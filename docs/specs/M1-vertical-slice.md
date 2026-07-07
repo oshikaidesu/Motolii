@@ -71,6 +71,15 @@ pub trait Analyzer {
 
 // oc-render: プレビューも書き出しもこの1関数のみを通る(B-4)
 pub fn render_frame(graph: &Graph, gpu: &GpuCtx, t: RationalTime, q: Quality) -> TextureHandle;
+
+// Quality: performance-model.mdのプレビュー品質モードの実体。
+// Draft=半解像度/fp16/色ショートカット許容/draftサンプル数、Final=厳密。
+// ゴールデンテストはFinalに対してのみ厳密比較する。
+pub struct Quality {
+    pub resolution_scale: u32,     // 1 = full, 2 = 1/2, 4 = 1/4
+    pub precise_color: bool,       // false: sRGB空間ブレンド等の近似を許容
+    pub effect_samples: SampleTier, // Draft | Full(モーションブラー等プラグインのサンプル数の口)
+}
 ```
 
 ## タスク分割
