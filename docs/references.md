@@ -13,6 +13,8 @@
 | [wgpu](https://github.com/gfx-rs/wgpu) | Apache-2.0/MIT | レンダリングコアの土台(採用決定済み) |
 | [Vello](https://github.com/linebender/vello) | Apache-2.0/MIT | wgpuベースのGPUコンピュート2Dレンダラ(アルファ状態)。プロシージャルオーバーレイのベクター描画を自前シェーダで書く前に、依存候補として評価する価値あり |
 | [Symphonia](https://github.com/pdeljanov/Symphonia) | MPL-2.0 | Pure Rust音声デコード(MP3/AAC/FLAC/WAV等)。音声インポート(B-1)の第一候補。MPLはファイル単位コピーレフトなので依存利用は安全 |
+| [resvg / usvg](https://github.com/linebender/resvg) | MPL-2.0 | SVGパーサ(usvg: 参照解決済みの正規化ツリーを返す)。SVG読み込み(コンセプト決定でコア機能)の第一候補。linebender管理下で保守中。Vello描画と接続する(M4-K6) |
+| [rubato](https://github.com/HEnquist/rubato) | MIT | 音声リサンプリング。バリスピード再生(M2音声トランスポート設計の適応リサンプリング)の候補 |
 | [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) | Apache-2.0 | Zed製Rust GPU UIフレームワーク。crates.ioに単体公開済み(v0.2系、pre-1.0でAPI変動あり)。A-1でWebView案が実測で破綻した場合の代替UI基盤。[gpui-component](https://github.com/longbridge/gpui-component)(既製コンポーネント集)も存在 |
 | [Theatre.js](https://github.com/theatre-js/theatre) | core: Apache-2.0 / **studio: AGPL-3.0** | キーフレーム編集UI(シーケンスエディタ+グラフエディタ)の操作仕様の参考。**studio側はAGPLなのでコード流用禁止**、coreのデータモデル(JSON書き出し形式)は参考可 |
 
