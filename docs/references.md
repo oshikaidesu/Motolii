@@ -1,0 +1,43 @@
+# 参考リポジトリ・ライブラリ一覧
+
+作成日: 2026-07-07(Web検索で所在・ライセンスを確認済み)
+
+用途別に「コードを流用/依存してよいもの」と「設計参考のみ(ライセンス・状況的にコード流用不可)」を明確に区別する。**GPL系はコードを読んで書き写すだけでも汚染リスクがあるため、設計・データ構造の考え方の参考に留める。**
+
+## コード流用・依存候補(ライセンス上安全)
+
+| リポジトリ | ライセンス | 何を参考/利用するか |
+|---|---|---|
+| [OpenCut](https://github.com/OpenCut-app/OpenCut) | MIT | タイムラインUI(React/Next.js)の操作仕様・コンポーネント。Rustコア(GPU compositor/effects/masks)は設計思想の参考。※フルリライト進行中のため追従は期待せず取り込みきり(落とし穴D-3) |
+| [ffmpeg-sidecar](https://github.com/nathanbabcock/ffmpeg-sidecar) | MIT | **B-2対策の本命**。ffmpegバイナリをサイドカープロセスとして起動しrawvideoフレームをIterator APIで受け取るRustクレート。M0-S2スパイクはまずこれを評価し、足りなければ自前パイプ実装 |
+| [wgpu](https://github.com/gfx-rs/wgpu) | Apache-2.0/MIT | レンダリングコアの土台(採用決定済み) |
+| [Vello](https://github.com/linebender/vello) | Apache-2.0/MIT | wgpuベースのGPUコンピュート2Dレンダラ(アルファ状態)。プロシージャルオーバーレイのベクター描画を自前シェーダで書く前に、依存候補として評価する価値あり |
+| [Symphonia](https://github.com/pdeljanov/Symphonia) | MPL-2.0 | Pure Rust音声デコード(MP3/AAC/FLAC/WAV等)。音声インポート(B-1)の第一候補。MPLはファイル単位コピーレフトなので依存利用は安全 |
+| [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) | Apache-2.0 | Zed製Rust GPU UIフレームワーク。crates.ioに単体公開済み(v0.2系、pre-1.0でAPI変動あり)。A-1でWebView案が実測で破綻した場合の代替UI基盤。[gpui-component](https://github.com/longbridge/gpui-component)(既製コンポーネント集)も存在 |
+| [Theatre.js](https://github.com/theatre-js/theatre) | core: Apache-2.0 / **studio: AGPL-3.0** | キーフレーム編集UI(シーケンスエディタ+グラフエディタ)の操作仕様の参考。**studio側はAGPLなのでコード流用禁止**、coreのデータモデル(JSON書き出し形式)は参考可 |
+
+## 設計参考のみ(GPL系・特殊ライセンス、コード流用不可)
+
+| リポジトリ | ライセンス | 何を学ぶか |
+|---|---|---|
+| [Olive](https://github.com/olive-editor/olive) | GPL-3.0 | ノードベースNLEをゼロから作った先行例。float中間パイプライン・カラーマネジメント(OCIO統合)・ディスクキャッシュの設計判断。「アルファのまま長期化した」経緯自体がスコープ管理(D-4)の教材 |
+| [Natron](https://github.com/NatronGitHub/Natron) | GPL-2.0 | ノードグラフ評価・タイル/領域ベースのレンダリング要求伝播(RoI)。B-5のキャッシュキー設計の参考 |
+| [Remotion](https://github.com/remotion-dev/remotion) | 独自(企業は有償) | プレビュー/書き出し分離(B-4)の設計思想、「時刻t→決定的フレーム」の純関数モデル。コード流用は不可と考えること |
+
+## その他の依存候補(定番、必要時に評価)
+
+- 音声出力: [cpal](https://github.com/RustAudio/cpal)(音声主クロック実装の土台)
+- WASMランタイム: [wasmtime](https://github.com/bytecodealliance/wasmtime)(5-1のWASMパラメータプラグイン、v2)
+- dylib ABI: [abi_stable](https://github.com/rodrimati1992/abi_stable_crates) / stabby(動的ロード導入時=v2に評価)
+- 色管理: [OpenColorIO](https://github.com/AcademySoftwareFoundation/OpenColorIO)(BSD-3。v1は自前の最小色空間タグで済ませ、HDR対応時に検討)
+
+## 検索ソース
+
+- OpenCut: [公式サイト](https://opencut.dev/), [GitHub org](https://github.com/OpenCut-app/)
+- ffmpeg-sidecar: [crates.io](https://crates.io/crates/ffmpeg-sidecar), [docs.rs](https://docs.rs/ffmpeg-sidecar/latest/ffmpeg_sidecar/)
+- Theatre.js: [README(ライセンス記載)](https://github.com/theatre-js/theatre/blob/main/README.md)
+- GPUI: [crates.io](https://crates.io/crates/gpui), [gpui.rs](https://www.gpui.rs/)
+- Symphonia: [GitHub](https://github.com/pdeljanov/Symphonia)
+- Remotion: [ライセンス](https://www.remotion.dev/docs/license)
+- Vello: [GitHub](https://github.com/linebender/vello)
+- Olive: [GitHub](https://github.com/olive-editor/olive) / Natron: [GitHub](https://github.com/NatronGitHub/Natron)
