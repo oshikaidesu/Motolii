@@ -4,6 +4,7 @@ members = [
     "crates/oc-core",
     "crates/oc-eval",
     "crates/oc-media",
+    "crates/oc-gpu",
 ]
 
 [workspace.package]
