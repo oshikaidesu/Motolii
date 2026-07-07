@@ -9,7 +9,10 @@ use oc_gpu::{download_rgba, solid_yuv420p, yuv_to_rgba_reference, GpuCtx, YuvToR
 fn gpu_or_skip() -> Option<GpuCtx> {
     match GpuCtx::new_headless() {
         Ok(g) => {
-            eprintln!("adapter: {} ({:?})", g.adapter_info.name, g.adapter_info.backend);
+            eprintln!(
+                "adapter: {} ({:?})",
+                g.adapter_info.name, g.adapter_info.backend
+            );
             Some(g)
         }
         Err(e) => {

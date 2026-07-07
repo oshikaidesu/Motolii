@@ -86,9 +86,9 @@ pub fn download_rgba(gpu: &GpuCtx, texture: &wgpu::Texture) -> Vec<u8> {
 
     let slice = buffer.slice(..);
     slice.map_async(wgpu::MapMode::Read, |_| {});
-    gpu.device.poll(wgpu::PollType::Wait).ok();
+    gpu.device.poll(wgpu::PollType::wait_indefinitely()).ok();
 
-    let mapped = slice.get_mapped_range();
+    let mapped = slice.get_mapped_range().expect("buffer map");
     let mut out = Vec::with_capacity((unpadded * height) as usize);
     for row in 0..height {
         let start = (row * padded) as usize;

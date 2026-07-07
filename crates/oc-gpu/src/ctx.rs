@@ -20,12 +20,13 @@ impl GpuCtx {
     }
 
     async fn new_headless_async() -> Result<Self, GpuError> {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: None,
                 force_fallback_adapter: false,
+                apply_limit_buckets: false,
             })
             .await
             .map_err(|e| GpuError::NoAdapter(e.to_string()))?;

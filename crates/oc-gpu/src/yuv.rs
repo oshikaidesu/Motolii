@@ -35,13 +35,13 @@ impl YuvToRgba {
                     })
                     .collect::<Vec<_>>(),
             });
-        let pipeline_layout =
-            gpu.device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("yuv-pl"),
-                    bind_group_layouts: &[&layout],
-                    push_constant_ranges: &[],
-                });
+        let pipeline_layout = gpu
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("yuv-pl"),
+                bind_group_layouts: &[Some(&layout)],
+                immediate_size: 0,
+            });
         let pipeline = gpu
             .device
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -66,7 +66,7 @@ impl YuvToRgba {
                 primitive: wgpu::PrimitiveState::default(),
                 depth_stencil: None,
                 multisample: wgpu::MultisampleState::default(),
-                multiview: None,
+                multiview_mask: None,
                 cache: None,
             });
         Self { pipeline, layout }
@@ -141,6 +141,7 @@ impl YuvToRgba {
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &bind, &[]);
