@@ -53,7 +53,11 @@ pub struct FrameDesc {
 pub enum ParamSource { Keyframes(KeyframeTrack), DataTrack(DataTrackId), Const(Value) }
 pub trait ParamEval { fn eval(&self, t: RationalTime, ctx: &DataTracks) -> Value; }
 
-// oc-nodes: ノードは状態を持たない。時刻とパラメータ・入力テクスチャから出力を決定
+// oc-nodes: ノードは状態を持たない。時刻とパラメータ・入力テクスチャから出力を決定。
+// エフェクトモデルの決定(concept.md)により、ユーザーに見えるのは「レイヤーに積む
+// エフェクトスタック」であり、これはRenderNodeの線形チェーンとして展開される。
+// RenderNodeの単純な境界(入力テクスチャ+パラメータ→出力)はそのまま
+// エフェクトプラグインの境界になる(LLMでのプラグイン自作を想定した書きやすさ最優先)。
 pub trait RenderNode {
     fn describe(&self) -> NodeDesc; // 入出力数・パラメータ定義
     fn render(&self, gpu: &GpuCtx, t: RationalTime,
