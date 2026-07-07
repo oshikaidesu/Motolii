@@ -2,6 +2,16 @@
 
 ステータス: **確定**(M0の採否判断を受けて該当箇所を更新する)
 
+## 実装状況(2026-07-07 更新)
+
+| タスク | 状況 |
+|---|---|
+| T0 | **部分完了**: workspace + CI(fmt/clippy/test + ffmpeg)は稼働。lavapipeのwgpu smokeテストはoc-gpu(T3)導入時に追加 |
+| T1 | **完了**: `oc-core`(RationalTime/Fps/FrameDesc/PixelFormat/ColorSpace/CpuFrame)。NTSC往復・非蓄積ドリフトのテスト済み |
+| T2 | **完了**: `oc-media`(probe/FrameReader/read_frame_at/Encoder)。ffmpeg実機での往復・フレーム正確シークテスト済み。S2の判断は[docs/spikes/s2-decode.md](../spikes/s2-decode.md)(ffmpeg-sidecarクレート不採用、自前パイプ採用) |
+| T6 | **完了**: `oc-eval`(Value/KeyframeTrack/Interp/cubic_bezier_ease/DataTrack/ParamSource/DataTracks)。補間・イージング・DataTrack参照のテスト済み |
+| T3-T5, T7-T11 | 未着手。M0-S1(プレビューブリッジ)はGUI環境が必要なため開発主機で実施すること |
+
 ## 目的(退治する落とし穴)
 
 B-3(色空間事故)、B-4(プレビュー/書き出し分岐)、C-3(評価エンジン過小評価)、D-2(自己検証基盤)。
