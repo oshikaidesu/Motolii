@@ -8,9 +8,9 @@ use std::path::Path;
 use oc_core::{ColorSpace, Fps, FrameDesc, PixelFormat, RationalTime};
 use oc_eval::DataTracks;
 use oc_export::{export_overlay_video, ExportOverlayRequest};
-use oc_gpu::GpuCtx;
 use oc_media::{probe, Encoder, FrameReader};
 use oc_nodes::{CanonicalPoint, CanonicalSize, ParamRectOverlay, RectOverlay};
+use oc_testkit::{gpu_or_skip, tmp_dir};
 
 const W: u32 = 64;
 const H: u32 = 48;
@@ -19,22 +19,6 @@ const FPS: Fps = Fps { num: 30, den: 1 };
 const N_FRAMES: i64 = 90;
 /// H.264往復の量子化誤差
 const LUMA_TOL: i32 = 8;
-
-fn gpu_or_skip() -> Option<GpuCtx> {
-    match GpuCtx::new_headless() {
-        Ok(g) => Some(g),
-        Err(e) => {
-            eprintln!("SKIP: no GPU adapter: {e}");
-            None
-        }
-    }
-}
-
-fn tmp_dir(tag: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("oc-export-t9-{tag}-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
-}
 
 /// フレーム番号を中央輝度に焼き込む(0..=255で一意)。
 fn frame_gray(index: i64) -> u8 {

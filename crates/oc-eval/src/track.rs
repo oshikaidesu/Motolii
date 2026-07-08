@@ -238,4 +238,28 @@ mod tests {
         };
         assert_eq!(missing.eval(RationalTime::ZERO, &ctx), Value::F64(-1.0));
     }
+
+    #[test]
+    fn vec2_axes_uses_data_fallback_when_track_is_not_scalar() {
+        let mut tracks = DataTracks::new();
+        tracks.insert(
+            "vec",
+            DataTrack {
+                start: RationalTime::ZERO,
+                sample_rate: Fps::new(1, 1),
+                values: vec![Value::Vec2([9.0, 9.0])],
+            },
+        );
+        let source = ParamSource::Vec2Axes {
+            x: Box::new(ParamSource::Data {
+                track: DataTrackId("vec".into()),
+                fallback: Value::F64(0.42),
+            }),
+            y: Box::new(ParamSource::Const(Value::F64(0.0))),
+        };
+        assert_eq!(
+            source.eval(RationalTime::ZERO, &tracks),
+            Value::Vec2([0.42, 0.0])
+        );
+    }
 }

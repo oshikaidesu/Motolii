@@ -13,3 +13,6 @@ oc-nodes.workspace = true
 oc-plugin.workspace = true
 oc-render.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+oc-testkit.workspace = true

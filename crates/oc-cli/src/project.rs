@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use serde::Deserialize;
@@ -103,6 +103,10 @@ pub enum ProjectError {
     UnsupportedVersion(u32),
     #[error("unknown param driver plugin: {0}")]
     UnknownParamDriver(String),
+    #[error("unknown param {param} for plugin {plugin}")]
+    UnknownParam { plugin: String, param: String },
+    #[error("cannot determine export length: input has no nb_frames or duration in probe")]
+    IndeterminateExportLength,
     #[error("duplicate data track id: {0}")]
     DuplicateDataTrack(String),
     #[error(transparent)]
@@ -126,12 +130,18 @@ pub fn load_project_v1_from_str(text: &str) -> Result<ProjectV1, ProjectError> {
     Ok(project)
 }
 
-fn export_frame_count(project: &ProjectV1, info: &MediaInfo) -> usize {
-    project.frame_count.unwrap_or_else(|| {
-        info.nb_frames
-            .map(|n| (n - project.start_frame).max(0) as usize)
-            .unwrap_or(0)
-    })
+fn export_frame_count(project: &ProjectV1, info: &MediaInfo) -> Result<usize, ProjectError> {
+    if let Some(n) = project.frame_count {
+        return Ok(n);
+    }
+    if let Some(nb) = info.nb_frames {
+        return Ok((nb - project.start_frame).max(0) as usize);
+    }
+    let Some(duration) = info.duration else {
+        return Err(ProjectError::IndeterminateExportLength);
+    };
+    let last_frame = duration.to_frame_floor(info.fps);
+    Ok((last_frame - project.start_frame + 1).max(0) as usize)
 }
 
 /// ParamDriver宣言からDataTrack集合を構築する。exportループの外で1回だけ呼ぶ。
@@ -155,6 +165,16 @@ pub fn build_data_tracks(
         let Some(plugin) = registry.param_driver_by_name(&driver.plugin) else {
             return Err(ProjectError::UnknownParamDriver(driver.plugin.clone()));
         };
+
+        let known: HashSet<&str> = plugin.desc().params.iter().map(|p| p.id).collect();
+        for key in driver.params.keys() {
+            if !known.contains(key.as_str()) {
+                return Err(ProjectError::UnknownParam {
+                    plugin: driver.plugin.clone(),
+                    param: key.clone(),
+                });
+            }
+        }
 
         let mut params = ResolvedParams::new();
         for def in &plugin.desc().params {
@@ -188,7 +208,7 @@ pub fn export_project_v1(
     let output_path = base.join(&project.output);
 
     let info = probe(&input_path)?;
-    let export_frames = export_frame_count(&project, &info);
+    let export_frames = export_frame_count(&project, &info)?;
     let start = RationalTime::from_frame(project.start_frame, info.fps);
     let duration = RationalTime::from_frame(
         export_frames.saturating_sub(1) as i64,
@@ -379,6 +399,88 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, ProjectError::UnknownParamDriver(id) if id == "nope"));
+    }
+
+    #[test]
+    fn build_data_tracks_rejects_unknown_param() {
+        let mut params = HashMap::new();
+        params.insert("amplitud".into(), Value::F64(1.0));
+        let drivers = vec![ParamDriverV1 {
+            plugin: "core.param.sine".into(),
+            track: "sine_x".into(),
+            params,
+        }];
+        let err = build_data_tracks(
+            &drivers,
+            RationalTime::ZERO,
+            RationalTime::from_seconds(1),
+            Fps { num: 12, den: 1 },
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            ProjectError::UnknownParam { plugin, param }
+            if plugin == "core.param.sine" && param == "amplitud"
+        ));
+    }
+
+    #[test]
+    fn export_frame_count_falls_back_to_duration_when_nb_frames_missing() {
+        let project = ProjectV1 {
+            version: 1,
+            input: "in.mp4".into(),
+            output: "out.mp4".into(),
+            start_frame: 0,
+            frame_count: None,
+            qp0: false,
+            param_drivers: vec![],
+            overlay: RectOverlayParamV1 {
+                center: ParamVec2V1::Const([0.0, 0.0]),
+                size: ParamVec2V1::Const([0.5, 0.5]),
+                color: ParamColorV1::Const([1.0, 0.0, 0.0, 1.0]),
+            },
+        };
+        let info = MediaInfo {
+            width: 64,
+            height: 48,
+            fps: Fps { num: 30, den: 1 },
+            duration: Some(RationalTime::from_frame(89, Fps { num: 30, den: 1 })),
+            nb_frames: None,
+            color_space: oc_core::ColorSpace::Rec709Limited,
+            rotation: 0,
+        };
+        assert_eq!(export_frame_count(&project, &info).unwrap(), 90);
+    }
+
+    #[test]
+    fn export_frame_count_errors_without_nb_frames_or_duration() {
+        let project = ProjectV1 {
+            version: 1,
+            input: "in.mp4".into(),
+            output: "out.mp4".into(),
+            start_frame: 0,
+            frame_count: None,
+            qp0: false,
+            param_drivers: vec![],
+            overlay: RectOverlayParamV1 {
+                center: ParamVec2V1::Const([0.0, 0.0]),
+                size: ParamVec2V1::Const([0.5, 0.5]),
+                color: ParamColorV1::Const([1.0, 0.0, 0.0, 1.0]),
+            },
+        };
+        let info = MediaInfo {
+            width: 64,
+            height: 48,
+            fps: Fps { num: 30, den: 1 },
+            duration: None,
+            nb_frames: None,
+            color_space: oc_core::ColorSpace::Rec709Limited,
+            rotation: 0,
+        };
+        assert!(matches!(
+            export_frame_count(&project, &info),
+            Err(ProjectError::IndeterminateExportLength)
+        ));
     }
 
     #[test]

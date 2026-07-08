@@ -58,8 +58,8 @@ pub struct LinearRenderGraph {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RenderStep {
-    /// 呼び出し側が供給する既存GPUテクスチャ(動画フレーム等)。
-    ExternalTexture {
+    /// 動画レイヤー等、呼び出し側が供給するGPUテクスチャ（VideoSourceNode / T8-R4）。
+    VideoSource {
         output: TextureId,
     },
     SolidSource {
@@ -85,7 +85,7 @@ pub enum RenderError {
     #[error("render_frame output must be premultiplied")]
     OutputMustBePremultiplied,
     #[error("render graph external texture id {0} was not provided")]
-    MissingExternalTexture(usize),
+    MissingVideoSource(usize),
     #[error("render graph has no texture for id {0}")]
     MissingTexture(usize),
     #[error("render graph has no source step")]
@@ -102,7 +102,7 @@ pub enum RenderError {
     OverlayInputMustBeTransparentPrefill { input: usize },
     #[error("composite foreground id {foreground} must be produced by OverlayRect output")]
     CompositeForegroundMustComeFromOverlay { foreground: usize },
-    #[error("composite background id {background} must be produced by SolidSource or ExternalTexture")]
+    #[error("composite background id {background} must be produced by SolidSource or VideoSource")]
     CompositeBackgroundMustComeFromSolid { background: usize },
     #[error("render graph output id {output} must be produced by CompositeNormal")]
     OutputMustBeProducedByCompositeNormal { output: usize },
@@ -119,7 +119,7 @@ pub enum RenderError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TexProducer {
     Solid { transparent: bool },
-    External,
+    VideoSource,
     Overlay,
     Composite,
 }
@@ -127,7 +127,7 @@ enum TexProducer {
 /// グラフ実行時に呼び出し側から注入するテクスチャとメタデータ。
 #[derive(Debug, Clone, Copy, Default)]
 pub struct RenderGraphInputs<'a> {
-    pub external_textures: &'a [(TextureId, TextureRef<'a>)],
+    pub video_sources: &'a [(TextureId, TextureRef<'a>)],
     /// 明示時はグラフ内のreporting SolidSourceを必須にしない。
     pub source_time: Option<RationalTime>,
 }
@@ -204,14 +204,14 @@ pub fn render_frame_with_background_texture(
     let desc = quality.render_desc(request.desc);
     validate_background_desc(desc, request.background.desc)?;
     // 外部背景経路も render_graph 一本化。オーバーレイ形状だけ毎フレーム差し替える。
-    let graph = linear_graph_with_external_background(request.desc, request.overlay);
+    let graph = linear_graph_with_video_source(request.desc, request.overlay);
     render_graph_cached(
         gpu,
         session,
         request.timeline_time,
         &graph,
         &RenderGraphInputs {
-            external_textures: &[(TextureId(0), request.background)],
+            video_sources: &[(TextureId(0), request.background)],
             source_time: Some(request.source_time),
         },
         quality,
@@ -253,12 +253,12 @@ pub fn render_graph_cached(
 
     for step in &graph.steps {
         match *step {
-            RenderStep::ExternalTexture { output } => {
+            RenderStep::VideoSource { output } => {
                 let (_, tex) = inputs
-                    .external_textures
+                    .video_sources
                     .iter()
                     .find(|(id, _)| *id == output)
-                    .ok_or(RenderError::MissingExternalTexture(output.0))?;
+                    .ok_or(RenderError::MissingVideoSource(output.0))?;
                 // ハンドル(Arc)の複製でスロットに載せ、以降は通常テクスチャと同じ経路にする。
                 textures[output.0] = Some(tex.texture.clone());
             }
@@ -326,14 +326,14 @@ pub fn render_graph_cached(
     })
 }
 
-pub fn linear_graph_with_external_background(
+pub fn linear_graph_with_video_source(
     desc: FrameDesc,
     overlay: RectOverlay,
 ) -> LinearRenderGraph {
     LinearRenderGraph {
         desc,
         steps: vec![
-            RenderStep::ExternalTexture {
+            RenderStep::VideoSource {
                 output: TextureId(0),
             },
             RenderStep::SolidSource {
@@ -410,16 +410,16 @@ fn validate_linear_graph(
 
     for step in &graph.steps {
         match *step {
-            RenderStep::ExternalTexture { output } => {
+            RenderStep::VideoSource { output } => {
                 if !inputs
-                    .external_textures
+                    .video_sources
                     .iter()
                     .any(|(id, _)| *id == output)
                 {
-                    return Err(RenderError::MissingExternalTexture(output.0));
+                    return Err(RenderError::MissingVideoSource(output.0));
                 }
                 validate_output(output, &mut written)?;
-                producer[output.0] = Some(TexProducer::External);
+                producer[output.0] = Some(TexProducer::VideoSource);
             }
             RenderStep::SolidSource { output, source } => {
                 validate_output(output, &mut written)?;
@@ -463,7 +463,7 @@ fn validate_linear_graph(
                     }
                 }
                 match producer.get(background.0).and_then(|p| *p) {
-                    Some(TexProducer::Solid { .. }) | Some(TexProducer::External) => {}
+                    Some(TexProducer::Solid { .. }) | Some(TexProducer::VideoSource) => {}
                     _ => {
                         return Err(RenderError::CompositeBackgroundMustComeFromSolid {
                             background: background.0,
@@ -517,7 +517,7 @@ fn texture_slot_count(graph: &LinearRenderGraph) -> Result<usize, RenderError> {
         .steps
         .iter()
         .flat_map(|step| match *step {
-            RenderStep::ExternalTexture { output } => vec![output.0],
+            RenderStep::VideoSource { output } => vec![output.0],
             RenderStep::SolidSource { output, .. } => vec![output.0],
             RenderStep::OverlayRect { input, output, .. } => vec![input.0, output.0],
             RenderStep::CompositeNormal {
@@ -659,19 +659,9 @@ fn to_u8(v: f32) -> u8 {
 mod tests {
     use super::*;
     use oc_core::{Fps, Quality, TimeMap};
-    use oc_gpu::{download_rgba, GpuCtx};
+    use oc_gpu::download_rgba;
     use oc_nodes::{CanonicalPoint, CanonicalSize};
-    use oc_testkit::{assert_rgba_close, RgbaImageDesc};
-
-    fn gpu_or_skip() -> Option<GpuCtx> {
-        match GpuCtx::new_headless() {
-            Ok(g) => Some(g),
-            Err(e) => {
-                eprintln!("SKIP: no GPU adapter: {e}");
-                None
-            }
-        }
-    }
+    use oc_testkit::{assert_rgba_close, gpu_or_skip, RgbaImageDesc};
 
     #[test]
     fn render_frame_runs_fixed_overlay_composite_graph() {

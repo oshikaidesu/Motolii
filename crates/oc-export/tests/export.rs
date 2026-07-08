@@ -3,30 +3,14 @@ use std::path::Path;
 use oc_core::{ColorSpace, Fps, FrameDesc, PixelFormat};
 use oc_eval::DataTracks;
 use oc_export::{export_overlay_video, ExportOverlayRequest};
-use oc_gpu::GpuCtx;
 use oc_media::{probe, Encoder};
 use oc_nodes::{CanonicalPoint, CanonicalSize, ParamRectOverlay, RectOverlay};
+use oc_testkit::{gpu_or_skip, tmp_dir};
 
 const W: u32 = 32;
 const H: u32 = 24;
 const FPS: Fps = Fps { num: 12, den: 1 };
 const N_FRAMES: usize = 6;
-
-fn gpu_or_skip() -> Option<GpuCtx> {
-    match GpuCtx::new_headless() {
-        Ok(g) => Some(g),
-        Err(e) => {
-            eprintln!("SKIP: no GPU adapter: {e}");
-            None
-        }
-    }
-}
-
-fn tmp_dir(tag: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("oc-export-{tag}-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
-}
 
 fn make_test_video(path: &Path) {
     let desc = FrameDesc::packed(W, H, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false);

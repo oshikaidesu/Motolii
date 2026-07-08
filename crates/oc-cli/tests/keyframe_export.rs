@@ -1,23 +1,13 @@
 use oc_core::{ColorSpace, Fps, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap};
 use oc_eval::{DataTracks, Interp, Keyframe, KeyframeTrack, ParamSource, Value};
-use oc_gpu::{download_rgba, GpuCtx};
+use oc_gpu::download_rgba;
 use oc_nodes::{CanonicalSize, ParamRectOverlay, RectOverlay, ViewportTransform};
 use oc_render::{render_frame, RenderFrameRequest, SolidSource};
-use oc_testkit::{assert_rgba_close, RgbaImageDesc};
+use oc_testkit::{assert_rgba_close, gpu_or_skip, RgbaImageDesc};
 
 const W: u32 = 32;
 const H: u32 = 24;
 const FPS: Fps = Fps { num: 12, den: 1 };
-
-fn gpu_or_skip() -> Option<GpuCtx> {
-    match GpuCtx::new_headless() {
-        Ok(g) => Some(g),
-        Err(e) => {
-            eprintln!("SKIP: no GPU adapter: {e}");
-            None
-        }
-    }
-}
 
 fn moving_overlay() -> ParamRectOverlay {
     let mut track = KeyframeTrack::new();

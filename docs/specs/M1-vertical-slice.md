@@ -18,7 +18,7 @@
 | T12 | **部分完了**: `oc-plugin`。静的リンク版の種別レジストリ(Filter / ParamDriver / Composite)とGPUテクスチャ境界のtraitを追加。参照プラグインはCPUフレームを受け取らず、Filter/Compositeは`wgpu::CommandEncoder`へGPU render passを積む。ParamDriverはDataTrack生成を単体テスト済み。export経路で`SineParamDriver`→`DataTracks`→`ParamSource::Data`接続済み。Filterは`oc-nodes`経由のGPUゴールデンで実証済み、Compositeのalpha契約は`oc-nodes::CompositeNode`で実証済み |
 | T5 | **後方移動**: GPU色解析はプラグイン/解析拡張領域であり、M1完了条件から外す。M1では合成DataTrackまたはParamDriver参照プラグインで「値列がパラメータを駆動する」境界だけを検証する |
 | T11 | 未着手。M0-S1(Slint UI統合スパイク)はGUI環境が必要なため開発主機で実施すること |
-| T8 | **部分完了**: 固定グラフに加え、外部GPU背景テクスチャ(動画フレームをYUV→RGBA変換したもの)を受けてOverlay/Compositeする入口を追加。動画SourceNodeの正式グラフ化は後続 |
+| T8 | **部分完了**: 固定グラフに加え、`RenderStep::VideoSource`で動画フレーム等の外部GPUテクスチャをグラフの一級ステップとして表現。`render_frame_with_background_texture`は同一`render_graph_cached`経路に合流(R4) |
 | T9 | **完了**: `oc-export`を追加し、`FrameReader`→`YuvToRgba`→`oc-render`→`Encoder`の最小mp4書き出しループを実装。30fps×3秒のタイムコード焼き込み素材で全フレームの時刻対応を検証(R5)。書き出しmp4のBT.709 limited色タグをprobeで検証(R5) |
 | T10 | **部分完了**: `oc-cli export-overlay`に加えて `oc-cli export-project`（versioned JSON）を追加。JSON→`oc-export`接続を最小実装し、小さな入力動画→JSON→mp4の統合テストを確認済み。キーフレーム/ParamDriver DataTrack駆動のゴールデン化済み。正式なプロジェクトE2Eサンプル同梱、合成DataTrack接続の拡張は後続 |
 
@@ -32,7 +32,7 @@
 | R1 | **完了**: `Quality { resolution_scale, precise_color, effect_samples }`を`oc-core`に定義し`render_frame`系へ配線。v1は`resolution_scale`のみ実効、他は口のみ | なし | Final(scale=1)の既存ゴールデンが全て不変。Draft(scale=2)で同グラフが「クラッシュせず出る」テストが通る(performance-modelの保証水準どおり) |
 | R2 | **完了**: `ParamRectOverlay`でParamSource駆動、exportがフレームごと評価、ProjectV1がKeyframes JSONを受理。先頭/中間/末尾ゴールデン通過 | R1 | キーフレームで矩形が移動するプロジェクトの書き出しで、先頭/中間/末尾3フレームのゴールデン比較が通る(T10完了条件) |
 | R3 | **完了**: `ParamDriver/DataTrack接続`。参照ParamDriver(`core.param.sine`)がDataTrackを生成し、`ParamSource::Data`+`Vec2Axes`でoverlay center.xを駆動。exportが事前構築した`DataTracks`を評価に渡す。先頭/中間/末尾ゴールデン通過 | R2 | DataTrack駆動のE2Eゴールデンが通る |
-| R4 | **動画SourceNodeの正式グラフ化**(T8残)。外部引数`BackgroundTextureRequest`方式に加え、グラフが動画ソースをノードとして持てる形に | R1 | ソースノード込みグラフのゴールデンが通り、既存の外部テクスチャ経路テストも不変 |
+| R4 | **完了**: 動画SourceNodeの正式グラフ化。`RenderStep::VideoSource`+`linear_graph_with_video_source`で外部背景をグラフ表現。既存`render_frame_with_background_texture`経路は不変 | R1 | ソースノード込みグラフのゴールデンが通り、既存の外部テクスチャ経路テストも不変 |
 | R5 | **完了**: T9完了条件の検証テスト。`oc-export/tests/t9_validation.rs`で(1)30fps×3秒タイムコード焼き込み素材の全フレーム時刻対応 (2)書き出しmp4のBT.709 limited色タグ(ffprobe生タグ含む)を検証 | なし | 両テストがCIで通る |
 | R6 | **完了**: **oc-testkit拡充**(T4残)。参照PNG保存・差分画像ファイル出力(ゴールデン失敗時のデバッグ運用) | なし | 意図的に壊したゴールデンで差分PNGが出力されるテストが通る |
 | R7 | **OverlayNode形状追加(円/線)+ Composite add/multiply**(T7残)。空間パラメータは正準座標、alpha契約は既存のnormal over式に準拠 | R1 | 各形状・各ブレンドの複数解像度ゴールデンが通る |

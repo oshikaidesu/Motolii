@@ -1,7 +1,7 @@
 //! oc-testkit: ゴールデン画像テストの共通部品。
 //!
-//! ここはGPUやメディア実装へ依存しない。各クレートのテストがRGBAバッファを渡し、
 //! 許容誤差・平均誤差・差分画像を同じ規則で扱うための薄い基盤。
+//! GPU/一時ディレクトリのテストヘルパーは `gpu_or_skip` / `tmp_dir` に集約する。
 
 use std::path::{Path, PathBuf};
 
@@ -266,6 +266,24 @@ fn golden_artifact_paths(dir: &Path, label: &str) -> GoldenArtifacts {
         actual: dir.join(format!("{safe}-actual.png")),
         diff: dir.join(format!("{safe}-diff.png")),
     }
+}
+
+/// lavapipe等が無い環境ではテストをスキップする。
+pub fn gpu_or_skip() -> Option<oc_gpu::GpuCtx> {
+    match oc_gpu::GpuCtx::new_headless() {
+        Ok(gpu) => Some(gpu),
+        Err(e) => {
+            eprintln!("SKIP: no GPU adapter: {e}");
+            None
+        }
+    }
+}
+
+/// プロセス固有の一時ディレクトリ。統合テストの入出力用。
+pub fn tmp_dir(tag: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("opencuts-{tag}-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("tmp_dir: create_dir_all");
+    dir
 }
 
 #[cfg(test)]

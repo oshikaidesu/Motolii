@@ -7,17 +7,7 @@ use oc_nodes::{
 };
 use oc_plugin::reference::CLEAR_FILTER;
 use oc_plugin::TextureRef;
-use oc_testkit::{assert_rgba_close, RgbaImageDesc};
-
-fn gpu_or_skip() -> Option<GpuCtx> {
-    match GpuCtx::new_headless() {
-        Ok(g) => Some(g),
-        Err(e) => {
-            eprintln!("SKIP: no GPU adapter: {e}");
-            None
-        }
-    }
-}
+use oc_testkit::{assert_rgba_close, gpu_or_skip, RgbaImageDesc};
 
 #[test]
 fn clear_filter_runs_through_node_and_matches_golden() {

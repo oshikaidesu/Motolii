@@ -1,26 +1,16 @@
 use oc_core::{ColorSpace, Fps, FrameDesc, PixelFormat, Quality, RationalTime};
 use oc_eval::{DataTrackId, DataTracks, ParamSource, Value};
-use oc_gpu::{download_rgba, GpuCtx};
+use oc_gpu::download_rgba;
 use oc_nodes::{CanonicalSize, ParamRectOverlay, RectOverlay, ViewportTransform};
 use oc_plugin::{
     reference::SINE_PARAM_DRIVER, ParamDriverContext, ParamDriverPlugin, ResolvedParams,
 };
 use oc_render::{render_frame, RenderFrameRequest, SolidSource};
-use oc_testkit::{assert_rgba_close, RgbaImageDesc};
+use oc_testkit::{assert_rgba_close, gpu_or_skip, RgbaImageDesc};
 
 const W: u32 = 32;
 const H: u32 = 24;
 const FPS: Fps = Fps { num: 12, den: 1 };
-
-fn gpu_or_skip() -> Option<GpuCtx> {
-    match GpuCtx::new_headless() {
-        Ok(g) => Some(g),
-        Err(e) => {
-            eprintln!("SKIP: no GPU adapter: {e}");
-            None
-        }
-    }
-}
 
 fn sine_x_tracks() -> DataTracks {
     let mut params = ResolvedParams::new();

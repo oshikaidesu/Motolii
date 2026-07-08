@@ -4,23 +4,8 @@
 //! GPUアダプタが無い環境ではskip(CIはlavapipeで必ず実行)。
 
 use oc_core::{ColorSpace, PixelFormat};
-use oc_gpu::{download_rgba, solid_yuv420p, yuv_to_rgba_reference, GpuCtx, YuvToRgba};
-use oc_testkit::{assert_rgba_close, RgbaImageDesc};
-
-fn gpu_or_skip() -> Option<GpuCtx> {
-    match GpuCtx::new_headless() {
-        Ok(g) => {
-            if let Some(info) = &g.adapter_info {
-                eprintln!("adapter: {} ({:?})", info.name, info.backend);
-            }
-            Some(g)
-        }
-        Err(e) => {
-            eprintln!("SKIP: no GPU adapter: {e}");
-            None
-        }
-    }
-}
+use oc_gpu::{download_rgba, solid_yuv420p, yuv_to_rgba_reference, YuvToRgba};
+use oc_testkit::{assert_rgba_close, gpu_or_skip, RgbaImageDesc};
 
 #[test]
 fn yuv_matches_reference_across_color_spaces() {
