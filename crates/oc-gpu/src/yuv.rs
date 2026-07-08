@@ -52,6 +52,24 @@ pub struct YuvToRgba {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     chroma_sampler: wgpu::Sampler,
+    pool: Option<SizePool>,
+}
+
+/// 寸法ごとに使い回すGPUリソース一式(第3回レビュー#1: 毎フレーム確保の排除)。
+/// performance-model 原則3「確保・解放を毎フレームやらない」の実装。
+/// 出力は2枚のピンポン: 呼び出し側(UI表示)が1枚を保持している間に次を書ける。
+/// 返したテクスチャを2回以上のconvertを跨いで保持する用途は想定しない。
+struct SizePool {
+    w: u32,
+    h: u32,
+    y_tex: wgpu::Texture,
+    u_tex: wgpu::Texture,
+    v_tex: wgpu::Texture,
+    param_buf: wgpu::Buffer,
+    bind: wgpu::BindGroup,
+    outputs: [wgpu::Texture; 2],
+    out_views: [wgpu::TextureView; 2],
+    next: usize,
 }
 
 impl YuvToRgba {
@@ -143,12 +161,14 @@ impl YuvToRgba {
             pipeline,
             layout,
             chroma_sampler,
+            pool: None,
         }
     }
 
     /// YUV420pのCpuFrameを変換し、ガンマ保持RGBA8テクスチャを返す。
     /// 係数はframe.desc.color_spaceから選択される。
-    pub fn convert(&self, gpu: &GpuCtx, frame: &CpuFrame) -> wgpu::Texture {
+    /// リソースは寸法別プールを使い回し、毎フレームの確保は行わない。
+    pub fn convert(&mut self, gpu: &GpuCtx, frame: &CpuFrame) -> wgpu::Texture {
         assert_eq!(
             frame.desc.format,
             PixelFormat::Yuv420p,
@@ -162,14 +182,67 @@ impl YuvToRgba {
         let y_size = (w * h) as usize;
         let c_size = (cw * ch) as usize;
 
-        let y_tex = self.upload_plane(gpu, w, h, &frame.data[..y_size]);
-        let u_tex = self.upload_plane(gpu, cw, ch, &frame.data[y_size..y_size + c_size]);
-        let v_tex = self.upload_plane(
+        if self.pool.as_ref().map(|p| (p.w, p.h)) != Some((w, h)) {
+            self.pool = Some(self.build_pool(gpu, w, h));
+        }
+        let pool = self.pool.as_mut().expect("pool built above");
+
+        // 中身だけ更新(確保しない)
+        write_plane(gpu, &pool.y_tex, w, h, &frame.data[..y_size]);
+        write_plane(
             gpu,
+            &pool.u_tex,
+            cw,
+            ch,
+            &frame.data[y_size..y_size + c_size],
+        );
+        write_plane(
+            gpu,
+            &pool.v_tex,
             cw,
             ch,
             &frame.data[y_size + c_size..y_size + 2 * c_size],
         );
+        gpu.queue
+            .write_buffer(&pool.param_buf, 0, bytemuck::bytes_of(&params));
+
+        let idx = pool.next;
+        pool.next = (idx + 1) % 2;
+
+        let mut enc = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        {
+            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("yuv-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &pool.out_views[idx],
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &pool.bind, &[]);
+            pass.draw(0..3, 0..1);
+        }
+        gpu.queue.submit([enc.finish()]);
+        pool.outputs[idx].clone()
+    }
+
+    /// 寸法別リソースの一括確保(サイズ変更時のみ呼ばれる)
+    fn build_pool(&self, gpu: &GpuCtx, w: u32, h: u32) -> SizePool {
+        let (cw, ch) = (w / 2, h / 2);
+        let y_tex = create_plane(gpu, w, h);
+        let u_tex = create_plane(gpu, cw, ch);
+        let v_tex = create_plane(gpu, cw, ch);
 
         let param_buf = gpu.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("yuv-params"),
@@ -177,32 +250,37 @@ impl YuvToRgba {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        gpu.queue
-            .write_buffer(&param_buf, 0, bytemuck::bytes_of(&params));
 
-        let out = gpu.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("yuv-out"),
-            size: wgpu::Extent3d {
-                width: w,
-                height: h,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            // TEXTURE_BINDING: 後段のエフェクト/UI(Slint Image)がそのまま参照できるように
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::COPY_SRC
-                | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        let out_view = out.create_view(&Default::default());
+        let make_out = || {
+            gpu.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("yuv-out"),
+                size: wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                // TEXTURE_BINDING+RENDER_ATTACHMENT: Slint Image::try_fromの必須要件
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::COPY_SRC
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+        };
+        let outputs = [make_out(), make_out()];
+        let out_views = [
+            outputs[0].create_view(&Default::default()),
+            outputs[1].create_view(&Default::default()),
+        ];
 
-        let views: Vec<wgpu::TextureView> = [&y_tex, &u_tex, &v_tex]
-            .iter()
-            .map(|t| t.create_view(&Default::default()))
-            .collect();
+        let views = [
+            y_tex.create_view(&Default::default()),
+            u_tex.create_view(&Default::default()),
+            v_tex.create_view(&Default::default()),
+        ];
         let mut bind_entries: Vec<wgpu::BindGroupEntry> = views
             .iter()
             .enumerate()
@@ -225,70 +303,58 @@ impl YuvToRgba {
             entries: &bind_entries,
         });
 
-        let mut enc = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        {
-            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("yuv-pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &out_view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, &bind, &[]);
-            pass.draw(0..3, 0..1);
+        SizePool {
+            w,
+            h,
+            y_tex,
+            u_tex,
+            v_tex,
+            param_buf,
+            bind,
+            outputs,
+            out_views,
+            next: 0,
         }
-        gpu.queue.submit([enc.finish()]);
-        out
     }
+}
 
-    fn upload_plane(&self, gpu: &GpuCtx, w: u32, h: u32, plane: &[u8]) -> wgpu::Texture {
-        let tex = gpu.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("yuv-plane"),
-            size: wgpu::Extent3d {
-                width: w,
-                height: h,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        gpu.queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &tex,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            plane,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(w),
-                rows_per_image: Some(h),
-            },
-            wgpu::Extent3d {
-                width: w,
-                height: h,
-                depth_or_array_layers: 1,
-            },
-        );
-        tex
-    }
+fn create_plane(gpu: &GpuCtx, w: u32, h: u32) -> wgpu::Texture {
+    gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("yuv-plane"),
+        size: wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::R8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    })
+}
+
+fn write_plane(gpu: &GpuCtx, tex: &wgpu::Texture, w: u32, h: u32, plane: &[u8]) {
+    gpu.queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: tex,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        plane,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(w),
+            rows_per_image: Some(h),
+        },
+        wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        },
+    );
 }
 
 /// テクセル中心=+0.5の連続座標でのバイリニアサンプル(ClampToEdge)。

@@ -142,7 +142,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // UIスレッドはレンダしない(レビュー指摘#2)。wgpuのDevice/QueueはSend+Sync。
     let (tx, rx) = mpsc::sync_channel::<wgpu::Texture>(1);
     std::thread::spawn(move || {
-        let conv = YuvToRgba::new(&gpu);
+        let mut conv = YuvToRgba::new(&gpu);
         let start = std::time::Instant::now();
         loop {
             let t = start.elapsed().as_secs_f32();

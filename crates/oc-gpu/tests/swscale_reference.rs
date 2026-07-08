@@ -60,7 +60,9 @@ fn swscale_convert(frame: &CpuFrame) -> Vec<u8> {
         .args(["-i", "-"])
         .args([
             "-vf",
-            "scale=in_color_matrix=bt709:in_range=tv:out_range=pc",
+            // in_h_chr_pos=0(左cosited)/in_v_chr_pos=128(垂直中間)を明示し、
+            // クロマsiting式の正しさまで比較対象に含める(第3回レビュー#4)
+            "scale=in_color_matrix=bt709:in_range=tv:out_range=pc:in_h_chr_pos=0:in_v_chr_pos=128",
         ])
         .args(["-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgba", "-"])
         .stdin(Stdio::piped())
@@ -101,7 +103,7 @@ fn gpu_matches_swscale_on_nonuniform_pattern() {
     let frame = make_pattern();
     let reference = swscale_convert(&frame);
 
-    let conv = YuvToRgba::new(&gpu);
+    let mut conv = YuvToRgba::new(&gpu);
     let ours = download_rgba(&gpu, &conv.convert(&gpu, &frame));
 
     // アルファはswscale出力も255のはずだが、比較はRGBのみで行う
@@ -122,9 +124,9 @@ fn gpu_matches_swscale_on_nonuniform_pattern() {
 
     // 平均誤差: 係数・レンジの系統誤差があればここが大きく崩れる
     assert!(mean <= 2.5, "mean diff {mean:.3} > 2.5 (systematic error?)");
-    // 最大誤差: クロマ補間アルゴリズム差(エッジ部)の許容
+    // 最大誤差: siting明示済みのため締めた上限(実測7、補間アルゴリズム差の余裕込み)
     assert!(
-        max <= 48,
-        "max diff {max} > 48 (chroma siting/upsample bug?)"
+        max <= 24,
+        "max diff {max} > 24 (chroma siting/upsample bug?)"
     );
 }

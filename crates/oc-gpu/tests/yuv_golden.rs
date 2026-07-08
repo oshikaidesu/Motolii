@@ -38,7 +38,7 @@ fn assert_close(gpu_out: &[u8], reference: &[u8], tol: i32, label: &str) {
 #[test]
 fn yuv_matches_reference_across_color_spaces() {
     let Some(gpu) = gpu_or_skip() else { return };
-    let conv = YuvToRgba::new(&gpu);
+    let mut conv = YuvToRgba::new(&gpu);
 
     // 代表色 (name, Y, U, V)。各色空間で同じYUV値を入れ、係数の違いが
     // 出力RGBの違いとして正しく現れることをCPU参照実装と突き合わせる。
@@ -72,7 +72,7 @@ fn yuv_matches_reference_across_color_spaces() {
 fn color_space_changes_output() {
     // 同じYUV値でも601と709で異なるRGBになる(決め打ちの再発防止)
     let Some(gpu) = gpu_or_skip() else { return };
-    let conv = YuvToRgba::new(&gpu);
+    let mut conv = YuvToRgba::new(&gpu);
     let red_709 = solid_yuv420p(16, 16, 63, 102, 240, ColorSpace::Rec709Limited);
     let red_601 = solid_yuv420p(16, 16, 63, 102, 240, ColorSpace::Rec601Limited);
     let out_709 = download_rgba(&gpu, &conv.convert(&gpu, &red_709));

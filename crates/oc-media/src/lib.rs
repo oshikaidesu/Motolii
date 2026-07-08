@@ -63,23 +63,37 @@ pub fn verify_tool_versions() -> Result<(u32, u32)> {
             }
         })?;
         let text = String::from_utf8_lossy(&out.stdout);
-        // 例: "ffmpeg version 6.1.1-3ubuntu5 ..." / "ffmpeg version n7.0 ..."
-        let ver = text
+        // 例: "ffmpeg version 6.1.1-3ubuntu5" / "version n7.0" / "version N-113445-g..."
+        // (gitマスター) / まれに日付版。判定は false-negative に弱くしない(第3回
+        // レビュー#5): 明確に古いと分かる場合だけ弾き、判定不能・特殊ビルドは
+        // 警告して通す(起動を止めない)。
+        let tok = text
             .split_whitespace()
             .nth(2)
             .unwrap_or("")
-            .trim_start_matches('n');
-        let major: u32 = ver
-            .split(['.', '-'])
-            .next()
-            .and_then(|s| s.parse().ok())
-            .ok_or_else(|| MediaError::Probe(format!("{bin}: cannot parse version: {ver}")))?;
-        if major < MIN_FFMPEG_MAJOR {
-            return Err(MediaError::Probe(format!(
+            .trim_start_matches(['n', 'N']);
+        let digits: String = tok.chars().take_while(|c| c.is_ascii_digit()).collect();
+        match digits.parse::<u32>() {
+            Ok(major) if major >= 1000 => {
+                // 日付/ビルド番号系(gitマスター "N-123456" 等) → 判定不能として通す
+                eprintln!(
+                    "warning: {bin} version '{tok}' looks like a snapshot build; \
+                     assuming >= {MIN_FFMPEG_MAJOR}"
+                );
+                Ok(0)
+            }
+            Ok(major) if major < MIN_FFMPEG_MAJOR => Err(MediaError::Probe(format!(
                 "{bin} major version {major} < required {MIN_FFMPEG_MAJOR}"
-            )));
+            ))),
+            Ok(major) => Ok(major),
+            Err(_) => {
+                eprintln!(
+                    "warning: {bin} version '{tok}' is unparsable; \
+                     assuming >= {MIN_FFMPEG_MAJOR}"
+                );
+                Ok(0)
+            }
         }
-        Ok(major)
     };
     Ok((major("ffmpeg")?, major("ffprobe")?))
 }
