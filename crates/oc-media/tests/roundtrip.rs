@@ -76,6 +76,9 @@ fn encode_probe_decode_seek_roundtrip() {
     let path = dir.join("counter.mp4");
     make_test_video(&path);
 
+    // 最低バージョン検証が通ること(#5)
+    oc_media::verify_tool_versions().expect("ffmpeg/ffprobe version check");
+
     // --- probe: 寸法・fps・長さ・色タグ ---
     let info = probe(&path).unwrap();
     assert_eq!((info.width, info.height), (W, H));
@@ -104,6 +107,21 @@ fn encode_probe_decode_seek_roundtrip() {
         assert_frame_is(&frame, index);
         assert_eq!(frame.pts, RationalTime::from_frame(index, FPS));
     }
+
+    // --- 厳密レベル検証(#7): TOL=6の緩さでレンジ取り違えを隠さない ---
+    // 黒(gray=0)→ Y=16、中間(gray=128)→ Y=126 が±2で出ること
+    let black = read_frame_at(&path, &info, 0).unwrap();
+    assert!(
+        (center_luma(&black) - 16).abs() <= 2,
+        "black level: got {} want 16±2 (full/limited range mixup?)",
+        center_luma(&black)
+    );
+    let mid = read_frame_at(&path, &info, 16).unwrap(); // gray = 16*8 = 128
+    assert!(
+        (center_luma(&mid) - 126).abs() <= 2,
+        "mid gray level: got {} want 126±2",
+        center_luma(&mid)
+    );
 
     // --- 範囲外シークはエラー ---
     assert!(read_frame_at(&path, &info, N_FRAMES + 10).is_err());

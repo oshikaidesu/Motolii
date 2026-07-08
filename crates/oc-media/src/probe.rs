@@ -39,6 +39,7 @@ struct FfprobeStream {
     avg_frame_rate: Option<String>,
     nb_frames: Option<String>,
     duration: Option<String>,
+    sample_aspect_ratio: Option<String>,
     color_space: Option<String>,
     color_range: Option<String>,
     #[serde(default)]
@@ -91,7 +92,18 @@ pub fn probe(path: impl AsRef<Path>) -> Result<MediaInfo> {
         _ => return Err(MediaError::Probe("missing dimensions".into())),
     };
 
-    // 回転メタデータ: 90/270度なら表示寸法はW/H入れ替え(デコードはautorotateで
+    // 非正方ピクセル(アナモルフィック)はv1スコープ外として明確に拒否する
+    // (レビュー指摘#6: 黙ってアスペクト崩れさせない)
+    if let Some(sar) = stream.sample_aspect_ratio.as_deref() {
+        if sar != "1:1" && sar != "0:1" && !sar.is_empty() {
+            return Err(MediaError::Probe(format!(
+                "anamorphic footage (SAR {sar}) is not supported in v1; \
+                 re-encode to square pixels first"
+            )));
+        }
+    }
+
+    // 回転メタデータ: 90/270度なら表示寸法はW/H入れ替え(デコードは明示transposeで
     // この寸法のフレームを出す)
     let rotation = stream
         .side_data_list

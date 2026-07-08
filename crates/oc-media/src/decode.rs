@@ -37,15 +37,20 @@ impl FrameReader {
         );
 
         let mut cmd = Command::new("ffmpeg");
-        cmd.args(["-v", "error", "-nostdin"]);
+        // autorotateはffmpegのバージョン/ビルドで既定挙動が揺れた歴史があるため
+        // 使わない(レビュー指摘#5)。回転はprobeのrotationから自前で明示指定し、
+        // どのffmpegでも決定的な出力にする。
+        cmd.args(["-v", "error", "-nostdin", "-noautorotate"]);
         if start_frame > 0 {
             // (start_frame - 0.5) / fps 秒へシーク
             let target = (start_frame as f64 - 0.5) * info.fps.den as f64 / info.fps.num as f64;
             cmd.args(["-ss", &format!("{target:.6}")]);
         }
-        cmd.arg("-i")
-            .arg(path.as_ref())
-            .args(["-f", "rawvideo", "-pix_fmt", "yuv420p", "-"])
+        cmd.arg("-i").arg(path.as_ref());
+        if let Some(vf) = rotation_filter(info.rotation) {
+            cmd.args(["-vf", vf]);
+        }
+        cmd.args(["-f", "rawvideo", "-pix_fmt", "yuv420p", "-"])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
@@ -111,6 +116,17 @@ impl Drop for FrameReader {
         // 途中で読むのをやめた場合にゾンビ化させない
         let _ = self.child.kill();
         let _ = self.child.wait();
+    }
+}
+
+/// probeのrotation(度)に対応する明示回転フィルタ。
+/// 方向の正しさ(時計/反時計)は実スマホ素材での目視確認(M1-T11)で最終検証する。
+fn rotation_filter(rotation: i64) -> Option<&'static str> {
+    match rotation.rem_euclid(360) {
+        90 => Some("transpose=2"), // 反時計回り90
+        180 => Some("hflip,vflip"),
+        270 => Some("transpose=1"), // 時計回り90
+        _ => None,
     }
 }
 

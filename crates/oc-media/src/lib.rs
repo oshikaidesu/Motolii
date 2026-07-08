@@ -44,3 +44,42 @@ pub fn tools_available() -> bool {
     };
     ok("ffmpeg") && ok("ffprobe")
 }
+
+/// 依存するffmpeg/ffprobeの最低メジャーバージョン。
+/// 根拠(レビュー指摘#5): side_data回転のJSON出力、scale=out_color_matrix、
+/// -display_rotation 等の挙動をこの版以降で確認している。
+pub const MIN_FFMPEG_MAJOR: u32 = 6;
+
+/// アプリ起動時に呼ぶ: ffmpeg/ffprobeの存在とバージョンを検証する。
+/// バージョン差による挙動ズレ(回転・色タグ)はサポート地獄になるため、
+/// 満たさない場合は起動段階で明確に失敗させる。
+pub fn verify_tool_versions() -> Result<(u32, u32)> {
+    let major = |bin: &'static str| -> Result<u32> {
+        let out = Command::new(bin).arg("-version").output().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                MediaError::ToolNotFound(bin)
+            } else {
+                MediaError::Io(e)
+            }
+        })?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        // 例: "ffmpeg version 6.1.1-3ubuntu5 ..." / "ffmpeg version n7.0 ..."
+        let ver = text
+            .split_whitespace()
+            .nth(2)
+            .unwrap_or("")
+            .trim_start_matches('n');
+        let major: u32 = ver
+            .split(['.', '-'])
+            .next()
+            .and_then(|s| s.parse().ok())
+            .ok_or_else(|| MediaError::Probe(format!("{bin}: cannot parse version: {ver}")))?;
+        if major < MIN_FFMPEG_MAJOR {
+            return Err(MediaError::Probe(format!(
+                "{bin} major version {major} < required {MIN_FFMPEG_MAJOR}"
+            )));
+        }
+        Ok(major)
+    };
+    Ok((major("ffmpeg")?, major("ffprobe")?))
+}
