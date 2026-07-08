@@ -3,11 +3,13 @@
 //! 仕様: docs/specs/M1-vertical-slice.md「インターフェース契約」
 
 mod frame;
+mod quality;
 mod time;
 mod time_map;
 
 pub use frame::{
     premultiply_rgba_f32, premultiply_rgba_u8, ColorSpace, CpuFrame, FrameDesc, PixelFormat,
 };
+pub use quality::{Quality, SampleTier};
 pub use time::{Fps, RationalTime};
 pub use time_map::TimeMap;

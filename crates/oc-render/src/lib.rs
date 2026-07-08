@@ -3,7 +3,9 @@
 //! まず固定グラフ(SolidSource -> Overlay(rect) -> Composite(normal))だけを持ち、
 //! 評価順・TimeMap・premultiplied alpha契約を1本の関数に束ねる。
 
-use oc_core::{premultiply_rgba_f32, ColorSpace, FrameDesc, PixelFormat, RationalTime, TimeMap};
+use oc_core::{
+    premultiply_rgba_f32, ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap,
+};
 use oc_gpu::{upload_rgba, GpuCtx};
 use oc_nodes::{create_rgba_render_target, CompositeNode, NodeError, OverlayNode, RectOverlay};
 use oc_plugin::TextureRef;
@@ -26,6 +28,17 @@ pub struct RenderFrameRequest {
     pub timeline_time: RationalTime,
     pub source: SolidSource,
     /// Overlay色もstraight RGBAとして受け取り、OverlayNodeがpremul化する。
+    pub overlay: RectOverlay,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct BackgroundTextureRequest<'a> {
+    pub desc: FrameDesc,
+    pub timeline_time: RationalTime,
+    pub source_time: RationalTime,
+    /// 既にGPU上にある背景RGBAテクスチャ。動画フレームはoc-gpuのYUV→RGBA変換後に渡す。
+    pub background: TextureRef<'a>,
+    /// Overlay色はstraight RGBAとして受け取り、OverlayNodeがpremul化する。
     pub overlay: RectOverlay,
 }
 
@@ -107,23 +120,74 @@ enum TexProducer {
 pub fn render_frame(
     gpu: &GpuCtx,
     request: &RenderFrameRequest,
+    quality: Quality,
 ) -> Result<RenderedFrame, RenderError> {
     render_graph(
         gpu,
         request.timeline_time,
         &linear_graph_from_request(request),
+        quality,
     )
+}
+
+pub fn render_frame_with_background_texture(
+    gpu: &GpuCtx,
+    request: &BackgroundTextureRequest<'_>,
+    quality: Quality,
+) -> Result<RenderedFrame, RenderError> {
+    validate_render_desc(request.desc)?;
+    // 外部背景経路でも Quality を通し、解像度は render_desc に合わせる。
+    // 背景テクスチャは縮小済みで渡すこと(v1はダウンスケールノードを持たない)。
+    let desc = quality.render_desc(request.desc);
+    validate_background_desc(desc, request.background.desc)?;
+
+    let transparent = upload_rgba(gpu, &desc, &solid_rgba(desc, [0.0, 0.0, 0.0, 0.0]));
+    let foreground = create_rgba_render_target(gpu, desc, "oc-render-external-foreground");
+    let output = create_rgba_render_target(gpu, desc, "oc-render-external-output");
+
+    OverlayNode::new(gpu, request.overlay).render(
+        gpu,
+        TextureRef {
+            texture: &transparent,
+            desc,
+        },
+        TextureRef {
+            texture: &foreground,
+            desc,
+        },
+    )?;
+
+    CompositeNode::new(gpu).render(
+        gpu,
+        request.background,
+        TextureRef {
+            texture: &foreground,
+            desc,
+        },
+        TextureRef {
+            texture: &output,
+            desc,
+        },
+    )?;
+
+    Ok(RenderedFrame {
+        texture: output,
+        desc,
+        source_time: request.source_time,
+    })
 }
 
 pub fn render_graph(
     gpu: &GpuCtx,
     timeline_time: RationalTime,
     graph: &LinearRenderGraph,
+    quality: Quality,
 ) -> Result<RenderedFrame, RenderError> {
     validate_render_desc(graph.desc)?;
     let graph_plan = validate_linear_graph(graph, timeline_time)?;
 
-    let desc = graph.desc;
+    // Quality.resolution_scaleのみ実効。正準座標はViewportTransform経由なので半解像度でも見た目比率は保つ。
+    let desc = quality.render_desc(graph.desc);
     let mut textures: Vec<Option<wgpu::Texture>> =
         (0..graph_plan.texture_count).map(|_| None).collect();
 
@@ -389,11 +453,12 @@ fn texture_ref(
 fn render_frame_direct(
     gpu: &GpuCtx,
     request: &RenderFrameRequest,
+    quality: Quality,
 ) -> Result<RenderedFrame, RenderError> {
     validate_render_desc(request.desc)?;
 
     let source_time = request.source.time_map.map(request.timeline_time);
-    let desc = request.desc;
+    let desc = quality.render_desc(request.desc);
 
     let background = upload_rgba(gpu, &desc, &solid_rgba(desc, request.source.color));
     let transparent = upload_rgba(gpu, &desc, &solid_rgba(desc, [0.0, 0.0, 0.0, 0.0]));
@@ -445,6 +510,18 @@ fn validate_render_desc(desc: FrameDesc) -> Result<(), RenderError> {
     Ok(())
 }
 
+fn validate_background_desc(output: FrameDesc, background: FrameDesc) -> Result<(), RenderError> {
+    if background.width != output.width
+        || background.height != output.height
+        || background.format != PixelFormat::Rgba8Unorm
+        || background.color_space != ColorSpace::Srgb
+        || !background.premultiplied
+    {
+        return Err(RenderError::UnsupportedFrameDesc);
+    }
+    Ok(())
+}
+
 fn solid_rgba(desc: FrameDesc, straight_color: [f32; 4]) -> Vec<u8> {
     let color = premultiply_rgba_f32(straight_color).map(to_u8);
     let mut data = vec![0u8; desc.data_size()];
@@ -461,7 +538,7 @@ fn to_u8(v: f32) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oc_core::{Fps, TimeMap};
+    use oc_core::{Fps, Quality, TimeMap};
     use oc_gpu::{download_rgba, GpuCtx};
     use oc_nodes::{CanonicalPoint, CanonicalSize};
     use oc_testkit::{assert_rgba_close, RgbaImageDesc};
@@ -482,10 +559,11 @@ mod tests {
         let request = centered_request();
         let desc = request.desc;
 
-        let rendered = render_frame(&gpu, &request).unwrap();
+        let rendered = render_frame(&gpu, &request, Quality::FINAL).unwrap();
         assert_eq!(rendered.source_time, RationalTime::new(7, 5));
+        assert_eq!(rendered.desc, desc);
 
-        let actual = download_rgba(&gpu, &rendered.texture);
+        let actual = download_rgba(&gpu, &rendered.texture).unwrap();
         let expected = expected_fixed_graph(desc);
         assert_rgba_close(
             "render-frame-overlay-composite",
@@ -500,31 +578,111 @@ mod tests {
     }
 
     #[test]
+    fn final_quality_matches_previous_unscaled_golden() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let request = centered_request();
+        let rendered = render_frame(&gpu, &request, Quality::FINAL).unwrap();
+        let actual = download_rgba(&gpu, &rendered.texture).unwrap();
+        assert_rgba_close(
+            "final-quality-unscaled-golden",
+            RgbaImageDesc {
+                width: request.desc.width,
+                height: request.desc.height,
+            },
+            &actual,
+            &expected_fixed_graph(request.desc),
+            1,
+        );
+    }
+
+    #[test]
+    fn draft_quality_renders_half_resolution_without_crashing() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let request = centered_request();
+        let rendered = render_frame(&gpu, &request, Quality::DRAFT).unwrap();
+        assert_eq!(rendered.desc.width, request.desc.width / 2);
+        assert_eq!(rendered.desc.height, request.desc.height / 2);
+        assert_eq!(rendered.source_time, RationalTime::new(7, 5));
+
+        let actual = download_rgba(&gpu, &rendered.texture).unwrap();
+        assert_eq!(
+            actual.len(),
+            (rendered.desc.width * rendered.desc.height * 4) as usize
+        );
+        // Draftは厳密一致不要。「何かピクセルが出る」ことのみ保証。
+        assert!(actual.iter().any(|&v| v != 0));
+    }
+
+    #[test]
     fn graph_executor_matches_direct_fixed_path() {
         let Some(gpu) = gpu_or_skip() else { return };
         for request in [centered_request(), fractional_edge_request()] {
-            let graph_rendered = render_graph(
-                &gpu,
-                request.timeline_time,
-                &linear_graph_from_request(&request),
-            )
-            .unwrap();
-            let direct_rendered = render_frame_direct(&gpu, &request).unwrap();
+            for quality in [Quality::FINAL, Quality::DRAFT] {
+                let graph_rendered = render_graph(
+                    &gpu,
+                    request.timeline_time,
+                    &linear_graph_from_request(&request),
+                    quality,
+                )
+                .unwrap();
+                let direct_rendered = render_frame_direct(&gpu, &request, quality).unwrap();
 
-            let graph_actual = download_rgba(&gpu, &graph_rendered.texture);
-            let direct_actual = download_rgba(&gpu, &direct_rendered.texture);
-            assert_eq!(graph_rendered.source_time, direct_rendered.source_time);
-            assert_rgba_close(
-                "graph-matches-direct",
-                RgbaImageDesc {
-                    width: request.desc.width,
-                    height: request.desc.height,
-                },
-                &graph_actual,
-                &direct_actual,
-                0,
-            );
+                let graph_actual = download_rgba(&gpu, &graph_rendered.texture).unwrap();
+                let direct_actual = download_rgba(&gpu, &direct_rendered.texture).unwrap();
+                assert_eq!(graph_rendered.source_time, direct_rendered.source_time);
+                assert_eq!(graph_rendered.desc, direct_rendered.desc);
+                assert_rgba_close(
+                    "graph-matches-direct",
+                    RgbaImageDesc {
+                        width: graph_rendered.desc.width,
+                        height: graph_rendered.desc.height,
+                    },
+                    &graph_actual,
+                    &direct_actual,
+                    0,
+                );
+            }
         }
+    }
+
+    #[test]
+    fn render_frame_accepts_external_background_texture() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let request = centered_request();
+        let desc = request.desc;
+        let background = upload_rgba(&gpu, &desc, &solid_rgba(desc, request.source.color));
+
+        let external = render_frame_with_background_texture(
+            &gpu,
+            &BackgroundTextureRequest {
+                desc,
+                timeline_time: request.timeline_time,
+                source_time: RationalTime::from_seconds(42),
+                background: TextureRef {
+                    texture: &background,
+                    desc,
+                },
+                overlay: request.overlay,
+            },
+            Quality::FINAL,
+        )
+        .unwrap();
+
+        let fixed = render_frame_direct(&gpu, &request, Quality::FINAL).unwrap();
+        let external_actual = download_rgba(&gpu, &external.texture).unwrap();
+        let fixed_actual = download_rgba(&gpu, &fixed.texture).unwrap();
+
+        assert_eq!(external.source_time, RationalTime::from_seconds(42));
+        assert_rgba_close(
+            "external-background-matches-fixed",
+            RgbaImageDesc {
+                width: desc.width,
+                height: desc.height,
+            },
+            &external_actual,
+            &fixed_actual,
+            0,
+        );
     }
 
     #[test]
@@ -548,7 +706,7 @@ mod tests {
             output: TextureId(0),
         };
 
-        let err = render_graph(&gpu, RationalTime::ZERO, &graph).unwrap_err();
+        let err = render_graph(&gpu, RationalTime::ZERO, &graph, Quality::FINAL).unwrap_err();
         assert!(matches!(err, RenderError::MissingTexture(1)));
     }
 
@@ -566,7 +724,7 @@ mod tests {
             },
         });
 
-        let err = render_graph(&gpu, request.timeline_time, &graph).unwrap_err();
+        let err = render_graph(&gpu, request.timeline_time, &graph, Quality::FINAL).unwrap_err();
         assert!(matches!(err, RenderError::MultipleReportingSources));
     }
 
@@ -577,7 +735,7 @@ mod tests {
         let mut graph = linear_graph_from_request(&request);
         graph.output = TextureId(99);
 
-        let err = render_graph(&gpu, request.timeline_time, &graph).unwrap_err();
+        let err = render_graph(&gpu, request.timeline_time, &graph, Quality::FINAL).unwrap_err();
         assert!(matches!(err, RenderError::NonCompactTextureId(99)));
     }
 
@@ -595,7 +753,7 @@ mod tests {
             },
         });
 
-        let err = render_graph(&gpu, request.timeline_time, &graph).unwrap_err();
+        let err = render_graph(&gpu, request.timeline_time, &graph, Quality::FINAL).unwrap_err();
         assert!(matches!(err, RenderError::DuplicateTextureWrite(0)));
     }
 
@@ -606,7 +764,7 @@ mod tests {
         request.source.reports_source_time = false;
         let graph = linear_graph_from_request(&request);
 
-        let err = render_graph(&gpu, request.timeline_time, &graph).unwrap_err();
+        let err = render_graph(&gpu, request.timeline_time, &graph, Quality::FINAL).unwrap_err();
         assert!(matches!(err, RenderError::MissingSource));
     }
 
@@ -626,7 +784,7 @@ mod tests {
             },
         };
 
-        let err = render_graph(&gpu, request.timeline_time, &graph).unwrap_err();
+        let err = render_graph(&gpu, request.timeline_time, &graph, Quality::FINAL).unwrap_err();
         assert!(matches!(
             err,
             RenderError::OverlayInputMustBeTransparentPrefill { input: 1 }
@@ -646,7 +804,7 @@ mod tests {
             output: TextureId(3),
         };
 
-        let err = render_graph(&gpu, request.timeline_time, &graph).unwrap_err();
+        let err = render_graph(&gpu, request.timeline_time, &graph, Quality::FINAL).unwrap_err();
         assert!(matches!(
             err,
             RenderError::CompositeForegroundMustComeFromOverlay { foreground: 0 }
