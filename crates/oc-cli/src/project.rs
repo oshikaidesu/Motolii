@@ -102,16 +102,18 @@ pub fn export_project_v1(
     gpu: &GpuCtx,
     project_path: impl AsRef<Path>,
 ) -> Result<ExportReport, ProjectError> {
+    let project_path = project_path.as_ref();
     let project = load_project_v1(project_path)?;
-    let input_path = Path::new(&project.input);
-    let output_path = Path::new(&project.output);
+    let base = project_path.parent().unwrap_or_else(|| Path::new("."));
+    let input_path = base.join(&project.input);
+    let output_path = base.join(&project.output);
     let overlay = project.overlay.into_param_overlay();
 
     Ok(export_overlay_video(
         gpu,
         &ExportOverlayRequest {
-            input_path,
-            output_path,
+            input_path: &input_path,
+            output_path: &output_path,
             start_frame: project.start_frame,
             frame_count: project.frame_count,
             overlay,

@@ -10,7 +10,7 @@ fn main() {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    match parse_args(std::env::args())? {
+    match parse_args(std::env::args().skip(1))? {
         Command::Help => {
             print!("{HELP}");
         }

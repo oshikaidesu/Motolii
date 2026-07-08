@@ -58,6 +58,10 @@ pub struct LinearRenderGraph {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RenderStep {
+    /// 呼び出し側が供給する既存GPUテクスチャ(動画フレーム等)。
+    ExternalTexture {
+        output: TextureId,
+    },
     SolidSource {
         output: TextureId,
         source: SolidSource,
@@ -80,6 +84,8 @@ pub enum RenderError {
     UnsupportedFrameDesc,
     #[error("render_frame output must be premultiplied")]
     OutputMustBePremultiplied,
+    #[error("render graph external texture id {0} was not provided")]
+    MissingExternalTexture(usize),
     #[error("render graph has no texture for id {0}")]
     MissingTexture(usize),
     #[error("render graph has no source step")]
@@ -96,7 +102,7 @@ pub enum RenderError {
     OverlayInputMustBeTransparentPrefill { input: usize },
     #[error("composite foreground id {foreground} must be produced by OverlayRect output")]
     CompositeForegroundMustComeFromOverlay { foreground: usize },
-    #[error("composite background id {background} must be produced by SolidSource")]
+    #[error("composite background id {background} must be produced by SolidSource or ExternalTexture")]
     CompositeBackgroundMustComeFromSolid { background: usize },
     #[error("render graph output id {output} must be produced by CompositeNormal")]
     OutputMustBeProducedByCompositeNormal { output: usize },
@@ -113,8 +119,63 @@ pub enum RenderError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TexProducer {
     Solid { transparent: bool },
+    External,
     Overlay,
     Composite,
+}
+
+/// グラフ実行時に呼び出し側から注入するテクスチャとメタデータ。
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RenderGraphInputs<'a> {
+    pub external_textures: &'a [(TextureId, TextureRef<'a>)],
+    /// 明示時はグラフ内のreporting SolidSourceを必須にしない。
+    pub source_time: Option<RationalTime>,
+}
+
+/// シェーダ/パイプラインと中間テクスチャをフレーム間で使い回すセッション。
+pub struct RenderSession {
+    overlay: OverlayNode,
+    composite: CompositeNode,
+    transparent: Option<(FrameDesc, wgpu::Texture)>,
+    targets_desc: Option<FrameDesc>,
+    targets: Vec<wgpu::Texture>,
+}
+
+impl RenderSession {
+    pub fn new(gpu: &GpuCtx) -> Self {
+        Self {
+            overlay: OverlayNode::new(gpu),
+            composite: CompositeNode::new(gpu),
+            transparent: None,
+            targets_desc: None,
+            targets: Vec::new(),
+        }
+    }
+
+    fn transparent_texture(&mut self, gpu: &GpuCtx, desc: FrameDesc) -> &wgpu::Texture {
+        if self.transparent.as_ref().map(|(d, _)| *d) != Some(desc) {
+            let tex = upload_rgba(gpu, &desc, &solid_rgba(desc, [0.0, 0.0, 0.0, 0.0]));
+            self.transparent = Some((desc, tex));
+        }
+        &self.transparent.as_ref().unwrap().1
+    }
+
+    fn ensure_target(
+        &mut self,
+        gpu: &GpuCtx,
+        desc: FrameDesc,
+        slot: usize,
+        label: &'static str,
+    ) -> &wgpu::Texture {
+        if self.targets_desc != Some(desc) {
+            self.targets_desc = Some(desc);
+            self.targets.clear();
+        }
+        while self.targets.len() <= slot {
+            self.targets.push(create_rgba_render_target(gpu, desc, label));
+        }
+        &self.targets[slot]
+    }
 }
 
 pub fn render_frame(
@@ -122,59 +183,39 @@ pub fn render_frame(
     request: &RenderFrameRequest,
     quality: Quality,
 ) -> Result<RenderedFrame, RenderError> {
-    render_graph(
+    let mut session = RenderSession::new(gpu);
+    render_graph_cached(
         gpu,
+        &mut session,
         request.timeline_time,
         &linear_graph_from_request(request),
+        &RenderGraphInputs::default(),
         quality,
     )
 }
 
 pub fn render_frame_with_background_texture(
     gpu: &GpuCtx,
+    session: &mut RenderSession,
     request: &BackgroundTextureRequest<'_>,
     quality: Quality,
 ) -> Result<RenderedFrame, RenderError> {
     validate_render_desc(request.desc)?;
-    // 外部背景経路でも Quality を通し、解像度は render_desc に合わせる。
-    // 背景テクスチャは縮小済みで渡すこと(v1はダウンスケールノードを持たない)。
     let desc = quality.render_desc(request.desc);
     validate_background_desc(desc, request.background.desc)?;
-
-    let transparent = upload_rgba(gpu, &desc, &solid_rgba(desc, [0.0, 0.0, 0.0, 0.0]));
-    let foreground = create_rgba_render_target(gpu, desc, "oc-render-external-foreground");
-    let output = create_rgba_render_target(gpu, desc, "oc-render-external-output");
-
-    OverlayNode::new(gpu, request.overlay).render(
+    // 外部背景経路も render_graph 一本化。オーバーレイ形状だけ毎フレーム差し替える。
+    let graph = linear_graph_with_external_background(request.desc, request.overlay);
+    render_graph_cached(
         gpu,
-        TextureRef {
-            texture: &transparent,
-            desc,
+        session,
+        request.timeline_time,
+        &graph,
+        &RenderGraphInputs {
+            external_textures: &[(TextureId(0), request.background)],
+            source_time: Some(request.source_time),
         },
-        TextureRef {
-            texture: &foreground,
-            desc,
-        },
-    )?;
-
-    CompositeNode::new(gpu).render(
-        gpu,
-        request.background,
-        TextureRef {
-            texture: &foreground,
-            desc,
-        },
-        TextureRef {
-            texture: &output,
-            desc,
-        },
-    )?;
-
-    Ok(RenderedFrame {
-        texture: output,
-        desc,
-        source_time: request.source_time,
-    })
+        quality,
+    )
 }
 
 pub fn render_graph(
@@ -183,8 +224,27 @@ pub fn render_graph(
     graph: &LinearRenderGraph,
     quality: Quality,
 ) -> Result<RenderedFrame, RenderError> {
+    let mut session = RenderSession::new(gpu);
+    render_graph_cached(
+        gpu,
+        &mut session,
+        timeline_time,
+        graph,
+        &RenderGraphInputs::default(),
+        quality,
+    )
+}
+
+pub fn render_graph_cached(
+    gpu: &GpuCtx,
+    session: &mut RenderSession,
+    timeline_time: RationalTime,
+    graph: &LinearRenderGraph,
+    inputs: &RenderGraphInputs<'_>,
+    quality: Quality,
+) -> Result<RenderedFrame, RenderError> {
     validate_render_desc(graph.desc)?;
-    let graph_plan = validate_linear_graph(graph, timeline_time)?;
+    let graph_plan = validate_linear_graph(graph, timeline_time, inputs)?;
 
     // Quality.resolution_scaleのみ実効。正準座標はViewportTransform経由なので半解像度でも見た目比率は保つ。
     let desc = quality.render_desc(graph.desc);
@@ -193,23 +253,36 @@ pub fn render_graph(
 
     for step in &graph.steps {
         match *step {
+            RenderStep::ExternalTexture { output } => {
+                let (_, tex) = inputs
+                    .external_textures
+                    .iter()
+                    .find(|(id, _)| *id == output)
+                    .ok_or(RenderError::MissingExternalTexture(output.0))?;
+                // ハンドル(Arc)の複製でスロットに載せ、以降は通常テクスチャと同じ経路にする。
+                textures[output.0] = Some(tex.texture.clone());
+            }
             RenderStep::SolidSource { output, source } => {
-                textures[output.0] = Some(upload_rgba(gpu, &desc, &solid_rgba(desc, source.color)));
+                let texture = if source.color == [0.0, 0.0, 0.0, 0.0] {
+                    session.transparent_texture(gpu, desc).clone()
+                } else {
+                    upload_rgba(gpu, &desc, &solid_rgba(desc, source.color))
+                };
+                textures[output.0] = Some(texture);
             }
             RenderStep::OverlayRect {
                 input,
                 output,
                 overlay,
             } => {
-                let input_texture = texture_ref(&textures, input)?;
-                let output_texture =
-                    create_rgba_render_target(gpu, desc, "oc-render-graph-overlay");
-                OverlayNode::new(gpu, overlay).render(
+                let input_texture = texture_ref(&textures, desc, input)?;
+                let output_texture = session
+                    .ensure_target(gpu, desc, output.0, "oc-render-graph-overlay")
+                    .clone();
+                session.overlay.set_rect(overlay);
+                session.overlay.render(
                     gpu,
-                    TextureRef {
-                        texture: input_texture,
-                        desc,
-                    },
+                    input_texture,
                     TextureRef {
                         texture: &output_texture,
                         desc,
@@ -222,19 +295,15 @@ pub fn render_graph(
                 foreground,
                 output,
             } => {
-                let background_texture = texture_ref(&textures, background)?;
-                let foreground_texture = texture_ref(&textures, foreground)?;
-                let output_texture = create_rgba_render_target(gpu, desc, "oc-render-graph-output");
-                CompositeNode::new(gpu).render(
+                let background_texture = texture_ref(&textures, desc, background)?;
+                let foreground_texture = texture_ref(&textures, desc, foreground)?;
+                let output_texture = session
+                    .ensure_target(gpu, desc, output.0, "oc-render-graph-output")
+                    .clone();
+                session.composite.render(
                     gpu,
-                    TextureRef {
-                        texture: background_texture,
-                        desc,
-                    },
-                    TextureRef {
-                        texture: foreground_texture,
-                        desc,
-                    },
+                    background_texture,
+                    foreground_texture,
                     TextureRef {
                         texture: &output_texture,
                         desc,
@@ -255,6 +324,39 @@ pub fn render_graph(
         desc,
         source_time: graph_plan.source_time,
     })
+}
+
+pub fn linear_graph_with_external_background(
+    desc: FrameDesc,
+    overlay: RectOverlay,
+) -> LinearRenderGraph {
+    LinearRenderGraph {
+        desc,
+        steps: vec![
+            RenderStep::ExternalTexture {
+                output: TextureId(0),
+            },
+            RenderStep::SolidSource {
+                output: TextureId(1),
+                source: SolidSource {
+                    color: [0.0, 0.0, 0.0, 0.0],
+                    time_map: TimeMap::identity(),
+                    reports_source_time: false,
+                },
+            },
+            RenderStep::OverlayRect {
+                input: TextureId(1),
+                output: TextureId(2),
+                overlay,
+            },
+            RenderStep::CompositeNormal {
+                background: TextureId(0),
+                foreground: TextureId(2),
+                output: TextureId(3),
+            },
+        ],
+        output: TextureId(3),
+    }
 }
 
 pub fn linear_graph_from_request(request: &RenderFrameRequest) -> LinearRenderGraph {
@@ -297,6 +399,7 @@ struct GraphPlan {
 fn validate_linear_graph(
     graph: &LinearRenderGraph,
     timeline_time: RationalTime,
+    inputs: &RenderGraphInputs<'_>,
 ) -> Result<GraphPlan, RenderError> {
     let texture_count = texture_slot_count(graph)?;
     let mut written = vec![false; texture_count];
@@ -307,6 +410,17 @@ fn validate_linear_graph(
 
     for step in &graph.steps {
         match *step {
+            RenderStep::ExternalTexture { output } => {
+                if !inputs
+                    .external_textures
+                    .iter()
+                    .any(|(id, _)| *id == output)
+                {
+                    return Err(RenderError::MissingExternalTexture(output.0));
+                }
+                validate_output(output, &mut written)?;
+                producer[output.0] = Some(TexProducer::External);
+            }
             RenderStep::SolidSource { output, source } => {
                 validate_output(output, &mut written)?;
                 producer[output.0] = Some(TexProducer::Solid {
@@ -349,7 +463,7 @@ fn validate_linear_graph(
                     }
                 }
                 match producer.get(background.0).and_then(|p| *p) {
-                    Some(TexProducer::Solid { .. }) => {}
+                    Some(TexProducer::Solid { .. }) | Some(TexProducer::External) => {}
                     _ => {
                         return Err(RenderError::CompositeBackgroundMustComeFromSolid {
                             background: background.0,
@@ -391,7 +505,10 @@ fn validate_linear_graph(
 
     Ok(GraphPlan {
         texture_count,
-        source_time: source_time.ok_or(RenderError::MissingSource)?,
+        source_time: inputs
+            .source_time
+            .or(source_time)
+            .ok_or(RenderError::MissingSource)?,
     })
 }
 
@@ -400,6 +517,7 @@ fn texture_slot_count(graph: &LinearRenderGraph) -> Result<usize, RenderError> {
         .steps
         .iter()
         .flat_map(|step| match *step {
+            RenderStep::ExternalTexture { output } => vec![output.0],
             RenderStep::SolidSource { output, .. } => vec![output.0],
             RenderStep::OverlayRect { input, output, .. } => vec![input.0, output.0],
             RenderStep::CompositeNormal {
@@ -439,14 +557,16 @@ fn validate_output(id: TextureId, written: &mut [bool]) -> Result<(), RenderErro
     Ok(())
 }
 
-fn texture_ref(
-    textures: &[Option<wgpu::Texture>],
+fn texture_ref<'a>(
+    textures: &'a [Option<wgpu::Texture>],
+    desc: FrameDesc,
     id: TextureId,
-) -> Result<&wgpu::Texture, RenderError> {
-    textures
+) -> Result<TextureRef<'a>, RenderError> {
+    let texture = textures
         .get(id.0)
         .and_then(Option::as_ref)
-        .ok_or(RenderError::MissingTexture(id.0))
+        .ok_or(RenderError::MissingTexture(id.0))?;
+    Ok(TextureRef { texture, desc })
 }
 
 #[cfg(test)]
@@ -465,7 +585,7 @@ fn render_frame_direct(
     let foreground = create_rgba_render_target(gpu, desc, "oc-render-foreground");
     let output = create_rgba_render_target(gpu, desc, "oc-render-output");
 
-    OverlayNode::new(gpu, request.overlay).render(
+    OverlayNode::with_rect(gpu, request.overlay).render(
         gpu,
         TextureRef {
             texture: &transparent,
@@ -652,8 +772,10 @@ mod tests {
         let desc = request.desc;
         let background = upload_rgba(&gpu, &desc, &solid_rgba(desc, request.source.color));
 
+        let mut session = RenderSession::new(&gpu);
         let external = render_frame_with_background_texture(
             &gpu,
+            &mut session,
             &BackgroundTextureRequest {
                 desc,
                 timeline_time: request.timeline_time,

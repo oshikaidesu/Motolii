@@ -55,20 +55,7 @@ where
     I: IntoIterator<Item = S>,
     S: Into<String>,
 {
-    let mut args: Vec<String> = args.into_iter().map(Into::into).collect();
-    if args
-        .first()
-        .map(|s| {
-            !matches!(
-                s.as_str(),
-                "export-overlay" | "export-project" | "--help" | "-h"
-            )
-        })
-        .unwrap_or(false)
-        && args.len() > 1
-    {
-        args.remove(0);
-    }
+    let args: Vec<String> = args.into_iter().map(Into::into).collect();
     match args.first().map(|s| s.as_str()) {
         None | Some("--help") | Some("-h") => Ok(Command::Help),
         Some("export-overlay") => parse_export_overlay(&args[1..]).map(Command::ExportOverlay),
@@ -232,7 +219,6 @@ mod tests {
     #[test]
     fn parses_export_overlay_command() {
         let cmd = parse_args([
-            "oc-cli",
             "export-overlay",
             "--input",
             "in.mp4",
@@ -284,16 +270,13 @@ mod tests {
     }
 
     #[test]
-    fn accepts_real_binary_path_as_argv0() {
-        assert_eq!(
-            parse_args(["target/debug/oc-cli", "--help"]).unwrap(),
-            Command::Help
-        );
+    fn shows_help_when_no_args() {
+        assert_eq!(parse_args(Vec::<String>::new()).unwrap(), Command::Help);
     }
 
     #[test]
     fn parses_export_project_command() {
-        let cmd = parse_args(["oc-cli", "export-project", "--project", "proj.json"]).unwrap();
+        let cmd = parse_args(["export-project", "--project", "proj.json"]).unwrap();
 
         let Command::ExportProject(args) = cmd else {
             panic!("expected export-project command");

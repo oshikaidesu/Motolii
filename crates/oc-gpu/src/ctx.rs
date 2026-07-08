@@ -89,6 +89,11 @@ impl GpuCtx {
 
     /// 既存のdevice/queueを共有する。要件(device_requirements)を満たしている保証は
     /// 呼び出し側にある。UI統合では`new_for_ui`を優先すること。
+    ///
+    /// **コールバックスロット制約**: wgpuの`set_device_lost_callback`と
+    /// `on_uncaptured_error`はデバイスあたり1スロットのみ(後から登録すると置換)。
+    /// 本関数はランタイム監視用ハンドラを登録するため、M3でホスト(Slint等)が
+    /// 別ハンドラを持つ構成にする場合は登録の所有者を1箇所に集約すること。
     pub fn from_device_queue(device: wgpu::Device, queue: wgpu::Queue) -> Self {
         let runtime_state = install_runtime_handlers(&device);
         Self {
@@ -100,10 +105,20 @@ impl GpuCtx {
     }
 
     pub fn check_health(&self) -> Result<(), GpuRuntimeError> {
-        self.runtime_state
+        let mut state = self
+            .runtime_state
             .lock()
-            .expect("GPU runtime state poisoned")
-            .to_result()
+            .expect("GPU runtime state poisoned");
+        if let Some(reason) = &state.device_lost {
+            return Err(GpuRuntimeError::DeviceLost {
+                reason: reason.clone(),
+            });
+        }
+        // 一過性のuncaptured errorは報告後にクリアし、次の操作で復帰できるようにする。
+        if let Some(error) = state.uncaptured_error.take() {
+            return Err(GpuRuntimeError::Uncaptured(error));
+        }
+        Ok(())
     }
 
     async fn new_async() -> Result<(Self, UiDeviceParts), GpuError> {
@@ -176,20 +191,6 @@ impl GpuCtx {
 struct GpuRuntimeState {
     device_lost: Option<String>,
     uncaptured_error: Option<String>,
-}
-
-impl GpuRuntimeState {
-    fn to_result(&self) -> Result<(), GpuRuntimeError> {
-        if let Some(reason) = &self.device_lost {
-            return Err(GpuRuntimeError::DeviceLost {
-                reason: reason.clone(),
-            });
-        }
-        if let Some(error) = &self.uncaptured_error {
-            return Err(GpuRuntimeError::Uncaptured(error.clone()));
-        }
-        Ok(())
-    }
 }
 
 fn install_runtime_handlers(device: &wgpu::Device) -> Arc<Mutex<GpuRuntimeState>> {

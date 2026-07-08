@@ -114,7 +114,7 @@ fn overlay_rect_uses_canonical_space_across_resolutions() {
         let output = create_rgba_render_target(&gpu, desc, "overlay-output");
         prefill_with_magenta(&gpu, desc, &output);
 
-        let overlay = OverlayNode::new(
+        let overlay = OverlayNode::with_rect(
             &gpu,
             RectOverlay {
                 center,

@@ -249,7 +249,7 @@ pub struct OverlayNode {
 }
 
 impl OverlayNode {
-    pub fn new(gpu: &GpuCtx, rect: RectOverlay) -> Self {
+    pub fn new(gpu: &GpuCtx) -> Self {
         let shader = gpu
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -333,8 +333,26 @@ impl OverlayNode {
             pipeline,
             bind_group_layout,
             sampler,
-            rect,
+            rect: RectOverlay {
+                center: CanonicalPoint::CENTER,
+                size: CanonicalSize {
+                    width: 0.0,
+                    height: 0.0,
+                },
+                color: [0.0; 4],
+            },
         }
+    }
+
+    /// 単発レンダ向け。ループ内では `new` + `set_rect` でパイプラインを使い回すこと。
+    pub fn with_rect(gpu: &GpuCtx, rect: RectOverlay) -> Self {
+        let mut node = Self::new(gpu);
+        node.rect = rect;
+        node
+    }
+
+    pub fn set_rect(&mut self, rect: RectOverlay) {
+        self.rect = rect;
     }
 
     pub fn render(

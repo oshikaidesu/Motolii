@@ -7,7 +7,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(5);
+/// 対話系・単発ダウンロード向けの既定タイムアウト。
+pub const DEFAULT_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(5);
 const POLL_STEP: Duration = Duration::from_millis(10);
 
 /// パック系RGBAのCPUデータをVRAMのテクスチャへアップロードする。
@@ -55,7 +56,7 @@ pub fn upload_rgba(gpu: &GpuCtx, desc: &FrameDesc, data: &[u8]) -> wgpu::Texture
 /// 単発呼び出し向けの薄いラッパー。書き出しループ等、同一寸法を繰り返し
 /// ダウンロードする場合は`RgbaDownloader`を使い、毎フレームの確保を避けること。
 pub fn download_rgba(gpu: &GpuCtx, texture: &wgpu::Texture) -> Result<Vec<u8>, GpuRuntimeError> {
-    RgbaDownloader::new().download(gpu, texture)
+    RgbaDownloader::new().download(gpu, texture, DEFAULT_DOWNLOAD_TIMEOUT)
 }
 
 /// RGBA8ダウンロード用ステージングバッファ(MAP_READ)を使い回すダウンローダ。
@@ -84,6 +85,7 @@ impl RgbaDownloader {
         &mut self,
         gpu: &GpuCtx,
         texture: &wgpu::Texture,
+        timeout: Duration,
     ) -> Result<Vec<u8>, GpuRuntimeError> {
         let width = texture.width();
         let height = texture.height();
@@ -139,7 +141,7 @@ impl RgbaDownloader {
         slice.map_async(wgpu::MapMode::Read, move |result| {
             let _ = tx.send(result.map_err(|e| e.to_string()));
         });
-        if let Err(e) = wait_for_map(gpu, rx, DOWNLOAD_TIMEOUT) {
+        if let Err(e) = wait_for_map(gpu, rx, timeout) {
             // map要求が残留したバッファは再map時に検証エラーになるため再利用しない
             self.buffer = None;
             self.capacity = 0;
