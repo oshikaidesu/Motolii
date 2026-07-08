@@ -2,9 +2,52 @@ use oc_core::{ColorSpace, CpuFrame, FrameDesc, PixelFormat};
 
 use crate::GpuCtx;
 
-/// YUV420p(Rec.709 limited)→ sRGB RGBA8 変換パイプライン(M1-T3)。
+/// YUV変換の係数・レンジ(FrameDesc.color_spaceから導出)。
+/// シェーダとCPU参照実装が同じ値を共有する(落とし穴B-3対策)。
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ColorParams {
+    pub y_off: f32,
+    pub y_scale: f32,
+    pub c_scale: f32,
+    pub _pad: f32,
+    pub crv: f32,
+    pub cbu: f32,
+    pub cgu: f32,
+    pub cgv: f32,
+}
+
+impl ColorParams {
+    /// 対応外の色空間(RGB系タグ)はNone。
+    pub fn for_color_space(cs: ColorSpace) -> Option<Self> {
+        // 係数: BT.709 kr=0.2126 kb=0.0722 / BT.601 kr=0.299 kb=0.114
+        let (crv, cbu, cgu, cgv) = match cs {
+            ColorSpace::Rec709Limited | ColorSpace::Rec709Full => {
+                (1.5748, 1.8556, -0.187_324, -0.468_124)
+            }
+            ColorSpace::Rec601Limited => (1.402, 1.772, -0.344_136, -0.714_136),
+            ColorSpace::LinearRgb | ColorSpace::Srgb => return None,
+        };
+        let (y_off, y_scale, c_scale) = match cs {
+            ColorSpace::Rec709Full => (0.0, 1.0 / 255.0, 1.0 / 255.0),
+            _ => (16.0, 1.0 / 219.0, 1.0 / 224.0),
+        };
+        Some(Self {
+            y_off,
+            y_scale,
+            c_scale,
+            _pad: 0.0,
+            crv,
+            cbu,
+            cgu,
+            cgv,
+        })
+    }
+}
+
+/// YUV420p → ガンマ保持RGBA8 変換パイプライン(M1-T3)。
 /// wgpuにはネイティブYUVサンプラが無いためY/U/Vを別テクスチャに載せ、
-/// fragmentシェーダで合成する(compute+storage textureより互換性が高い)。
+/// fragmentシェーダで合成する。係数・レンジはFrameDesc.color_spaceに従う。
 pub struct YuvToRgba {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
@@ -18,22 +61,33 @@ impl YuvToRgba {
                 label: Some("yuv"),
                 source: wgpu::ShaderSource::Wgsl(include_str!("yuv.wgsl").into()),
             });
+        let mut entries: Vec<wgpu::BindGroupLayoutEntry> = (0..3)
+            .map(|i| wgpu::BindGroupLayoutEntry {
+                binding: i,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            })
+            .collect();
+        entries.push(wgpu::BindGroupLayoutEntry {
+            binding: 3,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        });
         let layout = gpu
             .device
             .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("yuv-bgl"),
-                entries: &(0..3)
-                    .map(|i| wgpu::BindGroupLayoutEntry {
-                        binding: i,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    })
-                    .collect::<Vec<_>>(),
+                entries: &entries,
             });
         let pipeline_layout = gpu
             .device
@@ -72,25 +126,39 @@ impl YuvToRgba {
         Self { pipeline, layout }
     }
 
-    /// YUV420pのCpuFrameを変換し、sRGB RGBA8テクスチャを返す。
+    /// YUV420pのCpuFrameを変換し、ガンマ保持RGBA8テクスチャを返す。
+    /// 係数はframe.desc.color_spaceから選択される。
     pub fn convert(&self, gpu: &GpuCtx, frame: &CpuFrame) -> wgpu::Texture {
         assert_eq!(
             frame.desc.format,
             PixelFormat::Yuv420p,
             "YuvToRgba::convert expects Yuv420p"
         );
+        let params = ColorParams::for_color_space(frame.desc.color_space)
+            .unwrap_or_else(|| panic!("unsupported YUV color space {:?}", frame.desc.color_space));
+
         let (w, h) = (frame.desc.width, frame.desc.height);
         let (cw, ch) = (w / 2, h / 2);
         let y_size = (w * h) as usize;
         let c_size = (cw * ch) as usize;
 
-        let y_plane = &frame.data[..y_size];
-        let u_plane = &frame.data[y_size..y_size + c_size];
-        let v_plane = &frame.data[y_size + c_size..y_size + 2 * c_size];
+        let y_tex = self.upload_plane(gpu, w, h, &frame.data[..y_size]);
+        let u_tex = self.upload_plane(gpu, cw, ch, &frame.data[y_size..y_size + c_size]);
+        let v_tex = self.upload_plane(
+            gpu,
+            cw,
+            ch,
+            &frame.data[y_size + c_size..y_size + 2 * c_size],
+        );
 
-        let y_tex = self.upload_plane(gpu, w, h, y_plane);
-        let u_tex = self.upload_plane(gpu, cw, ch, u_plane);
-        let v_tex = self.upload_plane(gpu, cw, ch, v_plane);
+        let param_buf = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("yuv-params"),
+            size: std::mem::size_of::<ColorParams>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        gpu.queue
+            .write_buffer(&param_buf, 0, bytemuck::bytes_of(&params));
 
         let out = gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("yuv-out"),
@@ -103,7 +171,10 @@ impl YuvToRgba {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            // TEXTURE_BINDING: 後段のエフェクト/UI(Slint Image)がそのまま参照できるように
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
         let out_view = out.create_view(&Default::default());
@@ -112,15 +183,22 @@ impl YuvToRgba {
             .iter()
             .map(|t| t.create_view(&Default::default()))
             .collect();
+        let mut bind_entries: Vec<wgpu::BindGroupEntry> = views
+            .iter()
+            .enumerate()
+            .map(|(i, v)| wgpu::BindGroupEntry {
+                binding: i as u32,
+                resource: wgpu::BindingResource::TextureView(v),
+            })
+            .collect();
+        bind_entries.push(wgpu::BindGroupEntry {
+            binding: 3,
+            resource: param_buf.as_entire_binding(),
+        });
         let bind = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("yuv-bind"),
             layout: &self.layout,
-            entries: &(0..3)
-                .map(|i| wgpu::BindGroupEntry {
-                    binding: i as u32,
-                    resource: wgpu::BindingResource::TextureView(&views[i]),
-                })
-                .collect::<Vec<_>>(),
+            entries: &bind_entries,
         });
 
         let mut enc = gpu
@@ -189,10 +267,11 @@ impl YuvToRgba {
     }
 }
 
-/// CPU参照実装: シェーダと同一式でYUV420p1ピクセルをsRGB RGBAへ変換する。
+/// CPU参照実装: シェーダと同一式・同一係数でYUV420pをRGBAへ変換する。
 /// ゴールデンテストの理論値として使う(GPUと数値一致すべき)。
 pub fn yuv_to_rgba_reference(frame: &CpuFrame) -> Vec<u8> {
     assert_eq!(frame.desc.format, PixelFormat::Yuv420p);
+    let p = ColorParams::for_color_space(frame.desc.color_space).expect("yuv color space");
     let (w, h) = (frame.desc.width as usize, frame.desc.height as usize);
     let (cw, ch) = (w / 2, h / 2);
     let y_size = w * h;
@@ -209,12 +288,12 @@ pub fn yuv_to_rgba_reference(frame: &CpuFrame) -> Vec<u8> {
             let uv = u_plane[cidx] as f32;
             let vv = v_plane[cidx] as f32;
 
-            let yl = (yv - 16.0) / 219.0;
-            let cb = (uv - 128.0) / 224.0;
-            let cr = (vv - 128.0) / 224.0;
-            let r = yl + 1.5748 * cr;
-            let g = yl - 0.1873 * cb - 0.4681 * cr;
-            let b = yl + 1.8556 * cb;
+            let yl = (yv - p.y_off) * p.y_scale;
+            let cb = (uv - 128.0) * p.c_scale;
+            let cr = (vv - 128.0) * p.c_scale;
+            let r = yl + p.crv * cr;
+            let g = yl + p.cgu * cb + p.cgv * cr;
+            let b = yl + p.cbu * cb;
 
             let o = (row * w + col) * 4;
             out[o] = (r.clamp(0.0, 1.0) * 255.0).round() as u8;
@@ -227,8 +306,8 @@ pub fn yuv_to_rgba_reference(frame: &CpuFrame) -> Vec<u8> {
 }
 
 /// テスト・ユーティリティ: べた塗りYUV420pフレームを作る。
-pub fn solid_yuv420p(w: u32, h: u32, y: u8, u: u8, v: u8) -> CpuFrame {
-    let desc = FrameDesc::yuv(w, h, PixelFormat::Yuv420p, ColorSpace::Rec709Limited);
+pub fn solid_yuv420p(w: u32, h: u32, y: u8, u: u8, v: u8, cs: ColorSpace) -> CpuFrame {
+    let desc = FrameDesc::yuv(w, h, PixelFormat::Yuv420p, cs);
     let mut data = vec![0u8; desc.data_size()];
     let y_size = (w * h) as usize;
     let c_size = ((w / 2) * (h / 2)) as usize;

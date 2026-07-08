@@ -6,7 +6,7 @@ license.workspace = true
 
 [dependencies]
 oc-core.workspace = true
-wgpu = "30"
+wgpu.workspace = true
 pollster = "0.4"
 bytemuck = { version = "1", features = ["derive"] }
 thiserror.workspace = true

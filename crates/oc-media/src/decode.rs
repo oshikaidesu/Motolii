@@ -2,11 +2,15 @@ use std::io::Read;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 
-use oc_core::{ColorSpace, CpuFrame, FrameDesc, PixelFormat, RationalTime};
+use oc_core::{CpuFrame, FrameDesc, PixelFormat, RationalTime};
 
 use crate::{MediaError, MediaInfo, Result};
 
-/// ffmpegサイドカーからRGBAフレームを順に読むリーダー。
+/// ffmpegサイドカーから**生YUV420p**フレームを順に読むリーダー。
+///
+/// 色変換はffmpegにやらせない(レビュー指摘#2): YUV→RGBは必ずoc-gpuの
+/// 変換シェーダ(FrameDesc.color_space準拠)を通す。ffmpegの暗黙rgba変換は
+/// CPUで走る上にmatrix/rangeタグの解釈が暗黙で、B-3(色事故)の温床になるため。
 ///
 /// シークはffmpegの入力`-ss`(直前キーフレームへシーク→目的時刻までデコード読み捨て)
 /// を使うためフレーム正確。シーク先は「目的フレームの半フレーム手前」を指定することで、
@@ -23,13 +27,13 @@ impl FrameReader {
     /// `start_frame`から順方向に読むリーダーを開く。
     pub fn open(path: impl AsRef<Path>, info: &MediaInfo, start_frame: i64) -> Result<Self> {
         assert!(start_frame >= 0, "start_frame must be >= 0");
-        let desc = FrameDesc::packed(
+        // 生YUVで受ける。寸法はprobeが回転適用済み(autorotate後の出力と一致)。
+        // 4:2:0のため奇数寸法素材はv1スコープ外(FrameDesc::yuvがpanicで検出)。
+        let desc = FrameDesc::yuv(
             info.width,
             info.height,
-            PixelFormat::Rgba8Unorm,
-            // ffmpegにsRGB相当のRGBAへ変換させて受ける
-            ColorSpace::Srgb,
-            false,
+            PixelFormat::Yuv420p,
+            info.color_space,
         );
 
         let mut cmd = Command::new("ffmpeg");
@@ -41,7 +45,7 @@ impl FrameReader {
         }
         cmd.arg("-i")
             .arg(path.as_ref())
-            .args(["-f", "rawvideo", "-pix_fmt", "rgba", "-"])
+            .args(["-f", "rawvideo", "-pix_fmt", "yuv420p", "-"])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 

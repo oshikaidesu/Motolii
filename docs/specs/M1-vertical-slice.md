@@ -8,7 +8,8 @@
 |---|---|
 | T0 | **部分完了**: workspace + CI(fmt/clippy/test + ffmpeg)は稼働。lavapipeのwgpu smokeテストはoc-gpu(T3)導入時に追加 |
 | T1 | **完了**: `oc-core`(RationalTime/Fps/FrameDesc/PixelFormat/ColorSpace/CpuFrame)。NTSC往復・非蓄積ドリフトのテスト済み |
-| T2 | **完了**: `oc-media`(probe/FrameReader/read_frame_at/Encoder)。ffmpeg実機での往復・フレーム正確シークテスト済み。S2の判断は[docs/spikes/s2-decode.md](../spikes/s2-decode.md)(ffmpeg-sidecarクレート不採用、自前パイプ採用) |
+| T2 | **完了(2026-07-08 レビュー対応で改訂)**: `oc-media`。デコードは**生YUV420pで受ける**(ffmpegに色変換させない — 指摘#2)。probeは色タグ(matrix/range)と**回転メタデータ**(指摘#4: スマホ縦動画で寸法スワップ)を取得し、durationはfpsグリッドにスナップ(指摘#7)。Encoderは**BT.709色タグを明示出力**(指摘#5)。回転素材・色タグのテスト済み |
+| T3 | **完了(2026-07-08 レビュー対応で改訂)**: `oc-gpu`。YUV→RGB変換は**係数/レンジをuniformで受け、FrameDesc.color_spaceから選択**(指摘#3: 709決め打ち廃止)。ゴールデンテストは709limited/709full/601limitedの3空間×6色でCPU参照実装と完全一致(lavapipe実測 diff=0)。`GpuCtx::from_device_queue`でUI(Slint)のデバイス共有に対応。**wgpuはSlint対応の29に統一**(指摘#1) |
 | T6 | **完了**: `oc-eval`(Value/KeyframeTrack/Interp/cubic_bezier_ease/DataTrack/ParamSource/DataTracks)。補間・イージング・DataTrack参照のテスト済み |
 | T3-T5, T7-T11 | 未着手。M0-S1(プレビューブリッジ)はGUI環境が必要なため開発主機で実施すること |
 
@@ -95,7 +96,7 @@ pub struct Quality {
 | T6 | oc-eval: キーフレームトラック(線形/ベジェ/ホールド)+ イージング + DataTrack参照 + 単体テスト | T1 | 補間の数値テスト、DataTrack参照込みの評価テストが通る(C-3) |
 | T7 | oc-nodes: `RenderNode` trait + SourceNode(動画フレーム)+ OverlayNode(パラメータ駆動の2D図形: 円/矩形/線、色・位置・サイズ)+ CompositeNode(normal/add/multiply、premultiplied正しく) | T3, T6 | 各ノード単体のゴールデンイメージテストが通る |
 | T8 | oc-render: グラフ実行器 `render_frame()`(トポロジカル順に実行、毎回全計算) | T7 | 「ソース→オーバーレイ→合成」グラフのゴールデンイメージテストが通る |
-| T9 | oc-export: `render_frame()`ループ→PNG連番 / ffmpegエンコードパイプ→mp4 | T2, T8 | 30fpsの数秒グラフを書き出し、フレーム数・時刻対応が正確(全フレームにタイムコード焼き込みで検証) |
+| T9 | oc-export: `render_frame()`ループ→PNG連番 / ffmpegエンコードパイプ→mp4 | T2, T8 | 30fpsの数秒グラフを書き出し、フレーム数・時刻対応が正確(全フレームにタイムコード焼き込みで検証)。**書き出しmp4の色タグ(bt709/limited)をprobeで検証**(レビュー指摘#5。Encoderのタグ付けは実装・テスト済み) |
 | T10 | oc-cli: プロジェクト設定ファイル(バージョンフィールド付きJSON)を読み、解析→評価→レンダ→書き出しを一気通貫実行。サンプルプロジェクト同梱 | T5, T6, T9 | サンプルプロジェクトのE2Eゴールデンテスト(先頭/中間/末尾の3フレーム比較)がCIで通る |
 | T11 | 実素材検証: 自分のMV素材で1ショット(数秒)を書き出す。プレビュー(M0-S1採用方式での簡易表示)と書き出しのピクセル一致確認 | T10 | 書き出したショットがMV制作に使える品質(主観)+ プレビュー/書き出し一致テスト(B-4)が通る |
 

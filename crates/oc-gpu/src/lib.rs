@@ -9,4 +9,4 @@ mod yuv;
 
 pub use ctx::{GpuCtx, GpuError};
 pub use transfer::{download_rgba, upload_rgba};
-pub use yuv::{solid_yuv420p, yuv_to_rgba_reference, YuvToRgba};
+pub use yuv::{solid_yuv420p, yuv_to_rgba_reference, ColorParams, YuvToRgba};

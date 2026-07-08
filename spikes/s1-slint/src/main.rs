@@ -1,7 +1,9 @@
 //! M0-S1スパイク(Slint版): UI基盤の合否判定。
 //!
 //! 検証項目(docs/specs/M0-spikes.md):
-//! 1. wgpuテクスチャのゼロコピー埋め込み(Slintと同一デバイスでレンダ→Image化)
+//! 1. **oc-gpu(コア)が作ったテクスチャをSlintに渡すE2E結線**(レビュー指摘#1):
+//!    Slintのdevice/queueを`GpuCtx::from_device_queue`で共有し、oc-gpuの
+//!    YUV変換シェーダの出力テクスチャを`Image::try_from`でそのまま表示する
 //! 2. 30fpsでのテクスチャ更新がUI操作と共存するか
 //! 3. 日本語ラベル表示と日本語IME入力(LineEditに変換しながら入力できるか)
 //! 4. タイムライン風のカスタムウィジェット操作(ドラッグでプレイヘッド移動)
@@ -11,6 +13,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use oc_core::ColorSpace;
+use oc_gpu::{solid_yuv420p, GpuCtx, YuvToRgba};
 use slint::wgpu_29::wgpu;
 
 slint::slint! {
@@ -86,45 +90,30 @@ slint::slint! {
 const TEX_W: u32 = 1280;
 const TEX_H: u32 = 720;
 
-struct Gpu {
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    texture: wgpu::Texture,
+struct Core {
+    gpu: GpuCtx,
+    conv: YuvToRgba,
 }
 
-/// 動くテストパターンをGPU上のクリアだけで描く(CPU転送ゼロ)。
-/// 本実装(M1)ではここが render_frame(t, Quality) に置き換わる。
-fn render_pattern(gpu: &Gpu, t: f32) {
-    let view = gpu.texture.create_view(&Default::default());
-    let mut enc = gpu
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+/// oc-gpuのYUV変換を通したテクスチャを作る(コア→UIのE2E結線)。
+/// 色相が時間で回るYUV値を作り、BT.709 limitedとして変換する。
+fn render_via_core(core: &Core, t: f32) -> wgpu::Texture {
+    let (y, u, v) = hue_to_yuv709((t * 40.0) % 360.0);
+    let frame = solid_yuv420p(TEX_W, TEX_H, y, u, v, ColorSpace::Rec709Limited);
+    core.conv.convert(&core.gpu, &frame)
+}
 
-    // 背景: 時間で色相が回る(30fps更新の体感確認用)
-    let (r, g, b) = hsv((t * 40.0) % 360.0, 0.5, 0.25);
-    enc.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("bg"),
-        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: &view,
-            depth_slice: None,
-            resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color {
-                    r: r as f64,
-                    g: g as f64,
-                    b: b as f64,
-                    a: 1.0,
-                }),
-                store: wgpu::StoreOp::Store,
-            },
-        })],
-        depth_stencil_attachment: None,
-        timestamp_writes: None,
-        occlusion_query_set: None,
-        multiview_mask: None,
-    });
-
-    gpu.queue.submit([enc.finish()]);
+/// 色相→BT.709 limited YUV(スパイク用の簡易変換)
+fn hue_to_yuv709(h: f32) -> (u8, u8, u8) {
+    let (r, g, b) = hsv(h, 0.6, 0.6);
+    let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    let cb = (b - y) / 1.8556;
+    let cr = (r - y) / 1.5748;
+    (
+        (16.0 + 219.0 * y).round() as u8,
+        (128.0 + 224.0 * cb).round() as u8,
+        (128.0 + 224.0 * cr).round() as u8,
+    )
 }
 
 fn hsv(h: f32, s: f32, v: f32) -> (f32, f32, f32) {
@@ -148,10 +137,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .select()?;
 
     let app = SpikeWindow::new()?;
-    let gpu: Rc<RefCell<Option<Gpu>>> = Rc::new(RefCell::new(None));
+    let core: Rc<RefCell<Option<Core>>> = Rc::new(RefCell::new(None));
 
-    // Slintと同一のdevice/queueを取得する(ゼロコピー共有の要)
-    let gpu_setup = gpu.clone();
+    // Slintと同一のdevice/queueをoc-gpuに共有する(ゼロコピー結線の要)
+    let core_setup = core.clone();
     app.window()
         .set_rendering_notifier(move |state, graphics_api| {
             let (
@@ -161,29 +150,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             else {
                 return;
             };
-            let texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("preview"),
-                size: wgpu::Extent3d {
-                    width: TEX_W,
-                    height: TEX_H,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-            *gpu_setup.borrow_mut() = Some(Gpu {
-                device: device.clone(),
-                queue: queue.clone(),
-                texture,
-            });
+            let gpu = GpuCtx::from_device_queue(device.clone(), queue.clone());
+            let conv = YuvToRgba::new(&gpu);
+            *core_setup.borrow_mut() = Some(Core { gpu, conv });
         })?;
 
-    // 30fpsでテストパターンを更新
+    // 30fpsでコア経由のテクスチャを更新
     let app_weak = app.as_weak();
     let start = std::time::Instant::now();
     let timer = slint::Timer::default();
@@ -194,10 +166,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let Some(app) = app_weak.upgrade() else {
                 return;
             };
-            let gpu_ref = gpu.borrow();
-            let Some(g) = gpu_ref.as_ref() else { return };
-            render_pattern(g, start.elapsed().as_secs_f32());
-            if let Ok(img) = slint::Image::try_from(g.texture.clone()) {
+            let core_ref = core.borrow();
+            let Some(core) = core_ref.as_ref() else { return };
+            let texture = render_via_core(core, start.elapsed().as_secs_f32());
+            if let Ok(img) = slint::Image::try_from(texture) {
                 app.set_preview_texture(img);
             }
         },

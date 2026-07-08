@@ -34,6 +34,21 @@ impl Encoder {
         } else {
             cmd.args(["-crf", "18", "-pix_fmt", "yuv420p"]);
         }
+        // 出力の色タグを明示する(レビュー指摘#5): タグ無しRGB由来のmp4は
+        // プレイヤーごとに解釈が割れ「書き出したら色が違う」を生む。
+        // v1はBT.709 limited固定。RGB→YUVの変換行列自体もbt709を強制する。
+        cmd.args([
+            "-vf",
+            "scale=out_color_matrix=bt709:out_range=tv",
+            "-colorspace",
+            "bt709",
+            "-color_primaries",
+            "bt709",
+            "-color_trc",
+            "bt709",
+            "-color_range",
+            "tv",
+        ]);
         cmd.arg(out_path.as_ref())
             .stdin(Stdio::piped())
             .stderr(Stdio::piped());

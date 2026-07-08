@@ -2,20 +2,30 @@
 //! 「フレームNを要求→正しいフレームが返る」(M1-T2の完了条件)を、
 //! フレーム番号を輝度に焼き込んだ自作素材で数値検証する。
 //!
+//! レビュー指摘対応:
+//! - #2: デコードは生YUV420pで受ける(ffmpegに色変換させない)→ Y面の輝度で検証
+//! - #5: 書き出しmp4にBT.709色タグが付くことをprobeで検証
+//! - #4: 回転メタデータ付き素材でprobe寸法とデコードが整合することを検証
+//!
 //! ffmpeg/ffprobeが無い環境ではskip(CIでは必ずインストールして実行する)。
 
 use oc_core::{ColorSpace, Fps, FrameDesc, PixelFormat, RationalTime};
 use oc_media::{probe, read_frame_at, Encoder, FrameReader};
 
 const W: u32 = 64;
-const H: u32 = 64;
+const H: u32 = 48;
 const N_FRAMES: i64 = 30;
 const FPS: Fps = Fps { num: 30, den: 1 };
-/// qp0でも4:4:4のRGB→YUV変換で±数値の誤差は出るため許容幅を持つ
+/// RGB→YUV→RGBの量子化で±数値の誤差は出るため許容幅を持つ
 const TOL: i32 = 6;
 
 fn frame_gray(index: i64) -> u8 {
     (index * 8) as u8
+}
+
+/// グレーRGB(g,g,g)のBT.709 limited輝度: Y = 16 + 219*g/255(グレーは係数に依らない)
+fn expected_luma(gray: u8) -> i32 {
+    (16.0 + 219.0 * gray as f64 / 255.0).round() as i32
 }
 
 fn make_test_video(path: &std::path::Path) {
@@ -32,20 +42,28 @@ fn make_test_video(path: &std::path::Path) {
     enc.finish().unwrap();
 }
 
-fn center_gray(frame: &oc_core::CpuFrame) -> i32 {
-    let x = (W / 2) as usize;
-    let y = (H / 2) as usize;
-    let off = (y * frame.desc.stride as usize) + x * 4;
-    frame.data[off] as i32
+/// YUV420pフレームのY面中央値
+fn center_luma(frame: &oc_core::CpuFrame) -> i32 {
+    let w = frame.desc.width as usize;
+    let x = w / 2;
+    let y = (frame.desc.height / 2) as usize;
+    frame.data[y * w + x] as i32
 }
 
 fn assert_frame_is(frame: &oc_core::CpuFrame, index: i64) {
-    let got = center_gray(frame);
-    let want = frame_gray(index) as i32;
+    assert_eq!(frame.desc.format, PixelFormat::Yuv420p);
+    let got = center_luma(frame);
+    let want = expected_luma(frame_gray(index));
     assert!(
         (got - want).abs() <= TOL,
-        "expected frame {index} (gray {want}), got gray {got}"
+        "expected frame {index} (luma {want}), got luma {got}"
     );
+}
+
+fn tmp_dir(tag: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("oc-media-{tag}-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
 }
 
 #[test]
@@ -54,25 +72,28 @@ fn encode_probe_decode_seek_roundtrip() {
         eprintln!("SKIP: ffmpeg/ffprobe not found on PATH");
         return;
     }
-    let dir = std::env::temp_dir().join(format!("oc-media-test-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = tmp_dir("roundtrip");
     let path = dir.join("counter.mp4");
     make_test_video(&path);
 
-    // --- probe ---
+    // --- probe: 寸法・fps・長さ・色タグ ---
     let info = probe(&path).unwrap();
     assert_eq!((info.width, info.height), (W, H));
     assert_eq!(info.fps, FPS);
+    assert_eq!(info.rotation, 0);
+    // 書き出し色タグ検証(#5): Encoderが付けたBT.709 limitedをprobeが読める
+    assert_eq!(info.color_space, ColorSpace::Rec709Limited);
     if let Some(d) = info.duration {
-        assert_eq!(d, RationalTime::from_seconds(1));
+        assert_eq!(d, RationalTime::from_frame(N_FRAMES, FPS));
     }
 
-    // --- 先頭からの順次デコード: 全フレームが順番通り ---
+    // --- 先頭からの順次デコード: 全フレームが順番通り(生YUVで受かる) ---
     let mut reader = FrameReader::open(&path, &info, 0).unwrap();
     let mut count = 0i64;
     while let Some(frame) = reader.next_frame().unwrap() {
         assert_frame_is(&frame, count);
         assert_eq!(frame.pts, RationalTime::from_frame(count, FPS));
+        assert_eq!(frame.desc.color_space, ColorSpace::Rec709Limited);
         count += 1;
     }
     assert_eq!(count, N_FRAMES);
@@ -96,8 +117,7 @@ fn seek_then_sequential_read_stays_aligned() {
         eprintln!("SKIP: ffmpeg/ffprobe not found on PATH");
         return;
     }
-    let dir = std::env::temp_dir().join(format!("oc-media-test-seq-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = tmp_dir("seq");
     let path = dir.join("counter.mp4");
     make_test_video(&path);
     let info = probe(&path).unwrap();
@@ -109,6 +129,51 @@ fn seek_then_sequential_read_stays_aligned() {
         assert_frame_is(&frame, index);
     }
     assert!(reader.next_frame().unwrap().is_none());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn rotated_footage_dimensions_match_decode() {
+    if !oc_media::tools_available() {
+        eprintln!("SKIP: ffmpeg/ffprobe not found on PATH");
+        return;
+    }
+    let dir = tmp_dir("rotate");
+    let src = dir.join("counter.mp4");
+    make_test_video(&src);
+
+    // 回転メタデータ(display matrix)を付けた素材を作る(スマホ縦動画の再現)
+    let rotated = dir.join("rotated.mp4");
+    let status = std::process::Command::new("ffmpeg")
+        .args(["-v", "error", "-y", "-display_rotation", "90"])
+        .arg("-i")
+        .arg(&src)
+        .args(["-c", "copy"])
+        .arg(&rotated)
+        .status()
+        .unwrap();
+    assert!(status.success(), "ffmpeg -display_rotation failed");
+
+    // probeは表示寸法(W/H入れ替え)を返し、デコード出力と一致すること(#4)
+    let info = probe(&rotated).unwrap();
+    assert_ne!(info.rotation, 0);
+    assert_eq!(
+        (info.width, info.height),
+        (H, W),
+        "rotated footage should swap dimensions"
+    );
+
+    // デコードがその寸法で正しくフレームを切り出せる(truncated frameにならない)
+    let mut reader = FrameReader::open(&rotated, &info, 0).unwrap();
+    let mut count = 0i64;
+    while let Some(frame) = reader.next_frame().unwrap() {
+        assert_eq!((frame.desc.width, frame.desc.height), (H, W));
+        // グレー素材なので回転しても輝度は同じ
+        assert_frame_is(&frame, count);
+        count += 1;
+    }
+    assert_eq!(count, N_FRAMES);
 
     std::fs::remove_dir_all(&dir).ok();
 }
