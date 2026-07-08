@@ -15,6 +15,14 @@ Pre-1.0, pre-first-release. The engine core is coming together (Rust workspace +
 
 **Current goal (M1 "exit demo"):** render a simple 2-layer composite from a project file — a real video background + a rectangle shape sliding right with easing — out to an mp4, from the CLI. No UI yet.
 
+## Open & local — and staying that way
+
+**No account. No online license. No acquisition rug-pull.** It runs fully offline, and the MIT/Apache-2.0 license means it can always be forked and continued.
+
+This matters right now: several "free" After Effects alternatives went free _via acquisition_ and come with strings — Cavalry (acquired by Canva) requires signing in with a Canva account; Autograph's maker Left Angle wound down entirely (site and all) and it now runs through the Maxon App with account-based license assignment (and dropped Linux). A community already burned by subscriptions is right to be wary.
+
+We take the opposite bet: a permissive, local, no-account tool that can't be taken away or gated later. The honest flip side is sustainability — OSS projects can die from _lack_ of maintainers (see Natron). Our answer is the license itself: because it's MIT/Apache and fully local, it can be forked and carried on by anyone, so it survives whoever is (or isn't) around.
+
 ## Why this architecture
 
 - **Lightness is structural, not a tweak.** Pixels live in GPU (wgpu) textures and are never bounced to the CPU. The dominant cost in compositing is memory bandwidth × round-trips, not resolution — so we minimize round-trips by construction. See [`docs/performance-model.md`](docs/performance-model.md).
