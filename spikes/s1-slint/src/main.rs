@@ -167,7 +167,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 return;
             };
             let core_ref = core.borrow();
-            let Some(core) = core_ref.as_ref() else { return };
+            let Some(core) = core_ref.as_ref() else {
+                return;
+            };
             let texture = render_via_core(core, start.elapsed().as_secs_f32());
             if let Ok(img) = slint::Image::try_from(texture) {
                 app.set_preview_texture(img);
