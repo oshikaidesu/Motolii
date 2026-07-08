@@ -28,6 +28,7 @@
 | [performance-model.md](performance-model.md) | 性能の設計根拠と規律 | 現行 |
 | [pitfalls-and-roadmap.md](pitfalls-and-roadmap.md) | 落とし穴カタログ+ロードマップ+凍結ゲート | 現行 |
 | [references.md](references.md) | 依存候補・参考リポジトリ(ライセンス区分) | 現行 |
+| [ae-pain-points.md](ae-pain-points.md) | AEユーザー不満の体系化+我々の解決タグ(プラグイン窓口仮説の検証) | 現行 |
 | [specs/](specs/README.md) | マイルストーン仕様書(エージェントへの発注書)。確定/ドラフトのステータスはspecs/README.md参照 | M0/M1確定、M2〜M5ドラフト |
 | [spikes/](spikes/) | スパイク結果報告(S1: Slint統合、S2: デコード) | 完了報告(歴史的記録、更新しない) |
 
