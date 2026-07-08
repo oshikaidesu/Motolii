@@ -104,10 +104,7 @@ impl RgbaDownloader {
             self.capacity = required;
         }
         // ハンドルをclone(Arcの複製)しておき、エラー時にself.bufferを捨てられるようにする
-        let buffer = self
-            .buffer
-            .clone()
-            .expect("buffer ensured just above");
+        let buffer = self.buffer.clone().expect("buffer ensured just above");
         let buffer = &buffer;
 
         let mut enc = gpu

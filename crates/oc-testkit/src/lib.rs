@@ -231,9 +231,9 @@ pub fn assert_rgba_close_with_artifacts(
         compare_rgba_labeled(label, desc, actual, expected).unwrap_or_else(|err| panic!("{err}"));
 
     if diff.stats.max_abs_diff > tolerance {
-        if let Err(err) = write_golden_artifacts_if_configured(
-            label, desc, actual, expected, &diff, artifact_dir,
-        ) {
+        if let Err(err) =
+            write_golden_artifacts_if_configured(label, desc, actual, expected, &diff, artifact_dir)
+        {
             eprintln!("{label}: failed to write golden artifacts: {err}");
         }
 
@@ -294,14 +294,13 @@ mod tests {
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn env_lock() -> MutexGuard<'static, ()> {
-        ENV_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     fn temp_artifact_dir(test_name: &str) -> PathBuf {
-        std::env::temp_dir().join(format!(
-            "oc-testkit-{test_name}-{}",
-            std::process::id()
-        ))
+        std::env::temp_dir().join(format!("oc-testkit-{test_name}-{}", std::process::id()))
     }
 
     #[test]

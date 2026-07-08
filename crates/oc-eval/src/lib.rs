@@ -75,10 +75,9 @@ impl ParamSource {
                 .get(track)
                 .map(|d| d.eval(t))
                 .unwrap_or_else(|| fallback.clone()),
-            ParamSource::Vec2Axes { x, y } => Value::Vec2([
-                eval_scalar_axis(x, t, ctx),
-                eval_scalar_axis(y, t, ctx),
-            ]),
+            ParamSource::Vec2Axes { x, y } => {
+                Value::Vec2([eval_scalar_axis(x, t, ctx), eval_scalar_axis(y, t, ctx)])
+            }
         }
     }
 }
@@ -90,9 +89,7 @@ fn eval_scalar_axis(source: &ParamSource, t: RationalTime, ctx: &DataTracks) -> 
                 .get(track)
                 .map(|d| d.eval(t))
                 .unwrap_or_else(|| fallback.clone());
-            v.as_f64()
-                .or_else(|| fallback.as_f64())
-                .unwrap_or(0.0)
+            v.as_f64().or_else(|| fallback.as_f64()).unwrap_or(0.0)
         }
         other => {
             let v = other.eval(t, ctx);

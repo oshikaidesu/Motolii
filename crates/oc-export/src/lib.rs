@@ -112,8 +112,7 @@ pub fn export_overlay_video(
                 },
                 Quality::FINAL,
             )?;
-            let rgba =
-                downloader.download(gpu, &rendered.texture, EXPORT_DOWNLOAD_TIMEOUT)?;
+            let rgba = downloader.download(gpu, &rendered.texture, EXPORT_DOWNLOAD_TIMEOUT)?;
             encoder.write_frame(&rgba)?;
             Ok(())
         })() {

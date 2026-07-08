@@ -210,16 +210,8 @@ pub fn export_project_v1(
     let info = probe(&input_path)?;
     let export_frames = export_frame_count(&project, &info)?;
     let start = RationalTime::from_frame(project.start_frame, info.fps);
-    let duration = RationalTime::from_frame(
-        export_frames.saturating_sub(1) as i64,
-        info.fps,
-    );
-    let data_tracks = build_data_tracks(
-        &project.param_drivers,
-        start,
-        duration,
-        info.fps,
-    )?;
+    let duration = RationalTime::from_frame(export_frames.saturating_sub(1) as i64, info.fps);
+    let data_tracks = build_data_tracks(&project.param_drivers, start, duration, info.fps)?;
     let overlay = project.overlay.into_param_overlay();
 
     Ok(export_overlay_video(

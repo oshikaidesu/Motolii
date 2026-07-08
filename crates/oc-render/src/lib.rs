@@ -59,9 +59,7 @@ pub struct LinearRenderGraph {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RenderStep {
     /// 動画レイヤー等、呼び出し側が供給するGPUテクスチャ（VideoSourceNode / T8-R4）。
-    VideoSource {
-        output: TextureId,
-    },
+    VideoSource { output: TextureId },
     SolidSource {
         output: TextureId,
         source: SolidSource,
@@ -172,7 +170,8 @@ impl RenderSession {
             self.targets.clear();
         }
         while self.targets.len() <= slot {
-            self.targets.push(create_rgba_render_target(gpu, desc, label));
+            self.targets
+                .push(create_rgba_render_target(gpu, desc, label));
         }
         &self.targets[slot]
     }
@@ -326,10 +325,7 @@ pub fn render_graph_cached(
     })
 }
 
-pub fn linear_graph_with_video_source(
-    desc: FrameDesc,
-    overlay: RectOverlay,
-) -> LinearRenderGraph {
+pub fn linear_graph_with_video_source(desc: FrameDesc, overlay: RectOverlay) -> LinearRenderGraph {
     LinearRenderGraph {
         desc,
         steps: vec![
@@ -411,11 +407,7 @@ fn validate_linear_graph(
     for step in &graph.steps {
         match *step {
             RenderStep::VideoSource { output } => {
-                if !inputs
-                    .video_sources
-                    .iter()
-                    .any(|(id, _)| *id == output)
-                {
+                if !inputs.video_sources.iter().any(|(id, _)| *id == output) {
                     return Err(RenderError::MissingVideoSource(output.0));
                 }
                 validate_output(output, &mut written)?;
