@@ -26,6 +26,8 @@
 | [Olive](https://github.com/olive-editor/olive) | GPL-3.0 | ノードベースNLEをゼロから作った先行例。float中間パイプライン・カラーマネジメント(OCIO統合)・ディスクキャッシュの設計判断。「アルファのまま長期化した」経緯自体がスコープ管理(D-4)の教材 |
 | [Natron](https://github.com/NatronGitHub/Natron) | GPL-2.0 | ノードグラフ評価・タイル/領域ベースのレンダリング要求伝播(RoI)。B-5のキャッシュキー設計の参考 |
 | [Remotion](https://github.com/remotion-dev/remotion) | 独自(企業は有償) | プレビュー/書き出し分離(B-4)の設計思想、「時刻t→決定的フレーム」の純関数モデル。コード流用は不可と考えること |
+| [Reco video-stitcher](https://github.com/reco-project/video-stitcher) | **AGPL-3.0**(+CLA) | 2カメラ映像のパノラマ合成ツール。**Slint GUI + wgpu(28)GPUパイプライン + ffmpegゼロコピーHWデコード(NVDEC/VideoToolbox)という、うちと同型の構成が実運用品質で成立している実証**(活発、1100+コミット)。学ぶ点: HWデコード→wgpuのゼロコピー統合(うちのv2スコープB-2の先行例)、push型フレーム投入APIと厳格な依存方向のクレート階層。wgpu 28使用 = Slintバージョン連動の現実の傍証 |
+| [rs-wgpu-video-player](https://github.com/singh-ps/rs-wgpu-video-player) | GPL-2.0(表記曖昧、GPL扱い) | Slint UI + ffmpeg + cpalの動画プレイヤー(小規模・初期段階)。**「音声サンプル消費クロックを主、遅れた映像フレームはドロップ」というM2トランスポート設計と同一の結論に独立到達**している点が裏付けとして貴重。一方で反面教師も明確: フレームは`SharedPixelBuffer`(CPU経路)でSlintに渡しており(うちが避けたコピー路線)、libswscaleでCPU色変換(レビュー指摘#2で排除した経路)。既知の限界(シーク未実装・長時間でA/Vドリフト・1スロットキューでフレーム落ち)は、うちの有理数時間・有界キュー設計が対処すべき点のリスト |
 
 ## その他の依存候補(定番、必要時に評価)
 
