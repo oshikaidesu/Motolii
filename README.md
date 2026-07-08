@@ -21,7 +21,15 @@ Pre-1.0, pre-first-release. The engine core is coming together (Rust workspace +
 
 This matters right now: several "free" After Effects alternatives went free _via acquisition_ and come with strings — Cavalry (acquired by Canva) requires signing in with a Canva account; Autograph's maker Left Angle wound down entirely (site and all) and it now runs through the Maxon App with account-based license assignment (and dropped Linux). A community already burned by subscriptions is right to be wary.
 
-We take the opposite bet: a permissive, local, no-account tool that can't be taken away or gated later. The honest flip side is sustainability — OSS projects can die from _lack_ of maintainers (see Natron). Our answer is the license itself: because it's MIT/Apache and fully local, it can be forked and carried on by anyone, so it survives whoever is (or isn't) around.
+We take the opposite bet: a permissive, local, no-account tool that can't be taken away or gated later. The honest flip side is sustainability — OSS projects can die from _lack_ of maintainers (see Natron). Our answer has two parts: (1) the license itself — MIT/Apache and fully local, so it can be forked and carried on by anyone; and (2) **LLM-driven development** (see below), which widens the contributor gateway instead of depending on a funded core team.
+
+## LLM-driven development
+
+This project is built to be developed and extended primarily with LLMs, and that is a deliberate sustainability strategy — not an afterthought.
+
+- **The plugin boundary is intentionally simple** (`texture in + params → texture out`, params auto-generate their UI) specifically so that effects and extensions are easy for an LLM to write. Extending the tool shouldn't require learning a heavy C++ SDK or fragile scripting — describe the effect, get a plugin.
+- **Development is spec-driven and self-verifying**: each task has an automatic pass/fail (`cargo test` / golden images), which is exactly what makes autonomous/LLM-assisted contribution safe and parallelizable. See [`AGENTS.md`](AGENTS.md) and [`docs/specs/`](docs/specs/).
+- **Why this de-risks funding**: the classic OSS failure is "the developer(s) ran out of time/money." By lowering the barrier to author plugins and core changes with an LLM, the _developer_ gateway widens the same way we widen the _user_ gateway — the project doesn't hinge on funding a dedicated dev team to stay alive and growing.
 
 ## Why this architecture
 
@@ -60,7 +68,7 @@ cargo run -p oc-cli -- export-project path/to/project.json
 
 ## Looking for collaborators
 
-This is designed for parallel, spec-driven development (each task has an automatic pass/fail via `cargo test` / golden images). If you like Rust + GPU + motion graphics, there is a clear on-ramp:
+This is designed for parallel, spec-driven, **LLM-assisted** development (each task has an automatic pass/fail via `cargo test` / golden images, so an LLM can implement a ticket and prove it). If you like Rust + GPU + motion graphics — or just want to point an LLM at a good-first-issue — there is a clear on-ramp:
 
 - Read [`docs/README.md`](docs/README.md), then the milestone specs under [`docs/specs/`](docs/specs/).
 - Contributor conventions and the absolute rules live in [`AGENTS.md`](AGENTS.md) (applies to human and AI contributors alike).
