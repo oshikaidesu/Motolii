@@ -15,7 +15,8 @@
 | [Symphonia](https://github.com/pdeljanov/Symphonia) | MPL-2.0 | Pure Rust音声デコード(MP3/AAC/FLAC/WAV等)。音声インポート(B-1)の第一候補。MPLはファイル単位コピーレフトなので依存利用は安全 |
 | [resvg / usvg](https://github.com/linebender/resvg) | MPL-2.0 | SVGパーサ(usvg: 参照解決済みの正規化ツリーを返す)。SVG読み込み(コンセプト決定でコア機能)の第一候補。linebender管理下で保守中。Vello描画と接続する(M4-K6) |
 | [rubato](https://github.com/HEnquist/rubato) | MIT | 音声リサンプリング。バリスピード再生(M2音声トランスポート設計の適応リサンプリング)の候補 |
-| [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) | Apache-2.0 | Zed製Rust GPU UIフレームワーク。crates.ioに単体公開済み(v0.2系、pre-1.0でAPI変動あり)。A-1でWebView案が実測で破綻した場合の代替UI基盤。[gpui-component](https://github.com/longbridge/gpui-component)(既製コンポーネント集)も存在 |
+| [Slint](https://github.com/slint-ui/slint) | GPL / **Royalty-Free(デスクトップ無償)** / 商用 | **UI基盤に採用決定(2026-07-08)**。公式wgpu統合(`unstable-wgpu-29`、`Image::try_from(wgpu::Texture)`でゼロコピー埋め込み)+日本語IME実績([2025年調査](https://www.boringcactus.com/2025/04/13/2025-survey-of-rust-gui-libraries.html)で合格)。[slint-interpreter](https://docs.rs/slint-interpreter)で.slintの実行時ロード可(プラグインパネル用)。Royalty-Freeライセンスの条文(帰属表示等)は配布前に精査 |
+| [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) | Apache-2.0 | Zed製Rust GPU UIフレームワーク。crates.ioに単体公開済み(v0.2系、pre-1.0でAPI変動あり)。IME実績あり。Slint不合格時の検討候補。[gpui-component](https://github.com/longbridge/gpui-component)(既製コンポーネント集)も存在 |
 | [Theatre.js](https://github.com/theatre-js/theatre) | core: Apache-2.0 / **studio: AGPL-3.0** | キーフレーム編集UI(シーケンスエディタ+グラフエディタ)の操作仕様の参考。**studio側はAGPLなのでコード流用禁止**、coreのデータモデル(JSON書き出し形式)は参考可 |
 
 ## 設計参考のみ(GPL系・特殊ライセンス、コード流用不可)
