@@ -225,6 +225,14 @@ impl PluginRegistry {
         self.param_drivers.get(id).copied()
     }
 
+    /// JSON等の動的なプラグインID文字列から参照する(M1最小)。
+    pub fn param_driver_by_name(&self, name: &str) -> Option<&'static dyn ParamDriverPlugin> {
+        self.param_drivers
+            .iter()
+            .find(|(id, _)| id.0 == name)
+            .map(|(_, plugin)| *plugin)
+    }
+
     pub fn composite(&self, id: &PluginId) -> Option<&'static dyn CompositePlugin> {
         self.composites.get(id).copied()
     }

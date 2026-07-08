@@ -22,6 +22,8 @@ pub struct ExportOverlayRequest<'a> {
     /// Noneなら入力ストリーム終端まで書き出す。
     pub frame_count: Option<usize>,
     pub overlay: ParamRectOverlay,
+    /// ParamDriver等で事前構築したDataTrack集合。
+    pub data_tracks: DataTracks,
     /// trueなら検証用のほぼロスレスH.264で書く。
     pub qp0: bool,
 }
@@ -74,7 +76,7 @@ pub fn export_overlay_video(
     let mut encoder = Encoder::open(request.output_path, &desc, info.fps, request.qp0)?;
     let mut render_session = RenderSession::new(gpu);
     let mut frames_written = 0usize;
-    let tracks = DataTracks::new();
+    let tracks = request.data_tracks.clone();
     let mut loop_error: Option<ExportError> = None;
 
     while request

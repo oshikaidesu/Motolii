@@ -58,6 +58,11 @@ pub enum ParamSource {
         track: DataTrackId,
         fallback: Value,
     },
+    /// スカラー2本からVec2を組み立てる(DataTrackのF64をVec2パラメータへ接続する最小経路)。
+    Vec2Axes {
+        x: Box<ParamSource>,
+        y: Box<ParamSource>,
+    },
 }
 
 impl ParamSource {
@@ -70,6 +75,11 @@ impl ParamSource {
                 .get(track)
                 .map(|d| d.eval(t))
                 .unwrap_or_else(|| fallback.clone()),
+            ParamSource::Vec2Axes { x, y } => {
+                let x = x.eval(t, ctx).as_f64().unwrap_or(0.0);
+                let y = y.eval(t, ctx).as_f64().unwrap_or(0.0);
+                Value::Vec2([x, y])
+            }
         }
     }
 }

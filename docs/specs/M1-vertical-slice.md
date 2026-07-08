@@ -15,12 +15,12 @@
 | T4 | **部分完了**: `oc-testkit`。RGBAゴールデン比較(最大誤差/平均誤差/差分RGBA生成)を共通化し、`oc-gpu`のYUVゴールデンテストをtestkit経由に置き換え済み。参照PNG保存・差分ファイル出力はT7/T8の実画像ゴールデン導入時に追加 |
 | T6 | **完了**: `oc-eval`(Value/KeyframeTrack/Interp/cubic_bezier_ease/DataTrack/ParamSource/DataTracks)。補間・イージング・DataTrack参照のテスト済み |
 | T7 | **部分完了**: `oc-nodes`。正準座標(原点中央・Y-up・高さ=1.0)→px変換を`ViewportTransform`に集約し、`FilterPlugin`をノード経由でGPU実行する最小橋を追加。`ClearFilter(赤)`を`oc-nodes`経由で実行し、`oc-testkit`ゴールデンで一致確認済み。`OverlayNode`最小版(正準座標の矩形1つ)を追加し、偶数/奇数・整数/端数境界の複数解像度で、背景グラデーションの外側一致と先塗り漏れ検出込みのゴールデンを追加。`CompositeNode`最小版(normal over)でpremultiplied alphaの期待値式をGPUゴールデン化 |
-| T12 | **部分完了**: `oc-plugin`。静的リンク版の種別レジストリ(Filter / ParamDriver / Composite)とGPUテクスチャ境界のtraitを追加。参照プラグインはCPUフレームを受け取らず、Filter/Compositeは`wgpu::CommandEncoder`へGPU render passを積む。ParamDriverはDataTrack生成を単体テスト済み。Filterは`oc-nodes`経由のGPUゴールデンで実証済み、Compositeのalpha契約は`oc-nodes::CompositeNode`で実証済み |
+| T12 | **部分完了**: `oc-plugin`。静的リンク版の種別レジストリ(Filter / ParamDriver / Composite)とGPUテクスチャ境界のtraitを追加。参照プラグインはCPUフレームを受け取らず、Filter/Compositeは`wgpu::CommandEncoder`へGPU render passを積む。ParamDriverはDataTrack生成を単体テスト済み。export経路で`SineParamDriver`→`DataTracks`→`ParamSource::Data`接続済み。Filterは`oc-nodes`経由のGPUゴールデンで実証済み、Compositeのalpha契約は`oc-nodes::CompositeNode`で実証済み |
 | T5 | **後方移動**: GPU色解析はプラグイン/解析拡張領域であり、M1完了条件から外す。M1では合成DataTrackまたはParamDriver参照プラグインで「値列がパラメータを駆動する」境界だけを検証する |
 | T11 | 未着手。M0-S1(Slint UI統合スパイク)はGUI環境が必要なため開発主機で実施すること |
 | T8 | **部分完了**: 固定グラフに加え、外部GPU背景テクスチャ(動画フレームをYUV→RGBA変換したもの)を受けてOverlay/Compositeする入口を追加。動画SourceNodeの正式グラフ化は後続 |
 | T9 | **部分完了**: `oc-export`を追加し、`FrameReader`→`YuvToRgba`→`oc-render`→`Encoder`の最小mp4書き出しループを実装。小さな入力動画で3フレームのmp4書き出し(`64x48 @ 12fps`)を実地確認済み。JSONプロジェクト接続は最小実装済み |
-| T10 | **部分完了**: `oc-cli export-overlay`に加えて `oc-cli export-project`（versioned JSON）を追加。JSON→`oc-export`接続を最小実装し、小さな入力動画→JSON→mp4の統合テストを確認済み。正式なプロジェクトE2Eサンプル同梱、キーフレーム/シェイプ/合成のゴールデン化、合成DataTrackまたはParamDriver接続は後続 |
+| T10 | **部分完了**: `oc-cli export-overlay`に加えて `oc-cli export-project`（versioned JSON）を追加。JSON→`oc-export`接続を最小実装し、小さな入力動画→JSON→mp4の統合テストを確認済み。キーフレーム/ParamDriver DataTrack駆動のゴールデン化済み。正式なプロジェクトE2Eサンプル同梱、合成DataTrack接続の拡張は後続 |
 
 ## 残タスクチケット(2026-07-09 監査。全消化+凍結ゲートレビューでM1完了)
 
@@ -31,7 +31,7 @@
 |---|---|---|---|
 | R1 | **完了**: `Quality { resolution_scale, precise_color, effect_samples }`を`oc-core`に定義し`render_frame`系へ配線。v1は`resolution_scale`のみ実効、他は口のみ | なし | Final(scale=1)の既存ゴールデンが全て不変。Draft(scale=2)で同グラフが「クラッシュせず出る」テストが通る(performance-modelの保証水準どおり) |
 | R2 | **完了**: `ParamRectOverlay`でParamSource駆動、exportがフレームごと評価、ProjectV1がKeyframes JSONを受理。先頭/中間/末尾ゴールデン通過 | R1 | キーフレームで矩形が移動するプロジェクトの書き出しで、先頭/中間/末尾3フレームのゴールデン比較が通る(T10完了条件) |
-| R3 | **ParamDriver/DataTrack接続**。参照ParamDriverプラグインが生成したDataTrackを`ParamSource::DataTrack`で参照してシェイプを駆動(「値列がパラメータを駆動する」境界検証、旧T5の代替) | R2 | DataTrack駆動のE2Eゴールデンが通る |
+| R3 | **完了**: `ParamDriver/DataTrack接続`。参照ParamDriver(`core.param.sine`)がDataTrackを生成し、`ParamSource::Data`+`Vec2Axes`でoverlay center.xを駆動。exportが事前構築した`DataTracks`を評価に渡す。先頭/中間/末尾ゴールデン通過 | R2 | DataTrack駆動のE2Eゴールデンが通る |
 | R4 | **動画SourceNodeの正式グラフ化**(T8残)。外部引数`BackgroundTextureRequest`方式に加え、グラフが動画ソースをノードとして持てる形に | R1 | ソースノード込みグラフのゴールデンが通り、既存の外部テクスチャ経路テストも不変 |
 | R5 | **T9完了条件の検証テスト**。(1)タイムコード焼き込み素材で30fps数秒を書き出し全フレームの時刻対応を検証 (2)書き出しmp4の色タグ(bt709/limited)をprobeで検証 | なし | 両テストがCIで通る |
 | R6 | **oc-testkit拡充**(T4残)。参照PNG保存・差分画像ファイル出力(ゴールデン失敗時のデバッグ運用) | なし | 意図的に壊したゴールデンで差分PNGが出力されるテストが通る |
