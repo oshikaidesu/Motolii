@@ -164,6 +164,16 @@ impl Mul<i64> for RationalTime {
     }
 }
 
+impl Mul<RationalTime> for RationalTime {
+    type Output = RationalTime;
+    fn mul(self, rhs: RationalTime) -> Self {
+        Self::reduce(
+            self.num as i128 * rhs.num as i128,
+            self.den as i128 * rhs.den as i128,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

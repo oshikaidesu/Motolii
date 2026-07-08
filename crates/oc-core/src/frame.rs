@@ -150,6 +150,27 @@ impl CpuFrame {
     }
 }
 
+/// Straight RGBAをpremultiplied RGBAへ変換する。
+///
+/// UIやユーザー入力の色はstraightとして受け取り、GPU合成境界へ入る前にこの関数へ集約する。
+pub fn premultiply_rgba_f32(mut rgba: [f32; 4]) -> [f32; 4] {
+    rgba[0] *= rgba[3];
+    rgba[1] *= rgba[3];
+    rgba[2] *= rgba[3];
+    rgba
+}
+
+/// u8 straight RGBAをpremultiplied RGBAへ変換する。テスト・CPU素材の境界用。
+pub fn premultiply_rgba_u8(rgba: [u8; 4]) -> [u8; 4] {
+    let a = rgba[3] as u16;
+    [
+        ((rgba[0] as u16 * a + 127) / 255) as u8,
+        ((rgba[1] as u16 * a + 127) / 255) as u8,
+        ((rgba[2] as u16 * a + 127) / 255) as u8,
+        rgba[3],
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,6 +195,15 @@ mod tests {
         let mut d = FrameDesc::packed(16, 16, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false);
         d.stride = 16; // 16*4より小さい
         assert!(d.validate().is_err());
+    }
+
+    #[test]
+    fn premultiplies_straight_color() {
+        assert_eq!(premultiply_rgba_u8([255, 128, 0, 128]), [128, 64, 0, 128]);
+        assert_eq!(
+            premultiply_rgba_f32([1.0, 0.5, 0.25, 0.5]),
+            [0.5, 0.25, 0.125, 0.5]
+        );
     }
 
     #[test]

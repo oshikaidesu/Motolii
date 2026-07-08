@@ -552,6 +552,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "oc-core",
+ "oc-testkit",
  "pollster",
  "thiserror",
  "wgpu",
@@ -564,6 +565,51 @@ dependencies = [
  "oc-core",
  "serde",
  "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "oc-nodes"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "oc-core",
+ "oc-eval",
+ "oc-gpu",
+ "oc-plugin",
+ "oc-testkit",
+ "thiserror",
+ "wgpu",
+]
+
+[[package]]
+name = "oc-plugin"
+version = "0.1.0"
+dependencies = [
+ "oc-core",
+ "oc-eval",
+ "oc-gpu",
+ "thiserror",
+ "wgpu",
+]
+
+[[package]]
+name = "oc-render"
+version = "0.1.0"
+dependencies = [
+ "oc-core",
+ "oc-gpu",
+ "oc-nodes",
+ "oc-plugin",
+ "oc-testkit",
+ "thiserror",
+ "wgpu",
+]
+
+[[package]]
+name = "oc-testkit"
+version = "0.1.0"
+dependencies = [
  "thiserror",
 ]
 

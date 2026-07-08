@@ -4,6 +4,10 @@
 
 mod frame;
 mod time;
+mod time_map;
 
-pub use frame::{ColorSpace, CpuFrame, FrameDesc, PixelFormat};
+pub use frame::{
+    premultiply_rgba_f32, premultiply_rgba_u8, ColorSpace, CpuFrame, FrameDesc, PixelFormat,
+};
 pub use time::{Fps, RationalTime};
+pub use time_map::TimeMap;

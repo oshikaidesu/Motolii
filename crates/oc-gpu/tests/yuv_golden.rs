@@ -5,6 +5,7 @@
 
 use oc_core::{ColorSpace, PixelFormat};
 use oc_gpu::{download_rgba, solid_yuv420p, yuv_to_rgba_reference, GpuCtx, YuvToRgba};
+use oc_testkit::{assert_rgba_close, RgbaImageDesc};
 
 fn gpu_or_skip() -> Option<GpuCtx> {
     match GpuCtx::new_headless() {
@@ -19,20 +20,6 @@ fn gpu_or_skip() -> Option<GpuCtx> {
             None
         }
     }
-}
-
-fn assert_close(gpu_out: &[u8], reference: &[u8], tol: i32, label: &str) {
-    assert_eq!(gpu_out.len(), reference.len());
-    let mut max_diff = 0i32;
-    for (i, (&a, &b)) in gpu_out.iter().zip(reference).enumerate() {
-        let d = (a as i32 - b as i32).abs();
-        max_diff = max_diff.max(d);
-        assert!(
-            d <= tol,
-            "{label}: pixel byte {i}: gpu={a} ref={b} diff={d} > {tol}"
-        );
-    }
-    eprintln!("{label}: max byte diff = {max_diff}");
 }
 
 #[test]
@@ -63,7 +50,16 @@ fn yuv_matches_reference_across_color_spaces() {
             let out_tex = conv.convert(&gpu, &frame);
             let gpu_out = download_rgba(&gpu, &out_tex);
             // GPUのラスタライズ/量子化で±1は出うるので許容1
-            assert_close(&gpu_out, &reference, 1, &format!("{cs_name}/{name}"));
+            assert_rgba_close(
+                &format!("{cs_name}/{name}"),
+                RgbaImageDesc {
+                    width: frame.desc.width,
+                    height: frame.desc.height,
+                },
+                &gpu_out,
+                &reference,
+                1,
+            );
         }
     }
 }
