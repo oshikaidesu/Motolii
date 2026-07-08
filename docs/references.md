@@ -8,7 +8,7 @@
 
 | リポジトリ | ライセンス | 何を参考/利用するか |
 |---|---|---|
-| [OpenCut](https://github.com/OpenCut-app/OpenCut) | MIT | タイムラインUI(React/Next.js)の操作仕様・コンポーネント。Rustコア(GPU compositor/effects/masks)は設計思想の参考。※フルリライト進行中のため追従は期待せず取り込みきり(落とし穴D-3) |
+| [OpenCut](https://github.com/OpenCut-app/OpenCut) | MIT | タイムラインUIの**操作仕様の参考のみ。コード流用は不可**(D-3改訂2026-07-08。UIはSlintで自前実装するためReactコンポーネントは流用対象外)。Rustコア(GPU compositor/effects/masks)は設計思想の参考 |
 | [ffmpeg-sidecar](https://github.com/nathanbabcock/ffmpeg-sidecar) | MIT | **B-2対策の本命**。ffmpegバイナリをサイドカープロセスとして起動しrawvideoフレームをIterator APIで受け取るRustクレート。M0-S2スパイクはまずこれを評価し、足りなければ自前パイプ実装 |
 | [wgpu](https://github.com/gfx-rs/wgpu) | Apache-2.0/MIT | レンダリングコアの土台(採用決定済み) |
 | [Vello](https://github.com/linebender/vello) | Apache-2.0/MIT | wgpuベースのGPUコンピュート2Dレンダラ(アルファ状態)。プロシージャルオーバーレイのベクター描画を自前シェーダで書く前に、依存候補として評価する価値あり |
