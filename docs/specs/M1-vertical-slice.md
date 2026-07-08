@@ -12,7 +12,7 @@
 | T1 | **完了**: `oc-core`(RationalTime/Fps/FrameDesc/PixelFormat/ColorSpace/CpuFrame)。NTSC往復・非蓄積ドリフトのテスト済み |
 | T2 | **完了(2026-07-08 レビュー対応で改訂)**: `oc-media`。デコードは**生YUV420pで受ける**(ffmpegに色変換させない — 指摘#2)。probeは色タグ(matrix/range)と**回転メタデータ**(指摘#4: スマホ縦動画で寸法スワップ)を取得し、durationはfpsグリッドにスナップ(指摘#7)。Encoderは**BT.709色タグを明示出力**(指摘#5)。回転素材・色タグのテスト済み |
 | T3 | **完了(2026-07-08 レビュー対応で改訂)**: `oc-gpu`。YUV→RGB変換は**係数/レンジをuniformで受け、FrameDesc.color_spaceから選択**(指摘#3: 709決め打ち廃止)。ゴールデンテストは709limited/709full/601limitedの3空間×6色でCPU参照実装と完全一致(lavapipe実測 diff=0)。`GpuCtx::from_device_queue`でUI(Slint)のデバイス共有に対応。**wgpuはSlint対応の29に統一**(指摘#1) |
-| T4 | **部分完了**: `oc-testkit`。RGBAゴールデン比較(最大誤差/平均誤差/差分RGBA生成)を共通化し、`oc-gpu`のYUVゴールデンテストをtestkit経由に置き換え済み。参照PNG保存・差分ファイル出力はT7/T8の実画像ゴールデン導入時に追加 |
+| T4 | **完了**: `oc-testkit`。RGBAゴールデン比較(最大誤差/平均誤差/差分RGBA生成)を共通化し、`oc-gpu`のYUVゴールデンテストをtestkit経由に置き換え済み。参照/actual/diffのPNG保存と`OC_TESTKIT_ARTIFACT_DIR`によるゴールデン失敗時の差分出力を追加 |
 | T6 | **完了**: `oc-eval`(Value/KeyframeTrack/Interp/cubic_bezier_ease/DataTrack/ParamSource/DataTracks)。補間・イージング・DataTrack参照のテスト済み |
 | T7 | **部分完了**: `oc-nodes`。正準座標(原点中央・Y-up・高さ=1.0)→px変換を`ViewportTransform`に集約し、`FilterPlugin`をノード経由でGPU実行する最小橋を追加。`ClearFilter(赤)`を`oc-nodes`経由で実行し、`oc-testkit`ゴールデンで一致確認済み。`OverlayNode`最小版(正準座標の矩形1つ)を追加し、偶数/奇数・整数/端数境界の複数解像度で、背景グラデーションの外側一致と先塗り漏れ検出込みのゴールデンを追加。`CompositeNode`最小版(normal over)でpremultiplied alphaの期待値式をGPUゴールデン化 |
 | T12 | **部分完了**: `oc-plugin`。静的リンク版の種別レジストリ(Filter / ParamDriver / Composite)とGPUテクスチャ境界のtraitを追加。参照プラグインはCPUフレームを受け取らず、Filter/Compositeは`wgpu::CommandEncoder`へGPU render passを積む。ParamDriverはDataTrack生成を単体テスト済み。Filterは`oc-nodes`経由のGPUゴールデンで実証済み、Compositeのalpha契約は`oc-nodes::CompositeNode`で実証済み |
@@ -34,7 +34,7 @@
 | R3 | **ParamDriver/DataTrack接続**。参照ParamDriverプラグインが生成したDataTrackを`ParamSource::DataTrack`で参照してシェイプを駆動(「値列がパラメータを駆動する」境界検証、旧T5の代替) | R2 | DataTrack駆動のE2Eゴールデンが通る |
 | R4 | **動画SourceNodeの正式グラフ化**(T8残)。外部引数`BackgroundTextureRequest`方式に加え、グラフが動画ソースをノードとして持てる形に | R1 | ソースノード込みグラフのゴールデンが通り、既存の外部テクスチャ経路テストも不変 |
 | R5 | **T9完了条件の検証テスト**。(1)タイムコード焼き込み素材で30fps数秒を書き出し全フレームの時刻対応を検証 (2)書き出しmp4の色タグ(bt709/limited)をprobeで検証 | なし | 両テストがCIで通る |
-| R6 | **oc-testkit拡充**(T4残)。参照PNG保存・差分画像ファイル出力(ゴールデン失敗時のデバッグ運用) | なし | 意図的に壊したゴールデンで差分PNGが出力されるテストが通る |
+| R6 | **完了**: **oc-testkit拡充**(T4残)。参照PNG保存・差分画像ファイル出力(ゴールデン失敗時のデバッグ運用) | なし | 意図的に壊したゴールデンで差分PNGが出力されるテストが通る |
 | R7 | **OverlayNode形状追加(円/線)+ Composite add/multiply**(T7残)。空間パラメータは正準座標、alpha契約は既存のnormal over式に準拠 | R1 | 各形状・各ブレンドの複数解像度ゴールデンが通る |
 | R8 | **Velloの採否評価**(T7未決事項)。SVG読み込み前提のベクター描画基盤としてVello+usvgをスパイク評価し、採否を本仕様と`references.md`に記録 | なし(独立スパイク) | 採否判断がドキュメント化される(コードは使い捨て可) |
 | R9 | **実素材検証**(T11)。自分のMV素材で1ショット書き出し+プレビュー/書き出しピクセル一致確認。**開発主機でのGUI(S1方式)が必要なため人間の関与必須** | R2 | 一致テストが通る+主観品質OK |
