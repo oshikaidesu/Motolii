@@ -6,6 +6,7 @@
 use std::path::Path;
 
 use oc_core::{ColorSpace, Fps, FrameDesc, PixelFormat, RationalTime};
+use oc_eval::DataTracks;
 use oc_export::{export_overlay_video, ExportOverlayRequest};
 use oc_gpu::GpuCtx;
 use oc_media::{probe, Encoder, FrameReader};
@@ -112,6 +113,7 @@ fn export_preserves_timeline_for_all_frames_at_30fps() {
             start_frame: 0,
             frame_count: Some(N_FRAMES as usize),
             overlay: passthrough_overlay(),
+            data_tracks: DataTracks::new(),
             qp0: true,
         },
     )
@@ -167,6 +169,7 @@ fn exported_mp4_probe_reports_bt709_limited() {
             start_frame: 0,
             frame_count: Some(N_FRAMES as usize),
             overlay: passthrough_overlay(),
+            data_tracks: DataTracks::new(),
             qp0: true,
         },
     )
