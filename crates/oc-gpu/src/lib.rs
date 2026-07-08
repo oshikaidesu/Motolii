@@ -7,6 +7,6 @@ mod ctx;
 mod transfer;
 mod yuv;
 
-pub use ctx::{GpuCtx, GpuError};
-pub use transfer::{download_rgba, upload_rgba};
+pub use ctx::{GpuCtx, GpuError, GpuRuntimeError};
+pub use transfer::{download_rgba, upload_rgba, RgbaDownloader};
 pub use yuv::{solid_yuv420p, yuv_to_rgba_reference, ColorParams, YuvToRgba};

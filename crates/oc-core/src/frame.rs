@@ -51,7 +51,7 @@ pub enum ColorSpace {
 }
 
 /// プラグイン/クレート間で受け渡すフレームの記述子。
-/// discussion-log 5-2の方針をコード化したもの。
+/// docs/concept.md「フレーム記述子」決定(2026-07-06)をコード化したもの。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FrameDesc {
     pub width: u32,

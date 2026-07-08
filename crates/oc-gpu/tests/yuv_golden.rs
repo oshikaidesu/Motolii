@@ -48,7 +48,7 @@ fn yuv_matches_reference_across_color_spaces() {
             let frame = solid_yuv420p(16, 16, y, u, v, cs);
             let reference = yuv_to_rgba_reference(&frame);
             let out_tex = conv.convert(&gpu, &frame);
-            let gpu_out = download_rgba(&gpu, &out_tex);
+            let gpu_out = download_rgba(&gpu, &out_tex).unwrap();
             // GPUのラスタライズ/量子化で±1は出うるので許容1
             assert_rgba_close(
                 &format!("{cs_name}/{name}"),
@@ -71,8 +71,8 @@ fn color_space_changes_output() {
     let mut conv = YuvToRgba::new(&gpu);
     let red_709 = solid_yuv420p(16, 16, 63, 102, 240, ColorSpace::Rec709Limited);
     let red_601 = solid_yuv420p(16, 16, 63, 102, 240, ColorSpace::Rec601Limited);
-    let out_709 = download_rgba(&gpu, &conv.convert(&gpu, &red_709));
-    let out_601 = download_rgba(&gpu, &conv.convert(&gpu, &red_601));
+    let out_709 = download_rgba(&gpu, &conv.convert(&gpu, &red_709)).unwrap();
+    let out_601 = download_rgba(&gpu, &conv.convert(&gpu, &red_601)).unwrap();
     assert_ne!(
         out_709, out_601,
         "601/709で出力が同一 = 係数が無視されている"

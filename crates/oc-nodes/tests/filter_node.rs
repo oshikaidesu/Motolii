@@ -42,7 +42,7 @@ fn clear_filter_runs_through_node_and_matches_golden() {
     )
     .unwrap();
 
-    let actual = download_rgba(&gpu, &output);
+    let actual = download_rgba(&gpu, &output).unwrap();
     let mut expected = vec![0u8; desc.data_size()];
     for px in expected.chunks_exact_mut(4) {
         px.copy_from_slice(&[255, 0, 0, 255]);
@@ -136,7 +136,7 @@ fn overlay_rect_uses_canonical_space_across_resolutions() {
             )
             .unwrap();
 
-        let actual = download_rgba(&gpu, &output);
+        let actual = download_rgba(&gpu, &output).unwrap();
         let expected =
             expected_rect_over_pattern(desc, &input_data, [0, 255, 0, 255], center, size);
         assert_rgba_close(
@@ -180,7 +180,7 @@ fn composite_normal_over_uses_premultiplied_alpha() {
         )
         .unwrap();
 
-    let actual = download_rgba(&gpu, &output);
+    let actual = download_rgba(&gpu, &output).unwrap();
     let expected_px = premul_over_u8(bg_px, fg_px);
     let expected = tiled(desc, expected_px);
     assert_rgba_close(

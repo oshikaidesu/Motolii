@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::f64::consts::TAU;
 use std::sync::OnceLock;
 
-use oc_core::{Fps, FrameDesc, RationalTime};
+use oc_core::{CompCamera, Fps, FrameDesc, RationalTime};
 use oc_eval::{DataTrack, Value};
 use oc_gpu::GpuCtx;
 
@@ -18,6 +18,8 @@ pub struct PluginId(pub &'static str);
 pub enum PluginKind {
     /// 予約: デコード/メディアソース。M1ではoc-media境界として扱う。
     Input,
+    /// 入力なしでレイヤーのRGBAテクスチャを生成する。
+    LayerSource,
     /// テクスチャ in/out のGPUエフェクト。
     Filter,
     /// 値・時系列データを生成し、ParamSource/DataTrack側を駆動する。
@@ -32,6 +34,7 @@ pub enum PluginKind {
 pub enum ValueType {
     F64,
     Vec2,
+    Vec3,
     Color,
 }
 
@@ -87,6 +90,12 @@ pub struct ParamDriverContext {
     pub sample_rate: Fps,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct LayerSourceContext {
+    /// v1ではコンポ全体で共有される単一カメラ。
+    pub camera: CompCamera,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum PluginError {
     #[error("duplicate {kind:?} plugin id: {id}")]
@@ -105,6 +114,20 @@ pub trait FilterPlugin: Send + Sync {
         t: RationalTime,
         params: &ResolvedParams,
         input: TextureRef<'_>,
+        output: TextureRef<'_>,
+    ) -> Result<(), PluginError>;
+}
+
+pub trait LayerSourcePlugin: Send + Sync {
+    fn desc(&self) -> &NodeDesc;
+
+    fn render(
+        &self,
+        gpu: &GpuCtx,
+        encoder: &mut wgpu::CommandEncoder,
+        t: RationalTime,
+        params: &ResolvedParams,
+        ctx: LayerSourceContext,
         output: TextureRef<'_>,
     ) -> Result<(), PluginError>;
 }
@@ -135,6 +158,7 @@ pub trait CompositePlugin: Send + Sync {
 
 #[derive(Default)]
 pub struct PluginRegistry {
+    layer_sources: BTreeMap<PluginId, &'static dyn LayerSourcePlugin>,
     filters: BTreeMap<PluginId, &'static dyn FilterPlugin>,
     param_drivers: BTreeMap<PluginId, &'static dyn ParamDriverPlugin>,
     composites: BTreeMap<PluginId, &'static dyn CompositePlugin>,
@@ -143,6 +167,18 @@ pub struct PluginRegistry {
 impl PluginRegistry {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn register_layer_source(
+        &mut self,
+        plugin: &'static dyn LayerSourcePlugin,
+    ) -> Result<(), PluginError> {
+        insert_unique(
+            &mut self.layer_sources,
+            PluginKind::LayerSource,
+            plugin.desc().id.clone(),
+            plugin,
+        )
     }
 
     pub fn register_filter(
@@ -193,8 +229,13 @@ impl PluginRegistry {
         self.composites.get(id).copied()
     }
 
+    pub fn layer_source(&self, id: &PluginId) -> Option<&'static dyn LayerSourcePlugin> {
+        self.layer_sources.get(id).copied()
+    }
+
     pub fn len(&self, kind: PluginKind) -> usize {
         match kind {
+            PluginKind::LayerSource => self.layer_sources.len(),
             PluginKind::Filter => self.filters.len(),
             PluginKind::ParamDriver => self.param_drivers.len(),
             PluginKind::Composite => self.composites.len(),
@@ -223,10 +264,12 @@ pub mod reference {
     use super::*;
 
     pub static CLEAR_FILTER: ClearFilter = ClearFilter;
+    pub static CLEAR_LAYER_SOURCE: ClearLayerSource = ClearLayerSource;
     pub static SINE_PARAM_DRIVER: SineParamDriver = SineParamDriver;
     pub static CLEAR_COMPOSITE: ClearComposite = ClearComposite;
 
     pub fn register_reference_plugins(registry: &mut PluginRegistry) -> Result<(), PluginError> {
+        registry.register_layer_source(&CLEAR_LAYER_SOURCE)?;
         registry.register_filter(&CLEAR_FILTER)?;
         registry.register_param_driver(&SINE_PARAM_DRIVER)?;
         registry.register_composite(&CLEAR_COMPOSITE)?;
@@ -249,6 +292,28 @@ pub mod reference {
             _input: TextureRef<'_>,
             output: TextureRef<'_>,
         ) -> Result<(), PluginError> {
+            clear_texture(encoder, output, color_from_params(params));
+            Ok(())
+        }
+    }
+
+    pub struct ClearLayerSource;
+
+    impl LayerSourcePlugin for ClearLayerSource {
+        fn desc(&self) -> &NodeDesc {
+            clear_layer_source_desc()
+        }
+
+        fn render(
+            &self,
+            _gpu: &GpuCtx,
+            encoder: &mut wgpu::CommandEncoder,
+            _t: RationalTime,
+            params: &ResolvedParams,
+            ctx: LayerSourceContext,
+            output: TextureRef<'_>,
+        ) -> Result<(), PluginError> {
+            ctx.camera.validate().map_err(PluginError::Render)?;
             clear_texture(encoder, output, color_from_params(params));
             Ok(())
         }
@@ -313,6 +378,17 @@ pub mod reference {
             params: color_params(),
             min_inputs: 1,
             max_inputs: 1,
+        })
+    }
+
+    fn clear_layer_source_desc() -> &'static NodeDesc {
+        static DESC: OnceLock<NodeDesc> = OnceLock::new();
+        DESC.get_or_init(|| NodeDesc {
+            id: PluginId("core.layer_source.clear"),
+            display_name: "Clear Layer Source",
+            params: color_params(),
+            min_inputs: 0,
+            max_inputs: 0,
         })
     }
 
@@ -408,7 +484,7 @@ pub mod reference {
 
 #[cfg(test)]
 mod tests {
-    use super::reference::{register_reference_plugins, SINE_PARAM_DRIVER};
+    use super::reference::{register_reference_plugins, CLEAR_LAYER_SOURCE, SINE_PARAM_DRIVER};
     use super::*;
 
     #[test]
@@ -416,9 +492,13 @@ mod tests {
         let mut registry = PluginRegistry::new();
         register_reference_plugins(&mut registry).unwrap();
 
+        assert_eq!(registry.len(PluginKind::LayerSource), 1);
         assert_eq!(registry.len(PluginKind::Filter), 1);
         assert_eq!(registry.len(PluginKind::ParamDriver), 1);
         assert_eq!(registry.len(PluginKind::Composite), 1);
+        assert!(registry
+            .layer_source(&PluginId("core.layer_source.clear"))
+            .is_some());
         assert!(registry.filter(&PluginId("core.filter.clear")).is_some());
         assert!(registry
             .param_driver(&PluginId("core.param.sine"))
@@ -426,6 +506,22 @@ mod tests {
         assert!(registry
             .composite(&PluginId("core.composite.clear"))
             .is_some());
+    }
+
+    #[test]
+    fn registry_rejects_duplicate_layer_source_within_kind() {
+        let mut registry = PluginRegistry::new();
+        registry.register_layer_source(&CLEAR_LAYER_SOURCE).unwrap();
+        let err = registry
+            .register_layer_source(&CLEAR_LAYER_SOURCE)
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            PluginError::Duplicate {
+                kind: PluginKind::LayerSource,
+                id: "core.layer_source.clear"
+            }
+        ));
     }
 
     #[test]
