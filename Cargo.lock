@@ -614,6 +614,7 @@ dependencies = [
  "oc-gpu",
  "oc-media",
  "oc-nodes",
+ "oc-plugin",
  "oc-render",
  "oc-testkit",
  "serde",

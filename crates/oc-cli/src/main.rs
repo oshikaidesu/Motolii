@@ -25,6 +25,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     start_frame: args.start_frame,
                     frame_count: args.frame_count,
                     overlay: args.overlay,
+                    data_tracks: oc_eval::DataTracks::new(),
                     qp0: args.qp0,
                 },
             )?;

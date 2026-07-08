@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use oc_core::{ColorSpace, Fps, FrameDesc, PixelFormat};
+use oc_eval::DataTracks;
 use oc_export::{export_overlay_video, ExportOverlayRequest};
 use oc_gpu::GpuCtx;
 use oc_media::{probe, Encoder};
@@ -68,6 +69,7 @@ fn exports_video_overlay_to_mp4() {
                 },
                 color: [1.0, 0.0, 0.0, 0.0],
             }),
+            data_tracks: DataTracks::new(),
             qp0: true,
         },
     )

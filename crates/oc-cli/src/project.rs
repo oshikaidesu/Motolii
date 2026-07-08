@@ -1,11 +1,17 @@
+use std::collections::HashMap;
 use std::path::Path;
 
 use serde::Deserialize;
 
-use oc_eval::{ParamSource, Value};
+use oc_core::{Fps, RationalTime};
+use oc_eval::{DataTrackId, DataTracks, ParamSource, Value};
 use oc_export::{export_overlay_video, ExportOverlayRequest, ExportReport};
 use oc_gpu::GpuCtx;
+use oc_media::{probe, MediaInfo};
 use oc_nodes::ParamRectOverlay;
+use oc_plugin::{
+    reference::register_reference_plugins, ParamDriverContext, PluginRegistry, ResolvedParams,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct ProjectV1 {
@@ -19,7 +25,21 @@ pub struct ProjectV1 {
     pub frame_count: Option<usize>,
     #[serde(default)]
     pub qp0: bool,
+    /// ParamDriverが生成するDataTrack宣言(M1最小: sine 1本)。
+    #[serde(default)]
+    pub param_drivers: Vec<ParamDriverV1>,
     pub overlay: RectOverlayParamV1,
+}
+
+/// ProjectV1でParamDriverプラグインを1本宣言する最小形。
+#[derive(Debug, Deserialize)]
+pub struct ParamDriverV1 {
+    /// プラグインID(例: `core.param.sine`)。
+    pub plugin: String,
+    /// 生成したDataTrackを格納するID。overlayの`ParamSource::Data`から参照する。
+    pub track: String,
+    #[serde(default)]
+    pub params: HashMap<String, Value>,
 }
 
 /// ProjectV1のオーバーレイ。定数配列と`ParamSource` JSONの両方を受理する。
@@ -81,6 +101,14 @@ pub enum ProjectError {
     Io(#[from] std::io::Error),
     #[error("unsupported project version: {0}")]
     UnsupportedVersion(u32),
+    #[error("unknown param driver plugin: {0}")]
+    UnknownParamDriver(String),
+    #[error("duplicate data track id: {0}")]
+    DuplicateDataTrack(String),
+    #[error(transparent)]
+    Media(#[from] oc_media::MediaError),
+    #[error(transparent)]
+    Plugin(#[from] oc_plugin::PluginError),
     #[error(transparent)]
     Export(#[from] oc_export::ExportError),
 }
@@ -98,6 +126,57 @@ pub fn load_project_v1_from_str(text: &str) -> Result<ProjectV1, ProjectError> {
     Ok(project)
 }
 
+fn export_frame_count(project: &ProjectV1, info: &MediaInfo) -> usize {
+    project.frame_count.unwrap_or_else(|| {
+        info.nb_frames
+            .map(|n| (n - project.start_frame).max(0) as usize)
+            .unwrap_or(0)
+    })
+}
+
+/// ParamDriver宣言からDataTrack集合を構築する。exportループの外で1回だけ呼ぶ。
+pub fn build_data_tracks(
+    drivers: &[ParamDriverV1],
+    start: RationalTime,
+    duration: RationalTime,
+    sample_rate: Fps,
+) -> Result<DataTracks, ProjectError> {
+    let mut registry = PluginRegistry::new();
+    register_reference_plugins(&mut registry)?;
+
+    let mut tracks = DataTracks::new();
+    let ctx = ParamDriverContext {
+        start,
+        duration,
+        sample_rate,
+    };
+
+    for driver in drivers {
+        let Some(plugin) = registry.param_driver_by_name(&driver.plugin) else {
+            return Err(ProjectError::UnknownParamDriver(driver.plugin.clone()));
+        };
+
+        let mut params = ResolvedParams::new();
+        for def in &plugin.desc().params {
+            let value = driver
+                .params
+                .get(def.id)
+                .cloned()
+                .unwrap_or_else(|| def.default.clone());
+            params.insert(def.id, value);
+        }
+
+        let track = plugin.build_track(ctx, &params)?;
+        let id = DataTrackId(driver.track.clone());
+        if tracks.get(&id).is_some() {
+            return Err(ProjectError::DuplicateDataTrack(driver.track.clone()));
+        }
+        tracks.insert(id, track);
+    }
+
+    Ok(tracks)
+}
+
 pub fn export_project_v1(
     gpu: &GpuCtx,
     project_path: impl AsRef<Path>,
@@ -107,6 +186,20 @@ pub fn export_project_v1(
     let base = project_path.parent().unwrap_or_else(|| Path::new("."));
     let input_path = base.join(&project.input);
     let output_path = base.join(&project.output);
+
+    let info = probe(&input_path)?;
+    let export_frames = export_frame_count(&project, &info);
+    let start = RationalTime::from_frame(project.start_frame, info.fps);
+    let duration = RationalTime::from_frame(
+        export_frames.saturating_sub(1) as i64,
+        info.fps,
+    );
+    let data_tracks = build_data_tracks(
+        &project.param_drivers,
+        start,
+        duration,
+        info.fps,
+    )?;
     let overlay = project.overlay.into_param_overlay();
 
     Ok(export_overlay_video(
@@ -117,6 +210,7 @@ pub fn export_project_v1(
             start_frame: project.start_frame,
             frame_count: project.frame_count,
             overlay,
+            data_tracks,
             qp0: project.qp0,
         },
     )?)
@@ -126,8 +220,9 @@ pub fn export_project_v1(
 mod tests {
     use super::*;
     use oc_core::RationalTime;
-    use oc_eval::{DataTracks, Interp, Keyframe, KeyframeTrack};
+    use oc_eval::{Interp, Keyframe, KeyframeTrack};
     use oc_nodes::{CanonicalPoint, CanonicalSize, RectOverlay};
+    use oc_plugin::reference::SINE_PARAM_DRIVER;
 
     fn keyed_center_overlay(
         start: CanonicalPoint,
@@ -215,6 +310,95 @@ mod tests {
     }
 
     #[test]
+    fn datatrack_json_parses_and_moves_center_x() {
+        let json = r#"{
+            "version": 1,
+            "input": "in.mp4",
+            "output": "out.mp4",
+            "param_drivers": [
+                {
+                    "plugin": "core.param.sine",
+                    "track": "sine_x",
+                    "params": {
+                        "amplitude": {"F64": 0.25},
+                        "frequency_hz": {"F64": 0.5},
+                        "offset": {"F64": 0.0}
+                    }
+                }
+            ],
+            "overlay": {
+                "center": {
+                    "Vec2Axes": {
+                        "x": {"Data": {"track": "sine_x", "fallback": {"F64": 0.0}}},
+                        "y": {"Const": {"F64": 0.0}}
+                    }
+                },
+                "size": [0.5, 0.5],
+                "color": [1.0, 0.0, 0.0, 1.0]
+            }
+        }"#;
+        let project: ProjectV1 = serde_json::from_str(json).unwrap();
+        let tracks = build_data_tracks(
+            &project.param_drivers,
+            RationalTime::ZERO,
+            RationalTime::from_seconds(1),
+            Fps { num: 12, den: 1 },
+        )
+        .unwrap();
+        let overlay = project.overlay.into_param_overlay();
+
+        let fps = Fps { num: 12, den: 1 };
+        let start = overlay
+            .eval(RationalTime::from_frame(0, fps), &tracks)
+            .unwrap();
+        let mid = overlay
+            .eval(RationalTime::from_frame(6, fps), &tracks)
+            .unwrap();
+        let end = overlay
+            .eval(RationalTime::from_frame(12, fps), &tracks)
+            .unwrap();
+
+        assert!(start.center.x.abs() < 1e-9);
+        assert!((mid.center.x - 0.25).abs() < 1e-9);
+        assert!(end.center.x.abs() < 1e-9);
+        assert_eq!(start.center.y, 0.0);
+    }
+
+    #[test]
+    fn build_data_tracks_rejects_unknown_plugin() {
+        let drivers = vec![ParamDriverV1 {
+            plugin: "nope".into(),
+            track: "x".into(),
+            params: HashMap::new(),
+        }];
+        let err = build_data_tracks(
+            &drivers,
+            RationalTime::ZERO,
+            RationalTime::from_seconds(1),
+            Fps { num: 12, den: 1 },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ProjectError::UnknownParamDriver(id) if id == "nope"));
+    }
+
+    #[test]
+    fn build_data_tracks_registers_sine_plugin() {
+        let drivers = vec![ParamDriverV1 {
+            plugin: "core.param.sine".into(),
+            track: "sine_x".into(),
+            params: HashMap::new(),
+        }];
+        let tracks = build_data_tracks(
+            &drivers,
+            RationalTime::ZERO,
+            RationalTime::from_seconds(1),
+            Fps { num: 12, den: 1 },
+        )
+        .unwrap();
+        assert!(tracks.get(&DataTrackId("sine_x".into())).is_some());
+    }
+
+    #[test]
     fn keyed_helper_matches_eval() {
         let overlay = keyed_center_overlay(
             CanonicalPoint { x: -0.25, y: 0.0 },
@@ -231,7 +415,6 @@ mod tests {
             .eval(RationalTime::new(1, 2), &DataTracks::new())
             .unwrap();
         assert!(mid.center.x.abs() < 1e-9);
-        // constant helper stil compiles with RectOverlay
         let _ = ParamRectOverlay::constant(RectOverlay {
             center: CanonicalPoint::CENTER,
             size: CanonicalSize {
@@ -240,5 +423,6 @@ mod tests {
             },
             color: [1.0, 1.0, 1.0, 1.0],
         });
+        let _ = SINE_PARAM_DRIVER;
     }
 }

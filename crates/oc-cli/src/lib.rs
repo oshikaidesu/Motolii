@@ -285,7 +285,10 @@ mod tests {
     }
 }
 
-pub use project::{load_project_v1, load_project_v1_from_str, ProjectV1, RectOverlayParamV1};
+pub use project::{
+    build_data_tracks, load_project_v1, load_project_v1_from_str, ParamDriverV1, ProjectV1,
+    RectOverlayParamV1,
+};
 
 pub fn export_project(
     gpu: &oc_gpu::GpuCtx,
