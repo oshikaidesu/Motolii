@@ -19,7 +19,7 @@
 | T5 | **後方移動**: GPU色解析はプラグイン/解析拡張領域であり、M1完了条件から外す。M1では合成DataTrackまたはParamDriver参照プラグインで「値列がパラメータを駆動する」境界だけを検証する |
 | T11 | 未着手。M0-S1(Slint UI統合スパイク)はGUI環境が必要なため開発主機で実施すること |
 | T8 | **部分完了**: 固定グラフに加え、外部GPU背景テクスチャ(動画フレームをYUV→RGBA変換したもの)を受けてOverlay/Compositeする入口を追加。動画SourceNodeの正式グラフ化は後続 |
-| T9 | **部分完了**: `oc-export`を追加し、`FrameReader`→`YuvToRgba`→`oc-render`→`Encoder`の最小mp4書き出しループを実装。小さな入力動画で3フレームのmp4書き出し(`64x48 @ 12fps`)を実地確認済み。JSONプロジェクト接続は最小実装済み |
+| T9 | **完了**: `oc-export`を追加し、`FrameReader`→`YuvToRgba`→`oc-render`→`Encoder`の最小mp4書き出しループを実装。30fps×3秒のタイムコード焼き込み素材で全フレームの時刻対応を検証(R5)。書き出しmp4のBT.709 limited色タグをprobeで検証(R5) |
 | T10 | **部分完了**: `oc-cli export-overlay`に加えて `oc-cli export-project`（versioned JSON）を追加。JSON→`oc-export`接続を最小実装し、小さな入力動画→JSON→mp4の統合テストを確認済み。正式なプロジェクトE2Eサンプル同梱、キーフレーム/シェイプ/合成のゴールデン化、合成DataTrackまたはParamDriver接続は後続 |
 
 ## 残タスクチケット(2026-07-09 監査。全消化+凍結ゲートレビューでM1完了)
@@ -33,7 +33,7 @@
 | R2 | **完了**: `ParamRectOverlay`でParamSource駆動、exportがフレームごと評価、ProjectV1がKeyframes JSONを受理。先頭/中間/末尾ゴールデン通過 | R1 | キーフレームで矩形が移動するプロジェクトの書き出しで、先頭/中間/末尾3フレームのゴールデン比較が通る(T10完了条件) |
 | R3 | **ParamDriver/DataTrack接続**。参照ParamDriverプラグインが生成したDataTrackを`ParamSource::DataTrack`で参照してシェイプを駆動(「値列がパラメータを駆動する」境界検証、旧T5の代替) | R2 | DataTrack駆動のE2Eゴールデンが通る |
 | R4 | **動画SourceNodeの正式グラフ化**(T8残)。外部引数`BackgroundTextureRequest`方式に加え、グラフが動画ソースをノードとして持てる形に | R1 | ソースノード込みグラフのゴールデンが通り、既存の外部テクスチャ経路テストも不変 |
-| R5 | **T9完了条件の検証テスト**。(1)タイムコード焼き込み素材で30fps数秒を書き出し全フレームの時刻対応を検証 (2)書き出しmp4の色タグ(bt709/limited)をprobeで検証 | なし | 両テストがCIで通る |
+| R5 | **完了**: T9完了条件の検証テスト。`oc-export/tests/t9_validation.rs`で(1)30fps×3秒タイムコード焼き込み素材の全フレーム時刻対応 (2)書き出しmp4のBT.709 limited色タグ(ffprobe生タグ含む)を検証 | なし | 両テストがCIで通る |
 | R6 | **oc-testkit拡充**(T4残)。参照PNG保存・差分画像ファイル出力(ゴールデン失敗時のデバッグ運用) | なし | 意図的に壊したゴールデンで差分PNGが出力されるテストが通る |
 | R7 | **OverlayNode形状追加(円/線)+ Composite add/multiply**(T7残)。空間パラメータは正準座標、alpha契約は既存のnormal over式に準拠 | R1 | 各形状・各ブレンドの複数解像度ゴールデンが通る |
 | R8 | **Velloの採否評価**(T7未決事項)。SVG読み込み前提のベクター描画基盤としてVello+usvgをスパイク評価し、採否を本仕様と`references.md`に記録 | なし(独立スパイク) | 採否判断がドキュメント化される(コードは使い捨て可) |
