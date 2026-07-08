@@ -18,7 +18,7 @@
 
 | ID | 内容 | 依存 | 完了条件 |
 |---|---|---|---|
-| S1 | **(2026-07-08 改訂2)** Slint検証スパイク(`spikes/s1-slint/`、コンパイル済み)。UI基盤方針をWebViewからSlintに転換したため、旧S1a/S1b(WebViewブリッジ2方式)は廃止。検証項目: (1) **oc-gpuが作ったテクスチャをSlintに渡すE2E結線**(レビュー指摘#1対応: workspaceのwgpuをSlint対応の29に統一し、スパイクは`GpuCtx::from_device_queue`でSlintのdeviceを共有→oc-gpuのYUV変換出力を`Image::try_from`で表示する実装済み)、(2) 30fps更新とUI操作の共存、(3) 日本語IME入力(LineEditで変換→確定)、(4) 日本語ラベル表示、(5) タイムライン風ドラッグ操作。開発主機で`cargo run`して確認 | なし | `docs/spikes/s1-slint.md` に合否(特にIME)を記録し、M3仕様を確定 |
+| S1 | **(2026-07-08 改訂3)** Slint検証スパイク(`spikes/s1-slint/`)。UI基盤方針をWebViewからSlintに転換したため、旧S1a/S1b(WebViewブリッジ2方式)は廃止。検証項目: (1) **oc-gpuが作ったテクスチャをSlintに渡すE2E結線**(レビュー指摘#1対応: workspaceのwgpuをSlint対応の29に統一し、`GpuCtx::new_for_ui`のdeviceを`WGPUConfiguration::Manual`で共有)、(2) 30fps更新とUI操作の共存、(3) 日本語IME入力(LineEditで変換→確定)、(4) 日本語ラベル表示、(5) タイムライン風ドラッグ操作。**実行時落とし穴**として「`require_wgpu_29`なのにOpenGLレンダラが選ばれる」ミスマッチを確認し、`slint` featureを`renderer-femtovg-wgpu`明示に固定して回避 | なし | `docs/spikes/s1-slint.md` に合否(特にIME)を記録し、M3仕様を確定 |
 | S2 | [ffmpeg-sidecar](https://github.com/nathanbabcock/ffmpeg-sidecar)クレートで動画→rawvideoフレーム取得→wgpuテクスチャ表示。フレーム正確シーク(任意フレームへの往復)と、VFR素材(スマホ撮影)での挙動を確認 | なし | `docs/spikes/s2-decode.md` にデコードスループット、シーク往復時間、VFR時のタイムスタンプ挙動、クレート採否を記録 |
 | S3 | 有理数時間型(`i64分子/i64分母`)の設計メモ: フレーム番号との相互変換、異なるfpsのクリップ混在、音声サンプル位置との対応。コードは最小限(型と変換関数+テストのみ) | なし | `docs/spikes/s3-time.md` に型定義とM1で使う最終形を記録 |
 

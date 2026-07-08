@@ -8,7 +8,7 @@ edition = "2021"
 [workspace]
 
 [dependencies]
-slint = { version = "~1.17", features = ["unstable-wgpu-29"] }
+slint = { version = "~1.17", default-features = false, features = ["compat-1-2", "std", "backend-winit", "renderer-femtovg-wgpu", "unstable-wgpu-29"] }
 wgpu = "29"
 oc-core = { path = "../../crates/oc-core" }
 oc-gpu = { path = "../../crates/oc-gpu" }
