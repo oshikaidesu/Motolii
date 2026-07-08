@@ -6,7 +6,7 @@ mod project;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
-    ExportOverlay(ExportOverlayArgs),
+    ExportOverlay(Box<ExportOverlayArgs>),
     ExportProject(ExportProjectArgs),
     Help,
 }
@@ -58,7 +58,9 @@ where
     let args: Vec<String> = args.into_iter().map(Into::into).collect();
     match args.first().map(|s| s.as_str()) {
         None | Some("--help") | Some("-h") => Ok(Command::Help),
-        Some("export-overlay") => parse_export_overlay(&args[1..]).map(Command::ExportOverlay),
+        Some("export-overlay") => {
+            parse_export_overlay(&args[1..]).map(|args| Command::ExportOverlay(Box::new(args)))
+        }
         Some("export-project") => parse_export_project(&args[1..]).map(Command::ExportProject),
         Some(other) => Err(CliError::Usage(format!(
             "unknown command: {other}\n\n{HELP}"
@@ -212,6 +214,19 @@ where
         .map_err(|_| CliError::Usage(format!("{name} has invalid value: {raw}")))
 }
 
+pub use project::{
+    build_data_tracks, load_project_v1, load_project_v1_from_str, ParamDriverV1, ProjectV1,
+    RectOverlayParamV1,
+};
+
+pub fn export_project(
+    gpu: &oc_gpu::GpuCtx,
+    project_path: impl AsRef<std::path::Path>,
+) -> Result<oc_export::ExportReport, CliError> {
+    project::export_project_v1(gpu, project_path.as_ref())
+        .map_err(|e| CliError::Usage(e.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,17 +298,4 @@ mod tests {
         };
         assert_eq!(args.project, PathBuf::from("proj.json"));
     }
-}
-
-pub use project::{
-    build_data_tracks, load_project_v1, load_project_v1_from_str, ParamDriverV1, ProjectV1,
-    RectOverlayParamV1,
-};
-
-pub fn export_project(
-    gpu: &oc_gpu::GpuCtx,
-    project_path: impl AsRef<std::path::Path>,
-) -> Result<oc_export::ExportReport, CliError> {
-    project::export_project_v1(gpu, project_path.as_ref())
-        .map_err(|e| CliError::Usage(e.to_string()))
 }
