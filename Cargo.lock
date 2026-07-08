@@ -532,6 +532,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "oc-cli"
+version = "0.1.0"
+dependencies = [
+ "oc-core",
+ "oc-eval",
+ "oc-export",
+ "oc-gpu",
+ "oc-media",
+ "oc-nodes",
+ "oc-render",
+ "oc-testkit",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "oc-core"
 version = "0.1.0"
 dependencies = [
@@ -544,6 +561,20 @@ version = "0.1.0"
 dependencies = [
  "oc-core",
  "serde",
+]
+
+[[package]]
+name = "oc-export"
+version = "0.1.0"
+dependencies = [
+ "oc-core",
+ "oc-eval",
+ "oc-gpu",
+ "oc-media",
+ "oc-nodes",
+ "oc-plugin",
+ "oc-render",
+ "thiserror",
 ]
 
 [[package]]

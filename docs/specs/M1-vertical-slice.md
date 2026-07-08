@@ -7,6 +7,7 @@
 | タスク | 状況 |
 |---|---|
 | R1 | **完了**: `oc-core::Quality`/`SampleTier`を追加。`render_frame`/`render_graph`/`render_frame_with_background_texture`へ配線。`resolution_scale`のみ実効。Finalゴールデン不変+Draft半解像度出力テスト済み |
+| R2 | **完了**: `ParamRectOverlay`(center/size/color=`ParamSource`)を追加し、exportがフレーム`t`で評価。ProjectV1は定数配列とKeyframes JSONを受理。先頭/中間/末尾ゴールデン通過 |
 | T0 | **部分完了**: workspace + CI(fmt/clippy/test + ffmpeg)は稼働。lavapipeのwgpu smokeテストはoc-gpu(T3)導入時に追加 |
 | T1 | **完了**: `oc-core`(RationalTime/Fps/FrameDesc/PixelFormat/ColorSpace/CpuFrame)。NTSC往復・非蓄積ドリフトのテスト済み |
 | T2 | **完了(2026-07-08 レビュー対応で改訂)**: `oc-media`。デコードは**生YUV420pで受ける**(ffmpegに色変換させない — 指摘#2)。probeは色タグ(matrix/range)と**回転メタデータ**(指摘#4: スマホ縦動画で寸法スワップ)を取得し、durationはfpsグリッドにスナップ(指摘#7)。Encoderは**BT.709色タグを明示出力**(指摘#5)。回転素材・色タグのテスト済み |
@@ -29,7 +30,7 @@
 | ID | 内容 | 依存 | 完了条件(自動判定) |
 |---|---|---|---|
 | R1 | **完了**: `Quality { resolution_scale, precise_color, effect_samples }`を`oc-core`に定義し`render_frame`系へ配線。v1は`resolution_scale`のみ実効、他は口のみ | なし | Final(scale=1)の既存ゴールデンが全て不変。Draft(scale=2)で同グラフが「クラッシュせず出る」テストが通る(performance-modelの保証水準どおり) |
-| R2 | **キーフレーム→レンダ接続**(M1完成物定義の核)。`RectOverlay`のcenter/size/colorを`ParamSource`(Const/Keyframes)で保持し、フレームごとに`t`で評価してから描画。ProjectV1 JSONにキーフレーム記述を追加(バージョンフィールドの流儀維持) | R1 | キーフレームで矩形が移動するプロジェクトの書き出しで、先頭/中間/末尾3フレームのゴールデン比較が通る(T10完了条件) |
+| R2 | **完了**: `ParamRectOverlay`でParamSource駆動、exportがフレームごと評価、ProjectV1がKeyframes JSONを受理。先頭/中間/末尾ゴールデン通過 | R1 | キーフレームで矩形が移動するプロジェクトの書き出しで、先頭/中間/末尾3フレームのゴールデン比較が通る(T10完了条件) |
 | R3 | **ParamDriver/DataTrack接続**。参照ParamDriverプラグインが生成したDataTrackを`ParamSource::DataTrack`で参照してシェイプを駆動(「値列がパラメータを駆動する」境界検証、旧T5の代替) | R2 | DataTrack駆動のE2Eゴールデンが通る |
 | R4 | **動画SourceNodeの正式グラフ化**(T8残)。外部引数`BackgroundTextureRequest`方式に加え、グラフが動画ソースをノードとして持てる形に | R1 | ソースノード込みグラフのゴールデンが通り、既存の外部テクスチャ経路テストも不変 |
 | R5 | **T9完了条件の検証テスト**。(1)タイムコード焼き込み素材で30fps数秒を書き出し全フレームの時刻対応を検証 (2)書き出しmp4の色タグ(bt709/limited)をprobeで検証 | なし | 両テストがCIで通る |

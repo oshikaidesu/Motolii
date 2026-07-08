@@ -6,7 +6,7 @@
 use std::sync::OnceLock;
 
 use oc_core::{premultiply_rgba_f32, FrameDesc, RationalTime};
-use oc_eval::Value;
+use oc_eval::{DataTracks, ParamSource, Value};
 use oc_gpu::GpuCtx;
 use oc_plugin::{
     CompositePlugin, FilterPlugin, NodeDesc, PluginError, PluginId, ResolvedParams, TextureRef,
@@ -97,7 +97,76 @@ pub enum NodeError {
 pub struct RectOverlay {
     pub center: CanonicalPoint,
     pub size: CanonicalSize,
+    /// straight RGBA, 0..1
     pub color: [f32; 4],
+}
+
+/// キーフレーム/DataTrack駆動の矩形オーバーレイ。
+/// フレーム時刻 `t` で評価すると解決済みの [`RectOverlay`] になる。
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParamRectOverlay {
+    pub center: ParamSource,
+    pub size: ParamSource,
+    pub color: ParamSource,
+}
+
+#[derive(Debug, thiserror::Error, PartialEq)]
+pub enum ParamOverlayError {
+    #[error("overlay center must evaluate to Vec2")]
+    CenterNotVec2,
+    #[error("overlay size must evaluate to Vec2")]
+    SizeNotVec2,
+    #[error("overlay color must evaluate to Color")]
+    ColorNotColor,
+    #[error("overlay size must be > 0")]
+    NonPositiveSize,
+}
+
+impl ParamRectOverlay {
+    /// 定数オーバーレイから構築(CLI固定引数や既存テスト向け)。
+    pub fn constant(rect: RectOverlay) -> Self {
+        Self {
+            center: ParamSource::Const(Value::Vec2([rect.center.x, rect.center.y])),
+            size: ParamSource::Const(Value::Vec2([rect.size.width, rect.size.height])),
+            color: ParamSource::Const(Value::Color(rect.color.map(|c| c as f64))),
+        }
+    }
+
+    pub fn eval(
+        &self,
+        t: RationalTime,
+        ctx: &DataTracks,
+    ) -> Result<RectOverlay, ParamOverlayError> {
+        let center = self
+            .center
+            .eval(t, ctx)
+            .as_vec2()
+            .ok_or(ParamOverlayError::CenterNotVec2)?;
+        let size = self
+            .size
+            .eval(t, ctx)
+            .as_vec2()
+            .ok_or(ParamOverlayError::SizeNotVec2)?;
+        let color = self
+            .color
+            .eval(t, ctx)
+            .as_color()
+            .ok_or(ParamOverlayError::ColorNotColor)?;
+        if size[0] <= 0.0 || size[1] <= 0.0 {
+            return Err(ParamOverlayError::NonPositiveSize);
+        }
+        Ok(RectOverlay {
+            center: CanonicalPoint {
+                x: center[0],
+                y: center[1],
+            },
+            size: CanonicalSize {
+                width: size[0],
+                height: size[1],
+            },
+            color: color.map(|c| c.clamp(0.0, 1.0) as f32),
+        })
+    }
 }
 
 pub struct FilterNode {

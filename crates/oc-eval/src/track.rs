@@ -20,7 +20,7 @@ pub enum Interp {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Keyframe {
     pub t: RationalTime,
     pub value: Value,
@@ -28,7 +28,7 @@ pub struct Keyframe {
 }
 
 /// 時刻順にソートされたキーフレーム列。
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct KeyframeTrack {
     keys: Vec<Keyframe>,
 }

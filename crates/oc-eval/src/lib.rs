@@ -49,7 +49,7 @@ impl DataTracks {
 }
 
 /// パラメータの値の出どころ。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ParamSource {
     Const(Value),
     Keyframes(KeyframeTrack),

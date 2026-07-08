@@ -6,6 +6,8 @@ members = [
     "crates/oc-nodes",
     "crates/oc-plugin",
     "crates/oc-render",
+    "crates/oc-export",
+    "crates/oc-cli",
     "crates/oc-testkit",
     "crates/oc-media",
     "crates/oc-gpu",
@@ -20,9 +22,12 @@ repository = "https://github.com/oshikaidesu/p5.opencuts"
 oc-core = { path = "crates/oc-core" }
 oc-eval = { path = "crates/oc-eval" }
 oc-gpu = { path = "crates/oc-gpu" }
+oc-media = { path = "crates/oc-media" }
 oc-nodes = { path = "crates/oc-nodes" }
 oc-plugin = { path = "crates/oc-plugin" }
 oc-render = { path = "crates/oc-render" }
+oc-export = { path = "crates/oc-export" }
+oc-cli = { path = "crates/oc-cli" }
 oc-testkit = { path = "crates/oc-testkit" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

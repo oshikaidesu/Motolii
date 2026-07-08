@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub enum Value {
     F64(f64),
     Vec2([f64; 2]),
+    Vec3([f64; 3]),
     /// RGBA(リニア、0.0-1.0想定)
     Color([f64; 4]),
 }
@@ -17,6 +18,9 @@ impl Value {
             (Value::Vec2(x), Value::Vec2(y)) => {
                 Value::Vec2(std::array::from_fn(|i| x[i] + (y[i] - x[i]) * u))
             }
+            (Value::Vec3(x), Value::Vec3(y)) => {
+                Value::Vec3(std::array::from_fn(|i| x[i] + (y[i] - x[i]) * u))
+            }
             (Value::Color(x), Value::Color(y)) => {
                 Value::Color(std::array::from_fn(|i| x[i] + (y[i] - x[i]) * u))
             }
@@ -27,6 +31,20 @@ impl Value {
     pub fn as_f64(&self) -> Option<f64> {
         match self {
             Value::F64(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    pub fn as_vec2(&self) -> Option<[f64; 2]> {
+        match self {
+            Value::Vec2(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    pub fn as_color(&self) -> Option<[f64; 4]> {
+        match self {
+            Value::Color(v) => Some(*v),
             _ => None,
         }
     }
@@ -45,6 +63,14 @@ mod tests {
         assert_eq!(
             Value::lerp(&Value::Vec2([0.0, 100.0]), &Value::Vec2([10.0, 200.0]), 0.5),
             Value::Vec2([5.0, 150.0])
+        );
+        assert_eq!(
+            Value::lerp(
+                &Value::Vec3([0.0, 10.0, 100.0]),
+                &Value::Vec3([10.0, 20.0, 200.0]),
+                0.5
+            ),
+            Value::Vec3([5.0, 15.0, 150.0])
         );
     }
 
