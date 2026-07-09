@@ -2,3 +2,6 @@
 **/*.rs.bk
 spikes/s1-slint/target
 /.tools
+# Rustワークスペースと無関係のNode実験(p5等)を誤コミットしない(指摘3)
+node_modules/
+package-lock.json

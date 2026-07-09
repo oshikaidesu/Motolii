@@ -15,7 +15,7 @@
 ## 読む順序(初見向け)
 
 1. [concept.md](concept.md) — 何であって何でないか。**全決定事項の台帳**(スコープ、プラグイン境界、座標系、並行性、音声方針)
-2. [performance-model.md](performance-model.md) — 「なぜAEより軽くできるか」の物理(メモリ帯域モデル)、品質モード(Draft/Final)、並列性、40レイヤー目標の試算
+2. [performance-model.md](performance-model.md) — 「なぜAEより軽くできるか」の物理(メモリ帯域モデル)、品質モード(Draft/Final)、並列性、40レイヤー目標の試算。**容量・VRAM/RAM/ディスクの役割分担は [memory-model.md](memory-model.md)**(「GPU駆動=自縄自縛では?」への一元回答。P1〜P4が他ドキュメントを拘束する)
 3. [pitfalls-and-roadmap.md](pitfalls-and-roadmap.md) — **最重要・最大**。落とし穴カタログ(A〜G、先行プロジェクト死因分析込み)とロードマップ(M0〜M5)、凍結ゲート
 4. 着手するマイルストーンの仕様書: [specs/README.md](specs/README.md)(プロセスとステータス表)→ 各`specs/M*.md`
 5. 依存・参考リポジトリを調べる時: [references.md](references.md)(ライセンス区分つき。GPL系はコードを読むことすら禁止)
@@ -26,6 +26,7 @@
 |---|---|---|
 | [concept.md](concept.md) | コンセプト定義・決定事項の台帳 | 現行(決定はここに追記される) |
 | [performance-model.md](performance-model.md) | 性能の設計根拠と規律 | 現行 |
+| [memory-model.md](memory-model.md) | VRAM/RAM/ディスクの役割分担・容量ポリシー(P1〜P4)。容量談義の一元置き場(他文書はここへリンクのみ) | 現行 |
 | [pitfalls-and-roadmap.md](pitfalls-and-roadmap.md) | 落とし穴カタログ+ロードマップ+凍結ゲート | 現行 |
 | [references.md](references.md) | 依存候補・参考リポジトリ(ライセンス区分) | 現行 |
 | [specs/](specs/README.md) | マイルストーン仕様書(エージェントへの発注書)。確定/ドラフトのステータスはspecs/README.md参照 | M0/M1確定、M2〜M5ドラフト |
@@ -35,7 +36,7 @@
 
 どれか1つ破るだけでプロジェクトの根拠が崩れる、という種類のもの。番号は重要度順ではない。
 
-1. **VRAM常駐**: ピクセルはwgpuテクスチャとしてGPUに置いたまま処理する。安易なCPU処理の混入1箇所で「AEより軽い」根拠が消える([performance-model.md](performance-model.md))
+1. **VRAM常駐**: ピクセルはwgpuテクスチャとしてGPUに置いたまま処理する。安易なCPU処理の混入1箇所で「AEより軽い」根拠が消える([performance-model.md](performance-model.md))。ただしVRAMに縛るのは**作業セットのみ**で、容量系(キャッシュ/ベイク/プロキシ)はRAM/ディスク階層に置く — 役割分担と例外は [memory-model.md](memory-model.md)
 2. **色変換の一元化(OCIO-shaped)**: 色変換はレンダ直前の1箇所のみ。散らばった瞬間にOliveの二の舞(全書き直し)(落とし穴F-5)
 3. **プラグイン純関数契約**: プラグインの出力は時刻tと入力だけで決まる。隠れた可変状態の禁止。これがフレーム並列(マルチコア)の前提で、破るとAEと同じ「後付け不能」になる([performance-model.md](performance-model.md)§6)
 4. **単一writer+不変スナップショット**: ドキュメントを書き換えるのは編集スレッド(コマンド適用)だけ。他は全員`Arc<Document>`の読み手。Natronの死因(race/deadlock)の構造的排除(落とし穴F-2)
