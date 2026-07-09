@@ -20,7 +20,7 @@
 | T11 | **完了(2026-07-10)**: 実素材(1080p/4K)で書き出し+GUIプレビュー(`spikes/r9-preview`)+主観品質OK。B-4はCI合成素材+手元実素材(`qp0: false`書き出し)で確認 |
 | T8 | **部分完了**: 固定グラフに加え、`RenderStep::VideoSource`で動画フレーム等の外部GPUテクスチャをグラフの一級ステップとして表現。`render_frame_with_background_texture`は同一`render_graph_cached`経路に合流(R4)。**残り=中間バッファのピンポン使い回し**(performance-model §3のM1-T8方針: テクスチャ確保・コピーを毎フレームやらず2枚を交互再利用) |
 | T9 | **完了**: `oc-export`を追加し、`FrameReader`→`YuvToRgba`→`oc-render`→`Encoder`の最小mp4書き出しループを実装。30fps×3秒のタイムコード焼き込み素材で全フレームの時刻対応を検証(R5)。書き出しmp4のBT.709 limited色タグをprobeで検証(R5) |
-| T10 | **部分完了**: `oc-cli export-overlay`に加えて `oc-cli export-project`（versioned JSON）を追加。JSON→`oc-export`接続を最小実装し、小さな入力動画→JSON→mp4の統合テストを確認済み。キーフレーム/ParamDriver DataTrack駆動のゴールデン化済み。正式なプロジェクトE2Eサンプル同梱、合成DataTrack接続の拡張は後続 |
+| T10 | **完了**: `oc-cli export-overlay` / `export-project`(versioned JSON)。JSON→`oc-export`一気通貫。**M1出口デモ(実写(生成)背景 + Bezierイージングで右へ流れる矩形 → mp4)を正式サンプル `samples/exit-demo/` として同梱**し、**E2Eゴールデン `crates/oc-cli/tests/exit_demo.rs`**(export経路でmp4化→出力mp4をデコード→先頭/中間/末尾で「背景動画の透過」+「矩形のイージング位置(左→右)」を検証。lavapipe+ffmpegで緑)を追加。キーフレーム/ParamDriver DataTrack駆動のゴールデンも済み。合成DataTrack接続の拡張は後続 |
 
 ## 残タスクチケット(2026-07-09 監査。全消化+凍結ゲートレビューでM1完了)
 
