@@ -34,6 +34,8 @@
 
 - 音声出力: [cpal](https://github.com/RustAudio/cpal)(音声主クロック実装の土台)
 - WASMランタイム: [wasmtime](https://github.com/bytecodealliance/wasmtime)(5-1のWASMパラメータプラグイン、v2)
+- プラグインのクラッシュ隔離(設計思想の参考): **Bitwig Studio** — 別プロセスサンドボックス+5段階ホスティングモードで「1プラグインの異常が本体を落とさない/再生を止めない/自動再ロード」の模範(Abletonはネイティブ隔離なし=1個で全体が落ちる、が反面教師)。ただし音声バッファ前提でIPCが安いため、GPU(MB級・VRAM常駐)へは階層別に輸入する(concept.md「クラッシュ隔離を階層化」参照)
+- オープンプラグイン標準(設計思想の参考): [CLAP](https://github.com/free-audio/clap)(Bitwig+u-he、**MIT**、C-ABI、明快なスレッドモデル、プロセス外ホスティング対応、WASM版=WCLAPあり)。OFX/VSTと違いオープンで、我々のOSS思想と親和。そのまま採用ではなく境界設計の参考
 - dylib ABI: [abi_stable](https://github.com/rodrimati1992/abi_stable_crates) / stabby(動的ロード導入時=v2に評価)
 - 色管理: [OpenColorIO](https://github.com/AcademySoftwareFoundation/OpenColorIO)(BSD-3。v1は自前の最小色空間タグで済ませ、HDR対応時に検討。パイプラインをOCIO-shapedに保つ規律はperformance-model参照=F-5)
 - テキスト基盤(F-6、M5-P6): [rustybuzz](https://github.com/harfbuzz/rustybuzz)(MIT、HarfBuzzのRust移植=日本語シェーピング)/ [fontdb](https://github.com/RazrFalcon/fontdb)(MIT、フォント列挙・読み込み)。いずれもresvg/linebender系で実績あり
