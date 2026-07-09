@@ -40,6 +40,15 @@
 - タイムライン交換: [OpenTimelineIO](https://github.com/AcademySoftwareFoundation/OpenTimelineIO)(Apache-2.0。v2の書き出し候補。v1はスキーマの素性を寄せるのみ=F-5。座標系提案「単位なし・単一原点・Y-up」はF-1の正準座標系の参考元)
 - 並行テスト: [loom](https://github.com/tokio-rs/loom)(MIT。M4-K1のキャッシュ並行契約の検証候補=F-2)
 
+## プラットフォーム母数の出典(2026-07-10。E章ターゲットOS/F-9の根拠)
+
+クロスプラットフォームを設計レベルの恒久要件とする母数根拠。クリエイティブ層のOS比率に信頼できる一次統計は存在しない(Adobeは非公表)ため、傾向の裏取りとして使う。
+
+- [StatCounter — Desktop OS Market Share Worldwide](https://gs.statcounter.com/os-market-share/desktop/worldwide/) — 2026-06: Windows 56.55%(初の60%割れ)、macOS系合算 約16%("OS X"と"macOS"に分かれて計上される点に注意)、Linux 4.39%。Web利用ベースの推計であり導入台数ではない。[報道(linuxiac)](https://linuxiac.com/windows-drops-under-60-in-global-desktop-os-share-for-the-first-time-in-years/)
+- [Adobe — After EffectsのGPU機能](https://helpx.adobe.com/after-effects/using/basics-gpu-after-effects.html) — **macOSはCUDA非サポート**(Metal/OpenCLのみ)の一次ソース。AEプラグイン圏がWindows限定化する技術的根拠(F-9の1)
+- [School of Motion — Mac vs PC for MoGraph](https://www.schoolofmotion.com/blog/mac-vs-pc-motion-design-value) — モーションデザイン業界のMac/PC選択の論点整理(コスパ vs エコシステム)
+- [Mac vs PC for Graphic Design 2025(Alibaba insights)](https://www.alibaba.com/product-insights/mac-vs-pc-for-graphic-design-in-2025-which-pros-prefer.html) — エージェンシー系デザイナーMac 58%・UI/UX Mac 67%・3D/VFXワークステーションWindows 72%等の断片。**SEO寄り記事で精度は粗い**。「デザイン系=Mac優勢、GPU系=Windows優勢」の傾向確認のみに使う
+
 ## 検索ソース
 
 - OpenCut: [公式サイト](https://opencut.dev/), [GitHub org](https://github.com/OpenCut-app/)
