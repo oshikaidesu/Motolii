@@ -31,6 +31,23 @@ This project is built to be developed and extended primarily with LLMs, and that
 - **Development is spec-driven and self-verifying**: each task has an automatic pass/fail (`cargo test` / golden images), which is exactly what makes autonomous/LLM-assisted contribution safe and parallelizable. See [`AGENTS.md`](AGENTS.md) and [`docs/specs/`](docs/specs/).
 - **Why this de-risks funding**: the classic OSS failure is "the developer(s) ran out of time/money." By lowering the barrier to author plugins and core changes with an LLM, the _developer_ gateway widens the same way we widen the _user_ gateway — the project doesn't hinge on funding a dedicated dev team to stay alive and growing.
 
+## Coming from the Japanese scene (AviUtl)
+
+I'm a creator from the Japanese sphere, where the de-facto free After Effects alternative isn't Cavalry or Autograph — it's **AviUtl**, a beloved, community-sustained free tool that has been a backbone of Japanese motion-graphics / MV / vtuber work for well over a decade. In 2025 it was reborn as a from-scratch 64-bit rewrite, **AviUtl2 (ExEdit2)**.
+
+AviUtl is living proof of the thesis behind this project: a free, local, plugin/script-extensible tool, kept alive by its community, can outlast commercial churn. That spirit is exactly what we build on.
+
+But even AviUtl2 (beta50, 2026) leaves gaps this project targets — and yes, I know these firsthand:
+
+- **Windows-only** (Win10 64-bit; requires AVX2 + DirectX 11.3 + an ROV-capable GPU) — no macOS/Linux, and older hardware is locked out. Our Rust/wgpu core is cross-platform _by design_ (Vulkan/Metal/DX12); v1 targets one OS first, but the architecture isn't Win32/DirectX-bound.
+- **No real 3D compositing** — native support is static OBJ only (no camera/lights/bones); its own docs recommend rendering serious 3D in Blender and importing. We put glTF meshes and video in one composite.
+- **Whole-frame caching** (AE-style), not selective caching — we cache by node × time-range × params, so a small change doesn't re-render everything.
+- **No analysis-driven generative** (frame-wide color/tracking → parameters). AviUtl's tracking is point/region-based via plugins. We reserve this and ship it in a final phase.
+- **Plugin authoring** is a native C ABI / Lua scripts, and the ecosystem was reset (32-bit plugins don't carry over). We aim for a dead-simple, LLM-writable plugin boundary instead.
+- Still **beta / occasionally unstable**, with a largely Japanese-centric ecosystem.
+
+None of this is a knock on AviUtl — it's a remarkable project and a direct inspiration. It's a map of where a modern, GPU-native, cross-platform-capable, LLM-extensible foundation can go next.
+
 ## Why this architecture
 
 - **Lightness is structural, not a tweak.** Pixels live in GPU (wgpu) textures and are never bounced to the CPU. The dominant cost in compositing is memory bandwidth × round-trips, not resolution — so we minimize round-trips by construction. See [`docs/performance-model.md`](docs/performance-model.md).
