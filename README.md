@@ -35,9 +35,11 @@ This project is built to be developed and extended primarily with LLMs, and that
 
 I'm a creator from the Japanese sphere, where the de-facto free After Effects alternative isn't Cavalry or Autograph — it's **AviUtl**, a beloved, community-sustained free tool that has been a backbone of Japanese motion-graphics / MV / vtuber work for well over a decade. In 2025 it was reborn as a from-scratch 64-bit rewrite, **AviUtl2 (ExEdit2)**.
 
-AviUtl is living proof of the thesis behind this project: a free, local, plugin/script-extensible tool, kept alive by its community, can outlast commercial churn. That spirit is exactly what we build on.
+AviUtl is living proof of the thesis behind this project: a free, local, plugin/script-extensible tool, kept alive by its community, can outlast commercial churn. That spirit is exactly what we build on. But it also shows the **limit** of that model — and that limit is the crux everything snags on:
 
-But even AviUtl2 (beta50, 2026) leaves gaps this project targets — and yes, I know these firsthand:
+- **It isn't actually open source (the crux).** AviUtl/AviUtl2 ship a *Plugin SDK*, but the **core is closed and single-author**. The community can bolt plugins on the outside; it can never fix or advance the core. The proof: after v1.10 in 2019 the core sat **frozen for ~6 years** until the 2025 rewrite — people wanted improvements but couldn't touch it. AviUtl2 repeats the same single-author, closed-core pattern. This is the one thing plugins can never solve, and it's exactly what an **MIT/Apache, forkable core** is for: if we stop, anyone can continue it.
+
+And even setting that aside, AviUtl2 (beta50, 2026) leaves gaps this project targets — and yes, I know these firsthand:
 
 - **Windows-only** (Win10 64-bit; requires AVX2 + DirectX 11.3 + an ROV-capable GPU) — no macOS/Linux, and older hardware is locked out. Our Rust/wgpu core is cross-platform _by design_ (Vulkan/Metal/DX12); v1 targets one OS first, but the architecture isn't Win32/DirectX-bound.
 - **No real 3D compositing** — native support is static OBJ only (no camera/lights/bones); its own docs recommend rendering serious 3D in Blender and importing. We put glTF meshes and video in one composite.
@@ -46,7 +48,7 @@ But even AviUtl2 (beta50, 2026) leaves gaps this project targets — and yes, I 
 - **Plugin authoring** is a native C ABI / Lua scripts, and the ecosystem was reset (32-bit plugins don't carry over). We aim for a dead-simple, LLM-writable plugin boundary instead.
 - Still **beta / occasionally unstable**, with a largely Japanese-centric ecosystem.
 
-None of this is a knock on AviUtl — it's a remarkable project and a direct inspiration. It's a map of where a modern, GPU-native, cross-platform-capable, LLM-extensible foundation can go next.
+None of this is a knock on AviUtl — it's a remarkable project and a direct inspiration. It's a map of where a modern, **open**, GPU-native, cross-platform-capable, LLM-extensible foundation can go next. The single biggest difference we insist on: the **core is open and forkable**, so it can never be frozen behind one person again.
 
 ## Why this architecture
 
