@@ -6,6 +6,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 
 1. [docs/README.md](docs/README.md) — プロジェクト全体像・ドキュメントの読む順序・用語
 2. 着手するチケット: [docs/specs/M1-vertical-slice.md](docs/specs/M1-vertical-slice.md) の「残タスクチケット」表(完了条件・依存つき)
+3. プラグインを書く/量産する時: [docs/plugin-authoring.md](docs/plugin-authoring.md)(種別・NodeDesc必須欄・禁止事項・型紙)
 
 ## 絶対規律(破ると設計の根拠が崩れる。レビュー最重視項目)
 

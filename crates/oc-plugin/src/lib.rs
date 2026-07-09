@@ -48,7 +48,13 @@ pub struct ParamDef {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NodeDesc {
     pub id: PluginId,
+    /// パラメータスキーマの互換バージョン。破壊的変更で上げる(F-9)。
+    pub version: u32,
     pub display_name: &'static str,
+    /// UIブラウザ用カテゴリ(F-8)。例: "Color" / "Generate" / "Composite"。
+    pub category: &'static str,
+    /// 検索・発見用タグ(F-8)。将来サムネイル口とは別。
+    pub tags: &'static [&'static str],
     pub params: Vec<ParamDef>,
     pub min_inputs: usize,
     pub max_inputs: usize,
@@ -382,7 +388,10 @@ pub mod reference {
         static DESC: OnceLock<NodeDesc> = OnceLock::new();
         DESC.get_or_init(|| NodeDesc {
             id: PluginId("core.filter.clear"),
+            version: 1,
             display_name: "Clear",
+            category: "Utility",
+            tags: &["clear", "fill", "reference"],
             params: color_params(),
             min_inputs: 1,
             max_inputs: 1,
@@ -393,7 +402,10 @@ pub mod reference {
         static DESC: OnceLock<NodeDesc> = OnceLock::new();
         DESC.get_or_init(|| NodeDesc {
             id: PluginId("core.layer_source.clear"),
+            version: 1,
             display_name: "Clear Layer Source",
+            category: "Generate",
+            tags: &["clear", "fill", "reference"],
             params: color_params(),
             min_inputs: 0,
             max_inputs: 0,
@@ -404,7 +416,10 @@ pub mod reference {
         static DESC: OnceLock<NodeDesc> = OnceLock::new();
         DESC.get_or_init(|| NodeDesc {
             id: PluginId("core.composite.clear"),
+            version: 1,
             display_name: "Clear Composite",
+            category: "Composite",
+            tags: &["clear", "fill", "reference"],
             params: color_params(),
             min_inputs: 2,
             max_inputs: usize::MAX,
@@ -415,7 +430,10 @@ pub mod reference {
         static DESC: OnceLock<NodeDesc> = OnceLock::new();
         DESC.get_or_init(|| NodeDesc {
             id: PluginId("core.param.sine"),
+            version: 1,
             display_name: "Sine",
+            category: "Generate",
+            tags: &["lfo", "oscillator", "reference"],
             params: vec![
                 ParamDef {
                     id: "amplitude",
@@ -569,5 +587,27 @@ mod tests {
         assert_eq!(track.values.len(), 5);
         assert_eq!(track.values[0], Value::F64(10.0));
         assert!((track.values[1].as_f64().unwrap() - 12.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn reference_plugins_expose_discovery_metadata() {
+        let mut registry = PluginRegistry::new();
+        register_reference_plugins(&mut registry).unwrap();
+
+        let filter = registry
+            .filter(&PluginId("core.filter.clear"))
+            .unwrap()
+            .desc();
+        assert_eq!(filter.version, 1);
+        assert_eq!(filter.category, "Utility");
+        assert!(filter.tags.contains(&"reference"));
+        assert!(!filter.display_name.is_empty());
+
+        let driver = registry
+            .param_driver(&PluginId("core.param.sine"))
+            .unwrap()
+            .desc();
+        assert_eq!(driver.category, "Generate");
+        assert!(driver.tags.contains(&"lfo"));
     }
 }

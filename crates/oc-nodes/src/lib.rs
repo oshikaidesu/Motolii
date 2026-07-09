@@ -78,6 +78,10 @@ impl ViewportTransform {
             height: s.height * h,
         }
     }
+
+    pub fn height_px(self) -> u32 {
+        self.height_px
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -99,6 +103,32 @@ pub struct RectOverlay {
     pub size: CanonicalSize,
     /// straight RGBA, 0..1
     pub color: [f32; 4],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CircleOverlay {
+    pub center: CanonicalPoint,
+    /// 正準空間の半径(高さ=1.0基準)
+    pub radius: f64,
+    /// straight RGBA, 0..1
+    pub color: [f32; 4],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LineOverlay {
+    pub start: CanonicalPoint,
+    pub end: CanonicalPoint,
+    /// 正準空間の線幅(高さ=1.0基準)
+    pub width: f64,
+    /// straight RGBA, 0..1
+    pub color: [f32; 4],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum OverlayShape {
+    Rect(RectOverlay),
+    Circle(CircleOverlay),
+    Line(LineOverlay),
 }
 
 /// キーフレーム/DataTrack駆動の矩形オーバーレイ。
@@ -235,17 +265,23 @@ pub fn create_rgba_render_target(gpu: &GpuCtx, desc: FrameDesc, label: &str) -> 
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct RectUniform {
-    min_px: [f32; 2],
-    max_px: [f32; 2],
+struct OverlayUniform {
+    shape_kind: u32,
+    _pad0: [u32; 3],
+    params0: [f32; 4],
+    params1: [f32; 4],
     color: [f32; 4],
 }
+
+const OVERLAY_SHAPE_RECT: u32 = 0;
+const OVERLAY_SHAPE_CIRCLE: u32 = 1;
+const OVERLAY_SHAPE_LINE: u32 = 2;
 
 pub struct OverlayNode {
     pipeline: wgpu::RenderPipeline,
     bind_group_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
-    rect: RectOverlay,
+    shape: OverlayShape,
 }
 
 impl OverlayNode {
@@ -253,8 +289,8 @@ impl OverlayNode {
         let shader = gpu
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("oc-nodes-overlay-rect"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("overlay_rect.wgsl").into()),
+                label: Some("oc-nodes-overlay-shapes"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("overlay_shapes.wgsl").into()),
             });
         let bind_group_layout =
             gpu.device
@@ -333,26 +369,51 @@ impl OverlayNode {
             pipeline,
             bind_group_layout,
             sampler,
-            rect: RectOverlay {
+            shape: OverlayShape::Rect(RectOverlay {
                 center: CanonicalPoint::CENTER,
                 size: CanonicalSize {
                     width: 0.0,
                     height: 0.0,
                 },
                 color: [0.0; 4],
-            },
+            }),
         }
+    }
+
+    /// 単発レンダ向け。ループ内では `new` + `set_shape` でパイプラインを使い回すこと。
+    pub fn with_shape(gpu: &GpuCtx, shape: OverlayShape) -> Self {
+        let mut node = Self::new(gpu);
+        node.shape = shape;
+        node
     }
 
     /// 単発レンダ向け。ループ内では `new` + `set_rect` でパイプラインを使い回すこと。
     pub fn with_rect(gpu: &GpuCtx, rect: RectOverlay) -> Self {
-        let mut node = Self::new(gpu);
-        node.rect = rect;
-        node
+        Self::with_shape(gpu, OverlayShape::Rect(rect))
+    }
+
+    pub fn with_circle(gpu: &GpuCtx, circle: CircleOverlay) -> Self {
+        Self::with_shape(gpu, OverlayShape::Circle(circle))
+    }
+
+    pub fn with_line(gpu: &GpuCtx, line: LineOverlay) -> Self {
+        Self::with_shape(gpu, OverlayShape::Line(line))
+    }
+
+    pub fn set_shape(&mut self, shape: OverlayShape) {
+        self.shape = shape;
     }
 
     pub fn set_rect(&mut self, rect: RectOverlay) {
-        self.rect = rect;
+        self.shape = OverlayShape::Rect(rect);
+    }
+
+    pub fn set_circle(&mut self, circle: CircleOverlay) {
+        self.shape = OverlayShape::Circle(circle);
+    }
+
+    pub fn set_line(&mut self, line: LineOverlay) {
+        self.shape = OverlayShape::Line(line);
     }
 
     pub fn render(
@@ -367,23 +428,7 @@ impl OverlayNode {
             require_premultiplied("overlay", "output", output.desc)?;
         }
         let viewport = ViewportTransform::from_desc(&output.desc);
-        let center = viewport.point_to_px(self.rect.center);
-        let size = viewport.size_to_px(self.rect.size);
-        let uniform = RectUniform {
-            min_px: [
-                (center.x - size.width * 0.5) as f32,
-                (center.y - size.height * 0.5) as f32,
-            ],
-            max_px: [
-                (center.x + size.width * 0.5) as f32,
-                (center.y + size.height * 0.5) as f32,
-            ],
-            color: if output.desc.premultiplied {
-                premultiply_rgba_f32(self.rect.color)
-            } else {
-                self.rect.color
-            },
-        };
+        let uniform = overlay_uniform(&viewport, self.shape, output.desc.premultiplied);
         let uniform_buffer = gpu
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -447,7 +492,86 @@ impl OverlayNode {
     }
 }
 
+fn overlay_uniform(
+    viewport: &ViewportTransform,
+    shape: OverlayShape,
+    premultiplied: bool,
+) -> OverlayUniform {
+    let color = |straight: [f32; 4]| {
+        if premultiplied {
+            premultiply_rgba_f32(straight)
+        } else {
+            straight
+        }
+    };
+    match shape {
+        OverlayShape::Rect(rect) => {
+            let center = viewport.point_to_px(rect.center);
+            let size = viewport.size_to_px(rect.size);
+            OverlayUniform {
+                shape_kind: OVERLAY_SHAPE_RECT,
+                _pad0: [0; 3],
+                params0: [
+                    (center.x - size.width * 0.5) as f32,
+                    (center.y - size.height * 0.5) as f32,
+                    0.0,
+                    0.0,
+                ],
+                params1: [
+                    (center.x + size.width * 0.5) as f32,
+                    (center.y + size.height * 0.5) as f32,
+                    0.0,
+                    0.0,
+                ],
+                color: color(rect.color),
+            }
+        }
+        OverlayShape::Circle(circle) => {
+            let center = viewport.point_to_px(circle.center);
+            let radius = (circle.radius * viewport.height_px() as f64) as f32;
+            OverlayUniform {
+                shape_kind: OVERLAY_SHAPE_CIRCLE,
+                _pad0: [0; 3],
+                params0: [center.x as f32, center.y as f32, radius, 0.0],
+                params1: [0.0; 4],
+                color: color(circle.color),
+            }
+        }
+        OverlayShape::Line(line) => {
+            let start = viewport.point_to_px(line.start);
+            let end = viewport.point_to_px(line.end);
+            let width = (line.width * viewport.height_px() as f64) as f32;
+            OverlayUniform {
+                shape_kind: OVERLAY_SHAPE_LINE,
+                _pad0: [0; 3],
+                params0: [start.x as f32, start.y as f32, width, 0.0],
+                params1: [end.x as f32, end.y as f32, 0.0, 0.0],
+                color: color(line.color),
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompositeMode {
+    Normal,
+    Add,
+    Multiply,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct CompositeUniform {
+    mode: u32,
+    _pad: [u32; 3],
+}
+
+const COMPOSITE_MODE_NORMAL: u32 = 0;
+const COMPOSITE_MODE_ADD: u32 = 1;
+const COMPOSITE_MODE_MULTIPLY: u32 = 2;
+
 pub struct CompositeNode {
+    mode: CompositeMode,
     pipeline: wgpu::RenderPipeline,
     bind_group_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
@@ -455,17 +579,35 @@ pub struct CompositeNode {
 
 impl CompositeNode {
     pub fn new(gpu: &GpuCtx) -> Self {
+        Self::with_mode(gpu, CompositeMode::Normal)
+    }
+
+    pub fn with_mode(gpu: &GpuCtx, mode: CompositeMode) -> Self {
         let shader = gpu
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("oc-nodes-composite-normal"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("composite_normal.wgsl").into()),
+                label: Some("oc-nodes-composite-blend"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("composite_blend.wgsl").into()),
             });
         let bind_group_layout =
             gpu.device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("oc-nodes-composite-bgl"),
-                    entries: &[texture_entry(0), sampler_entry(1), texture_entry(2)],
+                    entries: &[
+                        texture_entry(0),
+                        sampler_entry(1),
+                        texture_entry(2),
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 3,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                    ],
                 });
         let pipeline_layout = gpu
             .device
@@ -508,10 +650,15 @@ impl CompositeNode {
             ..Default::default()
         });
         Self {
+            mode,
             pipeline,
             bind_group_layout,
             sampler,
         }
+    }
+
+    pub fn set_mode(&mut self, mode: CompositeMode) {
+        self.mode = mode;
     }
 
     pub fn render(
@@ -554,6 +701,17 @@ impl CompositeNode {
         let output_view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+        let uniform = CompositeUniform {
+            mode: composite_mode_to_u32(self.mode),
+            _pad: [0; 3],
+        };
+        let uniform_buffer = gpu
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("oc-nodes-composite-uniform"),
+                contents: bytemuck::bytes_of(&uniform),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
         let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("oc-nodes-composite-bg"),
             layout: &self.bind_group_layout,
@@ -569,6 +727,10 @@ impl CompositeNode {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: wgpu::BindingResource::TextureView(&fg_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: uniform_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -640,11 +802,22 @@ impl CompositePlugin for CompositeNode {
     }
 }
 
+fn composite_mode_to_u32(mode: CompositeMode) -> u32 {
+    match mode {
+        CompositeMode::Normal => COMPOSITE_MODE_NORMAL,
+        CompositeMode::Add => COMPOSITE_MODE_ADD,
+        CompositeMode::Multiply => COMPOSITE_MODE_MULTIPLY,
+    }
+}
+
 fn composite_normal_desc() -> &'static NodeDesc {
     static DESC: OnceLock<NodeDesc> = OnceLock::new();
     DESC.get_or_init(|| NodeDesc {
         id: PluginId("core.composite.normal"),
+        version: 1,
         display_name: "Normal",
+        category: "Composite",
+        tags: &["blend", "over", "premultiplied"],
         params: Vec::new(),
         min_inputs: 2,
         max_inputs: 2,

@@ -14,10 +14,10 @@
 | T3 | **完了(2026-07-08 レビュー対応で改訂)**: `oc-gpu`。YUV→RGB変換は**係数/レンジをuniformで受け、FrameDesc.color_spaceから選択**(指摘#3: 709決め打ち廃止)。ゴールデンテストは709limited/709full/601limitedの3空間×6色でCPU参照実装と完全一致(lavapipe実測 diff=0)。`GpuCtx::from_device_queue`でUI(Slint)のデバイス共有に対応。**wgpuはSlint対応の29に統一**(指摘#1) |
 | T4 | **完了**: `oc-testkit`。RGBAゴールデン比較(最大誤差/平均誤差/差分RGBA生成)を共通化し、`oc-gpu`のYUVゴールデンテストをtestkit経由に置き換え済み。参照/actual/diffのPNG保存と`OC_TESTKIT_ARTIFACT_DIR`によるゴールデン失敗時の差分出力を追加 |
 | T6 | **完了**: `oc-eval`(Value/KeyframeTrack/Interp/cubic_bezier_ease/DataTrack/ParamSource/DataTracks)。補間・イージング・DataTrack参照のテスト済み |
-| T7 | **部分完了**: `oc-nodes`。正準座標(原点中央・Y-up・高さ=1.0)→px変換を`ViewportTransform`に集約し、`FilterPlugin`をノード経由でGPU実行する最小橋を追加。`ClearFilter(赤)`を`oc-nodes`経由で実行し、`oc-testkit`ゴールデンで一致確認済み。`OverlayNode`最小版(正準座標の矩形1つ)を追加し、偶数/奇数・整数/端数境界の複数解像度で、背景グラデーションの外側一致と先塗り漏れ検出込みのゴールデンを追加。`CompositeNode`最小版(normal over)でpremultiplied alphaの期待値式をGPUゴールデン化。**ベクター基盤はR8でVello採用確定**(統合は凍結ゲート後。R7は自前シェーダで円/線を完走) |
+| T7 | **完了**: `oc-nodes`。正準座標→`ViewportTransform`集約。`FilterPlugin`/`OverlayNode`(矩形・円・線)/`CompositeNode`(normal/add/multiply)をGPUゴールデン化。Vello統合は凍結ゲート後(R8採用済み) |
 | T12 | **部分完了**: `oc-plugin`。静的リンク版の種別レジストリ(Filter / ParamDriver / Composite)とGPUテクスチャ境界のtraitを追加。参照プラグインはCPUフレームを受け取らず、Filter/Compositeは`wgpu::CommandEncoder`へGPU render passを積む。ParamDriverはDataTrack生成を単体テスト済み。export経路で`SineParamDriver`→`DataTracks`→`ParamSource::Data`接続済み。Filterは`oc-nodes`経由のGPUゴールデンで実証済み、Compositeのalpha契約は`oc-nodes::CompositeNode`で実証済み |
 | T5 | **後方移動**: GPU色解析はプラグイン/解析拡張領域であり、M1完了条件から外す。M1では合成DataTrackまたはParamDriver参照プラグインで「値列がパラメータを駆動する」境界だけを検証する |
-| T11 | 未着手。M0-S1(Slint UI統合スパイク)はGUI環境が必要なため開発主機で実施すること |
+| T11 | **完了(2026-07-10)**: 実素材(1080p/4K)で書き出し+GUIプレビュー(`spikes/r9-preview`)+主観品質OK。B-4はCI合成素材+手元実素材(`qp0: false`書き出し)で確認 |
 | T8 | **部分完了**: 固定グラフに加え、`RenderStep::VideoSource`で動画フレーム等の外部GPUテクスチャをグラフの一級ステップとして表現。`render_frame_with_background_texture`は同一`render_graph_cached`経路に合流(R4) |
 | T9 | **完了**: `oc-export`を追加し、`FrameReader`→`YuvToRgba`→`oc-render`→`Encoder`の最小mp4書き出しループを実装。30fps×3秒のタイムコード焼き込み素材で全フレームの時刻対応を検証(R5)。書き出しmp4のBT.709 limited色タグをprobeで検証(R5) |
 | T10 | **部分完了**: `oc-cli export-overlay`に加えて `oc-cli export-project`（versioned JSON）を追加。JSON→`oc-export`接続を最小実装し、小さな入力動画→JSON→mp4の統合テストを確認済み。キーフレーム/ParamDriver DataTrack駆動のゴールデン化済み。正式なプロジェクトE2Eサンプル同梱、合成DataTrack接続の拡張は後続 |
@@ -35,12 +35,12 @@
 | R4 | **完了**: 動画SourceNodeの正式グラフ化。`RenderStep::VideoSource`+`linear_graph_with_video_source`で外部背景をグラフ表現。既存`render_frame_with_background_texture`経路は不変 | R1 | ソースノード込みグラフのゴールデンが通り、既存の外部テクスチャ経路テストも不変 |
 | R5 | **完了**: T9完了条件の検証テスト。`oc-export/tests/t9_validation.rs`で(1)30fps×3秒タイムコード焼き込み素材の全フレーム時刻対応 (2)書き出しmp4のBT.709 limited色タグ(ffprobe生タグ含む)を検証 | なし | 両テストがCIで通る |
 | R6 | **完了**: **oc-testkit拡充**(T4残)。参照PNG保存・差分画像ファイル出力(ゴールデン失敗時のデバッグ運用) | なし | 意図的に壊したゴールデンで差分PNGが出力されるテストが通る |
-| R7 | **OverlayNode形状追加(円/線)+ Composite add/multiply**(T7残)。空間パラメータは正準座標、alpha契約は既存のnormal over式に準拠。**Vello統合はスコープ外**(R8採用済みだがM1は自前シェーダで小さく完走。Vello本番統合は凍結ゲート後チケット) | R1 | 各形状・各ブレンドの複数解像度ゴールデンが通る |
+| R7 | **完了(2026-07-10)**: `OverlayNode`に円(`CircleOverlay`)・線(`LineOverlay`)追加、`CompositeMode`(Add/Multiply)追加。正準座標・premul契約維持。Vello統合はスコープ外 | R1 | 各形状・各ブレンドの複数解像度ゴールデンが通る |
 | R8 | **完了(2026-07-10)**: Vello**採用**。vello 0.9=wgpu29一致・実レンダ合格。条件(Renderer長寿命/straight→premul境界変換/usvgアダプタ自前)は[spikes/s3-vello.md](../spikes/s3-vello.md) | なし(独立スパイク) | 採否判断がドキュメント化される(コードは使い捨て可) |
-| R9 | **実素材検証**(T11)。自分のMV素材で1ショット書き出し+プレビュー/書き出しピクセル一致確認。**開発主機でのGUI(S1方式)が必要なため人間の関与必須** | R2 | 一致テストが通る+主観品質OK |
+| R9 | **完了(2026-07-10)**: 実素材検証(T11)。`verify-b4`+`scripts/r9-verify.sh`+`spikes/r9-preview`。主観品質OK(人間サインオフ) → [reviews/2026-07-10-R9-real-material-checklist.md](../reviews/2026-07-10-R9-real-material-checklist.md) | R2 | 一致テストが通る+主観品質OK |
 
-並列性: **R8完了(2026-07-10)**。M1残チケットは**R7→R9**のみ(R7はR1済みで着手可。R9は実素材+GUIで人間必須)。
-全チケット消化後、凍結ゲートレビュー(pitfalls-and-roadmap.mdの9項目)を実施してM2/M4/M5仕様を確定する。
+並列性: **R1–R9完了(2026-07-10)**。M1残タスクチケット表は消化済み。
+次: **凍結ゲートレビュー**(pitfalls-and-roadmap.mdの9項目)を実施してM2/M4/M5仕様を確定する。
 
 補足(2026-07-09): CI(ubuntu)は`mesa-vulkan-drivers`導入済みでwgpuゴールデンテストがlavapipeで実行されている(T3で実測diff=0)。T0の「smokeテスト追加」はゴールデンテスト自体が上位互換として満たしているため、独立チケットにしない。
 

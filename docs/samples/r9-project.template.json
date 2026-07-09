@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "input": "your_clip.mp4",
+  "output": "r9_out.mp4",
+  "start_frame": 0,
+  "frame_count": 90,
+  "qp0": true,
+  "param_drivers": [],
+  "overlay": {
+    "center": [0.0, 0.0],
+    "size": [0.25, 0.25],
+    "color": [1.0, 0.0, 0.0, 0.5]
+  }
+}

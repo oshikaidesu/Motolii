@@ -42,7 +42,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         Command::ExportProject(args) => {
             oc_media_tools_hint();
             let gpu = GpuCtx::new_headless()?;
-            let report = oc_cli::export_project(&gpu, &args.project)?;
+            let prepared = oc_cli::prepare_project_export(&args.project)?;
+            let report = prepared.export(&gpu)?;
             println!(
                 "wrote {} frames: {}x{} @ {}/{} fps -> {}",
                 report.frames_written,
@@ -50,8 +51,37 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 report.desc.height,
                 report.fps.num,
                 report.fps.den,
-                args.project.display()
+                prepared.output_path.display()
             );
+        }
+        Command::VerifyB4(args) => {
+            oc_media_tools_hint();
+            let gpu = GpuCtx::new_headless()?;
+            match oc_cli::verify_b4_project_v1(
+                &gpu,
+                &args.project,
+                args.tolerance,
+                args.export_first,
+            ) {
+                Ok(report) => {
+                    print_b4_report(&report, args.tolerance);
+                    println!(
+                        "B-4 verify passed: {}/{} frames within tolerance {}",
+                        report.frames_passed, report.frames_checked, args.tolerance
+                    );
+                }
+                Err(oc_cli::B4VerifyError::Mismatch { report, tolerance, .. }) => {
+                    print_b4_report(&report, tolerance);
+                    return Err(format!(
+                        "B-4 verify failed: {}/{} frames exceeded tolerance {}",
+                        report.frames_checked - report.frames_passed,
+                        report.frames_checked,
+                        tolerance
+                    )
+                    .into());
+                }
+                Err(e) => return Err(e.into()),
+            }
         }
     }
     Ok(())
@@ -60,5 +90,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 fn oc_media_tools_hint() {
     if !oc_media::tools_available() {
         eprintln!("warning: ffmpeg/ffprobe not found on PATH; export will fail");
+    }
+}
+
+fn print_b4_report(report: &oc_cli::B4VerifyReport, tolerance: u32) {
+    for frame in &report.frame_results {
+        println!(
+            "frame {}: max_diff={} {} (tolerance {})",
+            frame.export_index,
+            frame.max_abs_diff,
+            if frame.passed { "OK" } else { "FAIL" },
+            tolerance
+        );
     }
 }

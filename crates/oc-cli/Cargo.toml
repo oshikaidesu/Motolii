@@ -12,6 +12,7 @@ oc-gpu.workspace = true
 oc-media.workspace = true
 oc-nodes.workspace = true
 oc-plugin.workspace = true
+oc-render.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

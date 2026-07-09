@@ -1,19 +1,23 @@
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use oc_core::{Fps, RationalTime};
+use oc_core::{ColorSpace, Fps, FrameDesc, PixelFormat, Quality, RationalTime};
 use oc_eval::{DataTrackId, DataTracks, ParamSource, Value};
 use oc_export::{export_overlay_video, ExportOverlayRequest, ExportReport};
-use oc_gpu::GpuCtx;
-use oc_media::{probe, MediaInfo};
-use oc_nodes::ParamRectOverlay;
+use oc_gpu::{GpuCtx, RgbaDownloader, YuvToRgba};
+use oc_media::{probe, FrameReader, MediaInfo};
+use oc_nodes::{ParamOverlayError, ParamRectOverlay};
 use oc_plugin::{
     reference::register_reference_plugins, ParamDriverContext, PluginRegistry, ResolvedParams,
+    TextureRef,
+};
+use oc_render::{
+    render_frame_with_background_texture, BackgroundTextureRequest, RenderSession,
 };
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ProjectV1 {
     /// スキーマバージョン。v1は今後の破壊的変更のための保険。
     pub version: u32,
@@ -32,7 +36,7 @@ pub struct ProjectV1 {
 }
 
 /// ProjectV1でParamDriverプラグインを1本宣言する最小形。
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ParamDriverV1 {
     /// プラグインID(例: `core.param.sine`)。
     pub plugin: String,
@@ -43,21 +47,21 @@ pub struct ParamDriverV1 {
 }
 
 /// ProjectV1のオーバーレイ。定数配列と`ParamSource` JSONの両方を受理する。
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct RectOverlayParamV1 {
     pub center: ParamVec2V1,
     pub size: ParamVec2V1,
     pub color: ParamColorV1,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(untagged)]
 pub enum ParamVec2V1 {
     Const([f64; 2]),
     Source(ParamSource),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(untagged)]
 pub enum ParamColorV1 {
     /// straight RGBA, 0..1 (f32/f64どちらでも可)
@@ -115,6 +119,12 @@ pub enum ProjectError {
     Plugin(#[from] oc_plugin::PluginError),
     #[error(transparent)]
     Export(#[from] oc_export::ExportError),
+    #[error(transparent)]
+    Overlay(#[from] ParamOverlayError),
+    #[error(transparent)]
+    Render(#[from] oc_render::RenderError),
+    #[error(transparent)]
+    Gpu(#[from] oc_gpu::GpuRuntimeError),
 }
 
 pub fn load_project_v1(path: impl AsRef<Path>) -> Result<ProjectV1, ProjectError> {
@@ -201,8 +211,14 @@ pub fn export_project_v1(
     gpu: &GpuCtx,
     project_path: impl AsRef<Path>,
 ) -> Result<ExportReport, ProjectError> {
-    let project_path = project_path.as_ref();
-    let project = load_project_v1(project_path)?;
+    let prepared = prepare_project_export(project_path)?;
+    prepared.export(gpu)
+}
+
+/// プロジェクトJSONを解決し、export/verifyで共有するコンテキストを構築する。
+pub fn prepare_project_export(project_path: impl AsRef<Path>) -> Result<PreparedProject, ProjectError> {
+    let project_path = project_path.as_ref().to_path_buf();
+    let project = load_project_v1(&project_path)?;
     let base = project_path.parent().unwrap_or_else(|| Path::new("."));
     let input_path = base.join(&project.input);
     let output_path = base.join(&project.output);
@@ -212,20 +228,124 @@ pub fn export_project_v1(
     let start = RationalTime::from_frame(project.start_frame, info.fps);
     let duration = RationalTime::from_frame(export_frames.saturating_sub(1) as i64, info.fps);
     let data_tracks = build_data_tracks(&project.param_drivers, start, duration, info.fps)?;
-    let overlay = project.overlay.into_param_overlay();
+    let overlay = project.overlay.clone().into_param_overlay();
+    let render_desc = FrameDesc::packed(
+        info.width,
+        info.height,
+        PixelFormat::Rgba8Unorm,
+        ColorSpace::Srgb,
+        true,
+    );
 
-    Ok(export_overlay_video(
-        gpu,
-        &ExportOverlayRequest {
-            input_path: &input_path,
-            output_path: &output_path,
-            start_frame: project.start_frame,
-            frame_count: project.frame_count,
-            overlay,
-            data_tracks,
-            qp0: project.qp0,
-        },
-    )?)
+    Ok(PreparedProject {
+        project_path,
+        input_path,
+        output_path,
+        project,
+        info,
+        export_frames,
+        overlay,
+        data_tracks,
+        render_desc,
+    })
+}
+
+#[derive(Debug, Clone)]
+pub struct PreparedProject {
+    pub project_path: PathBuf,
+    pub input_path: PathBuf,
+    pub output_path: PathBuf,
+    pub project: ProjectV1,
+    pub info: MediaInfo,
+    pub export_frames: usize,
+    pub overlay: ParamRectOverlay,
+    pub data_tracks: DataTracks,
+    pub render_desc: FrameDesc,
+}
+
+impl PreparedProject {
+    pub fn export(&self, gpu: &GpuCtx) -> Result<ExportReport, ProjectError> {
+        Ok(export_overlay_video(
+            gpu,
+            &ExportOverlayRequest {
+                input_path: &self.input_path,
+                output_path: &self.output_path,
+                start_frame: self.project.start_frame,
+                frame_count: self.project.frame_count,
+                overlay: self.overlay.clone(),
+                data_tracks: self.data_tracks.clone(),
+                qp0: self.project.qp0,
+            },
+        )?)
+    }
+
+    pub fn render_export_frame_rgba(
+        &self,
+        gpu: &GpuCtx,
+        export_index: usize,
+        session: &mut RenderSession,
+        yuv: &mut YuvToRgba,
+        downloader: &mut RgbaDownloader,
+    ) -> Result<Vec<u8>, ProjectError> {
+        let frame = self.read_source_frame(export_index)?;
+        let overlay = self.overlay.eval(frame.pts, &self.data_tracks)?;
+        let background = yuv.convert(gpu, &frame);
+        let rendered = render_frame_with_background_texture(
+            gpu,
+            session,
+            &BackgroundTextureRequest {
+                desc: self.render_desc,
+                timeline_time: frame.pts,
+                source_time: frame.pts,
+                background: TextureRef {
+                    texture: &background,
+                    desc: self.render_desc,
+                },
+                overlay,
+            },
+            Quality::FINAL,
+        )?;
+        Ok(downloader.download(
+            gpu,
+            &rendered.texture,
+            oc_export::EXPORT_DOWNLOAD_TIMEOUT,
+        )?)
+    }
+
+    pub fn decode_exported_frame_rgba(
+        &self,
+        gpu: &GpuCtx,
+        export_index: usize,
+        yuv: &mut YuvToRgba,
+        downloader: &mut RgbaDownloader,
+    ) -> Result<Vec<u8>, ProjectError> {
+        let out_info = probe(&self.output_path)?;
+        let mut reader = FrameReader::open(&self.output_path, &out_info, export_index as i64)?;
+        let frame = reader
+            .next_frame()?
+            .ok_or(ProjectError::Export(oc_export::ExportError::InvalidRequest(
+                "exported mp4 ended before expected frame",
+            )))?;
+        let texture = yuv.convert(gpu, &frame);
+        Ok(downloader.download(
+            gpu,
+            &texture,
+            oc_export::EXPORT_DOWNLOAD_TIMEOUT,
+        )?)
+    }
+
+    fn read_source_frame(&self, export_index: usize) -> Result<oc_core::CpuFrame, ProjectError> {
+        let mut reader =
+            FrameReader::open(&self.input_path, &self.info, self.project.start_frame)?;
+        for _ in 0..export_index {
+            let _ = reader.next_frame()?.ok_or(ProjectError::Export(
+                oc_export::ExportError::InvalidRequest("input ended before expected frame"),
+            ))?;
+        }
+        reader.next_frame()?.ok_or(ProjectError::Export(
+            oc_export::ExportError::InvalidRequest("input ended before expected frame"),
+        ))
+    }
 }
 
 #[cfg(test)]

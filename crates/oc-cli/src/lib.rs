@@ -3,11 +3,13 @@ use std::path::PathBuf;
 use oc_nodes::{CanonicalPoint, CanonicalSize, ParamRectOverlay, RectOverlay};
 
 mod project;
+mod verify_b4;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
     ExportOverlay(Box<ExportOverlayArgs>),
     ExportProject(ExportProjectArgs),
+    VerifyB4(VerifyB4Args),
     Help,
 }
 
@@ -26,6 +28,14 @@ pub struct ExportProjectArgs {
     pub project: PathBuf,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct VerifyB4Args {
+    pub project: PathBuf,
+    /// 検証前に書き出しを実行する。
+    pub export_first: bool,
+    pub tolerance: u32,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum CliError {
     #[error("{0}")]
@@ -38,6 +48,7 @@ oc-cli
 Commands:
   export-overlay --input <mp4> --output <mp4> [options]
   export-project --project <json> [options]
+  verify-b4 --project <json> [options]
 
 Options:
   --start-frame <n>       First source frame to export (default: 0)
@@ -47,6 +58,9 @@ Options:
   --color <r> <g> <b> <a> Overlay straight RGBA, 0..1 (default: 1 0 0 0.5)
   --qp0                  Use near-lossless H.264 for verification
   --project <json>       Project file path (versioned JSON)
+  --export               verify-b4: export before comparing (default: on)
+  --no-export            verify-b4: compare existing output only
+  --tolerance <n>        verify-b4: max per-channel diff (default: 8)
   --help                 Show this help
 ";
 
@@ -62,6 +76,7 @@ where
             parse_export_overlay(&args[1..]).map(|args| Command::ExportOverlay(Box::new(args)))
         }
         Some("export-project") => parse_export_project(&args[1..]).map(Command::ExportProject),
+        Some("verify-b4") => parse_verify_b4(&args[1..]).map(Command::VerifyB4),
         Some(other) => Err(CliError::Usage(format!(
             "unknown command: {other}\n\n{HELP}"
         ))),
@@ -88,6 +103,44 @@ fn parse_export_project(args: &[String]) -> Result<ExportProjectArgs, CliError> 
 
     Ok(ExportProjectArgs {
         project: project.ok_or_else(|| CliError::Usage("--project is required".into()))?,
+    })
+}
+
+fn parse_verify_b4(args: &[String]) -> Result<VerifyB4Args, CliError> {
+    let mut project: Option<PathBuf> = None;
+    let mut export_first = true;
+    let mut tolerance = 8u32;
+
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--help" | "-h" => return Err(CliError::Usage(HELP.to_string())),
+            "--project" => {
+                project = Some(PathBuf::from(take_one(args, &mut i, "--project")?));
+            }
+            "--export" => {
+                export_first = true;
+                i += 1;
+            }
+            "--no-export" => {
+                export_first = false;
+                i += 1;
+            }
+            "--tolerance" => {
+                tolerance = parse_one(args, &mut i, "--tolerance")?;
+            }
+            other => {
+                return Err(CliError::Usage(format!(
+                    "unknown verify-b4 option: {other}\n\n{HELP}"
+                )))
+            }
+        }
+    }
+
+    Ok(VerifyB4Args {
+        project: project.ok_or_else(|| CliError::Usage("--project is required".into()))?,
+        export_first,
+        tolerance,
     })
 }
 
@@ -215,9 +268,10 @@ where
 }
 
 pub use project::{
-    build_data_tracks, load_project_v1, load_project_v1_from_str, ParamDriverV1, ProjectV1,
-    RectOverlayParamV1,
+    build_data_tracks, load_project_v1, load_project_v1_from_str, prepare_project_export,
+    ParamDriverV1, PreparedProject, ProjectV1, RectOverlayParamV1,
 };
+pub use verify_b4::{verify_b4_project_v1, verify_prepared_b4, B4FrameResult, B4VerifyError, B4VerifyReport};
 
 pub fn export_project(
     gpu: &oc_gpu::GpuCtx,

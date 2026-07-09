@@ -50,7 +50,7 @@ pub enum ExportError {
 }
 
 /// 書き出しループのGPUダウンロード待ち。高負荷下の正当な遅延を許容する。
-const EXPORT_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(300);
+pub const EXPORT_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub fn export_overlay_video(
     gpu: &GpuCtx,

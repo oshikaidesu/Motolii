@@ -26,7 +26,11 @@ pub fn upload_rgba(gpu: &GpuCtx, desc: &FrameDesc, data: &[u8]) -> wgpu::Texture
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        // RENDER_ATTACHMENT+TEXTURE_BINDING: Slint Image::try_from の必須要件(yuv-outと同じ)
+        usage: wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_DST
+            | wgpu::TextureUsages::COPY_SRC
+            | wgpu::TextureUsages::RENDER_ATTACHMENT,
         view_formats: &[],
     });
     gpu.queue.write_texture(
