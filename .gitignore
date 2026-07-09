@@ -8,3 +8,5 @@ spikes/r9-preview/target
 node_modules/
 package-lock.json
 package.json
+# exit-demo のローカル生成物(input/出力mp4)はコミットしない
+samples/exit-demo/*.mp4

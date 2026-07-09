@@ -1,5 +1,10 @@
 # p5.opencuts
 
+<p align="center">
+  <img src="docs/assets/exit_demo.gif" alt="M1 exit demo: video background with a red rectangle sliding right with cubic-bezier easing, rendered headlessly to mp4" width="960">
+</p>
+<p align="center"><em>M1 exit demo — <code>cargo run -p oc-cli -- export-project</code> on <a href="samples/exit-demo/">samples/exit-demo/</a></em></p>
+
 > **A GPU-native, plugin-first motion-graphics compositor in Rust — built for music-video (MV) creation.**
 > _Working title. Early stage: building in the open, looking for collaborators._
 
