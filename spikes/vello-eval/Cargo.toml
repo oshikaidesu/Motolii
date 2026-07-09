@@ -1,0 +1,14 @@
+[package]
+name = "vello-eval"
+version = "0.1.0"
+edition = "2021"
+
+# ルートworkspaceから隔離(s1-slintと同じ流儀)。wgpuメジャーはこのプロジェクトの固定値(29)。
+[workspace]
+
+[dependencies]
+vello = "0.9.0"
+# vello_svgはvello ^0.7固定で0.9と組めないため、usvg→velloは自前変換で検証する
+usvg = "0.47"
+wgpu = "29"
+pollster = "0.4"

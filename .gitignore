@@ -1,4 +1,5 @@
 /target
 **/*.rs.bk
 spikes/s1-slint/target
+spikes/vello-eval/target
 /.tools

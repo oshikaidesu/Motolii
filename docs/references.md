@@ -11,7 +11,7 @@
 | [OpenCut](https://github.com/OpenCut-app/OpenCut) | MIT | タイムラインUIの**操作仕様の参考のみ。コード流用は不可**(D-3改訂2026-07-08。UIはSlintで自前実装するためReactコンポーネントは流用対象外)。Rustコア(GPU compositor/effects/masks)は設計思想の参考 |
 | [ffmpeg-sidecar](https://github.com/nathanbabcock/ffmpeg-sidecar) | MIT | **B-2対策の本命**。ffmpegバイナリをサイドカープロセスとして起動しrawvideoフレームをIterator APIで受け取るRustクレート。M0-S2スパイクはまずこれを評価し、足りなければ自前パイプ実装 |
 | [wgpu](https://github.com/gfx-rs/wgpu) | Apache-2.0/MIT | レンダリングコアの土台(採用決定済み) |
-| [Vello](https://github.com/linebender/vello) | Apache-2.0/MIT | wgpuベースのGPUコンピュート2Dレンダラ(アルファ状態)。プロシージャルオーバーレイのベクター描画を自前シェーダで書く前に、依存候補として評価する価値あり |
+| [Vello](https://github.com/linebender/vello) | Apache-2.0/MIT | **採用決定(2026-07-10、S3スパイク合格)**。vello 0.9=wgpu29依存で本体と同一デバイス同居を実測確認。条件: Renderer長寿命保持(初期化~900ms)・出力straight alpha→境界でpremul化・**vello_svgは使わず**usvg→vello変換は自前(スパイクに雛形)。バージョン結合がSlint↔wgpu↔velloの三者になる点に注意(A-3)。詳細は[spikes/s3-vello.md](spikes/s3-vello.md) |
 | [Symphonia](https://github.com/pdeljanov/Symphonia) | MPL-2.0 | Pure Rust音声デコード(MP3/AAC/FLAC/WAV等)。音声インポート(B-1)の第一候補。MPLはファイル単位コピーレフトなので依存利用は安全 |
 | [resvg / usvg](https://github.com/linebender/resvg) | MPL-2.0 | SVGパーサ(usvg: 参照解決済みの正規化ツリーを返す)。SVG読み込み(コンセプト決定でコア機能)の第一候補。linebender管理下で保守中。Vello描画と接続する(M4-K6) |
 | [rubato](https://github.com/HEnquist/rubato) | MIT | 音声リサンプリング。バリスピード再生(M2音声トランスポート設計の適応リサンプリング)の候補 |
