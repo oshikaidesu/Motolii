@@ -18,7 +18,7 @@
 | T12 | **部分完了**: `oc-plugin`。静的リンク版の種別レジストリ(Filter / ParamDriver / Composite)とGPUテクスチャ境界のtraitを追加。参照プラグインはCPUフレームを受け取らず、Filter/Compositeは`wgpu::CommandEncoder`へGPU render passを積む。ParamDriverはDataTrack生成を単体テスト済み。export経路で`SineParamDriver`→`DataTracks`→`ParamSource::Data`接続済み。Filterは`oc-nodes`経由のGPUゴールデンで実証済み、Compositeのalpha契約は`oc-nodes::CompositeNode`で実証済み |
 | T5 | **後方移動**: GPU色解析はプラグイン/解析拡張領域であり、M1完了条件から外す。M1では合成DataTrackまたはParamDriver参照プラグインで「値列がパラメータを駆動する」境界だけを検証する |
 | T11 | 未着手。M0-S1(Slint UI統合スパイク)はGUI環境が必要なため開発主機で実施すること |
-| T8 | **部分完了**: 固定グラフに加え、`RenderStep::VideoSource`で動画フレーム等の外部GPUテクスチャをグラフの一級ステップとして表現。`render_frame_with_background_texture`は同一`render_graph_cached`経路に合流(R4) |
+| T8 | **部分完了**: 固定グラフに加え、`RenderStep::VideoSource`で動画フレーム等の外部GPUテクスチャをグラフの一級ステップとして表現。`render_frame_with_background_texture`は同一`render_graph_cached`経路に合流(R4)。**残り=中間バッファのピンポン使い回し**(performance-model §3のM1-T8方針: テクスチャ確保・コピーを毎フレームやらず2枚を交互再利用) |
 | T9 | **完了**: `oc-export`を追加し、`FrameReader`→`YuvToRgba`→`oc-render`→`Encoder`の最小mp4書き出しループを実装。30fps×3秒のタイムコード焼き込み素材で全フレームの時刻対応を検証(R5)。書き出しmp4のBT.709 limited色タグをprobeで検証(R5) |
 | T10 | **部分完了**: `oc-cli export-overlay`に加えて `oc-cli export-project`（versioned JSON）を追加。JSON→`oc-export`接続を最小実装し、小さな入力動画→JSON→mp4の統合テストを確認済み。キーフレーム/ParamDriver DataTrack駆動のゴールデン化済み。正式なプロジェクトE2Eサンプル同梱、合成DataTrack接続の拡張は後続 |
 
