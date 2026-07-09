@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "input": "input.mp4",
+  "output": "exit-demo.mp4",
+  "overlay": {
+    "center": {
+      "Keyframes": {
+        "keys": [
+          {
+            "t": { "num": 0, "den": 1 },
+            "value": { "Vec2": [-0.35, 0.0] },
+            "interp": { "Bezier": { "x1": 0.42, "y1": 0.0, "x2": 0.58, "y2": 1.0 } }
+          },
+          {
+            "t": { "num": 2, "den": 1 },
+            "value": { "Vec2": [0.35, 0.0] },
+            "interp": "Linear"
+          }
+        ]
+      }
+    },
+    "size": [0.3, 0.4],
+    "color": [1.0, 0.15, 0.1, 1.0]
+  }
+}
