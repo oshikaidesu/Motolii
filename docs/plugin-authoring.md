@@ -57,6 +57,15 @@
 
 ## 5. 最小スケルトン(Filter)
 
+新規は手書きコピーより生成から始める(INF-7e):
+
+```bash
+./scripts/new-plugin.sh filter glow --out /tmp/glow.rs
+# kind: filter | layer_source | param_driver | composite
+```
+
+生成物は `validate_node_desc` を通る desc + テストスタブ付き。以下は手書き時の型紙。
+
 ```rust
 use motolii_plugin::{FilterPlugin, NodeDesc, PluginError, PluginId, ResolvedParams, TextureRef, ValueType};
 use motolii_core::RationalTime;
