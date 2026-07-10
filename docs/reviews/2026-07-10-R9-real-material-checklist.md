@@ -66,4 +66,4 @@ GUIを出さない場合のみ `--no-preview`。
 | QuickTimeで開けない | `qp0: true` は yuv444p — `qp0: false` で書き出し、または VLC/ffplay |
 | `output file missing` | `--export` 付きで実行、または先に `export-project` |
 | プレビューが真っ黒 | 入力パス・`start_frame` を確認。ターミナルに GPU/adapter ログあり |
-| CIではR9を回さない | 意図的。合成素材の `motoly-cli/tests/r9_b4_verify.rs` のみCI |
+| CIではR9を回さない | 意図的。合成素材の `motolii-cli/tests/r9_b4_verify.rs` のみCI |

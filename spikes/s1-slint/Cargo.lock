@@ -2490,18 +2490,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "motoly-core"
+name = "motolii-core"
 version = "0.1.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
-name = "motoly-gpu"
+name = "motolii-gpu"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "motoly-core",
+ "motolii-core",
  "pollster",
  "thiserror 2.0.18",
  "wgpu",
@@ -3595,8 +3595,8 @@ dependencies = [
 name = "s1-slint"
 version = "0.1.0"
 dependencies = [
- "motoly-core",
- "motoly-gpu",
+ "motolii-core",
+ "motolii-gpu",
  "slint",
  "wgpu",
 ]

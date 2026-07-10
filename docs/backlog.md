@@ -13,10 +13,10 @@
 ## 現在地サマリ(2026-07-09)
 
 - **フェーズ**: M1(垂直スライス)を消化中 → 完了後に**凍結ゲート**。M2〜M5(=v1コア)はドラフト。
-- **M1のゴール(出口デモ、2026-07-09確定)**: **実写動画(背景)+ 右へイージングで流れる四角シェイプ(上レイヤー)の2レイヤー合成をmp4出力**。`project.json`→`motoly-cli export-project`→mp4。CLIまで(UIはM3)。残り=正式サンプル同梱+E2Eゴールデン(T10残)。詳細は[M1仕様](specs/M1-vertical-slice.md)「出口デモ」。
+- **M1のゴール(出口デモ、2026-07-09確定)**: **実写動画(背景)+ 右へイージングで流れる四角シェイプ(上レイヤー)の2レイヤー合成をmp4出力**。`project.json`→`motolii-cli export-project`→mp4。CLIまで(UIはM3)。残り=正式サンプル同梱+E2Eゴールデン(T10残)。詳細は[M1仕様](specs/M1-vertical-slice.md)「出口デモ」。
 - **キーフレームUI決定(2026-07-09)**: AE式グラフビューは作らず、**Flow/アライトモーション式の区間イージングポップアップ**(cubic-bezier 4値、fps非依存)。空間モーションパスは別概念でv1コア外。詳細は[concept.md](concept.md)/[M3仕様](specs/M3-ui-integration.md)。
 - **スコープ決定(2026-07-09)**: **解析駆動(映像解析→DataTrack生成: 色解析/オプティカルフロー/トラッキング)は最終フェーズに後回し**。v1コア(M1〜M5)は解析なしで「MVを1本作れる」に到達する。DataTrack/ParamDriver機構とキャッシュの“口”は凍結ゲートで予約(スキーマ互換維持)。→ ④の「最終フェーズ」参照。
-- **クレート**: `motoly-core` / `motoly-media` / `motoly-gpu` / `motoly-eval` / `motoly-nodes` / `motoly-plugin` / `motoly-render` / `motoly-export` / `motoly-cli` / `motoly-testkit` が存在。
+- **クレート**: `motolii-core` / `motolii-media` / `motolii-gpu` / `motolii-eval` / `motolii-nodes` / `motolii-plugin` / `motolii-render` / `motolii-export` / `motolii-cli` / `motolii-testkit` が存在。
 - **M1タスク状況**: R1〜R6・T1〜T4・T6・T9 完了。T7/T8/T10/T12 部分完了。**残り = R7(形状/ブレンド追加)・R8(Vello採否)・R9(実素材, 要GUI)**。
 - **未検証の最大リスク**: **S1 Slintスパイクの実機GUI実走(IME/スレッド/Manualデバイス)がまだ**(ヘッドレス環境のため)。→ INF-1。
 - **凍結ゲート状態**: 9項目のうち F-1(正準座標)/F-3(評価順)/G-1(プラグイン種別)は**コード実証が進行中**、F-2(所有権の型強制)・F-4(TimeMap)は骨格・スキーマ段階。「仕様=凍結ではない」罠(pitfalls G-1)を回避するため**コード実証条件**で凍結する。

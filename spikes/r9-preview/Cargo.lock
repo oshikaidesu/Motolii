@@ -2490,104 +2490,104 @@ dependencies = [
 ]
 
 [[package]]
-name = "motoly-cli"
+name = "motolii-cli"
 version = "0.1.0"
 dependencies = [
- "motoly-core",
- "motoly-eval",
- "motoly-export",
- "motoly-gpu",
- "motoly-media",
- "motoly-nodes",
- "motoly-plugin",
- "motoly-render",
+ "motolii-core",
+ "motolii-eval",
+ "motolii-export",
+ "motolii-gpu",
+ "motolii-media",
+ "motolii-nodes",
+ "motolii-plugin",
+ "motolii-render",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
 ]
 
 [[package]]
-name = "motoly-core"
+name = "motolii-core"
 version = "0.1.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
-name = "motoly-eval"
+name = "motolii-eval"
 version = "0.1.0"
 dependencies = [
- "motoly-core",
+ "motolii-core",
  "serde",
 ]
 
 [[package]]
-name = "motoly-export"
+name = "motolii-export"
 version = "0.1.0"
 dependencies = [
- "motoly-core",
- "motoly-eval",
- "motoly-gpu",
- "motoly-media",
- "motoly-nodes",
- "motoly-plugin",
- "motoly-render",
+ "motolii-core",
+ "motolii-eval",
+ "motolii-gpu",
+ "motolii-media",
+ "motolii-nodes",
+ "motolii-plugin",
+ "motolii-render",
  "thiserror 2.0.18",
 ]
 
 [[package]]
-name = "motoly-gpu"
+name = "motolii-gpu"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "motoly-core",
+ "motolii-core",
  "pollster",
  "thiserror 2.0.18",
  "wgpu",
 ]
 
 [[package]]
-name = "motoly-media"
+name = "motolii-media"
 version = "0.1.0"
 dependencies = [
- "motoly-core",
+ "motolii-core",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
 ]
 
 [[package]]
-name = "motoly-nodes"
+name = "motolii-nodes"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "motoly-core",
- "motoly-eval",
- "motoly-gpu",
- "motoly-plugin",
+ "motolii-core",
+ "motolii-eval",
+ "motolii-gpu",
+ "motolii-plugin",
  "thiserror 2.0.18",
  "wgpu",
 ]
 
 [[package]]
-name = "motoly-plugin"
+name = "motolii-plugin"
 version = "0.1.0"
 dependencies = [
- "motoly-core",
- "motoly-eval",
- "motoly-gpu",
+ "motolii-core",
+ "motolii-eval",
+ "motolii-gpu",
  "thiserror 2.0.18",
  "wgpu",
 ]
 
 [[package]]
-name = "motoly-render"
+name = "motolii-render"
 version = "0.1.0"
 dependencies = [
- "motoly-core",
- "motoly-gpu",
- "motoly-nodes",
- "motoly-plugin",
+ "motolii-core",
+ "motolii-gpu",
+ "motolii-nodes",
+ "motolii-plugin",
  "thiserror 2.0.18",
  "wgpu",
 ]
@@ -3466,9 +3466,9 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 name = "r9-preview"
 version = "0.1.0"
 dependencies = [
- "motoly-cli",
- "motoly-gpu",
- "motoly-render",
+ "motolii-cli",
+ "motolii-gpu",
+ "motolii-render",
  "slint",
  "wgpu",
 ]

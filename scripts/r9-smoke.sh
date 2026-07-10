@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DIR="${1:-${TMPDIR:-/tmp}/motoly-r9-smoke}"
+DIR="${1:-${TMPDIR:-/tmp}/motolii-r9-smoke}"
 mkdir -p "${DIR}"
 
 INPUT="${DIR}/input.mp4"

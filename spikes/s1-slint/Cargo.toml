@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 # ルートworkspaceからは隔離するが、wgpuメジャーは統一済み(29)。
-# motoly-gpuをpath依存し、コアのテクスチャをSlintに渡すE2E結線を検証する。
+# motolii-gpuをpath依存し、コアのテクスチャをSlintに渡すE2E結線を検証する。
 [workspace]
 
 [dependencies]
 slint = { version = "~1.17", default-features = false, features = ["compat-1-2", "std", "backend-winit", "renderer-femtovg-wgpu", "unstable-wgpu-29"] }
 wgpu = "29"
-motoly-core = { path = "../../crates/motoly-core" }
-motoly-gpu = { path = "../../crates/motoly-gpu" }
+motolii-core = { path = "../../crates/motolii-core" }
+motolii-gpu = { path = "../../crates/motolii-gpu" }

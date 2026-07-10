@@ -1,0 +1,16 @@
+[package]
+name = "motolii-render"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+motolii-core.workspace = true
+motolii-gpu.workspace = true
+motolii-nodes.workspace = true
+motolii-plugin.workspace = true
+thiserror.workspace = true
+wgpu.workspace = true
+
+[dev-dependencies]
+motolii-testkit.workspace = true

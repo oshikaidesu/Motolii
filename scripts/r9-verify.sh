@@ -33,7 +33,7 @@ cd "${ROOT_DIR}"
 TOLERANCE="${R9_TOLERANCE:-8}"
 echo "==> export + B-4 verify (tolerance ${TOLERANCE}, qp0 recommended in project json)"
 set +e
-VERIFY_OUT="$(cargo run -q -p motoly-cli -- verify-b4 --project "${PROJECT}" --export --tolerance "${TOLERANCE}" 2>&1)"
+VERIFY_OUT="$(cargo run -q -p motolii-cli -- verify-b4 --project "${PROJECT}" --export --tolerance "${TOLERANCE}" 2>&1)"
 VERIFY_RC=$?
 set -e
 echo "${VERIFY_OUT}"

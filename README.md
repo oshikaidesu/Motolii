@@ -1,4 +1,4 @@
-# Motoly
+# Motolii
 
 > **A GPU-native, plugin-first motion-graphics compositor in Rust — built for music-video (MV) creation.**
 > _Early stage: building in the open, looking for collaborators._
@@ -64,7 +64,7 @@ None of this is a knock on AviUtl — it's a remarkable project and a direct ins
 | Render core | Rust + [wgpu](https://github.com/gfx-rs/wgpu) (VRAM-resident) |
 | UI (planned) | [Slint](https://slint.dev) (wgpu zero-copy texture embedding, Japanese IME) — not started yet |
 | Decode / encode | ffmpeg as a sidecar process (raw YUV in, mp4 out) |
-| Structure | Cargo workspace (`crates/motoly-*`) |
+| Structure | Cargo workspace (`crates/motolii-*`) |
 
 ## Design docs (start here)
 
@@ -82,7 +82,7 @@ Requires a recent Rust toolchain (pinned in `rust-toolchain.toml`), `ffmpeg`/`ff
 ```sh
 cargo test --workspace
 # Render a project to mp4 (see docs/specs/M1-vertical-slice.md for the JSON schema)
-cargo run -p motoly-cli -- export-project path/to/project.json
+cargo run -p motolii-cli -- export-project path/to/project.json
 ```
 
 ## Looking for collaborators

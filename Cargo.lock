@@ -488,119 +488,119 @@ dependencies = [
 ]
 
 [[package]]
-name = "motoly-cli"
+name = "motolii-cli"
 version = "0.1.0"
 dependencies = [
- "motoly-core",
- "motoly-eval",
- "motoly-export",
- "motoly-gpu",
- "motoly-media",
- "motoly-nodes",
- "motoly-plugin",
- "motoly-render",
- "motoly-testkit",
+ "motolii-core",
+ "motolii-eval",
+ "motolii-export",
+ "motolii-gpu",
+ "motolii-media",
+ "motolii-nodes",
+ "motolii-plugin",
+ "motolii-render",
+ "motolii-testkit",
  "serde",
  "serde_json",
  "thiserror",
 ]
 
 [[package]]
-name = "motoly-core"
+name = "motolii-core"
 version = "0.1.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
-name = "motoly-eval"
+name = "motolii-eval"
 version = "0.1.0"
 dependencies = [
- "motoly-core",
+ "motolii-core",
  "serde",
 ]
 
 [[package]]
-name = "motoly-export"
+name = "motolii-export"
 version = "0.1.0"
 dependencies = [
- "motoly-core",
- "motoly-eval",
- "motoly-gpu",
- "motoly-media",
- "motoly-nodes",
- "motoly-plugin",
- "motoly-render",
- "motoly-testkit",
+ "motolii-core",
+ "motolii-eval",
+ "motolii-gpu",
+ "motolii-media",
+ "motolii-nodes",
+ "motolii-plugin",
+ "motolii-render",
+ "motolii-testkit",
  "thiserror",
 ]
 
 [[package]]
-name = "motoly-gpu"
+name = "motolii-gpu"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "motoly-core",
- "motoly-testkit",
+ "motolii-core",
+ "motolii-testkit",
  "pollster",
  "thiserror",
  "wgpu",
 ]
 
 [[package]]
-name = "motoly-media"
+name = "motolii-media"
 version = "0.1.0"
 dependencies = [
- "motoly-core",
+ "motolii-core",
  "serde",
  "serde_json",
  "thiserror",
 ]
 
 [[package]]
-name = "motoly-nodes"
+name = "motolii-nodes"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "motoly-core",
- "motoly-eval",
- "motoly-gpu",
- "motoly-plugin",
- "motoly-testkit",
+ "motolii-core",
+ "motolii-eval",
+ "motolii-gpu",
+ "motolii-plugin",
+ "motolii-testkit",
  "thiserror",
  "wgpu",
 ]
 
 [[package]]
-name = "motoly-plugin"
+name = "motolii-plugin"
 version = "0.1.0"
 dependencies = [
- "motoly-core",
- "motoly-eval",
- "motoly-gpu",
+ "motolii-core",
+ "motolii-eval",
+ "motolii-gpu",
  "thiserror",
  "wgpu",
 ]
 
 [[package]]
-name = "motoly-render"
+name = "motolii-render"
 version = "0.1.0"
 dependencies = [
- "motoly-core",
- "motoly-gpu",
- "motoly-nodes",
- "motoly-plugin",
- "motoly-testkit",
+ "motolii-core",
+ "motolii-gpu",
+ "motolii-nodes",
+ "motolii-plugin",
+ "motolii-testkit",
  "thiserror",
  "wgpu",
 ]
 
 [[package]]
-name = "motoly-testkit"
+name = "motolii-testkit"
 version = "0.1.0"
 dependencies = [
  "image",
- "motoly-gpu",
+ "motolii-gpu",
  "thiserror",
 ]
 
