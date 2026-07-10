@@ -7,6 +7,24 @@ After Effects is powerful but heavy, and its extension gateway is narrow (C++ SD
 
 **This is not** a general NLE, a Nuke-style VFX compositor, or a color-grading suite. It is a motion-graphics tool: keyframes, easing, procedural overlays, 2.5D/3D (glTF) + video in one composite, and a single-song MV export.
 
+## Why Motolii?
+
+The name comes from English **_motley_** — the variegated, patchwork cloth worn by court jesters. In Shakespeare, the **motley fool** is the one in mismatched scraps who still tells the truth. That image stuck: a composite built from unrelated pieces that somehow become one thing.
+
+We spell it **Motolii** (モトリー) on purpose:
+
+- **`motley` → `motolii`** — same sound, but reads cleanly in romaji as _mo-to-lii_ (the trailing `ey` in _motley_ is easy to misread).
+- **Double `ii`** — distinctive enough to stand apart from other projects on GitHub and elsewhere.
+
+The deeper idea behind the tool is **collage**, not a single neat metaphor:
+
+- **Chroma-keyed clips** — cut reality into fragments and bring them in.
+- **Many layers, messy on purpose** — juxtaposition over invisible VFX glue.
+- **Music-synced remix** — fragments colliding on a beat (the 音MAD spirit, without naming it).
+- **Point clouds as fiction** — sparse data pretending to be a world.
+
+Motolii is a motion compositor by spec; collage is the attitude. The name does not explain any of that out loud — it just wears the patchwork.
+
 ---
 
 ## Status
