@@ -3,7 +3,7 @@
 //! v1はdylibロードを持たず、同一バイナリ内で種別レジストリに登録する。
 //! Render系の境界は最初からGPUテクスチャのみで、CPUフレームを受け渡す経路は作らない。
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::f64::consts::TAU;
 use std::sync::OnceLock;
 
@@ -112,6 +112,8 @@ pub struct LayerSourceContext {
 pub enum PluginError {
     #[error("duplicate {kind:?} plugin id: {id}")]
     Duplicate { kind: PluginKind, id: &'static str },
+    #[error("invalid NodeDesc for `{id}`: {reason}")]
+    InvalidDesc { id: String, reason: String },
     #[error("plugin render failed: {0}")]
     Render(String),
     #[error("param migrate failed for {plugin}: {reason}")]
@@ -134,6 +136,98 @@ pub struct CompLookbehind {
     pub offsets: Vec<i32>,
     /// 自己参照切断用のエフェクトID列。
     pub exclude: Vec<String>,
+}
+
+/// `NodeDesc`必須欄の機械判定(INF-7c、plugin-authoring §2)。
+///
+/// レジストリの`register_*`が必ず呼ぶため、テストを通るプラグインは検証済みになる
+/// (§7チェックリスト「メタデータ完備」の目視を不要化)。
+pub fn validate_node_desc(kind: PluginKind, desc: &NodeDesc) -> Result<(), PluginError> {
+    let invalid = |reason: String| PluginError::InvalidDesc {
+        id: desc.id.0.to_string(),
+        reason,
+    };
+    let ident_ok = |s: &str| {
+        !s.is_empty()
+            && s.chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+    };
+
+    let segments: Vec<&str> = desc.id.0.split('.').collect();
+    if segments.len() != 3 || !segments.iter().all(|s| ident_ok(s)) {
+        return Err(invalid(format!(
+            "id must be `vendor.kind.name` (lowercase ascii), got `{}`",
+            desc.id.0
+        )));
+    }
+    if desc.version == 0 {
+        return Err(invalid("version must be >= 1".into()));
+    }
+    if desc.display_name.trim().is_empty() {
+        return Err(invalid("display_name is empty".into()));
+    }
+    if desc.category.trim().is_empty() {
+        return Err(invalid("category is empty".into()));
+    }
+    if desc.tags.is_empty() {
+        return Err(invalid("tags must not be empty (discovery/F-8)".into()));
+    }
+    if let Some(tag) = desc.tags.iter().find(|t| {
+        t.is_empty()
+            || !t
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+    }) {
+        return Err(invalid(format!(
+            "tag `{tag}` must be short lowercase ascii"
+        )));
+    }
+    let mut param_ids = BTreeSet::new();
+    for param in &desc.params {
+        if param.id.trim().is_empty() {
+            return Err(invalid("param id is empty".into()));
+        }
+        if !param_ids.insert(param.id) {
+            return Err(invalid(format!("duplicate param id `{}`", param.id)));
+        }
+        let default_matches = matches!(
+            (param.value_type, &param.default),
+            (ValueType::F64, Value::F64(_))
+                | (ValueType::Vec2, Value::Vec2(_))
+                | (ValueType::Vec3, Value::Vec3(_))
+                | (ValueType::Color, Value::Color(_))
+                | (ValueType::AssetRef, Value::AssetRef(_))
+        );
+        if !default_matches {
+            return Err(invalid(format!(
+                "param `{}` default does not match value_type {:?}",
+                param.id, param.value_type
+            )));
+        }
+    }
+    if desc.min_inputs > desc.max_inputs {
+        return Err(invalid(format!(
+            "min_inputs {} > max_inputs {}",
+            desc.min_inputs, desc.max_inputs
+        )));
+    }
+    // 入出力アリティは種別の契約(plugin-authoring §1)そのもの。
+    let arity_ok = match kind {
+        PluginKind::LayerSource | PluginKind::ParamDriver => {
+            desc.min_inputs == 0 && desc.max_inputs == 0
+        }
+        PluginKind::Filter => desc.min_inputs == 1 && desc.max_inputs == 1,
+        PluginKind::Composite => desc.min_inputs >= 2,
+        // 予約種別はレジストリ登録経路が無いため、ここでは制約しない。
+        PluginKind::Input | PluginKind::Simulation | PluginKind::ScriptWasm => true,
+    };
+    if !arity_ok {
+        return Err(invalid(format!(
+            "inputs [{}, {}] violate {kind:?} arity contract",
+            desc.min_inputs, desc.max_inputs
+        )));
+    }
+    Ok(())
 }
 
 /// プラグインparamの版間移行(G-1 / FG-C4)。
@@ -184,6 +278,8 @@ fn migrate_sine_params(
 pub trait FilterPlugin: Send + Sync {
     fn desc(&self) -> &NodeDesc;
 
+    // プラグイン契約の引数集合(GPU/時刻/params/入出力)が閾値を超えるのは構造上のもの。
+    #[allow(clippy::too_many_arguments)]
     fn render(
         &self,
         gpu: &GpuCtx,
@@ -199,6 +295,7 @@ pub trait FilterPlugin: Send + Sync {
 pub trait LayerSourcePlugin: Send + Sync {
     fn desc(&self) -> &NodeDesc;
 
+    #[allow(clippy::too_many_arguments)]
     fn render(
         &self,
         gpu: &GpuCtx,
@@ -224,6 +321,7 @@ pub trait ParamDriverPlugin: Send + Sync {
 pub trait CompositePlugin: Send + Sync {
     fn desc(&self) -> &NodeDesc;
 
+    #[allow(clippy::too_many_arguments)]
     fn render(
         &self,
         gpu: &GpuCtx,
@@ -264,6 +362,7 @@ impl PluginRegistry {
         &mut self,
         plugin: &'static dyn LayerSourcePlugin,
     ) -> Result<(), PluginError> {
+        validate_node_desc(PluginKind::LayerSource, plugin.desc())?;
         let id = plugin.desc().id.clone();
         self.ensure_id_free(&id)?;
         insert_unique(&mut self.layer_sources, PluginKind::LayerSource, id, plugin)
@@ -273,6 +372,7 @@ impl PluginRegistry {
         &mut self,
         plugin: &'static dyn FilterPlugin,
     ) -> Result<(), PluginError> {
+        validate_node_desc(PluginKind::Filter, plugin.desc())?;
         let id = plugin.desc().id.clone();
         self.ensure_id_free(&id)?;
         insert_unique(&mut self.filters, PluginKind::Filter, id, plugin)
@@ -282,6 +382,7 @@ impl PluginRegistry {
         &mut self,
         plugin: &'static dyn ParamDriverPlugin,
     ) -> Result<(), PluginError> {
+        validate_node_desc(PluginKind::ParamDriver, plugin.desc())?;
         let id = plugin.desc().id.clone();
         self.ensure_id_free(&id)?;
         insert_unique(&mut self.param_drivers, PluginKind::ParamDriver, id, plugin)
@@ -291,6 +392,7 @@ impl PluginRegistry {
         &mut self,
         plugin: &'static dyn CompositePlugin,
     ) -> Result<(), PluginError> {
+        validate_node_desc(PluginKind::Composite, plugin.desc())?;
         let id = plugin.desc().id.clone();
         self.ensure_id_free(&id)?;
         insert_unique(&mut self.composites, PluginKind::Composite, id, plugin)
@@ -762,7 +864,9 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     }
 }
 
+// 公開APIのパニック禁止(INF-7b)は本番コードにlintを効かせ、テストmodだけ免除する。
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::reference::{register_reference_plugins, CLEAR_LAYER_SOURCE, SINE_PARAM_DRIVER};
     use super::*;
@@ -827,7 +931,7 @@ mod tests {
                     version: 1,
                     display_name: "Clash",
                     category: "Composite",
-                    tags: &[],
+                    tags: &["test"],
                     params: vec![],
                     min_inputs: 2,
                     max_inputs: 2,
@@ -950,5 +1054,121 @@ mod tests {
             serde_json::from_str::<CompLookbehind>(&look_json).unwrap(),
             look
         );
+    }
+
+    /// INF-7c: 参照プラグイン全desc + 検証の負例(欠落メタデータが赤になる証明)。
+    #[test]
+    fn validate_node_desc_accepts_reference_plugins() {
+        use super::reference::{CLEAR_COMPOSITE, CLEAR_FILTER, CLEAR_LAYER_SOURCE, TINT_FILTER};
+        validate_node_desc(PluginKind::Filter, CLEAR_FILTER.desc()).unwrap();
+        validate_node_desc(PluginKind::Filter, TINT_FILTER.desc()).unwrap();
+        validate_node_desc(PluginKind::LayerSource, CLEAR_LAYER_SOURCE.desc()).unwrap();
+        validate_node_desc(PluginKind::ParamDriver, SINE_PARAM_DRIVER.desc()).unwrap();
+        validate_node_desc(PluginKind::Composite, CLEAR_COMPOSITE.desc()).unwrap();
+    }
+
+    #[test]
+    fn validate_node_desc_rejects_incomplete_metadata() {
+        let valid = NodeDesc {
+            id: PluginId("core.filter.probe"),
+            version: 1,
+            display_name: "Probe",
+            category: "Utility",
+            tags: &["test"],
+            params: vec![],
+            min_inputs: 1,
+            max_inputs: 1,
+        };
+        validate_node_desc(PluginKind::Filter, &valid).unwrap();
+
+        let cases: &[(&str, NodeDesc)] = &[
+            (
+                "empty display_name",
+                NodeDesc {
+                    display_name: "  ",
+                    ..valid.clone()
+                },
+            ),
+            (
+                "empty category",
+                NodeDesc {
+                    category: "",
+                    ..valid.clone()
+                },
+            ),
+            (
+                "empty tags",
+                NodeDesc {
+                    tags: &[],
+                    ..valid.clone()
+                },
+            ),
+            (
+                "version 0",
+                NodeDesc {
+                    version: 0,
+                    ..valid.clone()
+                },
+            ),
+            (
+                "bad id",
+                NodeDesc {
+                    id: PluginId("Not.Valid.ID"),
+                    ..valid.clone()
+                },
+            ),
+            (
+                "arity",
+                NodeDesc {
+                    min_inputs: 0,
+                    max_inputs: 0,
+                    ..valid.clone()
+                },
+            ),
+        ];
+        for (label, desc) in cases {
+            let err = validate_node_desc(PluginKind::Filter, desc).unwrap_err();
+            assert!(
+                matches!(err, PluginError::InvalidDesc { .. }),
+                "{label}: {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn registry_rejects_invalid_desc_at_registration() {
+        struct BadFilter;
+        impl FilterPlugin for BadFilter {
+            fn desc(&self) -> &NodeDesc {
+                static DESC: OnceLock<NodeDesc> = OnceLock::new();
+                DESC.get_or_init(|| NodeDesc {
+                    id: PluginId("core.filter.bad"),
+                    version: 1,
+                    display_name: "Bad",
+                    category: "Utility",
+                    tags: &[],
+                    params: vec![],
+                    min_inputs: 1,
+                    max_inputs: 1,
+                })
+            }
+
+            fn render(
+                &self,
+                _gpu: &GpuCtx,
+                _pipelines: &mut PipelineCache,
+                _encoder: &mut wgpu::CommandEncoder,
+                _t: RationalTime,
+                _params: &ResolvedParams,
+                _input: TextureRef<'_>,
+                _output: TextureRef<'_>,
+            ) -> Result<(), PluginError> {
+                Ok(())
+            }
+        }
+        static BAD: BadFilter = BadFilter;
+        let mut registry = PluginRegistry::new();
+        let err = registry.register_filter(&BAD).unwrap_err();
+        assert!(matches!(err, PluginError::InvalidDesc { .. }));
     }
 }

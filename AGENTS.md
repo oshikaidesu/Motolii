@@ -32,4 +32,5 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 - **1チケット=1コミット**。完了時に仕様書のチケット表・実装状況表を更新する
 - 完了条件は自動判定(`cargo test`/ゴールデンイメージ)。「動いた気がする」を完了条件にしない
 - 提出前に `cargo test --workspace` 全緑を確認
+- **プラグイン規約の機械判定(INF-7a〜d)**: 提出前に `cargo test -p motolii-plugin` を回す(conformanceスキャナ=ベンダーAPI deny/公開面panic・`NodeDesc`検証)。clippy denyは同クレートの`[lints.clippy]`で`cargo clippy -p motolii-plugin`時にも効く。§7目視の代替
 - インターフェース契約(specの型シグネチャ)を変えたくなったら、実装を止めて仕様書改訂を先に

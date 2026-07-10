@@ -4,6 +4,15 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 
+# 公開API/参照実装でのpanic経路をCIで落とす(INF-7b、plugin-authoring §3-7)。
+# テストコードはlib.rs先頭のcfg_attr(test)とtests/側のallowで免除する。
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+
 [dependencies]
 motolii-core.workspace = true
 motolii-eval.workspace = true

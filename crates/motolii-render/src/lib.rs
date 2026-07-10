@@ -676,6 +676,8 @@ fn texture_slot_count(graph: &LinearRenderGraph) -> Result<usize, RenderError> {
     Ok(ids.len())
 }
 
+// プラグイン契約(8引数のrender)へ横流しするディスパッチのため引数が多いのは構造上のもの。
+#[allow(clippy::too_many_arguments)]
 fn dispatch_plugin(
     registry: &PluginRegistry,
     id: &PluginId,
@@ -1113,19 +1115,21 @@ mod tests {
         use motolii_plugin::{FilterPlugin, NodeDesc, PluginError};
         use std::sync::OnceLock;
 
-        struct ZeroMinFilter;
-        impl FilterPlugin for ZeroMinFilter {
+        // 不正descは登録時にvalidate_node_descが拒否するため、
+        // 正規descのFilterに対しグラフ側が空inputsを運ぶケースで描画時ガードを検証する。
+        struct EmptyInputFilter;
+        impl FilterPlugin for EmptyInputFilter {
             fn desc(&self) -> &NodeDesc {
                 static DESC: OnceLock<NodeDesc> = OnceLock::new();
                 DESC.get_or_init(|| NodeDesc {
-                    id: PluginId("test.filter.zero_min"),
+                    id: PluginId("test.filter.empty_input"),
                     version: 1,
-                    display_name: "ZeroMin",
+                    display_name: "EmptyInput",
                     category: "Utility",
-                    tags: &[],
+                    tags: &["test"],
                     params: vec![],
-                    min_inputs: 0,
-                    max_inputs: 0,
+                    min_inputs: 1,
+                    max_inputs: 1,
                 })
             }
 
@@ -1142,16 +1146,16 @@ mod tests {
                 Ok(())
             }
         }
-        static ZERO: ZeroMinFilter = ZeroMinFilter;
+        static EMPTY: EmptyInputFilter = EmptyInputFilter;
 
         let mut registry = PluginRegistry::new();
-        registry.register_filter(&ZERO).unwrap();
+        registry.register_filter(&EMPTY).unwrap();
 
         let desc = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
         let graph = LinearRenderGraph {
             desc,
             steps: vec![RenderStep::Plugin {
-                id: PluginId("test.filter.zero_min"),
+                id: PluginId("test.filter.empty_input"),
                 params: ResolvedParams::new(),
                 inputs: vec![],
                 output: TextureId(0),
