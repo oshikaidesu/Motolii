@@ -2490,6 +2490,109 @@ dependencies = [
 ]
 
 [[package]]
+name = "motoly-cli"
+version = "0.1.0"
+dependencies = [
+ "motoly-core",
+ "motoly-eval",
+ "motoly-export",
+ "motoly-gpu",
+ "motoly-media",
+ "motoly-nodes",
+ "motoly-plugin",
+ "motoly-render",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "motoly-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "motoly-eval"
+version = "0.1.0"
+dependencies = [
+ "motoly-core",
+ "serde",
+]
+
+[[package]]
+name = "motoly-export"
+version = "0.1.0"
+dependencies = [
+ "motoly-core",
+ "motoly-eval",
+ "motoly-gpu",
+ "motoly-media",
+ "motoly-nodes",
+ "motoly-plugin",
+ "motoly-render",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "motoly-gpu"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "motoly-core",
+ "pollster",
+ "thiserror 2.0.18",
+ "wgpu",
+]
+
+[[package]]
+name = "motoly-media"
+version = "0.1.0"
+dependencies = [
+ "motoly-core",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "motoly-nodes"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "motoly-core",
+ "motoly-eval",
+ "motoly-gpu",
+ "motoly-plugin",
+ "thiserror 2.0.18",
+ "wgpu",
+]
+
+[[package]]
+name = "motoly-plugin"
+version = "0.1.0"
+dependencies = [
+ "motoly-core",
+ "motoly-eval",
+ "motoly-gpu",
+ "thiserror 2.0.18",
+ "wgpu",
+]
+
+[[package]]
+name = "motoly-render"
+version = "0.1.0"
+dependencies = [
+ "motoly-core",
+ "motoly-gpu",
+ "motoly-nodes",
+ "motoly-plugin",
+ "thiserror 2.0.18",
+ "wgpu",
+]
+
+[[package]]
 name = "moxcms"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3005,109 +3108,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oc-cli"
-version = "0.1.0"
-dependencies = [
- "oc-core",
- "oc-eval",
- "oc-export",
- "oc-gpu",
- "oc-media",
- "oc-nodes",
- "oc-plugin",
- "oc-render",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "oc-core"
-version = "0.1.0"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "oc-eval"
-version = "0.1.0"
-dependencies = [
- "oc-core",
- "serde",
-]
-
-[[package]]
-name = "oc-export"
-version = "0.1.0"
-dependencies = [
- "oc-core",
- "oc-eval",
- "oc-gpu",
- "oc-media",
- "oc-nodes",
- "oc-plugin",
- "oc-render",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "oc-gpu"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "oc-core",
- "pollster",
- "thiserror 2.0.18",
- "wgpu",
-]
-
-[[package]]
-name = "oc-media"
-version = "0.1.0"
-dependencies = [
- "oc-core",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "oc-nodes"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "oc-core",
- "oc-eval",
- "oc-gpu",
- "oc-plugin",
- "thiserror 2.0.18",
- "wgpu",
-]
-
-[[package]]
-name = "oc-plugin"
-version = "0.1.0"
-dependencies = [
- "oc-core",
- "oc-eval",
- "oc-gpu",
- "thiserror 2.0.18",
- "wgpu",
-]
-
-[[package]]
-name = "oc-render"
-version = "0.1.0"
-dependencies = [
- "oc-core",
- "oc-gpu",
- "oc-nodes",
- "oc-plugin",
- "thiserror 2.0.18",
- "wgpu",
-]
-
-[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3466,9 +3466,9 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 name = "r9-preview"
 version = "0.1.0"
 dependencies = [
- "oc-cli",
- "oc-gpu",
- "oc-render",
+ "motoly-cli",
+ "motoly-gpu",
+ "motoly-render",
  "slint",
  "wgpu",
 ]
