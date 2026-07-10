@@ -3,7 +3,7 @@
 作成日: 2026-07-10
 
 並列エージェントやLLMがプラグインを量産するときの**唯一の契約書**。  
-実装の型紙は `crates/oc-plugin` の参照プラグイン(`reference`モジュール)。  
+実装の型紙は `crates/motolii-plugin` の参照プラグイン(`reference`モジュール)。  
 設計根拠は [concept.md](concept.md)・落とし穴F-8/F-9([pitfalls-and-roadmap.md](pitfalls-and-roadmap.md))。
 
 > v1は静的リンクのみ。dylib/WASM配布はv2。この文書は「書ける境界」を先に固定するためのもの。
@@ -52,14 +52,14 @@
 - **参照実装を型紙にする** — `ClearFilter` / `SineParamDriver` / `ClearComposite` をコピーしてから肉付けする
 - **パラメータは少ない** — LLM生成でも人間が触れる数に抑える。内部定数はコード側へ
 - **premultiplied alphaを前提にする** — Compositeは既存のnormal over式に合わせる。straight alphaを勝手に混ぜない
-- **テスト** — Render系は`oc-testkit`ゴールデン。ParamDriverは値列の単体テスト
+- **テスト** — Render系は`motolii-testkit`ゴールデン。ParamDriverは値列の単体テスト
 
 ## 5. 最小スケルトン(Filter)
 
 ```rust
-use oc_plugin::{FilterPlugin, NodeDesc, PluginError, PluginId, ResolvedParams, TextureRef, ValueType};
-use oc_core::RationalTime;
-use oc_gpu::GpuCtx;
+use motolii_plugin::{FilterPlugin, NodeDesc, PluginError, PluginId, ResolvedParams, TextureRef, ValueType};
+use motolii_core::RationalTime;
+use motolii_gpu::GpuCtx;
 
 pub struct MyGlow;
 

@@ -1,0 +1,18 @@
+[package]
+name = "motolii-export"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+motolii-core.workspace = true
+motolii-eval.workspace = true
+motolii-gpu.workspace = true
+motolii-media.workspace = true
+motolii-nodes.workspace = true
+motolii-plugin.workspace = true
+motolii-render.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+motolii-testkit.workspace = true

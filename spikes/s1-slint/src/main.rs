@@ -15,8 +15,8 @@
 
 use std::sync::mpsc;
 
-use oc_core::ColorSpace;
-use oc_gpu::{solid_yuv420p, GpuCtx, YuvToRgba};
+use motolii_core::ColorSpace;
+use motolii_gpu::{solid_yuv420p, GpuCtx, YuvToRgba};
 use slint::wgpu_29::wgpu;
 
 slint::slint! {
@@ -138,7 +138,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = SpikeWindow::new()?;
 
-    // レンダ専用スレッド: oc-gpuのYUV変換でテクスチャを生成し、チャネルで送る。
+    // レンダ専用スレッド: motolii-gpuのYUV変換でテクスチャを生成し、チャネルで送る。
     // UIスレッドはレンダしない(レビュー指摘#2)。wgpuのDevice/QueueはSend+Sync。
     let (tx, rx) = mpsc::sync_channel::<wgpu::Texture>(1);
     std::thread::spawn(move || {

@@ -1,7 +1,7 @@
-# p5.opencuts
+# Motolii
 
 > **A GPU-native, plugin-first motion-graphics compositor in Rust — built for music-video (MV) creation.**
-> _Working title. Early stage: building in the open, looking for collaborators._
+> _Early stage: building in the open, looking for collaborators._
 
 After Effects is powerful but heavy, and its extension gateway is narrow (C++ SDK, fragile JS expressions, limited plugin UI). This project is a bet on a different foundation: keep pixels resident on the GPU, make the plugin boundary dead-simple (so effects are easy to write — even by an LLM), and stay focused on getting a 3–5 minute MV out the door.
 
@@ -64,7 +64,7 @@ None of this is a knock on AviUtl — it's a remarkable project and a direct ins
 | Render core | Rust + [wgpu](https://github.com/gfx-rs/wgpu) (VRAM-resident) |
 | UI (planned) | [Slint](https://slint.dev) (wgpu zero-copy texture embedding, Japanese IME) — not started yet |
 | Decode / encode | ffmpeg as a sidecar process (raw YUV in, mp4 out) |
-| Structure | Cargo workspace (`crates/oc-*`) |
+| Structure | Cargo workspace (`crates/motolii-*`) |
 
 ## Design docs (start here)
 
@@ -82,7 +82,7 @@ Requires a recent Rust toolchain (pinned in `rust-toolchain.toml`), `ffmpeg`/`ff
 ```sh
 cargo test --workspace
 # Render a project to mp4 (see docs/specs/M1-vertical-slice.md for the JSON schema)
-cargo run -p oc-cli -- export-project path/to/project.json
+cargo run -p motolii-cli -- export-project path/to/project.json
 ```
 
 ## Looking for collaborators

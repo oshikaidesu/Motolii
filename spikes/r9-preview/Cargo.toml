@@ -8,6 +8,6 @@ edition = "2021"
 [dependencies]
 slint = { version = "~1.17", default-features = false, features = ["compat-1-2", "std", "backend-winit", "renderer-femtovg-wgpu", "unstable-wgpu-29"] }
 wgpu = "29"
-oc-cli = { path = "../../crates/oc-cli" }
-oc-gpu = { path = "../../crates/oc-gpu" }
-oc-render = { path = "../../crates/oc-render" }
+motolii-cli = { path = "../../crates/motolii-cli" }
+motolii-gpu = { path = "../../crates/motolii-gpu" }
+motolii-render = { path = "../../crates/motolii-render" }

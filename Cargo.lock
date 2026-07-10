@@ -488,6 +488,123 @@ dependencies = [
 ]
 
 [[package]]
+name = "motolii-cli"
+version = "0.1.0"
+dependencies = [
+ "motolii-core",
+ "motolii-eval",
+ "motolii-export",
+ "motolii-gpu",
+ "motolii-media",
+ "motolii-nodes",
+ "motolii-plugin",
+ "motolii-render",
+ "motolii-testkit",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "motolii-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "motolii-eval"
+version = "0.1.0"
+dependencies = [
+ "motolii-core",
+ "serde",
+]
+
+[[package]]
+name = "motolii-export"
+version = "0.1.0"
+dependencies = [
+ "motolii-core",
+ "motolii-eval",
+ "motolii-gpu",
+ "motolii-media",
+ "motolii-nodes",
+ "motolii-plugin",
+ "motolii-render",
+ "motolii-testkit",
+ "thiserror",
+]
+
+[[package]]
+name = "motolii-gpu"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "motolii-core",
+ "motolii-testkit",
+ "pollster",
+ "thiserror",
+ "wgpu",
+]
+
+[[package]]
+name = "motolii-media"
+version = "0.1.0"
+dependencies = [
+ "motolii-core",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "motolii-nodes"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "motolii-core",
+ "motolii-eval",
+ "motolii-gpu",
+ "motolii-plugin",
+ "motolii-testkit",
+ "thiserror",
+ "wgpu",
+]
+
+[[package]]
+name = "motolii-plugin"
+version = "0.1.0"
+dependencies = [
+ "motolii-core",
+ "motolii-eval",
+ "motolii-gpu",
+ "thiserror",
+ "wgpu",
+]
+
+[[package]]
+name = "motolii-render"
+version = "0.1.0"
+dependencies = [
+ "motolii-core",
+ "motolii-gpu",
+ "motolii-nodes",
+ "motolii-plugin",
+ "motolii-testkit",
+ "thiserror",
+ "wgpu",
+]
+
+[[package]]
+name = "motolii-testkit"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "motolii-gpu",
+ "thiserror",
+]
+
+[[package]]
 name = "moxcms"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -602,123 +719,6 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-foundation",
  "objc2-metal",
-]
-
-[[package]]
-name = "oc-cli"
-version = "0.1.0"
-dependencies = [
- "oc-core",
- "oc-eval",
- "oc-export",
- "oc-gpu",
- "oc-media",
- "oc-nodes",
- "oc-plugin",
- "oc-render",
- "oc-testkit",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "oc-core"
-version = "0.1.0"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "oc-eval"
-version = "0.1.0"
-dependencies = [
- "oc-core",
- "serde",
-]
-
-[[package]]
-name = "oc-export"
-version = "0.1.0"
-dependencies = [
- "oc-core",
- "oc-eval",
- "oc-gpu",
- "oc-media",
- "oc-nodes",
- "oc-plugin",
- "oc-render",
- "oc-testkit",
- "thiserror",
-]
-
-[[package]]
-name = "oc-gpu"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "oc-core",
- "oc-testkit",
- "pollster",
- "thiserror",
- "wgpu",
-]
-
-[[package]]
-name = "oc-media"
-version = "0.1.0"
-dependencies = [
- "oc-core",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "oc-nodes"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "oc-core",
- "oc-eval",
- "oc-gpu",
- "oc-plugin",
- "oc-testkit",
- "thiserror",
- "wgpu",
-]
-
-[[package]]
-name = "oc-plugin"
-version = "0.1.0"
-dependencies = [
- "oc-core",
- "oc-eval",
- "oc-gpu",
- "thiserror",
- "wgpu",
-]
-
-[[package]]
-name = "oc-render"
-version = "0.1.0"
-dependencies = [
- "oc-core",
- "oc-gpu",
- "oc-nodes",
- "oc-plugin",
- "oc-testkit",
- "thiserror",
- "wgpu",
-]
-
-[[package]]
-name = "oc-testkit"
-version = "0.1.0"
-dependencies = [
- "image",
- "oc-gpu",
- "thiserror",
 ]
 
 [[package]]

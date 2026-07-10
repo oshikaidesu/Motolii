@@ -2,9 +2,9 @@
 
 日付: 2026-07-07
 
-## 判断: ffmpeg-sidecarクレートは採用せず、自前パイプ実装(`oc-media`)とする
+## 判断: ffmpeg-sidecarクレートは採用せず、自前パイプ実装(`motolii-media`)とする
 
-スパイクを使い捨てにせず、そのまま本体クレート`oc-media`として実装・テストした(結果が明確だったため)。
+スパイクを使い捨てにせず、そのまま本体クレート`motolii-media`として実装・テストした(結果が明確だったため)。
 
 ### 理由
 
@@ -12,7 +12,7 @@
 - rawvideoパイプのプロトコル自体は「固定サイズをread_exactするだけ」で、クレートを挟む価値が薄い
 - 依存を1つ減らせる(ライセンス・保守追従の考慮も不要になる)
 
-### 実測で確認できたこと(crates/oc-media/tests/roundtrip.rs)
+### 実測で確認できたこと(crates/motolii-media/tests/roundtrip.rs)
 
 - エンコード(rawvideo→libx264 qp0)→ probe → 全フレーム順次デコード → フレーム正確シークの往復が成立
 - シークは入力側`-ss`に「目的フレームの半フレーム手前」の秒数を渡す方式でフレーム正確
@@ -28,5 +28,5 @@
 
 ## S1(Slint UI統合)・S3(時間表現)の状況
 
-- S3: `oc-core::RationalTime`として実装済み(NTSCレートの往復・非蓄積ドリフトをテストで確認)。設計メモは型のdocコメントに集約
+- S3: `motolii-core::RationalTime`として実装済み(NTSCレートの往復・非蓄積ドリフトをテストで確認)。設計メモは型のdocコメントに集約
 - S1: `spikes/s1-slint/`で実装済み。GUI起動・OpenGL/WGPUレンダラミスマッチ回避まで確認。IME・tearingの実機合否は開発主機で継続検証
