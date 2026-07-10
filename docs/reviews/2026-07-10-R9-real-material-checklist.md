@@ -56,7 +56,7 @@ GUIを出さない場合のみ `--no-preview`。
 ## 4. 台帳更新
 
 - [x] `docs/specs/M1-vertical-slice.md` の R9 / T11 を完了に更新
-- [ ] 凍結ゲートレビュー(pitfalls-and-roadmap.md 9項目)へ
+- [x] 凍結ゲート入場前チェック完了 → 残件は[2026-07-10-freeze-gate-remaining.md](2026-07-10-freeze-gate-remaining.md)(FG-C1〜C6)
 
 ## トラブルシュート
 

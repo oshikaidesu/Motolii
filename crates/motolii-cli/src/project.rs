@@ -3,15 +3,15 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, Quality, RationalTime};
+use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap, TimeMapError};
 use motolii_eval::{DataTrackId, DataTracks, ParamSource, Value};
 use motolii_export::{export_overlay_video, ExportOverlayRequest, ExportReport};
 use motolii_gpu::{GpuCtx, RgbaDownloader, YuvToRgba};
 use motolii_media::{probe, FrameReader, MediaInfo};
 use motolii_nodes::{ParamOverlayError, ParamRectOverlay};
 use motolii_plugin::{
-    reference::register_reference_plugins, ParamDriverContext, PluginRegistry, ResolvedParams,
-    TextureRef,
+    migrate_plugin_params, reference::register_reference_plugins, ParamDriverContext,
+    PluginRegistry, ResolvedParams, TextureRef,
 };
 use motolii_render::{
     render_frame_with_background_texture, BackgroundTextureRequest, RenderSession,
@@ -29,6 +29,9 @@ pub struct ProjectV1 {
     pub frame_count: Option<usize>,
     #[serde(default)]
     pub qp0: bool,
+    /// クリップの時間写像(F-4)。省略時は恒等。
+    #[serde(default)]
+    pub time_map: TimeMap,
     /// ParamDriverが生成するDataTrack宣言(M1最小: sine 1本)。
     #[serde(default)]
     pub param_drivers: Vec<ParamDriverV1>,
@@ -42,8 +45,15 @@ pub struct ParamDriverV1 {
     pub plugin: String,
     /// 生成したDataTrackを格納するID。overlayの`ParamSource::Data`から参照する。
     pub track: String,
+    /// 保存時のeffect version。省略時は1(旧JSON互換→migrate対象)。
+    #[serde(default = "default_effect_version")]
+    pub effect_version: u32,
     #[serde(default)]
     pub params: HashMap<String, Value>,
+}
+
+fn default_effect_version() -> u32 {
+    1
 }
 
 /// ProjectV1のオーバーレイ。定数配列と`ParamSource` JSONの両方を受理する。
@@ -125,6 +135,8 @@ pub enum ProjectError {
     Render(#[from] motolii_render::RenderError),
     #[error(transparent)]
     Gpu(#[from] motolii_gpu::GpuRuntimeError),
+    #[error(transparent)]
+    TimeMap(#[from] TimeMapError),
 }
 
 pub fn load_project_v1(path: impl AsRef<Path>) -> Result<ProjectV1, ProjectError> {
@@ -137,6 +149,7 @@ pub fn load_project_v1_from_str(text: &str) -> Result<ProjectV1, ProjectError> {
     if project.version != 1 {
         return Err(ProjectError::UnsupportedVersion(project.version));
     }
+    project.time_map.validate()?;
     Ok(project)
 }
 
@@ -176,8 +189,16 @@ pub fn build_data_tracks(
             return Err(ProjectError::UnknownParamDriver(driver.plugin.clone()));
         };
 
+        let mut raw_params = driver.params.clone();
+        migrate_plugin_params(
+            &driver.plugin,
+            driver.effect_version,
+            plugin.desc().version,
+            &mut raw_params,
+        )?;
+
         let known: HashSet<&str> = plugin.desc().params.iter().map(|p| p.id).collect();
-        for key in driver.params.keys() {
+        for key in raw_params.keys() {
             if !known.contains(key.as_str()) {
                 return Err(ProjectError::UnknownParam {
                     plugin: driver.plugin.clone(),
@@ -188,8 +209,7 @@ pub fn build_data_tracks(
 
         let mut params = ResolvedParams::new();
         for def in &plugin.desc().params {
-            let value = driver
-                .params
+            let value = raw_params
                 .get(def.id)
                 .cloned()
                 .unwrap_or_else(|| def.default.clone());
@@ -274,6 +294,7 @@ impl PreparedProject {
                 frame_count: self.project.frame_count,
                 overlay: self.overlay.clone(),
                 data_tracks: self.data_tracks.clone(),
+                time_map: self.project.time_map,
                 qp0: self.project.qp0,
             },
         )?)
@@ -296,7 +317,7 @@ impl PreparedProject {
             &BackgroundTextureRequest {
                 desc: self.render_desc,
                 timeline_time: frame.pts,
-                source_time: frame.pts,
+                time_map: self.project.time_map,
                 background: TextureRef {
                     texture: &background,
                     desc: self.render_desc,
@@ -501,6 +522,7 @@ mod tests {
         let drivers = vec![ParamDriverV1 {
             plugin: "nope".into(),
             track: "x".into(),
+            effect_version: 1,
             params: HashMap::new(),
         }];
         let err = build_data_tracks(
@@ -520,6 +542,7 @@ mod tests {
         let drivers = vec![ParamDriverV1 {
             plugin: "core.param.sine".into(),
             track: "sine_x".into(),
+            effect_version: 2,
             params,
         }];
         let err = build_data_tracks(
@@ -537,6 +560,63 @@ mod tests {
     }
 
     #[test]
+    fn old_sine_amp_param_migrates_on_load() {
+        // FG-C4: effect_version=1 の `amp` が現行 `amplitude` に移行する。
+        let drivers = vec![ParamDriverV1 {
+            plugin: "core.param.sine".into(),
+            track: "sine_x".into(),
+            effect_version: 1,
+            params: HashMap::from([("amp".into(), Value::F64(0.25))]),
+        }];
+        let tracks = build_data_tracks(
+            &drivers,
+            RationalTime::ZERO,
+            RationalTime::from_seconds(1),
+            Fps { num: 12, den: 1 },
+        )
+        .unwrap();
+        assert!(tracks.get(&DataTrackId("sine_x".into())).is_some());
+    }
+
+    #[test]
+    fn project_time_map_defaults_to_identity() {
+        let json = r#"{
+            "version": 1,
+            "input": "in.mp4",
+            "output": "out.mp4",
+            "overlay": {
+                "center": [0.0, 0.0],
+                "size": [0.5, 0.5],
+                "color": [1.0, 0.0, 0.0, 1.0]
+            }
+        }"#;
+        let project: ProjectV1 = serde_json::from_str(json).unwrap();
+        assert_eq!(project.time_map, TimeMap::identity());
+    }
+
+    #[test]
+    fn project_rejects_invalid_time_map() {
+        let json = r#"{
+            "version": 1,
+            "input": "in.mp4",
+            "output": "out.mp4",
+            "time_map": {
+                "source_start": {"num": 0, "den": 1},
+                "timeline_start": {"num": 0, "den": 1},
+                "speed_num": 1,
+                "speed_den": 0
+            },
+            "overlay": {
+                "center": [0.0, 0.0],
+                "size": [0.5, 0.5],
+                "color": [1.0, 0.0, 0.0, 1.0]
+            }
+        }"#;
+        let err = load_project_v1_from_str(json).unwrap_err();
+        assert!(matches!(err, ProjectError::TimeMap(TimeMapError::ZeroSpeedDenominator)));
+    }
+
+    #[test]
     fn export_frame_count_falls_back_to_duration_when_nb_frames_missing() {
         let project = ProjectV1 {
             version: 1,
@@ -545,6 +625,7 @@ mod tests {
             start_frame: 0,
             frame_count: None,
             qp0: false,
+            time_map: TimeMap::identity(),
             param_drivers: vec![],
             overlay: RectOverlayParamV1 {
                 center: ParamVec2V1::Const([0.0, 0.0]),
@@ -573,6 +654,7 @@ mod tests {
             start_frame: 0,
             frame_count: None,
             qp0: false,
+            time_map: TimeMap::identity(),
             param_drivers: vec![],
             overlay: RectOverlayParamV1 {
                 center: ParamVec2V1::Const([0.0, 0.0]),
@@ -600,6 +682,7 @@ mod tests {
         let drivers = vec![ParamDriverV1 {
             plugin: "core.param.sine".into(),
             track: "sine_x".into(),
+            effect_version: 2,
             params: HashMap::new(),
         }];
         let tracks = build_data_tracks(

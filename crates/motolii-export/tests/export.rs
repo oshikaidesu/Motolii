@@ -54,6 +54,7 @@ fn exports_video_overlay_to_mp4() {
                 color: [1.0, 0.0, 0.0, 0.0],
             }),
             data_tracks: DataTracks::new(),
+            time_map: motolii_core::TimeMap::identity(),
             qp0: true,
         },
     )

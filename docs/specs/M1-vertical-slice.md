@@ -40,7 +40,8 @@
 | R9 | **完了(2026-07-10)**: 実素材検証(T11)。`verify-b4`+`scripts/r9-verify.sh`+`spikes/r9-preview`。主観品質OK(人間サインオフ) → [reviews/2026-07-10-R9-real-material-checklist.md](../reviews/2026-07-10-R9-real-material-checklist.md) | R2 | 一致テストが通る+主観品質OK |
 
 並列性: **R1–R9完了(2026-07-10)**。M1残タスクチケット表は消化済み。
-次: **凍結ゲートレビュー**(pitfalls-and-roadmap.mdの9項目)を実施してM2/M4/M5仕様を確定する。
+**凍結ゲート残件 FG-C1〜C6 全緑 + レビュー3点対応(2026-07-10)**。
+**凍結ゲート宣言済み**: [reviews/2026-07-10-freeze-gate-declaration.md](../reviews/2026-07-10-freeze-gate-declaration.md)。次: M2/M4/M5仕様を確定して並列レーン着手。
 
 補足(2026-07-09): CI(ubuntu)は`mesa-vulkan-drivers`導入済みでwgpuゴールデンテストがlavapipeで実行されている(T3で実測diff=0)。T0の「smokeテスト追加」はゴールデンテスト自体が上位互換として満たしているため、独立チケットにしない。
 

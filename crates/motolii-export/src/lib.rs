@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality};
+use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, TimeMap};
 use motolii_eval::DataTracks;
 use motolii_gpu::{GpuCtx, RgbaDownloader, YuvToRgba};
 use motolii_media::{probe, Encoder, FrameReader};
@@ -24,6 +24,8 @@ pub struct ExportOverlayRequest<'a> {
     pub overlay: ParamRectOverlay,
     /// ParamDriver等で事前構築したDataTrack集合。
     pub data_tracks: DataTracks,
+    /// ソース時刻解決(F-4)。デフォルトは恒等。
+    pub time_map: TimeMap,
     /// trueなら検証用のほぼロスレスH.264で書く。
     pub qp0: bool,
 }
@@ -47,6 +49,8 @@ pub enum ExportError {
     Gpu(#[from] motolii_gpu::GpuRuntimeError),
     #[error(transparent)]
     Overlay(#[from] ParamOverlayError),
+    #[error(transparent)]
+    TimeMap(#[from] motolii_core::TimeMapError),
 }
 
 /// 書き出しループのGPUダウンロード待ち。高負荷下の正当な遅延を許容する。
@@ -59,6 +63,7 @@ pub fn export_overlay_video(
     if request.start_frame < 0 {
         return Err(ExportError::InvalidRequest("start_frame must be >= 0"));
     }
+    request.time_map.validate()?;
 
     let info = probe(request.input_path)?;
     let mut reader = FrameReader::open(request.input_path, &info, request.start_frame)?;
@@ -103,7 +108,7 @@ pub fn export_overlay_video(
                 &BackgroundTextureRequest {
                     desc,
                     timeline_time: frame.pts,
-                    source_time: frame.pts,
+                    time_map: request.time_map,
                     background: TextureRef {
                         texture: &background,
                         desc,

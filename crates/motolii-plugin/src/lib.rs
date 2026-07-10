@@ -10,6 +10,7 @@ use std::sync::OnceLock;
 use motolii_core::{CompCamera, Fps, FrameDesc, RationalTime};
 use motolii_eval::{DataTrack, Value};
 use motolii_gpu::{GpuCtx, PipelineCache};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PluginId(pub &'static str);
@@ -110,6 +111,74 @@ pub enum PluginError {
     Duplicate { kind: PluginKind, id: &'static str },
     #[error("plugin render failed: {0}")]
     Render(String),
+    #[error("param migrate failed for {plugin}: {reason}")]
+    Migrate {
+        plugin: String,
+        reason: String,
+    },
+}
+
+/// 複製インスタンスの評価コンテキスト口(F-7予約。配線はM2以降)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct InstanceIndex {
+    pub index: u32,
+    pub count: u32,
+}
+
+/// 合体結果の別時刻参照(F-11予約。実装はM4後)。
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct CompLookbehind {
+    /// グループIDまたはコンポルートの安定文字列。
+    pub target: String,
+    /// 負のフレームオフセット列(例: [-1, -2])。
+    pub offsets: Vec<i32>,
+    /// 自己参照切断用のエフェクトID列。
+    pub exclude: Vec<String>,
+}
+
+/// プラグインparamの版間移行(G-1 / FG-C4)。
+///
+/// `from_version` → `to_version` へ `params` を破壊的に書き換える。
+/// 未知プラグインは何もしない(呼び出し側がF-9パススルーを担当)。
+pub fn migrate_plugin_params(
+    plugin_id: &str,
+    from_version: u32,
+    to_version: u32,
+    params: &mut HashMap<String, Value>,
+) -> Result<(), PluginError> {
+    if from_version == to_version {
+        return Ok(());
+    }
+    if from_version > to_version {
+        return Err(PluginError::Migrate {
+            plugin: plugin_id.to_string(),
+            reason: format!("cannot downgrade params {from_version} → {to_version}"),
+        });
+    }
+    match plugin_id {
+        "core.param.sine" => migrate_sine_params(from_version, to_version, params),
+        _ => Ok(()),
+    }
+}
+
+fn migrate_sine_params(
+    from_version: u32,
+    to_version: u32,
+    params: &mut HashMap<String, Value>,
+) -> Result<(), PluginError> {
+    // v1→v2: `amp` を `amplitude` に改名(参照プラグインの破壊的変更デモ)。
+    if from_version < 2 && to_version >= 2 {
+        if let Some(v) = params.remove("amp") {
+            if params.contains_key("amplitude") {
+                return Err(PluginError::Migrate {
+                    plugin: "core.param.sine".into(),
+                    reason: "both amp and amplitude present during migrate".into(),
+                });
+            }
+            params.insert("amplitude".into(), v);
+        }
+    }
+    Ok(())
 }
 
 pub trait FilterPlugin: Send + Sync {
@@ -627,7 +696,8 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         static DESC: OnceLock<NodeDesc> = OnceLock::new();
         DESC.get_or_init(|| NodeDesc {
             id: PluginId("core.param.sine"),
-            version: 1,
+            // v2: `amp` → `amplitude`(FG-C4 migrate実証)。
+            version: 2,
             display_name: "Sine",
             category: "Generate",
             tags: &["lfo", "oscillator", "reference"],
@@ -863,5 +933,37 @@ mod tests {
             .desc();
         assert_eq!(driver.category, "Generate");
         assert!(driver.tags.contains(&"lfo"));
+        assert_eq!(driver.version, 2);
+    }
+
+    #[test]
+    fn migrate_sine_renames_amp_to_amplitude() {
+        let mut params = HashMap::new();
+        params.insert("amp".into(), Value::F64(0.5));
+        params.insert("frequency_hz".into(), Value::F64(2.0));
+        migrate_plugin_params("core.param.sine", 1, 2, &mut params).unwrap();
+        assert_eq!(params.get("amplitude"), Some(&Value::F64(0.5)));
+        assert!(!params.contains_key("amp"));
+        assert_eq!(params.get("frequency_hz"), Some(&Value::F64(2.0)));
+    }
+
+    #[test]
+    fn reserved_lookbehind_and_instance_index_serde() {
+        let idx = InstanceIndex {
+            index: 2,
+            count: 8,
+        };
+        let look = CompLookbehind {
+            target: "root".into(),
+            offsets: vec![-1, -2],
+            exclude: vec!["core.filter.echo".into()],
+        };
+        let idx_json = serde_json::to_string(&idx).unwrap();
+        let look_json = serde_json::to_string(&look).unwrap();
+        assert_eq!(serde_json::from_str::<InstanceIndex>(&idx_json).unwrap(), idx);
+        assert_eq!(
+            serde_json::from_str::<CompLookbehind>(&look_json).unwrap(),
+            look
+        );
     }
 }

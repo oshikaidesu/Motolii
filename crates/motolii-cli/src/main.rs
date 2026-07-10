@@ -26,6 +26,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     frame_count: args.frame_count,
                     overlay: args.overlay,
                     data_tracks: motolii_eval::DataTracks::new(),
+                    time_map: motolii_core::TimeMap::identity(),
                     qp0: args.qp0,
                 },
             )?;

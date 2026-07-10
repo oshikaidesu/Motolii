@@ -510,6 +510,16 @@ name = "motolii-core"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "motolii-doc"
+version = "0.1.0"
+dependencies = [
+ "motolii-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -579,6 +589,8 @@ dependencies = [
  "motolii-core",
  "motolii-eval",
  "motolii-gpu",
+ "serde",
+ "serde_json",
  "thiserror",
  "wgpu",
 ]

@@ -5,7 +5,7 @@
 
 use motolii_core::{
     premultiply_rgba_f32, ColorSpace, CompCamera, FrameDesc, PixelFormat, Quality, RationalTime,
-    TimeMap,
+    TimeMap, TimeMapError,
 };
 use motolii_gpu::{upload_rgba, GpuCtx, PipelineCache};
 use motolii_nodes::{create_rgba_render_target, CompositeNode, NodeError, OverlayNode, RectOverlay};
@@ -38,7 +38,8 @@ pub struct RenderFrameRequest {
 pub struct BackgroundTextureRequest<'a> {
     pub desc: FrameDesc,
     pub timeline_time: RationalTime,
-    pub source_time: RationalTime,
+    /// ソース時刻は必ずTimeMap経由(F-4)。恒等写像でもこの口を通す。
+    pub time_map: TimeMap,
     /// 既にGPU上にある背景RGBAテクスチャ。動画フレームはmotolii-gpuのYUV→RGBA変換後に渡す。
     pub background: TextureRef<'a>,
     /// Overlay色はstraight RGBAとして受け取り、OverlayNodeがpremul化する。
@@ -136,6 +137,8 @@ pub enum RenderError {
     Plugin(#[from] PluginError),
     #[error(transparent)]
     Node(#[from] NodeError),
+    #[error(transparent)]
+    TimeMap(#[from] TimeMapError),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -273,6 +276,7 @@ pub fn render_frame_with_background_texture(
     validate_background_desc(desc, request.background.desc)?;
     // 外部背景経路も render_graph 一本化。オーバーレイ形状だけ毎フレーム差し替える。
     let graph = linear_graph_with_video_source(request.desc, request.overlay);
+    let source_time = request.time_map.try_map(request.timeline_time)?;
     render_graph_cached(
         gpu,
         session,
@@ -280,7 +284,7 @@ pub fn render_frame_with_background_texture(
         &graph,
         &RenderGraphInputs {
             video_sources: &[(TextureId(0), request.background)],
-            source_time: Some(request.source_time),
+            source_time: Some(source_time),
             plugins: None,
         },
         quality,
@@ -525,7 +529,7 @@ fn validate_linear_graph(
                     if source_time.is_some() {
                         return Err(RenderError::MultipleReportingSources);
                     }
-                    source_time = Some(source.time_map.map(timeline_time));
+                    source_time = Some(source.time_map.try_map(timeline_time)?);
                 }
             }
             RenderStep::OverlayRect { input, output, .. } => {
@@ -811,7 +815,7 @@ fn render_frame_direct(
 ) -> Result<RenderedFrame, RenderError> {
     validate_render_desc(request.desc)?;
 
-    let source_time = request.source.time_map.map(request.timeline_time);
+    let source_time = request.source.time_map.try_map(request.timeline_time)?;
     let desc = quality.render_desc(request.desc);
 
     let background = upload_rgba(gpu, &desc, &solid_rgba(desc, request.source.color));
@@ -1308,13 +1312,15 @@ mod tests {
         let background = upload_rgba(&gpu, &desc, &solid_rgba(desc, request.source.color));
 
         let mut session = RenderSession::new(&gpu);
+        let time_map = TimeMap::offset(RationalTime::from_seconds(42), RationalTime::ZERO);
         let external = render_frame_with_background_texture(
             &gpu,
             &mut session,
             &BackgroundTextureRequest {
                 desc,
                 timeline_time: request.timeline_time,
-                source_time: RationalTime::from_seconds(42),
+                // offset: timeline 0 → source 42s(F-4製品経路)
+                time_map,
                 background: TextureRef {
                     texture: &background,
                     desc,
@@ -1329,7 +1335,10 @@ mod tests {
         let external_actual = download_rgba(&gpu, &external.texture).unwrap();
         let fixed_actual = download_rgba(&gpu, &fixed.texture).unwrap();
 
-        assert_eq!(external.source_time, RationalTime::from_seconds(42));
+        assert_eq!(
+            external.source_time,
+            time_map.try_map(request.timeline_time).unwrap()
+        );
         assert_rgba_close(
             "external-background-matches-fixed",
             RgbaImageDesc {
@@ -1468,6 +1477,150 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn plugin_composite_dispatches_via_registry_golden() {
+        // FG-C1: Compositeもレジストリ経由でグラフから呼ばれること。
+        let Some(gpu) = gpu_or_skip() else { return };
+        let desc = FrameDesc::packed(4, 3, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+
+        // CompositeNodeはGPUリソースを持つため静的参照にできず、テストでleakして登録する。
+        let composite: &'static CompositeNode = Box::leak(Box::new(CompositeNode::new(&gpu)));
+        let mut registry = PluginRegistry::new();
+        registry.register_composite(composite).unwrap();
+
+        let bg_px = [0u8, 128, 0, 128];
+        let fg_px = [128u8, 0, 0, 128];
+        let background = upload_rgba(&gpu, &desc, &tiled(desc, bg_px));
+        let foreground = upload_rgba(&gpu, &desc, &tiled(desc, fg_px));
+
+        let graph = LinearRenderGraph {
+            desc,
+            steps: vec![
+                RenderStep::VideoSource {
+                    output: TextureId(0),
+                },
+                RenderStep::VideoSource {
+                    output: TextureId(1),
+                },
+                RenderStep::Plugin {
+                    id: PluginId("core.composite.normal"),
+                    params: ResolvedParams::new(),
+                    inputs: vec![TextureId(0), TextureId(1)],
+                    output: TextureId(2),
+                },
+            ],
+            output: TextureId(2),
+        };
+
+        let rendered = render_graph_cached(
+            &gpu,
+            &mut RenderSession::new(&gpu),
+            RationalTime::ZERO,
+            &graph,
+            &RenderGraphInputs {
+                video_sources: &[
+                    (
+                        TextureId(0),
+                        TextureRef {
+                            texture: &background,
+                            desc,
+                        },
+                    ),
+                    (
+                        TextureId(1),
+                        TextureRef {
+                            texture: &foreground,
+                            desc,
+                        },
+                    ),
+                ],
+                source_time: Some(RationalTime::ZERO),
+                plugins: Some(&registry),
+            },
+            Quality::FINAL,
+        )
+        .unwrap();
+
+        let actual = download_rgba(&gpu, &rendered.texture).unwrap();
+        let expected = tiled(desc, premul_over_u8(bg_px, fg_px));
+        assert_rgba_close(
+            "plugin-composite-registry-premul-over",
+            RgbaImageDesc {
+                width: desc.width,
+                height: desc.height,
+            },
+            &actual,
+            &expected,
+            1,
+        );
+    }
+
+    #[test]
+    fn draft_and_final_share_canonical_overlay_centroid() {
+        // FG-C5: Draft半解像度でも正準空間上のオーバーレイ重心がFinalと一致する。
+        let Some(gpu) = gpu_or_skip() else { return };
+        let request = RenderFrameRequest {
+            desc: FrameDesc::packed(32, 16, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true),
+            timeline_time: RationalTime::ZERO,
+            source: SolidSource {
+                color: [0.0, 0.0, 0.0, 1.0],
+                time_map: TimeMap::identity(),
+                reports_source_time: true,
+            },
+            overlay: RectOverlay {
+                center: CanonicalPoint { x: 0.25, y: -0.125 },
+                size: CanonicalSize {
+                    width: 0.5,
+                    height: 0.5,
+                },
+                color: [1.0, 0.0, 0.0, 1.0],
+            },
+        };
+
+        let final_frame = render_frame(&gpu, &request, Quality::FINAL).unwrap();
+        let draft_frame = render_frame(&gpu, &request, Quality::DRAFT).unwrap();
+        let final_rgba = download_rgba(&gpu, &final_frame.texture).unwrap();
+        let draft_rgba = download_rgba(&gpu, &draft_frame.texture).unwrap();
+
+        let (fx, fy) = opaque_centroid_canonical(&final_rgba, final_frame.desc);
+        let (dx, dy) = opaque_centroid_canonical(&draft_rgba, draft_frame.desc);
+        assert!(
+            (fx - dx).abs() < 0.05 && (fy - dy).abs() < 0.05,
+            "canonical centroid mismatch: final=({fx},{fy}) draft=({dx},{dy})"
+        );
+    }
+
+    fn opaque_centroid_canonical(rgba: &[u8], desc: FrameDesc) -> (f64, f64) {
+        let w = desc.width as f64;
+        let h = desc.height as f64;
+        let mut sx = 0.0;
+        let mut sy = 0.0;
+        let mut n = 0.0;
+        for y in 0..desc.height {
+            for x in 0..desc.width {
+                let i = ((y * desc.width + x) * 4) as usize;
+                if rgba[i + 3] > 200 && rgba[i] > 200 {
+                    // ピクセル中心 → 正準(原点中央・Y-up・高さ=1)
+                    let cx = (x as f64 + 0.5) / h - (w / h) * 0.5;
+                    let cy = 0.5 - (y as f64 + 0.5) / h;
+                    sx += cx;
+                    sy += cy;
+                    n += 1.0;
+                }
+            }
+        }
+        assert!(n > 0.0, "no opaque overlay pixels");
+        (sx / n, sy / n)
+    }
+
+    fn tiled(desc: FrameDesc, px: [u8; 4]) -> Vec<u8> {
+        let mut out = vec![0u8; desc.data_size()];
+        for p in out.chunks_exact_mut(4) {
+            p.copy_from_slice(&px);
+        }
+        out
+    }
+
     fn centered_request() -> RenderFrameRequest {
         RenderFrameRequest {
             desc: FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true),
@@ -1479,7 +1632,8 @@ mod tests {
                     RationalTime::ZERO,
                     2,
                     1,
-                ),
+                )
+                .unwrap(),
                 reports_source_time: true,
             },
             overlay: RectOverlay {

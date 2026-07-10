@@ -98,6 +98,7 @@ fn export_preserves_timeline_for_all_frames_at_30fps() {
             frame_count: Some(N_FRAMES as usize),
             overlay: passthrough_overlay(),
             data_tracks: DataTracks::new(),
+            time_map: motolii_core::TimeMap::identity(),
             qp0: true,
         },
     )
@@ -154,6 +155,7 @@ fn exported_mp4_probe_reports_bt709_limited() {
             frame_count: Some(N_FRAMES as usize),
             overlay: passthrough_overlay(),
             data_tracks: DataTracks::new(),
+            time_map: motolii_core::TimeMap::identity(),
             qp0: true,
         },
     )

@@ -112,8 +112,8 @@ ParamDriverは`build_track`で`DataTrack`を返すだけ。ピクセルに触ら
 並列実装で勝手に広げない。凍結ゲート待ち:
 
 - 動的ロード(dylib)・WASM配布(v2)
-- 評価コンテキストのインスタンスインデックス`(i, count)`(F-7、口の予約のみ)
+- 評価コンテキストのインスタンスインデックス`(i, count)`(F-7) — 型`InstanceIndex`を予約(配線はM2以降)
 - サムネイル画像フィールド(F-8、口だけ将来)
 - ハンドルID化(A-3: 現状は`&wgpu::Texture`直渡し。内部更新閉じ込めは後続)
-- **ホスト所有PipelineCache / GpuAssetCache**(F-10、[plugin-resources.md](plugin-resources.md))。パイプラインは`PipelineCache`経由で借りる(所有しない)。`ValueType::AssetRef`は予約済み。GpuAssetCache結線はM2
-- **時間参照 `CompLookbehind`**(F-11、[plugin-resources.md](plugin-resources.md)§6)。「合体結果の前フレーム」(残像・フィードバック)はホストが渡す口の凍結待ち。**前フレームを`&self`に覚えて自作するのは§3-3違反で恒久却下** — 現時点で書けるのは現在フレームのみの空間グリッチまで
+- **ホスト所有PipelineCache**(F-10実証済み) / **GpuAssetCache結線はM2**。`ValueType::AssetRef`は予約済み
+- **時間参照 `CompLookbehind`**(F-11) — 型を予約([plugin-resources.md](plugin-resources.md)§6)。配線はM4後。**前フレームを`&self`に覚えて自作するのは§3-3違反で恒久却下** — 現時点で書けるのは現在フレームのみの空間グリッチまで

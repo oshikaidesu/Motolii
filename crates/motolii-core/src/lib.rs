@@ -14,4 +14,4 @@ pub use frame::{
 };
 pub use quality::{Quality, SampleTier};
 pub use time::{Fps, RationalTime};
-pub use time_map::TimeMap;
+pub use time_map::{TimeMap, TimeMapError};
