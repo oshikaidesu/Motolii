@@ -300,7 +300,10 @@ mod tests {
     }
 
     fn temp_artifact_dir(test_name: &str) -> PathBuf {
-        std::env::temp_dir().join(format!("motolii-testkit-{test_name}-{}", std::process::id()))
+        std::env::temp_dir().join(format!(
+            "motolii-testkit-{test_name}-{}",
+            std::process::id()
+        ))
     }
 
     #[test]

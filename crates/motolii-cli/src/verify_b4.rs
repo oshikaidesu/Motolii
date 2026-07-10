@@ -29,9 +29,7 @@ pub enum B4VerifyError {
     EmptyExport,
     #[error("output file missing: {0} (run with --export or export-project first)")]
     OutputMissing(String),
-    #[error(
-        "B-4 verify failed: {failed}/{total} frames exceeded tolerance {tolerance}"
-    )]
+    #[error("B-4 verify failed: {failed}/{total} frames exceeded tolerance {tolerance}")]
     Mismatch {
         report: B4VerifyReport,
         tolerance: u32,
@@ -86,12 +84,8 @@ pub fn verify_prepared_b4(
             &mut yuv,
             &mut downloader,
         )?;
-        let exported = prepared.decode_exported_frame_rgba(
-            gpu,
-            export_index,
-            &mut yuv,
-            &mut downloader,
-        )?;
+        let exported =
+            prepared.decode_exported_frame_rgba(gpu, export_index, &mut yuv, &mut downloader)?;
         let max_abs_diff = max_rgba_diff(&preview, &exported);
         frame_results.push(B4FrameResult {
             export_index,

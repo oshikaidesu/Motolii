@@ -27,6 +27,9 @@ pub enum PluginKind {
     ParamDriver,
     /// 複数テクスチャ入力を合成して1テクスチャへ書く。
     Composite,
+    /// 予約: 逐次状態シミュレーション(布・液体・パーティクル)。
+    /// 状態はホストが所有しStateTrackへベイクする。設計はdocs/simulation-model.md、実装はv1.x。
+    Simulation,
     /// 予約: v2以降の型付き式/WASM。
     ScriptWasm,
 }
@@ -112,10 +115,7 @@ pub enum PluginError {
     #[error("plugin render failed: {0}")]
     Render(String),
     #[error("param migrate failed for {plugin}: {reason}")]
-    Migrate {
-        plugin: String,
-        reason: String,
-    },
+    Migrate { plugin: String, reason: String },
 }
 
 /// 複製インスタンスの評価コンテキスト口(F-7予約。配線はM2以降)。
@@ -266,12 +266,7 @@ impl PluginRegistry {
     ) -> Result<(), PluginError> {
         let id = plugin.desc().id.clone();
         self.ensure_id_free(&id)?;
-        insert_unique(
-            &mut self.layer_sources,
-            PluginKind::LayerSource,
-            id,
-            plugin,
-        )
+        insert_unique(&mut self.layer_sources, PluginKind::LayerSource, id, plugin)
     }
 
     pub fn register_filter(
@@ -289,12 +284,7 @@ impl PluginRegistry {
     ) -> Result<(), PluginError> {
         let id = plugin.desc().id.clone();
         self.ensure_id_free(&id)?;
-        insert_unique(
-            &mut self.param_drivers,
-            PluginKind::ParamDriver,
-            id,
-            plugin,
-        )
+        insert_unique(&mut self.param_drivers, PluginKind::ParamDriver, id, plugin)
     }
 
     pub fn register_composite(
@@ -364,7 +354,7 @@ impl PluginRegistry {
             PluginKind::Filter => self.filters.len(),
             PluginKind::ParamDriver => self.param_drivers.len(),
             PluginKind::Composite => self.composites.len(),
-            PluginKind::Input | PluginKind::ScriptWasm => 0,
+            PluginKind::Input | PluginKind::Simulation | PluginKind::ScriptWasm => 0,
         }
     }
 }
@@ -382,10 +372,7 @@ fn insert_unique<T: ?Sized>(
     Ok(())
 }
 
-fn by_name<T: ?Sized>(
-    map: &BTreeMap<PluginId, &'static T>,
-    name: &str,
-) -> Option<&'static T> {
+fn by_name<T: ?Sized>(map: &BTreeMap<PluginId, &'static T>, name: &str) -> Option<&'static T> {
     map.iter()
         .find(|(id, _)| id.0 == name)
         .map(|(_, plugin)| *plugin)
@@ -800,9 +787,7 @@ mod tests {
             .composite(&PluginId("core.composite.clear"))
             .is_some());
         assert!(registry.filter_by_name("core.filter.clear").is_some());
-        assert!(registry
-            .composite_by_name("core.composite.clear")
-            .is_some());
+        assert!(registry.composite_by_name("core.composite.clear").is_some());
         assert!(registry
             .layer_source_by_name("core.layer_source.clear")
             .is_some());
@@ -949,10 +934,7 @@ mod tests {
 
     #[test]
     fn reserved_lookbehind_and_instance_index_serde() {
-        let idx = InstanceIndex {
-            index: 2,
-            count: 8,
-        };
+        let idx = InstanceIndex { index: 2, count: 8 };
         let look = CompLookbehind {
             target: "root".into(),
             offsets: vec![-1, -2],
@@ -960,7 +942,10 @@ mod tests {
         };
         let idx_json = serde_json::to_string(&idx).unwrap();
         let look_json = serde_json::to_string(&look).unwrap();
-        assert_eq!(serde_json::from_str::<InstanceIndex>(&idx_json).unwrap(), idx);
+        assert_eq!(
+            serde_json::from_str::<InstanceIndex>(&idx_json).unwrap(),
+            idx
+        );
         assert_eq!(
             serde_json::from_str::<CompLookbehind>(&look_json).unwrap(),
             look

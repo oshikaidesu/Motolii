@@ -271,7 +271,9 @@ pub use project::{
     build_data_tracks, load_project_v1, load_project_v1_from_str, prepare_project_export,
     ParamDriverV1, PreparedProject, ProjectV1, RectOverlayParamV1,
 };
-pub use verify_b4::{verify_b4_project_v1, verify_prepared_b4, B4FrameResult, B4VerifyError, B4VerifyReport};
+pub use verify_b4::{
+    verify_b4_project_v1, verify_prepared_b4, B4FrameResult, B4VerifyError, B4VerifyReport,
+};
 
 pub fn export_project(
     gpu: &motolii_gpu::GpuCtx,

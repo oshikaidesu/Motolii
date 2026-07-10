@@ -12,7 +12,9 @@ use motolii_gpu::{GpuCtx, RgbaDownloader, YuvToRgba};
 use motolii_media::{probe, Encoder, FrameReader};
 use motolii_nodes::{ParamOverlayError, ParamRectOverlay};
 use motolii_plugin::TextureRef;
-use motolii_render::{render_frame_with_background_texture, BackgroundTextureRequest, RenderSession};
+use motolii_render::{
+    render_frame_with_background_texture, BackgroundTextureRequest, RenderSession,
+};
 
 #[derive(Debug)]
 pub struct ExportOverlayRequest<'a> {

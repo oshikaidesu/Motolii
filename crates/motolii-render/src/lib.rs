@@ -8,7 +8,9 @@ use motolii_core::{
     TimeMap, TimeMapError,
 };
 use motolii_gpu::{upload_rgba, GpuCtx, PipelineCache};
-use motolii_nodes::{create_rgba_render_target, CompositeNode, NodeError, OverlayNode, RectOverlay};
+use motolii_nodes::{
+    create_rgba_render_target, CompositeNode, NodeError, OverlayNode, RectOverlay,
+};
 use motolii_plugin::{
     LayerSourceContext, PluginError, PluginId, PluginRegistry, ResolvedParams, TextureRef,
 };
@@ -386,19 +388,17 @@ pub fn render_graph_cached(
                 inputs: plugin_inputs,
                 output,
             } => {
-                let registry = inputs
-                    .plugins
-                    .ok_or(RenderError::MissingPluginRegistry)?;
+                let registry = inputs.plugins.ok_or(RenderError::MissingPluginRegistry)?;
                 let output_texture = session.acquire_ping(gpu, desc);
                 let out_ref = TextureRef {
                     texture: &output_texture,
                     desc,
                 };
-                let mut encoder = gpu
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("motolii-render-plugin"),
-                    });
+                let mut encoder =
+                    gpu.device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("motolii-render-plugin"),
+                        });
                 dispatch_plugin(
                     registry,
                     id,
@@ -657,11 +657,7 @@ fn texture_slot_count(graph: &LinearRenderGraph) -> Result<usize, RenderError> {
                 foreground,
                 output,
             } => vec![background.0, foreground.0, output.0],
-            RenderStep::Plugin {
-                inputs,
-                output,
-                ..
-            } => {
+            RenderStep::Plugin { inputs, output, .. } => {
                 let mut v: Vec<_> = inputs.iter().map(|id| id.0).collect();
                 v.push(output.0);
                 v
@@ -698,7 +694,11 @@ fn dispatch_plugin(
         if !expected.contains(&plugin_inputs.len()) {
             return Err(RenderError::PluginInputCount {
                 id: id.0,
-                expected: format!("{}..={}", filter.desc().min_inputs, filter.desc().max_inputs),
+                expected: format!(
+                    "{}..={}",
+                    filter.desc().min_inputs,
+                    filter.desc().max_inputs
+                ),
                 got: plugin_inputs.len(),
             });
         }
@@ -711,7 +711,15 @@ fn dispatch_plugin(
             });
         };
         let input = texture_ref(textures, desc, input_id)?;
-        filter.render(gpu, pipelines, encoder, timeline_time, params, input, output)?;
+        filter.render(
+            gpu,
+            pipelines,
+            encoder,
+            timeline_time,
+            params,
+            input,
+            output,
+        )?;
         return Ok(());
     }
 

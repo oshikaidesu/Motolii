@@ -41,6 +41,8 @@
 
 本宣言をもって **M2〜M5 の並列レーンを開いてよい**。ただし上表「明示的に凍結しないもの」を勝手に製品経路へ焼き込まないこと。未実証の口を広げたくなったら、実装を止めて仕様改訂(解凍手続き)を先に。
 
+既知の解凍手続き待ち(2026-07-10マージ時点): **F-12 時間軸自由度の口の予約**(`SimulationPlugin` trait叩き台・`TemporalFootprint`・スキーマのシムノード席。[simulation-model.md](../simulation-model.md)、backlog FG-2)。設計は確定済みだが、項目2(プラグインtrait)と項目3(スキーマ枠)への口の追加になるため本手続きを通す。
+
 ## 参照
 
 - G-1入場条件: [pitfalls-and-roadmap.md](../pitfalls-and-roadmap.md)
