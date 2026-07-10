@@ -30,6 +30,7 @@
 | [memory-model.md](memory-model.md) | メモリ階層(VRAM/RAM/ディスク)の役割分担と容量疑念の台帳 | 現行 |
 | [pitfalls-and-roadmap.md](pitfalls-and-roadmap.md) | 落とし穴カタログ+ロードマップ+凍結ゲート | 現行 |
 | [plugin-authoring.md](plugin-authoring.md) | プラグイン作者向け規約(LLM並列量産の契約書) | 現行(2026-07-10) |
+| [plugin-resources.md](plugin-resources.md) | プラグインのリソースライフサイクル・アセット境界・時間参照(F-10/F-11。先人: Bevy/Nuke/OFX/Potree/TD/GOP) | ドラフト(凍結ゲートで確定) |
 | [references.md](references.md) | 依存候補・参考リポジトリ(ライセンス区分) | 現行 |
 | [ae-pain-points.md](ae-pain-points.md) | AEユーザー不満の体系化+我々の解決タグ(プラグイン窓口仮説の検証) | 現行 |
 | [backlog.md](backlog.md) | イシュー候補台帳(現在地サマリ+横断/新規ギャップ/v2バックログ) | 現行 |
