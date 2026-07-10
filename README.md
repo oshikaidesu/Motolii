@@ -7,31 +7,6 @@ After Effects is powerful but heavy, and its extension gateway is narrow (C++ SD
 
 **This is not** a general NLE, a Nuke-style VFX compositor, or a color-grading suite. It is a motion-graphics tool: keyframes, easing, procedural overlays, 2.5D/3D (glTF) + video in one composite, and a single-song MV export.
 
-## Why Motolii?
-
-The name comes from English **_motley_** — the variegated, patchwork cloth worn by court jesters. In Shakespeare, the **motley fool** is the one in mismatched scraps who still tells the truth. That image stuck: a composite built from unrelated pieces that somehow become one thing.
-
-We spell it **Motolii** (モトリー) on purpose:
-
-- **`motley` → `motolii`** — same sound, but reads cleanly in romaji as _mo-to-lii_ (the trailing `ey` in _motley_ is easy to misread).
-- **Double `ii`** — distinctive enough to stand apart from other projects on GitHub and elsewhere.
-
-The deeper idea behind the tool is **collage**, not a single neat metaphor:
-
-- **Chroma-keyed clips** — cut reality into fragments and bring them in.
-- **Many layers, messy on purpose** — juxtaposition over invisible VFX glue.
-- **Music-synced remix** — fragments colliding on a beat (the 音MAD spirit, without naming it).
-- **Point clouds as fiction** — sparse data pretending to be a world.
-
-The architecture fits the same word:
-
-- **A minimal core** — the host stays thin; it holds the timeline, the GPU path, and the rules. Not a monolith that tries to ship every effect.
-- **Plugin-first** — features arrive as separate pieces snapped onto a simple boundary (`texture in + params → texture out`). The motley is the ecosystem, not the binary.
-- **Non-destructive by design** — the project file is a _recipe_ (commands, references, parameters), not baked pixels. Undo is diffs, caches live outside the document. You can remix without losing the source collage.
-- **A community that adds the color** — like AviUtl's plugin culture, but with an open, forkable core. Motolii is the empty patchwork coat; plugins, scripts, and contributors sew on the scraps.
-
-Motolii is a motion compositor by spec; collage is the attitude. The name does not explain any of that out loud — it just wears the patchwork.
-
 ---
 
 ## Status
@@ -119,6 +94,10 @@ This is designed for parallel, spec-driven, **LLM-assisted** development (each t
 - Good areas to help early: render nodes & shapes, golden-image test coverage, ffmpeg/decoder robustness, docs. (The UI is deliberately later and community-driven.)
 
 Issues / discussion: please open a GitHub issue. (A `good first issue` set is being curated from the backlog.)
+
+## About the name
+
+**Motolii** (モトリー) — from _motley_, patchwork. Spelled _motolii_ so romaji reads _mo-to-lii_. Same shape as the tool: thin core, plugins, non-destructive recipes, collage.
 
 ## License
 
