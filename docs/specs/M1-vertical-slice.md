@@ -18,7 +18,7 @@
 | T12 | **完了(所見1+2)**: レジストリディスパッチ(`RenderStep::Plugin`)+ホスト所有`PipelineCache`+参照`TintFilter`で再コンパイルなし実証。`AssetRef`予約済み。GpuAssetCache結線はM2 |
 | T5 | **後方移動**: GPU色解析はプラグイン/解析拡張領域であり、M1完了条件から外す。M1では合成DataTrackまたはParamDriver参照プラグインで「値列がパラメータを駆動する」境界だけを検証する |
 | T11 | **完了(2026-07-10)**: 実素材(1080p/4K)で書き出し+GUIプレビュー(`spikes/r9-preview`)+主観品質OK。B-4はCI合成素材+手元実素材(`qp0: false`書き出し)で確認 |
-| T8 | **部分完了**: 固定グラフに加え、`RenderStep::VideoSource`で動画フレーム等の外部GPUテクスチャをグラフの一級ステップとして表現。`render_frame_with_background_texture`は同一`render_graph_cached`経路に合流(R4)。**残り=中間バッファのピンポン使い回し**(performance-model §3のM1-T8方針: テクスチャ確保・コピーを毎フレームやらず2枚を交互再利用) |
+| T8 | **完了**: `RenderStep::VideoSource`+グラフ合流(R4)。中間RTは`RenderSession`ピンポン2枚でフレーム間再利用。Solid単色もセッションキャッシュ |
 | T9 | **完了**: `motolii-export`を追加し、`FrameReader`→`YuvToRgba`→`motolii-render`→`Encoder`の最小mp4書き出しループを実装。30fps×3秒のタイムコード焼き込み素材で全フレームの時刻対応を検証(R5)。書き出しmp4のBT.709 limited色タグをprobeで検証(R5) |
 | T10 | **完了**: `motolii-cli export-overlay` / `export-project`(versioned JSON)。JSON→`motolii-export`一気通貫。**M1出口デモ(実写(生成)背景 + Bezierイージングで右へ流れる矩形 → mp4)を正式サンプル `samples/exit-demo/` として同梱**し、**E2Eゴールデン `crates/motolii-cli/tests/exit_demo.rs`**(export経路でmp4化→出力mp4をデコード→先頭/中間/末尾で「背景動画の透過」+「矩形のイージング位置(左→右)」を検証。lavapipe+ffmpegで緑)を追加。キーフレーム/ParamDriver DataTrack駆動のゴールデンも済み。合成DataTrack接続の拡張は後続 |
 

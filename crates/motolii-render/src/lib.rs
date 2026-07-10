@@ -163,8 +163,18 @@ pub struct RenderSession {
     composite: CompositeNode,
     pipelines: PipelineCache,
     transparent: Option<(FrameDesc, wgpu::Texture)>,
-    targets_desc: Option<FrameDesc>,
-    targets: Vec<wgpu::Texture>,
+    /// 単色Solidの再利用(毎フレームuploadしない)。
+    solid: Option<(FrameDesc, [f32; 4], wgpu::Texture)>,
+    /// 中間RTピンポン2枚(performance-model §3 / M1-T8)。レイヤー数・TextureId数に依存しない。
+    ping: Option<PingPongPool>,
+}
+
+struct PingPongPool {
+    desc: FrameDesc,
+    buffers: [wgpu::Texture; 2],
+    next: usize,
+    /// プールを作り直した回数(テスト用)。
+    generations: u64,
 }
 
 impl RenderSession {
@@ -174,8 +184,8 @@ impl RenderSession {
             composite: CompositeNode::new(gpu),
             pipelines: PipelineCache::new(),
             transparent: None,
-            targets_desc: None,
-            targets: Vec::new(),
+            solid: None,
+            ping: None,
         }
     }
 
@@ -187,6 +197,15 @@ impl RenderSession {
         &mut self.pipelines
     }
 
+    /// ピンポン中間バッファ枚数(未使用なら0、使用中は常に2)。
+    pub fn ping_pong_len(&self) -> usize {
+        self.ping.as_ref().map(|_| 2).unwrap_or(0)
+    }
+
+    pub fn ping_pong_generations(&self) -> u64 {
+        self.ping.as_ref().map(|p| p.generations).unwrap_or(0)
+    }
+
     fn transparent_texture(&mut self, gpu: &GpuCtx, desc: FrameDesc) -> &wgpu::Texture {
         if self.transparent.as_ref().map(|(d, _)| *d) != Some(desc) {
             let tex = upload_rgba(gpu, &desc, &solid_rgba(desc, [0.0, 0.0, 0.0, 0.0]));
@@ -195,22 +214,35 @@ impl RenderSession {
         &self.transparent.as_ref().unwrap().1
     }
 
-    fn ensure_target(
-        &mut self,
-        gpu: &GpuCtx,
-        desc: FrameDesc,
-        slot: usize,
-        label: &'static str,
-    ) -> &wgpu::Texture {
-        if self.targets_desc != Some(desc) {
-            self.targets_desc = Some(desc);
-            self.targets.clear();
+    fn solid_texture(&mut self, gpu: &GpuCtx, desc: FrameDesc, color: [f32; 4]) -> &wgpu::Texture {
+        let hit = self
+            .solid
+            .as_ref()
+            .is_some_and(|(d, c, _)| *d == desc && *c == color);
+        if !hit {
+            let tex = upload_rgba(gpu, &desc, &solid_rgba(desc, color));
+            self.solid = Some((desc, color, tex));
         }
-        while self.targets.len() <= slot {
-            self.targets
-                .push(create_rgba_render_target(gpu, desc, label));
+        &self.solid.as_ref().unwrap().2
+    }
+
+    /// 中間レンダターゲットをピンポン2枚から取得(交互)。
+    fn acquire_ping(&mut self, gpu: &GpuCtx, desc: FrameDesc) -> wgpu::Texture {
+        if self.ping.as_ref().map(|p| p.desc) != Some(desc) {
+            let a = create_rgba_render_target(gpu, desc, "motolii-render-ping-a");
+            let b = create_rgba_render_target(gpu, desc, "motolii-render-ping-b");
+            let generations = self.ping.as_ref().map(|p| p.generations + 1).unwrap_or(1);
+            self.ping = Some(PingPongPool {
+                desc,
+                buffers: [a, b],
+                next: 0,
+                generations,
+            });
         }
-        &self.targets[slot]
+        let pool = self.ping.as_mut().unwrap();
+        let tex = pool.buffers[pool.next].clone();
+        pool.next = 1 - pool.next;
+        tex
     }
 }
 
@@ -303,7 +335,7 @@ pub fn render_graph_cached(
                 let texture = if source.color == [0.0, 0.0, 0.0, 0.0] {
                     session.transparent_texture(gpu, desc).clone()
                 } else {
-                    upload_rgba(gpu, &desc, &solid_rgba(desc, source.color))
+                    session.solid_texture(gpu, desc, source.color).clone()
                 };
                 textures[output.0] = Some(texture);
             }
@@ -313,9 +345,7 @@ pub fn render_graph_cached(
                 overlay,
             } => {
                 let input_texture = texture_ref(&textures, desc, *input)?;
-                let output_texture = session
-                    .ensure_target(gpu, desc, output.0, "motolii-render-graph-overlay")
-                    .clone();
+                let output_texture = session.acquire_ping(gpu, desc);
                 session.overlay.set_rect(*overlay);
                 session.overlay.render(
                     gpu,
@@ -334,9 +364,7 @@ pub fn render_graph_cached(
             } => {
                 let background_texture = texture_ref(&textures, desc, *background)?;
                 let foreground_texture = texture_ref(&textures, desc, *foreground)?;
-                let output_texture = session
-                    .ensure_target(gpu, desc, output.0, "motolii-render-graph-output")
-                    .clone();
+                let output_texture = session.acquire_ping(gpu, desc);
                 session.composite.render(
                     gpu,
                     background_texture,
@@ -357,9 +385,7 @@ pub fn render_graph_cached(
                 let registry = inputs
                     .plugins
                     .ok_or(RenderError::MissingPluginRegistry)?;
-                let output_texture = session
-                    .ensure_target(gpu, desc, output.0, "motolii-render-graph-plugin")
-                    .clone();
+                let output_texture = session.acquire_ping(gpu, desc);
                 let out_ref = TextureRef {
                     texture: &output_texture,
                     desc,
@@ -1042,6 +1068,30 @@ mod tests {
             &expected,
             1,
         );
+    }
+
+    #[test]
+    fn session_reuses_two_ping_pong_targets_across_frames() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let request = centered_request();
+        let graph = linear_graph_from_request(&request);
+        let mut session = RenderSession::new(&gpu);
+
+        assert_eq!(session.ping_pong_len(), 0);
+        for _ in 0..5 {
+            let rendered = render_graph_cached(
+                &gpu,
+                &mut session,
+                request.timeline_time,
+                &graph,
+                &RenderGraphInputs::default(),
+                Quality::FINAL,
+            )
+            .unwrap();
+            assert_eq!(rendered.desc, request.desc);
+            assert_eq!(session.ping_pong_len(), 2);
+            assert_eq!(session.ping_pong_generations(), 1);
+        }
     }
 
     #[test]
