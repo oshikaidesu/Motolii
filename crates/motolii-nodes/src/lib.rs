@@ -691,8 +691,8 @@ impl CompositeNode {
         require_premultiplied("composite-normal", "background", background.desc)?;
         require_premultiplied("composite-normal", "foreground", foreground.desc)?;
         require_premultiplied("composite-normal", "output", output.desc)?;
-        require_same_dimensions("composite-normal", background.desc, foreground.desc)?;
-        require_same_dimensions("composite-normal", background.desc, output.desc)?;
+        // 背景は正規化UVサンプルなので出力解像度と異なってよい(Draftの動画背景縮小など)。
+        require_same_dimensions("composite-normal", foreground.desc, output.desc)?;
         let bg_view = background
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
