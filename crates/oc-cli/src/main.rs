@@ -70,7 +70,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                         report.frames_passed, report.frames_checked, args.tolerance
                     );
                 }
-                Err(oc_cli::B4VerifyError::Mismatch { report, tolerance, .. }) => {
+                Err(oc_cli::B4VerifyError::Mismatch {
+                    report, tolerance, ..
+                }) => {
                     print_b4_report(&report, tolerance);
                     return Err(format!(
                         "B-4 verify failed: {}/{} frames exceeded tolerance {}",

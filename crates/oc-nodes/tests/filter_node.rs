@@ -352,11 +352,7 @@ fn composite_add_and_multiply_use_premultiplied_alpha() {
         let foreground = upload_rgba(&gpu, &desc, &foreground_data);
 
         for (label, mode, expected_px) in [
-            (
-                "add",
-                CompositeMode::Add,
-                premul_add_u8(bg_px, fg_px),
-            ),
+            ("add", CompositeMode::Add, premul_add_u8(bg_px, fg_px)),
             (
                 "multiply",
                 CompositeMode::Multiply,

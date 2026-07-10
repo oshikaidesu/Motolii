@@ -13,9 +13,7 @@ use oc_plugin::{
     reference::register_reference_plugins, ParamDriverContext, PluginRegistry, ResolvedParams,
     TextureRef,
 };
-use oc_render::{
-    render_frame_with_background_texture, BackgroundTextureRequest, RenderSession,
-};
+use oc_render::{render_frame_with_background_texture, BackgroundTextureRequest, RenderSession};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ProjectV1 {
@@ -216,7 +214,9 @@ pub fn export_project_v1(
 }
 
 /// プロジェクトJSONを解決し、export/verifyで共有するコンテキストを構築する。
-pub fn prepare_project_export(project_path: impl AsRef<Path>) -> Result<PreparedProject, ProjectError> {
+pub fn prepare_project_export(
+    project_path: impl AsRef<Path>,
+) -> Result<PreparedProject, ProjectError> {
     let project_path = project_path.as_ref().to_path_buf();
     let project = load_project_v1(&project_path)?;
     let base = project_path.parent().unwrap_or_else(|| Path::new("."));
@@ -305,11 +305,7 @@ impl PreparedProject {
             },
             Quality::FINAL,
         )?;
-        Ok(downloader.download(
-            gpu,
-            &rendered.texture,
-            oc_export::EXPORT_DOWNLOAD_TIMEOUT,
-        )?)
+        Ok(downloader.download(gpu, &rendered.texture, oc_export::EXPORT_DOWNLOAD_TIMEOUT)?)
     }
 
     pub fn decode_exported_frame_rgba(
@@ -321,22 +317,15 @@ impl PreparedProject {
     ) -> Result<Vec<u8>, ProjectError> {
         let out_info = probe(&self.output_path)?;
         let mut reader = FrameReader::open(&self.output_path, &out_info, export_index as i64)?;
-        let frame = reader
-            .next_frame()?
-            .ok_or(ProjectError::Export(oc_export::ExportError::InvalidRequest(
-                "exported mp4 ended before expected frame",
-            )))?;
+        let frame = reader.next_frame()?.ok_or(ProjectError::Export(
+            oc_export::ExportError::InvalidRequest("exported mp4 ended before expected frame"),
+        ))?;
         let texture = yuv.convert(gpu, &frame);
-        Ok(downloader.download(
-            gpu,
-            &texture,
-            oc_export::EXPORT_DOWNLOAD_TIMEOUT,
-        )?)
+        Ok(downloader.download(gpu, &texture, oc_export::EXPORT_DOWNLOAD_TIMEOUT)?)
     }
 
     fn read_source_frame(&self, export_index: usize) -> Result<oc_core::CpuFrame, ProjectError> {
-        let mut reader =
-            FrameReader::open(&self.input_path, &self.info, self.project.start_frame)?;
+        let mut reader = FrameReader::open(&self.input_path, &self.info, self.project.start_frame)?;
         for _ in 0..export_index {
             let _ = reader.next_frame()?.ok_or(ProjectError::Export(
                 oc_export::ExportError::InvalidRequest("input ended before expected frame"),
