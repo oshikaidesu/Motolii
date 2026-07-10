@@ -60,7 +60,7 @@ pub struct NodeDesc {
     pub max_inputs: usize,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct ResolvedParams {
     values: HashMap<&'static str, Value>,
 }
@@ -170,6 +170,17 @@ pub struct PluginRegistry {
     composites: BTreeMap<PluginId, &'static dyn CompositePlugin>,
 }
 
+impl std::fmt::Debug for PluginRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PluginRegistry")
+            .field("layer_sources", &self.layer_sources.len())
+            .field("filters", &self.filters.len())
+            .field("param_drivers", &self.param_drivers.len())
+            .field("composites", &self.composites.len())
+            .finish()
+    }
+}
+
 impl PluginRegistry {
     pub fn new() -> Self {
         Self::default()
@@ -231,12 +242,21 @@ impl PluginRegistry {
         self.param_drivers.get(id).copied()
     }
 
-    /// JSON等の動的なプラグインID文字列から参照する(M1最小)。
+    /// JSON等の動的なプラグインID文字列から参照する。
     pub fn param_driver_by_name(&self, name: &str) -> Option<&'static dyn ParamDriverPlugin> {
-        self.param_drivers
-            .iter()
-            .find(|(id, _)| id.0 == name)
-            .map(|(_, plugin)| *plugin)
+        by_name(&self.param_drivers, name)
+    }
+
+    pub fn filter_by_name(&self, name: &str) -> Option<&'static dyn FilterPlugin> {
+        by_name(&self.filters, name)
+    }
+
+    pub fn composite_by_name(&self, name: &str) -> Option<&'static dyn CompositePlugin> {
+        by_name(&self.composites, name)
+    }
+
+    pub fn layer_source_by_name(&self, name: &str) -> Option<&'static dyn LayerSourcePlugin> {
+        by_name(&self.layer_sources, name)
     }
 
     pub fn composite(&self, id: &PluginId) -> Option<&'static dyn CompositePlugin> {
@@ -269,6 +289,15 @@ fn insert_unique<T: ?Sized>(
     }
     map.insert(id, plugin);
     Ok(())
+}
+
+fn by_name<T: ?Sized>(
+    map: &BTreeMap<PluginId, &'static T>,
+    name: &str,
+) -> Option<&'static T> {
+    map.iter()
+        .find(|(id, _)| id.0 == name)
+        .map(|(_, plugin)| *plugin)
 }
 
 /// M1-T12用の最小参照プラグイン群。
@@ -532,6 +561,15 @@ mod tests {
         assert!(registry
             .composite(&PluginId("core.composite.clear"))
             .is_some());
+        assert!(registry.filter_by_name("core.filter.clear").is_some());
+        assert!(registry
+            .composite_by_name("core.composite.clear")
+            .is_some());
+        assert!(registry
+            .layer_source_by_name("core.layer_source.clear")
+            .is_some());
+        assert!(registry.param_driver_by_name("core.param.sine").is_some());
+        assert!(registry.filter_by_name("missing").is_none());
     }
 
     #[test]

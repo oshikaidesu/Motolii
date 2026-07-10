@@ -6,8 +6,8 @@
 
 ## 重大(紙の凍結=G-1違反になりかねないもの)
 
-- [ ] **1. グラフ実行器がプラグインを一度も呼ばない** — `crates/motolii-render/src/lib.rs:59`
-  `RenderStep`が閉じたenum(VideoSource/SolidSource/OverlayRect/CompositeNormal)で、実行器は`OverlayNode`/`CompositeNode`を直接呼ぶ。`validate_linear_graph`は「Overlayちょうど1個・Compositeちょうど1個」までハードコード。PluginRegistryのうち製品経路を通るのはParamDriverのみで、Filter/Composite/LayerSourceは「登録できるが呼ばれる口がない」。このままtrait凍結するとG-1の入場条件(種別レジストリ経由で動く)を紙で満たしたことになる。
+- [x] **1. グラフ実行器がプラグインを一度も呼ばない** — `crates/motolii-render/src/lib.rs`
+  `RenderStep::Plugin { id, params, inputs, output }` を追加。実行器が `PluginRegistry` 経由で Filter/Composite/LayerSource をディスパッチ。ゴールデン `plugin_filter_dispatches_via_registry_golden` で参照 ClearFilter がレジストリ経由で通ることを確認。所見5(by-name全種別)も同時対応。
   修正方針: `RenderStep::Plugin { id, params, inputs, output }`相当の一般ステップを追加し、参照Filterがレジストリ経由でグラフ内から呼ばれるゴールデンを1本通す。[plugin-resources.md](../plugin-resources.md)§5-1。
 
 - [ ] **2. 純関数契約とリソース生成禁止の両立機構がない** — `crates/motolii-plugin/src/lib.rs:113`
@@ -20,17 +20,16 @@
 
 ## 中(凍結の書き方で防げるもの)
 
-- [ ] **4. `&'static`がv1静的リンク前提を型に焼き込んでいる** — `crates/motolii-plugin/src/lib.rs:15`
-  `PluginId(&'static str)`・`ParamDef.id: &'static str`・レジストリの`&'static dyn Plugin`。v2のdylib/WASMロードは`&'static`を自然に供給できない。今の型のまま「凍結」すると、v2で凍結を破る側になる。
+- [x] **4. `&'static`がv1静的リンク前提を型に焼き込んでいる** — 凍結ゲート項目16に「凍結対象はセマンティクスであってlifetimeではない」を明記済み(docsコミット)。型のString化はしない。
   修正方針: 今すぐString化はしない(静的リンクv1ではこの形が軽い)。凍結ゲート文書に「凍結対象はid/version/paramの**セマンティクス**であり、lifetime/所有形態(&'static→Cow/String化)は互換変更として許す」と明記する。
 
-- [ ] **5. by-name参照がParamDriverにしかない** — `crates/motolii-plugin/src/lib.rs:235`
-  `param_driver_by_name`のみ存在(線形走査)。ドキュメントモデル(JSON)からFilter/Composite/LayerSourceを参照する時点で全種別に必要になる。
+- [x] **5. by-name参照がParamDriverにしかない** — `crates/motolii-plugin/src/lib.rs`
+  `filter_by_name` / `composite_by_name` / `layer_source_by_name` / `param_driver_by_name` を追加(所見1と同時)。
   修正方針: 所見1の一般ステップ実装と同時に全種別のby-name(またはキーをStringに統一)を足す。
 
 ## 確認のみ(既知・担当レーンが決まっているもの)
 
-- [ ] **6. 未知プラグインIDが即エラー(F-9パススルー未実装)** — `crates/motolii-cli/src/project.rs:109`
+- [x] **6. 未知プラグインIDが即エラー(F-9パススルー未実装)** — M2-D1完了条件に「未知プラグインIDは警告+パススルー」を明記済み。実装はM2。
   現状`UnknownParamDriver`でロード失敗。F-9の決定は「警告+パススルー」。M2ドキュメントスキーマ側の残作業として認識済み — M2仕様書のD1完了条件に明記されていることだけ確認する。
 
 - [ ] **7. T8残(中間バッファのピンポン再利用)** — M1仕様書に記載済みの残タスク。所見1のRenderStep改修と同じ箇所を触るため、同一PRか直後に片付けるのが安い。

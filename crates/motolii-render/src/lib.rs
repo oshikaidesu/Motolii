@@ -4,11 +4,14 @@
 //! 評価順・TimeMap・premultiplied alpha契約を1本の関数に束ねる。
 
 use motolii_core::{
-    premultiply_rgba_f32, ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap,
+    premultiply_rgba_f32, ColorSpace, CompCamera, FrameDesc, PixelFormat, Quality, RationalTime,
+    TimeMap,
 };
 use motolii_gpu::{upload_rgba, GpuCtx};
 use motolii_nodes::{create_rgba_render_target, CompositeNode, NodeError, OverlayNode, RectOverlay};
-use motolii_plugin::TextureRef;
+use motolii_plugin::{
+    LayerSourceContext, PluginError, PluginId, PluginRegistry, ResolvedParams, TextureRef,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TextureId(pub usize);
@@ -56,7 +59,7 @@ pub struct LinearRenderGraph {
     pub output: TextureId,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum RenderStep {
     /// 動画レイヤー等、呼び出し側が供給するGPUテクスチャ（VideoSourceNode / T8-R4）。
     VideoSource { output: TextureId },
@@ -72,6 +75,13 @@ pub enum RenderStep {
     CompositeNormal {
         background: TextureId,
         foreground: TextureId,
+        output: TextureId,
+    },
+    /// PluginRegistry経由の一般ステップ(所見1)。種別はレジストリlookupで決まる。
+    Plugin {
+        id: PluginId,
+        params: ResolvedParams,
+        inputs: Vec<TextureId>,
         output: TextureId,
     },
 }
@@ -110,6 +120,18 @@ pub enum RenderError {
     NonCompactTextureId(usize),
     #[error("render graph writes texture id {0} more than once")]
     DuplicateTextureWrite(usize),
+    #[error("render graph Plugin step requires RenderGraphInputs.plugins")]
+    MissingPluginRegistry,
+    #[error("unknown render plugin id: {0}")]
+    UnknownPlugin(String),
+    #[error("plugin {id} expects {expected} inputs, got {got}")]
+    PluginInputCount {
+        id: &'static str,
+        expected: String,
+        got: usize,
+    },
+    #[error(transparent)]
+    Plugin(#[from] PluginError),
     #[error(transparent)]
     Node(#[from] NodeError),
 }
@@ -120,6 +142,7 @@ enum TexProducer {
     VideoSource,
     Overlay,
     Composite,
+    Plugin,
 }
 
 /// グラフ実行時に呼び出し側から注入するテクスチャとメタデータ。
@@ -128,6 +151,8 @@ pub struct RenderGraphInputs<'a> {
     pub video_sources: &'a [(TextureId, TextureRef<'a>)],
     /// 明示時はグラフ内のreporting SolidSourceを必須にしない。
     pub source_time: Option<RationalTime>,
+    /// `RenderStep::Plugin` があるとき必須。レジストリ経由ディスパッチ(所見1)。
+    pub plugins: Option<&'a PluginRegistry>,
 }
 
 /// シェーダ/パイプラインと中間テクスチャをフレーム間で使い回すセッション。
@@ -212,6 +237,7 @@ pub fn render_frame_with_background_texture(
         &RenderGraphInputs {
             video_sources: &[(TextureId(0), request.background)],
             source_time: Some(request.source_time),
+            plugins: None,
         },
         quality,
     )
@@ -251,12 +277,12 @@ pub fn render_graph_cached(
         (0..graph_plan.texture_count).map(|_| None).collect();
 
     for step in &graph.steps {
-        match *step {
+        match step {
             RenderStep::VideoSource { output } => {
                 let (_, tex) = inputs
                     .video_sources
                     .iter()
-                    .find(|(id, _)| *id == output)
+                    .find(|(id, _)| *id == *output)
                     .ok_or(RenderError::MissingVideoSource(output.0))?;
                 // ハンドル(Arc)の複製でスロットに載せ、以降は通常テクスチャと同じ経路にする。
                 textures[output.0] = Some(tex.texture.clone());
@@ -274,11 +300,11 @@ pub fn render_graph_cached(
                 output,
                 overlay,
             } => {
-                let input_texture = texture_ref(&textures, desc, input)?;
+                let input_texture = texture_ref(&textures, desc, *input)?;
                 let output_texture = session
                     .ensure_target(gpu, desc, output.0, "motolii-render-graph-overlay")
                     .clone();
-                session.overlay.set_rect(overlay);
+                session.overlay.set_rect(*overlay);
                 session.overlay.render(
                     gpu,
                     input_texture,
@@ -294,8 +320,8 @@ pub fn render_graph_cached(
                 foreground,
                 output,
             } => {
-                let background_texture = texture_ref(&textures, desc, background)?;
-                let foreground_texture = texture_ref(&textures, desc, foreground)?;
+                let background_texture = texture_ref(&textures, desc, *background)?;
+                let foreground_texture = texture_ref(&textures, desc, *foreground)?;
                 let output_texture = session
                     .ensure_target(gpu, desc, output.0, "motolii-render-graph-output")
                     .clone();
@@ -308,6 +334,42 @@ pub fn render_graph_cached(
                         desc,
                     },
                 )?;
+                textures[output.0] = Some(output_texture);
+            }
+            RenderStep::Plugin {
+                id,
+                params,
+                inputs: plugin_inputs,
+                output,
+            } => {
+                let registry = inputs
+                    .plugins
+                    .ok_or(RenderError::MissingPluginRegistry)?;
+                let output_texture = session
+                    .ensure_target(gpu, desc, output.0, "motolii-render-graph-plugin")
+                    .clone();
+                let out_ref = TextureRef {
+                    texture: &output_texture,
+                    desc,
+                };
+                let mut encoder = gpu
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("motolii-render-plugin"),
+                    });
+                dispatch_plugin(
+                    registry,
+                    id,
+                    params,
+                    plugin_inputs,
+                    gpu,
+                    &mut encoder,
+                    timeline_time,
+                    &textures,
+                    desc,
+                    out_ref,
+                )?;
+                gpu.queue.submit([encoder.finish()]);
                 textures[output.0] = Some(output_texture);
             }
         }
@@ -403,18 +465,19 @@ fn validate_linear_graph(
     let mut producer: Vec<Option<TexProducer>> = vec![None; texture_count];
     let mut overlay_count = 0usize;
     let mut composite_count = 0usize;
+    let mut has_plugin = false;
 
     for step in &graph.steps {
-        match *step {
+        match step {
             RenderStep::VideoSource { output } => {
-                if !inputs.video_sources.iter().any(|(id, _)| *id == output) {
+                if !inputs.video_sources.iter().any(|(id, _)| *id == *output) {
                     return Err(RenderError::MissingVideoSource(output.0));
                 }
-                validate_output(output, &mut written)?;
+                validate_output(*output, &mut written)?;
                 producer[output.0] = Some(TexProducer::VideoSource);
             }
             RenderStep::SolidSource { output, source } => {
-                validate_output(output, &mut written)?;
+                validate_output(*output, &mut written)?;
                 producer[output.0] = Some(TexProducer::Solid {
                     transparent: source.color[3] == 0.0,
                 });
@@ -426,7 +489,7 @@ fn validate_linear_graph(
                 }
             }
             RenderStep::OverlayRect { input, output, .. } => {
-                validate_input(input, &written)?;
+                validate_input(*input, &written)?;
                 match producer.get(input.0).and_then(|p| *p) {
                     Some(TexProducer::Solid { transparent: true }) => {}
                     _ => {
@@ -435,7 +498,7 @@ fn validate_linear_graph(
                         })
                     }
                 }
-                validate_output(output, &mut written)?;
+                validate_output(*output, &mut written)?;
                 producer[output.0] = Some(TexProducer::Overlay);
                 overlay_count += 1;
             }
@@ -444,8 +507,8 @@ fn validate_linear_graph(
                 foreground,
                 output,
             } => {
-                validate_input(background, &written)?;
-                validate_input(foreground, &written)?;
+                validate_input(*background, &written)?;
+                validate_input(*foreground, &written)?;
                 match producer.get(foreground.0).and_then(|p| *p) {
                     Some(TexProducer::Overlay) => {}
                     _ => {
@@ -462,38 +525,60 @@ fn validate_linear_graph(
                         })
                     }
                 }
-                validate_output(output, &mut written)?;
+                validate_output(*output, &mut written)?;
                 producer[output.0] = Some(TexProducer::Composite);
                 composite_count += 1;
+            }
+            RenderStep::Plugin {
+                inputs: plugin_inputs,
+                output,
+                ..
+            } => {
+                if inputs.plugins.is_none() {
+                    return Err(RenderError::MissingPluginRegistry);
+                }
+                for input in plugin_inputs {
+                    validate_input(*input, &written)?;
+                }
+                validate_output(*output, &mut written)?;
+                producer[output.0] = Some(TexProducer::Plugin);
+                has_plugin = true;
             }
         }
     }
 
     validate_input(graph.output, &written)?;
 
-    if overlay_count == 0 {
-        return Err(RenderError::MissingOverlay);
-    }
-    if overlay_count != 1 {
-        return Err(RenderError::InvalidOverlayRectCount {
-            found: overlay_count,
-        });
-    }
-    if composite_count == 0 {
-        return Err(RenderError::MissingCompositeNormal);
-    }
-    if composite_count != 1 {
-        return Err(RenderError::InvalidCompositeNormalCount {
-            found: composite_count,
-        });
-    }
+    if has_plugin {
+        // Plugin経路は固定デモグラフ制約を外す。出力はいずれかのステップが書けていればよい。
+        if producer.get(graph.output.0).and_then(|p| *p).is_none() {
+            return Err(RenderError::MissingTexture(graph.output.0));
+        }
+    } else {
+        if overlay_count == 0 {
+            return Err(RenderError::MissingOverlay);
+        }
+        if overlay_count != 1 {
+            return Err(RenderError::InvalidOverlayRectCount {
+                found: overlay_count,
+            });
+        }
+        if composite_count == 0 {
+            return Err(RenderError::MissingCompositeNormal);
+        }
+        if composite_count != 1 {
+            return Err(RenderError::InvalidCompositeNormalCount {
+                found: composite_count,
+            });
+        }
 
-    match producer.get(graph.output.0).and_then(|p| *p) {
-        Some(TexProducer::Composite) => Ok(()),
-        _ => Err(RenderError::OutputMustBeProducedByCompositeNormal {
-            output: graph.output.0,
-        }),
-    }?;
+        match producer.get(graph.output.0).and_then(|p| *p) {
+            Some(TexProducer::Composite) => Ok(()),
+            _ => Err(RenderError::OutputMustBeProducedByCompositeNormal {
+                output: graph.output.0,
+            }),
+        }?;
+    }
 
     Ok(GraphPlan {
         texture_count,
@@ -508,7 +593,7 @@ fn texture_slot_count(graph: &LinearRenderGraph) -> Result<usize, RenderError> {
     let mut ids: Vec<_> = graph
         .steps
         .iter()
-        .flat_map(|step| match *step {
+        .flat_map(|step| match step {
             RenderStep::VideoSource { output } => vec![output.0],
             RenderStep::SolidSource { output, .. } => vec![output.0],
             RenderStep::OverlayRect { input, output, .. } => vec![input.0, output.0],
@@ -517,6 +602,15 @@ fn texture_slot_count(graph: &LinearRenderGraph) -> Result<usize, RenderError> {
                 foreground,
                 output,
             } => vec![background.0, foreground.0, output.0],
+            RenderStep::Plugin {
+                inputs,
+                output,
+                ..
+            } => {
+                let mut v: Vec<_> = inputs.iter().map(|id| id.0).collect();
+                v.push(output.0);
+                v
+            }
         })
         .collect();
     ids.push(graph.output.0);
@@ -529,6 +623,77 @@ fn texture_slot_count(graph: &LinearRenderGraph) -> Result<usize, RenderError> {
         }
     }
     Ok(ids.len())
+}
+
+fn dispatch_plugin(
+    registry: &PluginRegistry,
+    id: &PluginId,
+    params: &ResolvedParams,
+    plugin_inputs: &[TextureId],
+    gpu: &GpuCtx,
+    encoder: &mut wgpu::CommandEncoder,
+    timeline_time: RationalTime,
+    textures: &[Option<wgpu::Texture>],
+    desc: FrameDesc,
+    output: TextureRef<'_>,
+) -> Result<(), RenderError> {
+    if let Some(filter) = registry.filter(id) {
+        let expected = filter.desc().min_inputs..=filter.desc().max_inputs;
+        if !expected.contains(&plugin_inputs.len()) {
+            return Err(RenderError::PluginInputCount {
+                id: id.0,
+                expected: format!("{}..={}", filter.desc().min_inputs, filter.desc().max_inputs),
+                got: plugin_inputs.len(),
+            });
+        }
+        let input = texture_ref(textures, desc, plugin_inputs[0])?;
+        filter.render(gpu, encoder, timeline_time, params, input, output)?;
+        return Ok(());
+    }
+
+    if let Some(composite) = registry.composite(id) {
+        let expected = composite.desc().min_inputs..=composite.desc().max_inputs;
+        if !expected.contains(&plugin_inputs.len()) {
+            return Err(RenderError::PluginInputCount {
+                id: id.0,
+                expected: format!(
+                    "{}..={}",
+                    composite.desc().min_inputs,
+                    composite.desc().max_inputs
+                ),
+                got: plugin_inputs.len(),
+            });
+        }
+        let input_refs: Result<Vec<_>, _> = plugin_inputs
+            .iter()
+            .map(|input| texture_ref(textures, desc, *input))
+            .collect();
+        composite.render(gpu, encoder, timeline_time, params, &input_refs?, output)?;
+        return Ok(());
+    }
+
+    if let Some(layer) = registry.layer_source(id) {
+        if !plugin_inputs.is_empty() {
+            return Err(RenderError::PluginInputCount {
+                id: id.0,
+                expected: "0..=0".into(),
+                got: plugin_inputs.len(),
+            });
+        }
+        layer.render(
+            gpu,
+            encoder,
+            timeline_time,
+            params,
+            LayerSourceContext {
+                camera: CompCamera::DEFAULT,
+            },
+            output,
+        )?;
+        return Ok(());
+    }
+
+    Err(RenderError::UnknownPlugin(id.0.to_string()))
 }
 
 fn validate_input(id: TextureId, written: &[bool]) -> Result<(), RenderError> {
@@ -651,8 +816,10 @@ fn to_u8(v: f32) -> u8 {
 mod tests {
     use super::*;
     use motolii_core::{Fps, Quality, TimeMap};
+    use motolii_eval::Value;
     use motolii_gpu::download_rgba;
     use motolii_nodes::{CanonicalPoint, CanonicalSize};
+    use motolii_plugin::reference::register_reference_plugins;
     use motolii_testkit::{assert_rgba_close, gpu_or_skip, RgbaImageDesc};
 
     #[test]
@@ -745,6 +912,96 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn plugin_filter_dispatches_via_registry_golden() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let desc = FrameDesc::packed(16, 8, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let mut registry = PluginRegistry::new();
+        register_reference_plugins(&mut registry).unwrap();
+
+        let mut params = ResolvedParams::new();
+        params.insert("color", Value::Color([0.0, 1.0, 0.0, 1.0]));
+
+        let graph = LinearRenderGraph {
+            desc,
+            steps: vec![
+                RenderStep::SolidSource {
+                    output: TextureId(0),
+                    source: SolidSource {
+                        color: [1.0, 0.0, 0.0, 1.0],
+                        time_map: TimeMap::identity(),
+                        reports_source_time: true,
+                    },
+                },
+                RenderStep::Plugin {
+                    id: PluginId("core.filter.clear"),
+                    params,
+                    inputs: vec![TextureId(0)],
+                    output: TextureId(1),
+                },
+            ],
+            output: TextureId(1),
+        };
+
+        let mut session = RenderSession::new(&gpu);
+        let rendered = render_graph_cached(
+            &gpu,
+            &mut session,
+            RationalTime::ZERO,
+            &graph,
+            &RenderGraphInputs {
+                plugins: Some(&registry),
+                ..RenderGraphInputs::default()
+            },
+            Quality::FINAL,
+        )
+        .unwrap();
+
+        let actual = download_rgba(&gpu, &rendered.texture).unwrap();
+        let mut expected = vec![0u8; desc.data_size()];
+        for px in expected.chunks_exact_mut(4) {
+            px.copy_from_slice(&[0, 255, 0, 255]);
+        }
+        assert_rgba_close(
+            "plugin-filter-registry-clear-green",
+            RgbaImageDesc {
+                width: desc.width,
+                height: desc.height,
+            },
+            &actual,
+            &expected,
+            0,
+        );
+    }
+
+    #[test]
+    fn plugin_step_without_registry_errors() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let desc = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let graph = LinearRenderGraph {
+            desc,
+            steps: vec![
+                RenderStep::SolidSource {
+                    output: TextureId(0),
+                    source: SolidSource {
+                        color: [0.0, 0.0, 0.0, 1.0],
+                        time_map: TimeMap::identity(),
+                        reports_source_time: true,
+                    },
+                },
+                RenderStep::Plugin {
+                    id: PluginId("core.filter.clear"),
+                    params: ResolvedParams::new(),
+                    inputs: vec![TextureId(0)],
+                    output: TextureId(1),
+                },
+            ],
+            output: TextureId(1),
+        };
+        let err = render_graph(&gpu, RationalTime::ZERO, &graph, Quality::FINAL).unwrap_err();
+        assert!(matches!(err, RenderError::MissingPluginRegistry));
     }
 
     #[test]

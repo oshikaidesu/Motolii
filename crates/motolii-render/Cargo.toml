@@ -13,4 +13,5 @@ thiserror.workspace = true
 wgpu.workspace = true
 
 [dev-dependencies]
+motolii-eval.workspace = true
 motolii-testkit.workspace = true

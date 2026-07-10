@@ -15,7 +15,7 @@
 | T4 | **完了**: `motolii-testkit`。RGBAゴールデン比較(最大誤差/平均誤差/差分RGBA生成)を共通化し、`motolii-gpu`のYUVゴールデンテストをtestkit経由に置き換え済み。参照/actual/diffのPNG保存と`OC_TESTKIT_ARTIFACT_DIR`によるゴールデン失敗時の差分出力を追加 |
 | T6 | **完了**: `motolii-eval`(Value/KeyframeTrack/Interp/cubic_bezier_ease/DataTrack/ParamSource/DataTracks)。補間・イージング・DataTrack参照のテスト済み |
 | T7 | **完了**: `motolii-nodes`。正準座標→`ViewportTransform`集約。`FilterPlugin`/`OverlayNode`(矩形・円・線)/`CompositeNode`(normal/add/multiply)をGPUゴールデン化。Vello統合は凍結ゲート後(R8採用済み) |
-| T12 | **部分完了**: `motolii-plugin`。静的リンク版の種別レジストリ(Filter / ParamDriver / Composite)とGPUテクスチャ境界のtraitを追加。参照プラグインはCPUフレームを受け取らず、Filter/Compositeは`wgpu::CommandEncoder`へGPU render passを積む。ParamDriverはDataTrack生成を単体テスト済み。export経路で`SineParamDriver`→`DataTracks`→`ParamSource::Data`接続済み。Filterは`motolii-nodes`経由のGPUゴールデンで実証済み、Compositeのalpha契約は`motolii-nodes::CompositeNode`で実証済み |
+| T12 | **部分完了→ディスパッチ完了(所見1)**: `motolii-plugin`種別レジストリ+`RenderStep::Plugin`でFilter/Composite/LayerSourceがグラフ実行器からレジストリ経由で呼ばれる。参照ClearFilterゴールデン済み。ParamDriverはexport経路接続済み。**残り=PipelineCache(所見2/F-10)** |
 | T5 | **後方移動**: GPU色解析はプラグイン/解析拡張領域であり、M1完了条件から外す。M1では合成DataTrackまたはParamDriver参照プラグインで「値列がパラメータを駆動する」境界だけを検証する |
 | T11 | **完了(2026-07-10)**: 実素材(1080p/4K)で書き出し+GUIプレビュー(`spikes/r9-preview`)+主観品質OK。B-4はCI合成素材+手元実素材(`qp0: false`書き出し)で確認 |
 | T8 | **部分完了**: 固定グラフに加え、`RenderStep::VideoSource`で動画フレーム等の外部GPUテクスチャをグラフの一級ステップとして表現。`render_frame_with_background_texture`は同一`render_graph_cached`経路に合流(R4)。**残り=中間バッファのピンポン使い回し**(performance-model §3のM1-T8方針: テクスチャ確保・コピーを毎フレームやらず2枚を交互再利用) |
