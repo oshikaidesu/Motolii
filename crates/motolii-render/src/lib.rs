@@ -170,13 +170,15 @@ pub struct RenderSession {
     transparent: Option<(FrameDesc, wgpu::Texture)>,
     /// 単色Solidの再利用(毎フレームuploadしない)。
     solid: Option<(FrameDesc, [f32; 4], wgpu::Texture)>,
-    /// 中間RTピンポン2枚(performance-model §3 / M1-T8)。レイヤー数・TextureId数に依存しない。
-    ping: Option<PingPongPool>,
+    /// 中間RTプール(performance-model §3 / M1-T8)。必要枚数はグラフ深度に応じて伸びる。
+    ping: Option<RenderTargetPool>,
+    /// グラフ出力の退避先。ピンポン中間面と分離し、次フレームの上書きを防ぐ。
+    output: Option<(FrameDesc, wgpu::Texture)>,
 }
 
-struct PingPongPool {
+struct RenderTargetPool {
     desc: FrameDesc,
-    buffers: [wgpu::Texture; 2],
+    buffers: Vec<wgpu::Texture>,
     next: usize,
     /// プールを作り直した回数(テスト用)。
     generations: u64,
@@ -191,6 +193,7 @@ impl RenderSession {
             transparent: None,
             solid: None,
             ping: None,
+            output: None,
         }
     }
 
@@ -202,9 +205,9 @@ impl RenderSession {
         &mut self.pipelines
     }
 
-    /// ピンポン中間バッファ枚数(未使用なら0、使用中は常に2)。
+    /// 中間レンダターゲット枚数(未使用なら0)。
     pub fn ping_pong_len(&self) -> usize {
-        self.ping.as_ref().map(|_| 2).unwrap_or(0)
+        self.ping.as_ref().map(|p| p.buffers.len()).unwrap_or(0)
     }
 
     pub fn ping_pong_generations(&self) -> u64 {
@@ -231,23 +234,46 @@ impl RenderSession {
         &self.solid.as_ref().unwrap().2
     }
 
-    /// 中間レンダターゲットをピンポン2枚から取得(交互)。
-    fn acquire_ping(&mut self, gpu: &GpuCtx, desc: FrameDesc) -> wgpu::Texture {
+    /// 中間レンダターゲットを取得。`avoid` に載った面は入力として生存中なので避ける。
+    fn acquire_render_target(
+        &mut self,
+        gpu: &GpuCtx,
+        desc: FrameDesc,
+        avoid: &[&wgpu::Texture],
+    ) -> wgpu::Texture {
         if self.ping.as_ref().map(|p| p.desc) != Some(desc) {
             let a = create_rgba_render_target(gpu, desc, "motolii-render-ping-a");
             let b = create_rgba_render_target(gpu, desc, "motolii-render-ping-b");
             let generations = self.ping.as_ref().map(|p| p.generations + 1).unwrap_or(1);
-            self.ping = Some(PingPongPool {
+            self.ping = Some(RenderTargetPool {
                 desc,
-                buffers: [a, b],
+                buffers: vec![a, b],
                 next: 0,
                 generations,
             });
         }
         let pool = self.ping.as_mut().unwrap();
-        let tex = pool.buffers[pool.next].clone();
-        pool.next = 1 - pool.next;
+        let len = pool.buffers.len();
+        for offset in 0..len {
+            let idx = (pool.next + offset) % len;
+            let candidate = &pool.buffers[idx];
+            if !avoid.iter().any(|tex| *tex == candidate) {
+                pool.next = (idx + 1) % len;
+                return candidate.clone();
+            }
+        }
+        let tex = create_rgba_render_target(gpu, desc, "motolii-render-ping-extra");
+        pool.buffers.push(tex.clone());
+        pool.next = pool.buffers.len() % pool.buffers.len().max(1);
         tex
+    }
+
+    fn output_texture(&mut self, gpu: &GpuCtx, desc: FrameDesc) -> wgpu::Texture {
+        if self.output.as_ref().map(|(d, _)| *d) != Some(desc) {
+            let tex = create_rgba_render_target(gpu, desc, "motolii-render-output");
+            self.output = Some((desc, tex));
+        }
+        self.output.as_ref().unwrap().1.clone()
     }
 }
 
@@ -351,7 +377,8 @@ pub fn render_graph_cached(
                 overlay,
             } => {
                 let input_texture = texture_ref(&textures, desc, *input)?;
-                let output_texture = session.acquire_ping(gpu, desc);
+                let avoid = live_textures(&textures, &[*input]);
+                let output_texture = session.acquire_render_target(gpu, desc, &avoid);
                 session.overlay.set_rect(*overlay);
                 session.overlay.render(
                     gpu,
@@ -370,7 +397,8 @@ pub fn render_graph_cached(
             } => {
                 let background_texture = texture_ref(&textures, desc, *background)?;
                 let foreground_texture = texture_ref(&textures, desc, *foreground)?;
-                let output_texture = session.acquire_ping(gpu, desc);
+                let avoid = live_textures(&textures, &[*background, *foreground]);
+                let output_texture = session.acquire_render_target(gpu, desc, &avoid);
                 session.composite.render(
                     gpu,
                     background_texture,
@@ -389,7 +417,8 @@ pub fn render_graph_cached(
                 output,
             } => {
                 let registry = inputs.plugins.ok_or(RenderError::MissingPluginRegistry)?;
-                let output_texture = session.acquire_ping(gpu, desc);
+                let avoid = live_textures(&textures, plugin_inputs);
+                let output_texture = session.acquire_render_target(gpu, desc, &avoid);
                 let out_ref = TextureRef {
                     texture: &output_texture,
                     desc,
@@ -418,10 +447,13 @@ pub fn render_graph_cached(
         }
     }
 
-    let output_texture = textures
+    let intermediate = textures
         .get_mut(graph.output.0)
         .and_then(Option::take)
         .ok_or(RenderError::MissingTexture(graph.output.0))?;
+
+    let output_texture = session.output_texture(gpu, desc);
+    copy_texture(gpu, &intermediate, &output_texture, desc);
 
     Ok(RenderedFrame {
         texture: output_texture,
@@ -817,6 +849,43 @@ fn texture_ref<'a>(
     Ok(TextureRef { texture, desc })
 }
 
+fn live_textures<'a>(
+    textures: &'a [Option<wgpu::Texture>],
+    ids: &[TextureId],
+) -> Vec<&'a wgpu::Texture> {
+    ids.iter()
+        .filter_map(|id| textures.get(id.0).and_then(Option::as_ref))
+        .collect()
+}
+
+fn copy_texture(gpu: &GpuCtx, source: &wgpu::Texture, dest: &wgpu::Texture, desc: FrameDesc) {
+    let mut encoder = gpu
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("motolii-render-output-copy"),
+        });
+    encoder.copy_texture_to_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: source,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyTextureInfo {
+            texture: dest,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::Extent3d {
+            width: desc.width,
+            height: desc.height,
+            depth_or_array_layers: 1,
+        },
+    );
+    gpu.queue.submit([encoder.finish()]);
+}
+
 #[cfg(test)]
 fn render_frame_direct(
     gpu: &GpuCtx,
@@ -1074,6 +1143,119 @@ mod tests {
         }
         assert_rgba_close(
             "plugin-tint-pipeline-cache",
+            RgbaImageDesc {
+                width: desc.width,
+                height: desc.height,
+            },
+            &actual,
+            &expected,
+            1,
+        );
+    }
+
+    #[test]
+    fn rendered_frame_survives_next_render() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let request = centered_request();
+        let graph = linear_graph_from_request(&request);
+        let mut session = RenderSession::new(&gpu);
+        let inputs = RenderGraphInputs::default();
+
+        let first = render_graph_cached(
+            &gpu,
+            &mut session,
+            request.timeline_time,
+            &graph,
+            &inputs,
+            Quality::FINAL,
+        )
+        .unwrap();
+        let first_snapshot = download_rgba(&gpu, &first.texture).unwrap();
+
+        let _second = render_graph_cached(
+            &gpu,
+            &mut session,
+            RationalTime::from_frame(12, Fps::new(30, 1)),
+            &graph,
+            &inputs,
+            Quality::FINAL,
+        )
+        .unwrap();
+
+        let first_after = download_rgba(&gpu, &first.texture).unwrap();
+        assert_eq!(
+            first_snapshot, first_after,
+            "returned frame must not be overwritten by the next render"
+        );
+    }
+
+    #[test]
+    fn plugin_graph_three_steps_avoids_input_surface_collision() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let desc = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let mut registry = PluginRegistry::new();
+        register_reference_plugins(&mut registry).unwrap();
+
+        let mut clear_params = ResolvedParams::new();
+        clear_params.insert("color", Value::Color([0.0, 1.0, 0.0, 1.0]));
+        let mut tint_red = ResolvedParams::new();
+        tint_red.insert("color", Value::Color([1.0, 0.0, 0.0, 1.0]));
+        let mut tint_blue = ResolvedParams::new();
+        tint_blue.insert("color", Value::Color([0.0, 0.0, 1.0, 1.0]));
+
+        let graph = LinearRenderGraph {
+            desc,
+            steps: vec![
+                RenderStep::SolidSource {
+                    output: TextureId(0),
+                    source: SolidSource {
+                        color: [1.0, 1.0, 1.0, 1.0],
+                        time_map: TimeMap::identity(),
+                        reports_source_time: true,
+                    },
+                },
+                RenderStep::Plugin {
+                    id: PluginId("core.filter.clear"),
+                    params: clear_params,
+                    inputs: vec![TextureId(0)],
+                    output: TextureId(1),
+                },
+                RenderStep::Plugin {
+                    id: PluginId("core.filter.tint"),
+                    params: tint_red,
+                    inputs: vec![TextureId(1)],
+                    output: TextureId(2),
+                },
+                RenderStep::Plugin {
+                    id: PluginId("core.filter.tint"),
+                    params: tint_blue,
+                    inputs: vec![TextureId(1)],
+                    output: TextureId(3),
+                },
+            ],
+            output: TextureId(3),
+        };
+
+        let rendered = render_graph_cached(
+            &gpu,
+            &mut RenderSession::new(&gpu),
+            RationalTime::ZERO,
+            &graph,
+            &RenderGraphInputs {
+                plugins: Some(&registry),
+                ..RenderGraphInputs::default()
+            },
+            Quality::FINAL,
+        )
+        .unwrap();
+
+        let actual = download_rgba(&gpu, &rendered.texture).unwrap();
+        let mut expected = vec![0u8; desc.data_size()];
+        for px in expected.chunks_exact_mut(4) {
+            px.copy_from_slice(&[0, 0, 255, 255]);
+        }
+        assert_rgba_close(
+            "plugin-three-step-reuse-live-input",
             RgbaImageDesc {
                 width: desc.width,
                 height: desc.height,
