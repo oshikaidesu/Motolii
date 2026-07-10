@@ -160,6 +160,25 @@ pub fn validate_node_desc(kind: PluginKind, desc: &NodeDesc) -> Result<(), Plugi
             desc.id.0
         )));
     }
+    // id中央セグメントは登録PluginKindと一致させる(core.param.* をFilterに登録する抜けを塞ぐ)。
+    let expected_kind_seg = match kind {
+        PluginKind::Filter => Some("filter"),
+        PluginKind::ParamDriver => Some("param"),
+        PluginKind::LayerSource => Some("layer_source"),
+        PluginKind::Composite => Some("composite"),
+        // 予約種別はレジストリ登録経路が無い。将来の口に合わせて緩めに置く。
+        PluginKind::Input => Some("input"),
+        PluginKind::Simulation => Some("simulation"),
+        PluginKind::ScriptWasm => Some("script_wasm"),
+    };
+    if let Some(expected) = expected_kind_seg {
+        if segments[1] != expected {
+            return Err(invalid(format!(
+                "id kind segment `{}` does not match {kind:?} (expected `{expected}`)",
+                segments[1]
+            )));
+        }
+    }
     if desc.version == 0 {
         return Err(invalid("version must be >= 1".into()));
     }
@@ -1059,6 +1078,8 @@ mod tests {
             .register_filter(&super::reference::CLEAR_FILTER)
             .unwrap();
 
+        // 同一PluginId文字列を別種別に流用すると、kindセグメント検証が先に弾く
+        // (vendor.kind.name 規約下では ensure_id_free の前に InvalidDesc になる)。
         struct ClashComposite;
         impl CompositePlugin for ClashComposite {
             fn desc(&self) -> &NodeDesc {
@@ -1091,13 +1112,10 @@ mod tests {
 
         static CLASH: ClashComposite = ClashComposite;
         let err = registry.register_composite(&CLASH).unwrap_err();
-        assert!(matches!(
-            err,
-            PluginError::Duplicate {
-                kind: PluginKind::Filter,
-                id: "core.filter.clear"
-            }
-        ));
+        assert!(
+            matches!(err, PluginError::InvalidDesc { .. }),
+            "expected InvalidDesc for kind/id mismatch, got {err:?}"
+        );
     }
 
     #[test]
@@ -1260,6 +1278,13 @@ mod tests {
                 NodeDesc {
                     min_inputs: 0,
                     max_inputs: 0,
+                    ..valid.clone()
+                },
+            ),
+            (
+                "kind segment mismatch",
+                NodeDesc {
+                    id: PluginId("core.param.evil"),
                     ..valid.clone()
                 },
             ),

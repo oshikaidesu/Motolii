@@ -110,6 +110,7 @@ fn strip_line_comments(src: &str) -> String {
 
 /// Cargo.tomlのdependencies系セクションから直接依存クレート名を抜く。
 /// `foo = { package = "bar" }` のリネームは実クレート名(bar)も返す。
+/// `[dependencies.cudarc]` のようなネスト表形式もクレート名として拾う。
 fn direct_dependency_names(manifest: &str) -> Vec<String> {
     let mut names = Vec::new();
     let mut in_deps = false;
@@ -117,7 +118,13 @@ fn direct_dependency_names(manifest: &str) -> Vec<String> {
         let line = raw.trim();
         if line.starts_with('[') {
             let section = line.trim_matches(|c| c == '[' || c == ']');
-            in_deps = section.ends_with("dependencies");
+            if let Some(crate_name) = nested_dependency_crate(section) {
+                // [dependencies.cudarc] / [dev-dependencies.metal] / [target.…\.dependencies.ash]
+                names.push(crate_name.to_string());
+                in_deps = false;
+            } else {
+                in_deps = is_dependencies_table(section);
+            }
             continue;
         }
         if !in_deps || line.is_empty() || line.starts_with('#') {
@@ -133,6 +140,33 @@ fn direct_dependency_names(manifest: &str) -> Vec<String> {
         }
     }
     names
+}
+
+fn is_dependencies_table(section: &str) -> bool {
+    section == "dependencies"
+        || section.ends_with(".dependencies")
+        || section == "dev-dependencies"
+        || section.ends_with(".dev-dependencies")
+        || section == "build-dependencies"
+        || section.ends_with(".build-dependencies")
+}
+
+/// `[dependencies.cudarc]` → `Some("cudarc")`。通常の`[dependencies]`は`None`。
+fn nested_dependency_crate(section: &str) -> Option<&str> {
+    for marker in [
+        "dependencies.",
+        "dev-dependencies.",
+        "build-dependencies.",
+    ] {
+        if let Some(rest) = section.rsplit_once(marker) {
+            // target.'cfg(…)'.dependencies.foo → marker照合は dependencies. で foo
+            let name = rest.1;
+            if !name.is_empty() && !name.contains('.') {
+                return Some(name);
+            }
+        }
+    }
+    None
 }
 
 fn manifest_violations(manifest: &str) -> Vec<String> {
@@ -254,6 +288,19 @@ fn deny_scanner_flags_cuda_dependency() {
 fn deny_scanner_flags_renamed_vendor_package() {
     let manifest = "[dependencies]\ngfx = { package = \"metal\", version = \"0.27\" }\n";
     assert_eq!(manifest_violations(manifest), vec!["metal".to_string()]);
+}
+
+#[test]
+fn deny_scanner_flags_nested_dependency_table() {
+    let manifest = "[package]\nname = \"evil\"\n[dependencies.cudarc]\nversion = \"0.11\"\n";
+    assert_eq!(manifest_violations(manifest), vec!["cudarc".to_string()]);
+}
+
+#[test]
+fn deny_scanner_flags_target_nested_vendor_table() {
+    let manifest =
+        "[target.'cfg(windows)'.dependencies.d3d12]\nversion = \"0.7\"\n";
+    assert_eq!(manifest_violations(manifest), vec!["d3d12".to_string()]);
 }
 
 #[test]
