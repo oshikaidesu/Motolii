@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 use motolii_core::{ColorSpace, FrameDesc, Fps, PixelFormat, RationalTime};
 use motolii_eval::Value;
 use motolii_gpu::{GpuCtx, PipelineCache};
-use motolii_plugin::reference::{CLEAR_FILTER, SINE_PARAM_DRIVER, TINT_FILTER};
+use motolii_plugin::reference::{CLEAR_FILTER, OPACITY_FILTER, SINE_PARAM_DRIVER, TINT_FILTER};
 use motolii_plugin::{
     FilterPlugin, NodeDesc, ParamDriverContext, PluginError, PluginId, ResolvedParams, TextureRef,
 };
@@ -47,6 +47,28 @@ fn tint_filter_is_pure() {
         &gpu,
         &TINT_FILTER,
         RationalTime::from_seconds(1),
+        &params,
+        frame,
+        &input,
+    )
+    .unwrap();
+}
+
+#[test]
+fn opacity_filter_is_pure() {
+    let Some(gpu) = gpu_or_skip() else { return };
+    let frame = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+    let mut input = vec![0u8; frame.data_size()];
+    for px in input.chunks_exact_mut(4) {
+        px.copy_from_slice(&[200, 100, 50, 255]);
+    }
+    let mut params = ResolvedParams::new();
+    params.insert("amount", Value::F64(0.5));
+    assert_filter_pure(
+        "opacity-pure",
+        &gpu,
+        &OPACITY_FILTER,
+        RationalTime::ZERO,
         &params,
         frame,
         &input,
