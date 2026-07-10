@@ -23,6 +23,13 @@ The deeper idea behind the tool is **collage**, not a single neat metaphor:
 - **Music-synced remix** — fragments colliding on a beat (the 音MAD spirit, without naming it).
 - **Point clouds as fiction** — sparse data pretending to be a world.
 
+The architecture fits the same word:
+
+- **A minimal core** — the host stays thin; it holds the timeline, the GPU path, and the rules. Not a monolith that tries to ship every effect.
+- **Plugin-first** — features arrive as separate pieces snapped onto a simple boundary (`texture in + params → texture out`). The motley is the ecosystem, not the binary.
+- **Non-destructive by design** — the project file is a _recipe_ (commands, references, parameters), not baked pixels. Undo is diffs, caches live outside the document. You can remix without losing the source collage.
+- **A community that adds the color** — like AviUtl's plugin culture, but with an open, forkable core. Motolii is the empty patchwork coat; plugins, scripts, and contributors sew on the scraps.
+
 Motolii is a motion compositor by spec; collage is the attitude. The name does not explain any of that out loud — it just wears the patchwork.
 
 ---
