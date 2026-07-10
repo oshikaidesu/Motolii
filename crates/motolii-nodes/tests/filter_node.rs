@@ -1,6 +1,6 @@
 use motolii_core::{ColorSpace, FrameDesc, PixelFormat, RationalTime};
 use motolii_eval::Value;
-use motolii_gpu::{download_rgba, upload_rgba, GpuCtx};
+use motolii_gpu::{download_rgba, upload_rgba, GpuCtx, PipelineCache};
 use motolii_nodes::{
     create_rgba_render_target, CanonicalPoint, CanonicalSize, CircleOverlay, CompositeMode,
     CompositeNode, FilterNode, LineOverlay, OverlayNode, RectOverlay,
@@ -15,11 +15,13 @@ fn clear_filter_runs_through_node_and_matches_golden() {
     let desc = FrameDesc::packed(16, 8, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false);
     let input = create_rgba_render_target(&gpu, desc, "clear-filter-input");
     let output = create_rgba_render_target(&gpu, desc, "clear-filter-output");
+    let mut pipelines = PipelineCache::new();
 
     let mut node = FilterNode::new(&CLEAR_FILTER);
     node.set_param("color", Value::Color([1.0, 0.0, 0.0, 1.0]));
     node.render(
         &gpu,
+        &mut pipelines,
         RationalTime::ZERO,
         TextureRef {
             texture: &input,
@@ -397,11 +399,13 @@ fn composite_add_and_multiply_use_premultiplied_alpha() {
 
 fn prefill_with_magenta(gpu: &GpuCtx, desc: FrameDesc, output: &wgpu::Texture) {
     let input = create_rgba_render_target(gpu, desc, "overlay-prefill-input");
+    let mut pipelines = PipelineCache::new();
     let mut clear = FilterNode::new(&CLEAR_FILTER);
     clear.set_param("color", Value::Color([1.0, 0.0, 1.0, 1.0]));
     clear
         .render(
             gpu,
+            &mut pipelines,
             RationalTime::ZERO,
             TextureRef {
                 texture: &input,

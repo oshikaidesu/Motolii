@@ -7,7 +7,7 @@ use std::sync::OnceLock;
 
 use motolii_core::{premultiply_rgba_f32, FrameDesc, RationalTime};
 use motolii_eval::{DataTracks, ParamSource, Value};
-use motolii_gpu::GpuCtx;
+use motolii_gpu::{GpuCtx, PipelineCache};
 use motolii_plugin::{
     CompositePlugin, FilterPlugin, NodeDesc, PluginError, PluginId, ResolvedParams, TextureRef,
 };
@@ -219,6 +219,7 @@ impl FilterNode {
     pub fn render(
         &self,
         gpu: &GpuCtx,
+        pipelines: &mut PipelineCache,
         t: RationalTime,
         input: TextureRef<'_>,
         output: TextureRef<'_>,
@@ -230,7 +231,7 @@ impl FilterNode {
                 label: Some("motolii-nodes-filter"),
             });
         self.plugin
-            .render(gpu, &mut encoder, t, &self.params, input, output)?;
+            .render(gpu, pipelines, &mut encoder, t, &self.params, input, output)?;
         gpu.queue.submit([encoder.finish()]);
         Ok(())
     }
@@ -785,6 +786,7 @@ impl CompositePlugin for CompositeNode {
     fn render(
         &self,
         gpu: &GpuCtx,
+        _pipelines: &mut PipelineCache,
         encoder: &mut wgpu::CommandEncoder,
         t: RationalTime,
         _params: &ResolvedParams,

@@ -7,7 +7,7 @@ use motolii_core::{
     premultiply_rgba_f32, ColorSpace, CompCamera, FrameDesc, PixelFormat, Quality, RationalTime,
     TimeMap,
 };
-use motolii_gpu::{upload_rgba, GpuCtx};
+use motolii_gpu::{upload_rgba, GpuCtx, PipelineCache};
 use motolii_nodes::{create_rgba_render_target, CompositeNode, NodeError, OverlayNode, RectOverlay};
 use motolii_plugin::{
     LayerSourceContext, PluginError, PluginId, PluginRegistry, ResolvedParams, TextureRef,
@@ -159,6 +159,7 @@ pub struct RenderGraphInputs<'a> {
 pub struct RenderSession {
     overlay: OverlayNode,
     composite: CompositeNode,
+    pipelines: PipelineCache,
     transparent: Option<(FrameDesc, wgpu::Texture)>,
     targets_desc: Option<FrameDesc>,
     targets: Vec<wgpu::Texture>,
@@ -169,10 +170,19 @@ impl RenderSession {
         Self {
             overlay: OverlayNode::new(gpu),
             composite: CompositeNode::new(gpu),
+            pipelines: PipelineCache::new(),
             transparent: None,
             targets_desc: None,
             targets: Vec::new(),
         }
+    }
+
+    pub fn pipeline_cache(&self) -> &PipelineCache {
+        &self.pipelines
+    }
+
+    pub fn pipeline_cache_mut(&mut self) -> &mut PipelineCache {
+        &mut self.pipelines
     }
 
     fn transparent_texture(&mut self, gpu: &GpuCtx, desc: FrameDesc) -> &wgpu::Texture {
@@ -363,6 +373,7 @@ pub fn render_graph_cached(
                     params,
                     plugin_inputs,
                     gpu,
+                    &mut session.pipelines,
                     &mut encoder,
                     timeline_time,
                     &textures,
@@ -631,6 +642,7 @@ fn dispatch_plugin(
     params: &ResolvedParams,
     plugin_inputs: &[TextureId],
     gpu: &GpuCtx,
+    pipelines: &mut PipelineCache,
     encoder: &mut wgpu::CommandEncoder,
     timeline_time: RationalTime,
     textures: &[Option<wgpu::Texture>],
@@ -647,7 +659,7 @@ fn dispatch_plugin(
             });
         }
         let input = texture_ref(textures, desc, plugin_inputs[0])?;
-        filter.render(gpu, encoder, timeline_time, params, input, output)?;
+        filter.render(gpu, pipelines, encoder, timeline_time, params, input, output)?;
         return Ok(());
     }
 
@@ -668,7 +680,15 @@ fn dispatch_plugin(
             .iter()
             .map(|input| texture_ref(textures, desc, *input))
             .collect();
-        composite.render(gpu, encoder, timeline_time, params, &input_refs?, output)?;
+        composite.render(
+            gpu,
+            pipelines,
+            encoder,
+            timeline_time,
+            params,
+            &input_refs?,
+            output,
+        )?;
         return Ok(());
     }
 
@@ -682,6 +702,7 @@ fn dispatch_plugin(
         }
         layer.render(
             gpu,
+            pipelines,
             encoder,
             timeline_time,
             params,
@@ -912,6 +933,85 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn tint_filter_uses_pipeline_cache_without_recompile() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let desc = FrameDesc::packed(16, 8, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let mut registry = PluginRegistry::new();
+        register_reference_plugins(&mut registry).unwrap();
+
+        let mut params = ResolvedParams::new();
+        // 白(1,1,1,1) × tint(0.5, 0, 0, 1) → 暗い赤
+        params.insert("color", Value::Color([0.5, 0.0, 0.0, 1.0]));
+
+        let graph = LinearRenderGraph {
+            desc,
+            steps: vec![
+                RenderStep::SolidSource {
+                    output: TextureId(0),
+                    source: SolidSource {
+                        color: [1.0, 1.0, 1.0, 1.0],
+                        time_map: TimeMap::identity(),
+                        reports_source_time: true,
+                    },
+                },
+                RenderStep::Plugin {
+                    id: PluginId("core.filter.tint"),
+                    params: params.clone(),
+                    inputs: vec![TextureId(0)],
+                    output: TextureId(1),
+                },
+            ],
+            output: TextureId(1),
+        };
+
+        let mut session = RenderSession::new(&gpu);
+        let inputs = RenderGraphInputs {
+            plugins: Some(&registry),
+            ..RenderGraphInputs::default()
+        };
+
+        let rendered = render_graph_cached(
+            &gpu,
+            &mut session,
+            RationalTime::ZERO,
+            &graph,
+            &inputs,
+            Quality::FINAL,
+        )
+        .unwrap();
+        assert_eq!(session.pipeline_cache().misses(), 1);
+        assert_eq!(session.pipeline_cache().hits(), 0);
+
+        let _ = render_graph_cached(
+            &gpu,
+            &mut session,
+            RationalTime::ZERO,
+            &graph,
+            &inputs,
+            Quality::FINAL,
+        )
+        .unwrap();
+        assert_eq!(session.pipeline_cache().misses(), 1);
+        assert_eq!(session.pipeline_cache().hits(), 1);
+
+        let actual = download_rgba(&gpu, &rendered.texture).unwrap();
+        let mut expected = vec![0u8; desc.data_size()];
+        for px in expected.chunks_exact_mut(4) {
+            px.copy_from_slice(&[128, 0, 0, 255]);
+        }
+        assert_rgba_close(
+            "plugin-tint-pipeline-cache",
+            RgbaImageDesc {
+                width: desc.width,
+                height: desc.height,
+            },
+            &actual,
+            &expected,
+            1,
+        );
     }
 
     #[test]

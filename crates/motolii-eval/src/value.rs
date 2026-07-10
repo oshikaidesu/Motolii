@@ -8,6 +8,8 @@ pub enum Value {
     Vec3([f64; 3]),
     /// RGBA(リニア、0.0-1.0想定)
     Color([f64; 4]),
+    /// アセットID参照(F-10予約。補間なし。結線はM2 D1)。
+    AssetRef(String),
 }
 
 impl Value {

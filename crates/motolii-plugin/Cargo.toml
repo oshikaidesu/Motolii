@@ -8,5 +8,6 @@ license.workspace = true
 motolii-core.workspace = true
 motolii-eval.workspace = true
 motolii-gpu.workspace = true
+bytemuck = { version = "1", features = ["derive"] }
 thiserror.workspace = true
 wgpu.workspace = true

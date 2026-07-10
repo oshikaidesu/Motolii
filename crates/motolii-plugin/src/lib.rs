@@ -9,7 +9,7 @@ use std::sync::OnceLock;
 
 use motolii_core::{CompCamera, Fps, FrameDesc, RationalTime};
 use motolii_eval::{DataTrack, Value};
-use motolii_gpu::GpuCtx;
+use motolii_gpu::{GpuCtx, PipelineCache};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PluginId(pub &'static str);
@@ -36,6 +36,8 @@ pub enum ValueType {
     Vec2,
     Vec3,
     Color,
+    /// アセットID参照(F-10予約。実装結線はM2 D1)。
+    AssetRef,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -116,6 +118,7 @@ pub trait FilterPlugin: Send + Sync {
     fn render(
         &self,
         gpu: &GpuCtx,
+        pipelines: &mut PipelineCache,
         encoder: &mut wgpu::CommandEncoder,
         t: RationalTime,
         params: &ResolvedParams,
@@ -130,6 +133,7 @@ pub trait LayerSourcePlugin: Send + Sync {
     fn render(
         &self,
         gpu: &GpuCtx,
+        pipelines: &mut PipelineCache,
         encoder: &mut wgpu::CommandEncoder,
         t: RationalTime,
         params: &ResolvedParams,
@@ -154,6 +158,7 @@ pub trait CompositePlugin: Send + Sync {
     fn render(
         &self,
         gpu: &GpuCtx,
+        pipelines: &mut PipelineCache,
         encoder: &mut wgpu::CommandEncoder,
         t: RationalTime,
         params: &ResolvedParams,
@@ -307,6 +312,7 @@ pub mod reference {
     use super::*;
 
     pub static CLEAR_FILTER: ClearFilter = ClearFilter;
+    pub static TINT_FILTER: TintFilter = TintFilter;
     pub static CLEAR_LAYER_SOURCE: ClearLayerSource = ClearLayerSource;
     pub static SINE_PARAM_DRIVER: SineParamDriver = SineParamDriver;
     pub static CLEAR_COMPOSITE: ClearComposite = ClearComposite;
@@ -314,6 +320,7 @@ pub mod reference {
     pub fn register_reference_plugins(registry: &mut PluginRegistry) -> Result<(), PluginError> {
         registry.register_layer_source(&CLEAR_LAYER_SOURCE)?;
         registry.register_filter(&CLEAR_FILTER)?;
+        registry.register_filter(&TINT_FILTER)?;
         registry.register_param_driver(&SINE_PARAM_DRIVER)?;
         registry.register_composite(&CLEAR_COMPOSITE)?;
         Ok(())
@@ -329,6 +336,7 @@ pub mod reference {
         fn render(
             &self,
             _gpu: &GpuCtx,
+            _pipelines: &mut PipelineCache,
             encoder: &mut wgpu::CommandEncoder,
             _t: RationalTime,
             params: &ResolvedParams,
@@ -336,6 +344,94 @@ pub mod reference {
             output: TextureRef<'_>,
         ) -> Result<(), PluginError> {
             clear_texture(encoder, output, color_from_params(params));
+            Ok(())
+        }
+    }
+
+    /// PipelineCache実証用の実Filter(所見2/F-10)。入力をcolorで乗算する。
+    pub struct TintFilter;
+
+    impl FilterPlugin for TintFilter {
+        fn desc(&self) -> &NodeDesc {
+            tint_filter_desc()
+        }
+
+        fn render(
+            &self,
+            gpu: &GpuCtx,
+            pipelines: &mut PipelineCache,
+            encoder: &mut wgpu::CommandEncoder,
+            _t: RationalTime,
+            params: &ResolvedParams,
+            input: TextureRef<'_>,
+            output: TextureRef<'_>,
+        ) -> Result<(), PluginError> {
+            use motolii_gpu::PipelineCacheKey;
+            use wgpu::util::DeviceExt;
+
+            let cached = pipelines.get_or_create_tex_sample_uniform4(
+                gpu,
+                PipelineCacheKey {
+                    id: "core.filter.tint",
+                    wgsl: TINT_WGSL,
+                },
+            );
+            let color = match params.get("color") {
+                Some(Value::Color([r, g, b, a])) => [*r as f32, *g as f32, *b as f32, *a as f32],
+                _ => [1.0, 1.0, 1.0, 1.0],
+            };
+            let uniform_buffer = gpu
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("core.filter.tint.uniform"),
+                    contents: bytemuck::bytes_of(&color),
+                    usage: wgpu::BufferUsages::UNIFORM,
+                });
+            let input_view = input
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor::default());
+            let output_view = output
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor::default());
+            let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("core.filter.tint.bg"),
+                layout: &cached.bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&input_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&cached.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: uniform_buffer.as_entire_binding(),
+                    },
+                ],
+            });
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("core.filter.tint.pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &output_view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    multiview_mask: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                pass.set_pipeline(&cached.pipeline);
+                pass.set_bind_group(0, &bind_group, &[]);
+                pass.draw(0..3, 0..1);
+            }
             Ok(())
         }
     }
@@ -350,6 +446,7 @@ pub mod reference {
         fn render(
             &self,
             _gpu: &GpuCtx,
+            _pipelines: &mut PipelineCache,
             encoder: &mut wgpu::CommandEncoder,
             _t: RationalTime,
             params: &ResolvedParams,
@@ -372,6 +469,7 @@ pub mod reference {
         fn render(
             &self,
             _gpu: &GpuCtx,
+            _pipelines: &mut PipelineCache,
             encoder: &mut wgpu::CommandEncoder,
             _t: RationalTime,
             params: &ResolvedParams,
@@ -426,6 +524,58 @@ pub mod reference {
             max_inputs: 1,
         })
     }
+
+    fn tint_filter_desc() -> &'static NodeDesc {
+        static DESC: OnceLock<NodeDesc> = OnceLock::new();
+        DESC.get_or_init(|| NodeDesc {
+            id: PluginId("core.filter.tint"),
+            version: 1,
+            display_name: "Tint",
+            category: "Color",
+            tags: &["tint", "color", "reference"],
+            params: vec![ParamDef {
+                id: "color",
+                value_type: ValueType::Color,
+                default: Value::Color([1.0, 1.0, 1.0, 1.0]),
+            }],
+            min_inputs: 1,
+            max_inputs: 1,
+        })
+    }
+
+    const TINT_WGSL: &str = r#"
+struct TintUniform {
+    color: vec4<f32>,
+};
+
+@group(0) @binding(0) var input_tex: texture_2d<f32>;
+@group(0) @binding(1) var tex_sampler: sampler;
+@group(0) @binding(2) var<uniform> tint: TintUniform;
+
+struct VsOut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+@vertex
+fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VsOut {
+    var positions = array<vec2<f32>, 3>(
+        vec2<f32>(-1.0, -3.0),
+        vec2<f32>(-1.0, 1.0),
+        vec2<f32>(3.0, 1.0)
+    );
+    let p = positions[vertex_index];
+    var out: VsOut;
+    out.pos = vec4<f32>(p, 0.0, 1.0);
+    out.uv = p * vec2<f32>(0.5, -0.5) + vec2<f32>(0.5, 0.5);
+    return out;
+}
+
+@fragment
+fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
+    return textureSample(input_tex, tex_sampler, in.uv) * tint.color;
+}
+"#;
 
     fn clear_layer_source_desc() -> &'static NodeDesc {
         static DESC: OnceLock<NodeDesc> = OnceLock::new();
@@ -548,7 +698,7 @@ mod tests {
         register_reference_plugins(&mut registry).unwrap();
 
         assert_eq!(registry.len(PluginKind::LayerSource), 1);
-        assert_eq!(registry.len(PluginKind::Filter), 1);
+        assert_eq!(registry.len(PluginKind::Filter), 2);
         assert_eq!(registry.len(PluginKind::ParamDriver), 1);
         assert_eq!(registry.len(PluginKind::Composite), 1);
         assert!(registry

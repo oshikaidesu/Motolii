@@ -1,7 +1,7 @@
 # プラグインのリソースライフサイクルとアセット境界
 
 作成日: 2026-07-10
-ステータス: **ドラフト(凍結ゲートで確定)**。ただし「決めないままM2並列化に入らない」こと自体は確定(F-10)。
+ステータス: **ドラフト(凍結ゲートで確定)**。PipelineCache最小実装+TintFilter実証はコード化済み(2026-07-10)。ただし「決めないままM2並列化に入らない」こと自体は確定(F-10)。
 関連: [plugin-authoring.md](plugin-authoring.md)(作者契約)、[pitfalls-and-roadmap.md](pitfalls-and-roadmap.md) F-10/G-1、[memory-model.md](memory-model.md)(VRAM予算)、[concept.md](concept.md)
 
 ## 1. 問題(なぜこの文書が要るか)

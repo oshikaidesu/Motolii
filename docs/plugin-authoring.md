@@ -59,7 +59,7 @@
 ```rust
 use motolii_plugin::{FilterPlugin, NodeDesc, PluginError, PluginId, ResolvedParams, TextureRef, ValueType};
 use motolii_core::RationalTime;
-use motolii_gpu::GpuCtx;
+use motolii_gpu::{GpuCtx, PipelineCache};
 
 pub struct MyGlow;
 
@@ -72,6 +72,7 @@ impl FilterPlugin for MyGlow {
     fn render(
         &self,
         gpu: &GpuCtx,
+        pipelines: &mut PipelineCache,
         encoder: &mut wgpu::CommandEncoder,
         t: RationalTime,
         params: &ResolvedParams,
@@ -79,8 +80,9 @@ impl FilterPlugin for MyGlow {
         output: TextureRef<'_>,
     ) -> Result<(), PluginError> {
         // wgpu/WGSLのみ。CUDA等は書かない。
+        // パイプラインは pipelines.get_or_create_* でホストから借りる(所有しない)。
         // 出力は t + params + input だけで決める。
-        let _ = (gpu, encoder, t, params, input, output);
+        let _ = (gpu, pipelines, encoder, t, params, input, output);
         Err(PluginError::Render("unimplemented".into()))
     }
 }
@@ -113,6 +115,5 @@ ParamDriverは`build_track`で`DataTrack`を返すだけ。ピクセルに触ら
 - 評価コンテキストのインスタンスインデックス`(i, count)`(F-7、口の予約のみ)
 - サムネイル画像フィールド(F-8、口だけ将来)
 - ハンドルID化(A-3: 現状は`&wgpu::Texture`直渡し。内部更新閉じ込めは後続)
-- **ホスト所有PipelineCache / GpuAssetCache**(F-10、[plugin-resources.md](plugin-resources.md))。決まるまで「パイプラインを持つプラグイン」は書けない(§3-3と§3-6が両立しないため)。凍結ゲート待ち
-- **Importer種別・`ValueType::AssetRef`**(F-10)。ファイルを食うプラグインはこの口の凍結後
+- **ホスト所有PipelineCache / GpuAssetCache**(F-10、[plugin-resources.md](plugin-resources.md))。パイプラインは`PipelineCache`経由で借りる(所有しない)。`ValueType::AssetRef`は予約済み。GpuAssetCache結線はM2
 - **時間参照 `CompLookbehind`**(F-11、[plugin-resources.md](plugin-resources.md)§6)。「合体結果の前フレーム」(残像・フィードバック)はホストが渡す口の凍結待ち。**前フレームを`&self`に覚えて自作するのは§3-3違反で恒久却下** — 現時点で書けるのは現在フレームのみの空間グリッチまで

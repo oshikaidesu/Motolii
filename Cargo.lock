@@ -575,6 +575,7 @@ dependencies = [
 name = "motolii-plugin"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "motolii-core",
  "motolii-eval",
  "motolii-gpu",

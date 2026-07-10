@@ -10,12 +10,11 @@
   `RenderStep::Plugin { id, params, inputs, output }` を追加。実行器が `PluginRegistry` 経由で Filter/Composite/LayerSource をディスパッチ。ゴールデン `plugin_filter_dispatches_via_registry_golden` で参照 ClearFilter がレジストリ経由で通ることを確認。所見5(by-name全種別)も同時対応。
   修正方針: `RenderStep::Plugin { id, params, inputs, output }`相当の一般ステップを追加し、参照Filterがレジストリ経由でグラフ内から呼ばれるゴールデンを1本通す。[plugin-resources.md](../plugin-resources.md)§5-1。
 
-- [ ] **2. 純関数契約とリソース生成禁止の両立機構がない** — `crates/motolii-plugin/src/lib.rs:113`
-  「`&self`に状態を持つな」+「GPUリソースを毎フレーム作るな」を同時に守る手段がプラグインに存在しない(参照プラグインがClear系だから露呈していないだけ。コア側はRenderSessionで解決済み)。パイプラインを持つ普通のFilterを書いた瞬間に踏む。R1所見4(毎フレームのパイプライン再生成)のプラグイン版が構造的に不可避。
+- [x] **2. 純関数契約とリソース生成禁止の両立機構がない** — `motolii-gpu::PipelineCache` + `TintFilter`(`core.filter.tint`)
+  `RenderSession`がホスト所有キャッシュを持ち、Filter render に`&mut PipelineCache`を渡す。ゴールデン `tint_filter_uses_pipeline_cache_without_recompile` で miss=1→hit=1 を確認。`ValueType::AssetRef`/`Value::AssetRef`も予約。
   修正方針: ホスト所有PipelineCache(+将来GpuAssetCache)。決定案は[plugin-resources.md](../plugin-resources.md)§3。
 
-- [ ] **3. アセット語彙がない(点群インポートの前提欠落)** — `crates/motolii-eval/src/value.rs:5`
-  `ValueType`/`Value`はF64/Vec2/Vec3/Colorのみ。ファイルパスもアセット参照も渡せず、「ファイルを食うプラグイン」が書けない。プラグイン間データはテクスチャとDataTrackの2語彙だけで、頂点バッファ等の非テクスチャ常駐データの居場所がない。後からの変種追加はparam互換(G-1)に波及する。
+- [x] **3. アセット語彙がない(点群インポートの前提欠落)** — `ValueType::AssetRef` / `Value::AssetRef(String)` を予約(所見2と同時)。Importer/GpuAssetCache結線はM2。
   修正方針: `ValueType::AssetRef`の予約+M2 D1のAsset一般化(opaque blob+type文字列)+Importer種別の契約定義。[plugin-resources.md](../plugin-resources.md)§3 D2/D3。
 
 ## 中(凍結の書き方で防げるもの)
