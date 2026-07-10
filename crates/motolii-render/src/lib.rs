@@ -672,7 +672,15 @@ fn dispatch_plugin(
                 got: plugin_inputs.len(),
             });
         }
-        let input = texture_ref(textures, desc, plugin_inputs[0])?;
+        // Filter契約は入力テクスチャ1枚。descが0を許しても [0] でpanicしない。
+        let Some(&input_id) = plugin_inputs.first() else {
+            return Err(RenderError::PluginInputCount {
+                id: id.0,
+                expected: ">=1 (filter needs a bound input)".into(),
+                got: 0,
+            });
+        };
+        let input = texture_ref(textures, desc, input_id)?;
         filter.render(gpu, pipelines, encoder, timeline_time, params, input, output)?;
         return Ok(());
     }
@@ -1033,6 +1041,78 @@ mod tests {
             &actual,
             &expected,
             1,
+        );
+    }
+
+    #[test]
+    fn filter_dispatch_empty_inputs_returns_error_not_panic() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        use motolii_gpu::PipelineCache;
+        use motolii_plugin::{FilterPlugin, NodeDesc, PluginError};
+        use std::sync::OnceLock;
+
+        struct ZeroMinFilter;
+        impl FilterPlugin for ZeroMinFilter {
+            fn desc(&self) -> &NodeDesc {
+                static DESC: OnceLock<NodeDesc> = OnceLock::new();
+                DESC.get_or_init(|| NodeDesc {
+                    id: PluginId("test.filter.zero_min"),
+                    version: 1,
+                    display_name: "ZeroMin",
+                    category: "Utility",
+                    tags: &[],
+                    params: vec![],
+                    min_inputs: 0,
+                    max_inputs: 0,
+                })
+            }
+
+            fn render(
+                &self,
+                _gpu: &GpuCtx,
+                _pipelines: &mut PipelineCache,
+                _encoder: &mut wgpu::CommandEncoder,
+                _t: RationalTime,
+                _params: &ResolvedParams,
+                _input: TextureRef<'_>,
+                _output: TextureRef<'_>,
+            ) -> Result<(), PluginError> {
+                Ok(())
+            }
+        }
+        static ZERO: ZeroMinFilter = ZeroMinFilter;
+
+        let mut registry = PluginRegistry::new();
+        registry.register_filter(&ZERO).unwrap();
+
+        let desc = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let graph = LinearRenderGraph {
+            desc,
+            steps: vec![RenderStep::Plugin {
+                id: PluginId("test.filter.zero_min"),
+                params: ResolvedParams::new(),
+                inputs: vec![],
+                output: TextureId(0),
+            }],
+            output: TextureId(0),
+        };
+
+        let err = render_graph_cached(
+            &gpu,
+            &mut RenderSession::new(&gpu),
+            RationalTime::ZERO,
+            &graph,
+            &RenderGraphInputs {
+                plugins: Some(&registry),
+                source_time: Some(RationalTime::ZERO),
+                ..RenderGraphInputs::default()
+            },
+            Quality::FINAL,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, RenderError::PluginInputCount { got: 0, .. }),
+            "expected PluginInputCount, got {err:?}"
         );
     }
 
