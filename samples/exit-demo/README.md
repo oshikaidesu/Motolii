@@ -4,6 +4,9 @@ The M1 "exit demo": a **2-layer composite** — a real video background + a rect
 sliding right with **easing (cubic-bezier ease-in-out)** — rendered to an mp4 from the CLI.
 No UI involved; this is the headless pipeline (decode → canonical-space overlay → composite → encode).
 
+A preview GIF for the README lives at [`docs/assets/exit_demo.gif`](../../docs/assets/exit_demo.gif)
+(regenerate from a local render with ffmpeg if you change the demo).
+
 `project.json` is a versioned project file: `input` (background video), `output` (mp4),
 and an `overlay` whose `center.x` is keyframed from `-0.35` to `+0.35` over 2 seconds with a
 `Bezier` ease. The rectangle is opaque red, `0.3 x 0.4` in canonical coordinates
