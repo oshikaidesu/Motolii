@@ -31,11 +31,18 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let bg = textureSample(background_tex, tex_sampler, in.uv);
     let fg = textureSample(foreground_tex, tex_sampler, in.uv);
 
+    // Add: Porter-Duff plus (fg+fg)。出力αは source-over ではない(AE/AM の加算ブレンドとは異なる)。
     if composite.mode == 1u {
         return clamp(fg + bg, vec4<f32>(0.0), vec4<f32>(1.0));
     }
+    // Multiply: separable blend。未被覆領域は各レイヤーを残し、αは source-over。
     if composite.mode == 2u {
-        return fg * bg;
+        let inv_fg_a = 1.0 - fg.a;
+        let inv_bg_a = 1.0 - bg.a;
+        return vec4<f32>(
+            fg.rgb * inv_bg_a + bg.rgb * inv_fg_a + fg.rgb * bg.rgb,
+            fg.a + bg.a * inv_fg_a
+        );
     }
 
     let inv_a = 1.0 - fg.a;

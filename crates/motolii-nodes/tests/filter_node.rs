@@ -394,6 +394,64 @@ fn composite_add_and_multiply_use_premultiplied_alpha() {
     }
 }
 
+#[test]
+fn composite_multiply_premul_edge_cases() {
+    let Some(gpu) = gpu_or_skip() else { return };
+    let desc = FrameDesc::packed(4, 3, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+
+    let cases = [
+        (
+            "fg-transparent",
+            [0u8, 200, 100, 255],
+            [0u8, 0, 0, 0],
+        ),
+        (
+            "opaque-both",
+            [200u8, 100, 50, 255],
+            [128u8, 64, 32, 255],
+        ),
+    ];
+
+    for (label, bg_px, fg_px) in cases {
+        let background_data = tiled(desc, bg_px);
+        let foreground_data = tiled(desc, fg_px);
+        let background = upload_rgba(&gpu, &desc, &background_data);
+        let foreground = upload_rgba(&gpu, &desc, &foreground_data);
+        let output = create_rgba_render_target(&gpu, desc, "composite-multiply-edge-output");
+
+        CompositeNode::with_mode(&gpu, CompositeMode::Multiply)
+            .render(
+                &gpu,
+                TextureRef {
+                    texture: &background,
+                    desc,
+                },
+                TextureRef {
+                    texture: &foreground,
+                    desc,
+                },
+                TextureRef {
+                    texture: &output,
+                    desc,
+                },
+            )
+            .unwrap();
+
+        let actual = download_rgba(&gpu, &output).unwrap();
+        let expected = tiled(desc, premul_multiply_u8(bg_px, fg_px));
+        assert_rgba_close(
+            &format!("composite-multiply-{label}"),
+            RgbaImageDesc {
+                width: desc.width,
+                height: desc.height,
+            },
+            &actual,
+            &expected,
+            1,
+        );
+    }
+}
+
 fn prefill_with_magenta(gpu: &GpuCtx, desc: FrameDesc, output: &wgpu::Texture) {
     let input = create_rgba_render_target(gpu, desc, "overlay-prefill-input");
     let mut pipelines = PipelineCache::new();
@@ -472,11 +530,13 @@ fn premul_add_u8(bg: [u8; 4], fg: [u8; 4]) -> [u8; 4] {
 fn premul_multiply_u8(bg: [u8; 4], fg: [u8; 4]) -> [u8; 4] {
     let bg = bg.map(|v| v as f64 / 255.0);
     let fg = fg.map(|v| v as f64 / 255.0);
+    let inv_fg_a = 1.0 - fg[3];
+    let inv_bg_a = 1.0 - bg[3];
     [
-        to_u8(fg[0] * bg[0]),
-        to_u8(fg[1] * bg[1]),
-        to_u8(fg[2] * bg[2]),
-        to_u8(fg[3] * bg[3]),
+        to_u8(fg[0] * inv_bg_a + bg[0] * inv_fg_a + fg[0] * bg[0]),
+        to_u8(fg[1] * inv_bg_a + bg[1] * inv_fg_a + fg[1] * bg[1]),
+        to_u8(fg[2] * inv_bg_a + bg[2] * inv_fg_a + fg[2] * bg[2]),
+        to_u8(fg[3] + bg[3] * inv_fg_a),
     ]
 }
 
