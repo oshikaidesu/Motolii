@@ -614,8 +614,12 @@ name = "motolii-testkit"
 version = "0.1.0"
 dependencies = [
  "image",
+ "motolii-core",
+ "motolii-eval",
  "motolii-gpu",
+ "motolii-plugin",
  "thiserror",
+ "wgpu",
 ]
 
 [[package]]
