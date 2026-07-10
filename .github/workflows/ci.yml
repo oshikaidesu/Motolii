@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install ffmpeg + software Vulkan (oc-media / oc-gpu tests)
+      - name: Install ffmpeg + software Vulkan (motoly-media / motoly-gpu tests)
         run: |
           # The runner's third-party Microsoft apt repo intermittently serves
           # an invalid InRelease, which makes `apt-get update` exit non-zero.

@@ -21,10 +21,10 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 ## 実装規約(2026-07-09 コードレビューの教訓より)
 
 - **公開APIで`assert!`/panicしない**。入力起因の失敗は型付き`Result`(thiserror)で返す(例: JSON経由の値が直接届く関数)
-- **ループ内でGPUリソースを作らない**。テクスチャ/バッファ/パイプライン/シェーダモジュールの生成はコンストラクタかループ外へ。再利用パターンは`oc-gpu::RgbaDownloader`と`oc-gpu::yuv::SizePool`を参照
+- **ループ内でGPUリソースを作らない**。テクスチャ/バッファ/パイプライン/シェーダモジュールの生成はコンストラクタかループ外へ。再利用パターンは`motoly-gpu::RgbaDownloader`と`motoly-gpu::yuv::SizePool`を参照
 - **`?`での早期returnが後始末を飛ばさないか確認**。特に`Encoder::finish()`(飛ばすとDropがffmpegをkillしmp4が壊れる)
 - **エラー型を文字列に潰さない**。`#[from]`/`#[error(transparent)]`で構造を保ち、呼び出し側がmatchできる形を維持
-- **テストヘルパーはoc-testkitへ**。`gpu_or_skip`等をテストファイル間でコピペしない
+- **テストヘルパーはmotoly-testkitへ**。`gpu_or_skip`等をテストファイル間でコピペしない
 - **コメントは日本語で「なぜ」だけ**書く(何をしているかはコードが語る)
 
 ## ワークフロー

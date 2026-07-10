@@ -11,4 +11,4 @@
 ## 同便追加
 
 - [x] **R4** — `ExternalTexture`→`VideoSource`リネーム、`linear_graph_with_video_source`
-- [x] **testkit集約** — `gpu_or_skip`/`tmp_dir`を`oc-testkit`へ
+- [x] **testkit集約** — `gpu_or_skip`/`tmp_dir`を`motoly-testkit`へ

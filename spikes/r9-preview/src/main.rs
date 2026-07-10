@@ -6,9 +6,9 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc};
 
-use oc_cli::prepare_project_export;
-use oc_gpu::{upload_rgba, GpuCtx, RgbaDownloader, YuvToRgba};
-use oc_render::RenderSession;
+use motoly_cli::prepare_project_export;
+use motoly_gpu::{upload_rgba, GpuCtx, RgbaDownloader, YuvToRgba};
+use motoly_render::RenderSession;
 use slint::wgpu_29::wgpu;
 
 slint::slint! {

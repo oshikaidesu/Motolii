@@ -22,12 +22,12 @@ ffmpeg -f lavfi -i testsrc2=size=1280x720:rate=30 -t 2 -pix_fmt yuv420p input.mp
 Then render:
 
 ```sh
-cargo run -p oc-cli -- export-project --project samples/exit-demo/project.json
+cargo run -p motoly-cli -- export-project --project samples/exit-demo/project.json
 ```
 
 The result `exit-demo.mp4` is the background clip with the eased rectangle composited on top.
 
-> The automated end-to-end golden for this demo lives in `crates/oc-cli/tests/exit_demo.rs`
+> The automated end-to-end golden for this demo lives in `crates/motoly-cli/tests/exit_demo.rs`
 > (generates a background clip, exports through the same path, then decodes the output and
 > verifies the background shows through and the rectangle lands at the eased positions at
 > start / mid / end). That test is the M1 exit-demo completion criterion.
