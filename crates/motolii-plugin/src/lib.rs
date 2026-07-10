@@ -195,10 +195,12 @@ impl PluginRegistry {
         &mut self,
         plugin: &'static dyn LayerSourcePlugin,
     ) -> Result<(), PluginError> {
+        let id = plugin.desc().id.clone();
+        self.ensure_id_free(&id)?;
         insert_unique(
             &mut self.layer_sources,
             PluginKind::LayerSource,
-            plugin.desc().id.clone(),
+            id,
             plugin,
         )
     }
@@ -207,22 +209,21 @@ impl PluginRegistry {
         &mut self,
         plugin: &'static dyn FilterPlugin,
     ) -> Result<(), PluginError> {
-        insert_unique(
-            &mut self.filters,
-            PluginKind::Filter,
-            plugin.desc().id.clone(),
-            plugin,
-        )
+        let id = plugin.desc().id.clone();
+        self.ensure_id_free(&id)?;
+        insert_unique(&mut self.filters, PluginKind::Filter, id, plugin)
     }
 
     pub fn register_param_driver(
         &mut self,
         plugin: &'static dyn ParamDriverPlugin,
     ) -> Result<(), PluginError> {
+        let id = plugin.desc().id.clone();
+        self.ensure_id_free(&id)?;
         insert_unique(
             &mut self.param_drivers,
             PluginKind::ParamDriver,
-            plugin.desc().id.clone(),
+            id,
             plugin,
         )
     }
@@ -231,12 +232,28 @@ impl PluginRegistry {
         &mut self,
         plugin: &'static dyn CompositePlugin,
     ) -> Result<(), PluginError> {
-        insert_unique(
-            &mut self.composites,
-            PluginKind::Composite,
-            plugin.desc().id.clone(),
-            plugin,
-        )
+        let id = plugin.desc().id.clone();
+        self.ensure_id_free(&id)?;
+        insert_unique(&mut self.composites, PluginKind::Composite, id, plugin)
+    }
+
+    /// 種別をまたいでも PluginId は一意(ディスパッチの曖昧さを排除)。
+    fn ensure_id_free(&self, id: &PluginId) -> Result<(), PluginError> {
+        let kind = if self.layer_sources.contains_key(id) {
+            Some(PluginKind::LayerSource)
+        } else if self.filters.contains_key(id) {
+            Some(PluginKind::Filter)
+        } else if self.param_drivers.contains_key(id) {
+            Some(PluginKind::ParamDriver)
+        } else if self.composites.contains_key(id) {
+            Some(PluginKind::Composite)
+        } else {
+            None
+        };
+        if let Some(kind) = kind {
+            return Err(PluginError::Duplicate { kind, id: id.0 });
+        }
+        Ok(())
     }
 
     pub fn filter(&self, id: &PluginId) -> Option<&'static dyn FilterPlugin> {
@@ -367,7 +384,6 @@ pub mod reference {
             output: TextureRef<'_>,
         ) -> Result<(), PluginError> {
             use motolii_gpu::PipelineCacheKey;
-            use wgpu::util::DeviceExt;
 
             let cached = pipelines.get_or_create_tex_sample_uniform4(
                 gpu,
@@ -376,23 +392,21 @@ pub mod reference {
                     wgsl: TINT_WGSL,
                 },
             );
+            // UI/APIのcolorはstraight。シェーダ側でunpremul→乗算→premulする。
             let color = match params.get("color") {
                 Some(Value::Color([r, g, b, a])) => [*r as f32, *g as f32, *b as f32, *a as f32],
                 _ => [1.0, 1.0, 1.0, 1.0],
             };
-            let uniform_buffer = gpu
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("core.filter.tint.uniform"),
-                    contents: bytemuck::bytes_of(&color),
-                    usage: wgpu::BufferUsages::UNIFORM,
-                });
+            gpu.queue
+                .write_buffer(&cached.uniform_buffer, 0, bytemuck::bytes_of(&color));
             let input_view = input
                 .texture
                 .create_view(&wgpu::TextureViewDescriptor::default());
             let output_view = output
                 .texture
                 .create_view(&wgpu::TextureViewDescriptor::default());
+            // bind group / view は入力テクスチャがフレームごとに差し替わるため都度生成
+            // (OverlayNodeと同じ。バッファ/パイプラインはキャッシュ済み)。
             let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("core.filter.tint.bg"),
                 layout: &cached.bind_group_layout,
@@ -407,7 +421,7 @@ pub mod reference {
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: uniform_buffer.as_entire_binding(),
+                        resource: cached.uniform_buffer.as_entire_binding(),
                     },
                 ],
             });
@@ -573,7 +587,11 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VsOut {
 
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
-    return textureSample(input_tex, tex_sampler, in.uv) * tint.color;
+    let tin = textureSample(input_tex, tex_sampler, in.uv);
+    let t = tint.color;
+    let out_a = tin.a * t.a;
+    let rgb = select(tin.rgb / max(tin.a, 1e-5), vec3<f32>(0.0), tin.a == 0.0) * t.rgb;
+    return vec4<f32>(rgb * out_a, out_a);
 }
 "#;
 
@@ -734,6 +752,54 @@ mod tests {
             PluginError::Duplicate {
                 kind: PluginKind::LayerSource,
                 id: "core.layer_source.clear"
+            }
+        ));
+    }
+
+    #[test]
+    fn registry_rejects_duplicate_across_kinds() {
+        let mut registry = PluginRegistry::new();
+        registry
+            .register_filter(&super::reference::CLEAR_FILTER)
+            .unwrap();
+
+        struct ClashComposite;
+        impl CompositePlugin for ClashComposite {
+            fn desc(&self) -> &NodeDesc {
+                static DESC: OnceLock<NodeDesc> = OnceLock::new();
+                DESC.get_or_init(|| NodeDesc {
+                    id: PluginId("core.filter.clear"),
+                    version: 1,
+                    display_name: "Clash",
+                    category: "Composite",
+                    tags: &[],
+                    params: vec![],
+                    min_inputs: 2,
+                    max_inputs: 2,
+                })
+            }
+
+            fn render(
+                &self,
+                _gpu: &GpuCtx,
+                _pipelines: &mut PipelineCache,
+                _encoder: &mut wgpu::CommandEncoder,
+                _t: RationalTime,
+                _params: &ResolvedParams,
+                _inputs: &[TextureRef<'_>],
+                _output: TextureRef<'_>,
+            ) -> Result<(), PluginError> {
+                Ok(())
+            }
+        }
+
+        static CLASH: ClashComposite = ClashComposite;
+        let err = registry.register_composite(&CLASH).unwrap_err();
+        assert!(matches!(
+            err,
+            PluginError::Duplicate {
+                kind: PluginKind::Filter,
+                id: "core.filter.clear"
             }
         ));
     }

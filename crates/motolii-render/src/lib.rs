@@ -120,6 +120,8 @@ pub enum RenderError {
     NonCompactTextureId(usize),
     #[error("render graph writes texture id {0} more than once")]
     DuplicateTextureWrite(usize),
+    #[error("render graph texture id {0} is written but never read (and is not graph output)")]
+    UnusedTextureWrite(usize),
     #[error("render graph Plugin step requires RenderGraphInputs.plugins")]
     MissingPluginRegistry,
     #[error("unknown render plugin id: {0}")]
@@ -472,6 +474,7 @@ fn validate_linear_graph(
 ) -> Result<GraphPlan, RenderError> {
     let texture_count = texture_slot_count(graph)?;
     let mut written = vec![false; texture_count];
+    let mut read = vec![false; texture_count];
     let mut source_time = None;
     let mut producer: Vec<Option<TexProducer>> = vec![None; texture_count];
     let mut overlay_count = 0usize;
@@ -500,6 +503,7 @@ fn validate_linear_graph(
                 }
             }
             RenderStep::OverlayRect { input, output, .. } => {
+                mark_read(*input, &mut read)?;
                 validate_input(*input, &written)?;
                 match producer.get(input.0).and_then(|p| *p) {
                     Some(TexProducer::Solid { transparent: true }) => {}
@@ -518,6 +522,8 @@ fn validate_linear_graph(
                 foreground,
                 output,
             } => {
+                mark_read(*background, &mut read)?;
+                mark_read(*foreground, &mut read)?;
                 validate_input(*background, &written)?;
                 validate_input(*foreground, &written)?;
                 match producer.get(foreground.0).and_then(|p| *p) {
@@ -549,6 +555,7 @@ fn validate_linear_graph(
                     return Err(RenderError::MissingPluginRegistry);
                 }
                 for input in plugin_inputs {
+                    mark_read(*input, &mut read)?;
                     validate_input(*input, &written)?;
                 }
                 validate_output(*output, &mut written)?;
@@ -558,10 +565,17 @@ fn validate_linear_graph(
         }
     }
 
+    mark_read(graph.output, &mut read)?;
     validate_input(graph.output, &written)?;
 
+    for (id, was_written) in written.iter().enumerate() {
+        if *was_written && !read[id] {
+            return Err(RenderError::UnusedTextureWrite(id));
+        }
+    }
+
     if has_plugin {
-        // Plugin経路は固定デモグラフ制約を外す。出力はいずれかのステップが書けていればよい。
+        // Plugin経路は固定デモグラフ制約を外す。未使用書き込み検査で誤配線は既に弾く。
         if producer.get(graph.output.0).and_then(|p| *p).is_none() {
             return Err(RenderError::MissingTexture(graph.output.0));
         }
@@ -722,6 +736,14 @@ fn validate_input(id: TextureId, written: &[bool]) -> Result<(), RenderError> {
         Some(true) => Ok(()),
         _ => Err(RenderError::MissingTexture(id.0)),
     }
+}
+
+fn mark_read(id: TextureId, read: &mut [bool]) -> Result<(), RenderError> {
+    let Some(slot) = read.get_mut(id.0) else {
+        return Err(RenderError::MissingTexture(id.0));
+    };
+    *slot = true;
+    Ok(())
 }
 
 fn validate_output(id: TextureId, written: &mut [bool]) -> Result<(), RenderError> {
@@ -1012,6 +1034,50 @@ mod tests {
             &expected,
             1,
         );
+    }
+
+    #[test]
+    fn plugin_graph_rejects_unused_texture_write() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let desc = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let mut registry = PluginRegistry::new();
+        register_reference_plugins(&mut registry).unwrap();
+
+        let graph = LinearRenderGraph {
+            desc,
+            steps: vec![
+                RenderStep::SolidSource {
+                    output: TextureId(0),
+                    source: SolidSource {
+                        color: [1.0, 0.0, 0.0, 1.0],
+                        time_map: TimeMap::identity(),
+                        reports_source_time: true,
+                    },
+                },
+                RenderStep::Plugin {
+                    id: PluginId("core.filter.clear"),
+                    params: ResolvedParams::new(),
+                    inputs: vec![TextureId(0)],
+                    output: TextureId(1),
+                },
+            ],
+            // plugin出力を捨てて入力側を返す誤配線
+            output: TextureId(0),
+        };
+
+        let err = render_graph_cached(
+            &gpu,
+            &mut RenderSession::new(&gpu),
+            RationalTime::ZERO,
+            &graph,
+            &RenderGraphInputs {
+                plugins: Some(&registry),
+                ..RenderGraphInputs::default()
+            },
+            Quality::FINAL,
+        )
+        .unwrap_err();
+        assert!(matches!(err, RenderError::UnusedTextureWrite(1)));
     }
 
     #[test]

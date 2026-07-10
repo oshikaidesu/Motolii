@@ -19,6 +19,8 @@ pub struct CachedTexSampleUniform4 {
     pub pipeline: wgpu::RenderPipeline,
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub sampler: wgpu::Sampler,
+    /// フレーム間で再利用。毎フレームは `queue.write_buffer` のみ。
+    pub uniform_buffer: wgpu::Buffer,
 }
 
 #[derive(Default)]
@@ -138,10 +140,17 @@ fn create_tex_sample_uniform4(gpu: &GpuCtx, key: &PipelineCacheKey) -> CachedTex
         min_filter: wgpu::FilterMode::Nearest,
         ..Default::default()
     });
+    let uniform_buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(key.id),
+        size: 16,
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
     CachedTexSampleUniform4 {
         pipeline,
         bind_group_layout,
         sampler,
+        uniform_buffer,
     }
 }
 
