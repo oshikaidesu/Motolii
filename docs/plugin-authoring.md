@@ -130,6 +130,7 @@ ParamDriverは`build_track`で`DataTrack`を返すだけ。ピクセルに触ら
 - [ ] `&self`にフレーム間状態が無い
 - [ ] 空間値が正準座標
 - [ ] 参照実装またはゴールデン/単体テストがある
+- [ ] **純関数**: 同じ`t`+入力で2回呼んでも同一出力(`motolii_testkit::purity::assert_filter_pure` / `assert_param_driver_pure`)
 - [ ] 表示名が「意図単位」になっている
 
 ## 8. まだ凍結していない口(触らない / 予約のみ)

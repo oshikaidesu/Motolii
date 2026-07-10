@@ -90,7 +90,7 @@ fn segment_u(a: RationalTime, b: RationalTime, t: RationalTime) -> f64 {
 
 /// 解析結果などの等間隔サンプル列。start位置からsample_rateで並ぶ。
 /// キーフレームと同じく「時刻→値」として評価できる(ParamSource::Dataから参照)。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DataTrack {
     pub start: RationalTime,
     pub sample_rate: Fps,

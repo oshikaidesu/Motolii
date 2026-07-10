@@ -72,6 +72,16 @@ pub enum TestkitError {
         #[source]
         source: image::ImageError,
     },
+    #[error("plugin purity violated ({label}): same t+inputs produced different outputs (hidden &self state?)")]
+    PurityViolation { label: String },
+    #[error("plugin render/build failed during purity check ({label}): {source}")]
+    PluginFailed {
+        label: String,
+        #[source]
+        source: motolii_plugin::PluginError,
+    },
+    #[error("GPU download failed during purity check: {0}")]
+    Gpu(#[from] motolii_gpu::GpuRuntimeError),
 }
 
 /// ゴールデン失敗時の差分PNG出力先。未設定ならアーティファクト保存は行わない。
@@ -285,6 +295,145 @@ pub fn tmp_dir(tag: &str) -> PathBuf {
     std::fs::create_dir_all(&dir).expect("tmp_dir: create_dir_all");
     dir
 }
+
+/// 純関数契約の検出器(INF-7f、plugin-authoring §3-3)。
+///
+/// 同じ時刻・入力で2回呼び、出力が一致することを要求する。
+/// `&self` に隠した可変状態があるとここで赤になる。
+pub mod purity {
+    use motolii_core::{FrameDesc, RationalTime};
+    use motolii_eval::DataTrack;
+    use motolii_gpu::{download_rgba, upload_rgba, GpuCtx, PipelineCache};
+    use motolii_plugin::{
+        FilterPlugin, ParamDriverContext, ParamDriverPlugin, ResolvedParams, TextureRef,
+    };
+
+    use super::{compare_rgba, RgbaImageDesc, TestkitError};
+
+    fn empty_target(gpu: &GpuCtx, desc: FrameDesc, label: &str) -> wgpu::Texture {
+        gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(label),
+            size: wgpu::Extent3d {
+                width: desc.width,
+                height: desc.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        })
+    }
+
+    /// Filter を同一 `(t, params, input)` で2回呼び、出力RGBAが一致することを要求する。
+    pub fn assert_filter_pure(
+        label: &str,
+        gpu: &GpuCtx,
+        filter: &dyn FilterPlugin,
+        t: RationalTime,
+        params: &ResolvedParams,
+        frame: FrameDesc,
+        input_rgba: &[u8],
+    ) -> Result<(), TestkitError> {
+        let input = upload_rgba(gpu, &frame, input_rgba);
+        let out_a = empty_target(gpu, frame, &format!("{label}-pure-a"));
+        let out_b = empty_target(gpu, frame, &format!("{label}-pure-b"));
+        let mut pipelines = PipelineCache::new();
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some(&format!("{label}-pure")),
+            });
+        let in_ref = TextureRef {
+            texture: &input,
+            desc: frame,
+        };
+        filter
+            .render(
+                gpu,
+                &mut pipelines,
+                &mut encoder,
+                t,
+                params,
+                in_ref,
+                TextureRef {
+                    texture: &out_a,
+                    desc: frame,
+                },
+            )
+            .map_err(|source| TestkitError::PluginFailed {
+                label: label.into(),
+                source,
+            })?;
+        filter
+            .render(
+                gpu,
+                &mut pipelines,
+                &mut encoder,
+                t,
+                params,
+                in_ref,
+                TextureRef {
+                    texture: &out_b,
+                    desc: frame,
+                },
+            )
+            .map_err(|source| TestkitError::PluginFailed {
+                label: label.into(),
+                source,
+            })?;
+        gpu.queue.submit(std::iter::once(encoder.finish()));
+
+        let a = download_rgba(gpu, &out_a)?;
+        let b = download_rgba(gpu, &out_b)?;
+        let img = RgbaImageDesc {
+            width: frame.width,
+            height: frame.height,
+        };
+        let diff = compare_rgba(img, &a, &b)?;
+        if diff.stats.max_abs_diff == 0 {
+            Ok(())
+        } else {
+            Err(TestkitError::PurityViolation {
+                label: label.into(),
+            })
+        }
+    }
+
+    /// ParamDriver を同一 context/params で2回呼び、DataTrack が一致することを要求する。
+    pub fn assert_param_driver_pure(
+        label: &str,
+        driver: &dyn ParamDriverPlugin,
+        ctx: ParamDriverContext,
+        params: &ResolvedParams,
+    ) -> Result<(), TestkitError> {
+        let a: DataTrack = driver
+            .build_track(ctx, params)
+            .map_err(|source| TestkitError::PluginFailed {
+                label: label.into(),
+                source,
+            })?;
+        let b = driver
+            .build_track(ctx, params)
+            .map_err(|source| TestkitError::PluginFailed {
+                label: label.into(),
+                source,
+            })?;
+        if a == b {
+            Ok(())
+        } else {
+            Err(TestkitError::PurityViolation {
+                label: label.into(),
+            })
+        }
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
