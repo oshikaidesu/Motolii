@@ -36,6 +36,7 @@
 - 音声出力: [cpal](https://github.com/RustAudio/cpal)(音声主クロック実装の土台)
 - WASMランタイム: [wasmtime](https://github.com/bytecodealliance/wasmtime)(5-1のWASMパラメータプラグイン、v2)
 - プラグインのクラッシュ隔離(設計思想の参考): **Bitwig Studio** — 別プロセスサンドボックス+5段階ホスティングモードで「1プラグインの異常が本体を落とさない/再生を止めない/自動再ロード」の模範(Abletonはネイティブ隔離なし=1個で全体が落ちる、が反面教師)。ただし音声バッファ前提でIPCが安いため、GPU(MB級・VRAM常駐)へは階層別に輸入する(concept.md「クラッシュ隔離を階層化」参照)
+- 「馬鹿正直にシミュレートしない」の先行実証(設計思想の参考、いずれもクローズド): **[Furikake](https://aescripts.com/furikake/)** — AEの軽量粒子プラグイン。物理を「重力/風=閉形式・乱流=ノイズ変位・バウンス=解析反射」の f(t) に畳める力だけに選定し、粒子間相互作用を持たないことで O(N)・マルチコア・MFR対応の"バカ軽さ"を成立させた(concept.md根本コンセプトの母数)。**Alight Motion** — バウンス/バネ/段階移動を物理シミュでなくパラメトリック補間型([Animation Easing Curves](https://support.alightmotion.com/hc/en-us/articles/10536934703889-Animation-Easing-Curves))に畳み、AEでは`valueAtTime`式が必須だった領域をGUI選択肢化(Interp設計に採用済み)
 - オープンプラグイン標準(設計思想の参考): [CLAP](https://github.com/free-audio/clap)(Bitwig+u-he、**MIT**、C-ABI、明快なスレッドモデル、プロセス外ホスティング対応、WASM版=WCLAPあり)。OFX/VSTと違いオープンで、我々のOSS思想と親和。そのまま採用ではなく境界設計の参考
 - dylib ABI: [abi_stable](https://github.com/rodrimati1992/abi_stable_crates) / stabby(動的ロード導入時=v2に評価)
 - 色管理: [OpenColorIO](https://github.com/AcademySoftwareFoundation/OpenColorIO)(BSD-3。v1は自前の最小色空間タグで済ませ、HDR対応時に検討。パイプラインをOCIO-shapedに保つ規律はperformance-model参照=F-5)
