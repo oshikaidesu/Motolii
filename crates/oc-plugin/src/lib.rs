@@ -26,6 +26,9 @@ pub enum PluginKind {
     ParamDriver,
     /// 複数テクスチャ入力を合成して1テクスチャへ書く。
     Composite,
+    /// 予約: 逐次状態シミュレーション(布・液体・パーティクル)。
+    /// 状態はホストが所有しStateTrackへベイクする。設計はdocs/simulation-model.md、実装はv1.x。
+    Simulation,
     /// 予約: v2以降の型付き式/WASM。
     ScriptWasm,
 }
@@ -253,7 +256,7 @@ impl PluginRegistry {
             PluginKind::Filter => self.filters.len(),
             PluginKind::ParamDriver => self.param_drivers.len(),
             PluginKind::Composite => self.composites.len(),
-            PluginKind::Input | PluginKind::ScriptWasm => 0,
+            PluginKind::Input | PluginKind::Simulation | PluginKind::ScriptWasm => 0,
         }
     }
 }
