@@ -8,3 +8,14 @@ pub const EXACT: u8 = 0;
 
 /// lavapipe等のGPUラスタライズで±1が出うる比較。
 pub const GPU_RASTER: u8 = 1;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn constants_match_documented_values() {
+        assert_eq!(EXACT, 0);
+        assert_eq!(GPU_RASTER, 1);
+    }
+}

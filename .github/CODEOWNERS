@@ -1,6 +1,12 @@
 # M2E-2: テスト資産の不可侵化。
 # 保護領域への変更はコードオーナー承認が必須(ruleset/branch protectionで承認強制を有効化すること)。
 # CODEOWNERS単体ではマージを止めない — GitHub ruleset側の設定が完了条件①。
+#
+# ruleset 手順(マージ前に人手で1回):
+#   Settings → Rules → Rulesets → New branch ruleset
+#   - Target: default branch (main)
+#   - Require a pull request before merging → Require review from Code Owners
+#   - 既存の branch protection と重複しないよう確認
 
 crates/motolii-testkit/golden/** @oshikaidesu
 crates/motolii-testkit/src/cpu_reference/** @oshikaidesu

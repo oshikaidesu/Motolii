@@ -203,8 +203,3 @@ fn protected_diff_gate_allows_ordinary_tdd_tests_with_src() {
     assert!(ok, "expected ok for TDD (src+tests): {msg}");
 }
 
-#[test]
-fn tol_constants_exist_in_protected_module() {
-    assert_eq!(motolii_testkit::tol::EXACT, 0);
-    assert_eq!(motolii_testkit::tol::GPU_RASTER, 1);
-}
