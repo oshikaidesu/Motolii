@@ -1236,7 +1236,7 @@ mod tests {
         register_reference_plugins(&mut registry).unwrap();
 
         let mut clear_params = ResolvedParams::new();
-        clear_params.insert("color", Value::Color([0.0, 1.0, 0.0, 1.0]));
+        clear_params.insert("color", Value::Color([1.0, 1.0, 1.0, 1.0]));
         let mut tint_blue = ResolvedParams::new();
         tint_blue.insert("color", Value::Color([0.0, 0.0, 1.0, 1.0]));
 
