@@ -412,12 +412,13 @@ pub mod purity {
         ctx: ParamDriverContext,
         params: &ResolvedParams,
     ) -> Result<(), TestkitError> {
-        let a: DataTrack = driver
-            .build_track(ctx, params)
-            .map_err(|source| TestkitError::PluginFailed {
-                label: label.into(),
-                source,
-            })?;
+        let a: DataTrack =
+            driver
+                .build_track(ctx, params)
+                .map_err(|source| TestkitError::PluginFailed {
+                    label: label.into(),
+                    source,
+                })?;
         let b = driver
             .build_track(ctx, params)
             .map_err(|source| TestkitError::PluginFailed {
@@ -433,7 +434,6 @@ pub mod purity {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {

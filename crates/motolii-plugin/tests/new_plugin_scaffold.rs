@@ -89,9 +89,8 @@ fn generator_desc_json_passes_validate_for_all_kinds() {
     for (kind, name) in cases {
         let scaffold = run_print_desc(kind, name);
         let desc = node_desc_from_scaffold(&scaffold);
-        validate_node_desc(plugin_kind(&scaffold.plugin_kind), &desc).unwrap_or_else(|e| {
-            panic!("{kind}/{name}: {e}")
-        });
+        validate_node_desc(plugin_kind(&scaffold.plugin_kind), &desc)
+            .unwrap_or_else(|e| panic!("{kind}/{name}: {e}"));
     }
 }
 
