@@ -5,7 +5,7 @@ use motolii_eval::Value;
 use motolii_gpu::{download_rgba, upload_rgba, PipelineCache};
 use motolii_plugin::reference::OPACITY_FILTER;
 use motolii_plugin::{FilterPlugin, ResolvedParams, TextureRef};
-use motolii_testkit::{assert_rgba_close, gpu_or_skip, RgbaImageDesc};
+use motolii_testkit::{assert_rgba_close, gpu_or_skip, tol, RgbaImageDesc};
 
 #[test]
 fn opacity_half_scales_premul_rgba() {
@@ -74,6 +74,6 @@ fn opacity_half_scales_premul_rgba() {
         },
         &actual,
         &expected,
-        1,
+        tol::GPU_RASTER,
     );
 }

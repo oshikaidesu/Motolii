@@ -5,7 +5,7 @@
 //!
 //! M2E-2保護領域(CODEOWNERS+diffゲート対象):
 //! - [`cpu_reference`] — CPU参照実装・期待値生成
-//! - [`tol`] — tolerance定数(呼び出し側の定数化はM2E-4)
+//! - [`tol`] — tolerance定数(呼び出しは定数経由・生リテラルは走査deny)
 //! - `golden/` — 参照PNG置き場(現状はREADMEのみ)
 
 pub mod cpu_reference;
@@ -58,7 +58,7 @@ pub enum TestkitError {
         expected: usize,
     },
     #[error(
-        "{label}: image diff exceeded tolerance: max={max} > {tolerance}, mean={mean:.3}, differing={differing}/{compared}"
+        "{label}: image diff exceeded tolerance: max={max} (limit {tolerance}), mean={mean:.3} (limit {mean_limit:.3}), differing={differing}/{compared}"
     )]
     ToleranceExceeded {
         label: String,
@@ -67,6 +67,7 @@ pub enum TestkitError {
         differing: usize,
         compared: usize,
         tolerance: u8,
+        mean_limit: f64,
     },
     #[error("failed to create artifact directory {path}: {source}")]
     CreateArtifactDir {
@@ -248,7 +249,9 @@ pub fn assert_rgba_close_with_artifacts(
     let diff =
         compare_rgba_labeled(label, desc, actual, expected).unwrap_or_else(|err| panic!("{err}"));
 
-    if diff.stats.max_abs_diff > tolerance {
+    // meanも見る: maxだけだと「全域±1」の色ずれがGPU_RASTERで通る(監査E-2)。
+    let mean_limit = tol::mean_limit(tolerance);
+    if diff.stats.max_abs_diff > tolerance || diff.stats.mean_abs_diff > mean_limit {
         if let Err(err) =
             write_golden_artifacts_if_configured(label, desc, actual, expected, &diff, artifact_dir)
         {
@@ -264,6 +267,7 @@ pub fn assert_rgba_close_with_artifacts(
                 differing: diff.stats.differing_bytes,
                 compared: diff.stats.compared_bytes,
                 tolerance,
+                mean_limit,
             }
         );
     }
@@ -659,7 +663,7 @@ mod tests {
         let expected = [0, 0, 0, 255];
 
         let panic = std::panic::catch_unwind(|| {
-            assert_rgba_close("broken-golden", desc, &actual, &expected, 0);
+            assert_rgba_close("broken-golden", desc, &actual, &expected, tol::EXACT);
         });
         assert!(panic.is_err());
 
@@ -673,5 +677,21 @@ mod tests {
             None => std::env::remove_var("OC_TESTKIT_ARTIFACT_DIR"),
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// max=1でも全画素が1ずれ(mean=1)なら mean 上限で落ちる(監査E-2)。
+    #[test]
+    fn assert_close_rejects_uniform_shift_via_mean_limit() {
+        let desc = RgbaImageDesc {
+            width: 2,
+            height: 1,
+        };
+        // 全バイトが+1 — maxはGPU_RASTER内だが mean=1.0 > GPU_RASTER_MEAN。
+        let actual = [11, 21, 31, 255, 41, 51, 61, 255];
+        let expected = [10, 20, 30, 255, 40, 50, 60, 255];
+        let panic = std::panic::catch_unwind(|| {
+            assert_rgba_close("uniform-shift", desc, &actual, &expected, tol::GPU_RASTER);
+        });
+        assert!(panic.is_err());
     }
 }

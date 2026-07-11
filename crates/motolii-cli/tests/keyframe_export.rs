@@ -4,7 +4,7 @@ use motolii_gpu::download_rgba;
 use motolii_nodes::{CanonicalSize, ParamRectOverlay};
 use motolii_render::{render_frame, RenderFrameRequest, SolidSource};
 use motolii_testkit::cpu_reference::expected_rect_frame;
-use motolii_testkit::{assert_rgba_close, gpu_or_skip, RgbaImageDesc};
+use motolii_testkit::{assert_rgba_close, gpu_or_skip, tol, RgbaImageDesc};
 
 const W: u32 = 32;
 const H: u32 = 24;
@@ -71,7 +71,7 @@ fn keyframed_overlay_matches_golden_at_start_mid_end() {
             },
             &actual,
             &expected,
-            1,
+            tol::GPU_RASTER,
         );
     }
 }

@@ -6,7 +6,7 @@
 use motolii_core::{ColorSpace, PixelFormat};
 use motolii_gpu::{download_rgba, solid_yuv420p, YuvToRgba};
 use motolii_testkit::cpu_reference::yuv_to_rgba_reference;
-use motolii_testkit::{assert_rgba_close, gpu_or_skip, RgbaImageDesc};
+use motolii_testkit::{assert_rgba_close, gpu_or_skip, tol, RgbaImageDesc};
 
 #[test]
 fn yuv_matches_reference_across_color_spaces() {
@@ -44,7 +44,7 @@ fn yuv_matches_reference_across_color_spaces() {
                 },
                 &gpu_out,
                 &reference,
-                1,
+                tol::GPU_RASTER,
             );
         }
     }

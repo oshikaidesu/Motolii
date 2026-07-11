@@ -1052,7 +1052,7 @@ mod tests {
     use motolii_nodes::{CanonicalPoint, CanonicalSize};
     use motolii_plugin::reference::register_reference_plugins;
     use motolii_testkit::cpu_reference::{expected_fixed_graph, premul_over_u8};
-    use motolii_testkit::{assert_rgba_close, gpu_or_skip, RgbaImageDesc};
+    use motolii_testkit::{assert_rgba_close, gpu_or_skip, tol, RgbaImageDesc};
 
     #[test]
     fn render_frame_runs_fixed_overlay_composite_graph() {
@@ -1074,7 +1074,7 @@ mod tests {
             },
             &actual,
             &expected,
-            1,
+            tol::GPU_RASTER,
         );
     }
 
@@ -1092,7 +1092,7 @@ mod tests {
             },
             &actual,
             &expected_fixed_graph(request.desc),
-            1,
+            tol::GPU_RASTER,
         );
     }
 
@@ -1140,7 +1140,7 @@ mod tests {
                     },
                     &graph_actual,
                     &direct_actual,
-                    0,
+                    tol::EXACT,
                 );
             }
         }
@@ -1221,7 +1221,7 @@ mod tests {
             },
             &actual,
             &expected,
-            1,
+            tol::GPU_RASTER,
         );
     }
 
@@ -1332,7 +1332,7 @@ mod tests {
             },
             &actual,
             &expected,
-            1,
+            tol::GPU_RASTER,
         );
     }
 
@@ -1536,7 +1536,7 @@ mod tests {
             },
             &actual,
             &expected,
-            0,
+            tol::EXACT,
         );
     }
 
@@ -1611,7 +1611,7 @@ mod tests {
             },
             &external_actual,
             &fixed_actual,
-            0,
+            tol::EXACT,
         );
     }
 
@@ -1886,7 +1886,7 @@ mod tests {
             },
             &actual,
             &expected,
-            1,
+            tol::GPU_RASTER,
         );
     }
 
