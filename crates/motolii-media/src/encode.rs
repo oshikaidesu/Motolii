@@ -1,10 +1,10 @@
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::Path;
 use std::process::{Child, ChildStdin, Command, Stdio};
 
 use motolii_core::{Fps, FrameDesc, PixelFormat};
 
-use crate::{MediaError, Result};
+use crate::{read_child_stderr, MediaError, Result};
 
 /// RGBAフレーム列をffmpegサイドカーへパイプしてmp4(H.264)に書き出すエンコーダ。
 /// 書き出しループ(motolii-export)とテストの土台。
@@ -18,12 +18,24 @@ impl Encoder {
     /// 出力先とフレーム仕様を指定してエンコーダを開く。
     /// `qp0`はほぼロスレス(検証・テスト用)。通常書き出しはfalse(crf 18)。
     pub fn open(out_path: impl AsRef<Path>, desc: &FrameDesc, fps: Fps, qp0: bool) -> Result<Self> {
+        Self::open_with_command("ffmpeg", out_path, desc, fps, qp0)
+    }
+
+    /// 実行ファイルパスを明示してエンコーダを開く(テスト用)。
+    #[doc(hidden)]
+    pub fn open_with_command(
+        program: impl AsRef<Path>,
+        out_path: impl AsRef<Path>,
+        desc: &FrameDesc,
+        fps: Fps,
+        qp0: bool,
+    ) -> Result<Self> {
         assert_eq!(
             desc.format,
             PixelFormat::Rgba8Unorm,
             "Encoder expects RGBA input"
         );
-        let mut cmd = Command::new("ffmpeg");
+        let mut cmd = Command::new(program.as_ref());
         cmd.args(["-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgba"])
             .args(["-s", &format!("{}x{}", desc.width, desc.height)])
             .args(["-r", &format!("{}/{}", fps.num, fps.den)])
@@ -77,12 +89,12 @@ impl Encoder {
     /// stdinを閉じてffmpegの完了を待つ。必ず呼ぶこと(Dropは強制終了する)。
     pub fn finish(mut self) -> Result<()> {
         drop(self.stdin.take());
+        let mut err = String::new();
+        if let Some(stderr) = self.child.stderr.as_mut() {
+            err = read_child_stderr(stderr)?;
+        }
         let status = self.child.wait()?;
         if !status.success() {
-            let mut err = String::new();
-            if let Some(stderr) = self.child.stderr.as_mut() {
-                let _ = stderr.read_to_string(&mut err);
-            }
             return Err(MediaError::Ffmpeg(err));
         }
         Ok(())
@@ -93,5 +105,54 @@ impl Drop for Encoder {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use motolii_core::ColorSpace;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    #[cfg(unix)]
+    #[test]
+    fn finish_drains_stderr_before_wait_without_deadlock() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir =
+            std::env::temp_dir().join(format!("motolii-media-stderr-flood-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let fake_ffmpeg = dir.join("fake-ffmpeg");
+        std::fs::write(
+            &fake_ffmpeg,
+            "#!/bin/sh\n\
+             cat >/dev/null\n\
+             i=0\n\
+             while [ \"$i\" -lt 20000 ]; do\n\
+               echo \"err $i\" 1>&2\n\
+               i=$((i+1))\n\
+             done\n\
+             exit 0\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&fake_ffmpeg, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let desc = FrameDesc::packed(4, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false);
+        let out = dir.join("out.mp4");
+        let mut enc =
+            Encoder::open_with_command(&fake_ffmpeg, &out, &desc, Fps::new(1, 1), true).unwrap();
+        enc.write_frame(&vec![0u8; desc.data_size()]).unwrap();
+
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(enc.finish());
+        });
+        match rx.recv_timeout(Duration::from_secs(5)) {
+            Ok(result) => result.expect("finish failed"),
+            Err(_) => panic!("finish deadlocked"),
+        }
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
