@@ -104,7 +104,7 @@ fn gpu_matches_swscale_on_nonuniform_pattern() {
     let reference = swscale_convert(&frame);
 
     let mut conv = YuvToRgba::new(&gpu);
-    let ours = download_rgba(&gpu, &conv.convert(&gpu, &frame)).unwrap();
+    let ours = download_rgba(&gpu, &conv.convert(&gpu, &frame).unwrap()).unwrap();
 
     // アルファはswscale出力も255のはずだが、比較はRGBのみで行う
     let mut sum = 0u64;

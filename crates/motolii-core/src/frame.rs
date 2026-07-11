@@ -64,6 +64,16 @@ pub struct FrameDesc {
     pub premultiplied: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum FrameDescError {
+    #[error("FrameDesc::packed: packed format required")]
+    PackedFormatRequired,
+    #[error("FrameDesc::yuv: yuv format required")]
+    YuvFormatRequired,
+    #[error("FrameDesc::yuv: 4:2:0 requires even dimensions")]
+    OddDimensions,
+}
+
 impl FrameDesc {
     /// パディングなし(stride = width * bpp)のパック系記述子を作る。
     pub fn packed(
@@ -73,34 +83,56 @@ impl FrameDesc {
         color_space: ColorSpace,
         premultiplied: bool,
     ) -> Self {
+        Self::try_packed(width, height, format, color_space, premultiplied)
+            .expect("FrameDesc::packed: invalid arguments")
+    }
+
+    pub fn try_packed(
+        width: u32,
+        height: u32,
+        format: PixelFormat,
+        color_space: ColorSpace,
+        premultiplied: bool,
+    ) -> Result<Self, FrameDescError> {
         let bpp = format
             .bytes_per_pixel()
-            .expect("FrameDesc::packed: packed format required");
-        Self {
+            .ok_or(FrameDescError::PackedFormatRequired)?;
+        Ok(Self {
             width,
             height,
             stride: width * bpp,
             format,
             color_space,
             premultiplied,
-        }
+        })
     }
 
     /// YUV系(タイトパッキング)の記述子を作る。4:2:0のため偶数サイズのみ。
     pub fn yuv(width: u32, height: u32, format: PixelFormat, color_space: ColorSpace) -> Self {
-        assert!(format.is_yuv(), "FrameDesc::yuv: yuv format required");
-        assert!(
-            width.is_multiple_of(2) && height.is_multiple_of(2),
-            "FrameDesc::yuv: 4:2:0 requires even dimensions"
-        );
-        Self {
+        Self::try_yuv(width, height, format, color_space)
+            .expect("FrameDesc::yuv: invalid arguments")
+    }
+
+    pub fn try_yuv(
+        width: u32,
+        height: u32,
+        format: PixelFormat,
+        color_space: ColorSpace,
+    ) -> Result<Self, FrameDescError> {
+        if !format.is_yuv() {
+            return Err(FrameDescError::YuvFormatRequired);
+        }
+        if !width.is_multiple_of(2) || !height.is_multiple_of(2) {
+            return Err(FrameDescError::OddDimensions);
+        }
+        Ok(Self {
             width,
             height,
             stride: width,
             format,
             color_space,
             premultiplied: false,
-        }
+        })
     }
 
     /// フレーム全体のバイト数。
@@ -283,6 +315,14 @@ mod tests {
             true,
         );
         assert!(!a.same_aspect_integer_scale(c));
+    }
+
+    #[test]
+    fn try_yuv_rejects_odd_dimensions() {
+        assert!(matches!(
+            FrameDesc::try_yuv(63, 48, PixelFormat::Yuv420p, ColorSpace::Rec709Limited),
+            Err(FrameDescError::OddDimensions)
+        ));
     }
 
     #[test]

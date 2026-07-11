@@ -28,6 +28,12 @@ pub enum MediaError {
     Io(#[from] std::io::Error),
     #[error("probe failed: {0}")]
     Probe(String),
+    #[error("invalid start frame: {0}")]
+    InvalidStartFrame(i64),
+    #[error("encoder expects RGBA input, got {0:?}")]
+    UnsupportedEncoderFormat(motolii_core::PixelFormat),
+    #[error("frame size mismatch: expected {expected} bytes, got {got}")]
+    FrameSizeMismatch { expected: usize, got: usize },
     #[error("ffmpeg failed: {0}")]
     Ffmpeg(String),
 }

@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 pub use bezier::cubic_bezier_ease;
-pub use track::{DataTrack, Interp, Keyframe, KeyframeTrack};
+pub use track::{DataTrack, Interp, Keyframe, KeyframeTrack, TrackError};
 pub use value::Value;
 
 use motolii_core::RationalTime;

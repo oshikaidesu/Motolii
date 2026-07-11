@@ -5,6 +5,14 @@ use motolii_core::{Fps, RationalTime};
 use crate::bezier::cubic_bezier_ease;
 use crate::value::Value;
 
+#[derive(Debug, Clone, thiserror::Error, PartialEq)]
+pub enum TrackError {
+    #[error("Bezier control point x1/x2 must be in [0,1], got x1={x1} x2={x2}")]
+    InvalidBezier { x1: f64, x2: f64 },
+    #[error("keyframes must be sorted by strictly increasing time without duplicates")]
+    UnsortedOrDuplicateKeys,
+}
+
 /// キーフレーム区間(このキーから次のキーまで)の補間方法。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Interp {
@@ -29,8 +37,24 @@ pub struct Keyframe {
 
 /// 時刻順にソートされたキーフレーム列。
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "KeyframeTrackDe")]
 pub struct KeyframeTrack {
     keys: Vec<Keyframe>,
+}
+
+#[derive(Deserialize)]
+struct KeyframeTrackDe {
+    keys: Vec<Keyframe>,
+}
+
+impl TryFrom<KeyframeTrackDe> for KeyframeTrack {
+    type Error = TrackError;
+
+    fn try_from(value: KeyframeTrackDe) -> Result<Self, Self::Error> {
+        let track = Self { keys: value.keys };
+        track.validate()?;
+        Ok(track)
+    }
 }
 
 impl KeyframeTrack {
@@ -48,6 +72,22 @@ impl KeyframeTrack {
 
     pub fn keys(&self) -> &[Keyframe] {
         &self.keys
+    }
+
+    pub fn validate(&self) -> Result<(), TrackError> {
+        for window in self.keys.windows(2) {
+            if window[0].t >= window[1].t {
+                return Err(TrackError::UnsortedOrDuplicateKeys);
+            }
+        }
+        for key in &self.keys {
+            if let Interp::Bezier { x1, x2, .. } = key.interp {
+                if !(0.0..=1.0).contains(&x1) || !(0.0..=1.0).contains(&x2) {
+                    return Err(TrackError::InvalidBezier { x1, x2 });
+                }
+            }
+        }
+        Ok(())
     }
 
     /// 時刻tでの値。範囲外は端の値でクランプ。キーが無い場合はF64(0.0)。
@@ -188,6 +228,41 @@ mod tests {
         // ease-in: 序盤は線形より遅い
         let early = tr.eval(RationalTime::new(1, 2)).as_f64().unwrap();
         assert!(early < 25.0);
+    }
+
+    #[test]
+    fn rejects_unsorted_keys_on_validate() {
+        let track = KeyframeTrack {
+            keys: vec![
+                key(RationalTime::from_seconds(2), 2.0, Interp::Linear),
+                key(RationalTime::from_seconds(1), 1.0, Interp::Linear),
+            ],
+        };
+        assert_eq!(track.validate(), Err(TrackError::UnsortedOrDuplicateKeys));
+    }
+
+    #[test]
+    fn rejects_invalid_bezier_on_validate() {
+        let track = KeyframeTrack {
+            keys: vec![
+                Keyframe {
+                    t: RationalTime::ZERO,
+                    value: Value::F64(0.0),
+                    interp: Interp::Bezier {
+                        x1: 1.5,
+                        y1: 0.0,
+                        x2: 0.5,
+                        y2: 1.0,
+                    },
+                },
+                key(RationalTime::from_seconds(1), 1.0, Interp::Linear),
+            ],
+        };
+        assert!(matches!(
+            track.validate(),
+            Err(TrackError::InvalidBezier { x1, x2 })
+            if (x1 - 1.5).abs() < f64::EPSILON && (x2 - 0.5).abs() < f64::EPSILON
+        ));
     }
 
     #[test]

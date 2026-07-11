@@ -26,15 +26,16 @@ pub struct FrameReader {
 impl FrameReader {
     /// `start_frame`から順方向に読むリーダーを開く。
     pub fn open(path: impl AsRef<Path>, info: &MediaInfo, start_frame: i64) -> Result<Self> {
-        assert!(start_frame >= 0, "start_frame must be >= 0");
-        // 生YUVで受ける。寸法はprobeが回転適用済み(autorotate後の出力と一致)。
-        // 4:2:0のため奇数寸法素材はv1スコープ外(FrameDesc::yuvがpanicで検出)。
-        let desc = FrameDesc::yuv(
+        if start_frame < 0 {
+            return Err(MediaError::InvalidStartFrame(start_frame));
+        }
+        let desc = FrameDesc::try_yuv(
             info.width,
             info.height,
             PixelFormat::Yuv420p,
             info.color_space,
-        );
+        )
+        .map_err(|e| MediaError::Probe(e.to_string()))?;
 
         let mut cmd = Command::new("ffmpeg");
         // autorotateはffmpegのバージョン/ビルドで既定挙動が揺れた歴史があるため
@@ -140,4 +141,28 @@ pub fn read_frame_at(
     reader
         .next_frame()?
         .ok_or_else(|| MediaError::Ffmpeg(format!("frame {frame_index} out of range")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use motolii_core::ColorSpace;
+
+    fn sample_info() -> MediaInfo {
+        MediaInfo {
+            width: 64,
+            height: 48,
+            fps: motolii_core::Fps::new(30, 1),
+            duration: None,
+            nb_frames: None,
+            color_space: ColorSpace::Rec709Limited,
+            rotation: 0,
+        }
+    }
+
+    #[test]
+    fn frame_reader_rejects_negative_start_frame() {
+        let result = FrameReader::open("missing.mp4", &sample_info(), -1);
+        assert!(matches!(result, Err(MediaError::InvalidStartFrame(-1))));
+    }
 }

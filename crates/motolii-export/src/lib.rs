@@ -52,6 +52,8 @@ pub enum ExportError {
     #[error(transparent)]
     Overlay(#[from] ParamOverlayError),
     #[error(transparent)]
+    Yuv(#[from] motolii_gpu::YuvError),
+    #[error(transparent)]
     TimeMap(#[from] motolii_core::TimeMapError),
 }
 
@@ -109,7 +111,7 @@ pub fn export_overlay_video(
 
         match (|| -> Result<(), ExportError> {
             let overlay = request.overlay.eval(frame.pts, &tracks)?;
-            let background = yuv.convert(gpu, &frame);
+            let background = yuv.convert(gpu, &frame)?;
             let rendered = render_frame_with_background_texture(
                 gpu,
                 &mut render_session,
