@@ -221,7 +221,7 @@ impl FilterNode {
         &self,
         gpu: &GpuCtx,
         pipelines: &mut PipelineCache,
-        t: RationalTime,
+        ctx: &RenderCtx,
         input: TextureRef<'_>,
         output: TextureRef<'_>,
     ) -> Result<(), NodeError> {
@@ -231,13 +231,11 @@ impl FilterNode {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("motolii-nodes-filter"),
             });
-        // ノード直呼びはプレビュー/検証用。Quality は FINAL(ホストの render_graph 経路とは別)。
-        let ctx = RenderCtx::new(t, motolii_core::Quality::FINAL);
         self.plugin.render(
             gpu,
             pipelines,
             &mut encoder,
-            &ctx,
+            ctx,
             &self.params,
             input,
             output,
