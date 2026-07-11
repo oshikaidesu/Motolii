@@ -12,11 +12,15 @@
 //! 4. タイムライン風のカスタムウィジェット操作(ドラッグでプレイヘッド移動)
 //!
 //! 実行: `cargo run` (開発主機で。GUIが必要)
+//!
+//! 構造証拠ダンプ(クラムシェル閉でも可):
+//! `S1_EVIDENCE_DIR=../../docs/spikes/s1-evidence S1_EVIDENCE_ONLY=1 cargo run`
 
+use std::path::PathBuf;
 use std::sync::mpsc;
 
 use motolii_core::ColorSpace;
-use motolii_gpu::{solid_yuv420p, GpuCtx, YuvToRgba};
+use motolii_gpu::{download_rgba, solid_yuv420p, GpuCtx, YuvToRgba};
 use slint::wgpu_29::wgpu;
 
 slint::slint! {
@@ -120,6 +124,72 @@ fn hsv(h: f32, s: f32, v: f32) -> (f32, f32, f32) {
     (r + m, g + m, b + m)
 }
 
+/// Manual共有デバイス上でYUV→RGBA→`Image::try_from`まで通し、PNGを残す。
+/// 画面キャプチャ不能時(クラムシェル閉等)の層1証拠用。
+fn dump_structural_evidence(
+    gpu: &GpuCtx,
+    out_dir: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    std::fs::create_dir_all(out_dir)?;
+    let mut conv = YuvToRgba::new(gpu);
+    let mut frames = Vec::new();
+    for (i, hue) in [0.0_f32, 120.0, 240.0].into_iter().enumerate() {
+        let (y, u, v) = hue_to_yuv709(hue);
+        let frame = solid_yuv420p(TEX_W, TEX_H, y, u, v, ColorSpace::Rec709Limited);
+        let texture = conv.convert(gpu, &frame);
+        // Slint埋め込み契約: try_fromが通ることがテクスチャusageの合否
+        let img = slint::Image::try_from(texture.clone())
+            .map_err(|e| format!("Image::try_from failed at hue={hue}: {e:?}"))?;
+        let _ = img; // 埋め込み成功の証拠は下のPNG+manifest
+        let rgba = download_rgba(gpu, &texture)?;
+        let path = out_dir.join(format!("struct-frame-{i:02}-hue{hue:.0}.png"));
+        image::save_buffer(
+            &path,
+            &rgba,
+            TEX_W,
+            TEX_H,
+            image::ColorType::Rgba8,
+        )?;
+        frames.push(serde_json::json!({
+            "path": path.file_name().and_then(|s| s.to_str()),
+            "hue": hue,
+            "width": TEX_W,
+            "height": TEX_H,
+            "image_try_from": "ok",
+        }));
+        eprintln!("evidence: wrote {}", path.display());
+    }
+    let adapter = gpu.adapter_info.as_ref().map(|i| {
+        serde_json::json!({
+            "name": i.name,
+            "backend": format!("{:?}", i.backend),
+            "device_type": format!("{:?}", i.device_type),
+        })
+    });
+    let manifest = serde_json::json!({
+        "ticket": "INF-1",
+        "layer": 1,
+        "captured_at": chrono_like_now(),
+        "manual_device": true,
+        "adapter": adapter,
+        "frames": frames,
+        "notes": "GPU download PNGs + Image::try_from. Window/IME screenshots need open display.",
+    });
+    let manifest_path = out_dir.join("struct-manifest.json");
+    std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest)?)?;
+    eprintln!("evidence: wrote {}", manifest_path.display());
+    Ok(())
+}
+
+fn chrono_like_now() -> String {
+    // 依存を増やさずISO風タイムスタンプ
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format!("unix:{secs}")
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // コンポジタ要件(feature/limit)を明示したデバイスを自前で生成し、
     // 同じデバイスをSlintに渡す(WGPUConfiguration::Manual)。
@@ -135,6 +205,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             queue: parts.queue,
         })
         .select()?;
+
+    if let Ok(dir) = std::env::var("S1_EVIDENCE_DIR") {
+        let out = PathBuf::from(&dir);
+        dump_structural_evidence(&gpu, &out)?;
+        if std::env::var_os("S1_EVIDENCE_ONLY").is_some() {
+            eprintln!("S1_EVIDENCE_ONLY set — exiting before GUI run");
+            // SlintバックエンドのTLS破棄順パニックを避ける
+            std::process::exit(0);
+        }
+    }
 
     let app = SpikeWindow::new()?;
 
