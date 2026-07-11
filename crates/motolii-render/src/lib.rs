@@ -254,7 +254,7 @@ impl RenderSession {
         for offset in 0..len {
             let idx = (pool.next + offset) % len;
             let candidate = &pool.buffers[idx];
-            if !avoid.iter().any(|tex| *tex == candidate) {
+            if !avoid.contains(&candidate) {
                 pool.next = (idx + 1) % len;
                 return candidate.clone();
             }
