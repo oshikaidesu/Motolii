@@ -14,18 +14,11 @@ use std::io::{Read, Write};
 use std::process::{Command, Stdio};
 
 use motolii_core::{ColorSpace, CpuFrame, FrameDesc, PixelFormat, RationalTime};
-use motolii_gpu::{download_rgba, GpuCtx, YuvToRgba};
+use motolii_gpu::{download_rgba, YuvToRgba};
+use motolii_testkit::{ffmpeg_or_skip, gpu_or_skip};
 
 const W: u32 = 64;
 const H: u32 = 64;
-
-fn ffmpeg_available() -> bool {
-    Command::new("ffmpeg")
-        .arg("-version")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
-}
 
 /// 非均一テストパターン: Y=水平グラデ+斜めエッジ、U=垂直グラデ、V=斜めグラデ
 fn make_pattern() -> CpuFrame {
@@ -91,14 +84,10 @@ fn swscale_convert(frame: &CpuFrame) -> Vec<u8> {
 
 #[test]
 fn gpu_matches_swscale_on_nonuniform_pattern() {
-    if !ffmpeg_available() {
-        eprintln!("SKIP: ffmpeg not found");
+    if !ffmpeg_or_skip() {
         return;
     }
-    let Ok(gpu) = GpuCtx::new_headless() else {
-        eprintln!("SKIP: no GPU adapter");
-        return;
-    };
+    let Some(gpu) = gpu_or_skip() else { return };
 
     let frame = make_pattern();
     let reference = swscale_convert(&frame);

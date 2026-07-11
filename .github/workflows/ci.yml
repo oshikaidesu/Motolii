@@ -6,6 +6,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # M2E-1: CIでは環境依存テスト(GPU/ffmpeg)の無音スキップを禁止する。
+  # 依存が欠けると gpu_or_skip がpanicし、カナリア(motolii-testkit/tests/
+  # skip_policy.rs)が赤になる。ローカル開発機ではこの変数を設定しない。
+  MOTOLII_REQUIRE_GPU: "1"
 
 jobs:
   test:

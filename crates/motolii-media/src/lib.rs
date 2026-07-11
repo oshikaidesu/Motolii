@@ -62,7 +62,10 @@ pub(crate) fn read_child_stderr(stderr: &mut impl Read) -> std::io::Result<Strin
     Ok(String::from_utf8_lossy(&out).into_owned())
 }
 
-/// ffmpeg/ffprobeがPATHにあるか。テストはこれがfalseならskipする。
+/// ffmpeg/ffprobeがPATHにあるか。アプリ起動時チェック(CLI)用。
+/// **テストでは使わないこと** — テストのスキップ判定は
+/// `motolii_testkit::ffmpeg_or_skip`を通す(M2E-1: 手書きスキップは
+/// REQUIRE環境のスキップ禁止を迂回するため走査denyの対象)。
 pub fn tools_available() -> bool {
     let ok = |bin: &str| {
         Command::new(bin)

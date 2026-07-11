@@ -441,9 +441,16 @@ mod tests {
 
     #[test]
     fn convert_rejects_unsupported_inputs_without_panicking() {
-        let Ok(gpu) = GpuCtx::new_headless() else {
-            eprintln!("SKIP: no GPU adapter");
-            return;
+        let gpu = match GpuCtx::new_headless() {
+            Ok(gpu) => gpu,
+            Err(e) => {
+                // M2E-1: REQUIRE環境では無音スキップせずpanicさせる。型に依存
+                // しないポリシー関数のみ使う(クレート内ユニットテストがtestkit
+                // からGpuCtxを受け取ると、libとして別コンパイルされた同名型に
+                // なり噛み合わないため)
+                motolii_testkit::unavailable_dep("GPU adapter", &e.to_string());
+                return;
+            }
         };
         let mut conv = YuvToRgba::new(&gpu);
         let bad_format = CpuFrame::new(

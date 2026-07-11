@@ -278,12 +278,144 @@ fn golden_artifact_paths(dir: &Path, label: &str) -> GoldenArtifacts {
     }
 }
 
+/// M2E-1: 環境依存テストの必須化フラグ。CIはこれを`1`に設定する。
+///
+/// 依存(GPU/ffmpeg)が欠けた環境では全テストが無音スキップで緑になり得る
+/// (監査P-4実測: Vulkan ICD無しで141テスト全緑・1.2秒)。エージェントの
+/// 自己検証が「実は何も検証していない」状態を、CIでは構造的に禁止する。
+pub const REQUIRE_DEPS_ENV: &str = "MOTOLII_REQUIRE_GPU";
+
+/// `MOTOLII_REQUIRE_GPU`の値の解釈(純関数)。
+///
+/// `"1"`のみ有効、未設定/`""`/`"0"`は無効。**それ以外の値はpanic** —
+/// `true`/`yes`等の誤設定を黙って「無効」に倒すと、「スキップ禁止の
+/// つもりが実は禁止されていない」という無音の保証消失になる(独立
+/// レビュー所見1: `=true`でffmpeg欠損テストが0.00秒緑になることを実証)。
+/// 本PRが潰す失敗モードそのものなので、誤設定は大声で落とす。
+pub fn parse_require_flag(value: Option<&str>) -> bool {
+    match value {
+        None | Some("") | Some("0") => false,
+        Some("1") => true,
+        Some(other) => panic!(
+            "{REQUIRE_DEPS_ENV} has unrecognized value {other:?}; \
+             use \"1\" to forbid skips, or \"0\"/unset to allow them"
+        ),
+    }
+}
+
+/// `MOTOLII_REQUIRE_GPU=1`が立っているか(=スキップ禁止環境か)。
+/// 変数名は歴史的に"GPU"だが、対象はGPUに限らず環境依存全般(ffmpeg/ffprobe
+/// 含む — const名`REQUIRE_DEPS_ENV`の方が正確な意味)。
+pub fn deps_required() -> bool {
+    let value = std::env::var(REQUIRE_DEPS_ENV).ok();
+    parse_require_flag(value.as_deref())
+}
+
+/// スキップ方針の判定結果。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkipDecision {
+    /// 依存が使える。テストを実行する。
+    Run,
+    /// 依存が無く、必須環境でもない(ローカル開発機)。スキップしてよい。
+    Skip,
+    /// 依存が無いのに必須環境。スキップは許されない(=panicさせる)。
+    Forbid,
+}
+
+/// スキップ方針の判定本体(M2E-1)。
+///
+/// 環境変数にも実GPUにも依存しない純関数として分離してあるため、
+/// 「必須環境で依存が無ければForbid」という負例を通常のCI環境の欠損に
+/// 依存せず単体テストできる(ゲート完了条件(a))。
+pub fn skip_decision(available: bool, required: bool) -> SkipDecision {
+    match (available, required) {
+        (true, _) => SkipDecision::Run,
+        (false, false) => SkipDecision::Skip,
+        (false, true) => SkipDecision::Forbid,
+    }
+}
+
+/// 判定の適用: `Run`→true、`Skip`→false、`Forbid`→panic(CIを赤にする)。
+pub fn apply_skip_decision(dep: &str, decision: SkipDecision, detail: &str) -> bool {
+    match decision {
+        SkipDecision::Run => true,
+        SkipDecision::Skip => {
+            eprintln!("SKIP: {dep} unavailable: {detail}");
+            false
+        }
+        SkipDecision::Forbid => panic!(
+            "{REQUIRE_DEPS_ENV}=1: {dep} unavailable but silent skip is forbidden \
+             in this environment (M2E-1): {detail}"
+        ),
+    }
+}
+
+/// 依存が使えないと判明した時点で呼ぶ共通経路: ローカルではスキップ(常にfalse)、
+/// `MOTOLII_REQUIRE_GPU=1`の環境ではpanic(M2E-1)。
+///
+/// 型に依存しないため、testkitが返す型と被試験クレート内の型が別物になる
+/// クレート内ユニットテスト(例: motolii-gpuのsrc内テスト)からも使える。
+pub fn unavailable_dep(dep: &str, detail: &str) -> bool {
+    apply_skip_decision(dep, skip_decision(false, deps_required()), detail)
+}
+
+/// 外部ツールの状態。「未導入」と「導入済みだが実行失敗」を区別する。
+#[derive(Debug)]
+pub enum ToolStatus {
+    /// 起動でき、正常終了した。
+    Ok,
+    /// PATH上に存在しない(未導入)。
+    NotInstalled,
+    /// 起動失敗または非0終了(導入されているが壊れている)。
+    Failed(String),
+}
+
+/// `<bin> -version`を実行してツールの状態を判定する。
+///
+/// 注: 壊れたshebangのラッパースクリプトはUnixでspawnがENOENTを返すため
+/// `NotInstalled`と誤ラベルされ得る(実行パスは同一でメッセージのみの差)。
+pub fn tool_status(bin: &str) -> ToolStatus {
+    match std::process::Command::new(bin).arg("-version").output() {
+        Ok(out) if out.status.success() => ToolStatus::Ok,
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let head = stderr.lines().next().unwrap_or("");
+            ToolStatus::Failed(if head.is_empty() {
+                format!("`{bin} -version` exited with {}", out.status)
+            } else {
+                format!("`{bin} -version` exited with {} — {head}", out.status)
+            })
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => ToolStatus::NotInstalled,
+        Err(e) => ToolStatus::Failed(format!("failed to spawn `{bin}`: {e}")),
+    }
+}
+
+/// ffmpeg/ffprobeが無い環境ではテストをスキップする(戻り値false)。
+/// ただし`MOTOLII_REQUIRE_GPU=1`の環境(CI)ではスキップせずpanicする(M2E-1)。
+///
+/// 手書きの`tools_available()+eprintln`スキップはこの関数へ置き換えること
+/// (手書きスキップはポリシーを迂回する — tests/skip_policy.rsの走査がdenyする)。
+pub fn ffmpeg_or_skip() -> bool {
+    for bin in ["ffmpeg", "ffprobe"] {
+        match tool_status(bin) {
+            ToolStatus::Ok => {}
+            ToolStatus::NotInstalled => {
+                return unavailable_dep(bin, "not found on PATH (not installed)");
+            }
+            ToolStatus::Failed(detail) => return unavailable_dep(bin, &detail),
+        }
+    }
+    true
+}
+
 /// lavapipe等が無い環境ではテストをスキップする。
+/// ただし`MOTOLII_REQUIRE_GPU=1`の環境(CI)ではスキップせずpanicする(M2E-1)。
 pub fn gpu_or_skip() -> Option<motolii_gpu::GpuCtx> {
     match motolii_gpu::GpuCtx::new_headless() {
         Ok(gpu) => Some(gpu),
         Err(e) => {
-            eprintln!("SKIP: no GPU adapter: {e}");
+            unavailable_dep("GPU adapter", &e.to_string());
             None
         }
     }

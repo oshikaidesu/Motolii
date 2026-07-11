@@ -1,0 +1,232 @@
+//! M2E-1: スキップ方針の負例テストと、CI環境の完全性を主張するカナリア。
+//!
+//! 判定ロジック(`skip_decision`/`apply_skip_decision`)は環境変数・実GPUに
+//! 依存しない純関数なので、「必須環境で依存が無ければ赤」を通常のCI環境の
+//! 欠損に依存せず検証できる(ゲート完了条件(a)の方式)。
+//!
+//! さらに、手書きスキップ(`eprintln!("SKIP...`)をソース走査でdenyする。
+//! 手書きスキップはポリシーを迂回する抜け道 — カナリアだけ成功して個別
+//! テストが無音スキップされる穴 — になるため、スキップは必ずtestkitの
+//! ヘルパー(`gpu_or_skip`/`ffmpeg_or_skip`/`unavailable_dep`)を通す。
+
+use std::fs;
+use std::path::Path;
+
+use motolii_testkit::{
+    apply_skip_decision, deps_required, parse_require_flag, skip_decision, tool_status,
+    SkipDecision, ToolStatus,
+};
+
+#[test]
+fn decision_matrix_covers_all_cases() {
+    // 依存あり → 必須かどうかに関わらず実行
+    assert_eq!(skip_decision(true, false), SkipDecision::Run);
+    assert_eq!(skip_decision(true, true), SkipDecision::Run);
+    // 依存なし+必須でない(ローカル) → スキップ許可
+    assert_eq!(skip_decision(false, false), SkipDecision::Skip);
+    // 依存なし+必須(CI) → スキップ禁止
+    assert_eq!(skip_decision(false, true), SkipDecision::Forbid);
+}
+
+#[test]
+fn apply_run_returns_true_and_skip_returns_false() {
+    assert!(apply_skip_decision("dep", SkipDecision::Run, ""));
+    assert!(!apply_skip_decision("dep", SkipDecision::Skip, "not found"));
+}
+
+/// 負例: Forbidはpanicする(=CIが赤になる)ことの直接検証。
+#[test]
+#[should_panic(expected = "silent skip is forbidden")]
+fn apply_forbid_panics() {
+    apply_skip_decision("GPU adapter", SkipDecision::Forbid, "no adapter");
+}
+
+/// 環境変数の解釈は厳格: 認識できる値だけを受け付ける。
+#[test]
+fn require_flag_parsing_is_strict() {
+    assert!(!parse_require_flag(None));
+    assert!(!parse_require_flag(Some("")));
+    assert!(!parse_require_flag(Some("0")));
+    assert!(parse_require_flag(Some("1")));
+}
+
+/// 負例(独立レビュー所見1): `=true`等の誤設定を黙って「無効」に倒すと
+/// 「スキップ禁止のつもりが実は禁止されていない」無音の保証消失になる。
+/// 認識しない値はpanicで大声で落ちることを検証。
+#[test]
+#[should_panic(expected = "unrecognized value")]
+fn require_flag_rejects_unrecognized_value() {
+    parse_require_flag(Some("true"));
+}
+
+/// カナリア: `MOTOLII_REQUIRE_GPU=1`の環境(CI)で、GPUとffmpeg/ffprobeが
+/// 実際に使えることを主張する。依存が欠けたCIイメージ(mesaインストール
+/// 失敗等)では、このテストが最初に赤になる番犬。
+///
+/// ローカル(環境変数なし)ではスキップ — 開発機にGPU/ffmpegを強制しない。
+/// ffmpeg/ffprobeは「未導入」と「導入済みだが実行失敗」を区別して報告する。
+#[test]
+fn ci_canary_gpu_and_ffmpeg_present() {
+    if !deps_required() {
+        eprintln!("SKIP: MOTOLII_REQUIRE_GPU is not set (local run)");
+        return;
+    }
+    motolii_gpu::GpuCtx::new_headless()
+        .expect("canary: GPU adapter must be available when MOTOLII_REQUIRE_GPU=1");
+    for bin in ["ffmpeg", "ffprobe"] {
+        match tool_status(bin) {
+            ToolStatus::Ok => {}
+            ToolStatus::NotInstalled => panic!(
+                "canary: {bin} is not installed (not on PATH) — \
+                 the CI image is missing the dependency"
+            ),
+            ToolStatus::Failed(detail) => panic!(
+                "canary: {bin} is installed but failed to run — \
+                 broken installation, not a missing one: {detail}"
+            ),
+        }
+    }
+}
+
+// --- 手書きスキップの走査deny ---
+
+/// 判定本体(文字列マッチ)。走査テストから分離して正例/負例を単体テスト可能に。
+///
+/// マッチ規則: 文字列リテラル`"SKIP`を含む非コメント行。
+/// - `eprintln!`との同一行ANDにしない理由: rustfmtが長いマクロ呼び出しを
+///   折り返すと`eprintln!(`と`"SKIP: ..."`が別行になり見逃す(実測でfmtは
+///   この折り返しを行う)。リテラル自体を対象にすれば折り返し行を拾える
+/// - マクロ名を限定しない理由: `println!`/`log::warn!`等での手書きスキップも
+///   同じ抜け道になるため、出力手段によらず「SKIPを印字する行為」を検出する
+/// - コメント行(`//`開始)は除外: ルールを説明するコメントを誤検出しない
+///
+/// **検出できない残余(限界の明文化)**: (a) 小文字`"skip`等の別表記
+/// (b) 何も印字しない無音return(`let Ok(_) = ... else { return }`)。
+/// これらは字句走査では原理的に拾えないため、レビュー対象として残る。
+/// 環境レベルの保証はカナリア(依存の実在主張)とヘルパーのForbid panicが
+/// 担い、本走査は「スキップするならヘルパーを通せ」という規約層を守る。
+fn line_is_hand_rolled_skip(line: &str) -> bool {
+    !line.trim_start().starts_with("//") && line.contains(r#""SKIP"#)
+}
+
+#[test]
+fn matcher_detects_hand_rolled_skip() {
+    // 正例: かつて実在した手書きスキップの形
+    assert!(line_is_hand_rolled_skip(
+        r#"eprintln!("SKIP: ffmpeg not found");"#
+    ));
+    assert!(line_is_hand_rolled_skip(
+        r#"eprintln!("SKIP: no GPU adapter");"#
+    ));
+    // 正例: rustfmtの折り返しでリテラルが単独行になった形(旧マッチャの見逃し)
+    assert!(line_is_hand_rolled_skip(
+        r#"            "SKIP: ffmpeg/ffprobe not found on PATH","#
+    ));
+    // 正例: 別マクロ経由の手書きスキップ(旧マッチャの見逃し)
+    assert!(line_is_hand_rolled_skip(r#"println!("SKIP")"#));
+    assert!(line_is_hand_rolled_skip(
+        r#"log::warn!("SKIP: no adapter");"#
+    ));
+    // 負例: ルールを説明するコメントは拾わない(誤検出の抑制)
+    assert!(!line_is_hand_rolled_skip(
+        r#"// eprintln!("SKIP: ...") は禁止(ポリシー迂回)"#
+    ));
+    assert!(!line_is_hand_rolled_skip("    // SKIPについてのコメント"));
+    // 負例: 無関係の出力・SKIPを含まないリテラル
+    assert!(!line_is_hand_rolled_skip(r#"eprintln!("hello");"#));
+    // 負例: 引用符なしのSKIP(識別子・コメント語)は対象外
+    assert!(!line_is_hand_rolled_skip("let skip_count = 0; // SKIP"));
+}
+
+/// testkit以外の全クレートのソースから手書きスキップをdenyする。
+/// (testkit自身はポリシー実装としてSKIP出力を持つため除外)
+///
+/// **空振り合格の禁止(独立レビュー所見2+マジックナンバー排除の改訂)**:
+/// 走査I/Oの失敗はスキップでなくpanic。走査の実在性は総ファイル数の下限
+/// (クレート再編で壊れる/無関係ファイルで隠せるマジックナンバー)ではなく
+/// **構造**で主張する — (1)走査ルートに番兵クレート(motolii-core)が存在
+/// (ルート解決ミスの検出) (2)workspace対象クレートを列挙できた
+/// (3)各対象クレートで少なくとも1ファイル走査した。総数は診断情報に留める。
+#[test]
+fn no_hand_rolled_skip_paths_outside_testkit() {
+    let crates_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("crates dir");
+
+    // (2) 対象クレートの列挙: crates/直下でCargo.tomlを持つディレクトリ
+    let mut crate_dirs: Vec<std::path::PathBuf> = fs::read_dir(crates_dir)
+        .unwrap_or_else(|e| panic!("scan: read_dir {} failed: {e}", crates_dir.display()))
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir() && p.join("Cargo.toml").is_file())
+        .collect();
+    crate_dirs.sort();
+    assert!(
+        !crate_dirs.is_empty(),
+        "scan: {} にクレートが1つも見つからない — 走査ルートの解決が壊れている",
+        crates_dir.display()
+    );
+    // (1) 番兵: 共通語彙クレートの存在で「crates/を指しているつもりで別の場所」を検出
+    assert!(
+        crate_dirs
+            .iter()
+            .any(|p| p.file_name().is_some_and(|n| n == "motolii-core")),
+        "scan: 番兵クレートmotolii-coreが見つからない(クレート改名時はこの番兵を更新すること)"
+    );
+
+    let mut violations = Vec::new();
+    let mut diagnostics = Vec::new();
+    for dir in &crate_dirs {
+        let name = dir.file_name().expect("crate dir name").to_string_lossy();
+        // testkit自身はポリシー実装としてSKIP出力を持つため除外
+        if name == "motolii-testkit" {
+            continue;
+        }
+        let scanned = scan_dir(dir, &mut violations);
+        // (3) 各対象クレートで最低1ファイル
+        assert!(
+            scanned >= 1,
+            "scan: クレート{name}で.rsファイルを1つも走査できていない — 空振りの兆候"
+        );
+        diagnostics.push(format!("{name}={scanned}"));
+    }
+    // 総数は主張でなく診断情報(失敗時の切り分け用)
+    eprintln!("scan coverage: {}", diagnostics.join(", "));
+
+    assert!(
+        violations.is_empty(),
+        "手書きスキップはM2E-1のポリシー(REQUIRE時panic)を迂回する抜け道。\
+         testkitのgpu_or_skip / ffmpeg_or_skip / unavailable_dep経由に置き換えること:\n{}",
+        violations.join("\n")
+    );
+}
+
+/// 走査した.rsファイル数を返す。I/O失敗はpanic(リポジトリ内ソースは
+/// すべて可読・UTF-8のはずで、読めない=走査の前提崩壊)。
+fn scan_dir(dir: &Path, violations: &mut Vec<String>) -> usize {
+    let entries = fs::read_dir(dir)
+        .unwrap_or_else(|e| panic!("scan: read_dir {} failed: {e}", dir.display()));
+    let mut scanned = 0;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if path.is_dir() {
+            // ビルド成果物は対象外
+            if name == "target" {
+                continue;
+            }
+            scanned += scan_dir(&path, violations);
+        } else if path.extension().is_some_and(|e| e == "rs") {
+            let content = fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("scan: read {} failed: {e}", path.display()));
+            scanned += 1;
+            for (i, line) in content.lines().enumerate() {
+                if line_is_hand_rolled_skip(line) {
+                    violations.push(format!("{}:{}: {}", path.display(), i + 1, line.trim()));
+                }
+            }
+        }
+    }
+    scanned
+}

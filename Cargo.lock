@@ -563,6 +563,7 @@ name = "motolii-media"
 version = "0.1.0"
 dependencies = [
  "motolii-core",
+ "motolii-testkit",
  "serde",
  "serde_json",
  "thiserror",

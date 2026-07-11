@@ -10,7 +10,7 @@ use motolii_eval::DataTracks;
 use motolii_export::{export_overlay_video, ExportOverlayRequest};
 use motolii_media::{probe, Encoder, FrameReader};
 use motolii_nodes::{CanonicalPoint, CanonicalSize, ParamRectOverlay, RectOverlay};
-use motolii_testkit::{gpu_or_skip, tmp_dir};
+use motolii_testkit::{ffmpeg_or_skip, gpu_or_skip, tmp_dir};
 
 const W: u32 = 64;
 const H: u32 = 48;
@@ -78,8 +78,7 @@ fn passthrough_overlay() -> ParamRectOverlay {
 
 #[test]
 fn export_preserves_timeline_for_all_frames_at_30fps() {
-    if !motolii_media::tools_available() {
-        eprintln!("SKIP: ffmpeg/ffprobe not found on PATH");
+    if !ffmpeg_or_skip() {
         return;
     }
     let Some(gpu) = gpu_or_skip() else { return };
@@ -135,8 +134,7 @@ fn export_preserves_timeline_for_all_frames_at_30fps() {
 
 #[test]
 fn exported_mp4_probe_reports_bt709_limited() {
-    if !motolii_media::tools_available() {
-        eprintln!("SKIP: ffmpeg/ffprobe not found on PATH");
+    if !ffmpeg_or_skip() {
         return;
     }
     let Some(gpu) = gpu_or_skip() else { return };
