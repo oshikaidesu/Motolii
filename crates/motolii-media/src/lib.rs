@@ -13,6 +13,7 @@ mod decode;
 mod encode;
 mod probe;
 
+use std::io::Read;
 use std::process::Command;
 
 pub use decode::{read_frame_at, FrameReader};
@@ -32,6 +33,28 @@ pub enum MediaError {
 }
 
 pub type Result<T> = std::result::Result<T, MediaError>;
+
+const MAX_STDERR_BYTES: usize = 64 * 1024;
+
+/// 子プロセスのstderrをEOFまで読む。`wait()`前に呼びパイプ詰まりデッドロックを防ぐ。
+pub(crate) fn read_child_stderr(stderr: &mut impl Read) -> std::io::Result<String> {
+    let mut out = Vec::new();
+    let mut chunk = [0u8; 4096];
+    loop {
+        match stderr.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => {
+                if out.len() < MAX_STDERR_BYTES {
+                    let take = (MAX_STDERR_BYTES - out.len()).min(n);
+                    out.extend_from_slice(&chunk[..take]);
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(String::from_utf8_lossy(&out).into_owned())
+}
 
 /// ffmpeg/ffprobeがPATHにあるか。テストはこれがfalseならskipする。
 pub fn tools_available() -> bool {

@@ -4,7 +4,7 @@ use std::process::{Child, Command, Stdio};
 
 use motolii_core::{CpuFrame, FrameDesc, PixelFormat, RationalTime};
 
-use crate::{MediaError, MediaInfo, Result};
+use crate::{read_child_stderr, MediaError, MediaInfo, Result};
 
 /// ffmpegサイドカーから**生YUV420p**フレームを順に読むリーダー。
 ///
@@ -99,12 +99,12 @@ impl FrameReader {
     }
 
     fn check_exit(&mut self) -> Result<()> {
+        let mut err = String::new();
+        if let Some(stderr) = self.child.stderr.as_mut() {
+            err = read_child_stderr(stderr)?;
+        }
         let status = self.child.wait()?;
         if !status.success() {
-            let mut err = String::new();
-            if let Some(stderr) = self.child.stderr.as_mut() {
-                let _ = stderr.read_to_string(&mut err);
-            }
             return Err(MediaError::Ffmpeg(err));
         }
         Ok(())

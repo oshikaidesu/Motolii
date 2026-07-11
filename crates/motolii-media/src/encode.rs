@@ -1,10 +1,10 @@
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::Path;
 use std::process::{Child, ChildStdin, Command, Stdio};
 
 use motolii_core::{Fps, FrameDesc, PixelFormat};
 
-use crate::{MediaError, Result};
+use crate::{read_child_stderr, MediaError, Result};
 
 /// RGBAフレーム列をffmpegサイドカーへパイプしてmp4(H.264)に書き出すエンコーダ。
 /// 書き出しループ(motolii-export)とテストの土台。
@@ -77,12 +77,12 @@ impl Encoder {
     /// stdinを閉じてffmpegの完了を待つ。必ず呼ぶこと(Dropは強制終了する)。
     pub fn finish(mut self) -> Result<()> {
         drop(self.stdin.take());
+        let mut err = String::new();
+        if let Some(stderr) = self.child.stderr.as_mut() {
+            err = read_child_stderr(stderr)?;
+        }
         let status = self.child.wait()?;
         if !status.success() {
-            let mut err = String::new();
-            if let Some(stderr) = self.child.stderr.as_mut() {
-                let _ = stderr.read_to_string(&mut err);
-            }
             return Err(MediaError::Ffmpeg(err));
         }
         Ok(())
@@ -93,5 +93,66 @@ impl Drop for Encoder {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use motolii_core::ColorSpace;
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn finish_drains_stderr_before_wait_without_deadlock() {
+        let dir = std::env::temp_dir().join(format!(
+            "motolii-media-stderr-flood-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let fake_ffmpeg = dir.join("ffmpeg");
+        std::fs::write(
+            &fake_ffmpeg,
+            "#!/bin/sh\n\
+             cat >/dev/null\n\
+             i=0\n\
+             while [ \"$i\" -lt 20000 ]; do\n\
+               echo \"err $i\" 1>&2\n\
+               i=$((i+1))\n\
+             done\n\
+             exit 0\n",
+        )
+        .unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&fake_ffmpeg, std::fs::Permissions::from_mode(0o755))
+                .unwrap();
+        }
+
+        let old_path = std::env::var("PATH").unwrap_or_default();
+        std::env::set_var("PATH", format!("{}:{}", dir.display(), old_path));
+
+        let desc = FrameDesc::packed(4, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false);
+        let out = dir.join("out.mp4");
+        let mut enc = Encoder::open(&out, &desc, Fps::new(1, 1), true).unwrap();
+        enc.write_frame(&vec![0u8; desc.data_size()]).unwrap();
+
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(enc.finish());
+        });
+        let started = Instant::now();
+        match rx.recv_timeout(Duration::from_secs(5)) {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => panic!("finish failed: {e:?}"),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                panic!("finish deadlocked on stderr pipe (>{:?})", started.elapsed());
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => panic!("finish thread exited early"),
+        }
+
+        std::env::set_var("PATH", old_path);
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
