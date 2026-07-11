@@ -18,12 +18,24 @@ impl Encoder {
     /// 出力先とフレーム仕様を指定してエンコーダを開く。
     /// `qp0`はほぼロスレス(検証・テスト用)。通常書き出しはfalse(crf 18)。
     pub fn open(out_path: impl AsRef<Path>, desc: &FrameDesc, fps: Fps, qp0: bool) -> Result<Self> {
+        Self::open_with_command("ffmpeg", out_path, desc, fps, qp0)
+    }
+
+    /// 実行ファイルパスを明示してエンコーダを開く(テスト用)。
+    #[doc(hidden)]
+    pub fn open_with_command(
+        program: impl AsRef<Path>,
+        out_path: impl AsRef<Path>,
+        desc: &FrameDesc,
+        fps: Fps,
+        qp0: bool,
+    ) -> Result<Self> {
         assert_eq!(
             desc.format,
             PixelFormat::Rgba8Unorm,
             "Encoder expects RGBA input"
         );
-        let mut cmd = Command::new("ffmpeg");
+        let mut cmd = Command::new(program.as_ref());
         cmd.args(["-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgba"])
             .args(["-s", &format!("{}x{}", desc.width, desc.height)])
             .args(["-r", &format!("{}/{}", fps.num, fps.den)])
@@ -100,17 +112,19 @@ impl Drop for Encoder {
 mod tests {
     use super::*;
     use motolii_core::ColorSpace;
-    use std::sync::mpsc;
     use std::time::{Duration, Instant};
 
+    #[cfg(unix)]
     #[test]
     fn finish_drains_stderr_before_wait_without_deadlock() {
+        use std::os::unix::fs::PermissionsExt;
+
         let dir = std::env::temp_dir().join(format!(
             "motolii-media-stderr-flood-{}",
             std::process::id()
         ));
         std::fs::create_dir_all(&dir).unwrap();
-        let fake_ffmpeg = dir.join("ffmpeg");
+        let fake_ffmpeg = dir.join("fake-ffmpeg");
         std::fs::write(
             &fake_ffmpeg,
             "#!/bin/sh\n\
@@ -123,36 +137,22 @@ mod tests {
              exit 0\n",
         )
         .unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&fake_ffmpeg, std::fs::Permissions::from_mode(0o755))
-                .unwrap();
-        }
-
-        let old_path = std::env::var("PATH").unwrap_or_default();
-        std::env::set_var("PATH", format!("{}:{}", dir.display(), old_path));
+        std::fs::set_permissions(&fake_ffmpeg, std::fs::Permissions::from_mode(0o755)).unwrap();
 
         let desc = FrameDesc::packed(4, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false);
         let out = dir.join("out.mp4");
-        let mut enc = Encoder::open(&out, &desc, Fps::new(1, 1), true).unwrap();
+        let mut enc =
+            Encoder::open_with_command(&fake_ffmpeg, &out, &desc, Fps::new(1, 1), true).unwrap();
         enc.write_frame(&vec![0u8; desc.data_size()]).unwrap();
 
-        let (tx, rx) = mpsc::channel();
-        std::thread::spawn(move || {
-            let _ = tx.send(enc.finish());
-        });
         let started = Instant::now();
-        match rx.recv_timeout(Duration::from_secs(5)) {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => panic!("finish failed: {e:?}"),
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                panic!("finish deadlocked on stderr pipe (>{:?})", started.elapsed());
-            }
-            Err(mpsc::RecvTimeoutError::Disconnected) => panic!("finish thread exited early"),
-        }
+        enc.finish().expect("finish failed");
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "finish took too long ({:?}); stderr drain may have deadlocked",
+            started.elapsed()
+        );
 
-        std::env::set_var("PATH", old_path);
         let _ = std::fs::remove_dir_all(dir);
     }
 }
