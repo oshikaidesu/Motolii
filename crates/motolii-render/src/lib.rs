@@ -441,7 +441,7 @@ pub fn render_graph_cached(
         .and_then(Option::take)
         .ok_or(RenderError::MissingTexture(graph.output.0))?;
 
-    let output_texture = create_rgba_render_target(gpu, desc, "motolii-render-output");
+    let output_texture = create_owned_output_texture(gpu, desc);
     copy_texture(gpu, &intermediate, &output_texture, desc);
 
     Ok(RenderedFrame {
@@ -869,6 +869,26 @@ fn live_texture_ids_from_step(graph: &LinearRenderGraph, from_step: usize) -> Ve
     ids.sort_unstable_by_key(|id| id.0);
     ids.dedup_by_key(|id| id.0);
     ids
+}
+
+fn create_owned_output_texture(gpu: &GpuCtx, desc: FrameDesc) -> wgpu::Texture {
+    gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("motolii-render-output"),
+        size: wgpu::Extent3d {
+            width: desc.width,
+            height: desc.height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::COPY_SRC
+            | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    })
 }
 
 fn copy_texture(gpu: &GpuCtx, source: &wgpu::Texture, dest: &wgpu::Texture, desc: FrameDesc) {
