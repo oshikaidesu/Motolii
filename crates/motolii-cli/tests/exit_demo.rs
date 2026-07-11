@@ -13,9 +13,9 @@ use std::path::Path;
 use motolii_cli::{export_project, load_project_v1_from_str};
 use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, RationalTime};
 use motolii_eval::DataTracks;
-use motolii_gpu::yuv_to_rgba_reference;
 use motolii_media::{probe, read_frame_at, Encoder};
 use motolii_nodes::ViewportTransform;
+use motolii_testkit::cpu_reference::yuv_to_rgba_reference;
 use motolii_testkit::{ffmpeg_or_skip, gpu_or_skip, tmp_dir};
 
 const W: u32 = 64;

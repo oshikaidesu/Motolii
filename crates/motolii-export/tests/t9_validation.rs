@@ -10,6 +10,7 @@ use motolii_eval::DataTracks;
 use motolii_export::{export_overlay_video, ExportOverlayRequest};
 use motolii_media::{probe, Encoder, FrameReader};
 use motolii_nodes::{CanonicalPoint, CanonicalSize, ParamRectOverlay, RectOverlay};
+use motolii_testkit::cpu_reference::expected_luma;
 use motolii_testkit::{ffmpeg_or_skip, gpu_or_skip, tmp_dir};
 
 const W: u32 = 64;
@@ -23,10 +24,6 @@ const LUMA_TOL: i32 = 8;
 /// フレーム番号を中央輝度に焼き込む(0..=255で一意)。
 fn frame_gray(index: i64) -> u8 {
     index as u8
-}
-
-fn expected_luma(gray: u8) -> i32 {
-    (16.0 + 219.0 * gray as f64 / 255.0).round() as i32
 }
 
 fn center_luma(frame: &motolii_core::CpuFrame) -> i32 {

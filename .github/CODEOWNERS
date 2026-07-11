@@ -1,0 +1,27 @@
+# M2E-2: テスト資産の不可侵化。
+# 保護領域への変更はコードオーナー承認が必須(ruleset/branch protectionで承認強制を有効化すること)。
+# CODEOWNERS単体ではマージを止めない — GitHub ruleset側の設定が完了条件①。
+#
+# 自己保護: 本ファイル自体もオーナー対象。これが無いと「CODEOWNERSを書き換えて
+# 保護行を削除 → 次PRでオラクル変更」という迂回がdiffゲートをすり抜ける。
+#
+# 有効化順序(#35ブートストラップPR → ruleset):
+#   1. PR #35を先にマージ(CODEOWNERS+保護領域+diffゲートをmainへ)
+#   2. 直後にrulesetを有効化(作成者が唯一のCode Ownerなら、#35マージ前に
+#      有効化すると自己承認不可で詰まる)
+#   3. 別PRで保護パス変更が止まることを実地確認
+#   4. 確認後にM2E-2を[x]
+#
+# 単独運用: ruleset有効後は保護資産更新に別人のCode Owner承認が要る。
+#   第二Code Ownerを追加するか、管理者bypassを例外手順として明文化する。
+#
+# ruleset 手順(①完了条件・#35マージ後に人手で1回):
+#   Settings → Rules → Rulesets → New branch ruleset
+#   - Target: default branch (main)
+#   - Require a pull request before merging → Require review from Code Owners
+#   - 既存の branch protection と重複しないよう確認
+
+/.github/CODEOWNERS @oshikaidesu
+crates/motolii-testkit/golden/** @oshikaidesu
+crates/motolii-testkit/src/cpu_reference/** @oshikaidesu
+crates/motolii-testkit/src/tol/** @oshikaidesu

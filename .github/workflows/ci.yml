@@ -30,6 +30,18 @@ jobs:
       - name: Rust toolchain
         run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
       - uses: Swatinem/rust-cache@v2
+      - name: M2E-2 protected test assets × src simultaneous change gate
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          BASE="origin/${{ github.base_ref }}"
+          # ブートストラップPR(保護領域がbaseに無い)ではliveゲートをスキップ。
+          # 負例は cargo test -p motolii-testkit --test protected_assets が常時カバーする。
+          if git cat-file -e "$BASE:crates/motolii-testkit/src/cpu_reference/mod.rs" 2>/dev/null; then
+            ./scripts/check-protected-diff.sh "$BASE"
+          else
+            echo "M2E-2 bootstrap: protected paths absent on $BASE; skip live gate"
+          fi
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy

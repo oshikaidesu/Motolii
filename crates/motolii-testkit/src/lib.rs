@@ -2,6 +2,14 @@
 //!
 //! 許容誤差・平均誤差・差分画像を同じ規則で扱うための薄い基盤。
 //! GPU/一時ディレクトリのテストヘルパーは `gpu_or_skip` / `tmp_dir` に集約する。
+//!
+//! M2E-2保護領域(CODEOWNERS+diffゲート対象):
+//! - [`cpu_reference`] — CPU参照実装・期待値生成
+//! - [`tol`] — tolerance定数(呼び出し側の定数化はM2E-4)
+//! - `golden/` — 参照PNG置き場(現状はREADMEのみ)
+
+pub mod cpu_reference;
+pub mod tol;
 
 use std::path::{Path, PathBuf};
 

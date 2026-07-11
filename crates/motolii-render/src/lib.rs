@@ -1051,6 +1051,7 @@ mod tests {
     use motolii_gpu::download_rgba;
     use motolii_nodes::{CanonicalPoint, CanonicalSize};
     use motolii_plugin::reference::register_reference_plugins;
+    use motolii_testkit::cpu_reference::{expected_fixed_graph, premul_over_u8};
     use motolii_testkit::{assert_rgba_close, gpu_or_skip, RgbaImageDesc};
 
     #[test]
@@ -1999,36 +2000,5 @@ mod tests {
                 color: [1.0, 0.25, 0.0, 0.4],
             },
         }
-    }
-
-    fn expected_fixed_graph(desc: FrameDesc) -> Vec<u8> {
-        let bg = [0u8, 128, 0, 128];
-        let fg = [128u8, 0, 0, 128];
-        let over = premul_over_u8(bg, fg);
-        let mut out = vec![0u8; desc.data_size()];
-        for y in 0..desc.height {
-            for x in 0..desc.width {
-                let inside = (3..5).contains(&x) && (1..3).contains(&y);
-                let i = ((y * desc.width + x) * 4) as usize;
-                out[i..i + 4].copy_from_slice(if inside { &over } else { &bg });
-            }
-        }
-        out
-    }
-
-    fn premul_over_u8(bg: [u8; 4], fg: [u8; 4]) -> [u8; 4] {
-        let bg = bg.map(|v| v as f64 / 255.0);
-        let fg = fg.map(|v| v as f64 / 255.0);
-        let inv_a = 1.0 - fg[3];
-        [
-            to_u8_f64(fg[0] + bg[0] * inv_a),
-            to_u8_f64(fg[1] + bg[1] * inv_a),
-            to_u8_f64(fg[2] + bg[2] * inv_a),
-            to_u8_f64(fg[3] + bg[3] * inv_a),
-        ]
-    }
-
-    fn to_u8_f64(v: f64) -> u8 {
-        (v.clamp(0.0, 1.0) * 255.0).round() as u8
     }
 }
