@@ -68,8 +68,7 @@ fn tmp_dir(tag: &str) -> std::path::PathBuf {
 
 #[test]
 fn encode_probe_decode_seek_roundtrip() {
-    if !motolii_media::tools_available() {
-        eprintln!("SKIP: ffmpeg/ffprobe not found on PATH");
+    if !motolii_testkit::ffmpeg_or_skip() {
         return;
     }
     let dir = tmp_dir("roundtrip");
@@ -131,8 +130,7 @@ fn encode_probe_decode_seek_roundtrip() {
 
 #[test]
 fn seek_then_sequential_read_stays_aligned() {
-    if !motolii_media::tools_available() {
-        eprintln!("SKIP: ffmpeg/ffprobe not found on PATH");
+    if !motolii_testkit::ffmpeg_or_skip() {
         return;
     }
     let dir = tmp_dir("seq");
@@ -153,8 +151,7 @@ fn seek_then_sequential_read_stays_aligned() {
 
 #[test]
 fn rotated_footage_dimensions_match_decode() {
-    if !motolii_media::tools_available() {
-        eprintln!("SKIP: ffmpeg/ffprobe not found on PATH");
+    if !motolii_testkit::ffmpeg_or_skip() {
         return;
     }
     let dir = tmp_dir("rotate");

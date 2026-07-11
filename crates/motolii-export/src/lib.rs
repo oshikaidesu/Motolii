@@ -166,8 +166,7 @@ mod tests {
 
     #[test]
     fn export_rejects_non_identity_time_map() {
-        let Ok(gpu) = GpuCtx::new_headless() else {
-            eprintln!("SKIP: no GPU adapter");
+        let Some(gpu) = motolii_testkit::gpu_or_skip() else {
             return;
         };
         let err = export_overlay_video(

@@ -132,8 +132,7 @@ mod tests {
 
     #[test]
     fn encoder_rejects_wrong_frame_size() {
-        if !crate::tools_available() {
-            eprintln!("SKIP: ffmpeg/ffprobe not found on PATH");
+        if !motolii_testkit::ffmpeg_or_skip() {
             return;
         }
         let desc = FrameDesc::packed(8, 8, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false);

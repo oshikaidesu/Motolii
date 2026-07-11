@@ -329,14 +329,61 @@ pub fn apply_skip_decision(dep: &str, decision: SkipDecision, detail: &str) -> b
     }
 }
 
+/// 依存が使えないと判明した時点で呼ぶ共通経路: ローカルではスキップ(常にfalse)、
+/// `MOTOLII_REQUIRE_GPU=1`の環境ではpanic(M2E-1)。
+///
+/// 型に依存しないため、testkitが返す型と被試験クレート内の型が別物になる
+/// クレート内ユニットテスト(例: motolii-gpuのsrc内テスト)からも使える。
+pub fn unavailable_dep(dep: &str, detail: &str) -> bool {
+    apply_skip_decision(dep, skip_decision(false, deps_required()), detail)
+}
+
+/// 外部ツールの状態。「未導入」と「導入済みだが実行失敗」を区別する。
+#[derive(Debug)]
+pub enum ToolStatus {
+    /// 起動でき、正常終了した。
+    Ok,
+    /// PATH上に存在しない(未導入)。
+    NotInstalled,
+    /// 起動失敗または非0終了(導入されているが壊れている)。
+    Failed(String),
+}
+
+/// `<bin> -version`を実行してツールの状態を判定する。
+pub fn tool_status(bin: &str) -> ToolStatus {
+    match std::process::Command::new(bin).arg("-version").output() {
+        Ok(out) if out.status.success() => ToolStatus::Ok,
+        Ok(out) => ToolStatus::Failed(format!("`{bin} -version` exited with {}", out.status)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => ToolStatus::NotInstalled,
+        Err(e) => ToolStatus::Failed(format!("failed to spawn `{bin}`: {e}")),
+    }
+}
+
+/// ffmpeg/ffprobeが無い環境ではテストをスキップする(戻り値false)。
+/// ただし`MOTOLII_REQUIRE_GPU=1`の環境(CI)ではスキップせずpanicする(M2E-1)。
+///
+/// 手書きの`tools_available()+eprintln`スキップはこの関数へ置き換えること
+/// (手書きスキップはポリシーを迂回する — tests/skip_policy.rsの走査がdenyする)。
+pub fn ffmpeg_or_skip() -> bool {
+    for bin in ["ffmpeg", "ffprobe"] {
+        match tool_status(bin) {
+            ToolStatus::Ok => {}
+            ToolStatus::NotInstalled => {
+                return unavailable_dep(bin, "not found on PATH (not installed)");
+            }
+            ToolStatus::Failed(detail) => return unavailable_dep(bin, &detail),
+        }
+    }
+    true
+}
+
 /// lavapipe等が無い環境ではテストをスキップする。
 /// ただし`MOTOLII_REQUIRE_GPU=1`の環境(CI)ではスキップせずpanicする(M2E-1)。
 pub fn gpu_or_skip() -> Option<motolii_gpu::GpuCtx> {
     match motolii_gpu::GpuCtx::new_headless() {
         Ok(gpu) => Some(gpu),
         Err(e) => {
-            let decision = skip_decision(false, deps_required());
-            apply_skip_decision("GPU adapter", decision, &e.to_string());
+            unavailable_dep("GPU adapter", &e.to_string());
             None
         }
     }

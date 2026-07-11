@@ -16,7 +16,7 @@ use motolii_eval::DataTracks;
 use motolii_gpu::yuv_to_rgba_reference;
 use motolii_media::{probe, read_frame_at, Encoder};
 use motolii_nodes::ViewportTransform;
-use motolii_testkit::{gpu_or_skip, tmp_dir};
+use motolii_testkit::{ffmpeg_or_skip, gpu_or_skip, tmp_dir};
 
 const W: u32 = 64;
 const H: u32 = 48;
@@ -61,8 +61,7 @@ fn pixel(rgba: &[u8], w: u32, x: i64, y: i64) -> [u8; 4] {
 
 #[test]
 fn exit_demo_video_bg_plus_eased_rect_matches_golden() {
-    if !motolii_media::tools_available() {
-        eprintln!("SKIP: ffmpeg/ffprobe not found on PATH");
+    if !ffmpeg_or_skip() {
         return;
     }
     let Some(gpu) = gpu_or_skip() else { return };

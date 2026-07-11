@@ -3,7 +3,7 @@ use std::path::Path;
 use motolii_cli::export_project;
 use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat};
 use motolii_media::{probe, Encoder};
-use motolii_testkit::{gpu_or_skip, tmp_dir};
+use motolii_testkit::{ffmpeg_or_skip, gpu_or_skip, tmp_dir};
 
 const W: u32 = 32;
 const H: u32 = 24;
@@ -26,8 +26,7 @@ fn make_test_video(path: &Path) {
 
 #[test]
 fn exports_project_overlay_to_mp4() {
-    if !motolii_media::tools_available() {
-        eprintln!("SKIP: ffmpeg/ffprobe not found on PATH");
+    if !ffmpeg_or_skip() {
         return;
     }
     let Some(gpu) = gpu_or_skip() else { return };
