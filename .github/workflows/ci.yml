@@ -13,7 +13,9 @@ env:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # M2E-3: ubuntu-latest 追随で lavapipe/ffmpeg が黙って更新されると
+    # tolerance 0/1 のゴールデンが全赤になる。runner をピン留めする。
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Install ffmpeg + software Vulkan (motolii-media / motolii-gpu tests)
@@ -27,6 +29,11 @@ jobs:
             -exec grep -lq 'packages.microsoft.com' {} \; -delete || true
           sudo apt-get update
           sudo apt-get install -y ffmpeg mesa-vulkan-drivers
+      - name: Log mesa/ffmpeg versions (M2E-3 drift triage)
+        run: |
+          # 不変条件の証明ではなく、ドリフト時の一次切り分け用。
+          ffmpeg -version
+          dpkg -s mesa-vulkan-drivers
       - name: Rust toolchain
         run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
       - uses: Swatinem/rust-cache@v2
@@ -47,4 +54,5 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
-        run: cargo test --workspace
+        # M2E-3: Cargo.lock と乖離した解決を禁止し、依存ドリフトを検知する。
+        run: cargo test --locked --workspace
