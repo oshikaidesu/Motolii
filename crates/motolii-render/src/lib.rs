@@ -1442,13 +1442,7 @@ mod tests {
         let Some(gpu) = gpu_or_skip() else { return };
         let request = centered_request();
         let desc = request.desc;
-        let wrong_desc = FrameDesc::packed(
-            8,
-            8,
-            PixelFormat::Rgba8Unorm,
-            ColorSpace::Srgb,
-            true,
-        );
+        let wrong_desc = FrameDesc::packed(8, 8, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
         let background = upload_rgba(
             &gpu,
             &wrong_desc,
