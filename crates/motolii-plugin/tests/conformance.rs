@@ -153,11 +153,7 @@ fn is_dependencies_table(section: &str) -> bool {
 
 /// `[dependencies.cudarc]` → `Some("cudarc")`。通常の`[dependencies]`は`None`。
 fn nested_dependency_crate(section: &str) -> Option<&str> {
-    for marker in [
-        "dependencies.",
-        "dev-dependencies.",
-        "build-dependencies.",
-    ] {
+    for marker in ["dependencies.", "dev-dependencies.", "build-dependencies."] {
         if let Some(rest) = section.rsplit_once(marker) {
             // target.'cfg(…)'.dependencies.foo → marker照合は dependencies. で foo
             let name = rest.1;
@@ -298,8 +294,7 @@ fn deny_scanner_flags_nested_dependency_table() {
 
 #[test]
 fn deny_scanner_flags_target_nested_vendor_table() {
-    let manifest =
-        "[target.'cfg(windows)'.dependencies.d3d12]\nversion = \"0.7\"\n";
+    let manifest = "[target.'cfg(windows)'.dependencies.d3d12]\nversion = \"0.7\"\n";
     assert_eq!(manifest_violations(manifest), vec!["d3d12".to_string()]);
 }
 

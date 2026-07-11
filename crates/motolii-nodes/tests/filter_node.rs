@@ -400,16 +400,8 @@ fn composite_multiply_premul_edge_cases() {
     let desc = FrameDesc::packed(4, 3, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
 
     let cases = [
-        (
-            "fg-transparent",
-            [0u8, 200, 100, 255],
-            [0u8, 0, 0, 0],
-        ),
-        (
-            "opaque-both",
-            [200u8, 100, 50, 255],
-            [128u8, 64, 32, 255],
-        ),
+        ("fg-transparent", [0u8, 200, 100, 255], [0u8, 0, 0, 0]),
+        ("opaque-both", [200u8, 100, 50, 255], [128u8, 64, 32, 255]),
     ];
 
     for (label, bg_px, fg_px) in cases {

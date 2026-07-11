@@ -31,7 +31,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let bg = textureSample(background_tex, tex_sampler, in.uv);
     let fg = textureSample(foreground_tex, tex_sampler, in.uv);
 
-    // Add: Porter-Duff plus (fg+fg)。出力αは source-over ではない(AE/AM の加算ブレンドとは異なる)。
+    // Add: Porter-Duff plus (fg+bg)。出力αは source-over ではない(AE/AM の加算ブレンドとは異なる)。
     if composite.mode == 1u {
         return clamp(fg + bg, vec4<f32>(0.0), vec4<f32>(1.0));
     }
