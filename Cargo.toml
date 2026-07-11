@@ -38,3 +38,5 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # Slintのwgpu統合(unstable-wgpu-29)と同一メジャーに固定する。
 # wgpuの更新はSlint側の対応更新に合わせてまとめて行う(落とし穴A-3改訂)。
 wgpu = "29"
+# M2E-6: プロパティテストの正本。エージェントはこれ以外を独断導入しない(監査EN-5)。
+proptest = "1"
