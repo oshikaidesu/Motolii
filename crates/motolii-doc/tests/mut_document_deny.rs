@@ -76,9 +76,7 @@ fn mask_non_code(src: &str) -> String {
             continue;
         }
         // 通常文字列 / バイト文字列
-        if bytes[i] == b'"'
-            || (bytes[i] == b'b' && i + 1 < bytes.len() && bytes[i + 1] == b'"')
-        {
+        if bytes[i] == b'"' || (bytes[i] == b'b' && i + 1 < bytes.len() && bytes[i + 1] == b'"') {
             if bytes[i] == b'b' {
                 out.push(b' ');
                 i += 1;
@@ -211,8 +209,7 @@ fn mut_document_hit_lines(src: &str) -> Vec<usize> {
 }
 
 fn is_under_motolii_doc(rel: &str) -> bool {
-    rel == "crates/motolii-doc"
-        || rel.starts_with("crates/motolii-doc/")
+    rel == "crates/motolii-doc" || rel.starts_with("crates/motolii-doc/")
 }
 
 fn rust_sources(root: &Path) -> Vec<PathBuf> {
