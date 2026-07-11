@@ -116,14 +116,8 @@ pub fn probe(path: impl AsRef<Path>) -> Result<MediaInfo> {
 
     validate_even_dimensions(width, height)?;
 
-    let r_fps = stream
-        .r_frame_rate
-        .as_deref()
-        .and_then(parse_fraction);
-    let avg_fps = stream
-        .avg_frame_rate
-        .as_deref()
-        .and_then(parse_fraction);
+    let r_fps = stream.r_frame_rate.as_deref().and_then(parse_fraction);
+    let avg_fps = stream.avg_frame_rate.as_deref().and_then(parse_fraction);
     reject_variable_frame_rate(r_fps, avg_fps)?;
 
     let fps = r_fps
@@ -165,6 +159,7 @@ fn validate_even_dimensions(width: u32, height: u32) -> Result<()> {
 }
 
 /// r_frame_rate と avg_frame_rate が有意に食い違う場合はVFR疑いとして拒否する。
+/// ffprobeタグの比較によるヒューリスティックであり、全VFRを網羅する保証はない。
 fn reject_variable_frame_rate(r_fps: Option<Fps>, avg_fps: Option<Fps>) -> Result<()> {
     let (Some(r), Some(a)) = (r_fps, avg_fps) else {
         return Ok(());
@@ -274,7 +269,10 @@ mod tests {
             ColorSpace::Rec601Limited
         );
         // タグ欠落 → HD慣習
-        assert_eq!(map_color_space(None, None).unwrap(), ColorSpace::Rec709Limited);
+        assert_eq!(
+            map_color_space(None, None).unwrap(),
+            ColorSpace::Rec709Limited
+        );
     }
 
     #[test]
