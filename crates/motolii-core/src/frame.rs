@@ -134,11 +134,7 @@ impl FrameDesc {
 
     /// 同一アスペクト比かつ、どちらかが他方の整数倍解像度か(Draft縮小の動画背景など)。
     pub fn same_aspect_integer_scale(self, other: Self) -> bool {
-        if self.width == 0
-            || self.height == 0
-            || other.width == 0
-            || other.height == 0
-        {
+        if self.width == 0 || self.height == 0 || other.width == 0 || other.height == 0 {
             return false;
         }
         if u64::from(self.width) * u64::from(other.height)
@@ -264,10 +260,28 @@ mod tests {
 
     #[test]
     fn same_aspect_integer_scale_handles_large_dimensions_without_overflow() {
-        let a = FrameDesc::packed(65536, 65536, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
-        let b = FrameDesc::packed(65536, 65536, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let a = FrameDesc::packed(
+            65536,
+            65536,
+            PixelFormat::Rgba8Unorm,
+            ColorSpace::Srgb,
+            true,
+        );
+        let b = FrameDesc::packed(
+            65536,
+            65536,
+            PixelFormat::Rgba8Unorm,
+            ColorSpace::Srgb,
+            true,
+        );
         assert!(a.same_aspect_integer_scale(b));
-        let c = FrameDesc::packed(65536, 65537, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let c = FrameDesc::packed(
+            65536,
+            65537,
+            PixelFormat::Rgba8Unorm,
+            ColorSpace::Srgb,
+            true,
+        );
         assert!(!a.same_aspect_integer_scale(c));
     }
 
