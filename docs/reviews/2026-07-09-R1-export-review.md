@@ -53,3 +53,28 @@
 ## 見送り(キャップ外・軽微)
 
 - `gpu_or_skip`×5コピペ→motolii-testkitへ集約 / `CliError::Usage`への文字列潰し→`#[from]`で構造維持 / `tmp_dir`/`make_test_video`の二重定義 / `RgbaDownloader`のDefault+new重複 / LayerSource足場が未配線かつ`LayerSourceContext`にQualityの口がない(R4/M5配線時に要対応)
+
+---
+
+## 追補(2026-07-11 再監査: 本レポートの抜けと記録上の問題)
+
+本監査(2026-07-09)を後から検証した結果、**監査時点で存在したのに拾えなかった所見4件**と、**記録方法の問題4件**を記録する。各項目は origin/main `a3a05d5` と監査時系のツリー(`f020ec8`)の両方に対して file:line の現物確認済み。
+
+### 見落としていた所見(R1監査時点で存在)
+
+- [ ] **追-1【重大・現存】外部JSONから不正な時刻型を生成できる** — `crates/motolii-core/src/time.rs:10`(`RationalTime`)/ `:67`(`Fps`)
+  両型とも`Deserialize`をderiveしており、コンストラクタの検証を迂回して`den = 0`や負のfpsをJSONから作れる。その後の除算・フレーム変換でpanicする(`den<0`は`Ord`/`Hash`/`Eq`のden>0・既約前提も静かに壊す)。所見#3「負のstart_frame」と同じ**外部入力境界**の問題であり、R1監査の対象内だった。Issue #19(入力起因panicのResult化、close済み)のスコープにも含まれず、**a3a05d5でも未修正**。
+  修正方針: `try_new`+カスタムDeserialize(`#[serde(try_from = ...)]`)、またはプロジェクト読込時の再帰的validate。→ [2026-07-11-code-audit-pre-m2.md](2026-07-11-code-audit-pre-m2.md) 所見T-2 / チケットTM-2として起票済み
+- [x] **追-2【高・修正済み】ffmpeg stderrパイプのデッドロックを見落としていた** — 監査時点の`encode.rs:78-89` / `decode.rs:101-111`(stderrをpipeしたまま先に`wait()`)
+  ffmpegが大量出力するとstderrパイプ(通常64KB)が満杯になり子プロセスが終了できず、`wait()`で永久ブロックする古典的デッドロック。**まさにexport/media周辺で監査時点にも存在しており、本レポートの明示的な見落とし**。後日Issue #20として発見され、PR #30(2026-07-11 マージ、`read_child_stderr`ヘルパー: 64KiB上限+読み切り→`wait()`順序+モックffmpegのタイムアウト付きテスト)で修正済み。監査履歴の正確性のためここに記録する
+- [ ] **追-3【中・現存】`Encoder::write_frame()`をfinish後に呼ぶとpanic** — `crates/motolii-media/src/encode.rs:87`(a3a05d5)
+  `self.stdin.as_mut().expect("encoder already finished")`が残存。Issue #19が「外部入力panicのResult化」を完了扱いにした後もこの経路はpanicのままで、一貫性を欠く。公開APIとしては`MediaError::EncoderAlreadyFinished`を返すべき。呼び出し元が1箇所の今は低リスクだが、M4のジョブ化で呼び出しが増える前に対処(同ファイルのDrop時finish忘れ警告は[audit G-8](2026-07-11-code-audit-pre-m2.md)参照)
+- [ ] **追-4【中・現存】Mutex poisoningでGPUエラー処理自体がpanicする** — `crates/motolii-gpu/src/ctx.rs:111, 204, 213`(a3a05d5)
+  `check_health()`とGPUコールバック内に`lock().expect("GPU runtime state poisoned")`が残存。GPU障害を型付きエラーに集約する設計なのに、**監視状態のpoisonで防御機構そのものがpanicへ逆戻り**する。最低でも回復不能な`GpuRuntimeError`として返す(poisonは「エラー処理中のどこかがpanicした」印であり、二重panicは診断を悪化させる)
+
+### 記録上の問題(以後の監査プロセスへ反映)
+
+1. **所見#2の修正方針が危うい**: 現行実装(`ctx.rs:118`)はuncaptured GPU errorを一度報告したら単純に`take()`して続行する。Validation / OutOfMemory / Internal を一律「一過性」とみなす根拠はなく、エラー種別ごとに「継続可能/フレーム失敗/device再生成」を分けるべき。M3プレビュー統合(読み戻しなし=事故が画面にしか出ない)の前に要判断 — [audit G-6](2026-07-11-code-audit-pre-m2.md)と同じ棚
+2. **全項目が[x]なのに修正証跡がない**: 冒頭に「修正コミットに項番を書く」とあるが、レポート側に修正コミット・PR・確認テストへの逆リンクがなく、何を根拠に完了扱いにしたか後から追えない。以後のレビュー文書は**チェックを入れる際にコミットSHA/PR番号を項目へ併記**する(freeze-gate-remaining.mdはこの形式を守れている — テスト名併記)
+3. **所見#1の完了条件が閉じていない**: 「部分ファイルを残すか削除するか明示」に対し実装は再生可能な部分mp4を残す方針だが、`Err`に出力パスや`frames_written`が含まれず、呼び出し側が「利用可能な部分成果物が存在する」と判断できない。エラー型への文脈追加をM2-D6(書き出しmux)前に
+4. **対象時点が再現不能**: 「R1実装時点の未コミット作業ツリー」が対象で、監査対象SHAを復元できない。**以後の監査レポートには対象commit SHA・対象範囲・実行したテストを必記**する(本追補と[2026-07-11-code-audit-pre-m2.md](2026-07-11-code-audit-pre-m2.md)から適用)

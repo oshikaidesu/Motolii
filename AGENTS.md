@@ -5,7 +5,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 ## 最初に読む
 
 1. [docs/README.md](docs/README.md) — プロジェクト全体像・ドキュメントの読む順序・用語
-2. 着手するチケット: [docs/specs/M1-vertical-slice.md](docs/specs/M1-vertical-slice.md) の「残タスクチケット」表(完了条件・依存つき)
+2. 着手するフェーズの仕様書([docs/specs/](docs/specs/README.md)): タスク表(完了条件・依存つき)と、**末尾の「実装ガード」節**(先行ツールの失敗・ユーザー不満をタスクIDに紐付けた注意リスト。完了条件を追加している場合がある)
 3. プラグインを書く/量産する時: [docs/plugin-authoring.md](docs/plugin-authoring.md)(種別・NodeDesc必須欄・禁止事項・型紙)
 
 ## 絶対規律(破ると設計の根拠が崩れる。レビュー最重視項目)
@@ -31,6 +31,10 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 
 - **1チケット=1コミット**。完了時に仕様書のチケット表・実装状況表を更新する
 - 完了条件は自動判定(`cargo test`/ゴールデンイメージ)。「動いた気がする」を完了条件にしない
+- **テストを「直して」通さない**: ゴールデン参照画像・受け入れテストの削除・期待値書き換え・実装のspecial-caseで緑にすることを禁止。**テストが間違っていると思ったら実装を止めて報告する**。参照画像の正当な更新は理由を明記した独立PRに分離(specs/README.md 粒度ルール6、[pitfalls H-2](docs/pitfalls-and-roadmap.md))
+- **新規ヘルパーを書く前に既存を検索する**: 同等物が既にないかgrepしてから書く(LLM開発の最大の負債はコピペ増殖 — [pitfalls H-3](docs/pitfalls-and-roadmap.md))。テストヘルパーのtestkit集約ルールの一般化
+- **仕様書の未決事項に依存するタスクに着手しない**: 未決を「もっともらしいデフォルト」で埋めない。仕様書改訂PRで先に潰す(specs/README.md 粒度ルール7)
+- **完了報告は証跡付き**: 実行したコマンドとテスト出力を添える。「動くはず」を報告にしない
 - 提出前に `cargo test --workspace` 全緑を確認
 - **プラグイン規約の機械判定(INF-7a〜f)**: 提出前に `cargo test -p motolii-plugin` と、Filter/ParamDriverを触ったら `cargo test -p motolii-testkit --test purity` を回す。新規プラグインは `./scripts/new-plugin.sh <kind> <name>` から始め、純関数は `motolii_testkit::purity` で固定する
 - インターフェース契約(specの型シグネチャ)を変えたくなったら、実装を止めて仕様書改訂を先に
