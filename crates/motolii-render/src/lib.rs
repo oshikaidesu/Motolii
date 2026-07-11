@@ -12,7 +12,8 @@ use motolii_nodes::{
     create_rgba_render_target, CompositeNode, NodeError, OverlayNode, RectOverlay,
 };
 use motolii_plugin::{
-    LayerSourceContext, PluginError, PluginId, PluginRegistry, ResolvedParams, TextureRef,
+    LayerSourceContext, PluginError, PluginId, PluginRegistry, RenderCtx, ResolvedParams,
+    TextureRef,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -426,6 +427,7 @@ pub fn render_graph_cached(
                     &mut session.pipelines,
                     &mut encoder,
                     timeline_time,
+                    quality,
                     &textures,
                     desc,
                     out_ref,
@@ -697,7 +699,7 @@ fn texture_slot_count(graph: &LinearRenderGraph) -> Result<usize, RenderError> {
     Ok(ids.len())
 }
 
-// プラグイン契約(8引数のrender)へ横流しするディスパッチのため引数が多いのは構造上のもの。
+// プラグイン契約へ横流しするディスパッチのため引数が多いのは構造上のもの。
 #[allow(clippy::too_many_arguments)]
 fn dispatch_plugin(
     registry: &PluginRegistry,
@@ -708,10 +710,12 @@ fn dispatch_plugin(
     pipelines: &mut PipelineCache,
     encoder: &mut wgpu::CommandEncoder,
     timeline_time: RationalTime,
+    quality: Quality,
     textures: &[Option<wgpu::Texture>],
     desc: FrameDesc,
     output: TextureRef<'_>,
 ) -> Result<(), RenderError> {
+    let ctx = RenderCtx::new(timeline_time, quality);
     if let Some(filter) = registry.filter(id) {
         let expected = filter.desc().min_inputs..=filter.desc().max_inputs;
         if !expected.contains(&plugin_inputs.len()) {
@@ -734,15 +738,7 @@ fn dispatch_plugin(
             });
         };
         let input = texture_ref(textures, desc, input_id)?;
-        filter.render(
-            gpu,
-            pipelines,
-            encoder,
-            timeline_time,
-            params,
-            input,
-            output,
-        )?;
+        filter.render(gpu, pipelines, encoder, &ctx, params, input, output)?;
         return Ok(());
     }
 
@@ -763,15 +759,7 @@ fn dispatch_plugin(
             .iter()
             .map(|input| texture_ref(textures, desc, *input))
             .collect();
-        composite.render(
-            gpu,
-            pipelines,
-            encoder,
-            timeline_time,
-            params,
-            &input_refs?,
-            output,
-        )?;
+        composite.render(gpu, pipelines, encoder, &ctx, params, &input_refs?, output)?;
         return Ok(());
     }
 
@@ -1364,7 +1352,7 @@ mod tests {
     fn filter_dispatch_empty_inputs_returns_error_not_panic() {
         let Some(gpu) = gpu_or_skip() else { return };
         use motolii_gpu::PipelineCache;
-        use motolii_plugin::{FilterPlugin, NodeDesc, PluginError};
+        use motolii_plugin::{FilterPlugin, NodeDesc, PluginError, RenderCtx};
         use std::sync::OnceLock;
 
         // 不正descは登録時にvalidate_node_descが拒否するため、
@@ -1390,7 +1378,7 @@ mod tests {
                 _gpu: &GpuCtx,
                 _pipelines: &mut PipelineCache,
                 _encoder: &mut wgpu::CommandEncoder,
-                _t: RationalTime,
+                _ctx: &RenderCtx,
                 _params: &ResolvedParams,
                 _input: TextureRef<'_>,
                 _output: TextureRef<'_>,

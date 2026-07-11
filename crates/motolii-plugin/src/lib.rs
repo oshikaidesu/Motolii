@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::f64::consts::TAU;
 use std::sync::OnceLock;
 
-use motolii_core::{CompCamera, Fps, FrameDesc, RationalTime};
+use motolii_core::{CompCamera, Fps, FrameDesc, Quality, RationalTime};
 use motolii_eval::{DataTrack, Value};
 use motolii_gpu::{GpuCtx, PipelineCache};
 use serde::{Deserialize, Serialize};
@@ -136,6 +136,45 @@ pub struct CompLookbehind {
     pub offsets: Vec<i32>,
     /// 自己参照切断用のエフェクトID列。
     pub exclude: Vec<String>,
+}
+
+/// 前後フレーム/サブフレーム要求の静的宣言(F-12予約。解決はホスト)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+pub struct TemporalFootprint {
+    pub frames_before: u32,
+    pub frames_after: u32,
+    /// モーションブラー用。上限は`Quality::effect_samples`。
+    pub subframe_samples: u32,
+}
+
+/// Filter/Composite の per-call 文脈(M2E-7)。
+///
+/// `#[non_exhaustive]` — Quality・予約口の追加で既存プラグインのシグネチャを壊さない。
+/// 外部クレートは`RenderCtx::new`経由で構築する。
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct RenderCtx {
+    pub t: RationalTime,
+    /// Draft/Final 判別と effect_samples の口。解像度畳み込み後の TextureRef.desc だけでは読めない。
+    pub quality: Quality,
+    /// F-7 予約。Repeater 配線まで常に None。
+    pub instance: Option<InstanceIndex>,
+    /// F-11 予約。M4 配線まで常に None。
+    pub lookbehind: Option<CompLookbehind>,
+    /// F-12 予約。窓テクスチャの解決はホスト側(現状はデフォルト=ゼロ窓)。
+    pub temporal_footprint: TemporalFootprint,
+}
+
+impl RenderCtx {
+    pub fn new(t: RationalTime, quality: Quality) -> Self {
+        Self {
+            t,
+            quality,
+            instance: None,
+            lookbehind: None,
+            temporal_footprint: TemporalFootprint::default(),
+        }
+    }
 }
 
 /// `NodeDesc`必須欄の機械判定(INF-7c、plugin-authoring §2)。
@@ -297,14 +336,14 @@ fn migrate_sine_params(
 pub trait FilterPlugin: Send + Sync {
     fn desc(&self) -> &NodeDesc;
 
-    // プラグイン契約の引数集合(GPU/時刻/params/入出力)が閾値を超えるのは構造上のもの。
+    // プラグイン契約の引数集合(GPU/文脈/params/入出力)が閾値を超えるのは構造上のもの。
     #[allow(clippy::too_many_arguments)]
     fn render(
         &self,
         gpu: &GpuCtx,
         pipelines: &mut PipelineCache,
         encoder: &mut wgpu::CommandEncoder,
-        t: RationalTime,
+        ctx: &RenderCtx,
         params: &ResolvedParams,
         input: TextureRef<'_>,
         output: TextureRef<'_>,
@@ -346,7 +385,7 @@ pub trait CompositePlugin: Send + Sync {
         gpu: &GpuCtx,
         pipelines: &mut PipelineCache,
         encoder: &mut wgpu::CommandEncoder,
-        t: RationalTime,
+        ctx: &RenderCtx,
         params: &ResolvedParams,
         inputs: &[TextureRef<'_>],
         output: TextureRef<'_>,
@@ -535,7 +574,7 @@ pub mod reference {
             _gpu: &GpuCtx,
             _pipelines: &mut PipelineCache,
             encoder: &mut wgpu::CommandEncoder,
-            _t: RationalTime,
+            _ctx: &RenderCtx,
             params: &ResolvedParams,
             _input: TextureRef<'_>,
             output: TextureRef<'_>,
@@ -558,7 +597,7 @@ pub mod reference {
             gpu: &GpuCtx,
             pipelines: &mut PipelineCache,
             encoder: &mut wgpu::CommandEncoder,
-            _t: RationalTime,
+            _ctx: &RenderCtx,
             params: &ResolvedParams,
             input: TextureRef<'_>,
             output: TextureRef<'_>,
@@ -643,7 +682,7 @@ pub mod reference {
             gpu: &GpuCtx,
             pipelines: &mut PipelineCache,
             encoder: &mut wgpu::CommandEncoder,
-            _t: RationalTime,
+            _ctx: &RenderCtx,
             params: &ResolvedParams,
             input: TextureRef<'_>,
             output: TextureRef<'_>,
@@ -745,7 +784,7 @@ pub mod reference {
             _gpu: &GpuCtx,
             _pipelines: &mut PipelineCache,
             encoder: &mut wgpu::CommandEncoder,
-            _t: RationalTime,
+            _ctx: &RenderCtx,
             params: &ResolvedParams,
             _inputs: &[TextureRef<'_>],
             output: TextureRef<'_>,
@@ -1101,7 +1140,7 @@ mod tests {
                 _gpu: &GpuCtx,
                 _pipelines: &mut PipelineCache,
                 _encoder: &mut wgpu::CommandEncoder,
-                _t: RationalTime,
+                _ctx: &RenderCtx,
                 _params: &ResolvedParams,
                 _inputs: &[TextureRef<'_>],
                 _output: TextureRef<'_>,
@@ -1208,6 +1247,27 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<CompLookbehind>(&look_json).unwrap(),
             look
+        );
+    }
+
+    #[test]
+    fn render_ctx_carries_quality_and_reserved_defaults() {
+        use motolii_core::Quality;
+        let ctx = RenderCtx::new(RationalTime::from_seconds(1), Quality::DRAFT);
+        assert_eq!(ctx.t, RationalTime::from_seconds(1));
+        assert_eq!(ctx.quality, Quality::DRAFT);
+        assert!(ctx.instance.is_none());
+        assert!(ctx.lookbehind.is_none());
+        assert_eq!(ctx.temporal_footprint, TemporalFootprint::default());
+        let footprint = TemporalFootprint {
+            frames_before: 1,
+            frames_after: 2,
+            subframe_samples: 4,
+        };
+        let json = serde_json::to_string(&footprint).unwrap();
+        assert_eq!(
+            serde_json::from_str::<TemporalFootprint>(&json).unwrap(),
+            footprint
         );
     }
 
@@ -1323,7 +1383,7 @@ mod tests {
                 _gpu: &GpuCtx,
                 _pipelines: &mut PipelineCache,
                 _encoder: &mut wgpu::CommandEncoder,
-                _t: RationalTime,
+                _ctx: &RenderCtx,
                 _params: &ResolvedParams,
                 _input: TextureRef<'_>,
                 _output: TextureRef<'_>,

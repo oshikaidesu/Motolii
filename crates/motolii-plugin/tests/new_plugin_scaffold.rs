@@ -6,11 +6,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-use motolii_core::RationalTime;
 use motolii_gpu::{GpuCtx, PipelineCache};
 use motolii_plugin::{
     validate_node_desc, FilterPlugin, NodeDesc, PluginError, PluginId, PluginKind, PluginRegistry,
-    ResolvedParams, TextureRef,
+    RenderCtx, ResolvedParams, TextureRef,
 };
 use serde::Deserialize;
 
@@ -139,7 +138,7 @@ fn scaffold_filter_registers_cleanly() {
             _gpu: &GpuCtx,
             _pipelines: &mut PipelineCache,
             _encoder: &mut wgpu::CommandEncoder,
-            _t: RationalTime,
+            _ctx: &RenderCtx,
             _params: &ResolvedParams,
             _input: TextureRef<'_>,
             _output: TextureRef<'_>,

@@ -9,7 +9,8 @@ use motolii_core::{premultiply_rgba_f32, FrameDesc, RationalTime};
 use motolii_eval::{DataTracks, ParamSource, Value};
 use motolii_gpu::{GpuCtx, PipelineCache};
 use motolii_plugin::{
-    CompositePlugin, FilterPlugin, NodeDesc, PluginError, PluginId, ResolvedParams, TextureRef,
+    CompositePlugin, FilterPlugin, NodeDesc, PluginError, PluginId, RenderCtx, ResolvedParams,
+    TextureRef,
 };
 use wgpu::util::DeviceExt;
 
@@ -230,8 +231,17 @@ impl FilterNode {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("motolii-nodes-filter"),
             });
-        self.plugin
-            .render(gpu, pipelines, &mut encoder, t, &self.params, input, output)?;
+        // ノード直呼びはプレビュー/検証用。Quality は FINAL(ホストの render_graph 経路とは別)。
+        let ctx = RenderCtx::new(t, motolii_core::Quality::FINAL);
+        self.plugin.render(
+            gpu,
+            pipelines,
+            &mut encoder,
+            &ctx,
+            &self.params,
+            input,
+            output,
+        )?;
         gpu.queue.submit([encoder.finish()]);
         Ok(())
     }
@@ -789,7 +799,7 @@ impl CompositePlugin for CompositeNode {
         gpu: &GpuCtx,
         _pipelines: &mut PipelineCache,
         encoder: &mut wgpu::CommandEncoder,
-        t: RationalTime,
+        ctx: &RenderCtx,
         _params: &ResolvedParams,
         inputs: &[TextureRef<'_>],
         output: TextureRef<'_>,
@@ -800,7 +810,7 @@ impl CompositePlugin for CompositeNode {
                 inputs.len()
             )));
         }
-        self.render_with_encoder(gpu, Some(encoder), t, inputs[0], inputs[1], output)
+        self.render_with_encoder(gpu, Some(encoder), ctx.t, inputs[0], inputs[1], output)
             .map_err(|e| PluginError::Render(e.to_string()))
     }
 }

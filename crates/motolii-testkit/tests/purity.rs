@@ -8,7 +8,8 @@ use motolii_eval::Value;
 use motolii_gpu::{GpuCtx, PipelineCache};
 use motolii_plugin::reference::{CLEAR_FILTER, OPACITY_FILTER, SINE_PARAM_DRIVER, TINT_FILTER};
 use motolii_plugin::{
-    FilterPlugin, NodeDesc, ParamDriverContext, PluginError, PluginId, ResolvedParams, TextureRef,
+    FilterPlugin, NodeDesc, ParamDriverContext, PluginError, PluginId, RenderCtx, ResolvedParams,
+    TextureRef,
 };
 use motolii_testkit::purity::{assert_filter_pure, assert_param_driver_pure};
 use motolii_testkit::{gpu_or_skip, TestkitError};
@@ -121,7 +122,7 @@ fn stateful_filter_fails_purity_check() {
             _gpu: &GpuCtx,
             _pipelines: &mut PipelineCache,
             encoder: &mut wgpu::CommandEncoder,
-            _t: RationalTime,
+            _ctx: &RenderCtx,
             _params: &ResolvedParams,
             _input: TextureRef<'_>,
             output: TextureRef<'_>,
