@@ -691,8 +691,9 @@ impl CompositeNode {
         require_premultiplied("composite-normal", "background", background.desc)?;
         require_premultiplied("composite-normal", "foreground", foreground.desc)?;
         require_premultiplied("composite-normal", "output", output.desc)?;
-        // 背景は正規化UVサンプルなので出力解像度と異なってよい(Draftの動画背景縮小など)。
+        // 背景は正規化UVサンプル。出力と同一アスペクトかつ整数倍スケール差のみ許可。
         require_same_dimensions("composite-normal", foreground.desc, output.desc)?;
+        require_compatible_background("composite-normal", background.desc, output.desc)?;
         let bg_view = background
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -844,6 +845,18 @@ fn require_same_dimensions(
     b: FrameDesc,
 ) -> Result<(), NodeError> {
     if a.width == b.width && a.height == b.height {
+        Ok(())
+    } else {
+        Err(NodeError::DimensionMismatch { node })
+    }
+}
+
+fn require_compatible_background(
+    node: &'static str,
+    background: FrameDesc,
+    output: FrameDesc,
+) -> Result<(), NodeError> {
+    if background.same_aspect_integer_scale(output) {
         Ok(())
     } else {
         Err(NodeError::DimensionMismatch { node })

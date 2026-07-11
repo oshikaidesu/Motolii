@@ -816,11 +816,12 @@ fn texture_ref<'a>(
         .ok_or(RenderError::MissingTexture(id.0))?;
     Ok(TextureRef {
         texture,
-        desc: frame_desc_for_texture(texture, render_desc),
+        desc: frame_desc_with_texture_size(texture, render_desc),
     })
 }
 
-fn frame_desc_for_texture(texture: &wgpu::Texture, template: FrameDesc) -> FrameDesc {
+/// テクスチャ実寸だけ差し替え、format/色空間/premulはレンダ解像度テンプレートを流用する。
+fn frame_desc_with_texture_size(texture: &wgpu::Texture, template: FrameDesc) -> FrameDesc {
     FrameDesc::packed(
         texture.width(),
         texture.height(),
@@ -834,7 +835,14 @@ fn validate_external_texture_desc(
     expected: FrameDesc,
     source: TextureRef<'_>,
 ) -> Result<(), RenderError> {
-    if source.texture.width() != expected.width || source.texture.height() != expected.height {
+    let actual = FrameDesc::packed(
+        source.texture.width(),
+        source.texture.height(),
+        source.desc.format,
+        source.desc.color_space,
+        source.desc.premultiplied,
+    );
+    if !actual.same_aspect_integer_scale(expected) {
         return Err(RenderError::UnsupportedFrameDesc);
     }
     if source.desc.format != PixelFormat::Rgba8Unorm
@@ -908,9 +916,10 @@ fn validate_render_desc(desc: FrameDesc) -> Result<(), RenderError> {
 }
 
 fn validate_background_desc(output: FrameDesc, background: FrameDesc) -> Result<(), RenderError> {
-    if background.width != output.width
-        || background.height != output.height
-        || background.format != PixelFormat::Rgba8Unorm
+    if !background.same_aspect_integer_scale(output) {
+        return Err(RenderError::UnsupportedFrameDesc);
+    }
+    if background.format != PixelFormat::Rgba8Unorm
         || background.color_space != ColorSpace::Srgb
         || !background.premultiplied
     {
@@ -1434,7 +1443,7 @@ mod tests {
         let request = centered_request();
         let desc = request.desc;
         let wrong_desc = FrameDesc::packed(
-            16,
+            8,
             8,
             PixelFormat::Rgba8Unorm,
             ColorSpace::Srgb,
