@@ -118,6 +118,32 @@ fn generator_writes_rust_with_validate_test_stub() {
     assert!(src.contains("tags: &[\"glow\", \"scaffold\"]"));
     assert!(src.contains("generated_desc_passes_validate_node_desc"));
     assert!(src.contains("impl FilterPlugin for Glow"));
+    assert!(src.contains("RenderCtx"));
+    // Filter は時刻を RenderCtx 経由で受け取る。裸 RationalTime import は -D warnings で赤になる。
+    assert!(
+        !src.contains("use motolii_core::RationalTime"),
+        "filter scaffold must not import unused RationalTime"
+    );
+
+    let layer_out = out_dir.join("blob_layer.rs");
+    let status = Command::new("python3")
+        .arg(&script)
+        .args([
+            "layer_source",
+            "blob",
+            "--vendor",
+            "acme",
+            "--out",
+            layer_out.to_str().unwrap(),
+        ])
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let layer_src = std::fs::read_to_string(&layer_out).unwrap();
+    assert!(
+        layer_src.contains("use motolii_core::RationalTime"),
+        "layer_source scaffold still needs RationalTime for the t argument"
+    );
 }
 
 /// スクリプトが吐く既定 desc をレジストリ登録経路でも拒否されないことの型紙。

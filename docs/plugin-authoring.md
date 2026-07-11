@@ -68,7 +68,6 @@
 
 ```rust
 use motolii_plugin::{FilterPlugin, NodeDesc, PluginError, PluginId, RenderCtx, ResolvedParams, TextureRef, ValueType};
-use motolii_core::RationalTime;
 use motolii_gpu::{GpuCtx, PipelineCache};
 
 pub struct MyGlow;

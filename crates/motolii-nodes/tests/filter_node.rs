@@ -1,4 +1,4 @@
-use motolii_core::{ColorSpace, FrameDesc, PixelFormat, RationalTime};
+use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime};
 use motolii_eval::Value;
 use motolii_gpu::{download_rgba, upload_rgba, GpuCtx, PipelineCache};
 use motolii_nodes::{
@@ -6,7 +6,7 @@ use motolii_nodes::{
     CompositeNode, FilterNode, LineOverlay, OverlayNode, RectOverlay,
 };
 use motolii_plugin::reference::CLEAR_FILTER;
-use motolii_plugin::TextureRef;
+use motolii_plugin::{RenderCtx, TextureRef};
 use motolii_testkit::cpu_reference::{
     expected_circle_over_pattern, expected_line_over_pattern, expected_rect_over_pattern,
     premul_add_u8, premul_multiply_u8, premul_over_u8,
@@ -26,7 +26,7 @@ fn clear_filter_runs_through_node_and_matches_golden() {
     node.render(
         &gpu,
         &mut pipelines,
-        RationalTime::ZERO,
+        &RenderCtx::new(RationalTime::ZERO, Quality::FINAL),
         TextureRef {
             texture: &input,
             desc,
@@ -52,6 +52,97 @@ fn clear_filter_runs_through_node_and_matches_golden() {
         &actual,
         &expected,
         tol::EXACT,
+    );
+}
+
+#[test]
+fn filter_node_forwards_draft_quality_in_render_ctx() {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::OnceLock;
+
+    use motolii_gpu::PipelineCache;
+    use motolii_plugin::{
+        FilterPlugin, NodeDesc, PluginError, PluginId, ResolvedParams, TextureRef as Tex,
+    };
+
+    static SEEN_SCALE: AtomicU32 = AtomicU32::new(0);
+
+    struct QualityProbe;
+    impl FilterPlugin for QualityProbe {
+        fn desc(&self) -> &NodeDesc {
+            static DESC: OnceLock<NodeDesc> = OnceLock::new();
+            DESC.get_or_init(|| NodeDesc {
+                id: PluginId("test.filter.quality_probe_node"),
+                version: 1,
+                display_name: "QualityProbe",
+                category: "Utility",
+                tags: &["test"],
+                params: vec![],
+                min_inputs: 1,
+                max_inputs: 1,
+            })
+        }
+
+        fn render(
+            &self,
+            _gpu: &motolii_gpu::GpuCtx,
+            _pipelines: &mut PipelineCache,
+            encoder: &mut wgpu::CommandEncoder,
+            ctx: &RenderCtx,
+            _params: &ResolvedParams,
+            _input: Tex<'_>,
+            output: Tex<'_>,
+        ) -> Result<(), PluginError> {
+            SEEN_SCALE.store(ctx.quality.resolution_scale, Ordering::SeqCst);
+            let view = output
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor::default());
+            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("quality-probe-node"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            Ok(())
+        }
+    }
+    static PROBE: QualityProbe = QualityProbe;
+
+    let Some(gpu) = gpu_or_skip() else { return };
+    let desc = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+    let input = create_rgba_render_target(&gpu, desc, "probe-in");
+    let output = create_rgba_render_target(&gpu, desc, "probe-out");
+    let mut pipelines = PipelineCache::new();
+    SEEN_SCALE.store(0, Ordering::SeqCst);
+    FilterNode::new(&PROBE)
+        .render(
+            &gpu,
+            &mut pipelines,
+            &RenderCtx::new(RationalTime::ZERO, Quality::DRAFT),
+            TextureRef {
+                texture: &input,
+                desc,
+            },
+            TextureRef {
+                texture: &output,
+                desc,
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        SEEN_SCALE.load(Ordering::SeqCst),
+        Quality::DRAFT.resolution_scale,
+        "FilterNode must forward caller Quality into RenderCtx"
     );
 }
 
@@ -467,7 +558,7 @@ fn prefill_with_magenta(gpu: &GpuCtx, desc: FrameDesc, output: &wgpu::Texture) {
         .render(
             gpu,
             &mut pipelines,
-            RationalTime::ZERO,
+            &RenderCtx::new(RationalTime::ZERO, Quality::FINAL),
             TextureRef {
                 texture: &input,
                 desc,

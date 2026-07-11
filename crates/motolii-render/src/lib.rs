@@ -1423,6 +1423,119 @@ mod tests {
     }
 
     #[test]
+    fn plugin_dispatch_forwards_draft_quality_in_render_ctx() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        use std::sync::OnceLock;
+
+        use motolii_gpu::PipelineCache;
+        use motolii_plugin::{FilterPlugin, NodeDesc, PluginError, RenderCtx};
+
+        static SEEN_SCALE: AtomicU32 = AtomicU32::new(0);
+
+        struct QualityProbeFilter;
+        impl FilterPlugin for QualityProbeFilter {
+            fn desc(&self) -> &NodeDesc {
+                static DESC: OnceLock<NodeDesc> = OnceLock::new();
+                DESC.get_or_init(|| NodeDesc {
+                    id: PluginId("test.filter.quality_probe_graph"),
+                    version: 1,
+                    display_name: "QualityProbeGraph",
+                    category: "Utility",
+                    tags: &["test"],
+                    params: vec![],
+                    min_inputs: 1,
+                    max_inputs: 1,
+                })
+            }
+
+            fn render(
+                &self,
+                _gpu: &GpuCtx,
+                _pipelines: &mut PipelineCache,
+                encoder: &mut wgpu::CommandEncoder,
+                ctx: &RenderCtx,
+                _params: &ResolvedParams,
+                _input: TextureRef<'_>,
+                output: TextureRef<'_>,
+            ) -> Result<(), PluginError> {
+                SEEN_SCALE.store(ctx.quality.resolution_scale, Ordering::SeqCst);
+                let view = output
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+                encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("quality-probe-graph"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                Ok(())
+            }
+        }
+        static PROBE: QualityProbeFilter = QualityProbeFilter;
+
+        let Some(gpu) = gpu_or_skip() else { return };
+        let mut registry = PluginRegistry::new();
+        registry.register_filter(&PROBE).unwrap();
+
+        let desc = FrameDesc::packed(16, 8, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let graph = LinearRenderGraph {
+            desc,
+            steps: vec![
+                RenderStep::SolidSource {
+                    output: TextureId(0),
+                    source: SolidSource {
+                        color: [1.0, 0.0, 0.0, 1.0],
+                        time_map: TimeMap::identity(),
+                        reports_source_time: true,
+                    },
+                },
+                RenderStep::Plugin {
+                    id: PluginId("test.filter.quality_probe_graph"),
+                    params: ResolvedParams::new(),
+                    inputs: vec![TextureId(0)],
+                    output: TextureId(1),
+                },
+            ],
+            output: TextureId(1),
+        };
+
+        SEEN_SCALE.store(0, Ordering::SeqCst);
+        let rendered = render_graph_cached(
+            &gpu,
+            &mut RenderSession::new(&gpu),
+            RationalTime::ZERO,
+            &graph,
+            &RenderGraphInputs {
+                plugins: Some(&registry),
+                source_time: Some(RationalTime::ZERO),
+                ..RenderGraphInputs::default()
+            },
+            Quality::DRAFT,
+        )
+        .unwrap();
+        assert_eq!(
+            rendered.desc.width,
+            Quality::DRAFT.render_desc(desc).width,
+            "Draft must shrink the render target"
+        );
+        assert_eq!(
+            SEEN_SCALE.load(Ordering::SeqCst),
+            Quality::DRAFT.resolution_scale,
+            "dispatch_plugin must put caller Quality into RenderCtx"
+        );
+    }
+
+    #[test]
     fn plugin_graph_rejects_unused_texture_write() {
         let Some(gpu) = gpu_or_skip() else { return };
         let desc = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);

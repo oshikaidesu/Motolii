@@ -137,8 +137,9 @@ def render_source(*, kind: str, name: str, vendor: str) -> str:
     imports = [
         "use std::sync::OnceLock;",
         "",
-        "use motolii_core::RationalTime;",
     ]
+    if kind == "layer_source":
+        imports.append("use motolii_core::RationalTime;")
     if kind == "param_driver":
         imports.append("use motolii_eval::DataTrack;")
     imports.append("use motolii_gpu::{GpuCtx, PipelineCache};")

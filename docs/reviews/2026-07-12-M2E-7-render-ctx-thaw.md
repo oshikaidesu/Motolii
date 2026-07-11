@@ -11,6 +11,7 @@
 - 参照 Filter/Composite を `ctx: &RenderCtx` 経由に改訂し、既存ゴールデン・purity・workspace テストが不変で緑
 - `RenderCtx::new(t, quality)` でホストが Quality を渡し、予約フィールドはデフォルト(未配線)
 - `#[non_exhaustive]` により以降の予約口追加はシグネチャ非破壊
+- **追補**: `FilterNode::render` は呼び出し側の `&RenderCtx` を転送(`Quality::FINAL` 固定をやめた)。製品経路 `render_graph_cached(..., Quality::DRAFT)` でプローブ Filter が `ctx.quality.resolution_scale == 2` を観測するテストを追加
 
 ## 2. 旧データの migrate 経路
 
