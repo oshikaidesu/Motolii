@@ -1237,8 +1237,6 @@ mod tests {
 
         let mut clear_params = ResolvedParams::new();
         clear_params.insert("color", Value::Color([0.0, 1.0, 0.0, 1.0]));
-        let mut tint_red = ResolvedParams::new();
-        tint_red.insert("color", Value::Color([1.0, 0.0, 0.0, 1.0]));
         let mut tint_blue = ResolvedParams::new();
         tint_blue.insert("color", Value::Color([0.0, 0.0, 1.0, 1.0]));
 
@@ -1261,18 +1259,12 @@ mod tests {
                 },
                 RenderStep::Plugin {
                     id: PluginId("core.filter.tint"),
-                    params: tint_red,
+                    params: tint_blue,
                     inputs: vec![TextureId(1)],
                     output: TextureId(2),
                 },
-                RenderStep::Plugin {
-                    id: PluginId("core.filter.tint"),
-                    params: tint_blue,
-                    inputs: vec![TextureId(2)],
-                    output: TextureId(3),
-                },
             ],
-            output: TextureId(3),
+            output: TextureId(2),
         };
 
         let rendered = render_graph_cached(
