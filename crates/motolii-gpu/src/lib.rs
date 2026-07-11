@@ -11,4 +11,4 @@ mod yuv;
 pub use ctx::{GpuCtx, GpuError, GpuRuntimeError};
 pub use pipeline_cache::{CachedTexSampleUniform4, PipelineCache, PipelineCacheKey};
 pub use transfer::{download_rgba, upload_rgba, RgbaDownloader, DEFAULT_DOWNLOAD_TIMEOUT};
-pub use yuv::{solid_yuv420p, yuv_to_rgba_reference, ColorParams, YuvError, YuvToRgba};
+pub use yuv::{solid_yuv420p, ColorParams, YuvError, YuvToRgba};

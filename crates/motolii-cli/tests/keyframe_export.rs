@@ -1,8 +1,9 @@
 use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap};
 use motolii_eval::{DataTracks, Interp, Keyframe, KeyframeTrack, ParamSource, Value};
 use motolii_gpu::download_rgba;
-use motolii_nodes::{CanonicalSize, ParamRectOverlay, RectOverlay, ViewportTransform};
+use motolii_nodes::{CanonicalSize, ParamRectOverlay};
 use motolii_render::{render_frame, RenderFrameRequest, SolidSource};
+use motolii_testkit::cpu_reference::expected_rect_frame;
 use motolii_testkit::{assert_rgba_close, gpu_or_skip, RgbaImageDesc};
 
 const W: u32 = 32;
@@ -26,27 +27,6 @@ fn moving_overlay() -> ParamRectOverlay {
         size: ParamSource::Const(Value::Vec2([0.5, 0.5])),
         color: ParamSource::Const(Value::Color([1.0, 0.0, 0.0, 1.0])),
     }
-}
-
-fn expected_rect_frame(desc: FrameDesc, bg: [u8; 4], fg: [u8; 4], rect: RectOverlay) -> Vec<u8> {
-    let tx = ViewportTransform::from_desc(&desc);
-    let center = tx.point_to_px(rect.center);
-    let size = tx.size_to_px(rect.size);
-    let min_x = center.x - size.width * 0.5;
-    let max_x = center.x + size.width * 0.5;
-    let min_y = center.y - size.height * 0.5;
-    let max_y = center.y + size.height * 0.5;
-    let mut out = vec![0u8; desc.data_size()];
-    for y in 0..desc.height {
-        for x in 0..desc.width {
-            let cx = x as f64 + 0.5;
-            let cy = y as f64 + 0.5;
-            let inside = cx >= min_x && cx < max_x && cy >= min_y && cy < max_y;
-            let i = ((y * desc.width + x) * 4) as usize;
-            out[i..i + 4].copy_from_slice(if inside { &fg } else { &bg });
-        }
-    }
-    out
 }
 
 #[test]
@@ -76,7 +56,13 @@ fn keyframed_overlay_matches_golden_at_start_mid_end() {
         };
         let rendered = render_frame(&gpu, &request, Quality::FINAL).unwrap();
         let actual = download_rgba(&gpu, &rendered.texture).unwrap();
-        let expected = expected_rect_frame(desc, [0, 0, 0, 255], [255, 0, 0, 255], rect);
+        let expected = expected_rect_frame(
+            desc,
+            [0, 0, 0, 255],
+            [255, 0, 0, 255],
+            [rect.center.x, rect.center.y],
+            [rect.size.width, rect.size.height],
+        );
         assert_rgba_close(
             &format!("keyframe-overlay-{label}"),
             RgbaImageDesc {

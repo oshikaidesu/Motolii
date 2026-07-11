@@ -11,6 +11,7 @@
 
 use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, RationalTime};
 use motolii_media::{probe, read_frame_at, Encoder, FrameReader};
+use motolii_testkit::cpu_reference::expected_luma;
 
 const W: u32 = 64;
 const H: u32 = 48;
@@ -21,11 +22,6 @@ const TOL: i32 = 6;
 
 fn frame_gray(index: i64) -> u8 {
     (index * 8) as u8
-}
-
-/// グレーRGB(g,g,g)のBT.709 limited輝度: Y = 16 + 219*g/255(グレーは係数に依らない)
-fn expected_luma(gray: u8) -> i32 {
-    (16.0 + 219.0 * gray as f64 / 255.0).round() as i32
 }
 
 fn make_test_video(path: &std::path::Path) {

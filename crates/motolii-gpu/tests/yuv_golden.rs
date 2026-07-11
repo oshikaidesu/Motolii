@@ -4,7 +4,8 @@
 //! GPUアダプタが無い環境ではskip(CIはlavapipeで必ず実行)。
 
 use motolii_core::{ColorSpace, PixelFormat};
-use motolii_gpu::{download_rgba, solid_yuv420p, yuv_to_rgba_reference, YuvToRgba};
+use motolii_gpu::{download_rgba, solid_yuv420p, YuvToRgba};
+use motolii_testkit::cpu_reference::yuv_to_rgba_reference;
 use motolii_testkit::{assert_rgba_close, gpu_or_skip, RgbaImageDesc};
 
 #[test]
