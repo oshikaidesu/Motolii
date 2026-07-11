@@ -131,6 +131,27 @@ impl FrameDesc {
         }
         Ok(())
     }
+
+    /// 同一アスペクト比かつ、どちらかが他方の整数倍解像度か(Draft縮小の動画背景など)。
+    pub fn same_aspect_integer_scale(self, other: Self) -> bool {
+        if self.width == 0 || self.height == 0 || other.width == 0 || other.height == 0 {
+            return false;
+        }
+        if u64::from(self.width) * u64::from(other.height)
+            != u64::from(self.height) * u64::from(other.width)
+        {
+            return false;
+        }
+        let (large_w, large_h, small_w, small_h) = if self.width >= other.width {
+            (self.width, self.height, other.width, other.height)
+        } else {
+            (other.width, other.height, self.width, self.height)
+        };
+        if large_w % small_w != 0 || large_h % small_h != 0 {
+            return false;
+        }
+        large_w / small_w == large_h / small_h
+    }
 }
 
 /// CPU側メモリに載ったフレーム。デコード出力・書き出し入力・テストで使う。
@@ -204,6 +225,64 @@ mod tests {
             premultiply_rgba_f32([1.0, 0.5, 0.25, 0.5]),
             [0.5, 0.25, 0.125, 0.5]
         );
+    }
+
+    #[test]
+    fn same_aspect_integer_scale_accepts_draft_halving() {
+        let full = FrameDesc::packed(1920, 1080, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let draft = FrameDesc::packed(960, 540, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        assert!(full.same_aspect_integer_scale(draft));
+    }
+
+    #[test]
+    fn same_aspect_integer_scale_rejects_mismatched_aspect() {
+        let a = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let b = FrameDesc::packed(8, 8, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        assert!(!a.same_aspect_integer_scale(b));
+    }
+
+    #[test]
+    fn same_aspect_integer_scale_rejects_non_integer_scale() {
+        let a = FrameDesc::packed(640, 360, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let b = FrameDesc::packed(480, 270, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        assert!(!a.same_aspect_integer_scale(b));
+    }
+
+    #[test]
+    fn same_aspect_integer_scale_rejects_zero_dimension() {
+        let valid = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let zero_w = FrameDesc::packed(0, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let zero_h = FrameDesc::packed(8, 0, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        assert!(!valid.same_aspect_integer_scale(zero_w));
+        assert!(!valid.same_aspect_integer_scale(zero_h));
+        assert!(!zero_w.same_aspect_integer_scale(valid));
+    }
+
+    #[test]
+    fn same_aspect_integer_scale_handles_large_dimensions_without_overflow() {
+        let a = FrameDesc::packed(
+            65536,
+            65536,
+            PixelFormat::Rgba8Unorm,
+            ColorSpace::Srgb,
+            true,
+        );
+        let b = FrameDesc::packed(
+            65536,
+            65536,
+            PixelFormat::Rgba8Unorm,
+            ColorSpace::Srgb,
+            true,
+        );
+        assert!(a.same_aspect_integer_scale(b));
+        let c = FrameDesc::packed(
+            65536,
+            65537,
+            PixelFormat::Rgba8Unorm,
+            ColorSpace::Srgb,
+            true,
+        );
+        assert!(!a.same_aspect_integer_scale(c));
     }
 
     #[test]

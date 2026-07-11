@@ -291,8 +291,7 @@ pub fn render_frame_with_background_texture(
     quality: Quality,
 ) -> Result<RenderedFrame, RenderError> {
     validate_render_desc(request.desc)?;
-    let desc = quality.render_desc(request.desc);
-    validate_background_desc(desc, request.background.desc)?;
+    validate_background_desc(request.desc, request.background.desc)?;
     // 外部背景経路も render_graph 一本化。オーバーレイ形状だけ毎フレーム差し替える。
     let graph = linear_graph_with_video_source(request.desc, request.overlay);
     let source_time = request.time_map.try_map(request.timeline_time)?;
@@ -352,6 +351,7 @@ pub fn render_graph_cached(
                     .iter()
                     .find(|(id, _)| *id == *output)
                     .ok_or(RenderError::MissingVideoSource(output.0))?;
+                validate_external_texture_desc(graph.desc, *tex)?;
                 // ハンドル(Arc)の複製でスロットに載せ、以降は通常テクスチャと同じ経路にする。
                 textures[output.0] = Some(tex.texture.clone());
             }
@@ -828,14 +828,51 @@ fn validate_output(id: TextureId, written: &mut [bool]) -> Result<(), RenderErro
 
 fn texture_ref<'a>(
     textures: &'a [Option<wgpu::Texture>],
-    desc: FrameDesc,
+    render_desc: FrameDesc,
     id: TextureId,
 ) -> Result<TextureRef<'a>, RenderError> {
     let texture = textures
         .get(id.0)
         .and_then(Option::as_ref)
         .ok_or(RenderError::MissingTexture(id.0))?;
-    Ok(TextureRef { texture, desc })
+    Ok(TextureRef {
+        texture,
+        desc: frame_desc_with_texture_size(texture, render_desc),
+    })
+}
+
+/// テクスチャ実寸だけ差し替え、format/色空間/premulはレンダ解像度テンプレートを流用する。
+fn frame_desc_with_texture_size(texture: &wgpu::Texture, template: FrameDesc) -> FrameDesc {
+    FrameDesc::packed(
+        texture.width(),
+        texture.height(),
+        template.format,
+        template.color_space,
+        template.premultiplied,
+    )
+}
+
+fn validate_external_texture_desc(
+    expected: FrameDesc,
+    source: TextureRef<'_>,
+) -> Result<(), RenderError> {
+    let actual = FrameDesc::packed(
+        source.texture.width(),
+        source.texture.height(),
+        source.desc.format,
+        source.desc.color_space,
+        source.desc.premultiplied,
+    );
+    if !actual.same_aspect_integer_scale(expected) {
+        return Err(RenderError::UnsupportedFrameDesc);
+    }
+    if source.desc.format != PixelFormat::Rgba8Unorm
+        || source.desc.color_space != ColorSpace::Srgb
+        || !source.desc.premultiplied
+    {
+        return Err(RenderError::UnsupportedFrameDesc);
+    }
+    Ok(())
 }
 
 fn live_textures<'a>(
@@ -981,9 +1018,10 @@ fn validate_render_desc(desc: FrameDesc) -> Result<(), RenderError> {
 }
 
 fn validate_background_desc(output: FrameDesc, background: FrameDesc) -> Result<(), RenderError> {
-    if background.width != output.width
-        || background.height != output.height
-        || background.format != PixelFormat::Rgba8Unorm
+    if !background.same_aspect_integer_scale(output) {
+        return Err(RenderError::UnsupportedFrameDesc);
+    }
+    if background.format != PixelFormat::Rgba8Unorm
         || background.color_space != ColorSpace::Srgb
         || !background.premultiplied
     {
@@ -1574,6 +1612,77 @@ mod tests {
             &fixed_actual,
             0,
         );
+    }
+
+    #[test]
+    fn render_frame_with_background_texture_accepts_draft_quality() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let request = centered_request();
+        let desc = request.desc;
+        let background = upload_rgba(&gpu, &desc, &solid_rgba(desc, request.source.color));
+
+        let mut session = RenderSession::new(&gpu);
+        let rendered = render_frame_with_background_texture(
+            &gpu,
+            &mut session,
+            &BackgroundTextureRequest {
+                desc,
+                timeline_time: request.timeline_time,
+                time_map: TimeMap::identity(),
+                background: TextureRef {
+                    texture: &background,
+                    desc,
+                },
+                overlay: request.overlay,
+            },
+            Quality::DRAFT,
+        )
+        .unwrap();
+
+        assert_eq!(rendered.desc.width, desc.width / 2);
+        assert_eq!(rendered.desc.height, desc.height / 2);
+
+        let actual = download_rgba(&gpu, &rendered.texture).unwrap();
+        assert_eq!(
+            actual.len(),
+            (rendered.desc.width * rendered.desc.height * 4) as usize
+        );
+        assert!(actual.iter().any(|&v| v != 0));
+    }
+
+    #[test]
+    fn render_graph_rejects_mismatched_video_source_dimensions() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let request = centered_request();
+        let desc = request.desc;
+        let wrong_desc = FrameDesc::packed(8, 8, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let background = upload_rgba(
+            &gpu,
+            &wrong_desc,
+            &solid_rgba(wrong_desc, request.source.color),
+        );
+        let graph = linear_graph_with_video_source(desc, request.overlay);
+
+        let err = render_graph_cached(
+            &gpu,
+            &mut RenderSession::new(&gpu),
+            request.timeline_time,
+            &graph,
+            &RenderGraphInputs {
+                video_sources: &[(
+                    TextureId(0),
+                    TextureRef {
+                        texture: &background,
+                        desc: wrong_desc,
+                    },
+                )],
+                source_time: Some(RationalTime::ZERO),
+                ..RenderGraphInputs::default()
+            },
+            Quality::FINAL,
+        )
+        .unwrap_err();
+        assert!(matches!(err, RenderError::UnsupportedFrameDesc));
     }
 
     #[test]
