@@ -56,17 +56,13 @@ fn mask_non_code(src: &str) -> String {
         }
         // raw string: r#"..."# / r##"..."## / br"..." 等
         if let Some((prefix_len, hashes)) = raw_string_prefix(bytes, i) {
-            for _ in 0..prefix_len {
-                out.push(b' ');
-            }
+            out.extend(std::iter::repeat_n(b' ', prefix_len));
             i += prefix_len;
             let closer = format!("\"{}", "#".repeat(hashes));
             let closer_bytes = closer.as_bytes();
             while i < bytes.len() {
                 if bytes[i..].starts_with(closer_bytes) {
-                    for _ in 0..closer_bytes.len() {
-                        out.push(b' ');
-                    }
+                    out.extend(std::iter::repeat_n(b' ', closer_bytes.len()));
                     i += closer_bytes.len();
                     break;
                 }
