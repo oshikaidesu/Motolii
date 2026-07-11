@@ -119,10 +119,8 @@ mod tests {
     fn finish_drains_stderr_before_wait_without_deadlock() {
         use std::os::unix::fs::PermissionsExt;
 
-        let dir = std::env::temp_dir().join(format!(
-            "motolii-media-stderr-flood-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("motolii-media-stderr-flood-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let fake_ffmpeg = dir.join("fake-ffmpeg");
         std::fs::write(
