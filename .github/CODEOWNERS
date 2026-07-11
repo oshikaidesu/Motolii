@@ -1,25 +1,24 @@
 # M2E-2: テスト資産の不可侵化。
-# 保護領域への変更はコードオーナー承認が必須(ruleset/branch protectionで承認強制を有効化すること)。
+# 保護領域への変更はコードオーナー承認が必須。
 # CODEOWNERS単体ではマージを止めない — GitHub ruleset側の設定が完了条件①。
 #
 # 自己保護: 本ファイル自体もオーナー対象。これが無いと「CODEOWNERSを書き換えて
 # 保護行を削除 → 次PRでオラクル変更」という迂回がdiffゲートをすり抜ける。
 #
-# 有効化順序(#35ブートストラップPR → ruleset):
-#   1. PR #35を先にマージ(CODEOWNERS+保護領域+diffゲートをmainへ)
-#   2. 直後にrulesetを有効化(作成者が唯一のCode Ownerなら、#35マージ前に
-#      有効化すると自己承認不可で詰まる)
-#   3. 別PRで保護パス変更が止まることを実地確認
-#   4. 確認後にM2E-2を[x]
+# === 有効化履歴(2026-07-12, Cursor agent経由・人間の自己クリックループではない) ===
+# 1. PR #35 ブートストラップマージ済(CODEOWNERS+保護領域+diffゲート)
+# 2. ruleset作成: name=`M2E-2 require code owner review` id=18817145
+#    - target: refs/heads/main
+#    - require_code_owner_review: true
+#    - required_approving_review_count: 1
+#    - URL: https://github.com/oshikaidesu/Motolii/rules/18817145
+# 3. 実地確認 PR #42(保護のみ・本番差分なし → 確認後クローズ)
+#    - reviewDecision=REVIEW_REQUIRED / mergeStateStatus=BLOCKED
+# 4. 単独Owner方針: 第二Code Ownerは置かず、RepositoryRole Admin の
+#    bypass_mode=pull_request を例外手順とする(自己承認ループ禁止。
+#    保護資産更新は agent がPR作成→履歴を残す→必要時のみadmin bypass)。
 #
-# 単独運用: ruleset有効後は保護資産更新に別人のCode Owner承認が要る。
-#   第二Code Ownerを追加するか、管理者bypassを例外手順として明文化する。
-#
-# ruleset 手順(①完了条件・#35マージ後に人手で1回):
-#   Settings → Rules → Rulesets → New branch ruleset
-#   - Target: default branch (main)
-#   - Require a pull request before merging → Require review from Code Owners
-#   - 既存の branch protection と重複しないよう確認
+# UI手順の代替: Settings → Rules → Rulesets でも同等設定可(上記API作成済み)。
 
 /.github/CODEOWNERS @oshikaidesu
 crates/motolii-testkit/golden/** @oshikaidesu
