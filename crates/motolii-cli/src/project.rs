@@ -129,6 +129,8 @@ pub enum ProjectError {
     Media(#[from] motolii_media::MediaError),
     #[error(transparent)]
     Plugin(#[from] motolii_plugin::PluginError),
+    #[error("unsupported project time_map: only identity is accepted until M2")]
+    UnsupportedTimeMap,
     #[error(transparent)]
     Export(#[from] motolii_export::ExportError),
     #[error(transparent)]
@@ -152,6 +154,9 @@ pub fn load_project_v1_from_str(text: &str) -> Result<ProjectV1, ProjectError> {
         return Err(ProjectError::UnsupportedVersion(project.version));
     }
     project.time_map.validate()?;
+    if !project.time_map.is_identity() {
+        return Err(ProjectError::UnsupportedTimeMap);
+    }
     Ok(project)
 }
 
@@ -592,6 +597,28 @@ mod tests {
         }"#;
         let project: ProjectV1 = serde_json::from_str(json).unwrap();
         assert_eq!(project.time_map, TimeMap::identity());
+    }
+
+    #[test]
+    fn project_rejects_non_identity_time_map() {
+        let json = r#"{
+            "version": 1,
+            "input": "in.mp4",
+            "output": "out.mp4",
+            "time_map": {
+                "source_start": {"num": 0, "den": 1},
+                "timeline_start": {"num": 0, "den": 1},
+                "speed_num": 2,
+                "speed_den": 1
+            },
+            "overlay": {
+                "center": [0.0, 0.0],
+                "size": [0.5, 0.5],
+                "color": [1.0, 0.0, 0.0, 1.0]
+            }
+        }"#;
+        let err = load_project_v1_from_str(json).unwrap_err();
+        assert!(matches!(err, ProjectError::UnsupportedTimeMap));
     }
 
     #[test]

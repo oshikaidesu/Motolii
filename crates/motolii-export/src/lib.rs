@@ -66,6 +66,12 @@ pub fn export_overlay_video(
         return Err(ExportError::InvalidRequest("start_frame must be >= 0"));
     }
     request.time_map.validate()?;
+    if !request.time_map.is_identity() {
+        return Err(ExportError::InvalidRequest(
+            "only identity TimeMap is accepted for export until M2; \
+             non-identity maps do not affect decode and would silently mis-report source_time",
+        ));
+    }
 
     let info = probe(request.input_path)?;
     let mut reader = FrameReader::open(request.input_path, &info, request.start_frame)?;
@@ -144,4 +150,51 @@ pub fn export_overlay_video(
         desc,
         fps: info.fps,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use motolii_core::TimeMap;
+    use motolii_eval::DataTracks;
+    use motolii_nodes::{CanonicalPoint, CanonicalSize, ParamRectOverlay, RectOverlay};
+
+    use super::*;
+
+    #[test]
+    fn export_rejects_non_identity_time_map() {
+        let Ok(gpu) = GpuCtx::new_headless() else {
+            eprintln!("SKIP: no GPU adapter");
+            return;
+        };
+        let err = export_overlay_video(
+            &gpu,
+            &ExportOverlayRequest {
+                input_path: Path::new("missing.mp4"),
+                output_path: Path::new("out.mp4"),
+                start_frame: 0,
+                frame_count: Some(1),
+                overlay: ParamRectOverlay::constant(RectOverlay {
+                    center: CanonicalPoint::CENTER,
+                    size: CanonicalSize {
+                        width: 0.5,
+                        height: 0.5,
+                    },
+                    color: [1.0, 0.0, 0.0, 1.0],
+                }),
+                data_tracks: DataTracks::new(),
+                time_map: TimeMap::constant_speed(
+                    motolii_core::RationalTime::ZERO,
+                    motolii_core::RationalTime::ZERO,
+                    2,
+                    1,
+                )
+                .unwrap(),
+                qp0: true,
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ExportError::InvalidRequest(_)));
+    }
 }

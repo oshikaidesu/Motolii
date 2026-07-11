@@ -114,13 +114,14 @@ pub fn probe(path: impl AsRef<Path>) -> Result<MediaInfo> {
         std::mem::swap(&mut width, &mut height);
     }
 
-    // r_frame_rateを優先(コンテナ宣言レート)。VFR素材ではavg_frame_rateと食い違う。
-    // その扱い(CFR正規化)はM4のインポートパイプラインの責務。
-    let fps = stream
-        .r_frame_rate
-        .as_deref()
-        .and_then(parse_fraction)
-        .or_else(|| stream.avg_frame_rate.as_deref().and_then(parse_fraction))
+    validate_even_dimensions(width, height)?;
+
+    let r_fps = stream.r_frame_rate.as_deref().and_then(parse_fraction);
+    let avg_fps = stream.avg_frame_rate.as_deref().and_then(parse_fraction);
+    reject_variable_frame_rate(r_fps, avg_fps)?;
+
+    let fps = r_fps
+        .or(avg_fps)
         .ok_or_else(|| MediaError::Probe("missing frame rate".into()))?;
 
     let duration = stream
@@ -130,7 +131,8 @@ pub fn probe(path: impl AsRef<Path>) -> Result<MediaInfo> {
         .and_then(|s| parse_duration_snapped(s, fps));
     let nb_frames = stream.nb_frames.as_deref().and_then(|s| s.parse().ok());
 
-    let color_space = map_color_space(stream.color_space.as_deref(), stream.color_range.as_deref());
+    let color_space = map_color_space(stream.color_space.as_deref(), stream.color_range.as_deref())
+        .map_err(MediaError::Probe)?;
 
     Ok(MediaInfo {
         width,
@@ -143,15 +145,72 @@ pub fn probe(path: impl AsRef<Path>) -> Result<MediaInfo> {
     })
 }
 
+/// 4:2:0デコード前提のため偶数寸法のみ受理する。
+fn validate_even_dimensions(width: u32, height: u32) -> Result<()> {
+    if width.is_multiple_of(2) && height.is_multiple_of(2) {
+        Ok(())
+    } else {
+        Err(MediaError::Probe(format!(
+            "odd video dimensions ({width}x{height}) are not supported (4:2:0 requires even width and height); \
+             re-encode with even dimensions, e.g. \
+             ffmpeg -i input.mp4 -vf \"scale=trunc(iw/2)*2:trunc(ih/2)*2\" -c:v libx264 output.mp4"
+        )))
+    }
+}
+
+/// r_frame_rate と avg_frame_rate が有意に食い違う場合はVFR疑いとして拒否する。
+/// ffprobeタグの比較によるヒューリスティックであり、全VFRを網羅する保証はない。
+fn reject_variable_frame_rate(r_fps: Option<Fps>, avg_fps: Option<Fps>) -> Result<()> {
+    let (Some(r), Some(a)) = (r_fps, avg_fps) else {
+        return Ok(());
+    };
+    if fps_differ_significantly(r, a) {
+        return Err(MediaError::Probe(format!(
+            "variable frame rate (VFR) detected: r_frame_rate {}/{} != avg_frame_rate {}/{}; \
+             re-encode to constant frame rate first, e.g. \
+             ffmpeg -i input.mp4 -vf fps=30 -c:v libx264 output.mp4",
+            r.num, r.den, a.num, a.den
+        )));
+    }
+    Ok(())
+}
+
+fn fps_differ_significantly(a: Fps, b: Fps) -> bool {
+    let a_f = a.as_f64();
+    let b_f = b.as_f64();
+    if a_f <= 0.0 || b_f <= 0.0 {
+        return false;
+    }
+    (a_f - b_f).abs() / a_f.max(b_f) > 0.005
+}
+
 /// ffprobeの色タグ→FrameDescの色空間。タグ欠落時はHD慣習(BT.709 limited)。
-fn map_color_space(space: Option<&str>, range: Option<&str>) -> ColorSpace {
+fn map_color_space(
+    space: Option<&str>,
+    range: Option<&str>,
+) -> std::result::Result<ColorSpace, String> {
     let full = matches!(range, Some("pc") | Some("jpeg"));
     match space {
-        Some("smpte170m") | Some("bt470bg") => ColorSpace::Rec601Limited,
-        Some("bt709") if full => ColorSpace::Rec709Full,
-        Some("bt709") => ColorSpace::Rec709Limited,
-        _ if full => ColorSpace::Rec709Full,
-        _ => ColorSpace::Rec709Limited,
+        Some("smpte170m") | Some("bt470bg") if full => Err(
+            "BT.601 full range is not supported in v1; \
+             re-encode to limited range or convert to BT.709 first"
+                .to_string(),
+        ),
+        Some("smpte170m") | Some("bt470bg") => Ok(ColorSpace::Rec601Limited),
+        Some("bt709") if full => Ok(ColorSpace::Rec709Full),
+        Some("bt709") => Ok(ColorSpace::Rec709Limited),
+        Some("bt2020nc") | Some("bt2020c") | Some("bt2020") => Err(
+            "BT.2020/HDR color space is not supported in v1; \
+             re-encode to BT.709 (SDR) first, e.g. \
+             ffmpeg -i input.mp4 -vf zscale=transfer=linear,format=gbrpf32le,zscale=primaries=709,transfer=709,matrix=709,format=yuv420p -c:v libx264 output.mp4"
+                .to_string(),
+        ),
+        Some(tag) => Err(format!(
+            "unsupported color_space tag '{tag}'; \
+             re-encode to BT.709 (SDR) or BT.601 limited first"
+        )),
+        None if full => Ok(ColorSpace::Rec709Full),
+        None => Ok(ColorSpace::Rec709Limited),
     }
 }
 
@@ -198,18 +257,51 @@ mod tests {
     #[test]
     fn maps_color_tags() {
         assert_eq!(
-            map_color_space(Some("bt709"), Some("tv")),
+            map_color_space(Some("bt709"), Some("tv")).unwrap(),
             ColorSpace::Rec709Limited
         );
         assert_eq!(
-            map_color_space(Some("bt709"), Some("pc")),
+            map_color_space(Some("bt709"), Some("pc")).unwrap(),
             ColorSpace::Rec709Full
         );
         assert_eq!(
-            map_color_space(Some("smpte170m"), None),
+            map_color_space(Some("smpte170m"), None).unwrap(),
             ColorSpace::Rec601Limited
         );
         // タグ欠落 → HD慣習
-        assert_eq!(map_color_space(None, None), ColorSpace::Rec709Limited);
+        assert_eq!(
+            map_color_space(None, None).unwrap(),
+            ColorSpace::Rec709Limited
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_and_hdr_color_tags() {
+        assert!(map_color_space(Some("bt2020nc"), Some("tv")).is_err());
+        assert!(map_color_space(Some("bt2020"), None).is_err());
+        assert!(map_color_space(Some("unknown_tag"), None).is_err());
+    }
+
+    #[test]
+    fn rejects_601_full_range() {
+        assert!(map_color_space(Some("smpte170m"), Some("pc")).is_err());
+        assert!(map_color_space(Some("bt470bg"), Some("jpeg")).is_err());
+    }
+
+    #[test]
+    fn rejects_odd_dimensions() {
+        assert!(validate_even_dimensions(641, 480).is_err());
+        assert!(validate_even_dimensions(640, 481).is_err());
+        assert!(validate_even_dimensions(640, 480).is_ok());
+    }
+
+    #[test]
+    fn rejects_variable_frame_rate_when_rates_differ() {
+        let cfr = Fps::new(30000, 1001);
+        assert!(!fps_differ_significantly(cfr, cfr));
+        let vfr = Fps::new(24, 1);
+        assert!(fps_differ_significantly(cfr, vfr));
+        assert!(reject_variable_frame_rate(Some(cfr), Some(vfr)).is_err());
+        assert!(reject_variable_frame_rate(Some(cfr), None).is_ok());
     }
 }
