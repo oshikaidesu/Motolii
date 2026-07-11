@@ -45,3 +45,5 @@ mod tests {
         let _ = mean_limit(2);
     }
 }
+
+// M2E-2 ruleset live verify: CODEOWNERS review required (agent-run 2026-07-11T22:58Z)
