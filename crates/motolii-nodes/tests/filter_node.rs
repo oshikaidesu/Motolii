@@ -11,7 +11,7 @@ use motolii_testkit::cpu_reference::{
     expected_circle_over_pattern, expected_line_over_pattern, expected_rect_over_pattern,
     premul_add_u8, premul_multiply_u8, premul_over_u8,
 };
-use motolii_testkit::{assert_rgba_close, gpu_or_skip, RgbaImageDesc};
+use motolii_testkit::{assert_rgba_close, gpu_or_skip, tol, RgbaImageDesc};
 
 #[test]
 fn clear_filter_runs_through_node_and_matches_golden() {
@@ -51,7 +51,7 @@ fn clear_filter_runs_through_node_and_matches_golden() {
         },
         &actual,
         &expected,
-        0,
+        tol::EXACT,
     );
 }
 
@@ -145,7 +145,7 @@ fn overlay_rect_uses_canonical_space_across_resolutions() {
             RgbaImageDesc { width, height },
             &actual,
             &expected,
-            0,
+            tol::EXACT,
         );
     }
 }
@@ -192,7 +192,7 @@ fn composite_normal_over_uses_premultiplied_alpha() {
         },
         &actual,
         &expected,
-        1,
+        tol::GPU_RASTER,
     );
 }
 
@@ -253,7 +253,7 @@ fn overlay_circle_uses_canonical_space_across_resolutions() {
             RgbaImageDesc { width, height },
             &actual,
             &expected,
-            0,
+            tol::EXACT,
         );
     }
 }
@@ -342,7 +342,7 @@ fn overlay_line_uses_canonical_space_across_resolutions() {
             RgbaImageDesc { width, height },
             &actual,
             &expected,
-            0,
+            tol::EXACT,
         );
     }
 }
@@ -402,7 +402,7 @@ fn composite_add_and_multiply_use_premultiplied_alpha() {
                 RgbaImageDesc { width, height },
                 &actual,
                 &expected,
-                1,
+                tol::GPU_RASTER,
             );
         }
     }
@@ -453,7 +453,7 @@ fn composite_multiply_premul_edge_cases() {
             },
             &actual,
             &expected,
-            1,
+            tol::GPU_RASTER,
         );
     }
 }
