@@ -76,6 +76,11 @@ impl TimeMap {
                 * self.speed_num
                 * RationalTime::new(1, self.speed_den))
     }
+
+    /// 恒等写像か。実デコードへの適用はM2まで未実装のため、export等は恒等のみ受理する。
+    pub fn is_identity(&self) -> bool {
+        *self == Self::IDENTITY
+    }
 }
 
 impl Default for TimeMap {
@@ -92,6 +97,17 @@ mod tests {
     fn identity_maps_same_time() {
         let t = RationalTime::new(1001, 30000);
         assert_eq!(TimeMap::identity().try_map(t).unwrap(), t);
+    }
+
+    #[test]
+    fn is_identity_detects_non_identity_maps() {
+        assert!(TimeMap::identity().is_identity());
+        assert!(!TimeMap::offset(RationalTime::ZERO, RationalTime::from_seconds(1)).is_identity());
+        assert!(
+            !TimeMap::constant_speed(RationalTime::ZERO, RationalTime::ZERO, 2, 1)
+                .unwrap()
+                .is_identity()
+        );
     }
 
     #[test]
