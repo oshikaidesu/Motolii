@@ -1268,7 +1268,7 @@ mod tests {
                 RenderStep::Plugin {
                     id: PluginId("core.filter.tint"),
                     params: tint_blue,
-                    inputs: vec![TextureId(1)],
+                    inputs: vec![TextureId(2)],
                     output: TextureId(3),
                 },
             ],
