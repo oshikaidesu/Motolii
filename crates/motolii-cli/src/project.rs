@@ -140,6 +140,8 @@ pub enum ProjectError {
     #[error(transparent)]
     Gpu(#[from] motolii_gpu::GpuRuntimeError),
     #[error(transparent)]
+    Yuv(#[from] motolii_gpu::YuvError),
+    #[error(transparent)]
     TimeMap(#[from] TimeMapError),
 }
 
@@ -319,7 +321,7 @@ impl PreparedProject {
     ) -> Result<Vec<u8>, ProjectError> {
         let frame = self.read_source_frame(export_index)?;
         let overlay = self.overlay.eval(frame.pts, &self.data_tracks)?;
-        let background = yuv.convert(gpu, &frame);
+        let background = yuv.convert(gpu, &frame)?;
         let rendered = render_frame_with_background_texture(
             gpu,
             session,
@@ -354,7 +356,7 @@ impl PreparedProject {
         let frame = reader.next_frame()?.ok_or(ProjectError::Export(
             motolii_export::ExportError::InvalidRequest("exported mp4 ended before expected frame"),
         ))?;
-        let texture = yuv.convert(gpu, &frame);
+        let texture = yuv.convert(gpu, &frame)?;
         Ok(downloader.download(gpu, &texture, motolii_export::EXPORT_DOWNLOAD_TIMEOUT)?)
     }
 
@@ -619,6 +621,36 @@ mod tests {
         }"#;
         let err = load_project_v1_from_str(json).unwrap_err();
         assert!(matches!(err, ProjectError::UnsupportedTimeMap));
+    }
+
+    #[test]
+    fn project_rejects_invalid_bezier_keyframes() {
+        let json = r#"{
+            "version": 1,
+            "input": "in.mp4",
+            "output": "out.mp4",
+            "overlay": {
+                "center": {
+                    "Keyframes": {
+                        "keys": [
+                            {
+                                "t": {"num": 0, "den": 1},
+                                "value": {"Vec2": [0.0, 0.0]},
+                                "interp": {"Bezier": {"x1": 1.5, "y1": 0.0, "x2": 0.5, "y2": 1.0}}
+                            },
+                            {
+                                "t": {"num": 1, "den": 1},
+                                "value": {"Vec2": [1.0, 0.0]},
+                                "interp": "Linear"
+                            }
+                        ]
+                    }
+                },
+                "size": [0.5, 0.5],
+                "color": [1.0, 0.0, 0.0, 1.0]
+            }
+        }"#;
+        assert!(load_project_v1_from_str(json).is_err());
     }
 
     #[test]

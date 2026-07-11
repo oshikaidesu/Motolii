@@ -3,7 +3,7 @@
 ///
 /// x(s)は単調である必要があるため x1, x2 ∈ [0,1] を要求する(yは範囲外可 = オーバーシュート)。
 pub fn cubic_bezier_ease(x1: f64, y1: f64, x2: f64, y2: f64, x: f64) -> f64 {
-    assert!(
+    debug_assert!(
         (0.0..=1.0).contains(&x1) && (0.0..=1.0).contains(&x2),
         "cubic_bezier_ease: x1/x2 must be in [0,1]"
     );

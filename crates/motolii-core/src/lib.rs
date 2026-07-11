@@ -10,7 +10,8 @@ mod time_map;
 
 pub use camera::CompCamera;
 pub use frame::{
-    premultiply_rgba_f32, premultiply_rgba_u8, ColorSpace, CpuFrame, FrameDesc, PixelFormat,
+    premultiply_rgba_f32, premultiply_rgba_u8, ColorSpace, CpuFrame, FrameDesc, FrameDescError,
+    PixelFormat,
 };
 pub use quality::{Quality, SampleTier};
 pub use time::{Fps, RationalTime};

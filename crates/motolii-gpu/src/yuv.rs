@@ -2,6 +2,14 @@ use motolii_core::{ColorSpace, CpuFrame, FrameDesc, PixelFormat};
 
 use crate::GpuCtx;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum YuvError {
+    #[error("YuvToRgba expects Yuv420p, got {:?}", .0)]
+    UnsupportedFormat(PixelFormat),
+    #[error("unsupported YUV color space {:?}", .0)]
+    UnsupportedColorSpace(ColorSpace),
+}
+
 /// YUV変換の係数・レンジ(FrameDesc.color_spaceから導出)。
 /// シェーダとCPU参照実装が同じ値を共有する(落とし穴B-3対策)。
 #[repr(C)]
@@ -168,14 +176,12 @@ impl YuvToRgba {
     /// YUV420pのCpuFrameを変換し、ガンマ保持RGBA8テクスチャを返す。
     /// 係数はframe.desc.color_spaceから選択される。
     /// リソースは寸法別プールを使い回し、毎フレームの確保は行わない。
-    pub fn convert(&mut self, gpu: &GpuCtx, frame: &CpuFrame) -> wgpu::Texture {
-        assert_eq!(
-            frame.desc.format,
-            PixelFormat::Yuv420p,
-            "YuvToRgba::convert expects Yuv420p"
-        );
+    pub fn convert(&mut self, gpu: &GpuCtx, frame: &CpuFrame) -> Result<wgpu::Texture, YuvError> {
+        if frame.desc.format != PixelFormat::Yuv420p {
+            return Err(YuvError::UnsupportedFormat(frame.desc.format));
+        }
         let params = ColorParams::for_color_space(frame.desc.color_space)
-            .unwrap_or_else(|| panic!("unsupported YUV color space {:?}", frame.desc.color_space));
+            .ok_or(YuvError::UnsupportedColorSpace(frame.desc.color_space))?;
 
         let (w, h) = (frame.desc.width, frame.desc.height);
         let (cw, ch) = (w / 2, h / 2);
@@ -234,7 +240,7 @@ impl YuvToRgba {
             pass.draw(0..3, 0..1);
         }
         gpu.queue.submit([enc.finish()]);
-        pool.outputs[idx].clone()
+        Ok(pool.outputs[idx].clone())
     }
 
     /// 寸法別リソースの一括確保(サイズ変更時のみ呼ばれる)
@@ -426,4 +432,34 @@ pub fn solid_yuv420p(w: u32, h: u32, y: u8, u: u8, v: u8, cs: ColorSpace) -> Cpu
     data[y_size..y_size + c_size].fill(u);
     data[y_size + c_size..y_size + 2 * c_size].fill(v);
     CpuFrame::new(desc, motolii_core::RationalTime::ZERO, data)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::GpuCtx;
+
+    #[test]
+    fn convert_rejects_unsupported_inputs_without_panicking() {
+        let Ok(gpu) = GpuCtx::new_headless() else {
+            eprintln!("SKIP: no GPU adapter");
+            return;
+        };
+        let mut conv = YuvToRgba::new(&gpu);
+        let bad_format = CpuFrame::new(
+            FrameDesc::packed(16, 16, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false),
+            motolii_core::RationalTime::ZERO,
+            vec![0u8; 16 * 16 * 4],
+        );
+        assert!(matches!(
+            conv.convert(&gpu, &bad_format),
+            Err(YuvError::UnsupportedFormat(PixelFormat::Rgba8Unorm))
+        ));
+
+        let bad_cs = solid_yuv420p(16, 16, 128, 128, 128, ColorSpace::Srgb);
+        assert!(matches!(
+            conv.convert(&gpu, &bad_cs),
+            Err(YuvError::UnsupportedColorSpace(ColorSpace::Srgb))
+        ));
+    }
 }

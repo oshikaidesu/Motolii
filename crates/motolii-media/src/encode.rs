@@ -30,11 +30,9 @@ impl Encoder {
         fps: Fps,
         qp0: bool,
     ) -> Result<Self> {
-        assert_eq!(
-            desc.format,
-            PixelFormat::Rgba8Unorm,
-            "Encoder expects RGBA input"
-        );
+        if desc.format != PixelFormat::Rgba8Unorm {
+            return Err(MediaError::UnsupportedEncoderFormat(desc.format));
+        }
         let mut cmd = Command::new(program.as_ref());
         cmd.args(["-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgba"])
             .args(["-s", &format!("{}x{}", desc.width, desc.height)])
@@ -78,7 +76,12 @@ impl Encoder {
     }
 
     pub fn write_frame(&mut self, data: &[u8]) -> Result<()> {
-        assert_eq!(data.len(), self.frame_size, "frame size mismatch");
+        if data.len() != self.frame_size {
+            return Err(MediaError::FrameSizeMismatch {
+                expected: self.frame_size,
+                got: data.len(),
+            });
+        }
         self.stdin
             .as_mut()
             .expect("encoder already finished")
@@ -114,6 +117,44 @@ mod tests {
     use motolii_core::ColorSpace;
     use std::sync::mpsc;
     use std::time::Duration;
+
+    #[test]
+    fn encoder_rejects_non_rgba_format() {
+        let desc = FrameDesc::packed(8, 8, PixelFormat::Bgra8Unorm, ColorSpace::Srgb, false);
+        let result = Encoder::open("out.mp4", &desc, Fps::new(30, 1), true);
+        assert!(matches!(
+            result,
+            Err(MediaError::UnsupportedEncoderFormat(PixelFormat::Bgra8Unorm))
+        ));
+    }
+
+    #[test]
+    fn encoder_rejects_wrong_frame_size() {
+        if !crate::tools_available() {
+            eprintln!("SKIP: ffmpeg/ffprobe not found on PATH");
+            return;
+        }
+        let desc = FrameDesc::packed(8, 8, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false);
+        let path = std::env::temp_dir().join(format!(
+            "motolii-encoder-size-{}-{}.mp4",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut enc = Encoder::open(&path, &desc, Fps::new(30, 1), true).unwrap();
+        let err = enc.write_frame(&vec![0u8; desc.data_size() - 1]).unwrap_err();
+        assert!(matches!(
+            err,
+            MediaError::FrameSizeMismatch {
+                expected: 256,
+                got: 255
+            }
+        ));
+        let _ = enc.finish();
+        let _ = std::fs::remove_file(path);
+    }
 
     #[cfg(unix)]
     #[test]

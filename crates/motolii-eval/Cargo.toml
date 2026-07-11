@@ -7,3 +7,4 @@ license.workspace = true
 [dependencies]
 motolii-core.workspace = true
 serde.workspace = true
+thiserror.workspace = true
