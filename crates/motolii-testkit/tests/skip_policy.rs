@@ -141,21 +141,58 @@ fn matcher_detects_hand_rolled_skip() {
 /// testkit以外の全クレートのソースから手書きスキップをdenyする。
 /// (testkit自身はポリシー実装としてSKIP出力を持つため除外)
 ///
-/// **空振り合格の禁止(独立レビュー所見2)**: 走査I/Oの失敗はスキップでなく
-/// panicとし、走査できたファイル数の下限を主張する。judge自身が無音で
-/// 0ファイル走査→緑になる構造(このPRが潰す失敗モードの自己適用漏れ)を防ぐ。
+/// **空振り合格の禁止(独立レビュー所見2+マジックナンバー排除の改訂)**:
+/// 走査I/Oの失敗はスキップでなくpanic。走査の実在性は総ファイル数の下限
+/// (クレート再編で壊れる/無関係ファイルで隠せるマジックナンバー)ではなく
+/// **構造**で主張する — (1)走査ルートに番兵クレート(motolii-core)が存在
+/// (ルート解決ミスの検出) (2)workspace対象クレートを列挙できた
+/// (3)各対象クレートで少なくとも1ファイル走査した。総数は診断情報に留める。
 #[test]
 fn no_hand_rolled_skip_paths_outside_testkit() {
     let crates_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("crates dir");
-    let mut violations = Vec::new();
-    let scanned = scan_dir(crates_dir, &mut violations);
+
+    // (2) 対象クレートの列挙: crates/直下でCargo.tomlを持つディレクトリ
+    let mut crate_dirs: Vec<std::path::PathBuf> = fs::read_dir(crates_dir)
+        .unwrap_or_else(|e| panic!("scan: read_dir {} failed: {e}", crates_dir.display()))
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir() && p.join("Cargo.toml").is_file())
+        .collect();
+    crate_dirs.sort();
     assert!(
-        scanned >= 40,
-        "走査が空振り: {scanned}ファイルしか読めていない(現行workspaceは40超の.rsを持つ)。\
-         走査ルートの解決かディレクトリ構成が壊れている"
+        !crate_dirs.is_empty(),
+        "scan: {} にクレートが1つも見つからない — 走査ルートの解決が壊れている",
+        crates_dir.display()
     );
+    // (1) 番兵: 共通語彙クレートの存在で「crates/を指しているつもりで別の場所」を検出
+    assert!(
+        crate_dirs
+            .iter()
+            .any(|p| p.file_name().is_some_and(|n| n == "motolii-core")),
+        "scan: 番兵クレートmotolii-coreが見つからない(クレート改名時はこの番兵を更新すること)"
+    );
+
+    let mut violations = Vec::new();
+    let mut diagnostics = Vec::new();
+    for dir in &crate_dirs {
+        let name = dir.file_name().expect("crate dir name").to_string_lossy();
+        // testkit自身はポリシー実装としてSKIP出力を持つため除外
+        if name == "motolii-testkit" {
+            continue;
+        }
+        let scanned = scan_dir(dir, &mut violations);
+        // (3) 各対象クレートで最低1ファイル
+        assert!(
+            scanned >= 1,
+            "scan: クレート{name}で.rsファイルを1つも走査できていない — 空振りの兆候"
+        );
+        diagnostics.push(format!("{name}={scanned}"));
+    }
+    // 総数は主張でなく診断情報(失敗時の切り分け用)
+    eprintln!("scan coverage: {}", diagnostics.join(", "));
+
     assert!(
         violations.is_empty(),
         "手書きスキップはM2E-1のポリシー(REQUIRE時panic)を迂回する抜け道。\
@@ -175,8 +212,8 @@ fn scan_dir(dir: &Path, violations: &mut Vec<String>) -> usize {
         let name = entry.file_name();
         let name = name.to_string_lossy();
         if path.is_dir() {
-            // testkit自身(ポリシー実装+本走査)とビルド成果物は対象外
-            if name == "motolii-testkit" || name == "target" {
+            // ビルド成果物は対象外
+            if name == "target" {
                 continue;
             }
             scanned += scan_dir(&path, violations);
