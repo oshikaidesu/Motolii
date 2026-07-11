@@ -72,8 +72,22 @@ fn ci_canary_gpu_and_ffmpeg_present() {
 // --- 手書きスキップの走査deny ---
 
 /// 判定本体(文字列マッチ)。走査テストから分離して正例/負例を単体テスト可能に。
+///
+/// マッチ規則: 文字列リテラル`"SKIP`を含む非コメント行。
+/// - `eprintln!`との同一行ANDにしない理由: rustfmtが長いマクロ呼び出しを
+///   折り返すと`eprintln!(`と`"SKIP: ..."`が別行になり見逃す(実測でfmtは
+///   この折り返しを行う)。リテラル自体を対象にすれば折り返し行を拾える
+/// - マクロ名を限定しない理由: `println!`/`log::warn!`等での手書きスキップも
+///   同じ抜け道になるため、出力手段によらず「SKIPを印字する行為」を検出する
+/// - コメント行(`//`開始)は除外: ルールを説明するコメントを誤検出しない
+///
+/// **検出できない残余(限界の明文化)**: (a) 小文字`"skip`等の別表記
+/// (b) 何も印字しない無音return(`let Ok(_) = ... else { return }`)。
+/// これらは字句走査では原理的に拾えないため、レビュー対象として残る。
+/// 環境レベルの保証はカナリア(依存の実在主張)とヘルパーのForbid panicが
+/// 担い、本走査は「スキップするならヘルパーを通せ」という規約層を守る。
 fn line_is_hand_rolled_skip(line: &str) -> bool {
-    line.contains("eprintln!") && line.contains("SKIP")
+    !line.trim_start().starts_with("//") && line.contains(r#""SKIP"#)
 }
 
 #[test]
@@ -85,10 +99,24 @@ fn matcher_detects_hand_rolled_skip() {
     assert!(line_is_hand_rolled_skip(
         r#"eprintln!("SKIP: no GPU adapter");"#
     ));
-    // 負例: コメントや無関係の出力は拾わない
-    assert!(!line_is_hand_rolled_skip("// SKIPについてのコメント"));
+    // 正例: rustfmtの折り返しでリテラルが単独行になった形(旧マッチャの見逃し)
+    assert!(line_is_hand_rolled_skip(
+        r#"            "SKIP: ffmpeg/ffprobe not found on PATH","#
+    ));
+    // 正例: 別マクロ経由の手書きスキップ(旧マッチャの見逃し)
+    assert!(line_is_hand_rolled_skip(r#"println!("SKIP")"#));
+    assert!(line_is_hand_rolled_skip(
+        r#"log::warn!("SKIP: no adapter");"#
+    ));
+    // 負例: ルールを説明するコメントは拾わない(誤検出の抑制)
+    assert!(!line_is_hand_rolled_skip(
+        r#"// eprintln!("SKIP: ...") は禁止(ポリシー迂回)"#
+    ));
+    assert!(!line_is_hand_rolled_skip("    // SKIPについてのコメント"));
+    // 負例: 無関係の出力・SKIPを含まないリテラル
     assert!(!line_is_hand_rolled_skip(r#"eprintln!("hello");"#));
-    assert!(!line_is_hand_rolled_skip(r#"println!("SKIP")"#));
+    // 負例: 引用符なしのSKIP(識別子・コメント語)は対象外
+    assert!(!line_is_hand_rolled_skip("let skip_count = 0; // SKIP"));
 }
 
 /// testkit以外の全クレートのソースから手書きスキップをdenyする。
