@@ -32,7 +32,7 @@
 | [x] M2E-3 **(PR #40)** | CIの決定性ピン留め: runner固定(`ubuntu-24.04`)+`cargo test --locked --workspace`+mesa/ffmpegバージョンをCIログへ出力。<br>**証跡**: `runs-on: ubuntu-24.04` / Test=`cargo test --locked --workspace` / step `Log mesa/ffmpeg versions`(`ffmpeg -version`+`dpkg -s mesa-vulkan-drivers`)。判定は[レビュー]の存在確認 | 監査EN-3(E-3: 全て無ピン。lavapipe更新1つでtolerance 0/1のゴールデンが全赤→閾値bump圧力が最大化) | [レビュー] ci.ymlに3点が入っていることの確認(これは存在確認であり不変条件の証明ではない — ドリフト発生時の一次切り分けを可能にするのが目的) | 極小 |
 | [x] M2E-4 **(PR #36 / #38)** | toleranceの定数化(`testkit::tol`)+呼び出し箇所の生数値リテラルをdenyする走査テスト+mean上限のassert追加。<br>**証跡**: #36=`tol::{GPU_RASTER_MEAN,mean_limit}`(保護のみ)。#38=`assert_rgba_close*`のmax+mean判定+全呼び出しを`tol::EXACT`/`GPU_RASTER`経由+`tests/tol_literals.rs`(`fixture_literal_tolerance_is_detected`/`fixture_bypass_forms_are_detected`/`fixture_definition_forwarding_tolerance_is_allowed`/`fixture_tol_constants_are_allowed`/`no_disallowed_tolerance_in_workspace_sources`)+mean負例`assert_close_rejects_uniform_shift_via_mean_limit`。走査は許可定数と`assert_rgba_close`定義内`tolerance`転送以外をすべて拒否 | 監査EN-2(E-2: 「閾値を1上げる」1文字diffはテスト改変に見えない=ルール6の死角) | [自動] リテラルtoleranceを書いたテストが走査で赤(負例込み)。既存呼び出しが定数経由。`tol`定数はM2E-2の保護領域に置く | 小 |
 | [x] M2E-5 **(PR #47)** | 「motolii-doc外での`&mut Document`」をdenyする走査テスト(conformance.rsの基盤流用)。<br>**証跡**: `crates/motolii-doc/tests/mut_document_deny.rs` — 負例`fixture_same_line_mut_document_is_detected`/`fixture_linebreak_mut_document_is_detected`/`fixture_lifetime_mut_document_is_detected`/`fixture_path_qualified_mut_document_is_detected`、誤検出回避`fixture_comments_are_not_detected`/`fixture_strings_are_not_detected`/`fixture_identifier_boundary_avoids_false_positive`、実ツリー`no_mut_document_outside_motolii_doc`(motolii-doc内番兵つき)。コメント・文字列をマスクし、`&mut`改行分割とパス修飾(`motolii_doc::Document`)を検出 | 監査EN-4(E-4: `Document`はpubフィールド+Clone+pubコンストラクタで、単一writerは現状すり抜け可能) | [自動] 負例(テスト内のダミー違反)が赤になることを含めて緑 | 小 |
-| [ ] M2E-6 | proptestをworkspace依存に追加し、模範例1本(RationalTime roundtrip等)をmotolii-coreに置く | 監査EN-5(E-5: M2実装ガード12はプロパティテスト前提だが依存がゼロ件。各エージェントが独断選定すると分裂=H-3) | [自動] 模範例がCIで緑。workspace.dependenciesに追加済み | 極小 |
+| [x] M2E-6 **(PR #60)** | proptestをworkspace依存に追加し、模範例1本(RationalTime roundtrip等)をmotolii-coreに置く。<br>**証跡**: `Cargo.toml` `[workspace.dependencies] proptest = "1"` + `motolii-core` dev-dep + `tests/proptest_example.rs`(`rational_time_add_sub_roundtrip`)。以降のプロパティテストはこの依存と型紙をコピーする | 監査EN-5(E-5: M2実装ガード12はプロパティテスト前提だが依存がゼロ件。各エージェントが独断選定すると分裂=H-3) | [自動] 模範例がCIで緑。workspace.dependenciesに追加済み | 極小 |
 
 ## B. 乗算する穴を塞ぐ(プラグイン境界 — M2でプラグイン量産が始まる前に)
 
@@ -71,6 +71,6 @@
 
 ## 宣言方針
 
-1. 消化順: **M2E-1(審判の覚醒)→ M2E-2/M2E-4(テスト資産の保護)→ M2E-3(ピン留め)** → 残りのA群 → B群 → C群。M2E-3より先にM2E-1/2/4なのは、CIを固定しても審判自体がskipや自己参照で抜けられる状態では効果が限定されるため。**A群はM2E-1〜6** — 現時点でM2E-1〜5完了、M2E-6でA群完了
+1. 消化順: **M2E-1(審判の覚醒)→ M2E-2/M2E-4(テスト資産の保護)→ M2E-3(ピン留め)** → 残りのA群 → B群 → C群。M2E-3より先にM2E-1/2/4なのは、CIを固定しても審判自体がskipや自己参照で抜けられる状態では効果が限定されるため。**A群(M2E-1〜6)は完了** — 次はB群(M2E-7〜)
 2. 全項目チェック+証跡が揃ったら、本ファイル冒頭のステータスを「**達成**」に書き換えて**D1/D2/D3/D7/D8の並列発注を解禁**する(D4/D6は本ゲートの対象外 — 上記「ゲートが止める対象」)
 3. M2仕様([specs/M2-document-model.md](../specs/M2-document-model.md))は、ステータス行の着手条件に加えて**D1行の依存欄に本ゲートを明記**する(タスク表だけを見て発注するエージェントが素通りできないように)
