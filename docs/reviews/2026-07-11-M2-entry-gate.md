@@ -40,7 +40,7 @@
 
 | ID | 内容 | 出典 | 完了条件 | 規模 |
 |---|---|---|---|---|
-| [ ] M2E-7 | `RenderCtx`導入(Filter/Composite traitの裸引数を`#[non_exhaustive]`構造体へ)。Quality/将来の予約(InstanceIndex/CompLookbehind/TemporalFootprint)の口を確保。**解凍手続き(3点セット)対象** | 監査PB-1(P-1: 引数追加=全プラグイン破壊。render_graph_cachedがQualityを解像度に畳み込みDraft/Final判別不能) | [自動] 全参照プラグインがRenderCtx経由で既存ゴールデン不変。[レビュー] 解凍手続き文書化 | 中 |
+| [x] M2E-7 **(PR #62)** | `RenderCtx`導入(Filter/Composite traitの裸引数を`#[non_exhaustive]`構造体へ)。Quality/将来の予約(InstanceIndex/CompLookbehind/TemporalFootprint)の口を確保。**解凍手続き(3点セット)対象**<br>**証跡**: #62=`RenderCtx`/`TemporalFootprint`+Filter/Composite改訂+`dispatch_plugin`が`RenderCtx::new(t, quality)`渡し+参照プラグイン/scaffold/purity追随。解凍=[2026-07-12-M2E-7-render-ctx-thaw.md](2026-07-12-M2E-7-render-ctx-thaw.md)。テスト`render_ctx_carries_quality_and_reserved_defaults`+既存ゴールデン不変 | 監査PB-1(P-1: 引数追加=全プラグイン破壊。render_graph_cachedがQualityを解像度に畳み込みDraft/Final判別不能) | [自動] 全参照プラグインがRenderCtx経由で既存ゴールデン不変。[レビュー] 解凍手続き文書化 | 中 |
 | [ ] M2E-8 | 型付きparamアクセサ(`require_f64`等+`PluginError::Param`)+`NodeDesc::resolve_params`一元化(未知ID→Err/欠落→default/型不一致→Err)+ロード時のvalue_type検証 | 監査PB-2/PB-3(P-2: `f64_or`のサイレントデフォルト=「もっともらしく間違う絵」。P-3: 解決ロジックがproject.rsに手書き) | [自動] 型不一致JSONがロード時に構造化エラー。`f64_or`が参照実装から消えている | 小〜中 |
 | [ ] M2E-9 | `PluginRegistry::iter(kind)`+`assert_registry_pure`(登録済み全プラグインへvalidate+purity一括適用)+LayerSource/Composite用purityヘルパー | 監査PB-3(P-4①②: purityが手書き列挙のopt-in。登録=検査対象への反転) | [自動] レジストリに登録するだけで検査対象になることをテストで確認(未検査プラグインを作れない) | 小 |
 | [ ] M2E-10 | new-pluginスキャフォールドにpurityスタブ+ゴールデンスタブ+ParamDef例を同梱 | 監査PB-5(P-5: LLMは型紙に無いものは書かない。purity普及率≒スキャフォールド同梱率) | [自動] 生成物にテスト3種が含まれ、scaffold検証テストがそれを確認 | 小 |
@@ -71,6 +71,6 @@
 
 ## 宣言方針
 
-1. 消化順: **M2E-1(審判の覚醒)→ M2E-2/M2E-4(テスト資産の保護)→ M2E-3(ピン留め)** → 残りのA群 → B群 → C群。M2E-3より先にM2E-1/2/4なのは、CIを固定しても審判自体がskipや自己参照で抜けられる状態では効果が限定されるため。**A群(M2E-1〜6)は完了** — 次はB群(M2E-7〜)
+1. 消化順: **M2E-1(審判の覚醒)→ M2E-2/M2E-4(テスト資産の保護)→ M2E-3(ピン留め)** → 残りのA群 → B群 → C群。M2E-3より先にM2E-1/2/4なのは、CIを固定しても審判自体がskipや自己参照で抜けられる状態では効果が限定されるため。**A群(M2E-1〜6)は完了**。**B群は M2E-7 完了、次は M2E-8〜**
 2. 全項目チェック+証跡が揃ったら、本ファイル冒頭のステータスを「**達成**」に書き換えて**D1/D2/D3/D7/D8の並列発注を解禁**する(D4/D6は本ゲートの対象外 — 上記「ゲートが止める対象」)
 3. M2仕様([specs/M2-document-model.md](../specs/M2-document-model.md))は、ステータス行の着手条件に加えて**D1行の依存欄に本ゲートを明記**する(タスク表だけを見て発注するエージェントが素通りできないように)
