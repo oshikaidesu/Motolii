@@ -124,7 +124,9 @@ mod tests {
         let result = Encoder::open("out.mp4", &desc, Fps::new(30, 1), true);
         assert!(matches!(
             result,
-            Err(MediaError::UnsupportedEncoderFormat(PixelFormat::Bgra8Unorm))
+            Err(MediaError::UnsupportedEncoderFormat(
+                PixelFormat::Bgra8Unorm
+            ))
         ));
     }
 
@@ -144,7 +146,9 @@ mod tests {
                 .as_nanos()
         ));
         let mut enc = Encoder::open(&path, &desc, Fps::new(30, 1), true).unwrap();
-        let err = enc.write_frame(&vec![0u8; desc.data_size() - 1]).unwrap_err();
+        let err = enc
+            .write_frame(&vec![0u8; desc.data_size() - 1])
+            .unwrap_err();
         assert!(matches!(
             err,
             MediaError::FrameSizeMismatch {
