@@ -278,12 +278,65 @@ fn golden_artifact_paths(dir: &Path, label: &str) -> GoldenArtifacts {
     }
 }
 
+/// M2E-1: 環境依存テストの必須化フラグ。CIはこれを`1`に設定する。
+///
+/// 依存(GPU/ffmpeg)が欠けた環境では全テストが無音スキップで緑になり得る
+/// (監査P-4実測: Vulkan ICD無しで141テスト全緑・1.2秒)。エージェントの
+/// 自己検証が「実は何も検証していない」状態を、CIでは構造的に禁止する。
+pub const REQUIRE_DEPS_ENV: &str = "MOTOLII_REQUIRE_GPU";
+
+/// `MOTOLII_REQUIRE_GPU=1`が立っているか(=スキップ禁止環境か)。
+pub fn deps_required() -> bool {
+    std::env::var(REQUIRE_DEPS_ENV).is_ok_and(|v| v == "1")
+}
+
+/// スキップ方針の判定結果。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkipDecision {
+    /// 依存が使える。テストを実行する。
+    Run,
+    /// 依存が無く、必須環境でもない(ローカル開発機)。スキップしてよい。
+    Skip,
+    /// 依存が無いのに必須環境。スキップは許されない(=panicさせる)。
+    Forbid,
+}
+
+/// スキップ方針の判定本体(M2E-1)。
+///
+/// 環境変数にも実GPUにも依存しない純関数として分離してあるため、
+/// 「必須環境で依存が無ければForbid」という負例を通常のCI環境の欠損に
+/// 依存せず単体テストできる(ゲート完了条件(a))。
+pub fn skip_decision(available: bool, required: bool) -> SkipDecision {
+    match (available, required) {
+        (true, _) => SkipDecision::Run,
+        (false, false) => SkipDecision::Skip,
+        (false, true) => SkipDecision::Forbid,
+    }
+}
+
+/// 判定の適用: `Run`→true、`Skip`→false、`Forbid`→panic(CIを赤にする)。
+pub fn apply_skip_decision(dep: &str, decision: SkipDecision, detail: &str) -> bool {
+    match decision {
+        SkipDecision::Run => true,
+        SkipDecision::Skip => {
+            eprintln!("SKIP: {dep} unavailable: {detail}");
+            false
+        }
+        SkipDecision::Forbid => panic!(
+            "{REQUIRE_DEPS_ENV}=1: {dep} unavailable but silent skip is forbidden \
+             in this environment (M2E-1): {detail}"
+        ),
+    }
+}
+
 /// lavapipe等が無い環境ではテストをスキップする。
+/// ただし`MOTOLII_REQUIRE_GPU=1`の環境(CI)ではスキップせずpanicする(M2E-1)。
 pub fn gpu_or_skip() -> Option<motolii_gpu::GpuCtx> {
     match motolii_gpu::GpuCtx::new_headless() {
         Ok(gpu) => Some(gpu),
         Err(e) => {
-            eprintln!("SKIP: no GPU adapter: {e}");
+            let decision = skip_decision(false, deps_required());
+            apply_skip_decision("GPU adapter", decision, &e.to_string());
             None
         }
     }
