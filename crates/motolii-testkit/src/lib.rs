@@ -285,9 +285,30 @@ fn golden_artifact_paths(dir: &Path, label: &str) -> GoldenArtifacts {
 /// 自己検証が「実は何も検証していない」状態を、CIでは構造的に禁止する。
 pub const REQUIRE_DEPS_ENV: &str = "MOTOLII_REQUIRE_GPU";
 
+/// `MOTOLII_REQUIRE_GPU`の値の解釈(純関数)。
+///
+/// `"1"`のみ有効、未設定/`""`/`"0"`は無効。**それ以外の値はpanic** —
+/// `true`/`yes`等の誤設定を黙って「無効」に倒すと、「スキップ禁止の
+/// つもりが実は禁止されていない」という無音の保証消失になる(独立
+/// レビュー所見1: `=true`でffmpeg欠損テストが0.00秒緑になることを実証)。
+/// 本PRが潰す失敗モードそのものなので、誤設定は大声で落とす。
+pub fn parse_require_flag(value: Option<&str>) -> bool {
+    match value {
+        None | Some("") | Some("0") => false,
+        Some("1") => true,
+        Some(other) => panic!(
+            "{REQUIRE_DEPS_ENV} has unrecognized value {other:?}; \
+             use \"1\" to forbid skips, or \"0\"/unset to allow them"
+        ),
+    }
+}
+
 /// `MOTOLII_REQUIRE_GPU=1`が立っているか(=スキップ禁止環境か)。
+/// 変数名は歴史的に"GPU"だが、対象はGPUに限らず環境依存全般(ffmpeg/ffprobe
+/// 含む — const名`REQUIRE_DEPS_ENV`の方が正確な意味)。
 pub fn deps_required() -> bool {
-    std::env::var(REQUIRE_DEPS_ENV).is_ok_and(|v| v == "1")
+    let value = std::env::var(REQUIRE_DEPS_ENV).ok();
+    parse_require_flag(value.as_deref())
 }
 
 /// スキップ方針の判定結果。
@@ -350,10 +371,21 @@ pub enum ToolStatus {
 }
 
 /// `<bin> -version`を実行してツールの状態を判定する。
+///
+/// 注: 壊れたshebangのラッパースクリプトはUnixでspawnがENOENTを返すため
+/// `NotInstalled`と誤ラベルされ得る(実行パスは同一でメッセージのみの差)。
 pub fn tool_status(bin: &str) -> ToolStatus {
     match std::process::Command::new(bin).arg("-version").output() {
         Ok(out) if out.status.success() => ToolStatus::Ok,
-        Ok(out) => ToolStatus::Failed(format!("`{bin} -version` exited with {}", out.status)),
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let head = stderr.lines().next().unwrap_or("");
+            ToolStatus::Failed(if head.is_empty() {
+                format!("`{bin} -version` exited with {}", out.status)
+            } else {
+                format!("`{bin} -version` exited with {} — {head}", out.status)
+            })
+        }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => ToolStatus::NotInstalled,
         Err(e) => ToolStatus::Failed(format!("failed to spawn `{bin}`: {e}")),
     }

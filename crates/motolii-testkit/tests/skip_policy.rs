@@ -13,7 +13,8 @@ use std::fs;
 use std::path::Path;
 
 use motolii_testkit::{
-    apply_skip_decision, deps_required, skip_decision, tool_status, SkipDecision, ToolStatus,
+    apply_skip_decision, deps_required, parse_require_flag, skip_decision, tool_status,
+    SkipDecision, ToolStatus,
 };
 
 #[test]
@@ -38,6 +39,24 @@ fn apply_run_returns_true_and_skip_returns_false() {
 #[should_panic(expected = "silent skip is forbidden")]
 fn apply_forbid_panics() {
     apply_skip_decision("GPU adapter", SkipDecision::Forbid, "no adapter");
+}
+
+/// 環境変数の解釈は厳格: 認識できる値だけを受け付ける。
+#[test]
+fn require_flag_parsing_is_strict() {
+    assert!(!parse_require_flag(None));
+    assert!(!parse_require_flag(Some("")));
+    assert!(!parse_require_flag(Some("0")));
+    assert!(parse_require_flag(Some("1")));
+}
+
+/// 負例(独立レビュー所見1): `=true`等の誤設定を黙って「無効」に倒すと
+/// 「スキップ禁止のつもりが実は禁止されていない」無音の保証消失になる。
+/// 認識しない値はpanicで大声で落ちることを検証。
+#[test]
+#[should_panic(expected = "unrecognized value")]
+fn require_flag_rejects_unrecognized_value() {
+    parse_require_flag(Some("true"));
 }
 
 /// カナリア: `MOTOLII_REQUIRE_GPU=1`の環境(CI)で、GPUとffmpeg/ffprobeが
@@ -121,13 +140,22 @@ fn matcher_detects_hand_rolled_skip() {
 
 /// testkit以外の全クレートのソースから手書きスキップをdenyする。
 /// (testkit自身はポリシー実装としてSKIP出力を持つため除外)
+///
+/// **空振り合格の禁止(独立レビュー所見2)**: 走査I/Oの失敗はスキップでなく
+/// panicとし、走査できたファイル数の下限を主張する。judge自身が無音で
+/// 0ファイル走査→緑になる構造(このPRが潰す失敗モードの自己適用漏れ)を防ぐ。
 #[test]
 fn no_hand_rolled_skip_paths_outside_testkit() {
     let crates_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("crates dir");
     let mut violations = Vec::new();
-    scan_dir(crates_dir, &mut violations);
+    let scanned = scan_dir(crates_dir, &mut violations);
+    assert!(
+        scanned >= 40,
+        "走査が空振り: {scanned}ファイルしか読めていない(現行workspaceは40超の.rsを持つ)。\
+         走査ルートの解決かディレクトリ構成が壊れている"
+    );
     assert!(
         violations.is_empty(),
         "手書きスキップはM2E-1のポリシー(REQUIRE時panic)を迂回する抜け道。\
@@ -136,10 +164,12 @@ fn no_hand_rolled_skip_paths_outside_testkit() {
     );
 }
 
-fn scan_dir(dir: &Path, violations: &mut Vec<String>) {
-    let Ok(entries) = fs::read_dir(dir) else {
-        return;
-    };
+/// 走査した.rsファイル数を返す。I/O失敗はpanic(リポジトリ内ソースは
+/// すべて可読・UTF-8のはずで、読めない=走査の前提崩壊)。
+fn scan_dir(dir: &Path, violations: &mut Vec<String>) -> usize {
+    let entries = fs::read_dir(dir)
+        .unwrap_or_else(|e| panic!("scan: read_dir {} failed: {e}", dir.display()));
+    let mut scanned = 0;
     for entry in entries.flatten() {
         let path = entry.path();
         let name = entry.file_name();
@@ -149,11 +179,11 @@ fn scan_dir(dir: &Path, violations: &mut Vec<String>) {
             if name == "motolii-testkit" || name == "target" {
                 continue;
             }
-            scan_dir(&path, violations);
+            scanned += scan_dir(&path, violations);
         } else if path.extension().is_some_and(|e| e == "rs") {
-            let Ok(content) = fs::read_to_string(&path) else {
-                continue;
-            };
+            let content = fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("scan: read {} failed: {e}", path.display()));
+            scanned += 1;
             for (i, line) in content.lines().enumerate() {
                 if line_is_hand_rolled_skip(line) {
                     violations.push(format!("{}:{}: {}", path.display(), i + 1, line.trim()));
@@ -161,4 +191,5 @@ fn scan_dir(dir: &Path, violations: &mut Vec<String>) {
             }
         }
     }
+    scanned
 }
