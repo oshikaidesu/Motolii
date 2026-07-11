@@ -112,7 +112,8 @@ impl Drop for Encoder {
 mod tests {
     use super::*;
     use motolii_core::ColorSpace;
-    use std::time::{Duration, Instant};
+    use std::sync::mpsc;
+    use std::time::Duration;
 
     #[cfg(unix)]
     #[test]
@@ -143,13 +144,14 @@ mod tests {
             Encoder::open_with_command(&fake_ffmpeg, &out, &desc, Fps::new(1, 1), true).unwrap();
         enc.write_frame(&vec![0u8; desc.data_size()]).unwrap();
 
-        let started = Instant::now();
-        enc.finish().expect("finish failed");
-        assert!(
-            started.elapsed() < Duration::from_secs(5),
-            "finish took too long ({:?}); stderr drain may have deadlocked",
-            started.elapsed()
-        );
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(enc.finish());
+        });
+        match rx.recv_timeout(Duration::from_secs(5)) {
+            Ok(result) => result.expect("finish failed"),
+            Err(_) => panic!("finish deadlocked"),
+        }
 
         let _ = std::fs::remove_dir_all(dir);
     }
