@@ -172,8 +172,6 @@ pub struct RenderSession {
     solid: Option<(FrameDesc, [f32; 4], wgpu::Texture)>,
     /// 中間RTプール(performance-model §3 / M1-T8)。必要枚数はグラフ深度に応じて伸びる。
     ping: Option<RenderTargetPool>,
-    /// グラフ出力の退避先。ピンポン中間面と分離し、次フレームの上書きを防ぐ。
-    output: Option<(FrameDesc, wgpu::Texture)>,
 }
 
 struct RenderTargetPool {
@@ -193,7 +191,6 @@ impl RenderSession {
             transparent: None,
             solid: None,
             ping: None,
-            output: None,
         }
     }
 
@@ -263,17 +260,11 @@ impl RenderSession {
             }
         }
         let tex = create_rgba_render_target(gpu, desc, "motolii-render-ping-extra");
+        let new_idx = pool.buffers.len();
         pool.buffers.push(tex.clone());
-        pool.next = pool.buffers.len() % pool.buffers.len().max(1);
+        // 新規面を今回返したので、次のラウンドロビン開始位置はその次。
+        pool.next = (new_idx + 1) % pool.buffers.len();
         tex
-    }
-
-    fn output_texture(&mut self, gpu: &GpuCtx, desc: FrameDesc) -> wgpu::Texture {
-        if self.output.as_ref().map(|(d, _)| *d) != Some(desc) {
-            let tex = create_rgba_render_target(gpu, desc, "motolii-render-output");
-            self.output = Some((desc, tex));
-        }
-        self.output.as_ref().unwrap().1.clone()
     }
 }
 
@@ -352,7 +343,8 @@ pub fn render_graph_cached(
     let mut textures: Vec<Option<wgpu::Texture>> =
         (0..graph_plan.texture_count).map(|_| None).collect();
 
-    for step in &graph.steps {
+    for (step_idx, step) in graph.steps.iter().enumerate() {
+        let avoid = live_textures(&textures, &live_texture_ids_from_step(graph, step_idx));
         match step {
             RenderStep::VideoSource { output } => {
                 let (_, tex) = inputs
@@ -377,7 +369,6 @@ pub fn render_graph_cached(
                 overlay,
             } => {
                 let input_texture = texture_ref(&textures, desc, *input)?;
-                let avoid = live_textures(&textures, &[*input]);
                 let output_texture = session.acquire_render_target(gpu, desc, &avoid);
                 session.overlay.set_rect(*overlay);
                 session.overlay.render(
@@ -397,7 +388,6 @@ pub fn render_graph_cached(
             } => {
                 let background_texture = texture_ref(&textures, desc, *background)?;
                 let foreground_texture = texture_ref(&textures, desc, *foreground)?;
-                let avoid = live_textures(&textures, &[*background, *foreground]);
                 let output_texture = session.acquire_render_target(gpu, desc, &avoid);
                 session.composite.render(
                     gpu,
@@ -417,7 +407,6 @@ pub fn render_graph_cached(
                 output,
             } => {
                 let registry = inputs.plugins.ok_or(RenderError::MissingPluginRegistry)?;
-                let avoid = live_textures(&textures, plugin_inputs);
                 let output_texture = session.acquire_render_target(gpu, desc, &avoid);
                 let out_ref = TextureRef {
                     texture: &output_texture,
@@ -452,7 +441,7 @@ pub fn render_graph_cached(
         .and_then(Option::take)
         .ok_or(RenderError::MissingTexture(graph.output.0))?;
 
-    let output_texture = session.output_texture(gpu, desc);
+    let output_texture = create_rgba_render_target(gpu, desc, "motolii-render-output");
     copy_texture(gpu, &intermediate, &output_texture, desc);
 
     Ok(RenderedFrame {
@@ -858,6 +847,30 @@ fn live_textures<'a>(
         .collect()
 }
 
+fn step_input_ids(step: &RenderStep) -> Vec<TextureId> {
+    match step {
+        RenderStep::OverlayRect { input, .. } => vec![*input],
+        RenderStep::CompositeNormal {
+            background,
+            foreground,
+            ..
+        } => vec![*background, *foreground],
+        RenderStep::Plugin { inputs, .. } => inputs.clone(),
+        _ => Vec::new(),
+    }
+}
+
+/// ステップ `from_step` 以降で入力として参照されるテクスチャID。
+fn live_texture_ids_from_step(graph: &LinearRenderGraph, from_step: usize) -> Vec<TextureId> {
+    let mut ids = Vec::new();
+    for step in graph.steps.iter().skip(from_step) {
+        ids.extend(step_input_ids(step));
+    }
+    ids.sort_unstable_by_key(|id| id.0);
+    ids.dedup_by_key(|id| id.0);
+    ids
+}
+
 fn copy_texture(gpu: &GpuCtx, source: &wgpu::Texture, dest: &wgpu::Texture, desc: FrameDesc) {
     let mut encoder = gpu
         .device
@@ -1156,27 +1169,29 @@ mod tests {
     #[test]
     fn rendered_frame_survives_next_render() {
         let Some(gpu) = gpu_or_skip() else { return };
-        let request = centered_request();
-        let graph = linear_graph_from_request(&request);
         let mut session = RenderSession::new(&gpu);
         let inputs = RenderGraphInputs::default();
 
+        let first_request = centered_request();
         let first = render_graph_cached(
             &gpu,
             &mut session,
-            request.timeline_time,
-            &graph,
+            first_request.timeline_time,
+            &linear_graph_from_request(&first_request),
             &inputs,
             Quality::FINAL,
         )
         .unwrap();
         let first_snapshot = download_rgba(&gpu, &first.texture).unwrap();
 
+        let mut second_request = centered_request();
+        second_request.source.color = [0.0, 0.0, 1.0, 0.75];
+        second_request.overlay.color = [1.0, 1.0, 0.0, 1.0];
         let _second = render_graph_cached(
             &gpu,
             &mut session,
             RationalTime::from_frame(12, Fps::new(30, 1)),
-            &graph,
+            &linear_graph_from_request(&second_request),
             &inputs,
             Quality::FINAL,
         )
@@ -1186,6 +1201,10 @@ mod tests {
         assert_eq!(
             first_snapshot, first_after,
             "returned frame must not be overwritten by the next render"
+        );
+        assert!(
+            first_snapshot.iter().any(|&v| v > 0),
+            "first frame should contain visible pixels"
         );
     }
 
