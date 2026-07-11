@@ -1214,7 +1214,9 @@ mod tests {
     /// INF-7c: 参照プラグイン全desc + 検証の負例(欠落メタデータが赤になる証明)。
     #[test]
     fn validate_node_desc_accepts_reference_plugins() {
-        use super::reference::{CLEAR_COMPOSITE, CLEAR_FILTER, CLEAR_LAYER_SOURCE, OPACITY_FILTER, TINT_FILTER};
+        use super::reference::{
+            CLEAR_COMPOSITE, CLEAR_FILTER, CLEAR_LAYER_SOURCE, OPACITY_FILTER, TINT_FILTER,
+        };
         validate_node_desc(PluginKind::Filter, CLEAR_FILTER.desc()).unwrap();
         validate_node_desc(PluginKind::Filter, TINT_FILTER.desc()).unwrap();
         validate_node_desc(PluginKind::Filter, OPACITY_FILTER.desc()).unwrap();

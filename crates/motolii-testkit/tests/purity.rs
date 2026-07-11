@@ -3,7 +3,7 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::OnceLock;
 
-use motolii_core::{ColorSpace, FrameDesc, Fps, PixelFormat, RationalTime};
+use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, RationalTime};
 use motolii_eval::Value;
 use motolii_gpu::{GpuCtx, PipelineCache};
 use motolii_plugin::reference::{CLEAR_FILTER, OPACITY_FILTER, SINE_PARAM_DRIVER, TINT_FILTER};
@@ -170,5 +170,8 @@ fn stateful_filter_fails_purity_check() {
         &input,
     )
     .unwrap_err();
-    assert!(matches!(err, TestkitError::PurityViolation { .. }), "{err:?}");
+    assert!(
+        matches!(err, TestkitError::PurityViolation { .. }),
+        "{err:?}"
+    );
 }
