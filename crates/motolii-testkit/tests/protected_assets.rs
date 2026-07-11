@@ -202,4 +202,3 @@ fn protected_diff_gate_allows_ordinary_tdd_tests_with_src() {
     );
     assert!(ok, "expected ok for TDD (src+tests): {msg}");
 }
-
