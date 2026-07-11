@@ -445,11 +445,11 @@ pub fn tmp_dir(tag: &str) -> PathBuf {
 /// 同じ時刻・入力で2回呼び、出力が一致することを要求する。
 /// `&self` に隠した可変状態があるとここで赤になる。
 pub mod purity {
-    use motolii_core::{FrameDesc, RationalTime};
+    use motolii_core::{FrameDesc, Quality, RationalTime};
     use motolii_eval::DataTrack;
     use motolii_gpu::{download_rgba, upload_rgba, GpuCtx, PipelineCache};
     use motolii_plugin::{
-        FilterPlugin, ParamDriverContext, ParamDriverPlugin, ResolvedParams, TextureRef,
+        FilterPlugin, ParamDriverContext, ParamDriverPlugin, RenderCtx, ResolvedParams, TextureRef,
     };
 
     use super::{compare_rgba, RgbaImageDesc, TestkitError};
@@ -497,12 +497,13 @@ pub mod purity {
             texture: &input,
             desc: frame,
         };
+        let ctx = RenderCtx::new(t, Quality::FINAL);
         filter
             .render(
                 gpu,
                 &mut pipelines,
                 &mut encoder,
-                t,
+                &ctx,
                 params,
                 in_ref,
                 TextureRef {
@@ -519,7 +520,7 @@ pub mod purity {
                 gpu,
                 &mut pipelines,
                 &mut encoder,
-                t,
+                &ctx,
                 params,
                 in_ref,
                 TextureRef {

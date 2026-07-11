@@ -71,13 +71,13 @@ def method_body(kind: str, plugin_id: str) -> str:
         _gpu: &GpuCtx,
         _pipelines: &mut PipelineCache,
         _encoder: &mut wgpu::CommandEncoder,
-        _t: RationalTime,
+        _ctx: &RenderCtx,
         _params: &ResolvedParams,
         _input: TextureRef<'_>,
         _output: TextureRef<'_>,
     ) -> Result<(), PluginError> {{
         // wgpu/WGSLのみ。パイプラインは pipelines.get_or_create_* でホストから借りる。
-        // 出力は t + params + input だけで決める(純関数)。
+        // 出力は ctx.t + params + input だけで決める(純関数)。Quality は ctx.quality。
         Err(PluginError::Render("{todo}".into()))
     }}"""
     if kind == "layer_source":
@@ -107,7 +107,7 @@ def method_body(kind: str, plugin_id: str) -> str:
         _gpu: &GpuCtx,
         _pipelines: &mut PipelineCache,
         _encoder: &mut wgpu::CommandEncoder,
-        _t: RationalTime,
+        _ctx: &RenderCtx,
         _params: &ResolvedParams,
         _inputs: &[TextureRef<'_>],
         _output: TextureRef<'_>,
@@ -157,6 +157,8 @@ def render_source(*, kind: str, name: str, vendor: str) -> str:
         plugin_imports.append("LayerSourceContext")
     if kind == "param_driver":
         plugin_imports.append("ParamDriverContext")
+    if kind in ("filter", "composite"):
+        plugin_imports.append("RenderCtx")
     plugin_imports_sorted = ", ".join(plugin_imports)
     imports.append(f"use motolii_plugin::{{{plugin_imports_sorted}}};")
 

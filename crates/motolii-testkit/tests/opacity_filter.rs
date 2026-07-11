@@ -1,10 +1,10 @@
 //! INF-7g: OpacityFilter の出力が amount に比例することのゴールデン。
 
-use motolii_core::{ColorSpace, FrameDesc, PixelFormat, RationalTime};
+use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime};
 use motolii_eval::Value;
 use motolii_gpu::{download_rgba, upload_rgba, PipelineCache};
 use motolii_plugin::reference::OPACITY_FILTER;
-use motolii_plugin::{FilterPlugin, ResolvedParams, TextureRef};
+use motolii_plugin::{FilterPlugin, RenderCtx, ResolvedParams, TextureRef};
 use motolii_testkit::{assert_rgba_close, gpu_or_skip, tol, RgbaImageDesc};
 
 #[test]
@@ -47,7 +47,7 @@ fn opacity_half_scales_premul_rgba() {
             &gpu,
             &mut pipelines,
             &mut encoder,
-            RationalTime::ZERO,
+            &RenderCtx::new(RationalTime::ZERO, Quality::FINAL),
             &params,
             TextureRef {
                 texture: &input,

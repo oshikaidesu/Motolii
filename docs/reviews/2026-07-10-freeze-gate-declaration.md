@@ -43,6 +43,8 @@
 
 既知の解凍手続き待ち(2026-07-10マージ時点): **F-12 時間軸自由度の口の予約**(`SimulationPlugin` trait叩き台・`TemporalFootprint`・スキーマのシムノード席。[simulation-model.md](../simulation-model.md)、backlog FG-2)。設計は確定済みだが、項目2(プラグインtrait)と項目3(スキーマ枠)への口の追加になるため本手続きを通す。
 
+実施済み: **M2E-7 `RenderCtx`**(2026-07-12、[解凍記録](2026-07-12-M2E-7-render-ctx-thaw.md)) — Filter/Composite に Quality と予約口(InstanceIndex/CompLookbehind/TemporalFootprint)を `#[non_exhaustive]` 文脈へ畳んだ。F-12 の NodeDesc 宣言・SimulationPlugin・スキーマ席は未実施。
+
 ## 参照
 
 - G-1入場条件: [pitfalls-and-roadmap.md](../pitfalls-and-roadmap.md)

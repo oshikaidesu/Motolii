@@ -67,7 +67,7 @@
 生成物は `validate_node_desc` を通る desc + テストスタブ付き。以下は手書き時の型紙。
 
 ```rust
-use motolii_plugin::{FilterPlugin, NodeDesc, PluginError, PluginId, ResolvedParams, TextureRef, ValueType};
+use motolii_plugin::{FilterPlugin, NodeDesc, PluginError, PluginId, RenderCtx, ResolvedParams, TextureRef, ValueType};
 use motolii_core::RationalTime;
 use motolii_gpu::{GpuCtx, PipelineCache};
 
@@ -84,15 +84,15 @@ impl FilterPlugin for MyGlow {
         gpu: &GpuCtx,
         pipelines: &mut PipelineCache,
         encoder: &mut wgpu::CommandEncoder,
-        t: RationalTime,
+        ctx: &RenderCtx,
         params: &ResolvedParams,
         input: TextureRef<'_>,
         output: TextureRef<'_>,
     ) -> Result<(), PluginError> {
         // wgpu/WGSLのみ。CUDA等は書かない。
         // パイプラインは pipelines.get_or_create_* でホストから借りる(所有しない)。
-        // 出力は t + params + input だけで決める。
-        let _ = (gpu, pipelines, encoder, t, params, input, output);
+        // 出力は ctx.t + params + input だけで決める。Draft/Final は ctx.quality。
+        let _ = (gpu, pipelines, encoder, ctx, params, input, output);
         Err(PluginError::Render("unimplemented".into()))
     }
 }
@@ -140,11 +140,11 @@ ParamDriverは`build_track`で`DataTrack`を返すだけ。ピクセルに触ら
 > 口を広げる提案は**キャッシュキーへの寄与定義とセット**で出すこと(M4「キャッシュキーの完全性原則」)。キャッシュ自体はホストの専権事項で、プラグインからのキャッシュヒント・自前キャッシュは受けない(§3-3)。コスト優先度はホストが実測する。
 
 - 動的ロード(dylib)・WASM配布(v2)
-- 評価コンテキストのインスタンスインデックス`(i, count)`(F-7) — 型`InstanceIndex`を予約(配線はM2以降)
+- 評価コンテキストのインスタンスインデックス`(i, count)`(F-7) — 型`InstanceIndex`を予約。**配線口は`RenderCtx::instance`(M2E-7)**。Repeater 実装まで常に None
 - サムネイル画像フィールド(F-8、口だけ将来)
 - ハンドルID化(A-3: 現状は`&wgpu::Texture`直渡し。内部更新閉じ込めは後続)
 - **ホスト所有PipelineCache**(F-10実証済み) / **GpuAssetCache結線はM2**。`ValueType::AssetRef`は予約済み
-- **時間参照 `CompLookbehind`**(F-11) — 型を予約([plugin-resources.md](plugin-resources.md)§6)。配線はM4後。**前フレームを`&self`に覚えて自作するのは§3-3違反で恒久却下** — 現時点で書けるのは現在フレームのみの空間グリッチまで
+- **時間参照 `CompLookbehind`**(F-11) — 型を予約([plugin-resources.md](plugin-resources.md)§6)。**配線口は`RenderCtx::lookbehind`(M2E-7)**。実装はM4後。**前フレームを`&self`に覚えて自作するのは§3-3違反で恒久却下** — 現時点で書けるのは現在フレームのみの空間グリッチまで
 - **テキスト組版**(F-6) — コアは `itemize` / `shape(軸・クラスタ対応表)` / `draw` のみ([M5-P6](specs/M5-3d-and-post.md))。一発`draw_text`やシェーピング自作は禁止。縦書き・ルビ・行組・歌詞タイミングはプラグインの領分
-- `NodeDesc`の時間フットプリント宣言(前後フレーム/サブフレームサンプル。F-12、フィールドセット確定は解凍手続き経由)
+- `NodeDesc`の時間フットプリント宣言(前後フレーム/サブフレームサンプル。F-12) — 型`TemporalFootprint`と**`RenderCtx::temporal_footprint`口はM2E-7で予約**。窓テクスチャ解決はホスト側(未配線)
 - `SimulationPlugin` trait+StateTrack(F-12。`PluginKind::Simulation`はenum予約済み。traitシグネチャは[simulation-model.md](simulation-model.md)§3.2の叩き台を解凍手続きで確定)
