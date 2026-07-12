@@ -587,6 +587,7 @@ dependencies = [
  "motolii-core",
  "serde",
  "serde_json",
+ "thiserror",
 ]
 
 [[package]]
