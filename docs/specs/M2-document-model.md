@@ -1,7 +1,7 @@
 # M2: ドキュメントモデルとタイムライン
 
-ステータス: **ドラフト**(凍結ゲートで確定)
-着手条件: **Documentスキーマに触るタスク(D1/D2/D3/D7/D8)は[M2入場条件](../reviews/2026-07-11-M2-entry-gate.md)の全緑後に発注する**(D4/D6はDocumentスキーマから独立のため対象外 — 凍結ゲートのみで着手可。理由: 恒久性×並列化初陣×検証の弱さが重なる最初のフェーズであるため、審判の穴・プラグイン境界の乗算穴・D1が継承する罠を先に塞ぐ)
+ステータス: **ドラフト**(凍結ゲートで確定。**2026-07-12 粒化**: インターフェース契約節追加・D1巨大タスクを1PR粒度へ再分割・コマンド粒度の未決を潰した)
+着手条件: **Documentスキーマに触るタスク(D1* / D2* / D3* / D7 / D8)は[M2入場条件](../reviews/2026-07-11-M2-entry-gate.md)の全緑後に発注する**(D4/D6はDocumentスキーマから独立のため対象外 — 凍結ゲートのみで着手可。理由: 恒久性×並列化初陣×検証の弱さが重なる最初のフェーズであるため、審判の穴・プラグイン境界の乗算穴・D1が継承する罠を先に塞ぐ)
 
 ## 目的(退治する落とし穴)
 
@@ -30,6 +30,17 @@ D1着手前に固定する。エージェントが「もっともらしい継承
 3. **クリップのin/out/durationは`RationalTime`**: フレーム添字(`start_frame`/`frame_count`形式)をスキーマに入れない。`ProjectV1`のフレーム添字は入力素材fps基準の暫定であり、Documentへ持ち込まない
 4. **bpmは有理数**: `f64` bpm禁止。有理数(またはミリbpm整数)で持ち、拍時刻(`60/bpm`秒)が`RationalTime`に畳めることをD1完了条件に含める
 5. **`ExportOverlayRequest`形式のジョブミラーを温存しない**: D3はDocument→render層リクエスト(`BackgroundTextureRequest`系)を直結する。ProjectV1→PreparedProject→ExportOverlayRequestの4層コピーをD3で廃止する
+
+## D1-prelude(M2E-12 / 監査SC-2)
+
+入場条件として先行実装済みの骨格。**トラック/クリップ/Asset/BPM/キーフレーム等のスキーマ本体は含めない**(本体はゲート全緑後のD1)。
+
+| 予約 | 役割 |
+|---|---|
+| `Document.version` + `min_reader_version` | 版番号と前方互換の拒否閾値(実装ガード7) |
+| `#[serde(flatten)] Document.extra` | 未知キー保持→再保存で書き戻し(unknown-keys roundtrip) |
+| `DocumentWriter` + `edit`/`apply`/`snapshot` | 単一writer・`Arc`スナップショット(F-2)。`edit`はD2で`apply(Command)`に置換、呼び出し追加禁止 |
+| `DocumentWriter.revision: u64` | 編集世代(決定性テスト・無効化の席)。`edit`/`apply`で加算 |
 
 ## 音声トランスポート設計(音ズレ・途切れの構造的排除)
 
