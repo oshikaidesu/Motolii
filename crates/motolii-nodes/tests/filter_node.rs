@@ -257,6 +257,7 @@ fn composite_normal_over_uses_premultiplied_alpha() {
     CompositeNode::new(&gpu)
         .render(
             &gpu,
+            &RenderCtx::new(RationalTime::ZERO, Quality::FINAL),
             TextureRef {
                 texture: &background,
                 desc,
@@ -471,6 +472,7 @@ fn composite_add_and_multiply_use_premultiplied_alpha() {
             CompositeNode::with_mode(&gpu, mode)
                 .render(
                     &gpu,
+                    &RenderCtx::new(RationalTime::ZERO, Quality::FINAL),
                     TextureRef {
                         texture: &background,
                         desc,
@@ -519,6 +521,7 @@ fn composite_multiply_premul_edge_cases() {
         CompositeNode::with_mode(&gpu, CompositeMode::Multiply)
             .render(
                 &gpu,
+                &RenderCtx::new(RationalTime::ZERO, Quality::FINAL),
                 TextureRef {
                     texture: &background,
                     desc,
