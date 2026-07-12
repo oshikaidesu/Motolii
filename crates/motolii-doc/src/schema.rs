@@ -428,9 +428,29 @@ struct ClipDe {
     #[serde(default)]
     time_map: TimeMap,
     source: ClipSource,
-    /// 旧形式。存在すれば拒否(変換はD1e)。
+    /// 旧形式。キーが存在するだけで拒否(null 含む。不在との区別が必要 — D1i-1 follow-up)。
     #[serde(default)]
-    path_ops: Option<JsonValue>,
+    path_ops: LegacyPathOpsField,
+}
+
+/// `Option<JsonValue>` だと `"path_ops": null` が不在と同じ `None` になり拒否を迂回するため、
+/// キー存在を保持する(値自体は見ない)。
+#[derive(Debug, Clone, Default)]
+enum LegacyPathOpsField {
+    #[default]
+    Absent,
+    Present,
+}
+
+impl<'de> Deserialize<'de> for LegacyPathOpsField {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // null / 配列 / オブジェクトいずれも「キーが在る」ことだけが拒否条件
+        let _ = JsonValue::deserialize(deserializer)?;
+        Ok(Self::Present)
+    }
 }
 
 impl<'de> Deserialize<'de> for Clip {
@@ -439,7 +459,7 @@ impl<'de> Deserialize<'de> for Clip {
         D: serde::Deserializer<'de>,
     {
         let raw = ClipDe::deserialize(deserializer)?;
-        if raw.path_ops.is_some() {
+        if !matches!(raw.path_ops, LegacyPathOpsField::Absent) {
             return Err(serde::de::Error::custom(
                 "legacy field `path_ops` is not supported; use ClipSource::Vector { recipe.modifiers } (D1i-1). Migration is D1e",
             ));

@@ -85,6 +85,19 @@ fn serde_rejects_legacy_path_ops() {
 }
 
 #[test]
+fn serde_rejects_legacy_path_ops_null() {
+    // Option<JsonValue> だと null が不在と同じになり拒否を迂回するため、presence で弾く
+    let doc = valid_minimal_raster();
+    let mut clip_json = serde_json::to_value(&doc.tracks[0].items[0]).unwrap();
+    clip_json["path_ops"] = json!(null);
+    let err = serde_json::from_value::<Clip>(clip_json).unwrap_err();
+    assert!(
+        err.to_string().contains("path_ops"),
+        "expected path_ops:null reject, got {err}"
+    );
+}
+
+#[test]
 fn serde_rejects_recipe_on_asset_source() {
     let err = serde_json::from_value::<ClipSource>(json!({
         "source": "asset",
