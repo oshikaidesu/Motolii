@@ -182,11 +182,16 @@ impl<'de> Deserialize<'de> for Fps {
 }
 
 impl Fps {
+    /// 正値かつ既約。`60/2` → `30/1`(D1g / M2E-16同型)。
     pub const fn try_new(num: i64, den: i64) -> Result<Self, FpsError> {
         if num <= 0 || den <= 0 {
             return Err(FpsError::NonPositive);
         }
-        Ok(Self { num, den })
+        let g = const_gcd_u64(num as u64, den as u64) as i64;
+        Ok(Self {
+            num: num / g,
+            den: den / g,
+        })
     }
 
     pub const fn num(self) -> i64 {
@@ -208,6 +213,15 @@ impl Fps {
     pub fn as_f64(self) -> f64 {
         self.num as f64 / self.den as f64
     }
+}
+
+const fn const_gcd_u64(mut a: u64, mut b: u64) -> u64 {
+    while b != 0 {
+        let t = b;
+        b = a % b;
+        a = t;
+    }
+    a
 }
 
 fn gcd(mut a: u128, mut b: u128) -> u128 {
@@ -381,6 +395,14 @@ mod tests {
         assert_eq!(Fps::try_new(0, 1), Err(FpsError::NonPositive));
         assert_eq!(Fps::try_new(30, -1), Err(FpsError::NonPositive));
         assert_eq!(Fps::try_new(-30, 1), Err(FpsError::NonPositive));
+    }
+
+    #[test]
+    fn fps_try_new_reduces_by_gcd() {
+        let f = Fps::try_new(60, 2).unwrap();
+        assert_eq!(f.num(), 30);
+        assert_eq!(f.den(), 1);
+        assert_eq!(Fps::try_new(60, 2).unwrap(), Fps::try_new(30, 1).unwrap());
     }
 
     #[test]

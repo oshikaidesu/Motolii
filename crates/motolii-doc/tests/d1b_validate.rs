@@ -197,33 +197,25 @@ fn validate_does_not_mutate_writer() {
 }
 
 #[test]
-fn invalid_time_map_speed_den_zero_fails() {
-    let mut doc = valid_minimal();
-    if let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] {
-        // pubフィールド直書き — deserializeは拒否するがedit経路では壊せる
-        clip.time_map = TimeMap {
-            source_start: RationalTime::ZERO,
-            timeline_start: RationalTime::ZERO,
-            speed_num: 1,
-            speed_den: 0,
-        };
-    }
+fn time_map_speed_invariant_is_constructor_gated() {
+    // speed は非公開。不正・非正準値は try_new 以外で注入できない。
     assert!(matches!(
-        doc.validate(),
-        Err(DocumentError::InvalidTimeMap { .. })
+        TimeMap::try_new(RationalTime::ZERO, 1, 0, Default::default()),
+        Err(_)
     ));
-}
+    assert!(matches!(
+        TimeMap::try_new(RationalTime::ZERO, 0, 1, Default::default()),
+        Err(_)
+    ));
+    let reduced = TimeMap::constant_speed(RationalTime::ZERO, 2, 2).unwrap();
+    assert_eq!((reduced.speed_num(), reduced.speed_den()), (1, 1));
+    assert_eq!(reduced, TimeMap::identity());
 
-#[test]
-fn invalid_time_map_non_positive_speed_num_fails() {
     let mut doc = valid_minimal();
     if let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] {
-        clip.time_map.speed_num = 0;
+        clip.time_map = reduced;
     }
-    assert!(matches!(
-        doc.validate(),
-        Err(DocumentError::InvalidTimeMap { .. })
-    ));
+    assert!(doc.validate().is_ok());
 }
 
 #[test]

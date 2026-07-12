@@ -185,13 +185,7 @@ mod tests {
                     color: [1.0, 0.0, 0.0, 1.0],
                 }),
                 data_tracks: DataTracks::new(),
-                time_map: TimeMap::constant_speed(
-                    motolii_core::RationalTime::ZERO,
-                    motolii_core::RationalTime::ZERO,
-                    2,
-                    1,
-                )
-                .unwrap(),
+                time_map: TimeMap::constant_speed(motolii_core::RationalTime::ZERO, 2, 1).unwrap(),
                 qp0: true,
             },
         )
