@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
-    bump_min_reader_for_nest_schema_change, count_document, load_document,
+    bump_min_reader_for_nest_schema_change, count_document, load_document, load_document_bytes,
     load_document_bytes_with_reader_cap, migrate_bytes, migrate_document_file, save_document,
     Asset, AssetId, Clip, ClipSource, DocParam, Document, DocumentCounts, Group, ItemEnvelope,
     MigrateError, MigrateFileOptions, PersistError, Track, TrackItem, BACKUP_SUFFIX,
@@ -151,9 +151,10 @@ fn migrate_file_creates_backup_before_replace() {
     assert!(result.migrated);
     assert_eq!(fs::read(&result.backup_path).unwrap(), original);
     let loaded = load_document(&path).unwrap();
-    assert_eq!(loaded.version, LATEST_DOCUMENT_VERSION);
-    assert_eq!(loaded.min_reader_version, LATEST_DOCUMENT_VERSION);
-    assert_eq!(count_document(&loaded), count_document(&doc));
+    assert_eq!(loaded.document.version, LATEST_DOCUMENT_VERSION);
+    assert_eq!(loaded.document.min_reader_version, LATEST_DOCUMENT_VERSION);
+    assert_eq!(count_document(&loaded.document), count_document(&doc));
+    assert!(loaded.migrate_warnings.is_empty());
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -189,7 +190,7 @@ fn forward_compat_min_reader_bump_rejects_old_reader() {
         }
     ));
     let loaded = load_document_bytes_with_reader_cap(&bytes, READER_VERSION).unwrap();
-    assert_eq!(loaded.min_reader_version, 2);
+    assert_eq!(loaded.document.min_reader_version, 2);
 }
 
 #[test]
@@ -289,6 +290,27 @@ fn prelude_non_identity_time_map_without_clips_is_dropped_with_warning() {
         .contains(&"prelude_time_map_dropped_no_clips"));
     assert!(!doc.extra.contains_key("_migrated_prelude_time_map"));
     assert!(!doc.extra.contains_key("time_map"));
+}
+
+#[test]
+fn load_path_surfaces_prelude_time_map_dropped_warning() {
+    let tm = TimeMap::constant_speed(
+        RationalTime::ZERO,
+        RationalTime::try_new(1, 2).unwrap(),
+        2,
+        1,
+    )
+    .unwrap();
+    let json = serde_json::json!({
+        "version": 1,
+        "time_map": tm,
+    });
+    let bytes = serde_json::to_vec(&json).unwrap();
+    let loaded = load_document_bytes(&bytes).unwrap();
+    assert!(loaded
+        .migrate_warnings
+        .contains(&"prelude_time_map_dropped_no_clips"));
+    assert_eq!(loaded.document.version, LATEST_DOCUMENT_VERSION);
 }
 
 #[test]

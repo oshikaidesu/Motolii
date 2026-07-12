@@ -31,8 +31,8 @@ pub use migrate::{
 pub use param::{DocParam, LookAtAxis};
 pub use persist::{
     detect_cloud_sync, load_document, load_document_bytes, load_document_bytes_with_reader_cap,
-    save_document, save_document_with_options, CloudSyncHint, PersistError, SaveAbortAfter,
-    SaveOptions, READER_VERSION,
+    save_document, save_document_with_options, CloudSyncHint, LoadResult, PersistError,
+    SaveAbortAfter, SaveOptions, READER_VERSION,
 };
 pub use schema::{
     BlendMode, Clip, ClipSource, ClippingMaskSettings, Composition, CompositionError,

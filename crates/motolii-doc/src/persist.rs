@@ -160,14 +160,21 @@ pub fn save_document_with_options(
     Ok(())
 }
 
+/// 読込結果。マイグレーション警告を呼び出し側へ渡す(D1e。D1f警告合流の席)。
+#[derive(Debug, Clone, PartialEq)]
+pub struct LoadResult {
+    pub document: Document,
+    pub migrate_warnings: Vec<&'static str>,
+}
+
 /// 読込。`min_reader_version`超過はデシリアライズ前に拒否(ガード7)。
 /// クラウド同期検出は呼び出し側が`detect_cloud_sync`で参照する(ここでは拒否しない)。
-pub fn load_document(path: &Path) -> Result<Document, PersistError> {
+pub fn load_document(path: &Path) -> Result<LoadResult, PersistError> {
     let bytes = fs::read(path)?;
     load_document_bytes(&bytes)
 }
 
-pub fn load_document_bytes(bytes: &[u8]) -> Result<Document, PersistError> {
+pub fn load_document_bytes(bytes: &[u8]) -> Result<LoadResult, PersistError> {
     load_document_bytes_with_reader_cap(bytes, READER_VERSION)
 }
 
@@ -175,7 +182,7 @@ pub fn load_document_bytes(bytes: &[u8]) -> Result<Document, PersistError> {
 pub fn load_document_bytes_with_reader_cap(
     bytes: &[u8],
     reader_version: u32,
-) -> Result<Document, PersistError> {
+) -> Result<LoadResult, PersistError> {
     // 全文デシリアライズ前に版だけ読む — 未知フィールドで落ちる前に拒否するため
     let header: VersionHeader = serde_json::from_slice(bytes)?;
     if header.min_reader_version > reader_version {
@@ -184,10 +191,13 @@ pub fn load_document_bytes_with_reader_cap(
             reader_version,
         });
     }
-    let (doc, _report) =
+    let (doc, report) =
         migrate::migrate_bytes(bytes).map_err(|e| PersistError::Migrate(Box::new(e)))?;
     doc.validate()?;
-    Ok(doc)
+    Ok(LoadResult {
+        document: doc,
+        migrate_warnings: report.warnings,
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -325,8 +335,9 @@ mod tests {
         let doc = Document::new_v1();
         save_document(&path, &doc).unwrap();
         let loaded = load_document(&path).unwrap();
-        assert_eq!(loaded.version, LATEST_DOCUMENT_VERSION);
-        assert_eq!(loaded.bpm, doc.bpm);
+        assert_eq!(loaded.document.version, LATEST_DOCUMENT_VERSION);
+        assert_eq!(loaded.document.bpm, doc.bpm);
+        assert!(loaded.migrate_warnings.is_empty());
         let _ = fs::remove_dir_all(dir);
     }
 

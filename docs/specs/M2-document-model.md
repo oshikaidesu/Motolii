@@ -66,6 +66,7 @@ D1e(マイグレーション)はこの規律の運用口。D1a時点でネスト
 - **シリアライズ**: `color_interpretation` は `Option` + `skip_serializing_if=None`。v1(`new_v1`)は常に`None`で JSON に出さない。v2は必須(`validate`が`version>=2 && min_reader<2`およびフィールド有無の不一致を拒否)
 - **prelude `time_map`**: クリップがあれば全クリップ(ネスト Group 配下含む)へ写す。クリップが無く非恒等なら破棄し、`MigrationReport.warnings` に `prelude_time_map_dropped_no_clips` を記録する(undocumented `extra` キーは作らない)
 - **バックアップ**: 実マイグレーション時のみ作成。`dry_run` と noop(既に最新)では作らない。`*.motolii-pre-migrate.bak` が既にあれば上書きせず fail closed
+- **読込口**: `load_document*` は `LoadResult { document, migrate_warnings }` を返す。prelude `time_map` 破棄等の警告はオープン経路で呼び出し側へ届く(D1f 警告合流の席)
 
 ## 色契約の宣言(M2E-13 / 監査CQ-1・F-4)
 
