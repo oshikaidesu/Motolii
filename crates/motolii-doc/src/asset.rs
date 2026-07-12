@@ -91,10 +91,7 @@ struct RawAssetTable {
     entries: Vec<Asset>,
 }
 
-fn serialize_assets<S>(
-    entries: &BTreeMap<AssetId, Asset>,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
+fn serialize_assets<S>(entries: &BTreeMap<AssetId, Asset>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {

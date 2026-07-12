@@ -92,7 +92,10 @@ mod tests {
     #[test]
     fn beat_duration_folds_into_rational_time() {
         let bpm = Bpm::try_new(120, 1).unwrap();
-        assert_eq!(bpm.try_beat_duration().unwrap(), RationalTime::try_new(1, 2).unwrap());
+        assert_eq!(
+            bpm.try_beat_duration().unwrap(),
+            RationalTime::try_new(1, 2).unwrap()
+        );
     }
 
     #[test]
@@ -107,7 +110,10 @@ mod tests {
     #[test]
     fn fractional_bpm_stays_exact() {
         let bpm = Bpm::try_new(90, 1).unwrap();
-        assert_eq!(bpm.try_beat_duration().unwrap(), RationalTime::try_new(2, 3).unwrap());
+        assert_eq!(
+            bpm.try_beat_duration().unwrap(),
+            RationalTime::try_new(2, 3).unwrap()
+        );
     }
 
     #[test]

@@ -111,9 +111,7 @@ fn sample_document() -> Document {
         path_ops: Vec::new(),
     };
 
-    doc.soundtrack = Some(
-        Soundtrack::try_new(asset_id, RationalTime::ZERO, 1.0).unwrap(),
-    );
+    doc.soundtrack = Some(Soundtrack::try_new(asset_id, RationalTime::ZERO, 1.0).unwrap());
 
     doc.tracks.push(Track {
         id: track_id,

@@ -24,22 +24,10 @@ pub enum LookAtAxis {
 pub enum DocParam {
     Const(Value),
     Keyframes(KeyframeTrack),
-    Data {
-        track: DataTrackId,
-        fallback: Value,
-    },
-    Vec2Axes {
-        x: Box<DocParam>,
-        y: Box<DocParam>,
-    },
-    LookAt {
-        target: LayerId,
-        axis: LookAtAxis,
-    },
-    Follow {
-        target: LayerId,
-        offset: [f64; 2],
-    },
+    Data { track: DataTrackId, fallback: Value },
+    Vec2Axes { x: Box<DocParam>, y: Box<DocParam> },
+    LookAt { target: LayerId, axis: LookAtAxis },
+    Follow { target: LayerId, offset: [f64; 2] },
 }
 
 impl DocParam {

@@ -127,8 +127,7 @@ impl<'de> Deserialize<'de> for Soundtrack {
         D: Deserializer<'de>,
     {
         let raw = RawSoundtrack::deserialize(deserializer)?;
-        Soundtrack::try_new(raw.asset, raw.start_offset, raw.master_gain)
-            .map_err(de::Error::custom)
+        Soundtrack::try_new(raw.asset, raw.start_offset, raw.master_gain).map_err(de::Error::custom)
     }
 }
 
