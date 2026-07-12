@@ -658,6 +658,63 @@ impl PluginRegistry {
             PluginKind::Input | PluginKind::Simulation | PluginKind::ScriptWasm => 0,
         }
     }
+
+    /// 登録済みプラグインを種別ごとに列挙する(M2E-9: 一括purityの前提)。
+    pub fn iter(&self, kind: PluginKind) -> impl Iterator<Item = (&PluginId, DynPlugin)> + '_ {
+        let items: Vec<(&PluginId, DynPlugin)> = match kind {
+            PluginKind::LayerSource => self
+                .layer_sources
+                .iter()
+                .map(|(id, p)| (id, DynPlugin::LayerSource(*p)))
+                .collect(),
+            PluginKind::Filter => self
+                .filters
+                .iter()
+                .map(|(id, p)| (id, DynPlugin::Filter(*p)))
+                .collect(),
+            PluginKind::ParamDriver => self
+                .param_drivers
+                .iter()
+                .map(|(id, p)| (id, DynPlugin::ParamDriver(*p)))
+                .collect(),
+            PluginKind::Composite => self
+                .composites
+                .iter()
+                .map(|(id, p)| (id, DynPlugin::Composite(*p)))
+                .collect(),
+            PluginKind::Input | PluginKind::Simulation | PluginKind::ScriptWasm => Vec::new(),
+        };
+        items.into_iter()
+    }
+}
+
+/// `PluginRegistry::iter` が返す動的プラグイン参照。
+#[derive(Clone, Copy)]
+pub enum DynPlugin {
+    LayerSource(&'static dyn LayerSourcePlugin),
+    Filter(&'static dyn FilterPlugin),
+    ParamDriver(&'static dyn ParamDriverPlugin),
+    Composite(&'static dyn CompositePlugin),
+}
+
+impl DynPlugin {
+    pub fn desc(&self) -> &NodeDesc {
+        match self {
+            DynPlugin::LayerSource(p) => p.desc(),
+            DynPlugin::Filter(p) => p.desc(),
+            DynPlugin::ParamDriver(p) => p.desc(),
+            DynPlugin::Composite(p) => p.desc(),
+        }
+    }
+
+    pub fn kind(&self) -> PluginKind {
+        match self {
+            DynPlugin::LayerSource(_) => PluginKind::LayerSource,
+            DynPlugin::Filter(_) => PluginKind::Filter,
+            DynPlugin::ParamDriver(_) => PluginKind::ParamDriver,
+            DynPlugin::Composite(_) => PluginKind::Composite,
+        }
+    }
 }
 
 fn insert_unique<T: ?Sized>(
@@ -1241,6 +1298,19 @@ mod tests {
             .is_some());
         assert!(registry.param_driver_by_name("core.param.sine").is_some());
         assert!(registry.filter_by_name("missing").is_none());
+
+        assert_eq!(registry.iter(PluginKind::Filter).count(), 3);
+        assert_eq!(registry.iter(PluginKind::ParamDriver).count(), 1);
+        assert_eq!(registry.iter(PluginKind::LayerSource).count(), 1);
+        assert_eq!(registry.iter(PluginKind::Composite).count(), 1);
+        assert_eq!(registry.iter(PluginKind::Input).count(), 0);
+        let filter_ids: Vec<&str> = registry
+            .iter(PluginKind::Filter)
+            .map(|(id, _)| id.0)
+            .collect();
+        assert!(filter_ids.contains(&"core.filter.clear"));
+        assert!(filter_ids.contains(&"core.filter.tint"));
+        assert!(filter_ids.contains(&"core.filter.opacity"));
     }
 
     #[test]
