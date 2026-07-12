@@ -1,12 +1,12 @@
 # 第二実コード監査の裏取りと台帳化: D1系スキーマ・評価・永続(2026-07-12)
 
-ステータス: **裏取り済み所見**(規律1/2/6適用済み — 監査主張を設計根拠にせず、本文書で全コード主張をfile:line現物確認した。判定語併記。**S1/S6/S16の方式はユーザー決定待ち**)
+ステータス: **裏取り済み所見+決定記録**(規律1/2/6適用済み — 監査主張を設計根拠にせず、本文書で全コード主張をfile:line現物確認した。判定語併記。**S1/S6/S16は2026-07-12ユーザー決定: 3点とも案1承認**(補正4点込み、下記決定節))
 
 ## 前提と手法
 
 - 出所: 2026-07-12の第二LLM監査(第一監査=[2026-07-11-code-audit-pre-m2](2026-07-11-code-audit-pre-m2.md)の後続。前回はプラグイン境界中心、今回はD1a〜D1cマージ後のスキーマ・評価・永続が対象)
 - 対象SHA: `9c8e274`(本ブランチ作業ツリー)。**採用時に最新mainで再確認すること**(第一監査の検証注記を継承)
-- 裏取り方法: コード主張は全てfile:line現物を本セッションで確認した(下表「裏取り」列)。外部出典(Lottie/SQLite/OTIO/Krita/Blender/Godot)は公開恒久文書でありリンク保持するが、**個別記述の一次確認は未了**(規律3: 整合する事例に留める)
+- 裏取り方法: コード主張は全てfile:line現物を本セッションで確認した(下表「裏取り」列)。外部出典のうち**S1/S6/S16決定節の出典(OTIO・FCPXML・Lottie・Adobe・Blender)は一次・公式仕様を2026-07-12に確認済み**。その他(S7〜S18表中のSQLite/Krita/Godot等)は公開恒久文書のリンク保持のみで個別記述の一次確認は未了(規律3: 整合する事例に留める)
 - 監査の数値例(30000/1001でpos=14.999…等)は**再計算していない**。f64乗算+floorの構造(S7)が確認できれば境界誤りの可能性自体は成立するため、数値の精査はチケット側の再現テストに委ねる
 - ID: 本監査所見は**S1〜S18**。既存台帳のA1〜A8・B群([d1-spec-holes 追補](2026-07-12-d1-spec-holes-prior-art.md))と重複するものは統合先を明記
 
@@ -46,27 +46,38 @@
 
 hidden/solo/lockの「visible ≠ evaluable」(hiddenでもparent/mask/LookAt対象としては評価される — Lottie先例)は、既存**B④**の1行宣言では不足であることが確定。B④を「**フラグごとに描画・評価・書き出しの3軸で挙動を宣言する表**」へ書き換える(行き先: D1フォローアップ+D3発注書)。
 
-## ユーザー決定が必要な3点(A1〜A3と同じ手続き)
+## ユーザー決定3点【2026-07-12決定: 3点とも案1承認(補正4点込み)】
 
-いずれもユーザーデータへ不可逆に焼かれるスキーマ形状の決定。推奨は併記するが、決定はユーザー。
+いずれもユーザーデータへ不可逆に焼かれるスキーマ形状の決定。A1〜A3と同じ手続きでユーザーへ提示し、**2026-07-12に3点とも案1で承認された**。承認時の補正(式の固定・S6説明の訂正・S16執行機構・出典厳密化)は各節へ反映済み。
 
-**S1: クリップ時間原点の一本化方式**
-- **案1(監査推奨・当方も推奨)**: TimeMapを「クリップローカル時刻→ソース時刻」の写像にし、`timeline_start`を削除。タイムライン位置の正本は`Clip.start`のみ。キーフレーム時刻決定(spec-holes §1「クリップ起点のタイムライン時刻」)と同じ領域になり、クリップ移動=`start`1フィールド更新でコマンド・複製・トリム・Undoが単純化
-- **案2**: 二重保持を残し`clip.start == time_map.timeline_start`をvalidate不変条件+全コマンドの同時更新規約にする(スキーマ無変更だが、規約違反が新たな恒久バグ族になる)
-- 補足: spec-holes §1bの決定「TimeMapを時間の単一権威・尺は導出値」の**原点版**であり、案1はその決定と同方向
-- **先例(2026-07-12調査。いずれもタイムライン原点を二重保持しない)**: OTIOのClipは`source_range`(ソース領域)のみを持ち、タイムライン位置はTrack内の並びから**完全に導出**される(タイムライン原点フィールド自体が無い) — [OTIO Timeline Structure](https://opentimelineio.readthedocs.io/en/latest/tutorials/otio-timeline-structure.html)/[Time Ranges](https://opentimelineio.readthedocs.io/en/latest/tutorials/time-ranges.html)。FCPXMLは`offset`(親タイムライン上の位置)+`start`(ソースのイン点)+`duration`の3フィールドで、**位置と写像の領域が分離**しており原点の複製が無い — [FCPXML reference (fcp.cafe)](https://fcp.cafe/developers/fcpxml/)。Motoliiは暗黙Gap(明示start)方式なのでFCPXML形=案1が同型。二重保持(案2)の直接先例は見つかっていない
+**S1: クリップ時間原点の一本化方式 — 決定: 案1承認**
+- **案1(採用)**: TimeMapを「クリップローカル時刻→ソース時刻」の写像にし、`timeline_start`を削除。タイムライン位置の正本は`Clip.start`のみ
+- 案2(不採用): 二重保持+`clip.start == time_map.timeline_start`のvalidate不変条件(規約違反が新たな恒久バグ族になる)
+- **固定式(ユーザー指定。仕様へこのまま焼く)**:
+  ```
+  clip_local_time = timeline_time - clip.start
+  source_time     = time_map.map(clip_local_time)
+  ```
+  帰結: タイムライン位置の正本=`Clip.start` / キーフレーム時刻=クリップ起点のローカル時間(spec-holes §1と同一領域) / TimeMap=ローカル時間→ソース時間 / クリップ移動=`Clip.start`のみ変更 / **キーフレーム評価にはTimeMapを通さない**
+- **残る宣言義務(発注書で必須)**: **尺の正本**。(a) v1は`Clip.duration`が表示区間の正本でsource使用終端をTimeMapから導出する、または (b) TimeMapの終端ノットから`duration`を導出し独立保存しない — のどちらかを宣言する。宣言しないと原点の二重正本を消して**尺の二重正本**を残す(§1b「尺は導出値」との整合確認込み)
+- **先例(2026-07-12調査、一次確認済み)**: OTIOはTrack内の順序とGapから親時間上の位置を**導出**するためMotolii(明示start)と完全同型ではないが、「source領域と親timeline領域を別座標系にする」根拠になる — [OTIO Timeline Structure (v0.18.1)](https://opentimelineio.readthedocs.io/en/v0.18.1/tutorials/otio-timeline-structure.html)/[Time Ranges (v0.18.1)](https://opentimelineio.readthedocs.io/en/v0.18.1/tutorials/time-ranges.html)。FCPXMLは`offset`(親タイムライン上の位置)+`start`(ソースのイン点)+`duration`で位置と写像の領域が分離 — 一次: [Apple FCPXML Reference](https://developer.apple.com/documentation/professional-video-applications/fcpxml-reference)、解説(二次): [FCP Cafe](https://fcp.cafe/developers/fcpxml/)。二重保持(案2)の先例は**調査範囲では未発見**(不在証明ではない)
 
-**S6: PathOpの適用可能性の型表現**
-- **案1(監査推奨)**: `ClipSource`をVector/Raster系で型分離(またはPathOpをVector系ソース内へ移動)。Lottieのレイヤー型分離と同型
-- **案2(より小さい対策)**: スキーマは現状維持し、validateで「パス出力を持たないsourceに`path_ops`非空」を拒否。D3は到達不能としてよい
-- 補足: 案2はスキーマ非破壊だが、「どのsourceがパス出力を持つか」の判定表が別途正本として必要になる(プラグインはPluginKindでは判別できない可能性 — 発注前に要確認)
-- **先例(2026-07-12調査)**: Lottie/AEとも**modifierはシェイプレイヤーの内容リスト内にのみ存在**し、スコープ内の先行するシェイプ兄弟に作用する(フッテージレイヤーには構造上付けられない)。複数modifierは逆順合成、Trimのparallel/sequentialは複数シェイプの扱いとして定義 — [Lottie Shapes仕様](https://lottiefiles.github.io/lottie-spec/specs/shapes/)。つまり先例の解は**案1の「PathOpをVector系ソース内へ移動」変形**であり、これはS5の未決(スコープ・適用順・複数輪郭)の答えも同じ構造から同時に借りられる(clip直下の`Vec<PathOp>`のままだとスコープ概念が無く、S5の適用順仕様を独自発明することになる)。層レベルvalidate(案2)の直接先例は見つかっていない
+**S6: PathOpの適用可能性の型表現 — 決定: 案1承認(VectorRecipe形。root modifier stackに限定)**
+- **案1(採用)**: PathOpをVector系ソース内へ移動。案2(validate拒否のみ)は不採用 — 「どのsourceがパス出力を持つか」の判定表が別正本として必要になり、構造で防げるものを検査で防ぐことになる
+- **v1構造(ユーザー指定)**:
+  ```
+  VectorRecipe
+  ├── content: StandardShape | SvgAsset | TextPath | Group
+  └── modifiers: Vec<PathOp>
+  ```
+  固定規約: ①modifiersは**rootの全パス集合**に作用 ②**index 0から順に適用** ③Trimのparallel/sequentialは**PathOp自身のフィールド** ④raster sourceには**構造上存在しない**
+- **説明の訂正(承認時補正)**: 当初の「Vector系ソース内へ移せばLottieのスコープ・適用順も手に入る」は**不成立**。LottieはShape・Group・Style・Modifierが同一の内容リストに混在し、Modifierが同一スコープ内の**先行シェイプ兄弟**に作用する構造であり、`content+modifiers`の分離形では兄弟スコープは再現されない(誤適用防止のみが得られる)。Lottie同等の入れ子スコープが必要になったら`Vec<VectorItem>`(Shape/Group/Style/Modifier混在)の**別設計**が必要 — 本フォローアップよりかなり大きく、v1のroot modifier stackと混同しない(v2判断)
+- **先例(2026-07-12調査、一次確認済み)**: Lottie/AEともmodifierはシェイプレイヤーの内容リスト内にのみ存在し、フッテージレイヤーには構造上付けられない。複数modifierの合成順・Trimのparallel/sequentialも同仕様が定義 — [Lottie Shapes仕様 (1.0)](https://lottie.github.io/lottie-spec/1.0/specs/shapes/)。層レベルvalidate(旧案2)の先例は**調査範囲では未発見**
 
-**S16: コア演算の意味論version**
-- **案1(より小さい対策・当方推奨)**: per-opの`algorithm_version`フィールドは**焼かない**。方針宣言「コア演算の挙動変更は(a)Document version migrationでの明示変換、または(b)新variant追加でのみ行い、既存variantの意味は永久固定」をD1仕様へ1文で入れる
-- **案2**: 各永続演算へ`algorithm_version`フィールド(serde default=1)を今から予約
-- 補足: 案1は焼かない選択(運用注の判定基準)。ただし「既存variantの意味固定」はS5のPathOp意味論仕様+ゴールデンが揃って初めて執行可能 — S5とセット
-- **先例(2026-07-12調査)**: AEはブラーのアルゴリズム変更時に**旧エフェクトを「Gaussian Blur (Legacy)」「Fast Blur (Legacy)」へ改名してObsoleteカテゴリで永久保存**し、新アルゴリズムは別エフェクト(Fast Box Blur)として追加した。旧プロジェクトは旧アルゴリズムのまま開ける — [Adobe公式: Obsolete effects](https://helpx.adobe.com/after-effects/using/obsolete-effects.html)。=案1(意味永久固定+新variant)の実運用実績。一方Blenderの`do_versions`はロード時migration方式の先例だが、公式に「**as best as possible**」変換と明言しており画素一致は保証しない — [Blender Developer Handbook: Blend File Compatibility](https://developer.blender.org/docs/handbook/guidelines/compatibility_handling_for_blend_files/)。読み: **データモデル変更はmigration(Blender型)、画素に効くアルゴリズム変更は新variant(AE型)**という使い分けが先例の分業であり、案1はこれと一致
+**S16: コア演算の意味論version — 決定: 案1承認(意味論ゴールデンで機械執行)**
+- **案1(採用)**: per-opの`algorithm_version`フィールドは**焼かない**。方針: **データ形状変更→migration / 画素意味の変更→新variant / 既存variantの意味→固定 / legacy variantは新規UIから隠しても読込・評価は維持**。案2(フィールド予約)は不採用
+- **執行機構(承認時補正: 1文宣言だけでは執行できない)**: 最低限、永続演算ごとに**保護された意味論ゴールデン**を置く — PathOp各variant / BlendMode / LookAt・Follow / Bezier solver / WiggleのPRNG・seed / Transform合成。加えてCI規則: **画素意味を変えるPRは既存ゴールデンを更新できない。新variant+新ゴールデンを追加する**。PathOp分のゴールデンはS5の意味論仕様とセットで整備(D1発注書)、評価系演算(BlendMode/LookAt/Follow/Bezier/Transform合成)分はD3完了条件へ
+- **先例(2026-07-12調査、一次確認済み)**: AEはブラーのアルゴリズム変更時に旧エフェクトを「Gaussian Blur (Legacy)」等へ改名してObsoleteカテゴリへ移し、新アルゴリズムは別エフェクトとして追加した。Adobe公式はLegacyが現行と**異なる結果を出す**こと、旧エフェクト(例: 旧Lightning)を旧プロジェクトで**継続利用できる**ことを明記 — [Adobe公式: Obsolete effects](https://helpx.adobe.com/after-effects/desktop/apply-effects-and-animation-presets/list-of-effects/obsolete-effects.html)。ただし恒久保証までは出典から言えないため「**長期互換の実例**」に留める。Blenderの`do_versions`はロード時migration方式の先例だが、公式に「as best as possible」変換と明言しており画素一致は保証しない — [Blender Developer Handbook: Blend File Compatibility](https://developer.blender.org/docs/handbook/guidelines/compatibility_handling_for_blend_files/)。読み: **データモデル変更はmigration(Blender型)、画素に効く変更は新variant(AE型)**という分業が先例と整合(規律3: 整合する事例)
 
 ## 審判(テスト)への含意
 
@@ -76,7 +87,7 @@ hidden/solo/lockの「visible ≠ evaluable」(hiddenでもparent/mask/LookAt対
 
 監査提案の順序を受理する: ①TimeMap正準化+原点一本化(S1/S2) → ②DocParam期待型+AssetId型付け(S3/S4/S9) → ③PathOp意味論+適用可能性(S5/S6) → ④read/write互換(S13/S14) → ⑤入力上限・fuzz・fault injection(S10/S11) → ⑥recovery非破壊(S15) → ⑦DataTrack(S7/S8) → ⑧migration意味保存(S12) → ⑨OTIO loss report(S17)。S18(D2)とB④改訂は各発注書起草時。
 
-①〜③はユーザー決定(S1/S6/S16)の後に発注書化する。
+①〜③のユーザー決定(S1/S6/S16)は2026-07-12に案1で完了。発注書化はM2仕様のD1g〜D1i行として実施済み(→[M2-document-model.md](../specs/M2-document-model.md))。
 
 ## 既存台帳との重複整理
 
