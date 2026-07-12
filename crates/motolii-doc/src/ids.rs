@@ -4,10 +4,13 @@
 
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Serialize};
+use serde::de::{self, Deserialize, Deserializer};
+use serde::{Deserialize as DeserializeDerive, Serialize};
 
 /// レイヤーの恒久ID。表示名とは別(表示名は`LayerIdTable`の値側)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, DeserializeDerive,
+)]
 #[serde(transparent)]
 pub struct LayerId(u64);
 
@@ -30,17 +33,60 @@ pub enum LayerIdError {
     NotFound { id: u64 },
     #[error("LayerId space exhausted")]
     Exhausted,
+    #[error("LayerIdTable next ({next}) must be greater than max entry id ({max_id})")]
+    InvalidNext { next: u64, max_id: u64 },
 }
 
 /// レイヤーID台帳。削除後もIDを再利用しない。
 ///
 /// スキーマ本体(クリップ/トラック)は持たない — 表示名のみを席として予約する。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct LayerIdTable {
     /// 次に割り当てる生値。削除しても戻さない。
     next: u64,
-    /// id → 表示名(IDと別フィールド)
+    /// id → 表示名(IDと別フィールド)。JSONは配列で重複を検出する。
+    #[serde(serialize_with = "serialize_entries")]
     entries: BTreeMap<LayerId, String>,
+}
+
+#[derive(Serialize, DeserializeDerive)]
+struct RawEntry {
+    id: LayerId,
+    name: String,
+}
+
+#[derive(DeserializeDerive)]
+struct RawLayerIdTable {
+    next: u64,
+    entries: Vec<RawEntry>,
+}
+
+fn serialize_entries<S>(
+    entries: &BTreeMap<LayerId, String>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    use serde::ser::SerializeSeq;
+    let mut seq = serializer.serialize_seq(Some(entries.len()))?;
+    for (id, name) in entries {
+        seq.serialize_element(&RawEntry {
+            id: *id,
+            name: name.clone(),
+        })?;
+    }
+    seq.end()
+}
+
+impl<'de> Deserialize<'de> for LayerIdTable {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = RawLayerIdTable::deserialize(deserializer)?;
+        LayerIdTable::try_from_raw(raw).map_err(de::Error::custom)
+    }
 }
 
 impl Default for LayerIdTable {
@@ -55,6 +101,32 @@ impl LayerIdTable {
             next: 0,
             entries: BTreeMap::new(),
         }
+    }
+
+    fn try_from_raw(raw: RawLayerIdTable) -> Result<Self, LayerIdError> {
+        let mut entries = BTreeMap::new();
+        for entry in raw.entries {
+            if entries.insert(entry.id, entry.name).is_some() {
+                return Err(LayerIdError::Duplicate { id: entry.id.0 });
+            }
+        }
+        Self::validate_next(raw.next, &entries)?;
+        Ok(Self {
+            next: raw.next,
+            entries,
+        })
+    }
+
+    fn validate_next(next: u64, entries: &BTreeMap<LayerId, String>) -> Result<(), LayerIdError> {
+        if let Some((max_id, _)) = entries.iter().next_back() {
+            if next <= max_id.0 {
+                return Err(LayerIdError::InvalidNext {
+                    next,
+                    max_id: max_id.0,
+                });
+            }
+        }
+        Ok(())
     }
 
     pub fn len(&self) -> usize {
@@ -79,8 +151,9 @@ impl LayerIdTable {
         if self.entries.contains_key(&id) {
             return Err(LayerIdError::Duplicate { id: id.0 });
         }
-        self.next = self.next.checked_add(1).ok_or(LayerIdError::Exhausted)?;
+        let next = self.next.checked_add(1).ok_or(LayerIdError::Exhausted)?;
         self.entries.insert(id, display_name.into());
+        self.next = next;
         Ok(id)
     }
 
@@ -93,8 +166,9 @@ impl LayerIdTable {
         if self.entries.contains_key(&id) {
             return Err(LayerIdError::Duplicate { id: id.0 });
         }
-        self.entries.insert(id, display_name.into());
+        // 挿入前に完了: MAXは next を進められないため拒否(Err後に表は不変)
         let floor = id.0.checked_add(1).ok_or(LayerIdError::Exhausted)?;
+        self.entries.insert(id, display_name.into());
         if floor > self.next {
             self.next = floor;
         }
@@ -161,5 +235,42 @@ mod tests {
         assert_eq!(second.get(), 1);
         assert_ne!(second, first);
         assert!(!table.contains(first));
+    }
+
+    #[test]
+    fn deserialize_rejects_next_not_above_max_entry() {
+        let json = r#"{
+            "next": 1,
+            "entries": [{"id": 1, "name": "a"}, {"id": 0, "name": "b"}]
+        }"#;
+        let err = serde_json::from_str::<LayerIdTable>(json).unwrap_err();
+        assert!(
+            err.to_string().contains("next") && err.to_string().contains("max entry"),
+            "unexpected err: {err}"
+        );
+    }
+
+    #[test]
+    fn deserialize_rejects_duplicate_ids() {
+        let json = r#"{
+            "next": 3,
+            "entries": [{"id": 1, "name": "a"}, {"id": 1, "name": "b"}]
+        }"#;
+        let err = serde_json::from_str::<LayerIdTable>(json).unwrap_err();
+        assert!(
+            err.to_string().contains("already exists"),
+            "unexpected err: {err}"
+        );
+    }
+
+    #[test]
+    fn insert_max_id_is_atomic_on_exhausted() {
+        let mut table = LayerIdTable::new();
+        let before_len = table.len();
+        let max = LayerId::from_raw(u64::MAX);
+        assert_eq!(table.insert(max, "x"), Err(LayerIdError::Exhausted));
+        assert!(!table.contains(max));
+        assert_eq!(table.len(), before_len);
+        assert_eq!(table.next, 0);
     }
 }
