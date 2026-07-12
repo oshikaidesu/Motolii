@@ -21,7 +21,6 @@ fn valid_minimal() -> Document {
             duration: RationalTime::try_new(5, 1).unwrap(),
             time_map: TimeMap::default(),
             source: ClipSource::Asset { asset },
-            path_ops: Vec::new(),
         })],
     });
     doc
@@ -195,7 +194,6 @@ fn look_at_on_position_ok() {
             duration: RationalTime::try_new(1, 1).unwrap(),
             time_map: TimeMap::default(),
             source: ClipSource::Asset { asset },
-            path_ops: Vec::new(),
         })],
     });
     clip_mut(&mut doc).envelope.transform.position = DocParam::LookAt {

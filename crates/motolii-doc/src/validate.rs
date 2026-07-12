@@ -16,7 +16,9 @@ use crate::param::DocParam;
 use crate::param_expect::{
     self, known_plugin_param, path_op_scalar, vec2_axis, ExpectedValueType, ParamConstraints,
 };
-use crate::schema::{Clip, ClipSource, Group, ItemEnvelope, TrackItem};
+use crate::schema::{
+    Clip, ClipSource, Group, ItemEnvelope, StandardShape, TrackItem, VectorContent,
+};
 use crate::track_id::TrackId;
 use crate::{Document, LayerId};
 
@@ -87,6 +89,13 @@ pub enum DocumentError {
     NonFiniteBezier { path: String },
     #[error("invalid Bezier control points at {path}: x1={x1} x2={x2}")]
     InvalidBezier { path: String, x1: f64, x2: f64 },
+    #[error("asset {id} has type `{got}` at {path}; expected one of: {expected}")]
+    WrongAssetType {
+        path: String,
+        id: u64,
+        got: String,
+        expected: String,
+    },
 }
 
 impl Document {
@@ -146,6 +155,27 @@ impl Document {
             Ok(())
         } else {
             Err(DocumentError::UnknownAssetId { id: id.get() })
+        }
+    }
+
+    fn require_asset_type(
+        &self,
+        id: AssetId,
+        allowed: &[&str],
+        path: &str,
+    ) -> Result<(), DocumentError> {
+        let Some(asset) = self.assets.get(id) else {
+            return Err(DocumentError::UnknownAssetId { id: id.get() });
+        };
+        if allowed.iter().any(|t| *t == asset.asset_type) {
+            Ok(())
+        } else {
+            Err(DocumentError::WrongAssetType {
+                path: path.to_string(),
+                id: id.get(),
+                got: asset.asset_type.clone(),
+                expected: allowed.join(", "),
+            })
         }
     }
 }
@@ -219,11 +249,18 @@ fn validate_clip(
                 validate_plugin_param(doc, plugin_id, name, param, &path)?;
             }
         }
+        ClipSource::Vector { recipe } => {
+            validate_vector_content(doc, &recipe.content, &format!("layer{layer_id}.recipe"))?;
+            for (i, op) in recipe.modifiers.iter().enumerate() {
+                validate_path_op_params(
+                    doc,
+                    op,
+                    &format!("layer{layer_id}.recipe.modifiers[{i}]"),
+                )?;
+            }
+        }
     }
 
-    for (i, op) in clip.path_ops.iter().enumerate() {
-        validate_path_op_params(doc, op, &format!("layer{layer_id}.path_ops[{i}]"))?;
-    }
     Ok(())
 }
 
@@ -524,6 +561,40 @@ fn validate_value_structure(
     Ok(())
 }
 
+fn validate_vector_content(
+    doc: &Document,
+    content: &VectorContent,
+    path: &str,
+) -> Result<(), DocumentError> {
+    match content {
+        VectorContent::StandardShape { shape } => match shape {
+            StandardShape::Rect { width, height } | StandardShape::Ellipse { width, height } => {
+                validate_param(doc, width, path_op_scalar(), &format!("{path}.width"))?;
+                validate_param(doc, height, path_op_scalar(), &format!("{path}.height"))
+            }
+        },
+        VectorContent::SvgAsset { asset } => {
+            // S6: ラスタ動画等を SvgAsset に混ぜて modifiers を付けられないよう型を固定
+            doc.require_asset_type(*asset, &[SVG_ASSET_TYPE], &format!("{path}.asset"))
+        }
+        VectorContent::TextPath { font_asset, .. } => {
+            doc.require_asset_type(*font_asset, FONT_ASSET_TYPES, &format!("{path}.font_asset"))
+        }
+        VectorContent::Group { children } => {
+            for (i, child) in children.iter().enumerate() {
+                validate_vector_content(doc, child, &format!("{path}.children[{i}]"))?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// `VectorContent::SvgAsset` が要求する MIME。
+const SVG_ASSET_TYPE: &str = "image/svg+xml";
+
+/// `TextPath.font_asset` の許可型(D1i-1で確定。未決を埋めずここで正本化)。
+const FONT_ASSET_TYPES: &[&str] = &["font/ttf", "font/otf", "font/woff", "font/woff2"];
+
 fn validate_path_op_params(
     doc: &Document,
     op: &crate::schema::PathOp,
@@ -543,7 +614,12 @@ fn validate_path_op_params(
         PathOp::RoundCorners { radius } => {
             validate_param(doc, radius, c, &format!("{path}.radius"))
         }
-        PathOp::Trim { start, end, offset } => {
+        PathOp::Trim {
+            start,
+            end,
+            offset,
+            mode: _,
+        } => {
             validate_param(doc, start, c, &format!("{path}.start"))?;
             validate_param(doc, end, c, &format!("{path}.end"))?;
             validate_param(doc, offset, c, &format!("{path}.offset"))

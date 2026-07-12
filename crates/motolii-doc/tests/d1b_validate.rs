@@ -21,7 +21,6 @@ fn valid_minimal() -> Document {
             duration: RationalTime::try_new(5, 1).unwrap(),
             time_map: Default::default(),
             source: ClipSource::Asset { asset },
-            path_ops: Vec::new(),
         })],
     });
     doc
@@ -127,7 +126,6 @@ fn duplicate_layer_in_tree_fails() {
         duration: RationalTime::try_new(1, 1).unwrap(),
         time_map: Default::default(),
         source: ClipSource::Asset { asset },
-        path_ops: Vec::new(),
     }));
     assert!(matches!(
         doc.validate(),
@@ -248,7 +246,6 @@ fn parent_mutual_cycle_fails() {
                 duration: RationalTime::try_new(2, 1).unwrap(),
                 time_map: Default::default(),
                 source: ClipSource::Asset { asset },
-                path_ops: Vec::new(),
             }),
             TrackItem::Clip(Clip {
                 envelope: env_b,
@@ -256,7 +253,6 @@ fn parent_mutual_cycle_fails() {
                 duration: RationalTime::try_new(2, 1).unwrap(),
                 time_map: Default::default(),
                 source: ClipSource::Asset { asset },
-                path_ops: Vec::new(),
             }),
         ],
     });

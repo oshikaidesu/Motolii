@@ -36,8 +36,8 @@ pub use persist::{
 };
 pub use schema::{
     BlendMode, Clip, ClipSource, ClippingMaskSettings, Composition, CompositionError,
-    EffectInstance, Group, ItemEnvelope, MaskMode, PathOp, Soundtrack, SoundtrackError, Track,
-    TrackItem, Transform2D,
+    EffectInstance, Group, ItemEnvelope, MaskMode, PathOp, Soundtrack, SoundtrackError,
+    StandardShape, Track, TrackItem, Transform2D, TrimMode, VectorContent, VectorRecipe,
 };
 pub use track_id::{TrackId, TrackIdError, TrackIdTable};
 pub use validate::DocumentError;
