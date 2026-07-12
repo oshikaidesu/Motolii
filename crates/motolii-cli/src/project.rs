@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
@@ -12,8 +12,8 @@ use motolii_gpu::{GpuCtx, RgbaDownloader, YuvToRgba};
 use motolii_media::{probe, FrameReader, MediaInfo};
 use motolii_nodes::{ParamOverlayError, ParamRectOverlay};
 use motolii_plugin::{
-    migrate_plugin_params, reference::register_reference_plugins, ParamDriverContext,
-    PluginRegistry, ResolvedParams, TextureRef,
+    migrate_plugin_params, reference::register_reference_plugins, ParamDriverContext, PluginError,
+    PluginRegistry, TextureRef,
 };
 use motolii_render::{
     render_frame_with_background_texture, BackgroundTextureRequest, RenderSession,
@@ -151,7 +151,7 @@ pub fn load_project_v1(path: impl AsRef<Path>) -> Result<ProjectV1, ProjectError
 }
 
 pub fn load_project_v1_from_str(text: &str) -> Result<ProjectV1, ProjectError> {
-    let project: ProjectV1 = serde_json::from_str(text)?;
+    let mut project: ProjectV1 = serde_json::from_str(text)?;
     if project.version != 1 {
         return Err(ProjectError::UnsupportedVersion(project.version));
     }
@@ -159,7 +159,75 @@ pub fn load_project_v1_from_str(text: &str) -> Result<ProjectV1, ProjectError> {
     if !project.time_map.is_identity() {
         return Err(ProjectError::UnsupportedTimeMap);
     }
+    // M2E-8: 型不一致・未知キーはロード時に構造化エラー(serde受理だけでは足りない)。
+    normalize_param_drivers(&mut project.param_drivers)?;
     Ok(project)
+}
+
+/// migrate → resolve_params。成功時は default 充填済み params と現行 effect_version を書き戻す。
+fn normalize_param_drivers(drivers: &mut [ParamDriverV1]) -> Result<(), ProjectError> {
+    let mut registry = PluginRegistry::new();
+    register_reference_plugins(&mut registry)?;
+    for driver in drivers.iter_mut() {
+        let Some(plugin) = registry.param_driver_by_name(&driver.plugin) else {
+            return Err(ProjectError::UnknownParamDriver(driver.plugin.clone()));
+        };
+        let resolved = resolve_raw_params(
+            &driver.plugin,
+            driver.effect_version,
+            plugin.desc(),
+            &driver.params,
+        )?;
+        driver.params = plugin
+            .desc()
+            .params
+            .iter()
+            .map(|def| {
+                (
+                    def.id.to_string(),
+                    resolved
+                        .get(def.id)
+                        .cloned()
+                        .unwrap_or_else(|| def.default.clone()),
+                )
+            })
+            .collect();
+        driver.effect_version = plugin.desc().version;
+    }
+    Ok(())
+}
+
+fn resolve_driver_params(
+    registry: &PluginRegistry,
+    driver: &ParamDriverV1,
+) -> Result<motolii_plugin::ResolvedParams, ProjectError> {
+    let Some(plugin) = registry.param_driver_by_name(&driver.plugin) else {
+        return Err(ProjectError::UnknownParamDriver(driver.plugin.clone()));
+    };
+    resolve_raw_params(
+        &driver.plugin,
+        driver.effect_version,
+        plugin.desc(),
+        &driver.params,
+    )
+}
+
+fn resolve_raw_params(
+    plugin_name: &str,
+    effect_version: u32,
+    desc: &motolii_plugin::NodeDesc,
+    params: &HashMap<String, Value>,
+) -> Result<motolii_plugin::ResolvedParams, ProjectError> {
+    let mut raw_params = params.clone();
+    migrate_plugin_params(plugin_name, effect_version, desc.version, &mut raw_params)?;
+
+    match desc.resolve_params(&raw_params) {
+        Ok(params) => Ok(params),
+        Err(PluginError::Param {
+            plugin, id, got, ..
+        }) if got == "unknown" => Err(ProjectError::UnknownParam { plugin, param: id }),
+        Err(err) => Err(err.into()),
+    }
 }
 
 fn export_frame_count(project: &ProjectV1, info: &MediaInfo) -> Result<usize, ProjectError> {
@@ -197,34 +265,8 @@ pub fn build_data_tracks(
         let Some(plugin) = registry.param_driver_by_name(&driver.plugin) else {
             return Err(ProjectError::UnknownParamDriver(driver.plugin.clone()));
         };
-
-        let mut raw_params = driver.params.clone();
-        migrate_plugin_params(
-            &driver.plugin,
-            driver.effect_version,
-            plugin.desc().version,
-            &mut raw_params,
-        )?;
-
-        let known: HashSet<&str> = plugin.desc().params.iter().map(|p| p.id).collect();
-        for key in raw_params.keys() {
-            if !known.contains(key.as_str()) {
-                return Err(ProjectError::UnknownParam {
-                    plugin: driver.plugin.clone(),
-                    param: key.clone(),
-                });
-            }
-        }
-
-        let mut params = ResolvedParams::new();
-        for def in &plugin.desc().params {
-            let value = raw_params
-                .get(def.id)
-                .cloned()
-                .unwrap_or_else(|| def.default.clone());
-            params.insert(def.id, value);
-        }
-
+        // ロード済みでも、直接構築経路の防御として再解決する。
+        let params = resolve_driver_params(&registry, driver)?;
         let track = plugin.build_track(ctx, &params)?;
         let id = DataTrackId(driver.track.clone());
         if tracks.get(&id).is_some() {
@@ -564,6 +606,49 @@ mod tests {
             ProjectError::UnknownParam { plugin, param }
             if plugin == "core.param.sine" && param == "amplitud"
         ));
+    }
+
+    #[test]
+    fn load_project_rejects_param_type_mismatch() {
+        // M2E-8完了条件: 型不一致JSONはロード境界で構造化エラー。
+        let json = r#"{
+            "version": 1,
+            "input": "in.mp4",
+            "output": "out.mp4",
+            "param_drivers": [
+                {
+                    "plugin": "core.param.sine",
+                    "track": "sine_x",
+                    "effect_version": 2,
+                    "params": {
+                        "amplitude": {"Vec2": [1.0, 2.0]},
+                        "frequency_hz": {"F64": 1.0},
+                        "offset": {"F64": 0.0}
+                    }
+                }
+            ],
+            "overlay": {
+                "center": [0.0, 0.0],
+                "size": [0.5, 0.5],
+                "color": [1.0, 0.0, 0.0, 1.0]
+            }
+        }"#;
+        let err = load_project_v1_from_str(json).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ProjectError::Plugin(PluginError::Param {
+                    ref plugin,
+                    ref id,
+                    ref expected,
+                    ref got,
+                }) if plugin == "core.param.sine"
+                    && id == "amplitude"
+                    && expected == "F64"
+                    && got == "Vec2"
+            ),
+            "expected PluginError::Param type mismatch via load, got {err:?}"
+        );
     }
 
     #[test]
