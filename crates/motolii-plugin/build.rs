@@ -3,6 +3,8 @@
 //! Cargo feature にしない(`--all-features` / クリーン checkout 安全)。
 //! `#[path]` をソースに置かない(rustfmt が cfg を無視して欠落ファイルで落ちるため)。
 
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};

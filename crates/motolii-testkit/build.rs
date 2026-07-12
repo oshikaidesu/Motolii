@@ -2,6 +2,8 @@
 //!
 //! Cargo feature にしない。rustfmt が欠落 `#[path]` で落ちないよう OUT_DIR 経由。
 
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
