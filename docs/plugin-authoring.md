@@ -158,4 +158,3 @@ ParamDriverは`build_track`で`DataTrack`を返すだけ。ピクセルに触ら
 - **テキスト組版**(F-6) — コアは `itemize` / `shape(軸・クラスタ対応表)` / `draw` のみ([M5-P6](specs/M5-3d-and-post.md))。一発`draw_text`やシェーピング自作は禁止。縦書き・ルビ・行組・歌詞タイミングはプラグインの領分
 - `NodeDesc`の時間フットプリント宣言(前後フレーム/サブフレームサンプル。F-12) — 型`TemporalFootprint`と**`RenderCtx::temporal_footprint`口はM2E-7で予約**。窓テクスチャ解決はホスト側(未配線)
 - `SimulationPlugin` trait+StateTrack(F-12。`PluginKind::Simulation`はenum予約済み。traitシグネチャは[simulation-model.md](simulation-model.md)§3.2の叩き台を解凍手続きで確定)
-- **プラグインUI** — プラグインはUIを描かない(自前描画・イベント処理の口はv1に無い。AE `PF_CUSTOM_UI`型は恒久的に開けない方向)。UIは`ParamDef`の型+将来のUIヒント/レイアウト/ギズモ**宣言**にホストがウィジェットを供給する([plugin-ui-model.md](plugin-ui-model.md)。批判レビュー待ち)
