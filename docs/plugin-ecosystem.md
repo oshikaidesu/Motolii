@@ -28,6 +28,8 @@
 - 決済・バイナリ CDN・審査制マーケット
 - **Civitai Manager 系の自己満足 UI**(§5)
 
+**ダウンロード数を正義にしない理由:** 累積DL・人気順は「既に知られているもの」をさらに押し上げる。**ゲームチェンジャーが現れた瞬間に過去の指標になる** — 新しい尖りは母数が無いので一覧の下に沈み、口伝えか外部記事が無ければ発見されない。地図の役割は存在と語彙(id/tags/category/updated)であり、人気の再生産ではない。キュレーションの時間軸は note / Awesome 側に置く。
+
 ---
 
 ## 2. 参考元マップ(一次)
@@ -222,7 +224,8 @@ Civitai 系から借りてよいのは **「アプリ内で探して入れる」
 
 **二次(詳細・折りたたみ):** `id`(コピー可) / tap 名 / source URL・rev / `links` / 依存(将来)
 
-**出さない:** popularity / trend / DL 数 / 「公式おすすめ」順位
+**出さない:** popularity / trend / DL 数 / 「公式おすすめ」順位  
+(§1: DL数正義はゲームチェンジャー到来で陳腐化する)
 
 ### 5.5 Import surfaces(D&D 第一級)
 
@@ -379,3 +382,4 @@ AviUtl2 の `download→extract→copy` DSL は、ビルド中心に簡略化し
 | 日付 | 内容 |
 |---|---|
 | 2026-07-12 | 初版。分散 tap・lock・D&D・progressive disclosure・observability。UI は ReaPack 基調、Civitai Manager UI は明示的に不採用 |
+| 2026-07-12 | DL数正義の否定根拠を追記(ゲームチェンジャー到来で累積指標が陳腐化する) |
