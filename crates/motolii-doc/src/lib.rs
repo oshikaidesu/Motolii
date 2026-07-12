@@ -7,8 +7,11 @@
 
 mod asset;
 mod bpm;
+mod doc_keyframe;
+mod doc_value;
 mod ids;
 mod param;
+pub mod param_expect;
 mod persist;
 mod schema;
 mod track_id;
@@ -21,8 +24,11 @@ use serde_json::{Map, Value};
 
 pub use asset::{Asset, AssetError, AssetId, AssetTable};
 pub use bpm::{Bpm, BpmError};
+pub use doc_keyframe::{DocKeyframe, DocKeyframeError, DocKeyframeTrack};
+pub use doc_value::DocValue;
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
 pub use param::{DocParam, LookAtAxis};
+pub use param_expect::{ExpectedValueType, ParamConstraints};
 pub use persist::{
     detect_cloud_sync, load_document, load_document_bytes, save_document,
     save_document_with_options, CloudSyncHint, PersistError, SaveAbortAfter, SaveOptions,

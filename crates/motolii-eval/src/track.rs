@@ -81,7 +81,11 @@ impl KeyframeTrack {
             }
         }
         for key in &self.keys {
-            if let Interp::Bezier { x1, x2, .. } = key.interp {
+            if let Interp::Bezier { x1, y1, x2, y2 } = key.interp {
+                // y1/y2 も有限必須(x は範囲検査で NaN を弾けるが y は素通しだった — D1h)
+                if ![x1, y1, x2, y2].iter().all(|v| v.is_finite()) {
+                    return Err(TrackError::InvalidBezier { x1, x2 });
+                }
                 if !(0.0..=1.0).contains(&x1) || !(0.0..=1.0).contains(&x2) {
                     return Err(TrackError::InvalidBezier { x1, x2 });
                 }
