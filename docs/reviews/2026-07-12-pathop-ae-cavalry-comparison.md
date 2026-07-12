@@ -59,10 +59,56 @@
 5. **Twist中心・Wiggleアルゴリズム**: AE寄せでよいか(Cavalry専用相当が薄いので前例はAE側が強い)
 6. **閉集合の境界**: Lattice/Pinch/PathfinderはPathOpに入れないことを仕様一文で明示するか
 
+## 実ユーザー声とバイアス補正(2026-07-12追記)
+
+**【決定】ではない。** 「どちらが良いか」を人気投票で決めない。声の出所にエコーチェンバーが乗る。
+
+### バイアス地図
+
+| 側 | エコーの形 | 読み方 |
+|---|---|---|
+| **AE** | コミュニティ巨大。Trim Pathsは「通過儀礼」として称賛記事が多い。フォーラムは**回避策の共有**が多く、モデル欠陥が「職人技」に正規化されやすい | 「AEパス演算が愛されている」≠「意味論がきれい」。不満スレの方が設計入力になる |
+| **Cavalry** | Envato / School of Motion / ベンダー隣接の「switching from AE」記事が厚い。生き残った早期採用者の声が目立つ | 「手続きが速い」の賛辞は**Duplicator/データ/リアルタイム**に寄り、個別Path Offsetの優劣投票ではない |
+| **両側共通** | PathOp単体のA/B比較スレはほぼ無い。比較は「タイムライン vs システム」「補完関係」で語られる | 機能表の厚み比較(上節)と、声の比較は別軸 |
+
+Reddit一次スレは本環境から安定取得できず、以下は**Adobe Community / Creative COW / 教育メディア / 実務レビュー**中心(再確認可能URL付き)。
+
+### AE側の声(パス演算まわり — 不満が設計入力)
+
+| 声 | 出典 | 抽出 |
+|---|---|---|
+| Offset Pathsの上にTrimがあると first vertex が効かない / 順を入れ替えると二重線 | [Adobe Community](https://community.adobe.com/questions-529/setting-first-vertex-for-trim-paths-with-offset-paths-on-top-in-order-59037) | **スタック相互作用**が慢性痛。回避策=TrimのOffsetパラメータ |
+| Offset Pathsを足すとTrim方向が逆転し、パス方向反転が効かない(「2024でも直ってないquirk」) | [Creative COW 2024](https://creativecow.net/forums/thread/offset-paths-changes-direction-of-trim-path/) | ユーザー自身がlegacy quirkと認識 |
+| 内側ストロークが無くOffset Pathsで代用。開パスのcopies接続・元ストローク保持・極端copiesの挙動に不満。**「Cavalryも触ったが、このクローン方式ではCinema/Cavalry級の複製には届かない」** | [Adobe Community(Betaフィードバック)](https://community.adobe.com/questions-534/offset-paths-314278) | AEユーザーがCavalryを引き合いに**複製の天井**を指摘 |
+| first vertex / 開パスで形が壊れる。TrimはStart/Endの組みで方向制御せよ | [Adobe Community](https://community.adobe.com/questions-529/set-first-vertex-issue-on-open-path-46038) / [COW](https://creativecow.net/forums/thread/cant-select-shape-layer-to-set-first-vortex/) | Travel相当の明示口が無いことの症状 |
+| dash+Trimの「marching ants」、RepeaterのTransform席の取り違え | [COW](https://creativecow.net/forums/thread/dashed-trim-paths-dont-want-line-to-dance/) / [COW Repeater](https://creativecow.net/forums/thread/problem-with-repeater/) | 意図単位UIでも**席の意味が伝わりにくい** |
+
+称賛側(エコー): 教育記事はTrim/Repeater/Wiggleを「モーションデザインの親友」と書く([OlafMotion](https://olafmotion.com/motion-knowledge/shape-layers-vs-masks-in-after-effects/)等)。これは**意図単位の閉集合が覚えやすい**証拠であり、AEスタック相互作用が正しいことの証拠ではない。
+
+### Cavalry側の声(パス単体より「手続き全体」)
+
+| 声 | 出典 | 抽出 |
+|---|---|---|
+| AEの50個キーフレーム地獄 → Duplicator+Stagger。**補完であり置換ではない** | [School of Motion](https://www.schoolofmotion.com/blog/cavalry-houdini-of-2d-after-effects)(Greg等の実務談) | 勝ち筋は複製・関係性。パス演算スタックの優勝ではない |
+| ノードはHoudiniより浅いがAEの直接操作より急。2–4週で生産的。エフェクト生態系・仕上げはAE | [SuperRenders 2026実務レビュー](https://superrendersfarm.com/article/cavalry-motion-design-review-2026) | スタジオは**両方**。Cavalry単体優勝なし |
+| 「200+ building blocksでoverwhelm。まずStagger/Noise/Oscillator」 | [LinkedIn: Elena Kudriavtseva](https://www.linkedin.com/pulse/complete-guide-how-learn-cavalry-app-elena-kudriavtseva-ubikc) | **原子粒の発見可能性死**(F-8と同型の実体験) |
+| Path Offsetはチュートリアル題材として紹介されるが「AEより良い」比較は薄い | [Lesterbanks](https://lesterbanks.com/2020/11/working-with-cavalrys-path-offset-behavior/)(ベンダー動画の再掲) | パス単体の民意データは弱い |
+| Envato系「switching」記事 | [Envato](https://elements.envato.com/learn/cavalry-motion-graphics) | マーケ寄与大。リアルタイム・データ・プラグイン不要を強調。**Canva買収文脈**あり — 独立審判として割り引く |
+
+リポジトリ既存: Cavalryは「技術者すぎる」(F-8)、docs発見性の弱さ(友人証言・[spec-holes](2026-07-12-d1-spec-holes-prior-art.md))。声のサンプルと整合。
+
+### 「どちらが良い？」への仮答え(PathOp確定ではない)
+
+1. **ユーザー露出の形**: AEの意図単位閉集合(Trim / Offset / ZigZag / Repeater…)の方が、声としても教育コストとしても勝つ。Cavalryの「200+を組み立てる」は実務でもoverwhelm報告がある → Motoliiは**AE型の名前の閉集合**を維持(既存F-13/F-8)。
+2. **パラメータの厚み・相互作用の痛み**: AEフォーラムの慢性痛(Trim×Offset、first vertex、内側ストローク無し、開パスcopies、複製の天井)は、Cavalryが別口で解いている領域(Double Sided Offset、Travel、Stroke側Trim/taper、Duplicator)と重なる → **意味を焼くときAE最小実装だけを正解にしない**。
+3. **賛辞の帰属**: Cavalry称賛の本丸はPathOpではなくDuplicator/データ/リアルタイム。それをPathOp閉集合拡大の根拠にしない。
+4. **したがって採用方針(仮)**: 「AEの意図ラベル × Cavalryが厚い角だけ選択的に意味へ取り込む」。スープ全体は採らない。未決6点(上節)は、この仮方針の下でユーザー判断を待つ。
+
 ## いまやらないこと
 
 - 本メモの数値・モードをスキーマやゴールデンに焼く
 - CavalryのBehaviourグラフをプラグイン契約へ露出する
 - 「Cavalryの方が発達→閉集合を広げる」への短絡(F-8逆張りを崩す)
+- AEフォーラムの回避策文化やCavalryマーケ記事を【決定】根拠にする
 
 次工程: 上記未決をユーザー判断で潰したあと、M2「PathOp意味論表」を【決定】へ昇格し、その写しとしてD1i-2実装。
