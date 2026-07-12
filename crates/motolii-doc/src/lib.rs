@@ -66,9 +66,9 @@ pub struct Document {
     pub track_ids: TrackIdTable,
     #[serde(default)]
     pub tracks: Vec<Track>,
-    /// M2E-13: 永続カラーの解釈。v2で明示化(D1e)。
-    #[serde(default)]
-    pub color_interpretation: ColorInterpretation,
+    /// M2E-13: 永続カラーの解釈。v2で明示化(D1e)。v1ではシリアライズしない。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_interpretation: Option<ColorInterpretation>,
     /// 未知キー保持(unknown-keys roundtrip)。
     #[serde(default, flatten)]
     pub extra: Map<String, Value>,
@@ -86,8 +86,8 @@ impl Document {
             layers: LayerIdTable::new(),
             track_ids: TrackIdTable::new(),
             tracks: Vec::new(),
-            // v1 でもデシリアライズ欠落時の既定。永続義務は v2+。
-            color_interpretation: ColorInterpretation::default(),
+            // v1 JSON に v2 フィールドを出さない。
+            color_interpretation: None,
             extra: Map::new(),
         }
     }
@@ -97,7 +97,7 @@ impl Document {
         let mut doc = Self::new_v1();
         doc.version = LATEST_DOCUMENT_VERSION;
         doc.min_reader_version = LATEST_DOCUMENT_VERSION;
-        doc.color_interpretation = ColorInterpretation::StraightSrgb;
+        doc.color_interpretation = Some(ColorInterpretation::StraightSrgb);
         doc
     }
 }

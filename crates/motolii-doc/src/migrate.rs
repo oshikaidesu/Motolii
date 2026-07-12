@@ -372,7 +372,7 @@ fn apply_time_map_to_item(item: &mut TrackItem, time_map: &TimeMap) -> bool {
 
 fn migrate_v1_to_v2(mut doc: Document) -> Result<Document, MigrateError> {
     doc.version = 2;
-    doc.color_interpretation = ColorInterpretation::StraightSrgb;
+    doc.color_interpretation = Some(ColorInterpretation::StraightSrgb);
     // トップレベルスキーマ追加に伴い旧リーダーを拒否する。
     ensure_min_reader_for_version(&mut doc);
     Ok(doc)
@@ -381,6 +381,9 @@ fn migrate_v1_to_v2(mut doc: Document) -> Result<Document, MigrateError> {
 fn ensure_min_reader_for_version(doc: &mut Document) {
     if doc.version >= 2 {
         doc.min_reader_version = doc.min_reader_version.max(2);
+        if doc.color_interpretation.is_none() {
+            doc.color_interpretation = Some(ColorInterpretation::StraightSrgb);
+        }
     }
 }
 
@@ -401,22 +404,30 @@ pub fn migrate_document_file(
         .and_then(|s| s.to_str())
         .unwrap_or("document.json");
     let backup_path = path.with_file_name(format!("{file_name}{BACKUP_SUFFIX}"));
+
+    // dry_run / 既に最新(noop)ではバックアップも本体も触らない。
+    if options.dry_run || !migrated {
+        return Ok(MigrateFileResult {
+            backup_path,
+            report,
+            migrated,
+        });
+    }
+
     // 既存バックアップは上書きしない — fail closed。
     if backup_path.exists() {
         return Err(MigrateError::BackupExists(backup_path));
     }
     fs::copy(path, &backup_path)?;
-    if !options.dry_run && migrated {
-        crate::save_document(path, &doc).map_err(|e| match e {
-            crate::PersistError::Validate(v) => MigrateError::Validate(v),
-            crate::PersistError::Io(i) => MigrateError::Io(i),
-            crate::PersistError::Json(j) => MigrateError::Json(j),
-            crate::PersistError::Migrate(m) => *m,
-            crate::PersistError::ReaderTooOld { .. } | crate::PersistError::Aborted { .. } => {
-                MigrateError::Io(io::Error::other(e.to_string()))
-            }
-        })?;
-    }
+    crate::save_document(path, &doc).map_err(|e| match e {
+        crate::PersistError::Validate(v) => MigrateError::Validate(v),
+        crate::PersistError::Io(i) => MigrateError::Io(i),
+        crate::PersistError::Json(j) => MigrateError::Json(j),
+        crate::PersistError::Migrate(m) => *m,
+        crate::PersistError::ReaderTooOld { .. } | crate::PersistError::Aborted { .. } => {
+            MigrateError::Io(io::Error::other(e.to_string()))
+        }
+    })?;
     Ok(MigrateFileResult {
         backup_path,
         report,

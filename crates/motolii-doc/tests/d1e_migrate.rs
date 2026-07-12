@@ -7,10 +7,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
     bump_min_reader_for_nest_schema_change, count_document, load_document,
-    load_document_bytes_with_reader_cap, migrate_bytes, migrate_document_file, Asset, AssetId,
-    Clip, ClipSource, DocParam, Document, DocumentCounts, Group, ItemEnvelope, MigrateError,
-    MigrateFileOptions, PersistError, Track, TrackItem, BACKUP_SUFFIX, LATEST_DOCUMENT_VERSION,
-    READER_VERSION,
+    load_document_bytes_with_reader_cap, migrate_bytes, migrate_document_file, save_document,
+    Asset, AssetId, Clip, ClipSource, DocParam, Document, DocumentCounts, Group, ItemEnvelope,
+    MigrateError, MigrateFileOptions, PersistError, Track, TrackItem, BACKUP_SUFFIX,
+    LATEST_DOCUMENT_VERSION, READER_VERSION,
 };
 use motolii_eval::{Interp, Keyframe, KeyframeTrack, Value as EvalValue};
 use serde::Deserialize;
@@ -245,16 +245,13 @@ fn prelude_time_map_applies_to_clips_including_nested() {
     });
     let bytes = serde_json::to_vec(&json).unwrap();
     let (migrated, report) = migrate_bytes(&bytes).unwrap();
-    assert!(report
-        .steps
-        .iter()
-        .any(|s| *s == "prelude_time_map_to_clips"));
+    assert!(report.steps.contains(&"prelude_time_map_to_clips"));
     assert!(report.warnings.is_empty());
     assert!(!migrated.extra.contains_key("_migrated_prelude_time_map"));
 
     fn collect_maps(item: &TrackItem, out: &mut Vec<TimeMap>) {
         match item {
-            TrackItem::Clip(c) => out.push(c.time_map.clone()),
+            TrackItem::Clip(c) => out.push(c.time_map),
             TrackItem::Group(g) => {
                 for child in &g.children {
                     collect_maps(child, out);
@@ -289,8 +286,50 @@ fn prelude_non_identity_time_map_without_clips_is_dropped_with_warning() {
     let (doc, report) = migrate_bytes(&bytes).unwrap();
     assert!(report
         .warnings
-        .iter()
-        .any(|w| *w == "prelude_time_map_dropped_no_clips"));
+        .contains(&"prelude_time_map_dropped_no_clips"));
     assert!(!doc.extra.contains_key("_migrated_prelude_time_map"));
     assert!(!doc.extra.contains_key("time_map"));
+}
+
+#[test]
+fn v1_json_omits_color_interpretation() {
+    let doc = Document::new_v1();
+    let value = serde_json::to_value(&doc).unwrap();
+    assert_eq!(value["version"], 1);
+    assert_eq!(value["min_reader_version"], 1);
+    assert!(value.get("color_interpretation").is_none());
+
+    let v2 = Document::new_v2();
+    let v2_value = serde_json::to_value(&v2).unwrap();
+    assert_eq!(v2_value["version"], 2);
+    assert_eq!(v2_value["min_reader_version"], 2);
+    assert_eq!(v2_value["color_interpretation"], "straight_srgb");
+}
+
+#[test]
+fn dry_run_does_not_create_backup() {
+    let dir = unique_dir("dry-run");
+    let path = dir.join("legacy.json");
+    let doc = rich_v1_document();
+    let original = serde_json::to_vec_pretty(&doc).unwrap();
+    fs::write(&path, &original).unwrap();
+    let result = migrate_document_file(&path, &MigrateFileOptions { dry_run: true }).unwrap();
+    assert!(result.migrated);
+    assert!(!result.backup_path.exists());
+    assert_eq!(fs::read(&path).unwrap(), original);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn noop_migrate_already_latest_does_not_create_backup() {
+    let dir = unique_dir("noop");
+    let path = dir.join("current.json");
+    let doc = Document::new_v2();
+    save_document(&path, &doc).unwrap();
+    let before = fs::read(&path).unwrap();
+    let result = migrate_document_file(&path, &MigrateFileOptions::default()).unwrap();
+    assert!(!result.migrated);
+    assert!(!result.backup_path.exists());
+    assert_eq!(fs::read(&path).unwrap(), before);
+    let _ = fs::remove_dir_all(dir);
 }

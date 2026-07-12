@@ -179,6 +179,29 @@ fn version_below_min_reader_fails() {
 }
 
 #[test]
+fn version_2_requires_min_reader_at_least_2() {
+    let mut doc = Document::new_v2();
+    doc.min_reader_version = 1;
+    assert!(matches!(
+        doc.validate(),
+        Err(DocumentError::MinReaderTooLowForVersion {
+            version: 2,
+            min_reader_version: 1
+        })
+    ));
+}
+
+#[test]
+fn v1_with_color_interpretation_fails_validate() {
+    let mut doc = Document::new_v1();
+    doc.color_interpretation = Some(motolii_doc::ColorInterpretation::StraightSrgb);
+    assert!(matches!(
+        doc.validate(),
+        Err(DocumentError::ColorInterpretationOnV1)
+    ));
+}
+
+#[test]
 fn validate_does_not_mutate_writer() {
     let mut writer = DocumentWriter::new(valid_minimal());
     let rev = writer.revision;

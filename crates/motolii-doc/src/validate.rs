@@ -21,6 +21,19 @@ pub enum DocumentError {
         version: u32,
         min_reader_version: u32,
     },
+    /// v2 スキーマ追加以降は min_reader を同時に上げる(ガード7)。
+    #[error(
+        "Document.version {version} requires min_reader_version >= 2, got {min_reader_version}"
+    )]
+    MinReaderTooLowForVersion {
+        version: u32,
+        min_reader_version: u32,
+    },
+    /// v1 に v2 フィールドを載せた不正状態(シリアライズ汚染防止)。
+    #[error("color_interpretation must be absent when version < 2")]
+    ColorInterpretationOnV1,
+    #[error("color_interpretation is required when version >= 2")]
+    ColorInterpretationRequiredForV2,
     #[error("composition.duration must be positive, got {duration:?}")]
     NonPositiveCompositionDuration { duration: RationalTime },
     #[error("track id {id} is not registered in track_ids")]
@@ -67,6 +80,18 @@ impl Document {
                 version: self.version,
                 min_reader_version: self.min_reader_version,
             });
+        }
+        if self.version >= 2 && self.min_reader_version < 2 {
+            return Err(DocumentError::MinReaderTooLowForVersion {
+                version: self.version,
+                min_reader_version: self.min_reader_version,
+            });
+        }
+        if self.version < 2 && self.color_interpretation.is_some() {
+            return Err(DocumentError::ColorInterpretationOnV1);
+        }
+        if self.version >= 2 && self.color_interpretation.is_none() {
+            return Err(DocumentError::ColorInterpretationRequiredForV2);
         }
         if self.composition.duration <= RationalTime::ZERO {
             return Err(DocumentError::NonPositiveCompositionDuration {

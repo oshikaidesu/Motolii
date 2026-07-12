@@ -18,7 +18,7 @@ fn assert_loaded_matches_saved(loaded: &Document, saved: &Document) {
     if expected.version < LATEST_DOCUMENT_VERSION {
         expected.version = LATEST_DOCUMENT_VERSION;
         expected.min_reader_version = expected.min_reader_version.max(LATEST_DOCUMENT_VERSION);
-        expected.color_interpretation = ColorInterpretation::StraightSrgb;
+        expected.color_interpretation = Some(ColorInterpretation::StraightSrgb);
     }
     assert_eq!(loaded, &expected);
 }
@@ -106,7 +106,7 @@ fn concurrent_saves_leave_one_complete_document() {
             let mut e = d.clone();
             e.version = LATEST_DOCUMENT_VERSION;
             e.min_reader_version = e.min_reader_version.max(LATEST_DOCUMENT_VERSION);
-            e.color_interpretation = ColorInterpretation::StraightSrgb;
+            e.color_interpretation = Some(ColorInterpretation::StraightSrgb);
             loaded == e
         }),
         "final file must equal one of the concurrent saves, got bpm={:?}",

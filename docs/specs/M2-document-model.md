@@ -63,8 +63,9 @@ D1e(マイグレーション)はこの規律の運用口。D1a時点でネスト
 | `color_interpretation` | enum(`straight_srgb` のみ、v2時点) | `straight_srgb` | M2E-13 層1(straight-alpha・非線形sRGB・0–1)の永続明示。トップレベル追加 |
 
 - **版上げ**: v1→v2 マイグレーションで本フィールドを明示し、`version=2` かつ **`min_reader_version = max(既存, 2)`** を保証する(新規は`Document::new_v2()`)。旧リーダーが開いて再保存で意味を落とす経路を作らない
+- **シリアライズ**: `color_interpretation` は `Option` + `skip_serializing_if=None`。v1(`new_v1`)は常に`None`で JSON に出さない。v2は必須(`validate`が`version>=2 && min_reader<2`およびフィールド有無の不一致を拒否)
 - **prelude `time_map`**: クリップがあれば全クリップ(ネスト Group 配下含む)へ写す。クリップが無く非恒等なら破棄し、`MigrationReport.warnings` に `prelude_time_map_dropped_no_clips` を記録する(undocumented `extra` キーは作らない)
-- **バックアップ**: `*.motolii-pre-migrate.bak` が既にあれば上書きせず fail closed
+- **バックアップ**: 実マイグレーション時のみ作成。`dry_run` と noop(既に最新)では作らない。`*.motolii-pre-migrate.bak` が既にあれば上書きせず fail closed
 
 ## 色契約の宣言(M2E-13 / 監査CQ-1・F-4)
 
