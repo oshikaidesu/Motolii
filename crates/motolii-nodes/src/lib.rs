@@ -5,7 +5,7 @@
 
 use std::sync::OnceLock;
 
-use motolii_core::{premultiply_rgba_f32, FrameDesc, RationalTime};
+use motolii_core::{premultiply_rgba_f32, FrameDesc, Quality, RationalTime};
 use motolii_eval::{DataTracks, ParamSource, Value};
 use motolii_gpu::{GpuCtx, PipelineCache};
 use motolii_plugin::{
@@ -504,6 +504,50 @@ pub enum CompositeMode {
     Multiply,
 }
 
+/// 合成時の色空間経路。`Quality.precise_color` から選ぶ(M2E-18)。
+///
+/// v1は両枝とも現行sRGB空間ブレンドWGSL(恒等)。将来 `LinearPrecise` だけ差し替える受け皿。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum CompositeColorPath {
+    /// `precise_color == false`: sRGB空間ブレンド等の近似を許容
+    SrgbApprox = 0,
+    /// `precise_color == true`: リニア精密合成の席(v1はSrgbApproxと同一WGSL)
+    LinearPrecise = 1,
+}
+
+/// 不変な合成分岐プラン。隠れた可変状態なし(M2E-18)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CompositeRenderPlan {
+    pub color_path: CompositeColorPath,
+}
+
+/// `Quality` → 合成分岐プラン。純関数。
+pub fn plan_composite_render(quality: Quality) -> CompositeRenderPlan {
+    CompositeRenderPlan {
+        color_path: select_composite_color_path(quality.precise_color),
+    }
+}
+
+/// `Quality.precise_color` → 合成分岐。純関数(GPU不要)。
+pub fn select_composite_color_path(precise_color: bool) -> CompositeColorPath {
+    if precise_color {
+        CompositeColorPath::LinearPrecise
+    } else {
+        CompositeColorPath::SrgbApprox
+    }
+}
+
+/// 分岐点のWGSL選択。v1は両枝とも同一ソース(恒等実装)。
+/// 将来 `LinearPrecise` だけ別ファイルへ差し替える。
+pub fn composite_blend_shader_source(path: CompositeColorPath) -> &'static str {
+    match path {
+        CompositeColorPath::SrgbApprox | CompositeColorPath::LinearPrecise => {
+            include_str!("composite_blend.wgsl")
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct CompositeUniform {
@@ -517,7 +561,10 @@ const COMPOSITE_MODE_MULTIPLY: u32 = 2;
 
 pub struct CompositeNode {
     mode: CompositeMode,
-    pipeline: wgpu::RenderPipeline,
+    /// `CompositeColorPath::SrgbApprox` 用。コンストラクタで構築しレンダ時に再利用。
+    pipeline_srgb: wgpu::RenderPipeline,
+    /// `CompositeColorPath::LinearPrecise` 用。v1は同一WGSLでも別パイプライン実体。
+    pipeline_linear: wgpu::RenderPipeline,
     bind_group_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
 }
@@ -528,12 +575,6 @@ impl CompositeNode {
     }
 
     pub fn with_mode(gpu: &GpuCtx, mode: CompositeMode) -> Self {
-        let shader = gpu
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("motolii-nodes-composite-blend"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("composite_blend.wgsl").into()),
-            });
         let bind_group_layout =
             gpu.device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -561,33 +602,18 @@ impl CompositeNode {
                 bind_group_layouts: &[Some(&bind_group_layout)],
                 immediate_size: 0,
             });
-        let pipeline = gpu
-            .device
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("motolii-nodes-composite-pipeline"),
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some("vs_main"),
-                    buffers: &[],
-                    compilation_options: Default::default(),
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: Some("fs_main"),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Rgba8Unorm,
-                        blend: Some(wgpu::BlendState::REPLACE),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                    compilation_options: Default::default(),
-                }),
-                primitive: wgpu::PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState::default(),
-                multiview_mask: None,
-                cache: None,
-            });
+        let pipeline_srgb = create_composite_pipeline(
+            gpu,
+            &pipeline_layout,
+            CompositeColorPath::SrgbApprox,
+            "motolii-nodes-composite-srgb",
+        );
+        let pipeline_linear = create_composite_pipeline(
+            gpu,
+            &pipeline_layout,
+            CompositeColorPath::LinearPrecise,
+            "motolii-nodes-composite-linear",
+        );
         let sampler = gpu.device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("motolii-nodes-composite-sampler"),
             mag_filter: wgpu::FilterMode::Nearest,
@@ -596,7 +622,8 @@ impl CompositeNode {
         });
         Self {
             mode,
-            pipeline,
+            pipeline_srgb,
+            pipeline_linear,
             bind_group_layout,
             sampler,
         }
@@ -606,32 +633,37 @@ impl CompositeNode {
         self.mode = mode;
     }
 
+    /// プランに対応する実パイプライン(ループ外構築済み)。
+    pub fn pipeline_for_plan(&self, plan: CompositeRenderPlan) -> &wgpu::RenderPipeline {
+        match plan.color_path {
+            CompositeColorPath::SrgbApprox => &self.pipeline_srgb,
+            CompositeColorPath::LinearPrecise => &self.pipeline_linear,
+        }
+    }
+
     pub fn render(
         &self,
         gpu: &GpuCtx,
+        ctx: &RenderCtx,
         background: TextureRef<'_>,
         foreground: TextureRef<'_>,
         output: TextureRef<'_>,
     ) -> Result<(), NodeError> {
-        self.render_with_encoder(
-            gpu,
-            None,
-            RationalTime::ZERO,
-            background,
-            foreground,
-            output,
-        )
+        self.render_with_encoder(gpu, None, ctx, background, foreground, output)
     }
 
     fn render_with_encoder(
         &self,
         gpu: &GpuCtx,
         encoder: Option<&mut wgpu::CommandEncoder>,
-        _t: RationalTime,
+        ctx: &RenderCtx,
         background: TextureRef<'_>,
         foreground: TextureRef<'_>,
         output: TextureRef<'_>,
     ) -> Result<(), NodeError> {
+        let plan = plan_composite_render(ctx.quality);
+        let pipeline = self.pipeline_for_plan(plan);
+
         require_premultiplied("composite-normal", "background", background.desc)?;
         require_premultiplied("composite-normal", "foreground", foreground.desc)?;
         require_premultiplied("composite-normal", "output", output.desc)?;
@@ -682,22 +714,22 @@ impl CompositeNode {
         });
 
         if let Some(encoder) = encoder {
-            self.encode_pass(encoder, &output_view, &bind_group);
+            Self::encode_pass(encoder, pipeline, &output_view, &bind_group);
         } else {
             let mut encoder = gpu
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("motolii-nodes-composite"),
                 });
-            self.encode_pass(&mut encoder, &output_view, &bind_group);
+            Self::encode_pass(&mut encoder, pipeline, &output_view, &bind_group);
             gpu.queue.submit([encoder.finish()]);
         }
         Ok(())
     }
 
     fn encode_pass(
-        &self,
         encoder: &mut wgpu::CommandEncoder,
+        pipeline: &wgpu::RenderPipeline,
         output_view: &wgpu::TextureView,
         bind_group: &wgpu::BindGroup,
     ) {
@@ -717,10 +749,50 @@ impl CompositeNode {
             timestamp_writes: None,
             occlusion_query_set: None,
         });
-        pass.set_pipeline(&self.pipeline);
+        pass.set_pipeline(pipeline);
         pass.set_bind_group(0, bind_group, &[]);
         pass.draw(0..3, 0..1);
     }
+}
+
+fn create_composite_pipeline(
+    gpu: &GpuCtx,
+    pipeline_layout: &wgpu::PipelineLayout,
+    path: CompositeColorPath,
+    label: &str,
+) -> wgpu::RenderPipeline {
+    let shader = gpu
+        .device
+        .create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(label),
+            source: wgpu::ShaderSource::Wgsl(composite_blend_shader_source(path).into()),
+        });
+    gpu.device
+        .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some(label),
+            layout: Some(pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        })
 }
 
 impl CompositePlugin for CompositeNode {
@@ -744,7 +816,7 @@ impl CompositePlugin for CompositeNode {
                 inputs.len()
             )));
         }
-        self.render_with_encoder(gpu, Some(encoder), ctx.t, inputs[0], inputs[1], output)
+        self.render_with_encoder(gpu, Some(encoder), ctx, inputs[0], inputs[1], output)
             .map_err(|e| PluginError::Render(e.to_string()))
     }
 }
@@ -826,5 +898,43 @@ fn sampler_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
         visibility: wgpu::ShaderStages::FRAGMENT,
         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
         count: None,
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn select_composite_color_path_follows_precise_color_flag() {
+        assert_eq!(
+            select_composite_color_path(false),
+            CompositeColorPath::SrgbApprox
+        );
+        assert_eq!(
+            select_composite_color_path(true),
+            CompositeColorPath::LinearPrecise
+        );
+        assert_eq!(
+            plan_composite_render(Quality::DRAFT),
+            CompositeRenderPlan {
+                color_path: CompositeColorPath::SrgbApprox
+            }
+        );
+        assert_eq!(
+            plan_composite_render(Quality::FINAL),
+            CompositeRenderPlan {
+                color_path: CompositeColorPath::LinearPrecise
+            }
+        );
+    }
+
+    #[test]
+    fn composite_blend_shader_source_is_identity_in_v1() {
+        let approx = composite_blend_shader_source(CompositeColorPath::SrgbApprox);
+        let precise = composite_blend_shader_source(CompositeColorPath::LinearPrecise);
+        assert_eq!(approx, precise, "v1恒等: 両枝とも現行sRGBブレンドWGSL");
+        assert!(approx.contains("fs_main"));
     }
 }

@@ -392,6 +392,7 @@ pub fn render_graph_cached(
                 let output_texture = session.acquire_render_target(gpu, desc, &avoid);
                 session.composite.render(
                     gpu,
+                    &RenderCtx::new(timeline_time, quality),
                     background_texture,
                     foreground_texture,
                     TextureRef {
@@ -974,6 +975,7 @@ fn render_frame_direct(
 
     CompositeNode::new(gpu).render(
         gpu,
+        &RenderCtx::new(request.timeline_time, quality),
         TextureRef {
             texture: &background,
             desc,
@@ -1533,6 +1535,83 @@ mod tests {
             Quality::DRAFT.resolution_scale,
             "dispatch_plugin must put caller Quality into RenderCtx"
         );
+    }
+
+    #[test]
+    fn composite_normal_selects_distinct_pipelines_from_quality() {
+        // M2E-18: プランは不変、パイプラインは経路ごとにループ外構築済みの実体を選ぶ。
+        let Some(gpu) = gpu_or_skip() else { return };
+        let node = CompositeNode::new(&gpu);
+        let draft = motolii_nodes::plan_composite_render(Quality::DRAFT);
+        let final_plan = motolii_nodes::plan_composite_render(Quality::FINAL);
+        assert_eq!(
+            draft.color_path,
+            motolii_nodes::CompositeColorPath::SrgbApprox
+        );
+        assert_eq!(
+            final_plan.color_path,
+            motolii_nodes::CompositeColorPath::LinearPrecise
+        );
+        assert!(
+            !std::ptr::eq(
+                node.pipeline_for_plan(draft),
+                node.pipeline_for_plan(final_plan)
+            ),
+            "DRAFT/FINAL must bind distinct pipeline objects even when WGSL is identical in v1"
+        );
+
+        // 組み込み CompositeNormal 経路でも描画が落ちないこと(実パイプライン使用の煙)。
+        let desc = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let graph = LinearRenderGraph {
+            desc,
+            steps: vec![
+                RenderStep::SolidSource {
+                    output: TextureId(0),
+                    source: SolidSource {
+                        color: [1.0, 0.0, 0.0, 1.0],
+                        time_map: TimeMap::identity(),
+                        reports_source_time: true,
+                    },
+                },
+                RenderStep::SolidSource {
+                    output: TextureId(1),
+                    source: SolidSource {
+                        color: [0.0, 0.0, 0.0, 0.0],
+                        time_map: TimeMap::identity(),
+                        reports_source_time: false,
+                    },
+                },
+                RenderStep::OverlayRect {
+                    input: TextureId(1),
+                    output: TextureId(2),
+                    overlay: RectOverlay {
+                        center: CanonicalPoint::CENTER,
+                        size: CanonicalSize {
+                            width: 0.5,
+                            height: 0.5,
+                        },
+                        color: [0.0, 1.0, 0.0, 1.0],
+                    },
+                },
+                RenderStep::CompositeNormal {
+                    background: TextureId(0),
+                    foreground: TextureId(2),
+                    output: TextureId(3),
+                },
+            ],
+            output: TextureId(3),
+        };
+        for quality in [Quality::DRAFT, Quality::FINAL] {
+            render_graph_cached(
+                &gpu,
+                &mut RenderSession::new(&gpu),
+                RationalTime::ZERO,
+                &graph,
+                &RenderGraphInputs::default(),
+                quality,
+            )
+            .unwrap();
+        }
     }
 
     #[test]
