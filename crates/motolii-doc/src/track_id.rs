@@ -124,6 +124,10 @@ impl TrackIdTable {
 
     pub fn allocate(&mut self, display_name: impl Into<String>) -> Result<TrackId, TrackIdError> {
         let id = TrackId(self.next);
+        // LayerIdTableと同型の二重防御(next不変条件が破れた場合の安全網)
+        if self.entries.contains_key(&id) {
+            return Err(TrackIdError::Duplicate { id: id.0 });
+        }
         let next = self.next.checked_add(1).ok_or(TrackIdError::Exhausted)?;
         self.entries.insert(id, display_name.into());
         self.next = next;

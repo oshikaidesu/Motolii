@@ -8,6 +8,7 @@ use motolii_doc::{
     EffectInstance, Group, ItemEnvelope, LookAtAxis, MaskMode, PathOp, Soundtrack, Track,
     TrackItem,
 };
+use motolii_eval::{DataTrackId, Interp, Keyframe, KeyframeTrack, Value as EvalValue};
 use serde_json::{json, Map, Value};
 
 fn sample_document() -> Document {
@@ -150,6 +151,63 @@ fn composition_has_no_camera_field() {
     assert!(json["composition"].get("camera").is_none());
     assert_eq!(json["composition"]["aspect_num"], 16);
     assert_eq!(json["composition"]["aspect_den"], 9);
+}
+
+#[test]
+fn nested_unknown_fields_are_dropped_by_design() {
+    // 仕様「ネスト未知フィールドの方針」: Composition等はextraを持たず黙殺する。
+    // だからネストへフィールドを足す変更は必ずmin_reader_versionを上げる。
+    let input = json!({
+        "version": 1,
+        "composition": {
+            "aspect_num": 16,
+            "aspect_den": 9,
+            "duration": {"num": 10, "den": 1},
+            "fps": {"num": 30, "den": 1},
+            "camera": {"position": [0, 0, 1]}
+        },
+        "bpm": {"num": 120, "den": 1}
+    });
+    let doc: Document = serde_json::from_value(input).unwrap();
+    let out = serde_json::to_value(&doc).unwrap();
+    assert!(out["composition"].get("camera").is_none());
+    assert!(doc.extra.get("camera").is_none());
+}
+
+#[test]
+fn doc_param_keyframes_data_vec2axes_roundtrip() {
+    let mut keys = KeyframeTrack::new();
+    keys.insert(Keyframe {
+        t: RationalTime::ZERO,
+        value: EvalValue::F64(0.0),
+        interp: Interp::Linear,
+    });
+    keys.insert(Keyframe {
+        t: RationalTime::try_new(1, 1).unwrap(),
+        value: EvalValue::F64(1.0),
+        interp: Interp::Hold,
+    });
+
+    let params = [
+        DocParam::Keyframes(keys),
+        DocParam::Data {
+            track: DataTrackId("amp".into()),
+            fallback: EvalValue::F64(0.5),
+        },
+        DocParam::Vec2Axes {
+            x: Box::new(DocParam::const_f64(0.1)),
+            y: Box::new(DocParam::Data {
+                track: DataTrackId("y".into()),
+                fallback: EvalValue::F64(0.0),
+            }),
+        },
+    ];
+
+    for param in params {
+        let json = serde_json::to_value(&param).unwrap();
+        let back: DocParam = serde_json::from_value(json).unwrap();
+        assert_eq!(param, back);
+    }
 }
 
 #[test]

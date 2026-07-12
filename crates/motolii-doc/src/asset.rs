@@ -172,6 +172,10 @@ impl AssetTable {
         content_hash: impl Into<String>,
     ) -> Result<AssetId, AssetError> {
         let id = AssetId(self.next);
+        // LayerIdTableと同型の二重防御(next不変条件が破れた場合の安全網)
+        if self.entries.contains_key(&id) {
+            return Err(AssetError::Duplicate { id: id.0 });
+        }
         let next = self.next.checked_add(1).ok_or(AssetError::Exhausted)?;
         let asset = Asset {
             id,
