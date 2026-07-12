@@ -1,4 +1,14 @@
 //! D1c と並走するプロジェクト open/save。D1c 契約はそのまま呼び出す。
+//!
+//! ## tip 判定の方針
+//!
+//! - `last_journaled_fingerprint` 欠落: tip 不明 → **有効 main を保持**(巻き戻さない)
+//! - 指紋一致: journal リプレイ可。ただし replay フォールバックが tip より古い結果なら **main を保持**
+//! - 指紋不一致かつ main が旧世代スナップショットと一致、かつ tip を再構成で証明できる:
+//!   **前方復旧**(MainBehind)
+//! - 指紋不一致だが main がどの世代とも一致しない: D1c 単独 save 等の先行 → **main を保持**
+//!
+//! 「journal が新しい」と証明できない不一致は曖昧とし、main を rewind しない。
 
 use std::fs;
 use std::io;
@@ -309,14 +319,100 @@ fn classify_replay_source(
     }
 }
 
-/// tip 指紋が無い/不一致なら有効 main を journal で巻き戻さない。
-fn should_keep_valid_main(catalog: &GenerationCatalog, main_fp: u64) -> bool {
-    match catalog.last_journaled_fingerprint {
-        // 再構築・旧 catalog 等 — tip 不明なので有効 main を優先
-        None => true,
-        // D1c 単独 save 等で main だけ進んでいる
-        Some(fp) => fp != main_fp,
+/// main と journal tip の関係。
+///
+/// - 指紋欠落/曖昧: main を巻き戻さない(安全側)
+/// - main が旧世代に一致し tip が証明できる: 前方復旧
+enum TipRelation {
+    /// catalog 指紋 == main。journal リプレイ可。
+    InSync,
+    /// tip 不明、または main が先行/無関係。main を保持。
+    KeepMain,
+    /// main は旧世代、journal tip が新しい。前方復旧。
+    MainBehind(Box<Document>),
+}
+
+fn tip_relation(
+    document_path: &Path,
+    catalog: &GenerationCatalog,
+    main_fp: u64,
+    scan: &JournalScanOutcome,
+) -> Result<TipRelation, ProjectError> {
+    let Some(tip_fp) = catalog.last_journaled_fingerprint else {
+        // 再構築・旧 catalog — tip 不明なので有効 main を優先
+        return Ok(TipRelation::KeepMain);
+    };
+    if tip_fp == main_fp {
+        return Ok(TipRelation::InSync);
     }
+
+    // tip を journal/世代から再構成し、catalog 指紋と一致するか確認
+    let Some(tip_doc) = reconstruct_journal_tip(document_path, catalog, scan)? else {
+        return Ok(TipRelation::KeepMain);
+    };
+    let reconstructed_fp = document_fingerprint(&tip_doc)?;
+    if reconstructed_fp != tip_fp {
+        // tip を証明できない — 巻き戻さない
+        return Ok(TipRelation::KeepMain);
+    }
+
+    // main がいずれかの(古い)世代スナップショットと一致 → tip より遅れている
+    if main_matches_generation(document_path, catalog, main_fp)? {
+        return Ok(TipRelation::MainBehind(Box::new(tip_doc)));
+    }
+
+    // 世代に無い内容 = D1c 単独 save 等の先行編集。main を保持。
+    Ok(TipRelation::KeepMain)
+}
+
+fn main_matches_generation(
+    document_path: &Path,
+    catalog: &GenerationCatalog,
+    main_fp: u64,
+) -> Result<bool, ProjectError> {
+    for entry in &catalog.generations {
+        if let Ok(snap) = load_generation_snapshot(document_path, entry.id) {
+            if document_fingerprint(&snap)? == main_fp {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
+/// journal を初期 Document からリプレイし tip 状態を得る。
+fn reconstruct_journal_tip(
+    document_path: &Path,
+    catalog: &GenerationCatalog,
+    scan: &JournalScanOutcome,
+) -> Result<Option<Document>, ProjectError> {
+    if scan.frames.is_empty() {
+        return Ok(base_from_latest_generation(document_path, catalog));
+    }
+    // tip 再構成は Snapshot フレームで状態を積む。base は空でよい。
+    let replay = replay_journal(
+        document_path,
+        Document::new_v1(),
+        scan,
+        catalog,
+        &ReplayOptions {
+            fallback_on_failure: false,
+        },
+    );
+    if replay.replay_failures.is_empty() {
+        return Ok(Some(replay.document));
+    }
+    // 完全リプレイ不能なら、指紋一致の世代を探す
+    if let Some(tip_fp) = catalog.last_journaled_fingerprint {
+        for entry in catalog.generations.iter().rev() {
+            if let Ok(snap) = load_generation_snapshot(document_path, entry.id) {
+                if document_fingerprint(&snap)? == tip_fp {
+                    return Ok(Some(snap));
+                }
+            }
+        }
+    }
+    Ok(base_from_latest_generation(document_path, catalog))
 }
 
 fn open_with_main(
@@ -348,13 +444,26 @@ fn open_with_main(
 
     let (catalog, _) = resolve_catalog(document_path, scan.header.file_salt)?;
     let main_fp = document_fingerprint(&base)?;
-    if should_keep_valid_main(&catalog, main_fp) {
-        return Ok(OpenProjectOutcome {
-            document: base,
-            source: RecoverySource::MainFile,
-            truncated_bytes: truncated,
-            replay: None,
-        });
+    let relation = tip_relation(document_path, &catalog, main_fp, &scan)?;
+
+    match relation {
+        TipRelation::KeepMain => {
+            return Ok(OpenProjectOutcome {
+                document: base,
+                source: RecoverySource::MainFile,
+                truncated_bytes: truncated,
+                replay: None,
+            });
+        }
+        TipRelation::MainBehind(tip) => {
+            return Ok(OpenProjectOutcome {
+                document: *tip,
+                source: RecoverySource::JournalReplay,
+                truncated_bytes: truncated,
+                replay: None,
+            });
+        }
+        TipRelation::InSync => {}
     }
 
     if scan.frames.is_empty() {
@@ -379,6 +488,19 @@ fn open_with_main(
             fallback_on_failure: true,
         },
     );
+
+    // 有効 main(= tip)があるとき、フォールバックで古い snapshot へ落とさない
+    if !replay.replay_failures.is_empty() {
+        let replay_fp = document_fingerprint(&replay.document)?;
+        if replay_fp != main_fp {
+            return Ok(OpenProjectOutcome {
+                document: base,
+                source: RecoverySource::MainFile,
+                truncated_bytes: truncated,
+                replay: Some(replay),
+            });
+        }
+    }
 
     // テール切捨てで journal tip が main より古くなった場合も main を優先
     if truncated > 0 && replay.document != base {

@@ -308,7 +308,8 @@ fn corrupt_main_falls_back_to_generation_replay() {
 }
 
 #[test]
-fn snapshot_load_failure_falls_back_to_last_snapshot() {
+fn snapshot_load_failure_keeps_valid_main_tip() {
+    // tip(=main) と指紋が一致しているとき、Snapshot 失敗フォールバックで古い世代へ落とさない
     let dir = unique_dir("snap-fail");
     let path = dir.join("doc.json");
     let mut doc = Document::new_v1();
@@ -327,7 +328,6 @@ fn snapshot_load_failure_falls_back_to_last_snapshot() {
         .unwrap()
         .id;
 
-    // 2つ目の世代ファイルを消して Snapshot フレームを失敗させる
     fs::remove_file(
         dir.join(".motolii/generations")
             .join(format!("{second_gen}.json")),
@@ -335,8 +335,53 @@ fn snapshot_load_failure_falls_back_to_last_snapshot() {
     .unwrap();
 
     let opened = open_project(&path).unwrap();
-    assert_eq!(opened.source, RecoverySource::SnapshotFallback);
-    assert_eq!(opened.document.bpm, Bpm::try_new(70, 1).unwrap());
+    assert_eq!(opened.document.bpm, Bpm::try_new(80, 1).unwrap());
+    assert_eq!(opened.source, RecoverySource::MainFile);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn replay_fallback_does_not_regress_valid_main() {
+    let dir = unique_dir("fallback-keep-main");
+    let path = dir.join("doc.json");
+    let mut doc = Document::new_v1();
+    doc.bpm = Bpm::try_new(60, 1).unwrap();
+    save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 60, den: 1 });
+
+    doc.bpm = Bpm::try_new(61, 1).unwrap();
+    save_edit_only(&path, &doc, JournalEdit::SetBpm { num: 61, den: 1 });
+    // tip 指紋は 61。強制失敗 Edit を足しても main は 61 のまま
+    save_edit_only(&path, &doc, JournalEdit::ForceReplayFail);
+
+    let opened = open_project(&path).unwrap();
+    // フォールバックは snapshot(60) だが、有効 main tip(61) を保持する
+    assert_eq!(opened.document.bpm, Bpm::try_new(61, 1).unwrap());
+    assert_eq!(opened.source, RecoverySource::MainFile);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn main_older_than_journal_tip_recovers_forward() {
+    let dir = unique_dir("main-behind");
+    let path = dir.join("doc.json");
+    let mut older = Document::new_v1();
+    older.bpm = Bpm::try_new(100, 1).unwrap();
+    save_with_edit(&path, &older, JournalEdit::SetBpm { num: 100, den: 1 });
+
+    let mut newer = Document::new_v1();
+    newer.bpm = Bpm::try_new(200, 1).unwrap();
+    save_with_edit(&path, &newer, JournalEdit::SetBpm { num: 200, den: 1 });
+
+    // main だけ旧世代内容に戻す(catalog 指紋は 200 のまま)
+    save_document(&path, &older).unwrap();
+    assert_eq!(
+        load_document(&path).unwrap().bpm,
+        Bpm::try_new(100, 1).unwrap()
+    );
+
+    let opened = open_project(&path).unwrap();
+    assert_eq!(opened.document.bpm, Bpm::try_new(200, 1).unwrap());
+    assert_eq!(opened.source, RecoverySource::JournalReplay);
     let _ = fs::remove_dir_all(dir);
 }
 
