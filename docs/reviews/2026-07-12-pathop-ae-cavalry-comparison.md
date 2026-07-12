@@ -181,16 +181,52 @@ Reddit一次スレは本環境から安定取得できず、以下は**Adobe Com
 ### 「どちらが良い？」への仮答え(PathOp確定ではない)
 
 0. **豊富さ**: カタログ種数でも重なり族の厚みでも **Cavalryが勝つ**(上節スコアカード)。ユーザー観察は正しい。
-1. **ユーザー露出の形**: AEの意図単位閉集合(Trim / Offset / ZigZag / Repeater…)の方が、声としても教育コストとしても勝つ。Cavalryの「200+を組み立てる」は実務でもoverwhelm報告がある → Motoliiの**メニュー形**はAE型を維持(既存F-13/F-8)。**語彙の天井はAEに合わせない。**
-2. **パラメータの厚み・相互作用の痛み**: AEフォーラムの慢性痛(Trim×Offset、first vertex、内側ストローク無し、開パスcopies、複製の天井)は、Cavalryが別口で解いている領域と重なる → **意味を焼くときAE最小実装だけを正解にしない**。
-3. **賛辞の帰属**: Cavalry称賛の本丸の一つはDuplicatorだが、パス変形カタログ自体もAE Path operatorsより広い。それをPathOp閉集合の無制限拡大の根拠にはしない(発見可能性)。
-4. **したがって採用方針(仮)**: 「AEの意図ラベル × Cavalryの豊富さから痛い角・厚いパラメータを選択取り込み」。スープ全体は採らない。未決6点は、この仮方針の下でユーザー判断を待つ。
+1. **拡張モデル**: プロジェクト根本の拡張性に噛むのは **Cavalry**(後から粒を口に積む)。MotoliiではノードUI無限組合せではなく**プラグイン著述**(concept) — 精神はCavalry、実装は`Vec<PathOp>`+将来`PluginKind::PathOp`。
+2. **パス意味の正本**: パス操作は**枯れた技術**。Web再現の証明が **Lottie**。ここで独自方言やCavalryカタログ全面移植で差別化しない。v1意味の天井候補はLottie閉集合。
+3. **ユーザー露出の形**: 意図単位の名前(AE/Lottieラベル)。Cavalry原子スープはF-8で採らない。
+4. **Cavalry厚みの行き先**: Lottieを壊さない追加フィールド / v2 PathOpプラグイン / 別口(空間デフォーマ)。未決6点はここ。
+5. **短絡禁止**: 「拡張=Cavalry → PathOp意味もCavalry全面」でも「Lottie枯れてる → Cavalry比較不要」でもない。層を分ける(次節)。
+
+## コンセプト整合: 拡張はCavalry、パス意味はLottie(枯れた技術)(2026-07-12追記)
+
+ユーザー指摘: **拡張性というプロジェクトの根本に噛み合うのはCavalry**。一方**パス操作そのものは枯れた技術で、Webでも再現できる(Lottie)**。
+
+豊富さスコアカードと矛盾しない。軸を分ける。
+
+### 3層に分解する
+
+| 層 | 噛み合う先例 | Motolii既存決定との対応 | やること / やらないこと |
+|---|---|---|---|
+| **① 拡張モデル** | Cavalry: ShapeにDeformer/Behaviourを後から積む。コアは薄く、口に粒を足す([pitfalls](../pitfalls-and-roadmap.md)のCavalry/AviUtl分析) | concept「プラグインファースト」・F-13の`Vec<PathOp>`スタック・**`PluginKind::PathOp`はv2判断**(解凍手続き)。拡張はノードUIの無限組合せではなく**プラグインを書く**([concept](../concept.md)) | スタック席・将来のPathOpプラグイン口はCavalry精神。**ユーザーに200原子を組み立てさせない**(F-8=Cavalry逆張り) |
+| **② パス演算の意味(数学)** | **Lottie**(`pb`/`zz`/`op`/`rd`/`tm`/`tw`/`rp`): AEシェイプレイヤーの意味論・シリアライズが公開文書化済み。実装は[lottie-web](https://github.com/airbnb/lottie-web)等でWeb再現済み([references](../references.md)) | F-13「Lottieを前例」、GAP-12 | **意味の正本候補はLottie**。独自方言を発明しない。「Adobe独占」はUIの話で数学ではない(references既記)。枯れている=ここで差別化しない |
+| **③ パラメータの厚み・足りない角** | CavalryがAE/Lottieより厚い箇所(Double Sided Offset、Wave mode、Travel、Bevel等) | 豊富さスコアカード | Lottieを壊さず**追加的**に取るか、v2 PathOpプラグインへ回す。薄く焼いて後から解釈変更しない |
+
+### なぜ「拡張=Cavalry」と「意味=Lottie」が両立するか
+
+- Cavalryの強みの本丸は「パス数学の新発明」ではなく、**後から粒を口に足せる評価モデル**(Duplicator/Behaviour/Deformer)。Motoliiの拡張性(LLMでプラグインを足す)と同型の精神。
+- パス→パスの中核演算は既に業界で固定され、**LottieがWeb配送の証明**になっている。MotoliiがここでCavalryカタログ全体を再発明しても、拡張性の勝ち筋にならない(むしろ発見可能性死=F-8)。
+- よって: **口の形はCavalry寄り(積める・将来プラグイン化)、中身の意味はLottie(枯れた正本)、UIの粒は意図単位(AE/Lottie名/F-8)**。
+
+### 豊富さスコアカードとの読み替え
+
+- 「Cavalryの方が豊富」= **③の厚み・種数**の事実。否定しない。
+- 「だからPathOp閉集合をCavalryカタログに合わせる」= **②を捨てる短絡**。Lottieが枯れているなら、正本はLottie側。
+- 正しい含意: Lottie閉集合をv1の意味天井にし、Cavalryの余剰は(a)Lottie互換を壊さない追加フィールド、(b)`PluginKind::PathOp`(v2)、(c)Filter/空間デフォーマ別口、へ振り分ける。
+
+### まだ【決定】しないこと
+
+- どのCavalry厚みを(a)に入れるか(未決6点は残置)
+- `PluginKind::PathOp`の解凍タイミング
+- Trimを幾何と描画のどちらに置くか
+
+本節はコンセプト読みの整理であり、PathOp意味論表の【決定】昇格ではない。
 
 ## いまやらないこと
 
 - 本メモの数値・モードをスキーマやゴールデンに焼く
 - CavalryのBehaviourグラフをプラグイン契約へ露出する
 - 「Cavalryの方が発達→閉集合を広げる」への短絡(F-8逆張りを崩す)
+- 「拡張=Cavalry」をPathOp意味のCavalry全面化に短絡する
 - AEフォーラムの回避策文化やCavalryマーケ記事を【決定】根拠にする
 
-次工程: 上記未決をユーザー判断で潰したあと、M2「PathOp意味論表」を【決定】へ昇格し、その写しとしてD1i-2実装。
+次工程: 上記未決をユーザー判断で潰したあと、M2「PathOp意味論表」を【決定】へ昇格し、その写しとしてD1i-2実装。**意味の第一候補はLottie。拡張の口はCavalry精神。**
