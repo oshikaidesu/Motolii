@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Install ffmpeg + software Vulkan (motolii-media / motolii-gpu tests)
+      - name: Install ffmpeg + lavapipe + ALSA headers (media/gpu/audio)
         run: |
           # The runner's third-party Microsoft apt repo intermittently serves
           # an invalid InRelease, which makes `apt-get update` exit non-zero.
@@ -28,12 +28,15 @@ jobs:
             \( -name '*.list' -o -name '*.sources' \) \
             -exec grep -lq 'packages.microsoft.com' {} \; -delete || true
           sudo apt-get update
-          sudo apt-get install -y ffmpeg mesa-vulkan-drivers
+          # libasound2-dev: cpal(alsa-sys) のビルドに必要。実デバイスは不要(D4の
+          # ハードウェア再生テストは #[ignore]、デコード/リング/simは常時緑)。
+          sudo apt-get install -y ffmpeg mesa-vulkan-drivers libasound2-dev
       - name: Log mesa/ffmpeg versions (M2E-3 drift triage)
         run: |
           # 不変条件の証明ではなく、ドリフト時の一次切り分け用。
           ffmpeg -version
           dpkg -s mesa-vulkan-drivers
+          dpkg -s libasound2-dev
       - name: Rust toolchain
         run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
       - uses: Swatinem/rust-cache@v2
