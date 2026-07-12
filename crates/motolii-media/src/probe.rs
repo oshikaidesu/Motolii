@@ -16,7 +16,8 @@ pub struct MediaInfo {
     pub width: u32,
     pub height: u32,
     pub fps: Fps,
-    /// フレームグリッドにスナップした長さ(レビュー指摘#7: μs分母を持ち込まない)
+    /// フレームグリッドにスナップした**総尺**(M2E-17)。
+    /// 区間は半開 `[0, duration)`。最終フレームのPTSではない。
     pub duration: Option<RationalTime>,
     pub nb_frames: Option<i64>,
     /// 素材のYUV色空間タグ(タグ欠落時はHD慣習でRec709Limited)
