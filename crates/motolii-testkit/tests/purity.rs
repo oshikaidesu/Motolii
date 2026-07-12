@@ -3,15 +3,102 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::OnceLock;
 
-use motolii_core::{ColorSpace, FrameDesc, PixelFormat, RationalTime};
+use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, RationalTime};
+use motolii_eval::Value;
 use motolii_gpu::{GpuCtx, PipelineCache};
-use motolii_plugin::reference::register_reference_plugins;
-use motolii_plugin::{
-    FilterPlugin, NodeDesc, PluginError, PluginId, PluginKind, PluginRegistry, RenderCtx,
-    ResolvedParams, TextureRef,
+use motolii_plugin::reference::{
+    register_reference_plugins, CLEAR_FILTER, OPACITY_FILTER, SINE_PARAM_DRIVER, TINT_FILTER,
 };
-use motolii_testkit::purity::{assert_filter_pure, assert_registry_pure, RegistryPurityProbe};
+use motolii_plugin::{
+    FilterPlugin, NodeDesc, ParamDriverContext, PluginError, PluginId, PluginKind, PluginRegistry,
+    RenderCtx, ResolvedParams, TextureRef,
+};
+use motolii_testkit::purity::{
+    assert_filter_pure, assert_param_driver_pure, assert_registry_pure, RegistryPurityProbe,
+};
 use motolii_testkit::{gpu_or_skip, TestkitError};
+
+#[test]
+fn clear_filter_is_pure() {
+    let Some(gpu) = gpu_or_skip() else { return };
+    let frame = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+    let input = vec![10u8; frame.data_size()];
+    let mut params = ResolvedParams::new();
+    params.insert("color", Value::Color([0.2, 0.4, 0.6, 1.0]));
+    assert_filter_pure(
+        "clear-pure",
+        &gpu,
+        &CLEAR_FILTER,
+        RationalTime::ZERO,
+        &params,
+        frame,
+        &input,
+    )
+    .unwrap();
+}
+
+#[test]
+fn tint_filter_is_pure() {
+    let Some(gpu) = gpu_or_skip() else { return };
+    let frame = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+    let mut input = vec![0u8; frame.data_size()];
+    for px in input.chunks_exact_mut(4) {
+        px.copy_from_slice(&[128, 64, 32, 255]);
+    }
+    let mut params = ResolvedParams::new();
+    params.insert("color", Value::Color([1.0, 0.5, 0.25, 1.0]));
+    assert_filter_pure(
+        "tint-pure",
+        &gpu,
+        &TINT_FILTER,
+        RationalTime::from_seconds(1),
+        &params,
+        frame,
+        &input,
+    )
+    .unwrap();
+}
+
+#[test]
+fn opacity_filter_is_pure() {
+    let Some(gpu) = gpu_or_skip() else { return };
+    let frame = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+    let mut input = vec![0u8; frame.data_size()];
+    for px in input.chunks_exact_mut(4) {
+        px.copy_from_slice(&[200, 100, 50, 255]);
+    }
+    let mut params = ResolvedParams::new();
+    params.insert("amount", Value::F64(0.5));
+    assert_filter_pure(
+        "opacity-pure",
+        &gpu,
+        &OPACITY_FILTER,
+        RationalTime::ZERO,
+        &params,
+        frame,
+        &input,
+    )
+    .unwrap();
+}
+
+#[test]
+fn sine_param_driver_is_pure() {
+    let mut params = ResolvedParams::new();
+    params.insert("amplitude", Value::F64(1.0));
+    params.insert("frequency_hz", Value::F64(2.0));
+    params.insert("offset", Value::F64(0.0));
+    assert_param_driver_pure(
+        "sine-pure",
+        &SINE_PARAM_DRIVER,
+        ParamDriverContext {
+            start: RationalTime::ZERO,
+            duration: RationalTime::from_seconds(1),
+            sample_rate: Fps::new(8, 1),
+        },
+        &params,
+    )
+    .unwrap();
+}
 
 #[test]
 fn reference_registry_is_pure() {
@@ -103,7 +190,7 @@ fn registering_stateful_plugin_fails_registry_purity() {
     );
 }
 
-/// 検出器単体の負例(ヘルパー直叩き)。
+/// 隠れた呼び出し回数状態を持つ偽Filterは純関数検査で落ちる(検出器の負例)。
 #[test]
 fn stateful_filter_fails_purity_check() {
     let Some(gpu) = gpu_or_skip() else { return };
