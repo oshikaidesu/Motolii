@@ -39,6 +39,11 @@
 - 「馬鹿正直にシミュレートしない」の先行実証(設計思想の参考、いずれもクローズド): **[Furikake](https://aescripts.com/furikake/)** — AEの軽量粒子プラグイン。物理を「重力/風=閉形式・乱流=ノイズ変位・バウンス=解析反射」の f(t) に畳める力だけに選定し、粒子間相互作用を持たないことで O(N)・マルチコア・MFR対応の"バカ軽さ"を成立させた(concept.md根本コンセプトの母数)。**Alight Motion** — バウンス/バネ/段階移動を物理シミュでなくパラメトリック補間型([Animation Easing Curves](https://support.alightmotion.com/hc/en-us/articles/10536934703889-Animation-Easing-Curves))に畳み、AEでは`valueAtTime`式が必須だった領域をGUI選択肢化(Interp設計に採用済み)
 - グループへのエフェクト適用の先人比較(設計思想の参考、2026-07-10。concept「プリコンポは作らない/項目エンベロープ」決定の母数): **Alight Motion** — グループを1つのレイヤーとして選択し、単体レイヤーと同様にエフェクト/アニメーションを適用できる([レイヤー管理ガイド](https://themotionalight.com/group-and-ungroup-layers-in-alight-motion/))=採用した意味論。**AviUtl** — [グループ制御](https://aviutl.info/guru-puseigyo/)はフィルタを対象オブジェクトへ**個別**適用する意味論のため、「合成結果1枚に掛ける」用途では[フレームバッファ](https://aviutl.info/hure-mubaffa/)(画面全体を掴む)への迂回が定番 — per-child意味論と「画面全体しか掴めない」迂回の両方が反面教師([複数オブジェクトへまとめてフィルタ](https://scrapbox.io/aviutl/%E8%A4%87%E6%95%B0%E3%81%AE%E3%82%AA%E3%83%96%E3%82%B8%E3%82%A7%E3%82%AF%E3%83%88%E3%81%AB%E3%81%BE%E3%81%A8%E3%82%81%E3%81%A6%E3%83%95%E3%82%A3%E3%83%AB%E3%82%BF%E3%82%92%E6%8E%9B%E3%81%91%E3%82%8B)も同趣旨)。**Photoshop/クリスタ** — グループ既定の「通過(pass through)」ブレンドは分離合成と排他の二重意味論(通過グループにはエフェクトが定義できない)であり、通過不採用の根拠
 - オープンプラグイン標準(設計思想の参考): [CLAP](https://github.com/free-audio/clap)(Bitwig+u-he、**MIT**、C-ABI、明快なスレッドモデル、プロセス外ホスティング対応、WASM版=WCLAPあり)。OFX/VSTと違いオープンで、我々のOSS思想と親和。そのまま採用ではなく境界設計の参考
+- プラグイン発見・導入(v2・[plugin-ecosystem.md](plugin-ecosystem.md)、2026-07-12):
+  - **採る**: [ReaPack Index Format](https://codeberg.org/cfillion/reapack/wiki/Index-Format) / [reapack-index](https://github.com/cfillion/reapack-index) — 分散リポジトリ購読・Sync・索引生成。UI骨格もここ(簡潔な一覧/repo管理)
+  - **配管の参考**: ComfyUI Manager — custom node を git で揃える思想(Gradio UIは参考にしない)
+  - **検出の思想のみ**: AviUtl2 カタログのハッシュ検出・ワンボタン導入。[Neosku/aviutl2-catalog](https://github.com/Neosku/aviutl2-catalog) — **中央index・popularity/trend/telemetryは反面教師**
+  - **UI不採用**: Civitai Manager / Browser+ 系 — カード祭り・DL数中心の自己満足UI。課題意識(アプリ内導入・ハッシュ照合)だけ学び、見た目は借りない。ハッシュ腐敗時にLLMが直せない不透明状態も反面教師(observability節)
 - dylib ABI: [abi_stable](https://github.com/rodrimati1992/abi_stable_crates) / stabby(動的ロード導入時=v2に評価)
 - 色管理: [OpenColorIO](https://github.com/AcademySoftwareFoundation/OpenColorIO)(BSD-3。v1は自前の最小色空間タグで済ませ、HDR対応時に検討。パイプラインをOCIO-shapedに保つ規律はperformance-model参照=F-5)
 - テキスト基盤(F-6、M5-P6、**2026-07-10決定**):
