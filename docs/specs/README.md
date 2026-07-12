@@ -5,16 +5,18 @@
 ## 仕様書のステータス
 
 - **確定(frozen)**: このフェーズのタスクは着手可能。インターフェース変更はPRでの仕様書改訂を先に行う
-- **ドラフト(draft)**: 方向性の記述。凍結ゲート(M1完了後)または前フェーズの結果を受けて確定させる
+- **ドラフト(draft)**: 方向性の記述。前フェーズ結果・入場ゲート・未決潰しを受けて確定させる
+
+**読み分け(2026-07-12改訂)**: [凍結ゲート](../reviews/2026-07-10-freeze-gate-declaration.md)は M2〜M5 の**骨格**を解禁した。[M2入場条件](../reviews/2026-07-11-M2-entry-gate.md)(M2E-1〜18全緑)は Document に触る実装の**入場**であり、**M2仕様の確定ゲートを代替しない**。「慎重に入場した」ことと「細目が閉じて発注できる」ことは別種類のゲートである — [発注ゲート停止](../reviews/2026-07-12-M2-order-gate-halt.md)。細目意味論の正本昇格は各仕様の「未決事項」と[D1調査メモ](../reviews/2026-07-12-d1-spec-holes-prior-art.md)を追う。**M2が再確定されるまで D1d/D2/D3追補/D4/D5/D6/M3 の並列発注は禁止**。
 
 | 仕様書 | ステータス |
 |---|---|
 | [M0-spikes.md](M0-spikes.md) | 確定 |
 | [M1-vertical-slice.md](M1-vertical-slice.md) | 確定(M0の採否判断で該当箇所を更新) |
-| [M2-document-model.md](M2-document-model.md) | ドラフト(凍結ゲートで確定) |
-| [M3-ui-integration.md](M3-ui-integration.md) | ドラフト(M0-S1の採否判断で確定) |
-| [M4-cache-and-analysis.md](M4-cache-and-analysis.md) | ドラフト(凍結ゲートで確定) |
-| [M5-3d-and-post.md](M5-3d-and-post.md) | ドラフト(凍結ゲートで確定) |
+| [M2-document-model.md](M2-document-model.md) | **ドラフト**(骨格凍結済。細目・Command/journal/audio 未閉のため**発注停止**) |
+| [M3-ui-integration.md](M3-ui-integration.md) | ドラフト(S1実機+ M2細目閉じた後に確定。入場条件は[台帳](../reviews/2026-07-12-M3-M4-gate-ledger.md)。**M2再確定まで発注禁止**) |
+| [M4-cache-and-analysis.md](M4-cache-and-analysis.md) | ドラフト(骨格は凍結済。入場条件は台帳) |
+| [M5-3d-and-post.md](M5-3d-and-post.md) | ドラフト(骨格は凍結済。未決は P1/P2/P6 発注前に潰す) |
 
 ## タスク粒度のルール
 
