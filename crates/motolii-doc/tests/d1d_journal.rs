@@ -405,3 +405,61 @@ fn corrupt_catalog_does_not_block_open() {
     assert_eq!(opened.document.bpm, Bpm::try_new(55, 1).unwrap());
     let _ = fs::remove_dir_all(dir);
 }
+
+#[test]
+fn missing_fingerprint_does_not_rewind_newer_main() {
+    use motolii_doc::inject_clear_fingerprint;
+
+    let dir = unique_dir("missing-fp");
+    let path = dir.join("doc.json");
+    let mut doc = Document::new_v1();
+    doc.bpm = Bpm::try_new(100, 1).unwrap();
+    save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 100, den: 1 });
+
+    // tip 不明(再構築/旧 catalog 相当)のあと D1c 単独で main を進める
+    inject_clear_fingerprint(&path).unwrap();
+    let mut newer = Document::new_v1();
+    newer.bpm = Bpm::try_new(200, 1).unwrap();
+    save_document(&path, &newer).unwrap();
+
+    let opened = open_project(&path).unwrap();
+    assert_eq!(opened.document.bpm, Bpm::try_new(200, 1).unwrap());
+    assert_eq!(opened.source, RecoverySource::MainFile);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn rebuilt_catalog_missing_fp_keeps_main_after_save_document() {
+    let dir = unique_dir("rebuild-fp");
+    let path = dir.join("doc.json");
+    let mut doc = Document::new_v1();
+    doc.bpm = Bpm::try_new(90, 1).unwrap();
+    save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 90, den: 1 });
+
+    inject_corrupt_catalog(&path).unwrap();
+    let mut newer = Document::new_v1();
+    newer.bpm = Bpm::try_new(91, 1).unwrap();
+    save_document(&path, &newer).unwrap();
+
+    let opened = open_project(&path).unwrap();
+    assert_eq!(opened.document.bpm, Bpm::try_new(91, 1).unwrap());
+    assert_eq!(opened.source, RecoverySource::MainFile);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn corrupt_main_recovers_from_generation_without_journal() {
+    let dir = unique_dir("gen-only");
+    let path = dir.join("doc.json");
+    let mut doc = Document::new_v1();
+    doc.bpm = Bpm::try_new(140, 1).unwrap();
+    save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 140, den: 1 });
+
+    inject_corrupt_main(&path).unwrap();
+    fs::remove_file(dir.join(".motolii/journal.wal")).unwrap();
+
+    let opened = open_project(&path).unwrap();
+    assert_eq!(opened.source, RecoverySource::GenerationRecovery);
+    assert_eq!(opened.document.bpm, Bpm::try_new(140, 1).unwrap());
+    let _ = fs::remove_dir_all(dir);
+}

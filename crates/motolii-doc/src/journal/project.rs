@@ -309,6 +309,16 @@ fn classify_replay_source(
     }
 }
 
+/// tip 指紋が無い/不一致なら有効 main を journal で巻き戻さない。
+fn should_keep_valid_main(catalog: &GenerationCatalog, main_fp: u64) -> bool {
+    match catalog.last_journaled_fingerprint {
+        // 再構築・旧 catalog 等 — tip 不明なので有効 main を優先
+        None => true,
+        // D1c 単独 save 等で main だけ進んでいる
+        Some(fp) => fp != main_fp,
+    }
+}
+
 fn open_with_main(
     document_path: &Path,
     base: Document,
@@ -338,12 +348,7 @@ fn open_with_main(
 
     let (catalog, _) = resolve_catalog(document_path, scan.header.file_salt)?;
     let main_fp = document_fingerprint(&base)?;
-    // D1c 単独 save 等で main だけ進んでいる場合は journal で巻き戻さない
-    let main_ahead_of_journal = catalog
-        .last_journaled_fingerprint
-        .is_some_and(|fp| fp != main_fp);
-
-    if main_ahead_of_journal {
+    if should_keep_valid_main(&catalog, main_fp) {
         return Ok(OpenProjectOutcome {
             document: base,
             source: RecoverySource::MainFile,
@@ -394,25 +399,48 @@ fn open_with_main(
     })
 }
 
+fn catalog_salt_hint(document_path: &Path) -> u64 {
+    load_catalog_lenient(document_path)
+        .ok()
+        .and_then(|(c, _)| c.map(|c| c.journal_salt))
+        .unwrap_or(0)
+}
+
 fn open_without_main(document_path: &Path) -> Result<OpenProjectOutcome, ProjectError> {
     let journal_path = journal_path_for_document(document_path);
-    if !journal_path.exists() {
+
+    // journal が無くても世代スナップショットから復元できる
+    let healed = if journal_path.exists() {
+        match heal_journal(document_path) {
+            Ok(v) => Some(v),
+            Err(ProjectError::Journal(_)) => None,
+            Err(e) => return Err(e),
+        }
+    } else {
+        None
+    };
+
+    let salt = healed
+        .as_ref()
+        .map(|(scan, _)| scan.header.file_salt)
+        .unwrap_or_else(|| catalog_salt_hint(document_path));
+    let (catalog, _) = resolve_catalog(document_path, salt)?;
+    let Some(base) = base_from_latest_generation(document_path, &catalog) else {
         return Err(ProjectError::Unrecoverable {
             path: document_path.to_path_buf(),
         });
-    }
+    };
 
-    let (scan, truncated) = heal_journal(document_path)?;
-    let (catalog, _) = resolve_catalog(document_path, scan.header.file_salt)?;
-    let base =
-        base_from_latest_generation(document_path, &catalog).unwrap_or_else(Document::new_v1);
+    let Some((scan, truncated)) = healed else {
+        return Ok(OpenProjectOutcome {
+            document: base,
+            source: RecoverySource::GenerationRecovery,
+            truncated_bytes: 0,
+            replay: None,
+        });
+    };
 
     if scan.frames.is_empty() {
-        if base == Document::new_v1() && catalog.generations.is_empty() {
-            return Err(ProjectError::Unrecoverable {
-                path: document_path.to_path_buf(),
-            });
-        }
         return Ok(OpenProjectOutcome {
             document: base,
             source: RecoverySource::GenerationRecovery,
@@ -519,6 +547,20 @@ pub fn inject_corrupt_catalog(document_path: &Path) -> Result<(), ProjectError> 
 #[doc(hidden)]
 pub fn inject_corrupt_main(document_path: &Path) -> Result<(), ProjectError> {
     fs::write(document_path, b"{broken main")?;
+    Ok(())
+}
+
+/// テスト注入: tip 指紋を消して「不明 tip」状態にする。
+#[doc(hidden)]
+pub fn inject_clear_fingerprint(document_path: &Path) -> Result<(), ProjectError> {
+    let mut catalog =
+        load_catalog_lenient(document_path)?
+            .0
+            .ok_or_else(|| ProjectError::Unrecoverable {
+                path: document_path.to_path_buf(),
+            })?;
+    catalog.last_journaled_fingerprint = None;
+    save_catalog(document_path, &catalog)?;
     Ok(())
 }
 

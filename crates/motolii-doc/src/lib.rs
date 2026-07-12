@@ -24,12 +24,13 @@ pub use asset::{Asset, AssetError, AssetId, AssetTable};
 pub use bpm::{Bpm, BpmError};
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
 pub use journal::{
-    edit_payload, inject_bad_checksum_at_last_frame, inject_corrupt_catalog,
-    inject_corrupt_journal_tail, inject_corrupt_main, inject_salt_mismatch_frame, load_catalog,
-    open_project, save_project_with_journal, scan_journal, GenerationCatalog, GenerationEntry,
-    JournalEdit, JournalFrame, JournalHeader, JournalRecordKind, JournalScanOutcome,
-    JournalScanStop, OpenProjectOutcome, PinGenerationOptions, ProjectError, RecoverySource,
-    ReplayFailure, ReplayOutcome, RotateOptions, SaveProjectOptions, ScanJournalOptions,
+    edit_payload, inject_bad_checksum_at_last_frame, inject_clear_fingerprint,
+    inject_corrupt_catalog, inject_corrupt_journal_tail, inject_corrupt_main,
+    inject_salt_mismatch_frame, load_catalog, open_project, save_project_with_journal,
+    scan_journal, GenerationCatalog, GenerationEntry, JournalEdit, JournalFrame, JournalHeader,
+    JournalRecordKind, JournalScanOutcome, JournalScanStop, OpenProjectOutcome,
+    PinGenerationOptions, ProjectError, RecoverySource, ReplayFailure, ReplayOutcome,
+    RotateOptions, SaveProjectOptions, ScanJournalOptions,
 };
 pub use param::{DocParam, LookAtAxis};
 pub use persist::{

@@ -149,17 +149,21 @@ pub fn load_catalog_lenient(
 }
 
 /// journal salt と generations ディレクトリから最小カタログを再構築する。
+///
+/// 並びは UUID ではなくファイル mtime 昇順(同値はファイル名) — 最新世代の判定を誤らないため。
 pub fn rebuild_catalog_from_generations(
     document_path: &Path,
     journal_salt: u64,
     max_unpinned: u32,
 ) -> Result<GenerationCatalog, CatalogError> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
     let mut catalog = GenerationCatalog::new(journal_salt, max_unpinned);
     let gen_dir = motolii_dir_for_document(document_path).join(GENERATIONS_DIR);
     if !gen_dir.exists() {
         return Ok(catalog);
     }
-    let mut ids = Vec::new();
+    let mut found: Vec<(SystemTime, String, Uuid)> = Vec::new();
     for entry in fs::read_dir(gen_dir)? {
         let entry = entry?;
         let name = entry.file_name();
@@ -169,12 +173,17 @@ pub fn rebuild_catalog_from_generations(
         let Some(stem) = name.strip_suffix(".json") else {
             continue;
         };
-        if let Ok(id) = Uuid::parse_str(stem) {
-            ids.push(id);
-        }
+        let Ok(id) = Uuid::parse_str(stem) else {
+            continue;
+        };
+        let mtime = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .unwrap_or(UNIX_EPOCH);
+        found.push((mtime, name.to_string(), id));
     }
-    ids.sort_by_key(|id| *id.as_bytes());
-    for id in ids {
+    found.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    for (_, _, id) in found {
         catalog.register_generation(id, Uuid::nil(), false);
     }
     Ok(catalog)
@@ -215,4 +224,47 @@ pub fn rotate_generations(
         removed.push(victim);
     }
     Ok(removed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Duration, SystemTime};
+
+    #[test]
+    fn rebuild_orders_generations_by_mtime_not_uuid() {
+        let nanos = SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("motolii-mtime-{nanos}"));
+        let gen_dir = dir.join(".motolii").join(GENERATIONS_DIR);
+        fs::create_dir_all(&gen_dir).unwrap();
+        let doc_path = dir.join("doc.json");
+
+        // UUID 辞書順では older が後、mtime では newer が後になる組
+        let older_id = Uuid::parse_str("ffffffff-ffff-ffff-ffff-ffffffffffff").unwrap();
+        let newer_id = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+        let older_path = gen_dir.join(format!("{older_id}.json"));
+        let newer_path = gen_dir.join(format!("{newer_id}.json"));
+        fs::write(&older_path, b"{}").unwrap();
+        fs::write(&newer_path, b"{}").unwrap();
+
+        let older_time = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000);
+        let newer_time = SystemTime::UNIX_EPOCH + Duration::from_secs(2_000);
+        filetime_set(&older_path, older_time);
+        filetime_set(&newer_path, newer_time);
+
+        let catalog = rebuild_catalog_from_generations(&doc_path, 1, 5).unwrap();
+        assert_eq!(catalog.generations.len(), 2);
+        assert_eq!(catalog.generations[0].id, older_id);
+        assert_eq!(catalog.generations[1].id, newer_id);
+        assert_eq!(catalog.latest_generation().unwrap().id, newer_id);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    fn filetime_set(path: &Path, time: SystemTime) {
+        let file = fs::OpenOptions::new().write(true).open(path).unwrap();
+        file.set_modified(time).unwrap();
+    }
 }
