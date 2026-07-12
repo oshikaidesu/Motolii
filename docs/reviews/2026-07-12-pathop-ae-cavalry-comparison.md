@@ -6,9 +6,90 @@
 
 ## なぜCavalryを見るか
 
-ユーザー観察: パス操作の発達度はAEよりCavalry側が厚い可能性がある。AE/Lottie閉集合だけを前例に意味を焼くと、Cavalryが既に解いている角(両面オフセット・波モード・Stroke側Trim・点単位ベベル等)を後から足すときに恒久破壊が起きやすい。
+ユーザー観察: **CavalryはAEのパスエフェクトより豊富** — 機能インベントリでもこれは成立する(下節「豊富さスコアカード」)。AE/Lottie閉集合だけを前例に意味を焼くと、Cavalryが既に解いている角(両面オフセット・波モード・Stroke側Trim・点単位ベベル・Bend/Lattice等)を後から足すときに恒久破壊が起きやすい。
 
-ただし北極星はCavalryではない([concept](../concept.md): ベクター寄り・ブーリアン等はスコープ外、F-8は原子粒の逆張り)。**語彙の豊かさと比較軸**として読む。採用は「意図単位の閉集合」に畳めるものだけ。
+ただし北極星はCavalryではない([concept](../concept.md): ベクター寄り・ブーリアン等はスコープ外、F-8は原子粒の逆張り)。**語彙の豊かさは認める。ユーザー露出は意図単位に畳む。** 豊富さの承認 ≠ スープ全体の採用。
+
+## 豊富さスコアカード(AE Path operators × Cavalry path/deform族)
+
+数え方の約束: AEはシェイプレイヤー Add メニューの**パス演算子**(Fill/Strokeは除外。Wiggle Transformは変形揺れでパス頂点変形ではないがAE側に含めて記載)。CavalryはShape `Deformers`に積めるパス/メッシュ変形系+Stroke側Trim(描画だがTrim族)。公式docs一次。完全網羅ではないが方向は十分。
+
+### A. AE閉集合(ほぼこれで終わり)
+
+出典: [AE Scripting match names](https://ae-scripting.docsforadobe.dev/matchnames/layer/shapelayer/) / 教育一覧。
+
+| AE Path operator | 備考 |
+|---|---|
+| Offset Paths | 片面オフセット+Line Join |
+| Trim Paths | Start/End/Offset。Parallel相当 |
+| Round Corners | 半径1つ |
+| Zig Zag | Size / Ridges / Points |
+| Pucker & Bloat | Amount |
+| Twist | Angle / Center |
+| Wiggle Paths | 頂点荒れ |
+| Repeater | コピー+累乗Transform |
+| Merge Paths | ブーリアン系(Motolii v1スコープ外寄り) |
+| (Wiggle Transform) | パス頂点ではなくTransform揺れ |
+
+→ **パス幾何に効く中核はおおよそ 8〜9 個の固定メニュー。** ここがAEの「パスエフェクト」の天井。
+
+### B. Cavalry: 同じ意図でもパラメータが厚い(上位互換寄り)
+
+| AE相当 | Cavalry | 厚い点(公式) |
+|---|---|---|
+| Offset Paths | [Path Offset](https://cavalry.studio/docs/nodes/behaviours/path-offset/) | Single/Double Sided、開Cap 4種、Rounded、混在制約の明示 |
+| Zig Zag | [Wave](https://cavalry.studio/docs/nodes/behaviours/wave/) | Sine/Square/Sawtooth/**Triangle**、Adaptive、Travel、Sample、Output Béziers |
+| Round Corners | [Bevel](https://cavalry.studio/docs/nodes/behaviours/bevel/) | Fillet/**Chamfer**、点別/Sub-Mesh半径、Min/Max Angle |
+| Trim Paths | [Stroke.Trim](https://cavalry.studio/docs/nodes/utilities/stroke/) + [Travel Deformer](https://cavalry.studio/docs/nodes/behaviours/travel-deformer/) | taper/dash/Align同居。始点Travelが別口 |
+| Wiggle Paths | [Noise](https://cavalry.studio/docs/nodes/behaviours/noise/) as Deformer | 複数Noise Type・Normals・Stagger・Loop・Index Context |
+| Repeater | Duplicator + Stagger | 分布・インデックス駆動(別クラスの豊かさ) |
+
+→ **重なる族だけ見てもCavalryの方が厚い。** 「気がする」はここでも裏付けられる。
+
+### C. CavalryにあってAE Path operatorメニューに無いもの(カタログ拡大)
+
+公式docsで確認済みの例(パス/メッシュ変形族。不完全リスト):
+
+| Cavalry | 公式 | AE PathOpメニューに相当が無い |
+|---|---|---|
+| Bend | [Bend Deformer](https://cavalry.studio/docs/nodes/behaviours/bend-deformer/) | 円周曲げ(AEは別エフェクト/プラグイン寄せ) |
+| Squash and Stretch | [docs](https://cavalry.studio/docs/nodes/behaviours/squash-and-stretch/) | 面積保存・Bulge付き |
+| Lattice | [docs](https://cavalry.studio/docs/nodes/behaviours/lattice/) | 制御点グリッド |
+| Four Point Warp | [docs](https://cavalry.studio/docs/nodes/behaviours/four-point-warp/) | 四隅ベジェワープ |
+| Pinch | [docs](https://cavalry.studio/docs/nodes/behaviours/pinch/) | Falloff+Null |
+| Pathfinder | [docs](https://cavalry.studio/docs/nodes/behaviours/pathfinder/) | パスに沿う変形/配置 |
+| Path Relax / Path Average | [Path Relax](https://cavalry.studio/docs/nodes/behaviours/path-relax/) / 2.6 notes | 点分離・平滑 |
+| Chop Path | [docs](https://cavalry.studio/docs/nodes/behaviours/chop-path/) | スライス切断 |
+| Segment Path | [docs](https://cavalry.studio/docs/nodes/shapes/segment-path/) | 切断→sub-mesh |
+| Sub-Mesh | [docs](https://cavalry.studio/docs/nodes/behaviours/sub-mesh/) | 階層レベル指定変形 |
+| Auto-Crop | [docs](https://cavalry.studio/docs/nodes/behaviours/auto-crop/) | bboxクロップ |
+| Travel Deformer | [docs](https://cavalry.studio/docs/nodes/behaviours/travel-deformer/) | 輪郭始点(AEはfirst vertex手作業) |
+
+→ **種数でもCavalryが明らかに勝つ。** AEの固定8〜9に対し、Cavalryはパス/メッシュ変形だけで上記+Wave/Offset/Bevel/Noise…が並ぶ開放カタログ。
+
+### D. AE側が名前付きで勝つ点(公平のため)
+
+| 演算 | 注 |
+|---|---|
+| Pucker & Bloat | Cavalryに**専用**無し(Noise/Pinchで近似は別意味) |
+| Twist | Cavalryに**専用**未確認(空間ワープ族で代替) |
+| Merge Paths | AEはシェイプレイヤー内ブーリアン。Cavalryも別系統あるがMotolii v1はconceptどおりスコープ外寄り |
+
+### E. 判定(豊富さのみ。採用方針ではない)
+
+| 軸 | 勝者 |
+|---|---|
+| カタログ種数(パス/メッシュ変形) | **Cavalry** |
+| 重なり族のパラメータ厚み | **Cavalry**(Offset/Wave/Bevel/Trim周辺/Noise) |
+| 「意図の名前がメニューに並ぶ」発見性 | **AE** |
+| 専用Pucker/Twistの明示 | **AE** |
+
+**結論(豊富さ)**: ユーザー観察どおり、**Cavalryの方がパスエフェクトとして豊富**。AEは少ないが意図単位で揃えた閉集合。Cavalryは厚く・広く・組み立て前提。
+
+**Motoliiへの含意(まだ【決定】しない)**:
+1. AE閉集合を「語彙の天井」にしない — 豊富さの正本はCavalry比較込み
+2. ただしCavalryカタログをPathOpに全部焼かない — F-8。v1は意図単位に畳み、厚い角はパラメータ/将来variantで吸収
+3. 「豊富→全部入れる」は発見可能性死。正しい読みは「豊富→意味を薄く焼かない」
 
 ## アーキテクチャの差(焼かない前提)
 
@@ -99,10 +180,11 @@ Reddit一次スレは本環境から安定取得できず、以下は**Adobe Com
 
 ### 「どちらが良い？」への仮答え(PathOp確定ではない)
 
-1. **ユーザー露出の形**: AEの意図単位閉集合(Trim / Offset / ZigZag / Repeater…)の方が、声としても教育コストとしても勝つ。Cavalryの「200+を組み立てる」は実務でもoverwhelm報告がある → Motoliiは**AE型の名前の閉集合**を維持(既存F-13/F-8)。
-2. **パラメータの厚み・相互作用の痛み**: AEフォーラムの慢性痛(Trim×Offset、first vertex、内側ストローク無し、開パスcopies、複製の天井)は、Cavalryが別口で解いている領域(Double Sided Offset、Travel、Stroke側Trim/taper、Duplicator)と重なる → **意味を焼くときAE最小実装だけを正解にしない**。
-3. **賛辞の帰属**: Cavalry称賛の本丸はPathOpではなくDuplicator/データ/リアルタイム。それをPathOp閉集合拡大の根拠にしない。
-4. **したがって採用方針(仮)**: 「AEの意図ラベル × Cavalryが厚い角だけ選択的に意味へ取り込む」。スープ全体は採らない。未決6点(上節)は、この仮方針の下でユーザー判断を待つ。
+0. **豊富さ**: カタログ種数でも重なり族の厚みでも **Cavalryが勝つ**(上節スコアカード)。ユーザー観察は正しい。
+1. **ユーザー露出の形**: AEの意図単位閉集合(Trim / Offset / ZigZag / Repeater…)の方が、声としても教育コストとしても勝つ。Cavalryの「200+を組み立てる」は実務でもoverwhelm報告がある → Motoliiの**メニュー形**はAE型を維持(既存F-13/F-8)。**語彙の天井はAEに合わせない。**
+2. **パラメータの厚み・相互作用の痛み**: AEフォーラムの慢性痛(Trim×Offset、first vertex、内側ストローク無し、開パスcopies、複製の天井)は、Cavalryが別口で解いている領域と重なる → **意味を焼くときAE最小実装だけを正解にしない**。
+3. **賛辞の帰属**: Cavalry称賛の本丸の一つはDuplicatorだが、パス変形カタログ自体もAE Path operatorsより広い。それをPathOp閉集合の無制限拡大の根拠にはしない(発見可能性)。
+4. **したがって採用方針(仮)**: 「AEの意図ラベル × Cavalryの豊富さから痛い角・厚いパラメータを選択取り込み」。スープ全体は採らない。未決6点は、この仮方針の下でユーザー判断を待つ。
 
 ## いまやらないこと
 
