@@ -1,6 +1,6 @@
 # M2: ドキュメントモデルとタイムライン
 
-ステータス: **ドラフト**(凍結ゲートで確定。**2026-07-12**: D1-prelude 節追加・色契約節追加・LayerId予約節追加・時刻serde不変条件節追加)
+ステータス: **ドラフト**(凍結ゲートで確定。**2026-07-12**: D1-prelude 節追加・色契約節追加・LayerId予約節追加・時刻serde不変条件節追加・duration半開区間規約節追加)
 着手条件: **Documentスキーマに触るタスク(D1/D2/D3/D7/D8)は[M2入場条件](../reviews/2026-07-11-M2-entry-gate.md)の全緑後に発注する**(D4/D6はDocumentスキーマから独立のため対象外 — 凍結ゲートのみで着手可。理由: 恒久性×並列化初陣×検証の弱さが重なる最初のフェーズであるため、審判の穴・プラグイン境界の乗算穴・D1が継承する罠を先に塞ぐ)
 
 ## 目的(退治する落とし穴)
@@ -65,6 +65,14 @@ D1着手前に固定する。エージェントが「もっともらしい継承
 1. **`RationalTime`**: (a)`den==0`拒否 (b)負の分母は符号を分子へ (c)既約化 (d)`0/x`→`0/1` (e)正規化後のi64溢れは`RationalTimeError::Overflow`(panicしない)。公開経路は`try_new`/`try_from_frame`/`try_to_frame_floor`/`try_add`/`try_sub`/`try_mul`/`try_neg`のみ(中間演算はchecked)
 2. **`Fps`**: 正の`num`/`den`のみ。フィールドは非公開(正値を型の不変条件として固定)。構築は`try_new`とDeserializeのみ
 3. **`TimeMap.speed`**: M2では`speed_num > 0`かつ`speed_den > 0`のみ(ゼロ・負の速度は明示拒否。逆再生は将来拡張)。`try_map`は未検証入力でもpanicせず`TimeMapError`/`RationalTimeError`を返す
+
+## duration/区間規約(M2E-17 / 監査TM-3)
+
+時刻区間の開閉を1流儀に固定する。M4区間キャッシュと音声終端の前提。
+
+1. **`duration`は総尺**: 最終フレームのPTSではない。`MediaInfo.duration`も総尺(fpsグリッドスナップ済み)
+2. **区間は半開`[start, start+duration)`**: 終端ちょうど(`t == start+duration`)は範囲外。等間隔サンプル添字は`0..n`で、**`n = ceil(duration × rate)`**(有理数で厳密。`i/rate < duration` を満たす非負整数iの個数)。`duration`がrateグリッドに整列しているときは整数`n = duration × rate`に一致する。**`MediaInfo.duration`はfpsグリッドへスナップ済み**のため、`export_frame_count`の`floor(duration × fps)`は整列前提で正しく、非整列の一般式(ceil)はParamDriver側に適用する
+3. **互換性**: この規約により`ProjectV1`の書き出しフレーム数が1減る(例: 90フレーム素材で旧91→90)。`ProjectV1`は使い捨て(M2E-11①)でありユーザーデータの互換対象外。旧`from_frame(89)+1`系テストの更新は規約変更に伴う正当な期待値更新(M2E-2の「テスト更新」手続き)
 
 ## 音声トランスポート設計(音ズレ・途切れの構造的排除)
 

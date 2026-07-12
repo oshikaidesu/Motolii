@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::f64::consts::TAU;
 use std::sync::OnceLock;
 
-use motolii_core::{CompCamera, Fps, FrameDesc, Quality, RationalTime};
+use motolii_core::{CompCamera, Fps, FrameDesc, Quality, RationalTime, RationalTimeError};
 use motolii_eval::{DataTrack, Value};
 use motolii_gpu::{GpuCtx, PipelineCache};
 use serde::{Deserialize, Serialize};
@@ -218,7 +218,10 @@ pub struct TextureRef<'a> {
 
 #[derive(Debug, Clone, Copy)]
 pub struct ParamDriverContext {
+    /// サンプル列の開始時刻(タイムライン)。
     pub start: RationalTime,
+    /// 総尺。半開区間 `[start, start+duration)` を覆う(M2E-17)。
+    /// サンプル添字は `0..sample_count`（終端ちょうどは範囲外）。
     pub duration: RationalTime,
     pub sample_rate: Fps,
 }
@@ -247,6 +250,8 @@ pub enum PluginError {
         expected: String,
         got: String,
     },
+    #[error(transparent)]
+    RationalTime(#[from] RationalTimeError),
 }
 
 impl PluginError {
@@ -1019,7 +1024,7 @@ pub mod reference {
             let amplitude = params.require_f64("core.param.sine", "amplitude")?;
             let frequency_hz = params.require_f64("core.param.sine", "frequency_hz")?;
             let offset = params.require_f64("core.param.sine", "offset")?;
-            let samples = sample_count(ctx.duration, ctx.sample_rate);
+            let samples = sample_count(ctx.duration, ctx.sample_rate)?;
             let values = (0..samples)
                 .map(|i| {
                     let secs = i as f64 / ctx.sample_rate.as_f64();
@@ -1259,9 +1264,32 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         });
     }
 
-    fn sample_count(duration: RationalTime, sample_rate: Fps) -> usize {
-        let seconds = duration.as_seconds_f64().max(0.0);
-        (seconds * sample_rate.as_f64()).floor() as usize + 1
+    /// 半開 `[0, duration)` 上の等間隔サンプル数。`duration` は総尺(M2E-17)。
+    /// サンプル時刻は `i / rate`（i = 0,1,…）で、`i/rate < duration` を満たす個数
+    /// = 有理数の厳密 `ceil(duration × rate)`。整数境界では旧 `floor` と同じ。
+    /// 無条件の `floor+1`(フェンスポスト)には戻さない。
+    pub(super) fn sample_count(
+        duration: RationalTime,
+        sample_rate: Fps,
+    ) -> Result<usize, RationalTimeError> {
+        // ceil((d.num/d.den)*(r.num/r.den)) = ceil((d.num*r.num)/(d.den*r.den))
+        let num = (duration.num() as i128)
+            .checked_mul(sample_rate.num() as i128)
+            .ok_or(RationalTimeError::Overflow)?;
+        let den = (duration.den() as i128)
+            .checked_mul(sample_rate.den() as i128)
+            .ok_or(RationalTimeError::Overflow)?;
+        if den <= 0 {
+            return Err(RationalTimeError::ZeroDenominator);
+        }
+        if num <= 0 {
+            return Ok(0);
+        }
+        let n = num
+            .checked_add(den - 1)
+            .ok_or(RationalTimeError::Overflow)?
+            / den;
+        usize::try_from(n).map_err(|_| RationalTimeError::Overflow)
     }
 }
 
@@ -1410,9 +1438,47 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(track.values.len(), 5);
+        // M2E-17: 半開 [0,1) @ 4fps → 4サンプル(旧 fence-post の5を廃止)
+        assert_eq!(track.values.len(), 4);
         assert_eq!(track.values[0], Value::F64(10.0));
         assert!((track.values[1].as_f64().unwrap() - 12.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn sample_count_is_half_open_excluding_end() {
+        // duration=1s @ 4fps → 半開 [0,1) はサンプル 0..4（旧 fence-post の5ではない）
+        assert_eq!(
+            reference::sample_count(RationalTime::from_seconds(1), Fps::try_new(4, 1).unwrap())
+                .unwrap(),
+            4
+        );
+        // 総尺ちょうど(= end)のフレーム添字は範囲外: 90フレーム総尺ならサンプル数90
+        let fps = Fps::try_new(30, 1).unwrap();
+        let duration = RationalTime::try_from_frame(90, fps).unwrap();
+        assert_eq!(reference::sample_count(duration, fps).unwrap(), 90);
+        // 右端時刻は半開で範囲外。最終内包フレームは89
+        assert_eq!(RationalTime::try_from_frame(90, fps).unwrap(), duration);
+        assert!(RationalTime::try_from_frame(89, fps).unwrap() < duration);
+    }
+
+    #[test]
+    fn sample_count_ceil_keeps_in_range_samples_off_grid() {
+        let rate = Fps::try_new(4, 1).unwrap();
+        // 0.3s @ 4Hz: 区間内は 0, 0.25 → 2。floor(1.2)=1 では落とす。
+        assert_eq!(
+            reference::sample_count(RationalTime::try_new(3, 10).unwrap(), rate).unwrap(),
+            2
+        );
+        // 0.1s @ 4Hz: 区間内は t=0 のみ → 1。floor(0.4)=0 では空になる。
+        assert_eq!(
+            reference::sample_count(RationalTime::try_new(1, 10).unwrap(), rate).unwrap(),
+            1
+        );
+        // 整数境界は ceil=floor。無条件 floor+1 には戻らない。
+        assert_eq!(
+            reference::sample_count(RationalTime::from_seconds(1), rate).unwrap(),
+            4
+        );
     }
 
     #[test]

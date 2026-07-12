@@ -243,8 +243,10 @@ fn export_frame_count(project: &ProjectV1, info: &MediaInfo) -> Result<usize, Pr
     let Some(duration) = info.duration else {
         return Err(ProjectError::IndeterminateExportLength);
     };
-    let last_frame = duration.try_to_frame_floor(info.fps)?;
-    Ok((last_frame - project.start_frame + 1).max(0) as usize)
+    // M2E-17: duration=総尺、半開 [start, start+duration)。
+    // end_exclusive = floor(duration×fps)。旧 +1(最終PTS流儀)はオフバイワンになる。
+    let end_exclusive = duration.try_to_frame_floor(info.fps)?;
+    Ok((end_exclusive - project.start_frame).max(0) as usize)
 }
 
 /// ParamDriver宣言からDataTrack集合を構築する。exportループの外で1回だけ呼ぶ。
@@ -302,7 +304,8 @@ pub fn prepare_project_export(
     let info = probe(&input_path)?;
     let export_frames = export_frame_count(&project, &info)?;
     let start = RationalTime::try_from_frame(project.start_frame, info.fps)?;
-    let duration = RationalTime::try_from_frame(export_frames.saturating_sub(1) as i64, info.fps)?;
+    // M2E-17: ParamDriver に渡す duration も総尺(半開 [start, start+duration))。
+    let duration = RationalTime::try_from_frame(export_frames as i64, info.fps)?;
     let data_tracks = build_data_tracks(&project.param_drivers, start, duration, info.fps)?;
     let overlay = project.overlay.clone().into_param_overlay();
     let render_desc = FrameDesc::packed(
@@ -561,14 +564,27 @@ mod tests {
         let mid = overlay
             .eval(RationalTime::try_from_frame(6, fps).unwrap(), &tracks)
             .unwrap();
-        let end = overlay
+        // M2E-17 テスト更新: 半開 [0,1) @ 12fps の最終内包は frame 11。
+        // 旧 frame 12(=終端ちょうど)は範囲外→末尾へクランプ(正弦のゼロ戻りは終端PTS流儀の名残)。
+        let last_inclusive = overlay
+            .eval(RationalTime::try_from_frame(11, fps).unwrap(), &tracks)
+            .unwrap();
+        let end_exclusive = overlay
             .eval(RationalTime::try_from_frame(12, fps).unwrap(), &tracks)
             .unwrap();
 
         assert!(start.center.x.abs() < 1e-9);
         assert!((mid.center.x - 0.25).abs() < 1e-9);
-        assert!(end.center.x.abs() < 1e-9);
+        assert!((end_exclusive.center.x - last_inclusive.center.x).abs() < 1e-9);
         assert_eq!(start.center.y, 0.0);
+        assert_eq!(
+            tracks
+                .get(&DataTrackId("sine_x".into()))
+                .unwrap()
+                .values
+                .len(),
+            12
+        );
     }
 
     #[test]
@@ -805,16 +821,56 @@ mod tests {
                 color: ParamColorV1::Const([1.0, 0.0, 0.0, 1.0]),
             },
         };
+        let fps = Fps::try_new(30, 1).unwrap();
+        // M2E-17 テスト更新: duration=総尺。90フレーム素材は from_frame(90)。
+        // 旧 from_frame(89)+1=90(最終PTS流儀)は規約変更に伴う正当な期待値更新。
         let info = MediaInfo {
             width: 64,
             height: 48,
-            fps: Fps::try_new(30, 1).unwrap(),
-            duration: Some(RationalTime::try_from_frame(89, Fps::try_new(30, 1).unwrap()).unwrap()),
+            fps,
+            duration: Some(RationalTime::try_from_frame(90, fps).unwrap()),
             nb_frames: None,
             color_space: motolii_core::ColorSpace::Rec709Limited,
             rotation: 0,
         };
         assert_eq!(export_frame_count(&project, &info).unwrap(), 90);
+    }
+
+    #[test]
+    fn export_frame_count_half_open_excludes_end_frame() {
+        // 総尺ちょうど(= end)のフレームは半開で範囲外。count に +1 しない。
+        let fps = Fps::try_new(30, 1).unwrap();
+        let project = ProjectV1 {
+            version: 1,
+            input: "in.mp4".into(),
+            output: "out.mp4".into(),
+            start_frame: 0,
+            frame_count: None,
+            qp0: false,
+            time_map: TimeMap::identity(),
+            param_drivers: vec![],
+            overlay: RectOverlayParamV1 {
+                center: ParamVec2V1::Const([0.0, 0.0]),
+                size: ParamVec2V1::Const([0.5, 0.5]),
+                color: ParamColorV1::Const([1.0, 0.0, 0.0, 1.0]),
+            },
+        };
+        let info = MediaInfo {
+            width: 64,
+            height: 48,
+            fps,
+            duration: Some(RationalTime::try_from_frame(90, fps).unwrap()),
+            nb_frames: None,
+            color_space: motolii_core::ColorSpace::Rec709Limited,
+            rotation: 0,
+        };
+        assert_eq!(export_frame_count(&project, &info).unwrap(), 90);
+        // 旧流儀なら 91 になっていた。半開では 90 のまま。
+        assert_ne!(export_frame_count(&project, &info).unwrap(), 91);
+
+        let mut late_start = project.clone();
+        late_start.start_frame = 10;
+        assert_eq!(export_frame_count(&late_start, &info).unwrap(), 80);
     }
 
     #[test]

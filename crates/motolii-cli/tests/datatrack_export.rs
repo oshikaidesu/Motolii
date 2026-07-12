@@ -62,7 +62,8 @@ fn datatrack_overlay_matches_golden_at_start_mid_end() {
     let samples = [
         (RationalTime::try_from_frame(0, FPS).unwrap(), "start"),
         (RationalTime::try_from_frame(6, FPS).unwrap(), "mid"),
-        (RationalTime::try_from_frame(12, FPS).unwrap(), "end"),
+        // M2E-17: 半開 [0,1) @ 12fps の最終内包フレーム。旧 frame 12(=終端ちょうど)は範囲外。
+        (RationalTime::try_from_frame(11, FPS).unwrap(), "end"),
     ];
 
     for (t, label) in samples {
