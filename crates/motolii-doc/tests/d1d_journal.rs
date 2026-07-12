@@ -508,3 +508,49 @@ fn corrupt_main_recovers_from_generation_without_journal() {
     assert_eq!(opened.document.bpm, Bpm::try_new(140, 1).unwrap());
     let _ = fs::remove_dir_all(dir);
 }
+
+#[test]
+fn corrupt_main_replay_fallback_keeps_generation_base() {
+    use motolii_doc::inject_orphan_snapshot_after_first_frame;
+
+    let dir = unique_dir("gen-anti-rewind");
+    let path = dir.join("doc.json");
+    let mut older = Document::new_v1();
+    older.bpm = Bpm::try_new(100, 1).unwrap();
+    save_with_edit(&path, &older, JournalEdit::SetBpm { num: 100, den: 1 });
+    let mut newer = Document::new_v1();
+    newer.bpm = Bpm::try_new(200, 1).unwrap();
+    save_with_edit(&path, &newer, JournalEdit::SetBpm { num: 200, den: 1 });
+
+    inject_corrupt_main(&path).unwrap();
+    // Snap100 の直後に欠落 Snapshot → fallback は 100 になるが、世代 base は 200
+    inject_orphan_snapshot_after_first_frame(&path).unwrap();
+
+    let opened = open_project(&path).unwrap();
+    assert_eq!(opened.source, RecoverySource::GenerationRecovery);
+    assert_eq!(opened.document.bpm, Bpm::try_new(200, 1).unwrap());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn missing_fingerprint_main_behind_recovers_forward() {
+    use motolii_doc::inject_clear_fingerprint;
+
+    let dir = unique_dir("missing-fp-behind");
+    let path = dir.join("doc.json");
+    let mut older = Document::new_v1();
+    older.bpm = Bpm::try_new(100, 1).unwrap();
+    save_with_edit(&path, &older, JournalEdit::SetBpm { num: 100, den: 1 });
+    let mut newer = Document::new_v1();
+    newer.bpm = Bpm::try_new(200, 1).unwrap();
+    save_with_edit(&path, &newer, JournalEdit::SetBpm { num: 200, den: 1 });
+
+    inject_clear_fingerprint(&path).unwrap();
+    // main を旧世代へ戻す — 指紋無しでも tip 再構成で前方復旧できる
+    save_document(&path, &older).unwrap();
+
+    let opened = open_project(&path).unwrap();
+    assert_eq!(opened.document.bpm, Bpm::try_new(200, 1).unwrap());
+    assert_eq!(opened.source, RecoverySource::JournalReplay);
+    let _ = fs::remove_dir_all(dir);
+}

@@ -17,8 +17,8 @@ pub use format::{
 };
 pub use project::{
     inject_bad_checksum_at_last_frame, inject_clear_fingerprint, inject_corrupt_catalog,
-    inject_corrupt_journal_tail, inject_corrupt_main, inject_salt_mismatch_frame, open_project,
-    save_project_with_journal, OpenProjectOutcome, ProjectError, RecoverySource,
-    SaveProjectOptions,
+    inject_corrupt_journal_tail, inject_corrupt_main, inject_orphan_snapshot_after_first_frame,
+    inject_salt_mismatch_frame, open_project, save_project_with_journal, OpenProjectOutcome,
+    ProjectError, RecoverySource, SaveProjectOptions,
 };
 pub use replay::{edit_payload, JournalEdit, ReplayFailure, ReplayOutcome};

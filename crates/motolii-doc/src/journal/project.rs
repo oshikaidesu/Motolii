@@ -2,13 +2,13 @@
 //!
 //! ## tip 判定の方針
 //!
-//! - `last_journaled_fingerprint` 欠落: tip 不明 → **有効 main を保持**(巻き戻さない)
-//! - 指紋一致: journal リプレイ可。ただし replay フォールバックが tip より古い結果なら **main を保持**
-//! - 指紋不一致かつ main が旧世代スナップショットと一致、かつ tip を再構成で証明できる:
-//!   **前方復旧**(MainBehind)
-//! - 指紋不一致だが main がどの世代とも一致しない: D1c 単独 save 等の先行 → **main を保持**
-//!
-//! 「journal が新しい」と証明できない不一致は曖昧とし、main を rewind しない。
+//! - `last_journaled_fingerprint` がある場合:
+//!   - 一致 → InSync(リプレイ可)。フォールバックが tip より古ければ main/base 保持
+//!   - 不一致 + main が旧世代一致 + tip 証明可 → MainBehind(前方復旧)
+//!   - 不一致 + 世代不一致 → main 先行/曖昧 → KeepMain
+//! - 指紋欠落時も journal/世代から tip を再構成し、同様に MainBehind / InSync / KeepMain を決める。
+//!   tip を証明できないときだけ KeepMain(安全側)
+//! - `open_without_main` も generation `base` に対し同じ anti-rewind を適用する
 
 use std::fs;
 use std::io;
@@ -25,9 +25,9 @@ use super::catalog::{
     rotate_generations, save_catalog, GenerationCatalog, PinGenerationOptions, RotateOptions,
 };
 use super::format::{
-    append_frame, encode_frame, journal_path_for_document, read_or_create_header, scan_journal,
-    truncate_journal, JournalFrame, JournalHeader, JournalRecordKind, JournalScanOutcome,
-    ScanJournalOptions, HEADER_LEN,
+    append_frame, encode_frame, encode_header, journal_path_for_document, read_or_create_header,
+    scan_journal, truncate_journal, JournalFrame, JournalHeader, JournalRecordKind,
+    JournalScanOutcome, ScanJournalOptions, HEADER_LEN,
 };
 use super::replay::{
     document_fingerprint, edit_payload, load_generation_snapshot, replay_journal, snapshot_payload,
@@ -338,16 +338,33 @@ fn tip_relation(
     main_fp: u64,
     scan: &JournalScanOutcome,
 ) -> Result<TipRelation, ProjectError> {
-    let Some(tip_fp) = catalog.last_journaled_fingerprint else {
-        // 再構築・旧 catalog — tip 不明なので有効 main を優先
-        return Ok(TipRelation::KeepMain);
+    let reconstructed = reconstruct_journal_tip(document_path, catalog, scan)?;
+
+    // catalog 指紋があればそれを tip 証明に使う。無ければ再構成結果の指紋を tip とする。
+    let tip_fp = match catalog.last_journaled_fingerprint {
+        Some(fp) => fp,
+        None => {
+            let Some(tip_doc) = reconstructed.as_ref() else {
+                return Ok(TipRelation::KeepMain);
+            };
+            let tip_fp = document_fingerprint(tip_doc)?;
+            if tip_fp == main_fp {
+                return Ok(TipRelation::InSync);
+            }
+            if main_matches_generation(document_path, catalog, main_fp)? {
+                // tip 再構成が main より新しい(指紋が違う)こと自体が前方復旧の根拠
+                return Ok(TipRelation::MainBehind(Box::new(tip_doc.clone())));
+            }
+            // 世代に無い main = 先行編集、または曖昧
+            return Ok(TipRelation::KeepMain);
+        }
     };
+
     if tip_fp == main_fp {
         return Ok(TipRelation::InSync);
     }
 
-    // tip を journal/世代から再構成し、catalog 指紋と一致するか確認
-    let Some(tip_doc) = reconstruct_journal_tip(document_path, catalog, scan)? else {
+    let Some(tip_doc) = reconstructed else {
         return Ok(TipRelation::KeepMain);
     };
     let reconstructed_fp = document_fingerprint(&tip_doc)?;
@@ -356,12 +373,10 @@ fn tip_relation(
         return Ok(TipRelation::KeepMain);
     }
 
-    // main がいずれかの(古い)世代スナップショットと一致 → tip より遅れている
     if main_matches_generation(document_path, catalog, main_fp)? {
         return Ok(TipRelation::MainBehind(Box::new(tip_doc)));
     }
 
-    // 世代に無い内容 = D1c 単独 save 等の先行編集。main を保持。
     Ok(TipRelation::KeepMain)
 }
 
@@ -380,6 +395,22 @@ fn main_matches_generation(
     Ok(false)
 }
 
+fn generation_seq_for_fingerprint(
+    document_path: &Path,
+    catalog: &GenerationCatalog,
+    fp: u64,
+) -> Result<Option<u64>, ProjectError> {
+    let mut best = None;
+    for entry in &catalog.generations {
+        if let Ok(snap) = load_generation_snapshot(document_path, entry.id) {
+            if document_fingerprint(&snap)? == fp {
+                best = Some(entry.created_seq);
+            }
+        }
+    }
+    Ok(best)
+}
+
 /// journal を初期 Document からリプレイし tip 状態を得る。
 fn reconstruct_journal_tip(
     document_path: &Path,
@@ -389,7 +420,6 @@ fn reconstruct_journal_tip(
     if scan.frames.is_empty() {
         return Ok(base_from_latest_generation(document_path, catalog));
     }
-    // tip 再構成は Snapshot フレームで状態を積む。base は空でよい。
     let replay = replay_journal(
         document_path,
         Document::new_v1(),
@@ -402,7 +432,6 @@ fn reconstruct_journal_tip(
     if replay.replay_failures.is_empty() {
         return Ok(Some(replay.document));
     }
-    // 完全リプレイ不能なら、指紋一致の世代を探す
     if let Some(tip_fp) = catalog.last_journaled_fingerprint {
         for entry in catalog.generations.iter().rev() {
             if let Ok(snap) = load_generation_snapshot(document_path, entry.id) {
@@ -413,6 +442,40 @@ fn reconstruct_journal_tip(
         }
     }
     Ok(base_from_latest_generation(document_path, catalog))
+}
+
+/// replay 結果が anchor より古い/フォールバック巻き戻しなら anchor を選ぶ。
+fn prefer_anchor_against_rewind(
+    document_path: &Path,
+    catalog: &GenerationCatalog,
+    anchor: Document,
+    replay: ReplayOutcome,
+    truncated: u64,
+) -> Result<(Document, ReplayOutcome, bool), ProjectError> {
+    let anchor_fp = document_fingerprint(&anchor)?;
+    let replay_fp = document_fingerprint(&replay.document)?;
+
+    let keep_anchor = if (!replay.replay_failures.is_empty() && replay_fp != anchor_fp)
+        || (truncated > 0 && replay.document != anchor)
+    {
+        true
+    } else if replay_fp != anchor_fp {
+        match (
+            generation_seq_for_fingerprint(document_path, catalog, replay_fp)?,
+            generation_seq_for_fingerprint(document_path, catalog, anchor_fp)?,
+        ) {
+            (Some(r), Some(a)) => r < a,
+            _ => false,
+        }
+    } else {
+        false
+    };
+
+    if keep_anchor {
+        Ok((anchor, replay, true))
+    } else {
+        Ok((replay.document.clone(), replay, false))
+    }
 }
 
 fn open_with_main(
@@ -489,23 +552,11 @@ fn open_with_main(
         },
     );
 
-    // 有効 main(= tip)があるとき、フォールバックで古い snapshot へ落とさない
-    if !replay.replay_failures.is_empty() {
-        let replay_fp = document_fingerprint(&replay.document)?;
-        if replay_fp != main_fp {
-            return Ok(OpenProjectOutcome {
-                document: base,
-                source: RecoverySource::MainFile,
-                truncated_bytes: truncated,
-                replay: Some(replay),
-            });
-        }
-    }
-
-    // テール切捨てで journal tip が main より古くなった場合も main を優先
-    if truncated > 0 && replay.document != base {
+    let (document, replay, kept_anchor) =
+        prefer_anchor_against_rewind(document_path, &catalog, base, replay, truncated)?;
+    if kept_anchor {
         return Ok(OpenProjectOutcome {
-            document: base,
+            document,
             source: RecoverySource::MainFile,
             truncated_bytes: truncated,
             replay: Some(replay),
@@ -514,7 +565,7 @@ fn open_with_main(
 
     let source = classify_replay_source(&replay, truncated, &scan);
     Ok(OpenProjectOutcome {
-        document: replay.document.clone(),
+        document,
         source,
         truncated_bytes: truncated,
         replay: Some(replay),
@@ -573,7 +624,7 @@ fn open_without_main(document_path: &Path) -> Result<OpenProjectOutcome, Project
 
     let replay = replay_journal(
         document_path,
-        base,
+        base.clone(),
         &scan,
         &catalog,
         &ReplayOptions {
@@ -581,8 +632,10 @@ fn open_without_main(document_path: &Path) -> Result<OpenProjectOutcome, Project
         },
     );
 
+    let (document, replay, _kept_anchor) =
+        prefer_anchor_against_rewind(document_path, &catalog, base, replay, truncated)?;
     Ok(OpenProjectOutcome {
-        document: replay.document.clone(),
+        document,
         source: RecoverySource::GenerationRecovery,
         truncated_bytes: truncated,
         replay: Some(replay),
@@ -683,6 +736,33 @@ pub fn inject_clear_fingerprint(document_path: &Path) -> Result<(), ProjectError
             })?;
     catalog.last_journaled_fingerprint = None;
     save_catalog(document_path, &catalog)?;
+    Ok(())
+}
+
+/// テスト注入: 先頭 Snapshot の直後で欠落世代 Snapshot を挟み、後続を落とす。
+///
+/// corrupt main 経路で「世代 base より古い fallback」を起こすため。
+#[doc(hidden)]
+pub fn inject_orphan_snapshot_after_first_frame(document_path: &Path) -> Result<(), ProjectError> {
+    let journal_path = journal_path_for_document(document_path);
+    let data = fs::read(&journal_path)?;
+    let scan = super::format::scan_journal_bytes(&data, &ScanJournalOptions::default())?;
+    let Some(first) = scan.frames.first() else {
+        return Ok(());
+    };
+    let missing = Uuid::new_v4();
+    let orphan = JournalFrame {
+        record_id: Uuid::new_v4(),
+        prev_id: Some(first.record_id),
+        snapshot_ref: Some(missing),
+        record_salt: scan.header.file_salt,
+        kind: JournalRecordKind::Snapshot,
+        payload: snapshot_payload(missing),
+    };
+    let mut out = encode_header(&scan.header).to_vec();
+    out.extend_from_slice(&encode_frame(first));
+    out.extend_from_slice(&encode_frame(&orphan));
+    fs::write(journal_path, out)?;
     Ok(())
 }
 
