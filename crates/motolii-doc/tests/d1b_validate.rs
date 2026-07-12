@@ -199,14 +199,8 @@ fn validate_does_not_mutate_writer() {
 #[test]
 fn time_map_speed_invariant_is_constructor_gated() {
     // speed は非公開。不正・非正準値は try_new 以外で注入できない。
-    assert!(matches!(
-        TimeMap::try_new(RationalTime::ZERO, 1, 0, Default::default()),
-        Err(_)
-    ));
-    assert!(matches!(
-        TimeMap::try_new(RationalTime::ZERO, 0, 1, Default::default()),
-        Err(_)
-    ));
+    assert!(TimeMap::try_new(RationalTime::ZERO, 1, 0, Default::default()).is_err());
+    assert!(TimeMap::try_new(RationalTime::ZERO, 0, 1, Default::default()).is_err());
     let reduced = TimeMap::constant_speed(RationalTime::ZERO, 2, 2).unwrap();
     assert_eq!((reduced.speed_num(), reduced.speed_den()), (1, 1));
     assert_eq!(reduced, TimeMap::identity());
