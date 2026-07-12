@@ -28,6 +28,8 @@ pub enum MediaError {
     Io(#[from] std::io::Error),
     #[error("probe failed: {0}")]
     Probe(String),
+    #[error(transparent)]
+    RationalTime(#[from] motolii_core::RationalTimeError),
     #[error("invalid start frame: {0}")]
     InvalidStartFrame(i64),
     #[error("encoder expects RGBA input, got {0:?}")]

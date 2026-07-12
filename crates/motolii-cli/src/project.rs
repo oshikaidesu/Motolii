@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 use motolii_core::{
-    ColorSpace, Fps, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap, TimeMapError,
+    ColorSpace, Fps, FrameDesc, PixelFormat, Quality, RationalTime, RationalTimeError, TimeMap,
+    TimeMapError,
 };
 use motolii_eval::{DataTrackId, DataTracks, ParamSource, Value};
 use motolii_export::{export_overlay_video, ExportOverlayRequest, ExportReport};
@@ -143,6 +144,8 @@ pub enum ProjectError {
     Yuv(#[from] motolii_gpu::YuvError),
     #[error(transparent)]
     TimeMap(#[from] TimeMapError),
+    #[error(transparent)]
+    RationalTime(#[from] RationalTimeError),
 }
 
 pub fn load_project_v1(path: impl AsRef<Path>) -> Result<ProjectV1, ProjectError> {
@@ -240,7 +243,7 @@ fn export_frame_count(project: &ProjectV1, info: &MediaInfo) -> Result<usize, Pr
     let Some(duration) = info.duration else {
         return Err(ProjectError::IndeterminateExportLength);
     };
-    let last_frame = duration.to_frame_floor(info.fps);
+    let last_frame = duration.try_to_frame_floor(info.fps)?;
     Ok((last_frame - project.start_frame + 1).max(0) as usize)
 }
 
@@ -298,8 +301,8 @@ pub fn prepare_project_export(
 
     let info = probe(&input_path)?;
     let export_frames = export_frame_count(&project, &info)?;
-    let start = RationalTime::from_frame(project.start_frame, info.fps);
-    let duration = RationalTime::from_frame(export_frames.saturating_sub(1) as i64, info.fps);
+    let start = RationalTime::try_from_frame(project.start_frame, info.fps)?;
+    let duration = RationalTime::try_from_frame(export_frames.saturating_sub(1) as i64, info.fps)?;
     let data_tracks = build_data_tracks(&project.param_drivers, start, duration, info.fps)?;
     let overlay = project.overlay.clone().into_param_overlay();
     let render_desc = FrameDesc::packed(
@@ -502,7 +505,9 @@ mod tests {
         let overlay = project.overlay.into_param_overlay();
         let tracks = DataTracks::new();
         let start = overlay.eval(RationalTime::ZERO, &tracks).unwrap();
-        let mid = overlay.eval(RationalTime::new(1, 2), &tracks).unwrap();
+        let mid = overlay
+            .eval(RationalTime::try_new(1, 2).unwrap(), &tracks)
+            .unwrap();
         let end = overlay
             .eval(RationalTime::from_seconds(1), &tracks)
             .unwrap();
@@ -544,20 +549,20 @@ mod tests {
             &project.param_drivers,
             RationalTime::ZERO,
             RationalTime::from_seconds(1),
-            Fps { num: 12, den: 1 },
+            Fps::try_new(12, 1).unwrap(),
         )
         .unwrap();
         let overlay = project.overlay.into_param_overlay();
 
-        let fps = Fps { num: 12, den: 1 };
+        let fps = Fps::try_new(12, 1).unwrap();
         let start = overlay
-            .eval(RationalTime::from_frame(0, fps), &tracks)
+            .eval(RationalTime::try_from_frame(0, fps).unwrap(), &tracks)
             .unwrap();
         let mid = overlay
-            .eval(RationalTime::from_frame(6, fps), &tracks)
+            .eval(RationalTime::try_from_frame(6, fps).unwrap(), &tracks)
             .unwrap();
         let end = overlay
-            .eval(RationalTime::from_frame(12, fps), &tracks)
+            .eval(RationalTime::try_from_frame(12, fps).unwrap(), &tracks)
             .unwrap();
 
         assert!(start.center.x.abs() < 1e-9);
@@ -578,7 +583,7 @@ mod tests {
             &drivers,
             RationalTime::ZERO,
             RationalTime::from_seconds(1),
-            Fps { num: 12, den: 1 },
+            Fps::try_new(12, 1).unwrap(),
         )
         .unwrap_err();
         assert!(matches!(err, ProjectError::UnknownParamDriver(id) if id == "nope"));
@@ -598,7 +603,7 @@ mod tests {
             &drivers,
             RationalTime::ZERO,
             RationalTime::from_seconds(1),
-            Fps { num: 12, den: 1 },
+            Fps::try_new(12, 1).unwrap(),
         )
         .unwrap_err();
         assert!(matches!(
@@ -664,7 +669,7 @@ mod tests {
             &drivers,
             RationalTime::ZERO,
             RationalTime::from_seconds(1),
-            Fps { num: 12, den: 1 },
+            Fps::try_new(12, 1).unwrap(),
         )
         .unwrap();
         assert!(tracks.get(&DataTrackId("sine_x".into())).is_some());
@@ -803,8 +808,8 @@ mod tests {
         let info = MediaInfo {
             width: 64,
             height: 48,
-            fps: Fps { num: 30, den: 1 },
-            duration: Some(RationalTime::from_frame(89, Fps { num: 30, den: 1 })),
+            fps: Fps::try_new(30, 1).unwrap(),
+            duration: Some(RationalTime::try_from_frame(89, Fps::try_new(30, 1).unwrap()).unwrap()),
             nb_frames: None,
             color_space: motolii_core::ColorSpace::Rec709Limited,
             rotation: 0,
@@ -832,7 +837,7 @@ mod tests {
         let info = MediaInfo {
             width: 64,
             height: 48,
-            fps: Fps { num: 30, den: 1 },
+            fps: Fps::try_new(30, 1).unwrap(),
             duration: None,
             nb_frames: None,
             color_space: motolii_core::ColorSpace::Rec709Limited,
@@ -856,7 +861,7 @@ mod tests {
             &drivers,
             RationalTime::ZERO,
             RationalTime::from_seconds(1),
-            Fps { num: 12, den: 1 },
+            Fps::try_new(12, 1).unwrap(),
         )
         .unwrap();
         assert!(tracks.get(&DataTrackId("sine_x".into())).is_some());
@@ -876,7 +881,7 @@ mod tests {
             RationalTime::from_seconds(1),
         );
         let mid = overlay
-            .eval(RationalTime::new(1, 2), &DataTracks::new())
+            .eval(RationalTime::try_new(1, 2).unwrap(), &DataTracks::new())
             .unwrap();
         assert!(mid.center.x.abs() < 1e-9);
         let _ = ParamRectOverlay::constant(RectOverlay {

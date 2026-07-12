@@ -7,7 +7,10 @@ use motolii_testkit::{ffmpeg_or_skip, gpu_or_skip, tmp_dir};
 
 const W: u32 = 32;
 const H: u32 = 24;
-const FPS: Fps = Fps { num: 12, den: 1 };
+const FPS: Fps = match Fps::try_new(12, 1) {
+    Ok(fps) => fps,
+    Err(_) => panic!("invalid const fps"),
+};
 const N_FRAMES: usize = 6;
 
 fn make_test_video(path: &Path) {

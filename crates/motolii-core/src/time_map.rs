@@ -1,6 +1,6 @@
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::RationalTime;
+use crate::{RationalTime, RationalTimeError};
 
 /// Timeline時刻からsource時刻への最小TimeMap。
 ///
@@ -22,6 +22,8 @@ pub enum TimeMapError {
     NonPositiveSpeedDenominator,
     #[error("TimeMap speed_num must be positive (reverse playback deferred)")]
     NonPositiveSpeedNum,
+    #[error(transparent)]
+    RationalTime(#[from] RationalTimeError),
 }
 
 #[derive(Deserialize)]
@@ -100,10 +102,11 @@ impl TimeMap {
     /// 未検証入力でもpanicしない写像。
     pub fn try_map(&self, timeline_time: RationalTime) -> Result<RationalTime, TimeMapError> {
         self.validate()?;
-        Ok(self.source_start
-            + (timeline_time - self.timeline_start)
-                * self.speed_num
-                * RationalTime::new(1, self.speed_den))
+        let delta = timeline_time.try_sub(self.timeline_start)?;
+        let scaled = delta.try_mul_i64(self.speed_num)?;
+        let unit = RationalTime::try_new(1, self.speed_den)?;
+        let mapped = scaled.try_mul(unit)?;
+        Ok(self.source_start.try_add(mapped)?)
     }
 
     /// 恒等写像か。実デコードへの適用はM2まで未実装のため、export等は恒等のみ受理する。
@@ -122,9 +125,13 @@ impl Default for TimeMap {
 mod tests {
     use super::*;
 
+    fn rt(num: i64, den: i64) -> RationalTime {
+        RationalTime::try_new(num, den).unwrap()
+    }
+
     #[test]
     fn identity_maps_same_time() {
-        let t = RationalTime::new(1001, 30000);
+        let t = rt(1001, 30000);
         assert_eq!(TimeMap::identity().try_map(t).unwrap(), t);
     }
 

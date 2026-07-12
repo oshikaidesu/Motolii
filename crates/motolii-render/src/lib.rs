@@ -1049,7 +1049,7 @@ mod tests {
         let desc = request.desc;
 
         let rendered = render_frame(&gpu, &request, Quality::FINAL).unwrap();
-        assert_eq!(rendered.source_time, RationalTime::new(7, 5));
+        assert_eq!(rendered.source_time, RationalTime::try_new(7, 5).unwrap());
         assert_eq!(rendered.desc, desc);
 
         let actual = download_rgba(&gpu, &rendered.texture).unwrap();
@@ -1091,7 +1091,7 @@ mod tests {
         let rendered = render_frame(&gpu, &request, Quality::DRAFT).unwrap();
         assert_eq!(rendered.desc.width, request.desc.width / 2);
         assert_eq!(rendered.desc.height, request.desc.height / 2);
-        assert_eq!(rendered.source_time, RationalTime::new(7, 5));
+        assert_eq!(rendered.source_time, RationalTime::try_new(7, 5).unwrap());
 
         let actual = download_rgba(&gpu, &rendered.texture).unwrap();
         assert_eq!(
@@ -1237,7 +1237,7 @@ mod tests {
         let _second = render_graph_cached(
             &gpu,
             &mut session,
-            RationalTime::from_frame(12, Fps::new(30, 1)),
+            RationalTime::try_from_frame(12, Fps::try_new(30, 1).unwrap()).unwrap(),
             &linear_graph_from_request(&second_request),
             &inputs,
             Quality::FINAL,
@@ -2060,7 +2060,7 @@ mod tests {
     fn centered_request() -> RenderFrameRequest {
         RenderFrameRequest {
             desc: FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true),
-            timeline_time: RationalTime::from_frame(6, Fps::new(30, 1)),
+            timeline_time: RationalTime::try_from_frame(6, Fps::try_new(30, 1).unwrap()).unwrap(),
             source: SolidSource {
                 color: [0.0, 1.0, 0.0, 0.5],
                 time_map: TimeMap::constant_speed(
@@ -2086,7 +2086,7 @@ mod tests {
     fn fractional_edge_request() -> RenderFrameRequest {
         RenderFrameRequest {
             desc: FrameDesc::packed(13, 7, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true),
-            timeline_time: RationalTime::from_frame(11, Fps::new(24, 1)),
+            timeline_time: RationalTime::try_from_frame(11, Fps::try_new(24, 1).unwrap()).unwrap(),
             source: SolidSource {
                 color: [0.2, 0.6, 1.0, 0.75],
                 time_map: TimeMap::offset(RationalTime::from_seconds(3), RationalTime::ZERO),

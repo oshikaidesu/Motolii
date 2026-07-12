@@ -12,10 +12,10 @@ proptest! {
         num_b in -500i64..=500,
         den_b in 1i64..=500,
     ) {
-        let a = RationalTime::new(num_a, den_a);
-        let b = RationalTime::new(num_b, den_b);
-        prop_assert_eq!((a + b) - b, a);
-        prop_assert_eq!((a - b) + b, a);
+        let a = RationalTime::try_new(num_a, den_a).unwrap();
+        let b = RationalTime::try_new(num_b, den_b).unwrap();
+        prop_assert_eq!(a.try_add(b).unwrap().try_sub(b).unwrap(), a);
+        prop_assert_eq!(a.try_sub(b).unwrap().try_add(b).unwrap(), a);
     }
 
     #[test]

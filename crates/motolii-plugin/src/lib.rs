@@ -1404,7 +1404,7 @@ mod tests {
                 ParamDriverContext {
                     start: RationalTime::ZERO,
                     duration: RationalTime::from_seconds(1),
-                    sample_rate: Fps::new(4, 1),
+                    sample_rate: Fps::try_new(4, 1).unwrap(),
                 },
                 &params,
             )

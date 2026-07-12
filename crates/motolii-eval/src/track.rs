@@ -123,8 +123,17 @@ impl KeyframeTrack {
 /// 区間内正規化位置u ∈ [0,1)。区間端は有理数で厳密に扱い、u自体はf64でよい
 /// (uは1フレーム内の補間位置であり、蓄積しないためドリフトしない)。
 fn segment_u(a: RationalTime, b: RationalTime, t: RationalTime) -> f64 {
-    let num = (t - a).as_seconds_f64();
-    let den = (b - a).as_seconds_f64();
+    let Ok(num_t) = t.try_sub(a) else {
+        return 0.0;
+    };
+    let Ok(den_t) = b.try_sub(a) else {
+        return 0.0;
+    };
+    let num = num_t.as_seconds_f64();
+    let den = den_t.as_seconds_f64();
+    if den == 0.0 {
+        return 0.0;
+    }
     num / den
 }
 
@@ -143,7 +152,9 @@ impl DataTrack {
         if self.values.is_empty() {
             return Value::F64(0.0);
         }
-        let rel = t - self.start;
+        let Ok(rel) = t.try_sub(self.start) else {
+            return Value::F64(0.0);
+        };
         // サンプル位置(浮動小数)= rel * rate
         let pos = rel.as_seconds_f64() * self.sample_rate.as_f64();
         if pos <= 0.0 {
@@ -192,11 +203,15 @@ mod tests {
     #[test]
     fn linear_interpolation_at_rational_times() {
         let mut tr = KeyframeTrack::new();
-        let fps = Fps::new(30, 1);
+        let fps = Fps::try_new(30, 1).unwrap();
         tr.insert(key(RationalTime::ZERO, 0.0, Interp::Linear));
-        tr.insert(key(RationalTime::from_frame(30, fps), 30.0, Interp::Linear));
+        tr.insert(key(
+            RationalTime::try_from_frame(30, fps).unwrap(),
+            30.0,
+            Interp::Linear,
+        ));
         // フレーム12(=0.4秒)で値12.0
-        let v = tr.eval(RationalTime::from_frame(12, fps));
+        let v = tr.eval(RationalTime::try_from_frame(12, fps).unwrap());
         assert!((v.as_f64().unwrap() - 12.0).abs() < 1e-9);
     }
 
@@ -205,7 +220,10 @@ mod tests {
         let mut tr = KeyframeTrack::new();
         tr.insert(key(RationalTime::ZERO, 1.0, Interp::Hold));
         tr.insert(key(RationalTime::from_seconds(1), 2.0, Interp::Linear));
-        assert_eq!(tr.eval(RationalTime::new(999, 1000)), Value::F64(1.0));
+        assert_eq!(
+            tr.eval(RationalTime::try_new(999, 1000).unwrap()),
+            Value::F64(1.0)
+        );
         assert_eq!(tr.eval(RationalTime::from_seconds(1)), Value::F64(2.0));
     }
 
@@ -226,7 +244,10 @@ mod tests {
         let mid = tr.eval(RationalTime::from_seconds(1)).as_f64().unwrap();
         assert!((mid - 50.0).abs() < 1e-3);
         // ease-in: 序盤は線形より遅い
-        let early = tr.eval(RationalTime::new(1, 2)).as_f64().unwrap();
+        let early = tr
+            .eval(RationalTime::try_new(1, 2).unwrap())
+            .as_f64()
+            .unwrap();
         assert!(early < 25.0);
     }
 
@@ -278,13 +299,16 @@ mod tests {
     fn data_track_sampling() {
         let dt = DataTrack {
             start: RationalTime::from_seconds(1),
-            sample_rate: Fps::new(10, 1),
+            sample_rate: Fps::try_new(10, 1).unwrap(),
             values: (0..=10).map(|i| Value::F64(i as f64)).collect(),
         };
         // start前はクランプ
         assert_eq!(dt.eval(RationalTime::ZERO), Value::F64(0.0));
         // start + 0.55秒 = サンプル位置5.5 → 5.5
-        let v = dt.eval(RationalTime::new(155, 100)).as_f64().unwrap();
+        let v = dt
+            .eval(RationalTime::try_new(155, 100).unwrap())
+            .as_f64()
+            .unwrap();
         assert!((v - 5.5).abs() < 1e-9);
         // 末尾以降はクランプ
         assert_eq!(dt.eval(RationalTime::from_seconds(10)), Value::F64(10.0));
@@ -297,7 +321,7 @@ mod tests {
             "centroid.x",
             DataTrack {
                 start: RationalTime::ZERO,
-                sample_rate: Fps::new(30, 1),
+                sample_rate: Fps::try_new(30, 1).unwrap(),
                 values: vec![Value::F64(3.0), Value::F64(5.0)],
             },
         );
@@ -321,7 +345,7 @@ mod tests {
             "vec",
             DataTrack {
                 start: RationalTime::ZERO,
-                sample_rate: Fps::new(1, 1),
+                sample_rate: Fps::try_new(1, 1).unwrap(),
                 values: vec![Value::Vec2([9.0, 9.0])],
             },
         );

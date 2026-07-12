@@ -62,9 +62,9 @@ D1着手前に固定する。エージェントが「もっともらしい継承
 
 ジャーナル/JSONから不正有理数を注入できないようにする。`RationalTime`/`Fps`/`TimeMap`はDeserialize時に検証または正規化する。
 
-1. **`RationalTime`**: (a)`den==0`拒否 (b)負の分母は符号を分子へ (c)既約化 (d)`0/x`→`0/1` (e)正規化後のi64溢れは`RationalTimeError::Overflow`(panicしない)
-2. **`Fps`**: 正の`num`/`den`のみ
-3. **`TimeMap.speed`**: M2では`speed_num > 0`かつ`speed_den > 0`のみ(ゼロ・負の速度は明示拒否。逆再生は将来拡張)
+1. **`RationalTime`**: (a)`den==0`拒否 (b)負の分母は符号を分子へ (c)既約化 (d)`0/x`→`0/1` (e)正規化後のi64溢れは`RationalTimeError::Overflow`(panicしない)。公開経路は`try_new`/`try_from_frame`/`try_to_frame_floor`/`try_add`/`try_sub`/`try_mul`/`try_neg`のみ(中間演算はchecked)
+2. **`Fps`**: 正の`num`/`den`のみ。フィールドは非公開(正値を型の不変条件として固定)。構築は`try_new`とDeserializeのみ
+3. **`TimeMap.speed`**: M2では`speed_num > 0`かつ`speed_den > 0`のみ(ゼロ・負の速度は明示拒否。逆再生は将来拡張)。`try_map`は未検証入力でもpanicせず`TimeMapError`/`RationalTimeError`を返す
 
 ## 音声トランスポート設計(音ズレ・途切れの構造的排除)
 

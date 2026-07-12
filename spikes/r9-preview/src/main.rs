@@ -68,8 +68,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "{} — {} frames @ {}/{} fps ({}x{})",
         project_path.display(),
         export_frames,
-        prepared.info.fps.num,
-        prepared.info.fps.den,
+        prepared.info.fps.num(),
+        prepared.info.fps.den(),
         prepared.info.width,
         prepared.info.height
     ).into());

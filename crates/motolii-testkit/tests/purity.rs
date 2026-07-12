@@ -93,7 +93,7 @@ fn sine_param_driver_is_pure() {
         ParamDriverContext {
             start: RationalTime::ZERO,
             duration: RationalTime::from_seconds(1),
-            sample_rate: Fps::new(8, 1),
+            sample_rate: Fps::try_new(8, 1).unwrap(),
         },
         &params,
     )

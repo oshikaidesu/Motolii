@@ -16,7 +16,10 @@ use motolii_testkit::cpu_reference::expected_luma;
 const W: u32 = 64;
 const H: u32 = 48;
 const N_FRAMES: i64 = 30;
-const FPS: Fps = Fps { num: 30, den: 1 };
+const FPS: Fps = match Fps::try_new(30, 1) {
+    Ok(fps) => fps,
+    Err(_) => panic!("invalid const fps"),
+};
 /// RGB→YUV→RGBの量子化で±数値の誤差は出るため許容幅を持つ
 const TOL: i32 = 6;
 
@@ -82,7 +85,7 @@ fn encode_probe_decode_seek_roundtrip() {
     // 書き出し色タグ検証(#5): Encoderが付けたBT.709 limitedをprobeが読める
     assert_eq!(info.color_space, ColorSpace::Rec709Limited);
     if let Some(d) = info.duration {
-        assert_eq!(d, RationalTime::from_frame(N_FRAMES, FPS));
+        assert_eq!(d, RationalTime::try_from_frame(N_FRAMES, FPS).unwrap());
     }
 
     // --- 先頭からの順次デコード: 全フレームが順番通り(生YUVで受かる) ---
@@ -90,7 +93,7 @@ fn encode_probe_decode_seek_roundtrip() {
     let mut count = 0i64;
     while let Some(frame) = reader.next_frame().unwrap() {
         assert_frame_is(&frame, count);
-        assert_eq!(frame.pts, RationalTime::from_frame(count, FPS));
+        assert_eq!(frame.pts, RationalTime::try_from_frame(count, FPS).unwrap());
         assert_eq!(frame.desc.color_space, ColorSpace::Rec709Limited);
         count += 1;
     }
@@ -100,7 +103,7 @@ fn encode_probe_decode_seek_roundtrip() {
     for index in [0, 1, 14, 15, 17, 28, 29] {
         let frame = read_frame_at(&path, &info, index).unwrap();
         assert_frame_is(&frame, index);
-        assert_eq!(frame.pts, RationalTime::from_frame(index, FPS));
+        assert_eq!(frame.pts, RationalTime::try_from_frame(index, FPS).unwrap());
     }
 
     // --- 厳密レベル検証(#7): TOL=6の緩さでレンジ取り違えを隠さない ---
