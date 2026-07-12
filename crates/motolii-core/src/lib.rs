@@ -19,4 +19,4 @@ pub use frame::{
 };
 pub use quality::{Quality, SampleTier};
 pub use time::{Fps, FpsError, RationalTime, RationalTimeError};
-pub use time_map::{TimeMap, TimeMapError};
+pub use time_map::{OverrunMode, TimeMap, TimeMapError};

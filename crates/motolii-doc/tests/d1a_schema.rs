@@ -62,7 +62,7 @@ fn sample_document() -> Document {
         },
         start: RationalTime::try_new(0, 1).unwrap(),
         duration: RationalTime::try_new(5, 1).unwrap(),
-        time_map: TimeMap::constant_speed(RationalTime::ZERO, RationalTime::ZERO, 1, 1).unwrap(),
+        time_map: TimeMap::constant_speed(RationalTime::ZERO, 1, 1).unwrap(),
         source: ClipSource::Plugin {
             plugin_id: "core.layer_source.clear".into(),
             effect_version: 1,

@@ -715,7 +715,6 @@ mod tests {
             "output": "out.mp4",
             "time_map": {
                 "source_start": {"num": 0, "den": 1},
-                "timeline_start": {"num": 0, "den": 1},
                 "speed_num": 2,
                 "speed_den": 1
             },
@@ -727,6 +726,50 @@ mod tests {
         }"#;
         let err = load_project_v1_from_str(json).unwrap_err();
         assert!(matches!(err, ProjectError::UnsupportedTimeMap));
+    }
+
+    #[test]
+    fn project_rejects_black_overrun_even_when_affine_is_identity() {
+        let json = r#"{
+            "version": 1,
+            "input": "in.mp4",
+            "output": "out.mp4",
+            "time_map": {
+                "source_start": {"num": 0, "den": 1},
+                "speed_num": 1,
+                "speed_den": 1,
+                "overrun_mode": "black"
+            },
+            "overlay": {
+                "center": [0.0, 0.0],
+                "size": [0.5, 0.5],
+                "color": [1.0, 0.0, 0.0, 1.0]
+            }
+        }"#;
+        let err = load_project_v1_from_str(json).unwrap_err();
+        assert!(matches!(err, ProjectError::UnsupportedTimeMap));
+    }
+
+    #[test]
+    fn project_rejects_legacy_timeline_start_field() {
+        let json = r#"{
+            "version": 1,
+            "input": "in.mp4",
+            "output": "out.mp4",
+            "time_map": {
+                "source_start": {"num": 0, "den": 1},
+                "timeline_start": {"num": 0, "den": 1},
+                "speed_num": 1,
+                "speed_den": 1
+            },
+            "overlay": {
+                "center": [0.0, 0.0],
+                "size": [0.5, 0.5],
+                "color": [1.0, 0.0, 0.0, 1.0]
+            }
+        }"#;
+        let err = load_project_v1_from_str(json).unwrap_err();
+        assert!(matches!(err, ProjectError::Json(_)), "{err:?}");
     }
 
     #[test]
@@ -767,7 +810,6 @@ mod tests {
             "output": "out.mp4",
             "time_map": {
                 "source_start": {"num": 0, "den": 1},
-                "timeline_start": {"num": 0, "den": 1},
                 "speed_num": 1,
                 "speed_den": 0
             },
@@ -790,7 +832,6 @@ mod tests {
             "output": "out.mp4",
             "time_map": {
                 "source_start": {"num": 0, "den": 1},
-                "timeline_start": {"num": 0, "den": 1},
                 "speed_num": 0,
                 "speed_den": 1
             },
