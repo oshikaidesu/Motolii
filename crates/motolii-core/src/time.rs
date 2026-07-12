@@ -1,25 +1,53 @@
 use std::cmp::Ordering;
 use std::ops::{Add, Mul, Neg, Sub};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// 有理数タイムスタンプ。秒 = num/den。
 ///
 /// 浮動小数の秒を使うとフレーム境界の丸めが蓄積してドリフトする(落とし穴B-1)ため、
 /// タイムライン上の時刻・長さは常にこの型で扱う。常に正規化(den > 0、既約)して保持する。
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize)]
 pub struct RationalTime {
     num: i64,
     den: i64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum RationalTimeError {
+    #[error("RationalTime: denominator must not be zero")]
+    ZeroDenominator,
+    #[error("RationalTime: value overflows i64 after normalization")]
+    Overflow,
+}
+
+#[derive(Deserialize)]
+struct RawRationalTime {
+    num: i64,
+    den: i64,
+}
+
+impl<'de> Deserialize<'de> for RationalTime {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = RawRationalTime::deserialize(deserializer)?;
+        RationalTime::try_new(raw.num, raw.den).map_err(serde::de::Error::custom)
+    }
+}
+
 impl RationalTime {
     pub const ZERO: RationalTime = RationalTime { num: 0, den: 1 };
 
-    /// den == 0 はプログラミングエラーとしてpanicする。
+    /// 既に正規化された値向け。JSON等の未検証入力は`try_new`を使う。
     pub fn new(num: i64, den: i64) -> Self {
-        assert!(den != 0, "RationalTime: denominator must not be zero");
-        Self::reduce(num as i128, den as i128)
+        Self::try_new(num, den).expect("RationalTime::new: invalid rational")
+    }
+
+    /// M2E-16: den==0拒否・符号正規化・既約化・0/x→0/1・オーバーフローはErr。
+    pub fn try_new(num: i64, den: i64) -> Result<Self, RationalTimeError> {
+        Self::try_reduce(num as i128, den as i128)
     }
 
     pub fn from_seconds(secs: i64) -> Self {
@@ -41,7 +69,8 @@ impl RationalTime {
 
     /// フレーム番号から時刻へ(frame / fps)。
     pub fn from_frame(frame: i64, fps: Fps) -> Self {
-        Self::reduce(frame as i128 * fps.den as i128, fps.num as i128)
+        Self::try_reduce(frame as i128 * fps.den as i128, fps.num as i128)
+            .expect("RationalTime::from_frame overflow")
     }
 
     /// 時刻が属するフレーム番号(床関数)。負の時刻でも数学的な床を返す。
@@ -51,29 +80,71 @@ impl RationalTime {
         i128_div_floor(n, d)
     }
 
-    fn reduce(num: i128, den: i128) -> Self {
+    pub fn try_neg(self) -> Result<Self, RationalTimeError> {
+        Self::try_reduce(-(self.num as i128), self.den as i128)
+    }
+
+    fn try_reduce(num: i128, den: i128) -> Result<Self, RationalTimeError> {
+        if den == 0 {
+            return Err(RationalTimeError::ZeroDenominator);
+        }
+        // 負の分母は符号を分子へ移す(負の時刻そのものは正当)
         let (num, den) = if den < 0 { (-num, -den) } else { (num, den) };
+        if num == 0 {
+            return Ok(Self::ZERO);
+        }
         let g = gcd(num.unsigned_abs(), den.unsigned_abs()).max(1);
         let num = num / g as i128;
         let den = den / g as i128;
-        Self {
-            num: i64::try_from(num).expect("RationalTime overflow"),
-            den: i64::try_from(den).expect("RationalTime overflow"),
-        }
+        let num = i64::try_from(num).map_err(|_| RationalTimeError::Overflow)?;
+        let den = i64::try_from(den).map_err(|_| RationalTimeError::Overflow)?;
+        Ok(Self { num, den })
+    }
+
+    fn reduce(num: i128, den: i128) -> Self {
+        Self::try_reduce(num, den).expect("RationalTime overflow")
     }
 }
 
 /// フレームレート(num/den フレーム毎秒)。例: 30fps = 30/1、29.97fps = 30000/1001。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub struct Fps {
     pub num: i64,
     pub den: i64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum FpsError {
+    #[error("Fps: numerator and denominator must be positive")]
+    NonPositive,
+}
+
+#[derive(Deserialize)]
+struct RawFps {
+    num: i64,
+    den: i64,
+}
+
+impl<'de> Deserialize<'de> for Fps {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = RawFps::deserialize(deserializer)?;
+        Fps::try_new(raw.num, raw.den).map_err(serde::de::Error::custom)
+    }
+}
+
 impl Fps {
     pub fn new(num: i64, den: i64) -> Self {
-        assert!(num > 0 && den > 0, "Fps must be positive");
-        Self { num, den }
+        Self::try_new(num, den).expect("Fps::new: must be positive")
+    }
+
+    pub fn try_new(num: i64, den: i64) -> Result<Self, FpsError> {
+        if num <= 0 || den <= 0 {
+            return Err(FpsError::NonPositive);
+        }
+        Ok(Self { num, den })
     }
 
     /// 1フレームの長さ。
@@ -143,17 +214,19 @@ impl Add for RationalTime {
 impl Sub for RationalTime {
     type Output = RationalTime;
     fn sub(self, rhs: Self) -> Self {
-        self + (-rhs)
+        // Neg経由にしない: i64::MIN の符号反転を交差乗算で避ける
+        Self::reduce(
+            self.num as i128 * rhs.den as i128 - rhs.num as i128 * self.den as i128,
+            self.den as i128 * rhs.den as i128,
+        )
     }
 }
 
 impl Neg for RationalTime {
     type Output = RationalTime;
     fn neg(self) -> Self {
-        Self {
-            num: -self.num,
-            den: self.den,
-        }
+        self.try_neg()
+            .expect("RationalTime::neg overflow (e.g. -i64::MIN)")
     }
 }
 
@@ -242,5 +315,66 @@ mod tests {
             t = t + fps.frame_duration();
         }
         assert_eq!(t, RationalTime::from_frame(n, fps));
+    }
+
+    #[test]
+    fn try_new_rejects_zero_denominator() {
+        assert_eq!(
+            RationalTime::try_new(1, 0),
+            Err(RationalTimeError::ZeroDenominator)
+        );
+    }
+
+    #[test]
+    fn try_new_normalizes_negative_denominator() {
+        let t = RationalTime::try_new(3, -6).unwrap();
+        assert_eq!(t.num(), -1);
+        assert_eq!(t.den(), 2);
+    }
+
+    #[test]
+    fn try_new_reduces_by_gcd() {
+        let t = RationalTime::try_new(6, 9).unwrap();
+        assert_eq!(t, RationalTime::new(2, 3));
+    }
+
+    #[test]
+    fn try_new_zero_over_any_is_zero_one() {
+        assert_eq!(RationalTime::try_new(0, 42).unwrap(), RationalTime::ZERO);
+        assert_eq!(RationalTime::try_new(0, -7).unwrap(), RationalTime::ZERO);
+    }
+
+    #[test]
+    fn try_neg_i64_min_overflows() {
+        let t = RationalTime::try_new(i64::MIN, 1).unwrap();
+        assert_eq!(t.try_neg(), Err(RationalTimeError::Overflow));
+    }
+
+    #[test]
+    fn serde_rejects_zero_denominator() {
+        let err = serde_json::from_str::<RationalTime>(r#"{"num":1,"den":0}"#).unwrap_err();
+        assert!(err.to_string().contains("denominator"), "{err}");
+    }
+
+    #[test]
+    fn serde_normalizes_on_load() {
+        let t: RationalTime = serde_json::from_str(r#"{"num":2,"den":-4}"#).unwrap();
+        assert_eq!(t.num(), -1);
+        assert_eq!(t.den(), 2);
+        let z: RationalTime = serde_json::from_str(r#"{"num":0,"den":5}"#).unwrap();
+        assert_eq!(z, RationalTime::ZERO);
+    }
+
+    #[test]
+    fn fps_try_new_rejects_non_positive() {
+        assert_eq!(Fps::try_new(0, 1), Err(FpsError::NonPositive));
+        assert_eq!(Fps::try_new(30, -1), Err(FpsError::NonPositive));
+        assert_eq!(Fps::try_new(-30, 1), Err(FpsError::NonPositive));
+    }
+
+    #[test]
+    fn fps_serde_rejects_non_positive() {
+        let err = serde_json::from_str::<Fps>(r#"{"num":0,"den":1}"#).unwrap_err();
+        assert!(err.to_string().contains("positive"), "{err}");
     }
 }

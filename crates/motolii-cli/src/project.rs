@@ -757,10 +757,30 @@ mod tests {
             }
         }"#;
         let err = load_project_v1_from_str(json).unwrap_err();
-        assert!(matches!(
-            err,
-            ProjectError::TimeMap(TimeMapError::ZeroSpeedDenominator)
-        ));
+        // TimeMapのDeserializeがspeed_denを拒否するためJson境界で落ちる
+        assert!(matches!(err, ProjectError::Json(_)), "{err:?}");
+    }
+
+    #[test]
+    fn project_rejects_non_positive_speed_num() {
+        let json = r#"{
+            "version": 1,
+            "input": "in.mp4",
+            "output": "out.mp4",
+            "time_map": {
+                "source_start": {"num": 0, "den": 1},
+                "timeline_start": {"num": 0, "den": 1},
+                "speed_num": 0,
+                "speed_den": 1
+            },
+            "overlay": {
+                "center": [0.0, 0.0],
+                "size": [0.5, 0.5],
+                "color": [1.0, 0.0, 0.0, 1.0]
+            }
+        }"#;
+        let err = load_project_v1_from_str(json).unwrap_err();
+        assert!(matches!(err, ProjectError::Json(_)), "{err:?}");
     }
 
     #[test]

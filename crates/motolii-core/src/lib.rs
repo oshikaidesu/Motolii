@@ -18,5 +18,5 @@ pub use frame::{
     PixelFormat,
 };
 pub use quality::{Quality, SampleTier};
-pub use time::{Fps, RationalTime};
+pub use time::{Fps, FpsError, RationalTime, RationalTimeError};
 pub use time_map::{TimeMap, TimeMapError};
