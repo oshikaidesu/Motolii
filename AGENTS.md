@@ -7,6 +7,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 1. [docs/README.md](docs/README.md) — プロジェクト全体像・ドキュメントの読む順序・用語
 2. 着手するフェーズの仕様書([docs/specs/](docs/specs/README.md)): タスク表(完了条件・依存つき)と、**末尾の「実装ガード」節**(先行ツールの失敗・ユーザー不満をタスクIDに紐付けた注意リスト。完了条件を追加している場合がある)
 3. プラグインを書く/量産する時: [docs/plugin-authoring.md](docs/plugin-authoring.md)(種別・NodeDesc必須欄・禁止事項・型紙)
+4. M2 Document/スキーマ/ジャーナルに触る時: [docs/reviews/2026-07-12-rework-prior-art.md](docs/reviews/2026-07-12-rework-prior-art.md)の採用ガードレール(GR-RW-1〜6)と、着手フェーズ仕様の「実装ガード」
 
 ## 絶対規律(破ると設計の根拠が崩れる。レビュー最重視項目)
 
@@ -33,8 +34,21 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 - 完了条件は自動判定(`cargo test`/ゴールデンイメージ)。「動いた気がする」を完了条件にしない
 - **テストを「直して」通さない**: ゴールデン参照画像・受け入れテストの削除・期待値書き換え・実装のspecial-caseで緑にすることを禁止。**テストが間違っていると思ったら実装を止めて報告する**。参照画像の正当な更新は理由を明記した独立PRに分離(specs/README.md 粒度ルール6、[pitfalls H-2](docs/pitfalls-and-roadmap.md))
 - **新規ヘルパーを書く前に既存を検索する**: 同等物が既にないかgrepしてから書く(LLM開発の最大の負債はコピペ増殖 — [pitfalls H-3](docs/pitfalls-and-roadmap.md))。テストヘルパーのtestkit集約ルールの一般化
-- **仕様書の未決事項に依存するタスクに着手しない**: 未決を「もっともらしいデフォルト」で埋めない。仕様書改訂PRで先に潰す(specs/README.md 粒度ルール7)
+- **仕様書の未決事項に依存するタスクに着手しない**: 未決を「もっともらしいデフォルト」で埋めない。仕様書改訂PRで先に潰す(specs/README.md 粒度ルール7、GR-RW-6)
 - **完了報告は証跡付き**: 実行したコマンドとテスト出力を添える。「動くはず」を報告にしない
 - 提出前に `cargo test --workspace` 全緑を確認
 - **プラグイン規約の機械判定(INF-7a〜f)**: 提出前に `cargo test -p motolii-plugin` と、Filter/ParamDriverを触ったら `cargo test -p motolii-testkit --test purity` を回す。新規プラグインは `./scripts/new-plugin.sh <kind> <name>` から始め、純関数は `motolii_testkit::purity` で固定する
 - インターフェース契約(specの型シグネチャ)を変えたくなったら、実装を止めて仕様書改訂を先に
+
+## 出戻り防止(M2恒久スキーマ — GR-RW)
+
+先人の対応パターンと採用判定の正本: [docs/reviews/2026-07-12-rework-prior-art.md](docs/reviews/2026-07-12-rework-prior-art.md)。ゲート達成後も恒久物への早焼きはOlive型の切断コストになる。
+
+着手前チェック(1つでもNoなら実装を止め、仕様改訂または依存チケット待ちへ):
+
+1. **GR-RW-1 恒久物チェック**: このPRはDocumentスキーマ / ジャーナル / 意味論ゴールデン / プラグイン契約のどれを焼くか。焼くなら仕様の【決定】・ゲート項目・ユーザー決定への**逆リンク**があるか
+2. **GR-RW-2 意味未定は完了にしない**: 依存する意味論表・期待型表・互換方針は揃っているか。`cargo test`緑だけでは「完了」と書かない(第二監査: 縮退挙動がテスト固定されていた事例)
+3. **GR-RW-3 形状と画素を分離**: データ形状変更ならmigration経路(または旧形式拒否+D1e担当の明示)。画素/アルゴリズム意味の変更なら**新variant**とし、既存variantのゴールデン更新で通さない(AE Obsolete型 / S16)
+4. **GR-RW-4 クリティカルパス**: M2並列レーン表の依存を飛ばしていないか。特に **D1i-2完了前にD3しない**
+5. **GR-RW-5 移行PRのnon-goals**: migration / 解凍 / 監査フォローアップPRなら、対象チケットID以外のスキーマ整理をnon-goalsに書いたか。混入したらPRを分割する
+6. **GR-RW-6 未決は停止**: 仕様「未決事項」または監査「ユーザー決定待ち」に依存していないか。依存するならデフォルト埋め禁止
