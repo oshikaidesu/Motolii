@@ -36,7 +36,7 @@ impl Encoder {
         let mut cmd = Command::new(program.as_ref());
         cmd.args(["-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgba"])
             .args(["-s", &format!("{}x{}", desc.width, desc.height)])
-            .args(["-r", &format!("{}/{}", fps.num, fps.den)])
+            .args(["-r", &format!("{}/{}", fps.num(), fps.den())])
             .args(["-i", "-", "-c:v", "libx264"]);
         if qp0 {
             // 4:4:4 + qp0でクロマ劣化も抑える(ゴールデンテスト用)
@@ -121,7 +121,7 @@ mod tests {
     #[test]
     fn encoder_rejects_non_rgba_format() {
         let desc = FrameDesc::packed(8, 8, PixelFormat::Bgra8Unorm, ColorSpace::Srgb, false);
-        let result = Encoder::open("out.mp4", &desc, Fps::new(30, 1), true);
+        let result = Encoder::open("out.mp4", &desc, Fps::try_new(30, 1).unwrap(), true);
         assert!(matches!(
             result,
             Err(MediaError::UnsupportedEncoderFormat(
@@ -144,7 +144,7 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        let mut enc = Encoder::open(&path, &desc, Fps::new(30, 1), true).unwrap();
+        let mut enc = Encoder::open(&path, &desc, Fps::try_new(30, 1).unwrap(), true).unwrap();
         let err = enc
             .write_frame(&vec![0u8; desc.data_size() - 1])
             .unwrap_err();
@@ -184,8 +184,14 @@ mod tests {
 
         let desc = FrameDesc::packed(4, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false);
         let out = dir.join("out.mp4");
-        let mut enc =
-            Encoder::open_with_command(&fake_ffmpeg, &out, &desc, Fps::new(1, 1), true).unwrap();
+        let mut enc = Encoder::open_with_command(
+            &fake_ffmpeg,
+            &out,
+            &desc,
+            Fps::try_new(1, 1).unwrap(),
+            true,
+        )
+        .unwrap();
         enc.write_frame(&vec![0u8; desc.data_size()]).unwrap();
 
         let (tx, rx) = mpsc::channel();

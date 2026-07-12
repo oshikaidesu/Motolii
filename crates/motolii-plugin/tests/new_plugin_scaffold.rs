@@ -322,8 +322,18 @@ fn generated_artifacts_compile_in_self_crate_layout() {
     std::fs::write(in_testkit.join("mod.rs"), testkit_mod).unwrap();
 
     // 自己クレート配置: 独自 cfg は env 経由(Cargo feature ではない)。workspace --locked。
+    // 親の `target/` を上書きすると、後続の workspace テストが fixture 付きバイナリを
+    // 実行してしまうため、ネスト cargo は専用 target-dir へ隔離する。
+    let nested_target = fixture.join("cargo-target");
     let check_plugin = Command::new("cargo")
-        .args(["check", "-p", "motolii-plugin", "--locked"])
+        .args([
+            "check",
+            "-p",
+            "motolii-plugin",
+            "--locked",
+            "--target-dir",
+            nested_target.to_str().unwrap(),
+        ])
         .env("MOTOLII_SCAFFOLD_FIXTURE", "1")
         .current_dir(&root)
         .output()
@@ -344,6 +354,8 @@ fn generated_artifacts_compile_in_self_crate_layout() {
             "--lib",
             "--no-run",
             "--locked",
+            "--target-dir",
+            nested_target.to_str().unwrap(),
         ])
         .env("MOTOLII_SCAFFOLD_FIXTURE", "1")
         .current_dir(&root)

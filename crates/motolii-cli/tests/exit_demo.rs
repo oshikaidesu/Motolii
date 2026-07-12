@@ -20,7 +20,10 @@ use motolii_testkit::{ffmpeg_or_skip, gpu_or_skip, tmp_dir};
 
 const W: u32 = 64;
 const H: u32 = 48;
-const FPS: Fps = Fps { num: 12, den: 1 };
+const FPS: Fps = match Fps::try_new(12, 1) {
+    Ok(fps) => fps,
+    Err(_) => panic!("invalid const fps"),
+};
 const N_FRAMES: usize = 13; // frame 0..12 = t 0..1.0s
 const BG_GRAY: u8 = 120;
 
@@ -107,7 +110,7 @@ fn exit_demo_video_bg_plus_eased_rect_matches_golden() {
     let mut centers_x = Vec::new();
 
     for (idx, label) in samples {
-        let t = RationalTime::from_frame(idx, FPS);
+        let t = RationalTime::try_from_frame(idx, FPS).unwrap();
         let rect = overlay.eval(t, &tracks).unwrap();
         let c = tx.point_to_px(rect.center);
         centers_x.push(c.x);

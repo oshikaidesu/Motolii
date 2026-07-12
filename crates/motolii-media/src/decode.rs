@@ -44,7 +44,7 @@ impl FrameReader {
         cmd.args(["-v", "error", "-nostdin", "-noautorotate"]);
         if start_frame > 0 {
             // (start_frame - 0.5) / fps 秒へシーク
-            let target = (start_frame as f64 - 0.5) * info.fps.den as f64 / info.fps.num as f64;
+            let target = (start_frame as f64 - 0.5) * info.fps.den() as f64 / info.fps.num() as f64;
             cmd.args(["-ss", &format!("{target:.6}")]);
         }
         cmd.arg("-i").arg(path.as_ref());
@@ -94,7 +94,7 @@ impl FrameReader {
                 self.frame_size
             )));
         }
-        let pts = RationalTime::from_frame(self.next_frame_index, self.fps);
+        let pts = RationalTime::try_from_frame(self.next_frame_index, self.fps)?;
         self.next_frame_index += 1;
         Ok(Some(CpuFrame::new(self.desc, pts, data)))
     }
@@ -152,7 +152,7 @@ mod tests {
         MediaInfo {
             width: 64,
             height: 48,
-            fps: motolii_core::Fps::new(30, 1),
+            fps: motolii_core::Fps::try_new(30, 1).unwrap(),
             duration: None,
             nb_frames: None,
             color_space: ColorSpace::Rec709Limited,

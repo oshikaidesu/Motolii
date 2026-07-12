@@ -563,7 +563,7 @@ fn scaffold_is_pure() {{
         ParamDriverContext {{
             start: RationalTime::ZERO,
             duration: RationalTime::from_seconds(1),
-            sample_rate: Fps::new(8, 1),
+            sample_rate: Fps::try_new(8, 1).unwrap(),
         }},
         &params,
     )
@@ -579,7 +579,7 @@ fn scaffold_golden_stub() {{
             ParamDriverContext {{
                 start: RationalTime::ZERO,
                 duration: RationalTime::from_seconds(1),
-                sample_rate: Fps::new(8, 1),
+                sample_rate: Fps::try_new(8, 1).unwrap(),
             }},
             &params,
         )

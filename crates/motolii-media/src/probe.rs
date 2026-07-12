@@ -169,7 +169,10 @@ fn reject_variable_frame_rate(r_fps: Option<Fps>, avg_fps: Option<Fps>) -> Resul
             "variable frame rate (VFR) detected: r_frame_rate {}/{} != avg_frame_rate {}/{}; \
              re-encode to constant frame rate first, e.g. \
              ffmpeg -i input.mp4 -vf fps=30 -c:v libx264 output.mp4",
-            r.num, r.den, a.num, a.den
+            r.num(),
+            r.den(),
+            a.num(),
+            a.den()
         )));
     }
     Ok(())
@@ -221,7 +224,7 @@ fn parse_fraction(s: &str) -> Option<Fps> {
     if num <= 0 || den <= 0 {
         return None;
     }
-    Some(Fps::new(num, den))
+    Fps::try_new(num, den).ok()
 }
 
 /// ffprobeの秒表記("2.000000")を、fpsグリッドにスナップしたRationalTimeへ。
@@ -229,7 +232,7 @@ fn parse_fraction(s: &str) -> Option<Fps> {
 fn parse_duration_snapped(s: &str, fps: Fps) -> Option<RationalTime> {
     let secs: f64 = s.parse().ok()?;
     let frames = (secs * fps.as_f64()).round() as i64;
-    Some(RationalTime::from_frame(frames, fps))
+    RationalTime::try_from_frame(frames, fps).ok()
 }
 
 #[cfg(test)]
@@ -238,18 +241,18 @@ mod tests {
 
     #[test]
     fn parses_fraction() {
-        assert_eq!(parse_fraction("30000/1001"), Some(Fps::new(30000, 1001)));
-        assert_eq!(parse_fraction("30/1"), Some(Fps::new(30, 1)));
+        assert_eq!(parse_fraction("30000/1001"), Fps::try_new(30000, 1001).ok());
+        assert_eq!(parse_fraction("30/1"), Fps::try_new(30, 1).ok());
         assert_eq!(parse_fraction("0/0"), None);
         assert_eq!(parse_fraction("abc"), None);
     }
 
     #[test]
     fn duration_snaps_to_frame_grid() {
-        let fps = Fps::new(30000, 1001);
+        let fps = Fps::try_new(30000, 1001).unwrap();
         // 2.002秒 = ちょうど60フレーム(29.97fps)
         let d = parse_duration_snapped("2.002000", fps).unwrap();
-        assert_eq!(d, RationalTime::from_frame(60, fps));
+        assert_eq!(d, RationalTime::try_from_frame(60, fps).unwrap());
         // 分母がμsではなくfps由来であること
         assert!(d.den() <= 30000);
     }
@@ -297,9 +300,9 @@ mod tests {
 
     #[test]
     fn rejects_variable_frame_rate_when_rates_differ() {
-        let cfr = Fps::new(30000, 1001);
+        let cfr = Fps::try_new(30000, 1001).unwrap();
         assert!(!fps_differ_significantly(cfr, cfr));
-        let vfr = Fps::new(24, 1);
+        let vfr = Fps::try_new(24, 1).unwrap();
         assert!(fps_differ_significantly(cfr, vfr));
         assert!(reject_variable_frame_rate(Some(cfr), Some(vfr)).is_err());
         assert!(reject_variable_frame_rate(Some(cfr), None).is_ok());

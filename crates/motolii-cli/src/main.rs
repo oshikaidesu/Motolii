@@ -35,8 +35,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 report.frames_written,
                 report.desc.width,
                 report.desc.height,
-                report.fps.num,
-                report.fps.den,
+                report.fps.num(),
+                report.fps.den(),
                 args.output.display()
             );
         }
@@ -50,8 +50,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 report.frames_written,
                 report.desc.width,
                 report.desc.height,
-                report.fps.num,
-                report.fps.den,
+                report.fps.num(),
+                report.fps.den(),
                 prepared.output_path.display()
             );
         }

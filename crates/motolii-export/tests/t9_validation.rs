@@ -15,7 +15,10 @@ use motolii_testkit::{ffmpeg_or_skip, gpu_or_skip, tmp_dir};
 
 const W: u32 = 64;
 const H: u32 = 48;
-const FPS: Fps = Fps { num: 30, den: 1 };
+const FPS: Fps = match Fps::try_new(30, 1) {
+    Ok(fps) => fps,
+    Err(_) => panic!("invalid const fps"),
+};
 /// 3秒 @ 30fps
 const N_FRAMES: i64 = 90;
 /// H.264往復の量子化誤差
@@ -42,7 +45,7 @@ fn assert_frame_matches_index(frame: &motolii_core::CpuFrame, index: i64, fps: F
     );
     assert_eq!(
         frame.pts,
-        RationalTime::from_frame(index, fps),
+        RationalTime::try_from_frame(index, fps).unwrap(),
         "frame {index}: pts mismatch"
     );
 }
@@ -111,7 +114,7 @@ fn export_preserves_timeline_for_all_frames_at_30fps() {
         assert_eq!(nb, N_FRAMES);
     }
     if let Some(d) = info.duration {
-        assert_eq!(d, RationalTime::from_frame(N_FRAMES, FPS));
+        assert_eq!(d, RationalTime::try_from_frame(N_FRAMES, FPS).unwrap());
     }
 
     let mut reader = FrameReader::open(&output, &info, 0).unwrap();

@@ -8,7 +8,10 @@ use motolii_testkit::{assert_rgba_close, gpu_or_skip, tol, RgbaImageDesc};
 
 const W: u32 = 32;
 const H: u32 = 24;
-const FPS: Fps = Fps { num: 12, den: 1 };
+const FPS: Fps = match Fps::try_new(12, 1) {
+    Ok(fps) => fps,
+    Err(_) => panic!("invalid const fps"),
+};
 
 fn moving_overlay() -> ParamRectOverlay {
     let mut track = KeyframeTrack::new();
@@ -37,9 +40,9 @@ fn keyframed_overlay_matches_golden_at_start_mid_end() {
     let desc = FrameDesc::packed(W, H, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
     let tracks = DataTracks::new();
     let samples = [
-        (RationalTime::from_frame(0, FPS), "start"),
-        (RationalTime::from_frame(6, FPS), "mid"),
-        (RationalTime::from_frame(12, FPS), "end"),
+        (RationalTime::try_from_frame(0, FPS).unwrap(), "start"),
+        (RationalTime::try_from_frame(6, FPS).unwrap(), "mid"),
+        (RationalTime::try_from_frame(12, FPS).unwrap(), "end"),
     ];
 
     for (t, label) in samples {
@@ -101,7 +104,7 @@ fn project_json_accepts_keyframed_center() {
     let overlay = project.overlay.into_param_overlay();
     let tracks = DataTracks::new();
     let mid = overlay
-        .eval(RationalTime::from_frame(6, FPS), &tracks)
+        .eval(RationalTime::try_from_frame(6, FPS).unwrap(), &tracks)
         .unwrap();
     assert!(mid.center.x.abs() < 1e-9);
     assert_eq!(mid.center.y, 0.0);
