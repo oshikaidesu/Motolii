@@ -35,9 +35,11 @@ impl PlaybackHandle {
     /// 任意フレーム位置から再生を開始する。
     pub fn play_from(cache: Arc<PcmCache>, start_frame: u64) -> Result<Self, AudioError> {
         let host = cpal::default_host();
-        let device = host.default_output_device().ok_or_else(|| AudioError::NoOutputDevice {
-            detail: "no default output device".into(),
-        })?;
+        let device = host
+            .default_output_device()
+            .ok_or_else(|| AudioError::NoOutputDevice {
+                detail: "no default output device".into(),
+            })?;
         Self::play_from_on_device(cache, &device, start_frame)
     }
 
@@ -136,9 +138,12 @@ impl PlaybackHandle {
             })
             .map_err(|e| AudioError::Cpal(format!("failed to spawn producer thread: {e}")))?;
 
-        stream
-            .play()
-            .map_err(|e| AudioError::Cpal(e.to_string()))?;
+        if let Err(e) = stream.play() {
+            // play失敗時はハンドルを返さないので、ここで停止・joinしないとdetachになる
+            running.store(false, Ordering::Release);
+            let _ = producer.join();
+            return Err(AudioError::Cpal(e.to_string()));
+        }
 
         Ok(Self {
             ring,
@@ -211,9 +216,10 @@ fn pick_exact(
         .filter(|c| c.channels() == channels && c.sample_format() == SampleFormat::F32)
         .collect();
 
-    let Some(exact) = configs.iter().find(|c| {
-        c.min_sample_rate().0 <= sample_rate && c.max_sample_rate().0 >= sample_rate
-    }) else {
+    let Some(exact) = configs
+        .iter()
+        .find(|c| c.min_sample_rate().0 <= sample_rate && c.max_sample_rate().0 >= sample_rate)
+    else {
         return Err(AudioError::UnsupportedOutputConfig {
             sample_rate,
             channels,

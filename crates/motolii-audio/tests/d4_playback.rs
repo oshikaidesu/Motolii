@@ -118,10 +118,14 @@ fn hardware_playback_without_underrun() {
         .unwrap(),
     );
 
-    let handle = PlaybackHandle::play_from_on_device(cache, &device, 0)
-        .expect("start hardware playback");
+    let handle =
+        PlaybackHandle::play_from_on_device(cache, &device, 0).expect("start hardware playback");
     std::thread::sleep(std::time::Duration::from_millis(60));
     let stats = handle.stop();
-    assert_eq!(stats.underrun_count, 0, "hardware underruns: {}", stats.underrun_count);
+    assert_eq!(
+        stats.underrun_count, 0,
+        "hardware underruns: {}",
+        stats.underrun_count
+    );
     assert!(stats.frames_delivered > 0);
 }
