@@ -28,7 +28,7 @@ D1着手前に固定する。エージェントが「もっともらしい継承
 1. **D1は`ProjectV1`を継承も移行もしない**: `ProjectV1`(`motolii-cli`)はM1 CLI専用の使い捨て。Documentの`version`採番は独立。`export-project`はD3完了時にDocument読み込みへ置換する(ProjectV1増築禁止)
 2. **Document ≠ ExportJob**: Documentはレシピのみ。出力パス・書き出し範囲・エンコード設定(qp等)は別構造`ExportJob`(仮称)。Asset参照は初日から多重キー(実装ガード10)
 3. **クリップのin/out/durationは`RationalTime`**: フレーム添字(`start_frame`/`frame_count`形式)をスキーマに入れない。`ProjectV1`のフレーム添字は入力素材fps基準の暫定であり、Documentへ持ち込まない
-4. **bpmは有理数**: `f64` bpm禁止。有理数(またはミリbpm整数)で持ち、拍時刻(`60/bpm`秒)が`RationalTime`に畳めることをD1完了条件に含める
+4. **bpmは有理数**: `f64` bpm禁止。有理数で持ち、拍時刻(`60/bpm`秒)が`RationalTime`に畳めることをD1完了条件に含める。**小数bpm入力を許容する(ユーザー決定 2026-07-12: DAW慣行。例 120.35 → 12035/100を既約化)**。当初併記の「ミリbpm整数」案は棄却 — 小数桁数を3桁に固定する理由がなく、有理数が上位互換。`bpm > 0`をvalidate(M2E-16のFpsと同型)
 5. **`ExportOverlayRequest`形式のジョブミラーを温存しない**: D3はDocument→render層リクエスト(`BackgroundTextureRequest`系)を直結する。ProjectV1→PreparedProject→ExportOverlayRequestの4層コピーをD3で廃止する
 
 ## D1-prelude(M2E-12 / 監査SC-2)
