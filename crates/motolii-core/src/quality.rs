@@ -5,12 +5,14 @@ use crate::FrameDesc;
 /// プレビュー/書き出しで共有する品質パラメータ。
 ///
 /// 同一の `render_frame(..., quality)` を通し、差分はここの値だけにする(落とし穴B-4)。
-/// v1では `resolution_scale` のみ実効。他フィールドは口の確保。
+/// v1の実効: `resolution_scale`(解像度)と`precise_color`(合成分岐選択 — M2E-18、実装は恒等)。
+/// `effect_samples`は口のみ。`render_desc`は解像度のみ写し、色空間は変えない。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Quality {
     /// 1 = full, 2 = 1/2, 4 = 1/4。内部レンダ解像度を width/scale × height/scale にする。
     pub resolution_scale: u32,
-    /// false のとき sRGB 空間ブレンド等の近似を許容(v1では未使用)。
+    /// false のとき sRGB 空間ブレンド等の近似を許容。
+    /// 合成分岐(`select_composite_color_path`)まで配線済み。v1実装は両枝とも同一WGSL(恒等)。
     pub precise_color: bool,
     /// モーションブラー等プラグインのサンプル数の口(v1では未使用)。
     pub effect_samples: SampleTier,
@@ -39,6 +41,7 @@ impl Quality {
     };
 
     /// `FrameDesc` を内部レンダ解像度へ写す。scale=1 では入力と同一。
+    /// 色空間は触らない(`precise_color`の合成分岐は`select_composite_color_path`側)。
     pub fn render_desc(self, desc: FrameDesc) -> FrameDesc {
         let scale = self.resolution_scale.max(1);
         if scale == 1 {
