@@ -149,7 +149,7 @@ ParamDriverは`build_track`で`DataTrack`を返すだけ。ピクセルに触ら
 
 > 口を広げる提案は**キャッシュキーへの寄与定義とセット**で出すこと(M4「キャッシュキーの完全性原則」)。キャッシュ自体はホストの専権事項で、プラグインからのキャッシュヒント・自前キャッシュは受けない(§3-3)。コスト優先度はホストが実測する。
 
-- 動的ロード(dylib)・WASM配布(v2)。発見・導入・lock/tapの設計草案は[plugin-ecosystem.md](plugin-ecosystem.md)(実装はヒーロー後)
+- 動的ロード(dylib)・WASM配布(v2)。発見・導入は[plugin-ecosystem.md](plugin-ecosystem.md) — **最小地図は早期(GAP-13)**、フル tap/Sync はヒーロー後(V2-8)。ホストは課金・認証サーバを持たない。推奨は GitHub へソース／パッケージを載せる
 - 評価コンテキストのインスタンスインデックス`(i, count)`(F-7) — 型`InstanceIndex`を予約。**配線口は`RenderCtx::instance`(M2E-7)**。Repeater 実装まで常に None
 - サムネイル画像フィールド(F-8、口だけ将来)
 - ハンドルID化(A-3: 現状は`&wgpu::Texture`直渡し。内部更新閉じ込めは後続)

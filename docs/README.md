@@ -19,7 +19,7 @@
 3. [pitfalls-and-roadmap.md](pitfalls-and-roadmap.md) — **最重要・最大**。落とし穴カタログ(A〜H、先行プロジェクト死因分析+LLM開発規律込み)とロードマップ(M0〜M5)、凍結ゲート
 4. 着手するマイルストーンの仕様書: [specs/README.md](specs/README.md)(プロセスとステータス表)→ 各`specs/M*.md`(タスク表と**末尾の「実装ガード」節**の両方を読む)
 5. プラグインを書く/量産させる時: [plugin-authoring.md](plugin-authoring.md)(LLM/人間共通の契約・禁止事項・型紙)
-6. 発見・導入・コミュニティ設計(v2)を触る時: [plugin-ecosystem.md](plugin-ecosystem.md)(分散索引。実装はヒーロー後)
+6. 発見・導入・コミュニティ設計を触る時: [plugin-ecosystem.md](plugin-ecosystem.md)(ホストレス。**最小地図は早期 GAP-13**、フル Sync はヒーロー後)
 7. 依存・参考リポジトリを調べる時: [references.md](references.md)(ライセンス区分つき。GPL系はコードを読むことすら禁止)
 
 ## ファイルマップ
@@ -33,7 +33,7 @@
 | [pitfalls-and-roadmap.md](pitfalls-and-roadmap.md) | 落とし穴カタログ+ロードマップ+凍結ゲート | 現行 |
 | [plugin-authoring.md](plugin-authoring.md) | プラグイン作者向け規約(LLM並列量産の契約書) | 現行(2026-07-10) |
 | [plugin-resources.md](plugin-resources.md) | プラグインのリソースライフサイクル・アセット境界・時間参照(F-10/F-11) | **凍結ゲートで確定**(実装残はM2) |
-| [plugin-ecosystem.md](plugin-ecosystem.md) | 発見・導入・再現(分散tap/lock/D&D/見通し)。配布はv2。UIはReaPack基調(Civitai Manager UIは不採用) | 設計草案(2026-07-12) |
+| [plugin-ecosystem.md](plugin-ecosystem.md) | 発見・導入・再現(分散tap/lock/D&D/見通し)。最小地図=早期。UIはReaPack基調(Civitai Manager UIは不採用) | 設計(2026-07-12 本番寄せ) |
 | [references.md](references.md) | 依存候補・参考リポジトリ(ライセンス区分) | 現行 |
 | [ae-pain-points.md](ae-pain-points.md) | AEユーザー不満の体系化+我々の解決タグ(プラグイン窓口仮説の検証) | 現行 |
 | [backlog.md](backlog.md) | イシュー候補台帳(現在地サマリ+横断/新規ギャップ/v2バックログ) | 現行 |

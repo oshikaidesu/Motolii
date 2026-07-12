@@ -7,7 +7,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 1. [docs/README.md](docs/README.md) — プロジェクト全体像・ドキュメントの読む順序・用語
 2. 着手するフェーズの仕様書([docs/specs/](docs/specs/README.md)): タスク表(完了条件・依存つき)と、**末尾の「実装ガード」節**(先行ツールの失敗・ユーザー不満をタスクIDに紐付けた注意リスト。完了条件を追加している場合がある)
 3. プラグインを書く/量産する時: [docs/plugin-authoring.md](docs/plugin-authoring.md)(種別・NodeDesc必須欄・禁止事項・型紙)
-4. 発見・導入・コミュニティ設計(v2)を触る時: [docs/plugin-ecosystem.md](docs/plugin-ecosystem.md)(実装はヒーロー後)
+4. 発見・導入・コミュニティ設計を触る時: [docs/plugin-ecosystem.md](docs/plugin-ecosystem.md)(最小地図は早期 GAP-13。フル Sync はヒーロー後)
 
 ## 絶対規律(破ると設計の根拠が崩れる。レビュー最重視項目)
 
