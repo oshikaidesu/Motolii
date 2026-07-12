@@ -12,7 +12,8 @@ fn doc_crate_can_use_canonical_types_from_core() {
         motolii_core::PixelFormat::Rgba8Unorm,
         motolii_core::ColorSpace::Srgb,
         true,
-    ));
+    ))
+    .expect("non-zero FrameDesc");
     assert_eq!(
         tx.point_to_px(CanonicalPoint::CENTER),
         PixelPoint { x: 960.0, y: 540.0 }

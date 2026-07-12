@@ -10,7 +10,9 @@ mod time;
 mod time_map;
 
 pub use camera::CompCamera;
-pub use canonical::{CanonicalPoint, CanonicalSize, PixelPoint, PixelSize, ViewportTransform};
+pub use canonical::{
+    CanonicalPoint, CanonicalSize, PixelPoint, PixelSize, ViewportTransform, ViewportTransformError,
+};
 pub use frame::{
     premultiply_rgba_f32, premultiply_rgba_u8, ColorSpace, CpuFrame, FrameDesc, FrameDescError,
     PixelFormat,

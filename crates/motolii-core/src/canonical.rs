@@ -39,16 +39,29 @@ pub struct ViewportTransform {
     height_px: u32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum ViewportTransformError {
+    #[error("ViewportTransform: width must be non-zero")]
+    ZeroWidth,
+    #[error("ViewportTransform: height must be non-zero")]
+    ZeroHeight,
+}
+
 impl ViewportTransform {
-    pub fn new(width_px: u32, height_px: u32) -> Self {
-        assert!(width_px > 0 && height_px > 0, "viewport must be non-zero");
-        Self {
+    pub fn new(width_px: u32, height_px: u32) -> Result<Self, ViewportTransformError> {
+        if width_px == 0 {
+            return Err(ViewportTransformError::ZeroWidth);
+        }
+        if height_px == 0 {
+            return Err(ViewportTransformError::ZeroHeight);
+        }
+        Ok(Self {
             width_px,
             height_px,
-        }
+        })
     }
 
-    pub fn from_desc(desc: &FrameDesc) -> Self {
+    pub fn from_desc(desc: &FrameDesc) -> Result<Self, ViewportTransformError> {
         Self::new(desc.width, desc.height)
     }
 
@@ -76,10 +89,11 @@ impl ViewportTransform {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{ColorSpace, PixelFormat};
 
     #[test]
     fn canonical_center_maps_to_pixel_center() {
-        let tx = ViewportTransform::new(1920, 1080);
+        let tx = ViewportTransform::new(1920, 1080).expect("valid viewport");
         assert_eq!(
             tx.point_to_px(CanonicalPoint::CENTER),
             PixelPoint { x: 960.0, y: 540.0 }
@@ -88,7 +102,7 @@ mod tests {
 
     #[test]
     fn canonical_uses_height_as_unit_and_y_up() {
-        let tx = ViewportTransform::new(1920, 1080);
+        let tx = ViewportTransform::new(1920, 1080).expect("valid viewport");
         assert_eq!(
             tx.point_to_px(CanonicalPoint { x: 0.5, y: 0.25 }),
             PixelPoint {
@@ -105,6 +119,51 @@ mod tests {
                 width: 270.0,
                 height: 540.0
             }
+        );
+    }
+
+    #[test]
+    fn rejects_zero_width() {
+        assert_eq!(
+            ViewportTransform::new(0, 1080),
+            Err(ViewportTransformError::ZeroWidth)
+        );
+    }
+
+    #[test]
+    fn rejects_zero_height() {
+        assert_eq!(
+            ViewportTransform::new(1920, 0),
+            Err(ViewportTransformError::ZeroHeight)
+        );
+    }
+
+    #[test]
+    fn rejects_zero_dimension_frame_desc() {
+        let desc = FrameDesc {
+            width: 0,
+            height: 1080,
+            stride: 0,
+            format: PixelFormat::Rgba8Unorm,
+            color_space: ColorSpace::Srgb,
+            premultiplied: true,
+        };
+        assert_eq!(
+            ViewportTransform::from_desc(&desc),
+            Err(ViewportTransformError::ZeroWidth)
+        );
+
+        let desc = FrameDesc {
+            width: 1920,
+            height: 0,
+            stride: 1920 * 4,
+            format: PixelFormat::Rgba8Unorm,
+            color_space: ColorSpace::Srgb,
+            premultiplied: true,
+        };
+        assert_eq!(
+            ViewportTransform::from_desc(&desc),
+            Err(ViewportTransformError::ZeroHeight)
         );
     }
 }

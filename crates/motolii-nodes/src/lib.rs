@@ -15,12 +15,16 @@ use motolii_plugin::{
 use wgpu::util::DeviceExt;
 
 // 互換: 既存呼び出しは nodes 経由のまま。正本は motolii-core(M2E-14)。
-pub use motolii_core::{CanonicalPoint, CanonicalSize, PixelPoint, PixelSize, ViewportTransform};
+pub use motolii_core::{
+    CanonicalPoint, CanonicalSize, PixelPoint, PixelSize, ViewportTransform, ViewportTransformError,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum NodeError {
     #[error(transparent)]
     Plugin(#[from] PluginError),
+    #[error(transparent)]
+    Viewport(#[from] ViewportTransformError),
     #[error("{node} requires premultiplied {role} frame")]
     PremultipliedRequired {
         node: &'static str,
@@ -157,7 +161,7 @@ impl FilterNode {
         input: TextureRef<'_>,
         output: TextureRef<'_>,
     ) -> Result<(), NodeError> {
-        let _viewport = ViewportTransform::from_desc(&output.desc);
+        let _viewport = ViewportTransform::from_desc(&output.desc)?;
         let mut encoder = gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -368,7 +372,7 @@ impl OverlayNode {
             require_premultiplied("overlay", "input", input.desc)?;
             require_premultiplied("overlay", "output", output.desc)?;
         }
-        let viewport = ViewportTransform::from_desc(&output.desc);
+        let viewport = ViewportTransform::from_desc(&output.desc)?;
         let uniform = overlay_uniform(&viewport, self.shape, output.desc.premultiplied);
         let uniform_buffer = gpu
             .device
