@@ -21,6 +21,8 @@ pub enum JournalEdit {
     },
     /// テスト注入専用 — 意図的にリプレイ失敗させる。
     ForceReplayFail,
+    /// テスト注入専用 — リプレイ中に panic(ガード4 の catch_unwind / 隔離)。
+    ForceReplayPanic,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -80,6 +82,9 @@ fn apply_edit(doc: &mut Document, edit: &JournalEdit) -> Result<(), ReplayApplyE
             doc.bpm = Bpm::try_new(*num, *den)?;
         }
         JournalEdit::ForceReplayFail => return Err(ReplayApplyError::Forced),
+        JournalEdit::ForceReplayPanic => {
+            panic!("motolii: injected journal replay panic");
+        }
     }
     doc.validate()?;
     Ok(())

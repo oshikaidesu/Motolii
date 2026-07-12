@@ -12,6 +12,7 @@
 
 use std::fs;
 use std::io;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
@@ -32,6 +33,10 @@ use super::format::{
 use super::replay::{
     document_fingerprint, edit_payload, load_generation_snapshot, replay_journal, snapshot_payload,
     JournalEdit, ReplayOptions, ReplayOutcome,
+};
+use super::restore::{
+    clear_restore_attempted, load_restore_attempted, marker_matches_scan, quarantine_journal,
+    write_restore_attempted,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,6 +85,9 @@ pub enum ProjectError {
     MissingMainDocument(PathBuf),
     #[error("main document corrupt and no recoverable journal/generation at {path}")]
     Unrecoverable { path: PathBuf },
+    /// リプレイ中の panic / 毒 journal。呼び出し側で隔離済みのとき内部シグナルとして使う。
+    #[error("journal replay panicked or was poisoned")]
+    JournalPoisoned,
 }
 
 fn new_journal_salt(document_path: &Path) -> Result<u64, ProjectError> {
@@ -420,15 +428,21 @@ fn reconstruct_journal_tip(
     if scan.frames.is_empty() {
         return Ok(base_from_latest_generation(document_path, catalog));
     }
-    let replay = replay_journal(
-        document_path,
-        Document::new_v1(),
-        scan,
-        catalog,
-        &ReplayOptions {
-            fallback_on_failure: false,
-        },
-    );
+    let replay = match catch_unwind(AssertUnwindSafe(|| {
+        replay_journal(
+            document_path,
+            Document::new_v1(),
+            scan,
+            catalog,
+            &ReplayOptions {
+                fallback_on_failure: false,
+            },
+        )
+    })) {
+        Ok(outcome) => outcome,
+        // tip 推定中の panic は毒 journal 扱い(呼び出し側で隔離)
+        Err(_) => return Err(ProjectError::JournalPoisoned),
+    };
     if replay.replay_failures.is_empty() {
         return Ok(Some(replay.document));
     }
@@ -442,6 +456,76 @@ fn reconstruct_journal_tip(
         }
     }
     Ok(base_from_latest_generation(document_path, catalog))
+}
+
+/// 前回クラッシュのマーカーがあれば隔離し、無ければリプレイ前マーカーを書く。
+enum RestorePrep {
+    /// 前回と同じ tip の復元が未完了 → journal を隔離済み。リプレイしない。
+    QuarantinedPriorAttempt,
+    Proceed,
+}
+
+fn prepare_restore_attempt(
+    document_path: &Path,
+    scan: &JournalScanOutcome,
+) -> Result<RestorePrep, ProjectError> {
+    if let Some(marker) = load_restore_attempted(document_path)? {
+        if marker_matches_scan(&marker, scan) {
+            quarantine_journal(document_path)?;
+            clear_restore_attempted(document_path)?;
+            return Ok(RestorePrep::QuarantinedPriorAttempt);
+        }
+        clear_restore_attempted(document_path)?;
+    }
+    write_restore_attempted(document_path, scan)?;
+    Ok(RestorePrep::Proceed)
+}
+
+fn quarantine_and_clear_marker(document_path: &Path) -> Result<(), ProjectError> {
+    quarantine_journal(document_path)?;
+    clear_restore_attempted(document_path)?;
+    Ok(())
+}
+
+fn finish_restore_success(document_path: &Path) -> Result<(), ProjectError> {
+    clear_restore_attempted(document_path)?;
+    Ok(())
+}
+
+/// ガード4: マーカー付きリプレイ。失敗/panic 時は journal を隔離する。
+fn replay_with_restore_guard(
+    document_path: &Path,
+    base: Document,
+    scan: &JournalScanOutcome,
+    catalog: &GenerationCatalog,
+) -> Result<ReplayOutcome, ProjectError> {
+    let caught = catch_unwind(AssertUnwindSafe(|| {
+        replay_journal(
+            document_path,
+            base,
+            scan,
+            catalog,
+            &ReplayOptions {
+                fallback_on_failure: true,
+            },
+        )
+    }));
+
+    match caught {
+        Ok(outcome) => {
+            if outcome.replay_failures.is_empty() {
+                finish_restore_success(document_path)?;
+                Ok(outcome)
+            } else {
+                quarantine_and_clear_marker(document_path)?;
+                Ok(outcome)
+            }
+        }
+        Err(_) => {
+            quarantine_and_clear_marker(document_path)?;
+            Err(ProjectError::JournalPoisoned)
+        }
+    }
 }
 
 /// replay 結果が anchor より古い(巻き戻し)なら anchor を選ぶ。
@@ -523,10 +607,36 @@ fn open_with_main(
 
     let (catalog, _) = resolve_catalog(document_path, scan.header.file_salt)?;
     let main_fp = document_fingerprint(&base)?;
-    let relation = tip_relation(document_path, &catalog, main_fp, &scan)?;
+
+    match prepare_restore_attempt(document_path, &scan)? {
+        RestorePrep::QuarantinedPriorAttempt => {
+            return Ok(OpenProjectOutcome {
+                document: base,
+                source: RecoverySource::MainFile,
+                truncated_bytes: truncated,
+                replay: None,
+            });
+        }
+        RestorePrep::Proceed => {}
+    }
+
+    let relation = match tip_relation(document_path, &catalog, main_fp, &scan) {
+        Ok(r) => r,
+        Err(ProjectError::JournalPoisoned) => {
+            quarantine_and_clear_marker(document_path)?;
+            return Ok(OpenProjectOutcome {
+                document: base,
+                source: RecoverySource::MainFile,
+                truncated_bytes: truncated,
+                replay: None,
+            });
+        }
+        Err(e) => return Err(e),
+    };
 
     match relation {
         TipRelation::KeepMain => {
+            finish_restore_success(document_path)?;
             return Ok(OpenProjectOutcome {
                 document: base,
                 source: RecoverySource::MainFile,
@@ -535,6 +645,7 @@ fn open_with_main(
             });
         }
         TipRelation::MainBehind(tip) => {
+            finish_restore_success(document_path)?;
             return Ok(OpenProjectOutcome {
                 document: *tip,
                 source: RecoverySource::JournalReplay,
@@ -546,6 +657,7 @@ fn open_with_main(
     }
 
     if scan.frames.is_empty() {
+        finish_restore_success(document_path)?;
         return Ok(OpenProjectOutcome {
             document: base,
             source: if truncated > 0 {
@@ -558,15 +670,18 @@ fn open_with_main(
         });
     }
 
-    let replay = replay_journal(
-        document_path,
-        base.clone(),
-        &scan,
-        &catalog,
-        &ReplayOptions {
-            fallback_on_failure: true,
-        },
-    );
+    let replay = match replay_with_restore_guard(document_path, base.clone(), &scan, &catalog) {
+        Ok(outcome) => outcome,
+        Err(ProjectError::JournalPoisoned) => {
+            return Ok(OpenProjectOutcome {
+                document: base,
+                source: RecoverySource::MainFile,
+                truncated_bytes: truncated,
+                replay: None,
+            });
+        }
+        Err(e) => return Err(e),
+    };
 
     let (document, replay, kept_anchor) =
         prefer_anchor_against_rewind(document_path, &catalog, base, replay)?;
@@ -638,15 +753,30 @@ fn open_without_main(document_path: &Path) -> Result<OpenProjectOutcome, Project
         });
     }
 
-    let replay = replay_journal(
-        document_path,
-        base.clone(),
-        &scan,
-        &catalog,
-        &ReplayOptions {
-            fallback_on_failure: true,
-        },
-    );
+    match prepare_restore_attempt(document_path, &scan)? {
+        RestorePrep::QuarantinedPriorAttempt => {
+            return Ok(OpenProjectOutcome {
+                document: base,
+                source: RecoverySource::GenerationRecovery,
+                truncated_bytes: truncated,
+                replay: None,
+            });
+        }
+        RestorePrep::Proceed => {}
+    }
+
+    let replay = match replay_with_restore_guard(document_path, base.clone(), &scan, &catalog) {
+        Ok(outcome) => outcome,
+        Err(ProjectError::JournalPoisoned) => {
+            return Ok(OpenProjectOutcome {
+                document: base,
+                source: RecoverySource::GenerationRecovery,
+                truncated_bytes: truncated,
+                replay: None,
+            });
+        }
+        Err(e) => return Err(e),
+    };
 
     let (document, replay, _kept_anchor) =
         prefer_anchor_against_rewind(document_path, &catalog, base, replay)?;
@@ -670,6 +800,15 @@ pub fn open_project(document_path: &Path) -> Result<OpenProjectOutcome, ProjectE
         }
         MainLoad::Corrupt => open_without_main(document_path),
     }
+}
+
+/// テスト注入: リプレイ前マーカーを植えて「前回クラッシュ」を模擬する。
+#[doc(hidden)]
+pub fn inject_restore_attempted_marker(document_path: &Path) -> Result<(), ProjectError> {
+    let journal_path = journal_path_for_document(document_path);
+    let scan = scan_journal(&journal_path, &ScanJournalOptions::default())?;
+    write_restore_attempted(document_path, &scan)?;
+    Ok(())
 }
 
 /// テスト注入: ジャーナル末尾に壊れたバイト列を付与する。

@@ -575,3 +575,113 @@ fn missing_fingerprint_main_behind_recovers_forward() {
     assert_eq!(opened.source, RecoverySource::JournalReplay);
     let _ = fs::remove_dir_all(dir);
 }
+
+#[test]
+fn replay_failure_quarantines_journal_and_second_open_skips_it() {
+    use motolii_doc::{quarantine_dir_for_document, restore_attempted_path_for_document};
+
+    let dir = unique_dir("quarantine-fail");
+    let path = dir.join("doc.json");
+    let mut doc = Document::new_v1();
+    doc.bpm = Bpm::try_new(100, 1).unwrap();
+    save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 100, den: 1 });
+    save_edit_only(&path, &doc, JournalEdit::ForceReplayFail);
+
+    let journal = dir.join(".motolii/journal.wal");
+    assert!(journal.exists());
+
+    let first = open_project(&path).unwrap();
+    assert_eq!(first.source, RecoverySource::SnapshotFallback);
+    assert_eq!(first.document.bpm, Bpm::try_new(100, 1).unwrap());
+    assert!(!journal.exists(), "poison journal must be quarantined");
+    assert!(!restore_attempted_path_for_document(&path).exists());
+    let qdir = quarantine_dir_for_document(&path);
+    assert!(qdir.exists());
+    assert!(
+        fs::read_dir(&qdir).unwrap().next().is_some(),
+        "quarantine dir should hold relocated wal"
+    );
+
+    // 2回目は隔離済み journal を再リプレイしない(main / 世代のみ)
+    let second = open_project(&path).unwrap();
+    assert_eq!(second.source, RecoverySource::MainFile);
+    assert_eq!(second.document.bpm, Bpm::try_new(100, 1).unwrap());
+    assert!(second.replay.is_none());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn replay_panic_quarantines_and_second_open_uses_main() {
+    use motolii_doc::{quarantine_dir_for_document, restore_attempted_path_for_document};
+
+    let dir = unique_dir("quarantine-panic");
+    let path = dir.join("doc.json");
+    let mut doc = Document::new_v1();
+    doc.bpm = Bpm::try_new(88, 1).unwrap();
+    save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 88, den: 1 });
+    save_edit_only(&path, &doc, JournalEdit::ForceReplayPanic);
+
+    let journal = dir.join(".motolii/journal.wal");
+    let first = open_project(&path).unwrap();
+    assert_eq!(first.document.bpm, Bpm::try_new(88, 1).unwrap());
+    assert!(!journal.exists());
+    assert!(!restore_attempted_path_for_document(&path).exists());
+    assert!(quarantine_dir_for_document(&path)
+        .read_dir()
+        .unwrap()
+        .next()
+        .is_some());
+
+    let second = open_project(&path).unwrap();
+    assert_eq!(second.source, RecoverySource::MainFile);
+    assert_eq!(second.document.bpm, Bpm::try_new(88, 1).unwrap());
+    assert!(second.replay.is_none());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn stale_restore_marker_quarantines_without_replaying() {
+    use motolii_doc::{
+        inject_restore_attempted_marker, quarantine_dir_for_document,
+        restore_attempted_path_for_document,
+    };
+
+    let dir = unique_dir("stale-marker");
+    let path = dir.join("doc.json");
+    let mut doc = Document::new_v1();
+    doc.bpm = Bpm::try_new(42, 1).unwrap();
+    save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 42, den: 1 });
+
+    // 前回 open がリプレイ前に落ちた状態を模擬
+    inject_restore_attempted_marker(&path).unwrap();
+    assert!(restore_attempted_path_for_document(&path).exists());
+
+    let opened = open_project(&path).unwrap();
+    assert_eq!(opened.source, RecoverySource::MainFile);
+    assert_eq!(opened.document.bpm, Bpm::try_new(42, 1).unwrap());
+    assert!(!dir.join(".motolii/journal.wal").exists());
+    assert!(!restore_attempted_path_for_document(&path).exists());
+    assert!(quarantine_dir_for_document(&path)
+        .read_dir()
+        .unwrap()
+        .next()
+        .is_some());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn successful_open_clears_restore_marker() {
+    use motolii_doc::restore_attempted_path_for_document;
+
+    let dir = unique_dir("clear-marker");
+    let path = dir.join("doc.json");
+    let mut doc = Document::new_v1();
+    doc.bpm = Bpm::try_new(120, 1).unwrap();
+    save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 120, den: 1 });
+
+    let opened = open_project(&path).unwrap();
+    assert_eq!(opened.source, RecoverySource::JournalReplay);
+    assert!(!restore_attempted_path_for_document(&path).exists());
+    assert!(dir.join(".motolii/journal.wal").exists());
+    let _ = fs::remove_dir_all(dir);
+}
