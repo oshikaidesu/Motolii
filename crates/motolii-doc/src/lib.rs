@@ -1,14 +1,15 @@
-//! motolii-doc: ドキュメント所有権骨格(F-2) + D1-prelude(M2E-12) + D1aスキーマ + D1b検証。
+//! motolii-doc: ドキュメント所有権骨格(F-2) + D1-prelude(M2E-12) + D1aスキーマ + D1b検証 + D1c永続化。
 //!
 //! 読み手(レンダ・書き出し・解析)は`Arc<Document>`スナップショットのみを受け取る。
 //! `edit`は戻り値を持たない — 参照漏洩で凍結を封じないため。
 //!
-//! **D1a**: スキーマ本体。**D1b**: 保存前`validate`(ガード1)。永続I/O・ジャーナルはD1c/D1d。
+//! **D1a**: スキーマ本体。**D1b**: 保存前`validate`(ガード1)。**D1c**: アトミック保存/読込。ジャーナルはD1d。
 
 mod asset;
 mod bpm;
 mod ids;
 mod param;
+mod persist;
 mod schema;
 mod track_id;
 mod validate;
@@ -22,6 +23,11 @@ pub use asset::{Asset, AssetError, AssetId, AssetTable};
 pub use bpm::{Bpm, BpmError};
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
 pub use param::{DocParam, LookAtAxis};
+pub use persist::{
+    detect_cloud_sync, load_document, load_document_bytes, save_document,
+    save_document_with_options, CloudSyncHint, PersistError, SaveAbortAfter, SaveOptions,
+    READER_VERSION,
+};
 pub use schema::{
     BlendMode, Clip, ClipSource, ClippingMaskSettings, Composition, CompositionError,
     EffectInstance, Group, ItemEnvelope, MaskMode, PathOp, Soundtrack, SoundtrackError, Track,

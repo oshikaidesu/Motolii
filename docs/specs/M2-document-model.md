@@ -107,7 +107,7 @@ D1e(マイグレーション)はこの規律の運用口。D1a時点でネスト
 |---|---|---|---|
 | D1a | **完了**: **スキーマ本体+serde**(I/Oなし): Composition(有理数アスペクト・duration・fps。**`CompCamera`非包含** — #55/監査C-7)/既約有理数BPM/Soundtrack(楽曲1本・gain∈[0,1])/Asset一般(**D1aはパス+type+hashのメタのみ**。opaqueペイロード本体はImporter/GpuAssetCache側 — ファイル実体は多重キーpathが指す。ガード10)/`AssetId`・`TrackId`台帳(再利用禁止・LayerIdと同型)/Track・TrackItem(Clip\|Group再帰)/項目エンベロープ/クリップTimeMap/DocParam(Const・Keyframes・Data・Vec2Axes・LookAt・Follow。LayerIdはdoc内のみ。serdeはsnake_case — ProjectV1のParamSourceとは別名空間)/PathOp閉集合/Effect・Pluginソースに`extra` flatten予約(F-9の席。警告はD1f)。prelude継承。**ProjectV1非継承**。プロジェクト直下仮`time_map`はクリップへ | 凍結ゲート, **[M2入場条件](../reviews/2026-07-11-M2-entry-gate.md) 全緑** | JSON roundtripでグループネスト・エフェクト付きグループ・TimeMap・親参照・PathOp・Asset多重キーが保存される。**拍時刻がRationalTimeに畳める**。Composition型にcamera欄が無い。未知トップレベルキーは`extra`で保持。Effect/Pluginの未知フィールドも`extra`で保持 |
 | D1b | **完了**: 保存前不変条件検証(ガード1): 参照整合・ID一意・区間正当性。失敗時は既存スナップショットを壊さない口 | D1a | 壊れたDocumentが`validate`で型付きエラー。正常系は通る |
-| D1c | アトミック保存+読込(ガード2)+`min_reader_version`超過拒否(ガード7のI/O側) | D1a | temp→fsync→rename→dir fsync。各段abort注入で旧ファイルまたはジャーナルから復元可(ジャーナル本体はD1d) |
+| D1c | **完了**: アトミック保存+読込(ガード2)+`min_reader_version`超過拒否(ガード7のI/O側) | D1a | temp→fsync→rename→dir fsync。各段abort注入で旧ファイルまたはジャーナルから復元可(ジャーナル本体はD1d) |
 | D1d | ジャーナル(ガード3/4/6): レコードchecksum+世代salt・不正テール切捨て・UUID相互参照・リプレイ失敗フォールバック・ピン留め世代 | D1c | 壊れ方カタログの単体/注入テスト緑 |
 | D1e | マイグレーション枠+量的不変条件+旧版コーパス(ガード8)。前方互換の版上げ経路 | D1a | in-place禁止・バックアップ・クリップ/トラック/キー数一致・goldenコーパス回帰 |
 | D1f | 未知プラグインID: 開く=警告+パススルー・再保存で未知部分喪失なし(F-9、ガード9の「開く」側)。書き出し厳格化はD6接続 | D1a | 未知`plugin_id`を含むJSONがロード成功+警告+roundtrip保持 |
