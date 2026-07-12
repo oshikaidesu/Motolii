@@ -386,6 +386,85 @@ fn main_older_than_journal_tip_recovers_forward() {
 }
 
 #[test]
+fn main_behind_poison_wal_is_quarantined() {
+    use motolii_doc::{quarantine_dir_for_document, restore_attempted_path_for_document};
+
+    let dir = unique_dir("main-behind-poison");
+    let path = dir.join("doc.json");
+    let mut older = Document::new_v1();
+    older.bpm = Bpm::try_new(100, 1).unwrap();
+    save_with_edit(&path, &older, JournalEdit::SetBpm { num: 100, den: 1 });
+
+    let mut newer = Document::new_v1();
+    newer.bpm = Bpm::try_new(200, 1).unwrap();
+    save_with_edit(&path, &newer, JournalEdit::SetBpm { num: 200, den: 1 });
+
+    // tip 指紋は 200 のまま、毒 Edit を足す
+    save_edit_only(&path, &newer, JournalEdit::ForceReplayFail);
+    // main だけ旧世代へ — MainBehind + reconstruct が毒を世代フォールバックで吸収する経路
+    save_document(&path, &older).unwrap();
+
+    let journal = dir.join(".motolii/journal.wal");
+    assert!(journal.exists());
+
+    let first = open_project(&path).unwrap();
+    assert_eq!(first.document.bpm, Bpm::try_new(200, 1).unwrap());
+    assert_eq!(first.source, RecoverySource::JournalReplay);
+    assert!(
+        !journal.exists(),
+        "MainBehind must quarantine absorbed poison WAL"
+    );
+    assert!(!restore_attempted_path_for_document(&path).exists());
+    assert!(quarantine_dir_for_document(&path)
+        .read_dir()
+        .unwrap()
+        .next()
+        .is_some());
+    // tip を main に落としているので次回も 200、かつ再リプレイ無し
+    assert_eq!(
+        load_document(&path).unwrap().bpm,
+        Bpm::try_new(200, 1).unwrap()
+    );
+
+    let second = open_project(&path).unwrap();
+    assert_eq!(second.document.bpm, Bpm::try_new(200, 1).unwrap());
+    assert_eq!(second.source, RecoverySource::MainFile);
+    assert!(second.replay.is_none());
+    assert!(!journal.exists());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn restore_marker_survives_as_durable_file() {
+    use motolii_doc::{
+        inject_restore_attempted_marker, restore_attempted_path_for_document, scan_journal,
+        ScanJournalOptions,
+    };
+
+    let dir = unique_dir("marker-durable");
+    let path = dir.join("doc.json");
+    let mut doc = Document::new_v1();
+    doc.bpm = Bpm::try_new(55, 1).unwrap();
+    save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 55, den: 1 });
+
+    inject_restore_attempted_marker(&path).unwrap();
+    let marker_path = restore_attempted_path_for_document(&path);
+    assert!(marker_path.exists());
+    let meta = fs::metadata(&marker_path).unwrap();
+    assert!(meta.len() > 0);
+    // tmp 残骸が残っていない(rename 完了)
+    assert!(!marker_path.with_extension("json.tmp").exists());
+
+    let journal = dir.join(".motolii/journal.wal");
+    let scan = scan_journal(&journal, &ScanJournalOptions::default()).unwrap();
+    let bytes = fs::read(&marker_path).unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(v["file_salt"].as_u64().unwrap(), scan.header.file_salt);
+    assert_eq!(v["valid_bytes"].as_u64().unwrap(), scan.valid_bytes);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn edits_since_snapshot_persists_across_saves() {
     let dir = unique_dir("edit-counter");
     let path = dir.join("doc.json");

@@ -345,47 +345,50 @@ fn tip_relation(
     catalog: &GenerationCatalog,
     main_fp: u64,
     scan: &JournalScanOutcome,
-) -> Result<TipRelation, ProjectError> {
-    let reconstructed = reconstruct_journal_tip(document_path, catalog, scan)?;
+) -> Result<(TipRelation, bool), ProjectError> {
+    let (reconstructed, journal_poisoned) = reconstruct_journal_tip(document_path, catalog, scan)?;
 
     // catalog 指紋があればそれを tip 証明に使う。無ければ再構成結果の指紋を tip とする。
     let tip_fp = match catalog.last_journaled_fingerprint {
         Some(fp) => fp,
         None => {
             let Some(tip_doc) = reconstructed.as_ref() else {
-                return Ok(TipRelation::KeepMain);
+                return Ok((TipRelation::KeepMain, journal_poisoned));
             };
             let tip_fp = document_fingerprint(tip_doc)?;
             if tip_fp == main_fp {
-                return Ok(TipRelation::InSync);
+                return Ok((TipRelation::InSync, journal_poisoned));
             }
             if main_matches_generation(document_path, catalog, main_fp)? {
                 // tip 再構成が main より新しい(指紋が違う)こと自体が前方復旧の根拠
-                return Ok(TipRelation::MainBehind(Box::new(tip_doc.clone())));
+                return Ok((
+                    TipRelation::MainBehind(Box::new(tip_doc.clone())),
+                    journal_poisoned,
+                ));
             }
             // 世代に無い main = 先行編集、または曖昧
-            return Ok(TipRelation::KeepMain);
+            return Ok((TipRelation::KeepMain, journal_poisoned));
         }
     };
 
     if tip_fp == main_fp {
-        return Ok(TipRelation::InSync);
+        return Ok((TipRelation::InSync, journal_poisoned));
     }
 
     let Some(tip_doc) = reconstructed else {
-        return Ok(TipRelation::KeepMain);
+        return Ok((TipRelation::KeepMain, journal_poisoned));
     };
     let reconstructed_fp = document_fingerprint(&tip_doc)?;
     if reconstructed_fp != tip_fp {
         // tip を証明できない — 巻き戻さない
-        return Ok(TipRelation::KeepMain);
+        return Ok((TipRelation::KeepMain, journal_poisoned));
     }
 
     if main_matches_generation(document_path, catalog, main_fp)? {
-        return Ok(TipRelation::MainBehind(Box::new(tip_doc)));
+        return Ok((TipRelation::MainBehind(Box::new(tip_doc)), journal_poisoned));
     }
 
-    Ok(TipRelation::KeepMain)
+    Ok((TipRelation::KeepMain, journal_poisoned))
 }
 
 fn main_matches_generation(
@@ -420,13 +423,15 @@ fn generation_seq_for_fingerprint(
 }
 
 /// journal を初期 Document からリプレイし tip 状態を得る。
+///
+/// 戻り値の bool はリプレイ失敗を世代フォールバックで吸収したか(毒 WAL)。
 fn reconstruct_journal_tip(
     document_path: &Path,
     catalog: &GenerationCatalog,
     scan: &JournalScanOutcome,
-) -> Result<Option<Document>, ProjectError> {
+) -> Result<(Option<Document>, bool), ProjectError> {
     if scan.frames.is_empty() {
-        return Ok(base_from_latest_generation(document_path, catalog));
+        return Ok((base_from_latest_generation(document_path, catalog), false));
     }
     let replay = match catch_unwind(AssertUnwindSafe(|| {
         replay_journal(
@@ -444,18 +449,18 @@ fn reconstruct_journal_tip(
         Err(_) => return Err(ProjectError::JournalPoisoned),
     };
     if replay.replay_failures.is_empty() {
-        return Ok(Some(replay.document));
+        return Ok((Some(replay.document), false));
     }
     if let Some(tip_fp) = catalog.last_journaled_fingerprint {
         for entry in catalog.generations.iter().rev() {
             if let Ok(snap) = load_generation_snapshot(document_path, entry.id) {
                 if document_fingerprint(&snap)? == tip_fp {
-                    return Ok(Some(snap));
+                    return Ok((Some(snap), true));
                 }
             }
         }
     }
-    Ok(base_from_latest_generation(document_path, catalog))
+    Ok((base_from_latest_generation(document_path, catalog), true))
 }
 
 /// 前回クラッシュのマーカーがあれば隔離し、無ければリプレイ前マーカーを書く。
@@ -620,7 +625,7 @@ fn open_with_main(
         RestorePrep::Proceed => {}
     }
 
-    let relation = match tip_relation(document_path, &catalog, main_fp, &scan) {
+    let (relation, journal_poisoned) = match tip_relation(document_path, &catalog, main_fp, &scan) {
         Ok(r) => r,
         Err(ProjectError::JournalPoisoned) => {
             quarantine_and_clear_marker(document_path)?;
@@ -636,7 +641,12 @@ fn open_with_main(
 
     match relation {
         TipRelation::KeepMain => {
-            finish_restore_success(document_path)?;
+            if journal_poisoned {
+                // tip 判定で失敗を吸収した場合も毒 WAL を残さない
+                quarantine_and_clear_marker(document_path)?;
+            } else {
+                finish_restore_success(document_path)?;
+            }
             return Ok(OpenProjectOutcome {
                 document: base,
                 source: RecoverySource::MainFile,
@@ -645,7 +655,14 @@ fn open_with_main(
             });
         }
         TipRelation::MainBehind(tip) => {
-            finish_restore_success(document_path)?;
+            if journal_poisoned {
+                // 世代フォールバックで tip を得ても毒レコードは次回再リプレイしない
+                quarantine_and_clear_marker(document_path)?;
+                // journal を捨てたので tip を main に落とし、次回の後方巻き戻りを防ぐ
+                save_document(document_path, tip.as_ref())?;
+            } else {
+                finish_restore_success(document_path)?;
+            }
             return Ok(OpenProjectOutcome {
                 document: *tip,
                 source: RecoverySource::JournalReplay,

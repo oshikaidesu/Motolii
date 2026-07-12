@@ -2,9 +2,11 @@
 //!
 //! 前回起動がリプレイ途中で落ちた場合、同じ tip のマーカーが残っていれば
 //! 再試行せず隔離し、世代/main へフォールバックする。
+//!
+//! マーカー書き込みは D1c と同型: temp 書き込み → file fsync → rename → dir fsync。
 
-use std::fs;
-use std::io;
+use std::fs::{self, File};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -77,8 +79,29 @@ pub fn write_restore_attempted(
     let marker = marker_from_scan(scan);
     let bytes = serde_json::to_vec_pretty(&marker).map_err(io::Error::other)?;
     let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, bytes)?;
-    fs::rename(&tmp, path)?;
+
+    let mut file = File::create(&tmp)?;
+    file.write_all(&bytes)?;
+    file.flush()?;
+    file.sync_all()?;
+    drop(file);
+
+    fs::rename(&tmp, &path)?;
+    sync_dir(&dir)?;
+    Ok(())
+}
+
+fn sync_dir(dir: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        let dir_file = File::open(dir)?;
+        dir_file.sync_all()?;
+    }
+    #[cfg(not(unix))]
+    {
+        // D1c と同じく非 Unix ではディレクトリ fsync を省略する。
+        let _ = dir;
+    }
     Ok(())
 }
 
@@ -106,4 +129,59 @@ pub fn quarantine_journal(document_path: &Path) -> Result<Option<PathBuf>, io::E
     let dest = qdir.join(format!("journal.wal.corrupt.{ts}"));
     fs::rename(&journal_path, &dest)?;
     Ok(Some(dest))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::journal::format::{
+        append_frame, encode_header, scan_journal, JournalFrame, JournalHeader, JournalRecordKind,
+        ScanJournalOptions, HEADER_LEN, JOURNAL_FORMAT_VERSION,
+    };
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use uuid::Uuid;
+
+    fn unique_dir() -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("motolii-restore-{nanos}"));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn restore_marker_write_fsync_roundtrip() {
+        let dir = unique_dir();
+        let doc = dir.join("doc.json");
+        fs::write(&doc, b"{}").unwrap();
+        let journal = journal_path_for_document(&doc);
+        fs::create_dir_all(journal.parent().unwrap()).unwrap();
+        let header = JournalHeader {
+            version: JOURNAL_FORMAT_VERSION,
+            file_salt: 42,
+        };
+        fs::write(&journal, encode_header(&header)).unwrap();
+        let frame = JournalFrame {
+            record_id: Uuid::new_v4(),
+            prev_id: None,
+            snapshot_ref: None,
+            record_salt: 42,
+            kind: JournalRecordKind::Edit,
+            payload: b"{}".to_vec(),
+        };
+        append_frame(&journal, &frame).unwrap();
+        let scan = scan_journal(&journal, &ScanJournalOptions::default()).unwrap();
+        assert!(scan.valid_bytes > HEADER_LEN as u64);
+
+        write_restore_attempted(&doc, &scan).unwrap();
+        let path = restore_attempted_path_for_document(&doc);
+        assert!(path.exists());
+        // rename 後に tmp が残っていないこと
+        assert!(!path.with_extension("json.tmp").exists());
+        let loaded = load_restore_attempted(&doc).unwrap().expect("marker");
+        assert!(marker_matches_scan(&loaded, &scan));
+        let _ = fs::remove_dir_all(dir);
+    }
 }
