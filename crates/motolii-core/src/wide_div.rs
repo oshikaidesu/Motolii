@@ -166,20 +166,40 @@ fn u256_div_rem(numer: U256, den: U256) -> Result<(U256, U256), RationalTimeErro
     Ok((quot, rem))
 }
 
-/// 余り / 分母 を f64 補間率へ。分母が巨大でも [0,1) に収まるよう構築する。
+/// 余り / 分母 を f64 補間率へ。契約は半開区間 `[0, 1)`。
+///
+/// 巨大分母で `rem = den - 1` のとき両者が同じ f64 へ丸まり `1.0` になり得るため、
+/// その場合は `1.0` 未満の最大有限値へ落とす(次サンプルへの早着と debug_assert 発火を防ぐ)。
 pub(crate) fn rem_over_den_f64(rem: U256, den: U256) -> f64 {
     if rem == U256::ZERO {
         return 0.0;
     }
-    // den が u128 に収まる典型経路
-    if den.hi == 0 && rem.hi == 0 {
-        return rem.lo as f64 / den.lo as f64;
+    let raw = if den.hi == 0 && rem.hi == 0 {
+        rem.lo as f64 / den.lo as f64
+    } else {
+        let shift = den.hi.leading_zeros().min(rem.hi.leading_zeros()).min(64);
+        let rem_f = ldexp_u256(rem, shift);
+        let den_f = ldexp_u256(den, shift);
+        rem_f / den_f
+    };
+    clamp_unit_interval_exclusive(raw)
+}
+
+/// 負時刻側の `1 - u` も同じ半開区間へ。
+pub(crate) fn complement_unit_interval(u: f64) -> f64 {
+    clamp_unit_interval_exclusive(1.0 - u)
+}
+
+/// `[0, 1)` へ制限。`>= 1` は `1.0` 未満の最大 f64、負は `0.0`。
+pub(crate) fn clamp_unit_interval_exclusive(u: f64) -> f64 {
+    if !u.is_finite() || u <= 0.0 {
+        return 0.0;
     }
-    // 共通右シフトで指数範囲へ落としてから割る
-    let shift = den.hi.leading_zeros().min(rem.hi.leading_zeros()).min(64);
-    let rem_f = ldexp_u256(rem, shift);
-    let den_f = ldexp_u256(den, shift);
-    rem_f / den_f
+    if u < 1.0 {
+        return u;
+    }
+    // 1.0 未満の最大有限値(next_down(1.0))
+    f64::from_bits(1.0f64.to_bits() - 1)
 }
 
 fn ldexp_u256(v: U256, shift: u32) -> f64 {
@@ -233,5 +253,44 @@ mod tests {
         let (q, rem, _den) = mul_div_floor_3den(rel, rn, td, od, rd).unwrap();
         assert_eq!(q, 0);
         assert!(rem != U256::ZERO);
+    }
+
+    #[test]
+    fn rem_over_den_never_reaches_one_for_den_minus_one() {
+        // 前提: 巨大 u128 では (MAX-1)/MAX が f64 で 1.0 に丸まる
+        let den_lo = u128::MAX;
+        let rem_lo = u128::MAX - 1;
+        let raw = rem_lo as f64 / den_lo as f64;
+        assert_eq!(raw, 1.0, "precondition: f64 ratio must round to 1.0");
+
+        let u = rem_over_den_f64(U256::from_u128(rem_lo), U256::from_u128(den_lo));
+        assert!(
+            (0.0..1.0).contains(&u),
+            "interpolation factor must stay in [0,1), got {u}"
+        );
+        assert_eq!(u, f64::from_bits(1.0f64.to_bits() - 1));
+
+        // 256bit 分母でも同様
+        let den = U256 {
+            hi: u128::MAX / 2,
+            lo: u128::MAX,
+        };
+        let rem = den.saturating_sub(U256::from_u128(1));
+        let u2 = rem_over_den_f64(rem, den);
+        assert!(
+            (0.0..1.0).contains(&u2),
+            "wide den rem=den-1 must stay in [0,1), got {u2}"
+        );
+    }
+
+    #[test]
+    fn complement_unit_interval_stays_below_one() {
+        // u が 0 へ丸まった場合でも 1-u が 1.0 にならない
+        let c = complement_unit_interval(0.0);
+        assert!((0.0..1.0).contains(&c));
+        assert_eq!(c, f64::from_bits(1.0f64.to_bits() - 1));
+
+        let c2 = complement_unit_interval(1.0);
+        assert_eq!(c2, 0.0);
     }
 }
