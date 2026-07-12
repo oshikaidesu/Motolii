@@ -61,11 +61,20 @@
 新規は手書きコピーより生成から始める(INF-7e):
 
 ```bash
-./scripts/new-plugin.sh filter glow --out /tmp/glow.rs
+./scripts/new-plugin.sh filter glow \
+  --out /tmp/glow.rs \
+  --out-test /tmp/glow_test.rs \
+  --plugin-import motolii_plugin::reference
 # kind: filter | layer_source | param_driver | composite
+# --out のみでも `{stem}_test.rs` を同ディレクトリに書く
 ```
 
-生成物は `validate_node_desc` を通る desc + テストスタブ付き。以下は手書き時の型紙。
+生成物は**2成果物**(M2E-10 / INF-7e。plugin↔testkit 循環回避):
+
+1. **製品コード**(`--out`) → `motolii-plugin` **クレート内**に貼る。`use crate::{...}` + `validate_node_desc` + **ParamDef 例**。`motolii_testkit` / `motolii_plugin::` は参照しない
+2. **testkit テスト**(`--out-test`) → `motolii-testkit/tests/` に置く。**purity**(`assert_*_pure` + `gpu_or_skip`) + **ゴールデン**(RGBA は `assert_rgba_close`、ParamDriver は値列)。期待オラクル未設定時は fail-closed
+
+`--plugin-import` でテスト側の `use` 先を登録モジュールに合わせる。以下は手書き時の型紙(クレート外の例。クレート内では `use crate::...`)。
 
 ```rust
 use motolii_plugin::{FilterPlugin, NodeDesc, PluginError, PluginId, RenderCtx, ResolvedParams, TextureRef, ValueType};
