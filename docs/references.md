@@ -41,6 +41,7 @@
 - オープンプラグイン標準(設計思想の参考): [CLAP](https://github.com/free-audio/clap)(Bitwig+u-he、**MIT**、C-ABI、明快なスレッドモデル、プロセス外ホスティング対応、WASM版=WCLAPあり)。OFX/VSTと違いオープンで、我々のOSS思想と親和。そのまま採用ではなく境界設計の参考
 - プラグイン発見・導入(v2・[plugin-ecosystem.md](plugin-ecosystem.md)、2026-07-12):
   - **採る**: [ReaPack Index Format](https://codeberg.org/cfillion/reapack/wiki/Index-Format) / [reapack-index](https://github.com/cfillion/reapack-index) — 分散リポジトリ購読・Sync・索引生成。UI骨格もここ(簡潔な一覧/repo管理)
+  - **DAW隣接**: [KVR Audio](https://www.kvraudio.com/) — ホスト外のプラグインディレクトリ(人気・レビュー)。Ableton Pack / FX Chain・Track Template — 袋と暗黙セット。VCV Rack Library + `.vcv` パッチ — 地図と共有集合の分離。詳細は[plugin-ecosystem.md](plugin-ecosystem.md) §1.5
   - **配管の参考**: ComfyUI Manager — custom node を git で揃える思想(Gradio UIは参考にしない)
   - **検出の思想のみ**: AviUtl2 カタログのハッシュ検出・ワンボタン導入。[Neosku/aviutl2-catalog](https://github.com/Neosku/aviutl2-catalog) — **中央index・popularity/trend/telemetryは反面教師**
   - **UI不採用**: Civitai Manager / Browser+ 系 — カード祭り・DL数中心の自己満足UI。課題意識(アプリ内導入・ハッシュ照合)だけ学び、見た目は借りない。ハッシュ腐敗時にLLMが直せない不透明状態も反面教師(observability節)

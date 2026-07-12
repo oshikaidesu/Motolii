@@ -605,3 +605,5 @@ AviUtl2 の `download→extract→copy` DSL は、ビルド中心に簡略化し
 | 2026-07-12 | §1.1追記: 粒ノードは再発明防止が動機。look/WGSL一発Filterの排除ではない(F-8との誤読防止) |
 | 2026-07-12 | §1.3 界隈ガラパゴスは消さず、kit/lockを入口にする(AviUtlの手置き地獄の対案) |
 | 2026-07-12 | §1.4 他ソフトがkit薄い理由・kitと地図の分断リスク・人気の熱は外部/編集tapへ(累積DLは地図に載しない) |
+| 2026-07-12 | §1.4に既存例表: Brewfile/VS Code Profile/Steam Collection/Awesome 等 |
+| 2026-07-12 | §1.5 DAW圏: KVR=外部人気、テンプレ=暗黙kit、ReaPack/Ableton Pack/VCVの写像 |
