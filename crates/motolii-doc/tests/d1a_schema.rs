@@ -6,7 +6,8 @@ use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
     Asset, AssetId, BlendMode, Bpm, Clip, ClipSource, ClippingMaskSettings, DocKeyframe,
     DocKeyframeTrack, DocParam, DocValue, Document, EffectInstance, Group, ItemEnvelope,
-    LookAtAxis, MaskMode, PathOp, Soundtrack, Track, TrackItem,
+    LookAtAxis, MaskMode, PathOp, Soundtrack, StandardShape, Track, TrackItem, VectorContent,
+    VectorRecipe,
 };
 use motolii_eval::{DataTrackId, Interp};
 use serde_json::{json, Map, Value};
@@ -63,17 +64,22 @@ fn sample_document() -> Document {
         start: RationalTime::try_new(0, 1).unwrap(),
         duration: RationalTime::try_new(5, 1).unwrap(),
         time_map: TimeMap::constant_speed(RationalTime::ZERO, 1, 1).unwrap(),
-        source: ClipSource::Plugin {
-            plugin_id: "core.layer_source.clear".into(),
-            effect_version: 1,
-            params: BTreeMap::new(),
-            extra: Map::new(),
+        source: ClipSource::Vector {
+            recipe: VectorRecipe {
+                content: VectorContent::StandardShape {
+                    shape: StandardShape::Rect {
+                        width: DocParam::const_f64(0.5),
+                        height: DocParam::const_f64(0.3),
+                    },
+                },
+                modifiers: vec![PathOp::Trim {
+                    start: DocParam::const_f64(0.0),
+                    end: DocParam::const_f64(1.0),
+                    offset: DocParam::const_f64(0.0),
+                    mode: Default::default(),
+                }],
+            },
         },
-        path_ops: vec![PathOp::Trim {
-            start: DocParam::const_f64(0.0),
-            end: DocParam::const_f64(1.0),
-            offset: DocParam::const_f64(0.0),
-        }],
     };
 
     let group = Group {
@@ -108,7 +114,6 @@ fn sample_document() -> Document {
         duration: RationalTime::try_new(10, 1).unwrap(),
         time_map: TimeMap::identity(),
         source: ClipSource::Asset { asset: asset_id },
-        path_ops: Vec::new(),
     };
 
     doc.soundtrack = Some(Soundtrack::try_new(asset_id, RationalTime::ZERO, 1.0).unwrap());

@@ -160,6 +160,7 @@ pub struct Track {
 
 #[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant)] // Clip は VectorRecipe 込みで大きい。Box化は API 全域に波及するため v1 では許容。
 pub enum TrackItem {
     Clip(Clip),
     Group(Group),
@@ -277,12 +278,11 @@ pub enum BlendMode {
     Multiply,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "source", rename_all = "snake_case")]
 pub enum ClipSource {
-    Asset {
-        asset: AssetId,
-    },
+    /// raster / 汎用アセット。未知フィールド(recipe/modifiers等)は拒否(S6)。
+    Asset { asset: AssetId },
     Plugin {
         plugin_id: String,
         #[serde(default = "default_effect_version")]
@@ -293,9 +293,124 @@ pub enum ClipSource {
         #[serde(default, flatten)]
         extra: Map<String, JsonValue>,
     },
+    /// ベクトルソース。modifiers はここにしか存在しない(S6 / D1i-1)。
+    Vector { recipe: VectorRecipe },
+}
+
+#[derive(DeserializeDerive)]
+struct ClipSourceAssetDe {
+    asset: AssetId,
+}
+
+#[derive(DeserializeDerive)]
+struct ClipSourceVectorDe {
+    recipe: VectorRecipe,
+}
+
+#[derive(DeserializeDerive)]
+struct ClipSourcePluginDe {
+    plugin_id: String,
+    #[serde(default = "default_effect_version")]
+    effect_version: u32,
+    #[serde(default)]
+    params: BTreeMap<String, DocParam>,
+    #[serde(default, flatten)]
+    extra: Map<String, JsonValue>,
+}
+
+impl<'de> Deserialize<'de> for ClipSource {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Plugin の flatten extra と Asset/Vector の厳格拒否を同居させるため、
+        // tag を見てから variant ごとに Map を渡す(同一 enum への deny_unknown_fields+flatten は serde 不可)。
+        let mut map = Map::<String, JsonValue>::deserialize(deserializer)?;
+        let tag = map
+            .remove("source")
+            .ok_or_else(|| de::Error::missing_field("source"))?;
+        let tag = tag
+            .as_str()
+            .ok_or_else(|| de::Error::custom("ClipSource.source must be a string"))?;
+        match tag {
+            "asset" => {
+                reject_unknown_clip_source_fields(&map, &["asset"])?;
+                let de: ClipSourceAssetDe =
+                    serde_json::from_value(JsonValue::Object(map)).map_err(de::Error::custom)?;
+                Ok(Self::Asset { asset: de.asset })
+            }
+            "vector" => {
+                reject_unknown_clip_source_fields(&map, &["recipe"])?;
+                let de: ClipSourceVectorDe =
+                    serde_json::from_value(JsonValue::Object(map)).map_err(de::Error::custom)?;
+                Ok(Self::Vector { recipe: de.recipe })
+            }
+            "plugin" => {
+                let de: ClipSourcePluginDe =
+                    serde_json::from_value(JsonValue::Object(map)).map_err(de::Error::custom)?;
+                Ok(Self::Plugin {
+                    plugin_id: de.plugin_id,
+                    effect_version: de.effect_version,
+                    params: de.params,
+                    extra: de.extra,
+                })
+            }
+            other => Err(de::Error::unknown_variant(
+                other,
+                &["asset", "plugin", "vector"],
+            )),
+        }
+    }
+}
+
+fn reject_unknown_clip_source_fields<E: de::Error>(
+    map: &Map<String, JsonValue>,
+    allowed: &'static [&'static str],
+) -> Result<(), E> {
+    for key in map.keys() {
+        if !allowed.iter().any(|a| *a == key) {
+            return Err(E::unknown_field(key, allowed));
+        }
+    }
+    Ok(())
+}
+
+/// Vector系ソースのレシピ。modifiers は root の全パス集合に index 0 から順に作用。
+#[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
+pub struct VectorRecipe {
+    pub content: VectorContent,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub modifiers: Vec<PathOp>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum VectorContent {
+    StandardShape {
+        #[serde(flatten)]
+        shape: StandardShape,
+    },
+    SvgAsset {
+        asset: AssetId,
+    },
+    TextPath {
+        text: String,
+        font_asset: AssetId,
+    },
+    /// パス合成用ネスト(タイムライン`TrackItem::Group`とは別概念)。
+    Group {
+        children: Vec<VectorContent>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
+#[serde(tag = "shape", rename_all = "snake_case")]
+pub enum StandardShape {
+    Rect { width: DocParam, height: DocParam },
+    Ellipse { width: DocParam, height: DocParam },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Clip {
     pub envelope: ItemEnvelope,
     pub start: RationalTime,
@@ -303,14 +418,55 @@ pub struct Clip {
     #[serde(default)]
     pub time_map: TimeMap,
     pub source: ClipSource,
+}
+
+#[derive(DeserializeDerive)]
+struct ClipDe {
+    envelope: ItemEnvelope,
+    start: RationalTime,
+    duration: RationalTime,
     #[serde(default)]
-    pub path_ops: Vec<PathOp>,
+    time_map: TimeMap,
+    source: ClipSource,
+    /// 旧形式。存在すれば拒否(変換はD1e)。
+    #[serde(default)]
+    path_ops: Option<JsonValue>,
+}
+
+impl<'de> Deserialize<'de> for Clip {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = ClipDe::deserialize(deserializer)?;
+        if raw.path_ops.is_some() {
+            return Err(serde::de::Error::custom(
+                "legacy field `path_ops` is not supported; use ClipSource::Vector { recipe.modifiers } (D1i-1). Migration is D1e",
+            ));
+        }
+        Ok(Self {
+            envelope: raw.envelope,
+            start: raw.start,
+            duration: raw.duration,
+            time_map: raw.time_map,
+            source: raw.source,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
 pub struct Group {
     pub envelope: ItemEnvelope,
     pub children: Vec<TrackItem>,
+}
+
+/// Trim の適用モード(Lottie parallel/sequential。意味論は D1i-2)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, DeserializeDerive)]
+#[serde(rename_all = "snake_case")]
+pub enum TrimMode {
+    #[default]
+    Parallel,
+    Sequential,
 }
 
 /// v1閉集合のパス演算子(プラグイン契約には出さない。F-13)。
@@ -334,6 +490,8 @@ pub enum PathOp {
         start: DocParam,
         end: DocParam,
         offset: DocParam,
+        #[serde(default)]
+        mode: TrimMode,
     },
     Twist {
         angle: DocParam,
