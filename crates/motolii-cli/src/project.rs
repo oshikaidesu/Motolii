@@ -210,15 +210,9 @@ pub fn build_data_tracks(
         let params = match plugin.desc().resolve_params(&raw_params) {
             Ok(params) => params,
             Err(PluginError::Param {
-                plugin,
-                id,
-                got,
-                ..
+                plugin, id, got, ..
             }) if got == "unknown" => {
-                return Err(ProjectError::UnknownParam {
-                    plugin,
-                    param: id,
-                });
+                return Err(ProjectError::UnknownParam { plugin, param: id });
             }
             Err(err) => return Err(err.into()),
         };

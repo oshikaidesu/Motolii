@@ -250,12 +250,7 @@ pub enum PluginError {
 }
 
 impl PluginError {
-    fn param_type(
-        plugin: &str,
-        id: &str,
-        expected: ValueType,
-        got: &str,
-    ) -> Self {
+    fn param_type(plugin: &str, id: &str, expected: ValueType, got: &str) -> Self {
         Self::Param {
             plugin: plugin.to_string(),
             id: id.to_string(),
@@ -1556,12 +1551,20 @@ mod tests {
         let desc = SINE_PARAM_DRIVER.desc();
         let empty = HashMap::new();
         let filled = desc.resolve_params(&empty).unwrap();
-        assert_eq!(filled.require_f64("core.param.sine", "amplitude").unwrap(), 1.0);
         assert_eq!(
-            filled.require_f64("core.param.sine", "frequency_hz").unwrap(),
+            filled.require_f64("core.param.sine", "amplitude").unwrap(),
             1.0
         );
-        assert_eq!(filled.require_f64("core.param.sine", "offset").unwrap(), 0.0);
+        assert_eq!(
+            filled
+                .require_f64("core.param.sine", "frequency_hz")
+                .unwrap(),
+            1.0
+        );
+        assert_eq!(
+            filled.require_f64("core.param.sine", "offset").unwrap(),
+            0.0
+        );
 
         let mut unknown = HashMap::new();
         unknown.insert("nope".into(), Value::F64(1.0));
@@ -1615,7 +1618,9 @@ mod tests {
         );
 
         let empty = ResolvedParams::new();
-        let err = empty.require_f64("core.param.sine", "amplitude").unwrap_err();
+        let err = empty
+            .require_f64("core.param.sine", "amplitude")
+            .unwrap_err();
         assert!(
             matches!(
                 err,
