@@ -31,6 +31,8 @@ pub enum LayerIdError {
     Duplicate { id: u64 },
     #[error("LayerId {id} not found")]
     NotFound { id: u64 },
+    #[error("LayerId {id} is retired (below next={next}); reuse forbidden")]
+    Retired { id: u64, next: u64 },
     #[error("LayerId space exhausted")]
     Exhausted,
     #[error("LayerIdTable next ({next}) must be greater than max entry id ({max_id})")]
@@ -157,7 +159,8 @@ impl LayerIdTable {
         Ok(id)
     }
 
-    /// 既知IDの挿入(ロード復元用)。重複は拒否。`next`は必要なら前進する。
+    /// 未使用の新しいIDを明示挿入する。`id < next`は退役済みとして拒否(再利用禁止)。
+    /// ロード復元は`Deserialize`が台帳を直接構築する。
     pub fn insert(
         &mut self,
         id: LayerId,
@@ -165,6 +168,12 @@ impl LayerIdTable {
     ) -> Result<(), LayerIdError> {
         if self.entries.contains_key(&id) {
             return Err(LayerIdError::Duplicate { id: id.0 });
+        }
+        if id.0 < self.next {
+            return Err(LayerIdError::Retired {
+                id: id.0,
+                next: self.next,
+            });
         }
         // 挿入前に完了: MAXは next を進められないため拒否(Err後に表は不変)
         let floor = id.0.checked_add(1).ok_or(LayerIdError::Exhausted)?;
@@ -272,5 +281,24 @@ mod tests {
         assert!(!table.contains(max));
         assert_eq!(table.len(), before_len);
         assert_eq!(table.next, 0);
+    }
+
+    #[test]
+    fn insert_rejects_retired_id_after_remove() {
+        let mut table = LayerIdTable::new();
+        let id = table.allocate("a").unwrap();
+        table.remove(id).unwrap();
+        let next_before = table.next;
+        let len_before = table.len();
+        assert_eq!(
+            table.insert(id, "reuse"),
+            Err(LayerIdError::Retired {
+                id: id.get(),
+                next: next_before
+            })
+        );
+        assert!(!table.contains(id));
+        assert_eq!(table.len(), len_before);
+        assert_eq!(table.next, next_before);
     }
 }
