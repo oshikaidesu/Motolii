@@ -3,13 +3,14 @@
 //! 読み手(レンダ・書き出し・解析)は`Arc<Document>`スナップショットのみを受け取る。
 //! `edit`は戻り値を持たない — 参照漏洩で凍結を封じないため。
 //!
-//! **D1a**: スキーマ本体。**D1b**: 保存前`validate`(ガード1)。**D1c**: アトミック保存/読込。ジャーナルはD1d。
+//! **D1a**: スキーマ本体。**D1b**: 保存前`validate`(ガード1)。**D1c**: アトミック保存/読込。**D1f**: 未知`plugin_id`警告。ジャーナルはD1d。
 
 mod asset;
 mod bpm;
 mod ids;
 mod param;
 mod persist;
+mod plugin_catalog;
 mod schema;
 mod track_id;
 mod validate;
@@ -27,6 +28,9 @@ pub use persist::{
     detect_cloud_sync, load_document, load_document_bytes, save_document,
     save_document_with_options, CloudSyncHint, PersistError, SaveAbortAfter, SaveOptions,
     READER_VERSION,
+};
+pub use plugin_catalog::{
+    collect_plugin_warnings, LoadResult, LoadWarning, PluginCatalog,
 };
 pub use schema::{
     BlendMode, Clip, ClipSource, ClippingMaskSettings, Composition, CompositionError,

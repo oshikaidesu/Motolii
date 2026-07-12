@@ -20,6 +20,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Deserialize;
 use thiserror::Error;
 
+use crate::plugin_catalog::{collect_plugin_warnings, LoadResult, PluginCatalog};
 use crate::{Document, DocumentError};
 
 /// このリーダーが開ける`min_reader_version`の上限(=自版の読取能力)。
@@ -158,13 +159,14 @@ pub fn save_document_with_options(
 }
 
 /// 読込。`min_reader_version`超過はデシリアライズ前に拒否(ガード7)。
+/// 未知`plugin_id`は拒否せず`LoadResult::warnings`へ(D1f / ガード9の開く側)。
 /// クラウド同期検出は呼び出し側が`detect_cloud_sync`で参照する(ここでは拒否しない)。
-pub fn load_document(path: &Path) -> Result<Document, PersistError> {
+pub fn load_document(path: &Path, catalog: &PluginCatalog) -> Result<LoadResult, PersistError> {
     let bytes = fs::read(path)?;
-    load_document_bytes(&bytes)
+    load_document_bytes(&bytes, catalog)
 }
 
-pub fn load_document_bytes(bytes: &[u8]) -> Result<Document, PersistError> {
+pub fn load_document_bytes(bytes: &[u8], catalog: &PluginCatalog) -> Result<LoadResult, PersistError> {
     // 全文デシリアライズ前に版だけ読む — 未知フィールドで落ちる前に拒否するため
     let header: VersionHeader = serde_json::from_slice(bytes)?;
     if header.min_reader_version > READER_VERSION {
@@ -175,7 +177,8 @@ pub fn load_document_bytes(bytes: &[u8]) -> Result<Document, PersistError> {
     }
     let doc: Document = serde_json::from_slice(bytes)?;
     doc.validate()?;
-    Ok(doc)
+    let warnings = collect_plugin_warnings(&doc, catalog);
+    Ok(LoadResult { document: doc, warnings })
 }
 
 #[derive(Debug, Deserialize)]
@@ -294,6 +297,7 @@ fn sync_dir(dir: &Path) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::plugin_catalog::PluginCatalog;
     use crate::Document;
 
     fn unique_dir() -> PathBuf {
@@ -312,7 +316,7 @@ mod tests {
         let path = dir.join("proj.json");
         let doc = Document::new_v1();
         save_document(&path, &doc).unwrap();
-        let loaded = load_document(&path).unwrap();
+        let loaded = load_document(&path, &PluginCatalog::new()).unwrap().document;
         assert_eq!(loaded, doc);
         let _ = fs::remove_dir_all(dir);
     }
@@ -330,7 +334,7 @@ mod tests {
             },
             "bpm": {"num": 120, "den": 1}
         }"#;
-        let err = load_document_bytes(json.as_bytes()).unwrap_err();
+        let err = load_document_bytes(json.as_bytes(), &PluginCatalog::new()).unwrap_err();
         assert!(matches!(
             err,
             PersistError::ReaderTooOld {
