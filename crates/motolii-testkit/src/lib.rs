@@ -490,6 +490,9 @@ pub mod purity {
     }
 
     /// Filter を同一 `(t, params, input)` で2回呼び、出力RGBAが一致することを要求する。
+    ///
+    /// 各 `render` は別 encoder / 別 `queue.submit` 境界に置く。
+    /// 共有 uniform への `write_buffer` が次 submit 直前にまとまる偽陰性を避けるため(M2E-9 follow-up)。
     pub fn assert_filter_pure(
         label: &str,
         gpu: &GpuCtx,
@@ -503,51 +506,61 @@ pub mod purity {
         let out_a = empty_target(gpu, frame, &format!("{label}-pure-a"));
         let out_b = empty_target(gpu, frame, &format!("{label}-pure-b"));
         let mut pipelines = PipelineCache::new();
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some(&format!("{label}-pure")),
-            });
         let in_ref = TextureRef {
             texture: &input,
             desc: frame,
         };
         let ctx = RenderCtx::new(t, Quality::FINAL);
-        filter
-            .render(
-                gpu,
-                &mut pipelines,
-                &mut encoder,
-                &ctx,
-                params,
-                in_ref,
-                TextureRef {
-                    texture: &out_a,
-                    desc: frame,
-                },
-            )
-            .map_err(|source| TestkitError::PluginFailed {
-                label: label.into(),
-                source,
-            })?;
-        filter
-            .render(
-                gpu,
-                &mut pipelines,
-                &mut encoder,
-                &ctx,
-                params,
-                in_ref,
-                TextureRef {
-                    texture: &out_b,
-                    desc: frame,
-                },
-            )
-            .map_err(|source| TestkitError::PluginFailed {
-                label: label.into(),
-                source,
-            })?;
-        gpu.queue.submit(std::iter::once(encoder.finish()));
+        {
+            let mut encoder = gpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some(&format!("{label}-pure-a")),
+                });
+            filter
+                .render(
+                    gpu,
+                    &mut pipelines,
+                    &mut encoder,
+                    &ctx,
+                    params,
+                    in_ref,
+                    TextureRef {
+                        texture: &out_a,
+                        desc: frame,
+                    },
+                )
+                .map_err(|source| TestkitError::PluginFailed {
+                    label: label.into(),
+                    source,
+                })?;
+            gpu.queue.submit(std::iter::once(encoder.finish()));
+        }
+        {
+            let mut encoder = gpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some(&format!("{label}-pure-b")),
+                });
+            filter
+                .render(
+                    gpu,
+                    &mut pipelines,
+                    &mut encoder,
+                    &ctx,
+                    params,
+                    in_ref,
+                    TextureRef {
+                        texture: &out_b,
+                        desc: frame,
+                    },
+                )
+                .map_err(|source| TestkitError::PluginFailed {
+                    label: label.into(),
+                    source,
+                })?;
+            gpu.queue.submit(std::iter::once(encoder.finish()));
+        }
 
         let a = download_rgba(gpu, &out_a)?;
         let b = download_rgba(gpu, &out_b)?;
@@ -595,6 +608,8 @@ pub mod purity {
     }
 
     /// LayerSource を同一 `(t, params, ctx)` で2回呼び、出力RGBAが一致することを要求する。
+    ///
+    /// 各 `render` は別 encoder / 別 `queue.submit` 境界に置く(M2E-9 follow-up)。
     pub fn assert_layer_source_pure(
         label: &str,
         gpu: &GpuCtx,
@@ -607,46 +622,56 @@ pub mod purity {
         let out_a = empty_target(gpu, frame, &format!("{label}-ls-a"));
         let out_b = empty_target(gpu, frame, &format!("{label}-ls-b"));
         let mut pipelines = PipelineCache::new();
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some(&format!("{label}-ls-pure")),
-            });
-        plugin
-            .render(
-                gpu,
-                &mut pipelines,
-                &mut encoder,
-                t,
-                params,
-                ctx,
-                TextureRef {
-                    texture: &out_a,
-                    desc: frame,
-                },
-            )
-            .map_err(|source| TestkitError::PluginFailed {
-                label: label.into(),
-                source,
-            })?;
-        plugin
-            .render(
-                gpu,
-                &mut pipelines,
-                &mut encoder,
-                t,
-                params,
-                ctx,
-                TextureRef {
-                    texture: &out_b,
-                    desc: frame,
-                },
-            )
-            .map_err(|source| TestkitError::PluginFailed {
-                label: label.into(),
-                source,
-            })?;
-        gpu.queue.submit(std::iter::once(encoder.finish()));
+        {
+            let mut encoder = gpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some(&format!("{label}-ls-a")),
+                });
+            plugin
+                .render(
+                    gpu,
+                    &mut pipelines,
+                    &mut encoder,
+                    t,
+                    params,
+                    ctx,
+                    TextureRef {
+                        texture: &out_a,
+                        desc: frame,
+                    },
+                )
+                .map_err(|source| TestkitError::PluginFailed {
+                    label: label.into(),
+                    source,
+                })?;
+            gpu.queue.submit(std::iter::once(encoder.finish()));
+        }
+        {
+            let mut encoder = gpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some(&format!("{label}-ls-b")),
+                });
+            plugin
+                .render(
+                    gpu,
+                    &mut pipelines,
+                    &mut encoder,
+                    t,
+                    params,
+                    ctx,
+                    TextureRef {
+                        texture: &out_b,
+                        desc: frame,
+                    },
+                )
+                .map_err(|source| TestkitError::PluginFailed {
+                    label: label.into(),
+                    source,
+                })?;
+            gpu.queue.submit(std::iter::once(encoder.finish()));
+        }
 
         let a = download_rgba(gpu, &out_a)?;
         let b = download_rgba(gpu, &out_b)?;
@@ -665,6 +690,8 @@ pub mod purity {
     }
 
     /// Composite を同一 `(t, params, inputs)` で2回呼び、出力RGBAが一致することを要求する。
+    ///
+    /// 各 `render` は別 encoder / 別 `queue.submit` 境界に置く(M2E-9 follow-up)。
     pub fn assert_composite_pure(
         label: &str,
         gpu: &GpuCtx,
@@ -681,11 +708,6 @@ pub mod purity {
         let out_a = empty_target(gpu, frame, &format!("{label}-comp-a"));
         let out_b = empty_target(gpu, frame, &format!("{label}-comp-b"));
         let mut pipelines = PipelineCache::new();
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some(&format!("{label}-comp-pure")),
-            });
         let in_refs: Vec<TextureRef<'_>> = inputs
             .iter()
             .map(|texture| TextureRef {
@@ -694,41 +716,56 @@ pub mod purity {
             })
             .collect();
         let ctx = RenderCtx::new(t, Quality::FINAL);
-        composite
-            .render(
-                gpu,
-                &mut pipelines,
-                &mut encoder,
-                &ctx,
-                params,
-                &in_refs,
-                TextureRef {
-                    texture: &out_a,
-                    desc: frame,
-                },
-            )
-            .map_err(|source| TestkitError::PluginFailed {
-                label: label.into(),
-                source,
-            })?;
-        composite
-            .render(
-                gpu,
-                &mut pipelines,
-                &mut encoder,
-                &ctx,
-                params,
-                &in_refs,
-                TextureRef {
-                    texture: &out_b,
-                    desc: frame,
-                },
-            )
-            .map_err(|source| TestkitError::PluginFailed {
-                label: label.into(),
-                source,
-            })?;
-        gpu.queue.submit(std::iter::once(encoder.finish()));
+        {
+            let mut encoder = gpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some(&format!("{label}-comp-a")),
+                });
+            composite
+                .render(
+                    gpu,
+                    &mut pipelines,
+                    &mut encoder,
+                    &ctx,
+                    params,
+                    &in_refs,
+                    TextureRef {
+                        texture: &out_a,
+                        desc: frame,
+                    },
+                )
+                .map_err(|source| TestkitError::PluginFailed {
+                    label: label.into(),
+                    source,
+                })?;
+            gpu.queue.submit(std::iter::once(encoder.finish()));
+        }
+        {
+            let mut encoder = gpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some(&format!("{label}-comp-b")),
+                });
+            composite
+                .render(
+                    gpu,
+                    &mut pipelines,
+                    &mut encoder,
+                    &ctx,
+                    params,
+                    &in_refs,
+                    TextureRef {
+                        texture: &out_b,
+                        desc: frame,
+                    },
+                )
+                .map_err(|source| TestkitError::PluginFailed {
+                    label: label.into(),
+                    source,
+                })?;
+            gpu.queue.submit(std::iter::once(encoder.finish()));
+        }
 
         let a = download_rgba(gpu, &out_a)?;
         let b = download_rgba(gpu, &out_b)?;
