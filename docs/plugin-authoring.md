@@ -49,7 +49,7 @@
 
 ## 4. 推奨すること
 
-- **意図単位の1プラグイン** — 「グロー」「シェイク」のように完成した意図。原子プリミティブの組み立てをユーザーに強いない(F-8)
+- **意図単位の1プラグイン** — 「グロー」「シェイク」のように完成した意図。原子プリミティブの組み立てをユーザーに強いない(F-8)。粒(魚眼単体)と全部入り(VHS)の共存・ダブリの扱いは[plugin-ecosystem.md](plugin-ecosystem.md) §1.1(look vs primitive + kit)。同じ見た目を二重メンテしない
 - **参照実装を型紙にする** — `ClearFilter` / `SineParamDriver` / `ClearComposite` をコピーしてから肉付けする
 - **パラメータは少ない** — LLM生成でも人間が触れる数に抑える。内部定数はコード側へ
 - **paramsは型付きアクセサで読む** — `require_f64` / `require_color` / `require_vec2`。`f64_or`のサイレントフォールバックは禁止(「もっともらしく間違う絵」。M2E-8)。ロード側は`NodeDesc::resolve_params`を使い、手書きのdefault充填を複製しない
