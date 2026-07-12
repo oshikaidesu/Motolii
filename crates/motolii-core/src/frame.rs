@@ -38,7 +38,7 @@ impl PixelFormat {
 /// 色空間タグ。「タグを持つ」だけでなく変換の正しさはゴールデンテストで守る(落とし穴B-3)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ColorSpace {
-    /// リニアRGB(合成・ブレンドはこの空間で行う)
+    /// リニアRGB。precise_color時の合成空間の受け皿(M2E-18)。v1合成はsRGB空間ブレンド(M2E-13③)
     LinearRgb,
     /// sRGB伝達関数つきRGB
     Srgb,

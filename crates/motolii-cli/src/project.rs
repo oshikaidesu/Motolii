@@ -76,7 +76,7 @@ pub enum ParamVec2V1 {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(untagged)]
 pub enum ParamColorV1 {
-    /// straight RGBA, 0..1 (f32/f64どちらでも可)
+    /// 非線形sRGB・straight・0..1(M2E-13。f32/f64どちらでも可)
     Const([f64; 4]),
     Source(ParamSource),
 }

@@ -102,7 +102,7 @@ pub enum NodeError {
 pub struct RectOverlay {
     pub center: CanonicalPoint,
     pub size: CanonicalSize,
-    /// straight RGBA, 0..1
+    /// 非線形sRGB・straight・0..1(M2E-13。合成前にpremulへ)
     pub color: [f32; 4],
 }
 
@@ -111,7 +111,7 @@ pub struct CircleOverlay {
     pub center: CanonicalPoint,
     /// 正準空間の半径(高さ=1.0基準)
     pub radius: f64,
-    /// straight RGBA, 0..1
+    /// 非線形sRGB・straight・0..1(M2E-13。合成前にpremulへ)
     pub color: [f32; 4],
 }
 
@@ -121,7 +121,7 @@ pub struct LineOverlay {
     pub end: CanonicalPoint,
     /// 正準空間の線幅(高さ=1.0基準)
     pub width: f64,
-    /// straight RGBA, 0..1
+    /// 非線形sRGB・straight・0..1(M2E-13。合成前にpremulへ)
     pub color: [f32; 4],
 }
 
