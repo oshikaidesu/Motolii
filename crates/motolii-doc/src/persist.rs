@@ -166,7 +166,10 @@ pub fn load_document(path: &Path, catalog: &PluginCatalog) -> Result<LoadResult,
     load_document_bytes(&bytes, catalog)
 }
 
-pub fn load_document_bytes(bytes: &[u8], catalog: &PluginCatalog) -> Result<LoadResult, PersistError> {
+pub fn load_document_bytes(
+    bytes: &[u8],
+    catalog: &PluginCatalog,
+) -> Result<LoadResult, PersistError> {
     // 全文デシリアライズ前に版だけ読む — 未知フィールドで落ちる前に拒否するため
     let header: VersionHeader = serde_json::from_slice(bytes)?;
     if header.min_reader_version > READER_VERSION {
@@ -178,7 +181,10 @@ pub fn load_document_bytes(bytes: &[u8], catalog: &PluginCatalog) -> Result<Load
     let doc: Document = serde_json::from_slice(bytes)?;
     doc.validate()?;
     let warnings = collect_plugin_warnings(&doc, catalog);
-    Ok(LoadResult { document: doc, warnings })
+    Ok(LoadResult {
+        document: doc,
+        warnings,
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -316,8 +322,9 @@ mod tests {
         let path = dir.join("proj.json");
         let doc = Document::new_v1();
         save_document(&path, &doc).unwrap();
-        let loaded = load_document(&path, &PluginCatalog::new()).unwrap().document;
-        assert_eq!(loaded, doc);
+        let loaded = load_document(&path, &PluginCatalog::new()).unwrap();
+        assert!(loaded.warnings.is_empty());
+        assert_eq!(loaded.document, doc);
         let _ = fs::remove_dir_all(dir);
     }
 

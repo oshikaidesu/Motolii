@@ -30,7 +30,7 @@ pub use persist::{
     READER_VERSION,
 };
 pub use plugin_catalog::{
-    collect_plugin_warnings, LoadResult, LoadWarning, PluginCatalog,
+    collect_plugin_warnings, LoadResult, LoadWarning, PluginCatalog, PluginSlot,
 };
 pub use schema::{
     BlendMode, Clip, ClipSource, ClippingMaskSettings, Composition, CompositionError,

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use motolii_doc::{
-    load_document, save_document, ClipSource, LoadWarning, PluginCatalog, TrackItem,
+    load_document, save_document, ClipSource, LoadWarning, PluginCatalog, PluginSlot, TrackItem,
 };
 use serde_json::{json, Value};
 
@@ -152,7 +152,11 @@ fn unknown_plugin_parts_survive_save_reload_roundtrip() {
     let path = dir.join("doc.json");
     let catalog = PluginCatalog::reference_v1();
 
-    fs::write(&path, serde_json::to_vec_pretty(&unknown_plugin_json()).unwrap()).unwrap();
+    fs::write(
+        &path,
+        serde_json::to_vec_pretty(&unknown_plugin_json()).unwrap(),
+    )
+    .unwrap();
 
     let first = load_document(&path, &catalog).unwrap();
     assert_eq!(first.warnings.len(), 2);
@@ -258,5 +262,73 @@ fn unknown_effect_in_nested_group_is_warned() {
             plugin_id: "vendor.filter.glow".into(),
             layer_id: 0,
         }]
+    );
+}
+
+#[test]
+fn known_id_in_wrong_slot_is_wrong_kind_not_unknown() {
+    // filter席にlayer_source既知ID → UnknownではなくWrongKind
+    let input = json!({
+        "version": 1,
+        "composition": {
+            "aspect_num": 16,
+            "aspect_den": 9,
+            "duration": {"num": 10, "den": 1},
+            "fps": {"num": 30, "den": 1}
+        },
+        "bpm": {"num": 120, "den": 1},
+        "layers": {
+            "next": 1,
+            "entries": [{"id": 0, "name": "src"}]
+        },
+        "track_ids": {
+            "next": 1,
+            "entries": [{"id": 0, "name": "V1"}]
+        },
+        "tracks": [{
+            "id": 0,
+            "items": [{
+                "kind": "clip",
+                "envelope": {
+                    "layer_id": 0,
+                    "effects": [{
+                        "plugin_id": "core.layer_source.clear"
+                    }],
+                    "transform": {
+                        "position": {"const": {"Vec2": [0.0, 0.0]}},
+                        "anchor": {"const": {"Vec2": [0.0, 0.0]}},
+                        "scale": {"const": {"Vec2": [1.0, 1.0]}},
+                        "rotation": {"const": {"F64": 0.0}}
+                    }
+                },
+                "start": {"num": 0, "den": 1},
+                "duration": {"num": 1, "den": 1},
+                "source": {
+                    "source": "plugin",
+                    "plugin_id": "core.filter.tint"
+                }
+            }]
+        }]
+    });
+    let catalog = PluginCatalog::reference_v1();
+    let result =
+        motolii_doc::load_document_bytes(&serde_json::to_vec(&input).unwrap(), &catalog).unwrap();
+    // ソートは (WrongKind, layer_id, plugin_id) — plugin_id辞書順
+    assert_eq!(
+        result.warnings,
+        vec![
+            LoadWarning::PluginIdWrongKind {
+                plugin_id: "core.filter.tint".into(),
+                layer_id: 0,
+                expected: PluginSlot::LayerSource,
+                actual: PluginSlot::Filter,
+            },
+            LoadWarning::PluginIdWrongKind {
+                plugin_id: "core.layer_source.clear".into(),
+                layer_id: 0,
+                expected: PluginSlot::Filter,
+                actual: PluginSlot::LayerSource,
+            },
+        ]
     );
 }
