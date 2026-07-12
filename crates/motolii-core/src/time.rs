@@ -114,7 +114,7 @@ impl RationalTime {
             num_abs, rn as u128, td as u128, od as u128, rd as u128,
         )?;
         let u = crate::wide_div::rem_over_den_f64(rem, den);
-        debug_assert!((0.0..1.0).contains(&u) || u == 0.0);
+        debug_assert!((0.0..1.0).contains(&u));
 
         if !neg {
             let q = i64::try_from(q_abs).map_err(|_| RationalTimeError::Overflow)?;
@@ -126,7 +126,9 @@ impl RationalTime {
         } else {
             // div_euclid: floor(負非整数) = -(q+1), 分数部 = 1 - u'
             let q = i64::try_from(q_abs + 1).map_err(|_| RationalTimeError::Overflow)?;
-            Ok((-q, 1.0 - u))
+            let frac = crate::wide_div::complement_unit_interval(u);
+            debug_assert!((0.0..1.0).contains(&frac));
+            Ok((-q, frac))
         }
     }
 
@@ -371,6 +373,17 @@ mod tests {
         let (idx, u) = rt(55, 100).try_to_sample_index(rate).unwrap();
         assert_eq!(idx, 5);
         assert!((u - 0.5).abs() < 1e-15);
+    }
+
+    /// S7 follow-up: 負時刻の補間率も常に [0,1)。
+    #[test]
+    fn sample_index_negative_fraction_stays_in_unit_interval() {
+        let rate = fps(10, 1);
+        // -0.05秒 × 10Hz = -0.5 → floor -1, frac 0.5
+        let (idx, u) = rt(-5, 100).try_to_sample_index(rate).unwrap();
+        assert_eq!(idx, -1);
+        assert!((u - 0.5).abs() < 1e-15);
+        assert!((0.0..1.0).contains(&u));
     }
 
     /// S7: f64秒×rate だと床が1つ前に落ちる境界でも有理数添字は正しい。
