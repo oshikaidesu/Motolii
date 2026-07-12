@@ -162,17 +162,17 @@ impl DataTrack {
         if t <= self.start {
             return self.values[0].clone();
         }
-        let pos = seconds_since(t, self.start) * self.sample_rate.as_f64();
-        // f64フォールバックの丸めで負に落ちた場合も先頭へ。
-        if pos <= 0.0 {
-            return self.values[0].clone();
-        }
         let last = self.values.len() - 1;
-        if pos >= last as f64 {
+        // 添字は有理数床(S7)。i128溢れでも256bit乗除で床を求める。
+        // Err(Overflow)は商がi64に収まらない巨大添字のみ → 末尾クランプでよい。
+        let (i, u) = match t.try_to_sample_index_since(self.start, self.sample_rate) {
+            Ok((idx, _)) if idx < 0 => return self.values[0].clone(),
+            Ok((idx, frac)) => (idx as usize, frac),
+            Err(_) => return self.values[last].clone(),
+        };
+        if i >= last {
             return self.values[last].clone();
         }
-        let i = pos.floor() as usize;
-        let u = pos - i as f64;
         Value::lerp(&self.values[i], &self.values[i + 1], u)
     }
 }
@@ -319,6 +319,72 @@ mod tests {
         assert!((v - 5.5).abs() < 1e-9);
         // 末尾以降はクランプ
         assert_eq!(dt.eval(RationalTime::from_seconds(10)), Value::F64(10.0));
+    }
+
+    /// S7: NTSC rate でフレーム格子上の時刻が values[i] に一致する(f64床で1つ前に落ちない)。
+    #[test]
+    fn data_track_ntsc_exact_frame_hits_sample() {
+        let rate = Fps::try_new(30000, 1001).unwrap();
+        let values: Vec<Value> = (0..=30).map(|i| Value::F64(i as f64)).collect();
+        let dt = DataTrack {
+            start: RationalTime::ZERO,
+            sample_rate: rate,
+            values,
+        };
+        for frame in [0i64, 1, 14, 15, 29, 30] {
+            let t = RationalTime::try_from_frame(frame, rate).unwrap();
+            assert_eq!(
+                dt.eval(t),
+                Value::F64(frame as f64),
+                "frame {frame} must hit sample {frame}"
+            );
+        }
+    }
+
+    /// S7: 非補間型は境界で1サンプル前に落ちず、区間内は Hold(先頭側)。
+    #[test]
+    fn data_track_asset_ref_hold_at_ntsc_boundary() {
+        let rate = Fps::try_new(30000, 1001).unwrap();
+        let dt = DataTrack {
+            start: RationalTime::ZERO,
+            sample_rate: rate,
+            values: vec![Value::AssetRef(1), Value::AssetRef(2), Value::AssetRef(3)],
+        };
+        assert_eq!(
+            dt.eval(RationalTime::try_from_frame(1, rate).unwrap()),
+            Value::AssetRef(2)
+        );
+        // サンプル0と1の中間 → lerp が非補間のため先頭側を保持
+        let half = rate
+            .frame_duration()
+            .try_mul(RationalTime::try_new(1, 2).unwrap())
+            .unwrap();
+        assert_eq!(dt.eval(half), Value::AssetRef(1));
+        assert_eq!(
+            dt.eval(RationalTime::try_from_frame(2, rate).unwrap()),
+            Value::AssetRef(3)
+        );
+    }
+
+    /// S7: i128中間積が溢れても先頭近傍なら index 0(末尾へ誤クランプしない)。
+    #[test]
+    fn data_track_near_start_despite_i128_mul_overflow() {
+        let d = i64::MAX;
+        let start = RationalTime::try_new(1, d - 2).unwrap();
+        let t = RationalTime::try_new(1000, d).unwrap();
+        let rate = Fps::try_new(d - 1, d).unwrap();
+        let dt = DataTrack {
+            start,
+            sample_rate: rate,
+            values: vec![Value::F64(10.0), Value::F64(20.0), Value::F64(30.0)],
+        };
+        assert!(t > start);
+        let v = dt.eval(t).as_f64().unwrap();
+        // index 0・微小 u なので values[0] 近傍(末尾30へ誤クランプしない)
+        assert!(
+            (v - 10.0).abs() < 1e-6,
+            "expected near 10.0 at start of track, got {v}"
+        );
     }
 
     #[test]

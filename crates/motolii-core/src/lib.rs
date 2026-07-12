@@ -8,6 +8,7 @@ mod frame;
 mod quality;
 mod time;
 mod time_map;
+mod wide_div;
 
 pub use camera::CompCamera;
 pub use canonical::{
