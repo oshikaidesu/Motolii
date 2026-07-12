@@ -98,7 +98,7 @@ fn exit_demo_video_bg_plus_eased_rect_matches_golden() {
     let overlay = project.overlay.into_param_overlay();
     let tracks = DataTracks::new();
     let desc = FrameDesc::packed(W, H, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
-    let tx = ViewportTransform::from_desc(&desc);
+    let tx = ViewportTransform::from_desc(&desc).expect("non-zero FrameDesc");
 
     let info = probe(&output).unwrap();
     assert_eq!((info.width, info.height), (W, H));
