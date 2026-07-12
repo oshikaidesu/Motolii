@@ -3,11 +3,12 @@
 //! 読み手(レンダ・書き出し・解析)は`Arc<Document>`スナップショットのみを受け取る。
 //! `edit`は戻り値を持たない — 参照漏洩で凍結を封じないため。
 //!
-//! **D1a**: スキーマ本体。**D1b**: 保存前`validate`(ガード1)。**D1c**: アトミック保存/読込。ジャーナルはD1d。
+//! **D1a**: スキーマ本体。**D1b**: 保存前`validate`(ガード1)。**D1c**: アトミック保存/読込。**D1e**: 版マイグレーション(ガード8)。ジャーナルはD1d。
 
 mod asset;
 mod bpm;
 mod ids;
+mod migrate;
 mod param;
 mod persist;
 mod schema;
@@ -23,10 +24,15 @@ pub use asset::{Asset, AssetError, AssetId, AssetTable};
 pub use bpm::{Bpm, BpmError};
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
 pub use param::{DocParam, LookAtAxis};
+pub use migrate::{
+    bump_min_reader_for_nest_schema_change, count_document, migrate_bytes, migrate_document_file,
+    ColorInterpretation, DocumentCounts, LATEST_DOCUMENT_VERSION, MigrateError, MigrateFileOptions,
+    MigrateFileResult, MigrationReport, BACKUP_SUFFIX,
+};
 pub use persist::{
-    detect_cloud_sync, load_document, load_document_bytes, save_document,
-    save_document_with_options, CloudSyncHint, PersistError, SaveAbortAfter, SaveOptions,
-    READER_VERSION,
+    detect_cloud_sync, load_document, load_document_bytes, load_document_bytes_with_reader_cap,
+    save_document, save_document_with_options, CloudSyncHint, PersistError, SaveAbortAfter,
+    SaveOptions, READER_VERSION,
 };
 pub use schema::{
     BlendMode, Clip, ClipSource, ClippingMaskSettings, Composition, CompositionError,
@@ -60,6 +66,9 @@ pub struct Document {
     pub track_ids: TrackIdTable,
     #[serde(default)]
     pub tracks: Vec<Track>,
+    /// M2E-13: 永続カラーの解釈。v2で明示化(D1e)。
+    #[serde(default)]
+    pub color_interpretation: ColorInterpretation,
     /// 未知キー保持(unknown-keys roundtrip)。
     #[serde(default, flatten)]
     pub extra: Map<String, Value>,
@@ -77,6 +86,7 @@ impl Document {
             layers: LayerIdTable::new(),
             track_ids: TrackIdTable::new(),
             tracks: Vec::new(),
+            color_interpretation: ColorInterpretation::default(),
             extra: Map::new(),
         }
     }

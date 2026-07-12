@@ -8,8 +8,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use motolii_doc::{
     detect_cloud_sync, load_document, save_document, save_document_with_options, Bpm,
-    CloudSyncHint, Document, PersistError, SaveAbortAfter, SaveOptions, READER_VERSION,
+    CloudSyncHint, Document, LATEST_DOCUMENT_VERSION, PersistError, SaveAbortAfter, SaveOptions, READER_VERSION,
 };
+
+fn assert_loaded_matches_saved(loaded: &Document, saved: &Document) {
+    let mut expected = saved.clone();
+    expected.version = LATEST_DOCUMENT_VERSION;
+    assert_eq!(loaded, &expected);
+}
 
 fn unique_dir(tag: &str) -> PathBuf {
     let nanos = SystemTime::now()
@@ -36,7 +42,7 @@ fn save_load_roundtrip_preserves_document() {
     let mut doc = Document::new_v1();
     doc.bpm = Bpm::try_new(140, 1).unwrap();
     save_document(&path, &doc).unwrap();
-    assert_eq!(load_document(&path).unwrap(), doc);
+    assert_loaded_matches_saved(&load_document(&path).unwrap(), &doc);
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -49,17 +55,17 @@ fn overwrite_existing_file_succeeds() {
     let mut first = Document::new_v1();
     first.bpm = Bpm::try_new(100, 1).unwrap();
     save_document(&path, &first).unwrap();
-    assert_eq!(load_document(&path).unwrap(), first);
+    assert_loaded_matches_saved(&load_document(&path).unwrap(), &first);
 
     let mut second = Document::new_v1();
     second.bpm = Bpm::try_new(160, 1).unwrap();
     save_document(&path, &second).unwrap();
-    assert_eq!(load_document(&path).unwrap(), second);
+    assert_loaded_matches_saved(&load_document(&path).unwrap(), &second);
 
     let mut third = Document::new_v1();
     third.bpm = Bpm::try_new(180, 1).unwrap();
     save_document(&path, &third).unwrap();
-    assert_eq!(load_document(&path).unwrap(), third);
+    assert_loaded_matches_saved(&load_document(&path).unwrap(), &third);
     assert_eq!(count_motolii_tmps(&dir), 0);
     let _ = fs::remove_dir_all(dir);
 }
@@ -90,7 +96,7 @@ fn concurrent_saves_leave_one_complete_document() {
     let written: Vec<Document> = handles.into_iter().map(|h| h.join().unwrap()).collect();
     let loaded = load_document(&path).unwrap();
     assert!(
-        written.iter().any(|d| d == &loaded),
+        written.iter().any(|d| { let mut e = d.clone(); e.version = LATEST_DOCUMENT_VERSION; loaded == e }),
         "final file must equal one of the concurrent saves, got bpm={:?}",
         loaded.bpm
     );
@@ -127,7 +133,7 @@ fn abort_after_temp_write_keeps_old_file() {
         .ends_with(".motolii-tmp"));
 
     assert_eq!(fs::read(&path).unwrap(), old_bytes);
-    assert_eq!(load_document(&path).unwrap(), old);
+    assert_loaded_matches_saved(&load_document(&path).unwrap(), &old);
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -153,7 +159,7 @@ fn abort_after_temp_fsync_keeps_old_file() {
     };
     assert_eq!(stage, SaveAbortAfter::TempFsync);
     assert!(temp_path.exists());
-    assert_eq!(load_document(&path).unwrap(), old);
+    assert_loaded_matches_saved(&load_document(&path).unwrap(), &old);
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -183,7 +189,7 @@ fn abort_after_rename_new_file_is_complete() {
     ));
 
     // 置換済みなので本ファイルは新内容で完全に読める
-    assert_eq!(load_document(&path).unwrap(), newer);
+    assert_loaded_matches_saved(&load_document(&path).unwrap(), &newer);
     assert_eq!(count_motolii_tmps(&dir), 0);
     let _ = fs::remove_dir_all(dir);
 }
@@ -210,7 +216,7 @@ fn abort_temps_do_not_block_subsequent_save() {
     let mut final_doc = Document::new_v1();
     final_doc.bpm = Bpm::try_new(70, 1).unwrap();
     save_document(&path, &final_doc).unwrap();
-    assert_eq!(load_document(&path).unwrap(), final_doc);
+    assert_loaded_matches_saved(&load_document(&path).unwrap(), &final_doc);
     let _ = fs::remove_dir_all(dir);
 }
 

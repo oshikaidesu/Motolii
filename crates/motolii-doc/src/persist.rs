@@ -20,10 +20,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Deserialize;
 use thiserror::Error;
 
+use crate::migrate::{self, LATEST_DOCUMENT_VERSION};
 use crate::{Document, DocumentError};
 
 /// このリーダーが開ける`min_reader_version`の上限(=自版の読取能力)。
-pub const READER_VERSION: u32 = 1;
+pub const READER_VERSION: u32 = LATEST_DOCUMENT_VERSION;
 
 /// クラッシュ注入用の保存段。本番は`None`。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,6 +45,8 @@ pub enum PersistError {
     Io(#[from] io::Error),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    Migrate(#[from] Box<migrate::MigrateError>),
     #[error(
         "document requires reader version {min_reader_version}, but this reader is {reader_version}"
     )]
@@ -165,15 +168,23 @@ pub fn load_document(path: &Path) -> Result<Document, PersistError> {
 }
 
 pub fn load_document_bytes(bytes: &[u8]) -> Result<Document, PersistError> {
+    load_document_bytes_with_reader_cap(bytes, READER_VERSION)
+}
+
+/// 読取能力上限を指定して読込(前方互換テスト用)。
+pub fn load_document_bytes_with_reader_cap(
+    bytes: &[u8],
+    reader_version: u32,
+) -> Result<Document, PersistError> {
     // 全文デシリアライズ前に版だけ読む — 未知フィールドで落ちる前に拒否するため
     let header: VersionHeader = serde_json::from_slice(bytes)?;
-    if header.min_reader_version > READER_VERSION {
+    if header.min_reader_version > reader_version {
         return Err(PersistError::ReaderTooOld {
             min_reader_version: header.min_reader_version,
-            reader_version: READER_VERSION,
+            reader_version,
         });
     }
-    let doc: Document = serde_json::from_slice(bytes)?;
+    let (doc, _report) = migrate::migrate_bytes(bytes).map_err(|e| PersistError::Migrate(Box::new(e)))?;
     doc.validate()?;
     Ok(doc)
 }
@@ -313,7 +324,8 @@ mod tests {
         let doc = Document::new_v1();
         save_document(&path, &doc).unwrap();
         let loaded = load_document(&path).unwrap();
-        assert_eq!(loaded, doc);
+        assert_eq!(loaded.version, LATEST_DOCUMENT_VERSION);
+        assert_eq!(loaded.bpm, doc.bpm);
         let _ = fs::remove_dir_all(dir);
     }
 

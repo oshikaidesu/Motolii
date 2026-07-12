@@ -1,0 +1,22 @@
+{
+  "entries": [
+    {
+      "path": "v1/empty.json",
+      "track_count": 0,
+      "clip_count": 0,
+      "keyframe_count": 0
+    },
+    {
+      "path": "v1/rich.json",
+      "track_count": 1,
+      "clip_count": 2,
+      "keyframe_count": 2
+    },
+    {
+      "path": "prelude/empty.json",
+      "track_count": 0,
+      "clip_count": 0,
+      "keyframe_count": 0
+    }
+  ]
+}
