@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
@@ -12,8 +12,8 @@ use motolii_gpu::{GpuCtx, RgbaDownloader, YuvToRgba};
 use motolii_media::{probe, FrameReader, MediaInfo};
 use motolii_nodes::{ParamOverlayError, ParamRectOverlay};
 use motolii_plugin::{
-    migrate_plugin_params, reference::register_reference_plugins, ParamDriverContext,
-    PluginRegistry, ResolvedParams, TextureRef,
+    migrate_plugin_params, reference::register_reference_plugins, ParamDriverContext, PluginError,
+    PluginRegistry, TextureRef,
 };
 use motolii_render::{
     render_frame_with_background_texture, BackgroundTextureRequest, RenderSession,
@@ -206,24 +206,22 @@ pub fn build_data_tracks(
             &mut raw_params,
         )?;
 
-        let known: HashSet<&str> = plugin.desc().params.iter().map(|p| p.id).collect();
-        for key in raw_params.keys() {
-            if !known.contains(key.as_str()) {
+        // 未知キー・型不一致は resolve_params が構造化エラーにする(M2E-8 / P-2,P-3)。
+        let params = match plugin.desc().resolve_params(&raw_params) {
+            Ok(params) => params,
+            Err(PluginError::Param {
+                plugin,
+                id,
+                got,
+                ..
+            }) if got == "unknown" => {
                 return Err(ProjectError::UnknownParam {
-                    plugin: driver.plugin.clone(),
-                    param: key.clone(),
+                    plugin,
+                    param: id,
                 });
             }
-        }
-
-        let mut params = ResolvedParams::new();
-        for def in &plugin.desc().params {
-            let value = raw_params
-                .get(def.id)
-                .cloned()
-                .unwrap_or_else(|| def.default.clone());
-            params.insert(def.id, value);
-        }
+            Err(err) => return Err(err.into()),
+        };
 
         let track = plugin.build_track(ctx, &params)?;
         let id = DataTrackId(driver.track.clone());
@@ -564,6 +562,41 @@ mod tests {
             ProjectError::UnknownParam { plugin, param }
             if plugin == "core.param.sine" && param == "amplitud"
         ));
+    }
+
+    #[test]
+    fn build_data_tracks_rejects_type_mismatch() {
+        // M2E-8: Vec2 を F64 パラメータに渡すとロード時に構造化エラー。
+        let mut params = HashMap::new();
+        params.insert("amplitude".into(), Value::Vec2([1.0, 2.0]));
+        let drivers = vec![ParamDriverV1 {
+            plugin: "core.param.sine".into(),
+            track: "sine_x".into(),
+            effect_version: 2,
+            params,
+        }];
+        let err = build_data_tracks(
+            &drivers,
+            RationalTime::ZERO,
+            RationalTime::from_seconds(1),
+            Fps { num: 12, den: 1 },
+        )
+        .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ProjectError::Plugin(PluginError::Param {
+                    ref plugin,
+                    ref id,
+                    ref expected,
+                    ref got,
+                }) if plugin == "core.param.sine"
+                    && id == "amplitude"
+                    && expected == "F64"
+                    && got == "Vec2"
+            ),
+            "expected PluginError::Param type mismatch, got {err:?}"
+        );
     }
 
     #[test]

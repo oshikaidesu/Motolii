@@ -44,6 +44,46 @@ pub enum ValueType {
     AssetRef,
 }
 
+impl ValueType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ValueType::F64 => "F64",
+            ValueType::Vec2 => "Vec2",
+            ValueType::Vec3 => "Vec3",
+            ValueType::Color => "Color",
+            ValueType::AssetRef => "AssetRef",
+        }
+    }
+}
+
+impl std::fmt::Display for ValueType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// `Value` の実行時型名(エラー表示用)。
+pub fn value_type_name(value: &Value) -> &'static str {
+    match value {
+        Value::F64(_) => "F64",
+        Value::Vec2(_) => "Vec2",
+        Value::Vec3(_) => "Vec3",
+        Value::Color(_) => "Color",
+        Value::AssetRef(_) => "AssetRef",
+    }
+}
+
+pub fn value_matches_type(value_type: ValueType, value: &Value) -> bool {
+    matches!(
+        (value_type, value),
+        (ValueType::F64, Value::F64(_))
+            | (ValueType::Vec2, Value::Vec2(_))
+            | (ValueType::Vec3, Value::Vec3(_))
+            | (ValueType::Color, Value::Color(_))
+            | (ValueType::AssetRef, Value::AssetRef(_))
+    )
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParamDef {
     pub id: &'static str,
@@ -84,8 +124,89 @@ impl ResolvedParams {
         self.values.get(id)
     }
 
+    /// サイレントフォールバックは「もっともらしく間違う絵」の温床(M2E-8)。新規コードは`require_f64`。
+    #[deprecated(note = "use require_f64; silent fallback hides type mistakes")]
     pub fn f64_or(&self, id: &'static str, fallback: f64) -> f64 {
         self.get(id).and_then(Value::as_f64).unwrap_or(fallback)
+    }
+
+    pub fn require_f64(&self, plugin: &str, id: &'static str) -> Result<f64, PluginError> {
+        match self.get(id) {
+            Some(Value::F64(v)) => Ok(*v),
+            Some(v) => Err(PluginError::param_type(
+                plugin,
+                id,
+                ValueType::F64,
+                value_type_name(v),
+            )),
+            None => Err(PluginError::param_missing(plugin, id, ValueType::F64)),
+        }
+    }
+
+    pub fn require_color(&self, plugin: &str, id: &'static str) -> Result<[f64; 4], PluginError> {
+        match self.get(id) {
+            Some(Value::Color(v)) => Ok(*v),
+            Some(v) => Err(PluginError::param_type(
+                plugin,
+                id,
+                ValueType::Color,
+                value_type_name(v),
+            )),
+            None => Err(PluginError::param_missing(plugin, id, ValueType::Color)),
+        }
+    }
+
+    pub fn require_vec2(&self, plugin: &str, id: &'static str) -> Result<[f64; 2], PluginError> {
+        match self.get(id) {
+            Some(Value::Vec2(v)) => Ok(*v),
+            Some(v) => Err(PluginError::param_type(
+                plugin,
+                id,
+                ValueType::Vec2,
+                value_type_name(v),
+            )),
+            None => Err(PluginError::param_missing(plugin, id, ValueType::Vec2)),
+        }
+    }
+}
+
+impl NodeDesc {
+    /// 生JSON params を desc に照合して解決する(M2E-8)。
+    /// 未知ID→Err、型不一致→Err、欠落→`ParamDef.default` 充填。
+    pub fn resolve_params(
+        &self,
+        raw: &HashMap<String, Value>,
+    ) -> Result<ResolvedParams, PluginError> {
+        let plugin = self.id.0;
+        let known: BTreeSet<&str> = self.params.iter().map(|p| p.id).collect();
+        for key in raw.keys() {
+            if !known.contains(key.as_str()) {
+                return Err(PluginError::Param {
+                    plugin: plugin.to_string(),
+                    id: key.clone(),
+                    expected: "defined in NodeDesc".into(),
+                    got: "unknown".into(),
+                });
+            }
+        }
+
+        let mut params = ResolvedParams::new();
+        for def in &self.params {
+            let value = match raw.get(def.id) {
+                Some(v) if value_matches_type(def.value_type, v) => v.clone(),
+                Some(v) => {
+                    return Err(PluginError::param_type(
+                        plugin,
+                        def.id,
+                        def.value_type,
+                        value_type_name(v),
+                    ));
+                }
+                None => def.default.clone(),
+            };
+            params.insert(def.id, value);
+        }
+        Ok(params)
     }
 }
 
@@ -118,6 +239,39 @@ pub enum PluginError {
     Render(String),
     #[error("param migrate failed for {plugin}: {reason}")]
     Migrate { plugin: String, reason: String },
+    /// 型不一致・未知キー・欠落(require時)。サイレントデフォルトの代替。
+    #[error("plugin `{plugin}` param `{id}`: expected {expected}, got {got}")]
+    Param {
+        plugin: String,
+        id: String,
+        expected: String,
+        got: String,
+    },
+}
+
+impl PluginError {
+    fn param_type(
+        plugin: &str,
+        id: &str,
+        expected: ValueType,
+        got: &str,
+    ) -> Self {
+        Self::Param {
+            plugin: plugin.to_string(),
+            id: id.to_string(),
+            expected: expected.to_string(),
+            got: got.to_string(),
+        }
+    }
+
+    fn param_missing(plugin: &str, id: &str, expected: ValueType) -> Self {
+        Self::Param {
+            plugin: plugin.to_string(),
+            id: id.to_string(),
+            expected: expected.to_string(),
+            got: "missing".into(),
+        }
+    }
 }
 
 /// 複製インスタンスの評価コンテキスト口(F-7予約。配線はM2以降)。
@@ -248,15 +402,7 @@ pub fn validate_node_desc(kind: PluginKind, desc: &NodeDesc) -> Result<(), Plugi
         if !param_ids.insert(param.id) {
             return Err(invalid(format!("duplicate param id `{}`", param.id)));
         }
-        let default_matches = matches!(
-            (param.value_type, &param.default),
-            (ValueType::F64, Value::F64(_))
-                | (ValueType::Vec2, Value::Vec2(_))
-                | (ValueType::Vec3, Value::Vec3(_))
-                | (ValueType::Color, Value::Color(_))
-                | (ValueType::AssetRef, Value::AssetRef(_))
-        );
-        if !default_matches {
+        if !value_matches_type(param.value_type, &param.default) {
             return Err(invalid(format!(
                 "param `{}` default does not match value_type {:?}",
                 param.id, param.value_type
@@ -579,7 +725,11 @@ pub mod reference {
             _input: TextureRef<'_>,
             output: TextureRef<'_>,
         ) -> Result<(), PluginError> {
-            clear_texture(encoder, output, color_from_params(params));
+            clear_texture(
+                encoder,
+                output,
+                color_from_params("core.filter.clear", params)?,
+            );
             Ok(())
         }
     }
@@ -612,10 +762,8 @@ pub mod reference {
                 },
             );
             // UI/APIのcolorはstraight。シェーダ側でunpremul→乗算→premulする。
-            let color = match params.get("color") {
-                Some(Value::Color([r, g, b, a])) => [*r as f32, *g as f32, *b as f32, *a as f32],
-                _ => [1.0, 1.0, 1.0, 1.0],
-            };
+            let [r, g, b, a] = params.require_color("core.filter.tint", "color")?;
+            let color = [r as f32, g as f32, b as f32, a as f32];
             gpu.queue
                 .write_buffer(&cached.uniform_buffer, 0, bytemuck::bytes_of(&color));
             let input_view = input
@@ -696,7 +844,9 @@ pub mod reference {
                     wgsl: OPACITY_WGSL,
                 },
             );
-            let amount = params.f64_or("amount", 1.0).clamp(0.0, 1.0) as f32;
+            let amount = params
+                .require_f64("core.filter.opacity", "amount")?
+                .clamp(0.0, 1.0) as f32;
             let uniform = [amount, 0.0, 0.0, 0.0];
             gpu.queue
                 .write_buffer(&cached.uniform_buffer, 0, bytemuck::bytes_of(&uniform));
@@ -767,7 +917,11 @@ pub mod reference {
             output: TextureRef<'_>,
         ) -> Result<(), PluginError> {
             ctx.camera.validate().map_err(PluginError::Render)?;
-            clear_texture(encoder, output, color_from_params(params));
+            clear_texture(
+                encoder,
+                output,
+                color_from_params("core.layer_source.clear", params)?,
+            );
             Ok(())
         }
     }
@@ -789,7 +943,11 @@ pub mod reference {
             _inputs: &[TextureRef<'_>],
             output: TextureRef<'_>,
         ) -> Result<(), PluginError> {
-            clear_texture(encoder, output, color_from_params(params));
+            clear_texture(
+                encoder,
+                output,
+                color_from_params("core.composite.clear", params)?,
+            );
             Ok(())
         }
     }
@@ -806,9 +964,9 @@ pub mod reference {
             ctx: ParamDriverContext,
             params: &ResolvedParams,
         ) -> Result<DataTrack, PluginError> {
-            let amplitude = params.f64_or("amplitude", 1.0);
-            let frequency_hz = params.f64_or("frequency_hz", 1.0);
-            let offset = params.f64_or("offset", 0.0);
+            let amplitude = params.require_f64("core.param.sine", "amplitude")?;
+            let frequency_hz = params.require_f64("core.param.sine", "frequency_hz")?;
+            let offset = params.require_f64("core.param.sine", "offset")?;
             let samples = sample_count(ctx.duration, ctx.sample_rate);
             let values = (0..samples)
                 .map(|i| {
@@ -1015,16 +1173,12 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         }]
     }
 
-    fn color_from_params(params: &ResolvedParams) -> wgpu::Color {
-        match params.get("color") {
-            Some(Value::Color([r, g, b, a])) => wgpu::Color {
-                r: *r,
-                g: *g,
-                b: *b,
-                a: *a,
-            },
-            _ => wgpu::Color::TRANSPARENT,
-        }
+    fn color_from_params(
+        plugin: &str,
+        params: &ResolvedParams,
+    ) -> Result<wgpu::Color, PluginError> {
+        let [r, g, b, a] = params.require_color(plugin, "color")?;
+        Ok(wgpu::Color { r, g, b, a })
     }
 
     fn clear_texture(
@@ -1395,5 +1549,100 @@ mod tests {
         let mut registry = PluginRegistry::new();
         let err = registry.register_filter(&BAD).unwrap_err();
         assert!(matches!(err, PluginError::InvalidDesc { .. }));
+    }
+
+    #[test]
+    fn resolve_params_fills_defaults_and_rejects_unknown_or_mismatch() {
+        let desc = SINE_PARAM_DRIVER.desc();
+        let empty = HashMap::new();
+        let filled = desc.resolve_params(&empty).unwrap();
+        assert_eq!(filled.require_f64("core.param.sine", "amplitude").unwrap(), 1.0);
+        assert_eq!(
+            filled.require_f64("core.param.sine", "frequency_hz").unwrap(),
+            1.0
+        );
+        assert_eq!(filled.require_f64("core.param.sine", "offset").unwrap(), 0.0);
+
+        let mut unknown = HashMap::new();
+        unknown.insert("nope".into(), Value::F64(1.0));
+        let err = desc.resolve_params(&unknown).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                PluginError::Param {
+                    ref id,
+                    ref got,
+                    ..
+                } if id == "nope" && got == "unknown"
+            ),
+            "{err:?}"
+        );
+
+        let mut mismatch = HashMap::new();
+        mismatch.insert("amplitude".into(), Value::Vec2([0.0, 1.0]));
+        let err = desc.resolve_params(&mismatch).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                PluginError::Param {
+                    ref id,
+                    ref expected,
+                    ref got,
+                    ..
+                } if id == "amplitude" && expected == "F64" && got == "Vec2"
+            ),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn require_f64_rejects_wrong_type_and_missing() {
+        let mut params = ResolvedParams::new();
+        params.insert("amplitude", Value::Vec2([1.0, 2.0]));
+        let err = params
+            .require_f64("core.param.sine", "amplitude")
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                PluginError::Param {
+                    ref expected,
+                    ref got,
+                    ..
+                } if expected == "F64" && got == "Vec2"
+            ),
+            "{err:?}"
+        );
+
+        let empty = ResolvedParams::new();
+        let err = empty.require_f64("core.param.sine", "amplitude").unwrap_err();
+        assert!(
+            matches!(
+                err,
+                PluginError::Param {
+                    ref got,
+                    ..
+                } if got == "missing"
+            ),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn reference_impl_does_not_call_silent_f64_fallback() {
+        // 完了条件: 参照実装からサイレントf64フォールバック呼び出しが消えている(M2E-8)。
+        let src = include_str!("lib.rs");
+        let start = src
+            .find("pub mod reference")
+            .expect("reference module marker");
+        // テストmod自身の文字列に引っかからないよう、参照モジュール本体だけを見る。
+        let body = &src[start..];
+        let end = body.find("\n#[cfg(test)]").unwrap_or(body.len());
+        let reference = &body[..end];
+        let forbidden = format!(".{}(", "f64_or");
+        assert!(
+            !reference.contains(&forbidden),
+            "reference plugins must use require_* instead of silent f64 fallback"
+        );
     }
 }
