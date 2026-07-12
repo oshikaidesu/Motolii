@@ -90,7 +90,7 @@ impl PlaybackHandle {
         let total_frames = cache.frame_count();
         let mut playhead = start_frame.min(total_frames);
 
-        // ストリーム開始前に先読みして、起動直後のコールバック飢えを避ける
+        // play()前に先読み+プロデューサ起動 — コールバックがwriter不在のリングを枯らさない
         let prefill_target = capacity_frames.min((total_frames.saturating_sub(playhead)) as usize);
         while ring.buffered_frames() < prefill_target {
             let free = ring.free_frames();
@@ -108,10 +108,6 @@ impl PlaybackHandle {
             }
             playhead += pushed as u64;
         }
-
-        stream
-            .play()
-            .map_err(|e| AudioError::Cpal(e.to_string()))?;
 
         let producer = thread::Builder::new()
             .name("motolii-audio-producer".into())
@@ -140,6 +136,10 @@ impl PlaybackHandle {
             })
             .map_err(|e| AudioError::Cpal(format!("failed to spawn producer thread: {e}")))?;
 
+        stream
+            .play()
+            .map_err(|e| AudioError::Cpal(e.to_string()))?;
+
         Ok(Self {
             ring,
             running,
@@ -157,12 +157,24 @@ impl PlaybackHandle {
     }
 
     pub fn stop(mut self) -> PlaybackStats {
+        self.shutdown();
+        self.stats()
+    }
+
+    fn shutdown(&mut self) {
         self.running.store(false, Ordering::Release);
         if let Some(producer) = self.producer.take() {
             let _ = producer.join();
         }
+        // Stream dropがデバイス停止。プロデューサjoin後に落とす
         drop(self.stream.take());
-        self.stats()
+    }
+}
+
+impl Drop for PlaybackHandle {
+    fn drop(&mut self) {
+        // stop()を経由しない破棄でもゾンビプロデューサを残さない
+        self.shutdown();
     }
 }
 

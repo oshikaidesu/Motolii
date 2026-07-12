@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 mod support;
 
 use std::sync::Arc;
@@ -86,14 +88,17 @@ fn simulated_playback_from_mid_offset() {
     assert_eq!(stats.frames_delivered, cache.frame_count() - start);
 }
 
-/// 実デバイスがある環境のみ: 短い再生でアンダーラン0を確認する。
+/// 実デバイス向けの短い再生でアンダーラン0を確認する。
+///
+/// cpal出力はGPU/ffmpegと違いCI必須依存ではない(M2E-1の`MOTOLII_REQUIRE_GPU`対象外)。
+/// 既定では無視し、ローカルで `cargo test -p motolii-audio -- --ignored` を走らせる。
 #[test]
+#[ignore = "optional cpal device; not covered by MOTOLII_REQUIRE_GPU"]
 fn hardware_playback_without_underrun() {
     let host = cpal::default_host();
-    let Some(device) = host.default_output_device() else {
-        motolii_testkit::unavailable_dep("audio output", "no default output device");
-        return;
-    };
+    let device = host
+        .default_output_device()
+        .expect("ignored hardware test requires a default output device");
 
     let rate = 48_000u32;
     let frames = rate as usize / 10; // 100ms
@@ -113,14 +118,8 @@ fn hardware_playback_without_underrun() {
         .unwrap(),
     );
 
-    let handle = match PlaybackHandle::play_from_on_device(cache, &device, 0) {
-        Ok(handle) => handle,
-        Err(motolii_audio::AudioError::UnsupportedOutputConfig { detail, .. }) => {
-            motolii_testkit::unavailable_dep("audio output", &detail);
-            return;
-        }
-        Err(err) => panic!("start hardware playback: {err:?}"),
-    };
+    let handle = PlaybackHandle::play_from_on_device(cache, &device, 0)
+        .expect("start hardware playback");
     std::thread::sleep(std::time::Duration::from_millis(60));
     let stats = handle.stop();
     assert_eq!(stats.underrun_count, 0, "hardware underruns: {}", stats.underrun_count);

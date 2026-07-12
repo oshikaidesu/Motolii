@@ -1,4 +1,6 @@
 //! テスト用の最小WAV(PCM16 mono)を生成する。
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 pub fn write_pcm16_mono_wav(path: &std::path::Path, sample_rate: u32, samples: &[i16]) {
     let data_bytes = (samples.len() * 2) as u32;
     let byte_rate = sample_rate * 2;
