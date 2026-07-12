@@ -6,7 +6,7 @@ pub enum Value {
     F64(f64),
     Vec2([f64; 2]),
     Vec3([f64; 3]),
-    /// RGBA(リニア、0.0-1.0想定)
+    /// RGBA: 非線形sRGB・straight-alpha・各成分0.0–1.0(M2E-13。リニア化はレンダ側)
     Color([f64; 4]),
     /// アセットID参照(F-10予約。補間なし。結線はM2 D1)。
     AssetRef(String),
