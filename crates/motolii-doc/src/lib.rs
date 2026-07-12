@@ -1,9 +1,9 @@
-//! motolii-doc: ドキュメント所有権骨格(F-2) + D1-prelude(M2E-12) + D1aスキーマ本体。
+//! motolii-doc: ドキュメント所有権骨格(F-2) + D1-prelude(M2E-12) + D1aスキーマ + D1b検証。
 //!
 //! 読み手(レンダ・書き出し・解析)は`Arc<Document>`スナップショットのみを受け取る。
 //! `edit`は戻り値を持たない — 参照漏洩で凍結を封じないため。
 //!
-//! **D1a**: トラック/クリップ/Asset/BPM等のスキーマ本体。永続I/O・ジャーナルはD1c/D1d。
+//! **D1a**: スキーマ本体。**D1b**: 保存前`validate`(ガード1)。永続I/O・ジャーナルはD1c/D1d。
 
 mod asset;
 mod bpm;
@@ -11,6 +11,7 @@ mod ids;
 mod param;
 mod schema;
 mod track_id;
+mod validate;
 
 use std::sync::Arc;
 
@@ -27,6 +28,7 @@ pub use schema::{
     TrackItem, Transform2D,
 };
 pub use track_id::{TrackId, TrackIdError, TrackIdTable};
+pub use validate::DocumentError;
 
 fn default_min_reader_version() -> u32 {
     1
@@ -112,6 +114,11 @@ impl DocumentWriter {
             WriterMessage::SetBpm(bpm) => self.doc.bpm = bpm,
         }
         self.revision = self.revision.wrapping_add(1);
+    }
+
+    /// 保存前検証。失敗してもwriter内部のDocumentは不変(検証のみ — ガード1)。
+    pub fn validate(&self) -> Result<(), DocumentError> {
+        self.doc.validate()
     }
 }
 
