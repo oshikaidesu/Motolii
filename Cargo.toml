@@ -12,6 +12,7 @@ members = [
     "crates/motolii-media",
     "crates/motolii-gpu",
     "crates/motolii-doc",
+    "crates/motolii-audio",
 ]
 
 [workspace.package]
@@ -31,6 +32,7 @@ motolii-export = { path = "crates/motolii-export" }
 motolii-cli = { path = "crates/motolii-cli" }
 motolii-testkit = { path = "crates/motolii-testkit" }
 motolii-doc = { path = "crates/motolii-doc" }
+motolii-audio = { path = "crates/motolii-audio" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
