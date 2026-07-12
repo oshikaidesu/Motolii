@@ -9,12 +9,16 @@
 //! **D1-prelude**(M2E-12): version/互換の枠と所有権骨格のみ。トラック・クリップ等の
 //! スキーマ本体は含めない(本体はゲート達成後のD1)。
 
+mod ids;
+
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use motolii_core::TimeMap;
+
+pub use ids::{LayerId, LayerIdError, LayerIdTable};
 
 fn default_min_reader_version() -> u32 {
     1
