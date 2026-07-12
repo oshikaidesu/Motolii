@@ -11,4 +11,4 @@ mod ring;
 pub use cache::{decode_file, PcmCache, PcmFormat};
 pub use error::AudioError;
 pub use playback::{simulate_playback_without_underrun, PlaybackHandle, PlaybackStats};
-pub use ring::SampleRing;
+pub use ring::{split as split_ring, RingConsumer, RingProducer, RingStats};

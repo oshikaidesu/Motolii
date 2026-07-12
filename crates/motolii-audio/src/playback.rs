@@ -8,7 +8,7 @@ use cpal::{SampleFormat, Stream};
 
 use crate::cache::PcmCache;
 use crate::error::AudioError;
-use crate::ring::SampleRing;
+use crate::ring::{self, RingStats};
 
 /// 再生終了時の統計。アンダーランはコールバックが無音で埋めた回数。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,7 +19,7 @@ pub struct PlaybackStats {
 
 /// プロデューサスレッド + cpal出力の再生ハンドル。
 pub struct PlaybackHandle {
-    ring: Arc<SampleRing>,
+    ring_stats: RingStats,
     running: Arc<AtomicBool>,
     underruns: Arc<AtomicU64>,
     producer: Option<JoinHandle<()>>,
@@ -55,18 +55,18 @@ impl PlaybackHandle {
 
         // 約200ms分を先読み — コールバックが飢えない余裕(D4完了条件)。
         let capacity_frames = (format.sample_rate as usize / 5).max(1024);
-        let ring = Arc::new(SampleRing::new(output_channels, capacity_frames)?);
+        let (ring_prod, ring_cons) = ring::split(output_channels, capacity_frames)?;
+        let ring_stats = ring_prod.stats();
         let running = Arc::new(AtomicBool::new(true));
         let underruns = Arc::new(AtomicU64::new(0));
 
-        let ring_cb = Arc::clone(&ring);
         let underruns_cb = Arc::clone(&underruns);
         let stream = match config.sample_format() {
             SampleFormat::F32 => device
                 .build_output_stream(
                     &config.config(),
                     move |data: &mut [f32], _| {
-                        let got = ring_cb.pop_samples(data);
+                        let got = ring_cons.pop_samples(data);
                         if got < data.len() {
                             data[got..].fill(0.0);
                             underruns_cb.fetch_add(1, Ordering::Relaxed);
@@ -87,15 +87,14 @@ impl PlaybackHandle {
             }
         };
 
-        let ring_prod = Arc::clone(&ring);
         let running_prod = Arc::clone(&running);
         let total_frames = cache.frame_count();
         let mut playhead = start_frame.min(total_frames);
 
         // play()前に先読み+プロデューサ起動 — コールバックがwriter不在のリングを枯らさない
         let prefill_target = capacity_frames.min((total_frames.saturating_sub(playhead)) as usize);
-        while ring.buffered_frames() < prefill_target {
-            let free = ring.free_frames();
+        while ring_prod.buffered_frames() < prefill_target {
+            let free = ring_prod.free_frames();
             if free == 0 || playhead >= total_frames {
                 break;
             }
@@ -104,7 +103,7 @@ impl PlaybackHandle {
                 break;
             };
             let upmixed = upmix_to_output(chunk, input_channels, output_channels as usize);
-            let pushed = ring.push_frames(&upmixed);
+            let pushed = ring_prod.push_frames(&upmixed);
             if pushed == 0 {
                 break;
             }
@@ -146,7 +145,7 @@ impl PlaybackHandle {
         }
 
         Ok(Self {
-            ring,
+            ring_stats,
             running,
             underruns,
             producer: Some(producer),
@@ -156,7 +155,7 @@ impl PlaybackHandle {
 
     pub fn stats(&self) -> PlaybackStats {
         PlaybackStats {
-            frames_delivered: self.ring.frames_read(),
+            frames_delivered: self.ring_stats.frames_read(),
             underrun_count: self.underruns.load(Ordering::Acquire),
         }
     }
@@ -263,13 +262,13 @@ pub fn simulate_playback_without_underrun(
 ) -> Result<PlaybackStats, AudioError> {
     let format = cache.format();
     let capacity = (format.sample_rate as usize / 5).max(1024);
-    let ring = Arc::new(SampleRing::new(format.channels, capacity)?);
+    let (ring_prod, ring_cons) = ring::split(format.channels, capacity)?;
+    let ring_stats = ring_cons.stats();
     let running = Arc::new(AtomicBool::new(true));
     let underruns = Arc::new(AtomicU64::new(0));
     let total = cache.frame_count();
     let mut playhead = start_frame.min(total);
 
-    let ring_prod = Arc::clone(&ring);
     let running_prod = Arc::clone(&running);
     let cache = cache.clone();
     let producer = thread::spawn(move || {
@@ -297,15 +296,15 @@ pub fn simulate_playback_without_underrun(
 
     // 起動直後の競合アンダーランを避けるため、先読みが溜まるまで短く待つ
     let prefill = (format.sample_rate as usize / 20).max(256);
-    while ring.buffered_frames() < prefill.min(target as usize) {
+    while ring_cons.buffered_frames() < prefill.min(target as usize) {
         thread::sleep(Duration::from_micros(200));
     }
 
-    while ring.frames_read() < target {
-        let remaining_frames = (target - ring.frames_read()) as usize;
+    while ring_cons.frames_read() < target {
+        let remaining_frames = (target - ring_cons.frames_read()) as usize;
         let tick_frames = frames_per_tick.min(remaining_frames);
         let mut buf = vec![0.0f32; tick_frames * ch];
-        let got = ring.pop_samples(&mut buf);
+        let got = ring_cons.pop_samples(&mut buf);
         if got < buf.len() {
             underruns.fetch_add(1, Ordering::Relaxed);
             buf[got..].fill(0.0);
@@ -317,7 +316,7 @@ pub fn simulate_playback_without_underrun(
     let _ = producer.join();
 
     Ok(PlaybackStats {
-        frames_delivered: ring.frames_read(),
+        frames_delivered: ring_stats.frames_read(),
         underrun_count: underruns.load(Ordering::Acquire),
     })
 }
