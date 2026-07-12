@@ -15,7 +15,10 @@ use super::format::{JournalFrame, JournalRecordKind, JournalScanOutcome};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum JournalEdit {
-    SetBpm { num: i64, den: i64 },
+    SetBpm {
+        num: i64,
+        den: i64,
+    },
     /// テスト注入専用 — 意図的にリプレイ失敗させる。
     ForceReplayFail,
 }
@@ -101,11 +104,8 @@ fn snapshot_from_frame(
             record_id: frame.record_id,
             reason: "snapshot frame missing generation ref".into(),
         })?;
-    load_generation_snapshot(document_path, generation_id).map_err(|_| {
-        ReplayFailure::MissingSnapshot {
-            generation_id,
-        }
-    })
+    load_generation_snapshot(document_path, generation_id)
+        .map_err(|_| ReplayFailure::MissingSnapshot { generation_id })
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -128,48 +128,34 @@ pub fn replay_journal(
 
     for frame in &scan.frames {
         match frame.kind {
-            JournalRecordKind::Snapshot => {
-                match snapshot_from_frame(document_path, frame) {
-                    Ok(snapshot) => {
-                        fallback_generation = frame.snapshot_ref.or_else(|| {
-                            serde_json::from_slice::<SnapshotPayload>(&frame.payload)
-                                .ok()
-                                .map(|p| p.generation_id)
-                        });
-                        doc = snapshot.clone();
-                        last_snapshot = Some(snapshot);
-                        applied += 1;
-                    }
-                    Err(err) => {
-                        failures.push(err);
-                        if options.fallback_on_failure {
-                            break;
+            JournalRecordKind::Snapshot => match snapshot_from_frame(document_path, frame) {
+                Ok(snapshot) => {
+                    fallback_generation = frame.snapshot_ref.or_else(|| {
+                        serde_json::from_slice::<SnapshotPayload>(&frame.payload)
+                            .ok()
+                            .map(|p| p.generation_id)
+                    });
+                    doc = snapshot.clone();
+                    last_snapshot = Some(snapshot);
+                    applied += 1;
+                }
+                Err(err) => {
+                    failures.push(err);
+                    if options.fallback_on_failure {
+                        // Edit 失敗と同じく直前の成功スナップショットへ戻す
+                        if let Some(snapshot) = last_snapshot.clone() {
+                            doc = snapshot;
                         }
+                        break;
                     }
                 }
-            }
-            JournalRecordKind::Edit => {
-                match decode_edit(&frame.payload) {
-                    Ok(edit) => {
-                        if let Err(source) = apply_edit(&mut doc, &edit) {
-                            failures.push(ReplayFailure::ApplyEdit {
-                                record_id: frame.record_id,
-                                source,
-                            });
-                            if options.fallback_on_failure {
-                                if let Some(snapshot) = last_snapshot.clone() {
-                                    doc = snapshot;
-                                }
-                                break;
-                            }
-                        } else {
-                            applied += 1;
-                        }
-                    }
-                    Err(reason) => {
-                        failures.push(ReplayFailure::InvalidEditPayload {
+            },
+            JournalRecordKind::Edit => match decode_edit(&frame.payload) {
+                Ok(edit) => {
+                    if let Err(source) = apply_edit(&mut doc, &edit) {
+                        failures.push(ReplayFailure::ApplyEdit {
                             record_id: frame.record_id,
-                            reason,
+                            source,
                         });
                         if options.fallback_on_failure {
                             if let Some(snapshot) = last_snapshot.clone() {
@@ -177,9 +163,23 @@ pub fn replay_journal(
                             }
                             break;
                         }
+                    } else {
+                        applied += 1;
                     }
                 }
-            }
+                Err(reason) => {
+                    failures.push(ReplayFailure::InvalidEditPayload {
+                        record_id: frame.record_id,
+                        reason,
+                    });
+                    if options.fallback_on_failure {
+                        if let Some(snapshot) = last_snapshot.clone() {
+                            doc = snapshot;
+                        }
+                        break;
+                    }
+                }
+            },
             JournalRecordKind::PinGeneration => {
                 // カタログ側のメタデータ — リプレイ状態には影響しない。
                 applied += 1;
@@ -201,4 +201,10 @@ pub fn snapshot_payload(generation_id: Uuid) -> Vec<u8> {
 
 pub fn edit_payload(edit: &JournalEdit) -> Result<Vec<u8>, serde_json::Error> {
     serde_json::to_vec(edit)
+}
+
+/// Document 内容の安定指紋(main 先行判定用)。
+pub fn document_fingerprint(doc: &Document) -> Result<u64, serde_json::Error> {
+    let bytes = serde_json::to_vec(doc)?;
+    Ok(u64::from(crc32fast::hash(&bytes)))
 }

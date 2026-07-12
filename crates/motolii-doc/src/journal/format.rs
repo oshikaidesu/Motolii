@@ -84,7 +84,9 @@ pub enum JournalFormatError {
     UnknownKind(u8),
     #[error("journal frame checksum mismatch at offset {offset}")]
     ChecksumMismatch { offset: u64 },
-    #[error("journal record salt {record_salt} does not match file salt {file_salt} at offset {offset}")]
+    #[error(
+        "journal record salt {record_salt} does not match file salt {file_salt} at offset {offset}"
+    )]
     SaltMismatch {
         record_salt: u64,
         file_salt: u64,
@@ -117,10 +119,7 @@ pub fn read_header(data: &[u8]) -> Result<JournalHeader, JournalFormatError> {
         return Err(JournalFormatError::UnsupportedVersion(version));
     }
     let file_salt = u64::from_le_bytes(data[12..20].try_into().expect("salt"));
-    Ok(JournalHeader {
-        version,
-        file_salt,
-    })
+    Ok(JournalHeader { version, file_salt })
 }
 
 pub fn encode_header(header: &JournalHeader) -> [u8; HEADER_LEN] {
@@ -276,7 +275,10 @@ pub fn scan_journal_bytes(
     })
 }
 
-pub fn scan_journal(path: &Path, options: &ScanJournalOptions) -> Result<JournalScanOutcome, JournalFormatError> {
+pub fn scan_journal(
+    path: &Path,
+    options: &ScanJournalOptions,
+) -> Result<JournalScanOutcome, JournalFormatError> {
     let data = std::fs::read(path)?;
     scan_journal_bytes(&data, options)
 }
@@ -297,10 +299,7 @@ pub fn init_journal_file(path: &Path, file_salt: u64) -> Result<(), JournalForma
         version: JOURNAL_FORMAT_VERSION,
         file_salt,
     };
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)?;
+    let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
     file.write_all(&encode_header(&header))?;
     file.sync_all()?;
     Ok(())
@@ -314,7 +313,10 @@ pub fn append_frame(path: &Path, frame: &JournalFrame) -> Result<(), JournalForm
     Ok(())
 }
 
-pub fn read_or_create_header(path: &Path, file_salt: u64) -> Result<JournalHeader, JournalFormatError> {
+pub fn read_or_create_header(
+    path: &Path,
+    file_salt: u64,
+) -> Result<JournalHeader, JournalFormatError> {
     if path.exists() {
         let data = std::fs::read(path)?;
         read_header(&data)

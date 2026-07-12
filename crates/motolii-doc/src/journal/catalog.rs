@@ -27,6 +27,12 @@ pub struct GenerationCatalog {
     pub max_unpinned: u32,
     pub next_seq: u64,
     pub generations: Vec<GenerationEntry>,
+    /// 直近スナップショット以降の Edit 件数。跨ぎ save でも保持する。
+    #[serde(default)]
+    pub edits_since_snapshot: u32,
+    /// 最後にジャーナル追記した Document の指紋。main 先行判定に使う。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_journaled_fingerprint: Option<u64>,
 }
 
 impl GenerationCatalog {
@@ -37,15 +43,12 @@ impl GenerationCatalog {
             max_unpinned,
             next_seq: 0,
             generations: Vec::new(),
+            edits_since_snapshot: 0,
+            last_journaled_fingerprint: None,
         }
     }
 
-    pub fn register_generation(
-        &mut self,
-        id: Uuid,
-        journal_record: Uuid,
-        pinned: bool,
-    ) -> u64 {
+    pub fn register_generation(&mut self, id: Uuid, journal_record: Uuid, pinned: bool) -> u64 {
         let seq = self.next_seq;
         self.next_seq += 1;
         self.generations.push(GenerationEntry {
@@ -73,6 +76,10 @@ impl GenerationCatalog {
 
     pub fn find(&self, id: Uuid) -> Option<&GenerationEntry> {
         self.generations.iter().find(|g| g.id == id)
+    }
+
+    pub fn latest_generation(&self) -> Option<&GenerationEntry> {
+        self.generations.iter().max_by_key(|g| g.created_seq)
     }
 }
 
@@ -126,6 +133,53 @@ pub fn load_catalog(document_path: &Path) -> Result<Option<GenerationCatalog>, C
     Ok(Some(serde_json::from_slice(&bytes)?))
 }
 
+/// 壊れた catalog はエラーにせず None(呼び出し側で再構築)。
+pub fn load_catalog_lenient(
+    document_path: &Path,
+) -> Result<(Option<GenerationCatalog>, bool), CatalogError> {
+    let path = catalog_path_for_document(document_path);
+    if !path.exists() {
+        return Ok((None, false));
+    }
+    let bytes = fs::read(&path)?;
+    match serde_json::from_slice::<GenerationCatalog>(&bytes) {
+        Ok(catalog) => Ok((Some(catalog), false)),
+        Err(_) => Ok((None, true)),
+    }
+}
+
+/// journal salt と generations ディレクトリから最小カタログを再構築する。
+pub fn rebuild_catalog_from_generations(
+    document_path: &Path,
+    journal_salt: u64,
+    max_unpinned: u32,
+) -> Result<GenerationCatalog, CatalogError> {
+    let mut catalog = GenerationCatalog::new(journal_salt, max_unpinned);
+    let gen_dir = motolii_dir_for_document(document_path).join(GENERATIONS_DIR);
+    if !gen_dir.exists() {
+        return Ok(catalog);
+    }
+    let mut ids = Vec::new();
+    for entry in fs::read_dir(gen_dir)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        let Some(stem) = name.strip_suffix(".json") else {
+            continue;
+        };
+        if let Ok(id) = Uuid::parse_str(stem) {
+            ids.push(id);
+        }
+    }
+    ids.sort_by_key(|id| *id.as_bytes());
+    for id in ids {
+        catalog.register_generation(id, Uuid::nil(), false);
+    }
+    Ok(catalog)
+}
+
 pub fn save_catalog(document_path: &Path, catalog: &GenerationCatalog) -> Result<(), CatalogError> {
     let dir = motolii_dir_for_document(document_path);
     fs::create_dir_all(&dir)?;
@@ -141,9 +195,7 @@ pub fn rotate_generations(
     catalog: &mut GenerationCatalog,
     options: &RotateOptions,
 ) -> Result<Vec<Uuid>, CatalogError> {
-    let max_unpinned = options
-        .max_unpinned
-        .unwrap_or(catalog.max_unpinned) as usize;
+    let max_unpinned = options.max_unpinned.unwrap_or(catalog.max_unpinned) as usize;
     let mut removed = Vec::new();
     while catalog.unpinned_count() > max_unpinned {
         let oldest = catalog

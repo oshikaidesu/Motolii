@@ -11,8 +11,8 @@ use crate::persist::{save_document, save_document_with_options, SaveOptions};
 use crate::{Document, PersistError};
 
 use super::catalog::{
-    generation_path_for_document, load_catalog, rotate_generations, save_catalog,
-    GenerationCatalog, PinGenerationOptions, RotateOptions,
+    generation_path_for_document, load_catalog_lenient, rebuild_catalog_from_generations,
+    rotate_generations, save_catalog, GenerationCatalog, PinGenerationOptions, RotateOptions,
 };
 use super::format::{
     append_frame, encode_frame, journal_path_for_document, read_or_create_header, scan_journal,
@@ -20,7 +20,8 @@ use super::format::{
     ScanJournalOptions, HEADER_LEN,
 };
 use super::replay::{
-    edit_payload, replay_journal, snapshot_payload, JournalEdit, ReplayOptions, ReplayOutcome,
+    document_fingerprint, edit_payload, load_generation_snapshot, replay_journal, snapshot_payload,
+    JournalEdit, ReplayOptions, ReplayOutcome,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,6 +30,8 @@ pub enum RecoverySource {
     JournalReplay,
     SnapshotFallback,
     TruncatedJournalThenReplay,
+    /// main が読めず世代スナップショット+リプレイで復元した。
+    GenerationRecovery,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -65,10 +68,12 @@ pub enum ProjectError {
     Io(#[from] io::Error),
     #[error("main document missing at {0}")]
     MissingMainDocument(PathBuf),
+    #[error("main document corrupt and no recoverable journal/generation at {path}")]
+    Unrecoverable { path: PathBuf },
 }
 
 fn new_journal_salt(document_path: &Path) -> Result<u64, ProjectError> {
-    if let Some(catalog) = load_catalog(document_path)? {
+    if let Ok((Some(catalog), _)) = load_catalog_lenient(document_path) {
         return Ok(catalog.journal_salt);
     }
     let journal_path = journal_path_for_document(document_path);
@@ -91,15 +96,18 @@ struct ProjectLayout {
 fn ensure_layout(document_path: &Path, file_salt: u64) -> Result<ProjectLayout, ProjectError> {
     let journal_path = journal_path_for_document(document_path);
     let header = read_or_create_header(&journal_path, file_salt)?;
-    let catalog = match load_catalog(document_path)? {
-        Some(mut c) => {
+    let catalog = match load_catalog_lenient(document_path)? {
+        (Some(mut c), _) => {
             c.journal_salt = header.file_salt;
             c
         }
-        None => GenerationCatalog::new(
-            header.file_salt,
-            5, // デフォルト — SaveProjectOptions で上書き可
-        ),
+        (None, corrupted) => {
+            if corrupted {
+                rebuild_catalog_from_generations(document_path, header.file_salt, 5)?
+            } else {
+                GenerationCatalog::new(header.file_salt, 5)
+            }
+        }
     };
     let last_record = scan_journal(&journal_path, &ScanJournalOptions::default())
         .ok()
@@ -158,31 +166,23 @@ pub fn save_project_with_journal(
         layout.catalog.max_unpinned = max;
     }
 
-    let mut edits_since_snapshot = layout
-        .catalog
-        .generations
-        .len()
-        .saturating_sub(1) as u32;
+    // catalog に永続化したカウンタを跨ぎ save で使う
+    let mut edits_since_snapshot = layout.catalog.edits_since_snapshot;
 
     if let Some(edit) = &options.journal_edit {
         let payload = edit_payload(edit)?;
-        push_frame(
-            &mut layout,
-            JournalRecordKind::Edit,
-            None,
-            payload,
-        )?;
-        edits_since_snapshot += 1;
+        push_frame(&mut layout, JournalRecordKind::Edit, None, payload)?;
+        edits_since_snapshot = edits_since_snapshot.saturating_add(1);
     }
 
     let snapshot_interval = options.snapshot_every_n_edits.unwrap_or(0);
     let need_snapshot = !options.skip_snapshot
         && snapshot_interval > 0
         && edits_since_snapshot >= snapshot_interval;
-    if need_snapshot || (!options.skip_snapshot
+    let bootstrap_snapshot = !options.skip_snapshot
         && options.journal_edit.is_none()
-        && layout.catalog.generations.is_empty())
-    {
+        && layout.catalog.generations.is_empty();
+    if need_snapshot || bootstrap_snapshot {
         let generation_id = Uuid::new_v4();
         write_generation_snapshot(document_path, generation_id, doc)?;
         let payload = snapshot_payload(generation_id);
@@ -195,6 +195,7 @@ pub fn save_project_with_journal(
         layout
             .catalog
             .register_generation(generation_id, journal_record, false);
+        edits_since_snapshot = 0;
     }
 
     if let Some(pin) = &options.pin_generation {
@@ -214,6 +215,8 @@ pub fn save_project_with_journal(
         rotate_generations(document_path, &mut layout.catalog, rotate)?;
     }
 
+    layout.catalog.edits_since_snapshot = edits_since_snapshot;
+    layout.catalog.last_journaled_fingerprint = Some(document_fingerprint(doc)?);
     save_catalog(document_path, &layout.catalog)?;
     Ok(())
 }
@@ -223,11 +226,20 @@ struct PinPayload {
     generation_id: Uuid,
 }
 
-fn load_main_or_missing(document_path: &Path) -> Result<Option<Document>, ProjectError> {
+enum MainLoad {
+    Ok(Box<Document>),
+    Missing,
+    Corrupt,
+}
+
+fn try_load_main(document_path: &Path) -> Result<MainLoad, ProjectError> {
     if !document_path.exists() {
-        return Ok(None);
+        return Ok(MainLoad::Missing);
     }
-    Ok(Some(crate::load_document(document_path)?))
+    match crate::load_document(document_path) {
+        Ok(doc) => Ok(MainLoad::Ok(Box::new(doc))),
+        Err(_) => Ok(MainLoad::Corrupt),
+    }
 }
 
 fn heal_journal(document_path: &Path) -> Result<(JournalScanOutcome, u64), ProjectError> {
@@ -239,10 +251,7 @@ fn heal_journal(document_path: &Path) -> Result<(JournalScanOutcome, u64), Proje
     }
     let data = fs::read(&journal_path)?;
     let before_len = data.len() as u64;
-    let scan = super::format::scan_journal_bytes(
-        &data,
-        &ScanJournalOptions::default(),
-    )?;
+    let scan = super::format::scan_journal_bytes(&data, &ScanJournalOptions::default())?;
     let truncated = if scan.valid_bytes < before_len {
         truncate_journal(&journal_path, scan.valid_bytes)?;
         before_len - scan.valid_bytes
@@ -252,13 +261,58 @@ fn heal_journal(document_path: &Path) -> Result<(JournalScanOutcome, u64), Proje
     Ok((scan, truncated))
 }
 
-/// 本体 JSON + ジャーナルリプレイ + スナップショットフォールバックで復元する。
-pub fn open_project(document_path: &Path) -> Result<OpenProjectOutcome, ProjectError> {
-    let base = match load_main_or_missing(document_path)? {
-        Some(doc) => doc,
-        None => return Err(ProjectError::MissingMainDocument(document_path.to_path_buf())),
-    };
+fn resolve_catalog(
+    document_path: &Path,
+    file_salt: u64,
+) -> Result<(GenerationCatalog, bool), ProjectError> {
+    match load_catalog_lenient(document_path)? {
+        (Some(catalog), false) => Ok((catalog, false)),
+        (None, corrupted) => {
+            let rebuilt = rebuild_catalog_from_generations(document_path, file_salt, 5)?;
+            Ok((rebuilt, corrupted))
+        }
+        (Some(_), true) => unreachable!("lenient returns None when corrupted"),
+    }
+}
 
+fn base_from_latest_generation(
+    document_path: &Path,
+    catalog: &GenerationCatalog,
+) -> Option<Document> {
+    let mut gens: Vec<_> = catalog.generations.iter().collect();
+    gens.sort_by_key(|g| std::cmp::Reverse(g.created_seq));
+    for entry in gens {
+        if let Ok(doc) = load_generation_snapshot(document_path, entry.id) {
+            return Some(doc);
+        }
+    }
+    None
+}
+
+fn classify_replay_source(
+    replay: &ReplayOutcome,
+    truncated: u64,
+    scan: &JournalScanOutcome,
+) -> RecoverySource {
+    if !replay.replay_failures.is_empty() {
+        RecoverySource::SnapshotFallback
+    } else if truncated > 0 {
+        RecoverySource::TruncatedJournalThenReplay
+    } else if scan
+        .frames
+        .iter()
+        .any(|f| f.kind == JournalRecordKind::Edit)
+    {
+        RecoverySource::JournalReplay
+    } else {
+        RecoverySource::MainFile
+    }
+}
+
+fn open_with_main(
+    document_path: &Path,
+    base: Document,
+) -> Result<OpenProjectOutcome, ProjectError> {
     let journal_path = journal_path_for_document(document_path);
     if !journal_path.exists() {
         return Ok(OpenProjectOutcome {
@@ -282,6 +336,22 @@ pub fn open_project(document_path: &Path) -> Result<OpenProjectOutcome, ProjectE
         Err(e) => return Err(e),
     };
 
+    let (catalog, _) = resolve_catalog(document_path, scan.header.file_salt)?;
+    let main_fp = document_fingerprint(&base)?;
+    // D1c 単独 save 等で main だけ進んでいる場合は journal で巻き戻さない
+    let main_ahead_of_journal = catalog
+        .last_journaled_fingerprint
+        .is_some_and(|fp| fp != main_fp);
+
+    if main_ahead_of_journal {
+        return Ok(OpenProjectOutcome {
+            document: base,
+            source: RecoverySource::MainFile,
+            truncated_bytes: truncated,
+            replay: None,
+        });
+    }
+
     if scan.frames.is_empty() {
         return Ok(OpenProjectOutcome {
             document: base,
@@ -295,10 +365,6 @@ pub fn open_project(document_path: &Path) -> Result<OpenProjectOutcome, ProjectE
         });
     }
 
-    let catalog = load_catalog(document_path)?.unwrap_or_else(|| {
-        GenerationCatalog::new(scan.header.file_salt, 5)
-    });
-
     let replay = replay_journal(
         document_path,
         base.clone(),
@@ -309,16 +375,17 @@ pub fn open_project(document_path: &Path) -> Result<OpenProjectOutcome, ProjectE
         },
     );
 
-    let source = if !replay.replay_failures.is_empty() {
-        RecoverySource::SnapshotFallback
-    } else if truncated > 0 {
-        RecoverySource::TruncatedJournalThenReplay
-    } else if scan.frames.iter().any(|f| f.kind == JournalRecordKind::Edit) {
-        RecoverySource::JournalReplay
-    } else {
-        RecoverySource::MainFile
-    };
+    // テール切捨てで journal tip が main より古くなった場合も main を優先
+    if truncated > 0 && replay.document != base {
+        return Ok(OpenProjectOutcome {
+            document: base,
+            source: RecoverySource::MainFile,
+            truncated_bytes: truncated,
+            replay: Some(replay),
+        });
+    }
 
+    let source = classify_replay_source(&replay, truncated, &scan);
     Ok(OpenProjectOutcome {
         document: replay.document.clone(),
         source,
@@ -327,9 +394,71 @@ pub fn open_project(document_path: &Path) -> Result<OpenProjectOutcome, ProjectE
     })
 }
 
+fn open_without_main(document_path: &Path) -> Result<OpenProjectOutcome, ProjectError> {
+    let journal_path = journal_path_for_document(document_path);
+    if !journal_path.exists() {
+        return Err(ProjectError::Unrecoverable {
+            path: document_path.to_path_buf(),
+        });
+    }
+
+    let (scan, truncated) = heal_journal(document_path)?;
+    let (catalog, _) = resolve_catalog(document_path, scan.header.file_salt)?;
+    let base =
+        base_from_latest_generation(document_path, &catalog).unwrap_or_else(Document::new_v1);
+
+    if scan.frames.is_empty() {
+        if base == Document::new_v1() && catalog.generations.is_empty() {
+            return Err(ProjectError::Unrecoverable {
+                path: document_path.to_path_buf(),
+            });
+        }
+        return Ok(OpenProjectOutcome {
+            document: base,
+            source: RecoverySource::GenerationRecovery,
+            truncated_bytes: truncated,
+            replay: None,
+        });
+    }
+
+    let replay = replay_journal(
+        document_path,
+        base,
+        &scan,
+        &catalog,
+        &ReplayOptions {
+            fallback_on_failure: true,
+        },
+    );
+
+    Ok(OpenProjectOutcome {
+        document: replay.document.clone(),
+        source: RecoverySource::GenerationRecovery,
+        truncated_bytes: truncated,
+        replay: Some(replay),
+    })
+}
+
+/// 本体 JSON + ジャーナルリプレイ + スナップショットフォールバックで復元する。
+pub fn open_project(document_path: &Path) -> Result<OpenProjectOutcome, ProjectError> {
+    match try_load_main(document_path)? {
+        MainLoad::Ok(doc) => open_with_main(document_path, *doc),
+        MainLoad::Missing => {
+            // main 無しでも世代があれば復元を試みる
+            open_without_main(document_path).or(Err(ProjectError::MissingMainDocument(
+                document_path.to_path_buf(),
+            )))
+        }
+        MainLoad::Corrupt => open_without_main(document_path),
+    }
+}
+
 /// テスト注入: ジャーナル末尾に壊れたバイト列を付与する。
 #[doc(hidden)]
-pub fn inject_corrupt_journal_tail(document_path: &Path, garbage: &[u8]) -> Result<(), ProjectError> {
+pub fn inject_corrupt_journal_tail(
+    document_path: &Path,
+    garbage: &[u8],
+) -> Result<(), ProjectError> {
     use std::io::Write;
     let journal_path = journal_path_for_document(document_path);
     let mut file = fs::OpenOptions::new().append(true).open(journal_path)?;
@@ -343,10 +472,7 @@ pub fn inject_corrupt_journal_tail(document_path: &Path, garbage: &[u8]) -> Resu
 pub fn inject_bad_checksum_at_last_frame(document_path: &Path) -> Result<(), ProjectError> {
     let journal_path = journal_path_for_document(document_path);
     let data = fs::read(&journal_path)?;
-    let scan = super::format::scan_journal_bytes(
-        &data,
-        &ScanJournalOptions::default(),
-    )?;
+    let scan = super::format::scan_journal_bytes(&data, &ScanJournalOptions::default())?;
     if scan.frames.is_empty() {
         return Ok(());
     }
@@ -377,6 +503,22 @@ pub fn inject_salt_mismatch_frame(document_path: &Path) -> Result<(), ProjectErr
         payload: br#"{"op":"set_bpm","num":1,"den":1}"#.to_vec(),
     };
     append_frame(&journal_path, &bad_frame)?;
+    Ok(())
+}
+
+/// テスト注入: catalog.json を壊す。
+#[doc(hidden)]
+pub fn inject_corrupt_catalog(document_path: &Path) -> Result<(), ProjectError> {
+    use super::catalog::catalog_path_for_document;
+    let path = catalog_path_for_document(document_path);
+    fs::write(path, b"{not-valid-json")?;
+    Ok(())
+}
+
+/// テスト注入: main JSON を壊す。
+#[doc(hidden)]
+pub fn inject_corrupt_main(document_path: &Path) -> Result<(), ProjectError> {
+    fs::write(document_path, b"{broken main")?;
     Ok(())
 }
 

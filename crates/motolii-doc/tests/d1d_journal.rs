@@ -5,11 +5,11 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use motolii_doc::{
-    inject_bad_checksum_at_last_frame, inject_corrupt_journal_tail,
-    inject_salt_mismatch_frame, load_catalog, load_document, open_project, save_document,
-    save_project_with_journal, scan_journal, Bpm, Document, GenerationCatalog, JournalEdit,
-    JournalScanStop, PinGenerationOptions, RecoverySource, RotateOptions, SaveProjectOptions,
-    ScanJournalOptions,
+    inject_bad_checksum_at_last_frame, inject_corrupt_catalog, inject_corrupt_journal_tail,
+    inject_corrupt_main, inject_salt_mismatch_frame, load_catalog, load_document, open_project,
+    save_document, save_project_with_journal, scan_journal, Bpm, Document, GenerationCatalog,
+    JournalEdit, JournalScanStop, PinGenerationOptions, RecoverySource, RotateOptions,
+    SaveProjectOptions, ScanJournalOptions,
 };
 use uuid::Uuid;
 
@@ -78,14 +78,7 @@ fn truncates_partial_tail_after_crash() {
     let dir = unique_dir("partial-tail");
     let path = dir.join("doc.json");
     let mut doc = Document::new_v1();
-    save_with_edit(
-        &path,
-        &doc,
-        JournalEdit::SetBpm {
-            num: 120,
-            den: 1,
-        },
-    );
+    save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 120, den: 1 });
     doc.bpm = Bpm::try_new(130, 1).unwrap();
     save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 130, den: 1 });
 
@@ -99,26 +92,21 @@ fn truncates_partial_tail_after_crash() {
 }
 
 #[test]
-fn truncates_bad_checksum_frame() {
+fn truncates_bad_checksum_keeps_newer_main() {
+    // journal tip が切捨てで古くなっても、有効な main は巻き戻さない
     let dir = unique_dir("bad-checksum");
     let path = dir.join("doc.json");
     let mut doc = Document::new_v1();
     doc.bpm = Bpm::try_new(110, 1).unwrap();
-    save_with_edit(
-        &path,
-        &doc,
-        JournalEdit::SetBpm {
-            num: 110,
-            den: 1,
-        },
-    );
+    save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 110, den: 1 });
     doc.bpm = Bpm::try_new(111, 1).unwrap();
     save_edit_only(&path, &doc, JournalEdit::SetBpm { num: 111, den: 1 });
 
     inject_bad_checksum_at_last_frame(&path).unwrap();
     let opened = open_project(&path).unwrap();
     assert!(opened.truncated_bytes > 0);
-    assert_eq!(opened.document.bpm, Bpm::try_new(110, 1).unwrap());
+    assert_eq!(opened.document.bpm, Bpm::try_new(111, 1).unwrap());
+    assert_eq!(opened.source, RecoverySource::MainFile);
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -128,14 +116,7 @@ fn truncates_salt_mismatch_tail() {
     let path = dir.join("doc.json");
     let mut doc = Document::new_v1();
     doc.bpm = Bpm::try_new(105, 1).unwrap();
-    save_with_edit(
-        &path,
-        &doc,
-        JournalEdit::SetBpm {
-            num: 105,
-            den: 1,
-        },
-    );
+    save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 105, den: 1 });
     inject_salt_mismatch_frame(&path).unwrap();
 
     let scan = scan_journal(
@@ -157,14 +138,7 @@ fn replay_failure_falls_back_to_snapshot() {
     let path = dir.join("doc.json");
     let mut doc = Document::new_v1();
     doc.bpm = Bpm::try_new(100, 1).unwrap();
-    save_with_edit(
-        &path,
-        &doc,
-        JournalEdit::SetBpm {
-            num: 100,
-            den: 1,
-        },
-    );
+    save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 100, den: 1 });
 
     save_edit_only(&path, &doc, JournalEdit::ForceReplayFail);
 
@@ -231,7 +205,10 @@ fn pinned_generation_survives_rotation() {
 
     let catalog = load_catalog(&path).unwrap().expect("catalog");
     assert!(
-        catalog.generations.iter().any(|g| g.id == pinned_id && g.pinned),
+        catalog
+            .generations
+            .iter()
+            .any(|g| g.id == pinned_id && g.pinned),
         "pinned generation must remain"
     );
     assert!(
@@ -294,5 +271,137 @@ fn uuid_cross_refs_link_snapshot_and_journal_record() {
         .find(|f| f.snapshot_ref == Some(entry.id))
         .expect("snapshot frame");
     assert_eq!(snapshot_frame.record_id, entry.journal_record);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn save_document_alone_does_not_rewind_on_open() {
+    let dir = unique_dir("main-ahead");
+    let path = dir.join("doc.json");
+    let mut doc = Document::new_v1();
+    doc.bpm = Bpm::try_new(100, 1).unwrap();
+    save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 100, den: 1 });
+
+    let mut newer = Document::new_v1();
+    newer.bpm = Bpm::try_new(200, 1).unwrap();
+    save_document(&path, &newer).unwrap();
+
+    let opened = open_project(&path).unwrap();
+    assert_eq!(opened.document.bpm, Bpm::try_new(200, 1).unwrap());
+    assert_eq!(opened.source, RecoverySource::MainFile);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn corrupt_main_falls_back_to_generation_replay() {
+    let dir = unique_dir("corrupt-main");
+    let path = dir.join("doc.json");
+    let mut doc = Document::new_v1();
+    doc.bpm = Bpm::try_new(140, 1).unwrap();
+    save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 140, den: 1 });
+
+    inject_corrupt_main(&path).unwrap();
+    let opened = open_project(&path).unwrap();
+    assert_eq!(opened.source, RecoverySource::GenerationRecovery);
+    assert_eq!(opened.document.bpm, Bpm::try_new(140, 1).unwrap());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn snapshot_load_failure_falls_back_to_last_snapshot() {
+    let dir = unique_dir("snap-fail");
+    let path = dir.join("doc.json");
+    let mut doc = Document::new_v1();
+    doc.bpm = Bpm::try_new(70, 1).unwrap();
+    save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 70, den: 1 });
+    let first_gen = load_catalog(&path).unwrap().unwrap().generations[0].id;
+
+    doc.bpm = Bpm::try_new(80, 1).unwrap();
+    save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 80, den: 1 });
+    let second_gen = load_catalog(&path)
+        .unwrap()
+        .unwrap()
+        .generations
+        .iter()
+        .find(|g| g.id != first_gen)
+        .unwrap()
+        .id;
+
+    // 2つ目の世代ファイルを消して Snapshot フレームを失敗させる
+    fs::remove_file(
+        dir.join(".motolii/generations")
+            .join(format!("{second_gen}.json")),
+    )
+    .unwrap();
+
+    let opened = open_project(&path).unwrap();
+    assert_eq!(opened.source, RecoverySource::SnapshotFallback);
+    assert_eq!(opened.document.bpm, Bpm::try_new(70, 1).unwrap());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn edits_since_snapshot_persists_across_saves() {
+    let dir = unique_dir("edit-counter");
+    let path = dir.join("doc.json");
+    let mut doc = Document::new_v1();
+    save_project_with_journal(
+        &path,
+        &doc,
+        &SaveProjectOptions {
+            snapshot_every_n_edits: Some(2),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        load_catalog(&path).unwrap().unwrap().edits_since_snapshot,
+        0
+    );
+
+    doc.bpm = Bpm::try_new(11, 1).unwrap();
+    save_project_with_journal(
+        &path,
+        &doc,
+        &SaveProjectOptions {
+            journal_edit: Some(JournalEdit::SetBpm { num: 11, den: 1 }),
+            snapshot_every_n_edits: Some(2),
+            skip_snapshot: false,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let catalog = load_catalog(&path).unwrap().unwrap();
+    assert_eq!(catalog.edits_since_snapshot, 1);
+    let gens_after_one = catalog.generations.len();
+
+    doc.bpm = Bpm::try_new(12, 1).unwrap();
+    save_project_with_journal(
+        &path,
+        &doc,
+        &SaveProjectOptions {
+            journal_edit: Some(JournalEdit::SetBpm { num: 12, den: 1 }),
+            snapshot_every_n_edits: Some(2),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let catalog = load_catalog(&path).unwrap().unwrap();
+    assert_eq!(catalog.edits_since_snapshot, 0);
+    assert!(catalog.generations.len() > gens_after_one);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn corrupt_catalog_does_not_block_open() {
+    let dir = unique_dir("corrupt-catalog");
+    let path = dir.join("doc.json");
+    let mut doc = Document::new_v1();
+    doc.bpm = Bpm::try_new(55, 1).unwrap();
+    save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 55, den: 1 });
+
+    inject_corrupt_catalog(&path).unwrap();
+    let opened = open_project(&path).unwrap();
+    assert_eq!(opened.document.bpm, Bpm::try_new(55, 1).unwrap());
     let _ = fs::remove_dir_all(dir);
 }
