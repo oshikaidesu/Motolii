@@ -8,8 +8,8 @@ pub enum Value {
     Vec3([f64; 3]),
     /// RGBA: 非線形sRGB・straight-alpha・各成分0.0–1.0(M2E-13。リニア化はレンダ側)
     Color([f64; 4]),
-    /// アセットID参照(F-10予約。補間なし。結線はM2 D1)。
-    AssetRef(String),
+    /// アセットID参照(F-10 / D1h)。永続層の`AssetId`生値と同一。補間なし。
+    AssetRef(u64),
 }
 
 impl Value {

@@ -587,6 +587,7 @@ version = "0.1.0"
 dependencies = [
  "motolii-core",
  "motolii-eval",
+ "motolii-plugin",
  "serde",
  "serde_json",
  "thiserror",

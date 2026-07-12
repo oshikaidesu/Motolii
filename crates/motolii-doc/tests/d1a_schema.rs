@@ -4,11 +4,11 @@ use std::collections::BTreeMap;
 
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
-    Asset, AssetId, BlendMode, Bpm, Clip, ClipSource, ClippingMaskSettings, DocParam, Document,
-    EffectInstance, Group, ItemEnvelope, LookAtAxis, MaskMode, PathOp, Soundtrack, Track,
-    TrackItem,
+    Asset, AssetId, BlendMode, Bpm, Clip, ClipSource, ClippingMaskSettings, DocKeyframe,
+    DocKeyframeTrack, DocParam, DocValue, Document, EffectInstance, Group, ItemEnvelope,
+    LookAtAxis, MaskMode, PathOp, Soundtrack, Track, TrackItem,
 };
-use motolii_eval::{DataTrackId, Interp, Keyframe, KeyframeTrack, Value as EvalValue};
+use motolii_eval::{DataTrackId, Interp};
 use serde_json::{json, Map, Value};
 
 fn sample_document() -> Document {
@@ -174,15 +174,15 @@ fn nested_unknown_fields_are_dropped_by_design() {
 
 #[test]
 fn doc_param_keyframes_data_vec2axes_roundtrip() {
-    let mut keys = KeyframeTrack::new();
-    keys.insert(Keyframe {
+    let mut keys = DocKeyframeTrack::new();
+    keys.insert(DocKeyframe {
         t: RationalTime::ZERO,
-        value: EvalValue::F64(0.0),
+        value: DocValue::F64(0.0),
         interp: Interp::Linear,
     });
-    keys.insert(Keyframe {
+    keys.insert(DocKeyframe {
         t: RationalTime::try_new(1, 1).unwrap(),
-        value: EvalValue::F64(1.0),
+        value: DocValue::F64(1.0),
         interp: Interp::Hold,
     });
 
@@ -190,13 +190,13 @@ fn doc_param_keyframes_data_vec2axes_roundtrip() {
         DocParam::Keyframes(keys),
         DocParam::Data {
             track: DataTrackId("amp".into()),
-            fallback: EvalValue::F64(0.5),
+            fallback: DocValue::F64(0.5),
         },
         DocParam::Vec2Axes {
             x: Box::new(DocParam::const_f64(0.1)),
             y: Box::new(DocParam::Data {
                 track: DataTrackId("y".into()),
-                fallback: EvalValue::F64(0.0),
+                fallback: DocValue::F64(0.0),
             }),
         },
     ];
