@@ -8,6 +8,8 @@ description = "Document ownership skeleton (single writer + Arc snapshot)"
 [dependencies]
 motolii-core.workspace = true
 motolii-eval.workspace = true
+crc32fast = "1"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+uuid = { version = "1", features = ["v4", "serde"] }

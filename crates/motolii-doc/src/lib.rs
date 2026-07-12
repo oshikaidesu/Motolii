@@ -3,11 +3,12 @@
 //! 読み手(レンダ・書き出し・解析)は`Arc<Document>`スナップショットのみを受け取る。
 //! `edit`は戻り値を持たない — 参照漏洩で凍結を封じないため。
 //!
-//! **D1a**: スキーマ本体。**D1b**: 保存前`validate`(ガード1)。**D1c**: アトミック保存/読込。ジャーナルはD1d。
+//! **D1a**: スキーマ本体。**D1b**: 保存前`validate`(ガード1)。**D1c**: アトミック保存/読込。**D1d**: ジャーナル。
 
 mod asset;
 mod bpm;
 mod ids;
+mod journal;
 mod param;
 mod persist;
 mod schema;
@@ -23,6 +24,14 @@ pub use asset::{Asset, AssetError, AssetId, AssetTable};
 pub use bpm::{Bpm, BpmError};
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
 pub use param::{DocParam, LookAtAxis};
+pub use journal::{
+    edit_payload, inject_bad_checksum_at_last_frame, inject_corrupt_journal_tail,
+    inject_salt_mismatch_frame, load_catalog, open_project, save_project_with_journal,
+    scan_journal, GenerationCatalog, GenerationEntry, JournalEdit, JournalFrame, JournalHeader,
+    JournalRecordKind, JournalScanOutcome, JournalScanStop, OpenProjectOutcome, PinGenerationOptions, ProjectError,
+    RecoverySource, ReplayFailure, ReplayOutcome, RotateOptions, SaveProjectOptions,
+    ScanJournalOptions,
+};
 pub use persist::{
     detect_cloud_sync, load_document, load_document_bytes, save_document,
     save_document_with_options, CloudSyncHint, PersistError, SaveAbortAfter, SaveOptions,
