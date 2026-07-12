@@ -1,42 +1,58 @@
-//! motolii-doc: ドキュメント所有権の最小骨格(F-2 / FG-C3) + D1-prelude(M2E-12)。
+//! motolii-doc: ドキュメント所有権骨格(F-2) + D1-prelude(M2E-12) + D1aスキーマ本体。
 //!
-//! M1完了後に、「writer以外に`&mut Document`が無い」ことを型で固定する。
 //! 読み手(レンダ・書き出し・解析)は`Arc<Document>`スナップショットのみを受け取る。
+//! `edit`は戻り値を持たない — 参照漏洩で凍結を封じないため。
 //!
-//! `edit`は戻り値を持たない — 呼び出し側が内部への参照を保持できる形で凍結すると、
-//! 内部表現・ロック・スナップショット方式の差し替えが永久に封じられる(AE型の漏れ)。
-//!
-//! **D1-prelude**(M2E-12): version/互換の枠と所有権骨格のみ。トラック・クリップ等の
-//! スキーマ本体は含めない(本体はゲート達成後のD1)。
+//! **D1a**: トラック/クリップ/Asset/BPM等のスキーマ本体。永続I/O・ジャーナルはD1c/D1d。
 
+mod asset;
+mod bpm;
 mod ids;
+mod param;
+mod schema;
+mod track_id;
 
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use motolii_core::TimeMap;
-
+pub use asset::{Asset, AssetError, AssetId, AssetTable};
+pub use bpm::{Bpm, BpmError};
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
+pub use param::{DocParam, LookAtAxis};
+pub use schema::{
+    BlendMode, Clip, ClipSource, ClippingMaskSettings, Composition, CompositionError,
+    EffectInstance, Group, ItemEnvelope, MaskMode, PathOp, Soundtrack, SoundtrackError, Track,
+    TrackItem, Transform2D,
+};
+pub use track_id::{TrackId, TrackIdError, TrackIdTable};
 
 fn default_min_reader_version() -> u32 {
     1
 }
 
-/// プロジェクト状態の最小プレースホルダ。スキーマ本体はM2-D1。
+/// プロジェクト状態。`ProjectV1`とは非継承・版番独立(M2E-11①)。
 ///
-/// `min_reader_version` / `extra` は前方互換の枠(実装ガード7)。拒否は
-/// `min_reader_version` 超過時のみ。未知キーは `extra` に保持し再保存で書き戻す。
+/// `CompCamera`は含めない(#55)。未知キーは`extra`に保持し再保存で書き戻す。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Document {
     pub version: u32,
-    /// このリーダーが理解すべき最小スキーマ版。旧リーダーはこれを見て拒否する。
     #[serde(default = "default_min_reader_version")]
     pub min_reader_version: u32,
-    /// クリップ時間写像の予約口(F-4)。v1はプロジェクト直下に1本。
-    pub time_map: TimeMap,
-    /// 未知キー保持(unknown-keys roundtrip)。スキーマ本体フィールドをここに足さない。
+    pub composition: Composition,
+    pub bpm: Bpm,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub soundtrack: Option<Soundtrack>,
+    #[serde(default)]
+    pub assets: AssetTable,
+    #[serde(default)]
+    pub layers: LayerIdTable,
+    #[serde(default)]
+    pub track_ids: TrackIdTable,
+    #[serde(default)]
+    pub tracks: Vec<Track>,
+    /// 未知キー保持(unknown-keys roundtrip)。
     #[serde(default, flatten)]
     pub extra: Map<String, Value>,
 }
@@ -46,7 +62,13 @@ impl Document {
         Self {
             version: 1,
             min_reader_version: 1,
-            time_map: TimeMap::identity(),
+            composition: Composition::new_v1(),
+            bpm: Bpm::DEFAULT,
+            soundtrack: None,
+            assets: AssetTable::new(),
+            layers: LayerIdTable::new(),
+            track_ids: TrackIdTable::new(),
+            tracks: Vec::new(),
             extra: Map::new(),
         }
     }
@@ -56,7 +78,7 @@ impl Document {
 #[derive(Debug, Clone, PartialEq)]
 pub enum WriterMessage {
     /// プレースホルダ: 将来のプロキシ生成完了等。
-    SetTimeMap(TimeMap),
+    SetBpm(Bpm),
 }
 
 /// ドキュメントの唯一の書き手。`&mut Document`を外部に漏らさない。
@@ -87,7 +109,7 @@ impl DocumentWriter {
     /// バックグラウンド成果の適用。D2でメッセージ→Command変換に置換する。
     pub fn apply(&mut self, msg: WriterMessage) {
         match msg {
-            WriterMessage::SetTimeMap(map) => self.doc.time_map = map,
+            WriterMessage::SetBpm(bpm) => self.doc.bpm = bpm,
         }
         self.revision = self.revision.wrapping_add(1);
     }
@@ -112,34 +134,27 @@ mod tests {
 
         writer.edit(|doc| {
             doc.version = 2;
-            doc.time_map = TimeMap::offset(RationalTime::from_seconds(1), RationalTime::ZERO);
+            doc.bpm = Bpm::try_new(140, 1).unwrap();
         });
         assert_eq!(writer.revision, 1);
 
         let snap_after = writer.snapshot();
         assert_eq!(snap_before.version, 1);
         assert_eq!(snap_after.version, 2);
-        assert_ne!(snap_before.time_map, snap_after.time_map);
+        assert_ne!(snap_before.bpm, snap_after.bpm);
     }
 
     #[test]
     fn background_message_applies_only_via_writer() {
         let mut writer = DocumentWriter::new(Document::new_v1());
-        writer.apply(WriterMessage::SetTimeMap(
-            TimeMap::constant_speed(RationalTime::ZERO, RationalTime::ZERO, 2, 1).unwrap(),
-        ));
-        assert_eq!(writer.snapshot().time_map.speed_num, 2);
+        writer.apply(WriterMessage::SetBpm(Bpm::try_new(100, 1).unwrap()));
+        assert_eq!(writer.snapshot().bpm.num(), 100);
         assert_eq!(writer.revision, 1);
     }
 
     #[test]
-    fn document_json_roundtrip() {
-        let doc = Document {
-            version: 1,
-            min_reader_version: 1,
-            time_map: TimeMap::offset(RationalTime::from_seconds(3), RationalTime::ZERO),
-            extra: Map::new(),
-        };
+    fn document_json_roundtrip_empty() {
+        let doc = Document::new_v1();
         let json = serde_json::to_string(&doc).unwrap();
         let back: Document = serde_json::from_str(&json).unwrap();
         assert_eq!(doc, back);
@@ -149,15 +164,22 @@ mod tests {
     fn min_reader_version_defaults_when_absent() {
         let json = r#"{
             "version":1,
-            "time_map":{
-                "source_start":{"num":0,"den":1},
-                "timeline_start":{"num":0,"den":1},
-                "speed_num":1,
-                "speed_den":1
-            }
+            "composition":{
+                "aspect_num":16,
+                "aspect_den":9,
+                "duration":{"num":10,"den":1},
+                "fps":{"num":30,"den":1}
+            },
+            "bpm":{"num":120,"den":1}
         }"#;
         let doc: Document = serde_json::from_str(json).unwrap();
         assert_eq!(doc.min_reader_version, 1);
         assert!(doc.extra.is_empty());
+        assert_eq!(doc.composition.aspect_num(), 16);
+        assert_eq!(doc.composition.aspect_den(), 9);
+        assert_eq!(
+            doc.composition.duration,
+            RationalTime::try_new(10, 1).unwrap()
+        );
     }
 }
