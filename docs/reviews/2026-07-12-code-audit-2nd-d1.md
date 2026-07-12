@@ -54,16 +54,19 @@ hidden/solo/lockの「visible ≠ evaluable」(hiddenでもparent/mask/LookAt対
 - **案1(監査推奨・当方も推奨)**: TimeMapを「クリップローカル時刻→ソース時刻」の写像にし、`timeline_start`を削除。タイムライン位置の正本は`Clip.start`のみ。キーフレーム時刻決定(spec-holes §1「クリップ起点のタイムライン時刻」)と同じ領域になり、クリップ移動=`start`1フィールド更新でコマンド・複製・トリム・Undoが単純化
 - **案2**: 二重保持を残し`clip.start == time_map.timeline_start`をvalidate不変条件+全コマンドの同時更新規約にする(スキーマ無変更だが、規約違反が新たな恒久バグ族になる)
 - 補足: spec-holes §1bの決定「TimeMapを時間の単一権威・尺は導出値」の**原点版**であり、案1はその決定と同方向
+- **先例(2026-07-12調査。いずれもタイムライン原点を二重保持しない)**: OTIOのClipは`source_range`(ソース領域)のみを持ち、タイムライン位置はTrack内の並びから**完全に導出**される(タイムライン原点フィールド自体が無い) — [OTIO Timeline Structure](https://opentimelineio.readthedocs.io/en/latest/tutorials/otio-timeline-structure.html)/[Time Ranges](https://opentimelineio.readthedocs.io/en/latest/tutorials/time-ranges.html)。FCPXMLは`offset`(親タイムライン上の位置)+`start`(ソースのイン点)+`duration`の3フィールドで、**位置と写像の領域が分離**しており原点の複製が無い — [FCPXML reference (fcp.cafe)](https://fcp.cafe/developers/fcpxml/)。Motoliiは暗黙Gap(明示start)方式なのでFCPXML形=案1が同型。二重保持(案2)の直接先例は見つかっていない
 
 **S6: PathOpの適用可能性の型表現**
 - **案1(監査推奨)**: `ClipSource`をVector/Raster系で型分離(またはPathOpをVector系ソース内へ移動)。Lottieのレイヤー型分離と同型
 - **案2(より小さい対策)**: スキーマは現状維持し、validateで「パス出力を持たないsourceに`path_ops`非空」を拒否。D3は到達不能としてよい
 - 補足: 案2はスキーマ非破壊だが、「どのsourceがパス出力を持つか」の判定表が別途正本として必要になる(プラグインはPluginKindでは判別できない可能性 — 発注前に要確認)
+- **先例(2026-07-12調査)**: Lottie/AEとも**modifierはシェイプレイヤーの内容リスト内にのみ存在**し、スコープ内の先行するシェイプ兄弟に作用する(フッテージレイヤーには構造上付けられない)。複数modifierは逆順合成、Trimのparallel/sequentialは複数シェイプの扱いとして定義 — [Lottie Shapes仕様](https://lottiefiles.github.io/lottie-spec/specs/shapes/)。つまり先例の解は**案1の「PathOpをVector系ソース内へ移動」変形**であり、これはS5の未決(スコープ・適用順・複数輪郭)の答えも同じ構造から同時に借りられる(clip直下の`Vec<PathOp>`のままだとスコープ概念が無く、S5の適用順仕様を独自発明することになる)。層レベルvalidate(案2)の直接先例は見つかっていない
 
 **S16: コア演算の意味論version**
 - **案1(より小さい対策・当方推奨)**: per-opの`algorithm_version`フィールドは**焼かない**。方針宣言「コア演算の挙動変更は(a)Document version migrationでの明示変換、または(b)新variant追加でのみ行い、既存variantの意味は永久固定」をD1仕様へ1文で入れる
 - **案2**: 各永続演算へ`algorithm_version`フィールド(serde default=1)を今から予約
 - 補足: 案1は焼かない選択(運用注の判定基準)。ただし「既存variantの意味固定」はS5のPathOp意味論仕様+ゴールデンが揃って初めて執行可能 — S5とセット
+- **先例(2026-07-12調査)**: AEはブラーのアルゴリズム変更時に**旧エフェクトを「Gaussian Blur (Legacy)」「Fast Blur (Legacy)」へ改名してObsoleteカテゴリで永久保存**し、新アルゴリズムは別エフェクト(Fast Box Blur)として追加した。旧プロジェクトは旧アルゴリズムのまま開ける — [Adobe公式: Obsolete effects](https://helpx.adobe.com/after-effects/using/obsolete-effects.html)。=案1(意味永久固定+新variant)の実運用実績。一方Blenderの`do_versions`はロード時migration方式の先例だが、公式に「**as best as possible**」変換と明言しており画素一致は保証しない — [Blender Developer Handbook: Blend File Compatibility](https://developer.blender.org/docs/handbook/guidelines/compatibility_handling_for_blend_files/)。読み: **データモデル変更はmigration(Blender型)、画素に効くアルゴリズム変更は新variant(AE型)**という使い分けが先例の分業であり、案1はこれと一致
 
 ## 審判(テスト)への含意
 
