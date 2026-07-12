@@ -558,6 +558,7 @@ name = "motolii-cli"
 version = "0.1.0"
 dependencies = [
  "motolii-core",
+ "motolii-doc",
  "motolii-eval",
  "motolii-export",
  "motolii-gpu",
@@ -587,6 +588,11 @@ version = "0.1.0"
 dependencies = [
  "motolii-core",
  "motolii-eval",
+ "motolii-gpu",
+ "motolii-nodes",
+ "motolii-plugin",
+ "motolii-render",
+ "motolii-testkit",
  "serde",
  "serde_json",
  "thiserror",
@@ -606,6 +612,7 @@ name = "motolii-export"
 version = "0.1.0"
 dependencies = [
  "motolii-core",
+ "motolii-doc",
  "motolii-eval",
  "motolii-gpu",
  "motolii-media",

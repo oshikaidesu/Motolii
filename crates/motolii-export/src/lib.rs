@@ -3,17 +3,19 @@
 //! 解析やCLIはまだ持たず、動画フレームをGPUでRGBA化し、motolii-renderの共通経路で
 //! オーバーレイ合成して、motolii-media::Encoderへ流す。
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, TimeMap};
+use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap};
+use motolii_doc::{build_document_frame_graph, resolve_asset_path, Document, EvaluationTime, GraphError};
 use motolii_eval::DataTracks;
 use motolii_gpu::{GpuCtx, RgbaDownloader, YuvToRgba};
 use motolii_media::{probe, Encoder, FrameReader};
 use motolii_nodes::{ParamOverlayError, ParamRectOverlay};
-use motolii_plugin::TextureRef;
+use motolii_plugin::{reference::register_reference_plugins, PluginRegistry, TextureRef};
 use motolii_render::{
-    render_frame_with_background_texture, BackgroundTextureRequest, RenderSession,
+    render_frame_with_background_texture, render_graph_cached, BackgroundTextureRequest,
+    RenderGraphInputs, RenderSession,
 };
 
 #[derive(Debug)]
@@ -55,6 +57,25 @@ pub enum ExportError {
     Yuv(#[from] motolii_gpu::YuvError),
     #[error(transparent)]
     TimeMap(#[from] motolii_core::TimeMapError),
+    #[error(transparent)]
+    DocGraph(#[from] GraphError),
+    #[error(transparent)]
+    Plugin(#[from] motolii_plugin::PluginError),
+    #[error("document has no video source clip")]
+    NoVideoSource,
+    #[error("asset {0} path could not be resolved")]
+    UnresolvedAsset(u64),
+}
+
+/// 書き出し設定。Document≠ExportJob(M2E-11⑤)。
+#[derive(Debug)]
+pub struct ExportJob<'a> {
+    pub doc: &'a Document,
+    pub output_path: &'a Path,
+    pub project_root: Option<&'a Path>,
+    pub frame_count: Option<usize>,
+    pub qp0: bool,
+    pub data_tracks: DataTracks,
 }
 
 /// 書き出しループのGPUダウンロード待ち。高負荷下の正当な遅延を許容する。
@@ -147,11 +168,59 @@ pub fn export_overlay_video(
     if let Some(e) = finish_error {
         return Err(e);
     }
-    Ok(ExportReport {
-        frames_written,
-        desc,
-        fps: info.fps,
-    })
+    Ok(ExportReport { frames_written, desc, fps: info.fps })
+}
+
+pub fn export_document_video(gpu: &GpuCtx, job: &ExportJob<'_>) -> Result<ExportReport, ExportError> {
+    let mut registry = PluginRegistry::new();
+    register_reference_plugins(&mut registry)?;
+    let (video_path, asset_id) = find_primary_video(job.doc, job.project_root)?;
+    let info = probe(&video_path)?;
+    let desc = FrameDesc::packed(info.width, info.height, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+    let mut reader = FrameReader::open(&video_path, &info, 0)?;
+    let mut yuv = YuvToRgba::new(gpu);
+    let mut downloader = RgbaDownloader::new();
+    let mut encoder = Encoder::open(job.output_path, &desc, info.fps, job.qp0)?;
+    let mut render_session = RenderSession::new(gpu);
+    let tracks = job.data_tracks.clone();
+    let mut frames_written = 0usize;
+    let mut loop_error = None;
+    while job.frame_count.map(|n| frames_written < n).unwrap_or(true) {
+        let Some(frame) = (match reader.next_frame() { Ok(f) => f, Err(e) => { loop_error = Some(e.into()); break } }) else { break };
+        let timeline_time = frame.pts;
+        match (|| -> Result<(), ExportError> {
+            let built = build_document_frame_graph(job.doc, EvaluationTime::new(timeline_time), desc, &tracks, &registry, job.project_root)?;
+            if built.video_slots.is_empty() { return Err(ExportError::NoVideoSource); }
+            let background = yuv.convert(gpu, &frame)?;
+            let video_inputs: Vec<_> = built.video_slots.iter().map(|(tid, aid)| {
+                if aid.get() != asset_id { panic!("multiple video assets unsupported in D3 v1"); }
+                (*tid, TextureRef { texture: &background, desc })
+            }).collect();
+            let rendered = render_graph_cached(gpu, &mut render_session, timeline_time, &built.graph,
+                &RenderGraphInputs { video_sources: &video_inputs, source_time: Some(built.source_time), plugins: Some(&registry) }, Quality::FINAL)?;
+            encoder.write_frame(&downloader.download(gpu, &rendered.texture, EXPORT_DOWNLOAD_TIMEOUT)?)?;
+            Ok(())
+        })() { Ok(()) => frames_written += 1, Err(e) => { loop_error = Some(e); break } }
+    }
+    let finish_error = encoder.finish().err().map(ExportError::from);
+    if let Some(e) = loop_error { return Err(e); }
+    if let Some(e) = finish_error { return Err(e); }
+    Ok(ExportReport { frames_written, desc, fps: info.fps })
+}
+
+fn find_primary_video(doc: &Document, project_root: Option<&Path>) -> Result<(PathBuf, u64), ExportError> {
+    for track in &doc.tracks {
+        for item in &track.items {
+            if let motolii_doc::TrackItem::Clip(clip) = item {
+                if let motolii_doc::ClipSource::Asset { asset } = clip.source {
+                    let a = doc.assets.get(asset).ok_or(ExportError::UnresolvedAsset(asset.get()))?;
+                    let path = resolve_asset_path(a, project_root).ok_or(ExportError::UnresolvedAsset(asset.get()))?;
+                    return Ok((path, asset.get()));
+                }
+            }
+        }
+    }
+    Err(ExportError::NoVideoSource)
 }
 
 #[cfg(test)]

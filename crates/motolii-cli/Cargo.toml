@@ -8,6 +8,7 @@ license.workspace = true
 motolii-core.workspace = true
 motolii-eval.workspace = true
 motolii-export.workspace = true
+motolii-doc.workspace = true
 motolii-gpu.workspace = true
 motolii-media.workspace = true
 motolii-nodes.workspace = true
@@ -18,6 +19,8 @@ serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+motolii-doc.workspace = true
+motolii-nodes.workspace = true
 motolii-plugin.workspace = true
 motolii-render.workspace = true
 motolii-testkit.workspace = true

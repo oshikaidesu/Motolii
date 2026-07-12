@@ -8,6 +8,14 @@ description = "Document ownership skeleton (single writer + Arc snapshot)"
 [dependencies]
 motolii-core.workspace = true
 motolii-eval.workspace = true
+motolii-nodes.workspace = true
+motolii-plugin.workspace = true
+motolii-render.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+motolii-gpu.workspace = true
+motolii-plugin.workspace = true
+motolii-testkit.workspace = true

@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use motolii_nodes::{CanonicalPoint, CanonicalSize, ParamRectOverlay, RectOverlay};
 
+mod document_export;
 mod project;
 mod verify_b4;
 
@@ -274,6 +275,10 @@ pub use project::{
 pub use verify_b4::{
     verify_b4_project_v1, verify_prepared_b4, B4FrameResult, B4VerifyError, B4VerifyReport,
 };
+
+pub fn export_document(gpu: &motolii_gpu::GpuCtx, doc_path: impl AsRef<std::path::Path>, output_path: impl AsRef<std::path::Path>, frame_count: Option<usize>, qp0: bool) -> Result<motolii_export::ExportReport, CliError> {
+    document_export::export_document_file(gpu, doc_path.as_ref(), output_path.as_ref(), frame_count, qp0)
+}
 
 pub fn export_project(
     gpu: &motolii_gpu::GpuCtx,
