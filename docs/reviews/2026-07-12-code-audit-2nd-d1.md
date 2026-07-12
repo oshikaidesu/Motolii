@@ -6,7 +6,7 @@
 
 - 出所: 2026-07-12の第二LLM監査(第一監査=[2026-07-11-code-audit-pre-m2](2026-07-11-code-audit-pre-m2.md)の後続。前回はプラグイン境界中心、今回はD1a〜D1cマージ後のスキーマ・評価・永続が対象)
 - 対象SHA: `9c8e274`(本ブランチ作業ツリー)。**採用時に最新mainで再確認すること**(第一監査の検証注記を継承)
-- 裏取り方法: コード主張は全てfile:line現物を本セッションで確認した(下表「裏取り」列)。外部出典のうち**S1/S6/S16決定節の出典(OTIO・FCPXML・Lottie・Adobe・Blender)は一次・公式仕様を2026-07-12に確認済み**。その他(S7〜S18表中のSQLite/Krita/Godot等)は公開恒久文書のリンク保持のみで個別記述の一次確認は未了(規律3: 整合する事例に留める)
+- 裏取り方法: コード主張は全てfile:line現物を本セッションで確認した(下表「裏取り」列)。外部出典のうち**S1/S6/S16決定節の出典(OTIO・FCPXML・Lottie・Adobe・Blender)は一次・公式資料を2026-07-12に確認済み(FCP Cafeのみ二次解説として併記)**。その他(S7〜S18表中のSQLite/Krita/Godot等)は公開恒久文書のリンク保持のみで個別記述の一次確認は未了(規律3: 整合する事例に留める)
 - 監査の数値例(30000/1001でpos=14.999…等)は**再計算していない**。f64乗算+floorの構造(S7)が確認できれば境界誤りの可能性自体は成立するため、数値の精査はチケット側の再現テストに委ねる
 - ID: 本監査所見は**S1〜S18**。既存台帳のA1〜A8・B群([d1-spec-holes 追補](2026-07-12-d1-spec-holes-prior-art.md))と重複するものは統合先を明記
 
@@ -87,7 +87,7 @@ hidden/solo/lockの「visible ≠ evaluable」(hiddenでもparent/mask/LookAt対
 
 監査提案の順序を受理する: ①TimeMap正準化+原点一本化(S1/S2) → ②DocParam期待型+AssetId型付け(S3/S4/S9) → ③PathOp意味論+適用可能性(S5/S6) → ④read/write互換(S13/S14) → ⑤入力上限・fuzz・fault injection(S10/S11) → ⑥recovery非破壊(S15) → ⑦DataTrack(S7/S8) → ⑧migration意味保存(S12) → ⑨OTIO loss report(S17)。S18(D2)とB④改訂は各発注書起草時。
 
-①〜③のユーザー決定(S1/S6/S16)は2026-07-12に案1で完了。発注書化はM2仕様のD1g〜D1i行として実施済み(→[M2-document-model.md](../specs/M2-document-model.md))。
+①〜③のユーザー決定(S1/S6/S16)は2026-07-12に案1で完了。発注書化はM2仕様のD1g/D1h/D1i-1〜D1i-4行として実施済み(→[M2-document-model.md](../specs/M2-document-model.md)。2026-07-12承認時補正: source終端式=`time_map.map(clip.duration)`、依存の直列明記、DataTrack検査の二段化、D1iの子チケット分割)。
 
 ## 既存台帳との重複整理
 
