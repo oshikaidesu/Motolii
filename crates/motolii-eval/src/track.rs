@@ -123,18 +123,20 @@ impl KeyframeTrack {
 /// 区間内正規化位置u ∈ [0,1)。区間端は有理数で厳密に扱い、u自体はf64でよい
 /// (uは1フレーム内の補間位置であり、蓄積しないためドリフトしない)。
 fn segment_u(a: RationalTime, b: RationalTime, t: RationalTime) -> f64 {
-    let Ok(num_t) = t.try_sub(a) else {
-        return 0.0;
-    };
-    let Ok(den_t) = b.try_sub(a) else {
-        return 0.0;
-    };
-    let num = num_t.as_seconds_f64();
-    let den = den_t.as_seconds_f64();
+    let den = seconds_since(b, a);
     if den == 0.0 {
         return 0.0;
     }
-    num / den
+    seconds_since(t, a) / den
+}
+
+/// `t - origin` の秒。差分がi64 RationalTimeに収まれば厳密経路、溢れ時はf64秒差へフォールバック
+/// (評価値を0に握り潰さない — M2E-16 P1)。
+fn seconds_since(t: RationalTime, origin: RationalTime) -> f64 {
+    match t.try_sub(origin) {
+        Ok(rel) => rel.as_seconds_f64(),
+        Err(_) => t.as_seconds_f64() - origin.as_seconds_f64(),
+    }
 }
 
 /// 解析結果などの等間隔サンプル列。start位置からsample_rateで並ぶ。
@@ -152,11 +154,12 @@ impl DataTrack {
         if self.values.is_empty() {
             return Value::F64(0.0);
         }
-        let Ok(rel) = t.try_sub(self.start) else {
-            return Value::F64(0.0);
-        };
-        // サンプル位置(浮動小数)= rel * rate
-        let pos = rel.as_seconds_f64() * self.sample_rate.as_f64();
+        // Ord比較は交差乗算がi128に収まる。差分のRationalTime化より先に端クランプする。
+        if t <= self.start {
+            return self.values[0].clone();
+        }
+        let pos = seconds_since(t, self.start) * self.sample_rate.as_f64();
+        // f64フォールバックの丸めで負に落ちた場合も先頭へ。
         if pos <= 0.0 {
             return self.values[0].clone();
         }
@@ -312,6 +315,58 @@ mod tests {
         assert!((v - 5.5).abs() < 1e-9);
         // 末尾以降はクランプ
         assert_eq!(dt.eval(RationalTime::from_seconds(10)), Value::F64(10.0));
+    }
+
+    #[test]
+    fn data_track_end_clamps_when_relative_overflows_i64() {
+        // start=MIN, t=MAX の差分は RationalTime に再格納できないが、末尾クランプの20を返す。
+        let dt = DataTrack {
+            start: RationalTime::from_seconds(i64::MIN),
+            sample_rate: Fps::try_new(1, 1).unwrap(),
+            values: vec![Value::F64(10.0), Value::F64(20.0)],
+        };
+        assert_eq!(
+            dt.eval(RationalTime::from_seconds(i64::MAX)),
+            Value::F64(20.0)
+        );
+    }
+
+    #[test]
+    fn data_track_start_clamps_across_i64_bounds() {
+        let dt = DataTrack {
+            start: RationalTime::from_seconds(i64::MAX),
+            sample_rate: Fps::try_new(1, 1).unwrap(),
+            values: vec![Value::F64(10.0), Value::F64(20.0)],
+        };
+        assert_eq!(
+            dt.eval(RationalTime::from_seconds(i64::MIN)),
+            Value::F64(10.0)
+        );
+    }
+
+    #[test]
+    fn keyframe_linear_across_i64_span_does_not_collapse_to_zero() {
+        let mut tr = KeyframeTrack::new();
+        tr.insert(key(
+            RationalTime::from_seconds(i64::MIN),
+            10.0,
+            Interp::Linear,
+        ));
+        tr.insert(key(
+            RationalTime::from_seconds(i64::MAX),
+            20.0,
+            Interp::Linear,
+        ));
+        // ゼロ近傍は区間のほぼ中央 → 15付近。差分Overflowを0.0に握り潰さないこと。
+        let mid = tr.eval(RationalTime::ZERO).as_f64().unwrap();
+        assert!(
+            (mid - 15.0).abs() < 1.0,
+            "expected ~15 near span midpoint, got {mid}"
+        );
+        assert_eq!(
+            tr.eval(RationalTime::from_seconds(i64::MAX)),
+            Value::F64(20.0)
+        );
     }
 
     #[test]
