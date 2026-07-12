@@ -445,11 +445,15 @@ pub fn tmp_dir(tag: &str) -> PathBuf {
 /// 同じ時刻・入力で2回呼び、出力が一致することを要求する。
 /// `&self` に隠した可変状態があるとここで赤になる。
 pub mod purity {
-    use motolii_core::{FrameDesc, Quality, RationalTime};
+    use std::collections::HashMap;
+
+    use motolii_core::{CompCamera, Fps, FrameDesc, Quality, RationalTime};
     use motolii_eval::DataTrack;
     use motolii_gpu::{download_rgba, upload_rgba, GpuCtx, PipelineCache};
     use motolii_plugin::{
-        FilterPlugin, ParamDriverContext, ParamDriverPlugin, RenderCtx, ResolvedParams, TextureRef,
+        validate_node_desc, CompositePlugin, DynPlugin, FilterPlugin, LayerSourceContext,
+        LayerSourcePlugin, ParamDriverContext, ParamDriverPlugin, PluginKind, PluginRegistry,
+        RenderCtx, ResolvedParams, TextureRef,
     };
 
     use super::{compare_rgba, RgbaImageDesc, TestkitError};
@@ -472,6 +476,17 @@ pub mod purity {
                 | wgpu::TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         })
+    }
+
+    fn default_resolved_params(
+        label: &str,
+        desc: &motolii_plugin::NodeDesc,
+    ) -> Result<ResolvedParams, TestkitError> {
+        desc.resolve_params(&HashMap::new())
+            .map_err(|source| TestkitError::PluginFailed {
+                label: label.into(),
+                source,
+            })
     }
 
     /// Filter を同一 `(t, params, input)` で2回呼び、出力RGBAが一致することを要求する。
@@ -577,6 +592,265 @@ pub mod purity {
                 label: label.into(),
             })
         }
+    }
+
+    /// LayerSource を同一 `(t, params, ctx)` で2回呼び、出力RGBAが一致することを要求する。
+    pub fn assert_layer_source_pure(
+        label: &str,
+        gpu: &GpuCtx,
+        plugin: &dyn LayerSourcePlugin,
+        t: RationalTime,
+        params: &ResolvedParams,
+        ctx: LayerSourceContext,
+        frame: FrameDesc,
+    ) -> Result<(), TestkitError> {
+        let out_a = empty_target(gpu, frame, &format!("{label}-ls-a"));
+        let out_b = empty_target(gpu, frame, &format!("{label}-ls-b"));
+        let mut pipelines = PipelineCache::new();
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some(&format!("{label}-ls-pure")),
+            });
+        plugin
+            .render(
+                gpu,
+                &mut pipelines,
+                &mut encoder,
+                t,
+                params,
+                ctx,
+                TextureRef {
+                    texture: &out_a,
+                    desc: frame,
+                },
+            )
+            .map_err(|source| TestkitError::PluginFailed {
+                label: label.into(),
+                source,
+            })?;
+        plugin
+            .render(
+                gpu,
+                &mut pipelines,
+                &mut encoder,
+                t,
+                params,
+                ctx,
+                TextureRef {
+                    texture: &out_b,
+                    desc: frame,
+                },
+            )
+            .map_err(|source| TestkitError::PluginFailed {
+                label: label.into(),
+                source,
+            })?;
+        gpu.queue.submit(std::iter::once(encoder.finish()));
+
+        let a = download_rgba(gpu, &out_a)?;
+        let b = download_rgba(gpu, &out_b)?;
+        let img = RgbaImageDesc {
+            width: frame.width,
+            height: frame.height,
+        };
+        let diff = compare_rgba(img, &a, &b)?;
+        if diff.stats.max_abs_diff == 0 {
+            Ok(())
+        } else {
+            Err(TestkitError::PurityViolation {
+                label: label.into(),
+            })
+        }
+    }
+
+    /// Composite を同一 `(t, params, inputs)` で2回呼び、出力RGBAが一致することを要求する。
+    pub fn assert_composite_pure(
+        label: &str,
+        gpu: &GpuCtx,
+        composite: &dyn CompositePlugin,
+        t: RationalTime,
+        params: &ResolvedParams,
+        frame: FrameDesc,
+        input_rgbas: &[&[u8]],
+    ) -> Result<(), TestkitError> {
+        let inputs: Vec<wgpu::Texture> = input_rgbas
+            .iter()
+            .map(|rgba| upload_rgba(gpu, &frame, rgba))
+            .collect();
+        let out_a = empty_target(gpu, frame, &format!("{label}-comp-a"));
+        let out_b = empty_target(gpu, frame, &format!("{label}-comp-b"));
+        let mut pipelines = PipelineCache::new();
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some(&format!("{label}-comp-pure")),
+            });
+        let in_refs: Vec<TextureRef<'_>> = inputs
+            .iter()
+            .map(|texture| TextureRef {
+                texture,
+                desc: frame,
+            })
+            .collect();
+        let ctx = RenderCtx::new(t, Quality::FINAL);
+        composite
+            .render(
+                gpu,
+                &mut pipelines,
+                &mut encoder,
+                &ctx,
+                params,
+                &in_refs,
+                TextureRef {
+                    texture: &out_a,
+                    desc: frame,
+                },
+            )
+            .map_err(|source| TestkitError::PluginFailed {
+                label: label.into(),
+                source,
+            })?;
+        composite
+            .render(
+                gpu,
+                &mut pipelines,
+                &mut encoder,
+                &ctx,
+                params,
+                &in_refs,
+                TextureRef {
+                    texture: &out_b,
+                    desc: frame,
+                },
+            )
+            .map_err(|source| TestkitError::PluginFailed {
+                label: label.into(),
+                source,
+            })?;
+        gpu.queue.submit(std::iter::once(encoder.finish()));
+
+        let a = download_rgba(gpu, &out_a)?;
+        let b = download_rgba(gpu, &out_b)?;
+        let img = RgbaImageDesc {
+            width: frame.width,
+            height: frame.height,
+        };
+        let diff = compare_rgba(img, &a, &b)?;
+        if diff.stats.max_abs_diff == 0 {
+            Ok(())
+        } else {
+            Err(TestkitError::PurityViolation {
+                label: label.into(),
+            })
+        }
+    }
+
+    /// レジストリ一括purity用のプローブ入力(同一条件で全プラグインを叩く)。
+    pub struct RegistryPurityProbe {
+        pub frame: FrameDesc,
+        pub input_rgba: Vec<u8>,
+        pub t: RationalTime,
+        pub param_driver: ParamDriverContext,
+        pub layer: LayerSourceContext,
+    }
+
+    impl RegistryPurityProbe {
+        pub fn small() -> Self {
+            let frame = FrameDesc::packed(
+                8,
+                4,
+                motolii_core::PixelFormat::Rgba8Unorm,
+                motolii_core::ColorSpace::Srgb,
+                true,
+            );
+            let mut input_rgba = vec![0u8; frame.data_size()];
+            for px in input_rgba.chunks_exact_mut(4) {
+                px.copy_from_slice(&[128, 64, 32, 255]);
+            }
+            Self {
+                frame,
+                input_rgba,
+                t: RationalTime::ZERO,
+                param_driver: ParamDriverContext {
+                    start: RationalTime::ZERO,
+                    duration: RationalTime::from_seconds(1),
+                    sample_rate: Fps::new(8, 1),
+                },
+                layer: LayerSourceContext {
+                    camera: CompCamera::DEFAULT,
+                },
+            }
+        }
+    }
+
+    /// 登録済み全プラグインへ validate + purity を機械適用する(M2E-9)。
+    /// レジストリに載った瞬間に検査対象になる — 手書き列挙の抜けを許さない。
+    pub fn assert_registry_pure(
+        registry: &PluginRegistry,
+        gpu: &GpuCtx,
+        probe: &RegistryPurityProbe,
+    ) -> Result<(), TestkitError> {
+        let kinds = [
+            PluginKind::Filter,
+            PluginKind::ParamDriver,
+            PluginKind::LayerSource,
+            PluginKind::Composite,
+        ];
+        for kind in kinds {
+            for (id, plugin) in registry.iter(kind) {
+                let label = id.0;
+                validate_node_desc(plugin.kind(), plugin.desc()).map_err(|source| {
+                    TestkitError::PluginFailed {
+                        label: label.into(),
+                        source,
+                    }
+                })?;
+                let params = default_resolved_params(label, plugin.desc())?;
+                match plugin {
+                    DynPlugin::Filter(filter) => {
+                        assert_filter_pure(
+                            label,
+                            gpu,
+                            filter,
+                            probe.t,
+                            &params,
+                            probe.frame,
+                            &probe.input_rgba,
+                        )?;
+                    }
+                    DynPlugin::ParamDriver(driver) => {
+                        assert_param_driver_pure(label, driver, probe.param_driver, &params)?;
+                    }
+                    DynPlugin::LayerSource(plugin) => {
+                        assert_layer_source_pure(
+                            label,
+                            gpu,
+                            plugin,
+                            probe.t,
+                            &params,
+                            probe.layer,
+                            probe.frame,
+                        )?;
+                    }
+                    DynPlugin::Composite(composite) => {
+                        let n = composite.desc().min_inputs;
+                        let slices: Vec<&[u8]> =
+                            (0..n).map(|_| probe.input_rgba.as_slice()).collect();
+                        assert_composite_pure(
+                            label,
+                            gpu,
+                            composite,
+                            probe.t,
+                            &params,
+                            probe.frame,
+                            &slices,
+                        )?;
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 
