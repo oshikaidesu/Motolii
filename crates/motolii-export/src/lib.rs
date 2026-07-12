@@ -7,10 +7,12 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap};
-use motolii_doc::{build_document_frame_graph, resolve_asset_path, Document, EvaluationTime, GraphError};
+use motolii_doc::{
+    build_document_frame_graph, resolve_asset_path, Document, EvaluationTime, GraphError,
+};
 use motolii_eval::DataTracks;
 use motolii_gpu::{GpuCtx, RgbaDownloader, YuvToRgba};
-use motolii_media::{probe, Encoder, FrameReader};
+use motolii_media::{probe, read_frame_at, Encoder, FrameReader};
 use motolii_nodes::{ParamOverlayError, ParamRectOverlay};
 use motolii_plugin::{reference::register_reference_plugins, PluginRegistry, TextureRef};
 use motolii_render::{
@@ -61,10 +63,16 @@ pub enum ExportError {
     DocGraph(#[from] GraphError),
     #[error(transparent)]
     Plugin(#[from] motolii_plugin::PluginError),
+    #[error(transparent)]
+    RationalTime(#[from] motolii_core::RationalTimeError),
     #[error("document has no video source clip")]
     NoVideoSource,
+    #[error("multiple video asset clips in one frame")]
+    MultipleVideoSources,
     #[error("asset {0} path could not be resolved")]
     UnresolvedAsset(u64),
+    #[error("mapped source frame index is negative: {0}")]
+    NegativeSourceFrame(i64),
 }
 
 /// 書き出し設定。Document≠ExportJob(M2E-11⑤)。
@@ -168,53 +176,139 @@ pub fn export_overlay_video(
     if let Some(e) = finish_error {
         return Err(e);
     }
-    Ok(ExportReport { frames_written, desc, fps: info.fps })
+    Ok(ExportReport {
+        frames_written,
+        desc,
+        fps: info.fps,
+    })
 }
 
-pub fn export_document_video(gpu: &GpuCtx, job: &ExportJob<'_>) -> Result<ExportReport, ExportError> {
+pub fn export_document_video(
+    gpu: &GpuCtx,
+    job: &ExportJob<'_>,
+) -> Result<ExportReport, ExportError> {
     let mut registry = PluginRegistry::new();
     register_reference_plugins(&mut registry)?;
     let (video_path, asset_id) = find_primary_video(job.doc, job.project_root)?;
     let info = probe(&video_path)?;
-    let desc = FrameDesc::packed(info.width, info.height, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
-    let mut reader = FrameReader::open(&video_path, &info, 0)?;
+    let desc = FrameDesc::packed(
+        info.width,
+        info.height,
+        PixelFormat::Rgba8Unorm,
+        ColorSpace::Srgb,
+        true,
+    );
+    // 書き出しループはタイムライン尺主導。デコード位置はグラフの source_time(TimeMap済み)。
+    let timeline_fps = job.doc.composition.fps;
     let mut yuv = YuvToRgba::new(gpu);
     let mut downloader = RgbaDownloader::new();
-    let mut encoder = Encoder::open(job.output_path, &desc, info.fps, job.qp0)?;
+    let mut encoder = Encoder::open(job.output_path, &desc, timeline_fps, job.qp0)?;
     let mut render_session = RenderSession::new(gpu);
     let tracks = job.data_tracks.clone();
     let mut frames_written = 0usize;
     let mut loop_error = None;
     while job.frame_count.map(|n| frames_written < n).unwrap_or(true) {
-        let Some(frame) = (match reader.next_frame() { Ok(f) => f, Err(e) => { loop_error = Some(e.into()); break } }) else { break };
-        let timeline_time = frame.pts;
+        let timeline_time = match RationalTime::try_from_frame(frames_written as i64, timeline_fps)
+        {
+            Ok(t) => t,
+            Err(e) => {
+                loop_error = Some(e.into());
+                break;
+            }
+        };
+        if job.frame_count.is_none() && timeline_time >= job.doc.composition.duration {
+            break;
+        }
         match (|| -> Result<(), ExportError> {
-            let built = build_document_frame_graph(job.doc, EvaluationTime::new(timeline_time), desc, &tracks, &registry, job.project_root)?;
-            if built.video_slots.is_empty() { return Err(ExportError::NoVideoSource); }
+            let built = build_document_frame_graph(
+                job.doc,
+                EvaluationTime::new(timeline_time),
+                desc,
+                &tracks,
+                &registry,
+                job.project_root,
+            )?;
+            if built.video_slots.is_empty() {
+                return Err(ExportError::NoVideoSource);
+            }
+            for (_, aid) in &built.video_slots {
+                if aid.get() != asset_id {
+                    return Err(ExportError::MultipleVideoSources);
+                }
+            }
+            let source_frame = built.source_time.try_to_frame_floor(info.fps)?;
+            if source_frame < 0 {
+                return Err(ExportError::NegativeSourceFrame(source_frame));
+            }
+            let frame = read_frame_at(&video_path, &info, source_frame)?;
             let background = yuv.convert(gpu, &frame)?;
-            let video_inputs: Vec<_> = built.video_slots.iter().map(|(tid, aid)| {
-                if aid.get() != asset_id { panic!("multiple video assets unsupported in D3 v1"); }
-                (*tid, TextureRef { texture: &background, desc })
-            }).collect();
-            let rendered = render_graph_cached(gpu, &mut render_session, timeline_time, &built.graph,
-                &RenderGraphInputs { video_sources: &video_inputs, source_time: Some(built.source_time), plugins: Some(&registry) }, Quality::FINAL)?;
-            encoder.write_frame(&downloader.download(gpu, &rendered.texture, EXPORT_DOWNLOAD_TIMEOUT)?)?;
+            let video_inputs: Vec<_> = built
+                .video_slots
+                .iter()
+                .map(|(tid, _)| {
+                    (
+                        *tid,
+                        TextureRef {
+                            texture: &background,
+                            desc,
+                        },
+                    )
+                })
+                .collect();
+            let rendered = render_graph_cached(
+                gpu,
+                &mut render_session,
+                timeline_time,
+                &built.graph,
+                &RenderGraphInputs {
+                    video_sources: &video_inputs,
+                    source_time: Some(built.source_time),
+                    plugins: Some(&registry),
+                },
+                Quality::FINAL,
+            )?;
+            encoder.write_frame(&downloader.download(
+                gpu,
+                &rendered.texture,
+                EXPORT_DOWNLOAD_TIMEOUT,
+            )?)?;
             Ok(())
-        })() { Ok(()) => frames_written += 1, Err(e) => { loop_error = Some(e); break } }
+        })() {
+            Ok(()) => frames_written += 1,
+            Err(e) => {
+                loop_error = Some(e);
+                break;
+            }
+        }
     }
     let finish_error = encoder.finish().err().map(ExportError::from);
-    if let Some(e) = loop_error { return Err(e); }
-    if let Some(e) = finish_error { return Err(e); }
-    Ok(ExportReport { frames_written, desc, fps: info.fps })
+    if let Some(e) = loop_error {
+        return Err(e);
+    }
+    if let Some(e) = finish_error {
+        return Err(e);
+    }
+    Ok(ExportReport {
+        frames_written,
+        desc,
+        fps: timeline_fps,
+    })
 }
 
-fn find_primary_video(doc: &Document, project_root: Option<&Path>) -> Result<(PathBuf, u64), ExportError> {
+fn find_primary_video(
+    doc: &Document,
+    project_root: Option<&Path>,
+) -> Result<(PathBuf, u64), ExportError> {
     for track in &doc.tracks {
         for item in &track.items {
             if let motolii_doc::TrackItem::Clip(clip) = item {
                 if let motolii_doc::ClipSource::Asset { asset } = clip.source {
-                    let a = doc.assets.get(asset).ok_or(ExportError::UnresolvedAsset(asset.get()))?;
-                    let path = resolve_asset_path(a, project_root).ok_or(ExportError::UnresolvedAsset(asset.get()))?;
+                    let a = doc
+                        .assets
+                        .get(asset)
+                        .ok_or(ExportError::UnresolvedAsset(asset.get()))?;
+                    let path = resolve_asset_path(a, project_root)
+                        .ok_or(ExportError::UnresolvedAsset(asset.get()))?;
                     return Ok((path, asset.get()));
                 }
             }

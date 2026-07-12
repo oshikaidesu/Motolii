@@ -9,8 +9,8 @@ use motolii_core::{
 };
 use motolii_gpu::{upload_rgba, GpuCtx, PipelineCache};
 use motolii_nodes::{
-    create_rgba_render_target, ClippingMaskMode, CompositeMode, CompositeNode, MaskNode,
-    NodeError, OverlayNode, RectOverlay,
+    create_rgba_render_target, ClippingMaskMode, CompositeMode, CompositeNode, MaskNode, NodeError,
+    OverlayNode, RectOverlay,
 };
 use motolii_plugin::{
     LayerSourceContext, PluginError, PluginId, PluginRegistry, RenderCtx, ResolvedParams,
@@ -77,9 +77,23 @@ pub enum RenderStep {
         output: TextureId,
         overlay: RectOverlay,
     },
-    CompositeNormal { background: TextureId, foreground: TextureId, output: TextureId },
-    Composite { background: TextureId, foreground: TextureId, output: TextureId, mode: CompositeMode },
-    ApplyMask { content: TextureId, mask: TextureId, output: TextureId, mode: ClippingMaskMode },
+    CompositeNormal {
+        background: TextureId,
+        foreground: TextureId,
+        output: TextureId,
+    },
+    Composite {
+        background: TextureId,
+        foreground: TextureId,
+        output: TextureId,
+        mode: CompositeMode,
+    },
+    ApplyMask {
+        content: TextureId,
+        mask: TextureId,
+        output: TextureId,
+        mode: ClippingMaskMode,
+    },
     /// PluginRegistry経由の一般ステップ(所見1)。種別はレジストリlookupで決まる。
     Plugin {
         id: PluginId,
@@ -405,20 +419,38 @@ pub fn render_graph_cached(
                 )?;
                 textures[output.0] = Some(output_texture);
             }
-            RenderStep::Composite { background, foreground, output, mode } => {
+            RenderStep::Composite {
+                background,
+                foreground,
+                output,
+                mode,
+            } => {
                 let bt = texture_ref(&textures, desc, *background)?;
                 let ft = texture_ref(&textures, desc, *foreground)?;
                 let ot = session.acquire_render_target(gpu, desc, &avoid);
                 session.composite.set_mode(*mode);
-                session.composite.render(gpu, &RenderCtx::new(timeline_time, quality), bt, ft, TextureRef { texture: &ot, desc })?;
+                session.composite.render(
+                    gpu,
+                    &RenderCtx::new(timeline_time, quality),
+                    bt,
+                    ft,
+                    TextureRef { texture: &ot, desc },
+                )?;
                 textures[output.0] = Some(ot);
             }
-            RenderStep::ApplyMask { content, mask, output, mode } => {
+            RenderStep::ApplyMask {
+                content,
+                mask,
+                output,
+                mode,
+            } => {
                 let ct = texture_ref(&textures, desc, *content)?;
                 let mt = texture_ref(&textures, desc, *mask)?;
                 let ot = session.acquire_render_target(gpu, desc, &avoid);
                 session.mask.set_mode(*mode);
-                session.mask.render(gpu, ct, mt, TextureRef { texture: &ot, desc })?;
+                session
+                    .mask
+                    .render(gpu, ct, mt, TextureRef { texture: &ot, desc })?;
                 textures[output.0] = Some(ot);
             }
             RenderStep::Plugin {
@@ -619,16 +651,30 @@ fn validate_linear_graph(
                 producer[output.0] = Some(TexProducer::Composite);
                 composite_count += 1;
             }
-            RenderStep::Composite { background, foreground, output, .. } => {
-                mark_read(*background, &mut read)?; mark_read(*foreground, &mut read)?;
-                validate_input(*background, &written)?; validate_input(*foreground, &written)?;
+            RenderStep::Composite {
+                background,
+                foreground,
+                output,
+                ..
+            } => {
+                mark_read(*background, &mut read)?;
+                mark_read(*foreground, &mut read)?;
+                validate_input(*background, &written)?;
+                validate_input(*foreground, &written)?;
                 validate_output(*output, &mut written)?;
                 producer[output.0] = Some(TexProducer::Composite);
                 has_general_graph = true;
             }
-            RenderStep::ApplyMask { content, mask, output, .. } => {
-                mark_read(*content, &mut read)?; mark_read(*mask, &mut read)?;
-                validate_input(*content, &written)?; validate_input(*mask, &written)?;
+            RenderStep::ApplyMask {
+                content,
+                mask,
+                output,
+                ..
+            } => {
+                mark_read(*content, &mut read)?;
+                mark_read(*mask, &mut read)?;
+                validate_input(*content, &written)?;
+                validate_input(*mask, &written)?;
                 validate_output(*output, &mut written)?;
                 producer[output.0] = Some(TexProducer::Mask);
                 has_general_graph = true;
@@ -719,9 +765,23 @@ fn texture_slot_count(graph: &LinearRenderGraph) -> Result<usize, RenderError> {
             RenderStep::VideoSource { output } => vec![output.0],
             RenderStep::SolidSource { output, .. } => vec![output.0],
             RenderStep::OverlayRect { input, output, .. } => vec![input.0, output.0],
-            RenderStep::CompositeNormal { background, foreground, output } => vec![background.0, foreground.0, output.0],
-            RenderStep::Composite { background, foreground, output, .. } => vec![background.0, foreground.0, output.0],
-            RenderStep::ApplyMask { content, mask, output, .. } => vec![content.0, mask.0, output.0],
+            RenderStep::CompositeNormal {
+                background,
+                foreground,
+                output,
+            } => vec![background.0, foreground.0, output.0],
+            RenderStep::Composite {
+                background,
+                foreground,
+                output,
+                ..
+            } => vec![background.0, foreground.0, output.0],
+            RenderStep::ApplyMask {
+                content,
+                mask,
+                output,
+                ..
+            } => vec![content.0, mask.0, output.0],
             RenderStep::Plugin { inputs, output, .. } => {
                 let mut v: Vec<_> = inputs.iter().map(|id| id.0).collect();
                 v.push(output.0);
@@ -917,8 +977,16 @@ fn live_textures<'a>(
 fn step_input_ids(step: &RenderStep) -> Vec<TextureId> {
     match step {
         RenderStep::OverlayRect { input, .. } => vec![*input],
-        RenderStep::CompositeNormal { background, foreground, .. }
-        | RenderStep::Composite { background, foreground, .. } => vec![*background, *foreground],
+        RenderStep::CompositeNormal {
+            background,
+            foreground,
+            ..
+        }
+        | RenderStep::Composite {
+            background,
+            foreground,
+            ..
+        } => vec![*background, *foreground],
         RenderStep::ApplyMask { content, mask, .. } => vec![*content, *mask],
         RenderStep::Plugin { inputs, .. } => inputs.clone(),
         _ => Vec::new(),

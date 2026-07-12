@@ -10,7 +10,7 @@ use motolii_cli::export_document;
 use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, RationalTime, TimeMap};
 use motolii_doc::{
     save_document, Asset, AssetId, Clip, ClipSource, Composition, DocParam, Document, ItemEnvelope,
-    RECT_LAYER_SOURCE, Track, TrackItem,
+    Track, TrackItem, RECT_LAYER_SOURCE,
 };
 use motolii_eval::{DataTracks, Interp, Keyframe, KeyframeTrack, Value};
 use motolii_media::{probe, read_frame_at, Encoder};
@@ -32,7 +32,12 @@ fn eased_center_track() -> KeyframeTrack {
     track.insert(Keyframe {
         t: RationalTime::ZERO,
         value: Value::Vec2([-0.3, 0.0]),
-        interp: Interp::Bezier { x1: 0.42, y1: 0.0, x2: 0.58, y2: 1.0 },
+        interp: Interp::Bezier {
+            x1: 0.42,
+            y1: 0.0,
+            x2: 0.58,
+            y2: 1.0,
+        },
     });
     track.insert(Keyframe {
         t: RationalTime::try_new(1, 1).unwrap(),
@@ -170,7 +175,10 @@ fn exit_demo_video_bg_plus_eased_rect_matches_golden() {
             },
             _ => panic!("center param must be keyframes"),
         };
-        let c = tx.point_to_px(motolii_nodes::CanonicalPoint { x: center[0], y: center[1] });
+        let c = tx.point_to_px(motolii_nodes::CanonicalPoint {
+            x: center[0],
+            y: center[1],
+        });
         centers_x.push(c.x);
 
         let frame = read_frame_at(&output, &info, idx).unwrap();
