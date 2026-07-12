@@ -444,38 +444,54 @@ fn reconstruct_journal_tip(
     Ok(base_from_latest_generation(document_path, catalog))
 }
 
-/// replay 結果が anchor より古い/フォールバック巻き戻しなら anchor を選ぶ。
+/// replay 結果が anchor より古い(巻き戻し)なら anchor を選ぶ。
+///
+/// truncate 自体は理由にしない — 世代 snapshot より先の Edit をリプレイで進められた場合は
+/// その前進を残す(`open_without_main` の tip 復旧)。
 fn prefer_anchor_against_rewind(
     document_path: &Path,
     catalog: &GenerationCatalog,
     anchor: Document,
     replay: ReplayOutcome,
-    truncated: u64,
 ) -> Result<(Document, ReplayOutcome, bool), ProjectError> {
-    let anchor_fp = document_fingerprint(&anchor)?;
-    let replay_fp = document_fingerprint(&replay.document)?;
-
-    let keep_anchor = if (!replay.replay_failures.is_empty() && replay_fp != anchor_fp)
-        || (truncated > 0 && replay.document != anchor)
-    {
-        true
-    } else if replay_fp != anchor_fp {
-        match (
-            generation_seq_for_fingerprint(document_path, catalog, replay_fp)?,
-            generation_seq_for_fingerprint(document_path, catalog, anchor_fp)?,
-        ) {
-            (Some(r), Some(a)) => r < a,
-            _ => false,
-        }
-    } else {
-        false
-    };
+    let keep_anchor =
+        is_replay_older_than_anchor(document_path, catalog, &replay.document, &anchor)?;
 
     if keep_anchor {
         Ok((anchor, replay, true))
     } else {
         Ok((replay.document.clone(), replay, false))
     }
+}
+
+/// replay が anchor より古い状態か。
+fn is_replay_older_than_anchor(
+    document_path: &Path,
+    catalog: &GenerationCatalog,
+    replay_doc: &Document,
+    anchor: &Document,
+) -> Result<bool, ProjectError> {
+    let replay_fp = document_fingerprint(replay_doc)?;
+    let anchor_fp = document_fingerprint(anchor)?;
+    if replay_fp == anchor_fp {
+        return Ok(false);
+    }
+
+    let replay_seq = generation_seq_for_fingerprint(document_path, catalog, replay_fp)?;
+    let anchor_seq = generation_seq_for_fingerprint(document_path, catalog, anchor_fp)?;
+    let tip_fp = catalog.last_journaled_fingerprint;
+
+    Ok(match (replay_seq, anchor_seq) {
+        // 両方世代: seq 比較
+        (Some(r), Some(a)) => r < a,
+        // replay だけ世代 — anchor が tip 指紋なら tip からの巻き戻し
+        (Some(_), None) => tip_fp == Some(anchor_fp),
+        // anchor だけ世代 — replay が Edit 前進。anchor が tip なら replay は tip 外れ=巻き戻し扱い
+        // (通常 open_without_main では tip≠anchor で false → 前進を採用)
+        (None, Some(_)) => tip_fp == Some(anchor_fp),
+        // どちらも世代外: anchor が tip なら異なる replay は tip からの離脱
+        (None, None) => tip_fp == Some(anchor_fp),
+    })
 }
 
 fn open_with_main(
@@ -553,7 +569,7 @@ fn open_with_main(
     );
 
     let (document, replay, kept_anchor) =
-        prefer_anchor_against_rewind(document_path, &catalog, base, replay, truncated)?;
+        prefer_anchor_against_rewind(document_path, &catalog, base, replay)?;
     if kept_anchor {
         return Ok(OpenProjectOutcome {
             document,
@@ -633,7 +649,7 @@ fn open_without_main(document_path: &Path) -> Result<OpenProjectOutcome, Project
     );
 
     let (document, replay, _kept_anchor) =
-        prefer_anchor_against_rewind(document_path, &catalog, base, replay, truncated)?;
+        prefer_anchor_against_rewind(document_path, &catalog, base, replay)?;
     Ok(OpenProjectOutcome {
         document,
         source: RecoverySource::GenerationRecovery,

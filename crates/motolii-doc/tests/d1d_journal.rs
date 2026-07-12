@@ -533,6 +533,27 @@ fn corrupt_main_replay_fallback_keeps_generation_base() {
 }
 
 #[test]
+fn corrupt_main_truncated_journal_keeps_edits_past_generation() {
+    // truncate があっても、世代 snapshot より先の Edit リプレイは捨てない
+    let dir = unique_dir("gen-truncate-forward");
+    let path = dir.join("doc.json");
+    let mut doc = Document::new_v1();
+    doc.bpm = Bpm::try_new(100, 1).unwrap();
+    save_with_edit(&path, &doc, JournalEdit::SetBpm { num: 100, den: 1 });
+    doc.bpm = Bpm::try_new(150, 1).unwrap();
+    save_edit_only(&path, &doc, JournalEdit::SetBpm { num: 150, den: 1 });
+
+    inject_corrupt_main(&path).unwrap();
+    inject_corrupt_journal_tail(&path, b"GARBAGE_PARTIAL_WRITE").unwrap();
+
+    let opened = open_project(&path).unwrap();
+    assert_eq!(opened.source, RecoverySource::GenerationRecovery);
+    assert_eq!(opened.document.bpm, Bpm::try_new(150, 1).unwrap());
+    assert!(opened.truncated_bytes > 0);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn missing_fingerprint_main_behind_recovers_forward() {
     use motolii_doc::inject_clear_fingerprint;
 
