@@ -23,7 +23,10 @@ fn unknown_keys_survive_json_roundtrip() {
     let doc: Document = serde_json::from_value(input.clone()).expect("deserialize with extras");
     assert_eq!(doc.version, 1);
     assert_eq!(doc.min_reader_version, 1);
-    assert_eq!(doc.extra.get("future_track"), Some(&json!({"id": "t1", "kind": "video"})));
+    assert_eq!(
+        doc.extra.get("future_track"),
+        Some(&json!({"id": "t1", "kind": "video"}))
+    );
     assert_eq!(doc.extra.get("experimental_flag"), Some(&json!(true)));
 
     let output: Value = serde_json::to_value(&doc).expect("serialize");
