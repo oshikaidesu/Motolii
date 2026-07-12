@@ -14,7 +14,7 @@ use motolii_doc::{
 };
 use motolii_eval::DataTracks;
 use motolii_gpu::{GpuCtx, RgbaDownloader, YuvToRgba};
-use motolii_media::{probe, read_frame_at, Encoder, FrameReader, MediaInfo};
+use motolii_media::{probe, Encoder, FrameReader, MediaInfo};
 use motolii_nodes::{ParamOverlayError, ParamRectOverlay};
 use motolii_plugin::{reference::register_reference_plugins, PluginRegistry, TextureRef};
 use motolii_render::{
@@ -207,8 +207,8 @@ pub fn export_document_video(
     let mut encoder = Encoder::open(job.output_path, &desc, timeline_fps, job.qp0)?;
     let mut render_session = RenderSession::new(gpu);
     let tracks = job.data_tracks.clone();
-    // アクティブ資産がフレームごとに変わってもよいよう、path/probe をキャッシュする。
-    let mut media_cache: HashMap<u64, (PathBuf, MediaInfo)> = HashMap::new();
+    // AssetId → 開いたままの FrameReader。順方向は next_frame、巻き戻し/切替時のみ reopen。
+    let mut readers: HashMap<u64, CachedAssetReader> = HashMap::new();
     let mut frames_written = 0usize;
     let mut loop_error = None;
     while job.frame_count.map(|n| frames_written < n).unwrap_or(true) {
@@ -235,21 +235,21 @@ pub fn export_document_video(
             let active = active_video_slot(&built.video_slots)?;
             // 動画が無いフレームは空の video_sources でオーバーレイのみ続行。
             let background = if let Some((_slot_id, asset_id)) = active {
-                let (path, info) = load_media_cached(job, asset_id, &mut media_cache)?;
-                if info.width != desc.width || info.height != desc.height {
+                let cached = ensure_asset_reader(job, asset_id, &mut readers)?;
+                if cached.info.width != desc.width || cached.info.height != desc.height {
                     return Err(ExportError::VideoDimensionMismatch {
                         asset: asset_id.get(),
-                        got_w: info.width,
-                        got_h: info.height,
+                        got_w: cached.info.width,
+                        got_h: cached.info.height,
                         want_w: desc.width,
                         want_h: desc.height,
                     });
                 }
-                let source_frame = built.source_time.try_to_frame_floor(info.fps)?;
+                let source_frame = built.source_time.try_to_frame_floor(cached.info.fps)?;
                 if source_frame < 0 {
                     return Err(ExportError::NegativeSourceFrame(source_frame));
                 }
-                let frame = read_frame_at(&path, &info, source_frame)?;
+                let frame = cached.read_at(source_frame)?;
                 Some(yuv.convert(gpu, &frame)?)
             } else {
                 None
@@ -316,24 +316,67 @@ fn active_video_slot(
     Ok(Some((first_tid, first_aid)))
 }
 
-fn load_media_cached(
+/// 資産ごとの常駐デコーダ。順方向は ffmpeg を開き直さない。
+struct CachedAssetReader {
+    path: PathBuf,
+    info: MediaInfo,
+    reader: FrameReader,
+}
+
+impl CachedAssetReader {
+    fn open(path: PathBuf, info: MediaInfo, start_frame: i64) -> Result<Self, ExportError> {
+        let reader = FrameReader::open(&path, &info, start_frame)?;
+        Ok(Self { path, info, reader })
+    }
+
+    fn read_at(&mut self, frame_index: i64) -> Result<motolii_core::CpuFrame, ExportError> {
+        if frame_index < 0 {
+            return Err(ExportError::NegativeSourceFrame(frame_index));
+        }
+        let next = self.reader.next_frame_index();
+        if frame_index < next {
+            // 巻き戻し: シーク付きで開き直す。
+            self.reader = FrameReader::open(&self.path, &self.info, frame_index)?;
+        } else {
+            // 順方向: 目的フレーム直前まで読み捨て。
+            while self.reader.next_frame_index() < frame_index {
+                if self.reader.next_frame()?.is_none() {
+                    return Err(ExportError::Media(motolii_media::MediaError::Ffmpeg(
+                        format!("frame {frame_index} out of range"),
+                    )));
+                }
+            }
+        }
+        self.reader.next_frame()?.ok_or_else(|| {
+            ExportError::Media(motolii_media::MediaError::Ffmpeg(format!(
+                "frame {frame_index} out of range"
+            )))
+        })
+    }
+}
+
+fn ensure_asset_reader<'a>(
     job: &ExportJob<'_>,
     asset_id: AssetId,
-    cache: &mut HashMap<u64, (PathBuf, MediaInfo)>,
-) -> Result<(PathBuf, MediaInfo), ExportError> {
-    if let Some((path, info)) = cache.get(&asset_id.get()) {
-        return Ok((path.clone(), info.clone()));
+    readers: &'a mut HashMap<u64, CachedAssetReader>,
+) -> Result<&'a mut CachedAssetReader, ExportError> {
+    use std::collections::hash_map::Entry;
+    match readers.entry(asset_id.get()) {
+        Entry::Occupied(e) => Ok(e.into_mut()),
+        Entry::Vacant(e) => {
+            let asset = job
+                .doc
+                .assets
+                .get(asset_id)
+                .ok_or(ExportError::UnresolvedAsset(asset_id.get()))?;
+            let path = resolve_asset_path(asset, job.project_root)
+                .ok_or(ExportError::UnresolvedAsset(asset_id.get()))?;
+            let info = probe(&path)?;
+            // 初回は先頭から。実際のフレーム位置は read_at が合わせる。
+            let cached = CachedAssetReader::open(path, info, 0)?;
+            Ok(e.insert(cached))
+        }
     }
-    let asset = job
-        .doc
-        .assets
-        .get(asset_id)
-        .ok_or(ExportError::UnresolvedAsset(asset_id.get()))?;
-    let path = resolve_asset_path(asset, job.project_root)
-        .ok_or(ExportError::UnresolvedAsset(asset_id.get()))?;
-    let info = probe(&path)?;
-    cache.insert(asset_id.get(), (path.clone(), info.clone()));
-    Ok((path, info))
 }
 
 /// エンコーダ寸法用。文書に登場する動画アセットを走査する(アクティブ時刻は問わない)。
