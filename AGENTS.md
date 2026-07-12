@@ -7,6 +7,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 1. [docs/README.md](docs/README.md) — プロジェクト全体像・ドキュメントの読む順序・用語
 2. 着手するフェーズの仕様書([docs/specs/](docs/specs/README.md)): タスク表(完了条件・依存つき)と、**末尾の「実装ガード」節**(先行ツールの失敗・ユーザー不満をタスクIDに紐付けた注意リスト。完了条件を追加している場合がある)
 3. プラグインを書く/量産する時: [docs/plugin-authoring.md](docs/plugin-authoring.md)(種別・NodeDesc必須欄・禁止事項・型紙)
+4. M2 Document/スキーマ/ジャーナルに触る時: **先に**[docs/reviews/2026-07-12-m2-permanence-prevention.md](docs/reviews/2026-07-12-m2-permanence-prevention.md)(予防5手)。背景の先人調査は[rework-prior-art](docs/reviews/2026-07-12-rework-prior-art.md)
 
 ## 絶対規律(破ると設計の根拠が崩れる。レビュー最重視項目)
 
@@ -33,8 +34,22 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 - 完了条件は自動判定(`cargo test`/ゴールデンイメージ)。「動いた気がする」を完了条件にしない
 - **テストを「直して」通さない**: ゴールデン参照画像・受け入れテストの削除・期待値書き換え・実装のspecial-caseで緑にすることを禁止。**テストが間違っていると思ったら実装を止めて報告する**。参照画像の正当な更新は理由を明記した独立PRに分離(specs/README.md 粒度ルール6、[pitfalls H-2](docs/pitfalls-and-roadmap.md))
 - **新規ヘルパーを書く前に既存を検索する**: 同等物が既にないかgrepしてから書く(LLM開発の最大の負債はコピペ増殖 — [pitfalls H-3](docs/pitfalls-and-roadmap.md))。テストヘルパーのtestkit集約ルールの一般化
-- **仕様書の未決事項に依存するタスクに着手しない**: 未決を「もっともらしいデフォルト」で埋めない。仕様書改訂PRで先に潰す(specs/README.md 粒度ルール7)
+- **仕様書の未決事項に依存するタスクに着手しない**: 未決を「もっともらしいデフォルト」で埋めない。仕様書改訂PRで先に潰す(specs/README.md 粒度ルール7、GR-PV)
 - **完了報告は証跡付き**: 実行したコマンドとテスト出力を添える。「動くはず」を報告にしない
 - 提出前に `cargo test --workspace` 全緑を確認
 - **プラグイン規約の機械判定(INF-7a〜f)**: 提出前に `cargo test -p motolii-plugin` と、Filter/ParamDriverを触ったら `cargo test -p motolii-testkit --test purity` を回す。新規プラグインは `./scripts/new-plugin.sh <kind> <name>` から始め、純関数は `motolii_testkit::purity` で固定する
 - インターフェース契約(specの型シグネチャ)を変えたくなったら、実装を止めて仕様書改訂を先に
+
+## 恒久焼き込みの予防(M2 — GR-PV)
+
+正本: [docs/reviews/2026-07-12-m2-permanence-prevention.md](docs/reviews/2026-07-12-m2-permanence-prevention.md)。失敗後のmigration/Legacyは副次([rework-prior-art](docs/reviews/2026-07-12-rework-prior-art.md))。
+
+着手前チェック(1つでも No なら実装を止め、仕様改訂または依存チケット待ちへ):
+
+1. **意味が先か**: 焼く対象の意味論表/宣言が仕様にあるか。無ければ仕様改訂PRが先(コードで発明しない)
+2. **恒久面は狭いか**: 未決・未証明・UI都合だけのフィールドを足していないか
+3. **追加的か**: 新フィールド/新variant/defaultか。既存フィールドの解釈変更ではないか
+4. **依存直列か**: M2並列レーンを守っているか。特に **D1i-2完了前にD3しない**
+5. **完了条件に意味の審判があるか**: 拒否テストまたは意味論ゴールデン。`cargo test`緑だけで「完了」と書かない
+
+破れたときの出口だけ: 形状→D1e migration、画素→新variant(既存ゴールデン更新で通さない)、migration PRにnon-goals。

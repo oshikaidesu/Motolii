@@ -20,6 +20,7 @@
 - **未検証の最大リスク**: **S1 Slintスパイクの実機GUI実走**がまだ。→ INF-1。
 - **凍結ゲート状態**: **宣言**。改訂は宣言文書の解凍手続き(理由+migrate+ゴールデン)を通す。
 - **コントリビュータ導線(2026-07-10追記)**: 「乗ってもいいか」の最大欠落は視覚的証拠(GAP-11)と成功までの摩擦(GAP-9)。LLM委任の成否は**人間差し戻しをCIに移す**(INF-7)に依存。[plugin-authoring.md](plugin-authoring.md)§7の目視チェックリスト→機械判定が最安の一手。
+- **M2恒久焼き込みの予防(2026-07-12追記)**: 出戻りが最小の窓で予防を第一選択にする(H-4)。手順正本=[reviews/2026-07-12-m2-permanence-prevention.md](reviews/2026-07-12-m2-permanence-prevention.md)。先人対比=[rework-prior-art](reviews/2026-07-12-rework-prior-art.md)。運用入口=[AGENTS.md](../AGENTS.md)。
 
 ### 優先度の目安
 - **P0**: これが崩れると前提が失われる/多数のチケットの前提。今すぐ着手可能なものは最優先。
