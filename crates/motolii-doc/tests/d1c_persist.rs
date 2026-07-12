@@ -8,12 +8,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use motolii_doc::{
     detect_cloud_sync, load_document, save_document, save_document_with_options, Bpm,
-    CloudSyncHint, Document, LATEST_DOCUMENT_VERSION, PersistError, SaveAbortAfter, SaveOptions, READER_VERSION,
+    CloudSyncHint, ColorInterpretation, Document, PersistError, SaveAbortAfter, SaveOptions,
+    LATEST_DOCUMENT_VERSION, READER_VERSION,
 };
 
 fn assert_loaded_matches_saved(loaded: &Document, saved: &Document) {
+    // ロードは自動マイグレーションするため、保存時より古い版は現行版へ寄せて比較する。
     let mut expected = saved.clone();
-    expected.version = LATEST_DOCUMENT_VERSION;
+    if expected.version < LATEST_DOCUMENT_VERSION {
+        expected.version = LATEST_DOCUMENT_VERSION;
+        expected.min_reader_version = expected.min_reader_version.max(LATEST_DOCUMENT_VERSION);
+        expected.color_interpretation = ColorInterpretation::StraightSrgb;
+    }
     assert_eq!(loaded, &expected);
 }
 
@@ -96,7 +102,13 @@ fn concurrent_saves_leave_one_complete_document() {
     let written: Vec<Document> = handles.into_iter().map(|h| h.join().unwrap()).collect();
     let loaded = load_document(&path).unwrap();
     assert!(
-        written.iter().any(|d| { let mut e = d.clone(); e.version = LATEST_DOCUMENT_VERSION; loaded == e }),
+        written.iter().any(|d| {
+            let mut e = d.clone();
+            e.version = LATEST_DOCUMENT_VERSION;
+            e.min_reader_version = e.min_reader_version.max(LATEST_DOCUMENT_VERSION);
+            e.color_interpretation = ColorInterpretation::StraightSrgb;
+            loaded == e
+        }),
         "final file must equal one of the concurrent saves, got bpm={:?}",
         loaded.bpm
     );

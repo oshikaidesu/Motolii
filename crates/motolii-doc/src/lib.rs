@@ -23,12 +23,12 @@ use serde_json::{Map, Value};
 pub use asset::{Asset, AssetError, AssetId, AssetTable};
 pub use bpm::{Bpm, BpmError};
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
-pub use param::{DocParam, LookAtAxis};
 pub use migrate::{
     bump_min_reader_for_nest_schema_change, count_document, migrate_bytes, migrate_document_file,
-    ColorInterpretation, DocumentCounts, LATEST_DOCUMENT_VERSION, MigrateError, MigrateFileOptions,
-    MigrateFileResult, MigrationReport, BACKUP_SUFFIX,
+    ColorInterpretation, DocumentCounts, MigrateError, MigrateFileOptions, MigrateFileResult,
+    MigrationReport, BACKUP_SUFFIX, LATEST_DOCUMENT_VERSION,
 };
+pub use param::{DocParam, LookAtAxis};
 pub use persist::{
     detect_cloud_sync, load_document, load_document_bytes, load_document_bytes_with_reader_cap,
     save_document, save_document_with_options, CloudSyncHint, PersistError, SaveAbortAfter,
@@ -86,9 +86,19 @@ impl Document {
             layers: LayerIdTable::new(),
             track_ids: TrackIdTable::new(),
             tracks: Vec::new(),
+            // v1 でもデシリアライズ欠落時の既定。永続義務は v2+。
             color_interpretation: ColorInterpretation::default(),
             extra: Map::new(),
         }
+    }
+
+    /// 現行版。`color_interpretation` 追加に伴い `min_reader_version >= 2`。
+    pub fn new_v2() -> Self {
+        let mut doc = Self::new_v1();
+        doc.version = LATEST_DOCUMENT_VERSION;
+        doc.min_reader_version = LATEST_DOCUMENT_VERSION;
+        doc.color_interpretation = ColorInterpretation::StraightSrgb;
+        doc
     }
 }
 

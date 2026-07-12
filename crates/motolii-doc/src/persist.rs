@@ -184,7 +184,8 @@ pub fn load_document_bytes_with_reader_cap(
             reader_version,
         });
     }
-    let (doc, _report) = migrate::migrate_bytes(bytes).map_err(|e| PersistError::Migrate(Box::new(e)))?;
+    let (doc, _report) =
+        migrate::migrate_bytes(bytes).map_err(|e| PersistError::Migrate(Box::new(e)))?;
     doc.validate()?;
     Ok(doc)
 }
