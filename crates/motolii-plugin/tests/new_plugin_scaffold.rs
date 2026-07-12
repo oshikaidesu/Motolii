@@ -296,9 +296,8 @@ fn generated_artifacts_compile_in_self_crate_layout() {
         ("param_driver", "lfo"),
         ("composite", "mix"),
     ];
-    let mut plugin_mod = String::from(
-        "//! M2E-10 fixture: generated plugins compiled inside motolii-plugin.\n\n",
-    );
+    let mut plugin_mod =
+        String::from("//! M2E-10 fixture: generated plugins compiled inside motolii-plugin.\n\n");
     let mut testkit_mod = String::from("//! M2E-10 fixture: generated testkit tests.\n\n");
 
     for (kind, name) in cases {
@@ -310,6 +309,10 @@ fn generated_artifacts_compile_in_self_crate_layout() {
 
         let plugin_src = std::fs::read_to_string(&plugin_out).unwrap();
         assert_plugin_artifact(&plugin_src);
+        // 生成物は integration test 向け(`motolii_testkit::`)。lib 単体テスト取り込みでは `crate::` へ。
+        let test_src = std::fs::read_to_string(&test_out).unwrap();
+        let test_src = test_src.replace("use motolii_testkit::", "use crate::");
+        std::fs::write(&test_out, test_src).unwrap();
         plugin_mod.push_str(&format!("pub mod {mod_name};\n"));
         testkit_mod.push_str(&format!(
             "#[path = \"{mod_name}_test.rs\"]\nmod {mod_name}_test;\n"
@@ -332,21 +335,20 @@ fn generated_artifacts_compile_in_self_crate_layout() {
         String::from_utf8_lossy(&check_plugin.stderr)
     );
 
-    // testkit 実配置: 同じく env cfg + workspace --locked(実行はしない)
+    // testkit 実配置: lib 単体テストとして OUT_DIR 経由で取り込む(実行はしない)
     let check_tests = Command::new("cargo")
         .args([
             "test",
             "-p",
             "motolii-testkit",
-            "--test",
-            "scaffold_fixture_compile",
+            "--lib",
             "--no-run",
             "--locked",
         ])
         .env("MOTOLII_SCAFFOLD_FIXTURE", "1")
         .current_dir(&root)
         .output()
-        .expect("cargo test --no-run scaffold_fixture_compile");
+        .expect("cargo test --lib --no-run scaffold fixture");
     assert!(
         check_tests.status.success(),
         "motolii-testkit fixture tests failed to compile:\n{}\n{}",

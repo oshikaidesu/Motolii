@@ -1722,9 +1722,9 @@ mod tests {
     }
 }
 
-/// M2E-10: `new-plugin` 生成物を motolii-plugin 自己クレート配置でコンパイル検証する口。
-/// 実体は `target/scaffold-plugin-fixture/in_plugin/mod.rs`(テストが生成)。
-/// Cargo feature ではなく `MOTOLII_SCAFFOLD_FIXTURE` 経由の独自 cfg(通常/`--all-features` では無効)。
-#[cfg(motolii_scaffold_fixture)]
-#[path = "../../../target/scaffold-plugin-fixture/in_plugin/mod.rs"]
-pub mod scaffold_fixture;
+/// M2E-10: `new-plugin` 生成物を自己クレート配置でコンパイル検証する口。
+/// 実体は OUT_DIR(build.rs)。`MOTOLII_SCAFFOLD_FIXTURE` 未設定時は空モジュール。
+/// ソースに欠落 `#[path]` を置かない(rustfmt が cfg を無視するため)。
+pub mod scaffold_fixture {
+    include!(concat!(env!("OUT_DIR"), "/scaffold_fixture_mods.rs"));
+}

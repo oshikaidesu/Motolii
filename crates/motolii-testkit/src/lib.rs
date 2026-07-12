@@ -1007,3 +1007,11 @@ mod tests {
         assert!(panic.is_err());
     }
 }
+
+/// M2E-10: new-plugin 生成 testkit テストを実配置コンパイルする口(OUT_DIR)。
+/// `MOTOLII_SCAFFOLD_FIXTURE` 未設定時はモジュール自体が無い(通常/`--all-features` 安全)。
+#[cfg(all(test, motolii_scaffold_fixture))]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod scaffold_fixture_tests {
+    include!(concat!(env!("OUT_DIR"), "/scaffold_testkit_mods.rs"));
+}
