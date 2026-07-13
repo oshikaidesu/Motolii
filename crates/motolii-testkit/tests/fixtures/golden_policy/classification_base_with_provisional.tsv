@@ -1,0 +1,3 @@
+# base: provisional を含む(分類解除迂回の回帰用)
+semantic	crates/motolii-testkit/tests/fixtures/golden_policy/semantic_sample.txt
+provisional	crates/motolii-testkit/tests/fixtures/golden_policy/provisional_with_marker.txt
