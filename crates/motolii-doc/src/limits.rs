@@ -15,7 +15,7 @@ use thiserror::Error;
 use crate::param::DocParam;
 use crate::schema::{
     Clip, ClipSource, EffectInstance, Group, ItemEnvelope, PathOp, StandardShape, TrackItem,
-    VectorContent,
+    Transform2D, VectorContent,
 };
 use crate::Document;
 
@@ -332,11 +332,19 @@ fn check_path_op(
 ) -> Result<(), ResourceLimitError> {
     match op {
         PathOp::PuckerBloat { amount } => check_param(amount, &format!("{path}.amount"), limits),
-        PathOp::ZigZag { amount, ridges } => {
+        PathOp::ZigZag {
+            amount,
+            ridges,
+            point_type: _,
+        } => {
             check_param(amount, &format!("{path}.amount"), limits)?;
             check_param(ridges, &format!("{path}.ridges"), limits)
         }
-        PathOp::Offset { distance } => check_param(distance, &format!("{path}.distance"), limits),
+        PathOp::Offset {
+            distance,
+            line_join: _,
+            miter_limit: _,
+        } => check_param(distance, &format!("{path}.distance"), limits),
         PathOp::RoundCorners { radius } => check_param(radius, &format!("{path}.radius"), limits),
         PathOp::Trim {
             start,
@@ -348,17 +356,41 @@ fn check_path_op(
             check_param(end, &format!("{path}.end"), limits)?;
             check_param(offset, &format!("{path}.offset"), limits)
         }
-        PathOp::Twist { angle } => check_param(angle, &format!("{path}.angle"), limits),
-        PathOp::Wiggle { amp, freq, seed } => {
-            check_param(amp, &format!("{path}.amp"), limits)?;
-            check_param(freq, &format!("{path}.freq"), limits)?;
-            check_param(seed, &format!("{path}.seed"), limits)
+        PathOp::Twist { angle, center } => {
+            check_param(angle, &format!("{path}.angle"), limits)?;
+            check_param(center, &format!("{path}.center"), limits)
         }
-        PathOp::Repeater { copies, offset } => {
+        PathOp::Wiggle { amp, freq, seed: _ } => {
+            check_param(amp, &format!("{path}.amp"), limits)?;
+            check_param(freq, &format!("{path}.freq"), limits)
+            // seedはu64固定(非DocParam) — キーフレーム走査対象外。
+        }
+        PathOp::Repeater {
+            copies,
+            offset,
+            transform,
+            composite: _,
+            start_opacity,
+            end_opacity,
+        } => {
             check_param(copies, &format!("{path}.copies"), limits)?;
-            check_param(offset, &format!("{path}.offset"), limits)
+            check_param(offset, &format!("{path}.offset"), limits)?;
+            check_transform2d(transform, &format!("{path}.transform"), limits)?;
+            check_param(start_opacity, &format!("{path}.start_opacity"), limits)?;
+            check_param(end_opacity, &format!("{path}.end_opacity"), limits)
         }
     }
+}
+
+fn check_transform2d(
+    transform: &Transform2D,
+    path: &str,
+    limits: &ResourceLimits,
+) -> Result<(), ResourceLimitError> {
+    check_param(&transform.position, &format!("{path}.position"), limits)?;
+    check_param(&transform.anchor, &format!("{path}.anchor"), limits)?;
+    check_param(&transform.scale, &format!("{path}.scale"), limits)?;
+    check_param(&transform.rotation, &format!("{path}.rotation"), limits)
 }
 
 fn check_param(
