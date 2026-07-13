@@ -22,5 +22,6 @@
 
 /.github/CODEOWNERS @oshikaidesu
 crates/motolii-testkit/golden/** @oshikaidesu
+crates/motolii-testkit/golden_policy/** @oshikaidesu
 crates/motolii-testkit/src/cpu_reference/** @oshikaidesu
 crates/motolii-testkit/src/tol/** @oshikaidesu
