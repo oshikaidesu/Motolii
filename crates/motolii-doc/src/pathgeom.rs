@@ -290,8 +290,7 @@ fn pucker_bloat_contour(c: &Contour, amount: f64) -> Contour {
 }
 
 // ---------------------------------------------------------------------------
-// zig_zag: 既存の頂点間コード(直線近似。入力タンジェントは捨てる — v1簡略化)を
-// ridges*2分割し、外向き法線方向に交互にamountだけ変位させる。
+// zig_zag: ベジエ弧長に沿って ridges*2 分割し、法線方向に交互に amount だけ変位。
 // point_type=corner→ゼロタンジェント、smooth→前後点方向の自動タンジェント。
 // ---------------------------------------------------------------------------
 fn zigzag_contour(c: &Contour, amount: f64, ridges: f64, point_type: PointType) -> Contour {
@@ -307,22 +306,37 @@ fn zigzag_contour(c: &Contour, amount: f64, ridges: f64, point_type: PointType) 
     let mut points: Vec<Point> = Vec::new();
     let steps = ridge_count * 2;
     for e in 0..edge_count {
-        let a = c.vertices[e].point;
-        let b = c.vertices[(e + 1) % n].point;
-        points.push(a);
-        let dir = b.sub(a);
-        let len = dir.length();
-        if len < f64::EPSILON {
+        let v0 = &c.vertices[e];
+        let v1 = &c.vertices[(e + 1) % n];
+        let (cum, seg_len) = segment_sample_lengths(v0, v1);
+        if seg_len < f64::EPSILON {
             continue;
         }
-        let unit = dir.scale(1.0 / len);
-        let normal = Point {
-            x: -unit.y,
-            y: unit.x,
-        };
+        points.push(bezier_point(v0, v1, 0.0));
         for k in 1..steps {
-            let f = k as f64 / steps as f64;
-            let base = a.add(dir.scale(f));
+            let target = (k as f64 / steps as f64) * seg_len;
+            let t = t_at_length(&cum, seg_len, target);
+            let base = bezier_point(v0, v1, t);
+            let tangent = bezier_tangent(v0, v1, t);
+            let tlen = tangent.length();
+            let normal = if tlen < f64::EPSILON {
+                let chord = v1.point.sub(v0.point);
+                let clen = chord.length();
+                if clen < f64::EPSILON {
+                    continue;
+                }
+                let unit = chord.scale(1.0 / clen);
+                Point {
+                    x: -unit.y,
+                    y: unit.x,
+                }
+            } else {
+                let unit = tangent.scale(1.0 / tlen);
+                Point {
+                    x: -unit.y,
+                    y: unit.x,
+                }
+            };
             let sign = if k % 2 == 1 { 1.0 } else { -1.0 };
             points.push(base.add(normal.scale(sign * amount)));
         }
@@ -513,7 +527,7 @@ fn offset_contour(
     if !c.closed {
         return Err(PathOpError::OpenPathOffsetUnsupported);
     }
-    let pts: Vec<Point> = c.vertices.iter().map(|v| v.point).collect();
+    let pts = contour_polyline_samples(c);
     let n = pts.len();
     let orientation_sign = if polygon_signed_area(&pts) >= 0.0 {
         1.0
@@ -808,6 +822,28 @@ impl Affine {
             ty: self.ty + (other.ty - self.ty) * t,
         }
     }
+
+    /// 2×2部分の行列式。スケール≈0判定に使う。
+    fn det2(&self) -> f64 {
+        self.a * self.d - self.b * self.c
+    }
+
+    /// 逆アフィン。特異(スケール≈0)ならNone — Repeater負整数冪の退避先。
+    fn invert(&self) -> Option<Affine> {
+        let det = self.det2();
+        if det.abs() < f64::EPSILON {
+            return None;
+        }
+        let inv_det = 1.0 / det;
+        Some(Affine {
+            a: self.d * inv_det,
+            b: -self.b * inv_det,
+            c: -self.c * inv_det,
+            d: self.a * inv_det,
+            tx: (self.c * self.ty - self.d * self.tx) * inv_det,
+            ty: (self.b * self.tx - self.a * self.ty) * inv_det,
+        })
+    }
 }
 
 fn build_affine(t: &ResolvedTransform) -> Affine {
@@ -829,24 +865,36 @@ fn build_affine(t: &ResolvedTransform) -> Affine {
 }
 
 fn affine_pow_int(m: &Affine, n: i64) -> Affine {
-    if n <= 0 {
+    if n == 0 {
         return Affine::IDENTITY;
     }
+    if n > 0 {
+        let mut result = Affine::IDENTITY;
+        for _ in 0..n {
+            result = m.mul(&result);
+        }
+        return result;
+    }
+    // 負整数冪は逆行列で|n|回合成。Lottie Repeaterの負offsetがここに来る。
+    // スケール≈0で特異なら恒等 — 逆行列が発散するため幾何を打ち切る。
+    let Some(inv) = m.invert() else {
+        return Affine::IDENTITY;
+    };
     let mut result = Affine::IDENTITY;
-    for _ in 0..n {
-        result = m.mul(&result);
+    for _ in 0..(-n) {
+        result = inv.mul(&result);
     }
     result
 }
 
 fn affine_pow_real(m: &Affine, k: f64) -> Affine {
-    if k <= 0.0 {
+    if k.abs() <= f64::EPSILON {
         return Affine::IDENTITY;
     }
     let lo = k.floor();
     let frac = k - lo;
     let m_lo = affine_pow_int(m, lo as i64);
-    if frac <= f64::EPSILON {
+    if frac.abs() <= f64::EPSILON {
         return m_lo;
     }
     let m_hi = m.mul(&m_lo);
@@ -876,7 +924,7 @@ fn repeater_path(
     transform: &ResolvedTransform,
     composite: CompositeOrder,
 ) -> Path {
-    let n = copies.max(0.0).floor() as i64;
+    let n = copies.floor() as i64;
     if n <= 0 {
         return Path::default();
     }
@@ -887,7 +935,7 @@ fn repeater_path(
     };
     let mut out = Path::default();
     for i in order {
-        let k = (i as f64 + offset).max(0.0);
+        let k = i as f64 + offset;
         let mk = affine_pow_real(&m, k);
         for c in &path.contours {
             out.contours.push(apply_matrix_to_contour(c, &mk));
@@ -922,6 +970,51 @@ fn bezier_point(v0: &Vertex, v1: &Vertex, t: f64) -> Point {
         .add(p1.scale(3.0 * mt * mt * t))
         .add(p2.scale(3.0 * mt * t * t))
         .add(p3.scale(t * t * t))
+}
+
+fn bezier_tangent(v0: &Vertex, v1: &Vertex, t: f64) -> Point {
+    if is_straight(v0, v1) {
+        return v1.point.sub(v0.point);
+    }
+    let p0 = v0.point;
+    let p1 = v0.point.add(v0.out_tangent);
+    let p2 = v1.point.add(v1.in_tangent);
+    let p3 = v1.point;
+    let mt = 1.0 - t;
+    p1.sub(p0)
+        .scale(3.0 * mt * mt)
+        .add(p2.sub(p1).scale(6.0 * mt * t))
+        .add(p3.sub(p2).scale(3.0 * t * t))
+}
+
+/// Offset/ZigZag入力用: 輪郭をベジエ沿いの折れ線へ密化(Trimと同じARC_SAMPLES)。
+fn contour_polyline_samples(c: &Contour) -> Vec<Point> {
+    let n = c.vertices.len();
+    if n <= 1 {
+        return c.vertices.iter().map(|v| v.point).collect();
+    }
+    let edge_count = if c.closed { n } else { n - 1 };
+    let mut pts = Vec::new();
+    for e in 0..edge_count {
+        let v0 = &c.vertices[e];
+        let v1 = &c.vertices[(e + 1) % n];
+        if pts.is_empty() {
+            pts.push(v0.point);
+        }
+        if is_straight(v0, v1) {
+            // 閉路の最終辺は始点を二重に積まない(元の頂点列と同型を保つ)。
+            let is_closing = c.closed && e == edge_count - 1;
+            if !is_closing {
+                pts.push(v1.point);
+            }
+        } else {
+            for i in 1..=ARC_SAMPLES {
+                let t = i as f64 / ARC_SAMPLES as f64;
+                pts.push(bezier_point(v0, v1, t));
+            }
+        }
+    }
+    pts
 }
 
 fn segment_sample_lengths(v0: &Vertex, v1: &Vertex) -> ([f64; ARC_SAMPLES + 1], f64) {

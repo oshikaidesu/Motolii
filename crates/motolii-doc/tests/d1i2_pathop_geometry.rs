@@ -2,7 +2,9 @@
 //! 本ファイルのアサーションは意味論ゴールデン(GR-PV-5) — 数値の更新は「新variant」でのみ許可し、
 //! 既存アサーションの書き換えは禁止(AGENTS.md「テストを『直して』通さない」)。
 
-use motolii_doc::pathgeom::{apply, Contour, Path, Point, ResolvedPathOp, ResolvedTransform};
+use motolii_doc::pathgeom::{
+    apply, Contour, Path, Point, ResolvedPathOp, ResolvedTransform, Vertex,
+};
 use motolii_doc::{CompositeOrder, LineJoin, PathOpError, PointType, TrimMode};
 
 fn p(x: f64, y: f64) -> Point {
@@ -191,6 +193,46 @@ fn zig_zag_negative_amount_flips_first_peak_direction() {
     approx(out.contours[0].vertices[1].point, p(1.0, -0.5));
 }
 
+#[test]
+fn zig_zag_bezier_input_differs_from_chord_only() {
+    let chord = Path {
+        contours: vec![Contour::open([p(0.0, 0.0), p(2.0, 0.0)])],
+    };
+    let curved = Path {
+        contours: vec![Contour {
+            vertices: vec![
+                Vertex {
+                    point: p(0.0, 0.0),
+                    in_tangent: Point::ZERO,
+                    out_tangent: p(1.0, 0.8),
+                },
+                Vertex {
+                    point: p(2.0, 0.0),
+                    in_tangent: p(-1.0, 0.8),
+                    out_tangent: Point::ZERO,
+                },
+            ],
+            closed: false,
+        }],
+    };
+    let op = ResolvedPathOp::ZigZag {
+        amount: 0.5,
+        ridges: 1.0,
+        point_type: PointType::Corner,
+    };
+    let chord_out = apply(&chord, &op, 0.0).unwrap();
+    let curved_out = apply(&curved, &op, 0.0).unwrap();
+    assert_ne!(
+        chord_out.contours[0].vertices[1].point, curved_out.contours[0].vertices[1].point,
+        "bezier arc midpoint must differ from chord midpoint"
+    );
+    approx(chord_out.contours[0].vertices[1].point, p(1.0, 0.5));
+    assert!(
+        curved_out.contours[0].vertices[1].point.y > 0.5,
+        "curved ridge peak should bulge further outward than chord"
+    );
+}
+
 // --- round_corners ---
 
 #[test]
@@ -325,6 +367,40 @@ fn offset_negative_distance_shrinks_inward() {
     for (got, want) in pts.iter().zip(expected) {
         approx(*got, want);
     }
+}
+
+#[test]
+fn offset_bezier_input_differs_from_chord_only() {
+    let corner = Path {
+        contours: vec![Contour::closed([p(0.0, 0.0), p(2.0, 0.0), p(1.0, -1.0)])],
+    };
+    // 上辺(0,0)-(2,0)だけベジエで外側へ膨らませる。
+    let curved = Path {
+        contours: vec![Contour {
+            vertices: vec![
+                Vertex {
+                    point: p(0.0, 0.0),
+                    in_tangent: Point::ZERO,
+                    out_tangent: p(1.0, 0.6),
+                },
+                Vertex {
+                    point: p(2.0, 0.0),
+                    in_tangent: p(-1.0, 0.6),
+                    out_tangent: Point::ZERO,
+                },
+                Vertex::corner(p(1.0, -1.0)),
+            ],
+            closed: true,
+        }],
+    };
+    let op = ResolvedPathOp::Offset {
+        distance: 0.1,
+        line_join: LineJoin::Miter,
+        miter_limit: 4.0,
+    };
+    let corner_out = apply(&corner, &op, 0.0).unwrap();
+    let curved_out = apply(&curved, &op, 0.0).unwrap();
+    assert_ne!(corner_out, curved_out);
 }
 
 // --- trim ---
@@ -638,4 +714,25 @@ fn repeater_fractional_offset_linearly_blends_matrix_components() {
     };
     let out = apply(&path, &op, 0.0).unwrap();
     approx(out.contours[0].vertices[0].point, p(0.5, 0.5));
+}
+
+#[test]
+fn repeater_negative_offset_applies_inverse_transform() {
+    // offset=-1 で M^(-1) を適用(Lottie Repeaterのスタックシフト)。
+    let path = Path {
+        contours: vec![Contour::open([p(1.0, 0.0)])],
+    };
+    let op = ResolvedPathOp::Repeater {
+        copies: 1.0,
+        offset: -1.0,
+        transform: ResolvedTransform {
+            rotation: std::f64::consts::FRAC_PI_2,
+            ..ResolvedTransform::IDENTITY
+        },
+        composite: CompositeOrder::Above,
+        start_opacity: 1.0,
+        end_opacity: 1.0,
+    };
+    let out = apply(&path, &op, 0.0).unwrap();
+    approx(out.contours[0].vertices[0].point, p(0.0, -1.0));
 }

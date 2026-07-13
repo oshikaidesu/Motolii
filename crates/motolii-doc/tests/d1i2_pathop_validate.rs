@@ -306,6 +306,22 @@ fn repeater_negative_copies_rejected() {
 }
 
 #[test]
+fn repeater_fractional_copies_rejected() {
+    let doc = doc_with_modifiers(vec![PathOp::Repeater {
+        copies: DocParam::const_f64(2.5),
+        offset: DocParam::const_f64(0.0),
+        transform: motolii_doc::Transform2D::identity(),
+        composite: CompositeOrder::Above,
+        start_opacity: DocParam::const_f64(1.0),
+        end_opacity: DocParam::const_f64(1.0),
+    }]);
+    assert!(matches!(
+        doc.validate(),
+        Err(DocumentError::ValueOutOfRange { .. })
+    ));
+}
+
+#[test]
 fn repeater_opacity_out_of_range_rejected() {
     let doc = doc_with_modifiers(vec![PathOp::Repeater {
         copies: DocParam::const_f64(2.0),

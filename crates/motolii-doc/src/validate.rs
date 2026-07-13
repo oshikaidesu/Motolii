@@ -530,6 +530,11 @@ fn validate_value(
                 path: path.to_string(),
             });
         }
+        if constraints.integer && v.fract().abs() > f64::EPSILON {
+            return Err(DocumentError::ValueOutOfRange {
+                path: path.to_string(),
+            });
+        }
     }
     Ok(())
 }
@@ -713,7 +718,7 @@ fn validate_path_op_params(
             validate_param(
                 doc,
                 copies,
-                param_expect::path_op_non_negative(),
+                param_expect::path_op_non_negative_integer(),
                 &format!("{path}.copies"),
             )?;
             validate_param(doc, offset, scalar, &format!("{path}.offset"))?;

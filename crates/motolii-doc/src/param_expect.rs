@@ -50,6 +50,8 @@ pub struct ParamConstraints {
     pub min: Option<f64>,
     /// F64の上限(含む)。PathOp意味論表の`∈[-1,1]`等の拒否項目用(D1i-2)。
     pub max: Option<f64>,
+    /// F64が整数(端数なし)であること。Repeater.copies等(Lottie整数スロット)。
+    pub integer: bool,
 }
 
 impl ParamConstraints {
@@ -60,6 +62,7 @@ impl ParamConstraints {
             unit_interval: false,
             min: None,
             max: None,
+            integer: false,
         }
     }
 
@@ -70,6 +73,7 @@ impl ParamConstraints {
             unit_interval: true,
             min: None,
             max: None,
+            integer: false,
         }
     }
 
@@ -80,6 +84,7 @@ impl ParamConstraints {
             unit_interval: true,
             min: None,
             max: None,
+            integer: false,
         }
     }
 
@@ -90,6 +95,7 @@ impl ParamConstraints {
             unit_interval: false,
             min: None,
             max: None,
+            integer: false,
         }
     }
 
@@ -105,6 +111,7 @@ impl ParamConstraints {
             unit_interval: false,
             min: Some(min),
             max: Some(max),
+            integer: false,
         }
     }
 
@@ -116,6 +123,19 @@ impl ParamConstraints {
             unit_interval: false,
             min: Some(min),
             max: None,
+            integer: false,
+        }
+    }
+
+    /// F64を`[min, +inf)`かつ整数に閉じる(例: repeater.copies — Lottie整数スロット)。
+    pub const fn non_negative_integer_f64() -> Self {
+        Self {
+            expected: ExpectedValueType::F64,
+            allow_spatial_links: false,
+            unit_interval: false,
+            min: Some(0.0),
+            max: None,
+            integer: true,
         }
     }
 }
@@ -156,9 +176,14 @@ pub fn path_op_pucker_bloat_amount() -> ParamConstraints {
     ParamConstraints::ranged_f64(-1.0, 1.0)
 }
 
-/// zig_zag.amount / ridges, round_corners.radius, repeater.copies ≥ 0(PathOp意味論表)。
+/// zig_zag.amount / ridges, round_corners.radius ≥ 0(PathOp意味論表)。
 pub fn path_op_non_negative() -> ParamConstraints {
     ParamConstraints::min_f64(0.0)
+}
+
+/// repeater.copies: 非負整数(Lottie/AE Repeater。fractional offsetとは別スロット)。
+pub fn path_op_non_negative_integer() -> ParamConstraints {
+    ParamConstraints::non_negative_integer_f64()
 }
 
 /// trim.start / trim.end ∈ [0, 1](PathOp意味論表)。
