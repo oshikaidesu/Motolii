@@ -1,4 +1,5 @@
 //! D1c: アトミック保存・読込(ガード2)と`min_reader_version`拒否(ガード7のI/O側)。
+//! D1c-FU(#101): `ResourceLimits`(監査S10)注入と`OpenMode`(監査S14)。
 //!
 //! 保存手順は SQLite atomic commit と同型: **一意temp**書き込み → file fsync → **置換** → dir fsync。
 //! ジャーナル本体はD1d。本モジュールの abort 注入は「旧ファイルが残る/新ファイルが完全」を機械判定する。
@@ -10,9 +11,20 @@
 //!   fsyncはOSが実質サポートしない/不要なため**省略**する。保証水準は
 //!   「プロセスクラッシュ後に、完全な旧ファイルか完全な新ファイルのどちらかが見える」こと。
 //!   電源断時のディレクトリメタデータ永続はファイルシステム依存。
+//!
+//! ## OpenMode(#101 / 監査S14)
+//!
+//! `min_reader_version`単独の合否(旧: Reject/OK二値)を、読み/書き互換を分離した3値へ拡張する。
+//! 「未知ネストを読めたこと」と「再保存可能」を同一視しない — `Document.version`が自版の書き込み
+//! 能力(`WRITER_VERSION`)より新しい場合は**読めるが再保存・migrationは拒否**する(黙って新フィールドを
+//! 消して保存しないため)。
+//!
+//! - [`OpenMode::ReadWrite`]: `min_reader_version <= READER_VERSION` かつ `version <= WRITER_VERSION`
+//! - [`OpenMode::ReadOnlyNewer`]: `min_reader_version <= READER_VERSION` だが `version > WRITER_VERSION`
+//! - [`OpenMode::Reject`]: `min_reader_version > READER_VERSION`(Documentを返さない)
 
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -20,10 +32,45 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Deserialize;
 use thiserror::Error;
 
+use crate::limits::{check_document_resource_limits, ResourceLimitError, ResourceLimits};
 use crate::{Document, DocumentError};
 
 /// このリーダーが開ける`min_reader_version`の上限(=自版の読取能力)。
 pub const READER_VERSION: u32 = 1;
+
+/// このリーダーが**再保存・migrationしてよい**`Document.version`の上限(=自版の書込能力)。
+/// `Document.version`がこれを超える場合は`OpenMode::ReadOnlyNewer`(#101 / 監査S14)。
+pub const WRITER_VERSION: u32 = 1;
+
+/// 読み/書き互換を分離した3状態(監査S14)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenMode {
+    /// 読込・再保存・migrationいずれも可能。
+    ReadWrite,
+    /// 読込は可能だが、自版より新しい`version`のため再保存・migrationは拒否(警告つき)。
+    ReadOnlyNewer,
+    /// `min_reader_version`超過。Documentを返さない。
+    Reject,
+}
+
+/// `version`/`min_reader_version`から`OpenMode`を判定する(I/O副作用なし)。
+pub fn classify_open_mode(document_version: u32, min_reader_version: u32) -> OpenMode {
+    if min_reader_version > READER_VERSION {
+        OpenMode::Reject
+    } else if document_version > WRITER_VERSION {
+        OpenMode::ReadOnlyNewer
+    } else {
+        OpenMode::ReadWrite
+    }
+}
+
+/// 読込成功時の戻り値。`open_mode`は`ReadWrite`または`ReadOnlyNewer`のみ
+/// (`Reject`は`load_*`がDocumentを返さず`Err`にする — S14「Documentを返さない」)。
+#[derive(Debug, Clone, PartialEq)]
+pub struct OpenedDocument {
+    pub document: Document,
+    pub open_mode: OpenMode,
+}
 
 /// クラッシュ注入用の保存段。本番は`None`。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,12 +91,23 @@ pub enum PersistError {
     Io(#[from] io::Error),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    ResourceLimit(#[from] ResourceLimitError),
     #[error(
         "document requires reader version {min_reader_version}, but this reader is {reader_version}"
     )]
     ReaderTooOld {
         min_reader_version: u32,
         reader_version: u32,
+    },
+    /// S14: `OpenMode::ReadOnlyNewer`からの再保存・migration拒否(型付き警告)。
+    #[error(
+        "document version {document_version} is newer than this writer ({writer_version}); \
+         opened as ReadOnlyNewer — save/migration refused to avoid silently dropping newer fields"
+    )]
+    SaveRejectedReadOnlyNewer {
+        document_version: u32,
+        writer_version: u32,
     },
     /// テスト用 abort 注入。本番経路では返さない。
     #[error("save aborted after {stage:?} at {temp_path} (injection)")]
@@ -103,6 +161,29 @@ pub struct SaveOptions {
     pub abort_after: Option<SaveAbortAfter>,
 }
 
+/// `OpenMode`を判定し、`ReadWrite`以外は型付きエラーで拒否する(S14)。
+/// `ReadOnlyNewer`(自版より新しい`version`)・`Reject`(`min_reader_version`超過)からの
+/// 再保存・migrationはここで止める — 「未知ネストを読めたこと」と「再保存可能」を同一視しない。
+fn guard_open_mode_for_write(doc: &Document) -> Result<(), PersistError> {
+    match classify_open_mode(doc.version, doc.min_reader_version) {
+        OpenMode::ReadWrite => Ok(()),
+        OpenMode::ReadOnlyNewer => Err(PersistError::SaveRejectedReadOnlyNewer {
+            document_version: doc.version,
+            writer_version: WRITER_VERSION,
+        }),
+        OpenMode::Reject => Err(PersistError::ReaderTooOld {
+            min_reader_version: doc.min_reader_version,
+            reader_version: READER_VERSION,
+        }),
+    }
+}
+
+/// D1e(migration本体)向けの型の席のみ(#101はD1e本体を実装しない)。
+/// `OpenMode`ゲートだけをここで固定し、実際の変換ロジックはD1eが実装する。
+pub fn check_migration_allowed(doc: &Document) -> Result<(), PersistError> {
+    guard_open_mode_for_write(doc)
+}
+
 /// 検証→一意temp→fsync→置換→dir fsync。
 ///
 /// 失敗時に途中のtempは可能な範囲で掃除しない(注入テストが残骸を観察できるようにする)。
@@ -115,7 +196,9 @@ pub fn save_document_with_options(
     doc: &Document,
     options: &SaveOptions,
 ) -> Result<(), PersistError> {
+    // 構造不変条件(validate)を先に見る — OpenMode判定はversion整合を前提にするため。
     doc.validate()?;
+    guard_open_mode_for_write(doc)?;
 
     let parent = path
         .parent()
@@ -157,29 +240,72 @@ pub fn save_document_with_options(
     Ok(())
 }
 
-/// 読込。`min_reader_version`超過はデシリアライズ前に拒否(ガード7)。
+/// 読込。`min_reader_version`超過はデシリアライズ前に拒否(ガード7 / S14 `Reject`)。
 /// クラウド同期検出は呼び出し側が`detect_cloud_sync`で参照する(ここでは拒否しない)。
+/// resource limitsはproduction既定(`ResourceLimits::production`)を使う。境界を絞るテストは
+/// [`load_document_with_limits`]を使うこと。
 pub fn load_document(path: &Path) -> Result<Document, PersistError> {
-    let bytes = fs::read(path)?;
-    load_document_bytes(&bytes)
+    Ok(load_document_with_limits(path, &ResourceLimits::production())?.document)
 }
 
 pub fn load_document_bytes(bytes: &[u8]) -> Result<Document, PersistError> {
-    // 全文デシリアライズ前に版だけ読む — 未知フィールドで落ちる前に拒否するため
+    Ok(load_document_bytes_with_limits(bytes, &ResourceLimits::production())?.document)
+}
+
+/// #101: `ResourceLimits`を注入できるファイル読込。`OpenMode::Reject`は`Err`のみ返し、
+/// Documentを一切構築しない(S14「Documentを返さない」)。
+///
+/// ファイルbytes上限は**同一`File`ハンドル**から`max_file_bytes + 1`までのbounded readで
+/// 強制する。`metadata`→`fs::read`の二段だと検査と読込の間に拡大・差し替えされ、上限超過分を
+/// 確保してから拒否し得る(S10)。超過時は`FileBytes`を返し、超過分はメモリに載せない。
+pub fn load_document_with_limits(
+    path: &Path,
+    limits: &ResourceLimits,
+) -> Result<OpenedDocument, PersistError> {
+    let bytes = read_file_bounded(path, limits)?;
+    load_document_bytes_with_limits(&bytes, limits)
+}
+
+/// `max_file_bytes + 1`までしか読まない。超過なら全文を確保せず型付き拒否する。
+fn read_file_bounded(path: &Path, limits: &ResourceLimits) -> Result<Vec<u8>, PersistError> {
+    let mut file = File::open(path)?;
+    let mut buf = Vec::new();
+    // takeは上限+1で打ち切る — 巨大ファイルでも確保量をlimit近傍に閉じる。
+    Read::by_ref(&mut file)
+        .take(limits.max_file_bytes.saturating_add(1))
+        .read_to_end(&mut buf)?;
+    limits.check_file_bytes(buf.len() as u64)?;
+    Ok(buf)
+}
+
+/// #101: `ResourceLimits`を注入できるbytes読込。
+pub fn load_document_bytes_with_limits(
+    bytes: &[u8],
+    limits: &ResourceLimits,
+) -> Result<OpenedDocument, PersistError> {
+    limits.check_file_bytes(bytes.len() as u64)?;
+    // 全文デシリアライズ前に版だけ読む — 未知フィールドで落ちる前にOpenModeを判定するため
     let header: VersionHeader = serde_json::from_slice(bytes)?;
-    if header.min_reader_version > READER_VERSION {
+    let open_mode = classify_open_mode(header.version, header.min_reader_version);
+    if let OpenMode::Reject = open_mode {
         return Err(PersistError::ReaderTooOld {
             min_reader_version: header.min_reader_version,
             reader_version: READER_VERSION,
         });
     }
     let doc: Document = serde_json::from_slice(bytes)?;
+    // S10: Group深度・キー数などの資源上限をvalidateの再帰全走査より先に拒否する。
+    check_document_resource_limits(&doc, limits)?;
     doc.validate()?;
-    Ok(doc)
+    Ok(OpenedDocument {
+        document: doc,
+        open_mode,
+    })
 }
 
 #[derive(Debug, Deserialize)]
 struct VersionHeader {
+    version: u32,
     #[serde(default = "default_min_reader")]
     min_reader_version: u32,
 }

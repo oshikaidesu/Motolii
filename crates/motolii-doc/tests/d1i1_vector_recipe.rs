@@ -2,8 +2,8 @@
 
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
-    Clip, ClipSource, DocParam, Document, DocumentError, ItemEnvelope, PathOp, StandardShape,
-    Track, TrackItem, TrimMode, VectorContent, VectorRecipe,
+    Clip, ClipSource, DocParam, Document, DocumentError, ItemEnvelope, LineJoin, PathOp,
+    StandardShape, Track, TrackItem, TrimMode, VectorContent, VectorRecipe,
 };
 use serde_json::json;
 
@@ -37,6 +37,8 @@ fn vector_recipe_roundtrip() {
         modifiers: vec![
             PathOp::Offset {
                 distance: DocParam::const_f64(0.01),
+                line_join: LineJoin::Miter,
+                miter_limit: 4.0,
             },
             PathOp::Trim {
                 start: DocParam::const_f64(0.0),
@@ -151,6 +153,8 @@ fn validate_rejects_video_as_svg_asset() {
                     content: VectorContent::SvgAsset { asset: video },
                     modifiers: vec![PathOp::Offset {
                         distance: DocParam::const_f64(0.01),
+                        line_join: LineJoin::Miter,
+                        miter_limit: 4.0,
                     }],
                 },
             },
