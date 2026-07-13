@@ -109,9 +109,18 @@ pub fn eval_doc_param(
     }
 }
 
-/// `rotation = look_at(self.center, target.center)` (Y-up 正準・atan2)。
+/// 2点間の LookAt 角度(Y-up 正準・atan2)。座標空間は呼び出し側が揃える。
 ///
 /// `PlusX`: 0回転が +X を向く。`PlusY`: 0回転が +Y を向く(`angle - π/2`)。
+pub fn look_at_angle(from: [f64; 2], to: [f64; 2], axis: LookAtAxis) -> f64 {
+    let angle = (to[1] - from[1]).atan2(to[0] - from[0]);
+    match axis {
+        LookAtAxis::PlusX => angle,
+        LookAtAxis::PlusY => angle - std::f64::consts::FRAC_PI_2,
+    }
+}
+
+/// `rotation = look_at(self.center, target.center)` — `self_pos`/`target` は同一座標空間。
 pub fn eval_look_at_rotation(
     self_pos: [f64; 2],
     target: LayerId,
@@ -121,11 +130,7 @@ pub fn eval_look_at_rotation(
     let target_pos = resolved
         .position(target)
         .ok_or(ParamEvalError::UnresolvedLookAt(target.get()))?;
-    let angle = (target_pos[1] - self_pos[1]).atan2(target_pos[0] - self_pos[0]);
-    Ok(match axis {
-        LookAtAxis::PlusX => angle,
-        LookAtAxis::PlusY => angle - std::f64::consts::FRAC_PI_2,
-    })
+    Ok(look_at_angle(self_pos, target_pos, axis))
 }
 
 fn eval_data_track(

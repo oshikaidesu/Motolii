@@ -11,9 +11,7 @@ use motolii_eval::DataTracks;
 use crate::affine::{compose_local, compose_transform, Affine2D};
 use crate::command::find_envelope;
 use crate::param::DocParam;
-use crate::param_eval::{
-    eval_f64, eval_look_at_rotation, eval_vec2, ParamEvalError, ResolvedLayerParams,
-};
+use crate::param_eval::{eval_f64, eval_vec2, look_at_angle, ParamEvalError, ResolvedLayerParams};
 use crate::schema::{TrackItem, Transform2D};
 use crate::{Document, LayerId};
 
@@ -124,7 +122,9 @@ impl<'a> ResolveCtx<'a> {
 
         let anchor = eval_vec2(&xform.anchor, self.t, self.tracks, &self.resolved)?;
         let scale = eval_vec2(&xform.scale, self.t, self.tracks, &self.resolved)?;
-        let rotation = self.eval_rotation_world(&xform.rotation, world_pos)?;
+        // LookAt 角は world で向きを決めたあと placement の逆で local へ戻す
+        // (親/Group 回転を compose_local 後に二重に載せない)。
+        let rotation = self.eval_rotation_local(&xform.rotation, world_pos, placement_space, id)?;
         let local = compose_local(local_pos, anchor, scale, rotation);
         Ok(compose_transform(parent_m, local))
     }
@@ -157,15 +157,26 @@ impl<'a> ResolveCtx<'a> {
         }
     }
 
-    fn eval_rotation_world(
+    fn eval_rotation_local(
         &mut self,
         param: &DocParam,
         self_world: [f64; 2],
+        placement_space: Affine2D,
+        self_id: LayerId,
     ) -> Result<f64, ParamEvalError> {
         match param {
             DocParam::LookAt { target, axis } => {
-                let _ = self.ensure_world_pos(*target)?;
-                eval_look_at_rotation(self_world, *target, *axis, &self.resolved)
+                let target_world = self.ensure_world_pos(*target)?;
+                let inv =
+                    placement_space
+                        .try_invert()
+                        .ok_or(ParamEvalError::SingularPlacementSpace {
+                            layer: self_id.get(),
+                        })?;
+                // 点差 = 線形部分のみ。非一様 scale / 反転も inv に含まれる。
+                let from = inv.transform_point(self_world[0], self_world[1]);
+                let to = inv.transform_point(target_world[0], target_world[1]);
+                Ok(look_at_angle(from, to, *axis))
             }
             other => eval_f64(other, self.t, self.tracks, &self.resolved),
         }
