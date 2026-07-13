@@ -7,3 +7,7 @@
 # 空の semantic 集合は禁止(空の禁止CIを運用に乗せない)。
 # 台帳は M2E-2 の golden/** 保護領域外に置き、本ディレクトリを CODEOWNERS で別保護する。
 semantic	crates/motolii-doc/tests/d1i2_pathop_geometry.rs
+semantic	crates/motolii-doc/tests/d1i3_blend_mode.rs
+semantic	crates/motolii-doc/tests/d1i3_bezier_solver.rs
+semantic	crates/motolii-doc/tests/d1i3_lookat_follow.rs
+semantic	crates/motolii-doc/tests/d1i3_transform_compose.rs
