@@ -7,7 +7,7 @@
 | `semantic` | 既存variantの意味を永久固定する審判(S16) | **禁止・例外なし**。変更したければ新variant+新ファイル(+台帳追加)のみ。分類は台帳だけで足り、既存ゴールデン本体の編集は不要 |
 | `provisional` | C-1系sRGBブレンド依存等の暫定審判(#53) | ファイルに`MOTOLII_REGENERATE_WHEN:`がある場合のみ更新可 |
 
-空の`semantic`集合は拒否(空の禁止CIを運用に乗せない)。現行の意味論ゴールデンは D1i-2 の `d1i2_pathop_geometry.rs` と D1i-3 の `d1i3_*.rs`(BlendMode / LookAt・Follow / Bezier / Transform合成)。
+空の`semantic`集合は拒否(空の禁止CIを運用に乗せない)。現行の意味論ゴールデンは D1i-2 の `d1i2_pathop_geometry.rs` と D1i-3 の `d1i3_*.rs`(BlendMode / Follow(LookAtはD3修正後) / Bezier / Transform合成)。
 
 `git merge-base` / `git diff` 失敗(shallow clone等)は **fail-closed**(空振りでOKにしない)。CIは`fetch-depth: 0`。
 

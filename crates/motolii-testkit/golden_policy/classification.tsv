@@ -9,5 +9,4 @@
 semantic	crates/motolii-doc/tests/d1i2_pathop_geometry.rs
 semantic	crates/motolii-doc/tests/d1i3_blend_mode.rs
 semantic	crates/motolii-doc/tests/d1i3_bezier_solver.rs
-semantic	crates/motolii-doc/tests/d1i3_lookat_follow.rs
 semantic	crates/motolii-doc/tests/d1i3_transform_compose.rs

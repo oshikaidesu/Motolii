@@ -44,16 +44,23 @@ fn composite_mode_in_graph(blend: BlendMode) -> CompositeMode {
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let bg = doc.layers.allocate("bg").unwrap();
     let fg = doc.layers.allocate("fg").unwrap();
-    let track_id = doc.track_ids.allocate("V1").unwrap();
+    // A4: 同一Track内の時間重なりは禁止。合成検査は別Trackへ分ける。
+    let track_bg = doc.track_ids.allocate("V1").unwrap();
+    let track_fg = doc.track_ids.allocate("V2").unwrap();
     let mut bg_clip = rect_clip(bg.get(), [0.0, 0.0, 1.0, 1.0]);
     bg_clip.envelope.layer_id = bg;
     let mut fg_clip = rect_clip(fg.get(), [1.0, 0.0, 0.0, 0.5]);
     fg_clip.envelope.layer_id = fg;
     fg_clip.envelope.blend = blend;
     doc.tracks.push(Track {
-        id: track_id,
-        items: vec![TrackItem::Clip(bg_clip), TrackItem::Clip(fg_clip)],
+        id: track_bg,
+        items: vec![TrackItem::Clip(bg_clip)],
     });
+    doc.tracks.push(Track {
+        id: track_fg,
+        items: vec![TrackItem::Clip(fg_clip)],
+    });
+    doc.validate().expect("blend golden document must validate (A4)");
     let mut registry = PluginRegistry::new();
     register_reference_plugins(&mut registry).unwrap();
     let built = build_document_frame_graph(
