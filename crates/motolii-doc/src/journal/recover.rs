@@ -258,29 +258,67 @@ pub fn recover_project(
     let scan = scan_journal_fs(fs, &journal_path, &options)?;
     let ignored = scan.ignored_tail_bytes();
 
-    // recovery中の再crash検知: 同一tipのマーカーが残っていれば再リプレイしない
+    // recovery中の再crash検知: 同一tipのマーカーが残っていれば、mainからの再リプレイは避ける。
+    // 世代スナップショットを正本にして committed prefix を一度適用する
+    // (main採用でジャーナル編集を黙って落とさない)。
     let prior = load_marker(fs, document_path)?;
     if let Some(marker) = prior {
         if marker_matches(&marker, &scan) {
             let corrupt_path = copy_journal_to_corrupt(fs, document_path).ok();
-            let (doc, source) = fallback_document(fs, document_path, main, &catalog)?;
-            let recovered_path = if source != RecoverySource::MainFile {
-                Some(write_recovered_doc(fs, document_path, &doc)?)
-            } else {
-                None
+            let committed = frames_through_last_commit(&scan.frames);
+            let committed_scan = JournalScanOutcome {
+                header: scan.header.clone(),
+                frames: committed.to_vec(),
+                valid_bytes: scan.valid_bytes,
+                file_len: scan.file_len,
+                stopped: scan.stopped.clone(),
             };
+            let base = if let Some(gen) = catalog.latest_generation() {
+                load_generation_via_fs(
+                    fs,
+                    &generation_path_for_document(document_path, gen.id),
+                    limits,
+                )?
+            } else if let Some(doc) = main.clone() {
+                doc
+            } else {
+                let _ = clear_marker(fs, document_path);
+                return Err(RecoveryError::Unrecoverable {
+                    path: document_path.to_path_buf(),
+                });
+            };
+            let mut load_snap = |gid: Uuid| {
+                load_generation_via_fs(
+                    fs,
+                    &generation_path_for_document(document_path, gid),
+                    limits,
+                )
+                .map_err(|_| ReplayFailure::MissingSnapshot {
+                    generation_id: gid,
+                })
+            };
+            let replay = replay_from_base(base, &committed_scan, &mut load_snap, true);
             let _ = clear_marker(fs, document_path);
+            let recovered_path = Some(write_recovered_doc(fs, document_path, &replay.document)?);
+            let mut warnings = vec![
+                "restore_attempted marker matched tip; remounted via generation+committed replay (avoided main-only skip)"
+                    .into(),
+            ];
+            for f in &replay.replay_failures {
+                warnings.push(format!("replay failure: {f:?}"));
+            }
             return Ok(RecoveryResult {
-                document: doc,
-                source,
+                document: replay.document.clone(),
+                source: if replay.fallback_generation.is_some() {
+                    RecoverySource::SnapshotFallback
+                } else {
+                    RecoverySource::CommittedPrefixReplay
+                },
                 ignored_tail_bytes: ignored,
                 recovered_path,
                 corrupt_path,
-                replay: None,
-                warnings: vec![
-                    "restore_attempted marker matched tip; skipped replay to avoid crash loop"
-                        .into(),
-                ],
+                replay: Some(replay),
+                warnings,
             });
         }
     }
@@ -317,7 +355,11 @@ pub fn recover_project(
     let base = if let Some(doc) = main.clone() {
         doc
     } else if let Some(gen) = catalog.latest_generation() {
-        load_generation_via_fs(fs, &generation_path_for_document(document_path, gen.id))?
+        load_generation_via_fs(
+            fs,
+            &generation_path_for_document(document_path, gen.id),
+            limits,
+        )?
     } else {
         let _ = clear_marker(fs, document_path);
         return Err(RecoveryError::Unrecoverable {
@@ -326,11 +368,14 @@ pub fn recover_project(
     };
 
     let mut load_snap = |gid: Uuid| {
-        load_generation_via_fs(fs, &generation_path_for_document(document_path, gid)).map_err(
-            |_| ReplayFailure::MissingSnapshot {
-                generation_id: gid,
-            },
+        load_generation_via_fs(
+            fs,
+            &generation_path_for_document(document_path, gid),
+            limits,
         )
+        .map_err(|_| ReplayFailure::MissingSnapshot {
+            generation_id: gid,
+        })
     };
 
     let replay = replay_from_base(base, &committed_scan, &mut load_snap, true);
@@ -389,25 +434,6 @@ pub fn recover_project(
         corrupt_path,
         replay: Some(replay),
         warnings,
-    })
-}
-
-fn fallback_document(
-    fs: &mut dyn JournalFs,
-    document_path: &Path,
-    main: Option<Document>,
-    catalog: &GenerationCatalog,
-) -> Result<(Document, RecoverySource), RecoveryError> {
-    if let Some(doc) = main {
-        return Ok((doc, RecoverySource::MainFile));
-    }
-    if let Some(gen) = catalog.latest_generation() {
-        let doc =
-            load_generation_via_fs(fs, &generation_path_for_document(document_path, gen.id))?;
-        return Ok((doc, RecoverySource::SnapshotFallback));
-    }
-    Err(RecoveryError::Unrecoverable {
-        path: document_path.to_path_buf(),
     })
 }
 

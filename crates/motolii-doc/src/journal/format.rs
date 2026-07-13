@@ -107,6 +107,10 @@ pub enum JournalFormatError {
     BrokenPrevChain { record_id: Uuid },
     #[error("journal project_id mismatch: header={header} expected={expected}")]
     ProjectIdMismatch { header: Uuid, expected: Uuid },
+    #[error(
+        "journal file exists but is shorter than header ({observed} < {needed}); refusing overwrite"
+    )]
+    TruncatedHeader { observed: usize, needed: usize },
 }
 
 pub fn motolii_dir_for_document(document_path: &Path) -> PathBuf {
@@ -337,6 +341,7 @@ pub fn scan_journal(
 }
 
 /// ヘッダが無ければ作る。既存があれば読む。
+/// 既存ファイルがヘッダ未満の短さなら上書きせず型付きエラー(非破壊)。
 pub fn read_or_create_header(
     fs: &mut dyn JournalFs,
     journal_path: &Path,
@@ -355,6 +360,10 @@ pub fn read_or_create_header(
             }
             return Ok(header);
         }
+        return Err(JournalFormatError::TruncatedHeader {
+            observed: data.len(),
+            needed: HEADER_LEN,
+        });
     }
     let header = JournalHeader {
         version: JOURNAL_FORMAT_VERSION,

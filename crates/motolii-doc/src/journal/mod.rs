@@ -18,8 +18,9 @@ pub use catalog::{
     load_catalog, GenerationCatalog, GenerationEntry, PinGenerationOptions, RotateOptions,
 };
 pub use format::{
-    journal_path_for_document, scan_journal, JournalFrame, JournalHeader, JournalRecordKind,
-    JournalScanOutcome, JournalScanStop, ScanJournalOptions,
+    journal_path_for_document, read_or_create_header, scan_journal, JournalFormatError,
+    JournalFrame, JournalHeader, JournalRecordKind, JournalScanOutcome, JournalScanStop,
+    ScanJournalOptions, HEADER_LEN,
 };
 pub use fs::{
     DurabilityStage, FaultInjectingFs, FaultPlan, FsError, FsOp, FsOpKind, JournalFs, RecordingFs,

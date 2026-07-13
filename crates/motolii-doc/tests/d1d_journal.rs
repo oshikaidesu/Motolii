@@ -567,6 +567,86 @@ fn recovery_crash_loop_skips_replay_via_marker() {
 }
 
 #[test]
+fn truncated_journal_header_is_not_overwritten() {
+    use motolii_doc::journal::{
+        read_or_create_header, JournalFormatError, StdFs, HEADER_LEN,
+    };
+    use uuid::Uuid;
+
+    let dir = unique_dir("trunc-header");
+    let journal = dir.join(".motolii/journal.wal");
+    fs::create_dir_all(journal.parent().unwrap()).unwrap();
+    fs::write(&journal, b"SHORT").unwrap();
+    let before = fs::read(&journal).unwrap();
+    let mut fs_impl = StdFs;
+    let err = read_or_create_header(&mut fs_impl, &journal, Uuid::nil(), 1).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            JournalFormatError::TruncatedHeader {
+                observed: 5,
+                needed: HEADER_LEN
+            }
+        ),
+        "unexpected {err:?}"
+    );
+    assert_eq!(fs::read(&journal).unwrap(), before, "must not overwrite short wal");
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn marker_remount_does_not_prefer_stale_main_over_journal_edits() {
+    let dir = unique_dir("marker-stale-main");
+    let path = dir.join("proj.json");
+    save_project_with_journal(&path, &Document::new_v1(), &SaveProjectOptions::default()).unwrap();
+
+    let mut edited = Document::new_v1();
+    edited.bpm = Bpm::try_new(140, 1).unwrap();
+    save_project_with_journal(
+        &path,
+        &edited,
+        &SaveProjectOptions {
+            journal_edit: Some(JournalEdit::SetBpm { num: 140, den: 1 }),
+            checkpoint: false,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    // tipマーカーを残し、mainは編集前のまま(stale)
+    let journal = journal_path_for_document(&path);
+    let scan = scan_journal(&journal, &Default::default()).unwrap();
+    let marker = serde_json::json!({
+        "format_version": 1,
+        "project_id": scan.header.project_id,
+        "generation_salt": scan.header.generation_salt,
+        "tip_record_id": scan.frames.last().map(|f| f.record_id),
+        "valid_bytes": scan.valid_bytes,
+    });
+    let marker_path = path.parent().unwrap().join(".motolii/restore_attempted.json");
+    fs::write(&marker_path, serde_json::to_vec_pretty(&marker).unwrap()).unwrap();
+
+    assert_eq!(
+        motolii_doc::load_document(&path).unwrap().bpm,
+        Bpm::try_new(120, 1).unwrap(),
+        "precondition: main must stay stale"
+    );
+
+    let opened = open_project(&path).unwrap();
+    assert_eq!(
+        opened.document.bpm,
+        Bpm::try_new(140, 1).unwrap(),
+        "marker remount must replay committed edits, not return stale main"
+    );
+    assert!(
+        opened.warnings.iter().any(|w| w.contains("restore_attempted")),
+        "warnings={:?}",
+        opened.warnings
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn d1c_save_document_alone_still_works() {
     let dir = unique_dir("d1c-compat");
     let path = dir.join("doc.json");

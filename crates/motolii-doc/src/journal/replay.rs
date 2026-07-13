@@ -187,12 +187,13 @@ pub fn replay_from_base(
 pub fn load_generation_via_fs(
     fs: &mut dyn JournalFs,
     path: &std::path::Path,
+    limits: &crate::limits::ResourceLimits,
 ) -> Result<Document, crate::PersistError> {
     let bytes = fs.read(path).map_err(|e| match e {
         super::fs::FsError::Io(io) => crate::PersistError::Io(io),
         other => crate::PersistError::Io(std::io::Error::other(other.to_string())),
     })?;
-    crate::load_document_bytes(&bytes)
+    crate::load_document_bytes_with_limits(&bytes, limits).map(|opened| opened.document)
 }
 
 /// フレーム列から「最後にCommitされた」範囲だけを残す(未commitテールは無視)。
