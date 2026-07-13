@@ -60,7 +60,8 @@ fn composite_mode_in_graph(blend: BlendMode) -> CompositeMode {
         id: track_fg,
         items: vec![TrackItem::Clip(fg_clip)],
     });
-    doc.validate().expect("blend golden document must validate (A4)");
+    doc.validate()
+        .expect("blend golden document must validate (A4)");
     let mut registry = PluginRegistry::new();
     register_reference_plugins(&mut registry).unwrap();
     let built = build_document_frame_graph(
