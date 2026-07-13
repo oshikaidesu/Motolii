@@ -27,6 +27,7 @@ pub mod pathgeom;
 mod persist;
 mod plugin_compat;
 mod schema;
+mod spatial_resolve;
 mod stable_id;
 mod track_id;
 mod undo;
@@ -65,7 +66,7 @@ pub use journal::{
 };
 pub use limits::{ResourceLimitError, ResourceLimits};
 pub use param::{DocParam, LookAtAxis};
-pub use param_eval::{ParamEvalError, ResolvedLayerParams};
+pub use param_eval::{eval_look_at_rotation, look_at_angle, ParamEvalError, ResolvedLayerParams};
 pub use param_expect::{DocPluginKind, ExpectedValueType, KnownPluginInfo, ParamConstraints};
 pub use pathgeom::PathOpError;
 pub use persist::{
@@ -81,6 +82,7 @@ pub use schema::{
     Soundtrack, SoundtrackError, StandardShape, Track, TrackItem, Transform2D, TrimMode,
     VectorContent, VectorRecipe,
 };
+pub use spatial_resolve::resolve_document_spaces;
 pub use stable_id::{EffectId, KeyframeId, StableIdError, StableIdSeq};
 pub use track_id::{TrackId, TrackIdError, TrackIdTable};
 pub use undo::{Macro, UndoError, UndoHistory, UndoLimit};
