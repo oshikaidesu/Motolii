@@ -97,10 +97,23 @@
     background:var(--accent); color:var(--accent-ink); border:none; border-radius:2px;
     padding:5px 14px; font-weight:700; font-size:12px; cursor:pointer;
   }
-  /* Live式テーマ切替 */
-  .theme-toggle{display:flex; border:1px solid var(--line2); border-radius:2px; overflow:hidden; font-size:11px;}
-  .theme-toggle button{background:none; border:none; padding:3px 11px; color:var(--faint); cursor:pointer; font-size:11px;}
-  .theme-toggle button.on{background:var(--accent); color:var(--accent-ink); font-weight:600;}
+  /* Live式テーマ設定 */
+  .settings-popover{
+    position:absolute; z-index:60; top:48px; right:72px; width:300px;
+    background:var(--popup); border:1px solid var(--line2); border-radius:3px;
+    box-shadow:var(--shadow); padding:14px;
+  }
+  .settings-popover[hidden]{display:none;}
+  .settings-popover h2{font-size:13px; margin:0 0 10px;}
+  .setting-row{display:grid; grid-template-columns:82px 1fr; align-items:center; gap:10px; margin:8px 0;}
+  .setting-row label{color:var(--muted);}
+  .setting-row select{
+    width:100%; color:var(--text); background:var(--inset); border:1px solid var(--line2);
+    border-radius:2px; padding:5px 7px; font:inherit;
+  }
+  .setting-note{color:var(--faint); font-size:10.5px; margin:8px 0 0 92px;}
+  .theme-import{margin-left:92px; margin-top:8px;}
+  .theme-import:disabled{opacity:.55; cursor:not-allowed;}
 
   /* ---------- main 3-pane ---------- */
   .main{display:grid; grid-template-columns:232px 1fr 300px; min-height:0;}
@@ -427,7 +440,7 @@
 <div class="page">
   <header class="intro">
     <h1><span class="mark">Motolii</span> メインUI 第1案 — Ableton配色・ライト既定・全色トークン駆動</h1>
-    <p>第0案と同じ確定事項を、Liveの色語彙(フラット・無グラデーション・細罫線・色=情報)で組み直したもの。タイトルバー右の<b>ライト/ダーク</b>で実テーマ切替——全色がCSSトークン経由なので、これがそのまま将来の「テーマ自作=トークンファイル差し替え」の設計練習になっている。ビューポート周囲だけは両テーマとも無彩色の暗グレー(色判断の定石)。</p>
+    <p>第0案と同じ確定事項を、Liveの色語彙(フラット・無グラデーション・細罫線・色=情報)で組み直したもの。タイトルバー右の<b>設定</b>から実テーマ切替——組み込みLight/Darkも将来のcustom themeも同じsemantic token schemaを使い、初回既定はLight。ビューポート周囲だけは両テーマとも無彩色の暗グレー(色判断の定石)。</p>
   </header>
 
   <div class="app-wrap">
@@ -439,14 +452,24 @@
       <span class="wordmark">moto<b>lii</b></span>
       <span class="projname"><em>night_drive.mtl</em> — 1920×1080 / 30fps / 3:42</span>
       <span class="spacer"></span>
-      <div class="theme-toggle" role="group" aria-label="テーマ">
-        <button type="button" id="btn-light" class="on">ライト</button>
-        <button type="button" id="btn-dark">ダーク</button>
-      </div>
+      <button class="icon-btn" type="button" id="btn-settings" aria-expanded="false">⚙ 設定</button>
       <button class="icon-btn" type="button">↶ 取り消し</button>
       <button class="icon-btn" type="button">↷ やり直し</button>
       <button class="export-btn" type="button">書き出し</button>
     </div>
+
+    <section class="settings-popover" id="settings-popover" aria-label="設定" hidden>
+      <h2>設定 — 外観</h2>
+      <div class="setting-row">
+        <label for="theme-select">テーマ</label>
+        <select id="theme-select">
+          <option value="light" selected>Motolii Light（既定）</option>
+          <option value="dark">Motolii Dark</option>
+        </select>
+      </div>
+      <p class="setting-note">選択はユーザー設定として保存。projectには保存しない。</p>
+      <button class="icon-btn theme-import" type="button" title="将来のcustom theme読込口" disabled>＋ カスタムテーマを追加…（将来）</button>
+    </section>
 
     <!-- ========== main ========== -->
     <div class="main">
@@ -719,7 +742,7 @@
   <!-- ========== legend ========== -->
   <section class="legend">
     <h2>バッジ対応表 — どの決定を写したか</h2>
-    <p>ステータスは <span class="st fixed">決定済み</span>=conceptに昇格済み / <span class="st dir">方向確定</span>=ux-frontierで方向あり / <span class="st open">未決=想像</span>=プロトタイプ比較の対象。第1案の変更点: Ableton語彙(フラット・角2px・色=機能)、ライト既定+ダーク切替、全色トークン化、選択=青/キーフレーム=赤/配線=ティール/ベイク=緑の役割分離。</p>
+    <p>ステータスは <span class="st fixed">決定済み</span>=conceptに昇格済み / <span class="st dir">方向確定</span>=ux-frontierで方向あり / <span class="st open">未決=想像</span>=プロトタイプ比較の対象。第1案の変更点: Ableton語彙(フラット・角2px・色=機能)、設定画面でLight既定+Dark選択、custom themeを妨げない全色トークン化、選択=青/キーフレーム=赤/配線=ティール/ベイク=緑の役割分離。</p>
     <div class="lg-grid">
       <div class="lg-item"><span class="no">1</span><div>
         <b>アセットブラウザ <span class="st fixed">決定済み</span></b>
@@ -768,7 +791,7 @@
       U-C(3Dギズモ・CompCamera操作)は「v1で最難のUX新作・未決」のため2Dバウンディングボックスのみ描画(3Dモードは作らない、が既決)。
       ターゲットピッカー(U-B ピックウィップ型付き版)は「リンク」行の口だけ置いた。
       ノードグラフ・値グラフエディタ・調整レイヤー・マスクパス編集は<em>存在しないこと自体が仕様</em>。
-      <br><b>テーマ実装の含意:</b> このページの切替は「UIコードは色名を知らない(トークンだけ参照)→ テーマ=トークン値の束」の実演。Slintではglobal singleton、配布形式はLiveの.ask相当のフラットなファイルで足りる。
+      <br><b>テーマ実装の含意:</b> このページの切替は「UIコードは色名を知らない(トークンだけ参照)→ テーマ=トークン値の束」の実演。設定はユーザー単位で保存し、Documentへ焼き込まない。Slintではglobal singleton、配布形式はLiveの.ask相当のフラットなファイルで足りる。
     </div>
   </section>
 </div>
@@ -916,16 +939,23 @@
   function redraw(){ drawWave(); drawScopes(); }
   redraw();
 
-  /* ---------- theme toggle (Live式) ---------- */
-  var bl=document.getElementById('btn-light'), bd=document.getElementById('btn-dark');
-  function setTheme(dark){
+  /* ---------- theme settings (Live式) ---------- */
+  var bs=document.getElementById('btn-settings');
+  var sp=document.getElementById('settings-popover');
+  var ts=document.getElementById('theme-select');
+  function setTheme(dark, persist){
     if(dark){ document.documentElement.setAttribute('data-app-theme','dark'); }
     else{ document.documentElement.removeAttribute('data-app-theme'); }
-    bl.classList.toggle('on', !dark);
-    bd.classList.toggle('on', dark);
+    ts.value=dark?'dark':'light';
+    if(persist){ try{ localStorage.setItem('motolii-theme', ts.value); }catch(e){} }
     requestAnimationFrame(redraw);
   }
-  bl.addEventListener('click', function(){ setTheme(false); });
-  bd.addEventListener('click', function(){ setTheme(true); });
+  bs.addEventListener('click', function(){
+    var open=sp.hasAttribute('hidden');
+    sp.toggleAttribute('hidden', !open);
+    bs.setAttribute('aria-expanded', String(open));
+  });
+  ts.addEventListener('change', function(){ setTheme(ts.value==='dark', true); });
+  try{ setTheme(localStorage.getItem('motolii-theme')==='dark', false); }catch(e){ setTheme(false, false); }
 })();
 </script>
