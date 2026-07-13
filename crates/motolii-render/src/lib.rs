@@ -295,7 +295,10 @@ pub fn render_frame_with_background_texture(
     validate_background_desc(request.desc, request.background.desc)?;
     // 外部背景経路も render_graph 一本化。オーバーレイ形状だけ毎フレーム差し替える。
     let graph = linear_graph_with_video_source(request.desc, request.overlay);
-    let source_time = request.time_map.try_map(request.timeline_time)?;
+    let source_time = {
+        request.time_map.require_freeze_overrun()?;
+        request.time_map.try_map(request.timeline_time)?
+    };
     render_graph_cached(
         gpu,
         session,
@@ -553,7 +556,10 @@ fn validate_linear_graph(
                     if source_time.is_some() {
                         return Err(RenderError::MultipleReportingSources);
                     }
-                    source_time = Some(source.time_map.try_map(timeline_time)?);
+                    source_time = Some({
+                        source.time_map.require_freeze_overrun()?;
+                        source.time_map.try_map(timeline_time)?
+                    });
                 }
             }
             RenderStep::OverlayRect { input, output, .. } => {
@@ -953,7 +959,10 @@ fn render_frame_direct(
 ) -> Result<RenderedFrame, RenderError> {
     validate_render_desc(request.desc)?;
 
-    let source_time = request.source.time_map.try_map(request.timeline_time)?;
+    let source_time = {
+        request.source.time_map.require_freeze_overrun()?;
+        request.source.time_map.try_map(request.timeline_time)?
+    };
     let desc = quality.render_desc(request.desc);
 
     let background = upload_rgba(gpu, &desc, &solid_rgba(desc, request.source.color));
@@ -1036,7 +1045,7 @@ fn to_u8(v: f32) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use motolii_core::{Fps, Quality, TimeMap};
+    use motolii_core::{Fps, OverrunMode, Quality, TimeMap};
     use motolii_eval::Value;
     use motolii_gpu::download_rgba;
     use motolii_nodes::{CanonicalPoint, CanonicalSize};
@@ -1756,7 +1765,7 @@ mod tests {
         let background = upload_rgba(&gpu, &desc, &solid_rgba(desc, request.source.color));
 
         let mut session = RenderSession::new(&gpu);
-        let time_map = TimeMap::offset(RationalTime::from_seconds(42), RationalTime::ZERO);
+        let time_map = TimeMap::offset(RationalTime::from_seconds(42));
         let external = render_frame_with_background_texture(
             &gpu,
             &mut session,
@@ -1793,6 +1802,42 @@ mod tests {
             &fixed_actual,
             tol::EXACT,
         );
+    }
+
+    #[test]
+    fn render_rejects_black_and_loop_overrun_without_silent_freeze() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let request = centered_request();
+        let desc = request.desc;
+        let background = upload_rgba(&gpu, &desc, &solid_rgba(desc, request.source.color));
+        let mut session = RenderSession::new(&gpu);
+
+        for mode in [OverrunMode::Black, OverrunMode::Loop] {
+            let time_map = TimeMap::try_new(RationalTime::ZERO, 1, 1, mode).unwrap();
+            let err = render_frame_with_background_texture(
+                &gpu,
+                &mut session,
+                &BackgroundTextureRequest {
+                    desc,
+                    timeline_time: request.timeline_time,
+                    time_map,
+                    background: TextureRef {
+                        texture: &background,
+                        desc,
+                    },
+                    overlay: request.overlay,
+                },
+                Quality::FINAL,
+            )
+            .unwrap_err();
+            assert!(
+                matches!(
+                    err,
+                    RenderError::TimeMap(TimeMapError::UnsupportedOverrunMode(m)) if m == mode
+                ),
+                "mode={mode:?} err={err:?}"
+            );
+        }
     }
 
     #[test]
@@ -2142,13 +2187,7 @@ mod tests {
             timeline_time: RationalTime::try_from_frame(6, Fps::try_new(30, 1).unwrap()).unwrap(),
             source: SolidSource {
                 color: [0.0, 1.0, 0.0, 0.5],
-                time_map: TimeMap::constant_speed(
-                    RationalTime::from_seconds(1),
-                    RationalTime::ZERO,
-                    2,
-                    1,
-                )
-                .unwrap(),
+                time_map: TimeMap::constant_speed(RationalTime::from_seconds(1), 2, 1).unwrap(),
                 reports_source_time: true,
             },
             overlay: RectOverlay {
@@ -2168,7 +2207,7 @@ mod tests {
             timeline_time: RationalTime::try_from_frame(11, Fps::try_new(24, 1).unwrap()).unwrap(),
             source: SolidSource {
                 color: [0.2, 0.6, 1.0, 0.75],
-                time_map: TimeMap::offset(RationalTime::from_seconds(3), RationalTime::ZERO),
+                time_map: TimeMap::offset(RationalTime::from_seconds(3)),
                 reports_source_time: true,
             },
             overlay: RectOverlay {

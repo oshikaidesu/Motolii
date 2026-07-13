@@ -29,4 +29,4 @@
 ## S1(Slint UI統合)・S3(時間表現)の状況
 
 - S3: `motolii-core::RationalTime`として実装済み(NTSCレートの往復・非蓄積ドリフトをテストで確認)。設計メモは型のdocコメントに集約
-- S1: `spikes/s1-slint/`で実装済み。GUI起動・OpenGL/WGPUレンダラミスマッチ回避まで確認。IME・tearingの実機合否は開発主機で継続検証
+- S1: `spikes/s1-slint/`で実装済み。INF-1合格(2026-07-11・人間OK・Slint採用確定)。詳細は[s1-slint.md](s1-slint.md)

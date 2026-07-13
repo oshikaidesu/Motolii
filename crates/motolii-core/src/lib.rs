@@ -8,6 +8,7 @@ mod frame;
 mod quality;
 mod time;
 mod time_map;
+mod wide_div;
 
 pub use camera::CompCamera;
 pub use canonical::{
@@ -19,4 +20,4 @@ pub use frame::{
 };
 pub use quality::{Quality, SampleTier};
 pub use time::{Fps, FpsError, RationalTime, RationalTimeError};
-pub use time_map::{TimeMap, TimeMapError};
+pub use time_map::{OverrunMode, TimeMap, TimeMapError};

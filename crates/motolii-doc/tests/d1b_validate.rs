@@ -21,7 +21,6 @@ fn valid_minimal() -> Document {
             duration: RationalTime::try_new(5, 1).unwrap(),
             time_map: Default::default(),
             source: ClipSource::Asset { asset },
-            path_ops: Vec::new(),
         })],
     });
     doc
@@ -127,7 +126,6 @@ fn duplicate_layer_in_tree_fails() {
         duration: RationalTime::try_new(1, 1).unwrap(),
         time_map: Default::default(),
         source: ClipSource::Asset { asset },
-        path_ops: Vec::new(),
     }));
     assert!(matches!(
         doc.validate(),
@@ -197,33 +195,19 @@ fn validate_does_not_mutate_writer() {
 }
 
 #[test]
-fn invalid_time_map_speed_den_zero_fails() {
-    let mut doc = valid_minimal();
-    if let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] {
-        // pubフィールド直書き — deserializeは拒否するがedit経路では壊せる
-        clip.time_map = TimeMap {
-            source_start: RationalTime::ZERO,
-            timeline_start: RationalTime::ZERO,
-            speed_num: 1,
-            speed_den: 0,
-        };
-    }
-    assert!(matches!(
-        doc.validate(),
-        Err(DocumentError::InvalidTimeMap { .. })
-    ));
-}
+fn time_map_speed_invariant_is_constructor_gated() {
+    // speed は非公開。不正・非正準値は try_new 以外で注入できない。
+    assert!(TimeMap::try_new(RationalTime::ZERO, 1, 0, Default::default()).is_err());
+    assert!(TimeMap::try_new(RationalTime::ZERO, 0, 1, Default::default()).is_err());
+    let reduced = TimeMap::constant_speed(RationalTime::ZERO, 2, 2).unwrap();
+    assert_eq!((reduced.speed_num(), reduced.speed_den()), (1, 1));
+    assert_eq!(reduced, TimeMap::identity());
 
-#[test]
-fn invalid_time_map_non_positive_speed_num_fails() {
     let mut doc = valid_minimal();
     if let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] {
-        clip.time_map.speed_num = 0;
+        clip.time_map = reduced;
     }
-    assert!(matches!(
-        doc.validate(),
-        Err(DocumentError::InvalidTimeMap { .. })
-    ));
+    assert!(doc.validate().is_ok());
 }
 
 #[test]
@@ -262,7 +246,6 @@ fn parent_mutual_cycle_fails() {
                 duration: RationalTime::try_new(2, 1).unwrap(),
                 time_map: Default::default(),
                 source: ClipSource::Asset { asset },
-                path_ops: Vec::new(),
             }),
             TrackItem::Clip(Clip {
                 envelope: env_b,
@@ -270,7 +253,6 @@ fn parent_mutual_cycle_fails() {
                 duration: RationalTime::try_new(2, 1).unwrap(),
                 time_map: Default::default(),
                 source: ClipSource::Asset { asset },
-                path_ops: Vec::new(),
             }),
         ],
     });

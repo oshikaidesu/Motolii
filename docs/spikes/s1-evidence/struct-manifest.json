@@ -1,0 +1,35 @@
+{
+  "adapter": {
+    "backend": "Metal",
+    "device_type": "IntegratedGpu",
+    "name": "Apple M4"
+  },
+  "captured_at": "unix:1783739590",
+  "frames": [
+    {
+      "height": 720,
+      "hue": 0.0,
+      "image_try_from": "ok",
+      "path": "struct-frame-00-hue0.png",
+      "width": 1280
+    },
+    {
+      "height": 720,
+      "hue": 120.0,
+      "image_try_from": "ok",
+      "path": "struct-frame-01-hue120.png",
+      "width": 1280
+    },
+    {
+      "height": 720,
+      "hue": 240.0,
+      "image_try_from": "ok",
+      "path": "struct-frame-02-hue240.png",
+      "width": 1280
+    }
+  ],
+  "layer": 1,
+  "manual_device": true,
+  "notes": "GPU download PNGs + Image::try_from. Window/IME screenshots need open display.",
+  "ticket": "INF-1"
+}

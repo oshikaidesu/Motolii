@@ -1,4 +1,5 @@
 //! D1b: 保存前のドキュメント不変条件検証(ガード1)。
+//! D1h: DocParam期待型・空トラック拒否・AssetRef結線・NaN/Inf/値域(S3/S4/S9)。
 //!
 //! 壊れた状態を「正常に」シリアライズしないための判定口。
 //! 実際のアトミック書き込み拒否はD1cがこの結果を見る。
@@ -9,12 +10,19 @@ use motolii_core::{RationalTime, TimeMapError};
 use thiserror::Error;
 
 use crate::asset::AssetId;
+use crate::doc_keyframe::validate_interp;
+use crate::doc_value::DocValue;
 use crate::param::DocParam;
-use crate::schema::{Clip, ClipSource, Group, ItemEnvelope, TrackItem};
+use crate::param_expect::{
+    self, known_plugin_param, path_op_scalar, vec2_axis, ExpectedValueType, ParamConstraints,
+};
+use crate::schema::{
+    Clip, ClipSource, Group, ItemEnvelope, StandardShape, TrackItem, VectorContent,
+};
 use crate::track_id::TrackId;
 use crate::{Document, LayerId};
 
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[derive(Debug, Clone, PartialEq, Error)]
 pub enum DocumentError {
     #[error("Document.version ({version}) < min_reader_version ({min_reader_version})")]
     VersionBelowMinReader {
@@ -57,6 +65,37 @@ pub enum DocumentError {
     EmptyEffectPluginId { layer_id: u64 },
     #[error("clip plugin source plugin_id must be non-empty (layer {layer_id})")]
     EmptySourcePluginId { layer_id: u64 },
+    #[error("param type mismatch at {path}: expected {expected}, got {got}")]
+    ParamTypeMismatch {
+        path: String,
+        expected: String,
+        got: String,
+    },
+    #[error("empty keyframe track at {path}")]
+    EmptyKeyframeTrack { path: String },
+    #[error("keyframe variant mismatch at {path}: expected {expected}, got {got}")]
+    KeyframeVariantMismatch {
+        path: String,
+        expected: String,
+        got: String,
+    },
+    #[error("non-finite value at {path}")]
+    NonFiniteValue { path: String },
+    #[error("value out of range at {path}")]
+    ValueOutOfRange { path: String },
+    #[error("spatial link (LookAt/Follow) not allowed at {path}")]
+    SpatialLinkNotAllowed { path: String },
+    #[error("non-finite Bezier control points at {path}")]
+    NonFiniteBezier { path: String },
+    #[error("invalid Bezier control points at {path}: x1={x1} x2={x2}")]
+    InvalidBezier { path: String, x1: f64, x2: f64 },
+    #[error("asset {id} has type `{got}` at {path}; expected one of: {expected}")]
+    WrongAssetType {
+        path: String,
+        id: u64,
+        got: String,
+        expected: String,
+    },
 }
 
 impl Document {
@@ -116,6 +155,27 @@ impl Document {
             Ok(())
         } else {
             Err(DocumentError::UnknownAssetId { id: id.get() })
+        }
+    }
+
+    fn require_asset_type(
+        &self,
+        id: AssetId,
+        allowed: &[&str],
+        path: &str,
+    ) -> Result<(), DocumentError> {
+        let Some(asset) = self.assets.get(id) else {
+            return Err(DocumentError::UnknownAssetId { id: id.get() });
+        };
+        if allowed.iter().any(|t| *t == asset.asset_type) {
+            Ok(())
+        } else {
+            Err(DocumentError::WrongAssetType {
+                path: path.to_string(),
+                id: id.get(),
+                got: asset.asset_type.clone(),
+                expected: allowed.join(", "),
+            })
         }
     }
 }
@@ -184,15 +244,23 @@ fn validate_clip(
             if plugin_id.is_empty() {
                 return Err(DocumentError::EmptySourcePluginId { layer_id });
             }
-            for param in params.values() {
-                validate_param(doc, param)?;
+            for (name, param) in params {
+                let path = format!("layer{layer_id}.source.{name}");
+                validate_plugin_param(doc, plugin_id, name, param, &path)?;
+            }
+        }
+        ClipSource::Vector { recipe } => {
+            validate_vector_content(doc, &recipe.content, &format!("layer{layer_id}.recipe"))?;
+            for (i, op) in recipe.modifiers.iter().enumerate() {
+                validate_path_op_params(
+                    doc,
+                    op,
+                    &format!("layer{layer_id}.recipe.modifiers[{i}]"),
+                )?;
             }
         }
     }
 
-    for op in &clip.path_ops {
-        validate_path_op_params(doc, op)?;
-    }
     Ok(())
 }
 
@@ -211,20 +279,62 @@ fn validate_envelope(
         doc.require_layer(parent)?;
         parents.insert(id, parent.get());
     }
-    validate_param(doc, &env.transform.position)?;
-    validate_param(doc, &env.transform.anchor)?;
-    validate_param(doc, &env.transform.scale)?;
-    validate_param(doc, &env.transform.rotation)?;
-    validate_param(doc, &env.opacity)?;
+    let base = format!("layer{id}");
+    validate_param(
+        doc,
+        &env.transform.position,
+        param_expect::transform_position(),
+        &format!("{base}.position"),
+    )?;
+    validate_param(
+        doc,
+        &env.transform.anchor,
+        param_expect::transform_anchor(),
+        &format!("{base}.anchor"),
+    )?;
+    validate_param(
+        doc,
+        &env.transform.scale,
+        param_expect::transform_scale(),
+        &format!("{base}.scale"),
+    )?;
+    validate_param(
+        doc,
+        &env.transform.rotation,
+        param_expect::transform_rotation(),
+        &format!("{base}.rotation"),
+    )?;
+    validate_param(
+        doc,
+        &env.opacity,
+        param_expect::envelope_opacity(),
+        &format!("{base}.opacity"),
+    )?;
     for effect in &env.effects {
         if effect.plugin_id.is_empty() {
             return Err(DocumentError::EmptyEffectPluginId { layer_id: id });
         }
-        for param in effect.params.values() {
-            validate_param(doc, param)?;
+        for (name, param) in &effect.params {
+            let path = format!("{base}.effect[{}].{name}", effect.plugin_id);
+            validate_plugin_param(doc, &effect.plugin_id, name, param, &path)?;
         }
     }
     Ok(())
+}
+
+fn validate_plugin_param(
+    doc: &Document,
+    plugin_id: &str,
+    param_id: &str,
+    param: &DocParam,
+    path: &str,
+) -> Result<(), DocumentError> {
+    if let Some(c) = known_plugin_param(plugin_id, param_id) {
+        validate_param(doc, param, c, path)
+    } else {
+        // 未知plugin: 型表は持たないが有限性・AssetRefダングリングは検査(D1fと両立)
+        validate_param_structure(doc, param, path)
+    }
 }
 
 fn detect_parent_cycles(parents: &HashMap<u64, u64>) -> Result<(), DocumentError> {
@@ -247,12 +357,112 @@ fn detect_parent_cycles(parents: &HashMap<u64, u64>) -> Result<(), DocumentError
     Ok(())
 }
 
-fn validate_param(doc: &Document, param: &DocParam) -> Result<(), DocumentError> {
+fn validate_param(
+    doc: &Document,
+    param: &DocParam,
+    constraints: ParamConstraints,
+    path: &str,
+) -> Result<(), DocumentError> {
     match param {
-        DocParam::Const(_) | DocParam::Keyframes(_) | DocParam::Data { .. } => Ok(()),
+        DocParam::Const(v) => validate_value(doc, v, constraints, path),
+        DocParam::Keyframes(track) => {
+            if track.keys().is_empty() {
+                return Err(DocumentError::EmptyKeyframeTrack {
+                    path: path.to_string(),
+                });
+            }
+            let mut expected_kind: Option<&'static str> = None;
+            for key in track.keys() {
+                let kind = key.value.kind_name();
+                match expected_kind {
+                    None => expected_kind = Some(kind),
+                    Some(prev) if prev != kind => {
+                        return Err(DocumentError::KeyframeVariantMismatch {
+                            path: path.to_string(),
+                            expected: prev.to_string(),
+                            got: kind.to_string(),
+                        });
+                    }
+                    Some(_) => {}
+                }
+                validate_interp_at(path, &key.interp)?;
+                validate_value(doc, &key.value, constraints, path)?;
+            }
+            Ok(())
+        }
+        DocParam::Data { fallback, .. } => validate_value(doc, fallback, constraints, path),
         DocParam::Vec2Axes { x, y } => {
-            validate_param(doc, x)?;
-            validate_param(doc, y)
+            if constraints.expected != ExpectedValueType::Vec2 {
+                return Err(DocumentError::ParamTypeMismatch {
+                    path: path.to_string(),
+                    expected: constraints.expected.name().to_string(),
+                    got: "Vec2Axes".to_string(),
+                });
+            }
+            validate_param(doc, x, vec2_axis(), &format!("{path}.x"))?;
+            validate_param(doc, y, vec2_axis(), &format!("{path}.y"))
+        }
+        DocParam::LookAt { target, .. } => {
+            if !constraints.allow_spatial_links {
+                return Err(DocumentError::SpatialLinkNotAllowed {
+                    path: path.to_string(),
+                });
+            }
+            doc.require_layer(*target)
+        }
+        DocParam::Follow { target, offset } => {
+            if !constraints.allow_spatial_links {
+                return Err(DocumentError::SpatialLinkNotAllowed {
+                    path: path.to_string(),
+                });
+            }
+            if !offset[0].is_finite() || !offset[1].is_finite() {
+                return Err(DocumentError::NonFiniteValue {
+                    path: format!("{path}.offset"),
+                });
+            }
+            doc.require_layer(*target)
+        }
+    }
+}
+
+/// 未知plugin向け: 期待型なし。有限性・AssetRef存在・Bezierのみ。
+fn validate_param_structure(
+    doc: &Document,
+    param: &DocParam,
+    path: &str,
+) -> Result<(), DocumentError> {
+    match param {
+        DocParam::Const(v) => validate_value_structure(doc, v, path),
+        DocParam::Keyframes(track) => {
+            if track.keys().is_empty() {
+                return Err(DocumentError::EmptyKeyframeTrack {
+                    path: path.to_string(),
+                });
+            }
+            let mut expected_kind: Option<&'static str> = None;
+            for key in track.keys() {
+                let kind = key.value.kind_name();
+                match expected_kind {
+                    None => expected_kind = Some(kind),
+                    Some(prev) if prev != kind => {
+                        return Err(DocumentError::KeyframeVariantMismatch {
+                            path: path.to_string(),
+                            expected: prev.to_string(),
+                            got: kind.to_string(),
+                        });
+                    }
+                    Some(_) => {}
+                }
+                validate_interp_at(path, &key.interp)?;
+                validate_value_structure(doc, &key.value, path)?;
+            }
+            Ok(())
+        }
+        DocParam::Data { fallback, .. } => validate_value_structure(doc, fallback, path),
+        DocParam::Vec2Axes { x, y } => {
+            validate_param_structure(doc, x, &format!("{path}.x"))?;
+            validate_param_structure(doc, y, &format!("{path}.y"))
         }
         DocParam::LookAt { target, .. } | DocParam::Follow { target, .. } => {
             doc.require_layer(*target)
@@ -260,33 +470,169 @@ fn validate_param(doc: &Document, param: &DocParam) -> Result<(), DocumentError>
     }
 }
 
+fn validate_interp_at(path: &str, interp: &motolii_eval::Interp) -> Result<(), DocumentError> {
+    validate_interp(interp).map_err(|e| match e {
+        crate::doc_keyframe::DocKeyframeError::NonFiniteBezier => DocumentError::NonFiniteBezier {
+            path: path.to_string(),
+        },
+        crate::doc_keyframe::DocKeyframeError::InvalidBezier { x1, x2 } => {
+            DocumentError::InvalidBezier {
+                path: path.to_string(),
+                x1,
+                x2,
+            }
+        }
+        other => DocumentError::NonFiniteBezier {
+            path: format!("{path} ({other})"),
+        },
+    })
+}
+
+fn validate_value(
+    doc: &Document,
+    value: &DocValue,
+    constraints: ParamConstraints,
+    path: &str,
+) -> Result<(), DocumentError> {
+    if !constraints.expected.matches(value) {
+        return Err(DocumentError::ParamTypeMismatch {
+            path: path.to_string(),
+            expected: constraints.expected.name().to_string(),
+            got: value.kind_name().to_string(),
+        });
+    }
+    validate_value_structure(doc, value, path)?;
+    if constraints.unit_interval {
+        match value {
+            DocValue::F64(v) if !(0.0..=1.0).contains(v) => {
+                return Err(DocumentError::ValueOutOfRange {
+                    path: path.to_string(),
+                });
+            }
+            DocValue::Color(c) if c.iter().any(|x| !(0.0..=1.0).contains(x)) => {
+                return Err(DocumentError::ValueOutOfRange {
+                    path: path.to_string(),
+                });
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn validate_value_structure(
+    doc: &Document,
+    value: &DocValue,
+    path: &str,
+) -> Result<(), DocumentError> {
+    match value {
+        DocValue::F64(v) => {
+            if !v.is_finite() {
+                return Err(DocumentError::NonFiniteValue {
+                    path: path.to_string(),
+                });
+            }
+        }
+        DocValue::Vec2(v) => {
+            if v.iter().any(|x| !x.is_finite()) {
+                return Err(DocumentError::NonFiniteValue {
+                    path: path.to_string(),
+                });
+            }
+        }
+        DocValue::Vec3(v) => {
+            if v.iter().any(|x| !x.is_finite()) {
+                return Err(DocumentError::NonFiniteValue {
+                    path: path.to_string(),
+                });
+            }
+        }
+        DocValue::Color(c) => {
+            if c.iter().any(|x| !x.is_finite()) {
+                return Err(DocumentError::NonFiniteValue {
+                    path: path.to_string(),
+                });
+            }
+        }
+        DocValue::AssetRef(id) => {
+            doc.require_asset(*id)?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_vector_content(
+    doc: &Document,
+    content: &VectorContent,
+    path: &str,
+) -> Result<(), DocumentError> {
+    match content {
+        VectorContent::StandardShape { shape } => match shape {
+            StandardShape::Rect { width, height } | StandardShape::Ellipse { width, height } => {
+                validate_param(doc, width, path_op_scalar(), &format!("{path}.width"))?;
+                validate_param(doc, height, path_op_scalar(), &format!("{path}.height"))
+            }
+        },
+        VectorContent::SvgAsset { asset } => {
+            // S6: ラスタ動画等を SvgAsset に混ぜて modifiers を付けられないよう型を固定
+            doc.require_asset_type(*asset, &[SVG_ASSET_TYPE], &format!("{path}.asset"))
+        }
+        VectorContent::TextPath { font_asset, .. } => {
+            doc.require_asset_type(*font_asset, FONT_ASSET_TYPES, &format!("{path}.font_asset"))
+        }
+        VectorContent::Group { children } => {
+            for (i, child) in children.iter().enumerate() {
+                validate_vector_content(doc, child, &format!("{path}.children[{i}]"))?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// `VectorContent::SvgAsset` が要求する MIME。
+const SVG_ASSET_TYPE: &str = "image/svg+xml";
+
+/// `TextPath.font_asset` の許可型(D1i-1で確定。未決を埋めずここで正本化)。
+const FONT_ASSET_TYPES: &[&str] = &["font/ttf", "font/otf", "font/woff", "font/woff2"];
+
 fn validate_path_op_params(
     doc: &Document,
     op: &crate::schema::PathOp,
+    path: &str,
 ) -> Result<(), DocumentError> {
     use crate::schema::PathOp;
+    let c = path_op_scalar();
     match op {
-        PathOp::PuckerBloat { amount } => validate_param(doc, amount),
+        PathOp::PuckerBloat { amount } => validate_param(doc, amount, c, &format!("{path}.amount")),
         PathOp::ZigZag { amount, ridges } => {
-            validate_param(doc, amount)?;
-            validate_param(doc, ridges)
+            validate_param(doc, amount, c, &format!("{path}.amount"))?;
+            validate_param(doc, ridges, c, &format!("{path}.ridges"))
         }
-        PathOp::Offset { distance } => validate_param(doc, distance),
-        PathOp::RoundCorners { radius } => validate_param(doc, radius),
-        PathOp::Trim { start, end, offset } => {
-            validate_param(doc, start)?;
-            validate_param(doc, end)?;
-            validate_param(doc, offset)
+        PathOp::Offset { distance } => {
+            validate_param(doc, distance, c, &format!("{path}.distance"))
         }
-        PathOp::Twist { angle } => validate_param(doc, angle),
+        PathOp::RoundCorners { radius } => {
+            validate_param(doc, radius, c, &format!("{path}.radius"))
+        }
+        PathOp::Trim {
+            start,
+            end,
+            offset,
+            mode: _,
+        } => {
+            validate_param(doc, start, c, &format!("{path}.start"))?;
+            validate_param(doc, end, c, &format!("{path}.end"))?;
+            validate_param(doc, offset, c, &format!("{path}.offset"))
+        }
+        PathOp::Twist { angle } => validate_param(doc, angle, c, &format!("{path}.angle")),
         PathOp::Wiggle { amp, freq, seed } => {
-            validate_param(doc, amp)?;
-            validate_param(doc, freq)?;
-            validate_param(doc, seed)
+            validate_param(doc, amp, c, &format!("{path}.amp"))?;
+            validate_param(doc, freq, c, &format!("{path}.freq"))?;
+            validate_param(doc, seed, c, &format!("{path}.seed"))
         }
         PathOp::Repeater { copies, offset } => {
-            validate_param(doc, copies)?;
-            validate_param(doc, offset)
+            validate_param(doc, copies, c, &format!("{path}.copies"))?;
+            validate_param(doc, offset, c, &format!("{path}.offset"))
         }
     }
 }

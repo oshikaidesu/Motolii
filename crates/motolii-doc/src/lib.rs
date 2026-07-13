@@ -4,11 +4,15 @@
 //! `edit`は戻り値を持たない — 参照漏洩で凍結を封じないため。
 //!
 //! **D1a**: スキーマ本体。**D1b**: 保存前`validate`(ガード1)。**D1c**: アトミック保存/読込。ジャーナルはD1d。
+//! **D8**: 単一writer + スナップショット配布の並行契約(型denyは`mut_document_deny`、完走は`d8_ownership`)。
 
 mod asset;
 mod bpm;
+mod doc_keyframe;
+mod doc_value;
 mod ids;
 mod param;
+pub mod param_expect;
 mod persist;
 mod schema;
 mod track_id;
@@ -21,8 +25,11 @@ use serde_json::{Map, Value};
 
 pub use asset::{Asset, AssetError, AssetId, AssetTable};
 pub use bpm::{Bpm, BpmError};
+pub use doc_keyframe::{DocKeyframe, DocKeyframeError, DocKeyframeTrack};
+pub use doc_value::DocValue;
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
 pub use param::{DocParam, LookAtAxis};
+pub use param_expect::{ExpectedValueType, ParamConstraints};
 pub use persist::{
     detect_cloud_sync, load_document, load_document_bytes, save_document,
     save_document_with_options, CloudSyncHint, PersistError, SaveAbortAfter, SaveOptions,
@@ -30,8 +37,8 @@ pub use persist::{
 };
 pub use schema::{
     BlendMode, Clip, ClipSource, ClippingMaskSettings, Composition, CompositionError,
-    EffectInstance, Group, ItemEnvelope, MaskMode, PathOp, Soundtrack, SoundtrackError, Track,
-    TrackItem, Transform2D,
+    EffectInstance, Group, ItemEnvelope, MaskMode, PathOp, Soundtrack, SoundtrackError,
+    StandardShape, Track, TrackItem, Transform2D, TrimMode, VectorContent, VectorRecipe,
 };
 pub use track_id::{TrackId, TrackIdError, TrackIdTable};
 pub use validate::DocumentError;
