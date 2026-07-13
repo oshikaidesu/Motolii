@@ -14,7 +14,8 @@ use crate::doc_keyframe::validate_interp;
 use crate::doc_value::DocValue;
 use crate::param::DocParam;
 use crate::param_expect::{
-    self, known_plugin_param, path_op_scalar, vec2_axis, ExpectedValueType, ParamConstraints,
+    self, known_plugin_info, known_plugin_param, path_op_scalar, vec2_axis, DocPluginKind,
+    ExpectedValueType, ParamConstraints,
 };
 use crate::schema::{
     Clip, ClipSource, Group, ItemEnvelope, PathOp, StandardShape, TrackItem, Transform2D,
@@ -66,6 +67,15 @@ pub enum DocumentError {
     EmptyEffectPluginId { layer_id: u64 },
     #[error("clip plugin source plugin_id must be non-empty (layer {layer_id})")]
     EmptySourcePluginId { layer_id: u64 },
+    /// D1f/実装ガード9: 既知plugin_idを構造上違う種別のスロットに置く「バグ」は
+    /// degraded(警告)では救わず、型付きエラーで拒否する。
+    #[error("plugin `{plugin_id}` at {path} is registered as {expected} but used as {got}")]
+    PluginKindMismatch {
+        path: String,
+        plugin_id: String,
+        expected: String,
+        got: String,
+    },
     #[error("param type mismatch at {path}: expected {expected}, got {got}")]
     ParamTypeMismatch {
         path: String,
@@ -278,14 +288,24 @@ fn validate_clip(
     match &clip.source {
         ClipSource::Asset { asset } => doc.require_asset(*asset)?,
         ClipSource::Plugin {
-            plugin_id, params, ..
+            plugin_id,
+            effect_version,
+            params,
+            ..
         } => {
             if plugin_id.is_empty() {
                 return Err(DocumentError::EmptySourcePluginId { layer_id });
             }
+            let source_path = format!("layer{layer_id}.source");
+            let degraded = plugin_slot_degraded(
+                plugin_id,
+                *effect_version,
+                DocPluginKind::LayerSource,
+                &source_path,
+            )?;
             for (name, param) in params {
-                let path = format!("layer{layer_id}.source.{name}");
-                validate_plugin_param(doc, plugin_id, name, param, &path)?;
+                let path = format!("{source_path}.{name}");
+                validate_plugin_param(doc, plugin_id, name, param, &path, degraded)?;
             }
         }
         ClipSource::Vector { recipe } => {
@@ -330,12 +350,39 @@ fn validate_envelope(
         if effect.plugin_id.is_empty() {
             return Err(DocumentError::EmptyEffectPluginId { layer_id: id });
         }
+        let effect_path = format!("{base}.effect[{}]", effect.plugin_id);
+        let degraded = plugin_slot_degraded(
+            &effect.plugin_id,
+            effect.effect_version,
+            DocPluginKind::Filter,
+            &effect_path,
+        )?;
         for (name, param) in &effect.params {
-            let path = format!("{base}.effect[{}].{name}", effect.plugin_id);
-            validate_plugin_param(doc, &effect.plugin_id, name, param, &path)?;
+            let path = format!("{effect_path}.{name}");
+            validate_plugin_param(doc, &effect.plugin_id, name, param, &path, degraded)?;
         }
     }
     Ok(())
+}
+
+/// D1f/S13: 既知plugin_idの種別違いは型付きエラー、未知idと未来版effect_versionは
+/// 同一のdegraded扱い(構造検査のみ・型表チェックはスキップ)にする。
+fn plugin_slot_degraded(
+    plugin_id: &str,
+    effect_version: u32,
+    expected_kind: DocPluginKind,
+    path: &str,
+) -> Result<bool, DocumentError> {
+    match known_plugin_info(plugin_id) {
+        None => Ok(true),
+        Some(info) if info.kind != expected_kind => Err(DocumentError::PluginKindMismatch {
+            path: path.to_string(),
+            plugin_id: plugin_id.to_string(),
+            expected: expected_kind.name().to_string(),
+            got: info.kind.name().to_string(),
+        }),
+        Some(info) => Ok(effect_version > info.current_version),
+    }
 }
 
 /// Transform2Dの4スロット共通検査。エンベロープ本体とRepeater.transformで共用(D1i-2)。
@@ -372,13 +419,15 @@ fn validate_plugin_param(
     param_id: &str,
     param: &DocParam,
     path: &str,
+    degraded: bool,
 ) -> Result<(), DocumentError> {
-    if let Some(c) = known_plugin_param(plugin_id, param_id) {
-        validate_param(doc, param, c, path)
-    } else {
-        // 未知plugin: 型表は持たないが有限性・AssetRefダングリングは検査(D1fと両立)
-        validate_param_structure(doc, param, path)
+    if !degraded {
+        if let Some(c) = known_plugin_param(plugin_id, param_id) {
+            return validate_param(doc, param, c, path);
+        }
     }
+    // 未知plugin・既知プラグインの未来版: 型表は当てず有限性・AssetRefダングリングのみ検査(F-9/D1f)
+    validate_param_structure(doc, param, path)
 }
 
 fn detect_parent_cycles(parents: &HashMap<u64, u64>) -> Result<(), DocumentError> {

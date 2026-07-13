@@ -1,6 +1,9 @@
 //! 既知plugin期待型表と reference registry の乖離検出(D1h)。
+//! D1f: `known_plugin_info`(種別+現行version)の乖離もここで検出する(S13)。
 
-use motolii_doc::param_expect::{known_plugin_ids, known_plugin_param, ExpectedValueType};
+use motolii_doc::param_expect::{
+    known_plugin_ids, known_plugin_info, known_plugin_param, DocPluginKind, ExpectedValueType,
+};
 use motolii_plugin::{
     reference::register_reference_plugins, PluginKind, PluginRegistry, ValueType,
 };
@@ -12,6 +15,16 @@ fn value_type_to_expected(vt: ValueType) -> ExpectedValueType {
         ValueType::Vec3 => ExpectedValueType::Vec3,
         ValueType::Color => ExpectedValueType::Color,
         ValueType::AssetRef => ExpectedValueType::AssetRef,
+    }
+}
+
+fn plugin_kind_to_doc_kind(kind: PluginKind) -> DocPluginKind {
+    match kind {
+        PluginKind::LayerSource => DocPluginKind::LayerSource,
+        PluginKind::Filter => DocPluginKind::Filter,
+        PluginKind::ParamDriver => DocPluginKind::ParamDriver,
+        PluginKind::Composite => DocPluginKind::Composite,
+        other => panic!("unexpected registry kind in test fixture: {other:?}"),
     }
 }
 
@@ -43,6 +56,22 @@ fn known_plugin_param_table_covers_reference_registry() {
                     param.id
                 );
             }
+
+            // D1f/S13: doc側の種別+現行versionミラーがレジストリのNodeDescと一致すること。
+            let info = known_plugin_info(id.0).unwrap_or_else(|| {
+                panic!("missing known_plugin_info entry for {} (D1f mirror)", id.0)
+            });
+            assert_eq!(
+                info.kind,
+                plugin_kind_to_doc_kind(kind),
+                "kind mismatch for {}",
+                id.0
+            );
+            assert_eq!(
+                info.current_version, desc.version,
+                "current_version mismatch for {} (update param_expect::known_plugin_info)",
+                id.0
+            );
         }
     }
 

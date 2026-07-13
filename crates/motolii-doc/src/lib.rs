@@ -19,6 +19,7 @@ mod param;
 pub mod param_expect;
 pub mod pathgeom;
 mod persist;
+mod plugin_compat;
 mod schema;
 mod stable_id;
 mod track_id;
@@ -42,7 +43,7 @@ pub use duplicate::DuplicateError;
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
 pub use limits::{ResourceLimitError, ResourceLimits};
 pub use param::{DocParam, LookAtAxis};
-pub use param_expect::{ExpectedValueType, ParamConstraints};
+pub use param_expect::{DocPluginKind, ExpectedValueType, KnownPluginInfo, ParamConstraints};
 pub use pathgeom::PathOpError;
 pub use persist::{
     check_migration_allowed, classify_open_mode, detect_cloud_sync, load_document,
@@ -50,6 +51,7 @@ pub use persist::{
     save_document_with_options, CloudSyncHint, OpenMode, OpenedDocument, PersistError,
     SaveAbortAfter, SaveOptions, READER_VERSION, WRITER_VERSION,
 };
+pub use plugin_compat::{PluginDegradation, PluginOpenWarning};
 pub use schema::{
     BlendMode, Clip, ClipSource, ClippingMaskSettings, CompositeOrder, Composition,
     CompositionError, EffectInstance, Group, ItemEnvelope, LineJoin, MaskMode, PathOp, PointType,

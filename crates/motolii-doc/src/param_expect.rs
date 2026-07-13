@@ -227,6 +227,63 @@ pub fn known_plugin_ids() -> &'static [&'static str] {
     ]
 }
 
+/// `motolii_plugin::PluginKind` の doc側ミラー(D1f)。
+///
+/// motolii-docはmotolii-pluginに(本番コードでは)依存しない層分離のため、種別を自前で持つ。
+/// 乖離は `motolii-plugin` を dev-dependency に持つテストで検出する
+/// (`tests/d1h_plugin_expect_table.rs` と同じ手口)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DocPluginKind {
+    Filter,
+    LayerSource,
+    ParamDriver,
+    Composite,
+}
+
+impl DocPluginKind {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Filter => "Filter",
+            Self::LayerSource => "LayerSource",
+            Self::ParamDriver => "ParamDriver",
+            Self::Composite => "Composite",
+        }
+    }
+}
+
+impl std::fmt::Display for DocPluginKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+/// 既知plugin_idの種別+現行version(D1f/S13)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KnownPluginInfo {
+    pub kind: DocPluginKind,
+    /// レジストリ側`NodeDesc.version`の写し。これより新しい`effect_version`は
+    /// 「未来版」として未知プラグインと同じdegraded扱いにする(downgrade errorにしない — S13)。
+    pub current_version: u32,
+}
+
+/// 既知plugin_idの種別+現行versionを返す。未知は`None`(呼び出し側がdegraded扱いにする)。
+pub fn known_plugin_info(plugin_id: &str) -> Option<KnownPluginInfo> {
+    let (kind, current_version) = match plugin_id {
+        "core.filter.clear" | "core.filter.tint" | "core.filter.opacity" => {
+            (DocPluginKind::Filter, 1)
+        }
+        "core.layer_source.clear" => (DocPluginKind::LayerSource, 1),
+        "core.composite.clear" => (DocPluginKind::Composite, 1),
+        // v2: `amp` → `amplitude`(motolii-plugin migrate_plugin_paramsの写し)。
+        "core.param.sine" => (DocPluginKind::ParamDriver, 2),
+        _ => return None,
+    };
+    Some(KnownPluginInfo {
+        kind,
+        current_version,
+    })
+}
+
 /// Vec2Axes の各軸は常にスカラー。
 pub fn vec2_axis() -> ParamConstraints {
     ParamConstraints::typed(ExpectedValueType::F64)
