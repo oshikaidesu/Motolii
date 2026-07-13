@@ -9,8 +9,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use motolii_doc::{
     load_document_bytes_with_limits, load_document_with_limits, AssetId, Clip, ClipSource,
-    ClippingMaskSettings, Document, Group, ItemEnvelope, LayerId, PersistError, ResourceLimitError,
-    ResourceLimits, Track, TrackId, TrackItem, Transform2D,
+    Document, Group, ItemEnvelope, LayerId, PersistError, ResourceLimitError, ResourceLimits,
+    Track, TrackId, TrackItem,
 };
 
 fn unique_dir(tag: &str) -> PathBuf {
@@ -29,14 +29,7 @@ fn base_doc() -> Document {
 
 fn simple_clip(layer_id: LayerId, asset: AssetId) -> TrackItem {
     TrackItem::Clip(Clip {
-        envelope: ItemEnvelope {
-            layer_id,
-            effects: Vec::new(),
-            transform: Transform2D::identity(),
-            clipping_mask: ClippingMaskSettings::default(),
-            blend: Default::default(),
-            opacity: motolii_doc::DocParam::const_f64(1.0),
-        },
+        envelope: ItemEnvelope::new(layer_id),
         start: motolii_core::RationalTime::ZERO,
         duration: motolii_core::RationalTime::try_new(1, 1).unwrap(),
         time_map: Default::default(),

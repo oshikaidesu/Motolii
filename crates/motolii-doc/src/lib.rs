@@ -6,16 +6,21 @@
 //! **D1a**: スキーマ本体。**D1b**: 保存前`validate`(ガード1)。**D1c**: アトミック保存/読込。ジャーナルはD1d。
 //! **D8**: 単一writer + スナップショット配布の並行契約(型denyは`mut_document_deny`、完走は`d8_ownership`)。
 //! **D1c-FU(#101)**: `ResourceLimits`(入力上限、監査S10)と`OpenMode`(read/write互換分離、監査S14)。
+//! **D3**: Document→レンダグラフ変換(`graph` / `EvaluationTime`)。
 
+mod affine;
 mod asset;
 mod bpm;
 mod command;
 mod doc_keyframe;
 mod doc_value;
 mod duplicate;
+mod eval_time;
+mod graph;
 mod ids;
 mod limits;
 mod param;
+pub mod param_eval;
 pub mod param_expect;
 pub mod pathgeom;
 mod persist;
@@ -31,6 +36,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+pub use affine::{compose_local, compose_transform, resolve_transform, Affine2D};
 pub use asset::{Asset, AssetError, AssetId, AssetTable};
 pub use bpm::{Bpm, BpmError};
 pub use command::{
@@ -40,9 +46,17 @@ pub use command::{
 pub use doc_keyframe::{DocKeyframe, DocKeyframeError, DocKeyframeTrack};
 pub use doc_value::DocValue;
 pub use duplicate::DuplicateError;
+pub use eval_time::{
+    EvaluationTime, D3_CLIP_LOCAL_TO_SOURCE_VIA_TIMEMAP, M1_SOURCE_PTS_EQUALS_TIMELINE,
+};
+pub use graph::{
+    build_document_frame_graph, resolve_asset_path, DocumentFrameGraph, GraphError,
+    CLEAR_LAYER_SOURCE, RECT_LAYER_SOURCE,
+};
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
 pub use limits::{ResourceLimitError, ResourceLimits};
 pub use param::{DocParam, LookAtAxis};
+pub use param_eval::{ParamEvalError, ResolvedLayerParams};
 pub use param_expect::{DocPluginKind, ExpectedValueType, KnownPluginInfo, ParamConstraints};
 pub use pathgeom::PathOpError;
 pub use persist::{

@@ -821,6 +821,199 @@ impl CompositePlugin for CompositeNode {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClippingMaskMode {
+    Alpha,
+    Luminance,
+    InvertAlpha,
+    InvertLuminance,
+}
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct MaskUniform {
+    mode: u32,
+    _pad: [u32; 3],
+}
+pub struct MaskNode {
+    mode: ClippingMaskMode,
+    pipeline: wgpu::RenderPipeline,
+    bind_group_layout: wgpu::BindGroupLayout,
+    uniform_buffer: wgpu::Buffer,
+    sampler: wgpu::Sampler,
+}
+impl MaskNode {
+    pub fn new(gpu: &GpuCtx) -> Self {
+        Self::with_mode(gpu, ClippingMaskMode::Alpha)
+    }
+    pub fn with_mode(gpu: &GpuCtx, mode: ClippingMaskMode) -> Self {
+        let bgl = gpu
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("mask-bgl"),
+                entries: &[
+                    texture_entry(0),
+                    sampler_entry(1),
+                    texture_entry(2),
+                    sampler_entry(3),
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+            });
+        let pl = gpu
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("mask-pl"),
+                bind_group_layouts: &[Some(&bgl)],
+                immediate_size: 0,
+            });
+        let sh = gpu
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("mask-sh"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("mask_apply.wgsl").into()),
+            });
+        let pipeline = gpu
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("mask-pipe"),
+                layout: Some(&pl),
+                vertex: wgpu::VertexState {
+                    module: &sh,
+                    entry_point: Some("vs_main"),
+                    buffers: &[],
+                    compilation_options: Default::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &sh,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview_mask: None,
+                cache: None,
+            });
+        let uniform_buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("mask-u"),
+            size: 16,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let sampler = gpu.device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("mask-s"),
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+        Self {
+            mode,
+            pipeline,
+            bind_group_layout: bgl,
+            uniform_buffer,
+            sampler,
+        }
+    }
+    pub fn set_mode(&mut self, mode: ClippingMaskMode) {
+        self.mode = mode;
+    }
+    pub fn render(
+        &self,
+        gpu: &GpuCtx,
+        content: TextureRef<'_>,
+        mask: TextureRef<'_>,
+        output: TextureRef<'_>,
+    ) -> Result<(), NodeError> {
+        require_premultiplied("MaskNode", "content", content.desc)?;
+        require_premultiplied("MaskNode", "mask", mask.desc)?;
+        require_premultiplied("MaskNode", "output", output.desc)?;
+        let m = match self.mode {
+            ClippingMaskMode::Alpha => 0,
+            ClippingMaskMode::Luminance => 1,
+            ClippingMaskMode::InvertAlpha => 2,
+            ClippingMaskMode::InvertLuminance => 3,
+        };
+        gpu.queue.write_buffer(
+            &self.uniform_buffer,
+            0,
+            bytemuck::bytes_of(&MaskUniform {
+                mode: m,
+                _pad: [0; 3],
+            }),
+        );
+        let cv = content.texture.create_view(&Default::default());
+        let mv = mask.texture.create_view(&Default::default());
+        let ov = output.texture.create_view(&Default::default());
+        let bg = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("mask-bg"),
+            layout: &self.bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&cv),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&mv),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: self.uniform_buffer.as_entire_binding(),
+                },
+            ],
+        });
+        let mut enc = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("mask"),
+            });
+        {
+            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("mask-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &ov,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                multiview_mask: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &bg, &[]);
+            pass.draw(0..3, 0..1);
+        }
+        gpu.queue.submit([enc.finish()]);
+        Ok(())
+    }
+}
+
 fn composite_mode_to_u32(mode: CompositeMode) -> u32 {
     match mode {
         CompositeMode::Normal => COMPOSITE_MODE_NORMAL,

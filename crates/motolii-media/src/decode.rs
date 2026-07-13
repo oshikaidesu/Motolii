@@ -73,6 +73,11 @@ impl FrameReader {
         &self.desc
     }
 
+    /// 次に読むフレーム番号(開いた直後は `start_frame`)。
+    pub fn next_frame_index(&self) -> i64 {
+        self.next_frame_index
+    }
+
     /// 次のフレームを読む。ストリーム終端でNone。
     pub fn next_frame(&mut self) -> Result<Option<CpuFrame>> {
         let stdout = self.child.stdout.as_mut().expect("stdout piped");
