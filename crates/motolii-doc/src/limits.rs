@@ -464,7 +464,7 @@ fn clamp_u32(n: usize) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::schema::{ClippingMaskSettings, Track, Transform2D};
+    use crate::schema::Track;
     use crate::{AssetTable, LayerIdTable, TrackIdTable};
 
     fn tiny_limits() -> ResourceLimits {
@@ -617,14 +617,7 @@ mod tests {
 
     fn simple_clip(layer_id: crate::LayerId, asset: crate::AssetId) -> TrackItem {
         TrackItem::Clip(Clip {
-            envelope: ItemEnvelope {
-                layer_id,
-                effects: Vec::new(),
-                transform: Transform2D::identity(),
-                clipping_mask: ClippingMaskSettings::default(),
-                blend: Default::default(),
-                opacity: DocParam::const_f64(1.0),
-            },
+            envelope: ItemEnvelope::new(layer_id),
             start: motolii_core::RationalTime::ZERO,
             duration: motolii_core::RationalTime::try_new(1, 1).unwrap(),
             time_map: Default::default(),

@@ -179,7 +179,13 @@ fn default_opacity() -> DocParam {
     DocParam::const_f64(1.0)
 }
 
+fn default_false() -> bool {
+    false
+}
+
 /// クリップ/グループ共通の項目エンベロープ(concept 2026-07-10)。
+///
+/// `visible`/`solo`/`lock` は B④ 3軸表(決定パック採択)。serde default で追加的。
 #[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
 pub struct ItemEnvelope {
     pub layer_id: LayerId,
@@ -192,6 +198,15 @@ pub struct ItemEnvelope {
     pub blend: BlendMode,
     #[serde(default = "default_opacity")]
     pub opacity: DocParam,
+    /// 自身の描画除外。依存先(parent/mask/LookAt)としては評価可(B④)。
+    #[serde(default = "default_true")]
+    pub visible: bool,
+    /// 描画フィルタ。文書内に1つでも true があればソロ集合のみ描画(B④)。
+    #[serde(default = "default_false")]
+    pub solo: bool,
+    /// 編集禁止のみ。評価・描画に影響しない(B④)。
+    #[serde(default = "default_false")]
+    pub lock: bool,
 }
 
 impl ItemEnvelope {
@@ -203,6 +218,9 @@ impl ItemEnvelope {
             clipping_mask: ClippingMaskSettings::default(),
             blend: BlendMode::Normal,
             opacity: default_opacity(),
+            visible: true,
+            solo: false,
+            lock: false,
         }
     }
 }

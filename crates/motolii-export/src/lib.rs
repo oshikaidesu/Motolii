@@ -1,19 +1,26 @@
-//! motolii-export: M1の最小書き出しループ。
+//! motolii-export: M1の最小書き出しループ + D3 Document直結書き出し。
 //!
-//! 解析やCLIはまだ持たず、動画フレームをGPUでRGBA化し、motolii-renderの共通経路で
-//! オーバーレイ合成して、motolii-media::Encoderへ流す。
+//! ProjectV1 経路の `ExportOverlayRequest` は M1 互換のため残す。
+//! Document 書き出しは `ExportJob` → `build_document_frame_graph` → `render_graph_cached`
+//! で直結し、ExportOverlayRequest ミラーを作らない(M2E-11⑤)。
 
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, TimeMap};
+use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap};
+use motolii_doc::{
+    build_document_frame_graph, resolve_asset_path, AssetId, Document, EvaluationTime, GraphError,
+    TrackItem,
+};
 use motolii_eval::DataTracks;
 use motolii_gpu::{GpuCtx, RgbaDownloader, YuvToRgba};
-use motolii_media::{probe, Encoder, FrameReader};
+use motolii_media::{probe, Encoder, FrameReader, MediaInfo};
 use motolii_nodes::{ParamOverlayError, ParamRectOverlay};
-use motolii_plugin::TextureRef;
+use motolii_plugin::{reference::register_reference_plugins, PluginRegistry, TextureRef};
 use motolii_render::{
-    render_frame_with_background_texture, BackgroundTextureRequest, RenderSession,
+    render_frame_with_background_texture, render_graph_cached, BackgroundTextureRequest,
+    RenderGraphInputs, RenderSession, TextureId,
 };
 
 #[derive(Debug)]
@@ -55,6 +62,39 @@ pub enum ExportError {
     Yuv(#[from] motolii_gpu::YuvError),
     #[error(transparent)]
     TimeMap(#[from] motolii_core::TimeMapError),
+    #[error(transparent)]
+    DocGraph(#[from] GraphError),
+    #[error(transparent)]
+    Plugin(#[from] motolii_plugin::PluginError),
+    #[error(transparent)]
+    RationalTime(#[from] motolii_core::RationalTimeError),
+    #[error("document has no video source clip")]
+    NoVideoSource,
+    #[error("asset {0} path could not be resolved")]
+    UnresolvedAsset(u64),
+    #[error("mapped source frame index is negative: {0}")]
+    NegativeSourceFrame(i64),
+    #[error("video asset {asset} size {got_w}x{got_h} != export {want_w}x{want_h}")]
+    VideoDimensionMismatch {
+        asset: u64,
+        got_w: u32,
+        got_h: u32,
+        want_w: u32,
+        want_h: u32,
+    },
+    #[error("video asset has no decodable frames")]
+    EmptyVideoAsset,
+}
+
+/// 書き出し設定。Document≠ExportJob(M2E-11⑤)。
+#[derive(Debug)]
+pub struct ExportJob<'a> {
+    pub doc: &'a Document,
+    pub output_path: &'a Path,
+    pub project_root: Option<&'a Path>,
+    pub frame_count: Option<usize>,
+    pub qp0: bool,
+    pub data_tracks: DataTracks,
 }
 
 /// 書き出しループのGPUダウンロード待ち。高負荷下の正当な遅延を許容する。
@@ -85,8 +125,6 @@ pub fn export_overlay_video(
         true,
     );
     let mut yuv = YuvToRgba::new(gpu);
-    // ステージングバッファを使い回すダウンローダ(performance-model原則3: 毎フレーム確保しない)。
-    // 書き出し中は解像度が変わらないため、実質初回のみの確保になる。
     let mut downloader = RgbaDownloader::new();
     let mut encoder = Encoder::open(request.output_path, &desc, info.fps, request.qp0)?;
     let mut render_session = RenderSession::new(gpu);
@@ -139,7 +177,6 @@ pub fn export_overlay_video(
         }
     }
 
-    // エラー時もfinishを必ず呼び、moovを書いて部分書き出しを再生可能に残す。
     let finish_error = encoder.finish().err().map(ExportError::from);
     if let Some(e) = loop_error {
         return Err(e);
@@ -152,6 +189,244 @@ pub fn export_overlay_video(
         desc,
         fps: info.fps,
     })
+}
+
+/// Document → render graph 直結の書き出し(D3)。
+pub fn export_document_video(
+    gpu: &GpuCtx,
+    job: &ExportJob<'_>,
+) -> Result<ExportReport, ExportError> {
+    let mut registry = PluginRegistry::new();
+    register_reference_plugins(&mut registry)?;
+    let desc = resolve_export_frame_desc(job.doc, job.project_root)?;
+    let timeline_fps = job.doc.composition.fps;
+    let mut yuv = YuvToRgba::new(gpu);
+    let mut downloader = RgbaDownloader::new();
+    let mut encoder = Encoder::open(job.output_path, &desc, timeline_fps, job.qp0)?;
+    let mut render_session = RenderSession::new(gpu);
+    let tracks = job.data_tracks.clone();
+    let mut readers: HashMap<u64, CachedAssetReader> = HashMap::new();
+    let mut frames_written = 0usize;
+    let mut loop_error = None;
+    while job.frame_count.map(|n| frames_written < n).unwrap_or(true) {
+        let timeline_time = match RationalTime::try_from_frame(frames_written as i64, timeline_fps)
+        {
+            Ok(t) => t,
+            Err(e) => {
+                loop_error = Some(e.into());
+                break;
+            }
+        };
+        if job.frame_count.is_none() && timeline_time >= job.doc.composition.duration {
+            break;
+        }
+        match (|| -> Result<(), ExportError> {
+            let built = build_document_frame_graph(
+                job.doc,
+                EvaluationTime::new(timeline_time),
+                desc,
+                &tracks,
+                &registry,
+                job.project_root,
+            )?;
+            // スロットごとに独立デコード。テクスチャ寿命をループ末まで延ばす。
+            let mut backgrounds = Vec::with_capacity(built.video_slots.len());
+            for slot in &built.video_slots {
+                let cached = ensure_asset_reader(job, slot.asset, &mut readers)?;
+                if cached.info.width != desc.width || cached.info.height != desc.height {
+                    return Err(ExportError::VideoDimensionMismatch {
+                        asset: slot.asset.get(),
+                        got_w: cached.info.width,
+                        got_h: cached.info.height,
+                        want_w: desc.width,
+                        want_h: desc.height,
+                    });
+                }
+                let source_frame = freeze_source_frame(slot.source_time, &cached.info)?;
+                let frame = cached.read_at(source_frame)?;
+                backgrounds.push(yuv.convert(gpu, &frame)?);
+            }
+            let video_inputs: Vec<(TextureId, TextureRef<'_>)> = built
+                .video_slots
+                .iter()
+                .zip(backgrounds.iter())
+                .map(|(slot, tex)| (slot.texture_id, TextureRef { texture: tex, desc }))
+                .collect();
+            let rendered = render_graph_cached(
+                gpu,
+                &mut render_session,
+                timeline_time,
+                &built.graph,
+                &RenderGraphInputs {
+                    video_sources: &video_inputs,
+                    source_time: Some(built.source_time),
+                    plugins: Some(&registry),
+                },
+                Quality::FINAL,
+            )?;
+            encoder.write_frame(&downloader.download(
+                gpu,
+                &rendered.texture,
+                EXPORT_DOWNLOAD_TIMEOUT,
+            )?)?;
+            Ok(())
+        })() {
+            Ok(()) => frames_written += 1,
+            Err(e) => {
+                loop_error = Some(e);
+                break;
+            }
+        }
+    }
+    let finish_error = encoder.finish().err().map(ExportError::from);
+    if let Some(e) = loop_error {
+        return Err(e);
+    }
+    if let Some(e) = finish_error {
+        return Err(e);
+    }
+    Ok(ExportReport {
+        frames_written,
+        desc,
+        fps: timeline_fps,
+    })
+}
+
+/// Freeze: 素材 available 範囲へクランプ。`nb_frames` が無ければ `duration` から導出。
+/// どちらも無ければ呼び出し側の EOF 保持に委ねる(クランプしない)。
+pub fn freeze_source_frame(
+    source_time: RationalTime,
+    info: &MediaInfo,
+) -> Result<i64, ExportError> {
+    let mut source_frame = source_time.try_to_frame_floor(info.fps)?;
+    if source_frame < 0 {
+        source_frame = 0;
+    }
+    if let Some(n) = info.nb_frames {
+        if n > 0 && source_frame >= n {
+            source_frame = n - 1;
+        }
+    } else if let Some(duration) = info.duration {
+        let end_exclusive = duration.try_to_frame_floor(info.fps)?;
+        if end_exclusive > 0 && source_frame >= end_exclusive {
+            source_frame = end_exclusive - 1;
+        }
+    }
+    Ok(source_frame)
+}
+
+struct CachedAssetReader {
+    path: PathBuf,
+    info: MediaInfo,
+    reader: FrameReader,
+    /// Freeze: EOF 到達後も最後に読めたフレームを保持する。
+    last_frame: Option<motolii_core::CpuFrame>,
+}
+
+impl CachedAssetReader {
+    fn open(path: PathBuf, info: MediaInfo, start_frame: i64) -> Result<Self, ExportError> {
+        let reader = FrameReader::open(&path, &info, start_frame)?;
+        Ok(Self {
+            path,
+            info,
+            reader,
+            last_frame: None,
+        })
+    }
+
+    fn read_at(&mut self, frame_index: i64) -> Result<motolii_core::CpuFrame, ExportError> {
+        if frame_index < 0 {
+            return Err(ExportError::NegativeSourceFrame(frame_index));
+        }
+        let next = self.reader.next_frame_index();
+        if frame_index < next {
+            self.reader = FrameReader::open(&self.path, &self.info, frame_index)?;
+            self.last_frame = None;
+        }
+        while self.reader.next_frame_index() < frame_index {
+            match self.reader.next_frame()? {
+                Some(f) => self.last_frame = Some(f),
+                None => {
+                    // EOF: Freeze = 最終フレーム保持
+                    return self.last_frame.clone().ok_or(ExportError::EmptyVideoAsset);
+                }
+            }
+        }
+        match self.reader.next_frame()? {
+            Some(f) => {
+                self.last_frame = Some(f.clone());
+                Ok(f)
+            }
+            None => self.last_frame.clone().ok_or(ExportError::EmptyVideoAsset),
+        }
+    }
+}
+
+fn ensure_asset_reader<'a>(
+    job: &ExportJob<'_>,
+    asset_id: AssetId,
+    readers: &'a mut HashMap<u64, CachedAssetReader>,
+) -> Result<&'a mut CachedAssetReader, ExportError> {
+    use std::collections::hash_map::Entry;
+    match readers.entry(asset_id.get()) {
+        Entry::Occupied(e) => Ok(e.into_mut()),
+        Entry::Vacant(e) => {
+            let asset = job
+                .doc
+                .assets
+                .get(asset_id)
+                .ok_or(ExportError::UnresolvedAsset(asset_id.get()))?;
+            let path = resolve_asset_path(asset, job.project_root)
+                .ok_or(ExportError::UnresolvedAsset(asset_id.get()))?;
+            let info = probe(&path)?;
+            let cached = CachedAssetReader::open(path, info, 0)?;
+            Ok(e.insert(cached))
+        }
+    }
+}
+
+fn resolve_export_frame_desc(
+    doc: &Document,
+    project_root: Option<&Path>,
+) -> Result<FrameDesc, ExportError> {
+    let mut found = None;
+    for track in &doc.tracks {
+        collect_video_assets_from_items(&track.items, &mut found);
+    }
+    let Some(asset_id) = found else {
+        return Err(ExportError::NoVideoSource);
+    };
+    let asset = doc
+        .assets
+        .get(asset_id)
+        .ok_or(ExportError::UnresolvedAsset(asset_id.get()))?;
+    let path = resolve_asset_path(asset, project_root)
+        .ok_or(ExportError::UnresolvedAsset(asset_id.get()))?;
+    let info = probe(&path)?;
+    Ok(FrameDesc::packed(
+        info.width,
+        info.height,
+        PixelFormat::Rgba8Unorm,
+        ColorSpace::Srgb,
+        true,
+    ))
+}
+
+fn collect_video_assets_from_items(items: &[TrackItem], found: &mut Option<AssetId>) {
+    for item in items {
+        match item {
+            TrackItem::Clip(clip) => {
+                if let motolii_doc::ClipSource::Asset { asset } = clip.source {
+                    if found.is_none() {
+                        *found = Some(asset);
+                    }
+                }
+            }
+            TrackItem::Group(group) => {
+                collect_video_assets_from_items(&group.children, found);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -191,5 +466,44 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, ExportError::InvalidRequest(_)));
+    }
+
+    #[test]
+    fn freeze_source_frame_uses_duration_when_nb_frames_missing() {
+        use motolii_core::Fps;
+        use motolii_media::MediaInfo;
+
+        let info = MediaInfo {
+            width: 16,
+            height: 8,
+            fps: Fps::try_new(30, 1).unwrap(),
+            duration: Some(RationalTime::try_new(1, 1).unwrap()),
+            nb_frames: None,
+            color_space: ColorSpace::Srgb,
+            rotation: 0,
+        };
+        // 1s @ 30fps → end_exclusive=30、frame 40 は 29 へクランプ。
+        let t = RationalTime::try_from_frame(40, info.fps).unwrap();
+        assert_eq!(freeze_source_frame(t, &info).unwrap(), 29);
+        let early = RationalTime::try_from_frame(5, info.fps).unwrap();
+        assert_eq!(freeze_source_frame(early, &info).unwrap(), 5);
+    }
+
+    #[test]
+    fn freeze_source_frame_prefers_nb_frames() {
+        use motolii_core::Fps;
+        use motolii_media::MediaInfo;
+
+        let info = MediaInfo {
+            width: 16,
+            height: 8,
+            fps: Fps::try_new(24, 1).unwrap(),
+            duration: Some(RationalTime::try_new(10, 1).unwrap()),
+            nb_frames: Some(10),
+            color_space: ColorSpace::Srgb,
+            rotation: 0,
+        };
+        let t = RationalTime::try_from_frame(100, info.fps).unwrap();
+        assert_eq!(freeze_source_frame(t, &info).unwrap(), 9);
     }
 }

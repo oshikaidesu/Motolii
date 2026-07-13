@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use motolii_core::RationalTime;
-use motolii_eval::Interp;
+use motolii_eval::{Interp, Keyframe, KeyframeTrack, Value as EvalValue};
 
 use crate::doc_value::DocValue;
 use crate::stable_id::KeyframeId;
@@ -87,6 +87,19 @@ impl DocKeyframeTrack {
             validate_interp(&key.interp)?;
         }
         Ok(())
+    }
+
+    /// D3: 評価層へ落として補間する(恒久面は DocValue のまま)。
+    pub fn eval(&self, t: RationalTime) -> EvalValue {
+        let mut track = KeyframeTrack::new();
+        for key in &self.keys {
+            track.insert(Keyframe {
+                t: key.t,
+                value: key.value.to_eval(),
+                interp: key.interp,
+            });
+        }
+        track.eval(t)
     }
 }
 

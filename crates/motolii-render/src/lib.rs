@@ -9,7 +9,8 @@ use motolii_core::{
 };
 use motolii_gpu::{upload_rgba, GpuCtx, PipelineCache};
 use motolii_nodes::{
-    create_rgba_render_target, CompositeNode, NodeError, OverlayNode, RectOverlay,
+    create_rgba_render_target, AffinePlaceNode, ClippingMaskMode, CompositeMode, CompositeNode,
+    MaskNode, NodeError, OverlayNode, RectOverlay,
 };
 use motolii_plugin::{
     LayerSourceContext, PluginError, PluginId, PluginRegistry, RenderCtx, ResolvedParams,
@@ -81,6 +82,25 @@ pub enum RenderStep {
         foreground: TextureId,
         output: TextureId,
     },
+    Composite {
+        background: TextureId,
+        foreground: TextureId,
+        output: TextureId,
+        mode: CompositeMode,
+    },
+    ApplyMask {
+        content: TextureId,
+        mask: TextureId,
+        output: TextureId,
+        mode: ClippingMaskMode,
+    },
+    /// F-3 変形段: 正準アフィンの UV 逆行列で入力を再配置する。
+    AffinePlace {
+        input: TextureId,
+        output: TextureId,
+        /// UV空間の逆アフィン `[m00,m01,m02, m10,m11,m12]`。
+        inverse_uv: [f32; 6],
+    },
     /// PluginRegistry経由の一般ステップ(所見1)。種別はレジストリlookupで決まる。
     Plugin {
         id: PluginId,
@@ -150,6 +170,8 @@ enum TexProducer {
     VideoSource,
     Overlay,
     Composite,
+    Mask,
+    AffinePlace,
     Plugin,
 }
 
@@ -167,6 +189,8 @@ pub struct RenderGraphInputs<'a> {
 pub struct RenderSession {
     overlay: OverlayNode,
     composite: CompositeNode,
+    mask: MaskNode,
+    affine_place: AffinePlaceNode,
     pipelines: PipelineCache,
     transparent: Option<(FrameDesc, wgpu::Texture)>,
     /// 単色Solidの再利用(毎フレームuploadしない)。
@@ -188,6 +212,8 @@ impl RenderSession {
         Self {
             overlay: OverlayNode::new(gpu),
             composite: CompositeNode::new(gpu),
+            mask: MaskNode::new(gpu),
+            affine_place: AffinePlaceNode::new(gpu),
             pipelines: PipelineCache::new(),
             transparent: None,
             solid: None,
@@ -393,11 +419,73 @@ pub fn render_graph_cached(
                 let background_texture = texture_ref(&textures, desc, *background)?;
                 let foreground_texture = texture_ref(&textures, desc, *foreground)?;
                 let output_texture = session.acquire_render_target(gpu, desc, &avoid);
+                session.composite.set_mode(CompositeMode::Normal);
                 session.composite.render(
                     gpu,
                     &RenderCtx::new(timeline_time, quality),
                     background_texture,
                     foreground_texture,
+                    TextureRef {
+                        texture: &output_texture,
+                        desc,
+                    },
+                )?;
+                textures[output.0] = Some(output_texture);
+            }
+            RenderStep::Composite {
+                background,
+                foreground,
+                output,
+                mode,
+            } => {
+                let background_texture = texture_ref(&textures, desc, *background)?;
+                let foreground_texture = texture_ref(&textures, desc, *foreground)?;
+                let output_texture = session.acquire_render_target(gpu, desc, &avoid);
+                session.composite.set_mode(*mode);
+                session.composite.render(
+                    gpu,
+                    &RenderCtx::new(timeline_time, quality),
+                    background_texture,
+                    foreground_texture,
+                    TextureRef {
+                        texture: &output_texture,
+                        desc,
+                    },
+                )?;
+                textures[output.0] = Some(output_texture);
+            }
+            RenderStep::ApplyMask {
+                content,
+                mask,
+                output,
+                mode,
+            } => {
+                let content_texture = texture_ref(&textures, desc, *content)?;
+                let mask_texture = texture_ref(&textures, desc, *mask)?;
+                let output_texture = session.acquire_render_target(gpu, desc, &avoid);
+                session.mask.set_mode(*mode);
+                session.mask.render(
+                    gpu,
+                    content_texture,
+                    mask_texture,
+                    TextureRef {
+                        texture: &output_texture,
+                        desc,
+                    },
+                )?;
+                textures[output.0] = Some(output_texture);
+            }
+            RenderStep::AffinePlace {
+                input,
+                output,
+                inverse_uv,
+            } => {
+                let input_texture = texture_ref(&textures, desc, *input)?;
+                let output_texture = session.acquire_render_target(gpu, desc, &avoid);
+                session.affine_place.set_inverse_uv_matrix(*inverse_uv);
+                session.affine_place.render(
+                    gpu,
+                    input_texture,
                     TextureRef {
                         texture: &output_texture,
                         desc,
@@ -536,7 +624,7 @@ fn validate_linear_graph(
     let mut producer: Vec<Option<TexProducer>> = vec![None; texture_count];
     let mut overlay_count = 0usize;
     let mut composite_count = 0usize;
-    let mut has_plugin = false;
+    let mut has_general_graph = false;
 
     for step in &graph.steps {
         match step {
@@ -606,6 +694,41 @@ fn validate_linear_graph(
                 producer[output.0] = Some(TexProducer::Composite);
                 composite_count += 1;
             }
+            RenderStep::Composite {
+                background,
+                foreground,
+                output,
+                ..
+            } => {
+                mark_read(*background, &mut read)?;
+                mark_read(*foreground, &mut read)?;
+                validate_input(*background, &written)?;
+                validate_input(*foreground, &written)?;
+                validate_output(*output, &mut written)?;
+                producer[output.0] = Some(TexProducer::Composite);
+                has_general_graph = true;
+            }
+            RenderStep::ApplyMask {
+                content,
+                mask,
+                output,
+                ..
+            } => {
+                mark_read(*content, &mut read)?;
+                mark_read(*mask, &mut read)?;
+                validate_input(*content, &written)?;
+                validate_input(*mask, &written)?;
+                validate_output(*output, &mut written)?;
+                producer[output.0] = Some(TexProducer::Mask);
+                has_general_graph = true;
+            }
+            RenderStep::AffinePlace { input, output, .. } => {
+                mark_read(*input, &mut read)?;
+                validate_input(*input, &written)?;
+                validate_output(*output, &mut written)?;
+                producer[output.0] = Some(TexProducer::AffinePlace);
+                has_general_graph = true;
+            }
             RenderStep::Plugin {
                 inputs: plugin_inputs,
                 output,
@@ -620,7 +743,7 @@ fn validate_linear_graph(
                 }
                 validate_output(*output, &mut written)?;
                 producer[output.0] = Some(TexProducer::Plugin);
-                has_plugin = true;
+                has_general_graph = true;
             }
         }
     }
@@ -634,8 +757,22 @@ fn validate_linear_graph(
         }
     }
 
-    if has_plugin {
-        // Plugin経路は固定デモグラフ制約を外す。未使用書き込み検査で誤配線は既に弾く。
+    if !has_general_graph {
+        match producer.get(graph.output.0).and_then(|p| *p) {
+            // 単一レイヤー等、Compositeなしで中間テクスチャをそのまま出すD3グラフ。
+            Some(TexProducer::Overlay)
+            | Some(TexProducer::Plugin)
+            | Some(TexProducer::Mask)
+            | Some(TexProducer::AffinePlace)
+            | Some(TexProducer::VideoSource) => {
+                has_general_graph = true;
+            }
+            _ => {}
+        }
+    }
+
+    if has_general_graph {
+        // 一般グラフは固定デモ制約を外す。未使用書き込み検査で誤配線は既に弾く。
         if producer.get(graph.output.0).and_then(|p| *p).is_none() {
             return Err(RenderError::MissingTexture(graph.output.0));
         }
@@ -687,6 +824,19 @@ fn texture_slot_count(graph: &LinearRenderGraph) -> Result<usize, RenderError> {
                 foreground,
                 output,
             } => vec![background.0, foreground.0, output.0],
+            RenderStep::Composite {
+                background,
+                foreground,
+                output,
+                ..
+            } => vec![background.0, foreground.0, output.0],
+            RenderStep::ApplyMask {
+                content,
+                mask,
+                output,
+                ..
+            } => vec![content.0, mask.0, output.0],
+            RenderStep::AffinePlace { input, output, .. } => vec![input.0, output.0],
             RenderStep::Plugin { inputs, output, .. } => {
                 let mut v: Vec<_> = inputs.iter().map(|id| id.0).collect();
                 v.push(output.0);
@@ -886,7 +1036,14 @@ fn step_input_ids(step: &RenderStep) -> Vec<TextureId> {
             background,
             foreground,
             ..
+        }
+        | RenderStep::Composite {
+            background,
+            foreground,
+            ..
         } => vec![*background, *foreground],
+        RenderStep::ApplyMask { content, mask, .. } => vec![*content, *mask],
+        RenderStep::AffinePlace { input, .. } => vec![*input],
         RenderStep::Plugin { inputs, .. } => inputs.clone(),
         _ => Vec::new(),
     }
