@@ -147,6 +147,11 @@ impl LayerIdTable {
         self.entries.get(&id).map(String::as_str)
     }
 
+    /// 全エントリを走査する(#101 ResourceLimits の string bytes 検査用)。
+    pub fn iter(&self) -> impl Iterator<Item = (LayerId, &str)> {
+        self.entries.iter().map(|(id, name)| (*id, name.as_str()))
+    }
+
     /// 新しいIDを採番して挿入する。削除済みIDは再利用しない。
     pub fn allocate(&mut self, display_name: impl Into<String>) -> Result<LayerId, LayerIdError> {
         let id = LayerId(self.next);
