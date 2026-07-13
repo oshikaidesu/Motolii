@@ -2,9 +2,7 @@
 //! 本ファイルのアサーションは意味論ゴールデン(GR-PV-5) — 数値の更新は「新variant」でのみ許可し、
 //! 既存アサーションの書き換えは禁止(AGENTS.md「テストを『直して』通さない」)。
 
-use motolii_doc::pathgeom::{
-    apply, Contour, Path, Point, ResolvedPathOp, ResolvedTransform,
-};
+use motolii_doc::pathgeom::{apply, Contour, Path, Point, ResolvedPathOp, ResolvedTransform};
 use motolii_doc::{CompositeOrder, LineJoin, PathOpError, PointType, TrimMode};
 
 fn p(x: f64, y: f64) -> Point {
@@ -62,7 +60,12 @@ fn single_vertex_contour_is_identity() {
 #[test]
 fn pucker_bloat_amount_zero_is_identity() {
     let path = Path {
-        contours: vec![Contour::closed([p(-1.0, -1.0), p(1.0, -1.0), p(1.0, 1.0), p(-1.0, 1.0)])],
+        contours: vec![Contour::closed([
+            p(-1.0, -1.0),
+            p(1.0, -1.0),
+            p(1.0, 1.0),
+            p(-1.0, 1.0),
+        ])],
     };
     let out = apply(&path, &ResolvedPathOp::PuckerBloat { amount: 0.0 }, 0.0).unwrap();
     assert_eq!(out, path);
@@ -71,7 +74,12 @@ fn pucker_bloat_amount_zero_is_identity() {
 #[test]
 fn pucker_bloat_plus_one_collapses_to_centroid() {
     let path = Path {
-        contours: vec![Contour::closed([p(-1.0, -1.0), p(1.0, -1.0), p(1.0, 1.0), p(-1.0, 1.0)])],
+        contours: vec![Contour::closed([
+            p(-1.0, -1.0),
+            p(1.0, -1.0),
+            p(1.0, 1.0),
+            p(-1.0, 1.0),
+        ])],
     };
     let out = apply(&path, &ResolvedPathOp::PuckerBloat { amount: 1.0 }, 0.0).unwrap();
     for v in &out.contours[0].vertices {
@@ -82,7 +90,12 @@ fn pucker_bloat_plus_one_collapses_to_centroid() {
 #[test]
 fn pucker_bloat_minus_one_doubles_distance_from_centroid() {
     let path = Path {
-        contours: vec![Contour::closed([p(-1.0, -1.0), p(1.0, -1.0), p(1.0, 1.0), p(-1.0, 1.0)])],
+        contours: vec![Contour::closed([
+            p(-1.0, -1.0),
+            p(1.0, -1.0),
+            p(1.0, 1.0),
+            p(-1.0, 1.0),
+        ])],
     };
     let out = apply(&path, &ResolvedPathOp::PuckerBloat { amount: -1.0 }, 0.0).unwrap();
     let expected = [p(-2.0, -2.0), p(2.0, -2.0), p(2.0, 2.0), p(-2.0, 2.0)];
@@ -238,7 +251,12 @@ fn offset_open_path_is_typed_unsupported() {
 #[test]
 fn offset_miter_square_expands_by_distance_with_sharp_corners() {
     let path = Path {
-        contours: vec![Contour::closed([p(0.0, 0.0), p(1.0, 0.0), p(1.0, 1.0), p(0.0, 1.0)])],
+        contours: vec![Contour::closed([
+            p(0.0, 0.0),
+            p(1.0, 0.0),
+            p(1.0, 1.0),
+            p(0.0, 1.0),
+        ])],
     };
     let out = apply(
         &path,
@@ -261,7 +279,12 @@ fn offset_miter_square_expands_by_distance_with_sharp_corners() {
 #[test]
 fn offset_bevel_square_adds_chamfer_points_at_corners() {
     let path = Path {
-        contours: vec![Contour::closed([p(0.0, 0.0), p(1.0, 0.0), p(1.0, 1.0), p(0.0, 1.0)])],
+        contours: vec![Contour::closed([
+            p(0.0, 0.0),
+            p(1.0, 0.0),
+            p(1.0, 1.0),
+            p(0.0, 1.0),
+        ])],
     };
     let out = apply(
         &path,
@@ -280,7 +303,12 @@ fn offset_bevel_square_adds_chamfer_points_at_corners() {
 #[test]
 fn offset_negative_distance_shrinks_inward() {
     let path = Path {
-        contours: vec![Contour::closed([p(0.0, 0.0), p(1.0, 0.0), p(1.0, 1.0), p(0.0, 1.0)])],
+        contours: vec![Contour::closed([
+            p(0.0, 0.0),
+            p(1.0, 0.0),
+            p(1.0, 1.0),
+            p(0.0, 1.0),
+        ])],
     };
     let out = apply(
         &path,
@@ -376,7 +404,12 @@ fn trim_sequential_treats_two_contours_as_one_connected_length() {
 #[test]
 fn trim_offset_wraps_window_across_zero_boundary() {
     let path = Path {
-        contours: vec![Contour::closed([p(0.0, 0.0), p(4.0, 0.0), p(4.0, 4.0), p(0.0, 4.0)])],
+        contours: vec![Contour::closed([
+            p(0.0, 0.0),
+            p(4.0, 0.0),
+            p(4.0, 4.0),
+            p(0.0, 4.0),
+        ])],
     };
     // 周長16。start=0.9,end=0.1相当をoffset=0で直接: end<start→+1して0.9..1.1、coverage=0.2。
     let out = apply(

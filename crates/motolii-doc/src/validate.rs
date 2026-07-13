@@ -523,7 +523,8 @@ fn validate_value(
         }
     }
     if let DocValue::F64(v) = value {
-        if constraints.min.is_some_and(|min| *v < min) || constraints.max.is_some_and(|max| *v > max)
+        if constraints.min.is_some_and(|min| *v < min)
+            || constraints.max.is_some_and(|max| *v > max)
         {
             return Err(DocumentError::ValueOutOfRange {
                 path: path.to_string(),

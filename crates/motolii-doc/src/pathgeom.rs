@@ -199,7 +199,9 @@ pub fn apply(path: &Path, op: &ResolvedPathOp, t: f64) -> Result<Path, PathOpErr
             amount,
             ridges,
             point_type,
-        } => map_contours(path, |_, c| zigzag_contour(c, *amount, *ridges, *point_type)),
+        } => map_contours(path, |_, c| {
+            zigzag_contour(c, *amount, *ridges, *point_type)
+        }),
         ResolvedPathOp::Offset {
             distance,
             line_join,
@@ -243,7 +245,12 @@ pub fn apply(path: &Path, op: &ResolvedPathOp, t: f64) -> Result<Path, PathOpErr
 
 fn map_contours(path: &Path, f: impl Fn(usize, &Contour) -> Contour) -> Path {
     Path {
-        contours: path.contours.iter().enumerate().map(|(i, c)| f(i, c)).collect(),
+        contours: path
+            .contours
+            .iter()
+            .enumerate()
+            .map(|(i, c)| f(i, c))
+            .collect(),
     }
 }
 
@@ -309,7 +316,10 @@ fn zigzag_contour(c: &Contour, amount: f64, ridges: f64, point_type: PointType) 
             continue;
         }
         let unit = dir.scale(1.0 / len);
-        let normal = Point { x: -unit.y, y: unit.x };
+        let normal = Point {
+            x: -unit.y,
+            y: unit.x,
+        };
         for k in 1..steps {
             let f = k as f64 / steps as f64;
             let base = a.add(dir.scale(f));
@@ -468,8 +478,16 @@ fn arc_vertices(center: Point, radius: f64, a0: f64, a1: f64) -> Vec<Vertex> {
                 x: -ang.sin(),
                 y: ang.cos(),
             };
-            let out_t = if i < segments { tangent.scale(k) } else { Point::ZERO };
-            let in_t = if i > 0 { tangent.scale(-k) } else { Point::ZERO };
+            let out_t = if i < segments {
+                tangent.scale(k)
+            } else {
+                Point::ZERO
+            };
+            let in_t = if i > 0 {
+                tangent.scale(-k)
+            } else {
+                Point::ZERO
+            };
             Vertex {
                 point: p,
                 in_tangent: in_t,
@@ -497,7 +515,11 @@ fn offset_contour(
     }
     let pts: Vec<Point> = c.vertices.iter().map(|v| v.point).collect();
     let n = pts.len();
-    let orientation_sign = if polygon_signed_area(&pts) >= 0.0 { 1.0 } else { -1.0 };
+    let orientation_sign = if polygon_signed_area(&pts) >= 0.0 {
+        1.0
+    } else {
+        -1.0
+    };
 
     let mut offset_edges: Vec<(Point, Point)> = Vec::with_capacity(n);
     for i in 0..n {
@@ -510,7 +532,11 @@ fn offset_contour(
             continue;
         }
         let unit = dir.scale(1.0 / len);
-        let outward = Point { x: unit.y, y: -unit.x }.scale(orientation_sign);
+        let outward = Point {
+            x: unit.y,
+            y: -unit.x,
+        }
+        .scale(orientation_sign);
         let shift = outward.scale(distance);
         offset_edges.push((a.add(shift), b.add(shift)));
     }
@@ -684,7 +710,14 @@ fn value_noise_1d(seed: u64, salt: u64, t: f64) -> f64 {
     a + (b - a) * s
 }
 
-fn wiggle_contour(c: &Contour, amp: f64, freq: f64, seed: u64, contour_idx: usize, t: f64) -> Contour {
+fn wiggle_contour(
+    c: &Contour,
+    amp: f64,
+    freq: f64,
+    seed: u64,
+    contour_idx: usize,
+    t: f64,
+) -> Contour {
     if c.vertices.len() <= 1 {
         return c.clone();
     }
@@ -1005,7 +1038,9 @@ struct FlatSegment {
 fn contour_segments(c: &Contour) -> Vec<(Vertex, Vertex)> {
     let n = c.vertices.len();
     let m = if c.closed { n } else { n.saturating_sub(1) };
-    (0..m).map(|i| (c.vertices[i], c.vertices[(i + 1) % n])).collect()
+    (0..m)
+        .map(|i| (c.vertices[i], c.vertices[(i + 1) % n]))
+        .collect()
 }
 
 fn flatten_segments(contours: &[Contour]) -> Vec<FlatSegment> {
