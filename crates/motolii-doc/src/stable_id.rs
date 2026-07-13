@@ -81,8 +81,14 @@ macro_rules! stable_id_newtype {
     };
 }
 
-stable_id_newtype!(EffectId, "EffectInstanceの恒久ID(A8)。並べ替えで維持、複製時は新規採番。");
-stable_id_newtype!(KeyframeId, "DocKeyframeの恒久ID(A8)。時刻編集で不変、複製時は新規採番。");
+stable_id_newtype!(
+    EffectId,
+    "EffectInstanceの恒久ID(A8)。並べ替えで維持、複製時は新規採番。"
+);
+stable_id_newtype!(
+    KeyframeId,
+    "DocKeyframeの恒久ID(A8)。時刻編集で不変、複製時は新規採番。"
+);
 
 #[cfg(test)]
 mod tests {

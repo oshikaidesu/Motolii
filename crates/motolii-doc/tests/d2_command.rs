@@ -318,8 +318,13 @@ fn duplicate_track_item_allocates_fresh_ids_via_writer() {
     let before_next = writer.snapshot().next_stable_id.peek_next();
     writer.duplicate_track_item(f.layer).expect("duplicate");
     let after_next = writer.snapshot().next_stable_id.peek_next();
-    assert!(after_next > before_next, "duplication must mint fresh stable ids");
-    writer.validate().expect("duplicated document must validate");
+    assert!(
+        after_next > before_next,
+        "duplication must mint fresh stable ids"
+    );
+    writer
+        .validate()
+        .expect("duplicated document must validate");
 }
 
 // ---------------------------------------------------------------------------
@@ -346,7 +351,11 @@ fn same_gesture_drag_merges_into_one_macro_and_undoes_atomically() {
             )
             .expect("apply_command");
     }
-    assert_eq!(writer.undo_len(), 1, "same gesture must merge into a single macro");
+    assert_eq!(
+        writer.undo_len(),
+        1,
+        "same gesture must merge into a single macro"
+    );
 
     let snap = writer.snapshot();
     let TrackItem::Clip(clip) = &snap.tracks[0].items[0] else {
@@ -491,10 +500,16 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
     writer
         .duplicate_track_item(group_layer)
         .expect("duplicate group");
-    writer.validate().expect("post-duplicate document must validate");
+    writer
+        .validate()
+        .expect("post-duplicate document must validate");
 
     let snap = writer.snapshot();
-    assert_eq!(snap.tracks[0].items.len(), 3, "duplicate inserts right after source");
+    assert_eq!(
+        snap.tracks[0].items.len(),
+        3,
+        "duplicate inserts right after source"
+    );
 
     let TrackItem::Group(original_group) = &snap.tracks[0].items[1] else {
         panic!("expected original group at index 1");
@@ -503,10 +518,12 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
         panic!("expected cloned group at index 2");
     };
 
-    assert_ne!(cloned_group.envelope.layer_id, original_group.envelope.layer_id);
     assert_ne!(
-        cloned_group.envelope.effects[0].id,
-        original_group.envelope.effects[0].id,
+        cloned_group.envelope.layer_id,
+        original_group.envelope.layer_id
+    );
+    assert_ne!(
+        cloned_group.envelope.effects[0].id, original_group.envelope.effects[0].id,
         "effect id must be freshly minted, not reused"
     );
 
@@ -521,7 +538,10 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
     match &cloned_a.envelope.transform.position {
         DocParam::LookAt { target, .. } => {
             assert_eq!(*target, cloned_b.envelope.layer_id);
-            assert_ne!(*target, child_b, "internal ref must not still point at the original");
+            assert_ne!(
+                *target, child_b,
+                "internal ref must not still point at the original"
+            );
         }
         other => panic!("expected LookAt, got {other:?}"),
     }
@@ -529,7 +549,10 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
     // subtree外参照は維持される。
     match &cloned_b.envelope.transform.position {
         DocParam::LookAt { target, .. } => {
-            assert_eq!(*target, external_layer, "external ref must be preserved verbatim");
+            assert_eq!(
+                *target, external_layer,
+                "external ref must be preserved verbatim"
+            );
         }
         other => panic!("expected LookAt, got {other:?}"),
     }
@@ -549,7 +572,10 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
     let allocated_next = snap.next_stable_id.peek_next();
     writer.undo().expect("undo duplicate");
     let after_undo = writer.snapshot();
-    assert_eq!(after_undo.tracks, doc.tracks, "tree content must match pre-duplication state");
+    assert_eq!(
+        after_undo.tracks, doc.tracks,
+        "tree content must match pre-duplication state"
+    );
     assert_eq!(
         after_undo.next_stable_id.peek_next(),
         allocated_next,

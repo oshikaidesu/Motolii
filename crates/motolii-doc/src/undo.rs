@@ -77,17 +77,19 @@ fn merge_pair(first: &Command, second: Command) -> Command {
         (Command::SetBlendMode { target, old, .. }, Command::SetBlendMode { new, .. }) => {
             Command::SetBlendMode { target, old, new }
         }
-        (
-            Command::SetClippingMask { target, old, .. },
-            Command::SetClippingMask { new, .. },
-        ) => Command::SetClippingMask { target, old, new },
+        (Command::SetClippingMask { target, old, .. }, Command::SetClippingMask { new, .. }) => {
+            Command::SetClippingMask { target, old, new }
+        }
         (
             Command::SetTransformParent { target, old, .. },
             Command::SetTransformParent { new, .. },
         ) => Command::SetTransformParent { target, old, new },
         (
             Command::SetEffectEnabled {
-                target, effect, old, ..
+                target,
+                effect,
+                old,
+                ..
             },
             Command::SetEffectEnabled { new, .. },
         ) => Command::SetEffectEnabled {
@@ -132,7 +134,11 @@ impl UndoHistory {
     /// 再起動後(ジャーナルreplay等)の履歴復元。`restart_limit`でトリムする
     /// (liveとは別limit — 残小項目【決定】)。復元経路そのものはD1d/D1eの領分で、
     /// ここは「渡されたmacro列をどう刈るか」の設定面だけを持つ。
-    pub fn from_restored(macros: Vec<Macro>, live_limit: UndoLimit, restart_limit: UndoLimit) -> Self {
+    pub fn from_restored(
+        macros: Vec<Macro>,
+        live_limit: UndoLimit,
+        restart_limit: UndoLimit,
+    ) -> Self {
         let mut history = Self {
             live_limit,
             restart_limit,

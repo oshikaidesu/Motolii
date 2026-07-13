@@ -699,9 +699,10 @@ fn collect_stable_ids_param(
     max_observed: &mut Option<u64>,
 ) -> Result<(), DocumentError> {
     match param {
-        DocParam::Const(_) | DocParam::Data { .. } | DocParam::LookAt { .. } | DocParam::Follow { .. } => {
-            Ok(())
-        }
+        DocParam::Const(_)
+        | DocParam::Data { .. }
+        | DocParam::LookAt { .. }
+        | DocParam::Follow { .. } => Ok(()),
         DocParam::Keyframes(track) => {
             for key in track.keys() {
                 note_stable_id(key.id.get(), seen, max_observed)?;

@@ -33,7 +33,10 @@ pub enum DuplicateError {
 ///
 /// 戻り値の`Command::AddTrackItem`を`DocumentWriter::apply_command`へ渡すことで、
 /// 単一writer境界を保ったまま実際にツリーへ挿入する(この関数自体はtracksを変更しない)。
-pub fn duplicate_track_item(doc: &mut Document, source: LayerId) -> Result<Command, DuplicateError> {
+pub fn duplicate_track_item(
+    doc: &mut Document,
+    source: LayerId,
+) -> Result<Command, DuplicateError> {
     let (parent, index, item_ref) =
         find_item_location(doc, source).ok_or(CommandError::LayerNotFound(source.get()))?;
     let mut cloned = item_ref.clone();
@@ -55,7 +58,9 @@ pub fn duplicate_track_item(doc: &mut Document, source: LayerId) -> Result<Comma
     if seq.peek_next() != before {
         // 新規EffectId/KeyframeIdを発行した(subtreeにeffect/keyframeが存在した) —
         // ネスト永続フィールドの規律(M2E-11①)で下限へ引き上げる。
-        doc.min_reader_version = doc.min_reader_version.max(crate::validate::MIN_READER_VERSION_FOR_STABLE_IDS);
+        doc.min_reader_version = doc
+            .min_reader_version
+            .max(crate::validate::MIN_READER_VERSION_FOR_STABLE_IDS);
     }
 
     Ok(Command::AddTrackItem {

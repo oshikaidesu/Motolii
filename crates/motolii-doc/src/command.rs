@@ -295,14 +295,12 @@ impl Command {
             } => {
                 let layer = target.get();
                 let env = find_envelope_mut(doc, *target)?;
-                let e = env
-                    .effects
-                    .iter_mut()
-                    .find(|e| e.id == *effect)
-                    .ok_or(CommandError::EffectNotFound {
+                let e = env.effects.iter_mut().find(|e| e.id == *effect).ok_or(
+                    CommandError::EffectNotFound {
                         effect: effect.get(),
                         layer,
-                    })?;
+                    },
+                )?;
                 e.enabled = *new;
                 Ok(())
             }
@@ -435,14 +433,12 @@ fn write_property(
         ScalarPropertyId::Opacity => env.opacity = value,
         ScalarPropertyId::EffectParam(effect_id, name) => {
             let layer = env.layer_id.get();
-            let e = env
-                .effects
-                .iter_mut()
-                .find(|e| e.id == *effect_id)
-                .ok_or(CommandError::EffectNotFound {
+            let e = env.effects.iter_mut().find(|e| e.id == *effect_id).ok_or(
+                CommandError::EffectNotFound {
                     effect: effect_id.get(),
                     layer,
-                })?;
+                },
+            )?;
             e.params.insert(name.clone(), value);
         }
     }
@@ -463,7 +459,10 @@ pub(crate) fn envelope_of_mut(item: &mut TrackItem) -> &mut ItemEnvelope {
     }
 }
 
-fn find_envelope_mut_in_items(items: &mut [TrackItem], target: LayerId) -> Option<&mut ItemEnvelope> {
+fn find_envelope_mut_in_items(
+    items: &mut [TrackItem],
+    target: LayerId,
+) -> Option<&mut ItemEnvelope> {
     for item in items.iter_mut() {
         if envelope_of(item).layer_id == target {
             return Some(envelope_of_mut(item));
@@ -477,7 +476,10 @@ fn find_envelope_mut_in_items(items: &mut [TrackItem], target: LayerId) -> Optio
     None
 }
 
-pub(crate) fn find_envelope_mut(doc: &mut Document, target: LayerId) -> Result<&mut ItemEnvelope, CommandError> {
+pub(crate) fn find_envelope_mut(
+    doc: &mut Document,
+    target: LayerId,
+) -> Result<&mut ItemEnvelope, CommandError> {
     for track in &mut doc.tracks {
         if let Some(found) = find_envelope_mut_in_items(&mut track.items, target) {
             return Ok(found);
@@ -486,7 +488,10 @@ pub(crate) fn find_envelope_mut(doc: &mut Document, target: LayerId) -> Result<&
     Err(CommandError::LayerNotFound(target.get()))
 }
 
-fn find_group_children_mut(items: &mut [TrackItem], target: LayerId) -> Option<&mut Vec<TrackItem>> {
+fn find_group_children_mut(
+    items: &mut [TrackItem],
+    target: LayerId,
+) -> Option<&mut Vec<TrackItem>> {
     for item in items.iter_mut() {
         if let TrackItem::Group(g) = item {
             if g.envelope.layer_id == target {
@@ -537,11 +542,16 @@ pub fn find_envelope<'a>(doc: &'a Document, target: LayerId) -> Option<&'a ItemE
         }
         None
     }
-    doc.tracks.iter().find_map(|t| find_in_items(&t.items, target))
+    doc.tracks
+        .iter()
+        .find_map(|t| find_in_items(&t.items, target))
 }
 
 /// 読み取り専用: `target`にある`TrackItem`とその親ロケータ・indexを返す(削除/複製の下準備用)。
-pub fn find_item_location(doc: &Document, target: LayerId) -> Option<(ParentLocator, usize, &TrackItem)> {
+pub fn find_item_location(
+    doc: &Document,
+    target: LayerId,
+) -> Option<(ParentLocator, usize, &TrackItem)> {
     for track in &doc.tracks {
         if let Some((idx, item)) = track
             .items
@@ -558,7 +568,10 @@ pub fn find_item_location(doc: &Document, target: LayerId) -> Option<(ParentLoca
     None
 }
 
-fn find_in_groups(items: &[TrackItem], target: LayerId) -> Option<(ParentLocator, usize, &TrackItem)> {
+fn find_in_groups(
+    items: &[TrackItem],
+    target: LayerId,
+) -> Option<(ParentLocator, usize, &TrackItem)> {
     for item in items {
         if let TrackItem::Group(g) = item {
             if let Some((idx, child)) = g

@@ -136,7 +136,11 @@ impl DocumentWriter {
     }
 
     /// live/再起動後で別々のUndo深さ上限を設定して構築する(残小項目【決定】2026-07-13)。
-    pub fn with_undo_limits(doc: Document, live_limit: UndoLimit, restart_limit: UndoLimit) -> Self {
+    pub fn with_undo_limits(
+        doc: Document,
+        live_limit: UndoLimit,
+        restart_limit: UndoLimit,
+    ) -> Self {
         Self {
             doc,
             revision: 0,
@@ -175,7 +179,11 @@ impl DocumentWriter {
 
     /// atomic command(実装ガード5: 決定済みの値)を適用し、undo履歴へ積む。
     /// 単一writer境界(このメソッドだけがDocumentを書き換える)。
-    pub fn apply_command(&mut self, gesture: GestureId, command: Command) -> Result<(), CommandError> {
+    pub fn apply_command(
+        &mut self,
+        gesture: GestureId,
+        command: Command,
+    ) -> Result<(), CommandError> {
         self.undo.push(&mut self.doc, gesture, command)?;
         self.revision = self.revision.wrapping_add(1);
         Ok(())
@@ -212,7 +220,10 @@ impl DocumentWriter {
     }
 
     /// `LayerId`を新規発行する(非再利用)。Command構築前の下準備用。
-    pub fn allocate_layer_id(&mut self, display_name: impl Into<String>) -> Result<LayerId, LayerIdError> {
+    pub fn allocate_layer_id(
+        &mut self,
+        display_name: impl Into<String>,
+    ) -> Result<LayerId, LayerIdError> {
         self.doc.layers.allocate(display_name)
     }
 
