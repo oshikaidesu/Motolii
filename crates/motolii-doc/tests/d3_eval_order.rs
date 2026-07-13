@@ -396,6 +396,37 @@ fn black_overrun_is_typed_error_not_silent_freeze() {
 }
 
 #[test]
+fn black_overrun_rejected_even_when_clip_inactive() {
+    let mut doc = Document::new_v1();
+    doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
+    let layer = doc.layers.allocate("clip").unwrap();
+    let track_id = doc.track_ids.allocate("V1").unwrap();
+    let mut clip = rect_clip(layer.get(), [0.0, 0.0], [1.0, 1.0], [1.0, 0.0, 0.0, 1.0]);
+    clip.envelope.layer_id = layer;
+    clip.start = RationalTime::try_new(5, 1).unwrap();
+    clip.duration = RationalTime::try_new(1, 1).unwrap();
+    clip.time_map =
+        TimeMap::try_new(RationalTime::ZERO, 1, 1, motolii_core::OverrunMode::Black).unwrap();
+    doc.tracks.push(Track {
+        id: track_id,
+        items: vec![TrackItem::Clip(clip)],
+    });
+    let mut registry = PluginRegistry::new();
+    register_reference_plugins(&mut registry).unwrap();
+    // t=0 ではクリップ非アクティブだが、Black を黙って Freeze 相当にしない。
+    let err = build_document_frame_graph(
+        &doc,
+        EvaluationTime::new(RationalTime::ZERO),
+        desc(),
+        &DataTracks::new(),
+        &registry,
+        None,
+    )
+    .unwrap_err();
+    assert!(matches!(err, motolii_doc::GraphError::InvalidClip { .. }));
+}
+
+#[test]
 fn source_time_comes_from_video_clip_not_overlay() {
     use motolii_doc::{Asset, AssetId};
 

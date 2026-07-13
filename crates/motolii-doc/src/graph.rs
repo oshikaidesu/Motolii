@@ -330,6 +330,13 @@ impl<'a> GraphBuilder<'a> {
         mask_below: Option<TextureId>,
         layer: LayerId,
     ) -> Result<TextureId, GraphError> {
+        // OverrunMode: v1 は Freeze のみ。active 窓の外でも Black/Loop を黙って通さない。
+        clip.time_map
+            .require_freeze_overrun()
+            .map_err(|e| GraphError::InvalidClip {
+                layer: layer.get(),
+                source: e,
+            })?;
         if !clip_active(clip, self.timeline_time) {
             self.record_layer_position(layer, &clip.envelope.transform)?;
             return Ok(self.transparent());
@@ -341,13 +348,6 @@ impl<'a> GraphBuilder<'a> {
                     layer: layer.get(),
                     source: e.into(),
                 })?;
-        // OverrunMode: v1 は Freeze のみ。Black/Loop は型付き未実装。
-        clip.time_map
-            .require_freeze_overrun()
-            .map_err(|e| GraphError::InvalidClip {
-                layer: layer.get(),
-                source: e,
-            })?;
         let st = clip
             .time_map
             .try_map(local_t)
