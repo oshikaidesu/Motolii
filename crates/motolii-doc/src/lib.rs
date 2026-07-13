@@ -18,6 +18,7 @@ mod duplicate;
 mod eval_time;
 mod graph;
 mod ids;
+pub mod journal;
 mod limits;
 mod param;
 pub mod param_eval;
@@ -54,6 +55,14 @@ pub use graph::{
     CLEAR_LAYER_SOURCE, RECT_LAYER_SOURCE,
 };
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
+pub use journal::{
+    checkpoint_with_fault_plan, inject_bad_checksum_at_last_frame, inject_corrupt_journal_tail,
+    inject_salt_mismatch_frame, inject_unapplicable_committed_edit, load_catalog, open_project,
+    open_project_with_limits, save_project_with_journal, DurabilityStage, FaultPlan, FsOpKind,
+    GenerationCatalog, GenerationEntry, JournalEdit, JournalRecordKind, JournalScanStop,
+    OpenProjectOutcome, PinGenerationOptions, ProjectError, RecordingFs, RecoveryError,
+    RecoverySource, RotateOptions, SaveProjectOptions, StdFs, WalError, WalSession,
+};
 pub use limits::{ResourceLimitError, ResourceLimits};
 pub use param::{DocParam, LookAtAxis};
 pub use param_eval::{ParamEvalError, ResolvedLayerParams};

@@ -1,0 +1,3 @@
+# D1i-4 負例用台帳(consistent: semantic nonempty + provisional with marker)
+semantic	crates/motolii-testkit/tests/fixtures/golden_policy/semantic_sample.txt
+provisional	crates/motolii-testkit/tests/fixtures/golden_policy/provisional_with_marker.txt

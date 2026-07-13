@@ -1,0 +1,3 @@
+# D1i-4 負例用: provisional にマーカー欠落パスを載せる(SKIP_CONSISTENCY 必須)
+semantic	crates/motolii-testkit/tests/fixtures/golden_policy/semantic_sample.txt
+provisional	crates/motolii-testkit/tests/fixtures/golden_policy/provisional_without_marker.txt
