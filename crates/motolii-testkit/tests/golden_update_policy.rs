@@ -119,6 +119,25 @@ fn semantic_golden_modification_is_rejected() {
     );
 }
 
+/// 台帳ブートストラップPR相当: HEADでsemantic登録済みの既存ファイルを同時に書き換えても拒否する。
+/// (base未登録を理由に M を許可するとS16が初回PRで空洞化する)
+#[test]
+fn bootstrap_registration_cannot_rewrite_existing_semantic_file() {
+    let (ok, msg) = run_policy(
+        None,
+        false,
+        "A\tcrates/motolii-testkit/golden_policy/classification.tsv\nM\tcrates/motolii-doc/tests/d1i2_pathop_geometry.rs\n",
+    );
+    assert!(
+        !ok,
+        "bootstrap must not allow rewriting existing semantic golden: {msg}"
+    );
+    assert!(
+        msg.contains("semantic golden modified"),
+        "unexpected: {msg}"
+    );
+}
+
 #[test]
 fn semantic_golden_modification_rejected_even_with_regenerate_marker() {
     let class = "crates/motolii-testkit/tests/fixtures/golden_policy/classification_semantic_with_marker.tsv";

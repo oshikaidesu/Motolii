@@ -102,19 +102,8 @@ validate_classification_consistency() {
   fi
 }
 
-was_semantic_on_base() {
-  local want="$1"
-  local p
-  while IFS= read -r p; do
-    [[ -z "$p" ]] && continue
-    if [[ "$p" == "$want" ]]; then
-      return 0
-    fi
-  done <<<"$BASE_SEMANTIC_ROWS"
-  return 1
-}
-
 # base 台帳の semantic 集合を読み、削り/降格を拒否。
+# （ファイル本体の M/D 拒否は HEAD 台帳 class のみで行い、base 未登録でも迂回できない）
 load_base_semantic() {
   local base="$1"
   BASE_SEMANTIC_ROWS=""
@@ -191,14 +180,8 @@ fi
 MODE_FILES_FROM=0
 if [[ "${1:-}" == "--files-from" ]]; then
   MODE_FILES_FROM=1
-  # 施行テストは「既に semantic 登録済み」前提で変更を拒否する。
+  # 施行テストは HEAD 台帳の class だけで判定する(base 台帳は見ない)。
   BASE_SEMANTIC_ROWS=""
-  while IFS=$'\t' read -r class path; do
-    [[ -z "${class:-}" ]] && continue
-    if [[ "$class" == "semantic" ]]; then
-      BASE_SEMANTIC_ROWS="${BASE_SEMANTIC_ROWS}${BASE_SEMANTIC_ROWS:+$'\n'}${path}"
-    fi
-  done <<<"$CLASS_ROWS"
 else
   load_base_semantic "${1:-origin/main}"
 fi
@@ -219,11 +202,10 @@ while IFS= read -r raw || [[ -n "${raw:-}" ]]; do
 
   case "$class" in
     semantic)
+      # 新規 semantic ファイルの追加(A)のみ許可。既存ファイルの M/D は、
+      # 台帳の初回登録PRであっても例外なし拒否(S16)。base未登録を理由に
+      # 書き換えを許可すると、ブートストラップPRで意味論ゴールデンを書き換えられる。
       if [[ "$status" == "A" ]]; then
-        continue
-      fi
-      # base 未登録の初回載せはマーカー追記等を許可。登録後の書き換えは例外なし拒否。
-      if ! was_semantic_on_base "$path"; then
         continue
       fi
       failures=$((failures + 1))
