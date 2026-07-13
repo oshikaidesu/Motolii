@@ -14,6 +14,7 @@ mod ids;
 mod param;
 pub mod param_expect;
 mod persist;
+mod plugin_compat;
 mod schema;
 mod track_id;
 mod validate;
@@ -29,12 +30,13 @@ pub use doc_keyframe::{DocKeyframe, DocKeyframeError, DocKeyframeTrack};
 pub use doc_value::DocValue;
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
 pub use param::{DocParam, LookAtAxis};
-pub use param_expect::{ExpectedValueType, ParamConstraints};
+pub use param_expect::{DocPluginKind, ExpectedValueType, KnownPluginInfo, ParamConstraints};
 pub use persist::{
     detect_cloud_sync, load_document, load_document_bytes, save_document,
     save_document_with_options, CloudSyncHint, PersistError, SaveAbortAfter, SaveOptions,
     READER_VERSION,
 };
+pub use plugin_compat::{PluginDegradation, PluginOpenWarning};
 pub use schema::{
     BlendMode, Clip, ClipSource, ClippingMaskSettings, Composition, CompositionError,
     EffectInstance, Group, ItemEnvelope, MaskMode, PathOp, Soundtrack, SoundtrackError,
