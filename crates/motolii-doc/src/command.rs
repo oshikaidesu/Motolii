@@ -528,7 +528,7 @@ pub(crate) fn find_items_vec_mut(
 }
 
 /// 読み取り専用ロケータ(コマンド構築側が現在値を読むためのヘルパ)。
-pub fn find_envelope<'a>(doc: &'a Document, target: LayerId) -> Option<&'a ItemEnvelope> {
+pub fn find_envelope(doc: &Document, target: LayerId) -> Option<&ItemEnvelope> {
     fn find_in_items(items: &[TrackItem], target: LayerId) -> Option<&ItemEnvelope> {
         for item in items {
             if envelope_of(item).layer_id == target {

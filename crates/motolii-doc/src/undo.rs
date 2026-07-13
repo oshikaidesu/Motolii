@@ -10,8 +10,9 @@ use crate::Document;
 
 /// Undoの深さ設定。`0`=unlimited(Qt既定)。呼び出し側の運用設定であり、
 /// Documentスキーマには焼かない(GR-PV-2: 恒久面を狭く保つ)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum UndoLimit {
+    #[default]
     Unlimited,
     Bounded(usize),
 }
@@ -24,12 +25,6 @@ impl UndoLimit {
         } else {
             Self::Bounded(n as usize)
         }
-    }
-}
-
-impl Default for UndoLimit {
-    fn default() -> Self {
-        Self::Unlimited
     }
 }
 
