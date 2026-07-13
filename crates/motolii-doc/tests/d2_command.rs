@@ -636,7 +636,7 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
 
     let mut env_a = ItemEnvelope::new(child_a);
     // subtree内参照(sibling child_b) — 複製後は新IDへ再写像されるべき。
-    env_a.transform.position = DocParam::LookAt {
+    env_a.transform.rotation = DocParam::LookAt {
         target: child_b,
         axis: LookAtAxis::PlusY,
     };
@@ -652,8 +652,8 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
 
     let mut env_b = ItemEnvelope::new(child_b);
     // subtree外参照(external_layer) — 複製後も維持されるべき。
-    // (rotationはLookAt/Followを許可しない — positionのみ許可。d1h_validate::look_at_on_rotation_fails参照)
-    env_b.transform.position = DocParam::LookAt {
+    // (LookAt は rotation のみ許可 — d1h_validate::look_at_on_rotation_ok 参照)
+    env_b.transform.rotation = DocParam::LookAt {
         target: external_layer,
         axis: LookAtAxis::PlusY,
     };
@@ -743,7 +743,7 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
     };
 
     // subtree内参照は複製先の新IDへ再写像される。
-    match &cloned_a.envelope.transform.position {
+    match &cloned_a.envelope.transform.rotation {
         DocParam::LookAt { target, .. } => {
             assert_eq!(*target, cloned_b.envelope.layer_id);
             assert_ne!(
@@ -755,7 +755,7 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
     }
 
     // subtree外参照は維持される。
-    match &cloned_b.envelope.transform.position {
+    match &cloned_b.envelope.transform.rotation {
         DocParam::LookAt { target, .. } => {
             assert_eq!(
                 *target, external_layer,

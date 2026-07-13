@@ -9,7 +9,7 @@ use std::ops::Mul;
 use motolii_core::RationalTime;
 use motolii_eval::DataTracks;
 
-use crate::param_eval::{eval_f64, eval_vec2, ParamEvalError, ResolvedLayerParams};
+use crate::param_eval::{eval_rotation, eval_vec2, ParamEvalError, ResolvedLayerParams};
 use crate::schema::Transform2D;
 use crate::LayerId;
 
@@ -161,15 +161,19 @@ pub fn compose_transform(parent: Affine2D, local: Affine2D) -> Affine2D {
 }
 
 /// `lookup(layer)` は親レイヤーの `Transform2D` を返す。validate の森検査と揃える。
+///
+/// `self_id` があるとき LookAt の self は `resolved` の world position を使う
+/// (`resolve_document_spaces` で事前解決済みであること)。
 pub fn resolve_transform<'doc>(
     xform: &Transform2D,
     t: RationalTime,
     tracks: &DataTracks,
     resolved: &ResolvedLayerParams,
     lookup: &dyn Fn(LayerId) -> Option<&'doc Transform2D>,
+    self_id: Option<LayerId>,
 ) -> Result<Affine2D, ParamEvalError> {
     let mut visiting = HashSet::new();
-    resolve_transform_rec(xform, t, tracks, resolved, lookup, &mut visiting)
+    resolve_transform_rec(xform, t, tracks, resolved, lookup, self_id, &mut visiting)
 }
 
 fn resolve_local_only(
@@ -177,11 +181,16 @@ fn resolve_local_only(
     t: RationalTime,
     tracks: &DataTracks,
     resolved: &ResolvedLayerParams,
+    self_id: Option<LayerId>,
 ) -> Result<Affine2D, ParamEvalError> {
+    // LookAt は self 位置が要るので position を先に評価する。
     let position = eval_vec2(&xform.position, t, tracks, resolved)?;
+    let self_pos = self_id
+        .and_then(|id| resolved.position(id))
+        .unwrap_or(position);
     let anchor = eval_vec2(&xform.anchor, t, tracks, resolved)?;
     let scale = eval_vec2(&xform.scale, t, tracks, resolved)?;
-    let rotation = eval_f64(&xform.rotation, t, tracks, resolved)?;
+    let rotation = eval_rotation(&xform.rotation, self_pos, t, tracks, resolved)?;
     Ok(compose_local(position, anchor, scale, rotation))
 }
 
@@ -191,9 +200,10 @@ fn resolve_transform_rec<'doc>(
     tracks: &DataTracks,
     resolved: &ResolvedLayerParams,
     lookup: &dyn Fn(LayerId) -> Option<&'doc Transform2D>,
+    self_id: Option<LayerId>,
     visiting: &mut HashSet<u64>,
 ) -> Result<Affine2D, ParamEvalError> {
-    let local = resolve_local_only(xform, t, tracks, resolved)?;
+    let local = resolve_local_only(xform, t, tracks, resolved, self_id)?;
     let Some(parent_id) = xform.parent else {
         return Ok(local);
     };
@@ -202,7 +212,15 @@ fn resolve_transform_rec<'doc>(
         return Err(ParamEvalError::ParentCycle { layer: pid });
     }
     let parent_xform = lookup(parent_id).ok_or(ParamEvalError::DanglingParent { parent: pid })?;
-    let parent_m = resolve_transform_rec(parent_xform, t, tracks, resolved, lookup, visiting)?;
+    let parent_m = resolve_transform_rec(
+        parent_xform,
+        t,
+        tracks,
+        resolved,
+        lookup,
+        Some(parent_id),
+        visiting,
+    )?;
     visiting.remove(&pid);
     Ok(compose_transform(parent_m, local))
 }
@@ -263,8 +281,15 @@ mod tests {
                 None
             }
         };
-        let world =
-            resolve_transform(&child, RationalTime::ZERO, &tracks, &resolved, &lookup).unwrap();
+        let world = resolve_transform(
+            &child,
+            RationalTime::ZERO,
+            &tracks,
+            &resolved,
+            &lookup,
+            None,
+        )
+        .unwrap();
         approx(world.transform_point(0.0, 0.0), [11.0, 2.0]);
     }
 
@@ -291,8 +316,15 @@ mod tests {
                 None
             }
         };
-        let err =
-            resolve_transform(&xa, RationalTime::ZERO, &tracks, &resolved, &lookup).unwrap_err();
+        let err = resolve_transform(
+            &xa,
+            RationalTime::ZERO,
+            &tracks,
+            &resolved,
+            &lookup,
+            Some(a),
+        )
+        .unwrap_err();
         assert!(matches!(err, ParamEvalError::ParentCycle { .. }));
     }
 
@@ -305,8 +337,15 @@ mod tests {
         let tracks = DataTracks::new();
         let resolved = ResolvedLayerParams::default();
         let lookup = |_id: LayerId| None;
-        let err =
-            resolve_transform(&child, RationalTime::ZERO, &tracks, &resolved, &lookup).unwrap_err();
+        let err = resolve_transform(
+            &child,
+            RationalTime::ZERO,
+            &tracks,
+            &resolved,
+            &lookup,
+            None,
+        )
+        .unwrap_err();
         assert!(matches!(err, ParamEvalError::DanglingParent { parent: 99 }));
     }
 }
