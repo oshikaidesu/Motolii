@@ -36,11 +36,16 @@ use crate::limits::{check_document_resource_limits, ResourceLimitError, Resource
 use crate::{Document, DocumentError};
 
 /// このリーダーが開ける`min_reader_version`の上限(=自版の読取能力)。
-pub const READER_VERSION: u32 = 1;
+///
+/// D2でEffectInstance/DocKeyframeに必須`id`フィールド(A8)を追加したため2へ。
+/// version 1ドキュメント(id無し)はこのゲートを通過した後、デシリアライズで
+/// 拒否される — 変換(migration)はD1eの領分でありここでは発明しない。
+pub const READER_VERSION: u32 = 2;
 
 /// このリーダーが**再保存・migrationしてよい**`Document.version`の上限(=自版の書込能力)。
+/// D2でstable idを含む文書は`version=2`へ上がるため、書き込み能力も2へ揃える。
 /// `Document.version`がこれを超える場合は`OpenMode::ReadOnlyNewer`(#101 / 監査S14)。
-pub const WRITER_VERSION: u32 = 1;
+pub const WRITER_VERSION: u32 = 2;
 
 /// 読み/書き互換を分離した3状態(監査S14)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -152,6 +152,11 @@ impl LayerIdTable {
         self.entries.iter().map(|(id, name)| (*id, name.as_str()))
     }
 
+    /// 次に採番される生値(エントリは作らない)。Command構築前の予約確認用。
+    pub fn peek_next(&self) -> u64 {
+        self.next
+    }
+
     /// 新しいIDを採番して挿入する。削除済みIDは再利用しない。
     pub fn allocate(&mut self, display_name: impl Into<String>) -> Result<LayerId, LayerIdError> {
         let id = LayerId(self.next);
@@ -160,6 +165,18 @@ impl LayerIdTable {
         }
         let next = self.next.checked_add(1).ok_or(LayerIdError::Exhausted)?;
         self.entries.insert(id, display_name.into());
+        self.next = next;
+        Ok(id)
+    }
+
+    /// 採番カウンタだけ進める(台帳エントリは作らない)。
+    /// `AddTrackItem.layer_names`経由でエントリを載せる前のID予約に使う。
+    pub fn reserve(&mut self) -> Result<LayerId, LayerIdError> {
+        let id = LayerId(self.next);
+        if self.entries.contains_key(&id) {
+            return Err(LayerIdError::Duplicate { id: id.0 });
+        }
+        let next = self.next.checked_add(1).ok_or(LayerIdError::Exhausted)?;
         self.next = next;
         Ok(id)
     }
@@ -181,6 +198,24 @@ impl LayerIdTable {
             });
         }
         // 挿入前に完了: MAXは next を進められないため拒否(Err後に表は不変)
+        let floor = id.0.checked_add(1).ok_or(LayerIdError::Exhausted)?;
+        self.entries.insert(id, display_name.into());
+        if floor > self.next {
+            self.next = floor;
+        }
+        Ok(())
+    }
+
+    /// Undo/Redo用: 退役済み(`id < next`)でも台帳へ戻す。採番カウンタは戻さない。
+    /// `insert`と違い再利用禁止の退役チェックをしない — 同一エンティティの再適用専用。
+    pub fn restore(
+        &mut self,
+        id: LayerId,
+        display_name: impl Into<String>,
+    ) -> Result<(), LayerIdError> {
+        if self.entries.contains_key(&id) {
+            return Err(LayerIdError::Duplicate { id: id.0 });
+        }
         let floor = id.0.checked_add(1).ok_or(LayerIdError::Exhausted)?;
         self.entries.insert(id, display_name.into());
         if floor > self.next {
@@ -249,6 +284,21 @@ mod tests {
         assert_eq!(second.get(), 1);
         assert_ne!(second, first);
         assert!(!table.contains(first));
+    }
+
+    #[test]
+    fn reserve_advances_next_without_entry_and_restore_brings_back() {
+        let mut table = LayerIdTable::new();
+        let id = table.reserve().unwrap();
+        assert_eq!(id.get(), 0);
+        assert!(!table.contains(id));
+        assert_eq!(table.peek_next(), 1);
+        table.restore(id, "revived").unwrap();
+        assert_eq!(table.display_name(id), Some("revived"));
+        table.remove(id).unwrap();
+        table.restore(id, "again").unwrap();
+        assert_eq!(table.display_name(id), Some("again"));
+        assert_eq!(table.peek_next(), 1, "restore must not rewind next");
     }
 
     #[test]

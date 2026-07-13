@@ -510,6 +510,7 @@ mod tests {
             layers: LayerIdTable::new(),
             track_ids: TrackIdTable::new(),
             tracks: Vec::new(),
+            next_stable_id: Default::default(),
             extra: Map::new(),
         }
     }
@@ -707,11 +708,13 @@ mod tests {
 
         let mut keys = crate::DocKeyframeTrack::new();
         keys.insert(crate::DocKeyframe {
+            id: crate::KeyframeId::from_raw(1),
             t: motolii_core::RationalTime::ZERO,
             value: crate::DocValue::F64(0.0),
             interp: motolii_eval::Interp::Linear,
         });
         keys.insert(crate::DocKeyframe {
+            id: crate::KeyframeId::from_raw(2),
             t: motolii_core::RationalTime::try_new(1, 1).unwrap(),
             value: crate::DocValue::F64(1.0),
             interp: motolii_eval::Interp::Linear,
@@ -728,6 +731,7 @@ mod tests {
         assert!(check_document_resource_limits(&doc, &limits).is_ok());
 
         keys.insert(crate::DocKeyframe {
+            id: crate::KeyframeId::from_raw(3),
             t: motolii_core::RationalTime::try_new(2, 1).unwrap(),
             value: crate::DocValue::F64(2.0),
             interp: motolii_eval::Interp::Linear,
