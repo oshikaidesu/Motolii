@@ -32,8 +32,13 @@ pub enum ParamEvalError {
     /// validate の `ParentCycle` と同型。評価時に未検証文書へも適用する。
     #[error("transform.parent cycle involving layer {layer}")]
     ParentCycle { layer: u64 },
+    /// LookAt/Follow/parent/Group 継承の依存が循環している。
+    #[error("spatial link cycle involving layer {layer}")]
+    SpatialLinkCycle { layer: u64 },
     #[error("transform.parent {parent} does not resolve to a layer")]
     DanglingParent { parent: u64 },
+    #[error("singular placement space on layer {layer} (cannot map Follow into parent/group)")]
+    SingularPlacementSpace { layer: u64 },
 }
 
 #[derive(Debug, Clone, Default)]
