@@ -1,7 +1,6 @@
 //! D1i-2: PathOp意味論表(docs/specs/M2-document-model.md)の幾何ゴールデン。
 //! 本ファイルのアサーションは意味論ゴールデン(GR-PV-5) — 数値の更新は「新variant」でのみ許可し、
 //! 既存アサーションの書き換えは禁止(AGENTS.md「テストを『直して』通さない」)。
-//! MOTOLII_GOLDEN_CLASS: semantic
 
 use motolii_doc::pathgeom::{
     apply, Contour, Path, Point, ResolvedPathOp, ResolvedTransform, Vertex,

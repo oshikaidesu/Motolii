@@ -1,25 +1,23 @@
 # ゴールデン分類と regenerate マーカー(D1i-4 / S16 / #53)
 
-台帳: [`classification.tsv`](classification.tsv)。CI: `scripts/check-golden-update-policy.sh`。
+正本は [`classification.tsv`](classification.tsv)。CI: `scripts/check-golden-update-policy.sh`。
 
 | class | 意味 | 更新 |
 |---|---|---|
-| `semantic` | 既存variantの意味を永久固定する審判(S16) | **禁止・例外なし**。`MOTOLII_REGENERATE_WHEN`でも迂回不可。新variant+新ファイル(+台帳追加)のみ |
+| `semantic` | 既存variantの意味を永久固定する審判(S16) | **禁止・例外なし**。変更したければ新variant+新ファイル(+台帳追加)のみ。分類は台帳だけで足り、既存ゴールデン本体の編集は不要 |
 | `provisional` | C-1系sRGBブレンド依存等の暫定審判(#53) | ファイルに`MOTOLII_REGENERATE_WHEN:`がある場合のみ更新可 |
 
 空の`semantic`集合は拒否(空の禁止CIを運用に乗せない)。現行の意味論ゴールデンは D1i-2 の `d1i2_pathop_geometry.rs`。
 
-台帳の**初回登録PR**でも、HEAD台帳で`semantic`とされた既存ファイルの変更/削除は拒否する。baseに台帳が無いことを理由に書き換えを許可しない(S16の例外なし)。新規`semantic`ファイルの追加(`git` status `A`)と台帳へのパス追加のみが正規ルート。
+`git merge-base` / `git diff` 失敗(shallow clone等)は **fail-closed**(空振りでOKにしない)。CIは`fetch-depth: 0`。
+
+台帳の**初回登録PR**でも、HEAD台帳で`semantic`とされた既存ファイルの変更/削除は拒否する。新規`semantic`ファイルの追加(`git` status `A`)と台帳へのパス追加のみが正規ルート。
 
 ## マーカー規約
 
-ファイル先頭付近に固定文字列を置く(コメント内で可):
+`semantic` のファイル内`MOTOLII_GOLDEN_CLASS`は任意(台帳が正本)。
 
-```text
-MOTOLII_GOLDEN_CLASS: semantic
-```
-
-または暫定:
+暫定は必須:
 
 ```text
 MOTOLII_GOLDEN_CLASS: provisional

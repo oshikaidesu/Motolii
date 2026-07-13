@@ -18,6 +18,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          # merge-base が取れるよう履歴を確保(D1i-4 / M2E-2 ゲートの fail-closed 前提)
+          fetch-depth: 0
       - name: Install ffmpeg + software Vulkan + ALSA headers (motolii-media / motolii-gpu / motolii-audio tests)
         run: |
           # The runner's third-party Microsoft apt repo intermittently serves
@@ -44,7 +47,7 @@ jobs:
       - name: M2E-2 protected test assets × src simultaneous change gate
         if: github.event_name == 'pull_request'
         run: |
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          git fetch --no-tags origin "${{ github.base_ref }}"
           BASE="origin/${{ github.base_ref }}"
           # ブートストラップPR(保護領域がbaseに無い)ではliveゲートをスキップ。
           # 負例は cargo test -p motolii-testkit --test protected_assets が常時カバーする。
@@ -56,10 +59,9 @@ jobs:
       - name: D1i-4 semantic golden update forbid (S16)
         if: github.event_name == 'pull_request'
         run: |
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          git fetch --no-tags origin "${{ github.base_ref }}"
           BASE="origin/${{ github.base_ref }}"
-          # ブートストラップ(台帳がbaseに無い)でもHEAD台帳の一貫性は検査する。
-          # 負例は cargo test -p motolii-testkit --test golden_update_policy。
+          # merge-base 失敗はスクリプト側で fail-closed。浅掘り回避は checkout fetch-depth: 0。
           ./scripts/check-golden-update-policy.sh "$BASE"
       - name: Format
         run: cargo fmt --all --check

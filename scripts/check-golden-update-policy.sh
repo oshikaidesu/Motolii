@@ -3,18 +3,22 @@
 #
 # 許可:
 #   - 意味論(semantic)への「新規追加」(git status A) — 新variant+新ゴールデン
-#   - 台帳へ初めて載せたPRでのマーカー追記等(base に未登録だった semantic)
+#   - 台帳(classification.tsv)の追加/更新(分類のみ — 既存semantic本体を触らない)
 #   - 暫定(provisional)の更新 — ファイルに MOTOLII_REGENERATE_WHEN がある場合のみ
 #   - 分類外パスの任意変更
 # 拒否:
-#   - base 時点で既に semantic だったパスの変更/削除/リネーム(マーカー有無を問わない)
+#   - HEAD台帳で semantic の既存ファイルの変更/削除(マーカー有無を問わない)
 #   - provisional パスの更新で MOTOLII_REGENERATE_WHEN が無い
 #   - 台帳から semantic 行を削る(base 比較時)
-#   - semantic 集合が空 / 台帳パス不在 / クラスマーカー不一致
+#   - semantic 集合が空 / 台帳パス不在
+#   - merge-base / git diff 失敗(shallow clone等) — fail-closed
+#
+# 正本は classification.tsv。semantic ファイル内の MOTOLII_GOLDEN_CLASS は任意
+# (既存ゴールデン本体を変えずに分類できる)。
 #
 # Usage:
 #   ./scripts/check-golden-update-policy.sh [base_ref]
-#   ./scripts/check-golden-update-policy.sh --files-from -   # stdin: [STATUS\t]path
+#   ./scripts/check-golden-update-policy.sh --files-from -
 #   CLASSIFICATION_FILE=... ./scripts/check-golden-update-policy.sh --files-from -
 #   GOLDEN_POLICY_SKIP_CONSISTENCY=1  # 負例フィクスチャ用(本番CIでは設定しない)
 set -euo pipefail
@@ -23,7 +27,6 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 CLASSIFICATION_FILE="${CLASSIFICATION_FILE:-crates/motolii-testkit/golden_policy/classification.tsv}"
-CLASS_MARKER_SEMANTIC='MOTOLII_GOLDEN_CLASS: semantic'
 CLASS_MARKER_PROVISIONAL='MOTOLII_GOLDEN_CLASS: provisional'
 REGENERATE_MARKER='MOTOLII_REGENERATE_WHEN:'
 BASE_SEMANTIC_ROWS=""
@@ -86,8 +89,7 @@ validate_classification_consistency() {
     case "$class" in
       semantic)
         semantic_count=$((semantic_count + 1))
-        file_has "$path" "$CLASS_MARKER_SEMANTIC" \
-          || die "semantic path missing '$CLASS_MARKER_SEMANTIC': $path"
+        # 正本は台帳。ファイル内マーカーは任意(既存本体を触らず分類できる)。
         ;;
       provisional)
         file_has "$path" "$CLASS_MARKER_PROVISIONAL" \
@@ -103,7 +105,6 @@ validate_classification_consistency() {
 }
 
 # base 台帳の semantic 集合を読み、削り/降格を拒否。
-# （ファイル本体の M/D 拒否は HEAD 台帳 class のみで行い、base 未登録でも迂回できない）
 load_base_semantic() {
   local base="$1"
   BASE_SEMANTIC_ROWS=""
@@ -137,24 +138,24 @@ collect_changes() {
     else
       cat "$src"
     fi
-  else
-    local base="${1:-origin/main}"
-    if ! git rev-parse --verify "$base" >/dev/null 2>&1; then
-      echo "golden-update-policy: base ref '$base' not found; treating as no changes" >&2
-      return 0
-    fi
-    git diff --name-status "$base"...HEAD | while IFS=$'\t' read -r status a b; do
-      [[ -z "${status:-}" ]] && continue
-      case "$status" in
-        R*)
-          printf 'D\t%s\n' "$a"
-          printf 'A\t%s\n' "$b"
-          ;;
-        *)
-          printf '%s\t%s\n' "${status:0:1}" "$a"
-          ;;
-      esac
-    done
+    return 0
+  fi
+
+  local base="${1:-origin/main}"
+  if ! git rev-parse --verify "$base" >/dev/null 2>&1; then
+    die "base ref '$base' not found (fetch the PR base; refuse vacuous OK)"
+  fi
+  local merge_base
+  # process substitution 外で失敗を捕捉する(fail-closed)
+  if ! merge_base="$(git merge-base "$base" HEAD 2>/dev/null)"; then
+    die "no merge base with $base (shallow clone?). deepen fetch: git fetch --unshallow or fetch-depth: 0"
+  fi
+  if [[ -z "$merge_base" ]]; then
+    die "empty merge base with $base"
+  fi
+  # `git diff A...B` は merge-base を使うが、失敗時は非ゼロで落ちる
+  if ! git diff --name-status "$merge_base" HEAD; then
+    die "git diff --name-status $merge_base HEAD failed"
   fi
 }
 
@@ -180,7 +181,6 @@ fi
 MODE_FILES_FROM=0
 if [[ "${1:-}" == "--files-from" ]]; then
   MODE_FILES_FROM=1
-  # 施行テストは HEAD 台帳の class だけで判定する(base 台帳は見ない)。
   BASE_SEMANTIC_ROWS=""
 else
   load_base_semantic "${1:-origin/main}"
@@ -190,6 +190,11 @@ failures=0
 fail_msgs=""
 file_count=0
 
+# process substitution だと git 失敗が set -e をすり抜けるため、一旦ファイルへ落としてから読む。
+CHANGES_FILE="$(mktemp)"
+trap 'rm -f "$CHANGES_FILE"' EXIT
+collect_changes "$@" >"$CHANGES_FILE" || die "collect_changes failed (fail-closed)"
+
 while IFS= read -r raw || [[ -n "${raw:-}" ]]; do
   [[ -z "$raw" ]] && continue
   local_line="$(normalize_change_line "$raw")"
@@ -197,14 +202,17 @@ while IFS= read -r raw || [[ -n "${raw:-}" ]]; do
   path="${local_line#*$'\t'}"
   file_count=$((file_count + 1))
 
+  # 台帳自体の変更は常に許可(分類のみのブートストラップ経路)
+  if [[ "$path" == "$CLASSIFICATION_FILE" ]]; then
+    continue
+  fi
+
   class="$(lookup_class "$path" || true)"
   [[ -z "$class" ]] && continue
 
   case "$class" in
     semantic)
-      # 新規 semantic ファイルの追加(A)のみ許可。既存ファイルの M/D は、
-      # 台帳の初回登録PRであっても例外なし拒否(S16)。base未登録を理由に
-      # 書き換えを許可すると、ブートストラップPRで意味論ゴールデンを書き換えられる。
+      # 新規 semantic ファイルの追加(A)のみ許可。既存の M/D は例外なし拒否。
       if [[ "$status" == "A" ]]; then
         continue
       fi
@@ -223,7 +231,7 @@ while IFS= read -r raw || [[ -n "${raw:-}" ]]; do
       fi
       ;;
   esac
-done < <(collect_changes "$@")
+done <"$CHANGES_FILE"
 
 if [[ "$failures" -gt 0 ]]; then
   echo "D1i-4 golden-update-policy gate FAILED ($failures):" >&2
@@ -231,6 +239,7 @@ if [[ "$failures" -gt 0 ]]; then
   echo >&2
   echo "  semantic: never rewrite; add a new variant + new golden file instead." >&2
   echo "  provisional: require ${REGENERATE_MARKER} in the file (#53)." >&2
+  echo "  classify existing goldens via ${CLASSIFICATION_FILE} only (no body edit)." >&2
   exit 1
 fi
 

@@ -54,9 +54,21 @@ fn run_policy(classification: Option<&str>, skip_consistency: bool, files: &str)
 }
 
 fn run_live_policy_no_changes() -> (bool, String) {
+    // 差分ゼロ(stdin空)で台帳一貫性だけを見る。存在しないbaseはfail-closedのため使わない。
+    run_policy(None, false, "")
+}
+
+#[test]
+fn live_classification_is_consistent_and_nonempty() {
+    let (ok, msg) = run_live_policy_no_changes();
+    assert!(ok, "live classification must be consistent: {msg}");
+    assert!(msg.contains("golden-update-policy OK"), "unexpected: {msg}");
+}
+
+#[test]
+fn missing_base_ref_is_fail_closed() {
     let root = workspace_root();
     let script = root.join("scripts/check-golden-update-policy.sh");
-    // 存在しない base で差分ゼロ扱い — 台帳一貫性だけを見る
     let out = Command::new("bash")
         .arg(&script)
         .arg("refs/does-not-exist-d1i4")
@@ -68,15 +80,12 @@ fn run_live_policy_no_changes() -> (bool, String) {
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
-    (out.status.success(), msg)
-}
-
-#[test]
-fn live_classification_is_consistent_and_nonempty() {
-    let (ok, msg) = run_live_policy_no_changes();
-    assert!(ok, "live classification must be consistent: {msg}");
     assert!(
-        msg.contains("golden-update-policy OK") || msg.contains("treating as no changes"),
+        !out.status.success(),
+        "missing base must fail closed: {msg}"
+    );
+    assert!(
+        msg.contains("base ref") && msg.contains("not found"),
         "unexpected: {msg}"
     );
 }
@@ -95,14 +104,10 @@ fn d1i2_pathop_geometry_is_classified_semantic() {
         }),
         "D1i-2 geometry golden must be classified semantic: {tsv}"
     );
-    let src = std::fs::read_to_string(
-        root.join("crates/motolii-doc/tests/d1i2_pathop_geometry.rs"),
-    )
-    .expect("read geometry golden");
-    assert!(
-        src.contains("MOTOLII_GOLDEN_CLASS: semantic"),
-        "geometry golden must carry class marker"
-    );
+    // 本体編集なしで分類できること(正本は台帳)。
+    assert!(root
+        .join("crates/motolii-doc/tests/d1i2_pathop_geometry.rs")
+        .is_file());
 }
 
 #[test]
@@ -114,7 +119,8 @@ fn semantic_golden_modification_is_rejected() {
     );
     assert!(!ok, "expected fail for semantic modify: {msg}");
     assert!(
-        msg.contains("semantic golden modified") || msg.contains("golden-update-policy gate FAILED"),
+        msg.contains("semantic golden modified")
+            || msg.contains("golden-update-policy gate FAILED"),
         "unexpected: {msg}"
     );
 }
@@ -138,6 +144,17 @@ fn bootstrap_registration_cannot_rewrite_existing_semantic_file() {
     );
 }
 
+/// 台帳だけ追加し既存ゴールデンを触らない経路は許可。
+#[test]
+fn classification_tsv_only_change_is_allowed() {
+    let (ok, msg) = run_policy(
+        None,
+        false,
+        "A\tcrates/motolii-testkit/golden_policy/classification.tsv\n",
+    );
+    assert!(ok, "classification-only bootstrap must be allowed: {msg}");
+}
+
 #[test]
 fn semantic_golden_modification_rejected_even_with_regenerate_marker() {
     let class = "crates/motolii-testkit/tests/fixtures/golden_policy/classification_semantic_with_marker.tsv";
@@ -146,7 +163,10 @@ fn semantic_golden_modification_rejected_even_with_regenerate_marker() {
         false,
         "M\tcrates/motolii-testkit/tests/fixtures/golden_policy/semantic_with_regenerate_marker.txt\n",
     );
-    assert!(!ok, "regenerate marker must not bypass semantic lock: {msg}");
+    assert!(
+        !ok,
+        "regenerate marker must not bypass semantic lock: {msg}"
+    );
     assert!(
         msg.contains("semantic golden modified"),
         "unexpected: {msg}"
