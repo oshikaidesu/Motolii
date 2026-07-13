@@ -10,7 +10,9 @@ use thiserror::Error;
 use crate::command::{envelope_of, envelope_of_mut, find_item_location, Command, CommandError};
 use crate::doc_keyframe::DocKeyframeTrack;
 use crate::param::DocParam;
-use crate::schema::{ClipSource, ItemEnvelope, PathOp, StandardShape, TrackItem, VectorContent};
+use crate::schema::{
+    ClipSource, ItemEnvelope, PathOp, StandardShape, TrackItem, Transform2D, VectorContent,
+};
 use crate::stable_id::{EffectId, KeyframeId, StableIdError, StableIdSeq};
 use crate::{Document, LayerId, LayerIdError};
 
@@ -147,30 +149,70 @@ fn remap_path_op(
 ) -> Result<(), StableIdError> {
     match op {
         PathOp::PuckerBloat { amount } => remap_doc_param(amount, id_map, seq),
-        PathOp::ZigZag { amount, ridges } => {
+        PathOp::ZigZag {
+            amount,
+            ridges,
+            point_type: _,
+        } => {
             remap_doc_param(amount, id_map, seq)?;
             remap_doc_param(ridges, id_map, seq)
         }
-        PathOp::Offset { distance } => remap_doc_param(distance, id_map, seq),
+        PathOp::Offset {
+            distance,
+            line_join: _,
+            miter_limit: _,
+        } => remap_doc_param(distance, id_map, seq),
         PathOp::RoundCorners { radius } => remap_doc_param(radius, id_map, seq),
         PathOp::Trim {
-            start, end, offset, ..
+            start,
+            end,
+            offset,
+            mode: _,
         } => {
             remap_doc_param(start, id_map, seq)?;
             remap_doc_param(end, id_map, seq)?;
             remap_doc_param(offset, id_map, seq)
         }
-        PathOp::Twist { angle } => remap_doc_param(angle, id_map, seq),
-        PathOp::Wiggle { amp, freq, seed } => {
-            remap_doc_param(amp, id_map, seq)?;
-            remap_doc_param(freq, id_map, seq)?;
-            remap_doc_param(seed, id_map, seq)
+        PathOp::Twist { angle, center } => {
+            remap_doc_param(angle, id_map, seq)?;
+            remap_doc_param(center, id_map, seq)
         }
-        PathOp::Repeater { copies, offset } => {
+        PathOp::Wiggle { amp, freq, seed: _ } => {
+            remap_doc_param(amp, id_map, seq)?;
+            remap_doc_param(freq, id_map, seq)
+            // seedはu64固定(非DocParam) — キーフレーム再写像対象外。
+        }
+        PathOp::Repeater {
+            copies,
+            offset,
+            transform,
+            composite: _,
+            start_opacity,
+            end_opacity,
+        } => {
             remap_doc_param(copies, id_map, seq)?;
-            remap_doc_param(offset, id_map, seq)
+            remap_doc_param(offset, id_map, seq)?;
+            remap_transform2d(transform, id_map, seq)?;
+            remap_doc_param(start_opacity, id_map, seq)?;
+            remap_doc_param(end_opacity, id_map, seq)
         }
     }
+}
+
+fn remap_transform2d(
+    transform: &mut Transform2D,
+    id_map: &HashMap<u64, LayerId>,
+    seq: &mut StableIdSeq,
+) -> Result<(), StableIdError> {
+    if let Some(parent) = transform.parent {
+        if let Some(&new_parent) = id_map.get(&parent.get()) {
+            transform.parent = Some(new_parent);
+        }
+    }
+    remap_doc_param(&mut transform.position, id_map, seq)?;
+    remap_doc_param(&mut transform.anchor, id_map, seq)?;
+    remap_doc_param(&mut transform.scale, id_map, seq)?;
+    remap_doc_param(&mut transform.rotation, id_map, seq)
 }
 
 fn remap_envelope(

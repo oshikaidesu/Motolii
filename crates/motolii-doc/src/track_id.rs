@@ -122,6 +122,11 @@ impl TrackIdTable {
         self.entries.get(&id).map(String::as_str)
     }
 
+    /// 全エントリを走査する(#101 ResourceLimits の string bytes 検査用)。
+    pub fn iter(&self) -> impl Iterator<Item = (TrackId, &str)> {
+        self.entries.iter().map(|(id, name)| (*id, name.as_str()))
+    }
+
     pub fn allocate(&mut self, display_name: impl Into<String>) -> Result<TrackId, TrackIdError> {
         let id = TrackId(self.next);
         // LayerIdTableと同型の二重防御(next不変条件が破れた場合の安全網)

@@ -17,7 +17,8 @@ use crate::param_expect::{
     self, known_plugin_param, path_op_scalar, vec2_axis, ExpectedValueType, ParamConstraints,
 };
 use crate::schema::{
-    Clip, ClipSource, Group, ItemEnvelope, PathOp, StandardShape, TrackItem, VectorContent,
+    Clip, ClipSource, Group, ItemEnvelope, PathOp, StandardShape, TrackItem, Transform2D,
+    VectorContent,
 };
 use crate::track_id::TrackId;
 use crate::{Document, LayerId};
@@ -318,30 +319,7 @@ fn validate_envelope(
         parents.insert(id, parent.get());
     }
     let base = format!("layer{id}");
-    validate_param(
-        doc,
-        &env.transform.position,
-        param_expect::transform_position(),
-        &format!("{base}.position"),
-    )?;
-    validate_param(
-        doc,
-        &env.transform.anchor,
-        param_expect::transform_anchor(),
-        &format!("{base}.anchor"),
-    )?;
-    validate_param(
-        doc,
-        &env.transform.scale,
-        param_expect::transform_scale(),
-        &format!("{base}.scale"),
-    )?;
-    validate_param(
-        doc,
-        &env.transform.rotation,
-        param_expect::transform_rotation(),
-        &format!("{base}.rotation"),
-    )?;
+    validate_transform2d(doc, &env.transform, &base)?;
     validate_param(
         doc,
         &env.opacity,
@@ -358,6 +336,34 @@ fn validate_envelope(
         }
     }
     Ok(())
+}
+
+/// Transform2Dの4スロット共通検査。エンベロープ本体とRepeater.transformで共用(D1i-2)。
+fn validate_transform2d(doc: &Document, t: &Transform2D, base: &str) -> Result<(), DocumentError> {
+    validate_param(
+        doc,
+        &t.position,
+        param_expect::transform_position(),
+        &format!("{base}.position"),
+    )?;
+    validate_param(
+        doc,
+        &t.anchor,
+        param_expect::transform_anchor(),
+        &format!("{base}.anchor"),
+    )?;
+    validate_param(
+        doc,
+        &t.scale,
+        param_expect::transform_scale(),
+        &format!("{base}.scale"),
+    )?;
+    validate_param(
+        doc,
+        &t.rotation,
+        param_expect::transform_rotation(),
+        &format!("{base}.rotation"),
+    )
 }
 
 fn validate_plugin_param(
@@ -555,6 +561,20 @@ fn validate_value(
             _ => {}
         }
     }
+    if let DocValue::F64(v) = value {
+        if constraints.min.is_some_and(|min| *v < min)
+            || constraints.max.is_some_and(|max| *v > max)
+        {
+            return Err(DocumentError::ValueOutOfRange {
+                path: path.to_string(),
+            });
+        }
+        if constraints.integer && v.fract().abs() > f64::EPSILON {
+            return Err(DocumentError::ValueOutOfRange {
+                path: path.to_string(),
+            });
+        }
+    }
     Ok(())
 }
 
@@ -745,30 +765,65 @@ fn collect_stable_ids_path_op(
 ) -> Result<(), DocumentError> {
     match op {
         PathOp::PuckerBloat { amount } => collect_stable_ids_param(amount, seen, max_observed),
-        PathOp::ZigZag { amount, ridges } => {
+        PathOp::ZigZag {
+            amount,
+            ridges,
+            point_type: _,
+        } => {
             collect_stable_ids_param(amount, seen, max_observed)?;
             collect_stable_ids_param(ridges, seen, max_observed)
         }
-        PathOp::Offset { distance } => collect_stable_ids_param(distance, seen, max_observed),
+        PathOp::Offset {
+            distance,
+            line_join: _,
+            miter_limit: _,
+        } => collect_stable_ids_param(distance, seen, max_observed),
         PathOp::RoundCorners { radius } => collect_stable_ids_param(radius, seen, max_observed),
         PathOp::Trim {
-            start, end, offset, ..
+            start,
+            end,
+            offset,
+            mode: _,
         } => {
             collect_stable_ids_param(start, seen, max_observed)?;
             collect_stable_ids_param(end, seen, max_observed)?;
             collect_stable_ids_param(offset, seen, max_observed)
         }
-        PathOp::Twist { angle } => collect_stable_ids_param(angle, seen, max_observed),
-        PathOp::Wiggle { amp, freq, seed } => {
-            collect_stable_ids_param(amp, seen, max_observed)?;
-            collect_stable_ids_param(freq, seen, max_observed)?;
-            collect_stable_ids_param(seed, seen, max_observed)
+        PathOp::Twist { angle, center } => {
+            collect_stable_ids_param(angle, seen, max_observed)?;
+            collect_stable_ids_param(center, seen, max_observed)
         }
-        PathOp::Repeater { copies, offset } => {
+        PathOp::Wiggle { amp, freq, seed: _ } => {
+            collect_stable_ids_param(amp, seen, max_observed)?;
+            collect_stable_ids_param(freq, seen, max_observed)
+            // seedはu64固定(非DocParam) — stable id走査対象外。
+        }
+        PathOp::Repeater {
+            copies,
+            offset,
+            transform,
+            composite: _,
+            start_opacity,
+            end_opacity,
+        } => {
             collect_stable_ids_param(copies, seen, max_observed)?;
-            collect_stable_ids_param(offset, seen, max_observed)
+            collect_stable_ids_param(offset, seen, max_observed)?;
+            collect_stable_ids_transform2d(transform, seen, max_observed)?;
+            collect_stable_ids_param(start_opacity, seen, max_observed)?;
+            collect_stable_ids_param(end_opacity, seen, max_observed)
         }
     }
+}
+
+fn collect_stable_ids_transform2d(
+    transform: &Transform2D,
+    seen: &mut HashSet<u64>,
+    max_observed: &mut Option<u64>,
+) -> Result<(), DocumentError> {
+    collect_stable_ids_param(&transform.position, seen, max_observed)?;
+    collect_stable_ids_param(&transform.anchor, seen, max_observed)?;
+    collect_stable_ids_param(&transform.scale, seen, max_observed)?;
+    collect_stable_ids_param(&transform.rotation, seen, max_observed)
 }
 
 /// `VectorContent::SvgAsset` が要求する MIME。
@@ -777,44 +832,127 @@ const SVG_ASSET_TYPE: &str = "image/svg+xml";
 /// `TextPath.font_asset` の許可型(D1i-1で確定。未決を埋めずここで正本化)。
 const FONT_ASSET_TYPES: &[&str] = &["font/ttf", "font/otf", "font/woff", "font/woff2"];
 
+/// PathOp意味論表(D1i-2)の拒否項目をここで型付きエラーに落とす。
+/// open-path Offsetの拒否は幾何側(`pathgeom::apply`)の責務 — validateはDocumentの
+/// 静的スキーマしか見えず、SvgAsset/TextPath由来パスの開閉はレシピからは判定できない。
 fn validate_path_op_params(
     doc: &Document,
     op: &crate::schema::PathOp,
     path: &str,
 ) -> Result<(), DocumentError> {
     use crate::schema::PathOp;
-    let c = path_op_scalar();
+    let scalar = path_op_scalar();
     match op {
-        PathOp::PuckerBloat { amount } => validate_param(doc, amount, c, &format!("{path}.amount")),
-        PathOp::ZigZag { amount, ridges } => {
-            validate_param(doc, amount, c, &format!("{path}.amount"))?;
-            validate_param(doc, ridges, c, &format!("{path}.ridges"))
+        PathOp::PuckerBloat { amount } => validate_param(
+            doc,
+            amount,
+            param_expect::path_op_pucker_bloat_amount(),
+            &format!("{path}.amount"),
+        ),
+        PathOp::ZigZag {
+            amount,
+            ridges,
+            point_type: _,
+        } => {
+            validate_param(
+                doc,
+                amount,
+                param_expect::path_op_non_negative(),
+                &format!("{path}.amount"),
+            )?;
+            validate_param(
+                doc,
+                ridges,
+                param_expect::path_op_non_negative(),
+                &format!("{path}.ridges"),
+            )
         }
-        PathOp::Offset { distance } => {
-            validate_param(doc, distance, c, &format!("{path}.distance"))
+        PathOp::Offset {
+            distance,
+            line_join: _,
+            miter_limit,
+        } => {
+            validate_param(doc, distance, scalar, &format!("{path}.distance"))?;
+            if !miter_limit.is_finite() {
+                return Err(DocumentError::NonFiniteValue {
+                    path: format!("{path}.miter_limit"),
+                });
+            }
+            if *miter_limit <= 0.0 {
+                return Err(DocumentError::ValueOutOfRange {
+                    path: format!("{path}.miter_limit"),
+                });
+            }
+            Ok(())
         }
-        PathOp::RoundCorners { radius } => {
-            validate_param(doc, radius, c, &format!("{path}.radius"))
-        }
+        PathOp::RoundCorners { radius } => validate_param(
+            doc,
+            radius,
+            param_expect::path_op_non_negative(),
+            &format!("{path}.radius"),
+        ),
         PathOp::Trim {
             start,
             end,
             offset,
             mode: _,
         } => {
-            validate_param(doc, start, c, &format!("{path}.start"))?;
-            validate_param(doc, end, c, &format!("{path}.end"))?;
-            validate_param(doc, offset, c, &format!("{path}.offset"))
+            validate_param(
+                doc,
+                start,
+                param_expect::path_op_unit_interval(),
+                &format!("{path}.start"),
+            )?;
+            validate_param(
+                doc,
+                end,
+                param_expect::path_op_unit_interval(),
+                &format!("{path}.end"),
+            )?;
+            validate_param(doc, offset, scalar, &format!("{path}.offset"))
         }
-        PathOp::Twist { angle } => validate_param(doc, angle, c, &format!("{path}.angle")),
-        PathOp::Wiggle { amp, freq, seed } => {
-            validate_param(doc, amp, c, &format!("{path}.amp"))?;
-            validate_param(doc, freq, c, &format!("{path}.freq"))?;
-            validate_param(doc, seed, c, &format!("{path}.seed"))
+        PathOp::Twist { angle, center } => {
+            validate_param(doc, angle, scalar, &format!("{path}.angle"))?;
+            validate_param(
+                doc,
+                center,
+                param_expect::path_op_vec2(),
+                &format!("{path}.center"),
+            )
         }
-        PathOp::Repeater { copies, offset } => {
-            validate_param(doc, copies, c, &format!("{path}.copies"))?;
-            validate_param(doc, offset, c, &format!("{path}.offset"))
+        PathOp::Wiggle { amp, freq, seed: _ } => {
+            validate_param(doc, amp, scalar, &format!("{path}.amp"))?;
+            validate_param(doc, freq, scalar, &format!("{path}.freq"))
+            // seedはu64固定(非DocParam) — 型で非有限値・キーフレームを構文上排除済み。
+        }
+        PathOp::Repeater {
+            copies,
+            offset,
+            transform,
+            composite: _,
+            start_opacity,
+            end_opacity,
+        } => {
+            validate_param(
+                doc,
+                copies,
+                param_expect::path_op_non_negative_integer(),
+                &format!("{path}.copies"),
+            )?;
+            validate_param(doc, offset, scalar, &format!("{path}.offset"))?;
+            validate_transform2d(doc, transform, &format!("{path}.transform"))?;
+            validate_param(
+                doc,
+                start_opacity,
+                param_expect::path_op_opacity(),
+                &format!("{path}.start_opacity"),
+            )?;
+            validate_param(
+                doc,
+                end_opacity,
+                param_expect::path_op_opacity(),
+                &format!("{path}.end_opacity"),
+            )
         }
     }
 }

@@ -493,11 +493,59 @@ pub enum TrimMode {
     Sequential,
 }
 
+/// ZigZag の頂点形状(D1i-2 PathOp意味論表)。デフォルトは表が固定しないため
+/// 「Zig Zag」の字面どおり鋭角側を既定にする(便利デフォルトの発明ではなく命名からの素直な選択)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, DeserializeDerive)]
+#[serde(rename_all = "snake_case")]
+pub enum PointType {
+    #[default]
+    Corner,
+    Smooth,
+}
+
+/// Offset の線結合スタイル(Clipper2 offset準拠。D1i-2 PathOp意味論表)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, DeserializeDerive)]
+#[serde(rename_all = "snake_case")]
+pub enum LineJoin {
+    #[default]
+    Miter,
+    Round,
+    Bevel,
+}
+
+fn default_miter_limit() -> f64 {
+    4.0
+}
+
+/// Repeaterのコピー合成順(Lottie `rp.m`: 1=Above/2=Below)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, DeserializeDerive)]
+#[serde(rename_all = "snake_case")]
+pub enum CompositeOrder {
+    #[default]
+    Above,
+    Below,
+}
+
+fn default_repeater_transform() -> Transform2D {
+    Transform2D::identity()
+}
+
+fn default_full_opacity() -> DocParam {
+    DocParam::const_f64(1.0)
+}
+
 /// v1閉集合のパス演算子(プラグイン契約には出さない。F-13)。
 /// 意味・単位・範囲の正本は docs/specs/M2-document-model.md「PathOp意味論表」。
-/// 【決定】2026-07-13(Lottie/AE採択)。D1i-2で表に無い席(point_type/line_join/center/transform等)を追加的に足す。
+/// 【決定】2026-07-13(Lottie/AE採択)。
+///
+/// `line_join`/`miter_limit`/`point_type`は`TrimMode`と同格の非キーフレーム様式席(生の値)、
+/// それ以外の数値・空間パラメータは通常のDocParam(キーフレーム/リンク駆動)。
+/// `Wiggle.seed`は再現性のための固定`u64`であり、時間駆動のDocParamにはしない(意味論表)。
+/// `Twist.center`は表が「必須」と定めるため`default`を持たない — 旧JSON(center無し)は
+/// 型付き拒否になり、変換はD1e migrationの担当(D1g/D1i-1と同じ「拒否→D1e変換」の型)。
 #[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
 #[serde(tag = "op", rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant)] // Repeaterは完全なTransform2D+opacity2本を持ち大きい。TrackItemと同様、v1ではBox化しない。
 pub enum PathOp {
     PuckerBloat {
         amount: DocParam,
@@ -505,9 +553,15 @@ pub enum PathOp {
     ZigZag {
         amount: DocParam,
         ridges: DocParam,
+        #[serde(default)]
+        point_type: PointType,
     },
     Offset {
         distance: DocParam,
+        #[serde(default)]
+        line_join: LineJoin,
+        #[serde(default = "default_miter_limit")]
+        miter_limit: f64,
     },
     RoundCorners {
         radius: DocParam,
@@ -521,14 +575,23 @@ pub enum PathOp {
     },
     Twist {
         angle: DocParam,
+        center: DocParam,
     },
     Wiggle {
         amp: DocParam,
         freq: DocParam,
-        seed: DocParam,
+        seed: u64,
     },
     Repeater {
         copies: DocParam,
         offset: DocParam,
+        #[serde(default = "default_repeater_transform")]
+        transform: Transform2D,
+        #[serde(default)]
+        composite: CompositeOrder,
+        #[serde(default = "default_full_opacity")]
+        start_opacity: DocParam,
+        #[serde(default = "default_full_opacity")]
+        end_opacity: DocParam,
     },
 }

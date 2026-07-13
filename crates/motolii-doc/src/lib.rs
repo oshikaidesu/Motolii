@@ -5,6 +5,7 @@
 //!
 //! **D1a**: スキーマ本体。**D1b**: 保存前`validate`(ガード1)。**D1c**: アトミック保存/読込。ジャーナルはD1d。
 //! **D8**: 単一writer + スナップショット配布の並行契約(型denyは`mut_document_deny`、完走は`d8_ownership`)。
+//! **D1c-FU(#101)**: `ResourceLimits`(入力上限、監査S10)と`OpenMode`(read/write互換分離、監査S14)。
 
 mod asset;
 mod bpm;
@@ -13,8 +14,10 @@ mod doc_keyframe;
 mod doc_value;
 mod duplicate;
 mod ids;
+mod limits;
 mod param;
 pub mod param_expect;
+pub mod pathgeom;
 mod persist;
 mod schema;
 mod stable_id;
@@ -37,17 +40,21 @@ pub use doc_keyframe::{DocKeyframe, DocKeyframeError, DocKeyframeTrack};
 pub use doc_value::DocValue;
 pub use duplicate::DuplicateError;
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
+pub use limits::{ResourceLimitError, ResourceLimits};
 pub use param::{DocParam, LookAtAxis};
 pub use param_expect::{ExpectedValueType, ParamConstraints};
+pub use pathgeom::PathOpError;
 pub use persist::{
-    classify_open_mode, detect_cloud_sync, load_document, load_document_bytes, save_document,
-    save_document_with_options, CloudSyncHint, OpenMode, PersistError, SaveAbortAfter, SaveOptions,
-    READER_VERSION, WRITER_VERSION,
+    check_migration_allowed, classify_open_mode, detect_cloud_sync, load_document,
+    load_document_bytes, load_document_bytes_with_limits, load_document_with_limits, save_document,
+    save_document_with_options, CloudSyncHint, OpenMode, OpenedDocument, PersistError,
+    SaveAbortAfter, SaveOptions, READER_VERSION, WRITER_VERSION,
 };
 pub use schema::{
-    BlendMode, Clip, ClipSource, ClippingMaskSettings, Composition, CompositionError,
-    EffectInstance, Group, ItemEnvelope, MaskMode, PathOp, Soundtrack, SoundtrackError,
-    StandardShape, Track, TrackItem, Transform2D, TrimMode, VectorContent, VectorRecipe,
+    BlendMode, Clip, ClipSource, ClippingMaskSettings, CompositeOrder, Composition,
+    CompositionError, EffectInstance, Group, ItemEnvelope, LineJoin, MaskMode, PathOp, PointType,
+    Soundtrack, SoundtrackError, StandardShape, Track, TrackItem, Transform2D, TrimMode,
+    VectorContent, VectorRecipe,
 };
 pub use stable_id::{EffectId, KeyframeId, StableIdError, StableIdSeq};
 pub use track_id::{TrackId, TrackIdError, TrackIdTable};
