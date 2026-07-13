@@ -14,6 +14,7 @@ mod doc_keyframe;
 mod doc_value;
 mod duplicate;
 mod ids;
+pub mod journal;
 mod limits;
 mod param;
 pub mod param_expect;
@@ -41,6 +42,14 @@ pub use doc_keyframe::{DocKeyframe, DocKeyframeError, DocKeyframeTrack};
 pub use doc_value::DocValue;
 pub use duplicate::DuplicateError;
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
+pub use journal::{
+    checkpoint_with_fault_plan, inject_bad_checksum_at_last_frame, inject_corrupt_journal_tail,
+    inject_salt_mismatch_frame, load_catalog, open_project, open_project_with_limits,
+    save_project_with_journal, DurabilityStage, FaultPlan, FsOpKind, GenerationCatalog,
+    GenerationEntry, JournalEdit, JournalRecordKind, JournalScanStop, OpenProjectOutcome,
+    PinGenerationOptions, ProjectError, RecordingFs, RecoveryError, RecoverySource, RotateOptions,
+    SaveProjectOptions, StdFs, WalError, WalSession,
+};
 pub use limits::{ResourceLimitError, ResourceLimits};
 pub use param::{DocParam, LookAtAxis};
 pub use param_expect::{DocPluginKind, ExpectedValueType, KnownPluginInfo, ParamConstraints};

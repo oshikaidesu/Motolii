@@ -5,9 +5,9 @@
 //! ロード入口(`persist::load_document_with_limits`)へ注入可能。production既定値は
 //! 運用調整値であり、永続JSON・migration・plugin契約には焼かない(#101完了条件)。
 //!
-//! command payload / journal / sample はD1d(#105)/D2/D4がまだ存在しないため、
-//! ここでは検査プリミティブ(`check_*`)のみを提供し、Document構造の走査には含めない。
-//! D1d/D2/D4は上限を別定義せず、ここの`ResourceLimits`を再利用する(実装ガード)。
+//! command payload / journal / sample のうち journal はD1d(#105)が
+//! `check_journal_bytes` / `max_command_payload_bytes`(record payload)を再利用する。
+//! command本体はD2、sampleはD4。上限を別定義しない(実装ガード)。
 
 use serde_json::{Map, Value as JsonValue};
 use thiserror::Error;

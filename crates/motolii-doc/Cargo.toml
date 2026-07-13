@@ -11,7 +11,10 @@ motolii-eval.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+crc32fast = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
 
 [dev-dependencies]
 motolii-plugin.workspace = true
 proptest.workspace = true
+uuid = { version = "1", features = ["v4", "serde"] }
