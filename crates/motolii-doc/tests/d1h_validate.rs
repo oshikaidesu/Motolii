@@ -3,7 +3,7 @@
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
     AssetId, Clip, ClipSource, DocKeyframe, DocKeyframeTrack, DocParam, DocValue, Document,
-    DocumentError, EffectInstance, ItemEnvelope, Track, TrackItem,
+    DocumentError, EffectId, EffectInstance, ItemEnvelope, KeyframeId, Track, TrackItem,
 };
 use motolii_eval::Interp;
 use std::collections::BTreeMap;
@@ -58,11 +58,13 @@ fn keyframes_mixed_variants_fail() {
     let mut doc = valid_minimal();
     let mut track = DocKeyframeTrack::new();
     track.insert(DocKeyframe {
+        id: KeyframeId::from_raw(0),
         t: RationalTime::ZERO,
         value: DocValue::F64(0.0),
         interp: Interp::Linear,
     });
     track.insert(DocKeyframe {
+        id: KeyframeId::from_raw(1),
         t: RationalTime::from_seconds(1),
         value: DocValue::Vec2([0.0, 0.0]),
         interp: Interp::Linear,
@@ -113,6 +115,7 @@ fn color_out_of_range_fails() {
     let mut params = BTreeMap::new();
     params.insert("color".into(), DocParam::const_color([2.0, 0.0, 0.0, 1.0]));
     clip_mut(&mut doc).envelope.effects.push(EffectInstance {
+        id: EffectId::from_raw(0),
         plugin_id: "core.filter.tint".into(),
         effect_version: 1,
         enabled: true,
@@ -221,6 +224,7 @@ fn bezier_nan_y_fails() {
     let mut doc = valid_minimal();
     let mut track = DocKeyframeTrack::new();
     track.insert(DocKeyframe {
+        id: KeyframeId::from_raw(0),
         t: RationalTime::ZERO,
         value: DocValue::F64(0.0),
         interp: Interp::Bezier {
@@ -231,6 +235,7 @@ fn bezier_nan_y_fails() {
         },
     });
     track.insert(DocKeyframe {
+        id: KeyframeId::from_raw(1),
         t: RationalTime::from_seconds(1),
         value: DocValue::F64(1.0),
         interp: Interp::Linear,

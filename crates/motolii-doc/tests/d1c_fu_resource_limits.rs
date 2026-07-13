@@ -209,6 +209,7 @@ fn huge_effect_and_plugin_param_ids_are_rejected() {
         let layer = doc.layers.allocate("l").unwrap();
         let mut envelope = ItemEnvelope::new(layer);
         envelope.effects.push(EffectInstance {
+            id: motolii_doc::EffectId::from_raw(1),
             plugin_id: "core.filter.tint".into(),
             effect_version: 1,
             enabled: true,
