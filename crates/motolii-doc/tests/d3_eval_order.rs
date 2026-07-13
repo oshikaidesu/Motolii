@@ -487,3 +487,187 @@ fn source_time_comes_from_video_clip_not_overlay() {
         "source_time must follow video TimeMap (3+1), not overlay"
     );
 }
+
+#[test]
+fn f3_effect_before_transform_in_graph_steps() {
+    let mut doc = Document::new_v1();
+    doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
+    let layer = doc.layers.allocate("rect").unwrap();
+    let track_id = doc.track_ids.allocate("V1").unwrap();
+    let mut clip = rect_clip(layer.get(), [0.0, 0.0], [0.4, 0.4], [1.0, 0.0, 0.0, 1.0]);
+    clip.envelope.layer_id = layer;
+    clip.envelope.transform.position = DocParam::const_vec2([0.25, 0.0]);
+    let tint_id = alloc_effect(&mut doc);
+    clip.envelope.effects.push(EffectInstance {
+        id: tint_id,
+        plugin_id: "core.filter.tint".into(),
+        effect_version: 1,
+        enabled: true,
+        params: BTreeMap::from([("color".into(), DocParam::const_color([0.0, 1.0, 0.0, 1.0]))]),
+        extra: Default::default(),
+    });
+    doc.tracks.push(Track {
+        id: track_id,
+        items: vec![TrackItem::Clip(clip)],
+    });
+    let mut registry = PluginRegistry::new();
+    register_reference_plugins(&mut registry).unwrap();
+    let built = build_document_frame_graph(
+        &doc,
+        EvaluationTime::new(RationalTime::ZERO),
+        desc(),
+        &DataTracks::new(),
+        &registry,
+        None,
+    )
+    .unwrap();
+    use motolii_render::RenderStep;
+    let mut saw_overlay = false;
+    let mut saw_effect = false;
+    let mut saw_place = false;
+    for step in &built.graph.steps {
+        match step {
+            RenderStep::OverlayRect { .. } => {
+                assert!(!saw_effect && !saw_place, "source before effect/transform");
+                saw_overlay = true;
+            }
+            RenderStep::Plugin { .. } if saw_overlay && !saw_place => {
+                saw_effect = true;
+            }
+            RenderStep::AffinePlace { .. } => {
+                assert!(saw_effect, "effect must precede AffinePlace");
+                saw_place = true;
+            }
+            _ => {}
+        }
+    }
+    assert!(saw_overlay && saw_effect && saw_place);
+}
+
+#[test]
+fn parent_transform_composes_into_affine_place() {
+    let mut doc = Document::new_v1();
+    doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
+    let parent_layer = doc.layers.allocate("parent").unwrap();
+    let child_layer = doc.layers.allocate("child").unwrap();
+    let track_id = doc.track_ids.allocate("V1").unwrap();
+    let mut parent = rect_clip(
+        parent_layer.get(),
+        [0.0, 0.0],
+        [0.1, 0.1],
+        [0.0, 0.0, 1.0, 1.0],
+    );
+    parent.envelope.layer_id = parent_layer;
+    parent.envelope.transform.position = DocParam::const_vec2([0.2, 0.0]);
+    parent.envelope.visible = false;
+    let mut child = rect_clip(
+        child_layer.get(),
+        [0.0, 0.0],
+        [0.1, 0.1],
+        [1.0, 0.0, 0.0, 1.0],
+    );
+    child.envelope.layer_id = child_layer;
+    child.envelope.transform.position = DocParam::const_vec2([0.1, 0.0]);
+    child.envelope.transform.parent = Some(parent_layer);
+    doc.tracks.push(Track {
+        id: track_id,
+        items: vec![TrackItem::Clip(parent), TrackItem::Clip(child)],
+    });
+    let mut registry = PluginRegistry::new();
+    register_reference_plugins(&mut registry).unwrap();
+    let built = build_document_frame_graph(
+        &doc,
+        EvaluationTime::new(RationalTime::ZERO),
+        desc(),
+        &DataTracks::new(),
+        &registry,
+        None,
+    )
+    .unwrap();
+    // parent(0.2)+child(0.1)=0.3 の平行移動が AffinePlace に載る。
+    let place = built
+        .graph
+        .steps
+        .iter()
+        .find_map(|s| match s {
+            motolii_render::RenderStep::AffinePlace { inverse_uv, .. } => Some(*inverse_uv),
+            _ => None,
+        })
+        .expect("child must emit AffinePlace for composed parent transform");
+    // 恒等以外であること(合成済み)。
+    assert!(
+        (place[2]).abs() > 1e-4 || (place[5]).abs() > 1e-4 || (place[0] - 1.0).abs() > 1e-4,
+        "expected non-identity inverse_uv, got {place:?}"
+    );
+}
+
+#[test]
+fn two_video_assets_get_independent_slots() {
+    use motolii_doc::{Asset, AssetId};
+
+    let mut doc = Document::new_v1();
+    doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
+    let a0 = AssetId::from_raw(0);
+    let a1 = AssetId::from_raw(1);
+    for (id, name) in [(a0, "a"), (a1, "b")] {
+        doc.assets
+            .insert(Asset {
+                id,
+                name: name.into(),
+                asset_type: "video/mp4".into(),
+                content_hash: format!("sha256:{name}"),
+                path_absolute: None,
+                path_project_relative: None,
+                file_name: Some(format!("{name}.mp4")),
+                size_bytes: None,
+                head_hash: None,
+                tail_hash: None,
+            })
+            .unwrap();
+    }
+    let l0 = doc.layers.allocate("v0").unwrap();
+    let l1 = doc.layers.allocate("v1").unwrap();
+    let track_id = doc.track_ids.allocate("V1").unwrap();
+    let c0 = Clip {
+        envelope: ItemEnvelope::new(l0),
+        start: RationalTime::ZERO,
+        duration: RationalTime::try_new(10, 1).unwrap(),
+        time_map: TimeMap::offset(RationalTime::try_new(1, 1).unwrap()),
+        source: ClipSource::Asset { asset: a0 },
+    };
+    let c1 = Clip {
+        envelope: ItemEnvelope::new(l1),
+        start: RationalTime::ZERO,
+        duration: RationalTime::try_new(10, 1).unwrap(),
+        time_map: TimeMap::offset(RationalTime::try_new(2, 1).unwrap()),
+        source: ClipSource::Asset { asset: a1 },
+    };
+    doc.tracks.push(Track {
+        id: track_id,
+        items: vec![TrackItem::Clip(c0), TrackItem::Clip(c1)],
+    });
+    let mut registry = PluginRegistry::new();
+    register_reference_plugins(&mut registry).unwrap();
+    let t = RationalTime::try_new(1, 1).unwrap();
+    let built = build_document_frame_graph(
+        &doc,
+        EvaluationTime::new(t),
+        desc(),
+        &DataTracks::new(),
+        &registry,
+        None,
+    )
+    .unwrap();
+    assert_eq!(built.video_slots.len(), 2);
+    assert_eq!(built.video_slots[0].asset, a0);
+    assert_eq!(built.video_slots[1].asset, a1);
+    assert_eq!(
+        built.video_slots[0].source_time,
+        RationalTime::try_new(2, 1).unwrap()
+    );
+    assert_eq!(
+        built.video_slots[1].source_time,
+        RationalTime::try_new(3, 1).unwrap()
+    );
+    assert_eq!(built.source_time, built.video_slots[0].source_time);
+}

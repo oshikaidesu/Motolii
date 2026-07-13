@@ -9,8 +9,8 @@ use motolii_core::{
 };
 use motolii_gpu::{upload_rgba, GpuCtx, PipelineCache};
 use motolii_nodes::{
-    create_rgba_render_target, ClippingMaskMode, CompositeMode, CompositeNode, MaskNode, NodeError,
-    OverlayNode, RectOverlay,
+    create_rgba_render_target, AffinePlaceNode, ClippingMaskMode, CompositeMode, CompositeNode,
+    MaskNode, NodeError, OverlayNode, RectOverlay,
 };
 use motolii_plugin::{
     LayerSourceContext, PluginError, PluginId, PluginRegistry, RenderCtx, ResolvedParams,
@@ -94,6 +94,13 @@ pub enum RenderStep {
         output: TextureId,
         mode: ClippingMaskMode,
     },
+    /// F-3 変形段: 正準アフィンの UV 逆行列で入力を再配置する。
+    AffinePlace {
+        input: TextureId,
+        output: TextureId,
+        /// UV空間の逆アフィン `[m00,m01,m02, m10,m11,m12]`。
+        inverse_uv: [f32; 6],
+    },
     /// PluginRegistry経由の一般ステップ(所見1)。種別はレジストリlookupで決まる。
     Plugin {
         id: PluginId,
@@ -164,6 +171,7 @@ enum TexProducer {
     Overlay,
     Composite,
     Mask,
+    AffinePlace,
     Plugin,
 }
 
@@ -182,6 +190,7 @@ pub struct RenderSession {
     overlay: OverlayNode,
     composite: CompositeNode,
     mask: MaskNode,
+    affine_place: AffinePlaceNode,
     pipelines: PipelineCache,
     transparent: Option<(FrameDesc, wgpu::Texture)>,
     /// 単色Solidの再利用(毎フレームuploadしない)。
@@ -204,6 +213,7 @@ impl RenderSession {
             overlay: OverlayNode::new(gpu),
             composite: CompositeNode::new(gpu),
             mask: MaskNode::new(gpu),
+            affine_place: AffinePlaceNode::new(gpu),
             pipelines: PipelineCache::new(),
             transparent: None,
             solid: None,
@@ -465,6 +475,24 @@ pub fn render_graph_cached(
                 )?;
                 textures[output.0] = Some(output_texture);
             }
+            RenderStep::AffinePlace {
+                input,
+                output,
+                inverse_uv,
+            } => {
+                let input_texture = texture_ref(&textures, desc, *input)?;
+                let output_texture = session.acquire_render_target(gpu, desc, &avoid);
+                session.affine_place.set_inverse_uv_matrix(*inverse_uv);
+                session.affine_place.render(
+                    gpu,
+                    input_texture,
+                    TextureRef {
+                        texture: &output_texture,
+                        desc,
+                    },
+                )?;
+                textures[output.0] = Some(output_texture);
+            }
             RenderStep::Plugin {
                 id,
                 params,
@@ -694,6 +722,13 @@ fn validate_linear_graph(
                 producer[output.0] = Some(TexProducer::Mask);
                 has_general_graph = true;
             }
+            RenderStep::AffinePlace { input, output, .. } => {
+                mark_read(*input, &mut read)?;
+                validate_input(*input, &written)?;
+                validate_output(*output, &mut written)?;
+                producer[output.0] = Some(TexProducer::AffinePlace);
+                has_general_graph = true;
+            }
             RenderStep::Plugin {
                 inputs: plugin_inputs,
                 output,
@@ -725,7 +760,11 @@ fn validate_linear_graph(
     if !has_general_graph {
         match producer.get(graph.output.0).and_then(|p| *p) {
             // 単一レイヤー等、Compositeなしで中間テクスチャをそのまま出すD3グラフ。
-            Some(TexProducer::Overlay) | Some(TexProducer::Plugin) | Some(TexProducer::Mask) => {
+            Some(TexProducer::Overlay)
+            | Some(TexProducer::Plugin)
+            | Some(TexProducer::Mask)
+            | Some(TexProducer::AffinePlace)
+            | Some(TexProducer::VideoSource) => {
                 has_general_graph = true;
             }
             _ => {}
@@ -797,6 +836,7 @@ fn texture_slot_count(graph: &LinearRenderGraph) -> Result<usize, RenderError> {
                 output,
                 ..
             } => vec![content.0, mask.0, output.0],
+            RenderStep::AffinePlace { input, output, .. } => vec![input.0, output.0],
             RenderStep::Plugin { inputs, output, .. } => {
                 let mut v: Vec<_> = inputs.iter().map(|id| id.0).collect();
                 v.push(output.0);
@@ -1003,6 +1043,7 @@ fn step_input_ids(step: &RenderStep) -> Vec<TextureId> {
             ..
         } => vec![*background, *foreground],
         RenderStep::ApplyMask { content, mask, .. } => vec![*content, *mask],
+        RenderStep::AffinePlace { input, .. } => vec![*input],
         RenderStep::Plugin { inputs, .. } => inputs.clone(),
         _ => Vec::new(),
     }

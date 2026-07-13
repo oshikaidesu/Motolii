@@ -27,9 +27,17 @@ pub const RECT_LAYER_SOURCE: &str = "doc.layer_source.rect";
 pub const CLEAR_LAYER_SOURCE: &str = "core.layer_source.clear";
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct VideoSlot {
+    pub texture_id: TextureId,
+    pub asset: AssetId,
+    pub source_time: RationalTime,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct DocumentFrameGraph {
     pub graph: LinearRenderGraph,
-    pub video_slots: Vec<(TextureId, AssetId)>,
+    pub video_slots: Vec<VideoSlot>,
+    /// 代表 source_time(先頭の video slot。無ければ timeline)。
     pub source_time: RationalTime,
 }
 
@@ -37,8 +45,6 @@ pub struct DocumentFrameGraph {
 pub enum GraphError {
     #[error("no video source clip in document")]
     NoVideoSource,
-    #[error("multiple video asset clips in one frame")]
-    MultipleVideoSources,
     #[error("asset {0} has no resolvable path")]
     UnresolvedAsset(u64),
     #[error("clip layer {layer}: {source}")]
@@ -53,6 +59,8 @@ pub enum GraphError {
         #[source]
         source: ParamEvalError,
     },
+    #[error("singular transform (non-invertible) on layer {0}")]
+    SingularTransform(u64),
     #[error("plugin {plugin_id}: {source}")]
     Plugin {
         plugin_id: String,
@@ -126,6 +134,11 @@ pub fn build_document_frame_graph(
         any_solo,
     );
     let output = b.build_document(project_root)?;
+    let source_time = b
+        .video_slots
+        .first()
+        .map(|s| s.source_time)
+        .unwrap_or(eval.timeline_time);
     Ok(DocumentFrameGraph {
         graph: LinearRenderGraph {
             desc,
@@ -133,7 +146,7 @@ pub fn build_document_frame_graph(
             output,
         },
         video_slots: b.video_slots,
-        source_time: b.video_source_time.unwrap_or(eval.timeline_time),
+        source_time,
     })
 }
 
@@ -143,18 +156,18 @@ struct GraphBuilder<'a> {
     tracks: &'a DataTracks,
     registry: &'a PluginRegistry,
     any_solo: bool,
+    frame_desc: FrameDesc,
     steps: Vec<RenderStep>,
     next_id: usize,
     transparent_id: Option<TextureId>,
-    video_slots: Vec<(TextureId, AssetId)>,
-    video_source_time: Option<RationalTime>,
+    video_slots: Vec<VideoSlot>,
     resolved_layers: ResolvedLayerParams,
 }
 
 impl<'a> GraphBuilder<'a> {
     fn new(
         doc: &'a Document,
-        _desc: FrameDesc,
+        desc: FrameDesc,
         timeline_time: RationalTime,
         tracks: &'a DataTracks,
         registry: &'a PluginRegistry,
@@ -166,11 +179,11 @@ impl<'a> GraphBuilder<'a> {
             tracks,
             registry,
             any_solo,
+            frame_desc: desc,
             steps: Vec::new(),
             next_id: 0,
             transparent_id: None,
             video_slots: Vec::new(),
-            video_source_time: None,
             resolved_layers: ResolvedLayerParams::default(),
         }
     }
@@ -245,17 +258,19 @@ impl<'a> GraphBuilder<'a> {
         Ok(acc)
     }
 
-    fn ensure_video_slot(&mut self, asset: AssetId) -> Result<TextureId, GraphError> {
-        if let Some((id, existing)) = self.video_slots.first() {
-            return if *existing == asset {
-                Ok(*id)
-            } else {
-                Err(GraphError::MultipleVideoSources)
-            };
-        }
+    fn ensure_video_slot(
+        &mut self,
+        asset: AssetId,
+        source_time: RationalTime,
+    ) -> Result<TextureId, GraphError> {
+        // 同一 Asset でも TimeMap が異なれば別スロット(slot 単位の source_time)。
         let id = self.alloc_id();
         self.steps.push(RenderStep::VideoSource { output: id });
-        self.video_slots.push((id, asset));
+        self.video_slots.push(VideoSlot {
+            texture_id: id,
+            asset,
+            source_time,
+        });
         Ok(id)
     }
 
@@ -355,18 +370,16 @@ impl<'a> GraphBuilder<'a> {
                 layer: layer.get(),
                 source: e,
             })?;
-        if matches!(&clip.source, ClipSource::Asset { .. }) {
-            self.video_source_time = Some(st);
-        }
         let local = self.resolve_xform(&clip.envelope.transform, layer)?;
         let world = compose_transform(inherited, local);
-        // F-3: source → effects → (transform は world としてソース配置へ) → mask
-        let mut tex = self.build_source(clip, world, layer)?;
+        // F-3: source → effect stack → transform → clipping mask
+        let mut tex = self.build_source(clip, st, layer)?;
         for effect in &clip.envelope.effects {
             if effect.enabled {
                 tex = self.apply_effect(tex, effect, layer)?;
             }
         }
+        tex = self.apply_world_transform(tex, world, layer)?;
         if clip.envelope.clipping_mask.enabled {
             if let Some(mask) = mask_below {
                 tex = self.apply_mask(tex, mask, clip.envelope.clipping_mask.mode);
@@ -377,11 +390,13 @@ impl<'a> GraphBuilder<'a> {
     }
 
     fn resolve_xform(&self, xform: &Transform2D, layer: LayerId) -> Result<Affine2D, GraphError> {
+        let doc = self.doc;
         resolve_transform(
             xform,
             self.timeline_time,
             self.tracks,
             &self.resolved_layers,
+            &|id| crate::command::find_envelope(doc, id).map(|e| &e.transform),
         )
         .map_err(|e| GraphError::ParamEval {
             layer: layer.get(),
@@ -409,15 +424,15 @@ impl<'a> GraphBuilder<'a> {
     fn build_source(
         &mut self,
         clip: &Clip,
-        world: Affine2D,
+        source_time: RationalTime,
         layer: LayerId,
     ) -> Result<TextureId, GraphError> {
         match &clip.source {
-            ClipSource::Asset { asset } => self.ensure_video_slot(*asset),
+            ClipSource::Asset { asset } => self.ensure_video_slot(*asset, source_time),
             ClipSource::Vector { .. } => Err(GraphError::UnsupportedVectorSource(layer.get())),
             ClipSource::Plugin {
                 plugin_id, params, ..
-            } if plugin_id == RECT_LAYER_SOURCE => self.build_rect_overlay(params, world, layer),
+            } if plugin_id == RECT_LAYER_SOURCE => self.build_rect_overlay(params, layer),
             ClipSource::Plugin {
                 plugin_id, params, ..
             } if plugin_id == CLEAR_LAYER_SOURCE => {
@@ -440,7 +455,6 @@ impl<'a> GraphBuilder<'a> {
     fn build_rect_overlay(
         &mut self,
         params: &BTreeMap<String, crate::DocParam>,
-        world: Affine2D,
         layer: LayerId,
     ) -> Result<TextureId, GraphError> {
         let pe = |e| GraphError::ParamEval {
@@ -459,14 +473,15 @@ impl<'a> GraphBuilder<'a> {
             layer: layer.get(),
             param: "color",
         })?;
-        let mut center = eval_vec2(
+        // F-3: ソースはローカル空間。変形は effect 後の AffinePlace で適用する。
+        let center = eval_vec2(
             center_p,
             self.timeline_time,
             self.tracks,
             &self.resolved_layers,
         )
         .map_err(pe)?;
-        let mut size = eval_vec2(
+        let size = eval_vec2(
             size_p,
             self.timeline_time,
             self.tracks,
@@ -480,12 +495,6 @@ impl<'a> GraphBuilder<'a> {
             &self.resolved_layers,
         )
         .map_err(pe)?;
-        // v1 OverlayRect はコンプ空間へ直接描くため、継承変形を center/size へ畳む。
-        let translated = world.transform_point(center[0], center[1]);
-        center = translated;
-        let sc = world.approx_scale();
-        size[0] *= sc[0];
-        size[1] *= sc[1];
         let pre = self.transparent();
         let out = self.alloc_id();
         self.steps.push(RenderStep::OverlayRect {
@@ -507,6 +516,29 @@ impl<'a> GraphBuilder<'a> {
                     color[3] as f32,
                 ],
             },
+        });
+        Ok(out)
+    }
+
+    /// F-3 変形段。恒等ならスキップ。
+    fn apply_world_transform(
+        &mut self,
+        input: TextureId,
+        world: Affine2D,
+        layer: LayerId,
+    ) -> Result<TextureId, GraphError> {
+        if world.is_approx_identity() {
+            return Ok(input);
+        }
+        let aspect = self.frame_desc.width as f64 / self.frame_desc.height as f64;
+        let inverse_uv = world
+            .to_inverse_uv_matrix(aspect)
+            .ok_or(GraphError::SingularTransform(layer.get()))?;
+        let out = self.alloc_id();
+        self.steps.push(RenderStep::AffinePlace {
+            input,
+            output: out,
+            inverse_uv,
         });
         Ok(out)
     }

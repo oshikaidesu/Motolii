@@ -1014,6 +1014,193 @@ impl MaskNode {
     }
 }
 
+/// F-3 の変形段: 入力テクスチャを正準アフィンで再配置する。
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct AffinePlaceUniform {
+    m00: f32,
+    m01: f32,
+    m02: f32,
+    _pad0: f32,
+    m10: f32,
+    m11: f32,
+    m12: f32,
+    _pad1: f32,
+}
+
+pub struct AffinePlaceNode {
+    pipeline: wgpu::RenderPipeline,
+    bind_group_layout: wgpu::BindGroupLayout,
+    uniform_buffer: wgpu::Buffer,
+    sampler: wgpu::Sampler,
+    inv_uv: [f32; 6],
+}
+
+impl AffinePlaceNode {
+    pub fn new(gpu: &GpuCtx) -> Self {
+        let bgl = gpu
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("affine-place-bgl"),
+                entries: &[
+                    texture_entry(0),
+                    sampler_entry(1),
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+            });
+        let pl = gpu
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("affine-place-pl"),
+                bind_group_layouts: &[Some(&bgl)],
+                immediate_size: 0,
+            });
+        let sh = gpu
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("affine-place-sh"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("affine_place.wgsl").into()),
+            });
+        let pipeline = gpu
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("affine-place-pipe"),
+                layout: Some(&pl),
+                vertex: wgpu::VertexState {
+                    module: &sh,
+                    entry_point: Some("vs_main"),
+                    buffers: &[],
+                    compilation_options: Default::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &sh,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview_mask: None,
+                cache: None,
+            });
+        let uniform_buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("affine-place-u"),
+            size: std::mem::size_of::<AffinePlaceUniform>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let sampler = gpu.device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("affine-place-s"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        Self {
+            pipeline,
+            bind_group_layout: bgl,
+            uniform_buffer,
+            sampler,
+            inv_uv: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+        }
+    }
+
+    /// UV空間の逆アフィン6係数を設定する。
+    pub fn set_inverse_uv_matrix(&mut self, inv_uv: [f32; 6]) {
+        self.inv_uv = inv_uv;
+    }
+
+    pub fn render(
+        &self,
+        gpu: &GpuCtx,
+        input: TextureRef<'_>,
+        output: TextureRef<'_>,
+    ) -> Result<(), NodeError> {
+        require_same_dimensions("affine_place", input.desc, output.desc)?;
+        if input.desc.premultiplied || output.desc.premultiplied {
+            require_premultiplied("affine_place", "input", input.desc)?;
+            require_premultiplied("affine_place", "output", output.desc)?;
+        }
+        let u = AffinePlaceUniform {
+            m00: self.inv_uv[0],
+            m01: self.inv_uv[1],
+            m02: self.inv_uv[2],
+            _pad0: 0.0,
+            m10: self.inv_uv[3],
+            m11: self.inv_uv[4],
+            m12: self.inv_uv[5],
+            _pad1: 0.0,
+        };
+        gpu.queue
+            .write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&u));
+        let input_view = input
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let output_view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let bg = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("affine-place-bg"),
+            layout: &self.bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&input_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: self.uniform_buffer.as_entire_binding(),
+                },
+            ],
+        });
+        let mut enc = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("affine-place"),
+            });
+        {
+            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("affine-place-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &output_view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                multiview_mask: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &bg, &[]);
+            pass.draw(0..3, 0..1);
+        }
+        gpu.queue.submit([enc.finish()]);
+        Ok(())
+    }
+}
+
 fn composite_mode_to_u32(mode: CompositeMode) -> u32 {
     match mode {
         CompositeMode::Normal => COMPOSITE_MODE_NORMAL,

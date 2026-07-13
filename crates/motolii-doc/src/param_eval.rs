@@ -26,6 +26,11 @@ pub enum ParamEvalError {
         got: Value,
         fallback: &'static str,
     },
+    /// validate の `ParentCycle` と同型。評価時に未検証文書へも適用する。
+    #[error("transform.parent cycle involving layer {layer}")]
+    ParentCycle { layer: u64 },
+    #[error("transform.parent {parent} does not resolve to a layer")]
+    DanglingParent { parent: u64 },
 }
 
 #[derive(Debug, Clone, Default)]
