@@ -1,0 +1,32 @@
+{
+  "entries": [
+    {
+      "path": "timeline_start/speed_clip.json",
+      "track_count": 1,
+      "clip_count": 1,
+      "keyframe_count": 2,
+      "generation": "timeline_start"
+    },
+    {
+      "path": "path_ops/svg_with_ops.json",
+      "track_count": 1,
+      "clip_count": 1,
+      "keyframe_count": 0,
+      "generation": "path_ops"
+    },
+    {
+      "path": "path_ops/vector_with_clip_ops.json",
+      "track_count": 1,
+      "clip_count": 1,
+      "keyframe_count": 0,
+      "generation": "path_ops"
+    },
+    {
+      "path": "current/minimal_v1.json",
+      "track_count": 0,
+      "clip_count": 0,
+      "keyframe_count": 0,
+      "generation": "current"
+    }
+  ]
+}
