@@ -98,6 +98,8 @@ pub enum PersistError {
     Json(#[from] serde_json::Error),
     #[error(transparent)]
     ResourceLimit(#[from] ResourceLimitError),
+    #[error(transparent)]
+    Migrate(#[from] Box<crate::migrate::MigrateError>),
     #[error(
         "document requires reader version {min_reader_version}, but this reader is {reader_version}"
     )]

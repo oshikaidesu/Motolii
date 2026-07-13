@@ -7,6 +7,7 @@
 //! **D8**: 単一writer + スナップショット配布の並行契約(型denyは`mut_document_deny`、完走は`d8_ownership`)。
 //! **D1c-FU(#101)**: `ResourceLimits`(入力上限、監査S10)と`OpenMode`(read/write互換分離、監査S14)。
 //! **D3**: Document→レンダグラフ変換(`graph` / `EvaluationTime`)。
+//! **D1e**: 旧形式migration(`migrate`)。loadは拒否のまま、変換は明示API。
 
 mod affine;
 mod asset;
@@ -20,6 +21,7 @@ mod graph;
 mod ids;
 pub mod journal;
 mod limits;
+mod migrate;
 mod param;
 pub mod param_eval;
 pub mod param_expect;
@@ -64,6 +66,13 @@ pub use journal::{
     RecoverySource, RotateOptions, SaveProjectOptions, StdFs, WalError, WalSession,
 };
 pub use limits::{ResourceLimitError, ResourceLimits};
+pub use migrate::{
+    bump_min_reader_for_nest_schema_change, count_document, legacy_timemap_source, migrate_bytes,
+    migrate_bytes_with_limits, migrate_document_file, migrate_document_file_with_limits,
+    modern_timemap_source, semantic_fingerprint, DocumentCounts, MigrateError, MigrateFileOptions,
+    MigrateFileResult, MigrationReport, SemanticFingerprint, BACKUP_SUFFIX,
+    LATEST_DOCUMENT_VERSION,
+};
 pub use param::{DocParam, LookAtAxis};
 pub use param_eval::{ParamEvalError, ResolvedLayerParams};
 pub use param_expect::{DocPluginKind, ExpectedValueType, KnownPluginInfo, ParamConstraints};
