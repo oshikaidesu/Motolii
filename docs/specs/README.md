@@ -12,8 +12,7 @@
 |---|---|
 | [M0-spikes.md](M0-spikes.md) | 確定 |
 | [M1-vertical-slice.md](M1-vertical-slice.md) | 確定(M0の採否判断で該当箇所を更新) |
-| [M2-document-model.md](M2-document-model.md) | **段階発注可**(Wave1 #126/#129/#130・#100/#101完了・main到達。**D3(#110)・D1i-4(#107)・D1d(#105)・D1e(#104)完了**。発注可: #108 D1i-3 / D6 / D7。D5はD3+D4後) |
-| [M3-ui-integration.md](M3-ui-integration.md) | ドラフト(M0-S1の採否判断で確定) |
+| [M2-document-model.md](M2-document-model.md) | **段階発注可**(Wave2 #134/#135/#136 main到達。**Wave3**: #104 D1e 完了 / #108 D1i-3 並列PR。後段: #133 D6 / D7 / D5) || [M3-ui-integration.md](M3-ui-integration.md) | ドラフト(M0-S1の採否判断で確定) |
 | [M4-cache-and-analysis.md](M4-cache-and-analysis.md) | ドラフト(凍結ゲートで確定) |
 | [M5-3d-and-post.md](M5-3d-and-post.md) | ドラフト(凍結ゲートで確定) |
 
