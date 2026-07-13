@@ -210,3 +210,40 @@ fn look_at_angle_independent_of_document_item_order() {
     approx_angle(rb, FRAC_PI_4);
     approx_angle(ra, rb);
 }
+
+/// 親が回転しているとき、world 方向を placement 逆で local へ戻し、最終 world 軸が target を向く。
+#[test]
+fn look_at_rotated_parent_world_axis_points_at_target() {
+    let mut doc = Document::new_v1();
+    doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
+    let parent = doc.layers.allocate("parent").unwrap();
+    let looker = doc.layers.allocate("looker").unwrap();
+    let target = doc.layers.allocate("target").unwrap();
+    let tid = doc.track_ids.allocate("V1").unwrap();
+
+    // 親 +90°。looker local (1,0) → world (0,1)。target world (1,1) → 期待 world 角 0。
+    let mut parent_xf = Transform2D::identity();
+    parent_xf.rotation = DocParam::const_f64(FRAC_PI_2);
+    let mut looker_xf = Transform2D::identity();
+    looker_xf.position = DocParam::const_vec2([1.0, 0.0]);
+    looker_xf.parent = Some(parent);
+    looker_xf.rotation = DocParam::LookAt {
+        target,
+        axis: LookAtAxis::PlusX,
+    };
+    let mut target_xf = Transform2D::identity();
+    target_xf.position = DocParam::const_vec2([1.0, 1.0]);
+
+    doc.tracks.push(Track {
+        id: tid,
+        items: vec![
+            TrackItem::Clip(rect_clip(parent, parent_xf)),
+            TrackItem::Clip(rect_clip(looker, looker_xf)),
+            TrackItem::Clip(rect_clip(target, target_xf)),
+        ],
+    });
+
+    let (_, worlds) =
+        resolve_document_spaces(&doc, RationalTime::ZERO, &DataTracks::new()).unwrap();
+    approx_angle(rotation_of(worlds[&looker.get()]), 0.0);
+}
