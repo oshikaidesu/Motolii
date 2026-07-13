@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use motolii_core::RationalTime;
 use motolii_doc::{
-    Clip, ClipSource, DocParam, Document, DocumentError, EffectInstance, ItemEnvelope,
+    Clip, ClipSource, DocParam, Document, DocumentError, EffectId, EffectInstance, ItemEnvelope,
     PluginDegradation, Track, TrackItem,
 };
 use serde_json::{json, Map};
@@ -36,7 +36,9 @@ fn unknown_effect_plugin_id_loads_warns_and_roundtrips() {
     let mut extra = Map::new();
     extra.insert("vendor_flag".into(), json!(true));
     if let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] {
+        let eid = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
         clip.envelope.effects.push(EffectInstance {
+            id: eid,
             plugin_id: "vendor.filter.glow_deluxe".into(),
             effect_version: 3,
             enabled: true,
@@ -46,10 +48,14 @@ fn unknown_effect_plugin_id_loads_warns_and_roundtrips() {
     }
 
     // 1. load成功 = validateが通る(D1a/D1hの拒否対象ではない)
+    doc.version = 2;
+    doc.min_reader_version = 2;
     doc.validate()
         .expect("unknown plugin_id must not fail validate (open side)");
 
     // 2. 警告: 未知idとしてplugin_open_warningsに現れる
+    doc.version = 2;
+    doc.min_reader_version = 2;
     let warnings = doc.plugin_open_warnings();
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     assert_eq!(warnings[0].plugin_id, "vendor.filter.glow_deluxe");
@@ -114,7 +120,9 @@ fn known_plugin_future_version_is_degraded_not_a_downgrade_error() {
     // 未来版(2)を参照しても、migrate downgrade errorではなく未知プラグインと同じ契約になる(S13)。
     let (mut doc, _layer) = minimal_asset_clip_doc();
     if let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] {
+        let eid = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
         clip.envelope.effects.push(EffectInstance {
+            id: eid,
             plugin_id: "core.filter.opacity".into(),
             effect_version: 2,
             enabled: true,
@@ -124,8 +132,12 @@ fn known_plugin_future_version_is_degraded_not_a_downgrade_error() {
         });
     }
 
+    doc.version = 2;
+    doc.min_reader_version = 2;
     doc.validate()
         .expect("future effect_version must not be a hard error");
+    doc.version = 2;
+    doc.min_reader_version = 2;
     let warnings = doc.plugin_open_warnings();
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     assert_eq!(warnings[0].plugin_id, "core.filter.opacity");
@@ -142,7 +154,9 @@ fn known_plugin_future_version_is_degraded_not_a_downgrade_error() {
 fn known_plugin_current_version_has_no_warning() {
     let (mut doc, _layer) = minimal_asset_clip_doc();
     if let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] {
+        let eid = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
         clip.envelope.effects.push(EffectInstance {
+            id: eid,
             plugin_id: "core.filter.opacity".into(),
             effect_version: 1,
             enabled: true,
@@ -150,7 +164,11 @@ fn known_plugin_current_version_has_no_warning() {
             extra: Map::new(),
         });
     }
+    doc.version = 2;
+    doc.min_reader_version = 2;
     doc.validate().unwrap();
+    doc.version = 2;
+    doc.min_reader_version = 2;
     assert!(doc.plugin_open_warnings().is_empty());
 }
 
@@ -160,7 +178,9 @@ fn plugin_kind_mismatch_in_effect_slot_is_typed_error() {
     // degradeで救う「未知/未来版」ではなく構造上のバグ — 型付きエラーで拒否する。
     let (mut doc, _layer) = minimal_asset_clip_doc();
     if let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] {
+        let eid = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
         clip.envelope.effects.push(EffectInstance {
+            id: eid,
             plugin_id: "core.layer_source.clear".into(),
             effect_version: 1,
             enabled: true,
@@ -168,6 +188,8 @@ fn plugin_kind_mismatch_in_effect_slot_is_typed_error() {
             extra: Map::new(),
         });
     }
+    doc.version = 2;
+    doc.min_reader_version = 2;
     let err = doc.validate().unwrap_err();
     assert!(
         matches!(
@@ -222,7 +244,8 @@ fn plugin_kind_mismatch_in_clip_source_slot_is_typed_error() {
 fn raw_json_with_unknown_plugin_id_and_future_version_loads_and_preserves_extra() {
     // 実際のJSON経由(load_document_bytes相当)でも同じ契約が成立することを固定する。
     let input = json!({
-        "version": 1,
+        "version": 2,
+        "min_reader_version": 2,
         "composition": {
             "aspect_num": 16,
             "aspect_den": 9,
@@ -232,6 +255,7 @@ fn raw_json_with_unknown_plugin_id_and_future_version_loads_and_preserves_extra(
         "bpm": {"num": 120, "den": 1},
         "layers": {"next": 1, "entries": [{"id": 0, "name": "L"}]},
         "track_ids": {"next": 1, "entries": [{"id": 0, "name": "V1"}]},
+        "next_stable_id": 2,
         "tracks": [{
             "id": 0,
             "items": [{
@@ -240,6 +264,7 @@ fn raw_json_with_unknown_plugin_id_and_future_version_loads_and_preserves_extra(
                     "layer_id": 0,
                     "effects": [
                         {
+                            "id": 0,
                             "plugin_id": "vendor.filter.mystery",
                             "effect_version": 7,
                             "params": {
@@ -248,6 +273,7 @@ fn raw_json_with_unknown_plugin_id_and_future_version_loads_and_preserves_extra(
                             "vendor_only_field": {"nested": [1, 2]}
                         },
                         {
+                            "id": 1,
                             "plugin_id": "core.filter.opacity",
                             "effect_version": 99
                         }
