@@ -65,7 +65,7 @@ pub use journal::{
 };
 pub use limits::{ResourceLimitError, ResourceLimits};
 pub use param::{DocParam, LookAtAxis};
-pub use param_eval::{ParamEvalError, ResolvedLayerParams};
+pub use param_eval::{eval_look_at_rotation, ParamEvalError, ResolvedLayerParams};
 pub use param_expect::{DocPluginKind, ExpectedValueType, KnownPluginInfo, ParamConstraints};
 pub use pathgeom::PathOpError;
 pub use persist::{

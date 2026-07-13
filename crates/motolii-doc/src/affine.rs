@@ -9,7 +9,7 @@ use std::ops::Mul;
 use motolii_core::RationalTime;
 use motolii_eval::DataTracks;
 
-use crate::param_eval::{eval_f64, eval_vec2, ParamEvalError, ResolvedLayerParams};
+use crate::param_eval::{eval_rotation, eval_vec2, ParamEvalError, ResolvedLayerParams};
 use crate::schema::Transform2D;
 use crate::LayerId;
 
@@ -178,10 +178,11 @@ fn resolve_local_only(
     tracks: &DataTracks,
     resolved: &ResolvedLayerParams,
 ) -> Result<Affine2D, ParamEvalError> {
+    // LookAt は self 位置が要るので position を先に評価する。
     let position = eval_vec2(&xform.position, t, tracks, resolved)?;
     let anchor = eval_vec2(&xform.anchor, t, tracks, resolved)?;
     let scale = eval_vec2(&xform.scale, t, tracks, resolved)?;
-    let rotation = eval_f64(&xform.rotation, t, tracks, resolved)?;
+    let rotation = eval_rotation(&xform.rotation, position, t, tracks, resolved)?;
     Ok(compose_local(position, anchor, scale, rotation))
 }
 

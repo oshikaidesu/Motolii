@@ -74,7 +74,7 @@ fn unknown_track_id_fails() {
 fn look_at_missing_target_fails() {
     let mut doc = valid_minimal();
     if let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] {
-        clip.envelope.transform.position = DocParam::LookAt {
+        clip.envelope.transform.rotation = DocParam::LookAt {
             target: LayerId::from_raw(42),
             axis: LookAtAxis::PlusY,
         };

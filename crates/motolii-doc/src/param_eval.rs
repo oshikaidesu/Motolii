@@ -1,9 +1,9 @@
-//! DocParam評価(D3)。LookAt/Follow は解決済みレイヤー位置を参照する。
+//! DocParam評価(D3)。Follow は解決済み位置、LookAt は self→target の回転角。
 //!
 //! DataTrack 実出力型と期待型(fallback のバリアント)の照合もここで行う(D1h後段)。
 
 use crate::doc_value::DocValue;
-use crate::param::DocParam;
+use crate::param::{DocParam, LookAtAxis};
 use crate::param_expect::ExpectedValueType;
 use crate::LayerId;
 use motolii_core::RationalTime;
@@ -15,6 +15,9 @@ pub enum ParamEvalError {
     UnresolvedLookAt(u64),
     #[error("DocParam::Follow unresolved (layer {0})")]
     UnresolvedFollow(u64),
+    /// LookAt は self 位置が要る。汎用 `eval_doc_param` では評価不能。
+    #[error("DocParam::LookAt requires self position; use eval_look_at_rotation")]
+    LookAtRequiresSelfPosition,
     #[error("expected {expected}, got {got:?}")]
     TypeMismatch { expected: &'static str, got: Value },
     #[error(
@@ -92,15 +95,32 @@ pub fn eval_doc_param(
                 }),
             }
         }
-        DocParam::LookAt { target, .. } => resolved
-            .position(*target)
-            .map(Value::Vec2)
-            .ok_or(ParamEvalError::UnresolvedLookAt(target.get())),
+        // concept: rotation(t)=look_at(self, target) — self 無しでは角度が決まらない。
+        DocParam::LookAt { .. } => Err(ParamEvalError::LookAtRequiresSelfPosition),
         DocParam::Follow { target, offset } => resolved
             .position(*target)
             .map(|p| Value::Vec2([p[0] + offset[0], p[1] + offset[1]]))
             .ok_or(ParamEvalError::UnresolvedFollow(target.get())),
     }
+}
+
+/// `rotation = look_at(self.center, target.center)` (Y-up 正準・atan2)。
+///
+/// `PlusX`: 0回転が +X を向く。`PlusY`: 0回転が +Y を向く(`angle - π/2`)。
+pub fn eval_look_at_rotation(
+    self_pos: [f64; 2],
+    target: LayerId,
+    axis: LookAtAxis,
+    resolved: &ResolvedLayerParams,
+) -> Result<f64, ParamEvalError> {
+    let target_pos = resolved
+        .position(target)
+        .ok_or(ParamEvalError::UnresolvedLookAt(target.get()))?;
+    let angle = (target_pos[1] - self_pos[1]).atan2(target_pos[0] - self_pos[0]);
+    Ok(match axis {
+        LookAtAxis::PlusX => angle,
+        LookAtAxis::PlusY => angle - std::f64::consts::FRAC_PI_2,
+    })
 }
 
 fn eval_data_track(
@@ -142,6 +162,22 @@ pub fn eval_f64(
     }
 }
 
+/// rotation スロット用。LookAt なら `self_pos` を渡して角度へ落とす。
+pub fn eval_rotation(
+    param: &DocParam,
+    self_pos: [f64; 2],
+    t: RationalTime,
+    tracks: &DataTracks,
+    resolved: &ResolvedLayerParams,
+) -> Result<f64, ParamEvalError> {
+    match param {
+        DocParam::LookAt { target, axis } => {
+            eval_look_at_rotation(self_pos, *target, *axis, resolved)
+        }
+        other => eval_f64(other, t, tracks, resolved),
+    }
+}
+
 pub fn eval_vec2(
     param: &DocParam,
     t: RationalTime,
@@ -169,5 +205,73 @@ pub fn eval_color(
             expected: "Color",
             got: o,
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::f64::consts::{FRAC_PI_2, FRAC_PI_4, PI};
+
+    fn approx(got: f64, want: f64) {
+        let d = (got - want).abs();
+        assert!(d < 1e-12, "got {got} want {want} (Δ={d})");
+    }
+
+    #[test]
+    fn look_at_axis_affects_angle() {
+        let target = LayerId::from_raw(1);
+        let mut resolved = ResolvedLayerParams::default();
+        let at = |resolved: &ResolvedLayerParams, axis| {
+            eval_look_at_rotation([0.0, 0.0], target, axis, resolved).unwrap()
+        };
+
+        // self(0,0) → target(1,1): atan2(1,1)=π/4
+        resolved.insert_position(target, [1.0, 1.0]);
+        approx(at(&resolved, LookAtAxis::PlusX), FRAC_PI_4);
+        approx(at(&resolved, LookAtAxis::PlusY), FRAC_PI_4 - FRAC_PI_2);
+
+        // +X 方向(1,0): PlusX→0、PlusY→-π/2(0回転が+Y)
+        resolved.insert_position(target, [1.0, 0.0]);
+        approx(at(&resolved, LookAtAxis::PlusX), 0.0);
+        approx(at(&resolved, LookAtAxis::PlusY), -FRAC_PI_2);
+
+        // +Y 方向(0,1)
+        resolved.insert_position(target, [0.0, 1.0]);
+        approx(at(&resolved, LookAtAxis::PlusX), FRAC_PI_2);
+        approx(at(&resolved, LookAtAxis::PlusY), 0.0);
+
+        // 左(-1,0)
+        resolved.insert_position(target, [-1.0, 0.0]);
+        approx(at(&resolved, LookAtAxis::PlusX), PI);
+    }
+
+    #[test]
+    fn look_at_unresolved_target_is_typed_error() {
+        let target = LayerId::from_raw(99);
+        let err = eval_look_at_rotation(
+            [0.0, 0.0],
+            target,
+            LookAtAxis::PlusX,
+            &ResolvedLayerParams::default(),
+        )
+        .unwrap_err();
+        assert_eq!(err, ParamEvalError::UnresolvedLookAt(99));
+    }
+
+    #[test]
+    fn eval_doc_param_look_at_requires_self() {
+        let param = DocParam::LookAt {
+            target: LayerId::from_raw(1),
+            axis: LookAtAxis::PlusY,
+        };
+        let err = eval_doc_param(
+            &param,
+            RationalTime::ZERO,
+            &DataTracks::new(),
+            &ResolvedLayerParams::default(),
+        )
+        .unwrap_err();
+        assert_eq!(err, ParamEvalError::LookAtRequiresSelfPosition);
     }
 }
