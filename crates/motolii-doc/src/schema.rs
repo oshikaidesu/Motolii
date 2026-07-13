@@ -12,6 +12,7 @@ use motolii_core::{Fps, RationalTime, TimeMap};
 
 use crate::asset::AssetId;
 use crate::param::DocParam;
+use crate::stable_id::EffectId;
 use crate::track_id::TrackId;
 use crate::LayerId;
 
@@ -208,6 +209,9 @@ impl ItemEnvelope {
 
 #[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
 pub struct EffectInstance {
+    /// document-local安定ID(A8)。不変・非再利用。複製時は新規採番(D2)。
+    /// 旧形式(id無し)は拒否 — 変換はD1e(D1g/D1i-1と同型の方針)。
+    pub id: EffectId,
     pub plugin_id: String,
     #[serde(default = "default_effect_version")]
     pub effect_version: u32,

@@ -2,8 +2,8 @@
 
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
-    AssetId, Clip, ClipSource, DocParam, Document, DocumentError, DocumentWriter, EffectInstance,
-    ItemEnvelope, LayerId, LookAtAxis, Soundtrack, Track, TrackId, TrackItem,
+    AssetId, Clip, ClipSource, DocParam, Document, DocumentError, DocumentWriter, EffectId,
+    EffectInstance, ItemEnvelope, LayerId, LookAtAxis, Soundtrack, Track, TrackId, TrackItem,
 };
 use serde_json::Map;
 use std::collections::BTreeMap;
@@ -149,6 +149,7 @@ fn empty_effect_plugin_id_fails() {
     let mut doc = valid_minimal();
     if let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] {
         clip.envelope.effects.push(EffectInstance {
+            id: EffectId::from_raw(0),
             plugin_id: String::new(),
             effect_version: 1,
             enabled: true,
@@ -174,6 +175,37 @@ fn version_below_min_reader_fails() {
             min_reader_version: 2
         })
     ));
+}
+
+#[test]
+fn allocate_effect_id_bumps_version_and_min_reader() {
+    let mut writer = DocumentWriter::new(valid_minimal());
+    writer.allocate_effect_id().expect("allocate effect id");
+    let doc = writer.snapshot();
+    assert_eq!(
+        doc.version, 2,
+        "stable id allocation must raise Document.version"
+    );
+    assert_eq!(
+        doc.min_reader_version, 2,
+        "stable id allocation must raise min_reader_version floor"
+    );
+    writer
+        .validate()
+        .expect("version=2 with min_reader_version=2 must validate");
+}
+
+#[test]
+fn stable_id_document_is_open_mode_read_write() {
+    use motolii_doc::{classify_open_mode, OpenMode, READER_VERSION, WRITER_VERSION};
+
+    assert_eq!(READER_VERSION, 2);
+    assert_eq!(WRITER_VERSION, 2);
+    assert_eq!(
+        classify_open_mode(2, 2),
+        OpenMode::ReadWrite,
+        "version=2 / min_reader_version=2 must be ReadWrite under D2 writer capability"
+    );
 }
 
 #[test]

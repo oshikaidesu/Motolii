@@ -8,6 +8,7 @@ use motolii_core::RationalTime;
 use motolii_eval::Interp;
 
 use crate::doc_value::DocValue;
+use crate::stable_id::KeyframeId;
 
 #[derive(Debug, Clone, thiserror::Error, PartialEq)]
 pub enum DocKeyframeError {
@@ -21,6 +22,9 @@ pub enum DocKeyframeError {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DocKeyframe {
+    /// document-local安定ID(A8)。時刻編集で不変、複製時は新規採番(D2)。
+    /// 旧形式(id無し)は拒否 — 変換はD1e(D1g/D1i-1と同型の方針)。
+    pub id: KeyframeId,
     pub t: RationalTime,
     pub value: DocValue,
     pub interp: Interp,
@@ -61,6 +65,16 @@ impl DocKeyframeTrack {
 
     pub fn keys(&self) -> &[DocKeyframe] {
         &self.keys
+    }
+
+    pub fn get_by_id(&self, id: KeyframeId) -> Option<&DocKeyframe> {
+        self.keys.iter().find(|k| k.id == id)
+    }
+
+    /// idで1件削除する(コマンド層のキーフレーム削除で使用。時刻は不変条件維持に無関係)。
+    pub fn remove_by_id(&mut self, id: KeyframeId) -> Option<DocKeyframe> {
+        let idx = self.keys.iter().position(|k| k.id == id)?;
+        Some(self.keys.remove(idx))
     }
 
     pub fn validate(&self) -> Result<(), DocKeyframeError> {

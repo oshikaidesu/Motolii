@@ -18,7 +18,8 @@ use crate::param_expect::{
     ExpectedValueType, ParamConstraints,
 };
 use crate::schema::{
-    Clip, ClipSource, Group, ItemEnvelope, StandardShape, TrackItem, Transform2D, VectorContent,
+    Clip, ClipSource, Group, ItemEnvelope, PathOp, StandardShape, TrackItem, Transform2D,
+    VectorContent,
 };
 use crate::track_id::TrackId;
 use crate::{Document, LayerId};
@@ -106,7 +107,24 @@ pub enum DocumentError {
         got: String,
         expected: String,
     },
+    /// A8: EffectId/KeyframeIdは1つのID空間を共有する(document-local安定u64 ID)。
+    #[error("duplicate stable id {id} (EffectId/KeyframeId share one id space — A8)")]
+    DuplicateStableId { id: u64 },
+    #[error(transparent)]
+    StableIdCounterInvalid(#[from] crate::stable_id::StableIdError),
+    /// M2E-11①: ネスト(EffectInstance/DocKeyframe)への永続フィールド追加は
+    /// `min_reader_version`を上げる規律。実在すれば強制する(旧readerでのresave時の消失を防ぐ)。
+    #[error(
+        "document contains EffectId/KeyframeId but min_reader_version ({min_reader_version}) < {required} required for stable ids (A8/D2)"
+    )]
+    StableIdsRequireNewerReader {
+        min_reader_version: u32,
+        required: u32,
+    },
 }
+
+/// A8/D2: `EffectInstance.id`/`DocKeyframe.id`を含む文書が宣言すべき最小`min_reader_version`。
+pub(crate) const MIN_READER_VERSION_FOR_STABLE_IDS: u32 = 2;
 
 impl Document {
     /// 保存前不変条件。失敗しても`self`は変更しない(検証のみ)。
@@ -141,7 +159,28 @@ impl Document {
                 validate_item(self, item, &mut seen_layers, &mut parents)?;
             }
         }
-        detect_parent_cycles(&parents)
+        detect_parent_cycles(&parents)?;
+        self.validate_stable_ids()
+    }
+
+    /// A8: EffectId/KeyframeIdの一意性・`next_stable_id`カウンタの整合性・
+    /// stable id存在時の`min_reader_version`下限(M2E-11①のネスト規律を機械判定)。
+    fn validate_stable_ids(&self) -> Result<(), DocumentError> {
+        let mut seen = HashSet::new();
+        let mut max_observed: Option<u64> = None;
+        for track in &self.tracks {
+            for item in &track.items {
+                collect_stable_ids_item(item, &mut seen, &mut max_observed)?;
+            }
+        }
+        if !seen.is_empty() && self.min_reader_version < MIN_READER_VERSION_FOR_STABLE_IDS {
+            return Err(DocumentError::StableIdsRequireNewerReader {
+                min_reader_version: self.min_reader_version,
+                required: MIN_READER_VERSION_FOR_STABLE_IDS,
+            });
+        }
+        self.next_stable_id.validate_observed_max(max_observed)?;
+        Ok(())
     }
 
     fn require_track(&self, id: TrackId) -> Result<(), DocumentError> {
@@ -655,6 +694,185 @@ fn validate_vector_content(
             Ok(())
         }
     }
+}
+
+fn note_stable_id(
+    id: u64,
+    seen: &mut HashSet<u64>,
+    max_observed: &mut Option<u64>,
+) -> Result<(), DocumentError> {
+    if !seen.insert(id) {
+        return Err(DocumentError::DuplicateStableId { id });
+    }
+    *max_observed = Some(max_observed.map_or(id, |m| m.max(id)));
+    Ok(())
+}
+
+fn collect_stable_ids_item(
+    item: &TrackItem,
+    seen: &mut HashSet<u64>,
+    max_observed: &mut Option<u64>,
+) -> Result<(), DocumentError> {
+    match item {
+        TrackItem::Clip(clip) => {
+            collect_stable_ids_envelope(&clip.envelope, seen, max_observed)?;
+            match &clip.source {
+                ClipSource::Asset { .. } => Ok(()),
+                ClipSource::Plugin { params, .. } => {
+                    for param in params.values() {
+                        collect_stable_ids_param(param, seen, max_observed)?;
+                    }
+                    Ok(())
+                }
+                ClipSource::Vector { recipe } => {
+                    collect_stable_ids_vector_content(&recipe.content, seen, max_observed)?;
+                    for op in &recipe.modifiers {
+                        collect_stable_ids_path_op(op, seen, max_observed)?;
+                    }
+                    Ok(())
+                }
+            }
+        }
+        TrackItem::Group(group) => {
+            collect_stable_ids_envelope(&group.envelope, seen, max_observed)?;
+            for child in &group.children {
+                collect_stable_ids_item(child, seen, max_observed)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn collect_stable_ids_envelope(
+    env: &ItemEnvelope,
+    seen: &mut HashSet<u64>,
+    max_observed: &mut Option<u64>,
+) -> Result<(), DocumentError> {
+    collect_stable_ids_param(&env.transform.position, seen, max_observed)?;
+    collect_stable_ids_param(&env.transform.anchor, seen, max_observed)?;
+    collect_stable_ids_param(&env.transform.scale, seen, max_observed)?;
+    collect_stable_ids_param(&env.transform.rotation, seen, max_observed)?;
+    collect_stable_ids_param(&env.opacity, seen, max_observed)?;
+    for effect in &env.effects {
+        note_stable_id(effect.id.get(), seen, max_observed)?;
+        for param in effect.params.values() {
+            collect_stable_ids_param(param, seen, max_observed)?;
+        }
+    }
+    Ok(())
+}
+
+fn collect_stable_ids_param(
+    param: &DocParam,
+    seen: &mut HashSet<u64>,
+    max_observed: &mut Option<u64>,
+) -> Result<(), DocumentError> {
+    match param {
+        DocParam::Const(_)
+        | DocParam::Data { .. }
+        | DocParam::LookAt { .. }
+        | DocParam::Follow { .. } => Ok(()),
+        DocParam::Keyframes(track) => {
+            for key in track.keys() {
+                note_stable_id(key.id.get(), seen, max_observed)?;
+            }
+            Ok(())
+        }
+        DocParam::Vec2Axes { x, y } => {
+            collect_stable_ids_param(x, seen, max_observed)?;
+            collect_stable_ids_param(y, seen, max_observed)
+        }
+    }
+}
+
+fn collect_stable_ids_vector_content(
+    content: &VectorContent,
+    seen: &mut HashSet<u64>,
+    max_observed: &mut Option<u64>,
+) -> Result<(), DocumentError> {
+    match content {
+        VectorContent::StandardShape { shape } => match shape {
+            StandardShape::Rect { width, height } | StandardShape::Ellipse { width, height } => {
+                collect_stable_ids_param(width, seen, max_observed)?;
+                collect_stable_ids_param(height, seen, max_observed)
+            }
+        },
+        VectorContent::SvgAsset { .. } | VectorContent::TextPath { .. } => Ok(()),
+        VectorContent::Group { children } => {
+            for child in children {
+                collect_stable_ids_vector_content(child, seen, max_observed)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn collect_stable_ids_path_op(
+    op: &PathOp,
+    seen: &mut HashSet<u64>,
+    max_observed: &mut Option<u64>,
+) -> Result<(), DocumentError> {
+    match op {
+        PathOp::PuckerBloat { amount } => collect_stable_ids_param(amount, seen, max_observed),
+        PathOp::ZigZag {
+            amount,
+            ridges,
+            point_type: _,
+        } => {
+            collect_stable_ids_param(amount, seen, max_observed)?;
+            collect_stable_ids_param(ridges, seen, max_observed)
+        }
+        PathOp::Offset {
+            distance,
+            line_join: _,
+            miter_limit: _,
+        } => collect_stable_ids_param(distance, seen, max_observed),
+        PathOp::RoundCorners { radius } => collect_stable_ids_param(radius, seen, max_observed),
+        PathOp::Trim {
+            start,
+            end,
+            offset,
+            mode: _,
+        } => {
+            collect_stable_ids_param(start, seen, max_observed)?;
+            collect_stable_ids_param(end, seen, max_observed)?;
+            collect_stable_ids_param(offset, seen, max_observed)
+        }
+        PathOp::Twist { angle, center } => {
+            collect_stable_ids_param(angle, seen, max_observed)?;
+            collect_stable_ids_param(center, seen, max_observed)
+        }
+        PathOp::Wiggle { amp, freq, seed: _ } => {
+            collect_stable_ids_param(amp, seen, max_observed)?;
+            collect_stable_ids_param(freq, seen, max_observed)
+            // seedはu64固定(非DocParam) — stable id走査対象外。
+        }
+        PathOp::Repeater {
+            copies,
+            offset,
+            transform,
+            composite: _,
+            start_opacity,
+            end_opacity,
+        } => {
+            collect_stable_ids_param(copies, seen, max_observed)?;
+            collect_stable_ids_param(offset, seen, max_observed)?;
+            collect_stable_ids_transform2d(transform, seen, max_observed)?;
+            collect_stable_ids_param(start_opacity, seen, max_observed)?;
+            collect_stable_ids_param(end_opacity, seen, max_observed)
+        }
+    }
+}
+
+fn collect_stable_ids_transform2d(
+    transform: &Transform2D,
+    seen: &mut HashSet<u64>,
+    max_observed: &mut Option<u64>,
+) -> Result<(), DocumentError> {
+    collect_stable_ids_param(&transform.position, seen, max_observed)?;
+    collect_stable_ids_param(&transform.anchor, seen, max_observed)?;
+    collect_stable_ids_param(&transform.scale, seen, max_observed)?;
+    collect_stable_ids_param(&transform.rotation, seen, max_observed)
 }
 
 /// `VectorContent::SvgAsset` が要求する MIME。
