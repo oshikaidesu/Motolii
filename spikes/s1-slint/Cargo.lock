@@ -2494,6 +2494,7 @@ name = "motolii-core"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -3595,8 +3596,10 @@ dependencies = [
 name = "s1-slint"
 version = "0.1.0"
 dependencies = [
+ "image",
  "motolii-core",
  "motolii-gpu",
+ "serde_json",
  "slint",
  "wgpu",
 ]
