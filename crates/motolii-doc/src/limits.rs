@@ -259,6 +259,9 @@ fn check_clip(clip: &Clip, path: &str, limits: &ResourceLimits) -> Result<(), Re
             check_string(plugin_id, &format!("{path}.source.plugin_id"), limits)?;
             check_extra(extra, &format!("{path}.source.extra"), limits)?;
             for (name, param) in params {
+                // キー名をpathへ埋め込む前に長さ検査 — 巨大param IDのすり抜けと、
+                // 拒否メッセージ構築時の巨大formatを防ぐ。
+                check_string(name, &format!("{path}.source.param_id"), limits)?;
                 check_param(param, &format!("{path}.source.{name}"), limits)?;
             }
             Ok(())
@@ -297,6 +300,7 @@ fn check_effect(
     check_string(&effect.plugin_id, &format!("{path}.plugin_id"), limits)?;
     check_extra(&effect.extra, &format!("{path}.extra"), limits)?;
     for (name, param) in &effect.params {
+        check_string(name, &format!("{path}.param_id"), limits)?;
         check_param(param, &format!("{path}.{name}"), limits)?;
     }
     Ok(())
