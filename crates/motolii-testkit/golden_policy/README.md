@@ -13,6 +13,8 @@
 
 台帳の**初回登録PR**でも、HEAD台帳で`semantic`とされた既存ファイルの変更/削除は拒否する。新規`semantic`ファイルの追加(`git` status `A`)と台帳へのパス追加のみが正規ルート。
 
+base 台帳の`provisional`行も保護する。台帳から外してマーカー無し更新する迂回は拒否。`provisional`→`semantic`昇格のみ許可。ファイル変更の判定は HEAD 分類を優先し、未分類なら base 分類を参照する。
+
 ## マーカー規約
 
 `semantic` のファイル内`MOTOLII_GOLDEN_CLASS`は任意(台帳が正本)。

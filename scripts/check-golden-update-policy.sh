@@ -3,13 +3,14 @@
 #
 # 許可:
 #   - 意味論(semantic)への「新規追加」(git status A) — 新variant+新ゴールデン
-#   - 台帳(classification.tsv)の追加/更新(分類のみ — 既存semantic本体を触らない)
+#   - 台帳への新規分類追加 / provisional→semantic 昇格(厳格化)
 #   - 暫定(provisional)の更新 — ファイルに MOTOLII_REGENERATE_WHEN がある場合のみ
 #   - 分類外パスの任意変更
 # 拒否:
-#   - HEAD台帳で semantic の既存ファイルの変更/削除(マーカー有無を問わない)
-#   - provisional パスの更新で MOTOLII_REGENERATE_WHEN が無い
-#   - 台帳から semantic 行を削る(base 比較時)
+#   - HEADまたはbase台帳で semantic の既存ファイルの変更/削除(マーカー有無を問わない)
+#   - HEADまたはbase台帳で provisional の更新で MOTOLII_REGENERATE_WHEN が無い
+#   - 台帳から semantic / provisional 行を削る・分類外化する(base 比較時)
+#   - semantic → provisional 降格
 #   - semantic 集合が空 / 台帳パス不在
 #   - merge-base / git diff 失敗(shallow clone等) — fail-closed
 #
@@ -20,6 +21,8 @@
 #   ./scripts/check-golden-update-policy.sh [base_ref]
 #   ./scripts/check-golden-update-policy.sh --files-from -
 #   CLASSIFICATION_FILE=... ./scripts/check-golden-update-policy.sh --files-from -
+#   GOLDEN_POLICY_BASE_CLASSIFICATION=...  # --files-from 用に base 台帳を注入(回帰テスト)
+#   GOLDEN_POLICY_BASE_LOOKUP_ONLY=1       # 注入台帳を effective class 参照のみに使い、削り検査をスキップ(回帰テスト専用)
 #   GOLDEN_POLICY_SKIP_CONSISTENCY=1  # 負例フィクスチャ用(本番CIでは設定しない)
 set -euo pipefail
 
@@ -29,7 +32,7 @@ cd "$ROOT"
 CLASSIFICATION_FILE="${CLASSIFICATION_FILE:-crates/motolii-testkit/golden_policy/classification.tsv}"
 CLASS_MARKER_PROVISIONAL='MOTOLII_GOLDEN_CLASS: provisional'
 REGENERATE_MARKER='MOTOLII_REGENERATE_WHEN:'
-BASE_SEMANTIC_ROWS=""
+BASE_CLASS_ROWS=""
 
 die() {
   echo "golden-update-policy FAILED: $*" >&2
@@ -68,16 +71,38 @@ load_classification() {
   done <"$input"
 }
 
-lookup_class() {
-  local want="$1"
+lookup_in_rows() {
+  local rows="$1"
+  local want="$2"
   local class path
   while IFS=$'\t' read -r class path; do
+    [[ -z "${class:-}" ]] && continue
     if [[ "$path" == "$want" ]]; then
       echo "$class"
       return 0
     fi
-  done <<<"$CLASS_ROWS"
+  done <<<"$rows"
   return 1
+}
+
+lookup_class() {
+  lookup_in_rows "$CLASS_ROWS" "$1"
+}
+
+lookup_base_class() {
+  lookup_in_rows "$BASE_CLASS_ROWS" "$1"
+}
+
+# HEAD優先。未分類なら base を参照(台帳から外して変更する迂回を塞ぐ)。
+effective_class() {
+  local path="$1"
+  local class
+  class="$(lookup_class "$path" || true)"
+  if [[ -n "$class" ]]; then
+    echo "$class"
+    return 0
+  fi
+  lookup_base_class "$path" || true
 }
 
 validate_classification_consistency() {
@@ -104,30 +129,60 @@ validate_classification_consistency() {
   fi
 }
 
-# base 台帳の semantic 集合を読み、削り/降格を拒否。
-load_base_semantic() {
+# base 台帳の semantic/provisional を保護。削り・分類外化・semantic降格を拒否。
+# provisional→semantic 昇格のみ許可。
+enforce_base_classification_lock() {
+  local base_rows="$1"
+  BASE_CLASS_ROWS="$base_rows"
+  local class path now
+  while IFS=$'\t' read -r class path; do
+    [[ -z "${class:-}" ]] && continue
+    now="$(lookup_class "$path" || true)"
+    case "$class" in
+      semantic)
+        if [[ -z "$now" ]]; then
+          die "semantic entry removed from classification (demotion forbidden): $path"
+        fi
+        if [[ "$now" != "semantic" ]]; then
+          die "semantic entry demoted to '$now' (forbidden): $path"
+        fi
+        ;;
+      provisional)
+        if [[ -z "$now" ]]; then
+          die "provisional entry removed from classification (declassification forbidden): $path"
+        fi
+        if [[ "$now" != "provisional" && "$now" != "semantic" ]]; then
+          die "provisional entry changed to '$now' (forbidden): $path"
+        fi
+        ;;
+    esac
+  done <<<"$base_rows"
+}
+
+load_base_classification() {
   local base="$1"
-  BASE_SEMANTIC_ROWS=""
+  BASE_CLASS_ROWS=""
   if ! git cat-file -e "$base:$CLASSIFICATION_FILE" 2>/dev/null; then
     echo "golden-update-policy: no classification on $base; first registration allowed"
     return 0
   fi
   local base_rows
   base_rows="$(git show "$base:$CLASSIFICATION_FILE" | load_classification -)"
-  local class path
-  while IFS=$'\t' read -r class path; do
-    [[ -z "${class:-}" ]] && continue
-    [[ "$class" == "semantic" ]] || continue
-    BASE_SEMANTIC_ROWS="${BASE_SEMANTIC_ROWS}${BASE_SEMANTIC_ROWS:+$'\n'}${path}"
-    local now
-    now="$(lookup_class "$path" || true)"
-    if [[ -z "$now" ]]; then
-      die "semantic entry removed from classification (demotion forbidden): $path"
-    fi
-    if [[ "$now" != "semantic" ]]; then
-      die "semantic entry demoted to '$now' (forbidden): $path"
-    fi
-  done <<<"$base_rows"
+  enforce_base_classification_lock "$base_rows"
+}
+
+# 回帰テスト用: ファイルから base 台帳を注入(--files-from と併用)。
+load_injected_base_classification() {
+  local file="$1"
+  [[ -f "$file" ]] || die "GOLDEN_POLICY_BASE_CLASSIFICATION missing: $file"
+  local base_rows
+  base_rows="$(load_classification "$file")"
+  if [[ "${GOLDEN_POLICY_BASE_LOOKUP_ONLY:-}" == "1" ]]; then
+    # effective class のみ検証(削り検査は別テスト)。本番CIでは設定しない。
+    BASE_CLASS_ROWS="$base_rows"
+    return 0
+  fi
+  enforce_base_classification_lock "$base_rows"
 }
 
 collect_changes() {
@@ -179,11 +234,19 @@ if [[ "${GOLDEN_POLICY_SKIP_CONSISTENCY:-}" != "1" ]]; then
 fi
 
 MODE_FILES_FROM=0
+BASE_CLASS_ROWS=""
+if [[ -n "${GOLDEN_POLICY_BASE_CLASSIFICATION:-}" ]]; then
+  load_injected_base_classification "$GOLDEN_POLICY_BASE_CLASSIFICATION"
+fi
+
 if [[ "${1:-}" == "--files-from" ]]; then
   MODE_FILES_FROM=1
-  BASE_SEMANTIC_ROWS=""
+  # 注入が無ければ base 空(ブートストラップ相当)。注入時は上で lock 済み。
 else
-  load_base_semantic "${1:-origin/main}"
+  # ライブCI: git base 台帳で lock。注入があれば二重適用はしない(注入優先はテスト専用)。
+  if [[ -z "${GOLDEN_POLICY_BASE_CLASSIFICATION:-}" ]]; then
+    load_base_classification "${1:-origin/main}"
+  fi
 fi
 
 failures=0
@@ -202,12 +265,12 @@ while IFS= read -r raw || [[ -n "${raw:-}" ]]; do
   path="${local_line#*$'\t'}"
   file_count=$((file_count + 1))
 
-  # 台帳自体の変更は常に許可(分類のみのブートストラップ経路)
+  # 台帳パス自体の diff 行はスキップ(削りは enforce_base_classification_lock が審判)。
   if [[ "$path" == "$CLASSIFICATION_FILE" ]]; then
     continue
   fi
 
-  class="$(lookup_class "$path" || true)"
+  class="$(effective_class "$path")"
   [[ -z "$class" ]] && continue
 
   case "$class" in
@@ -239,6 +302,7 @@ if [[ "$failures" -gt 0 ]]; then
   echo >&2
   echo "  semantic: never rewrite; add a new variant + new golden file instead." >&2
   echo "  provisional: require ${REGENERATE_MARKER} in the file (#53)." >&2
+  echo "  do not drop provisional/semantic rows from ${CLASSIFICATION_FILE} to bypass." >&2
   echo "  classify existing goldens via ${CLASSIFICATION_FILE} only (no body edit)." >&2
   exit 1
 fi

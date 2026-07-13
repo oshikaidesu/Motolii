@@ -18,6 +18,31 @@ fn workspace_root() -> PathBuf {
 }
 
 fn run_policy(classification: Option<&str>, skip_consistency: bool, files: &str) -> (bool, String) {
+    run_policy_with_base(classification, None, skip_consistency, files)
+}
+
+fn run_policy_with_base(
+    classification: Option<&str>,
+    base_classification: Option<&str>,
+    skip_consistency: bool,
+    files: &str,
+) -> (bool, String) {
+    run_policy_with_base_opts(
+        classification,
+        base_classification,
+        skip_consistency,
+        false,
+        files,
+    )
+}
+
+fn run_policy_with_base_opts(
+    classification: Option<&str>,
+    base_classification: Option<&str>,
+    skip_consistency: bool,
+    base_lookup_only: bool,
+    files: &str,
+) -> (bool, String) {
     let root = workspace_root();
     let script = root.join("scripts/check-golden-update-policy.sh");
     let mut cmd = Command::new("bash");
@@ -30,6 +55,18 @@ fn run_policy(classification: Option<&str>, skip_consistency: bool, files: &str)
         .stderr(std::process::Stdio::piped());
     if let Some(c) = classification {
         cmd.env("CLASSIFICATION_FILE", c);
+    } else {
+        cmd.env_remove("CLASSIFICATION_FILE");
+    }
+    if let Some(b) = base_classification {
+        cmd.env("GOLDEN_POLICY_BASE_CLASSIFICATION", b);
+    } else {
+        cmd.env_remove("GOLDEN_POLICY_BASE_CLASSIFICATION");
+    }
+    if base_lookup_only {
+        cmd.env("GOLDEN_POLICY_BASE_LOOKUP_ONLY", "1");
+    } else {
+        cmd.env_remove("GOLDEN_POLICY_BASE_LOOKUP_ONLY");
     }
     if skip_consistency {
         cmd.env("GOLDEN_POLICY_SKIP_CONSISTENCY", "1");
@@ -240,4 +277,82 @@ fn empty_semantic_classification_is_rejected() {
         msg.contains("semantic classification is empty"),
         "unexpected: {msg}"
     );
+}
+
+/// provisional 行を台帳から消すだけでは通過できない(分類解除によるマーカー回避を塞ぐ)。
+#[test]
+fn dropping_provisional_from_classification_is_rejected() {
+    let head = "crates/motolii-testkit/tests/fixtures/golden_policy/classification_head_drop_provisional.tsv";
+    let base = "crates/motolii-testkit/tests/fixtures/golden_policy/classification_base_with_provisional.tsv";
+    let (ok, msg) = run_policy_with_base(
+        Some(head),
+        Some(base),
+        false,
+        "M\tcrates/motolii-testkit/golden_policy/classification.tsv\n",
+    );
+    assert!(!ok, "dropping provisional classification must fail: {msg}");
+    assert!(
+        msg.contains("provisional entry removed") || msg.contains("declassification forbidden"),
+        "unexpected: {msg}"
+    );
+}
+
+/// 台帳から provisional を外し、マーカー無しで本体を書き換える迂回も拒否。
+#[test]
+fn declassify_provisional_then_modify_without_marker_is_rejected() {
+    let head = "crates/motolii-testkit/tests/fixtures/golden_policy/classification_head_drop_provisional.tsv";
+    let base = "crates/motolii-testkit/tests/fixtures/golden_policy/classification_base_with_provisional.tsv";
+    let (ok, msg) = run_policy_with_base(
+        Some(head),
+        Some(base),
+        false,
+        "M\tcrates/motolii-testkit/golden_policy/classification.tsv\nM\tcrates/motolii-testkit/tests/fixtures/golden_policy/provisional_without_marker.txt\n",
+    );
+    assert!(
+        !ok,
+        "declassify+modify provisional without marker must fail: {msg}"
+    );
+    assert!(
+        msg.contains("provisional entry removed")
+            || msg.contains("declassification forbidden")
+            || msg.contains("provisional golden lacks"),
+        "unexpected: {msg}"
+    );
+}
+
+/// HEAD台帳では未分類でも、base が provisional ならマーカー必須(effective class)。
+/// 削り検査を意図的に外し、参照合成だけを審判する(本番CIでは LOOKUP_ONLY を付けない)。
+#[test]
+fn base_provisional_still_requires_marker_when_head_unclassified() {
+    let head = "crates/motolii-testkit/tests/fixtures/golden_policy/classification_head_drop_provisional.tsv";
+    let base = "crates/motolii-testkit/tests/fixtures/golden_policy/classification_base_provisional_unmarked.tsv";
+    let (ok, msg) = run_policy_with_base_opts(
+        Some(head),
+        Some(base),
+        false,
+        true, // lookup-only: 台帳削り以外の effective class 経路
+        "M\tcrates/motolii-testkit/tests/fixtures/golden_policy/provisional_without_marker.txt\n",
+    );
+    assert!(
+        !ok,
+        "base provisional must still be gated via effective class: {msg}"
+    );
+    assert!(
+        msg.contains("provisional golden lacks") || msg.contains("MOTOLII_REGENERATE_WHEN"),
+        "unexpected: {msg}"
+    );
+}
+
+/// provisional → semantic 昇格(台帳のみ)は許可。
+#[test]
+fn promoting_provisional_to_semantic_is_allowed() {
+    let head = "crates/motolii-testkit/tests/fixtures/golden_policy/classification_head_promote_provisional.tsv";
+    let base = "crates/motolii-testkit/tests/fixtures/golden_policy/classification_base_with_provisional.tsv";
+    let (ok, msg) = run_policy_with_base(
+        Some(head),
+        Some(base),
+        false,
+        "M\tcrates/motolii-testkit/golden_policy/classification.tsv\n",
+    );
+    assert!(ok, "provisional→semantic promotion must be allowed: {msg}");
 }
