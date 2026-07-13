@@ -24,7 +24,7 @@
 //! - [`OpenMode::Reject`]: `min_reader_version > READER_VERSION`(Documentを返さない)
 
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -255,17 +255,27 @@ pub fn load_document_bytes(bytes: &[u8]) -> Result<Document, PersistError> {
 /// #101: `ResourceLimits`を注入できるファイル読込。`OpenMode::Reject`は`Err`のみ返し、
 /// Documentを一切構築しない(S14「Documentを返さない」)。
 ///
-/// ファイルbytes上限はデシリアライズ前([`fs::metadata`])と読込後の両方で検査する
-/// (メタデータ検査だけでは巨大ファイルの全文読込自体は防げないため、事前拒否を優先しつつ
-/// 読込後にも再検査して整合を保つ)。
+/// ファイルbytes上限は**同一`File`ハンドル**から`max_file_bytes + 1`までのbounded readで
+/// 強制する。`metadata`→`fs::read`の二段だと検査と読込の間に拡大・差し替えされ、上限超過分を
+/// 確保してから拒否し得る(S10)。超過時は`FileBytes`を返し、超過分はメモリに載せない。
 pub fn load_document_with_limits(
     path: &Path,
     limits: &ResourceLimits,
 ) -> Result<OpenedDocument, PersistError> {
-    let metadata = fs::metadata(path)?;
-    limits.check_file_bytes(metadata.len())?;
-    let bytes = fs::read(path)?;
+    let bytes = read_file_bounded(path, limits)?;
     load_document_bytes_with_limits(&bytes, limits)
+}
+
+/// `max_file_bytes + 1`までしか読まない。超過なら全文を確保せず型付き拒否する。
+fn read_file_bounded(path: &Path, limits: &ResourceLimits) -> Result<Vec<u8>, PersistError> {
+    let mut file = File::open(path)?;
+    let mut buf = Vec::new();
+    // takeは上限+1で打ち切る — 巨大ファイルでも確保量をlimit近傍に閉じる。
+    Read::by_ref(&mut file)
+        .take(limits.max_file_bytes.saturating_add(1))
+        .read_to_end(&mut buf)?;
+    limits.check_file_bytes(buf.len() as u64)?;
+    Ok(buf)
 }
 
 /// #101: `ResourceLimits`を注入できるbytes読込。
@@ -284,8 +294,9 @@ pub fn load_document_bytes_with_limits(
         });
     }
     let doc: Document = serde_json::from_slice(bytes)?;
-    doc.validate()?;
+    // S10: Group深度・キー数などの資源上限をvalidateの再帰全走査より先に拒否する。
     check_document_resource_limits(&doc, limits)?;
+    doc.validate()?;
     Ok(OpenedDocument {
         document: doc,
         open_mode,

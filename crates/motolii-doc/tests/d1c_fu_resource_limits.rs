@@ -97,6 +97,28 @@ fn file_bytes_over_limit_is_rejected_before_full_parse() {
     let _ = fs::remove_dir_all(dir);
 }
 
+#[test]
+fn oversized_file_is_rejected_by_bounded_read() {
+    // metadata→fs::readだと全文を確保し得る。同一Fileのtake(limit+1)で打ち切ることを、
+    // 上限を大きく超えるblobで観測値=limit+1のFileBytesとして固定する。
+    let dir = unique_dir("bounded-read");
+    let path = dir.join("huge.bin");
+    fs::write(&path, vec![b'x'; 64 * 1024]).unwrap();
+    let limits = ResourceLimits {
+        max_file_bytes: 1_024,
+        ..ResourceLimits::production()
+    };
+    let err = load_document_with_limits(&path, &limits).unwrap_err();
+    assert!(matches!(
+        err,
+        PersistError::ResourceLimit(ResourceLimitError::FileBytes {
+            observed: 1_025,
+            limit: 1_024
+        })
+    ));
+    let _ = fs::remove_dir_all(dir);
+}
+
 // --- group depth (fuzz corpus相当: 敵対的な深い入れ子) ---
 
 #[test]
@@ -166,6 +188,84 @@ fn huge_string_field_is_rejected() {
             ..
         })
     ));
+}
+
+#[test]
+fn huge_effect_and_plugin_param_ids_are_rejected() {
+    use motolii_doc::{DocParam, EffectInstance};
+    use std::collections::BTreeMap;
+
+    let limits = ResourceLimits {
+        max_string_bytes: 1_000,
+        ..ResourceLimits::production()
+    };
+    let huge_id = "p".repeat(10_000);
+
+    // Effect.params のキー
+    {
+        let mut doc = base_doc();
+        let asset = doc.assets.allocate("a", "video/mp4", "h").unwrap();
+        let track_id = doc.track_ids.allocate("t").unwrap();
+        let layer = doc.layers.allocate("l").unwrap();
+        let mut envelope = ItemEnvelope::new(layer);
+        envelope.effects.push(EffectInstance {
+            plugin_id: "core.filter.tint".into(),
+            effect_version: 1,
+            enabled: true,
+            params: BTreeMap::from([(huge_id.clone(), DocParam::const_f64(0.5))]),
+            extra: Default::default(),
+        });
+        doc.tracks.push(Track {
+            id: track_id,
+            items: vec![TrackItem::Clip(Clip {
+                envelope,
+                start: motolii_core::RationalTime::ZERO,
+                duration: motolii_core::RationalTime::try_new(1, 1).unwrap(),
+                time_map: Default::default(),
+                source: ClipSource::Asset { asset },
+            })],
+        });
+        let err = load_document_bytes_with_limits(&to_bytes(&doc), &limits).unwrap_err();
+        assert!(matches!(
+            err,
+            PersistError::ResourceLimit(ResourceLimitError::StringBytes {
+                observed: 10_000,
+                limit: 1_000,
+                ..
+            })
+        ));
+    }
+
+    // Plugin source.params のキー
+    {
+        let mut doc = base_doc();
+        let track_id = doc.track_ids.allocate("t").unwrap();
+        let layer = doc.layers.allocate("l").unwrap();
+        doc.tracks.push(Track {
+            id: track_id,
+            items: vec![TrackItem::Clip(Clip {
+                envelope: ItemEnvelope::new(layer),
+                start: motolii_core::RationalTime::ZERO,
+                duration: motolii_core::RationalTime::try_new(1, 1).unwrap(),
+                time_map: Default::default(),
+                source: ClipSource::Plugin {
+                    plugin_id: "core.layer_source.solid".into(),
+                    effect_version: 1,
+                    params: BTreeMap::from([(huge_id, DocParam::const_f64(0.5))]),
+                    extra: Default::default(),
+                },
+            })],
+        });
+        let err = load_document_bytes_with_limits(&to_bytes(&doc), &limits).unwrap_err();
+        assert!(matches!(
+            err,
+            PersistError::ResourceLimit(ResourceLimitError::StringBytes {
+                observed: 10_000,
+                limit: 1_000,
+                ..
+            })
+        ));
+    }
 }
 
 // --- extra bytes: 巨大なextra flatten(fuzz corpus相当) ---
