@@ -4,7 +4,7 @@
 
 [インタラクティブHTML](m3-main-ui-v1.html)をM3の視覚構成基盤とする。設定画面からのライト/ダーク切替、preview canvas、波形、driver scopeをブラウザ内で実際に描画する。
 
-このHTMLは2026-07-11にClaude Desktopが一時scratchpadへ生成したモックを、2026-07-14に回収し、テーマ設定要件を追記したもの。静止画は回収直後の構成基準画像であり、設定popoverを開いた状態は含まない。
+このHTMLは2026-07-11にClaude Desktopが一時scratchpadへ生成したモックを、2026-07-14に回収し、テーマ設定要件・role名token・Dark既定・contrast修正を反映したもの。静止画はHTML改訂のたびにheadless Chrome(`#dark` / `#light` hashで固定入場)から再生成し、HTMLと乖離させない。
 
 ![M3 main UI dark](m3-main-ui-v1-dark.png)
 
@@ -23,11 +23,13 @@
 - 選択、keyframe、data mapping、bakeを別の意味色で示すこと
 - context説明を右下/status領域へ追加できる構造。Blenderは文脈ヘルプだけの参考で、全体UIは模倣しない
 - ライト/ダーク/custom themeとも同じsemantic token schemaを参照すること
-- 設定画面で組み込みLight/Darkを選択でき、初回既定はLightであること
+- 設定画面で組み込みDark/Lightを選択でき、初回既定はDarkであること(土台dark neutralの規約)
+- tokenはrole名のみとし、文字用途の意味色はcontrast 4.5:1以上を保つこと(具体hex値は固定しない)
 
 ## 固定しないもの
 
-- HTML内の具体色値、panel寸法、icon、font
+- HTML内の具体色値、panel寸法、icon、font(現在のglyphはemoji/文字のplaceholderで、icon仕様の先取りではない)
+- 既知のhue近接(solo黄とwarning琥珀、domain-path緑とstate-active緑、domain-pixel紫とitem-mesh紫、accentと選択青)。roleは分離済みで、hueの再配置はG0-6のCVD測定で決める
 - 組み込み2テーマ以外の配布テーマ内容。custom themeを追加できる契約だけを固定する
 - 未決と表示された音楽同期emission等の機能意味論
 - plugin custom UI、3D gizmo、任意track色の永続化
