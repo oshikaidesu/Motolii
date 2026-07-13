@@ -162,6 +162,11 @@ impl AssetTable {
         self.entries.get(&id)
     }
 
+    /// 全エントリを走査する(#101 ResourceLimits の string bytes 検査用)。
+    pub fn iter(&self) -> impl Iterator<Item = &Asset> {
+        self.entries.values()
+    }
+
     pub fn allocate(
         &mut self,
         name: impl Into<String>,
