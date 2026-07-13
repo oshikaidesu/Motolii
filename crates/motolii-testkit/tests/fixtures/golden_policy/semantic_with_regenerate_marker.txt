@@ -1,0 +1,3 @@
+# Fixture: 意味論なのに regenerate マーカーを付けた迂回試行
+MOTOLII_GOLDEN_CLASS: semantic
+MOTOLII_REGENERATE_WHEN: should-not-bypass

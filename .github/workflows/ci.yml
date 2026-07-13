@@ -53,6 +53,14 @@ jobs:
           else
             echo "M2E-2 bootstrap: protected paths absent on $BASE; skip live gate"
           fi
+      - name: D1i-4 semantic golden update forbid (S16)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          BASE="origin/${{ github.base_ref }}"
+          # ブートストラップ(台帳がbaseに無い)でもHEAD台帳の一貫性は検査する。
+          # 負例は cargo test -p motolii-testkit --test golden_update_policy。
+          ./scripts/check-golden-update-policy.sh "$BASE"
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy

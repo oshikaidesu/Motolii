@@ -1,0 +1,2 @@
+# Fixture: D1i-4 意味論ゴールデン分類サンプル
+MOTOLII_GOLDEN_CLASS: semantic
