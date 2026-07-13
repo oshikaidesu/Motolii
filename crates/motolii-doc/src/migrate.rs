@@ -5,8 +5,8 @@
 //! - #101 `OpenMode` / `ResourceLimits` を消費し、別ロード経路を作らない。
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
-use std::io;
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use motolii_core::{RationalTime, TimeMap};
@@ -511,10 +511,9 @@ pub fn migrate_bytes_with_limits(
 
     let before_counts = count_json_document(&root);
     let mut steps = Vec::new();
-    let mut warnings = Vec::new();
     let from_version = header.version;
 
-    rewrite_legacy_shapes(&mut root, &mut steps, &mut warnings)?;
+    rewrite_legacy_shapes(&mut root, &mut steps)?;
     if inject_missing_stable_ids_json(&mut root)? {
         steps.push("inject_stable_ids");
     }
@@ -550,7 +549,7 @@ pub fn migrate_bytes_with_limits(
             from_version,
             to_version,
             steps,
-            warnings,
+            warnings: Vec::new(),
         }
     };
     Ok((doc, report))
@@ -559,7 +558,6 @@ pub fn migrate_bytes_with_limits(
 fn rewrite_legacy_shapes(
     root: &mut Value,
     steps: &mut Vec<&'static str>,
-    warnings: &mut Vec<&'static str>,
 ) -> Result<(), MigrateError> {
     let asset_types = collect_asset_types(root);
     let Some(tracks) = root.get_mut("tracks").and_then(|t| t.as_array_mut()) else {
@@ -575,7 +573,6 @@ fn rewrite_legacy_shapes(
                 &format!("tracks[{ti}].items[{ii}]"),
                 &asset_types,
                 steps,
-                warnings,
             )?;
         }
     }
@@ -607,7 +604,6 @@ fn rewrite_item(
     path: &str,
     asset_types: &BTreeMap<u64, String>,
     steps: &mut Vec<&'static str>,
-    warnings: &mut Vec<&'static str>,
 ) -> Result<(), MigrateError> {
     let kind = item
         .get("kind")
@@ -615,17 +611,11 @@ fn rewrite_item(
         .unwrap_or("")
         .to_string();
     match kind.as_str() {
-        "clip" => rewrite_clip(item, path, asset_types, steps, warnings),
+        "clip" => rewrite_clip(item, path, asset_types, steps),
         "group" => {
             if let Some(children) = item.get_mut("children").and_then(|c| c.as_array_mut()) {
                 for (ci, child) in children.iter_mut().enumerate() {
-                    rewrite_item(
-                        child,
-                        &format!("{path}.children[{ci}]"),
-                        asset_types,
-                        steps,
-                        warnings,
-                    )?;
+                    rewrite_item(child, &format!("{path}.children[{ci}]"), asset_types, steps)?;
                 }
             }
             Ok(())
@@ -639,11 +629,10 @@ fn rewrite_clip(
     path: &str,
     asset_types: &BTreeMap<u64, String>,
     steps: &mut Vec<&'static str>,
-    warnings: &mut Vec<&'static str>,
 ) -> Result<(), MigrateError> {
     let clip_start = clip.get("start").cloned();
     if let Some(tm) = clip.get_mut("time_map") {
-        rewrite_timemap(tm, path, &clip_start, steps, warnings)?;
+        rewrite_timemap(tm, path, &clip_start, steps)?;
     }
     rewrite_path_ops(clip, path, asset_types, steps)?;
     Ok(())
@@ -654,7 +643,6 @@ fn rewrite_timemap(
     path: &str,
     clip_start: &Option<Value>,
     steps: &mut Vec<&'static str>,
-    warnings: &mut Vec<&'static str>,
 ) -> Result<(), MigrateError> {
     let Value::Object(map) = tm else {
         return Ok(());
@@ -662,22 +650,14 @@ fn rewrite_timemap(
     if !map.contains_key("timeline_start") {
         return Ok(());
     }
-    let timeline_start =
+    let timeline_start_val =
         map.remove("timeline_start")
             .ok_or_else(|| MigrateError::TimeMapRewrite {
                 path: path.to_string(),
                 detail: "timeline_start missing after check".into(),
             })?;
 
-    // D1g: Clip.startがタイムライン位置の正本。timeline_startは破棄。
-    // clip.start == timeline_start なら写像意味は保存される。
-    if let Some(cs) = clip_start.as_ref() {
-        if cs != &timeline_start {
-            warnings.push("timeline_start_mismatch_dropped_clip_start_wins");
-        }
-    }
-
-    // 現行TimeMapはoverrun_modeを持つ(default Freeze)。欠ければ後段serde default。
+    // 現行TimeMapは source_start/speed 必須。欠ければ補正も写像保存もできない。
     if !map.contains_key("source_start")
         || !map.contains_key("speed_num")
         || !map.contains_key("speed_den")
@@ -688,10 +668,107 @@ fn rewrite_timemap(
         });
     }
 
+    let timeline_start: RationalTime =
+        serde_json::from_value(timeline_start_val).map_err(|e| MigrateError::TimeMapRewrite {
+            path: path.to_string(),
+            detail: format!("invalid timeline_start: {e}"),
+        })?;
+
+    // clip.start が無いと clip_local 契約へ写せない — 警告黙殺せず拒否。
+    let Some(clip_start_val) = clip_start.as_ref() else {
+        return Err(MigrateError::TimeMapRewrite {
+            path: path.to_string(),
+            detail: "clip.start missing; cannot reconcile timeline_start".into(),
+        });
+    };
+    let clip_start_rt: RationalTime =
+        serde_json::from_value(clip_start_val.clone()).map_err(|e| {
+            MigrateError::TimeMapRewrite {
+                path: path.to_string(),
+                detail: format!("invalid clip.start: {e}"),
+            }
+        })?;
+
+    // 旧: source = source_start + (t - timeline_start) * speed
+    // 新: source = source_start' + (t - clip.start) * speed
+    // → source_start' = source_start + (clip.start - timeline_start) * speed
+    if clip_start_rt != timeline_start {
+        let source_start: RationalTime =
+            serde_json::from_value(map.get("source_start").cloned().ok_or_else(|| {
+                MigrateError::TimeMapRewrite {
+                    path: path.to_string(),
+                    detail: "source_start missing after check".into(),
+                }
+            })?)
+            .map_err(|e| MigrateError::TimeMapRewrite {
+                path: path.to_string(),
+                detail: format!("invalid source_start: {e}"),
+            })?;
+        let speed_num = map
+            .get("speed_num")
+            .and_then(|v| v.as_i64())
+            .ok_or_else(|| MigrateError::TimeMapRewrite {
+                path: path.to_string(),
+                detail: "speed_num must be i64".into(),
+            })?;
+        let speed_den = map
+            .get("speed_den")
+            .and_then(|v| v.as_i64())
+            .ok_or_else(|| MigrateError::TimeMapRewrite {
+                path: path.to_string(),
+                detail: "speed_den must be i64".into(),
+            })?;
+
+        let corrected = adjust_source_start_for_clip_anchor(
+            source_start,
+            timeline_start,
+            clip_start_rt,
+            speed_num,
+            speed_den,
+        )
+        .map_err(|detail| MigrateError::TimeMapRewrite {
+            path: path.to_string(),
+            detail,
+        })?;
+        map.insert(
+            "source_start".into(),
+            serde_json::to_value(corrected).map_err(|e| MigrateError::TimeMapRewrite {
+                path: path.to_string(),
+                detail: format!("serialize corrected source_start: {e}"),
+            })?,
+        );
+        if !steps.contains(&"adjust_source_start_for_timeline_start") {
+            steps.push("adjust_source_start_for_timeline_start");
+        }
+    }
+
     if !steps.contains(&"drop_timeline_start") {
         steps.push("drop_timeline_start");
     }
     Ok(())
+}
+
+/// 旧 timeline_start 基準写像を clip.start 基準へ移す source_start 補正。
+fn adjust_source_start_for_clip_anchor(
+    source_start: RationalTime,
+    timeline_start: RationalTime,
+    clip_start: RationalTime,
+    speed_num: i64,
+    speed_den: i64,
+) -> Result<RationalTime, String> {
+    let delta = clip_start
+        .try_sub(timeline_start)
+        .map_err(|e| format!("clip.start - timeline_start: {e}"))?;
+    let scaled = delta
+        .try_mul_i64(speed_num)
+        .map_err(|e| format!("delta * speed_num: {e}"))?;
+    let unit = RationalTime::try_new(1, speed_den).map_err(|e| format!("1/speed_den: {e}"))?;
+    let mapped = scaled
+        .try_mul(unit)
+        .map_err(|e| format!("scaled * unit: {e}"))?;
+    source_start
+        .try_add(mapped)
+        .map_err(|e| format!("source_start + offset: {e}"))
 }
 
 fn rewrite_path_ops(
@@ -1280,17 +1357,60 @@ pub fn migrate_document_file_with_limits(
         });
     }
 
-    if backup_path.exists() {
-        return Err(MigrateError::BackupExists(backup_path));
+    // exists()+copy の TOCTOU を避け、create_new で排他作成してから内容を書く。
+    // backup の fsync(+親dir fsync)が終わるまで save_document しない。
+    let mut backup_file = match OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&backup_path)
+    {
+        Ok(f) => f,
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+            return Err(MigrateError::BackupExists(backup_path));
+        }
+        Err(e) => return Err(MigrateError::Io(e)),
+    };
+    // 読んだ bytes を書く(再読込 TOCTOU も避ける)。失敗時は不完全 bak を消す。
+    if let Err(e) = (|| -> io::Result<()> {
+        backup_file.write_all(&bytes)?;
+        backup_file.flush()?;
+        backup_file.sync_all()?;
+        Ok(())
+    })() {
+        let _ = fs::remove_file(&backup_path);
+        return Err(MigrateError::Io(e));
     }
-    // 原本を先にコピー — 失敗したらrenameしない。
-    fs::copy(path, &backup_path)?;
+    drop(backup_file);
+
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    if let Err(e) = sync_dir(parent) {
+        // bak は残してよい(最後の既知良品)。原本は未書換。
+        return Err(MigrateError::Io(e));
+    }
+
     save_document(path, &doc)?;
     Ok(MigrateFileResult {
         backup_path,
         report,
         migrated,
     })
+}
+
+/// persist.rs と同型: Unix は親ディレクトリ fsync、非Unix は省略。
+fn sync_dir(dir: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        let dir_file = File::open(dir)?;
+        dir_file.sync_all()?;
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = dir;
+    }
+    Ok(())
 }
 
 fn read_file_bounded(path: &Path, limits: &ResourceLimits) -> Result<Vec<u8>, MigrateError> {

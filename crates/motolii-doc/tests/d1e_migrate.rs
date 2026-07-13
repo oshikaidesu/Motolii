@@ -162,6 +162,90 @@ fn timeline_start_preserves_timemap_and_param_semantics() {
 }
 
 #[test]
+fn timeline_start_mismatch_adjusts_source_start_preserving_map() {
+    // clip.start=4, timeline_start=2, source_start=1/2, speed=2
+    // source_start' = 1/2 + (4-2)*2 = 9/2
+    let mut root: serde_json::Value =
+        serde_json::from_slice(&fs::read(corpus_path("timeline_start/speed_clip.json")).unwrap())
+            .unwrap();
+    root["tracks"][0]["items"][0]["start"] = json!({"num": 4, "den": 1});
+    root["tracks"][0]["items"][0]["time_map"] = json!({
+        "source_start": {"num": 1, "den": 2},
+        "timeline_start": {"num": 2, "den": 1},
+        "speed_num": 2,
+        "speed_den": 1
+    });
+    let bytes = serde_json::to_vec(&root).unwrap();
+
+    let clip_start = RationalTime::try_new(4, 1).unwrap();
+    let source_start = RationalTime::try_new(1, 2).unwrap();
+    let timeline_start = RationalTime::try_new(2, 1).unwrap();
+    let sample_timeline = RationalTime::try_new(6, 1).unwrap();
+    let expected =
+        legacy_timemap_source(source_start, timeline_start, 2, 1, sample_timeline).unwrap();
+
+    let (doc, report) = migrate_bytes(&bytes).unwrap();
+    assert!(report.steps.contains(&"drop_timeline_start"));
+    assert!(report
+        .steps
+        .contains(&"adjust_source_start_for_timeline_start"));
+    assert!(report.warnings.is_empty());
+
+    let TrackItem::Clip(migrated) = &doc.tracks[0].items[0] else {
+        panic!("expected clip");
+    };
+    assert_eq!(
+        migrated.time_map.source_start,
+        RationalTime::try_new(9, 2).unwrap()
+    );
+    let got = modern_timemap_source(&migrated.time_map, clip_start, sample_timeline).unwrap();
+    assert_eq!(got, expected);
+}
+
+#[test]
+fn timeline_start_mismatch_rejects_when_clip_start_missing() {
+    let mut root: serde_json::Value =
+        serde_json::from_slice(&fs::read(corpus_path("timeline_start/speed_clip.json")).unwrap())
+            .unwrap();
+    let item = root["tracks"][0]["items"][0].as_object_mut().unwrap();
+    item.remove("start");
+    item["time_map"] = json!({
+        "source_start": {"num": 0, "den": 1},
+        "timeline_start": {"num": 1, "den": 1},
+        "speed_num": 1,
+        "speed_den": 1
+    });
+    let bytes = serde_json::to_vec(&root).unwrap();
+    let err = migrate_bytes(&bytes).unwrap_err();
+    assert!(
+        matches!(err, MigrateError::TimeMapRewrite { .. }),
+        "typed reject, got {err:?}"
+    );
+    let msg = err.to_string();
+    assert!(
+        msg.contains("clip.start missing") || msg.contains("TimeMap"),
+        "{msg}"
+    );
+}
+
+#[test]
+fn timeline_start_mismatch_rejects_when_speed_fields_missing() {
+    let mut root: serde_json::Value =
+        serde_json::from_slice(&fs::read(corpus_path("timeline_start/speed_clip.json")).unwrap())
+            .unwrap();
+    root["tracks"][0]["items"][0]["start"] = json!({"num": 4, "den": 1});
+    root["tracks"][0]["items"][0]["time_map"] = json!({
+        "source_start": {"num": 1, "den": 2},
+        "timeline_start": {"num": 2, "den": 1}
+        // speed_num / speed_den 欠落 → 補正不可で拒否
+    });
+    let bytes = serde_json::to_vec(&root).unwrap();
+    let err = migrate_bytes(&bytes).unwrap_err();
+    assert!(matches!(err, MigrateError::TimeMapRewrite { .. }));
+    assert!(err.to_string().contains("source_start/speed"));
+}
+
+#[test]
 fn path_ops_preserves_modifiers_and_dependency_edges() {
     let bytes = fs::read(corpus_path("path_ops/svg_with_ops.json")).unwrap();
     let (doc, report) = migrate_bytes(&bytes).unwrap();
