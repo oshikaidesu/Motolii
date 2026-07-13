@@ -13,6 +13,7 @@ mod doc_value;
 mod ids;
 mod param;
 pub mod param_expect;
+pub mod pathgeom;
 mod persist;
 mod schema;
 mod track_id;
@@ -30,15 +31,17 @@ pub use doc_value::DocValue;
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
 pub use param::{DocParam, LookAtAxis};
 pub use param_expect::{ExpectedValueType, ParamConstraints};
+pub use pathgeom::PathOpError;
 pub use persist::{
     detect_cloud_sync, load_document, load_document_bytes, save_document,
     save_document_with_options, CloudSyncHint, PersistError, SaveAbortAfter, SaveOptions,
     READER_VERSION,
 };
 pub use schema::{
-    BlendMode, Clip, ClipSource, ClippingMaskSettings, Composition, CompositionError,
-    EffectInstance, Group, ItemEnvelope, MaskMode, PathOp, Soundtrack, SoundtrackError,
-    StandardShape, Track, TrackItem, Transform2D, TrimMode, VectorContent, VectorRecipe,
+    BlendMode, Clip, ClipSource, ClippingMaskSettings, CompositeOrder, Composition,
+    CompositionError, EffectInstance, Group, ItemEnvelope, LineJoin, MaskMode, PathOp, PointType,
+    Soundtrack, SoundtrackError, StandardShape, Track, TrackItem, Transform2D, TrimMode,
+    VectorContent, VectorRecipe,
 };
 pub use track_id::{TrackId, TrackIdError, TrackIdTable};
 pub use validate::DocumentError;
