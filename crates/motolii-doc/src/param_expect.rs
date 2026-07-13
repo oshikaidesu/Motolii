@@ -39,13 +39,17 @@ impl ExpectedValueType {
 }
 
 /// 受け口ごとの制約。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ParamConstraints {
     pub expected: ExpectedValueType,
     /// LookAt / Follow を許すのは position のみ。
     pub allow_spatial_links: bool,
     /// スカラー成分を [0,1] に閉じる(opacity / Color 各成分)。
     pub unit_interval: bool,
+    /// F64の下限(含む)。PathOp意味論表の`≥0`等の拒否項目用(D1i-2)。
+    pub min: Option<f64>,
+    /// F64の上限(含む)。PathOp意味論表の`∈[-1,1]`等の拒否項目用(D1i-2)。
+    pub max: Option<f64>,
 }
 
 impl ParamConstraints {
@@ -54,6 +58,8 @@ impl ParamConstraints {
             expected,
             allow_spatial_links: false,
             unit_interval: false,
+            min: None,
+            max: None,
         }
     }
 
@@ -62,6 +68,8 @@ impl ParamConstraints {
             expected: ExpectedValueType::F64,
             allow_spatial_links: false,
             unit_interval: true,
+            min: None,
+            max: None,
         }
     }
 
@@ -70,6 +78,8 @@ impl ParamConstraints {
             expected: ExpectedValueType::Color,
             allow_spatial_links: false,
             unit_interval: true,
+            min: None,
+            max: None,
         }
     }
 
@@ -78,11 +88,35 @@ impl ParamConstraints {
             expected: ExpectedValueType::Vec2,
             allow_spatial_links: true,
             unit_interval: false,
+            min: None,
+            max: None,
         }
     }
 
     pub const fn scalar_f64() -> Self {
         Self::typed(ExpectedValueType::F64)
+    }
+
+    /// F64を`[min, max]`(両端含む)に閉じる(例: pucker_bloat.amount∈[-1,1])。
+    pub const fn ranged_f64(min: f64, max: f64) -> Self {
+        Self {
+            expected: ExpectedValueType::F64,
+            allow_spatial_links: false,
+            unit_interval: false,
+            min: Some(min),
+            max: Some(max),
+        }
+    }
+
+    /// F64を`[min, +inf)`に閉じる(例: zig_zag.amount≥0)。
+    pub const fn min_f64(min: f64) -> Self {
+        Self {
+            expected: ExpectedValueType::F64,
+            allow_spatial_links: false,
+            unit_interval: false,
+            min: Some(min),
+            max: None,
+        }
     }
 }
 
@@ -107,9 +141,34 @@ pub fn envelope_opacity() -> ParamConstraints {
     ParamConstraints::unit_f64()
 }
 
-/// PathOp の全 DocParam スロットは v1 で F64(値域の詳細は D1i-2)。
+/// PathOp の無制限スカラー(角度・オフセット・距離等。表が範囲を固定しない席)。
 pub fn path_op_scalar() -> ParamConstraints {
     ParamConstraints::typed(ExpectedValueType::F64)
+}
+
+/// PathOp の無制限Vec2(twist.center等。LookAt/Followは許可しない — 表が未決)。
+pub fn path_op_vec2() -> ParamConstraints {
+    ParamConstraints::typed(ExpectedValueType::Vec2)
+}
+
+/// pucker_bloat.amount ∈ [-1, 1](PathOp意味論表)。
+pub fn path_op_pucker_bloat_amount() -> ParamConstraints {
+    ParamConstraints::ranged_f64(-1.0, 1.0)
+}
+
+/// zig_zag.amount / ridges, round_corners.radius, repeater.copies ≥ 0(PathOp意味論表)。
+pub fn path_op_non_negative() -> ParamConstraints {
+    ParamConstraints::min_f64(0.0)
+}
+
+/// trim.start / trim.end ∈ [0, 1](PathOp意味論表)。
+pub fn path_op_unit_interval() -> ParamConstraints {
+    ParamConstraints::unit_f64()
+}
+
+/// repeater.start_opacity / end_opacity ∈ [0, 1](envelope.opacityと同型)。
+pub fn path_op_opacity() -> ParamConstraints {
+    ParamConstraints::unit_f64()
 }
 
 /// 既知ファーストパーティ effect / plugin / layer_source / composite / param_driver の期待型。
