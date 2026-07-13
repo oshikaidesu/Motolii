@@ -10,10 +10,10 @@ use std::collections::BTreeMap;
 
 use motolii_core::RationalTime;
 use motolii_doc::{
-    BlendMode, Clip, ClipSource, ClippingMaskSettings, Command, DocKeyframe, DocKeyframeTrack,
-    DocParam, DocValue, Document, DocumentWriter, EffectId, EffectInstance, Group, ItemEnvelope,
-    KeyframeId, LayerId, LookAtAxis, MaskMode, ParentLocator, ScalarPropertyId, Track, TrackId,
-    TrackItem,
+    layer_names_for_item, BlendMode, Clip, ClipSource, ClippingMaskSettings, Command, DocKeyframe,
+    DocKeyframeTrack, DocParam, DocValue, Document, DocumentWriter, EffectId, EffectInstance,
+    Group, ItemEnvelope, KeyframeId, LayerId, LookAtAxis, MaskMode, ParentLocator,
+    ScalarPropertyId, Track, TrackId, TrackItem,
 };
 use motolii_eval::Interp;
 use proptest::prelude::*;
@@ -251,8 +251,10 @@ proptest! {
 
     #[test]
     fn add_remove_track_item_roundtrip(start in 0i64..4) {
-        let f = fixture();
-        let new_layer = LayerId::from_raw(9999);
+        let mut f = fixture();
+        // エントリ無しでIDだけ予約 — applyが台帳へ載せ、inverseが外すので Document 全体が戻る。
+        let new_layer = f.doc.layers.reserve().unwrap();
+        let layer_names = BTreeMap::from([(new_layer, "new".to_string())]);
         let item = TrackItem::Clip(Clip {
             envelope: ItemEnvelope::new(new_layer),
             start: RationalTime::try_new(start, 1).unwrap(),
@@ -266,6 +268,7 @@ proptest! {
             parent: ParentLocator::Track(f.track),
             index: 2,
             item,
+            layer_names,
         };
         assert_roundtrip(&f.doc, cmd);
     }
@@ -275,12 +278,92 @@ proptest! {
 fn remove_track_item_roundtrip() {
     let f = fixture();
     let item = f.doc.tracks[0].items[1].clone();
+    let layer_names = layer_names_for_item(&f.doc, &item).unwrap();
     let cmd = Command::RemoveTrackItem {
         parent: ParentLocator::Track(f.track),
         index: 1,
         item,
+        layer_names,
     };
     assert_roundtrip(&f.doc, cmd);
+}
+
+#[test]
+fn add_effect_rejects_index_past_end() {
+    let f = fixture();
+    let before = f.doc.clone();
+    let mut writer = DocumentWriter::new(f.doc);
+    let gesture = writer.begin_gesture();
+    let effect = EffectInstance {
+        id: EffectId::from_raw(writer.snapshot().next_stable_id.peek_next()),
+        plugin_id: "core.filter.blur".into(),
+        effect_version: 1,
+        enabled: true,
+        params: BTreeMap::new(),
+        extra: Default::default(),
+    };
+    let err = writer
+        .apply_command(
+            gesture,
+            Command::AddEffect {
+                target: f.layer,
+                index: 99,
+                effect,
+            },
+        )
+        .expect_err("index past end");
+    assert!(matches!(
+        err,
+        motolii_doc::CommandError::IndexOutOfRange { index: 99, len: 1 }
+    ));
+    assert_eq!(writer.snapshot().as_ref(), &before);
+    assert_eq!(writer.undo_len(), 0);
+    assert_eq!(writer.redo_len(), 0);
+}
+
+#[test]
+fn add_track_item_rejects_index_past_end() {
+    let mut f = fixture();
+    let new_layer = f.doc.layers.reserve().unwrap();
+    let before = f.doc.clone();
+    let mut writer = DocumentWriter::new(f.doc);
+    let gesture = writer.begin_gesture();
+    let layer_names = BTreeMap::from([(new_layer, "x".to_string())]);
+    let item = TrackItem::Clip(Clip {
+        envelope: ItemEnvelope::new(new_layer),
+        start: RationalTime::ZERO,
+        duration: RationalTime::try_new(1, 1).unwrap(),
+        time_map: Default::default(),
+        source: ClipSource::Asset {
+            asset: motolii_doc::AssetId::from_raw(0),
+        },
+    });
+    let err = writer
+        .apply_command(
+            gesture,
+            Command::AddTrackItem {
+                parent: ParentLocator::Track(f.track),
+                index: 99,
+                item,
+                layer_names,
+            },
+        )
+        .expect_err("index past end");
+    assert!(matches!(
+        err,
+        motolii_doc::CommandError::IndexOutOfRange { index: 99, len: 2 }
+    ));
+    assert_eq!(writer.snapshot().as_ref(), &before);
+    assert_eq!(writer.undo_len(), 0);
+    assert_eq!(writer.redo_len(), 0);
+}
+
+/// 台帳エントリ(ID→表示名)を比較用に取り出す。`next`は含めない。
+fn layer_entries(doc: &Document) -> BTreeMap<u64, String> {
+    doc.layers
+        .iter()
+        .map(|(id, name)| (id.get(), name.to_string()))
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -692,9 +775,22 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
     }
 
     // 単一writer境界を保ったまま1回のundoで複製全体(1 gesture)が取り消せる。
-    // LayerId/EffectId/KeyframeIdの採番カウンタは非再利用規律により巻き戻らない
-    // (undoは「木構造の決定済み値」を戻すだけで、発行済みIDを再利用可能にはしない)。
+    // LayerId/EffectId/KeyframeIdの採番カウンタは非再利用規律により巻き戻らない。
+    // 台帳エントリ自体はRemoveで外れる — max_layersに孤児が溜まらない。
     let allocated_next = snap.next_stable_id.peek_next();
+    let layers_before = layer_entries(&doc);
+    let layers_after_dup = layer_entries(&snap);
+    let duplicated: BTreeMap<u64, String> = layers_after_dup
+        .iter()
+        .filter(|(id, _)| !layers_before.contains_key(id))
+        .map(|(id, name)| (*id, name.clone()))
+        .collect();
+    assert_eq!(
+        duplicated.len(),
+        3,
+        "nested group duplicate must register group+2 children in LayerIdTable"
+    );
+
     writer.undo().expect("undo duplicate");
     let after_undo = writer.snapshot();
     assert_eq!(
@@ -702,10 +798,79 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
         "tree content must match pre-duplication state"
     );
     assert_eq!(
+        layer_entries(&after_undo),
+        layers_before,
+        "undo must restore LayerIdTable entries (ids+names), not only tracks"
+    );
+    assert_eq!(
         after_undo.next_stable_id.peek_next(),
         allocated_next,
         "stable id counter must not be rewound by undo (non-reuse discipline)"
     );
+
+    // redoで同じ既発行IDと表示名が復帰する(insertではなくrestore経路)。
+    writer.redo().expect("redo duplicate");
+    writer.validate().expect("post-redo document must validate");
+    let after_redo = writer.snapshot();
+    assert_eq!(
+        layer_entries(&after_redo),
+        layers_after_dup,
+        "redo must restore the same LayerId entries and display names"
+    );
+    for (id, name) in &duplicated {
+        assert_eq!(
+            after_redo.layers.display_name(LayerId::from_raw(*id)),
+            Some(name.as_str())
+        );
+    }
+}
+
+#[test]
+fn duplicate_undo_redo_loop_does_not_grow_layer_table() {
+    let mut doc = Document::new_v1();
+    let group_layer = doc.layers.allocate("group").unwrap();
+    let child_a = doc.layers.allocate("child_a").unwrap();
+    let child_b = doc.layers.allocate("child_b").unwrap();
+    let track = doc.track_ids.allocate("V1").unwrap();
+    let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
+    doc.tracks.push(Track {
+        id: track,
+        items: vec![TrackItem::Group(Group {
+            envelope: ItemEnvelope::new(group_layer),
+            children: vec![
+                TrackItem::Clip(Clip {
+                    envelope: ItemEnvelope::new(child_a),
+                    start: RationalTime::ZERO,
+                    duration: RationalTime::try_new(1, 1).unwrap(),
+                    time_map: Default::default(),
+                    source: ClipSource::Asset { asset },
+                }),
+                TrackItem::Clip(Clip {
+                    envelope: ItemEnvelope::new(child_b),
+                    start: RationalTime::ZERO,
+                    duration: RationalTime::try_new(1, 1).unwrap(),
+                    time_map: Default::default(),
+                    source: ClipSource::Asset { asset },
+                }),
+            ],
+        })],
+    });
+    doc.validate().expect("fixture");
+
+    let baseline = layer_entries(&doc);
+    let mut writer = DocumentWriter::new(doc);
+    for _ in 0..8 {
+        writer
+            .duplicate_track_item(group_layer)
+            .expect("duplicate nested group");
+        writer.undo().expect("undo duplicate");
+        assert_eq!(
+            layer_entries(&writer.snapshot()),
+            baseline,
+            "duplicate↔undo must not accumulate LayerIdTable orphans"
+        );
+    }
+    assert_eq!(writer.snapshot().layers.len(), baseline.len());
 }
 
 #[test]

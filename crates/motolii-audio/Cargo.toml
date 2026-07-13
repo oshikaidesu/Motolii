@@ -1,0 +1,29 @@
+[package]
+name = "motolii-audio"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+motolii-doc.workspace = true
+# D4契約: WAV/FLAC/Ogg-Vorbis/PCM(default)に加え、MV素材で使う楽曲コンテナ(MP3/AAC/AIFF/ALAC)を
+# 明示featureで追加する(docs/references.md「Symphonia」)。
+symphonia = { version = "0.6", default-features = false, features = [
+    "aac",
+    "aiff",
+    "alac",
+    "flac",
+    "mp1",
+    "mp2",
+    "mp3",
+    "ogg",
+    "pcm",
+    "vorbis",
+    "wav",
+] }
+cpal = "0.18"
+
+[dev-dependencies]
+motolii-testkit.workspace = true
+motolii-doc.workspace = true

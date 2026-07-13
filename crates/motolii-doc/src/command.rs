@@ -7,6 +7,8 @@
 //! **スコープ外(本PR)**: `ClipSource::Plugin`/`VectorContent`/`PathOp`配下のDocParam編集
 //! コマンドはD1i-2(#100)と並走のため対象外。複製時のID再写像は`duplicate`が担当する。
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -120,6 +122,13 @@ pub enum CommandError {
     RemoveItemMismatch { expected: u64, found: u64 },
     #[error("removed effect does not match expected id (expected {expected}, found {found})")]
     RemoveEffectMismatch { expected: u64, found: u64 },
+    #[error(
+        "layer_names keys do not match track item subtree (item={item_layers:?}, names={named_layers:?})"
+    )]
+    LayerNamesMismatch {
+        item_layers: Vec<u64>,
+        named_layers: Vec<u64>,
+    },
     #[error(transparent)]
     LayerIdAlloc(#[from] crate::LayerIdError),
     #[error(transparent)]
@@ -170,11 +179,15 @@ pub enum Command {
         parent: ParentLocator,
         index: usize,
         item: TrackItem,
+        /// subtreeの表示名。applyで台帳へ載せ、Removeのinverseで戻す。
+        layer_names: BTreeMap<LayerId, String>,
     },
     RemoveTrackItem {
         parent: ParentLocator,
         index: usize,
         item: TrackItem,
+        /// subtreeの表示名。台帳から外したあと、inverseのAddで復元する。
+        layer_names: BTreeMap<LayerId, String>,
     },
 }
 
@@ -261,9 +274,18 @@ impl Command {
                 index,
                 effect,
             } => {
-                let env = find_envelope_mut(doc, *target)?;
-                let idx = (*index).min(env.effects.len());
-                env.effects.insert(idx, effect.clone());
+                // 事前検査: 対象envelopeが存在する。index > lenは拒否(==lenは末尾追加)。
+                let env =
+                    find_envelope(doc, *target).ok_or(CommandError::LayerNotFound(target.get()))?;
+                if *index > env.effects.len() {
+                    return Err(CommandError::IndexOutOfRange {
+                        index: *index,
+                        len: env.effects.len(),
+                    });
+                }
+                find_envelope_mut(doc, *target)?
+                    .effects
+                    .insert(*index, effect.clone());
                 Ok(())
             }
             Command::RemoveEffect {
@@ -309,18 +331,39 @@ impl Command {
                 parent,
                 index,
                 item,
+                layer_names,
             } => {
-                let items = find_items_vec_mut(doc, *parent)?;
-                let idx = (*index).min(items.len());
-                items.insert(idx, item.clone());
+                // 事前検査のみ — 失敗時はツリー・台帳とも未変更。
+                ensure_layer_names_match_item(item, layer_names)?;
+                let len = find_items_vec(doc, *parent)?.len();
+                if *index > len {
+                    return Err(CommandError::IndexOutOfRange { index: *index, len });
+                }
+                // 載せる予定のIDについて、restoreがExhaustedになるケースだけ事前拒否。
+                for id in layer_names.keys() {
+                    if !doc.layers.contains(*id) && id.get() == u64::MAX {
+                        return Err(CommandError::LayerIdAlloc(crate::LayerIdError::Exhausted));
+                    }
+                }
+
+                // ここから更新。事前検査済みなので台帳→ツリーの順で確定する。
+                for (id, name) in layer_names {
+                    if !doc.layers.contains(*id) {
+                        doc.layers.restore(*id, name.clone())?;
+                    }
+                }
+                find_items_vec_mut(doc, *parent)?.insert(*index, item.clone());
                 Ok(())
             }
             Command::RemoveTrackItem {
                 parent,
                 index,
                 item,
+                layer_names,
             } => {
-                let items = find_items_vec_mut(doc, *parent)?;
+                // 事前検査のみ — 失敗時はツリー・台帳とも未変更。
+                ensure_layer_names_match_item(item, layer_names)?;
+                let items = find_items_vec(doc, *parent)?;
                 if *index >= items.len() {
                     return Err(CommandError::IndexOutOfRange {
                         index: *index,
@@ -335,7 +378,16 @@ impl Command {
                         found: found.get(),
                     });
                 }
-                items.remove(*index);
+                for id in layer_names.keys() {
+                    if !doc.layers.contains(*id) {
+                        return Err(CommandError::LayerNotFound(id.get()));
+                    }
+                }
+
+                find_items_vec_mut(doc, *parent)?.remove(*index);
+                for id in layer_names.keys() {
+                    doc.layers.remove(*id)?;
+                }
                 Ok(())
             }
         }
@@ -403,22 +455,71 @@ impl Command {
                 parent,
                 index,
                 item,
+                layer_names,
             } => Command::RemoveTrackItem {
                 parent,
                 index,
                 item,
+                layer_names,
             },
             Command::RemoveTrackItem {
                 parent,
                 index,
                 item,
+                layer_names,
             } => Command::AddTrackItem {
                 parent,
                 index,
                 item,
+                layer_names,
             },
         }
     }
+}
+
+/// `item` subtreeのLayerId集合と`layer_names`のキーが一致することを要求する。
+fn ensure_layer_names_match_item(
+    item: &TrackItem,
+    layer_names: &BTreeMap<LayerId, String>,
+) -> Result<(), CommandError> {
+    let mut ids = Vec::new();
+    collect_layer_ids(item, &mut ids);
+    if ids.len() != layer_names.len() || ids.iter().any(|id| !layer_names.contains_key(id)) {
+        return Err(CommandError::LayerNamesMismatch {
+            item_layers: ids.iter().map(|id| id.get()).collect(),
+            named_layers: layer_names.keys().map(|id| id.get()).collect(),
+        });
+    }
+    Ok(())
+}
+
+/// TrackItem subtreeのLayerIdを深さ優先で集める。
+pub fn collect_layer_ids(item: &TrackItem, out: &mut Vec<LayerId>) {
+    out.push(envelope_of(item).layer_id);
+    if let TrackItem::Group(g) = item {
+        for child in &g.children {
+            collect_layer_ids(child, out);
+        }
+    }
+}
+
+/// Document台帳からsubtreeの表示名を拾う。RemoveTrackItem構築用。
+pub fn layer_names_for_item(
+    doc: &Document,
+    item: &TrackItem,
+) -> Result<BTreeMap<LayerId, String>, CommandError> {
+    let mut ids = Vec::new();
+    collect_layer_ids(item, &mut ids);
+    let mut names = BTreeMap::new();
+    for id in ids {
+        let name = doc
+            .layers
+            .display_name(id)
+            .ok_or(CommandError::LayerNotFound(id.get()))?
+            .to_string();
+        names.insert(id, name);
+    }
+    Ok(names)
 }
 
 fn write_property(
@@ -520,6 +621,40 @@ pub(crate) fn find_items_vec_mut(
         ParentLocator::Group(layer) => {
             for track in &mut doc.tracks {
                 if let Some(found) = find_group_children_mut(&mut track.items, layer) {
+                    return Ok(found);
+                }
+            }
+            Err(CommandError::GroupNotFound(layer.get()))
+        }
+    }
+}
+
+fn find_group_children(items: &[TrackItem], target: LayerId) -> Option<&[TrackItem]> {
+    for item in items {
+        if let TrackItem::Group(g) = item {
+            if g.envelope.layer_id == target {
+                return Some(g.children.as_slice());
+            }
+            if let Some(found) = find_group_children(&g.children, target) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+/// 事前検査用の読み取り専用ロケータ。
+fn find_items_vec(doc: &Document, parent: ParentLocator) -> Result<&[TrackItem], CommandError> {
+    match parent {
+        ParentLocator::Track(tid) => doc
+            .tracks
+            .iter()
+            .find(|t| t.id == tid)
+            .map(|t| t.items.as_slice())
+            .ok_or(CommandError::TrackNotFound(tid.get())),
+        ParentLocator::Group(layer) => {
+            for track in &doc.tracks {
+                if let Some(found) = find_group_children(&track.items, layer) {
                     return Ok(found);
                 }
             }
