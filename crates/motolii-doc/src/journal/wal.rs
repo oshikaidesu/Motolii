@@ -94,7 +94,8 @@ impl WalSession {
                     let tip_salt = {
                         let mut salt = scan.header.generation_salt;
                         for frame in &scan.frames {
-                            if frame.kind == JournalRecordKind::Checkpoint && frame.payload.len() >= 8
+                            if frame.kind == JournalRecordKind::Checkpoint
+                                && frame.payload.len() >= 8
                             {
                                 salt = u64::from_le_bytes(
                                     frame.payload[0..8].try_into().expect("new salt"),
@@ -187,26 +188,15 @@ pub fn commit_edit(
     fs.note_stage(DurabilityStage::JournalFsync)?;
 
     session.last_record = Some(commit_id);
-    session.catalog.edits_since_snapshot =
-        session.catalog.edits_since_snapshot.saturating_add(1);
+    session.catalog.edits_since_snapshot = session.catalog.edits_since_snapshot.saturating_add(1);
     Ok(record_id)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CheckpointOptions {
     pub persist: crate::SaveOptions,
     pub rotate: RotateOptions,
     pub pin: bool,
-}
-
-impl Default for CheckpointOptions {
-    fn default() -> Self {
-        Self {
-            persist: crate::SaveOptions::default(),
-            rotate: RotateOptions::default(),
-            pin: false,
-        }
-    }
 }
 
 /// mainをアトミック保存し、世代saltを更新するcheckpoint。

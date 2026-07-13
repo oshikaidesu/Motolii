@@ -44,11 +44,11 @@ pub use duplicate::DuplicateError;
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
 pub use journal::{
     checkpoint_with_fault_plan, inject_bad_checksum_at_last_frame, inject_corrupt_journal_tail,
-    inject_salt_mismatch_frame, load_catalog, open_project, open_project_with_limits,
-    save_project_with_journal, DurabilityStage, FaultPlan, FsOpKind, GenerationCatalog,
-    GenerationEntry, JournalEdit, JournalRecordKind, JournalScanStop, OpenProjectOutcome,
-    PinGenerationOptions, ProjectError, RecordingFs, RecoveryError, RecoverySource, RotateOptions,
-    SaveProjectOptions, StdFs, WalError, WalSession,
+    inject_salt_mismatch_frame, inject_unapplicable_committed_edit, load_catalog, open_project,
+    open_project_with_limits, save_project_with_journal, DurabilityStage, FaultPlan, FsOpKind,
+    GenerationCatalog, GenerationEntry, JournalEdit, JournalRecordKind, JournalScanStop,
+    OpenProjectOutcome, PinGenerationOptions, ProjectError, RecordingFs, RecoveryError,
+    RecoverySource, RotateOptions, SaveProjectOptions, StdFs, WalError, WalSession,
 };
 pub use limits::{ResourceLimitError, ResourceLimits};
 pub use param::{DocParam, LookAtAxis};

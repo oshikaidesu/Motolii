@@ -224,11 +224,7 @@ impl<F: JournalFs> JournalFs for RecordingFs<F> {
     }
 
     fn rename(&mut self, from: &Path, to: &Path) -> Result<(), FsError> {
-        self.record(
-            FsOpKind::Rename,
-            to,
-            format!("from={}", from.display()),
-        );
+        self.record(FsOpKind::Rename, to, format!("from={}", from.display()));
         self.inner.rename(from, to)
     }
 

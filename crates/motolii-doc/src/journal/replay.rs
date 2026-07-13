@@ -1,38 +1,62 @@
 //! ジャーナルリプレイと失敗時スナップショットフォールバック(ガード4)。
+//!
+//! Editレコードの耐久payloadは versioned `Command` envelope のみ。
+//! 故障注入は適用不能 Command の commit 等で行い、durable 形式へテスト専用 variant を焼かない。
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::{Bpm, Document, DocumentError};
+use crate::{Command, CommandError, Document, DocumentError};
 
 use super::format::{JournalFrame, JournalRecordKind, JournalScanOutcome};
 use super::fs::JournalFs;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "op", rename_all = "snake_case")]
-pub enum JournalEdit {
-    SetBpm { num: i64, den: i64 },
-    /// テスト注入専用 — 意図的にリプレイ失敗させる。
-    ForceReplayFail,
+/// Editレコードのオンディスクpayload(恒久面)。`Command`を版付きで包む。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct JournalEdit {
+    pub format_version: u32,
+    pub command: Command,
+}
+
+impl JournalEdit {
+    pub const FORMAT_VERSION: u32 = 1;
+
+    pub fn new(command: Command) -> Self {
+        Self {
+            format_version: Self::FORMAT_VERSION,
+            command,
+        }
+    }
+}
+
+impl From<Command> for JournalEdit {
+    fn from(command: Command) -> Self {
+        Self::new(command)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ReplayFailure {
-    InvalidEditPayload { record_id: Uuid, reason: String },
-    ApplyEdit { record_id: Uuid, source: ReplayApplyError },
-    MissingSnapshot { generation_id: Uuid },
-    ForcedByTest { record_id: Uuid },
+    InvalidEditPayload {
+        record_id: Uuid,
+        reason: String,
+    },
+    ApplyEdit {
+        record_id: Uuid,
+        source: ReplayApplyError,
+    },
+    MissingSnapshot {
+        generation_id: Uuid,
+    },
 }
 
 #[derive(Debug, Error, Clone, PartialEq)]
 pub enum ReplayApplyError {
     #[error(transparent)]
-    Document(#[from] DocumentError),
+    Command(#[from] CommandError),
     #[error(transparent)]
-    Bpm(#[from] crate::BpmError),
-    #[error("forced replay failure")]
-    Forced,
+    Document(#[from] DocumentError),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -62,7 +86,10 @@ pub fn snapshot_payload(generation_id: Uuid) -> Result<Vec<u8>, serde_json::Erro
     serde_json::to_vec(&SnapshotPayload { generation_id })
 }
 
-pub fn checkpoint_payload(new_salt: u64, generation_id: Uuid) -> Result<Vec<u8>, serde_json::Error> {
+pub fn checkpoint_payload(
+    new_salt: u64,
+    generation_id: Uuid,
+) -> Result<Vec<u8>, serde_json::Error> {
     let mut bytes = new_salt.to_le_bytes().to_vec();
     bytes.extend(serde_json::to_vec(&CheckpointPayload {
         new_salt,
@@ -83,18 +110,21 @@ pub fn document_fingerprint(doc: &Document) -> u64 {
 }
 
 fn apply_edit(doc: &mut Document, edit: &JournalEdit) -> Result<(), ReplayApplyError> {
-    match edit {
-        JournalEdit::SetBpm { num, den } => {
-            doc.bpm = Bpm::try_new(*num, *den)?;
-        }
-        JournalEdit::ForceReplayFail => return Err(ReplayApplyError::Forced),
-    }
+    edit.command.apply(doc)?;
     doc.validate()?;
     Ok(())
 }
 
 fn decode_edit(payload: &[u8]) -> Result<JournalEdit, String> {
-    serde_json::from_slice(payload).map_err(|e| e.to_string())
+    let edit: JournalEdit = serde_json::from_slice(payload).map_err(|e| e.to_string())?;
+    if edit.format_version != JournalEdit::FORMAT_VERSION {
+        return Err(format!(
+            "unsupported journal edit format_version {} (expected {})",
+            edit.format_version,
+            JournalEdit::FORMAT_VERSION
+        ));
+    }
+    Ok(edit)
 }
 
 /// `base`からscan内のEditを順に適用。失敗時は直近Snapshot世代へフォールバック可能。
@@ -132,17 +162,10 @@ pub fn replay_from_base(
                 Ok(edit) => match apply_edit(&mut base, &edit) {
                     Ok(()) => applied += 1,
                     Err(source) => {
-                        let failure = if matches!(source, ReplayApplyError::Forced) {
-                            ReplayFailure::ForcedByTest {
-                                record_id: frame.record_id,
-                            }
-                        } else {
-                            ReplayFailure::ApplyEdit {
-                                record_id: frame.record_id,
-                                source,
-                            }
-                        };
-                        failures.push(failure);
+                        failures.push(ReplayFailure::ApplyEdit {
+                            record_id: frame.record_id,
+                            source,
+                        });
                         if fallback_on_failure {
                             if let Some(gid) = last_snapshot {
                                 return ReplayOutcome {

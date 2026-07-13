@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use motolii_core::RationalTime;
 use motolii_doc::journal::{
     journal_path_for_document, scan_journal, CheckpointOptions, DurabilityStage, FaultInjectingFs,
     FaultPlan, FsOpKind, JournalEdit, JournalFs, JournalRecordKind, JournalScanStop, RecordingFs,
@@ -11,9 +12,10 @@ use motolii_doc::journal::{
 };
 use motolii_doc::{
     checkpoint_with_fault_plan, inject_bad_checksum_at_last_frame, inject_corrupt_journal_tail,
-    inject_salt_mismatch_frame, load_catalog, open_project, save_document, save_project_with_journal,
-    Bpm, Document, PinGenerationOptions, ProjectError, RecoverySource, ResourceLimits,
-    RotateOptions, SaveProjectOptions,
+    inject_salt_mismatch_frame, inject_unapplicable_committed_edit, load_catalog, open_project,
+    save_document, save_project_with_journal, Bpm, Clip, ClipSource, Command, DocParam, Document,
+    ItemEnvelope, LayerId, PinGenerationOptions, ProjectError, RecoverySource, ResourceLimits,
+    RotateOptions, SaveProjectOptions, ScalarPropertyId, Track, TrackItem,
 };
 
 fn unique_dir(tag: &str) -> PathBuf {
@@ -41,6 +43,42 @@ fn tiny_limits() -> ResourceLimits {
     }
 }
 
+/// 1 clip を持つ最小文書(Command リプレイ試験用)。
+fn doc_with_clip() -> (Document, LayerId) {
+    let mut doc = Document::new_v1();
+    let layer = doc.layers.allocate("a").unwrap();
+    let track = doc.track_ids.allocate("V1").unwrap();
+    let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
+    doc.tracks.push(Track {
+        id: track,
+        items: vec![TrackItem::Clip(Clip {
+            envelope: ItemEnvelope::new(layer),
+            start: RationalTime::ZERO,
+            duration: RationalTime::try_new(5, 1).unwrap(),
+            time_map: Default::default(),
+            source: ClipSource::Asset { asset },
+        })],
+    });
+    doc.validate().expect("fixture must validate");
+    (doc, layer)
+}
+
+fn set_opacity_cmd(layer: LayerId, old: f64, new: f64) -> JournalEdit {
+    JournalEdit::new(Command::SetProperty {
+        target: layer,
+        property: ScalarPropertyId::Opacity,
+        old_value: DocParam::const_f64(old),
+        new_value: DocParam::const_f64(new),
+    })
+}
+
+fn clip_opacity(doc: &Document) -> DocParam {
+    let TrackItem::Clip(c) = &doc.tracks[0].items[0] else {
+        panic!("expected clip");
+    };
+    c.envelope.opacity.clone()
+}
+
 #[test]
 fn journal_module_has_no_truncate_repair_path() {
     // 完了条件: 原本をtruncateして「修復」する経路が無いこと。
@@ -48,11 +86,13 @@ fn journal_module_has_no_truncate_repair_path() {
     let wal = include_str!("../src/journal/wal.rs");
     let recover = include_str!("../src/journal/recover.rs");
     let project = include_str!("../src/journal/project.rs");
+    let replay = include_str!("../src/journal/replay.rs");
     for (name, text) in [
         ("format", src),
         ("wal", wal),
         ("recover", recover),
         ("project", project),
+        ("replay", replay),
     ] {
         assert!(
             !text.contains("set_len"),
@@ -62,6 +102,10 @@ fn journal_module_has_no_truncate_repair_path() {
             !text.contains("truncate_journal"),
             "{name}.rs must not define truncate_journal"
         );
+        assert!(
+            !text.contains("ForceReplayFail"),
+            "{name}.rs must not bake ForceReplayFail into durable journal types"
+        );
     }
 }
 
@@ -69,18 +113,17 @@ fn journal_module_has_no_truncate_repair_path() {
 fn commit_and_checkpoint_fsync_order_is_fixed() {
     let dir = unique_dir("order");
     let path = dir.join("proj.json");
-    let doc = Document::new_v1();
+    let (doc, layer) = doc_with_clip();
 
     let (mut fs, log) = RecordingFs::new(StdFs);
     let project_id = uuid::Uuid::new_v4();
     let salt = 0x1111_2222_3333_4444;
-    let mut session =
-        WalSession::open_or_create(&mut fs, &path, project_id, salt, 5).unwrap();
+    let mut session = WalSession::open_or_create(&mut fs, &path, project_id, salt, 5).unwrap();
 
     motolii_doc::journal::commit_edit(
         &mut fs,
         &mut session,
-        &JournalEdit::SetBpm { num: 128, den: 1 },
+        &set_opacity_cmd(layer, 1.0, 0.5),
         &ResourceLimits::production(),
     )
     .unwrap();
@@ -220,16 +263,15 @@ fn salt_mismatch_stops_scan_without_truncate() {
 fn replay_applies_committed_edits_when_main_behind() {
     let dir = unique_dir("replay");
     let path = dir.join("proj.json");
-    let doc = Document::new_v1();
+    let (doc, layer) = doc_with_clip();
     save_project_with_journal(&path, &doc, &SaveProjectOptions::default()).unwrap();
 
-    let mut edited = Document::new_v1();
-    edited.bpm = Bpm::try_new(160, 1).unwrap();
+    let edit = set_opacity_cmd(layer, 1.0, 0.25);
     save_project_with_journal(
         &path,
-        &edited,
+        &doc,
         &SaveProjectOptions {
-            journal_edit: Some(JournalEdit::SetBpm { num: 160, den: 1 }),
+            journal_edit: Some(edit),
             checkpoint: false,
             ..Default::default()
         },
@@ -238,20 +280,20 @@ fn replay_applies_committed_edits_when_main_behind() {
 
     // mainは旧のまま
     assert_eq!(
-        motolii_doc::load_document(&path).unwrap().bpm,
-        Bpm::try_new(120, 1).unwrap()
+        clip_opacity(&motolii_doc::load_document(&path).unwrap()),
+        DocParam::const_f64(1.0)
     );
 
     let opened = open_project(&path).unwrap();
-    assert_eq!(opened.document.bpm, Bpm::try_new(160, 1).unwrap());
+    assert_eq!(clip_opacity(&opened.document), DocParam::const_f64(0.25));
     assert!(matches!(
         opened.source,
         RecoverySource::JournalReplay | RecoverySource::CommittedPrefixReplay
     ));
     // 原本mainは上書きしない
     assert_eq!(
-        motolii_doc::load_document(&path).unwrap().bpm,
-        Bpm::try_new(120, 1).unwrap()
+        clip_opacity(&motolii_doc::load_document(&path).unwrap()),
+        DocParam::const_f64(1.0)
     );
     assert!(opened.recovered_path.is_some());
     let _ = fs::remove_dir_all(dir);
@@ -265,16 +307,8 @@ fn replay_failure_falls_back_to_snapshot() {
     doc.bpm = Bpm::try_new(100, 1).unwrap();
     save_project_with_journal(&path, &doc, &SaveProjectOptions::default()).unwrap();
 
-    save_project_with_journal(
-        &path,
-        &doc,
-        &SaveProjectOptions {
-            journal_edit: Some(JournalEdit::ForceReplayFail),
-            checkpoint: false,
-            ..Default::default()
-        },
-    )
-    .unwrap();
+    // 適用不能 Command を通常の durable envelope で commit(テスト専用 variant は載せない)
+    inject_unapplicable_committed_edit(&path, &ResourceLimits::production()).unwrap();
 
     let opened = open_project(&path).unwrap();
     assert_eq!(opened.source, RecoverySource::SnapshotFallback);
@@ -387,14 +421,17 @@ fn journal_limits_return_typed_errors() {
         &Document::new_v1(),
         &SaveProjectOptions {
             limits: tiny,
-            journal_edit: Some(JournalEdit::SetBpm { num: 1, den: 1 }),
+            journal_edit: Some(set_opacity_cmd(LayerId::from_raw(1), 1.0, 0.5)),
             checkpoint: false,
             ..Default::default()
         },
     )
     .unwrap_err();
     assert!(
-        matches!(err, ProjectError::Wal(motolii_doc::journal::WalError::RecordPayloadLimit { .. })),
+        matches!(
+            err,
+            ProjectError::Wal(motolii_doc::journal::WalError::RecordPayloadLimit { .. })
+        ),
         "got {err:?}"
     );
     let _ = fs::remove_dir_all(dir);
@@ -437,7 +474,7 @@ fn fault_enospace_on_journal_append() {
         &path,
         &Document::new_v1(),
         &SaveProjectOptions {
-            journal_edit: Some(JournalEdit::SetBpm { num: 130, den: 1 }),
+            journal_edit: Some(set_opacity_cmd(LayerId::from_raw(1), 1.0, 0.5)),
             checkpoint: false,
             ..Default::default()
         },
@@ -551,14 +588,20 @@ fn recovery_crash_loop_skips_replay_via_marker() {
         "tip_record_id": scan.frames.last().map(|f| f.record_id),
         "valid_bytes": scan.valid_bytes,
     });
-    let marker_path = path.parent().unwrap().join(".motolii/restore_attempted.json");
+    let marker_path = path
+        .parent()
+        .unwrap()
+        .join(".motolii/restore_attempted.json");
     fs::write(&marker_path, serde_json::to_vec_pretty(&marker).unwrap()).unwrap();
 
     // mainを壊してgenerationフォールバック経路へ
     fs::write(&path, b"{not-json").unwrap();
     let opened = open_project(&path).unwrap();
     assert!(
-        opened.warnings.iter().any(|w| w.contains("restore_attempted")),
+        opened
+            .warnings
+            .iter()
+            .any(|w| w.contains("restore_attempted")),
         "warnings={:?}",
         opened.warnings
     );
@@ -568,9 +611,7 @@ fn recovery_crash_loop_skips_replay_via_marker() {
 
 #[test]
 fn truncated_journal_header_is_not_overwritten() {
-    use motolii_doc::journal::{
-        read_or_create_header, JournalFormatError, StdFs, HEADER_LEN,
-    };
+    use motolii_doc::journal::{read_or_create_header, JournalFormatError, StdFs, HEADER_LEN};
     use uuid::Uuid;
 
     let dir = unique_dir("trunc-header");
@@ -590,7 +631,11 @@ fn truncated_journal_header_is_not_overwritten() {
         ),
         "unexpected {err:?}"
     );
-    assert_eq!(fs::read(&journal).unwrap(), before, "must not overwrite short wal");
+    assert_eq!(
+        fs::read(&journal).unwrap(),
+        before,
+        "must not overwrite short wal"
+    );
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -598,15 +643,14 @@ fn truncated_journal_header_is_not_overwritten() {
 fn marker_remount_does_not_prefer_stale_main_over_journal_edits() {
     let dir = unique_dir("marker-stale-main");
     let path = dir.join("proj.json");
-    save_project_with_journal(&path, &Document::new_v1(), &SaveProjectOptions::default()).unwrap();
+    let (doc, layer) = doc_with_clip();
+    save_project_with_journal(&path, &doc, &SaveProjectOptions::default()).unwrap();
 
-    let mut edited = Document::new_v1();
-    edited.bpm = Bpm::try_new(140, 1).unwrap();
     save_project_with_journal(
         &path,
-        &edited,
+        &doc,
         &SaveProjectOptions {
-            journal_edit: Some(JournalEdit::SetBpm { num: 140, den: 1 }),
+            journal_edit: Some(set_opacity_cmd(layer, 1.0, 0.4)),
             checkpoint: false,
             ..Default::default()
         },
@@ -623,23 +667,29 @@ fn marker_remount_does_not_prefer_stale_main_over_journal_edits() {
         "tip_record_id": scan.frames.last().map(|f| f.record_id),
         "valid_bytes": scan.valid_bytes,
     });
-    let marker_path = path.parent().unwrap().join(".motolii/restore_attempted.json");
+    let marker_path = path
+        .parent()
+        .unwrap()
+        .join(".motolii/restore_attempted.json");
     fs::write(&marker_path, serde_json::to_vec_pretty(&marker).unwrap()).unwrap();
 
     assert_eq!(
-        motolii_doc::load_document(&path).unwrap().bpm,
-        Bpm::try_new(120, 1).unwrap(),
+        clip_opacity(&motolii_doc::load_document(&path).unwrap()),
+        DocParam::const_f64(1.0),
         "precondition: main must stay stale"
     );
 
     let opened = open_project(&path).unwrap();
     assert_eq!(
-        opened.document.bpm,
-        Bpm::try_new(140, 1).unwrap(),
+        clip_opacity(&opened.document),
+        DocParam::const_f64(0.4),
         "marker remount must replay committed edits, not return stale main"
     );
     assert!(
-        opened.warnings.iter().any(|w| w.contains("restore_attempted")),
+        opened
+            .warnings
+            .iter()
+            .any(|w| w.contains("restore_attempted")),
         "warnings={:?}",
         opened.warnings
     );

@@ -221,9 +221,8 @@ pub fn recover_project(
     document_path: &Path,
     limits: &ResourceLimits,
 ) -> Result<RecoveryResult, RecoveryError> {
-    let catalog = load_catalog_fs(fs, document_path)?.unwrap_or_else(|| {
-        GenerationCatalog::new(Uuid::nil(), 0, 5)
-    });
+    let catalog = load_catalog_fs(fs, document_path)?
+        .unwrap_or_else(|| GenerationCatalog::new(Uuid::nil(), 0, 5));
     let main = try_load_main(fs, document_path, limits)?;
     let journal_path = journal_path_for_document(document_path);
 
@@ -293,9 +292,7 @@ pub fn recover_project(
                     &generation_path_for_document(document_path, gid),
                     limits,
                 )
-                .map_err(|_| ReplayFailure::MissingSnapshot {
-                    generation_id: gid,
-                })
+                .map_err(|_| ReplayFailure::MissingSnapshot { generation_id: gid })
             };
             let replay = replay_from_base(base, &committed_scan, &mut load_snap, true);
             let _ = clear_marker(fs, document_path);
@@ -373,9 +370,7 @@ pub fn recover_project(
             &generation_path_for_document(document_path, gid),
             limits,
         )
-        .map_err(|_| ReplayFailure::MissingSnapshot {
-            generation_id: gid,
-        })
+        .map_err(|_| ReplayFailure::MissingSnapshot { generation_id: gid })
     };
 
     let replay = replay_from_base(base, &committed_scan, &mut load_snap, true);
@@ -439,7 +434,9 @@ pub fn recover_project(
 
 /// テスト用: バイト列をscanするだけの薄い入口。
 #[allow(dead_code)]
-pub fn scan_bytes_for_test(data: &[u8]) -> Result<JournalScanOutcome, super::format::JournalFormatError> {
+pub fn scan_bytes_for_test(
+    data: &[u8],
+) -> Result<JournalScanOutcome, super::format::JournalFormatError> {
     scan_journal_bytes(data, &ScanJournalOptions::default())
 }
 

@@ -125,14 +125,7 @@ pub fn save_project_with_journal_fs(
             ckpt.rotate.max_unpinned = Some(max);
             session.catalog.max_unpinned = max;
         }
-        let _gen_id = checkpoint(
-            fs,
-            document_path,
-            &mut session,
-            doc,
-            &ckpt,
-            &options.limits,
-        )?;
+        let _gen_id = checkpoint(fs, document_path, &mut session, doc, &ckpt, &options.limits)?;
     }
 
     Ok(())
@@ -180,7 +173,10 @@ pub fn checkpoint_with_fault_plan(
 
 // --- 壊れ方catalog注入(原本をtruncateしない) ---
 
-pub fn inject_corrupt_journal_tail(document_path: &Path, garbage: &[u8]) -> Result<(), ProjectError> {
+pub fn inject_corrupt_journal_tail(
+    document_path: &Path,
+    garbage: &[u8],
+) -> Result<(), ProjectError> {
     let mut fs = StdFs;
     let path = journal_path_for_document(document_path);
     fs.append(&path, garbage)?;
@@ -218,3 +214,31 @@ pub fn inject_salt_mismatch_frame(document_path: &Path) -> Result<(), ProjectErr
     Ok(())
 }
 
+/// リプレイ失敗フォールバック試験用: 適用できない Command を commit する。
+///
+/// durable payload は通常の versioned `JournalEdit`/`Command` envelope のみ。
+/// テスト専用の故障用 variant はオンディスク形式へ載せない。
+pub fn inject_unapplicable_committed_edit(
+    document_path: &Path,
+    limits: &ResourceLimits,
+) -> Result<(), ProjectError> {
+    use crate::{Command, DocParam, LayerId, ScalarPropertyId};
+
+    // 存在しない Layer への SetProperty — decode は成功し apply だけ失敗する。
+    let edit = JournalEdit::new(Command::SetProperty {
+        target: LayerId::from_raw(u64::MAX),
+        property: ScalarPropertyId::Opacity,
+        old_value: DocParam::const_f64(1.0),
+        new_value: DocParam::const_f64(0.0),
+    });
+    save_project_with_journal(
+        document_path,
+        &Document::new_v1(),
+        &SaveProjectOptions {
+            limits: *limits,
+            journal_edit: Some(edit),
+            checkpoint: false,
+            ..Default::default()
+        },
+    )
+}

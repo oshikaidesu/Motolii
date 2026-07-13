@@ -28,15 +28,13 @@ pub use fs::{
 };
 pub use project::{
     checkpoint_with_fault_plan, inject_bad_checksum_at_last_frame, inject_corrupt_journal_tail,
-    inject_salt_mismatch_frame, open_project, open_project_fs, open_project_with_limits,
-    save_project_with_journal, save_project_with_journal_fs, OpenProjectOutcome, ProjectError,
-    SaveProjectOptions,
+    inject_salt_mismatch_frame, inject_unapplicable_committed_edit, open_project, open_project_fs,
+    open_project_with_limits, save_project_with_journal, save_project_with_journal_fs,
+    OpenProjectOutcome, ProjectError, SaveProjectOptions,
 };
 pub use recover::{
-    recover_project, recovered_document_path, restore_attempted_path, RecoveryError, RecoveryResult,
-    RecoverySource,
+    recover_project, recovered_document_path, restore_attempted_path, RecoveryError,
+    RecoveryResult, RecoverySource,
 };
-pub use replay::{
-    document_fingerprint, edit_payload, JournalEdit, ReplayFailure, ReplayOutcome,
-};
+pub use replay::{document_fingerprint, edit_payload, JournalEdit, ReplayFailure, ReplayOutcome};
 pub use wal::{checkpoint, commit_edit, CheckpointOptions, WalError, WalSession};
