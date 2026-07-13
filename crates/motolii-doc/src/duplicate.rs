@@ -7,7 +7,9 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::command::{envelope_of, envelope_of_mut, find_item_location, Command, CommandError};
+use crate::command::{
+    collect_layer_ids, envelope_of_mut, find_item_location, Command, CommandError,
+};
 use crate::doc_keyframe::DocKeyframeTrack;
 use crate::param::DocParam;
 use crate::schema::{
@@ -32,6 +34,10 @@ pub enum DuplicateError {
 /// subtree内の`transform.parent`/`LookAt`/`Follow`参照を新IDへ再写像する。
 /// subtree外を指す参照(親が複製対象外、他レイヤーへのLookAt等)はそのまま維持する。
 ///
+/// LayerIdは`reserve`のみ(台帳エントリは作らない)。エントリは戻り値の
+/// `AddTrackItem.layer_names`経由でapply時に載る — undoのRemoveで台帳から外れ、
+/// `max_layers`に孤児が溜まらない。
+///
 /// 戻り値の`Command::AddTrackItem`を`DocumentWriter::apply_command`へ渡すことで、
 /// 単一writer境界を保ったまま実際にツリーへ挿入する(この関数自体はtracksを変更しない)。
 pub fn duplicate_track_item(
@@ -46,10 +52,12 @@ pub fn duplicate_track_item(
     collect_layer_ids(&cloned, &mut old_ids);
 
     let mut id_map: HashMap<u64, LayerId> = HashMap::with_capacity(old_ids.len());
+    let mut layer_names = std::collections::BTreeMap::new();
     for old in old_ids {
         let name = doc.layers.display_name(old).unwrap_or("layer").to_string();
-        let new_id = doc.layers.allocate(name)?;
+        let new_id = doc.layers.reserve()?;
         id_map.insert(old.get(), new_id);
+        layer_names.insert(new_id, name);
     }
 
     let before = doc.next_stable_id.peek_next();
@@ -68,16 +76,8 @@ pub fn duplicate_track_item(
         parent,
         index: index + 1,
         item: cloned,
+        layer_names,
     })
-}
-
-fn collect_layer_ids(item: &TrackItem, out: &mut Vec<LayerId>) {
-    out.push(envelope_of(item).layer_id);
-    if let TrackItem::Group(g) = item {
-        for child in &g.children {
-            collect_layer_ids(child, out);
-        }
-    }
 }
 
 fn remap_item(

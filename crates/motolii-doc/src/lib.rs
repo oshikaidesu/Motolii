@@ -33,8 +33,8 @@ use serde_json::{Map, Value};
 pub use asset::{Asset, AssetError, AssetId, AssetTable};
 pub use bpm::{Bpm, BpmError};
 pub use command::{
-    Command, CommandError, CommandKind, GestureId, MergeKey, ParentLocator, PropertyId,
-    ScalarPropertyId,
+    collect_layer_ids, layer_names_for_item, Command, CommandError, CommandKind, GestureId,
+    MergeKey, ParentLocator, PropertyId, ScalarPropertyId,
 };
 pub use doc_keyframe::{DocKeyframe, DocKeyframeError, DocKeyframeTrack};
 pub use doc_value::DocValue;
@@ -227,11 +227,19 @@ impl DocumentWriter {
     }
 
     /// `LayerId`を新規発行する(非再利用)。Command構築前の下準備用。
+    /// 台帳エントリも作る。`AddTrackItem`へ渡す場合は同じ名前を`layer_names`へ含め、
+    /// undo時に台帳から外せるようにする。エントリ無しの予約だけなら`reserve_layer_id`。
     pub fn allocate_layer_id(
         &mut self,
         display_name: impl Into<String>,
     ) -> Result<LayerId, LayerIdError> {
         self.doc.layers.allocate(display_name)
+    }
+
+    /// `LayerId`を予約する(カウンタのみ進める。台帳エントリは作らない)。
+    /// エントリは`AddTrackItem.layer_names`のapplyで載せる。
+    pub fn reserve_layer_id(&mut self) -> Result<LayerId, LayerIdError> {
+        self.doc.layers.reserve()
     }
 
     /// `EffectId`を新規発行する(A8、非再利用)。ネスト永続フィールド追加の規律
