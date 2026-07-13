@@ -5,9 +5,9 @@ use std::collections::BTreeMap;
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
     Asset, AssetId, BlendMode, Bpm, Clip, ClipSource, ClippingMaskSettings, DocKeyframe,
-    DocKeyframeTrack, DocParam, DocValue, Document, EffectInstance, Group, ItemEnvelope,
-    LookAtAxis, MaskMode, PathOp, Soundtrack, StandardShape, Track, TrackItem, VectorContent,
-    VectorRecipe,
+    DocKeyframeTrack, DocParam, DocValue, Document, EffectId, EffectInstance, Group, ItemEnvelope,
+    KeyframeId, LookAtAxis, MaskMode, PathOp, Soundtrack, StandardShape, Track, TrackItem,
+    VectorContent, VectorRecipe,
 };
 use motolii_eval::{DataTrackId, Interp};
 use serde_json::{json, Map, Value};
@@ -45,6 +45,7 @@ fn sample_document() -> Document {
             let mut env = ItemEnvelope::new(child_layer);
             env.transform.parent = Some(group_layer);
             env.effects.push(EffectInstance {
+                id: EffectId::from_raw(0),
                 plugin_id: "core.filter.tint".into(),
                 effect_version: 1,
                 enabled: true,
@@ -86,6 +87,7 @@ fn sample_document() -> Document {
         envelope: {
             let mut env = ItemEnvelope::new(group_layer);
             env.effects.push(EffectInstance {
+                id: EffectId::from_raw(1),
                 plugin_id: "core.filter.opacity".into(),
                 effect_version: 1,
                 enabled: true,
@@ -181,11 +183,13 @@ fn nested_unknown_fields_are_dropped_by_design() {
 fn doc_param_keyframes_data_vec2axes_roundtrip() {
     let mut keys = DocKeyframeTrack::new();
     keys.insert(DocKeyframe {
+        id: KeyframeId::from_raw(0),
         t: RationalTime::ZERO,
         value: DocValue::F64(0.0),
         interp: Interp::Linear,
     });
     keys.insert(DocKeyframe {
+        id: KeyframeId::from_raw(1),
         t: RationalTime::try_new(1, 1).unwrap(),
         value: DocValue::F64(1.0),
         interp: Interp::Hold,

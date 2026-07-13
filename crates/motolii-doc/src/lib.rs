@@ -8,14 +8,18 @@
 
 mod asset;
 mod bpm;
+mod command;
 mod doc_keyframe;
 mod doc_value;
+mod duplicate;
 mod ids;
 mod param;
 pub mod param_expect;
 mod persist;
 mod schema;
+mod stable_id;
 mod track_id;
+mod undo;
 mod validate;
 
 use std::sync::Arc;
@@ -25,8 +29,13 @@ use serde_json::{Map, Value};
 
 pub use asset::{Asset, AssetError, AssetId, AssetTable};
 pub use bpm::{Bpm, BpmError};
+pub use command::{
+    Command, CommandError, CommandKind, GestureId, MergeKey, ParentLocator, PropertyId,
+    ScalarPropertyId,
+};
 pub use doc_keyframe::{DocKeyframe, DocKeyframeError, DocKeyframeTrack};
 pub use doc_value::DocValue;
+pub use duplicate::DuplicateError;
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
 pub use param::{DocParam, LookAtAxis};
 pub use param_expect::{ExpectedValueType, ParamConstraints};
@@ -40,7 +49,9 @@ pub use schema::{
     EffectInstance, Group, ItemEnvelope, MaskMode, PathOp, Soundtrack, SoundtrackError,
     StandardShape, Track, TrackItem, Transform2D, TrimMode, VectorContent, VectorRecipe,
 };
+pub use stable_id::{EffectId, KeyframeId, StableIdError, StableIdSeq};
 pub use track_id::{TrackId, TrackIdError, TrackIdTable};
+pub use undo::{Macro, UndoError, UndoHistory, UndoLimit};
 pub use validate::DocumentError;
 
 fn default_min_reader_version() -> u32 {
@@ -67,6 +78,12 @@ pub struct Document {
     pub track_ids: TrackIdTable,
     #[serde(default)]
     pub tracks: Vec<Track>,
+    /// EffectId/KeyframeId共有カウンタ(A8)。非再利用の単調カウンタ — ネスト構造
+    /// (`EffectInstance.id`/`DocKeyframe.id`)を持つ文書は`min_reader_version`を
+    /// 2以上に上げる責務を保存側が持つ(M2E-11①のネスト規律。本フィールド自体は
+    /// `default`でロード可能 — 旧文書に`effects`/keyframesが無ければ影響しない)。
+    #[serde(default)]
+    pub next_stable_id: StableIdSeq,
     /// 未知キー保持(unknown-keys roundtrip)。
     #[serde(default, flatten)]
     pub extra: Map<String, Value>,
@@ -84,6 +101,7 @@ impl Document {
             layers: LayerIdTable::new(),
             track_ids: TrackIdTable::new(),
             tracks: Vec::new(),
+            next_stable_id: StableIdSeq::new(),
             extra: Map::new(),
         }
     }
@@ -97,16 +115,34 @@ pub enum WriterMessage {
 }
 
 /// ドキュメントの唯一の書き手。`&mut Document`を外部に漏らさない。
+///
+/// D2: `Command`の適用は必ず`apply_command`(内部でUndoHistoryへ積む)経由。
+/// `edit`/`apply`は移行済み呼び出し元のための足場であり、undo履歴には積まれない
+/// (選択/hover/IME等のUI状態や、Command化されていない旧経路専用 — 実装ガード5)。
 #[derive(Debug)]
 pub struct DocumentWriter {
     doc: Document,
     /// 編集世代。決定性テスト・無効化伝播の席(監査F-8)。
     pub revision: u64,
+    undo: UndoHistory,
+    /// gesture_id発行カウンタ。UI側の操作単位ごとに`begin_gesture`で1つ取る
+    /// (Documentスキーマには入れない実行時のみの値 — #103⑨)。
+    next_gesture: u64,
 }
 
 impl DocumentWriter {
     pub fn new(doc: Document) -> Self {
-        Self { doc, revision: 0 }
+        Self::with_undo_limits(doc, UndoLimit::Unlimited, UndoLimit::Unlimited)
+    }
+
+    /// live/再起動後で別々のUndo深さ上限を設定して構築する(残小項目【決定】2026-07-13)。
+    pub fn with_undo_limits(doc: Document, live_limit: UndoLimit, restart_limit: UndoLimit) -> Self {
+        Self {
+            doc,
+            revision: 0,
+            undo: UndoHistory::new(live_limit, restart_limit),
+            next_gesture: 0,
+        }
     }
 
     pub fn snapshot(&self) -> Arc<Document> {
@@ -115,18 +151,106 @@ impl DocumentWriter {
 
     /// 編集はクロージャ経由のみ。戻り値なし — 参照を外に返せない。
     ///
-    /// D2で`apply(Command)`に置換される足場。呼び出し追加禁止。
+    /// undo履歴には積まれない旧来経路。Command化された操作は`apply_command`を使う。
     pub fn edit(&mut self, f: impl FnOnce(&mut Document)) {
         f(&mut self.doc);
         self.revision = self.revision.wrapping_add(1);
     }
 
-    /// バックグラウンド成果の適用。D2でメッセージ→Command変換に置換する。
+    /// バックグラウンド成果の適用。undo履歴には積まれない(UI都合の非可逆反映)。
     pub fn apply(&mut self, msg: WriterMessage) {
         match msg {
             WriterMessage::SetBpm(bpm) => self.doc.bpm = bpm,
         }
         self.revision = self.revision.wrapping_add(1);
+    }
+
+    /// 新しいgesture(1操作単位)を開始し、そのIDを返す。以後このIDで積んだcommandは
+    /// 同一gestureの間、merge key(S18)が一致する限り1つのmacroへ畳まれる(#103⑨)。
+    pub fn begin_gesture(&mut self) -> GestureId {
+        let id = GestureId::from_raw(self.next_gesture);
+        self.next_gesture = self.next_gesture.wrapping_add(1);
+        id
+    }
+
+    /// atomic command(実装ガード5: 決定済みの値)を適用し、undo履歴へ積む。
+    /// 単一writer境界(このメソッドだけがDocumentを書き換える)。
+    pub fn apply_command(&mut self, gesture: GestureId, command: Command) -> Result<(), CommandError> {
+        self.undo.push(&mut self.doc, gesture, command)?;
+        self.revision = self.revision.wrapping_add(1);
+        Ok(())
+    }
+
+    pub fn can_undo(&self) -> bool {
+        self.undo.can_undo()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        self.undo.can_redo()
+    }
+
+    pub fn undo_len(&self) -> usize {
+        self.undo.undo_len()
+    }
+
+    pub fn redo_len(&self) -> usize {
+        self.undo.redo_len()
+    }
+
+    /// 直前のgesture(1 macro分)を丸ごと取り消す。
+    pub fn undo(&mut self) -> Result<(), UndoError> {
+        self.undo.undo(&mut self.doc)?;
+        self.revision = self.revision.wrapping_add(1);
+        Ok(())
+    }
+
+    /// 直前にundoしたgestureを丸ごと再適用する。
+    pub fn redo(&mut self) -> Result<(), UndoError> {
+        self.undo.redo(&mut self.doc)?;
+        self.revision = self.revision.wrapping_add(1);
+        Ok(())
+    }
+
+    /// `LayerId`を新規発行する(非再利用)。Command構築前の下準備用。
+    pub fn allocate_layer_id(&mut self, display_name: impl Into<String>) -> Result<LayerId, LayerIdError> {
+        self.doc.layers.allocate(display_name)
+    }
+
+    /// `EffectId`を新規発行する(A8、非再利用)。ネスト永続フィールド追加の規律
+    /// (M2E-11①)に沿い、発行と同時に`min_reader_version`を下限まで引き上げる。
+    pub fn allocate_effect_id(&mut self) -> Result<EffectId, StableIdError> {
+        let id = self.doc.next_stable_id.allocate()?;
+        self.bump_min_reader_version_for_stable_ids();
+        Ok(EffectId::from_raw(id))
+    }
+
+    /// `KeyframeId`を新規発行する(A8、非再利用)。同上。
+    pub fn allocate_keyframe_id(&mut self) -> Result<KeyframeId, StableIdError> {
+        let id = self.doc.next_stable_id.allocate()?;
+        self.bump_min_reader_version_for_stable_ids();
+        Ok(KeyframeId::from_raw(id))
+    }
+
+    fn bump_min_reader_version_for_stable_ids(&mut self) {
+        self.doc.min_reader_version = self
+            .doc
+            .min_reader_version
+            .max(validate::MIN_READER_VERSION_FOR_STABLE_IDS);
+    }
+
+    /// `source`のsubtreeを複製し、直後に挿入するcommandを1 gestureとして適用する
+    /// (「duplicate/paste時: subtree内参照は新ID再写像、外向き参照は維持」)。
+    pub fn duplicate_track_item(&mut self, source: LayerId) -> Result<GestureId, DuplicateError> {
+        let command = duplicate::duplicate_track_item(&mut self.doc, source)?;
+        let gesture = self.begin_gesture();
+        self.undo.push(&mut self.doc, gesture, command)?;
+        self.revision = self.revision.wrapping_add(1);
+        Ok(gesture)
+    }
+
+    /// 読み取り専用: コマンド構築側が現在の`ItemEnvelope`を読むためのヘルパ。
+    pub fn find_envelope(&self, target: LayerId) -> Option<&ItemEnvelope> {
+        command::find_envelope(&self.doc, target)
     }
 
     /// 保存前検証。失敗してもwriter内部のDocumentは不変(検証のみ — ガード1)。

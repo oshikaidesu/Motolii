@@ -23,7 +23,11 @@ use thiserror::Error;
 use crate::{Document, DocumentError};
 
 /// このリーダーが開ける`min_reader_version`の上限(=自版の読取能力)。
-pub const READER_VERSION: u32 = 1;
+///
+/// D2でEffectInstance/DocKeyframeに必須`id`フィールド(A8)を追加したため2へ。
+/// version 1ドキュメント(id無し)はこのゲートを通過した後、デシリアライズで
+/// 拒否される — 変換(migration)はD1eの領分でありここでは発明しない。
+pub const READER_VERSION: u32 = 2;
 
 /// クラッシュ注入用の保存段。本番は`None`。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

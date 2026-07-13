@@ -2,8 +2,8 @@
 
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
-    AssetId, Clip, ClipSource, DocParam, Document, DocumentError, DocumentWriter, EffectInstance,
-    ItemEnvelope, LayerId, LookAtAxis, Soundtrack, Track, TrackId, TrackItem,
+    AssetId, Clip, ClipSource, DocParam, Document, DocumentError, DocumentWriter, EffectId,
+    EffectInstance, ItemEnvelope, LayerId, LookAtAxis, Soundtrack, Track, TrackId, TrackItem,
 };
 use serde_json::Map;
 use std::collections::BTreeMap;
@@ -149,6 +149,7 @@ fn empty_effect_plugin_id_fails() {
     let mut doc = valid_minimal();
     if let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] {
         clip.envelope.effects.push(EffectInstance {
+            id: EffectId::from_raw(0),
             plugin_id: String::new(),
             effect_version: 1,
             enabled: true,
