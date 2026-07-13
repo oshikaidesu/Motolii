@@ -88,7 +88,15 @@ fn resolve_transform_composes_parent_chain() {
             None
         }
     };
-    let world = resolve_transform(&child, RationalTime::ZERO, &tracks, &resolved, &lookup).unwrap();
+    let world = resolve_transform(
+        &child,
+        RationalTime::ZERO,
+        &tracks,
+        &resolved,
+        &lookup,
+        None,
+    )
+    .unwrap();
     approx_pt(world.transform_point(0.0, 0.0), [11.0, 2.0]);
 }
 
@@ -115,7 +123,8 @@ fn resolve_transform_rejects_parent_cycle_with_typed_error() {
             None
         }
     };
-    let err = resolve_transform(&xa, RationalTime::ZERO, &tracks, &resolved, &lookup).unwrap_err();
+    let err =
+        resolve_transform(&xa, RationalTime::ZERO, &tracks, &resolved, &lookup, None).unwrap_err();
     assert!(matches!(err, ParamEvalError::ParentCycle { .. }));
 }
 
