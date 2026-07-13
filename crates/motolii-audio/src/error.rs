@@ -55,6 +55,9 @@ pub enum AudioError {
 
     #[error("failed to spawn producer thread: {0}")]
     ProducerSpawn(std::io::Error),
+
+    #[error("decoded sample count {observed} exceeds limit {limit}")]
+    SampleCountLimit { observed: u64, limit: u64 },
 }
 
 pub type Result<T> = std::result::Result<T, AudioError>;

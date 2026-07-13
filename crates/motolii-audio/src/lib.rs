@@ -17,7 +17,7 @@ mod producer;
 mod ring;
 
 pub use cache::{PcmCache, PcmFormat};
-pub use decode::{decode_file, decode_stream};
+pub use decode::{decode_file, decode_file_with_limits, decode_stream, decode_stream_with_limits};
 pub use device::OutputStream;
 pub use error::{AudioError, Result};
 pub use producer::AudioProducer;

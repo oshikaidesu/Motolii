@@ -3,6 +3,7 @@
 use std::fs::File;
 use std::path::Path;
 
+use motolii_doc::{ResourceLimitError, ResourceLimits};
 use symphonia::core::codecs::audio::AudioDecoderOptions;
 use symphonia::core::codecs::CodecParameters;
 use symphonia::core::errors::Error as SymphoniaError;
@@ -20,6 +21,14 @@ use crate::error::{AudioError, Result};
 /// 複数音声トラックを含むファイルではデフォルトトラック1本のみを読む
 /// (D4スコープ: ミキサー・複数trackは実装しない)。
 pub fn decode_file(path: impl AsRef<Path>) -> Result<PcmCache> {
+    decode_file_with_limits(path, &ResourceLimits::production())
+}
+
+/// `ResourceLimits::max_samples`を注入してデコードする(I/O境界)。
+pub fn decode_file_with_limits(
+    path: impl AsRef<Path>,
+    limits: &ResourceLimits,
+) -> Result<PcmCache> {
     let path = path.as_ref();
     let file = File::open(path)?;
     let mss = MediaSourceStream::new(Box::new(file), Default::default());
@@ -29,12 +38,21 @@ pub fn decode_file(path: impl AsRef<Path>) -> Result<PcmCache> {
         hint.with_extension(ext);
     }
 
-    decode_stream(mss, &hint)
+    decode_stream_with_limits(mss, &hint, limits)
 }
 
 /// `MediaSourceStream`から直接デコードする(テスト用: メモリ上のバイト列を
 /// ファイルに書かず直接渡せる)。
 pub fn decode_stream(mss: MediaSourceStream<'static>, hint: &Hint) -> Result<PcmCache> {
+    decode_stream_with_limits(mss, hint, &ResourceLimits::production())
+}
+
+/// `ResourceLimits::max_samples`を注入してストリームをデコードする。
+pub fn decode_stream_with_limits(
+    mss: MediaSourceStream<'static>,
+    hint: &Hint,
+    limits: &ResourceLimits,
+) -> Result<PcmCache> {
     let mut format = symphonia::default::get_probe().probe(
         hint,
         mss,
@@ -81,6 +99,7 @@ pub fn decode_stream(mss: MediaSourceStream<'static>, hint: &Hint) -> Result<Pcm
                 }
                 decoded.copy_to_vec_interleaved(&mut packet_samples);
                 samples.extend_from_slice(&packet_samples);
+                check_sample_limit(limits, samples.len() as u64)?;
             }
             // Symphoniaの規約: DecodeErrorは当該パケットだけ捨てて継続してよい
             // 回復可能エラー(壊れた1パケットで楽曲全体を拒否しない)。
@@ -91,6 +110,16 @@ pub fn decode_stream(mss: MediaSourceStream<'static>, hint: &Hint) -> Result<Pcm
 
     let pcm_format = pcm_format.ok_or(AudioError::NoAudioTrack)?;
     PcmCache::from_interleaved(samples, pcm_format)
+}
+
+fn check_sample_limit(limits: &ResourceLimits, observed: u64) -> Result<()> {
+    match limits.check_sample_count(observed) {
+        Ok(()) => Ok(()),
+        Err(ResourceLimitError::SampleCount { observed, limit }) => {
+            Err(AudioError::SampleCountLimit { observed, limit })
+        }
+        Err(_) => unreachable!("check_sample_count only returns SampleCount"),
+    }
 }
 
 #[cfg(test)]

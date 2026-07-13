@@ -7,6 +7,7 @@
 
 use std::cell::UnsafeCell;
 use std::marker::PhantomData;
+use std::ptr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -73,7 +74,12 @@ pub fn channel(channels: u16, capacity_frames: usize) -> Result<(RingProducer, R
         });
     }
     let ch = channels as usize;
-    let len = capacity_frames * ch;
+    let len = capacity_frames
+        .checked_mul(ch)
+        .ok_or(AudioError::InvalidRingConfig {
+            channels,
+            capacity_frames,
+        })?;
     let shared = Arc::new(Shared {
         storage: UnsafeCell::new(vec![0.0f32; len].into_boxed_slice()),
         channels: ch,
@@ -115,13 +121,21 @@ impl RingProducer {
             return 0;
         }
         let w = shared.written.load(Ordering::Relaxed);
-        // SAFETY: 唯一のRingProducer(!Sync)のみがここに到達する。コンシューマは
-        // `read`未満のスロットしか触らないので、書き込み範囲との重複はない。
-        let storage = unsafe { &mut *shared.storage.get() };
+        // SAFETY: ストレージ全体への`&[f32]`/`&mut [f32]`スライスは作らない(Producer/Consumerの
+        // 同時アクセスでRustエイリアシング規則に違反するため)。`Box::as_mut_ptr`でヒープ先頭の
+        // 生ポインタだけを取り、唯一のRingProducer(!Sync)が[written, written+n)のスロットを
+        // フレーム単位で書く。Consumerは`read`未満のスロットしか読まないので重複しない。
+        let storage_ptr = unsafe { (*shared.storage.get()).as_mut_ptr() };
         for i in 0..n {
             let slot = ((w as usize + i) % shared.capacity_frames) * shared.channels;
             let off = i * shared.channels;
-            storage[slot..slot + shared.channels].copy_from_slice(&src[off..off + shared.channels]);
+            unsafe {
+                ptr::copy_nonoverlapping(
+                    src[off..].as_ptr(),
+                    storage_ptr.add(slot),
+                    shared.channels,
+                );
+            }
         }
         shared.written.fetch_add(n as u64, Ordering::Release);
         n
@@ -150,13 +164,21 @@ impl RingConsumer {
             return 0;
         }
         let r = shared.read.load(Ordering::Relaxed);
-        // SAFETY: 唯一のRingConsumer(!Sync)のみがここに到達する。プロデューサは
-        // `written`以上のスロットしか触らないので、読み出し範囲との重複はない。
-        let storage = unsafe { &*shared.storage.get() };
+        // SAFETY: ストレージ全体への`&[f32]`/`&mut [f32]`スライスは作らない(Producer/Consumerの
+        // 同時アクセスでRustエイリアシング規則に違反するため)。`Box::as_ptr`でヒープ先頭の
+        // 生ポインタだけを取り、唯一のRingConsumer(!Sync)が[read, read+n)のスロットを
+        // フレーム単位で読む。Producerは`written`以上のスロットしか書かないので重複しない。
+        let storage_ptr = unsafe { (*shared.storage.get()).as_ptr() };
         for i in 0..n {
             let slot = ((r as usize + i) % shared.capacity_frames) * shared.channels;
             let off = i * shared.channels;
-            dst[off..off + shared.channels].copy_from_slice(&storage[slot..slot + shared.channels]);
+            unsafe {
+                ptr::copy_nonoverlapping(
+                    storage_ptr.add(slot),
+                    dst[off..].as_mut_ptr(),
+                    shared.channels,
+                );
+            }
         }
         shared.read.fetch_add(n as u64, Ordering::Release);
         n * shared.channels
@@ -284,6 +306,49 @@ mod tests {
     /// コンパイル時に検証する(型に`Sync`境界を要求する呼び出しをここに書けば、
     /// `!Sync`のため**コンパイルが失敗する**契約になっている — 意図的にコメントで
     /// その事実だけを記録し、`Sync`要求版は追加しない)。
+    #[test]
+    fn rejects_storage_length_overflow() {
+        let overflow_frames = usize::MAX / 2 + 1;
+        assert!(matches!(
+            channel(2, overflow_frames),
+            Err(AudioError::InvalidRingConfig {
+                channels: 2,
+                capacity_frames,
+            }) if capacity_frames == overflow_frames
+        ));
+    }
+
+    #[test]
+    fn concurrent_producer_consumer_roundtrip() {
+        const FRAMES: usize = 512;
+        let (prod, cons) = channel(2, 64).unwrap();
+        std::thread::scope(|s| {
+            s.spawn(move || {
+                for i in 0..FRAMES {
+                    let src = [i as f32, -(i as f32)];
+                    while prod.push_frames(&src) == 0 {
+                        std::hint::spin_loop();
+                    }
+                }
+            });
+            s.spawn(move || {
+                let mut received = Vec::with_capacity(FRAMES);
+                while received.len() < FRAMES {
+                    let mut dst = [0.0; 2];
+                    if cons.pop_samples(&mut dst) == 2 {
+                        received.push(dst);
+                    } else {
+                        std::hint::spin_loop();
+                    }
+                }
+                for (i, frame) in received.iter().enumerate() {
+                    assert_eq!(frame[0], i as f32);
+                    assert_eq!(frame[1], -(i as f32));
+                }
+            });
+        });
+    }
+
     #[test]
     fn handles_are_send_and_counters_are_sync() {
         fn assert_send<T: Send>() {}

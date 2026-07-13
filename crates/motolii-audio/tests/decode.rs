@@ -4,7 +4,8 @@
 
 mod support;
 
-use motolii_audio::{decode_file, AudioError};
+use motolii_audio::{decode_file, decode_file_with_limits, AudioError};
+use motolii_doc::ResourceLimits;
 use motolii_testkit::tmp_dir;
 use support::{sine_wave_i16, write_pcm16_wav};
 
@@ -135,5 +136,27 @@ fn zero_sample_rate_pcm_cache_is_rejected() {
     assert!(matches!(
         err,
         AudioError::UnsupportedSampleRate { sample_rate: 0 }
+    ));
+}
+
+#[test]
+fn decode_respects_max_samples_limit() {
+    let dir = tmp_dir("motolii-audio-decode-limit");
+    let path = dir.join("mono.wav");
+    let rate = 8_000u32;
+    let samples = sine_wave_i16(rate, 200, 440.0, 1);
+    write_pcm16_wav(&path, rate, 1, &samples);
+
+    let limits = ResourceLimits {
+        max_samples: 100,
+        ..ResourceLimits::production()
+    };
+    let err = decode_file_with_limits(&path, &limits).unwrap_err();
+    assert!(matches!(
+        err,
+        AudioError::SampleCountLimit {
+            observed,
+            limit: 100
+        } if observed > 100
     ));
 }
