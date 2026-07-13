@@ -5,6 +5,7 @@
 //! - #101 `OpenMode` / `ResourceLimits` を消費し、別ロード経路を作らない。
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -1343,11 +1344,7 @@ pub fn migrate_document_file_with_limits(
     let bytes = read_file_bounded(path, limits)?;
     let (doc, report) = migrate_bytes_with_limits(&bytes, limits)?;
     let migrated = report.did_migrate();
-    let file_name = path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("document.json");
-    let backup_path = path.with_file_name(format!("{file_name}{BACKUP_SUFFIX}"));
+    let backup_path = pre_migrate_backup_path(path);
 
     if options.dry_run || !migrated {
         return Ok(MigrateFileResult {
@@ -1397,6 +1394,17 @@ pub fn migrate_document_file_with_limits(
         report,
         migrated,
     })
+}
+
+/// 原本ファイル名に `BACKUP_SUFFIX` をバイト列のまま付与する。
+/// `to_str()` フォールバックで `document.json.bak` に化けるのを防ぐ。
+fn pre_migrate_backup_path(path: &Path) -> PathBuf {
+    let mut backup_name = path
+        .file_name()
+        .map(|s| s.to_os_string())
+        .unwrap_or_else(|| OsString::from("document.json"));
+    backup_name.push(BACKUP_SUFFIX);
+    path.with_file_name(backup_name)
 }
 
 /// persist.rs と同型: Unix は親ディレクトリ fsync、非Unix は省略。
@@ -1751,5 +1759,25 @@ mod tests {
         assert_eq!(counts.track_count, 1);
         assert_eq!(counts.clip_count, 2);
         assert_eq!(counts.keyframe_count, 2);
+    }
+
+    /// 非UTF-8ファイル名でも原本名+suffixのbakになり、document.json.bakへフォールバックしない。
+    /// (macOSは非UTF-8パスを作れないので、パス組み立てのみを検証する)
+    #[cfg(unix)]
+    #[test]
+    fn pre_migrate_backup_path_preserves_non_utf8_file_name() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        let name = OsStr::from_bytes(b"legacy\xff.json");
+        let path = Path::new("/tmp").join(name);
+        let bak = pre_migrate_backup_path(&path);
+        let mut expected = name.to_os_string();
+        expected.push(BACKUP_SUFFIX);
+        assert_eq!(bak.file_name(), Some(expected.as_os_str()));
+        assert_ne!(
+            bak.file_name().and_then(|s| s.to_str()),
+            Some(format!("document.json{BACKUP_SUFFIX}").as_str())
+        );
     }
 }
