@@ -1,8 +1,7 @@
 //! D2: 複製時のID再写像(A8)。「subtree内参照は新ID再写像、外向き参照は維持」。
 //!
-//! **スコープ**: envelope本体(transform 4種+opacity)+effects[].paramsのDocParamのみ。
-//! `ClipSource::Plugin`/`VectorContent`/`PathOp`配下はD1i-2(#100)と並走のため対象外
-//! (follow-up。将来の追加的拡張)。
+//! **スコープ**: envelope本体(transform 4種+opacity)+effects[].params、
+//! および`ClipSource::Plugin`/`VectorContent`/`PathOp`配下のDocParam(LookAt/Follow含む)。
 
 use std::collections::HashMap;
 
@@ -11,7 +10,7 @@ use thiserror::Error;
 use crate::command::{envelope_of, envelope_of_mut, find_item_location, Command, CommandError};
 use crate::doc_keyframe::DocKeyframeTrack;
 use crate::param::DocParam;
-use crate::schema::{ItemEnvelope, TrackItem};
+use crate::schema::{ClipSource, ItemEnvelope, PathOp, StandardShape, TrackItem, VectorContent};
 use crate::stable_id::{EffectId, KeyframeId, StableIdError, StableIdSeq};
 use crate::{Document, LayerId, LayerIdError};
 
@@ -57,10 +56,10 @@ pub fn duplicate_track_item(
     doc.next_stable_id = seq;
     if seq.peek_next() != before {
         // 新規EffectId/KeyframeIdを発行した(subtreeにeffect/keyframeが存在した) —
-        // ネスト永続フィールドの規律(M2E-11①)で下限へ引き上げる。
-        doc.min_reader_version = doc
-            .min_reader_version
-            .max(crate::validate::MIN_READER_VERSION_FOR_STABLE_IDS);
+        // ネスト永続フィールドの規律(M2E-11①)でversion/min_reader_versionを揃えて上げる。
+        let floor = crate::validate::MIN_READER_VERSION_FOR_STABLE_IDS;
+        doc.min_reader_version = doc.min_reader_version.max(floor);
+        doc.version = doc.version.max(floor);
     }
 
     Ok(Command::AddTrackItem {
@@ -85,12 +84,93 @@ fn remap_item(
     seq: &mut StableIdSeq,
 ) -> Result<(), StableIdError> {
     remap_envelope(envelope_of_mut(item), id_map, seq)?;
-    if let TrackItem::Group(g) = item {
-        for child in &mut g.children {
-            remap_item(child, id_map, seq)?;
+    match item {
+        TrackItem::Clip(clip) => remap_clip_source(&mut clip.source, id_map, seq)?,
+        TrackItem::Group(group) => {
+            for child in &mut group.children {
+                remap_item(child, id_map, seq)?;
+            }
         }
     }
     Ok(())
+}
+
+fn remap_clip_source(
+    source: &mut ClipSource,
+    id_map: &HashMap<u64, LayerId>,
+    seq: &mut StableIdSeq,
+) -> Result<(), StableIdError> {
+    match source {
+        ClipSource::Asset { .. } => Ok(()),
+        ClipSource::Plugin { params, .. } => {
+            for param in params.values_mut() {
+                remap_doc_param(param, id_map, seq)?;
+            }
+            Ok(())
+        }
+        ClipSource::Vector { recipe } => {
+            remap_vector_content(&mut recipe.content, id_map, seq)?;
+            for op in &mut recipe.modifiers {
+                remap_path_op(op, id_map, seq)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn remap_vector_content(
+    content: &mut VectorContent,
+    id_map: &HashMap<u64, LayerId>,
+    seq: &mut StableIdSeq,
+) -> Result<(), StableIdError> {
+    match content {
+        VectorContent::StandardShape { shape } => match shape {
+            StandardShape::Rect { width, height } | StandardShape::Ellipse { width, height } => {
+                remap_doc_param(width, id_map, seq)?;
+                remap_doc_param(height, id_map, seq)
+            }
+        },
+        VectorContent::SvgAsset { .. } | VectorContent::TextPath { .. } => Ok(()),
+        VectorContent::Group { children } => {
+            for child in children {
+                remap_vector_content(child, id_map, seq)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn remap_path_op(
+    op: &mut PathOp,
+    id_map: &HashMap<u64, LayerId>,
+    seq: &mut StableIdSeq,
+) -> Result<(), StableIdError> {
+    match op {
+        PathOp::PuckerBloat { amount } => remap_doc_param(amount, id_map, seq),
+        PathOp::ZigZag { amount, ridges } => {
+            remap_doc_param(amount, id_map, seq)?;
+            remap_doc_param(ridges, id_map, seq)
+        }
+        PathOp::Offset { distance } => remap_doc_param(distance, id_map, seq),
+        PathOp::RoundCorners { radius } => remap_doc_param(radius, id_map, seq),
+        PathOp::Trim {
+            start, end, offset, ..
+        } => {
+            remap_doc_param(start, id_map, seq)?;
+            remap_doc_param(end, id_map, seq)?;
+            remap_doc_param(offset, id_map, seq)
+        }
+        PathOp::Twist { angle } => remap_doc_param(angle, id_map, seq),
+        PathOp::Wiggle { amp, freq, seed } => {
+            remap_doc_param(amp, id_map, seq)?;
+            remap_doc_param(freq, id_map, seq)?;
+            remap_doc_param(seed, id_map, seq)
+        }
+        PathOp::Repeater { copies, offset } => {
+            remap_doc_param(copies, id_map, seq)?;
+            remap_doc_param(offset, id_map, seq)
+        }
+    }
 }
 
 fn remap_envelope(

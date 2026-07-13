@@ -4,9 +4,8 @@
 //! 持たず、apply/revertはold_value/new_valueの単純な書き込みで成立する(対称設計)。
 //! 選択・hover・IME中間状態はこのenumに入れない(#103⑨、UI状態のまま)。
 //!
-//! **スコープ外(本PR)**: `ClipSource::Plugin`/`VectorContent`/`PathOp`配下のDocParam編集は
-//! D1i-2(#100)と並走のため対象外。安定ID走査・複製再写像も同じ境界(envelope本体+
-//! effectsのみ)。将来の追加的コマンドとして拡張する。
+//! **スコープ外(本PR)**: `ClipSource::Plugin`/`VectorContent`/`PathOp`配下のDocParam編集
+//! コマンドはD1i-2(#100)と並走のため対象外。複製時のID再写像は`duplicate`が担当する。
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -41,7 +40,7 @@ pub enum PropertyId {
     TransformParent,
     EffectEnabled(EffectId),
     EffectParam(EffectId, String),
-    EffectList,
+    EffectList(EffectId),
     ChildList,
 }
 
@@ -216,7 +215,9 @@ impl Command {
             Command::SetBlendMode { .. } => PropertyId::Blend,
             Command::SetClippingMask { .. } => PropertyId::ClippingMask,
             Command::SetTransformParent { .. } => PropertyId::TransformParent,
-            Command::AddEffect { .. } | Command::RemoveEffect { .. } => PropertyId::EffectList,
+            Command::AddEffect { effect, .. } | Command::RemoveEffect { effect, .. } => {
+                PropertyId::EffectList(effect.id)
+            }
             Command::SetEffectEnabled { effect, .. } => PropertyId::EffectEnabled(*effect),
             Command::AddTrackItem { .. } | Command::RemoveTrackItem { .. } => PropertyId::ChildList,
         }

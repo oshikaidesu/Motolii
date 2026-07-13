@@ -10,6 +10,11 @@
 //!   fsyncはOSが実質サポートしない/不要なため**省略**する。保証水準は
 //!   「プロセスクラッシュ後に、完全な旧ファイルか完全な新ファイルのどちらかが見える」こと。
 //!   電源断時のディレクトリメタデータ永続はファイルシステム依存。
+//!
+//! ## OpenMode(読み/書き互換の分離)
+//!
+//! D1c-FU(#101)がI/O境界へ配線する。D2は stable id 導入で`WRITER_VERSION=2`を先に固定し、
+//! `version=2 / min_reader_version=2`が`ReadWrite`になる契約をここで正本化する。
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
@@ -28,6 +33,34 @@ use crate::{Document, DocumentError};
 /// version 1ドキュメント(id無し)はこのゲートを通過した後、デシリアライズで
 /// 拒否される — 変換(migration)はD1eの領分でありここでは発明しない。
 pub const READER_VERSION: u32 = 2;
+
+/// このリーダーが**再保存・migrationしてよい**`Document.version`の上限(=自版の書込能力)。
+///
+/// stable id を含む文書は`version=2`へ上がるため、書き込み能力も2へ揃える。
+/// `Document.version`がこれを超える場合は`OpenMode::ReadOnlyNewer`。
+pub const WRITER_VERSION: u32 = 2;
+
+/// 読み/書き互換を分離した3状態。I/O配線の本実装はD1c-FU(#101)が担う。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenMode {
+    /// 読込・再保存・migrationいずれも可能。
+    ReadWrite,
+    /// 読込は可能だが、自版より新しい`version`のため再保存・migrationは拒否。
+    ReadOnlyNewer,
+    /// `min_reader_version`超過。Documentを返さない。
+    Reject,
+}
+
+/// `version`/`min_reader_version`から`OpenMode`を判定する(I/O副作用なし)。
+pub fn classify_open_mode(document_version: u32, min_reader_version: u32) -> OpenMode {
+    if min_reader_version > READER_VERSION {
+        OpenMode::Reject
+    } else if document_version > WRITER_VERSION {
+        OpenMode::ReadOnlyNewer
+    } else {
+        OpenMode::ReadWrite
+    }
+}
 
 /// クラッシュ注入用の保存段。本番は`None`。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

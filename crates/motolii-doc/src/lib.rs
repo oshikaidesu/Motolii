@@ -40,9 +40,9 @@ pub use ids::{LayerId, LayerIdError, LayerIdTable};
 pub use param::{DocParam, LookAtAxis};
 pub use param_expect::{ExpectedValueType, ParamConstraints};
 pub use persist::{
-    detect_cloud_sync, load_document, load_document_bytes, save_document,
-    save_document_with_options, CloudSyncHint, PersistError, SaveAbortAfter, SaveOptions,
-    READER_VERSION,
+    classify_open_mode, detect_cloud_sync, load_document, load_document_bytes, save_document,
+    save_document_with_options, CloudSyncHint, OpenMode, PersistError, SaveAbortAfter, SaveOptions,
+    READER_VERSION, WRITER_VERSION,
 };
 pub use schema::{
     BlendMode, Clip, ClipSource, ClippingMaskSettings, Composition, CompositionError,
@@ -228,25 +228,25 @@ impl DocumentWriter {
     }
 
     /// `EffectId`を新規発行する(A8、非再利用)。ネスト永続フィールド追加の規律
-    /// (M2E-11①)に沿い、発行と同時に`min_reader_version`を下限まで引き上げる。
+    /// (M2E-11①)に沿い、発行と同時に`version`と`min_reader_version`を下限まで引き上げる。
+    /// `version < min_reader_version`は`validate`が拒否するため、片方だけ上げない。
     pub fn allocate_effect_id(&mut self) -> Result<EffectId, StableIdError> {
         let id = self.doc.next_stable_id.allocate()?;
-        self.bump_min_reader_version_for_stable_ids();
+        self.bump_versions_for_stable_ids();
         Ok(EffectId::from_raw(id))
     }
 
     /// `KeyframeId`を新規発行する(A8、非再利用)。同上。
     pub fn allocate_keyframe_id(&mut self) -> Result<KeyframeId, StableIdError> {
         let id = self.doc.next_stable_id.allocate()?;
-        self.bump_min_reader_version_for_stable_ids();
+        self.bump_versions_for_stable_ids();
         Ok(KeyframeId::from_raw(id))
     }
 
-    fn bump_min_reader_version_for_stable_ids(&mut self) {
-        self.doc.min_reader_version = self
-            .doc
-            .min_reader_version
-            .max(validate::MIN_READER_VERSION_FOR_STABLE_IDS);
+    fn bump_versions_for_stable_ids(&mut self) {
+        let floor = validate::MIN_READER_VERSION_FOR_STABLE_IDS;
+        self.doc.min_reader_version = self.doc.min_reader_version.max(floor);
+        self.doc.version = self.doc.version.max(floor);
     }
 
     /// `source`のsubtreeを複製し、直後に挿入するcommandを1 gestureとして適用する

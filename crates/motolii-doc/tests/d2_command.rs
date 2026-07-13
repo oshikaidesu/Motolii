@@ -412,6 +412,131 @@ fn different_gestures_do_not_merge() {
     assert_eq!(writer.snapshot(), std::sync::Arc::new(f.doc.clone()));
 }
 
+#[test]
+fn same_gesture_two_add_effects_do_not_merge() {
+    let f = fixture();
+    let mut writer = DocumentWriter::new(f.doc.clone());
+    let gesture = writer.begin_gesture();
+
+    let effect1_id = writer.allocate_effect_id().expect("allocate effect1");
+    let effect2_id = writer.allocate_effect_id().expect("allocate effect2");
+    let effect1 = EffectInstance {
+        id: effect1_id,
+        plugin_id: "core.filter.blur".into(),
+        effect_version: 1,
+        enabled: true,
+        params: BTreeMap::new(),
+        extra: Default::default(),
+    };
+    let effect2 = EffectInstance {
+        id: effect2_id,
+        plugin_id: "core.filter.tint".into(),
+        effect_version: 1,
+        enabled: true,
+        params: BTreeMap::new(),
+        extra: Default::default(),
+    };
+
+    writer
+        .apply_command(
+            gesture,
+            Command::AddEffect {
+                target: f.layer,
+                index: 1,
+                effect: effect1,
+            },
+        )
+        .expect("add effect1");
+    writer
+        .apply_command(
+            gesture,
+            Command::AddEffect {
+                target: f.layer,
+                index: 2,
+                effect: effect2,
+            },
+        )
+        .expect("add effect2");
+
+    let snap = writer.snapshot();
+    let TrackItem::Clip(clip) = &snap.tracks[0].items[0] else {
+        panic!("expected fixture clip at index 0");
+    };
+    assert_eq!(
+        clip.envelope.effects.len(),
+        3,
+        "distinct effect ids must not merge: both AddEffects must apply"
+    );
+    assert_eq!(writer.undo_len(), 1, "same gesture still forms one macro");
+}
+
+#[test]
+fn same_gesture_two_add_effects_undo_removes_both() {
+    let f = fixture();
+    let mut writer = DocumentWriter::new(f.doc.clone());
+    let gesture = writer.begin_gesture();
+
+    let effect1_id = writer.allocate_effect_id().expect("allocate effect1");
+    let effect2_id = writer.allocate_effect_id().expect("allocate effect2");
+    let effect1 = EffectInstance {
+        id: effect1_id,
+        plugin_id: "core.filter.blur".into(),
+        effect_version: 1,
+        enabled: true,
+        params: BTreeMap::new(),
+        extra: Default::default(),
+    };
+    let effect2 = EffectInstance {
+        id: effect2_id,
+        plugin_id: "core.filter.tint".into(),
+        effect_version: 1,
+        enabled: true,
+        params: BTreeMap::new(),
+        extra: Default::default(),
+    };
+
+    writer
+        .apply_command(
+            gesture,
+            Command::AddEffect {
+                target: f.layer,
+                index: 1,
+                effect: effect1,
+            },
+        )
+        .expect("add effect1");
+    writer
+        .apply_command(
+            gesture,
+            Command::AddEffect {
+                target: f.layer,
+                index: 2,
+                effect: effect2,
+            },
+        )
+        .expect("add effect2");
+
+    let snap = writer.snapshot();
+    let TrackItem::Clip(clip) = &snap.tracks[0].items[0] else {
+        panic!("expected fixture clip at index 0");
+    };
+    assert_eq!(clip.envelope.effects.len(), 3);
+
+    writer
+        .undo()
+        .expect("undo gesture removes both added effects");
+    let after_undo = writer.snapshot();
+    let TrackItem::Clip(clip) = &after_undo.tracks[0].items[0] else {
+        panic!("expected fixture clip at index 0");
+    };
+    assert_eq!(clip.envelope.effects.len(), 1);
+    assert_eq!(clip.envelope.effects[0].id, f.effect);
+    assert_eq!(
+        after_undo.tracks, f.doc.tracks,
+        "tree content must match pre-edit state"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // 完了条件4: duplicate/paste時のID再写像(subtree内=新規、外向き=維持)
 // ---------------------------------------------------------------------------
@@ -581,4 +706,84 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
         allocated_next,
         "stable id counter must not be rewound by undo (non-reuse discipline)"
     );
+}
+
+#[test]
+fn duplicate_remaps_plugin_lookat_within_subtree() {
+    let mut doc = Document::new_v1();
+    let group_layer = doc.layers.allocate("group").unwrap();
+    let child_a = doc.layers.allocate("child_a").unwrap();
+    let child_b = doc.layers.allocate("child_b").unwrap();
+    let track = doc.track_ids.allocate("V1").unwrap();
+    let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
+
+    let plugin_params = BTreeMap::from([(
+        "aim".into(),
+        DocParam::LookAt {
+            target: child_b,
+            axis: LookAtAxis::PlusY,
+        },
+    )]);
+
+    doc.tracks.push(Track {
+        id: track,
+        items: vec![TrackItem::Group(Group {
+            envelope: ItemEnvelope::new(group_layer),
+            children: vec![
+                TrackItem::Clip(Clip {
+                    envelope: ItemEnvelope::new(child_a),
+                    start: RationalTime::ZERO,
+                    duration: RationalTime::try_new(2, 1).unwrap(),
+                    time_map: Default::default(),
+                    source: ClipSource::Plugin {
+                        plugin_id: "vendor.test.plugin".into(),
+                        effect_version: 1,
+                        params: plugin_params,
+                        extra: Default::default(),
+                    },
+                }),
+                TrackItem::Clip(Clip {
+                    envelope: ItemEnvelope::new(child_b),
+                    start: RationalTime::ZERO,
+                    duration: RationalTime::try_new(2, 1).unwrap(),
+                    time_map: Default::default(),
+                    source: ClipSource::Asset { asset },
+                }),
+            ],
+        })],
+    });
+    doc.validate().expect("fixture must validate");
+
+    let mut writer = DocumentWriter::new(doc.clone());
+    writer
+        .duplicate_track_item(group_layer)
+        .expect("duplicate group");
+
+    let snap = writer.snapshot();
+    let TrackItem::Group(cloned_group) = &snap.tracks[0].items[1] else {
+        panic!("expected cloned group at index 1");
+    };
+    let TrackItem::Clip(cloned_a) = &cloned_group.children[0] else {
+        panic!("expected plugin clip clone");
+    };
+    let TrackItem::Clip(cloned_b) = &cloned_group.children[1] else {
+        panic!("expected sibling clip clone");
+    };
+
+    let ClipSource::Plugin { params, .. } = &cloned_a.source else {
+        panic!("expected plugin source on cloned clip");
+    };
+    match params.get("aim").expect("aim param") {
+        DocParam::LookAt { target, .. } => {
+            assert_eq!(
+                *target, cloned_b.envelope.layer_id,
+                "plugin LookAt must remap to cloned sibling inside subtree"
+            );
+            assert_ne!(
+                *target, child_b,
+                "plugin LookAt must not still point at the original layer"
+            );
+        }
+        other => panic!("expected LookAt, got {other:?}"),
+    }
 }
