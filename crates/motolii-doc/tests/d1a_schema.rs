@@ -106,7 +106,7 @@ fn sample_document() -> Document {
     let top_clip = Clip {
         envelope: {
             let mut env = ItemEnvelope::new(clip_layer);
-            env.transform.position = DocParam::LookAt {
+            env.transform.rotation = DocParam::LookAt {
                 target: group_layer,
                 axis: LookAtAxis::PlusY,
             };

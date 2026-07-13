@@ -164,21 +164,7 @@ fn asset_ref_resolves_when_registered() {
 }
 
 #[test]
-fn look_at_on_rotation_fails() {
-    let mut doc = valid_minimal();
-    let target = doc.layers.allocate("t").unwrap();
-    clip_mut(&mut doc).envelope.transform.rotation = DocParam::LookAt {
-        target,
-        axis: motolii_doc::LookAtAxis::PlusY,
-    };
-    assert!(matches!(
-        doc.validate(),
-        Err(DocumentError::SpatialLinkNotAllowed { .. })
-    ));
-}
-
-#[test]
-fn look_at_on_position_ok() {
+fn look_at_on_rotation_ok() {
     let mut doc = valid_minimal();
     let asset = match &doc.tracks[0].items[0] {
         TrackItem::Clip(c) => match c.source {
@@ -199,11 +185,25 @@ fn look_at_on_position_ok() {
             source: ClipSource::Asset { asset },
         })],
     });
-    clip_mut(&mut doc).envelope.transform.position = DocParam::LookAt {
+    clip_mut(&mut doc).envelope.transform.rotation = DocParam::LookAt {
         target,
         axis: motolii_doc::LookAtAxis::PlusY,
     };
     assert!(doc.validate().is_ok());
+}
+
+#[test]
+fn look_at_on_position_fails() {
+    let mut doc = valid_minimal();
+    let target = doc.layers.allocate("t").unwrap();
+    clip_mut(&mut doc).envelope.transform.position = DocParam::LookAt {
+        target,
+        axis: motolii_doc::LookAtAxis::PlusY,
+    };
+    assert!(matches!(
+        doc.validate(),
+        Err(DocumentError::SpatialLinkNotAllowed { .. })
+    ));
 }
 
 #[test]

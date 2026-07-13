@@ -12,14 +12,13 @@ use motolii_nodes::{CanonicalPoint, CanonicalSize, ClippingMaskMode, CompositeMo
 use motolii_plugin::{NodeDesc, PluginId, PluginRegistry, ResolvedParams};
 use motolii_render::{LinearRenderGraph, RenderStep, SolidSource, TextureId};
 
-use crate::affine::{compose_transform, resolve_transform, Affine2D};
+use crate::affine::Affine2D;
 use crate::eval_time::EvaluationTime;
 use crate::param_eval::{
     eval_color, eval_doc_param, eval_f64, eval_vec2, ParamEvalError, ResolvedLayerParams,
 };
-use crate::schema::{
-    BlendMode, Clip, ClipSource, Group, ItemEnvelope, MaskMode, TrackItem, Transform2D,
-};
+use crate::schema::{BlendMode, Clip, ClipSource, Group, ItemEnvelope, MaskMode, TrackItem};
+use crate::spatial_resolve::resolve_document_spaces;
 use crate::{AssetId, Document, LayerId};
 
 /// M1互換の矩形 LayerSource(プラグインID文字列。レジストリ未登録でも D3 が OverlayRect へ落とす)。
@@ -162,6 +161,8 @@ struct GraphBuilder<'a> {
     transparent_id: Option<TextureId>,
     video_slots: Vec<VideoSlot>,
     resolved_layers: ResolvedLayerParams,
+    /// 描画前に依存順で解決した world アフィン(Group/parent 込み)。
+    world_affines: HashMap<u64, Affine2D>,
 }
 
 impl<'a> GraphBuilder<'a> {
@@ -185,6 +186,7 @@ impl<'a> GraphBuilder<'a> {
             transparent_id: None,
             video_slots: Vec::new(),
             resolved_layers: ResolvedLayerParams::default(),
+            world_affines: HashMap::new(),
         }
     }
 
@@ -223,6 +225,23 @@ impl<'a> GraphBuilder<'a> {
     }
 
     fn build_document(&mut self, _: Option<&Path>) -> Result<TextureId, GraphError> {
+        // F-3: 参照先を先に評価。描画順とは独立に world position / アフィンを埋める。
+        let (resolved, worlds) = resolve_document_spaces(self.doc, self.timeline_time, self.tracks)
+            .map_err(|e| {
+                let layer = match &e {
+                    ParamEvalError::SpatialLinkCycle { layer }
+                    | ParamEvalError::ParentCycle { layer }
+                    | ParamEvalError::SingularPlacementSpace { layer } => *layer,
+                    ParamEvalError::UnresolvedLookAt(layer)
+                    | ParamEvalError::UnresolvedFollow(layer) => *layer,
+                    ParamEvalError::DanglingParent { parent } => *parent,
+                    _ => 0,
+                };
+                GraphError::ParamEval { layer, source: e }
+            })?;
+        self.resolved_layers = resolved;
+        self.world_affines = worlds;
+
         let mut acc = self.transparent();
         let mut prev_mask = None;
         let items: Vec<&TrackItem> = self
@@ -241,7 +260,6 @@ impl<'a> GraphBuilder<'a> {
             let draw = self.should_draw(env);
             // B④: visible=false でもマスク/LookAt 用に評価。solo 除外かつマスク不要なら画素は作らない。
             if !draw && !next_needs_mask {
-                self.record_layer_position(layer, &env.transform)?;
                 continue;
             }
             let tex = self.build_item(item, Affine2D::IDENTITY, prev_mask, layer)?;
@@ -294,8 +312,9 @@ impl<'a> GraphBuilder<'a> {
         mask_below: Option<TextureId>,
         layer: LayerId,
     ) -> Result<TextureId, GraphError> {
-        let local = self.resolve_xform(&group.envelope.transform, layer)?;
-        let child_xform = compose_transform(inherited, local);
+        // 子への継承は事前解決済み world アフィンを使う(描画時の再評価で LookAt 順依存を起こさない)。
+        let _ = inherited;
+        let child_xform = self.world_affine(layer)?;
         let mut acc = self.transparent();
         let mut prev_child = None;
         for (i, child) in group.children.iter().enumerate() {
@@ -308,7 +327,6 @@ impl<'a> GraphBuilder<'a> {
                 .unwrap_or(false);
             let draw = self.should_draw(env);
             if !draw && !next_needs_mask {
-                self.record_layer_position(child_layer, &env.transform)?;
                 continue;
             }
             let tex = self.build_item(child, child_xform, prev_child, child_layer)?;
@@ -334,7 +352,6 @@ impl<'a> GraphBuilder<'a> {
                 tex = self.apply_mask(tex, mask, group.envelope.clipping_mask.mode);
             }
         }
-        self.record_layer_position(layer, &group.envelope.transform)?;
         Ok(tex)
     }
 
@@ -345,6 +362,7 @@ impl<'a> GraphBuilder<'a> {
         mask_below: Option<TextureId>,
         layer: LayerId,
     ) -> Result<TextureId, GraphError> {
+        let _ = inherited;
         // OverrunMode: v1 は Freeze のみ。active 窓の外でも Black/Loop を黙って通さない。
         clip.time_map
             .require_freeze_overrun()
@@ -353,7 +371,6 @@ impl<'a> GraphBuilder<'a> {
                 source: e,
             })?;
         if !clip_active(clip, self.timeline_time) {
-            self.record_layer_position(layer, &clip.envelope.transform)?;
             return Ok(self.transparent());
         }
         let local_t =
@@ -370,8 +387,7 @@ impl<'a> GraphBuilder<'a> {
                 layer: layer.get(),
                 source: e,
             })?;
-        let local = self.resolve_xform(&clip.envelope.transform, layer)?;
-        let world = compose_transform(inherited, local);
+        let world = self.world_affine(layer)?;
         // F-3: source → effect stack → transform → clipping mask
         let mut tex = self.build_source(clip, st, layer)?;
         for effect in &clip.envelope.effects {
@@ -385,40 +401,17 @@ impl<'a> GraphBuilder<'a> {
                 tex = self.apply_mask(tex, mask, clip.envelope.clipping_mask.mode);
             }
         }
-        self.record_layer_position(layer, &clip.envelope.transform)?;
         Ok(tex)
     }
 
-    fn resolve_xform(&self, xform: &Transform2D, layer: LayerId) -> Result<Affine2D, GraphError> {
-        let doc = self.doc;
-        resolve_transform(
-            xform,
-            self.timeline_time,
-            self.tracks,
-            &self.resolved_layers,
-            &|id| crate::command::find_envelope(doc, id).map(|e| &e.transform),
-        )
-        .map_err(|e| GraphError::ParamEval {
-            layer: layer.get(),
-            source: e,
-        })
-    }
-
-    fn record_layer_position(
-        &mut self,
-        layer: LayerId,
-        xform: &Transform2D,
-    ) -> Result<(), GraphError> {
-        // visible=false でも LookAt/Follow 依存先として位置を記録する。
-        if let Ok(pos) = eval_vec2(
-            &xform.position,
-            self.timeline_time,
-            self.tracks,
-            &self.resolved_layers,
-        ) {
-            self.resolved_layers.insert_position(layer, pos);
-        }
-        Ok(())
+    fn world_affine(&self, layer: LayerId) -> Result<Affine2D, GraphError> {
+        self.world_affines
+            .get(&layer.get())
+            .copied()
+            .ok_or(GraphError::ParamEval {
+                layer: layer.get(),
+                source: ParamEvalError::UnresolvedLookAt(layer.get()),
+            })
     }
 
     fn build_source(

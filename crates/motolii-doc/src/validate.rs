@@ -496,7 +496,7 @@ fn validate_param(
             validate_param(doc, y, vec2_axis(), &format!("{path}.y"))
         }
         DocParam::LookAt { target, .. } => {
-            if !constraints.allow_spatial_links {
+            if !constraints.allow_look_at {
                 return Err(DocumentError::SpatialLinkNotAllowed {
                     path: path.to_string(),
                 });
@@ -504,7 +504,7 @@ fn validate_param(
             doc.require_layer(*target)
         }
         DocParam::Follow { target, offset } => {
-            if !constraints.allow_spatial_links {
+            if !constraints.allow_follow {
                 return Err(DocumentError::SpatialLinkNotAllowed {
                     path: path.to_string(),
                 });
