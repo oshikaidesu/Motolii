@@ -490,6 +490,8 @@ pub enum TrimMode {
 }
 
 /// v1閉集合のパス演算子(プラグイン契約には出さない。F-13)。
+/// 意味・単位・範囲の正本は docs/specs/M2-document-model.md「PathOp意味論表」。
+/// 【決定】2026-07-13(Lottie/AE採択)。D1i-2で表に無い席(point_type/line_join/center/transform等)を追加的に足す。
 #[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum PathOp {

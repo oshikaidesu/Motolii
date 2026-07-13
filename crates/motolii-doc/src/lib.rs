@@ -4,6 +4,7 @@
 //! `edit`は戻り値を持たない — 参照漏洩で凍結を封じないため。
 //!
 //! **D1a**: スキーマ本体。**D1b**: 保存前`validate`(ガード1)。**D1c**: アトミック保存/読込。ジャーナルはD1d。
+//! **D8**: 単一writer + スナップショット配布の並行契約(型denyは`mut_document_deny`、完走は`d8_ownership`)。
 
 mod asset;
 mod bpm;

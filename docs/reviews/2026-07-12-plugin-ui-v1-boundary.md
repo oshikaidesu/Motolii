@@ -2,14 +2,14 @@
 
 ステータス: **確定**(ユーザー承認)
 
-対象仕様: [M3-ui-integration.md](../specs/M3-ui-integration.md)「プラグインパネルの拡張方式」  
+対象仕様: [M3-ui-integration.md](../specs/M3-ui-integration.md)「プラグインパネルの拡張方式」
 先行レビュー: [prior-art-gap-survey](2026-07-12-prior-art-gap-survey.md) / [counter-review](2026-07-12-prior-art-gap-counter-review.md) / [M3-M4-gate-ledger](2026-07-12-M3-M4-gate-ledger.md)
 
 ## 最終判定
 
-> **v1の安定公開境界は`NodeDesc`自動生成パネルのみ。**  
-> `.slint`とwgpu自由描画は「技術的に可能だが、第三者向け契約として未成立」のため延期する。  
-> 宣言レイアウトやギズモも、ファーストパーティ実験を経てv1.xまたはv2で解凍判断する。  
+> **v1の安定公開境界は`NodeDesc`自動生成パネルのみ。**
+> `.slint`とwgpu自由描画は「技術的に可能だが、第三者向け契約として未成立」のため延期する。
+> 宣言レイアウトやギズモも、ファーストパーティ実験を経てv1.xまたはv2で解凍判断する。
 > 将来拡張しても、標準パネルだけで全パラメータを操作できることを不変条件とする。
 
 ## 補強サーチで確認した事実(判定は変わらず、根拠が厚くなった)
