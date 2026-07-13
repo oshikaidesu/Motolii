@@ -16,7 +16,7 @@
 
 | 焼くもの | 先に揃える文書 |
 |---|---|
-| PathOp / 演算 | variantごとの意味論表 — **下書き・未確定**(AE/Lottie案+[Cavalry比較](2026-07-12-pathop-ae-cavalry-comparison.md))。**【決定】後**にvalidate+幾何+ゴールデン(**D1i-2実装**) |
+| PathOp / 演算 | variantごとの意味論表 — **【決定】済み(2026-07-13、[決定パック採択](2026-07-13-decision-pack-adoption.md))**。D1i-2はvalidate+幾何+ゴールデンを表の写しとして実装(比較材料は[Cavalry比較](2026-07-12-pathop-ae-cavalry-comparison.md)=未採用・歴史記録) |
 | DocParam受け口 | 期待型表 — D1h済み |
 | TimeMap / 区間 | 写像式・尺の正本・OverrunMode — D1g済み |
 | 色・補間・変形順 | M2E-13 / 補間・変形の意味論宣言 — 済み |
