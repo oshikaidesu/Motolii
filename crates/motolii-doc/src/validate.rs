@@ -135,6 +135,15 @@ pub enum DocumentError {
     VideoComponentKindMismatch { layer_id: u64 },
     #[error("audio component[{index}] stream.kind must be audio (layer {layer_id})")]
     AudioComponentKindMismatch { layer_id: u64, index: usize },
+    #[error(
+        "duplicate audio stream ordinal {ordinal} on layer {layer_id} (indices {first_index} and {second_index})"
+    )]
+    DuplicateAudioStreamOrdinal {
+        layer_id: u64,
+        ordinal: u32,
+        first_index: usize,
+        second_index: usize,
+    },
     /// AG-1: decode/exportがvideo ordinal 0のみ。非0を黙ってv:0へ落とさない。
     #[error(
         "video stream ordinal {ordinal} is not supported yet (layer {layer_id}); only ordinal 0 is drawable in AG-1"
@@ -355,6 +364,17 @@ fn validate_clip(
             for (index, comp) in audio.iter().enumerate() {
                 if comp.stream.kind != StreamKind::Audio {
                     return Err(DocumentError::AudioComponentKindMismatch { layer_id, index });
+                }
+                if let Some(first_index) = audio[..index]
+                    .iter()
+                    .position(|earlier| earlier.stream.ordinal == comp.stream.ordinal)
+                {
+                    return Err(DocumentError::DuplicateAudioStreamOrdinal {
+                        layer_id,
+                        ordinal: comp.stream.ordinal,
+                        first_index,
+                        second_index: index,
+                    });
                 }
                 validate_param(
                     doc,

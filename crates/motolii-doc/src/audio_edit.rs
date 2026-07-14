@@ -32,15 +32,24 @@ pub fn build_import_clip_source(asset: crate::AssetId, mode: ImportAvMode) -> Cl
     }
 }
 
-/// 元クリップの直後へaudio-only Clipを追加し、元の有効なaudio componentを無効化する。
+/// 元Clipのaudioを別laneへ分離するcommand列を組み立てる。
+///
+/// A4 / 設計§4.4: 同一Track(または同一Group)内への時間重なり配置は禁止。
+/// 呼び出し側は必ず `destination_parent != source_parent` の別laneを渡す。
 pub fn plan_detach_audio(
     doc: &Document,
-    parent: ParentLocator,
+    source_parent: ParentLocator,
     clip_index: usize,
+    destination_parent: ParentLocator,
+    destination_index: usize,
     new_layer: LayerId,
     new_layer_name: &str,
 ) -> Result<Vec<Command>, CommandError> {
-    let items = items_at(doc, parent)?;
+    if source_parent == destination_parent {
+        return Err(CommandError::DetachSameLane);
+    }
+
+    let items = items_at(doc, source_parent)?;
     let item = items.get(clip_index).ok_or(CommandError::IndexOutOfRange {
         index: clip_index,
         len: items.len(),
@@ -48,7 +57,7 @@ pub fn plan_detach_audio(
     let TrackItem::Clip(original) = item else {
         return Err(CommandError::AudioComponentNotFound {
             layer: envelope_layer(item),
-            ordinal: 0,
+            index: 0,
         });
     };
     let ClipSource::Asset {
@@ -59,20 +68,29 @@ pub fn plan_detach_audio(
     else {
         return Err(CommandError::AudioComponentNotFound {
             layer: original.envelope.layer_id.get(),
-            ordinal: 0,
+            index: 0,
         });
     };
 
-    let enabled_ordinals: Vec<u32> = original_audio
+    let enabled_indices: Vec<usize> = original_audio
         .iter()
-        .filter(|component| component.enabled)
-        .map(|component| component.stream.ordinal)
+        .enumerate()
+        .filter(|(_, component)| component.enabled)
+        .map(|(index, _)| index)
         .collect();
-    let first_ordinal = enabled_ordinals.first().copied().unwrap_or(0);
-    if enabled_ordinals.is_empty() {
+    if enabled_indices.is_empty() {
         return Err(CommandError::AudioComponentNotFound {
             layer: original.envelope.layer_id.get(),
-            ordinal: first_ordinal,
+            index: 0,
+        });
+    }
+
+    // 挿入先の境界を先に検査(失敗時に部分commandを返さない)。
+    let dest_len = items_at(doc, destination_parent)?.len();
+    if destination_index > dest_len {
+        return Err(CommandError::IndexOutOfRange {
+            index: destination_index,
+            len: dest_len,
         });
     }
 
@@ -88,15 +106,15 @@ pub fn plan_detach_audio(
         },
     });
     let mut commands = vec![Command::AddTrackItem {
-        parent,
-        index: clip_index + 1,
+        parent: destination_parent,
+        index: destination_index,
         item: detached,
         layer_names: BTreeMap::from([(new_layer, new_layer_name.to_string())]),
     }];
-    commands.extend(enabled_ordinals.into_iter().map(|ordinal| {
+    commands.extend(enabled_indices.into_iter().map(|index| {
         Command::SetAudioComponentEnabled {
             target: original.envelope.layer_id,
-            ordinal,
+            index,
             old: true,
             new: false,
         }
