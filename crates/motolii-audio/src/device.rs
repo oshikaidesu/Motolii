@@ -52,7 +52,10 @@ impl OutputStream {
     /// デフォルト出力デバイスへ`consumer`を繋いで再生を開始する。
     ///
     /// `source`から[`negotiate_output`]し、リングは**デバイスレート**前提で読む。
-    pub fn open_default(source: PcmFormat, consumer: RingConsumer) -> Result<(Self, NegotiatedOutput)> {
+    pub fn open_default(
+        source: PcmFormat,
+        consumer: RingConsumer,
+    ) -> Result<(Self, NegotiatedOutput)> {
         let host = cpal::default_host();
         let device = host
             .default_output_device()

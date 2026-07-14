@@ -65,11 +65,8 @@ impl AudioProducer {
         let running_thread = Arc::clone(&running);
 
         let handle = if resampling {
-            let mut resampler = FixedRatioResampler::new(
-                source_rate,
-                device_sample_rate,
-                cache.format().channels,
-            )?;
+            let mut resampler =
+                FixedRatioResampler::new(source_rate, device_sample_rate, cache.format().channels)?;
             // 開始位置からの供給に合わせ、遅延 trim を初期状態にする。
             resampler.reset();
             thread::Builder::new()
