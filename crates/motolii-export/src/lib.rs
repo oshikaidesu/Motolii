@@ -1,8 +1,9 @@
-//! motolii-export: M1の最小書き出しループ + D3 Document直結書き出し。
+//! motolii-export: M1の最小書き出しループ + D3 Document直結書き出し + D6楽曲mux。
 //!
 //! ProjectV1 経路の `ExportOverlayRequest` は M1 互換のため残す。
 //! Document 書き出しは `ExportJob` → `build_document_frame_graph` → `render_graph_cached`
 //! で直結し、ExportOverlayRequest ミラーを作らない(M2E-11⑤)。
+//! D6: Document.soundtrack があれば映像エンコード後に元音声をオフセット付きでmuxする。
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -11,11 +12,13 @@ use std::time::Duration;
 use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap};
 use motolii_doc::{
     build_document_frame_graph, resolve_asset_path, AssetId, Document, EvaluationTime, GraphError,
-    TrackItem,
+    PluginOpenWarning, TrackItem, RECT_LAYER_SOURCE,
 };
 use motolii_eval::DataTracks;
 use motolii_gpu::{GpuCtx, RgbaDownloader, YuvToRgba};
-use motolii_media::{probe, Encoder, FrameReader, MediaInfo};
+use motolii_media::{
+    mux_soundtrack, probe, Encoder, FrameReader, MediaInfo, SoundtrackMuxRequest,
+};
 use motolii_nodes::{ParamOverlayError, ParamRectOverlay};
 use motolii_plugin::{reference::register_reference_plugins, PluginRegistry, TextureRef};
 use motolii_render::{
@@ -84,6 +87,9 @@ pub enum ExportError {
     },
     #[error("video asset has no decodable frames")]
     EmptyVideoAsset,
+    /// 実装ガード9 / D1f接続: 開くは警告、書き出しは拒否。
+    #[error("export refused: document has degraded plugins (open-only warnings are not allowed on export)")]
+    DegradedPlugins(Vec<PluginOpenWarning>),
 }
 
 /// 書き出し設定。Document≠ExportJob(M2E-11⑤)。
@@ -191,18 +197,39 @@ pub fn export_overlay_video(
     })
 }
 
-/// Document → render graph 直結の書き出し(D3)。
+/// Document → render graph 直結の書き出し(D3) + 楽曲mux(D6)。
 pub fn export_document_video(
     gpu: &GpuCtx,
     job: &ExportJob<'_>,
 ) -> Result<ExportReport, ExportError> {
+    // 実装ガード9: 開く=警告、書き出す=拒否(D1fの接続点。未知pluginは発明しない)。
+    // `doc.layer_source.rect` は graph 組み込みのファーストパーティで、
+    // expect表は reference registry 鏡像のため載らない — 書き出し拒否対象外。
+    let degraded: Vec<PluginOpenWarning> = job
+        .doc
+        .plugin_open_warnings()
+        .into_iter()
+        .filter(|w| w.plugin_id != RECT_LAYER_SOURCE)
+        .collect();
+    if !degraded.is_empty() {
+        return Err(ExportError::DegradedPlugins(degraded));
+    }
+
     let mut registry = PluginRegistry::new();
     register_reference_plugins(&mut registry)?;
     let desc = resolve_export_frame_desc(job.doc, job.project_root)?;
     let timeline_fps = job.doc.composition.fps;
+    let soundtrack = resolve_soundtrack_mux(job)?;
+
+    // muxが要るときは映像のみを一時ファイルへ書き、成功後に最終出力へ合成する。
+    let video_only_path = soundtrack
+        .as_ref()
+        .map(|_| job.output_path.with_extension("video-only.tmp.mp4"));
+    let encode_path: &Path = video_only_path.as_deref().unwrap_or(job.output_path);
+
     let mut yuv = YuvToRgba::new(gpu);
     let mut downloader = RgbaDownloader::new();
-    let mut encoder = Encoder::open(job.output_path, &desc, timeline_fps, job.qp0)?;
+    let mut encoder = Encoder::open(encode_path, &desc, timeline_fps, job.qp0)?;
     let mut render_session = RenderSession::new(gpu);
     let tracks = job.data_tracks.clone();
     let mut readers: HashMap<u64, CachedAssetReader> = HashMap::new();
@@ -280,16 +307,59 @@ pub fn export_document_video(
     }
     let finish_error = encoder.finish().err().map(ExportError::from);
     if let Some(e) = loop_error {
+        if soundtrack.is_some() {
+            let _ = std::fs::remove_file(encode_path);
+        }
         return Err(e);
     }
     if let Some(e) = finish_error {
+        if soundtrack.is_some() {
+            let _ = std::fs::remove_file(encode_path);
+        }
         return Err(e);
     }
+
+    if let Some(audio) = soundtrack {
+        let mux_result = mux_soundtrack(&SoundtrackMuxRequest {
+            video_path: encode_path,
+            audio_path: &audio.path,
+            output_path: job.output_path,
+            start_offset: audio.start_offset,
+            master_gain: audio.master_gain,
+        });
+        let _ = std::fs::remove_file(encode_path);
+        mux_result?;
+    }
+
     Ok(ExportReport {
         frames_written,
         desc,
         fps: timeline_fps,
     })
+}
+
+struct ResolvedSoundtrack {
+    path: PathBuf,
+    start_offset: RationalTime,
+    master_gain: f64,
+}
+
+fn resolve_soundtrack_mux(job: &ExportJob<'_>) -> Result<Option<ResolvedSoundtrack>, ExportError> {
+    let Some(st) = job.doc.soundtrack else {
+        return Ok(None);
+    };
+    let asset = job
+        .doc
+        .assets
+        .get(st.asset)
+        .ok_or(ExportError::UnresolvedAsset(st.asset.get()))?;
+    let path = resolve_asset_path(asset, job.project_root)
+        .ok_or(ExportError::UnresolvedAsset(st.asset.get()))?;
+    Ok(Some(ResolvedSoundtrack {
+        path,
+        start_offset: st.start_offset,
+        master_gain: st.master_gain(),
+    }))
 }
 
 /// Freeze: 素材 available 範囲へクランプ。`nb_frames` が無ければ `duration` から導出。
