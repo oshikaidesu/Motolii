@@ -72,6 +72,11 @@ pub enum GraphError {
     UnsupportedVectorSource(u64),
     #[error("rect layer source missing param `{param}` (layer {layer})")]
     MissingRectParam { layer: u64, param: &'static str },
+    /// AG-1: decodeはvideo ordinal 0のみ。非0を黙ってv:0描画しない。
+    #[error(
+        "video stream ordinal {ordinal} is not supported yet (layer {layer}); only ordinal 0 is drawable in AG-1"
+    )]
+    UnsupportedVideoStreamOrdinal { layer: u64, ordinal: u32 },
 }
 
 /// ガード10: relative → absolute → same-name → hash。実在ファイルのみ返す。
@@ -423,9 +428,17 @@ impl<'a> GraphBuilder<'a> {
         match &clip.source {
             ClipSource::Asset {
                 asset,
-                video: Some(_),
+                video: Some(video),
                 ..
-            } => self.ensure_video_slot(*asset, source_time),
+            } => {
+                if video.stream.ordinal != 0 {
+                    return Err(GraphError::UnsupportedVideoStreamOrdinal {
+                        layer: layer.get(),
+                        ordinal: video.stream.ordinal,
+                    });
+                }
+                self.ensure_video_slot(*asset, source_time)
+            }
             // audio-only: visual graphへ参加しない(AG-1)。
             ClipSource::Asset { video: None, .. } => Ok(self.transparent()),
             ClipSource::Vector { .. } => Err(GraphError::UnsupportedVectorSource(layer.get())),

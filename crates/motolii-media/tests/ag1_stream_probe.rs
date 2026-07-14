@@ -171,6 +171,56 @@ fn probes_audio_only_wav() {
 }
 
 #[test]
+fn probe_audio_ignores_attached_pic_cover_art() {
+    if !ffmpeg_or_skip() {
+        return;
+    }
+    let dir = tmp_dir("ag1_attached_pic");
+    let cover = dir.join("cover.png");
+    let audio = dir.join("with_cover.m4a");
+    // 1x1 PNG (odd video) を attached_pic として載せる。旧バグでは probe_container 経由で
+    // 偶数寸法拒否に巻き込まれた。
+    run_ffmpeg(&[
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=blue:s=1x1:d=0.04",
+        "-frames:v",
+        "1",
+        cover.to_str().unwrap(),
+    ]);
+    run_ffmpeg(&[
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:sample_rate=48000:duration=0.25",
+        "-i",
+        cover.to_str().unwrap(),
+        "-map",
+        "0:a:0",
+        "-map",
+        "1:v:0",
+        "-c:a",
+        "aac",
+        "-c:v",
+        "mjpeg",
+        "-disposition:v:0",
+        "attached_pic",
+        audio.to_str().unwrap(),
+    ]);
+    let info = motolii_media::probe_audio(&audio).expect("probe_audio must ignore cover art");
+    assert_eq!(info.codec_name, "aac");
+
+    // 列挙経路でも attached_pic は video ordinal に入れない。
+    let container = probe_container(&audio).expect("container probe with cover");
+    assert!(
+        container.video_streams.is_empty(),
+        "attached_pic must not consume a video ordinal"
+    );
+    assert_eq!(container.audio_streams.len(), 1);
+}
+
+#[test]
 fn probes_dual_audio_language_streams_stable_ordinals() {
     if !ffmpeg_or_skip() {
         return;

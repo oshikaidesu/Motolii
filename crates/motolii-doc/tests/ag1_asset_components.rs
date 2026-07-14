@@ -272,3 +272,202 @@ fn open_mode_rejects_future_min_reader() {
         OpenMode::Reject
     );
 }
+
+#[test]
+fn non_zero_video_ordinal_is_rejected() {
+    let mut doc = Document::new_v1();
+    doc.version = READER_VERSION;
+    doc.min_reader_version = MIN_READER_VERSION_FOR_ASSET_COMPONENTS;
+    let asset = register_asset(&mut doc);
+    push_asset_clip(
+        &mut doc,
+        ClipSource::Asset {
+            asset,
+            video: Some(VideoComponent::ordinal(1)),
+            audio: Vec::new(),
+        },
+    );
+    assert!(matches!(
+        doc.validate(),
+        Err(DocumentError::UnsupportedVideoStreamOrdinal { ordinal: 1, .. })
+    ));
+}
+
+#[test]
+fn animated_audio_gain_duplicate_issues_fresh_keyframe_ids() {
+    use motolii_doc::{
+        DocKeyframe, DocKeyframeTrack, DocParam, DocValue, DocumentWriter, KeyframeId,
+    };
+    use motolii_eval::Interp;
+
+    let mut doc = Document::new_v1();
+    doc.version = READER_VERSION;
+    doc.min_reader_version = MIN_READER_VERSION_FOR_ASSET_COMPONENTS;
+    let asset = doc.assets.allocate("a", "audio/wav", "sha256:aa").unwrap();
+    let layer = doc.layers.allocate("clip").unwrap();
+    let track = doc.track_ids.allocate("V1").unwrap();
+    let k0 = KeyframeId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let k1 = KeyframeId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let mut keys = DocKeyframeTrack::new();
+    keys.insert(DocKeyframe {
+        id: k0,
+        t: RationalTime::ZERO,
+        value: DocValue::F64(1.0),
+        interp: Interp::Linear,
+    });
+    keys.insert(DocKeyframe {
+        id: k1,
+        t: RationalTime::try_new(1, 1).unwrap(),
+        value: DocValue::F64(0.25),
+        interp: Interp::Linear,
+    });
+    let mut audio = AudioComponent::ordinal(0);
+    audio.gain = DocParam::Keyframes(keys);
+    doc.tracks.push(Track {
+        id: track,
+        items: vec![TrackItem::Clip(Clip {
+            envelope: ItemEnvelope::new(layer),
+            start: RationalTime::ZERO,
+            duration: RationalTime::try_new(1, 1).unwrap(),
+            time_map: TimeMap::default(),
+            source: ClipSource::Asset {
+                asset,
+                video: None,
+                audio: vec![audio],
+            },
+        })],
+    });
+    doc.validate().expect("fixture");
+
+    let mut writer = DocumentWriter::new(doc);
+    writer.duplicate_track_item(layer).expect("duplicate");
+    writer.validate().expect("post-duplicate must validate");
+
+    let snap = writer.snapshot();
+    let TrackItem::Clip(orig) = &snap.tracks[0].items[0] else {
+        panic!("orig clip");
+    };
+    let TrackItem::Clip(dup) = &snap.tracks[0].items[1] else {
+        panic!("dup clip");
+    };
+    let ClipSource::Asset {
+        audio: orig_audio, ..
+    } = &orig.source
+    else {
+        panic!("orig asset");
+    };
+    let ClipSource::Asset {
+        audio: dup_audio, ..
+    } = &dup.source
+    else {
+        panic!("dup asset");
+    };
+    let DocParam::Keyframes(orig_keys) = &orig_audio[0].gain else {
+        panic!("orig keys");
+    };
+    let DocParam::Keyframes(dup_keys) = &dup_audio[0].gain else {
+        panic!("dup keys");
+    };
+    let orig_ids: Vec<_> = orig_keys.keys().iter().map(|k| k.id).collect();
+    let dup_ids: Vec<_> = dup_keys.keys().iter().map(|k| k.id).collect();
+    assert_eq!(orig_ids.len(), 2);
+    assert_eq!(dup_ids.len(), 2);
+    for id in &dup_ids {
+        assert!(
+            !orig_ids.contains(id),
+            "duplicated gain keyframes must get fresh KeyframeIds"
+        );
+    }
+}
+
+#[test]
+fn animated_audio_gain_respects_key_count_limit() {
+    use motolii_doc::{
+        load_document_bytes_with_limits, DocKeyframe, DocKeyframeTrack, DocParam, DocValue,
+        KeyframeId, PersistError, ResourceLimitError, ResourceLimits,
+    };
+    use motolii_eval::Interp;
+
+    let mut doc = Document::new_v1();
+    doc.version = READER_VERSION;
+    doc.min_reader_version = MIN_READER_VERSION_FOR_ASSET_COMPONENTS;
+    let asset = register_asset(&mut doc);
+    let mut keys = DocKeyframeTrack::new();
+    for (i, t) in [0i64, 1, 2].into_iter().enumerate() {
+        keys.insert(DocKeyframe {
+            id: KeyframeId::from_raw(doc.next_stable_id.allocate().unwrap()),
+            t: RationalTime::try_new(t, 1).unwrap(),
+            value: DocValue::F64(1.0 - i as f64 * 0.1),
+            interp: Interp::Linear,
+        });
+    }
+    let mut audio = AudioComponent::ordinal(0);
+    audio.gain = DocParam::Keyframes(keys);
+    push_asset_clip(
+        &mut doc,
+        ClipSource::Asset {
+            asset,
+            video: None,
+            audio: vec![audio],
+        },
+    );
+    doc.validate().expect("validate ignores resource limits");
+
+    let limits = ResourceLimits {
+        max_keys_per_track: 2,
+        ..ResourceLimits::production()
+    };
+    let bytes = serde_json::to_vec(&doc).unwrap();
+    let err = load_document_bytes_with_limits(&bytes, &limits).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            PersistError::ResourceLimit(ResourceLimitError::KeyCount { observed: 3, .. })
+        ),
+        "got {err:?}"
+    );
+}
+
+#[test]
+fn duplicate_audio_gain_keyframe_ids_are_rejected_without_remap() {
+    use motolii_doc::{DocKeyframe, DocKeyframeTrack, DocParam, DocValue, KeyframeId};
+    use motolii_eval::Interp;
+
+    // walker無しだと複製後に同一KeyframeIdが2箇所に残りDuplicateStableIdになることを
+    // 回帰として固定する(remap実装が外れたら赤)。
+    let mut doc = Document::new_v1();
+    doc.version = READER_VERSION;
+    doc.min_reader_version = MIN_READER_VERSION_FOR_ASSET_COMPONENTS;
+    let asset = register_asset(&mut doc);
+    let shared = KeyframeId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let mut keys = DocKeyframeTrack::new();
+    keys.insert(DocKeyframe {
+        id: shared,
+        t: RationalTime::ZERO,
+        value: DocValue::F64(1.0),
+        interp: Interp::Linear,
+    });
+    let mut audio = AudioComponent::ordinal(0);
+    audio.gain = DocParam::Keyframes(keys);
+    push_asset_clip(
+        &mut doc,
+        ClipSource::Asset {
+            asset,
+            video: None,
+            audio: vec![audio.clone()],
+        },
+    );
+    // 意図的に同じgainキーを持つ2本目を手置き(remapを通さない)。
+    push_asset_clip(
+        &mut doc,
+        ClipSource::Asset {
+            asset,
+            video: None,
+            audio: vec![audio],
+        },
+    );
+    assert!(matches!(
+        doc.validate(),
+        Err(DocumentError::DuplicateStableId { id }) if id == shared.get()
+    ));
+}

@@ -47,16 +47,59 @@ pub struct SoundtrackMuxReport {
 
 /// 先頭音声ストリームを解析する。無音声なら Err。
 ///
-/// 実装は`probe_container`のaudio ordinal 0へ委譲する(AG-1)。
+/// `a:0`だけを読む。`probe_container`へ委譲しない — album art(attached_pic)や
+/// 未対応副videoの解析失敗でSoundtrack muxを巻き込まない(AG-1 review P2)。
 pub fn probe_audio(path: impl AsRef<Path>) -> Result<AudioStreamInfo> {
-    let container = crate::probe_container(path)?;
-    let stream = container
-        .audio_streams
+    let out = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=codec_name,sample_rate,channels",
+            "-print_format",
+            "json",
+        ])
+        .arg(path.as_ref())
+        .output()
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => MediaError::ToolNotFound("ffprobe"),
+            _ => MediaError::Io(e),
+        })?;
+    if !out.status.success() {
+        return Err(MediaError::Probe(
+            String::from_utf8_lossy(&out.stderr).into_owned(),
+        ));
+    }
+    #[derive(serde::Deserialize)]
+    struct Out {
+        streams: Vec<Stream>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Stream {
+        codec_name: Option<String>,
+        sample_rate: Option<String>,
+        channels: Option<u32>,
+    }
+    let parsed: Out = serde_json::from_slice(&out.stdout)
+        .map_err(|e| MediaError::Probe(format!("json parse: {e}")))?;
+    let stream = parsed
+        .streams
         .first()
         .ok_or_else(|| MediaError::Probe("no audio stream".into()))?;
+    let codec_name = stream
+        .codec_name
+        .clone()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| MediaError::Probe("missing audio codec_name".into()))?;
+    let sample_rate = stream
+        .sample_rate
+        .as_deref()
+        .and_then(|s| s.parse::<u32>().ok());
     Ok(AudioStreamInfo {
-        codec_name: stream.codec_name.clone(),
-        sample_rate: stream.sample_rate,
+        codec_name,
+        sample_rate,
         channels: stream.channels,
     })
 }

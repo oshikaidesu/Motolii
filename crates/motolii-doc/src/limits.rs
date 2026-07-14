@@ -249,7 +249,16 @@ fn check_group(
 fn check_clip(clip: &Clip, path: &str, limits: &ResourceLimits) -> Result<(), ResourceLimitError> {
     check_envelope(&clip.envelope, path, limits)?;
     match &clip.source {
-        ClipSource::Asset { .. } => Ok(()),
+        ClipSource::Asset { audio, .. } => {
+            for (i, comp) in audio.iter().enumerate() {
+                check_param(
+                    &comp.gain,
+                    &format!("{path}.source.audio[{i}].gain"),
+                    limits,
+                )?;
+            }
+            Ok(())
+        }
         ClipSource::Plugin {
             plugin_id,
             params,

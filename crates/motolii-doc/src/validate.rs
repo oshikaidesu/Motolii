@@ -135,6 +135,11 @@ pub enum DocumentError {
     VideoComponentKindMismatch { layer_id: u64 },
     #[error("audio component[{index}] stream.kind must be audio (layer {layer_id})")]
     AudioComponentKindMismatch { layer_id: u64, index: usize },
+    /// AG-1: decode/exportがvideo ordinal 0のみ。非0を黙ってv:0へ落とさない。
+    #[error(
+        "video stream ordinal {ordinal} is not supported yet (layer {layer_id}); only ordinal 0 is drawable in AG-1"
+    )]
+    UnsupportedVideoStreamOrdinal { layer_id: u64, ordinal: u32 },
 }
 
 /// A8/D2: `EffectInstance.id`/`DocKeyframe.id`を含む文書が宣言すべき最小`min_reader_version`。
@@ -339,6 +344,12 @@ fn validate_clip(
             if let Some(video) = video {
                 if video.stream.kind != StreamKind::Video {
                     return Err(DocumentError::VideoComponentKindMismatch { layer_id });
+                }
+                if video.stream.ordinal != 0 {
+                    return Err(DocumentError::UnsupportedVideoStreamOrdinal {
+                        layer_id,
+                        ordinal: video.stream.ordinal,
+                    });
                 }
             }
             for (index, comp) in audio.iter().enumerate() {
@@ -795,7 +806,12 @@ fn collect_stable_ids_item(
         TrackItem::Clip(clip) => {
             collect_stable_ids_envelope(&clip.envelope, seen, max_observed)?;
             match &clip.source {
-                ClipSource::Asset { .. } => Ok(()),
+                ClipSource::Asset { audio, .. } => {
+                    for comp in audio {
+                        collect_stable_ids_param(&comp.gain, seen, max_observed)?;
+                    }
+                    Ok(())
+                }
                 ClipSource::Plugin { params, .. } => {
                     for param in params.values() {
                         collect_stable_ids_param(param, seen, max_observed)?;

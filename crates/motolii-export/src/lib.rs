@@ -484,9 +484,16 @@ fn collect_video_assets_from_items(items: &[TrackItem], found: &mut Option<Asset
     for item in items {
         match item {
             TrackItem::Clip(clip) => {
-                if let motolii_doc::ClipSource::Asset { asset, .. } = clip.source {
-                    if found.is_none() {
-                        *found = Some(asset);
+                // audio-only(video: None)は解像度候補にしない。ordinal≠0はvalidate拒否済みでも
+                // export単体経路で黙ってv:0へ落とさないようスキップする(AG-1 review)。
+                if let motolii_doc::ClipSource::Asset {
+                    asset,
+                    video: Some(video),
+                    ..
+                } = &clip.source
+                {
+                    if video.stream.ordinal == 0 && found.is_none() {
+                        *found = Some(*asset);
                     }
                 }
             }
@@ -534,6 +541,62 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, ExportError::InvalidRequest(_)));
+    }
+
+    #[test]
+    fn collect_video_assets_skips_leading_audio_only_clip() {
+        use motolii_doc::{
+            AudioComponent, Clip, ClipSource, Document, ItemEnvelope, Track, TrackItem,
+            VideoComponent,
+        };
+
+        let mut doc = Document::new_v1();
+        let audio_asset = doc.assets.allocate("sfx", "audio/wav", "h-audio").unwrap();
+        let video_asset = doc.assets.allocate("bg", "video/mp4", "h-video").unwrap();
+        let audio_layer = doc.layers.allocate("audio").unwrap();
+        let video_layer = doc.layers.allocate("video").unwrap();
+        let track = doc.track_ids.allocate("V1").unwrap();
+        doc.tracks.push(Track {
+            id: track,
+            items: vec![
+                TrackItem::Clip(Clip {
+                    envelope: ItemEnvelope::new(audio_layer),
+                    start: RationalTime::ZERO,
+                    duration: RationalTime::try_new(1, 1).unwrap(),
+                    time_map: TimeMap::default(),
+                    source: ClipSource::Asset {
+                        asset: audio_asset,
+                        video: None,
+                        audio: vec![AudioComponent::ordinal(0)],
+                    },
+                }),
+                TrackItem::Clip(Clip {
+                    envelope: ItemEnvelope::new(video_layer),
+                    start: RationalTime::ZERO,
+                    duration: RationalTime::try_new(1, 1).unwrap(),
+                    time_map: TimeMap::default(),
+                    source: ClipSource::Asset {
+                        asset: video_asset,
+                        video: Some(VideoComponent::ordinal(0)),
+                        audio: Vec::new(),
+                    },
+                }),
+            ],
+        });
+
+        let mut found = None;
+        collect_video_assets_from_items(&doc.tracks[0].items, &mut found);
+        assert_eq!(
+            found,
+            Some(video_asset),
+            "leading audio-only clip must not become the export resolution source"
+        );
+
+        // 順序を入れ替えても同じvideo assetを選ぶ。
+        doc.tracks[0].items.swap(0, 1);
+        let mut found_swapped = None;
+        collect_video_assets_from_items(&doc.tracks[0].items, &mut found_swapped);
+        assert_eq!(found_swapped, Some(video_asset));
     }
 
     #[test]

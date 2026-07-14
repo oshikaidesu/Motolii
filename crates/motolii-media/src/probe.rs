@@ -104,7 +104,15 @@ struct FfprobeStream {
     #[serde(default)]
     tags: FfprobeTags,
     #[serde(default)]
+    disposition: FfprobeDisposition,
+    #[serde(default)]
     side_data_list: Vec<FfprobeSideData>,
+}
+
+#[derive(Deserialize, Default)]
+struct FfprobeDisposition {
+    #[serde(default)]
+    attached_pic: i64,
 }
 
 #[derive(Deserialize, Default)]
@@ -174,6 +182,10 @@ pub fn probe_container(path: impl AsRef<Path>) -> Result<ContainerInfo> {
     for stream in &parsed.streams {
         match stream.codec_type.as_deref() {
             Some("video") => {
+                // album artはvideo ordinalに数えず、厳格検証にも載せない。
+                if stream.disposition.attached_pic != 0 {
+                    continue;
+                }
                 let ordinal = video_streams.len() as u32;
                 video_streams.push(parse_video_stream(stream, ordinal, format_duration)?);
             }
