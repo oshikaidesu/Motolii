@@ -168,8 +168,10 @@ mod tests {
             std::env::temp_dir().join(format!("motolii-media-stderr-flood-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let fake_ffmpeg = dir.join("fake-ffmpeg");
+        // 一時ファイルへ書いてsync→renameし、Linuxの ETXTBSY(CIフレーク)を避ける。
+        let tmp = dir.join("fake-ffmpeg.tmp");
         std::fs::write(
-            &fake_ffmpeg,
+            &tmp,
             "#!/bin/sh\n\
              cat >/dev/null\n\
              i=0\n\
@@ -180,7 +182,13 @@ mod tests {
              exit 0\n",
         )
         .unwrap();
-        std::fs::set_permissions(&fake_ffmpeg, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755)).unwrap();
+        {
+            use std::io::Write;
+            let mut f = std::fs::OpenOptions::new().write(true).open(&tmp).unwrap();
+            f.sync_all().unwrap();
+        }
+        std::fs::rename(&tmp, &fake_ffmpeg).unwrap();
 
         let desc = FrameDesc::packed(4, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false);
         let out = dir.join("out.mp4");
