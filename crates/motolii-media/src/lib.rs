@@ -11,6 +11,7 @@
 
 mod decode;
 mod encode;
+mod mux;
 mod probe;
 
 use std::io::Read;
@@ -18,6 +19,10 @@ use std::process::Command;
 
 pub use decode::{read_frame_at, FrameReader};
 pub use encode::Encoder;
+pub use mux::{
+    audio_codec_allows_stream_copy, choose_audio_encode_mode, mux_soundtrack, probe_audio,
+    AudioEncodeMode, AudioStreamInfo, SoundtrackMuxReport, SoundtrackMuxRequest,
+};
 pub use probe::{probe, MediaInfo};
 
 #[derive(Debug, thiserror::Error)]
@@ -32,6 +37,10 @@ pub enum MediaError {
     RationalTime(#[from] motolii_core::RationalTimeError),
     #[error("invalid start frame: {0}")]
     InvalidStartFrame(i64),
+    #[error("soundtrack start_offset must be >= 0, got {0:?}")]
+    InvalidStartOffset(motolii_core::RationalTime),
+    #[error("soundtrack master_gain must be finite and in [0, 1], got {0}")]
+    InvalidMasterGain(f64),
     #[error("encoder expects RGBA input, got {0:?}")]
     UnsupportedEncoderFormat(motolii_core::PixelFormat),
     #[error("frame size mismatch: expected {expected} bytes, got {got}")]
