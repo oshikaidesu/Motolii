@@ -696,6 +696,7 @@ dependencies = [
  "cpal",
  "motolii-core",
  "motolii-doc",
+ "motolii-eval",
  "motolii-testkit",
  "rubato",
  "symphonia",

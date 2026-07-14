@@ -20,8 +20,8 @@ pub struct MixSource {
     pub timeline_duration: RationalTime,
     /// clip_local → source 時刻(varispeed含む)。
     pub time_map: TimeMap,
-    /// linear gain(有限・>=0)。DocParam評価後のスカラーを渡す。
-    /// linear gain。Const / Keyframes(F64)をsample時刻で評価する。
+    /// linear gain。Const(F64) / Keyframes(F64)をsample時刻で評価する
+    /// (`DocKeyframeTrack::eval`正本。Data/LookAt等は拒否)。
     pub gain: motolii_doc::DocParam,
     pub out_of_range: AudioOutOfRange,
     pub enabled: bool,
@@ -136,57 +136,22 @@ fn local_for_gain(source: &MixSource, timeline_t: RationalTime) -> Result<Ration
 
 fn eval_gain_at(param: &motolii_doc::DocParam, t: RationalTime) -> Result<f64> {
     use motolii_doc::{DocParam, DocValue};
-    match param {
-        DocParam::Const(DocValue::F64(v)) => {
-            if v.is_finite() && *v >= 0.0 {
-                Ok(*v)
-            } else {
-                Err(AudioError::InvalidGain { gain: *v })
-            }
-        }
-        DocParam::Keyframes(track) => {
-            let keys = track.keys();
-            if keys.is_empty() {
-                return Err(AudioError::InvalidGain { gain: f64::NAN });
-            }
-            if t <= keys[0].t {
-                return gain_from_value(&keys[0].value);
-            }
-            if t >= keys[keys.len() - 1].t {
-                return gain_from_value(&keys[keys.len() - 1].value);
-            }
-            for w in keys.windows(2) {
-                if t >= w[0].t && t <= w[1].t {
-                    let a = gain_from_value(&w[0].value)?;
-                    let b = gain_from_value(&w[1].value)?;
-                    let span = w[1]
-                        .t
-                        .try_sub(w[0].t)
-                        .map_err(|_| AudioError::InvalidMixRange)?;
-                    let delta = t.try_sub(w[0].t).map_err(|_| AudioError::InvalidMixRange)?;
-                    let u = if span == RationalTime::ZERO {
-                        0.0
-                    } else {
-                        delta.as_seconds_f64() / span.as_seconds_f64()
-                    };
-                    let g = a * (1.0 - u) + b * u;
-                    if g.is_finite() && g >= 0.0 {
-                        return Ok(g);
-                    }
-                    return Err(AudioError::InvalidGain { gain: g });
-                }
-            }
-            gain_from_value(&keys[keys.len() - 1].value)
-        }
-        _ => Err(AudioError::InvalidGain { gain: f64::NAN }),
-    }
-}
-
-fn gain_from_value(value: &motolii_doc::DocValue) -> Result<f64> {
-    match value {
-        motolii_doc::DocValue::F64(v) if v.is_finite() && *v >= 0.0 => Ok(*v),
-        motolii_doc::DocValue::F64(v) => Err(AudioError::InvalidGain { gain: *v }),
-        _ => Err(AudioError::InvalidGain { gain: f64::NAN }),
+    use motolii_eval::Value as EvalValue;
+    let raw = match param {
+        DocParam::Const(DocValue::F64(v)) => *v,
+        DocParam::Const(_) => return Err(AudioError::InvalidGain { gain: f64::NAN }),
+        // Hold/Bezier/Linearはキーフレーム正本(`DocKeyframeTrack::eval`)に委譲する。
+        DocParam::Keyframes(track) => match track.eval(t) {
+            EvalValue::F64(v) => v,
+            _ => return Err(AudioError::InvalidGain { gain: f64::NAN }),
+        },
+        // Data/LookAt/Follow/Vec2Axesは音声gainのAG-2範囲外。
+        _ => return Err(AudioError::InvalidGain { gain: f64::NAN }),
+    };
+    if raw.is_finite() && raw >= 0.0 {
+        Ok(raw)
+    } else {
+        Err(AudioError::InvalidGain { gain: raw })
     }
 }
 
@@ -333,7 +298,7 @@ mod tests {
         )
         .unwrap();
         let stereo_48 = PcmCache::from_interleaved(
-            vec![0.1, -0.1].repeat(480), // 0.01s @ 48000
+            [0.1, -0.1].repeat(480), // 0.01s @ 48000
             canonical_format(),
         )
         .unwrap();
@@ -429,5 +394,45 @@ mod tests {
         assert_eq!(&out[2..4], &[0.01, -0.01]);
         assert_eq!(&out[4..6], &[0.02, -0.02]);
         assert_eq!(&out[6..8], &[0.03, -0.03]);
+    }
+
+    #[test]
+    fn hold_gain_keyframes_follow_doc_eval() {
+        use motolii_doc::{DocKeyframe, DocKeyframeTrack, DocParam, DocValue, KeyframeId};
+        use motolii_eval::Interp;
+
+        // Hold区間の中点で線形補間(1.25)にならず 0.5 のまま — 正本evalと一致。
+        let mut track = DocKeyframeTrack::new();
+        track.insert(DocKeyframe {
+            id: KeyframeId::from_raw(0),
+            t: RationalTime::ZERO,
+            value: DocValue::F64(0.5),
+            interp: Interp::Hold,
+        });
+        track.insert(DocKeyframe {
+            id: KeyframeId::from_raw(1),
+            t: RationalTime::try_new(2, CANONICAL_SAMPLE_RATE as i64).unwrap(),
+            value: DocValue::F64(2.0),
+            interp: Interp::Hold,
+        });
+        let mid = RationalTime::try_new(1, CANONICAL_SAMPLE_RATE as i64).unwrap();
+        let expected = match track.eval(mid) {
+            motolii_eval::Value::F64(v) => v,
+            _ => panic!("expected f64"),
+        };
+        assert!((expected - 0.5).abs() < 1e-12);
+
+        let source = MixSource {
+            pcm: stereo_cache(vec![1.0, 1.0, 1.0, 1.0, 1.0, 1.0]),
+            timeline_start: RationalTime::ZERO,
+            timeline_duration: RationalTime::try_new(3, CANONICAL_SAMPLE_RATE as i64).unwrap(),
+            time_map: TimeMap::IDENTITY,
+            gain: DocParam::Keyframes(track),
+            out_of_range: AudioOutOfRange::Silence,
+            enabled: true,
+        };
+        let (out, _) = mix_audio(&[source], 1.0, 1, 1, None).unwrap();
+        assert!((out[0] as f64 - expected).abs() < 1e-6);
+        assert!((out[1] as f64 - expected).abs() < 1e-6);
     }
 }

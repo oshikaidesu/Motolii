@@ -48,11 +48,19 @@ impl AudioProgram {
                 ),
             ))?;
             let pcm = load_canonical_stream(&path, asset.content_hash.as_str(), 0, caches)?;
-            let duration = frames_to_time(pcm.frame_count())?;
+            let pcm_duration = frames_to_time(pcm.frame_count())?;
+            // start_offsetはソースin点。timeline尺は残り長(muxの `-ss` と一致)。
+            let timeline_duration = if st.start_offset >= pcm_duration {
+                return Err(AudioError::InvalidMixRange);
+            } else {
+                pcm_duration
+                    .try_sub(st.start_offset)
+                    .map_err(|_| AudioError::InvalidMixRange)?
+            };
             sources.push(MixSource {
                 pcm,
                 timeline_start: RationalTime::ZERO,
-                timeline_duration: duration,
+                timeline_duration,
                 time_map: TimeMap::constant_speed(st.start_offset, 1, 1)
                     .map_err(|_| AudioError::InvalidMixRange)?,
                 gain: motolii_doc::DocParam::const_f64(1.0),

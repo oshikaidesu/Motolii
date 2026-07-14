@@ -8,6 +8,7 @@ license.workspace = true
 thiserror.workspace = true
 motolii-doc.workspace = true
 motolii-core.workspace = true
+motolii-eval.workspace = true
 # D4契約: WAV/FLAC/Ogg-Vorbis/PCM(default)に加え、MV素材で使う楽曲コンテナ(MP3/AAC/AIFF/ALAC)を
 # 明示featureで追加する(docs/references.md「Symphonia」)。
 symphonia = { version = "0.6", default-features = false, features = [

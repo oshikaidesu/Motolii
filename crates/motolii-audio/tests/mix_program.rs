@@ -1,6 +1,7 @@
 //! AG-2完了条件: Document由来AudioProgram、MixProducer、seek非block、overlap不変。
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+#[allow(dead_code)] // 共有supportの未使用ヘルパーをこのテストでは参照しない
 mod support;
 
 use std::collections::HashMap;
@@ -59,9 +60,8 @@ fn soundtrack_and_clip_audio_mix_together() {
     let dir = tempfile_dir("ag2_mix");
     let bed = dir.join("bed.wav");
     let clip_wav = dir.join("clip.wav");
-    // 0.25 / 0.0 の定数ステレオ(PCM16 ≈ 0.25)
-    write_pcm16_wav(&bed, 48_000, 2, &vec![i16::MAX / 4, 0].repeat(480));
-    write_pcm16_wav(&clip_wav, 48_000, 2, &vec![0, i16::MAX / 4].repeat(480));
+    write_pcm16_wav(&bed, 48_000, 2, &[i16::MAX / 4, 0].repeat(480));
+    write_pcm16_wav(&clip_wav, 48_000, 2, &[0, i16::MAX / 4].repeat(480));
 
     let mut doc = Document::new_v1();
     doc.composition.duration = RationalTime::try_new(1, 1).unwrap();
@@ -160,6 +160,8 @@ fn mix_producer_feeds_ring_while_callback_only_reads() {
         fill_or_silence(&ring_cons, &mut buf, &counters);
         if buf.iter().any(|s| *s != 0.0) {
             heard = true;
+        }
+        if heard && (meter.snapshot().peak_l > 0.0 || meter.snapshot().peak_r > 0.0) {
             break;
         }
         thread::sleep(Duration::from_millis(1));
@@ -213,6 +215,14 @@ fn metering_snapshots_are_lock_free_under_updates() {
     let producer =
         MixProducer::spawn(Arc::clone(&program), ring_prod, 0, Some(Arc::clone(&meter))).unwrap();
 
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !meter.snapshot().clipped {
+        assert!(Instant::now() < deadline, "meter never observed clip");
+        let mut buf = vec![0.0f32; 64 * 2];
+        fill_or_silence(&ring_cons, &mut buf, &PlaybackCounters::default());
+        thread::sleep(Duration::from_millis(1));
+    }
+
     let mut max_ns = 0u64;
     for _ in 0..100 {
         let t0 = Instant::now();
@@ -236,6 +246,60 @@ fn gap_silence_is_not_ring_underrun() {
     // underflowカウンタはring経路のPlaybackCounters。mixの正規silenceとは別。
     let counters = PlaybackCounters::default();
     assert_eq!(counters.underrun_events(), 0);
+}
+
+#[test]
+fn soundtrack_start_offset_shortens_timeline_duration() {
+    let dir = tempfile_dir("ag2_offset");
+    let bed = dir.join("bed.wav");
+    // 480 frames @48k = 0.01s。先頭に大きい値、後半に小さい値。
+    let mut samples = Vec::new();
+    for i in 0..480 {
+        let v = if i < 240 { i16::MAX / 2 } else { i16::MAX / 8 };
+        samples.push(v);
+        samples.push(v);
+    }
+    write_pcm16_wav(&bed, 48_000, 2, &samples);
+
+    let mut doc = Document::new_v1();
+    let bed_id = AssetId::from_raw(0);
+    doc.assets
+        .insert(Asset {
+            id: bed_id,
+            name: "bed".into(),
+            asset_type: "audio/wav".into(),
+            content_hash: "sha256:bed-off".into(),
+            path_absolute: Some(bed.to_string_lossy().into()),
+            path_project_relative: None,
+            file_name: Some("bed.wav".into()),
+            size_bytes: None,
+            head_hash: None,
+            tail_hash: None,
+        })
+        .unwrap();
+    let offset = RationalTime::try_new(240, 48_000).unwrap(); // 半分
+    doc.soundtrack = Some(Soundtrack::try_new(bed_id, offset, 1.0).unwrap());
+
+    let mut caches = HashMap::new();
+    let program = AudioProgram::from_document(&doc, None, &mut caches).unwrap();
+    let src = &program.sources()[0];
+    assert_eq!(
+        src.timeline_duration,
+        RationalTime::try_new(240, 48_000).unwrap()
+    );
+
+    // timeline先頭は offset 以降のサンプル(=小さい値側)
+    let (out, report) = program.mix_audio(0, 1, None).unwrap();
+    assert!(
+        out[0].abs() < 0.2,
+        "expected post-offset quieter sample, got {}",
+        out[0]
+    );
+    // 尺を超えたら正規silence
+    let (past, report2) = program.mix_audio(240, 1, None).unwrap();
+    assert_eq!(&past[..2], &[0.0, 0.0]);
+    assert_eq!(report2.silence_frames, 1);
+    assert_eq!(report.silence_frames, 0);
 }
 
 fn tempfile_dir(name: &str) -> PathBuf {
