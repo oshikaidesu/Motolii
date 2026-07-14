@@ -9,6 +9,8 @@
 
 **GPU-resident rendering. Direct tools instead of setup rituals. Typed plugins. Local projects. One deterministic path from preview to export.**
 
+**Missing an effect? Describe it.** Motolii keeps its plugin contract small—typed parameters and GPU textures in/out—while the host generates the standard editing UI. Instead of spending weeks learning a large vendor SDK, an LLM can scaffold a plugin from the public contract and verify it with automated tests. Even a solo creator can grow the compositor around a particular project or style.
+
 Motolii is an open, inspectable, plugin-extensible compositor focused on making 3–5 minute music videos. It brings motion graphics, video, procedural shapes, text, effects, and 2.5D/3D assets into one composition with a single-song timeline.
 
 The project does not depend on a new compositing invention. Keyframes, easing, typed parameter links, render graphs, GPU textures, command-based editing, selective caches, 2D/3D projection, and plugins are all known techniques. The work is to compose them into a small, explicit, replaceable system without making historical workarounds part of the product model.
