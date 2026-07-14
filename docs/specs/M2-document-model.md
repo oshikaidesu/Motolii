@@ -1,7 +1,8 @@
 # M2: ドキュメントモデルとタイムライン
 
-ステータス: **段階発注可**([M2入場条件](../reviews/2026-07-11-M2-entry-gate.md)と人間決定は完了。**2026-07-13**: [#103決定パック](../reviews/2026-07-13-decision-pack-adoption.md)・**PathOp意味論表【決定】**・残小項目(Undo/ExportJob/Group/audio)採択。以後は原則コード依頼+受入。**2026-07-12**: D1-prelude・色契約・LayerId・時刻serde・duration半開・D1再分割・補間/変形意味論)
-着手条件: **タスク表の依存を満たした行から発注する**。Wave1(#126 D1f / #129 D4 / #130 D2)および#100・#101は**完了・main到達済み**。**Wave2完了**: D3(#136/#110)・D1i-4(#134/#107)・D1d(#135/#105)。**Wave3完了**: D1i-3(#108/#139+#141)・D1e(#104/#140)。**Transport方針【採択】**。**Wave4完了**: D4-FU(#147)・D6(#133)・**D7(#145)完了**(本PR)。**次発注可: D5(#144)**(D3+D4+D4-FU依存充足)。
+ステータス: **コア締結**(2026-07-14)。Document意味・Undo・参照・可搬性・評価順は自動テストで証明済み([完了宣言](../reviews/2026-07-14-m2-core-closure.md))。入場条件・決定パック・PathOp意味論は既存採択のまま。**残チケットはD5(#144)のみ**(Transport)。Param Pipeline / Element Domain / Constraint Graph は M2 blocker ではなく **PP-Gate**(M3前追跡)。
+着手条件: **Wave1〜4完了**(D1系/D2/D3/D4/D4-FU/D6/D7 および D1i・D1d/D1e main到達)。**次発注可: D5(#144)**(依存 D3+D4+D4-FU 充足)。Transport方針【採択】正本=[先例調査](../reviews/2026-07-14-d5-transport-prior-art.md)。
+
 ## 目的(退治する落とし穴)
 
 C-1(Undo後付け)、C-2(スキーマ進化)、B-1(音声・時間表現)、F-1(座標系)、F-2(所有権)、F-4(時間写像)。
