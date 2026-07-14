@@ -258,7 +258,7 @@ Issues and design discussions belong in GitHub Issues. Small, independently veri
 
 ## About the name
 
-**Motolii** (モトリー) comes from *motley*: varied parts forming one whole. The name matches the architecture—known techniques, non-destructive recipes, and specialized plugins composed around a small core.
+**Motolii** (モトリー) comes from *motley*: a varied, mismatched mixture of different colors, people, or parts forming one whole. The spelling deliberately passes that English word through a Japanese sound, then returns it to Roman letters without resolving cleanly back into either ordinary English or straightforward romanization—the final `lii` is intentional. The name is assembled, slightly crooked, and difficult to classify, like the project itself: known techniques, non-destructive recipes, and specialized plugins recomposed outside the conventions of the tools that produced them.
 
 ## License
 
