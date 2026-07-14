@@ -1,118 +1,248 @@
 # Motolii
 
 <p align="center">
-  <img src="docs/assets/exit_demo.gif" alt="M1 exit demo: video background with a red rectangle sliding right with cubic-bezier easing, rendered headlessly to mp4" width="960">
+  <img src="docs/assets/exit_demo.gif" alt="Motolii M1 exit demo: a video background with a shape animated by cubic-bezier easing and exported to mp4" width="960">
 </p>
-<p align="center"><em>M1 exit demo — <code>cargo run -p oc-cli -- export-project</code> on <a href="samples/exit-demo/">samples/exit-demo/</a></em></p>
+<p align="center"><em>M1 exit demo — a typed project recipe rendered headlessly to mp4</em></p>
 
-> **A GPU-native, plugin-first motion-graphics compositor in Rust — built for music-video (MV) creation.**
-> _Early stage: building in the open, looking for collaborators._
+> **An open, inspectable, plugin-extensible motion-graphics compositor for music-video creation.**
 
-After Effects is powerful but heavy, and its extension gateway is narrow (C++ SDK, fragile JS expressions, limited plugin UI). This project is a bet on a different foundation: keep pixels resident on the GPU, make the plugin boundary dead-simple (so effects are easy to write — even by an LLM), and stay focused on getting a 3–5 minute MV out the door.
+Motolii starts from a deliberately unglamorous thesis:
 
-**This is not** a general NLE, a Nuke-style VFX compositor, or a color-grading suite. It is a motion-graphics tool: keyframes, easing, procedural overlays, 2.5D/3D (glTF) + video in one composite, and a single-song MV export.
+> **Compositing does not need another black box or a new fundamental invention. The techniques already exist. The work is to compose them into a small, explicit, replaceable system.**
 
----
+Keyframes, easing, typed parameter links, render graphs, GPU textures, command-based editing, selective caches, 2D/3D projection, and plugins are all known techniques. Motolii combines them without making historical workarounds part of the product model.
 
-## Status
+It is built for making a 3–5 minute MV: motion graphics, video, procedural shapes, text, effects, and 2.5D/3D assets in one composition, with a single-song timeline and a deterministic final export.
 
-Pre-1.0, pre-first-release. The engine core is coming together (Rust workspace + CI + golden-image tests); the UI is intentionally not started yet (see roadmap). We are working toward a first demo:
+Pre-1.0, under active development. The core is usable from the CLI; the desktop editing experience is the next major layer.
 
-**Current goal (M1 "exit demo"):** render a simple 2-layer composite from a project file — a real video background + a rectangle shape sliding right with easing — out to an mp4, from the CLI. No UI yet.
+## Simple is not the same as beginner-only
 
-## Open & local — and staying that way
+Professional software often mistakes operational complexity for professional power. Motolii treats every unnecessary decision, setup ritual, hidden controller, and panel round-trip as lost creative attention.
 
-**No account. No online license. No acquisition rug-pull.** It runs fully offline, and the MIT/Apache-2.0 license means it can always be forked and continued.
+The goal is not to remove advanced control. It is to make common intent direct while keeping the underlying meaning inspectable.
 
-This matters right now: several "free" After Effects alternatives went free _via acquisition_ and come with strings — Cavalry (acquired by Canva) requires signing in with a Canva account; Autograph's maker Left Angle wound down entirely (site and all) and it now runs through the Maxon App with account-based license assignment (and dropped Linux). A community already burned by subscriptions is right to be wary.
+```text
+Direct operation ─┐
+Named tool        ├─→ typed document meaning
+Advanced editor  ─┘
+```
 
-We take the opposite bet: a permissive, local, no-account tool that can't be taken away or gated later. The honest flip side is sustainability — OSS projects can die from _lack_ of maintainers (see Natron). Our answer has two parts: (1) the license itself — MIT/Apache and fully local, so it can be forked and carried on by anyone; and (2) **LLM-driven development** (see below), which widens the contributor gateway instead of depending on a funded core team.
+A canvas drag, a named tool, and an Advanced control must edit the same document semantics. Moving from the simple path to the advanced path should never require rebuilding the work.
 
-## LLM-driven development
+Examples of this direction:
 
-This project is built to be developed and extended primarily with LLMs, and that is a deliberate sustainability strategy — not an afterthought.
+- relative movement as a direct operation, not a Null/expression ritual;
+- depth placement as a visible Depth Rail, not repeated Z-field bookkeeping;
+- typed Follow/LookAt relationships, not string expressions;
+- explicit effect and depth scopes, not invisible adjacency rules;
+- interval easing controls, not mandatory graph surgery;
+- plugin parameters that always have a host-generated editing fallback.
 
-- **The plugin boundary is intentionally simple** (`texture in + params → texture out`, params auto-generate their UI) specifically so that effects and extensions are easy for an LLM to write. Extending the tool shouldn't require learning a heavy C++ SDK or fragile scripting — describe the effect, get a plugin.
-- **Development is spec-driven and self-verifying**: each task has an automatic pass/fail (`cargo test` / golden images), which is exactly what makes autonomous/LLM-assisted contribution safe and parallelizable. See [`AGENTS.md`](AGENTS.md) and [`docs/specs/`](docs/specs/).
-- **Why this de-risks funding**: the classic OSS failure is "the developer(s) ran out of time/money." By lowering the barrier to author plugins and core changes with an LLM, the _developer_ gateway widens the same way we widen the _user_ gateway — the project doesn't hinge on funding a dedicated dev team to stay alive and growing.
+Complex expression and plugin escape hatches can exist, but repeated user recipes are evidence that the host should learn a smaller, named primitive.
 
-## Coming from the Japanese scene (AviUtl)
+## Known parts, deliberately composed
 
-I'm a creator from the Japanese sphere, where the de-facto free After Effects alternative isn't Cavalry or Autograph — it's **AviUtl**, a beloved, community-sustained free tool that has been a backbone of Japanese motion-graphics / MV / vtuber work for well over a decade. In 2025 it was reborn as a from-scratch 64-bit rewrite, **AviUtl2 (ExEdit2)**.
+Motolii does not claim to have invented compositing. It respects and learns from After Effects, AviUtl, Cavalry, Autograph, Alight Motion, Nuke, Blender, game engines, DAWs, and many smaller tools.
 
-AviUtl is living proof of the thesis behind this project: a free, local, plugin/script-extensible tool, kept alive by its community, can outlast commercial churn. That spirit is exactly what we build on. But it also shows the **limit** of that model — and that limit is the crux everything snags on:
+The useful question is not “which existing application should be cloned?” It is:
 
-- **It isn't actually open source (the crux).** AviUtl/AviUtl2 ship a *Plugin SDK*, but the **core is closed and single-author**. The community can bolt plugins on the outside; it can never fix or advance the core. The proof: after v1.10 in 2019 the core sat **frozen for ~6 years** until the 2025 rewrite — people wanted improvements but couldn't touch it. AviUtl2 repeats the same single-author, closed-core pattern. This is the one thing plugins can never solve, and it's exactly what an **MIT/Apache, forkable core** is for: if we stop, anyone can continue it.
+> Which proven meaning belongs in the host, which expression belongs in a plugin, and which historical workaround should disappear entirely?
 
-And even setting that aside, AviUtl2 (beta50, 2026) leaves gaps this project targets — and yes, I know these firsthand:
+Ideas and public semantics can be studied and recombined. Code, assets, trademarks, and proprietary implementation details remain separate and are not copied.
 
-- **Windows-only** (Win10 64-bit; requires AVX2 + DirectX 11.3 + an ROV-capable GPU) — no macOS/Linux, and older hardware is locked out. Our Rust/wgpu core is cross-platform _by design_ (Vulkan/Metal/DX12); v1 targets one OS first, but the architecture isn't Win32/DirectX-bound.
-- **No real 3D compositing** — native support is static OBJ only (no camera/lights/bones); its own docs recommend rendering serious 3D in Blender and importing. We put glTF meshes and video in one composite.
-- **Whole-frame caching** (AE-style), not selective caching — we cache by node × time-range × params, so a small change doesn't re-render everything.
-- **No analysis-driven generative** (frame-wide color/tracking → parameters). AviUtl's tracking is point/region-based via plugins. We reserve this and ship it in a final phase.
-- **Plugin authoring** is a native C ABI / Lua scripts, and the ecosystem was reset (32-bit plugins don't carry over). We aim for a dead-simple, LLM-writable plugin boundary instead.
-- Still **beta / occasionally unstable**, with a largely Japanese-centric ecosystem.
+The resulting system is intentionally conventional at its foundations:
 
-None of this is a knock on AviUtl — it's a remarkable project and a direct inspiration. It's a map of where a modern, **open**, GPU-native, cross-platform-capable, LLM-extensible foundation can go next. The single biggest difference we insist on: the **core is open and forkable**, so it can never be frozen behind one person again.
+- a serializable document recipe;
+- typed values and deterministic evaluation at time `t`;
+- a render graph operating on GPU-resident textures;
+- one preview/export evaluation path;
+- command-based edits with Undo and journaling;
+- plugins behind narrow, testable contracts;
+- caches that are disposable and never become document truth.
 
-## Why this architecture
+The value is in the composition of these parts and in the removal of accidental complexity between them.
 
-- **Lightness is structural, not a tweak.** Pixels live in GPU (wgpu) textures and are never bounced to the CPU. The dominant cost in compositing is memory bandwidth × round-trips, not resolution — so we minimize round-trips by construction. See [`docs/performance-model.md`](docs/performance-model.md).
-- **Plugin-first, low barrier.** Effects are a simple `texture in + params → texture out` boundary; parameter panels are auto-generated from the plugin's declared params. The narrow, expensive plugin gateway is exactly what we think drives most feature complaints about AE — see [`docs/ae-pain-points.md`](docs/ae-pain-points.md).
-- **Deterministic core.** `render_frame(t, Quality)` is a pure function; preview and export go through the same path (no "looks different when exported" bug). Document state is a single serde data structure edited by commands (undo/journal for free), read-only snapshots for rendering.
-- **Learn from the graveyard.** Design decisions are cross-checked against why similar projects stalled (Olive rewrite, Natron's cache/threading deadlocks). See the pitfall catalog in [`docs/pitfalls-and-roadmap.md`](docs/pitfalls-and-roadmap.md).
+## A small core is a long-term capability
 
-## Tech stack (decided)
+Motolii uses Rust, wgpu, WGSL, Slint, and ffmpeg today. Those are implementation choices, not project-file semantics or articles of faith.
 
-| Layer | Choice |
+```mermaid
+flowchart LR
+    C["Commands / Undo"] --> D["Document recipe"]
+    D --> E["Typed evaluation f(t)"]
+    E --> R["Render graph"]
+    R --> G["GPU-resident textures"]
+    G --> O["Preview / Export"]
+    P["Typed plugins"] --> E
+    P --> R
+```
+
+The core keeps a few boundaries explicit:
+
+- pixels remain in GPU textures while being processed;
+- frame format, color space, alpha, and dimensions are described explicitly;
+- color conversion has one owner and one final boundary;
+- `render_frame(t, Quality)` is deterministic;
+- preview and export use the same evaluation function;
+- the document stores recipes, while proxies, analysis, simulation results, and bakes remain replaceable caches;
+- vendor- and OS-specific GPU APIs do not enter the plugin contract.
+
+If a better GPU abstraction, rasterizer, cache strategy, or accelerator arrives, it should be possible to replace an implementation layer without redefining what a Motolii project means. Replacement is not assumed to be free—it still requires evidence, migration where necessary, and protected golden tests—but the architecture gives it a bounded place to happen.
+
+This is the internal form of the same simplicity promised to users: fewer hidden meanings, fewer scattered responsibilities, and less knowledge that must be reconstructed before making a change.
+
+## Extensible without becoming fragmented
+
+“Plugin-first” does not mean pushing product responsibility onto plugin authors.
+
+The host owns the meanings that must remain coherent across an entire project:
+
+- time and parameter evaluation;
+- coordinates, transforms, camera, and depth policy;
+- ownership, references, dependency order, and invalidation;
+- effect scope and compositing order;
+- commands, Undo, persistence, and migration;
+- missing-plugin diagnostics and export strictness;
+- preview/export equivalence.
+
+Plugins add expressions inside those boundaries: effects, generators, analyzers, simulations, text systems, materials, and specialized workflows. They do not silently mutate the document, search layers by name, create hidden controllers, or keep undeclared render state.
+
+Repeated community solutions can graduate deliberately:
+
+```text
+user plugin / recipe
+        ↓ repeated need
+validated preset / first-party plugin
+        ↓ stable meaning and tests
+host primitive / direct tool
+```
+
+This lets Motolii grow without turning every workaround into permanent core complexity.
+
+## Open, local, and inspectable
+
+- No account or online license is required.
+- Projects and rendering work locally.
+- The core is available under permissive MIT/Apache-2.0 terms.
+- The project can be forked and continued.
+- Design decisions, rejected alternatives, milestone specifications, and implementation guards are documented in the repository.
+
+Open source alone does not make a system understandable. Motolii also aims to make value origins, scopes, dependencies, fallbacks, plugin requirements, and recomputation reasons visible rather than burying them in a black box.
+
+## Scope
+
+Motolii is a motion-graphics compositor focused on music videos.
+
+It is intended to provide:
+
+- keyframes, interval easing, procedural and data-driven parameters;
+- raster video and vector shapes in the same composition;
+- groups, masks, effects, blending, and non-destructive recipes;
+- a shared XYZ world for 2D cards and glTF assets;
+- explicit layer-order and depth-occlusion policies;
+- one soundtrack, waveform/BPM-oriented editing, and final audio mux;
+- extensible effects and generators through typed plugin contracts.
+
+It is not trying to become:
+
+- a general-purpose NLE;
+- a color-grading suite;
+- a Nuke-style deep VFX compositor;
+- a full 3D content-creation package;
+- a universal node-programming environment.
+
+Heavy asset creation, character rigging, simulation authoring, grading, and specialist VFX can remain in dedicated tools and arrive as prepared assets or plugins.
+
+## Current status
+
+| Milestone | State | Result |
+|---|---|---|
+| M0 | Complete | GPU/UI, decode, and rational-time risks measured |
+| M1 | Complete and internally frozen | Video → typed animation → GPU composite → mp4 vertical slice |
+| M2 | Final integration | Document model, validation, commands/Undo, audio transport/mux, masks, portability |
+| M3 | Next | Desktop UI, timeline, direct tools, plugin parameter panels |
+| M4 | Planned | Selective cache, proxies, bake integration |
+| M5 | Planned | Shared 2D/3D world, depth tools, post-processing, text foundation |
+
+The M1 demo above is generated through the real export path and protected by automated tests. Current milestone truth and task dependencies live under [`docs/specs/`](docs/specs/); this README intentionally stays at project level.
+
+## Architecture and technology
+
+| Layer | Current choice |
 |---|---|
-| Render core | Rust + [wgpu](https://github.com/gfx-rs/wgpu) (VRAM-resident) |
-| UI (planned) | [Slint](https://slint.dev) (wgpu zero-copy texture embedding, Japanese IME) — not started yet |
-| Decode / encode | ffmpeg as a sidecar process (raw YUV in, mp4 out) |
+| Language | Rust |
+| Render core | [wgpu](https://github.com/gfx-rs/wgpu) + WGSL, GPU-resident textures |
+| Vector rendering | Vello/usvg boundary |
+| UI | [Slint](https://slint.dev), sharing the compositor's wgpu device |
+| Decode / encode | ffmpeg sidecar process, raw tagged frames at the boundary |
+| Project model | serde data, stable IDs, typed validation, command edits |
+| Verification | Rust tests, property tests, semantic and image goldens |
 | Structure | Cargo workspace (`crates/motolii-*`) |
 
-## Design docs (start here)
+See [`docs/performance-model.md`](docs/performance-model.md) for the memory-bandwidth model and [`docs/interaction-simplicity-model.md`](docs/interaction-simplicity-model.md) for how direct, tool, and advanced interactions converge on the same meaning.
 
-The design is documented in depth — this is the fastest way to understand the direction and to find where to help.
+## Design and development model
 
-- [`docs/README.md`](docs/README.md) — reading guide & glossary
-- [`docs/concept.md`](docs/concept.md) — what it is / isn't, the decision ledger
-- [`docs/pitfalls-and-roadmap.md`](docs/pitfalls-and-roadmap.md) — pitfall catalog + roadmap (M0–M5) + freeze gate
-- [`docs/performance-model.md`](docs/performance-model.md) — why it can be lighter than AE
+Motolii is specification-driven and verification-heavy so that both human and AI-assisted contributors can work in parallel without inventing incompatible local meanings.
 
-## Build & run (early)
+- Each implementation task has an explicit dependency and an automatic completion condition.
+- Public boundaries are proved with reference implementations before being frozen.
+- Semantic goldens protect meaning; image goldens protect output.
+- Document changes require validation, migration analysis, and a single-writer command path.
+- Plugins are tested for determinism and GPU-boundary conformance.
 
-Requires a recent Rust toolchain (pinned in `rust-toolchain.toml`), `ffmpeg`/`ffprobe` (v6+), and a Vulkan/Metal/DX12 GPU (CI runs on software Vulkan / lavapipe).
+Start here:
+
+- [`docs/README.md`](docs/README.md) — reading order and glossary
+- [`docs/concept.md`](docs/concept.md) — project definition and decision ledger
+- [`docs/interaction-simplicity-model.md`](docs/interaction-simplicity-model.md) — simplicity as user and implementation performance
+- [`docs/pitfalls-and-roadmap.md`](docs/pitfalls-and-roadmap.md) — failure catalog and roadmap
+- [`docs/specs/`](docs/specs/) — milestone specifications and task contracts
+- [`AGENTS.md`](AGENTS.md) — contribution rules for human and AI agents
+
+## Build and run
+
+Requirements:
+
+- the Rust toolchain pinned in `rust-toolchain.toml`;
+- `ffmpeg` and `ffprobe` 6 or later;
+- Vulkan, Metal, or DX12 graphics support. CI also exercises software Vulkan/lavapipe.
 
 ```sh
 cargo test --workspace
-# Render a project to mp4 (see docs/specs/M1-vertical-slice.md for the JSON schema)
+
+# Render a project to mp4.
 cargo run -p motolii-cli -- export-project path/to/project.json
 ```
 
-## Looking for collaborators
+## Contributing
 
-This is designed for parallel, spec-driven, **LLM-assisted** development (each task has an automatic pass/fail via `cargo test` / golden images, so an LLM can implement a ticket and prove it). If you like Rust + GPU + motion graphics — or just want to point an LLM at a good-first-issue — there is a clear on-ramp:
+Contributions are welcome in rendering, document semantics, tests, tooling, UI, plugins, documentation, and prior-art review.
 
-- Read [`docs/README.md`](docs/README.md), then the milestone specs under [`docs/specs/`](docs/specs/).
-- Contributor conventions and the absolute rules live in [`AGENTS.md`](AGENTS.md) (applies to human and AI contributors alike).
-- Good areas to help early: render nodes & shapes, golden-image test coverage, ffmpeg/decoder robustness, docs. (The UI is deliberately later and community-driven.)
+Before implementing a task:
 
-Issues / discussion: please open a GitHub issue. (A `good first issue` set is being curated from the backlog.)
+1. Read [`docs/README.md`](docs/README.md).
+2. Read the relevant milestone specification, including its implementation-guard section.
+3. Read [`AGENTS.md`](AGENTS.md).
+4. Preserve the protected tests and existing user changes.
+
+Issues and design discussions belong in GitHub Issues. Small, independently verifiable pull requests are preferred.
 
 ## About the name
 
-**Motolii** (モトリー) — from _motley_, patchwork. Spelled _motolii_ so romaji reads _mo-to-lii_. Same shape as the tool: thin core, plugins, non-destructive recipes, collage.
+**Motolii** (モトリー) comes from *motley*: varied parts forming one whole. The name matches the architecture—known techniques, non-destructive recipes, and specialized plugins composed around a small core.
 
 ## License
 
-Licensed under either of
+Licensed under either:
 
-- Apache License, Version 2.0 ([`LICENSE-APACHE`](LICENSE-APACHE))
-- MIT license ([`LICENSE-MIT`](LICENSE-MIT))
+- Apache License 2.0 ([`LICENSE-APACHE`](LICENSE-APACHE)); or
+- MIT ([`LICENSE-MIT`](LICENSE-MIT)),
 
-at your option. This permissive dual license (the Rust ecosystem standard) keeps the ecosystem free to build on — including selling commercial plugins.
+at your option.
 
-Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+Unless explicitly stated otherwise, contributions submitted for inclusion are dual-licensed under the same terms.
 
-**Dependency note:** third-party dependencies carry their own licenses. In particular Slint (planned UI) is used under its royalty-free desktop license (attribution required; verify terms before distribution), and ffmpeg is invoked as an external process (not linked). See [`docs/references.md`](docs/references.md).
+Third-party dependencies retain their own licenses. Slint and ffmpeg have separate distribution considerations; see [`docs/references.md`](docs/references.md) and verify applicable terms before release.
