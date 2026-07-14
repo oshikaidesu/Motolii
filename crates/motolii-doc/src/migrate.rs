@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use motolii_core::{RationalTime, TimeMap};
 use motolii_eval::DataTracks;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use thiserror::Error;
 
 use crate::limits::{check_document_resource_limits, ResourceLimitError, ResourceLimits};
@@ -171,6 +171,12 @@ pub fn count_document(doc: &Document) -> DocumentCounts {
             count_item(item, &mut clip_count, &mut keyframe_count);
         }
     }
+    // D1l: effect paramsはUseではなくDefinition台帳が持つ(1回だけ数える。共有でも重複しない)。
+    for def in &doc.effect_definitions {
+        for param in def.params.values() {
+            count_param(param, &mut keyframe_count);
+        }
+    }
     DocumentCounts {
         track_count: doc.tracks.len(),
         clip_count,
@@ -214,11 +220,7 @@ fn count_envelope(env: &crate::schema::ItemEnvelope, keys: &mut usize) {
     count_param(&env.transform.scale, keys);
     count_param(&env.transform.rotation, keys);
     count_param(&env.opacity, keys);
-    for effect in &env.effects {
-        for param in effect.params.values() {
-            count_param(param, keys);
-        }
-    }
+    // D1l: EffectUseはid参照のみ。paramsは`count_document`側でDefinition台帳を1回だけ数える。
 }
 
 fn count_vector_recipe(recipe: &VectorRecipe, keys: &mut usize) {
@@ -343,6 +345,17 @@ fn count_json_document(root: &Value) -> DocumentCounts {
         if let Some(items) = track.get("items").and_then(|i| i.as_array()) {
             for item in items {
                 count_json_item(item, &mut clip_count, &mut keyframe_count);
+            }
+        }
+    }
+    // D1l: 旧inline effect.paramsはenvelope側で数える(count_json_envelope)。
+    // 既に新形式(root.effect_definitions)のドキュメントはこちらで1回だけ数える。
+    if let Some(defs) = root.get("effect_definitions").and_then(|d| d.as_array()) {
+        for def in defs {
+            if let Some(params) = def.get("params").and_then(|p| p.as_object()) {
+                for param in params.values() {
+                    count_json_param(Some(param), &mut keyframe_count);
+                }
             }
         }
     }
@@ -527,6 +540,21 @@ pub fn migrate_bytes_with_limits(
     let from_version = header.version;
 
     rewrite_legacy_shapes(&mut root, &mut steps)?;
+
+    // D1l: inline EffectInstance(plugin_id直書き)を EffectUse+EffectDefinition へ分離。
+    // 採番はinject_missing_stable_ids_jsonと同じnext_stable_idカウンタを共有する
+    // (先にここで進め、root側へ書き戻してから次段に渡す)。
+    let mut next_id = root
+        .get("next_stable_id")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    if inline_effects_to_definition_use(&mut root, &mut next_id)? {
+        steps.push("inline_effects_to_definition_use");
+        if let Value::Object(map) = &mut root {
+            map.insert("next_stable_id".into(), json!(next_id));
+        }
+    }
+
     if inject_missing_stable_ids_json(&mut root)? {
         steps.push("inject_stable_ids");
     }
@@ -540,10 +568,12 @@ pub fn migrate_bytes_with_limits(
     // そのときseedキーは意味上seed:u64へ落ちるので件数減少を許容しない(拒否)。
     assert_counts_preserved(before_counts, after_rewrite)?;
 
-    if steps.contains(&"inject_stable_ids") {
+    if steps.contains(&"inject_stable_ids") || steps.contains(&"inline_effects_to_definition_use") {
         bump_min_reader_for_nest_schema_change(&mut doc, LATEST_DOCUMENT_VERSION);
-    } else if doc_has_stable_ids(&doc) {
-        // 既にidを持つ旧JSONでもvalidateのmin_reader下限を満たす。
+    } else if doc_has_stable_ids(&doc) && doc.min_reader_version < LATEST_DOCUMENT_VERSION {
+        // 既にidを持つ旧JSONでもvalidateのmin_reader下限を満たす。すでに下限を満たす
+        // 文書(=再migrateのidempotent経路)ではstepを積まない — 差分ゼロをdid_migrate()に
+        // 正しく反映するため。
         bump_min_reader_for_nest_schema_change(&mut doc, LATEST_DOCUMENT_VERSION);
         if !steps.contains(&"bump_min_reader_for_stable_ids") {
             steps.push("bump_min_reader_for_stable_ids");
@@ -952,6 +982,157 @@ fn extract_seed_u64(seed: &Value) -> Option<u64> {
     None
 }
 
+/// D1l: 旧inline `EffectInstance`(envelope.effects内で`plugin_id`直書き)を
+/// `EffectUse{id,definition_id}` + `Document.effect_definitions`へ分離する。
+///
+/// 既に`{id, definition_id}`形式(=`definition_id`キーを持つ)は素通り(idempotent)。
+/// Use側の`id`は保持する(欠落していれば後段`inject_missing_stable_ids_json`が採番する)。
+fn inline_effects_to_definition_use(
+    root: &mut Value,
+    next: &mut u64,
+) -> Result<bool, MigrateError> {
+    let mut migrated = false;
+    let mut new_definitions: Vec<Value> = Vec::new();
+
+    if let Some(tracks) = root.get_mut("tracks").and_then(|t| t.as_array_mut()) {
+        for track in tracks.iter_mut() {
+            let Some(items) = track.get_mut("items").and_then(|i| i.as_array_mut()) else {
+                continue;
+            };
+            for item in items.iter_mut() {
+                if inline_effects_in_item(item, next, &mut new_definitions)? {
+                    migrated = true;
+                }
+            }
+        }
+    }
+
+    if !new_definitions.is_empty() {
+        let Value::Object(map) = root else {
+            return Err(MigrateError::NotAnObject);
+        };
+        match map
+            .get_mut("effect_definitions")
+            .and_then(|d| d.as_array_mut())
+        {
+            Some(arr) => arr.extend(new_definitions),
+            None => {
+                map.insert("effect_definitions".into(), Value::Array(new_definitions));
+            }
+        }
+    }
+    Ok(migrated)
+}
+
+fn inline_effects_in_item(
+    item: &mut Value,
+    next: &mut u64,
+    definitions: &mut Vec<Value>,
+) -> Result<bool, MigrateError> {
+    let kind = item
+        .get("kind")
+        .and_then(|k| k.as_str())
+        .unwrap_or("")
+        .to_string();
+    match kind.as_str() {
+        "clip" => {
+            if let Some(env) = item.get_mut("envelope") {
+                inline_effects_in_envelope(env, next, definitions)
+            } else {
+                Ok(false)
+            }
+        }
+        "group" => {
+            let mut migrated = false;
+            if let Some(env) = item.get_mut("envelope") {
+                if inline_effects_in_envelope(env, next, definitions)? {
+                    migrated = true;
+                }
+            }
+            if let Some(children) = item.get_mut("children").and_then(|c| c.as_array_mut()) {
+                for child in children.iter_mut() {
+                    if inline_effects_in_item(child, next, definitions)? {
+                        migrated = true;
+                    }
+                }
+            }
+            Ok(migrated)
+        }
+        _ => Ok(false),
+    }
+}
+
+fn inline_effects_in_envelope(
+    env: &mut Value,
+    next: &mut u64,
+    definitions: &mut Vec<Value>,
+) -> Result<bool, MigrateError> {
+    let mut migrated = false;
+    if let Some(effects) = env.get_mut("effects").and_then(|e| e.as_array_mut()) {
+        for effect in effects.iter_mut() {
+            if inline_effect_entry(effect, next, definitions)? {
+                migrated = true;
+            }
+        }
+    }
+    Ok(migrated)
+}
+
+/// 1件のeffectエントリを検査し、旧inline形式なら`{id, definition_id}`へ置き換える。
+/// 戻り値は「このエントリを変換したか」。
+fn inline_effect_entry(
+    effect: &mut Value,
+    next: &mut u64,
+    definitions: &mut Vec<Value>,
+) -> Result<bool, MigrateError> {
+    let Value::Object(map) = effect else {
+        return Ok(false);
+    };
+    if map.contains_key("definition_id") {
+        return Ok(false);
+    }
+    if !map.contains_key("plugin_id") {
+        return Ok(false);
+    }
+
+    let use_id = map.get("id").cloned();
+    let definition_id = allocate_stable(next)?;
+    let plugin_id = map.remove("plugin_id").unwrap_or(Value::Null);
+    let effect_version = map.remove("effect_version");
+    let enabled = map.remove("enabled");
+    let params = map.remove("params");
+    // idはUse側の識別子なので台帳(Definition)へは運ばない。残りは未知フィールド(F-9)。
+    let extra: Vec<(String, Value)> = map
+        .iter()
+        .filter(|(k, _)| k.as_str() != "id")
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+
+    let mut def_obj = Map::new();
+    def_obj.insert("id".into(), json!(definition_id));
+    def_obj.insert("plugin_id".into(), plugin_id);
+    if let Some(v) = effect_version {
+        def_obj.insert("effect_version".into(), v);
+    }
+    if let Some(v) = enabled {
+        def_obj.insert("enabled".into(), v);
+    }
+    if let Some(v) = params {
+        def_obj.insert("params".into(), v);
+    }
+    for (k, v) in extra {
+        def_obj.insert(k, v);
+    }
+    definitions.push(Value::Object(def_obj));
+
+    map.clear();
+    if let Some(id) = use_id {
+        map.insert("id".into(), id);
+    }
+    map.insert("definition_id".into(), json!(definition_id));
+    Ok(true)
+}
+
 /// EffectInstance / DocKeyframe の欠落`id`をJSON段階で採番(D2必須。拒否→D1e変換)。
 fn inject_missing_stable_ids_json(root: &mut Value) -> Result<bool, MigrateError> {
     let mut next = root
@@ -961,28 +1142,66 @@ fn inject_missing_stable_ids_json(root: &mut Value) -> Result<bool, MigrateError
     let mut observed_max: Option<u64> = None;
     let mut injected = false;
 
-    let Some(tracks) = root.get_mut("tracks").and_then(|t| t.as_array_mut()) else {
-        return Ok(false);
-    };
-    for track in tracks.iter_mut() {
-        let Some(items) = track.get_mut("items").and_then(|i| i.as_array_mut()) else {
-            continue;
-        };
-        for item in items.iter_mut() {
-            if inject_ids_in_item(item, &mut next, &mut observed_max)? {
-                injected = true;
+    if let Some(tracks) = root.get_mut("tracks").and_then(|t| t.as_array_mut()) {
+        for track in tracks.iter_mut() {
+            let Some(items) = track.get_mut("items").and_then(|i| i.as_array_mut()) else {
+                continue;
+            };
+            for item in items.iter_mut() {
+                if inject_ids_in_item(item, &mut next, &mut observed_max)? {
+                    injected = true;
+                }
             }
         }
     }
 
-    if injected {
-        if let Some(max_id) = observed_max {
-            if next <= max_id {
-                next = max_id.saturating_add(1);
-            }
+    if inject_ids_in_effect_definitions(root, &mut next, &mut observed_max)? {
+        injected = true;
+    }
+
+    // カウンタ整合はinjected(新規採番の有無)と無関係に行う: 既存idだけでも
+    // (D1lのinline_effects_to_definition_use等が)`next_stable_id`を先取りで進めた場合、
+    // その後に観測した既存idの最大値がそれ以上ならカウンタを追い越して書き戻す。
+    let mut counter_updated = false;
+    if let Some(max_id) = observed_max {
+        if next <= max_id {
+            next = max_id.saturating_add(1);
+            counter_updated = true;
         }
+    }
+    if injected || counter_updated {
         if let Value::Object(map) = root {
             map.insert("next_stable_id".into(), json!(next));
+        }
+    }
+    Ok(injected)
+}
+
+/// D1l: `root.effect_definitions[].params`内のキーフレームid欠落を採番する。
+fn inject_ids_in_effect_definitions(
+    root: &mut Value,
+    next: &mut u64,
+    observed_max: &mut Option<u64>,
+) -> Result<bool, MigrateError> {
+    let mut injected = false;
+    if let Some(defs) = root
+        .get_mut("effect_definitions")
+        .and_then(|d| d.as_array_mut())
+    {
+        for def in defs.iter_mut() {
+            let Value::Object(map) = def else {
+                continue;
+            };
+            if let Some(id) = map.get("id").and_then(|v| v.as_u64()) {
+                note_id(observed_max, id);
+            }
+            if let Some(params) = map.get_mut("params").and_then(|p| p.as_object_mut()) {
+                for param in params.values_mut() {
+                    if inject_ids_in_param(param, next, observed_max)? {
+                        injected = true;
+                    }
+                }
+            }
         }
     }
     Ok(injected)
@@ -1348,10 +1567,12 @@ fn doc_has_stable_ids(doc: &Document) -> bool {
             _ => false,
         }
     }
-    doc.tracks
-        .iter()
-        .flat_map(|t| t.items.iter())
-        .any(walk_item)
+    !doc.effect_definitions.is_empty()
+        || doc
+            .tracks
+            .iter()
+            .flat_map(|t| t.items.iter())
+            .any(walk_item)
 }
 
 /// ファイルをbackup後に現行スキーマへ書換える。dry_run/noopでは原本を触らない。

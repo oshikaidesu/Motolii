@@ -9,7 +9,7 @@
 //! に振り分ける(こちらはこのモジュールでは警告にしない)。
 
 use crate::param_expect::{known_plugin_info, DocPluginKind};
-use crate::schema::{ClipSource, EffectInstance, TrackItem};
+use crate::schema::{ClipSource, EffectDefinition, TrackItem};
 use crate::Document;
 
 /// 既知idの将来版か、そもそも未知idか(実装ガード9・S13の層別)。
@@ -88,6 +88,9 @@ impl Document {
                 collect_item_warnings(item, &mut warnings);
             }
         }
+        // D1l: params/plugin_idはUse本体ではなくDefinitionが持つため、台帳側を1回だけ歩く
+        // (orphanも含む — 「開く」時点では参照有無に関わらず縮退を報告する)。
+        collect_effect_definition_warnings(&self.effect_definitions, &mut warnings);
         warnings
     }
 }
@@ -96,7 +99,6 @@ fn collect_item_warnings(item: &TrackItem, out: &mut Vec<PluginOpenWarning>) {
     match item {
         TrackItem::Clip(clip) => {
             let layer_id = clip.envelope.layer_id.get();
-            collect_effect_warnings(&clip.envelope.effects, layer_id, out);
             if let ClipSource::Plugin {
                 plugin_id,
                 effect_version,
@@ -113,8 +115,6 @@ fn collect_item_warnings(item: &TrackItem, out: &mut Vec<PluginOpenWarning>) {
             }
         }
         TrackItem::Group(group) => {
-            let layer_id = group.envelope.layer_id.get();
-            collect_effect_warnings(&group.envelope.effects, layer_id, out);
             for child in &group.children {
                 collect_item_warnings(child, out);
             }
@@ -122,17 +122,16 @@ fn collect_item_warnings(item: &TrackItem, out: &mut Vec<PluginOpenWarning>) {
     }
 }
 
-fn collect_effect_warnings(
-    effects: &[EffectInstance],
-    layer_id: u64,
+fn collect_effect_definition_warnings(
+    definitions: &[EffectDefinition],
     out: &mut Vec<PluginOpenWarning>,
 ) {
-    for effect in effects {
+    for def in definitions {
         push_if_degraded(
-            &effect.plugin_id,
-            effect.effect_version,
+            &def.plugin_id,
+            def.effect_version,
             DocPluginKind::Filter,
-            &format!("layer{layer_id}.effect[{}]", effect.plugin_id),
+            &format!("effect_definitions[{}]", def.id.get()),
             out,
         );
     }

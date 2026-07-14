@@ -11,9 +11,9 @@ use std::collections::BTreeMap;
 use motolii_core::RationalTime;
 use motolii_doc::{
     layer_names_for_item, BlendMode, Clip, ClipSource, ClippingMaskSettings, Command, DocKeyframe,
-    DocKeyframeTrack, DocParam, DocValue, Document, DocumentWriter, EffectId, EffectInstance,
-    Group, ItemEnvelope, KeyframeId, LayerId, LookAtAxis, MaskMode, ParentLocator,
-    ScalarPropertyId, Track, TrackId, TrackItem,
+    DocKeyframeTrack, DocParam, DocValue, Document, DocumentWriter, EffectDefinition,
+    EffectDefinitionId, EffectId, EffectInstance, EffectUse, Group, ItemEnvelope, KeyframeId,
+    LayerId, LookAtAxis, MaskMode, ParentLocator, ScalarPropertyId, Track, TrackId, TrackItem,
 };
 use motolii_eval::Interp;
 use proptest::prelude::*;
@@ -27,6 +27,7 @@ struct Fixture {
     layer: LayerId,
     other_layer: LayerId,
     effect: EffectId,
+    effect_def: EffectDefinitionId,
     track: TrackId,
 }
 
@@ -38,20 +39,26 @@ fn fixture() -> Fixture {
     let track = doc.track_ids.allocate("V1").unwrap();
     let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
     let effect = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let effect_def = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
+    doc.effect_definitions.push(EffectDefinition::new(
+        effect_def,
+        "core.filter.tint",
+        1,
+        true,
+        BTreeMap::from([("amount".into(), DocParam::const_f64(0.5))]),
+        Default::default(),
+    ));
 
     let mut env = ItemEnvelope::new(layer);
-    env.effects.push(EffectInstance {
+    env.effects.push(EffectUse {
         id: effect,
-        plugin_id: "core.filter.tint".into(),
-        effect_version: 1,
-        enabled: true,
-        params: BTreeMap::from([("amount".into(), DocParam::const_f64(0.5))]),
-        extra: Default::default(),
+        definition_id: effect_def,
     });
-    // stable id(effect)を含むため(M2E-11①)。version自体もこのテスト文書専用に2へ
+    // stable id(effect)を含むため(M2E-11①)。version自体もこのテスト文書専用に
+    // D1lのMIN_READER_VERSION_FOR_EFFECT_DEFINITIONSへ揃える
     // (`Document::new_v1()`の既定はversion=1のまま — 他テストの前提を変えない)。
-    doc.version = 2;
-    doc.min_reader_version = 2;
+    doc.version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
+    doc.min_reader_version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
 
     doc.tracks.push(Track {
         id: track,
@@ -78,6 +85,7 @@ fn fixture() -> Fixture {
         layer,
         other_layer,
         effect,
+        effect_def,
         track,
     }
 }
@@ -141,10 +149,8 @@ proptest! {
     fn set_property_effect_param_roundtrip(old in -10.0f64..10.0, new in -10.0f64..10.0) {
         let f = fixture();
         let doc = prepare(&f.doc, |d| {
-            let TrackItem::Clip(c) = &mut d.tracks[0].items[0] else { panic!("expected clip") };
-            c.envelope.effects[0]
-                .params
-                .insert("amount".into(), DocParam::const_f64(old));
+            let def = d.effect_definition_mut(f.effect_def).expect("effect definition");
+            def.params.insert("amount".into(), DocParam::const_f64(old));
         });
         let cmd = Command::SetProperty {
             target: f.layer,
@@ -202,8 +208,8 @@ proptest! {
     fn set_effect_enabled_roundtrip(old in any::<bool>(), new in any::<bool>()) {
         let f = fixture();
         let doc = prepare(&f.doc, |d| {
-            let TrackItem::Clip(c) = &mut d.tracks[0].items[0] else { panic!("expected clip") };
-            c.envelope.effects[0].enabled = old;
+            let def = d.effect_definition_mut(f.effect_def).expect("effect definition");
+            def.enabled = old;
         });
         let cmd = Command::SetEffectEnabled {
             target: f.layer,
@@ -217,9 +223,12 @@ proptest! {
     #[test]
     fn add_remove_effect_roundtrip(enabled in any::<bool>(), amount in -5.0f64..5.0) {
         let f = fixture();
-        let new_effect_id = EffectId::from_raw(f.doc.next_stable_id.peek_next());
+        let base = f.doc.next_stable_id.peek_next();
+        let new_effect_id = EffectId::from_raw(base);
+        let new_definition_id = EffectDefinitionId::from_raw(base + 1);
         let effect = EffectInstance {
             id: new_effect_id,
+            definition_id: new_definition_id,
             plugin_id: "core.filter.blur".into(),
             effect_version: 1,
             enabled,
@@ -229,9 +238,30 @@ proptest! {
         let cmd = Command::AddEffect {
             target: f.layer,
             index: 1,
-            effect,
+            effect: effect.clone(),
         };
-        assert_roundtrip(&f.doc, cmd);
+        // D1l: RemoveEffect(=AddEffectのinverse)はUseだけ外し、Definitionはorphanとして残す
+        // (GAP-14§2.2/§2.4 OrphanKeep)。よってDocument全体一致ではなくstack構造の復元と
+        // orphanの残存を別々に検証する。
+        let mut working = f.doc.clone();
+        cmd.apply(&mut working).expect("apply must succeed");
+        cmd.inverse()
+            .apply(&mut working)
+            .expect("inverse apply must succeed");
+        assert_eq!(
+            working.tracks, f.doc.tracks,
+            "unlinking the use must restore the original stack"
+        );
+        let (_, def) = effect.into_use_and_definition();
+        assert_eq!(
+            working.effect_definitions,
+            {
+                let mut expected = f.doc.effect_definitions.clone();
+                expected.push(def);
+                expected
+            },
+            "orphaned definition must remain in the ledger untouched"
+        );
     }
 
     #[test]
@@ -240,7 +270,13 @@ proptest! {
         let TrackItem::Clip(clip) = &f.doc.tracks[0].items[0] else {
             panic!("expected fixture clip at index 0");
         };
-        let effect = clip.envelope.effects[0].clone();
+        let use_ = clip.envelope.effects[0].clone();
+        let def = f
+            .doc
+            .effect_definition(use_.definition_id)
+            .expect("effect definition")
+            .clone();
+        let effect = EffectInstance::from_use_and_definition(&use_, &def);
         let cmd = Command::RemoveEffect {
             target: f.layer,
             index: 0,
@@ -292,8 +328,10 @@ fn add_effect_rejects_index_past_end() {
     let before = f.doc.clone();
     let mut writer = DocumentWriter::new(f.doc);
     let gesture = writer.begin_gesture();
+    let base = writer.snapshot().next_stable_id.peek_next();
     let effect = EffectInstance {
-        id: EffectId::from_raw(writer.snapshot().next_stable_id.peek_next()),
+        id: EffectId::from_raw(base),
+        definition_id: EffectDefinitionId::from_raw(base + 1),
         plugin_id: "core.filter.blur".into(),
         effect_version: 1,
         enabled: true,
@@ -498,9 +536,16 @@ fn same_gesture_two_add_effects_do_not_merge() {
     let gesture = writer.begin_gesture();
 
     let effect1_id = writer.allocate_effect_id().expect("allocate effect1");
+    let effect1_def = writer
+        .allocate_effect_definition_id()
+        .expect("allocate effect1 def");
     let effect2_id = writer.allocate_effect_id().expect("allocate effect2");
+    let effect2_def = writer
+        .allocate_effect_definition_id()
+        .expect("allocate effect2 def");
     let effect1 = EffectInstance {
         id: effect1_id,
+        definition_id: effect1_def,
         plugin_id: "core.filter.blur".into(),
         effect_version: 1,
         enabled: true,
@@ -509,6 +554,7 @@ fn same_gesture_two_add_effects_do_not_merge() {
     };
     let effect2 = EffectInstance {
         id: effect2_id,
+        definition_id: effect2_def,
         plugin_id: "core.filter.tint".into(),
         effect_version: 1,
         enabled: true,
@@ -556,9 +602,16 @@ fn same_gesture_two_add_effects_undo_removes_both() {
     let gesture = writer.begin_gesture();
 
     let effect1_id = writer.allocate_effect_id().expect("allocate effect1");
+    let effect1_def = writer
+        .allocate_effect_definition_id()
+        .expect("allocate effect1 def");
     let effect2_id = writer.allocate_effect_id().expect("allocate effect2");
+    let effect2_def = writer
+        .allocate_effect_definition_id()
+        .expect("allocate effect2 def");
     let effect1 = EffectInstance {
         id: effect1_id,
+        definition_id: effect1_def,
         plugin_id: "core.filter.blur".into(),
         effect_version: 1,
         enabled: true,
@@ -567,6 +620,7 @@ fn same_gesture_two_add_effects_undo_removes_both() {
     };
     let effect2 = EffectInstance {
         id: effect2_id,
+        definition_id: effect2_def,
         plugin_id: "core.filter.tint".into(),
         effect_version: 1,
         enabled: true,
@@ -656,16 +710,21 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
 
     let mut group_env = ItemEnvelope::new(group_layer);
     let effect_id = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
-    group_env.effects.push(EffectInstance {
+    let effect_def_id = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
+    doc.effect_definitions.push(EffectDefinition::new(
+        effect_def_id,
+        "core.filter.tint",
+        1,
+        true,
+        BTreeMap::new(),
+        Default::default(),
+    ));
+    group_env.effects.push(EffectUse {
         id: effect_id,
-        plugin_id: "core.filter.tint".into(),
-        effect_version: 1,
-        enabled: true,
-        params: BTreeMap::new(),
-        extra: Default::default(),
+        definition_id: effect_def_id,
     });
-    doc.version = 2;
-    doc.min_reader_version = 2;
+    doc.version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
+    doc.min_reader_version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
 
     doc.tracks.push(Track {
         id: track,

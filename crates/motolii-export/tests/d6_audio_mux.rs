@@ -6,8 +6,9 @@ use std::process::Command;
 
 use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, RationalTime, TimeMap};
 use motolii_doc::{
-    Asset, AssetId, Clip, ClipSource, Composition, DocParam, Document, EffectId, EffectInstance,
-    ItemEnvelope, PluginDegradation, Soundtrack, Track, TrackItem, RECT_LAYER_SOURCE,
+    Asset, AssetId, Clip, ClipSource, Composition, DocParam, Document, EffectDefinitionId,
+    EffectId, EffectInstance, ItemEnvelope, PluginDegradation, Soundtrack, Track, TrackItem,
+    RECT_LAYER_SOURCE,
 };
 use motolii_eval::DataTracks;
 use motolii_export::{export_document_video, ExportError, ExportJob};
@@ -300,17 +301,28 @@ fn export_refuses_degraded_plugins() {
     make_bg_video(&video);
 
     let mut doc = build_doc("bg.mp4", None);
-    if let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] {
-        let eid = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
-        clip.envelope.effects.push(EffectInstance {
-            id: eid,
-            plugin_id: "vendor.filter.unknown_for_export".into(),
-            effect_version: 1,
-            enabled: true,
-            params: BTreeMap::from([("amount".into(), DocParam::const_f64(0.25))]),
-            extra: Default::default(),
-        });
+    let eid = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let did = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let (use_, def) = EffectInstance {
+        id: eid,
+        definition_id: did,
+        plugin_id: "vendor.filter.unknown_for_export".into(),
+        effect_version: 1,
+        enabled: true,
+        params: BTreeMap::from([("amount".into(), DocParam::const_f64(0.25))]),
+        extra: Default::default(),
     }
+    .into_use_and_definition();
+    doc.effect_definitions.push(def);
+    if let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] {
+        clip.envelope.effects.push(use_);
+    }
+    doc.version = doc
+        .version
+        .max(motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS);
+    doc.min_reader_version = doc
+        .min_reader_version
+        .max(motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS);
     doc.validate()
         .expect("unknown plugin must still validate (open side)");
     assert!(!doc.plugin_open_warnings().is_empty());

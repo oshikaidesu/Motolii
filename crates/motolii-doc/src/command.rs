@@ -14,10 +14,10 @@ use thiserror::Error;
 
 use crate::param::DocParam;
 use crate::schema::{
-    AudioComponent, BlendMode, ClipSource, ClippingMaskSettings, EffectInstance, ItemEnvelope,
-    TrackItem,
+    AudioComponent, BlendMode, ClipSource, ClippingMaskSettings, EffectDefinition, EffectInstance,
+    ItemEnvelope, TrackItem,
 };
-use crate::stable_id::EffectId;
+use crate::stable_id::{EffectDefinitionId, EffectId};
 use crate::track_id::TrackId;
 use crate::{Document, LayerId};
 
@@ -46,6 +46,10 @@ pub enum PropertyId {
     EffectEnabled(EffectId),
     EffectParam(EffectId, String),
     EffectList(EffectId),
+    /// D1l: `DeleteEffectDefinition`/`AddEffectDefinition`(台帳の生存)。
+    EffectDefinitionLifecycle(EffectDefinitionId),
+    /// D1l: `CopyLocalEffect`/`UndoCopyLocalEffect`(1つのUseのdefinition_id付け替え)。
+    EffectDefinitionLink(EffectId),
     AudioEnabled(usize),
     AudioGain(usize),
     ChildList,
@@ -96,6 +100,10 @@ pub enum CommandKind {
     AddEffect,
     RemoveEffect,
     SetEffectEnabled,
+    /// D1l: `DeleteEffectDefinition` / `AddEffectDefinition`(inverse)共用。
+    DeleteEffectDefinition,
+    /// D1l: `CopyLocalEffect` / `UndoCopyLocalEffect`(inverse)共用。
+    CopyLocalEffect,
     SetAudioComponentEnabled,
     SetAudioComponentGain,
     AddTrackItem,
@@ -133,6 +141,17 @@ pub enum CommandError {
     RemoveItemMismatch { expected: u64, found: u64 },
     #[error("removed effect does not match expected id (expected {expected}, found {found})")]
     RemoveEffectMismatch { expected: u64, found: u64 },
+    #[error("effect definition {id} not found")]
+    EffectDefinitionNotFound { id: u64 },
+    /// GAP-14§2.1: 参照中Definitionの削除はReject(Cascadeしない)。
+    #[error("effect definition {id} is in use by {use_count} effect use(s)")]
+    DefinitionInUse { id: u64, use_count: usize },
+    #[error("effect definition {id} already exists")]
+    EffectDefinitionAlreadyExists { id: u64 },
+    #[error("effect definition {id} payload does not match existing ledger entry")]
+    EffectDefinitionMismatch { id: u64 },
+    #[error("copy-local effect use definition mismatch (expected {expected}, found {found})")]
+    CopyLocalDefinitionMismatch { expected: u64, found: u64 },
     #[error(
         "layer_names keys do not match track item subtree (item={item_layers:?}, names={named_layers:?})"
     )]
@@ -186,6 +205,24 @@ pub enum Command {
         old: bool,
         new: bool,
     },
+    /// D1l/GAP-14§2.5: `use_count==0`のときのみ成立(採否は`apply`側)。
+    DeleteEffectDefinition { definition: EffectDefinition },
+    /// `DeleteEffectDefinition`のinverse専用(未参照時のみ台帳へ復元)。
+    AddEffectDefinition { definition: EffectDefinition },
+    /// D1l/GAP-14§2.3 Materialize: `use_id`のみを`new_definition_id`(旧definitionのdeep-copy)へ付け替える。
+    CopyLocalEffect {
+        target: LayerId,
+        use_id: EffectId,
+        old_definition_id: EffectDefinitionId,
+        new_definition_id: EffectDefinitionId,
+    },
+    /// `CopyLocalEffect`のinverse専用: useを`old_definition_id`へ戻し、`new_definition_id`を台帳から外す。
+    UndoCopyLocalEffect {
+        target: LayerId,
+        use_id: EffectId,
+        old_definition_id: EffectDefinitionId,
+        new_definition_id: EffectDefinitionId,
+    },
     SetAudioComponentEnabled {
         target: LayerId,
         /// `ClipSource::Asset.audio` Vec内のindex(ordinalではない)。
@@ -226,6 +263,12 @@ impl Command {
             Command::AddEffect { .. } => CommandKind::AddEffect,
             Command::RemoveEffect { .. } => CommandKind::RemoveEffect,
             Command::SetEffectEnabled { .. } => CommandKind::SetEffectEnabled,
+            Command::DeleteEffectDefinition { .. } | Command::AddEffectDefinition { .. } => {
+                CommandKind::DeleteEffectDefinition
+            }
+            Command::CopyLocalEffect { .. } | Command::UndoCopyLocalEffect { .. } => {
+                CommandKind::CopyLocalEffect
+            }
             Command::SetAudioComponentEnabled { .. } => CommandKind::SetAudioComponentEnabled,
             Command::SetAudioComponentGain { .. } => CommandKind::SetAudioComponentGain,
             Command::AddTrackItem { .. } => CommandKind::AddTrackItem,
@@ -244,7 +287,11 @@ impl Command {
             | Command::RemoveEffect { target, .. }
             | Command::SetEffectEnabled { target, .. }
             | Command::SetAudioComponentEnabled { target, .. }
-            | Command::SetAudioComponentGain { target, .. } => target.get(),
+            | Command::SetAudioComponentGain { target, .. }
+            | Command::CopyLocalEffect { target, .. }
+            | Command::UndoCopyLocalEffect { target, .. } => target.get(),
+            Command::DeleteEffectDefinition { definition }
+            | Command::AddEffectDefinition { definition } => definition.id.get(),
             Command::AddTrackItem { item, .. } | Command::RemoveTrackItem { item, .. } => {
                 envelope_of(item).layer_id.get()
             }
@@ -261,6 +308,14 @@ impl Command {
                 PropertyId::EffectList(effect.id)
             }
             Command::SetEffectEnabled { effect, .. } => PropertyId::EffectEnabled(*effect),
+            Command::DeleteEffectDefinition { definition }
+            | Command::AddEffectDefinition { definition } => {
+                PropertyId::EffectDefinitionLifecycle(definition.id)
+            }
+            Command::CopyLocalEffect { use_id, .. }
+            | Command::UndoCopyLocalEffect { use_id, .. } => {
+                PropertyId::EffectDefinitionLink(*use_id)
+            }
             Command::SetAudioComponentEnabled { index, .. } => PropertyId::AudioEnabled(*index),
             Command::SetAudioComponentGain { index, .. } => PropertyId::AudioGain(*index),
             Command::AddTrackItem { .. } | Command::RemoveTrackItem { .. } => PropertyId::ChildList,
@@ -284,10 +339,33 @@ impl Command {
                 property,
                 new_value,
                 ..
-            } => {
-                let env = find_envelope_mut(doc, *target)?;
-                write_property(env, property, new_value.clone())
-            }
+            } => match property {
+                // D1l: EffectParamはEffectUseではなくEffectDefinition側を書き換える(共有Use全体へ反映)。
+                ScalarPropertyId::EffectParam(effect_id, name) => {
+                    let layer = target.get();
+                    let definition_id = find_envelope(doc, *target)
+                        .ok_or(CommandError::LayerNotFound(layer))?
+                        .effects
+                        .iter()
+                        .find(|u| u.id == *effect_id)
+                        .map(|u| u.definition_id)
+                        .ok_or(CommandError::EffectNotFound {
+                            effect: effect_id.get(),
+                            layer,
+                        })?;
+                    let def = doc.effect_definition_mut(definition_id).ok_or(
+                        CommandError::EffectDefinitionNotFound {
+                            id: definition_id.get(),
+                        },
+                    )?;
+                    def.params.insert(name.clone(), new_value.clone());
+                    Ok(())
+                }
+                _ => {
+                    let env = find_envelope_mut(doc, *target)?;
+                    write_property(env, property, new_value.clone())
+                }
+            },
             Command::SetBlendMode { target, new, .. } => {
                 find_envelope_mut(doc, *target)?.blend = *new;
                 Ok(())
@@ -314,9 +392,19 @@ impl Command {
                         len: env.effects.len(),
                     });
                 }
+                // D1l: definition_idが既に台帳にあれば共有(sharing/link)、無ければ新規挿入。
+                // 既存と食い違う場合は黙って上書きせず拒否する。
+                let (use_, def) = effect.clone().into_use_and_definition();
+                match doc.effect_definition(def.id) {
+                    Some(existing) if existing == &def => {}
+                    Some(_) => {
+                        return Err(CommandError::EffectDefinitionMismatch { id: def.id.get() })
+                    }
+                    None => doc.effect_definitions.push(def),
+                }
                 find_envelope_mut(doc, *target)?
                     .effects
-                    .insert(*index, effect.clone());
+                    .insert(*index, use_);
                 Ok(())
             }
             Command::RemoveEffect {
@@ -324,6 +412,7 @@ impl Command {
                 index,
                 effect,
             } => {
+                // GAP-14§2.2 Unlink: Useだけを外す。definitionは触らない(orphan keep)。
                 let env = find_envelope_mut(doc, *target)?;
                 if *index >= env.effects.len() {
                     return Err(CommandError::IndexOutOfRange {
@@ -348,14 +437,140 @@ impl Command {
                 ..
             } => {
                 let layer = target.get();
-                let env = find_envelope_mut(doc, *target)?;
-                let e = env.effects.iter_mut().find(|e| e.id == *effect).ok_or(
-                    CommandError::EffectNotFound {
+                let definition_id = find_envelope(doc, *target)
+                    .ok_or(CommandError::LayerNotFound(layer))?
+                    .effects
+                    .iter()
+                    .find(|u| u.id == *effect)
+                    .map(|u| u.definition_id)
+                    .ok_or(CommandError::EffectNotFound {
                         effect: effect.get(),
+                        layer,
+                    })?;
+                let def = doc.effect_definition_mut(definition_id).ok_or(
+                    CommandError::EffectDefinitionNotFound {
+                        id: definition_id.get(),
+                    },
+                )?;
+                def.enabled = *new;
+                Ok(())
+            }
+            Command::DeleteEffectDefinition { definition } => {
+                // GAP-14§2.1/§2.5: 参照中はReject、orphan/unusedのみ台帳から削除。
+                let use_count = doc.effect_use_count(definition.id);
+                if use_count > 0 {
+                    return Err(CommandError::DefinitionInUse {
+                        id: definition.id.get(),
+                        use_count,
+                    });
+                }
+                let idx = doc
+                    .effect_definitions
+                    .iter()
+                    .position(|d| d.id == definition.id)
+                    .ok_or(CommandError::EffectDefinitionNotFound {
+                        id: definition.id.get(),
+                    })?;
+                doc.effect_definitions.remove(idx);
+                Ok(())
+            }
+            Command::AddEffectDefinition { definition } => {
+                // `DeleteEffectDefinition`のinverse専用: 同IDが既に無いことを前提に復元する。
+                if doc.effect_definition(definition.id).is_some() {
+                    return Err(CommandError::EffectDefinitionAlreadyExists {
+                        id: definition.id.get(),
+                    });
+                }
+                doc.effect_definitions.push(definition.clone());
+                Ok(())
+            }
+            Command::CopyLocalEffect {
+                target,
+                use_id,
+                old_definition_id,
+                new_definition_id,
+            } => {
+                // GAP-14§2.3 Materialize: 旧definitionをdeep-copyし、対象Useだけ付け替える。
+                let layer = target.get();
+                let old_def = doc.effect_definition(*old_definition_id).cloned().ok_or(
+                    CommandError::EffectDefinitionNotFound {
+                        id: old_definition_id.get(),
+                    },
+                )?;
+                if doc.effect_definition(*new_definition_id).is_some() {
+                    return Err(CommandError::EffectDefinitionAlreadyExists {
+                        id: new_definition_id.get(),
+                    });
+                }
+                {
+                    let env =
+                        find_envelope(doc, *target).ok_or(CommandError::LayerNotFound(layer))?;
+                    let use_ = env.effects.iter().find(|u| u.id == *use_id).ok_or(
+                        CommandError::EffectNotFound {
+                            effect: use_id.get(),
+                            layer,
+                        },
+                    )?;
+                    if use_.definition_id != *old_definition_id {
+                        return Err(CommandError::CopyLocalDefinitionMismatch {
+                            expected: old_definition_id.get(),
+                            found: use_.definition_id.get(),
+                        });
+                    }
+                }
+                doc.effect_definitions
+                    .push(old_def.deep_copy(*new_definition_id));
+                let env = find_envelope_mut(doc, *target)?;
+                let use_ = env.effects.iter_mut().find(|u| u.id == *use_id).ok_or(
+                    CommandError::EffectNotFound {
+                        effect: use_id.get(),
                         layer,
                     },
                 )?;
-                e.enabled = *new;
+                use_.definition_id = *new_definition_id;
+                Ok(())
+            }
+            Command::UndoCopyLocalEffect {
+                target,
+                use_id,
+                old_definition_id,
+                new_definition_id,
+            } => {
+                // `CopyLocalEffect`のinverse: useを旧definitionへ戻し、複製先を台帳から外す。
+                let layer = target.get();
+                {
+                    let env =
+                        find_envelope(doc, *target).ok_or(CommandError::LayerNotFound(layer))?;
+                    let use_ = env.effects.iter().find(|u| u.id == *use_id).ok_or(
+                        CommandError::EffectNotFound {
+                            effect: use_id.get(),
+                            layer,
+                        },
+                    )?;
+                    if use_.definition_id != *new_definition_id {
+                        return Err(CommandError::CopyLocalDefinitionMismatch {
+                            expected: new_definition_id.get(),
+                            found: use_.definition_id.get(),
+                        });
+                    }
+                }
+                if doc.effect_definition(*old_definition_id).is_none() {
+                    return Err(CommandError::EffectDefinitionNotFound {
+                        id: old_definition_id.get(),
+                    });
+                }
+                {
+                    let env = find_envelope_mut(doc, *target)?;
+                    let use_ = env.effects.iter_mut().find(|u| u.id == *use_id).ok_or(
+                        CommandError::EffectNotFound {
+                            effect: use_id.get(),
+                            layer,
+                        },
+                    )?;
+                    use_.definition_id = *old_definition_id;
+                }
+                doc.effect_definitions
+                    .retain(|d| d.id != *new_definition_id);
                 Ok(())
             }
             Command::SetAudioComponentEnabled {
@@ -494,6 +709,34 @@ impl Command {
                 old: new,
                 new: old,
             },
+            Command::DeleteEffectDefinition { definition } => {
+                Command::AddEffectDefinition { definition }
+            }
+            Command::AddEffectDefinition { definition } => {
+                Command::DeleteEffectDefinition { definition }
+            }
+            Command::CopyLocalEffect {
+                target,
+                use_id,
+                old_definition_id,
+                new_definition_id,
+            } => Command::UndoCopyLocalEffect {
+                target,
+                use_id,
+                old_definition_id,
+                new_definition_id,
+            },
+            Command::UndoCopyLocalEffect {
+                target,
+                use_id,
+                old_definition_id,
+                new_definition_id,
+            } => Command::CopyLocalEffect {
+                target,
+                use_id,
+                old_definition_id,
+                new_definition_id,
+            },
             Command::SetAudioComponentEnabled {
                 target,
                 index,
@@ -587,6 +830,8 @@ pub fn layer_names_for_item(
     Ok(names)
 }
 
+/// `ScalarPropertyId::EffectParam`は`Command::apply`側で`Document.effect_definitions`を
+/// 直接書き換える(D1l: paramsはUseではなくDefinitionが持つ)。ここには到達しない防御的分岐。
 fn write_property(
     env: &mut ItemEnvelope,
     property: &ScalarPropertyId,
@@ -598,15 +843,11 @@ fn write_property(
         ScalarPropertyId::Scale => env.transform.scale = value,
         ScalarPropertyId::Rotation => env.transform.rotation = value,
         ScalarPropertyId::Opacity => env.opacity = value,
-        ScalarPropertyId::EffectParam(effect_id, name) => {
-            let layer = env.layer_id.get();
-            let e = env.effects.iter_mut().find(|e| e.id == *effect_id).ok_or(
-                CommandError::EffectNotFound {
-                    effect: effect_id.get(),
-                    layer,
-                },
-            )?;
-            e.params.insert(name.clone(), value);
+        ScalarPropertyId::EffectParam(effect_id, _) => {
+            return Err(CommandError::EffectNotFound {
+                effect: effect_id.get(),
+                layer: env.layer_id.get(),
+            });
         }
     }
     Ok(())

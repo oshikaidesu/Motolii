@@ -12,7 +12,7 @@ use motolii_core::{Fps, RationalTime, TimeMap};
 
 use crate::asset::AssetId;
 use crate::param::DocParam;
-use crate::stable_id::EffectId;
+use crate::stable_id::{EffectDefinitionId, EffectId};
 use crate::track_id::TrackId;
 use crate::LayerId;
 
@@ -189,8 +189,9 @@ fn default_false() -> bool {
 #[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
 pub struct ItemEnvelope {
     pub layer_id: LayerId,
+    /// D1l: ordered EffectUse stack。本体は`Document.effect_definitions`。
     #[serde(default)]
-    pub effects: Vec<EffectInstance>,
+    pub effects: Vec<EffectUse>,
     pub transform: Transform2D,
     #[serde(default)]
     pub clipping_mask: ClippingMaskSettings,
@@ -225,11 +226,17 @@ impl ItemEnvelope {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
-pub struct EffectInstance {
-    /// document-local安定ID(A8)。不変・非再利用。複製時は新規採番(D2)。
-    /// 旧形式(id無し)は拒否 — 変換はD1e(D1g/D1i-1と同型の方針)。
+/// stack上のUse参照(D1l)。identityは`id`、recipeは`definition_id`。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, DeserializeDerive)]
+pub struct EffectUse {
     pub id: EffectId,
+    pub definition_id: EffectDefinitionId,
+}
+
+/// 共有可能なEffect recipe(D1l)。
+#[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
+pub struct EffectDefinition {
+    pub id: EffectDefinitionId,
     pub plugin_id: String,
     #[serde(default = "default_effect_version")]
     pub effect_version: u32,
@@ -240,6 +247,88 @@ pub struct EffectInstance {
     /// 未知フィールド保持(F-9の席。警告はD1f)。
     #[serde(default, flatten)]
     pub extra: Map<String, JsonValue>,
+}
+
+impl EffectDefinition {
+    /// AddEffect / migration用の構築。
+    pub fn new(
+        id: EffectDefinitionId,
+        plugin_id: impl Into<String>,
+        effect_version: u32,
+        enabled: bool,
+        params: BTreeMap<String, DocParam>,
+        extra: Map<String, JsonValue>,
+    ) -> Self {
+        Self {
+            id,
+            plugin_id: plugin_id.into(),
+            effect_version,
+            enabled,
+            params,
+            extra,
+        }
+    }
+
+    pub fn deep_copy(&self, new_id: EffectDefinitionId) -> Self {
+        Self {
+            id: new_id,
+            plugin_id: self.plugin_id.clone(),
+            effect_version: self.effect_version,
+            enabled: self.enabled,
+            params: self.params.clone(),
+            extra: self.extra.clone(),
+        }
+    }
+}
+
+/// 旧inline EffectInstance相当の構築ヘルパ(テスト/AddEffect payload)。
+///
+/// 永続形は`EffectUse`+`EffectDefinition`。本型はcommandが両方を運ぶための便宜。
+#[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
+pub struct EffectInstance {
+    /// Use identity。
+    pub id: EffectId,
+    pub definition_id: EffectDefinitionId,
+    pub plugin_id: String,
+    #[serde(default = "default_effect_version")]
+    pub effect_version: u32,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub params: BTreeMap<String, DocParam>,
+    #[serde(default, flatten)]
+    pub extra: Map<String, JsonValue>,
+}
+
+impl EffectInstance {
+    pub fn into_use_and_definition(self) -> (EffectUse, EffectDefinition) {
+        (
+            EffectUse {
+                id: self.id,
+                definition_id: self.definition_id,
+            },
+            EffectDefinition {
+                id: self.definition_id,
+                plugin_id: self.plugin_id,
+                effect_version: self.effect_version,
+                enabled: self.enabled,
+                params: self.params,
+                extra: self.extra,
+            },
+        )
+    }
+
+    pub fn from_use_and_definition(use_: &EffectUse, def: &EffectDefinition) -> Self {
+        Self {
+            id: use_.id,
+            definition_id: use_.definition_id,
+            plugin_id: def.plugin_id.clone(),
+            effect_version: def.effect_version,
+            enabled: def.enabled,
+            params: def.params.clone(),
+            extra: def.extra.clone(),
+        }
+    }
 }
 
 /// 正準空間の2D変形。親参照はスキーマ予約。

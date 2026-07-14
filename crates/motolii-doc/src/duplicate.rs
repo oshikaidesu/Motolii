@@ -239,11 +239,10 @@ fn remap_envelope(
     remap_doc_param(&mut env.transform.scale, id_map, seq)?;
     remap_doc_param(&mut env.transform.rotation, id_map, seq)?;
     remap_doc_param(&mut env.opacity, id_map, seq)?;
+    // D1l: definition_idは共有のまま(duplicate時にrecipeをmaterializeしない — GAP-14§1)。
+    // Use identityだけ新規採番する。
     for effect in &mut env.effects {
         effect.id = EffectId::from_raw(seq.allocate()?);
-        for param in effect.params.values_mut() {
-            remap_doc_param(param, id_map, seq)?;
-        }
     }
     Ok(())
 }

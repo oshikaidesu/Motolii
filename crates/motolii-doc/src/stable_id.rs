@@ -1,10 +1,7 @@
-//! Effect/Keyframe等のdocument-local安定u64 ID(A8 / D2必須)。
+//! Effect/Keyframe/Definition等のdocument-local安定u64 ID(A8 / D2 / D1l)。
 //!
-//! LayerId/TrackIdと同じ「不変・非再利用」規律だが、Effect/Keyframeは他所から
-//! IDで参照されない(ダングリング参照の検査対象ではない)ため、存在テーブルは持たず
-//! 単調カウンタのみで足りる。Effect/KeyframeのID空間は1つのカウンタを共有する
-//! (「document-local u64 ID」を1空間として扱い、型間の値の取り違えでも
-//! 数値衝突が起きない安全側の設計)。
+//! LayerId/TrackIdと同じ「不変・非再利用」規律。EffectUse・EffectDefinition・Keyframeは
+//! 1つの`next_stable_id`カウンタを共有し、型間の数値衝突を避ける。
 
 use serde::{Deserialize, Serialize};
 
@@ -83,7 +80,11 @@ macro_rules! stable_id_newtype {
 
 stable_id_newtype!(
     EffectId,
-    "EffectInstanceの恒久ID(A8)。並べ替えで維持、複製時は新規採番。"
+    "EffectUseの恒久ID(A8 / D1l)。stack上のUse identity。旧EffectInstance.idからmigrationで引き継ぐ。"
+);
+stable_id_newtype!(
+    EffectDefinitionId,
+    "EffectDefinitionの恒久ID(D1l)。共有recipe identity。Useから参照される。"
 );
 stable_id_newtype!(
     KeyframeId,
