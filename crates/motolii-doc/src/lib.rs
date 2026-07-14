@@ -11,6 +11,7 @@
 
 mod affine;
 mod asset;
+mod audio_edit;
 mod bpm;
 mod command;
 mod doc_keyframe;
@@ -42,6 +43,7 @@ use serde_json::{Map, Value};
 
 pub use affine::{compose_local, compose_transform, resolve_transform, Affine2D};
 pub use asset::{Asset, AssetError, AssetId, AssetTable};
+pub use audio_edit::{build_import_clip_source, plan_detach_audio, ImportAvMode};
 pub use bpm::{Bpm, BpmError};
 pub use command::{
     collect_layer_ids, layer_names_for_item, Command, CommandError, CommandKind, GestureId,

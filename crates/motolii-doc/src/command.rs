@@ -13,7 +13,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::param::DocParam;
-use crate::schema::{BlendMode, ClippingMaskSettings, EffectInstance, ItemEnvelope, TrackItem};
+use crate::schema::{
+    AudioComponent, BlendMode, ClipSource, ClippingMaskSettings, EffectInstance, ItemEnvelope,
+    TrackItem,
+};
 use crate::stable_id::EffectId;
 use crate::track_id::TrackId;
 use crate::{Document, LayerId};
@@ -43,6 +46,8 @@ pub enum PropertyId {
     EffectEnabled(EffectId),
     EffectParam(EffectId, String),
     EffectList(EffectId),
+    AudioEnabled(usize),
+    AudioGain(usize),
     ChildList,
 }
 
@@ -91,6 +96,8 @@ pub enum CommandKind {
     AddEffect,
     RemoveEffect,
     SetEffectEnabled,
+    SetAudioComponentEnabled,
+    SetAudioComponentGain,
     AddTrackItem,
     RemoveTrackItem,
 }
@@ -114,6 +121,10 @@ pub enum CommandError {
     GroupNotFound(u64),
     #[error("effect {effect} not found on layer {layer}")]
     EffectNotFound { effect: u64, layer: u64 },
+    #[error("audio component index {index} not found on layer {layer}")]
+    AudioComponentNotFound { layer: u64, index: usize },
+    #[error("detach audio destination must be a different track/group lane than the source")]
+    DetachSameLane,
     #[error("track item index {index} out of range (len={len})")]
     IndexOutOfRange { index: usize, len: usize },
     #[error(
@@ -175,6 +186,20 @@ pub enum Command {
         old: bool,
         new: bool,
     },
+    SetAudioComponentEnabled {
+        target: LayerId,
+        /// `ClipSource::Asset.audio` Vec内のindex(ordinalではない)。
+        index: usize,
+        old: bool,
+        new: bool,
+    },
+    SetAudioComponentGain {
+        target: LayerId,
+        /// `ClipSource::Asset.audio` Vec内のindex(ordinalではない)。
+        index: usize,
+        old: DocParam,
+        new: DocParam,
+    },
     AddTrackItem {
         parent: ParentLocator,
         index: usize,
@@ -201,6 +226,8 @@ impl Command {
             Command::AddEffect { .. } => CommandKind::AddEffect,
             Command::RemoveEffect { .. } => CommandKind::RemoveEffect,
             Command::SetEffectEnabled { .. } => CommandKind::SetEffectEnabled,
+            Command::SetAudioComponentEnabled { .. } => CommandKind::SetAudioComponentEnabled,
+            Command::SetAudioComponentGain { .. } => CommandKind::SetAudioComponentGain,
             Command::AddTrackItem { .. } => CommandKind::AddTrackItem,
             Command::RemoveTrackItem { .. } => CommandKind::RemoveTrackItem,
         }
@@ -215,7 +242,9 @@ impl Command {
             | Command::SetTransformParent { target, .. }
             | Command::AddEffect { target, .. }
             | Command::RemoveEffect { target, .. }
-            | Command::SetEffectEnabled { target, .. } => target.get(),
+            | Command::SetEffectEnabled { target, .. }
+            | Command::SetAudioComponentEnabled { target, .. }
+            | Command::SetAudioComponentGain { target, .. } => target.get(),
             Command::AddTrackItem { item, .. } | Command::RemoveTrackItem { item, .. } => {
                 envelope_of(item).layer_id.get()
             }
@@ -232,6 +261,8 @@ impl Command {
                 PropertyId::EffectList(effect.id)
             }
             Command::SetEffectEnabled { effect, .. } => PropertyId::EffectEnabled(*effect),
+            Command::SetAudioComponentEnabled { index, .. } => PropertyId::AudioEnabled(*index),
+            Command::SetAudioComponentGain { index, .. } => PropertyId::AudioGain(*index),
             Command::AddTrackItem { .. } | Command::RemoveTrackItem { .. } => PropertyId::ChildList,
         }
     }
@@ -325,6 +356,18 @@ impl Command {
                     },
                 )?;
                 e.enabled = *new;
+                Ok(())
+            }
+            Command::SetAudioComponentEnabled {
+                target, index, new, ..
+            } => {
+                find_audio_component_mut(doc, *target, *index)?.enabled = *new;
+                Ok(())
+            }
+            Command::SetAudioComponentGain {
+                target, index, new, ..
+            } => {
+                find_audio_component_mut(doc, *target, *index)?.gain = new.clone();
                 Ok(())
             }
             Command::AddTrackItem {
@@ -448,6 +491,28 @@ impl Command {
             } => Command::SetEffectEnabled {
                 target,
                 effect,
+                old: new,
+                new: old,
+            },
+            Command::SetAudioComponentEnabled {
+                target,
+                index,
+                old,
+                new,
+            } => Command::SetAudioComponentEnabled {
+                target,
+                index,
+                old: new,
+                new: old,
+            },
+            Command::SetAudioComponentGain {
+                target,
+                index,
+                old,
+                new,
+            } => Command::SetAudioComponentGain {
+                target,
+                index,
                 old: new,
                 new: old,
             },
@@ -588,6 +653,45 @@ pub(crate) fn find_envelope_mut(
         }
     }
     Err(CommandError::LayerNotFound(target.get()))
+}
+
+/// `target`のAsset Clipから`audio[index]`を返す。
+pub(crate) fn find_audio_component_mut(
+    doc: &mut Document,
+    target: LayerId,
+    index: usize,
+) -> Result<&mut AudioComponent, CommandError> {
+    let layer = target.get();
+    let item = find_track_item_mut(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    let TrackItem::Clip(clip) = item else {
+        return Err(CommandError::AudioComponentNotFound { layer, index });
+    };
+    let ClipSource::Asset { audio, .. } = &mut clip.source else {
+        return Err(CommandError::AudioComponentNotFound { layer, index });
+    };
+    audio
+        .get_mut(index)
+        .ok_or(CommandError::AudioComponentNotFound { layer, index })
+}
+
+fn find_track_item_mut(doc: &mut Document, target: LayerId) -> Option<&mut TrackItem> {
+    fn find_in_items(items: &mut [TrackItem], target: LayerId) -> Option<&mut TrackItem> {
+        for item in items {
+            if envelope_of(item).layer_id == target {
+                return Some(item);
+            }
+            if let TrackItem::Group(group) = item {
+                if let Some(found) = find_in_items(&mut group.children, target) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+
+    doc.tracks
+        .iter_mut()
+        .find_map(|track| find_in_items(&mut track.items, target))
 }
 
 fn find_group_children_mut(
