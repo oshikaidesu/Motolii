@@ -5,15 +5,13 @@
 </p>
 <p align="center"><em>M1 exit demo — a typed project recipe rendered headlessly to mp4</em></p>
 
-> **An open, inspectable, plugin-extensible motion-graphics compositor for music-video creation.**
+> **After Effects is too heavy. Let's build a lighter motion-graphics compositor in native Rust.**
 
-Motolii starts from a deliberately unglamorous thesis:
+**GPU-resident rendering. Direct tools instead of setup rituals. Typed plugins. Local projects. One deterministic path from preview to export.**
 
-> **Compositing does not need a new fundamental invention. The techniques already exist. The work is to compose them into a small, explicit, replaceable system.**
+Motolii is an open, inspectable, plugin-extensible compositor focused on making 3–5 minute music videos. It brings motion graphics, video, procedural shapes, text, effects, and 2.5D/3D assets into one composition with a single-song timeline.
 
-Keyframes, easing, typed parameter links, render graphs, GPU textures, command-based editing, selective caches, 2D/3D projection, and plugins are all known techniques. Motolii combines them without making historical workarounds part of the product model.
-
-It is built for making a 3–5 minute MV: motion graphics, video, procedural shapes, text, effects, and 2.5D/3D assets in one composition, with a single-song timeline and a deterministic final export.
+The project does not depend on a new compositing invention. Keyframes, easing, typed parameter links, render graphs, GPU textures, command-based editing, selective caches, 2D/3D projection, and plugins are all known techniques. The work is to compose them into a small, explicit, replaceable system without making historical workarounds part of the product model.
 
 Pre-1.0, under active development. The core is usable from the CLI; the desktop editing experience is the next major layer.
 
