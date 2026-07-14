@@ -3,6 +3,7 @@
 //!
 //! **D4-FU**: デバイスレート≠素材レートのときだけ固定比リサンプルをリング書き込み前に挿入する。
 //! レート一致時はリサンプラを作らない(恒等パス)。アルゴリズム遅延はリサンプラ内の先頭 trim で吸収する。
+//! 終端 flush は期待デバイスフレーム数で打ち切り、余分な無音で Transport 時計を進めない。
 //!
 //! **AG-2**: `MixProducer` は `AudioProgram::mix_audio` をプロデューサ側で実行し、
 //! mixed PCMをリングへ供給する。callback内でmixしない。
@@ -17,13 +18,13 @@ use crate::convert::{CANONICAL_CHANNELS, CANONICAL_SAMPLE_RATE};
 use crate::error::{AudioError, Result};
 use crate::meter::AudioMeter;
 use crate::program::AudioProgram;
-use crate::resample::FixedRatioResampler;
+use crate::resample::{source_frame_to_device, FixedRatioResampler};
 use crate::ring::RingProducer;
 
 /// リングが満杯、または供給側が追いつけない時の再試行間隔。
 const POLL_INTERVAL: Duration = Duration::from_millis(1);
 
-/// 終端フラッシュで無音チャンクを流す上限(遅延吐き出し用)。
+/// 終端フラッシュの安全弁(期待尺到達が主停止条件。無限ループ防止)。
 const MAX_FLUSH_CHUNKS: usize = 8;
 
 /// `PcmCache`からリングへ供給し続けるバックグラウンドスレッドの所有ハンドル。
@@ -82,6 +83,7 @@ impl AudioProducer {
                         &cache,
                         &ring,
                         start_frame,
+                        device_sample_rate,
                         &mut resampler,
                         &running_thread,
                     )
@@ -300,27 +302,44 @@ fn mix_producer_loop_resample(
     resampler.reset();
 
     let end_frame = program_end_frame(program);
-    let mut playhead = start_frame;
+    let start = start_frame.min(end_frame);
+    let mut playhead = start;
+    // 変換対象尺の正本。flush 尾部の余分な無音でこれを超えない。
+    let expected_device_frames = source_frame_to_device(
+        end_frame.saturating_sub(start),
+        CANONICAL_SAMPLE_RATE,
+        device_sample_rate,
+    );
+    let mut delivered: u64 = 0;
     let mut pending: Vec<f32> = Vec::new();
     let mut pending_off = 0usize;
     let mut flushing = playhead >= end_frame;
     let mut flush_chunks = 0usize;
+    let channels = CANONICAL_CHANNELS as usize;
 
     while running.load(Ordering::Acquire) {
+        if delivered >= expected_device_frames {
+            break;
+        }
+        let budget_frames = (expected_device_frames - delivered) as usize;
+
         if pending_off < pending.len() {
-            let frames_left = (pending.len() - pending_off) / CANONICAL_CHANNELS as usize;
+            let frames_left = (pending.len() - pending_off) / channels;
             if frames_left == 0 {
                 pending.clear();
                 pending_off = 0;
                 continue;
             }
-            let pushed = ring.push_frames(&pending[pending_off..]);
+            let frames_to_offer = frames_left.min(budget_frames);
+            let end = pending_off + frames_to_offer * channels;
+            let pushed = ring.push_frames(&pending[pending_off..end]);
             if pushed == 0 {
                 thread::sleep(POLL_INTERVAL);
                 continue;
             }
-            pending_off += pushed * CANONICAL_CHANNELS as usize;
-            if pending_off >= pending.len() {
+            pending_off += pushed * channels;
+            delivered += pushed as u64;
+            if pending_off >= pending.len() || delivered >= expected_device_frames {
                 pending.clear();
                 pending_off = 0;
             }
@@ -328,7 +347,7 @@ fn mix_producer_loop_resample(
         }
 
         if flushing {
-            if flush_chunks >= MAX_FLUSH_CHUNKS {
+            if delivered >= expected_device_frames || flush_chunks >= MAX_FLUSH_CHUNKS {
                 break;
             }
             let Ok(out) = resampler.flush_silence_chunk() else {
@@ -336,17 +355,26 @@ fn mix_producer_loop_resample(
             };
             flush_chunks += 1;
             if out.is_empty() {
-                if flush_chunks >= MAX_FLUSH_CHUNKS {
-                    break;
-                }
                 continue;
             }
-            pending.extend_from_slice(out);
+            let frames = out.len() / channels;
+            let keep = frames.min(budget_frames);
+            if keep == 0 {
+                break;
+            }
+            pending.extend_from_slice(&out[..keep * channels]);
             continue;
         }
 
         if playhead >= end_frame {
             flushing = true;
+            continue;
+        }
+
+        // pending 未送出分を差し引いた残り予算だけ蓄積する。
+        let pending_frames = pending.len() / channels;
+        let room = budget_frames.saturating_sub(pending_frames);
+        if room == 0 {
             continue;
         }
 
@@ -368,9 +396,7 @@ fn mix_producer_loop_resample(
         let Ok(out) = resampler.process_interleaved(&pcm) else {
             break;
         };
-        if !out.is_empty() {
-            pending.extend_from_slice(out);
-        }
+        append_budgeted(&mut pending, out, channels, room);
         if playhead >= end_frame {
             flushing = true;
         }
@@ -411,33 +437,48 @@ fn producer_loop_resample(
     cache: &PcmCache,
     ring: &RingProducer,
     start_frame: u64,
+    device_sample_rate: u32,
     resampler: &mut FixedRatioResampler,
     running: &AtomicBool,
 ) {
     let total = cache.frame_count();
-    let mut playhead = start_frame.min(total);
+    let start = start_frame.min(total);
+    let mut playhead = start;
+    let source_rate = cache.format().sample_rate;
+    // 変換対象尺の正本。flush 尾部の余分な無音でこれを超えない。
+    let expected_device_frames =
+        source_frame_to_device(total.saturating_sub(start), source_rate, device_sample_rate);
+    let mut delivered: u64 = 0;
     let mut pending: Vec<f32> = Vec::new();
     let mut pending_off = 0usize; // サンプル単位
     let mut flushing = playhead >= total;
     let mut flush_chunks = 0usize;
 
     while running.load(Ordering::Acquire) {
-        // リングへ未送出分を先に出す(部分pushに耐える)。
+        if delivered >= expected_device_frames {
+            break;
+        }
+        let channels = resampler.channels();
+        let budget_frames = (expected_device_frames - delivered) as usize;
+
+        // リングへ未送出分を先に出す(部分pushに耐える)。予算を超える分は捨てる。
         if pending_off < pending.len() {
-            let channels = resampler.channels();
             let frames_left = (pending.len() - pending_off) / channels;
             if frames_left == 0 {
                 pending.clear();
                 pending_off = 0;
                 continue;
             }
-            let pushed = ring.push_frames(&pending[pending_off..]);
+            let frames_to_offer = frames_left.min(budget_frames);
+            let end = pending_off + frames_to_offer * channels;
+            let pushed = ring.push_frames(&pending[pending_off..end]);
             if pushed == 0 {
                 thread::sleep(POLL_INTERVAL);
                 continue;
             }
             pending_off += pushed * channels;
-            if pending_off >= pending.len() {
+            delivered += pushed as u64;
+            if pending_off >= pending.len() || delivered >= expected_device_frames {
                 pending.clear();
                 pending_off = 0;
             }
@@ -445,7 +486,7 @@ fn producer_loop_resample(
         }
 
         if flushing {
-            if flush_chunks >= MAX_FLUSH_CHUNKS {
+            if delivered >= expected_device_frames || flush_chunks >= MAX_FLUSH_CHUNKS {
                 break;
             }
             let Ok(out) = resampler.flush_silence_chunk() else {
@@ -453,18 +494,26 @@ fn producer_loop_resample(
             };
             flush_chunks += 1;
             if out.is_empty() {
-                // trim 中の無音だけならもう一度。出力がずっと空なら打ち切る。
-                if flush_chunks >= MAX_FLUSH_CHUNKS {
-                    break;
-                }
                 continue;
             }
-            pending.extend_from_slice(out);
+            let frames = out.len() / channels;
+            let keep = frames.min(budget_frames);
+            if keep == 0 {
+                break;
+            }
+            pending.extend_from_slice(&out[..keep * channels]);
             continue;
         }
 
         if playhead >= total {
             flushing = true;
+            continue;
+        }
+
+        // pending 未送出分を差し引いた残り予算だけ蓄積する。
+        let pending_frames = pending.len() / channels;
+        let room = budget_frames.saturating_sub(pending_frames);
+        if room == 0 {
             continue;
         }
 
@@ -478,9 +527,7 @@ fn producer_loop_resample(
             let Ok(out) = resampler.process_interleaved(chunk) else {
                 break;
             };
-            if !out.is_empty() {
-                pending.extend_from_slice(out);
-            }
+            append_budgeted(&mut pending, out, channels, room);
         } else {
             let Ok(chunk) = cache.read_frames(playhead, remaining) else {
                 break;
@@ -489,12 +536,19 @@ fn producer_loop_resample(
             let Ok(out) = resampler.process_partial_interleaved(chunk) else {
                 break;
             };
-            if !out.is_empty() {
-                pending.extend_from_slice(out);
-            }
+            append_budgeted(&mut pending, out, channels, room);
             flushing = true;
         }
     }
+}
+
+fn append_budgeted(pending: &mut Vec<f32>, out: &[f32], channels: usize, budget_frames: usize) {
+    if out.is_empty() || budget_frames == 0 {
+        return;
+    }
+    let frames = out.len() / channels;
+    let keep = frames.min(budget_frames);
+    pending.extend_from_slice(&out[..keep * channels]);
 }
 
 #[cfg(test)]

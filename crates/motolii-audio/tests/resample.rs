@@ -43,7 +43,10 @@ fn sine_cache(frames: usize, rate: u32) -> Arc<PcmCache> {
     )
 }
 
-/// プロデューサがリングへ書き切るまで待ち、デバイス側PCMを回収する。
+/// プロデューサが自然終了するまでリングを消費し、デバイス側PCMを回収する。
+///
+/// `stop` は `running=false` で打ち切るため、総フレーム回帰では期待尺到達後も
+/// しばらく無供給が続くのを待ってから join する(過剰 flush を検出するため)。
 fn drain_producer(
     cache: Arc<PcmCache>,
     start_frame: u64,
@@ -51,6 +54,14 @@ fn drain_producer(
     ring_capacity: usize,
 ) -> (Vec<f32>, bool) {
     let channels = cache.format().channels as usize;
+    let source_rate = cache.format().sample_rate;
+    let start = start_frame.min(cache.frame_count());
+    let expected_frames = source_frame_to_device(
+        cache.frame_count().saturating_sub(start),
+        source_rate,
+        device_rate,
+    ) as usize;
+
     let (prod, cons) = channel(cache.format().channels, ring_capacity).unwrap();
     let producer =
         AudioProducer::spawn_with_device_rate(Arc::clone(&cache), prod, start_frame, device_rate)
@@ -59,7 +70,7 @@ fn drain_producer(
 
     let mut out = Vec::new();
     let deadline = Instant::now() + Duration::from_secs(10);
-    let mut idle_rounds = 0u32;
+    let mut quiet_after_expected = 0u32;
     while Instant::now() < deadline {
         let n = cons.buffered_frames();
         if n > 0 {
@@ -68,18 +79,26 @@ fn drain_producer(
             fill_or_silence(&cons, &mut buf, &local);
             let supplied = local.frames_supplied() as usize;
             out.extend_from_slice(&buf[..supplied * channels]);
-            idle_rounds = 0;
+            quiet_after_expected = 0;
         } else {
-            idle_rounds += 1;
-            if idle_rounds > 80 {
-                break;
+            let out_frames = out.len() / channels;
+            if out_frames >= expected_frames {
+                quiet_after_expected += 1;
+                // 期待尺到達後 100ms 無供給なら自然終了とみなす。
+                // 過剰 flush があるとここに到達する前に out が伸び続ける。
+                if quiet_after_expected >= 100 {
+                    break;
+                }
             }
             std::thread::sleep(Duration::from_millis(1));
         }
     }
     producer.stop();
-    let n = cons.buffered_frames();
-    if n > 0 {
+    loop {
+        let n = cons.buffered_frames();
+        if n == 0 {
+            break;
+        }
         let mut buf = vec![0.0f32; n * channels];
         let local = PlaybackCounters::default();
         fill_or_silence(&cons, &mut buf, &local);
@@ -174,28 +193,86 @@ fn resampled_supply_is_gapless_with_separated_underrun_counters() {
 
     let expected_device_frames =
         source_frame_to_device(cache.frame_count(), src_rate, dst_rate) as usize;
-    let mut got = 0usize;
     let mut prev_supplied = 0u64;
     let deadline = Instant::now() + Duration::from_secs(15);
-    while got < expected_device_frames.saturating_sub(chunk) {
+    // 空きを待ってから読む(人工 underrun を作らない)。
+    while (counters.frames_supplied() as usize) < expected_device_frames {
         assert!(Instant::now() < deadline, "playback timeout");
-        let mut buf = vec![0.0f32; chunk];
+        let available = cons.buffered_frames();
+        if available == 0 {
+            std::thread::sleep(Duration::from_millis(1));
+            continue;
+        }
+        let n = available.min(chunk);
+        let mut buf = vec![0.0f32; n];
         fill_or_silence(&cons, &mut buf, &counters);
-        got += chunk;
         let supplied = counters.frames_supplied();
-        assert!(supplied >= prev_supplied);
+        assert!(supplied > prev_supplied);
         prev_supplied = supplied;
-        std::thread::sleep(Duration::from_secs_f64(chunk as f64 / dst_rate as f64));
+    }
+    // 期待尺到達後も過剰 flush が無いか短時間監視する。
+    let quiet_deadline = Instant::now() + Duration::from_millis(100);
+    while Instant::now() < quiet_deadline {
+        let available = cons.buffered_frames();
+        if available > 0 {
+            let mut buf = vec![0.0f32; available];
+            fill_or_silence(&cons, &mut buf, &counters);
+        } else {
+            std::thread::sleep(Duration::from_millis(1));
+        }
     }
     producer.stop();
+    loop {
+        let n = cons.buffered_frames();
+        if n == 0 {
+            break;
+        }
+        let mut buf = vec![0.0f32; n];
+        fill_or_silence(&cons, &mut buf, &counters);
+    }
 
     assert_eq!(counters.underrun_events(), 0, "unexpected underrun");
     assert_eq!(counters.silence_frames(), 0);
-    let supplied = counters.frames_supplied() as i64;
-    let expected = expected_device_frames as i64;
-    assert!(
-        (supplied - expected).unsigned_abs() < (chunk as u64) * 2,
-        "supplied={supplied} expected≈{expected}"
+    assert_eq!(
+        counters.frames_supplied() as usize,
+        expected_device_frames,
+        "flush must not supply past expected device frames"
+    );
+}
+
+#[test]
+fn resampled_total_frames_match_expected_from_start() {
+    let src_rate = 44_100u32;
+    let dst_rate = 48_000u32;
+    let src_frames = (src_rate / 2) as usize; // 0.5s → 期待 24_000 device frames
+    let cache = sine_cache(src_frames, src_rate);
+    let (out, resampling) = drain_producer(Arc::clone(&cache), 0, dst_rate, 16_384);
+    assert!(resampling);
+    let expected = source_frame_to_device(src_frames as u64, src_rate, dst_rate) as usize;
+    assert_eq!(
+        out.len(),
+        expected,
+        "start=0: got {} frames, expected {expected} (bug was 36800 via over-flush)",
+        out.len()
+    );
+}
+
+#[test]
+fn resampled_total_frames_match_expected_after_seek() {
+    let src_rate = 44_100u32;
+    let dst_rate = 48_000u32;
+    let src_frames = (src_rate / 2) as usize;
+    let start = 4_410u64; // 0.1s seek
+    let cache = sine_cache(src_frames, src_rate);
+    let (out, resampling) = drain_producer(Arc::clone(&cache), start, dst_rate, 16_384);
+    assert!(resampling);
+    let remaining = src_frames as u64 - start;
+    let expected = source_frame_to_device(remaining, src_rate, dst_rate) as usize;
+    assert_eq!(
+        out.len(),
+        expected,
+        "seek: got {} frames, expected {expected}",
+        out.len()
     );
 }
 
