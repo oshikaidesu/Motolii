@@ -22,7 +22,7 @@
 3. **単一XYZ世界での2.5D/3D合成**: 動画・画像・テキスト・図形・点群・glTFを含む全オブジェクトが常に同じ正準XYZ世界とworld transformを持つ。Zは常にカメラ投影・視差へ効き、切り替えるのは遮蔽ポリシーだけとする(2026-07-14決定)
    - 通常UIの`Z Occlusion` OFF / ONは、従来C-4のレイヤー順`Layer Order` / 同じ座標の共有depth bufferを使う`Group Depth`へ対応する。Advancedでは明示参加レイヤーの連続範囲をdepth binにする`AE-style Bins`も選べる。どの方式でもタイムライン子順や座標解釈を変えない。
    - **カメラ文脈はコンポ全体で共有する**: v1では「レイヤごとにカメラを持つ」ことはしない。コア(コンポ/Document)側に `CompCamera`(position/target/fov/roll等)を1つ保持する。全レイヤーがこれを参照し、`Layer Order`では投影済み2Dテクスチャ、depth系ポリシーでは同じ座標の共有depth passへ接続する。
-   - **ユーザー体験の制約**: レイヤ側は共通XYZ配置/scale/rotationを持つが、カメラ追加・切替・グループ内カメラ、ライト階層・collection・constraint等のBlender/Nuke的な沼に入らない。見かけサイズを変える直接操作は`Scale`と`Depth Move(Z)`を別toolとして識別可能にし、scriptを必須にしない。
+   - **ユーザー体験の制約**: レイヤ側は共通XYZ配置/scale/rotationを持つが、カメラ追加・切替・グループ内カメラ、ライト階層・collection・constraint等のBlender/Nuke的な沼に入らない。見かけサイズを変える直接操作は`Scale`と`Depth Move(Z)`を別toolとして識別可能にする。複数layerの配置と激しいZ animationはlive `Depth Rail / 奥行き展開`で編集し、見かけ構図を保つ補正も通常transformへ明示確定する。script・expression・controller null・自動group化・Bakeを必須にしない。
    - 初期3方式は固定された最終形ではない。将来の距離ソート・OIT・素材別queue等は、同じobject/world/camera入力を使い既存方式を再解釈しない追加ポリシーとして拡張する。`Group Depth / AE-style Bins`のopaque/cutoutはM5の実depth対象。soft alphaの完全な相互遮蔽は単一depth bufferでは解けないため、OIT/deep samples等の別拡張として扱い、無言の近似をしない。
 4. **MVを1本書き出せる**: 3〜5分・音楽同期の最終書き出し(音声mux込み)が完成条件
 
