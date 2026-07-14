@@ -113,6 +113,8 @@ M3のUI実装前に、最低限次の操作を同じ書式で台帳化する。
 
 Autographの`Generator → Modifier[] → Result`は有力だが、現行`ParamSource`は値の出所を選ぶ凍結済み契約である。次を満たすまでModifier列をDocumentへ追加しない。
 
+M2終了時の扱いと発火条件は[判定記録](reviews/2026-07-14-m2-exit-param-pipeline-disposition.md)を正本とする。M2 blockerにはせず、M3で常設補正・汎用Modifier・高度property評価列のいずれかへ着手する前に解凍する。
+
 | Gate | 必要な証拠 |
 |---|---|
 | PP-1 意味 | `Base / Link-or-Driver / Modifier[] / Result`の型、順序、循環拒否、errorを宣言 |
