@@ -94,7 +94,7 @@ impl FixedRatioResampler {
     pub fn process_interleaved(&mut self, input: &[f32]) -> Result<&[f32]> {
         let need = self.inner.input_frames_next();
         let frames = input.len() / self.channels;
-        if input.len() % self.channels != 0 || frames != need {
+        if !input.len().is_multiple_of(self.channels) || frames != need {
             return Err(AudioError::Resample {
                 detail: "input frame count must equal input_frames_next()",
             });
@@ -110,7 +110,7 @@ impl FixedRatioResampler {
 
     /// トラック終端など、必要フレーム未満の残りを流し込む。
     pub fn process_partial_interleaved(&mut self, input: &[f32]) -> Result<&[f32]> {
-        if input.len() % self.channels != 0 {
+        if !input.len().is_multiple_of(self.channels) {
             return Err(AudioError::MisalignedSamples {
                 len: input.len(),
                 channels: self.channels as u16,
