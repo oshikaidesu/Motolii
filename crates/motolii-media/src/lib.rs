@@ -20,8 +20,9 @@ use std::process::Command;
 pub use decode::{read_frame_at, FrameReader};
 pub use encode::Encoder;
 pub use mux::{
-    audio_codec_allows_stream_copy, choose_audio_encode_mode, mux_soundtrack, probe_audio,
-    AudioEncodeMode, AudioStreamInfo, SoundtrackMuxReport, SoundtrackMuxRequest,
+    audio_codec_allows_stream_copy, choose_audio_encode_mode, mux_mixed_pcm, mux_soundtrack,
+    probe_audio, write_f32le_wav_stereo_48k, AudioEncodeMode, AudioStreamInfo, MixedPcmMuxReport,
+    MixedPcmMuxRequest, SoundtrackMuxReport, SoundtrackMuxRequest,
 };
 pub use probe::{
     probe, probe_container, require_supported_audio, select_audio_stream, select_video_stream,

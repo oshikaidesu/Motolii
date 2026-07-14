@@ -1,22 +1,27 @@
-//! motolii-export: M1の最小書き出しループ + D3 Document直結書き出し + D6楽曲mux。
+//! motolii-export: M1の最小書き出しループ + D3 Document直結書き出し + D6/AG-4音声mux。
 //!
 //! ProjectV1 経路の `ExportOverlayRequest` は M1 互換のため残す。
 //! Document 書き出しは `ExportJob` → `build_document_frame_graph` → `render_graph_cached`
 //! で直結し、ExportOverlayRequest ミラーを作らない(M2E-11⑤)。
-//! D6: Document.soundtrack があれば映像エンコード後に元音声をオフセット付きでmuxする。
+//! D6/AG-4: 単一未加工Soundtrackはstream-copy経路、Clip audio等があれば
+//! `AudioProgram::mix_audio` の正準PCMをAAC encodeしてmuxする。
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use motolii_audio::{AudioProgram, CANONICAL_SAMPLE_RATE};
 use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap};
 use motolii_doc::{
-    build_document_frame_graph, resolve_asset_path, AssetId, Document, EvaluationTime, GraphError,
-    PluginOpenWarning, TrackItem, RECT_LAYER_SOURCE,
+    build_document_frame_graph, resolve_asset_path, AssetId, ClipSource, Document, EvaluationTime,
+    GraphError, PluginOpenWarning, TrackItem, RECT_LAYER_SOURCE,
 };
 use motolii_eval::DataTracks;
 use motolii_gpu::{GpuCtx, RgbaDownloader, YuvToRgba};
-use motolii_media::{mux_soundtrack, probe, Encoder, FrameReader, MediaInfo, SoundtrackMuxRequest};
+use motolii_media::{
+    mux_mixed_pcm, mux_soundtrack, probe, write_f32le_wav_stereo_48k, Encoder, FrameReader,
+    MediaInfo, MixedPcmMuxRequest, SoundtrackMuxRequest,
+};
 use motolii_nodes::{ParamOverlayError, ParamRectOverlay};
 use motolii_plugin::{reference::register_reference_plugins, PluginRegistry, TextureRef};
 use motolii_render::{
@@ -88,6 +93,8 @@ pub enum ExportError {
     /// 実装ガード9 / D1f接続: 開くは警告、書き出しは拒否。
     #[error("export refused: document has degraded plugins (open-only warnings are not allowed on export)")]
     DegradedPlugins(Vec<PluginOpenWarning>),
+    #[error(transparent)]
+    Audio(#[from] motolii_audio::AudioError),
 }
 
 /// 書き出し設定。Document≠ExportJob(M2E-11⑤)。
@@ -217,12 +224,15 @@ pub fn export_document_video(
     register_reference_plugins(&mut registry)?;
     let desc = resolve_export_frame_desc(job.doc, job.project_root)?;
     let timeline_fps = job.doc.composition.fps;
-    let soundtrack = resolve_soundtrack_mux(job)?;
+    let soundtrack = resolve_audio_export(job)?;
 
     // muxが要るときは映像のみを一時ファイルへ書き、成功後に最終出力へ合成する。
-    let video_only_path = soundtrack
-        .as_ref()
-        .map(|_| job.output_path.with_extension("video-only.tmp.mp4"));
+    let video_only_path = match &soundtrack {
+        AudioExportPlan::None => None,
+        AudioExportPlan::SoundtrackFast { .. } | AudioExportPlan::MixedPcm { .. } => {
+            Some(job.output_path.with_extension("video-only.tmp.mp4"))
+        }
+    };
     let encode_path: &Path = video_only_path.as_deref().unwrap_or(job.output_path);
 
     let mut yuv = YuvToRgba::new(gpu);
@@ -305,28 +315,59 @@ pub fn export_document_video(
     }
     let finish_error = encoder.finish().err().map(ExportError::from);
     if let Some(e) = loop_error {
-        if soundtrack.is_some() {
+        if !matches!(soundtrack, AudioExportPlan::None) {
             let _ = std::fs::remove_file(encode_path);
         }
         return Err(e);
     }
     if let Some(e) = finish_error {
-        if soundtrack.is_some() {
+        if !matches!(soundtrack, AudioExportPlan::None) {
             let _ = std::fs::remove_file(encode_path);
         }
         return Err(e);
     }
 
-    if let Some(audio) = soundtrack {
-        let mux_result = mux_soundtrack(&SoundtrackMuxRequest {
-            video_path: encode_path,
-            audio_path: &audio.path,
-            output_path: job.output_path,
-            start_offset: audio.start_offset,
-            master_gain: audio.master_gain,
-        });
-        let _ = std::fs::remove_file(encode_path);
-        mux_result?;
+    match soundtrack {
+        AudioExportPlan::None => {}
+        AudioExportPlan::SoundtrackFast(audio) => {
+            let mux_result = mux_soundtrack(&SoundtrackMuxRequest {
+                video_path: encode_path,
+                audio_path: &audio.path,
+                output_path: job.output_path,
+                start_offset: audio.start_offset,
+                master_gain: audio.master_gain,
+            });
+            let _ = std::fs::remove_file(encode_path);
+            mux_result?;
+        }
+        AudioExportPlan::MixedPcm { frame_count } => {
+            let pcm_path = job.output_path.with_extension("mixed.tmp.wav");
+            let mux_result = (|| -> Result<(), ExportError> {
+                let mut caches = HashMap::new();
+                let program = AudioProgram::from_document(job.doc, job.project_root, &mut caches)?;
+                // chunk境界で結果が変わらないことを保証するため、固定chunkで連結する。
+                let mut pcm = Vec::with_capacity(frame_count.saturating_mul(2));
+                let mut start = 0u64;
+                let total = frame_count as u64;
+                const CHUNK: usize = 48_000; // 1秒
+                while start < total {
+                    let n = ((total - start) as usize).min(CHUNK);
+                    let (chunk, _) = program.mix_audio(start, n, None)?;
+                    pcm.extend_from_slice(&chunk);
+                    start += n as u64;
+                }
+                write_f32le_wav_stereo_48k(&pcm_path, &pcm)?;
+                mux_mixed_pcm(&MixedPcmMuxRequest {
+                    video_path: encode_path,
+                    pcm_wav_path: &pcm_path,
+                    output_path: job.output_path,
+                })?;
+                Ok(())
+            })();
+            let _ = std::fs::remove_file(encode_path);
+            let _ = std::fs::remove_file(&pcm_path);
+            mux_result?;
+        }
     }
 
     Ok(ExportReport {
@@ -336,15 +377,36 @@ pub fn export_document_video(
     })
 }
 
+enum AudioExportPlan {
+    None,
+    /// 単一未加工Soundtrack → 既存 D6 stream-copy/AAC 経路。
+    SoundtrackFast(ResolvedSoundtrack),
+    /// Clip audio / 複数source / gain automation / retime → mixしてAAC。
+    MixedPcm {
+        frame_count: usize,
+    },
+}
+
 struct ResolvedSoundtrack {
     path: PathBuf,
     start_offset: RationalTime,
     master_gain: f64,
 }
 
-fn resolve_soundtrack_mux(job: &ExportJob<'_>) -> Result<Option<ResolvedSoundtrack>, ExportError> {
+/// AG-4: fast pathは「可聴sourceがSoundtrackのみ」かつClip側に加工音声が無いときだけ。
+fn resolve_audio_export(job: &ExportJob<'_>) -> Result<AudioExportPlan, ExportError> {
+    let has_clip_audio = document_has_enabled_clip_audio(job.doc);
+    let has_clip_retime = document_has_non_identity_clip_audio_retime(job.doc);
+
+    if has_clip_audio || has_clip_retime {
+        let frames = composition_canonical_frames(job.doc.composition.duration)?;
+        return Ok(AudioExportPlan::MixedPcm {
+            frame_count: frames,
+        });
+    }
+
     let Some(st) = job.doc.soundtrack else {
-        return Ok(None);
+        return Ok(AudioExportPlan::None);
     };
     let asset = job
         .doc
@@ -353,11 +415,69 @@ fn resolve_soundtrack_mux(job: &ExportJob<'_>) -> Result<Option<ResolvedSoundtra
         .ok_or(ExportError::UnresolvedAsset(st.asset.get()))?;
     let path = resolve_asset_path(asset, job.project_root)
         .ok_or(ExportError::UnresolvedAsset(st.asset.get()))?;
-    Ok(Some(ResolvedSoundtrack {
+    Ok(AudioExportPlan::SoundtrackFast(ResolvedSoundtrack {
         path,
         start_offset: st.start_offset,
         master_gain: st.master_gain(),
     }))
+}
+
+fn composition_canonical_frames(duration: RationalTime) -> Result<usize, ExportError> {
+    if duration <= RationalTime::ZERO {
+        return Ok(0);
+    }
+    let num = duration.num().max(0) as u128;
+    let den = duration.den().max(1) as u128;
+    let frames = (num * u128::from(CANONICAL_SAMPLE_RATE)) / den;
+    Ok(frames as usize)
+}
+
+fn document_has_enabled_clip_audio(doc: &Document) -> bool {
+    fn walk(items: &[TrackItem]) -> bool {
+        for item in items {
+            match item {
+                TrackItem::Clip(clip) => {
+                    if let ClipSource::Asset { audio, .. } = &clip.source {
+                        if audio.iter().any(|c| c.enabled) {
+                            return true;
+                        }
+                    }
+                }
+                TrackItem::Group(g) => {
+                    if walk(&g.children) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+    doc.tracks.iter().any(|t| walk(&t.items))
+}
+
+fn document_has_non_identity_clip_audio_retime(doc: &Document) -> bool {
+    fn walk(items: &[TrackItem]) -> bool {
+        for item in items {
+            match item {
+                TrackItem::Clip(clip) => {
+                    if let ClipSource::Asset { audio, .. } = &clip.source {
+                        if audio.iter().any(|c| c.enabled)
+                            && (clip.time_map.speed_num() != 1 || clip.time_map.speed_den() != 1)
+                        {
+                            return true;
+                        }
+                    }
+                }
+                TrackItem::Group(g) => {
+                    if walk(&g.children) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+    doc.tracks.iter().any(|t| walk(&t.items))
 }
 
 /// Freeze: 素材 available 範囲へクランプ。`nb_frames` が無ければ `duration` から導出。

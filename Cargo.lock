@@ -764,6 +764,7 @@ dependencies = [
 name = "motolii-export"
 version = "0.1.0"
 dependencies = [
+ "motolii-audio",
  "motolii-core",
  "motolii-doc",
  "motolii-eval",

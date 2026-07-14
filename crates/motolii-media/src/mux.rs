@@ -1,9 +1,11 @@
 //! D6: 映像mp4へ楽曲をmuxする。
 //!
-//! ミキシングバウンスはしない。コーデックがmp4互換かつ `master_gain == 1.0` なら
-//! ストリームコピーを優先し、それ以外は AAC 再エンコードへ落ちる。
-//! `start_offset` は音源側の開始点(ソースin点)として `-ss` で渡す。
+//! AG-4: 単一未加工Soundtrackはstream-copy/AAC再encodeの既存経路。
+//! Clip audio・複数source・gain automation・retimeがある場合は
+//! 正準mixed PCM(WAV)をAAC encodeしてmuxする(`mux_mixed_pcm`)。
 
+use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
@@ -172,6 +174,99 @@ pub fn mux_soundtrack(req: &SoundtrackMuxRequest<'_>) -> Result<SoundtrackMuxRep
         encode_mode,
         audio_codec: audio.codec_name,
     })
+}
+
+/// 映像mp4 + 正準mixed PCM(48k stereo interleaved f32) → AAC付きmp4。
+///
+/// stream-copyはしない(加工済みPCM境界)。失敗時も子プロセスをwaitして後始末する。
+#[derive(Debug, Clone)]
+pub struct MixedPcmMuxRequest<'a> {
+    pub video_path: &'a Path,
+    /// IEEE float WAV(48kHz / stereo / f32le)。
+    pub pcm_wav_path: &'a Path,
+    pub output_path: &'a Path,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MixedPcmMuxReport {
+    pub encode_mode: AudioEncodeMode,
+}
+
+pub fn mux_mixed_pcm(req: &MixedPcmMuxRequest<'_>) -> Result<MixedPcmMuxReport> {
+    let mut cmd = Command::new("ffmpeg");
+    cmd.args(["-v", "error", "-y"]);
+    cmd.arg("-i").arg(req.video_path);
+    cmd.arg("-i").arg(req.pcm_wav_path);
+    cmd.args([
+        "-map",
+        "0:v:0",
+        "-map",
+        "1:a:0",
+        "-c:v",
+        "copy",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-shortest",
+        "-movflags",
+        "+faststart",
+    ]);
+    cmd.arg(req.output_path);
+    cmd.stderr(std::process::Stdio::piped());
+
+    let mut child = cmd.spawn().map_err(|e| match e.kind() {
+        std::io::ErrorKind::NotFound => MediaError::ToolNotFound("ffmpeg"),
+        _ => MediaError::Io(e),
+    })?;
+    let mut err = String::new();
+    if let Some(stderr) = child.stderr.as_mut() {
+        err = read_child_stderr(stderr)?;
+    }
+    let status = child.wait()?;
+    if !status.success() {
+        return Err(MediaError::Ffmpeg(err));
+    }
+    Ok(MixedPcmMuxReport {
+        encode_mode: AudioEncodeMode::AacEncode,
+    })
+}
+
+/// 正準48kHz stereo interleaved f32 を IEEE float WAV として書く。
+pub fn write_f32le_wav_stereo_48k(path: &Path, interleaved: &[f32]) -> Result<()> {
+    if !interleaved.len().is_multiple_of(2) {
+        return Err(MediaError::Probe(
+            "interleaved stereo pcm length must be even".into(),
+        ));
+    }
+    let frames = interleaved.len() / 2;
+    let data_bytes = (interleaved.len() * 4) as u32;
+    let sample_rate = 48_000u32;
+    let channels = 2u16;
+    let bits = 32u16;
+    let block_align = channels * (bits / 8);
+    let byte_rate = sample_rate * u32::from(block_align);
+
+    let mut f = File::create(path)?;
+    f.write_all(b"RIFF")?;
+    f.write_all(&(36 + data_bytes).to_le_bytes())?;
+    f.write_all(b"WAVE")?;
+    f.write_all(b"fmt ")?;
+    f.write_all(&16u32.to_le_bytes())?;
+    f.write_all(&3u16.to_le_bytes())?; // IEEE float
+    f.write_all(&channels.to_le_bytes())?;
+    f.write_all(&sample_rate.to_le_bytes())?;
+    f.write_all(&byte_rate.to_le_bytes())?;
+    f.write_all(&block_align.to_le_bytes())?;
+    f.write_all(&bits.to_le_bytes())?;
+    f.write_all(b"data")?;
+    f.write_all(&data_bytes.to_le_bytes())?;
+    for s in interleaved {
+        f.write_all(&s.to_le_bytes())?;
+    }
+    f.sync_all()?;
+    let _ = frames;
+    Ok(())
 }
 
 fn format_offset_secs(t: RationalTime) -> String {
