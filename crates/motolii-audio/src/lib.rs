@@ -1,29 +1,36 @@
-//! motolii-audio: D4 — 楽曲1本のSymphoniaデコード→PCM全展開キャッシュ+cpal出力+
-//! SPSC リングバッファ/プロデューサスレッド(ミキサーなし)。
-//! D4-FU — デバイス≠素材サンプルレート時の固定比リサンプル(プロデューサ側・リング書き込み前)。
+//! motolii-audio: D4 PCM cache + D4-FU resample + AG-2 deterministic mixer。
 //!
-//! docs/specs/M2-document-model.md「音声トランスポート設計」の4./5./6.をD4/D4-FUの範囲で実装する。
-//! Documentスキーマには一切触れない独立レーン(docs/reviews/2026-07-12-m2-permanence-prevention.md
-//! 「依存直列を飛ばさない」: D4は独立)。
+//! docs/specs/M2-document-model.md「音声トランスポート設計」と
+//! docs/reviews/2026-07-14-audio-generalization-design.md §6 を実装する。
 //!
-//! **D4/D4-FUの非ゴール**(仕様書D4・D4-FU行・#123/#147): clock owner交代・映像frame drop・
-//! 適応解像度/DRS・自動バリスピードはD5。export muxはD6。波形peakはM3/U3。ミキサー・
-//! clip内蔵音声・複数trackはこのクレートの範囲外(コンセプト決定: 音声はプロジェクト直下の楽曲1本)。
-//! Transport側でのリサンプラ遅延引き算もしない(遅延はproducerの先頭trimで閉じる)。
+//! **AG-2**: `mix_audio` / `AudioProgram` で Soundtrack+Clip audio を正準48k stereoへ
+//! 決定論的に加算する。Transport入力はこのmixed PCMへ一般化する(D5はクロック所有のみ)。
+//! meteringはTransientのpeak/clip snapshot。自動normalize/limiterは行わない。
 
 mod cache;
+mod convert;
 mod decode;
 mod device;
 mod error;
+mod meter;
+mod mix;
 mod producer;
+mod program;
 mod resample;
 mod ring;
 
 pub use cache::{PcmCache, PcmFormat};
-pub use decode::{decode_file, decode_file_with_limits, decode_stream, decode_stream_with_limits};
+pub use convert::{canonical_format, to_canonical, CANONICAL_CHANNELS, CANONICAL_SAMPLE_RATE};
+pub use decode::{
+    decode_file, decode_file_audio_ordinal, decode_file_audio_ordinal_with_limits,
+    decode_file_with_limits, decode_stream, decode_stream_with_limits,
+};
 pub use device::{negotiate_output, select_device_sample_rate, NegotiatedOutput, OutputStream};
 pub use error::{AudioError, Result};
-pub use producer::AudioProducer;
+pub use meter::{AudioMeter, MeterSnapshot, CLIP_THRESHOLD};
+pub use mix::{mix_audio, MixReport, MixSource};
+pub use producer::{AudioProducer, MixProducer};
+pub use program::{program_from_sources, AudioProgram};
 pub use resample::{source_frame_to_device, FixedRatioResampler};
 pub use ring::{channel, fill_or_silence, PlaybackCounters, RingConsumer, RingProducer};
 

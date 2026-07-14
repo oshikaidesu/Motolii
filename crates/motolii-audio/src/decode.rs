@@ -8,7 +8,7 @@ use symphonia::core::codecs::audio::AudioDecoderOptions;
 use symphonia::core::codecs::CodecParameters;
 use symphonia::core::errors::Error as SymphoniaError;
 use symphonia::core::formats::probe::Hint;
-use symphonia::core::formats::{FormatOptions, TrackType};
+use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 
@@ -19,7 +19,7 @@ use crate::error::{AudioError, Result};
 ///
 /// コンテナ判定はSymphoniaのprobe(拡張子ヒント+マジックバイト)に委ねる。
 /// 複数音声トラックを含むファイルではデフォルトトラック1本のみを読む
-/// (D4スコープ: ミキサー・複数trackは実装しない)。
+/// (`decode_file_audio_ordinal`でordinal指定)。
 pub fn decode_file(path: impl AsRef<Path>) -> Result<PcmCache> {
     decode_file_with_limits(path, &ResourceLimits::production())
 }
@@ -27,6 +27,19 @@ pub fn decode_file(path: impl AsRef<Path>) -> Result<PcmCache> {
 /// `ResourceLimits::max_samples`を注入してデコードする(I/O境界)。
 pub fn decode_file_with_limits(
     path: impl AsRef<Path>,
+    limits: &ResourceLimits,
+) -> Result<PcmCache> {
+    decode_file_audio_ordinal_with_limits(path, 0, limits)
+}
+
+/// kind内audio ordinalを指定してデコードする(AG-2)。欠落は`StreamNotFound`。
+pub fn decode_file_audio_ordinal(path: impl AsRef<Path>, ordinal: u32) -> Result<PcmCache> {
+    decode_file_audio_ordinal_with_limits(path, ordinal, &ResourceLimits::production())
+}
+
+pub fn decode_file_audio_ordinal_with_limits(
+    path: impl AsRef<Path>,
+    ordinal: u32,
     limits: &ResourceLimits,
 ) -> Result<PcmCache> {
     let path = path.as_ref();
@@ -38,7 +51,7 @@ pub fn decode_file_with_limits(
         hint.with_extension(ext);
     }
 
-    decode_stream_with_limits(mss, &hint, limits)
+    decode_stream_audio_ordinal_with_limits(mss, &hint, ordinal, limits)
 }
 
 /// `MediaSourceStream`から直接デコードする(テスト用: メモリ上のバイト列を
@@ -53,6 +66,15 @@ pub fn decode_stream_with_limits(
     hint: &Hint,
     limits: &ResourceLimits,
 ) -> Result<PcmCache> {
+    decode_stream_audio_ordinal_with_limits(mss, hint, 0, limits)
+}
+
+fn decode_stream_audio_ordinal_with_limits(
+    mss: MediaSourceStream<'static>,
+    hint: &Hint,
+    ordinal: u32,
+    limits: &ResourceLimits,
+) -> Result<PcmCache> {
     let mut format = symphonia::default::get_probe().probe(
         hint,
         mss,
@@ -60,9 +82,15 @@ pub fn decode_stream_with_limits(
         MetadataOptions::default(),
     )?;
 
-    let track = format
-        .default_track(TrackType::Audio)
-        .ok_or(AudioError::NoAudioTrack)?;
+    let audio_tracks: Vec<_> = format
+        .tracks()
+        .iter()
+        .filter(|t| matches!(t.codec_params, Some(CodecParameters::Audio(_))))
+        .cloned()
+        .collect();
+    let track = audio_tracks
+        .get(ordinal as usize)
+        .ok_or(AudioError::StreamNotFound { ordinal })?;
     let track_id = track.id;
     let Some(CodecParameters::Audio(audio_params)) = track.codec_params.clone() else {
         return Err(AudioError::NoAudioTrack);
@@ -101,8 +129,6 @@ pub fn decode_stream_with_limits(
                 samples.extend_from_slice(&packet_samples);
                 check_sample_limit(limits, samples.len() as u64)?;
             }
-            // Symphoniaの規約: DecodeErrorは当該パケットだけ捨てて継続してよい
-            // 回復可能エラー(壊れた1パケットで楽曲全体を拒否しない)。
             Err(SymphoniaError::DecodeError(_)) => continue,
             Err(e) => return Err(e.into()),
         }

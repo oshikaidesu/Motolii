@@ -694,6 +694,7 @@ name = "motolii-audio"
 version = "0.1.0"
 dependencies = [
  "cpal",
+ "motolii-core",
  "motolii-doc",
  "motolii-testkit",
  "rubato",
