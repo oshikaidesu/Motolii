@@ -23,6 +23,8 @@ symphonia = { version = "0.6", default-features = false, features = [
     "wav",
 ] }
 cpal = "0.18"
+# D4-FU: デバイス≠素材レートの固定比変換(プロデューサ側)。レート一致時は挿入しない。
+rubato = "0.16"
 
 [dev-dependencies]
 motolii-testkit.workspace = true

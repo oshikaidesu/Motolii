@@ -58,6 +58,10 @@ pub enum AudioError {
 
     #[error("decoded sample count {observed} exceeds limit {limit}")]
     SampleCountLimit { observed: u64, limit: u64 },
+
+    /// 固定比リサンプルの構築・処理失敗(D4-FU)。公開APIはpanicしない。
+    #[error("fixed-ratio resample error: {detail}")]
+    Resample { detail: &'static str },
 }
 
 pub type Result<T> = std::result::Result<T, AudioError>;
