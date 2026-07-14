@@ -16,9 +16,7 @@ use motolii_doc::{
 };
 use motolii_eval::DataTracks;
 use motolii_gpu::{GpuCtx, RgbaDownloader, YuvToRgba};
-use motolii_media::{
-    mux_soundtrack, probe, Encoder, FrameReader, MediaInfo, SoundtrackMuxRequest,
-};
+use motolii_media::{mux_soundtrack, probe, Encoder, FrameReader, MediaInfo, SoundtrackMuxRequest};
 use motolii_nodes::{ParamOverlayError, ParamRectOverlay};
 use motolii_plugin::{reference::register_reference_plugins, PluginRegistry, TextureRef};
 use motolii_render::{

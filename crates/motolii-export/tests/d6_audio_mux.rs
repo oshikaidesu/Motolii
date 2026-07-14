@@ -64,10 +64,16 @@ fn extract_pcm(path: &Path, out: &Path, start: Option<&str>, duration: &str) {
         cmd.args(["-ss", ss]);
     }
     cmd.arg("-i").arg(path);
-    cmd.args(["-t", duration, "-vn", "-ac", "1", "-ar", "48000", "-f", "s16le"])
-        .arg(out);
+    cmd.args([
+        "-t", duration, "-vn", "-ac", "1", "-ar", "48000", "-f", "s16le",
+    ])
+    .arg(out);
     let status = cmd.status().expect("spawn ffmpeg extract");
-    assert!(status.success(), "pcm extract failed for {}", path.display());
+    assert!(
+        status.success(),
+        "pcm extract failed for {}",
+        path.display()
+    );
 }
 
 fn build_doc(video_name: &str, audio_name: Option<(&str, RationalTime)>) -> Document {
@@ -273,7 +279,10 @@ fn export_mux_respects_start_offset_and_stays_in_sync() {
     let start: f64 = parts[0].parse().unwrap_or(0.0);
     let dur: f64 = parts[1].parse().unwrap();
     assert!(start.abs() < 0.05, "audio start_time drifted: {start}");
-    assert!((dur - 1.0).abs() < 0.15, "audio duration not matched to video: {dur}");
+    assert!(
+        (dur - 1.0).abs() < 0.15,
+        "audio duration not matched to video: {dur}"
+    );
 
     std::fs::remove_dir_all(&dir).ok();
 }

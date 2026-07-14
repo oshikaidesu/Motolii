@@ -363,5 +363,4 @@ mod tests {
         assert_eq!(info.sample_rate, Some(48000));
         std::fs::remove_dir_all(&dir).ok();
     }
-
 }
