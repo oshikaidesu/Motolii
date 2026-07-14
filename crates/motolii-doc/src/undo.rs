@@ -95,10 +95,7 @@ fn merge_pair(first: &Command, second: Command) -> Command {
         },
         (
             Command::SetAudioComponentEnabled {
-                target,
-                index,
-                old,
-                ..
+                target, index, old, ..
             },
             Command::SetAudioComponentEnabled { new, .. },
         ) => Command::SetAudioComponentEnabled {
@@ -109,10 +106,7 @@ fn merge_pair(first: &Command, second: Command) -> Command {
         },
         (
             Command::SetAudioComponentGain {
-                target,
-                index,
-                old,
-                ..
+                target, index, old, ..
             },
             Command::SetAudioComponentGain { new, .. },
         ) => Command::SetAudioComponentGain {

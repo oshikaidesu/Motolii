@@ -111,14 +111,16 @@ pub fn plan_detach_audio(
         item: detached,
         layer_names: BTreeMap::from([(new_layer, new_layer_name.to_string())]),
     }];
-    commands.extend(enabled_indices.into_iter().map(|index| {
-        Command::SetAudioComponentEnabled {
-            target: original.envelope.layer_id,
-            index,
-            old: true,
-            new: false,
-        }
-    }));
+    commands.extend(
+        enabled_indices
+            .into_iter()
+            .map(|index| Command::SetAudioComponentEnabled {
+                target: original.envelope.layer_id,
+                index,
+                old: true,
+                new: false,
+            }),
+    );
     Ok(commands)
 }
 

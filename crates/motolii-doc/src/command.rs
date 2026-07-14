@@ -359,19 +359,13 @@ impl Command {
                 Ok(())
             }
             Command::SetAudioComponentEnabled {
-                target,
-                index,
-                new,
-                ..
+                target, index, new, ..
             } => {
                 find_audio_component_mut(doc, *target, *index)?.enabled = *new;
                 Ok(())
             }
             Command::SetAudioComponentGain {
-                target,
-                index,
-                new,
-                ..
+                target, index, new, ..
             } => {
                 find_audio_component_mut(doc, *target, *index)?.gain = new.clone();
                 Ok(())

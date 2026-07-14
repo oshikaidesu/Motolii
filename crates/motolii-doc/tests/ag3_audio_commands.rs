@@ -4,8 +4,8 @@ use std::path::Path;
 
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
-    build_import_clip_source, load_document, plan_detach_audio, save_document, AudioComponent, Clip,
-    ClipSource, Command, CommandError, DocParam, Document, DocumentError, DocumentWriter,
+    build_import_clip_source, load_document, plan_detach_audio, save_document, AudioComponent,
+    Clip, ClipSource, Command, CommandError, DocParam, Document, DocumentError, DocumentWriter,
     ImportAvMode, ItemEnvelope, ParentLocator, Track, TrackItem, VideoComponent,
     MIN_READER_VERSION_FOR_ASSET_COMPONENTS,
 };
@@ -140,6 +140,136 @@ fn detach_to_other_track_then_undo_restores_single_enabled_av_clip() {
 }
 
 #[test]
+fn detach_survives_save_reload_and_undo_restores() {
+    let mut f = fixture();
+    let audio_track = f.doc.track_ids.allocate("A1").unwrap();
+    f.doc.tracks.push(Track {
+        id: audio_track,
+        items: vec![],
+    });
+    let TrackItem::Clip(original) = &f.doc.tracks[0].items[0] else {
+        panic!("fixture clip");
+    };
+    let expected_start = original.start;
+    let expected_duration = original.duration;
+    let expected_time_map = original.time_map;
+    let expected_asset = match &original.source {
+        ClipSource::Asset { asset, .. } => *asset,
+        _ => panic!("fixture asset"),
+    };
+    let new_layer = f.doc.layers.reserve().unwrap();
+    let commands = plan_detach_audio(
+        &f.doc,
+        ParentLocator::Track(f.track),
+        0,
+        ParentLocator::Track(audio_track),
+        0,
+        new_layer,
+        "Audio",
+    )
+    .unwrap();
+    let mut writer = DocumentWriter::new(f.doc);
+    let gesture = writer.begin_gesture();
+    for command in commands {
+        writer.apply_command(gesture, command).unwrap();
+    }
+    let detached = writer.snapshot();
+    assert_detached_av_split(
+        &detached,
+        new_layer,
+        expected_asset,
+        expected_start,
+        expected_duration,
+        expected_time_map,
+    );
+
+    // 文書スナップショットの永続化(Undo履歴はセッション局所なので別途検証)。
+    let dir =
+        std::env::temp_dir().join(format!("motolii-ag3-detach-persist-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("doc.json");
+    save_document(Path::new(&path), &detached).unwrap();
+    let reloaded = load_document(Path::new(&path)).unwrap();
+    reloaded.validate().unwrap();
+    assert_detached_av_split(
+        &reloaded,
+        new_layer,
+        expected_asset,
+        expected_start,
+        expected_duration,
+        expected_time_map,
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+
+    // 同一gestureのUndo 1回で分離前に戻る。
+    writer.undo().unwrap();
+    let restored = writer.snapshot();
+    assert_eq!(restored.tracks[0].items.len(), 1);
+    assert_eq!(restored.tracks[1].items.len(), 0);
+    assert!(audio_components(&restored)[0].enabled);
+    let TrackItem::Clip(restored_clip) = &restored.tracks[0].items[0] else {
+        panic!("restored clip");
+    };
+    assert_eq!(restored_clip.start, expected_start);
+    assert_eq!(restored_clip.duration, expected_duration);
+    assert_eq!(restored_clip.time_map, expected_time_map);
+    assert!(matches!(
+        &restored_clip.source,
+        ClipSource::Asset {
+            video: Some(_),
+            audio,
+            ..
+        } if audio.len() == 1 && audio[0].enabled
+    ));
+}
+
+fn assert_detached_av_split(
+    doc: &Document,
+    audio_layer: motolii_doc::LayerId,
+    asset: motolii_doc::AssetId,
+    start: RationalTime,
+    duration: RationalTime,
+    time_map: TimeMap,
+) {
+    assert_eq!(doc.tracks[0].items.len(), 1);
+    assert_eq!(doc.tracks[1].items.len(), 1);
+    assert!(!audio_components(doc)[0].enabled);
+    assert_eq!(doc.layers.display_name(audio_layer), Some("Audio"));
+
+    let TrackItem::Clip(video_clip) = &doc.tracks[0].items[0] else {
+        panic!("video lane clip");
+    };
+    assert_eq!(video_clip.start, start);
+    assert_eq!(video_clip.duration, duration);
+    assert_eq!(video_clip.time_map, time_map);
+    assert!(matches!(
+        &video_clip.source,
+        ClipSource::Asset {
+            asset: a,
+            video: Some(_),
+            audio,
+        } if *a == asset && audio.len() == 1 && !audio[0].enabled
+    ));
+
+    let TrackItem::Clip(audio_clip) = &doc.tracks[1].items[0] else {
+        panic!("audio lane clip");
+    };
+    assert_eq!(audio_clip.envelope.layer_id, audio_layer);
+    assert_eq!(audio_clip.start, start);
+    assert_eq!(audio_clip.duration, duration);
+    assert_eq!(audio_clip.time_map, time_map);
+    assert!(matches!(
+        &audio_clip.source,
+        ClipSource::Asset {
+            asset: a,
+            video: None,
+            audio,
+        } if *a == asset && !audio.is_empty() && audio.iter().all(|c| c.enabled)
+    ));
+}
+
+#[test]
 fn detach_same_lane_is_rejected() {
     let mut f = fixture();
     let new_layer = f.doc.layers.reserve().unwrap();
@@ -253,20 +383,14 @@ fn mute_and_gain_survive_save_reload() {
         .unwrap();
     let before = writer.snapshot();
 
-    let dir = std::env::temp_dir().join(format!(
-        "motolii-ag3-persist-{}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("motolii-ag3-persist-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("doc.json");
     save_document(Path::new(&path), &before).unwrap();
     let after = load_document(Path::new(&path)).unwrap();
     assert!(!audio_components(&after)[0].enabled);
-    assert_eq!(
-        audio_components(&after)[0].gain,
-        DocParam::const_f64(0.3)
-    );
+    assert_eq!(audio_components(&after)[0].gain, DocParam::const_f64(0.3));
     let _ = std::fs::remove_dir_all(&dir);
 }
 
