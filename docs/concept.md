@@ -37,7 +37,7 @@
 - **先例の良い意味論を積極的に取り込む**: 既存商用製品との互換性や販売上の都合をMotoliiの設計制約にしない。競合の操作・公開仕様・失敗例から学び、より小さく一貫した意味へ作り直す。ただし着想・意味論の参照と、コード・asset・商標・固有UIの複製は分け、ライセンスと出典規律を守る。
 - **改善可能性を互換性破壊の免罪符にしない**: 後から直せることは強みだが、公開Documentへ一度焼いた意味は利用者の制作資産になる。未決はplugin/preset/非永続UIで試し、意味が安定してから追加的schemaとして昇格する。既存fieldの再解釈ではなく、migrationと意味論goldenを伴う。
 
-この原則の具体的な先例と未決事項は、[反復再発明の標準化監査](reviews/2026-07-14-repeated-wheel-standardization-audit.md)および[4ツールの称賛・日曜大工・根本ギャップ監査](reviews/2026-07-14-motion-tools-praise-diy-gap-audit.md)を参照する。特にAutograph型の`Generator → Modifier[] → Result`は相対補正と評価順を一般化する有力な先例だが、現行`ParamSource`の凍結面に触れるため、独立した反対側レビュー前には仕様化しない。
+フェーズ別の責務・代表操作・審判は[操作単純化モデル](interaction-simplicity-model.md)を正本とする。具体的な先例と未決事項は、[反復再発明の標準化監査](reviews/2026-07-14-repeated-wheel-standardization-audit.md)および[4ツールの称賛・日曜大工・根本ギャップ監査](reviews/2026-07-14-motion-tools-praise-diy-gap-audit.md)を参照する。特にAutograph型の`Generator → Modifier[] → Result`は相対補正と評価順を一般化する有力な先例だが、現行`ParamSource`の凍結面に触れるため、独立した反対側レビュー前には仕様化しない。
 
 ## このツールが「ではない」もの
 

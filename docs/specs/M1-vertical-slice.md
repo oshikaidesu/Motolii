@@ -50,6 +50,10 @@
 B-3(色空間事故)、B-4(プレビュー/書き出し分岐)、C-3(評価エンジン過小評価)、D-2(自己検証基盤)。
 完成物: **1本の動画を読み込み → キーフレーム/合成DataTrackでシェイプを駆動 → 合成 → mp4書き出し** ができるCLIツール。UIなし。キャッシュなし。
 
+### 操作単純化モデルへの割当（完了済み・契約基線）
+
+M1の`render_frame(t, Quality)`、型付き`Value / ParamSource / DataTrack`、plugin純関数、正準座標、preview/export共通評価を、[操作単純化モデル](../interaction-simplicity-model.md)の契約基線とする。M1へUI機能を遡及追加しない。M2以降のDirect/Tool/Advancedはこの基線を迂回する別評価経路を作らず、同じDocument意味へ正規化する。Param Pipeline GateがM1公開契約の変更を要求する場合は、実装前に凍結解除・migration・既存意味論golden維持を行う。
+
 2026-07-08 方針修正: GPU色解析はAE的な基礎操作ではなく、最終的にはプラグイン/ユーザーコミュニティへ委ねる拡張領域である。M1では「解析そのもの」を必須にせず、`motolii-eval`のキーフレーム・DataTrack参照、標準シェイプ制御、Compositeの基礎を優先する。DataTrack境界の検証は、合成テストデータまたはParamDriver参照プラグインで足りる。
 
 ## スコープ外

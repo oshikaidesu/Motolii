@@ -112,6 +112,10 @@ Depth Railは配置を担当し、遮蔽規則を変更しない。Zを交差さ
 
 ## タスク分割(粗案)
 
+### 操作単純化モデルへの割当
+
+M5は[操作単純化モデル](../interaction-simplicity-model.md)の最初の大規模実地審判である。P2Uは`Scale / Depth Move`を別channelのDirect操作へ、P2Rは大量Z編集を通常transformのToolへ、P2DはSimple `Z Occlusion`とAdvanced policyを同じDocument意味へ正規化する。いずれも隠れgroup/null/expression/controller/Bakeを生成しない。P5では完成画だけでなく「3D背景へ2Dキャラを配置→前後関係を調整→Advancedで意味を確認→Undoで復元」の操作記録を残し、入口開閉でDocumentと画が変わらないことを確認する。
+
 | ID | 内容 | 依存 | 完了条件(概要) |
 |---|---|---|---|
 | P1 | glTF読み込み(メッシュ・マテリアル最小限)+ OBJ→glTF変換パス | 凍結ゲート | サンプルアセットの読み込みゴールデンテスト |
