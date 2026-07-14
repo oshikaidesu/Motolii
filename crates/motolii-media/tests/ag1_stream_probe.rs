@@ -178,13 +178,13 @@ fn probe_audio_ignores_attached_pic_cover_art() {
     let dir = tmp_dir("ag1_attached_pic");
     let cover = dir.join("cover.png");
     let audio = dir.join("with_cover.m4a");
-    // 1x1 PNG (odd video) を attached_pic として載せる。旧バグでは probe_container 経由で
-    // 偶数寸法拒否に巻き込まれた。
+    // 2x2 PNG を attached_pic として載せる(1x1は一部FFmpegが0x0扱いして拒否する)。
+    // 旧バグでは probe_container 経由の厳格video検証に巻き込まれた。
     run_ffmpeg(&[
         "-f",
         "lavfi",
         "-i",
-        "color=c=blue:s=1x1:d=0.04",
+        "color=c=blue:s=2x2:d=0.04",
         "-frames:v",
         "1",
         cover.to_str().unwrap(),
