@@ -90,7 +90,7 @@ fn build_exit_demo_document(input_name: &str) -> Document {
         start: RationalTime::ZERO,
         duration: clip_duration,
         time_map: TimeMap::identity(),
-        source: ClipSource::Asset { asset: asset_id },
+        source: ClipSource::asset_video_only(asset_id),
     };
 
     let center = DocParam::Keyframes(eased_center_track());

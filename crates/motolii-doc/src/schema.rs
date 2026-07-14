@@ -300,11 +300,121 @@ pub enum BlendMode {
     Multiply,
 }
 
+/// 永続するmedia stream選択(kind + container内ordinal)。
+///
+/// content hashが同じAssetなら同じordinalを同じstreamとみなす。
+/// 欠落時は別streamへfallbackせずtyped error(AG-1)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, DeserializeDerive)]
+pub struct StreamSelector {
+    pub kind: StreamKind,
+    pub ordinal: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, DeserializeDerive)]
+#[serde(rename_all = "snake_case")]
+pub enum StreamKind {
+    Video,
+    Audio,
+}
+
+/// Asset Clipのvideo component(0または1)。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, DeserializeDerive)]
+pub struct VideoComponent {
+    pub stream: StreamSelector,
+}
+
+impl VideoComponent {
+    pub fn ordinal(ordinal: u32) -> Self {
+        Self {
+            stream: StreamSelector {
+                kind: StreamKind::Video,
+                ordinal,
+            },
+        }
+    }
+}
+
+/// source範囲外の音声挙動。videoの`Freeze`/`Black`語彙は流用しない(AG-1)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, DeserializeDerive)]
+#[serde(rename_all = "snake_case")]
+pub enum AudioOutOfRange {
+    #[default]
+    Silence,
+    Loop,
+}
+
+fn default_audio_gain() -> DocParam {
+    DocParam::const_f64(1.0)
+}
+
+/// Asset Clipのaudio component(0以上)。
+#[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
+pub struct AudioComponent {
+    pub stream: StreamSelector,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// linear・有限・0以上。上限は設けない(masteringしない — AG-1)。
+    #[serde(default = "default_audio_gain")]
+    pub gain: DocParam,
+    #[serde(default)]
+    pub out_of_range: AudioOutOfRange,
+}
+
+impl AudioComponent {
+    pub fn ordinal(ordinal: u32) -> Self {
+        Self {
+            stream: StreamSelector {
+                kind: StreamKind::Audio,
+                ordinal,
+            },
+            enabled: true,
+            gain: default_audio_gain(),
+            out_of_range: AudioOutOfRange::Silence,
+        }
+    }
+}
+
+/// 旧`ClipSource::Asset { asset }`欠落時のdefault: video ordinal 0 / audioなし。
+fn default_asset_video() -> Option<VideoComponent> {
+    Some(VideoComponent::ordinal(0))
+}
+
+fn is_legacy_default_video(video: &Option<VideoComponent>) -> bool {
+    matches!(
+        video,
+        Some(VideoComponent {
+            stream: StreamSelector {
+                kind: StreamKind::Video,
+                ordinal: 0,
+            },
+        })
+    )
+}
+
+/// 新しいnested fieldを含むAsset Clipか(旧readerでの再保存消失を防ぐ判定)。
+pub fn asset_components_require_newer_reader(
+    video: &Option<VideoComponent>,
+    audio: &[AudioComponent],
+) -> bool {
+    !audio.is_empty() || !is_legacy_default_video(video)
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "source", rename_all = "snake_case")]
 pub enum ClipSource {
     /// raster / 汎用アセット。未知フィールド(recipe/modifiers等)は拒否(S6)。
-    Asset { asset: AssetId },
+    ///
+    /// `video`/`audio`欠落は旧形式互換default(video ordinal 0 / audioなし)。
+    Asset {
+        asset: AssetId,
+        #[serde(
+            default = "default_asset_video",
+            skip_serializing_if = "is_legacy_default_video"
+        )]
+        video: Option<VideoComponent>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        audio: Vec<AudioComponent>,
+    },
     Plugin {
         plugin_id: String,
         #[serde(default = "default_effect_version")]
@@ -319,9 +429,24 @@ pub enum ClipSource {
     Vector { recipe: VectorRecipe },
 }
 
+impl ClipSource {
+    /// 旧形式互換のAsset Clip(video ordinal 0 / audioなし)。
+    pub fn asset_video_only(asset: AssetId) -> Self {
+        Self::Asset {
+            asset,
+            video: default_asset_video(),
+            audio: Vec::new(),
+        }
+    }
+}
+
 #[derive(DeserializeDerive)]
 struct ClipSourceAssetDe {
     asset: AssetId,
+    #[serde(default = "default_asset_video")]
+    video: Option<VideoComponent>,
+    #[serde(default)]
+    audio: Vec<AudioComponent>,
 }
 
 #[derive(DeserializeDerive)]
@@ -356,18 +481,29 @@ impl<'de> Deserialize<'de> for ClipSource {
             .ok_or_else(|| de::Error::custom("ClipSource.source must be a string"))?;
         match tag {
             "asset" => {
-                reject_unknown_clip_source_fields(&map, &["asset"])?;
+                reject_unknown_clip_source_fields(&map, &["asset", "video", "audio"])?;
                 let de: ClipSourceAssetDe =
                     serde_json::from_value(JsonValue::Object(map)).map_err(de::Error::custom)?;
-                Ok(Self::Asset { asset: de.asset })
+                Ok(Self::Asset {
+                    asset: de.asset,
+                    video: de.video,
+                    audio: de.audio,
+                })
             }
             "vector" => {
+                // audio/video は Asset 専用。unknown field 拒否で組合せを弾く。
                 reject_unknown_clip_source_fields(&map, &["recipe"])?;
                 let de: ClipSourceVectorDe =
                     serde_json::from_value(JsonValue::Object(map)).map_err(de::Error::custom)?;
                 Ok(Self::Vector { recipe: de.recipe })
             }
             "plugin" => {
+                // flatten extra へ落として黙殺しない(AG-1: 不正source/component組合せ)。
+                if map.contains_key("audio") || map.contains_key("video") {
+                    return Err(de::Error::custom(
+                        "ClipSource::Plugin cannot carry video/audio components; only Asset sources may",
+                    ));
+                }
                 let de: ClipSourcePluginDe =
                     serde_json::from_value(JsonValue::Object(map)).map_err(de::Error::custom)?;
                 Ok(Self::Plugin {

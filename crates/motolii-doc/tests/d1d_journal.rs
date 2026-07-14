@@ -56,7 +56,7 @@ fn doc_with_clip() -> (Document, LayerId) {
             start: RationalTime::ZERO,
             duration: RationalTime::try_new(5, 1).unwrap(),
             time_map: Default::default(),
-            source: ClipSource::Asset { asset },
+            source: ClipSource::asset_video_only(asset),
         })],
     });
     doc.validate().expect("fixture must validate");

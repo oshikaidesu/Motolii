@@ -18,8 +18,8 @@ use crate::param_expect::{
     ExpectedValueType, ParamConstraints,
 };
 use crate::schema::{
-    Clip, ClipSource, Group, ItemEnvelope, PathOp, StandardShape, TrackItem, Transform2D,
-    VectorContent,
+    asset_components_require_newer_reader, Clip, ClipSource, Group, ItemEnvelope, PathOp,
+    StandardShape, StreamKind, TrackItem, Transform2D, VectorContent,
 };
 use crate::track_id::TrackId;
 use crate::{Document, LayerId};
@@ -121,10 +121,27 @@ pub enum DocumentError {
         min_reader_version: u32,
         required: u32,
     },
+    /// AG-1: Asset Clipのvideo/audio component入れ子は`min_reader_version`を上げる。
+    #[error(
+        "document contains Asset Clip video/audio components but min_reader_version ({min_reader_version}) < {required} required for asset components (AG-1)"
+    )]
+    AssetComponentsRequireNewerReader {
+        min_reader_version: u32,
+        required: u32,
+    },
+    #[error("asset clip has neither video nor audio component (layer {layer_id})")]
+    EmptyAssetComponents { layer_id: u64 },
+    #[error("video component stream.kind must be video (layer {layer_id})")]
+    VideoComponentKindMismatch { layer_id: u64 },
+    #[error("audio component[{index}] stream.kind must be audio (layer {layer_id})")]
+    AudioComponentKindMismatch { layer_id: u64, index: usize },
 }
 
 /// A8/D2: `EffectInstance.id`/`DocKeyframe.id`を含む文書が宣言すべき最小`min_reader_version`。
 pub(crate) const MIN_READER_VERSION_FOR_STABLE_IDS: u32 = 2;
+
+/// AG-1: Asset Clip component入れ子を含む文書が宣言すべき最小`min_reader_version`。
+pub const MIN_READER_VERSION_FOR_ASSET_COMPONENTS: u32 = 3;
 
 impl Document {
     /// 保存前不変条件。失敗しても`self`は変更しない(検証のみ)。
@@ -160,7 +177,31 @@ impl Document {
             }
         }
         detect_parent_cycles(&parents)?;
-        self.validate_stable_ids()
+        self.validate_stable_ids()?;
+        self.validate_asset_component_reader_gate()
+    }
+
+    /// AG-1: 非legacyのAsset componentを含む文書は`min_reader_version>=3`。
+    fn validate_asset_component_reader_gate(&self) -> Result<(), DocumentError> {
+        let mut needs = false;
+        for track in &self.tracks {
+            for item in &track.items {
+                if item_uses_asset_components(item) {
+                    needs = true;
+                    break;
+                }
+            }
+            if needs {
+                break;
+            }
+        }
+        if needs && self.min_reader_version < MIN_READER_VERSION_FOR_ASSET_COMPONENTS {
+            return Err(DocumentError::AssetComponentsRequireNewerReader {
+                min_reader_version: self.min_reader_version,
+                required: MIN_READER_VERSION_FOR_ASSET_COMPONENTS,
+            });
+        }
+        Ok(())
     }
 
     /// A8: EffectId/KeyframeIdの一意性・`next_stable_id`カウンタの整合性・
@@ -286,7 +327,32 @@ fn validate_clip(
         .map_err(|source| DocumentError::InvalidTimeMap { layer_id, source })?;
 
     match &clip.source {
-        ClipSource::Asset { asset } => doc.require_asset(*asset)?,
+        ClipSource::Asset {
+            asset,
+            video,
+            audio,
+        } => {
+            doc.require_asset(*asset)?;
+            if video.is_none() && audio.is_empty() {
+                return Err(DocumentError::EmptyAssetComponents { layer_id });
+            }
+            if let Some(video) = video {
+                if video.stream.kind != StreamKind::Video {
+                    return Err(DocumentError::VideoComponentKindMismatch { layer_id });
+                }
+            }
+            for (index, comp) in audio.iter().enumerate() {
+                if comp.stream.kind != StreamKind::Audio {
+                    return Err(DocumentError::AudioComponentKindMismatch { layer_id, index });
+                }
+                validate_param(
+                    doc,
+                    &comp.gain,
+                    ParamConstraints::min_f64(0.0),
+                    &format!("layer{layer_id}.source.audio[{index}].gain"),
+                )?;
+            }
+        }
         ClipSource::Plugin {
             plugin_id,
             effect_version,
@@ -706,6 +772,18 @@ fn note_stable_id(
     }
     *max_observed = Some(max_observed.map_or(id, |m| m.max(id)));
     Ok(())
+}
+
+fn item_uses_asset_components(item: &TrackItem) -> bool {
+    match item {
+        TrackItem::Clip(clip) => match &clip.source {
+            ClipSource::Asset { video, audio, .. } => {
+                asset_components_require_newer_reader(video, audio)
+            }
+            _ => false,
+        },
+        TrackItem::Group(group) => group.children.iter().any(item_uses_asset_components),
+    }
 }
 
 fn collect_stable_ids_item(

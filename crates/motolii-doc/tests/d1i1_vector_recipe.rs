@@ -19,7 +19,7 @@ fn valid_minimal_raster() -> Document {
             start: RationalTime::ZERO,
             duration: RationalTime::try_new(5, 1).unwrap(),
             time_map: TimeMap::default(),
-            source: ClipSource::Asset { asset },
+            source: ClipSource::asset_video_only(asset),
         })],
     });
     doc
@@ -56,9 +56,7 @@ fn vector_recipe_roundtrip() {
 #[test]
 fn raster_clip_has_no_modifiers_field() {
     // 型レベル: Asset/Plugin に modifiers は無い。コンパイルできることが証拠。
-    let _ = ClipSource::Asset {
-        asset: motolii_doc::AssetId::from_raw(0),
-    };
+    let _ = ClipSource::asset_video_only(motolii_doc::AssetId::from_raw(0));
     let doc = valid_minimal_raster();
     assert!(doc.validate().is_ok());
     let v = serde_json::to_value(&doc).unwrap();

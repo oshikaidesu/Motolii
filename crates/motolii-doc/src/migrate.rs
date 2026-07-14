@@ -1740,9 +1740,7 @@ mod tests {
             start: RationalTime::ZERO,
             duration: RationalTime::try_new(1, 1).unwrap(),
             time_map: TimeMap::identity(),
-            source: ClipSource::Asset {
-                asset: crate::AssetId::from_raw(0),
-            },
+            source: ClipSource::asset_video_only(crate::AssetId::from_raw(0)),
         };
         doc.tracks.push(crate::Track {
             id: tid,

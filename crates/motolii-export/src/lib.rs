@@ -484,7 +484,7 @@ fn collect_video_assets_from_items(items: &[TrackItem], found: &mut Option<Asset
     for item in items {
         match item {
             TrackItem::Clip(clip) => {
-                if let motolii_doc::ClipSource::Asset { asset } = clip.source {
+                if let motolii_doc::ClipSource::Asset { asset, .. } = clip.source {
                     if found.is_none() {
                         *found = Some(asset);
                     }

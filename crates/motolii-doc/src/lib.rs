@@ -86,16 +86,17 @@ pub use persist::{
 };
 pub use plugin_compat::{PluginDegradation, PluginOpenWarning};
 pub use schema::{
-    BlendMode, Clip, ClipSource, ClippingMaskSettings, CompositeOrder, Composition,
-    CompositionError, EffectInstance, Group, ItemEnvelope, LineJoin, MaskMode, PathOp, PointType,
-    Soundtrack, SoundtrackError, StandardShape, Track, TrackItem, Transform2D, TrimMode,
-    VectorContent, VectorRecipe,
+    asset_components_require_newer_reader, AudioComponent, AudioOutOfRange, BlendMode, Clip,
+    ClipSource, ClippingMaskSettings, CompositeOrder, Composition, CompositionError,
+    EffectInstance, Group, ItemEnvelope, LineJoin, MaskMode, PathOp, PointType, Soundtrack,
+    SoundtrackError, StandardShape, StreamKind, StreamSelector, Track, TrackItem, Transform2D,
+    TrimMode, VectorContent, VectorRecipe, VideoComponent,
 };
 pub use spatial_resolve::resolve_document_spaces;
 pub use stable_id::{EffectId, KeyframeId, StableIdError, StableIdSeq};
 pub use track_id::{TrackId, TrackIdError, TrackIdTable};
 pub use undo::{Macro, UndoError, UndoHistory, UndoLimit};
-pub use validate::DocumentError;
+pub use validate::{DocumentError, MIN_READER_VERSION_FOR_ASSET_COMPONENTS};
 
 fn default_min_reader_version() -> u32 {
     1

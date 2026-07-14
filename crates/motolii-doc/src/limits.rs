@@ -621,7 +621,7 @@ mod tests {
             start: motolii_core::RationalTime::ZERO,
             duration: motolii_core::RationalTime::try_new(1, 1).unwrap(),
             time_map: Default::default(),
-            source: ClipSource::Asset { asset },
+            source: ClipSource::asset_video_only(asset),
         })
     }
 

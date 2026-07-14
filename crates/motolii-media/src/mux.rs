@@ -8,7 +8,6 @@ use std::path::Path;
 use std::process::Command;
 
 use motolii_core::RationalTime;
-use serde::Deserialize;
 
 use crate::{read_child_stderr, MediaError, Result};
 
@@ -46,60 +45,18 @@ pub struct SoundtrackMuxReport {
     pub audio_codec: String,
 }
 
-#[derive(Deserialize)]
-struct FfprobeAudioOut {
-    streams: Vec<FfprobeAudioStream>,
-}
-
-#[derive(Deserialize)]
-struct FfprobeAudioStream {
-    codec_name: Option<String>,
-    sample_rate: Option<String>,
-    channels: Option<u32>,
-}
-
 /// 先頭音声ストリームを解析する。無音声なら Err。
+///
+/// 実装は`probe_container`のaudio ordinal 0へ委譲する(AG-1)。
 pub fn probe_audio(path: impl AsRef<Path>) -> Result<AudioStreamInfo> {
-    let out = Command::new("ffprobe")
-        .args([
-            "-v",
-            "error",
-            "-select_streams",
-            "a:0",
-            "-show_entries",
-            "stream=codec_name,sample_rate,channels",
-            "-print_format",
-            "json",
-        ])
-        .arg(path.as_ref())
-        .output()
-        .map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => MediaError::ToolNotFound("ffprobe"),
-            _ => MediaError::Io(e),
-        })?;
-    if !out.status.success() {
-        return Err(MediaError::Probe(
-            String::from_utf8_lossy(&out.stderr).into_owned(),
-        ));
-    }
-    let parsed: FfprobeAudioOut = serde_json::from_slice(&out.stdout)
-        .map_err(|e| MediaError::Probe(format!("json parse: {e}")))?;
-    let stream = parsed
-        .streams
+    let container = crate::probe_container(path)?;
+    let stream = container
+        .audio_streams
         .first()
         .ok_or_else(|| MediaError::Probe("no audio stream".into()))?;
-    let codec_name = stream
-        .codec_name
-        .clone()
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| MediaError::Probe("missing audio codec_name".into()))?;
-    let sample_rate = stream
-        .sample_rate
-        .as_deref()
-        .and_then(|s| s.parse::<u32>().ok());
     Ok(AudioStreamInfo {
-        codec_name,
-        sample_rate,
+        codec_name: stream.codec_name.clone(),
+        sample_rate: stream.sample_rate,
         channels: stream.channels,
     })
 }

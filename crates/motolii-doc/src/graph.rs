@@ -421,7 +421,13 @@ impl<'a> GraphBuilder<'a> {
         layer: LayerId,
     ) -> Result<TextureId, GraphError> {
         match &clip.source {
-            ClipSource::Asset { asset } => self.ensure_video_slot(*asset, source_time),
+            ClipSource::Asset {
+                asset,
+                video: Some(_),
+                ..
+            } => self.ensure_video_slot(*asset, source_time),
+            // audio-only: visual graphへ参加しない(AG-1)。
+            ClipSource::Asset { video: None, .. } => Ok(self.transparent()),
             ClipSource::Vector { .. } => Err(GraphError::UnsupportedVectorSource(layer.get())),
             ClipSource::Plugin {
                 plugin_id, params, ..

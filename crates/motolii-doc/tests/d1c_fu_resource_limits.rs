@@ -33,7 +33,7 @@ fn simple_clip(layer_id: LayerId, asset: AssetId) -> TrackItem {
         start: motolii_core::RationalTime::ZERO,
         duration: motolii_core::RationalTime::try_new(1, 1).unwrap(),
         time_map: Default::default(),
-        source: ClipSource::Asset { asset },
+        source: ClipSource::asset_video_only(asset),
     })
 }
 
@@ -216,7 +216,7 @@ fn huge_effect_and_plugin_param_ids_are_rejected() {
                 start: motolii_core::RationalTime::ZERO,
                 duration: motolii_core::RationalTime::try_new(1, 1).unwrap(),
                 time_map: Default::default(),
-                source: ClipSource::Asset { asset },
+                source: ClipSource::asset_video_only(asset),
             })],
         });
         let err = load_document_bytes_with_limits(&to_bytes(&doc), &limits).unwrap_err();
