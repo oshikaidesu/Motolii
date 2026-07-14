@@ -34,6 +34,32 @@ pub struct AudioMeter {
     clipped: AtomicBool,
 }
 
+/// 再生開始またはユーザー操作で明示的に消すまでclip表示を維持するUI用ラッチ。
+#[derive(Debug, Default)]
+pub struct ClipLatch {
+    latched: AtomicBool,
+}
+
+impl ClipLatch {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn observe(&self, snapshot: MeterSnapshot) {
+        if snapshot.clipped {
+            self.latched.store(true, Ordering::Relaxed);
+        }
+    }
+
+    pub fn reset(&self) {
+        self.latched.store(false, Ordering::Relaxed);
+    }
+
+    pub fn is_latched(&self) -> bool {
+        self.latched.load(Ordering::Relaxed)
+    }
+}
+
 impl AudioMeter {
     pub fn new() -> Self {
         Self::default()
@@ -130,5 +156,21 @@ mod tests {
         assert!(meter.snapshot().clipped);
         meter.reset();
         assert_eq!(meter.snapshot(), MeterSnapshot::SILENT);
+    }
+
+    #[test]
+    fn clip_latch_retains_clip_until_reset() {
+        let latch = ClipLatch::new();
+        latch.observe(MeterSnapshot::SILENT);
+        assert!(!latch.is_latched());
+        latch.observe(MeterSnapshot {
+            clipped: true,
+            ..MeterSnapshot::SILENT
+        });
+        assert!(latch.is_latched());
+        latch.observe(MeterSnapshot::SILENT);
+        assert!(latch.is_latched());
+        latch.reset();
+        assert!(!latch.is_latched());
     }
 }

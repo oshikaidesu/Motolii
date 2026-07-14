@@ -18,6 +18,7 @@ mod producer;
 mod program;
 mod resample;
 mod ring;
+mod waveform;
 
 pub use cache::{PcmCache, PcmFormat};
 pub use convert::{canonical_format, to_canonical, CANONICAL_CHANNELS, CANONICAL_SAMPLE_RATE};
@@ -27,12 +28,13 @@ pub use decode::{
 };
 pub use device::{negotiate_output, select_device_sample_rate, NegotiatedOutput, OutputStream};
 pub use error::{AudioError, Result};
-pub use meter::{AudioMeter, MeterSnapshot, CLIP_THRESHOLD};
+pub use meter::{AudioMeter, ClipLatch, MeterSnapshot, CLIP_THRESHOLD};
 pub use mix::{mix_audio, MixReport, MixSource};
 pub use producer::{AudioProducer, MixProducer};
 pub use program::{program_from_sources, AudioProgram};
 pub use resample::{source_frame_to_device, FixedRatioResampler};
 pub use ring::{channel, fill_or_silence, PlaybackCounters, RingConsumer, RingProducer};
+pub use waveform::waveform_peaks;
 
 // Symphoniaのpublicな`Hint`/`MediaSourceStream`型はdecode_streamの引数として
 // 呼び出し側が組み立てる必要があるため再exportする。
