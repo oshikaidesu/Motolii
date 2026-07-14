@@ -296,6 +296,8 @@ pub fn known_plugin_info(plugin_id: &str) -> Option<KnownPluginInfo> {
             (DocPluginKind::Filter, 1)
         }
         "core.layer_source.clear" => (DocPluginKind::LayerSource, 1),
+        // graph 組み込みのファーストパーティ。現行versionのみ既知契約(未来版はD1f degraded→D6拒否)。
+        "doc.layer_source.rect" => (DocPluginKind::LayerSource, 1),
         "core.composite.clear" => (DocPluginKind::Composite, 1),
         // v2: `amp` → `amplitude`(motolii-plugin migrate_plugin_paramsの写し)。
         "core.param.sine" => (DocPluginKind::ParamDriver, 2),

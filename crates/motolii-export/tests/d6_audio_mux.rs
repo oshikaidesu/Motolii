@@ -7,7 +7,7 @@ use std::process::Command;
 use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, RationalTime, TimeMap};
 use motolii_doc::{
     Asset, AssetId, Clip, ClipSource, Composition, DocParam, Document, EffectId, EffectInstance,
-    ItemEnvelope, Soundtrack, Track, TrackItem, RECT_LAYER_SOURCE,
+    ItemEnvelope, PluginDegradation, Soundtrack, Track, TrackItem, RECT_LAYER_SOURCE,
 };
 use motolii_eval::DataTracks;
 use motolii_export::{export_document_video, ExportError, ExportJob};
@@ -334,4 +334,73 @@ fn export_refuses_degraded_plugins() {
     assert!(!output.exists(), "refused export must not leave output");
 
     std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn export_refuses_future_version_rect_layer_source() {
+    if !ffmpeg_or_skip() {
+        return;
+    }
+    let Some(gpu) = gpu_or_skip() else { return };
+
+    let dir = tmp_dir("export-d6-future-rect");
+    let video = dir.join("bg.mp4");
+    let output = dir.join("out.mp4");
+    make_bg_video(&video);
+
+    let mut doc = build_doc("bg.mp4", None);
+    // build_doc は現行v1の rect overlay を含む。未来版へ書き換え、D1f degraded にする。
+    if let TrackItem::Clip(clip) = &mut doc.tracks[0].items[1] {
+        if let ClipSource::Plugin {
+            plugin_id,
+            effect_version,
+            ..
+        } = &mut clip.source
+        {
+            assert_eq!(plugin_id, RECT_LAYER_SOURCE);
+            *effect_version = 2;
+        }
+    }
+    doc.validate()
+        .expect("future rect version must still open (D1f)");
+    let warnings = doc.plugin_open_warnings();
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert_eq!(warnings[0].plugin_id, RECT_LAYER_SOURCE);
+    assert_eq!(
+        warnings[0].reason,
+        PluginDegradation::FutureVersion {
+            known_version: 1,
+            found_version: 2,
+        }
+    );
+
+    let err = export_document_video(
+        &gpu,
+        &ExportJob {
+            doc: &doc,
+            output_path: &output,
+            project_root: Some(&dir),
+            frame_count: Some(1),
+            qp0: true,
+            data_tracks: DataTracks::new(),
+        },
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, ExportError::DegradedPlugins(_)),
+        "future rect must not bypass DegradedPlugins, got {err:?}"
+    );
+    assert!(!output.exists());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn current_version_rect_alone_is_not_degraded() {
+    let doc = build_doc("bg.mp4", None);
+    assert!(
+        doc.plugin_open_warnings().is_empty(),
+        "v1 rect is a known built-in contract: {:?}",
+        doc.plugin_open_warnings()
+    );
 }
