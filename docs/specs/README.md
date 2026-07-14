@@ -12,7 +12,8 @@
 |---|---|
 | [M0-spikes.md](M0-spikes.md) | 確定 |
 | [M1-vertical-slice.md](M1-vertical-slice.md) | 確定(M0の採否判断で該当箇所を更新) |
-| [M2-document-model.md](M2-document-model.md) | **段階発注可**(Wave4完了: D4-FU(#147)/D6(#133)/D7(#145)。**次: D5(#144)**) |
+| [M2-document-model.md](M2-document-model.md) | **コア締結**(2026-07-14)。残: D5(#144)。[完了宣言](../reviews/2026-07-14-m2-core-closure.md) |
+| [M3-ui-integration.md](M3-ui-integration.md) | ドラフト(M0-S1の採否判断で確定) |
 | [M4-cache-and-analysis.md](M4-cache-and-analysis.md) | ドラフト(凍結ゲートで確定) |
 | [M5-3d-and-post.md](M5-3d-and-post.md) | ドラフト(凍結ゲートで確定) |
 
