@@ -569,8 +569,11 @@ impl Command {
                     )?;
                     use_.definition_id = *old_definition_id;
                 }
-                doc.effect_definitions
-                    .retain(|d| d.id != *new_definition_id);
+                // 他Useが新definitionを共有している場合は台帳から外さない(dangling禁止)。
+                if doc.effect_use_count(*new_definition_id) == 0 {
+                    doc.effect_definitions
+                        .retain(|d| d.id != *new_definition_id);
+                }
                 Ok(())
             }
             Command::SetAudioComponentEnabled {

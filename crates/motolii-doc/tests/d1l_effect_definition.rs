@@ -14,7 +14,7 @@ use motolii_core::RationalTime;
 use motolii_doc::{
     load_document, migrate_bytes, save_document, Clip, ClipSource, Command, CommandError, DocParam,
     Document, DocumentError, DocumentWriter, EffectDefinition, EffectDefinitionId, EffectId,
-    EffectUse, ItemEnvelope, LayerId, Track, TrackItem,
+    EffectInstance, EffectUse, ItemEnvelope, LayerId, Track, TrackItem,
 };
 
 fn unique_dir(tag: &str) -> PathBuf {
@@ -289,6 +289,55 @@ fn copy_local_retargets_only_that_use_and_preserves_extra() {
     undo.apply(&mut working).expect("undo must succeed");
     assert_eq!(working, before_copy);
     let _ = s.doc.effect_definitions.len();
+}
+
+#[test]
+fn undo_copy_local_keeps_definition_if_other_uses_remain() {
+    // Bugbot: UndoCopyLocalが共有中のnew definitionを落とすとdanglingになる。
+    let mut s = shared_fixture();
+    let new_def_id = EffectDefinitionId::from_raw(s.doc.next_stable_id.allocate().unwrap());
+    let copy = Command::CopyLocalEffect {
+        target: s.layer_b,
+        use_id: s.u3,
+        old_definition_id: s.d1,
+        new_definition_id: new_def_id,
+    };
+    let mut working = s.doc.clone();
+    copy.apply(&mut working).unwrap();
+
+    let u4 = EffectId::from_raw(working.next_stable_id.allocate().unwrap());
+    let def = working.effect_definition(new_def_id).unwrap().clone();
+    Command::AddEffect {
+        target: s.layer_a,
+        index: 2,
+        effect: EffectInstance::from_use_and_definition(
+            &EffectUse {
+                id: u4,
+                definition_id: new_def_id,
+            },
+            &def,
+        ),
+    }
+    .apply(&mut working)
+    .unwrap();
+
+    copy.inverse().apply(&mut working).unwrap();
+    assert_eq!(
+        working
+            .find_effect_use(s.layer_b, s.u3)
+            .unwrap()
+            .definition_id,
+        s.d1
+    );
+    assert!(working.effect_definition(new_def_id).is_some());
+    assert_eq!(
+        working
+            .find_effect_use(s.layer_a, u4)
+            .unwrap()
+            .definition_id,
+        new_def_id
+    );
+    working.validate().unwrap();
 }
 
 // ---------------------------------------------------------------------------
