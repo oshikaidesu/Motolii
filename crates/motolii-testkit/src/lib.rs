@@ -8,6 +8,7 @@
 //! - [`tol`] — tolerance定数(呼び出しは定数経由・生リテラルは走査deny)
 //! - `golden/` — 参照PNG置き場(現状はREADMEのみ)
 
+pub mod clipping_mask;
 pub mod cpu_reference;
 pub mod tol;
 

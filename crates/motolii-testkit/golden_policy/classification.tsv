@@ -11,3 +11,5 @@ semantic	crates/motolii-doc/tests/d1i3_blend_mode.rs
 semantic	crates/motolii-doc/tests/d1i3_lookat_follow.rs
 semantic	crates/motolii-doc/tests/d1i3_bezier_solver.rs
 semantic	crates/motolii-doc/tests/d1i3_transform_compose.rs
+# D7: クリッピングマスク。クリスタ合成検証が C-1 sRGB ブレンド依存のため provisional。
+provisional	crates/motolii-doc/tests/d7_clipping_mask.rs
