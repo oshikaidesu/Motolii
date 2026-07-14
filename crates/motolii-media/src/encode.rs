@@ -184,8 +184,7 @@ mod tests {
         .unwrap();
         std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755)).unwrap();
         {
-            use std::io::Write;
-            let mut f = std::fs::OpenOptions::new().write(true).open(&tmp).unwrap();
+            let f = std::fs::OpenOptions::new().write(true).open(&tmp).unwrap();
             f.sync_all().unwrap();
         }
         std::fs::rename(&tmp, &fake_ffmpeg).unwrap();
