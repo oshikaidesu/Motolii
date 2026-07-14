@@ -9,13 +9,39 @@
 
 Motolii starts from a deliberately unglamorous thesis:
 
-> **Compositing does not need another black box or a new fundamental invention. The techniques already exist. The work is to compose them into a small, explicit, replaceable system.**
+> **Compositing does not lack techniques. It lacks a community-owned place where those techniques can be composed without inheriting decades of workarounds or a vendor's strategic limits.**
 
 Keyframes, easing, typed parameter links, render graphs, GPU textures, command-based editing, selective caches, 2D/3D projection, and plugins are all known techniques. Motolii combines them without making historical workarounds part of the product model.
 
 It is built for making a 3–5 minute MV: motion graphics, video, procedural shapes, text, effects, and 2.5D/3D assets in one composition, with a single-song timeline and a deterministic final export.
 
 Pre-1.0, under active development. The core is usable from the CLI; the desktop editing experience is the next major layer.
+
+## Why this project must exist
+
+After Effects helped establish the language of modern motion graphics. Its historical importance is not in question. Its present position is.
+
+Too much ordinary intent is still expressed through Null rigs, precompositions, adjustment-layer tricks, expressions, scripts, and paid plugins. Relative movement needs a controller. Repeated elements need a script or plugin. Common easing is delegated to extensions. Grouping, effect scope, caching boundaries, and composition reuse collapse into precompositions. 2D layer order and 3D depth interact through rules the timeline does not state plainly.
+
+Each workaround is individually learnable. Together they form a tax on experimentation. Calling that tax “professional workflow” does not make it creative power. When the dominant tool can leave foundational interaction problems to third parties for years, its dominance begins to slow the medium it helped create: artists spend attention maintaining technique around the tool instead of testing the image in front of them.
+
+Motolii is therefore openly a counter-project—not against AE artists, its accumulated craft, or every idea in AE, but against three assumptions:
+
+1. professional power must be operationally complicated;
+2. missing host semantics can be delegated indefinitely to scripts and plugins;
+3. creators must accept that the tool defining their medium remains a vendor-controlled black box.
+
+Cavalry and Autograph are important because they already made parts of this counterargument. Cavalry demonstrated procedural elements, typed connections, Context, and reusable Behaviours. Autograph demonstrated a modern GPU compositor, a shared 2D/3D composition, and a general Generator/Modifier model. Motolii studies both seriously.
+
+But a commercial counter is still owned somewhere else. [Cavalry was acquired by Canva](https://www.canva.com/newsroom/news/mangoai-cavalry-acquisition/). [Left Angle wound down and the Autograph team and technology moved to Maxon](https://www.maxon.net/en/article/autograph-acquisition). Their products may continue and improve; the structural lesson remains: access, pricing, platform support, product direction, and even continued existence are not ultimately held by their user communities. A counterculture can be absorbed into another product strategy.
+
+AviUtl came closer to a different answer. Its local operation, lightness, small extension surface, and user-made plugin/script culture sustained a distinct Japanese motion-graphics ecosystem for years. But its core remained closed and effectively single-author. The community could extend around it, not repair or continue the center itself.
+
+That leaves the space Motolii is built to occupy:
+
+> **A permissively licensed, local, forkable compositor whose core is small enough to understand, whose advanced power does not excuse bad interaction, and whose future can actually be continued by its community.**
+
+The counter is not a novel compositing algorithm. It is the refusal to leave known solutions scattered across proprietary cores, ritual workflows, and repeated third-party repairs.
 
 ## Simple is not the same as beginner-only
 
@@ -44,7 +70,7 @@ Complex expression and plugin escape hatches can exist, but repeated user recipe
 
 ## Known parts, deliberately composed
 
-Motolii does not claim to have invented compositing. It respects and learns from After Effects, AviUtl, Cavalry, Autograph, Alight Motion, Nuke, Blender, game engines, DAWs, and many smaller tools.
+Criticism does not require pretending that prior tools contributed nothing. Motolii respects and learns from After Effects, AviUtl, Cavalry, Autograph, Alight Motion, Nuke, Blender, game engines, DAWs, and many smaller tools.
 
 The useful question is not “which existing application should be cloned?” It is:
 
@@ -62,7 +88,7 @@ The resulting system is intentionally conventional at its foundations:
 - plugins behind narrow, testable contracts;
 - caches that are disposable and never become document truth.
 
-The value is in the composition of these parts and in the removal of accidental complexity between them.
+The value is in the composition of these parts, the removal of accidental complexity between them, and placing that composition in a core the community can inspect and change.
 
 ## A small core is a long-term capability
 
