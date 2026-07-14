@@ -137,7 +137,7 @@ fn build_doc(video_name: &str, audio_name: Option<(&str, RationalTime)>) -> Docu
                 start: RationalTime::ZERO,
                 duration: clip_duration,
                 time_map: TimeMap::identity(),
-                source: ClipSource::Asset { asset: video_id },
+                source: ClipSource::asset_video_only(video_id),
             }),
             TrackItem::Clip(Clip {
                 envelope: ItemEnvelope::new(overlay_layer),

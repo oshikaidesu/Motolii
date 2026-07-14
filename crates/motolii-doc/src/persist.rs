@@ -37,15 +37,15 @@ use crate::{Document, DocumentError};
 
 /// このリーダーが開ける`min_reader_version`の上限(=自版の読取能力)。
 ///
-/// D2でEffectInstance/DocKeyframeに必須`id`フィールド(A8)を追加したため2へ。
-/// version 1ドキュメント(id無し)はこのゲートを通過した後、デシリアライズで
-/// 拒否される — 変換(migration)はD1eの領分でありここでは発明しない。
-pub const READER_VERSION: u32 = 2;
+/// AG-1でAsset Clipへvideo/audio component入れ子を追加したため3へ。
+/// version 2以下(component欠落=video only)はdefaultで読める。componentを含む文書は
+/// `min_reader_version>=3`を要求し、旧readerの再保存消失を防ぐ。
+pub const READER_VERSION: u32 = 3;
 
 /// このリーダーが**再保存・migrationしてよい**`Document.version`の上限(=自版の書込能力)。
-/// D2でstable idを含む文書は`version=2`へ上がるため、書き込み能力も2へ揃える。
+/// AG-1のcomponent入り文書は`version=3`へ上がるため、書き込み能力も3へ揃える。
 /// `Document.version`がこれを超える場合は`OpenMode::ReadOnlyNewer`(#101 / 監査S14)。
-pub const WRITER_VERSION: u32 = 2;
+pub const WRITER_VERSION: u32 = 3;
 
 /// 読み/書き互換を分離した3状態(監査S14)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

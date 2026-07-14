@@ -103,7 +103,12 @@ fn remap_clip_source(
     seq: &mut StableIdSeq,
 ) -> Result<(), StableIdError> {
     match source {
-        ClipSource::Asset { .. } => Ok(()),
+        ClipSource::Asset { audio, .. } => {
+            for comp in audio {
+                remap_doc_param(&mut comp.gain, id_map, seq)?;
+            }
+            Ok(())
+        }
         ClipSource::Plugin { params, .. } => {
             for param in params.values_mut() {
                 remap_doc_param(param, id_map, seq)?;

@@ -61,14 +61,14 @@ fn fixture() -> Fixture {
                 start: RationalTime::ZERO,
                 duration: RationalTime::try_new(5, 1).unwrap(),
                 time_map: Default::default(),
-                source: ClipSource::Asset { asset },
+                source: ClipSource::asset_video_only(asset),
             }),
             TrackItem::Clip(Clip {
                 envelope: ItemEnvelope::new(other_layer),
                 start: RationalTime::ZERO,
                 duration: RationalTime::try_new(5, 1).unwrap(),
                 time_map: Default::default(),
-                source: ClipSource::Asset { asset },
+                source: ClipSource::asset_video_only(asset),
             }),
         ],
     });
@@ -260,9 +260,7 @@ proptest! {
             start: RationalTime::try_new(start, 1).unwrap(),
             duration: RationalTime::try_new(1, 1).unwrap(),
             time_map: Default::default(),
-            source: ClipSource::Asset {
-                asset: motolii_doc::AssetId::from_raw(0),
-            },
+            source: ClipSource::asset_video_only(motolii_doc::AssetId::from_raw(0)),
         });
         let cmd = Command::AddTrackItem {
             parent: ParentLocator::Track(f.track),
@@ -334,9 +332,7 @@ fn add_track_item_rejects_index_past_end() {
         start: RationalTime::ZERO,
         duration: RationalTime::try_new(1, 1).unwrap(),
         time_map: Default::default(),
-        source: ClipSource::Asset {
-            asset: motolii_doc::AssetId::from_raw(0),
-        },
+        source: ClipSource::asset_video_only(motolii_doc::AssetId::from_raw(0)),
     });
     let err = writer
         .apply_command(
@@ -679,7 +675,7 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
                 start: RationalTime::ZERO,
                 duration: RationalTime::try_new(5, 1).unwrap(),
                 time_map: Default::default(),
-                source: ClipSource::Asset { asset },
+                source: ClipSource::asset_video_only(asset),
             }),
             TrackItem::Group(Group {
                 envelope: group_env,
@@ -689,14 +685,14 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
                         start: RationalTime::ZERO,
                         duration: RationalTime::try_new(2, 1).unwrap(),
                         time_map: Default::default(),
-                        source: ClipSource::Asset { asset },
+                        source: ClipSource::asset_video_only(asset),
                     }),
                     TrackItem::Clip(Clip {
                         envelope: env_b,
                         start: RationalTime::ZERO,
                         duration: RationalTime::try_new(2, 1).unwrap(),
                         time_map: Default::default(),
-                        source: ClipSource::Asset { asset },
+                        source: ClipSource::asset_video_only(asset),
                     }),
                 ],
             }),
@@ -843,14 +839,14 @@ fn duplicate_undo_redo_loop_does_not_grow_layer_table() {
                     start: RationalTime::ZERO,
                     duration: RationalTime::try_new(1, 1).unwrap(),
                     time_map: Default::default(),
-                    source: ClipSource::Asset { asset },
+                    source: ClipSource::asset_video_only(asset),
                 }),
                 TrackItem::Clip(Clip {
                     envelope: ItemEnvelope::new(child_b),
                     start: RationalTime::ZERO,
                     duration: RationalTime::try_new(1, 1).unwrap(),
                     time_map: Default::default(),
-                    source: ClipSource::Asset { asset },
+                    source: ClipSource::asset_video_only(asset),
                 }),
             ],
         })],
@@ -912,7 +908,7 @@ fn duplicate_remaps_plugin_lookat_within_subtree() {
                     start: RationalTime::ZERO,
                     duration: RationalTime::try_new(2, 1).unwrap(),
                     time_map: Default::default(),
-                    source: ClipSource::Asset { asset },
+                    source: ClipSource::asset_video_only(asset),
                 }),
             ],
         })],

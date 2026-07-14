@@ -7,7 +7,7 @@ use motolii_core::{ColorSpace, Fps, RationalTime};
 
 use crate::{MediaError, Result};
 
-/// probeで得る映像ストリーム情報(v:0のみ。音声はM2で拡張)。
+/// probeで得る映像ストリーム情報(v:0のみ。後方互換ラッパ用)。
 ///
 /// width/heightは**表示上の寸法**(回転メタデータ適用後)。デコード(autorotate)の
 /// 出力寸法と一致する(レビュー指摘#4: スマホ縦動画対応)。
@@ -26,6 +26,59 @@ pub struct MediaInfo {
     pub rotation: i64,
 }
 
+/// container内の全stream列挙結果(AG-1)。
+#[derive(Debug, Clone, PartialEq)]
+pub struct ContainerInfo {
+    pub video_streams: Vec<ProbedVideoStream>,
+    pub audio_streams: Vec<ProbedAudioStream>,
+}
+
+/// kind内ordinal付きのvideo stream。
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProbedVideoStream {
+    pub ordinal: u32,
+    pub width: u32,
+    pub height: u32,
+    pub fps: Fps,
+    pub duration: Option<RationalTime>,
+    pub nb_frames: Option<i64>,
+    pub color_space: ColorSpace,
+    pub rotation: i64,
+    pub codec_name: Option<String>,
+}
+
+/// kind内ordinal付きのaudio stream。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProbedAudioStream {
+    pub ordinal: u32,
+    pub codec_name: String,
+    pub sample_rate: Option<u32>,
+    pub channels: Option<u32>,
+    pub channel_layout: Option<String>,
+    pub language: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MediaStreamKind {
+    Video,
+    Audio,
+}
+
+impl MediaStreamKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Video => "video",
+            Self::Audio => "audio",
+        }
+    }
+}
+
+impl std::fmt::Display for MediaStreamKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 #[derive(Deserialize)]
 struct FfprobeOut {
     streams: Vec<FfprobeStream>,
@@ -34,6 +87,8 @@ struct FfprobeOut {
 
 #[derive(Deserialize)]
 struct FfprobeStream {
+    codec_type: Option<String>,
+    codec_name: Option<String>,
     width: Option<u32>,
     height: Option<u32>,
     r_frame_rate: Option<String>,
@@ -43,8 +98,26 @@ struct FfprobeStream {
     sample_aspect_ratio: Option<String>,
     color_space: Option<String>,
     color_range: Option<String>,
+    sample_rate: Option<String>,
+    channels: Option<u32>,
+    channel_layout: Option<String>,
+    #[serde(default)]
+    tags: FfprobeTags,
+    #[serde(default)]
+    disposition: FfprobeDisposition,
     #[serde(default)]
     side_data_list: Vec<FfprobeSideData>,
+}
+
+#[derive(Deserialize, Default)]
+struct FfprobeDisposition {
+    #[serde(default)]
+    attached_pic: i64,
+}
+
+#[derive(Deserialize, Default)]
+struct FfprobeTags {
+    language: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -57,14 +130,32 @@ struct FfprobeFormat {
     duration: Option<String>,
 }
 
-/// ffprobeで先頭映像ストリームを解析する。
+/// ffprobeで先頭映像ストリームを解析する(後方互換)。
 pub fn probe(path: impl AsRef<Path>) -> Result<MediaInfo> {
+    let container = probe_container(path)?;
+    let stream = container
+        .video_streams
+        .first()
+        .ok_or_else(|| MediaError::Probe("no video stream".into()))?;
+    Ok(MediaInfo {
+        width: stream.width,
+        height: stream.height,
+        fps: stream.fps,
+        duration: stream.duration,
+        nb_frames: stream.nb_frames,
+        color_space: stream.color_space,
+        rotation: stream.rotation,
+    })
+}
+
+/// container内の全video/audio streamを列挙する(AG-1)。
+///
+/// ordinalは同じkindをcontainer順に0から数える。欠落時の自動fallbackはしない。
+pub fn probe_container(path: impl AsRef<Path>) -> Result<ContainerInfo> {
     let out = Command::new("ffprobe")
         .args([
             "-v",
             "error",
-            "-select_streams",
-            "v:0",
             "-show_streams",
             "-show_format",
             "-print_format",
@@ -83,18 +174,125 @@ pub fn probe(path: impl AsRef<Path>) -> Result<MediaInfo> {
     }
     let parsed: FfprobeOut = serde_json::from_slice(&out.stdout)
         .map_err(|e| MediaError::Probe(format!("json parse: {e}")))?;
-    let stream = parsed
-        .streams
-        .first()
-        .ok_or_else(|| MediaError::Probe("no video stream".into()))?;
 
+    let format_duration = parsed.format.as_ref().and_then(|f| f.duration.as_deref());
+    let mut video_streams = Vec::new();
+    let mut audio_streams = Vec::new();
+
+    for stream in &parsed.streams {
+        match stream.codec_type.as_deref() {
+            Some("video") => {
+                // album artはvideo ordinalに数えず、厳格検証にも載せない。
+                if stream.disposition.attached_pic != 0 {
+                    continue;
+                }
+                let ordinal = video_streams.len() as u32;
+                video_streams.push(parse_video_stream(stream, ordinal, format_duration)?);
+            }
+            Some("audio") => {
+                let ordinal = audio_streams.len() as u32;
+                audio_streams.push(parse_audio_stream(stream, ordinal)?);
+            }
+            _ => {}
+        }
+    }
+
+    Ok(ContainerInfo {
+        video_streams,
+        audio_streams,
+    })
+}
+
+/// kind+ordinalでvideo streamを取得する。欠落はtyped error(別streamへfallbackしない)。
+pub fn select_video_stream(info: &ContainerInfo, ordinal: u32) -> Result<&ProbedVideoStream> {
+    info.video_streams
+        .iter()
+        .find(|s| s.ordinal == ordinal)
+        .ok_or(MediaError::StreamNotFound {
+            kind: MediaStreamKind::Video,
+            ordinal,
+        })
+}
+
+/// kind+ordinalでaudio streamを取得する。欠落はtyped error。
+pub fn select_audio_stream(info: &ContainerInfo, ordinal: u32) -> Result<&ProbedAudioStream> {
+    info.audio_streams
+        .iter()
+        .find(|s| s.ordinal == ordinal)
+        .ok_or(MediaError::StreamNotFound {
+            kind: MediaStreamKind::Audio,
+            ordinal,
+        })
+}
+
+/// AG-1で受理するaudio codec/layoutか。未対応はtyped error。
+pub fn require_supported_audio(stream: &ProbedAudioStream) -> Result<()> {
+    if !audio_codec_supported(&stream.codec_name) {
+        return Err(MediaError::UnsupportedAudioCodec {
+            ordinal: stream.ordinal,
+            codec: stream.codec_name.clone(),
+        });
+    }
+    if let Some(layout) = stream.channel_layout.as_deref() {
+        if !channel_layout_supported(layout) {
+            return Err(MediaError::UnsupportedChannelLayout {
+                ordinal: stream.ordinal,
+                layout: layout.to_string(),
+            });
+        }
+    } else if let Some(ch) = stream.channels {
+        if ch == 0 || ch > 2 {
+            return Err(MediaError::UnsupportedChannelLayout {
+                ordinal: stream.ordinal,
+                layout: format!("{ch}ch"),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn audio_codec_supported(codec: &str) -> bool {
+    matches!(
+        codec,
+        "aac"
+            | "mp3"
+            | "ac3"
+            | "eac3"
+            | "flac"
+            | "opus"
+            | "vorbis"
+            | "pcm_s16le"
+            | "pcm_s24le"
+            | "pcm_s32le"
+            | "pcm_f32le"
+            | "pcm_f64le"
+            | "pcm_u8"
+            | "pcm_s16be"
+            | "pcm_s24be"
+            | "pcm_s32be"
+            | "pcm_f32be"
+            | "pcm_f64be"
+    )
+}
+
+fn channel_layout_supported(layout: &str) -> bool {
+    matches!(
+        layout,
+        "mono" | "stereo" | "1 channels" | "2 channels" | "1.0" | "2.0"
+    )
+}
+
+fn parse_video_stream(
+    stream: &FfprobeStream,
+    ordinal: u32,
+    format_duration: Option<&str>,
+) -> Result<ProbedVideoStream> {
     let (mut width, mut height) = match (stream.width, stream.height) {
         (Some(w), Some(h)) if w > 0 && h > 0 => (w, h),
         _ => return Err(MediaError::Probe("missing dimensions".into())),
     };
 
     // 非正方ピクセル(アナモルフィック)はv1スコープ外として明確に拒否する
-    // (レビュー指摘#6: 黙ってアスペクト崩れさせない)
     if let Some(sar) = stream.sample_aspect_ratio.as_deref() {
         if sar != "1:1" && sar != "0:1" && !sar.is_empty() {
             return Err(MediaError::Probe(format!(
@@ -104,8 +302,6 @@ pub fn probe(path: impl AsRef<Path>) -> Result<MediaInfo> {
         }
     }
 
-    // 回転メタデータ: 90/270度なら表示寸法はW/H入れ替え(デコードは明示transposeで
-    // この寸法のフレームを出す)
     let rotation = stream
         .side_data_list
         .iter()
@@ -128,14 +324,15 @@ pub fn probe(path: impl AsRef<Path>) -> Result<MediaInfo> {
     let duration = stream
         .duration
         .as_deref()
-        .or(parsed.format.as_ref().and_then(|f| f.duration.as_deref()))
+        .or(format_duration)
         .and_then(|s| parse_duration_snapped(s, fps));
     let nb_frames = stream.nb_frames.as_deref().and_then(|s| s.parse().ok());
 
     let color_space = map_color_space(stream.color_space.as_deref(), stream.color_range.as_deref())
         .map_err(MediaError::Probe)?;
 
-    Ok(MediaInfo {
+    Ok(ProbedVideoStream {
+        ordinal,
         width,
         height,
         fps,
@@ -143,6 +340,27 @@ pub fn probe(path: impl AsRef<Path>) -> Result<MediaInfo> {
         nb_frames,
         color_space,
         rotation,
+        codec_name: stream.codec_name.clone().filter(|s| !s.is_empty()),
+    })
+}
+
+fn parse_audio_stream(stream: &FfprobeStream, ordinal: u32) -> Result<ProbedAudioStream> {
+    let codec_name = stream
+        .codec_name
+        .clone()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| MediaError::Probe("missing audio codec_name".into()))?;
+    let sample_rate = stream
+        .sample_rate
+        .as_deref()
+        .and_then(|s| s.parse::<u32>().ok());
+    Ok(ProbedAudioStream {
+        ordinal,
+        codec_name,
+        sample_rate,
+        channels: stream.channels,
+        channel_layout: stream.channel_layout.clone().filter(|s| !s.is_empty()),
+        language: stream.tags.language.clone().filter(|s| !s.is_empty()),
     })
 }
 
@@ -160,7 +378,6 @@ fn validate_even_dimensions(width: u32, height: u32) -> Result<()> {
 }
 
 /// r_frame_rate と avg_frame_rate が有意に食い違う場合はVFR疑いとして拒否する。
-/// ffprobeタグの比較によるヒューリスティックであり、全VFRを網羅する保証はない。
 fn reject_variable_frame_rate(r_fps: Option<Fps>, avg_fps: Option<Fps>) -> Result<()> {
     let (Some(r), Some(a)) = (r_fps, avg_fps) else {
         return Ok(());
@@ -229,7 +446,6 @@ fn parse_fraction(s: &str) -> Option<Fps> {
 }
 
 /// ffprobeの秒表記("2.000000")を、fpsグリッドにスナップしたRationalTimeへ。
-/// μs分母(1_000_000)をタイムライン演算に持ち込まない(分母肥大化の回避)。
 fn parse_duration_snapped(s: &str, fps: Fps) -> Option<RationalTime> {
     let secs: f64 = s.parse().ok()?;
     let frames = (secs * fps.as_f64()).round() as i64;
@@ -251,10 +467,8 @@ mod tests {
     #[test]
     fn duration_snaps_to_frame_grid() {
         let fps = Fps::try_new(30000, 1001).unwrap();
-        // 2.002秒 = ちょうど60フレーム(29.97fps)
         let d = parse_duration_snapped("2.002000", fps).unwrap();
         assert_eq!(d, RationalTime::try_from_frame(60, fps).unwrap());
-        // 分母がμsではなくfps由来であること
         assert!(d.den() <= 30000);
     }
 
@@ -272,7 +486,6 @@ mod tests {
             map_color_space(Some("smpte170m"), None).unwrap(),
             ColorSpace::Rec601Limited
         );
-        // タグ欠落 → HD慣習
         assert_eq!(
             map_color_space(None, None).unwrap(),
             ColorSpace::Rec709Limited
@@ -307,5 +520,50 @@ mod tests {
         assert!(fps_differ_significantly(cfr, vfr));
         assert!(reject_variable_frame_rate(Some(cfr), Some(vfr)).is_err());
         assert!(reject_variable_frame_rate(Some(cfr), None).is_ok());
+    }
+
+    #[test]
+    fn supported_audio_accepts_common_codecs() {
+        let ok = ProbedAudioStream {
+            ordinal: 0,
+            codec_name: "aac".into(),
+            sample_rate: Some(48_000),
+            channels: Some(2),
+            channel_layout: Some("stereo".into()),
+            language: None,
+        };
+        assert!(require_supported_audio(&ok).is_ok());
+    }
+
+    #[test]
+    fn unsupported_audio_codec_is_typed() {
+        let bad = ProbedAudioStream {
+            ordinal: 1,
+            codec_name: "cook".into(),
+            sample_rate: Some(44_100),
+            channels: Some(2),
+            channel_layout: Some("stereo".into()),
+            language: None,
+        };
+        assert!(matches!(
+            require_supported_audio(&bad),
+            Err(MediaError::UnsupportedAudioCodec { ordinal: 1, .. })
+        ));
+    }
+
+    #[test]
+    fn unsupported_layout_is_typed() {
+        let bad = ProbedAudioStream {
+            ordinal: 0,
+            codec_name: "aac".into(),
+            sample_rate: Some(48_000),
+            channels: Some(6),
+            channel_layout: Some("5.1".into()),
+            language: None,
+        };
+        assert!(matches!(
+            require_supported_audio(&bad),
+            Err(MediaError::UnsupportedChannelLayout { .. })
+        ));
     }
 }

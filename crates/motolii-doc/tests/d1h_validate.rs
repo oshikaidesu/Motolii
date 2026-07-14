@@ -20,7 +20,7 @@ fn valid_minimal() -> Document {
             start: RationalTime::ZERO,
             duration: RationalTime::try_new(5, 1).unwrap(),
             time_map: TimeMap::default(),
-            source: ClipSource::Asset { asset },
+            source: ClipSource::asset_video_only(asset),
         })],
     });
     doc
@@ -168,7 +168,7 @@ fn look_at_on_rotation_ok() {
     let mut doc = valid_minimal();
     let asset = match &doc.tracks[0].items[0] {
         TrackItem::Clip(c) => match c.source {
-            ClipSource::Asset { asset } => asset,
+            ClipSource::Asset { asset, .. } => asset,
             _ => unreachable!(),
         },
         _ => unreachable!(),
@@ -182,7 +182,7 @@ fn look_at_on_rotation_ok() {
             start: RationalTime::ZERO,
             duration: RationalTime::try_new(1, 1).unwrap(),
             time_map: TimeMap::default(),
-            source: ClipSource::Asset { asset },
+            source: ClipSource::asset_video_only(asset),
         })],
     });
     clip_mut(&mut doc).envelope.transform.rotation = DocParam::LookAt {

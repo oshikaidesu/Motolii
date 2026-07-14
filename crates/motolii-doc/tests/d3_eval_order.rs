@@ -455,7 +455,7 @@ fn source_time_comes_from_video_clip_not_overlay() {
         start: RationalTime::ZERO,
         duration: RationalTime::try_new(10, 1).unwrap(),
         time_map: TimeMap::offset(RationalTime::try_new(3, 1).unwrap()),
-        source: ClipSource::Asset { asset: asset_id },
+        source: ClipSource::asset_video_only(asset_id),
     };
     let mut overlay = rect_clip(
         overlay_layer.get(),
@@ -633,14 +633,14 @@ fn two_video_assets_get_independent_slots() {
         start: RationalTime::ZERO,
         duration: RationalTime::try_new(10, 1).unwrap(),
         time_map: TimeMap::offset(RationalTime::try_new(1, 1).unwrap()),
-        source: ClipSource::Asset { asset: a0 },
+        source: ClipSource::asset_video_only(a0),
     };
     let c1 = Clip {
         envelope: ItemEnvelope::new(l1),
         start: RationalTime::ZERO,
         duration: RationalTime::try_new(10, 1).unwrap(),
         time_map: TimeMap::offset(RationalTime::try_new(2, 1).unwrap()),
-        source: ClipSource::Asset { asset: a1 },
+        source: ClipSource::asset_video_only(a1),
     };
     doc.tracks.push(Track {
         id: track_id,

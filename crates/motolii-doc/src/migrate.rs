@@ -191,6 +191,11 @@ fn count_item(item: &TrackItem, clips: &mut usize, keys: &mut usize) {
                     count_param(param, keys);
                 }
             }
+            if let ClipSource::Asset { audio, .. } = &clip.source {
+                for comp in audio {
+                    count_param(&comp.gain, keys);
+                }
+            }
         }
         TrackItem::Group(group) => count_group(group, clips, keys),
     }
@@ -414,6 +419,13 @@ fn count_json_source(source: &Value, keys: &mut usize) {
                     for op in mods {
                         count_json_path_op(op, keys);
                     }
+                }
+            }
+        }
+        "asset" => {
+            if let Some(audio) = source.get("audio").and_then(|a| a.as_array()) {
+                for comp in audio {
+                    count_json_param(comp.get("gain"), keys);
                 }
             }
         }
@@ -1111,6 +1123,19 @@ fn inject_ids_in_source(
             }
             Ok(injected)
         }
+        "asset" => {
+            let mut injected = false;
+            if let Some(audio) = source.get_mut("audio").and_then(|a| a.as_array_mut()) {
+                for comp in audio.iter_mut() {
+                    if let Some(gain) = comp.get_mut("gain") {
+                        if inject_ids_in_param(gain, next, observed_max)? {
+                            injected = true;
+                        }
+                    }
+                }
+            }
+            Ok(injected)
+        }
         _ => Ok(false),
     }
 }
@@ -1260,7 +1285,9 @@ fn doc_has_stable_ids(doc: &Document) -> bool {
                     || match &clip.source {
                         ClipSource::Plugin { params, .. } => params.values().any(param_has_keys),
                         ClipSource::Vector { recipe } => recipe_has_keys(recipe),
-                        ClipSource::Asset { .. } => false,
+                        ClipSource::Asset { audio, .. } => {
+                            audio.iter().any(|comp| param_has_keys(&comp.gain))
+                        }
                     }
             }
             TrackItem::Group(group) => {
@@ -1535,6 +1562,25 @@ fn collect_clip_semantics(
             collect_path_op_params(layer, op, sample_times, tracks, resolved, param_evals);
         }
     }
+    if let ClipSource::Asset { audio, .. } = &clip.source {
+        for (i, comp) in audio.iter().enumerate() {
+            if let Some(name) = audio_gain_fingerprint_name(i) {
+                for t in sample_times {
+                    push_eval(param_evals, layer, name, &comp.gain, *t, tracks, resolved);
+                }
+            }
+        }
+    }
+}
+
+fn audio_gain_fingerprint_name(index: usize) -> Option<&'static str> {
+    match index {
+        0 => Some("audio[0].gain"),
+        1 => Some("audio[1].gain"),
+        2 => Some("audio[2].gain"),
+        3 => Some("audio[3].gain"),
+        _ => Some("audio[n].gain"),
+    }
 }
 
 fn collect_envelope_semantics(
@@ -1740,9 +1786,7 @@ mod tests {
             start: RationalTime::ZERO,
             duration: RationalTime::try_new(1, 1).unwrap(),
             time_map: TimeMap::identity(),
-            source: ClipSource::Asset {
-                asset: crate::AssetId::from_raw(0),
-            },
+            source: ClipSource::asset_video_only(crate::AssetId::from_raw(0)),
         };
         doc.tracks.push(crate::Track {
             id: tid,

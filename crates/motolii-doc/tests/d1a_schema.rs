@@ -115,7 +115,7 @@ fn sample_document() -> Document {
         start: RationalTime::ZERO,
         duration: RationalTime::try_new(10, 1).unwrap(),
         time_map: TimeMap::identity(),
-        source: ClipSource::Asset { asset: asset_id },
+        source: ClipSource::asset_video_only(asset_id),
     };
 
     doc.soundtrack = Some(Soundtrack::try_new(asset_id, RationalTime::ZERO, 1.0).unwrap());

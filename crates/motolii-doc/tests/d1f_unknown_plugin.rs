@@ -24,7 +24,7 @@ fn minimal_asset_clip_doc() -> (Document, motolii_doc::LayerId) {
             start: RationalTime::ZERO,
             duration: RationalTime::try_new(5, 1).unwrap(),
             time_map: Default::default(),
-            source: ClipSource::Asset { asset },
+            source: ClipSource::asset_video_only(asset),
         })],
     });
     (doc, layer)

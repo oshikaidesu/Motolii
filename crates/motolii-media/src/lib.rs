@@ -23,7 +23,10 @@ pub use mux::{
     audio_codec_allows_stream_copy, choose_audio_encode_mode, mux_soundtrack, probe_audio,
     AudioEncodeMode, AudioStreamInfo, SoundtrackMuxReport, SoundtrackMuxRequest,
 };
-pub use probe::{probe, MediaInfo};
+pub use probe::{
+    probe, probe_container, require_supported_audio, select_audio_stream, select_video_stream,
+    ContainerInfo, MediaInfo, MediaStreamKind, ProbedAudioStream, ProbedVideoStream,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MediaError {
@@ -33,6 +36,12 @@ pub enum MediaError {
     Io(#[from] std::io::Error),
     #[error("probe failed: {0}")]
     Probe(String),
+    #[error("media stream not found: kind={kind}, ordinal={ordinal}")]
+    StreamNotFound { kind: MediaStreamKind, ordinal: u32 },
+    #[error("unsupported audio codec `{codec}` (audio ordinal {ordinal})")]
+    UnsupportedAudioCodec { ordinal: u32, codec: String },
+    #[error("unsupported audio channel layout `{layout}` (audio ordinal {ordinal})")]
+    UnsupportedChannelLayout { ordinal: u32, layout: String },
     #[error(transparent)]
     RationalTime(#[from] motolii_core::RationalTimeError),
     #[error("invalid start frame: {0}")]

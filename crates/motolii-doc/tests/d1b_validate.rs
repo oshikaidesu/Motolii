@@ -20,7 +20,7 @@ fn valid_minimal() -> Document {
             start: RationalTime::ZERO,
             duration: RationalTime::try_new(5, 1).unwrap(),
             time_map: Default::default(),
-            source: ClipSource::Asset { asset },
+            source: ClipSource::asset_video_only(asset),
         })],
     });
     doc
@@ -50,9 +50,7 @@ fn unknown_layer_id_fails() {
 fn unknown_asset_fails() {
     let mut doc = valid_minimal();
     if let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] {
-        clip.source = ClipSource::Asset {
-            asset: AssetId::from_raw(99),
-        };
+        clip.source = ClipSource::asset_video_only(AssetId::from_raw(99));
     }
     assert!(matches!(
         doc.validate(),
@@ -115,7 +113,7 @@ fn duplicate_layer_in_tree_fails() {
     let (layer_id, asset) = match &doc.tracks[0].items[0] {
         TrackItem::Clip(Clip {
             envelope,
-            source: ClipSource::Asset { asset },
+            source: ClipSource::Asset { asset, .. },
             ..
         }) => (envelope.layer_id, *asset),
         _ => panic!("expected clip"),
@@ -125,7 +123,7 @@ fn duplicate_layer_in_tree_fails() {
         start: RationalTime::try_new(5, 1).unwrap(),
         duration: RationalTime::try_new(1, 1).unwrap(),
         time_map: Default::default(),
-        source: ClipSource::Asset { asset },
+        source: ClipSource::asset_video_only(asset),
     }));
     assert!(matches!(
         doc.validate(),
@@ -199,8 +197,8 @@ fn allocate_effect_id_bumps_version_and_min_reader() {
 fn stable_id_document_is_open_mode_read_write() {
     use motolii_doc::{classify_open_mode, OpenMode, READER_VERSION, WRITER_VERSION};
 
-    assert_eq!(READER_VERSION, 2);
-    assert_eq!(WRITER_VERSION, 2);
+    assert_eq!(READER_VERSION, 3);
+    assert_eq!(WRITER_VERSION, 3);
     assert_eq!(
         classify_open_mode(2, 2),
         OpenMode::ReadWrite,
@@ -277,14 +275,14 @@ fn parent_mutual_cycle_fails() {
                 start: RationalTime::ZERO,
                 duration: RationalTime::try_new(2, 1).unwrap(),
                 time_map: Default::default(),
-                source: ClipSource::Asset { asset },
+                source: ClipSource::asset_video_only(asset),
             }),
             TrackItem::Clip(Clip {
                 envelope: env_b,
                 start: RationalTime::try_new(2, 1).unwrap(),
                 duration: RationalTime::try_new(2, 1).unwrap(),
                 time_map: Default::default(),
-                source: ClipSource::Asset { asset },
+                source: ClipSource::asset_video_only(asset),
             }),
         ],
     });

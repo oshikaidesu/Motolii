@@ -334,14 +334,14 @@ fn dependency_edges_survive_migration() {
                 start: RationalTime::ZERO,
                 duration: RationalTime::try_new(1, 1).unwrap(),
                 time_map: TimeMap::identity(),
-                source: ClipSource::Asset { asset },
+                source: ClipSource::asset_video_only(asset),
             }),
             TrackItem::Clip(Clip {
                 envelope: env_b,
                 start: RationalTime::ZERO,
                 duration: RationalTime::try_new(1, 1).unwrap(),
                 time_map: TimeMap::identity(),
-                source: ClipSource::Asset { asset },
+                source: ClipSource::asset_video_only(asset),
             }),
         ],
     });

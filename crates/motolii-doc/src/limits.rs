@@ -249,7 +249,16 @@ fn check_group(
 fn check_clip(clip: &Clip, path: &str, limits: &ResourceLimits) -> Result<(), ResourceLimitError> {
     check_envelope(&clip.envelope, path, limits)?;
     match &clip.source {
-        ClipSource::Asset { .. } => Ok(()),
+        ClipSource::Asset { audio, .. } => {
+            for (i, comp) in audio.iter().enumerate() {
+                check_param(
+                    &comp.gain,
+                    &format!("{path}.source.audio[{i}].gain"),
+                    limits,
+                )?;
+            }
+            Ok(())
+        }
         ClipSource::Plugin {
             plugin_id,
             params,
@@ -621,7 +630,7 @@ mod tests {
             start: motolii_core::RationalTime::ZERO,
             duration: motolii_core::RationalTime::try_new(1, 1).unwrap(),
             time_map: Default::default(),
-            source: ClipSource::Asset { asset },
+            source: ClipSource::asset_video_only(asset),
         })
     }
 
