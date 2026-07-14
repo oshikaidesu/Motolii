@@ -14,7 +14,7 @@ use motolii_audio::{AudioProgram, CANONICAL_SAMPLE_RATE};
 use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap};
 use motolii_doc::{
     build_document_frame_graph, resolve_asset_path, AssetId, ClipSource, Document, EvaluationTime,
-    GraphError, PluginOpenWarning, TrackItem, RECT_LAYER_SOURCE,
+    GraphError, PluginOpenWarning, TrackItem,
 };
 use motolii_eval::DataTracks;
 use motolii_gpu::{GpuCtx, RgbaDownloader, YuvToRgba};
@@ -208,14 +208,9 @@ pub fn export_document_video(
     job: &ExportJob<'_>,
 ) -> Result<ExportReport, ExportError> {
     // 実装ガード9: 開く=警告、書き出す=拒否(D1fの接続点。未知pluginは発明しない)。
-    // `doc.layer_source.rect` は graph 組み込みのファーストパーティで、
-    // expect表は reference registry 鏡像のため載らない — 書き出し拒否対象外。
-    let degraded: Vec<PluginOpenWarning> = job
-        .doc
-        .plugin_open_warnings()
-        .into_iter()
-        .filter(|w| w.plugin_id != RECT_LAYER_SOURCE)
-        .collect();
+    // `doc.layer_source.rect` は known_plugin_info で現行versionのみ既知契約。
+    // 未来版は FutureVersion 警告のままここに残り、書き出しを拒否する。
+    let degraded = job.doc.plugin_open_warnings();
     if !degraded.is_empty() {
         return Err(ExportError::DegradedPlugins(degraded));
     }
