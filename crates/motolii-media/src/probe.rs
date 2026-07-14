@@ -192,10 +192,7 @@ pub fn probe_container(path: impl AsRef<Path>) -> Result<ContainerInfo> {
 }
 
 /// kind+ordinalでvideo streamを取得する。欠落はtyped error(別streamへfallbackしない)。
-pub fn select_video_stream(
-    info: &ContainerInfo,
-    ordinal: u32,
-) -> Result<&ProbedVideoStream> {
+pub fn select_video_stream(info: &ContainerInfo, ordinal: u32) -> Result<&ProbedVideoStream> {
     info.video_streams
         .iter()
         .find(|s| s.ordinal == ordinal)
@@ -206,10 +203,7 @@ pub fn select_video_stream(
 }
 
 /// kind+ordinalでaudio streamを取得する。欠落はtyped error。
-pub fn select_audio_stream(
-    info: &ContainerInfo,
-    ordinal: u32,
-) -> Result<&ProbedAudioStream> {
+pub fn select_audio_stream(info: &ContainerInfo, ordinal: u32) -> Result<&ProbedAudioStream> {
     info.audio_streams
         .iter()
         .find(|s| s.ordinal == ordinal)

@@ -37,10 +37,7 @@ pub enum MediaError {
     #[error("probe failed: {0}")]
     Probe(String),
     #[error("media stream not found: kind={kind}, ordinal={ordinal}")]
-    StreamNotFound {
-        kind: MediaStreamKind,
-        ordinal: u32,
-    },
+    StreamNotFound { kind: MediaStreamKind, ordinal: u32 },
     #[error("unsupported audio codec `{codec}` (audio ordinal {ordinal})")]
     UnsupportedAudioCodec { ordinal: u32, codec: String },
     #[error("unsupported audio channel layout `{layout}` (audio ordinal {ordinal})")]
