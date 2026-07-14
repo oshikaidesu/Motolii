@@ -31,11 +31,7 @@ pub fn clipping_mask_factor(mask: [u8; 4], mode: ClippingMaskRef) -> f64 {
 }
 
 /// premul content × coverage(WGSL `fs_main` と同式)。
-pub fn clipping_mask_mul_u8(
-    content: [u8; 4],
-    mask: [u8; 4],
-    mode: ClippingMaskRef,
-) -> [u8; 4] {
+pub fn clipping_mask_mul_u8(content: [u8; 4], mask: [u8; 4], mode: ClippingMaskRef) -> [u8; 4] {
     let f = clipping_mask_factor(mask, mode);
     [
         to_u8(content[0] as f64 / 255.0 * f),
