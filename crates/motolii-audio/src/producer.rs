@@ -3,6 +3,9 @@
 //!
 //! **D4-FU**: デバイスレート≠素材レートのときだけ固定比リサンプルをリング書き込み前に挿入する。
 //! レート一致時はリサンプラを作らない(恒等パス)。アルゴリズム遅延はリサンプラ内の先頭 trim で吸収する。
+//!
+//! **AG-2**: `MixProducer` は `AudioProgram::mix_audio` をプロデューサ側で実行し、
+//! mixed PCMをリングへ供給する。callback内でmixしない。
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -10,7 +13,10 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use crate::cache::PcmCache;
+use crate::convert::{CANONICAL_CHANNELS, CANONICAL_SAMPLE_RATE};
 use crate::error::{AudioError, Result};
+use crate::meter::AudioMeter;
+use crate::program::AudioProgram;
 use crate::resample::FixedRatioResampler;
 use crate::ring::RingProducer;
 
@@ -117,6 +123,257 @@ impl AudioProducer {
 impl Drop for AudioProducer {
     fn drop(&mut self) {
         self.shutdown();
+    }
+}
+
+/// AG-2: `AudioProgram`をmixしてリングへ供給するプロデューサ。
+///
+/// decode/I/O/mixは本スレッド側。callbackは`fill_or_silence`で読むだけ。
+pub struct MixProducer {
+    running: Arc<AtomicBool>,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl MixProducer {
+    /// 正準48k stereoの`ring`へ、`start_frame`からmix結果を供給する。
+    pub fn spawn(
+        program: Arc<AudioProgram>,
+        ring: RingProducer,
+        start_frame: u64,
+        meter: Option<Arc<AudioMeter>>,
+    ) -> Result<Self> {
+        Self::spawn_with_device_rate(program, ring, start_frame, CANONICAL_SAMPLE_RATE, meter)
+    }
+
+    /// デバイスレート向け。不一致時のみリサンプルを挿入する。
+    pub fn spawn_with_device_rate(
+        program: Arc<AudioProgram>,
+        ring: RingProducer,
+        start_frame: u64,
+        device_sample_rate: u32,
+        meter: Option<Arc<AudioMeter>>,
+    ) -> Result<Self> {
+        if device_sample_rate == 0 {
+            return Err(AudioError::UnsupportedSampleRate {
+                sample_rate: device_sample_rate,
+            });
+        }
+        if ring.channels() != CANONICAL_CHANNELS as usize {
+            return Err(AudioError::Resample {
+                detail: "mix ring channel count must be stereo",
+            });
+        }
+
+        let resampling = device_sample_rate != CANONICAL_SAMPLE_RATE;
+        let running = Arc::new(AtomicBool::new(true));
+        let running_thread = Arc::clone(&running);
+
+        let handle = thread::Builder::new()
+            .name("motolii-audio-mix-producer".into())
+            .spawn(move || {
+                if resampling {
+                    mix_producer_loop_resample(
+                        &program,
+                        &ring,
+                        start_frame,
+                        device_sample_rate,
+                        meter.as_deref(),
+                        &running_thread,
+                    );
+                } else {
+                    mix_producer_loop_identity(
+                        &program,
+                        &ring,
+                        start_frame,
+                        meter.as_deref(),
+                        &running_thread,
+                    );
+                }
+            })
+            .map_err(AudioError::ProducerSpawn)?;
+
+        Ok(Self {
+            running,
+            handle: Some(handle),
+        })
+    }
+
+    pub fn stop(mut self) {
+        self.shutdown();
+    }
+
+    fn shutdown(&mut self) {
+        self.running.store(false, Ordering::Release);
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+impl Drop for MixProducer {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
+}
+
+/// mixチャンクサイズ(プロデューサ側alloc。callbackでは行わない)。
+const MIX_CHUNK_FRAMES: usize = 1_024;
+
+/// 全sourceのtimeline終端(正準frame)。これ以降は供給を止め、終端後のunderrunはTransport側。
+fn program_end_frame(program: &AudioProgram) -> u64 {
+    let mut end = 0u64;
+    for source in program.sources() {
+        let start = rational_to_canonical_frames(source.timeline_start);
+        let dur = rational_to_canonical_frames(source.timeline_duration);
+        end = end.max(start.saturating_add(dur));
+    }
+    end
+}
+
+fn rational_to_canonical_frames(t: motolii_core::RationalTime) -> u64 {
+    // frames = num * rate / den (非負前提)。
+    if t <= motolii_core::RationalTime::ZERO {
+        return 0;
+    }
+    let num = t.num().max(0) as u128;
+    let den = t.den().max(1) as u128;
+    ((num * u128::from(CANONICAL_SAMPLE_RATE)) / den) as u64
+}
+
+fn mix_producer_loop_identity(
+    program: &AudioProgram,
+    ring: &RingProducer,
+    start_frame: u64,
+    meter: Option<&AudioMeter>,
+    running: &AtomicBool,
+) {
+    let end_frame = program_end_frame(program);
+    let mut playhead = start_frame;
+    while running.load(Ordering::Acquire) {
+        if playhead >= end_frame {
+            break;
+        }
+        let free = ring.free_frames();
+        if free == 0 {
+            thread::sleep(POLL_INTERVAL);
+            continue;
+        }
+        let chunk_frames = free
+            .min(MIX_CHUNK_FRAMES)
+            .min((end_frame - playhead) as usize);
+        if chunk_frames == 0 {
+            break;
+        }
+        // meterはpush成功分だけ観測する(未再生分をpeakに入れない)。
+        let Ok((pcm, _)) = program.mix_audio(playhead, chunk_frames, None) else {
+            break;
+        };
+        // push前に観測し、consumerが読んだ時点でmeterが追いついているようにする。
+        if let Some(meter) = meter {
+            meter.observe_interleaved_stereo(&pcm);
+        }
+        let pushed = ring.push_frames(&pcm);
+        if pushed == 0 {
+            thread::sleep(POLL_INTERVAL);
+            continue;
+        }
+        // 未push分を再mixするため、観測済み未再生は次回チャンクで再度観測されうる(peakはmax)。
+        playhead += pushed as u64;
+    }
+}
+
+fn mix_producer_loop_resample(
+    program: &AudioProgram,
+    ring: &RingProducer,
+    start_frame: u64,
+    device_sample_rate: u32,
+    meter: Option<&AudioMeter>,
+    running: &AtomicBool,
+) {
+    let Ok(mut resampler) = FixedRatioResampler::new(
+        CANONICAL_SAMPLE_RATE,
+        device_sample_rate,
+        CANONICAL_CHANNELS,
+    ) else {
+        return;
+    };
+    resampler.reset();
+
+    let end_frame = program_end_frame(program);
+    let mut playhead = start_frame;
+    let mut pending: Vec<f32> = Vec::new();
+    let mut pending_off = 0usize;
+    let mut flushing = playhead >= end_frame;
+    let mut flush_chunks = 0usize;
+
+    while running.load(Ordering::Acquire) {
+        if pending_off < pending.len() {
+            let frames_left = (pending.len() - pending_off) / CANONICAL_CHANNELS as usize;
+            if frames_left == 0 {
+                pending.clear();
+                pending_off = 0;
+                continue;
+            }
+            let pushed = ring.push_frames(&pending[pending_off..]);
+            if pushed == 0 {
+                thread::sleep(POLL_INTERVAL);
+                continue;
+            }
+            pending_off += pushed * CANONICAL_CHANNELS as usize;
+            if pending_off >= pending.len() {
+                pending.clear();
+                pending_off = 0;
+            }
+            continue;
+        }
+
+        if flushing {
+            if flush_chunks >= MAX_FLUSH_CHUNKS {
+                break;
+            }
+            let Ok(out) = resampler.flush_silence_chunk() else {
+                break;
+            };
+            flush_chunks += 1;
+            if out.is_empty() {
+                if flush_chunks >= MAX_FLUSH_CHUNKS {
+                    break;
+                }
+                continue;
+            }
+            pending.extend_from_slice(out);
+            continue;
+        }
+
+        if playhead >= end_frame {
+            flushing = true;
+            continue;
+        }
+
+        let need = resampler
+            .input_frames_next()
+            .min((end_frame - playhead) as usize);
+        if need == 0 {
+            flushing = true;
+            continue;
+        }
+        let Ok((pcm, _)) = program.mix_audio(playhead, need, None) else {
+            break;
+        };
+        // 正準mix出力をmeter(device域ではなく)。resampler投入時点で観測。
+        if let Some(meter) = meter {
+            meter.observe_interleaved_stereo(&pcm);
+        }
+        playhead += need as u64;
+        let Ok(out) = resampler.process_interleaved(&pcm) else {
+            break;
+        };
+        if !out.is_empty() {
+            pending.extend_from_slice(out);
+        }
+        if playhead >= end_frame {
+            flushing = true;
+        }
     }
 }
 

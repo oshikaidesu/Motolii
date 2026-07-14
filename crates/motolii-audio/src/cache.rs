@@ -1,19 +1,21 @@
-//! 楽曲1本のインターリーブf32 PCM全展開キャッシュ(D4契約: ミキサーなし・単一バッファ)。
+//! 楽曲/stream 1本のインターリーブf32 PCM全展開キャッシュ(D4 + AG-2)。
+//!
+//! AG-2のmixerは本キャッシュをsourceとして読む。単一Soundtrack時代の
+//! 「再生位置→サンプル添字」契約はsource単位で維持し、複数sourceの加算は`mix`へ。
 
 use crate::error::{AudioError, Result};
 
-/// PCMの形式(チャンネル数・サンプルレート)。ミキサーが無いため楽曲全体で単一。
+/// PCMの形式(チャンネル数・サンプルレート)。stream単位で単一。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PcmFormat {
     pub channels: u16,
     pub sample_rate: u32,
 }
 
-/// 楽曲1本のインターリーブf32 PCM。デコード時に全展開してRAM保持する
+/// stream 1本のインターリーブf32 PCM。デコード時に全展開してRAM保持する
 /// (docs/specs/M2-document-model.md「音声トランスポート設計」5.: 5分ステレオ48kHzで≈110MB)。
 ///
-/// ミキシングが存在しないため「再生位置→サンプル」は本構造体の添字計算のみに
-/// 還元される — シーク・スクラブ・逆再生が同一コードパスになる設計の要。
+/// source単位の「再生位置→サンプル」は本構造体の添字計算。複数sourceの加算は`mix`。
 #[derive(Debug, Clone)]
 pub struct PcmCache {
     samples: Vec<f32>,
