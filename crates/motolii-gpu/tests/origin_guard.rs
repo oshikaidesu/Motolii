@@ -38,7 +38,9 @@ fn headless_allows_download_rgba() {
         return;
     };
     let desc = FrameDesc::packed(2, 2, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false);
-    let data = vec![255u8, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255];
+    let data = vec![
+        255u8, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255,
+    ];
     let texture = upload_rgba(&gpu, &desc, &data);
     let out = download_rgba(&gpu, &texture).expect("headless download should succeed");
     assert_eq!(out, data);
