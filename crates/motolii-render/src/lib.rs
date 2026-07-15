@@ -1288,7 +1288,10 @@ mod tests {
             Quality::FINAL,
         )
         .unwrap_err();
-        assert!(matches!(err, RenderError::Gpu(GpuRuntimeError::Uncaptured(_))));
+        assert!(matches!(
+            err,
+            RenderError::Gpu(GpuRuntimeError::Uncaptured(_))
+        ));
     }
 
     #[test]
