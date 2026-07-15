@@ -19,7 +19,7 @@
 | ID | 状態 | 固定済み | 未決/依存 | Issue化 |
 |---|---|---|---|---|
 | GAP-14 | `DONE` | 参照中Delete=Reject、Unlink=RemoveUse、Copy Local=Materialize、orphan=Keep、未知plugin同一規則 | —（決定済） | [#166](https://github.com/oshikaidesu/Motolii/issues/166)、[lifecycle決定](2026-07-15-shared-effect-lifecycle-decision.md) |
-| D1l | `READY` | Definition/Use分離、ordered stack、inline migration、非隣接共有、GAP-14 lifecycle+journal/Undo境界 | — | 実装PR #173を追補契約に合わせて再開 |
+| D1l | `READY` | Definition/Use分離、ordered stack、inline migration、非隣接共有、GAP-14 lifecycle+journal/Undo境界、新規Document v4生成口 | — | 実装PR #173を全追補契約に合わせて再開 |
 | D3e | `WAIT` | 各Use位置で個別評価、Groupは子合成後1回、source非消費 | D1l、D3 | D1l schema merge後 |
 
 ### GAP-14の出口（完了）
@@ -30,7 +30,7 @@
 - [x] schema/API/production codeは変更しない（本PRはdocs-only）
 - Cascade delete-all / Purge unused / 一斉Make Uniqueは**延期**（D1l完了条件に入れない）
 
-GAP-14 lifecycleとPR #197の追補出口は完了済み。D1lは既存実装PR #173を追補契約に合わせて再開する。
+GAP-14 lifecycle、PR #197、[2026-07-16新規Document v4生成追補](2026-07-16-d1l-current-document-constructor-decision.md)の出口は完了済み。D1lは既存実装PR #173を全追補契約に合わせて再開する。
 
 ## M3 — UI projection
 
