@@ -447,8 +447,8 @@ fn parse_fraction(s: &str) -> Option<Fps> {
 
 /// ffprobeの秒表記("2.000000")を、fpsグリッドにスナップしたRationalTimeへ。
 fn parse_duration_snapped(s: &str, fps: Fps) -> Option<RationalTime> {
-    let secs: f64 = s.parse().ok()?;
-    let frames = (secs * fps.as_f64()).round() as i64;
+    let t = RationalTime::try_from_decimal_str(s).ok()?;
+    let frames = t.try_to_frame_round(fps).ok()?;
     RationalTime::try_from_frame(frames, fps).ok()
 }
 

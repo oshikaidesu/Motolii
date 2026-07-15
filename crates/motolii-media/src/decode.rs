@@ -43,9 +43,8 @@ impl FrameReader {
         // どのffmpegでも決定的な出力にする。
         cmd.args(["-v", "error", "-nostdin", "-noautorotate"]);
         if start_frame > 0 {
-            // (start_frame - 0.5) / fps 秒へシーク
-            let target = (start_frame as f64 - 0.5) * info.fps.den() as f64 / info.fps.num() as f64;
-            cmd.args(["-ss", &format!("{target:.6}")]);
+            let seek = motolii_core::format_ffmpeg_seek_before_frame(start_frame, info.fps)?;
+            cmd.args(["-ss", &seek]);
         }
         cmd.arg("-i").arg(path.as_ref());
         if let Some(vf) = rotation_filter(info.rotation) {
