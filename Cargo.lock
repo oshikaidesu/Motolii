@@ -851,6 +851,8 @@ dependencies = [
  "motolii-eval",
  "motolii-gpu",
  "motolii-plugin",
+ "serde",
+ "serde_json",
  "thiserror 2.0.18",
  "wgpu",
 ]
