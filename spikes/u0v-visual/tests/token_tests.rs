@@ -41,13 +41,24 @@ fn theme_pref_roundtrip() {
 fn invalid_theme_file_falls_back_to_dark() {
     let dir = manifest_dir();
     let broken = dir.join("tokens/broken-test.json");
-    std::fs::write(&broken, r#"{"$schema":"https://www.designtokens.org/schemas/2025.10/formatSchema.json","color":{}}"#).unwrap();
+    std::fs::write(
+        &broken,
+        r#"{"$schema":"https://www.designtokens.org/schemas/2025.10/formatSchema.json","color":{}}"#,
+    )
+    .unwrap();
     let result = u0v_visual::load_theme(&dir, "broken", "tokens/broken-test.json");
     assert!(result.is_err());
+    let (theme, diag) = u0v_visual::load_theme_file_safe(&dir, "tokens/broken-test.json");
     let _ = std::fs::remove_file(broken);
-    let (theme, diag) = u0v_visual::load_theme_safe(&dir, ThemeId::MotoliiLight);
-    assert!(diag.is_none());
-    assert!(theme.tokens.contains_key("color.surface.bg"));
+    assert!(diag.is_some(), "broken theme must produce fallback diagnostic");
+
+    let dark = load_theme(&dir, "motolii-dark", "tokens/motolii-dark.json").unwrap();
+    let light = load_theme(&dir, "motolii-light", "tokens/motolii-light.json").unwrap();
+    let applied_bg = theme.tokens.get("color.surface.bg").unwrap();
+    let dark_bg = dark.tokens.get("color.surface.bg").unwrap();
+    let light_bg = light.tokens.get("color.surface.bg").unwrap();
+    assert_eq!(format!("{applied_bg:?}"), format!("{dark_bg:?}"), "fallback must be dark bg");
+    assert_ne!(format!("{applied_bg:?}"), format!("{light_bg:?}"), "fallback must not be light");
 }
 
 #[test]

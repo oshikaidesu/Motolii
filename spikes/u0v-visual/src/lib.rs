@@ -16,6 +16,26 @@ pub fn apply_theme_tokens(ui: &MainWindow, theme: &ThemeTokens) {
     apply_resolved(ui, theme);
 }
 
+/// semantic color token → Slint brush（apply とテストの共有経路）。
+pub fn color_brush_from_token(theme: &ThemeTokens, path: &str) -> Option<slint::Brush> {
+    match theme.tokens.get(path)? {
+        ResolvedToken::Color(c) => {
+            if (c.a - 1.0).abs() < f32::EPSILON {
+                Some(slint::Brush::from(slint::Color::from_rgb_u8(c.r, c.g, c.b)))
+            } else {
+                let a = (c.a * 255.0).round() as u8;
+                Some(slint::Brush::from(slint::Color::from_argb_u8(a, c.r, c.g, c.b)))
+            }
+        }
+        _ => None,
+    }
+}
+
+pub fn brush_rgb_u8(brush: slint::Brush) -> (u8, u8, u8) {
+    let c = brush.color().to_argb_u8();
+    (c.red, c.green, c.blue)
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ThemeLoadError {
     #[error("token: {0}")]
@@ -37,6 +57,25 @@ pub fn load_theme_by_id(manifest_dir: &std::path::Path, id: ThemeId) -> Result<T
     let theme = load_theme(manifest_dir, id.as_str(), rel)?;
     check_text_contrast(&theme)?;
     Ok(theme)
+}
+
+pub fn load_theme_file(manifest_dir: &std::path::Path, rel: &str) -> Result<ThemeTokens, ThemeLoadError> {
+    let theme = load_theme(manifest_dir, "external", rel)?;
+    check_text_contrast(&theme)?;
+    Ok(theme)
+}
+
+pub fn load_theme_file_safe(manifest_dir: &std::path::Path, rel: &str) -> (ThemeTokens, Option<String>) {
+    match load_theme_file(manifest_dir, rel) {
+        Ok(t) => (t, None),
+        Err(e) => {
+            let diag = format!("theme fallback to dark: {e}");
+            match load_theme_by_id(manifest_dir, ThemeId::MotoliiDark) {
+                Ok(t) => (t, Some(diag)),
+                Err(e2) => panic!("built-in dark theme must load: {e2}"),
+            }
+        }
+    }
 }
 
 pub fn load_theme_safe(

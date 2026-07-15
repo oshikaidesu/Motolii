@@ -11,7 +11,8 @@ cargo run   # GUI 環境のみ
 
 ## 自動判定
 
-- DTCG token schema + 3テーマ key parity + contrast ≥ 4.5:1
+- 通常文字4.5:1、大文字/太字3:1を下回るtoken pairを拒否する
+- 実行時テーマ切替: `color_brush_from_token` + 生成 `apply_resolved` が `theme.tokens` を参照（dark 固定ハードコード禁止をテスト検査）
 - 生成物以外の raw color literal 禁止
 - 6 情報領域 region-id (asset/preview/property/timeline/transport/context)
 - ja/en/pseudo 翻訳 + pseudo 伸長

@@ -236,32 +236,29 @@ pub fn generate_slint_globals(theme: &ThemeTokens) -> String {
     lines.join("\n")
 }
 
-pub fn generate_apply_theme(theme: &ThemeTokens) -> String {
+pub fn generate_apply_theme(themes: &[ThemeTokens]) -> String {
     let mut lines = vec![
-        "// AUTO-GENERATED".to_string(),
+        "// AUTO-GENERATED — runtime theme apply from theme.tokens".to_string(),
         "pub fn apply_resolved(ui: &crate::MainWindow, theme: &crate::token_gen::ThemeTokens) {".to_string(),
         "    let g = crate::Theme::get(ui);".to_string(),
-        "    let _ = theme;".to_string(),
+        "    use crate::token_gen::ResolvedToken;".to_string(),
     ];
-    for (path, token) in &theme.tokens {
+    for (path, template) in &themes[0].tokens {
         let setter = format!("set_{}", rust_field_name(path));
-        match token {
-            ResolvedToken::Color(c) => {
-                if (c.a - 1.0).abs() < f32::EPSILON {
-                    lines.push(format!(
-                        "    g.{setter}(slint::Brush::from(slint::Color::from_rgb_u8({}, {}, {})));",
-                        c.r, c.g, c.b
-                    ));
-                } else {
-                    let a = (c.a * 255.0).round() as u8;
-                    lines.push(format!(
-                        "    g.{setter}(slint::Brush::from(slint::Color::from_argb_u8({a}, {}, {}, {})));",
-                        c.r, c.g, c.b
-                    ));
-                }
+        match template {
+            ResolvedToken::Color(_) => {
+                lines.push(format!(
+                    r#"    if let Some(brush) = crate::color_brush_from_token(theme, "{path}") {{"#
+                ));
+                lines.push(format!("        g.{setter}(brush);"));
+                lines.push("    }".to_string());
             }
-            ResolvedToken::Dimension(px) => {
-                lines.push(format!("    g.{setter}({px:.1});"));
+            ResolvedToken::Dimension(_) => {
+                lines.push(format!(
+                    r#"    if let Some(ResolvedToken::Dimension(px)) = theme.tokens.get("{path}") {{"#
+                ));
+                lines.push(format!("        g.{setter}(*px);"));
+                lines.push("    }".to_string());
             }
         }
     }
@@ -410,7 +407,7 @@ pub fn write_generated(manifest_dir: &Path, out_dir: &Path) -> Result<(), TokenE
     fs::write(out_dir.join("theme.slint"), slint)?;
     let rust = generate_rust_theme(&themes);
     fs::write(out_dir.join("theme.rs"), rust)?;
-    let apply = generate_apply_theme(&themes[0]);
+    let apply = generate_apply_theme(&themes);
     fs::write(out_dir.join("apply_theme.rs"), apply)?;
 
     let manifest = serde_json::json!({
