@@ -9,14 +9,12 @@ mod playback;
 mod simulate;
 
 pub use clock::{
-    display_frame_without_latency_compensation, drift_within_one_frame,
-    perceptual_sample_frames, sample_frames_to_time, synced_display_frame,
+    display_frame_without_latency_compensation, drift_within_one_frame, perceptual_sample_frames,
+    sample_frames_to_time, synced_display_frame,
 };
 pub use drs::{DrsConfig, DrsController, DrsStage, FrameTiming};
 pub use playback::{PlaybackSession, PlaybackSessionError};
-pub use simulate::{
-    test_preview, test_transport_headless, HalfSpeedSimReport, PreviewSimulator,
-};
+pub use simulate::{test_preview, test_transport_headless, HalfSpeedSimReport, PreviewSimulator};
 
 use std::sync::Arc;
 
@@ -141,7 +139,10 @@ impl Transport {
 
     /// 聴感タイムライン時刻。
     pub fn perceptual_time(&self) -> Result<RationalTime, TransportError> {
-        Ok(sample_frames_to_time(self.perceptual_frames(), self.sample_rate)?)
+        Ok(sample_frames_to_time(
+            self.perceptual_frames(),
+            self.sample_rate,
+        )?)
     }
 
     /// 映像レンダ用: 常に最新の聴感時刻だけを返す(古い時刻は手掛けない=ドロップ)。

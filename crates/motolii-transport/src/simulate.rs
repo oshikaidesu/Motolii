@@ -76,13 +76,8 @@ impl PreviewSimulator {
             .device_wait()
             .set_wait_frames(device_wait_frames);
         self.last_callback_pcm.resize(self.chunk_frames, 0.0);
-        fill_or_silence(
-            &self.ring_cons,
-            &mut self.last_callback_pcm,
-            &self.counters,
-        );
-        self.supplied_trace
-            .push(self.counters.frames_supplied());
+        fill_or_silence(&self.ring_cons, &mut self.last_callback_pcm, &self.counters);
+        self.supplied_trace.push(self.counters.frames_supplied());
         Ok(())
     }
 
@@ -90,7 +85,11 @@ impl PreviewSimulator {
     pub fn tick_render(&mut self, render_cost: Duration) -> Result<FramePlan, TransportError> {
         let plan = self.transport.next_frame_plan()?;
         self.transport
-            .record_render_timing(FrameTiming::measured_gpu(render_cost, Duration::ZERO, render_cost));
+            .record_render_timing(FrameTiming::measured_gpu(
+                render_cost,
+                Duration::ZERO,
+                render_cost,
+            ));
         Ok(plan)
     }
 
@@ -169,8 +168,7 @@ impl PreviewSimulator {
                 }
                 let _ = i;
             }
-            self.tick_audio_callback(128)
-                .map_err(|e| e.to_string())?;
+            self.tick_audio_callback(128).map_err(|e| e.to_string())?;
             let over = i < 4;
             let cost = if over {
                 frame_budget * 2
@@ -305,7 +303,9 @@ mod tests {
         let cache = sine_cache(2, rate);
         let (mut sim, ring_prod) = test_preview(rate, 8_192, 480, true);
 
-        let report = sim.run_half_speed_render(&cache, &ring_prod, 2, true).unwrap();
+        let report = sim
+            .run_half_speed_render(&cache, &ring_prod, 2, true)
+            .unwrap();
         assert!(report.frames_dropped > 0, "must drop frames at 0.5x render");
         assert!(report.frames_rendered < rate as u64 * 2 / 30);
         assert_eq!(report.max_underrun_events, 0);

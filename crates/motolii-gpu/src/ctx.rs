@@ -43,9 +43,7 @@ pub fn optional_features() -> wgpu::Features {
 
 /// 自動DRSが利用可能か(timestamp query非対応時は無効+ドロップ継続)。
 pub fn drs_available(device: &wgpu::Device) -> bool {
-    device
-        .features()
-        .contains(wgpu::Features::TIMESTAMP_QUERY)
+    device.features().contains(wgpu::Features::TIMESTAMP_QUERY)
 }
 
 /// コンポジタが最低限必要とするlimitの検証(第3回レビュー#2)。

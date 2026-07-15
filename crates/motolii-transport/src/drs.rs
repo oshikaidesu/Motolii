@@ -212,7 +212,9 @@ impl DrsController {
 
     fn on_stage_change(&mut self, from: DrsStage) {
         let since = self.global_frame.saturating_sub(self.last_change_frame);
-        if since < self.config.min_dwell_frames as u64 && self.stage == self.stage_before_last_change {
+        if since < self.config.min_dwell_frames as u64
+            && self.stage == self.stage_before_last_change
+        {
             self.oscillations_in_dwell += 1;
         }
         self.stage_before_last_change = from;

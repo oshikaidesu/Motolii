@@ -28,8 +28,8 @@ pub use decode::{
     decode_file_with_limits, decode_stream, decode_stream_with_limits,
 };
 pub use device::{negotiate_output, select_device_sample_rate, NegotiatedOutput, OutputStream};
-pub use latency::DeviceWaitLatency;
 pub use error::{AudioError, Result};
+pub use latency::DeviceWaitLatency;
 pub use meter::{AudioMeter, ClipLatch, MeterSnapshot, CLIP_THRESHOLD};
 pub use mix::{mix_audio, MixReport, MixSource};
 pub use producer::{AudioProducer, MixProducer};

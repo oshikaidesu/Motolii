@@ -19,11 +19,7 @@ impl DeviceWaitLatency {
     }
 
     /// cpal `OutputCallbackInfo::timestamp()` の `playback − callback` を写す。
-    pub fn update_from_output_callback(
-        &self,
-        info: &cpal::OutputCallbackInfo,
-        sample_rate: u32,
-    ) {
+    pub fn update_from_output_callback(&self, info: &cpal::OutputCallbackInfo, sample_rate: u32) {
         if sample_rate == 0 {
             return;
         }
@@ -56,10 +52,7 @@ mod tests {
         let latency = DeviceWaitLatency::default();
         let callback = StreamInstant::ZERO;
         let playback = StreamInstant::new(0, 10_000_000); // 10ms @48k ≈ 480 frames
-        let info = OutputCallbackInfo::new(OutputStreamTimestamp {
-            callback,
-            playback,
-        });
+        let info = OutputCallbackInfo::new(OutputStreamTimestamp { callback, playback });
         latency.update_from_output_callback(&info, 48_000);
         assert_eq!(latency.wait_frames(), 480);
     }

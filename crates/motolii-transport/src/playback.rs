@@ -49,8 +49,8 @@ impl PlaybackSession {
         let format = cache.format();
         let counters = Arc::new(PlaybackCounters::default());
         let device_wait = Arc::new(DeviceWaitLatency::default());
-        let (ring_prod, ring_cons) = channel(format.channels, 4_096)
-            .map_err(PlaybackSessionError::Audio)?;
+        let (ring_prod, ring_cons) =
+            channel(format.channels, 4_096).map_err(PlaybackSessionError::Audio)?;
 
         let negotiated = negotiate_output(device, format).map_err(PlaybackSessionError::Audio)?;
         let output = OutputStream::open_negotiated_shared(

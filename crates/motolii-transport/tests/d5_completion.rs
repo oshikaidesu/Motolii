@@ -64,8 +64,8 @@ fn d5_drift_with_stale_display_and_latency_compensation() {
 
         // 補償なし対照: 供給が十分かつ待ちが2フレーム超のときだけドリフトを要求する。
         if supplied > device_wait + frame_samples * 2 {
-            let uncompensated = display_frame_without_latency_compensation(supplied, rate, fps)
-                .unwrap();
+            let uncompensated =
+                display_frame_without_latency_compensation(supplied, rate, fps).unwrap();
             assert!(
                 !drift_within_one_frame(uncompensated, perceptual, fps).unwrap(),
                 "uncompensated frame must drift when device_wait spans multiple frames"
@@ -101,10 +101,11 @@ fn d5_drift_with_stale_display_and_latency_compensation() {
             }
         }
 
-        sim.transport_mut().record_render_timing(FrameTiming::unmeasured(
-            Duration::ZERO,
-            DrsConfig::from_fps(fps).frame_budget / 2,
-        ));
+        sim.transport_mut()
+            .record_render_timing(FrameTiming::unmeasured(
+                Duration::ZERO,
+                DrsConfig::from_fps(fps).frame_budget / 2,
+            ));
         tick += 1;
     }
 }
@@ -115,10 +116,18 @@ fn d5_half_speed_pcm_bit_identical_video_drops() {
     let cache = sine_cache(2, rate);
     let (mut sim, ring_prod) = test_preview(rate, 8_192, 480, true);
 
-    let report = sim.run_half_speed_render(&cache, &ring_prod, 2, true).unwrap();
-    assert!(report.pcm_bit_identical, "PCM must match cache at source rate");
+    let report = sim
+        .run_half_speed_render(&cache, &ring_prod, 2, true)
+        .unwrap();
+    assert!(
+        report.pcm_bit_identical,
+        "PCM must match cache at source rate"
+    );
     assert_eq!(report.max_underrun_events, 0, "no audio underruns");
-    assert!(report.frames_dropped > 0, "video must drop when render is 0.5x");
+    assert!(
+        report.frames_dropped > 0,
+        "video must drop when render is 0.5x"
+    );
     assert!(
         report.frames_rendered < (rate as u64 * 2) / 30,
         "fewer renders than realtime 30fps"
@@ -196,7 +205,10 @@ fn d5_timestamp_query_unavailable_disables_auto_drs() {
     .unwrap();
     assert!(!transport.drs().is_enabled());
     assert_eq!(
-        transport.drs().effective_quality(Quality::DRAFT).resolution_scale,
+        transport
+            .drs()
+            .effective_quality(Quality::DRAFT)
+            .resolution_scale,
         Quality::DRAFT.resolution_scale
     );
 }
@@ -217,8 +229,5 @@ fn d5_latency_compensation_uses_device_wait_only() {
     )
     .unwrap();
     let perceptual = transport.perceptual_time().unwrap();
-    assert_eq!(
-        perceptual,
-        RationalTime::try_new(47_520, 48_000).unwrap()
-    );
+    assert_eq!(perceptual, RationalTime::try_new(47_520, 48_000).unwrap());
 }

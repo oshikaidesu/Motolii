@@ -2,9 +2,7 @@
 
 use std::sync::Arc;
 
-use motolii_core::{
-    ColorSpace, FrameDesc, Fps, PixelFormat, Quality, TimeMap,
-};
+use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, Quality, TimeMap};
 use motolii_nodes::{CanonicalPoint, CanonicalSize, RectOverlay};
 use motolii_render::{render_frame, RenderFrameRequest, SolidSource};
 use motolii_testkit::gpu_or_skip;
@@ -53,11 +51,16 @@ fn transport_frame_plan_drives_render_with_quality_and_time() {
     };
 
     let rendered = render_frame(&gpu, &request, plan.quality).expect("render_frame");
-    assert_eq!(rendered.desc.width, desc.width / plan.quality.resolution_scale);
-    assert_eq!(rendered.desc.height, desc.height / plan.quality.resolution_scale);
     assert_eq!(
-        rendered.source_time,
-        plan.timeline_time,
+        rendered.desc.width,
+        desc.width / plan.quality.resolution_scale
+    );
+    assert_eq!(
+        rendered.desc.height,
+        desc.height / plan.quality.resolution_scale
+    );
+    assert_eq!(
+        rendered.source_time, plan.timeline_time,
         "render uses transport timeline_time"
     );
 }

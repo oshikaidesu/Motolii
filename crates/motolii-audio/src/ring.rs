@@ -215,8 +215,7 @@ impl PlaybackCounters {
     /// ヘッドレスTransportシミュレーション専用: 実PCMを伴わず供給済みだけ進める。
     #[doc(hidden)]
     pub fn advance_supplied_for_simulation(&self, frames: u64) {
-        self.frames_supplied
-            .fetch_add(frames, Ordering::Relaxed);
+        self.frames_supplied.fetch_add(frames, Ordering::Relaxed);
     }
 }
 
