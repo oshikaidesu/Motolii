@@ -1,0 +1,1004 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Motolii メインUIモック</title>
+<style>
+  /* ============ theme tokens (Live式: 全色ここ経由・直書き禁止) ============ */
+  :root{
+    /* semantic tokens: role名のみ・テーマ=この値の束。既定=Motolii Dark(土台はdark neutral) */
+    /* 具体色値はG0-6で確定するplaceholder。役割の分離とcontrast下限(文字4.5:1)を満たすことだけ保証 */
+    --bg:#1c1c1c; --panel:#282828; --panel2:#313131; --inset:#212121;
+    --line:#3c3c3c; --line2:#4b4b4b;
+    --content-primary:#e3e3e3; --content-secondary:#b4b4b4; --content-muted:#9c9c9c; --content-disabled:#5c5c5c;
+    --accent-selection:#6aa8e8; --accent-focus:#6aa8e8; --on-accent:#0d1522;
+    --state-keyframe:#e08a5a;                     /* keyframe/automation */
+    --music:#c583d6;                              /* 小節.拍readout・snap・beat tick・楽曲 */
+    --state-linked:#4cc4c4;                       /* データ駆動配線・driver scope */
+    --state-cached:#8ea8c4;                       /* bake/cache(常にbar/patternと併用) */
+    --state-active:#58c97b; --on-active:#0e1a12;  /* 有効・再生中 */
+    --state-solo:#d4b94e; --state-mute:#9c9c9c;   /* mute=明度/線種cueと併用 */
+    --feedback-warning:#dfa14f; --feedback-error:#ee8b7d;
+    --domain-path:#58c97b; --domain-pixel:#a292e0; --item-mesh:#a292e0;
+    --playhead:#f0f0f0;
+    --clip-ink:#e6e6e6; --clip-border:rgba(255,255,255,.22);
+    --clip-video:#3b4a5e; --clip-shape:#4a3f5e; --clip-group:#3c5244;
+    --clip-particle:#5a4f33; --clip-audio:#2c3a4d;
+    --grid1:rgba(255,255,255,.12); --grid2:rgba(255,255,255,.045);
+    --vp-surround:#161616;
+    --popup:#2e2e2e; --hover:rgba(255,255,255,.05);
+    --wave:#7fa3cf; --wave2:#5c7ba6;
+    --shadow:0 12px 34px rgba(0,0,0,.55);
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --beat:56px; --bar:224px; --namecol:208px;
+  }
+  :root[data-app-theme="light"]{
+    --bg:#b6b6b6; --panel:#d4d4d4; --panel2:#c7c7c7; --inset:#e0e0e0;
+    --line:#a2a2a2; --line2:#8d8d8d;
+    --content-primary:#161616; --content-secondary:#454545; --content-muted:#4f4f4f; --content-disabled:#8f8f8f;
+    --accent-selection:#1d4d80; --accent-focus:#1d4d80; --on-accent:#ffffff;
+    --state-keyframe:#9c3a12;
+    --music:#7d3585;
+    --state-linked:#055454;
+    --state-cached:#4a5d78;
+    --state-active:#26603b; --on-active:#f2f7f2;
+    --state-solo:#6b5a10; --state-mute:#545454;
+    --feedback-warning:#7d4a00; --feedback-error:#a3231e;
+    --domain-path:#26603b; --domain-pixel:#5a4699; --item-mesh:#5a4699;
+    --playhead:#111111;
+    --clip-ink:#1a1a1a; --clip-border:rgba(0,0,0,.25);
+    --clip-video:#a7bdd6; --clip-shape:#c3b1de; --clip-group:#adcbb4;
+    --clip-particle:#d8c793; --clip-audio:#cfd9e6;
+    --grid1:rgba(0,0,0,.16); --grid2:rgba(0,0,0,.06);
+    --vp-surround:#2e2e2e;
+    --popup:#e9e9e9; --hover:rgba(0,0,0,.05);
+    --wave:#3a5578; --wave2:#54739c;
+    --shadow:0 10px 30px rgba(0,0,0,.25);
+  }
+
+  html{background:var(--bg);}
+  body{
+    margin:0; background:var(--bg); color:var(--content-primary);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP",Meiryo,sans-serif;
+    font-size:14px; line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .page{max-width:1400px; margin:0 auto; padding:28px 20px 64px;}
+
+  /* ---------- intro ---------- */
+  .intro{margin:0 0 18px 4px;}
+  .intro h1{font-size:19px; font-weight:700; margin:0 0 4px; letter-spacing:.01em; text-wrap:balance;}
+  .intro h1 .mark{color:var(--accent-selection);}
+  .intro p{margin:0; color:var(--content-secondary); font-size:12.5px; max-width:64em;}
+
+  /* ---------- app frame (Ableton語彙: フラット・無グラデ・細罫線・角2px) ---------- */
+  .app-wrap{overflow-x:auto; border-radius:4px;}
+  .app{
+    min-width:1280px; background:var(--panel);
+    border:1px solid var(--line2); border-radius:4px;
+    box-shadow:var(--shadow);
+    display:grid; grid-template-rows:42px 500px auto;
+    overflow:hidden; position:relative;
+    font-size:12px; line-height:1.45;
+  }
+  button{font-family:inherit;}
+  button:focus-visible,select:focus-visible{outline:2px solid var(--accent-focus); outline-offset:1px;}
+
+  /* ---------- badges ---------- */
+  .tag{
+    position:absolute; z-index:40;
+    width:18px; height:18px; border-radius:50%;
+    background:var(--panel); border:1px solid var(--accent-selection); color:var(--accent-selection);
+    font-size:11px; font-weight:700; font-family:var(--mono);
+    display:flex; align-items:center; justify-content:center;
+  }
+
+  /* ---------- title bar ---------- */
+  .titlebar{
+    display:flex; align-items:center; gap:14px; padding:0 14px;
+    border-bottom:1px solid var(--line); background:var(--panel2);
+  }
+  .traffic{display:flex; gap:7px;}
+  .traffic i{width:11px; height:11px; border-radius:50%; background:var(--line); display:block;}
+  .wordmark{font-weight:800; letter-spacing:.04em; font-size:13px;}
+  .wordmark b{color:var(--accent-selection); font-weight:800;}
+  .projname{color:var(--content-secondary); font-size:12px;}
+  .projname em{font-style:normal; color:var(--content-primary);}
+  .titlebar .spacer{flex:1;}
+  .icon-btn{
+    background:none; border:1px solid transparent; color:var(--content-secondary);
+    border-radius:2px; padding:3px 8px; font-size:12px; cursor:pointer;
+  }
+  .icon-btn:hover{background:var(--hover); color:var(--content-primary);}
+  .export-btn{
+    background:var(--accent-selection); color:var(--on-accent); border:none; border-radius:2px;
+    padding:5px 14px; font-weight:700; font-size:12px; cursor:pointer;
+  }
+  /* Live式テーマ設定 */
+  .settings-popover{
+    position:absolute; z-index:60; top:48px; right:72px; width:300px;
+    background:var(--popup); border:1px solid var(--line2); border-radius:3px;
+    box-shadow:var(--shadow); padding:14px;
+  }
+  .settings-popover[hidden]{display:none;}
+  .settings-popover h2{font-size:13px; margin:0 0 10px;}
+  .setting-row{display:grid; grid-template-columns:82px 1fr; align-items:center; gap:10px; margin:8px 0;}
+  .setting-row label{color:var(--content-secondary);}
+  .setting-row select{
+    width:100%; color:var(--content-primary); background:var(--inset); border:1px solid var(--line2);
+    border-radius:2px; padding:5px 7px; font:inherit;
+  }
+  .setting-note{color:var(--content-muted); font-size:10.5px; margin:8px 0 0 92px;}
+  .theme-import{margin-left:92px; margin-top:8px;}
+  .theme-import:disabled{color:var(--content-disabled); cursor:not-allowed;}
+
+  /* ---------- main 3-pane ---------- */
+  .main{display:grid; grid-template-columns:232px 1fr 300px; min-height:0;}
+
+  /* ----- left ----- */
+  .left{border-right:1px solid var(--line); display:flex; flex-direction:column; min-height:0; position:relative; background:var(--panel);}
+  .tabs{display:flex; border-bottom:1px solid var(--line); padding:0 8px; gap:2px;}
+  .tab{
+    padding:8px 12px 7px; font-size:12px; color:var(--content-secondary); cursor:pointer;
+    border-bottom:2px solid transparent; margin-bottom:-1px;
+  }
+  .tab.on{color:var(--content-primary); border-bottom-color:var(--accent-selection); font-weight:600;}
+  .search{margin:10px 10px 6px; background:var(--inset); border:1px solid var(--line);
+    border-radius:2px; padding:5px 10px; color:var(--content-muted); font-size:11.5px;}
+  .assets{overflow-y:auto; padding:6px 10px 12px; display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .asset{background:var(--panel2); border:1px solid var(--line); border-radius:2px; overflow:hidden; cursor:default;}
+  .asset:hover{border-color:var(--line2);}
+  /* thumbnail地はmedia内容のためテーマ非依存: 意図的な固定色 */
+  .thumb{height:56px; position:relative; display:flex; align-items:center; justify-content:center; background:#20242c;}
+  .thumb .play{
+    width:20px; height:20px; border-radius:50%; background:rgba(0,0,0,.45); z-index:1;
+    color:#fff; font-size:9px; display:flex; align-items:center; justify-content:center;
+  }
+  .asset .meta{padding:5px 7px 6px;}
+  .asset .name{font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .asset .kind{font-size:10px; color:var(--content-muted);}
+  .chip{
+    display:inline-block; font-size:9.5px; padding:0 5px; border-radius:2px; line-height:15px;
+    background:var(--inset); border:1px solid var(--line); color:var(--content-secondary); vertical-align:1px;
+  }
+  .chip.song{color:var(--music); border-color:var(--music);}
+  .chip.gltf{color:var(--item-mesh); border-color:var(--item-mesh);}
+
+  /* ----- center ----- */
+  .center{display:flex; flex-direction:column; min-width:0; background:var(--vp-surround);}
+  .viewport{flex:1; position:relative; display:flex; align-items:center; justify-content:center; padding:18px 24px 10px;}
+  /* viewport内overlay(canvas枠・quality chip・gizmo)はmedia上の表示のためテーマ非依存: 意図的な固定色 */
+  .canvas-box{position:relative; width:100%; max-width:820px; aspect-ratio:16/9;
+    border:1px solid rgba(255,255,255,.14); border-radius:2px; overflow:hidden; background:#000;}
+  .canvas-box canvas{width:100%; height:100%; display:block;}
+  .quality-chip{
+    position:absolute; top:8px; right:8px; z-index:5;
+    font-size:10px; font-family:var(--mono); color:#b9bec9;
+    background:rgba(10,10,12,.75); border:1px solid rgba(255,255,255,.16); border-radius:2px; padding:2px 8px;
+  }
+  .gizmo{
+    position:absolute; left:54.5%; top:28.5%; width:15%; height:27%;
+    border:1px solid var(--accent-selection); z-index:4; pointer-events:none;
+  }
+  .gizmo i{
+    position:absolute; width:7px; height:7px; background:#fff;
+    border:1px solid var(--accent-selection); display:block;
+  }
+  .gizmo i:nth-child(1){left:-4px; top:-4px;} .gizmo i:nth-child(2){right:-4px; top:-4px;}
+  .gizmo i:nth-child(3){left:-4px; bottom:-4px;} .gizmo i:nth-child(4){right:-4px; bottom:-4px;}
+  .gizmo i:nth-child(5){left:calc(50% - 4px); top:-4px;} .gizmo i:nth-child(6){left:calc(50% - 4px); bottom:-4px;}
+  .gizmo i:nth-child(7){left:-4px; top:calc(50% - 4px);} .gizmo i:nth-child(8){right:-4px; top:calc(50% - 4px);}
+  .gizmo .anchor{position:absolute; left:calc(50% - 5px); top:calc(50% - 5px); width:10px; height:10px;
+    border:1px solid var(--accent-selection); border-radius:50%;}
+
+  .transport{
+    display:flex; align-items:center; gap:14px; padding:8px 18px 10px;
+    border-top:1px solid var(--line); background:var(--panel2); position:relative; color:var(--content-primary);
+  }
+  .tp-btns{display:flex; gap:4px;}
+  .tp-btn{
+    width:30px; height:26px; border-radius:2px; border:1px solid var(--line);
+    background:var(--panel); color:var(--content-primary); font-size:12px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .tp-btn.play{background:var(--state-active); border-color:var(--state-active); color:var(--on-active); font-weight:700;}
+  .tc{font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:14px; letter-spacing:.03em;}
+  .tc small{color:var(--content-muted); font-size:10px; letter-spacing:0; margin-right:6px;}
+  .tc .bars{color:var(--music);}
+  .tp-sep{width:1px; height:18px; background:var(--line);}
+  .bpm{font-family:var(--mono); font-size:12px; color:var(--content-secondary);}
+  .bpm b{color:var(--content-primary); font-weight:600;}
+  .snap-chip{font-size:11px; color:var(--content-secondary); border:1px solid var(--line); border-radius:2px; padding:2px 8px;}
+  .snap-chip b{color:var(--music); font-weight:600;}
+  .transport .spacer{flex:1;}
+  .quality-toggle{display:flex; border:1px solid var(--line2); border-radius:2px; overflow:hidden; font-size:11px;}
+  .quality-toggle span{padding:3px 12px; color:var(--content-muted); cursor:pointer;}
+  .quality-toggle span.on{background:var(--panel); color:var(--content-primary); font-weight:600;}
+
+  /* ----- right ----- */
+  .right{border-left:1px solid var(--line); overflow-y:auto; min-height:0; position:relative; background:var(--panel);}
+  .layer-head{
+    display:flex; align-items:center; gap:8px; padding:10px 12px;
+    border-bottom:1px solid var(--line); background:var(--panel2); position:sticky; top:0; z-index:3;
+  }
+  .layer-head .sw{width:12px; height:12px; border-radius:2px; background:var(--clip-shape); border:1px solid var(--line2);}
+  .layer-head b{font-size:12.5px;}
+  .layer-head .kind{color:var(--content-muted); font-size:11px;}
+  .sec{padding:8px 0 4px; border-bottom:1px solid var(--line); position:relative;}
+  .sec-title{
+    display:flex; align-items:center; gap:6px; padding:2px 12px 6px;
+    font-size:10.5px; letter-spacing:.08em; color:var(--content-muted); font-weight:600;
+  }
+  .sec-title .add{margin-left:auto; color:var(--content-secondary); cursor:pointer; letter-spacing:0; font-size:12px;}
+  .prow{display:flex; align-items:center; gap:8px; padding:4px 12px; min-height:24px;}
+  .prow:hover{background:var(--hover);}
+  .prow .pname{width:64px; color:var(--content-secondary); font-size:11.5px; flex:none;}
+  .pval{
+    font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:11.5px;
+    background:var(--inset); border:1px solid var(--line); border-radius:2px; padding:1px 7px; color:var(--content-primary);
+  }
+  .pval small{color:var(--content-muted); font-size:9px; margin-right:3px;}
+  .prow .spacer{flex:1;}
+  .kf-dia{
+    width:9px; height:9px; transform:rotate(45deg); flex:none; cursor:pointer;
+    border:1px solid var(--content-muted); background:none; border-radius:1px;
+  }
+  .kf-dia.on{background:var(--state-keyframe); border-color:var(--state-keyframe);}
+  .link-badge{
+    display:inline-flex; align-items:center; gap:4px;
+    font-size:10px; color:var(--state-linked); border:1px solid var(--state-linked);
+    border-radius:2px; padding:1px 8px; cursor:pointer; white-space:nowrap; background:none;
+  }
+  .link-badge .rng{color:var(--content-secondary); font-family:var(--mono);}
+  .link-empty{color:var(--content-muted); font-size:11px; cursor:pointer;}
+
+  /* stack */
+  .stack-item{display:flex; align-items:center; gap:8px; padding:5px 12px; cursor:default;}
+  .stack-item:hover{background:var(--hover);}
+  .stack-item .grip{color:var(--content-muted); font-size:10px; cursor:grab; letter-spacing:-1px;}
+  .stack-item .en{
+    width:10px; height:10px; border-radius:2px; border:1px solid var(--state-active); flex:none;
+    background:var(--state-active);
+  }
+  .stack-item .en.off{background:none; border-color:var(--line2);}
+  .stack-item .nm{font-size:12px;}
+  .stack-item .dom{margin-left:auto; font-size:9.5px; color:var(--content-muted);}
+  .stack-item.path .dom{color:var(--domain-path);}
+  .stack-item.pix .dom{color:var(--domain-pixel);}
+  .raster-boundary{
+    display:flex; align-items:center; gap:8px; padding:4px 12px; margin:2px 0;
+    color:var(--content-muted); font-size:10px; letter-spacing:.06em;
+  }
+  .raster-boundary::before,.raster-boundary::after{content:""; flex:1; border-top:1px dashed var(--line2);}
+
+  /* drivers */
+  .driver{
+    margin:4px 10px 8px; background:var(--panel2); border:1px solid var(--line);
+    border-radius:2px; padding:7px 9px;
+  }
+  .driver .hd{display:flex; align-items:center; gap:7px;}
+  .driver .hd b{font-size:11.5px; font-weight:600;}
+  .driver .hd .std{font-size:9px; color:var(--content-muted); border:1px solid var(--line2); border-radius:2px; padding:0 4px;}
+  .driver .hd .n{margin-left:auto; font-size:10px; color:var(--state-linked); font-family:var(--mono);}
+  .driver canvas{width:100%; height:22px; display:block; margin:6px 0 5px; background:var(--inset); border-radius:2px;}
+  .driver .ft{display:flex; gap:6px; align-items:center;}
+  .map-btn{
+    font-size:10px; padding:2px 10px; border-radius:2px; cursor:pointer;
+    background:var(--accent-selection); border:1px solid var(--accent-selection); color:var(--on-accent); font-weight:600;
+  }
+  .driver .ft span{font-size:10px; color:var(--content-muted);}
+
+  /* ---------- timeline ---------- */
+  .timeline{border-top:1px solid var(--line); background:var(--inset); position:relative; overflow:hidden;}
+  .tl-toolbar{
+    display:flex; align-items:center; gap:12px; padding:6px 12px;
+    border-bottom:1px solid var(--line); font-size:11px; color:var(--content-secondary); background:var(--panel);
+  }
+  .tl-toolbar .zoom{margin-left:auto; font-family:var(--mono); color:var(--content-muted);}
+  .tl-body{position:relative;}
+  .tl-row{display:grid; grid-template-columns:var(--namecol) 1fr; border-bottom:1px solid var(--grid2);}
+  .tl-name{
+    display:flex; align-items:center; gap:7px; padding:0 10px;
+    white-space:nowrap; overflow:hidden;
+    border-right:1px solid var(--line); font-size:11.5px; background:var(--panel);
+    position:relative; z-index:2;
+  }
+  .tl-name .vis{width:7px; height:7px; border-radius:50%; background:var(--content-secondary); flex:none;}
+  .tl-name .cara{color:var(--content-muted); font-size:9px; width:10px; flex:none;}
+  .tl-name .lk{font-size:10px; color:var(--content-muted); margin-left:auto;}
+  .tl-name .typ{font-size:9px; color:var(--content-muted); flex:0 1 auto; overflow:hidden; text-overflow:ellipsis;}
+  .tl-name.indent{padding-left:24px;}
+  .tl-lane{
+    position:relative; height:100%;
+    background:
+      repeating-linear-gradient(to right, var(--grid1) 0 1px, transparent 1px var(--bar)),
+      repeating-linear-gradient(to right, var(--grid2) 0 1px, transparent 1px var(--beat));
+  }
+  .ruler{height:22px;}
+  .ruler .tl-name{font-size:9.5px; color:var(--content-muted); letter-spacing:.05em;}
+  .ruler .bar-num{
+    position:absolute; top:3px; font-family:var(--mono); font-size:9.5px; color:var(--content-muted);
+    transform:translateX(4px); font-variant-numeric:tabular-nums;
+  }
+  .track{height:34px;}
+  .track.audio{height:52px;}
+  .track.expanded-lane{height:44px; background:var(--panel2);}
+  .clip{
+    position:absolute; top:5px; bottom:5px; border-radius:2px;
+    border:1px solid var(--clip-border); background:var(--panel2);
+    display:flex; align-items:center; padding:0 8px; font-size:10.5px;
+    white-space:nowrap; overflow:hidden; color:var(--clip-ink);
+  }
+  .clip .cnm{overflow:hidden; text-overflow:ellipsis; font-weight:600;}
+  .clip.video{background:var(--clip-video);}
+  .clip.shape{background:var(--clip-shape);}
+  .clip.selected{border:2px solid var(--accent-selection); top:4px; bottom:4px;}
+  .clip.group{background:var(--clip-group);}
+  .clip.particle{background:var(--clip-particle);}
+  .clip .gicon{opacity:.55; margin-right:6px; font-size:9px;}
+  .clip .cchip{
+    margin-left:8px; font-size:9px; opacity:.75; border:1px solid var(--clip-border);
+    border-radius:2px; padding:0 4px; flex:none;
+  }
+  .audio-clip{position:absolute; inset:5px 0; border-radius:2px; overflow:hidden;
+    background:var(--clip-audio); border:1px solid var(--clip-border);}
+  .audio-clip canvas{width:100%; height:100%; display:block;}
+  .audio-clip .alabel{
+    position:absolute; left:8px; top:3px; font-size:9.5px; color:var(--content-secondary); font-family:var(--mono);
+  }
+  /* bake bar */
+  .bakebar{position:absolute; left:0; right:0; bottom:0; height:4px; display:flex; overflow:hidden;}
+  .bakebar .done{background:var(--state-cached); width:46%;}
+  .bakebar .doing{
+    width:16%;
+    background:repeating-linear-gradient(45deg,var(--state-cached) 0 4px, transparent 4px 8px);
+  }
+  .bakebar .dirty{flex:1; background:var(--state-cached); opacity:.22;}
+  @media (prefers-reduced-motion:no-preference){
+    .bakebar .doing{animation:crawl 1.2s linear infinite;}
+    @keyframes crawl{from{background-position:0 0;}to{background-position:11.3px 0;}}
+  }
+  /* burst notes */
+  .note{
+    position:absolute; top:50%; width:8px; height:8px; transform:translate(-50%,-50%) rotate(45deg);
+    background:var(--music); border-radius:1px;
+  }
+  .note.ghost{background:none; border:1px dashed var(--music); opacity:.7;}
+  /* keyframes on lane */
+  .kf{
+    position:absolute; top:50%; width:10px; height:10px; transform:translate(-50%,-50%) rotate(45deg);
+    background:var(--panel); border:1.5px solid var(--state-keyframe); border-radius:1px; cursor:pointer;
+  }
+  .kf.sel{background:var(--state-keyframe); border-color:var(--accent-selection); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent-selection) 35%, transparent);}
+  .kf-span{position:absolute; top:50%; height:2px; transform:translateY(-50%); background:var(--state-keyframe); opacity:.35;}
+  .kf-span.sel{opacity:.85; height:3px;}
+  .lane-label{position:absolute; left:8px; top:4px; font-size:9.5px; color:var(--content-muted);}
+
+  /* solo / mute */
+  .sm{display:inline-flex; gap:3px; margin-left:auto; flex:none;}
+  .sm i{
+    width:14px; height:14px; border:1px solid var(--line2); border-radius:2px;
+    font-style:normal; font-size:8.5px; line-height:12px; text-align:center;
+    color:var(--content-muted); font-family:var(--mono); cursor:pointer;
+  }
+  .sm i.solo-on{background:var(--state-solo); border-color:var(--state-solo); color:var(--panel);}
+  .sm i.mute-on{background:var(--state-mute); border-color:var(--state-mute); color:var(--panel);}
+  .tl-lane.muted .clip{opacity:.45; border-style:dashed;}
+  /* warning / error chips */
+  .state-chip{
+    margin-left:6px; flex:none; font-size:9px; line-height:14px; font-weight:600;
+    border-radius:2px; padding:0 5px; background:var(--panel);
+  }
+  .state-chip.warn{color:var(--feedback-warning); border:1px solid var(--feedback-warning);}
+  .state-chip.err{color:var(--feedback-error); border:1px solid var(--feedback-error);}
+
+  /* playhead */
+  .playhead{
+    position:absolute; top:0; bottom:0; left:calc(var(--namecol) + 470px); width:1px;
+    background:var(--playhead); z-index:20; pointer-events:none;
+  }
+  .playhead::before{
+    content:""; position:absolute; top:0; left:-5px;
+    border:5.5px solid transparent; border-top:7px solid var(--playhead); border-bottom:none;
+  }
+
+  /* ---------- easing popup ---------- */
+  .ease-pop{
+    position:absolute; z-index:30; width:292px;
+    left:calc(var(--namecol) + 700px); bottom:58px;
+    background:var(--popup); border:1px solid var(--line2); border-radius:2px;
+    box-shadow:var(--shadow); padding:10px 12px 11px;
+  }
+  .ease-pop::after{
+    content:""; position:absolute; left:22px; bottom:-6px;
+    width:10px; height:10px; background:var(--popup); border-right:1px solid var(--line2);
+    border-bottom:1px solid var(--line2); transform:rotate(45deg);
+  }
+  .ease-pop .hd{display:flex; align-items:baseline; gap:8px; margin-bottom:7px;}
+  .ease-pop .hd b{font-size:11.5px;}
+  .ease-pop .hd span{font-size:10px; color:var(--content-muted); font-family:var(--mono);}
+  .ease-pop .hd .x{margin-left:auto; color:var(--content-muted); cursor:pointer; font-size:12px;}
+  .interp-row{display:flex; gap:4px; margin-bottom:8px;}
+  .interp-row span{
+    flex:1; text-align:center; font-size:10px; padding:3px 0; border-radius:2px;
+    border:1px solid var(--line); color:var(--content-secondary); cursor:pointer;
+  }
+  .interp-row span.on{border-color:var(--state-keyframe); color:var(--state-keyframe); font-weight:600;}
+  .curve-box{
+    background:var(--inset); border:1px solid var(--line); border-radius:2px;
+    padding:6px; margin-bottom:8px;
+  }
+  .curve-box svg{display:block; width:100%; height:118px; overflow:visible;}
+  .cv-grid{stroke:var(--line); stroke-dasharray:3 3;}
+  .cv-stem{stroke:var(--state-keyframe); opacity:.45;}
+  .cv-curve{stroke:var(--state-keyframe); fill:none;}
+  .cv-knob{fill:var(--popup); stroke:var(--state-keyframe);}
+  .cv-end{fill:var(--state-keyframe);}
+  .preset-row{display:flex; gap:4px; flex-wrap:wrap; margin-bottom:8px;}
+  .preset-row span{
+    font-size:10px; padding:2px 9px; border-radius:2px;
+    border:1px solid var(--line); color:var(--content-secondary); cursor:pointer;
+  }
+  .preset-row span.on{border-color:var(--state-keyframe); color:var(--state-keyframe); font-weight:600;}
+  .ease-ft{display:flex; align-items:center; gap:8px;}
+  .ease-ft .cb{font-size:11px; font-family:var(--mono); color:var(--content-secondary);}
+  .ease-ft .ovs{margin-left:auto; font-size:10px; color:var(--content-secondary); display:flex; align-items:center; gap:5px;}
+  .toggle{width:26px; height:14px; border-radius:8px; background:color-mix(in srgb, var(--state-keyframe) 35%, transparent); position:relative;}
+  .toggle::after{content:""; position:absolute; right:2px; top:2px; width:10px; height:10px; border-radius:50%; background:var(--state-keyframe);}
+
+  /* ---------- legend ---------- */
+  .legend{margin-top:30px;}
+  .legend h2{font-size:15px; margin:0 0 4px; font-weight:700;}
+  .legend > p{color:var(--content-secondary); font-size:12.5px; margin:0 0 16px; max-width:66em;}
+  .lg-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:10px;}
+  .lg-item{
+    background:var(--panel); border:1px solid var(--line); border-radius:2px;
+    padding:11px 13px; display:flex; gap:10px; align-items:flex-start;
+  }
+  .lg-item .no{
+    width:20px; height:20px; border-radius:50%; flex:none; margin-top:1px;
+    background:none; border:1px solid var(--accent-selection); color:var(--accent-selection);
+    font-size:11px; font-weight:700; font-family:var(--mono);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .lg-item b{font-size:12.5px; display:block; margin-bottom:2px;}
+  .lg-item p{margin:0; font-size:11.5px; color:var(--content-secondary);}
+  .lg-item .src{display:inline-block; margin-top:5px; font-size:10px; font-family:var(--mono); color:var(--content-muted);}
+  .st{display:inline-block; font-size:9.5px; padding:0 6px; border-radius:2px; line-height:16px; margin-left:6px; vertical-align:1px; font-weight:600;}
+  .st.fixed{color:var(--state-active); border:1px solid var(--state-active);}
+  .st.dir{color:var(--state-keyframe); border:1px solid var(--state-keyframe);}
+  .st.open{color:var(--content-secondary); border:1px dashed var(--line2);}
+  .not-mocked{
+    margin-top:14px; border:1px dashed var(--line2); border-radius:2px; padding:11px 14px;
+    color:var(--content-secondary); font-size:12px;
+  }
+  .not-mocked b{color:var(--content-primary); font-size:12px;}
+</style>
+
+<div class="page">
+  <header class="intro">
+    <h1><span class="mark">Motolii</span> メインUI 第1案 — Ableton配色・ダーク既定・全色トークン駆動</h1>
+    <p>第0案と同じ確定事項を、Liveの色語彙(フラット・無グラデーション・細罫線・色=情報)で組み直したもの。タイトルバー右の<b>設定</b>から実テーマ切替——組み込みDark/Lightも将来のcustom themeも同じsemantic token schemaを使い、初回既定はDark(土台はdark neutralの規約)。ビューポート周囲だけは両テーマとも無彩色の暗グレー(色判断の定石)。</p>
+  </header>
+
+  <div class="app-wrap">
+  <div class="app">
+
+    <!-- ========== title bar ========== -->
+    <div class="titlebar">
+      <span class="traffic"><i></i><i></i><i></i></span>
+      <span class="wordmark">moto<b>lii</b></span>
+      <span class="projname"><em>night_drive.mtl</em> — 1920×1080 / 30fps / 3:42</span>
+      <span class="spacer"></span>
+      <button class="icon-btn" type="button" id="btn-settings" aria-expanded="false">⚙ 設定</button>
+      <button class="icon-btn" type="button">↶ 取り消し</button>
+      <button class="icon-btn" type="button">↷ やり直し</button>
+      <button class="export-btn" type="button">書き出し</button>
+    </div>
+
+    <section class="settings-popover" id="settings-popover" aria-label="設定" hidden>
+      <h2>設定 — 外観</h2>
+      <div class="setting-row">
+        <label for="theme-select">テーマ</label>
+        <select id="theme-select">
+          <option value="dark" selected>Motolii Dark（既定）</option>
+          <option value="light">Motolii Light</option>
+        </select>
+      </div>
+      <p class="setting-note">選択はユーザー設定として保存。projectには保存しない。</p>
+      <button class="icon-btn theme-import" type="button" title="将来のcustom theme読込口" disabled>＋ カスタムテーマを追加…（将来）</button>
+    </section>
+
+    <!-- ========== main ========== -->
+    <div class="main">
+
+      <!-- left -->
+      <aside class="left">
+        <span class="tag" style="top:8px; right:10px;">1</span>
+        <div class="tabs">
+          <span class="tab on">アセット</span>
+          <span class="tab">エフェクト</span>
+        </div>
+        <div class="search">検索…</div>
+        <div class="assets">
+          <div class="asset">
+            <div class="thumb" id="th-video"><span class="play">▶</span></div>
+            <div class="meta"><div class="name">city_loop.mp4</div><div class="kind">動画 12s</div></div>
+          </div>
+          <div class="asset">
+            <div class="thumb" id="th-svg"></div>
+            <div class="meta"><div class="name">logo.svg</div><div class="kind">SVG</div></div>
+          </div>
+          <div class="asset">
+            <div class="thumb" id="th-audio"></div>
+            <div class="meta"><div class="name">night_drive.wav</div><div class="kind"><span class="chip song">♪ 楽曲</span></div></div>
+          </div>
+          <div class="asset">
+            <div class="thumb" id="th-mesh"></div>
+            <div class="meta"><div class="name">car.glb</div><div class="kind"><span class="chip gltf">glTF</span></div></div>
+          </div>
+          <div class="asset">
+            <div class="thumb" id="th-grain"></div>
+            <div class="meta"><div class="name">grain.png</div><div class="kind">画像</div></div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- center -->
+      <section class="center">
+        <div class="viewport">
+          <div class="canvas-box">
+            <canvas id="vp" width="960" height="540"></canvas>
+            <span class="quality-chip">ドラフト ½解像度 fp16</span>
+            <div class="gizmo" aria-hidden="true">
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+              <span class="anchor"></span>
+            </div>
+          </div>
+        </div>
+        <div class="transport">
+          <span class="tag" style="top:-9px; right:150px;">8</span>
+          <div class="tp-btns">
+            <button class="tp-btn" type="button">⏮</button>
+            <button class="tp-btn play" type="button">▶</button>
+            <button class="tp-btn" type="button">⏭</button>
+            <button class="tp-btn" type="button" title="ループ">⟳</button>
+          </div>
+          <span class="tc"><small>TC</small>00:01:47:12</span>
+          <span class="tp-sep"></span>
+          <span class="tc bars"><small>小節</small><span class="bars">54.3</span></span>
+          <span class="tp-sep"></span>
+          <span class="bpm">BPM <b>132</b> ・ 4/4</span>
+          <span class="snap-chip">スナップ <b>1/4拍</b></span>
+          <span class="spacer"></span>
+          <span class="state-chip warn">! GPUメモリ 78%</span>
+          <div class="quality-toggle"><span class="on">ドラフト</span><span>最終品質</span></div>
+        </div>
+      </section>
+
+      <!-- right -->
+      <aside class="right">
+        <div class="layer-head">
+          <span class="sw"></span>
+          <b>ロゴ</b><span class="kind">SVG レイヤー</span>
+        </div>
+
+        <div class="sec">
+          <div class="sec-title">変形</div>
+          <div class="prow">
+            <span class="pname">位置</span>
+            <span class="pval"><small>X</small>0.124</span>
+            <span class="pval"><small>Y</small>−0.082</span>
+            <span class="spacer"></span>
+            <span class="kf-dia on" title="キーフレーム有効"></span>
+          </div>
+          <div class="prow">
+            <span class="pname">スケール</span>
+            <span class="pval">1.00</span>
+            <span class="link-badge" title="データ駆動配線">⌁ 音量 Low <span class="rng">0.8–1.4</span></span>
+            <span class="spacer"></span>
+            <span class="kf-dia"></span>
+          </div>
+          <div class="prow">
+            <span class="pname">回転</span>
+            <span class="pval">0.0°</span>
+            <span class="spacer"></span>
+            <span class="kf-dia"></span>
+          </div>
+          <div class="prow">
+            <span class="pname">不透明度</span>
+            <span class="pval">100%</span>
+            <span class="spacer"></span>
+            <span class="kf-dia on"></span>
+          </div>
+          <div class="prow">
+            <span class="pname">リンク</span>
+            <span class="link-empty">＋ ターゲットへドラッグ(LookAt / Follow / 親子)</span>
+          </div>
+        </div>
+
+        <div class="sec">
+          <span class="tag" style="top:6px; right:10px;">2</span>
+          <div class="sec-title">スタック(1本) <span class="add">＋ 追加</span></div>
+          <div class="stack-item path"><span class="grip">⠿</span><span class="en"></span><span class="nm">トリムパス</span><span class="dom">パス</span></div>
+          <div class="stack-item path"><span class="grip">⠿</span><span class="en"></span><span class="nm">パスのオフセット</span><span class="dom">パス</span></div>
+          <div class="stack-item path"><span class="grip">⠿</span><span class="en off"></span><span class="nm">リピーター</span><span class="dom">パス</span></div>
+          <div class="raster-boundary">ラスタライズ境界</div>
+          <div class="stack-item pix"><span class="grip">⠿</span><span class="en"></span><span class="nm">グロー</span><span class="dom">ピクセル</span></div>
+          <div class="stack-item pix"><span class="grip">⠿</span><span class="en"></span><span class="nm">色収差</span><span class="dom">ピクセル</span></div>
+        </div>
+
+        <div class="sec">
+          <span class="tag" style="top:6px; right:10px;">3</span>
+          <div class="sec-title">ドライバ(コンポ共有) <span class="add">＋</span></div>
+          <div class="driver">
+            <div class="hd"><b>音量フォロワー Low</b><span class="std">標準</span><span class="n">→ 2配線</span></div>
+            <canvas id="drv-env" width="240" height="44"></canvas>
+            <div class="ft"><button class="map-btn" type="button">マップ</button><span>スムージング 120ms</span></div>
+          </div>
+          <div class="driver">
+            <div class="hd"><b>LFO 1</b><span class="n">→ 1配線</span></div>
+            <canvas id="drv-lfo" width="240" height="44"></canvas>
+            <div class="ft"><button class="map-btn" type="button">マップ</button><span>1/2拍 ・ サイン</span></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- ========== timeline ========== -->
+    <div class="timeline">
+      <div class="tl-toolbar">
+        <span>トラック</span>
+        <span style="color:var(--content-muted)">グループ化 ⌘G ・ クリップ ⌥C ・ 仮出力 ⌘B</span>
+        <span class="zoom">拍 = 56px</span>
+      </div>
+
+      <div class="tl-body">
+        <div class="tl-row ruler">
+          <div class="tl-name">小節.拍</div>
+          <div class="tl-lane">
+            <span class="bar-num" style="left:0">52</span>
+            <span class="bar-num" style="left:224px">53</span>
+            <span class="bar-num" style="left:448px">54</span>
+            <span class="bar-num" style="left:672px">55</span>
+            <span class="bar-num" style="left:896px">56</span>
+            <span class="bar-num" style="left:1120px">57</span>
+          </div>
+        </div>
+
+        <div class="tl-row track audio">
+          <div class="tl-name" style="position:relative;">
+            <span class="tag" style="top:14px; left:-2px;">5</span>
+            <span class="vis" style="background:var(--state-keyframe)"></span>
+            ♪ 楽曲 <span class="typ">基準線</span>
+            <span class="lk">🔒</span>
+          </div>
+          <div class="tl-lane">
+            <div class="audio-clip">
+              <canvas id="wave" width="1344" height="42"></canvas>
+              <span class="alabel">night_drive.wav</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="tl-row track">
+          <div class="tl-name"><span class="cara">▸</span><span class="vis"></span>スパーク <span class="typ">パーティクル</span><span class="sm"><i>S</i><i>M</i></span></div>
+          <div class="tl-lane">
+            <div class="clip particle" style="left:224px; width:784px;">
+              <span class="tag" style="top:-9px; right:-6px;">7</span>
+              <span class="cnm">スパーク</span><span class="cchip">L0 閉形式</span>
+              <span class="note" style="left:112px;"></span>
+              <span class="note" style="left:224px;"></span>
+              <span class="note" style="left:336px;"></span>
+              <span class="note ghost" style="left:392px;"></span>
+              <span class="note" style="left:560px;"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="tl-row track">
+          <div class="tl-name indent"><span class="cara">▸</span><span class="vis"></span>グラデ <span class="typ">シェイプ ・ ↧クリップ(ルミナンス)</span><span class="sm"><i>S</i><i class="mute-on" title="ミュート中">M</i></span></div>
+          <div class="tl-lane muted">
+            <div class="clip shape" style="left:336px; width:560px;"><span class="cnm">グラデ</span></div>
+          </div>
+        </div>
+
+        <div class="tl-row track">
+          <div class="tl-name"><span class="cara">▾</span><span class="vis" style="background:var(--accent-selection)"></span><b>ロゴ</b> <span class="typ">SVG</span><span class="sm"><i class="solo-on" title="ソロ中">S</i><i>M</i></span></div>
+          <div class="tl-lane">
+            <div class="clip shape selected" style="left:280px; width:672px;"><span class="cnm">ロゴ</span></div>
+          </div>
+        </div>
+
+        <div class="tl-row track expanded-lane">
+          <div class="tl-name indent" style="color:var(--content-secondary); font-size:10.5px;">位置 · Y</div>
+          <div class="tl-lane">
+            <span class="kf-span" style="left:336px; width:112px;"></span>
+            <span class="kf-span sel" style="left:560px; width:168px;"></span>
+            <span class="kf-span" style="left:728px; width:112px;"></span>
+            <span class="kf" style="left:336px;"></span>
+            <span class="kf" style="left:448px;"></span>
+            <span class="kf sel" style="left:560px;"></span>
+            <span class="kf sel" style="left:728px;"></span>
+            <span class="kf" style="left:840px;"></span>
+          </div>
+        </div>
+
+        <div class="tl-row track">
+          <div class="tl-name"><span class="cara">▸</span><span class="vis"></span>背景まとめ <span class="typ">グループ · 3</span><span class="lk" title="仮出力ON">❄</span></div>
+          <div class="tl-lane">
+            <div class="clip group" style="left:0; width:1120px;">
+              <span class="tag" style="top:-9px; left:496px;">6</span>
+              <span class="gicon">▣</span><span class="cnm">背景まとめ(仮出力 ON)</span>
+              <div class="bakebar"><span class="done"></span><span class="doing"></span><span class="dirty"></span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tl-row track" style="border-bottom:none;">
+          <div class="tl-name indent"><span class="vis"></span>city_loop.mp4 <span class="typ">動画</span></div>
+          <div class="tl-lane">
+            <div class="clip video" style="left:0; width:1008px;"><span class="cnm">city_loop.mp4</span><span class="cchip">×1.0</span><span class="state-chip err">! 要再リンク</span></div>
+          </div>
+        </div>
+
+        <div class="playhead"></div>
+
+        <!-- easing popup -->
+        <div class="ease-pop">
+          <span class="tag" style="top:-9px; left:-9px;">4</span>
+          <div class="hd"><b>イージング</b><span>54.2 → 54.4</span><span class="x">✕</span></div>
+          <div class="interp-row">
+            <span class="on">ベジェ</span><span>バウンス</span><span>エラスティック</span><span>ステップ</span>
+          </div>
+          <div class="curve-box">
+            <svg viewBox="0 -52 100 164" preserveAspectRatio="none" aria-label="cubic-bezier curve">
+              <line class="cv-grid" x1="0" y1="0" x2="100" y2="0" stroke-width="1" vector-effect="non-scaling-stroke"/>
+              <line class="cv-grid" x1="0" y1="100" x2="100" y2="100" stroke-width="1" vector-effect="non-scaling-stroke"/>
+              <line class="cv-stem" x1="0" y1="100" x2="34" y2="-56" stroke-width="1" vector-effect="non-scaling-stroke"/>
+              <line class="cv-stem" x1="100" y1="0" x2="64" y2="0" stroke-width="1" vector-effect="non-scaling-stroke"/>
+              <path class="cv-curve" d="M0,100 C34,-56 64,0 100,0" stroke-width="2" vector-effect="non-scaling-stroke"/>
+              <circle class="cv-knob" cx="34" cy="-56" r="3.5" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+              <circle class="cv-knob" cx="64" cy="0" r="3.5" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+              <circle class="cv-end" cx="0" cy="100" r="3"/>
+              <circle class="cv-end" cx="100" cy="0" r="3"/>
+            </svg>
+          </div>
+          <div class="preset-row">
+            <span>直線</span><span>イーズイン</span><span>イーズアウト</span><span class="on">オーバーシュート</span>
+          </div>
+          <div class="ease-ft">
+            <span class="cb">(0.34, 1.56, 0.64, 1.00)</span>
+            <span class="ovs">オーバーシュート <span class="toggle"></span></span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- ========== legend ========== -->
+  <section class="legend">
+    <h2>バッジ対応表 — どの決定を写したか</h2>
+    <p>ステータスは <span class="st fixed">決定済み</span>=conceptに昇格済み / <span class="st dir">方向確定</span>=ux-frontierで方向あり / <span class="st open">未決=想像</span>=プロトタイプ比較の対象。第1案の変更点: Ableton語彙(フラット・角2px・色=機能)、設定画面でDark既定+Light選択、custom themeを妨げない全色トークン化、1 role 1意味のtoken分離(選択/キーフレーム/音楽時間/配線/有効/キャッシュ/solo/mute/warning/error)。</p>
+    <div class="lg-grid">
+      <div class="lg-item"><span class="no">1</span><div>
+        <b>アセットブラウザ <span class="st fixed">決定済み</span></b>
+        <p>アプリ内エクスプローラーはコアUI。楽曲は「♪楽曲」チップで1本だけ特別扱い(音声=楽曲1本の決定)。</p>
+        <span class="src">concept.md / M3-U6</span>
+      </div></div>
+      <div class="lg-item"><span class="no">2</span><div>
+        <b>1本のエフェクトスタック <span class="st fixed">決定済み</span></b>
+        <p>パス演算子(ベクター域)→ ラスタライズ境界(可視)→ Filter(ピクセル域)を単一の順序リストで表示。二重体系を見せない。</p>
+        <span class="src">concept.md 2026-07-10 / M3 / F-8・F-13</span>
+      </div></div>
+      <div class="lg-item"><span class="no">3</span><div>
+        <b>ドライバ=一級オブジェクト <span class="st dir">方向確定</span></b>
+        <p>Ableton LFO/エンベロープフォロワーの翻訳。1ドライバ→N配線、「マップ」ボタン、帯域別音量フォロワーは標準搭載。置き場所(コンポ共有パネル)は仮。</p>
+        <span class="src">ux-frontier U-A</span>
+      </div></div>
+      <div class="lg-item"><span class="no">4</span><div>
+        <b>区間イージングポップアップ <span class="st fixed">決定済み</span></b>
+        <p>Flow/AM式。2キーフレーム選択→ポップアップ。補間タイプ(ベジェ/バウンス/エラスティック/ステップ=Interp variant)+プリセット+4値、オーバーシュートはyの[0,1]外。グラフビューは作らない。</p>
+        <span class="src">concept.md / M3-U4 / Interp::Bezier</span>
+      </div></div>
+      <div class="lg-item"><span class="no">5</span><div>
+        <b>楽曲基準線: 波形+BPMグリッド <span class="st fixed">決定済み</span></b>
+        <p>タイムライン最上段に波形をピン留め。ビート検出はせずBPM手動入力→グリッド+スナップ。ルーラーは小節.拍。</p>
+        <span class="src">concept.md / M3-U7 / ux-frontier U-F</span>
+      </div></div>
+      <div class="lg-item"><span class="no">6</span><div>
+        <b>ベイク状態バー <span class="st dir">方向確定</span></b>
+        <p>DAWフリーズトラックの翻訳。仮出力ONのグループに区間バー: 実線=ベイク済み / 縞アニメ=進行中 / 淡色=ダーティ。解凍操作は無い(編集→自動無効化)。</p>
+        <span class="src">ux-frontier U-E / M4-K7</span>
+      </div></div>
+      <div class="lg-item"><span class="no">7</span><div>
+        <b>音楽同期エミッション <span class="st open">未決=想像</span></b>
+        <p>バーストをビートグリッドに「ノーツとして置く」(ステップシーケンサの翻訳)。rate=パラメータ/バースト=ノーツの分離。この描写はプロトタイプ2案比較の前提でしかない。</p>
+        <span class="src">ux-frontier U-D / SIM-5</span>
+      </div></div>
+      <div class="lg-item"><span class="no">8</span><div>
+        <b>トランスポート+品質切替 <span class="st fixed">決定済み</span></b>
+        <p>TCと小節.拍の併記、BPM・スナップ常時表示。ドラフト⇄最終品質は同一 render_frame(t, Quality) のモード切替。</p>
+        <span class="src">concept.md / performance-model / M3-U5</span>
+      </div></div>
+    </div>
+
+    <div class="not-mocked">
+      <b>意図的に描いていないもの:</b>
+      U-C(3Dギズモ・CompCamera操作)は「v1で最難のUX新作・未決」のため2Dバウンディングボックスのみ描画(3Dモードは作らない、が既決)。
+      ターゲットピッカー(U-B ピックウィップ型付き版)は「リンク」行の口だけ置いた。
+      ノードグラフ・値グラフエディタ・調整レイヤー・マスクパス編集は<em>存在しないこと自体が仕様</em>。
+      <br><b>テーマ実装の含意:</b> このページの切替は「UIコードは色名を知らない(トークンだけ参照)→ テーマ=トークン値の束」の実演。設定はユーザー単位で保存し、Documentへ焼き込まない。Slintではglobal singleton、配布形式はLiveの.ask相当のフラットなファイルで足りる。
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+  function tok(name){return getComputedStyle(document.documentElement).getPropertyValue(name).trim();}
+
+  /* ---------- asset thumbnails (メディア内容なのでテーマ非依存・暗地固定) ---------- */
+  function paintThumb(id, fn){
+    var el=document.getElementById(id); if(!el) return;
+    var c=document.createElement('canvas'); c.width=110; c.height=56;
+    c.style.cssText='position:absolute;inset:0;width:100%;height:100%';
+    el.insertBefore(c, el.firstChild);
+    fn(c.getContext('2d'), c.width, c.height);
+  }
+  paintThumb('th-video', function(g,w,h){
+    var gr=g.createLinearGradient(0,0,0,h); gr.addColorStop(0,'#1b2b4a'); gr.addColorStop(1,'#0e1524');
+    g.fillStyle=gr; g.fillRect(0,0,w,h);
+    var r=mulberry32(7);
+    for(var i=0;i<26;i++){ g.fillStyle='rgba(255,190,120,'+(0.15+r()*0.5)+')';
+      var x=r()*w, y=h*0.35+r()*h*0.45; g.beginPath(); g.arc(x,y,0.6+r()*1.8,0,7); g.fill(); }
+  });
+  paintThumb('th-svg', function(g,w,h){
+    g.fillStyle='#20242c'; g.fillRect(0,0,w,h);
+    g.strokeStyle='#e8ecf4'; g.lineWidth=2.4;
+    g.beginPath(); g.arc(w/2,h/2,15,0,7); g.stroke();
+    g.beginPath(); g.arc(w/2,h/2,7,-0.5,3.6); g.stroke();
+  });
+  paintThumb('th-audio', function(g,w,h){
+    g.fillStyle='#1b2230'; g.fillRect(0,0,w,h);
+    var r=mulberry32(21); g.fillStyle='#7fa3cf';
+    for(var x=4;x<w-4;x+=3){ var a=(0.2+0.8*Math.abs(Math.sin(x*0.18)))*r()*h*0.38;
+      g.fillRect(x,h/2-a,2,a*2); }
+  });
+  paintThumb('th-mesh', function(g,w,h){
+    g.fillStyle='#1d1a28'; g.fillRect(0,0,w,h);
+    g.strokeStyle='#a292e0'; g.lineWidth=1;
+    var cx=w/2, cy=h/2+4;
+    g.strokeRect(cx-18,cy-14,26,18);
+    g.beginPath(); g.moveTo(cx-18,cy-14); g.lineTo(cx-8,cy-22); g.lineTo(cx+18,cy-22); g.lineTo(cx+8,cy-14); g.stroke();
+    g.beginPath(); g.moveTo(cx+18,cy-22); g.lineTo(cx+18,cy-4); g.lineTo(cx+8,cy+4); g.stroke();
+  });
+  paintThumb('th-grain', function(g,w,h){
+    g.fillStyle='#1a1a1d'; g.fillRect(0,0,w,h);
+    var r=mulberry32(99);
+    for(var i=0;i<400;i++){ g.fillStyle='rgba(255,255,255,'+r()*0.28+')'; g.fillRect(r()*w,r()*h,1,1); }
+  });
+
+  /* ---------- viewport frame (映像内容=テーマ非依存) ---------- */
+  (function(){
+    var cv=document.getElementById('vp'); if(!cv) return;
+    var g=cv.getContext('2d'), w=cv.width, h=cv.height, r=mulberry32(4242);
+    var gr=g.createLinearGradient(0,0,0,h);
+    gr.addColorStop(0,'#0a0d1a'); gr.addColorStop(0.62,'#131b33'); gr.addColorStop(1,'#0a0910');
+    g.fillStyle=gr; g.fillRect(0,0,w,h);
+    var hg=g.createRadialGradient(w*0.5,h*0.62,10,w*0.5,h*0.62,w*0.55);
+    hg.addColorStop(0,'rgba(255,107,82,0.16)'); hg.addColorStop(1,'rgba(255,107,82,0)');
+    g.fillStyle=hg; g.fillRect(0,0,w,h);
+    for(var i=0;i<90;i++){
+      var x=r()*w, y=h*0.5+r()*h*0.2, rad=0.8+r()*2.6;
+      g.fillStyle='rgba('+(200+r()*55|0)+','+(150+r()*80|0)+','+(90+r()*60|0)+','+(0.12+r()*0.5)+')';
+      g.beginPath(); g.arc(x,y,rad,0,7); g.fill();
+    }
+    g.strokeStyle='rgba(120,140,190,0.22)';
+    for(var j=0;j<7;j++){
+      g.lineWidth=0.7;
+      g.beginPath(); g.moveTo(w*0.5+(j-3)*14, h*0.62); g.lineTo(w*0.5+(j-3)*180, h); g.stroke();
+    }
+    for(var k=0;k<46;k++){
+      var px=w*0.32+r()*w*0.5, py=h*0.2+r()*h*0.5;
+      g.fillStyle='rgba(255,197,84,'+(0.2+r()*0.75)+')';
+      g.fillRect(px,py,1.6,1.6);
+      if(r()>0.7){ g.fillStyle='rgba(255,197,84,0.16)'; g.fillRect(px-2,py-2,5,5); }
+    }
+    var cx=w*0.62, cy=h*0.42;
+    g.save();
+    g.shadowColor='rgba(255,107,82,0.85)'; g.shadowBlur=34;
+    g.strokeStyle='#ff8066'; g.lineWidth=7;
+    g.beginPath(); g.arc(cx,cy,58,0,7); g.stroke();
+    g.lineWidth=4;
+    g.beginPath(); g.arc(cx,cy,32,-0.6,3.8); g.stroke();
+    g.restore();
+    g.save();
+    g.shadowColor='rgba(230,240,255,0.6)'; g.shadowBlur=16;
+    g.fillStyle='#eef1f8';
+    g.font='700 44px "Hiragino Sans","Noto Sans JP",sans-serif';
+    g.fillText('夜を走る', w*0.09, h*0.82);
+    g.restore();
+    g.fillStyle='rgba(180,190,210,0.55)';
+    g.font='400 15px "Hiragino Sans","Noto Sans JP",sans-serif';
+    g.fillText('night drive — 01:47', w*0.093, h*0.88);
+  })();
+
+  /* ---------- theme-aware canvases (トークンを読んで描画・切替で再描画) ---------- */
+  function drawWave(){
+    var cv=document.getElementById('wave'); if(!cv) return;
+    var g=cv.getContext('2d'), w=cv.width, h=cv.height, r=mulberry32(1212);
+    var beat=56, mid=h/2;
+    g.clearRect(0,0,w,h);
+    var c1=tok('--wave'), c2=tok('--wave2'), tick=tok('--music');
+    for(var x=0;x<w;x+=2){
+      var phase=(x%beat)/beat;
+      var kick=Math.max(0,1-phase*4.5);
+      var body=0.22+0.5*Math.abs(Math.sin(x*0.021))*r();
+      var a=Math.min(1,(body+kick*0.9))*mid*0.92;
+      g.fillStyle=((x%(beat*4))<beat)?c1:c2;
+      g.fillRect(x,mid-a,1.4,a*2);
+    }
+    for(var b=0;b<w;b+=beat){
+      g.globalAlpha=(b%(beat*4)===0)?0.95:0.4;
+      g.fillStyle=tick;
+      g.fillRect(b,0,1,(b%(beat*4)===0)?7:4);
+      g.globalAlpha=1;
+    }
+  }
+  function drawScopes(){
+    var c=tok('--state-linked');
+    var env=document.getElementById('drv-env');
+    if(env){
+      var g=env.getContext('2d'), w=env.width, h=env.height, r=mulberry32(33);
+      g.clearRect(0,0,w,h);
+      g.strokeStyle=c; g.lineWidth=1.6; g.beginPath();
+      for(var x=0;x<=w;x+=4){
+        var t=x/w;
+        var v=0.25+0.65*Math.max(0, Math.sin(t*22)+0.4*r()-0.3);
+        var y=h-2-Math.min(1,v)*(h-6);
+        x===0?g.moveTo(x,y):g.lineTo(x,y);
+      }
+      g.stroke();
+    }
+    var lfo=document.getElementById('drv-lfo');
+    if(lfo){
+      var g2=lfo.getContext('2d'), w2=lfo.width, h2=lfo.height;
+      g2.clearRect(0,0,w2,h2);
+      g2.strokeStyle=c; g2.lineWidth=1.6; g2.beginPath();
+      for(var x2=0;x2<=w2;x2+=3){
+        var y2=h2/2 - Math.sin(x2/w2*Math.PI*6)*(h2/2-5);
+        x2===0?g2.moveTo(x2,y2):g2.lineTo(x2,y2);
+      }
+      g2.stroke();
+    }
+  }
+  function redraw(){ drawWave(); drawScopes(); }
+  redraw();
+
+  /* ---------- theme settings (Live式) ---------- */
+  var bs=document.getElementById('btn-settings');
+  var sp=document.getElementById('settings-popover');
+  var ts=document.getElementById('theme-select');
+  function setTheme(light, persist){
+    if(light){ document.documentElement.setAttribute('data-app-theme','light'); }
+    else{ document.documentElement.removeAttribute('data-app-theme'); }
+    ts.value=light?'light':'dark';
+    if(persist){ try{ localStorage.setItem('motolii-theme', ts.value); }catch(e){} }
+    requestAnimationFrame(redraw);
+  }
+  bs.addEventListener('click', function(){
+    var open=sp.hasAttribute('hidden');
+    sp.toggleAttribute('hidden', !open);
+    bs.setAttribute('aria-expanded', String(open));
+  });
+  ts.addEventListener('change', function(){ setTheme(ts.value==='light', true); });
+  /* #light / #dark はscreenshot生成用の固定入口。通常起動は保存値、なければDark既定 */
+  try{
+    var saved=localStorage.getItem('motolii-theme');
+    if(location.hash==='#light'){ saved='light'; }
+    if(location.hash==='#dark'){ saved='dark'; }
+    setTheme(saved==='light', false);
+  }catch(e){ setTheme(location.hash==='#light', false); }
+})();
+</script>

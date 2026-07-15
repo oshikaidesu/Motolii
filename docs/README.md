@@ -35,9 +35,11 @@
 | [references.md](references.md) | 依存候補・参考リポジトリ(ライセンス区分) | 現行 |
 | [ae-pain-points.md](ae-pain-points.md) | AEユーザー不満の体系化+我々の解決タグ(プラグイン窓口仮説の検証) | 現行 |
 | [dev-experience.md](dev-experience.md) | 開発体験(DX): プラグイン/シェーダのホットリロードはしご(AE再起動地獄の予防) | 現行(2026-07-13。設計ノート、契約変更なし) |
-| [plugin-ui-model.md](plugin-ui-model.md) | プラグインUIモデル: 宣言語彙 vs 自由描画(設計仮説。**M3§拡張方式と競合中、GAP-13で採否判断**) | **非規範・採否判断待ち**(2026-07-13。批判レビュー7点反映済) |
+| [plugin-ui-model.md](plugin-ui-model.md) | プラグインUIモデル: 宣言語彙 vs 自由描画(設計仮説。**v1境界は[plugin-ui-v1-boundary](reviews/2026-07-12-plugin-ui-v1-boundary.md)が正**。GAP-13はWidgetHint採否のみ) | **非規範・採否判断待ち**(2026-07-13。批判レビュー7点反映済) |
+| [ui-visual-language.md](ui-visual-language.md) | M3の視覚言語: 高密度一覧、意味色、既存UIへの馴染み、contrast、token規約 | 設計基準(具体token値はM3視覚確定待ち) |
+| [mocks/](mocks/README.md) | M3高密度メインUI。Ableton色語彙、ライト/ダーク切替、badge説明を持つ自己完結HTML | 視覚構成の基準モック |
 | [backlog.md](backlog.md) | イシュー候補台帳(現在地サマリ+横断/新規ギャップ/v2バックログ) | 現行 |
-| [specs/](specs/README.md) | マイルストーン仕様書(エージェントへの発注書)。確定/ドラフトのステータスはspecs/README.md参照 | M0/M1確定、M2段階発注可(コア締結撤回・P1修復済・再宣言待ち)、M3〜M5ドラフト |
+| [specs/](specs/README.md) | マイルストーン仕様書(エージェントへの発注書)。確定/ドラフトのステータスはspecs/README.md参照 | M0/M1確定、M2段階発注可、**M3段階発注可**、M4〜M5ドラフト |
 | [spikes/](spikes/) | スパイク結果報告(S1: Slint統合、S2: デコード、[S3(R8): Vello採否](spikes/s3-vello.md)) | 完了報告(歴史的記録、更新しない) |
 | [reviews/2026-07-12-m2-permanence-prevention.md](reviews/2026-07-12-m2-permanence-prevention.md) | M2恒久焼き込みの**予防手順**(やること5手)。運用正本 | 現行 |
 | [reviews/2026-07-12-rework-prior-art.md](reviews/2026-07-12-rework-prior-art.md) | 出戻りの先人調査(予防側/失敗後の対比)。設計根拠ではない | 仮説メモ |
@@ -50,6 +52,7 @@
 | [reviews/2026-07-15-prior-art-complaint-boundary-audit.md](reviews/2026-07-15-prior-art-complaint-boundary-audit.md) | 先例が収束した固定契約と日曜大工帯の分離 | **調査第一陣**(2026-07-15) |
 | [reviews/2026-07-15-implementation-readiness-ledger.md](reviews/2026-07-15-implementation-readiness-ledger.md) | M2〜M5のREADY/SPIKE/WAIT/BLOCKED分類とIssue昇格順 | **運用正本**(2026-07-15) |
 | [reviews/2026-07-15-shared-effect-lifecycle-decision.md](reviews/2026-07-15-shared-effect-lifecycle-decision.md) | Shared Effectの削除/Unlink/Copy Local/orphan lifecycle（GAP-14） | **決定**(2026-07-15 / #166) |
+| [reviews/2026-07-15-m3-entry-gate.md](reviews/2026-07-15-m3-entry-gate.md) | M3 UIタスク(U0V〜U8)の入場条件・段階発注ルール | **運用正本**(2026-07-15。未達成) |
 | [reviews/2026-07-15-p5-generative-pattern-disposition.md](reviews/2026-07-15-p5-generative-pattern-disposition.md) | p5.js系ジェネ表現をone-shot/純関数/Feedback/Simulation/記録入力へ分類 | **調査・配置案**(2026-07-15) |
 
 ## 全体で守る規律(コードレビュー最重視項目)
