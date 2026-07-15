@@ -859,9 +859,12 @@ dependencies = [
 name = "motolii-transport"
 version = "0.1.0"
 dependencies = [
+ "cpal",
  "motolii-audio",
  "motolii-core",
  "motolii-gpu",
+ "motolii-nodes",
+ "motolii-render",
  "motolii-testkit",
  "thiserror 2.0.18",
 ]

@@ -91,7 +91,23 @@ impl OutputStream {
         consumer: RingConsumer,
         device_wait: Option<Arc<DeviceWaitLatency>>,
     ) -> Result<Self> {
-        let counters = Arc::new(PlaybackCounters::default());
+        Self::open_negotiated_shared(
+            device,
+            negotiated,
+            consumer,
+            Arc::new(PlaybackCounters::default()),
+            device_wait,
+        )
+    }
+
+    /// Transportと共有する`PlaybackCounters`/`DeviceWaitLatency`で開く(D5本番経路)。
+    pub fn open_negotiated_shared(
+        device: &cpal::Device,
+        negotiated: &NegotiatedOutput,
+        consumer: RingConsumer,
+        counters: Arc<PlaybackCounters>,
+        device_wait: Option<Arc<DeviceWaitLatency>>,
+    ) -> Result<Self> {
         let counters_cb = Arc::clone(&counters);
         let sample_rate = negotiated.device_sample_rate;
 
@@ -102,7 +118,6 @@ impl OutputStream {
                 if let Some(latency) = &device_wait {
                     latency.update_from_output_callback(info, sample_rate);
                 }
-                // D4契約: allocate/block/decodeしない。リングから読むだけ。
                 fill_or_silence(&consumer, data, &counters_cb);
             },
             |err| {

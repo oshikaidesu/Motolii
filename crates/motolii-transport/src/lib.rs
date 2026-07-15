@@ -5,10 +5,15 @@
 
 mod clock;
 mod drs;
+mod playback;
 mod simulate;
 
-pub use clock::{drift_within_one_frame, perceptual_sample_frames, sample_frames_to_time};
+pub use clock::{
+    display_frame_without_latency_compensation, drift_within_one_frame,
+    perceptual_sample_frames, sample_frames_to_time, synced_display_frame,
+};
 pub use drs::{DrsConfig, DrsController, DrsStage, FrameTiming};
+pub use playback::{PlaybackSession, PlaybackSessionError};
 pub use simulate::{
     test_preview, test_transport_headless, HalfSpeedSimReport, PreviewSimulator,
 };
@@ -24,6 +29,8 @@ pub enum TransportError {
     Time(#[from] RationalTimeError),
     #[error("sample_rate must be positive")]
     InvalidSampleRate,
+    #[error("pcm cache read failed")]
+    CacheRead,
 }
 
 /// 映像レンダ1フレーム分の計画(常に最新の聴感時刻)。

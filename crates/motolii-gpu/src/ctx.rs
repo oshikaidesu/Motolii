@@ -173,7 +173,7 @@ impl GpuCtx {
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("motolii-gpu"),
-                required_features: features,
+                required_features: features | (optional_features() & adapter.features()),
                 // アダプタの実力値をそのまま要求(最低ラインは検証済み)。
                 // 固定値要求だと弱いGPUを無用に弾き、強いGPUの能力も使えない
                 required_limits: adapter_limits,

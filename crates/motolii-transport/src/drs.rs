@@ -24,8 +24,32 @@ impl DrsStage {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FrameTiming {
     pub gpu: Duration,
+    /// GPU timestamp query由来のときのみDRSが`gpu`を見る。falseなら壁時計でDRSしない。
+    pub gpu_measured: bool,
     pub cpu: Duration,
     pub wall: Duration,
+}
+
+impl FrameTiming {
+    /// timestamp query等で測ったGPU時間(DRS正本)。
+    pub fn measured_gpu(gpu: Duration, cpu: Duration, wall: Duration) -> Self {
+        Self {
+            gpu,
+            gpu_measured: true,
+            cpu,
+            wall,
+        }
+    }
+
+    /// GPU計測なし(自動DRS更新は行わない)。
+    pub fn unmeasured(cpu: Duration, wall: Duration) -> Self {
+        Self {
+            gpu: Duration::ZERO,
+            gpu_measured: false,
+            cpu,
+            wall,
+        }
+    }
 }
 
 /// DRS制御則の運用調整値(永続スキーマに焼かない)。
@@ -138,9 +162,13 @@ impl DrsController {
             return;
         }
 
+        if !timing.gpu_measured {
+            return;
+        }
+
         let cpu_bound = timing.cpu >= timing.gpu;
-        let over = !cpu_bound && timing.wall > self.config.frame_budget;
-        let under = timing.wall < self.config.upgrade_threshold();
+        let over = !cpu_bound && timing.gpu > self.config.frame_budget;
+        let under = timing.gpu < self.config.upgrade_threshold();
 
         if over {
             self.consecutive_over += 1;
@@ -204,19 +232,19 @@ mod tests {
     use super::*;
 
     fn over_budget(config: &DrsConfig) -> FrameTiming {
-        FrameTiming {
-            gpu: config.frame_budget + Duration::from_millis(2),
-            cpu: Duration::from_millis(1),
-            wall: config.frame_budget + Duration::from_millis(3),
-        }
+        FrameTiming::measured_gpu(
+            config.frame_budget + Duration::from_millis(2),
+            Duration::from_millis(1),
+            config.frame_budget + Duration::from_millis(3),
+        )
     }
 
     fn under_budget(config: &DrsConfig) -> FrameTiming {
-        FrameTiming {
-            gpu: Duration::from_millis(1),
-            cpu: Duration::from_millis(1),
-            wall: config.upgrade_threshold() / 2,
-        }
+        FrameTiming::measured_gpu(
+            config.upgrade_threshold() / 2,
+            Duration::from_millis(1),
+            config.upgrade_threshold() / 2,
+        )
     }
 
     #[test]
@@ -237,11 +265,11 @@ mod tests {
         let fps = motolii_core::Fps::try_new(30, 1).unwrap();
         let config = DrsConfig::from_fps(fps);
         let mut drs = DrsController::new(true, config);
-        let cpu_bound = FrameTiming {
-            gpu: Duration::from_millis(1),
-            cpu: config.frame_budget + Duration::from_millis(5),
-            wall: config.frame_budget + Duration::from_millis(5),
-        };
+        let cpu_bound = FrameTiming::measured_gpu(
+            Duration::from_millis(1),
+            config.frame_budget + Duration::from_millis(5),
+            config.frame_budget + Duration::from_millis(5),
+        );
         for _ in 0..4 {
             drs.record_frame(cpu_bound);
         }
@@ -272,6 +300,21 @@ mod tests {
         }
         assert_eq!(drs.stage(), DrsStage::Quarter);
         drs.record_frame(under_budget(&config));
+        assert_eq!(drs.stage(), DrsStage::Half);
+    }
+
+    #[test]
+    fn wall_over_budget_without_gpu_measurement_does_not_downgrade() {
+        let fps = motolii_core::Fps::try_new(30, 1).unwrap();
+        let config = DrsConfig::from_fps(fps);
+        let mut drs = DrsController::new(true, config);
+        let wall_only = FrameTiming::unmeasured(
+            Duration::from_millis(1),
+            config.frame_budget + Duration::from_millis(10),
+        );
+        for _ in 0..4 {
+            drs.record_frame(wall_only);
+        }
         assert_eq!(drs.stage(), DrsStage::Half);
     }
 }

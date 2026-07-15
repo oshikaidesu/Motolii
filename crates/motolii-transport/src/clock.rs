@@ -19,6 +19,23 @@ pub fn sample_frames_to_time(
     RationalTime::try_new(frames as i64, sample_rate as i64)
 }
 
+/// 補償なし(供給済み直結)の表示フレーム床 — ドリフトテストの対照用。
+pub fn display_frame_without_latency_compensation(
+    supplied_frames: u64,
+    sample_rate: u32,
+    fps: Fps,
+) -> Result<i64, RationalTimeError> {
+    sample_frames_to_time(supplied_frames, sample_rate)?.try_to_frame_floor(fps)
+}
+
+/// 聴感時刻から独立に同期表示フレームを求める(`next_frame_plan`と同等の床)。
+pub fn synced_display_frame(
+    perceptual_time: RationalTime,
+    fps: Fps,
+) -> Result<i64, RationalTimeError> {
+    perceptual_time.try_to_frame_floor(fps)
+}
+
 /// 表示フレームPTS(床)と聴感時刻の差が1フレーム長以内か。
 pub fn drift_within_one_frame(
     display_frame: i64,
