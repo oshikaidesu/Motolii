@@ -382,15 +382,7 @@ pub fn render_graph_cached(
     inputs: &RenderGraphInputs<'_>,
     quality: Quality,
 ) -> Result<RenderedFrame, RenderError> {
-    render_graph_cached_inner(
-        gpu,
-        session,
-        timeline_time,
-        graph,
-        inputs,
-        quality,
-        true,
-    )
+    render_graph_cached_inner(gpu, session, timeline_time, graph, inputs, quality, true)
 }
 
 /// テスト専用: 中間 ping-pong バッファをそのまま返す（契約違反の負例審判用）。
@@ -403,15 +395,7 @@ pub fn render_graph_cached_pool_alias_for_test(
     inputs: &RenderGraphInputs<'_>,
     quality: Quality,
 ) -> Result<RenderedFrame, RenderError> {
-    render_graph_cached_inner(
-        gpu,
-        session,
-        timeline_time,
-        graph,
-        inputs,
-        quality,
-        false,
-    )
+    render_graph_cached_inner(gpu, session, timeline_time, graph, inputs, quality, false)
 }
 
 fn render_graph_cached_inner(
