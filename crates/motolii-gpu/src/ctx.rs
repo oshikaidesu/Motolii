@@ -121,6 +121,15 @@ impl GpuCtx {
         Ok(())
     }
 
+    /// テスト専用: 次の`check_health`が`Uncaptured`を返すよう注入する。
+    #[doc(hidden)]
+    pub fn inject_uncaptured_error_for_test(&self, message: &str) {
+        self.runtime_state
+            .lock()
+            .expect("GPU runtime state poisoned")
+            .uncaptured_error = Some(message.to_string());
+    }
+
     async fn new_async() -> Result<(Self, UiDeviceParts), GpuError> {
         // OOMの失敗モードをdevice lost(全リソース喪失)より手前の、型付きエラーで
         // 捕捉できるリソース作成失敗に寄せる(安全に品質を落として継続する前提)。
