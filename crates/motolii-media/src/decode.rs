@@ -151,9 +151,10 @@ impl FrameReader {
             .child
             .lock()
             .map_err(|_| MediaError::Ffmpeg("frame reader child lock poisoned".into()))?;
-        let stdout = child.stdout.as_mut().ok_or_else(|| {
-            MediaError::Ffmpeg("frame reader stdout not piped".into())
-        })?;
+        let stdout = child
+            .stdout
+            .as_mut()
+            .ok_or_else(|| MediaError::Ffmpeg("frame reader stdout not piped".into()))?;
 
         let mut data = vec![0u8; self.frame_size];
         let mut filled = 0;
