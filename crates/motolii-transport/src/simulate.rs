@@ -118,7 +118,7 @@ impl PreviewSimulator {
             let expected = cache
                 .read_frames(self.source_playhead, self.chunk_frames)
                 .map_err(|_| TransportError::CacheRead)?;
-            while ring_prod.push_frames(&expected) == 0 {
+            while ring_prod.push_frames(expected) == 0 {
                 std::hint::spin_loop();
             }
 

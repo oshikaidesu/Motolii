@@ -43,7 +43,7 @@ pub fn drift_within_one_frame(
     fps: Fps,
 ) -> Result<bool, RationalTimeError> {
     let display_pts = RationalTime::try_from_frame(display_frame, fps)?;
-    let frame_len = RationalTime::try_new(fps.den() as i64, fps.num() as i64)?;
+    let frame_len = RationalTime::try_new(fps.den(), fps.num())?;
     let diff = if display_pts >= perceptual_time {
         display_pts.try_sub(perceptual_time)?
     } else {

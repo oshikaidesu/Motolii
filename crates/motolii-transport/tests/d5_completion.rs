@@ -50,7 +50,7 @@ fn d5_drift_with_stale_display_and_latency_compensation() {
 
     while supplied_total < ten_min_samples {
         let expected = cache.read_frames(source_playhead, chunk).unwrap();
-        while ring_prod.push_frames(&expected) == 0 {
+        while ring_prod.push_frames(expected) == 0 {
             std::hint::spin_loop();
         }
         source_playhead += chunk as u64;
