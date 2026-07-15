@@ -63,8 +63,23 @@ pub enum DocumentError {
     },
     #[error("transform.parent cycle involving layer {layer_id}")]
     ParentCycle { layer_id: u64 },
-    #[error("effect plugin_id must be non-empty (layer {layer_id})")]
-    EmptyEffectPluginId { layer_id: u64 },
+    /// D1l: `EffectUse.definition_id`が`effect_definitions`に存在しない(黙ってdropしない — GAP-14§4-1)。
+    #[error("effect use {id} on layer {layer_id} references unknown definition {definition_id}")]
+    DanglingEffectDefinition {
+        layer_id: u64,
+        id: u64,
+        definition_id: u64,
+    },
+    #[error("effect definition {id} plugin_id must be non-empty")]
+    EmptyEffectDefinitionPluginId { id: u64 },
+    /// D1l: `EffectDefinition`/`EffectUse`を含む文書が宣言すべき`min_reader_version`下限。
+    #[error(
+        "document contains EffectDefinition/EffectUse but min_reader_version ({min_reader_version}) < {required} required (D1l)"
+    )]
+    EffectDefinitionsRequireNewerReader {
+        min_reader_version: u32,
+        required: u32,
+    },
     #[error("clip plugin source plugin_id must be non-empty (layer {layer_id})")]
     EmptySourcePluginId { layer_id: u64 },
     /// D1f/実装ガード9: 既知plugin_idを構造上違う種別のスロットに置く「バグ」は
@@ -157,6 +172,9 @@ pub(crate) const MIN_READER_VERSION_FOR_STABLE_IDS: u32 = 2;
 /// AG-1: Asset Clip component入れ子を含む文書が宣言すべき最小`min_reader_version`。
 pub const MIN_READER_VERSION_FOR_ASSET_COMPONENTS: u32 = 3;
 
+/// D1l: `EffectDefinition`/`EffectUse`共有schemaを含む文書が宣言すべき最小`min_reader_version`。
+pub const MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS: u32 = 4;
+
 impl Document {
     /// 保存前不変条件。失敗しても`self`は変更しない(検証のみ)。
     pub fn validate(&self) -> Result<(), DocumentError> {
@@ -192,7 +210,37 @@ impl Document {
         }
         detect_parent_cycles(&parents)?;
         self.validate_stable_ids()?;
-        self.validate_asset_component_reader_gate()
+        self.validate_asset_component_reader_gate()?;
+        self.validate_effect_definitions()
+    }
+
+    /// D1l: `effect_definitions`台帳自体(plugin_id/params)とreader gateを検査する。
+    /// 参照整合(dangling)は`validate_envelope`側で個々のUseについて検査する。
+    fn validate_effect_definitions(&self) -> Result<(), DocumentError> {
+        for def in &self.effect_definitions {
+            if def.plugin_id.is_empty() {
+                return Err(DocumentError::EmptyEffectDefinitionPluginId { id: def.id.get() });
+            }
+            let path = format!("effect_definitions[{}]", def.id.get());
+            let degraded = plugin_slot_degraded(
+                &def.plugin_id,
+                def.effect_version,
+                DocPluginKind::Filter,
+                &path,
+            )?;
+            for (name, param) in &def.params {
+                let p = format!("{path}.{name}");
+                validate_plugin_param(self, &def.plugin_id, name, param, &p, degraded)?;
+            }
+        }
+        let any_effects = !self.effect_definitions.is_empty() || document_has_any_effect_use(self);
+        if any_effects && self.min_reader_version < MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS {
+            return Err(DocumentError::EffectDefinitionsRequireNewerReader {
+                min_reader_version: self.min_reader_version,
+                required: MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
+            });
+        }
+        Ok(())
     }
 
     /// AG-1: 非legacyのAsset componentを含む文書は`min_reader_version>=3`。
@@ -223,6 +271,13 @@ impl Document {
     fn validate_stable_ids(&self) -> Result<(), DocumentError> {
         let mut seen = HashSet::new();
         let mut max_observed: Option<u64> = None;
+        // D1l: EffectDefinitionIdもEffectId/KeyframeIdと同じ共有counterの空間(stable_id.rs)。
+        for def in &self.effect_definitions {
+            note_stable_id(def.id.get(), &mut seen, &mut max_observed)?;
+            for param in def.params.values() {
+                collect_stable_ids_param(param, &mut seen, &mut max_observed)?;
+            }
+        }
         for track in &self.tracks {
             for item in &track.items {
                 collect_stable_ids_item(item, &mut seen, &mut max_observed)?;
@@ -443,23 +498,30 @@ fn validate_envelope(
         param_expect::envelope_opacity(),
         &format!("{base}.opacity"),
     )?;
-    for effect in &env.effects {
-        if effect.plugin_id.is_empty() {
-            return Err(DocumentError::EmptyEffectPluginId { layer_id: id });
-        }
-        let effect_path = format!("{base}.effect[{}]", effect.plugin_id);
-        let degraded = plugin_slot_degraded(
-            &effect.plugin_id,
-            effect.effect_version,
-            DocPluginKind::Filter,
-            &effect_path,
-        )?;
-        for (name, param) in &effect.params {
-            let path = format!("{effect_path}.{name}");
-            validate_plugin_param(doc, &effect.plugin_id, name, param, &path, degraded)?;
+    for use_ in &env.effects {
+        if doc.effect_definition(use_.definition_id).is_none() {
+            return Err(DocumentError::DanglingEffectDefinition {
+                layer_id: id,
+                id: use_.id.get(),
+                definition_id: use_.definition_id.get(),
+            });
         }
     }
     Ok(())
+}
+
+/// D1l: 文書内のいずれかのlayer(Group含む)が1つでも`EffectUse`を持つか。
+fn document_has_any_effect_use(doc: &Document) -> bool {
+    fn walk(items: &[TrackItem]) -> bool {
+        items.iter().any(|item| {
+            let (effects, children): (&[crate::schema::EffectUse], &[TrackItem]) = match item {
+                TrackItem::Clip(clip) => (&clip.envelope.effects, &[]),
+                TrackItem::Group(group) => (&group.envelope.effects, &group.children),
+            };
+            !effects.is_empty() || walk(children)
+        })
+    }
+    doc.tracks.iter().any(|t| walk(&t.items))
 }
 
 /// D1f/S13: 既知plugin_idの種別違いは型付きエラー、未知idと未来版effect_versionは
@@ -793,6 +855,29 @@ fn validate_vector_content(
     }
 }
 
+/// Document内の全stable ID(EffectUse/EffectDefinition/Keyframe共有空間)を収集する。
+/// command/migrationの衝突検査で`validate_stable_ids`と同じ走査を再利用する(D1l)。
+pub(crate) fn collect_document_stable_ids(doc: &Document) -> HashSet<u64> {
+    let mut seen = HashSet::new();
+    let mut max_observed = None;
+    for def in &doc.effect_definitions {
+        let _ = note_stable_id(def.id.get(), &mut seen, &mut max_observed);
+        for param in def.params.values() {
+            let _ = collect_stable_ids_param(param, &mut seen, &mut max_observed);
+        }
+    }
+    for track in &doc.tracks {
+        for item in &track.items {
+            let _ = collect_stable_ids_item(item, &mut seen, &mut max_observed);
+        }
+    }
+    seen
+}
+
+pub(crate) fn stable_id_in_use(doc: &Document, id: u64) -> bool {
+    collect_document_stable_ids(doc).contains(&id)
+}
+
 fn note_stable_id(
     id: u64,
     seen: &mut HashSet<u64>,
@@ -867,11 +952,9 @@ fn collect_stable_ids_envelope(
     collect_stable_ids_param(&env.transform.scale, seen, max_observed)?;
     collect_stable_ids_param(&env.transform.rotation, seen, max_observed)?;
     collect_stable_ids_param(&env.opacity, seen, max_observed)?;
-    for effect in &env.effects {
-        note_stable_id(effect.id.get(), seen, max_observed)?;
-        for param in effect.params.values() {
-            collect_stable_ids_param(param, seen, max_observed)?;
-        }
+    // D1l: EffectUseのparamsは持たない(paramsはeffect_definitions側でcollectする)。
+    for use_ in &env.effects {
+        note_stable_id(use_.id.get(), seen, max_observed)?;
     }
     Ok(())
 }

@@ -90,15 +90,18 @@ pub use plugin_compat::{PluginDegradation, PluginOpenWarning};
 pub use schema::{
     asset_components_require_newer_reader, AudioComponent, AudioOutOfRange, BlendMode, Clip,
     ClipSource, ClippingMaskSettings, CompositeOrder, Composition, CompositionError,
-    EffectInstance, Group, ItemEnvelope, LineJoin, MaskMode, PathOp, PointType, Soundtrack,
-    SoundtrackError, StandardShape, StreamKind, StreamSelector, Track, TrackItem, Transform2D,
-    TrimMode, VectorContent, VectorRecipe, VideoComponent,
+    EffectDefinition, EffectInstance, EffectUse, Group, ItemEnvelope, LineJoin, MaskMode, PathOp,
+    PointType, Soundtrack, SoundtrackError, StandardShape, StreamKind, StreamSelector, Track,
+    TrackItem, Transform2D, TrimMode, VectorContent, VectorRecipe, VideoComponent,
 };
 pub use spatial_resolve::resolve_document_spaces;
-pub use stable_id::{EffectId, KeyframeId, StableIdError, StableIdSeq};
+pub use stable_id::{EffectDefinitionId, EffectId, KeyframeId, StableIdError, StableIdSeq};
 pub use track_id::{TrackId, TrackIdError, TrackIdTable};
 pub use undo::{Macro, UndoError, UndoHistory, UndoLimit};
-pub use validate::{DocumentError, MIN_READER_VERSION_FOR_ASSET_COMPONENTS};
+pub use validate::{
+    DocumentError, MIN_READER_VERSION_FOR_ASSET_COMPONENTS,
+    MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
+};
 
 fn default_min_reader_version() -> u32 {
     1
@@ -124,12 +127,12 @@ pub struct Document {
     pub track_ids: TrackIdTable,
     #[serde(default)]
     pub tracks: Vec<Track>,
-    /// EffectId/KeyframeId共有カウンタ(A8)。非再利用の単調カウンタ — ネスト構造
-    /// (`EffectInstance.id`/`DocKeyframe.id`)を持つ文書は`min_reader_version`を
-    /// 2以上に上げる責務を保存側が持つ(M2E-11①のネスト規律。本フィールド自体は
-    /// `default`でロード可能 — 旧文書に`effects`/keyframesが無ければ影響しない)。
+    /// EffectUse / EffectDefinition / KeyframeId 共有カウンタ(A8 / D1l)。
     #[serde(default)]
     pub next_stable_id: StableIdSeq,
+    /// D1l: 共有Effect recipe台帳。Useから参照。orphan(参照0)を許可する。
+    #[serde(default)]
+    pub effect_definitions: Vec<EffectDefinition>,
     /// 未知キー保持(unknown-keys roundtrip)。
     #[serde(default, flatten)]
     pub extra: Map<String, Value>,
@@ -148,8 +151,64 @@ impl Document {
             track_ids: TrackIdTable::new(),
             tracks: Vec::new(),
             next_stable_id: StableIdSeq::new(),
+            effect_definitions: Vec::new(),
             extra: Map::new(),
         }
+    }
+
+    pub fn effect_definition(&self, id: EffectDefinitionId) -> Option<&EffectDefinition> {
+        self.effect_definitions.iter().find(|d| d.id == id)
+    }
+
+    pub fn effect_definition_mut(
+        &mut self,
+        id: EffectDefinitionId,
+    ) -> Option<&mut EffectDefinition> {
+        self.effect_definitions.iter_mut().find(|d| d.id == id)
+    }
+
+    pub fn effect_use_count(&self, definition_id: EffectDefinitionId) -> usize {
+        self.effect_use_ids(definition_id).len()
+    }
+
+    pub fn effect_use_ids(&self, definition_id: EffectDefinitionId) -> Vec<EffectId> {
+        fn collect_in_items(
+            items: &[TrackItem],
+            definition_id: EffectDefinitionId,
+            out: &mut Vec<EffectId>,
+        ) {
+            for item in items {
+                match item {
+                    TrackItem::Clip(clip) => {
+                        for use_ in &clip.envelope.effects {
+                            if use_.definition_id == definition_id {
+                                out.push(use_.id);
+                            }
+                        }
+                    }
+                    TrackItem::Group(group) => {
+                        for use_ in &group.envelope.effects {
+                            if use_.definition_id == definition_id {
+                                out.push(use_.id);
+                            }
+                        }
+                        collect_in_items(&group.children, definition_id, out);
+                    }
+                }
+            }
+        }
+        let mut out = Vec::new();
+        for track in &self.tracks {
+            collect_in_items(&track.items, definition_id, &mut out);
+        }
+        out
+    }
+
+    pub fn find_effect_use(&self, layer: LayerId, use_id: EffectId) -> Option<&EffectUse> {
+        crate::command::find_envelope(self, layer)?
+            .effects
+            .iter()
+            .find(|u| u.id == use_id)
     }
 }
 
@@ -281,13 +340,27 @@ impl DocumentWriter {
         self.doc.layers.reserve()
     }
 
-    /// `EffectId`を新規発行する(A8、非再利用)。ネスト永続フィールド追加の規律
-    /// (M2E-11①)に沿い、発行と同時に`version`と`min_reader_version`を下限まで引き上げる。
-    /// `version < min_reader_version`は`validate`が拒否するため、片方だけ上げない。
+    /// `EffectId`(Use)を新規発行する(A8 / D1l)。ネスト永続追加に合わせversion下限を上げる。
     pub fn allocate_effect_id(&mut self) -> Result<EffectId, StableIdError> {
         let id = self.doc.next_stable_id.allocate()?;
-        self.bump_versions_for_stable_ids();
+        self.bump_versions_for_effect_schema();
         Ok(EffectId::from_raw(id))
+    }
+
+    /// `EffectDefinitionId`を新規発行する(D1l)。
+    pub fn allocate_effect_definition_id(&mut self) -> Result<EffectDefinitionId, StableIdError> {
+        let id = self.doc.next_stable_id.allocate()?;
+        self.bump_versions_for_effect_schema();
+        Ok(EffectDefinitionId::from_raw(id))
+    }
+
+    /// Use+Definitionの対を新規採番する(unique effect追加の下準備)。
+    pub fn allocate_unique_effect_pair(
+        &mut self,
+    ) -> Result<(EffectId, EffectDefinitionId), StableIdError> {
+        let use_id = self.allocate_effect_id()?;
+        let def_id = self.allocate_effect_definition_id()?;
+        Ok((use_id, def_id))
     }
 
     /// `KeyframeId`を新規発行する(A8、非再利用)。同上。
@@ -299,6 +372,12 @@ impl DocumentWriter {
 
     fn bump_versions_for_stable_ids(&mut self) {
         let floor = validate::MIN_READER_VERSION_FOR_STABLE_IDS;
+        self.doc.min_reader_version = self.doc.min_reader_version.max(floor);
+        self.doc.version = self.doc.version.max(floor);
+    }
+
+    fn bump_versions_for_effect_schema(&mut self) {
+        let floor = validate::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
         self.doc.min_reader_version = self.doc.min_reader_version.max(floor);
         self.doc.version = self.doc.version.max(floor);
     }

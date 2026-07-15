@@ -6,8 +6,8 @@ use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime, Ti
 use motolii_doc::param_eval::eval_doc_param;
 use motolii_doc::{
     build_document_frame_graph, Clip, ClipSource, ClippingMaskSettings, DocParam, DocValue,
-    Document, EffectId, EffectInstance, EvaluationTime, Group, ItemEnvelope, MaskMode,
-    ParamEvalError, Track, TrackItem, RECT_LAYER_SOURCE,
+    Document, EffectDefinition, EffectDefinitionId, EffectId, EffectUse, EvaluationTime, Group,
+    ItemEnvelope, MaskMode, ParamEvalError, Track, TrackItem, RECT_LAYER_SOURCE,
 };
 use motolii_eval::{DataTrack, DataTrackId, DataTracks, Value};
 use motolii_gpu::download_rgba;
@@ -24,11 +24,34 @@ fn desc() -> FrameDesc {
     FrameDesc::packed(W, H, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true)
 }
 
-fn alloc_effect(doc: &mut Document) -> EffectId {
-    let id = doc.next_stable_id.allocate().unwrap();
-    doc.version = doc.version.max(2);
-    doc.min_reader_version = doc.min_reader_version.max(2);
-    EffectId::from_raw(id)
+/// D1l: `EffectUse`(env側)+`EffectDefinition`(doc側)を1回で作り、Useのidを返す。
+fn push_effect(
+    doc: &mut Document,
+    env: &mut ItemEnvelope,
+    plugin_id: &str,
+    params: BTreeMap<String, DocParam>,
+) -> EffectId {
+    let use_id = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let definition_id = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
+    doc.effect_definitions.push(EffectDefinition::new(
+        definition_id,
+        plugin_id,
+        1,
+        true,
+        params,
+        Default::default(),
+    ));
+    env.effects.push(EffectUse {
+        id: use_id,
+        definition_id,
+    });
+    doc.version = doc
+        .version
+        .max(motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS);
+    doc.min_reader_version = doc
+        .min_reader_version
+        .max(motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS);
+    use_id
 }
 
 fn rect_clip(layer: u64, center: [f64; 2], size: [f64; 2], color: [f64; 4]) -> Clip {
@@ -102,15 +125,12 @@ fn masked_group_effect_applies_before_clipping_mask() {
         [1.0, 1.0, 1.0, 1.0],
     );
     content_clip.envelope.layer_id = content_layer;
-    let tint_id = alloc_effect(&mut doc);
-    content_clip.envelope.effects.push(EffectInstance {
-        id: tint_id,
-        plugin_id: "core.filter.tint".into(),
-        effect_version: 1,
-        enabled: true,
-        params: BTreeMap::from([("color".into(), DocParam::const_color([0.0, 1.0, 0.0, 1.0]))]),
-        extra: Default::default(),
-    });
+    push_effect(
+        &mut doc,
+        &mut content_clip.envelope,
+        "core.filter.tint",
+        BTreeMap::from([("color".into(), DocParam::const_color([0.0, 1.0, 0.0, 1.0]))]),
+    );
     content_clip.envelope.clipping_mask = ClippingMaskSettings {
         enabled: true,
         mode: MaskMode::Luminance,
@@ -158,20 +178,15 @@ fn group_effect_stack_applies_after_children_composite() {
         [1.0, 0.0, 0.0, 1.0],
     );
     child.envelope.layer_id = child_layer;
-    let opacity_id = alloc_effect(&mut doc);
+    let mut group_envelope = ItemEnvelope::new(group_layer);
+    push_effect(
+        &mut doc,
+        &mut group_envelope,
+        "core.filter.opacity",
+        BTreeMap::from([("amount".into(), DocParam::const_f64(0.5))]),
+    );
     let group = Group {
-        envelope: {
-            let mut env = ItemEnvelope::new(group_layer);
-            env.effects.push(EffectInstance {
-                id: opacity_id,
-                plugin_id: "core.filter.opacity".into(),
-                effect_version: 1,
-                enabled: true,
-                params: BTreeMap::from([("amount".into(), DocParam::const_f64(0.5))]),
-                extra: Default::default(),
-            });
-            env
-        },
+        envelope: group_envelope,
         children: vec![TrackItem::Clip(child)],
     };
     doc.tracks.push(Track {
@@ -497,15 +512,12 @@ fn f3_effect_before_transform_in_graph_steps() {
     let mut clip = rect_clip(layer.get(), [0.0, 0.0], [0.4, 0.4], [1.0, 0.0, 0.0, 1.0]);
     clip.envelope.layer_id = layer;
     clip.envelope.transform.position = DocParam::const_vec2([0.25, 0.0]);
-    let tint_id = alloc_effect(&mut doc);
-    clip.envelope.effects.push(EffectInstance {
-        id: tint_id,
-        plugin_id: "core.filter.tint".into(),
-        effect_version: 1,
-        enabled: true,
-        params: BTreeMap::from([("color".into(), DocParam::const_color([0.0, 1.0, 0.0, 1.0]))]),
-        extra: Default::default(),
-    });
+    push_effect(
+        &mut doc,
+        &mut clip.envelope,
+        "core.filter.tint",
+        BTreeMap::from([("color".into(), DocParam::const_color([0.0, 1.0, 0.0, 1.0]))]),
+    );
     doc.tracks.push(Track {
         id: track_id,
         items: vec![TrackItem::Clip(clip)],
