@@ -3,6 +3,7 @@
 spikes/s1-slint/target
 spikes/vello-eval/target
 spikes/r9-preview/target
+spikes/ime-acceptance/target
 /.tools
 # Rustワークスペースと無関係のNode実験(p5等)を誤コミットしない
 node_modules/
