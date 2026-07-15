@@ -7,6 +7,44 @@
 **MV(ミュージックビデオ)制作のための、モーショングラフィック指向のコンポジットツール。**
 3〜5分程度の動画を最終成果物として書き出すことがゴール。
 
+## 長期の北極星: 映像表現を演奏・再利用・配布できる単位にする
+
+Motoliiは完成条件としてはMV制作ツールだが、長期的には**映像表現の共通実行環境と、その最初のリファレンスHost**を目指す。映像表現を特定project内の手順や巨大なtemplateへ閉じ込めず、時刻・入力・型付きparameterから結果を返す、小さく再利用可能な実行単位として扱う。制作者はそれをtimeline上で配置し、keyframe・ParamDriver・DataTrackで変調し、組み合わせて一本の作品を「演奏」できる。開発者は編集アプリ全体を作らず、ひとつの新しい表現へ集中できる。
+
+これは**「映像制作におけるVST」**という比喩で捉えられる。VSTバイナリ互換、DAW化、音声プラグインの読み込みを目標にするという意味ではない。VSTから継承するのは、Hostと表現実装を分離し、時間・parameter・automation・保存互換を共通言語にすることで、小さな作者と制作資産の生態系を成立させた構造である。AEのプラグインAPIやproject構造を再現することも目的にしない。
+
+| 音楽制作での役割 | Motoliiでの対応 | 共通化する意味 |
+|---|---|---|
+| Instrument / Generator | `LayerSource`、将来の生成系plugin | 時刻とparameterから素材を生む |
+| Audio Effect | `Filter` / `Composite` | 入力へ順序付きで表現を適用する |
+| LFO / Modulator / MIDI Effect | `ParamDriver` / `DataTrack` / 型付きlink | parameterを手打ちkeyframe以外の信号で駆動する |
+| Automation | keyframe、補間、BPM grid、TimeMap | 時間に沿って同じ意味を再現する |
+| DAW Project | `Document` | 実装結果ではなく、作品のrecipeを保存する |
+| Realtime playback / Bounce | Preview / Export | 同じ評価関数を品質差だけで実行する |
+
+この北極星は、現在の完成条件を膨らませる口実ではなく、**迷った時に境界を削るための判断基準**である。v1はまず一人の制作者が3〜5分のMVを最後まで完成できることを優先し、動的配布marketplace、第三者SDK、独自plugin UI、VST互換等を完成条件へ追加しない。一方、短期実装の都合で将来の表現単位をHost内部へ焼き込み、公開境界を閉ざすこともしない。
+
+### コンセプトが課すこと
+
+- **作品の主役は手順ではなく表現の意図**: ユーザーに原子nodeの配線、隠れNull、文字列expression、再現不能な操作列を組ませない。「グロー」「反復」「追従」「歌詞組版」のような意図を、検査・保存・再利用できる単位として見せる。
+- **時間は共通言語**: 映像、parameter、解析値、生成、preview、exportが同じ時刻`t`とTimeMapを使う。pluginごとの独自clock、再生順依存、前frameの隠れ状態を許さない。
+- **Hostは創作上のインフラを引き受ける**: lifecycle、GPU resource、cache、Undo、保存、欠落plugin診断、version、UI metadata、座標、色、品質、error recoveryはHost責務とする。plugin作者や制作者へ再実装させない。
+- **専門性は開き、基礎責任は投棄しない**: 未知の表現はpluginで試せる一方、頻出して意味が安定したものはHostの型付きprimitive/toolへの昇格候補にする。標準制作体験を第三者pluginの購入や自作だけに依存させない。
+
+### 設計と実装の審判
+
+新しい機能、公開API、Document field、plugin種別を提案するときは、少なくとも次を答えられなければ実装へ進めない。
+
+1. **表現単位**: これは何という制作意図で、Hostとpluginのどちらが所有するか。単なる既存アプリのUI手順をschema化していないか。
+2. **再現性**: 同じDocument・素材・plugin version・時刻・seed・Qualityから同じ意味の結果を再生成できるか。隠れ状態や評価順依存がないか。
+3. **可搬性**: OS、GPU vendor、解像度、DPIから独立した契約か。正準座標、wgpu/WGSL、明示的FrameDescを通るか。
+4. **作品の持続性**: 安定ID、parameterの型・default・範囲・version、migration方針があり、plugin欠落時も作品を壊さず診断できるか。
+5. **Host一貫性**: Preview/Export、cache/invalidation、Undo/journal、error、resource lifecycleに別経路やplugin専用例外を作らないか。
+6. **作者体験**: 第三者がHost内部を知らず、参照実装と機械判定可能なtestだけで正しいpluginを書ける境界か。
+7. **制作者体験**: plugin名や実装方式を知らなくても発見・適用・調整・automation・置換ができ、結果をAdvancedで検査できるか。
+
+この審判は新しい公開契約を即時に要求するものではない。未決事項は既存の凍結ゲートと仕様改訂手順に従い、まず非永続prototypeまたは既存plugin境界で検証する。既存の絶対規律であるVRAM常駐、色変換一元化、純関数、単一writer、正準座標、Preview/Export同一関数、vendor非依存は、この北極星を実装可能にする下部構造である。
+
 ## 解決したい問題(既存ツールの限界)
 
 - **Cavalry**: ベクター/パラメトリックに寄りすぎており、ピクセル(ラスター)処理や3D適用が重い
