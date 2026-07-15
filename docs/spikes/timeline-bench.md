@@ -2,7 +2,9 @@
 
 作成日: 2026-07-15 / Issue #57
 
-## 結論 (INF-1 **合格**)
+## 結論 (M3 実装ガード2 / Issue #57 **合格**)
+
+記録形式は [s1-slint.md](s1-slint.md)(INF-1) を参考にした。**本スパイクのラベルは INF-1 ではない**。
 
 クリップ **1,000** + キーフレーム **100,000** の合成データで、パン/ズーム更新時の wgpu 自前描画が **p95 ≤ 16.667ms (60fps)** を満たす。Slint ListView / 大量 Slint エレメントでタイムラインを組む方針は採用しない（M3 実装ガード2どおり）。
 
@@ -46,7 +48,14 @@
 | 可視インスタンス (最終フレーム例) | 210 clips + 20,005 keyframes (+ グリッド) |
 | 合否 | **PASS** |
 
-ソフトウェア Vulkan で余裕付き合格。実 GPU (Metal/Vulkan ディスクリート) ではさらに余裕が見込める。S1 と同様、本番 UI 統合時は開発主機での再実測を推奨するが、**アーキテクチャ判断 (ListView 回避) は本スパイクで確定**する。
+llvmpipe での p95 は **16.00ms / 予算 16.667ms（マージン約 4%）** であり、余裕付きではない。実 GPU は未実測（速い蓋然性はあるが本記録の根拠にしない）。**アーキテクチャ判断 (ListView 回避 + wgpu 1枚面) は本スパイクで確定**する。U3 着手前に開発主機 GPU で再実測し、マージンを記録することを推奨する。
+
+再現コマンド（証跡一式）:
+```bash
+cd spikes/timeline-bench
+cargo run --release -- --json > ../../docs/spikes/timeline-bench-evidence/bench-report.json
+TIMELINE_BENCH_EVIDENCE=../../docs/spikes/timeline-bench-evidence cargo run --release
+```
 
 ## U3 への含意
 
