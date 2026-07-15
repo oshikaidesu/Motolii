@@ -1,5 +1,7 @@
 # Motolii
 
+**[日本語: なぜ、もう一つ映像制作ソフトを作るのか](MANIFESTO.ja.md)** — After Effectsの重さ、AviUtlからの移行、ソフトごとのエフェクト再発明、そして「映像制作におけるVST」について。
+
 <p align="center">
   <img src="docs/assets/exit_demo.gif" alt="Motolii M1 exit demo: a video background with a shape animated by cubic-bezier easing and exported to mp4" width="960">
 </p>
