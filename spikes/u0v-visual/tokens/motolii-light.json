@@ -1,0 +1,86 @@
+{
+  "$schema": "https://www.designtokens.org/schemas/2025.10/formatSchema.json",
+  "$description": "Motolii Light — placeholder values from v2 mock. G0-6で確定。",
+  "color": {
+    "surface": {
+      "bg": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.7137, 0.7137, 0.7137], "alpha": 1 } },
+      "panel": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.8314, 0.8314, 0.8314], "alpha": 1 } },
+      "panel-raised": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.7804, 0.7804, 0.7804], "alpha": 1 } },
+      "inset": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.8784, 0.8784, 0.8784], "alpha": 1 } },
+      "overlay": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.9137, 0.9137, 0.9137], "alpha": 1 } },
+      "vp-surround": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.1804, 0.1804, 0.1804], "alpha": 1 } }
+    },
+    "stroke": {
+      "line": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.6353, 0.6353, 0.6353], "alpha": 1 } },
+      "line-strong": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.5529, 0.5529, 0.5529], "alpha": 1 } },
+      "grid-major": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0, 0, 0], "alpha": 0.16 } },
+      "grid-minor": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0, 0, 0], "alpha": 0.06 } }
+    },
+    "content": {
+      "primary": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.0863, 0.0863, 0.0863], "alpha": 1 } },
+      "secondary": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.2706, 0.2706, 0.2706], "alpha": 1 } },
+      "muted": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.3098, 0.3098, 0.3098], "alpha": 1 } },
+      "disabled": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.5608, 0.5608, 0.5608], "alpha": 1 } }
+    },
+    "accent": {
+      "selection": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.1137, 0.302, 0.502], "alpha": 1 } },
+      "focus": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.1137, 0.302, 0.502], "alpha": 1 } },
+      "on-accent": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [1, 1, 1], "alpha": 1 } }
+    },
+    "state": {
+      "keyframe": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.6118, 0.2275, 0.0706], "alpha": 1 } },
+      "active": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.149, 0.3765, 0.2314], "alpha": 1 } },
+      "on-active": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.949, 0.9686, 0.949], "alpha": 1 } },
+      "solo": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.4196, 0.3529, 0.0627], "alpha": 1 } },
+      "mute": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.3294, 0.3294, 0.3294], "alpha": 1 } },
+      "linked": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.0196, 0.3294, 0.3294], "alpha": 1 } },
+      "cached": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.2902, 0.3647, 0.4706], "alpha": 1 } },
+      "music": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.4902, 0.2078, 0.5216], "alpha": 1 } }
+    },
+    "feedback": {
+      "warning": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.4902, 0.2902, 0], "alpha": 1 } },
+      "error": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.6392, 0.1373, 0.1176], "alpha": 1 } }
+    },
+    "domain": {
+      "path": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.149, 0.3765, 0.2314], "alpha": 1 } },
+      "pixel": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.3529, 0.2745, 0.6], "alpha": 1 } }
+    },
+    "item": {
+      "mesh": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.0549, 0.3529, 0.3294], "alpha": 1 } },
+      "video": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.6549, 0.7412, 0.8392], "alpha": 1 } },
+      "shape": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.7647, 0.6941, 0.8706], "alpha": 1 } },
+      "text": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.851, 0.702, 0.7529], "alpha": 1 } },
+      "image": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.8275, 0.8118, 0.7059], "alpha": 1 } },
+      "group": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.6784, 0.7961, 0.7059], "alpha": 1 } },
+      "particle": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.8471, 0.7804, 0.5765], "alpha": 1 } },
+      "audio": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.8118, 0.851, 0.902], "alpha": 1 } }
+    },
+    "clip": {
+      "ink": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.102, 0.102, 0.102], "alpha": 1 } },
+      "border": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0, 0, 0], "alpha": 0.25 } }
+    },
+    "playhead": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.0667, 0.0667, 0.0667], "alpha": 1 } },
+    "hover": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0, 0, 0], "alpha": 0.05 } },
+    "wave": {
+      "primary": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.2275, 0.3333, 0.4706], "alpha": 1 } },
+      "secondary": { "$type": "color", "$value": { "colorSpace": "srgb", "components": [0.3294, 0.451, 0.6118], "alpha": 1 } }
+    }
+  },
+  "dimension": {
+    "spacing": {
+      "1": { "$type": "dimension", "$value": { "value": 2, "unit": "px" } },
+      "2": { "$type": "dimension", "$value": { "value": 4, "unit": "px" } },
+      "3": { "$type": "dimension", "$value": { "value": 8, "unit": "px" } },
+      "4": { "$type": "dimension", "$value": { "value": 12, "unit": "px" } },
+      "5": { "$type": "dimension", "$value": { "value": 16, "unit": "px" } }
+    },
+    "row": {
+      "s": { "$type": "dimension", "$value": { "value": 22, "unit": "px" } },
+      "m": { "$type": "dimension", "$value": { "value": 26, "unit": "px" } },
+      "l": { "$type": "dimension", "$value": { "value": 44, "unit": "px" } },
+      "x": { "$type": "dimension", "$value": { "value": 36, "unit": "px" } }
+    },
+    "radius": { "$type": "dimension", "$value": { "value": 2, "unit": "px" } },
+    "icon": { "$type": "dimension", "$value": { "value": 16, "unit": "px" } }
+  }
+}

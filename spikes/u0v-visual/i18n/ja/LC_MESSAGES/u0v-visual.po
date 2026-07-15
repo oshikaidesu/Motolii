@@ -1,0 +1,67 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: ja\n"
+
+msgid "Motolii U0V — visual spike"
+msgstr "Motolii U0V — 視覚スパイク"
+
+msgid "night_drive.mtl — 1920×1080 / 30fps"
+msgstr "night_drive.mtl — 1920×1080 / 30fps"
+
+msgid "Motolii Dark"
+msgstr "Motolii Dark（既定）"
+
+msgid "Motolii Light"
+msgstr "Motolii Light"
+
+msgid "Custom fixture"
+msgstr "カスタム fixture"
+
+msgid "Assets"
+msgstr "アセット"
+
+msgid "Effects"
+msgstr "エフェクト"
+
+msgid "Search…"
+msgstr "検索…"
+
+msgid "Video 12s"
+msgstr "動画 12s"
+
+msgid "BPM 128"
+msgstr "BPM 128"
+
+msgid "Snap 1/4"
+msgstr "スナップ 1/4"
+
+msgid "Layer"
+msgstr "レイヤー"
+
+msgid "Opacity"
+msgstr "不透明度"
+
+msgid "Position"
+msgstr "位置"
+
+msgid "Effect stack"
+msgstr "エフェクトスタック"
+
+msgid "Driver"
+msgstr "ドライバー"
+
+msgid "scope waveform"
+msgstr "スコープ波形"
+
+msgid "Timeline overview (wgpu)"
+msgstr "タイムライン overview (wgpu)"
+
+msgid "Hover: trim clip"
+msgstr "ホバー: クリップをトリム"
+
+msgid "Shortcut: T"
+msgstr "ショートカット: T"
+
+msgid "Constraint: snap on"
+msgstr "制約: スナップ ON"
