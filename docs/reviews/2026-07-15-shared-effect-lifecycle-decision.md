@@ -59,6 +59,14 @@
 
 Copy Localの複製範囲（必須）: `plugin_id`, `effect_version`, `enabled`, `params`, `extra`（未知field含む）。新しい`EffectDefinitionId`を割り当て、対象`EffectUse.definition_id`だけ更新。旧Definitionの`use_count`が0になればorphan（保持）。
 
+`params`内の`KeyframeId`はDefinition間で共有しない。Copy Local準備時に、ネストした`Vec2Axes`を含む全Keyframeへ共有`next_stable_id`の予約区間から新IDを割り当てる。Commandの必須payloadは`use_id`、`previous_definition_id`、採番済みの完全な`new_definition`、半開区間`stable_id_reservation=[before, after)`とする。`previous_definition_id`はCommand単独の`inverse()`とjournal replayに必要で、applyは対象UseがまだこのIDを参照していることを検査する。準備はcounterの複製上で行い、Documentを変更しない。初回`apply`（journal replayを含む）が`next_stable_id == before`を確認して成功する時だけcounterを`after`へ進める。したがってCommandの取消・準備失敗はIDを消費せず、適用失敗はcounterを含むDocument全体を変えない。
+
+`apply`はIDを選ばず、時刻依存・再計算もしない。予約区間は非空（`before < after`）で、当該Commandが**新たに導入するID集合**と半開区間の全整数が等しいこと（`introduced_ids == { before, ..., after-1 }`）を検査する。Copy Localが導入するのは新Definition IDとその全Keyframe IDだけで、既存`use_id`は予約集合へ含めない。Add create/linkは新Use IDを含み、createだけ新Definition配下のIDも含む。全導入IDは一意かつ現在未使用でなければならない。Undo後のRedoではcounterを巻き戻さず、`next_stable_id >= after`かつ同じpayload IDが現在未使用の場合だけ同一IDを復元し、counterを再commitしない。`before < next_stable_id < after`、空・穴あき・過大区間、予約外ID、現在の衝突は型付きエラーでDocument不変とする。これにより、保存Documentのcounterが`before`であるjournal replayと、counterが既に`after`以降のRedoを同じCommandで決定的に扱う。
+
+Copy Localの採番順は固定する。`EffectDefinitionId`を先に取り、`params`をキーの辞書順で走査する。各`DocParam`は`Keyframes`の格納順、`Vec2Axes`は`x`→`y`の順に再帰し、各keyframeの`KeyframeId`を採る。既存`duplicate.rs`と同じ再採番関数を共用し、別実装を作らない。`apply`は、IDだけを除いた`new_definition`が適用時点の参照元Definitionのdeep-copyであることも検証し、plugin/params/extraを改変したpayloadをCopy Localとして受理しない。
+
+削除済みIDの非再利用は、単調counter、上記予約区間、WriterのCommand準備API、Undo/Redo履歴、journal replayの正規経路で保証する。`from_raw`/`peek_next`から任意の過去IDを組み立てた敵対的Commandを、Documentにtombstone集合を足さず完全識別することは本契約の保証外と明記する。公開`apply`は予約・衝突・形状を検査するが、永続reservation/tombstoneをDocument schemaへ追加しない。
+
 ### 2.4 最後のUseを削除
 
 | 候補 | 判定 | 理由 |
@@ -113,9 +121,11 @@ before共通:
 
 | 操作 | after | Undo 1回 |
 |---|---|---|
-| `CopyLocal(U3)` | `definitions`に`D3=deep_copy(D1)`追加。`U3→D3`。`U1/U2`は`D1`のまま | 復元: `U3→D1`、`D3`削除（他から未参照であること） |
+| `CopyLocal(use_id=U3, previous_definition_id=D1, new_definition=D3, reservation)` | apply前に`U3→D1`を検査。`definitions`に採番済み`D3=deep_copy_and_remint(D1)`追加。`U3→D3`。`U1/U2`は`D1`のまま。D1/D3内のKeyframeIdは全て異なる | Command payloadだけから復元: `U3→D1`、`D3`削除（他から未参照であること）。Redoは同じD3/KeyframeIdを復元 |
 
 `U3`が`D1`の最後の参照だった場合、afterは`D1` orphan + `D3`参照1。Undoは`D1`再利用へ戻し`D3`を消す。
+
+Undo時に`U3`以外のUseが`D3`を参照している、または`U3`がすでに`D3`以外を参照している場合は、`UndoCopyLocal`全体を型付きRejectしてDocumentを変えない。履歴外の編集を黙って巻き込んだり、D3だけ残す部分成功にはしない。
 
 ### 3.4 Delete last Use
 
@@ -149,6 +159,10 @@ before共通:
 7. **未知plugin**: lifecycle成功パスで`extra`/未知fieldを喪失しない
 8. **1 Undo**: `DeleteDefinition`(成功時) / `UnlinkUse` / `CopyLocal` はそれぞれ1 gesture = 1 Undo。部分適用しない
 9. **inline migration**: 既存`EffectInstance`→Definition1+Use1は共有ゼロ。orphanを新たに作らない（1:1）
+10. **内部IDのdeep-copy**: Copy LocalはDefinition配下の全`KeyframeId`を再採番する。元DefinitionとのID共有を禁止し、`validate`/save成功を審判する
+11. **決定済みpayload**: Copy Local Commandは`use_id`、`previous_definition_id`、採番済み`new_definition`、`stable_id_reservation=[before, after)`を保持する。準備はDocument不変、apply/redo中にIDを選ばず、失敗時はcounterを含むDocument全体が不変
+12. **予約commit**: Add/Link/Copy Local等が新たに導入するIDはWriterがcounter複製上の非空連続区間へ具体化し、導入ID集合は区間の全点と等しい。初回apply/journal replayだけ`next==before`から`after`へ進め、Redoは`next>=after`で同じIDを復元しcounterを触らない。中間counter・空/穴あき/過大区間・予約外ID・nested ID衝突を型付き拒否する
+13. **Copy Local完全性**: payloadは`use_id`、`previous_definition_id`、`new_definition`、予約区間を持つ。applyはUseの旧参照と、IDを除くnew payloadが旧Definitionと同一であることを検査する。再採番順はDefinition→params辞書順→Keyframes格納順、Vec2Axesはx→y。Undoの参照干渉は部分成功せずRejectする
 
 ## 5. D1lへ追加する自動試験（実装時の完了条件へ転記）
 
@@ -161,6 +175,12 @@ before共通:
 7. `copy_local_then_save_reload_preserves_two_definitions`
 8. `delete_definition_unused_is_one_undo` / `unlink_is_one_undo` / `copy_local_is_one_undo`
 9. migration fixture: inline EffectInstance → 1 Def + 1 Use、画素/order/extra不変（既存D1l条件と結合）
+10. `copy_local_keyframed_params_remints_ids_and_survives_validate_save` — `Vec2Axes`を含む元/新DefinitionのKeyframeId集合が交差せず、値・時刻・補間・`extra`は同一。固定走査順どおりのID列も検査
+11. `copy_local_keyframed_undo_redo_restores_exact_ids` — apply→UndoでDocument全文一致、Redoで初回apply後と同じDefinition/KeyframeId
+12. `stable_id_reservation_replays_and_rejects_invalid_ranges_without_mutation` — Add create/linkとCopy Localについて、`next==before`のjournal replay、`next>=after`のRedo、導入ID集合と区間全点の一致を検査。`before>=after`・`before<next<after`・穴あき/過大区間・予約外新規Use/Definition/nested Keyframe ID・現在衝突は無変更Reject。Copy Localの既存Use IDは予約対象外
+13. `copy_local_rejects_non_copy_payload_without_mutation` — ID以外のplugin/params/extra改変をReject
+14. `undo_copy_local_rejects_new_definition_reuse_without_mutation` — 新Definitionを別Useが参照した状態で部分Undoしない
+15. `copy_local_rejects_stale_previous_definition_without_mutation` — 対象Useがpayloadの`previous_definition_id`を指さなければRejectし、inverseはDocument探索なしで旧参照を復元
 
 ## 6. D1l依存・完了条件への反映
 
@@ -177,4 +197,5 @@ Product公開APIの最終型名確定以外の実装、Timeline gutter、Composi
 
 | 日付 | 内容 |
 |---|---|
+| 2026-07-15 / PR #196 | Copy Local配下Keyframe IDの再採番、自己完結payload、journal replay可能な全点充足予約区間commit、固定走査順、payload完全性、Undo干渉Rejectを追加。Document schemaへのtombstone/reservation追加は棄却 |
 | 2026-07-15 | GAP-14初回決定。参照中Delete=Reject、Unlink=RemoveUse、Copy Local=Materialize、orphan=Keep、未知plugin同一規則 |
