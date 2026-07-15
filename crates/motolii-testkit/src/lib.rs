@@ -10,6 +10,7 @@
 
 pub mod clipping_mask;
 pub mod cpu_reference;
+pub mod slint_dep_policy;
 pub mod tol;
 
 use std::path::{Path, PathBuf};
