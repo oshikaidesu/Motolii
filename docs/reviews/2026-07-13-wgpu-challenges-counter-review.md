@@ -47,6 +47,8 @@
 
 既存タスクとの関係(2026-07-13追記): [M1実装ガードG7](../specs/M1-vertical-slice.md)は**bounded channelによるバックプレッシャ**(増強チケット候補・未実装)であり、**GPU stagingリングによるコピー重畳とは別物**。混同しない。本レビューの提案は (1)**GPU stagingリングによる重畳**と (2)**性能SLO**(§C-2)の2点。正式タスク化は未了 — 採択判断はbacklog/仕様への反映時に、判定語併記で行う。
 
+先例調査(2026-07-13): 「同期待ちを避け、完了までのレイテンシを許容する」原則まではUnity `AsyncGPUReadback`・OBS staging surface・Unreal `FRHIGPUTextureReadback`の公式文書が共通に裏付ける。**N本のbounded staging ring自体はMotolii向けの設計推論**であり、先例が共通に公式規定するものではない — [readback先例調査](2026-07-13-readback-pipelining-prior-art.md)§1(調査文書。採択時は併読)。
+
 ### B-2. VRAM予算 — **棄却(設計済み)。ただし事実記述の更新を採用**
 
 LRU・RAM/ディスク降格・ハード予算は[memory-model.md](../memory-model.md) P3と[M4 K1](../specs/M4-cache-and-analysis.md)に既にある。「Motoliiから抜けている」は不正確。
@@ -72,7 +74,7 @@ v1は静的リンクRust traitで[`TextureRef`が`&wgpu::Texture`を直接渡す
 - アプリ独自のPipelineCacheはパイプラインオブジェクトのメモ化であって、cold-startコンパイルの保証ではない
 - プラグイン追加後、最初にノードを表示した瞬間のヒッチを測る完了条件が無い
 
-推奨: INF-8へ「cold cacheで代表プラグインN本を初表示した最大停止時間のSLO」「起動時prewarm」「compile中はlast-goodまたはpass-through」の受け入れ条件を追加する(仕様編集は本レビューではしない — ゲート採用時に判定語併記で)。
+推奨: INF-8へ「cold cacheで代表プラグインN本を初表示した最大停止時間のSLO」「起動時prewarm」「compile中はlast-goodまたはpass-through」の受け入れ条件を追加する(仕様編集は本レビューではしない — ゲート採用時に判定語併記で)。この形はUnreal PSO Precaching(起動時prewarm+未完時は描画スキップ/デフォルト代替)と同型の出荷済みパターン。転移の2部品にも一般解の先例がある(非同期コンパイル=Bevy 0.13がwgpu上での実現可能性を出荷済み、列挙=Fossilize型/Unreal型の2系統)。ただし**Motolii側の接合条件**が残る: パイプライン生成の捕捉面統一(Overlay/Composite系はPipelineCache外で直接生成しており、現行キーも完全なpipeline記述ではない)と、非同期コンパイル結果の`&mut PipelineCache`への合流設計。方式選択とあわせてゲート判定の対象 — [readback先例調査](2026-07-13-readback-pipelining-prior-art.md)§3。
 
 ### B-5. カラーマネジメント — **棄却(方向は設計済み)。HDR意味論の前倒しはしない**
 

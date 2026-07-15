@@ -8,6 +8,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 2. 着手するフェーズの仕様書([docs/specs/](docs/specs/README.md)): タスク表(完了条件・依存つき)と、**末尾の「実装ガード」節**(先行ツールの失敗・ユーザー不満をタスクIDに紐付けた注意リスト。完了条件を追加している場合がある)
 3. プラグインを書く/量産する時: [docs/plugin-authoring.md](docs/plugin-authoring.md)(種別・NodeDesc必須欄・禁止事項・型紙)
 4. M2 Document/スキーマ/ジャーナルに触る時: **先に**[docs/reviews/2026-07-12-m2-permanence-prevention.md](docs/reviews/2026-07-12-m2-permanence-prevention.md)(予防5手)。背景の先人調査は[rework-prior-art](docs/reviews/2026-07-12-rework-prior-art.md)
+5. M3 UI/入力/タイムライン/プラグインパネルに触る時: **先に**[docs/reviews/2026-07-14-m3-ui-boundary-prevention.md](docs/reviews/2026-07-14-m3-ui-boundary-prevention.md)(UI境界の規律8本)。外観を伴う変更は[docs/ui-visual-language.md](docs/ui-visual-language.md)も読む
 
 ## 絶対規律(破ると設計の根拠が崩れる。レビュー最重視項目)
 
@@ -53,3 +54,19 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 5. **完了条件に意味の審判があるか**: 拒否テストまたは意味論ゴールデン。`cargo test`緑だけで「完了」と書かない
 
 破れたときの出口だけ: 形状→D1e migration、画素→新variant(既存ゴールデン更新で通さない)、migration PRにnon-goals。
+
+## UI境界汚染の予防(M3 — GR-UI)
+
+正本: [docs/reviews/2026-07-14-m3-ui-boundary-prevention.md](docs/reviews/2026-07-14-m3-ui-boundary-prevention.md)。採否記録は[反対側レビュー](docs/reviews/2026-07-14-m3-ui-boundary-counter-review.md)。UIはDocumentの投影であり、Slintの状態・px/DPI・入力イベント列を永続意味論へしない。
+
+M3仕様のGR-UI審判割当表で対象タスクに割り当てられた項目だけを確認する。非該当を形式的にYesにしない。該当項目が1つでもNoなら仕様改訂または依存待ちへ:
+
+1. **状態の持ち場が決まったか**: Document / User settings / Workspace-session候補 / Transientを分類したか
+2. **書き込み口が一つか**: 永続編集はD2コマンドと単一writerだけを通るか
+3. **1ジェスチャー=1履歴か**: D2のmacro/merge/Undo単位を使い、未決transaction APIを発明していないか
+4. **UIスレッドを待たせないか**: worker分離、非blocking最新値mailbox、generation破棄があり、同期読み戻しが無いか
+5. **UI単位を焼いていないか**: px/DPI/度/ウィンドウ座標をDocument・評価・公開契約へ流していないか
+6. **Slintを隔離したか**: `motolii-ui`外の製品クレートとdomain公開APIへSlint依存・型を出していないか
+7. **未決を埋めていないか**: GAP-13/GAP-6等の判断前に公開UI APIや恒久設定形式を足していないか
+8. **審判が再現可能か**: fixture・command・合否条件があり、基準機性能とIME等の人間確認を自動試験から分離したか
+9. **読む前に識別できるか**: 主要状態を文字だけ/色だけで表さず、新規componentを既存のtheme・icon・spacingへ馴染ませたか

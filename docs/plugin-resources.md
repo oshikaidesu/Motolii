@@ -47,7 +47,7 @@
 - **GpuAssetCache(ホスト所有)**: 消費側プラグイン(主にLayerSource)が`prepare(gpu, asset) → GPU常駐表現`を実装し、ホストが**アセット内容ハッシュをキーに1回だけ**呼んでキャッシュする。renderには常駐表現のハンドルが渡る
 - 寿命・予算は[memory-model.md](memory-model.md)のVRAM予算+LRUに従う(M4のキャッシュ層と同じ台帳。キャッシュキー思想は既存の「ノードID×時間区間×パラメータハッシュ」と同型)
 
-点群の姿: `Importer(.ply/.laz/COPC → 八分木blob)` + `LayerSource(アセットハンドル + CompCamera → RGBAテクスチャ)` の2プラグイン。描画契約は既存のLayerSourcePluginのままでよい(F-3の「3D系LayerSourceはCompCameraを参照してRGBA化」と整合)。
+点群の`Layer Order`時の姿: `Importer(.ply/.laz/COPC → 八分木blob)` + `LayerSource(アセットハンドル + CompCamera → RGBAテクスチャ)` の2プラグイン。`Group Depth`等へ参加する場合は、RGBAへdepthを密輸せず、M5-P2Dで定めるHostのobject/world/depth参加境界へ同じ点群表現を供給する。既存LayerSource契約だけを全遮蔽ポリシーの唯一経路とはしない。
 
 ### D3. パラメータ語彙の予約: AssetRef
 
@@ -113,6 +113,17 @@ CompLookbehind {
 ### 6-3. 決定性の定義(ここが再生ヘッド依存との分水嶺)
 
 フィードバックは「**クリップ開始時刻を初期条件とする漸化式**」として定義する。これにより`render_frame(t, Quality)`は純関数のまま(素朴に計算すると高いだけ)で、順再生・チェックポイントは定義ではなく**最適化**になる。TD/AviUtl型の「スクラブすると結果が変わる」を構造的に排除する。Draftはチェックポイント間隔・リプレイ解像度を粗くしてよい(Draftの近似はB-4上もともと許容)。FINALは厳密リプレイ。
+
+非clear canvas型の蓄積描画は、この一般形の具体例として扱う:
+
+```text
+A₀ = transparent
+Aₙ = Composite(DecayOrTransform(Aₙ₋₁), Drawₙ)
+```
+
+`Drawₙ`はShapeScript等をone-shot実行して得た固定seed・固定stepの命令列で、JS runtimeはレンダへ常駐しない。`DecayOrTransform`が恒等で各draw命令を通常shapeの出現時刻へ畳んでもpixel意味が保てる場合は、フィードバックを使わずmaterializeする(安い力優先)。半透明の反復合成・blur・変形等で前出力そのものが必要な場合だけ、ホスト所有のFeedback stateへ昇格する。
+
+「画面全体を毎step更新しない」は意味論ではなく実行最適化である。Feedbackは論理的にはtarget surfaceを定義するが、実更新はK0のRoD/RoIを基礎にSCR-4でdamage伝播を定義して限定する。局所drawはdirty領域だけ、blur/transformはfootprint分だけ拡張し、global effectだけが全target更新へ退化する。チェックポイントtextureと中間結果はVRAM常駐のまま扱う。
 
 ### 6-4. v1の態度
 

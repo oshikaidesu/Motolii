@@ -2,7 +2,7 @@
 
 日付: 2026-07-14
 
-状態: **先例調査・設計仮説。仕様変更ではない**
+状態: **先例調査・設計仮説。仕様変更ではない**。本調査後の採否は[既知技術による処分決定](2026-07-14-motion-foundation-known-tech-disposition.md)を正本とする。
 
 対象: After Effects / AviUtl・拡張編集 / Cavalry / Autograph
 

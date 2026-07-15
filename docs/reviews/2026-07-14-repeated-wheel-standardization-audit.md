@@ -1,6 +1,6 @@
 # AE反復再発明プラグイン標準化監査(2026-07-14)
 
-状態: **設計レビュー。仕様変更は未承認**
+状態: **設計レビュー。仕様変更は未承認**。Relative Move、Effect Link、Duplicator/seedの採否は[2026-07-15決定](2026-07-15-relative-scope-duplicator-decision.md)を優先する。
 
 併読:
 
@@ -473,7 +473,7 @@ Blenderは[Delta Transforms](https://docs.blender.org/manual/en/latest/scene_lay
 
 - 通常drag: 現在時刻のPosition編集。Auto Key規則に従う
 - **Primary modifier+drag**: Relative Move。macOSでは`Command+drag`候補。Windows/Linuxの割当はshortcut表で確定する
-- ToolbarまたはCommand Paletteにも`Move Animation / 軌跡全体を移動`を置き、modifierだけの隠し機能にしない
+- ~~ToolbarまたはCommand Paletteにも`Move Animation / 軌跡全体を移動`を置く~~ — 後続決定で撤回。専用Tool/panelを増やさず、keymap可能なmodifier+dragとHUD/ghostだけに統一する
 - 操作中は現在オブジェクトだけでなくmotion path全体をghost表示し、全キーが同じΔで動くことを示す
 - HUDに`ΔX / ΔY`、3Dでは操作toolに応じて`ΔZ`を表示する。絶対Positionと混同させない
 - `Escape`で取消、pointer-upで確定する
@@ -752,14 +752,14 @@ Adjustment Layer相当は、`Group Composite`、`Backdrop Surface`、`Compositio
 
 | 優先 | 変更候補 | 先に必要なもの | 現時点の扱い |
 |---:|---|---|---|
-| 1 | Relative Move | D2 macro/merge、Canvas transform契約、反対側レビュー | M3仕様改訂候補 |
+| 1 | Relative Move | D2 macro/merge、Canvas transform契約 | **one-shot版をM3-U2fへ正式割当**。常設offsetだけPP-Gate待ち |
 | 2 | Timing Rail | D2 macro/merge、Timeline編集契約、反対側レビュー | 詳細案まで記録 |
-| 3 | Cloner/Effector | M2所有、M5評価/Depth、instance spike、反対側レビュー | 独立仕様改訂候補 |
-| 4 | Effect Scope | M2 Effect所有、M5処理段/flatten、反対側レビュー | 独立仕様改訂候補 |
+| 3 | Cloner/Effector | M2所有、M5評価/Depth、instance spike | 製品採用前にM5-P0I境界spike |
+| 4 | Effect Scope | M2 Effect所有、M5処理段/flatten | 三分類を決定。ExplicitSet/Backdrop schemaは独立仕様改訂待ち |
 | 5 | Text addressable spans | M5 P6 cluster mappingの審判 | first-party plugin要件候補 |
 | 6 | Anchor/Align/Distribute | M3 selection/bounds契約 | UI要件候補 |
 | 7 | Search/Filter/Selection | Workspace-session所有決定 | UI要件候補 |
-| 8 | Import/animated bounds | importとderived cacheの所有決定 | 監査待ち |
+| 8 | Import/animated bounds | importとderived cacheの所有決定 | M4-K0 RoD/RoI契約へ前倒し |
 | 9 | Path batch operations | shape/path選択モデル | 監査待ち |
 
 ここに挙げた`M3-U3e`等はレビュー内の仮称であり、仕様書の確定タスクIDではない。未決の所有境界を、それらしいデフォルトで埋めない。

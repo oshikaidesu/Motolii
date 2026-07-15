@@ -33,7 +33,7 @@ Advanced editor  ─┘
 ```
 
 - `Direct`: Canvas drag、shortcut、target click等の最短操作。
-- `Tool`: 奥行き展開、Stagger、Relative Move等、目的の名前を持つ操作。
+- `Tool`: 奥行き展開、Stagger等、目的の名前を持つ操作。Relative Moveは専用Toolでなくmodifier+drag gestureである。
 - `Advanced`: 評価列、明示scope、policy、数値を検査・編集する入口。
 
 3入口は同じDomain Intentまたは同じDocument意味へ正規化する。簡易UI専用field、Advanced専用コピー、隠れhelper objectを作らない。
@@ -99,15 +99,15 @@ M3のUI実装前に、最低限次の操作を同じ書式で台帳化する。
 
 | Intent | Direct | Tool | Advanced | Hostが保存する意味 | 禁止する補修 |
 |---|---|---|---|---|---|
-| 相対移動 | Command+drag | Relative Move | 対象key/補正方法を表示 | v1はD2 macroによる選択key差分。常設ModifierはPP-Gate待ち | Null、expression、隠れoffset channel |
+| 相対移動 | keymap modifier+Canvas drag | — | drag中HUD+motion path ghostのみ | **v1正式機能**: D2 macroによるConst/選択source全key差分。常設UI/Modifierなし | Null、expression、隠れoffset channel、専用Tool |
 | 追従 | targetをCanvasでclick | Follow | target ID、offset、評価順 | `DocParam::Follow`等の型付き参照 | layer名文字列、pick-whip式文字列 |
 | 反復 | sourceからdrag/create | Clone/Stagger | index、distribution、seed | Hostのinstance/context境界。具体表現はplugin可 | 大量layer、式コピー |
-| 局所effect | 対象Groupへdrop | Effect Scope | input/scope/output | 明示Group/Scope/Backdrop意味 | 「下全部」の無表示推論 |
+| 局所effect | Effect out→Layer stack inへdrag | Timeline Effect Link | definition/use、from/in、stack位置 | Owned=合成後1回、Explicit=共有recipeを各layerへ個別適用、Backdrop=Host入力+plugin処理 | 「下全部」の無表示推論、隣接依存、二重描画 |
 | 奥行き配置 | Z rail drag | 奥行き展開 | depth policy、participant、数値 | 通常transform + 明示policy | controller、auto group、Bake必須 |
 | key easing | 区間選択→preset | Easing popup | 補間型とparams | 区間`Interp` | valueAtTime式、暗黙近傍curve変更 |
 | plugin parameter | 自動panel | plugin preset | source/version/type/dependency | NodeDesc準拠params | custom UIでしか編集できない保存値 |
 
-この表の「常設Modifier」「汎用Element Domain」「永続Constraint Graph」は未決である。既存variantへ推測で焼かず、それぞれ独立レビューを通す。
+この表の「常設Modifier」「汎用Element Domain」「永続Constraint Graph」は未決である。既存variantへ推測で焼かず、それぞれ独立レビューを通す。一方、Relative Moveのone-shot版、Bounds/ROI最小契約、Scope三分類、Instance/Element spikeは[既知技術による処分決定](reviews/2026-07-14-motion-foundation-known-tech-disposition.md)に従い、未決事項と一括保留しない。
 
 ## 4. Param Pipeline Gate（PP-Gate）
 
@@ -184,13 +184,13 @@ G0の入力として次を確定する。
 |---|---|---|
 | Domain Intent | U0b/U0c | UI eventやSlint型を含まず、同じIntentをshortcut/button/Canvasから発行可能 |
 | Command正規化 | U2a/U2b | 入口違いで同じDocument意味、Undo 1回、Cancel変更ゼロ |
-| Conformance harness | U2c候補 | 代表操作を複数入口で実行し、hidden itemなし・serialize意味同値を検査 |
+| Conformance harness | U2c | 代表操作を複数入口で実行し、hidden itemなし・serialize意味同値を検査 |
 | semantic badge | U0e/U4a | key/Data/Link/plugin/scope/policyを文字だけ・色だけに頼らず識別 |
-| Advanced round-trip | U4c候補 | 畳む前後でserialize不変。Directで作った既存意味を検査・編集可能 |
+| Advanced round-trip | U4c | 畳む前後でserialize不変。Directで作った既存意味を検査・編集可能 |
 | plugin fallback | U4a | custom UIなしで全保存paramを編集可能 |
 | 操作性能 | U1c/U3a | action sequenceのp50/p95、UI非blocking、readbackなし |
 
-`G0-7 / U2c / U4c`は本書上の候補IDである。先行中のM3仕様改訂をcommitした後、依存・PR粒度・GR-UI割当を同時に仕様表へ採番するまで着手しない。
+`G0-7 / U2c / U4c`は[2026-07-14全層反映監査](reviews/2026-07-14-recent-concept-propagation-audit.md)を経てM3仕様の正式IDへ昇格した。個別候補機能の採用を意味せず、まず既存意味を同一入口へ正規化・検査するHost審判を実装する。
 
 ### M4 — 短い操作が再計算地獄を生まない
 

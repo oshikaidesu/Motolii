@@ -2,6 +2,8 @@
 
 ステータス: **採択済み設計レビュー**（2026-07-14ユーザー決定をM5へ反映）
 
+> **同日追補**: cameraはM5で追加する3D機能ではなく、全Compositionに常在するOutput FrameとしてM2-D1j/D1k/D3→M3-U1f/U2dへ前倒しした。2D objectは既定`z=0`で同じcameraを通る。camera/Stageの意味は[統一カメラ設計](2026-07-14-unified-stage-camera-design.md)、未反映の是正順は[全層反映監査](2026-07-14-recent-concept-propagation-audit.md)を優先する。本書のdepth policy、Depth Rail、Scale/Depth Move判定は維持する。
+
 対象: 「映像が主役なら、Z位置に合わせてレイヤーを自動整理すべきではないか」という疑問と、将来のレイヤー間深度遮蔽の置き場。
 
 ## 結論
