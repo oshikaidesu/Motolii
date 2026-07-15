@@ -216,7 +216,10 @@ pub fn log_report_summary(report: &PerfReport) {
     }
     eprintln!("external_bench_slots={}", report.external_bench_slots.len());
     for slot in report.external_bench_slots {
-        eprintln!("  slot {} env={} hint={}", slot.id, slot.env_var, slot.invoke_hint);
+        eprintln!(
+            "  slot {} env={} hint={}",
+            slot.id, slot.env_var, slot.invoke_hint
+        );
     }
 }
 
@@ -235,7 +238,10 @@ pub fn baseline_out_from_env() -> Option<PathBuf> {
     std::env::var_os(BASELINE_OUT_ENV).map(PathBuf::from)
 }
 
-pub fn write_baseline_json(path: impl AsRef<Path>, report: &PerfReport) -> Result<(), BaselineError> {
+pub fn write_baseline_json(
+    path: impl AsRef<Path>,
+    report: &PerfReport,
+) -> Result<(), BaselineError> {
     let path = path.as_ref();
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
