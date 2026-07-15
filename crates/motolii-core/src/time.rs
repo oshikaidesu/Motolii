@@ -113,17 +113,13 @@ impl RationalTime {
         let int_part: i128 = if int_s.is_empty() {
             0
         } else {
-            int_s
-                .parse()
-                .map_err(|_| RationalTimeError::Overflow)?
+            int_s.parse().map_err(|_| RationalTimeError::Overflow)?
         };
         let frac_len = frac_s.len();
         let frac_part: i128 = if frac_s.is_empty() {
             0
         } else {
-            frac_s
-                .parse()
-                .map_err(|_| RationalTimeError::Overflow)?
+            frac_s.parse().map_err(|_| RationalTimeError::Overflow)?
         };
         let den_pow = if frac_len == 0 {
             1i128
@@ -332,18 +328,14 @@ impl Fps {
 /// ffmpeg `-ss` 用: 目的フレームの半フレーム手前の秒文字列(小数6桁)。
 ///
 /// `frame > 0` のみ。境界の10進丸めがフレームをまたぐのを防ぐ(TM-4)。
-pub fn format_ffmpeg_seek_before_frame(
-    frame: i64,
-    fps: Fps,
-) -> Result<String, RationalTimeError> {
+pub fn format_ffmpeg_seek_before_frame(frame: i64, fps: Fps) -> Result<String, RationalTimeError> {
     if frame <= 0 {
         return Err(RationalTimeError::Overflow);
     }
     let frame_time = RationalTime::try_from_frame(frame, fps)?;
     let half_frame = RationalTime::try_new(
         fps.den(),
-        2i64
-            .checked_mul(fps.num())
+        2i64.checked_mul(fps.num())
             .ok_or(RationalTimeError::Overflow)?,
     )?;
     let seek = frame_time.try_sub(half_frame)?;
@@ -362,16 +354,12 @@ fn round_rational_to_i64(num: i128, den: i128) -> Result<i64, RationalTimeError>
     let den_u = den as u128;
     let floor = num_abs / den_u;
     let rem = num_abs % den_u;
-    let twice_rem = rem
-        .checked_mul(2)
-        .ok_or(RationalTimeError::Overflow)?;
+    let twice_rem = rem.checked_mul(2).ok_or(RationalTimeError::Overflow)?;
     let rounded_abs = if twice_rem < den_u {
         floor
     } else {
         // ちょうど半分もゼロから遠ざかる(f64::round 同型)
-        floor
-            .checked_add(1)
-            .ok_or(RationalTimeError::Overflow)?
+        floor.checked_add(1).ok_or(RationalTimeError::Overflow)?
     };
     let signed = if neg {
         -(i64::try_from(rounded_abs).map_err(|_| RationalTimeError::Overflow)?)
@@ -587,7 +575,10 @@ mod tests {
         let t = RationalTime::try_from_decimal_str("2.002000").unwrap();
         assert_eq!(t, rt(2002000, 1_000_000));
         assert_eq!(RationalTime::try_from_decimal_str(".5").unwrap(), rt(1, 2));
-        assert_eq!(RationalTime::try_from_decimal_str("-1.25").unwrap(), rt(-5, 4));
+        assert_eq!(
+            RationalTime::try_from_decimal_str("-1.25").unwrap(),
+            rt(-5, 4)
+        );
     }
 
     #[test]
