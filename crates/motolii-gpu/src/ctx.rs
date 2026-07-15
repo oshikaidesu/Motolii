@@ -36,6 +36,18 @@ pub fn required_features() -> wgpu::Features {
     wgpu::Features::empty()
 }
 
+/// DRS等で使うが全アダプタ必須ではないfeature(D5縮退規約)。
+pub fn optional_features() -> wgpu::Features {
+    wgpu::Features::TIMESTAMP_QUERY
+}
+
+/// 自動DRSが利用可能か(timestamp query非対応時は無効+ドロップ継続)。
+pub fn drs_available(device: &wgpu::Device) -> bool {
+    device
+        .features()
+        .contains(wgpu::Features::TIMESTAMP_QUERY)
+}
+
 /// コンポジタが最低限必要とするlimitの検証(第3回レビュー#2)。
 ///
 /// 「固定値で要求」だと弱いGPUでrequest_deviceが原因不明に失敗するため、

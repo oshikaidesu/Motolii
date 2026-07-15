@@ -856,6 +856,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "motolii-transport"
+version = "0.1.0"
+dependencies = [
+ "motolii-audio",
+ "motolii-core",
+ "motolii-gpu",
+ "motolii-testkit",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "moxcms"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

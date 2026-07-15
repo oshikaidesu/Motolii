@@ -12,6 +12,7 @@ mod convert;
 mod decode;
 mod device;
 mod error;
+mod latency;
 mod meter;
 mod mix;
 mod producer;
@@ -27,6 +28,7 @@ pub use decode::{
     decode_file_with_limits, decode_stream, decode_stream_with_limits,
 };
 pub use device::{negotiate_output, select_device_sample_rate, NegotiatedOutput, OutputStream};
+pub use latency::DeviceWaitLatency;
 pub use error::{AudioError, Result};
 pub use meter::{AudioMeter, ClipLatch, MeterSnapshot, CLIP_THRESHOLD};
 pub use mix::{mix_audio, MixReport, MixSource};
