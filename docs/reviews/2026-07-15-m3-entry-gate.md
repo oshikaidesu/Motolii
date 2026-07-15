@@ -50,25 +50,25 @@
 
 | ID | 内容 | 出典 | 完了条件 | 規模 |
 |---|---|---|---|---|
-| [ ] M3E-1 | **slint依存をuiクレートに限定**する依存方向CI(負例込み)。タイムライン/プレビュー描画はwgpuモジュールに置き、Ardour/YTK型の全域染みを構造的に拒否 | M3ガード4、[台帳](2026-07-12-M3-M4-gate-ledger.md) | [自動] ui以外の`slint`依存が走査で赤。許可リストはuiクレートのみ | 小 |
-| [ ] M3E-2 | **性能ハーネス枠**: 起動時間・アイドルメモリ・(将来)1080pベンチの計測受け皿。M3ガード2/10の数値審判の土台 | INF-2、台帳 | [自動] CIまたは`cargo test`でハーネスが実行され、ベースライン記録の口がある | 小〜中 |
+| [ ] M3E-1 | **slint依存をuiクレートに限定**する依存方向CI(負例込み)。タイムライン/プレビュー描画はwgpuモジュールに置き、Ardour/YTK型の全域染みを構造的に拒否 | M3ガード4、[台帳](2026-07-12-M3-M4-gate-ledger.md) | [自動] ui以外の`slint`依存が走査で赤。許可リストはuiクレートのみ | 小。**PR [#180](https://github.com/oshikaidesu/Motolii/pull/180)** (`f8167cd` / `slint_dep_policy`) — マージ後に `[x]` |
+| [ ] M3E-2 | **性能ハーネス枠**: 起動時間・アイドルメモリ・(将来)1080pベンチの計測受け皿。M3ガード2/10の数値審判の土台 | INF-2、台帳 | [自動] CIまたは`cargo test`でハーネスが実行され、ベースライン記録の口がある | 小〜中。**PR [#183](https://github.com/oshikaidesu/Motolii/pull/183)** (`e1b49e1` / `perf_harness`) — マージ後に `[x]` |
 | [x] M3E-3 | **操作列プロパティテストの系列版**の受け皿確認 — M2-D2単発版をU2/U3へ拡張する契約がM3仕様ガード7/U2完了条件に残っていること | M3ガード7 | [レビュー] M3仕様とU2発注書に完了条件が存在 | 仕様のみ。**充足**: `M3-ui-integration.md` U2完了条件 + ガード7(本PR) |
 
 ## B. U1/U5の前提機構(ゲート必須 — 共有デバイス初登場)
 
 | ID | 内容 | 出典 | 完了条件 | 規模 |
 |---|---|---|---|---|
-| [ ] M3E-4 | `GpuCtx`に**生成起源タグ**(Headless/UiShared)。`poll(Wait)`/`download_rgba`はUiSharedで型付き拒否 | GR-2 | [自動] UiSharedでの同期読み戻しがテストで拒否される | 小 |
-| [ ] M3E-5 | レンダループ毎フレーム`check_health()` + **デバイスコールバック所有者=コア**をM3「デバイスとスレッドの規約」4項目目として明文化 | GR-5 | [レビュー] M3仕様に4項目目がマージ済み。[自動] レンダ入口で`check_health`が呼ばれる | 小 |
-| [ ] M3E-6 | **`RenderedFrame`寿命契約**: 「次の`render_graph_cached`で無効」+ U1は表示前コピー(またはGR-1プール前倒し) | G-1、台帳 | [レビュー] M3仕様またはU1発注書に契約文が存在。[自動] 契約違反の負例テスト(連続フレームで同一バッファ上書きを検出) | 小〜中 |
-| [ ] M3E-7 | **Quality丸め規則** + 「正準aspectは常にFinalのdescから」明文化 | CQ-4 | [レビュー] 仕様またはレンダ契約文書に明文化 | 仕様のみ |
-| [ ] M3E-8 | **FrameReaderキャンセル** + killハンドル分離(U5「最新要求のみ」の前提) | GR-7、M3ガード8 | [自動] 古いシーク/読み出し要求のキャンセルテスト | 小〜中 |
+| [ ] M3E-4 | `GpuCtx`に**生成起源タグ**(Headless/UiShared)。`poll(Wait)`/`download_rgba`はUiSharedで型付き拒否 | GR-2 | [自動] UiSharedでの同期読み戻しがテストで拒否される | 小。**PR [#189](https://github.com/oshikaidesu/Motolii/pull/189)** (`44b1166` / `origin_guard`) — マージ後に `[x]` |
+| [ ] M3E-5 | レンダループ毎フレーム`check_health()` + **デバイスコールバック所有者=コア**をM3「デバイスとスレッドの規約」4項目目として明文化 | GR-5 | [レビュー] M3仕様に4項目目がマージ済み。[自動] レンダ入口で`check_health`が呼ばれる | 小。**PR [#187](https://github.com/oshikaidesu/Motolii/pull/187)** (`4d6d274`) — マージ後に `[x]` |
+| [ ] M3E-6 | **`RenderedFrame`寿命契約**: 「次の`render_graph_cached`で無効」+ U1は表示前コピー(またはGR-1プール前倒し) | G-1、台帳 | [レビュー] M3仕様またはU1発注書に契約文が存在。[自動] 契約違反の負例テスト(連続フレームで同一バッファ上書きを検出) | 小〜中。**PR [#186](https://github.com/oshikaidesu/Motolii/pull/186)** (`0e1c098`) — マージ後に `[x]` |
+| [ ] M3E-7 | **Quality丸め規則** + 「正準aspectは常にFinalのdescから」明文化 | CQ-4 | [レビュー] 仕様またはレンダ契約文書に明文化 | 仕様のみ。**PR [#188](https://github.com/oshikaidesu/Motolii/pull/188)** (`d7249b4` / `performance-model.md`) — マージ後に `[x]` |
+| [ ] M3E-8 | **FrameReaderキャンセル** + killハンドル分離(U5「最新要求のみ」の前提) | GR-7、M3ガード8 | [自動] 古いシーク/読み出し要求のキャンセルテスト | 小〜中。**PR [#185](https://github.com/oshikaidesu/Motolii/pull/185)** (`588e841` / `framereader_cancel`) — マージ後に `[x]` |
 
 ## C. 準恒久UX(ゲート必須 — 後付けだとハードコードが先に増える)
 
 | ID | 内容 | 出典 | 完了条件 | 規模 |
 |---|---|---|---|---|
-| [ ] M3E-9 | **入力マップ/ショートカットのスキーマ設計**(初日カスタマイズ可能=M3ガード5)。キーマップファイルの永続化方針を文書化 | GAP-6 | [レビュー] スキーマ草案またはM3仕様節がマージ済み。Documentスキーマへの焼き込みは別タスク | 仕様のみ |
+| [ ] M3E-9 | **入力マップ/ショートカットのスキーマ設計**(初日カスタマイズ可能=M3ガード5)。キーマップファイルの永続化方針を文書化 | GAP-6 | [レビュー] スキーマ草案またはM3仕様節がマージ済み。Documentスキーマへの焼き込みは別タスク | 仕様のみ。**PR [#181](https://github.com/oshikaidesu/Motolii/pull/181)** (`06bde9e` / `keymap-schema.md`) — 本PR(#179)後にrebase推奨。マージ後に `[x]` |
 
 ## 解消済み(台帳候補から落下 — 再掲しない)
 
@@ -88,7 +88,9 @@
 | Issue | 内容 | 推奨タイミング |
 |---|---|---|
 | [#56](https://github.com/oshikaidesu/Motolii/issues/56) | IME受け入れチェックリスト(M3ガード1) | **U1前推奨**。未了でもU0V/U2は可 |
-| [#57](https://github.com/oshikaidesu/Motolii/issues/57) | タイムライン1枚描画ベンチ「1,000クリップ+10万キー@60fps」(M3ガード2) | **U3前推奨** |
+| [#57](https://github.com/oshikaidesu/Motolii/issues/57) | タイムライン1枚描画ベンチ「1,000クリップ+10万キー@60fps」(M3ガード2) | **U3前推奨**。**PR [#178](https://github.com/oshikaidesu/Motolii/pull/178)** で llvmpipe 合格（実GPU再実測は U3 前推奨） |
+
+関連並走: D5骨格 **PR [#182](https://github.com/oshikaidesu/Motolii/pull/182)**（統合pending）、TM-4 **PR [#177](https://github.com/oshikaidesu/Motolii/pull/177)**、U0V **PR [#184](https://github.com/oshikaidesu/Motolii/pull/184)**（本PRを base）。
 
 ## 入場条件に含めない(M3期間中・別フェーズでよい)
 
