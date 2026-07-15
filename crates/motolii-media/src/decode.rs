@@ -1,10 +1,54 @@
 use std::io::Read;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use motolii_core::{CpuFrame, FrameDesc, PixelFormat, RationalTime};
 
 use crate::{read_child_stderr, MediaError, MediaInfo, Result};
+
+/// 進行中の読み出し/シーク要求を論理キャンセルするトークン。
+///
+/// cancel と kill は別系統: 本トークンはフラグのみ立てる。ブロッキング read を
+/// 解放するには [`FrameReaderKillHandle::kill`] を別途呼ぶ(U5「最新要求のみ」の協調)。
+#[derive(Clone, Debug)]
+pub struct FrameReaderCancel {
+    cancelled: Arc<AtomicBool>,
+}
+
+impl FrameReaderCancel {
+    /// この読み出し要求をキャンセル済みにする。
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Release);
+    }
+
+    /// キャンセル済みか。
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Acquire)
+    }
+}
+
+/// ffmpeg 子プロセスを外から終了させるハンドル(cancel とは分離)。
+#[derive(Clone, Debug)]
+pub struct FrameReaderKillHandle {
+    child: Arc<Mutex<Child>>,
+}
+
+impl FrameReaderKillHandle {
+    /// 子プロセスを kill し wait する。ブロッキング read 中のスレッド解放用。
+    pub fn kill(&self) -> Result<()> {
+        let mut child = self
+            .child
+            .lock()
+            .map_err(|_| MediaError::Ffmpeg("frame reader child lock poisoned".into()))?;
+        if let Err(e) = child.kill() {
+            return Err(MediaError::Io(e));
+        }
+        let _ = child.wait()?;
+        Ok(())
+    }
+}
 
 /// ffmpegサイドカーから**生YUV420p**フレームを順に読むリーダー。
 ///
@@ -16,7 +60,8 @@ use crate::{read_child_stderr, MediaError, MediaInfo, Result};
 /// を使うためフレーム正確。シーク先は「目的フレームの半フレーム手前」を指定することで、
 /// 秒数の10進文字列化による丸めがフレーム境界をまたぐことを防ぐ。
 pub struct FrameReader {
-    child: Child,
+    child: Arc<Mutex<Child>>,
+    cancel: FrameReaderCancel,
     desc: FrameDesc,
     frame_size: usize,
     fps: motolii_core::Fps,
@@ -60,8 +105,14 @@ impl FrameReader {
             _ => MediaError::Io(e),
         })?;
 
+        let child = Arc::new(Mutex::new(child));
+        let cancel = FrameReaderCancel {
+            cancelled: Arc::new(AtomicBool::new(false)),
+        };
+
         Ok(Self {
             child,
+            cancel,
             frame_size: desc.data_size(),
             desc,
             fps: info.fps,
@@ -78,20 +129,56 @@ impl FrameReader {
         self.next_frame_index
     }
 
-    /// 次のフレームを読む。ストリーム終端でNone。
+    /// 論理キャンセル用トークン(複製可。別スレッドから古い要求を打ち切る)。
+    pub fn cancel_token(&self) -> FrameReaderCancel {
+        self.cancel.clone()
+    }
+
+    /// 子プロセス kill 用ハンドル(cancel とは別系統)。
+    pub fn kill_handle(&self) -> FrameReaderKillHandle {
+        FrameReaderKillHandle {
+            child: Arc::clone(&self.child),
+        }
+    }
+
+    /// 次のフレームを読む。ストリーム終端でNone。キャンセル済みなら [`MediaError::Cancelled`]。
     pub fn next_frame(&mut self) -> Result<Option<CpuFrame>> {
-        let stdout = self.child.stdout.as_mut().expect("stdout piped");
+        if self.cancel.is_cancelled() {
+            return Err(MediaError::Cancelled);
+        }
+
+        let mut child = self
+            .child
+            .lock()
+            .map_err(|_| MediaError::Ffmpeg("frame reader child lock poisoned".into()))?;
+        let stdout = child.stdout.as_mut().ok_or_else(|| {
+            MediaError::Ffmpeg("frame reader stdout not piped".into())
+        })?;
+
         let mut data = vec![0u8; self.frame_size];
         let mut filled = 0;
         while filled < self.frame_size {
-            match stdout.read(&mut data[filled..])? {
-                0 => break,
-                n => filled += n,
+            if self.cancel.is_cancelled() {
+                return Err(MediaError::Cancelled);
+            }
+            match stdout.read(&mut data[filled..]) {
+                Ok(0) => break,
+                Ok(n) => filled += n,
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) => {
+                    if self.cancel.is_cancelled() {
+                        return Err(MediaError::Cancelled);
+                    }
+                    return Err(MediaError::Io(e));
+                }
             }
         }
+        if self.cancel.is_cancelled() {
+            return Err(MediaError::Cancelled);
+        }
         if filled == 0 {
-            self.check_exit()?;
-            return Ok(None);
+            let cancelled = self.cancel.is_cancelled();
+            return check_child_exit(&mut child, cancelled).map(|_| None);
         }
         if filled < self.frame_size {
             return Err(MediaError::Ffmpeg(format!(
@@ -103,25 +190,30 @@ impl FrameReader {
         self.next_frame_index += 1;
         Ok(Some(CpuFrame::new(self.desc, pts, data)))
     }
+}
 
-    fn check_exit(&mut self) -> Result<()> {
-        let mut err = String::new();
-        if let Some(stderr) = self.child.stderr.as_mut() {
-            err = read_child_stderr(stderr)?;
-        }
-        let status = self.child.wait()?;
-        if !status.success() {
-            return Err(MediaError::Ffmpeg(err));
-        }
-        Ok(())
+fn check_child_exit(child: &mut Child, cancelled: bool) -> Result<()> {
+    let mut err = String::new();
+    if let Some(stderr) = child.stderr.as_mut() {
+        err = read_child_stderr(stderr)?;
     }
+    let status = child.wait()?;
+    if !status.success() {
+        if cancelled {
+            return Err(MediaError::Cancelled);
+        }
+        return Err(MediaError::Ffmpeg(err));
+    }
+    Ok(())
 }
 
 impl Drop for FrameReader {
     fn drop(&mut self) {
         // 途中で読むのをやめた場合にゾンビ化させない
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        if let Ok(mut child) = self.child.lock() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     }
 }
 
@@ -169,5 +261,21 @@ mod tests {
     fn frame_reader_rejects_negative_start_frame() {
         let result = FrameReader::open("missing.mp4", &sample_info(), -1);
         assert!(matches!(result, Err(MediaError::InvalidStartFrame(-1))));
+    }
+
+    #[test]
+    fn cancel_token_and_kill_handle_are_independent() {
+        let cancel = FrameReaderCancel {
+            cancelled: Arc::new(AtomicBool::new(false)),
+        };
+        assert!(!cancel.is_cancelled());
+        cancel.cancel();
+        assert!(cancel.is_cancelled());
+        // kill ハンドルは cancel とは別型(コンパイル時に分離を保証)
+        let _ = FrameReaderKillHandle {
+            child: Arc::new(Mutex::new(
+                Command::new("true").spawn().expect("spawn true"),
+            )),
+        };
     }
 }
