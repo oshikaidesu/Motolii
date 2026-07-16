@@ -28,6 +28,7 @@ M2のDocument意味・migration・Undo・評価順・所有権は、後続フェ
 3. **Param Pipeline / Element Domain / Constraint Graph**: PR #176相当の案をM2外へ送るなら、現行`DocParam`の解釈を変えず追加的変更だけで導入できることをdecision PRで記録する。UI実装から先に既存fieldへ意味を焼かない
 4. 下記の未merge棚卸しを、対象ごとの小さいdecision/spec PRで採択・延期・棄却する。Draft文書や別ブランチの台帳を暗黙の発注根拠にしない
 5. **Project sidecar / session ownership**: D1dの親directory共有`.motolii`衝突とprocess間lock未規定をD1mで修復する。同一directory複数projectの隔離、canonical path alias排他、legacy layoutの非破壊移行を満たすまで保存基盤を閉じない
+6. **External revision**: provider名警告だけを完了根拠にせず、D1m後のD1nでmain/journal/catalogのtransient revision preconditionを実装する。検出した非協調変更をtyped rejectし、watch/mtimeを正本にせず、自動merge/overwriteを行わない
 
 ### 未merge棚卸しの初期集合
 
@@ -49,7 +50,7 @@ M2のDocument意味・migration・Undo・評価順・所有権は、後続フェ
 4. D3のmask/group/effect/transform/LookAt・Follow・Parent評価順を意味論ゴールデンで固定する。D3eは非隣接共有、Group合成後1回、preview/export同一、欠落typed errorを個別に審判する。CompCamera採択時は既定cameraで既存2D pixel不変を追加する
 5. 単一writerと`Arc<Document>`スナップショットを並行テストで確認し、UI/workerから直接書き換える公開口がない
 6. D1fの未知plugin保持・警告とD6のdegraded plugin書き出し拒否を結合し、未来versionが既知扱いへ迂回しないことを確認する
-7. ジャーナルの破損・途中書き込み・世代不一致を型付きで拒否し、復旧がDocument正本を上書きしないことを確認する。D1mで同一directoryの複数projectがsidecarを共有せず、別process/path aliasの同時read-write openを即時typed rejectする
+7. ジャーナルの破損・途中書き込み・世代不一致を型付きで拒否し、復旧がDocument正本を上書きしないことを確認する。D1mで同一directoryの複数projectがsidecarを共有せず、別process/path aliasの同時read-write openを即時typed rejectする。D1nでmain/journal/catalogの外部差替えを保存前に検出し、競合操作のwriteが0であることを確認する
 8. 意味論ゴールデン更新禁止ゲートと`cargo test --workspace`が全緑である
 
 ### 証跡の形式
@@ -63,7 +64,7 @@ M2のDocument意味・migration・Undo・評価順・所有権は、後続フェ
 | B command/ownership | 自動+レビュー | D2/D1l操作列、単一writer、snapshotのテスト名と公開API確認 |
 | B doc→render | 自動 | D3/D3e意味論ゴールデン。採択時はcamera審判 |
 | B unknown/export | 自動 | D1f→D6結合テスト名 |
-| B journal/session | 自動+レビュー | 破損・途中書き込み・世代不一致・復旧、project間隔離、subprocess lock、公開mutation API capabilityのテスト名/確認 |
+| B journal/session/revision | 自動+レビュー | 破損・途中書き込み・世代不一致・復旧、project間隔離、subprocess lock、公開mutation API capability、external revision conflict write=0のテスト名/確認 |
 | C 追補レビュー | レビュー | 固定パスの独立レビュー記録、P0/P1=0、各修復PR |
 | 全体 | 自動 | golden policy gateと`cargo test --workspace`のrun URL、commit SHA |
 
@@ -88,8 +89,9 @@ M2のDocument意味・migration・Undo・評価順・所有権は、後続フェ
 3. D3eを最新D1l型からIssue化・実装する
 4. #176相当を恒久面ごとに棚卸しし、CompCameraとParam Pipeline等の採否・延期を小さいdecision/spec PRで閉じる
 5. D1mを独立実装・レビューし、project-scoped sidecarとsession ownershipをmainへ到達させる
-6. M2追補実コードレビューを行い、発見事項を1件1PRで修復する
-7. 発効宣言とは別のM2基盤再締結PRで本書A〜Cの証跡表を埋め、ステータスを解除へ変更する
-8. その後にのみM3段階発注可PRを作る
+6. D1nを独立実装・レビューし、external revision preconditionをmainへ到達させる
+7. M2追補実コードレビューを行い、発見事項を1件1PRで修復する
+8. 発効宣言とは別のM2基盤再締結PRで本書A〜Cの証跡表を埋め、ステータスを解除へ変更する
+9. その後にのみM3段階発注可PRを作る
 
 順序を変える場合は本書の改訂PRを先に出す。並列化の都合だけで恒久面の依存を緩めない。
