@@ -76,7 +76,7 @@ D1e(マイグレーション)はこの規律の運用口。D1a時点でネスト
 
 ジャーナル/JSONから不正有理数を注入できないようにする。`RationalTime`/`Fps`/`TimeMap`はDeserialize時に検証または正規化する。
 
-1. **`RationalTime`**: (a)`den==0`拒否 (b)負の分母は符号を分子へ (c)既約化 (d)`0/x`→`0/1` (e)正規化後のi64溢れは`RationalTimeError::Overflow`(panicしない)。公開経路は`try_new`/`try_from_frame`/`try_to_frame_floor`/`try_add`/`try_sub`/`try_mul`/`try_neg`のみ(中間演算はchecked)
+1. **`RationalTime`**: (a)`den==0`拒否 (b)負の分母は符号を分子へ (c)既約化 (d)`0/x`→`0/1` (e)正規化後のi64溢れは`RationalTimeError::Overflow`(panicしない)。公開経路は`try_new`/`try_from_frame`/`try_to_frame_floor`/`try_to_frame_round`/`try_add`/`try_sub`/`try_mul`/`try_neg`のみ(中間演算はchecked)。**時刻→フレーム添字は `try_to_frame_floor` / `try_to_frame_round` のみ**(TM-4/#48)。ffmpeg `-ss` 秒文字列は `motolii_core::format_ffmpeg_seek_before_frame` のみ
 2. **`Fps`**: 正の`num`/`den`のみ。フィールドは非公開(正値を型の不変条件として固定)。構築は`try_new`とDeserializeのみ
 3. **`TimeMap.speed`**: M2では`speed_num > 0`かつ`speed_den > 0`のみ(ゼロ・負の速度は明示拒否。逆再生は将来拡張)。構築時・Deserialize時に**既約化**し、速度フィールドは**非公開**(正準コンストラクタ`try_new`限定 — Eq/Hashが意味同値と一致)。`try_map`は未検証入力でもpanicせず`TimeMapError`/`RationalTimeError`を返す。**`Fps`も既約化**。永続JSONキーは`overrun_mode`(短縮`overrun`は拒否)
 

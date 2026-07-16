@@ -19,5 +19,5 @@ pub use frame::{
     PixelFormat,
 };
 pub use quality::{Quality, SampleTier};
-pub use time::{Fps, FpsError, RationalTime, RationalTimeError};
+pub use time::{format_ffmpeg_seek_before_frame, Fps, FpsError, RationalTime, RationalTimeError};
 pub use time_map::{OverrunMode, TimeMap, TimeMapError};
