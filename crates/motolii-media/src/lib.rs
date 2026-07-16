@@ -17,7 +17,7 @@ mod probe;
 use std::io::Read;
 use std::process::Command;
 
-pub use decode::{read_frame_at, FrameReader};
+pub use decode::{read_frame_at, FrameReader, FrameReaderCancel, FrameReaderKillHandle};
 pub use encode::Encoder;
 pub use mux::{
     audio_codec_allows_stream_copy, choose_audio_encode_mode, mux_mixed_pcm, mux_soundtrack,
@@ -57,6 +57,8 @@ pub enum MediaError {
     FrameSizeMismatch { expected: usize, got: usize },
     #[error("ffmpeg failed: {0}")]
     Ffmpeg(String),
+    #[error("frame read cancelled")]
+    Cancelled,
 }
 
 pub type Result<T> = std::result::Result<T, MediaError>;
