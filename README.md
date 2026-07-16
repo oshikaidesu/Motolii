@@ -1,5 +1,7 @@
 # Motolii
 
+**[日本語: Motoliiの問題設定と長期方針](VISION.ja.md)** — After Effectsの重さ、AviUtlからの移行、ソフトごとのエフェクト再実装をどう捉えるか。
+
 <p align="center">
   <img src="docs/assets/exit_demo.gif" alt="Motolii M1 exit demo: a video background with a shape animated by cubic-bezier easing and exported to mp4" width="960">
 </p>

@@ -77,6 +77,13 @@ pub enum GraphError {
         "video stream ordinal {ordinal} is not supported yet (layer {layer}); only ordinal 0 is drawable in AG-1"
     )]
     UnsupportedVideoStreamOrdinal { layer: u64, ordinal: u32 },
+    /// D1l: EffectUse.definition_idがeffect_definitionsに無い(validateで通常防がれるが描画側も型付きで拒否)。
+    #[error("effect use {use_id} on layer {layer} references missing definition {definition_id}")]
+    MissingEffectDefinition {
+        layer: u64,
+        use_id: u64,
+        definition_id: u64,
+    },
 }
 
 /// ガード10: relative → absolute → same-name → hash。実在ファイルのみ返す。
@@ -348,8 +355,9 @@ impl<'a> GraphBuilder<'a> {
         // F-3: 子合成 → グループ effect stack → clipping mask。変形は継承済み。
         let mut tex = acc;
         for effect in &group.envelope.effects {
-            if effect.enabled {
-                tex = self.apply_effect(tex, effect, layer)?;
+            let def = self.resolve_effect_definition(effect, layer)?;
+            if def.enabled {
+                tex = self.apply_effect(tex, def, layer)?;
             }
         }
         if group.envelope.clipping_mask.enabled {
@@ -396,8 +404,9 @@ impl<'a> GraphBuilder<'a> {
         // F-3: source → effect stack → transform → clipping mask
         let mut tex = self.build_source(clip, st, layer)?;
         for effect in &clip.envelope.effects {
-            if effect.enabled {
-                tex = self.apply_effect(tex, effect, layer)?;
+            let def = self.resolve_effect_definition(effect, layer)?;
+            if def.enabled {
+                tex = self.apply_effect(tex, def, layer)?;
             }
         }
         tex = self.apply_world_transform(tex, world, layer)?;
@@ -555,16 +564,32 @@ impl<'a> GraphBuilder<'a> {
         Ok(out)
     }
 
+    /// D1l: `EffectUse.definition_id`→`Document.effect_definitions`を解決する。
+    fn resolve_effect_definition(
+        &self,
+        effect_use: &crate::schema::EffectUse,
+        layer: LayerId,
+    ) -> Result<&'a crate::schema::EffectDefinition, GraphError> {
+        self.doc.effect_definition(effect_use.definition_id).ok_or(
+            GraphError::MissingEffectDefinition {
+                layer: layer.get(),
+                use_id: effect_use.id.get(),
+                definition_id: effect_use.definition_id.get(),
+            },
+        )
+    }
+
     fn apply_effect(
         &mut self,
         input: TextureId,
-        effect: &crate::schema::EffectInstance,
+        definition: &crate::schema::EffectDefinition,
         layer: LayerId,
     ) -> Result<TextureId, GraphError> {
-        let resolved = self.resolve_plugin_params(&effect.plugin_id, &effect.params, layer)?;
+        let resolved =
+            self.resolve_plugin_params(&definition.plugin_id, &definition.params, layer)?;
         let out = self.alloc_id();
         self.steps.push(RenderStep::Plugin {
-            id: self.resolve_plugin_id(&effect.plugin_id)?,
+            id: self.resolve_plugin_id(&definition.plugin_id)?,
             params: resolved,
             inputs: vec![input],
             output: out,

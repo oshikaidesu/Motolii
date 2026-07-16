@@ -4,7 +4,11 @@ spikes/s1-slint/target
 spikes/vello-eval/target
 spikes/r9-preview/target
 spikes/ime-acceptance/target
+spikes/timeline-bench/target
 /.tools
+# Claude Codeの個人設定と隔離worktreeを誤コミットしない
+/.claude/settings.local.json
+/.claude/worktrees/
 # Rustワークスペースと無関係のNode実験(p5等)を誤コミットしない
 node_modules/
 package-lock.json

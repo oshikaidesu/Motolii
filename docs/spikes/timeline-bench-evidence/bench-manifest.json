@@ -1,0 +1,30 @@
+{
+  "ticket": "M3-guard-2",
+  "layer": 1,
+  "captured_at": "2026-07-15T06:35:00Z",
+  "adapter": {
+    "name": "llvmpipe (LLVM 20.1.2, 256 bits)",
+    "backend": "Vulkan",
+    "device_type": "Cpu"
+  },
+  "dataset": {
+    "clips": 1000,
+    "keyframes": 100000,
+    "tracks": 32
+  },
+  "viewport": [1920, 512],
+  "warmup_frames": 120,
+  "measured_frames": 600,
+  "target_fps": 60,
+  "median_frame_ms": 8.783,
+  "p95_frame_ms": 16.002,
+  "fps_median": 113.9,
+  "fps_p95": 62.5,
+  "pass": true,
+  "measurement": "headless wgpu render_to_texture; pan/zoom animated each frame; CPU viewport cull; instanced rect draw; wall-clock includes submit+poll",
+  "evidence": {
+    "png": "frame-sample.png",
+    "json": "bench-report.json"
+  },
+  "notes": "Cloud CI uses Mesa llvmpipe (software Vulkan). Discrete GPU is expected faster; pass margin on software renderer supports U3 direction."
+}

@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! AG-2完了条件: Document由来AudioProgram、MixProducer、seek非block、overlap不変。
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 

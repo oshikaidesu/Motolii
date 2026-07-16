@@ -233,7 +233,7 @@ pub fn inject_unapplicable_committed_edit(
     });
     save_project_with_journal(
         document_path,
-        &Document::new_v1(),
+        &Document::new_current(),
         &SaveProjectOptions {
             limits: *limits,
             journal_edit: Some(edit),

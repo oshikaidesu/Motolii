@@ -12,10 +12,12 @@ mod fs;
 mod project;
 mod recover;
 mod replay;
+mod v1_edit;
 mod wal;
 
 pub use catalog::{
-    load_catalog, GenerationCatalog, GenerationEntry, PinGenerationOptions, RotateOptions,
+    generation_path_for_document, load_catalog, GenerationCatalog, GenerationEntry,
+    PinGenerationOptions, RotateOptions,
 };
 pub use format::{
     journal_path_for_document, read_or_create_header, scan_journal, JournalFormatError,
@@ -36,5 +38,8 @@ pub use recover::{
     recover_project, recovered_document_path, restore_attempted_path, RecoveryError,
     RecoveryResult, RecoverySource,
 };
-pub use replay::{document_fingerprint, edit_payload, JournalEdit, ReplayFailure, ReplayOutcome};
+pub use replay::{
+    document_fingerprint, edit_payload, replay_from_base, JournalEdit, ReplayFailure,
+    ReplayOutcome, V1_EDIT_FORMAT_VERSION, V2_EDIT_FORMAT_VERSION,
+};
 pub use wal::{checkpoint, commit_edit, CheckpointOptions, WalError, WalSession};

@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! D1c-FU(#101, 監査S10): `ResourceLimits`をロード入口へ注入した境界/超過テスト。
 //!
 //! 「巨大入力拒否」は本物の巨大ファイルを作らず、小さい上限を注入して同じ拒否経路を
@@ -185,7 +187,7 @@ fn huge_string_field_is_rejected() {
 
 #[test]
 fn huge_effect_and_plugin_param_ids_are_rejected() {
-    use motolii_doc::{DocParam, EffectInstance};
+    use motolii_doc::{DocParam, EffectDefinition, EffectDefinitionId, EffectUse};
     use std::collections::BTreeMap;
 
     let limits = ResourceLimits {
@@ -201,13 +203,18 @@ fn huge_effect_and_plugin_param_ids_are_rejected() {
         let track_id = doc.track_ids.allocate("t").unwrap();
         let layer = doc.layers.allocate("l").unwrap();
         let mut envelope = ItemEnvelope::new(layer);
-        envelope.effects.push(EffectInstance {
+        let def_id = EffectDefinitionId::from_raw(2);
+        doc.effect_definitions.push(EffectDefinition::new(
+            def_id,
+            "core.filter.tint",
+            1,
+            true,
+            BTreeMap::from([(huge_id.clone(), DocParam::const_f64(0.5))]),
+            Default::default(),
+        ));
+        envelope.effects.push(EffectUse {
             id: motolii_doc::EffectId::from_raw(1),
-            plugin_id: "core.filter.tint".into(),
-            effect_version: 1,
-            enabled: true,
-            params: BTreeMap::from([(huge_id.clone(), DocParam::const_f64(0.5))]),
-            extra: Default::default(),
+            definition_id: def_id,
         });
         doc.tracks.push(Track {
             id: track_id,
