@@ -5,17 +5,37 @@
 //!
 //! **D1a**: スキーマ本体。**D1b**: 保存前`validate`(ガード1)。**D1c**: アトミック保存/読込。ジャーナルはD1d。
 //! **D8**: 単一writer + スナップショット配布の並行契約(型denyは`mut_document_deny`、完走は`d8_ownership`)。
+//! **D1c-FU(#101)**: `ResourceLimits`(入力上限、監査S10)と`OpenMode`(read/write互換分離、監査S14)。
+//! **D3**: Document→レンダグラフ変換(`graph` / `EvaluationTime`)。
+//! **D1e**: 旧形式migration(`migrate`)。loadは拒否のまま、変換は明示API。
 
+mod affine;
 mod asset;
+mod audio_edit;
 mod bpm;
+mod command;
 mod doc_keyframe;
 mod doc_value;
+mod duplicate;
+mod effect_prepare;
+mod eval_time;
+mod graph;
 mod ids;
+pub mod journal;
+mod legacy_effect_migrate;
+mod limits;
+mod migrate;
 mod param;
+pub mod param_eval;
 pub mod param_expect;
+pub mod pathgeom;
 mod persist;
+mod plugin_compat;
 mod schema;
+mod spatial_resolve;
+mod stable_id;
 mod track_id;
+mod undo;
 mod validate;
 
 use std::sync::Arc;
@@ -23,25 +43,70 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+pub use affine::{compose_local, compose_transform, resolve_transform, Affine2D};
 pub use asset::{Asset, AssetError, AssetId, AssetTable};
+pub use audio_edit::{build_import_clip_source, plan_detach_audio, ImportAvMode};
 pub use bpm::{Bpm, BpmError};
+pub use command::{
+    collect_layer_ids, layer_names_for_item, Command, CommandError, CommandKind, GestureId,
+    MergeKey, ParentLocator, PropertyId, ScalarPropertyId,
+};
 pub use doc_keyframe::{DocKeyframe, DocKeyframeError, DocKeyframeTrack};
 pub use doc_value::DocValue;
-pub use ids::{LayerId, LayerIdError, LayerIdTable};
-pub use param::{DocParam, LookAtAxis};
-pub use param_expect::{ExpectedValueType, ParamConstraints};
-pub use persist::{
-    detect_cloud_sync, load_document, load_document_bytes, save_document,
-    save_document_with_options, CloudSyncHint, PersistError, SaveAbortAfter, SaveOptions,
-    READER_VERSION,
+pub use duplicate::DuplicateError;
+pub use effect_prepare::{DraftDocParam, DraftKeyframe, EffectDefinitionDraft, PrepareError};
+pub use eval_time::{
+    EvaluationTime, D3_CLIP_LOCAL_TO_SOURCE_VIA_TIMEMAP, M1_SOURCE_PTS_EQUALS_TIMELINE,
 };
+pub use graph::{
+    build_document_frame_graph, resolve_asset_path, DocumentFrameGraph, GraphError, VideoSlot,
+    CLEAR_LAYER_SOURCE, RECT_LAYER_SOURCE,
+};
+pub use ids::{LayerId, LayerIdError, LayerIdTable};
+pub use journal::{
+    checkpoint_with_fault_plan, inject_bad_checksum_at_last_frame, inject_corrupt_journal_tail,
+    inject_salt_mismatch_frame, inject_unapplicable_committed_edit, load_catalog, open_project,
+    open_project_with_limits, save_project_with_journal, DurabilityStage, FaultPlan, FsOpKind,
+    GenerationCatalog, GenerationEntry, JournalEdit, JournalRecordKind, JournalScanStop,
+    OpenProjectOutcome, PinGenerationOptions, ProjectError, RecordingFs, RecoveryError,
+    RecoverySource, RotateOptions, SaveProjectOptions, StdFs, WalError, WalSession,
+};
+pub use limits::{ResourceLimitError, ResourceLimits};
+pub use migrate::{
+    bump_min_reader_for_nest_schema_change, count_document, legacy_timemap_source, migrate_bytes,
+    migrate_bytes_with_limits, migrate_document_file, migrate_document_file_with_limits,
+    modern_timemap_source, semantic_fingerprint, DocumentCounts, MigrateError, MigrateFileOptions,
+    MigrateFileResult, MigrationReport, SemanticFingerprint, BACKUP_SUFFIX,
+    LATEST_DOCUMENT_VERSION,
+};
+pub use param::{DocParam, LookAtAxis};
+pub use param_eval::{eval_look_at_rotation, look_at_angle, ParamEvalError, ResolvedLayerParams};
+pub use param_expect::{DocPluginKind, ExpectedValueType, KnownPluginInfo, ParamConstraints};
+pub use pathgeom::PathOpError;
+pub use persist::{
+    check_migration_allowed, classify_open_mode, detect_cloud_sync, load_document,
+    load_document_bytes, load_document_bytes_with_limits, load_document_with_limits, save_document,
+    save_document_with_options, CloudSyncHint, OpenMode, OpenedDocument, PersistError,
+    SaveAbortAfter, SaveOptions, READER_VERSION, WRITER_VERSION,
+};
+pub use plugin_compat::{PluginDegradation, PluginOpenWarning};
 pub use schema::{
-    BlendMode, Clip, ClipSource, ClippingMaskSettings, Composition, CompositionError,
-    EffectInstance, Group, ItemEnvelope, MaskMode, PathOp, Soundtrack, SoundtrackError,
-    StandardShape, Track, TrackItem, Transform2D, TrimMode, VectorContent, VectorRecipe,
+    asset_components_require_newer_reader, AudioComponent, AudioOutOfRange, BlendMode, Clip,
+    ClipSource, ClippingMaskSettings, CompositeOrder, Composition, CompositionError,
+    EffectDefinition, EffectInstance, EffectUse, Group, ItemEnvelope, LineJoin, MaskMode, PathOp,
+    PointType, Soundtrack, SoundtrackError, StandardShape, StreamKind, StreamSelector, Track,
+    TrackItem, Transform2D, TrimMode, VectorContent, VectorRecipe, VideoComponent,
+};
+pub use spatial_resolve::resolve_document_spaces;
+pub use stable_id::{
+    EffectDefinitionId, EffectId, KeyframeId, StableIdError, StableIdReservation, StableIdSeq,
 };
 pub use track_id::{TrackId, TrackIdError, TrackIdTable};
-pub use validate::DocumentError;
+pub use undo::{Macro, UndoError, UndoHistory, UndoLimit};
+pub use validate::{
+    DocumentError, MIN_READER_VERSION_FOR_ASSET_COMPONENTS,
+    MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
+};
 
 fn default_min_reader_version() -> u32 {
     1
@@ -67,16 +132,44 @@ pub struct Document {
     pub track_ids: TrackIdTable,
     #[serde(default)]
     pub tracks: Vec<Track>,
+    /// EffectUse / EffectDefinition / KeyframeId 共有カウンタ(A8 / D1l)。
+    #[serde(default)]
+    pub next_stable_id: StableIdSeq,
+    /// D1l: 共有Effect recipe台帳。Useから参照。orphan(参照0)を許可する。
+    #[serde(default)]
+    pub effect_definitions: Vec<EffectDefinition>,
     /// 未知キー保持(unknown-keys roundtrip)。
     #[serde(default, flatten)]
     pub extra: Map<String, Value>,
 }
 
 impl Document {
+    /// 現行writerが新しく作るDocumentの唯一の生成口。
+    pub fn new_current() -> Self {
+        Self::empty_at_version(
+            persist::WRITER_VERSION,
+            validate::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
+        )
+    }
+
+    /// 旧版fixture・明示migration専用。製品の新規作成には`new_current`を使う。
+    ///
+    /// ```compile_fail
+    /// #![deny(deprecated)]
+    /// let _ = motolii_doc::Document::new_v1();
+    /// ```
+    #[deprecated(
+        since = "0.1.0",
+        note = "legacy/migration fixtures only; product code must use Document::new_current()"
+    )]
     pub fn new_v1() -> Self {
+        Self::empty_at_version(1, 1)
+    }
+
+    fn empty_at_version(version: u32, min_reader_version: u32) -> Self {
         Self {
-            version: 1,
-            min_reader_version: 1,
+            version,
+            min_reader_version,
             composition: Composition::new_v1(),
             bpm: Bpm::DEFAULT,
             soundtrack: None,
@@ -84,8 +177,65 @@ impl Document {
             layers: LayerIdTable::new(),
             track_ids: TrackIdTable::new(),
             tracks: Vec::new(),
+            next_stable_id: StableIdSeq::new(),
+            effect_definitions: Vec::new(),
             extra: Map::new(),
         }
+    }
+
+    pub fn effect_definition(&self, id: EffectDefinitionId) -> Option<&EffectDefinition> {
+        self.effect_definitions.iter().find(|d| d.id == id)
+    }
+
+    pub fn effect_definition_mut(
+        &mut self,
+        id: EffectDefinitionId,
+    ) -> Option<&mut EffectDefinition> {
+        self.effect_definitions.iter_mut().find(|d| d.id == id)
+    }
+
+    pub fn effect_use_count(&self, definition_id: EffectDefinitionId) -> usize {
+        self.effect_use_ids(definition_id).len()
+    }
+
+    pub fn effect_use_ids(&self, definition_id: EffectDefinitionId) -> Vec<EffectId> {
+        fn collect_in_items(
+            items: &[TrackItem],
+            definition_id: EffectDefinitionId,
+            out: &mut Vec<EffectId>,
+        ) {
+            for item in items {
+                match item {
+                    TrackItem::Clip(clip) => {
+                        for use_ in &clip.envelope.effects {
+                            if use_.definition_id == definition_id {
+                                out.push(use_.id);
+                            }
+                        }
+                    }
+                    TrackItem::Group(group) => {
+                        for use_ in &group.envelope.effects {
+                            if use_.definition_id == definition_id {
+                                out.push(use_.id);
+                            }
+                        }
+                        collect_in_items(&group.children, definition_id, out);
+                    }
+                }
+            }
+        }
+        let mut out = Vec::new();
+        for track in &self.tracks {
+            collect_in_items(&track.items, definition_id, &mut out);
+        }
+        out
+    }
+
+    pub fn find_effect_use(&self, layer: LayerId, use_id: EffectId) -> Option<&EffectUse> {
+        crate::command::find_envelope(self, layer)?
+            .effects
+            .iter()
+            .find(|u| u.id == use_id)
     }
 }
 
@@ -97,16 +247,120 @@ pub enum WriterMessage {
 }
 
 /// ドキュメントの唯一の書き手。`&mut Document`を外部に漏らさない。
+///
+/// D2: `Command`の適用は必ず`apply_command`(内部でUndoHistoryへ積む)経由。
+/// `edit`/`apply`は移行済み呼び出し元のための足場であり、undo履歴には積まれない
+/// (選択/hover/IME等のUI状態や、Command化されていない旧経路専用 — 実装ガード5)。
+///
+/// D1l B-3: Effect identity 採番の正規経路は `prepare_*` のみ。旧 allocate API は公開されない:
+/// ```compile_fail
+/// # fn main() {
+/// let mut w = motolii_doc::DocumentWriter::new(motolii_doc::Document::new_current());
+/// let _ = w.allocate_effect_id();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// let mut w = motolii_doc::DocumentWriter::new(motolii_doc::Document::new_current());
+/// let _ = w.allocate_effect_definition_id();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// let mut w = motolii_doc::DocumentWriter::new(motolii_doc::Document::new_current());
+/// let _ = w.allocate_unique_effect_pair();
+/// # }
+/// ```
+///
+/// Draft 型は永続化できない(serde 無し):
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::EffectDefinitionDraft;
+/// fn _serialize(d: &EffectDefinitionDraft) -> impl serde::Serialize + '_ { d }
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::DraftDocParam;
+/// fn _serialize(d: &DraftDocParam) -> impl serde::Serialize + '_ { d }
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::DraftKeyframe;
+/// fn _serialize(d: &DraftKeyframe) -> impl serde::Serialize + '_ { d }
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::EffectDefinitionDraft;
+/// fn _deserialize<T: for<'de> serde::Deserialize<'de>>() {}
+/// _deserialize::<EffectDefinitionDraft>();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::DraftDocParam;
+/// fn _deserialize<T: for<'de> serde::Deserialize<'de>>() {}
+/// _deserialize::<DraftDocParam>();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::DraftKeyframe;
+/// fn _deserialize<T: for<'de> serde::Deserialize<'de>>() {}
+/// _deserialize::<DraftKeyframe>();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::EffectDefinitionDraft;
+/// fn _owned<T: serde::de::DeserializeOwned>() {}
+/// _owned::<EffectDefinitionDraft>();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::DraftDocParam;
+/// fn _owned<T: serde::de::DeserializeOwned>() {}
+/// _owned::<DraftDocParam>();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::DraftKeyframe;
+/// fn _owned<T: serde::de::DeserializeOwned>() {}
+/// _owned::<DraftKeyframe>();
+/// # }
+/// ```
 #[derive(Debug)]
 pub struct DocumentWriter {
     doc: Document,
     /// 編集世代。決定性テスト・無効化伝播の席(監査F-8)。
     pub revision: u64,
+    undo: UndoHistory,
+    /// gesture_id発行カウンタ。UI側の操作単位ごとに`begin_gesture`で1つ取る
+    /// (Documentスキーマには入れない実行時のみの値 — #103⑨)。
+    next_gesture: u64,
 }
 
 impl DocumentWriter {
     pub fn new(doc: Document) -> Self {
-        Self { doc, revision: 0 }
+        Self::with_undo_limits(doc, UndoLimit::Unlimited, UndoLimit::Unlimited)
+    }
+
+    /// live/再起動後で別々のUndo深さ上限を設定して構築する(残小項目【決定】2026-07-13)。
+    pub fn with_undo_limits(
+        doc: Document,
+        live_limit: UndoLimit,
+        restart_limit: UndoLimit,
+    ) -> Self {
+        Self {
+            doc,
+            revision: 0,
+            undo: UndoHistory::new(live_limit, restart_limit),
+            next_gesture: 0,
+        }
     }
 
     pub fn snapshot(&self) -> Arc<Document> {
@@ -115,13 +369,13 @@ impl DocumentWriter {
 
     /// 編集はクロージャ経由のみ。戻り値なし — 参照を外に返せない。
     ///
-    /// D2で`apply(Command)`に置換される足場。呼び出し追加禁止。
+    /// undo履歴には積まれない旧来経路。Command化された操作は`apply_command`を使う。
     pub fn edit(&mut self, f: impl FnOnce(&mut Document)) {
         f(&mut self.doc);
         self.revision = self.revision.wrapping_add(1);
     }
 
-    /// バックグラウンド成果の適用。D2でメッセージ→Command変換に置換する。
+    /// バックグラウンド成果の適用。undo履歴には積まれない(UI都合の非可逆反映)。
     pub fn apply(&mut self, msg: WriterMessage) {
         match msg {
             WriterMessage::SetBpm(bpm) => self.doc.bpm = bpm,
@@ -129,9 +383,128 @@ impl DocumentWriter {
         self.revision = self.revision.wrapping_add(1);
     }
 
+    /// 新しいgesture(1操作単位)を開始し、そのIDを返す。以後このIDで積んだcommandは
+    /// 同一gestureの間、merge key(S18)が一致する限り1つのmacroへ畳まれる(#103⑨)。
+    pub fn begin_gesture(&mut self) -> GestureId {
+        let id = GestureId::from_raw(self.next_gesture);
+        self.next_gesture = self.next_gesture.wrapping_add(1);
+        id
+    }
+
+    /// atomic command(実装ガード5: 決定済みの値)を適用し、undo履歴へ積む。
+    /// 単一writer境界(このメソッドだけがDocumentを書き換える)。
+    pub fn apply_command(
+        &mut self,
+        gesture: GestureId,
+        command: Command,
+    ) -> Result<(), CommandError> {
+        self.undo.push(&mut self.doc, gesture, command)?;
+        self.revision = self.revision.wrapping_add(1);
+        Ok(())
+    }
+
+    pub fn can_undo(&self) -> bool {
+        self.undo.can_undo()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        self.undo.can_redo()
+    }
+
+    pub fn undo_len(&self) -> usize {
+        self.undo.undo_len()
+    }
+
+    pub fn redo_len(&self) -> usize {
+        self.undo.redo_len()
+    }
+
+    /// 直前のgesture(1 macro分)を丸ごと取り消す。
+    pub fn undo(&mut self) -> Result<(), UndoError> {
+        self.undo.undo(&mut self.doc)?;
+        self.revision = self.revision.wrapping_add(1);
+        Ok(())
+    }
+
+    /// 直前にundoしたgestureを丸ごと再適用する。
+    pub fn redo(&mut self) -> Result<(), UndoError> {
+        self.undo.redo(&mut self.doc)?;
+        self.revision = self.revision.wrapping_add(1);
+        Ok(())
+    }
+
+    /// `LayerId`を新規発行する(非再利用)。Command構築前の下準備用。
+    /// 台帳エントリも作る。`AddTrackItem`へ渡す場合は同じ名前を`layer_names`へ含め、
+    /// undo時に台帳から外せるようにする。エントリ無しの予約だけなら`reserve_layer_id`。
+    pub fn allocate_layer_id(
+        &mut self,
+        display_name: impl Into<String>,
+    ) -> Result<LayerId, LayerIdError> {
+        self.doc.layers.allocate(display_name)
+    }
+
+    /// `LayerId`を予約する(カウンタのみ進める。台帳エントリは作らない)。
+    /// エントリは`AddTrackItem.layer_names`のapplyで載せる。
+    pub fn reserve_layer_id(&mut self) -> Result<LayerId, LayerIdError> {
+        self.doc.layers.reserve()
+    }
+
+    /// `KeyframeId`を新規発行する(A8、非再利用)。同上。
+    pub fn allocate_keyframe_id(&mut self) -> Result<KeyframeId, StableIdError> {
+        let id = self.doc.next_stable_id.allocate()?;
+        self.bump_versions_for_stable_ids();
+        Ok(KeyframeId::from_raw(id))
+    }
+
+    fn bump_versions_for_stable_ids(&mut self) {
+        let floor = validate::MIN_READER_VERSION_FOR_STABLE_IDS;
+        self.doc.min_reader_version = self.doc.min_reader_version.max(floor);
+        self.doc.version = self.doc.version.max(floor);
+    }
+
+    /// `source`のsubtreeを複製し、直後に挿入するcommandを1 gestureとして適用する
+    /// (「duplicate/paste時: subtree内参照は新ID再写像、外向き参照は維持」)。
+    pub fn duplicate_track_item(&mut self, source: LayerId) -> Result<GestureId, DuplicateError> {
+        let command = duplicate::duplicate_track_item(&mut self.doc, source)?;
+        let gesture = self.begin_gesture();
+        self.undo.push(&mut self.doc, gesture, command)?;
+        self.revision = self.revision.wrapping_add(1);
+        Ok(gesture)
+    }
+
+    /// 読み取り専用: コマンド構築側が現在の`ItemEnvelope`を読むためのヘルパ。
+    pub fn find_envelope(&self, target: LayerId) -> Option<&ItemEnvelope> {
+        command::find_envelope(&self.doc, target)
+    }
+
     /// 保存前検証。失敗してもwriter内部のDocumentは不変(検証のみ — ガード1)。
     pub fn validate(&self) -> Result<(), DocumentError> {
         self.doc.validate()
+    }
+
+    /// D1l B-3: 新 Use+Definition を counter clone 上で準備する。成功・失敗とも live Document 不変。
+    pub fn prepare_create_effect(
+        &self,
+        target: LayerId,
+        index: usize,
+        draft: EffectDefinitionDraft,
+    ) -> Result<Command, PrepareError> {
+        effect_prepare::prepare_create_effect(&self.doc, target, index, draft)
+    }
+
+    /// D1l B-3: 既存 Definition へ新 Use を準備する。
+    pub fn prepare_link_effect_use(
+        &self,
+        target: LayerId,
+        index: usize,
+        definition_id: EffectDefinitionId,
+    ) -> Result<Command, PrepareError> {
+        effect_prepare::prepare_link_effect_use(&self.doc, target, index, definition_id)
+    }
+
+    /// D1l B-3: 対象 Use の Definition をローカル複製する。
+    pub fn prepare_copy_local_effect(&self, use_id: EffectId) -> Result<Command, PrepareError> {
+        effect_prepare::prepare_copy_local_effect(&self.doc, use_id)
     }
 }
 
@@ -141,6 +514,7 @@ pub fn render_with_snapshot(doc: &Arc<Document>) -> u32 {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use motolii_core::RationalTime;

@@ -1,9 +1,11 @@
+#![allow(deprecated)]
+
 //! D1i-1: VectorRecipe 構造移動と旧 path_ops 拒否。
 
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
-    Clip, ClipSource, DocParam, Document, DocumentError, ItemEnvelope, PathOp, StandardShape,
-    Track, TrackItem, TrimMode, VectorContent, VectorRecipe,
+    Clip, ClipSource, DocParam, Document, DocumentError, ItemEnvelope, LineJoin, PathOp,
+    StandardShape, Track, TrackItem, TrimMode, VectorContent, VectorRecipe,
 };
 use serde_json::json;
 
@@ -19,7 +21,7 @@ fn valid_minimal_raster() -> Document {
             start: RationalTime::ZERO,
             duration: RationalTime::try_new(5, 1).unwrap(),
             time_map: TimeMap::default(),
-            source: ClipSource::Asset { asset },
+            source: ClipSource::asset_video_only(asset),
         })],
     });
     doc
@@ -37,6 +39,8 @@ fn vector_recipe_roundtrip() {
         modifiers: vec![
             PathOp::Offset {
                 distance: DocParam::const_f64(0.01),
+                line_join: LineJoin::Miter,
+                miter_limit: 4.0,
             },
             PathOp::Trim {
                 start: DocParam::const_f64(0.0),
@@ -54,9 +58,7 @@ fn vector_recipe_roundtrip() {
 #[test]
 fn raster_clip_has_no_modifiers_field() {
     // 型レベル: Asset/Plugin に modifiers は無い。コンパイルできることが証拠。
-    let _ = ClipSource::Asset {
-        asset: motolii_doc::AssetId::from_raw(0),
-    };
+    let _ = ClipSource::asset_video_only(motolii_doc::AssetId::from_raw(0));
     let doc = valid_minimal_raster();
     assert!(doc.validate().is_ok());
     let v = serde_json::to_value(&doc).unwrap();
@@ -151,6 +153,8 @@ fn validate_rejects_video_as_svg_asset() {
                     content: VectorContent::SvgAsset { asset: video },
                     modifiers: vec![PathOp::Offset {
                         distance: DocParam::const_f64(0.01),
+                        line_join: LineJoin::Miter,
+                        miter_limit: 4.0,
                     }],
                 },
             },

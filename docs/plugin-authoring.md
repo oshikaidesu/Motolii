@@ -35,6 +35,13 @@ Motoliiの長期の北極星は、映像表現を特定projectの手順から切
 - 「何でもFilterに詰める」は禁止(G-2)。迷ったら種別を増やすのではなく、既存種別に収まるか見直す。
 - 予約種別(v1.x以降、口のみ): `Simulation`(逐次状態シミュレーション。[simulation-model.md](simulation-model.md))、`ScriptWasm`(v2)。
 
+## 1.5. UIは書かない(v1)
+
+**v1のプラグイン公開契約にカスタムUIは無い。** ホストが`NodeDesc.params`からプロパティパネルを自動生成する(M3 U4)。`.slint`同梱・wgpu描画パネル・独自ウィジェットは契約外 — 書いてもホストはロードしない。判定: [reviews/2026-07-12-plugin-ui-v1-boundary.md](reviews/2026-07-12-plugin-ui-v1-boundary.md)。
+
+- パラメータは`ParamDef`で足りる粒度に抑える(スライダー/カラー等の自動生成で操作可能であること)
+- 将来カスタムUIが解凍されても、**自動生成パネルだけで全パラメータを操作できること**が不変条件
+
 ## 2. 必須メタデータ(`NodeDesc`)
 
 すべてのプラグインは `desc()` で次を返す。欠けたらレビュー却下。
@@ -156,6 +163,7 @@ ParamDriverは`build_track`で`DataTrack`を返すだけ。ピクセルに触ら
 - [ ] 参照実装またはゴールデン/単体テストがある
 - [ ] **純関数**: 同じ`t`+入力で2回呼んでも同一出力(`motolii_testkit::purity::assert_filter_pure` / `assert_param_driver_pure`)
 - [ ] 表示名が「意図単位」になっている
+- [ ] カスタムUI(.slint / wgpuパネル / 独自ウィジェット)を製品コードに含めていない
 
 ## 8. まだ凍結していない口(触らない / 予約のみ)
 
@@ -173,3 +181,4 @@ ParamDriverは`build_track`で`DataTrack`を返すだけ。ピクセルに触ら
 - `NodeDesc`の時間フットプリント宣言(前後フレーム/サブフレームサンプル。F-12) — 型`TemporalFootprint`と**`RenderCtx::temporal_footprint`口はM2E-7で予約**。窓テクスチャ解決はホスト側(未配線)
 - `SimulationPlugin` trait+StateTrack(F-12。`PluginKind::Simulation`はenum予約済み。traitシグネチャは[simulation-model.md](simulation-model.md)§3.2の叩き台を解凍手続きで確定)
 - **Backdrop input** — 画像処理はFilter/Composite pluginでよいが、timeline走査・「下のlayer」推論は禁止。Hostが評価地点の合成済みtextureを型付き入力として渡す口は[2026-07-15決定](reviews/2026-07-15-relative-scope-duplicator-decision.md)後も未凍結であり、scope/migration/cache key/循環拒否を同時に解凍するまで追加しない
+- **カスタムプラグインUI** — `.slint`実行時ロード / wgpu自由描画 / 宣言レイアウト / ギズモ。v1公開境界外([plugin-ui-v1-boundary](reviews/2026-07-12-plugin-ui-v1-boundary.md)。解凍はv1.x/v2)

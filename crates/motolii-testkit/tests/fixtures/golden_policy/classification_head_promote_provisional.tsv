@@ -1,0 +1,3 @@
+# head: provisional → semantic 昇格(許可経路)
+semantic	crates/motolii-testkit/tests/fixtures/golden_policy/semantic_sample.txt
+semantic	crates/motolii-testkit/tests/fixtures/golden_policy/provisional_with_marker.txt

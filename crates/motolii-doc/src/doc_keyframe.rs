@@ -5,9 +5,10 @@
 use serde::{Deserialize, Serialize};
 
 use motolii_core::RationalTime;
-use motolii_eval::Interp;
+use motolii_eval::{Interp, Keyframe, KeyframeTrack, Value as EvalValue};
 
 use crate::doc_value::DocValue;
+use crate::stable_id::KeyframeId;
 
 #[derive(Debug, Clone, thiserror::Error, PartialEq)]
 pub enum DocKeyframeError {
@@ -21,6 +22,9 @@ pub enum DocKeyframeError {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DocKeyframe {
+    /// document-local安定ID(A8)。時刻編集で不変、複製時は新規採番(D2)。
+    /// 旧形式(id無し)は拒否 — 変換はD1e(D1g/D1i-1と同型の方針)。
+    pub id: KeyframeId,
     pub t: RationalTime,
     pub value: DocValue,
     pub interp: Interp,
@@ -63,17 +67,57 @@ impl DocKeyframeTrack {
         &self.keys
     }
 
-    pub fn validate(&self) -> Result<(), DocKeyframeError> {
-        for window in self.keys.windows(2) {
-            if window[0].t >= window[1].t {
-                return Err(DocKeyframeError::UnsortedOrDuplicateKeys);
-            }
-        }
-        for key in &self.keys {
-            validate_interp(&key.interp)?;
-        }
-        Ok(())
+    pub fn get_by_id(&self, id: KeyframeId) -> Option<&DocKeyframe> {
+        self.keys.iter().find(|k| k.id == id)
     }
+
+    /// idで1件削除する(コマンド層のキーフレーム削除で使用。時刻は不変条件維持に無関係)。
+    pub fn remove_by_id(&mut self, id: KeyframeId) -> Option<DocKeyframe> {
+        let idx = self.keys.iter().position(|k| k.id == id)?;
+        Some(self.keys.remove(idx))
+    }
+
+    pub fn validate(&self) -> Result<(), DocKeyframeError> {
+        validate_keyframe_times_and_interp(
+            self.keys.iter().map(|k| k.t),
+            self.keys.iter().map(|k| &k.interp),
+        )
+    }
+
+    /// D3: 評価層へ落として補間する(恒久面は DocValue のまま)。
+    pub fn eval(&self, t: RationalTime) -> EvalValue {
+        let mut track = KeyframeTrack::new();
+        for key in &self.keys {
+            track.insert(Keyframe {
+                t: key.t,
+                value: key.value.to_eval(),
+                interp: key.interp,
+            });
+        }
+        track.eval(t)
+    }
+}
+
+/// Draft/永続を問わず、時刻の厳密昇順・重複なしと補間の妥当性を検査する。
+/// `insert`の置換意味は使わない(D1l B-3)。
+pub(crate) fn validate_keyframe_times_and_interp<'a>(
+    times: impl IntoIterator<Item = RationalTime>,
+    interps: impl IntoIterator<Item = &'a Interp>,
+) -> Result<(), DocKeyframeError> {
+    let times: Vec<RationalTime> = times.into_iter().collect();
+    let interps: Vec<&Interp> = interps.into_iter().collect();
+    if times.len() != interps.len() {
+        return Err(DocKeyframeError::UnsortedOrDuplicateKeys);
+    }
+    for window in times.windows(2) {
+        if window[0] >= window[1] {
+            return Err(DocKeyframeError::UnsortedOrDuplicateKeys);
+        }
+    }
+    for interp in interps {
+        validate_interp(interp)?;
+    }
+    Ok(())
 }
 
 pub fn validate_interp(interp: &Interp) -> Result<(), DocKeyframeError> {

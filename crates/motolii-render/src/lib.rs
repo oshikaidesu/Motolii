@@ -7,9 +7,10 @@ use motolii_core::{
     premultiply_rgba_f32, ColorSpace, CompCamera, FrameDesc, PixelFormat, Quality, RationalTime,
     TimeMap, TimeMapError,
 };
-use motolii_gpu::{upload_rgba, GpuCtx, PipelineCache};
+use motolii_gpu::{upload_rgba, GpuCtx, GpuRuntimeError, PipelineCache};
 use motolii_nodes::{
-    create_rgba_render_target, CompositeNode, NodeError, OverlayNode, RectOverlay,
+    create_rgba_render_target, AffinePlaceNode, ClippingMaskMode, CompositeMode, CompositeNode,
+    MaskNode, NodeError, OverlayNode, RectOverlay,
 };
 use motolii_plugin::{
     LayerSourceContext, PluginError, PluginId, PluginRegistry, RenderCtx, ResolvedParams,
@@ -50,6 +51,11 @@ pub struct BackgroundTextureRequest<'a> {
 }
 
 #[derive(Debug)]
+/// 1フレーム分のレンダ結果。
+///
+/// `texture` は `RenderSession` の ping-pong 中間バッファとは独立した出力コピー。
+/// 同一セッションで次の `render_graph_cached` を呼んでも、直前フレームのピクセルは上書きされない。
+/// Slint 等へ渡す前の表示用コピー義務は M3 仕様「プレビュー出力の寿命」節を参照。
 pub struct RenderedFrame {
     pub texture: wgpu::Texture,
     pub desc: FrameDesc,
@@ -80,6 +86,25 @@ pub enum RenderStep {
         background: TextureId,
         foreground: TextureId,
         output: TextureId,
+    },
+    Composite {
+        background: TextureId,
+        foreground: TextureId,
+        output: TextureId,
+        mode: CompositeMode,
+    },
+    ApplyMask {
+        content: TextureId,
+        mask: TextureId,
+        output: TextureId,
+        mode: ClippingMaskMode,
+    },
+    /// F-3 変形段: 正準アフィンの UV 逆行列で入力を再配置する。
+    AffinePlace {
+        input: TextureId,
+        output: TextureId,
+        /// UV空間の逆アフィン `[m00,m01,m02, m10,m11,m12]`。
+        inverse_uv: [f32; 6],
     },
     /// PluginRegistry経由の一般ステップ(所見1)。種別はレジストリlookupで決まる。
     Plugin {
@@ -142,6 +167,8 @@ pub enum RenderError {
     Node(#[from] NodeError),
     #[error(transparent)]
     TimeMap(#[from] TimeMapError),
+    #[error(transparent)]
+    Gpu(#[from] GpuRuntimeError),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -150,6 +177,8 @@ enum TexProducer {
     VideoSource,
     Overlay,
     Composite,
+    Mask,
+    AffinePlace,
     Plugin,
 }
 
@@ -167,6 +196,8 @@ pub struct RenderGraphInputs<'a> {
 pub struct RenderSession {
     overlay: OverlayNode,
     composite: CompositeNode,
+    mask: MaskNode,
+    affine_place: AffinePlaceNode,
     pipelines: PipelineCache,
     transparent: Option<(FrameDesc, wgpu::Texture)>,
     /// 単色Solidの再利用(毎フレームuploadしない)。
@@ -188,6 +219,8 @@ impl RenderSession {
         Self {
             overlay: OverlayNode::new(gpu),
             composite: CompositeNode::new(gpu),
+            mask: MaskNode::new(gpu),
+            affine_place: AffinePlaceNode::new(gpu),
             pipelines: PipelineCache::new(),
             transparent: None,
             solid: None,
@@ -210,6 +243,19 @@ impl RenderSession {
 
     pub fn ping_pong_generations(&self) -> u64 {
         self.ping.as_ref().map(|p| p.generations).unwrap_or(0)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn ping_buffer_ptrs_for_test(&self) -> Vec<*const wgpu::Texture> {
+        self.ping
+            .as_ref()
+            .map(|p| {
+                p.buffers
+                    .iter()
+                    .map(|tex| tex as *const wgpu::Texture)
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     fn transparent_texture(&mut self, gpu: &GpuCtx, desc: FrameDesc) -> &wgpu::Texture {
@@ -338,6 +384,33 @@ pub fn render_graph_cached(
     inputs: &RenderGraphInputs<'_>,
     quality: Quality,
 ) -> Result<RenderedFrame, RenderError> {
+    render_graph_cached_inner(gpu, session, timeline_time, graph, inputs, quality, true)
+}
+
+/// テスト専用: 中間 ping-pong バッファをそのまま返す（契約違反の負例審判用）。
+#[doc(hidden)]
+pub fn render_graph_cached_pool_alias_for_test(
+    gpu: &GpuCtx,
+    session: &mut RenderSession,
+    timeline_time: RationalTime,
+    graph: &LinearRenderGraph,
+    inputs: &RenderGraphInputs<'_>,
+    quality: Quality,
+) -> Result<RenderedFrame, RenderError> {
+    render_graph_cached_inner(gpu, session, timeline_time, graph, inputs, quality, false)
+}
+
+fn render_graph_cached_inner(
+    gpu: &GpuCtx,
+    session: &mut RenderSession,
+    timeline_time: RationalTime,
+    graph: &LinearRenderGraph,
+    inputs: &RenderGraphInputs<'_>,
+    quality: Quality,
+    owned_output: bool,
+) -> Result<RenderedFrame, RenderError> {
+    // レンダ入口でデバイス健全性を確認する(M3E-5)。lost/uncapturedを型付きで返す。
+    gpu.check_health()?;
     validate_render_desc(graph.desc)?;
     let graph_plan = validate_linear_graph(graph, timeline_time, inputs)?;
 
@@ -393,11 +466,73 @@ pub fn render_graph_cached(
                 let background_texture = texture_ref(&textures, desc, *background)?;
                 let foreground_texture = texture_ref(&textures, desc, *foreground)?;
                 let output_texture = session.acquire_render_target(gpu, desc, &avoid);
+                session.composite.set_mode(CompositeMode::Normal);
                 session.composite.render(
                     gpu,
                     &RenderCtx::new(timeline_time, quality),
                     background_texture,
                     foreground_texture,
+                    TextureRef {
+                        texture: &output_texture,
+                        desc,
+                    },
+                )?;
+                textures[output.0] = Some(output_texture);
+            }
+            RenderStep::Composite {
+                background,
+                foreground,
+                output,
+                mode,
+            } => {
+                let background_texture = texture_ref(&textures, desc, *background)?;
+                let foreground_texture = texture_ref(&textures, desc, *foreground)?;
+                let output_texture = session.acquire_render_target(gpu, desc, &avoid);
+                session.composite.set_mode(*mode);
+                session.composite.render(
+                    gpu,
+                    &RenderCtx::new(timeline_time, quality),
+                    background_texture,
+                    foreground_texture,
+                    TextureRef {
+                        texture: &output_texture,
+                        desc,
+                    },
+                )?;
+                textures[output.0] = Some(output_texture);
+            }
+            RenderStep::ApplyMask {
+                content,
+                mask,
+                output,
+                mode,
+            } => {
+                let content_texture = texture_ref(&textures, desc, *content)?;
+                let mask_texture = texture_ref(&textures, desc, *mask)?;
+                let output_texture = session.acquire_render_target(gpu, desc, &avoid);
+                session.mask.set_mode(*mode);
+                session.mask.render(
+                    gpu,
+                    content_texture,
+                    mask_texture,
+                    TextureRef {
+                        texture: &output_texture,
+                        desc,
+                    },
+                )?;
+                textures[output.0] = Some(output_texture);
+            }
+            RenderStep::AffinePlace {
+                input,
+                output,
+                inverse_uv,
+            } => {
+                let input_texture = texture_ref(&textures, desc, *input)?;
+                let output_texture = session.acquire_render_target(gpu, desc, &avoid);
+                session.affine_place.set_inverse_uv_matrix(*inverse_uv);
+                session.affine_place.render(
+                    gpu,
+                    input_texture,
                     TextureRef {
                         texture: &output_texture,
                         desc,
@@ -447,14 +582,34 @@ pub fn render_graph_cached(
         .and_then(Option::take)
         .ok_or(RenderError::MissingTexture(graph.output.0))?;
 
-    let output_texture = create_owned_output_texture(gpu, desc);
-    copy_texture(gpu, &intermediate, &output_texture, desc);
-
-    Ok(RenderedFrame {
-        texture: output_texture,
+    Ok(into_rendered_frame(
+        gpu,
+        intermediate,
         desc,
-        source_time: graph_plan.source_time,
-    })
+        graph_plan.source_time,
+        owned_output,
+    ))
+}
+
+fn into_rendered_frame(
+    gpu: &GpuCtx,
+    intermediate: wgpu::Texture,
+    desc: FrameDesc,
+    source_time: RationalTime,
+    owned_output: bool,
+) -> RenderedFrame {
+    let texture = if owned_output {
+        let output_texture = create_owned_output_texture(gpu, desc);
+        copy_texture(gpu, &intermediate, &output_texture, desc);
+        output_texture
+    } else {
+        intermediate
+    };
+    RenderedFrame {
+        texture,
+        desc,
+        source_time,
+    }
 }
 
 pub fn linear_graph_with_video_source(desc: FrameDesc, overlay: RectOverlay) -> LinearRenderGraph {
@@ -536,7 +691,7 @@ fn validate_linear_graph(
     let mut producer: Vec<Option<TexProducer>> = vec![None; texture_count];
     let mut overlay_count = 0usize;
     let mut composite_count = 0usize;
-    let mut has_plugin = false;
+    let mut has_general_graph = false;
 
     for step in &graph.steps {
         match step {
@@ -606,6 +761,41 @@ fn validate_linear_graph(
                 producer[output.0] = Some(TexProducer::Composite);
                 composite_count += 1;
             }
+            RenderStep::Composite {
+                background,
+                foreground,
+                output,
+                ..
+            } => {
+                mark_read(*background, &mut read)?;
+                mark_read(*foreground, &mut read)?;
+                validate_input(*background, &written)?;
+                validate_input(*foreground, &written)?;
+                validate_output(*output, &mut written)?;
+                producer[output.0] = Some(TexProducer::Composite);
+                has_general_graph = true;
+            }
+            RenderStep::ApplyMask {
+                content,
+                mask,
+                output,
+                ..
+            } => {
+                mark_read(*content, &mut read)?;
+                mark_read(*mask, &mut read)?;
+                validate_input(*content, &written)?;
+                validate_input(*mask, &written)?;
+                validate_output(*output, &mut written)?;
+                producer[output.0] = Some(TexProducer::Mask);
+                has_general_graph = true;
+            }
+            RenderStep::AffinePlace { input, output, .. } => {
+                mark_read(*input, &mut read)?;
+                validate_input(*input, &written)?;
+                validate_output(*output, &mut written)?;
+                producer[output.0] = Some(TexProducer::AffinePlace);
+                has_general_graph = true;
+            }
             RenderStep::Plugin {
                 inputs: plugin_inputs,
                 output,
@@ -620,7 +810,7 @@ fn validate_linear_graph(
                 }
                 validate_output(*output, &mut written)?;
                 producer[output.0] = Some(TexProducer::Plugin);
-                has_plugin = true;
+                has_general_graph = true;
             }
         }
     }
@@ -634,8 +824,22 @@ fn validate_linear_graph(
         }
     }
 
-    if has_plugin {
-        // Plugin経路は固定デモグラフ制約を外す。未使用書き込み検査で誤配線は既に弾く。
+    if !has_general_graph {
+        match producer.get(graph.output.0).and_then(|p| *p) {
+            // 単一レイヤー等、Compositeなしで中間テクスチャをそのまま出すD3グラフ。
+            Some(TexProducer::Overlay)
+            | Some(TexProducer::Plugin)
+            | Some(TexProducer::Mask)
+            | Some(TexProducer::AffinePlace)
+            | Some(TexProducer::VideoSource) => {
+                has_general_graph = true;
+            }
+            _ => {}
+        }
+    }
+
+    if has_general_graph {
+        // 一般グラフは固定デモ制約を外す。未使用書き込み検査で誤配線は既に弾く。
         if producer.get(graph.output.0).and_then(|p| *p).is_none() {
             return Err(RenderError::MissingTexture(graph.output.0));
         }
@@ -687,6 +891,19 @@ fn texture_slot_count(graph: &LinearRenderGraph) -> Result<usize, RenderError> {
                 foreground,
                 output,
             } => vec![background.0, foreground.0, output.0],
+            RenderStep::Composite {
+                background,
+                foreground,
+                output,
+                ..
+            } => vec![background.0, foreground.0, output.0],
+            RenderStep::ApplyMask {
+                content,
+                mask,
+                output,
+                ..
+            } => vec![content.0, mask.0, output.0],
+            RenderStep::AffinePlace { input, output, .. } => vec![input.0, output.0],
             RenderStep::Plugin { inputs, output, .. } => {
                 let mut v: Vec<_> = inputs.iter().map(|id| id.0).collect();
                 v.push(output.0);
@@ -886,7 +1103,14 @@ fn step_input_ids(step: &RenderStep) -> Vec<TextureId> {
             background,
             foreground,
             ..
+        }
+        | RenderStep::Composite {
+            background,
+            foreground,
+            ..
         } => vec![*background, *foreground],
+        RenderStep::ApplyMask { content, mask, .. } => vec![*content, *mask],
+        RenderStep::AffinePlace { input, .. } => vec![*input],
         RenderStep::Plugin { inputs, .. } => inputs.clone(),
         _ => Vec::new(),
     }
@@ -1114,6 +1338,27 @@ mod tests {
     }
 
     #[test]
+    fn render_graph_cached_checks_gpu_health_at_entry() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        gpu.inject_uncaptured_error_for_test("synthetic test GPU fault");
+        let mut session = RenderSession::new(&gpu);
+        let request = centered_request();
+        let err = render_graph_cached(
+            &gpu,
+            &mut session,
+            request.timeline_time,
+            &linear_graph_from_request(&request),
+            &RenderGraphInputs::default(),
+            Quality::FINAL,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            RenderError::Gpu(GpuRuntimeError::Uncaptured(_))
+        ));
+    }
+
+    #[test]
     fn graph_executor_matches_direct_fixed_path() {
         let Some(gpu) = gpu_or_skip() else { return };
         for request in [centered_request(), fractional_edge_request()] {
@@ -1263,6 +1508,72 @@ mod tests {
         assert!(
             first_snapshot.iter().any(|&v| v > 0),
             "first frame should contain visible pixels"
+        );
+    }
+
+    #[test]
+    fn rendered_frame_texture_not_aliases_session_ping_pool() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let mut session = RenderSession::new(&gpu);
+        let request = centered_request();
+        let rendered = render_graph_cached(
+            &gpu,
+            &mut session,
+            request.timeline_time,
+            &linear_graph_from_request(&request),
+            &RenderGraphInputs::default(),
+            Quality::FINAL,
+        )
+        .unwrap();
+
+        assert!(
+            session.ping_pong_len() >= 2,
+            "fixed graph should use ping-pong pool"
+        );
+        let output_ptr = &rendered.texture as *const wgpu::Texture;
+        for pool_ptr in session.ping_buffer_ptrs_for_test() {
+            assert_ne!(
+                output_ptr, pool_ptr,
+                "RenderedFrame.texture must not alias RenderSession ping-pong buffers"
+            );
+        }
+    }
+
+    #[test]
+    fn contract_violation_pool_alias_corrupts_prior_frame_pixels() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let mut session = RenderSession::new(&gpu);
+        let inputs = RenderGraphInputs::default();
+        let first_request = centered_request();
+
+        let first = render_graph_cached_pool_alias_for_test(
+            &gpu,
+            &mut session,
+            first_request.timeline_time,
+            &linear_graph_from_request(&first_request),
+            &inputs,
+            Quality::FINAL,
+        )
+        .unwrap();
+        let first_snapshot = download_rgba(&gpu, &first.texture).unwrap();
+
+        let mut second_request = centered_request();
+        second_request.source.color = [0.0, 0.0, 1.0, 0.75];
+        second_request.overlay.color = [1.0, 1.0, 0.0, 1.0];
+        let _second = render_graph_cached_pool_alias_for_test(
+            &gpu,
+            &mut session,
+            RationalTime::try_from_frame(12, Fps::try_new(30, 1).unwrap()).unwrap(),
+            &linear_graph_from_request(&second_request),
+            &inputs,
+            Quality::FINAL,
+        )
+        .unwrap();
+
+        let first_after = download_rgba(&gpu, &first.texture).unwrap();
+        assert_ne!(
+            first_snapshot, first_after,
+            "returning session pool buffer as RenderedFrame would corrupt prior frame pixels"
         );
     }
 

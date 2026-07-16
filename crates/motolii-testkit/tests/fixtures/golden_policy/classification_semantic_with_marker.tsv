@@ -1,0 +1,2 @@
+# D1i-4 負例用: semantic + regenerate用 regenerate マーカー
+semantic	crates/motolii-testkit/tests/fixtures/golden_policy/semantic_with_regenerate_marker.txt

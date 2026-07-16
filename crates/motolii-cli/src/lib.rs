@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use motolii_nodes::{CanonicalPoint, CanonicalSize, ParamRectOverlay, RectOverlay};
 
+mod document_export;
 mod project;
 mod verify_b4;
 
@@ -267,6 +268,7 @@ where
         .map_err(|_| CliError::Usage(format!("{name} has invalid value: {raw}")))
 }
 
+pub use document_export::export_document_file as export_document;
 pub use project::{
     build_data_tracks, load_project_v1, load_project_v1_from_str, prepare_project_export,
     ParamDriverV1, PreparedProject, ProjectV1, RectOverlayParamV1,

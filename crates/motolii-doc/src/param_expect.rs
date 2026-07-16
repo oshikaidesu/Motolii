@@ -39,50 +39,127 @@ impl ExpectedValueType {
 }
 
 /// 受け口ごとの制約。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ParamConstraints {
     pub expected: ExpectedValueType,
-    /// LookAt / Follow を許すのは position のみ。
-    pub allow_spatial_links: bool,
+    /// LookAt は `transform.rotation`(F64)のみ(concept: 角度契約)。
+    pub allow_look_at: bool,
+    /// Follow は `transform.position`(Vec2)のみ。
+    pub allow_follow: bool,
     /// スカラー成分を [0,1] に閉じる(opacity / Color 各成分)。
     pub unit_interval: bool,
+    /// F64の下限(含む)。PathOp意味論表の`≥0`等の拒否項目用(D1i-2)。
+    pub min: Option<f64>,
+    /// F64の上限(含む)。PathOp意味論表の`∈[-1,1]`等の拒否項目用(D1i-2)。
+    pub max: Option<f64>,
+    /// F64が整数(端数なし)であること。Repeater.copies等(Lottie整数スロット)。
+    pub integer: bool,
 }
 
 impl ParamConstraints {
     pub const fn typed(expected: ExpectedValueType) -> Self {
         Self {
             expected,
-            allow_spatial_links: false,
+            allow_look_at: false,
+            allow_follow: false,
             unit_interval: false,
+            min: None,
+            max: None,
+            integer: false,
         }
     }
 
     pub const fn unit_f64() -> Self {
         Self {
             expected: ExpectedValueType::F64,
-            allow_spatial_links: false,
+            allow_look_at: false,
+            allow_follow: false,
             unit_interval: true,
+            min: None,
+            max: None,
+            integer: false,
         }
     }
 
     pub const fn color() -> Self {
         Self {
             expected: ExpectedValueType::Color,
-            allow_spatial_links: false,
+            allow_look_at: false,
+            allow_follow: false,
             unit_interval: true,
+            min: None,
+            max: None,
+            integer: false,
         }
     }
 
+    /// Follow 可・LookAt 不可(位置に置いた旧LookAtは型付き拒否)。
     pub const fn position() -> Self {
         Self {
             expected: ExpectedValueType::Vec2,
-            allow_spatial_links: true,
+            allow_look_at: false,
+            allow_follow: true,
             unit_interval: false,
+            min: None,
+            max: None,
+            integer: false,
+        }
+    }
+
+    /// LookAt 可・Follow 不可(concept: rotation 角度)。
+    pub const fn rotation() -> Self {
+        Self {
+            expected: ExpectedValueType::F64,
+            allow_look_at: true,
+            allow_follow: false,
+            unit_interval: false,
+            min: None,
+            max: None,
+            integer: false,
         }
     }
 
     pub const fn scalar_f64() -> Self {
         Self::typed(ExpectedValueType::F64)
+    }
+
+    /// F64を`[min, max]`(両端含む)に閉じる(例: pucker_bloat.amount∈[-1,1])。
+    pub const fn ranged_f64(min: f64, max: f64) -> Self {
+        Self {
+            expected: ExpectedValueType::F64,
+            allow_look_at: false,
+            allow_follow: false,
+            unit_interval: false,
+            min: Some(min),
+            max: Some(max),
+            integer: false,
+        }
+    }
+
+    /// F64を`[min, +inf)`に閉じる(例: zig_zag.amount≥0)。
+    pub const fn min_f64(min: f64) -> Self {
+        Self {
+            expected: ExpectedValueType::F64,
+            allow_look_at: false,
+            allow_follow: false,
+            unit_interval: false,
+            min: Some(min),
+            max: None,
+            integer: false,
+        }
+    }
+
+    /// F64を`[min, +inf)`かつ整数に閉じる(例: repeater.copies — Lottie整数スロット)。
+    pub const fn non_negative_integer_f64() -> Self {
+        Self {
+            expected: ExpectedValueType::F64,
+            allow_look_at: false,
+            allow_follow: false,
+            unit_interval: false,
+            min: Some(0.0),
+            max: None,
+            integer: true,
+        }
     }
 }
 
@@ -100,16 +177,46 @@ pub fn transform_scale() -> ParamConstraints {
 }
 
 pub fn transform_rotation() -> ParamConstraints {
-    ParamConstraints::typed(ExpectedValueType::F64)
+    ParamConstraints::rotation()
 }
 
 pub fn envelope_opacity() -> ParamConstraints {
     ParamConstraints::unit_f64()
 }
 
-/// PathOp の全 DocParam スロットは v1 で F64(値域の詳細は D1i-2)。
+/// PathOp の無制限スカラー(角度・オフセット・距離等。表が範囲を固定しない席)。
 pub fn path_op_scalar() -> ParamConstraints {
     ParamConstraints::typed(ExpectedValueType::F64)
+}
+
+/// PathOp の無制限Vec2(twist.center等。LookAt/Followは許可しない — 表が未決)。
+pub fn path_op_vec2() -> ParamConstraints {
+    ParamConstraints::typed(ExpectedValueType::Vec2)
+}
+
+/// pucker_bloat.amount ∈ [-1, 1](PathOp意味論表)。
+pub fn path_op_pucker_bloat_amount() -> ParamConstraints {
+    ParamConstraints::ranged_f64(-1.0, 1.0)
+}
+
+/// zig_zag.amount / ridges, round_corners.radius ≥ 0(PathOp意味論表)。
+pub fn path_op_non_negative() -> ParamConstraints {
+    ParamConstraints::min_f64(0.0)
+}
+
+/// repeater.copies: 非負整数(Lottie/AE Repeater。fractional offsetとは別スロット)。
+pub fn path_op_non_negative_integer() -> ParamConstraints {
+    ParamConstraints::non_negative_integer_f64()
+}
+
+/// trim.start / trim.end ∈ [0, 1](PathOp意味論表)。
+pub fn path_op_unit_interval() -> ParamConstraints {
+    ParamConstraints::unit_f64()
+}
+
+/// repeater.start_opacity / end_opacity ∈ [0, 1](envelope.opacityと同型)。
+pub fn path_op_opacity() -> ParamConstraints {
+    ParamConstraints::unit_f64()
 }
 
 /// 既知ファーストパーティ effect / plugin / layer_source / composite / param_driver の期待型。
@@ -141,6 +248,65 @@ pub fn known_plugin_ids() -> &'static [&'static str] {
         "core.composite.clear",
         "core.param.sine",
     ]
+}
+
+/// `motolii_plugin::PluginKind` の doc側ミラー(D1f)。
+///
+/// motolii-docはmotolii-pluginに(本番コードでは)依存しない層分離のため、種別を自前で持つ。
+/// 乖離は `motolii-plugin` を dev-dependency に持つテストで検出する
+/// (`tests/d1h_plugin_expect_table.rs` と同じ手口)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DocPluginKind {
+    Filter,
+    LayerSource,
+    ParamDriver,
+    Composite,
+}
+
+impl DocPluginKind {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Filter => "Filter",
+            Self::LayerSource => "LayerSource",
+            Self::ParamDriver => "ParamDriver",
+            Self::Composite => "Composite",
+        }
+    }
+}
+
+impl std::fmt::Display for DocPluginKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+/// 既知plugin_idの種別+現行version(D1f/S13)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KnownPluginInfo {
+    pub kind: DocPluginKind,
+    /// レジストリ側`NodeDesc.version`の写し。これより新しい`effect_version`は
+    /// 「未来版」として未知プラグインと同じdegraded扱いにする(downgrade errorにしない — S13)。
+    pub current_version: u32,
+}
+
+/// 既知plugin_idの種別+現行versionを返す。未知は`None`(呼び出し側がdegraded扱いにする)。
+pub fn known_plugin_info(plugin_id: &str) -> Option<KnownPluginInfo> {
+    let (kind, current_version) = match plugin_id {
+        "core.filter.clear" | "core.filter.tint" | "core.filter.opacity" => {
+            (DocPluginKind::Filter, 1)
+        }
+        "core.layer_source.clear" => (DocPluginKind::LayerSource, 1),
+        // graph 組み込みのファーストパーティ。現行versionのみ既知契約(未来版はD1f degraded→D6拒否)。
+        "doc.layer_source.rect" => (DocPluginKind::LayerSource, 1),
+        "core.composite.clear" => (DocPluginKind::Composite, 1),
+        // v2: `amp` → `amplitude`(motolii-plugin migrate_plugin_paramsの写し)。
+        "core.param.sine" => (DocPluginKind::ParamDriver, 2),
+        _ => return None,
+    };
+    Some(KnownPluginInfo {
+        kind,
+        current_version,
+    })
 }
 
 /// Vec2Axes の各軸は常にスカラー。

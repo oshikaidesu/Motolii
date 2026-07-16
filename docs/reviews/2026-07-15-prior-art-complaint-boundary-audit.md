@@ -56,7 +56,7 @@ DaVinci Resolve Shared Nodesは、groupを作らず同じnode設定を複数clip
 一方AE Adjustment Layerは「選択対象」ではなく、timeline下方の合成結果全体へ一度適用する。除外にはprecompose、個別effect複製、expression link等が必要になる。したがってAdjustment LayerをExplicit Shared Useの意味へ流用しない。
 
 - 固定候補: definition identityとuse identityの分離、各Useのordered stack位置、共有parameter変更の全Use反映、非隣接可
-- 未決: 参照中Definitionの削除を拒否/cascade/materializeのどれにするか、orphan definitionのGC、UI上のunlink/copy-local
+- **lifecycle決定済**([GAP-14](2026-07-15-shared-effect-lifecycle-decision.md)): 参照中Delete=Reject、Unlink=RemoveUse、Copy Local=Materialize、orphan=Keep（自動GC棄却）。Cascade/Purgeは延期
 - 可変: 常時線、gutter幅、bundle、stub、socket形状
 - 禁止: timeline隣接を永続target意味にする、source layerを消費/複製する、万能include/exclude式をv1へ焼く
 
@@ -117,7 +117,7 @@ Cavalry DuplicatorのInput Shapes、Distribution、per-instance Position/Rotatio
 
 ### 実装前に追加決定が必要
 
-1. GAP-14 / D1l: 参照中Definition削除、unlink/copy-local、orphan GC
+1. ~~GAP-14 / D1l: 参照中Definition削除、unlink/copy-local、orphan GC~~ → **決定済**([lifecycle](2026-07-15-shared-effect-lifecycle-decision.md))。D1l実装へ
 2. P0I: Distribution別identity continuity表とalgorithm version
 3. P0I: Input Shape local transformをDistribution transformとどう合成するか
 4. Param pipeline: typed connectionと既存key/Const/DataTrackの合成・拒否規則

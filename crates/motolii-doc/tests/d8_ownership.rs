@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! D8: 単一writer + Arcスナップショット所有権(F-2)の並行契約。
 //!
 //! 型レベル禁止(`&mut Document`はmotolii-doc外deny)は`mut_document_deny`が担保。

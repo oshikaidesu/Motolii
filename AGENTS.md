@@ -2,13 +2,29 @@
 
 Cursor / Claude Code / その他のLLMエージェント共通の入口。実装に着手する前にここを読む。
 
+## 「発注」時のCursor自動委任
+
+- ユーザーが「発注して」「実装を発注」等、**発注を依頼動詞として明示した時だけ**自動委任を発火する。通常の「実装して」、説明・引用・ファイル内に現れただけの「発注」では発火しない
+- 発火時の役割は固定する。**Grok 4.5 Fastが現場監督**として仕様・やりたいこと・現状差分から発注書案を作り、**主担当Codexが実装前に正しさ・抜け・ユーザー意図との一致を審査**し、承認済み発注書だけを**Composer 2.5が受注者**として実装する。最後に同じGrokが差分を検収する
+- 実装発注は隔離worktreeで二段階実行する。まず`./scripts/delegate-cursor-supervised.sh prepare <worktree> <order-file> "<task>"`でGrok案だけを生成して停止する。Codexは誤りがあればComposerへ流さずGrokへ差し戻す。正しければorder fileへ`CODEX PRECHECK: APPROVED`を明示し、`execute`で初めてComposerを起動する
+- Grokの発注書は対象仕様ID、目的、現状、変更許可ファイル、非目標、再利用箇所、STOP条件、必須負例、実行コマンドを含む。`ORDER: READY`かつCodex事前承認がない限りComposerを起動しない。Grok検収が`VERDICT: ACCEPT`でなければ差分を採用・commit・pushしない
+- `delegate-cursor-review.sh`の並列助言は調査・論点抽出専用であり、実装の指揮系統には使わない。Composerに仕様判断・発注範囲変更・代替設計をさせない
+- 主担当は監督者として、外部エージェントの差分を仕様・依存・実装ガード・既存API・テスト期待値に照らしてコードレビューする。レビュー未完了の差分を採用せず、必要な修正と検証を行ってから主作業ツリーへ反映する
+- 実装発注は一度に1つの契約境界へ分割し、発注文に **変更許可ファイル・非目標・STOP条件・必須負例・実行コマンド** を明記する。複数境界を同時に満たす「便利な共通化」を発注側から要求しない
+- Cursor実装には「例外追加・lint抑制・テスト期待値変更・生JSON/文字列走査・公開raw API・重複planner/helper」で契約を迂回しないよう明示する。必要に見えた時点で実装を止め、既存の正規境界と仕様IDを報告させる
+- Cursor差分は、実装担当とは別のread-only反対側レビューで **P0/P1=0** を確認するまで採用しない。テスト緑は採用条件の一部であって、契約適合の代わりにしない
+- 委任結果は根拠ではなく未検証の助言として扱う。最終判断、統合、必須テスト、完了報告は主担当が行う。Cursor子エージェントは委任を再帰実行しない
+- 外部モデルへ秘密情報、認証情報、未公開の個人データを渡さない。片方が失敗しても安全に進められる作業は続行し、完了報告に失敗を明記する。両方の成功を完了条件の代わりにしない
+
 ## 最初に読む
 
 1. [docs/README.md](docs/README.md) — プロジェクト全体像・ドキュメントの読む順序・用語
 2. 着手するフェーズの仕様書([docs/specs/](docs/specs/README.md)): タスク表(完了条件・依存つき)と、**末尾の「実装ガード」節**(先行ツールの失敗・ユーザー不満をタスクIDに紐付けた注意リスト。完了条件を追加している場合がある)
 3. プラグインを書く/量産する時: [docs/plugin-authoring.md](docs/plugin-authoring.md)(種別・NodeDesc必須欄・禁止事項・型紙)
 4. M2 Document/スキーマ/ジャーナルに触る時: **先に**[docs/reviews/2026-07-12-m2-permanence-prevention.md](docs/reviews/2026-07-12-m2-permanence-prevention.md)(予防5手)。背景の先人調査は[rework-prior-art](docs/reviews/2026-07-12-rework-prior-art.md)
-5. M3 UI/入力/タイムライン/プラグインパネルに触る時: **先に**[docs/reviews/2026-07-14-m3-ui-boundary-prevention.md](docs/reviews/2026-07-14-m3-ui-boundary-prevention.md)(UI境界の規律8本)。外観を伴う変更は[docs/ui-visual-language.md](docs/ui-visual-language.md)も読む
+5. M3製品実装に触る時: **先に**[docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md](docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md)を読み、ステータスが発効中なら実装を止める。調査・fixtureも公開APIや永続形式へ焼かない
+6. M3 UI/入力/タイムライン/プラグインパネルに触る時: **先に**[docs/reviews/2026-07-14-m3-ui-boundary-prevention.md](docs/reviews/2026-07-14-m3-ui-boundary-prevention.md)(UI境界の規律8本)
+7. M3の外観・timeline・panelに触る時: **先に**[docs/ui-visual-language.md](docs/ui-visual-language.md)と[高密度メインUIモック](docs/mocks/README.md)を読む。モックの具体色値や未決機能をそのまま契約へ焼かない
 
 ## 絶対規律(破ると設計の根拠が崩れる。レビュー最重視項目)
 

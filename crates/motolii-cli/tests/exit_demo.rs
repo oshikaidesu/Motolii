@@ -1,18 +1,20 @@
+#![allow(deprecated)]
+
 //! M1 出口デモ(ヒーロー)のE2Eゴールデン。
 //!
-//! 「実写(生成)背景 + Bezierイージングで右へ流れる四角シェイプ」の2レイヤー合成を
-//! `export-project` の経路そのものでmp4化し、**出力mp4をデコードして中身を検証**する。
-//! これがM1の出口デモ(README/Redditのヒーロー)の自動判定であり、
-//! パイプライン(デコード背景 → 正準座標オーバーレイ → 合成 → エンコード → デコード)が
-//! E2Eで成立していることを先頭/中間/末尾の3フレームで示す。
-//!
-//! ffmpeg/ffprobeが無い、またはGPUアダプタが無い環境ではskip(CIはlavapipe+ffmpegで実行)。
+//! 「実写(生成)背景 + Bezierイージングで右へ流れる四角シェイプ」を
+//! Document→レンダグラフ(D3)経由でmp4化し、**出力mp4をデコードして中身を検証**する。
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
-use motolii_cli::{export_project, load_project_v1_from_str};
-use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, RationalTime};
-use motolii_eval::DataTracks;
+use motolii_cli::export_document;
+use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, RationalTime, TimeMap};
+use motolii_doc::{
+    save_document, Asset, AssetId, Clip, ClipSource, Composition, DocKeyframe, DocKeyframeTrack,
+    DocParam, DocValue, Document, ItemEnvelope, KeyframeId, Track, TrackItem, RECT_LAYER_SOURCE,
+};
+use motolii_eval::Interp;
 use motolii_media::{probe, read_frame_at, Encoder};
 use motolii_nodes::ViewportTransform;
 use motolii_testkit::cpu_reference::yuv_to_rgba_reference;
@@ -24,24 +26,100 @@ const FPS: Fps = match Fps::try_new(12, 1) {
     Ok(fps) => fps,
     Err(_) => panic!("invalid const fps"),
 };
-const N_FRAMES: usize = 13; // frame 0..12 = t 0..1.0s
+const N_FRAMES: usize = 13;
 const BG_GRAY: u8 = 120;
 
-/// 出口デモのオーバーレイ(center.xをBezierイージングで -0.3 → +0.3、可視な赤矩形)。
-/// keyのinterpはそのkeyから次のkeyまでの区間に効く → ease-in-outはkey0に置く。
-fn overlay_json() -> &'static str {
-    r#"{
-    "center": { "Keyframes": { "keys": [
-      {"t": {"num": 0, "den": 1}, "value": {"Vec2": [-0.3, 0.0]},
-       "interp": {"Bezier": {"x1": 0.42, "y1": 0.0, "x2": 0.58, "y2": 1.0}}},
-      {"t": {"num": 1, "den": 1}, "value": {"Vec2": [0.3, 0.0]}, "interp": "Linear"}
-    ] } },
-    "size": [0.3, 0.4],
-    "color": [1.0, 0.15, 0.1, 1.0]
-  }"#
+fn eased_center_track() -> DocKeyframeTrack {
+    let mut track = DocKeyframeTrack::new();
+    track.insert(DocKeyframe {
+        id: KeyframeId::from_raw(0),
+        t: RationalTime::ZERO,
+        value: DocValue::Vec2([-0.3, 0.0]),
+        interp: Interp::Bezier {
+            x1: 0.42,
+            y1: 0.0,
+            x2: 0.58,
+            y2: 1.0,
+        },
+    });
+    track.insert(DocKeyframe {
+        id: KeyframeId::from_raw(1),
+        t: RationalTime::try_new(1, 1).unwrap(),
+        value: DocValue::Vec2([0.3, 0.0]),
+        interp: Interp::Linear,
+    });
+    track
 }
 
-/// フラットなグレーの背景動画(実写素材の代用)。矩形の外側=この色が見えるべき。
+fn build_exit_demo_document(input_name: &str) -> Document {
+    let mut doc = Document::new_v1();
+    // KeyframeId 0,1 を使うためカウンタを先に進める(A8)。
+    let _ = doc.next_stable_id.allocate().unwrap();
+    let _ = doc.next_stable_id.allocate().unwrap();
+    doc.version = 2;
+    doc.min_reader_version = 2;
+    doc.composition = Composition::try_new(
+        W as i64,
+        H as i64,
+        RationalTime::try_new(N_FRAMES as i64, 12).unwrap(),
+        FPS,
+    )
+    .unwrap();
+
+    let asset_id = AssetId::from_raw(0);
+    doc.assets
+        .insert(Asset {
+            id: asset_id,
+            name: "bg".into(),
+            asset_type: "video/mp4".into(),
+            content_hash: "sha256:exit-demo".into(),
+            path_absolute: None,
+            path_project_relative: None,
+            file_name: Some(input_name.into()),
+            size_bytes: None,
+            head_hash: None,
+            tail_hash: None,
+        })
+        .unwrap();
+
+    let bg_layer = doc.layers.allocate("bg").unwrap();
+    let overlay_layer = doc.layers.allocate("overlay").unwrap();
+    let track_id = doc.track_ids.allocate("V1").unwrap();
+    let clip_duration = RationalTime::try_new(N_FRAMES as i64, 12).unwrap();
+
+    let bg_clip = Clip {
+        envelope: ItemEnvelope::new(bg_layer),
+        start: RationalTime::ZERO,
+        duration: clip_duration,
+        time_map: TimeMap::identity(),
+        source: ClipSource::asset_video_only(asset_id),
+    };
+
+    let center = DocParam::Keyframes(eased_center_track());
+    let overlay_clip = Clip {
+        envelope: ItemEnvelope::new(overlay_layer),
+        start: RationalTime::ZERO,
+        duration: clip_duration,
+        time_map: TimeMap::identity(),
+        source: ClipSource::Plugin {
+            plugin_id: RECT_LAYER_SOURCE.into(),
+            effect_version: 1,
+            params: BTreeMap::from([
+                ("center".into(), center),
+                ("size".into(), DocParam::const_vec2([0.3, 0.4])),
+                ("color".into(), DocParam::const_color([1.0, 0.15, 0.1, 1.0])),
+            ]),
+            extra: Default::default(),
+        },
+    };
+
+    doc.tracks.push(Track {
+        id: track_id,
+        items: vec![TrackItem::Clip(bg_clip), TrackItem::Clip(overlay_clip)],
+    });
+    doc
+}
+
 fn make_bg_video(path: &Path) {
     let desc = FrameDesc::packed(W, H, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false);
     let mut enc = Encoder::open(path, &desc, FPS, true).unwrap();
@@ -72,34 +150,37 @@ fn exit_demo_video_bg_plus_eased_rect_matches_golden() {
     let dir = tmp_dir("exit-demo");
     let input = dir.join("input.mp4");
     let output = dir.join("exit-demo.mp4");
-    let project_path = dir.join("project.json");
+    let document_path = dir.join("document.json");
 
     make_bg_video(&input);
 
-    let full_json = format!(
-        r#"{{
-  "version": 1,
-  "input": "{}",
-  "output": "{}",
-  "frame_count": {N_FRAMES},
-  "qp0": true,
-  "overlay": {}
-}}"#,
-        input.display(),
-        output.display(),
-        overlay_json()
-    );
-    std::fs::write(&project_path, &full_json).unwrap();
+    let doc = build_exit_demo_document("input.mp4");
+    doc.validate().unwrap();
+    save_document(&document_path, &doc).unwrap();
 
-    // export-project 経路そのものを通す
-    let report = export_project(&gpu, &project_path).unwrap();
+    let report = export_document(&gpu, &document_path, &output, Some(N_FRAMES), true).unwrap();
     assert_eq!(report.frames_written, N_FRAMES);
     assert_eq!((report.desc.width, report.desc.height), (W, H));
 
-    // 期待矩形位置は「出荷サンプルと同じJSON」を評価器に通して得る(ドッグフード)
-    let project = load_project_v1_from_str(&full_json).unwrap();
-    let overlay = project.overlay.into_param_overlay();
-    let tracks = DataTracks::new();
+    // 検証用に同じキーフレーム軌道を再構築(IDは評価に影響しない)。
+    let mut center_track = DocKeyframeTrack::new();
+    center_track.insert(DocKeyframe {
+        id: KeyframeId::from_raw(0),
+        t: RationalTime::ZERO,
+        value: DocValue::Vec2([-0.3, 0.0]),
+        interp: Interp::Bezier {
+            x1: 0.42,
+            y1: 0.0,
+            x2: 0.58,
+            y2: 1.0,
+        },
+    });
+    center_track.insert(DocKeyframe {
+        id: KeyframeId::from_raw(1),
+        t: RationalTime::try_new(1, 1).unwrap(),
+        value: DocValue::Vec2([0.3, 0.0]),
+        interp: Interp::Linear,
+    });
     let desc = FrameDesc::packed(W, H, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
     let tx = ViewportTransform::from_desc(&desc).expect("non-zero FrameDesc");
 
@@ -111,40 +192,40 @@ fn exit_demo_video_bg_plus_eased_rect_matches_golden() {
 
     for (idx, label) in samples {
         let t = RationalTime::try_from_frame(idx, FPS).unwrap();
-        let rect = overlay.eval(t, &tracks).unwrap();
-        let c = tx.point_to_px(rect.center);
+        let center = match center_track.eval(t) {
+            motolii_eval::Value::Vec2(v) => v,
+            other => panic!("center keyframes must be Vec2, got {other:?}"),
+        };
+        let c = tx.point_to_px(motolii_nodes::CanonicalPoint {
+            x: center[0],
+            y: center[1],
+        });
         centers_x.push(c.x);
 
-        // 出力mp4をデコード(生YUV420p)→ 参照実装でRGBAへ
         let frame = read_frame_at(&output, &info, idx).unwrap();
         assert_eq!(frame.desc.format, PixelFormat::Yuv420p);
         let rgba = yuv_to_rgba_reference(&frame);
 
-        // (1) 矩形中心 ≈ 赤(H.264 4:2:0 + YUV往復の許容を持たせる)
-        let center = pixel(&rgba, W, c.x.round() as i64, c.y.round() as i64);
+        let center_px = pixel(&rgba, W, c.x.round() as i64, c.y.round() as i64);
         assert!(
-            center[0] > 150 && center[1] < 100 && center[2] < 100,
-            "{label}: rect center expected red-ish, got {center:?} at ({:.1},{:.1})",
+            center_px[0] > 150 && center_px[1] < 100 && center_px[2] < 100,
+            "{label}: rect center expected red-ish, got {center_px:?} at ({:.1},{:.1})",
             c.x,
             c.y
         );
 
-        // (2) 背景コーナー ≈ グレー(矩形は中央帯なので四隅は背景動画が見える)
         let corner = pixel(&rgba, W, 2, 2);
         let gray_ok = corner[..3]
             .iter()
             .all(|&v| (v as i32 - BG_GRAY as i32).abs() < 45);
         assert!(
             gray_ok,
-            "{label}: bg corner expected gray~{BG_GRAY}, got {corner:?}"
+            "{label}: corner should stay near bg gray {BG_GRAY}, got {corner:?}"
         );
     }
 
-    // (3) 右へ流れる: 先頭 < 中間 < 末尾(モーションの向き)
     assert!(
         centers_x[0] < centers_x[1] && centers_x[1] < centers_x[2],
-        "rect should move right: {centers_x:?}"
+        "eased center.x should advance left→right across samples: {centers_x:?}"
     );
-
-    std::fs::remove_dir_all(&dir).ok();
 }

@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "min_reader_version": 1,
+  "composition": {
+    "aspect_num": 16,
+    "aspect_den": 9,
+    "duration": { "num": 10, "den": 1 },
+    "fps": { "num": 30, "den": 1 }
+  },
+  "bpm": { "num": 120, "den": 1 },
+  "assets": {
+    "next": 1,
+    "entries": [
+      {
+        "id": 0,
+        "name": "icon",
+        "asset_type": "image/svg+xml",
+        "content_hash": "svg0"
+      }
+    ]
+  },
+  "layers": {
+    "next": 1,
+    "entries": [{ "id": 0, "name": "Vec" }]
+  },
+  "track_ids": {
+    "next": 1,
+    "entries": [{ "id": 0, "name": "V1" }]
+  },
+  "tracks": [
+    {
+      "id": 0,
+      "items": [
+        {
+          "kind": "clip",
+          "envelope": {
+            "layer_id": 0,
+            "transform": {
+              "position": { "const": { "Vec2": [0.0, 0.0] } },
+              "anchor": { "const": { "Vec2": [0.0, 0.0] } },
+              "scale": { "const": { "Vec2": [1.0, 1.0] } },
+              "rotation": { "const": { "F64": 0.5 } }
+            },
+            "opacity": { "const": { "F64": 1.0 } }
+          },
+          "start": { "num": 0, "den": 1 },
+          "duration": { "num": 4, "den": 1 },
+          "time_map": {
+            "source_start": { "num": 0, "den": 1 },
+            "speed_num": 1,
+            "speed_den": 1
+          },
+          "source": { "source": "asset", "asset": 0 },
+          "path_ops": [
+            {
+              "op": "offset",
+              "distance": { "const": { "F64": 0.05 } }
+            },
+            {
+              "op": "twist",
+              "angle": { "const": { "F64": 0.3 } }
+            },
+            {
+              "op": "wiggle",
+              "amp": { "const": { "F64": 0.01 } },
+              "freq": { "const": { "F64": 2.0 } },
+              "seed": { "const": { "F64": 7.0 } }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

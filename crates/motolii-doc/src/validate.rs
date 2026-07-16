@@ -14,10 +14,12 @@ use crate::doc_keyframe::validate_interp;
 use crate::doc_value::DocValue;
 use crate::param::DocParam;
 use crate::param_expect::{
-    self, known_plugin_param, path_op_scalar, vec2_axis, ExpectedValueType, ParamConstraints,
+    self, known_plugin_info, known_plugin_param, path_op_scalar, vec2_axis, DocPluginKind,
+    ExpectedValueType, ParamConstraints,
 };
 use crate::schema::{
-    Clip, ClipSource, Group, ItemEnvelope, StandardShape, TrackItem, VectorContent,
+    asset_components_require_newer_reader, Clip, ClipSource, Group, ItemEnvelope, PathOp,
+    StandardShape, StreamKind, TrackItem, Transform2D, VectorContent,
 };
 use crate::track_id::TrackId;
 use crate::{Document, LayerId};
@@ -61,10 +63,34 @@ pub enum DocumentError {
     },
     #[error("transform.parent cycle involving layer {layer_id}")]
     ParentCycle { layer_id: u64 },
-    #[error("effect plugin_id must be non-empty (layer {layer_id})")]
-    EmptyEffectPluginId { layer_id: u64 },
+    /// D1l: `EffectUse.definition_id`が`effect_definitions`に存在しない(黙ってdropしない — GAP-14§4-1)。
+    #[error("effect use {id} on layer {layer_id} references unknown definition {definition_id}")]
+    DanglingEffectDefinition {
+        layer_id: u64,
+        id: u64,
+        definition_id: u64,
+    },
+    #[error("effect definition {id} plugin_id must be non-empty")]
+    EmptyEffectDefinitionPluginId { id: u64 },
+    /// D1l: `EffectDefinition`/`EffectUse`を含む文書が宣言すべき`min_reader_version`下限。
+    #[error(
+        "document contains EffectDefinition/EffectUse but min_reader_version ({min_reader_version}) < {required} required (D1l)"
+    )]
+    EffectDefinitionsRequireNewerReader {
+        min_reader_version: u32,
+        required: u32,
+    },
     #[error("clip plugin source plugin_id must be non-empty (layer {layer_id})")]
     EmptySourcePluginId { layer_id: u64 },
+    /// D1f/実装ガード9: 既知plugin_idを構造上違う種別のスロットに置く「バグ」は
+    /// degraded(警告)では救わず、型付きエラーで拒否する。
+    #[error("plugin `{plugin_id}` at {path} is registered as {expected} but used as {got}")]
+    PluginKindMismatch {
+        path: String,
+        plugin_id: String,
+        expected: String,
+        got: String,
+    },
     #[error("param type mismatch at {path}: expected {expected}, got {got}")]
     ParamTypeMismatch {
         path: String,
@@ -96,7 +122,58 @@ pub enum DocumentError {
         got: String,
         expected: String,
     },
+    /// A8: EffectId/KeyframeIdは1つのID空間を共有する(document-local安定u64 ID)。
+    #[error("duplicate stable id {id} (EffectId/KeyframeId share one id space — A8)")]
+    DuplicateStableId { id: u64 },
+    #[error(transparent)]
+    StableIdCounterInvalid(#[from] crate::stable_id::StableIdError),
+    /// M2E-11①: ネスト(EffectInstance/DocKeyframe)への永続フィールド追加は
+    /// `min_reader_version`を上げる規律。実在すれば強制する(旧readerでのresave時の消失を防ぐ)。
+    #[error(
+        "document contains EffectId/KeyframeId but min_reader_version ({min_reader_version}) < {required} required for stable ids (A8/D2)"
+    )]
+    StableIdsRequireNewerReader {
+        min_reader_version: u32,
+        required: u32,
+    },
+    /// AG-1: Asset Clipのvideo/audio component入れ子は`min_reader_version`を上げる。
+    #[error(
+        "document contains Asset Clip video/audio components but min_reader_version ({min_reader_version}) < {required} required for asset components (AG-1)"
+    )]
+    AssetComponentsRequireNewerReader {
+        min_reader_version: u32,
+        required: u32,
+    },
+    #[error("asset clip has neither video nor audio component (layer {layer_id})")]
+    EmptyAssetComponents { layer_id: u64 },
+    #[error("video component stream.kind must be video (layer {layer_id})")]
+    VideoComponentKindMismatch { layer_id: u64 },
+    #[error("audio component[{index}] stream.kind must be audio (layer {layer_id})")]
+    AudioComponentKindMismatch { layer_id: u64, index: usize },
+    #[error(
+        "duplicate audio stream ordinal {ordinal} on layer {layer_id} (indices {first_index} and {second_index})"
+    )]
+    DuplicateAudioStreamOrdinal {
+        layer_id: u64,
+        ordinal: u32,
+        first_index: usize,
+        second_index: usize,
+    },
+    /// AG-1: decode/exportがvideo ordinal 0のみ。非0を黙ってv:0へ落とさない。
+    #[error(
+        "video stream ordinal {ordinal} is not supported yet (layer {layer_id}); only ordinal 0 is drawable in AG-1"
+    )]
+    UnsupportedVideoStreamOrdinal { layer_id: u64, ordinal: u32 },
 }
+
+/// A8/D2: `EffectInstance.id`/`DocKeyframe.id`を含む文書が宣言すべき最小`min_reader_version`。
+pub(crate) const MIN_READER_VERSION_FOR_STABLE_IDS: u32 = 2;
+
+/// AG-1: Asset Clip component入れ子を含む文書が宣言すべき最小`min_reader_version`。
+pub const MIN_READER_VERSION_FOR_ASSET_COMPONENTS: u32 = 3;
+
+/// D1l: `EffectDefinition`/`EffectUse`共有schemaを含む文書が宣言すべき最小`min_reader_version`。
+pub const MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS: u32 = 4;
 
 impl Document {
     /// 保存前不変条件。失敗しても`self`は変更しない(検証のみ)。
@@ -131,7 +208,89 @@ impl Document {
                 validate_item(self, item, &mut seen_layers, &mut parents)?;
             }
         }
-        detect_parent_cycles(&parents)
+        detect_parent_cycles(&parents)?;
+        self.validate_stable_ids()?;
+        self.validate_asset_component_reader_gate()?;
+        self.validate_effect_definitions()
+    }
+
+    /// D1l: `effect_definitions`台帳自体(plugin_id/params)とreader gateを検査する。
+    /// 参照整合(dangling)は`validate_envelope`側で個々のUseについて検査する。
+    fn validate_effect_definitions(&self) -> Result<(), DocumentError> {
+        for def in &self.effect_definitions {
+            if def.plugin_id.is_empty() {
+                return Err(DocumentError::EmptyEffectDefinitionPluginId { id: def.id.get() });
+            }
+            let path = format!("effect_definitions[{}]", def.id.get());
+            let degraded = plugin_slot_degraded(
+                &def.plugin_id,
+                def.effect_version,
+                DocPluginKind::Filter,
+                &path,
+            )?;
+            for (name, param) in &def.params {
+                let p = format!("{path}.{name}");
+                validate_plugin_param(self, &def.plugin_id, name, param, &p, degraded)?;
+            }
+        }
+        let any_effects = !self.effect_definitions.is_empty() || document_has_any_effect_use(self);
+        if any_effects && self.min_reader_version < MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS {
+            return Err(DocumentError::EffectDefinitionsRequireNewerReader {
+                min_reader_version: self.min_reader_version,
+                required: MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
+            });
+        }
+        Ok(())
+    }
+
+    /// AG-1: 非legacyのAsset componentを含む文書は`min_reader_version>=3`。
+    fn validate_asset_component_reader_gate(&self) -> Result<(), DocumentError> {
+        let mut needs = false;
+        for track in &self.tracks {
+            for item in &track.items {
+                if item_uses_asset_components(item) {
+                    needs = true;
+                    break;
+                }
+            }
+            if needs {
+                break;
+            }
+        }
+        if needs && self.min_reader_version < MIN_READER_VERSION_FOR_ASSET_COMPONENTS {
+            return Err(DocumentError::AssetComponentsRequireNewerReader {
+                min_reader_version: self.min_reader_version,
+                required: MIN_READER_VERSION_FOR_ASSET_COMPONENTS,
+            });
+        }
+        Ok(())
+    }
+
+    /// A8: EffectId/KeyframeIdの一意性・`next_stable_id`カウンタの整合性・
+    /// stable id存在時の`min_reader_version`下限(M2E-11①のネスト規律を機械判定)。
+    fn validate_stable_ids(&self) -> Result<(), DocumentError> {
+        let mut seen = HashSet::new();
+        let mut max_observed: Option<u64> = None;
+        // D1l: EffectDefinitionIdもEffectId/KeyframeIdと同じ共有counterの空間(stable_id.rs)。
+        for def in &self.effect_definitions {
+            note_stable_id(def.id.get(), &mut seen, &mut max_observed)?;
+            for param in def.params.values() {
+                collect_stable_ids_param(param, &mut seen, &mut max_observed)?;
+            }
+        }
+        for track in &self.tracks {
+            for item in &track.items {
+                collect_stable_ids_item(item, &mut seen, &mut max_observed)?;
+            }
+        }
+        if !seen.is_empty() && self.min_reader_version < MIN_READER_VERSION_FOR_STABLE_IDS {
+            return Err(DocumentError::StableIdsRequireNewerReader {
+                min_reader_version: self.min_reader_version,
+                required: MIN_READER_VERSION_FOR_STABLE_IDS,
+            });
+        }
+        self.next_stable_id.validate_observed_max(max_observed)?;
+        Ok(())
     }
 
     fn require_track(&self, id: TrackId) -> Result<(), DocumentError> {
@@ -237,16 +396,68 @@ fn validate_clip(
         .map_err(|source| DocumentError::InvalidTimeMap { layer_id, source })?;
 
     match &clip.source {
-        ClipSource::Asset { asset } => doc.require_asset(*asset)?,
+        ClipSource::Asset {
+            asset,
+            video,
+            audio,
+        } => {
+            doc.require_asset(*asset)?;
+            if video.is_none() && audio.is_empty() {
+                return Err(DocumentError::EmptyAssetComponents { layer_id });
+            }
+            if let Some(video) = video {
+                if video.stream.kind != StreamKind::Video {
+                    return Err(DocumentError::VideoComponentKindMismatch { layer_id });
+                }
+                if video.stream.ordinal != 0 {
+                    return Err(DocumentError::UnsupportedVideoStreamOrdinal {
+                        layer_id,
+                        ordinal: video.stream.ordinal,
+                    });
+                }
+            }
+            for (index, comp) in audio.iter().enumerate() {
+                if comp.stream.kind != StreamKind::Audio {
+                    return Err(DocumentError::AudioComponentKindMismatch { layer_id, index });
+                }
+                if let Some(first_index) = audio[..index]
+                    .iter()
+                    .position(|earlier| earlier.stream.ordinal == comp.stream.ordinal)
+                {
+                    return Err(DocumentError::DuplicateAudioStreamOrdinal {
+                        layer_id,
+                        ordinal: comp.stream.ordinal,
+                        first_index,
+                        second_index: index,
+                    });
+                }
+                validate_param(
+                    doc,
+                    &comp.gain,
+                    ParamConstraints::min_f64(0.0),
+                    &format!("layer{layer_id}.source.audio[{index}].gain"),
+                )?;
+            }
+        }
         ClipSource::Plugin {
-            plugin_id, params, ..
+            plugin_id,
+            effect_version,
+            params,
+            ..
         } => {
             if plugin_id.is_empty() {
                 return Err(DocumentError::EmptySourcePluginId { layer_id });
             }
+            let source_path = format!("layer{layer_id}.source");
+            let degraded = plugin_slot_degraded(
+                plugin_id,
+                *effect_version,
+                DocPluginKind::LayerSource,
+                &source_path,
+            )?;
             for (name, param) in params {
-                let path = format!("layer{layer_id}.source.{name}");
-                validate_plugin_param(doc, plugin_id, name, param, &path)?;
+                let path = format!("{source_path}.{name}");
+                validate_plugin_param(doc, plugin_id, name, param, &path, degraded)?;
             }
         }
         ClipSource::Vector { recipe } => {
@@ -280,46 +491,85 @@ fn validate_envelope(
         parents.insert(id, parent.get());
     }
     let base = format!("layer{id}");
-    validate_param(
-        doc,
-        &env.transform.position,
-        param_expect::transform_position(),
-        &format!("{base}.position"),
-    )?;
-    validate_param(
-        doc,
-        &env.transform.anchor,
-        param_expect::transform_anchor(),
-        &format!("{base}.anchor"),
-    )?;
-    validate_param(
-        doc,
-        &env.transform.scale,
-        param_expect::transform_scale(),
-        &format!("{base}.scale"),
-    )?;
-    validate_param(
-        doc,
-        &env.transform.rotation,
-        param_expect::transform_rotation(),
-        &format!("{base}.rotation"),
-    )?;
+    validate_transform2d(doc, &env.transform, &base)?;
     validate_param(
         doc,
         &env.opacity,
         param_expect::envelope_opacity(),
         &format!("{base}.opacity"),
     )?;
-    for effect in &env.effects {
-        if effect.plugin_id.is_empty() {
-            return Err(DocumentError::EmptyEffectPluginId { layer_id: id });
-        }
-        for (name, param) in &effect.params {
-            let path = format!("{base}.effect[{}].{name}", effect.plugin_id);
-            validate_plugin_param(doc, &effect.plugin_id, name, param, &path)?;
+    for use_ in &env.effects {
+        if doc.effect_definition(use_.definition_id).is_none() {
+            return Err(DocumentError::DanglingEffectDefinition {
+                layer_id: id,
+                id: use_.id.get(),
+                definition_id: use_.definition_id.get(),
+            });
         }
     }
     Ok(())
+}
+
+/// D1l: 文書内のいずれかのlayer(Group含む)が1つでも`EffectUse`を持つか。
+fn document_has_any_effect_use(doc: &Document) -> bool {
+    fn walk(items: &[TrackItem]) -> bool {
+        items.iter().any(|item| {
+            let (effects, children): (&[crate::schema::EffectUse], &[TrackItem]) = match item {
+                TrackItem::Clip(clip) => (&clip.envelope.effects, &[]),
+                TrackItem::Group(group) => (&group.envelope.effects, &group.children),
+            };
+            !effects.is_empty() || walk(children)
+        })
+    }
+    doc.tracks.iter().any(|t| walk(&t.items))
+}
+
+/// D1f/S13: 既知plugin_idの種別違いは型付きエラー、未知idと未来版effect_versionは
+/// 同一のdegraded扱い(構造検査のみ・型表チェックはスキップ)にする。
+fn plugin_slot_degraded(
+    plugin_id: &str,
+    effect_version: u32,
+    expected_kind: DocPluginKind,
+    path: &str,
+) -> Result<bool, DocumentError> {
+    match known_plugin_info(plugin_id) {
+        None => Ok(true),
+        Some(info) if info.kind != expected_kind => Err(DocumentError::PluginKindMismatch {
+            path: path.to_string(),
+            plugin_id: plugin_id.to_string(),
+            expected: expected_kind.name().to_string(),
+            got: info.kind.name().to_string(),
+        }),
+        Some(info) => Ok(effect_version > info.current_version),
+    }
+}
+
+/// Transform2Dの4スロット共通検査。エンベロープ本体とRepeater.transformで共用(D1i-2)。
+fn validate_transform2d(doc: &Document, t: &Transform2D, base: &str) -> Result<(), DocumentError> {
+    validate_param(
+        doc,
+        &t.position,
+        param_expect::transform_position(),
+        &format!("{base}.position"),
+    )?;
+    validate_param(
+        doc,
+        &t.anchor,
+        param_expect::transform_anchor(),
+        &format!("{base}.anchor"),
+    )?;
+    validate_param(
+        doc,
+        &t.scale,
+        param_expect::transform_scale(),
+        &format!("{base}.scale"),
+    )?;
+    validate_param(
+        doc,
+        &t.rotation,
+        param_expect::transform_rotation(),
+        &format!("{base}.rotation"),
+    )
 }
 
 fn validate_plugin_param(
@@ -328,13 +578,15 @@ fn validate_plugin_param(
     param_id: &str,
     param: &DocParam,
     path: &str,
+    degraded: bool,
 ) -> Result<(), DocumentError> {
-    if let Some(c) = known_plugin_param(plugin_id, param_id) {
-        validate_param(doc, param, c, path)
-    } else {
-        // 未知plugin: 型表は持たないが有限性・AssetRefダングリングは検査(D1fと両立)
-        validate_param_structure(doc, param, path)
+    if !degraded {
+        if let Some(c) = known_plugin_param(plugin_id, param_id) {
+            return validate_param(doc, param, c, path);
+        }
     }
+    // 未知plugin・既知プラグインの未来版: 型表は当てず有限性・AssetRefダングリングのみ検査(F-9/D1f)
+    validate_param_structure(doc, param, path)
 }
 
 fn detect_parent_cycles(parents: &HashMap<u64, u64>) -> Result<(), DocumentError> {
@@ -403,7 +655,7 @@ fn validate_param(
             validate_param(doc, y, vec2_axis(), &format!("{path}.y"))
         }
         DocParam::LookAt { target, .. } => {
-            if !constraints.allow_spatial_links {
+            if !constraints.allow_look_at {
                 return Err(DocumentError::SpatialLinkNotAllowed {
                     path: path.to_string(),
                 });
@@ -411,7 +663,7 @@ fn validate_param(
             doc.require_layer(*target)
         }
         DocParam::Follow { target, offset } => {
-            if !constraints.allow_spatial_links {
+            if !constraints.allow_follow {
                 return Err(DocumentError::SpatialLinkNotAllowed {
                     path: path.to_string(),
                 });
@@ -427,7 +679,7 @@ fn validate_param(
 }
 
 /// 未知plugin向け: 期待型なし。有限性・AssetRef存在・Bezierのみ。
-fn validate_param_structure(
+pub(crate) fn validate_param_structure(
     doc: &Document,
     param: &DocParam,
     path: &str,
@@ -470,7 +722,10 @@ fn validate_param_structure(
     }
 }
 
-fn validate_interp_at(path: &str, interp: &motolii_eval::Interp) -> Result<(), DocumentError> {
+pub(crate) fn validate_interp_at(
+    path: &str,
+    interp: &motolii_eval::Interp,
+) -> Result<(), DocumentError> {
     validate_interp(interp).map_err(|e| match e {
         crate::doc_keyframe::DocKeyframeError::NonFiniteBezier => DocumentError::NonFiniteBezier {
             path: path.to_string(),
@@ -486,6 +741,36 @@ fn validate_interp_at(path: &str, interp: &motolii_eval::Interp) -> Result<(), D
             path: format!("{path} ({other})"),
         },
     })
+}
+
+/// ID採番前のDraft keyframe列: 空拒否・variant一致・値の構造検査。
+pub(crate) fn validate_keyframe_draft_values(
+    doc: &Document,
+    values: &[crate::doc_value::DocValue],
+    path: &str,
+) -> Result<(), DocumentError> {
+    if values.is_empty() {
+        return Err(DocumentError::EmptyKeyframeTrack {
+            path: path.to_string(),
+        });
+    }
+    let mut expected_kind: Option<&'static str> = None;
+    for value in values {
+        let kind = value.kind_name();
+        match expected_kind {
+            None => expected_kind = Some(kind),
+            Some(prev) if prev != kind => {
+                return Err(DocumentError::KeyframeVariantMismatch {
+                    path: path.to_string(),
+                    expected: prev.to_string(),
+                    got: kind.to_string(),
+                });
+            }
+            Some(_) => {}
+        }
+        validate_value_structure(doc, value, path)?;
+    }
+    Ok(())
 }
 
 fn validate_value(
@@ -515,6 +800,20 @@ fn validate_value(
                 });
             }
             _ => {}
+        }
+    }
+    if let DocValue::F64(v) = value {
+        if constraints.min.is_some_and(|min| *v < min)
+            || constraints.max.is_some_and(|max| *v > max)
+        {
+            return Err(DocumentError::ValueOutOfRange {
+                path: path.to_string(),
+            });
+        }
+        if constraints.integer && v.fract().abs() > f64::EPSILON {
+            return Err(DocumentError::ValueOutOfRange {
+                path: path.to_string(),
+            });
         }
     }
     Ok(())
@@ -589,50 +888,350 @@ fn validate_vector_content(
     }
 }
 
-/// `VectorContent::SvgAsset` が要求する MIME。
-const SVG_ASSET_TYPE: &str = "image/svg+xml";
+/// Document内の全stable ID(EffectUse/EffectDefinition/Keyframe共有空間)を収集する。
+/// command/migrationの衝突検査で`validate_stable_ids`と同じ走査を再利用する(D1l)。
+pub(crate) fn collect_document_stable_ids(doc: &Document) -> HashSet<u64> {
+    let mut seen = HashSet::new();
+    let mut max_observed = None;
+    for def in &doc.effect_definitions {
+        let _ = note_stable_id(def.id.get(), &mut seen, &mut max_observed);
+        for param in def.params.values() {
+            let _ = collect_stable_ids_param(param, &mut seen, &mut max_observed);
+        }
+    }
+    for track in &doc.tracks {
+        for item in &track.items {
+            let _ = collect_stable_ids_item(item, &mut seen, &mut max_observed);
+        }
+    }
+    seen
+}
 
-/// `TextPath.font_asset` の許可型(D1i-1で確定。未決を埋めずここで正本化)。
-const FONT_ASSET_TYPES: &[&str] = &["font/ttf", "font/otf", "font/woff", "font/woff2"];
+pub(crate) fn stable_id_in_use(doc: &Document, id: u64) -> bool {
+    collect_document_stable_ids(doc).contains(&id)
+}
 
-fn validate_path_op_params(
-    doc: &Document,
-    op: &crate::schema::PathOp,
-    path: &str,
+fn note_stable_id(
+    id: u64,
+    seen: &mut HashSet<u64>,
+    max_observed: &mut Option<u64>,
 ) -> Result<(), DocumentError> {
-    use crate::schema::PathOp;
-    let c = path_op_scalar();
+    if !seen.insert(id) {
+        return Err(DocumentError::DuplicateStableId { id });
+    }
+    *max_observed = Some(max_observed.map_or(id, |m| m.max(id)));
+    Ok(())
+}
+
+fn item_uses_asset_components(item: &TrackItem) -> bool {
+    match item {
+        TrackItem::Clip(clip) => match &clip.source {
+            ClipSource::Asset { video, audio, .. } => {
+                asset_components_require_newer_reader(video, audio)
+            }
+            _ => false,
+        },
+        TrackItem::Group(group) => group.children.iter().any(item_uses_asset_components),
+    }
+}
+
+fn collect_stable_ids_item(
+    item: &TrackItem,
+    seen: &mut HashSet<u64>,
+    max_observed: &mut Option<u64>,
+) -> Result<(), DocumentError> {
+    match item {
+        TrackItem::Clip(clip) => {
+            collect_stable_ids_envelope(&clip.envelope, seen, max_observed)?;
+            match &clip.source {
+                ClipSource::Asset { audio, .. } => {
+                    for comp in audio {
+                        collect_stable_ids_param(&comp.gain, seen, max_observed)?;
+                    }
+                    Ok(())
+                }
+                ClipSource::Plugin { params, .. } => {
+                    for param in params.values() {
+                        collect_stable_ids_param(param, seen, max_observed)?;
+                    }
+                    Ok(())
+                }
+                ClipSource::Vector { recipe } => {
+                    collect_stable_ids_vector_content(&recipe.content, seen, max_observed)?;
+                    for op in &recipe.modifiers {
+                        collect_stable_ids_path_op(op, seen, max_observed)?;
+                    }
+                    Ok(())
+                }
+            }
+        }
+        TrackItem::Group(group) => {
+            collect_stable_ids_envelope(&group.envelope, seen, max_observed)?;
+            for child in &group.children {
+                collect_stable_ids_item(child, seen, max_observed)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn collect_stable_ids_envelope(
+    env: &ItemEnvelope,
+    seen: &mut HashSet<u64>,
+    max_observed: &mut Option<u64>,
+) -> Result<(), DocumentError> {
+    collect_stable_ids_param(&env.transform.position, seen, max_observed)?;
+    collect_stable_ids_param(&env.transform.anchor, seen, max_observed)?;
+    collect_stable_ids_param(&env.transform.scale, seen, max_observed)?;
+    collect_stable_ids_param(&env.transform.rotation, seen, max_observed)?;
+    collect_stable_ids_param(&env.opacity, seen, max_observed)?;
+    // D1l: EffectUseのparamsは持たない(paramsはeffect_definitions側でcollectする)。
+    for use_ in &env.effects {
+        note_stable_id(use_.id.get(), seen, max_observed)?;
+    }
+    Ok(())
+}
+
+fn collect_stable_ids_param(
+    param: &DocParam,
+    seen: &mut HashSet<u64>,
+    max_observed: &mut Option<u64>,
+) -> Result<(), DocumentError> {
+    match param {
+        DocParam::Const(_)
+        | DocParam::Data { .. }
+        | DocParam::LookAt { .. }
+        | DocParam::Follow { .. } => Ok(()),
+        DocParam::Keyframes(track) => {
+            for key in track.keys() {
+                note_stable_id(key.id.get(), seen, max_observed)?;
+            }
+            Ok(())
+        }
+        DocParam::Vec2Axes { x, y } => {
+            collect_stable_ids_param(x, seen, max_observed)?;
+            collect_stable_ids_param(y, seen, max_observed)
+        }
+    }
+}
+
+fn collect_stable_ids_vector_content(
+    content: &VectorContent,
+    seen: &mut HashSet<u64>,
+    max_observed: &mut Option<u64>,
+) -> Result<(), DocumentError> {
+    match content {
+        VectorContent::StandardShape { shape } => match shape {
+            StandardShape::Rect { width, height } | StandardShape::Ellipse { width, height } => {
+                collect_stable_ids_param(width, seen, max_observed)?;
+                collect_stable_ids_param(height, seen, max_observed)
+            }
+        },
+        VectorContent::SvgAsset { .. } | VectorContent::TextPath { .. } => Ok(()),
+        VectorContent::Group { children } => {
+            for child in children {
+                collect_stable_ids_vector_content(child, seen, max_observed)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn collect_stable_ids_path_op(
+    op: &PathOp,
+    seen: &mut HashSet<u64>,
+    max_observed: &mut Option<u64>,
+) -> Result<(), DocumentError> {
     match op {
-        PathOp::PuckerBloat { amount } => validate_param(doc, amount, c, &format!("{path}.amount")),
-        PathOp::ZigZag { amount, ridges } => {
-            validate_param(doc, amount, c, &format!("{path}.amount"))?;
-            validate_param(doc, ridges, c, &format!("{path}.ridges"))
+        PathOp::PuckerBloat { amount } => collect_stable_ids_param(amount, seen, max_observed),
+        PathOp::ZigZag {
+            amount,
+            ridges,
+            point_type: _,
+        } => {
+            collect_stable_ids_param(amount, seen, max_observed)?;
+            collect_stable_ids_param(ridges, seen, max_observed)
         }
-        PathOp::Offset { distance } => {
-            validate_param(doc, distance, c, &format!("{path}.distance"))
-        }
-        PathOp::RoundCorners { radius } => {
-            validate_param(doc, radius, c, &format!("{path}.radius"))
-        }
+        PathOp::Offset {
+            distance,
+            line_join: _,
+            miter_limit: _,
+        } => collect_stable_ids_param(distance, seen, max_observed),
+        PathOp::RoundCorners { radius } => collect_stable_ids_param(radius, seen, max_observed),
         PathOp::Trim {
             start,
             end,
             offset,
             mode: _,
         } => {
-            validate_param(doc, start, c, &format!("{path}.start"))?;
-            validate_param(doc, end, c, &format!("{path}.end"))?;
-            validate_param(doc, offset, c, &format!("{path}.offset"))
+            collect_stable_ids_param(start, seen, max_observed)?;
+            collect_stable_ids_param(end, seen, max_observed)?;
+            collect_stable_ids_param(offset, seen, max_observed)
         }
-        PathOp::Twist { angle } => validate_param(doc, angle, c, &format!("{path}.angle")),
-        PathOp::Wiggle { amp, freq, seed } => {
-            validate_param(doc, amp, c, &format!("{path}.amp"))?;
-            validate_param(doc, freq, c, &format!("{path}.freq"))?;
-            validate_param(doc, seed, c, &format!("{path}.seed"))
+        PathOp::Twist { angle, center } => {
+            collect_stable_ids_param(angle, seen, max_observed)?;
+            collect_stable_ids_param(center, seen, max_observed)
         }
-        PathOp::Repeater { copies, offset } => {
-            validate_param(doc, copies, c, &format!("{path}.copies"))?;
-            validate_param(doc, offset, c, &format!("{path}.offset"))
+        PathOp::Wiggle { amp, freq, seed: _ } => {
+            collect_stable_ids_param(amp, seen, max_observed)?;
+            collect_stable_ids_param(freq, seen, max_observed)
+            // seedはu64固定(非DocParam) — stable id走査対象外。
+        }
+        PathOp::Repeater {
+            copies,
+            offset,
+            transform,
+            composite: _,
+            start_opacity,
+            end_opacity,
+        } => {
+            collect_stable_ids_param(copies, seen, max_observed)?;
+            collect_stable_ids_param(offset, seen, max_observed)?;
+            collect_stable_ids_transform2d(transform, seen, max_observed)?;
+            collect_stable_ids_param(start_opacity, seen, max_observed)?;
+            collect_stable_ids_param(end_opacity, seen, max_observed)
+        }
+    }
+}
+
+fn collect_stable_ids_transform2d(
+    transform: &Transform2D,
+    seen: &mut HashSet<u64>,
+    max_observed: &mut Option<u64>,
+) -> Result<(), DocumentError> {
+    collect_stable_ids_param(&transform.position, seen, max_observed)?;
+    collect_stable_ids_param(&transform.anchor, seen, max_observed)?;
+    collect_stable_ids_param(&transform.scale, seen, max_observed)?;
+    collect_stable_ids_param(&transform.rotation, seen, max_observed)
+}
+
+/// `VectorContent::SvgAsset` が要求する MIME。
+const SVG_ASSET_TYPE: &str = "image/svg+xml";
+
+/// `TextPath.font_asset` の許可型(D1i-1で確定。未決を埋めずここで正本化)。
+const FONT_ASSET_TYPES: &[&str] = &["font/ttf", "font/otf", "font/woff", "font/woff2"];
+
+/// PathOp意味論表(D1i-2)の拒否項目をここで型付きエラーに落とす。
+/// open-path Offsetの拒否は幾何側(`pathgeom::apply`)の責務 — validateはDocumentの
+/// 静的スキーマしか見えず、SvgAsset/TextPath由来パスの開閉はレシピからは判定できない。
+fn validate_path_op_params(
+    doc: &Document,
+    op: &crate::schema::PathOp,
+    path: &str,
+) -> Result<(), DocumentError> {
+    use crate::schema::PathOp;
+    let scalar = path_op_scalar();
+    match op {
+        PathOp::PuckerBloat { amount } => validate_param(
+            doc,
+            amount,
+            param_expect::path_op_pucker_bloat_amount(),
+            &format!("{path}.amount"),
+        ),
+        PathOp::ZigZag {
+            amount,
+            ridges,
+            point_type: _,
+        } => {
+            validate_param(
+                doc,
+                amount,
+                param_expect::path_op_non_negative(),
+                &format!("{path}.amount"),
+            )?;
+            validate_param(
+                doc,
+                ridges,
+                param_expect::path_op_non_negative(),
+                &format!("{path}.ridges"),
+            )
+        }
+        PathOp::Offset {
+            distance,
+            line_join: _,
+            miter_limit,
+        } => {
+            validate_param(doc, distance, scalar, &format!("{path}.distance"))?;
+            if !miter_limit.is_finite() {
+                return Err(DocumentError::NonFiniteValue {
+                    path: format!("{path}.miter_limit"),
+                });
+            }
+            if *miter_limit <= 0.0 {
+                return Err(DocumentError::ValueOutOfRange {
+                    path: format!("{path}.miter_limit"),
+                });
+            }
+            Ok(())
+        }
+        PathOp::RoundCorners { radius } => validate_param(
+            doc,
+            radius,
+            param_expect::path_op_non_negative(),
+            &format!("{path}.radius"),
+        ),
+        PathOp::Trim {
+            start,
+            end,
+            offset,
+            mode: _,
+        } => {
+            validate_param(
+                doc,
+                start,
+                param_expect::path_op_unit_interval(),
+                &format!("{path}.start"),
+            )?;
+            validate_param(
+                doc,
+                end,
+                param_expect::path_op_unit_interval(),
+                &format!("{path}.end"),
+            )?;
+            validate_param(doc, offset, scalar, &format!("{path}.offset"))
+        }
+        PathOp::Twist { angle, center } => {
+            validate_param(doc, angle, scalar, &format!("{path}.angle"))?;
+            validate_param(
+                doc,
+                center,
+                param_expect::path_op_vec2(),
+                &format!("{path}.center"),
+            )
+        }
+        PathOp::Wiggle { amp, freq, seed: _ } => {
+            validate_param(doc, amp, scalar, &format!("{path}.amp"))?;
+            validate_param(doc, freq, scalar, &format!("{path}.freq"))
+            // seedはu64固定(非DocParam) — 型で非有限値・キーフレームを構文上排除済み。
+        }
+        PathOp::Repeater {
+            copies,
+            offset,
+            transform,
+            composite: _,
+            start_opacity,
+            end_opacity,
+        } => {
+            validate_param(
+                doc,
+                copies,
+                param_expect::path_op_non_negative_integer(),
+                &format!("{path}.copies"),
+            )?;
+            validate_param(doc, offset, scalar, &format!("{path}.offset"))?;
+            validate_transform2d(doc, transform, &format!("{path}.transform"))?;
+            validate_param(
+                doc,
+                start_opacity,
+                param_expect::path_op_opacity(),
+                &format!("{path}.start_opacity"),
+            )?;
+            validate_param(
+                doc,
+                end_opacity,
+                param_expect::path_op_opacity(),
+                &format!("{path}.end_opacity"),
+            )
         }
     }
 }

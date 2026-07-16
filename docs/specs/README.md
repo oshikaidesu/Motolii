@@ -1,19 +1,22 @@
 # 仕様書プロセス(並列エージェント開発の前提)
 
-各フェーズ(M0〜M5)の実装前に、このディレクトリの仕様書を「確定」状態にしてから着手する。仕様書はエージェントへの発注書であり、**タスクの粒度は「1タスク = 1エージェント = 1PR」で完結する単位**に揃える。
+各フェーズ(M0〜M5)の実装前に、このディレクトリの仕様書を「確定」または「段階発注可」にしてから着手する(「ドラフト」のまま着手しない)。仕様書はエージェントへの発注書であり、**タスクの粒度は「1タスク = 1エージェント = 1PR」で完結する単位**に揃える。段階発注可では**タスク表の依存を満たした行だけ**着手する。
 
 ## 仕様書のステータス
 
 - **確定(frozen)**: このフェーズのタスクは着手可能。インターフェース変更はPRでの仕様書改訂を先に行う
+- **段階発注可(ready with gates)**: 人間決定は完了。タスク表の依存を満たした行から着手可能
 - **ドラフト(draft)**: 方向性の記述。凍結ゲート(M1完了後)または前フェーズの結果を受けて確定させる
+
+後続の停止ゲートが発効している場合は、上の一般則より停止ゲートを優先する。現在M3はM2基盤再締結ゲート解除後の入場PRまで着手不可である。
 
 | 仕様書 | ステータス |
 |---|---|
 | [M0-spikes.md](M0-spikes.md) | 確定 |
 | [M1-vertical-slice.md](M1-vertical-slice.md) | 確定(M0の採否判断で該当箇所を更新) |
-| [M2-document-model.md](M2-document-model.md) | ドラフト(統一camera D1j schema→D1k runtime→D3接続を追加。migration/解凍後に確定) |
-| [M3-ui-integration.md](M3-ui-integration.md) | **確定(タスク別入場)**。G0-2/3/4/7完了。U0eはG0-6目視、U0fはG0-8+M4-K1a実測、各UIは表記M2依存を待つ |
-| [M4-cache-and-analysis.md](M4-cache-and-analysis.md) | ドラフト(K0 RoD/RoIは透過Stageと分離。旧K1をK1a〜K1dの台帳/並行store/階層退避/pressure制御へ分割。K2へShared Effect invalidationを追加) |
+| [M2-document-model.md](M2-document-model.md) | **段階発注可**(コア締結撤回。P1修復済。[基盤再締結ゲート](../reviews/2026-07-15-m2-foundation-reclosure-gate.md)発効中。統一camera CAM-G0→D1j→D1k→D3fレーンを含む) |
+| [M3-ui-integration.md](M3-ui-integration.md) | **ドラフト / 製品実装停止**(M2基盤再締結後に入場条件を再翻訳。G0-2/3/4/7の意味決定は記録済み) |
+| [M4-cache-and-analysis.md](M4-cache-and-analysis.md) | ドラフト(K0 RoD/RoIは透過Stageと分離。旧K1をK1a〜K1dの台帳/並行store/階層退避/pressure制御へ分割。K2へShared Effect invalidationを追加。凍結ゲートで確定) |
 | [M5-3d-and-post.md](M5-3d-and-post.md) | ドラフト(P0I/P7でCavalry型Duplicator+stable seedを段階実装。凍結ゲートで確定) |
 
 ## タスク粒度のルール
@@ -31,7 +34,7 @@
 
 ```markdown
 # M{n}: {フェーズ名}
-ステータス: 確定 | ドラフト
+ステータス: 確定 | 段階発注可 | ドラフト
 ## 目的(このフェーズが退治する落とし穴)
 ## スコープ外(やらないこと)
 ## インターフェース契約(並列タスク間の境界となる型・trait)

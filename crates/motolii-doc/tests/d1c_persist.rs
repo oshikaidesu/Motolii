@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! D1c: アトミック保存の各段 abort 注入と min_reader / roundtrip / 競合・再保存。
 
 use std::fs;
@@ -219,6 +221,7 @@ fn save_rejects_invalid_document() {
     let dir = unique_dir("invalid");
     let path = dir.join("doc.json");
     let mut doc = Document::new_v1();
+    // version < min_reader_version は validate が型付き拒否する(方針1)。
     doc.version = 1;
     doc.min_reader_version = 2;
     let err = save_document(&path, &doc).unwrap_err();

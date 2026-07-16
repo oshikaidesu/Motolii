@@ -12,6 +12,7 @@ use motolii_core::{Fps, RationalTime, TimeMap};
 
 use crate::asset::AssetId;
 use crate::param::DocParam;
+use crate::stable_id::{EffectDefinitionId, EffectId};
 use crate::track_id::TrackId;
 use crate::LayerId;
 
@@ -178,12 +179,19 @@ fn default_opacity() -> DocParam {
     DocParam::const_f64(1.0)
 }
 
+fn default_false() -> bool {
+    false
+}
+
 /// クリップ/グループ共通の項目エンベロープ(concept 2026-07-10)。
+///
+/// `visible`/`solo`/`lock` は B④ 3軸表(決定パック採択)。serde default で追加的。
 #[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
 pub struct ItemEnvelope {
     pub layer_id: LayerId,
+    /// D1l: ordered EffectUse stack。本体は`Document.effect_definitions`。
     #[serde(default)]
-    pub effects: Vec<EffectInstance>,
+    pub effects: Vec<EffectUse>,
     pub transform: Transform2D,
     #[serde(default)]
     pub clipping_mask: ClippingMaskSettings,
@@ -191,6 +199,15 @@ pub struct ItemEnvelope {
     pub blend: BlendMode,
     #[serde(default = "default_opacity")]
     pub opacity: DocParam,
+    /// 自身の描画除外。依存先(parent/mask/LookAt)としては評価可(B④)。
+    #[serde(default = "default_true")]
+    pub visible: bool,
+    /// 描画フィルタ。文書内に1つでも true があればソロ集合のみ描画(B④)。
+    #[serde(default = "default_false")]
+    pub solo: bool,
+    /// 編集禁止のみ。評価・描画に影響しない(B④)。
+    #[serde(default = "default_false")]
+    pub lock: bool,
 }
 
 impl ItemEnvelope {
@@ -202,12 +219,53 @@ impl ItemEnvelope {
             clipping_mask: ClippingMaskSettings::default(),
             blend: BlendMode::Normal,
             opacity: default_opacity(),
+            visible: true,
+            solo: false,
+            lock: false,
         }
     }
 }
 
+/// stack上のUse参照(D1l)。identityは`id`、recipeは`definition_id`。
+///
+/// 未知/hybridフィールドはserdeで拒否する(`plugin_id`等のinline payload混入を黙殺しない)。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct EffectUse {
+    pub id: EffectId,
+    pub definition_id: EffectDefinitionId,
+}
+
+impl<'de> Deserialize<'de> for EffectUse {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(DeserializeDerive)]
+        struct RawEffectUse {
+            id: EffectId,
+            definition_id: EffectDefinitionId,
+            #[serde(flatten)]
+            extra: Map<String, JsonValue>,
+        }
+
+        let raw = RawEffectUse::deserialize(deserializer)?;
+        if !raw.extra.is_empty() {
+            return Err(de::Error::custom(format!(
+                "EffectUse has unknown or hybrid inline fields: {:?}",
+                raw.extra.keys().collect::<Vec<_>>()
+            )));
+        }
+        Ok(Self {
+            id: raw.id,
+            definition_id: raw.definition_id,
+        })
+    }
+}
+
+/// 共有可能なEffect recipe(D1l)。
 #[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
-pub struct EffectInstance {
+pub struct EffectDefinition {
+    pub id: EffectDefinitionId,
     pub plugin_id: String,
     #[serde(default = "default_effect_version")]
     pub effect_version: u32,
@@ -218,6 +276,88 @@ pub struct EffectInstance {
     /// 未知フィールド保持(F-9の席。警告はD1f)。
     #[serde(default, flatten)]
     pub extra: Map<String, JsonValue>,
+}
+
+impl EffectDefinition {
+    /// AddEffect / migration用の構築。
+    pub fn new(
+        id: EffectDefinitionId,
+        plugin_id: impl Into<String>,
+        effect_version: u32,
+        enabled: bool,
+        params: BTreeMap<String, DocParam>,
+        extra: Map<String, JsonValue>,
+    ) -> Self {
+        Self {
+            id,
+            plugin_id: plugin_id.into(),
+            effect_version,
+            enabled,
+            params,
+            extra,
+        }
+    }
+
+    pub fn deep_copy(&self, new_id: EffectDefinitionId) -> Self {
+        Self {
+            id: new_id,
+            plugin_id: self.plugin_id.clone(),
+            effect_version: self.effect_version,
+            enabled: self.enabled,
+            params: self.params.clone(),
+            extra: self.extra.clone(),
+        }
+    }
+}
+
+/// 旧inline EffectInstance相当の構築ヘルパ(テスト/AddEffect payload)。
+///
+/// 永続形は`EffectUse`+`EffectDefinition`。本型はcommandが両方を運ぶための便宜。
+#[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
+pub struct EffectInstance {
+    /// Use identity。
+    pub id: EffectId,
+    pub definition_id: EffectDefinitionId,
+    pub plugin_id: String,
+    #[serde(default = "default_effect_version")]
+    pub effect_version: u32,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub params: BTreeMap<String, DocParam>,
+    #[serde(default, flatten)]
+    pub extra: Map<String, JsonValue>,
+}
+
+impl EffectInstance {
+    pub fn into_use_and_definition(self) -> (EffectUse, EffectDefinition) {
+        (
+            EffectUse {
+                id: self.id,
+                definition_id: self.definition_id,
+            },
+            EffectDefinition {
+                id: self.definition_id,
+                plugin_id: self.plugin_id,
+                effect_version: self.effect_version,
+                enabled: self.enabled,
+                params: self.params,
+                extra: self.extra,
+            },
+        )
+    }
+
+    pub fn from_use_and_definition(use_: &EffectUse, def: &EffectDefinition) -> Self {
+        Self {
+            id: use_.id,
+            definition_id: use_.definition_id,
+            plugin_id: def.plugin_id.clone(),
+            effect_version: def.effect_version,
+            enabled: def.enabled,
+            params: def.params.clone(),
+            extra: def.extra.clone(),
+        }
+    }
 }
 
 /// 正準空間の2D変形。親参照はスキーマ予約。
@@ -278,11 +418,121 @@ pub enum BlendMode {
     Multiply,
 }
 
+/// 永続するmedia stream選択(kind + container内ordinal)。
+///
+/// content hashが同じAssetなら同じordinalを同じstreamとみなす。
+/// 欠落時は別streamへfallbackせずtyped error(AG-1)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, DeserializeDerive)]
+pub struct StreamSelector {
+    pub kind: StreamKind,
+    pub ordinal: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, DeserializeDerive)]
+#[serde(rename_all = "snake_case")]
+pub enum StreamKind {
+    Video,
+    Audio,
+}
+
+/// Asset Clipのvideo component(0または1)。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, DeserializeDerive)]
+pub struct VideoComponent {
+    pub stream: StreamSelector,
+}
+
+impl VideoComponent {
+    pub fn ordinal(ordinal: u32) -> Self {
+        Self {
+            stream: StreamSelector {
+                kind: StreamKind::Video,
+                ordinal,
+            },
+        }
+    }
+}
+
+/// source範囲外の音声挙動。videoの`Freeze`/`Black`語彙は流用しない(AG-1)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, DeserializeDerive)]
+#[serde(rename_all = "snake_case")]
+pub enum AudioOutOfRange {
+    #[default]
+    Silence,
+    Loop,
+}
+
+fn default_audio_gain() -> DocParam {
+    DocParam::const_f64(1.0)
+}
+
+/// Asset Clipのaudio component(0以上)。
+#[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
+pub struct AudioComponent {
+    pub stream: StreamSelector,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// linear・有限・0以上。上限は設けない(masteringしない — AG-1)。
+    #[serde(default = "default_audio_gain")]
+    pub gain: DocParam,
+    #[serde(default)]
+    pub out_of_range: AudioOutOfRange,
+}
+
+impl AudioComponent {
+    pub fn ordinal(ordinal: u32) -> Self {
+        Self {
+            stream: StreamSelector {
+                kind: StreamKind::Audio,
+                ordinal,
+            },
+            enabled: true,
+            gain: default_audio_gain(),
+            out_of_range: AudioOutOfRange::Silence,
+        }
+    }
+}
+
+/// 旧`ClipSource::Asset { asset }`欠落時のdefault: video ordinal 0 / audioなし。
+fn default_asset_video() -> Option<VideoComponent> {
+    Some(VideoComponent::ordinal(0))
+}
+
+fn is_legacy_default_video(video: &Option<VideoComponent>) -> bool {
+    matches!(
+        video,
+        Some(VideoComponent {
+            stream: StreamSelector {
+                kind: StreamKind::Video,
+                ordinal: 0,
+            },
+        })
+    )
+}
+
+/// 新しいnested fieldを含むAsset Clipか(旧readerでの再保存消失を防ぐ判定)。
+pub fn asset_components_require_newer_reader(
+    video: &Option<VideoComponent>,
+    audio: &[AudioComponent],
+) -> bool {
+    !audio.is_empty() || !is_legacy_default_video(video)
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "source", rename_all = "snake_case")]
 pub enum ClipSource {
     /// raster / 汎用アセット。未知フィールド(recipe/modifiers等)は拒否(S6)。
-    Asset { asset: AssetId },
+    ///
+    /// `video`/`audio`欠落は旧形式互換default(video ordinal 0 / audioなし)。
+    Asset {
+        asset: AssetId,
+        #[serde(
+            default = "default_asset_video",
+            skip_serializing_if = "is_legacy_default_video"
+        )]
+        video: Option<VideoComponent>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        audio: Vec<AudioComponent>,
+    },
     Plugin {
         plugin_id: String,
         #[serde(default = "default_effect_version")]
@@ -297,9 +547,24 @@ pub enum ClipSource {
     Vector { recipe: VectorRecipe },
 }
 
+impl ClipSource {
+    /// 旧形式互換のAsset Clip(video ordinal 0 / audioなし)。
+    pub fn asset_video_only(asset: AssetId) -> Self {
+        Self::Asset {
+            asset,
+            video: default_asset_video(),
+            audio: Vec::new(),
+        }
+    }
+}
+
 #[derive(DeserializeDerive)]
 struct ClipSourceAssetDe {
     asset: AssetId,
+    #[serde(default = "default_asset_video")]
+    video: Option<VideoComponent>,
+    #[serde(default)]
+    audio: Vec<AudioComponent>,
 }
 
 #[derive(DeserializeDerive)]
@@ -334,18 +599,29 @@ impl<'de> Deserialize<'de> for ClipSource {
             .ok_or_else(|| de::Error::custom("ClipSource.source must be a string"))?;
         match tag {
             "asset" => {
-                reject_unknown_clip_source_fields(&map, &["asset"])?;
+                reject_unknown_clip_source_fields(&map, &["asset", "video", "audio"])?;
                 let de: ClipSourceAssetDe =
                     serde_json::from_value(JsonValue::Object(map)).map_err(de::Error::custom)?;
-                Ok(Self::Asset { asset: de.asset })
+                Ok(Self::Asset {
+                    asset: de.asset,
+                    video: de.video,
+                    audio: de.audio,
+                })
             }
             "vector" => {
+                // audio/video は Asset 専用。unknown field 拒否で組合せを弾く。
                 reject_unknown_clip_source_fields(&map, &["recipe"])?;
                 let de: ClipSourceVectorDe =
                     serde_json::from_value(JsonValue::Object(map)).map_err(de::Error::custom)?;
                 Ok(Self::Vector { recipe: de.recipe })
             }
             "plugin" => {
+                // flatten extra へ落として黙殺しない(AG-1: 不正source/component組合せ)。
+                if map.contains_key("audio") || map.contains_key("video") {
+                    return Err(de::Error::custom(
+                        "ClipSource::Plugin cannot carry video/audio components; only Asset sources may",
+                    ));
+                }
                 let de: ClipSourcePluginDe =
                     serde_json::from_value(JsonValue::Object(map)).map_err(de::Error::custom)?;
                 Ok(Self::Plugin {
@@ -489,11 +765,59 @@ pub enum TrimMode {
     Sequential,
 }
 
+/// ZigZag の頂点形状(D1i-2 PathOp意味論表)。デフォルトは表が固定しないため
+/// 「Zig Zag」の字面どおり鋭角側を既定にする(便利デフォルトの発明ではなく命名からの素直な選択)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, DeserializeDerive)]
+#[serde(rename_all = "snake_case")]
+pub enum PointType {
+    #[default]
+    Corner,
+    Smooth,
+}
+
+/// Offset の線結合スタイル(Clipper2 offset準拠。D1i-2 PathOp意味論表)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, DeserializeDerive)]
+#[serde(rename_all = "snake_case")]
+pub enum LineJoin {
+    #[default]
+    Miter,
+    Round,
+    Bevel,
+}
+
+fn default_miter_limit() -> f64 {
+    4.0
+}
+
+/// Repeaterのコピー合成順(Lottie `rp.m`: 1=Above/2=Below)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, DeserializeDerive)]
+#[serde(rename_all = "snake_case")]
+pub enum CompositeOrder {
+    #[default]
+    Above,
+    Below,
+}
+
+fn default_repeater_transform() -> Transform2D {
+    Transform2D::identity()
+}
+
+fn default_full_opacity() -> DocParam {
+    DocParam::const_f64(1.0)
+}
+
 /// v1閉集合のパス演算子(プラグイン契約には出さない。F-13)。
 /// 意味・単位・範囲の正本は docs/specs/M2-document-model.md「PathOp意味論表」。
-/// 【決定】2026-07-13(Lottie/AE採択)。D1i-2で表に無い席(point_type/line_join/center/transform等)を追加的に足す。
+/// 【決定】2026-07-13(Lottie/AE採択)。
+///
+/// `line_join`/`miter_limit`/`point_type`は`TrimMode`と同格の非キーフレーム様式席(生の値)、
+/// それ以外の数値・空間パラメータは通常のDocParam(キーフレーム/リンク駆動)。
+/// `Wiggle.seed`は再現性のための固定`u64`であり、時間駆動のDocParamにはしない(意味論表)。
+/// `Twist.center`は表が「必須」と定めるため`default`を持たない — 旧JSON(center無し)は
+/// 型付き拒否になり、変換はD1e migrationの担当(D1g/D1i-1と同じ「拒否→D1e変換」の型)。
 #[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
 #[serde(tag = "op", rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant)] // Repeaterは完全なTransform2D+opacity2本を持ち大きい。TrackItemと同様、v1ではBox化しない。
 pub enum PathOp {
     PuckerBloat {
         amount: DocParam,
@@ -501,9 +825,15 @@ pub enum PathOp {
     ZigZag {
         amount: DocParam,
         ridges: DocParam,
+        #[serde(default)]
+        point_type: PointType,
     },
     Offset {
         distance: DocParam,
+        #[serde(default)]
+        line_join: LineJoin,
+        #[serde(default = "default_miter_limit")]
+        miter_limit: f64,
     },
     RoundCorners {
         radius: DocParam,
@@ -517,14 +847,23 @@ pub enum PathOp {
     },
     Twist {
         angle: DocParam,
+        center: DocParam,
     },
     Wiggle {
         amp: DocParam,
         freq: DocParam,
-        seed: DocParam,
+        seed: u64,
     },
     Repeater {
         copies: DocParam,
         offset: DocParam,
+        #[serde(default = "default_repeater_transform")]
+        transform: Transform2D,
+        #[serde(default)]
+        composite: CompositeOrder,
+        #[serde(default = "default_full_opacity")]
+        start_opacity: DocParam,
+        #[serde(default = "default_full_opacity")]
+        end_opacity: DocParam,
     },
 }

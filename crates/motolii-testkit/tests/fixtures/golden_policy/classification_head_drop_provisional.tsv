@@ -1,0 +1,2 @@
+# head: provisional 行を削除した迂回台帳(semantic のみ)
+semantic	crates/motolii-testkit/tests/fixtures/golden_policy/semantic_sample.txt

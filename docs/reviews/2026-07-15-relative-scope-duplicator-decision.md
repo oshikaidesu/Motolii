@@ -45,6 +45,7 @@ Layer H.effects.in[2]
 - 同じlayerへ同じdefinitionを複数回使えるよう、definition identityとuse identityを分ける
 - definition変更は全useへ反映する。useの並べ替えは対象layerのstackだけを変える
 - target layerの表示名・timeline順変更では接続不変。削除、欠落、循環不能条件を型付き検査する
+- **lifecycle正本**: 参照中Definition削除・Unlink・Copy Local・orphanは[GAP-14決定](2026-07-15-shared-effect-lifecycle-decision.md)に従う（参照中Delete=Reject、orphan自動GCなし）
 - Explicitはsource layerを消費、複製、再合成しないため、出力挿入位置の曖昧さと二重描画を作らない
 - 複数layerを一枚に合成してから処理したい場合はGroupを使う。Explicit Composite Setはv1で作らない
 
@@ -135,6 +136,8 @@ value      = pcg32(RandomKey)
 先例: [Cavalry Random](https://cavalry.studio/docs/nodes/behaviours/random/)、[Cavalry Index Context](https://cavalry.studio/docs/nodes/utilities/index-context/)、stable identityの比較先として[OpenUSD PointInstancer](https://openusd.org/24.08/api/class_usd_geom_point_instancer.html)
 
 ## 6. 実装順
+
+この順序は意味決定間の依存を示すが、M3製品実装の着手許可ではない。[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)の発効中はU1f/U2f/U2gを停止し、再締結後のM3入場PRでIDと依存を再翻訳する。
 
 1. M3-U2f: modifier+drag one-shot Relative Move
 2. M3-U1f: K0を待たず透けるStage/off-frame selection

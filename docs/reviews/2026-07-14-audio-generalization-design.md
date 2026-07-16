@@ -214,12 +214,12 @@ Clipは既定では1行。必要時だけaudio部分を展開し、waveform、mu
 
 | ID | フェーズ | 内容 | 完了条件 |
 |---|---|---|---|
-| AG-0 | M2終了前・仕様のみ | 本文とM2の「楽曲1本=恒久制約」を改訂 | コード/serde変更なし。現行M2タスクを増やさない |
-| AG-1 | v1.x schema/media | probeを全stream列挙へ。stream selector+Asset Clip componentを追加。旧欠落default=video only。min_reader_version/D1e規律 | 旧project意味不変、roundtrip、欠落stream拒否、video/audio/audio-only fixture |
-| AG-2 | v1.x audio engine | per-stream PCM cache、canonical変換、deterministic mixer、AudioProgram→Transport | 2 source mix、seek、10分A/V drift、callback非blocking、chunk size不変 |
-| AG-3 | M3 UI | Video+Audio/Video Only import、waveform展開、mute/gain、音声分離macro | move/trim/retime追従、分離Undo 1回、保存再読込一致 |
-| AG-4 | export | 単一bed stream-copy fast pathとmixed encode path | fast path sample一致、mix時にstream-copyしない、preview/export PCM一致 |
-| AG-5 | later | fade/pan/role/bus/audio effect/pitch preserve | 各意味論表と需要確認後。初期一般化のblockerにしない |
+| AG-0 | **完了** | 本文とM2の「楽曲1本=恒久制約」を改訂 | コード/serde変更なし。現行M2タスクを増やさない |
+| AG-1 | **完了**(#156) | probeを全stream列挙へ。stream selector+Asset Clip componentを追加。旧欠落default=video only。min_reader_version/D1e規律 | 旧project意味不変、roundtrip、欠落stream拒否、video/audio/audio-only fixture |
+| AG-2 | **完了**(#157) | per-stream PCM cache、canonical変換、deterministic mixer、AudioProgram→Transport | 2 source mix、seek、10分A/V drift、callback非blocking、chunk size不変 |
+| AG-3 | **進行中**(Part of #158 / PR#164) / UIは別Issue・M3 | Video+Audio/Video Only source構築、waveform peaks、mute/gain command、音声分離macro(別lane必須)。Slint import dialog・waveform表示は未実装 | domain受け入れ: 分離Undo・保存再読込・同一lane拒否・ordinal一意。#158はUI完了まで閉じない |
+| AG-4 | **完了**(#159) | 単一bed stream-copy fast pathとmixed encode path | fast path sample一致、mix時にstream-copyしない、preview/export PCM一致 |
+| AG-5 | **追跡のみ**(#160) | fade/pan/role/bus/audio effect/pitch preserve。一括実装禁止。候補はすべて保留 | 需要確認→意味論表→仕様PR→子Issue。blockerにしない |
 
 依存: AG-1→AG-2→AG-3/AG-4。AG-1はDocument解凍手続き(理由・追加的変更・旧project審判)を独立PRで通す。M2 Wave4へ割り込ませない。
 

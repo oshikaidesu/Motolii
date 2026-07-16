@@ -8,9 +8,20 @@ description = "Document ownership skeleton (single writer + Arc snapshot)"
 [dependencies]
 motolii-core.workspace = true
 motolii-eval.workspace = true
+motolii-nodes.workspace = true
+motolii-plugin.workspace = true
+motolii-render.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+crc32fast = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
 
 [dev-dependencies]
+motolii-gpu.workspace = true
 motolii-plugin.workspace = true
+motolii-testkit.workspace = true
+proptest.workspace = true
+syn = { version = "2", features = ["full", "visit"] }
+proc-macro2 = { version = "1", features = ["span-locations"] }
+uuid = { version = "1", features = ["v4", "serde"] }
