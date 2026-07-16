@@ -6,21 +6,33 @@
 //! **D1a**: スキーマ本体。**D1b**: 保存前`validate`(ガード1)。**D1c**: アトミック保存/読込。ジャーナルはD1d。
 //! **D8**: 単一writer + スナップショット配布の並行契約(型denyは`mut_document_deny`、完走は`d8_ownership`)。
 //! **D1c-FU(#101)**: `ResourceLimits`(入力上限、監査S10)と`OpenMode`(read/write互換分離、監査S14)。
+//! **D3**: Document→レンダグラフ変換(`graph` / `EvaluationTime`)。
+//! **D1e**: 旧形式migration(`migrate`)。loadは拒否のまま、変換は明示API。
 
+mod affine;
 mod asset;
+mod audio_edit;
 mod bpm;
 mod command;
 mod doc_keyframe;
 mod doc_value;
 mod duplicate;
+mod effect_prepare;
+mod eval_time;
+mod graph;
 mod ids;
+pub mod journal;
+mod legacy_effect_migrate;
 mod limits;
+mod migrate;
 mod param;
+pub mod param_eval;
 pub mod param_expect;
 pub mod pathgeom;
 mod persist;
 mod plugin_compat;
 mod schema;
+mod spatial_resolve;
 mod stable_id;
 mod track_id;
 mod undo;
@@ -31,7 +43,9 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+pub use affine::{compose_local, compose_transform, resolve_transform, Affine2D};
 pub use asset::{Asset, AssetError, AssetId, AssetTable};
+pub use audio_edit::{build_import_clip_source, plan_detach_audio, ImportAvMode};
 pub use bpm::{Bpm, BpmError};
 pub use command::{
     collect_layer_ids, layer_names_for_item, Command, CommandError, CommandKind, GestureId,
@@ -40,9 +54,33 @@ pub use command::{
 pub use doc_keyframe::{DocKeyframe, DocKeyframeError, DocKeyframeTrack};
 pub use doc_value::DocValue;
 pub use duplicate::DuplicateError;
+pub use effect_prepare::{DraftDocParam, DraftKeyframe, EffectDefinitionDraft, PrepareError};
+pub use eval_time::{
+    EvaluationTime, D3_CLIP_LOCAL_TO_SOURCE_VIA_TIMEMAP, M1_SOURCE_PTS_EQUALS_TIMELINE,
+};
+pub use graph::{
+    build_document_frame_graph, resolve_asset_path, DocumentFrameGraph, GraphError, VideoSlot,
+    CLEAR_LAYER_SOURCE, RECT_LAYER_SOURCE,
+};
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
+pub use journal::{
+    checkpoint_with_fault_plan, inject_bad_checksum_at_last_frame, inject_corrupt_journal_tail,
+    inject_salt_mismatch_frame, inject_unapplicable_committed_edit, load_catalog, open_project,
+    open_project_with_limits, save_project_with_journal, DurabilityStage, FaultPlan, FsOpKind,
+    GenerationCatalog, GenerationEntry, JournalEdit, JournalRecordKind, JournalScanStop,
+    OpenProjectOutcome, PinGenerationOptions, ProjectError, RecordingFs, RecoveryError,
+    RecoverySource, RotateOptions, SaveProjectOptions, StdFs, WalError, WalSession,
+};
 pub use limits::{ResourceLimitError, ResourceLimits};
+pub use migrate::{
+    bump_min_reader_for_nest_schema_change, count_document, legacy_timemap_source, migrate_bytes,
+    migrate_bytes_with_limits, migrate_document_file, migrate_document_file_with_limits,
+    modern_timemap_source, semantic_fingerprint, DocumentCounts, MigrateError, MigrateFileOptions,
+    MigrateFileResult, MigrationReport, SemanticFingerprint, BACKUP_SUFFIX,
+    LATEST_DOCUMENT_VERSION,
+};
 pub use param::{DocParam, LookAtAxis};
+pub use param_eval::{eval_look_at_rotation, look_at_angle, ParamEvalError, ResolvedLayerParams};
 pub use param_expect::{DocPluginKind, ExpectedValueType, KnownPluginInfo, ParamConstraints};
 pub use pathgeom::PathOpError;
 pub use persist::{
@@ -53,15 +91,22 @@ pub use persist::{
 };
 pub use plugin_compat::{PluginDegradation, PluginOpenWarning};
 pub use schema::{
-    BlendMode, Clip, ClipSource, ClippingMaskSettings, CompositeOrder, Composition,
-    CompositionError, EffectInstance, Group, ItemEnvelope, LineJoin, MaskMode, PathOp, PointType,
-    Soundtrack, SoundtrackError, StandardShape, Track, TrackItem, Transform2D, TrimMode,
-    VectorContent, VectorRecipe,
+    asset_components_require_newer_reader, AudioComponent, AudioOutOfRange, BlendMode, Clip,
+    ClipSource, ClippingMaskSettings, CompositeOrder, Composition, CompositionError,
+    EffectDefinition, EffectInstance, EffectUse, Group, ItemEnvelope, LineJoin, MaskMode, PathOp,
+    PointType, Soundtrack, SoundtrackError, StandardShape, StreamKind, StreamSelector, Track,
+    TrackItem, Transform2D, TrimMode, VectorContent, VectorRecipe, VideoComponent,
 };
-pub use stable_id::{EffectId, KeyframeId, StableIdError, StableIdSeq};
+pub use spatial_resolve::resolve_document_spaces;
+pub use stable_id::{
+    EffectDefinitionId, EffectId, KeyframeId, StableIdError, StableIdReservation, StableIdSeq,
+};
 pub use track_id::{TrackId, TrackIdError, TrackIdTable};
 pub use undo::{Macro, UndoError, UndoHistory, UndoLimit};
-pub use validate::DocumentError;
+pub use validate::{
+    DocumentError, MIN_READER_VERSION_FOR_ASSET_COMPONENTS,
+    MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
+};
 
 fn default_min_reader_version() -> u32 {
     1
@@ -87,22 +132,44 @@ pub struct Document {
     pub track_ids: TrackIdTable,
     #[serde(default)]
     pub tracks: Vec<Track>,
-    /// EffectId/KeyframeId共有カウンタ(A8)。非再利用の単調カウンタ — ネスト構造
-    /// (`EffectInstance.id`/`DocKeyframe.id`)を持つ文書は`min_reader_version`を
-    /// 2以上に上げる責務を保存側が持つ(M2E-11①のネスト規律。本フィールド自体は
-    /// `default`でロード可能 — 旧文書に`effects`/keyframesが無ければ影響しない)。
+    /// EffectUse / EffectDefinition / KeyframeId 共有カウンタ(A8 / D1l)。
     #[serde(default)]
     pub next_stable_id: StableIdSeq,
+    /// D1l: 共有Effect recipe台帳。Useから参照。orphan(参照0)を許可する。
+    #[serde(default)]
+    pub effect_definitions: Vec<EffectDefinition>,
     /// 未知キー保持(unknown-keys roundtrip)。
     #[serde(default, flatten)]
     pub extra: Map<String, Value>,
 }
 
 impl Document {
+    /// 現行writerが新しく作るDocumentの唯一の生成口。
+    pub fn new_current() -> Self {
+        Self::empty_at_version(
+            persist::WRITER_VERSION,
+            validate::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
+        )
+    }
+
+    /// 旧版fixture・明示migration専用。製品の新規作成には`new_current`を使う。
+    ///
+    /// ```compile_fail
+    /// #![deny(deprecated)]
+    /// let _ = motolii_doc::Document::new_v1();
+    /// ```
+    #[deprecated(
+        since = "0.1.0",
+        note = "legacy/migration fixtures only; product code must use Document::new_current()"
+    )]
     pub fn new_v1() -> Self {
+        Self::empty_at_version(1, 1)
+    }
+
+    fn empty_at_version(version: u32, min_reader_version: u32) -> Self {
         Self {
-            version: 1,
-            min_reader_version: 1,
+            version,
+            min_reader_version,
             composition: Composition::new_v1(),
             bpm: Bpm::DEFAULT,
             soundtrack: None,
@@ -111,8 +178,64 @@ impl Document {
             track_ids: TrackIdTable::new(),
             tracks: Vec::new(),
             next_stable_id: StableIdSeq::new(),
+            effect_definitions: Vec::new(),
             extra: Map::new(),
         }
+    }
+
+    pub fn effect_definition(&self, id: EffectDefinitionId) -> Option<&EffectDefinition> {
+        self.effect_definitions.iter().find(|d| d.id == id)
+    }
+
+    pub fn effect_definition_mut(
+        &mut self,
+        id: EffectDefinitionId,
+    ) -> Option<&mut EffectDefinition> {
+        self.effect_definitions.iter_mut().find(|d| d.id == id)
+    }
+
+    pub fn effect_use_count(&self, definition_id: EffectDefinitionId) -> usize {
+        self.effect_use_ids(definition_id).len()
+    }
+
+    pub fn effect_use_ids(&self, definition_id: EffectDefinitionId) -> Vec<EffectId> {
+        fn collect_in_items(
+            items: &[TrackItem],
+            definition_id: EffectDefinitionId,
+            out: &mut Vec<EffectId>,
+        ) {
+            for item in items {
+                match item {
+                    TrackItem::Clip(clip) => {
+                        for use_ in &clip.envelope.effects {
+                            if use_.definition_id == definition_id {
+                                out.push(use_.id);
+                            }
+                        }
+                    }
+                    TrackItem::Group(group) => {
+                        for use_ in &group.envelope.effects {
+                            if use_.definition_id == definition_id {
+                                out.push(use_.id);
+                            }
+                        }
+                        collect_in_items(&group.children, definition_id, out);
+                    }
+                }
+            }
+        }
+        let mut out = Vec::new();
+        for track in &self.tracks {
+            collect_in_items(&track.items, definition_id, &mut out);
+        }
+        out
+    }
+
+    pub fn find_effect_use(&self, layer: LayerId, use_id: EffectId) -> Option<&EffectUse> {
+        crate::command::find_envelope(self, layer)?
+            .effects
+            .iter()
+            .find(|u| u.id == use_id)
     }
 }
 
@@ -128,6 +251,88 @@ pub enum WriterMessage {
 /// D2: `Command`の適用は必ず`apply_command`(内部でUndoHistoryへ積む)経由。
 /// `edit`/`apply`は移行済み呼び出し元のための足場であり、undo履歴には積まれない
 /// (選択/hover/IME等のUI状態や、Command化されていない旧経路専用 — 実装ガード5)。
+///
+/// D1l B-3: Effect identity 採番の正規経路は `prepare_*` のみ。旧 allocate API は公開されない:
+/// ```compile_fail
+/// # fn main() {
+/// let mut w = motolii_doc::DocumentWriter::new(motolii_doc::Document::new_current());
+/// let _ = w.allocate_effect_id();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// let mut w = motolii_doc::DocumentWriter::new(motolii_doc::Document::new_current());
+/// let _ = w.allocate_effect_definition_id();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// let mut w = motolii_doc::DocumentWriter::new(motolii_doc::Document::new_current());
+/// let _ = w.allocate_unique_effect_pair();
+/// # }
+/// ```
+///
+/// Draft 型は永続化できない(serde 無し):
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::EffectDefinitionDraft;
+/// fn _serialize(d: &EffectDefinitionDraft) -> impl serde::Serialize + '_ { d }
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::DraftDocParam;
+/// fn _serialize(d: &DraftDocParam) -> impl serde::Serialize + '_ { d }
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::DraftKeyframe;
+/// fn _serialize(d: &DraftKeyframe) -> impl serde::Serialize + '_ { d }
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::EffectDefinitionDraft;
+/// fn _deserialize<T: for<'de> serde::Deserialize<'de>>() {}
+/// _deserialize::<EffectDefinitionDraft>();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::DraftDocParam;
+/// fn _deserialize<T: for<'de> serde::Deserialize<'de>>() {}
+/// _deserialize::<DraftDocParam>();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::DraftKeyframe;
+/// fn _deserialize<T: for<'de> serde::Deserialize<'de>>() {}
+/// _deserialize::<DraftKeyframe>();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::EffectDefinitionDraft;
+/// fn _owned<T: serde::de::DeserializeOwned>() {}
+/// _owned::<EffectDefinitionDraft>();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::DraftDocParam;
+/// fn _owned<T: serde::de::DeserializeOwned>() {}
+/// _owned::<DraftDocParam>();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::DraftKeyframe;
+/// fn _owned<T: serde::de::DeserializeOwned>() {}
+/// _owned::<DraftKeyframe>();
+/// # }
+/// ```
 #[derive(Debug)]
 pub struct DocumentWriter {
     doc: Document,
@@ -244,15 +449,6 @@ impl DocumentWriter {
         self.doc.layers.reserve()
     }
 
-    /// `EffectId`を新規発行する(A8、非再利用)。ネスト永続フィールド追加の規律
-    /// (M2E-11①)に沿い、発行と同時に`version`と`min_reader_version`を下限まで引き上げる。
-    /// `version < min_reader_version`は`validate`が拒否するため、片方だけ上げない。
-    pub fn allocate_effect_id(&mut self) -> Result<EffectId, StableIdError> {
-        let id = self.doc.next_stable_id.allocate()?;
-        self.bump_versions_for_stable_ids();
-        Ok(EffectId::from_raw(id))
-    }
-
     /// `KeyframeId`を新規発行する(A8、非再利用)。同上。
     pub fn allocate_keyframe_id(&mut self) -> Result<KeyframeId, StableIdError> {
         let id = self.doc.next_stable_id.allocate()?;
@@ -285,6 +481,31 @@ impl DocumentWriter {
     pub fn validate(&self) -> Result<(), DocumentError> {
         self.doc.validate()
     }
+
+    /// D1l B-3: 新 Use+Definition を counter clone 上で準備する。成功・失敗とも live Document 不変。
+    pub fn prepare_create_effect(
+        &self,
+        target: LayerId,
+        index: usize,
+        draft: EffectDefinitionDraft,
+    ) -> Result<Command, PrepareError> {
+        effect_prepare::prepare_create_effect(&self.doc, target, index, draft)
+    }
+
+    /// D1l B-3: 既存 Definition へ新 Use を準備する。
+    pub fn prepare_link_effect_use(
+        &self,
+        target: LayerId,
+        index: usize,
+        definition_id: EffectDefinitionId,
+    ) -> Result<Command, PrepareError> {
+        effect_prepare::prepare_link_effect_use(&self.doc, target, index, definition_id)
+    }
+
+    /// D1l B-3: 対象 Use の Definition をローカル複製する。
+    pub fn prepare_copy_local_effect(&self, use_id: EffectId) -> Result<Command, PrepareError> {
+        effect_prepare::prepare_copy_local_effect(&self.doc, use_id)
+    }
 }
 
 /// 読み手API: スナップショットだけを受け、書き込めない。
@@ -293,6 +514,7 @@ pub fn render_with_snapshot(doc: &Arc<Document>) -> u32 {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use motolii_core::RationalTime;

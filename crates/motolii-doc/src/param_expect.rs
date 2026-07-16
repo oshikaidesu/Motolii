@@ -42,8 +42,10 @@ impl ExpectedValueType {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ParamConstraints {
     pub expected: ExpectedValueType,
-    /// LookAt / Follow を許すのは position のみ。
-    pub allow_spatial_links: bool,
+    /// LookAt は `transform.rotation`(F64)のみ(concept: 角度契約)。
+    pub allow_look_at: bool,
+    /// Follow は `transform.position`(Vec2)のみ。
+    pub allow_follow: bool,
     /// スカラー成分を [0,1] に閉じる(opacity / Color 各成分)。
     pub unit_interval: bool,
     /// F64の下限(含む)。PathOp意味論表の`≥0`等の拒否項目用(D1i-2)。
@@ -58,7 +60,8 @@ impl ParamConstraints {
     pub const fn typed(expected: ExpectedValueType) -> Self {
         Self {
             expected,
-            allow_spatial_links: false,
+            allow_look_at: false,
+            allow_follow: false,
             unit_interval: false,
             min: None,
             max: None,
@@ -69,7 +72,8 @@ impl ParamConstraints {
     pub const fn unit_f64() -> Self {
         Self {
             expected: ExpectedValueType::F64,
-            allow_spatial_links: false,
+            allow_look_at: false,
+            allow_follow: false,
             unit_interval: true,
             min: None,
             max: None,
@@ -80,7 +84,8 @@ impl ParamConstraints {
     pub const fn color() -> Self {
         Self {
             expected: ExpectedValueType::Color,
-            allow_spatial_links: false,
+            allow_look_at: false,
+            allow_follow: false,
             unit_interval: true,
             min: None,
             max: None,
@@ -88,10 +93,25 @@ impl ParamConstraints {
         }
     }
 
+    /// Follow 可・LookAt 不可(位置に置いた旧LookAtは型付き拒否)。
     pub const fn position() -> Self {
         Self {
             expected: ExpectedValueType::Vec2,
-            allow_spatial_links: true,
+            allow_look_at: false,
+            allow_follow: true,
+            unit_interval: false,
+            min: None,
+            max: None,
+            integer: false,
+        }
+    }
+
+    /// LookAt 可・Follow 不可(concept: rotation 角度)。
+    pub const fn rotation() -> Self {
+        Self {
+            expected: ExpectedValueType::F64,
+            allow_look_at: true,
+            allow_follow: false,
             unit_interval: false,
             min: None,
             max: None,
@@ -107,7 +127,8 @@ impl ParamConstraints {
     pub const fn ranged_f64(min: f64, max: f64) -> Self {
         Self {
             expected: ExpectedValueType::F64,
-            allow_spatial_links: false,
+            allow_look_at: false,
+            allow_follow: false,
             unit_interval: false,
             min: Some(min),
             max: Some(max),
@@ -119,7 +140,8 @@ impl ParamConstraints {
     pub const fn min_f64(min: f64) -> Self {
         Self {
             expected: ExpectedValueType::F64,
-            allow_spatial_links: false,
+            allow_look_at: false,
+            allow_follow: false,
             unit_interval: false,
             min: Some(min),
             max: None,
@@ -131,7 +153,8 @@ impl ParamConstraints {
     pub const fn non_negative_integer_f64() -> Self {
         Self {
             expected: ExpectedValueType::F64,
-            allow_spatial_links: false,
+            allow_look_at: false,
+            allow_follow: false,
             unit_interval: false,
             min: Some(0.0),
             max: None,
@@ -154,7 +177,7 @@ pub fn transform_scale() -> ParamConstraints {
 }
 
 pub fn transform_rotation() -> ParamConstraints {
-    ParamConstraints::typed(ExpectedValueType::F64)
+    ParamConstraints::rotation()
 }
 
 pub fn envelope_opacity() -> ParamConstraints {
@@ -273,6 +296,8 @@ pub fn known_plugin_info(plugin_id: &str) -> Option<KnownPluginInfo> {
             (DocPluginKind::Filter, 1)
         }
         "core.layer_source.clear" => (DocPluginKind::LayerSource, 1),
+        // graph 組み込みのファーストパーティ。現行versionのみ既知契約(未来版はD1f degraded→D6拒否)。
+        "doc.layer_source.rect" => (DocPluginKind::LayerSource, 1),
         "core.composite.clear" => (DocPluginKind::Composite, 1),
         // v2: `amp` → `amplitude`(motolii-plugin migrate_plugin_paramsの写し)。
         "core.param.sine" => (DocPluginKind::ParamDriver, 2),

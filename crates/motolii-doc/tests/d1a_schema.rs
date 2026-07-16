@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! D1a: スキーマ本体のJSON roundtripと境界宣言の機械判定。
 
 use std::collections::BTreeMap;
@@ -5,9 +7,9 @@ use std::collections::BTreeMap;
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
     Asset, AssetId, BlendMode, Bpm, Clip, ClipSource, ClippingMaskSettings, DocKeyframe,
-    DocKeyframeTrack, DocParam, DocValue, Document, EffectId, EffectInstance, Group, ItemEnvelope,
-    KeyframeId, LookAtAxis, MaskMode, PathOp, Soundtrack, StandardShape, Track, TrackItem,
-    VectorContent, VectorRecipe,
+    DocKeyframeTrack, DocParam, DocValue, Document, EffectDefinition, EffectDefinitionId, EffectId,
+    EffectUse, Group, ItemEnvelope, KeyframeId, LookAtAxis, MaskMode, PathOp, Soundtrack,
+    StandardShape, Track, TrackItem, VectorContent, VectorRecipe,
 };
 use motolii_eval::{DataTrackId, Interp};
 use serde_json::{json, Map, Value};
@@ -40,20 +42,34 @@ fn sample_document() -> Document {
     let mut effect_extra = Map::new();
     effect_extra.insert("vendor_meta".into(), json!({"x": 1}));
 
+    let tint_def_id = EffectDefinitionId::from_raw(2);
+    doc.effect_definitions.push(EffectDefinition::new(
+        tint_def_id,
+        "core.filter.tint",
+        1,
+        true,
+        BTreeMap::from([("color".into(), DocParam::const_color([1.0, 0.0, 0.0, 1.0]))]),
+        effect_extra,
+    ));
+    let opacity_def_id = EffectDefinitionId::from_raw(3);
+    doc.effect_definitions.push(EffectDefinition::new(
+        opacity_def_id,
+        "core.filter.opacity",
+        1,
+        true,
+        BTreeMap::from([("opacity".into(), DocParam::const_f64(0.8))]),
+        Map::new(),
+    ));
+    doc.version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
+    doc.min_reader_version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
+
     let child_clip = Clip {
         envelope: {
             let mut env = ItemEnvelope::new(child_layer);
             env.transform.parent = Some(group_layer);
-            env.effects.push(EffectInstance {
+            env.effects.push(EffectUse {
                 id: EffectId::from_raw(0),
-                plugin_id: "core.filter.tint".into(),
-                effect_version: 1,
-                enabled: true,
-                params: BTreeMap::from([(
-                    "color".into(),
-                    DocParam::const_color([1.0, 0.0, 0.0, 1.0]),
-                )]),
-                extra: effect_extra,
+                definition_id: tint_def_id,
             });
             env.clipping_mask = ClippingMaskSettings {
                 enabled: true,
@@ -86,13 +102,9 @@ fn sample_document() -> Document {
     let group = Group {
         envelope: {
             let mut env = ItemEnvelope::new(group_layer);
-            env.effects.push(EffectInstance {
+            env.effects.push(EffectUse {
                 id: EffectId::from_raw(1),
-                plugin_id: "core.filter.opacity".into(),
-                effect_version: 1,
-                enabled: true,
-                params: BTreeMap::from([("opacity".into(), DocParam::const_f64(0.8))]),
-                extra: Map::new(),
+                definition_id: opacity_def_id,
             });
             env.transform.position = DocParam::Follow {
                 target: clip_layer,
@@ -106,7 +118,7 @@ fn sample_document() -> Document {
     let top_clip = Clip {
         envelope: {
             let mut env = ItemEnvelope::new(clip_layer);
-            env.transform.position = DocParam::LookAt {
+            env.transform.rotation = DocParam::LookAt {
                 target: group_layer,
                 axis: LookAtAxis::PlusY,
             };
@@ -115,7 +127,7 @@ fn sample_document() -> Document {
         start: RationalTime::ZERO,
         duration: RationalTime::try_new(10, 1).unwrap(),
         time_map: TimeMap::identity(),
-        source: ClipSource::Asset { asset: asset_id },
+        source: ClipSource::asset_video_only(asset_id),
     };
 
     doc.soundtrack = Some(Soundtrack::try_new(asset_id, RationalTime::ZERO, 1.0).unwrap());
@@ -228,10 +240,9 @@ fn effect_unknown_fields_survive_roundtrip() {
     let TrackItem::Clip(child) = &group.children[0] else {
         panic!("expected child clip");
     };
-    assert_eq!(
-        child.envelope.effects[0].extra.get("vendor_meta"),
-        Some(&json!({"x": 1}))
-    );
+    let def_id = child.envelope.effects[0].definition_id;
+    let def = back.effect_definition(def_id).expect("definition kept");
+    assert_eq!(def.extra.get("vendor_meta"), Some(&json!({"x": 1})));
 }
 
 #[test]

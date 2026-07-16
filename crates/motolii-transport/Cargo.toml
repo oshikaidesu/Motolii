@@ -1,0 +1,18 @@
+[package]
+name = "motolii-transport"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+motolii-audio.workspace = true
+motolii-core.workspace = true
+motolii-gpu.workspace = true
+thiserror.workspace = true
+cpal = "0.18"
+
+[dev-dependencies]
+motolii-testkit.workspace = true
+motolii-render.workspace = true
+motolii-nodes.workspace = true
+cpal = "0.18"

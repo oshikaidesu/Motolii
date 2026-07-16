@@ -1,0 +1,3 @@
+# Fixture: D1i-4 暫定ゴールデン(マーカー付き = 更新可)
+MOTOLII_GOLDEN_CLASS: provisional
+MOTOLII_REGENERATE_WHEN: srgb-blend-to-linear

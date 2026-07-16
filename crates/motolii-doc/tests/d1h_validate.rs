@@ -1,9 +1,12 @@
+#![allow(deprecated)]
+
 //! D1h: DocParam期待型・空トラック・AssetRef・NaN/Inf/値域の validate。
 
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
     AssetId, Clip, ClipSource, DocKeyframe, DocKeyframeTrack, DocParam, DocValue, Document,
-    DocumentError, EffectId, EffectInstance, ItemEnvelope, KeyframeId, Track, TrackItem,
+    DocumentError, EffectDefinition, EffectDefinitionId, EffectId, EffectUse, ItemEnvelope,
+    KeyframeId, Track, TrackItem,
 };
 use motolii_eval::Interp;
 use std::collections::BTreeMap;
@@ -20,7 +23,7 @@ fn valid_minimal() -> Document {
             start: RationalTime::ZERO,
             duration: RationalTime::try_new(5, 1).unwrap(),
             time_map: TimeMap::default(),
-            source: ClipSource::Asset { asset },
+            source: ClipSource::asset_video_only(asset),
         })],
     });
     doc
@@ -114,14 +117,22 @@ fn color_out_of_range_fails() {
     let mut doc = valid_minimal();
     let mut params = BTreeMap::new();
     params.insert("color".into(), DocParam::const_color([2.0, 0.0, 0.0, 1.0]));
-    clip_mut(&mut doc).envelope.effects.push(EffectInstance {
-        id: EffectId::from_raw(0),
-        plugin_id: "core.filter.tint".into(),
-        effect_version: 1,
-        enabled: true,
+    let use_id = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let def_id = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
+    doc.effect_definitions.push(EffectDefinition::new(
+        def_id,
+        "core.filter.tint",
+        1,
+        true,
         params,
-        extra: Default::default(),
+        Default::default(),
+    ));
+    clip_mut(&mut doc).envelope.effects.push(EffectUse {
+        id: use_id,
+        definition_id: def_id,
     });
+    doc.version = 4;
+    doc.min_reader_version = 4;
     assert!(matches!(
         doc.validate(),
         Err(DocumentError::ValueOutOfRange { .. })
@@ -164,25 +175,11 @@ fn asset_ref_resolves_when_registered() {
 }
 
 #[test]
-fn look_at_on_rotation_fails() {
-    let mut doc = valid_minimal();
-    let target = doc.layers.allocate("t").unwrap();
-    clip_mut(&mut doc).envelope.transform.rotation = DocParam::LookAt {
-        target,
-        axis: motolii_doc::LookAtAxis::PlusY,
-    };
-    assert!(matches!(
-        doc.validate(),
-        Err(DocumentError::SpatialLinkNotAllowed { .. })
-    ));
-}
-
-#[test]
-fn look_at_on_position_ok() {
+fn look_at_on_rotation_ok() {
     let mut doc = valid_minimal();
     let asset = match &doc.tracks[0].items[0] {
         TrackItem::Clip(c) => match c.source {
-            ClipSource::Asset { asset } => asset,
+            ClipSource::Asset { asset, .. } => asset,
             _ => unreachable!(),
         },
         _ => unreachable!(),
@@ -196,14 +193,28 @@ fn look_at_on_position_ok() {
             start: RationalTime::ZERO,
             duration: RationalTime::try_new(1, 1).unwrap(),
             time_map: TimeMap::default(),
-            source: ClipSource::Asset { asset },
+            source: ClipSource::asset_video_only(asset),
         })],
     });
-    clip_mut(&mut doc).envelope.transform.position = DocParam::LookAt {
+    clip_mut(&mut doc).envelope.transform.rotation = DocParam::LookAt {
         target,
         axis: motolii_doc::LookAtAxis::PlusY,
     };
     assert!(doc.validate().is_ok());
+}
+
+#[test]
+fn look_at_on_position_fails() {
+    let mut doc = valid_minimal();
+    let target = doc.layers.allocate("t").unwrap();
+    clip_mut(&mut doc).envelope.transform.position = DocParam::LookAt {
+        target,
+        axis: motolii_doc::LookAtAxis::PlusY,
+    };
+    assert!(matches!(
+        doc.validate(),
+        Err(DocumentError::SpatialLinkNotAllowed { .. })
+    ));
 }
 
 #[test]

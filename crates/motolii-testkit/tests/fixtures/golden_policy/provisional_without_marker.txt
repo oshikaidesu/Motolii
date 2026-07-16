@@ -1,0 +1,2 @@
+# Fixture: D1i-4 暫定扱いだが regenerate マーカー欠落(更新拒否の負例)
+MOTOLII_GOLDEN_CLASS: provisional

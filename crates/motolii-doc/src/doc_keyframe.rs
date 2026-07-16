@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use motolii_core::RationalTime;
-use motolii_eval::Interp;
+use motolii_eval::{Interp, Keyframe, KeyframeTrack, Value as EvalValue};
 
 use crate::doc_value::DocValue;
 use crate::stable_id::KeyframeId;
@@ -78,16 +78,46 @@ impl DocKeyframeTrack {
     }
 
     pub fn validate(&self) -> Result<(), DocKeyframeError> {
-        for window in self.keys.windows(2) {
-            if window[0].t >= window[1].t {
-                return Err(DocKeyframeError::UnsortedOrDuplicateKeys);
-            }
-        }
-        for key in &self.keys {
-            validate_interp(&key.interp)?;
-        }
-        Ok(())
+        validate_keyframe_times_and_interp(
+            self.keys.iter().map(|k| k.t),
+            self.keys.iter().map(|k| &k.interp),
+        )
     }
+
+    /// D3: 評価層へ落として補間する(恒久面は DocValue のまま)。
+    pub fn eval(&self, t: RationalTime) -> EvalValue {
+        let mut track = KeyframeTrack::new();
+        for key in &self.keys {
+            track.insert(Keyframe {
+                t: key.t,
+                value: key.value.to_eval(),
+                interp: key.interp,
+            });
+        }
+        track.eval(t)
+    }
+}
+
+/// Draft/永続を問わず、時刻の厳密昇順・重複なしと補間の妥当性を検査する。
+/// `insert`の置換意味は使わない(D1l B-3)。
+pub(crate) fn validate_keyframe_times_and_interp<'a>(
+    times: impl IntoIterator<Item = RationalTime>,
+    interps: impl IntoIterator<Item = &'a Interp>,
+) -> Result<(), DocKeyframeError> {
+    let times: Vec<RationalTime> = times.into_iter().collect();
+    let interps: Vec<&Interp> = interps.into_iter().collect();
+    if times.len() != interps.len() {
+        return Err(DocKeyframeError::UnsortedOrDuplicateKeys);
+    }
+    for window in times.windows(2) {
+        if window[0] >= window[1] {
+            return Err(DocKeyframeError::UnsortedOrDuplicateKeys);
+        }
+    }
+    for interp in interps {
+        validate_interp(interp)?;
+    }
+    Ok(())
 }
 
 pub fn validate_interp(interp: &Interp) -> Result<(), DocKeyframeError> {

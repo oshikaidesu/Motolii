@@ -1,9 +1,12 @@
+#![allow(deprecated)]
+
 //! D1b: Document::validate の正常系・破壊系。
 
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
-    AssetId, Clip, ClipSource, DocParam, Document, DocumentError, DocumentWriter, EffectId,
-    EffectInstance, ItemEnvelope, LayerId, LookAtAxis, Soundtrack, Track, TrackId, TrackItem,
+    AssetId, Clip, ClipSource, DocParam, Document, DocumentError, DocumentWriter, EffectDefinition,
+    EffectDefinitionDraft, EffectDefinitionId, EffectId, EffectUse, ItemEnvelope, LayerId,
+    LookAtAxis, Soundtrack, Track, TrackId, TrackItem, MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
 };
 use serde_json::Map;
 use std::collections::BTreeMap;
@@ -20,7 +23,7 @@ fn valid_minimal() -> Document {
             start: RationalTime::ZERO,
             duration: RationalTime::try_new(5, 1).unwrap(),
             time_map: Default::default(),
-            source: ClipSource::Asset { asset },
+            source: ClipSource::asset_video_only(asset),
         })],
     });
     doc
@@ -50,9 +53,7 @@ fn unknown_layer_id_fails() {
 fn unknown_asset_fails() {
     let mut doc = valid_minimal();
     if let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] {
-        clip.source = ClipSource::Asset {
-            asset: AssetId::from_raw(99),
-        };
+        clip.source = ClipSource::asset_video_only(AssetId::from_raw(99));
     }
     assert!(matches!(
         doc.validate(),
@@ -74,7 +75,7 @@ fn unknown_track_id_fails() {
 fn look_at_missing_target_fails() {
     let mut doc = valid_minimal();
     if let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] {
-        clip.envelope.transform.position = DocParam::LookAt {
+        clip.envelope.transform.rotation = DocParam::LookAt {
             target: LayerId::from_raw(42),
             axis: LookAtAxis::PlusY,
         };
@@ -115,7 +116,7 @@ fn duplicate_layer_in_tree_fails() {
     let (layer_id, asset) = match &doc.tracks[0].items[0] {
         TrackItem::Clip(Clip {
             envelope,
-            source: ClipSource::Asset { asset },
+            source: ClipSource::Asset { asset, .. },
             ..
         }) => (envelope.layer_id, *asset),
         _ => panic!("expected clip"),
@@ -125,7 +126,7 @@ fn duplicate_layer_in_tree_fails() {
         start: RationalTime::try_new(5, 1).unwrap(),
         duration: RationalTime::try_new(1, 1).unwrap(),
         time_map: Default::default(),
-        source: ClipSource::Asset { asset },
+        source: ClipSource::asset_video_only(asset),
     }));
     assert!(matches!(
         doc.validate(),
@@ -145,21 +146,29 @@ fn soundtrack_unknown_asset_fails() {
 }
 
 #[test]
-fn empty_effect_plugin_id_fails() {
+fn empty_effect_definition_plugin_id_fails() {
     let mut doc = valid_minimal();
+    let def_id = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
+    doc.effect_definitions.push(EffectDefinition::new(
+        def_id,
+        String::new(),
+        1,
+        true,
+        BTreeMap::new(),
+        Map::new(),
+    ));
     if let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] {
-        clip.envelope.effects.push(EffectInstance {
-            id: EffectId::from_raw(0),
-            plugin_id: String::new(),
-            effect_version: 1,
-            enabled: true,
-            params: BTreeMap::new(),
-            extra: Map::new(),
+        let use_id = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
+        clip.envelope.effects.push(EffectUse {
+            id: use_id,
+            definition_id: def_id,
         });
     }
+    doc.version = 4;
+    doc.min_reader_version = 4;
     assert!(matches!(
         doc.validate(),
-        Err(DocumentError::EmptyEffectPluginId { .. })
+        Err(DocumentError::EmptyEffectDefinitionPluginId { .. })
     ));
 }
 
@@ -178,29 +187,72 @@ fn version_below_min_reader_fails() {
 }
 
 #[test]
-fn allocate_effect_id_bumps_version_and_min_reader() {
-    let mut writer = DocumentWriter::new(valid_minimal());
-    writer.allocate_effect_id().expect("allocate effect id");
-    let doc = writer.snapshot();
+fn prepare_effect_keeps_current_version_and_writer_unchanged() {
+    let mut doc = Document::new_current();
+    let layer = doc.layers.allocate("a").unwrap();
+    let tid = doc.track_ids.allocate("V1").unwrap();
+    let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
+    doc.tracks.push(Track {
+        id: tid,
+        items: vec![TrackItem::Clip(Clip {
+            envelope: ItemEnvelope::new(layer),
+            start: RationalTime::ZERO,
+            duration: RationalTime::try_new(5, 1).unwrap(),
+            time_map: Default::default(),
+            source: ClipSource::asset_video_only(asset),
+        })],
+    });
+    doc.validate().unwrap();
+
+    let writer = DocumentWriter::new(doc);
+    let snap_before = writer.snapshot();
+    let revision_before = writer.revision;
+    let undo_before = writer.undo_len();
+    let redo_before = writer.redo_len();
+
+    let draft = EffectDefinitionDraft {
+        plugin_id: "core.filter.blur".into(),
+        effect_version: 1,
+        enabled: true,
+        params: BTreeMap::new(),
+        extra: Map::new(),
+    };
+    let cmd = writer
+        .prepare_create_effect(layer, 0, draft)
+        .expect("prepare create on new_current must succeed");
+
+    assert_eq!(writer.snapshot().version, snap_before.version);
     assert_eq!(
-        doc.version, 2,
-        "stable id allocation must raise Document.version"
+        writer.snapshot().min_reader_version,
+        snap_before.min_reader_version
     );
     assert_eq!(
-        doc.min_reader_version, 2,
-        "stable id allocation must raise min_reader_version floor"
+        writer.snapshot().next_stable_id.peek_next(),
+        snap_before.next_stable_id.peek_next()
+    );
+    assert_eq!(writer.revision, revision_before);
+    assert_eq!(writer.undo_len(), undo_before);
+    assert_eq!(writer.redo_len(), redo_before);
+    assert_eq!(snap_before.version, 4);
+    assert_eq!(
+        snap_before.min_reader_version,
+        MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS
+    );
+    assert!(
+        cmd.stable_id_reservation().is_some(),
+        "prepare must return identity lifecycle command"
     );
     writer
         .validate()
-        .expect("version=2 with min_reader_version=2 must validate");
+        .expect("new_current document must validate");
 }
 
 #[test]
 fn stable_id_document_is_open_mode_read_write() {
     use motolii_doc::{classify_open_mode, OpenMode, READER_VERSION, WRITER_VERSION};
 
-    assert_eq!(READER_VERSION, 2);
-    assert_eq!(WRITER_VERSION, 2);
+    assert_eq!(READER_VERSION, 4);
+    assert_eq!(WRITER_VERSION, 4);
     assert_eq!(
         classify_open_mode(2, 2),
         OpenMode::ReadWrite,
@@ -277,14 +329,14 @@ fn parent_mutual_cycle_fails() {
                 start: RationalTime::ZERO,
                 duration: RationalTime::try_new(2, 1).unwrap(),
                 time_map: Default::default(),
-                source: ClipSource::Asset { asset },
+                source: ClipSource::asset_video_only(asset),
             }),
             TrackItem::Clip(Clip {
                 envelope: env_b,
                 start: RationalTime::try_new(2, 1).unwrap(),
                 duration: RationalTime::try_new(2, 1).unwrap(),
                 time_map: Default::default(),
-                source: ClipSource::Asset { asset },
+                source: ClipSource::asset_video_only(asset),
             }),
         ],
     });

@@ -58,6 +58,22 @@ pub enum AudioError {
 
     #[error("decoded sample count {observed} exceeds limit {limit}")]
     SampleCountLimit { observed: u64, limit: u64 },
+
+    /// 固定比リサンプルの構築・処理失敗(D4-FU)。公開APIはpanicしない。
+    #[error("fixed-ratio resample error: {detail}")]
+    Resample { detail: &'static str },
+
+    /// AG-2: gainが有限かつ0以上でない。
+    #[error("gain must be finite and >= 0, got {gain}")]
+    InvalidGain { gain: f64 },
+
+    /// AG-2: mix範囲またはTimeMap写像が不正。
+    #[error("invalid mix timeline range or time map")]
+    InvalidMixRange,
+
+    /// AG-2: 指定audio stream ordinalがコンテナに無い。
+    #[error("audio stream ordinal {ordinal} not found in source")]
+    StreamNotFound { ordinal: u32 },
 }
 
 pub type Result<T> = std::result::Result<T, AudioError>;

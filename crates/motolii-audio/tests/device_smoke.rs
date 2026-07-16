@@ -37,8 +37,10 @@ fn hardware_playback_reports_zero_underrun() {
     let (ring_prod, ring_cons) = channel(1, rate as usize / 5).unwrap();
 
     let producer = AudioProducer::spawn(Arc::clone(&cache), ring_prod, 0).unwrap();
-    let output = OutputStream::open_on_device(&device, format, ring_cons)
+    let (output, negotiated) = OutputStream::open_on_device(&device, format, ring_cons)
         .expect("open hardware output stream");
+    assert_eq!(negotiated.device_sample_rate, rate);
+    assert!(!negotiated.needs_resample());
 
     std::thread::sleep(Duration::from_millis(200));
 

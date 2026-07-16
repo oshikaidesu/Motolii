@@ -11,14 +11,23 @@
 
 mod decode;
 mod encode;
+mod mux;
 mod probe;
 
 use std::io::Read;
 use std::process::Command;
 
-pub use decode::{read_frame_at, FrameReader};
+pub use decode::{read_frame_at, FrameReader, FrameReaderCancel, FrameReaderKillHandle};
 pub use encode::Encoder;
-pub use probe::{probe, MediaInfo};
+pub use mux::{
+    audio_codec_allows_stream_copy, choose_audio_encode_mode, mux_mixed_pcm, mux_soundtrack,
+    probe_audio, write_f32le_wav_stereo_48k, AudioEncodeMode, AudioStreamInfo, MixedPcmMuxReport,
+    MixedPcmMuxRequest, SoundtrackMuxReport, SoundtrackMuxRequest,
+};
+pub use probe::{
+    probe, probe_container, require_supported_audio, select_audio_stream, select_video_stream,
+    ContainerInfo, MediaInfo, MediaStreamKind, ProbedAudioStream, ProbedVideoStream,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MediaError {
@@ -28,16 +37,28 @@ pub enum MediaError {
     Io(#[from] std::io::Error),
     #[error("probe failed: {0}")]
     Probe(String),
+    #[error("media stream not found: kind={kind}, ordinal={ordinal}")]
+    StreamNotFound { kind: MediaStreamKind, ordinal: u32 },
+    #[error("unsupported audio codec `{codec}` (audio ordinal {ordinal})")]
+    UnsupportedAudioCodec { ordinal: u32, codec: String },
+    #[error("unsupported audio channel layout `{layout}` (audio ordinal {ordinal})")]
+    UnsupportedChannelLayout { ordinal: u32, layout: String },
     #[error(transparent)]
     RationalTime(#[from] motolii_core::RationalTimeError),
     #[error("invalid start frame: {0}")]
     InvalidStartFrame(i64),
+    #[error("soundtrack start_offset must be >= 0, got {0:?}")]
+    InvalidStartOffset(motolii_core::RationalTime),
+    #[error("soundtrack master_gain must be finite and in [0, 1], got {0}")]
+    InvalidMasterGain(f64),
     #[error("encoder expects RGBA input, got {0:?}")]
     UnsupportedEncoderFormat(motolii_core::PixelFormat),
     #[error("frame size mismatch: expected {expected} bytes, got {got}")]
     FrameSizeMismatch { expected: usize, got: usize },
     #[error("ffmpeg failed: {0}")]
     Ffmpeg(String),
+    #[error("frame read cancelled")]
+    Cancelled,
 }
 
 pub type Result<T> = std::result::Result<T, MediaError>;

@@ -6,14 +6,21 @@
 //! - 1 gesture = 1 macro のmerge(#103⑨、merge key=S18)。undo/redoはmacro単位
 //! - duplicate時: subtree内参照は新ID再写像、外向き参照は維持
 
+#![allow(deprecated)]
+
+mod common;
+
+use common::identity_roundtrip::assert_identity_command_roundtrip;
+
 use std::collections::BTreeMap;
 
 use motolii_core::RationalTime;
 use motolii_doc::{
-    layer_names_for_item, BlendMode, Clip, ClipSource, ClippingMaskSettings, Command, DocKeyframe,
-    DocKeyframeTrack, DocParam, DocValue, Document, DocumentWriter, EffectId, EffectInstance,
-    Group, ItemEnvelope, KeyframeId, LayerId, LookAtAxis, MaskMode, ParentLocator,
-    ScalarPropertyId, Track, TrackId, TrackItem,
+    layer_names_for_item, BlendMode, Clip, ClipSource, ClippingMaskSettings, Command, CommandError,
+    DocKeyframe, DocKeyframeTrack, DocParam, DocValue, Document, DocumentWriter, EffectDefinition,
+    EffectDefinitionId, EffectId, EffectInstance, EffectUse, Group, ItemEnvelope, KeyframeId,
+    LayerId, LookAtAxis, MaskMode, ParentLocator, ScalarPropertyId, StableIdReservation, Track,
+    TrackId, TrackItem,
 };
 use motolii_eval::Interp;
 use proptest::prelude::*;
@@ -27,31 +34,43 @@ struct Fixture {
     layer: LayerId,
     other_layer: LayerId,
     effect: EffectId,
+    effect_def: EffectDefinitionId,
     track: TrackId,
+}
+
+fn allocate_effect_ids_for_add_effect_test(
+    doc: &mut Document,
+) -> (EffectId, EffectDefinitionId, EffectId, EffectDefinitionId) {
+    let effect1_id = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let effect1_def = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let effect2_id = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let effect2_def = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
+    (effect1_id, effect1_def, effect2_id, effect2_def)
 }
 
 /// 1 effect(paramあり)を持つlayer + 参照先になる別layerを持つ最小文書。
 fn fixture() -> Fixture {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let layer = doc.layers.allocate("a").unwrap();
     let other_layer = doc.layers.allocate("b").unwrap();
     let track = doc.track_ids.allocate("V1").unwrap();
     let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
     let effect = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let effect_def = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
+    doc.effect_definitions.push(EffectDefinition::new(
+        effect_def,
+        "core.filter.tint",
+        1,
+        true,
+        BTreeMap::from([("amount".into(), DocParam::const_f64(0.5))]),
+        Default::default(),
+    ));
 
     let mut env = ItemEnvelope::new(layer);
-    env.effects.push(EffectInstance {
+    env.effects.push(EffectUse {
         id: effect,
-        plugin_id: "core.filter.tint".into(),
-        effect_version: 1,
-        enabled: true,
-        params: BTreeMap::from([("amount".into(), DocParam::const_f64(0.5))]),
-        extra: Default::default(),
+        definition_id: effect_def,
     });
-    // stable id(effect)を含むため(M2E-11①)。version自体もこのテスト文書専用に2へ
-    // (`Document::new_v1()`の既定はversion=1のまま — 他テストの前提を変えない)。
-    doc.version = 2;
-    doc.min_reader_version = 2;
 
     doc.tracks.push(Track {
         id: track,
@@ -61,14 +80,14 @@ fn fixture() -> Fixture {
                 start: RationalTime::ZERO,
                 duration: RationalTime::try_new(5, 1).unwrap(),
                 time_map: Default::default(),
-                source: ClipSource::Asset { asset },
+                source: ClipSource::asset_video_only(asset),
             }),
             TrackItem::Clip(Clip {
                 envelope: ItemEnvelope::new(other_layer),
                 start: RationalTime::ZERO,
                 duration: RationalTime::try_new(5, 1).unwrap(),
                 time_map: Default::default(),
-                source: ClipSource::Asset { asset },
+                source: ClipSource::asset_video_only(asset),
             }),
         ],
     });
@@ -78,6 +97,7 @@ fn fixture() -> Fixture {
         layer,
         other_layer,
         effect,
+        effect_def,
         track,
     }
 }
@@ -141,10 +161,8 @@ proptest! {
     fn set_property_effect_param_roundtrip(old in -10.0f64..10.0, new in -10.0f64..10.0) {
         let f = fixture();
         let doc = prepare(&f.doc, |d| {
-            let TrackItem::Clip(c) = &mut d.tracks[0].items[0] else { panic!("expected clip") };
-            c.envelope.effects[0]
-                .params
-                .insert("amount".into(), DocParam::const_f64(old));
+            let def = d.effect_definition_mut(f.effect_def).expect("effect definition");
+            def.params.insert("amount".into(), DocParam::const_f64(old));
         });
         let cmd = Command::SetProperty {
             target: f.layer,
@@ -202,8 +220,8 @@ proptest! {
     fn set_effect_enabled_roundtrip(old in any::<bool>(), new in any::<bool>()) {
         let f = fixture();
         let doc = prepare(&f.doc, |d| {
-            let TrackItem::Clip(c) = &mut d.tracks[0].items[0] else { panic!("expected clip") };
-            c.envelope.effects[0].enabled = old;
+            let def = d.effect_definition_mut(f.effect_def).expect("effect definition");
+            def.enabled = old;
         });
         let cmd = Command::SetEffectEnabled {
             target: f.layer,
@@ -217,9 +235,12 @@ proptest! {
     #[test]
     fn add_remove_effect_roundtrip(enabled in any::<bool>(), amount in -5.0f64..5.0) {
         let f = fixture();
-        let new_effect_id = EffectId::from_raw(f.doc.next_stable_id.peek_next());
+        let base = f.doc.next_stable_id.peek_next();
+        let new_effect_id = EffectId::from_raw(base);
+        let new_definition_id = EffectDefinitionId::from_raw(base + 1);
         let effect = EffectInstance {
             id: new_effect_id,
+            definition_id: new_definition_id,
             plugin_id: "core.filter.blur".into(),
             effect_version: 1,
             enabled,
@@ -229,7 +250,8 @@ proptest! {
         let cmd = Command::AddEffect {
             target: f.layer,
             index: 1,
-            effect,
+            effect: effect.clone(),
+            introduced_definition: true,
         };
         assert_roundtrip(&f.doc, cmd);
     }
@@ -240,11 +262,18 @@ proptest! {
         let TrackItem::Clip(clip) = &f.doc.tracks[0].items[0] else {
             panic!("expected fixture clip at index 0");
         };
-        let effect = clip.envelope.effects[0].clone();
+        let use_ = clip.envelope.effects[0].clone();
+        let def = f
+            .doc
+            .effect_definition(use_.definition_id)
+            .expect("effect definition")
+            .clone();
+        let effect = EffectInstance::from_use_and_definition(&use_, &def);
         let cmd = Command::RemoveEffect {
             target: f.layer,
             index: 0,
             effect,
+            introduced_definition: false,
         };
         assert_roundtrip(&f.doc, cmd);
     }
@@ -260,9 +289,7 @@ proptest! {
             start: RationalTime::try_new(start, 1).unwrap(),
             duration: RationalTime::try_new(1, 1).unwrap(),
             time_map: Default::default(),
-            source: ClipSource::Asset {
-                asset: motolii_doc::AssetId::from_raw(0),
-            },
+            source: ClipSource::asset_video_only(motolii_doc::AssetId::from_raw(0)),
         });
         let cmd = Command::AddTrackItem {
             parent: ParentLocator::Track(f.track),
@@ -294,8 +321,10 @@ fn add_effect_rejects_index_past_end() {
     let before = f.doc.clone();
     let mut writer = DocumentWriter::new(f.doc);
     let gesture = writer.begin_gesture();
+    let base = writer.snapshot().next_stable_id.peek_next();
     let effect = EffectInstance {
-        id: EffectId::from_raw(writer.snapshot().next_stable_id.peek_next()),
+        id: EffectId::from_raw(base),
+        definition_id: EffectDefinitionId::from_raw(base + 1),
         plugin_id: "core.filter.blur".into(),
         effect_version: 1,
         enabled: true,
@@ -309,6 +338,7 @@ fn add_effect_rejects_index_past_end() {
                 target: f.layer,
                 index: 99,
                 effect,
+                introduced_definition: true,
             },
         )
         .expect_err("index past end");
@@ -334,9 +364,7 @@ fn add_track_item_rejects_index_past_end() {
         start: RationalTime::ZERO,
         duration: RationalTime::try_new(1, 1).unwrap(),
         time_map: Default::default(),
-        source: ClipSource::Asset {
-            asset: motolii_doc::AssetId::from_raw(0),
-        },
+        source: ClipSource::asset_video_only(motolii_doc::AssetId::from_raw(0)),
     });
     let err = writer
         .apply_command(
@@ -498,13 +526,15 @@ fn different_gestures_do_not_merge() {
 #[test]
 fn same_gesture_two_add_effects_do_not_merge() {
     let f = fixture();
-    let mut writer = DocumentWriter::new(f.doc.clone());
+    let mut doc = f.doc.clone();
+    let (effect1_id, effect1_def, effect2_id, effect2_def) =
+        allocate_effect_ids_for_add_effect_test(&mut doc);
+    let mut writer = DocumentWriter::new(doc);
     let gesture = writer.begin_gesture();
 
-    let effect1_id = writer.allocate_effect_id().expect("allocate effect1");
-    let effect2_id = writer.allocate_effect_id().expect("allocate effect2");
     let effect1 = EffectInstance {
         id: effect1_id,
+        definition_id: effect1_def,
         plugin_id: "core.filter.blur".into(),
         effect_version: 1,
         enabled: true,
@@ -513,6 +543,7 @@ fn same_gesture_two_add_effects_do_not_merge() {
     };
     let effect2 = EffectInstance {
         id: effect2_id,
+        definition_id: effect2_def,
         plugin_id: "core.filter.tint".into(),
         effect_version: 1,
         enabled: true,
@@ -527,6 +558,7 @@ fn same_gesture_two_add_effects_do_not_merge() {
                 target: f.layer,
                 index: 1,
                 effect: effect1,
+                introduced_definition: true,
             },
         )
         .expect("add effect1");
@@ -537,6 +569,7 @@ fn same_gesture_two_add_effects_do_not_merge() {
                 target: f.layer,
                 index: 2,
                 effect: effect2,
+                introduced_definition: true,
             },
         )
         .expect("add effect2");
@@ -556,13 +589,15 @@ fn same_gesture_two_add_effects_do_not_merge() {
 #[test]
 fn same_gesture_two_add_effects_undo_removes_both() {
     let f = fixture();
-    let mut writer = DocumentWriter::new(f.doc.clone());
+    let mut doc = f.doc.clone();
+    let (effect1_id, effect1_def, effect2_id, effect2_def) =
+        allocate_effect_ids_for_add_effect_test(&mut doc);
+    let mut writer = DocumentWriter::new(doc);
     let gesture = writer.begin_gesture();
 
-    let effect1_id = writer.allocate_effect_id().expect("allocate effect1");
-    let effect2_id = writer.allocate_effect_id().expect("allocate effect2");
     let effect1 = EffectInstance {
         id: effect1_id,
+        definition_id: effect1_def,
         plugin_id: "core.filter.blur".into(),
         effect_version: 1,
         enabled: true,
@@ -571,6 +606,7 @@ fn same_gesture_two_add_effects_undo_removes_both() {
     };
     let effect2 = EffectInstance {
         id: effect2_id,
+        definition_id: effect2_def,
         plugin_id: "core.filter.tint".into(),
         effect_version: 1,
         enabled: true,
@@ -585,6 +621,7 @@ fn same_gesture_two_add_effects_undo_removes_both() {
                 target: f.layer,
                 index: 1,
                 effect: effect1,
+                introduced_definition: true,
             },
         )
         .expect("add effect1");
@@ -595,6 +632,7 @@ fn same_gesture_two_add_effects_undo_removes_both() {
                 target: f.layer,
                 index: 2,
                 effect: effect2,
+                introduced_definition: true,
             },
         )
         .expect("add effect2");
@@ -626,7 +664,7 @@ fn same_gesture_two_add_effects_undo_removes_both() {
 
 #[test]
 fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let external_layer = doc.layers.allocate("external").unwrap();
     let group_layer = doc.layers.allocate("group").unwrap();
     let child_a = doc.layers.allocate("child_a").unwrap();
@@ -636,7 +674,7 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
 
     let mut env_a = ItemEnvelope::new(child_a);
     // subtree内参照(sibling child_b) — 複製後は新IDへ再写像されるべき。
-    env_a.transform.position = DocParam::LookAt {
+    env_a.transform.rotation = DocParam::LookAt {
         target: child_b,
         axis: LookAtAxis::PlusY,
     };
@@ -652,24 +690,27 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
 
     let mut env_b = ItemEnvelope::new(child_b);
     // subtree外参照(external_layer) — 複製後も維持されるべき。
-    // (rotationはLookAt/Followを許可しない — positionのみ許可。d1h_validate::look_at_on_rotation_fails参照)
-    env_b.transform.position = DocParam::LookAt {
+    // (LookAt は rotation のみ許可 — d1h_validate::look_at_on_rotation_ok 参照)
+    env_b.transform.rotation = DocParam::LookAt {
         target: external_layer,
         axis: LookAtAxis::PlusY,
     };
 
     let mut group_env = ItemEnvelope::new(group_layer);
     let effect_id = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
-    group_env.effects.push(EffectInstance {
+    let effect_def_id = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
+    doc.effect_definitions.push(EffectDefinition::new(
+        effect_def_id,
+        "core.filter.tint",
+        1,
+        true,
+        BTreeMap::new(),
+        Default::default(),
+    ));
+    group_env.effects.push(EffectUse {
         id: effect_id,
-        plugin_id: "core.filter.tint".into(),
-        effect_version: 1,
-        enabled: true,
-        params: BTreeMap::new(),
-        extra: Default::default(),
+        definition_id: effect_def_id,
     });
-    doc.version = 2;
-    doc.min_reader_version = 2;
 
     doc.tracks.push(Track {
         id: track,
@@ -679,7 +720,7 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
                 start: RationalTime::ZERO,
                 duration: RationalTime::try_new(5, 1).unwrap(),
                 time_map: Default::default(),
-                source: ClipSource::Asset { asset },
+                source: ClipSource::asset_video_only(asset),
             }),
             TrackItem::Group(Group {
                 envelope: group_env,
@@ -689,14 +730,14 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
                         start: RationalTime::ZERO,
                         duration: RationalTime::try_new(2, 1).unwrap(),
                         time_map: Default::default(),
-                        source: ClipSource::Asset { asset },
+                        source: ClipSource::asset_video_only(asset),
                     }),
                     TrackItem::Clip(Clip {
                         envelope: env_b,
                         start: RationalTime::ZERO,
                         duration: RationalTime::try_new(2, 1).unwrap(),
                         time_map: Default::default(),
-                        source: ClipSource::Asset { asset },
+                        source: ClipSource::asset_video_only(asset),
                     }),
                 ],
             }),
@@ -743,7 +784,7 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
     };
 
     // subtree内参照は複製先の新IDへ再写像される。
-    match &cloned_a.envelope.transform.position {
+    match &cloned_a.envelope.transform.rotation {
         DocParam::LookAt { target, .. } => {
             assert_eq!(*target, cloned_b.envelope.layer_id);
             assert_ne!(
@@ -755,7 +796,7 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
     }
 
     // subtree外参照は維持される。
-    match &cloned_b.envelope.transform.position {
+    match &cloned_b.envelope.transform.rotation {
         DocParam::LookAt { target, .. } => {
             assert_eq!(
                 *target, external_layer,
@@ -843,14 +884,14 @@ fn duplicate_undo_redo_loop_does_not_grow_layer_table() {
                     start: RationalTime::ZERO,
                     duration: RationalTime::try_new(1, 1).unwrap(),
                     time_map: Default::default(),
-                    source: ClipSource::Asset { asset },
+                    source: ClipSource::asset_video_only(asset),
                 }),
                 TrackItem::Clip(Clip {
                     envelope: ItemEnvelope::new(child_b),
                     start: RationalTime::ZERO,
                     duration: RationalTime::try_new(1, 1).unwrap(),
                     time_map: Default::default(),
-                    source: ClipSource::Asset { asset },
+                    source: ClipSource::asset_video_only(asset),
                 }),
             ],
         })],
@@ -912,7 +953,7 @@ fn duplicate_remaps_plugin_lookat_within_subtree() {
                     start: RationalTime::ZERO,
                     duration: RationalTime::try_new(2, 1).unwrap(),
                     time_map: Default::default(),
-                    source: ClipSource::Asset { asset },
+                    source: ClipSource::asset_video_only(asset),
                 }),
             ],
         })],
@@ -950,5 +991,310 @@ fn duplicate_remaps_plugin_lookat_within_subtree() {
             );
         }
         other => panic!("expected LookAt, got {other:?}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// D1l: lifecycle undo/redoはDocument全体を復元する
+// ---------------------------------------------------------------------------
+
+fn assert_writer_roundtrip(mut writer: DocumentWriter, before: Document, cmd: Command) {
+    let gesture = writer.begin_gesture();
+    writer.apply_command(gesture, cmd.clone()).expect("apply");
+    writer.undo().expect("undo");
+    assert_eq!(writer.snapshot().as_ref(), &before);
+    writer.redo().expect("redo");
+    let mut expected = before.clone();
+    cmd.apply(&mut expected).expect("re-apply");
+    assert_eq!(writer.snapshot().as_ref(), &expected);
+}
+
+#[test]
+fn add_effect_create_undo_redo_restores_full_document() {
+    let f = fixture();
+    let base = f.doc.next_stable_id.peek_next();
+    let effect = EffectInstance {
+        id: EffectId::from_raw(base),
+        definition_id: EffectDefinitionId::from_raw(base + 1),
+        plugin_id: "core.filter.blur".into(),
+        effect_version: 1,
+        enabled: true,
+        params: BTreeMap::new(),
+        extra: Default::default(),
+    };
+    let cmd = Command::AddEffect {
+        target: f.layer,
+        index: 1,
+        effect,
+        introduced_definition: true,
+    };
+    assert_writer_roundtrip(DocumentWriter::new(f.doc.clone()), f.doc, cmd);
+}
+
+#[test]
+fn add_effect_link_undo_redo_restores_full_document() {
+    let f = fixture();
+    let base = f.doc.next_stable_id.peek_next();
+    let effect = EffectInstance::from_use_and_definition(
+        &EffectUse {
+            id: EffectId::from_raw(base),
+            definition_id: f.effect_def,
+        },
+        f.doc.effect_definition(f.effect_def).unwrap(),
+    );
+    let cmd = Command::AddEffect {
+        target: f.layer,
+        index: 1,
+        effect,
+        introduced_definition: false,
+    };
+    assert_writer_roundtrip(DocumentWriter::new(f.doc.clone()), f.doc, cmd);
+}
+
+#[test]
+fn add_effect_link_rejects_use_id_colliding_with_existing_effect() {
+    let f = fixture();
+    let def = f.doc.effect_definition(f.effect_def).unwrap().clone();
+    let cmd = Command::AddEffect {
+        target: f.layer,
+        index: 1,
+        effect: EffectInstance::from_use_and_definition(
+            &EffectUse {
+                id: f.effect,
+                definition_id: f.effect_def,
+            },
+            &def,
+        ),
+        introduced_definition: false,
+    };
+    let mut working = f.doc.clone();
+    let before = working.clone();
+    let err = cmd
+        .apply(&mut working)
+        .expect_err("colliding use id must reject");
+    assert_eq!(err, CommandError::StableIdCollision { id: f.effect.get() });
+    assert_eq!(working, before);
+}
+
+#[test]
+fn add_effect_create_rejects_use_id_collision_without_inserting_definition() {
+    let f = fixture();
+    let new_definition_id = EffectDefinitionId::from_raw(f.doc.next_stable_id.peek_next());
+    let cmd = Command::AddEffect {
+        target: f.layer,
+        index: 1,
+        effect: EffectInstance {
+            id: f.effect,
+            definition_id: new_definition_id,
+            plugin_id: "core.filter.blur".into(),
+            effect_version: 1,
+            enabled: true,
+            params: BTreeMap::new(),
+            extra: Default::default(),
+        },
+        introduced_definition: true,
+    };
+    let mut working = f.doc.clone();
+    let before = working.clone();
+    let err = cmd
+        .apply(&mut working)
+        .expect_err("create with colliding use id must reject");
+    assert_eq!(err, CommandError::StableIdCollision { id: f.effect.get() });
+    assert_eq!(working, before);
+    assert!(working.effect_definition(new_definition_id).is_none());
+}
+
+#[test]
+fn add_effect_link_rejects_use_id_colliding_with_existing_keyframe() {
+    let mut f = fixture();
+    let kf_id = KeyframeId::from_raw(f.doc.next_stable_id.allocate().unwrap());
+    let TrackItem::Clip(clip) = &mut f.doc.tracks[0].items[0] else {
+        panic!("expected clip");
+    };
+    let mut opacity_track = DocKeyframeTrack::new();
+    opacity_track.insert(DocKeyframe {
+        id: kf_id,
+        t: RationalTime::ZERO,
+        value: DocValue::F64(1.0),
+        interp: Interp::Hold,
+    });
+    clip.envelope.opacity = DocParam::Keyframes(opacity_track);
+    f.doc.validate().unwrap();
+
+    let def = f.doc.effect_definition(f.effect_def).unwrap().clone();
+    let new_use_id = EffectId::from_raw(kf_id.get());
+    let cmd = Command::AddEffect {
+        target: f.layer,
+        index: 1,
+        effect: EffectInstance::from_use_and_definition(
+            &EffectUse {
+                id: new_use_id,
+                definition_id: f.effect_def,
+            },
+            &def,
+        ),
+        introduced_definition: false,
+    };
+    let mut working = f.doc.clone();
+    let before = working.clone();
+    let err = cmd
+        .apply(&mut working)
+        .expect_err("keyframe collision must reject");
+    assert_eq!(err, CommandError::StableIdCollision { id: kf_id.get() });
+    assert_eq!(working, before);
+}
+
+#[test]
+fn unlink_undo_redo_restores_full_document() {
+    let f = fixture();
+    let use_ = f.doc.tracks[0].items[0].as_clip().unwrap().envelope.effects[0].clone();
+    let def = f.doc.effect_definition(use_.definition_id).unwrap().clone();
+    let cmd = Command::RemoveEffect {
+        target: f.layer,
+        index: 0,
+        effect: EffectInstance::from_use_and_definition(&use_, &def),
+        introduced_definition: false,
+    };
+    assert_writer_roundtrip(DocumentWriter::new(f.doc.clone()), f.doc, cmd);
+}
+
+#[test]
+fn copy_local_last_reference_undo_redo_restores_full_document() {
+    let s = shared_fixture_from_d2();
+    let before = s.doc.next_stable_id.peek_next();
+    let new_def_id = EffectDefinitionId::from_raw(before);
+    let source = s.doc.effect_definition(s.d1).unwrap();
+    let mut new_def = source.clone();
+    new_def.id = new_def_id;
+    let cmd = Command::CopyLocalEffect {
+        use_id: s.u3,
+        previous_definition_id: s.d1,
+        new_definition: new_def,
+        stable_id_reservation: StableIdReservation::new(before, before + 1),
+    };
+    assert_identity_command_roundtrip(&s.doc, cmd);
+}
+
+#[test]
+fn delete_unused_definition_undo_redo_restores_full_document() {
+    let s = shared_fixture_from_d2();
+    let def = s.doc.effect_definition(s.d2_orphan).unwrap().clone();
+    let cmd = Command::DeleteEffectDefinition { definition: def };
+    assert_writer_roundtrip(DocumentWriter::new(s.doc.clone()), s.doc, cmd);
+}
+
+#[test]
+fn duplicate_track_item_shares_definition_but_mints_new_use_id() {
+    let s = shared_fixture_from_d2();
+    let orig_uses = s.doc.tracks[0].items[0]
+        .as_clip()
+        .unwrap()
+        .envelope
+        .effects
+        .clone();
+    let mut writer = DocumentWriter::new(s.doc);
+    writer.duplicate_track_item(s.layer_a).expect("duplicate");
+    let snap = writer.snapshot();
+    let cloned_uses = snap.tracks[0].items[1]
+        .as_clip()
+        .unwrap()
+        .envelope
+        .effects
+        .clone();
+    assert_eq!(cloned_uses.len(), orig_uses.len());
+    for (orig, cloned) in orig_uses.iter().zip(cloned_uses.iter()) {
+        assert_ne!(orig.id, cloned.id);
+        assert_eq!(orig.definition_id, cloned.definition_id);
+    }
+}
+
+struct SharedD2 {
+    doc: Document,
+    layer_a: LayerId,
+    u3: EffectId,
+    d1: EffectDefinitionId,
+    d2_orphan: EffectDefinitionId,
+}
+
+fn shared_fixture_from_d2() -> SharedD2 {
+    let mut doc = Document::new_current();
+    let layer_a = doc.layers.allocate("a").unwrap();
+    let layer_b = doc.layers.allocate("b").unwrap();
+    let track = doc.track_ids.allocate("V1").unwrap();
+    let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
+    let u1 = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let u2 = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let u3 = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let d1 = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let d2_orphan = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
+    doc.effect_definitions.push(EffectDefinition::new(
+        d1,
+        "core.filter.tint",
+        1,
+        true,
+        BTreeMap::from([("amount".into(), DocParam::const_f64(0.4))]),
+        Default::default(),
+    ));
+    doc.effect_definitions.push(EffectDefinition::new(
+        d2_orphan,
+        "core.filter.tint",
+        1,
+        true,
+        BTreeMap::from([("amount".into(), DocParam::const_f64(0.1))]),
+        Default::default(),
+    ));
+    let mut env_a = ItemEnvelope::new(layer_a);
+    env_a.effects.push(EffectUse {
+        id: u1,
+        definition_id: d1,
+    });
+    env_a.effects.push(EffectUse {
+        id: u2,
+        definition_id: d1,
+    });
+    let mut env_b = ItemEnvelope::new(layer_b);
+    env_b.effects.push(EffectUse {
+        id: u3,
+        definition_id: d1,
+    });
+    doc.tracks.push(Track {
+        id: track,
+        items: vec![
+            TrackItem::Clip(Clip {
+                envelope: env_a,
+                start: RationalTime::ZERO,
+                duration: RationalTime::try_new(5, 1).unwrap(),
+                time_map: Default::default(),
+                source: ClipSource::asset_video_only(asset),
+            }),
+            TrackItem::Clip(Clip {
+                envelope: env_b,
+                start: RationalTime::ZERO,
+                duration: RationalTime::try_new(5, 1).unwrap(),
+                time_map: Default::default(),
+                source: ClipSource::asset_video_only(asset),
+            }),
+        ],
+    });
+    doc.validate().unwrap();
+    SharedD2 {
+        doc,
+        layer_a,
+        u3,
+        d1,
+        d2_orphan,
+    }
+}
+
+trait ClipItem {
+    fn as_clip(&self) -> Option<&Clip>;
+}
+
+impl ClipItem for TrackItem {
+    fn as_clip(&self) -> Option<&Clip> {
+        match self {
+            TrackItem::Clip(c) => Some(c),
+            _ => None,
+        }
     }
 }

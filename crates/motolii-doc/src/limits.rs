@@ -5,16 +5,16 @@
 //! ロード入口(`persist::load_document_with_limits`)へ注入可能。production既定値は
 //! 運用調整値であり、永続JSON・migration・plugin契約には焼かない(#101完了条件)。
 //!
-//! command payload / journal / sample はD1d(#105)/D2/D4がまだ存在しないため、
-//! ここでは検査プリミティブ(`check_*`)のみを提供し、Document構造の走査には含めない。
-//! D1d/D2/D4は上限を別定義せず、ここの`ResourceLimits`を再利用する(実装ガード)。
+//! command payload / journal / sample のうち journal はD1d(#105)が
+//! `check_journal_bytes` / `max_command_payload_bytes`(record payload)を再利用する。
+//! command本体はD2、sampleはD4。上限を別定義しない(実装ガード)。
 
 use serde_json::{Map, Value as JsonValue};
 use thiserror::Error;
 
 use crate::param::DocParam;
 use crate::schema::{
-    Clip, ClipSource, EffectInstance, Group, ItemEnvelope, PathOp, StandardShape, TrackItem,
+    Clip, ClipSource, EffectDefinition, Group, ItemEnvelope, PathOp, StandardShape, TrackItem,
     Transform2D, VectorContent,
 };
 use crate::Document;
@@ -178,6 +178,10 @@ pub(crate) fn check_document_resource_limits(
 
     check_extra(&doc.extra, "document.extra", limits)?;
 
+    for (i, def) in doc.effect_definitions.iter().enumerate() {
+        check_effect_definition(def, &format!("effect_definitions[{i}]"), limits)?;
+    }
+
     for (id, name) in doc.layers.iter() {
         check_string(name, &format!("layers[{}].name", id.get()), limits)?;
     }
@@ -249,7 +253,16 @@ fn check_group(
 fn check_clip(clip: &Clip, path: &str, limits: &ResourceLimits) -> Result<(), ResourceLimitError> {
     check_envelope(&clip.envelope, path, limits)?;
     match &clip.source {
-        ClipSource::Asset { .. } => Ok(()),
+        ClipSource::Asset { audio, .. } => {
+            for (i, comp) in audio.iter().enumerate() {
+                check_param(
+                    &comp.gain,
+                    &format!("{path}.source.audio[{i}].gain"),
+                    limits,
+                )?;
+            }
+            Ok(())
+        }
         ClipSource::Plugin {
             plugin_id,
             params,
@@ -286,20 +299,18 @@ fn check_envelope(
     check_param(&env.transform.scale, &format!("{path}.scale"), limits)?;
     check_param(&env.transform.rotation, &format!("{path}.rotation"), limits)?;
     check_param(&env.opacity, &format!("{path}.opacity"), limits)?;
-    for (i, effect) in env.effects.iter().enumerate() {
-        check_effect(effect, &format!("{path}.effects[{i}]"), limits)?;
-    }
+    // D1l: EffectUseはid参照のみ(文字列/paramsはeffect_definitions側で検査する)。
     Ok(())
 }
 
-fn check_effect(
-    effect: &EffectInstance,
+fn check_effect_definition(
+    def: &EffectDefinition,
     path: &str,
     limits: &ResourceLimits,
 ) -> Result<(), ResourceLimitError> {
-    check_string(&effect.plugin_id, &format!("{path}.plugin_id"), limits)?;
-    check_extra(&effect.extra, &format!("{path}.extra"), limits)?;
-    for (name, param) in &effect.params {
+    check_string(&def.plugin_id, &format!("{path}.plugin_id"), limits)?;
+    check_extra(&def.extra, &format!("{path}.extra"), limits)?;
+    for (name, param) in &def.params {
         check_string(name, &format!("{path}.param_id"), limits)?;
         check_param(param, &format!("{path}.{name}"), limits)?;
     }
@@ -464,7 +475,7 @@ fn clamp_u32(n: usize) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::schema::{ClippingMaskSettings, Track, Transform2D};
+    use crate::schema::Track;
     use crate::{AssetTable, LayerIdTable, TrackIdTable};
 
     fn tiny_limits() -> ResourceLimits {
@@ -511,6 +522,7 @@ mod tests {
             track_ids: TrackIdTable::new(),
             tracks: Vec::new(),
             next_stable_id: Default::default(),
+            effect_definitions: Vec::new(),
             extra: Map::new(),
         }
     }
@@ -617,18 +629,11 @@ mod tests {
 
     fn simple_clip(layer_id: crate::LayerId, asset: crate::AssetId) -> TrackItem {
         TrackItem::Clip(Clip {
-            envelope: ItemEnvelope {
-                layer_id,
-                effects: Vec::new(),
-                transform: Transform2D::identity(),
-                clipping_mask: ClippingMaskSettings::default(),
-                blend: Default::default(),
-                opacity: DocParam::const_f64(1.0),
-            },
+            envelope: ItemEnvelope::new(layer_id),
             start: motolii_core::RationalTime::ZERO,
             duration: motolii_core::RationalTime::try_new(1, 1).unwrap(),
             time_map: Default::default(),
-            source: ClipSource::Asset { asset },
+            source: ClipSource::asset_video_only(asset),
         })
     }
 

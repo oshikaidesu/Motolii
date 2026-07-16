@@ -6,9 +6,11 @@ license.workspace = true
 
 [dependencies]
 motolii-core.workspace = true
+motolii-doc.workspace = true
 motolii-eval.workspace = true
 motolii-gpu.workspace = true
 motolii-media.workspace = true
+motolii-audio.workspace = true
 motolii-nodes.workspace = true
 motolii-plugin.workspace = true
 motolii-render.workspace = true

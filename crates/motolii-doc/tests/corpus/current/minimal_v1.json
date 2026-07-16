@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "min_reader_version": 1,
+  "composition": {
+    "aspect_num": 16,
+    "aspect_den": 9,
+    "duration": { "num": 10, "den": 1 },
+    "fps": { "num": 30, "den": 1 }
+  },
+  "bpm": { "num": 120, "den": 1 }
+}
