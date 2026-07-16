@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! LookAt/Follow: 描画順非依存の world position 事前解決(F-3)。
 
 use std::collections::BTreeMap;

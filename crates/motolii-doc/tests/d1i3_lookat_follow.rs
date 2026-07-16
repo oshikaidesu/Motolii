@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! D1i-3: LookAt(rotation角度) / Follow(position+offset) の意味論ゴールデン(S16)。
 //! concept: `rotation(t)=look_at(self.center, target.center)`。PlusX/PlusY を固定。
 //! 本ファイルのアサーション更新は禁止(新variant+新ファイルのみ)。

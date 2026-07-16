@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use motolii_core::{RationalTime, TimeMap};
 use motolii_eval::DataTracks;
 use serde::Deserialize;
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use thiserror::Error;
 
 use crate::limits::{check_document_resource_limits, ResourceLimitError, ResourceLimits};
@@ -549,7 +549,7 @@ pub fn migrate_bytes_with_limits(
         steps.push("inject_stable_ids");
     }
 
-    if inline_effects_to_definition_use(&mut root)? {
+    if crate::legacy_effect_migrate::migrate_inline_effects_json(&mut root)? {
         steps.push("inline_effects_to_definition_use");
     }
 
@@ -974,173 +974,6 @@ fn extract_seed_u64(seed: &Value) -> Option<u64> {
         }
     }
     None
-}
-
-/// D1l: 旧inline `EffectInstance`(envelope.effects内で`plugin_id`直書き)を
-/// `EffectUse{id,definition_id}` + `Document.effect_definitions`へ分離する。
-///
-/// 既に`{id, definition_id}`形式(=`definition_id`キーを持つ)は素通り(idempotent)。
-/// Use側の`id`は保持する(欠落は先行する`inject_missing_stable_ids_json`が採番済み)。
-fn inline_effects_to_definition_use(root: &mut Value) -> Result<bool, MigrateError> {
-    let mut next = root
-        .get("next_stable_id")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0);
-    let mut migrated = false;
-    let mut new_definitions: Vec<Value> = Vec::new();
-
-    if let Some(tracks) = root.get_mut("tracks").and_then(|t| t.as_array_mut()) {
-        for track in tracks.iter_mut() {
-            let Some(items) = track.get_mut("items").and_then(|i| i.as_array_mut()) else {
-                continue;
-            };
-            for item in items.iter_mut() {
-                if inline_effects_in_item(item, &mut next, &mut new_definitions)? {
-                    migrated = true;
-                }
-            }
-        }
-    }
-
-    if !new_definitions.is_empty() {
-        let Value::Object(map) = root else {
-            return Err(MigrateError::NotAnObject);
-        };
-        match map
-            .get_mut("effect_definitions")
-            .and_then(|d| d.as_array_mut())
-        {
-            Some(arr) => arr.extend(new_definitions),
-            None => {
-                map.insert("effect_definitions".into(), Value::Array(new_definitions));
-            }
-        }
-    }
-
-    if migrated {
-        if let Value::Object(map) = root {
-            map.insert("next_stable_id".into(), json!(next));
-        }
-    }
-    Ok(migrated)
-}
-
-fn inline_effects_in_item(
-    item: &mut Value,
-    next: &mut u64,
-    definitions: &mut Vec<Value>,
-) -> Result<bool, MigrateError> {
-    let kind = item
-        .get("kind")
-        .and_then(|k| k.as_str())
-        .unwrap_or("")
-        .to_string();
-    match kind.as_str() {
-        "clip" => {
-            if let Some(env) = item.get_mut("envelope") {
-                inline_effects_in_envelope(env, next, definitions)
-            } else {
-                Ok(false)
-            }
-        }
-        "group" => {
-            let mut migrated = false;
-            if let Some(env) = item.get_mut("envelope") {
-                if inline_effects_in_envelope(env, next, definitions)? {
-                    migrated = true;
-                }
-            }
-            if let Some(children) = item.get_mut("children").and_then(|c| c.as_array_mut()) {
-                for child in children.iter_mut() {
-                    if inline_effects_in_item(child, next, definitions)? {
-                        migrated = true;
-                    }
-                }
-            }
-            Ok(migrated)
-        }
-        _ => Ok(false),
-    }
-}
-
-fn inline_effects_in_envelope(
-    env: &mut Value,
-    next: &mut u64,
-    definitions: &mut Vec<Value>,
-) -> Result<bool, MigrateError> {
-    let mut migrated = false;
-    if let Some(effects) = env.get_mut("effects").and_then(|e| e.as_array_mut()) {
-        for effect in effects.iter_mut() {
-            if inline_effect_entry(effect, next, definitions)? {
-                migrated = true;
-            }
-        }
-    }
-    Ok(migrated)
-}
-
-/// 1件のeffectエントリを検査し、旧inline形式なら`{id, definition_id}`へ置き換える。
-/// 戻り値は「このエントリを変換したか」。
-fn inline_effect_entry(
-    effect: &mut Value,
-    next: &mut u64,
-    definitions: &mut Vec<Value>,
-) -> Result<bool, MigrateError> {
-    let Value::Object(map) = effect else {
-        return Ok(false);
-    };
-    if map.contains_key("definition_id") {
-        if map.contains_key("plugin_id")
-            || map.contains_key("params")
-            || map.contains_key("effect_version")
-            || map.contains_key("enabled")
-        {
-            return Err(MigrateError::HybridEffectEntry {
-                path: "envelope.effects[]".into(),
-            });
-        }
-        return Ok(false);
-    }
-    if !map.contains_key("plugin_id") {
-        return Ok(false);
-    }
-
-    let use_id = map.get("id").cloned();
-    let definition_id = allocate_stable(next)?;
-    let plugin_id = map.remove("plugin_id").unwrap_or(Value::Null);
-    let effect_version = map.remove("effect_version");
-    let enabled = map.remove("enabled");
-    let params = map.remove("params");
-    // idはUse側の識別子なので台帳(Definition)へは運ばない。残りは未知フィールド(F-9)。
-    let extra: Vec<(String, Value)> = map
-        .iter()
-        .filter(|(k, _)| k.as_str() != "id")
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect();
-
-    let mut def_obj = Map::new();
-    def_obj.insert("id".into(), json!(definition_id));
-    def_obj.insert("plugin_id".into(), plugin_id);
-    if let Some(v) = effect_version {
-        def_obj.insert("effect_version".into(), v);
-    }
-    if let Some(v) = enabled {
-        def_obj.insert("enabled".into(), v);
-    }
-    if let Some(v) = params {
-        def_obj.insert("params".into(), v);
-    }
-    for (k, v) in extra {
-        def_obj.insert(k, v);
-    }
-    definitions.push(Value::Object(def_obj));
-
-    map.clear();
-    if let Some(id) = use_id {
-        map.insert("id".into(), id);
-    }
-    map.insert("definition_id".into(), json!(definition_id));
-    Ok(true)
 }
 
 /// EffectInstance / DocKeyframe の欠落`id`をJSON段階で採番(D2必須。拒否→D1e変換)。
@@ -1955,6 +1788,7 @@ pub fn modern_timemap_source(
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use crate::schema::ItemEnvelope;

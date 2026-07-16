@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! D1a: スキーマ本体のJSON roundtripと境界宣言の機械判定。
 
 use std::collections::BTreeMap;

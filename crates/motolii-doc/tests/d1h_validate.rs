@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! D1h: DocParam期待型・空トラック・AssetRef・NaN/Inf/値域の validate。
 
 use motolii_core::{RationalTime, TimeMap};

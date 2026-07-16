@@ -14,7 +14,8 @@ use motolii_core::RationalTime;
 use motolii_doc::{
     load_document, migrate_bytes, save_document, Clip, ClipSource, Command, CommandError, DocParam,
     Document, DocumentError, DocumentWriter, EffectDefinition, EffectDefinitionId, EffectId,
-    EffectInstance, EffectUse, ItemEnvelope, LayerId, MigrateError, Track, TrackItem,
+    EffectInstance, EffectUse, ItemEnvelope, LayerId, MigrateError, StableIdReservation, Track,
+    TrackItem,
 };
 
 fn unique_dir(tag: &str) -> PathBuf {
@@ -46,7 +47,7 @@ struct Shared {
 }
 
 fn shared_fixture() -> Shared {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let layer_a = doc.layers.allocate("a").unwrap();
     let layer_b = doc.layers.allocate("b").unwrap();
     let track = doc.track_ids.allocate("V1").unwrap();
@@ -93,9 +94,6 @@ fn shared_fixture() -> Shared {
         definition_id: d1,
     });
 
-    doc.version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
-    doc.min_reader_version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
-
     doc.tracks.push(Track {
         id: track,
         items: vec![
@@ -131,6 +129,26 @@ fn shared_fixture() -> Shared {
 
 fn effects_on(doc: &Document, layer: LayerId) -> Vec<EffectUse> {
     doc.find_effect_use_all(layer)
+}
+
+fn copy_local_command(
+    doc: &Document,
+    use_id: EffectId,
+    previous_definition_id: EffectDefinitionId,
+) -> Command {
+    let before = doc.next_stable_id.peek_next();
+    let new_def_id = EffectDefinitionId::from_raw(before);
+    let source = doc
+        .effect_definition(previous_definition_id)
+        .expect("definition");
+    let mut new_def = source.clone();
+    new_def.id = new_def_id;
+    Command::CopyLocalEffect {
+        use_id,
+        previous_definition_id,
+        new_definition: new_def,
+        stable_id_reservation: StableIdReservation::new(before, before + 1),
+    }
 }
 
 // `Document`に無い薄い読み取りヘルパ(テスト専用)。
@@ -256,10 +274,9 @@ fn unlink_one_use_keeps_definition_and_other_uses() {
 
     // §4-5: Undo 1回で復元(同一index・同一definition_id)。
     let restored = cmd.inverse();
-    cmd.inverse();
     let mut undone = working.clone();
     restored.apply(&mut undone).expect("undo must succeed");
-    assert_eq!(undone.tracks, s.doc.tracks);
+    assert_eq!(undone, s.doc);
 }
 
 // ---------------------------------------------------------------------------
@@ -268,14 +285,9 @@ fn unlink_one_use_keeps_definition_and_other_uses() {
 
 #[test]
 fn copy_local_retargets_only_that_use_and_preserves_extra() {
-    let mut s = shared_fixture();
-    let new_def_id = EffectDefinitionId::from_raw(s.doc.next_stable_id.allocate().unwrap());
-    let cmd = Command::CopyLocalEffect {
-        target: s.layer_b,
-        use_id: s.u3,
-        old_definition_id: s.d1,
-        new_definition_id: new_def_id,
-    };
+    let s = shared_fixture();
+    let new_def_id = EffectDefinitionId::from_raw(s.doc.next_stable_id.peek_next());
+    let cmd = copy_local_command(&s.doc, s.u3, s.d1);
     let mut working = s.doc.clone();
     cmd.apply(&mut working).expect("copy local must succeed");
 
@@ -312,24 +324,29 @@ fn copy_local_retargets_only_that_use_and_preserves_extra() {
         .validate()
         .expect("post copy-local doc must validate");
 
-    // Undo 1回で復元。
+    // Undo 1回で復元(counterは非巻戻し — D1l/journal追補§2.2)。
     let undo = cmd.inverse();
     let before_copy = s.doc.clone();
     undo.apply(&mut working).expect("undo must succeed");
-    assert_eq!(working, before_copy);
-    let _ = s.doc.effect_definitions.len();
+    let reservation = cmd.stable_id_reservation().expect("reservation");
+    assert_eq!(
+        working.next_stable_id.peek_next(),
+        reservation.after(),
+        "undo must not roll back counter"
+    );
+    let mut normalized = working.clone();
+    normalized.next_stable_id = before_copy.next_stable_id;
+    assert_eq!(normalized, before_copy);
 }
 
 #[test]
 fn undo_copy_local_rejects_when_new_definition_still_shared() {
-    let mut s = shared_fixture();
-    let new_def_id = EffectDefinitionId::from_raw(s.doc.next_stable_id.allocate().unwrap());
-    let copy = Command::CopyLocalEffect {
-        target: s.layer_b,
-        use_id: s.u3,
-        old_definition_id: s.d1,
-        new_definition_id: new_def_id,
+    let s = shared_fixture();
+    let copy = copy_local_command(&s.doc, s.u3, s.d1);
+    let Command::CopyLocalEffect { new_definition, .. } = &copy else {
+        panic!("expected copy local command")
     };
+    let new_def_id = new_definition.id;
     let mut working = s.doc.clone();
     copy.apply(&mut working).unwrap();
 
@@ -464,15 +481,10 @@ fn orphan_definition_survives_save_reload() {
 #[test]
 fn copy_local_then_save_reload_preserves_two_definitions() {
     let mut s = shared_fixture();
-    let new_def_id = EffectDefinitionId::from_raw(s.doc.next_stable_id.allocate().unwrap());
-    Command::CopyLocalEffect {
-        target: s.layer_b,
-        use_id: s.u3,
-        old_definition_id: s.d1,
-        new_definition_id: new_def_id,
-    }
-    .apply(&mut s.doc)
-    .expect("copy local must succeed");
+    let new_def_id = EffectDefinitionId::from_raw(s.doc.next_stable_id.peek_next());
+    copy_local_command(&s.doc, s.u3, s.d1)
+        .apply(&mut s.doc)
+        .expect("copy local must succeed");
     s.doc.validate().expect("post copy-local doc must validate");
 
     let dir = unique_dir("copy-local-reload");
@@ -546,24 +558,19 @@ fn unlink_is_one_undo() {
 
 #[test]
 fn copy_local_is_one_undo() {
-    let mut s = shared_fixture();
-    let new_def_id = EffectDefinitionId::from_raw(s.doc.next_stable_id.allocate().unwrap());
+    let s = shared_fixture();
+    let cmd = copy_local_command(&s.doc, s.u3, s.d1);
     let mut writer = DocumentWriter::new(s.doc.clone());
     let gesture = writer.begin_gesture();
-    writer
-        .apply_command(
-            gesture,
-            Command::CopyLocalEffect {
-                target: s.layer_b,
-                use_id: s.u3,
-                old_definition_id: s.d1,
-                new_definition_id: new_def_id,
-            },
-        )
-        .unwrap();
+    writer.apply_command(gesture, cmd.clone()).unwrap();
     assert_eq!(writer.undo_len(), 1);
     writer.undo().unwrap();
-    assert_eq!(writer.snapshot().as_ref(), &s.doc);
+    let after_undo = writer.snapshot();
+    let reservation = cmd.stable_id_reservation().expect("reservation");
+    assert_eq!(after_undo.next_stable_id.peek_next(), reservation.after());
+    let mut normalized = (*after_undo).clone();
+    normalized.next_stable_id = s.doc.next_stable_id;
+    assert_eq!(&normalized, &s.doc);
 }
 
 // ---------------------------------------------------------------------------

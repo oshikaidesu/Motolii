@@ -17,10 +17,12 @@ mod command;
 mod doc_keyframe;
 mod doc_value;
 mod duplicate;
+mod effect_prepare;
 mod eval_time;
 mod graph;
 mod ids;
 pub mod journal;
+mod legacy_effect_migrate;
 mod limits;
 mod migrate;
 mod param;
@@ -52,6 +54,7 @@ pub use command::{
 pub use doc_keyframe::{DocKeyframe, DocKeyframeError, DocKeyframeTrack};
 pub use doc_value::DocValue;
 pub use duplicate::DuplicateError;
+pub use effect_prepare::{DraftDocParam, DraftKeyframe, EffectDefinitionDraft, PrepareError};
 pub use eval_time::{
     EvaluationTime, D3_CLIP_LOCAL_TO_SOURCE_VIA_TIMEMAP, M1_SOURCE_PTS_EQUALS_TIMELINE,
 };
@@ -95,7 +98,9 @@ pub use schema::{
     TrackItem, Transform2D, TrimMode, VectorContent, VectorRecipe, VideoComponent,
 };
 pub use spatial_resolve::resolve_document_spaces;
-pub use stable_id::{EffectDefinitionId, EffectId, KeyframeId, StableIdError, StableIdSeq};
+pub use stable_id::{
+    EffectDefinitionId, EffectId, KeyframeId, StableIdError, StableIdReservation, StableIdSeq,
+};
 pub use track_id::{TrackId, TrackIdError, TrackIdTable};
 pub use undo::{Macro, UndoError, UndoHistory, UndoLimit};
 pub use validate::{
@@ -139,10 +144,32 @@ pub struct Document {
 }
 
 impl Document {
+    /// 現行writerが新しく作るDocumentの唯一の生成口。
+    pub fn new_current() -> Self {
+        Self::empty_at_version(
+            persist::WRITER_VERSION,
+            validate::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
+        )
+    }
+
+    /// 旧版fixture・明示migration専用。製品の新規作成には`new_current`を使う。
+    ///
+    /// ```compile_fail
+    /// #![deny(deprecated)]
+    /// let _ = motolii_doc::Document::new_v1();
+    /// ```
+    #[deprecated(
+        since = "0.1.0",
+        note = "legacy/migration fixtures only; product code must use Document::new_current()"
+    )]
     pub fn new_v1() -> Self {
+        Self::empty_at_version(1, 1)
+    }
+
+    fn empty_at_version(version: u32, min_reader_version: u32) -> Self {
         Self {
-            version: 1,
-            min_reader_version: 1,
+            version,
+            min_reader_version,
             composition: Composition::new_v1(),
             bpm: Bpm::DEFAULT,
             soundtrack: None,
@@ -224,6 +251,88 @@ pub enum WriterMessage {
 /// D2: `Command`の適用は必ず`apply_command`(内部でUndoHistoryへ積む)経由。
 /// `edit`/`apply`は移行済み呼び出し元のための足場であり、undo履歴には積まれない
 /// (選択/hover/IME等のUI状態や、Command化されていない旧経路専用 — 実装ガード5)。
+///
+/// D1l B-3: Effect identity 採番の正規経路は `prepare_*` のみ。旧 allocate API は公開されない:
+/// ```compile_fail
+/// # fn main() {
+/// let mut w = motolii_doc::DocumentWriter::new(motolii_doc::Document::new_current());
+/// let _ = w.allocate_effect_id();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// let mut w = motolii_doc::DocumentWriter::new(motolii_doc::Document::new_current());
+/// let _ = w.allocate_effect_definition_id();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// let mut w = motolii_doc::DocumentWriter::new(motolii_doc::Document::new_current());
+/// let _ = w.allocate_unique_effect_pair();
+/// # }
+/// ```
+///
+/// Draft 型は永続化できない(serde 無し):
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::EffectDefinitionDraft;
+/// fn _serialize(d: &EffectDefinitionDraft) -> impl serde::Serialize + '_ { d }
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::DraftDocParam;
+/// fn _serialize(d: &DraftDocParam) -> impl serde::Serialize + '_ { d }
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::DraftKeyframe;
+/// fn _serialize(d: &DraftKeyframe) -> impl serde::Serialize + '_ { d }
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::EffectDefinitionDraft;
+/// fn _deserialize<T: for<'de> serde::Deserialize<'de>>() {}
+/// _deserialize::<EffectDefinitionDraft>();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::DraftDocParam;
+/// fn _deserialize<T: for<'de> serde::Deserialize<'de>>() {}
+/// _deserialize::<DraftDocParam>();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::DraftKeyframe;
+/// fn _deserialize<T: for<'de> serde::Deserialize<'de>>() {}
+/// _deserialize::<DraftKeyframe>();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::EffectDefinitionDraft;
+/// fn _owned<T: serde::de::DeserializeOwned>() {}
+/// _owned::<EffectDefinitionDraft>();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::DraftDocParam;
+/// fn _owned<T: serde::de::DeserializeOwned>() {}
+/// _owned::<DraftDocParam>();
+/// # }
+/// ```
+/// ```compile_fail
+/// # fn main() {
+/// use motolii_doc::DraftKeyframe;
+/// fn _owned<T: serde::de::DeserializeOwned>() {}
+/// _owned::<DraftKeyframe>();
+/// # }
+/// ```
 #[derive(Debug)]
 pub struct DocumentWriter {
     doc: Document,
@@ -340,29 +449,6 @@ impl DocumentWriter {
         self.doc.layers.reserve()
     }
 
-    /// `EffectId`(Use)を新規発行する(A8 / D1l)。ネスト永続追加に合わせversion下限を上げる。
-    pub fn allocate_effect_id(&mut self) -> Result<EffectId, StableIdError> {
-        let id = self.doc.next_stable_id.allocate()?;
-        self.bump_versions_for_effect_schema();
-        Ok(EffectId::from_raw(id))
-    }
-
-    /// `EffectDefinitionId`を新規発行する(D1l)。
-    pub fn allocate_effect_definition_id(&mut self) -> Result<EffectDefinitionId, StableIdError> {
-        let id = self.doc.next_stable_id.allocate()?;
-        self.bump_versions_for_effect_schema();
-        Ok(EffectDefinitionId::from_raw(id))
-    }
-
-    /// Use+Definitionの対を新規採番する(unique effect追加の下準備)。
-    pub fn allocate_unique_effect_pair(
-        &mut self,
-    ) -> Result<(EffectId, EffectDefinitionId), StableIdError> {
-        let use_id = self.allocate_effect_id()?;
-        let def_id = self.allocate_effect_definition_id()?;
-        Ok((use_id, def_id))
-    }
-
     /// `KeyframeId`を新規発行する(A8、非再利用)。同上。
     pub fn allocate_keyframe_id(&mut self) -> Result<KeyframeId, StableIdError> {
         let id = self.doc.next_stable_id.allocate()?;
@@ -372,12 +458,6 @@ impl DocumentWriter {
 
     fn bump_versions_for_stable_ids(&mut self) {
         let floor = validate::MIN_READER_VERSION_FOR_STABLE_IDS;
-        self.doc.min_reader_version = self.doc.min_reader_version.max(floor);
-        self.doc.version = self.doc.version.max(floor);
-    }
-
-    fn bump_versions_for_effect_schema(&mut self) {
-        let floor = validate::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
         self.doc.min_reader_version = self.doc.min_reader_version.max(floor);
         self.doc.version = self.doc.version.max(floor);
     }
@@ -401,6 +481,31 @@ impl DocumentWriter {
     pub fn validate(&self) -> Result<(), DocumentError> {
         self.doc.validate()
     }
+
+    /// D1l B-3: 新 Use+Definition を counter clone 上で準備する。成功・失敗とも live Document 不変。
+    pub fn prepare_create_effect(
+        &self,
+        target: LayerId,
+        index: usize,
+        draft: EffectDefinitionDraft,
+    ) -> Result<Command, PrepareError> {
+        effect_prepare::prepare_create_effect(&self.doc, target, index, draft)
+    }
+
+    /// D1l B-3: 既存 Definition へ新 Use を準備する。
+    pub fn prepare_link_effect_use(
+        &self,
+        target: LayerId,
+        index: usize,
+        definition_id: EffectDefinitionId,
+    ) -> Result<Command, PrepareError> {
+        effect_prepare::prepare_link_effect_use(&self.doc, target, index, definition_id)
+    }
+
+    /// D1l B-3: 対象 Use の Definition をローカル複製する。
+    pub fn prepare_copy_local_effect(&self, use_id: EffectId) -> Result<Command, PrepareError> {
+        effect_prepare::prepare_copy_local_effect(&self.doc, use_id)
+    }
 }
 
 /// 読み手API: スナップショットだけを受け、書き込めない。
@@ -409,6 +514,7 @@ pub fn render_with_snapshot(doc: &Arc<Document>) -> u32 {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use motolii_core::RationalTime;

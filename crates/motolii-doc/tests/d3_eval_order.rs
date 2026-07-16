@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! D3: F-3評価順・B④3軸・DataTrack型照合の意味論ゴールデン。
 
 use std::collections::BTreeMap;

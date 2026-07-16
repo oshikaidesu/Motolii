@@ -1,10 +1,12 @@
+#![allow(deprecated)]
+
 //! D1b: Document::validate の正常系・破壊系。
 
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
     AssetId, Clip, ClipSource, DocParam, Document, DocumentError, DocumentWriter, EffectDefinition,
-    EffectDefinitionId, EffectId, EffectUse, ItemEnvelope, LayerId, LookAtAxis, Soundtrack, Track,
-    TrackId, TrackItem,
+    EffectDefinitionDraft, EffectDefinitionId, EffectId, EffectUse, ItemEnvelope, LayerId,
+    LookAtAxis, Soundtrack, Track, TrackId, TrackItem, MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
 };
 use serde_json::Map;
 use std::collections::BTreeMap;
@@ -185,21 +187,64 @@ fn version_below_min_reader_fails() {
 }
 
 #[test]
-fn allocate_effect_id_bumps_version_and_min_reader() {
-    let mut writer = DocumentWriter::new(valid_minimal());
-    writer.allocate_effect_id().expect("allocate effect id");
-    let doc = writer.snapshot();
+fn prepare_effect_keeps_current_version_and_writer_unchanged() {
+    let mut doc = Document::new_current();
+    let layer = doc.layers.allocate("a").unwrap();
+    let tid = doc.track_ids.allocate("V1").unwrap();
+    let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
+    doc.tracks.push(Track {
+        id: tid,
+        items: vec![TrackItem::Clip(Clip {
+            envelope: ItemEnvelope::new(layer),
+            start: RationalTime::ZERO,
+            duration: RationalTime::try_new(5, 1).unwrap(),
+            time_map: Default::default(),
+            source: ClipSource::asset_video_only(asset),
+        })],
+    });
+    doc.validate().unwrap();
+
+    let writer = DocumentWriter::new(doc);
+    let snap_before = writer.snapshot();
+    let revision_before = writer.revision;
+    let undo_before = writer.undo_len();
+    let redo_before = writer.redo_len();
+
+    let draft = EffectDefinitionDraft {
+        plugin_id: "core.filter.blur".into(),
+        effect_version: 1,
+        enabled: true,
+        params: BTreeMap::new(),
+        extra: Map::new(),
+    };
+    let cmd = writer
+        .prepare_create_effect(layer, 0, draft)
+        .expect("prepare create on new_current must succeed");
+
+    assert_eq!(writer.snapshot().version, snap_before.version);
     assert_eq!(
-        doc.version, 4,
-        "effect id allocation must raise Document.version to D1l floor"
+        writer.snapshot().min_reader_version,
+        snap_before.min_reader_version
     );
     assert_eq!(
-        doc.min_reader_version, 4,
-        "effect id allocation must raise min_reader_version floor to D1l floor"
+        writer.snapshot().next_stable_id.peek_next(),
+        snap_before.next_stable_id.peek_next()
+    );
+    assert_eq!(writer.revision, revision_before);
+    assert_eq!(writer.undo_len(), undo_before);
+    assert_eq!(writer.redo_len(), redo_before);
+    assert_eq!(snap_before.version, 4);
+    assert_eq!(
+        snap_before.min_reader_version,
+        MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS
+    );
+    assert!(
+        cmd.stable_id_reservation().is_some(),
+        "prepare must return identity lifecycle command"
     );
     writer
         .validate()
-        .expect("version=4 with min_reader_version=4 must validate");
+        .expect("new_current document must validate");
 }
 
 #[test]

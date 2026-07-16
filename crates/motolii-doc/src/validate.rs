@@ -679,7 +679,7 @@ fn validate_param(
 }
 
 /// 未知plugin向け: 期待型なし。有限性・AssetRef存在・Bezierのみ。
-fn validate_param_structure(
+pub(crate) fn validate_param_structure(
     doc: &Document,
     param: &DocParam,
     path: &str,
@@ -722,7 +722,10 @@ fn validate_param_structure(
     }
 }
 
-fn validate_interp_at(path: &str, interp: &motolii_eval::Interp) -> Result<(), DocumentError> {
+pub(crate) fn validate_interp_at(
+    path: &str,
+    interp: &motolii_eval::Interp,
+) -> Result<(), DocumentError> {
     validate_interp(interp).map_err(|e| match e {
         crate::doc_keyframe::DocKeyframeError::NonFiniteBezier => DocumentError::NonFiniteBezier {
             path: path.to_string(),
@@ -738,6 +741,36 @@ fn validate_interp_at(path: &str, interp: &motolii_eval::Interp) -> Result<(), D
             path: format!("{path} ({other})"),
         },
     })
+}
+
+/// ID採番前のDraft keyframe列: 空拒否・variant一致・値の構造検査。
+pub(crate) fn validate_keyframe_draft_values(
+    doc: &Document,
+    values: &[crate::doc_value::DocValue],
+    path: &str,
+) -> Result<(), DocumentError> {
+    if values.is_empty() {
+        return Err(DocumentError::EmptyKeyframeTrack {
+            path: path.to_string(),
+        });
+    }
+    let mut expected_kind: Option<&'static str> = None;
+    for value in values {
+        let kind = value.kind_name();
+        match expected_kind {
+            None => expected_kind = Some(kind),
+            Some(prev) if prev != kind => {
+                return Err(DocumentError::KeyframeVariantMismatch {
+                    path: path.to_string(),
+                    expected: prev.to_string(),
+                    got: kind.to_string(),
+                });
+            }
+            Some(_) => {}
+        }
+        validate_value_structure(doc, value, path)?;
+    }
+    Ok(())
 }
 
 fn validate_value(

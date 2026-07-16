@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! D1i-2: PathOp意味論表(docs/specs/M2-document-model.md)の拒否項目 + 追加席の serde 契約。
 //! 幾何の意味論ゴールデンは `d1i2_pathop_geometry.rs`。
 

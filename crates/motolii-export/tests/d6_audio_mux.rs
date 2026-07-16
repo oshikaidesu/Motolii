@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! D6: Document書き出しの楽曲mux + D1f書き出し厳格化。
 
 use std::collections::BTreeMap;

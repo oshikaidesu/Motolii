@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! D1f: 未知plugin_id・既知プラグインの未来版の「開く」側契約(F-9、実装ガード9、S13)。
 //!
 //! 完了条件: 未知plugin_idを含むJSONがロード成功+警告+roundtrip保持。既知プラグインの

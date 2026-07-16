@@ -12,6 +12,7 @@ use crate::command::{
 };
 use crate::doc_keyframe::DocKeyframeTrack;
 use crate::param::DocParam;
+use crate::schema::EffectDefinition;
 use crate::schema::{
     ClipSource, ItemEnvelope, PathOp, StandardShape, TrackItem, Transform2D, VectorContent,
 };
@@ -255,13 +256,7 @@ fn remap_doc_param(
     match param {
         DocParam::Const(_) | DocParam::Data { .. } => {}
         DocParam::Keyframes(track) => {
-            let mut fresh = DocKeyframeTrack::new();
-            for key in track.keys() {
-                let mut k = key.clone();
-                k.id = KeyframeId::from_raw(seq.allocate()?);
-                fresh.insert(k);
-            }
-            *track = fresh;
+            remint_keyframes_in_param(track, seq)?;
         }
         DocParam::Vec2Axes { x, y } => {
             remap_doc_param(x, id_map, seq)?;
@@ -274,4 +269,144 @@ fn remap_doc_param(
         }
     }
     Ok(())
+}
+
+/// Copy Local payload検証と予約区間の導入ID列挙で共用する固定走査(D1l/GAP-14§2.3)。
+pub(crate) fn remint_order_keyframe_ids(definition: &EffectDefinition) -> Vec<KeyframeId> {
+    let mut ids = Vec::new();
+    for param in definition.params.values() {
+        collect_keyframe_ids_param(param, &mut ids);
+    }
+    ids
+}
+
+fn collect_keyframe_ids_param(param: &DocParam, out: &mut Vec<KeyframeId>) {
+    match param {
+        DocParam::Const(_)
+        | DocParam::Data { .. }
+        | DocParam::LookAt { .. }
+        | DocParam::Follow { .. } => {}
+        DocParam::Keyframes(track) => {
+            for key in track.keys() {
+                out.push(key.id);
+            }
+        }
+        DocParam::Vec2Axes { x, y } => {
+            collect_keyframe_ids_param(x, out);
+            collect_keyframe_ids_param(y, out);
+        }
+    }
+}
+
+fn remint_keyframes_in_param(
+    track: &mut DocKeyframeTrack,
+    seq: &mut StableIdSeq,
+) -> Result<(), StableIdError> {
+    let mut fresh = DocKeyframeTrack::new();
+    for key in track.keys() {
+        let mut k = key.clone();
+        k.id = KeyframeId::from_raw(seq.allocate()?);
+        fresh.insert(k);
+    }
+    *track = fresh;
+    Ok(())
+}
+
+/// Create/Copy Local prepare: params辞書順・Vec2Axes x→yの固定採番順でKeyframeIdを再採番する。
+pub(crate) fn remint_doc_param(
+    param: &mut DocParam,
+    seq: &mut StableIdSeq,
+) -> Result<(), StableIdError> {
+    match param {
+        DocParam::Const(_)
+        | DocParam::Data { .. }
+        | DocParam::LookAt { .. }
+        | DocParam::Follow { .. } => Ok(()),
+        DocParam::Keyframes(track) => remint_keyframes_in_param(track, seq),
+        DocParam::Vec2Axes { x, y } => {
+            remint_doc_param(x, seq)?;
+            remint_doc_param(y, seq)
+        }
+    }
+}
+
+/// Copy Local prepare: Definition本体のparamsを固定採番順でremintする。
+pub(crate) fn remint_effect_definition(
+    definition: &mut EffectDefinition,
+    seq: &mut StableIdSeq,
+) -> Result<(), StableIdError> {
+    for param in definition.params.values_mut() {
+        remint_doc_param(param, seq)?;
+    }
+    Ok(())
+}
+
+/// Copy Local apply: payloadのDefinition本体が参照元と意味同一(ID除く)か。
+pub(crate) fn definition_semantic_body_eq(
+    source: &EffectDefinition,
+    payload: &EffectDefinition,
+) -> bool {
+    if source.plugin_id != payload.plugin_id
+        || source.effect_version != payload.effect_version
+        || source.enabled != payload.enabled
+        || source.extra != payload.extra
+        || source.params.len() != payload.params.len()
+    {
+        return false;
+    }
+    source.params.iter().all(|(name, src_param)| {
+        payload
+            .params
+            .get(name)
+            .is_some_and(|payload_param| doc_param_semantic_body_eq(src_param, payload_param))
+    })
+}
+
+fn doc_param_semantic_body_eq(a: &DocParam, b: &DocParam) -> bool {
+    match (a, b) {
+        (DocParam::Const(va), DocParam::Const(vb)) => va == vb,
+        (
+            DocParam::Data {
+                track: ta,
+                fallback: fa,
+            },
+            DocParam::Data {
+                track: tb,
+                fallback: fb,
+            },
+        ) => ta == tb && fa == fb,
+        (
+            DocParam::LookAt {
+                target: ta,
+                axis: aa,
+            },
+            DocParam::LookAt {
+                target: tb,
+                axis: ab,
+            },
+        ) => ta == tb && aa == ab,
+        (
+            DocParam::Follow {
+                target: ta,
+                offset: oa,
+            },
+            DocParam::Follow {
+                target: tb,
+                offset: ob,
+            },
+        ) => ta == tb && oa == ob,
+        (DocParam::Keyframes(ta), DocParam::Keyframes(tb)) => {
+            let ka = ta.keys();
+            let kb = tb.keys();
+            ka.len() == kb.len()
+                && ka
+                    .iter()
+                    .zip(kb.iter())
+                    .all(|(a, b)| a.t == b.t && a.value == b.value && a.interp == b.interp)
+        }
+        (DocParam::Vec2Axes { x: ax, y: ay }, DocParam::Vec2Axes { x: bx, y: by }) => {
+            doc_param_semantic_body_eq(ax, bx) && doc_param_semantic_body_eq(ay, by)
+        }
+        _ => false,
+    }
 }

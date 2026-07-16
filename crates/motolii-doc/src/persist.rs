@@ -47,6 +47,12 @@ pub const READER_VERSION: u32 = 4;
 /// `Document.version`がこれを超える場合は`OpenMode::ReadOnlyNewer`(#101 / 監査S14)。
 pub const WRITER_VERSION: u32 = 4;
 
+const _: [(); 4] = [(); READER_VERSION as usize];
+const _: [(); 4] = [(); WRITER_VERSION as usize];
+const _: [(); READER_VERSION as usize] = [(); WRITER_VERSION as usize];
+const _: [(); READER_VERSION as usize] =
+    [(); crate::validate::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS as usize];
+
 /// 読み/書き互換を分離した3状態(監査S14)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpenMode {
@@ -425,6 +431,7 @@ fn sync_dir(dir: &Path) -> io::Result<()> {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use crate::Document;

@@ -22,4 +22,6 @@ motolii-gpu.workspace = true
 motolii-plugin.workspace = true
 motolii-testkit.workspace = true
 proptest.workspace = true
+syn = { version = "2", features = ["full", "visit"] }
+proc-macro2 = { version = "1", features = ["span-locations"] }
 uuid = { version = "1", features = ["v4", "serde"] }

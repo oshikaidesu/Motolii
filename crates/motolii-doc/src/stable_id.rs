@@ -36,6 +36,11 @@ impl StableIdSeq {
         self.next
     }
 
+    /// `Command`側で予約区間の意味検証が完了した後にのみ使う高速コミット口。
+    pub(crate) fn commit_validated_reservation(&mut self, after: u64) {
+        self.next = after;
+    }
+
     /// ロード済みDocument内の実在IDと整合しているか(カウンタが実在最大値以下=破損)を検査する。
     pub fn validate_observed_max(self, max_observed: Option<u64>) -> Result<(), StableIdError> {
         if let Some(max_id) = max_observed {
@@ -76,6 +81,30 @@ macro_rules! stable_id_newtype {
             }
         }
     };
+}
+
+/// Effect lifecycle Commandが消費する半開区間 `[before, after)` の予約。
+///
+/// JSONは必須field `before`/`after` のみ。`before >= after` 等の意味検査は後続applyの責務。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StableIdReservation {
+    before: u64,
+    after: u64,
+}
+
+impl StableIdReservation {
+    pub const fn new(before: u64, after: u64) -> Self {
+        Self { before, after }
+    }
+
+    pub const fn before(self) -> u64 {
+        self.before
+    }
+
+    pub const fn after(self) -> u64 {
+        self.after
+    }
 }
 
 stable_id_newtype!(
@@ -121,5 +150,12 @@ mod tests {
         assert_eq!(json, "7");
         let back: EffectId = serde_json::from_str(&json).unwrap();
         assert_eq!(id, back);
+    }
+
+    #[test]
+    fn commit_validated_reservation_updates_counter_in_o1() {
+        let mut seq = StableIdSeq::new();
+        seq.commit_validated_reservation(42);
+        assert_eq!(seq.peek_next(), 42);
     }
 }

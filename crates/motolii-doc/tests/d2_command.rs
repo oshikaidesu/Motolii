@@ -6,6 +6,12 @@
 //! - 1 gesture = 1 macro のmerge(#103⑨、merge key=S18)。undo/redoはmacro単位
 //! - duplicate時: subtree内参照は新ID再写像、外向き参照は維持
 
+#![allow(deprecated)]
+
+mod common;
+
+use common::identity_roundtrip::assert_identity_command_roundtrip;
+
 use std::collections::BTreeMap;
 
 use motolii_core::RationalTime;
@@ -13,7 +19,8 @@ use motolii_doc::{
     layer_names_for_item, BlendMode, Clip, ClipSource, ClippingMaskSettings, Command, CommandError,
     DocKeyframe, DocKeyframeTrack, DocParam, DocValue, Document, DocumentWriter, EffectDefinition,
     EffectDefinitionId, EffectId, EffectInstance, EffectUse, Group, ItemEnvelope, KeyframeId,
-    LayerId, LookAtAxis, MaskMode, ParentLocator, ScalarPropertyId, Track, TrackId, TrackItem,
+    LayerId, LookAtAxis, MaskMode, ParentLocator, ScalarPropertyId, StableIdReservation, Track,
+    TrackId, TrackItem,
 };
 use motolii_eval::Interp;
 use proptest::prelude::*;
@@ -31,9 +38,19 @@ struct Fixture {
     track: TrackId,
 }
 
+fn allocate_effect_ids_for_add_effect_test(
+    doc: &mut Document,
+) -> (EffectId, EffectDefinitionId, EffectId, EffectDefinitionId) {
+    let effect1_id = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let effect1_def = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let effect2_id = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let effect2_def = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
+    (effect1_id, effect1_def, effect2_id, effect2_def)
+}
+
 /// 1 effect(paramあり)を持つlayer + 参照先になる別layerを持つ最小文書。
 fn fixture() -> Fixture {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let layer = doc.layers.allocate("a").unwrap();
     let other_layer = doc.layers.allocate("b").unwrap();
     let track = doc.track_ids.allocate("V1").unwrap();
@@ -54,11 +71,6 @@ fn fixture() -> Fixture {
         id: effect,
         definition_id: effect_def,
     });
-    // stable id(effect)を含むため(M2E-11①)。version自体もこのテスト文書専用に
-    // D1lのMIN_READER_VERSION_FOR_EFFECT_DEFINITIONSへ揃える
-    // (`Document::new_v1()`の既定はversion=1のまま — 他テストの前提を変えない)。
-    doc.version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
-    doc.min_reader_version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
 
     doc.tracks.push(Track {
         id: track,
@@ -514,17 +526,12 @@ fn different_gestures_do_not_merge() {
 #[test]
 fn same_gesture_two_add_effects_do_not_merge() {
     let f = fixture();
-    let mut writer = DocumentWriter::new(f.doc.clone());
+    let mut doc = f.doc.clone();
+    let (effect1_id, effect1_def, effect2_id, effect2_def) =
+        allocate_effect_ids_for_add_effect_test(&mut doc);
+    let mut writer = DocumentWriter::new(doc);
     let gesture = writer.begin_gesture();
 
-    let effect1_id = writer.allocate_effect_id().expect("allocate effect1");
-    let effect1_def = writer
-        .allocate_effect_definition_id()
-        .expect("allocate effect1 def");
-    let effect2_id = writer.allocate_effect_id().expect("allocate effect2");
-    let effect2_def = writer
-        .allocate_effect_definition_id()
-        .expect("allocate effect2 def");
     let effect1 = EffectInstance {
         id: effect1_id,
         definition_id: effect1_def,
@@ -582,17 +589,12 @@ fn same_gesture_two_add_effects_do_not_merge() {
 #[test]
 fn same_gesture_two_add_effects_undo_removes_both() {
     let f = fixture();
-    let mut writer = DocumentWriter::new(f.doc.clone());
+    let mut doc = f.doc.clone();
+    let (effect1_id, effect1_def, effect2_id, effect2_def) =
+        allocate_effect_ids_for_add_effect_test(&mut doc);
+    let mut writer = DocumentWriter::new(doc);
     let gesture = writer.begin_gesture();
 
-    let effect1_id = writer.allocate_effect_id().expect("allocate effect1");
-    let effect1_def = writer
-        .allocate_effect_definition_id()
-        .expect("allocate effect1 def");
-    let effect2_id = writer.allocate_effect_id().expect("allocate effect2");
-    let effect2_def = writer
-        .allocate_effect_definition_id()
-        .expect("allocate effect2 def");
     let effect1 = EffectInstance {
         id: effect1_id,
         definition_id: effect1_def,
@@ -662,7 +664,7 @@ fn same_gesture_two_add_effects_undo_removes_both() {
 
 #[test]
 fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let external_layer = doc.layers.allocate("external").unwrap();
     let group_layer = doc.layers.allocate("group").unwrap();
     let child_a = doc.layers.allocate("child_a").unwrap();
@@ -709,8 +711,6 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
         id: effect_id,
         definition_id: effect_def_id,
     });
-    doc.version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
-    doc.min_reader_version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
 
     doc.tracks.push(Track {
         id: track,
@@ -1160,15 +1160,19 @@ fn unlink_undo_redo_restores_full_document() {
 
 #[test]
 fn copy_local_last_reference_undo_redo_restores_full_document() {
-    let mut s = shared_fixture_from_d2();
-    let new_def_id = EffectDefinitionId::from_raw(s.doc.next_stable_id.allocate().unwrap());
+    let s = shared_fixture_from_d2();
+    let before = s.doc.next_stable_id.peek_next();
+    let new_def_id = EffectDefinitionId::from_raw(before);
+    let source = s.doc.effect_definition(s.d1).unwrap();
+    let mut new_def = source.clone();
+    new_def.id = new_def_id;
     let cmd = Command::CopyLocalEffect {
-        target: s.layer_b,
         use_id: s.u3,
-        old_definition_id: s.d1,
-        new_definition_id: new_def_id,
+        previous_definition_id: s.d1,
+        new_definition: new_def,
+        stable_id_reservation: StableIdReservation::new(before, before + 1),
     };
-    assert_writer_roundtrip(DocumentWriter::new(s.doc.clone()), s.doc, cmd);
+    assert_identity_command_roundtrip(&s.doc, cmd);
 }
 
 #[test]
@@ -1207,14 +1211,13 @@ fn duplicate_track_item_shares_definition_but_mints_new_use_id() {
 struct SharedD2 {
     doc: Document,
     layer_a: LayerId,
-    layer_b: LayerId,
     u3: EffectId,
     d1: EffectDefinitionId,
     d2_orphan: EffectDefinitionId,
 }
 
 fn shared_fixture_from_d2() -> SharedD2 {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let layer_a = doc.layers.allocate("a").unwrap();
     let layer_b = doc.layers.allocate("b").unwrap();
     let track = doc.track_ids.allocate("V1").unwrap();
@@ -1254,8 +1257,6 @@ fn shared_fixture_from_d2() -> SharedD2 {
         id: u3,
         definition_id: d1,
     });
-    doc.version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
-    doc.min_reader_version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
     doc.tracks.push(Track {
         id: track,
         items: vec![
@@ -1279,7 +1280,6 @@ fn shared_fixture_from_d2() -> SharedD2 {
     SharedD2 {
         doc,
         layer_a,
-        layer_b,
         u3,
         d1,
         d2_orphan,
