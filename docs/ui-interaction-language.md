@@ -2,7 +2,7 @@
 
 日付: 2026-07-16
 
-ステータス: **設計決定**。M3の操作互換性と共通component契約の正本。具体tokenは[UI視覚言語](ui-visual-language.md)、Document意味とDirect / Tool / Advanced正規化は[操作単純化モデル](interaction-simplicity-model.md)、実装タスクと審判割当は[M3仕様](specs/M3-ui-integration.md)を正本とする。
+ステータス: **設計決定**。M3の操作互換性と共通component契約の正本。具体tokenは[UI視覚言語](ui-visual-language.md)、Document意味とDirect / Tool / Advanced正規化は[操作単純化モデル](interaction-simplicity-model.md)、実装タスクと審判割当は[M3仕様](specs/M3-ui-integration.md)を正本とする。成熟ソフトの更新から抽出した反証と受入観点は[UIアップデート考古学](reviews/2026-07-16-ui-update-forensics.md)を参照する。
 
 ## 1. 製品命題
 
@@ -162,6 +162,75 @@ Advanced ──────┘
 - DPI / global UI scale / theme / contrast / reduce motion。
 - typed target検査、拒否理由、欠落参照表示。
 
+### 8.1 Silent disabledを禁止する
+
+controlやtargetをgray/dimにするだけで説明を終えない。ユーザーが存在を認識でき、実行しようとする可能性がある操作を無効化する場合、同じcomponentが少なくとも次を返す。
+
+- **何ができないか**: 拒否されたactionまたはtarget。
+- **なぜできないか**: 型不一致、循環、選択不足、read-only、依存未完了等の具体理由。
+- **どうすれば進めるか**: 必要な選択、解除操作、対応target、代替入口。回復不能ならその事実。
+
+理由はhoverだけへ隠さず、keyboard focus、screen reader、接続/drag中のカーソル近傍説明からも到達可能にする。色、opacity、禁止cursorは補助表現であり、理由の代わりにしない。
+
+次の2状態を混同しない。
+
+| 状態 | 投影 |
+|---|---|
+| 現在の文脈と無関係で、存在を知らせる必要もない | 非表示にしてよい。ただしlayoutが不規則に跳ねないこと |
+| 操作候補だが現在は実行不能 | disabled/dim + 理由 + 回復方法。操作中ならその場で表示 |
+
+「接続できません」だけでも不十分である。`PositionはLayer targetを要求します / 選択中のAudio Trackは対象外です`のように、期待型と実targetを含む型付き診断を人間向け文へ投影する。UI文言をdomain errorの正本にはせず、同じtyped reasonから短文、詳細、screen-reader説明を生成する。
+
+### 8.2 オブジェクト自身ではなく操作境界が診断する
+
+Document内のLayerやTrackへUI説明責任を持たせない。複数object間の接続、編集、drop、削除等を審判するpolicy/preflightがread-onlyなDocument snapshotと対象IDを読み、成功時は準備済み操作、失敗時は領域固有の型付きrejectionを返す。
+
+```text
+Source ID ─────┐
+Target ID ─────┼→ Policy / Preflight ─→ Prepared Operation
+Arc<Document> ─┘                    └→ Domain Rejection
+                                              ↓ adapter
+                                      Diagnostic Envelope
+                                              ↓ projection
+                         Brief / Context / Inspect / Screen reader
+```
+
+これは概念上`Result<PreparedOperation, DomainRejection>`に相当するが、本節はRust公開signatureを凍結しない。重要なのは依存方向である。
+
+- Layer等のDocument objectはUI文言、Slint型、tooltip、`CommandId`を知らない。
+- `ConnectionRejection`、`EditRejection`、`DropRejection`等は各domainに置き、原因の構造を失わない。
+- UI境界は領域固有rejectionを、小さな共通`Diagnostic Envelope`相当へ適応する。
+- 全domain errorを一つの巨大enumへ集約しない。共通化するのは表示に必要な最小意味だけ。
+- DiagnosticはTransientな値であり、Document、journal、Undo、cache keyへserializeしない。
+
+共通envelopeが意味として持つ最小項目は次である。具体的なRust型と配置crateはU2c-4で既存error型を棚卸ししてから決める。
+
+| 項目 | 意味 | 禁止 |
+|---|---|---|
+| stable reason code | 翻訳、test、同一診断追跡の鍵 | 人間向け英文をIDにする |
+| action kind | 何を試みたか | mouse event列やbutton名 |
+| subjects | 関係する安定object ID群と役割 | layer名/property path文字列を参照正本にする |
+| typed facts | expected/actual型、循環経路、read-only理由等 | 文字列へ平坦化して原因構造を失う |
+| recoverability | 回復可能、別操作が必要、回復不能 | 常に「再試行してください」で潰す |
+| recovery candidates | 次に取りうるDomain Intent候補 | UI callback、物理key、暗黙の自動修復 |
+
+recovery candidateは提案であり、診断表示だけでDocumentを変更しない。ユーザーが選んだ時に通常のIntent→D2 command→single writerを通し、その操作自身のUndo/Cancel規則に従う。
+
+### 8.3 結果ではなく次の一手を段階投影する
+
+同じ診断値を場所ごとに別実装せず、情報密度だけを変えて投影する。
+
+| 段階 | 表示内容 | 用途 |
+|---|---|---|
+| Brief | 結果+最短の原因 | badge、status、一覧 |
+| Context | 結果+原因+直近の回復方法 | cursor近傍、drag、connection、focus |
+| Inspect | 関係ID、expected/actual、scope、評価順、回復不能理由 | Advanced、診断詳細 |
+| Assistive | Context以上を順序立てた完全な文 | screen reader、keyboard-only |
+
+予測可能な拒否はCommit後まで待たず、Target/Preview中に返す。invalid候補をdimにする場合も、hover/focus時点で同じ診断を表示する。実行後にしか分からない競合やstaleは結果時に表示するが、原因構造を一般的な「失敗しました」へ潰さない。
+
+通常操作を成立させるために外部検索を要求しない。Help URLやmanualは追加学習の入口であり、原因と次の一手の代用品ではない。長文modalを常時出すことも目的ではなく、同じ診断をその場では短く、必要時だけ深く開く。
+
 初期の共通語彙は少なくとも次を含む。
 
 ```text
@@ -171,6 +240,7 @@ ConnectionTargetPicker
 TargetChip / SemanticBadge
 DragPreview / GhostOverlay
 TypedErrorBadge
+DiagnosticBrief / DiagnosticContext / DiagnosticInspect
 TimelineItem / EffectUseSlot
 BrowserItem / DropTarget
 ```
@@ -187,6 +257,9 @@ BrowserItem / DropTarget
 4. reference screenで既存componentと同居させ、追加分だけ別製品のように浮かないことを確認する。
 5. theme外raw color、独自spacing、独自icon、直接的なSlint型流出を機械検査する。
 6. componentを迂回する局所UIは、理由、非目標、再利用不能の証拠、正規componentへ戻す条件を記録する。
+7. disabled/invalid fixtureはtyped reasonと回復方法を持ち、gray/dimだけの状態を拒否する。
+8. 同じrejectionをBrief/Context/Inspectへ投影してもreason code、subject ID、typed factsが一致し、表示文字列を再解析しない。
+9. recovery実行は通常のDomain Intentとsingle writerを通り、診断componentがDocumentを直接変更しない。
 
 テスト緑だけで操作互換性の代わりにしない。一方、目視だけにもせず、状態matrix、操作列、serialize差分、screenshot/lightness/CVD、keyboard focus順、UI scale注入を分けて証跡化する。
 

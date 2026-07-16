@@ -39,7 +39,7 @@
 | M0 | `DONE` | spike完了 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み |
 | M2 | **実装中** | D1l/D3e、D5、統一camera follow-upをmainへ到達させる。D6は#150実装+#154修復済み |
-| M3 | **段階入場可** | G0-2/3/4/7完了。U0a/U0b等は各M2依存に従い着手可。U0eはG0-6目視、U0fはG0-8+K1a実測待ち |
+| M3 | **実装開始済み** | U0aはmain到達済み。次はU0b-1とU1a-1。U0eは生成基盤/fixtureと人間が決める具体値を分離。U0fはG0-8+K1a実測待ち |
 | M4 | **契約spike可** | K0でRoD/RoIのruntime契約を凍結 |
 | M5 | **identity spike可** | P0IでDuplicator/Instance identityを凍結 |
 
@@ -52,15 +52,21 @@ Shared Effect:
 D1l #172 → D3e → U2g → K2
 
 M3 shell / preview:
-U0a → U1a → U1b → U1f #169
-                 └→ U2b → U2c → U2f #168
+U0a DONE → U1a-1 → U1b-1 → U1b-2 → U1f #169
+                                  └→ U2b-1 → U2c-1〜5 → U2f #168
 
 Unified Camera:
 D1j → D1k → D3 camera follow-up → U1f #169 → U2d
 
 Timeline Effect UI:
-U0a + G0-2 → U0b → U3a
+U0a + G0-2 → U0b-1 → U0b-2 → U3a
 D1l + D3e + U3a → U2g
+
+UI input / keymap:
+U0b-1 → U0b-2 → U0c-1 → U0c-2 → U0d-1 → U0d-2 → U0d-3
+
+Visual language:
+U0e-1 generator → U0e-2 reference fixture → G0-6H human review → U0e-3 product values/components
 
 Editor scripting:
 U2a → U2b → U9a → U9b → U9c
@@ -86,10 +92,12 @@ P0I #170 → P7a → P7b → P7c → P7U
 | 優先 | ID | Phase | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
 | 1 | D1l | M2 | `DO` | [#172](https://github.com/oshikaidesu/Motolii/issues/172) | PR #171、D1e、D1f、D1i-2はmain到達済み。着手時にGR-PVを再確認 | D3eをIssue化 |
-| 2 | U0a | M3 | `ISSUE` | — | G0-1完了。M2全体やG0-2/G0-3を待たない | U1aをIssue化 |
-| 3 | D5 | M2 | `DO` | [#144](https://github.com/oshikaidesu/Motolii/issues/144) | D3、D4、D4-FU #147はmain到達済み | U5のM2依存を解除 |
-| 4 | K0 | M4 | `DO` / `SPIKE` | [#167](https://github.com/oshikaidesu/Motolii/issues/167) | D3はmain到達済み。Issue本文の未checkは着手時に同期 | K1aをIssue化 |
-| 5 | P0I | M5 | `DO` / `SPIKE` | [#170](https://github.com/oshikaidesu/Motolii/issues/170) | 独立。製品schema/APIを追加しない | P7aをIssue化 |
+| 2 | U0b-1 | M3 | `ISSUE` | — | U0a、G0-2、D2はmain到達済み。状態所有fixtureだけを発注 | U0b-2をIssue化 |
+| 3 | U1a-1 | M3 | `ISSUE` | — | U0aとD3はmain到達済み。最新mainから固定shell+静止viewportだけを発注 | U1b-1をIssue化 |
+| 4 | U0e-1 | M3 | `ISSUE` | — | U0a完了。PR #184は証拠・抽出元とし、具体値/shellを持ち込まない | U0e-2をIssue化 |
+| 5 | D5 | M2 | `DO` | [#144](https://github.com/oshikaidesu/Motolii/issues/144) | D3、D4、D4-FU #147はmain到達済み | U5のM2依存を解除 |
+| 6 | K0 | M4 | `DO` / `SPIKE` | [#167](https://github.com/oshikaidesu/Motolii/issues/167) | D3はmain到達済み。Issue本文の未checkは着手時に同期 | K1aをIssue化 |
+| 7 | P0I | M5 | `DO` / `SPIKE` | [#170](https://github.com/oshikaidesu/Motolii/issues/170) | 独立。製品schema/APIを追加しない | P7aをIssue化 |
 
 ## 次にIssue化するもの
 
@@ -98,9 +106,8 @@ P0I #170 → P7a → P7b → P7c → P7U
 | 順序 | ID | Phase | 状態 | 起票条件 | 次の出口 |
 |---|---|---|---|---|---|
 | 1 | D3e | M2 | `WAIT` | D1l merge | Shared Effectを各Use位置で評価し、U2gを解禁 |
-| 2 | U1a | M3 | `WAIT` | U0a merge | Slint shellと静止preview |
-| 3 | U1b | M3 | `WAIT` | U1a merge | render worker/latest generation |
-| 4 | U0b | M3 | `ISSUE` | G0-2完了 + D2(main済み)。U0aと並列起票可 | U0c/U2a/U3aの入口 |
+| 2 | U1b-1 | M3 | `WAIT` | U1a-1 merge | render worker/latest mailbox。古い結果E2EはU1b-2 |
+| 3 | U0b-2 | M3 | `WAIT` | U0b-1 merge | Slint非依存domain intent。U0c-1/U2a-1の入口 |
 | 5 | U3a | M3 | `WAIT` | U0a + U0b merge | timeline基盤、U2gのUI依存を解除 |
 | 6 | U2g | M3 | `WAIT` | D1l + D3e + U0e + U2b + U3a merge | Effect常時接続線 |
 | 7 | K1a | M4 | `WAIT` | K0 merge | ResourceLedgerとhard budget。backendの空きVRAM値を正本にしない |
@@ -131,17 +138,17 @@ P0I #170 → P7a → P7b → P7c → P7U
 | G0-2 | `DONE` | 入力/キーマップ/a11y最小意味論 | [M3着手前決定§2](reviews/2026-07-16-m3-preflight-decisions.md#2-g0-2-inputとui状態の意味)に従いU0bをIssue化 |
 | G0-3 | `DONE` / `縮小採用` | plugin UIモデル | v1はHost自動生成panelのみ。自由`.slint`/wgpu UIを実装しない |
 | G0-4 | `DONE` | UI性能測定プロトコル | U1c/U3a等でraw結果を取り、絶対閾値は別改訂 |
-| G0-6 | `WAIT` / `HUMAN` | 視覚token/認知審判 | 5 reference screenの目視後に具体tokenを固定しU0eへ |
+| G0-6H | `WAIT` / `HUMAN` | 視覚token/認知審判 | U0e-2が作る5 reference screenの目視後に具体tokenを固定しU0e-3へ |
 | G0-7 | `DONE` | Direct/Tool/Advanced conformance | UI操作言語とU2c fixtureへ従う |
 | G0-8 | `WAIT` / `MEASURE` | resource予算preset/安全余白/hysteresisの具体値 | G0-4手順+K1a実測後に値だけ固定。P3/P3aの意味は変更しない |
 
 ## M3への入場判定
 
-「M3に入った」と呼べる最小条件は **U0aのmain到達**。ただし、それはM2完了を意味しない。
+「M3に入った」と呼べる最小条件である **U0aのmain到達は完了済み**。ただし、それはM2完了を意味しない。
 
 | 目的 | 必要な直前条件 |
 |---|---|
-| UI shellを始める | U0aのみ。今すぐIssue化可 |
+| UI shellを始める | U0a完了済み。U1a-1を最新mainからIssue化可 |
 | 静止previewを出す | U0a + D3 |
 | 枠外Stageを作る | U1b + U0e + D1k + D3 camera follow-up |
 | Relative Moveを作る | U0c + U0d + U2a + U2c |
@@ -153,7 +160,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | resource設定を出す | G0-2 + G0-8 + U0b + K1a → U0f。設定はUser settings、pressure実測値はTransient |
 | 重いpreviewを追従させる | U1b + U1c + U5 + K1d → U1g。project fps/audio clockを変えず表示frameだけ落とす |
 
-したがって現在の短い運用判断は、**D1lと並行してU0aを開始する**。D1l完了後はD3eへ進み、U0系基盤が合流した時点でU2g/U2f/U1fを順に解禁する。
+したがって現在の短い運用判断は、**D1lと並行してU0b-1またはU1a-1を開始する**。視覚レーンはPR #184を証拠・抽出元としてU0e-1へ必要な生成機構だけを移し、U0e-2後に必ずG0-6Hの人間審判へ戻す。U0系基盤が合流した時点でU2g/U2f/U1fを順に解禁する。
 
 ## 更新規則
 
