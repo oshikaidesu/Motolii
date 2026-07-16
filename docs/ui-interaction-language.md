@@ -84,6 +84,21 @@ v1の既定配置は、既存の制作ソフトで学習済みの役割へ合わ
 
 既知のshortcutは**既定値**であって契約ではない。Space、Delete、Undo/Redo、tool切替、snap、modifier+drag、接続開始等、製品内の全shortcutをユーザーが追加・置換・無効化できるようにする。機能は物理keyではなく`CommandId`/gesture intentを受け取る。設定画面の完成を待たず、version付きJSONを全機能へ届く正規fallbackとして提供する。OS/IMEが捕捉する組合せは別の固定操作へ黙って置換せず、利用不能理由を示す。
 
+### 3.1 先例を採るためのMotolii UI力学ゲート
+
+成熟した制作ソフトに存在するだけでは採用理由にしない。先例から採ってよいのは、本書で既に決めたMotoliiの力学を完成させるものだけとする。
+
+| Motoliiの力学 | 採用してよい先例 | 拒否する膨張 |
+|---|---|---|
+| 選択→決まったInspector | single/additive/range/marquee、Stage/Timeline間の同一選択、隠れた選択へ戻る操作 | hoverでfocusを奪う、panelごとの別selection、selectionのDocument保存 |
+| Discover→Target→Preview→Commit/Cancel→Inspect→Undo | Delete/Duplicate/Rename/Copy/Pasteの共通command入口とpreflight | clipboard payload、cross-document再写像、Shared Effect複製意味をUIで決めること |
+| 一画面・既知の役割 | Fit All/Selection、Go to Playhead、前後対象、検索/filterから同じTimelineへ戻る操作 | 検索専用workflow、別の編集正本、機能ごとに移動するpanel |
+| 可視の因果+Brief/Context/Inspect | background activity、失敗理由、cache/bakeのready/stale範囲を既存Timeline/status/diagnosticへ投影 | UI所有job queue、UI独自cache状態、色だけの進捗、処理policy変更 |
+
+scope、reference-frame比較、Undo履歴panel、annotation、任意guide、preview rangeは一般的な先例ではあるが、上記力学を成立させる必然がまだないため、このゲートからは採用しない。必要性が作品workflowから確認された時に別判定する。
+
+採用したUI力学も、背後にD2 commandまたは型付きruntime snapshotが無ければ席だけを確保して`WAIT`とする。偽データ、UI所有状態、局所callbackで完成扱いしない。
+
 ## 4. 少数の共通操作文法
 
 全操作は、存在する範囲で次の流れへ揃える。
