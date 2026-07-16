@@ -2649,9 +2649,11 @@ dependencies = [
  "motolii-plugin",
  "motolii-render",
  "motolii-testkit",
+ "proc-macro2",
  "proptest",
  "serde",
  "serde_json",
+ "syn",
  "thiserror 2.0.18",
  "uuid",
 ]

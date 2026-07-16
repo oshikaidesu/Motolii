@@ -2,7 +2,7 @@
 
 日付: 2026-07-16
 対象: D1l PR #173 / PR #197追補
-状態: 【決定】（最終反対側レビューP0/P1=0・merge可）
+状態: 【決定・2026-07-16 lint機構追補】（元決定の反対側レビューP0/P1=0。deprecated属性だけ[追補決定](2026-07-16-d1l-new-v1-lint-conflict-decision.md)で置換）
 
 ## 1. 発見した停止要因
 
@@ -27,7 +27,7 @@ PR #197はD1l Commandをversion 4へmigration済みのDocumentにだけ適用し
 
 `Document::new_v1()`は旧版fixture、migration、互換テストのために維持する。製品の「新規プロジェクト」経路はこれを呼ばない。`new_v1()`自体のversion/minを変えて旧fixtureの意味を壊さない。
 
-`new_v1()`には製品新規作成での使用を禁ずるdeprecationを付ける。利用を許可するのは次の閉じた範囲だけとする。
+**2026-07-16 lint競合追補**: `new_v1()`へRustの`#[deprecated]`属性は付けない。`--all-targets -D warnings`と既存semantic test byte不変を同時に満たせないためである。代わりに`#[doc(hidden)]`と下記AST policyを正本とする([lint競合決定](2026-07-16-d1l-new-v1-lint-conflict-decision.md))。利用を許可するのは次の閉じた範囲だけとする。
 
 - `crates/motolii-doc/src/migrate.rs`のlegacy生成
 - `#[cfg(test)]`で囲まれたunit test
@@ -56,7 +56,7 @@ PR #197はD1l Commandをversion 4へmigration済みのDocumentにだけ適用し
 
 1. `READER_VERSION == WRITER_VERSION == MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS == 4`。`Document::new_current()`は`version == WRITER_VERSION`かつ`min_reader_version == MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS`で、save/load後も`OpenMode::ReadWrite`のまま不変。
 2. `Document::new_v1()`は従来どおりv1のままで、互換fixtureが変わらない。
-3. 上記allowlist外の非test `src` targetに`new_v1()`呼び出しを追加した負例がポリシーテストで落ち、`cargo clippy --workspace --all-targets -- -D warnings`が緑。
+3. 上記allowlist外の非test `src` targetに`new_v1()`呼び出しを追加した負例がポリシーテストで落ち、既存semantic testにlint suppressionを足さず`cargo clippy --workspace --all-targets -- -D warnings`が緑。
 4. v1〜v3の各3入力と、version/minだけを4に偽装したinline/hybrid入力で`prepare_*`とv2 lifecycle Commandが型付き拒否し、counterを含むDocument全文が不変。
 5. v4の`new_current()`でcreate/link/copy-localの準備が成功し、準備前後のDocument全文が不変。
 6. D1e v3→v4 inline Effect migration後とv1 journalのメモリ上recovery後が、同じv4構造検証と適用前提を満たす。

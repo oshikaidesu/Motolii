@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! D1i-1: VectorRecipe 構造移動と旧 path_ops 拒否。
 
 use motolii_core::{RationalTime, TimeMap};

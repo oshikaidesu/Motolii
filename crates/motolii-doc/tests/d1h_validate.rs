@@ -1,9 +1,12 @@
+#![allow(deprecated)]
+
 //! D1h: DocParam期待型・空トラック・AssetRef・NaN/Inf/値域の validate。
 
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
     AssetId, Clip, ClipSource, DocKeyframe, DocKeyframeTrack, DocParam, DocValue, Document,
-    DocumentError, EffectId, EffectInstance, ItemEnvelope, KeyframeId, Track, TrackItem,
+    DocumentError, EffectDefinition, EffectDefinitionId, EffectId, EffectUse, ItemEnvelope,
+    KeyframeId, Track, TrackItem,
 };
 use motolii_eval::Interp;
 use std::collections::BTreeMap;
@@ -114,14 +117,22 @@ fn color_out_of_range_fails() {
     let mut doc = valid_minimal();
     let mut params = BTreeMap::new();
     params.insert("color".into(), DocParam::const_color([2.0, 0.0, 0.0, 1.0]));
-    clip_mut(&mut doc).envelope.effects.push(EffectInstance {
-        id: EffectId::from_raw(0),
-        plugin_id: "core.filter.tint".into(),
-        effect_version: 1,
-        enabled: true,
+    let use_id = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let def_id = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
+    doc.effect_definitions.push(EffectDefinition::new(
+        def_id,
+        "core.filter.tint",
+        1,
+        true,
         params,
-        extra: Default::default(),
+        Default::default(),
+    ));
+    clip_mut(&mut doc).envelope.effects.push(EffectUse {
+        id: use_id,
+        definition_id: def_id,
     });
+    doc.version = 4;
+    doc.min_reader_version = 4;
     assert!(matches!(
         doc.validate(),
         Err(DocumentError::ValueOutOfRange { .. })

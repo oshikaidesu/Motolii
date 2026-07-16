@@ -620,6 +620,7 @@ fn collect_video_assets_from_items(items: &[TrackItem], found: &mut Option<Asset
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use std::path::Path;
 
