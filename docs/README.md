@@ -54,6 +54,7 @@
 | [reviews/2026-07-15-shared-effect-lifecycle-decision.md](reviews/2026-07-15-shared-effect-lifecycle-decision.md) | Shared Effectの削除/Unlink/Copy Local/orphan lifecycle（GAP-14） | **決定**(2026-07-15 / #166) |
 | [reviews/2026-07-15-m3-entry-gate.md](reviews/2026-07-15-m3-entry-gate.md) | M3 UIタスク(U0V〜U8)の入場条件・段階発注ルール | **運用正本**(2026-07-15。未達成) |
 | [reviews/2026-07-15-p5-generative-pattern-disposition.md](reviews/2026-07-15-p5-generative-pattern-disposition.md) | p5.js系ジェネ表現をone-shot/純関数/Feedback/Simulation/記録入力へ分類 | **調査・配置案**(2026-07-15) |
+| [reviews/2026-07-15-keymap-schema.md](reviews/2026-07-15-keymap-schema.md) | 入力マップ/ショートカットのスキーマ草案・永続化方針・a11y境界(M3E-9/GAP-6) | **設計草案**(2026-07-15) |
 
 ## 全体で守る規律(コードレビュー最重視項目)
 
