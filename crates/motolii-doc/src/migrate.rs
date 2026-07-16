@@ -100,6 +100,8 @@ pub enum MigrateError {
     TimeMapRewrite { path: String, detail: String },
     #[error("stable id injection failed: {0}")]
     StableId(String),
+    #[error("hybrid effect entry has both definition_id and inline definition fields at {path}")]
+    HybridEffectEntry { path: String },
     #[error("document root must be a JSON object")]
     NotAnObject,
 }
@@ -171,6 +173,12 @@ pub fn count_document(doc: &Document) -> DocumentCounts {
             count_item(item, &mut clip_count, &mut keyframe_count);
         }
     }
+    // D1l: effect paramsはUseではなくDefinition台帳が持つ(1回だけ数える。共有でも重複しない)。
+    for def in &doc.effect_definitions {
+        for param in def.params.values() {
+            count_param(param, &mut keyframe_count);
+        }
+    }
     DocumentCounts {
         track_count: doc.tracks.len(),
         clip_count,
@@ -214,11 +222,7 @@ fn count_envelope(env: &crate::schema::ItemEnvelope, keys: &mut usize) {
     count_param(&env.transform.scale, keys);
     count_param(&env.transform.rotation, keys);
     count_param(&env.opacity, keys);
-    for effect in &env.effects {
-        for param in effect.params.values() {
-            count_param(param, keys);
-        }
-    }
+    // D1l: EffectUseはid参照のみ。paramsは`count_document`側でDefinition台帳を1回だけ数える。
 }
 
 fn count_vector_recipe(recipe: &VectorRecipe, keys: &mut usize) {
@@ -343,6 +347,17 @@ fn count_json_document(root: &Value) -> DocumentCounts {
         if let Some(items) = track.get("items").and_then(|i| i.as_array()) {
             for item in items {
                 count_json_item(item, &mut clip_count, &mut keyframe_count);
+            }
+        }
+    }
+    // D1l: 旧inline effect.paramsはenvelope側で数える(count_json_envelope)。
+    // 既に新形式(root.effect_definitions)のドキュメントはこちらで1回だけ数える。
+    if let Some(defs) = root.get("effect_definitions").and_then(|d| d.as_array()) {
+        for def in defs {
+            if let Some(params) = def.get("params").and_then(|p| p.as_object()) {
+                for param in params.values() {
+                    count_json_param(Some(param), &mut keyframe_count);
+                }
             }
         }
     }
@@ -527,8 +542,15 @@ pub fn migrate_bytes_with_limits(
     let from_version = header.version;
 
     rewrite_legacy_shapes(&mut root, &mut steps)?;
+
+    // D1l: 欠落stable IDの採番とカウンタ正規化を先に行い、共有空間を確定してから
+    // inline EffectInstanceを EffectUse+EffectDefinition へ分離する。
     if inject_missing_stable_ids_json(&mut root)? {
         steps.push("inject_stable_ids");
+    }
+
+    if crate::legacy_effect_migrate::migrate_inline_effects_json(&mut root)? {
+        steps.push("inline_effects_to_definition_use");
     }
 
     // 変換後JSONを現行Documentへ。ResourceLimitsはdeserialize後に再検査。
@@ -540,10 +562,12 @@ pub fn migrate_bytes_with_limits(
     // そのときseedキーは意味上seed:u64へ落ちるので件数減少を許容しない(拒否)。
     assert_counts_preserved(before_counts, after_rewrite)?;
 
-    if steps.contains(&"inject_stable_ids") {
+    if steps.contains(&"inject_stable_ids") || steps.contains(&"inline_effects_to_definition_use") {
         bump_min_reader_for_nest_schema_change(&mut doc, LATEST_DOCUMENT_VERSION);
-    } else if doc_has_stable_ids(&doc) {
-        // 既にidを持つ旧JSONでもvalidateのmin_reader下限を満たす。
+    } else if doc_has_stable_ids(&doc) && doc.min_reader_version < LATEST_DOCUMENT_VERSION {
+        // 既にidを持つ旧JSONでもvalidateのmin_reader下限を満たす。すでに下限を満たす
+        // 文書(=再migrateのidempotent経路)ではstepを積まない — 差分ゼロをdid_migrate()に
+        // 正しく反映するため。
         bump_min_reader_for_nest_schema_change(&mut doc, LATEST_DOCUMENT_VERSION);
         if !steps.contains(&"bump_min_reader_for_stable_ids") {
             steps.push("bump_min_reader_for_stable_ids");
@@ -961,28 +985,67 @@ fn inject_missing_stable_ids_json(root: &mut Value) -> Result<bool, MigrateError
     let mut observed_max: Option<u64> = None;
     let mut injected = false;
 
-    let Some(tracks) = root.get_mut("tracks").and_then(|t| t.as_array_mut()) else {
-        return Ok(false);
-    };
-    for track in tracks.iter_mut() {
-        let Some(items) = track.get_mut("items").and_then(|i| i.as_array_mut()) else {
-            continue;
-        };
-        for item in items.iter_mut() {
-            if inject_ids_in_item(item, &mut next, &mut observed_max)? {
-                injected = true;
+    if let Some(tracks) = root.get_mut("tracks").and_then(|t| t.as_array_mut()) {
+        for track in tracks.iter_mut() {
+            let Some(items) = track.get_mut("items").and_then(|i| i.as_array_mut()) else {
+                continue;
+            };
+            for item in items.iter_mut() {
+                if inject_ids_in_item(item, &mut next, &mut observed_max)? {
+                    injected = true;
+                }
             }
         }
     }
 
-    if injected {
-        if let Some(max_id) = observed_max {
-            if next <= max_id {
-                next = max_id.saturating_add(1);
-            }
+    if inject_ids_in_effect_definitions(root, &mut next, &mut observed_max)? {
+        injected = true;
+    }
+
+    // カウンタ整合はinjected(新規採番の有無)と無関係に行う: 既存idだけでも
+    // 観測した既存idの最大値がカウンタ以上なら追い越して書き戻す。
+    let mut counter_updated = false;
+    if let Some(max_id) = observed_max {
+        if next <= max_id {
+            next = max_id
+                .checked_add(1)
+                .ok_or_else(|| MigrateError::StableId("stable id sequence exhausted".into()))?;
+            counter_updated = true;
         }
+    }
+    if injected || counter_updated {
         if let Value::Object(map) = root {
             map.insert("next_stable_id".into(), json!(next));
+        }
+    }
+    Ok(injected)
+}
+
+/// D1l: `root.effect_definitions[].params`内のキーフレームid欠落を採番する。
+fn inject_ids_in_effect_definitions(
+    root: &mut Value,
+    next: &mut u64,
+    observed_max: &mut Option<u64>,
+) -> Result<bool, MigrateError> {
+    let mut injected = false;
+    if let Some(defs) = root
+        .get_mut("effect_definitions")
+        .and_then(|d| d.as_array_mut())
+    {
+        for def in defs.iter_mut() {
+            let Value::Object(map) = def else {
+                continue;
+            };
+            if let Some(id) = map.get("id").and_then(|v| v.as_u64()) {
+                note_id(observed_max, id);
+            }
+            if let Some(params) = map.get_mut("params").and_then(|p| p.as_object_mut()) {
+                for param in params.values_mut() {
+                    if inject_ids_in_param(param, next, observed_max)? {
+                        injected = true;
+                    }
+                }
+            }
         }
     }
     Ok(injected)
@@ -1348,10 +1411,12 @@ fn doc_has_stable_ids(doc: &Document) -> bool {
             _ => false,
         }
     }
-    doc.tracks
-        .iter()
-        .flat_map(|t| t.items.iter())
-        .any(walk_item)
+    !doc.effect_definitions.is_empty()
+        || doc
+            .tracks
+            .iter()
+            .flat_map(|t| t.items.iter())
+            .any(walk_item)
 }
 
 /// ファイルをbackup後に現行スキーマへ書換える。dry_run/noopでは原本を触らない。
@@ -1723,6 +1788,7 @@ pub fn modern_timemap_source(
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use crate::schema::ItemEnvelope;

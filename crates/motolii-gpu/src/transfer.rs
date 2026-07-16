@@ -91,6 +91,7 @@ impl RgbaDownloader {
         texture: &wgpu::Texture,
         timeout: Duration,
     ) -> Result<Vec<u8>, GpuRuntimeError> {
+        gpu.ensure_sync_readback_allowed()?;
         let width = texture.width();
         let height = texture.height();
         let unpadded = width * 4;
@@ -186,12 +187,6 @@ fn wait_for_map(
         }
         let remaining = timeout - elapsed;
         let step = remaining.min(POLL_STEP);
-        match gpu.device.poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: Some(step),
-        }) {
-            Ok(_) | Err(wgpu::PollError::Timeout) => {}
-            Err(e) => return Err(GpuRuntimeError::Poll(e.to_string())),
-        }
+        gpu.poll_wait(Some(step))?;
     }
 }

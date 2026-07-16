@@ -1,0 +1,10 @@
+{
+  "ticket": "M3-GUARD-1",
+  "issue": "#56",
+  "spike_crate": "spikes/ime-acceptance",
+  "recorded_at": "未実走",
+  "runner": "",
+  "environment_note": "骨格landed — 開発主機での実走待ち",
+  "overall": "pending",
+  "note": "合否を偽らない。実機審判後に spikes/ime-acceptance から更新する。"
+}
