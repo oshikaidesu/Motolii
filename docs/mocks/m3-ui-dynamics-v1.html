@@ -116,7 +116,7 @@
     .stage { position: relative; overflow: hidden; background-color: #101419; background-image: linear-gradient(#1a2026 1px, transparent 1px), linear-gradient(90deg, #1a2026 1px, transparent 1px); background-size: 28px 28px; }
     .world { position: absolute; inset: 0; transition: transform var(--motion-normal) var(--ease); }
     .output-frame {
-      position: absolute; left: 50%; top: 50%; width: min(62vw, 640px); aspect-ratio: 16/9;
+      position: absolute; left: 50%; top: 50%; width: min(82%, 640px); aspect-ratio: 16/9;
       transform: translate(-50%, -50%); border: 2px solid #c7d1d8; background: rgba(12,16,19,.68);
       box-shadow: 0 0 0 200vmax rgba(4,6,8,.37); transition: transform var(--motion-normal) var(--ease), border-color var(--motion-fast);
     }
@@ -128,10 +128,10 @@
     .stage-object { position: absolute; cursor: pointer; transition: transform var(--motion-normal) var(--ease), box-shadow var(--motion-fast), opacity var(--motion-fast); }
     .stage-object.hero { left: 47%; top: 43%; width: 126px; height: 90px; transform: translate(-50%, -50%) rotate(-7deg); background: #3b7956; border: 2px solid #77b88c; clip-path: polygon(50% 0, 100% 28%, 82% 100%, 16% 92%, 0 25%); }
     .stage-object.title { left: 51%; top: 64%; transform: translate(-50%, -50%); color: #eef1f2; font-weight: 760; font-size: clamp(17px, 2.2vw, 30px); letter-spacing: .16em; white-space: nowrap; }
-    .stage-object.orbit { left: calc(50% + 290px); top: 34%; width: 74px; height: 74px; border: 2px solid var(--shape); border-radius: 50%; background: rgba(212,162,79,.15); }
+    .stage-object.orbit { left: auto; right: -6px; top: 34%; width: 74px; height: 74px; border: 2px solid var(--shape); border-radius: 50%; background: rgba(212,162,79,.15); }
     .stage-object.selected { filter: none; box-shadow: 0 0 0 2px var(--selection), 0 0 0 5px rgba(88,166,216,.22); }
     .stage-object.selected::after { content: ""; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; transform: translate(-50%, -50%) rotate(45deg); background: var(--selection); border: 1px solid #fff; }
-    .offframe-label { position: absolute; left: calc(50% + 278px); top: calc(34% + 84px); color: var(--secondary); font-size: 10px; border-left: 2px solid var(--shape); padding-left: 6px; }
+    .offframe-label { position: absolute; right: 4px; top: calc(34% + 84px); color: var(--secondary); font-size: 10px; border-left: 2px solid var(--shape); padding-left: 6px; }
     .motion-path { position: absolute; left: 32%; top: 35%; width: 250px; height: 140px; opacity: 0; pointer-events: none; transition: opacity var(--motion-fast); }
     .motion-path svg { width: 100%; height: 100%; overflow: visible; }
     .relative-mode .motion-path { opacity: 1; }
@@ -231,6 +231,7 @@
       .workspace { grid-template-columns: 178px minmax(360px, 1fr) 240px; }
       .scenario-button { padding: 0 7px; font-size: 11px; }
       .project, .scenario-label { display: none; }
+      .phase-strip { display: none; }
     }
   </style>
 </head>
@@ -492,9 +493,9 @@
 
       cameraDiscover() { state.tool = 'select'; $('#stageNote').textContent = 'Camera = Document / Hand = Session'; },
       handPreview() { state.tool = 'hand'; stage.classList.add('hand-mode'); $('#stageNote').textContent = 'Hand · Stage Viewのみ · Undoなし'; showHud('Preview · Project session', 'Stage View pan +0.08, +0.04', 'export / Documentは不変'); },
-      cameraCommit() { state.tool = 'camera'; stage.classList.add('camera-mode'); state.undo = 1; $('#stageNote').textContent = 'Camera · Output Frame · Undo 1'; showHud('Commit · Document', 'CompCameraを移動', 'Output Frame / exportへ反映', 'ok'); },
+      cameraCommit() { state.tool = 'camera'; stage.classList.add('camera-mode'); state.committed = true; state.undo = 1; $('#stageNote').textContent = 'Camera · Output Frame · Undo 1'; showHud('Commit · Document', 'CompCameraを移動', 'Output Frame / exportへ反映', 'ok'); },
       cameraInspect() { state.tool = 'camera'; stage.classList.add('camera-mode'); selectObject('orbit'); showHud('Inspect · off-frame', 'Orbit Shapeは同じworld', '枠外でもbounds / anchor / hit-testを維持'); },
-      cameraUndo() { state.tool = 'hand'; stage.classList.add('hand-mode'); state.undo = 0; showHud('Undo · Camera only', 'Output Frameを復元', 'Stage View panはSession状態なので不変'); },
+      cameraUndo() { state.tool = 'hand'; stage.classList.add('hand-mode'); state.committed = false; state.undo = 0; showHud('Undo · Camera only', 'Output Frameを復元', 'Stage View panはSession状態なので不変'); },
 
       effectsDiscover() { $('#linkedBadge').classList.add('pulse'); },
       effectsTarget() { showHud('Inspect · direction', 'Glow A ◇ out → ○ in', '名前やtimeline順でなく安定IDで接続'); },
@@ -502,9 +503,9 @@
       effectsInspect() { $('#inspectMode').textContent = 'Advanced · ownership / order'; showHud('Inspect · shared definition', '1 definition · 3 uses', '各layerのstack位置で個別に評価'); },
 
       diagnosticDiscover() { $('#disabledParameter').classList.add('pulse'); },
-      diagnosticContext() { $('#diagnostic').classList.add('show'); },
-      diagnosticPreview() { $('#diagnostic').classList.add('show'); showHud('Preview · typed rejection', 'BackdropInputが必要', 'VideoLayerは対象外 · 対応targetを選択', 'error'); },
-      diagnosticInspect() { $('#diagnostic').classList.add('show', 'inspect'); $('#inspectMode').textContent = 'Advanced · same rejection'; }
+      diagnosticContext() { $('#diagnostic').classList.add('show'); $('#diagnostic').scrollIntoView({ block: 'nearest' }); },
+      diagnosticPreview() { $('#diagnostic').classList.add('show'); $('#diagnostic').scrollIntoView({ block: 'nearest' }); showHud('Preview · typed rejection', 'BackdropInputが必要', 'VideoLayerは対象外 · 対応targetを選択', 'error'); },
+      diagnosticInspect() { $('#diagnostic').classList.add('show', 'inspect'); $('#diagnostic').scrollIntoView({ block: 'nearest' }); $('#inspectMode').textContent = 'Advanced · same rejection'; }
     };
 
     function render() {
