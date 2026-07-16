@@ -1,6 +1,7 @@
 /target
 **/*.rs.bk
 spikes/s1-slint/target
+spikes/u0v-visual/target
 spikes/vello-eval/target
 spikes/r9-preview/target
 /.tools

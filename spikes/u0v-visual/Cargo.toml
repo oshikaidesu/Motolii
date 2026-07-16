@@ -1,0 +1,36 @@
+[package]
+name = "u0v-visual"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# 製品workspaceから隔離。Slint/wgpuはスパイク内のみ(M3E-1対象外)。
+[workspace]
+
+[lib]
+name = "u0v_visual"
+path = "src/lib.rs"
+
+[dependencies]
+slint = { version = "~1.17", default-features = false, features = ["compat-1-2", "std", "backend-winit", "renderer-femtovg-wgpu", "unstable-wgpu-29"] }
+wgpu = "29"
+motolii-gpu = { path = "../../crates/motolii-gpu" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+bytemuck = { version = "1", features = ["derive"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[build-dependencies]
+slint-build = "~1.17"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+regex = "1"
+walkdir = "2"
+
+[[bin]]
+name = "u0v-visual"
+path = "src/main.rs"

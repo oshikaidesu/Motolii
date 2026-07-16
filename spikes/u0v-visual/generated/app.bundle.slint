@@ -1,0 +1,305 @@
+// AUTO-GENERATED — edit tokens/*.json and rebuild
+export global Theme {
+    in-out property <brush> color-accent-focus: #6aa8e8;
+    in-out property <brush> color-accent-on-accent: #0d1522;
+    in-out property <brush> color-accent-selection: #6aa8e8;
+    in-out property <brush> color-clip-border: #ffffff38;
+    in-out property <brush> color-clip-ink: #e6e6e6;
+    in-out property <brush> color-content-disabled: #5c5c5c;
+    in-out property <brush> color-content-muted: #9c9c9c;
+    in-out property <brush> color-content-primary: #e3e3e3;
+    in-out property <brush> color-content-secondary: #b4b4b4;
+    in-out property <brush> color-domain-path: #58c97b;
+    in-out property <brush> color-domain-pixel: #a292e0;
+    in-out property <brush> color-feedback-error: #ee8b7d;
+    in-out property <brush> color-feedback-warning: #dfa14f;
+    in-out property <brush> color-hover: #ffffff0d;
+    in-out property <brush> color-item-audio: #2c3a4d;
+    in-out property <brush> color-item-group: #3c5244;
+    in-out property <brush> color-item-image: #4d4a3a;
+    in-out property <brush> color-item-mesh: #8fd0cb;
+    in-out property <brush> color-item-particle: #5a4f33;
+    in-out property <brush> color-item-shape: #4a3f5e;
+    in-out property <brush> color-item-text: #5e3a48;
+    in-out property <brush> color-item-video: #3b4a5e;
+    in-out property <brush> color-playhead: #f0f0f0;
+    in-out property <brush> color-state-active: #58c97b;
+    in-out property <brush> color-state-cached: #8ea8c4;
+    in-out property <brush> color-state-keyframe: #e08a5a;
+    in-out property <brush> color-state-linked: #4cc4c4;
+    in-out property <brush> color-state-music: #c583d6;
+    in-out property <brush> color-state-mute: #9c9c9c;
+    in-out property <brush> color-state-on-active: #0e1a12;
+    in-out property <brush> color-state-solo: #d4b94e;
+    in-out property <brush> color-stroke-grid-major: #ffffff1f;
+    in-out property <brush> color-stroke-grid-minor: #ffffff0b;
+    in-out property <brush> color-stroke-line: #3c3c3c;
+    in-out property <brush> color-stroke-line-strong: #4b4b4b;
+    in-out property <brush> color-surface-bg: #1c1c1c;
+    in-out property <brush> color-surface-inset: #212121;
+    in-out property <brush> color-surface-overlay: #2e2e2e;
+    in-out property <brush> color-surface-panel: #282828;
+    in-out property <brush> color-surface-panel-raised: #313131;
+    in-out property <brush> color-surface-vp-surround: #161616;
+    in-out property <brush> color-wave-primary: #7fa3cf;
+    in-out property <brush> color-wave-secondary: #5c7ba6;
+    in-out property <length> dimension-icon: 16px;
+    in-out property <length> dimension-radius: 2px;
+    in-out property <length> dimension-row-l: 44px;
+    in-out property <length> dimension-row-m: 26px;
+    in-out property <length> dimension-row-s: 22px;
+    in-out property <length> dimension-row-x: 36px;
+    in-out property <length> dimension-spacing-1: 2px;
+    in-out property <length> dimension-spacing-2: 4px;
+    in-out property <length> dimension-spacing-3: 8px;
+    in-out property <length> dimension-spacing-4: 12px;
+    in-out property <length> dimension-spacing-5: 16px;
+}
+import { ScrollView, ComboBox } from "std-widgets.slint";
+
+export global AppState {
+    in-out property <string> locale: "ja";
+    in-out property <int> theme-index: 0;
+    in-out property <string> theme-diagnostic: "";
+    in-out property <image> timeline-texture;
+    in-out property <image> preview-texture;
+    callback theme-changed(int);
+    callback locale-changed(string);
+}
+
+component Region inherits Rectangle {
+    in property <string> region-id;
+}
+
+component SectionTitle inherits Rectangle {
+    in property <string> title;
+    height: Theme.dimension-row-s;
+    background: Theme.color-surface-inset;
+    border-width: 1px;
+    border-color: Theme.color-stroke-grid-minor;
+    HorizontalLayout {
+        padding-left: Theme.dimension-spacing-4;
+        alignment: center;
+        Text {
+            text: title;
+            color: Theme.color-content-muted;
+            font-size: 10px;
+            font-weight: 600;
+            overflow: elide;
+        }
+    }
+}
+
+component AssetRow inherits Rectangle {
+    in property <string> name;
+    in property <string> meta;
+    in property <bool> selected;
+    height: Theme.dimension-row-s;
+    background: selected ? Theme.color-accent-selection : transparent;
+    border-width: selected ? 1px : 0px;
+    border-color: Theme.color-accent-selection;
+    HorizontalLayout {
+        padding-left: Theme.dimension-spacing-3;
+        padding-right: Theme.dimension-spacing-3;
+        spacing: Theme.dimension-spacing-3;
+        Rectangle { width: Theme.dimension-icon; height: Theme.dimension-icon; background: Theme.color-surface-inset; border-radius: Theme.dimension-radius; }
+        Text { text: name; color: Theme.color-content-primary; font-size: 11px; overflow: elide; horizontal-stretch: 1; }
+        Text { text: meta; color: Theme.color-content-muted; font-size: 10px; overflow: elide; }
+    }
+}
+
+component PropRow inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    height: Theme.dimension-row-s;
+    HorizontalLayout {
+        padding-left: Theme.dimension-spacing-4;
+        padding-right: Theme.dimension-spacing-4;
+        spacing: Theme.dimension-spacing-3;
+        Text { text: label; color: Theme.color-content-secondary; font-size: 11px; width: 60px; overflow: elide; }
+        Text { text: value; color: Theme.color-content-primary; font-size: 11px; font-family: "Courier New"; overflow: elide; horizontal-stretch: 1; }
+    }
+}
+
+export component MainWindow inherits Window {
+    preferred-width: 1280px;
+    preferred-height: 800px;
+    title: @tr("Motolii U0V — visual spike");
+
+    VerticalLayout {
+        padding: 0;
+
+        // title bar
+        Rectangle {
+            height: 36px;
+            background: Theme.color-surface-panel-raised;
+            border-width: 1px;
+            border-color: Theme.color-stroke-line;
+            HorizontalLayout {
+                padding-left: Theme.dimension-spacing-4;
+                padding-right: Theme.dimension-spacing-4;
+                spacing: Theme.dimension-spacing-4;
+                Text { text: "motolii"; color: Theme.color-accent-selection; font-weight: 800; }
+                Text { text: @tr("night_drive.mtl — 1920×1080 / 30fps"); color: Theme.color-content-secondary; font-size: 11px; overflow: elide; horizontal-stretch: 1; }
+                ComboBox {
+                    model: [@tr("Motolii Dark"), @tr("Motolii Light"), @tr("Custom fixture")];
+                    current-index: AppState.theme-index;
+                    selected(value) => { AppState.theme-changed(self.current-index); }
+                }
+                ComboBox {
+                    model: ["ja", "en", "pseudo"];
+                    current-index: AppState.locale == "en" ? 1 : (AppState.locale == "pseudo" ? 2 : 0);
+                    selected(value) => {
+                        AppState.locale-changed(value == "en" ? "en" : (value == "pseudo" ? "pseudo" : "ja"));
+                    }
+                }
+            }
+        }
+
+        // main 3-pane
+        HorizontalLayout {
+            vertical-stretch: 1;
+
+            // asset region
+            Region {
+                region-id: "asset";
+                width: 236px;
+                background: Theme.color-surface-panel;
+                border-width: 1px;
+                border-color: Theme.color-stroke-line;
+                VerticalLayout {
+                    padding: 0;
+                    Rectangle {
+                        height: Theme.dimension-row-s;
+                        HorizontalLayout {
+                            padding-left: Theme.dimension-spacing-3;
+                            Text { text: @tr("Assets"); color: Theme.color-content-primary; font-weight: 600; font-size: 11px; overflow: elide; }
+                            Text { text: @tr("Effects"); color: Theme.color-content-secondary; font-size: 11px; overflow: elide; }
+                        }
+                    }
+                    Rectangle {
+                        height: 24px;
+                        background: Theme.color-surface-inset;
+                        border-radius: Theme.dimension-radius;
+                        Text { text: @tr("Search…"); color: Theme.color-content-muted; font-size: 11px; horizontal-alignment: left; vertical-alignment: center; overflow: elide; }
+                    }
+                    AssetRow { name: "city_loop.mp4"; meta: @tr("Video 12s"); selected: true; }
+                    AssetRow { name: "logo.svg"; meta: "SVG"; }
+                    AssetRow { name: "night_drive.wav"; meta: "3:42"; }
+                    AssetRow { name: "car.glb"; meta: "glTF"; }
+                }
+            }
+
+            // center: preview + transport
+            Rectangle {
+                horizontal-stretch: 1;
+                background: Theme.color-surface-vp-surround;
+                VerticalLayout {
+
+                Region {
+                    region-id: "preview";
+                    vertical-stretch: 1;
+                    Image {
+                        source: AppState.preview-texture;
+                        image-fit: contain;
+                        width: 100%;
+                        height: 100%;
+                    }
+                }
+
+                Region {
+                    region-id: "transport";
+                    height: Theme.dimension-row-m;
+                    background: Theme.color-surface-panel-raised;
+                    border-width: 1px;
+                    border-color: Theme.color-stroke-line;
+                    HorizontalLayout {
+                        padding-left: Theme.dimension-spacing-5;
+                        padding-right: Theme.dimension-spacing-5;
+                        spacing: Theme.dimension-spacing-4;
+                        Text { text: "⏮"; color: Theme.color-content-primary; }
+                        Text { text: "▶"; color: Theme.color-state-on-active; }
+                        Text { text: "00:01:12:08"; color: Theme.color-content-primary; font-family: "Courier New"; overflow: elide; }
+                        Text { text: @tr("BPM 128"); color: Theme.color-content-secondary; overflow: elide; horizontal-stretch: 1; }
+                        Text { text: @tr("Snap 1/4"); color: Theme.color-state-music; font-size: 10px; overflow: elide; }
+                    }
+                }
+                }
+            }
+
+            // property region
+            Region {
+                region-id: "property";
+                width: 300px;
+                background: Theme.color-surface-panel;
+                border-width: 1px;
+                border-color: Theme.color-stroke-line;
+                ScrollView {
+                    VerticalLayout {
+                        padding: 0;
+                        SectionTitle { title: @tr("Layer"); }
+                        PropRow { label: @tr("Opacity"); value: "100%"; }
+                        PropRow { label: @tr("Position"); value: "540, 320"; }
+                        SectionTitle { title: @tr("Effect stack"); }
+                        PropRow { label: "Glow"; value: "on"; }
+                        PropRow { label: @tr("Driver"); value: "LFO 0.42"; }
+                        Rectangle {
+                            height: 24px;
+                            background: Theme.color-surface-inset;
+                            Text { text: @tr("scope waveform"); color: Theme.color-wave-primary; font-size: 10px; horizontal-alignment: left; vertical-alignment: center; overflow: elide; }
+                        }
+                    }
+                }
+            }
+        }
+
+        // timeline region (wgpu texture — no ListView)
+        Region {
+            region-id: "timeline";
+            height: 300px;
+            background: Theme.color-surface-inset;
+            border-width: 1px;
+            border-color: Theme.color-stroke-line;
+            VerticalLayout {
+                Rectangle {
+                    height: Theme.dimension-row-s;
+                    background: Theme.color-surface-panel;
+                    Text { text: @tr("Timeline overview (wgpu)"); color: Theme.color-content-secondary; font-size: 10px; x: Theme.dimension-spacing-4; y: 5px; overflow: elide; }
+                }
+                Image {
+                    source: AppState.timeline-texture;
+                    image-fit: contain;
+                    horizontal-stretch: 1;
+                    vertical-stretch: 1;
+                }
+            }
+        }
+
+        // context / status bar
+        Region {
+            region-id: "context";
+            height: Theme.dimension-row-s;
+            background: Theme.color-surface-panel-raised;
+            border-width: 1px;
+            border-color: Theme.color-stroke-line;
+            HorizontalLayout {
+                padding-left: Theme.dimension-spacing-4;
+                padding-right: Theme.dimension-spacing-4;
+                spacing: Theme.dimension-spacing-4;
+                Text {
+                    text: @tr("Hover: trim clip") + "  " + @tr("Shortcut: T") + "  " + @tr("Constraint: snap on");
+                    color: Theme.color-content-secondary;
+                    font-size: 10px;
+                    overflow: elide;
+                    horizontal-stretch: 1;
+                }
+                Text {
+                    text: AppState.theme-diagnostic;
+                    color: Theme.color-feedback-warning;
+                    font-size: 10px;
+                    overflow: elide;
+                }
+            }
+        }
+    }
+}

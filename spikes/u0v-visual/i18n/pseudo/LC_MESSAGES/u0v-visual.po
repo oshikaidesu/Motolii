@@ -1,0 +1,67 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: pseudo\n"
+
+msgid "Motolii U0V — visual spike"
+msgstr "[[!!! Motolii U0V — visual spike !!!]]"
+
+msgid "night_drive.mtl — 1920×1080 / 30fps"
+msgstr "[[!!! night_drive.mtl — 1920×1080 / 30fps / 3:42 !!!]]"
+
+msgid "Motolii Dark"
+msgstr "[[!!! Motolii Dark (default) !!!]]"
+
+msgid "Motolii Light"
+msgstr "[[!!! Motolii Light !!!]]"
+
+msgid "Custom fixture"
+msgstr "[[!!! Custom fixture !!!]]"
+
+msgid "Assets"
+msgstr "[[!!! Assets !!!]]"
+
+msgid "Effects"
+msgstr "[[!!! Effects !!!]]"
+
+msgid "Search…"
+msgstr "[[!!! Search… !!!]]"
+
+msgid "Video 12s"
+msgstr "[[!!! Video 12s !!!]]"
+
+msgid "BPM 128"
+msgstr "[[!!! BPM 128 !!!]]"
+
+msgid "Snap 1/4"
+msgstr "[[!!! Snap 1/4 beat !!!]]"
+
+msgid "Layer"
+msgstr "[[!!! Layer !!!]]"
+
+msgid "Opacity"
+msgstr "[[!!! Opacity !!!]]"
+
+msgid "Position"
+msgstr "[[!!! Position !!!]]"
+
+msgid "Effect stack"
+msgstr "[[!!! Effect stack !!!]]"
+
+msgid "Driver"
+msgstr "[[!!! Driver !!!]]"
+
+msgid "scope waveform"
+msgstr "[[!!! scope waveform !!!]]"
+
+msgid "Timeline overview (wgpu)"
+msgstr "[[!!! Timeline overview (wgpu texture) !!!]]"
+
+msgid "Hover: trim clip"
+msgstr "[[!!! Hover: trim clip !!!]]"
+
+msgid "Shortcut: T"
+msgstr "[[!!! Shortcut: T !!!]]"
+
+msgid "Constraint: snap on"
+msgstr "[[!!! Constraint: snap on !!!]]"
