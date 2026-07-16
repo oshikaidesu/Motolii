@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! AG-3: audio component commandと分離macroの受け入れテスト。
 
 use std::path::Path;

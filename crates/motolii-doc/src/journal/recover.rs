@@ -204,7 +204,10 @@ fn try_load_main(
     let bytes = fs.read(document_path)?;
     match crate::load_document_bytes_with_limits(&bytes, limits) {
         Ok(opened) => Ok(Some(opened.document)),
-        Err(_) => Ok(None),
+        Err(_) => match crate::migrate_bytes_with_limits(&bytes, limits) {
+            Ok((doc, _)) => Ok(Some(doc)),
+            Err(_) => Ok(None),
+        },
     }
 }
 

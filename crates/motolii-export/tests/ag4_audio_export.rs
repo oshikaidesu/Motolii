@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! AG-4: fast path維持と mixed PCM export の審判。
 
 use std::collections::BTreeMap;

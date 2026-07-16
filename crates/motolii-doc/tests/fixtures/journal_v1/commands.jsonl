@@ -1,0 +1,13 @@
+{"SetProperty":{"target":0,"property":"Opacity","old_value":{"const":{"F64":1.0}},"new_value":{"const":{"F64":0.5}}}}
+{"SetBlendMode":{"target":0,"old":"normal","new":"multiply"}}
+{"SetClippingMask":{"target":0,"old":{"enabled":false,"mode":"alpha"},"new":{"enabled":false,"mode":"alpha"}}}
+{"SetTransformParent":{"target":0,"old":null,"new":null}}
+{"AddEffect":{"target":0,"index":0,"effect":{"id":5,"plugin_id":"vendor.unknown.glow","effect_version":2,"enabled":false,"params":{"amount":{"const":{"F64":0.75}}},"vendor_custom":"keep-me"}}}
+{"RemoveEffect":{"target":0,"index":0,"effect":{"id":5,"plugin_id":"vendor.unknown.glow","effect_version":2,"enabled":false,"params":{"amount":{"const":{"F64":0.75}}},"vendor_custom":"keep-me"}}}
+{"SetEffectEnabled":{"target":0,"effect":5,"old":true,"new":false}}
+{"DeleteEffectDefinition":{"definition":{"id":9,"plugin_id":"core.filter.tint","effect_version":1,"enabled":true,"params":{}}}}
+{"AddEffectDefinition":{"definition":{"id":9,"plugin_id":"core.filter.tint","effect_version":1,"enabled":true,"params":{}}}}
+{"SetAudioComponentEnabled":{"target":0,"index":0,"old":true,"new":false}}
+{"SetAudioComponentGain":{"target":0,"index":0,"old":{"const":{"F64":1.0}},"new":{"const":{"F64":0.5}}}}
+{"AddTrackItem":{"parent":{"Track":0},"index":0,"item":{"kind":"clip","envelope":{"layer_id":1,"effects":[{"id":7,"plugin_id":"p.nested","vendor":"n"}],"transform":{"position":{"const":{"Vec2":[0.0,0.0]}},"anchor":{"const":{"Vec2":[0.0,0.0]}},"scale":{"const":{"Vec2":[1.0,1.0]}},"rotation":{"const":{"F64":0.0}}},"opacity":{"const":{"F64":1.0}}},"start":{"num":0,"den":1},"duration":{"num":5,"den":1},"time_map":{"source_start":{"num":0,"den":1},"speed_num":1,"speed_den":1,"overrun_mode":"freeze"},"source":{"source":"asset","asset":0,"video":{"stream":{"kind":"video","ordinal":0}},"audio":[]}},"layer_names":{"1":"nested"}}}
+{"RemoveTrackItem":{"parent":{"Track":0},"index":0,"item":{"kind":"clip","envelope":{"layer_id":1,"effects":[{"id":7,"plugin_id":"p.nested","vendor":"n"}],"transform":{"position":{"const":{"Vec2":[0.0,0.0]}},"anchor":{"const":{"Vec2":[0.0,0.0]}},"scale":{"const":{"Vec2":[1.0,1.0]}},"rotation":{"const":{"F64":0.0}}},"opacity":{"const":{"F64":1.0}}},"start":{"num":0,"den":1},"duration":{"num":5,"den":1},"time_map":{"source_start":{"num":0,"den":1},"speed_num":1,"speed_den":1,"overrun_mode":"freeze"},"source":{"source":"asset","asset":0,"video":{"stream":{"kind":"video","ordinal":0}},"audio":[]}},"layer_names":{"1":"nested"}}}

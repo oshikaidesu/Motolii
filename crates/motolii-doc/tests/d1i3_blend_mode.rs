@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! D1i-3: BlendMode の意味論ゴールデン(S16)。
 //! 閉集合・D3→CompositeMode 1:1 写像・premul 合成式を固定する。
 //! 本ファイルのアサーション更新は禁止(新variant+新ファイルのみ)。
