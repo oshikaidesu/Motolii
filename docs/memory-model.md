@@ -37,11 +37,25 @@ AEとの対比: AEはRAM=作業セット+プレビューキャッシュの一体
 ### P3. VRAM予算は自前で持つ(ドライバに任せない)
 
 - wgpuには**ポータブルで信頼できる空きVRAM API**が無い(2026-07-13、wgpu 29時点へ表現を更新)。`Device::generate_allocator_report()`でwgpu管理下の割当量は取れ、`MemoryBudgetThresholds`でD3D12/一部Vulkanの予算閾値は設定できるが、allocator reportはbackend依存で`None`になり得、`MemoryBudgetThresholds`も対応backendが限られる。Metalを含む全環境の空きVRAM・レジデンシを統一的には取れない。**allocator reportは診断補助に使い、正本は自前台帳**([反対側レビュー](reviews/2026-07-13-wgpu-challenges-counter-review.md) B-2)。超過時の挙動はOS依存: WindowsはWDDMがシステムRAMへ自動ページング(クラッシュはしないが1桁遅くなる見えない崖)、Vulkan系はallocation失敗やdevice lost。**どのOSでもドライバの自動ページングに頼らない**
-- キャッシュ層(M4 K1)はVRAM予算を設定値として自前管理し、超過する前に追い出す
+- キャッシュ層(M4 K1a〜K1d)はVRAM予算を設定値として自前管理し、超過する前に追い出す。正本はtexture/buffer descriptorから見積もる**Motolii自身の割当台帳**で、`AllocatorReport`との差は診断にだけ使う。対応backendでは`MemoryBudgetThresholds`を追加の安全柵にするが、未対応backendでも同じ挙動になることを必須とする
+- 予算はソフト目標でなく**新規割当のadmission前に強制するhard cap**とし、作業中の一時割当とdevice復旧用の安全余白を予算外へ予約する。使用中で追い出せないresourceだけで要求を満たせない場合は、OS paging/OOMへ進まず要求元・要求量・現予算を含む型付きエラーへ縮退する
+- ユーザー設定は`Auto`を既定とし、詳細設定でMotoliiが使ってよいVRAM/RAM/ディスクの絶対上限を指定できる。これは作品の意味でなく**User settings**であり、Document・journal・plugin APIへ入れない。`Auto`の具体値と「省メモリ/性能優先」preset値は基準機計測後に固定し、実装者がGPU名や総RAMだけから場当たりに決めない
+- Apple Silicon/iGPU等の共有メモリでは、VRAM台帳とRAMキャッシュを別々に上限まで使わせず、両者の合算上限も持つ。dGPUでも他アプリ・surface・driver内部割当の余白をゼロにしない
 - 逼迫時の退避はしご(この順で発動):
   1. レンダ済みVRAMキャッシュをRAM/ディスク階層へ降格(P1のコピーアウト)
   2. デコード先読み深度の削減
   3. Draft解像度の段階降格 1/2→1/4(performance-model既定の仕組みに接続)
+  4. 解像度固定中、または1/4でも作業セットが入らなければ、新規preview/background jobを型付き拒否し、既存の最後の正常frameと編集操作を維持する。FPS低下は1フレームの必要容量を減らさないため、この容量退避はしごへ含めない
+
+### P3a. 容量逼迫と再生期限超過を別の制御ループにする
+
+VRAM/RAM予算超過は**容量**、GPU演算・帯域不足で次の表示時刻に間に合わない状態は**throughput/latency**の問題である。同じ「重い」という見た目でも対策を混ぜない。
+
+- 容量制御はP3の割当台帳とadmissionで判定し、キャッシュ降格・先読み削減・許可時だけ解像度降格を行う。表示FPSを落としても1枚のtexture容量は変わらない
+- 再生期限制御はGPU frame timeとrender queue latencyで判定する。既定Draft値(低sample、最終質感skip)を使った上で、解像度自動時は1/2→1/4へ段階降格し、それでも間に合わなければ**表示する中間frameを捨てて最新時刻だけを要求**する
+- 解像度固定時は勝手に縮小せず、Draft固有のeffect品質まで適用した後、表示frameを間引く。project fps、`RationalTime`、audio/Transport主クロックは変更せず、30fps素材が遅く再生されるのではなくpreview表示だけが15/10fps相当へ落ちる
+- 自動降格・frame drop・固定設定による拒否は観測可能にし、理由・現在の解像度scale・実表示fps・予算使用量をHUDへ出す。自動状態はTransient、ユーザー選択はUser settingsで、どちらもDocumentへ保存しない
+- Final書き出しは同じ`render_frame(t, Quality)`を全frameに対して完走させ、表示frame dropや自動Draft降格を持ち込まない。リアルタイムに間に合わない場合は時間を掛けて正しく書き出す
 
 ### P4. ディスクキャッシュはv1に含める(ベイク/プロキシ用)
 
@@ -64,10 +78,11 @@ AEとの対比: AEはRAM=作業セット+プレビューキャッシュの一体
 | 日付 | 疑念 | 結論 |
 |---|---|---|
 | 2026-07-09 | VRAMは増設できず、RAM増設の逃げ道を自ら捨てているのでは(自縄自縛疑念) | 作業セット(VRAM・レイヤー数非依存・〜400MB)と容量系(RAM/ディスク・増設が効く)の分離で解消。P1〜P4を決定。CPU合成へ戻す選択肢は帯域根拠(§1)を消すため無い |
+| 2026-07-16 | wgpuなら空きVRAM取得と退避が標準化されているのでは / 重い時は解像度・FPSをどう落とすか | portableな空きVRAM正本は無いため自前台帳+hard capを正本とし、backend APIは補助に限定。容量逼迫はP3退避、期限超過はP3aのDraft降格+最新frame表示で分離。ユーザー予算・解像度固定はUser settings |
 
 ## 関連リンク
 
 - [performance-model.md](performance-model.md) — 帯域が支配コストである物理、§7の40レイヤー試算、GPU原則(P1が精密化)
-- [specs/M4-cache-and-analysis.md](specs/M4-cache-and-analysis.md) — キャッシュ層の実装仕様(K1予算/LRU/並行契約、K4プロキシ、K7ベイク)
+- [specs/M4-cache-and-analysis.md](specs/M4-cache-and-analysis.md) — キャッシュ層の実装仕様(K1a〜K1dの台帳/並行契約/予算/逼迫制御、K4プロキシ、K7ベイク)
 - [pitfalls-and-roadmap.md](pitfalls-and-roadmap.md) — B-5(キャッシュのメモリ予算)、E(ターゲットOS。Windows将来対応)
 - [concept.md](concept.md) — 仮出力(ベイク)=プリコンポ代替の決定

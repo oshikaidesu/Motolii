@@ -6,6 +6,8 @@
 
 正本: [concept.md「操作設計の根本原則」](concept.md#操作設計の根本原則-複雑さをユーザーへ転嫁しない)
 
+UI側の既知外殻、視覚動線、共通component契約、漏れ実装の拒否は[UI操作言語](ui-interaction-language.md)を正本とする。
+
 先例調査: [反復再発明の標準化監査](reviews/2026-07-14-repeated-wheel-standardization-audit.md)、[4ツールの称賛・日曜大工・根本ギャップ監査](reviews/2026-07-14-motion-tools-praise-diy-gap-audit.md)
 
 ## 1. 目的
@@ -63,6 +65,32 @@ Advanced controlsを畳んでも、出力へ影響する状態は要約表示す
 | 依存 | target、scope、plugin、DataTrackを型付きIDで追跡できる |
 | 失敗 | typed errorまたは診断。別の意味へ無言fallbackしない |
 | 性能 | 操作中にUI thread待機、GPU同期readback、全Document再構築をしない |
+
+### S-3a. 接続操作はカーソル自身が意味を説明する
+
+LookAt / Follow / Parent / DataTrack / Effect Use等の型付き参照は、渦巻きiconやsocketだけを置いて意味を推測させない。接続開始から確定またはCancelまで、カーソル近傍へ少なくとも次の三要素を含む短文を常時表示する。
+
+- **何を変えるか**: 例「このグループの移動」
+- **何へ繋ぐか**: 例「円形パス」または未選択時の期待型「パス」
+- **どうなるか**: 例「パスに沿って移動します」
+
+実装は汎用node editorではなく、`Idle → Picking → HoverValid / HoverInvalid → Commit / Cancel`のTransientな状態機械とする。`Picking`中は期待型を明示し、接続可能targetを形+outlineで強調、接続不能targetをdimし理由を文言で示す。hover中は仮線または同等のfrom/to手掛かりを表示し、確定後はInspector等へ`移動経路 → 円形パス`相当のsemantic badgeを残す。平常時まで追従文を常時出さず、接続controlのhoverでは開始方法をtooltip、接続mode中はカーソル追従文を常時出す。
+
+ウィップdrag、`接続`button、Canvas/Timeline clickは同じConnection Intentへ正規化する。Documentへ保存するのは既存の型付きIDと決定済み値だけで、pointer軌跡、hover、入口種別、説明文、仮線を保存しない。iconだけのウィップ、layer名/property path文字列、接続のための隠れhelper生成を正規入口にしない。
+
+#### Advanced例外の許容境界
+
+今後の論点は接続UIを重くすることではなく、通常入口の外にどこまで高度な接続意味を追加できるかである。Advancedは説明や検査を省く裏口ではなく、同じDocument意味の由来、対象、評価順、所有/共有、失敗理由を詳しく検査・編集する入口とする。
+
+高度用途の例外は、次をすべて満たす場合だけ独立仕様で追加できる。
+
+1. target型、作用scope、評価順、循環/欠落時の失敗が宣言できる。
+2. Simple表示を閉じても接続の存在と由来がsemantic badgeから分かる。
+3. 接続、解除、所有化/共有化等が明示D2 commandで可逆になり、複製・移動時の参照規則をfixture化できる。
+4. preview/export、cache invalidation、rename、削除後の意味を自動審判できる。
+5. 文字列expression、名前検索、隠れcontroller、型検査や循環拒否を外す`force connect`を要求しない。
+
+この条件を満たしても、cross-group参照、共有path、複数target、座標space変換、接続後Modifier列等の具体形はここで一括採用しない。最小の通常接続で実需を観測し、例外を1契約境界ずつ追加する。Advanced表示の存在を理由に未決のDocument fieldや汎用Constraint Graphを先焼きしない。
 
 ### S-4. Expressionとpluginの位置
 
@@ -125,6 +153,52 @@ M2終了時の扱いと発火条件は[判定記録](reviews/2026-07-14-m2-exit-
 | PP-6 反対側レビュー | 過剰なnode graph化、順序例外、UI認知負荷を独立再判定 |
 
 PP-Gate前のRelative Moveは**選択keyへ同じ差分を適用する1回のD2 macro**に限定する。永続的な後段offsetと偽らない。
+
+### 4.1 v1.x候補: One-Knob Macro Control
+
+AbletonのMacro Controlのように、**一つのcontrolから複数parameterを同時に動かす**入口は、複雑な設定を演奏可能な少数ノブへ畳めるためMotoliiとも相性がよい。ただしM3の基礎UIには入れず、v1.xの追加候補とする。
+
+これはD2の「複数commandを1 Undoにまとめるmacro」やshortcut macroとは別物である。保存される一対多のparameter driverになるため、実装前にPP-Gateを通す。
+
+```text
+Macro Control M
+  ├─ typed target A + mapping
+  ├─ typed target B + mapping
+  └─ typed target C + mapping
+```
+
+最低限、次を仕様改訂で決める。
+
+- Macroのscopeとstable identity。Group、Layer、Effect Definition、projectのどこに所有させるか。
+- targetを名前やproperty path文字列でなく、安定IDと期待ValueTypeで参照する方法。
+- Macro入力域と、targetごとのmin/max、反転、clamp、将来curveの写像。
+- Macro自体をkeyframe/DataTrackで動かす場合の評価順とcache invalidation。
+- target側の通常値、Link/Driver、将来Modifierとの合成順と、Canvasからの逆編集可否。
+- 自己参照/相互参照の循環拒否、削除済みtarget、型変更、plugin欠落の表示。
+- Group/Definition複製時に内部targetを複製先へ張り替え、外部targetを明示的に維持する規則。
+- 1 knob drag=1 Undo、Cancel変更ゼロ、preview/export同一。
+
+Simple表示はMacro knobと接続target数/異常のsemantic badgeを残し、Advancedで各target、範囲、反転、評価順を検査する。隠れcontroller layer、文字列expression、UIだけに存在するmapping、custom UIでしか編集できないtargetを作らない。
+
+#### UI配置
+
+初期配置は、独立windowではなく**右Inspector内のEffect編集領域**を第一候補として固定する。選択中のLayer / Group / Effect Definitionに対応するeffect-stackまたはparameter panelの上部へ、横一列のMacro stripとして置く。
+
+```text
+Inspector / Effects
+┌─────────────────────────────┐
+│ Macro strip  [M1] [M2] [M3]│  ← knob + target数/異常badge
+├─────────────────────────────┤
+│ Effect stack / Parameters   │
+│ ...                         │
+└─────────────────────────────┘
+```
+
+- 平常時はノブ、名称、target数、欠落/循環等の異常だけを表示する。
+- `Map`またはAdvancedで同じInspector領域を展開し、target/range/invert/orderを編集する。別の浮動windowを唯一の編集口にしない。
+- StageとTimelineにはMacro本体を重複配置せず、接続/自動化の存在をsemantic badgeで示し、選択するとEffect編集領域へ戻す。
+- 画面上の配置を先に決めても、Document上の所有scopeは決めたことにしない。Group/Layer/Effect Definitionのどれが正本かはMC-0で複製意味と同時に決める。
+- 初期版は同じEffect編集context内のtargetへ範囲を限定する案を小さい代替として比較し、project横断mappingを既定にしない。
 
 ## 5. M0〜M5への割当
 

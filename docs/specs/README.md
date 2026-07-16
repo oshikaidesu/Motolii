@@ -12,8 +12,8 @@
 | [M0-spikes.md](M0-spikes.md) | 確定 |
 | [M1-vertical-slice.md](M1-vertical-slice.md) | 確定(M0の採否判断で該当箇所を更新) |
 | [M2-document-model.md](M2-document-model.md) | ドラフト(統一camera D1j schema→D1k runtime→D3接続を追加。migration/解凍後に確定) |
-| [M3-ui-integration.md](M3-ui-integration.md) | ドラフト(INF-1/G0-1/G0-5完了。U1f透過StageはK0を待たない。U2f modifier+drag、U2g Effect常時接続線を追加) |
-| [M4-cache-and-analysis.md](M4-cache-and-analysis.md) | ドラフト(K0 RoD/RoIは透過Stageと分離した性能契約。K2へShared Effect invalidationを追加) |
+| [M3-ui-integration.md](M3-ui-integration.md) | **確定(タスク別入場)**。G0-2/3/4/7完了。U0eはG0-6目視、U0fはG0-8+M4-K1a実測、各UIは表記M2依存を待つ |
+| [M4-cache-and-analysis.md](M4-cache-and-analysis.md) | ドラフト(K0 RoD/RoIは透過Stageと分離。旧K1をK1a〜K1dの台帳/並行store/階層退避/pressure制御へ分割。K2へShared Effect invalidationを追加) |
 | [M5-3d-and-post.md](M5-3d-and-post.md) | ドラフト(P0I/P7でCavalry型Duplicator+stable seedを段階実装。凍結ゲートで確定) |
 
 ## タスク粒度のルール
