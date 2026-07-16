@@ -1,6 +1,6 @@
 # Motolii
 
-**[日本語: Motoliiの問題設定と長期方針](VISION.ja.md)** — After Effectsの重さ、AviUtlからの移行、ソフトごとのエフェクト再実装をどう捉えるか。
+**[日本語: なぜ、もう一つ映像制作ソフトを作るのか](MANIFESTO.ja.md)** — After Effectsの重さ、AviUtlからの移行、ソフトごとのエフェクト再発明、そして「映像制作におけるVST」について。問題設定と長期方針の要約は[VISION.ja.md](VISION.ja.md)。
 
 <p align="center">
   <img src="docs/assets/exit_demo.gif" alt="Motolii M1 exit demo: a video background with a shape animated by cubic-bezier easing and exported to mp4" width="960">
@@ -191,7 +191,7 @@ The M1 demo above is generated through the real export path and protected by aut
 | Verification | Rust tests, property tests, semantic and image goldens |
 | Structure | Cargo workspace (`crates/motolii-*`) |
 
-See [`docs/performance-model.md`](docs/performance-model.md) for the memory-bandwidth model and [`docs/concept.md`](docs/concept.md) for the project definition and current decision ledger.
+See [`docs/performance-model.md`](docs/performance-model.md) for the memory-bandwidth model, [`docs/concept.md`](docs/concept.md) for the project definition and current decision ledger, and [`docs/interaction-simplicity-model.md`](docs/interaction-simplicity-model.md) for how direct, tool, and advanced interactions converge on the same meaning.
 
 ## Design and development model
 
@@ -207,6 +207,7 @@ Start here:
 
 - [`docs/README.md`](docs/README.md) — reading order and glossary
 - [`docs/concept.md`](docs/concept.md) — project definition and decision ledger
+- [`docs/interaction-simplicity-model.md`](docs/interaction-simplicity-model.md) — simplicity as user and implementation performance
 - [`docs/pitfalls-and-roadmap.md`](docs/pitfalls-and-roadmap.md) — failure catalog and roadmap
 - [`docs/specs/`](docs/specs/) — milestone specifications and task contracts
 - [`AGENTS.md`](AGENTS.md) — contribution rules for human and AI agents

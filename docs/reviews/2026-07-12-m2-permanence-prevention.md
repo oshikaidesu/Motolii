@@ -29,7 +29,8 @@
 
 - 未決のUI都合だった項目: コマンド粒度は**【決定】#103⑨**(2026-07-13)。波形ピークは低優先化済みでM3/U3任せ — 未決のまま実装デフォルト禁止の規律は維持
 - 画素アルゴリズムの「改善」(既存variantの意味変更) — 新variantにするか、意味論ゴールデンが無いなら触らない
-- CompCamera等、単位未宣言の席 — 台帳どおり入れない
+- CompCameraは[統一カメラ設計](2026-07-14-unified-stage-camera-design.md)で単位と意味を【決定】済み。ただしD1jの追加schema+default migration、D1kのruntime解凍、D3の接続順を飛ばして焼かない
+- Shared Effectは[2026-07-15決定](2026-07-15-relative-scope-duplicator-decision.md)のDefinition/Use意味だけをD1lで追加する。既存inline effectの一対一migration、未知field保持、順序pixel同一を満たす前にshapeを変えず、Composite Set/Backdrop/隣接scopeを便乗追加しない
 
 **判定**: 「便利だからフィールド追加」は却下。席が要るなら仕様に【決定】を足してから。
 

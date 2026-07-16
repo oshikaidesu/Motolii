@@ -172,7 +172,7 @@ ParamDriverは`build_track`で`DataTrack`を返すだけ。ピクセルに触ら
 > 口を広げる提案は**キャッシュキーへの寄与定義とセット**で出すこと(M4「キャッシュキーの完全性原則」)。キャッシュ自体はホストの専権事項で、プラグインからのキャッシュヒント・自前キャッシュは受けない(§3-3)。コスト優先度はホストが実測する。
 
 - 動的ロード(dylib)・WASM配布(v2)
-- 評価コンテキストのインスタンスインデックス`(i, count)`(F-7) — 型`InstanceIndex`を予約。**配線口は`RenderCtx::instance`(M2E-7)**。Repeater 実装まで常に None
+- 評価コンテキストのinstance情報(F-7) — 現行予約`InstanceIndex(i,count)`をそのまま恒久化せず、M5-P0I/P7で`stable InstanceId + index/count + nested depth + position`へ解凍する。乱数identityにindexを使わず、`user_seed + InstanceId + channel`のPCG32だけを許可。P7前は`RenderCtx::instance`を拡張しない
 - サムネイル画像フィールド(F-8、口だけ将来)
 - ハンドルID化(A-3: 現状は`&wgpu::Texture`直渡し。内部更新閉じ込めは後続)
 - **ホスト所有PipelineCache**(F-10実証済み) / **GpuAssetCache結線はM2**。`ValueType::AssetRef`は予約済み
@@ -180,4 +180,5 @@ ParamDriverは`build_track`で`DataTrack`を返すだけ。ピクセルに触ら
 - **テキスト組版**(F-6) — コアは `itemize` / `shape(軸・クラスタ対応表)` / `draw` のみ([M5-P6](specs/M5-3d-and-post.md))。一発`draw_text`やシェーピング自作は禁止。縦書き・ルビ・行組・歌詞タイミングはプラグインの領分
 - `NodeDesc`の時間フットプリント宣言(前後フレーム/サブフレームサンプル。F-12) — 型`TemporalFootprint`と**`RenderCtx::temporal_footprint`口はM2E-7で予約**。窓テクスチャ解決はホスト側(未配線)
 - `SimulationPlugin` trait+StateTrack(F-12。`PluginKind::Simulation`はenum予約済み。traitシグネチャは[simulation-model.md](simulation-model.md)§3.2の叩き台を解凍手続きで確定)
+- **Backdrop input** — 画像処理はFilter/Composite pluginでよいが、timeline走査・「下のlayer」推論は禁止。Hostが評価地点の合成済みtextureを型付き入力として渡す口は[2026-07-15決定](reviews/2026-07-15-relative-scope-duplicator-decision.md)後も未凍結であり、scope/migration/cache key/循環拒否を同時に解凍するまで追加しない
 - **カスタムプラグインUI** — `.slint`実行時ロード / wgpu自由描画 / 宣言レイアウト / ギズモ。v1公開境界外([plugin-ui-v1-boundary](reviews/2026-07-12-plugin-ui-v1-boundary.md)。解凍はv1.x/v2)

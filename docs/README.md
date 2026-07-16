@@ -18,7 +18,7 @@
 1. [concept.md](concept.md) — 何であって何でないか。**全決定事項の台帳**(スコープ、プラグイン境界、座標系、並行性、音声方針)
 2. [performance-model.md](performance-model.md) — 「なぜAEより軽くできるか」の物理(メモリ帯域モデル)、品質モード(Draft/Final)、並列性、40レイヤー目標の試算。**容量・VRAM上限への疑念は[memory-model.md](memory-model.md)(疑念台帳)へ**
 3. [pitfalls-and-roadmap.md](pitfalls-and-roadmap.md) — **最重要・最大**。落とし穴カタログ(A〜H、先行プロジェクト死因分析+LLM開発規律込み)とロードマップ(M0〜M5)、凍結ゲート
-4. 着手するマイルストーンの仕様書: [specs/README.md](specs/README.md)(プロセスとステータス表)→ 各`specs/M*.md`(タスク表と**末尾の「実装ガード」節**の両方を読む)
+4. 実装に着手する時: [implementation-ledger.md](implementation-ledger.md)(NOW/NEXT/WAIT)→ [specs/README.md](specs/README.md)(プロセスとステータス表)→ 対象`specs/M*.md`(タスク表と**末尾の「実装ガード」節**の両方を読む)
 5. プラグインを書く/量産させる時: [plugin-authoring.md](plugin-authoring.md)(LLM/人間共通の契約・禁止事項・型紙)
 6. 依存・参考リポジトリを調べる時: [references.md](references.md)(ライセンス区分つき。GPL系はコードを読むことすら禁止)
 
@@ -36,14 +36,29 @@
 | [references.md](references.md) | 依存候補・参考リポジトリ(ライセンス区分) | 現行 |
 | [ae-pain-points.md](ae-pain-points.md) | AEユーザー不満の体系化+我々の解決タグ(プラグイン窓口仮説の検証) | 現行 |
 | [dev-experience.md](dev-experience.md) | 開発体験(DX): プラグイン/シェーダのホットリロードはしご(AE再起動地獄の予防) | 現行(2026-07-13。設計ノート、契約変更なし) |
-| [plugin-ui-model.md](plugin-ui-model.md) | プラグインUIモデル: 宣言語彙 vs 自由描画(設計仮説。**M3§拡張方式と競合中、GAP-13で採否判断**) | **非規範・採否判断待ち**(2026-07-13。批判レビュー7点反映済) |
-| [ui-visual-language.md](ui-visual-language.md) | M3の視覚言語: 高密度一覧、意味色、既存UIへの馴染み、contrast、token規約 | 設計基準(具体token値はM3視覚確定待ち) |
-| [mocks/](mocks/README.md) | M3高密度メインUI。Ableton色語彙、ライト/ダーク切替、badge説明を持つ自己完結HTML | 視覚構成の基準モック |
+| [plugin-ui-model.md](plugin-ui-model.md) | プラグインUIモデル: 宣言語彙 vs 自由描画。M3着手前決定で縮小採用 | **採否済み分析**(v1はHost自動生成panel、自由UIは延期) |
+| [interaction-simplicity-model.md](interaction-simplicity-model.md) | 操作単純化モデル: Direct/Tool/Advanced正規化、plugin昇格、PP-Gate、M0〜M5割当 | 現行(2026-07-14。凍結済み公開契約は変更しない) |
+| [generative-user-boundary.md](generative-user-boundary.md) | ジェネラティブ表現とユーザー拡張の境界: Shape/SVG、p5.js型入力、Materialize/Live/Feedback/Simulation、Host責務 | **設計決定**(2026-07-15。未凍結runtimeの実装許可ではない) |
+| [ui-interaction-language.md](ui-interaction-language.md) | M3のUI操作言語: 既知の外殻、可視の因果、共通component契約、Simple/Advanced、漏れ実装の拒否 | **設計決定**(2026-07-16) |
+| [ui-visual-language.md](ui-visual-language.md) | M3の視覚言語: 高密度一覧、意味色、既存UIへの馴染み、contrast、token規約、参照範囲 | 設計基準(具体token値はM3視覚確定(G0-6)待ち) |
+| [mocks/](mocks/README.md) | M3高密度メインUI(基準)+timeline/interaction/UI力学の比較モック台帳 | 視覚構成の基準モック |
 | [ui-concept.md](ui-concept.md) | UIコンセプト: 体験の北極星(譜面台・First Beat・五本柱)。散在するUI文書の層地図つき | **設計仮説・反対側レビュー待ち**(2026-07-16。契約・M3ステータス変更なし) |
+| [implementation-ledger.md](implementation-ledger.md) | 現場向け実装進行台帳: M0〜M5のNOW/NEXT/WAIT、依存、Issue昇格順 | **日々の発注入口**(意味・完了条件は各specが正本。M3行は再締結ゲート優先) |
 | [backlog.md](backlog.md) | イシュー候補台帳(現在地サマリ+横断/新規ギャップ/v2バックログ) | 現行 |
 | [specs/](specs/README.md) | マイルストーン仕様書(エージェントへの発注書)。確定/ドラフトのステータスはspecs/README.md参照 | M0/M1確定、M2段階発注可(基盤再締結ゲート発効中)、M3ドラフト/製品実装停止、M4/M5ドラフト |
 | [spikes/](spikes/) | スパイク結果報告(S1: Slint統合、S2: デコード、[S3(R8): Vello採否](spikes/s3-vello.md)) | 完了報告(歴史的記録、更新しない) |
 | [reviews/2026-07-12-m2-permanence-prevention.md](reviews/2026-07-12-m2-permanence-prevention.md) | M2恒久焼き込みの**予防手順**(やること5手)。運用正本 | 現行 |
+| [reviews/2026-07-14-m3-ui-boundary-prevention.md](reviews/2026-07-14-m3-ui-boundary-prevention.md) | M3でUI都合をDocument・レンダ・公開契約へ逆流させない**予防手順**(規律8本) | 現行 |
+| [reviews/2026-07-14-m3-ui-boundary-counter-review.md](reviews/2026-07-14-m3-ui-boundary-counter-review.md) | M3 UI境界規約の反対側レビュー。R1〜R9を採用/縮小/延期で再判定 | 現行(判定反映済み) |
+| [reviews/2026-07-16-m3-preflight-decisions.md](reviews/2026-07-16-m3-preflight-decisions.md) | M3着手前決定: input/状態寿命、plugin UI、性能測定、操作文法を固定し、見た目とresource実値を証拠待ちへ分離 | **設計決定**(G0-2/3/4/7完了) |
+| [reviews/2026-07-16-m3-ui-concept-to-tickets.md](reviews/2026-07-16-m3-ui-concept-to-tickets.md) | UIコンセプトを1 Issue=1 commitの実装粒へ分解。状態、入力、視覚、preview、共通操作、最初のEffect panelの依存と拒否条件 | **実装発注の正本**(U0b〜U4aの枝番) |
+| [reviews/2026-07-16-ui-update-forensics.md](reviews/2026-07-16-ui-update-forensics.md) | Figma/Ableton/AE/Blender/Godot/Home AssistantとLinux GUIの公式更新・fork履歴から、UI失敗、不安定platformの隔離、user拡張をMotoliiのcomponent審判へ変換 | **調査と採用審判**(AF-1〜17) |
+| [reviews/2026-07-14-unified-stage-camera-design.md](reviews/2026-07-14-unified-stage-camera-design.md) | 2D/3Dを分けない単一カメラ、Stage、Output Frame、枠外表示の意味と実装順 | **決定**(2026-07-14) |
+| [reviews/2026-07-14-recent-concept-propagation-audit.md](reviews/2026-07-14-recent-concept-propagation-audit.md) | 直近の根幹決定を意味・Document・評価・UI・依存・コードの6面で逆引きした未反映台帳 | 横断監査(2026-07-14) |
+| [reviews/2026-07-14-motion-foundation-known-tech-disposition.md](reviews/2026-07-14-motion-foundation-known-tech-disposition.md) | Relative Move、Bounds/ROI、Effect Scope、Instance/Elementを既知技術で再判定した最小契約 | **決定**(2026-07-14) |
+| [reviews/2026-07-15-relative-scope-duplicator-decision.md](reviews/2026-07-15-relative-scope-duplicator-decision.md) | modifier+drag、透過Stage、常時Effect接続線、Cavalry型Duplicator、stable seedの具体化 | **決定**(2026-07-15) |
+| [reviews/2026-07-15-prior-art-complaint-boundary-audit.md](reviews/2026-07-15-prior-art-complaint-boundary-audit.md) | 先例が収束した固定契約と、Null/Group/Crop等の日曜大工帯を分離 | **調査第一陣**(2026-07-15) |
+| [reviews/2026-07-15-implementation-readiness-ledger.md](reviews/2026-07-15-implementation-readiness-ledger.md) | M2〜M5のREADY/SPIKE/WAIT/BLOCKED分類とIssue昇格順 | **運用正本**(2026-07-15) |
 | [reviews/2026-07-12-rework-prior-art.md](reviews/2026-07-12-rework-prior-art.md) | 出戻りの先人調査(予防側/失敗後の対比)。設計根拠ではない | 仮説メモ |
 | [reviews/2026-07-12-pathop-ae-cavalry-comparison.md](reviews/2026-07-12-pathop-ae-cavalry-comparison.md) | PathOp語彙のAE/Lottie×Cavalry比較。意味【決定】前の材料(採択後は参考) | 調査メモ(未採用) |
 | [reviews/2026-07-13-undecided-critical-path-confirm.md](reviews/2026-07-13-undecided-critical-path-confirm.md) | 友人レビュー確認: 未決の追跡先・クリティカルパス補正・B⑤コード確認 | 確認メモ |
@@ -86,7 +101,7 @@
 - **Quality (Draft/Final)**: 同一レンダ関数に渡す品質パラメータ。Draft=1/2解像度(重い時1/4へ自動降格)・fp16。Finalのみ厳密
 - **DataTrack / ParamDriver**: 解析プラグインが生成する時系列データと、それでパラメータを駆動する仕組み(「解析→生成」がこのツールの長期的な強み)
 - **TimeMap**: クリップのソース時刻写像。v1は恒等+定数速度のみ実装、スキーマは初日から予約(落とし穴F-4)
-- **CompCamera**: コンポ全体で共有する単一カメラ文脈。3D系レイヤーソースはこれを参照して2Dテクスチャへラスタライズする
+- **CompCamera**: 全Compositionに常在し、2D=`z=0`を含む全objectが共有する単一カメラ。Output Frameはその投影開口。Stage Viewのpan/zoomはDocument外で、別cameraではない
 - **凍結ゲート**: M1完了後、実際に動いたインターフェースだけを凍結して並列開発を解禁する関門。[宣言](reviews/2026-07-10-freeze-gate-declaration.md)済み(2026-07-10)。改訂は解凍手続き(理由+migrate+ゴールデン)を通す
 - **グループ仮出力(ベイク)**: プリコンポの代替。グループ出力を時間範囲でキャッシュし、編集で自動無効化
 - **SimulationPlugin / StateTrack**: 逐次状態シミュレーション(布・液体・パーティクル)のプラグイン境界と、そのベイク結果(チェックポイント列の区間キャッシュ)。状態はホストが所有し、`render_frame(t)`はベイク結果を読む純関数のまま(落とし穴F-12、[simulation-model.md](simulation-model.md)。口の予約段階)

@@ -14,10 +14,10 @@
 |---|---|
 | [M0-spikes.md](M0-spikes.md) | 確定 |
 | [M1-vertical-slice.md](M1-vertical-slice.md) | 確定(M0の採否判断で該当箇所を更新) |
-| [M2-document-model.md](M2-document-model.md) | **段階発注可**(コア締結撤回。P1修復済。[基盤再締結ゲート](../reviews/2026-07-15-m2-foundation-reclosure-gate.md)発効中) |
-| [M3-ui-integration.md](M3-ui-integration.md) | **ドラフト / 製品実装停止**(M2基盤再締結後に入場条件を再翻訳) |
-| [M4-cache-and-analysis.md](M4-cache-and-analysis.md) | ドラフト(凍結ゲートで確定) |
-| [M5-3d-and-post.md](M5-3d-and-post.md) | ドラフト(凍結ゲートで確定) |
+| [M2-document-model.md](M2-document-model.md) | **段階発注可**(コア締結撤回。P1修復済。[基盤再締結ゲート](../reviews/2026-07-15-m2-foundation-reclosure-gate.md)発効中。統一camera CAM-G0→D1j→D1k→D3fレーンを含む) |
+| [M3-ui-integration.md](M3-ui-integration.md) | **ドラフト / 製品実装停止**(M2基盤再締結後に入場条件を再翻訳。G0-2/3/4/7の意味決定は記録済み) |
+| [M4-cache-and-analysis.md](M4-cache-and-analysis.md) | ドラフト(K0 RoD/RoIは透過Stageと分離。旧K1をK1a〜K1dの台帳/並行store/階層退避/pressure制御へ分割。K2へShared Effect invalidationを追加。凍結ゲートで確定) |
+| [M5-3d-and-post.md](M5-3d-and-post.md) | ドラフト(P0I/P7でCavalry型Duplicator+stable seedを段階実装。凍結ゲートで確定) |
 
 ## タスク粒度のルール
 

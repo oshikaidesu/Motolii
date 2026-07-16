@@ -1,0 +1,252 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900">
+  <style>
+    text { font-family: "Noto Sans JP"; fill: #dce1e8; }
+    .label { font-size: 12px; font-weight: 600; }
+    .small { font-size: 10px; fill: #8f98a6; }
+    .micro { font-size: 9px; fill: #747e8d; }
+    .title { font-size: 13px; font-weight: 650; }
+    .number { font-family: "SF Mono"; font-size: 11px; }
+    .icon { fill: none; stroke: #a8b0bc; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .muted-icon { fill: none; stroke: #626b78; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  </style>
+
+  <!-- Mock-only palette: values are not G0-6 tokens. -->
+  <rect width="1440" height="900" fill="#0e1013"/>
+
+  <!-- Top application bar -->
+  <rect x="0" y="0" width="1440" height="46" fill="#171a1f"/>
+  <path d="M0 45.5H1440" stroke="#2a3038"/>
+  <circle cx="18" cy="23" r="5" fill="#ff6b62"/>
+  <circle cx="35" cy="23" r="5" fill="#e5ad47"/>
+  <circle cx="52" cy="23" r="5" fill="#59ba72"/>
+  <text fill="#dce1e8" x="76" y="28" class="title">Motolii</text>
+  <path d="M145 16v14M138 23h14" class="icon"/>
+  <rect x="165" y="11" width="152" height="25" rx="5" fill="#111419" stroke="#303640"/>
+  <circle cx="181" cy="23" r="4" class="muted-icon"/>
+  <path d="M184 26l4 4" class="muted-icon"/>
+  <text fill="#dce1e8" x="196" y="27" class="small">検索 / コマンド</text>
+
+  <!-- Transport: compact, no pill explosion -->
+  <path d="M654 17l10 6-10 6z" fill="#dce1e8"/>
+  <path d="M686 17v12M692 17v12" class="icon"/>
+  <path d="M718 17v12M724 17l8 6-8 6" class="icon"/>
+  <text fill="#dce1e8" x="760" y="27" class="number">00:00:12:18</text>
+  <circle cx="880" cy="23" r="5" fill="#f06a72"/>
+  <text fill="#dce1e8" x="897" y="27" class="small">30 fps</text>
+  <path d="M1290 17h14M1290 23h14M1290 29h14" class="icon"/>
+  <circle cx="1332" cy="23" r="8" class="icon"/>
+  <path d="M1332 18v10M1327 23h10" class="icon"/>
+  <rect x="1362" y="15" width="12" height="16" rx="2" class="icon"/>
+
+  <!-- Asset browser -->
+  <rect x="0" y="46" width="232" height="514" fill="#14171b"/>
+  <path d="M231.5 46V900" stroke="#2a3038"/>
+  <text fill="#dce1e8" x="16" y="73" class="title">アセット</text>
+  <path d="M190 62v14M183 69h14" class="icon"/>
+  <rect x="12" y="86" width="208" height="28" rx="4" fill="#101318" stroke="#2c323b"/>
+  <circle cx="27" cy="100" r="4" class="muted-icon"/>
+  <path d="M30 103l4 4" class="muted-icon"/>
+  <text fill="#dce1e8" x="41" y="104" class="small">素材を検索</text>
+
+  <text fill="#dce1e8" x="16" y="137" class="micro">PROJECT</text>
+  <rect x="8" y="146" width="216" height="30" rx="3" fill="#20252c"/>
+  <path d="M17 156h8l3 3h11v10H17z" class="icon"/>
+  <text fill="#dce1e8" x="49" y="166" class="label">MV_Project</text>
+  <text fill="#dce1e8" x="198" y="166" class="small">8</text>
+
+  <!-- Asset rows with type marks -->
+  <g transform="translate(12 190)">
+    <rect width="46" height="34" rx="3" fill="#202a32"/>
+    <path d="M16 10l18 7-18 7z" fill="#4ea8de"/>
+    <text fill="#dce1e8" x="58" y="14" class="label">city_night.mp4</text><text fill="#dce1e8" x="58" y="29" class="small">映像 · 00:18</text>
+  </g>
+  <g transform="translate(12 236)">
+    <rect width="46" height="34" rx="3" fill="#2b2720"/>
+    <path d="M9 18h3l2-7 3 14 3-10 3 6 3-12 3 17 3-8h5" fill="none" stroke="#e6a94a" stroke-width="1.5"/>
+    <text fill="#dce1e8" x="58" y="14" class="label">main_track.wav</text><text fill="#dce1e8" x="58" y="29" class="small">音声 · 03:42</text>
+  </g>
+  <g transform="translate(12 282)">
+    <rect width="46" height="34" rx="3" fill="#222a22"/>
+    <path d="M10 25l8-15 7 10 5-7 7 12z" fill="none" stroke="#77c77b" stroke-width="1.7"/>
+    <text fill="#dce1e8" x="58" y="14" class="label">logo.svg</text><text fill="#dce1e8" x="58" y="29" class="small">シェイプ</text>
+  </g>
+  <g transform="translate(12 328)">
+    <rect width="46" height="34" rx="3" fill="#2d232b"/>
+    <text x="14" y="24" font-size="19" font-weight="700" fill="#cc79a7">T</text>
+    <text fill="#dce1e8" x="58" y="14" class="label">lyrics.txt</text><text fill="#dce1e8" x="58" y="29" class="small">テキスト · 24行</text>
+  </g>
+  <path d="M12 388H220" stroke="#272d35"/>
+  <text fill="#dce1e8" x="16" y="414" class="micro">COLLECTIONS</text>
+  <text fill="#dce1e8" x="20" y="442" class="small">◇ お気に入り</text>
+  <text fill="#dce1e8" x="20" y="470" class="small">◫ シェイプ</text>
+  <text fill="#dce1e8" x="20" y="498" class="small">⌁ 最近使った項目</text>
+
+  <!-- Preview workspace -->
+  <rect x="232" y="46" width="892" height="514" fill="#101216"/>
+  <rect x="247" y="59" width="862" height="40" fill="#15191e" stroke="#282e36"/>
+  <text fill="#dce1e8" x="263" y="83" class="label">プレビュー</text>
+  <text fill="#dce1e8" x="1028" y="83" class="small">Fit  ▾</text>
+  <path d="M1069 72h13v13h-13z" class="icon"/>
+  <rect x="286" y="115" width="784" height="425" fill="#090b0e" stroke="#242a31"/>
+  <rect x="392" y="147" width="572" height="322" fill="#181d26"/>
+  <circle cx="678" cy="308" r="92" fill="#252c38"/>
+  <circle cx="678" cy="308" r="62" fill="none" stroke="#4ea8de" stroke-width="2" opacity=".75"/>
+  <path d="M610 350c39-70 93-104 162-103" fill="none" stroke="#77c77b" stroke-width="3"/>
+  <circle cx="611" cy="350" r="5" fill="#77c77b"/>
+  <circle cx="772" cy="247" r="5" fill="#77c77b"/>
+  <text x="516" y="296" font-size="38" font-weight="700" fill="#f0f3f7">NIGHT</text>
+  <text x="685" y="337" font-size="28" font-weight="650" fill="#cc79a7">DRIVE</text>
+  <rect x="501" y="257" width="303" height="101" fill="none" stroke="#55c7ff" stroke-width="1.5"/>
+  <rect x="497" y="253" width="8" height="8" fill="#101216" stroke="#55c7ff"/>
+  <rect x="800" y="253" width="8" height="8" fill="#101216" stroke="#55c7ff"/>
+  <rect x="497" y="354" width="8" height="8" fill="#101216" stroke="#55c7ff"/>
+  <rect x="800" y="354" width="8" height="8" fill="#101216" stroke="#55c7ff"/>
+  <text fill="#dce1e8" x="298" y="529" class="small">1920 × 1080</text>
+  <text fill="#dce1e8" x="974" y="529" class="number">100%</text>
+
+  <!-- Inspector -->
+  <rect x="1124" y="46" width="316" height="514" fill="#15181d"/>
+  <path d="M1124 99H1440M1124 46V900" stroke="#2a3038"/>
+  <text fill="#dce1e8" x="1142" y="73" class="title">インスペクター</text>
+  <text fill="#dce1e8" x="1142" y="91" class="small">テキスト · NIGHT DRIVE</text>
+  <text fill="#dce1e8" x="1142" y="124" class="micro">TRANSFORM</text>
+  <path d="M1420 118l5 5 5-5" class="muted-icon"/>
+  <text fill="#dce1e8" x="1142" y="153" class="small">位置</text>
+  <rect x="1210" y="134" width="88" height="27" rx="3" fill="#101318" stroke="#2d343d"/>
+  <text fill="#dce1e8" x="1221" y="152" class="number">X  0.000</text>
+  <rect x="1304" y="134" width="88" height="27" rx="3" fill="#101318" stroke="#2d343d"/>
+  <text fill="#dce1e8" x="1315" y="152" class="number">Y  0.086</text>
+  <rect x="1406" y="142" width="8" height="8" transform="rotate(45 1410 146)" fill="#e6a94a"/>
+  <text fill="#dce1e8" x="1142" y="190" class="small">回転</text>
+  <rect x="1210" y="171" width="182" height="27" rx="3" fill="#101318" stroke="#2d343d"/>
+  <text fill="#dce1e8" x="1221" y="189" class="number">0.0°</text>
+  <text fill="#dce1e8" x="1142" y="227" class="small">不透明度</text>
+  <path d="M1210 221H1360" stroke="#343b45" stroke-width="3"/>
+  <path d="M1210 221H1334" stroke="#55c7ff" stroke-width="3"/>
+  <circle cx="1334" cy="221" r="5" fill="#55c7ff"/>
+  <text fill="#dce1e8" x="1368" y="225" class="number">82%</text>
+  <path d="M1136 250H1428" stroke="#2a3038"/>
+  <text fill="#dce1e8" x="1142" y="279" class="micro">TEXT</text>
+  <rect x="1142" y="293" width="250" height="50" rx="3" fill="#101318" stroke="#2d343d"/>
+  <text fill="#dce1e8" x="1154" y="315" class="label">NIGHT DRIVE</text>
+  <text fill="#dce1e8" x="1154" y="333" class="small">Noto Sans JP · Bold · 84</text>
+  <text fill="#dce1e8" x="1142" y="374" class="micro">EFFECTS</text>
+  <rect x="1138" y="386" width="274" height="42" rx="3" fill="#1b2026" stroke="#303640"/>
+  <circle cx="1155" cy="407" r="7" fill="#77c77b"/>
+  <path d="M1151 407l3 3 6-7" fill="none" stroke="#101216" stroke-width="1.5"/>
+  <text fill="#dce1e8" x="1172" y="411" class="label">Glow</text>
+  <path d="M1392 401l6 6-6 6" class="muted-icon"/>
+  <rect x="1138" y="436" width="274" height="42" rx="3" fill="#1b2026" stroke="#303640"/>
+  <circle cx="1155" cy="457" r="7" fill="#626b78"/>
+  <text x="1172" y="461" class="label" fill="#858e9b">Chromatic Offset</text>
+  <path d="M1388 451l8 12M1396 451l-8 12" stroke="#626b78" stroke-width="1.5"/>
+  <path d="M1136 492H1428" stroke="#2a3038"/>
+  <path d="M1145 514h14l4 4h12v15h-30z" fill="none" stroke="#e5ad47" stroke-width="1.5"/>
+  <text x="1184" y="526" class="small" fill="#e5ad47">font fallbackを確認</text>
+
+  <!-- Timeline header -->
+  <rect x="0" y="560" width="1440" height="340" fill="#111419"/>
+  <path d="M0 560H1440" stroke="#343b44"/>
+  <rect x="0" y="560" width="232" height="58" fill="#171a1f"/>
+  <rect x="232" y="560" width="1208" height="58" fill="#15181d"/>
+  <path d="M231.5 560V900M0 617.5H1440" stroke="#2a3038"/>
+  <text fill="#dce1e8" x="16" y="586" class="title">タイムライン</text>
+  <path d="M16 600h14M23 593v14" class="icon"/>
+  <path d="M48 594h13v13H48zM51 591h13v13" class="icon"/>
+  <path d="M82 593l7 7-7 7" class="icon"/>
+  <text fill="#dce1e8" x="112" y="603" class="small">SNAP</text>
+  <rect x="153" y="590" width="25" height="14" rx="7" fill="#26313a"/>
+  <circle cx="170" cy="597" r="5" fill="#55c7ff"/>
+
+  <!-- Time ruler -->
+  <g class="micro">
+    <text fill="#dce1e8" x="251" y="584">00:00</text><text fill="#dce1e8" x="411" y="584">00:05</text><text fill="#dce1e8" x="571" y="584">00:10</text>
+    <text fill="#dce1e8" x="731" y="584">00:15</text><text fill="#dce1e8" x="891" y="584">00:20</text><text fill="#dce1e8" x="1051" y="584">00:25</text><text fill="#dce1e8" x="1211" y="584">00:30</text><text fill="#dce1e8" x="1371" y="584">00:35</text>
+  </g>
+  <g stroke="#323843">
+    <path d="M248 592v26M408 592v26M568 592v26M728 592v26M888 592v26M1048 592v26M1208 592v26M1368 592v26"/>
+  </g>
+  <g stroke="#21262d">
+    <path d="M328 608V900M488 608V900M648 608V900M808 608V900M968 608V900M1128 608V900M1288 608V900"/>
+  </g>
+
+  <!-- Track controls and lanes -->
+  <g>
+    <rect x="0" y="618" width="232" height="48" fill="#171a1f"/><rect x="232" y="618" width="1208" height="48" fill="#12151a"/>
+    <rect x="8" y="628" width="4" height="28" rx="2" fill="#8b8dd8"/>
+    <path d="M23 638h8l3 3h9v9H23z" class="icon"/><text fill="#dce1e8" x="51" y="647" class="label">GROUP · INTRO</text>
+    <text fill="#dce1e8" x="171" y="647" class="small">S</text><text fill="#dce1e8" x="197" y="647" class="small">M</text>
+  </g>
+  <g>
+    <rect x="0" y="666" width="232" height="48" fill="#15181d"/><rect x="232" y="666" width="1208" height="48" fill="#101318"/>
+    <rect x="8" y="676" width="4" height="28" rx="2" fill="#4ea8de"/>
+    <path d="M24 680l15 7-15 7z" fill="none" stroke="#4ea8de" stroke-width="1.6"/><text fill="#dce1e8" x="51" y="695" class="label">CITY NIGHT</text>
+    <text fill="#dce1e8" x="171" y="695" class="small">S</text><text fill="#dce1e8" x="197" y="695" class="small">M</text>
+  </g>
+  <g>
+    <rect x="0" y="714" width="232" height="48" fill="#15181d"/><rect x="232" y="714" width="1208" height="48" fill="#101318"/>
+    <rect x="8" y="724" width="4" height="28" rx="2" fill="#cc79a7"/>
+    <text x="25" y="744" font-size="17" font-weight="700" fill="#cc79a7">T</text><text fill="#dce1e8" x="51" y="743" class="label">NIGHT DRIVE</text>
+    <text fill="#dce1e8" x="171" y="743" class="small">S</text><text fill="#dce1e8" x="197" y="743" class="small">M</text>
+  </g>
+  <g>
+    <rect x="0" y="762" width="232" height="48" fill="#15181d"/><rect x="232" y="762" width="1208" height="48" fill="#101318"/>
+    <rect x="8" y="772" width="4" height="28" rx="2" fill="#77c77b"/>
+    <path d="M23 797l7-17 8 12 6-9" fill="none" stroke="#77c77b" stroke-width="1.6"/><text fill="#dce1e8" x="51" y="791" class="label">LOGO SHAPE</text>
+    <text fill="#dce1e8" x="171" y="791" class="small">S</text><text fill="#dce1e8" x="197" y="791" class="small">M</text>
+  </g>
+  <g>
+    <rect x="0" y="810" width="232" height="58" fill="#15181d"/><rect x="232" y="810" width="1208" height="58" fill="#101318"/>
+    <rect x="8" y="820" width="4" height="38" rx="2" fill="#e6a94a"/>
+    <path d="M21 838h3l2-8 3 16 3-11 3 6 3-13 3 18 3-8h5" fill="none" stroke="#e6a94a" stroke-width="1.4"/><text fill="#dce1e8" x="58" y="839" class="label">MAIN TRACK</text>
+    <rect x="188" y="825" width="25" height="22" rx="3" fill="#3a3021" stroke="#e6a94a"/><text x="197" y="840" class="small" fill="#e6a94a">M</text>
+  </g>
+
+  <!-- Clips: type color as stripe/fill plus icon/shape -->
+  <rect x="248" y="625" width="610" height="34" rx="3" fill="#282943" stroke="#6467a3"/>
+  <rect x="248" y="625" width="5" height="34" rx="2" fill="#8b8dd8"/>
+  <path d="M264 637h8l3 3h9v9h-20z" fill="none" stroke="#b6b7df" stroke-width="1.2"/>
+  <text fill="#dce1e8" x="294" y="647" class="label">INTRO GROUP</text>
+
+  <rect x="266" y="673" width="516" height="34" rx="3" fill="#203546" stroke="#477c9d"/>
+  <rect x="266" y="673" width="5" height="34" rx="2" fill="#4ea8de"/>
+  <path d="M282 683l15 7-15 7z" fill="#75bbe5"/>
+  <text fill="#dce1e8" x="307" y="695" class="label">city_night.mp4</text>
+
+  <!-- Selected text clip -->
+  <rect x="430" y="720" width="296" height="34" rx="3" fill="#432b3d" stroke="#55c7ff" stroke-width="2"/>
+  <rect x="430" y="720" width="5" height="34" rx="2" fill="#cc79a7"/>
+  <text x="446" y="742" font-size="15" font-weight="700" fill="#e3a7cb">T</text>
+  <text fill="#dce1e8" x="467" y="742" class="label">NIGHT DRIVE</text>
+  <rect x="511" y="746" width="6" height="6" transform="rotate(45 514 749)" fill="#e6a94a"/>
+  <rect x="604" y="746" width="6" height="6" transform="rotate(45 607 749)" fill="#e6a94a"/>
+  <rect x="700" y="746" width="6" height="6" transform="rotate(45 703 749)" fill="#e6a94a"/>
+
+  <rect x="610" y="768" width="364" height="34" rx="3" fill="#243926" stroke="#4f8454"/>
+  <rect x="610" y="768" width="5" height="34" rx="2" fill="#77c77b"/>
+  <path d="M627 793l7-16 8 11 6-8" fill="none" stroke="#9bd69e" stroke-width="1.4"/>
+  <text fill="#dce1e8" x="660" y="790" class="label">logo.svg</text>
+
+  <rect x="248" y="817" width="1120" height="44" rx="3" fill="#332b20" stroke="#695638"/>
+  <rect x="248" y="817" width="5" height="44" rx="2" fill="#e6a94a"/>
+  <path d="M262 840h4l3-12 4 24 4-16 4 9 4-19 4 26 4-12h4l4 6 4-17 4 23 4-14 4 5 4-11 4 18" fill="none" stroke="#e9bd73" stroke-width="1.2"/>
+  <text fill="#dce1e8" x="664" y="844" class="small">MUTED</text>
+
+  <!-- Beat guides and playhead -->
+  <g stroke="#28313a" stroke-dasharray="2 5">
+    <path d="M288 608V868M368 608V868M448 608V868M528 608V868M608 608V868M688 608V868M768 608V868M848 608V868M928 608V868M1008 608V868M1088 608V868M1168 608V868M1248 608V868M1328 608V868"/>
+  </g>
+  <path d="M650 592V868" stroke="#55c7ff" stroke-width="1.5"/>
+  <path d="M643 592h14l-7 8z" fill="#55c7ff"/>
+  <rect x="620" y="568" width="61" height="20" rx="3" fill="#20313b" stroke="#55c7ff"/>
+  <text x="628" y="582" class="number" fill="#8edcff">12:18</text>
+
+  <!-- Bottom status -->
+  <rect x="0" y="868" width="1440" height="32" fill="#171a1f"/>
+  <path d="M0 868H1440" stroke="#2a3038"/>
+  <circle cx="17" cy="884" r="4" fill="#59ba72"/>
+  <text fill="#dce1e8" x="29" y="888" class="small">Preview ready</text>
+  <text fill="#dce1e8" x="1248" y="888" class="small">Drop 0</text>
+  <text fill="#dce1e8" x="1310" y="888" class="small">Render 6.2 ms</text>
+  <text fill="#dce1e8" x="1406" y="888" class="small">▤</text>
+</svg>
