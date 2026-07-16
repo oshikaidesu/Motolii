@@ -3,6 +3,7 @@
 spikes/s1-slint/target
 spikes/vello-eval/target
 spikes/r9-preview/target
+spikes/ime-acceptance/target
 spikes/timeline-bench/target
 /.tools
 # Claude Codeの個人設定と隔離worktreeを誤コミットしない
