@@ -7,9 +7,12 @@
 //! - [`cpu_reference`] — CPU参照実装・期待値生成
 //! - [`tol`] — tolerance定数(呼び出しは定数経由・生リテラルは走査deny)
 //! - `golden/` — 参照PNG置き場(現状はREADMEのみ)
+//!
+//! M3E-2 / INF-2: 性能ハーネス枠は [`perf`] に集約する。
 
 pub mod clipping_mask;
 pub mod cpu_reference;
+pub mod perf;
 pub mod slint_dep_policy;
 pub mod tol;
 
