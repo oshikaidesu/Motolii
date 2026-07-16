@@ -40,7 +40,7 @@
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み |
 | M2 | **実装中** | D1l/D3e、D5、統一camera follow-upをmainへ到達させる。D6は#150実装+#154修復済み |
 | M3 | **実装開始済み** | U0aはmain到達済み。次はU0b-1とU1a-1。U0eは生成基盤/fixtureと人間が決める具体値を分離。U0fはG0-8+K1a実測待ち |
-| M4 | **契約spike可** | K0でRoD/RoIのruntime契約を凍結 |
+| M4 | **契約spike可** | K0でRoD/RoIのruntime契約を凍結。その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む |
 | M5 | **identity spike可** | P0IでDuplicator/Instance identityを凍結 |
 
 M2を全件閉じてからM3を一括開始する方式ではない。M3はタスク別入場であり、依存が閉じたレーンから並行して進める。
@@ -81,6 +81,12 @@ K1c + K4 → K1d
 G0-8 + K1a → U0f
 U1b + U1c + U5 + K1d → U1g → U1h
 
+MV whole-song cache / freeze:
+K1b + K1c + D3 → K7a
+K7a + K2 → K7b → K7c → U8b
+K1d + D3 → K8a
+K7c + K8a + D5 → K8b
+
 Duplicator:
 P0I #170 → P7a → P7b → P7c → P7U
 ```
@@ -114,6 +120,11 @@ P0I #170 → P7a → P7b → P7c → P7U
 | 8 | K1b | M4 | `WAIT` | K1a merge | cache同一性/LRU/並行store |
 | 9 | K1c | M4 | `WAIT` | K1a + K1b merge | VRAM/RAM/disk階層admissionと退避 |
 | 10 | K1d | M4 | `WAIT` | K1c + K4 merge | 容量pressureとdeadlineを分離したpreview縮退signal |
+| 10a | K7a | M4 | `WAIT` | K1b + K1c + D3 merge | group子合成のatomic bake成果物境界 |
+| 10b | K7b | M4 | `WAIT` | K7a + K2 merge | 依存時間区間だけの無効化と旧世代再利用 |
+| 10c | K7c | M4 | `WAIT` | K7a + K7b merge | bake hit時の内部graph置換と再freeze |
+| 10d | K8a | M4 | `WAIT` | K1b + K1c + K1d + D3 merge | 全曲Draft coverage planner |
+| 10e | K8b | M4 | `WAIT` | K7c + K8a + D5 merge | 100GB accounting fixtureと通し再生E2E |
 | 11 | U0f | M3 | `WAIT` | G0-2 + G0-8 + U0b + K1a merge | resource policyをUser settingsへ。Documentへ入れない |
 | 12 | U1g | M3 | `WAIT` | U1b + U1c + U5 + K1d merge | Transport時刻不変の最新frame表示/コマ落ち |
 | 13 | U1h | M3 | `WAIT` | U0e + U0f + U1g merge | Performance/Memory settingsとpressure HUD |
