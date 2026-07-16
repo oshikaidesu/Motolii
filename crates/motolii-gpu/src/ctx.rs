@@ -10,6 +10,14 @@ pub enum GpuError {
     Requirements(String),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GpuOrigin {
+    /// CLI・テスト・書き出し用の専用デバイス。同期読み戻し可。
+    Headless,
+    /// UI(Slint)と共有中のデバイス。`poll(Wait)`/`download_rgba`は禁止。
+    UiShared,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum GpuRuntimeError {
     #[error("GPU device was lost: {reason}")]
@@ -22,6 +30,10 @@ pub enum GpuRuntimeError {
     Poll(String),
     #[error("GPU operation timed out after {0:?}")]
     Timeout(std::time::Duration),
+    #[error(
+        "synchronous GPU readback (poll Wait / download_rgba) is forbidden on UI-shared device; use GpuCtx::new_headless() for export"
+    )]
+    SyncReadbackForbidden,
 }
 
 /// コンポジタが必要とするデバイス要件の**単一の情報源**。
@@ -73,18 +85,42 @@ pub struct GpuCtx {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub adapter_info: Option<wgpu::AdapterInfo>,
+    origin: GpuOrigin,
     runtime_state: Arc<Mutex<GpuRuntimeState>>,
 }
 
 impl GpuCtx {
     pub fn new_headless() -> Result<Self, GpuError> {
-        let (ctx, _parts) = pollster::block_on(Self::new_async())?;
+        let (ctx, _parts) = pollster::block_on(Self::new_async(GpuOrigin::Headless))?;
         Ok(ctx)
     }
 
     /// コンポジタ要件でデバイスを生成し、Slintへ渡すパーツと共有GpuCtxを返す。
     pub fn new_for_ui() -> Result<(Self, UiDeviceParts), GpuError> {
-        pollster::block_on(Self::new_async())
+        pollster::block_on(Self::new_async(GpuOrigin::UiShared))
+    }
+
+    pub fn origin(&self) -> GpuOrigin {
+        self.origin
+    }
+
+    /// M3規約3: UI共有デバイスでは`poll(Wait)`を呼ばない。
+    pub fn poll_wait(&self, timeout: Option<std::time::Duration>) -> Result<(), GpuRuntimeError> {
+        self.ensure_sync_readback_allowed()?;
+        match self.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout,
+        }) {
+            Ok(_) | Err(wgpu::PollError::Timeout) => Ok(()),
+            Err(e) => Err(GpuRuntimeError::Poll(e.to_string())),
+        }
+    }
+
+    pub(crate) fn ensure_sync_readback_allowed(&self) -> Result<(), GpuRuntimeError> {
+        if self.origin == GpuOrigin::UiShared {
+            return Err(GpuRuntimeError::SyncReadbackForbidden);
+        }
+        Ok(())
     }
 
     /// 既存のdevice/queueを共有する。要件(device_requirements)を満たしている保証は
@@ -95,11 +131,21 @@ impl GpuCtx {
     /// 本関数はランタイム監視用ハンドラを登録するため、M3でホスト(Slint等)が
     /// 別ハンドラを持つ構成にする場合は登録の所有者を1箇所に集約すること。
     pub fn from_device_queue(device: wgpu::Device, queue: wgpu::Queue) -> Self {
+        Self::from_device_queue_with_origin(device, queue, GpuOrigin::UiShared)
+    }
+
+    /// 既存device/queueを共有する。`origin`はデバイスの用途に合わせて呼び出し側が指定する。
+    pub fn from_device_queue_with_origin(
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        origin: GpuOrigin,
+    ) -> Self {
         let runtime_state = install_runtime_handlers(&device);
         Self {
             device,
             queue,
             adapter_info: None,
+            origin,
             runtime_state,
         }
     }
@@ -130,7 +176,7 @@ impl GpuCtx {
             .uncaptured_error = Some(message.to_string());
     }
 
-    async fn new_async() -> Result<(Self, UiDeviceParts), GpuError> {
+    async fn new_async(origin: GpuOrigin) -> Result<(Self, UiDeviceParts), GpuError> {
         // OOMの失敗モードをdevice lost(全リソース喪失)より手前の、型付きエラーで
         // 捕捉できるリソース作成失敗に寄せる(安全に品質を落として継続する前提)。
         // 作成失敗の閾値をdevice loss側より低くし、必ず先に失敗の余地を作る。
@@ -184,6 +230,7 @@ impl GpuCtx {
             device: device.clone(),
             queue: queue.clone(),
             adapter_info: Some(adapter_info),
+            origin,
             runtime_state,
         };
         let parts = UiDeviceParts {

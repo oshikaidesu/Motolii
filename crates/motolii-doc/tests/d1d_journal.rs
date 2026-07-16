@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! D1d: journal checksum/salt/UUID・壊れ方catalog・故障注入・非破壊recovery・ResourceLimits。
 
 use std::fs;

@@ -1,0 +1,33 @@
+---
+description: Motoliiの仕様駆動実装とハック防止ゲート
+alwaysApply: true
+---
+
+# Motolii contract gates
+
+実装前にルートの`AGENTS.md`と、対象phaseのspec・実装ガード・予防レビューを読む。仕様の未決、依存未完了、型signatureの矛盾を見つけたら編集を始めず`STOP`として、根拠の文書・task ID・既存コード位置を報告する。もっともらしいdefaultで埋めない。
+
+## 差分を作る前の発注境界
+
+- 発注された1つの契約境界だけを変更する。隣接境界、将来task、UI都合、migration、公開APIの「ついで実装」をしない
+- 変更予定ファイル、再利用する既存helper、非目標、失敗時の不変条件、必須負例を先に列挙する
+- 新規helperを書く前に`rg`で既存実装を検索する。同じ意味のscanner、planner、ID採番、serde変換、test fixtureを複製しない
+- 公開interfaceや永続schemaの変更が必要になったら停止し、仕様改訂を要求する
+
+## 禁止する契約回避
+
+次を「テストを通すための実装」として追加しない。必要に見えた時点で`STOP`する。
+
+- 仕様で閉集合として明記済みでない`allow`、`ignore`、lint抑制、例外allowlistの追加・拡張。明記済みの場合も最小scopeに限定する
+- 既存期待値、golden、fixture、受け入れテストの削除・弱体化・書換え
+- test名、fixture値、特定ID、特定pathだけを通すspecial-case
+- typed schema / Deserialize / migration境界を迂回する生JSON・文字列scanner
+- callerに`from_raw`、`peek_next`、直接field mutationを要求する公開raw API
+- `serde(default)`や暗黙upgradeで欠けた永続意味を捏造する処理
+- 既存planner/helperと意味が重なる局所実装
+- validation完了前の部分mutation、失敗時にcounterやDocumentを残す処理
+- 必須契約をTODO、コメント、後続taskへ逃がす処理
+
+## 完了報告
+
+変更ファイル、各仕様IDとの対応、失敗時不変を示す負例、実行コマンドと実出力を報告する。テスト緑だけで完了としない。未完項目、仮定、回避策が1つでもあれば明示し、`P0/P1=0`の独立レビュー前提で提出する。commit・push・PR作成は明示発注がない限り行わない。

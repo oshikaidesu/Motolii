@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! D1e: migration枠・旧形式変換・意味保存・OpenMode拒否。
 
 use std::fs;

@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! AG-1: Asset Clip video/audio component schema / 互換 / 拒否。
 
 use motolii_core::{RationalTime, TimeMap};

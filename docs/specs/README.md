@@ -8,12 +8,14 @@
 - **段階発注可(ready with gates)**: 人間決定は完了。タスク表の依存を満たした行から着手可能
 - **ドラフト(draft)**: 方向性の記述。凍結ゲート(M1完了後)または前フェーズの結果を受けて確定させる
 
+後続の停止ゲートが発効している場合は、上の一般則より停止ゲートを優先する。現在M3はM2基盤再締結ゲート解除後の入場PRまで着手不可である。
+
 | 仕様書 | ステータス |
 |---|---|
 | [M0-spikes.md](M0-spikes.md) | 確定 |
 | [M1-vertical-slice.md](M1-vertical-slice.md) | 確定(M0の採否判断で該当箇所を更新) |
-| [M2-document-model.md](M2-document-model.md) | **段階発注可**(コア締結**撤回**。P1 #153/#154修復済。D5発注可。[記録](../reviews/2026-07-14-m2-core-closure.md)) |
-| [M3-ui-integration.md](M3-ui-integration.md) | ドラフト(M0-S1の採否判断で確定) |
+| [M2-document-model.md](M2-document-model.md) | **段階発注可**(コア締結撤回。P1修復済。[基盤再締結ゲート](../reviews/2026-07-15-m2-foundation-reclosure-gate.md)発効中) |
+| [M3-ui-integration.md](M3-ui-integration.md) | **ドラフト / 製品実装停止**(M2基盤再締結後に入場条件を再翻訳) |
 | [M4-cache-and-analysis.md](M4-cache-and-analysis.md) | ドラフト(凍結ゲートで確定) |
 | [M5-3d-and-post.md](M5-3d-and-post.md) | ドラフト(凍結ゲートで確定) |
 
