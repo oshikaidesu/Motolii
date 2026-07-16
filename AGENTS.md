@@ -23,6 +23,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 3. プラグインを書く/量産する時: [docs/plugin-authoring.md](docs/plugin-authoring.md)(種別・NodeDesc必須欄・禁止事項・型紙)
 4. M2 Document/スキーマ/ジャーナルに触る時: **先に**[docs/reviews/2026-07-12-m2-permanence-prevention.md](docs/reviews/2026-07-12-m2-permanence-prevention.md)(予防5手)。背景の先人調査は[rework-prior-art](docs/reviews/2026-07-12-rework-prior-art.md)
 5. M3製品実装に触る時: **先に**[docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md](docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md)を読み、ステータスが発効中なら実装を止める。調査・fixtureも公開APIや永続形式へ焼かない
+6. M3の外観・timeline・panelに触る時: **先に**[docs/ui-visual-language.md](docs/ui-visual-language.md)と[高密度メインUIモック](docs/mocks/README.md)を読む。モックの具体色値や未決機能をそのまま契約へ焼かない
 
 ## 絶対規律(破ると設計の根拠が崩れる。レビュー最重視項目)
 
