@@ -1,12 +1,14 @@
 # 先例調査: すぐに受け入れられたUI(2026-07-16)
 
-ステータス: **仮説メモ**(受容側の先例集 — **設計根拠ではない**。同日のレビュー指摘「全事例が既存ユーザー基盤/界隈への着地であり不確定変数が多すぎる」を反映して結論を格下げ済み — 文末の改訂記録と「参照クラスの偏り」節)。M3は[基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)発効中の製品実装停止であり、本文書はタスク・完了条件・契約を一切変更しない。転移候補は「M3入場PRの再翻訳時に個別採択する仮説」として台帳化するのみ。
+ステータス: **仮説メモ**(受容側の先例集 — **設計根拠ではない**。同日のレビュー指摘2件を反映: ①「全事例が既存ユーザー基盤/界隈への着地であり不確定変数が多すぎる」→第一部の結論を格下げ(「参照クラスの偏り」節)、②「政治でなく根本的なUX/UIの話」→**第二部(操作パターン単位の収斂語彙とUX原理)を追補**。文末の改訂記録)。M3は[基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)発効中の製品実装停止であり、本文書はタスク・完了条件・契約を一切変更しない。転移候補は「M3入場PRの再翻訳時に個別採択する仮説」として台帳化するのみ。
 
 運用規律: [成功先例調査](2026-07-12-success-prior-art.md)と同じ基準 — 出典URLの無い逸話を設計根拠にしない。加えて本調査固有の制約として、**取得環境のプロキシ制限(HTTP 403)により原文全文を照合できなかった出典が多数ある**。等級とは別に「原文未照合(スニペット経由)」を都度明記し、設計根拠へ昇格させる前の原文照合を必須とする。
 
 ## これは何か
 
 M3の[実装ガード11項](../specs/M3-ui-integration.md)は全て**失敗回避**(出荷済みエディタの苦情・死因)から抽出した。本メモはその対 — 「出た直後にユーザーへ受け入れられたUI」を集め、受容がどのUI決定に帰属されているかを証拠の強さつきで読む試み。
+
+**二部構成(2026-07-16 同日追補)**: 第一部=プロダクト単位の受容事例(市場での受容 — 交絡が大きく、用途は界隈の期待チェックリストまで)。**第二部=操作パターン単位の受容**(業界横断で収斂した操作語彙と、それを支えるUX原理の一次資料)。操作単位の収斂は「どの製品が市場で成功したか」に依存しない受容証拠 — 数十年・数十ツールが同じ操作を再採用し続けている事実そのものが「ユーザーが訓練済みでゼロ学習」の証拠になる — ため、**M3設計への転移はこちらが本線**。
 
 **前提の注意(全事例共通)**: 「受け入れられた」は UI 単独の効果ではない。無料・流通チャネル・時代要因(リモートワーク、サブスク反発、TikTok流入)との交絡が全事例にあり、本文で都度申告する。**UI単独の因果はどの事例でも分離できていない** — 最もクリーンなBlender 2.80(価格ゼロ不変のままUI刷新直後に企業支援が集中)ですらEeveeレンダラとの交絡が残る。
 
@@ -135,7 +137,76 @@ M3のU4(区間イージングポップアップ)が参照する当のUI。
 4. **U5/U6/U7 横断**: YMM4型の「ドメイン特化の最短経路」をMVに翻訳すると「**楽曲をセット→BPM入力→ビートグリッドにスナップして置くだけで音に合う**」がそれに当たる。新規タスクは切らず、U6→U7の接続体験(楽曲セットからスナップ配置までの操作数)を統合レビューの観点とする
 5. **測定側の含意(型6)**: M3のUI受け入れ確認を既存AEユーザーだけで行わない。AM/CapCut系のモバイル編集経験層(=新規層)を含める
 
-## 参照クラスの偏り(2026-07-16 レビュー指摘で追加 — 本メモで最も重要な限界)
+## 第二部: 操作パターン単位の受容 — 収斂した操作語彙とUX原理(2026-07-16 追補)
+
+第一部への批判(交絡・参照クラスの偏り)を受けて、受容の単位を**プロダクトから操作パターンへ**下げる。ここでの「すぐに受け入れられるUI」の操作的定義:
+
+> **業界横断で同一の操作へ収斂している語彙は、対象ユーザーが既に訓練済みであり、新規に学ぶものが無い(=即受容)。**
+
+これは根拠のある定義である: 学習時間は「新規に学ぶ手続き(プロダクションルール)数」に線形比例し、既知システムと共有される手続きの学習コストはほぼゼロ(Bovair, Kieras & Polson 1990、後述)。逆に、収斂していない領域でどの慣習を選んでも誰かの期待を裏切る。したがってM3の設計方針はシンプルに書ける: **収斂語彙はそのまま借用し、独自設計(と選択の自由)は非収斂領域に限定する**。実装ガード5「既定は業界標準の操作」の「業界標準」の中身を、以下で具体的に列挙する。
+
+照合状態の注記: 各操作の裏付けは公式マニュアル・公式ヘルプURL(恒久文書)。support.alightmotion.com とBlackmagicの公式マニュアルPDFは直接フェッチ403のためスニペット照合(その旨明記)。
+
+### 2-A. 収斂語彙の台帳(ゼロ学習で借用できる操作)
+
+| 操作 | 収斂の内容と裏付け | M3該当 |
+|---|---|---|
+| **Space=再生/停止** | 実質全ツール共通([Premiere公式ショートカット表](https://helpx.adobe.com/premiere/desktop/get-started/keyboard-shortcuts/default-keyboard-shortcuts.html)、[FCP公式](https://support.apple.com/guide/final-cut-pro/keyboard-shortcuts-ver90ba5929/mac)) | U5 |
+| **JKLシャトル** | J=逆再生/K=停止/L=順再生/連打で倍速、**K+J/Lで半速**という細部までFCP/Resolveで一致(FCP公式同上、Resolveはマニュアルに独立節 — 公式PDF直接照合は403)。モバイル系には無い=デスクトップ専門家語彙 | U5 |
+| **クリップ端ドラッグ=トリム** | [Premiere公式](https://helpx.adobe.com/premiere-pro/using/trimming-clips.html)、[FCP公式](https://support.apple.com/guide/final-cut-pro/extend-or-shorten-clips-ver9847ec25/mac)。※トリム後の隙間処理は非収斂(2-B) | U3 |
+| **磁石アイコン=スナップ+単キートグル(ドラッグ中も切替可)** | [FCP: Nキー・長押しで一時切替](https://support.apple.com/guide/final-cut-pro/snap-to-items-in-the-timeline-ver9f7888dc3/mac)、[Premiere: Sキー・磁石アイコン](https://helpx.adobe.com/premiere/desktop/edit-projects/change-clip-sequence/snap-clips.html)。図像と「単キー+一時切替」は収斂、キー自体は非収斂(2-B) | U3/U7 |
+| **再生ヘッド位置で分割+Shiftで全トラック** | 構造が収斂: [Premiere Ctrl+K / Ctrl+Shift+K](https://helpx.adobe.com/premiere/desktop/get-started/keyboard-shortcuts/default-keyboard-shortcuts.html)、[FCP Cmd+B / Shift+Cmd+B](https://support.apple.com/guide/final-cut-pro/cut-clips-in-two-ver4e30479/mac)。キーはB陣営(Apple/BMD/CapCut)とK陣営(Adobe)に分裂(2-B) | U3 |
+| **キーフレーム=菱形(ダイヤモンド)図像** | [FCP「白いダイヤモンドで表示」](https://support.apple.com/guide/final-cut-pro/add-video-effect-keyframes-ver8e3f20ea/mac)、[Blender Dope Sheet](https://docs.blender.org/manual/en/2.83/editors/dope_sheet/introduction.html)、[Adobe KF図解](https://helpx.adobe.com/premiere/desktop/add-video-effects/control-effects-and-transitions-using-keyframes/about-keyframes.html)。図像としてほぼ100%収斂 | U4 |
+| **1個目のKFだけ明示的、以降は値変更で自動キー** | [AE公式](https://helpx.adobe.com/after-effects/desktop/animate-in-after-effects/animation-basics/animation-basics.html)。AM/FCP/Resolveも同挙動(AM公式ヘルプは403、裏付け中) | U4 |
+| **正規化2ハンドルのcubic-bezierイージング+ease系命名** | [CSS easing-function(MDN)](https://developer.mozilla.org/en-US/docs/Web/CSS/easing-function)で規格化。[Flow](https://aescripts.com/flow/)はこのモデルとAEを橋渡しし**cubic-bezier値のコピペ**対応。[AM公式のカーブエディタ](https://support.alightmotion.com/hc/en-us/articles/10536934703889-Animation-Easing-Curves)(403・スニペット照合)も同型。**「Ease In=ゆっくり始まる」の語義は完全に統一** — 独自命名を避けるべき領域 | U4 |
+| **scrubbable number(数値の横ドラッグ増減)** | 4ツール以上で収斂、用語も「scrub」で統一: [AE(hot text)](https://helpx.adobe.com/be_en/after-effects/using/layer-properties.html)、[Figma](https://help.figma.com/hc/en-us/articles/360039956914)、[Blender(縦ドラッグで複数フィールド一括)](https://docs.blender.org/manual/en/latest/interface/controls/buttons/fields.html)、[Cavalry](https://docs.cavalry.scenegroup.co/user-interface/menus/window-menu/attribute-editor/control-rows/control-rows-interaction/) | U4 |
+| **Shift=比率固定(完全収斂)、8ハンドル構造、Shift回転=角度スナップ** | [Figma](https://help.figma.com/hc/en-us/articles/360040451453-Scale-layers-while-maintaining-proportions)、[PowerPoint](https://support.microsoft.com/en-us/office/graphics-visuals/change-the-size-of-a-picture-shape-text-box-or-wordart)、[Canva(Shift回転=15°)](https://www.canva.com/help/flip-and-rotate/)。※「中心基準スケール」の修飾キーは非収斂(2-B) | U1/U3 |
+| **ダブルクリック=一段深く入る、Esc=一段出る** | [Illustrator分離モード](https://helpx.adobe.com/illustrator/desktop/manage-objects/select-objects/isolate-objects.html)、[Figma deep select](https://help.figma.com/hc/en-us/articles/360040449873-Select-layers-and-objects)。グループ内部編集の共通文法 | U8 |
+| **OSからのドラッグ&ドロップ読み込み** | [FCP(タイムラインへ直接、編集種別つき)](https://support.apple.com/guide/final-cut-pro/drag-clips-to-the-timeline-ver4e30143/mac)、[Premiere](https://helpx.adobe.com/premiere-pro/how-to/import-file-directly.html)。※Premiereは実装差で公式がMedia Browser経由を推奨 — 「D&Dは必ず動く」を完了条件で保証する価値がある | U6 |
+| **Cmd/Ctrl+Z、右クリックメニュー(モバイルは長押し)** | 普遍。ただし**「無制限Undo」は業界標準ではない**([AEの既定Undo段数は32](https://helpx.adobe.com/after-effects/using/preferences.html)) — M2ジャーナル設計で深いUndoを持つMotoliiには差別化点でもある | U2 |
+
+### 2-B. 非収斂領域の台帳(独自設計の自由と責任がある帯)
+
+どれを選んでも誰かの慣習を裏切る領域。方針: **主要ターゲット(AviUtl/AM出身層)の慣習を第一参照にして選び、実装ガード5の「初日からのショートカットカスタマイズ」を保険にする**。
+
+| 領域 | 分岐の実態 |
+|---|---|
+| 分割キー | B(Blade: Apple/BMD/CapCut)vs K(Adobe)。新しめのツールはB系 |
+| スナップキー | N(FCP/Resolve)vs S(Premiere) |
+| タイムラインズーム | Cmd+=/-、=/-、Ctrl+ホイール等ツールごとにバラバラ。ピンチはタッチ系のみ収斂 |
+| トリム後のリップル挙動 | FCP=常時リップル、Premiere/Resolve=隙間残置+別ツール、CapCut/AM=自動クローズ寄り。**ツール哲学の分岐点**(ガード5のオプトイン原則の適用先) |
+| KF有効化の入口 | **ストップウォッチはAdobe方言**([AE](https://helpx.adobe.com/after-effects/desktop/animate-in-after-effects/animation-basics/animation-basics.html)/[Premiere](https://helpx.adobe.com/premiere/desktop/add-video-effects/control-effects-and-transitions-using-keyframes/add-keyframes.html)のみ)。FCP/Resolve/AMは**菱形ボタンで直接キー追加**([FCP](https://support.apple.com/guide/final-cut-pro/add-video-effect-keyframes-ver8e3f20ea/mac))— 非Adobe系はこちらに収斂 |
+| パラメータのリセット | Blender=右クリック→デフォルトへ、Adobe=エフェクト単位Reset、Figma=無し。統一パターン不在 |
+| リネーム | ダブルクリック(Figma等Web系)vs Enter(AE)vs F2(Blender) |
+| グループ化の意味 | Ctrl+Gの図像は共通だが、映像系では意味自体が分岐(AE=プリコンポ、NLE=ネスト)。MotoliiはAM式グループ意味論を決定済み(concept.md)なので、借りるのはキー図像のみ |
+
+### 2-C. UX原理の一次資料台帳(なぜその操作は即受容されるのか)
+
+| 原理 | 原典 | 核心 | 効くM3面 |
+|---|---|---|---|
+| 直接操作の3要件 | Shneiderman (1983) "Direct Manipulation," *IEEE Computer* 16(8) [DOI](https://dl.acm.org/doi/10.1109/MC.1983.1654471) | "Continuous representation of the object of interest / Physical actions... instead of complex syntax / **Rapid incremental reversible operations** whose impact ... is immediately visible" | キャンバス・タイムライン・KFは数値入力より直接ドラッグを優先(U1/U3/U4) |
+| 実行/評価の隔たり | Hutchins, Hollan & Norman (1985) *HCI* 1(4) [PDF](https://worrydream.com/refs/Hutchins_1985_-_Direct_Manipulation_Interfaces.pdf) | 操作と結果表示の距離が「直接感」を決める | 同上 |
+| 応答時間0.1秒の限界 | Miller (1968) [DOI](https://dl.acm.org/doi/10.1145/1476589.1476628) / Nielsen (1993) [3限界](https://www.nngroup.com/articles/response-times-3-important-limits/) | "0.1 second is about the limit for having the user feel that the system is reacting instantaneously" | スクラブ・値変更は100ms以内に**何かを**見せる。Draft降格(低忠実でも即時)はこの原理の実装(U5・ガード8) |
+| スクラブの遅延対策(実証) | Matejka, Grossman & Fitzmaurice, "Swift" (CHI 2012) [DOI](https://dl.acm.org/doi/10.1145/2207676.2207766) / "Swifter" (CHI 2013) [DOI](https://dl.acm.org/doi/10.1145/2470654.2466149) | スクラブ中の低解像度即時表示が遅延の悪影響を打ち消す。サムネイル格子でシーン探索が最大48%改善(著者報告) | M2 Transport+適応解像度+「最新要求のみ処理」(ガード8)の**直接の学術的裏付け** |
+| Jakobの法則 | Nielsen (2000) ["End of Web Design"](https://www.nngroup.com/articles/end-of-web-design/) | "Users spend most of their time on other sites... users prefer your site to work the same way as all the other sites they already know" | 収斂語彙の借用そのもの(2-A) |
+| 一貫性と標準 / 認識>想起 | Nielsen (1994) [10ヒューリスティック](https://www.nngroup.com/articles/ten-usability-heuristics/) | #4: プラットフォーム・業界慣習への追従。#6: "The user should not have to remember information..." | プリセットは名前でなく**カーブ形状のサムネイル**で見せる(U4) |
+| 段階的開示 | Nielsen (2006) [Progressive Disclosure](https://www.nngroup.com/articles/progressive-disclosure/) | "defers advanced or rarely used features to a secondary screen, making applications easier to learn and less error-prone" | 第一部のVOICEVOX「丁度よさ」の原理名。NodeDescパネルは賢いデフォルト+詳細展開の二層(U4) |
+| Fittsの法則 | Fitts (1954) *J. Exp. Psychol.* 47(6) [PDF](http://www2.psychology.uiowa.edu/faculty/mordkoff/InfoProc/pdfs/Fitts%201954.pdf) | 到達時間は距離と目標幅の関数 | 菱形KF・ベジェハンドル・トリムハンドルのヒットエリアを見た目より広く(U3/U4) |
+| Hickの法則 | Hick (1952) [DOI](https://journals.sagepub.com/doi/10.1080/17470215208416600) | 選択時間は選択肢数の対数に比例 | イージングプリセット一覧はカテゴリ分割・少数先出し(U4) |
+| 学習転移の定量 | Bovair, Kieras & Polson (1990) *HCI* 5 [PDF](https://web.eecs.umich.edu/~kieras/docs/Procedural_knowledge/BovairKierasPolson1990.pdf)、Card, Moran & Newell (1980) [KLM](https://dl.acm.org/doi/10.1145/358886.358895) | 学習時間は**新規に学ぶプロダクションルール数に線形比例**。既知と共有する手続きのコストはほぼゼロ | 「収斂語彙=ゼロ学習」の実証根拠。本部の定義そのもの |
+
+照合状態: nngroup.com はプロキシ403のため、引用は複数の独立ソースのスニペットで逐語照合(URLは原典恒久URL)。Shneiderman 1983本文はACM購読壁(書誌・要旨確認)。設計根拠へ昇格させる前に原文再確認が必要。
+
+### 2-D. M3への転移(操作レベルの仮説台帳 — 採択はM3入場PRの再翻訳時)
+
+1. **U3(タイムライン)**: 2-Aの収斂語彙(端ドラッグトリム/磁石+単キー+一時切替/分割+Shift全トラック/Space・JKL)を受け入れ確認のチェックリストにする。非収斂のキー割当(分割・スナップ・ズーム)はAviUtl2の既定を第一参照に選び、初日カスタマイズ(ガード5)を保険に
+2. **U4(キーフレーム)**: 菱形図像を採用。**ストップウォッチは採用しない**(Adobe方言。非Adobe系の「菱形ボタン直接追加+以降自動キー」に乗る)。イージングは既定方針(Flow/AM式)が2-Aの収斂と完全整合 — 具体化: 正規化2ハンドル+ease系命名+形状サムネイルのプリセット+cubic-bezier 4値文字列のコピペ入出力
+3. **U4(パラメータパネル)**: NodeDesc自動生成行の数値は**全てscrubbable**(スライダー併記の有無に関わらず)。リセットは非収斂領域なので独自に決めてよい(Blender式右クリックを候補)
+4. **U5(トランスポート)**: Swift/Swifterを、ガード8(最新要求のみ+観測可能)とDraft降格の学術的裏付けとして出典に追加。「100ms以内に低忠実でも何かを見せる」を受け入れ観点の言葉にする
+5. **U6(アセットブラウザ)**: OSからのD&Dが「必ず動く」ことをU6完了条件が既に含む(現行どおり)。Premiereの実装差はD&Dを軽視しない反面教師
+6. **U8(グループ)**: 「ダブルクリックで一段入る/Escで出る」をグループ内部選択の文法に借用
+
+## 参照クラスの偏り(2026-07-16 レビュー指摘で追加 — **第一部**の最も重要な限界)
 
 指摘: 「どれも以前からユーザーがいたソフトで、界隈にも属している。不確定の変数が多すぎる」。事例を先行基盤で分類し直すと、指摘のとおり構造的な偏りがある:
 
@@ -175,7 +246,10 @@ M3のU4(区間イージングポップアップ)が参照する当のUI。
 | 反例探索(同型UIで非受容: Premiere Rush等) | 型1〜7が生存バイアスでないかの検証 |
 | 窓の杜・ニコニコ公式ランキング等の原文照合 | 未照合A級出典の確定 |
 | Flowの採用規模の代理指標(チュートリアル言及数等) | U4方針の参照事例の証拠強化 |
+| 第二部の403出典の原文照合(AMヘルプ・Resolveマニュアル・nngroup.com・Shneiderman 1983本文) | 収斂語彙・UX原理を設計根拠へ昇格させる前提 |
+| AviUtl(拡張編集)自身の操作語彙と2-A収斂語彙の差分表 | 非収斂領域のキー割当を「AviUtl2既定を第一参照」で決めるための材料 |
 
 ## 改訂記録
 
-- 2026-07-16(同日): レビュー指摘「全事例が既存ユーザー/界隈持ちで不確定変数が多すぎる」を反映 — ①「参照クラスの偏り」節を追加し先行基盤で全事例を再分類 ②「ゼロ界隈からの即時受容は本調査に1件も無い」を明記 ③本メモの用途を「対象界隈の期待チェックリスト」へ格下げ ④Motoliiの参照枠をAviUtl2型(即時)ではなくFigma/Ableton型(年単位)と明記 ⑤横断の型を「語られた語彙の観察」へ弱化
+- 2026-07-16(同日・1回目): レビュー指摘「全事例が既存ユーザー/界隈持ちで不確定変数が多すぎる」を反映 — ①「参照クラスの偏り」節を追加し先行基盤で全事例を再分類 ②「ゼロ界隈からの即時受容は本調査に1件も無い」を明記 ③本メモの用途を「対象界隈の期待チェックリスト」へ格下げ ④Motoliiの参照枠をAviUtl2型(即時)ではなくFigma/Ableton型(年単位)と明記 ⑤横断の型を「語られた語彙の観察」へ弱化
+- 2026-07-16(同日・2回目): レビュー指摘「市場の話ではなく根本的なUX/UIの話」を反映 — 第二部を追補。①受容の単位を操作パターンへ下げ「業界収斂した語彙=訓練済み=ゼロ学習」と操作的に定義(Bovair/Kieras/Polsonの学習転移研究を根拠に) ②収斂語彙の台帳(2-A)と非収斂領域の台帳(2-B)を公式マニュアルURLつきで作成 ③UX原理の一次資料台帳(2-C)を追加 ④操作レベルのM3転移仮説(2-D)を追加。発見: ストップウォッチはAdobe方言/「無制限Undo」は業界標準ではない/分割キーはB陣営とK陣営に分裂
