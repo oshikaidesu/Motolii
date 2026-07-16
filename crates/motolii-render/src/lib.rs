@@ -7,7 +7,7 @@ use motolii_core::{
     premultiply_rgba_f32, ColorSpace, CompCamera, FrameDesc, PixelFormat, Quality, RationalTime,
     TimeMap, TimeMapError,
 };
-use motolii_gpu::{upload_rgba, GpuCtx, PipelineCache};
+use motolii_gpu::{upload_rgba, GpuCtx, GpuRuntimeError, PipelineCache};
 use motolii_nodes::{
     create_rgba_render_target, AffinePlaceNode, ClippingMaskMode, CompositeMode, CompositeNode,
     MaskNode, NodeError, OverlayNode, RectOverlay,
@@ -167,6 +167,8 @@ pub enum RenderError {
     Node(#[from] NodeError),
     #[error(transparent)]
     TimeMap(#[from] TimeMapError),
+    #[error(transparent)]
+    Gpu(#[from] GpuRuntimeError),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -407,6 +409,8 @@ fn render_graph_cached_inner(
     quality: Quality,
     owned_output: bool,
 ) -> Result<RenderedFrame, RenderError> {
+    // レンダ入口でデバイス健全性を確認する(M3E-5)。lost/uncapturedを型付きで返す。
+    gpu.check_health()?;
     validate_render_desc(graph.desc)?;
     let graph_plan = validate_linear_graph(graph, timeline_time, inputs)?;
 
@@ -1331,6 +1335,27 @@ mod tests {
         );
         // Draftは厳密一致不要。「何かピクセルが出る」ことのみ保証。
         assert!(actual.iter().any(|&v| v != 0));
+    }
+
+    #[test]
+    fn render_graph_cached_checks_gpu_health_at_entry() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        gpu.inject_uncaptured_error_for_test("synthetic test GPU fault");
+        let mut session = RenderSession::new(&gpu);
+        let request = centered_request();
+        let err = render_graph_cached(
+            &gpu,
+            &mut session,
+            request.timeline_time,
+            &linear_graph_from_request(&request),
+            &RenderGraphInputs::default(),
+            Quality::FINAL,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            RenderError::Gpu(GpuRuntimeError::Uncaptured(_))
+        ));
     }
 
     #[test]
