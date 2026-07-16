@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M3 interaction mock v0 — 状態step送り</title>
+<style>
+  /* Mock-only palette: values are not G0-6 tokens. */
+  :root{
+    --canvas:#0e1013; --panel:#14171b; --raised:#1b1f25; --overlay:#20252c;
+    --line:#2a3038; --line-soft:#22272e;
+    --txt:#dce1e8; --txt2:#8f98a6; --txt3:#747e8d; --txt-disabled:#4d545e;
+    --sel:#4ea8de; --focus:#7cc4ef;
+    --c-video:#4ea8de; --c-audio:#59ba72; --c-shape:#c987d8; --c-text:#e5ad47; --c-group:#8f98a6;
+    --kf:#e5ad47; --warn:#e5ad47; --err:#f06a72; --ok:#59ba72;
+    --ghost:rgba(78,168,222,.35);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{background:var(--canvas); color:var(--txt);
+    font-family:"Noto Sans JP","Hiragino Sans",sans-serif; font-size:13px;}
+  .num{font-family:"SF Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums;}
+  body{display:flex; flex-direction:column; height:100vh; overflow:hidden;}
+  body.grayscale .stagearea{filter:grayscale(1);}
+
+  /* ── scene control bar (mock harness, not product UI) ── */
+  .harness{background:var(--panel); border-bottom:1px solid var(--line);
+    padding:8px 14px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  .harness .tag{font-size:11px; color:var(--txt3); margin-right:4px;}
+  .scenebtn{background:var(--raised); color:var(--txt2); border:1px solid var(--line);
+    border-radius:4px; padding:4px 10px; font-size:12px; cursor:pointer;}
+  .scenebtn[aria-pressed="true"]{background:var(--overlay); color:var(--txt);
+    border-color:var(--sel); outline:1px solid var(--sel);}
+  .toggle{margin-left:auto; display:flex; gap:8px;}
+  .desc{background:var(--panel); border-bottom:1px solid var(--line);
+    padding:6px 14px; font-size:12px; color:var(--txt2); min-height:40px;}
+  .desc b{color:var(--txt); font-weight:600;}
+  .desc .ref{color:var(--txt3); font-size:11px;}
+
+  /* ── mock stage ── */
+  .stagearea{flex:1; position:relative; display:flex; flex-direction:column; overflow:hidden;}
+
+  /* inspector strip: connection badges live here */
+  .inspector{height:64px; background:var(--panel); border-bottom:1px solid var(--line);
+    padding:8px 14px; display:flex; gap:16px; align-items:center;}
+  .insp-title{font-size:12px; color:var(--txt2); width:150px;}
+  .insp-title b{display:block; color:var(--txt); font-size:13px;}
+  .badge{display:inline-flex; align-items:center; gap:5px; padding:2px 8px;
+    border:1px solid var(--line); border-radius:3px; font-size:11px; color:var(--txt2);
+    background:var(--raised);}
+  .badge .dot{width:7px; height:7px; border-radius:1px;}
+  .badge.link{border-color:var(--c-video);}
+  .badge.warnb{border-color:var(--warn); color:var(--warn);}
+
+  /* timeline */
+  .timeline{flex:1; display:flex; flex-direction:column; background:var(--canvas); position:relative;}
+  .ruler{height:26px; border-bottom:1px solid var(--line); display:flex; align-items:flex-end;
+    padding-left:200px; position:relative; color:var(--txt3); font-size:10px;}
+  .ruler span{position:absolute; bottom:5px;}
+  .track{display:flex; height:44px; border-bottom:1px solid var(--line-soft);}
+  .track.group-row{height:34px;}
+  .thead{width:200px; flex:none; background:var(--panel); border-right:1px solid var(--line);
+    display:flex; align-items:center; gap:8px; padding:0 10px; font-size:12px;}
+  .thead .typeic{width:14px; height:14px; flex:none;}
+  .thead .tname{flex:1; overflow:hidden; white-space:nowrap; color:var(--txt);}
+  .thead .st{width:16px; height:16px; border:1px solid var(--line); border-radius:3px;
+    display:flex; align-items:center; justify-content:center; font-size:9px; color:var(--txt3);}
+  .thead .st.mute-on{background:var(--overlay); color:var(--txt); border-color:var(--txt3);}
+  .lane{flex:1; position:relative;}
+  .clip{position:absolute; top:6px; height:32px; border-radius:3px;
+    border:1px solid transparent; display:flex; align-items:center; padding:0 8px;
+    font-size:11px; color:var(--txt); overflow:hidden;}
+  .group-row .clip{top:5px; height:24px;}
+  .clip .stripe{position:absolute; left:0; top:0; bottom:0; width:4px;}
+  .clip.video{background:#1c2e3d;} .clip.video .stripe{background:var(--c-video);}
+  .clip.audio{background:#1c3324;} .clip.audio .stripe{background:var(--c-audio);}
+  .clip.shape{background:#31253a;} .clip.shape .stripe{background:var(--c-shape);}
+  .clip.textc{background:#3a2f1a;} .clip.textc .stripe{background:var(--c-text);}
+  .clip.groupc{background:#23272d;} .clip.groupc .stripe{background:var(--c-group);}
+  .clip .cname{margin-left:8px; z-index:1;}
+  .clip.selected{border-color:var(--sel); box-shadow:0 0 0 1px var(--sel);}
+  .clip.mutedclip{opacity:.45;}
+  .kf{position:absolute; bottom:3px; width:8px; height:8px; transform:rotate(45deg);
+    background:var(--kf); border:1px solid #0e1013;}
+  .kf.kf-sel{background:#fff; outline:1px solid var(--kf);}
+  .easeseg{position:absolute; bottom:6px; height:2px; background:var(--kf); opacity:.7;}
+  .playhead{position:absolute; top:0; bottom:0; left:520px; width:1px; background:#f06a72; z-index:5;}
+  .playhead::before{content:""; position:absolute; top:0; left:-5px;
+    border:5px solid transparent; border-top:6px solid #f06a72;}
+  .warnic{position:absolute; right:5px; top:8px; color:var(--warn); font-size:11px; z-index:1;}
+
+  /* ── per-scene overlays: shown/hidden by [data-scene], no motion ── */
+  [data-on]{display:none;}
+  /* hover */
+  .hover-ring{position:absolute; inset:-2px; border:1px solid var(--txt2); border-radius:4px;}
+  .infocard{position:absolute; z-index:20; background:var(--overlay); border:1px solid var(--line);
+    border-radius:4px; padding:8px 10px; font-size:11px; color:var(--txt2); max-width:280px;
+    box-shadow:0 4px 14px rgba(0,0,0,.5);}
+  .infocard b{color:var(--txt); display:block; font-size:12px; margin-bottom:2px;}
+  /* keyboard focus: 2px ring + inner offset (not色のみ) */
+  .focus-ring{position:absolute; inset:-3px; border:2px solid var(--focus); border-radius:5px;}
+  .focus-ring::after{content:""; position:absolute; inset:1px; border:1px solid #0e1013; border-radius:3px;}
+  /* drag/trim ghost + HUD */
+  .ghostclip{position:absolute; top:6px; height:32px; border-radius:3px;
+    border:1px dashed var(--sel); background:var(--ghost); z-index:8;}
+  .snapline{position:absolute; top:0; bottom:0; width:1px; background:var(--sel); z-index:8;}
+  .hud{position:absolute; z-index:30; background:var(--overlay); border:1px solid var(--sel);
+    border-radius:4px; padding:6px 10px; font-size:12px; color:var(--txt);
+    box-shadow:0 4px 14px rgba(0,0,0,.5);}
+  .hud .sub{font-size:10px; color:var(--txt2); display:block;}
+  .hud.rel{border-color:var(--c-shape);}
+  .mpath{position:absolute; z-index:7; pointer-events:none;}
+  /* easing popup */
+  .easepopup{position:absolute; z-index:30; background:var(--overlay); border:1px solid var(--line);
+    border-radius:5px; padding:10px; width:230px; box-shadow:0 6px 18px rgba(0,0,0,.55);}
+  .easepopup h4{font-size:11px; color:var(--txt2); font-weight:600; margin-bottom:6px;}
+  .easepopup .presets{display:flex; gap:6px; margin-top:8px;}
+  .easepopup .presets button{flex:1; background:var(--raised); border:1px solid var(--line);
+    border-radius:3px; color:var(--txt2); font-size:10px; padding:3px 0;}
+  .easepopup .presets button[aria-pressed="true"]{border-color:var(--kf); color:var(--txt);}
+  /* connection */
+  .connline{position:absolute; z-index:9; pointer-events:none;}
+  .cursorcard{position:absolute; z-index:40; background:var(--overlay);
+    border:1px solid var(--sel); border-radius:4px; padding:7px 10px; font-size:11px;
+    color:var(--txt2); max-width:270px; box-shadow:0 4px 14px rgba(0,0,0,.5);}
+  .cursorcard b{color:var(--txt); display:block; font-size:12px;}
+  .cursorcard.invalid{border-color:var(--err);}
+  .cursorcard.invalid b{color:var(--err);}
+  .cursorcard .next{color:var(--txt3); font-size:10px; display:block; margin-top:3px;}
+  .valid-ring{position:absolute; inset:-2px; border:1.5px solid var(--ok); border-radius:4px;}
+  .valid-ring::before{content:"◇"; position:absolute; top:-9px; right:-4px; color:var(--ok);
+    font-size:10px; background:var(--canvas); line-height:1;}
+  .invalid-dim{position:absolute; inset:0; background:rgba(14,16,19,.55); border-radius:3px; z-index:2;}
+  .cursor-fake{position:absolute; z-index:41; width:0; height:0;
+    border-left:11px solid var(--txt); border-top:4px solid transparent; border-bottom:14px solid transparent;
+    transform:rotate(-15deg);}
+  /* diagnostic */
+  .diag-context{position:absolute; z-index:30; background:var(--overlay); border:1px solid var(--warn);
+    border-radius:4px; padding:8px 10px; font-size:11px; color:var(--txt2); max-width:300px;
+    box-shadow:0 4px 14px rgba(0,0,0,.5);}
+  .diag-context b{color:var(--warn); display:block; font-size:12px;}
+  .diag-context .fix{color:var(--txt); margin-top:3px; display:block;}
+  .diag-context .code{color:var(--txt3); font-size:10px; margin-top:3px; display:block;}
+  footer{background:var(--panel); border-top:1px solid var(--line); padding:5px 14px;
+    font-size:11px; color:var(--txt3);}
+</style>
+</head>
+<body>
+
+<!-- ══ mock harness(製品UIではない) ══ -->
+<div class="harness" role="toolbar" aria-label="scene切替">
+  <span class="tag">SCENE</span>
+  <!-- buttons injected -->
+  <span id="btns" style="display:flex;gap:6px;flex-wrap:wrap;"></span>
+  <span class="toggle">
+    <button class="scenebtn" id="gs" aria-pressed="false">grayscale審判</button>
+  </span>
+</div>
+<div class="desc" id="desc"></div>
+
+<div class="stagearea">
+
+  <!-- Inspector strip: 平常時のsemantic badge(Brief) -->
+  <div class="inspector">
+    <div class="insp-title">選択中<b id="selname">Shape: bg_circle</b></div>
+    <span class="badge link"><span class="dot" style="background:var(--c-video)"></span>Follow ← V1 main_cam</span>
+    <span class="badge"><span class="dot" style="background:var(--kf)"></span>keyframe ×4</span>
+    <span class="badge warnb" data-on="s8">⚠ 接続不可 1件</span>
+    <span class="badge" style="opacity:.55">Effect: Blur(共有)</span>
+  </div>
+
+  <!-- Timeline -->
+  <div class="timeline">
+    <div class="ruler num">
+      <span style="left:200px">00:00</span><span style="left:360px">00:02</span>
+      <span style="left:520px">00:04</span><span style="left:680px">00:06</span>
+      <span style="left:840px">00:08</span><span style="left:1000px">00:10</span>
+    </div>
+    <div class="playhead"></div>
+
+    <!-- V1 video -->
+    <div class="track">
+      <div class="thead">
+        <svg class="typeic" viewBox="0 0 14 14"><rect x="1" y="2.5" width="12" height="9" rx="1.5" fill="none" stroke="var(--c-video)" stroke-width="1.4"/><path d="M5.5 5l4 2-4 2z" fill="var(--c-video)"/></svg>
+        <span class="tname">main_cam</span>
+        <span class="st">S</span><span class="st">M</span>
+      </div>
+      <div class="lane">
+        <div class="clip video" style="left:40px; width:430px;"><span class="stripe"></span><span class="cname">intro_take2.mp4</span></div>
+        <div class="clip video" style="left:490px; width:380px;" id="trimclip"><span class="stripe"></span><span class="cname">chorus.mp4</span>
+          <span class="warnic" title="missing media">⚠</span>
+        </div>
+        <!-- s4: trim ghost -->
+        <div class="ghostclip" data-on="s4" style="left:490px; width:322px;"></div>
+        <div class="snapline" data-on="s4" style="left:812px;"></div>
+        <div class="hud num" data-on="s4" style="left:700px; top:-42px;">−0:00:14 <span style="color:var(--txt2)">(out 0:07:22)</span><span class="sub">snap: A1 clip末尾</span></div>
+      </div>
+    </div>
+
+    <!-- A1 audio -->
+    <div class="track">
+      <div class="thead">
+        <svg class="typeic" viewBox="0 0 14 14"><path d="M2 8.5v-3M5 11V3M8 9.5v-5M11 10.5v-7" stroke="var(--c-audio)" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>
+        <span class="tname">vocal_mix</span>
+        <span class="st">S</span><span class="st mute-on">M</span>
+      </div>
+      <div class="lane">
+        <div class="clip audio mutedclip" style="left:40px; width:772px;"><span class="stripe"></span><span class="cname">vocal_full.wav</span></div>
+        <div class="invalid-dim" data-on="s8" style="left:40px; width:772px; top:6px; height:32px;"></div>
+      </div>
+    </div>
+
+    <!-- S1 shape (selected) -->
+    <div class="track">
+      <div class="thead" id="shapehead">
+        <svg class="typeic" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5" fill="none" stroke="var(--c-shape)" stroke-width="1.5"/></svg>
+        <span class="tname">bg_circle</span>
+        <span class="st">S</span><span class="st">M</span>
+      </div>
+      <div class="lane">
+        <div class="clip shape selected" style="left:120px; width:560px;" id="shapeclip">
+          <span class="stripe"></span><span class="cname">bg_circle</span>
+          <span class="kf" style="left:90px;"></span>
+          <span class="kf" style="left:210px;" id="kfa"></span>
+          <span class="kf" style="left:330px;" id="kfb"></span>
+          <span class="kf" style="left:470px;"></span>
+          <span class="easeseg" data-on="s6" style="left:214px; width:116px;"></span>
+        </div>
+        <!-- s2 hover -->
+        <div class="hover-ring" data-on="s2" style="left:118px; top:4px; width:564px; height:36px;"></div>
+        <div class="infocard" data-on="s2" style="left:400px; top:44px;">
+          <b>Shape clip: bg_circle</b>
+          drag=移動 / 端drag=trim / ⌥drag=Relative Move<br>
+          <span style="color:var(--txt3)">Follow ← V1 main_cam(Inspectorで検査)</span>
+        </div>
+        <!-- s3 keyboard focus -->
+        <div class="focus-ring" data-on="s3" style="left:117px; top:3px; width:566px; height:38px;"></div>
+        <!-- s5 Relative drag: HUD + motion path ghost -->
+        <svg class="mpath" data-on="s5" style="left:120px; top:-8px;" width="560" height="60">
+          <path d="M20 40 C 120 5, 300 5, 430 32" fill="none" stroke="var(--c-shape)" stroke-width="1.5" stroke-dasharray="4 4"/>
+          <circle cx="20" cy="40" r="3" fill="var(--c-shape)"/><circle cx="430" cy="32" r="3" fill="none" stroke="var(--c-shape)"/>
+        </svg>
+        <div class="hud rel num" data-on="s5" style="left:430px; top:-46px;">Relative Move Δ +64, −18<span class="sub">motion path全体を保ったまま平行移動(⌥+drag)</span></div>
+        <!-- s6 easing popup -->
+        <div class="easepopup" data-on="s6" style="left:330px; top:46px;">
+          <h4>EASING — kf 2→3(選択区間)</h4>
+          <svg width="208" height="70" style="background:var(--raised); border-radius:3px;">
+            <path d="M8 62 C 70 62, 120 8, 200 8" fill="none" stroke="var(--kf)" stroke-width="2"/>
+            <circle cx="8" cy="62" r="3.5" fill="var(--kf)"/><circle cx="200" cy="8" r="3.5" fill="var(--kf)"/>
+            <circle cx="70" cy="62" r="3" fill="none" stroke="var(--txt2)"/><circle cx="120" cy="8" r="3" fill="none" stroke="var(--txt2)"/>
+            <path d="M8 62 L70 62 M200 8 L120 8" stroke="var(--txt3)" stroke-width="1" stroke-dasharray="2 3"/>
+          </svg>
+          <div class="presets">
+            <button>Linear</button><button aria-pressed="true">Ease</button><button>Out</button><button>In</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- T1 text -->
+    <div class="track">
+      <div class="thead">
+        <svg class="typeic" viewBox="0 0 14 14"><path d="M2.5 3.5h9M7 3.5v8" stroke="var(--c-text)" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>
+        <span class="tname">title_lyrics</span>
+        <span class="st">S</span><span class="st">M</span>
+      </div>
+      <div class="lane">
+        <div class="clip textc" style="left:250px; width:300px;" id="textclip"><span class="stripe"></span><span class="cname">"未来へ"</span></div>
+        <!-- s7 valid connection target -->
+        <div class="valid-ring" data-on="s7" style="left:248px; top:4px; width:304px; height:36px;"></div>
+      </div>
+    </div>
+
+    <!-- G1 group -->
+    <div class="track group-row">
+      <div class="thead">
+        <svg class="typeic" viewBox="0 0 14 14"><rect x="1.5" y="4" width="8" height="7" rx="1" fill="none" stroke="var(--c-group)" stroke-width="1.3"/><rect x="4.5" y="2" width="8" height="7" rx="1" fill="none" stroke="var(--c-group)" stroke-width="1.3"/></svg>
+        <span class="tname">particles_grp ▸ 3</span>
+        <span class="st">S</span><span class="st">M</span>
+      </div>
+      <div class="lane">
+        <div class="clip groupc" style="left:180px; width:640px;"><span class="stripe"></span><span class="cname">folded ×3</span></div>
+      </div>
+    </div>
+
+    <!-- s7/s8: connection仮線 + cursor card -->
+    <svg class="connline" data-on="s7" style="left:0; top:0;" width="1200" height="400">
+      <path d="M400 150 C 430 160, 460 168, 495 178" fill="none" stroke="var(--ok)" stroke-width="1.5" stroke-dasharray="5 4"/>
+      <circle cx="400" cy="150" r="3" fill="var(--ok)"/>
+    </svg>
+    <svg class="connline" data-on="s8" style="left:0; top:0;" width="1200" height="400">
+      <path d="M400 122 C 415 112, 430 104, 448 96" fill="none" stroke="var(--err)" stroke-width="1.5" stroke-dasharray="5 4"/>
+      <circle cx="400" cy="122" r="3" fill="var(--err)"/>
+    </svg>
+    <div class="cursor-fake" data-on="s7" style="left:496px; top:176px;"></div>
+    <div class="cursorcard" data-on="s7" style="left:516px; top:184px;">
+      <b>LookAt を接続</b>
+      bg_circle.Orientation → <b style="display:inline">title_lyrics(Layer ✓)</b><br>
+      確定: 常にこのLayerの位置を向く
+      <span class="next">click=確定 / Esc=変更ゼロで中止</span>
+    </div>
+    <div class="cursor-fake" data-on="s8" style="left:449px; top:94px;"></div>
+    <div class="cursorcard invalid" data-on="s8" style="left:470px; top:100px;">
+      <b>接続できません — 型不一致</b>
+      LookAtは <b style="display:inline">Layer target</b> を要求します。<br>
+      hover中の <b style="display:inline">vocal_mix はAudio Track</b> で対象外です。
+      <span class="next">対応target: V1 / T1 / G1(輪郭表示中) — Esc=中止</span>
+    </div>
+
+    <!-- s9 disabled + typed reason -->
+    <div class="diag-context" data-on="s9" style="left:300px; top:150px;">
+      <b>⚠ Bake を実行できません</b>
+      chorus.mp4 のメディア参照が欠落しています(missing media)。
+      <span class="fix">▸ 次の一手: アセットブラウザで再リンク、または対象範囲からこのclipを除外</span>
+      <span class="code">reason: BAKE_SOURCE_MISSING · subject: clip #v1-02 · 回復可能</span>
+    </div>
+  </div>
+</div>
+
+<footer>
+  M3 interaction mock v0 — 色値はモック内の仮値でDTCG tokenではない。scene切替は瞬時(motion 0)で、全stateが静止でも判別できることを審判する。←/→キーでstep送り。
+</footer>
+
+<script>
+const SCENES = [
+ ["s1","平常時","<b>Brief密度の基準。</b>semantic badgeが接続・keyframe・共有Effectを要約し、timelineはclip読取りを妨げない。<span class='ref'>ui-interaction-language §5.2 / ui-visual-language 意味色</span>"],
+ ["s2","hover / Info","<b>Discover:</b> hoverしたclip自身が名前・開始できる操作・接続の存在を説明する(Ableton Info View型)。<span class='ref'>§2.1 / §4 Discover</span>"],
+ ["s3","keyboard focus","<b>focus ringは2px相当+内側offset。</b>面の明度変化だけに頼らず、grayscaleでもhoverと区別できるか。<span class='ref'>ui-visual-language 非テキストcontrastとfocus外観</span>"],
+ ["s4","drag / trim中","<b>Preview:</b> ghost+snap線+tabular数字HUD。数値は幅が揺れない。Escで変更ゼロ。<span class='ref'>§4 Preview / §5.2 操作中へ面積を譲る</span>"],
+ ["s5","Relative drag","<b>通常dragとの区別。</b>modifier+dragはHUD文言とmotion path ghostで操作前に判別できるか(G0-6人間審判)。<span class='ref'>ui-visual-language G0-6 審判5</span>"],
+ ["s6","easing popup","<b>Flow/AM式:</b> keyframe区間選択→popup編集。値グラフを主画面に常設しない。clip上のease区間表示も併記。<span class='ref'>ui-visual-language 参照範囲 / v0未表現</span>"],
+ ["s7","接続: valid","<b>カーソル近傍に「何を・何へ・どうなる」を常時追従。</b>valid targetはoutline+◇形、仮線あり。色だけに依存しない。<span class='ref'>§6 説明付き接続 / 接続操作の視覚文法</span>"],
+ ["s8","接続: invalid","<b>Silent disabled禁止:</b> dim+型付き拒否理由(期待型と実target)+対応targetの提示。<span class='ref'>§8.1 / §8.3 Context段階</span>"],
+ ["s9","disabled+診断","<b>Brief(badge)→Context(近傍説明)の段階投影。</b>reason code・subject・回復可能性を構造のまま示す。<span class='ref'>§8.2 / §8.3</span>"],
+];
+const btns = document.getElementById('btns'), desc = document.getElementById('desc');
+let cur = 0;
+SCENES.forEach(([id,label],i)=>{
+  const b = document.createElement('button');
+  b.className='scenebtn'; b.textContent=(i+1)+'. '+label;
+  b.onclick=()=>set(i); btns.appendChild(b);
+});
+function set(i){
+  cur=i;
+  const id=SCENES[i][0];
+  document.querySelectorAll('[data-on]').forEach(el=>{
+    el.style.display = el.dataset.on===id ? (el.tagName==='svg'||el.tagName==='SVG'?'block':'block') : 'none';
+  });
+  document.querySelectorAll('#btns .scenebtn').forEach((b,j)=>b.setAttribute('aria-pressed', j===i));
+  desc.innerHTML = '<b>'+(i+1)+'. '+SCENES[i][1]+'</b> — '+SCENES[i][2];
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight') set(Math.min(cur+1,SCENES.length-1));
+  if(e.key==='ArrowLeft') set(Math.max(cur-1,0));
+});
+const gs=document.getElementById('gs');
+gs.onclick=()=>{
+  const on = gs.getAttribute('aria-pressed')!=='true';
+  gs.setAttribute('aria-pressed',on); document.body.classList.toggle('grayscale',on);
+};
+set(0);
+</script>
+</body>
+</html>

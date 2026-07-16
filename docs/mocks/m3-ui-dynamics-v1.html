@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Motolii UI Dynamics v1</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --canvas: #111417;
+      --panel: #181c20;
+      --raised: #20252a;
+      --overlay: #292f35;
+      --line: #394149;
+      --line-strong: #59636d;
+      --text: #f0f3f5;
+      --secondary: #b4bdc5;
+      --muted: #7f8992;
+      --selection: #58a6d8;
+      --focus: #a5d8f3;
+      --shape: #d4a24f;
+      --video: #5fa777;
+      --audio: #8a77c8;
+      --effect: #59b6b0;
+      --warning: #e0a34b;
+      --error: #e06c75;
+      --ok: #72c28d;
+      --radius: 5px;
+      --motion-fast: 150ms;
+      --motion-normal: 260ms;
+      --ease: cubic-bezier(.2,.7,.2,1);
+      --timeline-h: 316px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: var(--canvas);
+      color: var(--text);
+      font: 13px/1.4 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button { font: inherit; }
+    button:focus-visible, [tabindex]:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+    .app { width: 100vw; min-width: 0; height: 100%; display: grid; grid-template-rows: 42px 48px 1fr var(--timeline-h) 30px; overflow: hidden; }
+
+    .topbar, .scenario-bar, .statusbar {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    .topbar { padding: 0 12px; gap: 10px; }
+    .brand { font-weight: 720; letter-spacing: .02em; margin-right: 4px; }
+    .prototype-tag {
+      color: var(--warning);
+      border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--line));
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-size: 11px;
+    }
+    .project { color: var(--secondary); margin-left: 6px; }
+    .spacer { flex: 1; }
+    .transport { display: flex; align-items: center; gap: 4px; }
+    .timecode { font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; min-width: 92px; text-align: center; }
+    .icon-button, .small-button, .scenario-button, .tool-button {
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      background: transparent;
+      color: var(--secondary);
+      cursor: pointer;
+    }
+    .icon-button { width: 30px; height: 28px; }
+    .icon-button:hover, .small-button:hover, .tool-button:hover { background: var(--raised); color: var(--text); }
+    .icon-button.active, .tool-button.active { background: var(--overlay); border-color: var(--selection); color: var(--text); }
+
+    .scenario-bar { padding: 5px 10px; gap: 6px; background: #15191d; overflow-x: auto; overflow-y: hidden; }
+    .scenario-label { color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin-right: 4px; }
+    .scenario-button { height: 30px; padding: 0 10px; border-color: var(--line); }
+    .scenario-button:hover { border-color: var(--line-strong); color: var(--text); }
+    .scenario-button.active { background: var(--raised); color: var(--text); border-color: var(--selection); box-shadow: inset 0 -2px var(--selection); }
+    .small-button { min-height: 28px; padding: 0 9px; border-color: var(--line); }
+    .small-button.primary { border-color: var(--selection); color: var(--text); }
+    .small-button.danger { border-color: color-mix(in srgb, var(--error) 55%, var(--line)); color: #ffc2c6; }
+    .motion-toggle { display: flex; align-items: center; gap: 6px; color: var(--secondary); font-size: 12px; }
+    .motion-toggle input { accent-color: var(--selection); }
+
+    .workspace { width: 100%; min-width: 0; min-height: 0; display: grid; grid-template-columns: 214px minmax(420px, 1fr) 286px; overflow: hidden; }
+    .panel { min-width: 0; min-height: 0; background: var(--panel); border-right: 1px solid var(--line); }
+    .panel:last-child { border-right: 0; border-left: 1px solid var(--line); }
+    .panel-head { height: 36px; display: flex; align-items: center; padding: 0 10px; gap: 8px; border-bottom: 1px solid var(--line); font-weight: 650; }
+    .panel-head .meta { margin-left: auto; color: var(--muted); font-size: 11px; font-weight: 500; }
+
+    .browser-tabs { display: flex; padding: 8px 8px 0; gap: 3px; }
+    .browser-tab { flex: 1; padding: 5px 0; text-align: center; color: var(--secondary); border-bottom: 2px solid transparent; }
+    .browser-tab.active { color: var(--text); border-color: var(--selection); }
+    .search { margin: 8px; border: 1px solid var(--line); border-radius: var(--radius); color: var(--muted); padding: 7px 8px; background: var(--canvas); }
+    .browser-list { padding: 0 7px; }
+    .browser-item { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 7px; min-height: 38px; padding: 5px 7px; border-radius: var(--radius); color: var(--secondary); }
+    .browser-item:hover { background: var(--raised); color: var(--text); }
+    .browser-item.selected { background: color-mix(in srgb, var(--selection) 12%, var(--raised)); box-shadow: inset 2px 0 var(--selection); }
+    .kind-icon { width: 18px; height: 18px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 3px; font-size: 10px; font-weight: 700; }
+    .kind-icon.effect { border-radius: 50%; color: var(--effect); }
+    .item-sub { color: var(--muted); font-size: 10px; }
+
+    .stage-shell { min-width: 0; min-height: 0; display: grid; grid-template-rows: 36px 1fr; background: #0b0e10; }
+    .stage-toolbar { background: var(--panel); border-bottom: 1px solid var(--line); display: flex; align-items: center; padding: 0 8px; gap: 4px; }
+    .tool-button { height: 28px; min-width: 32px; padding: 0 8px; }
+    .tool-sep { height: 18px; border-left: 1px solid var(--line); margin: 0 4px; }
+    .stage-note { margin-left: auto; color: var(--muted); font-size: 11px; }
+    .stage { position: relative; overflow: hidden; background-color: #101419; background-image: linear-gradient(#1a2026 1px, transparent 1px), linear-gradient(90deg, #1a2026 1px, transparent 1px); background-size: 28px 28px; }
+    .world { position: absolute; inset: 0; transition: transform var(--motion-normal) var(--ease); }
+    .output-frame {
+      position: absolute; left: 50%; top: 50%; width: min(62vw, 640px); aspect-ratio: 16/9;
+      transform: translate(-50%, -50%); border: 2px solid #c7d1d8; background: rgba(12,16,19,.68);
+      box-shadow: 0 0 0 200vmax rgba(4,6,8,.37); transition: transform var(--motion-normal) var(--ease), border-color var(--motion-fast);
+    }
+    .output-frame::before { content: "OUTPUT FRAME · CAMERA"; position: absolute; top: -23px; left: -2px; color: #d5dde2; font-size: 10px; letter-spacing: .08em; }
+    .frame-corner { position: absolute; width: 10px; height: 10px; border: solid var(--focus); opacity: 0; }
+    .camera-mode .frame-corner { opacity: 1; }
+    .frame-corner.tl { left: -5px; top: -5px; border-width: 2px 0 0 2px; }
+    .frame-corner.br { right: -5px; bottom: -5px; border-width: 0 2px 2px 0; }
+    .stage-object { position: absolute; cursor: pointer; transition: transform var(--motion-normal) var(--ease), box-shadow var(--motion-fast), opacity var(--motion-fast); }
+    .stage-object.hero { left: 47%; top: 43%; width: 126px; height: 90px; transform: translate(-50%, -50%) rotate(-7deg); background: #3b7956; border: 2px solid #77b88c; clip-path: polygon(50% 0, 100% 28%, 82% 100%, 16% 92%, 0 25%); }
+    .stage-object.title { left: 51%; top: 64%; transform: translate(-50%, -50%); color: #eef1f2; font-weight: 760; font-size: clamp(17px, 2.2vw, 30px); letter-spacing: .16em; white-space: nowrap; }
+    .stage-object.orbit { left: calc(50% + 290px); top: 34%; width: 74px; height: 74px; border: 2px solid var(--shape); border-radius: 50%; background: rgba(212,162,79,.15); }
+    .stage-object.selected { filter: none; box-shadow: 0 0 0 2px var(--selection), 0 0 0 5px rgba(88,166,216,.22); }
+    .stage-object.selected::after { content: ""; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; transform: translate(-50%, -50%) rotate(45deg); background: var(--selection); border: 1px solid #fff; }
+    .offframe-label { position: absolute; left: calc(50% + 278px); top: calc(34% + 84px); color: var(--secondary); font-size: 10px; border-left: 2px solid var(--shape); padding-left: 6px; }
+    .motion-path { position: absolute; left: 32%; top: 35%; width: 250px; height: 140px; opacity: 0; pointer-events: none; transition: opacity var(--motion-fast); }
+    .motion-path svg { width: 100%; height: 100%; overflow: visible; }
+    .relative-mode .motion-path { opacity: 1; }
+    .relative-mode .hero { transform: translate(54px, -18px) translate(-50%, -50%) rotate(-7deg); }
+    .camera-mode .output-frame { transform: translate(calc(-50% + 46px), calc(-50% - 22px)) rotate(-1.2deg); border-color: var(--focus); }
+    .hand-mode .world { transform: translate(48px, 26px) scale(.94); }
+    .cursor-hud { position: absolute; z-index: 20; left: 54%; top: 38%; min-width: 220px; padding: 8px 10px; border-radius: var(--radius); background: rgba(31,37,43,.96); border: 1px solid var(--line-strong); box-shadow: 0 8px 28px rgba(0,0,0,.35); opacity: 0; transform: translateY(6px); pointer-events: none; transition: opacity var(--motion-fast), transform var(--motion-fast); }
+    .cursor-hud.show { opacity: 1; transform: translateY(0); }
+    .hud-title { font-weight: 700; }
+    .hud-row { margin-top: 3px; color: var(--secondary); }
+    .hud-row strong { color: var(--text); }
+    .hud-row.error { color: #ffc1c5; }
+    .hud-row.ok { color: #a9e7bb; }
+    .hud-kicker { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+
+    .inspector { overflow: auto; }
+    .selection-card { margin: 9px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised); display: grid; grid-template-columns: 32px 1fr; gap: 8px; }
+    .selection-card .kind-icon { width: 28px; height: 28px; }
+    .semantic-line { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+    .badge { display: inline-flex; align-items: center; gap: 4px; min-height: 20px; padding: 1px 6px; border: 1px solid var(--line-strong); border-radius: 3px; color: var(--secondary); font-size: 10px; }
+    .badge.linked { border-color: var(--effect); color: #a8e6e1; }
+    .badge.warning { border-color: var(--warning); color: #f4cb8a; }
+    .badge.error { border-color: var(--error); color: #ffc2c6; }
+    .inspector-section { border-top: 1px solid var(--line); }
+    .section-title { height: 33px; display: flex; align-items: center; gap: 6px; padding: 0 10px; font-weight: 650; }
+    .section-title::before { content: "⌄"; color: var(--muted); }
+    .parameter { display: grid; grid-template-columns: 88px 1fr auto; align-items: center; gap: 6px; min-height: 34px; padding: 3px 10px; }
+    .parameter-name { color: var(--secondary); }
+    .parameter-value { background: var(--canvas); border: 1px solid var(--line); border-radius: 3px; padding: 4px 6px; font-variant-numeric: tabular-nums; }
+    .diamond { width: 9px; height: 9px; transform: rotate(45deg); border: 1px solid var(--warning); }
+    .parameter.disabled { color: var(--muted); }
+    .parameter.disabled .parameter-value { opacity: .5; text-decoration: line-through; }
+    .diagnostic { margin: 8px 10px 11px; border: 1px solid var(--error); border-left-width: 3px; border-radius: var(--radius); background: color-mix(in srgb, var(--error) 8%, var(--panel)); overflow: hidden; display: none; }
+    .diagnostic.show { display: block; }
+    .diagnostic-brief { padding: 8px; font-weight: 650; color: #ffc3c7; }
+    .diagnostic-context, .diagnostic-inspect { border-top: 1px solid color-mix(in srgb, var(--error) 35%, var(--line)); padding: 8px; color: var(--secondary); }
+    .diagnostic-inspect { font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; display: none; }
+    .diagnostic.inspect .diagnostic-inspect { display: block; }
+    .diagnostic-actions { padding: 0 8px 8px; display: flex; gap: 6px; }
+
+    .timeline { width: 100%; min-width: 0; min-height: 0; display: grid; grid-template-rows: 34px 24px 1fr; background: var(--panel); border-top: 1px solid var(--line); overflow: hidden; }
+    .timeline-toolbar { display: flex; align-items: center; gap: 6px; padding: 0 9px; border-bottom: 1px solid var(--line); }
+    .timeline-title { font-weight: 700; }
+    .timeline-info { color: var(--muted); font-size: 11px; }
+    .timeline-ruler { display: grid; grid-template-columns: 250px 1fr; border-bottom: 1px solid var(--line); background: #15191d; }
+    .ruler-labels { position: relative; border-left: 1px solid var(--line); background-image: repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px 10%); }
+    .ruler-labels span { position: absolute; top: 4px; color: var(--muted); font: 10px ui-monospace, monospace; }
+    .timeline-body { position: relative; overflow: hidden; }
+    .timeline-grid { position: absolute; inset: 0 0 0 250px; background-image: repeating-linear-gradient(90deg, rgba(89,99,109,.24) 0 1px, transparent 1px 10%); }
+    .track-row { position: relative; height: 43px; display: grid; grid-template-columns: 190px 60px 1fr; border-bottom: 1px solid #2a3036; }
+    .track-head { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 7px; padding: 0 8px; border-right: 1px solid var(--line); color: var(--secondary); }
+    .track-row.selected .track-head { background: color-mix(in srgb, var(--selection) 13%, var(--raised)); box-shadow: inset 3px 0 var(--selection); color: var(--text); }
+    .track-kind { width: 13px; height: 13px; border: 1px solid currentColor; border-radius: 2px; }
+    .track-kind.shape { color: var(--shape); transform: rotate(45deg) scale(.72); }
+    .track-kind.video { color: var(--video); }
+    .track-kind.audio { color: var(--audio); border-radius: 50%; }
+    .track-kind.effect { color: var(--effect); border-radius: 50%; }
+    .row-actions { color: var(--muted); font-size: 10px; letter-spacing: .15em; }
+    .gutter { position: relative; border-right: 1px solid var(--line); background: #13171a; }
+    .socket { position: absolute; width: 11px; height: 11px; top: 16px; background: var(--canvas); border: 2px solid var(--effect); z-index: 4; }
+    .socket.out { right: 7px; transform: rotate(45deg); }
+    .socket.in { left: 7px; border-radius: 50%; }
+    .socket.in::after { content: ""; position: absolute; left: -7px; top: 1px; border-top: 3px solid transparent; border-bottom: 3px solid transparent; border-right: 5px solid var(--effect); }
+    .track-lane { position: relative; overflow: hidden; }
+    .clip { position: absolute; top: 6px; height: 30px; border-radius: 3px; padding: 6px 8px; color: #eef3f1; overflow: hidden; white-space: nowrap; }
+    .clip.video { left: 4%; width: 49%; background: #315f45; border-left: 3px solid var(--video); }
+    .clip.shape { left: 23%; width: 34%; background: #6a522c; border-left: 3px solid var(--shape); }
+    .clip.audio { left: 1%; width: 88%; background: #4f456f; border-left: 3px solid var(--audio); }
+    .clip.effect { left: 8%; width: 27%; background: #315e5c; border: 1px solid var(--effect); }
+    .wave { position: absolute; inset: 8px 4px; opacity: .35; background: repeating-linear-gradient(90deg, transparent 0 4px, #ddd 4px 5px); clip-path: polygon(0 48%,5% 25%,9% 68%,14% 32%,20% 75%,27% 20%,35% 60%,42% 35%,50% 70%,59% 25%,66% 62%,75% 38%,84% 72%,92% 31%,100% 52%,100% 58%,92% 45%,84% 83%,75% 48%,66% 72%,59% 35%,50% 80%,42% 45%,35% 70%,27% 30%,20% 85%,14% 42%,9% 78%,5% 35%,0 58%); }
+    .playhead { position: absolute; z-index: 8; top: 0; bottom: 0; left: calc(250px + 41% * (100% - 250px) / 100%); width: 1px; background: var(--error); pointer-events: none; }
+    .playhead::before { content: ""; position: absolute; top: 0; left: -4px; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 7px solid var(--error); }
+    .connection-svg { position: absolute; z-index: 3; left: 190px; top: 0; width: 60px; height: 100%; overflow: visible; pointer-events: none; }
+    .connection-svg path { fill: none; stroke: var(--effect); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+    .connection-svg path.preview { stroke: var(--focus); stroke-width: 2.4; stroke-dasharray: 5 4; opacity: 0; }
+    .connection-mode .connection-svg path.preview { opacity: 1; stroke-dashoffset: 0; animation: dash 800ms linear infinite; }
+    @keyframes dash { to { stroke-dashoffset: -18; } }
+    .connection-mode .target-valid { background: color-mix(in srgb, var(--ok) 10%, transparent); box-shadow: inset 0 0 0 2px var(--ok); }
+    .connection-mode.invalid .target-valid { opacity: .35; box-shadow: none; }
+    .connection-mode.invalid .target-invalid { background: color-mix(in srgb, var(--error) 10%, transparent); box-shadow: inset 0 0 0 2px var(--error); }
+    .effect-summary { display: none; margin-left: 5px; color: #9edbd6; font-size: 10px; }
+    .effect-summary.show { display: inline; }
+
+    .statusbar { border-top: 1px solid var(--line); border-bottom: 0; padding: 0 10px; gap: 10px; color: var(--secondary); font-size: 11px; overflow: hidden; white-space: nowrap; }
+    .status-phase { color: var(--text); font-weight: 650; }
+    .phase-strip { display: flex; align-items: center; gap: 4px; }
+    .phase { color: var(--muted); padding: 1px 5px; border-radius: 3px; }
+    .phase.active { color: var(--text); background: var(--overlay); box-shadow: inset 0 -2px var(--selection); }
+    .phase.done { color: var(--ok); }
+    .undo-note { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+    .pulse { animation: pulse 800ms var(--ease) 1; }
+    @keyframes pulse { 50% { box-shadow: 0 0 0 5px rgba(88,166,216,.28); } }
+    body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
+
+    @media (max-width: 1050px) {
+      .workspace { grid-template-columns: 178px minmax(360px, 1fr) 240px; }
+      .scenario-button { padding: 0 7px; font-size: 11px; }
+      .project, .scenario-label { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app" aria-label="Motolii UI力学モック">
+    <header class="topbar">
+      <div class="brand">Motolii</div>
+      <div class="prototype-tag">UI力学検証 · token未確定</div>
+      <div class="project">Echoes / Main Composition</div>
+      <div class="spacer"></div>
+      <div class="transport" aria-label="Transport">
+        <button class="icon-button" title="先頭へ">|◀</button>
+        <button class="icon-button active" id="playButton" title="再生・停止">▶</button>
+        <button class="icon-button" title="次のフレーム">▶|</button>
+        <div class="timecode">00:00:04:12</div>
+      </div>
+      <div class="spacer"></div>
+      <button class="small-button" id="undoButton">Undo</button>
+      <button class="small-button" id="resetButton">Reset</button>
+    </header>
+
+    <nav class="scenario-bar" aria-label="検証するUI力学">
+      <span class="scenario-label">Dynamics</span>
+      <button class="scenario-button active" data-scenario="selection">選択の同期</button>
+      <button class="scenario-button" data-scenario="connection">説明付き接続</button>
+      <button class="scenario-button" data-scenario="relative">Relative Move</button>
+      <button class="scenario-button" data-scenario="camera">Camera / Hand</button>
+      <button class="scenario-button" data-scenario="effects">共有Effect</button>
+      <button class="scenario-button" data-scenario="diagnostic">段階診断</button>
+      <div class="spacer"></div>
+      <label class="motion-toggle"><input type="checkbox" id="reduceMotion"> Motion 0</label>
+      <button class="small-button" id="prevStep">前</button>
+      <button class="small-button primary" id="nextStep">次へ</button>
+      <button class="small-button" id="autoButton">自動</button>
+    </nav>
+
+    <section class="workspace">
+      <aside class="panel" aria-label="Asset and Plugin Browser">
+        <div class="panel-head">Browser <span class="meta">⌘B</span></div>
+        <div class="browser-tabs"><div class="browser-tab">Assets</div><div class="browser-tab active">Plugins</div></div>
+        <div class="search">Search plugins</div>
+        <div class="browser-list">
+          <div class="browser-item selected"><span class="kind-icon effect">fx</span><span>Glow<div class="item-sub">Filter · GPU</div></span><span>⋮</span></div>
+          <div class="browser-item"><span class="kind-icon effect">fx</span><span>Directional Blur<div class="item-sub">Filter · GPU</div></span><span>⋮</span></div>
+          <div class="browser-item"><span class="kind-icon effect">fx</span><span>Displace<div class="item-sub">Filter · GPU</div></span><span>⋮</span></div>
+          <div class="browser-item"><span class="kind-icon">G</span><span>Grid Duplicator<div class="item-sub">Generator</div></span><span>⋮</span></div>
+        </div>
+      </aside>
+
+      <section class="stage-shell" aria-label="Stage">
+        <div class="stage-toolbar">
+          <button class="tool-button active" data-tool="select" title="Select">↖</button>
+          <button class="tool-button" data-tool="camera" title="Camera: 作品を変更">▣</button>
+          <button class="tool-button" data-tool="hand" title="Hand: 表示だけを変更">✥</button>
+          <span class="tool-sep"></span>
+          <button class="tool-button">Fit Output</button>
+          <button class="tool-button">Fit All</button>
+          <div class="stage-note" id="stageNote">Select · objectを選択</div>
+        </div>
+        <div class="stage" id="stage">
+          <div class="world" id="world">
+            <div class="output-frame">
+              <i class="frame-corner tl"></i><i class="frame-corner br"></i>
+            </div>
+            <div class="stage-object hero selected" data-object="hero" tabindex="0" aria-label="Hero Shape"></div>
+            <div class="stage-object title" data-object="title" tabindex="0">MOTION / MEMORY</div>
+            <div class="stage-object orbit" data-object="orbit" tabindex="0" aria-label="Orbit Shape"></div>
+            <div class="offframe-label">FRAME外 · 選択可能</div>
+            <div class="motion-path" aria-hidden="true">
+              <svg viewBox="0 0 250 140"><path d="M18,112 C52,68 82,90 112,50 S178,22 228,56" fill="none" stroke="#8dbedb" stroke-width="2" stroke-dasharray="5 5"/><circle cx="18" cy="112" r="5" fill="#111417" stroke="#8dbedb"/><circle cx="228" cy="56" r="6" fill="#58a6d8" stroke="#fff"/></svg>
+            </div>
+          </div>
+          <div class="cursor-hud" id="cursorHud">
+            <div class="hud-kicker" id="hudKicker">Preview · Transient</div>
+            <div class="hud-title" id="hudTitle">Hero Shapeを選択</div>
+            <div class="hud-row" id="hudBody">StageとTimelineは同じselectionを投影します</div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel inspector" aria-label="Inspector">
+        <div class="panel-head">Inspector <span class="meta" id="inspectMode">Simple</span></div>
+        <div class="selection-card" id="selectionCard">
+          <span class="kind-icon" id="selectionIcon">◇</span>
+          <div><strong id="selectionName">Hero Shape</strong><div class="item-sub" id="selectionType">Shape · layer_hero</div><div class="semantic-line"><span class="badge" id="selectionBadge">Selected</span><span class="badge linked" id="linkedBadge">◇ Glow A · shared</span></div></div>
+        </div>
+        <div class="inspector-section">
+          <div class="section-title">Transform</div>
+          <div class="parameter"><span class="parameter-name">Position</span><span class="parameter-value" id="positionValue">−0.08, 0.12</span><i class="diamond"></i></div>
+          <div class="parameter"><span class="parameter-name">Rotation</span><span class="parameter-value">−0.122 rad</span><i class="diamond"></i></div>
+          <div class="parameter"><span class="parameter-name">Scale</span><span class="parameter-value">1.000</span><i class="diamond"></i></div>
+        </div>
+        <div class="inspector-section">
+          <div class="section-title">Glow A <span class="badge linked">out → 3 uses</span></div>
+          <div class="parameter"><span class="parameter-name">Radius</span><span class="parameter-value">0.036</span><i class="diamond"></i></div>
+          <div class="parameter disabled" id="disabledParameter"><span class="parameter-name">Backdrop</span><span class="parameter-value">Unavailable</span><span class="badge error">!</span></div>
+        </div>
+        <div class="diagnostic" id="diagnostic">
+          <div class="diagnostic-brief">Backdrop入力は現在利用できません</div>
+          <div class="diagnostic-context">GlowはBackdropInputを要求します。通常のVideo Layerは対象外です。</div>
+          <div class="diagnostic-inspect">reason: effect.input.type_mismatch<br>action: connect_backdrop<br>expected: BackdropInput<br>actual: VideoLayer<br>subject: use_glow_hero<br>recoverability: choose_compatible_target</div>
+          <div class="diagnostic-actions"><button class="small-button" id="detailsButton">詳細</button><button class="small-button primary">対応targetを選ぶ</button></div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="timeline" id="timeline" aria-label="Timeline">
+      <div class="timeline-toolbar">
+        <span class="timeline-title">Timeline</span><span class="timeline-info">Main Composition · 24 fps</span>
+        <div class="spacer"></div>
+        <span class="badge linked">◇ from / ○ in</span><span class="badge">Snap</span><button class="small-button">Fit Selection</button>
+      </div>
+      <div class="timeline-ruler"><div></div><div class="ruler-labels"><span style="left:2%">00:00</span><span style="left:22%">00:02</span><span style="left:42%">00:04</span><span style="left:62%">00:06</span><span style="left:82%">00:08</span></div></div>
+      <div class="timeline-body">
+        <div class="timeline-grid"></div>
+        <div class="track-row" data-track="effect"><div class="track-head"><i class="track-kind effect"></i><span>Glow A <small class="effect-summary show">shared · 3</small></span><span class="row-actions">◇</span></div><div class="gutter"><span class="socket out"></span></div><div class="track-lane"><div class="clip effect">Effect Definition · Glow A</div></div></div>
+        <div class="track-row selected target-valid" data-track="hero"><div class="track-head"><i class="track-kind shape"></i><span>Hero Shape</span><span class="row-actions">S ◉</span></div><div class="gutter"><span class="socket in"></span></div><div class="track-lane"><div class="clip shape">Hero Shape · ◇ Glow A</div></div></div>
+        <div class="track-row target-invalid" data-track="audio"><div class="track-head"><i class="track-kind audio"></i><span>Main Audio</span><span class="row-actions">M ◉</span></div><div class="gutter"></div><div class="track-lane"><div class="clip audio"><div class="wave"></div>Main Audio</div></div></div>
+        <div class="track-row target-valid" data-track="footage"><div class="track-head"><i class="track-kind video"></i><span>Street Footage</span><span class="row-actions">S ◉</span></div><div class="gutter"><span class="socket in"></span></div><div class="track-lane"><div class="clip video">Street Footage · ◇ Glow A</div></div></div>
+        <svg class="connection-svg" viewBox="0 0 60 172" preserveAspectRatio="none" aria-label="Effect接続">
+          <path d="M50 21 C30 21 35 64 10 64"/>
+          <path d="M50 21 C23 21 36 150 10 150"/>
+          <path class="preview" d="M50 21 C20 21 38 107 10 107"/>
+        </svg>
+        <div class="playhead"></div>
+      </div>
+    </section>
+
+    <footer class="statusbar">
+      <span class="status-phase" id="statusPhase">Discover</span>
+      <span id="statusText">Stage・Timelineのどちらからでも同じobjectを選べます</span>
+      <div class="phase-strip" aria-label="共通操作状態">
+        <span class="phase active">Discover</span><span>›</span><span class="phase">Target</span><span>›</span><span class="phase">Preview</span><span>›</span><span class="phase">Commit/Cancel</span><span>›</span><span class="phase">Inspect</span><span>›</span><span class="phase">Undo</span>
+      </div>
+      <span class="undo-note" id="undoNote">Document: unchanged · Undo: 0</span>
+    </footer>
+  </main>
+
+  <script>
+    const state = {
+      scenario: 'selection',
+      step: 0,
+      selected: 'hero',
+      committed: false,
+      undo: 0,
+      auto: null,
+      tool: 'select'
+    };
+
+    const scenarios = {
+      selection: [
+        { phase: 0, text: 'Stage・Timelineのどちらからでも同じobjectを選べます', action: 'selectionIdle' },
+        { phase: 1, text: 'Orbit ShapeをTargetとして指しています。hoverはselectionを奪いません', action: 'selectionTarget' },
+        { phase: 3, text: '選択を確定。Stage・Timeline・Inspectorが同じIDへ同期します', action: 'selectionCommit' },
+        { phase: 4, text: 'Inspectorは決まった場所で同じobjectの意味を検査します', action: 'selectionInspect' }
+      ],
+      connection: [
+        { phase: 0, text: 'Glow Aのoutから接続を開始。何を変えるかを先に説明します', action: 'connectDiscover' },
+        { phase: 1, text: 'Video / Shapeだけをvalid targetとして形と輪郭で示します', action: 'connectValid' },
+        { phase: 2, text: 'Audioを指すとdrop前にexpected / actualと回復方法を返します', action: 'connectInvalid' },
+        { phase: 3, text: 'EscapeならDocument変更ゼロ。次へでvalid targetへの接続をCommitします', action: 'connectCancel' },
+        { phase: 4, text: '確定後もInspector badgeとTimelineの常時線へ因果が残ります', action: 'connectCommit' },
+        { phase: 5, text: 'Undo 1回で追加したUseだけを戻します', action: 'connectUndo' }
+      ],
+      relative: [
+        { phase: 0, text: '専用toolを増やさず、割当可能なmodifier+dragから開始します', action: 'relativeDiscover' },
+        { phase: 2, text: '現在値ではなくmotion path全体へ同じ差分をTransient previewします', action: 'relativePreview' },
+        { phase: 3, text: 'pointer-upで全keyへの差分を1 macro / 1 UndoとしてCommitします', action: 'relativeCommit' },
+        { phase: 4, text: 'InspectorのPositionとpath ghostは同じ確定結果の投影です', action: 'relativeInspect' },
+        { phase: 5, text: 'Undoで全keyをgesture前へ一度に戻します', action: 'relativeUndo' }
+      ],
+      camera: [
+        { phase: 0, text: 'CameraとHandは同じStageにあるが、所有者と結果が違います', action: 'cameraDiscover' },
+        { phase: 2, text: 'HandはStage Viewだけをpan。Output FrameとDocumentは変わりません', action: 'handPreview' },
+        { phase: 3, text: 'CameraはOutput Frameを動かし、作品意味として1 Undoで確定します', action: 'cameraCommit' },
+        { phase: 4, text: '枠外objectは同じworldに残り、scrim越しでも選択できます', action: 'cameraInspect' },
+        { phase: 5, text: 'Camera操作だけがUndo対象。Handの表示位置はそのままです', action: 'cameraUndo' }
+      ],
+      effects: [
+        { phase: 0, text: '共有Effect Definitionと各layerのUseを非選択時も常時表示します', action: 'effectsDiscover' },
+        { phase: 1, text: '◇ outと○ in、arrowheadで向きを色以外にも符号化します', action: 'effectsTarget' },
+        { phase: 2, text: '線はclip / keyframe領域へ入らず固定gutter内を通ります', action: 'effectsPreview' },
+        { phase: 4, text: '同じdefinitionでもUseは各layerのstack位置で個別適用されます', action: 'effectsInspect' }
+      ],
+      diagnostic: [
+        { phase: 0, text: 'disabledをgrayだけで終えず、操作候補として存在を示します', action: 'diagnosticDiscover' },
+        { phase: 1, text: 'focus / hoverでBriefと直近の回復方法へ到達できます', action: 'diagnosticContext' },
+        { phase: 2, text: '予測可能な拒否はCommit前にexpected / actualを返します', action: 'diagnosticPreview' },
+        { phase: 4, text: 'Advancedは同じ診断のstable codeと関係IDを深く表示します', action: 'diagnosticInspect' }
+      ]
+    };
+
+    const $ = (s) => document.querySelector(s);
+    const $$ = (s) => [...document.querySelectorAll(s)];
+    const stage = $('#stage');
+    const hud = $('#cursorHud');
+    const timeline = $('#timeline');
+
+    function clearProjection() {
+      stage.className = 'stage';
+      timeline.className = 'timeline';
+      hud.classList.remove('show');
+      $('#diagnostic').className = 'diagnostic';
+      $('#inspectMode').textContent = 'Simple';
+      $('#positionValue').textContent = '−0.08, 0.12';
+      $('#stageNote').textContent = 'Select · objectを選択';
+      $$('[data-object]').forEach(el => el.classList.toggle('selected', el.dataset.object === state.selected));
+      $$('[data-track]').forEach(el => el.classList.toggle('selected', el.dataset.track === state.selected));
+      $$('.tool-button[data-tool]').forEach(el => el.classList.toggle('active', el.dataset.tool === state.tool));
+      $('#selectionBadge').textContent = 'Selected';
+    }
+
+    function showHud(kicker, title, body, tone = '') {
+      $('#hudKicker').textContent = kicker;
+      $('#hudTitle').textContent = title;
+      $('#hudBody').textContent = body;
+      $('#hudBody').className = 'hud-row ' + tone;
+      hud.classList.add('show');
+    }
+
+    function selectObject(id) {
+      state.selected = id;
+      const map = {
+        hero: ['Hero Shape', 'Shape · layer_hero', '◇'],
+        orbit: ['Orbit Shape', 'Shape · layer_orbit', '○'],
+        title: ['MOTION / MEMORY', 'Text · layer_title', 'T'],
+        audio: ['Main Audio', 'Audio · track_audio', '◉'],
+        footage: ['Street Footage', 'Video · layer_footage', '▣']
+      };
+      const m = map[id] || map.hero;
+      $('#selectionName').textContent = m[0];
+      $('#selectionType').textContent = m[1];
+      $('#selectionIcon').textContent = m[2];
+      $$('[data-object]').forEach(el => el.classList.toggle('selected', el.dataset.object === id));
+      $$('[data-track]').forEach(el => el.classList.toggle('selected', el.dataset.track === id));
+      $('#selectionCard').classList.remove('pulse');
+      void $('#selectionCard').offsetWidth;
+      $('#selectionCard').classList.add('pulse');
+    }
+
+    const actions = {
+      selectionIdle() { selectObject('hero'); },
+      selectionTarget() { showHud('Target · hover', 'Orbit Shape', 'hoverはfocus / selectionを変更しません'); },
+      selectionCommit() { selectObject('orbit'); showHud('Commit · Selection ID', 'Orbit Shapeを選択', 'Stage / Timeline / Inspectorへ同時投影', 'ok'); },
+      selectionInspect() { selectObject('orbit'); $('#inspectMode').textContent = 'Inspect'; },
+
+      connectDiscover() { showHud('Discover · Connection', 'Glow A の out', 'VideoまたはShapeのEffect Useへ接続'); },
+      connectValid() { timeline.classList.add('connection-mode'); showHud('Target · valid', 'Hero Shape / Effect Stack [1]', 'dropでGlow AのUseを追加 · Undo 1回', 'ok'); },
+      connectInvalid() { timeline.classList.add('connection-mode', 'invalid'); showHud('Target · invalid', 'Main Audioは対象外', 'expected: Visual Layer / actual: Audio Track', 'error'); },
+      connectCancel() { showHud('Cancel · Escape', '接続previewを破棄', 'Document unchanged · Undo 0'); },
+      connectCommit() { timeline.classList.add('connection-mode'); state.committed = true; state.undo = 1; showHud('Commit · Effect Use', 'Glow A → Hero Shape', 'use_glow_heroを追加しました', 'ok'); },
+      connectUndo() { state.committed = false; state.undo = 0; showHud('Undo', 'Effect Useを除去', 'Definitionと他のUseは不変'); },
+
+      relativeDiscover() { showHud('Discover · keymap action', 'Relative Move', 'primary modifier + drag · 専用toolなし'); },
+      relativePreview() { stage.classList.add('relative-mode'); showHud('Preview · Transient', 'Relative ΔX +0.14 · ΔY +0.06', 'motion path全体をghost表示'); },
+      relativeCommit() { stage.classList.add('relative-mode'); state.committed = true; state.undo = 1; $('#positionValue').textContent = '0.06, 0.18'; showHud('Commit · 1 macro', 'Positionの全keyへ適用', 'pointer-up · Undo 1回', 'ok'); },
+      relativeInspect() { stage.classList.add('relative-mode'); $('#positionValue').textContent = '0.06, 0.18'; $('#inspectMode').textContent = 'Advanced · same meaning'; },
+      relativeUndo() { state.committed = false; state.undo = 0; showHud('Undo', '全keyを元の軌跡へ復元', 'gesture全体を一度に戻しました'); },
+
+      cameraDiscover() { state.tool = 'select'; $('#stageNote').textContent = 'Camera = Document / Hand = Session'; },
+      handPreview() { state.tool = 'hand'; stage.classList.add('hand-mode'); $('#stageNote').textContent = 'Hand · Stage Viewのみ · Undoなし'; showHud('Preview · Project session', 'Stage View pan +0.08, +0.04', 'export / Documentは不変'); },
+      cameraCommit() { state.tool = 'camera'; stage.classList.add('camera-mode'); state.undo = 1; $('#stageNote').textContent = 'Camera · Output Frame · Undo 1'; showHud('Commit · Document', 'CompCameraを移動', 'Output Frame / exportへ反映', 'ok'); },
+      cameraInspect() { state.tool = 'camera'; stage.classList.add('camera-mode'); selectObject('orbit'); showHud('Inspect · off-frame', 'Orbit Shapeは同じworld', '枠外でもbounds / anchor / hit-testを維持'); },
+      cameraUndo() { state.tool = 'hand'; stage.classList.add('hand-mode'); state.undo = 0; showHud('Undo · Camera only', 'Output Frameを復元', 'Stage View panはSession状態なので不変'); },
+
+      effectsDiscover() { $('#linkedBadge').classList.add('pulse'); },
+      effectsTarget() { showHud('Inspect · direction', 'Glow A ◇ out → ○ in', '名前やtimeline順でなく安定IDで接続'); },
+      effectsPreview() { timeline.classList.add('connection-mode'); showHud('Preview · routing', '固定connection gutter', 'clip / keyframeの読取りを横断しません'); },
+      effectsInspect() { $('#inspectMode').textContent = 'Advanced · ownership / order'; showHud('Inspect · shared definition', '1 definition · 3 uses', '各layerのstack位置で個別に評価'); },
+
+      diagnosticDiscover() { $('#disabledParameter').classList.add('pulse'); },
+      diagnosticContext() { $('#diagnostic').classList.add('show'); },
+      diagnosticPreview() { $('#diagnostic').classList.add('show'); showHud('Preview · typed rejection', 'BackdropInputが必要', 'VideoLayerは対象外 · 対応targetを選択', 'error'); },
+      diagnosticInspect() { $('#diagnostic').classList.add('show', 'inspect'); $('#inspectMode').textContent = 'Advanced · same rejection'; }
+    };
+
+    function render() {
+      clearProjection();
+      const steps = scenarios[state.scenario];
+      state.step = Math.max(0, Math.min(state.step, steps.length - 1));
+      const current = steps[state.step];
+      actions[current.action]();
+      const phaseNames = ['Discover', 'Target', 'Preview', 'Commit / Cancel', 'Inspect', 'Undo'];
+      $('#statusPhase').textContent = phaseNames[current.phase];
+      $('#statusText').textContent = current.text;
+      $$('.phase').forEach((el, i) => {
+        el.classList.toggle('active', i === current.phase);
+        el.classList.toggle('done', i < current.phase);
+      });
+      $('#undoNote').textContent = `Document: ${state.committed ? 'changed' : 'unchanged'} · Undo: ${state.undo}`;
+      $('#prevStep').disabled = state.step === 0;
+      $('#nextStep').textContent = state.step === steps.length - 1 ? '最初へ' : '次へ';
+      $$('.scenario-button').forEach(el => el.classList.toggle('active', el.dataset.scenario === state.scenario));
+      $$('.tool-button[data-tool]').forEach(el => el.classList.toggle('active', el.dataset.tool === state.tool));
+    }
+
+    function setScenario(name) {
+      state.scenario = name;
+      state.step = 0;
+      state.committed = false;
+      state.undo = 0;
+      state.tool = 'select';
+      stopAuto();
+      render();
+    }
+
+    function next() {
+      const last = scenarios[state.scenario].length - 1;
+      state.step = state.step >= last ? 0 : state.step + 1;
+      render();
+    }
+
+    function stopAuto() {
+      if (state.auto) window.clearInterval(state.auto);
+      state.auto = null;
+      $('#autoButton').textContent = '自動';
+    }
+
+    $$('.scenario-button').forEach(el => el.addEventListener('click', () => setScenario(el.dataset.scenario)));
+    $('#nextStep').addEventListener('click', next);
+    $('#prevStep').addEventListener('click', () => { state.step = Math.max(0, state.step - 1); render(); });
+    $('#autoButton').addEventListener('click', () => {
+      if (state.auto) return stopAuto();
+      $('#autoButton').textContent = '停止';
+      state.auto = window.setInterval(next, 1900);
+    });
+    $('#reduceMotion').addEventListener('change', (e) => document.body.classList.toggle('reduce-motion', e.target.checked));
+    $('#resetButton').addEventListener('click', () => setScenario(state.scenario));
+    $('#undoButton').addEventListener('click', () => { state.committed = false; state.undo = 0; state.step = 0; render(); });
+    $('#detailsButton').addEventListener('click', () => $('#diagnostic').classList.toggle('inspect'));
+    $('#playButton').addEventListener('click', (e) => { e.currentTarget.classList.toggle('active'); e.currentTarget.textContent = e.currentTarget.classList.contains('active') ? '▶' : 'Ⅱ'; });
+    $$('[data-object]').forEach(el => el.addEventListener('click', () => { selectObject(el.dataset.object); state.selected = el.dataset.object; }));
+    $$('[data-track]').forEach(el => el.addEventListener('click', () => { const id = el.dataset.track; if (id !== 'effect') { selectObject(id); state.selected = id; } }));
+    $$('.tool-button[data-tool]').forEach(el => el.addEventListener('click', () => {
+      state.tool = el.dataset.tool;
+      stage.className = 'stage ' + (state.tool === 'camera' ? 'camera-mode' : state.tool === 'hand' ? 'hand-mode' : '');
+      $('#stageNote').textContent = state.tool === 'camera' ? 'Camera · Document / Undo対象' : state.tool === 'hand' ? 'Hand · Session / Undo対象外' : 'Select · objectを選択';
+      $$('.tool-button[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === state.tool));
+    }));
+
+    render();
+  </script>
+</body>
+</html>
