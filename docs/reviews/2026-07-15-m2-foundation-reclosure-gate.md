@@ -25,7 +25,7 @@ M2のDocument意味・migration・Undo・評価順・所有権は、後続フェ
 
 1. **Shared Effect**: D1l schema/migrationをmainへ到達させ、その後にD3e評価接続を別PRで完了する。inline旧projectの要素数・順序・未知plugin field・pixelを保持し、Definition/Use欠落を型付き拒否する
 2. **CompCamera**: mainの正本はCompositionへ含めない。PR #176相当の統一カメラ案をv1で採択するか延期するかをdecision/spec PRで先に決める。採択時はD1j schema+default migration→D1k runtime契約→D3接続を別PRで直列化し、既存2D pixelを保持する。未merge案を既決として扱わない
-3. **Param Pipeline / Element Domain / Constraint Graph**: PR #176相当の案をM2外へ送るなら、現行`DocParam`の解釈を変えず追加的変更だけで導入できることをdecision PRで記録する。UI実装から先に既存fieldへ意味を焼かない
+3. **Param Pipeline / Element Domain / Constraint Graph**: [M2持越し境界](2026-07-16-m2-param-element-constraint-disposition.md)をmainへ到達させる。現行`DocParam`/typed ID/LookAt・Followの解釈を変えず、PP/ED/CG各解凍gate前にUI・Document・plugin ABIへ推測のpipeline/generic domain/graphを焼かない
 4. 下記の未merge棚卸しを、対象ごとの小さいdecision/spec PRで採択・延期・棄却する。Draft文書や別ブランチの台帳を暗黙の発注根拠にしない
 
 ### 未merge棚卸しの初期集合
@@ -33,7 +33,7 @@ M2のDocument意味・migration・Undo・評価順・所有権は、後続フェ
 | 対象 | mainでの状態 | 再締結までの処置 |
 |---|---|---|
 | #173 / D1l | lifecycleは決定済み、実装未merge | 独立コードレビュー後に修復・merge |
-| #176相当の将来境界文書群 | 未mergeの提案。下記ファイル集合を含む | 一括merge禁止。M2恒久面への影響ごとに採択・延期・棄却を分割記録 |
+| #176相当の将来境界文書群 | 未mergeの提案。下記ファイル集合を含む | 一括merge禁止。M2恒久面への影響ごとに採択・延期・棄却を分割記録。Param/Element/Constraintは2026-07-16持越し境界PRで処置 |
 | main上の実装準備台帳にあるU1f/U2f/U2gと、依存欄へ残るD1k等の未翻訳参照語 | 意味決定の記録や参照語はmainにあるが、M3/M2正本のタスク表へ未翻訳 | 本ゲート中は`BLOCKED`。再締結後のM3入場PRで採否・ID・依存を再翻訳 |
 | #182 / D5 | Draft。現行M3粗案ではU1へ直接、U5へ間接依存 | M2基盤再締結の閉集合外。別レーンで判定 |
 | #179 | closed / 未merge | 旧M3入場判断として採用しない。再締結後の新しい入場PRで置換 |
