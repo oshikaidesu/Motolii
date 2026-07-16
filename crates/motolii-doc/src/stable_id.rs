@@ -1,10 +1,7 @@
-//! Effect/Keyframe等のdocument-local安定u64 ID(A8 / D2必須)。
+//! Effect/Keyframe/Definition等のdocument-local安定u64 ID(A8 / D2 / D1l)。
 //!
-//! LayerId/TrackIdと同じ「不変・非再利用」規律だが、Effect/Keyframeは他所から
-//! IDで参照されない(ダングリング参照の検査対象ではない)ため、存在テーブルは持たず
-//! 単調カウンタのみで足りる。Effect/KeyframeのID空間は1つのカウンタを共有する
-//! (「document-local u64 ID」を1空間として扱い、型間の値の取り違えでも
-//! 数値衝突が起きない安全側の設計)。
+//! LayerId/TrackIdと同じ「不変・非再利用」規律。EffectUse・EffectDefinition・Keyframeは
+//! 1つの`next_stable_id`カウンタを共有し、型間の数値衝突を避ける。
 
 use serde::{Deserialize, Serialize};
 
@@ -37,6 +34,11 @@ impl StableIdSeq {
 
     pub const fn peek_next(self) -> u64 {
         self.next
+    }
+
+    /// `Command`側で予約区間の意味検証が完了した後にのみ使う高速コミット口。
+    pub(crate) fn commit_validated_reservation(&mut self, after: u64) {
+        self.next = after;
     }
 
     /// ロード済みDocument内の実在IDと整合しているか(カウンタが実在最大値以下=破損)を検査する。
@@ -81,9 +83,37 @@ macro_rules! stable_id_newtype {
     };
 }
 
+/// Effect lifecycle Commandが消費する半開区間 `[before, after)` の予約。
+///
+/// JSONは必須field `before`/`after` のみ。`before >= after` 等の意味検査は後続applyの責務。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StableIdReservation {
+    before: u64,
+    after: u64,
+}
+
+impl StableIdReservation {
+    pub const fn new(before: u64, after: u64) -> Self {
+        Self { before, after }
+    }
+
+    pub const fn before(self) -> u64 {
+        self.before
+    }
+
+    pub const fn after(self) -> u64 {
+        self.after
+    }
+}
+
 stable_id_newtype!(
     EffectId,
-    "EffectInstanceの恒久ID(A8)。並べ替えで維持、複製時は新規採番。"
+    "EffectUseの恒久ID(A8 / D1l)。stack上のUse identity。旧EffectInstance.idからmigrationで引き継ぐ。"
+);
+stable_id_newtype!(
+    EffectDefinitionId,
+    "EffectDefinitionの恒久ID(D1l)。共有recipe identity。Useから参照される。"
 );
 stable_id_newtype!(
     KeyframeId,
@@ -120,5 +150,12 @@ mod tests {
         assert_eq!(json, "7");
         let back: EffectId = serde_json::from_str(&json).unwrap();
         assert_eq!(id, back);
+    }
+
+    #[test]
+    fn commit_validated_reservation_updates_counter_in_o1() {
+        let mut seq = StableIdSeq::new();
+        seq.commit_validated_reservation(42);
+        assert_eq!(seq.peek_next(), 42);
     }
 }
