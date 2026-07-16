@@ -2765,6 +2765,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "motolii-transport"
+version = "0.1.0"
+dependencies = [
+ "cpal",
+ "motolii-audio",
+ "motolii-core",
+ "motolii-gpu",
+ "motolii-nodes",
+ "motolii-render",
+ "motolii-testkit",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "motolii-ui"
 version = "0.1.0"
 dependencies = [

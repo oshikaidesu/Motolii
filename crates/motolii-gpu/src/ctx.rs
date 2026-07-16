@@ -48,6 +48,16 @@ pub fn required_features() -> wgpu::Features {
     wgpu::Features::empty()
 }
 
+/// DRS等で使うが全アダプタ必須ではないfeature(D5縮退規約)。
+pub fn optional_features() -> wgpu::Features {
+    wgpu::Features::TIMESTAMP_QUERY
+}
+
+/// 自動DRSが利用可能か(timestamp query非対応時は無効+ドロップ継続)。
+pub fn drs_available(device: &wgpu::Device) -> bool {
+    device.features().contains(wgpu::Features::TIMESTAMP_QUERY)
+}
+
 /// コンポジタが最低限必要とするlimitの検証(第3回レビュー#2)。
 ///
 /// 「固定値で要求」だと弱いGPUでrequest_deviceが原因不明に失敗するため、
@@ -216,7 +226,7 @@ impl GpuCtx {
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("motolii-gpu"),
-                required_features: features,
+                required_features: features | (optional_features() & adapter.features()),
                 // アダプタの実力値をそのまま要求(最低ラインは検証済み)。
                 // 固定値要求だと弱いGPUを無用に弾き、強いGPUの能力も使えない
                 required_limits: adapter_limits,

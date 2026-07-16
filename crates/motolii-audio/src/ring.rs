@@ -211,6 +211,12 @@ impl PlaybackCounters {
     pub fn underrun_events(&self) -> u64 {
         self.underrun_events.load(Ordering::Acquire)
     }
+
+    /// ヘッドレスTransportシミュレーション専用: 実PCMを伴わず供給済みだけ進める。
+    #[doc(hidden)]
+    pub fn advance_supplied_for_simulation(&self, frames: u64) {
+        self.frames_supplied.fetch_add(frames, Ordering::Relaxed);
+    }
 }
 
 /// コールバック本体(D4契約: allocate/block/decodeしない。リングから読むだけ)。

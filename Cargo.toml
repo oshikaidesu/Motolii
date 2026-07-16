@@ -13,6 +13,7 @@ members = [
     "crates/motolii-gpu",
     "crates/motolii-doc",
     "crates/motolii-audio",
+    "crates/motolii-transport",
     "crates/motolii-ui",
 ]
 
@@ -34,6 +35,7 @@ motolii-cli = { path = "crates/motolii-cli" }
 motolii-testkit = { path = "crates/motolii-testkit" }
 motolii-doc = { path = "crates/motolii-doc" }
 motolii-audio = { path = "crates/motolii-audio" }
+motolii-transport = { path = "crates/motolii-transport" }
 motolii-ui = { path = "crates/motolii-ui" }
 serde = { version = "1", features = ["derive"] }
 slint = { version = "~1.17", default-features = false, features = [
