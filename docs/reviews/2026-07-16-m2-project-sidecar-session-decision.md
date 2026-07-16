@@ -76,7 +76,7 @@ All production mutations of the project file or its journal family require `&mut
 
 The in-process rule remains unchanged: only the editing thread owns `&mut ProjectSession` and mutates `Document`; workers read `Arc<Document>`. The OS lock adds inter-process ownership and does not replace the single-writer rule.
 
-Cloud-sync software can ignore advisory locks. D1m therefore prevents cooperating Motolii processes and path aliases from racing, but does not claim to solve remote synchronization. The existing external-change warning remains; compare-before-replace conflict handling is a separate D1n decision if the M2 follow-up review proves the current fingerprint checks insufficient.
+Cloud-sync software can ignore advisory locks. D1m therefore prevents cooperating Motolii processes and path aliases from racing, but does not claim to solve remote synchronization. The existing external-change warning remains; compare-before-mutate conflict handling is unconditionally delegated to the separate [D1n external revision decision](2026-07-16-m2-external-revision-decision.md).
 
 ## D1m completion judgment
 
