@@ -1,0 +1,23 @@
+{
+  "ticket": "M3-guard-2",
+  "adapter": "llvmpipe (LLVM 20.1.2, 256 bits)",
+  "backend": "Vulkan",
+  "clips": 1000,
+  "keyframes": 100000,
+  "viewport": [
+    1920,
+    512
+  ],
+  "warmup_frames": 120,
+  "measured_frames": 600,
+  "target_fps": 60.0,
+  "median_frame_ms": 8.791856000000001,
+  "p95_frame_ms": 15.990399999999998,
+  "fps_median": 113.74162634146873,
+  "fps_p95": 62.537522513508115,
+  "pass": true,
+  "visible_clips_last": 210,
+  "visible_keyframes_last": 20005,
+  "cpu_cull_upload_us_last": 7489,
+  "measurement": "headless wgpu render_to_texture; each frame updates pan/zoom, CPU culls visible clips/keyframes, uploads instance buffer, single render pass; wall-clock frame time includes GPU submit+poll"
+}

@@ -1,3 +1,9 @@
+//! 時刻→フレーム/シーク秒文字列の正準口(TM-4 / Issue #48)。
+//!
+//! クレート外で時刻をフレーム添字へ変換する場合は **`try_to_frame_floor` /
+//! `try_to_frame_round` のみ**を使う。ffmpeg `-ss` 用の秒文字列は
+//! **`format_ffmpeg_seek_before_frame` のみ**。f64×fps の独自丸めは禁止。
+
 use std::cmp::Ordering;
 
 use serde::{Deserialize, Deserializer, Serialize};
@@ -73,6 +79,63 @@ impl RationalTime {
     /// 時刻が属するフレーム番号(床関数)。負の時刻でも数学的な床を返す。
     pub fn try_to_frame_floor(self, fps: Fps) -> Result<i64, RationalTimeError> {
         Ok(self.try_to_sample_index(fps)?.0)
+    }
+
+    /// 時刻に最も近いフレーム番号(有理数最近傍。半端はゼロから遠ざかる)。
+    pub fn try_to_frame_round(self, fps: Fps) -> Result<i64, RationalTimeError> {
+        let num = (self.num as i128)
+            .checked_mul(fps.num() as i128)
+            .ok_or(RationalTimeError::Overflow)?;
+        let den = (self.den as i128)
+            .checked_mul(fps.den() as i128)
+            .ok_or(RationalTimeError::Overflow)?;
+        round_rational_to_i64(num, den)
+    }
+
+    /// 10進秒文字列(ffprobe等)を有理数へ。入力は表示用の近似であり、
+    /// フレーム境界の判定は [`Self::try_to_frame_round`] で行う。
+    pub fn try_from_decimal_str(s: &str) -> Result<Self, RationalTimeError> {
+        let s = s.trim();
+        if s.is_empty() {
+            return Err(RationalTimeError::Overflow);
+        }
+        let (sign, rest) = if let Some(r) = s.strip_prefix('-') {
+            (-1i128, r)
+        } else if let Some(r) = s.strip_prefix('+') {
+            (1i128, r)
+        } else {
+            (1i128, s)
+        };
+        let (int_s, frac_s) = match rest.split_once('.') {
+            Some((i, f)) => (i, f),
+            None => (rest, ""),
+        };
+        let int_part: i128 = if int_s.is_empty() {
+            0
+        } else {
+            int_s.parse().map_err(|_| RationalTimeError::Overflow)?
+        };
+        let frac_len = frac_s.len();
+        let frac_part: i128 = if frac_s.is_empty() {
+            0
+        } else {
+            frac_s.parse().map_err(|_| RationalTimeError::Overflow)?
+        };
+        let den_pow = if frac_len == 0 {
+            1i128
+        } else {
+            10i128
+                .checked_pow(frac_len as u32)
+                .ok_or(RationalTimeError::Overflow)?
+        };
+        let unsigned = int_part
+            .checked_mul(den_pow)
+            .and_then(|v| v.checked_add(frac_part))
+            .ok_or(RationalTimeError::Overflow)?;
+        let num = sign
+            .checked_mul(unsigned)
+            .ok_or(RationalTimeError::Overflow)?;
+        Self::try_reduce(num, den_pow)
     }
 
     /// 等間隔サンプル添字の床と区間内補間率 `u ∈ [0,1)`。
@@ -262,6 +325,50 @@ impl Fps {
     }
 }
 
+/// ffmpeg `-ss` 用: 目的フレームの半フレーム手前の秒文字列(小数6桁)。
+///
+/// `frame > 0` のみ。境界の10進丸めがフレームをまたぐのを防ぐ(TM-4)。
+pub fn format_ffmpeg_seek_before_frame(frame: i64, fps: Fps) -> Result<String, RationalTimeError> {
+    if frame <= 0 {
+        return Err(RationalTimeError::Overflow);
+    }
+    let frame_time = RationalTime::try_from_frame(frame, fps)?;
+    let half_frame = RationalTime::try_new(
+        fps.den(),
+        2i64.checked_mul(fps.num())
+            .ok_or(RationalTimeError::Overflow)?,
+    )?;
+    let seek = frame_time.try_sub(half_frame)?;
+    Ok(format!("{:.6}", seek.as_seconds_f64()))
+}
+
+fn round_rational_to_i64(num: i128, den: i128) -> Result<i64, RationalTimeError> {
+    if den <= 0 {
+        return Err(RationalTimeError::ZeroDenominator);
+    }
+    if num == 0 {
+        return Ok(0);
+    }
+    let neg = num < 0;
+    let num_abs = num.unsigned_abs();
+    let den_u = den as u128;
+    let floor = num_abs / den_u;
+    let rem = num_abs % den_u;
+    let twice_rem = rem.checked_mul(2).ok_or(RationalTimeError::Overflow)?;
+    let rounded_abs = if twice_rem < den_u {
+        floor
+    } else {
+        // ちょうど半分もゼロから遠ざかる(f64::round 同型)
+        floor.checked_add(1).ok_or(RationalTimeError::Overflow)?
+    };
+    let signed = if neg {
+        -(i64::try_from(rounded_abs).map_err(|_| RationalTimeError::Overflow)?)
+    } else {
+        i64::try_from(rounded_abs).map_err(|_| RationalTimeError::Overflow)?
+    };
+    Ok(signed)
+}
+
 const fn const_gcd_u64(mut a: u64, mut b: u64) -> u64 {
     while b != 0 {
         let t = b;
@@ -439,6 +546,58 @@ mod tests {
         assert_eq!(idx, 0);
         assert!((0.0..1.0).contains(&u));
         assert!(u < 1e-10, "position should be tiny, got {u}");
+    }
+
+    #[test]
+    fn frame_round_nearest() {
+        let rate = fps(30, 1);
+        assert_eq!(rt(1, 30).try_to_frame_round(rate).unwrap(), 1);
+        assert_eq!(rt(49, 3000).try_to_frame_round(rate).unwrap(), 0);
+        assert_eq!(rt(51, 3000).try_to_frame_round(rate).unwrap(), 1);
+        assert_eq!(rt(-49, 3000).try_to_frame_round(rate).unwrap(), 0);
+        assert_eq!(rt(-51, 3000).try_to_frame_round(rate).unwrap(), -1);
+        // ちょうど半フレームはゼロから遠ざかる
+        assert_eq!(rt(1, 60).try_to_frame_round(rate).unwrap(), 1);
+        assert_eq!(rt(-1, 60).try_to_frame_round(rate).unwrap(), -1);
+    }
+
+    #[test]
+    fn frame_round_ntsc_lattice() {
+        let rate = fps(30000, 1001);
+        for frame in [0i64, 1, 29, 30, 1799, 1800] {
+            let t = RationalTime::try_from_frame(frame, rate).unwrap();
+            assert_eq!(t.try_to_frame_round(rate).unwrap(), frame, "frame {frame}");
+        }
+    }
+
+    #[test]
+    fn decimal_str_parses_ffprobe_style() {
+        let t = RationalTime::try_from_decimal_str("2.002000").unwrap();
+        assert_eq!(t, rt(2002000, 1_000_000));
+        assert_eq!(RationalTime::try_from_decimal_str(".5").unwrap(), rt(1, 2));
+        assert_eq!(
+            RationalTime::try_from_decimal_str("-1.25").unwrap(),
+            rt(-5, 4)
+        );
+    }
+
+    #[test]
+    fn ffmpeg_seek_before_frame_matches_half_frame_offset() {
+        let rate = fps(30, 1);
+        assert_eq!(
+            format_ffmpeg_seek_before_frame(1, rate).unwrap(),
+            "0.016667"
+        );
+        assert_eq!(
+            format_ffmpeg_seek_before_frame(30, rate).unwrap(),
+            "0.983333"
+        );
+        let ntsc = fps(30000, 1001);
+        let legacy = {
+            let target = (15f64 - 0.5) * ntsc.den() as f64 / ntsc.num() as f64;
+            format!("{target:.6}")
+        };
+        assert_eq!(format_ffmpeg_seek_before_frame(15, ntsc).unwrap(), legacy);
     }
 
     #[test]

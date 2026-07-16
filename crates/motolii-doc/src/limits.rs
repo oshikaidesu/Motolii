@@ -14,7 +14,7 @@ use thiserror::Error;
 
 use crate::param::DocParam;
 use crate::schema::{
-    Clip, ClipSource, EffectInstance, Group, ItemEnvelope, PathOp, StandardShape, TrackItem,
+    Clip, ClipSource, EffectDefinition, Group, ItemEnvelope, PathOp, StandardShape, TrackItem,
     Transform2D, VectorContent,
 };
 use crate::Document;
@@ -178,6 +178,10 @@ pub(crate) fn check_document_resource_limits(
 
     check_extra(&doc.extra, "document.extra", limits)?;
 
+    for (i, def) in doc.effect_definitions.iter().enumerate() {
+        check_effect_definition(def, &format!("effect_definitions[{i}]"), limits)?;
+    }
+
     for (id, name) in doc.layers.iter() {
         check_string(name, &format!("layers[{}].name", id.get()), limits)?;
     }
@@ -295,20 +299,18 @@ fn check_envelope(
     check_param(&env.transform.scale, &format!("{path}.scale"), limits)?;
     check_param(&env.transform.rotation, &format!("{path}.rotation"), limits)?;
     check_param(&env.opacity, &format!("{path}.opacity"), limits)?;
-    for (i, effect) in env.effects.iter().enumerate() {
-        check_effect(effect, &format!("{path}.effects[{i}]"), limits)?;
-    }
+    // D1l: EffectUseはid参照のみ(文字列/paramsはeffect_definitions側で検査する)。
     Ok(())
 }
 
-fn check_effect(
-    effect: &EffectInstance,
+fn check_effect_definition(
+    def: &EffectDefinition,
     path: &str,
     limits: &ResourceLimits,
 ) -> Result<(), ResourceLimitError> {
-    check_string(&effect.plugin_id, &format!("{path}.plugin_id"), limits)?;
-    check_extra(&effect.extra, &format!("{path}.extra"), limits)?;
-    for (name, param) in &effect.params {
+    check_string(&def.plugin_id, &format!("{path}.plugin_id"), limits)?;
+    check_extra(&def.extra, &format!("{path}.extra"), limits)?;
+    for (name, param) in &def.params {
         check_string(name, &format!("{path}.param_id"), limits)?;
         check_param(param, &format!("{path}.{name}"), limits)?;
     }
@@ -520,6 +522,7 @@ mod tests {
             track_ids: TrackIdTable::new(),
             tracks: Vec::new(),
             next_stable_id: Default::default(),
+            effect_definitions: Vec::new(),
             extra: Map::new(),
         }
     }

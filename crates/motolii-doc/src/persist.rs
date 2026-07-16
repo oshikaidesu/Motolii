@@ -37,15 +37,21 @@ use crate::{Document, DocumentError};
 
 /// このリーダーが開ける`min_reader_version`の上限(=自版の読取能力)。
 ///
-/// AG-1でAsset Clipへvideo/audio component入れ子を追加したため3へ。
-/// version 2以下(component欠落=video only)はdefaultで読める。componentを含む文書は
-/// `min_reader_version>=3`を要求し、旧readerの再保存消失を防ぐ。
-pub const READER_VERSION: u32 = 3;
+/// D1lでEffectDefinition/EffectUse共有schemaを追加したため4へ。
+/// version 3以下(旧inline EffectInstance)はdefaultで読める。共有schemaを含む文書は
+/// `min_reader_version>=4`を要求し、旧readerの再保存消失を防ぐ。
+pub const READER_VERSION: u32 = 4;
 
 /// このリーダーが**再保存・migrationしてよい**`Document.version`の上限(=自版の書込能力)。
-/// AG-1のcomponent入り文書は`version=3`へ上がるため、書き込み能力も3へ揃える。
+/// D1lのEffectDefinition入り文書は`version=4`へ上がるため、書き込み能力も4へ揃える。
 /// `Document.version`がこれを超える場合は`OpenMode::ReadOnlyNewer`(#101 / 監査S14)。
-pub const WRITER_VERSION: u32 = 3;
+pub const WRITER_VERSION: u32 = 4;
+
+const _: [(); 4] = [(); READER_VERSION as usize];
+const _: [(); 4] = [(); WRITER_VERSION as usize];
+const _: [(); READER_VERSION as usize] = [(); WRITER_VERSION as usize];
+const _: [(); READER_VERSION as usize] =
+    [(); crate::validate::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS as usize];
 
 /// 読み/書き互換を分離した3状態(監査S14)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -425,6 +431,7 @@ fn sync_dir(dir: &Path) -> io::Result<()> {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use crate::Document;

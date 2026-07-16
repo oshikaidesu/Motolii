@@ -12,14 +12,16 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::duplicate::{definition_semantic_body_eq, remint_order_keyframe_ids};
 use crate::param::DocParam;
 use crate::schema::{
-    AudioComponent, BlendMode, ClipSource, ClippingMaskSettings, EffectInstance, ItemEnvelope,
-    TrackItem,
+    AudioComponent, BlendMode, ClipSource, ClippingMaskSettings, EffectDefinition, EffectInstance,
+    EffectUse, ItemEnvelope, TrackItem,
 };
-use crate::stable_id::EffectId;
+use crate::stable_id::{EffectDefinitionId, EffectId, StableIdReservation};
 use crate::track_id::TrackId;
-use crate::{Document, LayerId};
+use crate::validate::{self, stable_id_in_use};
+use crate::{Document, LayerId, WRITER_VERSION};
 
 /// `SetProperty`が書き込める閉じたプロパティ集合(envelope本体+effect params)。
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -46,6 +48,10 @@ pub enum PropertyId {
     EffectEnabled(EffectId),
     EffectParam(EffectId, String),
     EffectList(EffectId),
+    /// D1l: `DeleteEffectDefinition`/`AddEffectDefinition`(台帳の生存)。
+    EffectDefinitionLifecycle(EffectDefinitionId),
+    /// D1l: `CopyLocalEffect`/`UndoCopyLocalEffect`(1つのUseのdefinition_id付け替え)。
+    EffectDefinitionLink(EffectId),
     AudioEnabled(usize),
     AudioGain(usize),
     ChildList,
@@ -95,7 +101,17 @@ pub enum CommandKind {
     SetTransformParent,
     AddEffect,
     RemoveEffect,
+    /// D1l v2: `CreateEffect` / `UndoCreateEffect`(inverse)共用。
+    CreateEffect,
+    /// D1l v2: `LinkEffectUse` / `UndoLinkEffectUse`(inverse)共用。
+    LinkEffectUse,
+    /// D1l v2: `UnlinkEffectUse` / `RestoreEffectUse`(inverse)共用。
+    UnlinkEffectUse,
     SetEffectEnabled,
+    /// D1l: `DeleteEffectDefinition` / `AddEffectDefinition`(inverse)共用。
+    DeleteEffectDefinition,
+    /// D1l v2: `CopyLocalEffect` / `UndoCopyLocalEffect`(inverse)共用。
+    CopyLocalEffect,
     SetAudioComponentEnabled,
     SetAudioComponentGain,
     AddTrackItem,
@@ -133,6 +149,54 @@ pub enum CommandError {
     RemoveItemMismatch { expected: u64, found: u64 },
     #[error("removed effect does not match expected id (expected {expected}, found {found})")]
     RemoveEffectMismatch { expected: u64, found: u64 },
+    #[error("removed effect definition payload does not match ledger (definition {id})")]
+    RemoveEffectDefinitionMismatch { id: u64 },
+    #[error("effect definition {id} not found")]
+    EffectDefinitionNotFound { id: u64 },
+    /// GAP-14§2.1: 参照中Definitionの削除はReject(Cascadeしない)。
+    #[error("effect definition {id} is in use by effect use(s) {use_ids:?}")]
+    DefinitionInUse { id: u64, use_ids: Vec<u64> },
+    #[error("effect definition {id} already exists")]
+    EffectDefinitionAlreadyExists { id: u64 },
+    #[error("effect definition {id} payload does not match existing ledger entry")]
+    EffectDefinitionMismatch { id: u64 },
+    #[error("stable id {id} already exists in the shared document-local id space")]
+    StableIdCollision { id: u64 },
+    #[error(
+        "undo copy-local rejected: definition {id} is still shared by other use(s) {use_ids:?}"
+    )]
+    UndoCopyLocalDefinitionInUse { id: u64, use_ids: Vec<u64> },
+    #[error("copy-local effect use definition mismatch (expected {expected}, found {found})")]
+    CopyLocalDefinitionMismatch { expected: u64, found: u64 },
+    #[error("copy-local payload does not match source definition semantics")]
+    CopyLocalPayloadMismatch,
+    #[error("effect use {use_id} not found in document")]
+    EffectUseNotFound { use_id: u64 },
+    #[error(
+        "effect lifecycle v2 commands require a migrated v4 effect-definition document (version={version}, min_reader_version={min_reader_version})"
+    )]
+    EffectLifecycleRequiresV4Document {
+        version: u32,
+        min_reader_version: u32,
+    },
+    #[error("stable id reservation interval must be non-empty (before={before}, after={after})")]
+    InvalidStableIdReservationInterval { before: u64, after: u64 },
+    #[error(
+        "stable id reservation introduced ids {introduced:?} do not match interval [{before}, {after})"
+    )]
+    StableIdReservationMismatch {
+        before: u64,
+        after: u64,
+        introduced: Vec<u64>,
+    },
+    #[error(
+        "stable id reservation counter mismatch (next={next}, before={before}, after={after})"
+    )]
+    StableIdReservationCounterMismatch { next: u64, before: u64, after: u64 },
+    #[error("stable id {id} is outside reservation interval [{before}, {after})")]
+    StableIdOutsideReservation { id: u64, before: u64, after: u64 },
+    #[error(transparent)]
+    Validate(#[from] crate::validate::DocumentError),
     #[error(
         "layer_names keys do not match track item subtree (item={item_layers:?}, names={named_layers:?})"
     )]
@@ -174,17 +238,88 @@ pub enum Command {
         target: LayerId,
         index: usize,
         effect: EffectInstance,
+        /// `true` iff applyが台帳へ新規Definitionを挿入した(create)。
+        /// Undo(inverse RemoveEffect)はこのときだけDefinitionも戻す。ユーザーUnlinkは`false`。
+        introduced_definition: bool,
     },
     RemoveEffect {
         target: LayerId,
         index: usize,
         effect: EffectInstance,
+        /// `AddEffect(introduced_definition=true)`のinverse専用。ユーザーUnlinkは常に`false`。
+        introduced_definition: bool,
     },
     SetEffectEnabled {
         target: LayerId,
         effect: EffectId,
         old: bool,
         new: bool,
+    },
+    /// D1l/GAP-14§2.5: `use_count==0`のときのみ成立(採否は`apply`側)。
+    DeleteEffectDefinition { definition: EffectDefinition },
+    /// `DeleteEffectDefinition`のinverse専用(未参照時のみ台帳へ復元)。
+    AddEffectDefinition { definition: EffectDefinition },
+    /// D1l v2: 新Use+新Definitionを同時挿入(create)。
+    CreateEffect {
+        target: LayerId,
+        index: usize,
+        #[serde(rename = "use")]
+        use_: EffectUse,
+        definition: EffectDefinition,
+        stable_id_reservation: StableIdReservation,
+    },
+    /// `CreateEffect`のinverse専用。
+    UndoCreateEffect {
+        target: LayerId,
+        index: usize,
+        #[serde(rename = "use")]
+        use_: EffectUse,
+        definition: EffectDefinition,
+        stable_id_reservation: StableIdReservation,
+    },
+    /// D1l v2: 既存Definitionへ新Useを挿入(link)。
+    LinkEffectUse {
+        target: LayerId,
+        index: usize,
+        #[serde(rename = "use")]
+        use_: EffectUse,
+        stable_id_reservation: StableIdReservation,
+    },
+    /// `LinkEffectUse`のinverse専用。
+    UndoLinkEffectUse {
+        target: LayerId,
+        index: usize,
+        #[serde(rename = "use")]
+        use_: EffectUse,
+        stable_id_reservation: StableIdReservation,
+    },
+    /// D1l v2/GAP-14§2.2: 対象Useだけ除去。Definitionはorphan keep。
+    UnlinkEffectUse {
+        target: LayerId,
+        index: usize,
+        #[serde(rename = "use")]
+        use_: EffectUse,
+    },
+    /// `UnlinkEffectUse`のinverse専用。
+    RestoreEffectUse {
+        target: LayerId,
+        index: usize,
+        #[serde(rename = "use")]
+        use_: EffectUse,
+    },
+    /// D1l v2/GAP-14§2.3 Materialize: 採番済み完全payloadで当該Useだけ付け替える。
+    CopyLocalEffect {
+        use_id: EffectId,
+        previous_definition_id: EffectDefinitionId,
+        new_definition: EffectDefinition,
+        stable_id_reservation: StableIdReservation,
+    },
+    /// `CopyLocalEffect`のinverse専用。
+    UndoCopyLocalEffect {
+        use_id: EffectId,
+        previous_definition_id: EffectDefinitionId,
+        new_definition: EffectDefinition,
+        stable_id_reservation: StableIdReservation,
     },
     SetAudioComponentEnabled {
         target: LayerId,
@@ -225,7 +360,22 @@ impl Command {
             Command::SetTransformParent { .. } => CommandKind::SetTransformParent,
             Command::AddEffect { .. } => CommandKind::AddEffect,
             Command::RemoveEffect { .. } => CommandKind::RemoveEffect,
+            Command::CreateEffect { .. } | Command::UndoCreateEffect { .. } => {
+                CommandKind::CreateEffect
+            }
+            Command::LinkEffectUse { .. } | Command::UndoLinkEffectUse { .. } => {
+                CommandKind::LinkEffectUse
+            }
+            Command::UnlinkEffectUse { .. } | Command::RestoreEffectUse { .. } => {
+                CommandKind::UnlinkEffectUse
+            }
             Command::SetEffectEnabled { .. } => CommandKind::SetEffectEnabled,
+            Command::DeleteEffectDefinition { .. } | Command::AddEffectDefinition { .. } => {
+                CommandKind::DeleteEffectDefinition
+            }
+            Command::CopyLocalEffect { .. } | Command::UndoCopyLocalEffect { .. } => {
+                CommandKind::CopyLocalEffect
+            }
             Command::SetAudioComponentEnabled { .. } => CommandKind::SetAudioComponentEnabled,
             Command::SetAudioComponentGain { .. } => CommandKind::SetAudioComponentGain,
             Command::AddTrackItem { .. } => CommandKind::AddTrackItem,
@@ -245,6 +395,16 @@ impl Command {
             | Command::SetEffectEnabled { target, .. }
             | Command::SetAudioComponentEnabled { target, .. }
             | Command::SetAudioComponentGain { target, .. } => target.get(),
+            Command::CreateEffect { target, .. }
+            | Command::UndoCreateEffect { target, .. }
+            | Command::LinkEffectUse { target, .. }
+            | Command::UndoLinkEffectUse { target, .. }
+            | Command::UnlinkEffectUse { target, .. }
+            | Command::RestoreEffectUse { target, .. } => target.get(),
+            Command::CopyLocalEffect { use_id, .. }
+            | Command::UndoCopyLocalEffect { use_id, .. } => use_id.get(),
+            Command::DeleteEffectDefinition { definition }
+            | Command::AddEffectDefinition { definition } => definition.id.get(),
             Command::AddTrackItem { item, .. } | Command::RemoveTrackItem { item, .. } => {
                 envelope_of(item).layer_id.get()
             }
@@ -260,7 +420,21 @@ impl Command {
             Command::AddEffect { effect, .. } | Command::RemoveEffect { effect, .. } => {
                 PropertyId::EffectList(effect.id)
             }
+            Command::CreateEffect { use_, .. }
+            | Command::UndoCreateEffect { use_, .. }
+            | Command::LinkEffectUse { use_, .. }
+            | Command::UndoLinkEffectUse { use_, .. }
+            | Command::UnlinkEffectUse { use_, .. }
+            | Command::RestoreEffectUse { use_, .. } => PropertyId::EffectList(use_.id),
             Command::SetEffectEnabled { effect, .. } => PropertyId::EffectEnabled(*effect),
+            Command::DeleteEffectDefinition { definition }
+            | Command::AddEffectDefinition { definition } => {
+                PropertyId::EffectDefinitionLifecycle(definition.id)
+            }
+            Command::CopyLocalEffect { use_id, .. }
+            | Command::UndoCopyLocalEffect { use_id, .. } => {
+                PropertyId::EffectDefinitionLink(*use_id)
+            }
             Command::SetAudioComponentEnabled { index, .. } => PropertyId::AudioEnabled(*index),
             Command::SetAudioComponentGain { index, .. } => PropertyId::AudioGain(*index),
             Command::AddTrackItem { .. } | Command::RemoveTrackItem { .. } => PropertyId::ChildList,
@@ -276,6 +450,51 @@ impl Command {
         }
     }
 
+    /// 新規stable identityを導入するv2 lifecycle variantだけ`Some`を返す(D1l/journal追補§2.2)。
+    pub fn stable_id_reservation(&self) -> Option<StableIdReservation> {
+        match self {
+            Command::CreateEffect {
+                stable_id_reservation,
+                ..
+            }
+            | Command::UndoCreateEffect {
+                stable_id_reservation,
+                ..
+            }
+            | Command::LinkEffectUse {
+                stable_id_reservation,
+                ..
+            }
+            | Command::UndoLinkEffectUse {
+                stable_id_reservation,
+                ..
+            }
+            | Command::CopyLocalEffect {
+                stable_id_reservation,
+                ..
+            }
+            | Command::UndoCopyLocalEffect {
+                stable_id_reservation,
+                ..
+            } => Some(*stable_id_reservation),
+            Command::SetProperty { .. }
+            | Command::SetBlendMode { .. }
+            | Command::SetClippingMask { .. }
+            | Command::SetTransformParent { .. }
+            | Command::AddEffect { .. }
+            | Command::RemoveEffect { .. }
+            | Command::SetEffectEnabled { .. }
+            | Command::DeleteEffectDefinition { .. }
+            | Command::AddEffectDefinition { .. }
+            | Command::UnlinkEffectUse { .. }
+            | Command::RestoreEffectUse { .. }
+            | Command::SetAudioComponentEnabled { .. }
+            | Command::SetAudioComponentGain { .. }
+            | Command::AddTrackItem { .. }
+            | Command::RemoveTrackItem { .. } => None,
+        }
+    }
+
     /// `new`側を`Document`へ書き込む。
     pub fn apply(&self, doc: &mut Document) -> Result<(), CommandError> {
         match self {
@@ -284,10 +503,33 @@ impl Command {
                 property,
                 new_value,
                 ..
-            } => {
-                let env = find_envelope_mut(doc, *target)?;
-                write_property(env, property, new_value.clone())
-            }
+            } => match property {
+                // D1l: EffectParamはEffectUseではなくEffectDefinition側を書き換える(共有Use全体へ反映)。
+                ScalarPropertyId::EffectParam(effect_id, name) => {
+                    let layer = target.get();
+                    let definition_id = find_envelope(doc, *target)
+                        .ok_or(CommandError::LayerNotFound(layer))?
+                        .effects
+                        .iter()
+                        .find(|u| u.id == *effect_id)
+                        .map(|u| u.definition_id)
+                        .ok_or(CommandError::EffectNotFound {
+                            effect: effect_id.get(),
+                            layer,
+                        })?;
+                    let def = doc.effect_definition_mut(definition_id).ok_or(
+                        CommandError::EffectDefinitionNotFound {
+                            id: definition_id.get(),
+                        },
+                    )?;
+                    def.params.insert(name.clone(), new_value.clone());
+                    Ok(())
+                }
+                _ => {
+                    let env = find_envelope_mut(doc, *target)?;
+                    write_property(env, property, new_value.clone())
+                }
+            },
             Command::SetBlendMode { target, new, .. } => {
                 find_envelope_mut(doc, *target)?.blend = *new;
                 Ok(())
@@ -304,8 +546,8 @@ impl Command {
                 target,
                 index,
                 effect,
+                introduced_definition,
             } => {
-                // 事前検査: 対象envelopeが存在する。index > lenは拒否(==lenは末尾追加)。
                 let env =
                     find_envelope(doc, *target).ok_or(CommandError::LayerNotFound(target.get()))?;
                 if *index > env.effects.len() {
@@ -314,31 +556,110 @@ impl Command {
                         len: env.effects.len(),
                     });
                 }
+                let (use_, def) = effect.clone().into_use_and_definition();
+                if stable_id_in_use(doc, use_.id.get()) {
+                    return Err(CommandError::StableIdCollision { id: use_.id.get() });
+                }
+                match doc.effect_definition(def.id) {
+                    Some(existing) if existing == &def => {
+                        if *introduced_definition {
+                            return Err(CommandError::EffectDefinitionAlreadyExists {
+                                id: def.id.get(),
+                            });
+                        }
+                    }
+                    Some(_) => {
+                        return Err(CommandError::EffectDefinitionMismatch { id: def.id.get() })
+                    }
+                    None => {
+                        if !*introduced_definition {
+                            return Err(CommandError::EffectDefinitionNotFound {
+                                id: def.id.get(),
+                            });
+                        }
+                        if stable_id_in_use(doc, def.id.get()) {
+                            return Err(CommandError::StableIdCollision { id: def.id.get() });
+                        }
+                        doc.effect_definitions.push(def);
+                    }
+                }
                 find_envelope_mut(doc, *target)?
                     .effects
-                    .insert(*index, effect.clone());
+                    .insert(*index, use_);
                 Ok(())
             }
             Command::RemoveEffect {
                 target,
                 index,
                 effect,
+                introduced_definition,
             } => {
-                let env = find_envelope_mut(doc, *target)?;
+                let layer = target.get();
+                let env = find_envelope(doc, *target).ok_or(CommandError::LayerNotFound(layer))?;
                 if *index >= env.effects.len() {
                     return Err(CommandError::IndexOutOfRange {
                         index: *index,
                         len: env.effects.len(),
                     });
                 }
-                let found = env.effects[*index].id;
-                if found != effect.id {
+                let at_index = env.effects[*index].clone();
+                if at_index.id != effect.id {
                     return Err(CommandError::RemoveEffectMismatch {
                         expected: effect.id.get(),
-                        found: found.get(),
+                        found: at_index.id.get(),
                     });
                 }
-                env.effects.remove(*index);
+                if at_index.definition_id != effect.definition_id {
+                    return Err(CommandError::RemoveEffectDefinitionMismatch {
+                        id: effect.definition_id.get(),
+                    });
+                }
+                let (_, expected_def) = effect.clone().into_use_and_definition();
+                let ledger_def = doc
+                    .effect_definition(effect.definition_id)
+                    .ok_or(CommandError::EffectDefinitionNotFound {
+                        id: effect.definition_id.get(),
+                    })?
+                    .clone();
+                if ledger_def != expected_def {
+                    return Err(CommandError::RemoveEffectDefinitionMismatch {
+                        id: effect.definition_id.get(),
+                    });
+                }
+                if *introduced_definition {
+                    let remaining = doc.effect_use_count(effect.definition_id);
+                    if remaining != 1 {
+                        return Err(CommandError::DefinitionInUse {
+                            id: effect.definition_id.get(),
+                            use_ids: doc
+                                .effect_use_ids(effect.definition_id)
+                                .into_iter()
+                                .map(|id| id.get())
+                                .collect(),
+                        });
+                    }
+                    if doc
+                        .effect_definitions
+                        .iter()
+                        .position(|d| d.id == effect.definition_id)
+                        .is_none()
+                    {
+                        return Err(CommandError::EffectDefinitionNotFound {
+                            id: effect.definition_id.get(),
+                        });
+                    }
+                }
+                find_envelope_mut(doc, *target)?.effects.remove(*index);
+                if *introduced_definition {
+                    let idx = doc
+                        .effect_definitions
+                        .iter()
+                        .position(|d| d.id == effect.definition_id)
+                        .ok_or(CommandError::EffectDefinitionNotFound {
+                            id: effect.definition_id.get(),
+                        })?;
+                    doc.effect_definitions.remove(idx);
+                }
                 Ok(())
             }
             Command::SetEffectEnabled {
@@ -348,16 +669,150 @@ impl Command {
                 ..
             } => {
                 let layer = target.get();
-                let env = find_envelope_mut(doc, *target)?;
-                let e = env.effects.iter_mut().find(|e| e.id == *effect).ok_or(
-                    CommandError::EffectNotFound {
+                let definition_id = find_envelope(doc, *target)
+                    .ok_or(CommandError::LayerNotFound(layer))?
+                    .effects
+                    .iter()
+                    .find(|u| u.id == *effect)
+                    .map(|u| u.definition_id)
+                    .ok_or(CommandError::EffectNotFound {
                         effect: effect.get(),
                         layer,
+                    })?;
+                let def = doc.effect_definition_mut(definition_id).ok_or(
+                    CommandError::EffectDefinitionNotFound {
+                        id: definition_id.get(),
                     },
                 )?;
-                e.enabled = *new;
+                def.enabled = *new;
                 Ok(())
             }
+            Command::DeleteEffectDefinition { definition } => {
+                let use_ids: Vec<u64> = doc
+                    .effect_use_ids(definition.id)
+                    .into_iter()
+                    .map(|id| id.get())
+                    .collect();
+                if !use_ids.is_empty() {
+                    return Err(CommandError::DefinitionInUse {
+                        id: definition.id.get(),
+                        use_ids,
+                    });
+                }
+                let existing = doc.effect_definition(definition.id).ok_or(
+                    CommandError::EffectDefinitionNotFound {
+                        id: definition.id.get(),
+                    },
+                )?;
+                if existing != definition {
+                    return Err(CommandError::EffectDefinitionMismatch {
+                        id: definition.id.get(),
+                    });
+                }
+                let idx = doc
+                    .effect_definitions
+                    .iter()
+                    .position(|d| d.id == definition.id)
+                    .ok_or(CommandError::EffectDefinitionNotFound {
+                        id: definition.id.get(),
+                    })?;
+                doc.effect_definitions.remove(idx);
+                Ok(())
+            }
+            Command::AddEffectDefinition { definition } => {
+                if doc.effect_definition(definition.id).is_some() {
+                    return Err(CommandError::EffectDefinitionAlreadyExists {
+                        id: definition.id.get(),
+                    });
+                }
+                if stable_id_in_use(doc, definition.id.get()) {
+                    return Err(CommandError::StableIdCollision {
+                        id: definition.id.get(),
+                    });
+                }
+                doc.effect_definitions.push(definition.clone());
+                Ok(())
+            }
+            Command::CreateEffect {
+                target,
+                index,
+                use_,
+                definition,
+                stable_id_reservation,
+            } => apply_create_effect(
+                doc,
+                *target,
+                *index,
+                use_.clone(),
+                definition.clone(),
+                *stable_id_reservation,
+            ),
+            Command::UndoCreateEffect {
+                target,
+                index,
+                use_,
+                definition,
+                stable_id_reservation,
+            } => apply_undo_create_effect(
+                doc,
+                *target,
+                *index,
+                use_.clone(),
+                definition.clone(),
+                *stable_id_reservation,
+            ),
+            Command::LinkEffectUse {
+                target,
+                index,
+                use_,
+                stable_id_reservation,
+            } => apply_link_effect_use(doc, *target, *index, use_.clone(), *stable_id_reservation),
+            Command::UndoLinkEffectUse {
+                target,
+                index,
+                use_,
+                stable_id_reservation,
+            } => apply_undo_link_effect_use(
+                doc,
+                *target,
+                *index,
+                use_.clone(),
+                *stable_id_reservation,
+            ),
+            Command::UnlinkEffectUse {
+                target,
+                index,
+                use_,
+            } => apply_unlink_effect_use(doc, *target, *index, use_.clone()),
+            Command::RestoreEffectUse {
+                target,
+                index,
+                use_,
+            } => apply_restore_effect_use(doc, *target, *index, use_.clone()),
+            Command::CopyLocalEffect {
+                use_id,
+                previous_definition_id,
+                new_definition,
+                stable_id_reservation,
+            } => apply_copy_local_effect(
+                doc,
+                *use_id,
+                *previous_definition_id,
+                new_definition.clone(),
+                *stable_id_reservation,
+            ),
+            Command::UndoCopyLocalEffect {
+                use_id,
+                previous_definition_id,
+                new_definition,
+                stable_id_reservation,
+            } => apply_undo_copy_local_effect(
+                doc,
+                *use_id,
+                *previous_definition_id,
+                new_definition.clone(),
+                *stable_id_reservation,
+            ),
             Command::SetAudioComponentEnabled {
                 target, index, new, ..
             } => {
@@ -469,19 +924,23 @@ impl Command {
                 target,
                 index,
                 effect,
+                introduced_definition,
             } => Command::RemoveEffect {
                 target,
                 index,
                 effect,
+                introduced_definition,
             },
             Command::RemoveEffect {
                 target,
                 index,
                 effect,
+                introduced_definition,
             } => Command::AddEffect {
                 target,
                 index,
                 effect,
+                introduced_definition,
             },
             Command::SetEffectEnabled {
                 target,
@@ -493,6 +952,100 @@ impl Command {
                 effect,
                 old: new,
                 new: old,
+            },
+            Command::DeleteEffectDefinition { definition } => {
+                Command::AddEffectDefinition { definition }
+            }
+            Command::AddEffectDefinition { definition } => {
+                Command::DeleteEffectDefinition { definition }
+            }
+            Command::CreateEffect {
+                target,
+                index,
+                use_,
+                definition,
+                stable_id_reservation,
+            } => Command::UndoCreateEffect {
+                target,
+                index,
+                use_,
+                definition,
+                stable_id_reservation,
+            },
+            Command::UndoCreateEffect {
+                target,
+                index,
+                use_,
+                definition,
+                stable_id_reservation,
+            } => Command::CreateEffect {
+                target,
+                index,
+                use_,
+                definition,
+                stable_id_reservation,
+            },
+            Command::LinkEffectUse {
+                target,
+                index,
+                use_,
+                stable_id_reservation,
+            } => Command::UndoLinkEffectUse {
+                target,
+                index,
+                use_,
+                stable_id_reservation,
+            },
+            Command::UndoLinkEffectUse {
+                target,
+                index,
+                use_,
+                stable_id_reservation,
+            } => Command::LinkEffectUse {
+                target,
+                index,
+                use_,
+                stable_id_reservation,
+            },
+            Command::UnlinkEffectUse {
+                target,
+                index,
+                use_,
+            } => Command::RestoreEffectUse {
+                target,
+                index,
+                use_,
+            },
+            Command::RestoreEffectUse {
+                target,
+                index,
+                use_,
+            } => Command::UnlinkEffectUse {
+                target,
+                index,
+                use_,
+            },
+            Command::CopyLocalEffect {
+                use_id,
+                previous_definition_id,
+                new_definition,
+                stable_id_reservation,
+            } => Command::UndoCopyLocalEffect {
+                use_id,
+                previous_definition_id,
+                new_definition,
+                stable_id_reservation,
+            },
+            Command::UndoCopyLocalEffect {
+                use_id,
+                previous_definition_id,
+                new_definition,
+                stable_id_reservation,
+            } => Command::CopyLocalEffect {
+                use_id,
+                previous_definition_id,
+                new_definition,
+                stable_id_reservation,
             },
             Command::SetAudioComponentEnabled {
                 target,
@@ -587,6 +1140,8 @@ pub fn layer_names_for_item(
     Ok(names)
 }
 
+/// `ScalarPropertyId::EffectParam`は`Command::apply`側で`Document.effect_definitions`を
+/// 直接書き換える(D1l: paramsはUseではなくDefinitionが持つ)。ここには到達しない防御的分岐。
 fn write_property(
     env: &mut ItemEnvelope,
     property: &ScalarPropertyId,
@@ -598,15 +1153,11 @@ fn write_property(
         ScalarPropertyId::Scale => env.transform.scale = value,
         ScalarPropertyId::Rotation => env.transform.rotation = value,
         ScalarPropertyId::Opacity => env.opacity = value,
-        ScalarPropertyId::EffectParam(effect_id, name) => {
-            let layer = env.layer_id.get();
-            let e = env.effects.iter_mut().find(|e| e.id == *effect_id).ok_or(
-                CommandError::EffectNotFound {
-                    effect: effect_id.get(),
-                    layer,
-                },
-            )?;
-            e.params.insert(name.clone(), value);
+        ScalarPropertyId::EffectParam(effect_id, _) => {
+            return Err(CommandError::EffectNotFound {
+                effect: effect_id.get(),
+                layer: env.layer_id.get(),
+            });
         }
     }
     Ok(())
@@ -748,7 +1299,10 @@ fn find_group_children(items: &[TrackItem], target: LayerId) -> Option<&[TrackIt
 }
 
 /// 事前検査用の読み取り専用ロケータ。
-fn find_items_vec(doc: &Document, parent: ParentLocator) -> Result<&[TrackItem], CommandError> {
+pub(crate) fn find_items_vec(
+    doc: &Document,
+    parent: ParentLocator,
+) -> Result<&[TrackItem], CommandError> {
     match parent {
         ParentLocator::Track(tid) => doc
             .tracks
@@ -828,4 +1382,520 @@ fn find_in_groups(
         }
     }
     None
+}
+
+struct ReservationCommit {
+    advance_to: Option<u64>,
+}
+
+pub(crate) fn guard_effect_lifecycle_document(doc: &Document) -> Result<(), CommandError> {
+    let required = validate::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
+    if doc.version != WRITER_VERSION || doc.min_reader_version != required {
+        return Err(CommandError::EffectLifecycleRequiresV4Document {
+            version: doc.version,
+            min_reader_version: doc.min_reader_version,
+        });
+    }
+    doc.validate().map_err(CommandError::Validate)?;
+    Ok(())
+}
+
+fn swap_if_valid(doc: &mut Document, next: Document) -> Result<(), CommandError> {
+    next.validate().map_err(CommandError::Validate)?;
+    *doc = next;
+    Ok(())
+}
+
+fn validate_reservation_shape(
+    reservation: StableIdReservation,
+    introduced: &[u64],
+) -> Result<(), CommandError> {
+    let before = reservation.before();
+    let after = reservation.after();
+    if before >= after {
+        return Err(CommandError::InvalidStableIdReservationInterval { before, after });
+    }
+    let span = after
+        .checked_sub(before)
+        .ok_or(CommandError::InvalidStableIdReservationInterval { before, after })?;
+    let introduced_len =
+        u64::try_from(introduced.len()).map_err(|_| CommandError::StableIdReservationMismatch {
+            before,
+            after,
+            introduced: introduced.to_vec(),
+        })?;
+    if introduced_len != span {
+        return Err(CommandError::StableIdReservationMismatch {
+            before,
+            after,
+            introduced: introduced.to_vec(),
+        });
+    }
+    for (offset, &id) in introduced.iter().enumerate() {
+        let offset =
+            u64::try_from(offset).map_err(|_| CommandError::StableIdReservationMismatch {
+                before,
+                after,
+                introduced: introduced.to_vec(),
+            })?;
+        let expected =
+            before
+                .checked_add(offset)
+                .ok_or(CommandError::StableIdReservationMismatch {
+                    before,
+                    after,
+                    introduced: introduced.to_vec(),
+                })?;
+        if id != expected {
+            return Err(CommandError::StableIdReservationMismatch {
+                before,
+                after,
+                introduced: introduced.to_vec(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn validate_reservation_for_apply(
+    doc: &Document,
+    reservation: StableIdReservation,
+    introduced: &[u64],
+) -> Result<ReservationCommit, CommandError> {
+    validate_reservation_shape(reservation, introduced)?;
+    let before = reservation.before();
+    let after = reservation.after();
+    for &id in introduced {
+        if stable_id_in_use(doc, id) {
+            return Err(CommandError::StableIdCollision { id });
+        }
+    }
+    let next = doc.next_stable_id.peek_next();
+    let advance_to = if next == before {
+        Some(after)
+    } else if next >= after {
+        None
+    } else {
+        return Err(CommandError::StableIdReservationCounterMismatch {
+            next,
+            before,
+            after,
+        });
+    };
+    Ok(ReservationCommit { advance_to })
+}
+
+fn validate_reservation_for_undo(
+    doc: &Document,
+    reservation: StableIdReservation,
+    introduced: &[u64],
+) -> Result<(), CommandError> {
+    validate_reservation_shape(reservation, introduced)?;
+    let before = reservation.before();
+    let after = reservation.after();
+    let next = doc.next_stable_id.peek_next();
+    if next < after {
+        return Err(CommandError::StableIdReservationCounterMismatch {
+            next,
+            before,
+            after,
+        });
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_reservation_closure(
+    reservation: StableIdReservation,
+    introduced: &[u64],
+) -> Result<(), CommandError> {
+    validate_reservation_shape(reservation, introduced)
+}
+
+pub(crate) fn introduced_ids_create(use_: &EffectUse, definition: &EffectDefinition) -> Vec<u64> {
+    let mut ids = vec![use_.id.get(), definition.id.get()];
+    ids.extend(
+        remint_order_keyframe_ids(definition)
+            .into_iter()
+            .map(|id| id.get()),
+    );
+    ids
+}
+
+pub(crate) fn introduced_ids_link(use_: &EffectUse) -> Vec<u64> {
+    vec![use_.id.get()]
+}
+
+pub(crate) fn introduced_ids_copy_local(new_definition: &EffectDefinition) -> Vec<u64> {
+    let mut ids = vec![new_definition.id.get()];
+    ids.extend(
+        remint_order_keyframe_ids(new_definition)
+            .into_iter()
+            .map(|id| id.get()),
+    );
+    ids
+}
+
+fn apply_reservation_commit(doc: &mut Document, commit: ReservationCommit) {
+    if let Some(after) = commit.advance_to {
+        doc.next_stable_id.commit_validated_reservation(after);
+    }
+}
+
+pub(crate) fn find_use_location(doc: &Document, use_id: EffectId) -> Option<(LayerId, usize)> {
+    fn walk(items: &[TrackItem], use_id: EffectId) -> Option<(LayerId, usize)> {
+        for item in items {
+            let env = envelope_of(item);
+            if let Some(index) = env.effects.iter().position(|u| u.id == use_id) {
+                return Some((env.layer_id, index));
+            }
+            if let TrackItem::Group(g) = item {
+                if let Some(found) = walk(&g.children, use_id) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+    doc.tracks
+        .iter()
+        .find_map(|track| walk(&track.items, use_id))
+}
+
+fn apply_create_effect(
+    doc: &mut Document,
+    target: LayerId,
+    index: usize,
+    use_: EffectUse,
+    definition: EffectDefinition,
+    reservation: StableIdReservation,
+) -> Result<(), CommandError> {
+    guard_effect_lifecycle_document(doc)?;
+    if use_.definition_id != definition.id {
+        return Err(CommandError::EffectDefinitionMismatch {
+            id: definition.id.get(),
+        });
+    }
+    let introduced = introduced_ids_create(&use_, &definition);
+    let commit = validate_reservation_for_apply(doc, reservation, &introduced)?;
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(target.get()))?;
+    if index > env.effects.len() {
+        return Err(CommandError::IndexOutOfRange {
+            index,
+            len: env.effects.len(),
+        });
+    }
+    if doc.effect_definition(definition.id).is_some() {
+        return Err(CommandError::EffectDefinitionAlreadyExists {
+            id: definition.id.get(),
+        });
+    }
+
+    let mut next = doc.clone();
+    {
+        let env = find_envelope_mut(&mut next, target)?;
+        env.effects.insert(index, use_);
+    }
+    next.effect_definitions.push(definition);
+    apply_reservation_commit(&mut next, commit);
+    swap_if_valid(doc, next)
+}
+
+fn apply_undo_create_effect(
+    doc: &mut Document,
+    target: LayerId,
+    index: usize,
+    use_: EffectUse,
+    definition: EffectDefinition,
+    reservation: StableIdReservation,
+) -> Result<(), CommandError> {
+    guard_effect_lifecycle_document(doc)?;
+    let introduced = introduced_ids_create(&use_, &definition);
+    validate_reservation_for_undo(doc, reservation, &introduced)?;
+    let layer = target.get();
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    if index >= env.effects.len() {
+        return Err(CommandError::IndexOutOfRange {
+            index,
+            len: env.effects.len(),
+        });
+    }
+    let at_index = &env.effects[index];
+    if at_index.id != use_.id || at_index.definition_id != use_.definition_id {
+        return Err(CommandError::RemoveEffectMismatch {
+            expected: use_.id.get(),
+            found: at_index.id.get(),
+        });
+    }
+    let ledger_def =
+        doc.effect_definition(definition.id)
+            .ok_or(CommandError::EffectDefinitionNotFound {
+                id: definition.id.get(),
+            })?;
+    if ledger_def != &definition {
+        return Err(CommandError::RemoveEffectDefinitionMismatch {
+            id: definition.id.get(),
+        });
+    }
+    let remaining = doc.effect_use_count(definition.id);
+    if remaining != 1 {
+        return Err(CommandError::DefinitionInUse {
+            id: definition.id.get(),
+            use_ids: doc
+                .effect_use_ids(definition.id)
+                .into_iter()
+                .map(|id| id.get())
+                .collect(),
+        });
+    }
+
+    let mut next = doc.clone();
+    find_envelope_mut(&mut next, target)?.effects.remove(index);
+    next.effect_definitions.retain(|d| d.id != definition.id);
+    swap_if_valid(doc, next)
+}
+
+fn apply_link_effect_use(
+    doc: &mut Document,
+    target: LayerId,
+    index: usize,
+    use_: EffectUse,
+    reservation: StableIdReservation,
+) -> Result<(), CommandError> {
+    guard_effect_lifecycle_document(doc)?;
+    let introduced = introduced_ids_link(&use_);
+    let commit = validate_reservation_for_apply(doc, reservation, &introduced)?;
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(target.get()))?;
+    if index > env.effects.len() {
+        return Err(CommandError::IndexOutOfRange {
+            index,
+            len: env.effects.len(),
+        });
+    }
+    let existing = doc.effect_definition(use_.definition_id).ok_or(
+        CommandError::EffectDefinitionNotFound {
+            id: use_.definition_id.get(),
+        },
+    )?;
+
+    let mut next = doc.clone();
+    let _ = existing;
+    find_envelope_mut(&mut next, target)?
+        .effects
+        .insert(index, use_);
+    apply_reservation_commit(&mut next, commit);
+    swap_if_valid(doc, next)
+}
+
+fn apply_undo_link_effect_use(
+    doc: &mut Document,
+    target: LayerId,
+    index: usize,
+    use_: EffectUse,
+    reservation: StableIdReservation,
+) -> Result<(), CommandError> {
+    guard_effect_lifecycle_document(doc)?;
+    let introduced = introduced_ids_link(&use_);
+    validate_reservation_for_undo(doc, reservation, &introduced)?;
+    let layer = target.get();
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    if index >= env.effects.len() {
+        return Err(CommandError::IndexOutOfRange {
+            index,
+            len: env.effects.len(),
+        });
+    }
+    let at_index = &env.effects[index];
+    if at_index.id != use_.id || at_index.definition_id != use_.definition_id {
+        return Err(CommandError::RemoveEffectMismatch {
+            expected: use_.id.get(),
+            found: at_index.id.get(),
+        });
+    }
+    if doc.effect_definition(use_.definition_id).is_none() {
+        return Err(CommandError::EffectDefinitionNotFound {
+            id: use_.definition_id.get(),
+        });
+    }
+
+    let mut next = doc.clone();
+    find_envelope_mut(&mut next, target)?.effects.remove(index);
+    swap_if_valid(doc, next)
+}
+
+fn apply_unlink_effect_use(
+    doc: &mut Document,
+    target: LayerId,
+    index: usize,
+    use_: EffectUse,
+) -> Result<(), CommandError> {
+    guard_effect_lifecycle_document(doc)?;
+    let layer = target.get();
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    if index >= env.effects.len() {
+        return Err(CommandError::IndexOutOfRange {
+            index,
+            len: env.effects.len(),
+        });
+    }
+    let at_index = &env.effects[index];
+    if at_index.id != use_.id || at_index.definition_id != use_.definition_id {
+        return Err(CommandError::RemoveEffectMismatch {
+            expected: use_.id.get(),
+            found: at_index.id.get(),
+        });
+    }
+    if doc.effect_definition(use_.definition_id).is_none() {
+        return Err(CommandError::EffectDefinitionNotFound {
+            id: use_.definition_id.get(),
+        });
+    }
+
+    let mut next = doc.clone();
+    find_envelope_mut(&mut next, target)?.effects.remove(index);
+    swap_if_valid(doc, next)
+}
+
+fn apply_restore_effect_use(
+    doc: &mut Document,
+    target: LayerId,
+    index: usize,
+    use_: EffectUse,
+) -> Result<(), CommandError> {
+    guard_effect_lifecycle_document(doc)?;
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(target.get()))?;
+    if index > env.effects.len() {
+        return Err(CommandError::IndexOutOfRange {
+            index,
+            len: env.effects.len(),
+        });
+    }
+    if stable_id_in_use(doc, use_.id.get()) {
+        return Err(CommandError::StableIdCollision { id: use_.id.get() });
+    }
+    if doc.effect_definition(use_.definition_id).is_none() {
+        return Err(CommandError::EffectDefinitionNotFound {
+            id: use_.definition_id.get(),
+        });
+    }
+
+    let mut next = doc.clone();
+    find_envelope_mut(&mut next, target)?
+        .effects
+        .insert(index, use_);
+    swap_if_valid(doc, next)
+}
+
+fn apply_copy_local_effect(
+    doc: &mut Document,
+    use_id: EffectId,
+    previous_definition_id: EffectDefinitionId,
+    new_definition: EffectDefinition,
+    reservation: StableIdReservation,
+) -> Result<(), CommandError> {
+    guard_effect_lifecycle_document(doc)?;
+    let introduced = introduced_ids_copy_local(&new_definition);
+    let commit = validate_reservation_for_apply(doc, reservation, &introduced)?;
+    let (target, index) =
+        find_use_location(doc, use_id).ok_or(CommandError::EffectUseNotFound {
+            use_id: use_id.get(),
+        })?;
+    {
+        let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(target.get()))?;
+        let use_ = &env.effects[index];
+        if use_.id != use_id {
+            return Err(CommandError::EffectUseNotFound {
+                use_id: use_id.get(),
+            });
+        }
+        if use_.definition_id != previous_definition_id {
+            return Err(CommandError::CopyLocalDefinitionMismatch {
+                expected: previous_definition_id.get(),
+                found: use_.definition_id.get(),
+            });
+        }
+    }
+    let source = doc.effect_definition(previous_definition_id).ok_or(
+        CommandError::EffectDefinitionNotFound {
+            id: previous_definition_id.get(),
+        },
+    )?;
+    if !definition_semantic_body_eq(source, &new_definition) {
+        return Err(CommandError::CopyLocalPayloadMismatch);
+    }
+    if doc.effect_definition(new_definition.id).is_some() {
+        return Err(CommandError::EffectDefinitionAlreadyExists {
+            id: new_definition.id.get(),
+        });
+    }
+
+    let mut next = doc.clone();
+    {
+        let env = find_envelope_mut(&mut next, target)?;
+        env.effects[index].definition_id = new_definition.id;
+    }
+    next.effect_definitions.push(new_definition);
+    apply_reservation_commit(&mut next, commit);
+    swap_if_valid(doc, next)
+}
+
+fn apply_undo_copy_local_effect(
+    doc: &mut Document,
+    use_id: EffectId,
+    previous_definition_id: EffectDefinitionId,
+    new_definition: EffectDefinition,
+    reservation: StableIdReservation,
+) -> Result<(), CommandError> {
+    guard_effect_lifecycle_document(doc)?;
+    let introduced = introduced_ids_copy_local(&new_definition);
+    validate_reservation_for_undo(doc, reservation, &introduced)?;
+    let (target, index) =
+        find_use_location(doc, use_id).ok_or(CommandError::EffectUseNotFound {
+            use_id: use_id.get(),
+        })?;
+    {
+        let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(target.get()))?;
+        let use_ = &env.effects[index];
+        if use_.definition_id != new_definition.id {
+            return Err(CommandError::CopyLocalDefinitionMismatch {
+                expected: new_definition.id.get(),
+                found: use_.definition_id.get(),
+            });
+        }
+    }
+    if doc.effect_definition(previous_definition_id).is_none() {
+        return Err(CommandError::EffectDefinitionNotFound {
+            id: previous_definition_id.get(),
+        });
+    }
+    let ledger =
+        doc.effect_definition(new_definition.id)
+            .ok_or(CommandError::EffectDefinitionNotFound {
+                id: new_definition.id.get(),
+            })?;
+    if ledger != &new_definition {
+        return Err(CommandError::EffectDefinitionMismatch {
+            id: new_definition.id.get(),
+        });
+    }
+    let shared_use_ids: Vec<u64> = doc
+        .effect_use_ids(new_definition.id)
+        .into_iter()
+        .map(|id| id.get())
+        .filter(|id| *id != use_id.get())
+        .collect();
+    if !shared_use_ids.is_empty() {
+        return Err(CommandError::UndoCopyLocalDefinitionInUse {
+            id: new_definition.id.get(),
+            use_ids: shared_use_ids,
+        });
+    }
+
+    let mut next = doc.clone();
+    {
+        let env = find_envelope_mut(&mut next, target)?;
+        env.effects[index].definition_id = previous_definition_id;
+    }
+    next.effect_definitions
+        .retain(|d| d.id != new_definition.id);
+    swap_if_valid(doc, next)
 }
