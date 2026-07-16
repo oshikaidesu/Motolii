@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! D1c-FU(#101, 監査S14): `OpenMode`(ReadWrite / ReadOnlyNewer / Reject)の読込/保存可否。
 //!
 //! 「未知ネストを読めたこと」と「再保存可能」を同一視しない — `ReadOnlyNewer`は読めても

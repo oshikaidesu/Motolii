@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 //! D1c: アトミック保存の各段 abort 注入と min_reader / roundtrip / 競合・再保存。
 
 use std::fs;
