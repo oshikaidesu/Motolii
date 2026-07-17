@@ -2620,6 +2620,7 @@ dependencies = [
  "motolii-media",
  "motolii-nodes",
  "motolii-plugin",
+ "motolii-plugins-firstparty",
  "motolii-render",
  "motolii-testkit",
  "serde",
@@ -2647,6 +2648,7 @@ dependencies = [
  "motolii-gpu",
  "motolii-nodes",
  "motolii-plugin",
+ "motolii-plugins-firstparty",
  "motolii-render",
  "motolii-testkit",
  "proc-macro2",
@@ -2679,6 +2681,7 @@ dependencies = [
  "motolii-media",
  "motolii-nodes",
  "motolii-plugin",
+ "motolii-plugins-firstparty",
  "motolii-render",
  "motolii-testkit",
  "thiserror 2.0.18",
@@ -2733,6 +2736,14 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "wgpu",
+]
+
+[[package]]
+name = "motolii-plugins-firstparty"
+version = "0.1.0"
+dependencies = [
+ "motolii-plugin",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

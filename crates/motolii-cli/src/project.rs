@@ -13,10 +13,9 @@ use motolii_gpu::{GpuCtx, RgbaDownloader, YuvToRgba};
 use motolii_media::{probe, FrameReader, MediaInfo};
 use motolii_nodes::{ParamOverlayError, ParamRectOverlay};
 use motolii_plugin::{
-    migrate_plugin_params,
-    reference::{reference_catalog, register_reference_plugins},
-    ParamDriverContext, PluginError, PluginRegistry, PluginRuntime, TextureRef,
+    migrate_plugin_params, ParamDriverContext, PluginError, PluginRuntime, TextureRef,
 };
+use motolii_plugins_firstparty::first_party_runtime;
 use motolii_render::{
     render_frame_with_background_texture, BackgroundTextureRequest, RenderSession,
 };
@@ -151,13 +150,12 @@ pub enum ProjectError {
     TimeMap(#[from] TimeMapError),
     #[error(transparent)]
     RationalTime(#[from] RationalTimeError),
+    #[error(transparent)]
+    FirstParty(#[from] motolii_plugins_firstparty::FirstPartyError),
 }
 
 fn reference_runtime() -> Result<PluginRuntime, ProjectError> {
-    let catalog = std::sync::Arc::new(reference_catalog()?);
-    let mut executors = PluginRegistry::new();
-    register_reference_plugins(&mut executors)?;
-    Ok(PluginRuntime::try_new(catalog, executors)?)
+    Ok(first_party_runtime()?)
 }
 
 pub fn load_project_v1(path: impl AsRef<Path>) -> Result<ProjectV1, ProjectError> {

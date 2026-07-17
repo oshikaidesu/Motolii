@@ -5,6 +5,7 @@ members = [
     "crates/motolii-eval",
     "crates/motolii-nodes",
     "crates/motolii-plugin",
+    "crates/motolii-plugins-firstparty",
     "crates/motolii-render",
     "crates/motolii-export",
     "crates/motolii-cli",
@@ -29,6 +30,7 @@ motolii-gpu = { path = "crates/motolii-gpu" }
 motolii-media = { path = "crates/motolii-media" }
 motolii-nodes = { path = "crates/motolii-nodes" }
 motolii-plugin = { path = "crates/motolii-plugin" }
+motolii-plugins-firstparty = { path = "crates/motolii-plugins-firstparty" }
 motolii-render = { path = "crates/motolii-render" }
 motolii-export = { path = "crates/motolii-export" }
 motolii-cli = { path = "crates/motolii-cli" }
