@@ -15,8 +15,8 @@ use motolii_doc::{
 use motolii_eval::DataTracks;
 use motolii_export::{export_document_video, ExportJob};
 use motolii_media::{choose_audio_encode_mode, probe, probe_audio, AudioEncodeMode, Encoder};
-use motolii_plugin::reference::{reference_catalog, register_reference_plugins};
-use motolii_plugin::{PluginRegistry, PluginRuntime};
+use motolii_plugin::PluginRuntime;
+use motolii_plugins_firstparty::first_party_runtime;
 use motolii_testkit::{ffmpeg_or_skip, gpu_or_skip, tmp_dir};
 
 const W: u32 = 32;
@@ -28,9 +28,7 @@ const FPS: Fps = match Fps::try_new(12, 1) {
 const N_FRAMES: usize = 12;
 
 fn reference_runtime() -> PluginRuntime {
-    let mut registry = PluginRegistry::new();
-    register_reference_plugins(&mut registry).unwrap();
-    PluginRuntime::try_new(std::sync::Arc::new(reference_catalog().unwrap()), registry).unwrap()
+    first_party_runtime().unwrap()
 }
 
 fn make_bg_video(path: &Path) {

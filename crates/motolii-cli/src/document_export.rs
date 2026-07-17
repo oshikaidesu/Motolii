@@ -4,8 +4,7 @@ use motolii_doc::{open_project_resolved, ResourceLimits};
 use motolii_eval::DataTracks;
 use motolii_export::{export_document_video, ExportJob, ExportReport};
 use motolii_gpu::GpuCtx;
-use motolii_plugin::reference::{reference_catalog, register_reference_plugins};
-use motolii_plugin::{PluginRegistry, PluginRuntime};
+use motolii_plugins_firstparty::first_party_runtime;
 use std::path::Path;
 
 pub fn export_document_file(
@@ -15,12 +14,7 @@ pub fn export_document_file(
     frame_count: Option<usize>,
     qp0: bool,
 ) -> Result<ExportReport, CliError> {
-    let catalog =
-        std::sync::Arc::new(reference_catalog().map_err(|e| CliError::Usage(e.to_string()))?);
-    let mut executors = PluginRegistry::new();
-    register_reference_plugins(&mut executors).map_err(|e| CliError::Usage(e.to_string()))?;
-    let runtime =
-        PluginRuntime::try_new(catalog, executors).map_err(|e| CliError::Usage(e.to_string()))?;
+    let runtime = first_party_runtime()?;
     let opened = open_project_resolved(doc_path, &ResourceLimits::production(), runtime.catalog())
         .map_err(|e| CliError::Usage(e.to_string()))?;
     let doc = opened.recovered.document;

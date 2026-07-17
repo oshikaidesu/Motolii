@@ -19,8 +19,8 @@ use motolii_doc::{
 use motolii_eval::DataTracks;
 use motolii_gpu::download_rgba;
 use motolii_nodes::ClippingMaskMode;
-use motolii_plugin::reference::{reference_catalog, register_reference_plugins};
-use motolii_plugin::{PluginRegistry, PluginRuntime};
+use motolii_plugin::PluginRuntime;
+use motolii_plugins_firstparty::first_party_runtime;
 use motolii_render::{render_graph_cached, RenderGraphInputs, RenderSession, RenderStep};
 use motolii_testkit::clipping_mask::{clipping_mask_frame, clipping_mask_mul_u8, ClippingMaskRef};
 use motolii_testkit::cpu_reference::{expected_rect_frame, premul_over_u8};
@@ -34,9 +34,7 @@ fn desc() -> FrameDesc {
 }
 
 fn reference_runtime() -> PluginRuntime {
-    let mut registry = PluginRegistry::new();
-    register_reference_plugins(&mut registry).unwrap();
-    PluginRuntime::try_new(std::sync::Arc::new(reference_catalog().unwrap()), registry).unwrap()
+    first_party_runtime().unwrap()
 }
 
 fn rect_clip(layer: u64, center: [f64; 2], size: [f64; 2], color: [f64; 4]) -> Clip {
