@@ -6,4 +6,5 @@ license.workspace = true
 
 [dependencies]
 motolii-plugin.workspace = true
+motolii-plugin-opacity.workspace = true
 thiserror.workspace = true

@@ -13,7 +13,7 @@ use motolii_doc::{
     EffectDefinitionId, EffectId, EffectUse, ItemEnvelope, PluginDiagnosticReason, Track,
     TrackItem,
 };
-use motolii_plugin::reference::reference_catalog;
+use motolii_plugins_firstparty::first_party_catalog;
 use serde_json::{json, Map};
 
 fn minimal_asset_clip_doc() -> (Document, motolii_doc::LayerId) {
@@ -63,7 +63,9 @@ fn unknown_effect_plugin_id_loads_warns_and_roundtrips() {
         .expect("unknown plugin_id must not fail validate (open side)");
 
     // 2. 診断: 未知idとしてprepared解決に現れる
-    let resolved = doc.prepare_plugins(&reference_catalog().unwrap()).unwrap();
+    let resolved = doc
+        .prepare_plugins(&first_party_catalog().unwrap())
+        .unwrap();
     let warnings = resolved.diagnostics();
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     assert_eq!(warnings[0].plugin_id, "vendor.filter.glow_deluxe");
@@ -107,7 +109,9 @@ fn unknown_clip_source_plugin_id_loads_warns_and_roundtrips() {
     });
 
     doc.validate().expect("unknown plugin source must open");
-    let resolved = doc.prepare_plugins(&reference_catalog().unwrap()).unwrap();
+    let resolved = doc
+        .prepare_plugins(&first_party_catalog().unwrap())
+        .unwrap();
     let warnings = resolved.diagnostics();
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     assert!(matches!(
@@ -121,7 +125,7 @@ fn unknown_clip_source_plugin_id_loads_warns_and_roundtrips() {
 
 #[test]
 fn known_plugin_future_version_is_degraded_not_a_downgrade_error() {
-    // core.filter.opacity は現行 version 1(motolii-plugin側 NodeDesc.version と同期)。
+    // core.filter.opacity は現行 version 1(motolii-plugin-opacity 側 NodeDesc.version と同期)。
     // 未来版(2)を参照しても、migrate downgrade errorではなく未知プラグインと同じ契約になる(S13)。
     let (mut doc, _layer) = minimal_asset_clip_doc();
     let def_id = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
@@ -146,7 +150,9 @@ fn known_plugin_future_version_is_degraded_not_a_downgrade_error() {
     doc.min_reader_version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
     doc.validate()
         .expect("future effect_version must not be a hard error");
-    let resolved = doc.prepare_plugins(&reference_catalog().unwrap()).unwrap();
+    let resolved = doc
+        .prepare_plugins(&first_party_catalog().unwrap())
+        .unwrap();
     let warnings = resolved.diagnostics();
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     assert_eq!(warnings[0].plugin_id, "core.filter.opacity");
@@ -182,7 +188,7 @@ fn known_plugin_current_version_has_no_warning() {
     doc.min_reader_version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
     doc.validate().unwrap();
     assert!(doc
-        .prepare_plugins(&reference_catalog().unwrap())
+        .prepare_plugins(&first_party_catalog().unwrap())
         .unwrap()
         .diagnostics()
         .is_empty());
@@ -214,7 +220,7 @@ fn plugin_kind_mismatch_in_effect_slot_is_typed_error() {
     doc.validate()
         .expect("intrinsic validation does not know plugin kinds");
     let err = doc
-        .prepare_plugins(&reference_catalog().unwrap())
+        .prepare_plugins(&first_party_catalog().unwrap())
         .unwrap_err();
     assert!(
         matches!(
@@ -254,7 +260,7 @@ fn plugin_kind_mismatch_in_clip_source_slot_is_typed_error() {
     doc.validate()
         .expect("intrinsic validation does not know plugin kinds");
     let err = doc
-        .prepare_plugins(&reference_catalog().unwrap())
+        .prepare_plugins(&first_party_catalog().unwrap())
         .unwrap_err();
     assert!(
         matches!(
@@ -333,7 +339,9 @@ fn raw_json_with_unknown_plugin_id_and_future_version_loads_and_preserves_extra(
     doc.validate()
         .expect("validate must accept unknown plugin_id/kind combos here");
 
-    let resolved = doc.prepare_plugins(&reference_catalog().unwrap()).unwrap();
+    let resolved = doc
+        .prepare_plugins(&first_party_catalog().unwrap())
+        .unwrap();
     let warnings = resolved.diagnostics();
     assert_eq!(warnings.len(), 3, "{warnings:?}");
     assert!(warnings

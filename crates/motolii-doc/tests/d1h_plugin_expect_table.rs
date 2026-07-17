@@ -1,6 +1,6 @@
 //! VSM-A0I-2: Document側へfirst-party plugin ID表を再導入しない審判。
 
-use motolii_plugin::reference::reference_catalog;
+use motolii_plugins_firstparty::first_party_catalog;
 
 #[test]
 fn plugin_contracts_live_in_catalog_not_param_expect() {
@@ -22,7 +22,7 @@ fn plugin_contracts_live_in_catalog_not_param_expect() {
         );
     }
 
-    let catalog = reference_catalog().unwrap();
+    let catalog = first_party_catalog().unwrap();
     assert_eq!(catalog.len(), 6);
     assert!(catalog.get("core.filter.opacity").is_some());
     assert!(catalog.get("core.param.sine").is_some());

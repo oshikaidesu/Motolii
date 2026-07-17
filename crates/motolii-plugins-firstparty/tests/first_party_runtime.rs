@@ -24,18 +24,12 @@ fn first_party_runtime_succeeds_with_required_opacity_capability() {
 }
 
 #[test]
-fn catalog_id_set_matches_reference_catalog() {
-    let reference_ids: BTreeSet<_> = reference_catalog()
-        .unwrap()
-        .iter()
-        .map(|(id, _)| id.0)
-        .collect();
+fn first_party_catalog_exposes_fixed_id_set() {
     let first_party_ids: BTreeSet<_> = first_party_catalog()
         .unwrap()
         .iter()
         .map(|(id, _)| id.0)
         .collect();
-    assert_eq!(first_party_ids, reference_ids);
     assert_eq!(
         first_party_ids,
         EXPECTED_FIRST_PARTY_IDS
@@ -46,20 +40,36 @@ fn catalog_id_set_matches_reference_catalog() {
 }
 
 #[test]
-fn executor_id_set_matches_register_reference_plugins() {
+fn reference_catalog_omits_externalized_opacity() {
+    let reference_ids: BTreeSet<_> = reference_catalog()
+        .unwrap()
+        .iter()
+        .map(|(id, _)| id.0)
+        .collect();
+    assert!(!reference_ids.contains("core.filter.opacity"));
+    assert_eq!(reference_ids.len(), EXPECTED_FIRST_PARTY_IDS.len() - 1);
+}
+
+#[test]
+fn first_party_registry_exposes_fixed_executor_id_set() {
     let first_party_ids = executor_id_set(&first_party_registry().unwrap());
-    let mut legacy = PluginRegistry::new();
-    register_reference_plugins(&mut legacy).unwrap();
-    let legacy_ids = executor_id_set(&legacy);
-    assert_eq!(first_party_ids, legacy_ids);
     assert_eq!(
         first_party_ids,
         EXPECTED_FIRST_PARTY_IDS
             .iter()
             .copied()
             .map(str::to_string)
-            .collect()
+            .collect::<BTreeSet<_>>()
     );
+}
+
+#[test]
+fn reference_registry_omits_externalized_opacity_executor() {
+    let mut legacy = PluginRegistry::new();
+    register_reference_plugins(&mut legacy).unwrap();
+    let legacy_ids = executor_id_set(&legacy);
+    assert!(!legacy_ids.contains("core.filter.opacity"));
+    assert_eq!(legacy_ids.len(), EXPECTED_FIRST_PARTY_IDS.len() - 1);
 }
 
 fn executor_id_set(registry: &PluginRegistry) -> BTreeSet<String> {

@@ -7,12 +7,14 @@ use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, RationalTime};
 use motolii_eval::Value;
 use motolii_gpu::{GpuCtx, PipelineCache};
 use motolii_plugin::reference::{
-    register_reference_plugins, CLEAR_FILTER, OPACITY_FILTER, SINE_PARAM_DRIVER, TINT_FILTER,
+    register_reference_plugins, CLEAR_FILTER, SINE_PARAM_DRIVER, TINT_FILTER,
 };
 use motolii_plugin::{
     FilterPlugin, NodeDesc, ParamDriverContext, PluginError, PluginId, PluginKind, PluginRegistry,
     RenderCtx, ResolvedParams, TextureRef,
 };
+use motolii_plugin_opacity::OPACITY_FILTER;
+use motolii_plugins_firstparty::first_party_registry;
 use motolii_testkit::purity::{
     assert_filter_pure, assert_param_driver_pure, assert_registry_pure, RegistryPurityProbe,
 };
@@ -101,11 +103,22 @@ fn sine_param_driver_is_pure() {
 }
 
 #[test]
+fn first_party_registry_is_pure() {
+    let Some(gpu) = gpu_or_skip() else { return };
+    let registry = first_party_registry().unwrap();
+    assert!(registry.len(PluginKind::Filter) >= 1);
+    assert!(registry.len(PluginKind::LayerSource) >= 1);
+    assert!(registry.len(PluginKind::Composite) >= 1);
+    assert!(registry.len(PluginKind::ParamDriver) >= 1);
+    assert_registry_pure(&registry, &gpu, &RegistryPurityProbe::small()).unwrap();
+}
+
+#[test]
 fn reference_registry_is_pure() {
     let Some(gpu) = gpu_or_skip() else { return };
     let mut registry = PluginRegistry::new();
     register_reference_plugins(&mut registry).unwrap();
-    // Filter×3 + ParamDriver + LayerSource + Composite が手書き列挙なしで検査される。
+    // Filter×2 + ParamDriver + LayerSource + Composite が手書き列挙なしで検査される。
     assert!(registry.len(PluginKind::Filter) >= 1);
     assert!(registry.len(PluginKind::LayerSource) >= 1);
     assert!(registry.len(PluginKind::Composite) >= 1);

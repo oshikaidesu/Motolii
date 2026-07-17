@@ -1149,8 +1149,6 @@ pub mod reference {
 
     pub static CLEAR_FILTER: ClearFilter = ClearFilter;
     pub static TINT_FILTER: TintFilter = TintFilter;
-    /// INF-7g 実演: LLMが new-plugin 型紙から肉付けした参照Filter。
-    pub static OPACITY_FILTER: OpacityFilter = OpacityFilter;
     pub static CLEAR_LAYER_SOURCE: ClearLayerSource = ClearLayerSource;
     pub static SINE_PARAM_DRIVER: SineParamDriver = SineParamDriver;
     pub static CLEAR_COMPOSITE: ClearComposite = ClearComposite;
@@ -1159,7 +1157,6 @@ pub mod reference {
         registry.register_layer_source(&CLEAR_LAYER_SOURCE)?;
         registry.register_filter(&CLEAR_FILTER)?;
         registry.register_filter(&TINT_FILTER)?;
-        registry.register_filter(&OPACITY_FILTER)?;
         registry.register_param_driver(&SINE_PARAM_DRIVER)?;
         registry.register_composite(&CLEAR_COMPOSITE)?;
         Ok(())
@@ -1172,7 +1169,6 @@ pub mod reference {
             (PluginKind::LayerSource, clear_layer_source_desc(), vec![]),
             (PluginKind::Filter, clear_filter_desc(), vec![]),
             (PluginKind::Filter, tint_filter_desc(), vec![]),
-            (PluginKind::Filter, opacity_filter_desc(), vec![]),
             (
                 PluginKind::ParamDriver,
                 sine_param_desc(),
@@ -1311,88 +1307,6 @@ pub mod reference {
         }
     }
 
-    /// 不透明度乗算(INF-7g)。premul RGBA 全体に `amount` を掛ける。
-    pub struct OpacityFilter;
-
-    impl FilterPlugin for OpacityFilter {
-        fn desc(&self) -> &NodeDesc {
-            opacity_filter_desc()
-        }
-
-        fn render(
-            &self,
-            gpu: &GpuCtx,
-            pipelines: &mut PipelineCache,
-            encoder: &mut wgpu::CommandEncoder,
-            _ctx: &RenderCtx,
-            params: &ResolvedParams,
-            input: TextureRef<'_>,
-            output: TextureRef<'_>,
-        ) -> Result<(), PluginError> {
-            use motolii_gpu::PipelineCacheKey;
-
-            let cached = pipelines.get_or_create_tex_sample_uniform4(
-                gpu,
-                PipelineCacheKey {
-                    id: "core.filter.opacity",
-                    wgsl: OPACITY_WGSL,
-                },
-            );
-            let amount = params
-                .require_f64("core.filter.opacity", "amount")?
-                .clamp(0.0, 1.0) as f32;
-            let uniform = [amount, 0.0, 0.0, 0.0];
-            gpu.queue
-                .write_buffer(&cached.uniform_buffer, 0, bytemuck::bytes_of(&uniform));
-            let input_view = input
-                .texture
-                .create_view(&wgpu::TextureViewDescriptor::default());
-            let output_view = output
-                .texture
-                .create_view(&wgpu::TextureViewDescriptor::default());
-            let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("core.filter.opacity.bg"),
-                layout: &cached.bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&input_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&cached.sampler),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: cached.uniform_buffer.as_entire_binding(),
-                    },
-                ],
-            });
-            {
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("core.filter.opacity.pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &output_view,
-                        depth_slice: None,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    multiview_mask: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                });
-                pass.set_pipeline(&cached.pipeline);
-                pass.set_bind_group(0, &bind_group, &[]);
-                pass.draw(0..3, 0..1);
-            }
-            Ok(())
-        }
-    }
-
     pub struct ClearLayerSource;
 
     impl LayerSourcePlugin for ClearLayerSource {
@@ -1509,25 +1423,6 @@ pub mod reference {
         })
     }
 
-    fn opacity_filter_desc() -> &'static NodeDesc {
-        static DESC: OnceLock<NodeDesc> = OnceLock::new();
-        DESC.get_or_init(|| NodeDesc {
-            id: PluginId("core.filter.opacity"),
-            version: 1,
-            display_name: "Opacity",
-            category: "Color",
-            tags: &["opacity", "alpha", "reference"],
-            params: vec![ParamDef {
-                id: "amount",
-                value_type: ValueType::F64,
-                default: Value::F64(1.0),
-                f64_domain: Some(F64Domain::unit()),
-            }],
-            min_inputs: 1,
-            max_inputs: 1,
-        })
-    }
-
     const TINT_WGSL: &str = r#"
 struct TintUniform {
     color: vec4<f32>,
@@ -1563,42 +1458,6 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let out_a = tin.a * t.a;
     let rgb = select(tin.rgb / max(tin.a, 1e-5), vec3<f32>(0.0), tin.a == 0.0) * t.rgb;
     return vec4<f32>(rgb * out_a, out_a);
-}
-"#;
-
-    const OPACITY_WGSL: &str = r#"
-struct OpacityUniform {
-    // x = amount (0..1). yzw unused (tex_sample_uniform4 スロットに合わせる)。
-    amount: vec4<f32>,
-};
-
-@group(0) @binding(0) var input_tex: texture_2d<f32>;
-@group(0) @binding(1) var tex_sampler: sampler;
-@group(0) @binding(2) var<uniform> opacity: OpacityUniform;
-
-struct VsOut {
-    @builtin(position) pos: vec4<f32>,
-    @location(0) uv: vec2<f32>,
-};
-
-@vertex
-fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VsOut {
-    var positions = array<vec2<f32>, 3>(
-        vec2<f32>(-1.0, -3.0),
-        vec2<f32>(-1.0, 1.0),
-        vec2<f32>(3.0, 1.0)
-    );
-    let p = positions[vertex_index];
-    var out: VsOut;
-    out.pos = vec4<f32>(p, 0.0, 1.0);
-    out.uv = p * vec2<f32>(0.5, -0.5) + vec2<f32>(0.5, 0.5);
-    return out;
-}
-
-@fragment
-fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
-    let tin = textureSample(input_tex, tex_sampler, in.uv);
-    return tin * opacity.amount.x;
 }
 "#;
 
@@ -1749,7 +1608,7 @@ mod tests {
         register_reference_plugins(&mut registry).unwrap();
 
         assert_eq!(registry.len(PluginKind::LayerSource), 1);
-        assert_eq!(registry.len(PluginKind::Filter), 3);
+        assert_eq!(registry.len(PluginKind::Filter), 2);
         assert_eq!(registry.len(PluginKind::ParamDriver), 1);
         assert_eq!(registry.len(PluginKind::Composite), 1);
         assert!(registry
@@ -1770,7 +1629,7 @@ mod tests {
         assert!(registry.param_driver_by_name("core.param.sine").is_some());
         assert!(registry.filter_by_name("missing").is_none());
 
-        assert_eq!(registry.iter(PluginKind::Filter).count(), 3);
+        assert_eq!(registry.iter(PluginKind::Filter).count(), 2);
         assert_eq!(registry.iter(PluginKind::ParamDriver).count(), 1);
         assert_eq!(registry.iter(PluginKind::LayerSource).count(), 1);
         assert_eq!(registry.iter(PluginKind::Composite).count(), 1);
@@ -1781,12 +1640,11 @@ mod tests {
             .collect();
         assert!(filter_ids.contains(&"core.filter.clear"));
         assert!(filter_ids.contains(&"core.filter.tint"));
-        assert!(filter_ids.contains(&"core.filter.opacity"));
     }
 
     #[test]
     fn runtime_rejects_kind_mismatch_even_if_catalog_was_not_built_normally() {
-        let node = super::reference::OPACITY_FILTER.desc().clone();
+        let node = super::reference::CLEAR_FILTER.desc().clone();
         let mut contracts = BTreeMap::new();
         contracts.insert(
             node.id.clone(),
@@ -1799,13 +1657,13 @@ mod tests {
         let catalog = Arc::new(PluginCatalog { contracts });
         let mut executors = PluginRegistry::new();
         executors
-            .register_filter(&super::reference::OPACITY_FILTER)
+            .register_filter(&super::reference::CLEAR_FILTER)
             .unwrap();
         let err = PluginRuntime::try_new(catalog, executors).unwrap_err();
         assert!(matches!(
             err,
             PluginRuntimeError::KindMismatch {
-                id: "core.filter.opacity",
+                id: "core.filter.clear",
                 contract: PluginKind::LayerSource,
                 executor: PluginKind::Filter,
             }
@@ -2030,12 +1888,9 @@ mod tests {
     /// INF-7c: 参照プラグイン全desc + 検証の負例(欠落メタデータが赤になる証明)。
     #[test]
     fn validate_node_desc_accepts_reference_plugins() {
-        use super::reference::{
-            CLEAR_COMPOSITE, CLEAR_FILTER, CLEAR_LAYER_SOURCE, OPACITY_FILTER, TINT_FILTER,
-        };
+        use super::reference::{CLEAR_COMPOSITE, CLEAR_FILTER, CLEAR_LAYER_SOURCE, TINT_FILTER};
         validate_node_desc(PluginKind::Filter, CLEAR_FILTER.desc()).unwrap();
         validate_node_desc(PluginKind::Filter, TINT_FILTER.desc()).unwrap();
-        validate_node_desc(PluginKind::Filter, OPACITY_FILTER.desc()).unwrap();
         validate_node_desc(PluginKind::LayerSource, CLEAR_LAYER_SOURCE.desc()).unwrap();
         validate_node_desc(PluginKind::ParamDriver, SINE_PARAM_DRIVER.desc()).unwrap();
         validate_node_desc(PluginKind::Composite, CLEAR_COMPOSITE.desc()).unwrap();

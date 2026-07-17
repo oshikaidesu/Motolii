@@ -15,9 +15,8 @@ use motolii_doc::{
 use motolii_eval::DataTracks;
 use motolii_export::{export_document_video, ExportError, ExportJob};
 use motolii_media::{probe, Encoder};
-use motolii_plugin::reference::reference_catalog;
 use motolii_plugin::{PluginRegistry, PluginRuntime};
-use motolii_plugins_firstparty::first_party_runtime;
+use motolii_plugins_firstparty::{first_party_catalog, first_party_runtime};
 use motolii_testkit::{ffmpeg_or_skip, gpu_or_skip, tmp_dir};
 
 const W: u32 = 32;
@@ -34,7 +33,7 @@ fn reference_runtime() -> PluginRuntime {
 
 fn contract_only_runtime() -> PluginRuntime {
     PluginRuntime::try_new(
-        std::sync::Arc::new(reference_catalog().unwrap()),
+        std::sync::Arc::new(first_party_catalog().unwrap()),
         PluginRegistry::new(),
     )
     .unwrap()
@@ -345,7 +344,7 @@ fn export_refuses_degraded_plugins() {
     doc.validate()
         .expect("unknown plugin must still validate (open side)");
     assert!(!doc
-        .prepare_plugins(&reference_catalog().unwrap())
+        .prepare_plugins(&first_party_catalog().unwrap())
         .unwrap()
         .diagnostics()
         .is_empty());
@@ -454,7 +453,9 @@ fn export_refuses_future_version_rect_layer_source() {
     }
     doc.validate()
         .expect("future rect version must still open (D1f)");
-    let prepared = doc.prepare_plugins(&reference_catalog().unwrap()).unwrap();
+    let prepared = doc
+        .prepare_plugins(&first_party_catalog().unwrap())
+        .unwrap();
     let warnings = prepared.diagnostics();
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     assert_eq!(warnings[0].plugin_id, RECT_LAYER_SOURCE);
@@ -492,12 +493,12 @@ fn export_refuses_future_version_rect_layer_source() {
 fn current_version_rect_alone_is_not_degraded() {
     let doc = build_doc("bg.mp4", None);
     assert!(
-        doc.prepare_plugins(&reference_catalog().unwrap())
+        doc.prepare_plugins(&first_party_catalog().unwrap())
             .unwrap()
             .diagnostics()
             .is_empty(),
         "v1 rect is a known built-in contract: {:?}",
-        doc.prepare_plugins(&reference_catalog().unwrap())
+        doc.prepare_plugins(&first_party_catalog().unwrap())
             .unwrap()
             .diagnostics()
     );

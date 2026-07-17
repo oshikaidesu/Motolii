@@ -13,11 +13,11 @@ use motolii_doc::{
     ScalarPropertyId, Track, TrackItem,
 };
 use motolii_eval::Value;
-use motolii_plugin::reference::reference_catalog;
 use motolii_plugin::{
     MigrationOp, MigrationStep, NodeDesc, ParamDef, PluginCatalog, PluginCatalogBuilder,
     PluginContract, PluginId, PluginKind, ValueType,
 };
+use motolii_plugins_firstparty::first_party_catalog;
 
 fn document_with_effect(
     plugin_id: &str,
@@ -92,7 +92,7 @@ fn incomplete_chain_catalog() -> PluginCatalog {
 
 #[test]
 fn sine_rename_changes_only_the_prepared_clone() {
-    let catalog = reference_catalog().unwrap();
+    let catalog = first_party_catalog().unwrap();
     let raw = BTreeMap::from([
         ("amp".into(), DocParam::const_f64(0.25)),
         ("frequency_hz".into(), DocParam::const_f64(2.0)),
@@ -121,7 +121,7 @@ fn sine_rename_changes_only_the_prepared_clone() {
 
 #[test]
 fn migration_conflict_and_old_shape_mismatch_are_distinct_hard_errors() {
-    let catalog = reference_catalog().unwrap();
+    let catalog = first_party_catalog().unwrap();
     let conflict = BTreeMap::from([
         ("amp".into(), DocParam::const_f64(0.25)),
         ("amplitude".into(), DocParam::const_f64(0.5)),
@@ -152,7 +152,7 @@ fn migration_conflict_and_old_shape_mismatch_are_distinct_hard_errors() {
 
 #[test]
 fn missing_contract_future_version_and_chain_gap_remain_separate_diagnostics() {
-    let reference = reference_catalog().unwrap();
+    let reference = first_party_catalog().unwrap();
     let (unknown, _, _, unknown_definition) = document_with_effect(
         "vendor.filter.absent",
         1,
@@ -196,7 +196,7 @@ fn missing_contract_future_version_and_chain_gap_remain_separate_diagnostics() {
 
 #[test]
 fn kind_mismatch_is_catalog_typed_not_intrinsic() {
-    let catalog = reference_catalog().unwrap();
+    let catalog = first_party_catalog().unwrap();
     let (doc, _, _, _) = document_with_effect(
         "core.layer_source.clear",
         1,
@@ -215,7 +215,7 @@ fn kind_mismatch_is_catalog_typed_not_intrinsic() {
 
 #[test]
 fn opacity_domain_is_owned_by_contract_and_checks_both_boundaries() {
-    let catalog = reference_catalog().unwrap();
+    let catalog = first_party_catalog().unwrap();
     for amount in [-0.01, 1.01] {
         let (doc, _, _, _) = document_with_effect(
             "core.filter.opacity",
@@ -232,7 +232,7 @@ fn opacity_domain_is_owned_by_contract_and_checks_both_boundaries() {
 
 #[test]
 fn failed_plugin_edit_restores_raw_document_revision_and_undo() {
-    let catalog = Arc::new(reference_catalog().unwrap());
+    let catalog = Arc::new(first_party_catalog().unwrap());
     let (doc, layer, effect, _) = document_with_effect(
         "core.filter.opacity",
         1,
@@ -264,7 +264,7 @@ fn failed_plugin_edit_restores_raw_document_revision_and_undo() {
 
 #[test]
 fn unknown_plugin_roundtrips_and_does_not_block_unrelated_edit() {
-    let catalog = Arc::new(reference_catalog().unwrap());
+    let catalog = Arc::new(first_party_catalog().unwrap());
     let (doc, layer, _, definition) = document_with_effect(
         "vendor.filter.absent",
         1,
@@ -306,7 +306,7 @@ fn unknown_plugin_roundtrips_and_does_not_block_unrelated_edit() {
 
 #[test]
 fn resolved_project_open_returns_raw_document_with_prepared_diagnostics() {
-    let catalog = reference_catalog().unwrap();
+    let catalog = first_party_catalog().unwrap();
     let (doc, _, _, definition) = document_with_effect(
         "vendor.filter.absent",
         1,

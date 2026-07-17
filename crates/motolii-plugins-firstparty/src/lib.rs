@@ -1,11 +1,12 @@
 //! first-party 既定プラグインの composition root。
 use std::sync::Arc;
 
-use motolii_plugin::reference::{reference_catalog, register_reference_plugins};
+use motolii_plugin::reference::{register_reference_contracts, register_reference_plugins};
 use motolii_plugin::{
-    PluginCatalog, PluginContractError, PluginError, PluginKind, PluginRegistry, PluginRuntime,
-    PluginRuntimeError,
+    PluginCatalog, PluginCatalogBuilder, PluginContractError, PluginError, PluginKind,
+    PluginRegistry, PluginRuntime, PluginRuntimeError,
 };
+use motolii_plugin_opacity::{opacity_contract, OPACITY_FILTER};
 
 const REQUIRED_HOST_CAPABILITIES: &[&str] = &["core.filter.opacity"];
 
@@ -22,12 +23,16 @@ pub enum FirstPartyError {
 }
 
 pub fn first_party_catalog() -> Result<PluginCatalog, PluginContractError> {
-    reference_catalog()
+    let mut builder = PluginCatalogBuilder::new();
+    register_reference_contracts(&mut builder)?;
+    builder.register(opacity_contract())?;
+    builder.build()
 }
 
 pub fn first_party_registry() -> Result<PluginRegistry, PluginError> {
     let mut registry = PluginRegistry::new();
     register_reference_plugins(&mut registry)?;
+    registry.register_filter(&OPACITY_FILTER)?;
     Ok(registry)
 }
 
@@ -64,12 +69,28 @@ fn executor_has_id(executors: &PluginRegistry, id: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use motolii_plugin::reference::reference_catalog;
+
     use super::*;
 
     #[test]
     fn missing_opacity_executor_is_rejected_before_graph_eval() {
         let catalog = first_party_catalog().unwrap();
         let registry = PluginRegistry::new();
+
+        let err = ensure_required_host_capabilities(&catalog, &registry).unwrap_err();
+        assert!(matches!(
+            err,
+            FirstPartyError::RequiredCapabilityMissing {
+                id: "core.filter.opacity"
+            }
+        ));
+    }
+
+    #[test]
+    fn missing_opacity_contract_is_rejected_before_graph_eval() {
+        let catalog = reference_catalog().unwrap();
+        let registry = first_party_registry().unwrap();
 
         let err = ensure_required_host_capabilities(&catalog, &registry).unwrap_err();
         assert!(matches!(
