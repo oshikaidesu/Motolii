@@ -254,7 +254,7 @@ A3 実装時（本発注外）の拘束:
 
 | 仮 ID | 単一境界 | 変更許可の方向性 | 非目標 |
 |---|---|---|---|
-| VSM-A3-1a | `PreparedDocumentPlugins`をGraphBuilderへ渡し、LayerSource slot取得＋最小`PreparedLayerSourceMissing` errorを追加。clear専用分岐は維持したまま、そのparamsだけprepared評価へ切り替える | `motolii-doc` graph（＋最小test） | 任意IDの一般lowering・clear分岐削除・Filter prepared化・plugin crate |
+| VSM-A3-1a（**完了**） | `PreparedDocumentPlugins`をGraphBuilderへ渡し、LayerSource slot取得＋最小`PreparedLayerSourceMissing` errorを追加。clear専用分岐は維持したまま、そのparamsだけprepared評価へ切り替える | `motolii-doc` graph（＋最小test） | 任意IDの一般lowering・clear分岐削除・Filter prepared化・plugin crate |
 | VSM-A3-1b | `doc.layer_source.rect` reserved-ID 衝突を product composition root で型付き拒否する A0S 未閉鎖 gate | `motolii-plugins-firstparty`（＋最小 test） | graph lowering・plugin crate・schema |
 | VSM-A3-1c | prepared LayerSourceを`layer_source_by_name`で一般loweringし、clear専用分岐と選択的`UnsupportedSourcePlugin`を削除 | `motolii-doc` graph（＋正負test） | prepared配線・composition root・plugin crate・Filter経路 |
 | VSM-A3-2 | `radial_repeater` 外部 crate＋contract／executor＋firstparty 登録＋parity／allowlist | `plugins/*`＋firstparty | graph 再設計・画素意味変更 |
