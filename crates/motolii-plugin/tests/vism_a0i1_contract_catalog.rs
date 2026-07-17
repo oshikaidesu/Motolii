@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use motolii_eval::Value;
-use motolii_plugin::reference::{reference_catalog, register_reference_plugins, OPACITY_FILTER};
+use motolii_plugin::reference::{reference_catalog, register_reference_plugins, TINT_FILTER};
 use motolii_plugin::{
     DomainError, F64Domain, FilterPlugin, MigrationOp, MigrationPlanError, MigrationStep, NodeDesc,
     ParamDef, PluginCatalogBuilder, PluginContract, PluginContractError, PluginId, PluginKind,
@@ -37,13 +37,10 @@ fn scalar(id: &'static str, default: f64, domain: Option<F64Domain>) -> ParamDef
 }
 
 #[test]
-fn reference_catalog_owns_opacity_domain_and_sine_migration() {
+fn reference_catalog_owns_sine_migration_without_opacity() {
     let catalog = reference_catalog().unwrap();
-    assert_eq!(catalog.len(), 6);
-
-    let opacity = catalog.get("core.filter.opacity").unwrap();
-    assert_eq!(opacity.kind, PluginKind::Filter);
-    assert_eq!(opacity.node.params[0].f64_domain, Some(F64Domain::unit()));
+    assert_eq!(catalog.len(), 5);
+    assert!(catalog.get("core.filter.opacity").is_none());
 
     let sine = catalog.get("core.param.sine").unwrap();
     assert_eq!(
@@ -228,7 +225,7 @@ fn catalog_rejects_duplicate_migration_source_version() {
 fn runtime_allows_contract_only_catalog() {
     let catalog = Arc::new(reference_catalog().unwrap());
     let runtime = PluginRuntime::try_new(catalog, PluginRegistry::new()).unwrap();
-    assert_eq!(runtime.catalog().len(), 6);
+    assert_eq!(runtime.catalog().len(), 5);
     assert_eq!(runtime.executors().len(PluginKind::Filter), 0);
 }
 
@@ -236,12 +233,12 @@ fn runtime_allows_contract_only_catalog() {
 fn runtime_rejects_executor_without_contract() {
     let catalog = Arc::new(PluginCatalogBuilder::new().build().unwrap());
     let mut executors = PluginRegistry::new();
-    executors.register_filter(&OPACITY_FILTER).unwrap();
+    executors.register_filter(&TINT_FILTER).unwrap();
     let err = PluginRuntime::try_new(catalog, executors).unwrap_err();
     assert!(matches!(
         err,
         PluginRuntimeError::ExecutorContractMissing {
-            id: "core.filter.opacity",
+            id: "core.filter.tint",
             kind: PluginKind::Filter,
         }
     ));
@@ -249,23 +246,20 @@ fn runtime_rejects_executor_without_contract() {
 
 #[test]
 fn runtime_rejects_version_and_descriptor_mismatch() {
-    let mut version_contract = filter_contract(
-        "core.filter.opacity",
-        2,
-        OPACITY_FILTER.desc().params.clone(),
-    );
-    version_contract.node.display_name = OPACITY_FILTER.desc().display_name;
-    version_contract.node.category = OPACITY_FILTER.desc().category;
-    version_contract.node.tags = OPACITY_FILTER.desc().tags;
+    let mut version_contract =
+        filter_contract("core.filter.tint", 2, TINT_FILTER.desc().params.clone());
+    version_contract.node.display_name = TINT_FILTER.desc().display_name;
+    version_contract.node.category = TINT_FILTER.desc().category;
+    version_contract.node.tags = TINT_FILTER.desc().tags;
     let mut builder = PluginCatalogBuilder::new();
     builder.register(version_contract).unwrap();
     let mut executors = PluginRegistry::new();
-    executors.register_filter(&OPACITY_FILTER).unwrap();
+    executors.register_filter(&TINT_FILTER).unwrap();
     let err = PluginRuntime::try_new(Arc::new(builder.build().unwrap()), executors).unwrap_err();
     assert!(matches!(
         err,
         PluginRuntimeError::VersionMismatch {
-            id: "core.filter.opacity",
+            id: "core.filter.tint",
             contract: 2,
             executor: 1,
         }
@@ -273,19 +267,19 @@ fn runtime_rejects_version_and_descriptor_mismatch() {
 
     let mut descriptor_contract = PluginContract {
         kind: PluginKind::Filter,
-        node: OPACITY_FILTER.desc().clone(),
+        node: TINT_FILTER.desc().clone(),
         migrations: vec![],
     };
     descriptor_contract.node.display_name = "Different Name";
     let mut builder = PluginCatalogBuilder::new();
     builder.register(descriptor_contract).unwrap();
     let mut executors = PluginRegistry::new();
-    executors.register_filter(&OPACITY_FILTER).unwrap();
+    executors.register_filter(&TINT_FILTER).unwrap();
     let err = PluginRuntime::try_new(Arc::new(builder.build().unwrap()), executors).unwrap_err();
     assert!(matches!(
         err,
         PluginRuntimeError::DescriptorMismatch {
-            id: "core.filter.opacity"
+            id: "core.filter.tint"
         }
     ));
 }
@@ -296,6 +290,6 @@ fn reference_catalog_and_executor_registry_form_valid_runtime() {
     let mut executors = PluginRegistry::new();
     register_reference_plugins(&mut executors).unwrap();
     let runtime = PluginRuntime::try_new(catalog, executors).unwrap();
-    assert_eq!(runtime.catalog().len(), 6);
-    assert_eq!(runtime.executors().len(PluginKind::Filter), 3);
+    assert_eq!(runtime.catalog().len(), 5);
+    assert_eq!(runtime.executors().len(PluginKind::Filter), 2);
 }

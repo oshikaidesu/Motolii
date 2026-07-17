@@ -1,0 +1,17 @@
+[package]
+name = "motolii-plugin-opacity"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "External reference Filter: core.filter.opacity (VSM-A1-3)"
+
+# 公開API/参照実装でのpanic経路をCIで落とす(A1S §2.2、plugin-authoring §3-7)。
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[dependencies]
+motolii-plugin.workspace = true

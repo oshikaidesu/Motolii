@@ -7,4 +7,5 @@ description = "First-party plugin composition root (VSM-A1-2)"
 
 [dependencies]
 motolii-plugin.workspace = true
+motolii-plugin-opacity.workspace = true
 thiserror.workspace = true

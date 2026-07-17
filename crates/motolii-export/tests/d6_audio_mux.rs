@@ -17,7 +17,7 @@ use motolii_export::{export_document_video, ExportError, ExportJob};
 use motolii_media::{probe, Encoder};
 use motolii_plugin::reference::reference_catalog;
 use motolii_plugin::{PluginRegistry, PluginRuntime};
-use motolii_plugins_firstparty::first_party_runtime;
+use motolii_plugins_firstparty::{first_party_catalog, first_party_runtime};
 use motolii_testkit::{ffmpeg_or_skip, gpu_or_skip, tmp_dir};
 
 const W: u32 = 32;
@@ -34,7 +34,7 @@ fn reference_runtime() -> PluginRuntime {
 
 fn contract_only_runtime() -> PluginRuntime {
     PluginRuntime::try_new(
-        std::sync::Arc::new(reference_catalog().unwrap()),
+        std::sync::Arc::new(first_party_catalog().unwrap()),
         PluginRegistry::new(),
     )
     .unwrap()

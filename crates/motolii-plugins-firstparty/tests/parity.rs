@@ -2,10 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use motolii_plugin::{
-    reference::{reference_catalog, register_reference_plugins},
-    PluginCatalog, PluginKind, PluginRegistry,
-};
+use motolii_plugin::{F64Domain, PluginCatalog, PluginKind, PluginRegistry};
 use motolii_plugins_firstparty::{
     first_party_catalog, first_party_registry, first_party_runtime, FirstPartyError,
 };
@@ -18,6 +15,15 @@ fn registry_ids(registry: &PluginRegistry, kind: PluginKind) -> BTreeSet<&'stati
     registry.iter(kind).map(|(id, _)| id.0).collect()
 }
 
+const EXPECTED_CATALOG_IDS: &[&str] = &[
+    "core.layer_source.clear",
+    "core.filter.clear",
+    "core.filter.tint",
+    "core.filter.opacity",
+    "core.param.sine",
+    "core.composite.clear",
+];
+
 #[test]
 fn first_party_apis_succeed() {
     let _ = first_party_catalog().unwrap();
@@ -26,39 +32,36 @@ fn first_party_apis_succeed() {
 }
 
 #[test]
-fn catalog_id_parity_with_reference_catalog() {
-    let reference = reference_catalog().unwrap();
-    let first_party = first_party_catalog().unwrap();
-
-    assert_eq!(reference.len(), first_party.len());
-    assert_eq!(catalog_ids(&reference), catalog_ids(&first_party));
-    assert!(first_party.get("core.filter.opacity").is_some());
+fn first_party_catalog_has_six_contracts_including_opacity() {
+    let catalog = first_party_catalog().unwrap();
+    assert_eq!(catalog.len(), 6);
+    assert_eq!(
+        catalog_ids(&catalog),
+        EXPECTED_CATALOG_IDS.iter().copied().collect()
+    );
+    assert!(catalog.get("core.filter.opacity").is_some());
 }
 
 #[test]
-fn registry_id_parity_with_register_reference_plugins() {
-    let mut reference = PluginRegistry::new();
-    register_reference_plugins(&mut reference).unwrap();
-    let first_party = first_party_registry().unwrap();
+fn opacity_domain_is_owned_by_first_party_catalog() {
+    let catalog = first_party_catalog().unwrap();
+    let opacity = catalog.get("core.filter.opacity").unwrap();
+    assert_eq!(opacity.kind, PluginKind::Filter);
+    assert_eq!(opacity.node.params[0].f64_domain, Some(F64Domain::unit()));
+}
 
-    for kind in [
-        PluginKind::LayerSource,
-        PluginKind::Filter,
-        PluginKind::ParamDriver,
-        PluginKind::Composite,
-    ] {
-        assert_eq!(
-            reference.len(kind),
-            first_party.len(kind),
-            "len mismatch for {kind:?}"
-        );
-        assert_eq!(
-            registry_ids(&reference, kind),
-            registry_ids(&first_party, kind),
-            "id mismatch for {kind:?}"
-        );
-    }
-    assert!(first_party.filter_by_name("core.filter.opacity").is_some());
+#[test]
+fn first_party_registry_has_three_filters_including_opacity() {
+    let registry = first_party_registry().unwrap();
+    assert_eq!(registry.len(PluginKind::LayerSource), 1);
+    assert_eq!(registry.len(PluginKind::Filter), 3);
+    assert_eq!(registry.len(PluginKind::ParamDriver), 1);
+    assert_eq!(registry.len(PluginKind::Composite), 1);
+    let filter_ids = registry_ids(&registry, PluginKind::Filter);
+    assert!(filter_ids.contains("core.filter.clear"));
+    assert!(filter_ids.contains("core.filter.tint"));
+    assert!(filter_ids.contains("core.filter.opacity"));
+    assert!(registry.filter_by_name("core.filter.opacity").is_some());
 }
 
 #[test]
@@ -75,8 +78,15 @@ fn first_party_error_preserves_distinct_variants() {
         kind: PluginKind::Filter,
     }
     .into();
+    let missing = FirstPartyError::MissingRequiredCapability {
+        id: "core.filter.opacity",
+    };
 
     assert!(matches!(contract, FirstPartyError::Contract(_)));
     assert!(matches!(plugin, FirstPartyError::Plugin(_)));
     assert!(matches!(runtime, FirstPartyError::Runtime(_)));
+    assert!(matches!(
+        missing,
+        FirstPartyError::MissingRequiredCapability { .. }
+    ));
 }

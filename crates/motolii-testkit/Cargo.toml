@@ -15,6 +15,10 @@ serde_json.workspace = true
 thiserror.workspace = true
 wgpu.workspace = true
 
+[dev-dependencies]
+motolii-plugin-opacity.workspace = true
+motolii-plugins-firstparty.workspace = true
+
 [[bench]]
 name = "perf_startup"
 harness = false

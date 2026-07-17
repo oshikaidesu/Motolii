@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "plugins/motolii-plugin-opacity",
     "crates/motolii-core",
     "crates/motolii-eval",
     "crates/motolii-nodes",
@@ -30,6 +31,7 @@ motolii-gpu = { path = "crates/motolii-gpu" }
 motolii-media = { path = "crates/motolii-media" }
 motolii-nodes = { path = "crates/motolii-nodes" }
 motolii-plugin = { path = "crates/motolii-plugin" }
+motolii-plugin-opacity = { path = "plugins/motolii-plugin-opacity" }
 motolii-plugins-firstparty = { path = "crates/motolii-plugins-firstparty" }
 motolii-render = { path = "crates/motolii-render" }
 motolii-export = { path = "crates/motolii-export" }

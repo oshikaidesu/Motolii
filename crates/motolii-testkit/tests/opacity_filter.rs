@@ -3,8 +3,8 @@
 use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime};
 use motolii_eval::Value;
 use motolii_gpu::{download_rgba, upload_rgba, GpuCtx, PipelineCache};
-use motolii_plugin::reference::OPACITY_FILTER;
 use motolii_plugin::{FilterPlugin, RenderCtx, ResolvedParams, TextureRef};
+use motolii_plugin_opacity::OPACITY_FILTER;
 use motolii_testkit::{assert_rgba_close, gpu_or_skip, tol, RgbaImageDesc};
 
 const WIDTH: u32 = 4;

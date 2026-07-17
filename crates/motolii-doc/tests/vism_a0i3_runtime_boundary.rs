@@ -10,8 +10,8 @@ use motolii_doc::{
     PluginDiagnosticReason, Track, TrackItem, RECT_LAYER_SOURCE,
 };
 use motolii_eval::DataTracks;
-use motolii_plugin::reference::reference_catalog;
 use motolii_plugin::{PluginRegistry, PluginRuntime};
+use motolii_plugins_firstparty::first_party_catalog;
 
 fn opacity_document() -> Document {
     let mut doc = Document::new_current();
@@ -58,7 +58,7 @@ fn opacity_document() -> Document {
 #[test]
 fn contract_only_runtime_reports_executor_missing_before_graph_build() {
     let runtime = PluginRuntime::try_new(
-        Arc::new(reference_catalog().unwrap()),
+        Arc::new(first_party_catalog().unwrap()),
         PluginRegistry::new(),
     )
     .unwrap();

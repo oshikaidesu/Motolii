@@ -2,7 +2,7 @@
 
 作成日: 2026-07-17
 
-状態: **A1-1・A1-2完了／A1-3未着手**。A0I-1〜3でContract Catalog、prepared resolution、製品実行入口を実装したが、現行`FilterPlugin`を別crateから実装するための公開依存、first-party組み立て点、検査器、移動前pixel基線が未確定だった。本書でそれらを固定し、A1実装者が公開APIや例外を発明しない状態にする。
+状態: **A1-1・A1-2・A1-3完了**。A0I-1〜3でContract Catalog、prepared resolution、製品実行入口を実装したが、現行`FilterPlugin`を別crateから実装するための公開依存、first-party組み立て点、検査器、移動前pixel基線が未確定だった。本書でそれらを固定し、A1実装者が公開APIや例外を発明しない状態にする。
 
 関連文書: [VSM-A0S](2026-07-17-vism-a0s-contract-catalog-spec.md)、[A0D](2026-07-17-vism-a0d-contract-migration-ownership-decision.md)、[Vism実装計画](2026-07-17-vism-implementation-plan.md)、[plugin作者規約](../plugin-authoring.md)
 
