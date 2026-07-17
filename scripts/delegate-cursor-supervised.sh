@@ -2,9 +2,12 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GROK_MODEL="${CURSOR_GROK_MODEL:-cursor-grok-4.5-high-fast}"
+GROK_BUILD_MODEL="${GROK_BUILD_MODEL:-grok-4.5}"
+CURSOR_GROK_MODEL="${CURSOR_GROK_MODEL:-cursor-grok-4.5-high-fast}"
+CURSOR_AGENT_BIN="${CURSOR_AGENT_BIN:-cursor-agent}"
 COMPOSER_MODEL="${CURSOR_COMPOSER_MODEL:-composer-2.5}"
-TIMEOUT_SECONDS="${CURSOR_SUPERVISED_TIMEOUT_SECONDS:-300}"
+TIMEOUT_SECONDS="${GROK_SUPERVISED_TIMEOUT_SECONDS:-${CURSOR_SUPERVISED_TIMEOUT_SECONDS:-300}}"
+GROK_BUILD_FALLBACK_TO_CURSOR="${GROK_BUILD_FALLBACK_TO_CURSOR:-1}"
 
 usage() {
   echo "Usage: $0 prepare <isolated-worktree> <order-file> <task>"
@@ -49,13 +52,17 @@ if ! git -C "$WORKTREE" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "delegate-cursor-supervised: git worktreeではありません: $WORKTREE" >&2
   exit 2
 fi
-if ! command -v agent >/dev/null 2>&1; then
-  echo "delegate-cursor-supervised: Cursor Agent CLI 'agent' が見つかりません" >&2
-  exit 127
-fi
 if [[ ! "$TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
   echo "delegate-cursor-supervised: timeoutは正の整数で指定してください" >&2
   exit 2
+fi
+if [[ "$GROK_BUILD_FALLBACK_TO_CURSOR" != "0" && "$GROK_BUILD_FALLBACK_TO_CURSOR" != "1" ]]; then
+  echo "delegate-cursor-supervised: GROK_BUILD_FALLBACK_TO_CURSOR は0か1で指定してください" >&2
+  exit 2
+fi
+if [[ "$MODE" == "execute" ]] && ! command -v "$CURSOR_AGENT_BIN" >/dev/null 2>&1; then
+  echo "delegate-cursor-supervised: Composer用のCursor Agent CLI '$CURSOR_AGENT_BIN' が見つかりません" >&2
+  exit 127
 fi
 
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/motolii-cursor-supervised.XXXXXX")"
@@ -93,6 +100,50 @@ run_agent() {
   return "$status"
 }
 
+run_supervisor() {
+  local output="$1"
+  local prompt="$2"
+
+  if command -v grok >/dev/null 2>&1; then
+    if run_agent "$output.grok-build" grok -p "$prompt" \
+      --cwd "$WORKTREE" \
+      --model "$GROK_BUILD_MODEL" \
+      --output-format plain \
+      --permission-mode plan \
+      --no-subagents \
+      --no-memory \
+      --disable-web-search; then
+      if grep -Eqi '402 Payment Required|spending-limit|run out of credits|responses API error' \
+        "$output.grok-build" "$output.grok-build.err"; then
+        echo "delegate-cursor-supervised: Grok Buildが利用上限を返しました" >&2
+      else
+        cp "$output.grok-build" "$output"
+        SUPERVISOR_BACKEND_USED="grok-build"
+        return 0
+      fi
+    fi
+    echo "delegate-cursor-supervised: Grok Buildの実行に失敗しました" >&2
+  else
+    echo "delegate-cursor-supervised: Grok Build CLI 'grok' が見つかりません" >&2
+  fi
+
+  if [[ "$GROK_BUILD_FALLBACK_TO_CURSOR" != "1" ]]; then
+    return 1
+  fi
+  if ! command -v "$CURSOR_AGENT_BIN" >/dev/null 2>&1; then
+    echo "delegate-cursor-supervised: フォールバック用のCursor Agent CLI '$CURSOR_AGENT_BIN' が見つかりません" >&2
+    return 127
+  fi
+
+  echo "delegate-cursor-supervised: Cursor版Grokへフォールバックします" >&2
+  if ! run_agent "$output.cursor-grok" "$CURSOR_AGENT_BIN" -p --trust --mode ask \
+    --output-format text --model "$CURSOR_GROK_MODEL" --workspace "$WORKTREE" "$prompt"; then
+    return 1
+  fi
+  cp "$output.cursor-grok" "$output"
+  SUPERVISOR_BACKEND_USED="cursor-grok"
+}
+
 if [[ "$MODE" == "prepare" ]]; then
   supervisor_prompt=$(cat <<EOF
 You are the on-site supervisor for Motolii. Work read-only. Read AGENTS.md and every required spec/review completely. Inspect the current worktree and existing diff. Translate the user intent into a binding implementation order for Composer 2.5; do not implement.
@@ -108,14 +159,14 @@ EOF
   )
 
   echo "## 1. Grok supervisor order draft"
-  if ! run_agent "$tmp_dir/order.txt" agent -p --trust --mode ask --output-format text \
-    --model "$GROK_MODEL" --workspace "$WORKTREE" "$supervisor_prompt"; then
-    cat "$tmp_dir/order.txt"
+  if ! run_supervisor "$tmp_dir/order.txt" "$supervisor_prompt"; then
+    [[ ! -f "$tmp_dir/order.txt" ]] || cat "$tmp_dir/order.txt"
     exit 1
   fi
   cat "$tmp_dir/order.txt"
   {
     cat "$tmp_dir/order.txt"
+    echo "SUPERVISOR_BACKEND: $SUPERVISOR_BACKEND_USED"
     echo "TASK_SHA256: $task_hash"
   } >"$ORDER_FILE"
   if ! grep -qx 'ORDER: READY' "$tmp_dir/order.txt"; then
@@ -159,7 +210,7 @@ EOF
 
 echo
 echo "## 2. Composer 2.5 implementation (Codex-prechecked order)"
-if ! run_agent "$tmp_dir/implementation.txt" agent -p --force --trust --output-format text \
+if ! run_agent "$tmp_dir/implementation.txt" "$CURSOR_AGENT_BIN" -p --force --trust --output-format text \
   --model "$COMPOSER_MODEL" --workspace "$WORKTREE" "$composer_prompt"; then
   cat "$tmp_dir/implementation.txt"
   exit 1
@@ -184,9 +235,8 @@ EOF
 
 echo
 echo "## 3. Grok supervisor inspection"
-if ! run_agent "$tmp_dir/inspection.txt" agent -p --trust --mode ask --output-format text \
-  --model "$GROK_MODEL" --workspace "$WORKTREE" "$inspection_prompt"; then
-  cat "$tmp_dir/inspection.txt"
+if ! run_supervisor "$tmp_dir/inspection.txt" "$inspection_prompt"; then
+  [[ ! -f "$tmp_dir/inspection.txt" ]] || cat "$tmp_dir/inspection.txt"
   exit 1
 fi
 cat "$tmp_dir/inspection.txt"
