@@ -45,6 +45,7 @@ VSM-A0I-1〜3でContract Catalog、Documentのprepared resolution、graph／expo
 
 - パラメータは`ParamDef`で足りる粒度に抑える(スライダー/カラー等の自動生成で操作可能であること)
 - 将来カスタムUIが解凍されても、**自動生成パネルだけで全パラメータを操作できること**が不変条件
+- 表現の調整、値source、automation、接続、診断をParameter Panelへ集約するUI力学は[UI操作言語 §5.4](ui-interaction-language.md#54-parameter-panelを表現のホームにする)を正本とする。plugin固有panelや文字列expressionを意味の唯一の家にしない
 
 ## 2. 必須メタデータ(`NodeDesc`)
 
