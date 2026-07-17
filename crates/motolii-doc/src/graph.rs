@@ -20,8 +20,8 @@ use crate::param_eval::{
 use crate::schema::{BlendMode, Clip, ClipSource, Group, ItemEnvelope, MaskMode, TrackItem};
 use crate::spatial_resolve::resolve_document_spaces;
 use crate::{
-    AssetId, Document, DocumentPluginError, LayerId, PluginDiagnostic, PluginSlotId,
-    PreparedDocumentPlugins,
+    AssetId, Document, DocumentPluginError, LayerId, PluginDiagnostic, PluginDiagnosticReason,
+    PluginSlotId, PreparedDocumentPlugins,
 };
 
 /// M1互換の矩形 LayerSource(プラグインID文字列。レジストリ未登録でも D3 が OverlayRect へ落とす)。
@@ -473,23 +473,32 @@ impl<'a> GraphBuilder<'a> {
             ClipSource::Plugin {
                 plugin_id, params, ..
             } if plugin_id == RECT_LAYER_SOURCE => self.build_rect_overlay(params, layer),
-            ClipSource::Plugin { plugin_id, .. } if plugin_id == CLEAR_LAYER_SOURCE => {
+            ClipSource::Plugin { .. } => {
                 let recipe = self
                     .prepared
                     .get(&PluginSlotId::LayerSource(layer))
                     .ok_or(GraphError::PreparedLayerSourceMissing { layer: layer.get() })?;
-                let resolved = self.resolve_plugin_params(plugin_id, &recipe.params, layer)?;
+                let executor = self
+                    .registry
+                    .layer_source_by_name(&recipe.plugin_id)
+                    .ok_or_else(|| {
+                        GraphError::PluginDiagnostics(vec![PluginDiagnostic {
+                            slot: PluginSlotId::LayerSource(layer),
+                            plugin_id: recipe.plugin_id.clone(),
+                            reason: PluginDiagnosticReason::ExecutorMissing,
+                        }])
+                    })?;
+                let desc = executor.desc();
+                let resolved =
+                    self.resolve_plugin_params(&recipe.plugin_id, &recipe.params, layer)?;
                 let out = self.alloc_id();
                 self.steps.push(RenderStep::Plugin {
-                    id: self.resolve_plugin_id(CLEAR_LAYER_SOURCE)?,
+                    id: desc.id.clone(),
                     params: resolved,
                     inputs: vec![],
                     output: out,
                 });
                 Ok(out)
-            }
-            ClipSource::Plugin { plugin_id, .. } => {
-                Err(GraphError::UnsupportedSourcePlugin(plugin_id.clone()))
             }
         }
     }
