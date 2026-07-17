@@ -365,7 +365,7 @@ pub struct ExportJob<'a> {
 | `DocPluginKind` | 削除し`motolii_plugin::PluginKind`を使用 |
 | `PluginOpenWarning`／`PluginDegradation` | `PluginDiagnostic`へ置換 |
 | `Document::plugin_open_warnings()` | `prepare_plugins()`のdiagnosticへ置換 |
-| `migrate_plugin_params` | A0I-1ではdeprecated。A2でSine旧CLI処分と同時に削除 |
+| `migrate_plugin_params` | A0I-1ではdeprecated。A2で削除し、旧CLI互換は[A2S](2026-07-17-vism-a2-legacy-project-migration-decision.md)のprivate declarative adapterへ移す |
 | 裸の`PluginRegistry`をgraphへ渡す | `PluginRuntime`へ置換 |
 | export内`register_reference_plugins` | composition rootへ移動 |
 

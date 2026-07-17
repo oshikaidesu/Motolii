@@ -210,7 +210,7 @@ A1後に発注する。
 - 中央`migrate_plugin_params`のSine ID matchを削除。
 - old `amp` recipeはprepared cloneだけが`amplitude`へ移り、raw recipe不変。
 - migration欠落時はdegradedで開け、exportを拒否。
-- `ProjectV1` CLI専用migrationとDocument recipe migrationを混同せず、旧CLI fixtureの処分を明記。
+- `ProjectV1` CLI専用migrationとDocument recipe migrationを混同せず、旧CLI fixtureは[A2S](2026-07-17-vism-a2-legacy-project-migration-decision.md)のprivate declarative adapterで互換維持する。
 
 ## 10. 非目標
 
