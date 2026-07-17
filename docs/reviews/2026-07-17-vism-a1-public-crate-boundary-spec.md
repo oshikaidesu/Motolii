@@ -54,6 +54,16 @@ first-party無特権を検査可能にするため、外部参照pluginは`plugi
 
 crate内testは追加依存を要しない自己完結unit testだけを許す。GPU golden、purity、catalog parity、Host組み立て検査は審判側からplugin crateを読む方向に置き、plugin crateから`motolii-testkit`へdev依存しない。
 
+Opacity crateの公開面は次に固定する。
+
+```rust
+pub struct OpacityFilter;
+pub static OPACITY_FILTER: OpacityFilter;
+pub fn opacity_contract() -> PluginContract;
+```
+
+`OpacityFilter`は`FilterPlugin`を実装する。外部から可変Registry／Catalogを受け取る登録関数、builder、raw GPU helperは公開しない。
+
 ## 3. 検査器
 
 A1の依存検査はdenylistではなくallowlistである。既存`motolii-plugin/tests/conformance.rs`のCargo table走査とsource token走査を再利用し、次を自動化する。
@@ -91,15 +101,21 @@ pub fn first_party_registry() -> Result<PluginRegistry, PluginError>;
 pub fn first_party_runtime() -> Result<PluginRuntime, FirstPartyError>;
 ```
 
-`first_party_catalog()`と`first_party_registry()`は、既存の`reference_catalog()`と`register_reference_plugins()`を内部で再利用して完成値を返す。callerから可変`PluginRegistry`を受け取る公開登録関数は追加せず、登録途中の失敗を外へ残さない。`first_party_runtime()`はこの二つの完成値を`PluginRuntime::try_new`へ渡す唯一の既定組み立てである。
+`first_party_catalog()`と`first_party_registry()`は完成値を返す。A1-2では既存の`reference_catalog()`と`register_reference_plugins()`をそのまま再利用する。A1-3では`PluginCatalogBuilder`へ`register_reference_contracts()`と`opacity_contract()`を順に登録し、Registryへ`register_reference_plugins()`と外部`OPACITY_FILTER`を順に登録する。Opacityのcontract／executorをfirstparty内へ複製しない。callerから可変`PluginRegistry`を受け取る公開登録関数は追加せず、登録途中の失敗を外へ残さない。`first_party_runtime()`はこの二つの完成値を`PluginRuntime::try_new`へ渡す唯一の既定組み立てである。
 
-`FirstPartyError`は`PluginContractError`、`PluginError`、`PluginRuntimeError`を別variantとして`#[from]`で保持し、文字列へ潰さない。内部composition crateの通常依存は`motolii-plugin`と`thiserror`だけとする。これは`plugins/motolii-plugin-*`へ課す外部作者crateの一依存制約とは別である。
+`FirstPartyError`は`PluginContractError`、`PluginError`、`PluginRuntimeError`を別variantとして`#[from]`で保持し、さらに次のvariantを持つ。
+
+```rust
+MissingRequiredCapability { id: &'static str }
+```
+
+A1-2時点の内部composition crateの通常依存は`motolii-plugin`と`thiserror`だけ、A1-3完了後はこれらと`motolii-plugin-opacity`だけとする。これは`plugins/motolii-plugin-*`へ課す外部作者crateの一依存制約とは別である。
 
 製品adapterもこの構造を途中で文字列へ潰さない。CLIは`CliError::FirstParty(#[from] FirstPartyError)`を持ち、表示文字列化は最終的なCLI表示境界だけで行う。
 
 CLI、Document export、製品test helperは個別に`reference_catalog()`と`register_reference_plugins()`を組み合わせず、この組み立てcrateを使う。`motolii-plugin::reference`はA2等の未移動参照実装を一時的に保持してよいが、既定セットのcomposition rootではなくなる。
 
-v1のHost必須capabilityには`core.filter.opacity`を含める。Document graphがenvelope opacityをこのIDへlowerするためである。組み立て後runtimeに必須IDが無い場合はstartup時の型付きエラーとし、graph評価時の偶発的missingまで遅延させない。
+v1のHost必須capabilityには`core.filter.opacity`を含める。Document graphがenvelope opacityをこのIDへlowerするためである。`first_party_runtime()`は`PluginRuntime::try_new`後、非公開検査関数で必須IDがcatalogとexecutorの両方に存在することを確認する。どちらかが無い場合は`FirstPartyError::MissingRequiredCapability`を返し、graph評価時の偶発的missingまで遅延させない。欠落fixtureはcrate内unit testからこの非公開検査関数を呼び、検査専用の公開runtime constructorや可変登録APIを追加しない。
 
 ## 5. 移動前pixel基線
 
