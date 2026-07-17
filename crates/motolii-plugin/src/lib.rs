@@ -7,9 +7,14 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::f64::consts::TAU;
 use std::sync::{Arc, OnceLock};
 
-use motolii_core::{CompCamera, Fps, FrameDesc, Quality, RationalTime, RationalTimeError};
-use motolii_eval::{DataTrack, Value};
-use motolii_gpu::{GpuCtx, PipelineCache};
+// A1S §2.1: 外部plugin crateが別versionのwgpu/bound型分裂を避け、単一依存でtrait実装できる公開面。
+pub use bytemuck;
+pub use motolii_core::{CompCamera, Fps, FrameDesc, Quality, RationalTime};
+pub use motolii_eval::{DataTrack, Value};
+pub use motolii_gpu::{GpuCtx, PipelineCache, PipelineCacheKey};
+pub use wgpu;
+
+use motolii_core::RationalTimeError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
