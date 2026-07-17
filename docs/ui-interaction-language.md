@@ -13,6 +13,7 @@ MotoliiのUIは、**見た瞬間は知っている制作ソフトに見え、触
 - 一度学んだ操作規則を、別機能、Advanced、pluginが裏切らない。共通componentから漏れた実装は外観不良ではなく操作互換性の不具合として扱う。
 - UIはDocumentの投影であり、別の制作データ正本、隠れhelper、入口別意味を持たない。
 - 親しみやすさを、ポップな配色、派手なmotion、マスコット的装飾、ケレン味のある専用演出で代替しない。装飾を外しても、対象・結果・戻し方が分かることをユーザーファーストの基準にする。
+- 基本成果まで外部manualを要求しない。UI自身を最初の実行可能なドキュメントとし、操作した場所で結果、失敗理由、戻し方を学べるようにする。Help/docsは原因表示の代用品ではなく、現在の対象と状態を引き継いで理解を深める第二層とする。
 
 ```text
 既知の制作ソフト外殻
@@ -65,13 +66,16 @@ v1の既定配置は、既存の制作ソフトで学習済みの役割へ合わ
 
 ```text
 上: transport / tool / project-level action
-左: Asset / Plugin Browser
+左: Project Explorer / Plugin Browser
 中央: Stage / Output Frame / direct manipulation
 右: 選択対象のInspector
 下: Timeline / time / order
 ```
 
 固定分割で開始し、可変dockingを革新点にしない。panelの開閉や幅変更は許しても、同じ役割が機能ごとに別の場所へ移動しない。
+
+- Project assetと外部filesystemは別popupへ分けず、既存Browserの`Project` tab内にある同じExplorer UIで`PROJECT / FILES`を切り替える。FILESの選択・previewはDocument外で、未配置素材はInboxへ受け取り、PROJECTからの配置確定だけをDocument commandにする。
+- Timeline左端のInboxは、未配置素材、未解決review note、未確認background job等の未整理参照だけを受け取る。選択・hoverへ追従せず、処理済みは外す。通常操作historyや全assetを蓄積せず、空の時だけTipを一件表示できる。
 
 次は原則として既存語彙を維持する。
 
@@ -99,6 +103,24 @@ scope、reference-frame比較、Undo履歴panel、annotation、任意guide、pre
 
 採用したUI力学も、背後にD2 commandまたは型付きruntime snapshotが無ければ席だけを確保して`WAIT`とする。偽データ、UI所有状態、局所callbackで完成扱いしない。
 
+### 3.2 ユーザーが候補を選ぶ棚
+
+プラグイン、素材、Color、preset等、候補がユーザーの追加によって増える選択面は、名前検索だけの一覧にしない。次の整理・再発見機能を共通のUX必須条件とする。
+
+- **Folder**: ユーザーが任意のまとまりを作り、候補を移動・複数配置できる
+- **Label**: Folderを横断して用途・雰囲気・domain・`GO-TO`等の意味を複数付与できる。Host既定labelとユーザーlabelを見分けられる
+- **History**: 確定して使った候補を新しい順に再選択できる。hover preview、検索、Cancelは履歴へ追加しない
+
+候補の主な識別物が画像・色・音等である時は、その内容を最大面積で示し、名前、code、由来等の文字を常時主役にしない。ただしkeyboard、screen reader、検索用のaccessible nameと、必要時に開く詳細は失わない。
+
+視覚候補の棚は`single click = 選択／Preview`、`double click = 現在targetへCommit`を共通短縮操作にできる。double clickだけを唯一のCommit入口にはせず、keyboardの`Enter`と明示`Apply`を同じIntentへ接続する。Historyへ積むのはCommitだけであり、single click、hover、Cancelは積まない。
+
+星1〜5の評価は採用しない。候補ごとに「星1か星3か」を判断する仕事を増やし、主要preview面を反復iconで狭めるためである。優先度やお気に入り相当の整理は、意味を再利用できるLabelまたはFolderで表す。
+
+Folder、Label、履歴は候補を探すためのUser settingsまたはWorkspace-session候補であり、配置・適用先のDocument意味とは分離する。保存場所と同期方式が未決の段階でDocument schemaへ焼かない。候補の選択・整理だけではUndoを作らず、配置やparameter適用をCommitした時だけ通常のD2 commandへ進む。
+
+FolderとLabelはcandidateの安定identityを参照するユーザー所有の仮想整理であり、install先、package内部path、filesystem階層、Cargo/module構造から生成しない。packageの更新、再導入、保存場所変更でユーザーの棚を移動・改名しない。由来や実fileは診断・Developer infoで別に読めても、整理の正本にしない。
+
 ## 4. 少数の共通操作文法
 
 全操作は、存在する範囲で次の流れへ揃える。
@@ -116,6 +138,8 @@ Discover → Target → Preview → Commit / Cancel → Inspect → Undo
 | Inspect | 結果、由来、接続、近似、errorを閉じたpanelでも要約表示する |
 | Undo | Direct / Tool / Advancedの入口差にかかわらず同じ意味を戻す |
 
+この流れは、結果を安全な範囲へ矯正するためのものではない。極端な値や奇妙な組合せもPreviewし、回収・Cancel・Undoできるようにする。意味を追跡できる限り表現を許し、型不一致、宣言されない循環、復元不能なmutationだけを局所的に拒否する。詳細は[小さなコアと探索可能な拡張](extensible-core-model.md)を参照する。
+
 機能ごとに別の「追加」「接続」「選択」「確定」を発明しない。特殊なのが作品意味なのか、実装者が局所的な近道を選んだだけなのかをレビューで分ける。
 
 ## 5. 視覚動線と情報密度
@@ -126,6 +150,11 @@ Discover → Target → Preview → Commit / Cancel → Inspect → Undo
 - 順序が結果へ影響するものは、評価順と同じ方向へ並べるか、矢印とlabelで差を明示する。
 - 参照元、参照先、共有definition、DataTrack等は、renameやtimeline順に依存しない接続として投影する。
 - 値がどこから来たかを別画面で探させず、parameter近傍のbadgeからAdvanced詳細へ辿れるようにする。
+- 数値parameterはpanel幅いっぱいのbarを暗黙の最小・最大として見せない。値面の左右dragによるscrub、明示的な数値入力、必要なら有限端を持たない横目盛が固定cursorの下を流れるdialを使い、画面比率と値域を分離する。目盛animationは操作量のfeedbackに限り、意味の唯一の手掛かりにせずreduced-motionで停止する。sliderは型として有限範囲が確定している値に限る。
+- automation可能なparameterは名前近傍の同じ位置へdiamond markを置き、Automation ON/OFFと現在時刻のkey有無を枠・diamond塗り・短い文字状態の複合で区別する。Timelineへ投影する現在channelのkeyと別のautomation正本をUI内に作らない。
+- Easingはkey単体の属性ではなく隣接key間の動きとして見せる。Preview直下のGraph iconはplayheadが同一channelの隣接key区間の内部にある時だけ点灯し、key上と区間外では操作不能にする。key clickをEasing入口にしない。Graph Viewは補間種別、value-time graph、Bezier handle、raw値を同じ区間で往復できるようにし、curve/preset適用はその1区間への1 commandとする。区間番号、key数、時刻範囲、key stripは重ねない。curve選択はGraph左右の余白へ形状thumbnailとして置き、名前はhover / focusのInfoとaccessible nameへ下げる。graph drag中はPreview、releaseは1 Undo、`Esc`/capture lossは変更ゼロ。
+- Easingのお気に入りはcurve thumbnail上の単一◎markで示す。これは星評価ではなく、Graph icon double clickで即適用される1個のUser settingである。mark変更はDocument・Undo不変、最後に使ったcurveへの自動追従は禁止する。点灯中Graph iconはsingle clickでGraph View、double clickでお気に入りを現在区間へ1 command / 1 Undoとし、double click判定でsingle clickのpopupを残さない。key上・区間外は無効とする。
+- 空間parameterは内部型の対称性をそのままUIへ写さない。`Position X/Y`はStage平面、`Depth Z`は前後関係の独立操作面として投影するが、保存は同じ正準XYZの`position.z`を使う。Depth操作から暗黙の3D modeや第二のDepth正本を作らず、Z方向の平行移動と`Rotation Z`（Z軸まわりの回転）はlabel・control・automation channelを分ける。
 
 ### 5.2 現在操作中の情報へ面積を譲る
 
@@ -139,6 +168,16 @@ Discover → Target → Preview → Commit / Cancel → Inspect → Undo
 | Advanced | 由来、scope、評価順、所有/共有、数値を十分な幅で検査・編集 |
 
 小さなInspector文だけを唯一の操作説明にしない。global UI scale、主要panel幅、Timeline density、Stage overlayの可読性は分けて審判する。具体寸法はG0-2/G0-6で基準機、DPI、視距離を測って固定し、測定前の数値を本書では焼かない。
+
+### 5.3 既定は沈黙 — 状態は逸脱だけが語る
+
+平常・正常・不変を意味する表示を常設しない（2026-07-17、vism境界モックの引き算審判で決定）。
+
+- 状態表示の既定は沈黙とする。`READY`等の正常語は原則置かず、missing / stale / rendering / blocked / preview中などの逸脱だけが状態を語る。実装保証（例: previewとexportの同一評価）はUIバナーではなく設計文書・Developer info・診断が持つ。
+- 同じ事実のBrief表示は1つのsurfaceに1箇所とする。§8.3の3密度（Brief / Context / Inspect）を超えて同じ値の家を増やさない。増やす場合は密度差または直接操作面（railやbar上のbadge等）という根拠を記録する。
+- 規則・思想・使い方の文章をchromeへ常設しない。同じ内容はhover / focusのInfo（§2.1のInfo View）、操作中のContext、Developer info / Advancedへ時間方向に配分する（§5.2）。
+- 同じ意味へのcommit入口を並置しない。即時適用のcontrolがあるなら別の`Apply`を重ねず、keyboard / ATの到達性は同じcontrolの操作性で満たす。
+- 一度も変化しない表示は席ごと外す。残すなら、全状態と遷移条件を持つ状態機械としてfixture化する。
 
 ## 6. 説明付き接続
 

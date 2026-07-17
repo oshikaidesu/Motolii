@@ -1,0 +1,1216 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Motolii — Extensible host / all surfaces golden</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg:#141414; --panel:#1a1a1a; --raised:#222222; --hover:#2c2c2c;
+      --line:#3b3b3b; --line2:#686868; --ink:#f0f0f0; --sub:#c6c6c6; --muted:#929292;
+      --active:#d8b574; --data:#78b5b0; --shape:#aaa0d0; --warning:#e18a6d;
+      --ok:#90b287; --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+      --way-project:#6eb3ae; --way-files:#83a8cf; --way-plugins:#9f9fcf;
+      --way-stage:#bca072; --way-inspector:#8eb086; --way-timeline:#cc9587;
+      --object-1:#76aaa6; --object-2:#9a9ac0; --object-3:#b19b78;
+      --object-4:#8da787; --object-5:#be9388; --object-6:#85a2c0;
+    }
+    *{box-sizing:border-box} html,body{width:100%;height:100%}
+    body{margin:0;overflow:hidden;background:var(--bg);color:var(--ink);font:12px/1.35 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif}
+    button,input{font:inherit;color:inherit} button{cursor:pointer}
+    button:focus-visible,input:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+    [hidden]{display:none!important}
+    .app{height:100vh;min-width:1080px;display:grid;grid-template-rows:34px 32px minmax(360px,1fr) 270px 24px;background:var(--panel)}
+    .titlebar,.commandbar,.stage-tools,.transport,.timeline-head,.status{display:flex;align-items:center}
+    .titlebar{gap:12px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--raised)}
+    .wordmark{font-weight:850;letter-spacing:.08em}.project{color:var(--sub)}.project b{color:var(--ink)}.grow{flex:1}
+    .btn{height:25px;padding:0 9px;border:1px solid var(--line2);border-radius:2px;background:var(--panel)}
+    .btn:hover{background:var(--hover)}.btn.primary{border-color:var(--active);background:color-mix(in srgb,var(--active) 16%,var(--panel));font-weight:700}
+    .btn.quiet{border-color:var(--line);color:var(--sub)}.btn[disabled]{border-style:dashed;color:var(--muted);cursor:not-allowed}
+    .undo-state{color:var(--muted);font:9px var(--mono)}.undo-state:empty{display:none}
+
+    .commandbar{gap:3px;padding:0 8px;border-bottom:1px solid var(--line);background:var(--bg)}
+    .cmdtool{height:24px;min-width:29px;padding:0 7px;border:1px solid transparent;background:transparent;color:var(--sub)}
+    .cmdtool:hover{border-color:var(--line);background:var(--hover)}.cmdtool.active{border-color:var(--ink);color:var(--ink);background:var(--raised)}
+    .cmd-sep{height:17px;border-left:1px solid var(--line);margin:0 5px}.crumb{color:var(--sub);font-size:10px}.crumb b{color:var(--ink)}
+
+    .workspace{position:relative;min-height:0;display:grid;grid-template-columns:284px minmax(520px,1fr) 326px}
+    .browser,.inspector{min-height:0;overflow:auto;background:var(--panel)}
+    .browser{border-right:1px solid var(--line)}.inspector{border-left:1px solid var(--line)}
+    .panel-head{height:29px;display:flex;align-items:center;gap:7px;padding:0 9px;border-bottom:1px solid var(--line);background:var(--raised);font-weight:700}
+    .panel-head small{margin-left:auto;color:var(--muted);font:8px var(--mono);font-weight:400}
+    .browser .panel-head::before,.inspector .panel-head::before,.stage-tools::before,.timeline-head::before,.inbox-head::before{content:"";flex:0 0 8px;width:8px;height:8px;background:var(--way-plugins);box-shadow:inset 0 0 0 1px #ffffff30}
+    .browser:has(.browser-tab[data-tab="project"].on) .panel-head::before{background:var(--way-project)}
+    .inspector .panel-head::before{background:var(--way-inspector)}.stage-tools::before{background:var(--way-stage)}.timeline-head::before{background:var(--way-timeline)}.inbox-head::before{background:var(--way-files)}
+    .browser-tabs{height:28px;display:flex;border-bottom:1px solid var(--line)}
+    .browser-tab{flex:1;border:0;border-right:1px solid var(--line);background:var(--bg);color:var(--muted);font-size:10px}
+    .browser-tab:hover{background:var(--hover);color:var(--sub)}.browser-tab.on{color:var(--ink);background:var(--panel)}.browser-tab[data-tab="project"].on{box-shadow:inset 0 -2px var(--way-project)}.browser-tab[data-tab="vism"].on{box-shadow:inset 0 -2px var(--way-plugins)}
+    .search{display:block;width:calc(100% - 16px);height:27px;margin:8px;padding:4px 8px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+    .plugin-shelf{margin:0 8px 8px;border:1px solid var(--line);background:var(--bg)}.plugin-folder-row{display:flex;gap:4px;padding:4px;border-bottom:1px solid var(--line)}.plugin-folder{min-width:0;flex:1;height:22px;border:1px solid var(--line2);background:var(--panel);color:var(--sub);font:8px var(--mono)}.plugin-folder-row .btn{width:25px;padding:0}
+    .plugin-labels{display:flex;gap:3px;padding:4px;overflow:hidden}.plugin-label{height:18px;padding:1px 4px;border:1px solid var(--line);background:transparent;color:var(--muted);font:6px var(--mono)}.plugin-label.on{border-color:var(--way-plugins);color:var(--ink)}.plugin-view-toggle{display:flex;gap:2px;margin-left:auto}.plugin-view-toggle button{height:18px;padding:1px 4px;border:1px solid var(--line);background:transparent;color:var(--muted);font:6px var(--mono)}.plugin-view-toggle button.on{border-color:var(--way-plugins);color:var(--ink)}
+    .plugin-history{height:28px;display:flex;align-items:center;gap:3px;padding:4px;border-top:1px solid var(--line)}.plugin-history small{color:var(--muted);font:6px var(--mono)}.plugin-history-items{display:flex;gap:3px;min-width:0}.plugin-history-item{height:19px;max-width:75px;padding:1px 5px;border:1px solid var(--line);background:var(--panel);color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:6px var(--mono)}
+    .browser-section{height:22px;padding:5px 8px;border-top:1px solid var(--line);border-bottom:1px solid #1b1b1b;color:var(--muted);font:8px var(--mono);letter-spacing:.08em}
+    #vism-browser{--plugin-thumb-size:108px}.plugin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--plugin-thumb-size),1fr));gap:1px;background:var(--line)}
+    .vism{position:relative;min-width:0;min-height:132px;display:grid;grid-template-rows:70px auto;gap:0;padding:0;border:0;background:var(--panel);text-align:left;color:var(--sub);width:100%}
+    .vism:hover,.vism.on{background:var(--hover);color:var(--ink)}.vism.on{box-shadow:inset 0 0 0 2px var(--active)}
+    .plugin-thumb{position:relative;overflow:hidden;background:#080808;border-bottom:1px solid var(--line)}
+    .plugin-thumb::before,.plugin-thumb::after{content:"";position:absolute}
+    .plugin-thumb.bloom{background:radial-gradient(circle at 62% 45%,#f2e2b0 0 3px,#d0ad6255 4px 18px,transparent 19px),radial-gradient(circle at 36% 58%,#75a7b555 0 8px,transparent 27px),#08090a}
+    .plugin-thumb.bloom::before{width:48px;height:48px;left:43%;top:12%;border:1px solid #d4b36f;border-radius:50%;box-shadow:0 0 0 8px #d4b36f22,0 0 0 17px #d4b36f12}
+    .plugin-thumb.glyph{background:linear-gradient(135deg,#10191a,#080909)}
+    .plugin-thumb.glyph::before{content:"Aa";left:14px;top:8px;color:#b8dbd6;font:700 31px/1 ui-serif,serif;letter-spacing:-5px;transform:skew(-8deg)}
+    .plugin-thumb.glyph::after{left:8px;right:8px;bottom:11px;height:12px;background:repeating-linear-gradient(90deg,#79aaa6 0 2px,transparent 2px 8px);opacity:.6;transform:skewX(-20deg)}
+    .plugin-thumb.fold{background:linear-gradient(145deg,#171422,#09090b)}
+    .plugin-thumb.fold::before{width:48px;height:48px;left:31%;top:14%;background:linear-gradient(135deg,#b2a8df,#493f75);clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%,22% 50%,50% 22%,78% 50%,50% 78%)}
+    .plugin-thumb.fold::after{left:12px;right:12px;top:50%;border-top:1px dashed #9e96ca;transform:rotate(-18deg)}
+    .plugin-thumb.ribbon{background:repeating-linear-gradient(151deg,#0b0b0b 0 9px,#282034 10px 14px,#0b0b0b 15px 22px)}
+    .plugin-thumb.ribbon::before{inset:12px 20px;border:1px dashed #d68162;transform:skew(-12deg)}
+    .thumb-state{position:absolute;right:5px;top:5px;padding:2px 4px;border:1px solid var(--line2);background:#0a0a0adf;color:var(--sub);font:7px var(--mono)}
+    .plugin-card-body{min-width:0;padding:6px}
+    .vism-copy{min-width:0}.vism-copy b,.vism-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .vism-copy b{font-size:10px}.vism-copy small{margin-top:1px;color:var(--muted);font:7px var(--mono)}
+    .plugin-tags{display:flex;gap:3px;flex-wrap:wrap;margin-top:5px}.plugin-tags i{padding:1px 3px;border:1px solid var(--line);color:var(--muted);font:6px var(--mono);font-style:normal}
+    .plugin-origin{display:flex;align-items:center;gap:4px;margin-top:4px;color:var(--muted);font:7px var(--mono)}.plugin-origin::before{content:"";width:7px;height:8px;border:1px solid var(--line2);border-radius:1px}#vism-browser[data-view="thumb"] .plugin-origin{display:none}
+    #vism-browser[data-view="thumb"] .vism{min-height:var(--plugin-thumb-size);display:block;overflow:hidden}
+    #vism-browser[data-view="thumb"] .plugin-thumb{display:block;height:var(--plugin-thumb-size);border:0}
+    #vism-browser[data-view="thumb"] .plugin-card-body{position:absolute;z-index:3;left:0;right:0;bottom:0;padding:18px 6px 6px;background:linear-gradient(transparent,#050505eb 35%,#050505 100%)}
+    #vism-browser[data-view="thumb"] .vism-copy b{font-size:10px;text-shadow:0 1px 2px #000}#vism-browser[data-view="thumb"] .vism-copy small{color:#c6c6c0}
+    #vism-browser[data-view="thumb"] .plugin-tags{margin-top:3px}#vism-browser[data-view="thumb"] .plugin-tags i{border-color:#777;color:#ddd;background:#080808bb}
+    #vism-browser[data-view="thumb"] .plugin-origin{margin-top:2px;color:#aaa}
+    .state{padding:2px 5px;border:1px solid var(--line);color:var(--muted);font:7px var(--mono);white-space:nowrap}
+    .state.ready{border-color:var(--ok);color:var(--ok)}.state.missing,.state.blocked{border-color:var(--warning);color:var(--warning)}
+    .project-row{min-height:34px;display:grid;grid-template-columns:18px minmax(0,1fr) auto;align-items:center;gap:6px;padding:4px 8px;border-bottom:1px solid var(--line);color:var(--sub)}
+    .project-row.on{box-shadow:inset 2px 0 var(--active);background:var(--hover);color:var(--ink)}
+    .project-row i{font-style:normal;color:var(--muted);font:8px var(--mono)}.project-row small{color:var(--muted);font:7px var(--mono)}
+
+    .surface-drawer{display:none;position:absolute;z-index:22;top:0;bottom:0;border:1px solid var(--line2);background:var(--panel);box-shadow:0 16px 38px #000b}
+    .surface-drawer.open{display:grid}
+    .surface-head{height:30px;display:flex;align-items:center;gap:6px;padding:0 7px;border-bottom:1px solid var(--line);background:var(--raised)}
+    .surface-head b{font-size:10px}.surface-head small{color:var(--muted);font:7px var(--mono)}.surface-head .close-surface{margin-left:auto}
+    .surface-foot{height:27px;display:flex;align-items:center;gap:8px;padding:0 7px;border-top:1px solid var(--line);background:var(--bg);color:var(--muted);font:7px var(--mono)}
+    .surface-foot .btn{margin-left:auto}
+    .project-explorer{height:calc(100% - 59px);min-height:0;display:grid;grid-template-rows:31px minmax(0,1fr) 27px;overflow:hidden}
+    .explorer-path{display:flex;align-items:center;gap:4px;padding:4px 6px;border-bottom:1px solid var(--line)}
+    .asset-source-tab{height:22px;padding:3px 6px;border:1px solid var(--line);background:var(--bg);color:var(--muted);font:7px var(--mono)}.asset-source-tab.on{color:var(--ink);background:var(--raised)}.asset-source-tab[data-asset-source="project"].on{border-color:var(--way-project)}.asset-source-tab[data-asset-source="files"].on{border-color:var(--way-files)}
+    .explorer-path .path{min-width:0;flex:1;height:22px;padding:3px 6px;border:1px solid var(--line);background:var(--bg);color:var(--sub);font:8px var(--mono);overflow:hidden;white-space:nowrap}
+    .explorer-body{min-height:0;display:grid;grid-template-columns:82px minmax(0,1fr)}
+    .explorer-places{border-right:1px solid var(--line);padding-top:4px}.place{height:23px;padding:5px 7px;color:var(--sub);font-size:9px}.place.on{border-left:2px solid var(--active);padding-left:5px;background:var(--hover);color:var(--ink)}
+    .place-title{margin-top:5px;padding:5px 7px;border-top:1px solid var(--line);color:var(--muted);font:7px var(--mono)}
+    .asset-content{min-width:0;min-height:0;display:grid;grid-template-rows:27px minmax(0,1fr)}
+    .asset-tools{display:flex;align-items:center;gap:7px;padding:0 7px;border-bottom:1px solid var(--line);color:var(--muted);font:7px var(--mono)}.asset-tools b{color:var(--sub);font-size:9px}.asset-tools span:last-child{margin-left:auto}
+    .project-explorer #asset-scope-label{display:none}.project-explorer .surface-foot{gap:5px}.project-explorer .surface-foot .btn{padding:0 7px}
+    .asset-grid{min-height:0;display:grid;grid-template-columns:repeat(2,1fr);grid-auto-rows:108px;gap:1px;overflow:auto;background:var(--line)}
+    .asset-tile{min-width:0;padding:5px;border:0;background:var(--panel);color:var(--sub);text-align:left}.asset-tile:hover{background:var(--hover)}.asset-tile.on{box-shadow:inset 0 0 0 2px var(--active);color:var(--ink)}
+    .asset-preview{height:76px;position:relative;display:grid;place-items:center;border:1px solid var(--line);background:#080808;overflow:hidden}
+    .asset-preview.video{background:linear-gradient(145deg,#18212b,#08090a)}.asset-preview.video::after{content:"▶ 00:12";font:8px var(--mono)}
+    .asset-preview.logo::after{content:"◇";width:38px;height:38px;display:grid;place-items:center;border:1px solid var(--shape);font-size:18px}
+    .asset-preview.audio::after{content:"╱╲╱▁╲╱╲▁╱╲";color:var(--data);font:8px var(--mono);letter-spacing:1px}
+    .asset-preview.texture{background:repeating-linear-gradient(135deg,#171717 0 6px,#3b3420 6px 7px)}
+    .asset-preview.folder::after{content:"";width:52px;height:34px;border:1px solid var(--sub);border-top-width:6px}
+    .asset-name{height:21px;display:flex;align-items:center;gap:4px;overflow:hidden;white-space:nowrap;font:8px var(--mono)}.asset-name small{margin-left:auto;color:var(--muted)}
+
+    .color-book{--book-cell:54px;right:326px;width:min(420px,calc(100% - 610px));grid-template-rows:30px 32px minmax(0,1fr) 27px}
+    .book-resize-handle{position:absolute;z-index:3;left:-5px;top:0;bottom:0;width:9px;padding:0;border:0;background:transparent;cursor:ew-resize}.book-resize-handle::after{content:"";position:absolute;left:4px;top:42%;height:54px;border-left:1px solid var(--line2)}
+    .book-toolbar{display:flex;align-items:center;gap:4px;padding:4px 6px;border-bottom:1px solid var(--line)}.book-search{min-width:0;flex:1;height:23px;padding:3px 6px;border:1px solid var(--line);background:var(--bg);font:8px var(--mono)}.book-library{height:23px;padding:3px 6px;border:1px solid var(--active);color:var(--ink);font:7px var(--mono)}
+    .book-body{min-height:0;display:grid;grid-template-columns:96px minmax(0,1fr)}.book-folders{min-height:0;padding:4px 0;border-right:1px solid var(--line);overflow:auto}.book-folder{width:100%;height:23px;padding:3px 7px;border:0;background:transparent;color:var(--sub);text-align:left;font:8px var(--mono)}.book-folder:hover{background:var(--hover)}.book-folder.on{padding-left:5px;border-left:2px solid var(--active);background:var(--raised);color:var(--ink)}.book-folder span{float:right;color:var(--muted)}.book-folder-add{margin:6px 7px 0;width:calc(100% - 14px);height:21px;border:1px dashed var(--line2);background:transparent;color:var(--muted);font:7px var(--mono)}
+    .book-content{min-width:0;min-height:0;display:grid;grid-template-rows:29px 105px minmax(0,1fr) 59px}.book-tags{display:flex;align-items:center;gap:3px;padding:4px 6px;border-bottom:1px solid var(--line);overflow:hidden}.book-tag{height:19px;padding:2px 5px;border:1px solid var(--line);background:transparent;color:var(--muted);font:6px var(--mono)}.book-tag.on{border-color:var(--active);color:var(--ink)}
+    .color-picker{display:grid;grid-template-columns:92px minmax(0,1fr);gap:8px;align-items:center;padding:6px;border-bottom:1px solid var(--line);background:#0a0a0a}.color-cycle{position:relative;width:86px;height:86px;border-radius:50%;background:conic-gradient(#f44,#ff0,#4f4,#0ff,#44f,#f0f,#f44);box-shadow:0 0 0 1px var(--line2);cursor:crosshair}.color-cycle::after{content:"";position:absolute;inset:9px;border-radius:50%;background:var(--panel)}.color-field{position:absolute;z-index:2;inset:18px;background:linear-gradient(135deg,#fff,transparent 53%),linear-gradient(0deg,#000,transparent 62%),var(--active);box-shadow:0 0 0 1px #fff7}.color-field.triangle{clip-path:polygon(50% 0,100% 100%,0 100%)}.color-field.square{inset:20px;border-radius:2px}.color-field i{position:absolute;left:58%;top:39%;width:7px;height:7px;border:1px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #000;transform:translate(-50%,-50%)}
+    .picker-tools{min-width:0;display:grid;gap:7px}.eyedropper{height:23px;display:flex;align-items:center;gap:6px;padding:2px 6px;border:1px solid var(--line);background:var(--panel);color:var(--sub);font:7px var(--mono)}.eyedropper.on{border-color:var(--active);color:var(--ink)}.eyedropper-icon{position:relative;width:15px;height:15px;transform:rotate(-42deg)}.eyedropper-icon::before{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:1px solid currentColor;border-radius:3px 3px 1px 1px}.eyedropper-icon::after{content:"";position:absolute;left:6px;top:11px;width:3px;height:4px;border-left:1px solid currentColor;border-bottom:1px solid currentColor}
+    .book-swatches{min-height:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--book-cell),1fr));grid-auto-rows:calc(var(--book-cell) + 7px);gap:3px;padding:6px;overflow:auto}.book-swatch{position:relative;min-width:0;padding:3px;border:1px solid var(--line);background:var(--bg)}.book-swatch:hover{border-color:var(--ink)}.book-swatch.on{outline:2px solid var(--active);outline-offset:-2px}.book-swatch[hidden]{display:none}.book-color{display:block;width:100%;height:calc(var(--book-cell) - 1px);padding:0;border:1px solid #ffffff35;background:var(--swatch);cursor:pointer}.book-color:focus-visible{outline:2px solid var(--ink);outline-offset:-3px}
+    .book-history{display:grid;grid-template-rows:18px 1fr;padding:4px 6px;border-top:1px solid var(--line);background:var(--raised)}.history-head{display:flex;align-items:center;color:var(--muted);font:7px var(--mono)}.history-head button{margin-left:auto;border:0;background:transparent;color:var(--muted);font:7px var(--mono)}.history-colors{display:grid;grid-template-columns:repeat(8,1fr);gap:3px}.history-color{min-width:0;height:28px;padding:0;border:1px solid #ffffff35;background:var(--history-color)}
+    #selected-color-chip{flex:0 0 22px;width:22px;height:17px}
+    .color-chip{width:42px;height:17px;border:1px solid var(--line2);background:var(--chip,#df8b4d)}.color-chip::after{content:attr(data-label);margin-left:48px;color:var(--muted);font:7px var(--mono)}
+
+    .stage-shell{min-width:0;min-height:0;display:grid;grid-template-rows:30px 1fr 32px;background:var(--bg)}
+    .stage-tools{gap:4px;padding:0 8px;border-bottom:1px solid var(--line);background:var(--panel)}
+    .toolbtn{height:23px;min-width:29px;border:1px solid transparent;background:transparent;color:var(--sub)}
+    .toolbtn:hover{border-color:var(--line)}.toolbtn.on{border-color:var(--ink)}
+    .stage-mode{margin-left:auto;color:var(--muted);font:8px var(--mono)}.stage-mode b{color:var(--active)}
+    .stage{position:relative;min-height:0;overflow:hidden;background:#060606}
+    .frame{position:absolute;left:50%;top:50%;width:min(82%,780px);aspect-ratio:16/9;transform:translate(-50%,-50%);border:1px solid #666;background:radial-gradient(circle at 63% 37%,#26313a 0,#14191c 25%,transparent 51%),linear-gradient(150deg,#171315,#090909 58%);overflow:hidden}
+    .frame::before{content:"OUTPUT FRAME";position:absolute;left:8px;top:8px;color:var(--muted);font:8px var(--mono);letter-spacing:.1em;z-index:4}
+    .grid{position:absolute;inset:0;opacity:.17;background-image:linear-gradient(#333 1px,transparent 1px),linear-gradient(90deg,#333 1px,transparent 1px);background-size:12.5% 25%}
+    .scene-copy{position:absolute;left:8%;top:15%;color:#dddcd6;font-size:clamp(19px,3vw,38px);font-weight:820;letter-spacing:.16em;line-height:.92;opacity:.88}
+    .scene-copy small{display:block;margin-top:9px;color:#84909a;font:8px var(--mono);letter-spacing:.14em}
+    .rings{position:absolute;right:12%;top:50%;width:42%;aspect-ratio:1;transform:translateY(-50%)}
+    .ring{position:absolute;border:1px solid #aaa;border-radius:50%;inset:var(--i);opacity:calc(.78 - var(--n)*.11);transform:rotate(calc(var(--n)*13deg))}
+    .ring:nth-child(odd){border-style:dashed}.pulse{position:absolute;inset:39%;border-radius:50%;background:#ddd;box-shadow:0 0 30px #b7d3d5}
+    .effect-veil{position:absolute;inset:0;background:radial-gradient(circle at 70% 46%,color-mix(in srgb,var(--active) 22%,transparent),transparent 33%);mix-blend-mode:screen;transition:opacity .18s}
+    .stage[data-mode="discover"] .effect-veil{opacity:.35}.stage[data-mode="installed"] .effect-veil{opacity:.8}
+    .stage[data-mode="missing"] .effect-veil,.stage[data-mode="blocked"] .effect-veil{opacity:0}
+    .stage[data-mode="missing"] .frame::after,.stage[data-mode="blocked"] .frame::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(135deg,transparent 0 16px,#ffffff08 16px 17px)}
+    .selection-bounds{position:absolute;z-index:7;left:7%;top:13%;width:39%;height:31%;border:1px solid var(--active);pointer-events:none}.selection-bounds i{position:absolute;width:7px;height:7px;border:1px solid var(--ink);background:var(--bg)}.selection-bounds i:nth-child(1){left:-4px;top:-4px}.selection-bounds i:nth-child(2){right:-4px;top:-4px}.selection-bounds i:nth-child(3){right:-4px;bottom:-4px}.selection-bounds i:nth-child(4){left:-4px;bottom:-4px}
+    .motion-path{display:none;position:absolute;z-index:6;left:7%;top:39%;width:56%;height:38%;pointer-events:none}.motion-path svg{width:100%;height:100%;overflow:visible}.motion-path path{fill:none;stroke:var(--shape);stroke-width:1.5;stroke-dasharray:5 4}.motion-path circle{fill:var(--bg);stroke:var(--shape)}.stage.interaction-relative .motion-path{display:block}.stage.interaction-relative .selection-bounds{border-style:dashed;transform:translate(18px,-8px)}.stage.interaction-relative .selection-bounds::after{content:"Δ +.140 / +.060";position:absolute;left:100%;top:-19px;padding:3px 5px;border:1px solid var(--shape);background:#0b0b0be8;color:var(--sub);font:7px var(--mono);white-space:nowrap}
+    .connection-preview{display:none;position:absolute;z-index:8;inset:0;pointer-events:none}.connection-preview svg{width:100%;height:100%}.connection-preview path{fill:none;stroke:var(--active);stroke-width:2;stroke-dasharray:6 5;animation:trace-dash .8s linear infinite}.connection-preview circle{fill:var(--bg);stroke:var(--active);stroke-width:2}.stage.interaction-connect .connection-preview{display:block}@keyframes trace-dash{to{stroke-dashoffset:-22}}
+    .stage-hud{display:none;position:absolute;z-index:10;right:12px;top:44px;width:220px;padding:7px 8px;border:1px solid var(--active);background:#0b0b0bef;box-shadow:0 8px 22px #000a}.stage-hud b,.stage-hud small{display:block}.stage-hud b{font-size:9px}.stage-hud small{margin-top:2px;color:var(--sub);font:7px var(--mono)}.stage.interaction-connect .stage-hud,.stage.interaction-relative .stage-hud{display:block}.stage.interaction-camera .frame{outline:2px solid var(--active);outline-offset:4px}.stage.interaction-hand .frame{transform:translate(-47%,-48%)}
+    .stage-badge{position:absolute;left:50%;top:14px;transform:translateX(-50%);padding:5px 8px;border:1px solid var(--line2);background:#101010e8;color:var(--sub);font:8px var(--mono)}.stage-badge:empty{display:none}
+    .stage[data-mode="missing"] .stage-badge,.stage[data-mode="blocked"] .stage-badge{border-style:dashed;border-color:var(--warning);color:var(--warning)}
+    .transport{gap:8px;padding:0 8px;border-top:1px solid var(--line);background:var(--raised)}
+    .transport .time{font:10px var(--mono)}.transport .quality{margin-left:auto;color:var(--muted);font:8px var(--mono)}
+    .interval-easing{position:relative;width:28px;height:22px;padding:0;border:1px solid var(--line);background:var(--bg);color:var(--muted)}
+    .interval-easing svg{width:17px;height:13px;overflow:visible}.interval-easing path{fill:none;stroke:currentColor;stroke-width:1.5}.interval-easing circle{fill:var(--bg);stroke:currentColor;stroke-width:1.5}
+    .interval-easing:not(:disabled){border-color:var(--active);color:var(--active);box-shadow:inset 0 -2px color-mix(in srgb,var(--active) 72%,transparent);cursor:pointer}.interval-easing[aria-pressed="true"]{background:color-mix(in srgb,var(--active) 15%,var(--bg));color:var(--ink)}.interval-easing:disabled{opacity:.38;cursor:default}
+
+    .section{border-bottom:1px solid var(--line)}.section-title{height:23px;display:flex;align-items:center;padding:0 9px;background:var(--bg);color:var(--muted);font:8px var(--mono);letter-spacing:.09em}
+    .section-title span{margin-left:auto;color:var(--sub)}
+    .identity{display:grid;grid-template-columns:38px 1fr;gap:9px;align-items:center;padding:10px 9px}
+    .identity .icon{width:38px;height:38px;display:grid;place-items:center;border:1px solid var(--active);color:var(--active);font:10px var(--mono)}
+    .identity b,.identity small{display:block}.identity small{color:var(--muted);font:8px var(--mono)}
+    .row{min-height:27px;display:grid;grid-template-columns:92px minmax(0,1fr) auto;align-items:center;gap:6px;padding:3px 9px;border-top:1px solid var(--line)}
+    .row label{color:var(--sub);font-size:10px}.value{min-width:0;padding:2px 5px;border:1px solid var(--line);background:var(--bg);font:9px var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .param-label{min-width:0;display:flex;align-items:center;gap:5px;color:var(--sub);font-size:10px}.automation-mark{position:relative;width:18px;height:18px;display:grid;place-items:center;padding:0;border:1px solid var(--line);background:var(--bg);color:var(--muted);font:9px var(--mono)}.automation-mark::before{content:"◇"}.automation-mark.on{border-color:var(--active);color:var(--active);box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--active) 16%,transparent)}.automation-mark.at-key::before{content:"◆"}.automation-mark:focus-visible{outline:1px solid var(--ink);outline-offset:1px}
+    .scrub{position:relative;min-width:0;height:24px;overflow:hidden;padding:0 5px;border:1px solid var(--line);background:var(--bg);color:var(--active);font:8px var(--mono);cursor:ew-resize;user-select:none;touch-action:none}.scrub.dragging{border-color:var(--active);outline:1px solid color-mix(in srgb,var(--active) 38%,transparent)}
+    .scrub-dial{position:absolute;z-index:1;left:4px;right:43px;top:3px;bottom:3px;opacity:.58;background-image:repeating-linear-gradient(90deg,transparent 0 7px,var(--line2) 7px 8px,transparent 8px 10px),repeating-linear-gradient(90deg,transparent 0 39px,var(--active) 39px 40px,transparent 40px 50px);background-size:10px 7px,50px 13px;background-position:calc(var(--dial-shift,0) * -1px) bottom,calc(var(--dial-shift,0) * -1px) bottom;background-repeat:repeat-x;-webkit-mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);transition:opacity .16s ease}.scrub-dial::after{content:"";position:absolute;left:50%;top:0;bottom:0;border-left:1px solid var(--ink);box-shadow:0 0 5px var(--active)}
+    .scrub.dragging .scrub-dial{opacity:1}.scrub.settling .scrub-dial{animation:dial-land .24s cubic-bezier(.2,.8,.25,1)}.scrub output{position:relative;z-index:2;float:right;min-width:35px;height:22px;display:grid;place-items:center;padding-left:6px;background:linear-gradient(90deg,transparent,var(--bg) 22%);color:var(--active);font:8px var(--mono)}
+    .scrub-hint{color:var(--muted);font:7px var(--mono);white-space:nowrap}.object-auto{display:grid;justify-items:end;gap:1px}.object-auto i{font-style:normal}@keyframes dial-land{0%{transform:translateX(0)}42%{transform:translateX(var(--dial-kick,3px));filter:brightness(1.7)}100%{transform:translateX(0);filter:none}}@media(prefers-reduced-motion:reduce){.scrub.settling .scrub-dial{animation:none}}
+    .tag{padding:2px 5px;border:1px solid var(--active);color:var(--active);font:7px var(--mono);white-space:nowrap}
+    .action-strip{display:flex;gap:5px;padding:8px 9px;border-top:1px solid var(--line)}.action-strip .btn{flex:1}
+    .notice{margin:8px;padding:8px;border:1px dashed var(--line2);color:var(--sub);font-size:9px}.notice strong{color:var(--active)}
+    .notice.error{border-color:var(--warning);color:#dca38f}.notice.error strong{color:var(--warning)}
+    .lifecycle{display:grid;grid-template-columns:1fr auto;gap:4px 8px;padding:7px 9px;border-top:1px solid var(--line);color:var(--sub);font-size:9px}
+    .lifecycle span{color:var(--muted);font:8px var(--mono)}
+    .object-path{padding:0 9px 8px;color:var(--muted);font:7px var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.axis-pack{display:flex;gap:3px}.axis-pack i{padding:1px 3px;border:1px solid var(--line);font-style:normal}.axis-pack b{color:var(--active);font-size:7px}
+    .applied-plugin{display:grid;grid-template-columns:14px 25px minmax(0,1fr) auto;align-items:center;gap:5px;padding:6px 8px;border-top:1px solid var(--line);background:var(--raised)}.applied-plugin .grip{color:var(--muted);font:8px var(--mono)}.applied-plugin .plugin-mini{width:25px;height:25px;display:grid;place-items:center;border:1px solid var(--active);color:var(--active);font:8px var(--mono)}.applied-plugin b,.applied-plugin small{display:block}.applied-plugin small{color:var(--muted);font:7px var(--mono)}.applied-plugin .state{align-self:start}
+    .segmented{display:flex;gap:2px}.segmented span{padding:2px 4px;border:1px solid var(--line);color:var(--muted);font:7px var(--mono)}.segmented span.on{border-color:var(--active);color:var(--ink)}.driver-mini{height:18px;position:relative;overflow:hidden;border:1px solid var(--line);background:var(--bg)}.driver-mini svg{width:100%;height:100%}.driver-mini path{fill:none;stroke:var(--data);stroke-width:1}.link-value{display:flex;align-items:center;gap:4px}.link-value i{width:7px;height:7px;border:1px solid var(--active);transform:rotate(45deg)}
+
+    .timeline{min-height:0;display:grid;grid-template-rows:28px 0 1fr;border-top:1px solid var(--line);background:var(--panel);overflow:hidden}.timeline.depth-open{grid-template-rows:28px 56px 1fr}
+    .timeline-head{gap:8px;padding:0 9px;border-bottom:1px solid var(--line);background:var(--raised)}.timeline-head b{font-size:10px}.depth-toggle{width:25px;height:22px;padding:0;border:1px solid var(--line);background:var(--bg);color:var(--muted);font:11px var(--mono)}.depth-toggle:hover,.depth-toggle[aria-expanded="true"]{border-color:var(--active);color:var(--ink);background:var(--hover)}
+    .z-rail{min-width:0;display:grid;grid-template-columns:200px minmax(0,1fr) 48px;overflow:hidden;border-bottom:1px solid var(--line);background:var(--bg);opacity:0;pointer-events:none}.timeline.depth-open .z-rail{opacity:1;pointer-events:auto}
+    .z-head{display:flex;align-items:center;gap:8px;padding:0 9px;border-right:1px solid var(--line)}.z-head b{font:700 11px var(--mono)}.z-head span{color:var(--muted);font:8px var(--mono);letter-spacing:.08em}.z-head small{color:var(--sub);font:8px var(--mono)}.depth-key{width:20px;height:20px;margin-left:auto;padding:0;border:1px solid var(--line);background:var(--bg);color:var(--muted);font:10px var(--mono)}.depth-key.on{border-color:var(--active);color:var(--active)}
+    .z-plot{position:relative;min-width:0;display:grid;grid-template-rows:27px 27px;padding:0 30px;overflow:hidden}
+    .z-axis{position:absolute;left:30px;right:30px;top:0;bottom:0;pointer-events:none}.z-axis::before{content:"";position:absolute;left:0;right:0;top:13px;height:1px;background:var(--line2)}
+    .z-axis::after{content:"";position:absolute;left:50%;top:0;bottom:0;border-left:1px solid var(--line2)}
+    .z-scale{position:absolute;inset:1px 30px auto;color:var(--muted);font:7px var(--mono);pointer-events:none}.z-scale span{position:absolute;transform:translateX(-50%)}.z-scale span:nth-child(1){left:0;transform:none}.z-scale span:nth-child(2){left:25%}.z-scale span:nth-child(3){left:50%}.z-scale span:nth-child(4){left:75%}.z-scale span:nth-child(5){right:0;transform:none}
+    .z-depth-lane{position:relative;border-bottom:1px solid var(--line)}.z-depth-lane:last-child{border-bottom:0}.z-depth-lane::before{content:"";position:absolute;left:0;right:0;top:13px;border-top:1px solid var(--line)}
+    .z-lane-name{position:absolute;z-index:2;left:-27px;top:8px;width:25px;color:var(--muted);font:7px var(--mono)}
+    .z-marker{position:absolute;z-index:3;top:4px;height:19px;min-width:28px;padding:1px 5px;transform:translateX(-50%);border:1px solid var(--line2);background:var(--raised);color:var(--sub);font:8px var(--mono);white-space:nowrap;cursor:ew-resize}
+    .z-marker::before{content:"";position:absolute;left:50%;top:17px;width:5px;height:5px;transform:translateX(-50%) rotate(45deg);border:1px solid var(--line2);background:var(--bg)}
+    .z-marker[data-keyable="true"]{padding-right:17px}.z-marker[data-keyable="true"]::after{content:"◇";position:absolute;right:3px;top:2px;color:var(--muted);font:8px var(--mono)}.z-marker.at-key::after{content:"◆";color:var(--active)}
+    .z-marker.selected{border-color:var(--active);color:var(--ink)}.z-marker.selected::before{border-color:var(--active);background:var(--active)}.z-marker.dragging{outline:2px solid var(--ink);outline-offset:1px}
+    .z-marker.camera-marker{border-style:double;border-color:var(--data);color:var(--data);cursor:default}.z-marker.camera-marker::before{border-color:var(--data);background:transparent}.particle-depth-range{position:absolute;z-index:1;top:7px;height:13px;border:1px dashed var(--shape);background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--shape) 24%,transparent) 0 3px,transparent 3px 6px);pointer-events:none}
+    .z-tools{display:grid;place-items:center;border-left:1px solid var(--line);color:var(--muted);font:8px var(--mono)}
+    .timeline-body{position:relative;min-height:0;background:var(--panel)}
+    .inbox{position:absolute;z-index:6;left:0;top:0;bottom:0;width:200px;display:grid;grid-template-rows:25px minmax(0,1fr);border-right:1px solid var(--line2);background:var(--panel)}
+    .inbox.empty{grid-template-rows:25px 0 auto}
+    .inbox-head{height:25px;display:flex;align-items:center;gap:6px;padding:0 7px;border-bottom:1px solid var(--line);color:var(--muted);font:7px var(--mono);letter-spacing:.08em}.inbox-head b{color:var(--way-files)}.inbox-head span{margin-left:auto}.inbox-list{min-height:0;overflow:auto}
+    .inbox-item{width:100%;min-height:37px;display:grid;grid-template-columns:19px minmax(0,1fr) auto;align-items:center;gap:5px;padding:5px 6px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--sub);text-align:left}.inbox-item:hover{background:var(--hover)}.inbox-item>i{width:18px;height:18px;display:grid;place-items:center;border:1px solid var(--line2);color:var(--active);font:8px var(--mono);font-style:normal}.inbox-item b,.inbox-item small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.inbox-item b{font-size:8px}.inbox-item small{margin-top:2px;color:var(--muted);font:6px var(--mono)}.inbox-item .inbox-done{width:17px;height:17px;padding:0;border:1px solid var(--line);background:var(--bg);color:var(--muted);font:7px var(--mono)}
+    .inbox-item[data-inbox-kind="asset"]>i{border-color:var(--way-project);color:var(--way-project)}.inbox-item[data-inbox-kind="note"]>i{border-color:var(--object-3);color:var(--object-3)}.inbox-item[data-inbox-kind="job"]>i{border-color:var(--way-inspector);color:var(--way-inspector)}
+    .inbox-tip{display:none;padding:10px 8px;color:var(--muted);font:7px var(--mono)}.inbox.empty .inbox-tip{display:block}.inbox-tip b{display:block;margin-bottom:5px;color:var(--active);font-size:8px}.inbox-tip p{margin:0 0 8px;color:var(--sub);font:8px/1.5 var(--sans)}.inbox-tip button{height:19px;padding:2px 6px;border:1px solid var(--line);background:var(--bg);color:var(--muted);font:7px var(--mono)}
+    .time-plane{position:absolute;left:200px;right:0;top:0;bottom:0;overflow:hidden;background-size:232px 100%,58px 100%;background-image:linear-gradient(90deg,var(--line2) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px)}
+    .beat-ruler{position:absolute;z-index:3;left:0;right:0;top:0;height:16px;border-bottom:1px solid var(--line2);background:color-mix(in srgb,var(--bg) 88%,transparent);color:var(--muted);font:7px var(--mono);pointer-events:none}.beat-ruler span{position:absolute;top:3px;transform:translateX(-50%)}.beat-ruler span:first-child{transform:none}.beat-ruler::after{content:"54.2";position:absolute;left:46%;top:2px;padding:0 3px;background:var(--ink);color:var(--bg)}
+    .clip{--clip-color:var(--object-1);position:absolute;height:22px;padding:3px 7px;border:1px solid color-mix(in srgb,var(--clip-color) 48%,#000);border-left-width:4px;background:var(--clip-color);color:#111;box-shadow:inset 0 1px #ffffff26;font:8px var(--mono);white-space:nowrap;overflow:visible;cursor:pointer}
+    .clip[data-color-slot="1"]{--clip-color:var(--object-1)}.clip[data-color-slot="2"]{--clip-color:var(--object-2)}.clip[data-color-slot="3"]{--clip-color:var(--object-3)}.clip[data-color-slot="4"]{--clip-color:var(--object-4)}.clip[data-color-slot="5"]{--clip-color:var(--object-5)}.clip[data-color-slot="6"]{--clip-color:var(--object-6)}
+    .clip.on{border-color:var(--active);border-left-color:color-mix(in srgb,var(--clip-color) 48%,#000);color:#080808}.clip .badge{margin-left:8px;color:#242424}
+    .group-label,.parent-label{display:inline-block;margin-right:6px;padding:0 4px;border:1px solid #252525;color:#181818;font:7px var(--mono);letter-spacing:.05em}.group-label{font-weight:700}.parent-label{border-style:dashed}
+    .clip.missing{border-style:dashed;border-color:var(--warning);color:var(--warning)}
+    .clip.selected{outline:2px solid var(--ink);outline-offset:1px}
+    .song-clip{height:24px;overflow:hidden}.song-wave{margin-left:9px;color:#242424;letter-spacing:1px}
+    .fx-flow{display:inline-flex;align-items:center;gap:3px;margin-left:9px;font:8px var(--mono)}.fx-flow b{padding:0 3px;border:1px solid var(--active);color:var(--active);font-weight:500}.fx-flow i{padding:0 4px;border-bottom:1px solid var(--active);color:var(--ink);font-style:normal}.fx-flow i.missing{border:1px dashed var(--warning);color:var(--warning)}.fx-flow .arrow{color:var(--muted)}
+    .readiness{position:absolute;left:0;right:0;bottom:-4px;height:3px;display:flex}.readiness i{height:100%;border-right:1px solid var(--bg)}.readiness .ready{background:var(--ok)}.readiness .rendering{background:repeating-linear-gradient(90deg,var(--active) 0 4px,transparent 4px 7px)}.readiness .stale{background:repeating-linear-gradient(135deg,var(--warning) 0 2px,transparent 2px 5px)}.readiness.missing .ready,.readiness.missing .rendering{display:none}.readiness.missing .stale{width:100%!important}
+    .inline-key{position:absolute;top:14px;width:10px;height:10px;padding:0;transform:translateX(-50%) rotate(45deg);border:2px solid var(--active);background:var(--raised);z-index:4}.inline-key.filled{background:var(--active)}.inline-key.channel-hidden{display:none}.inline-key.key-selected{outline:2px solid var(--ink);outline-offset:3px}.inline-key[data-easing="Linear"]{border-style:dashed}
+    .clip .inline-key{border-color:#111;background:var(--clip-color);box-shadow:0 0 0 1px #ffffffb8}.clip .inline-key.filled{background:#111}.clip .inline-key.key-selected{outline-color:#fff;box-shadow:0 0 0 1px #111}
+    .clip .fx-flow b{border-color:#242424;color:#181818}.clip .fx-flow i{border-color:#242424;color:#181818}.clip .fx-flow .arrow{color:#333}
+    .playhead{position:absolute;left:46%;top:0;bottom:0;border-left:1px solid var(--ink)}.playhead::before{content:"";position:absolute;left:-4px;top:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:6px solid var(--ink)}
+    .easing-panel{display:none;position:fixed;z-index:45;right:6px;bottom:31px;width:390px;border:1px solid var(--line2);background:color-mix(in srgb,var(--panel) 97%,transparent);box-shadow:0 16px 46px #000}.easing-panel.open{display:block}
+    .curve-shelf{display:none;position:fixed;z-index:45;right:402px;bottom:31px;width:264px;border:1px solid var(--line2);background:color-mix(in srgb,var(--panel) 97%,transparent);box-shadow:0 16px 46px #000}.curve-shelf.open{display:block}
+    .shelf-head{height:29px;display:flex;align-items:center;gap:6px;padding:0 8px;border-bottom:1px solid var(--line);background:var(--raised)}.shelf-head b{font:8px var(--mono);letter-spacing:.08em}.shelf-head button{height:19px;padding:0 6px;border:1px solid var(--line);background:var(--bg);color:var(--sub);font:7px var(--mono)}.shelf-head #save-curve{margin-left:auto}
+    .curve-folder-row{display:flex;gap:4px;padding:6px 8px 0}.curve-folder-row select{flex:1;min-width:0;height:20px;border:1px solid var(--line);background:var(--bg);color:var(--sub);font:7px var(--mono)}.curve-folder-row button{width:20px;height:20px;padding:0;border:1px solid var(--line);background:var(--bg);color:var(--sub)}
+    .curve-tags{display:flex;gap:3px;padding:6px 8px 0}.curve-tags button{height:18px;padding:0 6px;border:1px solid var(--line);background:var(--bg);color:var(--muted);font:7px var(--mono)}.curve-tags button.on{border-color:var(--active);color:var(--ink)}
+    .curve-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;padding:6px 8px}
+    .curve-card{position:relative;height:66px;padding:2px 3px 1px;border:1px solid var(--line);background:var(--bg);text-align:left}.curve-card.on{border-color:var(--active)}.curve-card svg{width:100%;height:44px;overflow:visible}.curve-card .curve-path{fill:none;stroke:var(--active);stroke-width:2.5}.curve-card small{display:block;color:var(--muted);font:6px var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .curve-history{display:flex;gap:4px;align-items:center;padding:2px 8px 8px}.curve-history>small{color:var(--muted);font:6px var(--mono)}.curve-history div{display:flex;gap:4px}.curve-history div button{width:36px;height:24px;padding:1px;border:1px solid var(--line);background:var(--bg)}.curve-history svg{width:100%;height:100%;overflow:visible}.curve-history .curve-path{fill:none;stroke:var(--active);stroke-width:3}.easing-head{height:29px;display:flex;align-items:center;gap:7px;padding:0 8px;border-bottom:1px solid var(--line);background:var(--raised)}.easing-head b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:8px var(--mono);letter-spacing:.08em}.easing-head button{margin-left:auto;width:20px;height:20px;padding:0;border:0;background:transparent;color:var(--muted)}
+    .easing-workspace{display:grid;grid-template-columns:92px minmax(0,1fr) 92px;align-items:center;gap:8px;padding:8px}
+    .easing-curves{display:grid;grid-template-columns:repeat(2,1fr);gap:4px;align-content:center}.easing-curves button{height:38px;padding:4px;border:1px solid var(--line);background:var(--bg);color:var(--muted)}.easing-curves button svg{width:100%;height:100%;overflow:visible}.easing-curves button path{fill:none;stroke:currentColor;stroke-width:1.5;vector-effect:non-scaling-stroke}.easing-curves button.on{border-color:var(--active);color:var(--active);box-shadow:inset 0 -2px var(--active)}
+    .easing-graph{position:relative;height:238px;width:fit-content;margin:auto}.easing-graph>svg{height:100%;aspect-ratio:100/164;overflow:visible;border:1px solid var(--line);background-color:var(--bg);background-size:25% 15.24%;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px)}.graph-guide{stroke:var(--line2);stroke-dasharray:3 4}.graph-stem{stroke:var(--active);opacity:.5}.graph-curve{fill:none;stroke:var(--active);stroke-width:2}.graph-handle{fill:var(--bg);stroke:var(--ink);stroke-width:1.3;cursor:move}.graph-end{fill:var(--active)}.easing-graph .derived-badge{position:absolute;right:5px;top:5px;z-index:2;width:18px;height:18px;display:grid;place-items:center;border:1px solid var(--active);background:color-mix(in srgb,var(--panel) 88%,transparent);color:var(--active);font:11px/1 var(--mono)}
+    .easing-values{display:grid;gap:6px}.handle-value{display:grid;grid-template-columns:18px 9px 1fr;align-items:center;gap:2px;padding:6px;border:1px solid var(--line);background:var(--bg);font:7px var(--mono)}.handle-value>span{grid-row:1/3;width:16px;height:16px;display:grid;place-items:center;border:1px solid var(--active);border-radius:50%;color:var(--active)}.handle-value small{color:var(--muted);font:6px var(--mono)}.handle-value b{color:var(--active);font:7px var(--mono);font-weight:500}
+
+    .recovery{position:absolute;z-index:30;left:306px;right:348px;top:88px;bottom:248px;display:none;grid-template-rows:34px 1fr 42px;border:1px solid var(--warning);background:color-mix(in srgb,var(--panel) 97%,transparent);box-shadow:0 20px 60px #000}
+    .recovery.open{display:grid}.recovery-head{display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid var(--line);background:var(--raised)}
+    .recovery-head b{font-size:10px}.recovery-head span{color:var(--muted);font:8px var(--mono)}.recovery-head button{margin-left:auto}
+    .recovery-body{display:grid;grid-template-columns:1fr 1fr;min-height:0}
+    .candidate,.recovery-rules{padding:14px;border-right:1px solid var(--line)}.recovery-rules{border:0}
+    .candidate .big-icon{width:56px;height:56px;display:grid;place-items:center;border:1px solid var(--active);color:var(--active);font:13px var(--mono)}
+    .candidate h2{margin:12px 0 2px;font-size:15px}.candidate p,.recovery-rules p{color:var(--sub);font-size:9px}
+    .candidate dl{display:grid;grid-template-columns:90px 1fr;gap:5px;margin-top:14px;font:8px var(--mono)}.candidate dt{color:var(--muted)}.candidate dd{margin:0;color:var(--sub)}
+    .recovery-rules h3{margin:0 0 9px;font-size:11px}.recovery-rules ol{margin:0;padding-left:19px;color:var(--sub);font-size:9px}.recovery-rules li{margin:7px 0}
+    .recovery-actions{display:flex;align-items:center;gap:7px;padding:7px 10px;border-top:1px solid var(--line)}.recovery-actions small{color:var(--muted);font:8px var(--mono)}.recovery-actions .btn:first-of-type{margin-left:auto}
+    .settings-sheet{display:none;position:fixed;z-index:50;left:50%;top:50%;width:520px;height:360px;transform:translate(-50%,-50%);grid-template-rows:34px 1fr 38px;border:1px solid var(--line2);background:var(--panel);box-shadow:0 24px 80px #000}.settings-sheet.open{display:grid}.settings-head{display:flex;align-items:center;gap:7px;padding:0 10px;border-bottom:1px solid var(--line);background:var(--raised)}.settings-head small{color:var(--muted);font:7px var(--mono)}.settings-head button{margin-left:auto}
+    .settings-body{display:grid;grid-template-columns:130px 1fr;min-height:0}.settings-nav{padding:7px;border-right:1px solid var(--line)}.settings-nav button{width:100%;height:27px;padding:4px 7px;border:0;background:transparent;color:var(--sub);text-align:left;font:8px var(--mono)}.settings-nav button.on{border-left:2px solid var(--active);padding-left:5px;background:var(--raised);color:var(--ink)}
+    .settings-content{padding:14px}.settings-content h2{margin:0 0 3px;font-size:13px}.settings-content p{margin:0 0 17px;color:var(--muted);font-size:9px}.setting-row{min-height:48px;display:grid;grid-template-columns:150px 1fr;align-items:center;border-top:1px solid var(--line)}.setting-row label{color:var(--sub);font-size:10px}.setting-choice{display:flex;gap:4px}.setting-choice button{height:25px;padding:3px 9px;border:1px solid var(--line);background:var(--bg);color:var(--muted);font:8px var(--mono)}.setting-choice button.on{border-color:var(--active);color:var(--ink)}.setting-slider{display:flex;align-items:center}.setting-slider input{width:100%;max-width:220px;accent-color:var(--active)}
+    .settings-foot{display:flex;align-items:center;gap:7px;padding:6px 10px;border-top:1px solid var(--line)}.settings-foot span{color:var(--muted);font:7px var(--mono)}.settings-foot button{margin-left:auto}
+
+    .status{display:grid;grid-template-columns:190px 1fr auto;gap:8px;padding:0 9px;border-top:1px solid var(--line);background:var(--bg);font:8px var(--mono)}
+    .status b{color:var(--active)}.status span{color:var(--sub)}.status kbd{color:var(--muted)}
+    details.dev-info{border-bottom:1px solid var(--line)}details.dev-info summary{padding:7px 9px;color:var(--muted);font:8px var(--mono);cursor:pointer}details.dev-info[open] summary{color:var(--sub);background:var(--bg)}
+    @media(max-height:760px){.app{grid-template-rows:34px 32px minmax(300px,1fr) 238px 24px}.recovery{bottom:258px}.easing-panel{width:350px}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <header class="titlebar">
+    <span class="wordmark">MOTOLII</span><span class="project"><b>night_drive.mtl</b> / Main composition</span>
+    <span class="grow"></span><span class="undo-state" id="undo-state"></span>
+    <button class="btn quiet" id="open-settings">Settings</button><button class="btn quiet" id="undo" disabled>↶ Undo</button><button class="btn" id="export">Export</button>
+  </header>
+
+  <nav class="commandbar" aria-label="Main tools">
+    <button class="cmdtool active" data-stage-tool="select" aria-label="Select">↖</button><button class="cmdtool" data-stage-tool="hand" aria-label="Hand">✥</button><button class="cmdtool" aria-label="Shape">◇</button><button class="cmdtool" aria-label="Text">T</button><button class="cmdtool" data-stage-tool="connect" aria-label="Connect">⌁</button><button class="cmdtool" data-stage-tool="relative" aria-label="Relative Move">Δ</button><button class="cmdtool" data-stage-tool="camera" aria-label="Camera">▣</button>
+    <span class="cmd-sep"></span><button class="cmdtool surface-toggle" id="surface-colors" aria-pressed="false">COLOR BOOK</button>
+    <span class="cmd-sep"></span><span class="crumb">Pulse rings / <b id="crumb">Echo Bloom</b></span>  </nav>
+
+  <main class="workspace">
+    <aside class="browser">
+      <div class="panel-head">Browser <small>PROJECT / PLUGINS</small></div>
+      <div class="browser-tabs">
+        <button class="browser-tab" data-tab="project">Project</button>
+        <button class="browser-tab on" data-tab="vism">Plugins</button>
+      </div>
+      <div id="vism-browser" data-view="thumb">
+        <input class="search" id="search" type="search" placeholder="Search plugins or tags" aria-label="Search plugins">
+        <div class="plugin-shelf" data-info="User library|install pathに依存しない仮想整理">
+          <div class="plugin-folder-row"><select class="plugin-folder" id="plugin-folder" aria-label="Plugin folder"><option value="all">▰ All plugins</option><option value="motion">▰ Motion Essentials</option><option value="type">▰ Typography</option><option value="experimental">▰ Experimental</option><option value="project">▰ Project used</option></select><button class="btn quiet" id="add-plugin-folder" aria-label="Plugin folderを追加">＋</button></div>
+          <div class="plugin-labels" aria-label="Plugin labels"><button class="plugin-label on" data-plugin-label="all">ALL</button><button class="plugin-label" data-plugin-label="goto">GO-TO</button><button class="plugin-label" data-plugin-label="effect">EFFECT</button><button class="plugin-label" data-plugin-label="generator">GENERATOR</button><button class="plugin-label" data-plugin-label="text">TEXT</button><span class="plugin-view-toggle"><button class="on" data-plugin-view="thumb">THUMB</button><button data-plugin-view="detail">DETAIL</button></span></div>
+          <div class="plugin-history"><small>HISTORY</small><div class="plugin-history-items" id="plugin-history"></div></div>
+        </div>
+        <div class="browser-section">INSTALLED / AVAILABLE</div>
+        <div class="plugin-grid">
+          <button class="vism on" data-mode="installed" data-folder="motion project" data-labels="goto effect glow" data-search="echo bloom light pulse glow effect installed">
+            <span class="plugin-thumb bloom"><span class="thumb-state state ready">READY</span></span>
+            <span class="plugin-card-body"><span class="vism-copy"><b>Echo Bloom</b><small>Light pulses around an input</small></span><span class="plugin-tags"><i>EFFECT</i><i>GLOW</i></span><span class="plugin-origin">Local file · Ready</span></span>
+          </button>
+          <button class="vism" data-mode="discover" data-folder="type" data-labels="generator text" data-search="glyph current kinetic text lyrics generator bundled available">
+            <span class="plugin-thumb glyph"><span class="thumb-state state">AVAILABLE</span></span>
+            <span class="plugin-card-body"><span class="vism-copy"><b>Glyph Current</b><small>Flowing type expression</small></span><span class="plugin-tags"><i>GENERATOR</i><i>TEXT</i></span><span class="plugin-origin">Bundled</span></span>
+          </button>
+          <button class="vism" data-mode="blocked" data-folder="experimental" data-labels="effect space" data-search="fold field space geometry effect incompatible">
+            <span class="plugin-thumb fold"><span class="thumb-state state blocked">UNAVAILABLE</span></span>
+            <span class="plugin-card-body"><span class="vism-copy"><b>Fold Field</b><small>Spatial folding expression</small></span><span class="plugin-tags"><i>EFFECT</i><i>SPACE</i></span><span class="plugin-origin">Local file · Unavailable</span></span>
+          </button>
+        </div>
+        <div class="browser-section">PROJECT DIAGNOSTIC</div>
+        <div class="plugin-grid">
+          <button class="vism" data-mode="missing" data-folder="project" data-labels="generator array missing" data-search="ribbon array missing unavailable generator">
+            <span class="plugin-thumb ribbon"><span class="thumb-state state missing">MISSING</span></span>
+            <span class="plugin-card-body"><span class="vism-copy"><b>Ribbon Array</b><small>Used in this Project</small></span><span class="plugin-tags"><i>GENERATOR</i><i>ARRAY</i></span><span class="plugin-origin">Project reference · Missing</span></span>
+          </button>
+        </div>
+      </div>
+      <div class="project-explorer" id="project-browser" hidden data-info="Project Explorer|Project assetと外部fileを同じ場所で探す">
+        <div class="explorer-path"><button class="asset-source-tab on" data-asset-source="project">PROJECT</button><button class="asset-source-tab" data-asset-source="files">FILES</button><button class="btn quiet file-nav" hidden>‹</button><button class="btn quiet file-nav" hidden>↑</button><div class="path" id="asset-path">night_drive / Assets</div><button class="btn quiet">⌕</button></div>
+        <div class="explorer-body">
+          <nav class="explorer-places">
+            <div data-asset-source-view="project"><div class="place on">▦ All</div><div class="place">◆ Used</div><div class="place">◇ Unplaced</div><div class="place-title">FOLDERS</div><div class="place">visual</div><div class="place">audio</div><div class="place">brand</div></div>
+            <div data-asset-source-view="files" hidden><div class="place on">▣ source</div><div class="place">▤ Recent</div><div class="place">◇ Downloads</div><div class="place-title">FOLDERS</div><div class="place">city</div><div class="place">logos</div><div class="place">textures</div><div class="place">audio</div></div>
+          </nav>
+          <div class="asset-content">
+            <div class="asset-tools"><b id="asset-source-title">Project assets</b><span id="asset-scope-label">USED / UNPLACED</span><span id="asset-count">4 ITEMS</span></div>
+            <div class="asset-grid">
+              <button class="asset-tile on" data-asset-source-view="project" data-asset="night_drive.wav"><span class="asset-preview audio"></span><span class="asset-name">night_drive.wav<small>USED</small></span></button>
+              <button class="asset-tile" data-asset-source-view="project" data-asset="logo.svg"><span class="asset-preview logo"></span><span class="asset-name">logo.svg<small>UNPLACED</small></span></button>
+              <button class="asset-tile" data-asset-source-view="project" data-asset="grain.png"><span class="asset-preview texture"></span><span class="asset-name">grain.png<small>USED</small></span></button>
+              <button class="asset-tile" data-asset-source-view="project" data-asset="city_loop.mp4"><span class="asset-preview video"></span><span class="asset-name">city_loop.mp4<small>INBOX</small></span></button>
+              <button class="asset-tile" data-asset-source-view="files" data-asset="city_loop.mp4" hidden><span class="asset-preview video"></span><span class="asset-name">city_loop.mp4<small>12s</small></span></button>
+              <button class="asset-tile" data-asset-source-view="files" data-asset="logo.svg" hidden><span class="asset-preview logo"></span><span class="asset-name">logo.svg<small>SVG</small></span></button>
+              <button class="asset-tile" data-asset-source-view="files" data-asset="night_drive.wav" hidden><span class="asset-preview audio"></span><span class="asset-name">night_drive.wav<small>3:42</small></span></button>
+              <button class="asset-tile" data-asset-source-view="files" data-asset="grain.png" hidden><span class="asset-preview texture"></span><span class="asset-name">grain.png<small>4K</small></span></button>
+              <button class="asset-tile" data-asset-source-view="files" data-asset="city_alt" hidden><span class="asset-preview folder"></span><span class="asset-name">city_alt<small>14</small></span></button>
+              <button class="asset-tile" data-asset-source-view="files" data-asset="impact_04.wav" hidden><span class="asset-preview audio"></span><span class="asset-name">impact_04.wav<small>2s</small></span></button>
+            </div>
+          </div>
+        </div>
+        <div class="surface-foot" data-info="Project Explorer|ProjectとFilesを同じ面で探す|Space / Enter"><span id="asset-foot-copy">PROJECT · READY TO PLACE</span><button class="btn primary" id="place-asset">Place selected</button></div>
+      </div>
+    </aside>
+
+    <section class="surface-drawer color-book" id="color-book-drawer" aria-label="Color Book" aria-hidden="true">
+      <button class="book-resize-handle" id="book-resize" aria-label="Color Bookの幅を変更" data-info="Color Book幅|左端dragで変更|Drag"></button>
+      <div class="surface-head"><b>Color Book</b><small>COLOR FIRST · USER LIBRARY</small><button class="btn quiet" id="import-colors" aria-label="色を読み込む">⇩</button><button class="btn quiet close-surface" data-close-surface="colors">×</button></div>
+      <div class="book-toolbar"><input class="book-search" id="book-search" type="search" placeholder="Search colors" aria-label="Color Bookを検索"><button class="book-library">MY COLORS</button></div>
+      <div class="book-body">
+        <nav class="book-folders" aria-label="Color folders">
+          <button class="book-folder on" data-folder="all">▦ All colors <span>15</span></button>
+          <button class="book-folder" data-folder="brand">▰ Brand <span>6</span></button>
+          <button class="book-folder" data-folder="night">▰ Night Drive <span>4</span></button>
+          <button class="book-folder" data-folder="neutral">▰ Neutral <span>6</span></button>
+          <button class="book-folder" data-folder="fx">▰ FX <span>3</span></button>
+          <button class="book-folder-add" id="add-color-folder">＋ FOLDER</button>
+        </nav>
+        <div class="book-content">
+          <div class="book-tags" aria-label="Color labels"><button class="book-tag on" data-color-tag="all">ALL</button><button class="book-tag" data-color-tag="goto">GO-TO</button><button class="book-tag" data-color-tag="warm">WARM</button><button class="book-tag" data-color-tag="cool">COOL</button><button class="book-tag" data-color-tag="neutral">NEUTRAL</button><button class="book-tag" data-color-tag="fx">FX</button></div>
+          <div class="color-picker">
+            <div class="color-cycle" id="color-cycle" aria-label="Color cycle" data-info="Color cycle|色を作る · 形はSettings|Apply / Esc"><div class="color-field triangle" id="color-field"><i></i></div></div>
+            <div class="picker-tools">
+              <button class="eyedropper" id="eyedropper" aria-pressed="false"><span class="eyedropper-icon" aria-hidden="true"></span><span>EYEDROPPER</span></button>
+            </div>
+          </div>
+          <div class="book-swatches" aria-label="Colors">
+            <div class="book-swatch" data-color="#18202b" data-folder="brand night" data-tags="goto cool dark" aria-label="Deep navy"><button class="book-color" style="--swatch:#18202b" aria-label="Deep navyを選択"></button></div>
+            <div class="book-swatch" data-color="#26415a" data-folder="brand night" data-tags="cool dark" aria-label="Raised blue"><button class="book-color" style="--swatch:#26415a" aria-label="Raised blueを選択"></button></div>
+            <div class="book-swatch on" data-color="#df8b4d" data-folder="brand night" data-tags="goto warm signal" aria-label="Warm orange"><button class="book-color" style="--swatch:#df8b4d" aria-label="Warm orangeを選択"></button></div>
+            <div class="book-swatch" data-color="#f1c27d" data-folder="brand night" data-tags="goto warm" aria-label="Soft amber"><button class="book-color" style="--swatch:#f1c27d" aria-label="Soft amberを選択"></button></div>
+            <div class="book-swatch" data-color="#68a6d8" data-folder="brand" data-tags="goto cool signal" aria-label="Signal blue"><button class="book-color" style="--swatch:#68a6d8" aria-label="Signal blueを選択"></button></div>
+            <div class="book-swatch" data-color="#72a97e" data-folder="brand" data-tags="cool signal" aria-label="Signal green"><button class="book-color" style="--swatch:#72a97e" aria-label="Signal greenを選択"></button></div>
+            <div class="book-swatch" data-color="#0a0a0a" data-folder="neutral" data-tags="neutral dark" aria-label="Black"><button class="book-color" style="--swatch:#0a0a0a" aria-label="Blackを選択"></button></div>
+            <div class="book-swatch" data-color="#343434" data-folder="neutral" data-tags="neutral dark" aria-label="Dark gray"><button class="book-color" style="--swatch:#343434" aria-label="Dark grayを選択"></button></div>
+            <div class="book-swatch" data-color="#747474" data-folder="neutral" data-tags="neutral" aria-label="Gray"><button class="book-color" style="--swatch:#747474" aria-label="Grayを選択"></button></div>
+            <div class="book-swatch" data-color="#b7b7b7" data-folder="neutral" data-tags="neutral" aria-label="Light gray"><button class="book-color" style="--swatch:#b7b7b7" aria-label="Light grayを選択"></button></div>
+            <div class="book-swatch" data-color="#ededed" data-folder="neutral" data-tags="goto neutral" aria-label="Paper"><button class="book-color" style="--swatch:#ededed" aria-label="Paperを選択"></button></div>
+            <div class="book-swatch" data-color="#00000000" data-folder="neutral" data-tags="neutral" aria-label="Transparent"><button class="book-color" style="--swatch:repeating-linear-gradient(135deg,#ddd 0 5px,#777 5px 10px)" aria-label="Transparentを選択"></button></div>
+            <div class="book-swatch" data-color="#ad82bf" data-folder="fx" data-tags="goto cool fx" aria-label="Neon purple"><button class="book-color" style="--swatch:#ad82bf" aria-label="Neon purpleを選択"></button></div>
+            <div class="book-swatch" data-color="#62b4ae" data-folder="fx" data-tags="goto cool fx" aria-label="Neon cyan"><button class="book-color" style="--swatch:#62b4ae" aria-label="Neon cyanを選択"></button></div>
+            <div class="book-swatch" data-color="#c9736f" data-folder="fx" data-tags="goto warm fx" aria-label="Flare red"><button class="book-color" style="--swatch:#c9736f" aria-label="Flare redを選択"></button></div>
+          </div>
+          <div class="book-history"><div class="history-head">HISTORY <button id="clear-color-history">CLEAR</button></div><div class="history-colors" id="color-history"></div></div>
+        </div>
+      </div>
+      <div class="surface-foot"><span class="book-color" id="selected-color-chip" style="--swatch:#df8b4d"></span><span id="color-target">FILL · PREVIEW</span><button class="btn primary" id="apply-color">Apply to Fill</button></div>
+    </section>
+
+    <section class="stage-shell">
+      <div class="stage-tools"><button class="toolbtn">Fit</button><button class="toolbtn">100%</button><button class="toolbtn on">▦</button><span class="stage-mode">STAGE / <b id="stage-mode">ECHO BLOOM</b></span></div>
+      <div class="stage" id="stage" data-mode="installed">
+        <div class="frame">
+          <div class="grid"></div><div class="effect-veil"></div>
+          <div class="scene-copy">NIGHT<br>DRIVE<small>54.2 / CITY SIGNAL</small></div>
+          <div class="rings"><i class="ring" style="--i:0%;--n:0"></i><i class="ring" style="--i:11%;--n:1"></i><i class="ring" style="--i:22%;--n:2"></i><i class="ring" style="--i:33%;--n:3"></i><i class="pulse"></i></div>
+          <div class="selection-bounds" aria-label="選択Object bounds"><i></i><i></i><i></i><i></i></div>
+          <div class="motion-path" aria-label="Relative Move motion path"><svg viewBox="0 0 300 120"><path d="M12 100 C72 22 126 94 181 38 S250 26 288 54"/><circle cx="12" cy="100" r="4"/><circle cx="181" cy="38" r="4"/><circle cx="288" cy="54" r="5"/></svg></div>
+        </div>
+        <div class="connection-preview" aria-label="説明付き接続preview"><svg viewBox="0 0 800 420" preserveAspectRatio="none"><path d="M154 116 C288 56 472 78 630 188"/><circle cx="154" cy="116" r="7"/><circle cx="630" cy="188" r="9"/></svg></div>
+        <div class="stage-hud" id="stage-hud"><b id="stage-hud-title">TEXTURE → Echo Bloom</b><small id="stage-hud-body">Target valid · Clickで接続 / Escで取消</small></div>
+        <div class="stage-badge" id="stage-badge"></div>
+      </div>
+      <div class="transport"><button class="toolbtn" id="step-prev" aria-label="前のkeyへ">|‹</button><button class="toolbtn" id="play">▶</button><button class="toolbtn" id="step-next" aria-label="次のkeyへ">›|</button><button class="interval-easing" id="interval-easing" aria-label="現在区間のEasing Graph Viewを開く" aria-pressed="false" aria-controls="easing-panel" data-info="Easing Graph|key間にいる時だけ開けます|"><svg viewBox="0 0 20 14" aria-hidden="true"><path d="M2 12 C7 12 8 2 18 2"/><circle cx="2" cy="12" r="1.6"/><circle cx="18" cy="2" r="1.6"/></svg></button><span class="time" id="time">00:54.2</span><span>BAR 54.2.00</span><span>120 BPM · SNAP BEAT</span><span class="quality">DRAFT · FP16 · 1/2</span></div>
+    </section>
+
+    <aside class="inspector" id="inspector"></aside>
+  </main>
+
+  <section class="timeline" id="timeline" aria-label="譜面">
+    <div class="timeline-head" data-info="譜面 / Timeline|時間・Depth・Effect・keyを同じbarで読む"><button class="depth-toggle" id="depth-toggle" aria-expanded="false" aria-controls="depth-rail" aria-label="Depth Railを開く" data-info="Depth|前後配置を現在時刻で開く · Document変更なし">≋</button><b>譜面 / Timeline</b></div>
+    <div class="z-rail" id="depth-rail" aria-label="Depth Rail · Edit-Space Z" aria-hidden="true">
+      <div class="z-head"><b>DEPTH</b><span>Z / EDIT SPACE</span><button class="depth-key on" id="depth-key" aria-pressed="true" aria-label="現在時刻のDepth keyを削除">◆</button><small id="z-readout"></small></div>
+      <div class="z-plot">
+        <div class="z-scale"><span>−.50</span><span>−.25</span><span>0</span><span>+.25</span><span>+.50</span></div>
+        <div class="z-depth-lane"><span class="z-lane-name">ROOT</span><div class="z-axis" id="z-axis"></div><span class="particle-depth-range" id="particle-depth-range" style="left:58%;width:20%" aria-label="Pulse Emitterから生成された粒子群の評価済みDepth範囲 · read only"></span><button class="z-marker selected at-key" data-editable="true" data-keyable="true" data-role="emitter" data-z="0.18" data-base-z="0.18" data-amplitude="0.12" data-short="Emitter" data-z-name="Pulse rings" style="left:68%">Emitter +.18</button><button class="z-marker" data-editable="true" data-keyable="true" data-z="0" data-base-z="0" data-amplitude="0" data-short="Text" data-z-name="NIGHT DRIVE" style="left:50%">Text 0</button><span class="z-marker camera-marker" data-z="0.42" data-base-z="0.36" data-amplitude="0.06" data-phase="1.5708" data-short="CAM" data-z-name="CompCamera" style="left:92%" aria-label="Camera world Z context · read only">CAM +.42 →</span></div>
+        <div class="z-depth-lane"><span class="z-lane-name">GROUP</span><button class="z-marker" data-editable="true" data-keyable="true" data-z="-0.20" data-base-z="-0.20" data-amplitude="0.05" data-phase="0" data-short="Grid" data-z-name="City grid" style="left:30%">Grid −.20</button></div>
+      </div>
+      <div class="z-tools">FIT</div>
+    </div>
+    <div class="timeline-body">
+      <aside class="inbox" id="inbox" aria-label="Inbox" data-info="Inbox|未整理・未確認のものを一時的に受け取る">
+        <div class="inbox-head"><b>INBOX</b><span id="inbox-count">3</span></div>
+        <div class="inbox-list" id="inbox-list">
+          <div class="inbox-item" data-inbox-kind="asset" tabindex="0"><i>▧</i><span><b>city_loop.mp4</b><small>Imported · Unplaced</small></span><button class="inbox-done" aria-label="city_loop.mp4をInboxから片付ける">×</button></div>
+          <div class="inbox-item" data-inbox-kind="note" tabindex="0"><i>✎</i><span><b>Impactを2f遅らせる</b><small>Review · 00:54.2</small></span><button class="inbox-done" aria-label="Review noteを解決する">✓</button></div>
+          <div class="inbox-item" data-inbox-kind="job" tabindex="0"><i>⇩</i><span><b>preview_07.mp4</b><small>Render complete · Unchecked</small></span><button class="inbox-done" aria-label="Render結果を確認済みにする">✓</button></div>
+        </div>
+        <div class="inbox-tip"><b>TIP</b><p>Graph iconをdouble-clickすると、Favorite Easingを現在区間へ適用できます。</p><button id="dismiss-tip">DISMISS</button></div>
+      </aside>
+      <div class="time-plane" aria-label="項目barをpackingした一枚の時間面">
+        <div class="beat-ruler" aria-label="Beat ruler"><span style="left:0">52</span><span style="left:25%">53</span><span style="left:50%">54</span><span style="left:75%">55</span><span style="left:100%">56</span></div>
+        <div class="clip song-clip time-bar" data-color-slot="1" data-kind="♪" data-name="楽曲" data-path="PROJECT / night_drive.wav" data-flow-input="AUDIO" data-flow-role="SONG" data-flow-core="night_drive.wav" data-flow-effect="BPM / BEAT" data-flow-output="TIME REF" data-flow-meta="Locked · read-only reference" data-flow-state="ready" style="left:1%;right:1%;top:20px">night_drive.wav <span class="song-wave">╱╲╱▁╲╱╲▁╱╲╱╲▁╱╲╱╲▁╱╲╱╲▁╱╲</span></div>
+        <div class="clip on selected time-bar" id="vism-clip" data-color-slot="2" data-kind="G" data-name="Pulse rings" data-path="PROJECT / Main / Pulse rings" data-flow-input="TEXTURE" data-flow-role="GROUP" data-flow-core="Pulse rings" data-flow-effect="Echo Bloom" data-flow-output="TEXTURE" data-flow-meta="" data-flow-state="ready" style="left:4%;width:88%;top:54px"><span class="group-label">GROUP · Pulse rings</span><span>z +.18</span><span class="fx-flow"><b>IN</b><span class="arrow">→</span><i id="plugin-flow-name">Echo Bloom</i><span class="arrow">→</span><b>OUT</b></span><span class="readiness" id="plugin-readiness" aria-label="ready, rendering, stale"><i class="ready" style="width:46%"></i><i class="rendering" style="width:21%"></i><i class="stale" style="width:33%"></i></span><button class="inline-key filled" data-easing="Smooth" data-channel="Intensity" style="left:28%" aria-label="Intensity keyframe 1"></button><button class="inline-key" data-easing="Smooth" data-channel="Intensity" style="left:54%" aria-label="Intensity keyframe 2"></button><button class="inline-key filled" data-easing="Ease Out" data-channel="Intensity" style="left:76%" aria-label="Intensity keyframe 3"></button></div>
+        <div class="clip time-bar" data-color-slot="3" data-kind="T" data-name="NIGHT DRIVE" data-path="PROJECT / Main / NIGHT DRIVE" data-flow-input="TEXT" data-flow-role="OBJECT" data-flow-core="NIGHT DRIVE" data-flow-effect="Opacity" data-flow-output="TEXTURE" data-flow-meta="" data-flow-state="ready" style="left:27%;width:38%;top:88px">NIGHT DRIVE <span class="badge">Opacity · 2 keys</span><button class="inline-key filled" data-easing="Linear" data-channel="Opacity" style="left:32%" aria-label="Opacity keyframe 1"></button><button class="inline-key" data-easing="Ease In" data-channel="Opacity" style="left:78%" aria-label="Opacity keyframe 2"></button></div>
+        <div class="clip time-bar" data-color-slot="4" data-kind="S" data-name="City grid" data-path="PROJECT / Main / Pulse rings / City grid" data-flow-input="SHAPE" data-flow-role="CHILD" data-flow-core="City grid" data-flow-effect="Group composite" data-flow-output="TEXTURE" data-flow-meta="" data-flow-state="ready" style="left:8%;width:79%;top:120px"><span class="parent-label">↳ Pulse rings</span>City grid <span class="badge">z −.20</span><span class="readiness" aria-label="ready"><i class="ready" style="width:100%"></i></span></div>
+        <div class="clip time-bar" data-color-slot="5" data-kind="V" data-name="city_loop.mp4" data-path="PROJECT / Main / city_loop.mp4" data-flow-input="VIDEO" data-flow-role="OBJECT" data-flow-core="city_loop.mp4" data-flow-effect="None" data-flow-output="TEXTURE" data-flow-meta="" data-flow-state="ready" style="left:16%;width:31%;top:152px">▧ city_loop.mp4</div>
+        <div class="clip time-bar" data-color-slot="6" data-kind="V" data-name="traffic_pass.mp4" data-path="PROJECT / Main / traffic_pass.mp4" data-flow-input="VIDEO" data-flow-role="OBJECT" data-flow-core="traffic_pass.mp4" data-flow-effect="None" data-flow-output="TEXTURE" data-flow-meta="" data-flow-state="ready" style="left:51%;width:37%;top:184px">▧ traffic_pass.mp4</div>
+        <div class="playhead" id="playhead"></div>
+      </div>
+      <aside class="easing-panel" id="easing-panel" aria-hidden="true" aria-label="Interval Easing Graph View">
+        <div class="easing-head" data-info="Easing Graph|現在の動きを編集 · 1 Undo|Esc"><b id="easing-target">Pulse rings · Intensity</b><button id="close-easing" aria-label="Easing Graph Viewを閉じる">×</button></div>
+        <div class="easing-workspace">
+          <div class="easing-curves" aria-label="Easing curve shapes">
+            <button data-curve="Linear" aria-label="Linear" data-info="Linear|一定速度"><svg viewBox="0 0 40 24" aria-hidden="true"><path d="M3 21 L37 3"/></svg></button>
+            <button class="on" data-curve="Smooth" aria-label="Smooth" data-info="Smooth|なめらかな加減速"><svg viewBox="0 0 40 24" aria-hidden="true"><path d="M3 21 C14 21 16 3 37 3"/></svg></button>
+            <button data-curve="Ease In" aria-label="Ease In" data-info="Ease In|ゆっくり始まる"><svg viewBox="0 0 40 24" aria-hidden="true"><path d="M3 21 C24 21 27 3 37 3"/></svg></button>
+            <button data-curve="Ease Out" aria-label="Ease Out" data-info="Ease Out|ゆっくり止まる"><svg viewBox="0 0 40 24" aria-hidden="true"><path d="M3 21 C13 21 16 3 37 3"/></svg></button>
+            <button data-curve="Bounce" aria-label="Bounce" data-info="Bounce|跳ねる"><svg viewBox="0 0 40 24" aria-hidden="true"><path d="M3 21 C12 21 13 3 22 3 C27 3 27 13 31 13 C35 13 35 3 37 3"/></svg></button>
+            <button data-curve="Elastic" aria-label="Elastic" data-info="Elastic|行き過ぎて戻る"><svg viewBox="0 0 40 24" aria-hidden="true"><path d="M3 21 C11 21 12 -4 21 5 S30 3 37 3"/></svg></button>
+            <button data-curve="Step" aria-label="Step" data-info="Step|途中で切り替える"><svg viewBox="0 0 40 24" aria-hidden="true"><path d="M3 21 H20 V3 H37"/></svg></button>
+            <button id="open-curve-shelf" aria-label="My curves" data-info="My curves|保存した形を開く|Esc"><svg viewBox="0 0 40 24" aria-hidden="true"><path d="M5 19 C13 19 15 7 35 7 M5 14 C14 14 18 3 35 3 M5 22 H35"/></svg></button>
+          </div>
+          <div class="easing-graph" aria-label="Easing curve graph"><span class="derived-badge" id="overshoot-badge" aria-label="Overshoot">↥</span><svg viewBox="0 -52 100 164" preserveAspectRatio="none"><line class="graph-guide" x1="0" y1="0" x2="100" y2="0"/><line class="graph-guide" x1="0" y1="100" x2="100" y2="100"/><line class="graph-stem" id="graph-stem-a" x1="0" y1="100" x2="34" y2="-56"/><line class="graph-stem" id="graph-stem-b" x1="100" y1="0" x2="64" y2="0"/><path class="graph-curve" id="graph-curve" d="M0,100 C34,-56 64,0 100,0"/><circle class="graph-handle" id="graph-handle-a" cx="34" cy="-56" r="3.5"/><circle class="graph-handle" id="graph-handle-b" cx="64" cy="0" r="3.5"/><circle class="graph-end" cx="0" cy="100" r="3"/><circle class="graph-end" cx="100" cy="0" r="3"/></svg></div>
+          <div class="easing-values" id="easing-values" aria-label="Bezier handle values">
+            <span class="handle-value" data-info="Handle 1|X / Y"><span>1</span><small>x</small><b id="ease-x1">0.34</b><small>y</small><b id="ease-y1">1.56</b></span>
+            <span class="handle-value" data-info="Handle 2|X / Y"><span>2</span><small>x</small><b id="ease-x2">0.64</b><small>y</small><b id="ease-y2">1.00</b></span>
+          </div>
+        </div>
+      </aside>
+      <aside class="curve-shelf" id="curve-shelf" aria-hidden="true" aria-label="My curves">
+        <div class="shelf-head"><b>MY CURVES</b><button id="save-curve">＋ SAVE CURRENT</button><button id="close-curve-shelf" aria-label="My curvesを閉じる">×</button></div>
+        <div class="curve-folder-row"><select id="curve-folder" aria-label="Curve folder"><option value="all">▰ All curves</option><option value="type">▰ Type rig</option><option value="camera">▰ Camera moves</option></select><button id="add-curve-folder" aria-label="Curve folderを追加">＋</button></div>
+        <div class="curve-tags" aria-label="Curve labels"><button class="on" data-curve-tag="all">ALL</button><button data-curve-tag="goto">GO-TO</button><button data-curve-tag="text">TEXT</button><button data-curve-tag="camera">CAMERA</button></div>
+        <div class="curve-grid" id="curve-grid"></div>
+        <div class="curve-history"><small>HISTORY</small><div id="curve-history"></div></div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="recovery" id="recovery" role="dialog" aria-modal="true" aria-labelledby="recovery-title">
+    <div class="recovery-head"><b id="recovery-title">Plugin recovery candidate</b><span>PROJECT OPEN DID NOT INSTALL OR EXECUTE CODE</span><button class="btn quiet" id="close-recovery">Close</button></div>
+    <div class="recovery-body">
+      <div class="candidate">
+        <div class="big-icon">?</div><h2>Ribbon Array</h2><p>保持されたidentityと互換性を照合する候補です。表示名の一致だけでは復元しません。</p>
+        <dl><dt>Project requires</dt><dd>compatible plugin identity</dd><dt>Payload</dt><dd>retained · not interpreted</dd><dt>Candidate state</dt><dd>not installed</dd><dt>Compatibility</dt><dd>verification required</dd></dl>
+      </div>
+      <div class="recovery-rules">
+        <h3>Hostが先に守ること</h3>
+        <ol><li>Projectを開く操作からinstall、network、build、code実行を分離する。</li><li>由来・要求能力・権限・互換理由を確認できる別操作にする。</li><li>互換性が確定するまで保持payloadを書き換えない。</li><li>復元できなければ似た絵へfallbackせず、必要なexportを拒否する。</li></ol>
+      </div>
+    </div>
+    <div class="recovery-actions"><small>Install store / manifest / trust UIは未決。このモックでは確定しません。</small><button class="btn quiet" id="cancel-recovery">Cancel</button><button class="btn" disabled>INSTALL FLOW UNDECIDED</button></div>
+  </section>
+
+  <section class="settings-sheet" id="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="settings-head"><b id="settings-title">Settings</b><small>USER SETTINGS · DOCUMENT変更なし</small><button class="btn quiet" id="close-settings">×</button></div>
+    <div class="settings-body">
+      <nav class="settings-nav"><button>General</button><button class="on" data-pane="color">Color Editing</button><button data-pane="browser">Browser</button><button>Input</button><button>Appearance</button></nav>
+      <div class="settings-content">
+        <div class="settings-pane" data-pane="color">
+          <h2>Color Editing</h2><p>低頻度の編集環境設定です。作品のColor値やUndoには入りません。</p>
+          <div class="setting-row"><label>Color field shape</label><div class="setting-choice"><button class="on" data-field-shape="triangle">Triangle</button><button data-field-shape="square">Square</button></div></div>
+          <div class="setting-row"><label>Apply gesture</label><div class="value">Double click / Enter</div></div>
+          <div class="setting-row"><label>Swatch size</label><div class="setting-slider"><input id="palette-size" type="range" min="42" max="88" value="54" aria-label="Color swatchの大きさ"></div></div>
+        </div>
+        <div class="settings-pane" data-pane="browser" hidden>
+          <h2>Browser</h2><p>候補棚の表示密度です。Folder・選択・Documentを変えません。</p>
+          <div class="setting-row"><label>Plugin thumbnail size</label><div class="setting-slider"><input id="plugin-thumb-size" type="range" min="92" max="240" value="108" aria-label="Plugin thumbnailの大きさ"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="settings-foot"><span>Changes save to User settings</span><button class="btn primary" id="done-settings">Done</button></div>
+  </section>
+
+  <footer class="status"><b id="status-title"></b><span id="status-body"></span><kbd id="status-key"></kbd></footer>
+</div>
+
+<script>
+(() => {
+  const $ = selector => document.querySelector(selector);
+  const $$ = selector => [...document.querySelectorAll(selector)];
+  const state = {mode:"installed", stageTool:"select", playing:false, start:0, raf:0, playheadPct:46, activeInterval:null, depthOpen:false, depthPhase:0, intensity:64, spread:42, automation:{position:true,depth:true,scale:false,rotation:false,opacity:true,intensity:true,spread:false}, activeParam:"intensity", easing:{interp:"Bezier",preset:"Smooth",x1:.34,y1:1.56,x2:.64,y2:1,overshoot:true}, easeDrag:null, curveTag:"all", curveFolder:"all", curveHistory:[], curveLibrary:[{name:"Smooth",interp:"Bezier",v:[.34,1.56,.64,1],tags:"goto",folder:""},{name:"Snap in",interp:"Bezier",v:[.7,0,.2,1],tags:"goto text",folder:"type"},{name:"Drift out",interp:"Bezier",v:[0,.4,.3,1],tags:"camera",folder:"camera"},{name:"Lyric pop",interp:"Bezier",v:[.2,1.35,.5,1],tags:"text",folder:"type"},{name:"Bounce",interp:"Bounce",v:[0,0,1,1],tags:"",folder:""}], zDrag:null, assetSource:"project", selectedAsset:"night_drive.wav", colorChannel:"Fill", selectedColor:"#df8b4d", appliedFill:"#df8b4d", appliedStroke:"#68a6d8", colorFolder:"all", colorTag:"all", colorHistory:["#df8b4d","#68a6d8","#ad82bf","#18202b","#62b4ae"], colorField:"triangle", colorResize:null, eyedropper:false, pluginFolder:"all", pluginLabel:"all", pluginView:"thumb", pluginHistory:["installed","missing"]};
+  const modeCopy = {
+    installed:{accent:"#d4b36f",crumb:"Echo Bloom",stage:"ECHO BLOOM",badge:"",brief:""},
+    discover:{accent:"#79aaa6",crumb:"Glyph Current",stage:"GLYPH CURRENT · DISCOVER",badge:"DISCOVERY PREVIEW · NOT IN PROJECT",brief:"Discovery preview · Project変更ゼロ"},
+    blocked:{accent:"#9e96ca",crumb:"Fold Field",stage:"FOLD FIELD · UNAVAILABLE",badge:"UNAVAILABLE · CAPABILITY UNSUPPORTED",brief:"要求能力が未対応 · 置換なし"},
+    missing:{accent:"#d68162",crumb:"Ribbon Array",stage:"RIBBON ARRAY · MISSING",badge:"MISSING · PROJECT PAYLOAD RETAINED",brief:"必要pluginを評価できません · payload保持 · 無関係編集は可能"}
+  };
+
+  let statusHome={title:"",body:"",key:""};
+  function renderStatus(){
+    $("#status-title").textContent=statusHome.title; $("#status-body").textContent=statusHome.body; $("#status-key").textContent=statusHome.key;
+  }
+  function status(title, body, key=""){
+    statusHome={title,body,key}; renderStatus();
+  }
+  function statusInfo(title, body, key=""){
+    $("#status-title").textContent=title; $("#status-body").textContent=body; $("#status-key").textContent=key;
+  }
+  function setUndo(label){
+    $("#undo").disabled=false; $("#undo-state").textContent="Undo 1 · "+label;
+  }
+  function clearUndo(){
+    $("#undo").disabled=true; $("#undo-state").textContent="";
+  }
+  function setStageTool(tool){
+    const stage=$("#stage"); state.stageTool=tool;
+    stage.classList.remove("interaction-connect","interaction-relative","interaction-camera","interaction-hand");
+    if(tool!=="select")stage.classList.add(`interaction-${tool}`);
+    $$("[data-stage-tool]").forEach(button=>button.classList.toggle("active",button.dataset.stageTool===tool));
+    const copies={
+      select:["Selection","","V"],
+      connect:["TEXTURE → Echo Bloom","型付きtargetを強調 · Click確定 / Esc取消","Esc"],
+      relative:["Relative Move Δ +.140 / +.060","motion path全体を同じ差分でPreview","Click commit / Esc"],
+      camera:["Camera / Output","Output Frameを編集 · Document / 1 Undo","C"],
+      hand:["Hand / View","表示だけを移動 · Document変更ゼロ","H"]
+    },copy=copies[tool];
+    $("#stage-hud-title").textContent=copy[0]; $("#stage-hud-body").textContent=copy[1]; status(copy[0],copy[1],copy[2]);
+  }
+  function inspector(mode){
+    const head='<div class="panel-head">Inspector</div>';
+    const objectAuto=(param,keys)=>`<span class="scrub-hint object-auto" id="${param}-object-state"><i>${state.automation[param]?"AUTO ON":"AUTO OFF"}</i>${keys?`<i>${keys}</i>`:""}</span>`;
+    if(mode==="installed") return head+`
+      <div class="section"><div class="section-title">SELECTED OBJECT <span></span></div>
+        <div class="identity"><div class="icon">G</div><div><b>Pulse rings</b><small>Group · 1 child</small></div></div>
+      </div>
+      <div class="section"><div class="section-title">TRANSFORM <span>OBJECT</span></div>
+        <div class="row"><span class="param-label">Position <button class="automation-mark ${state.automation.position?"on":""}" data-object-automation="position" aria-pressed="${state.automation.position}" aria-label="Position automation ${state.automation.position?"on":"off"}"></button></span><span class="value axis-pack"><i><b>X</b> 0.124</i><i><b>Y</b> −0.082</i></span>${objectAuto("position","2 KEYS")}</div>
+        <div class="row"><span class="param-label">Depth Z <button class="automation-mark ${state.automation.depth?"on":""} at-key" data-object-automation="depth" aria-pressed="${state.automation.depth}" aria-label="Depth Z automation ${state.automation.depth?"on":"off"}"></button></span><span class="value" id="depth-value">0.180</span>${objectAuto("depth","1 KEY")}</div>
+        <div class="row"><span class="param-label">Scale <button class="automation-mark ${state.automation.scale?"on":""}" data-object-automation="scale" aria-pressed="${state.automation.scale}" aria-label="Scale automation ${state.automation.scale?"on":"off"}"></button></span><span class="value">1.000</span>${objectAuto("scale","")}</div>
+        <div class="row"><span class="param-label">Rotation Z <button class="automation-mark ${state.automation.rotation?"on":""}" data-object-automation="rotation" aria-pressed="${state.automation.rotation}" aria-label="Rotation Z automation ${state.automation.rotation?"on":"off"}"></button></span><span class="value">0.000 rad</span>${objectAuto("rotation","")}</div>
+        <div class="row"><span class="param-label">Opacity <button class="automation-mark ${state.automation.opacity?"on":""}" data-object-automation="opacity" aria-pressed="${state.automation.opacity}" aria-label="Opacity automation ${state.automation.opacity?"on":"off"}"></button></span><span class="value">100%</span>${objectAuto("opacity","2 KEYS")}</div>
+      </div>
+      <div class="section"><div class="section-title">APPEARANCE <span>OBJECT</span></div>
+        <div class="row"><label>Fill</label><button class="color-chip" data-color-channel="Fill" data-label="${state.appliedFill}" style="--chip:${state.appliedFill}" aria-label="FillをColor Bookから選ぶ"></button><span class="tag">COLOR</span></div>
+        <div class="row"><label>Stroke</label><button class="color-chip" data-color-channel="Stroke" data-label="${state.appliedStroke}" style="--chip:${state.appliedStroke}" aria-label="StrokeをColor Bookから選ぶ"></button><span class="tag">COLOR</span></div>
+      </div>
+      <div class="section"><div class="section-title">GROUP COMPOSITION <span>EDIT SPACE</span></div>
+        <div class="row"><label>Z Occlusion</label><span class="segmented"><span>OFF / Stack</span><span class="on">ON / Group Z</span></span><span class="tag">Z</span></div>
+        <div class="row"><label>Composite</label><span class="value">Child → Group bake point</span><span></span></div>
+        <div class="row"><label>Link</label><button class="value link-value" id="link-target"><i></i>Position → target</button><span class="tag">TYPED</span></div>
+      </div>
+      <div class="section"><div class="section-title">DRIVER <span>2 ROUTES</span></div>
+        <div class="row"><label>Audio Low</label><span class="driver-mini"><svg viewBox="0 0 180 18" preserveAspectRatio="none"><path d="M0 15 L14 13 27 16 42 4 55 11 72 8 89 15 106 5 124 12 144 3 160 11 180 7"/></svg></span><span class="tag">LIVE</span></div>
+      </div>
+      <div class="section"><div class="section-title">APPLIED PLUGINS <span>＋</span></div>
+        <div class="applied-plugin"><span class="grip">::</span><span class="plugin-mini">◎</span><span><b>Echo Bloom</b><small>IN → Effect → OUT · selected</small></span></div>
+      </div>
+      <div class="section"><div class="section-title">ECHO BLOOM <span>HOST PANEL</span></div>
+        <div class="row"><label>Input</label><span class="value">Pulse rings composite</span><span class="tag">TEXTURE</span></div>
+        <div class="row"><span class="param-label">Intensity <button class="automation-mark ${state.automation.intensity?"on":""}" data-automation="intensity" aria-pressed="${state.automation.intensity}" aria-label="Intensity automation ${state.automation.intensity?"on":"off"}"></button></span><button class="scrub" id="intensity" data-param="intensity" style="--dial-shift:${state.intensity*2}" aria-label="Intensity。無限目盛を左右dragして変更"><span class="scrub-dial" aria-hidden="true"></span><output id="intensity-read">${state.intensity}%</output></button><span class="scrub-hint" id="intensity-auto-state">${state.automation.intensity?"AUTO ON":"AUTO OFF"}</span></div>
+        <div class="row"><span class="param-label">Spread <button class="automation-mark ${state.automation.spread?"on":""}" data-automation="spread" aria-pressed="${state.automation.spread}" aria-label="Spread automation ${state.automation.spread?"on":"off"}"></button></span><button class="scrub" id="spread" data-param="spread" style="--dial-shift:${state.spread*2}" aria-label="Spread。無限目盛を左右dragして変更"><span class="scrub-dial" aria-hidden="true"></span><output id="spread-read">${state.spread}%</output></button><span class="scrub-hint" id="spread-auto-state">${state.automation.spread?"AUTO ON":"AUTO OFF"}</span></div>
+        <div class="row"><label>Blend</label><span class="value">Screen</span><span></span></div>
+      </div>
+      <details class="dev-info"><summary>Developer info</summary><div class="row"><label>Package</label><span class="value">Vism (.vism)</span><span></span></div><div class="row"><label>Identity</label><span class="value">demo.echo-bloom</span><span></span></div><div class="lifecycle">Preview / Export<span>SAME EVALUATION</span>Undo / Save<span>PROJECT</span>Cache / Resource<span>HOST</span></div></details>`;
+    if(mode==="discover") return head+`
+      <div class="section"><div class="section-title">DISCOVERY <span>NOT IN PROJECT</span></div>
+        <div class="identity"><div class="icon">字</div><div><b>Glyph Current</b><small>Generator plugin · flowing type</small></div></div>
+        <div class="action-strip"><button class="btn quiet" id="preview-vism">Preview</button><button class="btn primary" id="add-vism">Add to selected object</button></div>
+      </div>
+      <details class="dev-info"><summary>Developer info</summary><div class="row"><label>Package</label><span class="value">Vism (.vism)</span><span></span></div><div class="row"><label>Identity</label><span class="value">demo.glyph-current</span><span></span></div><div class="lifecycle">Project change<span>NONE</span>Code execution<span>NONE</span>Standard panel<span>AVAILABLE AFTER ADD</span></div></details>`;
+    if(mode==="blocked") return head+`
+      <div class="section"><div class="section-title">DISCOVERY <span style="color:var(--warning)">UNAVAILABLE</span></div>
+        <div class="identity"><div class="icon">◇</div><div><b>Fold Field</b><small>Effect plugin · local file</small></div></div>
+        <div class="notice error"><strong>このHostでは評価できません</strong><br>要求された能力が未対応です。近い既存Effectへ置換せず、非互換理由を表示します。</div>
+        <div class="lifecycle">Project change<span>NONE</span>Install<span>NOT STARTED</span>Fallback<span>REFUSED</span></div>
+      </div>
+      <div class="action-strip"><button class="btn quiet" id="inspect-reason">Inspect reason</button><button class="btn" disabled>Add</button></div>
+      <details class="dev-info"><summary>Developer info</summary><div class="row"><label>Package</label><span class="value">Vism (.vism)</span><span></span></div><div class="row"><label>Identity</label><span class="value">demo.fold-field</span><span></span></div></details>`;
+    return head+`
+      <div class="section"><div class="section-title">PROJECT INSTANCE <span style="color:var(--warning)">MISSING</span></div>
+        <div class="identity"><div class="icon" style="border-color:var(--warning);color:var(--warning)">?</div><div><b>Ribbon Array</b><small>Plugin unavailable · Project instance retained</small></div></div>
+        <div class="notice error"><strong>必要なプラグインを評価できません</strong><br>identity、version要求、instance payloadを保持しています。欠落中はpayloadを解釈して似た設定へ変換しません。</div>
+        <div class="lifecycle">Project open<span>SUCCEEDED</span>Unrelated edit<span>AVAILABLE</span>Required export<span>REFUSED</span>Payload<span>RETAINED</span></div>
+        <div class="action-strip"><button class="btn quiet" id="review-recovery">Review recovery</button></div>
+      </div>
+      <div class="section"><div class="section-title">STANDARD TRANSFORM <span>EDITABLE</span></div><div class="row"><label>Position</label><span class="value">X 0.00 · Y 0.00</span><span></span></div><div class="row"><label>Scale</label><span class="value">100%</span><span></span></div></div>
+      <details class="dev-info"><summary>Developer info</summary><div class="row"><label>Package</label><span class="value">Vism (.vism)</span><span></span></div><div class="row"><label>Identity</label><span class="value">demo.ribbon-array</span><span></span></div></details>`;
+  }
+  function applyScrubValue(param,value){
+    state[param]=Math.max(0,Math.round(value)); $(`#${param}-read`).textContent=state[param]+"%";
+    $(`#${param}`).style.setProperty("--dial-shift",state[param]*2);
+    if(param==="intensity")$("#stage").style.setProperty("--glow",state.intensity/100);
+    else $(".rings").style.transform=`translateY(-50%) scale(${.75+state.spread/170})`;
+  }
+  function cancelScrub(control){
+    if(!control?._scrub)return;
+    const param=control.dataset.param; applyScrubValue(param,control._scrub.value);
+    control._scrub=null; control.classList.remove("dragging");
+    status("Echo Bloom",`${param} · Cancel · Document変更ゼロ`,"");
+  }
+  function projectAutomation(param){
+    state.activeParam=param;
+    $$("#vism-clip .inline-key").forEach(key=>key.classList.toggle("channel-hidden",!state.automation[param]));
+  }
+  function intervalKeys(){return state.activeInterval?[state.activeInterval.startKey,state.activeInterval.endKey]:[]}
+  function keyPct(key){return parseFloat(key.style.left)}
+  function intervalAt(position){
+    const bar=$(".time-bar.selected"),channel=state.activeParam[0].toUpperCase()+state.activeParam.slice(1);
+    if(!bar)return null;
+    const keys=[...bar.querySelectorAll(".inline-key:not(.channel-hidden)")].filter(key=>key.dataset.channel===channel).sort((a,b)=>keyPct(a)-keyPct(b));
+    for(let index=0;index<keys.length-1;index++){
+      const left=keyPct(keys[index]),right=keyPct(keys[index+1]);
+      if(position>left&&position<right)return {bar,channel,left,right,startKey:keys[index],endKey:keys[index+1]};
+    }
+    return null;
+  }
+  function sameInterval(a,b){return !!a&&!!b&&a.startKey===b.startKey&&a.endKey===b.endKey}
+  function syncIntervalEasing(position=state.playheadPct){
+    state.playheadPct=position;
+    const interval=intervalAt(position),button=$("#interval-easing"),panelOpen=$("#easing-panel").classList.contains("open");
+    button.disabled=!interval; button.classList.toggle("on",!!interval);
+    button.setAttribute("aria-label",interval?`${interval.bar.dataset.name} · ${interval.channel}のEasing Graph Viewを開く`:"key間へ移動するとEasing Graph Viewを開けます");
+    if(!interval&&panelOpen)closeEasingPanel();
+    else if(panelOpen&&!sameInterval(interval,state.activeInterval)){state.activeInterval=interval;refreshEasingPanel()}
+    return interval;
+  }
+  function setPlayhead(position){
+    $("#playhead").style.left=`${position}%`;
+    syncIntervalEasing(position);
+  }
+  function closeCurveShelf(){
+    $("#curve-shelf").classList.remove("open"); $("#curve-shelf").setAttribute("aria-hidden","true");
+  }
+  function closeEasingPanel(){
+    $("#easing-panel").classList.remove("open"); $("#easing-panel").setAttribute("aria-hidden","true");
+    $("#interval-easing").setAttribute("aria-pressed","false");
+    closeCurveShelf();
+    $$(".inline-key").forEach(key=>key.classList.remove("key-selected"));
+    state.activeInterval=null;
+  }
+  function renderEasingGraph(){
+    const e=state.easing,curve=$("#graph-curve"),ay=100-e.y1*100,by=100-e.y2*100,ax=e.x1*100,bx=e.x2*100;
+    const paths={
+      Bezier:`M0,100 C${ax},${ay} ${bx},${by} 100,0`,
+      Bounce:"M0,100 C28,100 35,8 52,8 C62,8 63,36 72,36 C82,36 85,0 100,0",
+      Elastic:"M0,100 C22,100 25,-42 48,16 C64,56 74,-18 100,0",
+      Step:"M0,100 L50,100 L50,0 L100,0"
+    };
+    curve.setAttribute("d",paths[e.interp]); $("#graph-stem-a").setAttribute("x2",ax); $("#graph-stem-a").setAttribute("y2",ay);
+    $("#graph-stem-b").setAttribute("x2",bx); $("#graph-stem-b").setAttribute("y2",by); $("#graph-handle-a").setAttribute("cx",ax); $("#graph-handle-a").setAttribute("cy",ay); $("#graph-handle-b").setAttribute("cx",bx); $("#graph-handle-b").setAttribute("cy",by);
+    ["x1","y1","x2","y2"].forEach(name=>$(`#ease-${name}`).textContent=e[name].toFixed(2));
+    $$("[data-curve]").forEach(button=>button.classList.toggle("on",e.interp==="Bezier"?button.dataset.curve===e.preset:button.dataset.curve===e.interp));
+    $("#overshoot-badge").hidden=!e.overshoot;
+    $("#easing-values").style.visibility=e.interp==="Bezier"?"":"hidden";
+    const handles=[...$$(".graph-handle"),...$$(".graph-stem")]; handles.forEach(item=>item.style.opacity=e.interp==="Bezier"?"":"0");
+  }
+  function rawCurve(){
+    const e=state.easing;
+    return `(${e.x1.toFixed(2)}, ${e.y1.toFixed(2)}, ${e.x2.toFixed(2)}, ${e.y2.toFixed(2)})`;
+  }
+  function setEasingPreset(name){
+    const presets={Linear:[0,0,1,1],Smooth:[.34,1.56,.64,1],"Ease In":[.42,0,1,1],"Ease Out":[0,0,.58,1]},p=presets[name];
+    state.easing.interp="Bezier"; state.easing.preset=name; [state.easing.x1,state.easing.y1,state.easing.x2,state.easing.y2]=p; state.easing.overshoot=state.easing.y1>1||state.easing.y2>1; renderEasingGraph();
+  }
+  function curvePath(entry){
+    if(entry.interp==="Bezier"){const [x1,y1,x2,y2]=entry.v;return `M0,100 C${x1*100},${100-y1*100} ${x2*100},${100-y2*100} 100,0`}
+    return {Bounce:"M0,100 C28,100 35,8 52,8 C62,8 63,36 72,36 C82,36 85,0 100,0",Elastic:"M0,100 C22,100 25,-42 48,16 C64,56 74,-18 100,0",Step:"M0,100 L50,100 L50,0 L100,0"}[entry.interp];
+  }
+  function applyCurveEntry(entry,commit){
+    if(entry.interp==="Bezier"){state.easing.interp="Bezier";state.easing.preset=entry.name;[state.easing.x1,state.easing.y1,state.easing.x2,state.easing.y2]=entry.v;state.easing.overshoot=entry.v[1]>1||entry.v[3]>1}
+    else state.easing.interp=entry.interp;
+    renderEasingGraph();
+    if(commit){commitEasing(entry.name);state.curveHistory=[entry,...state.curveHistory.filter(item=>item.name!==entry.name)];renderCurveShelf()}
+    else{status(entry.name,"Preview","Dbl click / Enter · Commit");renderCurveShelf()}
+  }
+  function curveThumb(entry){return `<svg viewBox="0 -52 100 164" preserveAspectRatio="none" aria-hidden="true"><path class="curve-path" d="${curvePath(entry)}"/></svg>`}
+  function renderCurveShelf(){
+    if(!$("#curve-shelf").classList.contains("open"))return;
+    const grid=$("#curve-grid"); grid.replaceChildren();
+    state.curveLibrary.filter(entry=>(state.curveFolder==="all"||entry.folder===state.curveFolder)&&(state.curveTag==="all"||(entry.tags||"").split(" ").includes(state.curveTag))).forEach(entry=>{
+      const card=document.createElement("button"); card.className="curve-card";
+      card.setAttribute("aria-label",`${entry.name} · clickでpreview / double click・EnterでCommit`);
+      if(state.easing.interp==="Bezier"?state.easing.preset===entry.name:state.easing.interp===entry.interp)card.classList.add("on");
+      card.innerHTML=`${curveThumb(entry)}<small>${entry.name}</small>`;
+      card.addEventListener("click",()=>applyCurveEntry(entry,false));
+      card.addEventListener("dblclick",()=>applyCurveEntry(entry,true));
+      card.addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();applyCurveEntry(entry,true)}});
+      grid.append(card);
+    });
+    const history=$("#curve-history"); history.replaceChildren();
+    state.curveHistory.slice(0,5).forEach(entry=>{
+      const button=document.createElement("button"); button.setAttribute("aria-label",`${entry.name}を履歴からpreview`);
+      button.innerHTML=curveThumb(entry);
+      button.onclick=()=>applyCurveEntry(entry,false); button.ondblclick=()=>applyCurveEntry(entry,true);
+      history.append(button);
+    });
+  }
+  function commitEasing(label){
+    const interval=state.activeInterval; if(!interval)return;
+    interval.startKey.dataset.easing=label; interval.startKey.dataset.curve=rawCurve();
+    setUndo("Interval Easing"); status("Easing",`${label} · 1 Undo`,"⌘Z");
+  }
+  function refreshEasingPanel(){
+    const interval=state.activeInterval;if(!interval)return;
+    const keys=intervalKeys(),easing=interval.startKey.dataset.easing;
+    $$(".inline-key").forEach(key=>key.classList.toggle("key-selected",keys.includes(key)));
+    $("#easing-target").textContent=`${interval.bar.dataset.name} · ${interval.channel}`;
+    if(["Linear","Smooth","Ease In","Ease Out"].includes(easing))setEasingPreset(easing);
+    else if(["Bounce","Elastic","Step"].includes(easing))state.easing.interp=easing;
+    renderEasingGraph();
+    $("#easing-panel").classList.add("open"); $("#easing-panel").setAttribute("aria-hidden","false");
+    $("#interval-easing").setAttribute("aria-pressed","true");
+  }
+  function bindInspector(){
+    if(state.mode==="installed"){
+      $$("[data-object-automation]").forEach(mark=>mark.addEventListener("click",()=>{
+        const param=mark.dataset.objectAutomation,on=!state.automation[param]; state.automation[param]=on;
+        mark.classList.toggle("on",on); mark.setAttribute("aria-pressed",String(on)); mark.setAttribute("aria-label",`${param} automation ${on?"on":"off"}`);
+        const hint=$(`#${param}-object-state`); if(hint)hint.querySelector("i").textContent=on?"AUTO ON":"AUTO OFF";
+        setUndo(`${param} automation`); status("Automation",`${param} ${on?"ON":"OFF"}`,"⌘Z");
+      }));
+      $$(".automation-mark[data-automation]").forEach(mark=>mark.addEventListener("click",()=>{
+        const param=mark.dataset.automation,on=!state.automation[param]; state.automation[param]=on;
+        mark.classList.toggle("on",on); mark.setAttribute("aria-pressed",String(on)); mark.setAttribute("aria-label",`${param} automation ${on?"on":"off"}`);
+        $(`#${param}-auto-state`).textContent=on?"AUTO ON":"AUTO OFF"; projectAutomation(param);
+        setUndo(`${param} automation`); status("Automation",`${param} ${on?"ON":"OFF"}`,"⌘Z");
+      }));
+      $$(".scrub[data-param]").forEach(control=>{
+        control.addEventListener("pointerdown",event=>{
+          event.preventDefault(); control.setPointerCapture(event.pointerId);
+          projectAutomation(control.dataset.param);
+          control.classList.add("dragging"); control._scrub={x:event.clientX,value:state[control.dataset.param]};
+          status("Echo Bloom",`${control.dataset.param} · 数値を左右dragしてPreview`,"Release / Esc");
+        });
+        control.addEventListener("pointermove",event=>{
+          if(!control._scrub)return;
+          const param=control.dataset.param;
+          applyScrubValue(param,control._scrub.value+(event.clientX-control._scrub.x));
+          status("Echo Bloom",`${param} ${state[param]}% · Preview`,"Release / Esc");
+        });
+        control.addEventListener("pointerup",()=>{
+          if(!control._scrub)return;
+          const param=control.dataset.param,delta=state[param]-control._scrub.value,changed=delta!==0;
+          control._scrub=null; control.classList.remove("dragging");
+          if(changed){
+            control.style.setProperty("--dial-kick",(delta>0?3:-3)+"px"); control.classList.remove("settling"); void control.offsetWidth; control.classList.add("settling");
+            setUndo(param==="intensity"?"Intensity":"Spread");status("Echo Bloom",`${param} ${state[param]}% · 1 Undo`,"⌘Z");
+          }
+          else status("Echo Bloom",`${param} · No change · Undoなし`,"");
+        });
+        control.addEventListener("pointercancel",()=>cancelScrub(control));
+        control.addEventListener("animationend",()=>control.classList.remove("settling"));
+        control.addEventListener("keydown",event=>{
+          if(!["ArrowLeft","ArrowRight"].includes(event.key))return;
+          event.preventDefault(); const param=control.dataset.param,step=event.shiftKey?10:1; projectAutomation(param);
+          applyScrubValue(param,state[param]+(event.key==="ArrowRight"?step:-step));
+          control.style.setProperty("--dial-kick",(event.key==="ArrowRight"?3:-3)+"px"); control.classList.remove("settling"); void control.offsetWidth; control.classList.add("settling");
+          setUndo(param==="intensity"?"Intensity":"Spread"); status("Echo Bloom",`${param} ${state[param]}% · keyboard step`,"⌘Z");
+        });
+      });
+      $$(".color-chip").forEach(chip=>chip.addEventListener("click",()=>{
+        state.colorChannel=chip.dataset.colorChannel; state.selectedColor=state.colorChannel==="Fill"?state.appliedFill:state.appliedStroke;
+        syncColorBook(); setSurface("colors",true);
+        status("Color Book",`${state.colorChannel} · Preview`,"Esc");
+      }));
+      $("#link-target").onclick=()=>setStageTool("connect");
+    }
+    if(state.mode==="discover"){
+      $("#preview-vism").onclick=()=>status("Glyph Current","Preview · Project変更ゼロ","Esc");
+      $("#add-vism").onclick=()=>{state.pluginHistory=["discover",...state.pluginHistory.filter(mode=>mode!=="discover")];renderPluginHistory();setUndo("Add Glyph Current");status("Glyph Current","Project instanceを追加 · 1 Undo","⌘Z")};
+    }
+    if(state.mode==="blocked") $("#inspect-reason").onclick=()=>status("Unsupported capability","要求: Feedback buffer / Host: 未対応","Esc");
+    if(state.mode==="missing") $("#review-recovery").onclick=()=>{$("#recovery").classList.add("open");status("Recovery candidate","候補を照合 · installなし","Esc")};
+  }
+  function setMode(mode){
+    state.mode=mode; const copy=modeCopy[mode];
+    document.documentElement.style.setProperty("--active",copy.accent);
+    $$(".vism[data-mode]").forEach(item=>item.classList.toggle("on",item.dataset.mode===mode));
+    $("#stage").dataset.mode=mode; $("#crumb").textContent=copy.crumb; $("#stage-mode").textContent=copy.stage; $("#stage-badge").textContent=copy.badge;
+    $("#vism-clip").classList.toggle("missing",mode==="missing"); $("#vism-clip").classList.toggle("on",mode!=="missing");
+    $("#plugin-flow-name").textContent=mode==="missing"?"Ribbon Array":"Echo Bloom";
+    $("#plugin-flow-name").classList.toggle("missing",mode==="missing");
+    $("#plugin-readiness").classList.toggle("missing",mode==="missing");
+    $("#vism-clip").dataset.flowEffect=mode==="missing"?"Ribbon Array":"Echo Bloom";
+    $("#vism-clip").dataset.flowState=mode==="missing"?"missing":"ready";
+    $("#vism-clip").dataset.flowMeta=mode==="missing"?"payload retained":"";
+    $("#inspector").innerHTML=inspector(mode); clearUndo(); bindInspector();
+    status(copy.crumb,copy.brief,mode==="missing"?"Review recovery":"");
+  }
+
+  function setSurface(kind,open){
+    if(kind!=="colors")return;
+    const drawer=$("#color-book-drawer");
+    drawer.classList.toggle("open",open); drawer.setAttribute("aria-hidden",String(!open));
+    const button=$("#surface-colors");
+    button.classList.toggle("active",open); button.setAttribute("aria-pressed",String(open));
+    if(open)syncColorBook();
+  }
+  function syncColorBook(){
+    $("#color-target").textContent=`${state.colorChannel.toUpperCase()} · PREVIEW`;
+    $("#apply-color").textContent=`Apply to ${state.colorChannel}`;
+    $("#selected-color-chip").style.setProperty("--swatch",state.selectedColor);
+    const query=$("#book-search").value.trim().toLowerCase();
+    $$(".book-swatch").forEach(item=>{
+      const folderMatch=state.colorFolder==="all"||item.dataset.folder.split(" ").includes(state.colorFolder);
+      const tagMatch=state.colorTag==="all"||item.dataset.tags.split(" ").includes(state.colorTag);
+      const queryMatch=!query||item.getAttribute("aria-label").toLowerCase().includes(query)||item.dataset.tags.includes(query);
+      item.hidden=!(folderMatch&&tagMatch&&queryMatch);
+      item.classList.toggle("on",item.dataset.color.toLowerCase()===state.selectedColor.toLowerCase());
+    });
+    renderColorHistory();
+  }
+  function renderColorHistory(){
+    const host=$("#color-history"); host.replaceChildren();
+    state.colorHistory.slice(0,8).forEach(color=>{
+      const button=document.createElement("button"); button.className="history-color"; button.style.setProperty("--history-color",color);
+      button.setAttribute("aria-label",`${color}を履歴から選択`);
+      button.onclick=()=>{state.selectedColor=color;syncColorBook();status("Color history",`${state.colorChannel} preview`,"Apply / Esc")};
+      host.append(button);
+    });
+  }
+  function filterPlugins(){
+    const query=$("#search").value.trim().toLowerCase();
+    $$(".vism[data-mode]").forEach(item=>{
+      const folderMatch=state.pluginFolder==="all"||item.dataset.folder.split(" ").includes(state.pluginFolder);
+      const labelMatch=state.pluginLabel==="all"||item.dataset.labels.split(" ").includes(state.pluginLabel);
+      item.hidden=!(folderMatch&&labelMatch&&(!query||item.dataset.search.includes(query)));
+    });
+  }
+  function renderPluginHistory(){
+    const names={installed:"Echo Bloom",discover:"Glyph Current",blocked:"Fold Field",missing:"Ribbon Array"};
+    const host=$("#plugin-history"); host.replaceChildren();
+    state.pluginHistory.slice(0,3).forEach(mode=>{
+      const button=document.createElement("button"); button.className="plugin-history-item"; button.textContent=names[mode]; button.dataset.historyMode=mode;
+      button.onclick=()=>{setMode(mode);status("Plugin history",`${names[mode]} · 使用履歴から選択`,"")};
+      host.append(button);
+    });
+  }
+  function hslToHex(h,s,l){
+    s/=100;l/=100;const k=n=>(n+h/30)%12,a=s*Math.min(l,1-l),f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
+    return "#"+[f(0),f(8),f(4)].map(value=>Math.round(255*value).toString(16).padStart(2,"0")).join("");
+  }
+  function applySelectedColor(){
+    if(state.colorChannel==="Fill")state.appliedFill=state.selectedColor;else state.appliedStroke=state.selectedColor;
+    const chip=$(`.color-chip[data-color-channel="${state.colorChannel}"]`);
+    if(chip){chip.style.setProperty("--chip",state.selectedColor);chip.dataset.label=state.selectedColor}
+    state.colorHistory=[state.selectedColor,...state.colorHistory.filter(color=>color!==state.selectedColor)];
+    $(".scene-copy").style.color=state.selectedColor;setUndo(`${state.colorChannel} color`);syncColorBook();
+    status("Color applied",`${state.colorChannel} ${state.selectedColor} · 1 Undo`,"⌘Z");
+  }
+  function setAssetSource(source){
+    state.assetSource=source;
+    $$("[data-asset-source]").forEach(button=>button.classList.toggle("on",button.dataset.assetSource===source));
+    $$("[data-asset-source-view]").forEach(item=>item.hidden=item.dataset.assetSourceView!==source);
+    $$(".file-nav").forEach(button=>button.hidden=source!=="files");
+    $("#asset-path").textContent=source==="files"?"素材 / MV / night_drive / source":"night_drive / Assets";
+    $("#asset-source-title").textContent=source==="files"?"External files":"Project assets";
+    $("#asset-scope-label").textContent=source==="files"?"BROWSE / PREVIEW":"USED / UNPLACED";
+    const visible=$$(".asset-tile").filter(tile=>tile.dataset.assetSourceView===source);
+    $("#asset-count").textContent=`${visible.length} ITEMS`;
+    visible.forEach((tile,index)=>tile.classList.toggle("on",index===0));
+    state.selectedAsset=visible[0]?.dataset.asset||"";
+    $("#asset-foot-copy").textContent=source==="files"?"FILES":"PROJECT";
+    $("#place-asset").textContent=source==="files"?"＋ INBOX":"PLACE";
+    status("Assets",source==="files"?"External files":"Project assets","");
+  }
+  function setBrowserTab(tab){
+    const isVism=tab==="vism";
+    $$("[data-tab]").forEach(button=>button.classList.toggle("on",button.dataset.tab===tab));
+    $("#vism-browser").hidden=!isVism;$("#project-browser").hidden=isVism;
+    if(!isVism)setAssetSource(state.assetSource);
+    status(isVism?"Plugin Browser":"Project Explorer","","");
+  }
+  function syncInbox(){
+    const count=$$("#inbox-list .inbox-item").length;
+    $("#inbox-count").textContent=String(count);
+    $("#inbox").classList.toggle("empty",count===0);
+  }
+  function openInboxItem(item){
+    const kind=item.dataset.inboxKind,name=item.querySelector("b").textContent;
+    if(kind==="asset"){
+      setBrowserTab("project");setAssetSource("project");
+      const tile=$$(".asset-tile[data-asset-source-view='project']").find(candidate=>candidate.dataset.asset===name);
+      if(tile)tile.click();
+    }else if(kind==="note"){
+      setPlayhead(46);status("Review note",`${name} · 00:54.2`,"Enter");
+    }else status("Render complete",`${name} · clickで確認`,"Enter");
+  }
+  function bindInboxItem(item){
+    item.addEventListener("click",event=>{if(!event.target.closest(".inbox-done"))openInboxItem(item)});
+    item.addEventListener("keydown",event=>{if(event.key==="Enter")openInboxItem(item)});
+    item.querySelector(".inbox-done").onclick=()=>{
+      const label=item.querySelector("b").textContent;item.remove();syncInbox();
+      status("Inbox",`${label} · ${item.dataset.inboxKind==="asset"?"片付け":"確認済み"}`,"");
+    };
+  }
+  function addInboxAsset(name){
+    const existing=$$("#inbox-list .inbox-item").find(item=>item.dataset.inboxKind==="asset"&&item.querySelector("b").textContent===name);
+    if(existing){status("Inbox",`${name}は受取済み`,"");return}
+    const item=document.createElement("div");item.className="inbox-item";item.dataset.inboxKind="asset";item.tabIndex=0;
+    const icon=document.createElement("i");icon.textContent="▧";
+    const copy=document.createElement("span"),title=document.createElement("b"),meta=document.createElement("small");
+    title.textContent=name;meta.textContent="Imported · Unplaced";copy.append(title,meta);
+    const done=document.createElement("button");done.className="inbox-done";done.textContent="×";done.setAttribute("aria-label",`${name}をInboxから片付ける`);
+    item.append(icon,copy,done);$("#inbox-list").prepend(item);bindInboxItem(item);syncInbox();
+    status("Inbox",`${name}を受取 · Project配置なし`,"");
+  }
+
+  $$(".vism[data-mode]").forEach(item=>item.onclick=()=>setMode(item.dataset.mode));
+  $$("[data-tab]").forEach(button=>button.onclick=()=>setBrowserTab(button.dataset.tab));
+  $("#search").addEventListener("input",event=>{
+    filterPlugins();
+  });
+  $("#plugin-folder").onchange=event=>{state.pluginFolder=event.target.value;filterPlugins();status("Plugin folder","Folderで絞り込み","")};
+  $$(".plugin-label").forEach(label=>label.onclick=()=>{
+    state.pluginLabel=label.dataset.pluginLabel; $$(".plugin-label").forEach(item=>item.classList.toggle("on",item===label)); filterPlugins();
+    status("Plugin label",`${label.textContent} filter`,"");
+  });
+  $$("[data-plugin-view]").forEach(button=>button.onclick=()=>{
+    state.pluginView=button.dataset.pluginView; $("#vism-browser").dataset.view=state.pluginView;
+    $$("[data-plugin-view]").forEach(item=>item.classList.toggle("on",item===button));
+    status("Plugin Browser",state.pluginView==="thumb"?"Overlay表示":"詳細card表示","");
+  });
+  $("#plugin-thumb-size").oninput=event=>{
+    $("#vism-browser").style.setProperty("--plugin-thumb-size",`${event.target.value}px`);
+    status("Plugin thumbnail",`${event.target.value}px · User setting`,"");
+  };
+  $("#add-plugin-folder").onclick=()=>status("New plugin folder","Folderを追加 · User library","Enter / Esc");
+  $("#surface-colors").onclick=()=>setSurface("colors",!$("#color-book-drawer").classList.contains("open"));
+  $$("[data-close-surface]").forEach(button=>button.onclick=()=>setSurface(button.dataset.closeSurface,false));
+  $$("[data-asset-source]").forEach(button=>button.onclick=()=>setAssetSource(button.dataset.assetSource));
+  $$(".asset-tile").forEach(tile=>tile.onclick=()=>{
+    state.selectedAsset=tile.dataset.asset; $$(".asset-tile").forEach(item=>item.classList.toggle("on",item===tile));
+    status("Assets",`${state.selectedAsset} · ${state.assetSource==="files"?"Preview":"Project"}`,"Enter / Drag");
+  });
+  $("#place-asset").onclick=()=>{
+    if(state.assetSource==="files"){addInboxAsset(state.selectedAsset);return}
+    setUndo(`Place ${state.selectedAsset}`);status("Asset placed",`${state.selectedAsset}を配置 · 1 Undo`,"⌘Z");
+  };
+  $$(".inbox-item").forEach(bindInboxItem);
+  $("#dismiss-tip").onclick=()=>{$(".inbox-tip").hidden=true;status("Tip","Dismiss · User setting","")};
+  $$(".book-swatch").forEach(swatch=>{
+    swatch.addEventListener("mouseenter",()=>{$(".scene-copy").style.color=swatch.dataset.color;status("Color preview",`${state.colorChannel} ${swatch.dataset.color} · Transient`,"Click / Esc")});
+    swatch.addEventListener("mouseleave",()=>{$(".scene-copy").style.color=state.colorChannel==="Fill"?state.appliedFill:state.appliedStroke});
+    swatch.addEventListener("click",()=>{state.selectedColor=swatch.dataset.color;syncColorBook();status("Color selected",`${state.colorChannel} ${state.selectedColor} · double clickで適用`,"Double click / Enter / Esc")});
+    swatch.addEventListener("dblclick",()=>{state.selectedColor=swatch.dataset.color;applySelectedColor()});
+    swatch.querySelector(".book-color").addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();state.selectedColor=swatch.dataset.color;applySelectedColor()}});
+  });
+  $$(".book-folder").forEach(folder=>folder.onclick=()=>{
+    state.colorFolder=folder.dataset.folder; $$(".book-folder").forEach(item=>item.classList.toggle("on",item===folder)); syncColorBook();
+    status("Color folder",`${folder.textContent.trim()} filter`,"");
+  });
+  $$(".book-tag").forEach(tag=>tag.onclick=()=>{
+    state.colorTag=tag.dataset.colorTag; $$(".book-tag").forEach(item=>item.classList.toggle("on",item===tag)); syncColorBook();
+    status("Color tag",`${tag.textContent} filter`,"");
+  });
+  $("#book-search").oninput=syncColorBook;
+  $("#add-color-folder").onclick=()=>status("New color folder","Folderを追加 · User library","Enter / Esc");
+  $$("[data-field-shape]").forEach(button=>button.onclick=()=>{
+    state.colorField=button.dataset.fieldShape; $("#color-field").className=`color-field ${state.colorField}`;
+    $$("[data-field-shape]").forEach(item=>item.classList.toggle("on",item===button));
+    status("Color field",`${state.colorField==="triangle"?"Triangle":"Square"} · User setting`,"");
+  });
+  $("#palette-size").oninput=event=>{
+    $("#color-book-drawer").style.setProperty("--book-cell",`${event.target.value}px`);
+    status("Palette size",`Swatch ${event.target.value}px · User setting`,"");
+  };
+  $("#eyedropper").onclick=()=>{
+    state.eyedropper=!state.eyedropper; $("#eyedropper").classList.toggle("on",state.eyedropper); $("#eyedropper").setAttribute("aria-pressed",String(state.eyedropper));
+    status("Eyedropper",state.eyedropper?"Stage上の色を選択 · previewのみ":"Cancel · Color変更ゼロ",state.eyedropper?"Click Stage / Esc":"");
+  };
+  $("#color-cycle").addEventListener("pointerdown",event=>{
+    const rect=event.currentTarget.getBoundingClientRect(),x=event.clientX-(rect.left+rect.width/2),y=event.clientY-(rect.top+rect.height/2);
+    const hue=(Math.atan2(y,x)*180/Math.PI+450)%360; state.selectedColor=hslToHex(hue,68,58); syncColorBook();
+    status("Color cycle",`${state.colorChannel} preview`,"Apply / Esc");
+  });
+  $("#stage").addEventListener("click",()=>{
+    if(!state.eyedropper)return; state.selectedColor="#84909a";state.eyedropper=false;$("#eyedropper").classList.remove("on");$("#eyedropper").setAttribute("aria-pressed","false");syncColorBook();
+    status("Eyedropper","Preview · Applyまで変更ゼロ","Apply / Esc");
+  });
+  $("#book-resize").addEventListener("pointerdown",event=>{
+    event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);state.colorResize={startX:event.clientX,startWidth:$("#color-book-drawer").getBoundingClientRect().width};
+  });
+  $("#book-resize").addEventListener("pointermove",event=>{
+    if(!state.colorResize)return;const width=Math.max(250,Math.min(650,state.colorResize.startWidth+state.colorResize.startX-event.clientX));
+    $("#color-book-drawer").style.width=`${width}px`;status("Color Book size",`${Math.round(width)}px · User setting`,"Release");
+  });
+  $("#book-resize").addEventListener("pointerup",()=>{if(state.colorResize){state.colorResize=null;status("Color Book size","User setting","")}});
+  $("#apply-color").onclick=applySelectedColor;
+  $("#import-colors").onclick=()=>status("Color import","検査してUser libraryへ追加","Esc");
+  $("#clear-color-history").onclick=()=>{state.colorHistory=[];renderColorHistory();status("Color history","消去 · Undoなし","")};
+  $("#open-settings").onclick=()=>{$("#settings-sheet").classList.add("open");status("Settings","User settings","Esc")};
+  $$(".settings-nav [data-pane]").forEach(button=>button.onclick=()=>{
+    $$(".settings-nav button").forEach(item=>item.classList.toggle("on",item===button));
+    $$(".settings-pane").forEach(pane=>pane.hidden=pane.dataset.pane!==button.dataset.pane);
+  });
+  $("#close-settings").onclick=$("#done-settings").onclick=()=>{$("#settings-sheet").classList.remove("open");status("Settings","Close","")};
+  function formatZ(value){
+    if(Math.abs(value)<.005)return "0";
+    return `${value>0?"+":"−"}${Math.abs(value).toFixed(2)}`;
+  }
+  function selectTimelineBar(bar){
+    if(!bar)return;
+    $$(".time-bar").forEach(item=>item.classList.toggle("selected",item===bar));
+    if($("#easing-panel").classList.contains("open"))closeEasingPanel();
+    syncIntervalEasing();
+    status(bar.dataset.name,"選択","");
+  }
+  function updateTimelineZ(marker,value){
+    const bar=$$(".time-bar").find(item=>item.dataset.name===marker.dataset.zName);
+    if(!bar)return;
+    bar.dataset.flowMeta=bar.dataset.flowState==="missing"?"payload retained":"";
+    const badge=bar.querySelector(":scope > span:nth-child(2)");
+    if(badge&&/^z\\s/i.test(badge.textContent))badge.textContent=`z ${formatZ(value)}`;
+  }
+  function syncDepthKeyUI(){
+    const marker=$(".z-marker.selected[data-editable='true']"),atKey=!!marker?.classList.contains("at-key");
+    $("#depth-key").classList.toggle("on",atKey); $("#depth-key").textContent=atKey?"◆":"◇";
+    $("#depth-key").setAttribute("aria-pressed",String(atKey));
+    $("#depth-key").setAttribute("aria-label",atKey?"現在時刻のDepth keyを削除":"現在時刻にDepth keyを追加");
+  }
+  function setDepthRail(open){
+    state.depthOpen=open; $("#timeline").classList.toggle("depth-open",open);
+    $("#depth-toggle").setAttribute("aria-expanded",String(open)); $("#depth-toggle").setAttribute("aria-label",open?"Depth Railを閉じる":"Depth Railを開く");
+    $("#depth-rail").setAttribute("aria-hidden",String(!open));
+    if(open)updateDepthProjection(state.depthPhase);
+  }
+  function setDepthMarker(marker,value){
+    const z=Math.max(-.5,Math.min(.5,value)),ratio=(z+.5)*100;
+    marker.dataset.z=z.toFixed(3); marker.style.left=`${ratio}%`;
+    marker.textContent=`${marker.dataset.short} ${formatZ(z)}${marker.classList.contains("camera-marker")?" →":""}`;
+    if(marker.dataset.role==="emitter"){
+      const near=Math.max(-.5,z-.10),far=Math.min(.5,z+.10),range=$("#particle-depth-range");
+      range.style.left=`${(near+.5)*100}%`; range.style.width=`${(far-near)*100}%`;
+      updateTimelineZ(marker,z);
+    }
+    if(marker.classList.contains("selected")&&$("#depth-value"))$("#depth-value").textContent=z.toFixed(3);
+  }
+  function updateDepthProjection(phase){
+    state.depthPhase=phase;
+    $$(".z-marker[data-amplitude]").forEach(marker=>{
+      if(state.zDrag?.marker===marker)return;
+      const base=+marker.dataset.baseZ,amplitude=+marker.dataset.amplitude,offset=+(marker.dataset.phase||0);
+      setDepthMarker(marker,base+amplitude*Math.sin(phase*Math.PI*2+offset));
+    });
+  }
+  $$(".time-bar").forEach(bar=>bar.addEventListener("click",()=>selectTimelineBar(bar)));
+  $$(".inline-key").forEach(key=>key.addEventListener("click",event=>{
+    event.stopPropagation(); state.activeParam=key.dataset.channel.toLowerCase(); selectTimelineBar(key.closest(".time-bar"));
+    closeEasingPanel(); setPlayhead(keyPct(key));
+    status("Keyframe",`${key.dataset.channel} key · ${keyPct(key)}%`,"key間でEasing iconが点灯");
+  }));
+  $$("[data-curve]").forEach(button=>button.addEventListener("click",()=>{
+    if(!state.activeInterval)return;
+    const name=button.dataset.curve;
+    if(["Linear","Smooth","Ease In","Ease Out"].includes(name))setEasingPreset(name);
+    else{state.easing.interp=name;renderEasingGraph()}
+    commitEasing(name);
+  }));
+  $("#open-curve-shelf").onclick=()=>{
+    const open=!$("#curve-shelf").classList.contains("open");
+    $("#curve-shelf").classList.toggle("open",open); $("#curve-shelf").setAttribute("aria-hidden",String(!open));
+    if(open)renderCurveShelf();
+  };
+  $("#close-curve-shelf").onclick=closeCurveShelf;
+  $("#save-curve").onclick=()=>{
+    const e=state.easing,name=`Custom ${state.curveLibrary.filter(entry=>entry.name.startsWith("Custom")).length+1}`;
+    state.curveLibrary.push(e.interp==="Bezier"?{name,interp:"Bezier",v:[e.x1,e.y1,e.x2,e.y2],tags:""}:{name,interp:e.interp,v:[0,0,1,1],tags:""});
+    renderCurveShelf(); status("Curve saved",`${name} · User library`,"");
+  };
+  $$("[data-curve-tag]").forEach(tag=>tag.onclick=()=>{
+    state.curveTag=tag.dataset.curveTag; $$("[data-curve-tag]").forEach(item=>item.classList.toggle("on",item===tag)); renderCurveShelf();
+  });
+  $("#curve-folder").onchange=event=>{state.curveFolder=event.target.value;renderCurveShelf()};
+  $("#add-curve-folder").onclick=()=>status("New curve folder","Folderを追加 · User library","Enter / Esc");
+  $$(".graph-handle").forEach(handle=>handle.addEventListener("pointerdown",event=>{
+    if(state.easing.interp!=="Bezier")return; event.preventDefault(); handle.setPointerCapture(event.pointerId); state.easeDrag={which:handle.id.endsWith("a")?"a":"b",start:{...state.easing}};
+    status("Easing curve","Handle drag · 現在区間へPreview","Release / Esc");
+  }));
+  $$(".graph-handle").forEach(handle=>handle.addEventListener("pointermove",event=>{
+    if(!state.easeDrag)return;
+    const rect=$(".easing-graph svg").getBoundingClientRect(),x=Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width));
+    const svgY=-52+Math.max(0,Math.min(1,(event.clientY-rect.top)/rect.height))*164,y=Math.max(-.12,Math.min(2,(100-svgY)/100));
+    if(state.easeDrag.which==="a"){state.easing.x1=x;state.easing.y1=y}else{state.easing.x2=x;state.easing.y2=y}
+    state.easing.preset="Custom"; state.easing.overshoot=state.easing.y1>1||state.easing.y2>1; renderEasingGraph(); status("Easing curve",rawCurve(),"Release / Esc");
+  }));
+  $$(".graph-handle").forEach(handle=>handle.addEventListener("pointerup",()=>{
+    if(!state.easeDrag)return; state.easeDrag=null; commitEasing("Custom curve");
+  }));
+  $("#close-easing").onclick=()=>closeEasingPanel();
+  $("#interval-easing").onclick=()=>{
+    const interval=syncIntervalEasing();if(!interval)return;
+    if(state.playing)$("#play").click();
+    state.activeInterval=interval;refreshEasingPanel();
+    status("Easing Graph",`${interval.bar.dataset.name} · ${interval.channel}`,"Esc");
+  };
+  $$("[data-stage-tool]").forEach(button=>button.addEventListener("click",()=>{
+    const tool=button.dataset.stageTool;
+    if(tool==="relative"&&state.stageTool==="relative"){setUndo("Relative Move");setStageTool("select");status("Relative Move","motion path全体へ差分を確定 · 1 Undo","⌘Z");return}
+    setStageTool(tool); if(tool==="camera")setUndo("Camera");
+  }));
+  $("#stage").addEventListener("click",event=>{
+    if(state.stageTool!=="connect")return;
+    setUndo("Connect Position → Echo Bloom"); setStageTool("select"); status("Connection committed","Position → Echo Bloom · typed link · 1 Undo","⌘Z");
+  });
+  $("#depth-toggle").onclick=()=>{
+    setDepthRail(!state.depthOpen);
+    status("Depth",state.depthOpen?"現在時刻の前後配置を表示 · Document変更ゼロ":"Close · Document変更ゼロ","");
+  };
+  $("#depth-key").onclick=()=>{
+    const marker=$(".z-marker.selected[data-editable='true']"); if(!marker)return;
+    const add=!marker.classList.contains("at-key"); marker.classList.toggle("at-key",add);
+    if(add&&!state.automation.depth){
+      state.automation.depth=true;
+      const mark=$("[data-object-automation='depth']"); mark?.classList.add("on","at-key"); mark?.setAttribute("aria-pressed","true");
+      const hint=$("#depth-object-state i"); if(hint)hint.textContent="AUTO ON";
+    }
+    syncDepthKeyUI(); setUndo(`Depth key ${add?"add":"remove"}`);
+    status("Depth key",`${marker.dataset.zName} · ${add?"現在時刻へ追加":"現在時刻から削除"} · 1 Undo`,"⌘Z");
+  };
+  $$(".z-marker[data-editable='true']").forEach(marker=>{
+    marker.addEventListener("pointerdown",event=>{
+      event.preventDefault(); marker.setPointerCapture(event.pointerId);
+      $$(".z-marker[data-editable='true']").forEach(item=>item.classList.toggle("selected",item===marker));
+      selectTimelineBar($$(".time-bar").find(item=>item.dataset.name===marker.dataset.zName));
+      state.zDrag={marker,startLeft:marker.style.left,startZ:marker.dataset.z,startBase:marker.dataset.baseZ};
+      marker.classList.add("dragging"); $("#z-readout").textContent=`${marker.dataset.zName} ${formatZ(+marker.dataset.z)}`;
+      syncDepthKeyUI(); status("Depth Z",`${marker.dataset.zName} · Preview`, "Drag / Esc");
+    });
+    marker.addEventListener("pointermove",event=>{
+      if(!state.zDrag||state.zDrag.marker!==marker)return;
+      const rect=$("#z-axis").getBoundingClientRect();
+      const ratio=Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width));
+      const z=ratio-.5; setDepthMarker(marker,z); $("#z-readout").textContent=`${marker.dataset.zName} ${formatZ(z)}`;
+      status("Depth Z",`${marker.dataset.zName} ${formatZ(z)} · Preview`, "Release / Esc");
+    });
+    marker.addEventListener("pointerup",()=>{
+      if(!state.zDrag||state.zDrag.marker!==marker)return;
+      marker.classList.remove("dragging"); marker.dataset.baseZ=marker.dataset.z;
+      if(state.automation.depth)marker.classList.add("at-key");
+      state.zDrag=null; syncDepthKeyUI(); setUndo("Depth Z"); $("#z-readout").textContent="";
+      status("Depth Z",`${marker.dataset.zName} ${formatZ(+marker.dataset.z)}${state.automation.depth?" · key":""} · 1 Undo`, "⌘Z");
+    });
+  });
+  $("#undo").onclick=()=>{clearUndo();status("Undo","1操作を取消","")};
+  $("#export").onclick=()=>state.mode==="missing"?status("Export blocked","必要なプラグインを評価できません","Review recovery"):status("Export","Final品質で評価","");
+  $("#close-recovery").onclick=$("#cancel-recovery").onclick=()=>{$("#recovery").classList.remove("open");status("Ribbon Array","Close","")};
+  $("#step-prev").onclick=()=>{$("#time").textContent="00:54.1";setPlayhead(28);updateDepthProjection(.18);status("Previous key","54.1 · key上ではEasing区間なし","←")};
+  $("#step-next").onclick=()=>{$("#time").textContent="00:54.4";setPlayhead(54);updateDepthProjection(.62);status("Next key","54.4 · key上ではEasing区間なし","→")};
+  $("#play").onclick=()=>{
+    state.playing=!state.playing; $("#play").textContent=state.playing?"Ⅱ":"▶";
+    if(state.playing){state.start=performance.now();state.raf=requestAnimationFrame(frame);status("Playback","","Space")}
+    else{cancelAnimationFrame(state.raf);$("#time").textContent="00:54.2"}
+  };
+  function frame(now){
+    if(!state.playing)return; const elapsed=(now-state.start)/1000,phase=(elapsed%4)/4;
+    $("#time").textContent=`00:${String(54+Math.floor(elapsed)%6).padStart(2,"0")}.${Math.floor(phase*4)+1}`;
+    setPlayhead(38+phase*22);
+    $(".pulse").style.transform=`scale(${1+.22*Math.abs(Math.sin(elapsed*4))})`;
+    updateDepthProjection(phase);
+    state.raf=requestAnimationFrame(frame);
+  }
+  addEventListener("keydown",event=>{
+    if(event.key==="Escape"&&state.easeDrag){
+      state.easing={...state.easeDrag.start}; state.easeDrag=null; renderEasingGraph(); status("Easing curve","Cancel · Document変更ゼロ",""); return;
+    }
+    if(event.key==="Escape"&&$("#curve-shelf").classList.contains("open")){
+      closeCurveShelf(); status("My curves","Close",""); return;
+    }
+    if(event.key==="Escape"&&$("#easing-panel").classList.contains("open")){
+      closeEasingPanel(); status("Easing Graph","Close",""); return;
+    }
+    if(event.key==="Escape"&&state.zDrag){
+      const {marker,startZ,startBase}=state.zDrag; marker.dataset.baseZ=startBase; setDepthMarker(marker,+startZ); marker.classList.remove("dragging"); state.zDrag=null;
+      updateTimelineZ(marker,+startZ); $("#z-readout").textContent=""; status("Depth Z","Cancel · Document変更ゼロ","");
+      return;
+    }
+    if(event.key==="Escape"&&$(".scrub.dragging")){
+      cancelScrub($(".scrub.dragging"));
+      return;
+    }
+    if(event.key==="Escape"&&$("#recovery").classList.contains("open"))$("#close-recovery").click();
+    else if(event.key==="Escape"&&$("#settings-sheet").classList.contains("open"))$("#close-settings").click();
+    else if(event.key==="Escape"&&state.eyedropper){state.eyedropper=false;$("#eyedropper").classList.remove("on");$("#eyedropper").setAttribute("aria-pressed","false");status("Eyedropper","Cancel · Color変更ゼロ","")}
+    else if(event.key==="Escape"&&($(".surface-drawer.open"))){setSurface("colors",false);$(".scene-copy").style.color=state.appliedFill;status("Surface closed","Close · Document変更ゼロ","")}
+    else if(event.key==="Escape"&&state.stageTool!=="select"){setStageTool("select");status("Tool cancel","Stage previewを取消 · Document変更ゼロ","")}
+    if(event.code==="Space"&&!["INPUT","BUTTON"].includes(document.activeElement.tagName)){event.preventDefault();$("#play").click()}
+  });
+  $$("[data-info]").forEach(element=>{
+    const [title,body,key=""]=element.dataset.info.split("|");
+    const show=()=>statusInfo(title,body,key),hide=()=>renderStatus();
+    element.addEventListener("mouseenter",show); element.addEventListener("mouseleave",hide);
+    element.addEventListener("focusin",show); element.addEventListener("focusout",hide);
+  });
+  setMode("installed");
+  setDepthRail(false);
+  syncDepthKeyUI();
+  syncIntervalEasing();
+  renderPluginHistory();
+  filterPlugins();
+  setAssetSource("project");
+  syncInbox();
+  if(location.hash==="#inbox-empty"){$$("#inbox-list .inbox-item").forEach(item=>item.remove());syncInbox()}
+  if(location.hash==="#asset-explorer"){setBrowserTab("project");setAssetSource("files")}
+  if(location.hash==="#color-book")setSurface("colors",true);
+  if(location.hash==="#z-rail")setDepthRail(true);
+  if(location.hash==="#easing-interval")$("#interval-easing").click();
+  if(location.hash==="#all-surfaces"){setBrowserTab("project");setAssetSource("files");setSurface("colors",true);setDepthRail(true)}
+  if(location.hash==="#settings")$("#open-settings").click();
+  status("","","");
+})();
+</script>
+</body>
+</html>
