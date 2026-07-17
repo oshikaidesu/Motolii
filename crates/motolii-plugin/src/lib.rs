@@ -4,7 +4,6 @@
 //! Render系の境界は最初からGPUテクスチャのみで、CPUフレームを受け渡す経路は作らない。
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::f64::consts::TAU;
 use std::sync::{Arc, OnceLock};
 
 // A1S §2.1: 外部plugin crateが別versionのwgpu/bound型分裂を避け、単一依存でtrait実装できる公開面。
@@ -746,51 +745,6 @@ pub fn validate_node_desc(kind: PluginKind, desc: &NodeDesc) -> Result<(), Plugi
     Ok(())
 }
 
-/// プラグインparamの版間移行(G-1 / FG-C4)。
-///
-/// `from_version` → `to_version` へ `params` を破壊的に書き換える。
-/// 未知プラグインは何もしない(呼び出し側がF-9パススルーを担当)。
-pub fn migrate_plugin_params(
-    plugin_id: &str,
-    from_version: u32,
-    to_version: u32,
-    params: &mut HashMap<String, Value>,
-) -> Result<(), PluginError> {
-    if from_version == to_version {
-        return Ok(());
-    }
-    if from_version > to_version {
-        return Err(PluginError::Migrate {
-            plugin: plugin_id.to_string(),
-            reason: format!("cannot downgrade params {from_version} → {to_version}"),
-        });
-    }
-    match plugin_id {
-        "core.param.sine" => migrate_sine_params(from_version, to_version, params),
-        _ => Ok(()),
-    }
-}
-
-fn migrate_sine_params(
-    from_version: u32,
-    to_version: u32,
-    params: &mut HashMap<String, Value>,
-) -> Result<(), PluginError> {
-    // v1→v2: `amp` を `amplitude` に改名(参照プラグインの破壊的変更デモ)。
-    if from_version < 2 && to_version >= 2 {
-        if let Some(v) = params.remove("amp") {
-            if params.contains_key("amplitude") {
-                return Err(PluginError::Migrate {
-                    plugin: "core.param.sine".into(),
-                    reason: "both amp and amplitude present during migrate".into(),
-                });
-            }
-            params.insert("amplitude".into(), v);
-        }
-    }
-    Ok(())
-}
-
 pub trait FilterPlugin: Send + Sync {
     fn desc(&self) -> &NodeDesc;
 
@@ -1150,14 +1104,12 @@ pub mod reference {
     pub static CLEAR_FILTER: ClearFilter = ClearFilter;
     pub static TINT_FILTER: TintFilter = TintFilter;
     pub static CLEAR_LAYER_SOURCE: ClearLayerSource = ClearLayerSource;
-    pub static SINE_PARAM_DRIVER: SineParamDriver = SineParamDriver;
     pub static CLEAR_COMPOSITE: ClearComposite = ClearComposite;
 
     pub fn register_reference_plugins(registry: &mut PluginRegistry) -> Result<(), PluginError> {
         registry.register_layer_source(&CLEAR_LAYER_SOURCE)?;
         registry.register_filter(&CLEAR_FILTER)?;
         registry.register_filter(&TINT_FILTER)?;
-        registry.register_param_driver(&SINE_PARAM_DRIVER)?;
         registry.register_composite(&CLEAR_COMPOSITE)?;
         Ok(())
     }
@@ -1169,18 +1121,6 @@ pub mod reference {
             (PluginKind::LayerSource, clear_layer_source_desc(), vec![]),
             (PluginKind::Filter, clear_filter_desc(), vec![]),
             (PluginKind::Filter, tint_filter_desc(), vec![]),
-            (
-                PluginKind::ParamDriver,
-                sine_param_desc(),
-                vec![MigrationStep {
-                    from_version: 1,
-                    to_version: 2,
-                    ops: vec![MigrationOp::RenameParam {
-                        from: "amp",
-                        to: "amplitude",
-                    }],
-                }],
-            ),
             (PluginKind::Composite, clear_composite_desc(), vec![]),
         ] {
             catalog.register(PluginContract {
@@ -1360,36 +1300,6 @@ pub mod reference {
         }
     }
 
-    pub struct SineParamDriver;
-
-    impl ParamDriverPlugin for SineParamDriver {
-        fn desc(&self) -> &NodeDesc {
-            sine_param_desc()
-        }
-
-        fn build_track(
-            &self,
-            ctx: ParamDriverContext,
-            params: &ResolvedParams,
-        ) -> Result<DataTrack, PluginError> {
-            let amplitude = params.require_f64("core.param.sine", "amplitude")?;
-            let frequency_hz = params.require_f64("core.param.sine", "frequency_hz")?;
-            let offset = params.require_f64("core.param.sine", "offset")?;
-            let samples = sample_count(ctx.duration, ctx.sample_rate)?;
-            let values = (0..samples)
-                .map(|i| {
-                    let secs = i as f64 / ctx.sample_rate.as_f64();
-                    Value::F64(offset + amplitude * (TAU * frequency_hz * secs).sin())
-                })
-                .collect();
-            Ok(DataTrack {
-                start: ctx.start,
-                sample_rate: ctx.sample_rate,
-                values,
-            })
-        }
-    }
-
     fn clear_filter_desc() -> &'static NodeDesc {
         static DESC: OnceLock<NodeDesc> = OnceLock::new();
         DESC.get_or_init(|| NodeDesc {
@@ -1489,40 +1399,6 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         })
     }
 
-    fn sine_param_desc() -> &'static NodeDesc {
-        static DESC: OnceLock<NodeDesc> = OnceLock::new();
-        DESC.get_or_init(|| NodeDesc {
-            id: PluginId("core.param.sine"),
-            // v2: `amp` → `amplitude`(FG-C4 migrate実証)。
-            version: 2,
-            display_name: "Sine",
-            category: "Generate",
-            tags: &["lfo", "oscillator", "reference"],
-            params: vec![
-                ParamDef {
-                    id: "amplitude",
-                    value_type: ValueType::F64,
-                    default: Value::F64(1.0),
-                    f64_domain: None,
-                },
-                ParamDef {
-                    id: "frequency_hz",
-                    value_type: ValueType::F64,
-                    default: Value::F64(1.0),
-                    f64_domain: None,
-                },
-                ParamDef {
-                    id: "offset",
-                    value_type: ValueType::F64,
-                    default: Value::F64(0.0),
-                    f64_domain: None,
-                },
-            ],
-            min_inputs: 0,
-            max_inputs: 0,
-        })
-    }
-
     fn color_params() -> Vec<ParamDef> {
         vec![ParamDef {
             id: "color",
@@ -1565,41 +1441,13 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             occlusion_query_set: None,
         });
     }
-
-    /// 半開 `[0, duration)` 上の等間隔サンプル数。`duration` は総尺(M2E-17)。
-    /// サンプル時刻は `i / rate`（i = 0,1,…）で、`i/rate < duration` を満たす個数
-    /// = 有理数の厳密 `ceil(duration × rate)`。整数境界では旧 `floor` と同じ。
-    /// 無条件の `floor+1`(フェンスポスト)には戻さない。
-    pub(super) fn sample_count(
-        duration: RationalTime,
-        sample_rate: Fps,
-    ) -> Result<usize, RationalTimeError> {
-        // ceil((d.num/d.den)*(r.num/r.den)) = ceil((d.num*r.num)/(d.den*r.den))
-        let num = (duration.num() as i128)
-            .checked_mul(sample_rate.num() as i128)
-            .ok_or(RationalTimeError::Overflow)?;
-        let den = (duration.den() as i128)
-            .checked_mul(sample_rate.den() as i128)
-            .ok_or(RationalTimeError::Overflow)?;
-        if den <= 0 {
-            return Err(RationalTimeError::ZeroDenominator);
-        }
-        if num <= 0 {
-            return Ok(0);
-        }
-        let n = num
-            .checked_add(den - 1)
-            .ok_or(RationalTimeError::Overflow)?
-            / den;
-        usize::try_from(n).map_err(|_| RationalTimeError::Overflow)
-    }
 }
 
 // 公開APIのパニック禁止(INF-7b)は本番コードにlintを効かせ、テストmodだけ免除する。
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
-    use super::reference::{register_reference_plugins, CLEAR_LAYER_SOURCE, SINE_PARAM_DRIVER};
+    use super::reference::{register_reference_plugins, CLEAR_LAYER_SOURCE};
     use super::*;
 
     #[test]
@@ -1609,15 +1457,12 @@ mod tests {
 
         assert_eq!(registry.len(PluginKind::LayerSource), 1);
         assert_eq!(registry.len(PluginKind::Filter), 2);
-        assert_eq!(registry.len(PluginKind::ParamDriver), 1);
+        assert_eq!(registry.len(PluginKind::ParamDriver), 0);
         assert_eq!(registry.len(PluginKind::Composite), 1);
         assert!(registry
             .layer_source(&PluginId("core.layer_source.clear"))
             .is_some());
         assert!(registry.filter(&PluginId("core.filter.clear")).is_some());
-        assert!(registry
-            .param_driver(&PluginId("core.param.sine"))
-            .is_some());
         assert!(registry
             .composite(&PluginId("core.composite.clear"))
             .is_some());
@@ -1626,11 +1471,11 @@ mod tests {
         assert!(registry
             .layer_source_by_name("core.layer_source.clear")
             .is_some());
-        assert!(registry.param_driver_by_name("core.param.sine").is_some());
+        assert!(registry.param_driver_by_name("core.param.sine").is_none());
         assert!(registry.filter_by_name("missing").is_none());
 
         assert_eq!(registry.iter(PluginKind::Filter).count(), 2);
-        assert_eq!(registry.iter(PluginKind::ParamDriver).count(), 1);
+        assert_eq!(registry.iter(PluginKind::ParamDriver).count(), 0);
         assert_eq!(registry.iter(PluginKind::LayerSource).count(), 1);
         assert_eq!(registry.iter(PluginKind::Composite).count(), 1);
         assert_eq!(registry.iter(PluginKind::Input).count(), 0);
@@ -1736,78 +1581,19 @@ mod tests {
     #[test]
     fn registry_rejects_duplicate_within_kind() {
         let mut registry = PluginRegistry::new();
-        registry.register_param_driver(&SINE_PARAM_DRIVER).unwrap();
+        registry
+            .register_filter(&super::reference::CLEAR_FILTER)
+            .unwrap();
         let err = registry
-            .register_param_driver(&SINE_PARAM_DRIVER)
+            .register_filter(&super::reference::CLEAR_FILTER)
             .unwrap_err();
         assert!(matches!(
             err,
             PluginError::Duplicate {
-                kind: PluginKind::ParamDriver,
-                id: "core.param.sine"
+                kind: PluginKind::Filter,
+                id: "core.filter.clear"
             }
         ));
-    }
-
-    #[test]
-    fn sine_param_driver_builds_typed_data_track() {
-        let mut params = ResolvedParams::new();
-        params.insert("amplitude", Value::F64(2.0));
-        params.insert("frequency_hz", Value::F64(1.0));
-        params.insert("offset", Value::F64(10.0));
-
-        let track = SINE_PARAM_DRIVER
-            .build_track(
-                ParamDriverContext {
-                    start: RationalTime::ZERO,
-                    duration: RationalTime::from_seconds(1),
-                    sample_rate: Fps::try_new(4, 1).unwrap(),
-                },
-                &params,
-            )
-            .unwrap();
-
-        // M2E-17: 半開 [0,1) @ 4fps → 4サンプル(旧 fence-post の5を廃止)
-        assert_eq!(track.values.len(), 4);
-        assert_eq!(track.values[0], Value::F64(10.0));
-        assert!((track.values[1].as_f64().unwrap() - 12.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn sample_count_is_half_open_excluding_end() {
-        // duration=1s @ 4fps → 半開 [0,1) はサンプル 0..4（旧 fence-post の5ではない）
-        assert_eq!(
-            reference::sample_count(RationalTime::from_seconds(1), Fps::try_new(4, 1).unwrap())
-                .unwrap(),
-            4
-        );
-        // 総尺ちょうど(= end)のフレーム添字は範囲外: 90フレーム総尺ならサンプル数90
-        let fps = Fps::try_new(30, 1).unwrap();
-        let duration = RationalTime::try_from_frame(90, fps).unwrap();
-        assert_eq!(reference::sample_count(duration, fps).unwrap(), 90);
-        // 右端時刻は半開で範囲外。最終内包フレームは89
-        assert_eq!(RationalTime::try_from_frame(90, fps).unwrap(), duration);
-        assert!(RationalTime::try_from_frame(89, fps).unwrap() < duration);
-    }
-
-    #[test]
-    fn sample_count_ceil_keeps_in_range_samples_off_grid() {
-        let rate = Fps::try_new(4, 1).unwrap();
-        // 0.3s @ 4Hz: 区間内は 0, 0.25 → 2。floor(1.2)=1 では落とす。
-        assert_eq!(
-            reference::sample_count(RationalTime::try_new(3, 10).unwrap(), rate).unwrap(),
-            2
-        );
-        // 0.1s @ 4Hz: 区間内は t=0 のみ → 1。floor(0.4)=0 では空になる。
-        assert_eq!(
-            reference::sample_count(RationalTime::try_new(1, 10).unwrap(), rate).unwrap(),
-            1
-        );
-        // 整数境界は ceil=floor。無条件 floor+1 には戻らない。
-        assert_eq!(
-            reference::sample_count(RationalTime::from_seconds(1), rate).unwrap(),
-            4
-        );
     }
 
     #[test]
@@ -1823,25 +1609,6 @@ mod tests {
         assert_eq!(filter.category, "Utility");
         assert!(filter.tags.contains(&"reference"));
         assert!(!filter.display_name.is_empty());
-
-        let driver = registry
-            .param_driver(&PluginId("core.param.sine"))
-            .unwrap()
-            .desc();
-        assert_eq!(driver.category, "Generate");
-        assert!(driver.tags.contains(&"lfo"));
-        assert_eq!(driver.version, 2);
-    }
-
-    #[test]
-    fn migrate_sine_renames_amp_to_amplitude() {
-        let mut params = HashMap::new();
-        params.insert("amp".into(), Value::F64(0.5));
-        params.insert("frequency_hz".into(), Value::F64(2.0));
-        migrate_plugin_params("core.param.sine", 1, 2, &mut params).unwrap();
-        assert_eq!(params.get("amplitude"), Some(&Value::F64(0.5)));
-        assert!(!params.contains_key("amp"));
-        assert_eq!(params.get("frequency_hz"), Some(&Value::F64(2.0)));
     }
 
     #[test]
@@ -1892,7 +1659,6 @@ mod tests {
         validate_node_desc(PluginKind::Filter, CLEAR_FILTER.desc()).unwrap();
         validate_node_desc(PluginKind::Filter, TINT_FILTER.desc()).unwrap();
         validate_node_desc(PluginKind::LayerSource, CLEAR_LAYER_SOURCE.desc()).unwrap();
-        validate_node_desc(PluginKind::ParamDriver, SINE_PARAM_DRIVER.desc()).unwrap();
         validate_node_desc(PluginKind::Composite, CLEAR_COMPOSITE.desc()).unwrap();
     }
 
@@ -2006,93 +1772,6 @@ mod tests {
         let mut registry = PluginRegistry::new();
         let err = registry.register_filter(&BAD).unwrap_err();
         assert!(matches!(err, PluginError::InvalidDesc { .. }));
-    }
-
-    #[test]
-    fn resolve_params_fills_defaults_and_rejects_unknown_or_mismatch() {
-        let desc = SINE_PARAM_DRIVER.desc();
-        let empty = HashMap::new();
-        let filled = desc.resolve_params(&empty).unwrap();
-        assert_eq!(
-            filled.require_f64("core.param.sine", "amplitude").unwrap(),
-            1.0
-        );
-        assert_eq!(
-            filled
-                .require_f64("core.param.sine", "frequency_hz")
-                .unwrap(),
-            1.0
-        );
-        assert_eq!(
-            filled.require_f64("core.param.sine", "offset").unwrap(),
-            0.0
-        );
-
-        let mut unknown = HashMap::new();
-        unknown.insert("nope".into(), Value::F64(1.0));
-        let err = desc.resolve_params(&unknown).unwrap_err();
-        assert!(
-            matches!(
-                err,
-                PluginError::Param {
-                    ref id,
-                    ref got,
-                    ..
-                } if id == "nope" && got == "unknown"
-            ),
-            "{err:?}"
-        );
-
-        let mut mismatch = HashMap::new();
-        mismatch.insert("amplitude".into(), Value::Vec2([0.0, 1.0]));
-        let err = desc.resolve_params(&mismatch).unwrap_err();
-        assert!(
-            matches!(
-                err,
-                PluginError::Param {
-                    ref id,
-                    ref expected,
-                    ref got,
-                    ..
-                } if id == "amplitude" && expected == "F64" && got == "Vec2"
-            ),
-            "{err:?}"
-        );
-    }
-
-    #[test]
-    fn require_f64_rejects_wrong_type_and_missing() {
-        let mut params = ResolvedParams::new();
-        params.insert("amplitude", Value::Vec2([1.0, 2.0]));
-        let err = params
-            .require_f64("core.param.sine", "amplitude")
-            .unwrap_err();
-        assert!(
-            matches!(
-                err,
-                PluginError::Param {
-                    ref expected,
-                    ref got,
-                    ..
-                } if expected == "F64" && got == "Vec2"
-            ),
-            "{err:?}"
-        );
-
-        let empty = ResolvedParams::new();
-        let err = empty
-            .require_f64("core.param.sine", "amplitude")
-            .unwrap_err();
-        assert!(
-            matches!(
-                err,
-                PluginError::Param {
-                    ref got,
-                    ..
-                } if got == "missing"
-            ),
-            "{err:?}"
-        );
     }
 
     #[test]

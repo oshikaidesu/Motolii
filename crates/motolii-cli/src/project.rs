@@ -13,7 +13,7 @@ use motolii_gpu::{GpuCtx, RgbaDownloader, YuvToRgba};
 use motolii_media::{probe, FrameReader, MediaInfo};
 use motolii_nodes::{ParamOverlayError, ParamRectOverlay};
 use motolii_plugin::{
-    migrate_plugin_params, ParamDriverContext, PluginError, PluginRuntime, TextureRef,
+    MigrationOp, ParamDriverContext, PluginContract, PluginError, PluginRuntime, TextureRef,
 };
 use motolii_plugins_firstparty::first_party_runtime;
 use motolii_render::{
@@ -152,6 +152,28 @@ pub enum ProjectError {
     RationalTime(#[from] RationalTimeError),
     #[error(transparent)]
     FirstParty(#[from] motolii_plugins_firstparty::FirstPartyError),
+    #[error(
+        "plugin `{plugin}` saved version {saved_version} is newer than current {current_version}"
+    )]
+    FuturePluginVersion {
+        plugin: String,
+        saved_version: u32,
+        current_version: u32,
+    },
+    #[error("plugin `{plugin}` migration step missing from version {from_version}")]
+    MigrationStepMissing { plugin: String, from_version: u32 },
+    #[error("plugin `{plugin}` rename conflict: both `{from}` and `{to}` present")]
+    MigrationRenameConflict {
+        plugin: String,
+        from: String,
+        to: String,
+    },
+    #[error("plugin `{plugin}` migration shape mismatch for rename `{from}` -> `{to}`")]
+    MigrationShapeMismatch {
+        plugin: String,
+        from: String,
+        to: String,
+    },
 }
 
 fn reference_runtime() -> Result<PluginRuntime, ProjectError> {
@@ -164,7 +186,7 @@ pub fn load_project_v1(path: impl AsRef<Path>) -> Result<ProjectV1, ProjectError
 }
 
 pub fn load_project_v1_from_str(text: &str) -> Result<ProjectV1, ProjectError> {
-    let mut project: ProjectV1 = serde_json::from_str(text)?;
+    let project: ProjectV1 = serde_json::from_str(text)?;
     if project.version != 1 {
         return Err(ProjectError::UnsupportedVersion(project.version));
     }
@@ -173,38 +195,15 @@ pub fn load_project_v1_from_str(text: &str) -> Result<ProjectV1, ProjectError> {
         return Err(ProjectError::UnsupportedTimeMap);
     }
     // M2E-8: 型不一致・未知キーはロード時に構造化エラー(serde受理だけでは足りない)。
-    normalize_param_drivers(&mut project.param_drivers)?;
+    validate_param_drivers(&project.param_drivers)?;
     Ok(project)
 }
 
-/// migrate → resolve_params。成功時は default 充填済み params と現行 effect_version を書き戻す。
-fn normalize_param_drivers(drivers: &mut [ParamDriverV1]) -> Result<(), ProjectError> {
+/// migrate → resolve_params で全 driver を検証する。raw params / effect_version は変更しない。
+fn validate_param_drivers(drivers: &[ParamDriverV1]) -> Result<(), ProjectError> {
     let runtime = reference_runtime()?;
-    for driver in drivers.iter_mut() {
-        let Some(plugin) = runtime.executors().param_driver_by_name(&driver.plugin) else {
-            return Err(ProjectError::UnknownParamDriver(driver.plugin.clone()));
-        };
-        let resolved = resolve_raw_params(
-            &driver.plugin,
-            driver.effect_version,
-            plugin.desc(),
-            &driver.params,
-        )?;
-        driver.params = plugin
-            .desc()
-            .params
-            .iter()
-            .map(|def| {
-                (
-                    def.id.to_string(),
-                    resolved
-                        .get(def.id)
-                        .cloned()
-                        .unwrap_or_else(|| def.default.clone()),
-                )
-            })
-            .collect();
-        driver.effect_version = plugin.desc().version;
+    for driver in drivers {
+        resolve_driver_params(&runtime, driver)?;
     }
     Ok(())
 }
@@ -217,6 +216,7 @@ fn resolve_driver_params(
         return Err(ProjectError::UnknownParamDriver(driver.plugin.clone()));
     };
     resolve_raw_params(
+        runtime,
         &driver.plugin,
         driver.effect_version,
         plugin.desc(),
@@ -224,14 +224,88 @@ fn resolve_driver_params(
     )
 }
 
+fn apply_legacy_param_migrations(
+    contract: &PluginContract,
+    saved_version: u32,
+    params: &HashMap<String, Value>,
+) -> Result<HashMap<String, Value>, ProjectError> {
+    let plugin_id = contract.node.id.0;
+    let current_version = contract.node.version;
+    if saved_version > current_version {
+        return Err(ProjectError::FuturePluginVersion {
+            plugin: plugin_id.to_string(),
+            saved_version,
+            current_version,
+        });
+    }
+    if saved_version == current_version {
+        return Ok(params.clone());
+    }
+
+    let mut migrated = params.clone();
+    let mut version = saved_version;
+    while version < current_version {
+        let step = contract
+            .migrations
+            .iter()
+            .find(|step| step.from_version == version)
+            .ok_or_else(|| ProjectError::MigrationStepMissing {
+                plugin: plugin_id.to_string(),
+                from_version: version,
+            })?;
+        for op in &step.ops {
+            match op {
+                MigrationOp::RenameParam { from, to } => {
+                    let has_from = migrated.contains_key(*from);
+                    let has_to = migrated.contains_key(*to);
+                    match (has_from, has_to) {
+                        (true, true) => {
+                            return Err(ProjectError::MigrationRenameConflict {
+                                plugin: plugin_id.to_string(),
+                                from: (*from).to_string(),
+                                to: (*to).to_string(),
+                            });
+                        }
+                        (true, false) => {
+                            if let Some(value) = migrated.remove(*from) {
+                                migrated.insert((*to).to_string(), value);
+                            }
+                        }
+                        (false, true) => {
+                            return Err(ProjectError::MigrationShapeMismatch {
+                                plugin: plugin_id.to_string(),
+                                from: (*from).to_string(),
+                                to: (*to).to_string(),
+                            });
+                        }
+                        (false, false) => {
+                            return Err(ProjectError::MigrationShapeMismatch {
+                                plugin: plugin_id.to_string(),
+                                from: (*from).to_string(),
+                                to: (*to).to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        version = step.to_version;
+    }
+    Ok(migrated)
+}
+
 fn resolve_raw_params(
+    runtime: &PluginRuntime,
     plugin_name: &str,
     effect_version: u32,
     desc: &motolii_plugin::NodeDesc,
     params: &HashMap<String, Value>,
 ) -> Result<motolii_plugin::ResolvedParams, ProjectError> {
-    let mut raw_params = params.clone();
-    migrate_plugin_params(plugin_name, effect_version, desc.version, &mut raw_params)?;
+    let contract = runtime
+        .catalog()
+        .get(plugin_name)
+        .ok_or_else(|| ProjectError::UnknownParamDriver(plugin_name.to_string()))?;
+    let raw_params = apply_legacy_param_migrations(contract, effect_version, params)?;
 
     match desc.resolve_params(&raw_params) {
         Ok(params) => Ok(params),
@@ -438,7 +512,6 @@ mod tests {
     use motolii_core::RationalTime;
     use motolii_eval::{Interp, Keyframe, KeyframeTrack};
     use motolii_nodes::{CanonicalPoint, CanonicalSize, RectOverlay};
-    use motolii_plugin::reference::SINE_PARAM_DRIVER;
 
     fn keyed_center_overlay(
         start: CanonicalPoint,
@@ -537,6 +610,7 @@ mod tests {
                 {
                     "plugin": "core.param.sine",
                     "track": "sine_x",
+                    "effect_version": 2,
                     "params": {
                         "amplitude": {"F64": 0.25},
                         "frequency_hz": {"F64": 0.5},
@@ -614,6 +688,42 @@ mod tests {
     }
 
     #[test]
+    fn build_data_tracks_rejects_non_finite_sine_param() {
+        let mut params = HashMap::new();
+        params.insert("amplitude".into(), Value::F64(f64::INFINITY));
+        params.insert("frequency_hz".into(), Value::F64(1.0));
+        params.insert("offset".into(), Value::F64(0.0));
+        let drivers = vec![ParamDriverV1 {
+            plugin: "core.param.sine".into(),
+            track: "sine_x".into(),
+            effect_version: 2,
+            params,
+        }];
+        let err = build_data_tracks(
+            &drivers,
+            RationalTime::ZERO,
+            RationalTime::from_seconds(1),
+            Fps::try_new(12, 1).unwrap(),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ProjectError::Plugin(PluginError::Param {
+                    ref plugin,
+                    ref id,
+                    ref expected,
+                    ref got,
+                }) if plugin == "core.param.sine"
+                    && id == "amplitude"
+                    && expected == "F64"
+                    && got == "non-finite"
+            ),
+            "expected non-finite rejection via build_data_tracks, got {err:?}"
+        );
+    }
+
+    #[test]
     fn build_data_tracks_rejects_unknown_param() {
         let mut params = HashMap::new();
         params.insert("amplitud".into(), Value::F64(1.0));
@@ -677,6 +787,95 @@ mod tests {
                     && got == "Vec2"
             ),
             "expected PluginError::Param type mismatch via load, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn legacy_v1_amp_load_preserves_raw_params_and_builds_datatrack() {
+        // A2S §6 fixture 3: effect_version=1 + `amp` は raw 不変のまま読め、DataTrack 構築も成功する。
+        let json = r#"{
+            "version": 1,
+            "input": "in.mp4",
+            "output": "out.mp4",
+            "param_drivers": [
+                {
+                    "plugin": "core.param.sine",
+                    "track": "sine_x",
+                    "effect_version": 1,
+                    "params": {
+                        "amp": {"F64": 0.25}
+                    }
+                }
+            ],
+            "overlay": {
+                "center": [0.0, 0.0],
+                "size": [0.5, 0.5],
+                "color": [1.0, 0.0, 0.0, 1.0]
+            }
+        }"#;
+        let project = load_project_v1_from_str(json).unwrap();
+        let driver = &project.param_drivers[0];
+        assert_eq!(driver.effect_version, 1);
+        assert!(driver.params.contains_key("amp"));
+        assert!(!driver.params.contains_key("amplitude"));
+
+        let tracks = build_data_tracks(
+            &project.param_drivers,
+            RationalTime::ZERO,
+            RationalTime::from_seconds(1),
+            Fps::try_new(12, 1).unwrap(),
+        )
+        .unwrap();
+        assert!(tracks.get(&DataTrackId("sine_x".into())).is_some());
+    }
+
+    #[test]
+    fn load_rejects_second_driver_without_partial_success() {
+        let json = r#"{
+            "version": 1,
+            "input": "in.mp4",
+            "output": "out.mp4",
+            "param_drivers": [
+                {
+                    "plugin": "core.param.sine",
+                    "track": "sine_x",
+                    "effect_version": 1,
+                    "params": {
+                        "amp": {"F64": 0.25}
+                    }
+                },
+                {
+                    "plugin": "core.param.sine",
+                    "track": "sine_y",
+                    "effect_version": 2,
+                    "params": {
+                        "amplitude": {"Vec2": [1.0, 2.0]},
+                        "frequency_hz": {"F64": 1.0},
+                        "offset": {"F64": 0.0}
+                    }
+                }
+            ],
+            "overlay": {
+                "center": [0.0, 0.0],
+                "size": [0.5, 0.5],
+                "color": [1.0, 0.0, 0.0, 1.0]
+            }
+        }"#;
+        let err = load_project_v1_from_str(json).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ProjectError::Plugin(PluginError::Param {
+                    ref plugin,
+                    ref id,
+                    ref expected,
+                    ref got,
+                }) if plugin == "core.param.sine"
+                    && id == "amplitude"
+                    && expected == "F64"
+                    && got == "Vec2"
+            ),
+            "expected second-driver type mismatch via load, got {err:?}"
         );
     }
 
@@ -997,6 +1196,137 @@ mod tests {
             },
             color: [1.0, 1.0, 1.0, 1.0],
         });
-        let _ = SINE_PARAM_DRIVER;
+    }
+
+    #[test]
+    fn legacy_adapter_rejects_both_amp_and_amplitude() {
+        let drivers = vec![ParamDriverV1 {
+            plugin: "core.param.sine".into(),
+            track: "sine_x".into(),
+            effect_version: 1,
+            params: HashMap::from([
+                ("amp".into(), Value::F64(0.25)),
+                ("amplitude".into(), Value::F64(0.5)),
+            ]),
+        }];
+        let err = build_data_tracks(
+            &drivers,
+            RationalTime::ZERO,
+            RationalTime::from_seconds(1),
+            Fps::try_new(12, 1).unwrap(),
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            ProjectError::MigrationRenameConflict {
+                ref plugin,
+                ref from,
+                ref to,
+            } if plugin == "core.param.sine" && from == "amp" && to == "amplitude"
+        ));
+    }
+
+    #[test]
+    fn legacy_adapter_rejects_destination_without_source_shape() {
+        let drivers = vec![ParamDriverV1 {
+            plugin: "core.param.sine".into(),
+            track: "sine_x".into(),
+            effect_version: 1,
+            params: HashMap::from([("amplitude".into(), Value::F64(0.25))]),
+        }];
+        let err = build_data_tracks(
+            &drivers,
+            RationalTime::ZERO,
+            RationalTime::from_seconds(1),
+            Fps::try_new(12, 1).unwrap(),
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            ProjectError::MigrationShapeMismatch {
+                ref plugin,
+                ref from,
+                ref to,
+            } if plugin == "core.param.sine" && from == "amp" && to == "amplitude"
+        ));
+    }
+
+    #[test]
+    fn legacy_adapter_rejects_missing_rename_source_shape() {
+        let drivers = vec![ParamDriverV1 {
+            plugin: "core.param.sine".into(),
+            track: "sine_x".into(),
+            effect_version: 1,
+            params: HashMap::from([("frequency_hz".into(), Value::F64(1.0))]),
+        }];
+        let err = build_data_tracks(
+            &drivers,
+            RationalTime::ZERO,
+            RationalTime::from_seconds(1),
+            Fps::try_new(12, 1).unwrap(),
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            ProjectError::MigrationShapeMismatch {
+                ref plugin,
+                ref from,
+                ref to,
+            } if plugin == "core.param.sine" && from == "amp" && to == "amplitude"
+        ));
+    }
+
+    #[test]
+    fn legacy_adapter_rejects_future_effect_version() {
+        let drivers = vec![ParamDriverV1 {
+            plugin: "core.param.sine".into(),
+            track: "sine_x".into(),
+            effect_version: 99,
+            params: HashMap::new(),
+        }];
+        let err = build_data_tracks(
+            &drivers,
+            RationalTime::ZERO,
+            RationalTime::from_seconds(1),
+            Fps::try_new(12, 1).unwrap(),
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            ProjectError::FuturePluginVersion {
+                ref plugin,
+                saved_version: 99,
+                current_version: 2,
+            } if plugin == "core.param.sine"
+        ));
+    }
+
+    #[test]
+    fn legacy_adapter_rejects_missing_migration_step() {
+        let runtime = reference_runtime().unwrap();
+        let contract = runtime.catalog().get("core.param.sine").unwrap().clone();
+        let mut broken = contract;
+        broken.migrations.clear();
+        let params = HashMap::from([("amp".into(), Value::F64(0.25))]);
+        let err = apply_legacy_param_migrations(&broken, 1, &params).unwrap_err();
+        assert!(matches!(
+            err,
+            ProjectError::MigrationStepMissing {
+                ref plugin,
+                from_version: 1,
+            } if plugin == "core.param.sine"
+        ));
+    }
+
+    #[test]
+    fn legacy_adapter_does_not_mutate_input_params() {
+        let runtime = reference_runtime().unwrap();
+        let contract = runtime.catalog().get("core.param.sine").unwrap();
+        let params = HashMap::from([("amp".into(), Value::F64(0.25))]);
+        let migrated = apply_legacy_param_migrations(contract, 1, &params).unwrap();
+        assert!(params.contains_key("amp"));
+        assert!(!params.contains_key("amplitude"));
+        assert!(migrated.contains_key("amplitude"));
+        assert!(!migrated.contains_key("amp"));
     }
 }

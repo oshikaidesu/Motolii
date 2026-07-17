@@ -93,6 +93,26 @@ const OPACITY_ALLOWED_PUBLIC_PATHS: &[&str] = &[
     "motolii_plugin::ValueType",
 ];
 
+/// Sine crate が実際に名指しした `motolii_plugin::` 公開pathの閉集合(A2S / A1S §3同型)。
+const SINE_ALLOWED_PUBLIC_PATHS: &[&str] = &[
+    "motolii_plugin::DataTrack",
+    "motolii_plugin::Fps",
+    "motolii_plugin::MigrationOp",
+    "motolii_plugin::MigrationStep",
+    "motolii_plugin::NodeDesc",
+    "motolii_plugin::ParamDef",
+    "motolii_plugin::ParamDriverContext",
+    "motolii_plugin::ParamDriverPlugin",
+    "motolii_plugin::PluginContract",
+    "motolii_plugin::PluginError",
+    "motolii_plugin::PluginId",
+    "motolii_plugin::PluginKind",
+    "motolii_plugin::RationalTime",
+    "motolii_plugin::ResolvedParams",
+    "motolii_plugin::Value",
+    "motolii_plugin::ValueType",
+];
+
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .ancestors()
@@ -380,12 +400,20 @@ fn opacity_observed_public_paths(src: &str) -> BTreeSet<String> {
 }
 
 fn opacity_public_path_violations(src: &str) -> Vec<String> {
+    public_path_violations(src, OPACITY_ALLOWED_PUBLIC_PATHS)
+}
+
+fn sine_public_path_violations(src: &str) -> Vec<String> {
+    public_path_violations(src, SINE_ALLOWED_PUBLIC_PATHS)
+}
+
+fn public_path_violations(src: &str, expected_paths: &[&str]) -> Vec<String> {
     let mut violations = Vec::new();
     if strip_line_comments(src).contains("motolii_plugin::{") {
         violations.push("brace import motolii_plugin::{...} is forbidden".to_string());
     }
     let observed = opacity_observed_public_paths(src);
-    let expected: BTreeSet<_> = OPACITY_ALLOWED_PUBLIC_PATHS
+    let expected: BTreeSet<_> = expected_paths
         .iter()
         .map(|path| (*path).to_string())
         .collect();
@@ -396,6 +424,36 @@ fn opacity_public_path_violations(src: &str) -> Vec<String> {
         violations.push(format!("missing expected public path: {path}"));
     }
     violations
+}
+
+const CLI_DENIED_SINE_CRATES: &[&str] = &["motolii-plugin-sine"];
+
+const CLI_DENIED_SINE_SRC_TOKENS: &[&str] = &["motolii_plugin_sine", "motolii-plugin-sine"];
+
+fn cli_sine_dependency_violations(manifest: &str) -> Vec<String> {
+    let mut violations = direct_dependency_names(manifest, DependencyTableKind::Normal)
+        .into_iter()
+        .filter(|name| CLI_DENIED_SINE_CRATES.contains(&name.as_str()))
+        .collect::<Vec<_>>();
+    violations.extend(
+        direct_dependency_names(manifest, DependencyTableKind::DevOrBuild)
+            .into_iter()
+            .filter(|name| CLI_DENIED_SINE_CRATES.contains(&name.as_str())),
+    );
+    violations
+}
+
+fn cli_sine_source_violations(src: &str) -> Vec<&'static str> {
+    let code = strip_line_comments(src);
+    CLI_DENIED_SINE_SRC_TOKENS
+        .iter()
+        .copied()
+        .filter(|token| contains_token(&code, token))
+        .collect()
+}
+
+fn cli_crate_dir() -> PathBuf {
+    workspace_root().join("crates/motolii-cli")
 }
 
 #[test]
@@ -620,6 +678,83 @@ fn opacity_plugin_public_api_paths_are_closed_set() {
         violations.is_empty(),
         "Opacity crate の未知公開path: {:?}",
         violations
+    );
+}
+
+#[test]
+fn sine_plugin_public_api_paths_are_closed_set() {
+    let sine_src = workspace_root().join("plugins/motolii-plugin-sine/src/lib.rs");
+    let text = fs::read_to_string(sine_src).unwrap();
+    let violations = sine_public_path_violations(&text);
+    assert!(
+        violations.is_empty(),
+        "Sine crate の未知公開path: {:?}",
+        violations
+    );
+}
+
+#[test]
+fn cli_has_no_direct_sine_dependency_or_import() {
+    let cli_dir = cli_crate_dir();
+    let manifest = fs::read_to_string(cli_dir.join("Cargo.toml")).unwrap();
+    let dep_violations = cli_sine_dependency_violations(&manifest);
+    assert!(
+        dep_violations.is_empty(),
+        "motolii-cli must not depend on motolii-plugin-sine directly (VSM-A2): {:?}",
+        dep_violations
+    );
+
+    let mut files = Vec::new();
+    collect_rust_files(&cli_dir.join("src"), &mut files);
+    collect_rust_files(&cli_dir.join("tests"), &mut files);
+    for file in files {
+        let text = fs::read_to_string(&file).unwrap();
+        let violations = cli_sine_source_violations(&text);
+        assert!(
+            violations.is_empty(),
+            "{} must not import motolii-plugin-sine directly (VSM-A2): {:?}",
+            file.display(),
+            violations
+        );
+    }
+}
+
+#[test]
+fn cli_sine_dependency_scanner_flags_manifest_violation() {
+    let manifest = "[dependencies]\nmotolii-plugin-sine.workspace = true\n";
+    assert_eq!(
+        cli_sine_dependency_violations(manifest),
+        vec!["motolii-plugin-sine".to_string()]
+    );
+}
+
+#[test]
+fn cli_sine_dependency_scanner_flags_dev_dependency() {
+    let manifest = "[dev-dependencies]\nmotolii-plugin-sine = { path = \"../../plugins/motolii-plugin-sine\" }\n";
+    assert_eq!(
+        cli_sine_dependency_violations(manifest),
+        vec!["motolii-plugin-sine".to_string()]
+    );
+}
+
+#[test]
+fn cli_sine_import_scanner_flags_source_violation() {
+    let src = "use motolii_plugin_sine::SINE_PARAM_DRIVER;\n";
+    assert_eq!(cli_sine_source_violations(src), vec!["motolii_plugin_sine"]);
+}
+
+#[test]
+fn plugin_facade_has_no_central_migrate_plugin_params() {
+    let lib_src =
+        fs::read_to_string(workspace_root().join("crates/motolii-plugin/src/lib.rs")).unwrap();
+    let code = strip_line_comments(&lib_src);
+    assert!(
+        !code.contains("fn migrate_plugin_params"),
+        "central migrate_plugin_params must be removed (VSM-A2)"
+    );
+    assert!(
+        !code.contains("\"core.param.sine\" =>"),
+        "central Sine ID match must not remain in motolii-plugin facade"
     );
 }
 

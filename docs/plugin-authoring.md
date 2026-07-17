@@ -12,7 +12,7 @@
 
 Motoliiの長期の北極星は、映像表現を特定projectの手順から切り離し、演奏・再利用・保存・配布できる単位にすることにある。「映像制作におけるVST」はその構造の比喩であり、このplugin境界は単なる内製effect追加口ではない。Host全体をforkせず、ひとつの表現に集中できる作者面を作る。
 
-VSM-A0I-1〜3でContract Catalog、Documentのprepared resolution、graph／exportのruntime必須化までは実装済みである。VSM-A1-3で `core.filter.opacity` を `plugins/motolii-plugin-opacity` へ外部化し、first-party組み立てと依存allowlist検査の実証が完了した。Sine等の残存参照実装の外部crate化はVSM-A2以降。
+VSM-A0I-1〜3でContract Catalog、Documentのprepared resolution、graph／exportのruntime必須化までは実装済みである。VSM-A1-3で `core.filter.opacity` を `plugins/motolii-plugin-opacity` へ外部化し、VSM-A2で `core.param.sine` を `plugins/motolii-plugin-sine` へ外部化した。first-party組み立てと依存allowlist検査の実証が完了している。
 
 > **現在の停止線**: plugin crateは`motolii-plugin`だけへ依存し、GPU golden／purity／parityはHost側の審判から検査する。private依存の例外やtestkitへのdev依存を追加しない。
 

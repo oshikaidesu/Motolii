@@ -37,22 +37,10 @@ fn scalar(id: &'static str, default: f64, domain: Option<F64Domain>) -> ParamDef
 }
 
 #[test]
-fn reference_catalog_owns_sine_migration() {
+fn reference_catalog_omits_externalized_sine() {
     let catalog = reference_catalog().unwrap();
-    assert_eq!(catalog.len(), 5);
-
-    let sine = catalog.get("core.param.sine").unwrap();
-    assert_eq!(
-        sine.migrations,
-        vec![MigrationStep {
-            from_version: 1,
-            to_version: 2,
-            ops: vec![MigrationOp::RenameParam {
-                from: "amp",
-                to: "amplitude",
-            }],
-        }]
-    );
+    assert_eq!(catalog.len(), 4);
+    assert!(catalog.get("core.param.sine").is_none());
 }
 
 #[test]
@@ -224,7 +212,7 @@ fn catalog_rejects_duplicate_migration_source_version() {
 fn runtime_allows_contract_only_catalog() {
     let catalog = Arc::new(reference_catalog().unwrap());
     let runtime = PluginRuntime::try_new(catalog, PluginRegistry::new()).unwrap();
-    assert_eq!(runtime.catalog().len(), 5);
+    assert_eq!(runtime.catalog().len(), 4);
     assert_eq!(runtime.executors().len(PluginKind::Filter), 0);
 }
 
@@ -289,6 +277,6 @@ fn reference_catalog_and_executor_registry_form_valid_runtime() {
     let mut executors = PluginRegistry::new();
     register_reference_plugins(&mut executors).unwrap();
     let runtime = PluginRuntime::try_new(catalog, executors).unwrap();
-    assert_eq!(runtime.catalog().len(), 5);
+    assert_eq!(runtime.catalog().len(), 4);
     assert_eq!(runtime.executors().len(PluginKind::Filter), 2);
 }

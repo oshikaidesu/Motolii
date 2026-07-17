@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "plugins/motolii-plugin-opacity",
+    "plugins/motolii-plugin-sine",
     "crates/motolii-core",
     "crates/motolii-eval",
     "crates/motolii-nodes",
@@ -32,6 +33,7 @@ motolii-media = { path = "crates/motolii-media" }
 motolii-nodes = { path = "crates/motolii-nodes" }
 motolii-plugin = { path = "crates/motolii-plugin" }
 motolii-plugin-opacity = { path = "plugins/motolii-plugin-opacity" }
+motolii-plugin-sine = { path = "plugins/motolii-plugin-sine" }
 motolii-plugins-firstparty = { path = "crates/motolii-plugins-firstparty" }
 motolii-render = { path = "crates/motolii-render" }
 motolii-export = { path = "crates/motolii-export" }

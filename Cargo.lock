@@ -2746,11 +2746,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "motolii-plugin-sine"
+version = "0.1.0"
+dependencies = [
+ "motolii-plugin",
+]
+
+[[package]]
 name = "motolii-plugins-firstparty"
 version = "0.1.0"
 dependencies = [
  "motolii-plugin",
  "motolii-plugin-opacity",
+ "motolii-plugin-sine",
  "thiserror 2.0.18",
 ]
 
@@ -2778,6 +2786,7 @@ dependencies = [
  "motolii-gpu",
  "motolii-plugin",
  "motolii-plugin-opacity",
+ "motolii-plugin-sine",
  "motolii-plugins-firstparty",
  "serde",
  "serde_json",
