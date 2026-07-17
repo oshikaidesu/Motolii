@@ -18,6 +18,8 @@ A1の基線は次の3コミットである。
 
 各コミット単独の対象testと、A0I-3時点の`cargo test --workspace`が全緑であることを確認済み。A1はこの基線より前のworking treeや、A0Iと同居した未コミット差分へ積まない。
 
+上記hashとA1S／A1Gを含む基線をoriginへpushするまで、local `main`をrebaseしてhashを書き換えない。push前にA1を隔離branchへ発注する場合も、このlocal `main`のhash列を明示的な起点とし、別のmainや未コミット差分へ積まない。
+
 ## 2. 公開crate境界
 
 ### 2.1 façadeを採用する
@@ -45,7 +47,8 @@ first-party無特権を検査可能にするため、外部参照pluginは`plugi
 - `[dependencies]`は`motolii-plugin`だけ。
 - `[dev-dependencies]`と`[build-dependencies]`は空。
 - `build.rs`、独自proc-macro、workspace内部crateへのalias依存を持たない。
-- Rust sourceで`motolii_`から始まるpathは`motolii_plugin::`だけ。
+- `src/**/*.rs`で`motolii_`から始まるpathは`motolii_plugin::`だけ。
+- `tests/**/*.rs`では`motolii_plugin::`に加え、そのpackage自身のcanonical crate名だけを許す。A1では`motolii_plugin_opacity::`であり、任意名の例外allowlistにはしない。
 - Slint、OS／vendor API、CUDA／Metal／D3D等を参照しない。
 - `motolii-plugin`と同じpanic禁止lintをcrate manifestへ持つ。
 
@@ -63,6 +66,8 @@ A1の依存検査はdenylistではなくallowlistである。既存`motolii-plug
 6. 違反fixtureが赤になることと、実ツリーの違反0件を別testで証明する。
 
 検査の例外allowlistは作らない。必要に見えた時点でA1を停止し、本書へ戻す。
+
+既知の検査限界として、workspace内の同一Cargo buildではdependency featureがunifyされるため、別crateが有効化したfeatureへの偶発的依存を完全には証明できない。A1は直接依存allowlist、source閉集合、実ツリー検査を審判とし、standalone package buildの導入は完了したものとして偽装しない。この限界がOpacityの成立性へ影響した場合は検査例外を足さず停止する。
 
 A1は検査の副産物として、Opacity crateが実際に名指しした公開APIをfixture内の閉集合として固定する。最低限、trait／contract型、`Value`、GPU context、pipeline cache、wgpu型、uniform byte化APIを列挙し、未知の公開pathが増えたら赤にする。これは「現在の契約で書けた」と「この契約が将来も最小である」を混同しないための観測値である。
 
@@ -117,7 +122,17 @@ MOTOLII_REQUIRE_GPU=1 cargo test -p motolii-testkit --test opacity_filter
 - `cargo test --workspace`
 - `git diff --check`
 
-## 7. 非目標と停止条件
+## 7. A1本体の採択単位
+
+A1本体は次の3コミットを直列に作り、各段を独立してreview可能にする。
+
+1. **VSM-A1-1 — façade公開面**: A1Sで列挙した最小再exportと、外部pathからその公開面が存在することだけを証明するcompile test。composition rootやOpacity実装は動かさない。
+2. **VSM-A1-2 — first-party composition root**: `motolii-plugins-firstparty`を導入し、CLI、Document export、製品test helperを一箇所の組み立てへ移す。この段ではOpacityを`motolii-plugin::reference`内に残し、catalog／executor ID集合と挙動を変えない。
+3. **VSM-A1-3 — Opacity外部crate化**: Opacity contract／executor／WGSLを外部crateへ移し、旧実装を削除する。依存検査、必須capability負例、公開API利用閉集合、列挙parity、assembled purityをこの段で完成させる。
+
+後段の都合を前段へ混ぜない。各段は対象testと`cargo test --workspace`を通してからmainへ採択し、3段をsquashしない。
+
+## 8. 非目標と停止条件
 
 - `.vism` package、manifest、loaderを作らない。
 - OpacityのID、version、parameter、pixel、clamp意味を変えない。
