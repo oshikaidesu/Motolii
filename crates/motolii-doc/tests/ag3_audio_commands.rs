@@ -3,6 +3,7 @@
 //! AG-3: audio component commandと分離macroの受け入れテスト。
 
 use std::path::Path;
+use std::sync::Arc;
 
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
@@ -11,6 +12,11 @@ use motolii_doc::{
     ImportAvMode, ItemEnvelope, ParentLocator, Track, TrackItem, VideoComponent,
     MIN_READER_VERSION_FOR_ASSET_COMPONENTS,
 };
+use motolii_plugin::reference::reference_catalog;
+
+fn reference_writer(doc: Document) -> DocumentWriter {
+    DocumentWriter::new(doc, Arc::new(reference_catalog().unwrap())).unwrap()
+}
 
 struct Fixture {
     doc: Document,
@@ -58,7 +64,7 @@ fn audio_components(doc: &Document) -> &[AudioComponent] {
 #[test]
 fn mute_and_gain_roundtrip_through_document_writer() {
     let f = fixture();
-    let mut writer = DocumentWriter::new(f.doc);
+    let mut writer = reference_writer(f.doc);
     let gesture = writer.begin_gesture();
     writer
         .apply_command(
@@ -117,7 +123,7 @@ fn detach_to_other_track_then_undo_restores_single_enabled_av_clip() {
         "Audio",
     )
     .unwrap();
-    let mut writer = DocumentWriter::new(f.doc);
+    let mut writer = reference_writer(f.doc);
     let gesture = writer.begin_gesture();
     for command in commands {
         writer.apply_command(gesture, command).unwrap();
@@ -170,7 +176,7 @@ fn detach_survives_save_reload_and_undo_restores() {
         "Audio",
     )
     .unwrap();
-    let mut writer = DocumentWriter::new(f.doc);
+    let mut writer = reference_writer(f.doc);
     let gesture = writer.begin_gesture();
     for command in commands {
         writer.apply_command(gesture, command).unwrap();
@@ -324,7 +330,7 @@ fn mute_gain_by_index_targets_second_component() {
         };
         audio.push(AudioComponent::ordinal(1));
     }
-    let mut writer = DocumentWriter::new(f.doc);
+    let mut writer = reference_writer(f.doc);
     let gesture = writer.begin_gesture();
     writer
         .apply_command(
@@ -359,7 +365,7 @@ fn mute_gain_by_index_targets_second_component() {
 #[test]
 fn mute_and_gain_survive_save_reload() {
     let f = fixture();
-    let mut writer = DocumentWriter::new(f.doc);
+    let mut writer = reference_writer(f.doc);
     let gesture = writer.begin_gesture();
     writer
         .apply_command(

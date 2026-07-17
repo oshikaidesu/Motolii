@@ -13,10 +13,7 @@ use crate::asset::AssetId;
 use crate::doc_keyframe::validate_interp;
 use crate::doc_value::DocValue;
 use crate::param::DocParam;
-use crate::param_expect::{
-    self, known_plugin_info, known_plugin_param, path_op_scalar, vec2_axis, DocPluginKind,
-    ExpectedValueType, ParamConstraints,
-};
+use crate::param_expect::{self, path_op_scalar, vec2_axis, ExpectedValueType, ParamConstraints};
 use crate::schema::{
     asset_components_require_newer_reader, Clip, ClipSource, Group, ItemEnvelope, PathOp,
     StandardShape, StreamKind, TrackItem, Transform2D, VectorContent,
@@ -222,15 +219,9 @@ impl Document {
                 return Err(DocumentError::EmptyEffectDefinitionPluginId { id: def.id.get() });
             }
             let path = format!("effect_definitions[{}]", def.id.get());
-            let degraded = plugin_slot_degraded(
-                &def.plugin_id,
-                def.effect_version,
-                DocPluginKind::Filter,
-                &path,
-            )?;
             for (name, param) in &def.params {
                 let p = format!("{path}.{name}");
-                validate_plugin_param(self, &def.plugin_id, name, param, &p, degraded)?;
+                validate_param_structure(self, param, &p)?;
             }
         }
         let any_effects = !self.effect_definitions.is_empty() || document_has_any_effect_use(self);
@@ -440,24 +431,15 @@ fn validate_clip(
             }
         }
         ClipSource::Plugin {
-            plugin_id,
-            effect_version,
-            params,
-            ..
+            plugin_id, params, ..
         } => {
             if plugin_id.is_empty() {
                 return Err(DocumentError::EmptySourcePluginId { layer_id });
             }
             let source_path = format!("layer{layer_id}.source");
-            let degraded = plugin_slot_degraded(
-                plugin_id,
-                *effect_version,
-                DocPluginKind::LayerSource,
-                &source_path,
-            )?;
             for (name, param) in params {
                 let path = format!("{source_path}.{name}");
-                validate_plugin_param(doc, plugin_id, name, param, &path, degraded)?;
+                validate_param_structure(doc, param, &path)?;
             }
         }
         ClipSource::Vector { recipe } => {
@@ -524,26 +506,6 @@ fn document_has_any_effect_use(doc: &Document) -> bool {
     doc.tracks.iter().any(|t| walk(&t.items))
 }
 
-/// D1f/S13: 既知plugin_idの種別違いは型付きエラー、未知idと未来版effect_versionは
-/// 同一のdegraded扱い(構造検査のみ・型表チェックはスキップ)にする。
-fn plugin_slot_degraded(
-    plugin_id: &str,
-    effect_version: u32,
-    expected_kind: DocPluginKind,
-    path: &str,
-) -> Result<bool, DocumentError> {
-    match known_plugin_info(plugin_id) {
-        None => Ok(true),
-        Some(info) if info.kind != expected_kind => Err(DocumentError::PluginKindMismatch {
-            path: path.to_string(),
-            plugin_id: plugin_id.to_string(),
-            expected: expected_kind.name().to_string(),
-            got: info.kind.name().to_string(),
-        }),
-        Some(info) => Ok(effect_version > info.current_version),
-    }
-}
-
 /// Transform2Dの4スロット共通検査。エンベロープ本体とRepeater.transformで共用(D1i-2)。
 fn validate_transform2d(doc: &Document, t: &Transform2D, base: &str) -> Result<(), DocumentError> {
     validate_param(
@@ -572,23 +534,6 @@ fn validate_transform2d(doc: &Document, t: &Transform2D, base: &str) -> Result<(
     )
 }
 
-fn validate_plugin_param(
-    doc: &Document,
-    plugin_id: &str,
-    param_id: &str,
-    param: &DocParam,
-    path: &str,
-    degraded: bool,
-) -> Result<(), DocumentError> {
-    if !degraded {
-        if let Some(c) = known_plugin_param(plugin_id, param_id) {
-            return validate_param(doc, param, c, path);
-        }
-    }
-    // 未知plugin・既知プラグインの未来版: 型表は当てず有限性・AssetRefダングリングのみ検査(F-9/D1f)
-    validate_param_structure(doc, param, path)
-}
-
 fn detect_parent_cycles(parents: &HashMap<u64, u64>) -> Result<(), DocumentError> {
     for &start in parents.keys() {
         let mut path = HashSet::new();
@@ -609,7 +554,7 @@ fn detect_parent_cycles(parents: &HashMap<u64, u64>) -> Result<(), DocumentError
     Ok(())
 }
 
-fn validate_param(
+pub(crate) fn validate_param(
     doc: &Document,
     param: &DocParam,
     constraints: ParamConstraints,

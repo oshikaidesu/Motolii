@@ -5,10 +5,11 @@
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
     AssetId, Clip, ClipSource, DocKeyframe, DocKeyframeTrack, DocParam, DocValue, Document,
-    DocumentError, EffectDefinition, EffectDefinitionId, EffectId, EffectUse, ItemEnvelope,
-    KeyframeId, Track, TrackItem,
+    DocumentError, DocumentPluginError, EffectDefinition, EffectDefinitionId, EffectId, EffectUse,
+    ItemEnvelope, KeyframeId, Track, TrackItem,
 };
 use motolii_eval::Interp;
+use motolii_plugin::reference::reference_catalog;
 use std::collections::BTreeMap;
 
 fn valid_minimal() -> Document {
@@ -133,9 +134,13 @@ fn color_out_of_range_fails() {
     });
     doc.version = 4;
     doc.min_reader_version = 4;
+    doc.validate().unwrap();
     assert!(matches!(
-        doc.validate(),
-        Err(DocumentError::ValueOutOfRange { .. })
+        doc.prepare_plugins(&reference_catalog().unwrap()),
+        Err(DocumentPluginError::ContractViolation {
+            source: DocumentError::ValueOutOfRange { .. },
+            ..
+        })
     ));
 }
 
@@ -269,8 +274,12 @@ fn layer_source_clear_rejects_wrong_color_type() {
         params,
         extra: Default::default(),
     };
+    doc.validate().unwrap();
     assert!(matches!(
-        doc.validate(),
-        Err(DocumentError::ParamTypeMismatch { .. })
+        doc.prepare_plugins(&reference_catalog().unwrap()),
+        Err(DocumentPluginError::ContractViolation {
+            source: DocumentError::ParamTypeMismatch { .. },
+            ..
+        })
     ));
 }

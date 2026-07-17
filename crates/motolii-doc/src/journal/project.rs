@@ -62,6 +62,8 @@ pub enum ProjectError {
     Io(#[from] std::io::Error),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    Plugin(#[from] crate::DocumentPluginError),
 }
 
 pub type OpenProjectOutcome = RecoveryResult;

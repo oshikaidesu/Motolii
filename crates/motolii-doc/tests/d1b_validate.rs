@@ -8,8 +8,14 @@ use motolii_doc::{
     EffectDefinitionDraft, EffectDefinitionId, EffectId, EffectUse, ItemEnvelope, LayerId,
     LookAtAxis, Soundtrack, Track, TrackId, TrackItem, MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
 };
+use motolii_plugin::reference::reference_catalog;
 use serde_json::Map;
 use std::collections::BTreeMap;
+use std::sync::Arc;
+
+fn reference_writer(doc: Document) -> DocumentWriter {
+    DocumentWriter::new(doc, Arc::new(reference_catalog().unwrap())).unwrap()
+}
 
 fn valid_minimal() -> Document {
     let mut doc = Document::new_v1();
@@ -33,7 +39,7 @@ fn valid_minimal() -> Document {
 fn valid_document_passes() {
     let doc = valid_minimal();
     assert!(doc.validate().is_ok());
-    let writer = DocumentWriter::new(doc);
+    let writer = reference_writer(doc);
     assert!(writer.validate().is_ok());
 }
 
@@ -204,7 +210,7 @@ fn prepare_effect_keeps_current_version_and_writer_unchanged() {
     });
     doc.validate().unwrap();
 
-    let writer = DocumentWriter::new(doc);
+    let writer = reference_writer(doc);
     let snap_before = writer.snapshot();
     let revision_before = writer.revision;
     let undo_before = writer.undo_len();
@@ -262,7 +268,7 @@ fn stable_id_document_is_open_mode_read_write() {
 
 #[test]
 fn validate_does_not_mutate_writer() {
-    let mut writer = DocumentWriter::new(valid_minimal());
+    let mut writer = reference_writer(valid_minimal());
     let rev = writer.revision;
     writer.edit(|doc| {
         doc.tracks[0].id = TrackId::from_raw(99);
@@ -274,7 +280,9 @@ fn validate_does_not_mutate_writer() {
     assert_eq!(snap.tracks[0].id, TrackId::from_raw(99));
     assert!(matches!(
         writer.validate(),
-        Err(DocumentError::UnknownTrackId { id: 99 })
+        Err(motolii_doc::DocumentPluginError::Structural(
+            DocumentError::UnknownTrackId { id: 99 }
+        ))
     ));
 }
 

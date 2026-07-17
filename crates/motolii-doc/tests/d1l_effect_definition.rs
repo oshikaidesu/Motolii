@@ -6,6 +6,7 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
@@ -17,6 +18,11 @@ use motolii_doc::{
     EffectInstance, EffectUse, ItemEnvelope, LayerId, MigrateError, StableIdReservation, Track,
     TrackItem,
 };
+use motolii_plugin::reference::reference_catalog;
+
+fn reference_writer(doc: Document) -> DocumentWriter {
+    DocumentWriter::new(doc, Arc::new(reference_catalog().unwrap())).unwrap()
+}
 
 fn unique_dir(tag: &str) -> PathBuf {
     let nanos = SystemTime::now()
@@ -75,7 +81,10 @@ fn shared_fixture() -> Shared {
         "core.filter.tint",
         1,
         true,
-        std::collections::BTreeMap::from([("amount".into(), DocParam::const_f64(0.1))]),
+        std::collections::BTreeMap::from([(
+            "color".into(),
+            DocParam::const_color([0.1, 0.1, 0.1, 1.0]),
+        )]),
         Default::default(),
     ));
 
@@ -431,7 +440,7 @@ fn delete_orphan_definition_then_undo_restores_same_id_and_fields() {
     let before = s.doc.clone();
     assert_eq!(s.doc.effect_use_count(s.d2_orphan), 0);
 
-    let mut writer = DocumentWriter::new(s.doc.clone());
+    let mut writer = reference_writer(s.doc.clone());
     let gesture = writer.begin_gesture();
     let def = writer
         .snapshot()
@@ -511,7 +520,7 @@ fn copy_local_then_save_reload_preserves_two_definitions() {
 #[test]
 fn delete_definition_unused_is_one_undo() {
     let s = shared_fixture();
-    let mut writer = DocumentWriter::new(s.doc.clone());
+    let mut writer = reference_writer(s.doc.clone());
     let gesture = writer.begin_gesture();
     let def = writer
         .snapshot()
@@ -531,7 +540,7 @@ fn delete_definition_unused_is_one_undo() {
 #[test]
 fn unlink_is_one_undo() {
     let s = shared_fixture();
-    let mut writer = DocumentWriter::new(s.doc.clone());
+    let mut writer = reference_writer(s.doc.clone());
     let gesture = writer.begin_gesture();
     let use_ = writer.find_envelope(s.layer_a).unwrap().effects[1].clone();
     let def = writer
@@ -560,7 +569,7 @@ fn unlink_is_one_undo() {
 fn copy_local_is_one_undo() {
     let s = shared_fixture();
     let cmd = copy_local_command(&s.doc, s.u3, s.d1);
-    let mut writer = DocumentWriter::new(s.doc.clone());
+    let mut writer = reference_writer(s.doc.clone());
     let gesture = writer.begin_gesture();
     writer.apply_command(gesture, cmd.clone()).unwrap();
     assert_eq!(writer.undo_len(), 1);
