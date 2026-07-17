@@ -95,6 +95,8 @@ pub fn first_party_runtime() -> Result<PluginRuntime, FirstPartyError>;
 
 `FirstPartyError`は`PluginContractError`、`PluginError`、`PluginRuntimeError`を別variantとして`#[from]`で保持し、文字列へ潰さない。内部composition crateの通常依存は`motolii-plugin`と`thiserror`だけとする。これは`plugins/motolii-plugin-*`へ課す外部作者crateの一依存制約とは別である。
 
+製品adapterもこの構造を途中で文字列へ潰さない。CLIは`CliError::FirstParty(#[from] FirstPartyError)`を持ち、表示文字列化は最終的なCLI表示境界だけで行う。
+
 CLI、Document export、製品test helperは個別に`reference_catalog()`と`register_reference_plugins()`を組み合わせず、この組み立てcrateを使う。`motolii-plugin::reference`はA2等の未移動参照実装を一時的に保持してよいが、既定セットのcomposition rootではなくなる。
 
 v1のHost必須capabilityには`core.filter.opacity`を含める。Document graphがenvelope opacityをこのIDへlowerするためである。組み立て後runtimeに必須IDが無い場合はstartup時の型付きエラーとし、graph評価時の偶発的missingまで遅延させない。
