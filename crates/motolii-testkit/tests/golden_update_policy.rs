@@ -30,6 +30,7 @@ fn run_policy_with_base(
     run_policy_with_base_opts(
         classification,
         base_classification,
+        None,
         skip_consistency,
         false,
         files,
@@ -39,6 +40,7 @@ fn run_policy_with_base(
 fn run_policy_with_base_opts(
     classification: Option<&str>,
     base_classification: Option<&str>,
+    migration: Option<&str>,
     skip_consistency: bool,
     base_lookup_only: bool,
     files: &str,
@@ -55,8 +57,16 @@ fn run_policy_with_base_opts(
         .stderr(std::process::Stdio::piped());
     if let Some(c) = classification {
         cmd.env("CLASSIFICATION_FILE", c);
+        cmd.env(
+            "MIGRATION_FILE",
+            "crates/motolii-testkit/tests/fixtures/golden_policy/migrations_empty.tsv",
+        );
     } else {
         cmd.env_remove("CLASSIFICATION_FILE");
+        cmd.env_remove("MIGRATION_FILE");
+    }
+    if let Some(m) = migration {
+        cmd.env("MIGRATION_FILE", m);
     }
     if let Some(b) = base_classification {
         cmd.env("GOLDEN_POLICY_BASE_CLASSIFICATION", b);
@@ -148,6 +158,21 @@ fn d1i2_pathop_geometry_is_classified_semantic() {
 }
 
 #[test]
+fn blend_mode_oracle_is_semantic_and_harness_is_not() {
+    let root = workspace_root();
+    let tsv = std::fs::read_to_string(
+        root.join("crates/motolii-testkit/golden_policy/classification.tsv"),
+    )
+    .expect("read classification.tsv");
+    assert!(tsv
+        .lines()
+        .any(|line| { line == "semantic\tcrates/motolii-doc/tests/oracles/d1i3_blend_mode.tsv" }));
+    assert!(!tsv
+        .lines()
+        .any(|line| { line == "semantic\tcrates/motolii-doc/tests/d1i3_blend_mode.rs" }));
+}
+
+#[test]
 fn semantic_golden_modification_is_rejected() {
     let (ok, msg) = run_policy(
         None,
@@ -160,6 +185,30 @@ fn semantic_golden_modification_is_rejected() {
             || msg.contains("golden-update-policy gate FAILED"),
         "unexpected: {msg}"
     );
+}
+
+#[test]
+fn blend_mode_oracle_modification_is_rejected() {
+    let (ok, msg) = run_policy(
+        None,
+        false,
+        "M\tcrates/motolii-doc/tests/oracles/d1i3_blend_mode.tsv\n",
+    );
+    assert!(!ok, "expected fail for semantic oracle modify: {msg}");
+    assert!(
+        msg.contains("semantic golden modified"),
+        "unexpected: {msg}"
+    );
+}
+
+#[test]
+fn blend_mode_harness_runtime_wiring_change_is_allowed() {
+    let (ok, msg) = run_policy(
+        None,
+        false,
+        "M\tcrates/motolii-doc/tests/d1i3_blend_mode.rs\n",
+    );
+    assert!(ok, "semantic harness change must be allowed: {msg}");
 }
 
 /// 台帳ブートストラップPR相当: HEADでsemantic登録済みの既存ファイルを同時に書き換えても拒否する。
@@ -329,6 +378,7 @@ fn base_provisional_still_requires_marker_when_head_unclassified() {
     let (ok, msg) = run_policy_with_base_opts(
         Some(head),
         Some(base),
+        None,
         false,
         true, // lookup-only: 台帳削り以外の effective class 経路
         "M\tcrates/motolii-testkit/tests/fixtures/golden_policy/provisional_without_marker.txt\n",
@@ -339,6 +389,40 @@ fn base_provisional_still_requires_marker_when_head_unclassified() {
     );
     assert!(
         msg.contains("provisional golden lacks") || msg.contains("MOTOLII_REGENERATE_WHEN"),
+        "unexpected: {msg}"
+    );
+}
+
+#[test]
+fn semantic_harness_to_registered_oracle_migration_is_allowed() {
+    let head = "crates/motolii-testkit/tests/fixtures/golden_policy/classification_head_semantic_migration.tsv";
+    let base = "crates/motolii-testkit/tests/fixtures/golden_policy/classification_base_semantic_sample.tsv";
+    let migration =
+        "crates/motolii-testkit/tests/fixtures/golden_policy/migrations_semantic_sample.tsv";
+    let (ok, msg) = run_policy_with_base_opts(
+        Some(head),
+        Some(base),
+        Some(migration),
+        false,
+        false,
+        "M\tcrates/motolii-testkit/golden_policy/classification.tsv\nM\tcrates/motolii-testkit/tests/fixtures/golden_policy/semantic_sample.txt\nA\tcrates/motolii-testkit/tests/fixtures/golden_policy/semantic_with_regenerate_marker.txt\n",
+    );
+    assert!(ok, "valid harness-to-oracle migration must pass: {msg}");
+}
+
+#[test]
+fn semantic_declassification_without_migration_is_rejected() {
+    let head = "crates/motolii-testkit/tests/fixtures/golden_policy/classification_head_semantic_migration.tsv";
+    let base = "crates/motolii-testkit/tests/fixtures/golden_policy/classification_base_semantic_sample.tsv";
+    let (ok, msg) = run_policy_with_base(
+        Some(head),
+        Some(base),
+        false,
+        "M\tcrates/motolii-testkit/golden_policy/classification.tsv\n",
+    );
+    assert!(!ok, "semantic declassification must fail: {msg}");
+    assert!(
+        msg.contains("removed without a valid harness-to-oracle migration"),
         "unexpected: {msg}"
     );
 }

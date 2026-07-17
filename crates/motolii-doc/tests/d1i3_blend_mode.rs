@@ -2,7 +2,7 @@
 
 //! D1i-3: BlendMode の意味論ゴールデン(S16)。
 //! 閉集合・D3→CompositeMode 1:1 写像・premul 合成式を固定する。
-//! 本ファイルのアサーション更新は禁止(新variant+新ファイルのみ)。
+//! 期待値の正本は `oracles/d1i3_blend_mode.tsv`。本ファイルは変更可能なharness。
 
 use std::collections::BTreeMap;
 
@@ -17,6 +17,96 @@ use motolii_plugin::reference::{reference_catalog, register_reference_plugins};
 use motolii_plugin::{PluginRegistry, PluginRuntime};
 use motolii_render::RenderStep;
 use motolii_testkit::cpu_reference::{premul_add_u8, premul_multiply_u8, premul_over_u8};
+
+const ORACLE: &str = include_str!("oracles/d1i3_blend_mode.tsv");
+
+#[derive(Debug)]
+struct MapCase {
+    serde_name: &'static str,
+    composite_name: &'static str,
+}
+
+#[derive(Debug)]
+struct PremulCase {
+    group: &'static str,
+    operation: &'static str,
+    bg: [u8; 4],
+    fg: [u8; 4],
+    expected: [u8; 4],
+}
+
+fn rgba8(value: &str) -> [u8; 4] {
+    let values = value
+        .split(',')
+        .map(|component| component.parse::<u8>().expect("oracle rgba8 component"))
+        .collect::<Vec<_>>();
+    values
+        .try_into()
+        .expect("oracle rgba8 must have 4 components")
+}
+
+fn oracle_cases() -> (Vec<MapCase>, Vec<PremulCase>) {
+    let mut maps = Vec::new();
+    let mut premul = Vec::new();
+    for line in ORACLE.lines() {
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let fields = line.split('\t').collect::<Vec<_>>();
+        match fields.as_slice() {
+            ["map", serde_name, composite_name] => maps.push(MapCase {
+                serde_name,
+                composite_name,
+            }),
+            ["premul", group, operation, bg, fg, expected] => premul.push(PremulCase {
+                group,
+                operation,
+                bg: rgba8(bg),
+                fg: rgba8(fg),
+                expected: rgba8(expected),
+            }),
+            _ => panic!("malformed BlendMode semantic oracle line: {line}"),
+        }
+    }
+    assert!(!maps.is_empty(), "BlendMode map oracle must not be empty");
+    assert!(
+        !premul.is_empty(),
+        "BlendMode premul oracle must not be empty"
+    );
+    (maps, premul)
+}
+
+fn blend_mode(serde_name: &str) -> BlendMode {
+    serde_json::from_str(&format!("\"{serde_name}\"")).expect("oracle BlendMode serde name")
+}
+
+fn composite_mode(name: &str) -> CompositeMode {
+    match name {
+        "normal" => CompositeMode::Normal,
+        "add" => CompositeMode::Add,
+        "multiply" => CompositeMode::Multiply,
+        other => panic!("unknown CompositeMode name in semantic oracle: {other}"),
+    }
+}
+
+fn assert_premul_group(group: &str) {
+    let (_, cases) = oracle_cases();
+    let mut matched = 0;
+    for case in cases.into_iter().filter(|case| case.group == group) {
+        matched += 1;
+        let actual = match case.operation {
+            "over" => premul_over_u8(case.bg, case.fg),
+            "add" => premul_add_u8(case.bg, case.fg),
+            "multiply" => premul_multiply_u8(case.bg, case.fg),
+            other => panic!("unknown premul operation in semantic oracle: {other}"),
+        };
+        assert_eq!(actual, case.expected, "oracle case: {case:?}");
+    }
+    assert!(
+        matched > 0,
+        "premul oracle group must not be empty: {group}"
+    );
+}
 
 fn desc() -> FrameDesc {
     FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true)
@@ -103,57 +193,33 @@ fn blend_mode_closed_set_rejects_unknown_on_deserialize() {
 
 #[test]
 fn blend_mode_serde_roundtrip_closed_variants() {
-    for mode in [BlendMode::Normal, BlendMode::Add, BlendMode::Multiply] {
+    let (maps, _) = oracle_cases();
+    for case in maps {
+        let mode = blend_mode(case.serde_name);
         let json = serde_json::to_string(&mode).unwrap();
         let back: BlendMode = serde_json::from_str(&json).unwrap();
         assert_eq!(back, mode);
+        assert_eq!(json, format!("\"{}\"", case.serde_name));
     }
-    assert_eq!(
-        serde_json::from_str::<BlendMode>(r#""normal""#).unwrap(),
-        BlendMode::Normal
-    );
-    assert_eq!(
-        serde_json::from_str::<BlendMode>(r#""add""#).unwrap(),
-        BlendMode::Add
-    );
-    assert_eq!(
-        serde_json::from_str::<BlendMode>(r#""multiply""#).unwrap(),
-        BlendMode::Multiply
-    );
 }
 
 #[test]
 fn doc_blend_maps_one_to_one_onto_composite_mode() {
-    assert_eq!(
-        composite_mode_in_graph(BlendMode::Normal),
-        CompositeMode::Normal
-    );
-    assert_eq!(composite_mode_in_graph(BlendMode::Add), CompositeMode::Add);
-    assert_eq!(
-        composite_mode_in_graph(BlendMode::Multiply),
-        CompositeMode::Multiply
-    );
+    let (maps, _) = oracle_cases();
+    for case in maps {
+        assert_eq!(
+            composite_mode_in_graph(blend_mode(case.serde_name)),
+            composite_mode(case.composite_name)
+        );
+    }
 }
 
 #[test]
 fn premul_blend_formulas_match_cpu_reference() {
-    // GPU シェーダ(composite_blend.wgsl)と同一式の CPU 正本。画素審判の期待値置き場。
-    let bg = [0u8, 128, 0, 128];
-    let fg = [128u8, 0, 0, 128];
-    assert_eq!(premul_over_u8(bg, fg), [128, 64, 0, 192]);
-    assert_eq!(premul_add_u8(bg, fg), [128, 128, 0, 255]);
-    assert_eq!(premul_multiply_u8(bg, fg), [64, 64, 0, 192]);
+    assert_premul_group("formula");
 }
 
 #[test]
 fn premul_multiply_keeps_uncovered_and_source_over_alpha() {
-    // fg 透明 → bg を残す。両不透明 → rgb 積・α source-over。
-    assert_eq!(
-        premul_multiply_u8([0, 200, 100, 255], [0, 0, 0, 0]),
-        [0, 200, 100, 255]
-    );
-    assert_eq!(
-        premul_multiply_u8([200, 100, 50, 255], [128, 64, 32, 255]),
-        [100, 25, 6, 255]
-    );
+    assert_premul_group("multiply_edge");
 }

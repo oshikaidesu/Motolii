@@ -21,6 +21,7 @@
 #   ./scripts/check-golden-update-policy.sh [base_ref]
 #   ./scripts/check-golden-update-policy.sh --files-from -
 #   CLASSIFICATION_FILE=... ./scripts/check-golden-update-policy.sh --files-from -
+#   MIGRATION_FILE=...      # harness -> oracle 移行台帳
 #   GOLDEN_POLICY_BASE_CLASSIFICATION=...  # --files-from 用に base 台帳を注入(回帰テスト)
 #   GOLDEN_POLICY_BASE_LOOKUP_ONLY=1       # 注入台帳を effective class 参照のみに使い、削り検査をスキップ(回帰テスト専用)
 #   GOLDEN_POLICY_SKIP_CONSISTENCY=1  # 負例フィクスチャ用(本番CIでは設定しない)
@@ -30,9 +31,12 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 CLASSIFICATION_FILE="${CLASSIFICATION_FILE:-crates/motolii-testkit/golden_policy/classification.tsv}"
+MIGRATION_FILE="${MIGRATION_FILE:-crates/motolii-testkit/golden_policy/migrations.tsv}"
 CLASS_MARKER_PROVISIONAL='MOTOLII_GOLDEN_CLASS: provisional'
 REGENERATE_MARKER='MOTOLII_REGENERATE_WHEN:'
 BASE_CLASS_ROWS=""
+MIGRATION_ROWS=""
+BASE_MIGRATION_ROWS=""
 
 die() {
   echo "golden-update-policy FAILED: $*" >&2
@@ -71,6 +75,26 @@ load_classification() {
   done <"$input"
 }
 
+load_migrations() {
+  local file="$1"
+  local input
+  if [[ "$file" == "-" ]]; then
+    input="/dev/stdin"
+  else
+    [[ -f "$file" ]] || die "migration file missing: $file"
+    input="$file"
+  fi
+  while IFS= read -r line || [[ -n "${line:-}" ]]; do
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    local source target rest
+    IFS=$'\t' read -r source target rest <<<"$line"
+    if [[ -z "$source" || -z "$target" || -n "${rest:-}" || "$source" == "$target" ]]; then
+      die "malformed migration line (need distinct source<TAB>target): $line"
+    fi
+    printf '%s\t%s\n' "$source" "$target"
+  done <"$input"
+}
+
 lookup_in_rows() {
   local rows="$1"
   local want="$2"
@@ -93,6 +117,52 @@ lookup_base_class() {
   lookup_in_rows "$BASE_CLASS_ROWS" "$1"
 }
 
+lookup_migration_target() {
+  local want="$1"
+  local source target
+  while IFS=$'\t' read -r source target; do
+    [[ -z "${source:-}" ]] && continue
+    if [[ "$source" == "$want" ]]; then
+      echo "$target"
+      return 0
+    fi
+  done <<<"$MIGRATION_ROWS"
+  return 1
+}
+
+semantic_harness_migrated() {
+  local source="$1"
+  local target
+  target="$(lookup_migration_target "$source" || true)"
+  [[ -n "$target" ]] || return 1
+  [[ -f "$source" ]] || return 1
+  [[ -f "$target" ]] || return 1
+  [[ "$(lookup_class "$target" || true)" == "semantic" ]]
+}
+
+enforce_base_migration_lock() {
+  local base_rows="$1"
+  BASE_MIGRATION_ROWS="$base_rows"
+  local source target now
+  while IFS=$'\t' read -r source target; do
+    [[ -z "${source:-}" ]] && continue
+    now="$(lookup_migration_target "$source" || true)"
+    [[ "$now" == "$target" ]] \
+      || die "semantic migration ledger entry removed or retargeted: $source -> $target"
+  done <<<"$base_rows"
+}
+
+load_base_migrations() {
+  local base="$1"
+  BASE_MIGRATION_ROWS=""
+  if ! git cat-file -e "$base:$MIGRATION_FILE" 2>/dev/null; then
+    return 0
+  fi
+  local base_rows
+  base_rows="$(git show "$base:$MIGRATION_FILE" | load_migrations -)"
+  enforce_base_migration_lock "$base_rows"
+}
+
 # HEAD優先。未分類なら base を参照(台帳から外して変更する迂回を塞ぐ)。
 effective_class() {
   local path="$1"
@@ -100,6 +170,10 @@ effective_class() {
   class="$(lookup_class "$path" || true)"
   if [[ -n "$class" ]]; then
     echo "$class"
+    return 0
+  fi
+  if [[ "$(lookup_base_class "$path" || true)" == "semantic" ]] \
+    && semantic_harness_migrated "$path"; then
     return 0
   fi
   lookup_base_class "$path" || true
@@ -127,6 +201,15 @@ validate_classification_consistency() {
   if [[ "$semantic_count" -lt 1 ]]; then
     die "semantic classification is empty (refuse vacuous forbid-CI)"
   fi
+
+  local source target
+  while IFS=$'\t' read -r source target; do
+    [[ -z "${source:-}" ]] && continue
+    [[ -f "$source" ]] || die "semantic migration source missing: $source"
+    [[ -f "$target" ]] || die "semantic migration target missing: $target"
+    [[ "$(lookup_class "$target" || true)" == "semantic" ]] \
+      || die "semantic migration target is not classified semantic: $source -> $target"
+  done <<<"$MIGRATION_ROWS"
 }
 
 # base 台帳の semantic/provisional を保護。削り・分類外化・semantic降格を拒否。
@@ -141,7 +224,10 @@ enforce_base_classification_lock() {
     case "$class" in
       semantic)
         if [[ -z "$now" ]]; then
-          die "semantic entry removed from classification (demotion forbidden): $path"
+          if semantic_harness_migrated "$path"; then
+            continue
+          fi
+          die "semantic entry removed without a valid harness-to-oracle migration: $path"
         fi
         if [[ "$now" != "semantic" ]]; then
           die "semantic entry demoted to '$now' (forbidden): $path"
@@ -229,6 +315,7 @@ normalize_change_line() {
 }
 
 CLASS_ROWS="$(load_classification "$CLASSIFICATION_FILE")"
+MIGRATION_ROWS="$(load_migrations "$MIGRATION_FILE")"
 if [[ "${GOLDEN_POLICY_SKIP_CONSISTENCY:-}" != "1" ]]; then
   validate_classification_consistency
 fi
@@ -245,6 +332,7 @@ if [[ "${1:-}" == "--files-from" ]]; then
 else
   # ライブCI: git base 台帳で lock。注入があれば二重適用はしない(注入優先はテスト専用)。
   if [[ -z "${GOLDEN_POLICY_BASE_CLASSIFICATION:-}" ]]; then
+    load_base_migrations "${1:-origin/main}"
     load_base_classification "${1:-origin/main}"
   fi
 fi
