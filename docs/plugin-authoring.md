@@ -12,6 +12,10 @@
 
 Motoliiの長期の北極星は、映像表現を特定projectの手順から切り離し、演奏・再利用・保存・配布できる単位にすることにある。「映像制作におけるVST」はその構造の比喩であり、このplugin境界は単なる内製effect追加口ではない。Host全体をforkせず、ひとつの表現に集中できる作者面を作る。
 
+VSM-A0I-1〜3でContract Catalog、Documentのprepared resolution、graph／exportのruntime必須化までは実装済みである。一方、別crate作者面はまだ成立していない。現行traitが要求するGPU／Value型の公開façade、依存allowlist、first-party組み立て点は[A1S](reviews/2026-07-17-vism-a1-public-crate-boundary-spec.md)を正本とし、移動前pixel基線VSM-A1Gの完了までOpacity外部crate化を開始しない。
+
+> **現在の停止線**: 「別crateへファイルを移した」だけで第三者と同じ境界と判定しない。plugin crateは`motolii-plugin`だけへ依存し、GPU golden／purity／parityはHost側の審判から検査する。private依存の例外やtestkitへのdev依存を追加しない。
+
 そのため、pluginは一枚の絵を出せれば完成ではない。次の全条件を満たして初めて、作品に置ける表現単位になる。
 
 - Hostが所有する時刻、型付きparameter、入力、seed、Qualityだけから再現できる

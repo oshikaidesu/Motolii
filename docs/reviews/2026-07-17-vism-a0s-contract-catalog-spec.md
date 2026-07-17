@@ -2,7 +2,7 @@
 
 作成日: 2026-07-17
 
-状態: **仕様決定／コード変更なし**。本書は[VSM-A0D](2026-07-17-vism-a0d-contract-migration-ownership-decision.md)の所有決定を、実装時に別解を発明できない公開型・呼出境界・拒否fixtureへ落とす。`.vism` manifest、動的loader、UI、永続schemaは対象外である。
+状態: **仕様決定／A0I-1〜3実装完了**。本書は[VSM-A0D](2026-07-17-vism-a0d-contract-migration-ownership-decision.md)の所有決定を、実装時に別解を発明できない公開型・呼出境界・拒否fixtureへ落とす。`.vism` manifest、動的loader、UI、永続schemaは対象外である。
 
 関連文書: [VSM-A0 inventory](2026-07-17-vism-a0-plugin-boundary-inventory.md)、[Vism実装計画](2026-07-17-vism-implementation-plan.md)、[M2 Document仕様](../specs/M2-document-model.md)、[plugin作者規約](../plugin-authoring.md)
 
@@ -384,6 +384,8 @@ A0Dの「A0Iを1 ticket」はcall site監査後には大きすぎる。意味順
 
 完了条件: `cargo test -p motolii-plugin`、既存purity、workspace全緑。
 
+**完了**: `cb2c9a7`。`PluginContract`、immutable catalog、validated runtime、reference contractと拒否fixtureを実装した。
+
 ### VSM-A0I-2 — Document prepared resolution
 
 - §5、§6を`motolii-doc`へ実装。
@@ -393,6 +395,8 @@ A0Dの「A0Iを1 ticket」はcall site監査後には大きすぎる。意味順
 - Sine rename、raw bytes／revision不変、unknown／future／chain欠落／conflict／kind違いをfixture化。
 
 完了条件: M2 D1f/D6のopen／round-trip意味を維持、`cargo test -p motolii-doc`、workspace全緑。
+
+**完了**: `e4f42c6`。clone-only prepared resolution、catalog保持Writer、resolved open、degraded分類とraw不変fixtureを実装した。
 
 ### VSM-A0I-3 — 製品実行入口
 
@@ -404,7 +408,9 @@ A0Dの「A0Iを1 ticket」はcall site監査後には大きすぎる。意味順
 
 完了条件: D3／D6／CLI E2E、`cargo test --workspace`全緑。
 
-A1はA0I-3完了まで開始しない。A2はA1後とし、中央Sine migrationの削除を担当する。
+**完了**: `057e2e9`。graph／ExportJob／製品CLIをruntime必須化し、export内部registry生成と製品raw openを拒否するfixtureを実装した。
+
+A1は[A1S公開crate境界仕様](2026-07-17-vism-a1-public-crate-boundary-spec.md)と移動前pixel基線VSM-A1Gの完了まで開始しない。A2はA1後とし、中央Sine migrationの削除を担当する。
 
 ## 10. A0I拒否fixture
 
