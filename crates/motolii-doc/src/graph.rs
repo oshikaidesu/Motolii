@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use motolii_core::{FrameDesc, RationalTime, TimeMapError};
 use motolii_eval::{DataTracks, Value};
 use motolii_nodes::{CanonicalPoint, CanonicalSize, ClippingMaskMode, CompositeMode, RectOverlay};
-use motolii_plugin::{NodeDesc, PluginId, PluginRegistry, ResolvedParams};
+use motolii_plugin::{NodeDesc, PluginId, PluginRegistry, PluginRuntime, ResolvedParams};
 use motolii_render::{LinearRenderGraph, RenderStep, SolidSource, TextureId};
 
 use crate::affine::Affine2D;
@@ -19,7 +19,7 @@ use crate::param_eval::{
 };
 use crate::schema::{BlendMode, Clip, ClipSource, Group, ItemEnvelope, MaskMode, TrackItem};
 use crate::spatial_resolve::resolve_document_spaces;
-use crate::{AssetId, Document, LayerId};
+use crate::{AssetId, Document, DocumentPluginError, LayerId, PluginDiagnostic};
 
 /// M1互換の矩形 LayerSource(プラグインID文字列。レジストリ未登録でも D3 が OverlayRect へ落とす)。
 pub const RECT_LAYER_SOURCE: &str = "doc.layer_source.rect";
@@ -66,6 +66,10 @@ pub enum GraphError {
         #[source]
         source: motolii_plugin::PluginError,
     },
+    #[error(transparent)]
+    PluginDocument(#[from] DocumentPluginError),
+    #[error("document plugins are not executable: {0:?}")]
+    PluginDiagnostics(Vec<PluginDiagnostic>),
     #[error("unsupported clip source plugin: {0}")]
     UnsupportedSourcePlugin(String),
     #[error("VectorRecipe clip is not rasterized in D3 v1 (layer {0}); use Plugin rect or Asset")]
@@ -132,16 +136,22 @@ pub fn build_document_frame_graph(
     eval: EvaluationTime,
     desc: FrameDesc,
     data_tracks: &DataTracks,
-    registry: &PluginRegistry,
+    runtime: &PluginRuntime,
     project_root: Option<&Path>,
 ) -> Result<DocumentFrameGraph, GraphError> {
+    let prepared = doc.prepare_plugins(runtime.catalog())?;
+    let mut diagnostics = prepared.diagnostics().to_vec();
+    diagnostics.extend(prepared.execution_diagnostics(runtime));
+    if !diagnostics.is_empty() {
+        return Err(GraphError::PluginDiagnostics(diagnostics));
+    }
     let any_solo = document_has_solo(doc);
     let mut b = GraphBuilder::new(
         doc,
         desc,
         eval.timeline_time,
         data_tracks,
-        registry,
+        runtime.executors(),
         any_solo,
     );
     let output = b.build_document(project_root)?;

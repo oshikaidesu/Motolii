@@ -13,8 +13,9 @@ use motolii_gpu::{GpuCtx, RgbaDownloader, YuvToRgba};
 use motolii_media::{probe, FrameReader, MediaInfo};
 use motolii_nodes::{ParamOverlayError, ParamRectOverlay};
 use motolii_plugin::{
-    migrate_plugin_params, reference::register_reference_plugins, ParamDriverContext, PluginError,
-    PluginRegistry, TextureRef,
+    migrate_plugin_params,
+    reference::{reference_catalog, register_reference_plugins},
+    ParamDriverContext, PluginError, PluginRegistry, PluginRuntime, TextureRef,
 };
 use motolii_render::{
     render_frame_with_background_texture, BackgroundTextureRequest, RenderSession,
@@ -130,6 +131,10 @@ pub enum ProjectError {
     Media(#[from] motolii_media::MediaError),
     #[error(transparent)]
     Plugin(#[from] motolii_plugin::PluginError),
+    #[error(transparent)]
+    PluginContract(#[from] motolii_plugin::PluginContractError),
+    #[error(transparent)]
+    PluginRuntime(#[from] motolii_plugin::PluginRuntimeError),
     #[error("unsupported project time_map: only identity is accepted until M2")]
     UnsupportedTimeMap,
     #[error(transparent)]
@@ -146,6 +151,13 @@ pub enum ProjectError {
     TimeMap(#[from] TimeMapError),
     #[error(transparent)]
     RationalTime(#[from] RationalTimeError),
+}
+
+fn reference_runtime() -> Result<PluginRuntime, ProjectError> {
+    let catalog = std::sync::Arc::new(reference_catalog()?);
+    let mut executors = PluginRegistry::new();
+    register_reference_plugins(&mut executors)?;
+    Ok(PluginRuntime::try_new(catalog, executors)?)
 }
 
 pub fn load_project_v1(path: impl AsRef<Path>) -> Result<ProjectV1, ProjectError> {
@@ -169,10 +181,9 @@ pub fn load_project_v1_from_str(text: &str) -> Result<ProjectV1, ProjectError> {
 
 /// migrate → resolve_params。成功時は default 充填済み params と現行 effect_version を書き戻す。
 fn normalize_param_drivers(drivers: &mut [ParamDriverV1]) -> Result<(), ProjectError> {
-    let mut registry = PluginRegistry::new();
-    register_reference_plugins(&mut registry)?;
+    let runtime = reference_runtime()?;
     for driver in drivers.iter_mut() {
-        let Some(plugin) = registry.param_driver_by_name(&driver.plugin) else {
+        let Some(plugin) = runtime.executors().param_driver_by_name(&driver.plugin) else {
             return Err(ProjectError::UnknownParamDriver(driver.plugin.clone()));
         };
         let resolved = resolve_raw_params(
@@ -201,10 +212,10 @@ fn normalize_param_drivers(drivers: &mut [ParamDriverV1]) -> Result<(), ProjectE
 }
 
 fn resolve_driver_params(
-    registry: &PluginRegistry,
+    runtime: &PluginRuntime,
     driver: &ParamDriverV1,
 ) -> Result<motolii_plugin::ResolvedParams, ProjectError> {
-    let Some(plugin) = registry.param_driver_by_name(&driver.plugin) else {
+    let Some(plugin) = runtime.executors().param_driver_by_name(&driver.plugin) else {
         return Err(ProjectError::UnknownParamDriver(driver.plugin.clone()));
     };
     resolve_raw_params(
@@ -256,8 +267,7 @@ pub fn build_data_tracks(
     duration: RationalTime,
     sample_rate: Fps,
 ) -> Result<DataTracks, ProjectError> {
-    let mut registry = PluginRegistry::new();
-    register_reference_plugins(&mut registry)?;
+    let runtime = reference_runtime()?;
 
     let mut tracks = DataTracks::new();
     let ctx = ParamDriverContext {
@@ -267,11 +277,11 @@ pub fn build_data_tracks(
     };
 
     for driver in drivers {
-        let Some(plugin) = registry.param_driver_by_name(&driver.plugin) else {
+        let Some(plugin) = runtime.executors().param_driver_by_name(&driver.plugin) else {
             return Err(ProjectError::UnknownParamDriver(driver.plugin.clone()));
         };
         // ロード済みでも、直接構築経路の防御として再解決する。
-        let params = resolve_driver_params(&registry, driver)?;
+        let params = resolve_driver_params(&runtime, driver)?;
         let track = plugin.build_track(ctx, &params)?;
         let id = DataTrackId(driver.track.clone());
         if tracks.get(&id).is_some() {

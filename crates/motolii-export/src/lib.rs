@@ -14,7 +14,7 @@ use motolii_audio::{AudioProgram, CANONICAL_SAMPLE_RATE};
 use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap};
 use motolii_doc::{
     build_document_frame_graph, resolve_asset_path, AssetId, ClipSource, Document, EvaluationTime,
-    GraphError, PluginOpenWarning, TrackItem,
+    GraphError, PluginDiagnostic, TrackItem,
 };
 use motolii_eval::DataTracks;
 use motolii_gpu::{GpuCtx, RgbaDownloader, YuvToRgba};
@@ -23,7 +23,7 @@ use motolii_media::{
     MediaInfo, MixedPcmMuxRequest, SoundtrackMuxRequest,
 };
 use motolii_nodes::{ParamOverlayError, ParamRectOverlay};
-use motolii_plugin::{reference::register_reference_plugins, PluginRegistry, TextureRef};
+use motolii_plugin::{PluginRuntime, TextureRef};
 use motolii_render::{
     render_frame_with_background_texture, render_graph_cached, BackgroundTextureRequest,
     RenderGraphInputs, RenderSession, TextureId,
@@ -71,6 +71,8 @@ pub enum ExportError {
     #[error(transparent)]
     DocGraph(#[from] GraphError),
     #[error(transparent)]
+    DocPlugin(#[from] motolii_doc::DocumentPluginError),
+    #[error(transparent)]
     Plugin(#[from] motolii_plugin::PluginError),
     #[error(transparent)]
     RationalTime(#[from] motolii_core::RationalTimeError),
@@ -92,7 +94,7 @@ pub enum ExportError {
     EmptyVideoAsset,
     /// 実装ガード9 / D1f接続: 開くは警告、書き出しは拒否。
     #[error("export refused: document has degraded plugins (open-only warnings are not allowed on export)")]
-    DegradedPlugins(Vec<PluginOpenWarning>),
+    DegradedPlugins(Vec<PluginDiagnostic>),
     #[error(transparent)]
     Audio(#[from] motolii_audio::AudioError),
 }
@@ -101,6 +103,7 @@ pub enum ExportError {
 #[derive(Debug)]
 pub struct ExportJob<'a> {
     pub doc: &'a Document,
+    pub runtime: &'a PluginRuntime,
     pub output_path: &'a Path,
     pub project_root: Option<&'a Path>,
     pub frame_count: Option<usize>,
@@ -207,16 +210,14 @@ pub fn export_document_video(
     gpu: &GpuCtx,
     job: &ExportJob<'_>,
 ) -> Result<ExportReport, ExportError> {
-    // 実装ガード9: 開く=警告、書き出す=拒否(D1fの接続点。未知pluginは発明しない)。
-    // `doc.layer_source.rect` は known_plugin_info で現行versionのみ既知契約。
-    // 未来版は FutureVersion 警告のままここに残り、書き出しを拒否する。
-    let degraded = job.doc.plugin_open_warnings();
+    // 実装ガード9: 開く=診断、書き出す=拒否(D1fの接続点。未知pluginは発明しない)。
+    let prepared = job.doc.prepare_plugins(job.runtime.catalog())?;
+    let mut degraded = prepared.diagnostics().to_vec();
+    degraded.extend(prepared.execution_diagnostics(job.runtime));
     if !degraded.is_empty() {
         return Err(ExportError::DegradedPlugins(degraded));
     }
 
-    let mut registry = PluginRegistry::new();
-    register_reference_plugins(&mut registry)?;
     let desc = resolve_export_frame_desc(job.doc, job.project_root)?;
     let timeline_fps = job.doc.composition.fps;
     let soundtrack = resolve_audio_export(job)?;
@@ -256,7 +257,7 @@ pub fn export_document_video(
                 EvaluationTime::new(timeline_time),
                 desc,
                 &tracks,
-                &registry,
+                job.runtime,
                 job.project_root,
             )?;
             // スロットごとに独立デコード。テクスチャ寿命をループ末まで延ばす。
@@ -290,7 +291,7 @@ pub fn export_document_video(
                 &RenderGraphInputs {
                     video_sources: &video_inputs,
                     source_time: Some(built.source_time),
-                    plugins: Some(&registry),
+                    plugins: Some(job.runtime.executors()),
                 },
                 Quality::FINAL,
             )?;
