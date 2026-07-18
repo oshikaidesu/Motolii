@@ -23,7 +23,7 @@ test.describe("shared discovery Browser candidate", () => {
     ]);
     await expect(page.getByText("READY", { exact: true })).toHaveCount(0);
     await expect(page.getByText("AVAILABLE", { exact: true })).toHaveCount(0);
-    await expect(page.getByRole("complementary", { name: "Effect detail" })).toContainText(
+    await expect(page.locator("#vism-browser")).not.toContainText(
       "Layered light pulses",
     );
     await expect(page.getByRole("button", { name: "Apply" })).toHaveCount(0);
@@ -48,21 +48,20 @@ test.describe("shared discovery Browser candidate", () => {
   }) => {
     await openCandidate(page);
 
-    const glyph = page.locator('.candidate-plugin-card[data-mode="discover"]');
-    await glyph.click();
-    await expect(page.locator("#plugin-detail-name")).toHaveText("Glyph Current");
-    await expect(page.locator("#plugin-detail-description")).toContainText(
-      "flowing",
+    await expect(
+      page.locator("#inspector #effect-parameter-description"),
+    ).toContainText(
+      "Adjust Intensity and Spread",
     );
-
-    await glyph.dblclick();
-    await expect(page.locator("#undo-state")).toContainText(
-      "Add Glyph Current",
-    );
-
+    await expect(page.locator("#inspector")).not.toContainText("TRANSFORM");
+    await expect(page.locator("#inspector")).toContainText("Pulse rings · Effect");
     const echo = page.locator('.candidate-plugin-card[data-mode="installed"]');
-    await echo.dragTo(page.locator("#stage"));
+    await echo.dblclick();
     await expect(page.locator("#undo-state")).toContainText("Add Echo Bloom");
+
+    const glyph = page.locator('.candidate-plugin-card[data-mode="discover"]');
+    await glyph.dragTo(page.locator("#stage"));
+    await expect(page.locator("#undo-state")).toContainText("Add Glyph Current");
   });
 
   test("uses the same search, source rail, and result grid for Project and Files", async ({

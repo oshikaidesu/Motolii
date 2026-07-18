@@ -13,7 +13,6 @@ function PluginCard({
   thumbnail,
   kind,
   name,
-  description,
   state,
   selected = false,
 }) {
@@ -26,7 +25,6 @@ function PluginCard({
       data-search={search}
       data-plugin-name={name}
       data-plugin-kind={kind}
-      data-plugin-description={description}
       draggable={!state}
       aria-label={`${name}${state ? ` · ${state}` : ""}`}
     >
@@ -146,7 +144,6 @@ function CandidatePluginBrowser() {
               thumbnail="bloom"
               kind="FX"
               name="Echo Bloom"
-              description="Layered light pulses that follow the selected object."
               selected
             />
             <PluginCard
@@ -157,7 +154,6 @@ function CandidatePluginBrowser() {
               thumbnail="glyph"
               kind="G"
               name="Glyph Current"
-              description="Turns text into flowing, rhythm-aware motion."
             />
             <PluginCard
               mode="blocked"
@@ -167,7 +163,6 @@ function CandidatePluginBrowser() {
               thumbnail="fold"
               kind="FX"
               name="Fold Field"
-              description="Folds the image through a spatial geometry field."
               state="Unavailable"
             />
             <PluginCard
@@ -178,22 +173,9 @@ function CandidatePluginBrowser() {
               thumbnail="ribbon"
               kind="G"
               name="Ribbon Array"
-              description="Repeats an object along a controllable ribbon path."
               state="Missing"
             />
           </div>
-          <aside className="candidate-effect-detail" aria-label="Effect detail">
-            <header>
-              <span id="plugin-detail-kind">FX</span>
-              <strong id="plugin-detail-name">Echo Bloom</strong>
-            </header>
-            <p id="plugin-detail-description">
-              Layered light pulses that follow the selected object.
-            </p>
-            <span className="candidate-effect-gesture">
-              Drag to object · Double-click selected
-            </span>
-          </aside>
         </section>
 
         <section

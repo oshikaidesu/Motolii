@@ -531,6 +531,21 @@
   function inspector(mode){
     const head='<div class="panel-head">Inspector</div>';
     const objectAuto=(param,keys)=>`<span class="scrub-hint object-auto" id="${param}-object-state"><i>${state.automation[param]?"AUTO ON":"AUTO OFF"}</i>${keys?`<i>${keys}</i>`:""}</span>`;
+    const effectFocused=$("#vism-browser")?.classList.contains("candidate-plugin-browser");
+    const effectDescription=effectFocused
+      ?'<p class="effect-parameter-description" id="effect-parameter-description">Layered light pulses that follow the selected object. Adjust Intensity and Spread while watching the Stage.</p>'
+      :"";
+    if(mode==="installed"&&effectFocused)return head+`
+      <div class="section"><div class="section-title">EDITING EFFECT <span>ON OBJECT</span></div>
+        <div class="identity"><div class="icon">◎</div><div><b>Echo Bloom</b><small>Pulse rings · Effect</small></div></div>
+      </div>
+      <div class="section"><div class="section-title">ECHO BLOOM <span>HOST PANEL</span></div>${effectDescription}
+        <div class="row"><label>Input</label><span class="value">Pulse rings composite</span><span class="tag">TEXTURE</span></div>
+        <div class="row"><span class="param-label">Intensity <button class="automation-mark ${state.automation.intensity?"on":""}" data-automation="intensity" aria-pressed="${state.automation.intensity}" aria-label="Intensity automation ${state.automation.intensity?"on":"off"}"></button></span><button class="scrub" id="intensity" data-param="intensity" style="--dial-shift:${state.intensity*2}" aria-label="Intensity。無限目盛を左右dragして変更"><span class="scrub-dial" aria-hidden="true"></span><output id="intensity-read">${state.intensity}%</output></button><span class="scrub-hint" id="intensity-auto-state">${state.automation.intensity?"AUTO ON":"AUTO OFF"}</span></div>
+        <div class="row"><span class="param-label">Spread <button class="automation-mark ${state.automation.spread?"on":""}" data-automation="spread" aria-pressed="${state.automation.spread}" aria-label="Spread automation ${state.automation.spread?"on":"off"}"></button></span><button class="scrub" id="spread" data-param="spread" style="--dial-shift:${state.spread*2}" aria-label="Spread。無限目盛を左右dragして変更"><span class="scrub-dial" aria-hidden="true"></span><output id="spread-read">${state.spread}%</output></button><span class="scrub-hint" id="spread-auto-state">${state.automation.spread?"AUTO ON":"AUTO OFF"}</span></div>
+        <div class="row"><label>Blend</label><span class="value">Screen</span><span></span></div>
+      </div>
+      <details class="dev-info"><summary>Developer info</summary><div class="row"><label>Package</label><span class="value">Vism (.vism)</span><span></span></div><div class="row"><label>Identity</label><span class="value">demo.echo-bloom</span><span></span></div></details>`;
     if(mode==="installed") return head+`
       <div class="section"><div class="section-title">SELECTED OBJECT <span></span></div>
         <div class="identity"><div class="icon">G</div><div><b>Pulse rings</b><small>Group · 1 child</small></div></div>
@@ -557,7 +572,7 @@
       <div class="section"><div class="section-title">APPLIED PLUGINS <span>＋</span></div>
         <div class="applied-plugin"><span class="grip">::</span><span class="plugin-mini">◎</span><span><b>Echo Bloom</b><small>IN → Effect → OUT · selected</small></span></div>
       </div>
-      <div class="section"><div class="section-title">ECHO BLOOM <span>HOST PANEL</span></div>
+      <div class="section"><div class="section-title">ECHO BLOOM <span>HOST PANEL</span></div>${effectDescription}
         <div class="row"><label>Input</label><span class="value">Pulse rings composite</span><span class="tag">TEXTURE</span></div>
         <div class="row"><span class="param-label">Intensity <button class="automation-mark ${state.automation.intensity?"on":""}" data-automation="intensity" aria-pressed="${state.automation.intensity}" aria-label="Intensity automation ${state.automation.intensity?"on":"off"}"></button></span><button class="scrub" id="intensity" data-param="intensity" style="--dial-shift:${state.intensity*2}" aria-label="Intensity。無限目盛を左右dragして変更"><span class="scrub-dial" aria-hidden="true"></span><output id="intensity-read">${state.intensity}%</output></button><span class="scrub-hint" id="intensity-auto-state">${state.automation.intensity?"AUTO ON":"AUTO OFF"}</span></div>
         <div class="row"><span class="param-label">Spread <button class="automation-mark ${state.automation.spread?"on":""}" data-automation="spread" aria-pressed="${state.automation.spread}" aria-label="Spread automation ${state.automation.spread?"on":"off"}"></button></span><button class="scrub" id="spread" data-param="spread" style="--dial-shift:${state.spread*2}" aria-label="Spread。無限目盛を左右dragして変更"><span class="scrub-dial" aria-hidden="true"></span><output id="spread-read">${state.spread}%</output></button><span class="scrub-hint" id="spread-auto-state">${state.automation.spread?"AUTO ON":"AUTO OFF"}</span></div>
@@ -765,7 +780,7 @@
         syncColorBook(); setSurface("colors",true);
         status("Color Book",`${state.colorChannel} · Preview`,"Esc");
       }));
-      $("#link-target").onclick=()=>setStageTool("connect");
+      if($("#link-target"))$("#link-target").onclick=()=>setStageTool("connect");
     }
     if(state.mode==="discover"){
       $("#preview-vism").onclick=()=>status("Glyph Current","Preview · Project変更ゼロ","Esc");
@@ -789,17 +804,6 @@
     $("#inspector").innerHTML=inspector(mode); clearUndo(); bindInspector();
     status(copy.crumb,copy.brief,mode==="missing"?"Review recovery":"");
   }
-  function updatePluginDetail(item){
-    if(!item||!$("#plugin-detail-name"))return;
-    $("#plugin-detail-kind").textContent=item.dataset.pluginKind||"";
-    $("#plugin-detail-name").textContent=item.dataset.pluginName||item.textContent.trim();
-    $("#plugin-detail-description").textContent=item.dataset.pluginDescription||"";
-    const apply=$("#plugin-detail-apply"),blocked=["blocked","missing"].includes(item.dataset.mode);
-    apply.disabled=blocked;
-    apply.textContent=blocked?"Unavailable":"Apply";
-    apply.onclick=()=>status(item.dataset.pluginName,"Apply to selected object","Enter");
-  }
-
   function setSurface(kind,open){
     if(kind!=="colors")return;
     const drawer=$("#color-book-drawer");
@@ -992,7 +996,7 @@
   }
   let draggedPlugin=null;
   $$(".vism[data-mode]").forEach(item=>{
-    item.onclick=()=>{setMode(item.dataset.mode);updatePluginDetail(item)};
+    item.onclick=()=>setMode(item.dataset.mode);
     item.ondblclick=()=>commitPlugin(item,"Double click");
     item.ondragstart=event=>{
       if(!item.draggable)return;
