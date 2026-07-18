@@ -609,7 +609,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    app.run()?;
+    app.window().on_close_requested(|| {
+        if let Err(e) = slint::quit_event_loop() {
+            eprintln!("pv1: event loop quit failed: {e}");
+        }
+        slint::CloseRequestResponse::HideWindow
+    });
+    app.show()?;
+    slint::run_event_loop_until_quit()?;
     cmd_tx.send(UiCommand::Shutdown)?;
     let snapshot = worker_handle
         .join()

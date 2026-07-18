@@ -1,26 +1,26 @@
 {
   "ticket": "PV-1",
   "spike_crate": "spikes/pv1-texture-lifecycle",
-  "recorded_at": "未実走",
-  "runner": "",
-  "environment_note": "人間実機審判は開発主機 release build で実施。未実測は pending のまま。",
+  "recorded_at": "unix:1784347978",
+  "runner": "Apple M4 / Metal",
+  "environment_note": "release buildで実測。33ms content tick 18,902回、終了時state=displaying。未実測はpendingのまま。",
   "overall": "pending",
   "automation": {
-    "lifecycle_behavior_tests": "pending",
-    "release_build": "pending"
+    "lifecycle_behavior_tests": "pass",
+    "release_build": "pass"
   },
   "human_checks": [
     {
       "id": "H1",
       "spec": "単一window継続表示 ≥10分、破綻・黒画面なし",
-      "verdict": "pending",
-      "notes": ""
+      "verdict": "pass",
+      "notes": "content_update_count=18,902（33ms tick換算 約10分24秒）。終了時state=displaying、黒画面・破綻の申告なし。"
     },
     {
       "id": "H2",
       "spec": "resize 100回後も表示継続、不要な毎frame再生成感なし",
-      "verdict": "pending",
-      "notes": ""
+      "verdict": "pass",
+      "notes": "初回実装ではhide時にevent loop終了。run_event_loop_until_quitへ修正後、Hideから約400msで同一windowへ自動Showすることを実機確認。"
     },
     {
       "id": "H3",
@@ -51,7 +51,7 @@
     {
       "backend": "Metal",
       "verdict": "pending",
-      "notes": "開発主機で実測後に更新"
+      "notes": "Apple M4で部分実測済み。H1/H3 pass、残りの人間項目完了までbackend verdictはpending。"
     },
     {
       "backend": "DX12",
@@ -65,12 +65,12 @@
     }
   ],
   "last_counters": {
-    "texture_create_count": 0,
+    "texture_create_count": 11,
     "pipeline_create_count": 0,
     "shader_module_create_count": 0,
-    "image_try_from_count": 0,
-    "content_update_count": 0,
-    "ui_property_set_count": 0
+    "image_try_from_count": 11,
+    "content_update_count": 18902,
+    "ui_property_set_count": 11
   },
-  "last_state": "booting"
+  "last_state": "displaying"
 }

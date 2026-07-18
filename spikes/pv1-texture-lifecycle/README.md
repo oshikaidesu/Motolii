@@ -26,7 +26,7 @@ cargo run --release
 1. **Hide**: ボタンで `window.hide()` → 約 400ms 後に自動 `show()` + lifecycle `Show`（手動 Show 不要）
 2. **Minimize**: ボタンで `set_minimized(true)` → 約 400ms 後に自動 `set_minimized(false)` + lifecycle `Restore`
 
-Show / Restore 手動ボタンも残すが、審判手順の正は上記自動往復。
+Hide 中も `run_event_loop_until_quit()` で event loop を維持し、window の close 操作で明示的に終了する。Show / Restore 手動ボタンも残すが、審判手順の正は上記自動往復。
 
 ## 自動層 (CI / ヘッドレス)
 

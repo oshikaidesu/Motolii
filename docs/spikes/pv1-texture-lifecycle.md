@@ -27,7 +27,7 @@
 1. **Hide ボタン**: `window.hide()` → single-shot Timer（~400ms）で自動 `show()` + lifecycle `Show`
 2. **Minimize ボタン**: `set_minimized(true)` → single-shot で自動 `set_minimized(false)` + lifecycle `Restore`
 
-hide 後に同一 window の Show を押せない問題を、event loop 上の自動往復で回避する。
+`run_event_loop_until_quit()` によりhide中もevent loopを維持し、同一windowの自動Showを成立させる。通常のwindow closeでは `quit_event_loop()` を呼んで明示終了する。
 
 ## 禁止構造（本 spike に含めない）
 
