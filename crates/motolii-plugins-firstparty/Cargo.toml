@@ -7,5 +7,6 @@ license.workspace = true
 [dependencies]
 motolii-plugin.workspace = true
 motolii-plugin-opacity.workspace = true
+motolii-plugin-radial-repeater.workspace = true
 motolii-plugin-sine.workspace = true
 thiserror.workspace = true

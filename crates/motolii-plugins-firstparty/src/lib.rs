@@ -7,6 +7,7 @@ use motolii_plugin::{
     PluginRegistry, PluginRuntime, PluginRuntimeError,
 };
 use motolii_plugin_opacity::{opacity_contract, OPACITY_FILTER};
+use motolii_plugin_radial_repeater::{radial_repeater_contract, RADIAL_REPEATER_LAYER_SOURCE};
 use motolii_plugin_sine::{sine_contract, SINE_PARAM_DRIVER};
 
 const REQUIRED_HOST_CAPABILITIES: &[&str] = &["core.filter.opacity"];
@@ -30,6 +31,7 @@ pub fn first_party_catalog() -> Result<PluginCatalog, PluginContractError> {
     let mut builder = PluginCatalogBuilder::new();
     register_reference_contracts(&mut builder)?;
     builder.register(opacity_contract())?;
+    builder.register(radial_repeater_contract())?;
     builder.register(sine_contract())?;
     builder.build()
 }
@@ -38,6 +40,7 @@ pub fn first_party_registry() -> Result<PluginRegistry, PluginError> {
     let mut registry = PluginRegistry::new();
     register_reference_plugins(&mut registry)?;
     registry.register_filter(&OPACITY_FILTER)?;
+    registry.register_layer_source(&RADIAL_REPEATER_LAYER_SOURCE)?;
     registry.register_param_driver(&SINE_PARAM_DRIVER)?;
     Ok(registry)
 }

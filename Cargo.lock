@@ -2746,6 +2746,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "motolii-plugin-radial-repeater"
+version = "0.1.0"
+dependencies = [
+ "motolii-plugin",
+]
+
+[[package]]
 name = "motolii-plugin-sine"
 version = "0.1.0"
 dependencies = [
@@ -2758,6 +2765,7 @@ version = "0.1.0"
 dependencies = [
  "motolii-plugin",
  "motolii-plugin-opacity",
+ "motolii-plugin-radial-repeater",
  "motolii-plugin-sine",
  "thiserror 2.0.18",
 ]

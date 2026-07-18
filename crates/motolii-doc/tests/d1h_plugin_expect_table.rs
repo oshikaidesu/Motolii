@@ -23,7 +23,8 @@ fn plugin_contracts_live_in_catalog_not_param_expect() {
     }
 
     let catalog = first_party_catalog().unwrap();
-    assert_eq!(catalog.len(), 6);
+    assert_eq!(catalog.len(), 7);
     assert!(catalog.get("core.filter.opacity").is_some());
     assert!(catalog.get("core.param.sine").is_some());
+    assert!(catalog.get("core.layer_source.radial_repeater").is_some());
 }
