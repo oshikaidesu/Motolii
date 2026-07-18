@@ -115,9 +115,17 @@ CI URL付きで改めて記録する。
 
 上記は[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)のA〜C完了証跡表におけるコード到達・CI成功の根拠である。単独ではゲート解除、M3入場を意味しない。
 
+## 記録する実証跡（#218 / main — 再締結宣言）
+
+再締結解除宣言のremote証跡:
+
+- PR: `https://github.com/oshikaidesu/Motolii/pull/218`
+- main merge SHA: `cc87d8aa1d2cf2a2d24937d43e66c11df4aa769c`
+
+上記は[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)の再締結解除宣言がmain上で発効した根拠である。コード到達証跡（#217）とは別である。単独ではM3入場を意味しない。
+
 ## 未達（本追補レビューでは主張しない）
 
-1. **本再締結宣言PR**のmain到達（ゲート文書の効力発生条件）
-2. **その後の別M3入場PR**（U0/U1依存の再翻訳と実装許可）
+1. **別M3入場PR**（U0/U1依存の再翻訳と実装許可）
 
-したがって、実コード固定面のP0/P1は0だが、**本再締結宣言PRがmergeされるまで**M3製品実装は開始しない。merge後も製品実装の着手許可は自動解禁されず、別M3入場PRのみがU0/U1依存を最新mainへ再翻訳する。
+再締結解除宣言（PR [#218](https://github.com/oshikaidesu/Motolii/pull/218) / `cc87d8aa1d2cf2a2d24937d43e66c11df4aa769c`）はmain上で発効済みである。実コード固定面のP0/P1は0だが、**M3製品実装の着手許可は自動解禁されず**、別M3入場PRのみがU0/U1依存を最新mainへ再翻訳する。
