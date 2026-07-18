@@ -13,7 +13,7 @@ use motolii_doc::{
     DocumentPluginError, DocumentWriter, DraftDocParam, DraftKeyframe, EffectDefinition,
     EffectDefinitionDraft, EffectDefinitionId, EffectId, EffectUse, ItemEnvelope, LayerId,
     PrepareError, StableIdError, StableIdReservation, Track, TrackId, TrackItem,
-    MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS, WRITER_VERSION,
+    MIN_READER_VERSION_FOR_COMP_CAMERA, WRITER_VERSION,
 };
 use motolii_eval::Interp;
 use motolii_plugin::reference::reference_catalog;
@@ -451,33 +451,58 @@ fn prepared_commands_satisfy_identity_roundtrip() {
 }
 
 #[test]
-fn prepare_rejects_non_v4_documents() {
-    for (version, min) in [(1, 1), (2, 2), (3, 3), (5, 4)] {
+fn prepare_rejects_non_current_writer_contract() {
+    let draft = EffectDefinitionDraft {
+        plugin_id: "p".into(),
+        effect_version: 1,
+        enabled: true,
+        params: BTreeMap::new(),
+        extra: Map::new(),
+    };
+
+    for (version, min) in [(1, 1), (2, 2), (3, 3), (4, 4)] {
         let mut doc = Document::new_current();
         doc.version = version;
         doc.min_reader_version = min;
-        let writer = reference_writer(doc);
-        let draft = EffectDefinitionDraft {
-            plugin_id: "p".into(),
-            effect_version: 1,
-            enabled: true,
-            params: BTreeMap::new(),
-            extra: Map::new(),
-        };
-        let err = writer
-            .prepare_create_effect(LayerId::from_raw(0), 0, draft.clone())
-            .unwrap_err();
-        assert!(matches!(
-            err,
-            PrepareError::Command(CommandError::EffectLifecycleRequiresV4Document { .. })
-        ));
-        assert!(writer
-            .prepare_link_effect_use(LayerId::from_raw(0), 0, EffectDefinitionId::from_raw(0))
-            .is_err());
-        assert!(writer
-            .prepare_copy_local_effect(EffectId::from_raw(0))
-            .is_err());
+        let err = DocumentWriter::new(doc, Arc::new(reference_catalog().unwrap())).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DocumentPluginError::Structural(
+                    DocumentError::CompCameraDisguisedOldVersion { .. }
+                )
+            ),
+            "v{version} min={min}: {err:?}"
+        );
     }
+
+    let mut sub_floor = Document::new_current();
+    sub_floor.min_reader_version = MIN_READER_VERSION_FOR_COMP_CAMERA - 1;
+    let err = DocumentWriter::new(sub_floor, Arc::new(reference_catalog().unwrap())).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            DocumentPluginError::Structural(DocumentError::CompCameraRequiresNewerReader { .. })
+        ),
+        "{err:?}"
+    );
+
+    let mut future = Document::new_current();
+    future.version = WRITER_VERSION + 1;
+    let writer = reference_writer(future);
+    let err = writer
+        .prepare_create_effect(LayerId::from_raw(0), 0, draft.clone())
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        PrepareError::Command(CommandError::EffectLifecycleRequiresV4Document { .. })
+    ));
+    assert!(writer
+        .prepare_link_effect_use(LayerId::from_raw(0), 0, EffectDefinitionId::from_raw(0))
+        .is_err());
+    assert!(writer
+        .prepare_copy_local_effect(EffectId::from_raw(0))
+        .is_err());
 }
 
 #[test]
@@ -709,10 +734,7 @@ fn prepare_create_rejects_stable_id_exhaustion_without_mutation() {
 fn new_current_contract_matches_prepare_gate() {
     let doc = Document::new_current();
     assert_eq!(doc.version, WRITER_VERSION);
-    assert_eq!(
-        doc.min_reader_version,
-        MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS
-    );
+    assert_eq!(doc.min_reader_version, MIN_READER_VERSION_FOR_COMP_CAMERA);
     let writer = reference_writer(doc);
     assert!(writer.validate().is_ok());
 }

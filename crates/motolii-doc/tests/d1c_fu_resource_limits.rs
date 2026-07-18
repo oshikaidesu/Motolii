@@ -26,7 +26,7 @@ fn unique_dir(tag: &str) -> PathBuf {
 }
 
 fn base_doc() -> Document {
-    Document::new_v1()
+    Document::new_current()
 }
 
 fn simple_clip(layer_id: LayerId, asset: AssetId) -> TrackItem {

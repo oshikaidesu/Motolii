@@ -170,7 +170,7 @@ fn rect_clip(layer: LayerId, xform: Transform2D) -> Clip {
 fn look_at_angle_independent_of_document_item_order() {
     let tracks = DataTracks::new();
     let build = |target_first: bool| {
-        let mut doc = Document::new_v1();
+        let mut doc = Document::new_current();
         doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
         let target = doc.layers.allocate("target").unwrap();
         let looker = doc.layers.allocate("looker").unwrap();
@@ -216,7 +216,7 @@ fn look_at_angle_independent_of_document_item_order() {
 /// 親が回転しているとき、world 方向を placement 逆で local へ戻し、最終 world 軸が target を向く。
 #[test]
 fn look_at_rotated_parent_world_axis_points_at_target() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let parent = doc.layers.allocate("parent").unwrap();
     let looker = doc.layers.allocate("looker").unwrap();

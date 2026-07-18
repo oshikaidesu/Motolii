@@ -97,7 +97,7 @@ pub use plugin_resolution::{
 };
 pub use schema::{
     asset_components_require_newer_reader, AudioComponent, AudioOutOfRange, BlendMode, Clip,
-    ClipSource, ClippingMaskSettings, CompositeOrder, Composition, CompositionError,
+    ClipSource, ClippingMaskSettings, CompCameraDoc, CompositeOrder, Composition, CompositionError,
     EffectDefinition, EffectInstance, EffectUse, Group, ItemEnvelope, LineJoin, MaskMode, PathOp,
     PointType, Soundtrack, SoundtrackError, StandardShape, StreamKind, StreamSelector, Track,
     TrackItem, Transform2D, TrimMode, VectorContent, VectorRecipe, VideoComponent,
@@ -109,7 +109,7 @@ pub use stable_id::{
 pub use track_id::{TrackId, TrackIdError, TrackIdTable};
 pub use undo::{Macro, UndoError, UndoHistory, UndoLimit};
 pub use validate::{
-    DocumentError, MIN_READER_VERSION_FOR_ASSET_COMPONENTS,
+    DocumentError, MIN_READER_VERSION_FOR_ASSET_COMPONENTS, MIN_READER_VERSION_FOR_COMP_CAMERA,
     MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
 };
 
@@ -118,8 +118,6 @@ fn default_min_reader_version() -> u32 {
 }
 
 /// プロジェクト状態。`ProjectV1`とは非継承・版番独立(M2E-11①)。
-///
-/// `CompCamera`は含めない(#55)。未知キーは`extra`に保持し再保存で書き戻す。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Document {
     pub version: u32,
@@ -153,7 +151,7 @@ impl Document {
     pub fn new_current() -> Self {
         Self::empty_at_version(
             persist::WRITER_VERSION,
-            validate::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
+            validate::MIN_READER_VERSION_FOR_COMP_CAMERA,
         )
     }
 
@@ -554,26 +552,25 @@ mod tests {
 
     #[test]
     fn writer_is_sole_mutator_readers_get_arc() {
-        let mut writer = reference_writer(Document::new_v1());
+        let mut writer = reference_writer(Document::new_current());
         let snap_before = writer.snapshot();
-        assert_eq!(render_with_snapshot(&snap_before), 1);
+        assert_eq!(render_with_snapshot(&snap_before), WRITER_VERSION);
         assert_eq!(writer.revision, 0);
 
         writer.edit(|doc| {
-            doc.version = 2;
             doc.bpm = Bpm::try_new(140, 1).unwrap();
         });
         assert_eq!(writer.revision, 1);
 
         let snap_after = writer.snapshot();
-        assert_eq!(snap_before.version, 1);
-        assert_eq!(snap_after.version, 2);
+        assert_eq!(snap_before.version, WRITER_VERSION);
+        assert_eq!(snap_after.version, WRITER_VERSION);
         assert_ne!(snap_before.bpm, snap_after.bpm);
     }
 
     #[test]
     fn background_message_applies_only_via_writer() {
-        let mut writer = reference_writer(Document::new_v1());
+        let mut writer = reference_writer(Document::new_current());
         writer.apply(WriterMessage::SetBpm(Bpm::try_new(100, 1).unwrap()));
         assert_eq!(writer.snapshot().bpm.num(), 100);
         assert_eq!(writer.revision, 1);
@@ -581,7 +578,7 @@ mod tests {
 
     #[test]
     fn document_json_roundtrip_empty() {
-        let doc = Document::new_v1();
+        let doc = Document::new_current();
         let json = serde_json::to_string(&doc).unwrap();
         let back: Document = serde_json::from_str(&json).unwrap();
         assert_eq!(doc, back);
@@ -590,12 +587,18 @@ mod tests {
     #[test]
     fn min_reader_version_defaults_when_absent() {
         let json = r#"{
-            "version":1,
+            "version":5,
             "composition":{
                 "aspect_num":16,
                 "aspect_den":9,
                 "duration":{"num":10,"den":1},
-                "fps":{"num":30,"den":1}
+                "fps":{"num":30,"den":1},
+                "camera":{
+                    "kind":"planar_orthographic",
+                    "center":{"const":{"Vec2":[0.0,0.0]}},
+                    "roll_radians":{"const":{"F64":0.0}},
+                    "height":{"const":{"F64":1.0}}
+                }
             },
             "bpm":{"num":120,"den":1}
         }"#;

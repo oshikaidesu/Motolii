@@ -97,7 +97,8 @@ fn golden_corpus_migrates_both_legacy_generations() {
             assert!(
                 msg.contains("timeline_start")
                     || msg.contains("path_ops")
-                    || msg.contains("unknown field"),
+                    || msg.contains("unknown field")
+                    || msg.contains("missing field `camera`"),
                 "load must keep rejecting legacy for {}: {msg}",
                 entry.path
             );
@@ -350,6 +351,12 @@ fn dependency_edges_survive_migration() {
     });
     // 現行スキーマを一度legacy time_map風に壊してから戻す: timeline_startをJSONへ注入
     let mut value = serde_json::to_value(&doc).unwrap();
+    value["version"] = json!(1);
+    value["min_reader_version"] = json!(1);
+    value["composition"]
+        .as_object_mut()
+        .unwrap()
+        .remove("camera");
     value["tracks"][0]["items"][0]["time_map"] = json!({
         "source_start": {"num": 0, "den": 1},
         "timeline_start": {"num": 0, "den": 1},
@@ -427,7 +434,7 @@ fn dry_run_and_noop_do_not_touch_files() {
     assert_eq!(fs::read(&path).unwrap(), original);
 
     let current = dir.join("current.json");
-    let doc = Document::new_v1();
+    let doc = Document::new_current();
     common::session::save_document_via_session(&current, &doc);
     let before = fs::read(&current).unwrap();
     let noop = common::session::migrate_document_file_via_session(

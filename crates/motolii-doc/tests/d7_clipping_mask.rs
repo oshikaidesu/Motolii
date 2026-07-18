@@ -65,7 +65,7 @@ fn clipped_doc(
     mode: MaskMode,
     mask_visible: bool,
 ) -> Document {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let mask_layer = doc.layers.allocate("mask").unwrap();
     let content_layer = doc.layers.allocate("content").unwrap();

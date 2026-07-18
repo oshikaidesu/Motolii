@@ -23,7 +23,10 @@ use crate::persist::{
     check_migration_allowed, classify_open_mode, save_document, OpenMode, PersistError,
     READER_VERSION, WRITER_VERSION,
 };
-use crate::schema::{Clip, ClipSource, Group, PathOp, TrackItem, VectorContent, VectorRecipe};
+use crate::schema::{
+    Clip, ClipSource, CompCameraDoc, Group, PathOp, TrackItem, VectorContent, VectorRecipe,
+};
+use crate::validate::MIN_READER_VERSION_FOR_COMP_CAMERA;
 use crate::{Document, DocumentError};
 
 /// 現行スキーマへ揃えたあとの文書版(=書込能力)。
@@ -102,6 +105,12 @@ pub enum MigrateError {
     StableId(String),
     #[error("hybrid effect entry has both definition_id and inline definition fields at {path}")]
     HybridEffectEntry { path: String },
+    #[error(
+        "document version {version} must not carry composition.camera; migration inserts default camera (D1j)"
+    )]
+    DisguisedCompCamera { version: u32 },
+    #[error("composition.camera migration failed: {0}")]
+    CompCameraMigration(String),
     #[error("document root must be a JSON object")]
     NotAnObject,
 }
@@ -179,6 +188,7 @@ pub fn count_document(doc: &Document) -> DocumentCounts {
             count_param(param, &mut keyframe_count);
         }
     }
+    count_comp_camera(&doc.composition.camera, &mut keyframe_count);
     DocumentCounts {
         track_count: doc.tracks.len(),
         clip_count,
@@ -316,6 +326,20 @@ fn count_param(param: &DocParam, keys: &mut usize) {
     }
 }
 
+fn count_comp_camera(camera: &CompCameraDoc, keys: &mut usize) {
+    match camera {
+        CompCameraDoc::PlanarOrthographic {
+            center,
+            roll_radians,
+            height,
+        } => {
+            count_param(center, keys);
+            count_param(roll_radians, keys);
+            count_param(height, keys);
+        }
+    }
+}
+
 fn assert_counts_preserved(
     before: DocumentCounts,
     after: DocumentCounts,
@@ -359,6 +383,15 @@ fn count_json_document(root: &Value) -> DocumentCounts {
                     count_json_param(Some(param), &mut keyframe_count);
                 }
             }
+        }
+    }
+    if let Some(camera) = root
+        .get("composition")
+        .and_then(|c| c.get("camera"))
+        .and_then(|c| c.as_object())
+    {
+        for key in ["center", "roll_radians", "height"] {
+            count_json_param(camera.get(key), &mut keyframe_count);
         }
     }
     DocumentCounts {
@@ -553,6 +586,8 @@ pub fn migrate_bytes_with_limits(
         steps.push("inline_effects_to_definition_use");
     }
 
+    migrate_comp_camera_json(&mut root, from_version, &mut steps)?;
+
     // 変換後JSONを現行Documentへ。ResourceLimitsはdeserialize後に再検査。
     let mut doc: Document = serde_json::from_value(root)?;
     check_document_resource_limits(&doc, limits)?;
@@ -563,6 +598,8 @@ pub fn migrate_bytes_with_limits(
     assert_counts_preserved(before_counts, after_rewrite)?;
 
     if steps.contains(&"inject_stable_ids") || steps.contains(&"inline_effects_to_definition_use") {
+        bump_min_reader_for_nest_schema_change(&mut doc, LATEST_DOCUMENT_VERSION);
+    } else if steps.contains(&"insert_default_comp_camera") {
         bump_min_reader_for_nest_schema_change(&mut doc, LATEST_DOCUMENT_VERSION);
     } else if doc_has_stable_ids(&doc) && doc.min_reader_version < LATEST_DOCUMENT_VERSION {
         // 既にidを持つ旧JSONでもvalidateのmin_reader下限を満たす。すでに下限を満たす
@@ -590,6 +627,52 @@ pub fn migrate_bytes_with_limits(
         }
     };
     Ok((doc, report))
+}
+
+fn default_comp_camera_json() -> Value {
+    serde_json::to_value(CompCameraDoc::default_planar_orthographic())
+        .expect("default planar camera serializes")
+}
+
+/// v1–v4で`composition.camera`欠落時のみ既定cameraをJSON挿入し、版を5へ上げる。
+fn migrate_comp_camera_json(
+    root: &mut Value,
+    from_version: u32,
+    steps: &mut Vec<&'static str>,
+) -> Result<(), MigrateError> {
+    if from_version > MIN_READER_VERSION_FOR_COMP_CAMERA - 1 {
+        return Ok(());
+    }
+    let Value::Object(map) = root else {
+        return Err(MigrateError::NotAnObject);
+    };
+    let composition = map
+        .get_mut("composition")
+        .ok_or_else(|| MigrateError::CompCameraMigration("composition missing".into()))?;
+    let Value::Object(comp_map) = composition else {
+        return Err(MigrateError::CompCameraMigration(
+            "composition must be object".into(),
+        ));
+    };
+    if comp_map.contains_key("camera") {
+        return Err(MigrateError::DisguisedCompCamera {
+            version: from_version,
+        });
+    }
+    comp_map.insert("camera".into(), default_comp_camera_json());
+    map.insert("version".into(), json!(MIN_READER_VERSION_FOR_COMP_CAMERA));
+    let min = map
+        .get("min_reader_version")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1) as u32;
+    map.insert(
+        "min_reader_version".into(),
+        json!(min.max(MIN_READER_VERSION_FOR_COMP_CAMERA)),
+    );
+    if !steps.contains(&"insert_default_comp_camera") {
+        steps.push("insert_default_comp_camera");
+    }
+    Ok(())
 }
 
 fn rewrite_legacy_shapes(

@@ -15,8 +15,8 @@ use crate::doc_value::DocValue;
 use crate::param::DocParam;
 use crate::param_expect::{self, path_op_scalar, vec2_axis, ExpectedValueType, ParamConstraints};
 use crate::schema::{
-    asset_components_require_newer_reader, Clip, ClipSource, Group, ItemEnvelope, PathOp,
-    StandardShape, StreamKind, TrackItem, Transform2D, VectorContent,
+    asset_components_require_newer_reader, Clip, ClipSource, CompCameraDoc, Group, ItemEnvelope,
+    PathOp, StandardShape, StreamKind, TrackItem, Transform2D, VectorContent,
 };
 use crate::track_id::TrackId;
 use crate::{Document, LayerId};
@@ -161,6 +161,19 @@ pub enum DocumentError {
         "video stream ordinal {ordinal} is not supported yet (layer {layer_id}); only ordinal 0 is drawable in AG-1"
     )]
     UnsupportedVideoStreamOrdinal { layer_id: u64, ordinal: u32 },
+    /// D1j: `composition.camera`を含む文書が宣言すべき`min_reader_version`下限。
+    #[error(
+        "document contains composition.camera but min_reader_version ({min_reader_version}) < {required} required (D1j)"
+    )]
+    CompCameraRequiresNewerReader {
+        min_reader_version: u32,
+        required: u32,
+    },
+    /// D1j: v1–v4 JSONにcamera形payloadを載せた版偽装はtyped reject。
+    #[error(
+        "document version {version} must not carry composition.camera before v{required}; use migrate (D1j)"
+    )]
+    CompCameraDisguisedOldVersion { version: u32, required: u32 },
 }
 
 /// A8/D2: `EffectInstance.id`/`DocKeyframe.id`を含む文書が宣言すべき最小`min_reader_version`。
@@ -171,6 +184,9 @@ pub const MIN_READER_VERSION_FOR_ASSET_COMPONENTS: u32 = 3;
 
 /// D1l: `EffectDefinition`/`EffectUse`共有schemaを含む文書が宣言すべき最小`min_reader_version`。
 pub const MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS: u32 = 4;
+
+/// D1j: `composition.camera`を含む文書が宣言すべき最小`min_reader_version`。
+pub const MIN_READER_VERSION_FOR_COMP_CAMERA: u32 = 5;
 
 impl Document {
     /// 保存前不変条件。失敗しても`self`は変更しない(検証のみ)。
@@ -186,6 +202,7 @@ impl Document {
                 duration: self.composition.duration,
             });
         }
+        self.validate_comp_camera()?;
 
         if let Some(st) = &self.soundtrack {
             self.require_asset(st.asset)?;
@@ -234,6 +251,37 @@ impl Document {
         Ok(())
     }
 
+    /// D1j: planar cameraのreader gateとDocParam契約。
+    fn validate_comp_camera(&self) -> Result<(), DocumentError> {
+        if self.version < MIN_READER_VERSION_FOR_COMP_CAMERA {
+            return Err(DocumentError::CompCameraDisguisedOldVersion {
+                version: self.version,
+                required: MIN_READER_VERSION_FOR_COMP_CAMERA,
+            });
+        }
+        if self.min_reader_version < MIN_READER_VERSION_FOR_COMP_CAMERA {
+            return Err(DocumentError::CompCameraRequiresNewerReader {
+                min_reader_version: self.min_reader_version,
+                required: MIN_READER_VERSION_FOR_COMP_CAMERA,
+            });
+        }
+        validate_comp_camera_doc(self, &self.composition.camera, "composition.camera")
+    }
+
+    /// load経路: JSON上で旧版にcameraが載っていた場合の版偽装拒否。
+    pub(crate) fn reject_disguised_comp_camera_wire(
+        document_version: u32,
+        composition_has_camera: bool,
+    ) -> Result<(), DocumentError> {
+        if document_version < MIN_READER_VERSION_FOR_COMP_CAMERA && composition_has_camera {
+            return Err(DocumentError::CompCameraDisguisedOldVersion {
+                version: document_version,
+                required: MIN_READER_VERSION_FOR_COMP_CAMERA,
+            });
+        }
+        Ok(())
+    }
+
     /// AG-1: 非legacyのAsset componentを含む文書は`min_reader_version>=3`。
     fn validate_asset_component_reader_gate(&self) -> Result<(), DocumentError> {
         let mut needs = false;
@@ -274,6 +322,7 @@ impl Document {
                 collect_stable_ids_item(item, &mut seen, &mut max_observed)?;
             }
         }
+        collect_stable_ids_comp_camera(&self.composition.camera, &mut seen, &mut max_observed)?;
         if !seen.is_empty() && self.min_reader_version < MIN_READER_VERSION_FOR_STABLE_IDS {
             return Err(DocumentError::StableIdsRequireNewerReader {
                 min_reader_version: self.min_reader_version,
@@ -748,6 +797,11 @@ fn validate_value(
         }
     }
     if let DocValue::F64(v) = value {
+        if constraints.exclusive_min.is_some_and(|min| *v <= min) {
+            return Err(DocumentError::ValueOutOfRange {
+                path: path.to_string(),
+            });
+        }
         if constraints.min.is_some_and(|min| *v < min)
             || constraints.max.is_some_and(|max| *v > max)
         {
@@ -849,6 +903,7 @@ pub(crate) fn collect_document_stable_ids(doc: &Document) -> HashSet<u64> {
             let _ = collect_stable_ids_item(item, &mut seen, &mut max_observed);
         }
     }
+    let _ = collect_stable_ids_comp_camera(&doc.composition.camera, &mut seen, &mut max_observed);
     seen
 }
 
@@ -935,6 +990,24 @@ fn collect_stable_ids_envelope(
         note_stable_id(use_.id.get(), seen, max_observed)?;
     }
     Ok(())
+}
+
+fn collect_stable_ids_comp_camera(
+    camera: &CompCameraDoc,
+    seen: &mut HashSet<u64>,
+    max_observed: &mut Option<u64>,
+) -> Result<(), DocumentError> {
+    match camera {
+        CompCameraDoc::PlanarOrthographic {
+            center,
+            roll_radians,
+            height,
+        } => {
+            collect_stable_ids_param(center, seen, max_observed)?;
+            collect_stable_ids_param(roll_radians, seen, max_observed)?;
+            collect_stable_ids_param(height, seen, max_observed)
+        }
+    }
 }
 
 fn collect_stable_ids_param(
@@ -1048,6 +1121,39 @@ fn collect_stable_ids_transform2d(
     collect_stable_ids_param(&transform.anchor, seen, max_observed)?;
     collect_stable_ids_param(&transform.scale, seen, max_observed)?;
     collect_stable_ids_param(&transform.rotation, seen, max_observed)
+}
+
+fn validate_comp_camera_doc(
+    doc: &Document,
+    camera: &CompCameraDoc,
+    path: &str,
+) -> Result<(), DocumentError> {
+    match camera {
+        CompCameraDoc::PlanarOrthographic {
+            center,
+            roll_radians,
+            height,
+        } => {
+            validate_param(
+                doc,
+                center,
+                param_expect::planar_camera_center(),
+                &format!("{path}.center"),
+            )?;
+            validate_param(
+                doc,
+                roll_radians,
+                param_expect::planar_camera_roll(),
+                &format!("{path}.roll_radians"),
+            )?;
+            validate_param(
+                doc,
+                height,
+                param_expect::planar_camera_height(),
+                &format!("{path}.height"),
+            )
+        }
+    }
 }
 
 /// `VectorContent::SvgAsset` が要求する MIME。

@@ -11,7 +11,6 @@ use motolii_doc::{
     build_import_clip_source, load_document, plan_detach_audio, AudioComponent, Clip, ClipSource,
     Command, CommandError, DocParam, Document, DocumentError, DocumentWriter, ImportAvMode,
     ItemEnvelope, ParentLocator, Track, TrackItem, VideoComponent,
-    MIN_READER_VERSION_FOR_ASSET_COMPONENTS,
 };
 use motolii_plugin::reference::reference_catalog;
 
@@ -26,9 +25,7 @@ struct Fixture {
 }
 
 fn fixture() -> Fixture {
-    let mut doc = Document::new_v1();
-    doc.version = MIN_READER_VERSION_FOR_ASSET_COMPONENTS;
-    doc.min_reader_version = MIN_READER_VERSION_FOR_ASSET_COMPONENTS;
+    let mut doc = Document::new_current();
     let asset = doc
         .assets
         .allocate("clip", "video/mp4", "sha256:a")

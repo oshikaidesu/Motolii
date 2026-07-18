@@ -13,7 +13,7 @@ use motolii_plugin::reference::reference_catalog;
 use std::collections::BTreeMap;
 
 fn valid_minimal() -> Document {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let layer = doc.layers.allocate("a").unwrap();
     let tid = doc.track_ids.allocate("V1").unwrap();
     let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
@@ -132,8 +132,8 @@ fn color_out_of_range_fails() {
         id: use_id,
         definition_id: def_id,
     });
-    doc.version = 4;
-    doc.min_reader_version = 4;
+    doc.version = 5;
+    doc.min_reader_version = 5;
     doc.validate().unwrap();
     assert!(matches!(
         doc.prepare_plugins(&reference_catalog().unwrap()),

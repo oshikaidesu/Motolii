@@ -4,24 +4,23 @@
 
 use motolii_doc::{
     load_document_bytes_with_limits, Document, OpenMode, ResourceLimits,
-    MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS, READER_VERSION, WRITER_VERSION,
+    MIN_READER_VERSION_FOR_COMP_CAMERA, MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS, READER_VERSION,
+    WRITER_VERSION,
 };
 
 #[test]
 fn current_versions_are_one_contract() {
-    assert_eq!(READER_VERSION, 4);
-    assert_eq!(WRITER_VERSION, 4);
+    assert_eq!(READER_VERSION, 5);
+    assert_eq!(WRITER_VERSION, 5);
     assert_eq!(MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS, 4);
+    assert_eq!(MIN_READER_VERSION_FOR_COMP_CAMERA, 5);
 }
 
 #[test]
 fn new_current_roundtrips_as_read_write_without_version_changes() {
     let doc = Document::new_current();
     assert_eq!(doc.version, WRITER_VERSION);
-    assert_eq!(
-        doc.min_reader_version,
-        MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS
-    );
+    assert_eq!(doc.min_reader_version, MIN_READER_VERSION_FOR_COMP_CAMERA);
 
     let bytes = serde_json::to_vec(&doc).unwrap();
     let opened = load_document_bytes_with_limits(&bytes, &ResourceLimits::production()).unwrap();

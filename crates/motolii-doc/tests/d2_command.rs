@@ -406,7 +406,7 @@ fn layer_entries(doc: &Document) -> BTreeMap<u64, String> {
 
 #[test]
 fn effect_and_keyframe_ids_never_repeat_and_are_addressable() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let a = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
     let b = KeyframeId::from_raw(doc.next_stable_id.allocate().unwrap());
     let c = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
@@ -874,7 +874,7 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
 
 #[test]
 fn duplicate_undo_redo_loop_does_not_grow_layer_table() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let group_layer = doc.layers.allocate("group").unwrap();
     let child_a = doc.layers.allocate("child_a").unwrap();
     let child_b = doc.layers.allocate("child_b").unwrap();
@@ -922,7 +922,7 @@ fn duplicate_undo_redo_loop_does_not_grow_layer_table() {
 
 #[test]
 fn duplicate_remaps_plugin_lookat_within_subtree() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let group_layer = doc.layers.allocate("group").unwrap();
     let child_a = doc.layers.allocate("child_a").unwrap();
     let child_b = doc.layers.allocate("child_b").unwrap();

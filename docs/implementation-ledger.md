@@ -109,7 +109,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 | 順序 | ID | Phase | 状態 | 起票条件 | 次の出口 |
 |---|---|---|---|---|---|
-| 1 | D1j | M2 | `WAIT` | CAM-G0 merge（D1lはmain到達済み） | v5 planar camera schema/default migration |
+| 1 | D1j | M2 | `DONE` | CAM-G0 merge（D1lはmain到達済み） | v5 planar camera schema/default migration |
 | 2 | U1b-1 | M3 | `WAIT` | U1a-1 merge | render worker/latest mailbox。古い結果E2EはU1b-2 |
 | 3 | U0b-2 | M3 | `WAIT` | U0b-1 merge | Slint非依存domain intent。U0c-1/U2a-1の入口 |
 | 4 | U3a | M3 | `WAIT` | U0a + U0b merge | timeline基盤、U2gのUI依存を解除 |

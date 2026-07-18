@@ -50,6 +50,8 @@ pub struct ParamConstraints {
     pub unit_interval: bool,
     /// F64の下限(含む)。PathOp意味論表の`≥0`等の拒否項目用(D1i-2)。
     pub min: Option<f64>,
+    /// F64の下限(不含)。`height > 0`等の拒否項目用(D1j planar camera)。
+    pub exclusive_min: Option<f64>,
     /// F64の上限(含む)。PathOp意味論表の`∈[-1,1]`等の拒否項目用(D1i-2)。
     pub max: Option<f64>,
     /// F64が整数(端数なし)であること。Repeater.copies等(Lottie整数スロット)。
@@ -64,6 +66,7 @@ impl ParamConstraints {
             allow_follow: false,
             unit_interval: false,
             min: None,
+            exclusive_min: None,
             max: None,
             integer: false,
         }
@@ -76,6 +79,7 @@ impl ParamConstraints {
             allow_follow: false,
             unit_interval: true,
             min: None,
+            exclusive_min: None,
             max: None,
             integer: false,
         }
@@ -88,6 +92,7 @@ impl ParamConstraints {
             allow_follow: false,
             unit_interval: true,
             min: None,
+            exclusive_min: None,
             max: None,
             integer: false,
         }
@@ -101,6 +106,7 @@ impl ParamConstraints {
             allow_follow: true,
             unit_interval: false,
             min: None,
+            exclusive_min: None,
             max: None,
             integer: false,
         }
@@ -114,6 +120,7 @@ impl ParamConstraints {
             allow_follow: false,
             unit_interval: false,
             min: None,
+            exclusive_min: None,
             max: None,
             integer: false,
         }
@@ -131,6 +138,7 @@ impl ParamConstraints {
             allow_follow: false,
             unit_interval: false,
             min: Some(min),
+            exclusive_min: None,
             max: Some(max),
             integer: false,
         }
@@ -144,6 +152,21 @@ impl ParamConstraints {
             allow_follow: false,
             unit_interval: false,
             min: Some(min),
+            exclusive_min: None,
+            max: None,
+            integer: false,
+        }
+    }
+
+    /// F64を`(exclusive_min, +inf)`に閉じる(例: planar camera height>0 — D1j)。
+    pub const fn exclusive_min_f64(exclusive_min: f64) -> Self {
+        Self {
+            expected: ExpectedValueType::F64,
+            allow_look_at: false,
+            allow_follow: false,
+            unit_interval: false,
+            min: None,
+            exclusive_min: Some(exclusive_min),
             max: None,
             integer: false,
         }
@@ -157,6 +180,7 @@ impl ParamConstraints {
             allow_follow: false,
             unit_interval: false,
             min: Some(0.0),
+            exclusive_min: None,
             max: None,
             integer: true,
         }
@@ -217,6 +241,21 @@ pub fn path_op_unit_interval() -> ParamConstraints {
 /// repeater.start_opacity / end_opacity ∈ [0, 1](envelope.opacityと同型)。
 pub fn path_op_opacity() -> ParamConstraints {
     ParamConstraints::unit_f64()
+}
+
+/// Planar orthographic camera center (canonical XY)。
+pub fn planar_camera_center() -> ParamConstraints {
+    ParamConstraints::typed(ExpectedValueType::Vec2)
+}
+
+/// Planar orthographic camera roll (radians)。
+pub fn planar_camera_roll() -> ParamConstraints {
+    ParamConstraints::scalar_f64()
+}
+
+/// Planar orthographic visible height (`height > 0` — D1j)。
+pub fn planar_camera_height() -> ParamConstraints {
+    ParamConstraints::exclusive_min_f64(0.0)
 }
 
 /// Vec2Axes の各軸は常にスカラー。

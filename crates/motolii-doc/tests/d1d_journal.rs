@@ -46,7 +46,7 @@ fn tiny_limits() -> ResourceLimits {
 
 /// 1 clip を持つ最小文書(Command リプレイ試験用)。
 fn doc_with_clip() -> (Document, LayerId) {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let layer = doc.layers.allocate("a").unwrap();
     let track = doc.track_ids.allocate("V1").unwrap();
     let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
@@ -114,7 +114,7 @@ fn journal_module_has_no_truncate_repair_path() {
 fn roundtrip_checkpoint_open() {
     let dir = unique_dir("roundtrip");
     let path = dir.join("proj.json");
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.bpm = Bpm::try_new(140, 1).unwrap();
     common::session::save_journal(&path, &doc, &SaveProjectOptions::default());
     let (_session, opened) = common::session::open_recovered(&path);
@@ -166,7 +166,7 @@ fn replay_applies_committed_edits_when_main_behind() {
 fn pinned_generation_survives_rotation() {
     let dir = unique_dir("pinned");
     let path = dir.join("proj.json");
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.bpm = Bpm::try_new(110, 1).unwrap();
     common::session::save_journal(
         &path,
@@ -222,7 +222,11 @@ fn pinned_generation_survives_rotation() {
 fn uuid_cross_refs_link_snapshot_and_journal_record() {
     let dir = unique_dir("uuid-refs");
     let path = dir.join("proj.json");
-    common::session::save_journal(&path, &Document::new_v1(), &SaveProjectOptions::default());
+    common::session::save_journal(
+        &path,
+        &Document::new_current(),
+        &SaveProjectOptions::default(),
+    );
     let catalog = load_catalog(&path).unwrap().unwrap();
     let entry = &catalog.generations[0];
     assert_ne!(entry.id, uuid::Uuid::nil());
@@ -256,7 +260,7 @@ fn journal_limits_return_typed_errors() {
     tiny.max_command_payload_bytes = 1;
     let err = common::session::save_journal_result(
         &path,
-        &Document::new_v1(),
+        &Document::new_current(),
         &SaveProjectOptions {
             limits: tiny,
             journal_edit: Some(set_opacity_cmd(LayerId::from_raw(1), 1.0, 0.5)),
@@ -274,7 +278,11 @@ fn journal_limits_return_typed_errors() {
 
     let dir2 = unique_dir("limits-total");
     let path2 = dir2.join("proj.json");
-    common::session::save_journal(&path2, &Document::new_v1(), &SaveProjectOptions::default());
+    common::session::save_journal(
+        &path2,
+        &Document::new_current(),
+        &SaveProjectOptions::default(),
+    );
     let journal = journal_path_for_document(&path2);
     let jlen = fs::metadata(&journal).unwrap().len();
     let mut tight = ResourceLimits::production();
@@ -312,7 +320,11 @@ fn open_project_with_limits_expect(path: &Path, limits: &ResourceLimits) -> Proj
 fn fault_partial_write_then_recover_ignores_tail() {
     let dir = unique_dir("partial-fault");
     let path = dir.join("proj.json");
-    common::session::save_journal(&path, &Document::new_v1(), &SaveProjectOptions::default());
+    common::session::save_journal(
+        &path,
+        &Document::new_current(),
+        &SaveProjectOptions::default(),
+    );
 
     let mut faulty = FaultInjectingFs::new(FaultPlan::PartialWrite { max_bytes: 8 });
     faulty.seed_from_disk(&dir).unwrap();
@@ -330,12 +342,12 @@ fn fault_partial_write_then_recover_ignores_tail() {
 fn fault_rename_not_durable_loses_rename_on_crash() {
     let dir = unique_dir("rename-nd");
     let path = dir.join("proj.json");
-    common::session::save_document_via_session(&path, &Document::new_v1());
+    common::session::save_document_via_session(&path, &Document::new_current());
 
     let mut faulty = FaultInjectingFs::new(FaultPlan::RenameNotDurable);
     faulty.seed_from_disk(&dir).unwrap();
     let tmp = dir.join("tmp.json");
-    let mut newer = Document::new_v1();
+    let mut newer = Document::new_current();
     newer.bpm = Bpm::try_new(150, 1).unwrap();
     let bytes = serde_json::to_vec_pretty(&newer).unwrap();
     faulty.write_create(&tmp, &bytes).unwrap();
@@ -354,7 +366,11 @@ fn fault_rename_not_durable_loses_rename_on_crash() {
 fn fault_reorder_append_not_visible_until_sync() {
     let dir = unique_dir("reorder");
     let path = dir.join("proj.json");
-    common::session::save_journal(&path, &Document::new_v1(), &SaveProjectOptions::default());
+    common::session::save_journal(
+        &path,
+        &Document::new_current(),
+        &SaveProjectOptions::default(),
+    );
 
     let mut faulty = FaultInjectingFs::new(FaultPlan::ReorderPendingAppend);
     faulty.seed_from_disk(&dir).unwrap();
@@ -372,7 +388,11 @@ fn fault_reorder_append_not_visible_until_sync() {
 fn recovery_crash_loop_skips_replay_via_marker() {
     let dir = unique_dir("recovery-recrash");
     let path = dir.join("proj.json");
-    common::session::save_journal(&path, &Document::new_v1(), &SaveProjectOptions::default());
+    common::session::save_journal(
+        &path,
+        &Document::new_current(),
+        &SaveProjectOptions::default(),
+    );
 
     // tipに合わせたrestore_attemptedを手書き
     let journal = journal_path_for_document(&path);
@@ -490,7 +510,7 @@ fn marker_remount_does_not_prefer_stale_main_over_journal_edits() {
 fn d1c_save_document_alone_still_works() {
     let dir = unique_dir("d1c-compat");
     let path = dir.join("doc.json");
-    let doc = Document::new_v1();
+    let doc = Document::new_current();
     common::session::save_document_via_session(&path, &doc);
     assert_eq!(motolii_doc::load_document(&path).unwrap(), doc);
     let _ = fs::remove_dir_all(dir);
