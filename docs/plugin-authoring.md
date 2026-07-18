@@ -12,6 +12,8 @@
 
 Motoliiの長期の北極星は、映像表現を特定projectの手順から切り離し、演奏・再利用・保存・配布できる単位にすることにある。「映像制作におけるVST」はその構造の比喩であり、このplugin境界は単なる内製effect追加口ではない。Host全体をforkせず、ひとつの表現に集中できる作者面を作る。
 
+長期的なユーザー向け配布単位は[Vism](vism-package-concept.md)である。Vismは一つの持ち運べる映像表現、`Filter`等はHost内部の実行分類であり、同義ではない。Vismは別VismのIDを直接要求せず型付きinputを宣言し、具体provider・接続・初期値は[Kit](vism-kit-model.md)が束ねる。v1のpluginは静的リンクされたpre-Vism参照実装として、将来のpackage境界を公開契約だけで反証する。`.vism` loader、Kit schema、package manifestを本書から先行実装しない。
+
 VSM-A0I-1〜3でContract Catalog、Documentのprepared resolution、graph／exportのruntime必須化までは実装済みである。VSM-A1-3で `core.filter.opacity` を `plugins/motolii-plugin-opacity` へ、VSM-A2で `core.param.sine` を `plugins/motolii-plugin-sine` へ、VSM-A3で `core.layer_source.radial_repeater` を `plugins/motolii-plugin-radial-repeater` へ外部化した。first-party組み立てと依存allowlist検査の実証が完了している。
 
 > **現在の停止線**: plugin crateは`motolii-plugin`だけへ依存し、GPU golden／purity／parityはHost側の審判から検査する。private依存の例外やtestkitへのdev依存を追加しない。
@@ -37,11 +39,22 @@ VSM-A0I-1〜3でContract Catalog、Documentのprepared resolution、graph／expo
 
 - テクスチャを触るものはRender系(Filter/Composite/LayerSource)。値だけならParamDriver。
 - 「何でもFilterに詰める」は禁止(G-2)。迷ったら種別を増やすのではなく、既存種別に収まるか見直す。
+- 他のplugin／VismをIDや表示名で検索しない。必要な値、event、texture、assetは型付きinputとして宣言し、具体providerの選択と接続はKit／Hostへ残す。
 - 予約種別(v1.x以降、口のみ): `Simulation`(逐次状態シミュレーション。[simulation-model.md](simulation-model.md))、`ScriptWasm`(v2)。
+
+### 1.1 位置や大きさを編集する拡張は現行traitへ偽装しない
+
+本節の4種は現在の評価plugin境界である。位置、Scale、key、接続等を編集する将来拡張は、次の責任寿命で別に審判する。
+
+- Commit後にpluginが不要な一回限りの編集: **Authoring Tool**候補。read-only snapshotからtyped command batchを提案し、Hostがpreflightして1 macro commitする。
+- 時刻や入力変更後も続く関係: **Behavior / Driver**候補。入力、出力、scope、評価順、時間依存、削除/欠落時挙動を宣言する。
+- 独自recipeやnode graphが正本: **Generator / Structured Recipe**候補。recipe、version、依存、Materialize/Live/Bakeを宣言する。
+
+これは分類の決定であって、新しいtrait/APIの実装許可ではない。`FilterPlugin`や`ParamDriverPlugin`へ自由な`&mut Document`、layer名検索、UI callback、独自Undo、隠れcontrollerを足して代用しない。公開境界の解凍条件、capability分割、Hostへ昇格する審判は[小さなコアと探索可能な拡張](extensible-core-model.md)を正本とする。
 
 ## 1.5. UIは書かない(v1)
 
-**v1のプラグイン公開契約にカスタムUIは無い。** ホストが`NodeDesc.params`からプロパティパネルを自動生成する(M3 U4)。`.slint`同梱・wgpu描画パネル・独自ウィジェットは契約外 — 書いてもホストはロードしない。判定: [reviews/2026-07-12-plugin-ui-v1-boundary.md](reviews/2026-07-12-plugin-ui-v1-boundary.md)。
+**v1のプラグイン公開契約にカスタムUIは無い。** ホストが`NodeDesc.params`からプロパティパネルを自動生成する(M3 U4)。plugin所有egui/native code・wgpu描画panel・独自widgetは契約外 — 書いてもホストはロードしない。判定: [reviews/2026-07-18-m3-egui-selection.md](reviews/2026-07-18-m3-egui-selection.md)。
 
 - パラメータは`ParamDef`で足りる粒度に抑える(スライダー/カラー等の自動生成で操作可能であること)
 - 将来カスタムUIが解凍されても、**自動生成パネルだけで全パラメータを操作できること**が不変条件
@@ -168,7 +181,7 @@ ParamDriverは`build_track`で`DataTrack`を返すだけ。ピクセルに触ら
 - [ ] 参照実装またはゴールデン/単体テストがある
 - [ ] **純関数**: 同じ`t`+入力で2回呼んでも同一出力(`motolii_testkit::purity::assert_filter_pure` / `assert_param_driver_pure`)
 - [ ] 表示名が「意図単位」になっている
-- [ ] カスタムUI(.slint / wgpuパネル / 独自ウィジェット)を製品コードに含めていない
+- [ ] カスタムUI(plugin所有egui/native code / wgpu panel / 独自widget)を製品コードに含めていない
 
 ## 8. まだ凍結していない口(触らない / 予約のみ)
 
@@ -186,4 +199,4 @@ ParamDriverは`build_track`で`DataTrack`を返すだけ。ピクセルに触ら
 - `NodeDesc`の時間フットプリント宣言(前後フレーム/サブフレームサンプル。F-12) — 型`TemporalFootprint`と**`RenderCtx::temporal_footprint`口はM2E-7で予約**。窓テクスチャ解決はホスト側(未配線)
 - `SimulationPlugin` trait+StateTrack(F-12。`PluginKind::Simulation`はenum予約済み。traitシグネチャは[simulation-model.md](simulation-model.md)§3.2の叩き台を解凍手続きで確定)
 - **Backdrop input** — 画像処理はFilter/Composite pluginでよいが、timeline走査・「下のlayer」推論は禁止。Hostが評価地点の合成済みtextureを型付き入力として渡す口は[2026-07-15決定](reviews/2026-07-15-relative-scope-duplicator-decision.md)後も未凍結であり、scope/migration/cache key/循環拒否を同時に解凍するまで追加しない
-- **カスタムプラグインUI** — `.slint`実行時ロード / wgpu自由描画 / 宣言レイアウト / ギズモ。v1公開境界外([plugin-ui-v1-boundary](reviews/2026-07-12-plugin-ui-v1-boundary.md)。解凍はv1.x/v2)
+- **カスタムプラグインUI** — plugin所有egui/native code / wgpu自由描画は公開しない。Host所有の宣言レイアウト / gizmoは型ごとの解凍判断。v1公開境界外([egui-selection](reviews/2026-07-18-m3-egui-selection.md))

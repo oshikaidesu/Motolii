@@ -89,6 +89,8 @@ SVG runtime、XML、外部参照、script、イベント、ネットワーク取
 
 Hostは経路を黙って変更しない。Materialize、Live、Bakeは保存意味・編集可能性・コストが異なるため、自動診断はしても切替はユーザーが確認できる操作にする。
 
+描画時に多数の要素が現れることは、第六の保存経路ではない。Pure LiveまたはSimulationの評価結果は、Document Objectへ展開せず、必要時だけ安定identityを解決できる個体集合として扱える。選択可能であること、物理状態を持つこと、Document実体であることを同一視しない。個体性、明示Materialize、性能上限を意味論へ焼かない原則は[小さなコアと探索可能な拡張 §7](extensible-core-model.md#7-documentを増やさず個体性を開く)を正本とする。具体的な公開型と保存形式は未決である。
+
 ## 5. p5.js型表現を受けるときの翻訳
 
 p5.jsは入口の親しみや公開コーパスに価値がある一方、暗黙canvas、左上原点、pixel単位、`draw()` loop、frame rate、入力event、前frame画素、グローバル乱数を持つ。これらを互換名のままMotoliiへ持ち込むと、正準座標、任意時刻scrub、フレーム並列、preview/export一致と衝突する。
@@ -123,7 +125,7 @@ p5.jsは入口の親しみや公開コーパスに価値がある一方、暗黙
 - 型付きparamと既定値、明示seed、必要な入力とscope
 - Materialize / Live / Bakeの選択
 - Bake範囲、品質、再計算の開始と取消
-- plugin/version/依存素材を含むRecipeの共有
+- plugin/version/依存素材を含むRecipeの共有。複数Vismの要求・型付き接続・初期値を再利用する目的単位はKitとして区別する
 
 ### Hostに残すもの
 
@@ -144,7 +146,7 @@ p5.jsは入口の親しみや公開コーパスに価値がある一方、暗黙
 
 ```text
 素材を置く → 反応/生成を加える → 即preview → seed/paramを変える
-          → 音/DataTrackへ接続 → 通常編集と混ぜる → Recipeとして共有
+          → 音/DataTrackへ接続 → 通常編集と混ぜる → 単一recipeまたはKitとして共有
 ```
 
 将来の編集体験では次を優先する。
