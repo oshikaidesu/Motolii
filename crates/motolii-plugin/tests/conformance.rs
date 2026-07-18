@@ -366,7 +366,7 @@ fn plugin_test_motolii_violations(src: &str, own_crate: &str) -> Vec<String> {
         .into_iter()
         .filter(|path| {
             !is_valid_motolii_plugin_path(path)
-                && !(path.starts_with(&allowed_own) && path.len() > allowed_own.len())
+                && (!path.starts_with(&allowed_own) || path.len() <= allowed_own.len())
         })
         .collect()
 }
@@ -384,7 +384,7 @@ fn opacity_observed_public_paths(src: &str) -> BTreeSet<String> {
         }
         let item = rest
             .trim_end_matches(';')
-            .split(|c: char| c == ' ' || c == '{')
+            .split([' ', '{'])
             .next()
             .unwrap_or("");
         if !item.is_empty() {
