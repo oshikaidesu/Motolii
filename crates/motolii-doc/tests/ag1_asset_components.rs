@@ -341,7 +341,11 @@ fn animated_audio_gain_duplicate_issues_fresh_keyframe_ids() {
     });
     doc.validate().expect("fixture");
 
-    let mut writer = DocumentWriter::new(doc);
+    let mut writer = DocumentWriter::new(
+        doc,
+        std::sync::Arc::new(motolii_plugin::reference::reference_catalog().unwrap()),
+    )
+    .unwrap();
     writer.duplicate_track_item(layer).expect("duplicate");
     writer.validate().expect("post-duplicate must validate");
 

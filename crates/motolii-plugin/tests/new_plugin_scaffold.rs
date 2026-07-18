@@ -67,6 +67,7 @@ fn node_desc_from_scaffold(s: &ScaffoldDesc) -> NodeDesc {
             id: leak(s.param_id.clone()),
             value_type: ValueType::F64,
             default: Value::F64(1.0),
+            f64_domain: None,
         }],
         min_inputs: s.min_inputs,
         max_inputs: s.max_inputs,

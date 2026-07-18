@@ -1,9 +1,10 @@
 //! Document JSON経由の書き出し(D3)。
 use crate::CliError;
-use motolii_doc::load_document;
+use motolii_doc::{open_project_resolved, ResourceLimits};
 use motolii_eval::DataTracks;
 use motolii_export::{export_document_video, ExportJob, ExportReport};
 use motolii_gpu::GpuCtx;
+use motolii_plugins_firstparty::first_party_runtime;
 use std::path::Path;
 
 pub fn export_document_file(
@@ -13,12 +14,15 @@ pub fn export_document_file(
     frame_count: Option<usize>,
     qp0: bool,
 ) -> Result<ExportReport, CliError> {
-    let doc = load_document(doc_path).map_err(|e| CliError::Usage(e.to_string()))?;
-    doc.validate().map_err(|e| CliError::Usage(e.to_string()))?;
+    let runtime = first_party_runtime()?;
+    let opened = open_project_resolved(doc_path, &ResourceLimits::production(), runtime.catalog())
+        .map_err(|e| CliError::Usage(e.to_string()))?;
+    let doc = opened.recovered.document;
     export_document_video(
         gpu,
         &ExportJob {
             doc: &doc,
+            runtime: &runtime,
             output_path,
             project_root: doc_path.parent(),
             frame_count,

@@ -11,8 +11,13 @@ use std::thread;
 use std::time::Duration;
 
 use motolii_doc::{render_with_snapshot, Bpm, Document, DocumentWriter, WriterMessage};
+use motolii_plugin::reference::reference_catalog;
 
 fn assert_send_sync<T: Send + Sync>() {}
+
+fn reference_writer(doc: Document) -> DocumentWriter {
+    DocumentWriter::new(doc, Arc::new(reference_catalog().unwrap())).unwrap()
+}
 
 #[test]
 fn arc_document_is_send_sync_for_reader_threads() {
@@ -21,7 +26,7 @@ fn arc_document_is_send_sync_for_reader_threads() {
 
 #[test]
 fn render_thread_finishes_on_stale_snapshot_while_writer_edits() {
-    let mut writer = DocumentWriter::new(Document::new_v1());
+    let mut writer = reference_writer(Document::new_v1());
     let initial_bpm = writer.snapshot().bpm.num();
     let snap = writer.snapshot();
     assert_eq!(snap.version, 1);
@@ -87,7 +92,7 @@ fn background_thread_delivers_message_only_writer_applies() {
             .unwrap();
     });
 
-    let mut writer = DocumentWriter::new(Document::new_v1());
+    let mut writer = reference_writer(Document::new_v1());
     let before = writer.snapshot();
     assert_eq!(before.bpm.num(), Bpm::DEFAULT.num());
 
@@ -103,7 +108,7 @@ fn background_thread_delivers_message_only_writer_applies() {
 
 #[test]
 fn multiple_reader_threads_share_one_immutable_snapshot() {
-    let mut writer = DocumentWriter::new(Document::new_v1());
+    let mut writer = reference_writer(Document::new_v1());
     writer.edit(|doc| {
         doc.bpm = Bpm::try_new(132, 1).unwrap();
     });

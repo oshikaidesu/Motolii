@@ -13,13 +13,17 @@ use motolii_doc::{
 };
 use motolii_eval::DataTracks;
 use motolii_nodes::CompositeMode;
-use motolii_plugin::reference::register_reference_plugins;
-use motolii_plugin::PluginRegistry;
+use motolii_plugin::PluginRuntime;
+use motolii_plugins_firstparty::first_party_runtime;
 use motolii_render::RenderStep;
 use motolii_testkit::cpu_reference::{premul_add_u8, premul_multiply_u8, premul_over_u8};
 
 fn desc() -> FrameDesc {
     FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true)
+}
+
+fn reference_runtime() -> PluginRuntime {
+    first_party_runtime().unwrap()
 }
 
 fn rect_clip(layer: u64, color: [f64; 4]) -> Clip {
@@ -64,14 +68,13 @@ fn composite_mode_in_graph(blend: BlendMode) -> CompositeMode {
     });
     doc.validate()
         .expect("blend golden document must validate (A4)");
-    let mut registry = PluginRegistry::new();
-    register_reference_plugins(&mut registry).unwrap();
+    let runtime = reference_runtime();
     let built = build_document_frame_graph(
         &doc,
         EvaluationTime::new(RationalTime::ZERO),
         desc(),
         &DataTracks::new(),
-        &registry,
+        &runtime,
         None,
     )
     .unwrap();

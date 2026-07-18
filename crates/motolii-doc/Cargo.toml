@@ -19,6 +19,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 
 [dev-dependencies]
 motolii-gpu.workspace = true
+motolii-plugins-firstparty.workspace = true
 motolii-plugin.workspace = true
 motolii-testkit.workspace = true
 proptest.workspace = true

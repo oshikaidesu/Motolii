@@ -15,6 +15,8 @@ use motolii_doc::{
 use motolii_eval::DataTracks;
 use motolii_export::{export_document_video, ExportJob};
 use motolii_media::{choose_audio_encode_mode, probe, probe_audio, AudioEncodeMode, Encoder};
+use motolii_plugin::PluginRuntime;
+use motolii_plugins_firstparty::first_party_runtime;
 use motolii_testkit::{ffmpeg_or_skip, gpu_or_skip, tmp_dir};
 
 const W: u32 = 32;
@@ -24,6 +26,10 @@ const FPS: Fps = match Fps::try_new(12, 1) {
     Err(_) => panic!("invalid const fps"),
 };
 const N_FRAMES: usize = 12;
+
+fn reference_runtime() -> PluginRuntime {
+    first_party_runtime().unwrap()
+}
 
 fn make_bg_video(path: &Path) {
     let desc = FrameDesc::packed(W, H, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false);
@@ -220,6 +226,7 @@ fn clip_audio_forces_mixed_export_and_matches_preview_pcm() {
         &gpu,
         &ExportJob {
             doc: &doc,
+            runtime: &reference_runtime(),
             output_path: &out,
             project_root: Some(&dir),
             frame_count: Some(N_FRAMES),
@@ -327,6 +334,7 @@ fn soundtrack_plus_clip_audio_takes_mixed_path() {
         &gpu,
         &ExportJob {
             doc: &doc,
+            runtime: &reference_runtime(),
             output_path: &out,
             project_root: Some(&dir),
             frame_count: Some(N_FRAMES),
