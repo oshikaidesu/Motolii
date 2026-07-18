@@ -1,5 +1,23 @@
 # M3 UIモック
 
+## JSX分解基盤
+
+- [部品台帳と並行所有ルール](../mocks-ui/README.md)
+- [機械可読な対応表](../mocks-ui/component-map.json)
+- `docs/mocks-ui`は、現行HTMLを`tokens → primitives → patterns → surfaces → screens`へ分解して比較するモック専用基盤である。
+- React / JSXのprops、state、DOM event、CSS値、component境界をRust公開API、Document、User settings形式、egui公開component名へ転記しない。
+- 現在は`#all-surfaces`にBrowser、Stage、Inspector、Timelineを接続済み。既存HTMLとgoldenを置き換えず、同じ責務を再現できることを確認してからhash fixture単位で移す。
+
+ローカル実行:
+
+```sh
+cd docs/mocks-ui
+npm ci
+npm run dev -- --host 127.0.0.1
+```
+
+`http://127.0.0.1:5173/#all-surfaces`が統合fixture、`#catalog`が登録済みscreen一覧である。
+
 ## モック共通規約
 
 - 審判用の入場・状態切替はhash（例: `#all-surfaces`）で行い、製品chromeへ審判用button・注記・fixture名を混ぜない。
