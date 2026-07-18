@@ -153,8 +153,8 @@ run_supervisor() {
   if [[ "$result_kind" == "order" ]]; then
     cursor_mode_args+=(--mode ask)
   else
-    # headless標準modeを--forceなしで使い、read-only shell検証を可能にする。
-    :
+    # headlessはread-only shellにも承認が要る。検収promptと事後差分審査で書込みを拒否する。
+    cursor_mode_args+=(--force)
   fi
   prompt="Do not spawn subagents or delegate any part of this task. Complete the requested read-only work yourself in this run and return the required terminal marker.
 
