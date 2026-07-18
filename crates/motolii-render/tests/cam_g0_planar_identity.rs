@@ -40,10 +40,9 @@ fn parse_u32(meta: &BTreeMap<&str, &str>, key: &str) -> u32 {
 }
 
 fn parse_bool(meta: &BTreeMap<&str, &str>, key: &str) -> bool {
-    match meta
+    match *meta
         .get(key)
         .unwrap_or_else(|| panic!("oracle meta missing {key}"))
-        .as_ref()
     {
         "true" => true,
         "false" => false,
