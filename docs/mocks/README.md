@@ -40,7 +40,7 @@
 - 重複入口とfixture用chromeを削除した。Easingの`APPLY TO N KEYS`、toolbarの`ALL`と`ASSETS`（Project Explorerは既存Browserへ統合）、Overshoot toggle（preset名`SMOOTH`と導出`OVERSHOOT` badgeへ分離）。Browserカードの由来行は`DETAIL`表示のみとし、Transform行のautomation markへ`AUTO ON/OFF`の文字状態を併記した。
 - Easing panel再整理（同日）: 固定title行、数値range、raw tuple、`VALUE`/`TIME`軸label、`SELECTED INTERVAL`文字を削除した。区間中心導線への改訂後も、時刻範囲・件数・key stripは追加せず、Graph自身へ意味を重ねない。curve名の文字button列とX1..Y2の下段も撤去し、左右余白の形状thumbnailとhandle値へ置換した。
 - status / InfoのBriefを「結果+最短原因」へ切り詰めた（同日）: 方針文の尻尾（`Document変更ゼロ。` `〜しません。` `復活させません` 等）を反応文から撤去し、所有の保証はCancel / Hand等の「壊れていないこと自体が結果」の操作にだけ残す。
-- M2再締結ゲート中に許可された、製品コード・公開API・永続形式を変更しない構成モックである。Slint実装やVSM-E0〜E3の着手許可には使わない。
+- M2再締結ゲート中に許可された、製品コード・公開API・永続形式を変更しない構成モックである。egui製品実装やVSM-E0〜E3の着手許可には使わない。
 
 ### 過去UI統合台帳
 
@@ -136,7 +136,7 @@
 - 組み込み2テーマ以外の配布テーマ内容。custom themeを追加できる契約だけを固定する
 - 未決と表示された音楽同期emission等の機能意味論
 - plugin custom UI、3D gizmo、任意track色の永続化
-- HTML/CSS/Canvasという実装方式。製品UIはM3仕様どおりSlint + wgpuを使う
+- HTML/CSS/Canvasという実装方式。製品UIはM3仕様どおりegui shell + wgpu preview/timelineを使う
 
 ## 次の改訂
 
