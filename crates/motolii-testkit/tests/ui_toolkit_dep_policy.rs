@@ -1,9 +1,10 @@
-//! M3E-1: slint 依存方向 CI のライブ走査と負例。
+//! M3E-1: UI toolkit依存方向CIのlive走査と負例。
 
 use std::path::{Path, PathBuf};
 
-use motolii_testkit::slint_dep_policy::{
-    find_slint_violations_in_crates, is_slint_dependency, scan_cargo_toml, SLINT_UI_CRATE_ALLOWLIST,
+use motolii_testkit::ui_toolkit_dep_policy::{
+    find_ui_toolkit_violations_in_crates, is_ui_toolkit_dependency, scan_cargo_toml,
+    UI_TOOLKIT_CRATE_ALLOWLIST,
 };
 
 fn workspace_root() -> PathBuf {
@@ -16,7 +17,7 @@ fn workspace_root() -> PathBuf {
 
 fn fixture_manifest(name: &str) -> PathBuf {
     workspace_root().join(format!(
-        "crates/motolii-testkit/tests/fixtures/slint_dep_policy/{name}/Cargo.toml"
+        "crates/motolii-testkit/tests/fixtures/ui_toolkit_dep_policy/{name}/Cargo.toml"
     ))
 }
 
@@ -29,43 +30,45 @@ fn read_fixture(name: &str) -> (PathBuf, String) {
 }
 
 #[test]
-fn slint_dependency_names_cover_ecosystem() {
-    assert!(is_slint_dependency("slint"));
-    assert!(is_slint_dependency("slint-build"));
-    assert!(is_slint_dependency("slint-interpreter"));
-    assert!(is_slint_dependency("i-slint-core"));
-    assert!(!is_slint_dependency("wgpu"));
-    assert!(!is_slint_dependency("motolii-core"));
+fn ui_toolkit_dependency_names_cover_ecosystem() {
+    assert!(is_ui_toolkit_dependency("egui"));
+    assert!(is_ui_toolkit_dependency("egui-wgpu"));
+    assert!(is_ui_toolkit_dependency("egui_tiles"));
+    assert!(is_ui_toolkit_dependency("eframe"));
+    assert!(is_ui_toolkit_dependency("winit"));
+    assert!(is_ui_toolkit_dependency("epaint"));
+    assert!(!is_ui_toolkit_dependency("wgpu"));
+    assert!(!is_ui_toolkit_dependency("motolii-core"));
 }
 
 #[test]
-fn workspace_has_no_slint_outside_ui_allowlist() {
+fn workspace_has_no_ui_toolkit_outside_ui_allowlist() {
     let root = workspace_root();
-    let violations = find_slint_violations_in_crates(&root, SLINT_UI_CRATE_ALLOWLIST);
+    let violations = find_ui_toolkit_violations_in_crates(&root, UI_TOOLKIT_CRATE_ALLOWLIST);
     assert!(
         violations.is_empty(),
-        "slint must be limited to {:?}; violations: {violations:#?}",
-        SLINT_UI_CRATE_ALLOWLIST
+        "UI toolkit must be limited to {:?}; violations: {violations:#?}",
+        UI_TOOLKIT_CRATE_ALLOWLIST
     );
 }
 
 #[test]
-fn detector_flags_non_ui_crate_with_slint() {
+fn detector_flags_non_ui_crate_with_egui() {
     let (path, text) = read_fixture("violation_core");
     let hits = scan_cargo_toml(&path, &text);
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].crate_name, "motolii-core");
-    assert_eq!(hits[0].dependency, "slint");
+    assert_eq!(hits[0].dependency, "egui");
     assert_eq!(hits[0].section, "dependencies");
 }
 
 #[test]
-fn detector_flags_dev_dependency_slint() {
+fn detector_flags_dev_dependency_eframe() {
     let (path, text) = read_fixture("violation_dev_dep");
     let hits = scan_cargo_toml(&path, &text);
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].section, "dev-dependencies");
-    assert_eq!(hits[0].dependency, "slint-build");
+    assert_eq!(hits[0].dependency, "eframe");
 }
 
 #[test]
@@ -75,15 +78,15 @@ fn detector_allows_ui_crate_fixture() {
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].crate_name, "motolii-ui");
     assert!(
-        SLINT_UI_CRATE_ALLOWLIST.contains(&hits[0].crate_name.as_str()),
-        "ui crate slint dep is allowlisted"
+        UI_TOOLKIT_CRATE_ALLOWLIST.contains(&hits[0].crate_name.as_str()),
+        "UI crate toolkit dependency is allowlisted"
     );
 }
 
 #[test]
 fn allowlist_skips_ui_crate_in_scanner() {
     let root = workspace_root();
-    let synthetic_root = root.join("target/m3e1-slint-dep-fixture");
+    let synthetic_root = root.join("target/m3e1-ui-toolkit-dep-fixture");
     let crates_root = synthetic_root.join("crates");
     let _ = std::fs::remove_dir_all(&synthetic_root);
     std::fs::create_dir_all(crates_root.join("motolii-ui")).unwrap();
@@ -99,7 +102,8 @@ fn allowlist_skips_ui_crate_in_scanner() {
     )
     .unwrap();
 
-    let violations = find_slint_violations_in_crates(&synthetic_root, SLINT_UI_CRATE_ALLOWLIST);
+    let violations =
+        find_ui_toolkit_violations_in_crates(&synthetic_root, UI_TOOLKIT_CRATE_ALLOWLIST);
     assert_eq!(violations.len(), 1);
     assert_eq!(violations[0].crate_name, "motolii-core");
 

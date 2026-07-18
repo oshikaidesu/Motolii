@@ -34,7 +34,7 @@ jobs:
           # libasound2-dev: cpal(alsa-sys)のビルドに必要(D4)。実デバイスは不要 —
           # D4のハードウェア再生テストは#[ignore]で既定スキップ、デコード/リング/
           # シミュレーション再生は常時緑(motolii-audio/tests/device_smoke.rs参照)。
-          # libfontconfig1-dev: SlintのLinux文字描画依存をCIでビルドするために必要。
+          # libfontconfig1-dev: Linux文字描画依存をCIでビルドするために必要。
           sudo apt-get install -y ffmpeg mesa-vulkan-drivers libasound2-dev libfontconfig1-dev
       - name: Log mesa/ffmpeg/alsa/fontconfig versions (M2E-3 drift triage)
         run: |
@@ -67,8 +67,8 @@ jobs:
           BASE="origin/${{ github.base_ref }}"
           # merge-base 失敗はスクリプト側で fail-closed。浅掘り回避は checkout fetch-depth: 0。
           ./scripts/check-golden-update-policy.sh "$BASE"
-      - name: M3E-1 slint dependency direction gate
-        run: ./scripts/check-slint-deps.sh
+      - name: M3E-1 UI toolkit dependency direction gate
+        run: ./scripts/check-ui-toolkit-deps.sh
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy

@@ -8,7 +8,10 @@ mod pipeline_cache;
 mod transfer;
 mod yuv;
 
-pub use ctx::{drs_available, optional_features, GpuCtx, GpuError, GpuOrigin, GpuRuntimeError};
+pub use ctx::{
+    drs_available, optional_features, GpuCtx, GpuError, GpuOrigin, GpuRuntimeError,
+    UiSharedDeviceParts,
+};
 pub use pipeline_cache::{
     CachedFullscreenUniform16, CachedTexSampleUniform4, PipelineCache, PipelineCacheKey,
 };

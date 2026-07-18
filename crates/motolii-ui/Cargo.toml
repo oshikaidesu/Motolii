@@ -5,5 +5,11 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-slint.workspace = true
+eframe.workspace = true
+egui.workspace = true
+egui-wgpu.workspace = true
+egui-winit.workspace = true
+egui_tiles.workspace = true
+motolii-gpu.workspace = true
 thiserror.workspace = true
+winit.workspace = true

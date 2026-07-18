@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 /// wgpu内部のバックエンド実装が持つ推移的依存は対象外(直接依存のみ見る)。
 ///
 /// `windows` / `windows-sys` は入れない — F-9の本命はGPUベンダーAPIであり、
-/// M3のSlint/cpal等の正当なOS依存まで赤にすると基盤が進めなくなる。
+/// M3のegui/cpal等の正当なOS依存まで赤にすると基盤が進めなくなる。
 const DENIED_CRATES: &[&str] = &[
     // CUDA
     "cudarc",

@@ -13,8 +13,8 @@
 pub mod clipping_mask;
 pub mod cpu_reference;
 pub mod perf;
-pub mod slint_dep_policy;
 pub mod tol;
+pub mod ui_toolkit_dep_policy;
 
 use std::path::{Path, PathBuf};
 

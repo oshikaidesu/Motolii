@@ -14,7 +14,7 @@ pub enum GpuError {
 pub enum GpuOrigin {
     /// CLI・テスト・書き出し用の専用デバイス。同期読み戻し可。
     Headless,
-    /// UI(Slint)と共有中のデバイス。`poll(Wait)`/`download_rgba`は禁止。
+    /// UIと共有中のデバイス。`poll(Wait)`/`download_rgba`は禁止。
     UiShared,
 }
 
@@ -74,9 +74,8 @@ pub fn check_minimum_limits(l: &wgpu::Limits) -> Result<(), String> {
     Ok(())
 }
 
-/// UI(Slint)へ渡すためのデバイス一式。
-/// `slint::wgpu_29::WGPUConfiguration::Manual`にそのまま供給する。
-pub struct UiDeviceParts {
+/// UI shellへ既存deviceとして渡すためのwgpu一式。
+pub struct UiSharedDeviceParts {
     pub instance: wgpu::Instance,
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
@@ -87,8 +86,8 @@ pub struct UiDeviceParts {
 ///
 /// 生成方法:
 /// - `new_headless()`: 自前でadapter/deviceを作る(CLI・テスト・書き出し用)
-/// - `new_for_ui()`: **要件を明示したデバイスを自前で作り、UI(Slint)に渡す**(M3の正規経路。
-///   Slint任せのデバイス生成だとコンポジタのfeature/limitが有効化されない恐れがある)
+/// - `new_for_ui()`: **要件を明示したデバイスを自前で作り、UI shellへ渡す**(M3の正規経路。
+///   shell任せのデバイス生成だとコンポジタのfeature/limitが有効化されない恐れがある)
 /// - `from_device_queue()`: 既存device/queueの共有(要件検証は呼び出し側の責任。
 ///   可能なら`new_for_ui`を使うこと)
 pub struct GpuCtx {
@@ -105,8 +104,8 @@ impl GpuCtx {
         Ok(ctx)
     }
 
-    /// コンポジタ要件でデバイスを生成し、Slintへ渡すパーツと共有GpuCtxを返す。
-    pub fn new_for_ui() -> Result<(Self, UiDeviceParts), GpuError> {
+    /// コンポジタ要件でデバイスを生成し、UI shellへ渡すパーツと共有GpuCtxを返す。
+    pub fn new_for_ui() -> Result<(Self, UiSharedDeviceParts), GpuError> {
         pollster::block_on(Self::new_async(GpuOrigin::UiShared))
     }
 
@@ -138,7 +137,7 @@ impl GpuCtx {
     ///
     /// **コールバックスロット制約**: wgpuの`set_device_lost_callback`と
     /// `on_uncaptured_error`はデバイスあたり1スロットのみ(後から登録すると置換)。
-    /// 本関数はランタイム監視用ハンドラを登録するため、M3でホスト(Slint等)が
+    /// 本関数はランタイム監視用ハンドラを登録するため、M3でUI shellが
     /// 別ハンドラを持つ構成にする場合は登録の所有者を1箇所に集約すること。
     pub fn from_device_queue(device: wgpu::Device, queue: wgpu::Queue) -> Self {
         Self::from_device_queue_with_origin(device, queue, GpuOrigin::UiShared)
@@ -186,7 +185,7 @@ impl GpuCtx {
             .uncaptured_error = Some(message.to_string());
     }
 
-    async fn new_async(origin: GpuOrigin) -> Result<(Self, UiDeviceParts), GpuError> {
+    async fn new_async(origin: GpuOrigin) -> Result<(Self, UiSharedDeviceParts), GpuError> {
         // OOMの失敗モードをdevice lost(全リソース喪失)より手前の、型付きエラーで
         // 捕捉できるリソース作成失敗に寄せる(安全に品質を落として継続する前提)。
         // 作成失敗の閾値をdevice loss側より低くし、必ず先に失敗の余地を作る。
@@ -243,7 +242,7 @@ impl GpuCtx {
             origin,
             runtime_state,
         };
-        let parts = UiDeviceParts {
+        let parts = UiSharedDeviceParts {
             instance,
             adapter,
             device,

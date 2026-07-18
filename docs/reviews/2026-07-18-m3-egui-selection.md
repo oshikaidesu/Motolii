@@ -1,6 +1,6 @@
 # M3 UI基盤 egui採用判断（2026-07-18）
 
-ステータス: **採否決定 / 文書反映のみ**。M3のUI基盤をSlintからeguiへ変更する。[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済みだが、本判断だけでは製品実装を許可しない。現行`motolii-ui`骨格、workspace依存、Slint固有コメントとテスト名の移行は、M3入場PRで行う。
+ステータス: **採否決定 / M3入場移行済み**。M3のUI基盤をSlintからeguiへ変更し、2026-07-19の入場差分で`motolii-ui`骨格、workspace依存、toolkit隔離gateを移行した。
 
 ## 1. 決定
 
@@ -71,22 +71,16 @@ toolkit変更で次を変えない。
 - timeline layout/hit-test/render modelはtoolkit非依存とし、大量widgetではなく単一wgpu面を使う
 - panel layoutの利用者設定をDocument、egui memory、`egui_tiles::Tree`の生serializeへ焼かない
 
-## 6. 移行停止線
+## 6. M3入場移行の結果
 
-M3入場PRまで行わないもの:
+1. workspaceのSlint依存を除き、egui/eframe/egui-wgpu/egui-winit 0.35、egui_tiles 0.16、winit 0.30へ移行した
+2. `UiDeviceParts`をtoolkit中立な`UiSharedDeviceParts`へ変更し、`WgpuSetup::Existing`へのprivate adapterを`motolii-ui`へ置いた
+3. 依存方向CIを「egui/eframe/winit系の直接依存は`motolii-ui`だけ」へ一般化し、公開型へのtoolkit型流出も拒否する
+4. Apple M4 / Metalのlifecycle probeでcore-first instance/adapter/device/queueからWindow Surfaceを表示済みである。入場差分はこの正規経路を維持し、surfaceを伴う製品E2EをU1a-1の完了条件に残す。失敗が実証されたplatformだけ、shell生成deviceを`GpuCtx::from_device_queue()`へ渡す代替を仕様改訂する
+5. eframe 0.35の`App::ui` seamをprivate compile testへ固定し、toolkit API churnを`motolii-ui`外へ漏らさない
+6. panel layoutの組み込みpresetは製品code、利用者の可変配置はWorkspace profileが所有する。`egui_tiles::Tree`を保存せず、Motolii所有modelとversion付き保存形式はU1a-2→U1a-3で別々に実装する。欠落・破損時は既定presetへresetでき、Document/journal/Undoへ入れない
 
-- workspaceのSlint依存削除とegui依存追加
-- `UiDeviceParts`、Slint固有コメント、依存方向テスト名の変更
-- `motolii-ui`製品shell、panel、preview、timeline実装
-- 公開API、Document schema、plugin ABI、永続設定形式の追加
-
-M3入場PRでは次を同時に再翻訳する。
-
-1. G0-1を本判断と実機証拠へ差し替える
-2. Slint固有の依存方向CIを「UI toolkitは`motolii-ui`だけ」へ一般化する
-3. core-first既存device方式でWindow Surface互換adapterを確認する。失敗時だけ、surface-compatible deviceをshellが生成して`GpuCtx::from_device_queue()`へ渡す代替を仕様改訂する
-4. `egui_tiles`はruntime projectionに限定し、安定layout modelの所有層と保存寿命を先に決める
-5. 0.35で確認した`App::update`→`App::ui`等のAPI churnを製品全体へ漏らさないadapter testを置く
+入場差分には製品shell、panel、preview、timeline、Document schema、plugin ABI、永続設定形式を含めない。これらはM3タスク表の枝番へ分離する。
 
 ## 7. 歴史資料の扱い
 

@@ -34,7 +34,7 @@ Generatorは素材を生み、Filterは入力を変え、ParamDriverは時間に
 
 Motolii自体は、3〜5分のミュージックビデオを完成させるためのモーショングラフィック・コンポジットツールである。汎用の映像規格を先に作るのではなく、一本のMVを実際に作り切るHostを通して、必要な境界を確かめる。
 
-Rust、wgpu、WGSL、Slint、ffmpegを使うのは現在の実装選択であって、作品の意味そのものではない。Documentは完成ピクセルではなくrecipeを持ち、評価は時刻`t`から決まり、ピクセルはGPU texture上に留まり、PreviewとExportは同じ関数を通る。プラグインはOSやGPU vendor固有APIではなく、狭く明示された契約へ参加する。
+Rust、wgpu、WGSL、egui、ffmpegを使うのは現在の実装選択であって、作品の意味そのものではない。Documentは完成ピクセルではなくrecipeを持ち、評価は時刻`t`から決まり、ピクセルはGPU texture上に留まり、PreviewとExportは同じ関数を通る。プラグインはOSやGPU vendor固有APIではなく、狭く明示された契約へ参加する。
 
 Motoliiが最良のHostとして永遠に残る必要はない。
 

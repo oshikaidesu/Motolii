@@ -76,7 +76,7 @@ The value is in the composition of these parts, the removal of accidental comple
 
 ## A small core is a long-term capability
 
-Motolii uses Rust, wgpu, WGSL, Slint, and ffmpeg today. Those are implementation choices, not project-file semantics or articles of faith.
+Motolii uses Rust, wgpu, WGSL, egui, and ffmpeg today. Those are implementation choices, not project-file semantics or articles of faith.
 
 ```mermaid
 flowchart LR
@@ -185,7 +185,7 @@ The M1 demo above is generated through the real export path and protected by aut
 | Language | Rust |
 | Render core | [wgpu](https://github.com/gfx-rs/wgpu) + WGSL, GPU-resident textures |
 | Vector rendering | Vello/usvg boundary |
-| UI | [Slint](https://slint.dev), sharing the compositor's wgpu device |
+| UI | [egui](https://github.com/emilk/egui), sharing the compositor's wgpu device |
 | Decode / encode | ffmpeg sidecar process, raw tagged frames at the boundary |
 | Project model | serde data, stable IDs, typed validation, command edits |
 | Verification | Rust tests, property tests, semantic and image goldens |
@@ -255,4 +255,4 @@ at your option.
 
 Unless explicitly stated otherwise, contributions submitted for inclusion are dual-licensed under the same terms.
 
-Third-party dependencies retain their own licenses. Slint and ffmpeg have separate distribution considerations; see [`docs/references.md`](docs/references.md) and verify applicable terms before release.
+Third-party dependencies retain their own licenses. ffmpeg has separate distribution considerations; see [`docs/references.md`](docs/references.md) and verify applicable terms before release.

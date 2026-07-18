@@ -1,20 +1,24 @@
-//! M3E-1: slint 直接依存の許可リスト走査。
+//! M3E-1: UI toolkit直接依存の許可リスト走査。
 //!
-//! 製品クレート(`crates/`)は UI クレートのみが slint 系クレートへ直接依存できる。
-//! `spikes/` は workspace 外の隔離スパイクのため対象外。
+//! 製品クレート(`crates/`)では`motolii-ui`だけがegui/winit系へ直接依存できる。
+//! `spikes/`はworkspace外の隔離spikeのため対象外。
 
 use std::path::{Path, PathBuf};
 
-/// 将来の UI クレート名。未作成でも許可リストに予約する。
-pub const SLINT_UI_CRATE_ALLOWLIST: &[&str] = &["motolii-ui"];
+pub const UI_TOOLKIT_CRATE_ALLOWLIST: &[&str] = &["motolii-ui"];
 
-/// slint エコシステムの直接依存名か。
-pub fn is_slint_dependency(name: &str) -> bool {
-    name == "slint" || name.starts_with("slint-") || name.starts_with("i-slint-")
+/// egui/winitエコシステムの直接依存名か。
+pub fn is_ui_toolkit_dependency(name: &str) -> bool {
+    name == "egui"
+        || name.starts_with("egui-")
+        || name == "egui_tiles"
+        || name == "eframe"
+        || name == "winit"
+        || matches!(name, "ecolor" | "emath" | "epaint" | "epaint_default_fonts")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SlintDepViolation {
+pub struct UiToolkitDepViolation {
     pub crate_name: String,
     pub manifest_path: PathBuf,
     pub dependency: String,
@@ -64,8 +68,8 @@ fn dependency_key(line: &str) -> Option<&str> {
     Some(key)
 }
 
-/// 単一 `Cargo.toml` の直接 slint 依存を列挙する。
-pub fn scan_cargo_toml(manifest_path: &Path, manifest_text: &str) -> Vec<SlintDepViolation> {
+/// 単一`Cargo.toml`の直接UI toolkit依存を列挙する。
+pub fn scan_cargo_toml(manifest_path: &Path, manifest_text: &str) -> Vec<UiToolkitDepViolation> {
     let crate_name = parse_package_name(manifest_text).unwrap_or_else(|| {
         manifest_path
             .parent()
@@ -90,8 +94,8 @@ pub fn scan_cargo_toml(manifest_path: &Path, manifest_text: &str) -> Vec<SlintDe
         let Some(key) = dependency_key(trimmed) else {
             continue;
         };
-        if is_slint_dependency(key) {
-            violations.push(SlintDepViolation {
+        if is_ui_toolkit_dependency(key) {
+            violations.push(UiToolkitDepViolation {
                 crate_name: crate_name.clone(),
                 manifest_path: manifest_path.to_path_buf(),
                 dependency: key.to_string(),
@@ -103,11 +107,11 @@ pub fn scan_cargo_toml(manifest_path: &Path, manifest_text: &str) -> Vec<SlintDe
     violations
 }
 
-/// `crates/` 配下を走査し、許可リスト外クレートの slint 直接依存を返す。
-pub fn find_slint_violations_in_crates(
+/// `crates/`配下を走査し、許可リスト外クレートのUI toolkit直接依存を返す。
+pub fn find_ui_toolkit_violations_in_crates(
     workspace_root: &Path,
     allowlist: &[&str],
-) -> Vec<SlintDepViolation> {
+) -> Vec<UiToolkitDepViolation> {
     let crates_dir = workspace_root.join("crates");
     let Ok(entries) = std::fs::read_dir(&crates_dir) else {
         return Vec::new();
