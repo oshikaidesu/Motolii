@@ -30,6 +30,7 @@ fn reference_writer(doc: Document) -> DocumentWriter {
     DocumentWriter::new(doc, Arc::new(reference_catalog().unwrap())).unwrap()
 }
 use proptest::prelude::*;
+use proptest::test_runner::RngSeed;
 
 // ---------------------------------------------------------------------------
 // フィクスチャ
@@ -304,6 +305,241 @@ proptest! {
             layer_names,
         };
         assert_roundtrip(&f.doc, cmd);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 再締結ゲート B.3: 固定seedの異種編集列(複数gesture×各複数command) Undo/Redo 審判
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone)]
+enum RandomEditSpec {
+    Position { x: f64, y: f64 },
+    Rotation { radians: f64 },
+    Opacity { new: f64 },
+    Blend { mode_idx: usize },
+    ClippingMask { enabled: bool, mode_idx: usize },
+    TransformParent { set_parent: bool },
+    EffectEnabled { enabled: bool },
+    EffectParam { amount: f64 },
+}
+
+fn position_edit_spec_strategy() -> impl Strategy<Value = RandomEditSpec> {
+    (-1000.0f64..1000.0, -1000.0f64..1000.0).prop_map(|(x, y)| RandomEditSpec::Position { x, y })
+}
+
+fn blend_edit_spec_strategy() -> impl Strategy<Value = RandomEditSpec> {
+    (0usize..3).prop_map(|mode_idx| RandomEditSpec::Blend { mode_idx })
+}
+
+fn random_edit_spec_strategy() -> impl Strategy<Value = RandomEditSpec> {
+    prop_oneof![
+        position_edit_spec_strategy(),
+        (-10.0f64..10.0).prop_map(|radians| RandomEditSpec::Rotation { radians }),
+        (0.0f64..=1.0).prop_map(|new| RandomEditSpec::Opacity { new }),
+        blend_edit_spec_strategy(),
+        (any::<bool>(), 0usize..4)
+            .prop_map(|(enabled, mode_idx)| RandomEditSpec::ClippingMask { enabled, mode_idx }),
+        any::<bool>().prop_map(|set_parent| RandomEditSpec::TransformParent { set_parent }),
+        any::<bool>().prop_map(|enabled| RandomEditSpec::EffectEnabled { enabled }),
+        (-10.0f64..10.0).prop_map(|amount| RandomEditSpec::EffectParam { amount }),
+    ]
+}
+
+/// gesture 0: 必須 Position + 0..=5 任意 tail → 1..=6 command。
+fn gesture_0_strategy() -> impl Strategy<Value = Vec<RandomEditSpec>> {
+    (
+        position_edit_spec_strategy(),
+        prop::collection::vec(random_edit_spec_strategy(), 0..=5),
+    )
+        .prop_map(|(head, tail)| {
+            let mut edits = vec![head];
+            edits.extend(tail);
+            edits
+        })
+}
+
+/// gesture 1: 必須 Blend + 0..=5 任意 tail → 1..=6 command。
+fn gesture_1_strategy() -> impl Strategy<Value = Vec<RandomEditSpec>> {
+    (
+        blend_edit_spec_strategy(),
+        prop::collection::vec(random_edit_spec_strategy(), 0..=5),
+    )
+        .prop_map(|(head, tail)| {
+            let mut edits = vec![head];
+            edits.extend(tail);
+            edits
+        })
+}
+
+/// gesture 2..: 1..=6 任意 command。
+fn extra_gesture_strategy() -> impl Strategy<Value = Vec<RandomEditSpec>> {
+    prop::collection::vec(random_edit_spec_strategy(), 1..=6)
+}
+
+/// 2..=12 gesture。shrink 後も gesture 0=Position・gesture 1=Blend を構造的に保持する。
+fn multi_gesture_sequence_strategy() -> impl Strategy<Value = Vec<Vec<RandomEditSpec>>> {
+    (
+        gesture_0_strategy(),
+        gesture_1_strategy(),
+        prop::collection::vec(extra_gesture_strategy(), 0..=10),
+    )
+        .prop_map(|(g0, g1, extras)| {
+            let mut gestures = vec![g0, g1];
+            gestures.extend(extras);
+            gestures
+        })
+}
+
+fn build_random_edit_command(
+    writer: &DocumentWriter,
+    f: &Fixture,
+    spec: &RandomEditSpec,
+) -> Command {
+    let env = writer
+        .find_envelope(f.layer)
+        .expect("fixture layer must exist in writer");
+    let snap = writer.snapshot();
+    match spec {
+        RandomEditSpec::Position { x, y } => Command::SetProperty {
+            target: f.layer,
+            property: ScalarPropertyId::Position,
+            old_value: env.transform.position.clone(),
+            new_value: DocParam::const_vec2([*x, *y]),
+        },
+        RandomEditSpec::Rotation { radians } => Command::SetProperty {
+            target: f.layer,
+            property: ScalarPropertyId::Rotation,
+            old_value: env.transform.rotation.clone(),
+            new_value: DocParam::const_f64(*radians),
+        },
+        RandomEditSpec::Opacity { new } => Command::SetProperty {
+            target: f.layer,
+            property: ScalarPropertyId::Opacity,
+            old_value: env.opacity.clone(),
+            new_value: DocParam::const_f64(*new),
+        },
+        RandomEditSpec::Blend { mode_idx } => {
+            let modes = [BlendMode::Normal, BlendMode::Add, BlendMode::Multiply];
+            Command::SetBlendMode {
+                target: f.layer,
+                old: env.blend,
+                new: modes[*mode_idx % modes.len()],
+            }
+        }
+        RandomEditSpec::ClippingMask { enabled, mode_idx } => {
+            let modes = [
+                MaskMode::Alpha,
+                MaskMode::Luminance,
+                MaskMode::InvertAlpha,
+                MaskMode::InvertLuminance,
+            ];
+            Command::SetClippingMask {
+                target: f.layer,
+                old: env.clipping_mask.clone(),
+                new: ClippingMaskSettings {
+                    enabled: *enabled,
+                    mode: modes[*mode_idx % modes.len()],
+                },
+            }
+        }
+        RandomEditSpec::TransformParent { set_parent } => Command::SetTransformParent {
+            target: f.layer,
+            old: env.transform.parent,
+            new: if *set_parent {
+                Some(f.other_layer)
+            } else {
+                None
+            },
+        },
+        RandomEditSpec::EffectEnabled { enabled } => {
+            let definition_id = env
+                .effects
+                .iter()
+                .find(|u| u.id == f.effect)
+                .expect("fixture effect use")
+                .definition_id;
+            let old = snap
+                .effect_definition(definition_id)
+                .expect("fixture effect definition")
+                .enabled;
+            Command::SetEffectEnabled {
+                target: f.layer,
+                effect: f.effect,
+                old,
+                new: *enabled,
+            }
+        }
+        RandomEditSpec::EffectParam { amount } => {
+            let definition_id = env
+                .effects
+                .iter()
+                .find(|u| u.id == f.effect)
+                .expect("fixture effect use")
+                .definition_id;
+            let old = snap
+                .effect_definition(definition_id)
+                .expect("fixture effect definition")
+                .params
+                .get("amount")
+                .expect("fixture amount param")
+                .clone();
+            Command::SetProperty {
+                target: f.layer,
+                property: ScalarPropertyId::EffectParam(f.effect, "amount".into()),
+                old_value: old,
+                new_value: DocParam::const_f64(*amount),
+            }
+        }
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        // 再締結ゲート B.3: 固定seed (0x4D32_B303_5EED_0001) で再現可能な異種編集列審判
+        cases: 32,
+        rng_seed: RngSeed::Fixed(0x4D32_B303_5EED_0001),
+        .. ProptestConfig::default()
+    })]
+
+    #[test]
+    fn random_multi_gesture_sequence_undo_redo_restores_semantic_state(
+        gestures in multi_gesture_sequence_strategy()
+    ) {
+        let f = fixture();
+        let initial = f.doc.clone();
+        let mut writer = reference_writer(initial.clone());
+        let gesture_count = gestures.len();
+
+        for edits in &gestures {
+            let gesture = writer.begin_gesture();
+            for spec in edits {
+                let cmd = build_random_edit_command(&writer, &f, spec);
+                writer
+                    .apply_command(gesture, cmd)
+                    .expect("apply_command must succeed");
+                writer.validate().expect("document must validate after apply");
+            }
+        }
+
+        let applied = writer.snapshot().as_ref().clone();
+        assert_eq!(writer.undo_len(), gesture_count);
+
+        for _ in 0..gesture_count {
+            writer.undo().expect("undo");
+        }
+        assert_eq!(writer.undo_len(), 0);
+        assert_eq!(writer.snapshot().as_ref(), &initial);
+
+        for _ in 0..gesture_count {
+            writer.redo().expect("redo");
+        }
+        assert_eq!(writer.snapshot().as_ref(), &applied);
+
+        for _ in 0..gesture_count {
+            writer.undo().expect("undo");
+        }
+        assert_eq!(writer.snapshot().as_ref(), &initial);
     }
 }
 
