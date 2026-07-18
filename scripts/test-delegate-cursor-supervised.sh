@@ -107,7 +107,7 @@ status="$RUN_STATUS"
 assert_status 0 "$status" "markerless Grok fallback"
 assert_contains "$order_file" "SUPERVISOR_BACKEND: cursor-grok" "markerless Grok fallback"
 assert_contains "$CALL_LOG" "cursor-agent" "explicit Cursor binary"
-assert_has_fragment "$CALL_LOG" "--mode plan" "read-only supervisor mode"
+assert_has_fragment "$CALL_LOG" "--mode ask" "read-only order supervisor mode"
 assert_not_contains "$CALL_LOG" "agent" "generic agent collision"
 
 order_file="$TMP_ROOT/stop-order.md"
@@ -170,5 +170,22 @@ assert_status 4 "$status" "VERDICT REJECT preservation"
 assert_contains "$CALL_LOG" "cursor-agent" "Composer explicit Cursor binary"
 assert_contains "$CALL_LOG" "grok" "Grok inspection"
 assert_not_contains "$CALL_LOG" "agent" "execute generic agent collision"
+
+: >"$CALL_LOG"
+if env -u CURSOR_AGENT -u CURSOR_AGENT_BIN \
+    PATH="$FAKE_BIN:/usr/bin:/bin" \
+    FAKE_CALL_LOG="$CALL_LOG" \
+    FAKE_GROK_OUTPUT="inspection transport failure without verdict" \
+    FAKE_CURSOR_OUTPUT=$'read-only inspection complete\nVERDICT: ACCEPT' \
+    CURSOR_SUPERVISED_HEARTBEAT_SECONDS=1 \
+    CURSOR_SUPERVISED_TIMEOUT_SECONDS=5 \
+    "$SCRIPT" execute "$WORKTREE" "$approved_order" "$task" \
+    >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"; then
+  status=0
+else
+  status=$?
+fi
+assert_status 0 "$status" "Cursor inspection fallback"
+assert_has_fragment "$CALL_LOG" "--mode plan" "read-only inspection supervisor mode"
 
 echo "test-delegate-cursor-supervised: all tests passed"

@@ -149,6 +149,13 @@ run_supervisor() {
   local output="$1"
   local prompt="$2"
   local result_kind="$3"
+  local cursor_mode="ask"
+  if [[ "$result_kind" == "verdict" ]]; then
+    cursor_mode="plan"
+  fi
+  prompt="Do not spawn subagents or delegate any part of this task. Complete the requested read-only work yourself in this run and return the required terminal marker.
+
+$prompt"
 
   if command -v grok >/dev/null 2>&1; then
     if run_agent "$output.grok-build" grok -p "$prompt" \
@@ -186,7 +193,7 @@ run_supervisor() {
   fi
 
   echo "delegate-cursor-supervised: Cursor版Grokへフォールバックします" >&2
-  if ! run_agent "$output.cursor-grok" "$CURSOR_AGENT_BIN" -p --trust --mode plan \
+  if ! run_agent "$output.cursor-grok" "$CURSOR_AGENT_BIN" -p --trust --mode "$cursor_mode" \
     --output-format text --model "$CURSOR_GROK_MODEL" --workspace "$WORKTREE" "$prompt"; then
     return 1
   fi
@@ -273,7 +280,7 @@ fi
 cat "$tmp_dir/implementation.txt"
 
 inspection_prompt=$(cat <<EOF
-You are the same on-site supervisor for Motolii. Work read-only. Inspect the actual git diff and test evidence in the worktree. Verify it line-by-line against your binding order below and the authoritative specs. A green test suite is not sufficient. Look specifically for contract-avoidance hacks, scope/file drift, weakened tests, missing negative cases, duplicated logic, public raw APIs, implicit migration, non-atomic failure paths, unbounded work or allocation, wire incompatibility, and unfinished integration gates.
+You are the same on-site supervisor for Motolii. Work read-only. Do not create a plan, spawn subagents, or wait for another agent. Use read-only shell/tools now to inspect the actual git diff and rerun the required test evidence in the worktree. Verify it line-by-line against your binding order below and the authoritative specs. A green test suite is not sufficient. Look specifically for contract-avoidance hacks, scope/file drift, weakened tests, missing negative cases, duplicated logic, public raw APIs, implicit migration, non-atomic failure paths, unbounded work or allocation, wire incompatibility, and unfinished integration gates.
 
 Classify findings P0/P1/P2 with file and line evidence. P0 or P1, missing required tests, edits outside the allowlist, or unverifiable command output requires rejection. End with exactly one line:
 VERDICT: ACCEPT
