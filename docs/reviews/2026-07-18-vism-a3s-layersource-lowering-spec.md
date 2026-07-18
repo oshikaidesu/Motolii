@@ -431,7 +431,7 @@ cargo test --workspace
 
 ## 16. 既知の統合ゲート
 
-- M3 再締結ゲート発効中 → UI／Slint／U4a 実装禁止
+- M3 入場PR未採択 → UI／egui移行／U4a 実装禁止
 - A3 実装は本 A3S `ORDER` 相当の分割発注＋反対側レビュー P0/P1=0 後
 - **A3-2 は A3-0 main 到達後**にのみ発注可（Host cache 定型が公開 façade 経由で到達していること）
 - A3-0 実装は別発注＋反対側レビュー P0/P1=0

@@ -2,7 +2,7 @@
 
 ステータス: **【決定】**。対象はRelative Move、Bounds/ROI、Effect Scope、Cloner/Effector、Element Domain。「反対側レビュー未実施」を一括保留の理由にせず、既知技術で意味が安定している最小契約だけを先に固定する。**2026-07-15のUI・Explicit共有・Cavalry採用・seed規約は[後続決定](2026-07-15-relative-scope-duplicator-decision.md)を優先する。**
 
-本書の意味決定は着手許可ではない。[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)の発効中は、M3製品実装への割当を停止し、解除後のM3入場PRで再翻訳する。
+本書の意味決定は着手許可ではない。[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)は解除済みだが、M3入場PRで再翻訳するまで製品実装への割当を停止する。
 
 ## 1. 判定
 
