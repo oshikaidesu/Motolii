@@ -1,6 +1,6 @@
 # M3 UI基盤 egui採用判断（2026-07-18）
 
-ステータス: **採否決定 / 文書反映のみ**。M3のUI基盤をSlintからeguiへ変更する。これは[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)中の製品実装許可ではない。現行`motolii-ui`骨格、workspace依存、Slint固有コメントとテスト名の移行は、ゲート解除後のM3入場PRで行う。
+ステータス: **採否決定 / 文書反映のみ**。M3のUI基盤をSlintからeguiへ変更する。[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済みだが、本判断だけでは製品実装を許可しない。現行`motolii-ui`骨格、workspace依存、Slint固有コメントとテスト名の移行は、M3入場PRで行う。
 
 ## 1. 決定
 

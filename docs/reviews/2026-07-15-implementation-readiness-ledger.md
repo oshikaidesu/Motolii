@@ -2,7 +2,7 @@
 
 ステータス: **運用正本**。先例監査後の各タスクを、実装者が未決を推測せず着手できる単位へ分類する。Issue化は「意味が固定済みの実装」または「後続を凍結するため完了条件が固定済みのspike」に限る。
 
-ただし[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)の発効中は、本書のM3行より同ゲートを優先する。M3の意味決定や既存Issueは着手許可ではなく、U1f/U2f/U2gを含む製品実装は再締結後のM3入場PRでIDと依存を再翻訳するまで停止する。
+[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。ただしM3の意味決定や既存Issueは着手許可ではなく、U1f/U2f/U2gを含む製品実装はM3入場PRでIDと依存を再翻訳するまで停止する。
 
 ## 状態語
 
@@ -19,7 +19,7 @@
 | ID | 状態 | 固定済み | 未決/依存 | Issue化 |
 |---|---|---|---|---|
 | GAP-14 | `DONE` | 参照中Delete=Reject、Unlink=RemoveUse、Copy Local=Materialize、orphan=Keep、未知plugin同一規則 | —（決定済） | [#166](https://github.com/oshikaidesu/Motolii/issues/166)、[lifecycle決定](2026-07-15-shared-effect-lifecycle-decision.md) |
-| D1l | `DONE`（main到達／再締結証跡待ち） | Definition/Use分離、ordered stack、inline migration、非隣接共有、GAP-14 lifecycle+journal/Undo境界、新規Document v4生成口 | M2再締結時の独立追補レビューと証跡対応付け | `a23a4ad`、`74af37e`、lint follow-up `02192c2` |
+| D1l | `DONE`（main到達／再締結証跡済み） | Definition/Use分離、ordered stack、inline migration、非隣接共有、GAP-14 lifecycle+journal/Undo境界、新規Document v4生成口 | [M2再締結証跡](2026-07-15-m2-foundation-reclosure-gate.md)で独立追補レビューと証跡対応付け済み | `a23a4ad`、`74af37e`、lint follow-up `02192c2` |
 | D3e | `DONE` | 各Use位置で個別評価、Groupは子合成後1回、source非消費、prepared params評価 | D1l実装main到達済み、D3 | `crates/motolii-doc/tests/d3e_shared_effect_eval.rs`、`crates/motolii-export/tests/d3e_preview_export_same.rs` |
 
 ### GAP-14の出口（完了）
@@ -36,9 +36,9 @@ GAP-14 lifecycle、PR #197、[2026-07-16新規Document v4生成追補](2026-07-1
 
 | ID | 状態 | 固定済み | 可変UI | 依存/Issue化 |
 |---|---|---|---|---|
-| U1f | `BLOCKED`（意味決定のみ保持） | Final frame不変、off-frame objectを表示/選択、K0を待たない、UI thread readback禁止 | scrim濃度、outline、full-pixel表示、境界装飾 | 再締結とM3入場PR待ち。U1b/U0e/D1kは未翻訳候補。[#169](https://github.com/oshikaidesu/Motolii/issues/169)は着手不可 |
-| U2f | `BLOCKED`（意味決定のみ保持） | 全Position Const/keyへ同じEdit-Space差分、時刻/補間/接線不変、1 Undo、Cancel 0、Bake/offset/helperなし | modifier物理key、HUD、ghost、path表示 | 再締結とM3入場PR待ち。U0c/U0d/U2a/U2cは未翻訳候補。[#168](https://github.com/oshikaidesu/Motolii/issues/168)は着手不可 |
-| U2g | `BLOCKED`（意味決定のみ保持） | Effect Definition out→Layer Use in、非隣接、1 drag=1 Use、Group/Explicit意味差 | gutter、routing、bundle/stub、socket形状 | 再締結、D1l/D3e、M3入場PR待ち。Issue化しない |
+| U1f | `BLOCKED`（意味決定のみ保持） | Final frame不変、off-frame objectを表示/選択、K0を待たない、UI thread readback禁止 | scrim濃度、outline、full-pixel表示、境界装飾 | M3入場PR待ち。U1b/U0e/D1kは未翻訳候補。[#169](https://github.com/oshikaidesu/Motolii/issues/169)は着手不可 |
+| U2f | `BLOCKED`（意味決定のみ保持） | 全Position Const/keyへ同じEdit-Space差分、時刻/補間/接線不変、1 Undo、Cancel 0、Bake/offset/helperなし | modifier物理key、HUD、ghost、path表示 | M3入場PR待ち。U0c/U0d/U2a/U2cは未翻訳候補。[#168](https://github.com/oshikaidesu/Motolii/issues/168)は着手不可 |
+| U2g | `BLOCKED`（意味決定のみ保持） | Effect Definition out→Layer Use in、非隣接、1 drag=1 Use、Group/Explicit意味差 | gutter、routing、bundle/stub、socket形状 | D1l/D3e完了済み、M3入場PR待ち。Issue化しない |
 
 ### UI PRの共通禁止
 
@@ -98,6 +98,6 @@ D3
   -> K1 cache
 ```
 
-図中のU2gを含むM3昇格は再締結ゲート解除後に限る。発効中は上表の`BLOCKED`を優先する。
+図中のU2gを含むM3昇格はM3入場PR後に限る。入場前は上表の`BLOCKED`を優先する。
 
 後続Issueを前倒し作成しない。前段merge時に型名・依存・fixtureを最新mainで再確認し、仕様とコードが一致した時点で1 Issue=1 PRへ翻訳する。
