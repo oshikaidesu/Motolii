@@ -144,7 +144,7 @@ pub enum DocumentPluginError {
         plugin_id: String,
         param: String,
         #[source]
-        source: DocumentError,
+        source: Box<DocumentError>,
     },
     #[error("plugin `{plugin_id}` default for `{param}` cannot be represented in Document")]
     InvalidDefault { plugin_id: String, param: String },
@@ -366,11 +366,11 @@ fn prepare_recipe(
                         DocumentPluginError::ContractViolation {
                             plugin_id: plugin_id.to_string(),
                             param: (*from).to_string(),
-                            source: DocumentError::ParamTypeMismatch {
+                            source: Box::new(DocumentError::ParamTypeMismatch {
                                 path: format!("{plugin_id}.{from}"),
                                 expected: "parameter present in saved schema".to_string(),
                                 got: "missing".to_string(),
-                            },
+                            }),
                         }
                     })?;
                     migrated.insert((*to).to_string(), value);
@@ -385,11 +385,11 @@ fn prepare_recipe(
             return Err(DocumentPluginError::ContractViolation {
                 plugin_id: plugin_id.to_string(),
                 param: name.clone(),
-                source: DocumentError::ParamTypeMismatch {
+                source: Box::new(DocumentError::ParamTypeMismatch {
                     path: format!("{plugin_id}.{name}"),
                     expected: "parameter defined by current PluginContract".to_string(),
                     got: "unknown parameter".to_string(),
-                },
+                }),
             });
         }
     }
@@ -426,11 +426,11 @@ fn validate_prepared_recipe(
             DocumentPluginError::ContractViolation {
                 plugin_id: recipe.plugin_id.clone(),
                 param: definition.id.to_string(),
-                source: DocumentError::ParamTypeMismatch {
+                source: Box::new(DocumentError::ParamTypeMismatch {
                     path: format!("{}.{}", recipe.plugin_id, definition.id),
                     expected: definition.value_type.to_string(),
                     got: "missing".to_string(),
-                },
+                }),
             }
         })?;
         validate_param(
@@ -442,7 +442,7 @@ fn validate_prepared_recipe(
         .map_err(|source| DocumentPluginError::ContractViolation {
             plugin_id: recipe.plugin_id.clone(),
             param: definition.id.to_string(),
-            source,
+            source: Box::new(source),
         })?;
     }
     Ok(())

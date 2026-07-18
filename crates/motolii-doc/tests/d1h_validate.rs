@@ -137,10 +137,8 @@ fn color_out_of_range_fails() {
     doc.validate().unwrap();
     assert!(matches!(
         doc.prepare_plugins(&reference_catalog().unwrap()),
-        Err(DocumentPluginError::ContractViolation {
-            source: DocumentError::ValueOutOfRange { .. },
-            ..
-        })
+        Err(DocumentPluginError::ContractViolation { source, .. })
+            if matches!(source.as_ref(), DocumentError::ValueOutOfRange { .. })
     ));
 }
 
@@ -277,9 +275,7 @@ fn layer_source_clear_rejects_wrong_color_type() {
     doc.validate().unwrap();
     assert!(matches!(
         doc.prepare_plugins(&reference_catalog().unwrap()),
-        Err(DocumentPluginError::ContractViolation {
-            source: DocumentError::ParamTypeMismatch { .. },
-            ..
-        })
+        Err(DocumentPluginError::ContractViolation { source, .. })
+            if matches!(source.as_ref(), DocumentError::ParamTypeMismatch { .. })
     ));
 }
