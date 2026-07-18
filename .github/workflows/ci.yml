@@ -43,6 +43,8 @@ jobs:
           dpkg -s mesa-vulkan-drivers
           dpkg -s libasound2-dev
           dpkg -s libfontconfig1-dev
+      - name: Delegation CLI boundary
+        run: ./scripts/test-delegate-cursor-supervised.sh
       - name: Rust toolchain
         run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
       - uses: Swatinem/rust-cache@v2

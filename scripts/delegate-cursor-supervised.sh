@@ -8,6 +8,7 @@ CURSOR_AGENT_BIN="${CURSOR_AGENT_BIN:-cursor-agent}"
 COMPOSER_MODEL="${CURSOR_COMPOSER_MODEL:-composer-2.5}"
 TIMEOUT_SECONDS="${GROK_SUPERVISED_TIMEOUT_SECONDS:-${CURSOR_SUPERVISED_TIMEOUT_SECONDS:-300}}"
 GROK_BUILD_FALLBACK_TO_CURSOR="${GROK_BUILD_FALLBACK_TO_CURSOR:-1}"
+HEARTBEAT_SECONDS="${CURSOR_SUPERVISED_HEARTBEAT_SECONDS:-30}"
 
 usage() {
   echo "Usage: $0 prepare <isolated-worktree> <order-file> <task>"
@@ -56,6 +57,10 @@ if [[ ! "$TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
   echo "delegate-cursor-supervised: timeoutは正の整数で指定してください" >&2
   exit 2
 fi
+if [[ ! "$HEARTBEAT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "delegate-cursor-supervised: heartbeat間隔は正の整数で指定してください" >&2
+  exit 2
+fi
 if [[ "$GROK_BUILD_FALLBACK_TO_CURSOR" != "0" && "$GROK_BUILD_FALLBACK_TO_CURSOR" != "1" ]]; then
   echo "delegate-cursor-supervised: GROK_BUILD_FALLBACK_TO_CURSOR は0か1で指定してください" >&2
   exit 2
@@ -74,14 +79,28 @@ trap cleanup EXIT
 run_agent() {
   local output="$1"
   shift
+  echo "delegate-cursor-supervised: 起動: $1 (timeout=${TIMEOUT_SECONDS}s)" >&2
   "$@" >"$output" 2>"$output.err" &
   local pid=$!
   (
-    sleep "$TIMEOUT_SECONDS"
-    if kill -0 "$pid" 2>/dev/null; then
-      touch "$output.timeout"
-      kill -TERM "$pid" 2>/dev/null || true
-    fi
+    local elapsed=0
+    local interval
+    while (( elapsed < TIMEOUT_SECONDS )); do
+      interval="$HEARTBEAT_SECONDS"
+      if (( elapsed + interval > TIMEOUT_SECONDS )); then
+        interval=$((TIMEOUT_SECONDS - elapsed))
+      fi
+      sleep "$interval"
+      elapsed=$((elapsed + interval))
+      if ! kill -0 "$pid" 2>/dev/null; then
+        exit 0
+      fi
+      if (( elapsed < TIMEOUT_SECONDS )); then
+        echo "delegate-cursor-supervised: 実行継続中 (${elapsed}s)" >&2
+      fi
+    done
+    touch "$output.timeout"
+    kill -TERM "$pid" 2>/dev/null || true
   ) &
   local watchdog=$!
   set +e
@@ -100,9 +119,36 @@ run_agent() {
   return "$status"
 }
 
+supervisor_result_is_valid() {
+  local output="$1"
+  local result_kind="$2"
+
+  awk -v result_kind="$result_kind" '
+    NF { last_nonempty = $0 }
+    $0 == "ORDER: READY" || $0 == "ORDER: STOP" {
+      order_markers++
+    }
+    $0 == "VERDICT: ACCEPT" || $0 == "VERDICT: REJECT" {
+      verdict_markers++
+    }
+    END {
+      if (result_kind == "order") {
+        valid_terminal = last_nonempty == "ORDER: READY" || last_nonempty == "ORDER: STOP"
+        exit !(order_markers == 1 && verdict_markers == 0 && valid_terminal)
+      }
+      if (result_kind == "verdict") {
+        valid_terminal = last_nonempty == "VERDICT: ACCEPT" || last_nonempty == "VERDICT: REJECT"
+        exit !(verdict_markers == 1 && order_markers == 0 && valid_terminal)
+      }
+      exit 1
+    }
+  ' "$output"
+}
+
 run_supervisor() {
   local output="$1"
   local prompt="$2"
+  local result_kind="$3"
 
   if command -v grok >/dev/null 2>&1; then
     if run_agent "$output.grok-build" grok -p "$prompt" \
@@ -116,13 +162,16 @@ run_supervisor() {
       if grep -Eqi '402 Payment Required|spending-limit|run out of credits|responses API error' \
         "$output.grok-build" "$output.grok-build.err"; then
         echo "delegate-cursor-supervised: Grok Buildが利用上限を返しました" >&2
-      else
+      elif supervisor_result_is_valid "$output.grok-build" "$result_kind"; then
         cp "$output.grok-build" "$output"
         SUPERVISOR_BACKEND_USED="grok-build"
         return 0
+      else
+        echo "delegate-cursor-supervised: Grok Buildの結果マーカーが欠落・曖昧・末尾外です" >&2
       fi
+    else
+      echo "delegate-cursor-supervised: Grok Buildの実行に失敗しました" >&2
     fi
-    echo "delegate-cursor-supervised: Grok Buildの実行に失敗しました" >&2
   else
     echo "delegate-cursor-supervised: Grok Build CLI 'grok' が見つかりません" >&2
   fi
@@ -138,6 +187,10 @@ run_supervisor() {
   echo "delegate-cursor-supervised: Cursor版Grokへフォールバックします" >&2
   if ! run_agent "$output.cursor-grok" "$CURSOR_AGENT_BIN" -p --trust --mode ask \
     --output-format text --model "$CURSOR_GROK_MODEL" --workspace "$WORKTREE" "$prompt"; then
+    return 1
+  fi
+  if ! supervisor_result_is_valid "$output.cursor-grok" "$result_kind"; then
+    echo "delegate-cursor-supervised: Cursor版Grokの結果マーカーが欠落・曖昧・末尾外です" >&2
     return 1
   fi
   cp "$output.cursor-grok" "$output"
@@ -159,7 +212,7 @@ EOF
   )
 
   echo "## 1. Grok supervisor order draft"
-  if ! run_supervisor "$tmp_dir/order.txt" "$supervisor_prompt"; then
+  if ! run_supervisor "$tmp_dir/order.txt" "$supervisor_prompt" order; then
     [[ ! -f "$tmp_dir/order.txt" ]] || cat "$tmp_dir/order.txt"
     exit 1
   fi
@@ -235,7 +288,7 @@ EOF
 
 echo
 echo "## 3. Grok supervisor inspection"
-if ! run_supervisor "$tmp_dir/inspection.txt" "$inspection_prompt"; then
+if ! run_supervisor "$tmp_dir/inspection.txt" "$inspection_prompt" verdict; then
   [[ ! -f "$tmp_dir/inspection.txt" ]] || cat "$tmp_dir/inspection.txt"
   exit 1
 fi
