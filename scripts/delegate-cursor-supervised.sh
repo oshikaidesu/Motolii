@@ -185,7 +185,7 @@ run_supervisor() {
   fi
 
   echo "delegate-cursor-supervised: Cursor版Grokへフォールバックします" >&2
-  if ! run_agent "$output.cursor-grok" "$CURSOR_AGENT_BIN" -p --trust --mode ask \
+  if ! run_agent "$output.cursor-grok" "$CURSOR_AGENT_BIN" -p --trust --mode plan \
     --output-format text --model "$CURSOR_GROK_MODEL" --workspace "$WORKTREE" "$prompt"; then
     return 1
   fi

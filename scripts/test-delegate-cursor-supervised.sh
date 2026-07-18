@@ -38,6 +38,13 @@ assert_not_contains() {
   fi
 }
 
+assert_has_fragment() {
+  local file="$1"
+  local expected="$2"
+  local label="$3"
+  grep -Fq -- "$expected" "$file" || fail "$label: missing fragment '$expected' in $file"
+}
+
 FAKE_BIN="$TMP_ROOT/bin"
 WORKTREE="$TMP_ROOT/worktree"
 CALL_LOG="$TMP_ROOT/calls.log"
@@ -56,6 +63,7 @@ cat >"$FAKE_BIN/cursor-agent" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 echo cursor-agent >>"$FAKE_CALL_LOG"
+printf 'cursor-agent-args:%s\n' "$*" >>"$FAKE_CALL_LOG"
 if [[ " $* " == *" --model composer-2.5 "* ]]; then
   printf '%s\n' "${FAKE_COMPOSER_OUTPUT:-implementation complete}"
 else
@@ -99,6 +107,7 @@ status="$RUN_STATUS"
 assert_status 0 "$status" "markerless Grok fallback"
 assert_contains "$order_file" "SUPERVISOR_BACKEND: cursor-grok" "markerless Grok fallback"
 assert_contains "$CALL_LOG" "cursor-agent" "explicit Cursor binary"
+assert_has_fragment "$CALL_LOG" "--mode plan" "read-only supervisor mode"
 assert_not_contains "$CALL_LOG" "agent" "generic agent collision"
 
 order_file="$TMP_ROOT/stop-order.md"
