@@ -27,6 +27,8 @@ test.describe("shared discovery Browser candidate", () => {
       "Layered light pulses",
     );
     await expect(page.getByRole("button", { name: "Apply" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Filters" })).toHaveCount(0);
+    await expect(page.locator("#plugin-filter-panel")).toHaveCount(0);
 
     await page.getByRole("button", { name: "Thumbnail-only view" }).click();
     await expect(page.locator("#vism-browser")).toHaveAttribute(
@@ -45,9 +47,7 @@ test.describe("shared discovery Browser candidate", () => {
     ).toHaveCount(2);
     await expect(page.locator("#plugin-result-count")).toHaveText("2");
 
-    await page.locator("#plugin-filter-toggle").click();
-    await expect(page.locator("#plugin-filter-panel")).toBeVisible();
-    await page.locator('[data-plugin-label="effect"]').click();
+    await page.getByRole("searchbox", { name: "Search plugins" }).fill("fold");
     await expect(
       page.locator(".candidate-plugin-card:visible"),
     ).toHaveCount(1);

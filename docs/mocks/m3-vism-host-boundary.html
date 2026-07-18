@@ -1039,12 +1039,6 @@
     $("#plugin-recent-toggle").classList.toggle("on",open);
     status("Recent",open?"Committed plugins":"","");
   };
-  if($("#plugin-filter-toggle"))$("#plugin-filter-toggle").onclick=()=>{
-    const open=$("#plugin-filter-panel").hidden;
-    $("#plugin-filter-panel").hidden=!open;
-    $("#plugin-filter-toggle").setAttribute("aria-expanded",String(open));
-    status("Filters",open?"Filter results":"","");
-  };
   $$(".plugin-label").forEach(label=>label.onclick=()=>{
     state.pluginLabel=label.dataset.pluginLabel; $$(".plugin-label").forEach(item=>item.classList.toggle("on",item===label)); filterPlugins();
     status("Plugin label",`${label.textContent} filter`,"");

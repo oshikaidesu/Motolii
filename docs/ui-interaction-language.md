@@ -112,7 +112,7 @@ scope、reference-frame比較、Undo履歴panel、annotation、任意guide、pre
 - **Tags / Filters**: Collectionを横断して用途・雰囲気・domain・状態等を複数条件で絞る。Host既定tagとユーザーtagを識別できる
 - **Recent**: 確定して使った候補を新しい順に再選択できるsource。hover preview、検索、Cancelは履歴へ追加しない
 
-Project ExplorerとPlugin Browserは同じBrowser shellを使う。上からSearch、左または折畳み領域にSources / Collections、中央にResults、必要時だけFilters / Detailを置き、keyboard focus移動、single click選択、preview、grid/list切替、履歴、drag/drop、`Enter`の意味を揃える。狭い常設panelではSources / CollectionsとResultsを優先し、Tags、Detail、管理操作を常時同時表示しない。
+Project ExplorerとPlugin Browserは同じBrowser shellを使う。上からSearch、左または折畳み領域にSources / Collections、中央にResultsを置き、keyboard focus移動、single click選択、preview、grid/list切替、履歴、drag/drop、`Enter`の意味を揃える。狭い常設panelではSearchからResultsへの視線を遮るkind tag/filter行を置かず、Sources / Collectionsと分類責任を重複させない。高度な絞り込みが必要な時だけ別のFilter Viewへ開き、Tags、Detail、管理操作を常時同時表示しない。
 
 Tagsは全候補の語彙をchipとして固定表示しない。現在scopeと検索結果に関連する少数をFilter Viewへ出し、選択に応じて結果件数と利用可能tagを更新する。複合条件を繰り返し使う場合は保存検索をCollection相当の入口へ置けるが、別の検索結果正本を作らない。
 

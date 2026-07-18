@@ -57,14 +57,6 @@ function CandidatePluginBrowser() {
           placeholder="Search"
           aria-label="Search plugins"
         />
-        <button
-          className="candidate-icon-button"
-          id="plugin-filter-toggle"
-          aria-label="Filters"
-          aria-expanded="false"
-        >
-          ◫
-        </button>
         <span className="plugin-view-toggle" aria-label="Result view">
           <button
             data-plugin-view="visual"
@@ -83,13 +75,6 @@ function CandidatePluginBrowser() {
             ☷
           </button>
         </span>
-      </div>
-
-      <div className="candidate-filter-panel" id="plugin-filter-panel" hidden>
-        <button className="plugin-label on" data-plugin-label="all">All</button>
-        <button className="plugin-label" data-plugin-label="effect">FX</button>
-        <button className="plugin-label" data-plugin-label="generator">Gen</button>
-        <button className="plugin-label" data-plugin-label="text">Text</button>
       </div>
 
       <div className="candidate-browser-layout">

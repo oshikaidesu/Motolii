@@ -7,7 +7,7 @@
   height: calc(100% - 57px);
   min-height: 0;
   display: grid;
-  grid-template-rows: 36px auto minmax(0, 1fr);
+  grid-template-rows: 36px minmax(0, 1fr);
   background: var(--panel);
 }
 
@@ -48,18 +48,6 @@
 .candidate-icon-button[aria-expanded="true"] {
   border-color: var(--way-plugins);
   color: var(--ink);
-}
-
-.candidate-filter-panel {
-  display: flex;
-  gap: 3px;
-  padding: 4px 5px;
-  border-bottom: 1px solid var(--line);
-  background: var(--raised);
-}
-
-.candidate-filter-panel[hidden] {
-  display: none;
 }
 
 .candidate-browser-layout {
