@@ -52,30 +52,29 @@ D1着手前に固定する。エージェントが「もっともらしい継承
 
 1. **ネストに永続フィールドを追加する変更は、必ず`min_reader_version`を上げる**(旧リーダーはファイルを拒否する。開いて壊す経路を作らない)
 2. プラグイン作者が足しうる未知キーだけ Effect/Plugin の`extra`で保持する(F-9)。コア構造の進化は版番号で守る
-3. `CompCamera`の追加は[統一カメラ設計](../reviews/2026-07-14-unified-stage-camera-design.md)で【決定】済み。D1aの旧readerがnested `camera`を黙殺するため、D1jで`min_reader_version`を同時に上げ、D1e経路で旧projectへ既定cameraを追加する。schemaだけを先に足さない
+3. `CompCamera`の追加は[planar v1 camera決定](../reviews/2026-07-16-m2-comp-camera-decision.md)で【決定】済み。D1aの旧readerがnested `camera`を黙殺するため、D1jで`min_reader_version`を同時に上げ、D1e経路で旧projectへ既定cameraを追加する。schemaだけを先に足さない
 
-## 統一カメラの永続意味(D1j / **【決定】** 2026-07-14)
+## 統一カメラの永続意味(D1j / **【決定】** 2026-07-16 / planar v1)
 
-2D/3Dで別の制作世界を持たない。全Compositionは共有`CompCamera`をちょうど1つ持ち、既存2D objectは同じ正準XYZ世界の`z=0`平面へ投影する。`Output Frame`はcamera projection apertureそのものであり、別のcrop transformを保存しない。
+正本: [planar v1 camera決定](../reviews/2026-07-16-m2-comp-camera-decision.md)。2D/3Dで別の制作世界を持たない。全Compositionは共有`Composition.camera`をちょうど1つ持ち、既存2D objectは同じ正準XYZ世界の`z=0`平面へ投影する。`Output Frame`はcamera projection apertureそのものであり、別のcrop transformを保存しない。
+
+wireはinternally tagged（`kind` / `planar_orthographic`）。受け入れる永続variantは **`CompCameraDoc::PlanarOrthographic` のみ**:
 
 ```text
-CompCameraDoc {
-  position: [DocParam<F64>; 3],       // 正準XYZ
-  target: [DocParam<F64>; 3],         // 正準XYZ
-  roll_radians: DocParam<F64>,
-  projection: Orthographic {
-    height: DocParam<F64>,             // 正準高さ
-  } | Perspective {
-    fov_y_radians: DocParam<F64>,
-  }
+CompCameraDoc::PlanarOrthographic {
+  center: DocParam<Vec2>,          // 既定 [0, 0]
+  roll_radians: DocParam<F64>,     // 既定 0
+  height: DocParam<F64>,           // 既定 1
 }
 ```
 
-- 既定は`position=[0,0,1]`、`target=[0,0,0]`、`roll=0`、`Orthographic{height=1}`。既存2D projectのOutput Frame内の画を変えないmigration値とする
+- 既定は`center=[0,0]`、`roll_radians=0`、`height=1`。既存2D projectのOutput Frame内の画を変えないmigration値とする
 - aspectは既存`Composition`の有理アスペクトが正本。cameraへ重複保存しない
 - UIのdegree表示、logical/physical px、DPI、Stage View pan/zoom/fitはDocumentへ入れない
 - 全camera parameterは既存DocParamと同じ時刻`t`で評価し、D2 command/Undo/cache invalidationへ載せる
-- 非有限値、`position==target`、`height<=0`、`fov_y_radians`が`(0, π)`外は型付きvalidate error
+- 非有限値・`height<=0`は型付きvalidate error。NDC方程式・Draft縮退・pixel変換・CQ-5解凍の詳細は正本へ委譲
+- Spatial/Perspective、target/up、複数cameraはM2非目標。M5以降の追加variant決定待ち（target制約は将来あってもpose保存にはしない）
+- 実装順は **CAM-G0→D1j→D1k→D3f のみ**。完了審判は[CompCameraレーン](#compcameraレーンm2再締結対象直列)へ委譲
 - 現行`motolii-core::CompCamera`のdegree/Perspective固定形をそのままserdeしない。D1jは追加schema+default migration、D1kはCQ-5 runtime契約+解凍へ分け、既存意味論goldenを更新で通さない
 
 D1aの「Compositionにcamera欄が無い」はD1a完了時の歴史的受け入れ条件であり、D1j後の最終schema条件ではない。D1jで当該拒否testを理由付きで新契約のmigration/roundtrip testへ置換する。
