@@ -186,6 +186,9 @@ else
   status=$?
 fi
 assert_status 0 "$status" "Cursor inspection fallback"
-assert_has_fragment "$CALL_LOG" "--mode plan" "read-only inspection supervisor mode"
+inspection_args="$(grep -F -- '--model cursor-grok-4.5-high-fast' "$CALL_LOG")"
+[[ -n "$inspection_args" ]] || fail "inspection supervisor model: cursor-grok args missing"
+[[ "$inspection_args" != *"--mode plan"* ]] || fail "inspection shell-capable standard mode: plan mode present"
+[[ "$inspection_args" != *"--force"* ]] || fail "read-only inspection autonomy: force present"
 
 echo "test-delegate-cursor-supervised: all tests passed"
