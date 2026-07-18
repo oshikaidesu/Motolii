@@ -179,6 +179,38 @@ Discover → Target → Preview → Commit / Cancel → Inspect → Undo
 - 同じ意味へのcommit入口を並置しない。即時適用のcontrolがあるなら別の`Apply`を重ねず、keyboard / ATの到達性は同じcontrolの操作性で満たす。
 - 一度も変化しない表示は席ごと外す。残すなら、全状態と遷移条件を持つ状態機械としてfixture化する。
 
+### 5.4 Parameter Panelを表現のホームにする
+
+Effect、Vism、Host標準機能の実装方式が違っても、ユーザーが表現を理解し調整する主たる場所は、選択対象のInspector内にある**同じParameter Panel**とする。自由度を増やすために、意味の家をExpression editor、plugin固有panel、隠れcontrollerへ分散させない。
+
+```text
+選択した表現
+└─ Parameter Panel
+   └─ Parameter
+      ├─ 固定値
+      ├─ Keyframe / Easing
+      ├─ 型付きDriver（Wiggle / Loop / Audio等）
+      ├─ 型付きLink / DataTrack
+      └─ Advanced（由来・範囲・評価順・診断）
+```
+
+- ユーザーはparameterから始め、現在値、時間変化、値の由来、接続、errorを同じ行またはその文脈展開から辿る。値の決まり方ごとに別の操作世界へ移動させない。
+- Stageの直接操作、Timelineのkey、Graph View、接続pickerは同じparameter意味の投影・拡大面である。別の値、別のautomation、別の接続正本を所有せず、操作後はParameter Panelで結果と由来を検査できる。
+- plugin kind、executor crate、内部node構成はユーザーが通常操作で理解すべき分類にしない。表示名、parameter、意図、入力、結果を主語にし、実装由来は診断またはDeveloper infoへ下げる。
+- Expressionが与えていた実験性は、型付きDriver、Link、Preview、Cancel、Undo、極端値を許す探索へ回収する。`Wiggle`、`Loop`、`Map`等を文字列断片ではなく名前とparameterを持つ操作として、対象parameterの近傍から追加・調整・除去できるようにする。
+- 将来、数式・WASM等の高度入力を解凍しても、parameterから開く追加の値sourceとして扱う。それを標準作法、別project正本、自由なDocument mutation、他layerの名前検索へ昇格させない。詳細な解決順は[操作単純化モデル S-4](interaction-simplicity-model.md#s-4-expressionとpluginの位置)に従う。
+- 専門的な大面積editorが必要な場合は、Parameter Panelから現在の対象と状態を引き継ぐ文脈拡大として開き、戻った時に同じ意味を検査・編集できることを要求する。専用editorだけで作成・修復できる保存状態は禁止する。
+
+この力学の目的は、初心者向けに能力を隠すことではない。**試す場所、意味を読む場所、直す場所を一致させる**ことで、初心者には所在を、熟練者には画面往復の少ない反復速度を与える。
+
+合格条件:
+
+- 任意の保存parameterについて、現在値と値sourceをParameter Panelから識別できる。
+- 固定値、keyframe、Driver、Linkのうち実装済みのsourceへ同じparameter文脈から移行し、戻せる。
+- Stage / Timeline / Graph / Advancedで行った変更が、Parameter Panelへ同じDocument意味として反映される。
+- pluginや高度機能を追加しても、それだけの専用panel、文字列expression、隠れhelperを知らなければ作品を修復できない状態を作らない。
+- pluginまたはexecutorが欠落しても、Documentが保持するraw recipeとContract Catalogのmetadataから、表示名、parameter、raw値、値source、診断を同じ場所へ投影できる。
+
 ## 6. 説明付き接続
 
 LookAt / Follow / Parent / DataTrack / Effect Use等は共通Connection Target Pickerを使う。接続mode中はカーソル近傍へ次を常時表示する。

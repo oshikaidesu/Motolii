@@ -1,0 +1,26 @@
+[package]
+name = "pv1-texture-lifecycle"
+version = "0.1.0"
+edition = "2021"
+
+# ルートworkspaceから隔離。wgpu 29 + Slint 1.17 Manual共有のtexture lifecycle検証。
+[workspace]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+slint = { version = "~1.17", default-features = false, features = ["compat-1-2", "std", "backend-winit", "renderer-femtovg-wgpu", "unstable-wgpu-29"] }
+wgpu = "29"
+motolii-core = { path = "../../crates/motolii-core" }
+motolii-gpu = { path = "../../crates/motolii-gpu" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+motolii-testkit = { path = "../../crates/motolii-testkit" }
+
+[[bin]]
+name = "pv1-texture-lifecycle"
+path = "src/main.rs"

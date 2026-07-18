@@ -17,4 +17,5 @@ motolii-render.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+motolii-plugins-firstparty.workspace = true
 motolii-testkit.workspace = true

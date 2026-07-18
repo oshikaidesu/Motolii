@@ -1,0 +1,12 @@
+[package]
+name = "motolii-plugins-firstparty"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+motolii-plugin.workspace = true
+motolii-plugin-opacity.workspace = true
+motolii-plugin-radial-repeater.workspace = true
+motolii-plugin-sine.workspace = true
+thiserror.workspace = true

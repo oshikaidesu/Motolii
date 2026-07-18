@@ -1,10 +1,8 @@
+use motolii_cli::{build_data_tracks, ParamDriverV1};
 use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, Quality, RationalTime};
 use motolii_eval::{DataTrackId, DataTracks, ParamSource, Value};
 use motolii_gpu::download_rgba;
 use motolii_nodes::{CanonicalSize, ParamRectOverlay};
-use motolii_plugin::{
-    reference::SINE_PARAM_DRIVER, ParamDriverContext, ParamDriverPlugin, ResolvedParams,
-};
 use motolii_render::{render_frame, RenderFrameRequest, SolidSource};
 use motolii_testkit::cpu_reference::expected_rect_frame;
 use motolii_testkit::{assert_rgba_close, gpu_or_skip, tol, RgbaImageDesc};
@@ -17,25 +15,25 @@ const FPS: Fps = match Fps::try_new(12, 1) {
 };
 
 fn sine_x_tracks() -> DataTracks {
-    let mut params = ResolvedParams::new();
-    params.insert("amplitude", Value::F64(0.25));
-    params.insert("frequency_hz", Value::F64(0.5));
-    params.insert("offset", Value::F64(0.0));
-
-    let track = SINE_PARAM_DRIVER
-        .build_track(
-            ParamDriverContext {
-                start: RationalTime::ZERO,
-                duration: RationalTime::from_seconds(1),
-                sample_rate: FPS,
-            },
-            &params,
-        )
-        .unwrap();
-
-    let mut tracks = DataTracks::new();
-    tracks.insert(DataTrackId("sine_x".into()), track);
-    tracks
+    let drivers = vec![ParamDriverV1 {
+        plugin: "core.param.sine".into(),
+        track: "sine_x".into(),
+        effect_version: 2,
+        params: {
+            let mut params = std::collections::HashMap::new();
+            params.insert("amplitude".into(), Value::F64(0.25));
+            params.insert("frequency_hz".into(), Value::F64(0.5));
+            params.insert("offset".into(), Value::F64(0.0));
+            params
+        },
+    }];
+    build_data_tracks(
+        &drivers,
+        RationalTime::ZERO,
+        RationalTime::from_seconds(1),
+        FPS,
+    )
+    .unwrap()
 }
 
 fn sine_driven_overlay() -> ParamRectOverlay {
@@ -102,7 +100,7 @@ fn datatrack_overlay_matches_golden_at_start_mid_end() {
 
 #[test]
 fn project_json_accepts_datatrack_center() {
-    use motolii_cli::{build_data_tracks, load_project_v1_from_str};
+    use motolii_cli::load_project_v1_from_str;
 
     let json = r#"{
   "version": 1,
@@ -112,6 +110,7 @@ fn project_json_accepts_datatrack_center() {
     {
       "plugin": "core.param.sine",
       "track": "sine_x",
+      "effect_version": 2,
       "params": {
         "amplitude": {"F64": 0.25},
         "frequency_hz": {"F64": 0.5},

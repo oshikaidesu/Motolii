@@ -19,8 +19,8 @@ use motolii_doc::{
 use motolii_eval::DataTracks;
 use motolii_gpu::download_rgba;
 use motolii_nodes::ClippingMaskMode;
-use motolii_plugin::reference::register_reference_plugins;
-use motolii_plugin::PluginRegistry;
+use motolii_plugin::PluginRuntime;
+use motolii_plugins_firstparty::first_party_runtime;
 use motolii_render::{render_graph_cached, RenderGraphInputs, RenderSession, RenderStep};
 use motolii_testkit::clipping_mask::{clipping_mask_frame, clipping_mask_mul_u8, ClippingMaskRef};
 use motolii_testkit::cpu_reference::{expected_rect_frame, premul_over_u8};
@@ -31,6 +31,10 @@ const H: u32 = 8;
 
 fn desc() -> FrameDesc {
     FrameDesc::packed(W, H, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true)
+}
+
+fn reference_runtime() -> PluginRuntime {
+    first_party_runtime().unwrap()
 }
 
 fn rect_clip(layer: u64, center: [f64; 2], size: [f64; 2], color: [f64; 4]) -> Clip {
@@ -94,14 +98,13 @@ fn clipped_doc(
 
 fn render_doc(doc: &Document) -> Option<Vec<u8>> {
     let gpu = gpu_or_skip()?;
-    let mut registry = PluginRegistry::new();
-    register_reference_plugins(&mut registry).unwrap();
+    let runtime = reference_runtime();
     let built = build_document_frame_graph(
         doc,
         EvaluationTime::new(RationalTime::ZERO),
         desc(),
         &DataTracks::new(),
-        &registry,
+        &runtime,
         None,
     )
     .unwrap();
@@ -114,7 +117,7 @@ fn render_doc(doc: &Document) -> Option<Vec<u8>> {
         &RenderGraphInputs {
             video_sources: &[],
             source_time: Some(built.source_time),
-            plugins: Some(&registry),
+            plugins: Some(runtime.executors()),
         },
         Quality::FINAL,
     )
@@ -131,14 +134,13 @@ fn assert_mode_maps(mode: MaskMode, want: ClippingMaskMode) {
         mode,
         false,
     );
-    let mut registry = PluginRegistry::new();
-    register_reference_plugins(&mut registry).unwrap();
+    let runtime = reference_runtime();
     let built = build_document_frame_graph(
         &doc,
         EvaluationTime::new(RationalTime::ZERO),
         desc(),
         &DataTracks::new(),
-        &registry,
+        &runtime,
         None,
     )
     .unwrap();

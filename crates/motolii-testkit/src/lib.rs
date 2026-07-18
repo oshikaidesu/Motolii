@@ -612,6 +612,44 @@ pub mod purity {
         }
     }
 
+    /// LayerSource を1回 render し、出力 RGBA を返す(testkit 専用の正規 1 経路)。
+    ///
+    /// 各呼び出しは別 encoder / 別 `queue.submit` 境界に置く(M2E-9 follow-up)。
+    pub fn render_layer_source_rgba(
+        label: &str,
+        gpu: &GpuCtx,
+        pipelines: &mut PipelineCache,
+        plugin: &dyn LayerSourcePlugin,
+        t: RationalTime,
+        params: &ResolvedParams,
+        ctx: LayerSourceContext,
+        frame: FrameDesc,
+    ) -> Result<Vec<u8>, TestkitError> {
+        let output = empty_target(gpu, frame, &format!("{label}-ls"));
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some(label) });
+        plugin
+            .render(
+                gpu,
+                pipelines,
+                &mut encoder,
+                t,
+                params,
+                ctx,
+                TextureRef {
+                    texture: &output,
+                    desc: frame,
+                },
+            )
+            .map_err(|source| TestkitError::PluginFailed {
+                label: label.into(),
+                source,
+            })?;
+        gpu.queue.submit(std::iter::once(encoder.finish()));
+        Ok(download_rgba(gpu, &output)?)
+    }
+
     /// LayerSource を同一 `(t, params, ctx)` で2回呼び、出力RGBAが一致することを要求する。
     ///
     /// 各 `render` は別 encoder / 別 `queue.submit` 境界に置く(M2E-9 follow-up)。
@@ -624,62 +662,27 @@ pub mod purity {
         ctx: LayerSourceContext,
         frame: FrameDesc,
     ) -> Result<(), TestkitError> {
-        let out_a = empty_target(gpu, frame, &format!("{label}-ls-a"));
-        let out_b = empty_target(gpu, frame, &format!("{label}-ls-b"));
         let mut pipelines = PipelineCache::new();
-        {
-            let mut encoder = gpu
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some(&format!("{label}-ls-a")),
-                });
-            plugin
-                .render(
-                    gpu,
-                    &mut pipelines,
-                    &mut encoder,
-                    t,
-                    params,
-                    ctx,
-                    TextureRef {
-                        texture: &out_a,
-                        desc: frame,
-                    },
-                )
-                .map_err(|source| TestkitError::PluginFailed {
-                    label: label.into(),
-                    source,
-                })?;
-            gpu.queue.submit(std::iter::once(encoder.finish()));
-        }
-        {
-            let mut encoder = gpu
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some(&format!("{label}-ls-b")),
-                });
-            plugin
-                .render(
-                    gpu,
-                    &mut pipelines,
-                    &mut encoder,
-                    t,
-                    params,
-                    ctx,
-                    TextureRef {
-                        texture: &out_b,
-                        desc: frame,
-                    },
-                )
-                .map_err(|source| TestkitError::PluginFailed {
-                    label: label.into(),
-                    source,
-                })?;
-            gpu.queue.submit(std::iter::once(encoder.finish()));
-        }
-
-        let a = download_rgba(gpu, &out_a)?;
-        let b = download_rgba(gpu, &out_b)?;
+        let a = render_layer_source_rgba(
+            &format!("{label}-ls-a"),
+            gpu,
+            &mut pipelines,
+            plugin,
+            t,
+            params,
+            ctx,
+            frame,
+        )?;
+        let b = render_layer_source_rgba(
+            &format!("{label}-ls-b"),
+            gpu,
+            &mut pipelines,
+            plugin,
+            t,
+            params,
+            ctx,
+            frame,
+        )?;
         let img = RgbaImageDesc {
             width: frame.width,
             height: frame.height,

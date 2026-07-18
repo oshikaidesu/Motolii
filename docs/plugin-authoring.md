@@ -12,6 +12,10 @@
 
 Motoliiの長期の北極星は、映像表現を特定projectの手順から切り離し、演奏・再利用・保存・配布できる単位にすることにある。「映像制作におけるVST」はその構造の比喩であり、このplugin境界は単なる内製effect追加口ではない。Host全体をforkせず、ひとつの表現に集中できる作者面を作る。
 
+VSM-A0I-1〜3でContract Catalog、Documentのprepared resolution、graph／exportのruntime必須化までは実装済みである。VSM-A1-3で `core.filter.opacity` を `plugins/motolii-plugin-opacity` へ、VSM-A2で `core.param.sine` を `plugins/motolii-plugin-sine` へ、VSM-A3で `core.layer_source.radial_repeater` を `plugins/motolii-plugin-radial-repeater` へ外部化した。first-party組み立てと依存allowlist検査の実証が完了している。
+
+> **現在の停止線**: plugin crateは`motolii-plugin`だけへ依存し、GPU golden／purity／parityはHost側の審判から検査する。private依存の例外やtestkitへのdev依存を追加しない。
+
 そのため、pluginは一枚の絵を出せれば完成ではない。次の全条件を満たして初めて、作品に置ける表現単位になる。
 
 - Hostが所有する時刻、型付きparameter、入力、seed、Qualityだけから再現できる
@@ -41,6 +45,7 @@ Motoliiの長期の北極星は、映像表現を特定projectの手順から切
 
 - パラメータは`ParamDef`で足りる粒度に抑える(スライダー/カラー等の自動生成で操作可能であること)
 - 将来カスタムUIが解凍されても、**自動生成パネルだけで全パラメータを操作できること**が不変条件
+- 表現の調整、値source、automation、接続、診断をParameter Panelへ集約するUI力学は[UI操作言語 §5.4](ui-interaction-language.md#54-parameter-panelを表現のホームにする)を正本とする。plugin固有panelや文字列expressionを意味の唯一の家にしない
 
 ## 2. 必須メタデータ(`NodeDesc`)
 

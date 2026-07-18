@@ -30,7 +30,7 @@ pub mod param_eval;
 pub mod param_expect;
 pub mod pathgeom;
 mod persist;
-mod plugin_compat;
+mod plugin_resolution;
 mod schema;
 mod spatial_resolve;
 mod stable_id;
@@ -81,7 +81,7 @@ pub use migrate::{
 };
 pub use param::{DocParam, LookAtAxis};
 pub use param_eval::{eval_look_at_rotation, look_at_angle, ParamEvalError, ResolvedLayerParams};
-pub use param_expect::{DocPluginKind, ExpectedValueType, KnownPluginInfo, ParamConstraints};
+pub use param_expect::{ExpectedValueType, ParamConstraints};
 pub use pathgeom::PathOpError;
 pub use persist::{
     check_migration_allowed, classify_open_mode, detect_cloud_sync, load_document,
@@ -89,7 +89,11 @@ pub use persist::{
     save_document_with_options, CloudSyncHint, OpenMode, OpenedDocument, PersistError,
     SaveAbortAfter, SaveOptions, READER_VERSION, WRITER_VERSION,
 };
-pub use plugin_compat::{PluginDegradation, PluginOpenWarning};
+pub use plugin_resolution::{
+    open_project_resolved, prepare_plugin_recipe, DocumentPluginError, PluginDiagnostic,
+    PluginDiagnosticReason, PluginSlotId, PreparedDocumentPlugins, PreparedPluginRecipe,
+    ResolvedOpenProjectOutcome,
+};
 pub use schema::{
     asset_components_require_newer_reader, AudioComponent, AudioOutOfRange, BlendMode, Clip,
     ClipSource, ClippingMaskSettings, CompositeOrder, Composition, CompositionError,
@@ -255,19 +259,22 @@ pub enum WriterMessage {
 /// D1l B-3: Effect identity 採番の正規経路は `prepare_*` のみ。旧 allocate API は公開されない:
 /// ```compile_fail
 /// # fn main() {
-/// let mut w = motolii_doc::DocumentWriter::new(motolii_doc::Document::new_current());
+/// let catalog = std::sync::Arc::new(motolii_plugin::reference::reference_catalog().unwrap());
+/// let mut w = motolii_doc::DocumentWriter::new(motolii_doc::Document::new_current(), catalog).unwrap();
 /// let _ = w.allocate_effect_id();
 /// # }
 /// ```
 /// ```compile_fail
 /// # fn main() {
-/// let mut w = motolii_doc::DocumentWriter::new(motolii_doc::Document::new_current());
+/// let catalog = std::sync::Arc::new(motolii_plugin::reference::reference_catalog().unwrap());
+/// let mut w = motolii_doc::DocumentWriter::new(motolii_doc::Document::new_current(), catalog).unwrap();
 /// let _ = w.allocate_effect_definition_id();
 /// # }
 /// ```
 /// ```compile_fail
 /// # fn main() {
-/// let mut w = motolii_doc::DocumentWriter::new(motolii_doc::Document::new_current());
+/// let catalog = std::sync::Arc::new(motolii_plugin::reference::reference_catalog().unwrap());
+/// let mut w = motolii_doc::DocumentWriter::new(motolii_doc::Document::new_current(), catalog).unwrap();
 /// let _ = w.allocate_unique_effect_pair();
 /// # }
 /// ```
@@ -336,6 +343,7 @@ pub enum WriterMessage {
 #[derive(Debug)]
 pub struct DocumentWriter {
     doc: Document,
+    catalog: Arc<motolii_plugin::PluginCatalog>,
     /// 編集世代。決定性テスト・無効化伝播の席(監査F-8)。
     pub revision: u64,
     undo: UndoHistory,
@@ -345,22 +353,29 @@ pub struct DocumentWriter {
 }
 
 impl DocumentWriter {
-    pub fn new(doc: Document) -> Self {
-        Self::with_undo_limits(doc, UndoLimit::Unlimited, UndoLimit::Unlimited)
+    pub fn new(
+        doc: Document,
+        catalog: Arc<motolii_plugin::PluginCatalog>,
+    ) -> Result<Self, DocumentPluginError> {
+        Self::with_undo_limits(doc, catalog, UndoLimit::Unlimited, UndoLimit::Unlimited)
     }
 
     /// live/再起動後で別々のUndo深さ上限を設定して構築する(残小項目【決定】2026-07-13)。
     pub fn with_undo_limits(
         doc: Document,
+        catalog: Arc<motolii_plugin::PluginCatalog>,
         live_limit: UndoLimit,
         restart_limit: UndoLimit,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, DocumentPluginError> {
+        doc.validate()?;
+        doc.prepare_plugins(&catalog)?;
+        Ok(Self {
             doc,
+            catalog,
             revision: 0,
             undo: UndoHistory::new(live_limit, restart_limit),
             next_gesture: 0,
-        }
+        })
     }
 
     pub fn snapshot(&self) -> Arc<Document> {
@@ -398,7 +413,14 @@ impl DocumentWriter {
         gesture: GestureId,
         command: Command,
     ) -> Result<(), CommandError> {
+        let before_doc = self.doc.clone();
+        let before_undo = self.undo.clone();
         self.undo.push(&mut self.doc, gesture, command)?;
+        if let Err(error) = self.doc.prepare_plugins(&self.catalog) {
+            self.doc = before_doc;
+            self.undo = before_undo;
+            return Err(CommandError::Plugin(error));
+        }
         self.revision = self.revision.wrapping_add(1);
         Ok(())
     }
@@ -478,8 +500,10 @@ impl DocumentWriter {
     }
 
     /// 保存前検証。失敗してもwriter内部のDocumentは不変(検証のみ — ガード1)。
-    pub fn validate(&self) -> Result<(), DocumentError> {
-        self.doc.validate()
+    pub fn validate(&self) -> Result<(), DocumentPluginError> {
+        self.doc.validate()?;
+        self.doc.prepare_plugins(&self.catalog)?;
+        Ok(())
     }
 
     /// D1l B-3: 新 Use+Definition を counter clone 上で準備する。成功・失敗とも live Document 不変。
@@ -517,11 +541,19 @@ pub fn render_with_snapshot(doc: &Arc<Document>) -> u32 {
 #[allow(deprecated)]
 mod tests {
     use super::*;
+
+    fn reference_writer(doc: Document) -> DocumentWriter {
+        DocumentWriter::new(
+            doc,
+            Arc::new(motolii_plugin::reference::reference_catalog().unwrap()),
+        )
+        .unwrap()
+    }
     use motolii_core::RationalTime;
 
     #[test]
     fn writer_is_sole_mutator_readers_get_arc() {
-        let mut writer = DocumentWriter::new(Document::new_v1());
+        let mut writer = reference_writer(Document::new_v1());
         let snap_before = writer.snapshot();
         assert_eq!(render_with_snapshot(&snap_before), 1);
         assert_eq!(writer.revision, 0);
@@ -540,7 +572,7 @@ mod tests {
 
     #[test]
     fn background_message_applies_only_via_writer() {
-        let mut writer = DocumentWriter::new(Document::new_v1());
+        let mut writer = reference_writer(Document::new_v1());
         writer.apply(WriterMessage::SetBpm(Bpm::try_new(100, 1).unwrap()));
         assert_eq!(writer.snapshot().bpm.num(), 100);
         assert_eq!(writer.revision, 1);

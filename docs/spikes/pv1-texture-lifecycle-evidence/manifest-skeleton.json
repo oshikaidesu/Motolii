@@ -1,0 +1,76 @@
+{
+  "ticket": "PV-1",
+  "spike_crate": "spikes/pv1-texture-lifecycle",
+  "recorded_at": "unix:1784348448",
+  "runner": "Apple M4 / Metal",
+  "environment_note": "release buildで実測。H6は単一monitor環境のため適用外。未実測の他backendはpendingのまま。",
+  "overall": "pass",
+  "automation": {
+    "lifecycle_behavior_tests": "pass",
+    "release_build": "pass"
+  },
+  "human_checks": [
+    {
+      "id": "H1",
+      "spec": "単一window継続表示 ≥10分、破綻・黒画面なし",
+      "verdict": "pass",
+      "notes": "content_update_count=18,902のrunで約10分24秒継続。終了時state=displaying、黒画面・破綻なし。"
+    },
+    {
+      "id": "H2",
+      "spec": "resize 100回後も表示継続、不要な毎frame再生成感なし",
+      "verdict": "pass",
+      "notes": "OS縦resize drag後も表示継続。最終runのtexture_create_count=217で100回以上の寸法変更を確認。"
+    },
+    {
+      "id": "H3",
+      "spec": "hide/show（単一window・Hide後自動Show往復）",
+      "verdict": "pass",
+      "notes": "run_event_loop_until_quit修正後、Hideから約400msで同一windowへ自動Showすることを実機確認。"
+    },
+    {
+      "id": "H4",
+      "spec": "minimize相当→自動Restore往復",
+      "verdict": "pass",
+      "notes": "Minimize後、約400msで同一windowへ自動Restoreすることを実機確認。"
+    },
+    {
+      "id": "H5",
+      "spec": "明示texture再生成後の復帰",
+      "verdict": "pass",
+      "notes": "Regenerate押下後も表示と数値更新が継続し、最終state=displaying。"
+    },
+    {
+      "id": "H6",
+      "spec": "DPI/monitor移動（可能な環境のみ）",
+      "verdict": "pass",
+      "notes": "単一monitor環境のため適用外。『可能な環境のみ』の任意項目として免除。"
+    }
+  ],
+  "backends": [
+    {
+      "backend": "Metal",
+      "verdict": "pass",
+      "notes": "Apple M4でH1–H5 pass。H6は単一monitor環境のため適用外。"
+    },
+    {
+      "backend": "DX12",
+      "verdict": "pending",
+      "notes": "未実測 — pending 維持"
+    },
+    {
+      "backend": "Vulkan",
+      "verdict": "pending",
+      "notes": "未実測 — pending 維持"
+    }
+  ],
+  "last_counters": {
+    "texture_create_count": 217,
+    "pipeline_create_count": 0,
+    "shader_module_create_count": 0,
+    "image_try_from_count": 104,
+    "content_update_count": 3140,
+    "ui_property_set_count": 104
+  },
+  "last_state": "displaying"
+}

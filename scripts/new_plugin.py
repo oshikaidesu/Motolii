@@ -220,6 +220,7 @@ impl {trait} for {pascal} {{
                 id: "{param_id}",
                 value_type: {param_type},
                 default: {param_default},
+                f64_domain: None,
             }}],
             min_inputs: {min_in},
             max_inputs: {max_in},

@@ -1,0 +1,3 @@
+# D1i-4 semantic harness -> oracle migration ledger.
+# 形式: <旧semantic harness>\t<新semantic oracle>
+crates/motolii-doc/tests/d1i3_blend_mode.rs	crates/motolii-doc/tests/oracles/d1i3_blend_mode.tsv

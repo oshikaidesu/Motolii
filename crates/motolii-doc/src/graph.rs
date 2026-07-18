@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use motolii_core::{FrameDesc, RationalTime, TimeMapError};
 use motolii_eval::{DataTracks, Value};
 use motolii_nodes::{CanonicalPoint, CanonicalSize, ClippingMaskMode, CompositeMode, RectOverlay};
-use motolii_plugin::{NodeDesc, PluginId, PluginRegistry, ResolvedParams};
+use motolii_plugin::{NodeDesc, PluginId, PluginRegistry, PluginRuntime, ResolvedParams};
 use motolii_render::{LinearRenderGraph, RenderStep, SolidSource, TextureId};
 
 use crate::affine::Affine2D;
@@ -19,7 +19,10 @@ use crate::param_eval::{
 };
 use crate::schema::{BlendMode, Clip, ClipSource, Group, ItemEnvelope, MaskMode, TrackItem};
 use crate::spatial_resolve::resolve_document_spaces;
-use crate::{AssetId, Document, LayerId};
+use crate::{
+    AssetId, Document, DocumentPluginError, LayerId, PluginDiagnostic, PluginDiagnosticReason,
+    PluginSlotId, PreparedDocumentPlugins,
+};
 
 /// M1互換の矩形 LayerSource(プラグインID文字列。レジストリ未登録でも D3 が OverlayRect へ落とす)。
 pub const RECT_LAYER_SOURCE: &str = "doc.layer_source.rect";
@@ -66,6 +69,10 @@ pub enum GraphError {
         #[source]
         source: motolii_plugin::PluginError,
     },
+    #[error(transparent)]
+    PluginDocument(#[from] DocumentPluginError),
+    #[error("document plugins are not executable: {0:?}")]
+    PluginDiagnostics(Vec<PluginDiagnostic>),
     #[error("unsupported clip source plugin: {0}")]
     UnsupportedSourcePlugin(String),
     #[error("VectorRecipe clip is not rasterized in D3 v1 (layer {0}); use Plugin rect or Asset")]
@@ -84,6 +91,8 @@ pub enum GraphError {
         use_id: u64,
         definition_id: u64,
     },
+    #[error("prepared LayerSource recipe missing for layer {layer}")]
+    PreparedLayerSourceMissing { layer: u64 },
 }
 
 /// ガード10: relative → absolute → same-name → hash。実在ファイルのみ返す。
@@ -132,16 +141,23 @@ pub fn build_document_frame_graph(
     eval: EvaluationTime,
     desc: FrameDesc,
     data_tracks: &DataTracks,
-    registry: &PluginRegistry,
+    runtime: &PluginRuntime,
     project_root: Option<&Path>,
 ) -> Result<DocumentFrameGraph, GraphError> {
+    let prepared = doc.prepare_plugins(runtime.catalog())?;
+    let mut diagnostics = prepared.diagnostics().to_vec();
+    diagnostics.extend(prepared.execution_diagnostics(runtime));
+    if !diagnostics.is_empty() {
+        return Err(GraphError::PluginDiagnostics(diagnostics));
+    }
     let any_solo = document_has_solo(doc);
     let mut b = GraphBuilder::new(
         doc,
         desc,
         eval.timeline_time,
         data_tracks,
-        registry,
+        runtime.executors(),
+        &prepared,
         any_solo,
     );
     let output = b.build_document(project_root)?;
@@ -166,6 +182,7 @@ struct GraphBuilder<'a> {
     timeline_time: RationalTime,
     tracks: &'a DataTracks,
     registry: &'a PluginRegistry,
+    prepared: &'a PreparedDocumentPlugins,
     any_solo: bool,
     frame_desc: FrameDesc,
     steps: Vec<RenderStep>,
@@ -184,6 +201,7 @@ impl<'a> GraphBuilder<'a> {
         timeline_time: RationalTime,
         tracks: &'a DataTracks,
         registry: &'a PluginRegistry,
+        prepared: &'a PreparedDocumentPlugins,
         any_solo: bool,
     ) -> Self {
         Self {
@@ -191,6 +209,7 @@ impl<'a> GraphBuilder<'a> {
             timeline_time,
             tracks,
             registry,
+            prepared,
             any_solo,
             frame_desc: desc,
             steps: Vec::new(),
@@ -454,21 +473,32 @@ impl<'a> GraphBuilder<'a> {
             ClipSource::Plugin {
                 plugin_id, params, ..
             } if plugin_id == RECT_LAYER_SOURCE => self.build_rect_overlay(params, layer),
-            ClipSource::Plugin {
-                plugin_id, params, ..
-            } if plugin_id == CLEAR_LAYER_SOURCE => {
-                let resolved = self.resolve_plugin_params(plugin_id, params, layer)?;
+            ClipSource::Plugin { .. } => {
+                let recipe = self
+                    .prepared
+                    .get(&PluginSlotId::LayerSource(layer))
+                    .ok_or(GraphError::PreparedLayerSourceMissing { layer: layer.get() })?;
+                let executor = self
+                    .registry
+                    .layer_source_by_name(&recipe.plugin_id)
+                    .ok_or_else(|| {
+                        GraphError::PluginDiagnostics(vec![PluginDiagnostic {
+                            slot: PluginSlotId::LayerSource(layer),
+                            plugin_id: recipe.plugin_id.clone(),
+                            reason: PluginDiagnosticReason::ExecutorMissing,
+                        }])
+                    })?;
+                let desc = executor.desc();
+                let resolved =
+                    self.resolve_plugin_params(&recipe.plugin_id, &recipe.params, layer)?;
                 let out = self.alloc_id();
                 self.steps.push(RenderStep::Plugin {
-                    id: self.resolve_plugin_id(CLEAR_LAYER_SOURCE)?,
+                    id: desc.id.clone(),
                     params: resolved,
                     inputs: vec![],
                     output: out,
                 });
                 Ok(out)
-            }
-            ClipSource::Plugin { plugin_id, .. } => {
-                Err(GraphError::UnsupportedSourcePlugin(plugin_id.clone()))
             }
         }
     }
@@ -585,11 +615,20 @@ impl<'a> GraphBuilder<'a> {
         definition: &crate::schema::EffectDefinition,
         layer: LayerId,
     ) -> Result<TextureId, GraphError> {
-        let resolved =
-            self.resolve_plugin_params(&definition.plugin_id, &definition.params, layer)?;
+        let recipe = self
+            .prepared
+            .get(&PluginSlotId::EffectDefinition(definition.id))
+            .ok_or_else(|| {
+                GraphError::PluginDiagnostics(vec![PluginDiagnostic {
+                    slot: PluginSlotId::EffectDefinition(definition.id),
+                    plugin_id: definition.plugin_id.clone(),
+                    reason: PluginDiagnosticReason::ContractMissing,
+                }])
+            })?;
+        let resolved = self.resolve_plugin_params(&recipe.plugin_id, &recipe.params, layer)?;
         let out = self.alloc_id();
         self.steps.push(RenderStep::Plugin {
-            id: self.resolve_plugin_id(&definition.plugin_id)?,
+            id: self.resolve_plugin_id(&recipe.plugin_id)?,
             params: resolved,
             inputs: vec![input],
             output: out,
@@ -824,5 +863,149 @@ mod resolve_tests {
         let got = resolve_asset_path(&asset, Some(&root)).unwrap();
         assert_eq!(got, hash_path);
         let _ = fs::remove_dir_all(&root);
+    }
+}
+
+#[cfg(test)]
+mod vism_a3_1a_tests {
+    use super::*;
+    use crate::{Clip, ClipSource, DocParam, ItemEnvelope, Track, TrackItem};
+    use motolii_core::RationalTime;
+    use motolii_eval::DataTracks;
+    use motolii_plugin::{reference::register_reference_plugins, PluginRegistry};
+
+    #[test]
+    fn n_prepared_layer_source_missing_typed() {
+        let mut doc = Document::new_current();
+        let layer = doc.layers.allocate("clear").unwrap();
+        let track = doc.track_ids.allocate("V1").unwrap();
+        doc.tracks.push(Track {
+            id: track,
+            items: vec![TrackItem::Clip(Clip {
+                envelope: ItemEnvelope::new(layer),
+                start: RationalTime::ZERO,
+                duration: RationalTime::from_seconds(1),
+                time_map: Default::default(),
+                source: ClipSource::Plugin {
+                    plugin_id: CLEAR_LAYER_SOURCE.into(),
+                    effect_version: 1,
+                    params: BTreeMap::from([(
+                        "color".into(),
+                        DocParam::const_color([0.0, 0.0, 0.0, 1.0]),
+                    )]),
+                    extra: Default::default(),
+                },
+            })],
+        });
+        doc.validate().unwrap();
+        let clip = match &doc.tracks[0].items[0] {
+            TrackItem::Clip(clip) => clip,
+            TrackItem::Group(_) => panic!("expected clip"),
+        };
+        let mut registry = PluginRegistry::new();
+        register_reference_plugins(&mut registry).unwrap();
+        let tracks = DataTracks::new();
+        let prepared = PreparedDocumentPlugins::default();
+        let mut builder = GraphBuilder::new(
+            &doc,
+            FrameDesc::packed(
+                16,
+                8,
+                motolii_core::PixelFormat::Rgba8Unorm,
+                motolii_core::ColorSpace::Srgb,
+                true,
+            ),
+            RationalTime::ZERO,
+            &tracks,
+            &registry,
+            &prepared,
+            false,
+        );
+        let expected_layer = layer.get();
+        let err = builder
+            .build_source(clip, RationalTime::ZERO, layer)
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            GraphError::PreparedLayerSourceMissing { layer: got } if got == expected_layer
+        ));
+    }
+}
+
+#[cfg(test)]
+mod d3e_resolve_effect_tests {
+    use super::*;
+    use crate::{
+        Clip, ClipSource, DocParam, EffectDefinitionId, EffectId, EffectUse, ItemEnvelope, Track,
+        TrackItem, RECT_LAYER_SOURCE,
+    };
+    use motolii_core::{ColorSpace, FrameDesc, PixelFormat, RationalTime};
+    use motolii_eval::DataTracks;
+    use motolii_plugin::{reference::register_reference_plugins, PluginRegistry};
+
+    #[test]
+    fn missing_effect_definition_returns_typed_graph_error() {
+        let mut doc = Document::new_current();
+        let layer = doc.layers.allocate("clip").unwrap();
+        let track = doc.track_ids.allocate("V1").unwrap();
+        let dangling = EffectDefinitionId::from_raw(42);
+        let use_id = EffectId::from_raw(7);
+        let mut envelope = ItemEnvelope::new(layer);
+        envelope.effects.push(EffectUse {
+            id: use_id,
+            definition_id: dangling,
+        });
+        doc.tracks.push(Track {
+            id: track,
+            items: vec![TrackItem::Clip(Clip {
+                envelope,
+                start: RationalTime::ZERO,
+                duration: RationalTime::from_seconds(1),
+                time_map: Default::default(),
+                source: ClipSource::Plugin {
+                    plugin_id: RECT_LAYER_SOURCE.into(),
+                    effect_version: 1,
+                    params: BTreeMap::from([
+                        ("center".into(), DocParam::const_vec2([0.0, 0.0])),
+                        ("size".into(), DocParam::const_vec2([0.5, 0.5])),
+                        ("color".into(), DocParam::const_color([1.0, 0.0, 0.0, 1.0])),
+                    ]),
+                    extra: Default::default(),
+                },
+            })],
+        });
+
+        let mut registry = PluginRegistry::new();
+        register_reference_plugins(&mut registry).unwrap();
+        let tracks = DataTracks::new();
+        let prepared = PreparedDocumentPlugins::default();
+        let desc = FrameDesc::packed(16, 8, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let builder = GraphBuilder::new(
+            &doc,
+            desc,
+            RationalTime::ZERO,
+            &tracks,
+            &registry,
+            &prepared,
+            false,
+        );
+        let effect = match &doc.tracks[0].items[0] {
+            TrackItem::Clip(clip) => &clip.envelope.effects[0],
+            TrackItem::Group(_) => panic!("expected clip"),
+        };
+        let expected_layer = layer.get();
+        let err = builder
+            .resolve_effect_definition(effect, layer)
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            GraphError::MissingEffectDefinition {
+                layer: got_layer,
+                use_id: got_use,
+                definition_id: got_def,
+            } if got_layer == expected_layer
+                && got_use == use_id.get()
+                && got_def == dangling.get()
+        ));
     }
 }

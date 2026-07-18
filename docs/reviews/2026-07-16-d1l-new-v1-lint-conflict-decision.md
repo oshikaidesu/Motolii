@@ -2,6 +2,8 @@
 
 Status: **Decision amendment — specification correction before PR #200 repair**.
 
+> 2026-07-17追補: 本文書の「semantic test fileをbyte-for-byte不変」は、当時のD1i-4実装を前提にした衝突処分である。以後は[semantic oracle保護境界の訂正](2026-07-17-d1i4-semantic-oracle-boundary-decision.md)を優先し、期待値oracleは不変、API・fixture・runtime配線を担うharnessは変更可と読む。`new_v1`の製品利用をAST gateで拒否する決定自体は維持する。
+
 ## Conflict
 
 The current D1l constructor decision simultaneously requires:

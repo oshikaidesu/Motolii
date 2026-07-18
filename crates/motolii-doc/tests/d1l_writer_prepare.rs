@@ -3,19 +3,25 @@
 mod common;
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use common::identity_roundtrip::assert_identity_command_roundtrip;
 
 use motolii_core::RationalTime;
 use motolii_doc::{
     Clip, ClipSource, Command, CommandError, DocParam, DocValue, Document, DocumentError,
-    DocumentWriter, DraftDocParam, DraftKeyframe, EffectDefinition, EffectDefinitionDraft,
-    EffectDefinitionId, EffectId, EffectUse, ItemEnvelope, LayerId, PrepareError, StableIdError,
-    StableIdReservation, Track, TrackId, TrackItem, MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
-    WRITER_VERSION,
+    DocumentPluginError, DocumentWriter, DraftDocParam, DraftKeyframe, EffectDefinition,
+    EffectDefinitionDraft, EffectDefinitionId, EffectId, EffectUse, ItemEnvelope, LayerId,
+    PrepareError, StableIdError, StableIdReservation, Track, TrackId, TrackItem,
+    MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS, WRITER_VERSION,
 };
 use motolii_eval::Interp;
+use motolii_plugin::reference::reference_catalog;
 use serde_json::Map;
+
+fn reference_writer(doc: Document) -> DocumentWriter {
+    DocumentWriter::new(doc, Arc::new(reference_catalog().unwrap())).unwrap()
+}
 
 fn collect_keyframe_ids_param(param: &DocParam, out: &mut Vec<u64>) {
     match param {
@@ -156,7 +162,7 @@ fn v4_fixture() -> Fixture {
     let def_id = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
     doc.effect_definitions.push(EffectDefinition::new(
         def_id,
-        "core.filter.tint",
+        "vendor.filter.fixture",
         1,
         true,
         BTreeMap::from([("amount".into(), DocParam::const_f64(0.5))]),
@@ -245,7 +251,7 @@ fn assert_writer_unchanged(writer: &DocumentWriter, before: &Document, revision:
 #[test]
 fn prepare_success_leaves_writer_document_revision_undo_redo_unchanged() {
     let f = v4_fixture();
-    let writer = DocumentWriter::new(f.doc.clone());
+    let writer = reference_writer(f.doc.clone());
     let snap = writer.snapshot();
     let revision = writer.revision;
 
@@ -272,7 +278,7 @@ fn prepare_success_leaves_writer_document_revision_undo_redo_unchanged() {
 #[test]
 fn prepare_create_fixed_allocation_order_and_reservation_closure() {
     let f = v4_fixture();
-    let writer = DocumentWriter::new(f.doc);
+    let writer = reference_writer(f.doc);
     let before = writer.snapshot().next_stable_id.peek_next();
     let cmd = writer
         .prepare_create_effect(f.layer, 0, nested_create_draft())
@@ -311,7 +317,7 @@ fn prepare_create_fixed_allocation_order_and_reservation_closure() {
 #[test]
 fn prepare_link_reserves_use_id_only() {
     let f = v4_fixture();
-    let writer = DocumentWriter::new(f.doc);
+    let writer = reference_writer(f.doc);
     let before = writer.snapshot().next_stable_id.peek_next();
     let cmd = writer
         .prepare_link_effect_use(f.layer, 0, f.def_id)
@@ -334,7 +340,7 @@ fn prepare_link_reserves_use_id_only() {
 #[test]
 fn prepare_copy_local_remints_definition_not_use() {
     let (mut doc, layer) = layer_track_only_fixture();
-    let seed_writer = DocumentWriter::new(doc.clone());
+    let seed_writer = reference_writer(doc.clone());
     let seed_cmd = seed_writer
         .prepare_create_effect(layer, 0, nested_create_draft())
         .expect("nested create");
@@ -351,7 +357,7 @@ fn prepare_copy_local_remints_definition_not_use() {
     let original_def_id = original_definition.id;
     let original_def = doc.effect_definition(original_def_id).unwrap().clone();
 
-    let writer = DocumentWriter::new(doc);
+    let writer = reference_writer(doc);
     let before = writer.snapshot().next_stable_id.peek_next();
     let copy_cmd = writer.prepare_copy_local_effect(use_id).expect("copy");
     let Command::CopyLocalEffect {
@@ -428,7 +434,7 @@ fn prepare_copy_local_remints_definition_not_use() {
 #[test]
 fn prepared_commands_satisfy_identity_roundtrip() {
     let f = v4_fixture();
-    let writer = DocumentWriter::new(f.doc.clone());
+    let writer = reference_writer(f.doc.clone());
     let snap = writer.snapshot();
 
     for cmd in [
@@ -450,7 +456,7 @@ fn prepare_rejects_non_v4_documents() {
         let mut doc = Document::new_current();
         doc.version = version;
         doc.min_reader_version = min;
-        let writer = DocumentWriter::new(doc);
+        let writer = reference_writer(doc);
         let draft = EffectDefinitionDraft {
             plugin_id: "p".into(),
             effect_version: 1,
@@ -475,33 +481,20 @@ fn prepare_rejects_non_v4_documents() {
 }
 
 #[test]
-fn prepare_rejects_validate_failure_without_mutation() {
+fn writer_constructor_rejects_intrinsically_invalid_document() {
     let mut f = v4_fixture();
     f.doc.tracks[0].id = TrackId::from_raw(99);
-    let writer = DocumentWriter::new(f.doc);
-    let before = writer.snapshot();
-    let revision = writer.revision;
-    let draft = EffectDefinitionDraft {
-        plugin_id: "p".into(),
-        effect_version: 1,
-        enabled: true,
-        params: BTreeMap::new(),
-        extra: Map::new(),
-    };
-    let err = writer
-        .prepare_create_effect(f.layer, 0, draft)
-        .expect_err("invalid doc");
+    let err = DocumentWriter::new(f.doc, Arc::new(reference_catalog().unwrap())).unwrap_err();
     assert!(matches!(
         err,
-        PrepareError::Command(CommandError::Validate(_))
+        DocumentPluginError::Structural(DocumentError::UnknownTrackId { id: 99 })
     ));
-    assert_writer_unchanged(&writer, &before, revision);
 }
 
 #[test]
 fn prepare_rejects_missing_target_and_bad_index() {
     let f = v4_fixture();
-    let writer = DocumentWriter::new(f.doc);
+    let writer = reference_writer(f.doc);
     let before = writer.snapshot();
     let revision = writer.revision;
     let draft = EffectDefinitionDraft {
@@ -534,7 +527,7 @@ fn prepare_rejects_missing_target_and_bad_index() {
 #[test]
 fn prepare_link_rejects_missing_definition() {
     let f = v4_fixture();
-    let writer = DocumentWriter::new(f.doc);
+    let writer = reference_writer(f.doc);
     let before = writer.snapshot();
     let err = writer
         .prepare_link_effect_use(f.layer, 0, EffectDefinitionId::from_raw(999))
@@ -549,7 +542,7 @@ fn prepare_link_rejects_missing_definition() {
 #[test]
 fn prepare_copy_local_rejects_missing_use() {
     let f = v4_fixture();
-    let writer = DocumentWriter::new(f.doc);
+    let writer = reference_writer(f.doc);
     let before = writer.snapshot();
     let err = writer
         .prepare_copy_local_effect(EffectId::from_raw(999))
@@ -564,7 +557,7 @@ fn prepare_copy_local_rejects_missing_use() {
 #[test]
 fn prepare_create_rejects_duplicate_keyframe_times_without_consuming_ids() {
     let f = v4_fixture();
-    let writer = DocumentWriter::new(f.doc);
+    let writer = reference_writer(f.doc);
     let before_counter = writer.snapshot().next_stable_id.peek_next();
     let snap = writer.snapshot();
     let t = RationalTime::ZERO;
@@ -601,7 +594,7 @@ fn prepare_create_rejects_duplicate_keyframe_times_without_consuming_ids() {
 #[test]
 fn prepare_create_rejects_unsorted_keyframe_times_without_consuming_ids() {
     let f = v4_fixture();
-    let writer = DocumentWriter::new(f.doc);
+    let writer = reference_writer(f.doc);
     let before_counter = writer.snapshot().next_stable_id.peek_next();
     let draft = EffectDefinitionDraft {
         plugin_id: "p".into(),
@@ -635,7 +628,7 @@ fn prepare_create_rejects_unsorted_keyframe_times_without_consuming_ids() {
 #[test]
 fn prepare_create_rejects_invalid_interp_without_consuming_ids() {
     let f = v4_fixture();
-    let writer = DocumentWriter::new(f.doc);
+    let writer = reference_writer(f.doc);
     let before_counter = writer.snapshot().next_stable_id.peek_next();
     let draft = EffectDefinitionDraft {
         plugin_id: "p".into(),
@@ -667,7 +660,7 @@ fn prepare_create_rejects_invalid_interp_without_consuming_ids() {
 #[test]
 fn prepare_create_rejects_non_finite_value_without_consuming_ids() {
     let f = v4_fixture();
-    let writer = DocumentWriter::new(f.doc);
+    let writer = reference_writer(f.doc);
     let before_counter = writer.snapshot().next_stable_id.peek_next();
     let draft = EffectDefinitionDraft {
         plugin_id: "p".into(),
@@ -695,7 +688,7 @@ fn prepare_create_rejects_non_finite_value_without_consuming_ids() {
 fn prepare_create_rejects_stable_id_exhaustion_without_mutation() {
     let mut f = v4_fixture();
     exhaust_stable_id_counter(&mut f.doc);
-    let writer = DocumentWriter::new(f.doc);
+    let writer = reference_writer(f.doc);
     let before = writer.snapshot();
     let draft = EffectDefinitionDraft {
         plugin_id: "p".into(),
@@ -720,6 +713,6 @@ fn new_current_contract_matches_prepare_gate() {
         doc.min_reader_version,
         MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS
     );
-    let writer = DocumentWriter::new(doc);
+    let writer = reference_writer(doc);
     assert!(writer.validate().is_ok());
 }

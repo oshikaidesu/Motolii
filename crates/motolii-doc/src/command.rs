@@ -197,6 +197,8 @@ pub enum CommandError {
     StableIdOutsideReservation { id: u64, before: u64, after: u64 },
     #[error(transparent)]
     Validate(#[from] crate::validate::DocumentError),
+    #[error(transparent)]
+    Plugin(#[from] crate::DocumentPluginError),
     #[error(
         "layer_names keys do not match track item subtree (item={item_layers:?}, names={named_layers:?})"
     )]

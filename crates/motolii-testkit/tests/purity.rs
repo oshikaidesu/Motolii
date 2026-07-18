@@ -3,18 +3,21 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::OnceLock;
 
-use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, RationalTime};
+use motolii_core::{ColorSpace, CompCamera, Fps, FrameDesc, PixelFormat, RationalTime};
 use motolii_eval::Value;
 use motolii_gpu::{GpuCtx, PipelineCache};
-use motolii_plugin::reference::{
-    register_reference_plugins, CLEAR_FILTER, OPACITY_FILTER, SINE_PARAM_DRIVER, TINT_FILTER,
-};
+use motolii_plugin::reference::{register_reference_plugins, CLEAR_FILTER, TINT_FILTER};
 use motolii_plugin::{
-    FilterPlugin, NodeDesc, ParamDriverContext, PluginError, PluginId, PluginKind, PluginRegistry,
-    RenderCtx, ResolvedParams, TextureRef,
+    FilterPlugin, LayerSourceContext, NodeDesc, ParamDriverContext, PluginError, PluginId,
+    PluginKind, PluginRegistry, RenderCtx, ResolvedParams, TextureRef,
 };
+use motolii_plugin_opacity::OPACITY_FILTER;
+use motolii_plugin_radial_repeater::RADIAL_REPEATER_LAYER_SOURCE;
+use motolii_plugin_sine::SINE_PARAM_DRIVER;
+use motolii_plugins_firstparty::first_party_registry;
 use motolii_testkit::purity::{
-    assert_filter_pure, assert_param_driver_pure, assert_registry_pure, RegistryPurityProbe,
+    assert_filter_pure, assert_layer_source_pure, assert_param_driver_pure, assert_registry_pure,
+    RegistryPurityProbe,
 };
 use motolii_testkit::{gpu_or_skip, TestkitError};
 
@@ -101,15 +104,51 @@ fn sine_param_driver_is_pure() {
 }
 
 #[test]
+fn radial_repeater_layer_source_is_pure() {
+    let Some(gpu) = gpu_or_skip() else { return };
+    let frame = FrameDesc::packed(16, 12, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+    let mut params = ResolvedParams::new();
+    params.insert("count", Value::F64(9.0));
+    params.insert("radius", Value::F64(0.28));
+    params.insert("dot_radius", Value::F64(0.05));
+    params.insert("phase", Value::F64(0.15));
+    params.insert("angular_speed", Value::F64(0.7));
+    params.insert("color", Value::Color([0.25, 0.55, 0.85, 0.65]));
+    assert_layer_source_pure(
+        "radial-repeater-pure",
+        &gpu,
+        &RADIAL_REPEATER_LAYER_SOURCE,
+        RationalTime::from_seconds(2),
+        &params,
+        LayerSourceContext {
+            camera: CompCamera::DEFAULT,
+        },
+        frame,
+    )
+    .unwrap();
+}
+
+#[test]
+fn first_party_registry_is_pure() {
+    let Some(gpu) = gpu_or_skip() else { return };
+    let registry = first_party_registry().unwrap();
+    assert!(registry.len(PluginKind::Filter) >= 1);
+    assert!(registry.len(PluginKind::LayerSource) >= 1);
+    assert!(registry.len(PluginKind::Composite) >= 1);
+    assert_eq!(registry.len(PluginKind::ParamDriver), 1);
+    assert_registry_pure(&registry, &gpu, &RegistryPurityProbe::small()).unwrap();
+}
+
+#[test]
 fn reference_registry_is_pure() {
     let Some(gpu) = gpu_or_skip() else { return };
     let mut registry = PluginRegistry::new();
     register_reference_plugins(&mut registry).unwrap();
-    // Filter×3 + ParamDriver + LayerSource + Composite が手書き列挙なしで検査される。
+    // Filter×2 + LayerSource + Composite。ParamDriverは外部crateへ移設済み。
     assert!(registry.len(PluginKind::Filter) >= 1);
     assert!(registry.len(PluginKind::LayerSource) >= 1);
     assert!(registry.len(PluginKind::Composite) >= 1);
-    assert!(registry.len(PluginKind::ParamDriver) >= 1);
+    assert_eq!(registry.len(PluginKind::ParamDriver), 0);
     assert_registry_pure(&registry, &gpu, &RegistryPurityProbe::small()).unwrap();
 }
 

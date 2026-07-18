@@ -1,6 +1,6 @@
 # 実装進行台帳
 
-最終確認: **2026-07-16**
+最終確認: **2026-07-18**
 
 このファイルは、実装者が「次に何をするか」を1枚で判断するための現場用台帳。M0〜M5の意味や完了条件を再定義せず、現在の依存関係と発注順だけを示す。
 
@@ -38,25 +38,25 @@
 |---|---|---|
 | M0 | `DONE` | spike完了 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み |
-| M2 | **実装中** | D1l/D3e、D5、統一camera follow-upをmainへ到達させる。D6は#150実装+#154修復済み |
-| M3 | **実装開始済み** | U0aはmain到達済み。次はU0b-1とU1a-1。U0eは生成基盤/fixtureと人間が決める具体値を分離。U0fはG0-8+K1a実測待ち |
+| M2 | **再締結ゲート発効中** | D1l実装はmain到達済み。D3e、D1m、CAM-G0→D1j→D1k→D3f、追補レビューと再締結証跡を閉じる。D5は骨格到達・統合審判pending |
+| M3 | **製品実装停止** | #180/#191は隔離CIと空クレート骨格のみ。再締結解除後のM3入場PRで依存を最新mainへ再翻訳するまでU0/U1等を発注しない |
 | M4 | **契約spike可** | K0でRoD/RoIのruntime契約を凍結。その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む |
 | M5 | **identity spike可** | P0IでDuplicator/Instance identityを凍結 |
 
-M2を全件閉じてからM3を一括開始する方式ではない。M3はタスク別入場であり、依存が閉じたレーンから並行して進める。
+[M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)の発効中は、個別依存が閉じて見えるM3レーンも製品実装へ入れない。依存ゼロで製品コードを変更しない調査・fixtureだけを分離できる。ゲート解除後はM3入場PRでタスク別依存へ再翻訳する。
 
 ## 主クリティカルパス
 
 ```text
 Shared Effect:
-D1l #172 → D3e → U2g → K2
+D1l DONE → D3e → U2g（M3入場後）→ K2
 
 M3 shell / preview:
-U0a DONE → U1a-1 → U1b-1 → U1b-2 → U1f #169
+U0a骨格 DONE → [M2再締結解除・M3入場] → U1a-1 → U1b-1 → U1b-2 → U1f #169
                                   └→ U2b-1 → U2c-1〜5 → U2f #168
 
 Unified Camera:
-D1j → D1k → D3 camera follow-up → U1f #169 → U2d
+CAM-G0 → D1j → D1k → D3f → [M3入場] → U1f #169 → U2d
 
 Timeline Effect UI:
 U0a + G0-2 → U0b-1 → U0b-2 → U3a
@@ -97,13 +97,11 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 | 優先 | ID | Phase | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
-| 1 | D1l | M2 | `DO` | [#172](https://github.com/oshikaidesu/Motolii/issues/172) | PR #171、D1e、D1f、D1i-2はmain到達済み。着手時にGR-PVを再確認 | D3eをIssue化 |
-| 2 | U0b-1 | M3 | `ISSUE` | — | U0a、G0-2、D2はmain到達済み。状態所有fixtureだけを発注 | U0b-2をIssue化 |
-| 3 | U1a-1 | M3 | `ISSUE` | — | U0aとD3はmain到達済み。最新mainから固定shell+静止viewportだけを発注 | U1b-1をIssue化 |
-| 4 | U0e-1 | M3 | `ISSUE` | — | U0a完了。PR #184は証拠・抽出元とし、具体値/shellを持ち込まない | U0e-2をIssue化 |
-| 5 | D5 | M2 | `DO` | [#144](https://github.com/oshikaidesu/Motolii/issues/144) | D3、D4、D4-FU #147はmain到達済み | U5のM2依存を解除 |
-| 6 | K0 | M4 | `DO` / `SPIKE` | [#167](https://github.com/oshikaidesu/Motolii/issues/167) | D3はmain到達済み。Issue本文の未checkは着手時に同期 | K1aをIssue化 |
-| 7 | P0I | M5 | `DO` / `SPIKE` | [#170](https://github.com/oshikaidesu/Motolii/issues/170) | 独立。製品schema/APIを追加しない | P7aをIssue化 |
+| 1 | D3e | M2 | `DONE` | — | `apply_effect`をprepared recipe評価へ。`d3e_shared_effect_eval` + `d3e_preview_export_same` | Shared Effect評価を閉じる |
+| 2 | D1m | M2 | `DO` | — | [A0S追補](reviews/2026-07-17-vism-a0s-contract-catalog-spec.md)でpath mutationはsession/crate-private確定。root-public raw-path save/open維持は不要 | 保存所有権を閉じる |
+| 3 | CAM-G0 | M2 | `DO` / `SPIKE` | — | planar v1 camera決定main到達済み。既存pixel fixture/classificationだけ | D1jを解禁 |
+| 4 | K0 | M4 | `DO` / `SPIKE` | [#167](https://github.com/oshikaidesu/Motolii/issues/167) | D3はmain到達済み。製品schema/APIへ焼かない独立fixtureに限定 | K1aをIssue化 |
+| 5 | P0I | M5 | `DO` / `SPIKE` | [#170](https://github.com/oshikaidesu/Motolii/issues/170) | 独立。製品schema/APIを追加しない | P7aをIssue化 |
 
 ## 次にIssue化するもの
 
@@ -111,35 +109,35 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 | 順序 | ID | Phase | 状態 | 起票条件 | 次の出口 |
 |---|---|---|---|---|---|
-| 1 | D3e | M2 | `WAIT` | D1l merge | Shared Effectを各Use位置で評価し、U2gを解禁 |
+| 1 | D1j | M2 | `WAIT` | CAM-G0 merge（D1lはmain到達済み） | v5 planar camera schema/default migration |
 | 2 | U1b-1 | M3 | `WAIT` | U1a-1 merge | render worker/latest mailbox。古い結果E2EはU1b-2 |
 | 3 | U0b-2 | M3 | `WAIT` | U0b-1 merge | Slint非依存domain intent。U0c-1/U2a-1の入口 |
-| 5 | U3a | M3 | `WAIT` | U0a + U0b merge | timeline基盤、U2gのUI依存を解除 |
-| 6 | U2g | M3 | `WAIT` | D1l + D3e + U0e + U2b + U3a merge | Effect常時接続線 |
-| 7 | K1a | M4 | `WAIT` | K0 merge | ResourceLedgerとhard budget。backendの空きVRAM値を正本にしない |
-| 8 | K1b | M4 | `WAIT` | K1a merge | cache同一性/LRU/並行store |
-| 9 | K1c | M4 | `WAIT` | K1a + K1b merge | VRAM/RAM/disk階層admissionと退避 |
-| 10 | K1d | M4 | `WAIT` | K1c + K4 merge | 容量pressureとdeadlineを分離したpreview縮退signal |
-| 10a | K7a | M4 | `WAIT` | K1b + K1c + D3 merge | group子合成のatomic bake成果物境界 |
-| 10b | K7b | M4 | `WAIT` | K7a + K2 merge | 依存時間区間だけの無効化と旧世代再利用 |
-| 10c | K7c | M4 | `WAIT` | K7a + K7b merge | bake hit時の内部graph置換と再freeze |
-| 10d | K8a | M4 | `WAIT` | K1b + K1c + K1d + D3 merge | 全曲Draft coverage planner |
-| 10e | K8b | M4 | `WAIT` | K7c + K8a + D5 merge | 100GB accounting fixtureと通し再生E2E |
-| 11 | U0f | M3 | `WAIT` | G0-2 + G0-8 + U0b + K1a merge | resource policyをUser settingsへ。Documentへ入れない |
-| 12 | U1g | M3 | `WAIT` | U1b + U1c + U5 + K1d merge | Transport時刻不変の最新frame表示/コマ落ち |
-| 13 | U1h | M3 | `WAIT` | U0e + U0f + U1g merge | Performance/Memory settingsとpressure HUD |
-| 14 | P7a | M5 | `WAIT` | P0I merge | Duplicator recipe schema |
-| 15 | U9a | M3 | `WAIT` | U2b merge | 汎用one-shot Generator hook。script runtime型を公開契約へ焼かない |
-| 16 | U9b | M3/v1.x | `WAIT` | U9a merge | Motolii ShapeScript。Paper.js互換やp5.js互換を名乗らない |
-| 17 | U9c | M3/v1.x | `WAIT` | U9b merge | SVG materialize adapter。DOM/XMLをDocument意味へしない |
-| 18 | SCR-4 | M4/v1.x | `WAIT` | U9b + F-11 + K0/K1b/K1c/K7 | 非clear drawをホスト所有Feedbackへ翻訳。隠しcanvasを作らない |
+| 4 | U3a | M3 | `WAIT` | U0a + U0b merge | timeline基盤、U2gのUI依存を解除 |
+| 5 | U2g | M3 | `WAIT` | D1l + D3e + U0e + U2b + U3a merge | Effect常時接続線 |
+| 6 | K1a | M4 | `WAIT` | K0 merge | ResourceLedgerとhard budget。backendの空きVRAM値を正本にしない |
+| 7 | K1b | M4 | `WAIT` | K1a merge | cache同一性/LRU/並行store |
+| 8 | K1c | M4 | `WAIT` | K1a + K1b merge | VRAM/RAM/disk階層admissionと退避 |
+| 9 | K1d | M4 | `WAIT` | K1c + K4 merge | 容量pressureとdeadlineを分離したpreview縮退signal |
+| 10 | K7a | M4 | `WAIT` | K1b + K1c + D3 merge | group子合成のatomic bake成果物境界 |
+| 11 | K7b | M4 | `WAIT` | K7a + K2 merge | 依存時間区間だけの無効化と旧世代再利用 |
+| 12 | K7c | M4 | `WAIT` | K7a + K7b merge | bake hit時の内部graph置換と再freeze |
+| 13 | K8a | M4 | `WAIT` | K1b + K1c + K1d + D3 merge | 全曲Draft coverage planner |
+| 14 | K8b | M4 | `WAIT` | K7c + K8a + D5 merge | 100GB accounting fixtureと通し再生E2E |
+| 15 | U0f | M3 | `WAIT` | G0-2 + G0-8 + U0b + K1a merge | resource policyをUser settingsへ。Documentへ入れない |
+| 16 | U1g | M3 | `WAIT` | U1b + U1c + U5 + K1d merge | Transport時刻不変の最新frame表示/コマ落ち |
+| 17 | U1h | M3 | `WAIT` | U0e + U0f + U1g merge | Performance/Memory settingsとpressure HUD |
+| 18 | P7a | M5 | `WAIT` | P0I merge | Duplicator recipe schema |
+| 19 | U9a | M3 | `WAIT` | U2b merge | 汎用one-shot Generator hook。script runtime型を公開契約へ焼かない |
+| 20 | U9b | M3/v1.x | `WAIT` | U9a merge | Motolii ShapeScript。Paper.js互換やp5.js互換を名乗らない |
+| 21 | U9c | M3/v1.x | `WAIT` | U9b merge | SVG materialize adapter。DOM/XMLをDocument意味へしない |
+| 22 | SCR-4 | M4/v1.x | `WAIT` | U9b + F-11 + K0/K1b/K1c/K7 | 非clear drawをホスト所有Feedbackへ翻訳。隠しcanvasを作らない |
 
 ## 凍結済みだが依存待ちのIssue
 
 | ID | 状態 | Issue | 待っているもの | 注意 |
 |---|---|---|---|---|
-| U2f | `WAIT` | [#168](https://github.com/oshikaidesu/Motolii/issues/168) | U0c、U0d、U2a、U2c | one-shotだけ。永続offset/Modifierへ広げない |
-| U1f | `WAIT` | [#169](https://github.com/oshikaidesu/Motolii/issues/169) | U1b、U0e、D1k、D3 camera follow-up | K0は依存ではない。保守的Draftで成立させる |
+| U2f | `BLOCKED` | [#168](https://github.com/oshikaidesu/Motolii/issues/168) | M2再締結解除、新しいM3入場PR、U0c、U0d、U2a、U2c | one-shotだけ。永続offset/Modifierへ広げない |
+| U1f | `BLOCKED` | [#169](https://github.com/oshikaidesu/Motolii/issues/169) | M2再締結解除、新しいM3入場PR、U1b、U0e、D1k、D3 camera follow-up | K0は依存ではない。保守的Draftで成立させる |
 
 ## 先に仕様を直すもの
 
@@ -155,12 +153,12 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 ## M3への入場判定
 
-「M3に入った」と呼べる最小条件である **U0aのmain到達は完了済み**。ただし、それはM2完了を意味しない。
+U0a相当の隔離CI／空クレート骨格はmain到達済みだが、これはM3入場を意味しない。再締結ゲート解除後の新しいM3入場PRが、次表の依存とIDを最新mainへ再翻訳して初めて製品実装を解禁する。
 
 | 目的 | 必要な直前条件 |
 |---|---|
-| UI shellを始める | U0a完了済み。U1a-1を最新mainからIssue化可 |
-| 静止previewを出す | U0a + D3 |
+| UI shellを始める | M2再締結解除＋M3入場PR＋U0a骨格の再確認 |
+| 静止previewを出す | M3入場＋U0a + D3 |
 | 枠外Stageを作る | U1b + U0e + D1k + D3 camera follow-up |
 | Relative Moveを作る | U0c + U0d + U2a + U2c |
 | Effect接続線を作る | D1l + D3e + U0e + U2b + U3a |
@@ -171,7 +169,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | resource設定を出す | G0-2 + G0-8 + U0b + K1a → U0f。設定はUser settings、pressure実測値はTransient |
 | 重いpreviewを追従させる | U1b + U1c + U5 + K1d → U1g。project fps/audio clockを変えず表示frameだけ落とす |
 
-したがって現在の短い運用判断は、**D1lと並行してU0b-1またはU1a-1を開始する**。視覚レーンはPR #184を証拠・抽出元としてU0e-1へ必要な生成機構だけを移し、U0e-2後に必ずG0-6Hの人間審判へ戻す。U0系基盤が合流した時点でU2g/U2f/U1fを順に解禁する。
+したがって現在の短い運用判断は、**D3e、D1m、CAM-G0を別境界で進め、M3製品実装は発注しない**。D5は骨格を完了扱いせず、本番preview／GPU計測／実機E2Eを後続へ残す。再締結のA〜C証跡と独立追補レビューが揃った後、M3入場PRでU0b/U1a/U0e等の採否と依存を再確定する。
 
 ## 更新規則
 

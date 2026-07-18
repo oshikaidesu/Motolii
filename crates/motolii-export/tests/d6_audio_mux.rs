@@ -9,12 +9,14 @@ use std::process::Command;
 use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, RationalTime, TimeMap};
 use motolii_doc::{
     Asset, AssetId, Clip, ClipSource, Composition, DocParam, Document, EffectDefinitionId,
-    EffectId, EffectInstance, ItemEnvelope, PluginDegradation, Soundtrack, Track, TrackItem,
+    EffectId, EffectInstance, ItemEnvelope, PluginDiagnosticReason, Soundtrack, Track, TrackItem,
     RECT_LAYER_SOURCE,
 };
 use motolii_eval::DataTracks;
 use motolii_export::{export_document_video, ExportError, ExportJob};
 use motolii_media::{probe, Encoder};
+use motolii_plugin::{PluginRegistry, PluginRuntime};
+use motolii_plugins_firstparty::{first_party_catalog, first_party_runtime};
 use motolii_testkit::{ffmpeg_or_skip, gpu_or_skip, tmp_dir};
 
 const W: u32 = 32;
@@ -24,6 +26,18 @@ const FPS: Fps = match Fps::try_new(12, 1) {
     Err(_) => panic!("invalid const fps"),
 };
 const N_FRAMES: usize = 12; // 1秒
+
+fn reference_runtime() -> PluginRuntime {
+    first_party_runtime().unwrap()
+}
+
+fn contract_only_runtime() -> PluginRuntime {
+    PluginRuntime::try_new(
+        std::sync::Arc::new(first_party_catalog().unwrap()),
+        PluginRegistry::new(),
+    )
+    .unwrap()
+}
 
 fn make_bg_video(path: &Path) {
     let desc = FrameDesc::packed(W, H, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false);
@@ -184,6 +198,7 @@ fn export_muxes_soundtrack_sample_exact_stream_copy() {
         &gpu,
         &ExportJob {
             doc: &doc,
+            runtime: &reference_runtime(),
             output_path: &output,
             project_root: Some(&dir),
             frame_count: Some(N_FRAMES),
@@ -240,6 +255,7 @@ fn export_mux_respects_start_offset_and_stays_in_sync() {
         &gpu,
         &ExportJob {
             doc: &doc,
+            runtime: &reference_runtime(),
             output_path: &output,
             project_root: Some(&dir),
             frame_count: Some(N_FRAMES),
@@ -327,12 +343,17 @@ fn export_refuses_degraded_plugins() {
         .max(motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS);
     doc.validate()
         .expect("unknown plugin must still validate (open side)");
-    assert!(!doc.plugin_open_warnings().is_empty());
+    assert!(!doc
+        .prepare_plugins(&first_party_catalog().unwrap())
+        .unwrap()
+        .diagnostics()
+        .is_empty());
 
     let err = export_document_video(
         &gpu,
         &ExportJob {
             doc: &doc,
+            runtime: &reference_runtime(),
             output_path: &output,
             project_root: Some(&dir),
             frame_count: Some(1),
@@ -348,6 +369,61 @@ fn export_refuses_degraded_plugins() {
     assert!(!output.exists(), "refused export must not leave output");
 
     std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn export_refuses_contract_without_executor() {
+    let Some(gpu) = gpu_or_skip() else { return };
+    let dir = tmp_dir("export-a0i3-executor-missing");
+    let output = dir.join("out.mp4");
+    let mut doc = build_doc("missing.mp4", None);
+    let eid = EffectId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let did = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let (use_, def) = EffectInstance {
+        id: eid,
+        definition_id: did,
+        plugin_id: "core.filter.opacity".into(),
+        effect_version: 1,
+        enabled: true,
+        params: BTreeMap::from([("amount".into(), DocParam::const_f64(0.5))]),
+        extra: Default::default(),
+    }
+    .into_use_and_definition();
+    doc.effect_definitions.push(def);
+    if let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] {
+        clip.envelope.effects.push(use_);
+    }
+    doc.version = doc
+        .version
+        .max(motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS);
+    doc.min_reader_version = doc
+        .min_reader_version
+        .max(motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS);
+    let runtime = contract_only_runtime();
+
+    let error = export_document_video(
+        &gpu,
+        &ExportJob {
+            doc: &doc,
+            runtime: &runtime,
+            output_path: &output,
+            project_root: Some(&dir),
+            frame_count: Some(1),
+            qp0: true,
+            data_tracks: DataTracks::new(),
+        },
+    )
+    .unwrap_err();
+
+    let ExportError::DegradedPlugins(diagnostics) = error else {
+        panic!("expected degraded export, got {error:?}");
+    };
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.plugin_id == "core.filter.opacity"
+            && diagnostic.reason == PluginDiagnosticReason::ExecutorMissing
+    }));
+    assert!(!output.exists());
+    std::fs::remove_dir_all(dir).ok();
 }
 
 #[test]
@@ -377,14 +453,17 @@ fn export_refuses_future_version_rect_layer_source() {
     }
     doc.validate()
         .expect("future rect version must still open (D1f)");
-    let warnings = doc.plugin_open_warnings();
+    let prepared = doc
+        .prepare_plugins(&first_party_catalog().unwrap())
+        .unwrap();
+    let warnings = prepared.diagnostics();
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     assert_eq!(warnings[0].plugin_id, RECT_LAYER_SOURCE);
     assert_eq!(
         warnings[0].reason,
-        PluginDegradation::FutureVersion {
-            known_version: 1,
-            found_version: 2,
+        PluginDiagnosticReason::FutureVersion {
+            current_version: 1,
+            saved_version: 2,
         }
     );
 
@@ -392,6 +471,7 @@ fn export_refuses_future_version_rect_layer_source() {
         &gpu,
         &ExportJob {
             doc: &doc,
+            runtime: &reference_runtime(),
             output_path: &output,
             project_root: Some(&dir),
             frame_count: Some(1),
@@ -413,8 +493,13 @@ fn export_refuses_future_version_rect_layer_source() {
 fn current_version_rect_alone_is_not_degraded() {
     let doc = build_doc("bg.mp4", None);
     assert!(
-        doc.plugin_open_warnings().is_empty(),
+        doc.prepare_plugins(&first_party_catalog().unwrap())
+            .unwrap()
+            .diagnostics()
+            .is_empty(),
         "v1 rect is a known built-in contract: {:?}",
-        doc.plugin_open_warnings()
+        doc.prepare_plugins(&first_party_catalog().unwrap())
+            .unwrap()
+            .diagnostics()
     );
 }

@@ -13,6 +13,7 @@ mod common;
 use common::identity_roundtrip::assert_identity_command_roundtrip;
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use motolii_core::RationalTime;
 use motolii_doc::{
@@ -23,6 +24,11 @@ use motolii_doc::{
     TrackId, TrackItem,
 };
 use motolii_eval::Interp;
+use motolii_plugin::reference::reference_catalog;
+
+fn reference_writer(doc: Document) -> DocumentWriter {
+    DocumentWriter::new(doc, Arc::new(reference_catalog().unwrap())).unwrap()
+}
 use proptest::prelude::*;
 
 // ---------------------------------------------------------------------------
@@ -59,7 +65,7 @@ fn fixture() -> Fixture {
     let effect_def = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
     doc.effect_definitions.push(EffectDefinition::new(
         effect_def,
-        "core.filter.tint",
+        "vendor.filter.fixture",
         1,
         true,
         BTreeMap::from([("amount".into(), DocParam::const_f64(0.5))]),
@@ -319,7 +325,7 @@ fn remove_track_item_roundtrip() {
 fn add_effect_rejects_index_past_end() {
     let f = fixture();
     let before = f.doc.clone();
-    let mut writer = DocumentWriter::new(f.doc);
+    let mut writer = reference_writer(f.doc);
     let gesture = writer.begin_gesture();
     let base = writer.snapshot().next_stable_id.peek_next();
     let effect = EffectInstance {
@@ -356,7 +362,7 @@ fn add_track_item_rejects_index_past_end() {
     let mut f = fixture();
     let new_layer = f.doc.layers.reserve().unwrap();
     let before = f.doc.clone();
-    let mut writer = DocumentWriter::new(f.doc);
+    let mut writer = reference_writer(f.doc);
     let gesture = writer.begin_gesture();
     let layer_names = BTreeMap::from([(new_layer, "x".to_string())]);
     let item = TrackItem::Clip(Clip {
@@ -425,7 +431,7 @@ fn effect_and_keyframe_ids_never_repeat_and_are_addressable() {
 #[test]
 fn duplicate_track_item_allocates_fresh_ids_via_writer() {
     let f = fixture();
-    let mut writer = DocumentWriter::new(f.doc);
+    let mut writer = reference_writer(f.doc);
     let before_next = writer.snapshot().next_stable_id.peek_next();
     writer.duplicate_track_item(f.layer).expect("duplicate");
     let after_next = writer.snapshot().next_stable_id.peek_next();
@@ -445,7 +451,7 @@ fn duplicate_track_item_allocates_fresh_ids_via_writer() {
 #[test]
 fn same_gesture_drag_merges_into_one_macro_and_undoes_atomically() {
     let f = fixture();
-    let mut writer = DocumentWriter::new(f.doc.clone());
+    let mut writer = reference_writer(f.doc.clone());
     let gesture = writer.begin_gesture();
 
     // 「ドラッグ中」の3ステップ: 決定済みの値を都度記録するが、同一merge keyなので1つに畳まれる。
@@ -489,7 +495,7 @@ fn same_gesture_drag_merges_into_one_macro_and_undoes_atomically() {
 #[test]
 fn different_gestures_do_not_merge() {
     let f = fixture();
-    let mut writer = DocumentWriter::new(f.doc.clone());
+    let mut writer = reference_writer(f.doc.clone());
 
     let g1 = writer.begin_gesture();
     writer
@@ -529,7 +535,7 @@ fn same_gesture_two_add_effects_do_not_merge() {
     let mut doc = f.doc.clone();
     let (effect1_id, effect1_def, effect2_id, effect2_def) =
         allocate_effect_ids_for_add_effect_test(&mut doc);
-    let mut writer = DocumentWriter::new(doc);
+    let mut writer = reference_writer(doc);
     let gesture = writer.begin_gesture();
 
     let effect1 = EffectInstance {
@@ -544,7 +550,7 @@ fn same_gesture_two_add_effects_do_not_merge() {
     let effect2 = EffectInstance {
         id: effect2_id,
         definition_id: effect2_def,
-        plugin_id: "core.filter.tint".into(),
+        plugin_id: "vendor.filter.fixture".into(),
         effect_version: 1,
         enabled: true,
         params: BTreeMap::new(),
@@ -592,7 +598,7 @@ fn same_gesture_two_add_effects_undo_removes_both() {
     let mut doc = f.doc.clone();
     let (effect1_id, effect1_def, effect2_id, effect2_def) =
         allocate_effect_ids_for_add_effect_test(&mut doc);
-    let mut writer = DocumentWriter::new(doc);
+    let mut writer = reference_writer(doc);
     let gesture = writer.begin_gesture();
 
     let effect1 = EffectInstance {
@@ -607,7 +613,7 @@ fn same_gesture_two_add_effects_undo_removes_both() {
     let effect2 = EffectInstance {
         id: effect2_id,
         definition_id: effect2_def,
-        plugin_id: "core.filter.tint".into(),
+        plugin_id: "vendor.filter.fixture".into(),
         effect_version: 1,
         enabled: true,
         params: BTreeMap::new(),
@@ -701,7 +707,7 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
     let effect_def_id = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
     doc.effect_definitions.push(EffectDefinition::new(
         effect_def_id,
-        "core.filter.tint",
+        "vendor.filter.fixture",
         1,
         true,
         BTreeMap::new(),
@@ -745,7 +751,7 @@ fn duplicate_remaps_internal_refs_and_preserves_external_refs() {
     });
     doc.validate().expect("fixture must validate");
 
-    let mut writer = DocumentWriter::new(doc.clone());
+    let mut writer = reference_writer(doc.clone());
     writer
         .duplicate_track_item(group_layer)
         .expect("duplicate group");
@@ -899,7 +905,7 @@ fn duplicate_undo_redo_loop_does_not_grow_layer_table() {
     doc.validate().expect("fixture");
 
     let baseline = layer_entries(&doc);
-    let mut writer = DocumentWriter::new(doc);
+    let mut writer = reference_writer(doc);
     for _ in 0..8 {
         writer
             .duplicate_track_item(group_layer)
@@ -960,7 +966,7 @@ fn duplicate_remaps_plugin_lookat_within_subtree() {
     });
     doc.validate().expect("fixture must validate");
 
-    let mut writer = DocumentWriter::new(doc.clone());
+    let mut writer = reference_writer(doc.clone());
     writer
         .duplicate_track_item(group_layer)
         .expect("duplicate group");
@@ -1011,11 +1017,12 @@ fn assert_writer_roundtrip(mut writer: DocumentWriter, before: Document, cmd: Co
 
 #[test]
 fn add_effect_create_undo_redo_restores_full_document() {
-    let f = fixture();
-    let base = f.doc.next_stable_id.peek_next();
+    let mut f = fixture();
+    let effect_id = f.doc.next_stable_id.allocate().unwrap();
+    let definition_id = f.doc.next_stable_id.allocate().unwrap();
     let effect = EffectInstance {
-        id: EffectId::from_raw(base),
-        definition_id: EffectDefinitionId::from_raw(base + 1),
+        id: EffectId::from_raw(effect_id),
+        definition_id: EffectDefinitionId::from_raw(definition_id),
         plugin_id: "core.filter.blur".into(),
         effect_version: 1,
         enabled: true,
@@ -1028,16 +1035,16 @@ fn add_effect_create_undo_redo_restores_full_document() {
         effect,
         introduced_definition: true,
     };
-    assert_writer_roundtrip(DocumentWriter::new(f.doc.clone()), f.doc, cmd);
+    assert_writer_roundtrip(reference_writer(f.doc.clone()), f.doc, cmd);
 }
 
 #[test]
 fn add_effect_link_undo_redo_restores_full_document() {
-    let f = fixture();
-    let base = f.doc.next_stable_id.peek_next();
+    let mut f = fixture();
+    let effect_id = f.doc.next_stable_id.allocate().unwrap();
     let effect = EffectInstance::from_use_and_definition(
         &EffectUse {
-            id: EffectId::from_raw(base),
+            id: EffectId::from_raw(effect_id),
             definition_id: f.effect_def,
         },
         f.doc.effect_definition(f.effect_def).unwrap(),
@@ -1048,7 +1055,7 @@ fn add_effect_link_undo_redo_restores_full_document() {
         effect,
         introduced_definition: false,
     };
-    assert_writer_roundtrip(DocumentWriter::new(f.doc.clone()), f.doc, cmd);
+    assert_writer_roundtrip(reference_writer(f.doc.clone()), f.doc, cmd);
 }
 
 #[test]
@@ -1155,7 +1162,7 @@ fn unlink_undo_redo_restores_full_document() {
         effect: EffectInstance::from_use_and_definition(&use_, &def),
         introduced_definition: false,
     };
-    assert_writer_roundtrip(DocumentWriter::new(f.doc.clone()), f.doc, cmd);
+    assert_writer_roundtrip(reference_writer(f.doc.clone()), f.doc, cmd);
 }
 
 #[test]
@@ -1180,7 +1187,7 @@ fn delete_unused_definition_undo_redo_restores_full_document() {
     let s = shared_fixture_from_d2();
     let def = s.doc.effect_definition(s.d2_orphan).unwrap().clone();
     let cmd = Command::DeleteEffectDefinition { definition: def };
-    assert_writer_roundtrip(DocumentWriter::new(s.doc.clone()), s.doc, cmd);
+    assert_writer_roundtrip(reference_writer(s.doc.clone()), s.doc, cmd);
 }
 
 #[test]
@@ -1192,7 +1199,7 @@ fn duplicate_track_item_shares_definition_but_mints_new_use_id() {
         .envelope
         .effects
         .clone();
-    let mut writer = DocumentWriter::new(s.doc);
+    let mut writer = reference_writer(s.doc);
     writer.duplicate_track_item(s.layer_a).expect("duplicate");
     let snap = writer.snapshot();
     let cloned_uses = snap.tracks[0].items[1]
@@ -1229,7 +1236,7 @@ fn shared_fixture_from_d2() -> SharedD2 {
     let d2_orphan = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
     doc.effect_definitions.push(EffectDefinition::new(
         d1,
-        "core.filter.tint",
+        "vendor.filter.fixture",
         1,
         true,
         BTreeMap::from([("amount".into(), DocParam::const_f64(0.4))]),
@@ -1237,7 +1244,7 @@ fn shared_fixture_from_d2() -> SharedD2 {
     ));
     doc.effect_definitions.push(EffectDefinition::new(
         d2_orphan,
-        "core.filter.tint",
+        "vendor.filter.fixture",
         1,
         true,
         BTreeMap::from([("amount".into(), DocParam::const_f64(0.1))]),

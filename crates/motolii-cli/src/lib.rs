@@ -41,6 +41,8 @@ pub struct VerifyB4Args {
 pub enum CliError {
     #[error("{0}")]
     Usage(String),
+    #[error(transparent)]
+    FirstParty(#[from] motolii_plugins_firstparty::FirstPartyError),
 }
 
 pub const HELP: &str = "\
@@ -281,8 +283,11 @@ pub fn export_project(
     gpu: &motolii_gpu::GpuCtx,
     project_path: impl AsRef<std::path::Path>,
 ) -> Result<motolii_export::ExportReport, CliError> {
-    project::export_project_v1(gpu, project_path.as_ref())
-        .map_err(|e| CliError::Usage(e.to_string()))
+    match project::export_project_v1(gpu, project_path.as_ref()) {
+        Ok(report) => Ok(report),
+        Err(project::ProjectError::FirstParty(err)) => Err(CliError::FirstParty(err)),
+        Err(other) => Err(CliError::Usage(other.to_string())),
+    }
 }
 
 #[cfg(test)]

@@ -13,8 +13,8 @@ use motolii_doc::{
 };
 use motolii_eval::{DataTrack, DataTrackId, DataTracks, Value};
 use motolii_gpu::download_rgba;
-use motolii_plugin::reference::register_reference_plugins;
-use motolii_plugin::PluginRegistry;
+use motolii_plugin::PluginRuntime;
+use motolii_plugins_firstparty::first_party_runtime;
 use motolii_render::{render_graph_cached, RenderGraphInputs, RenderSession};
 use motolii_testkit::cpu_reference::{expected_rect_frame, premul_over_u8};
 use motolii_testkit::{assert_rgba_close, gpu_or_skip, tol, RgbaImageDesc};
@@ -24,6 +24,10 @@ const H: u32 = 8;
 
 fn desc() -> FrameDesc {
     FrameDesc::packed(W, H, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true)
+}
+
+fn reference_runtime() -> PluginRuntime {
+    first_party_runtime().unwrap()
 }
 
 /// D1l: `EffectUse`(env側)+`EffectDefinition`(doc側)を1回で作り、Useのidを返す。
@@ -77,14 +81,13 @@ fn rect_clip(layer: u64, center: [f64; 2], size: [f64; 2], color: [f64; 4]) -> C
 
 fn render_doc(doc: &Document) -> Option<Vec<u8>> {
     let gpu = gpu_or_skip()?;
-    let mut registry = PluginRegistry::new();
-    register_reference_plugins(&mut registry).unwrap();
+    let runtime = reference_runtime();
     let built = build_document_frame_graph(
         doc,
         EvaluationTime::new(RationalTime::ZERO),
         desc(),
         &DataTracks::new(),
-        &registry,
+        &runtime,
         None,
     )
     .unwrap();
@@ -97,7 +100,7 @@ fn render_doc(doc: &Document) -> Option<Vec<u8>> {
         &RenderGraphInputs {
             video_sources: &[],
             source_time: Some(built.source_time),
-            plugins: Some(&registry),
+            plugins: Some(runtime.executors()),
         },
         Quality::FINAL,
     )
@@ -398,14 +401,13 @@ fn black_overrun_is_typed_error_not_silent_freeze() {
         id: track_id,
         items: vec![TrackItem::Clip(clip)],
     });
-    let mut registry = PluginRegistry::new();
-    register_reference_plugins(&mut registry).unwrap();
+    let runtime = reference_runtime();
     let err = build_document_frame_graph(
         &doc,
         EvaluationTime::new(RationalTime::ZERO),
         desc(),
         &DataTracks::new(),
-        &registry,
+        &runtime,
         None,
     )
     .unwrap_err();
@@ -428,15 +430,14 @@ fn black_overrun_rejected_even_when_clip_inactive() {
         id: track_id,
         items: vec![TrackItem::Clip(clip)],
     });
-    let mut registry = PluginRegistry::new();
-    register_reference_plugins(&mut registry).unwrap();
+    let runtime = reference_runtime();
     // t=0 ではクリップ非アクティブだが、Black を黙って Freeze 相当にしない。
     let err = build_document_frame_graph(
         &doc,
         EvaluationTime::new(RationalTime::ZERO),
         desc(),
         &DataTracks::new(),
-        &registry,
+        &runtime,
         None,
     )
     .unwrap_err();
@@ -486,15 +487,14 @@ fn source_time_comes_from_video_clip_not_overlay() {
         id: track_id,
         items: vec![TrackItem::Clip(video), TrackItem::Clip(overlay)],
     });
-    let mut registry = PluginRegistry::new();
-    register_reference_plugins(&mut registry).unwrap();
+    let runtime = reference_runtime();
     let t = RationalTime::try_new(1, 1).unwrap();
     let built = build_document_frame_graph(
         &doc,
         EvaluationTime::new(t),
         desc(),
         &DataTracks::new(),
-        &registry,
+        &runtime,
         None,
     )
     .unwrap();
@@ -524,14 +524,13 @@ fn f3_effect_before_transform_in_graph_steps() {
         id: track_id,
         items: vec![TrackItem::Clip(clip)],
     });
-    let mut registry = PluginRegistry::new();
-    register_reference_plugins(&mut registry).unwrap();
+    let runtime = reference_runtime();
     let built = build_document_frame_graph(
         &doc,
         EvaluationTime::new(RationalTime::ZERO),
         desc(),
         &DataTracks::new(),
-        &registry,
+        &runtime,
         None,
     )
     .unwrap();
@@ -587,14 +586,13 @@ fn parent_transform_composes_into_affine_place() {
         id: track_id,
         items: vec![TrackItem::Clip(parent), TrackItem::Clip(child)],
     });
-    let mut registry = PluginRegistry::new();
-    register_reference_plugins(&mut registry).unwrap();
+    let runtime = reference_runtime();
     let built = build_document_frame_graph(
         &doc,
         EvaluationTime::new(RationalTime::ZERO),
         desc(),
         &DataTracks::new(),
-        &registry,
+        &runtime,
         None,
     )
     .unwrap();
@@ -660,15 +658,14 @@ fn two_video_assets_get_independent_slots() {
         id: track_id,
         items: vec![TrackItem::Clip(c0), TrackItem::Clip(c1)],
     });
-    let mut registry = PluginRegistry::new();
-    register_reference_plugins(&mut registry).unwrap();
+    let runtime = reference_runtime();
     let t = RationalTime::try_new(1, 1).unwrap();
     let built = build_document_frame_graph(
         &doc,
         EvaluationTime::new(t),
         desc(),
         &DataTracks::new(),
-        &registry,
+        &runtime,
         None,
     )
     .unwrap();

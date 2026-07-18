@@ -39,7 +39,7 @@
 | [plugin-ui-model.md](plugin-ui-model.md) | プラグインUIモデル: 宣言語彙 vs 自由描画。M3着手前決定で縮小採用 | **採否済み分析**(v1はHost自動生成panel、自由UIは延期) |
 | [interaction-simplicity-model.md](interaction-simplicity-model.md) | 操作単純化モデル: Direct/Tool/Advanced正規化、plugin昇格、PP-Gate、M0〜M5割当 | 現行(2026-07-14。凍結済み公開契約は変更しない) |
 | [generative-user-boundary.md](generative-user-boundary.md) | ジェネラティブ表現とユーザー拡張の境界: Shape/SVG、p5.js型入力、Materialize/Live/Feedback/Simulation、Host責務 | **設計決定**(2026-07-15。未凍結runtimeの実装許可ではない) |
-| [ui-interaction-language.md](ui-interaction-language.md) | M3のUI操作言語: 既知の外殻、可視の因果、共通component契約、Simple/Advanced、漏れ実装の拒否 | **設計決定**(2026-07-16) |
+| [ui-interaction-language.md](ui-interaction-language.md) | M3のUI操作言語: 既知の外殻、可視の因果、Parameter Panelを表現のホームにするUI力学、共通component契約、Simple/Advanced、漏れ実装の拒否 | **設計決定**(2026-07-16、Parameter Panel力学を2026-07-18追補) |
 | [ui-visual-language.md](ui-visual-language.md) | M3の視覚言語: 高密度一覧、意味色、既存UIへの馴染み、contrast、token規約、参照範囲 | 設計基準(具体token値はM3視覚確定(G0-6)待ち) |
 | [mocks/](mocks/README.md) | M3高密度メインUI(基準)+timeline/interaction/UI力学の比較モック台帳 | 視覚構成の基準モック |
 | [ui-concept.md](ui-concept.md) | UIコンセプト: 体験の北極星(譜面台・First Beat・五本柱)。散在するUI文書の層地図つき | **設計仮説・反対側レビュー待ち**(2026-07-16。契約・M3ステータス変更なし) |
@@ -51,8 +51,17 @@
 | [reviews/2026-07-14-m3-ui-boundary-prevention.md](reviews/2026-07-14-m3-ui-boundary-prevention.md) | M3でUI都合をDocument・レンダ・公開契約へ逆流させない**予防手順**(規律8本) | 現行 |
 | [reviews/2026-07-14-m3-ui-boundary-counter-review.md](reviews/2026-07-14-m3-ui-boundary-counter-review.md) | M3 UI境界規約の反対側レビュー。R1〜R9を採用/縮小/延期で再判定 | 現行(判定反映済み) |
 | [reviews/2026-07-16-m3-preflight-decisions.md](reviews/2026-07-16-m3-preflight-decisions.md) | M3着手前決定: input/状態寿命、plugin UI、性能測定、操作文法を固定し、見た目とresource実値を証拠待ちへ分離 | **設計決定**(G0-2/3/4/7完了) |
-| [reviews/2026-07-16-m3-ui-concept-to-tickets.md](reviews/2026-07-16-m3-ui-concept-to-tickets.md) | UIコンセプトを1 Issue=1 commitの実装粒へ分解。状態、入力、視覚、preview、共通操作、最初のEffect panelの依存と拒否条件 | **実装発注の正本**(U0b〜U4aの枝番) |
+| [reviews/2026-07-16-m3-ui-concept-to-tickets.md](reviews/2026-07-16-m3-ui-concept-to-tickets.md) | UIコンセプトを1 Issue=1 commitの実装粒へ分解。状態、入力、視覚、preview、共通操作、最初のEffect panelの依存と拒否条件 | **条件付き発注の正本／M2再締結中は停止**(U0b〜U4aの枝番) |
 | [reviews/2026-07-16-ui-update-forensics.md](reviews/2026-07-16-ui-update-forensics.md) | Figma/Ableton/AE/Blender/Godot/Home AssistantとLinux GUIの公式更新・fork履歴から、UI失敗、不安定platformの隔離、user拡張をMotoliiのcomponent審判へ変換 | **調査と採用審判**(AF-1〜17) |
+| [reviews/2026-07-17-vism-a0-plugin-boundary-inventory.md](reviews/2026-07-17-vism-a0-plugin-boundary-inventory.md) | VSM-A0: 現行pluginの登録・保存・評価・migration境界をコード事実で分類 | **調査完了** |
+| [reviews/2026-07-17-vism-a7-bpm-datatrack-spike.md](reviews/2026-07-17-vism-a7-bpm-datatrack-spike.md) | VSM-A7: 現行BPM→DataTrack→DocParamの最小意味fixture | **spike完了** |
+| [reviews/2026-07-17-vism-a0d-contract-migration-ownership-decision.md](reviews/2026-07-17-vism-a0d-contract-migration-ownership-decision.md) | VSM-A0D: Document、plugin作者、Host catalog、executorの所有分離 | **設計決定** |
+| [reviews/2026-07-17-vism-a0s-contract-catalog-spec.md](reviews/2026-07-17-vism-a0s-contract-catalog-spec.md) | VSM-A0S: Contract Catalog、prepared resolution、runtime公開境界 | **A0I-1〜3実装完了** + D1m保存/open所有追補（docs only） |
+| [reviews/2026-07-17-vism-a1-public-crate-boundary-spec.md](reviews/2026-07-17-vism-a1-public-crate-boundary-spec.md) | VSM-A1S: Opacity外部crate化のfaçade、依存allowlist、first-party組み立て、必須capability、移動前pixel gate | **A1-3完了** |
+| [reviews/2026-07-17-vism-a2-legacy-project-migration-decision.md](reviews/2026-07-17-vism-a2-legacy-project-migration-decision.md) | VSM-A2S: Sine外部crate化時の旧CLI ProjectV1 migration処分と公開façadeレビュー | **設計決定／A2実装可** |
+| [reviews/2026-07-18-vism-a3-external-expression-survey.md](reviews/2026-07-18-vism-a3-external-expression-survey.md) | VSM-A3R: AE Expression／Script／Effect、aescripts、Blender Driver／Geometry Nodes／Simulation／Add-onを責任分類し、Parameter Panel中心のA3候補へ翻訳 | **調査完了**（採用決定は[A3D](reviews/2026-07-18-vism-a3d-radial-repeater-decision.md)） |
+| [reviews/2026-07-18-vism-a3d-radial-repeater-decision.md](reviews/2026-07-18-vism-a3d-radial-repeater-decision.md) | VSM-A3D: 決定論的2D Radial Repeater LayerSource（`core.layer_source.radial_repeater` v1）のidentity・正準意味・parameter閉集合・UI投影要求・非目標 | **設計決定** |
+| [reviews/2026-07-18-vism-a3s-layersource-lowering-spec.md](reviews/2026-07-18-vism-a3s-layersource-lowering-spec.md) | VSM-A3S: 一般LayerSource lowering（prepared→`RenderStep::Plugin`）、clear一般化、拒否分類、rect分離、画素契約、U4a handoff、A3分割発注表。[F1](reviews/2026-07-17-vism-implementation-plan.md)でHost cache GAPを訂正し、`VSM-A3-0`〜`VSM-A3-4`まで実装済み | **仕様・VSM-A3完了** |
 | [reviews/2026-07-14-unified-stage-camera-design.md](reviews/2026-07-14-unified-stage-camera-design.md) | 2D/3Dを分けない単一カメラ、Stage、Output Frame、枠外表示の意味と実装順 | **決定**(2026-07-14) |
 | [reviews/2026-07-14-recent-concept-propagation-audit.md](reviews/2026-07-14-recent-concept-propagation-audit.md) | 直近の根幹決定を意味・Document・評価・UI・依存・コードの6面で逆引きした未反映台帳 | 横断監査(2026-07-14) |
 | [reviews/2026-07-14-motion-foundation-known-tech-disposition.md](reviews/2026-07-14-motion-foundation-known-tech-disposition.md) | Relative Move、Bounds/ROI、Effect Scope、Instance/Elementを既知技術で再判定した最小契約 | **決定**(2026-07-14) |
@@ -76,6 +85,7 @@
 | [reviews/2026-07-15-d1l-journal-revert-boundary-counter-review.md](reviews/2026-07-15-d1l-journal-revert-boundary-counter-review.md) | PR #197の反対側レビュー、採番/閉集合/orphan指摘と採否 | **P0/P1=0・merge可** |
 | [reviews/2026-07-16-d1l-current-document-constructor-decision.md](reviews/2026-07-16-d1l-current-document-constructor-decision.md) | 新規Documentをv4で作る製品constructorと、legacy `new_v1`/D1e/D1l Commandの版境界 | **決定**(lint機構は下記追補) |
 | [reviews/2026-07-16-d1l-new-v1-lint-conflict-decision.md](reviews/2026-07-16-d1l-new-v1-lint-conflict-decision.md) | `new_v1` deprecated属性とprotected semantic/clippyの三律背反を、`doc(hidden)`+AST gateへ一本化 | **決定追補** |
+| [reviews/2026-07-17-d1i4-semantic-oracle-boundary-decision.md](reviews/2026-07-17-d1i4-semantic-oracle-boundary-decision.md) | D1i-4/S16の保護単位をtest harness全体から意味の期待値oracleへ訂正し、API配線と作品意味を分離 | **決定追補／BlendModeから段階移行** |
 | [reviews/2026-07-16-d1l-current-document-constructor-counter-review.md](reviews/2026-07-16-d1l-current-document-constructor-counter-review.md) | 新規Document v4生成契約の版/構造検証/allowlist指摘と採否 | **P0/P1=0・merge可** |
 | [reviews/2026-07-15-p5-generative-pattern-disposition.md](reviews/2026-07-15-p5-generative-pattern-disposition.md) | p5.js系ジェネ表現をone-shot/純関数/Feedback/Simulation/記録入力へ分類 | **調査・配置案**(2026-07-15) |
 | [reviews/2026-07-16-m3-ui-gap-survey.md](reviews/2026-07-16-m3-ui-gap-survey.md) | M3前UIギャップ調査: U1〜U8に席が無いUI領域(書き出し/保存/エラー表示等)とコア側前提の欠落(状態購読/ParamDefメタデータ/Transport等) | **調査メモ**(2026-07-16。採否はM3入場PRで) |
