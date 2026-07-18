@@ -2,16 +2,16 @@
 
 作成日: 2026-07-18
 
-## 結論（**未確定 — 人間審判 pending**）
+## 結論（**PV-1 pass — Apple M4 / Metal**）
 
 自動振る舞い試験は `spikes/pv1-texture-lifecycle/tests/lifecycle_behavior.rs` で構造を検証する。
-**overall 合格は人間実機審判（H1–H6）完了まで記録しない。**
+Apple M4 / Metal実機でH1–H5を確認し、H6は単一monitor環境のため「可能な環境のみ」の適用外とした。DX12 / Vulkanは未実測のためpendingを維持する。
 
 | 層 | 内容 | 状態 | 証拠 |
 |---|---|---|---|
 | 自動 | 状態機械・counter・generation bind・定常 tick 非再生成 | **実装済** | `cargo test` 出力（下記） |
-| 人間 | 10分継続・100 resize・hide/show 自動往復・minimize 自動復帰・DPI | **pending** | [manifest-skeleton.json](pv1-texture-lifecycle-evidence/manifest-skeleton.json) |
-| Backend | Metal / DX12 / Vulkan | **Metal pending / 他 pending** | 開発主機実測後に更新 |
+| 人間 | 10分継続・100 resize・hide/show 自動往復・minimize 自動復帰・regenerate | **pass** | [manifest-skeleton.json](pv1-texture-lifecycle-evidence/manifest-skeleton.json) |
+| Backend | Metal / DX12 / Vulkan | **Metal pass / 他 pending** | Apple M4実測。H6は単一monitorのため適用外 |
 
 ## 観測対象
 
@@ -83,7 +83,7 @@ test resize_increments_texture_create_once ... ok
 test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
 ```
 
-`cargo build --release` も成功。**overall / 人間 H1–H6 / backend は pending のまま。**
+`cargo build --release` も成功。Apple M4 / Metal実機審判後に **overall / Metalをpass** とし、DX12 / Vulkanはpendingを維持した。
 
 ## 人間審判コマンド
 

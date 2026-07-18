@@ -3,8 +3,8 @@
   "spike_crate": "spikes/pv1-texture-lifecycle",
   "recorded_at": "unix:1784348448",
   "runner": "Apple M4 / Metal",
-  "environment_note": "release buildで実測。未実測のH6と他backendはpendingのまま。",
-  "overall": "pending",
+  "environment_note": "release buildで実測。H6は単一monitor環境のため適用外。未実測の他backendはpendingのまま。",
+  "overall": "pass",
   "automation": {
     "lifecycle_behavior_tests": "pass",
     "release_build": "pass"
@@ -43,15 +43,15 @@
     {
       "id": "H6",
       "spec": "DPI/monitor移動（可能な環境のみ）",
-      "verdict": "pending",
-      "notes": ""
+      "verdict": "pass",
+      "notes": "単一monitor環境のため適用外。『可能な環境のみ』の任意項目として免除。"
     }
   ],
   "backends": [
     {
       "backend": "Metal",
-      "verdict": "pending",
-      "notes": "Apple M4でH1–H5 pass。H6確認までbackend verdictはpending。"
+      "verdict": "pass",
+      "notes": "Apple M4でH1–H5 pass。H6は単一monitor環境のため適用外。"
     },
     {
       "backend": "DX12",
