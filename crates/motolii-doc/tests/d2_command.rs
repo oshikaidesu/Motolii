@@ -8,7 +8,7 @@
 
 #![allow(deprecated)]
 
-mod common;
+pub mod common;
 
 use common::identity_roundtrip::assert_identity_command_roundtrip;
 

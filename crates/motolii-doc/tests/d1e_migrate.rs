@@ -1,7 +1,7 @@
 #![allow(deprecated)]
 
 //! D1e: migration枠・旧形式変換・意味保存・OpenMode拒否。
-mod common;
+pub mod common;
 
 use std::fs;
 use std::path::{Path, PathBuf};

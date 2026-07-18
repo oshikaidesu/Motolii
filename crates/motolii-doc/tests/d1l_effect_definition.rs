@@ -4,7 +4,7 @@
 //! §4不変条件・§5試験を1:1で機械判定へ落とす。
 //! Cascade/purge/一斉Make Uniqueは延期(本ファイルの対象外)。
 
-mod common;
+pub mod common;
 
 use std::fs;
 use std::path::PathBuf;

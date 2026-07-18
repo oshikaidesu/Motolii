@@ -1,7 +1,7 @@
 #![allow(deprecated)]
 
 //! D1c: アトミック保存の各段 abort 注入と min_reader / roundtrip / 競合・再保存。
-mod common;
+pub mod common;
 
 use std::fs;
 use std::path::{Path, PathBuf};

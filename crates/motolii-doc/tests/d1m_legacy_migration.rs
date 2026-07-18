@@ -11,7 +11,7 @@ use motolii_doc::{
     SessionError,
 };
 
-mod common;
+pub mod common;
 
 use common::session::{acquire_session, open_recovered, save_journal};
 

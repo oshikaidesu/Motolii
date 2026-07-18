@@ -1,6 +1,6 @@
 //! D1l Stage B-3: Writer prepare API 受け入れ正本。
 
-mod common;
+pub mod common;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;

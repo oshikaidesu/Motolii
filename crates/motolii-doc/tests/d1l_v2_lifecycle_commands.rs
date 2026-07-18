@@ -1,6 +1,6 @@
 //! D1l Stage B-1/2: v2 lifecycle command と reservation 契約の固定。
 
-mod common;
+pub mod common;
 
 use std::collections::BTreeMap;
 

@@ -342,9 +342,7 @@ fn solve_uv_affine_from_three_points(dst: &[(f64, f64); 3], src: &[(f64, f64); 3
         b.swap(col, pivot);
         let pivot_val = a[col][col];
         assert!(pivot_val.abs() > 1e-12, "degenerate affine fit");
-        for j in col..6 {
-            a[col][j] /= pivot_val;
-        }
+        a[col][col..].iter_mut().for_each(|x| *x /= pivot_val);
         b[col] /= pivot_val;
         for row in 0..6 {
             if row == col {
@@ -354,8 +352,20 @@ fn solve_uv_affine_from_three_points(dst: &[(f64, f64); 3], src: &[(f64, f64); 3
             if factor == 0.0 {
                 continue;
             }
-            for j in col..6 {
-                a[row][j] -= factor * a[col][j];
+            if row < col {
+                let (upper, lower) = a.split_at_mut(col);
+                let pivot_row = &lower[0][col..];
+                upper[row][col..]
+                    .iter_mut()
+                    .zip(pivot_row.iter())
+                    .for_each(|(x, &pivot)| *x -= factor * pivot);
+            } else {
+                let (upper, lower) = a.split_at_mut(row);
+                let pivot_row = &upper[col][col..];
+                lower[0][col..]
+                    .iter_mut()
+                    .zip(pivot_row.iter())
+                    .for_each(|(x, &pivot)| *x -= factor * pivot);
             }
             b[row] -= factor * b[col];
         }

@@ -7,7 +7,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use motolii_doc::{Document, ProjectSession, ResourceLimits, SaveProjectOptions, SessionError};
 
-mod common;
+pub mod common;
 
 use common::session::{open_recovered, save_journal};
 

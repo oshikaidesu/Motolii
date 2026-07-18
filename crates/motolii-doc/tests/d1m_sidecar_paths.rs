@@ -11,7 +11,7 @@ use motolii_doc::{
     Document,
 };
 
-mod common;
+pub mod common;
 
 use common::session::{open_recovered, save_journal};
 use motolii_doc::SaveProjectOptions;

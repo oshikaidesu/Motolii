@@ -135,7 +135,7 @@ fn render_doc(doc: &mut Document) -> Option<Vec<u8>> {
 }
 
 fn assert_mode_maps(mode: MaskMode, want: ClippingMaskMode) {
-    let mut doc = clipped_doc(
+    let doc = clipped_doc(
         [-0.25, 0.0],
         [0.5, 1.0],
         [1.0, 1.0, 1.0, 1.0],

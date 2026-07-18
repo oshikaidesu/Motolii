@@ -5,7 +5,7 @@
 //! 「未知ネストを読めたこと」と「再保存可能」を同一視しない — `ReadOnlyNewer`は読めても
 //! save/migrationは型付きエラーで拒否する。`Reject`はDocumentを一切返さない。
 
-mod common;
+pub mod common;
 
 use std::fs;
 use std::path::PathBuf;

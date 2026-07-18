@@ -1,7 +1,7 @@
 //! VSM-A0I-2: raw Documentと一時的なprepared recipeの境界。
 
 use std::collections::BTreeMap;
-mod common;
+pub mod common;
 use std::fs;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};

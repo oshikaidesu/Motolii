@@ -1,7 +1,7 @@
 #![allow(deprecated)]
 
 //! AG-3: audio component commandと分離macroの受け入れテスト。
-mod common;
+pub mod common;
 
 use std::path::Path;
 use std::sync::Arc;

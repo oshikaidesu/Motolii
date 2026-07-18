@@ -2,7 +2,7 @@
 
 //! D1d: journal checksum/salt/UUID・壊れ方catalog・故障注入・非破壊recovery・ResourceLimits。
 
-mod common;
+pub mod common;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -268,7 +268,6 @@ fn journal_limits_return_typed_errors() {
             ..Default::default()
         },
     )
-    .map_err(ProjectError::from)
     .unwrap_err();
     assert!(
         matches!(err, ProjectError::Wal(WalError::RecordPayloadLimit { .. })),
