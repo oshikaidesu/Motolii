@@ -7,5 +7,6 @@
       "runtimeArgs": ["-m", "http.server", "8931", "--directory", "docs/mocks"],
       "port": 8931
     }
-  ]
+  ],
+  "autoVerify": false
 }

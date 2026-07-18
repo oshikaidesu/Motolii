@@ -1,0 +1,1112 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Motolii main UI v3 — monochrome structure test</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --black: #050505;
+      --canvas: #080808;
+      --panel: #0d0d0d;
+      --raised: #141414;
+      --hover: #1a1a1a;
+      --line: #292929;
+      --line-strong: #505050;
+      --ink: #ededed;
+      --secondary: #b7b7b7;
+      --muted: #7c7c7c;
+      --disabled: #515151;
+      --focus: #ffffff;
+      --stage: #050505;
+      --stage-ink: #ededed;
+      --sp-1: 2px;
+      --sp-2: 4px;
+      --sp-3: 8px;
+      --sp-4: 12px;
+      --row-s: 22px;
+      --row-m: 26px;
+      --row-l: 42px;
+      --name-col: 218px;
+      --beat: 56px;
+      --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; }
+    body { margin: 0; overflow: hidden; background: var(--black); color: var(--ink); font: 12px/1.35 Inter, ui-sans-serif, system-ui, -apple-system, sans-serif; }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+    .app { width: 100vw; height: 100vh; min-width: 980px; display: grid; grid-template-rows: 34px minmax(280px, 48vh) 1fr 24px; overflow: hidden; background: var(--panel); }
+
+    .titlebar { display: flex; align-items: center; gap: var(--sp-4); padding: 0 var(--sp-4); border-bottom: 1px solid var(--line); background: var(--raised); }
+    .wordmark { font-weight: 800; letter-spacing: .06em; }
+    .project { color: var(--secondary); }
+    .project b { color: var(--ink); font-weight: 600; }
+    .grow { flex: 1; }
+    .button { min-height: 24px; padding: 0 var(--sp-3); border: 1px solid var(--line); border-radius: 1px; background: var(--panel); cursor: pointer; }
+    .button:hover { background: var(--hover); border-color: var(--line-strong); }
+    .button.active { background: var(--ink); color: var(--black); border-color: var(--ink); }
+    .button.strong { font-weight: 700; border-color: var(--line-strong); }
+    .button[disabled] { color: var(--disabled); border-style: dashed; cursor: not-allowed; }
+
+    .main { position:relative; min-height: 0; display: grid; grid-template-columns: 220px minmax(440px, 1fr) 292px; }
+    .left, .right { min-height: 0; overflow: auto; background: var(--panel); }
+    .left { border-right: 1px solid var(--line); }
+    .right { border-left: 1px solid var(--line); }
+    .tabs { height: 28px; display: flex; align-items: end; gap: var(--sp-1); padding: 0 var(--sp-3); border-bottom: 1px solid var(--line); }
+    .tab { height: 27px; padding: 6px var(--sp-3) 0; color: var(--muted); border-bottom: 2px solid transparent; }
+    .tab.on { color: var(--ink); border-bottom-color: var(--ink); }
+    .search { height: 25px; margin: var(--sp-3); padding: 4px var(--sp-3); border: 1px solid var(--line); color: var(--muted); background: var(--canvas); }
+    .asset-head, .asset { height: var(--row-s); display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-3); border-bottom: 1px solid #171717; }
+    .asset-head { color: var(--muted); font-size: 10px; border-color: var(--line); }
+    .asset { cursor: pointer; color: var(--secondary); }
+    .asset:hover { background: var(--hover); color: var(--ink); }
+    .asset.selected { outline: 1px solid var(--ink); outline-offset: -1px; background: var(--raised); color: var(--ink); }
+    .asset .name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .asset .meta { color: var(--muted); font: 10px var(--mono); }
+    .kind { width: 13px; height: 13px; display: grid; place-items: center; border: 1px solid var(--line-strong); color: var(--secondary); font: 8px var(--mono); }
+    .kind.audio { border-radius: 50%; }
+    .kind.shape { transform: rotate(45deg) scale(.74); }
+    .kind.shape span { transform: rotate(-45deg) scale(1.35); }
+    .kind.image { border-style: double; }
+    .kind.mesh { clip-path: polygon(50% 0,100% 25%,88% 82%,50% 100%,12% 82%,0 25%); }
+    .flag { padding: 0 4px; border: 1px solid var(--line-strong); font-size: 9px; color: var(--secondary); }
+    .flag.issue { border-style: dashed; color: var(--ink); }
+    .browser-note { margin: var(--sp-3); padding: var(--sp-3); border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; }
+
+    .center { min-width: 0; min-height: 0; display: grid; grid-template-rows: 30px 1fr 34px; background: var(--stage); }
+    .tools { display: flex; align-items: center; gap: var(--sp-1); padding: 0 var(--sp-3); border-bottom: 1px solid var(--line); background: var(--panel); }
+    .tool { height: 24px; min-width: 28px; padding: 0 7px; border: 1px solid transparent; background: transparent; color: var(--secondary); cursor: pointer; }
+    .tool:hover { border-color: var(--line); color: var(--ink); }
+    .tool.active { border-color: var(--ink); color: var(--ink); background: var(--raised); }
+    .tool small { color: var(--muted); }
+    .ownership { margin-left: auto; color: var(--muted); font-size: 10px; }
+    .ownership b { color: var(--ink); }
+
+    .stage { position: relative; min-height: 0; overflow: hidden; background: var(--stage); color: var(--stage-ink); }
+    .world { position: absolute; inset: 0; }
+    .output-frame { position: absolute; left: 50%; top: 50%; width: min(78%, 740px); aspect-ratio: 16/9; transform: translate(-50%, -50%); border: 1px solid #8b8b8b; background: var(--stage); }
+    .output-frame::before { content: "OUTPUT FRAME / CAMERA"; position: absolute; left: -1px; top: -18px; color: var(--muted); font: 9px var(--mono); letter-spacing: .08em; }
+    .composition-mark { position: absolute; left: 50%; top: 43%; width: 116px; height: 116px; transform: translate(-50%, -50%); border: 2px solid #d8d8d8; border-radius: 50%; }
+    .composition-mark::before { content: ""; position: absolute; inset: 22px; border: 1px solid #8a8a8a; border-radius: 50%; border-right-style: dashed; }
+    .composition-mark::after { content: ""; position: absolute; left: 50%; top: 50%; width: 7px; height: 7px; transform: translate(-50%, -50%) rotate(45deg); border: 1px solid #fff; background: #080808; }
+    .composition-title { position: absolute; left: 50%; top: 72%; transform: translate(-50%, -50%); font-size: clamp(17px, 2.2vw, 30px); font-weight: 720; letter-spacing: .18em; white-space: nowrap; }
+    .composition-sub { position: absolute; left: 50%; top: calc(72% + 28px); transform: translateX(-50%); color: var(--muted); font: 10px var(--mono); white-space: nowrap; }
+    .selected-box { position: absolute; left: 50%; top: 43%; width: 142px; height: 142px; transform: translate(-50%, -50%); border: 1px solid #fff; pointer-events: none; }
+    .selected-box i { position: absolute; width: 7px; height: 7px; background: #fff; border: 1px solid #080808; }
+    .selected-box i:nth-child(1) { left: -4px; top: -4px; } .selected-box i:nth-child(2) { right: -4px; top: -4px; }
+    .selected-box i:nth-child(3) { left: -4px; bottom: -4px; } .selected-box i:nth-child(4) { right: -4px; bottom: -4px; }
+    .group-bounds { position: absolute; left: 24%; top: 18%; width: 54%; height: 65%; border: 1px dashed #777; pointer-events: none; }
+    .group-bounds::before { content: "背景まとめ · 3 objects"; position: absolute; left: 0; top: -17px; color: var(--secondary); font: 9px var(--mono); background: var(--stage); padding-right: 5px; }
+    .depth-card { position: absolute; left: 30%; top: 31%; width: 72px; height: 50px; border: 1px dotted #777; transform: translate(-18px, 14px) skewY(-8deg); }
+    .depth-card::after { content: "z −0.20"; position: absolute; left: 3px; bottom: 2px; color: var(--muted); font: 8px var(--mono); transform: skewY(8deg); }
+    .offframe-object { position: absolute; right: -20px; top: 25%; width: 70px; height: 70px; border: 2px double #aaa; transform: rotate(20deg); }
+    .offframe-object::after { content: "FRAME外 / 同じworld"; position: absolute; right: 26px; top: 76px; width: 110px; color: var(--muted); font: 9px var(--mono); transform: rotate(-20deg); }
+    .path-ghost { display: none; position: absolute; left: 34%; top: 23%; width: 36%; height: 42%; pointer-events: none; }
+    .path-ghost svg { width: 100%; height: 100%; }
+    .stage.relative .path-ghost { display: block; }
+    .stage.relative .composition-mark { transform: translate(calc(-50% + 44px), calc(-50% - 18px)); }
+    .stage.camera .output-frame { transform: translate(calc(-50% + 34px), calc(-50% - 12px)); border-width: 2px; }
+    .stage.hand .world { transform: translate(38px, 20px); }
+    .target-hud { display: none; position: absolute; z-index: 8; left: 56%; top: 21%; width: 240px; padding: var(--sp-3); border: 1px solid var(--ink); background: var(--panel); }
+    .target-hud.show { display: block; }
+    .target-hud .eyebrow { color: var(--muted); font: 9px var(--mono); letter-spacing: .08em; }
+    .target-hud b { display: block; margin: 2px 0; }
+    .target-hud p { margin: 0; color: var(--secondary); font-size: 10px; }
+    .stage.targeting [data-target="valid"] { outline: 2px solid #fff; outline-offset: 4px; }
+    .stage.targeting.invalid [data-target="valid"] { outline-style: dotted; opacity: .4; }
+
+    .transport { display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-3); border-top: 1px solid var(--line); background: var(--raised); }
+    .transport .play { width: 30px; font-weight: 800; }
+    .time { font: 12px var(--mono); font-variant-numeric: tabular-nums; }
+    .bars { color: var(--secondary); font: 10px var(--mono); }
+    .bpm { padding-left: var(--sp-3); border-left: 1px solid var(--line); font: 10px var(--mono); }
+    .snap { padding: 1px 5px; border: 1px solid var(--line-strong); font-size: 9px; }
+    .quality { margin-left: auto; color: var(--secondary); font: 9px var(--mono); }
+
+    .panel-head { position: sticky; top: 0; z-index: 2; height: 28px; display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-3); border-bottom: 1px solid var(--line); background: var(--raised); }
+    .panel-head .meta { color: var(--muted); font-size: 10px; }
+    .section { border-bottom: 1px solid var(--line); }
+    .section-title { height: var(--row-s); display: flex; align-items: center; padding: 0 var(--sp-3); background: var(--canvas); color: var(--muted); font-size: 9px; letter-spacing: .08em; }
+    .section-title .add { margin-left: auto; color: var(--secondary); }
+    .property { height: var(--row-s); display: grid; grid-template-columns: 68px 1fr 12px; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-3); border-bottom: 1px solid #171717; }
+    .property:hover { background: var(--hover); }
+    .property.active-channel { background:var(--raised); box-shadow:inset 2px 0 0 var(--state-keyframe,var(--ink)); }
+    .property .name { color: var(--secondary); }
+    .value { padding: 0 4px; border: 1px solid var(--line); background: var(--canvas); font: 10px var(--mono); }
+    .xyz-values { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:2px; padding:0; border:0; background:transparent; }
+    .axis-value { min-width:0; height:16px; display:grid; grid-template-columns:12px 1fr; align-items:center; border:1px solid var(--line); background:var(--canvas); overflow:hidden; }
+    .axis-value b { display:grid; place-items:center; height:100%; border-right:1px solid var(--line); color:var(--muted); font:8px var(--mono); }
+    .axis-value i { min-width:0; padding:0 3px; overflow:hidden; font:9px var(--mono); font-style:normal; }
+    .diamond { width: 8px; height: 8px; border: 1px solid var(--line-strong); transform: rotate(45deg); }
+    .diamond.on { background: var(--ink); border-color: var(--ink); }
+    .stack-row { height: var(--row-s); display: grid; grid-template-columns: 14px 12px 1fr auto; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-3); border-bottom: 1px solid #171717; }
+    .grip { color: var(--muted); letter-spacing: -2px; }
+    .enable { width: 9px; height: 9px; border: 1px solid var(--ink); background: var(--ink); }
+    .enable.off { background: transparent; border-color: var(--disabled); }
+    .domain { color: var(--muted); font: 9px var(--mono); }
+    .boundary { height: 18px; display: grid; place-items: center; color: var(--muted); font: 8px var(--mono); border-bottom: 1px dashed var(--line-strong); }
+    .driver { padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid #171717; }
+    .driver-head { display: flex; align-items: center; gap: var(--sp-2); }
+    .driver-head .uses { margin-left: auto; color: var(--secondary); font: 9px var(--mono); }
+    .driver-line { height: 18px; margin-top: var(--sp-2); border-top: 1px solid var(--line); position: relative; }
+    .driver-line svg { position: absolute; inset: 0; width: 100%; height: 18px; }
+    .notice { margin: var(--sp-3); border: 1px dashed var(--line-strong); padding: var(--sp-3); color: var(--secondary); font-size: 10px; }
+    .notice b { color: var(--ink); }
+    .mode-row { display: grid; grid-template-columns: 86px 1fr; align-items: center; min-height: var(--row-s); padding: 0 var(--sp-3); border-bottom: 1px solid #171717; }
+    .mode-row .label { color: var(--secondary); }
+    .segmented { display: flex; border: 1px solid var(--line-strong); }
+    .segmented span { flex: 1; padding: 2px 4px; text-align: center; color: var(--muted); font: 9px var(--mono); }
+    .segmented .on { background: var(--ink); color: var(--black); }
+    .group-summary { padding: var(--sp-2) var(--sp-3); color: var(--secondary); font-size: 9px; border-bottom: 1px solid #171717; }
+    .group-summary b { color: var(--ink); }
+
+    .timeline { min-height: 0; display: grid; grid-template-rows: 28px 1fr; border-top: 1px solid var(--line); background: var(--panel); overflow: hidden; }
+    .z-viewer { display:none; min-width:980px; grid-template-columns:92px 1fr 50px; border-bottom:1px solid var(--line); background:var(--canvas); }
+    .z-viewer-head { display:flex; align-items:center; gap:6px; padding:0 8px; border-right:1px solid var(--line); }
+    .z-viewer-head b { font:700 12px var(--mono); }
+    .z-viewer-head span { color:var(--muted); font:8px var(--mono); letter-spacing:.08em; }
+    .z-plot { position:relative; min-width:0; display:grid; grid-template-rows:27px 27px; padding:0 30px; overflow:hidden; }
+    .z-plot::before { content:""; position:absolute; left:30px; right:30px; top:13px; bottom:13px; background:linear-gradient(90deg,transparent calc(50% - .5px),var(--line-strong) calc(50% - .5px),var(--line-strong) calc(50% + .5px),transparent calc(50% + .5px)); pointer-events:none; }
+    .z-depth-lane { position:relative; border-bottom:1px solid var(--line); }
+    .z-depth-lane:last-child { border-bottom:0; }
+    .z-depth-lane::before { content:""; position:absolute; left:0; right:0; top:13px; height:1px; background:var(--line-strong); }
+    .z-lane-name { position:absolute; z-index:2; left:-27px; top:8px; width:25px; color:var(--muted); font:7px var(--mono); text-align:left; }
+    .z-marker { position:absolute; z-index:3; top:4px; height:19px; min-width:22px; max-width:112px; padding:1px 5px; transform:translateX(-50%); border:1px solid var(--line-strong); background:var(--raised); color:var(--secondary); font:8px var(--mono); white-space:nowrap; cursor:ew-resize; }
+    .z-marker::before { content:""; position:absolute; left:50%; top:17px; width:5px; height:5px; transform:translateX(-50%) rotate(45deg); border:1px solid var(--line-strong); background:var(--canvas); }
+    .z-marker.selected { border-color:var(--accent-selection,var(--ink)); color:var(--ink); }
+    .z-marker.selected::before { border-color:var(--accent-selection,var(--ink)); background:var(--accent-selection,var(--ink)); }
+    .z-marker.dragging { outline:2px solid var(--focus); outline-offset:1px; }
+    .z-marker.logo-depth-marker { display:none; }
+    :root[data-palette="open"] .z-marker.group-depth-marker { display:none; }
+    :root[data-palette="open"] .z-marker.logo-depth-marker { display:block; }
+    .z-scale { position:absolute; inset:0 30px; pointer-events:none; color:var(--muted); font:7px var(--mono); }
+    .z-scale span { position:absolute; top:0; transform:translateX(-50%); }
+    .z-scale span:nth-child(1) { left:0; transform:none; }
+    .z-scale span:nth-child(2) { left:25%; }
+    .z-scale span:nth-child(3) { left:50%; }
+    .z-scale span:nth-child(4) { left:75%; }
+    .z-scale span:nth-child(5) { right:0; transform:none; }
+    .z-viewer-tools { display:grid; place-items:center; border-left:1px solid var(--line); color:var(--muted); font:8px var(--mono); }
+    .tl-toolbar { display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-3); border-bottom: 1px solid var(--line); background: var(--raised); }
+    .tl-toolbar .hint { color: var(--muted); }
+    .tl-body { min-height: 0; position: relative; overflow: hidden; }
+    .score-jump { position:relative; }
+    .score-jump-button { min-width:138px; display:flex; align-items:center; gap:6px; padding:3px 7px; border:1px solid var(--line-strong); background:var(--panel); color:var(--ink); text-align:left; cursor:pointer; }
+    .score-jump-button .kind { flex:0 0 auto; }
+    .score-jump-button b { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:550; }
+    .score-jump-button::after { content:"⌄"; margin-left:auto; color:var(--muted); }
+    .score-jump-pop { display:none; position:absolute; z-index:30; left:0; top:calc(100% + 5px); width:218px; padding:4px; border:1px solid var(--line-strong); background:var(--panel); box-shadow:0 8px 24px #000b; }
+    .score-jump-pop.show { display:block; }
+    .score-jump-pop::after { content:"時間上で見失った項目へ移動"; display:block; padding:5px 6px 2px; color:var(--muted); font:7px var(--mono); }
+    .score-jump-item { width:100%; height:25px; display:grid; grid-template-columns:16px minmax(0,1fr) auto; align-items:center; gap:6px; padding:0 6px; border:0; background:transparent; color:var(--secondary); text-align:left; cursor:pointer; }
+    .score-jump-item:hover, .score-jump-item:focus-visible { background:var(--hover); color:var(--ink); }
+    .score-jump-item.selected { background:var(--raised); color:var(--ink); }
+    .score-jump-item.child { padding-left:18px; }
+    .score-jump-item span:nth-child(2) { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .score-jump-item i { color:var(--muted); font:7px var(--mono); font-style:normal; }
+    .score-jump-item i.issue { color:var(--feedback-warning,var(--ink)); }
+    .clip.jump-hover { outline:1px solid var(--focus); outline-offset:2px; }
+    .timeline-context { display:none; position:absolute; z-index:11; left:0; top:64px; bottom:0; width:184px; border-right:1px solid var(--line-strong); background:var(--panel); }
+    .context-mode { height:100%; display:flex; flex-direction:column; }
+    .context-eyebrow { height:22px; display:flex; align-items:center; gap:5px; padding:0 8px; border-bottom:1px solid var(--line); color:var(--muted); font:7px var(--mono); letter-spacing:.09em; }
+    .context-eyebrow span { margin-left:auto; }
+    .context-identity { display:grid; grid-template-columns:22px minmax(0,1fr); gap:7px; align-items:center; padding:9px 8px 6px; }
+    .context-identity .kind { width:22px; height:22px; display:grid; place-items:center; border:1px solid var(--line-strong); }
+    .context-identity b { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; }
+    .context-path { padding:0 8px 7px; color:var(--muted); font:7px var(--mono); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .context-facts { margin:0 8px 7px; padding:5px 6px; border:1px solid var(--line); color:var(--secondary); font:8px var(--mono); line-height:1.45; }
+    .context-actions { display:flex; gap:4px; padding:0 8px; }
+    .context-actions button { flex:1; height:21px; border:1px solid var(--line); background:transparent; color:var(--secondary); font:8px var(--mono); cursor:pointer; }
+    .context-actions button:hover, .context-actions button:focus-visible { border-color:var(--line-strong); color:var(--ink); }
+    .context-tip { margin-top:auto; padding:6px 8px; border-top:1px solid var(--line); color:var(--muted); font:7px var(--mono); }
+    .context-keys { display:none; }
+    .context-keys .context-eyebrow { height:90px; align-items:flex-start; padding-top:8px; }
+    .context-key-row { display:grid; grid-template-columns:1fr auto; align-items:center; height:27px; padding:0 8px; border-bottom:1px solid var(--line); color:var(--secondary); font:8px var(--mono); }
+    .context-key-row i { color:var(--muted); font-style:normal; }
+    .context-range { margin:7px 8px; padding:5px 6px; border:1px solid var(--line); color:var(--secondary); font:8px var(--mono); }
+    .context-range b { display:block; margin-bottom:2px; font-weight:550; }
+    .timeline-context .score-jump-pop { left:calc(100% + 5px); top:auto; bottom:0; }
+    .tl-row { min-width: 980px; height: var(--row-m); display: grid; grid-template-columns: var(--name-col) 52px 1fr; border-bottom: 1px solid #181818; }
+    .tl-row.ruler { height: 22px; color: var(--muted); font: 9px var(--mono); }
+    .tl-row.song { height: var(--row-l); }
+    .track-name { display: flex; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-3); border-right: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
+    .track-name.selected { outline: 1px solid #fff; outline-offset: -1px; background: var(--raised); }
+    .track-name .type { color: var(--muted); font-size: 9px; overflow: hidden; text-overflow: ellipsis; }
+    .track-name .sm { margin-left: auto; color: var(--muted); font: 8px var(--mono); letter-spacing: .12em; }
+    .track-name.child { padding-left: 27px; border-left: 3px double var(--line-strong); }
+    .track-name.child::before { content: "└"; color: var(--muted); font: 9px var(--mono); }
+    .connection-gutter { position: relative; border-right: 1px solid var(--line); background: var(--canvas); }
+    .socket { position: absolute; top: 8px; width: 9px; height: 9px; background: var(--canvas); border: 1px solid #d4d4d4; }
+    .socket.out { right: 8px; transform: rotate(45deg); }
+    .socket.in { left: 8px; border-radius: 50%; }
+    .socket.in::before { content: ""; position: absolute; left: -6px; top: 2px; border-top: 2px solid transparent; border-bottom: 2px solid transparent; border-right: 4px solid #d4d4d4; }
+    .socket-label { position: absolute; top: 7px; color: var(--muted); font: 7px var(--mono); letter-spacing: .02em; }
+    .socket-label.out-label { left: 3px; }
+    .socket-label.in-label { right: 3px; }
+    .lane { position: relative; min-width: 0; overflow: hidden; background-size: calc(var(--beat) * 4) 100%, var(--beat) 100%; background-image: linear-gradient(90deg, #303030 1px, transparent 1px), linear-gradient(90deg, #1d1d1d 1px, transparent 1px); }
+    .clip { position: absolute; top: 4px; height: 18px; padding: 2px 6px; border: 1px solid #555; background: #171717; white-space: nowrap; overflow: hidden; }
+    .clip.shape { border-style: solid; }
+    .clip.video { border-style: double; }
+    .clip.text { border-style: dotted; }
+    .clip.group { border-style: dashed; }
+    .clip.image { background-image: repeating-linear-gradient(135deg, #181818 0 4px, #242424 4px 5px); }
+    .clip.selected { border-color: #fff; border-width: 2px; top: 3px; }
+    .clip .chip { margin-left: 5px; padding: 0 3px; border: 1px solid var(--line-strong); font-size: 8px; }
+    .fx-flow { display:inline-flex; align-items:center; gap:3px; margin-left:7px; font:8px var(--mono); vertical-align:1px; }
+    .fx-flow b { padding:0 3px; border:1px solid var(--state-linked, var(--line-strong)); color:var(--state-linked, var(--secondary)); font-weight:500; }
+    .fx-flow i { padding:0 4px; border-bottom:1px solid var(--item-effect, var(--line-strong)); color:var(--item-effect, var(--secondary)); font-style:normal; }
+    .fx-flow .arrow { color:var(--muted); }
+    .clip .issue { border-style: dashed; }
+    .readiness { position:absolute; z-index:2; left:0; right:0; bottom:-3px; height:3px; display:flex; pointer-events:none; }
+    .readiness i { display:block; height:100%; border-right:1px solid var(--canvas); }
+    .readiness .ready { background:var(--state-cached,var(--state-linked,var(--secondary))); }
+    .readiness .rendering { background:repeating-linear-gradient(90deg,var(--state-keyframe,var(--secondary)) 0 4px,transparent 4px 7px); }
+    .readiness .stale { background:repeating-linear-gradient(135deg,var(--feedback-warning,var(--secondary)) 0 2px,transparent 2px 5px); }
+    .key-disclosure { width:24px; height:18px; padding:0; border:1px solid var(--line); background:var(--canvas); color:var(--muted); font:8px var(--mono); cursor:pointer; }
+    .key-disclosure:hover, .key-disclosure:focus-visible { color:var(--ink); border-color:var(--line-strong); }
+    .inline-keys { display:none; position:absolute; z-index:3; inset:0 2px; pointer-events:none; }
+    .inline-key { position:absolute; top:14px; width:8px; height:8px; transform:translateX(-50%) rotate(45deg); border:1px solid var(--state-keyframe,var(--ink)); background:var(--raised); }
+    .inline-key.in-range { background:var(--state-keyframe,var(--ink)); }
+    .inline-key-range { position:absolute; top:17px; height:2px; background:var(--state-keyframe,var(--ink)); }
+    .inline-key-label { position:absolute; right:3px; top:1px; padding:0 3px; border:1px solid var(--line-strong); background:var(--raised); color:var(--secondary); font:8px var(--mono); }
+    .child-mark { margin-right:4px; color:var(--item-group,var(--muted)); font:8px var(--mono); }
+    .song-wave { position: absolute; inset: 4px 0; border: 1px solid var(--line-strong); background: #101010; overflow: hidden; }
+    .song-wave svg { width: 100%; height: 100%; }
+    .song-label { position: absolute; left: 6px; top: 5px; z-index: 2; font: 9px var(--mono); background: #101010; padding: 0 3px; }
+    .key-detail { display:none; min-width:980px; height:54px; grid-template-columns:var(--name-col) 1fr; border-bottom:1px solid var(--line); background:var(--canvas); }
+    .key-detail-head { display:flex; align-items:flex-start; gap:6px; padding:7px 8px; border-right:1px solid var(--line); color:var(--muted); }
+    .key-detail-head b { color:var(--secondary); font:8px var(--mono); letter-spacing:.08em; }
+    .key-detail-head span { font:8px var(--mono); }
+    .key-detail-body { display:grid; grid-template-rows:27px 27px; }
+    .key-detail-row { display:grid; grid-template-columns:74px 1fr; border-bottom:1px solid var(--line); }
+    .key-detail-row:last-child { border-bottom:0; }
+    .key-detail-name { display:flex; align-items:center; padding:0 8px; border-right:1px solid var(--line); color:var(--secondary); font:8px var(--mono); }
+    .key-detail-axis { position:relative; min-width:0; background-size:calc(var(--beat) * 4) 100%,var(--beat) 100%; background-image:linear-gradient(90deg,#303030 1px,transparent 1px),linear-gradient(90deg,#1d1d1d 1px,transparent 1px); }
+    .kf-span { position: absolute; top: 14px; height: 2px; background: #666; }
+    .kf-span.selected { background: #fff; height: 3px; }
+    .kf { position: absolute; top: 10px; width: 9px; height: 9px; border: 1px solid #aaa; transform: rotate(45deg); background: var(--panel); }
+    .kf.selected { background: #fff; border-color: #fff; }
+    .connection-lines { position: absolute; z-index: 4; left: var(--name-col); top: 22px; width: 52px; height: 260px; pointer-events: none; }
+    .connection-lines path { fill: none; stroke: #aaa; stroke-width: 1.2; }
+    .playhead { position: absolute; z-index: 6; top: 0; bottom: 0; left: calc(var(--name-col) + 52px + 38%); width: 1px; background: #fff; }
+    .playhead::before { content: ""; position: absolute; top: 0; left: -4px; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 6px solid #fff; }
+    .ease-pop { display: none; position: absolute; z-index: 10; right: 10%; bottom: 18px; width: 288px; border: 1px solid #888; background: #111; }
+    .ease-pop.show { display: block; }
+    .ease-head, .ease-tabs, .ease-foot { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line); }
+    .ease-head span { margin-left: auto; color: var(--muted); }
+    .ease-tabs button { flex: 1; padding: 3px; border: 1px solid var(--line); background: transparent; color: var(--secondary); }
+    .ease-tabs button.active { border-color: #fff; color: #fff; }
+    .curve { height: 110px; padding: var(--sp-3); }
+    .curve svg { width: 100%; height: 100%; }
+    .ease-foot { border-bottom: 0; color: var(--secondary); font: 9px var(--mono); }
+
+    .status { display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-3); border-top: 1px solid var(--line); background: var(--raised); color: var(--secondary); overflow: hidden; white-space: nowrap; }
+    .status b { color: var(--ink); }
+    .status code { padding: 0 3px; border: 1px solid var(--line-strong); color: var(--ink); font: 9px var(--mono); }
+    .status .stat { margin-left: auto; color: var(--muted); font: 9px var(--mono); }
+
+    .tone-nav { display: flex; gap: 2px; }
+    .tone-nav a { width: 22px; height: 20px; display: grid; place-items: center; border: 1px solid var(--line); color: var(--secondary); text-decoration: none; font: 9px var(--mono); }
+    .tone-nav a.on { border-color: var(--accent-selection, var(--ink)); color: var(--ink); background: var(--canvas); }
+    .tone-name { color: var(--muted); font: 9px var(--mono); white-space: nowrap; }
+
+    @media (max-width: 1120px) {
+      .main { grid-template-columns: 184px minmax(420px, 1fr) 248px; }
+      .project .details, .ownership span { display: none; }
+      .status .stat { display: none; }
+    }
+
+    /* Semantic color comparison: surfaces stay neutral; color only identifies meaning. */
+    :root[data-semantic-color="on"] {
+      --accent-selection: #68a6d8;
+      --item-song: #ad82bf;
+      --item-effect: #62a9a4;
+      --item-shape: #bf8b5f;
+      --item-text: #a87983;
+      --item-video: #66819b;
+      --item-group: #6f9079;
+      --item-mesh: #709b96;
+      --item-image: #8e896b;
+      --state-keyframe: #d0905e;
+      --state-linked: #62b4ae;
+      --state-depth: #8f86b9;
+      --state-play: #72a97e;
+      --feedback-warning: #c69a58;
+      --feedback-error: #c9736f;
+    }
+    :root[data-semantic-color="on"] .tool.active,
+    :root[data-semantic-color="on"] .tab.on { border-color: var(--accent-selection); color: var(--ink); }
+    :root[data-semantic-color="on"] .selected-box,
+    :root[data-semantic-color="on"] .track-name.selected { border-color: var(--accent-selection); }
+    :root[data-semantic-color="on"] .selected-box i { background: var(--accent-selection); }
+    :root[data-semantic-color="on"] .group-bounds { border-color: var(--item-group); }
+    :root[data-semantic-color="on"] .group-bounds::before { color: var(--item-group); }
+    :root[data-semantic-color="on"] .depth-card { color: var(--state-depth); }
+    :root[data-semantic-color="on"] .z-marker { border-color: var(--state-depth); }
+    :root[data-semantic-color="on"] .kind.audio { border-color: var(--item-song); color: var(--item-song); }
+    :root[data-semantic-color="on"] .kind.shape { border-color: var(--item-shape); color: var(--item-shape); }
+    :root[data-semantic-color="on"] .kind.image { border-color: var(--item-image); color: var(--item-image); }
+    :root[data-semantic-color="on"] .kind.mesh { border-color: var(--item-mesh); color: var(--item-mesh); }
+    :root[data-semantic-color="on"] [data-track="effect"] .kind { border-color: var(--item-effect); color: var(--item-effect); }
+    :root[data-semantic-color="on"] [data-track="text"] .kind { border-color: var(--item-text); color: var(--item-text); }
+    :root[data-semantic-color="on"] [data-track="video"] .kind { border-color: var(--item-video); color: var(--item-video); }
+    :root[data-semantic-color="on"] [data-track="group"] .kind { border-color: var(--item-group); color: var(--item-group); }
+    :root[data-semantic-color="on"] .song-wave { border-color: var(--item-song); background: color-mix(in srgb, var(--item-song) 10%, var(--canvas)); }
+    :root[data-semantic-color="on"] .song-wave path { stroke: var(--item-song); }
+    :root[data-semantic-color="on"] .clip.shape { background: color-mix(in srgb, var(--item-shape) 27%, var(--panel)); border-color: var(--item-shape); }
+    :root[data-semantic-color="on"] .clip.text { background: color-mix(in srgb, var(--item-text) 24%, var(--panel)); border-color: var(--item-text); }
+    :root[data-semantic-color="on"] .clip.video { background: color-mix(in srgb, var(--item-video) 25%, var(--panel)); border-color: var(--item-video); }
+    :root[data-semantic-color="on"] .clip.group { background: color-mix(in srgb, var(--item-group) 24%, var(--panel)); border-color: var(--item-group); }
+    :root[data-semantic-color="on"] .clip.mesh { background: color-mix(in srgb, var(--item-mesh) 22%, var(--panel)); border-color: var(--item-mesh); }
+    :root[data-semantic-color="on"] .clip.image { background-image: repeating-linear-gradient(135deg, color-mix(in srgb, var(--item-image) 16%, var(--panel)) 0 4px, color-mix(in srgb, var(--item-image) 28%, var(--panel)) 4px 5px); border-color: var(--item-image); }
+    :root[data-semantic-color="on"] [data-track="effect"] .clip { background: color-mix(in srgb, var(--item-effect) 23%, var(--panel)); border-color: var(--item-effect); }
+    :root[data-semantic-color="on"] .clip.selected { border-color: var(--accent-selection); }
+    :root[data-semantic-color="on"] .kf-span.selected,
+    :root[data-semantic-color="on"] .kf.selected,
+    :root[data-semantic-color="on"] .diamond.on { background: var(--state-keyframe); border-color: var(--state-keyframe); }
+    :root[data-semantic-color="on"] .socket,
+    :root[data-semantic-color="on"] .connection-lines path { border-color: var(--state-linked); stroke: var(--state-linked); }
+    :root[data-semantic-color="on"] .socket-label { color: var(--state-linked); }
+    :root[data-semantic-color="on"] .socket.in::before { border-right-color: var(--state-linked); }
+    :root[data-semantic-color="on"] .mode-row .segmented .on { background: var(--state-depth); color: var(--black); }
+    :root[data-semantic-color="on"] .playhead { background: var(--state-play); }
+    :root[data-semantic-color="on"] .playhead::before { border-top-color: var(--state-play); }
+    :root[data-semantic-color="on"] .button.play.active { background: var(--state-play); color: var(--black); }
+    :root[data-semantic-color="on"] .chip.issue,
+    :root[data-semantic-color="on"] .flag.issue { border-color: var(--feedback-error); color: var(--feedback-error); }
+    :root[data-semantic-color="on"] [data-track="group"] .chip { border-color: var(--feedback-warning); color: var(--feedback-warning); }
+
+    /* Same UI, six surface-lightness mappings. Stage remains black in every tone. */
+    :root[data-surface-tone="1"] {
+      --black:#050505; --canvas:#080808; --panel:#0d0d0d; --raised:#141414; --hover:#1a1a1a;
+      --line:#292929; --line-strong:#505050; --ink:#ededed; --secondary:#b7b7b7; --muted:#7c7c7c; --disabled:#515151; --focus:#fff;
+    }
+    :root[data-surface-tone="2"] {
+      --black:#101010; --canvas:#151515; --panel:#1a1a1a; --raised:#222; --hover:#2a2a2a;
+      --line:#383838; --line-strong:#616161; --ink:#f0f0f0; --secondary:#c5c5c5; --muted:#929292; --disabled:#666; --focus:#fff;
+    }
+    :root[data-surface-tone="3"] {
+      --black:#1a1a19; --canvas:#20201f; --panel:#262625; --raised:#2e2e2c; --hover:#373735;
+      --line:#444441; --line-strong:#6c6c67; --ink:#f2f2ef; --secondary:#cececa; --muted:#a1a19b; --disabled:#777772; --focus:#fff;
+    }
+    :root[data-surface-tone="4"] {
+      --black:#211f1b; --canvas:#27241f; --panel:#2d2a24; --raised:#373229; --hover:#413b32;
+      --line:#4c463c; --line-strong:#786f60; --ink:#f3eee4; --secondary:#d3cabc; --muted:#a69b89; --disabled:#7d7466; --focus:#fff8e9;
+    }
+    :root[data-surface-tone="5"] {
+      color-scheme:light;
+      --black:#676660; --canvas:#706f68; --panel:#797770; --raised:#85837b; --hover:#918f86;
+      --line:#9a978e; --line-strong:#b7b3a8; --ink:#11110f; --secondary:#282722; --muted:#47453e; --disabled:#5d5a52; --focus:#000;
+      --accent-selection:#164f79; --item-song:#51286a; --item-effect:#155d59; --item-shape:#6d3e17; --item-text:#6d2e3d; --item-video:#274866; --item-group:#28553a; --item-mesh:#245b57; --item-image:#5e571e;
+      --state-keyframe:#7a3f12; --state-linked:#075e59; --state-depth:#4e3b75; --state-play:#245b31; --feedback-warning:#674600; --feedback-error:#7c211c;
+    }
+    :root[data-surface-tone="6"] {
+      color-scheme:light;
+      --black:#b9b7b0; --canvas:#c7c5bd; --panel:#d1cfc7; --raised:#dedcd4; --hover:#e9e7df;
+      --line:#aaa79e; --line-strong:#77746d; --ink:#171714; --secondary:#34332e; --muted:#5e5b54; --disabled:#8b8880; --focus:#000;
+      --accent-selection:#0d5685; --item-song:#63337b; --item-effect:#14645f; --item-shape:#794518; --item-text:#793244; --item-video:#315773; --item-group:#2b6040; --item-mesh:#286662; --item-image:#655d20;
+      --state-keyframe:#8a480f; --state-linked:#07655f; --state-depth:#55427e; --state-play:#286436; --feedback-warning:#745000; --feedback-error:#882a25;
+    }
+    :root[data-surface-tone] .asset-head,
+    :root[data-surface-tone] .asset,
+    :root[data-surface-tone] .property,
+    :root[data-surface-tone] .stack-row,
+    :root[data-surface-tone] .driver,
+    :root[data-surface-tone] .mode-row,
+    :root[data-surface-tone] .group-summary { border-bottom-color: color-mix(in srgb, var(--line) 62%, var(--panel)); }
+    :root[data-surface-tone] .tl-row { border-bottom-color: color-mix(in srgb, var(--line) 54%, var(--panel)); }
+    :root[data-surface-tone] .lane { background-image: linear-gradient(90deg, var(--line-strong) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px); }
+    :root[data-surface-tone] .clip { background: var(--raised); border-color: var(--line-strong); }
+    :root[data-surface-tone] .song-wave,
+    :root[data-surface-tone] .song-label { background: var(--canvas); }
+    :root[data-surface-tone] .kf { background: var(--panel); }
+    :root[data-surface-tone] .ease-pop { background: var(--raised); }
+    :root[data-surface-tone="5"] .composition-mark,
+    :root[data-surface-tone="6"] .composition-mark { border-color: var(--stage-ink); }
+
+    /* Preview-first vocabulary study: less narration, more Stage. */
+    :root[data-layout="preview-first"] .app { grid-template-rows: 34px minmax(360px, 54vh) 1fr 24px; }
+    :root[data-layout="preview-first"] .main { grid-template-columns: 184px minmax(560px, 1fr) 252px; }
+    :root[data-layout="preview-first"] .browser-note,
+    :root[data-layout="preview-first"] .group-summary,
+    :root[data-layout="preview-first"] .notice,
+    :root[data-layout="preview-first"] .ownership span,
+    :root[data-layout="preview-first"] .tl-toolbar .hint,
+    :root[data-layout="preview-first"] .panel-head .meta { display:none; }
+    :root[data-layout="preview-first"] .composition-mark { width:148px; height:148px; }
+    :root[data-layout="preview-first"] .selected-box { width:174px; height:174px; }
+    :root[data-layout="preview-first"] .composition-title { font-size:clamp(22px,2.7vw,36px); }
+    :root[data-layout="preview-first"] .output-frame { width:min(84%,900px); }
+    :root[data-layout="preview-first"] .section-title { letter-spacing:.02em; }
+    :root[data-layout="preview-first"] .tl-body { overflow:hidden; background-size:calc(var(--beat) * 4) 100%,var(--beat) 100%; background-image:linear-gradient(90deg,var(--line-strong) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px); }
+    :root[data-layout="preview-first"] .tl-row { position:absolute; left:0; right:0; display:block; min-width:980px; border:0; pointer-events:none; }
+    :root[data-layout="preview-first"] .tl-row .track-name,
+    :root[data-layout="preview-first"] .connection-gutter,
+    :root[data-layout="preview-first"] .connection-lines,
+    :root[data-layout="preview-first"] [data-track="effect"],
+    :root[data-layout="preview-first"] .group-fx-section { display:none; }
+    :root[data-layout="preview-first"] .tl-row .lane { position:absolute; inset:0; overflow:visible; background:none; pointer-events:auto; }
+    :root[data-layout="preview-first"] .timeline-context { display:block; }
+    :root[data-layout="preview-first"] [data-track]:not([data-track="song"]) .lane { inset:0 0 0 184px; }
+    :root[data-layout="preview-first"] .tl-row.ruler { top:0; height:22px; }
+    :root[data-layout="preview-first"] .tl-row.song { top:22px; height:42px; }
+    :root[data-layout="preview-first"] [data-track="logo"] { top:70px; }
+    :root[data-layout="preview-first"] [data-track="text"] { top:98px; }
+    :root[data-layout="preview-first"] [data-track="group"] { top:126px; }
+    :root[data-layout="preview-first"] [data-track="video"] { top:158px; }
+    :root[data-layout="preview-first"] [data-track="mesh"] { top:186px; }
+    :root[data-layout="preview-first"] [data-track="image"] { top:214px; }
+    :root[data-layout="preview-first"] .key-detail { position:absolute; z-index:5; left:184px; right:0; top:154px; min-width:796px; grid-template-columns:1fr; }
+    :root[data-layout="preview-first"] .key-detail-head,
+    :root[data-layout="preview-first"] .key-detail-name { display:none; }
+    :root[data-layout="preview-first"] .key-detail-row { grid-template-columns:1fr; }
+    :root[data-layout="preview-first"][data-keys-expanded="on"] [data-track="video"] { top:212px; }
+    :root[data-layout="preview-first"][data-keys-expanded="on"] [data-track="mesh"] { top:240px; }
+    :root[data-layout="preview-first"][data-keys-expanded="on"] [data-track="image"] { top:268px; }
+    :root[data-layout="preview-first"] .playhead { left:calc(38% + 114px); }
+    :root[data-layout="preview-first"] .timeline { grid-template-rows:54px 28px 1fr; }
+    :root[data-layout="preview-first"] .z-viewer { display:grid; }
+    :root[data-layout="preview-first"] .inline-keys { display:block; }
+    :root[data-layout="preview-first"] [data-track="group"] .clip { overflow:visible; }
+    :root[data-layout="preview-first"][data-keys-expanded="on"] .key-detail { display:grid; }
+    :root[data-layout="preview-first"][data-keys-expanded="on"] .context-object { display:none; }
+    :root[data-layout="preview-first"][data-keys-expanded="on"] .context-keys { display:flex; }
+    :root[data-layout="preview-first"][data-keys-expanded="on"] .inline-keys { display:none; }
+    :root[data-layout="preview-first"][data-keys-expanded="on"] .tl-body { overflow-y:auto; }
+    :root[data-palette="open"] .inline-keys,
+    :root[data-palette="open"] .key-disclosure { display:none; }
+    :root:not([data-layout="preview-first"]) .fx-flow { display:none; }
+
+    .asset-explorer { display:none; }
+    :root[data-explorer="open"] .asset-explorer {
+      display:grid; position:absolute; z-index:20; left:184px; top:0; bottom:0; width:470px;
+      grid-template-rows:30px 1fr 26px; border-right:1px solid var(--line-strong); background:var(--panel);
+    }
+    .explorer-bar { display:flex; align-items:center; gap:4px; padding:0 6px; border-bottom:1px solid var(--line); background:var(--raised); }
+    .explorer-bar .path { flex:1; min-width:0; height:21px; display:flex; align-items:center; padding:0 6px; border:1px solid var(--line); background:var(--canvas); color:var(--secondary); overflow:hidden; white-space:nowrap; }
+    .explorer-body { min-height:0; display:grid; grid-template-columns:104px 1fr; }
+    .explorer-places { border-right:1px solid var(--line); padding-top:4px; }
+    .place { height:24px; display:flex; align-items:center; gap:5px; padding:0 7px; color:var(--secondary); }
+    .place.on { background:var(--raised); color:var(--ink); border-left:2px solid var(--accent-selection); padding-left:5px; }
+    .explorer-content { min-width:0; min-height:0; display:grid; grid-template-rows:28px 1fr; }
+    .explorer-tools { display:flex; align-items:center; gap:6px; padding:0 7px; border-bottom:1px solid var(--line); color:var(--muted); }
+    .explorer-tools .count { margin-left:auto; }
+    .thumb-grid { min-height:0; overflow:hidden; display:grid; grid-template-columns:repeat(3,1fr); grid-auto-rows:112px; gap:1px; background:var(--line); }
+    .thumb { position:relative; min-width:0; padding:5px; background:var(--panel); overflow:hidden; }
+    .thumb.selected { outline:2px solid var(--accent-selection); outline-offset:-2px; }
+    .thumb-visual { height:76px; position:relative; display:grid; place-items:center; background:var(--stage); border:1px solid color-mix(in srgb,var(--line) 70%,var(--stage)); overflow:hidden; color:var(--stage-ink); }
+    .thumb-visual.video::before { content:""; position:absolute; inset:13px 18px; border:1px solid var(--item-video); transform:skewY(-5deg); }
+    .thumb-visual.video::after { content:"▶ 00:12"; font:9px var(--mono); }
+    .thumb-visual.logo::after { content:"◇"; width:38px; height:38px; display:grid; place-items:center; border:1px solid var(--item-shape); font-size:18px; }
+    .thumb-visual.audio::after { content:"╱╲╱▁╲╱╲▁╱╲╱╲▁╱╲"; color:var(--item-song); letter-spacing:1px; }
+    .thumb-visual.texture { background-image:repeating-linear-gradient(135deg,#171717 0 5px,#29261a 5px 6px); }
+    .thumb-visual.folder::before { content:""; width:52px; height:35px; border:1px solid var(--secondary); border-top-width:6px; }
+    .thumb-name { height:24px; display:flex; align-items:center; gap:4px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:10px; }
+    .thumb-name .meta { margin-left:auto; color:var(--muted); font:8px var(--mono); }
+    .explorer-foot { display:flex; align-items:center; gap:7px; padding:0 7px; border-top:1px solid var(--line); color:var(--muted); font:9px var(--mono); }
+    .explorer-foot .range { margin-left:auto; }
+    :root[data-explorer="open"] .stage::after { content:"DROP TO PLACE"; position:absolute; z-index:12; right:22px; top:18px; padding:3px 6px; border:1px dashed var(--accent-selection); color:var(--accent-selection); font:9px var(--mono); }
+
+    .color-palette { display:none; }
+    :root[data-palette="open"] .color-palette {
+      display:grid; position:absolute; z-index:20; left:184px; top:0; bottom:0; width:470px;
+      grid-template-rows:30px 76px 1fr 90px 26px; border-right:1px solid var(--line-strong); background:var(--panel);
+    }
+    .palette-head { display:flex; align-items:center; gap:7px; padding:0 7px; border-bottom:1px solid var(--line); background:var(--raised); }
+    .palette-tabs { display:flex; align-items:center; gap:2px; padding:6px 7px; border-bottom:1px solid var(--line); }
+    .palette-tab { height:22px; padding:3px 7px; border:1px solid var(--line); color:var(--secondary); }
+    .palette-tab.on { border-color:var(--accent-selection); color:var(--ink); }
+    .palette-source { margin-left:auto; color:var(--muted); font:9px var(--mono); }
+    .palette-summary { grid-column:1/-1; display:flex; align-items:center; gap:6px; color:var(--muted); font-size:10px; }
+    .swatch-groups { min-height:0; overflow:hidden; padding:7px; }
+    .swatch-group { margin-bottom:10px; }
+    .swatch-title { height:20px; display:flex; align-items:center; color:var(--secondary); font-size:10px; }
+    .swatches { display:grid; grid-template-columns:repeat(6,1fr); gap:3px; }
+    .swatch { min-width:0; height:58px; padding:3px; border:1px solid var(--line); background:var(--canvas); }
+    .swatch.on { outline:2px solid var(--accent-selection); outline-offset:-2px; }
+    .swatch-color { display:block; height:32px; border:1px solid color-mix(in srgb,var(--line) 65%,transparent); }
+    .swatch-name { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font:8px var(--mono); margin-top:3px; }
+    .swatch-code { display:block; color:var(--muted); font:7px var(--mono); }
+    .palette-import { display:grid; grid-template-columns:1fr auto; grid-template-rows:26px 1fr; gap:5px; padding:7px; border-top:1px solid var(--line); background:var(--raised); }
+    .code-input { display:flex; align-items:center; min-width:0; padding:0 6px; border:1px solid var(--line); background:var(--canvas); color:var(--secondary); font:9px var(--mono); overflow:hidden; white-space:nowrap; }
+    .import-types { grid-column:1/-1; display:flex; gap:4px; align-items:start; }
+    .import-types span { padding:2px 5px; border:1px solid var(--line); color:var(--muted); font:8px var(--mono); }
+    .palette-foot { display:flex; align-items:center; gap:8px; padding:0 7px; border-top:1px solid var(--line); color:var(--muted); font:9px var(--mono); }
+    .palette-foot .mode { margin-left:auto; color:var(--secondary); }
+    .palette-property { display:none; }
+    :root[data-palette="open"] .palette-property { display:grid; }
+    :root[data-palette="open"] .group-compose-section,
+    :root[data-palette="open"] .group-fx-section,
+    :root[data-palette="open"] .driver-section { display:none; }
+    .color-value { display:flex; align-items:center; gap:5px; }
+    .color-chip { width:38px; height:15px; padding:0; background:#df8b4d; border:1px solid var(--line-strong); cursor:pointer; }
+    .color-chip.stroke { background:#68a6d8; }
+    .color-chip:hover, .color-chip:focus-visible { outline:2px solid var(--focus); outline-offset:1px; }
+    :root[data-palette="open"] .composition-mark { border-color:#df8b4d; }
+    :root[data-palette="open"] .color-palette { display:none; }
+    .palette-pop { display:none; position:fixed; z-index:40; right:252px; top:158px; width:254px; padding:6px; border:1px solid var(--line-strong); background:var(--raised); }
+    .palette-pop.show { display:block; }
+    .palette-pop-head { min-height:27px; border-bottom:1px solid var(--line); margin-bottom:6px; }
+    .palette-set-row { display:flex; align-items:center; gap:5px; }
+    .palette-set { width:36px; height:15px; display:grid; grid-template-columns:repeat(3,1fr); border:1px solid var(--line); cursor:pointer; }
+    .palette-set.on { outline:1px solid var(--accent-selection); outline-offset:1px; }
+    .palette-set i { display:block; }
+    .palette-pop-head .icon-button { margin-left:auto; width:22px; height:20px; padding:0; border:1px solid var(--line); background:var(--panel); color:var(--secondary); }
+    .palette-colors { display:grid; grid-template-columns:repeat(6,1fr); gap:4px; }
+    .palette-color { position:relative; aspect-ratio:1; padding:0; border:1px solid color-mix(in srgb,var(--line-strong) 70%,transparent); cursor:pointer; }
+    .palette-color:hover { outline:2px solid var(--focus); outline-offset:1px; }
+    .palette-color.on::after { content:""; position:absolute; inset:7px; border:1px solid currentColor; transform:rotate(45deg); color:#fff; mix-blend-mode:difference; }
+    .palette-pop-foot { height:25px; display:flex; align-items:end; gap:5px; margin-top:5px; border-top:1px solid var(--line); }
+    .palette-pop-foot button { width:23px; height:19px; padding:0; border:1px solid var(--line); background:var(--panel); color:var(--secondary); }
+    :root[data-palette="open"] .composition-mark { background:color-mix(in srgb,#df8b4d 22%,transparent); border-color:#68a6d8; }
+  </style>
+</head>
+<body>
+  <main class="app" aria-label="Motolii monochrome high-density UI mock">
+    <header class="titlebar">
+      <span class="wordmark">MOTOLII</span>
+      <span class="project"><b>night_drive.mtl</b> <span class="details">— 1920×1080 / 30 fps / 3:42</span></span>
+      <nav class="tone-nav" aria-label="surface tone comparison"><a href="#tone-1">1</a><a href="#tone-2">2</a><a href="#tone-3">3</a><a href="#tone-4">4</a><a href="#tone-5">5</a><a href="#tone-6">6</a><a class="preview-link" href="#preview-first">P</a><a class="asset-link" href="#asset-explorer">A</a><a class="palette-link" href="#color-palette">C</a></nav>
+      <span class="tone-name" id="tone-name"></span>
+      <span class="grow"></span>
+      <button class="button">設定</button><button class="button" id="undo">取り消し</button><button class="button">やり直し</button><button class="button strong">書き出し</button>
+    </header>
+
+    <section class="main">
+      <aside class="left" aria-label="素材の棚">
+        <div class="tabs"><span class="tab on">アセット</span><span class="tab">エフェクト</span></div>
+        <div class="search">検索…</div>
+        <div class="asset-head"><span></span><span>名前</span><span>種別 / 長さ</span></div>
+        <div class="asset" data-select="video" tabindex="0"><span class="kind">V</span><span class="name">city_loop.mp4 <span class="flag issue">! 要再リンク</span></span><span class="meta">動画 12s</span></div>
+        <div class="asset" data-select="logo" tabindex="0"><span class="kind shape"><span>S</span></span><span class="name">logo.svg</span><span class="meta">SVG</span></div>
+        <div class="asset" data-select="song" tabindex="0"><span class="kind audio">A</span><span class="name">night_drive.wav <span class="flag">楽曲</span></span><span class="meta">3:42</span></div>
+        <div class="asset" data-select="mesh" tabindex="0"><span class="kind mesh">M</span><span class="name">car.glb</span><span class="meta">glTF</span></div>
+        <div class="asset" data-select="image" tabindex="0"><span class="kind image">I</span><span class="name">grain.png</span><span class="meta">画像</span></div>
+        <div class="asset" data-select="text" tabindex="0"><span class="kind">T</span><span class="name">NIGHT DRIVE</span><span class="meta">テキスト</span></div>
+        <div class="browser-note"><b>SONG / BPM 120</b><br>Beat grid · locked</div>
+      </aside>
+
+      <section class="asset-explorer" aria-label="Asset Explorer">
+        <div class="explorer-bar"><button class="button">‹</button><button class="button">›</button><button class="button">↑</button><div class="path">素材 / MV / night_drive / source</div><button class="button">⌕</button></div>
+        <div class="explorer-body">
+          <nav class="explorer-places"><div class="place on">▣ source</div><div class="place">★ Favorites</div><div class="place">◇ Collections</div><div class="place">▤ Recent</div><div class="section-title">FOLDERS</div><div class="place">city</div><div class="place">logos</div><div class="place">textures</div><div class="place">audio</div></nav>
+          <div class="explorer-content"><div class="explorer-tools"><b>source</b><span>Grid</span><span>List</span><span>⌕ subfolders</span><span class="count">8 items</span></div>
+            <div class="thumb-grid">
+              <div class="thumb selected"><div class="thumb-visual video"></div><div class="thumb-name"><i class="kind">V</i>city_loop.mp4<span class="meta">12s</span></div></div>
+              <div class="thumb"><div class="thumb-visual logo"></div><div class="thumb-name"><i class="kind shape"><span>S</span></i>logo.svg<span class="meta">SVG</span></div></div>
+              <div class="thumb"><div class="thumb-visual audio"></div><div class="thumb-name"><i class="kind audio">A</i>night_drive.wav<span class="meta">3:42</span></div></div>
+              <div class="thumb"><div class="thumb-visual texture"></div><div class="thumb-name"><i class="kind image">I</i>grain.png<span class="meta">4K</span></div></div>
+              <div class="thumb"><div class="thumb-visual folder"></div><div class="thumb-name">city_alt<span class="meta">14</span></div></div>
+              <div class="thumb"><div class="thumb-visual video"></div><div class="thumb-name"><i class="kind">V</i>rain_plate.mov<span class="meta">8s</span></div></div>
+              <div class="thumb"><div class="thumb-visual logo"></div><div class="thumb-name"><i class="kind shape"><span>S</span></i>mark_outline.svg</div></div>
+              <div class="thumb"><div class="thumb-visual audio"></div><div class="thumb-name"><i class="kind audio">A</i>impact_04.wav<span class="meta">2s</span></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="explorer-foot"><span>Space preview</span><span>Enter place</span><span>Drag → Stage / TL</span><span class="range">IN 00:02.12　OUT 00:09.18</span></div>
+      </section>
+
+      <section class="color-palette" aria-label="Color Palette">
+        <div class="palette-head"><b>Color Palette</b><span class="grow"></span><button class="button">＋ New</button><button class="button">Import</button></div>
+        <div class="palette-tabs"><span class="palette-tab">My</span><span class="palette-tab">Project</span><span class="palette-tab on">Imported</span><span class="palette-source">Figma / Night Drive UI</span><div class="palette-summary"><b>24 colors</b><span>Collection: Brand</span><span>Mode: Dark</span><span class="grow"></span><span>profile: sRGB ✓</span></div></div>
+        <div class="swatch-groups">
+          <div class="swatch-group"><div class="swatch-title">Brand</div><div class="swatches">
+            <div class="swatch"><span class="swatch-color" style="background:#18202b"></span><span class="swatch-name">bg/deep</span><span class="swatch-code">#18202B</span></div>
+            <div class="swatch"><span class="swatch-color" style="background:#26415a"></span><span class="swatch-name">bg/raised</span><span class="swatch-code">#26415A</span></div>
+            <div class="swatch on"><span class="swatch-color" style="background:#df8b4d"></span><span class="swatch-name">accent/main</span><span class="swatch-code">#DF8B4D</span></div>
+            <div class="swatch"><span class="swatch-color" style="background:#f1c27d"></span><span class="swatch-name">accent/soft</span><span class="swatch-code">#F1C27D</span></div>
+            <div class="swatch"><span class="swatch-color" style="background:#68a6d8"></span><span class="swatch-name">signal/blue</span><span class="swatch-code">#68A6D8</span></div>
+            <div class="swatch"><span class="swatch-color" style="background:#72a97e"></span><span class="swatch-name">signal/green</span><span class="swatch-code">#72A97E</span></div>
+          </div></div>
+          <div class="swatch-group"><div class="swatch-title">Neutral</div><div class="swatches">
+            <div class="swatch"><span class="swatch-color" style="background:#0a0a0a"></span><span class="swatch-name">black</span><span class="swatch-code">#0A0A0A</span></div>
+            <div class="swatch"><span class="swatch-color" style="background:#343434"></span><span class="swatch-name">gray/800</span><span class="swatch-code">#343434</span></div>
+            <div class="swatch"><span class="swatch-color" style="background:#747474"></span><span class="swatch-name">gray/500</span><span class="swatch-code">#747474</span></div>
+            <div class="swatch"><span class="swatch-color" style="background:#b7b7b7"></span><span class="swatch-name">gray/300</span><span class="swatch-code">#B7B7B7</span></div>
+            <div class="swatch"><span class="swatch-color" style="background:#ededed"></span><span class="swatch-name">paper</span><span class="swatch-code">#EDEDED</span></div>
+            <div class="swatch"><span class="swatch-color" style="background:transparent"></span><span class="swatch-name">clear</span><span class="swatch-code">#00000000</span></div>
+          </div></div>
+          <div class="swatch-group"><div class="swatch-title">FX</div><div class="swatches">
+            <div class="swatch"><span class="swatch-color" style="background:#ad82bf"></span><span class="swatch-name">neon/purple</span><span class="swatch-code">#AD82BF</span></div>
+            <div class="swatch"><span class="swatch-color" style="background:#62b4ae"></span><span class="swatch-name">neon/cyan</span><span class="swatch-code">#62B4AE</span></div>
+            <div class="swatch"><span class="swatch-color" style="background:#c9736f"></span><span class="swatch-name">flare/red</span><span class="swatch-code">#C9736F</span></div>
+          </div></div>
+        </div>
+        <div class="palette-import"><div class="code-input">#FF6B35　rgb(20 34 48 / .8)　--brand-accent: #DF8B4D;</div><button class="button strong">Read 3 colors</button><div class="import-types"><span>HEX / RGB / HSL</span><span>CSS variables</span><span>DTCG JSON</span><span>Figma Variables JSON</span></div></div>
+        <div class="palette-foot"><span>Enter apply</span><span>Drag → Fill / Stroke / Effect</span><span>Applied value is copied</span><span class="mode">straight sRGB RGBA</span></div>
+      </section>
+
+      <section class="center" aria-label="ステージ">
+        <div class="tools">
+          <button class="tool active" data-tool="select">選択</button>
+          <button class="tool" data-tool="link">接続</button>
+          <button class="tool" data-tool="relative">Relative</button>
+          <button class="tool" data-tool="camera">Camera</button>
+          <button class="tool" data-tool="hand">Hand</button>
+          <span class="ownership"><b id="owner">PROJECT</b><span> / Undo ×1</span></span>
+        </div>
+        <div class="stage" id="stage">
+          <div class="world">
+            <div class="output-frame"></div>
+            <div class="composition-mark" data-target="valid" tabindex="0" aria-label="logo.svg"></div>
+            <div class="depth-card"></div>
+            <div class="composition-title">NIGHT DRIVE</div>
+            <div class="composition-sub">bar 54.2 / beat-synced position</div>
+            <div class="group-bounds"></div>
+            <div class="selected-box"><i></i><i></i><i></i><i></i></div>
+            <div class="offframe-object" tabindex="0" aria-label="frame外object"></div>
+            <div class="path-ghost"><svg viewBox="0 0 300 130"><path d="M15 110 C76 38 120 105 180 45 S252 28 286 58" fill="none" stroke="#888" stroke-width="1.5" stroke-dasharray="5 4"/><circle cx="15" cy="110" r="4" fill="#080808" stroke="#fff"/><circle cx="286" cy="58" r="5" fill="#fff"/></svg></div>
+          </div>
+          <div class="target-hud" id="hud"><div class="eyebrow">TARGET</div><b id="hud-title">Position → Object</b><p id="hud-body">Objectを選択 · Escで取消</p></div>
+        </div>
+        <div class="transport">
+          <button class="button">|&lt;</button><button class="button play" id="play">▶</button><button class="button">&gt;|</button>
+          <span class="time" id="time">00:01:48:12</span><span class="bars" id="bar-time">54.2.00</span><span class="bpm">BPM <b>120.00</b> / 4</span><span class="snap">SNAP: BEAT</span><span class="quality">DRAFT · 1/2 · fp16</span>
+        </div>
+      </section>
+
+      <aside class="right" aria-label="選択の意味">
+        <div class="panel-head"><span class="kind">G</span><b id="selection-name">背景まとめ</b><span class="meta" id="selection-meta">Group · 3 objects</span></div>
+        <div class="section"><div class="section-title">変形</div>
+          <div class="property active-channel" data-channel="position-y"><span class="name">位置</span><span class="value xyz-values" id="position"><span class="axis-value"><b>X</b><i id="pos-x">0.124</i></span><span class="axis-value"><b>Y</b><i id="pos-y">−0.082</i></span><span class="axis-value"><b>Z</b><i id="pos-z">0.180</i></span></span><i class="diamond on"></i></div>
+          <div class="property" data-channel="scale"><span class="name">スケール</span><span class="value">1.000</span><i class="diamond"></i></div>
+          <div class="property" data-channel="rotation"><span class="name">回転</span><span class="value">0.000 rad</span><i class="diamond"></i></div>
+          <div class="property" data-channel="opacity"><span class="name">不透明度</span><span class="value">100%</span><i class="diamond on"></i></div>
+          <div class="property palette-property"><span class="name">Fill</span><span class="value color-value"><button class="color-chip" id="palette-trigger" aria-label="Fill colorを選択"></button></span><i class="diamond on"></i></div>
+          <div class="property palette-property"><span class="name">Stroke</span><span class="value color-value"><button class="color-chip stroke" id="stroke-trigger" aria-label="Stroke colorを選択"></button></span><i class="diamond on"></i></div>
+          <div class="property"><span class="name">リンク</span><button class="button" id="link-button">＋ target</button><span></span></div>
+        </div>
+        <div class="section group-compose-section"><div class="section-title">グループ合成</div>
+          <div class="mode-row"><span class="label">Z Occlusion</span><span class="segmented"><span>OFF / Stack</span><span class="on">ON / Group Z</span></span></div>
+          <div class="group-summary">Local XYZ · shared depth</div>
+        </div>
+        <div class="section group-fx-section"><div class="section-title">Group FX <span class="add">＋</span></div>
+          <div class="boundary">COMPOSITE → BAKE</div>
+          <div class="stack-row"><span class="grip">::</span><i class="enable"></i><span>VHS</span><span class="domain">OWNED GROUP</span></div>
+          <div class="stack-row"><span class="grip">::</span><i class="enable"></i><span>グロー A</span><span class="domain">AFTER BAKE</span></div>
+        </div>
+        <div class="section driver-section"><div class="section-title">Driver <span class="add">＋</span></div>
+          <div class="driver"><div class="driver-head"><b>音量フォロワー Low</b><span class="uses">→ 2配線</span></div><div class="driver-line"><svg viewBox="0 0 240 18" preserveAspectRatio="none"><path d="M0 15 L18 12 30 14 46 4 62 10 84 8 102 15 126 6 148 11 172 3 190 12 218 7 240 9" fill="none" stroke="#aaa" stroke-width="1"/></svg></div></div>
+        </div>
+        <div class="notice" id="notice"><b>STALE</b> 52.4–54.1</div>
+        <div class="palette-pop" id="palette-pop" role="dialog" aria-label="Color Palette">
+          <div class="palette-pop-head">
+            <div class="palette-set-row"><button class="palette-set on" aria-label="Imported palette"><i style="background:#18202b"></i><i style="background:#df8b4d"></i><i style="background:#68a6d8"></i></button><button class="palette-set" aria-label="Recent colors"><i style="background:#ad82bf"></i><i style="background:#62b4ae"></i><i style="background:#c9736f"></i></button><button class="palette-set" aria-label="Neutral palette"><i style="background:#111"></i><i style="background:#777"></i><i style="background:#eee"></i></button><button class="icon-button" id="palette-import" aria-label="Paletteを読み込む">⇩</button></div>
+          </div>
+          <div class="palette-colors">
+            <button class="palette-color" data-color="#18202b" aria-label="Deep navy" style="background:#18202b"></button><button class="palette-color" data-color="#26415a" aria-label="Raised blue" style="background:#26415a"></button><button class="palette-color on" data-color="#df8b4d" aria-label="Warm orange" style="background:#df8b4d"></button><button class="palette-color" data-color="#f1c27d" aria-label="Soft amber" style="background:#f1c27d"></button><button class="palette-color" data-color="#68a6d8" aria-label="Signal blue" style="background:#68a6d8"></button><button class="palette-color" data-color="#72a97e" aria-label="Signal green" style="background:#72a97e"></button>
+            <button class="palette-color" data-color="#0a0a0a" aria-label="Black" style="background:#0a0a0a"></button><button class="palette-color" data-color="#343434" aria-label="Dark gray" style="background:#343434"></button><button class="palette-color" data-color="#747474" aria-label="Gray" style="background:#747474"></button><button class="palette-color" data-color="#b7b7b7" aria-label="Light gray" style="background:#b7b7b7"></button><button class="palette-color" data-color="#ededed" aria-label="Paper" style="background:#ededed"></button><button class="palette-color" data-color="#00000000" aria-label="Transparent" style="background:repeating-linear-gradient(135deg,#ddd 0 5px,#777 5px 10px)"></button>
+            <button class="palette-color" data-color="#ad82bf" aria-label="Purple" style="background:#ad82bf"></button><button class="palette-color" data-color="#62b4ae" aria-label="Cyan" style="background:#62b4ae"></button><button class="palette-color" data-color="#c9736f" aria-label="Red" style="background:#c9736f"></button><button class="palette-color" data-color="#c69a58" aria-label="Ochre" style="background:#c69a58"></button><button class="palette-color" data-color="#8f86b9" aria-label="Lavender" style="background:#8f86b9"></button><button class="palette-color" data-color="#66819b" aria-label="Blue gray" style="background:#66819b"></button>
+          </div>
+          <div class="palette-pop-foot"><button aria-label="新しい色を追加">＋</button><button aria-label="Paletteを管理">•••</button></div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="timeline" aria-label="譜面">
+      <div class="z-viewer" aria-label="Depth Rail · Edit-Space Z">
+        <div class="z-viewer-head"><b>Z</b><span>EDIT SPACE</span></div>
+        <div class="z-plot" id="z-plot">
+          <div class="z-scale"><span>−.50</span><span>−.25</span><span>0</span><span>+.25</span><span>+.50</span></div>
+          <div class="z-depth-lane"><span class="z-lane-name">ROOT</span><button class="z-marker selected group-depth-marker" data-z="0.18" data-z-name="背景まとめ" data-z-track="group" style="left:68%">G +.18</button><button class="z-marker logo-depth-marker" data-z="0.18" data-z-name="ロゴ" data-z-track="logo" style="left:68%">ロゴ +.18</button></div>
+          <div class="z-depth-lane"><span class="z-lane-name">GROUP</span><button class="z-marker" data-z="-0.20" data-z-name="city_loop.mp4" data-z-track="video" style="left:30%">V −.20</button><button class="z-marker" data-z="0" data-z-name="grain.png" data-z-track="image" style="left:50%">I 0</button><button class="z-marker" data-z="0.34" data-z-name="car.glb" data-z-track="mesh" style="left:84%">M +.34</button></div>
+        </div>
+        <div class="z-viewer-tools">FIT</div>
+      </div>
+      <div class="tl-toolbar"><b>譜面</b><span class="hint">SONG / BARS / KEYS</span><span class="grow"></span><button class="button" id="ease-button">Easing</button><span>56px / beat</span></div>
+      <div class="tl-body" id="tl-body">
+        <aside class="timeline-context" aria-label="選択コンテキスト"><div class="context-mode context-object"><div class="context-eyebrow"><b>SELECTED</b><span>DOCUMENT</span></div><div class="context-identity"><span class="kind" id="context-kind">G</span><b id="context-name">背景まとめ</b></div><div class="context-path" id="context-path">PROJECT / 背景まとめ</div><div class="context-facts" id="context-facts">Group · 3 objects · Group Z<br>ZG · ◇2 · !1</div><div class="context-actions"><button id="context-parent">↑ PARENT</button><div class="score-jump"><button id="score-jump-button" aria-haspopup="true" aria-expanded="false">JUMP ⌄</button><nav class="score-jump-pop" id="score-jump-pop" aria-label="項目へ移動"><button class="score-jump-item" data-jump-target="logo" data-jump-name="ロゴ" data-jump-meta="Shape · Z +.18 · Glow A"><span class="kind shape">S</span><span>ロゴ</span><i>Z+.18 · ◇1</i></button><button class="score-jump-item" data-jump-target="text" data-jump-name="NIGHT DRIVE" data-jump-meta="Text · 54.0–55.2"><span class="kind">T</span><span>NIGHT DRIVE</span><i>54–55</i></button><button class="score-jump-item selected" data-jump-target="group" data-jump-name="背景まとめ" data-jump-meta="Group · 3 objects · Group Z"><span class="kind">G</span><span>背景まとめ</span><i>ZG · ◇2</i></button><button class="score-jump-item child" data-jump-target="video" data-jump-name="city_loop.mp4" data-jump-meta="Group child · Z −.20 · 要再リンク"><span class="kind">V</span><span>city_loop.mp4</span><i class="issue">!</i></button><button class="score-jump-item child" data-jump-target="mesh" data-jump-name="car.glb" data-jump-meta="Group child · Z +.34 · Depth"><span class="kind mesh">M</span><span>car.glb</span><i>Z+.34 · D</i></button><button class="score-jump-item child" data-jump-target="image" data-jump-name="grain.png" data-jump-meta="Group child · Z 0 · overlay"><span class="kind image">I</span><span>grain.png</span><i>Z0</i></button></nav></div></div><div class="context-tip">BAR / Zを選ぶとここだけが切り替わる</div></div><div class="context-mode context-keys"><div class="context-eyebrow"><b>KEY DETAIL</b><span>背景まとめ</span></div><div class="context-key-row"><b>位置 Y</b><i>5 keys</i></div><div class="context-key-row"><b>不透明度</b><i>3 keys</i></div><div class="context-range"><b>54.2 → 54.4</b>区間 · easing</div><div class="context-actions"><button id="context-close-keys">◇ CLOSE</button></div><div class="context-tip">値・enable・EffectはInspector</div></div></aside>
+        <div class="tl-row ruler"><div class="track-name">小節.拍</div><div class="connection-gutter"></div><div class="lane"><span style="position:absolute;left:0">52</span><span style="position:absolute;left:224px">53</span><span style="position:absolute;left:448px">54</span><span style="position:absolute;left:672px">55</span><span style="position:absolute;left:896px">56</span></div></div>
+        <div class="tl-row song" data-track="song"><div class="track-name"><span class="kind audio">A</span><b>楽曲</b><span class="type">BPM 120 / LOCKED</span><span class="sm">SNAP</span></div><div class="connection-gutter"></div><div class="lane"><div class="song-wave"><span class="song-label">night_drive.wav · BPM 120.00</span><svg viewBox="0 0 1100 34" preserveAspectRatio="none"><path d="M0 17 L8 8 12 26 20 11 28 23 36 5 44 28 52 12 60 20 68 7 76 27 84 14 92 19 100 9 108 25 116 12 124 22 132 6 140 28 148 15 156 20 164 10 172 24 180 7 188 27 196 13 204 21 212 5 220 29 228 12 236 22 244 8 252 26 260 15 268 19 276 6 284 28 292 10 300 24 308 13 316 20 324 8 332 26 340 11 348 23 356 7 364 27 372 14 380 19 388 5 396 29 404 12 412 22 420 9 428 25 436 14 444 20 452 6 460 28 468 11 476 24 484 8 492 26 500 13 508 21 516 7 524 27 532 12 540 23 548 5 556 29 564 15 572 19 580 9 588 25 596 11 604 24 612 6 620 28 628 13 636 21 644 8 652 26 660 12 668 22 676 7 684 27 692 14 700 20 708 5 716 29 724 10 732 24 740 9 748 25 756 13 764 21 772 6 780 28 788 11 796 23 804 8 812 26 820 15 828 19 836 7 844 27 852 12 860 22 868 5 876 29 884 14 892 20 900 9 908 25 916 11 924 24 932 6 940 28 948 13 956 21 964 8 972 26 980 12 988 23 996 7 1004 27 1012 14 1020 19 1028 5 1036 29 1044 11 1052 24 1060 9 1068 25 1076 13 1084 21 1092 7 1100 27" fill="none" stroke="#a8a8a8" stroke-width="1"/></svg></div></div></div>
+        <div class="tl-row" data-track="effect"><div class="track-name"><span class="kind">F</span><b>グロー A</b><span class="type">SHARED ×2</span></div><div class="connection-gutter"><span class="socket-label out-label">OUT</span><span class="socket out"></span></div><div class="lane"><div class="clip" style="left:56px;width:230px">Glow A ◇2</div></div></div>
+        <div class="tl-row" data-track="logo"><div class="track-name"><span class="kind shape"><span>S</span></span><b>ロゴ</b><span class="type">SVG / z +0.18</span><span class="sm">S M</span></div><div class="connection-gutter"><span class="socket in"></span><span class="socket-label in-label">IN</span></div><div class="lane"><div class="clip shape" style="left:280px;width:650px">ロゴ <span class="chip">z +0.18</span> <span class="chip">◇ Glow A</span><span class="fx-flow"><b>IN</b><span class="arrow">→</span><i>Glow A ◇2</i><span class="arrow">→</span><b>OUT</b></span></div></div></div>
+        <div class="tl-row" data-track="text"><div class="track-name"><span class="kind">T</span><span>NIGHT DRIVE</span><span class="type">テキスト</span><span class="sm">S M</span></div><div class="connection-gutter"></div><div class="lane"><div class="clip text" style="left:448px;width:336px">NIGHT DRIVE</div></div></div>
+        <div class="tl-row" data-track="group"><div class="track-name selected"><span class="kind">G</span><b>背景まとめ</b><span class="type">3 objects / Z GROUP</span><span class="sm">▾</span></div><div class="connection-gutter"><span class="socket in"></span><span class="socket-label in-label">IN</span></div><div class="lane"><div class="clip group selected" style="left:0;width:1080px">背景まとめ · 3 objects <button class="key-disclosure" id="key-disclosure" aria-label="keyのあるparameterを表示" aria-expanded="false">◇2 ▸</button><span class="fx-flow"><b>IN</b><span class="arrow">→</span><i>VHS</i><span class="arrow">→</span><i>Glow A ◇2</i><span class="arrow">→</span><b>OUT</b></span><span class="chip">//// stale 52.4–54.1</span><span class="readiness" aria-label="ready 52–53.3, rendering 53.3–54.1, stale 54.1–56"><i class="ready" style="width:34%"></i><i class="rendering" style="width:28%"></i><i class="stale" style="width:38%"></i></span><span class="inline-keys" id="inline-keys" aria-label="操作中parameterのkeyframes"></span></div></div></div>
+        <div class="key-detail" id="key-detail" aria-label="背景まとめのキー詳細"><div class="key-detail-head"><b>キー詳細</b><span>背景まとめ</span></div><div class="key-detail-body"><div class="key-detail-row"><span class="key-detail-name">位置 Y</span><div class="key-detail-axis"><span class="kf-span" style="left:10%;width:10%"></span><span class="kf-span selected" style="left:43%;width:26%"></span><span class="kf" style="left:9%"></span><span class="kf" style="left:26%"></span><span class="kf selected" style="left:43%"></span><span class="kf selected" style="left:69%"></span><span class="kf" style="left:86%"></span></div></div><div class="key-detail-row"><span class="key-detail-name">不透明度</span><div class="key-detail-axis"><span class="kf-span" style="left:17%;width:77%"></span><span class="kf" style="left:17%"></span><span class="kf" style="left:60%"></span><span class="kf" style="left:94%"></span></div></div></div></div>
+        <div class="tl-row" data-track="video"><div class="track-name child"><span class="kind">V</span><span>city_loop.mp4</span><span class="type">子 / z −0.20</span><span class="sm">S M</span></div><div class="connection-gutter"></div><div class="lane"><div class="clip video" style="left:0;width:1008px"><span class="child-mark">↳G</span>city_loop.mp4 <span class="chip">z −0.20</span> <span class="chip issue">! 要再リンク</span></div></div></div>
+        <div class="tl-row" data-track="mesh"><div class="track-name child"><span class="kind mesh">M</span><span>car.glb</span><span class="type">子 / z +0.34</span></div><div class="connection-gutter"></div><div class="lane"><div class="clip mesh" style="left:224px;width:620px"><span class="child-mark">↳G</span>car.glb <span class="chip">z +0.34 / depth participant</span></div></div></div>
+        <div class="tl-row" data-track="image"><div class="track-name child"><span class="kind image">I</span><span>grain.png</span><span class="type">子 / z 0.00 / overlay</span></div><div class="connection-gutter"></div><div class="lane"><div class="clip image" style="left:0;width:1080px"><span class="child-mark">↳G</span>grain.png / screen 40% <span class="chip">z 0.00</span></div></div></div>
+        <svg class="connection-lines" viewBox="0 0 52 260" preserveAspectRatio="none" aria-label="Glow A outから各Effect Use inへの接続"><path d="M40 55 C25 55 29 81 13 81"/><path d="M40 55 C17 55 30 165 13 165"/></svg>
+        <div class="playhead" id="playhead"></div>
+        <div class="ease-pop" id="ease-pop"><div class="ease-head"><b>区間イージング</b><span>54.2 → 54.4</span></div><div class="ease-tabs"><button class="active">ベジェ</button><button>バウンス</button><button>エラスティック</button><button>ステップ</button></div><div class="curve"><svg viewBox="0 0 260 100" preserveAspectRatio="none"><line x1="0" y1="92" x2="260" y2="8" stroke="#555" stroke-dasharray="3 4"/><path d="M0 92 C88 -24 166 8 260 8" fill="none" stroke="#eee" stroke-width="2"/><line x1="0" y1="92" x2="88" y2="-24" stroke="#888"/><line x1="260" y1="8" x2="166" y2="8" stroke="#888"/><circle cx="88" cy="-24" r="4" fill="#111" stroke="#fff"/><circle cx="166" cy="8" r="4" fill="#111" stroke="#fff"/></svg></div><div class="ease-foot">(0.34, 1.56, 0.64, 1.00) / オーバーシュート</div></div>
+      </div>
+    </section>
+
+    <footer class="status"><b id="status-title">背景まとめ</b><span id="status-text">3 objects · Group Z</span><code id="status-key">V</code><span class="stat" id="status-stat">Saved · Undo 0 · GPU 0%</span></footer>
+  </main>
+
+  <script>
+    (() => {
+      const toneNames = ['BLACK / baseline', 'CHARCOAL', 'GRAPHITE', 'WARM GRAPHITE', 'MID STONE', 'ABLETON LIGHT'];
+      const toneMatch = location.hash.match(/^#tone-([1-6])$/);
+      const assetExplorer = location.hash === '#asset-explorer';
+      const paletteMode = location.hash === '#color-palette' || location.hash === '#color-palette-stroke';
+      const paletteOpenFixture = location.hash === '#color-palette-stroke';
+      const previewFirst = location.hash === '#preview-first' || assetExplorer || paletteMode;
+      if (location.hash === '#color' || toneMatch || previewFirst) document.documentElement.setAttribute('data-semantic-color', 'on');
+      if (toneMatch || previewFirst) document.documentElement.setAttribute('data-surface-tone', previewFirst ? '4' : toneMatch[1]);
+      if (previewFirst) document.documentElement.setAttribute('data-layout', 'preview-first');
+      if (assetExplorer) document.documentElement.setAttribute('data-explorer', 'open');
+      if (paletteMode) document.documentElement.setAttribute('data-palette', 'open');
+      const tone = previewFirst ? 0 : (toneMatch ? Number(toneMatch[1]) : 1);
+      document.querySelectorAll('.tone-nav a').forEach((a, i) => a.classList.toggle('on', i + 1 === tone));
+      document.querySelector('.asset-link').classList.toggle('on', assetExplorer);
+      document.querySelector('.preview-link').classList.toggle('on', previewFirst && !assetExplorer && !paletteMode);
+      document.querySelector('.palette-link').classList.toggle('on', paletteMode);
+      document.getElementById('tone-name').textContent = paletteMode ? 'COLOR' : (assetExplorer ? 'ASSET EXPLORER / browse · preview · place' : (previewFirst ? 'PREVIEW FIRST / vocabulary study' : toneNames[tone - 1]));
+      addEventListener('hashchange', () => location.reload());
+      const state = { tool: 'select', playing: false, raf: 0, start: 0, undo: 0, changed: false };
+      const $ = (s) => document.querySelector(s);
+      const $$ = (s) => [...document.querySelectorAll(s)];
+      const stage = $('#stage');
+      function setPosition(x, y, z) { $('#pos-x').textContent=x; $('#pos-y').textContent=y; $('#pos-z').textContent=z; }
+      const zInitials = new Map($$('.z-marker').map((marker) => [marker, Number(marker.dataset.z)]));
+      const zPrefixes = { group:'G', logo:'ロゴ', video:'V', image:'I', mesh:'M' };
+      function formatRailZ(value) {
+        if (Math.abs(value) < .005) return '0';
+        return `${value > 0 ? '+' : '−'}${Math.abs(value).toFixed(2).replace(/^0/, '')}`;
+      }
+      function setZMarker(marker, value) {
+        const clamped = Math.max(-.5, Math.min(.5, value));
+        marker.dataset.z = clamped.toFixed(2);
+        marker.style.left = `${(clamped + .5) * 100}%`;
+        marker.textContent = `${zPrefixes[marker.dataset.zTrack]} ${formatRailZ(clamped)}`;
+        if (marker.dataset.zTrack === 'logo') $('#pos-z').textContent = clamped.toFixed(3);
+      }
+      function resetZMarkers() { zInitials.forEach((value, marker) => setZMarker(marker, value)); }
+
+      function status(title, text, key = '') {
+        $('#status-title').textContent = title;
+        $('#status-text').textContent = text;
+        $('#status-key').textContent = key || '—';
+        $('#status-stat').textContent = `${state.changed ? 'Edited' : 'Saved'} · Undo ${state.undo} · GPU ${state.playing ? '38' : '0'}%`;
+      }
+
+      function setTool(tool) {
+        state.tool = tool;
+        stage.className = 'stage';
+        $('#hud').classList.remove('show');
+        $$('.tool').forEach((b) => b.classList.toggle('active', b.dataset.tool === tool));
+        if (tool === 'select') { $('#owner').textContent = 'PROJECT'; status('背景まとめ', '3 objects · Group Z', 'V'); }
+        if (tool === 'link') { stage.classList.add('targeting'); $('#hud').classList.add('show'); $('#owner').textContent = 'TARGET'; status('Position → Object', '選択 · Escで取消', 'Esc'); }
+        if (tool === 'relative') { stage.classList.add('relative'); $('#owner').textContent = 'Preview'; setPosition('Δ+.140','Δ+.060','0.180'); status('Relative Move', 'motion path全体へ同じ差分をpreview。クリックで1 macroを確定。', 'Primary+Drag'); }
+        if (tool === 'camera') { stage.classList.add('camera'); $('#owner').textContent = 'OUTPUT'; status('Camera', 'Outputを移動', 'C'); }
+        if (tool === 'hand') { stage.classList.add('hand'); $('#owner').textContent = 'VIEW'; status('Hand', '表示だけを移動', 'H'); }
+      }
+
+      $$('.tool').forEach((button) => button.addEventListener('click', () => {
+        const tool = button.dataset.tool;
+        if (state.tool === 'relative' && tool === 'relative') {
+          state.changed = true; state.undo = 1; setPosition('0.264','−0.022','0.180');
+          status('Relative Moveを確定', '全keyへEdit-Spaceの差分を適用。gesture全体でUndo 1回。', '⌘Z');
+          return;
+        }
+        if (tool === 'camera') { state.changed = true; state.undo = 1; }
+        setTool(tool);
+      }));
+
+      $('#link-button').addEventListener('click', () => setTool('link'));
+      $('.composition-mark').addEventListener('click', () => {
+        if (state.tool === 'link') {
+          state.changed = true; state.undo = 1; stage.classList.remove('targeting'); $('#hud-title').textContent = '接続を確定'; $('#hud-body').textContent = 'Position → logo.svg / Undo 1回';
+          status('接続済み', 'Position → logo.svg。Inspector badgeとTimeline gutterに因果が残る。', '⌘Z');
+        }
+      });
+
+      $$('[data-select]').forEach((row) => row.addEventListener('click', () => {
+        $$('[data-select]').forEach((r) => r.classList.toggle('selected', r === row));
+        const id = row.dataset.select;
+        const labels = { logo: 'ロゴ素材', video: 'city_loop.mp4', song: 'night_drive.wav', mesh: 'car.glb', image: 'grain.png', text: 'NIGHT DRIVE' };
+        status(labels[id], id === 'song' ? 'BPM 120 · LOCKED' : '素材を選択', 'Enter');
+      }));
+
+      function selectScoreItem(id) {
+        const jumpItem = $(`[data-jump-target="${id}"]`);
+        const row = $(`[data-track="${id}"]`);
+        $$('.score-jump-item').forEach((item) => item.classList.toggle('selected', item === jumpItem));
+        $$('.track-name.selected, .clip.selected').forEach((item) => item.classList.remove('selected'));
+        row?.querySelector('.track-name')?.classList.add('selected');
+        row?.querySelector('.clip')?.classList.add('selected');
+        if (jumpItem) {
+          $('#context-kind').textContent = jumpItem.querySelector('.kind').textContent;
+          $('#context-name').textContent = jumpItem.dataset.jumpName;
+          $('#context-path').textContent = jumpItem.classList.contains('child') ? `PROJECT / 背景まとめ / ${jumpItem.dataset.jumpName}` : `PROJECT / ${jumpItem.dataset.jumpName}`;
+          $('#context-facts').innerHTML = `${jumpItem.dataset.jumpMeta}<br>${jumpItem.querySelector('i').textContent}`;
+          $('#selection-name').textContent = jumpItem.dataset.jumpName;
+          $('#selection-meta').textContent = jumpItem.dataset.jumpMeta;
+          status(jumpItem.dataset.jumpName, jumpItem.dataset.jumpMeta, 'Enter');
+        }
+      }
+
+      const jumpButton = $('#score-jump-button');
+      const jumpPop = $('#score-jump-pop');
+      const jumpItems = $$('.score-jump-item');
+      jumpButton.addEventListener('click', () => {
+        const open = !jumpPop.classList.contains('show');
+        jumpPop.classList.toggle('show', open);
+        jumpButton.setAttribute('aria-expanded', String(open));
+        if (open) jumpPop.querySelector('.selected')?.focus();
+      });
+      jumpItems.forEach((item, index) => {
+        const bar = $(`[data-track="${item.dataset.jumpTarget}"] .clip`);
+        const reveal = () => {
+          bar?.classList.add('jump-hover');
+          status(item.dataset.jumpName, item.dataset.jumpMeta, 'Enter');
+        };
+        const conceal = () => bar?.classList.remove('jump-hover');
+        item.addEventListener('pointerenter', reveal);
+        item.addEventListener('pointerleave', conceal);
+        item.addEventListener('focus', reveal);
+        item.addEventListener('blur', conceal);
+        item.addEventListener('click', () => {
+          selectScoreItem(item.dataset.jumpTarget);
+          jumpPop.classList.remove('show');
+          jumpButton.setAttribute('aria-expanded', 'false');
+          jumpButton.focus();
+        });
+        item.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            item.click();
+            return;
+          }
+          if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+          event.preventDefault();
+          jumpItems[(index + (event.key === 'ArrowDown' ? 1 : jumpItems.length - 1)) % jumpItems.length].focus();
+        });
+      });
+      $('#context-parent').addEventListener('click', () => selectScoreItem('group'));
+
+      $$('[data-track]').forEach((row) => row.addEventListener('click', () => {
+        const id = row.dataset.track;
+        if (state.tool === 'link' && id === 'song') {
+          stage.classList.add('invalid'); $('#hud-title').textContent = 'Objectが必要'; $('#hud-body').textContent = 'Songは対象外 · Esc';
+          status('接続不可', 'Position → Object', 'Esc');
+          return;
+        }
+        if (previewFirst && $(`[data-jump-target="${id}"]`)) selectScoreItem(id);
+        else status(id, 'Timelineの選択は同じInspectorへ戻る。別の編集正本を作らない。', 'Enter');
+      }));
+
+      $('#ease-button').addEventListener('click', () => {
+        $('#ease-pop').classList.toggle('show');
+        status('区間イージング', '選択した2 key間だけを編集。既存の他区間は不変。', 'Esc');
+      });
+      $$('.ease-tabs button').forEach((button) => button.addEventListener('click', () => {
+        $$('.ease-tabs button').forEach((b) => b.classList.toggle('active', b === button));
+        status(button.textContent, '意図名とAdvancedの実値は同じInterp意味を編集する。', 'Enter');
+      }));
+
+      let zDrag = null;
+      function selectZMarker(marker) {
+        $$('.z-marker').forEach((item) => item.classList.toggle('selected', item === marker));
+        selectScoreItem(marker.dataset.zTrack);
+        $('#selection-name').textContent = marker.dataset.zName;
+        $('#selection-meta').textContent = 'Object · Edit Z';
+        $('#pos-z').textContent = Number(marker.dataset.z).toFixed(3);
+      }
+      $$('.z-marker').forEach((marker) => {
+        const reveal = () => {
+          if (!zDrag && !$('#palette-pop').classList.contains('show')) status(marker.dataset.zName, `Z ${formatRailZ(Number(marker.dataset.z))}`, 'Drag');
+        };
+        marker.addEventListener('pointerenter', reveal);
+        marker.addEventListener('focus', reveal);
+        marker.addEventListener('pointerdown', (event) => {
+          event.preventDefault();
+          selectZMarker(marker);
+          marker.setPointerCapture(event.pointerId);
+          zDrag = { marker, pointerId:event.pointerId, start:Number(marker.dataset.z), moved:false };
+          marker.classList.add('dragging');
+          status(marker.dataset.zName, `Z ${formatRailZ(zDrag.start)}`, 'Drag');
+        });
+        marker.addEventListener('pointermove', (event) => {
+          if (!zDrag || zDrag.marker !== marker || zDrag.pointerId !== event.pointerId) return;
+          const rect = marker.parentElement.getBoundingClientRect();
+          const value = Math.round((((event.clientX - rect.left) / rect.width) - .5) * 100) / 100;
+          if (Math.abs(value - zDrag.start) >= .01) zDrag.moved = true;
+          setZMarker(marker, value);
+          status(marker.dataset.zName, `Z ${formatRailZ(Number(marker.dataset.z))}`, 'Release');
+        });
+        marker.addEventListener('pointerup', (event) => {
+          if (!zDrag || zDrag.marker !== marker || zDrag.pointerId !== event.pointerId) return;
+          const moved = zDrag.moved;
+          zDrag = null;
+          marker.classList.remove('dragging');
+          if (moved) {
+            state.changed = true; state.undo = 1;
+            status('Zを確定', `${marker.dataset.zName} ${formatRailZ(Number(marker.dataset.z))}`, '⌘Z');
+          } else status(marker.dataset.zName, `Z ${formatRailZ(Number(marker.dataset.z))}`, 'Drag');
+        });
+        marker.addEventListener('pointercancel', () => {
+          if (!zDrag || zDrag.marker !== marker) return;
+          setZMarker(marker, zDrag.start);
+          marker.classList.remove('dragging');
+          zDrag = null;
+          status('Z', '取消', '—');
+        });
+      });
+      addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape' || !zDrag) return;
+        const { marker, start } = zDrag;
+        setZMarker(marker, start);
+        marker.classList.remove('dragging');
+        zDrag = null;
+        status('Z', '取消', '—');
+      });
+
+      const keyOverview = {
+        'position-y': { label:'Y', name:'位置 Y', points:[9, 26, 43, 69, 86], range:[43, 69] },
+        opacity: { label:'α', name:'不透明度', points:[17, 60, 94] }
+      };
+      if (previewFirst) $('[data-track="group"]').after($('#key-detail'));
+      function renderInlineKeys(channel) {
+        const host = $('#inline-keys');
+        const config = keyOverview[channel];
+        host.replaceChildren();
+        if (!config) return;
+        if (config.range) {
+          const range = document.createElement('i');
+          range.className = 'inline-key-range';
+          range.style.left = `${config.range[0]}%`;
+          range.style.width = `${config.range[1] - config.range[0]}%`;
+          host.append(range);
+        }
+        config.points.forEach((left, index) => {
+          const key = document.createElement('i');
+          key.className = `inline-key${config.range && index >= 2 && index <= 3 ? ' in-range' : ''}`;
+          key.style.left = `${left}%`;
+          host.append(key);
+        });
+        const label = document.createElement('b');
+        label.className = 'inline-key-label';
+        label.textContent = config.label;
+        host.append(label);
+      }
+      renderInlineKeys('position-y');
+      if (previewFirst) {
+        $$('[data-channel]').forEach((property) => property.addEventListener('click', () => {
+          $$('[data-channel]').forEach((item) => item.classList.toggle('active-channel', item === property));
+          const channel = property.dataset.channel;
+          renderInlineKeys(channel);
+          const config = keyOverview[channel];
+          status(config?.name || property.querySelector('.name').textContent, config ? `${config.points.length} keys · bar上` : 'keyなし', config ? '◇' : '—');
+        }));
+        const disclosure = $('#key-disclosure');
+        const revealDisclosure = () => status('キー詳細', 'keyのある2 parameters', 'Click');
+        disclosure.addEventListener('pointerenter', revealDisclosure);
+        disclosure.addEventListener('focus', revealDisclosure);
+        disclosure.addEventListener('click', (event) => {
+          event.stopPropagation();
+          const expanded = document.documentElement.getAttribute('data-keys-expanded') === 'on';
+          if (expanded) document.documentElement.removeAttribute('data-keys-expanded');
+          else document.documentElement.setAttribute('data-keys-expanded', 'on');
+          disclosure.setAttribute('aria-expanded', String(!expanded));
+          disclosure.textContent = expanded ? '◇2 ▸' : '◇2 ▾';
+          status('キー詳細', expanded ? 'bar上に戻る' : '2 keyed parameters', expanded ? '◇' : 'Close');
+        });
+        $('#context-close-keys').addEventListener('click', () => disclosure.click());
+      }
+
+      function frame(now) {
+        if (!state.playing) return;
+        const t = (now - state.start) / 1000;
+        const phase = (t % 4) / 4;
+        const beat = phase * 4;
+        const y = Math.abs(Math.sin(beat * Math.PI)) * 26 * Math.exp(-phase * 1.2);
+        $('.composition-mark').style.transform = `translate(-50%, calc(-50% - ${y}px))`;
+        const x = 38 + phase * 24;
+        $('#playhead').style.left = previewFirst ? `calc(${x}% + ${Math.round(184 * (1 - x / 100))}px)` : `calc(var(--name-col) + 52px + ${x}%)`;
+        $('#bar-time').textContent = `54.${Math.floor(beat) + 1}.${String(Math.floor((beat % 1) * 100)).padStart(2, '0')}`;
+        state.raf = requestAnimationFrame(frame);
+      }
+      $('#play').addEventListener('click', () => {
+        state.playing = !state.playing;
+        $('#play').textContent = state.playing ? 'Ⅱ' : '▶';
+        $('#play').classList.toggle('active', state.playing);
+        if (state.playing) { state.start = performance.now(); status('再生', '音声クロックを主として作品とplayheadが同じ時刻を演奏。', 'Space'); state.raf = requestAnimationFrame(frame); }
+        else { cancelAnimationFrame(state.raf); $('.composition-mark').style.transform = ''; status('停止', '54.2.00', 'Space'); }
+      });
+      $('#undo').addEventListener('click', () => { state.changed = false; state.undo = 0; setPosition('0.124','−0.082','0.180'); resetZMarkers(); setTool('select'); status('取り消し', '1 gesture', '⌘Z'); });
+      setTool('select');
+      if (paletteMode) {
+        selectScoreItem('logo');
+        $('#selection-meta').textContent = 'Object · SVG';
+        $('.group-depth-marker').classList.remove('selected');
+        $('.logo-depth-marker').classList.add('selected');
+        status('ロゴ', 'Object · SVG', '—');
+        const palettePop = $('#palette-pop');
+        const fillTrigger = $('#palette-trigger');
+        const strokeTrigger = $('#stroke-trigger');
+        const mark = $('.composition-mark');
+        const appliedColors = { fill:'#df8b4d', stroke:'#68a6d8' };
+        let activeChannel = 'stroke';
+        function applyColors() {
+          mark.style.backgroundColor = appliedColors.fill;
+          mark.style.borderColor = appliedColors.stroke;
+          fillTrigger.style.background = appliedColors.fill;
+          strokeTrigger.style.background = appliedColors.stroke;
+        }
+        function openPalette(channel) {
+          activeChannel = channel;
+          $$('.palette-color').forEach((item) => item.classList.toggle('on', item.dataset.color.toLowerCase() === appliedColors[channel].toLowerCase()));
+          palettePop.classList.add('show');
+          status(channel === 'fill' ? 'Fill' : 'Stroke', '色を選択', 'Esc');
+        }
+        function revealOnIntent(trigger, channel, description) {
+          const show = () => {
+            if (!palettePop.classList.contains('show')) status(channel, description, 'Click');
+          };
+          const restore = () => {
+            if (!palettePop.classList.contains('show')) status('ロゴ', 'Object · SVG', '—');
+          };
+          trigger.addEventListener('pointerenter', show);
+          trigger.addEventListener('pointerleave', restore);
+          trigger.addEventListener('focus', show);
+          trigger.addEventListener('blur', restore);
+        }
+        applyColors();
+        revealOnIntent(fillTrigger, 'Fill', '面の色を変更');
+        revealOnIntent(strokeTrigger, 'Stroke', '縁の色を変更');
+        fillTrigger.addEventListener('click', () => openPalette('fill'));
+        strokeTrigger.addEventListener('click', () => openPalette('stroke'));
+        if (paletteOpenFixture) openPalette('stroke');
+        $$('.palette-color').forEach((swatch) => {
+          swatch.addEventListener('pointerenter', () => {
+            if (activeChannel === 'fill') mark.style.backgroundColor = swatch.dataset.color;
+            else mark.style.borderColor = swatch.dataset.color;
+            status(activeChannel === 'fill' ? 'Fill' : 'Stroke', 'Preview', 'Esc');
+          });
+          swatch.addEventListener('pointerleave', applyColors);
+          swatch.addEventListener('click', () => {
+            appliedColors[activeChannel] = swatch.dataset.color;
+            $$('.palette-color').forEach((item) => item.classList.toggle('on', item === swatch));
+            state.changed = true; state.undo = 1;
+            applyColors();
+            palettePop.classList.remove('show');
+            status(activeChannel === 'fill' ? 'Fill' : 'Stroke', '適用', '⌘Z');
+          });
+        });
+        $('#palette-import').addEventListener('click', () => status('Palette', '読み込み', 'Enter'));
+        stage.addEventListener('click', () => {
+          if (palettePop.classList.contains('show')) {
+            applyColors();
+            palettePop.classList.remove('show');
+            status(activeChannel === 'fill' ? 'Fill' : 'Stroke', '取消', '');
+          }
+        });
+        addEventListener('keydown', (event) => {
+          if (event.key === 'Escape' && palettePop.classList.contains('show')) {
+            applyColors();
+            palettePop.classList.remove('show');
+            status(activeChannel === 'fill' ? 'Fill' : 'Stroke', '取消', '');
+          }
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

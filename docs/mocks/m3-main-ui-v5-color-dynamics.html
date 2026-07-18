@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Motolii main UI v5 — color dynamics states</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --black: #050505;
+      --canvas: #080808;
+      --panel: #0d0d0d;
+      --raised: #141414;
+      --hover: #1a1a1a;
+      --line: #292929;
+      --line-strong: #505050;
+      --ink: #ededed;
+      --secondary: #b7b7b7;
+      --muted: #7c7c7c;
+      --disabled: #515151;
+      --focus: #ffffff;
+      --sp-1: 2px;
+      --sp-2: 4px;
+      --sp-3: 8px;
+      --sp-4: 12px;
+      --row-s: 22px;
+      --row-m: 26px;
+      --row-l: 42px;
+      --name-col: 218px;
+      --beat: 56px;
+      --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; }
+    body { margin: 0; overflow: hidden; background: var(--black); color: var(--ink); font: 12px/1.35 Inter, ui-sans-serif, system-ui, -apple-system, sans-serif; }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+    .app { width: 100vw; height: 100vh; min-width: 980px; display: grid; grid-template-rows: 34px minmax(280px, 48vh) 1fr 24px; overflow: hidden; background: var(--panel); }
+
+    .titlebar { display: flex; align-items: center; gap: var(--sp-4); padding: 0 var(--sp-4); border-bottom: 1px solid var(--line); background: var(--raised); }
+    .wordmark { font-weight: 800; letter-spacing: .06em; }
+    .project { color: var(--secondary); }
+    .project b { color: var(--ink); font-weight: 600; }
+    .theme-tag { padding: 1px 5px; border: 1px dashed var(--line-strong); color: var(--muted); font: 9px var(--mono); }
+    .grow { flex: 1; }
+    .button { min-height: 24px; padding: 0 var(--sp-3); border: 1px solid var(--line); border-radius: 1px; background: var(--panel); cursor: pointer; }
+    .button:hover { background: var(--hover); border-color: var(--line-strong); }
+    .button.active { background: var(--ink); color: var(--black); border-color: var(--ink); }
+    .button.strong { font-weight: 700; border-color: var(--line-strong); }
+    .button[disabled] { color: var(--disabled); border-style: dashed; cursor: not-allowed; }
+
+    .main { min-height: 0; display: grid; grid-template-columns: 220px minmax(440px, 1fr) 292px; }
+    .left, .right { min-height: 0; overflow: auto; background: var(--panel); }
+    .left { border-right: 1px solid var(--line); }
+    .right { border-left: 1px solid var(--line); }
+    .tabs { height: 28px; display: flex; align-items: end; gap: var(--sp-1); padding: 0 var(--sp-3); border-bottom: 1px solid var(--line); }
+    .tab { height: 27px; padding: 6px var(--sp-3) 0; color: var(--muted); border-bottom: 2px solid transparent; }
+    .tab.on { color: var(--ink); border-bottom-color: var(--ink); }
+    .search { height: 25px; margin: var(--sp-3); padding: 4px var(--sp-3); border: 1px solid var(--line); color: var(--muted); background: var(--canvas); }
+    .asset-head, .asset { height: var(--row-s); display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-3); border-bottom: 1px solid #171717; }
+    .asset-head { color: var(--muted); font-size: 10px; border-color: var(--line); }
+    .asset { cursor: pointer; color: var(--secondary); }
+    .asset:hover { background: var(--hover); color: var(--ink); }
+    .asset.selected { outline: 1px solid var(--ink); outline-offset: -1px; background: var(--raised); color: var(--ink); }
+    .asset .name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .asset .meta { color: var(--muted); font: 10px var(--mono); }
+    .kind { width: 13px; height: 13px; display: grid; place-items: center; border: 1px solid var(--line-strong); color: var(--secondary); font: 8px var(--mono); flex: none; }
+    .kind.audio { border-radius: 50%; }
+    .kind.shape { transform: rotate(45deg) scale(.74); }
+    .kind.shape span { transform: rotate(-45deg) scale(1.35); }
+    .kind.image { border-style: double; }
+    .kind.mesh { clip-path: polygon(50% 0,100% 25%,88% 82%,50% 100%,12% 82%,0 25%); }
+    .flag { padding: 0 4px; border: 1px solid var(--line-strong); font-size: 9px; color: var(--secondary); }
+    .flag.issue { border-style: dashed; color: var(--ink); }
+    .browser-note { margin: var(--sp-3); padding: var(--sp-3); border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; }
+
+    .center { min-width: 0; min-height: 0; display: grid; grid-template-rows: 30px 1fr 34px; background: var(--black); }
+    .tools { display: flex; align-items: center; gap: var(--sp-1); padding: 0 var(--sp-3); border-bottom: 1px solid var(--line); background: var(--panel); }
+    .tool { height: 24px; min-width: 28px; padding: 0 7px; border: 1px solid transparent; background: transparent; color: var(--secondary); cursor: pointer; }
+    .tool:hover { border-color: var(--line); color: var(--ink); }
+    .tool.active { border-color: var(--ink); color: var(--ink); background: var(--raised); }
+    .ownership { margin-left: auto; color: var(--muted); font-size: 10px; }
+    .ownership b { color: var(--ink); }
+    .ownership b.transient { color: var(--state-linked); }
+    .ownership b.preview { color: var(--accent-selection); }
+    .ownership b.session { color: var(--muted); }
+
+    .stage { position: relative; min-height: 0; overflow: hidden; background: var(--black); }
+    .world { position: absolute; inset: 0; }
+    .output-frame { position: absolute; left: 50%; top: 50%; width: min(78%, 740px); aspect-ratio: 16/9; transform: translate(-50%, -50%); border: 1px solid #8b8b8b; background: #080808; }
+    .output-frame::before { content: "OUTPUT FRAME / CAMERA"; position: absolute; left: -1px; top: -18px; color: var(--muted); font: 9px var(--mono); letter-spacing: .08em; }
+    .composition-mark { position: absolute; left: 50%; top: 43%; width: 116px; height: 116px; transform: translate(-50%, -50%); border: 2px solid #d8d8d8; border-radius: 50%; }
+    .composition-mark::before { content: ""; position: absolute; inset: 22px; border: 1px solid #8a8a8a; border-radius: 50%; border-right-style: dashed; }
+    .composition-mark::after { content: ""; position: absolute; left: 50%; top: 50%; width: 7px; height: 7px; transform: translate(-50%, -50%) rotate(45deg); border: 1px solid #fff; background: #080808; }
+    .composition-title { position: absolute; left: 50%; top: 72%; transform: translate(-50%, -50%); font-size: clamp(17px, 2.2vw, 30px); font-weight: 720; letter-spacing: .18em; white-space: nowrap; }
+    .composition-sub { position: absolute; left: 50%; top: calc(72% + 28px); transform: translateX(-50%); color: var(--muted); font: 10px var(--mono); white-space: nowrap; }
+    .selected-box { position: absolute; left: 50%; top: 43%; width: 142px; height: 142px; transform: translate(-50%, -50%); border: 1px solid #fff; pointer-events: none; }
+    .selected-box i { position: absolute; width: 7px; height: 7px; background: #fff; border: 1px solid #080808; }
+    .selected-box i:nth-child(1) { left: -4px; top: -4px; } .selected-box i:nth-child(2) { right: -4px; top: -4px; }
+    .selected-box i:nth-child(3) { left: -4px; bottom: -4px; } .selected-box i:nth-child(4) { right: -4px; bottom: -4px; }
+    .group-bounds { position: absolute; left: 24%; top: 18%; width: 54%; height: 65%; border: 1px dashed #777; pointer-events: none; }
+    .group-bounds::before { content: "GROUP / 背景まとめ / 3 children"; position: absolute; left: 0; top: -17px; color: var(--secondary); font: 9px var(--mono); background: var(--black); padding-right: 5px; }
+    .z-axis { position: absolute; right: 18%; bottom: 14%; width: 94px; height: 74px; color: var(--secondary); font: 8px var(--mono); pointer-events: none; }
+    .z-axis svg { width: 100%; height: 100%; }
+    .path-ghost { display: none; position: absolute; left: 34%; top: 23%; width: 36%; height: 42%; pointer-events: none; }
+    .path-ghost svg { width: 100%; height: 100%; }
+    .stage.relative .path-ghost { display: block; }
+    .stage.relative .composition-mark { transform: translate(calc(-50% + 44px), calc(-50% - 18px)); }
+    .target-hud { display: none; position: absolute; z-index: 8; left: 56%; top: 21%; width: 250px; padding: var(--sp-3); border: 1px solid var(--ink); background: var(--panel); }
+    .target-hud.show { display: block; }
+    .target-hud .eyebrow { color: var(--muted); font: 9px var(--mono); letter-spacing: .08em; }
+    .target-hud b { display: block; margin: 2px 0; }
+    .target-hud p { margin: 0; color: var(--secondary); font-size: 10px; }
+    .stage.targeting .target-hud { border-color: var(--state-linked); }
+    .stage.targeting.invalid .target-hud { border-color: var(--feedback-error); }
+    .stage.targeting [data-target="valid"] { outline: 2px solid var(--state-linked); outline-offset: 4px; }
+    .stage.targeting.invalid [data-target="valid"] { outline: 2px dotted var(--feedback-error); opacity: .4; }
+    .tentative-line { display: none; position: absolute; inset: 0; z-index: 7; pointer-events: none; }
+    .stage.targeting .tentative-line { display: block; }
+    .tentative-line svg { width: 100%; height: 100%; }
+    .tentative-line path { fill: none; stroke: var(--state-linked); stroke-width: 1.5; stroke-dasharray: 6 5; }
+    .stage.targeting.invalid .tentative-line path { stroke: var(--feedback-error); stroke-dasharray: 2 4; }
+    .t-from { position: absolute; left: 25%; bottom: 4%; color: var(--state-linked); font: 9px var(--mono); background: var(--black); padding: 0 3px; }
+    .stage.targeting.invalid .t-from { color: var(--feedback-error); }
+    .t-x { display: none; position: absolute; left: 48.6%; top: 38%; color: var(--feedback-error); font: 700 16px var(--mono); }
+    .stage.targeting.invalid .t-x { display: block; }
+
+    .transport { display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-3); border-top: 1px solid var(--line); background: var(--raised); }
+    .transport .play { width: 30px; font-weight: 800; }
+    .time { font: 12px var(--mono); font-variant-numeric: tabular-nums; }
+    .bars { color: var(--secondary); font: 10px var(--mono); }
+    .bpm { padding-left: var(--sp-3); border-left: 1px solid var(--line); font: 10px var(--mono); }
+    .snap { padding: 1px 5px; border: 1px solid var(--line-strong); font-size: 9px; }
+    .quality { margin-left: auto; color: var(--secondary); font: 9px var(--mono); }
+
+    .panel-head { position: sticky; top: 0; z-index: 2; height: 28px; display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-3); border-bottom: 1px solid var(--line); background: var(--raised); }
+    .panel-head .meta { color: var(--muted); font-size: 10px; }
+    .section { border-bottom: 1px solid var(--line); }
+    .section-title { height: var(--row-s); display: flex; align-items: center; padding: 0 var(--sp-3); background: var(--canvas); color: var(--muted); font-size: 9px; letter-spacing: .08em; }
+    .section-title .add { margin-left: auto; color: var(--secondary); }
+    .property { height: var(--row-s); display: grid; grid-template-columns: 68px 1fr 12px; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-3); border-bottom: 1px solid #171717; }
+    .property:hover { background: var(--hover); }
+    .property .name { color: var(--secondary); }
+    .value { padding: 0 4px; border: 1px solid var(--line); background: var(--canvas); font: 10px var(--mono); }
+    .diamond { width: 8px; height: 8px; border: 1px solid var(--line-strong); transform: rotate(45deg); }
+    .diamond.on { background: var(--ink); border-color: var(--ink); }
+    .stack-row { height: var(--row-s); display: grid; grid-template-columns: 14px 12px 1fr auto; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-3); border-bottom: 1px solid #171717; }
+    .grip { color: var(--muted); letter-spacing: -2px; }
+    .enable { width: 9px; height: 9px; border: 1px solid var(--ink); background: var(--ink); }
+    .enable.off { background: transparent; border-color: var(--disabled); }
+    .domain { color: var(--muted); font: 9px var(--mono); }
+    .boundary { height: 18px; display: grid; place-items: center; color: var(--muted); font: 8px var(--mono); border-bottom: 1px dashed var(--line-strong); }
+    .driver { padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid #171717; }
+    .driver-head { display: flex; align-items: center; gap: var(--sp-2); }
+    .driver-head .uses { margin-left: auto; color: var(--secondary); font: 9px var(--mono); }
+    .driver-line { height: 18px; margin-top: var(--sp-2); border-top: 1px solid var(--line); position: relative; }
+    .driver-line svg { position: absolute; inset: 0; width: 100%; height: 18px; }
+    .notice { margin: var(--sp-3); border: 1px dashed var(--line-strong); padding: var(--sp-3); color: var(--secondary); font-size: 10px; }
+    .notice b { color: var(--ink); }
+    .mode-row { display: grid; grid-template-columns: 86px 1fr; align-items: center; min-height: var(--row-s); padding: 0 var(--sp-3); border-bottom: 1px solid #171717; }
+    .mode-row .label { color: var(--secondary); }
+    .segmented { display: flex; border: 1px solid var(--line-strong); }
+    .segmented span { flex: 1; padding: 2px 4px; text-align: center; color: var(--muted); font: 9px var(--mono); }
+    .segmented .on { background: var(--ink); color: var(--black); }
+    .group-summary { padding: var(--sp-2) var(--sp-3); color: var(--secondary); font-size: 9px; border-bottom: 1px solid #171717; }
+    .group-summary b { color: var(--ink); }
+
+    .timeline { min-height: 0; display: grid; grid-template-rows: 28px 1fr; border-top: 1px solid var(--line); background: var(--panel); overflow: hidden; }
+    .tl-toolbar { display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-3); border-bottom: 1px solid var(--line); background: var(--raised); }
+    .tl-toolbar .hint { color: var(--muted); }
+    .tl-body { min-height: 0; position: relative; overflow: hidden; }
+    .tl-row { min-width: 980px; height: var(--row-m); display: grid; grid-template-columns: var(--name-col) 52px 1fr; border-bottom: 1px solid #181818; }
+    .tl-row.ruler { height: 22px; color: var(--muted); font: 9px var(--mono); }
+    .tl-row.song { height: var(--row-l); }
+    .track-name { display: flex; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-3); border-right: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
+    .track-name.selected { outline: 1px solid #fff; outline-offset: -1px; background: var(--raised); }
+    .track-name .type { color: var(--muted); font-size: 9px; overflow: hidden; text-overflow: ellipsis; }
+    .track-name .sm { margin-left: auto; color: var(--muted); font: 8px var(--mono); letter-spacing: .12em; }
+    .track-name.child { padding-left: 27px; border-left: 3px double var(--line-strong); }
+    .track-name.child::before { content: "└"; color: var(--muted); font: 9px var(--mono); }
+    body[data-scene="invalid"] [data-track="song"] .track-name { outline: 1px dashed var(--feedback-error); outline-offset: -1px; }
+    .connection-gutter { position: relative; border-right: 1px solid var(--line); background: var(--canvas); }
+    .socket { position: absolute; top: 8px; width: 9px; height: 9px; background: var(--canvas); border: 1px solid #d4d4d4; }
+    .socket.out { right: 8px; transform: rotate(45deg); }
+    .socket.in { left: 8px; border-radius: 50%; }
+    .socket.in::before { content: ""; position: absolute; left: -6px; top: 2px; border-top: 2px solid transparent; border-bottom: 2px solid transparent; border-right: 4px solid #d4d4d4; }
+    .socket-label { position: absolute; top: 7px; color: var(--muted); font: 7px var(--mono); letter-spacing: .02em; }
+    .socket-label.out-label { left: 3px; }
+    .socket-label.in-label { right: 3px; }
+    .lane { position: relative; min-width: 0; overflow: hidden; background-size: calc(var(--beat) * 4) 100%, var(--beat) 100%; background-image: linear-gradient(90deg, #303030 1px, transparent 1px), linear-gradient(90deg, #1d1d1d 1px, transparent 1px); }
+    .clip { position: absolute; top: 4px; height: 18px; padding: 2px 6px; border: 1px solid #555; background: #171717; white-space: nowrap; overflow: hidden; }
+    .clip.shape { border-style: solid; }
+    .clip.video { border-style: double; }
+    .clip.text { border-style: dotted; }
+    .clip.group { border-style: dashed; }
+    .clip.image { background-image: repeating-linear-gradient(135deg, #181818 0 4px, #242424 4px 5px); }
+    .clip.selected { border-color: #fff; border-width: 2px; top: 3px; }
+    .clip .chip { margin-left: 5px; padding: 0 3px; border: 1px solid var(--line-strong); font-size: 8px; }
+    .clip .issue { border-style: dashed; }
+    .song-wave { position: absolute; inset: 4px 0; border: 1px solid var(--line-strong); background: #101010; overflow: hidden; }
+    .song-wave svg { width: 100%; height: 100%; }
+    .song-label { position: absolute; left: 6px; top: 5px; z-index: 2; font: 9px var(--mono); background: #101010; padding: 0 3px; }
+    .kf-lane { height: 32px; }
+    .kf-span { position: absolute; top: 14px; height: 2px; background: #666; }
+    .kf-span.selected { background: #fff; height: 3px; }
+    .kf { position: absolute; top: 10px; width: 9px; height: 9px; border: 1px solid #aaa; transform: rotate(45deg); background: var(--panel); }
+    .kf.selected { background: #fff; border-color: #fff; }
+    .connection-lines { position: absolute; z-index: 4; left: var(--name-col); top: 22px; width: 52px; height: 260px; pointer-events: none; }
+    .connection-lines path { fill: none; stroke: #aaa; stroke-width: 1.2; }
+    .playhead { position: absolute; z-index: 6; top: 0; bottom: 0; left: calc(var(--name-col) + 52px + 38%); width: 1px; background: #fff; }
+    .playhead::before { content: ""; position: absolute; top: 0; left: -4px; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 6px solid #fff; }
+    .ease-pop { display: none; position: absolute; z-index: 10; right: 10%; bottom: 18px; width: 288px; border: 1px solid #888; background: #111; }
+    .ease-pop.show { display: block; }
+    .ease-head, .ease-tabs, .ease-foot { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line); }
+    .ease-head span { margin-left: auto; color: var(--muted); }
+    .ease-tabs button { flex: 1; padding: 3px; border: 1px solid var(--line); background: transparent; color: var(--secondary); }
+    .ease-tabs button.active { border-color: #fff; color: #fff; }
+    .curve { height: 110px; padding: var(--sp-3); }
+    .curve svg { width: 100%; height: 100%; }
+    .ease-foot { border-bottom: 0; color: var(--secondary); font: 9px var(--mono); }
+
+    .status { display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-3); border-top: 1px solid var(--line); background: var(--raised); color: var(--secondary); overflow: hidden; white-space: nowrap; }
+    .status b { color: var(--ink); }
+    .status code { padding: 0 3px; border: 1px solid var(--line-strong); color: var(--ink); font: 9px var(--mono); }
+    .phases { display: flex; align-items: center; gap: 3px; color: var(--muted); font: 9px var(--mono); }
+    .phases code { border: 1px solid var(--line); color: var(--muted); }
+    .phases code.on { border-color: var(--accent-selection); color: var(--ink); }
+    .status .stat { margin-left: auto; color: var(--muted); font: 9px var(--mono); }
+
+    @media (max-width: 1120px) {
+      .main { grid-template-columns: 184px minmax(420px, 1fr) 248px; }
+      .project .details, .ownership span { display: none; }
+      .status .stat { display: none; }
+    }
+
+    /* Token ROLES follow frozen meaning. Hue/lightness/application below are DESIGN
+       CANDIDATES for comparison — meaning being frozen does not freeze design.
+       quiet:  static identity sinks to near-neutral, only dynamics get chroma.
+       fill:   Ableton-like painted clip faces with dark text; states ride as outlines.
+       stripe: identity confined to a fixed-position edge stripe + icon; faces neutral.
+       mono:   chroma budget of two — one accent hue for dynamics (split by form), red for errors.
+       warm:   temperature mapping — committed=cool family, now/unconfirmed=warm, diagnosis=red.
+       cvd:    Okabe-Ito mapping — the whole chroma budget goes to states, identity goes neutral.
+       trace:  v3 monochrome statics + chroma only on dynamics; selection stays white.
+       paper:  light-ground inversion of the quiet mapping (light theme held as an equal). */
+    :root[data-theme="quiet"] {
+      --accent-selection: #5cb8f2;
+      --item-song: #8e8697;
+      --item-effect: #7e908e;
+      --item-shape: #97897a;
+      --item-text: #94848b;
+      --item-video: #7e8894;
+      --item-group: #84907f;
+      --item-mesh: #7e908c;
+      --item-image: #8f8c7c;
+      --state-keyframe: #ffb054;
+      --state-linked: #35d6c3;
+      --state-depth: #a89bef;
+      --state-play: #63dd8d;
+      --feedback-warning: #e5c25a;
+      --feedback-error: #ff7d72;
+    }
+    :root[data-theme="fill"] {
+      --accent-selection: #7cc4ff;
+      --item-song: #b892c8;
+      --item-effect: #79c3bb;
+      --item-shape: #d29e6a;
+      --item-text: #c48d99;
+      --item-video: #86a3c0;
+      --item-group: #8db296;
+      --item-mesh: #85b8b1;
+      --item-image: #b7b184;
+      --state-keyframe: #ff9f43;
+      --state-linked: #3adbc9;
+      --state-depth: #a89bef;
+      --state-play: #6ee7a0;
+      --feedback-warning: #eec35e;
+      --feedback-error: #ff6b61;
+    }
+    :root[data-theme="stripe"] {
+      --accent-selection: #5cb8f2;
+      --item-song: #ad7fc4;
+      --item-effect: #4faca4;
+      --item-shape: #c98f57;
+      --item-text: #c07f90;
+      --item-video: #6f92bd;
+      --item-group: #6fa877;
+      --item-mesh: #62a8a2;
+      --item-image: #a8a06a;
+      --state-keyframe: #ffb054;
+      --state-linked: #35d6c3;
+      --state-depth: #a89bef;
+      --state-play: #63dd8d;
+      --feedback-warning: #e5c25a;
+      --feedback-error: #ff7d72;
+    }
+    :root[data-theme="mono"] {
+      --accent-selection: #6db3e8;
+      --item-song: #9a9a9a;
+      --item-effect: #9a9a9a;
+      --item-shape: #9a9a9a;
+      --item-text: #9a9a9a;
+      --item-video: #9a9a9a;
+      --item-group: #9a9a9a;
+      --item-mesh: #9a9a9a;
+      --item-image: #9a9a9a;
+      --state-keyframe: #e0e0e0;
+      --state-linked: #6db3e8;
+      --state-depth: #bdbdbd;
+      --state-play: #e8e8e8;
+      --feedback-warning: #d0d0d0;
+      --feedback-error: #ff7a70;
+    }
+    :root[data-theme="warm"] {
+      --accent-selection: #ffb35c;
+      --item-song: #8b84c8;
+      --item-effect: #5aa8a3;
+      --item-shape: #6c95c2;
+      --item-text: #7a92b8;
+      --item-video: #5f7fa8;
+      --item-group: #63a08b;
+      --item-mesh: #58a3a8;
+      --item-image: #7d92a3;
+      --state-keyframe: #7fa3d8;
+      --state-linked: #5fb0aa;
+      --state-depth: #8f9ac9;
+      --state-play: #ff8a5e;
+      --feedback-warning: #ffd166;
+      --feedback-error: #ff6b61;
+    }
+    :root[data-theme="cvd"] {
+      --accent-selection: #56b4e9;
+      --item-song: #8e8697;
+      --item-effect: #7e908e;
+      --item-shape: #97897a;
+      --item-text: #94848b;
+      --item-video: #7e8894;
+      --item-group: #84907f;
+      --item-mesh: #7e908c;
+      --item-image: #8f8c7c;
+      --state-keyframe: #e69f00;
+      --state-linked: #009e73;
+      --state-depth: #0072b2;
+      --state-play: #f0e442;
+      --feedback-warning: #cc79a7;
+      --feedback-error: #d55e00;
+    }
+    :root[data-theme="trace"] {
+      --accent-selection: #ffffff;
+      --item-song: #7c7c7c;
+      --item-effect: #7c7c7c;
+      --item-shape: #7c7c7c;
+      --item-text: #7c7c7c;
+      --item-video: #7c7c7c;
+      --item-group: #7c7c7c;
+      --item-mesh: #7c7c7c;
+      --item-image: #7c7c7c;
+      --state-keyframe: #ffb054;
+      --state-linked: #35d6c3;
+      --state-depth: #9a9a9a;
+      --state-play: #63dd8d;
+      --feedback-warning: #e5c25a;
+      --feedback-error: #ff7d72;
+    }
+    :root[data-theme="paper"] {
+      color-scheme: light;
+      --black: #e9e9e6;
+      --canvas: #f1f1ee;
+      --panel: #f7f7f4;
+      --raised: #ebebe8;
+      --hover: #e2e2df;
+      --line: #c8c8c4;
+      --line-strong: #93938f;
+      --ink: #161616;
+      --secondary: #3f3f3d;
+      --muted: #6f6f6b;
+      --disabled: #b3b3af;
+      --focus: #000000;
+      --accent-selection: #1f6fb5;
+      --item-song: #7a4f96;
+      --item-effect: #1f7d76;
+      --item-shape: #96601f;
+      --item-text: #963f5c;
+      --item-video: #33608f;
+      --item-group: #3f7a4f;
+      --item-mesh: #237a72;
+      --item-image: #6f6a2a;
+      --state-keyframe: #b35c00;
+      --state-linked: #0f7d72;
+      --state-depth: #5b4fa8;
+      --state-play: #1e7d3f;
+      --feedback-warning: #8f6a00;
+      --feedback-error: #b3261e;
+    }
+    :root[data-semantic-color="on"] .tool.active,
+    :root[data-semantic-color="on"] .tab.on { border-color: var(--accent-selection); color: var(--ink); }
+    :root[data-semantic-color="on"] .selected-box,
+    :root[data-semantic-color="on"] .track-name.selected { border-color: var(--accent-selection); outline-color: var(--accent-selection); }
+    :root[data-semantic-color="on"] .selected-box i { background: var(--accent-selection); }
+    :root[data-semantic-color="on"] .group-bounds { border-color: var(--item-group); }
+    :root[data-semantic-color="on"] .group-bounds::before { color: var(--item-group); }
+    :root[data-semantic-color="on"] .z-axis { color: var(--state-depth); }
+    :root[data-semantic-color="on"] .z-axis line,
+    :root[data-semantic-color="on"] .z-axis path { stroke: var(--state-depth); }
+    :root[data-semantic-color="on"] .z-axis text { fill: var(--state-depth); }
+    :root[data-semantic-color="on"] .kind.audio { border-color: var(--item-song); color: var(--item-song); }
+    :root[data-semantic-color="on"] .kind.shape { border-color: var(--item-shape); color: var(--item-shape); }
+    :root[data-semantic-color="on"] .kind.image { border-color: var(--item-image); color: var(--item-image); }
+    :root[data-semantic-color="on"] .kind.mesh { border-color: var(--item-mesh); color: var(--item-mesh); }
+    :root[data-semantic-color="on"] [data-track="effect"] .kind { border-color: var(--item-effect); color: var(--item-effect); }
+    :root[data-semantic-color="on"] [data-track="text"] .kind { border-color: var(--item-text); color: var(--item-text); }
+    :root[data-semantic-color="on"] [data-track="video"] .kind { border-color: var(--item-video); color: var(--item-video); }
+    :root[data-semantic-color="on"] [data-track="group"] .kind { border-color: var(--item-group); color: var(--item-group); }
+    :root[data-semantic-color="on"] .song-wave { border-color: var(--item-song); background: color-mix(in srgb, var(--item-song) 10%, var(--canvas)); }
+    :root[data-semantic-color="on"] .song-wave path { stroke: var(--item-song); }
+    :root[data-semantic-color="on"] .clip.shape { background: color-mix(in srgb, var(--item-shape) 27%, var(--panel)); border-color: var(--item-shape); }
+    :root[data-semantic-color="on"] .clip.text { background: color-mix(in srgb, var(--item-text) 24%, var(--panel)); border-color: var(--item-text); }
+    :root[data-semantic-color="on"] .clip.video { background: color-mix(in srgb, var(--item-video) 25%, var(--panel)); border-color: var(--item-video); }
+    :root[data-semantic-color="on"] .clip.group { background: color-mix(in srgb, var(--item-group) 24%, var(--panel)); border-color: var(--item-group); }
+    :root[data-semantic-color="on"] .clip.mesh { background: color-mix(in srgb, var(--item-mesh) 22%, var(--panel)); border-color: var(--item-mesh); }
+    :root[data-semantic-color="on"] .clip.image { background-image: repeating-linear-gradient(135deg, color-mix(in srgb, var(--item-image) 16%, var(--panel)) 0 4px, color-mix(in srgb, var(--item-image) 28%, var(--panel)) 4px 5px); border-color: var(--item-image); }
+    :root[data-semantic-color="on"] [data-track="effect"] .clip { background: color-mix(in srgb, var(--item-effect) 23%, var(--panel)); border-color: var(--item-effect); }
+    :root[data-semantic-color="on"] .clip.selected { border-color: var(--accent-selection); }
+    :root[data-semantic-color="on"] .kf-span.selected,
+    :root[data-semantic-color="on"] .kf.selected,
+    :root[data-semantic-color="on"] .diamond.on { background: var(--state-keyframe); border-color: var(--state-keyframe); }
+    :root[data-semantic-color="on"] .socket,
+    :root[data-semantic-color="on"] .connection-lines path { border-color: var(--state-linked); stroke: var(--state-linked); }
+    :root[data-semantic-color="on"] .socket-label { color: var(--state-linked); }
+    :root[data-semantic-color="on"] .socket.in::before { border-right-color: var(--state-linked); }
+    :root[data-semantic-color="on"] .mode-row .segmented .on { background: var(--state-depth); color: var(--black); }
+    :root[data-semantic-color="on"] .playhead { background: var(--state-play); }
+    :root[data-semantic-color="on"] .playhead::before { border-top-color: var(--state-play); }
+    :root[data-semantic-color="on"] .button.play.active { background: var(--state-play); color: var(--black); }
+    :root[data-semantic-color="on"] .path-ghost path { stroke: var(--accent-selection); }
+    :root[data-semantic-color="on"] .path-ghost circle { stroke: var(--accent-selection); }
+    :root[data-semantic-color="on"] .ease-tabs button.active { border-color: var(--state-keyframe); color: var(--ink); }
+    :root[data-semantic-color="on"] .ease-pop { border-color: var(--state-keyframe); }
+    :root[data-semantic-color="on"] .chip.issue,
+    :root[data-semantic-color="on"] .flag.issue { border-color: var(--feedback-error); color: var(--feedback-error); }
+    :root[data-semantic-color="on"] [data-track="group"] .chip { border-color: var(--feedback-warning); color: var(--feedback-warning); }
+
+    /* fill candidate: identity as painted faces (Ableton clip style), dark text on face.
+       Line-style channel (solid/double/dotted/dashed) stays as the color-free cue. */
+    :root[data-theme="fill"] .clip.shape,
+    :root[data-theme="fill"] .clip.text,
+    :root[data-theme="fill"] .clip.video,
+    :root[data-theme="fill"] .clip.group,
+    :root[data-theme="fill"] .clip.mesh,
+    :root[data-theme="fill"] .clip.image,
+    :root[data-theme="fill"] [data-track="effect"] .clip { color: #0b0b0b; font-weight: 600; }
+    :root[data-theme="fill"] .clip.shape { background: var(--item-shape); }
+    :root[data-theme="fill"] .clip.text { background: var(--item-text); }
+    :root[data-theme="fill"] .clip.video { background: var(--item-video); }
+    :root[data-theme="fill"] .clip.group { background: var(--item-group); }
+    :root[data-theme="fill"] .clip.mesh { background: var(--item-mesh); }
+    :root[data-theme="fill"] [data-track="effect"] .clip { background: var(--item-effect); }
+    :root[data-theme="fill"] .clip.image { background-image: repeating-linear-gradient(135deg, var(--item-image) 0 4px, color-mix(in srgb, var(--item-image) 72%, #000) 4px 5px); }
+    :root[data-theme="fill"] .clip .chip { border-color: rgba(0, 0, 0, .55); color: #0b0b0b; }
+    :root[data-theme="fill"] .clip .chip.issue { border-color: #6d100c; color: #6d100c; }
+    :root[data-theme="fill"] [data-track="group"] .clip .chip { border-color: #5c4406; color: #5c4406; }
+    :root[data-theme="fill"] .clip.selected { border-color: #ffffff; }
+    :root[data-theme="fill"] .song-wave { background: color-mix(in srgb, var(--item-song) 26%, var(--canvas)); }
+    :root[data-theme="fill"] .kf { background: color-mix(in srgb, var(--state-keyframe) 30%, var(--panel)); }
+
+    /* stripe candidate: identity lives only in a fixed-position 4px edge + icon; faces stay neutral. */
+    :root[data-theme="stripe"] .clip.shape,
+    :root[data-theme="stripe"] .clip.text,
+    :root[data-theme="stripe"] .clip.video,
+    :root[data-theme="stripe"] .clip.group,
+    :root[data-theme="stripe"] .clip.mesh,
+    :root[data-theme="stripe"] [data-track="effect"] .clip { background: #171717; border-color: #4a4a4a; padding-left: 12px; }
+    :root[data-theme="stripe"] .clip.image { background-image: repeating-linear-gradient(135deg, #181818 0 4px, #242424 4px 5px); border-color: #4a4a4a; padding-left: 12px; }
+    :root[data-theme="stripe"] .clip::before { content: ""; position: absolute; left: 0; top: -1px; bottom: -1px; width: 4px; }
+    :root[data-theme="stripe"] .clip.shape::before { background: var(--item-shape); }
+    :root[data-theme="stripe"] .clip.text::before { background: var(--item-text); }
+    :root[data-theme="stripe"] .clip.video::before { background: var(--item-video); }
+    :root[data-theme="stripe"] .clip.group::before { background: var(--item-group); }
+    :root[data-theme="stripe"] .clip.mesh::before { background: var(--item-mesh); }
+    :root[data-theme="stripe"] .clip.image::before { background: var(--item-image); }
+    :root[data-theme="stripe"] [data-track="effect"] .clip::before { background: var(--item-effect); }
+    :root[data-theme="stripe"] .clip.selected { border-color: var(--accent-selection); }
+    :root[data-theme="stripe"] .song-wave { background: #101010; border-color: #4a4a4a; border-left: 4px solid var(--item-song); }
+
+    /* warm candidate: unconfirmed/now rides warm; committed stays cool. Invalid keeps error red. */
+    :root[data-theme="warm"] .tentative-line path { stroke: var(--accent-selection); }
+    :root[data-theme="warm"] .stage.targeting:not(.invalid) .t-from { color: var(--accent-selection); }
+    :root[data-theme="warm"] .stage.targeting:not(.invalid) .target-hud { border-color: var(--accent-selection); }
+    :root[data-theme="warm"] .stage.targeting:not(.invalid) [data-target="valid"] { outline-color: var(--accent-selection); }
+    :root[data-theme="warm"] .kf.selected,
+    :root[data-theme="warm"] .kf-span.selected { background: var(--accent-selection); border-color: var(--accent-selection); }
+
+    /* paper candidate: light-ground inversion; repaint values the dark base hard-codes. */
+    :root[data-theme="paper"] .lane { background-image: linear-gradient(90deg, #b9b9b5 1px, transparent 1px), linear-gradient(90deg, #d7d7d3 1px, transparent 1px); }
+    :root[data-theme="paper"] .tl-row { border-bottom-color: #dededa; }
+    :root[data-theme="paper"] .asset, :root[data-theme="paper"] .property, :root[data-theme="paper"] .stack-row, :root[data-theme="paper"] .driver { border-bottom-color: #dfdfdb; }
+    :root[data-theme="paper"] .song-wave { background: #eceae4; }
+    :root[data-theme="paper"] .song-label { background: #eceae4; }
+    :root[data-theme="paper"] .output-frame { background: #fbfbf9; border-color: #6f6f6b; }
+    :root[data-theme="paper"] .composition-mark { border-color: #2b2b2b; }
+    :root[data-theme="paper"] .composition-mark::before { border-color: #666; }
+    :root[data-theme="paper"] .composition-mark::after { background: #f1f1ee; border-color: #000; }
+    :root[data-theme="paper"] .selected-box i { border-color: #f1f1ee; }
+    :root[data-theme="paper"] .group-bounds { border-color: #5c5c58; }
+    :root[data-theme="paper"] .path-ghost circle { fill: #f1f1ee; }
+    :root[data-theme="paper"] .kf { border-color: #666; }
+    :root[data-theme="paper"] .kf-span { background: #8a8a86; }
+    :root[data-theme="paper"] .ease-pop { background: var(--panel); }
+    :root[data-theme="paper"] .curve path { stroke: #1a1a1a; }
+    :root[data-theme="paper"] .curve circle { fill: #f7f7f4; stroke: #000; }
+    :root[data-theme="paper"] .clip .chip { border-color: #93938f; }
+  </style>
+</head>
+<body>
+  <main class="app" aria-label="Motolii color dynamics states mock">
+    <header class="titlebar">
+      <span class="wordmark">MOTOLII</span>
+      <span class="project"><b>night_drive.mtl</b> <span class="details">— 1920×1080 / 30 fps / 3:42</span></span>
+      <span class="theme-tag" id="theme-tag">design候補: quiet</span>
+      <span class="grow"></span>
+      <button class="button">設定</button><button class="button" id="undo">取り消し</button><button class="button">やり直し</button><button class="button strong">書き出し</button>
+    </header>
+
+    <section class="main">
+      <aside class="left" aria-label="素材の棚">
+        <div class="tabs"><span class="tab on">アセット</span><span class="tab">エフェクト</span></div>
+        <div class="search">検索…</div>
+        <div class="asset-head"><span></span><span>名前</span><span>種別 / 長さ</span></div>
+        <div class="asset" data-select="video" tabindex="0"><span class="kind">V</span><span class="name">city_loop.mp4 <span class="flag issue">! 要再リンク</span></span><span class="meta">動画 12s</span></div>
+        <div class="asset" data-select="logo" tabindex="0"><span class="kind shape"><span>S</span></span><span class="name">logo.svg</span><span class="meta">SVG</span></div>
+        <div class="asset" data-select="song" tabindex="0"><span class="kind audio">A</span><span class="name">night_drive.wav <span class="flag">楽曲</span></span><span class="meta">3:42</span></div>
+        <div class="asset" data-select="mesh" tabindex="0"><span class="kind mesh">M</span><span class="name">car.glb</span><span class="meta">glTF</span></div>
+        <div class="asset" data-select="image" tabindex="0"><span class="kind image">I</span><span class="name">grain.png</span><span class="meta">画像</span></div>
+        <div class="asset" data-select="text" tabindex="0"><span class="kind">T</span><span class="name">NIGHT DRIVE</span><span class="meta">テキスト</span></div>
+        <div class="browser-note"><b>色は状況の説明にだけ現れる。</b><br>平常時=種別の低彩度。操作中=その力学の状態色+形+短文だけが昇格する。</div>
+      </aside>
+
+      <section class="center" aria-label="ステージ">
+        <div class="tools">
+          <button class="tool active" data-tool="select">選択</button>
+          <button class="tool" data-tool="link">接続</button>
+          <button class="tool" data-tool="relative">Relative</button>
+          <button class="tool" data-tool="camera">Camera</button>
+          <button class="tool" data-tool="hand">Hand</button>
+          <span class="ownership"><b id="owner">Document</b><span> / 1 gesture = 1 Undo</span></span>
+        </div>
+        <div class="stage" id="stage">
+          <div class="world">
+            <div class="output-frame"></div>
+            <div class="composition-mark" data-target="valid" tabindex="0" aria-label="logo.svg"></div>
+            <div class="composition-title">NIGHT DRIVE</div>
+            <div class="composition-sub">bar 54.2 / beat-synced position</div>
+            <div class="group-bounds"></div>
+            <div class="selected-box"><i></i><i></i><i></i><i></i></div>
+            <div class="z-axis"><svg viewBox="0 0 94 74"><line x1="18" y1="58" x2="74" y2="18" stroke="#aaa"/><path d="M74 18 L68 20 M74 18 L72 24" stroke="#aaa"/><line x1="18" y1="58" x2="82" y2="58" stroke="#666"/><line x1="18" y1="58" x2="18" y2="8" stroke="#666"/><text x="77" y="16" fill="#aaa">+Z</text><text x="84" y="62" fill="#777">X</text><text x="10" y="8" fill="#777">Y</text><text x="1" y="72" fill="#777">Group local / Y-up</text></svg></div>
+            <div class="path-ghost"><svg viewBox="0 0 300 130"><path d="M15 110 C76 38 120 105 180 45 S252 28 286 58" fill="none" stroke="#888" stroke-width="1.5" stroke-dasharray="5 4"/><circle cx="15" cy="110" r="4" fill="#080808" stroke="#fff"/><circle cx="286" cy="58" r="5" fill="#fff"/></svg></div>
+            <div class="tentative-line"><svg viewBox="0 0 1000 560" preserveAspectRatio="none"><path d="M300 545 C 430 505 455 330 496 252"/></svg><span class="t-from">from: ロゴ.Position</span><span class="t-x">×</span></div>
+          </div>
+          <div class="target-hud" id="hud"><div class="eyebrow" id="hud-eyebrow">TARGET / PREVIEW</div><b id="hud-title">Positionを接続</b><p id="hud-body">Visual Layerを選択。確定するとLookAt targetになります。</p></div>
+        </div>
+        <div class="transport">
+          <button class="button">|&lt;</button><button class="button play" id="play">▶</button><button class="button">&gt;|</button>
+          <span class="time" id="time">00:01:48:12</span><span class="bars" id="bar-time">54.2.00</span><span class="bpm">BPM <b>120.00</b> / 4</span><span class="snap">SNAP: BEAT</span><span class="quality">DRAFT · 1/2 · fp16</span>
+        </div>
+      </section>
+
+      <aside class="right" aria-label="選択の意味">
+        <div class="panel-head"><span class="kind">G</span><b id="selection-name">背景まとめ</b><span class="meta" id="selection-meta">Group · 3 children · group_bg</span></div>
+        <div class="section"><div class="section-title">変形</div>
+          <div class="property"><span class="name">位置 XYZ</span><span class="value" id="position">X 0.124　Y −0.082　Z 0.180</span><i class="diamond on"></i></div>
+          <div class="property"><span class="name">スケール</span><span class="value">1.000</span><i class="diamond"></i></div>
+          <div class="property"><span class="name">回転</span><span class="value">0.000 rad</span><i class="diamond"></i></div>
+          <div class="property"><span class="name">不透明度</span><span class="value">100%</span><i class="diamond on"></i></div>
+          <div class="property"><span class="name">リンク</span><button class="button" id="link-button">＋ target</button><span></span></div>
+        </div>
+        <div class="section"><div class="section-title">グループ合成</div>
+          <div class="mode-row"><span class="label">Z Occlusion</span><span class="segmented"><span>OFF / Layer Order</span><span class="on">ON / Group Depth</span></span></div>
+          <div class="group-summary"><b>再帰Group / 固定canvasなし / 固定尺なし。</b><br>子はGroup local XYZで評価し、Group境界の内側だけ共有depthへ参加。</div>
+        </div>
+        <div class="section"><div class="section-title">グループスタック / 子合成後に1回 <span class="add">＋ 追加</span></div>
+          <div class="boundary">3 CHILDREN COMPOSITE → BAKE POINT (STALE)</div>
+          <div class="stack-row"><span class="grip">::</span><i class="enable"></i><span>VHS</span><span class="domain">OWNED GROUP</span></div>
+          <div class="stack-row"><span class="grip">::</span><i class="enable"></i><span>グロー A</span><span class="domain">AFTER BAKE</span></div>
+        </div>
+        <div class="section"><div class="section-title">ドライバ / コンポ共有 <span class="add">＋</span></div>
+          <div class="driver"><div class="driver-head"><b>音量フォロワー Low</b><span class="uses">→ 2配線</span></div><div class="driver-line"><svg viewBox="0 0 240 18" preserveAspectRatio="none"><path d="M0 15 L18 12 30 14 46 4 62 10 84 8 102 15 126 6 148 11 172 3 190 12 218 7 240 9" fill="none" stroke="#aaa" stroke-width="1"/></svg></div></div>
+        </div>
+        <div class="notice" id="notice"><b>仮出力 STALE:</b> 子編集で52.4–54.1だけ無効化。Group stack変更は子合成直後のベイクを無効化しません。</div>
+      </aside>
+    </section>
+
+    <section class="timeline" aria-label="譜面">
+      <div class="tl-toolbar"><b>タイムライン</b><span class="hint">楽曲基準線 / 小節.拍 / 表示順 / 評価接続</span><span class="grow"></span><button class="button" id="ease-button">区間イージング</button><span>拍 = 56px</span></div>
+      <div class="tl-body" id="tl-body">
+        <div class="tl-row ruler"><div class="track-name">小節.拍</div><div class="connection-gutter"></div><div class="lane"><span style="position:absolute;left:0">52</span><span style="position:absolute;left:224px">53</span><span style="position:absolute;left:448px">54</span><span style="position:absolute;left:672px">55</span><span style="position:absolute;left:896px">56</span></div></div>
+        <div class="tl-row song" data-track="song"><div class="track-name"><span class="kind audio">A</span><b>楽曲</b><span class="type">基準線 / LOCKED</span><span class="sm">SNAP</span></div><div class="connection-gutter"></div><div class="lane"><div class="song-wave"><span class="song-label">night_drive.wav · BPM 120.00</span><svg viewBox="0 0 1100 34" preserveAspectRatio="none"><path d="M0 17 L8 8 12 26 20 11 28 23 36 5 44 28 52 12 60 20 68 7 76 27 84 14 92 19 100 9 108 25 116 12 124 22 132 6 140 28 148 15 156 20 164 10 172 24 180 7 188 27 196 13 204 21 212 5 220 29 228 12 236 22 244 8 252 26 260 15 268 19 276 6 284 28 292 10 300 24 308 13 316 20 324 8 332 26 340 11 348 23 356 7 364 27 372 14 380 19 388 5 396 29 404 12 412 22 420 9 428 25 436 14 444 20 452 6 460 28 468 11 476 24 484 8 492 26 500 13 508 21 516 7 524 27 532 12 540 23 548 5 556 29 564 15 572 19 580 9 588 25 596 11 604 24 612 6 620 28 628 13 636 21 644 8 652 26 660 12 668 22 676 7 684 27 692 14 700 20 708 5 716 29 724 10 732 24 740 9 748 25 756 13 764 21 772 6 780 28 788 11 796 23 804 8 812 26 820 15 828 19 836 7 844 27 852 12 860 22 868 5 876 29 884 14 892 20 900 9 908 25 916 11 924 24 932 6 940 28 948 13 956 21 964 8 972 26 980 12 988 23 996 7 1004 27 1012 14 1020 19 1028 5 1036 29 1044 11 1052 24 1060 9 1068 25 1076 13 1084 21 1092 7 1100 27" fill="none" stroke="#a8a8a8" stroke-width="1"/></svg></div></div></div>
+        <div class="tl-row" data-track="effect"><div class="track-name"><span class="kind">F</span><b>グロー A</b><span class="type">Effect Definition / 2 uses</span></div><div class="connection-gutter"><span class="socket-label out-label">OUT</span><span class="socket out"></span></div><div class="lane"><div class="clip" style="left:56px;width:230px">共有定義 / Glow A</div></div></div>
+        <div class="tl-row" data-track="logo"><div class="track-name"><span class="kind shape"><span>S</span></span><b>ロゴ</b><span class="type">SVG / z +0.18</span><span class="sm">S M</span></div><div class="connection-gutter"><span class="socket in"></span><span class="socket-label in-label">IN</span></div><div class="lane"><div class="clip shape" style="left:280px;width:650px">ロゴ <span class="chip">z +0.18</span> <span class="chip">◇ Glow A</span></div></div></div>
+        <div class="tl-row kf-lane" data-track="position"><div class="track-name"><span></span><span class="type">位置 · Y / 5 keys</span></div><div class="connection-gutter"></div><div class="lane"><span class="kf-span" style="left:336px;width:112px"></span><span class="kf-span selected" style="left:560px;width:168px"></span><span class="kf" style="left:336px"></span><span class="kf" style="left:448px"></span><span class="kf selected" style="left:560px"></span><span class="kf selected" style="left:728px"></span><span class="kf" style="left:840px"></span></div></div>
+        <div class="tl-row" data-track="text"><div class="track-name"><span class="kind">T</span><span>NIGHT DRIVE</span><span class="type">テキスト</span><span class="sm">S M</span></div><div class="connection-gutter"></div><div class="lane"><div class="clip text" style="left:448px;width:336px">NIGHT DRIVE</div></div></div>
+        <div class="tl-row" data-track="group"><div class="track-name selected"><span class="kind">G</span><b>背景まとめ</b><span class="type">Group / 3 / Z: GROUP DEPTH</span><span class="sm">▾</span></div><div class="connection-gutter"><span class="socket in"></span><span class="socket-label in-label">IN</span></div><div class="lane"><div class="clip group selected" style="left:0;width:1080px">背景まとめ / 子合成 → 仮出力 → VHS <span class="chip">//// stale 52.4–54.1</span></div></div></div>
+        <div class="tl-row" data-track="video"><div class="track-name child"><span class="kind">V</span><span>city_loop.mp4</span><span class="type">子 / z −0.20</span><span class="sm">S M</span></div><div class="connection-gutter"></div><div class="lane"><div class="clip video" style="left:0;width:1008px">city_loop.mp4 <span class="chip">z −0.20</span> <span class="chip issue">! 要再リンク</span></div></div></div>
+        <div class="tl-row" data-track="mesh"><div class="track-name child"><span class="kind mesh">M</span><span>car.glb</span><span class="type">子 / z +0.34</span></div><div class="connection-gutter"></div><div class="lane"><div class="clip mesh" style="left:224px;width:620px">car.glb <span class="chip">z +0.34 / depth participant</span></div></div></div>
+        <div class="tl-row" data-track="image"><div class="track-name child"><span class="kind image">I</span><span>grain.png</span><span class="type">子 / z 0.00 / overlay</span></div><div class="connection-gutter"></div><div class="lane"><div class="clip image" style="left:0;width:1080px">grain.png / screen 40% <span class="chip">z 0.00</span></div></div></div>
+        <svg class="connection-lines" viewBox="0 0 52 260" preserveAspectRatio="none" aria-label="Glow A outから各Effect Use inへの接続"><path d="M40 55 C25 55 29 81 13 81"/><path d="M40 55 C17 55 30 165 13 165"/></svg>
+        <div class="playhead" id="playhead"></div>
+        <div class="ease-pop" id="ease-pop"><div class="ease-head"><b>区間イージング</b><span>54.2 → 54.4</span></div><div class="ease-tabs"><button class="active">ベジェ</button><button>バウンス</button><button>エラスティック</button><button>ステップ</button></div><div class="curve"><svg viewBox="0 0 260 100" preserveAspectRatio="none"><line x1="0" y1="92" x2="260" y2="8" stroke="#555" stroke-dasharray="3 4"/><path d="M0 92 C88 -24 166 8 260 8" fill="none" stroke="#eee" stroke-width="2"/><line x1="0" y1="92" x2="88" y2="-24" stroke="#888"/><line x1="260" y1="8" x2="166" y2="8" stroke="#888"/><circle cx="88" cy="-24" r="4" fill="#111" stroke="#fff"/><circle cx="166" cy="8" r="4" fill="#111" stroke="#fff"/></svg></div><div class="ease-foot">(0.34, 1.56, 0.64, 1.00) / オーバーシュート</div></div>
+      </div>
+    </section>
+
+    <footer class="status"><b id="status-title">ロゴ</b><span id="status-text">Stage / Timelineの選択は同じobject。ドラッグ=移動。</span><code id="status-key">V</code><span class="phases" id="phases"></span><span class="stat" id="status-stat">Document unchanged · Undo 0 · GPU 0%</span></footer>
+  </main>
+
+  <script>
+    (() => {
+      document.documentElement.setAttribute('data-semantic-color', 'on');
+      const state = { tool: 'select', playing: false, raf: 0, start: 0, undo: 0, changed: false };
+      const $ = (s) => document.querySelector(s);
+      const $$ = (s) => [...document.querySelectorAll(s)];
+      const stage = $('#stage');
+
+      const PHASES = ['Discover', 'Target', 'Preview', 'Commit', 'Inspect', 'Undo'];
+      function setPhases(active) {
+        $('#phases').innerHTML = PHASES.map((p) => `<code class="${p === active ? 'on' : ''}">${p}</code>`).join('→');
+      }
+
+      function status(title, text, key = '') {
+        $('#status-title').textContent = title;
+        $('#status-text').textContent = text;
+        $('#status-key').textContent = key || '—';
+        $('#status-stat').textContent = `Document ${state.changed ? 'changed' : 'unchanged'} · Undo ${state.undo} · GPU ${state.playing ? '38' : '0'}%`;
+      }
+
+      function setOwner(text, cls) { const o = $('#owner'); o.textContent = text; o.className = cls || ''; }
+
+      function setTool(tool) {
+        state.tool = tool;
+        stage.className = 'stage';
+        $('#hud').classList.remove('show');
+        $$('.tool').forEach((b) => b.classList.toggle('active', b.dataset.tool === tool));
+        if (tool === 'select') { setOwner('Document', ''); setPhases('Inspect'); status('Group「背景まとめ」', '平常時: 意味はbadge要約(Brief)。選択accentはStage/Timeline/Inspectorで同一。', 'V'); }
+        if (tool === 'link') { stage.classList.add('targeting'); $('#hud').classList.add('show'); setOwner('Transient', 'transient'); setPhases('Target'); status('接続先を選択', '何を(Position)・何へ(仮線の先)・どうなるか(HUD)。EscapeでDocument変更ゼロ。', 'Esc'); }
+        if (tool === 'relative') { stage.classList.add('relative'); setOwner('Preview', 'preview'); setPhases('Preview'); $('#position').textContent = 'Relative ΔX +0.140　ΔY +0.060'; status('Relative Move', 'motion path全体へ同じ差分をTransientにpreview。確定=1 macro、Escape=変更ゼロ。', 'Primary+Drag'); }
+        if (tool === 'camera') { stage.classList.add('camera'); setOwner('Document', ''); setPhases('Commit'); status('Camera', 'Output Frameを移動。作品と書き出しが変わる=Document操作。', 'C'); }
+        if (tool === 'hand') { stage.classList.add('hand'); setOwner('Project session', 'session'); setPhases(''); status('Hand / Stage View', '表示だけを移動。Document・書き出し・Undoは不変。', 'H'); }
+      }
+
+      $$('.tool').forEach((button) => button.addEventListener('click', () => setTool(button.dataset.tool)));
+      $('#link-button').addEventListener('click', () => setTool('link'));
+
+      $('.composition-mark').addEventListener('click', () => {
+        if (state.tool === 'link') {
+          state.changed = true; state.undo = 1; stage.classList.remove('targeting'); setPhases('Commit');
+          $('#hud-title').textContent = '接続を確定'; $('#hud-body').textContent = 'Position → logo.svg / Undo 1回';
+          status('接続済み', 'Position → logo.svg。因果はInspector badgeとTimeline gutterに残る。', '⌘Z');
+        }
+      });
+
+      $$('[data-select]').forEach((row) => row.addEventListener('click', () => {
+        $$('[data-select]').forEach((r) => r.classList.toggle('selected', r === row));
+        const labels = { logo: 'ロゴ素材', video: 'city_loop.mp4', song: 'night_drive.wav', mesh: 'car.glb', image: 'grain.png', text: 'NIGHT DRIVE' };
+        status(labels[row.dataset.select], row.dataset.select === 'song' ? '楽曲は譜面の固定基準線。削除・並べ替え対象ではない。' : 'Browserの素材を選択。配置確定まではDocument selectionを変えない。', 'Enter');
+      }));
+
+      function invalidTarget() {
+        stage.classList.add('invalid'); setPhases('Target');
+        $('#hud-eyebrow').textContent = 'TARGET / REJECTED';
+        $('#hud-title').textContent = '楽曲基準線は対象外';
+        $('#hud-body').textContent = 'expected: Visual Layer / actual: Song Spine。回復: ロゴ等のVisual Layerを選択、またはEscapeで中止(変更ゼロ)。';
+        status('接続できません', 'PositionはVisual Layerを要求。dim+理由+次の一手(silent disabled禁止)。', 'Esc');
+      }
+      $$('[data-track]').forEach((row) => row.addEventListener('click', () => {
+        if (state.tool === 'link' && row.dataset.track === 'song') { invalidTarget(); return; }
+        status(row.dataset.track, 'Timelineの選択は同じInspectorへ戻る。別の編集正本を作らない。', 'Enter');
+      }));
+
+      function openEase() {
+        $('#ease-pop').classList.add('show'); setPhases('Commit');
+        status('区間イージング', '選択した2 key間だけを編集。意図名(バウンス等)とAdvanced実値は同じInterp意味。', 'Esc');
+      }
+      $('#ease-button').addEventListener('click', openEase);
+      $$('.ease-tabs button').forEach((button) => button.addEventListener('click', () => {
+        $$('.ease-tabs button').forEach((b) => b.classList.toggle('active', b === button));
+        status(button.textContent, '意図名とAdvancedの実値は同じInterp意味を編集する。', 'Enter');
+      }));
+
+      function playStatic() {
+        state.playing = true;
+        $('#play').textContent = 'Ⅱ'; $('#play').classList.add('active');
+        $('#playhead').style.left = 'calc(var(--name-col) + 52px + 52%)';
+        $('#bar-time').textContent = '54.3.40'; $('#time').textContent = '00:01:49:02';
+        $('.composition-mark').style.transform = 'translate(-50%, calc(-50% - 18px))';
+        setPhases('');
+        status('再生', '音声クロックが主。動くのは作品とplayheadだけで、UI演出は再生に参加しない。', 'Space');
+      }
+      function frame(now) {
+        if (!state.playing) return;
+        const t = (now - state.start) / 1000;
+        const phase = (t % 4) / 4;
+        const beat = phase * 4;
+        const y = Math.abs(Math.sin(beat * Math.PI)) * 26 * Math.exp(-phase * 1.2);
+        $('.composition-mark').style.transform = `translate(-50%, calc(-50% - ${y}px))`;
+        $('#playhead').style.left = `calc(var(--name-col) + 52px + ${38 + phase * 24}%)`;
+        $('#bar-time').textContent = `54.${Math.floor(beat) + 1}.${String(Math.floor((beat % 1) * 100)).padStart(2, '0')}`;
+        state.raf = requestAnimationFrame(frame);
+      }
+      $('#play').addEventListener('click', () => {
+        state.playing = !state.playing;
+        $('#play').textContent = state.playing ? 'Ⅱ' : '▶';
+        $('#play').classList.toggle('active', state.playing);
+        if (state.playing) { state.start = performance.now(); status('再生', '音声クロックを主として作品とplayheadが同じ時刻を演奏。', 'Space'); state.raf = requestAnimationFrame(frame); }
+        else { cancelAnimationFrame(state.raf); $('.composition-mark').style.transform = ''; status('停止', '再生を停止。UI motionではなくDocument評価の動き。', 'Space'); }
+      });
+      $('#undo').addEventListener('click', () => { state.changed = false; state.undo = 0; $('#position').textContent = 'X 0.124　Y −0.082　Z 0.180'; setTool('select'); status('取り消し', '直前のDocument gestureを1回で戻しました。', '⌘Z'); });
+
+      /* Hash = "#<design candidate>-<dynamics state>", both optional. Every scene is static (motion 0).
+         Meaning (roles, states, fixture) is shared; the candidate only swaps design. */
+      let theme = 'quiet', scene = 'select';
+      (location.hash || '').slice(1).split('-').forEach((part) => {
+        if (['quiet', 'fill', 'stripe', 'mono', 'warm', 'cvd', 'trace', 'paper'].includes(part)) theme = part;
+        else if (part) scene = part;
+      });
+      document.documentElement.setAttribute('data-theme', theme);
+      $('#theme-tag').textContent = `design候補: ${theme}`;
+      document.body.dataset.scene = scene;
+      setTool('select');
+      if (scene === 'target') setTool('link');
+      else if (scene === 'invalid') { setTool('link'); invalidTarget(); }
+      else if (scene === 'relative') setTool('relative');
+      else if (scene === 'ease') openEase();
+      else if (scene === 'play') playStatic();
+    })();
+  </script>
+</body>
+</html>
