@@ -11,9 +11,9 @@ use crate::limits::ResourceLimits;
 use crate::{Document, PersistError};
 
 use super::catalog::{load_catalog_fs, save_catalog_fs, PinGenerationOptions, RotateOptions};
-use super::format::{journal_path_for_document, JournalFormatError};
-use super::fs::{FaultInjectingFs, FaultPlan, FsError, JournalFs, StdFs};
-use super::recover::{recover_project, RecoveryError, RecoveryResult};
+use super::format::JournalFormatError;
+use super::fs::{FsError, JournalFs};
+use super::recover::{RecoveryError, RecoveryResult};
 use super::replay::JournalEdit;
 use super::wal::{checkpoint, commit_edit, CheckpointOptions, WalError, WalSession};
 
@@ -64,6 +64,8 @@ pub enum ProjectError {
     Json(#[from] serde_json::Error),
     #[error(transparent)]
     Plugin(#[from] crate::DocumentPluginError),
+    #[error(transparent)]
+    Session(#[from] super::session::SessionError),
 }
 
 pub type OpenProjectOutcome = RecoveryResult;
@@ -84,16 +86,19 @@ fn resolve_ids(
 }
 
 /// ジャーナル付き保存。
-pub fn save_project_with_journal(
+#[cfg(test)]
+pub(crate) fn save_project_with_journal(
     document_path: &Path,
     doc: &Document,
     options: &SaveProjectOptions,
 ) -> Result<(), ProjectError> {
+    use super::fs::StdFs;
+
     let mut fs = StdFs;
     save_project_with_journal_fs(&mut fs, document_path, doc, options)
 }
 
-pub fn save_project_with_journal_fs(
+pub(crate) fn save_project_with_journal_fs(
     fs: &mut dyn JournalFs,
     document_path: &Path,
     doc: &Document,
@@ -133,34 +138,44 @@ pub fn save_project_with_journal_fs(
     Ok(())
 }
 
-/// プロジェクトを開く(非破壊recovery込み)。
-pub fn open_project(document_path: &Path) -> Result<OpenProjectOutcome, ProjectError> {
+/// プロジェクトを開く(非破壊recovery込み)。crate内部・故障注入専用。
+#[cfg(test)]
+pub(crate) fn open_project(document_path: &Path) -> Result<OpenProjectOutcome, ProjectError> {
     open_project_with_limits(document_path, &ResourceLimits::production())
 }
 
-pub fn open_project_with_limits(
+#[cfg(test)]
+pub(crate) fn open_project_with_limits(
     document_path: &Path,
     limits: &ResourceLimits,
 ) -> Result<OpenProjectOutcome, ProjectError> {
+    use super::fs::StdFs;
+
     let mut fs = StdFs;
     open_project_fs(&mut fs, document_path, limits)
 }
 
-pub fn open_project_fs(
+#[cfg(test)]
+pub(crate) fn open_project_fs(
     fs: &mut dyn JournalFs,
     document_path: &Path,
     limits: &ResourceLimits,
 ) -> Result<OpenProjectOutcome, ProjectError> {
+    use super::recover::recover_project;
+
     Ok(recover_project(fs, document_path, limits)?)
 }
 
 /// 故障注入プラン付きでcheckpointを走らせる(単体テスト用)。
-pub fn checkpoint_with_fault_plan(
+#[cfg(test)]
+pub(crate) fn checkpoint_with_fault_plan(
     document_path: &Path,
     doc: &Document,
     options: &SaveProjectOptions,
-    plan: FaultPlan,
+    plan: super::fs::FaultPlan,
 ) -> Result<(), ProjectError> {
+    use super::fs::FaultInjectingFs;
+
     let mut faulty = FaultInjectingFs::new(plan);
     let parent = document_path.parent().unwrap_or_else(|| Path::new("."));
     faulty.seed_from_disk(parent)?;
@@ -175,17 +190,25 @@ pub fn checkpoint_with_fault_plan(
 
 // --- 壊れ方catalog注入(原本をtruncateしない) ---
 
-pub fn inject_corrupt_journal_tail(
+#[cfg(test)]
+pub(crate) fn inject_corrupt_journal_tail(
     document_path: &Path,
     garbage: &[u8],
 ) -> Result<(), ProjectError> {
+    use super::format::journal_path_for_document;
+    use super::fs::StdFs;
+
     let mut fs = StdFs;
     let path = journal_path_for_document(document_path);
     fs.append(&path, garbage)?;
     Ok(())
 }
 
-pub fn inject_bad_checksum_at_last_frame(document_path: &Path) -> Result<(), ProjectError> {
+#[cfg(test)]
+pub(crate) fn inject_bad_checksum_at_last_frame(document_path: &Path) -> Result<(), ProjectError> {
+    use super::format::journal_path_for_document;
+    use super::fs::StdFs;
+
     let mut fs = StdFs;
     let path = journal_path_for_document(document_path);
     let mut data = fs.read(&path)?;
@@ -198,8 +221,11 @@ pub fn inject_bad_checksum_at_last_frame(document_path: &Path) -> Result<(), Pro
     Ok(())
 }
 
-pub fn inject_salt_mismatch_frame(document_path: &Path) -> Result<(), ProjectError> {
-    use super::format::{encode_frame, JournalFrame, JournalRecordKind};
+#[cfg(test)]
+pub(crate) fn inject_salt_mismatch_frame(document_path: &Path) -> Result<(), ProjectError> {
+    use super::format::{encode_frame, journal_path_for_document, JournalFrame, JournalRecordKind};
+    use super::fs::StdFs;
+
     let mut fs = StdFs;
     let path = journal_path_for_document(document_path);
     let data = fs.read(&path)?;
@@ -220,27 +246,32 @@ pub fn inject_salt_mismatch_frame(document_path: &Path) -> Result<(), ProjectErr
 ///
 /// durable payload は通常の versioned `JournalEdit`/`Command` envelope のみ。
 /// テスト専用の故障用 variant はオンディスク形式へ載せない。
-pub fn inject_unapplicable_committed_edit(
+#[cfg(test)]
+pub(crate) fn inject_unapplicable_committed_edit(
     document_path: &Path,
     limits: &ResourceLimits,
 ) -> Result<(), ProjectError> {
-    use crate::{Command, DocParam, LayerId, ScalarPropertyId};
+    use super::replay::JournalEdit;
+    use super::session::ProjectSession;
+    use crate::{Command, DocParam, Document, LayerId, ScalarPropertyId};
 
-    // 存在しない Layer への SetProperty — decode は成功し apply だけ失敗する。
     let edit = JournalEdit::new(Command::SetProperty {
         target: LayerId::from_raw(u64::MAX),
         property: ScalarPropertyId::Opacity,
         old_value: DocParam::const_f64(1.0),
         new_value: DocParam::const_f64(0.0),
     });
-    save_project_with_journal(
-        document_path,
-        &Document::new_current(),
-        &SaveProjectOptions {
-            limits: *limits,
-            journal_edit: Some(edit),
-            checkpoint: false,
-            ..Default::default()
-        },
-    )
+    let mut session = ProjectSession::acquire(document_path, limits)?;
+    session
+        .save_with_journal(
+            &Document::new_current(),
+            &SaveProjectOptions {
+                limits: *limits,
+                journal_edit: Some(edit),
+                checkpoint: false,
+                ..Default::default()
+            },
+        )
+        .map_err(|e| *e)?;
+    Ok(())
 }

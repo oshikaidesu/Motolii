@@ -1420,14 +1420,7 @@ fn doc_has_stable_ids(doc: &Document) -> bool {
 }
 
 /// ファイルをbackup後に現行スキーマへ書換える。dry_run/noopでは原本を触らない。
-pub fn migrate_document_file(
-    path: &Path,
-    options: &MigrateFileOptions,
-) -> Result<MigrateFileResult, MigrateError> {
-    migrate_document_file_with_limits(path, options, &ResourceLimits::production())
-}
-
-pub fn migrate_document_file_with_limits(
+pub(crate) fn migrate_document_file_with_limits(
     path: &Path,
     options: &MigrateFileOptions,
     limits: &ResourceLimits,

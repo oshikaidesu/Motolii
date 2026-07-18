@@ -1,6 +1,6 @@
 # M2 project sidecar identity / session ownership decision (2026-07-16)
 
-Status: **Decision / implementation not started**. This decision adds D1m to the M2 reclosure critical path. D1d's corruption recovery remains valid, but its current parent-directory-shared sidecar path and lack of inter-process ownership must not be treated as closed.
+Status: **Implementation landed** (D1m, branch `cursor/d1m-project-session`). D1d's corruption recovery remains valid on project-scoped sidecars with inter-process session ownership.
 
 > **2026-07-18 supplement ([VSM-A0S](2026-07-17-vism-a0s-contract-catalog-spec.md) alignment)**: The save/open ownership rows below are amended so D1m implementation cannot invent a second product open path or keep root-public path mutation. Code is not updated by this supplement.
 
@@ -132,7 +132,7 @@ Align with [VSM-A0S §11](2026-07-17-vism-a0s-contract-catalog-spec.md): catalog
 
 ## Legacy sidecar migration diagnostic report (2026-07-18)
 
-Status: **Decision / implementation not started**. This supplement closes the unknown-legacy-entry diagnostic contract for D1m before implementation. It does not change family predicates, staging/atomic-install steps, lock semantics, or D1d recovery meaning.
+Status: **Implemented** (D1m diagnostic report, branch `cursor/d1m-project-session`). This supplement closes the unknown-legacy-entry diagnostic contract for D1m. It does not change family predicates, staging/atomic-install steps, lock semantics, or D1d recovery meaning.
 
 ### Signature
 

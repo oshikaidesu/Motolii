@@ -113,12 +113,53 @@ pub enum JournalFormatError {
     TruncatedHeader { observed: usize, needed: usize },
 }
 
-pub fn motolii_dir_for_document(document_path: &Path) -> PathBuf {
+fn parent_or_dot(document_path: &Path) -> &Path {
     document_path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."))
-        .join(".motolii")
+}
+
+/// project-scoped sidecar: `<parent>/<file-name>.motolii/` (native `OsString` suffix)。
+pub fn motolii_dir_for_document(document_path: &Path) -> PathBuf {
+    project_sidecar_dir_for_document(document_path)
+}
+
+pub fn project_sidecar_dir_for_document(document_path: &Path) -> PathBuf {
+    let parent = parent_or_dot(document_path);
+    let mut sidecar_name = document_path
+        .file_name()
+        .map(|s| s.to_os_string())
+        .unwrap_or_else(|| std::ffi::OsString::from("document"));
+    sidecar_name.push(".motolii");
+    parent.join(sidecar_name)
+}
+
+/// sibling lock: `<parent>/<file-name>.motolii.lock`
+pub fn project_lock_path_for_document(document_path: &Path) -> PathBuf {
+    let parent = parent_or_dot(document_path);
+    let mut lock_name = document_path
+        .file_name()
+        .map(|s| s.to_os_string())
+        .unwrap_or_else(|| std::ffi::OsString::from("document"));
+    lock_name.push(".motolii.lock");
+    parent.join(lock_name)
+}
+
+/// legacy parent-shared layout (input only; never auto-adopted)。
+pub fn legacy_shared_motolii_dir_for_document(document_path: &Path) -> PathBuf {
+    parent_or_dot(document_path).join(".motolii")
+}
+
+/// explicit migration staging: `<parent>/<file-name>.motolii.importing/`
+pub fn legacy_staging_dir_for_document(document_path: &Path) -> PathBuf {
+    let parent = parent_or_dot(document_path);
+    let mut staging_name = document_path
+        .file_name()
+        .map(|s| s.to_os_string())
+        .unwrap_or_else(|| std::ffi::OsString::from("document"));
+    staging_name.push(".motolii.importing");
+    parent.join(staging_name)
 }
 
 pub fn journal_path_for_document(document_path: &Path) -> PathBuf {

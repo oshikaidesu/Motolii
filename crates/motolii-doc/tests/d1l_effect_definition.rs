@@ -4,6 +4,8 @@
 //! §4不変条件・§5試験を1:1で機械判定へ落とす。
 //! Cascade/purge/一斉Make Uniqueは延期(本ファイルの対象外)。
 
+mod common;
+
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -13,10 +15,9 @@ use serde_json::{json, Map as JsonMap, Value as JsonValue};
 
 use motolii_core::RationalTime;
 use motolii_doc::{
-    load_document, migrate_bytes, save_document, Clip, ClipSource, Command, CommandError, DocParam,
-    Document, DocumentError, DocumentWriter, EffectDefinition, EffectDefinitionId, EffectId,
-    EffectInstance, EffectUse, ItemEnvelope, LayerId, MigrateError, StableIdReservation, Track,
-    TrackItem,
+    load_document, migrate_bytes, Clip, ClipSource, Command, CommandError, DocParam, Document,
+    DocumentError, DocumentWriter, EffectDefinition, EffectDefinitionId, EffectId, EffectInstance,
+    EffectUse, ItemEnvelope, LayerId, MigrateError, StableIdReservation, Track, TrackItem,
 };
 use motolii_plugin::reference::reference_catalog;
 
@@ -474,7 +475,7 @@ fn orphan_definition_survives_save_reload() {
     let s = shared_fixture();
     let dir = unique_dir("orphan-reload");
     let path = dir.join("doc.json");
-    save_document(&path, &s.doc).unwrap();
+    common::session::save_document_via_session(&path, &s.doc);
     let reloaded = load_document(&path).unwrap();
     assert_eq!(reloaded, s.doc);
     assert_eq!(reloaded.effect_use_count(s.d2_orphan), 0);
@@ -498,7 +499,7 @@ fn copy_local_then_save_reload_preserves_two_definitions() {
 
     let dir = unique_dir("copy-local-reload");
     let path = dir.join("doc.json");
-    save_document(&path, &s.doc).unwrap();
+    common::session::save_document_via_session(&path, &s.doc);
     let reloaded = load_document(&path).unwrap();
     assert_eq!(reloaded, s.doc);
     assert!(reloaded.effect_definition(s.d1).is_some());

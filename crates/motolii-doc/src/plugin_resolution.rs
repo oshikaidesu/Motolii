@@ -13,10 +13,7 @@ use crate::param_expect::{ExpectedValueType, ParamConstraints};
 use crate::schema::{ClipSource, TrackItem};
 use crate::stable_id::EffectDefinitionId;
 use crate::validate::{validate_param, DocumentError};
-use crate::{
-    open_project_with_limits, AssetId, Document, LayerId, OpenProjectOutcome, ProjectError,
-    ResourceLimits,
-};
+use crate::{AssetId, Document, LayerId, ProjectError, ProjectSession, ResourceLimits};
 
 const RECT_LAYER_SOURCE_ID: &str = "doc.layer_source.rect";
 const RECT_LAYER_SOURCE_VERSION: u32 = 1;
@@ -68,7 +65,8 @@ pub struct PreparedDocumentPlugins {
 
 #[derive(Debug)]
 pub struct ResolvedOpenProjectOutcome {
-    pub recovered: OpenProjectOutcome,
+    pub session: ProjectSession,
+    pub recovered: super::journal::RecoveryResult,
     pub plugins: PreparedDocumentPlugins,
 }
 
@@ -184,9 +182,13 @@ pub fn open_project_resolved(
     limits: &ResourceLimits,
     catalog: &PluginCatalog,
 ) -> Result<ResolvedOpenProjectOutcome, ProjectError> {
-    let recovered = open_project_with_limits(document_path, limits)?;
+    let (session, recovered) = ProjectSession::open(document_path, limits)?;
     let plugins = recovered.document.prepare_plugins(catalog)?;
-    Ok(ResolvedOpenProjectOutcome { recovered, plugins })
+    Ok(ResolvedOpenProjectOutcome {
+        session,
+        recovered,
+        plugins,
+    })
 }
 
 pub fn prepare_plugin_recipe(

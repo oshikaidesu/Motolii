@@ -1,16 +1,17 @@
 //! VSM-A0I-2: raw Documentと一時的なprepared recipeの境界。
 
 use std::collections::BTreeMap;
+mod common;
 use std::fs;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use motolii_core::RationalTime;
 use motolii_doc::{
-    open_project_resolved, save_document, Clip, ClipSource, Command, CommandError, DocParam,
-    Document, DocumentPluginError, DocumentWriter, EffectDefinition, EffectDefinitionId, EffectId,
-    EffectUse, ItemEnvelope, PluginDiagnosticReason, PluginSlotId, ResourceLimits,
-    ScalarPropertyId, Track, TrackItem,
+    open_project_resolved, Clip, ClipSource, Command, CommandError, DocParam, Document,
+    DocumentPluginError, DocumentWriter, EffectDefinition, EffectDefinitionId, EffectId, EffectUse,
+    ItemEnvelope, PluginDiagnosticReason, PluginSlotId, ResourceLimits, ScalarPropertyId, Track,
+    TrackItem,
 };
 use motolii_eval::Value;
 use motolii_plugin::{
@@ -320,9 +321,9 @@ fn resolved_project_open_returns_raw_document_with_prepared_diagnostics() {
     let dir = std::env::temp_dir().join(format!("motolii-a0i2-resolved-open-{nonce}"));
     fs::create_dir_all(&dir).unwrap();
     let path = dir.join("project.json");
-    save_document(&path, &doc).unwrap();
-
+    common::session::save_document_via_session(&path, &doc);
     let opened = open_project_resolved(&path, &ResourceLimits::production(), &catalog).unwrap();
+    let _session = opened.session;
 
     assert_eq!(serde_json::to_vec(&opened.recovered.document).unwrap(), raw);
     assert_eq!(

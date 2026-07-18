@@ -5,14 +5,16 @@
 //! 「未知ネストを読めたこと」と「再保存可能」を同一視しない — `ReadOnlyNewer`は読めても
 //! save/migrationは型付きエラーで拒否する。`Reject`はDocumentを一切返さない。
 
+mod common;
+
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use motolii_doc::{
     check_migration_allowed, classify_open_mode, load_document_bytes_with_limits,
-    load_document_with_limits, save_document, Document, OpenMode, PersistError, ResourceLimits,
-    READER_VERSION, WRITER_VERSION,
+    load_document_with_limits, Document, OpenMode, PersistError, ResourceLimits, READER_VERSION,
+    WRITER_VERSION,
 };
 
 fn unique_dir(tag: &str) -> PathBuf {
@@ -85,7 +87,7 @@ fn read_write_loads_and_saves() {
     assert_eq!(opened.open_mode, OpenMode::ReadWrite);
 
     check_migration_allowed(&opened.document).expect("ReadWrite must allow migration gate");
-    save_document(&path, &opened.document).expect("ReadWrite must allow save");
+    common::session::save_document_via_session(&path, &opened.document);
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -103,7 +105,12 @@ fn read_only_newer_loads_but_refuses_save() {
     assert_eq!(opened.open_mode, OpenMode::ReadOnlyNewer);
     assert_eq!(opened.document.version, newer_version);
 
-    let save_err = save_document(&path, &opened.document).unwrap_err();
+    let save_err = common::session::save_document_via_session_with_options(
+        &path,
+        &opened.document,
+        &motolii_doc::SaveOptions::default(),
+    )
+    .unwrap_err();
     assert!(
         matches!(
             save_err,

@@ -64,20 +64,21 @@ pub use graph::{
 };
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
 pub use journal::{
-    checkpoint_with_fault_plan, inject_bad_checksum_at_last_frame, inject_corrupt_journal_tail,
-    inject_salt_mismatch_frame, inject_unapplicable_committed_edit, load_catalog, open_project,
-    open_project_with_limits, save_project_with_journal, DurabilityStage, FaultPlan, FsOpKind,
-    GenerationCatalog, GenerationEntry, JournalEdit, JournalRecordKind, JournalScanStop,
-    OpenProjectOutcome, PinGenerationOptions, ProjectError, RecordingFs, RecoveryError,
-    RecoverySource, RotateOptions, SaveProjectOptions, StdFs, WalError, WalSession,
+    generation_path_for_document, journal_path_for_document,
+    legacy_shared_motolii_dir_for_document, legacy_staging_dir_for_document, load_catalog,
+    motolii_dir_for_document, project_lock_path_for_document, project_sidecar_dir_for_document,
+    restore_attempted_path, DurabilityStage, FaultPlan, FsOpKind, GenerationCatalog,
+    GenerationEntry, JournalEdit, JournalRecordKind, JournalScanStop,
+    LegacySidecarMigrationDisposition, LegacySidecarMigrationReport, OpenProjectOutcome,
+    PinGenerationOptions, ProjectError, ProjectSession, RecordingFs, RecoveryError, RecoverySource,
+    RotateOptions, SaveProjectOptions, SessionError, StdFs, WalError,
 };
 pub use limits::{ResourceLimitError, ResourceLimits};
 pub use migrate::{
     bump_min_reader_for_nest_schema_change, count_document, legacy_timemap_source, migrate_bytes,
-    migrate_bytes_with_limits, migrate_document_file, migrate_document_file_with_limits,
-    modern_timemap_source, semantic_fingerprint, DocumentCounts, MigrateError, MigrateFileOptions,
-    MigrateFileResult, MigrationReport, SemanticFingerprint, BACKUP_SUFFIX,
-    LATEST_DOCUMENT_VERSION,
+    migrate_bytes_with_limits, modern_timemap_source, semantic_fingerprint, DocumentCounts,
+    MigrateError, MigrateFileOptions, MigrateFileResult, MigrationReport, SemanticFingerprint,
+    BACKUP_SUFFIX, LATEST_DOCUMENT_VERSION,
 };
 pub use param::{DocParam, LookAtAxis};
 pub use param_eval::{eval_look_at_rotation, look_at_angle, ParamEvalError, ResolvedLayerParams};
@@ -85,9 +86,9 @@ pub use param_expect::{ExpectedValueType, ParamConstraints};
 pub use pathgeom::PathOpError;
 pub use persist::{
     check_migration_allowed, classify_open_mode, detect_cloud_sync, load_document,
-    load_document_bytes, load_document_bytes_with_limits, load_document_with_limits, save_document,
-    save_document_with_options, CloudSyncHint, OpenMode, OpenedDocument, PersistError,
-    SaveAbortAfter, SaveOptions, READER_VERSION, WRITER_VERSION,
+    load_document_bytes, load_document_bytes_with_limits, load_document_with_limits, CloudSyncHint,
+    OpenMode, OpenedDocument, PersistError, SaveAbortAfter, SaveOptions, READER_VERSION,
+    WRITER_VERSION,
 };
 pub use plugin_resolution::{
     open_project_resolved, prepare_plugin_recipe, DocumentPluginError, PluginDiagnostic,

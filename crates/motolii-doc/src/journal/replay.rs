@@ -289,13 +289,13 @@ mod replay_tests {
     use serde_json::json;
 
     use crate::journal::{
-        generation_path_for_document, load_catalog, open_project, replay_from_base, JournalEdit,
-        JournalRecordKind, JournalScanOutcome, ReplayFailure, V1_EDIT_FORMAT_VERSION,
+        generation_path_for_document, load_catalog, open_project, replay_from_base,
+        save_project_with_journal, JournalEdit, JournalRecordKind, JournalScanOutcome,
+        ReplayFailure, V1_EDIT_FORMAT_VERSION,
     };
     use crate::{
-        migrate_bytes, save_project_with_journal, Clip, ClipSource, Command, DocParam, Document,
-        EffectUse, ItemEnvelope, LayerId, ResourceLimits, SaveProjectOptions, ScalarPropertyId,
-        Track, TrackItem,
+        migrate_bytes, Clip, ClipSource, Command, DocParam, Document, EffectUse, ItemEnvelope,
+        LayerId, ResourceLimits, SaveProjectOptions, ScalarPropertyId, Track, TrackItem,
     };
 
     fn unique_dir(tag: &str) -> PathBuf {

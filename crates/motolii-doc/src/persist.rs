@@ -200,11 +200,11 @@ pub fn check_migration_allowed(doc: &Document) -> Result<(), PersistError> {
 /// 検証→一意temp→fsync→置換→dir fsync。
 ///
 /// 失敗時に途中のtempは可能な範囲で掃除しない(注入テストが残骸を観察できるようにする)。
-pub fn save_document(path: &Path, doc: &Document) -> Result<(), PersistError> {
+pub(crate) fn save_document(path: &Path, doc: &Document) -> Result<(), PersistError> {
     save_document_with_options(path, doc, &SaveOptions::default())
 }
 
-pub fn save_document_with_options(
+pub(crate) fn save_document_with_options(
     path: &Path,
     doc: &Document,
     options: &SaveOptions,
