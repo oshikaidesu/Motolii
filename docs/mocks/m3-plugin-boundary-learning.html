@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Motolii — small core / plugin boundary mock</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg:#080808; --panel:#101010; --raised:#171717; --hover:#202020;
+      --line:#303030; --line2:#555; --ink:#f0f0ee; --sub:#b6b6b1; --muted:#777773;
+      --tool:#e6b85c; --behavior:#77b8aa; --generator:#9b92ce; --warning:#d68162;
+      --video:#6f8fab; --audio:#aa7f9f; --shape:#c39b67; --text:#a5a58a;
+      --active:var(--tool); --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+    }
+    *{box-sizing:border-box} html,body{width:100%;height:100%}
+    body{margin:0;overflow:hidden;background:var(--bg);color:var(--ink);font:12px/1.35 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif}
+    button,input{font:inherit;color:inherit} button{cursor:pointer} button:focus-visible,input:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+    .app{height:100vh;min-width:1040px;display:grid;grid-template-rows:34px 32px minmax(330px,1fr) 220px 24px;background:var(--panel)}
+    .titlebar{display:flex;align-items:center;gap:12px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--raised)}
+    .wordmark{font-weight:850;letter-spacing:.08em}.project{color:var(--sub)}.project b{color:var(--ink)}.grow{flex:1}
+    .btn{height:25px;padding:0 9px;border:1px solid var(--line2);border-radius:2px;background:var(--panel)}
+    .btn:hover{background:var(--hover)}.btn.primary{border-color:var(--active);background:color-mix(in srgb,var(--active) 18%,var(--panel));font-weight:700}
+    .btn.quiet{border-color:var(--line);color:var(--sub)}.btn[disabled]{color:#555;border-style:dashed;cursor:not-allowed}
+    .undo-state{color:var(--muted);font:10px var(--mono)}
+
+    .commandbar{display:flex;align-items:center;gap:2px;padding:0 8px;border-bottom:1px solid var(--line);background:#0c0c0c}
+    .cmdtool{height:24px;min-width:29px;padding:0 7px;border:1px solid transparent;background:transparent;color:var(--sub)}.cmdtool:hover{border-color:var(--line);background:var(--hover)}.cmdtool.active{border-color:var(--ink);color:var(--ink);background:var(--raised)}
+    .cmd-sep{height:17px;border-left:1px solid var(--line);margin:0 5px}.crumb{color:var(--sub);font-size:10px}.crumb b{color:var(--ink)}
+    .study{margin-left:auto;display:flex;align-items:center;gap:7px;color:var(--muted);font:8px var(--mono)}.study i{width:6px;height:6px;border-radius:50%;background:var(--active)}
+
+    .workspace{min-height:0;display:grid;grid-template-columns:206px minmax(520px,1fr) 310px}
+    .browser,.inspector{min-height:0;overflow:auto;background:var(--panel)}.browser{border-right:1px solid var(--line)}.inspector{border-left:1px solid var(--line)}
+    .panel-head{height:29px;display:flex;align-items:center;gap:7px;padding:0 9px;border-bottom:1px solid var(--line);background:var(--raised);font-weight:700}
+    .panel-head small{margin-left:auto;color:var(--muted);font:8px var(--mono);font-weight:400}
+    .browser-tabs{height:27px;display:flex;border-bottom:1px solid var(--line)}.browser-tab{flex:1;border:0;border-right:1px solid var(--line);background:#0b0b0b;color:var(--muted);font-size:10px}.browser-tab:hover{background:var(--hover);color:var(--sub)}.browser-tab.on{color:var(--ink);box-shadow:inset 0 -2px var(--ink);background:var(--panel)}
+    .search{height:25px;margin:8px;padding:4px 7px;border:1px solid var(--line);color:var(--muted);background:var(--bg)}
+    .browser-section{height:22px;padding:5px 8px;border-top:1px solid var(--line);border-bottom:1px solid #1b1b1b;color:var(--muted);font:8px var(--mono);letter-spacing:.08em}
+    .asset{height:29px;display:grid;grid-template-columns:18px minmax(0,1fr) auto;align-items:center;gap:6px;padding:0 8px;border-bottom:1px solid #1c1c1c;color:var(--sub)}
+    .asset:hover,.asset.on{background:var(--hover);color:var(--ink)}.asset.on{box-shadow:inset 2px 0 var(--active)}
+    .asset i{width:12px;height:12px;display:grid;place-items:center;border:1px solid var(--line2);font:7px var(--mono);font-style:normal}.asset[data-browser-mode="tool"] i{border-color:var(--tool);color:var(--tool)}.asset[data-browser-mode="behavior"] i{border-color:var(--behavior);color:var(--behavior)}.asset[data-browser-mode="generator"] i{border-color:var(--generator);color:var(--generator)}.asset[data-browser-mode="missing"] i{border-color:var(--warning);color:var(--warning)}
+    .asset span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.asset em{color:var(--muted);font:7px var(--mono);font-style:normal}
+    .browser-note{margin:9px;padding:8px;border:1px dashed var(--line);color:var(--muted);font-size:9px}
+
+    .stage-shell{min-width:0;min-height:0;display:grid;grid-template-rows:30px 1fr 32px;background:var(--bg)}
+    .stage-tools{display:flex;align-items:center;gap:4px;padding:0 8px;border-bottom:1px solid var(--line);background:var(--panel)}
+    .toolbtn{height:23px;min-width:27px;border:1px solid transparent;background:transparent;color:var(--sub)}.toolbtn:hover{border-color:var(--line)}.toolbtn.on{border-color:var(--ink)}
+    .stage-mode{margin-left:auto;color:var(--muted);font:8px var(--mono)}.stage-mode b{color:var(--active)}
+    .stage{position:relative;min-height:0;overflow:hidden;background:#060606}
+    .frame{position:absolute;left:50%;top:50%;width:min(80%,760px);aspect-ratio:16/9;transform:translate(-50%,-50%);border:1px solid #666;background:radial-gradient(circle at 62% 38%,#25313a 0,#15191c 22%,transparent 50%),linear-gradient(150deg,#171315,#090909 58%);overflow:visible}
+    .frame::before{content:"OUTPUT FRAME";position:absolute;left:-1px;top:-17px;color:var(--muted);font:8px var(--mono);letter-spacing:.1em}
+    .grid{position:absolute;inset:0;opacity:.23;background-image:linear-gradient(#333 1px,transparent 1px),linear-gradient(90deg,#333 1px,transparent 1px);background-size:12.5% 25%}
+    .center-line{position:absolute;left:50%;top:0;bottom:0;border-left:1px dashed #333}
+    .scene-copy{position:absolute;left:7%;top:10%;color:#d7d7d1;font-size:clamp(14px,2vw,24px);font-weight:780;letter-spacing:.16em;line-height:1.02;opacity:.8}.scene-copy small{display:block;margin-top:6px;color:#84909a;font:8px var(--mono);letter-spacing:.14em}
+    .obj{position:absolute;width:54px;height:54px;display:grid;place-items:center;transform:translate(-50%,-50%);border:1px solid #aaa;background:#111;color:var(--sub);font:8px var(--mono);transition:left .28s ease,top .28s ease,transform .28s ease,opacity .2s}.obj[data-obj="0"]{border-color:#d6ad69;background:#3a2d18}.obj[data-obj="1"]{border-color:#79a9b5;background:#183139}.obj[data-obj="2"]{border-color:#a29acb;background:#2a263c}.obj[data-obj="3"]{border-color:#c47d68;background:#38231f}
+    .obj.selected{border-color:var(--active);box-shadow:0 0 0 3px color-mix(in srgb,var(--active) 25%,transparent);color:var(--ink)}
+    .obj.circle{border-radius:50%}.obj.diamond{transform:translate(-50%,-50%) rotate(45deg)}.obj.diamond span{transform:rotate(-45deg)}
+    .selection-hull{position:absolute;border:1px dashed var(--active);pointer-events:none;transition:all .28s ease}.selection-hull::before{content:"4 selected";position:absolute;left:0;top:-16px;color:var(--active);font:8px var(--mono)}
+    .orbit{position:absolute;left:50%;top:50%;width:260px;height:170px;transform:translate(-50%,-50%);border:1px dashed var(--active);border-radius:50%;opacity:0;transition:opacity .2s}
+    .stage.preview .orbit{opacity:.65}.stage.preview .selection-hull{opacity:.25}
+    .audio-wave{display:none;position:absolute;left:8%;right:8%;bottom:12%;height:28px;color:var(--behavior);opacity:.85}
+    .audio-wave svg{width:100%;height:100%}.stage.behavior .audio-wave{display:block}
+    .driver-line{display:none;position:absolute;left:50%;top:50%;width:34%;border-top:1px dashed var(--behavior);transform:translate(-50%,-50%) rotate(-12deg);transform-origin:center}.stage.behavior .driver-line{display:block}
+    .generator-shape{display:none;position:absolute;left:50%;top:50%;width:62%;height:56%;transform:translate(-50%,-50%)}.stage.generator .generator-shape{display:block}.stage.generator .scene-copy,.stage.missing .scene-copy{opacity:.16}
+    .ribbon{position:absolute;left:50%;top:50%;width:76%;height:16px;transform-origin:center;background:var(--generator);opacity:.75;mix-blend-mode:screen}
+    .missing-veil{display:none;position:absolute;inset:0;background:repeating-linear-gradient(135deg,transparent 0 16px,#ffffff08 16px 17px);pointer-events:none}.stage.missing .missing-veil{display:block}
+    .missing-label{display:none;position:absolute;left:50%;top:15%;transform:translateX(-50%);padding:6px 9px;border:1px dashed var(--warning);background:var(--panel);color:var(--warning);font:9px var(--mono)}.stage.missing .missing-label{display:block}
+    .offscreen-tag{display:none;position:absolute;right:4px;top:34%;padding:4px 6px;border:1px dashed var(--active);background:var(--panel);color:var(--active);font:8px var(--mono)}.stage.extreme .offscreen-tag{display:block}
+    .context-card{position:absolute;left:12px;bottom:12px;width:270px;padding:9px;border:1px solid var(--line2);background:#101010e8;box-shadow:0 8px 24px #0008;opacity:0;transform:translateY(5px);pointer-events:none;transition:opacity .16s,transform .16s}.stage.preview .context-card,.stage.missing .context-card{opacity:1;transform:none}
+    .context-card .eyebrow{color:var(--active);font:8px var(--mono);letter-spacing:.09em}.context-card b{display:block;margin:2px 0 3px}.context-card p{margin:0;color:var(--sub);font-size:9px}.context-card kbd{float:right;border:1px solid var(--line2);padding:1px 4px;color:var(--muted);font:8px var(--mono)}
+    .transport{display:flex;align-items:center;gap:8px;padding:0 8px;border-top:1px solid var(--line);background:var(--raised)}.transport .time{font:10px var(--mono)}.transport .quality{margin-left:auto;color:var(--muted);font:8px var(--mono)}
+
+    .section{border-bottom:1px solid var(--line)}.section-title{height:23px;display:flex;align-items:center;padding:0 9px;background:#0b0b0b;color:var(--muted);font:8px var(--mono);letter-spacing:.09em}.section-title span{margin-left:auto;color:var(--sub)}
+    .identity{display:grid;grid-template-columns:30px 1fr;gap:8px;align-items:center;padding:9px}.identity .icon{width:30px;height:30px;display:grid;place-items:center;border:1px solid var(--active);color:var(--active);font:9px var(--mono)}.identity b{display:block}.identity small{color:var(--muted);font:8px var(--mono)}
+    .row{min-height:25px;display:grid;grid-template-columns:92px minmax(0,1fr) auto;align-items:center;gap:6px;padding:3px 9px;border-top:1px solid #1c1c1c}.row label{color:var(--sub);font-size:10px}.value{min-width:0;padding:2px 5px;border:1px solid var(--line);background:var(--bg);font:9px var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.source{padding:2px 5px;border:1px solid var(--active);color:var(--active);font:8px var(--mono);white-space:nowrap}
+    .range{width:100%;accent-color:var(--active)}.range-read{width:43px;text-align:right;color:var(--active);font:8px var(--mono)}
+    .action-strip{display:flex;gap:5px;padding:8px 9px;border-top:1px solid var(--line)}.action-strip .btn{flex:1}
+    .notice{margin:8px;padding:8px;border:1px dashed var(--line2);color:var(--sub);font-size:9px}.notice strong{color:var(--active)}.notice.error{border-color:var(--warning);color:#dca38f}.notice.error strong{color:var(--warning)}
+    .dependency{display:flex;align-items:center;gap:7px;padding:7px 9px;border-top:1px solid #1c1c1c;color:var(--sub);font-size:9px}.dependency i{width:7px;height:7px;border-radius:50%;background:var(--active)}.dependency.missing i{background:var(--warning)}.dependency span{margin-left:auto;color:var(--muted);font:8px var(--mono)}
+    .help-link{display:block;margin:8px;padding:7px;border:1px solid var(--line);color:var(--sub);text-decoration:none;font-size:9px}.help-link:hover{border-color:var(--active);color:var(--ink)}.help-link b{color:var(--active)}
+
+    .timeline{min-height:0;display:grid;grid-template-rows:28px 1fr;border-top:1px solid var(--line);background:var(--panel)}
+    .tl-head{display:flex;align-items:center;gap:8px;padding:0 9px;border-bottom:1px solid var(--line);background:var(--raised)}.tl-head b{font-size:10px}.tl-head span{color:var(--muted);font:8px var(--mono)}
+    .tl-body{position:relative;overflow:hidden;display:grid;grid-template-columns:206px 1fr}.names{border-right:1px solid var(--line)}
+    .track,.lane{height:31px;border-bottom:1px solid #202020}.track{display:grid;grid-template-columns:18px 1fr auto;align-items:center;gap:6px;padding:0 8px;color:var(--sub)}.track.on{box-shadow:inset 2px 0 var(--active);background:var(--raised)}.track i{width:12px;height:12px;display:grid;place-items:center;border:1px solid var(--line2);font:7px var(--mono);font-style:normal}.track small{color:var(--muted);font:7px var(--mono)}
+    .lanes{position:relative;background-image:linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:56px 100%}.lane{position:relative}.clip{position:absolute;top:4px;height:22px;padding:4px 7px;border:1px solid var(--line2);border-left-width:3px;background:var(--raised);color:var(--sub);font:8px var(--mono);white-space:nowrap;overflow:hidden}.lane:nth-child(1) .clip{border-left-color:var(--audio)}.lane:nth-child(3) .clip{border-left-color:var(--text)}.lane:nth-child(4) .clip{border-left-color:var(--shape)}.lane:nth-child(5) .clip{border-left-color:var(--video)}.clip.on{border-color:var(--active);color:var(--ink)}.clip .badge{margin-left:7px;color:var(--active)}
+    .playhead{position:absolute;left:44%;top:0;bottom:0;border-left:1px solid var(--ink);pointer-events:none}.playhead::before{content:"";position:absolute;left:-4px;top:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:6px solid var(--ink)}
+
+    .structure{display:none;position:absolute;z-index:20;left:220px;right:324px;top:95px;bottom:236px;border:1px solid var(--generator);background:#0d0d0df5;box-shadow:0 20px 60px #000}
+    .structure.open{display:grid;grid-template-rows:31px 1fr}.structure-head{display:flex;align-items:center;gap:8px;padding:0 9px;border-bottom:1px solid var(--line);background:var(--raised)}.structure-head b{font-size:10px}.structure-head span{color:var(--muted);font:8px var(--mono)}.structure-head button{margin-left:auto}
+    .graph{position:relative;overflow:hidden;background-image:radial-gradient(#3a3a3a 1px,transparent 1px);background-size:16px 16px}.wire{position:absolute;height:1px;background:var(--generator);transform-origin:left center;opacity:.7}.node{position:absolute;width:128px;border:1px solid var(--line2);background:var(--panel);box-shadow:0 6px 18px #0008}.node b{display:block;padding:5px 7px;border-bottom:1px solid var(--line);color:var(--generator);font-size:9px}.node span{display:block;padding:4px 7px;color:var(--sub);font:8px var(--mono)}.node em{float:right;color:var(--muted);font-style:normal}.node.input{left:9%;top:34%}.node.repeat{left:39%;top:22%}.node.output{right:9%;top:42%}
+
+    .status{display:grid;grid-template-columns:180px 1fr auto;align-items:center;gap:8px;padding:0 9px;border-top:1px solid var(--line);background:#0b0b0b;font:8px var(--mono)}.status b{color:var(--active)}.status span{color:var(--sub)}.status kbd{color:var(--muted)}
+    [hidden]{display:none!important}
+    @media(max-height:760px){.app{grid-template-rows:34px 32px minmax(300px,1fr) 188px 24px}.track,.lane{height:27px}.structure{bottom:204px}}
+  </style>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="titlebar">
+    <span class="wordmark">MOTOLII</span><span class="project"><b>night_drive.mtl</b> / Main composition</span>
+    <span class="grow"></span><span class="undo-state" id="undo-state">Undo —</span>
+    <button class="btn quiet" id="undo" disabled>↶ Undo</button><button class="btn">Export</button>
+  </header>
+
+  <nav class="commandbar" aria-label="Main tools">
+    <button class="cmdtool active" aria-label="Select">↖</button><button class="cmdtool" aria-label="Hand">✥</button><button class="cmdtool" aria-label="Shape">◇</button><button class="cmdtool" aria-label="Text">T</button><button class="cmdtool" aria-label="Connect">⌁</button>
+    <span class="cmd-sep"></span><span class="crumb">Title group / <b>4 objects selected</b></span>
+    <span class="study"><i></i><span id="study-mode">Circle Layout · Preview</span></span>
+  </nav>
+
+  <main class="workspace">
+    <aside class="browser">
+      <div class="panel-head">Browser <small>ASSET / PLUGIN</small></div>
+      <div class="browser-tabs"><button class="browser-tab" data-browser-tab="project">Project</button><button class="browser-tab on" data-browser-tab="extensions">Extensions</button></div>
+      <div class="search">⌕ Search</div>
+      <div id="project-list" hidden><div class="browser-section">DOCUMENT</div><div class="asset"><i style="border-color:var(--audio);color:var(--audio)">A</i><span>night_drive.wav</span><em>03:42</em></div><div class="asset"><i>G</i><span>Title group</span><em>4 OBJ</em></div><div class="asset"><i style="border-color:var(--text);color:var(--text)">T</i><span>NIGHT DRIVE</span><em>TEXT</em></div><div class="asset"><i style="border-color:var(--shape);color:var(--shape)">S</i><span>Logo</span><em>SVG</em></div><div class="asset"><i style="border-color:var(--video);color:var(--video)">V</i><span>city_loop.mp4</span><em>12s</em></div></div>
+      <div id="extension-list"><div class="browser-section">ARRANGE</div><div class="asset on" data-browser-mode="tool"><i>T</i><span>Circle Layout</span><em>TOOL</em></div><div class="browser-section">MOTION</div><div class="asset" data-browser-mode="behavior"><i>B</i><span>Audio Response</span><em>LIVE</em></div><div class="browser-section">GENERATE</div><div class="asset" data-browser-mode="generator"><i>G</i><span>Ribbon Array</span><em>RECIPE</em></div><div class="browser-section">DIAGNOSTIC FIXTURE</div><div class="asset" data-browser-mode="missing"><i>?</i><span>Ribbon Array unavailable</span><em>MISSING</em></div><div class="browser-note">選ぶのは目的です。Tool / Live / Recipeは結果がいつまでpluginを必要とするかを示す補助表示です。</div></div>
+    </aside>
+
+    <section class="stage-shell">
+      <div class="stage-tools"><button class="toolbtn">Fit</button><button class="toolbtn">100%</button><button class="toolbtn on">▦</button><span class="stage-mode">STAGE / <b id="stage-mode">CIRCLE LAYOUT · PREVIEW</b></span></div>
+      <div class="stage preview" id="stage">
+        <div class="frame">
+          <div class="grid"></div><div class="center-line"></div><div class="scene-copy">NIGHT<br>DRIVE<small>54.2 / CITY SIGNAL</small></div><div class="orbit"></div><div class="driver-line"></div>
+          <div class="selection-hull" id="hull"></div>
+          <div class="obj circle selected" data-obj="0">A</div><div class="obj selected" data-obj="1">B</div><div class="obj diamond selected" data-obj="2"><span>C</span></div><div class="obj circle selected" data-obj="3">D</div>
+          <div class="generator-shape" id="generator-shape"></div>
+          <div class="audio-wave"><svg viewBox="0 0 800 30" preserveAspectRatio="none"><path d="M0 15 L24 15 34 4 44 26 54 12 64 18 80 15 118 15 128 1 138 29 148 9 158 21 172 15 222 15 232 5 242 25 252 12 262 18 284 15 330 15 340 2 350 28 360 8 370 22 384 15 438 15 448 5 458 25 468 11 478 19 500 15 548 15 558 2 568 28 578 9 588 21 604 15 660 15 670 4 680 26 690 11 700 19 718 15 800 15" fill="none" stroke="currentColor"/></svg></div>
+          <div class="missing-veil"></div><div class="missing-label">PLUGIN MISSING · recipe retained</div><div class="offscreen-tag">1 object is outside frame →</div>
+        </div>
+        <div class="context-card"><span class="eyebrow" id="context-eye">CIRCLE LAYOUT · PREVIEW</span><kbd id="context-key">Esc</kbd><b id="context-title">円形配置を確認</b><p id="context-body">4 objectsのPositionだけが変わります。確定後にTool依存は残りません。</p></div>
+      </div>
+      <div class="transport"><button class="btn quiet" id="play">▶</button><span class="time" id="time">00:54.2</span><span>♩ 128 BPM</span><span class="quality">DRAFT 1/2 · Preview / Export same evaluator</span></div>
+    </section>
+
+    <aside class="inspector" id="inspector"></aside>
+  </main>
+
+  <section class="timeline">
+    <div class="tl-head"><b>Timeline</b><span>横行はDocument実体の時間投影 · 独自設定を所有しない</span></div>
+    <div class="tl-body">
+      <div class="names">
+        <div class="track"><i>A</i><span>night_drive.wav</span><small>SONG</small></div>
+        <div class="track on"><i>G</i><span>Title group</span><small id="track-state">4 OBJECTS</small></div>
+        <div class="track"><i>T</i><span>NIGHT DRIVE</span><small>TEXT</small></div>
+        <div class="track"><i>S</i><span>Logo</span><small>SVG</small></div>
+        <div class="track"><i>V</i><span>city_loop.mp4</span><small>VIDEO</small></div>
+      </div>
+      <div class="lanes">
+        <div class="lane"><div class="clip" style="left:0;width:92%">night_drive.wav</div></div>
+        <div class="lane"><div class="clip on" id="group-clip" style="left:8%;width:72%">Title group <span class="badge" id="clip-badge">Preview · Circle Layout</span></div></div>
+        <div class="lane"><div class="clip" style="left:23%;width:44%">NIGHT DRIVE ◇2</div></div>
+        <div class="lane"><div class="clip" style="left:12%;width:64%">Logo</div></div>
+        <div class="lane"><div class="clip" style="left:0;width:86%">city_loop.mp4</div></div>
+        <div class="playhead" id="playhead"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="structure" id="structure" aria-label="Ribbon Array structure editor">
+    <div class="structure-head"><b>Ribbon Array / Structure</b><span>plugin-owned projection · Host typed inputs</span><button class="btn quiet" id="close-structure">Close</button></div>
+    <div class="graph">
+      <div class="wire" style="left:22%;top:47%;width:29%;transform:rotate(-9deg)"></div><div class="wire" style="left:51%;top:37%;width:31%;transform:rotate(11deg)"></div>
+      <div class="node input"><b>Shape input</b><span>Title group <em>GROUP</em></span></div>
+      <div class="node repeat"><b>Repeat</b><span>Count <em id="node-count">7</em></span><span>Twist <em id="node-twist">18°</em></span></div>
+      <div class="node output"><b>Result</b><span>Ribbon Array <em>LIVE</em></span></div>
+    </div>
+  </section>
+
+  <footer class="status"><b id="status-title">Circle Layout</b><span id="status-body">Positionの変更をPreview中。Documentはまだ不変。</span><kbd id="status-key">Enter / Esc</kbd></footer>
+</div>
+
+<script>
+(()=>{
+  const $=(q,r=document)=>r.querySelector(q), $$=(q,r=document)=>[...r.querySelectorAll(q)];
+  const state={mode:'tool',committed:false,playing:false,extreme:false,count:7,twist:18,raf:0,start:0};
+  const modeColors={tool:'var(--tool)',behavior:'var(--behavior)',generator:'var(--generator)',missing:'var(--warning)'};
+  const studyLabels={tool:'Circle Layout · Preview',behavior:'Audio Response · Live',generator:'Ribbon Array · Recipe',missing:'Ribbon Array · Missing'};
+  const statusTitles={tool:'Circle Layout',behavior:'Audio Response',generator:'Ribbon Array',missing:'Plugin missing'};
+  const docs='../extensible-core-model.md';
+  const configs={
+    tool:{stage:'CIRCLE LAYOUT · PREVIEW',eye:'CIRCLE LAYOUT · PREVIEW',title:'円形配置を確認',body:'4 objectsのPositionだけが変わります。確定後にTool依存は残りません。',key:'Esc',status:'Positionの変更をPreview中。Documentはまだ不変。',badge:'Preview · Circle Layout'},
+    behavior:{stage:'AUDIO RESPONSE · LIVE',eye:'SCALE · AUDIO LEVEL',title:'Audio LevelがScaleを駆動',body:'同じ型付き接続を標準Inspectorから確認できます。極端な範囲も試せます。',key:'Space',status:'Scale ← Audio Level · input / range / scopeを宣言済み。',badge:'Scale ← Audio Level'},
+    generator:{stage:'RIBBON ARRAY · RECIPE',eye:'RIBBON ARRAY',title:'主要値は標準Inspectorで編集',body:'構造編集は必要な時だけ開きます。recipeと依存はDocumentから確認できます。',key:'G',status:'Ribbon Array recipe · 標準Parameterと構造編集は同じ意味。',badge:'Ribbon Array · recipe'},
+    missing:{stage:'RIBBON ARRAY · MISSING',eye:'RIBBON ARRAY · MISSING',title:'作品全体は壊れません',body:'recipeと最後の表示を保持。Transformなど無関係な標準値は編集できます。',key:'?',status:'Ribbon Array v1.4が欠落。recipeは保持され、他の編集は継続可能。',badge:'! Ribbon Array missing'}
+  };
+
+  function status(title,body,key=''){$('#status-title').textContent=title;$('#status-body').textContent=body;$('#status-key').textContent=key}
+  function objectsDefault(){return [[38,38],[62,38],[38,63],[62,63]]}
+  function objectsCircle(spread=100){const rx=19*spread/100,ry=13*spread/100;return [[50,50-ry],[50+rx,50],[50,50+ry],[50-rx,50]]}
+  function placeObjects(points,scale=1){$$('.obj').forEach((o,i)=>{o.style.left=points[i][0]+'%';o.style.top=points[i][1]+'%';o.style.transform=`translate(-50%,-50%)${o.classList.contains('diamond')?' rotate(45deg)':''} scale(${scale})`}); updateHull(points)}
+  function updateHull(points){const xs=points.map(p=>p[0]),ys=points.map(p=>p[1]);const h=$('#hull');h.style.left=(Math.min(...xs)-5)+'%';h.style.top=(Math.min(...ys)-8)+'%';h.style.width=(Math.max(...xs)-Math.min(...xs)+10)+'%';h.style.height=(Math.max(...ys)-Math.min(...ys)+16)+'%'}
+  function renderRibbons(){const host=$('#generator-shape');host.replaceChildren();for(let i=0;i<state.count;i++){const e=document.createElement('i');e.className='ribbon';const p=state.count===1?0:i/(state.count-1)-.5;e.style.transform=`translate(-50%,-50%) translateY(${p*118}px) rotate(${p*state.twist*2}deg)`;e.style.opacity=String(.35+.5*(1-Math.abs(p)));host.append(e)}$('#node-count').textContent=state.count;$('#node-twist').textContent=state.twist+'°'}
+  function inspector(mode){
+    const common=`<div class="panel-head">Inspector <small>HOST STANDARD</small></div>`;
+    if(mode==='tool')return common+`<div class="section"><div class="section-title">SELECTION <span>4 OBJECTS</span></div><div class="identity"><div class="icon">T</div><div><b>Circle Layout</b><small>Tool · Preview only</small></div></div><div class="row"><label>Target</label><span class="value">4 selected objects</span><span></span></div><div class="row"><label>Spread</label><input class="range" id="spread" type="range" min="40" max="180" value="100"><output class="range-read" id="spread-read">100%</output></div><div class="notice"><strong>確定後</strong><br>標準Positionだけが残り、このToolへの依存は残りません。</div><div class="action-strip"><button class="btn quiet" id="cancel-tool">Cancel</button><button class="btn primary" id="commit-tool">Commit · 1 Undo</button></div></div><a class="help-link" href="${docs}#41-authoring-toolは自由なmut-documentを受け取らない"><b>仕組みを見る</b> · なぜ確定後にpluginが不要なのか →</a>`;
+    if(mode==='behavior')return common+`<div class="section"><div class="section-title">TITLE GROUP <span>4 OBJECTS</span></div><div class="identity"><div class="icon">B</div><div><b>Scale</b><small>standard parameter</small></div></div><div class="row"><label>Value source</label><span class="value">Audio Level</span><span class="source">LIVE</span></div><div class="row"><label>Input</label><span class="value">night_drive.wav / Level</span><span></span></div><div class="row"><label>Range</label><input class="range" id="behavior-range" type="range" min="20" max="520" value="140"><output class="range-read" id="behavior-read">140%</output></div><div class="row"><label>Scope</label><span class="value">Title group / children</span><span></span></div><div class="dependency"><i></i>Audio Response <span>v2.1 · required</span></div></div><div class="action-strip"><button class="btn quiet" id="invalid-target">Try invalid target</button><button class="btn" id="fit-selection">Fit selection</button></div><div id="behavior-error"></div><a class="help-link" href="${docs}#42-behaviorは続く意味を宣言する"><b>仕組みを見る</b> · この接続が時間と共に残る理由 →</a>`;
+    if(mode==='generator')return common+`<div class="section"><div class="section-title">RIBBON ARRAY <span>LIVE RECIPE</span></div><div class="identity"><div class="icon">G</div><div><b>Ribbon Array</b><small>Generator · structured recipe</small></div></div><div class="row"><label>Input</label><span class="value">Title group</span><span class="source">GROUP</span></div><div class="row"><label>Count</label><input class="range" id="count" type="range" min="1" max="15" value="${state.count}"><output class="range-read" id="count-read">${state.count}</output></div><div class="row"><label>Twist</label><input class="range" id="twist" type="range" min="-90" max="90" value="${state.twist}"><output class="range-read" id="twist-read">${state.twist}°</output></div><div class="dependency"><i></i>Ribbon Array <span>v1.4 · recipe owner</span></div><div class="action-strip"><button class="btn primary" id="open-structure">Edit structure</button></div></div><div class="notice"><strong>標準fallback</strong><br>保存ParameterはこのInspectorから常に検査・編集できます。</div><a class="help-link" href="${docs}#43-generatorは独自構造を隠さない"><b>仕組みを見る</b> · 専門UIとDocumentの境界 →</a>`;
+    return common+`<div class="section"><div class="section-title">RIBBON ARRAY <span style="color:var(--warning)">MISSING</span></div><div class="identity"><div class="icon" style="border-color:var(--warning);color:var(--warning)">?</div><div><b>Ribbon Array</b><small>Generator recipe retained</small></div></div><div class="notice error"><strong>Ribbon Array v1.4が見つかりません</strong><br>recipe、入力、version、最後の診断可能な表示を保持しています。</div><div class="row"><label>Input</label><span class="value">Title group</span><span class="source">RETAINED</span></div><div class="row"><label>Count</label><span class="value">${state.count}</span><span></span></div><div class="row"><label>Twist</label><span class="value">${state.twist}°</span><span></span></div><div class="dependency missing"><i></i>Ribbon Array <span>v1.4 · unavailable</span></div></div><div class="section"><div class="section-title">STANDARD TRANSFORM <span>EDITABLE</span></div><div class="row"><label>Position</label><span class="value">X 0.00 · Y 0.00</span><span></span></div><div class="row"><label>Scale</label><span class="value">100%</span><span></span></div></div><div class="action-strip"><button class="btn quiet" id="locate-plugin">Locate compatible plugin</button></div><a class="help-link" href="${docs}#3-hostが小さくても手放さない責任"><b>仕組みを見る</b> · 欠落しても作品全体を壊さない理由 →</a>`;
+  }
+  function committedInspector(){return `<div class="panel-head">Inspector <small>HOST STANDARD</small></div><div class="section"><div class="section-title">TITLE GROUP <span>4 OBJECTS</span></div><div class="identity"><div class="icon">G</div><div><b>Transform</b><small>standard Document values</small></div></div><div class="row"><label>Position A</label><span class="value">X 0.00 · Y −0.13</span><span></span></div><div class="row"><label>Position B</label><span class="value">X +0.19 · Y 0.00</span><span></span></div><div class="row"><label>Position C</label><span class="value">X 0.00 · Y +0.13</span><span></span></div><div class="row"><label>Position D</label><span class="value">X −0.19 · Y 0.00</span><span></span></div><div class="dependency"><i></i>No plugin dependency <span>EDITABLE</span></div></div><div class="notice"><strong>Circle Layoutは終了しました</strong><br>結果は通常のPositionです。各objectを個別に編集できます。</div><a class="help-link" href="${docs}#41-authoring-toolは自由なmut-documentを受け取らない"><b>仕組みを見る</b> · Toolの責任がCommitで終わる理由 →</a>`}
+  function bindInspector(){
+    if(state.mode==='tool'){$('#spread').addEventListener('input',e=>{const v=+e.target.value;$('#spread-read').textContent=v+'%';placeObjects(objectsCircle(v));status('Circle Layout',`Spread ${v}% · Previewのみ`,'Enter / Esc')});$('#commit-tool').onclick=()=>{state.committed=true;$('#stage').classList.remove('preview');$('#stage-mode').textContent='STANDARD POSITION';$('#study-mode').textContent='Title group · Transform';$('#clip-badge').textContent='Position · standard values';$('#track-state').textContent='4 OBJECTS';$('#inspector').innerHTML=committedInspector();setUndo('Circle Layout');status('確定','4つのPositionを1 macroで保存。Tool依存なし。','⌘Z');renderContext('CIRCLE LAYOUT · COMMITTED','標準Positionとして確定','Toolを閉じても通常編集できます。','⌘Z')};$('#cancel-tool').onclick=()=>{placeObjects(objectsDefault());status('取消','Document変更ゼロ。','—');renderContext('CIRCLE LAYOUT · CANCELLED','変更はありません','Preview中の値は保存されませんでした。','—')}}
+    if(state.mode==='behavior'){$('#behavior-range').addEventListener('input',e=>{const v=+e.target.value;$('#behavior-read').textContent=v+'%';state.extreme=v>360;$('#stage').classList.toggle('extreme',state.extreme);const scale=Math.min(v/100,3.1);placeObjects(objectsCircle(100),scale);status('Audio → Scale',`Range ${v}% · 値は制限せずPreview`,'⌘Z')});$('#invalid-target').onclick=()=>{$('#behavior-error').innerHTML='<div class="notice error"><strong>接続できません</strong><br>Scaleは数値信号を要求します。選択したText Styleは型が異なります。</div>';status('型不一致','expected Number · actual TextStyle','Esc')};$('#fit-selection').onclick=()=>{$('#stage').classList.remove('extreme');placeObjects(objectsCircle(82),1.2);status('Fit selection','Document値を変えずStage Viewだけを回収。','F')}}
+    if(state.mode==='generator'){$('#count').addEventListener('input',e=>{state.count=+e.target.value;$('#count-read').textContent=state.count;renderRibbons();setUndo('Count');status('Ribbon Array',`Count ${state.count} · standard parameter`,'⌘Z')});$('#twist').addEventListener('input',e=>{state.twist=+e.target.value;$('#twist-read').textContent=state.twist+'°';renderRibbons();setUndo('Twist');status('Ribbon Array',`Twist ${state.twist}° · structureと同じ値`,'⌘Z')});$('#open-structure').onclick=()=>{$('#structure').classList.add('open');status('Structure','専門的な編集面を一時表示。Host shell内。','Esc')}}
+    if(state.mode==='missing'){$('#locate-plugin').onclick=()=>status('Compatible plugin','これは導線fixture。Document変更はありません。','—')}
+  }
+  function renderContext(eye,title,body,key){$('#context-eye').textContent=eye;$('#context-title').textContent=title;$('#context-body').textContent=body;$('#context-key').textContent=key}
+  function setUndo(label){$('#undo').disabled=false;$('#undo-state').textContent='Undo 1 · '+label}
+  function clearUndo(){$('#undo').disabled=true;$('#undo-state').textContent='Undo —'}
+  function setMode(mode){
+    state.mode=mode;state.extreme=false;document.documentElement.style.setProperty('--active',modeColors[mode]);
+    $$('.asset[data-browser-mode]').forEach(a=>a.classList.toggle('on',a.dataset.browserMode===mode));$('#study-mode').textContent=studyLabels[mode];
+    const s=$('#stage'),c=configs[mode];s.className='stage '+(mode==='tool'?'preview':mode);$('#stage-mode').textContent=c.stage;renderContext(c.eye,c.title,c.body,c.key);status(statusTitles[mode],c.status,c.key);$('#clip-badge').textContent=c.badge;$('#track-state').textContent=mode==='behavior'?'DRIVEN':mode==='generator'?'RECIPE':mode==='missing'?'DEGRADED':'4 OBJECTS';$('#inspector').innerHTML=inspector(mode);$('#structure').classList.remove('open');clearUndo();
+    $$('.obj').forEach(o=>o.hidden=mode==='generator'||mode==='missing');$('#hull').hidden=mode==='generator'||mode==='missing';
+    if(mode==='tool')placeObjects(objectsCircle());if(mode==='behavior')placeObjects(objectsCircle(),1.25);if(mode==='generator'||mode==='missing')renderRibbons();bindInspector();
+  }
+  $$('.asset[data-browser-mode]').forEach(a=>a.onclick=()=>setMode(a.dataset.browserMode));
+  $$('[data-browser-tab]').forEach(button=>button.onclick=()=>{const project=button.dataset.browserTab==='project';$$('[data-browser-tab]').forEach(item=>item.classList.toggle('on',item===button));$('#project-list').hidden=!project;$('#extension-list').hidden=project;status(project?'Project':'Extensions',project?'Document上の実体を選択します。':'目的からTool / Behavior / Generatorを選択します。','')});
+  $$('.cmdtool').forEach(button=>button.onclick=()=>{$$('.cmdtool').forEach(item=>item.classList.toggle('active',item===button));status(button.getAttribute('aria-label'),'既知のTool操作。選択結果は同じInspectorへ投影します。','')});
+  $('#close-structure').onclick=()=>{$('#structure').classList.remove('open');status('Ribbon Array','構造を閉じても同じrecipeとParameter。','G')};
+  $('#undo').onclick=()=>{clearUndo();state.committed=false;state.count=7;state.twist=18;setMode(state.mode);status('Undo','同じDomain Intentを1回で取り消しました。','⌘Z')};
+  $('#play').onclick=()=>{state.playing=!state.playing;$('#play').textContent=state.playing?'Ⅱ':'▶';if(state.playing){state.start=performance.now();state.raf=requestAnimationFrame(frame);status('再生','同じ時刻でBehaviorとGeneratorを評価。','Space')}else{cancelAnimationFrame(state.raf);$('#time').textContent='00:54.2'}};
+  function frame(now){if(!state.playing)return;const t=(now-state.start)/1000,p=(t%4)/4;$('#time').textContent=`00:${String(54+Math.floor(t)%6).padStart(2,'0')}.${Math.floor(p*4)+1}`;$('#playhead').style.left=(36+p*26)+'%';if(state.mode==='behavior'){const scale=1+.35*Math.abs(Math.sin(t*5));placeObjects(objectsCircle(),scale)}state.raf=requestAnimationFrame(frame)}
+  addEventListener('keydown',e=>{if(e.key==='Escape'){if($('#structure').classList.contains('open'))$('#close-structure').click();else if(state.mode==='tool')$('#cancel-tool')?.click()}if(e.code==='Space'&&!['INPUT','BUTTON'].includes(document.activeElement.tagName)){e.preventDefault();$('#play').click()}});
+  setMode('tool');
+})();
+</script>
+</body>
+</html>

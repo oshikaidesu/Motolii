@@ -2,24 +2,26 @@
 
 作成日: 2026-07-15 / Issue #57
 
+状態: **描画コアの合格証拠**。Slintへの埋め込み記述は2026-07-18の[egui採用判断](../reviews/2026-07-18-m3-egui-selection.md)で置換された。単一wgpu面、fixture、性能結果は継承する。
+
 ## 結論 (M3 実装ガード2 / Issue #57 **合格**)
 
 記録形式は [s1-slint.md](s1-slint.md)(INF-1) を参考にした。**本スパイクのラベルは INF-1 ではない**。
 
-クリップ **1,000** + キーフレーム **100,000** の合成データで、パン/ズーム更新時の wgpu 自前描画が **p95 ≤ 16.667ms (60fps)** を満たす。Slint ListView / 大量 Slint エレメントでタイムラインを組む方針は採用しない（M3 実装ガード2どおり）。
+クリップ **1,000** + キーフレーム **100,000** の合成データで、パン/ズーム更新時の wgpu 自前描画が **p95 ≤ 16.667ms (60fps)** を満たす。項目ごとの大量UI widgetでタイムラインを組む方針は採用しない（M3 実装ガード2どおり）。
 
 | 層 | 内容 | 状態 | 証拠 |
 |---|---|---|---|
 | 1 構造 | 1枚の `wgpu::Texture` へインスタンス矩形描画・ビューポート CPU カリング | **合格** | [bench-manifest.json](timeline-bench-evidence/bench-manifest.json) + [frame-sample.png](timeline-bench-evidence/frame-sample.png) |
 | 2 性能 | パン/ズーム 600 フレーム計測、p95 60fps 以上 | **合格** | 下表・[bench-report.json](timeline-bench-evidence/bench-report.json) |
-| 3 U3 含意 | カスタム描画面 + Slint はイベント/シェル | **合格** | 本ドキュメント「U3への含意」 |
+| 3 U3 含意 | toolkit非依存カスタム描画面 + UI shell | **合格** | 本ドキュメント「U3への含意」 |
 
 再現: `cd spikes/timeline-bench && cargo run --release`（ヘッドレス可。Vulkan ICD 要。CI では `mesa-vulkan-drivers`）
 
 ## 方針 (仕様どおり)
 
-- **Slint ListView は使わない** — タイムライン/波形/グラフは 1 枚のカスタムレンダリング面 (wgpu テクスチャ) に自前描画
-- プレビューと同様、完成テクスチャは `slint::Image::try_from` で埋め込む想定（本スパイクは Slint 非連結・描画コアのみ計測）
+- **大量のegui widgetは使わない** — タイムライン/波形/グラフは1枚のカスタムwgpu面に自前描画
+- 完成TextureViewはegui-wgpuのnative textureとして表示する（本スパイクはUI非連結・描画コアのみ計測）
 - 製品 `Document`/schema 変更なし (`spikes/` 完結)
 - wgpu **29** (workspace 固定)
 

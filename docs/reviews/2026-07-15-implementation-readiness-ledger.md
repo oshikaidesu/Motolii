@@ -42,7 +42,7 @@ GAP-14 lifecycle、PR #197、[2026-07-16新規Document v4生成追補](2026-07-1
 
 ### UI PRの共通禁止
 
-- Slint型、px/DPI、pointer event列、線routingをDocument/domain APIへ保存しない
+- egui/eframe/winit型、px/DPI、pointer event列、線routingをDocument/domain APIへ保存しない
 - prototype都合でD2 command、Effect Use、CompCamera、Boundsの意味を変更しない
 - screenshotだけで完了しない。操作fixture、Undo、Cancel、非blockingを自動判定する
 

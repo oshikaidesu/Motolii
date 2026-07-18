@@ -72,7 +72,7 @@ v1の既定配置は、既存の制作ソフトで学習済みの役割へ合わ
 下: Timeline / time / order
 ```
 
-固定分割で開始し、可変dockingを革新点にしない。panelの開閉や幅変更は許しても、同じ役割が機能ごとに別の場所へ移動しない。
+上記は**組み込み既定preset**であり固定契約ではない。利用者はpanelを分割、tab化、resize、表示/非表示、復帰でき、既定presetへresetできる。同じ機能を別の場所へ置いてもBrowser/Stage/Inspector/Timelineという役割名・icon・shortcut・domain intentは変えず、配置と機能意味を結合しない。
 
 - Project assetと外部filesystemは別popupへ分けず、既存Browserの`Project` tab内にある同じExplorer UIで`PROJECT / FILES`を切り替える。FILESの選択・previewはDocument外で、未配置素材はInboxへ受け取り、PROJECTからの配置確定だけをDocument commandにする。
 - Timeline左端のInboxは、未配置素材、未解決review note、未確認background job等の未整理参照だけを受け取る。選択・hoverへ追従せず、処理済みは外す。通常操作historyや全assetを蓄積せず、空の時だけTipを一件表示できる。
