@@ -13,15 +13,21 @@ function PluginCard({
   thumbnail,
   kind,
   name,
+  description,
   state,
+  selected = false,
 }) {
   return (
     <button
-      className="vism candidate-plugin-card"
+      className={`vism candidate-plugin-card${selected ? " on" : ""}`}
       data-mode={mode}
       data-folder={folder}
       data-labels={labels}
       data-search={search}
+      data-plugin-name={name}
+      data-plugin-kind={kind}
+      data-plugin-description={description}
+      draggable={!state}
       aria-label={`${name}${state ? ` · ${state}` : ""}`}
     >
       <span className={`plugin-thumb ${thumbnail}`}>
@@ -140,6 +146,8 @@ function CandidatePluginBrowser() {
               thumbnail="bloom"
               kind="FX"
               name="Echo Bloom"
+              description="Layered light pulses that follow the selected object."
+              selected
             />
             <PluginCard
               mode="discover"
@@ -149,6 +157,7 @@ function CandidatePluginBrowser() {
               thumbnail="glyph"
               kind="G"
               name="Glyph Current"
+              description="Turns text into flowing, rhythm-aware motion."
             />
             <PluginCard
               mode="blocked"
@@ -158,6 +167,7 @@ function CandidatePluginBrowser() {
               thumbnail="fold"
               kind="FX"
               name="Fold Field"
+              description="Folds the image through a spatial geometry field."
               state="Unavailable"
             />
             <PluginCard
@@ -168,9 +178,22 @@ function CandidatePluginBrowser() {
               thumbnail="ribbon"
               kind="G"
               name="Ribbon Array"
+              description="Repeats an object along a controllable ribbon path."
               state="Missing"
             />
           </div>
+          <aside className="candidate-effect-detail" aria-label="Effect detail">
+            <header>
+              <span id="plugin-detail-kind">FX</span>
+              <strong id="plugin-detail-name">Echo Bloom</strong>
+            </header>
+            <p id="plugin-detail-description">
+              Layered light pulses that follow the selected object.
+            </p>
+            <span className="candidate-effect-gesture">
+              Drag to object · Double-click selected
+            </span>
+          </aside>
         </section>
 
         <section
@@ -189,12 +212,25 @@ function CandidatePluginBrowser() {
   );
 }
 
-function AssetTile({ source, asset, preview, name, meta, hidden = false }) {
+function AssetTile({
+  source,
+  asset,
+  preview,
+  name,
+  meta,
+  root,
+  path = "",
+  directory,
+  hidden = false,
+}) {
   return (
     <button
       className="asset-tile"
       data-asset-source-view={source}
       data-asset={asset}
+      data-file-root={root}
+      data-file-path={path}
+      data-file-directory={directory}
       hidden={hidden}
       aria-label={`${name} · ${meta}`}
     >
@@ -234,13 +270,13 @@ function CandidateProjectBrowser() {
           ▣
         </button>
         <button className="candidate-icon-button" aria-label="List view">☷</button>
-        <button className="btn quiet file-nav" hidden aria-label="Back">‹</button>
-        <button className="btn quiet file-nav" hidden aria-label="Parent folder">↑</button>
+        <button className="btn quiet file-nav" id="file-back" hidden aria-label="Back">‹</button>
+        <button className="btn quiet file-nav" id="file-parent" hidden aria-label="Parent folder">↑</button>
       </div>
 
-      <div className="candidate-asset-path" id="asset-path">
+      <nav className="candidate-asset-path" id="asset-path" aria-label="Current folder">
         night_drive / Assets
-      </div>
+      </nav>
 
       <div className="candidate-browser-layout">
         <nav className="candidate-browser-nav" aria-label="Asset sources">
@@ -258,16 +294,21 @@ function CandidateProjectBrowser() {
             </div>
           </div>
           <div data-asset-source-view="files" hidden>
-            <div className="candidate-nav-group">
-              <button className="on"><i aria-hidden="true">▣</i><span>Source</span></button>
-              <button><i aria-hidden="true">↺</i><span>Recent</span></button>
-              <button><i aria-hidden="true">⇩</i><span>Downloads</span></button>
+            <div className="candidate-nav-title">Registered folders</div>
+            <div className="candidate-nav-group candidate-file-roots">
+              <button className="on" data-file-root-select="city">
+                <i aria-hidden="true">▣</i><span>City Source</span>
+              </button>
+              <button data-file-root-select="audio">
+                <i aria-hidden="true">▣</i><span>Audio Library</span>
+              </button>
+              <button data-file-root-select="brand">
+                <i aria-hidden="true">▣</i><span>Brand Kit</span>
+              </button>
             </div>
-            <div className="candidate-nav-title">Locations</div>
-            <div className="candidate-nav-group">
-              <button><i aria-hidden="true">◇</i><span>City</span></button>
-              <button><i aria-hidden="true">◇</i><span>Audio</span></button>
-            </div>
+            <button className="candidate-register-folder" id="add-file-root">
+              ＋ Add folder
+            </button>
           </div>
         </nav>
 
@@ -282,12 +323,28 @@ function CandidateProjectBrowser() {
             <AssetTile source="project" asset="logo.svg" preview="logo" name="logo.svg" meta="UNPLACED" />
             <AssetTile source="project" asset="grain.png" preview="texture" name="grain.png" meta="USED" />
             <AssetTile source="project" asset="city_loop.mp4" preview="video" name="city_loop.mp4" meta="INBOX" />
-            <AssetTile source="files" asset="city_loop.mp4" preview="video" name="city_loop.mp4" meta="12s" hidden />
-            <AssetTile source="files" asset="logo.svg" preview="logo" name="logo.svg" meta="SVG" hidden />
-            <AssetTile source="files" asset="night_drive.wav" preview="audio" name="night_drive.wav" meta="3:42" hidden />
-            <AssetTile source="files" asset="grain.png" preview="texture" name="grain.png" meta="4K" hidden />
-            <AssetTile source="files" asset="city_alt" preview="folder" name="city_alt" meta="14" hidden />
-            <AssetTile source="files" asset="impact_04.wav" preview="audio" name="impact_04.wav" meta="2s" hidden />
+            <AssetTile source="files" root="city" asset="MV" directory="MV" preview="folder" name="MV" meta="Folder" hidden />
+            <AssetTile source="files" root="city" asset="logo.svg" preview="logo" name="logo.svg" meta="SVG" hidden />
+            <AssetTile source="files" root="city" path="MV" asset="night_drive" directory="MV/night_drive" preview="folder" name="night_drive" meta="Folder" hidden />
+            <AssetTile source="files" root="city" path="MV" asset="city_loop.mp4" preview="video" name="city_loop.mp4" meta="12s" hidden />
+            <AssetTile source="files" root="city" path="MV/night_drive" asset="source" directory="MV/night_drive/source" preview="folder" name="source" meta="Folder" hidden />
+            <AssetTile source="files" root="city" path="MV/night_drive" asset="night_drive.wav" preview="audio" name="night_drive.wav" meta="3:42" hidden />
+            <AssetTile source="files" root="city" path="MV/night_drive/source" asset="city_loop.mp4" preview="video" name="city_loop.mp4" meta="12s" hidden />
+            <AssetTile source="files" root="city" path="MV/night_drive/source" asset="grain.png" preview="texture" name="grain.png" meta="4K" hidden />
+            <AssetTile source="files" root="city" path="MV/night_drive/source" asset="skyline.exr" preview="video" name="skyline.exr" meta="EXR" hidden />
+            <AssetTile source="files" root="city" path="MV/night_drive/source" asset="notes.txt" preview="folder" name="notes.txt" meta="TXT" hidden />
+            <AssetTile source="files" root="audio" asset="Hits" directory="Hits" preview="folder" name="Hits" meta="Folder" hidden />
+            <AssetTile source="files" root="audio" asset="Beds" directory="Beds" preview="folder" name="Beds" meta="Folder" hidden />
+            <AssetTile source="files" root="audio" asset="impact_04.wav" preview="audio" name="impact_04.wav" meta="2s" hidden />
+            <AssetTile source="files" root="audio" path="Hits" asset="impact_01.wav" preview="audio" name="impact_01.wav" meta="1s" hidden />
+            <AssetTile source="files" root="audio" path="Hits" asset="impact_04.wav" preview="audio" name="impact_04.wav" meta="2s" hidden />
+            <AssetTile source="files" root="audio" path="Beds" asset="night_drive.wav" preview="audio" name="night_drive.wav" meta="3:42" hidden />
+            <AssetTile source="files" root="brand" asset="Logos" directory="Logos" preview="folder" name="Logos" meta="Folder" hidden />
+            <AssetTile source="files" root="brand" asset="Textures" directory="Textures" preview="folder" name="Textures" meta="Folder" hidden />
+            <AssetTile source="files" root="brand" path="Logos" asset="logo.svg" preview="logo" name="logo.svg" meta="SVG" hidden />
+            <AssetTile source="files" root="brand" path="Logos" asset="wordmark.svg" preview="logo" name="wordmark.svg" meta="SVG" hidden />
+            <AssetTile source="files" root="brand" path="Textures" asset="grain.png" preview="texture" name="grain.png" meta="4K" hidden />
+            <AssetTile source="files" root="brand" path="Textures" asset="paper.png" preview="texture" name="paper.png" meta="2K" hidden />
           </div>
         </section>
       </div>

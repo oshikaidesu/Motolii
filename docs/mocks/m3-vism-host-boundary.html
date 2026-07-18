@@ -490,7 +490,7 @@
 (() => {
   const $ = selector => document.querySelector(selector);
   const $$ = selector => [...document.querySelectorAll(selector)];
-  const state = {mode:"installed", stageTool:"select", playing:false, start:0, raf:0, playheadPct:46, activeInterval:null, depthOpen:false, depthPhase:0, intensity:64, spread:42, automation:{position:true,depth:true,scale:false,rotation:false,opacity:true,intensity:true,spread:false}, activeParam:"intensity", easing:{interp:"Bezier",preset:"Smooth",x1:.34,y1:1.56,x2:.64,y2:1,overshoot:true}, easeDrag:null, curveTag:"all", curveFolder:"all", curveHistory:[], curveLibrary:[{name:"Smooth",interp:"Bezier",v:[.34,1.56,.64,1],tags:"goto",folder:""},{name:"Snap in",interp:"Bezier",v:[.7,0,.2,1],tags:"goto text",folder:"type"},{name:"Drift out",interp:"Bezier",v:[0,.4,.3,1],tags:"camera",folder:"camera"},{name:"Lyric pop",interp:"Bezier",v:[.2,1.35,.5,1],tags:"text",folder:"type"},{name:"Bounce",interp:"Bounce",v:[0,0,1,1],tags:"",folder:""}], zDrag:null, assetSource:"project", selectedAsset:"night_drive.wav", colorChannel:"Fill", selectedColor:"#df8b4d", appliedFill:"#df8b4d", appliedStroke:"#68a6d8", colorFolder:"all", colorTag:"all", colorHistory:["#df8b4d","#68a6d8","#ad82bf","#18202b","#62b4ae"], colorField:"triangle", colorResize:null, eyedropper:false, pluginSource:"all", pluginFolder:"all", pluginLabel:"all", pluginView:"thumb", pluginHistory:["installed","missing"]};
+  const state = {mode:"installed", stageTool:"select", playing:false, start:0, raf:0, playheadPct:46, activeInterval:null, depthOpen:false, depthPhase:0, intensity:64, spread:42, automation:{position:true,depth:true,scale:false,rotation:false,opacity:true,intensity:true,spread:false}, activeParam:"intensity", easing:{interp:"Bezier",preset:"Smooth",x1:.34,y1:1.56,x2:.64,y2:1,overshoot:true}, easeDrag:null, curveTag:"all", curveFolder:"all", curveHistory:[], curveLibrary:[{name:"Smooth",interp:"Bezier",v:[.34,1.56,.64,1],tags:"goto",folder:""},{name:"Snap in",interp:"Bezier",v:[.7,0,.2,1],tags:"goto text",folder:"type"},{name:"Drift out",interp:"Bezier",v:[0,.4,.3,1],tags:"camera",folder:"camera"},{name:"Lyric pop",interp:"Bezier",v:[.2,1.35,.5,1],tags:"text",folder:"type"},{name:"Bounce",interp:"Bounce",v:[0,0,1,1],tags:"",folder:""}], zDrag:null, assetSource:"project", selectedAsset:"night_drive.wav", fileRoot:"city", filePath:"", fileHistory:[], colorChannel:"Fill", selectedColor:"#df8b4d", appliedFill:"#df8b4d", appliedStroke:"#68a6d8", colorFolder:"all", colorTag:"all", colorHistory:["#df8b4d","#68a6d8","#ad82bf","#18202b","#62b4ae"], colorField:"triangle", colorResize:null, eyedropper:false, pluginSource:"all", pluginFolder:"all", pluginLabel:"all", pluginView:"thumb", pluginHistory:["installed","missing"]};
   const modeCopy = {
     installed:{accent:"#d4b36f",crumb:"Echo Bloom",stage:"ECHO BLOOM",badge:"",brief:""},
     discover:{accent:"#79aaa6",crumb:"Glyph Current",stage:"GLYPH CURRENT · DISCOVER",badge:"DISCOVERY PREVIEW · NOT IN PROJECT",brief:"Discovery preview · Project変更ゼロ"},
@@ -789,6 +789,16 @@
     $("#inspector").innerHTML=inspector(mode); clearUndo(); bindInspector();
     status(copy.crumb,copy.brief,mode==="missing"?"Review recovery":"");
   }
+  function updatePluginDetail(item){
+    if(!item||!$("#plugin-detail-name"))return;
+    $("#plugin-detail-kind").textContent=item.dataset.pluginKind||"";
+    $("#plugin-detail-name").textContent=item.dataset.pluginName||item.textContent.trim();
+    $("#plugin-detail-description").textContent=item.dataset.pluginDescription||"";
+    const apply=$("#plugin-detail-apply"),blocked=["blocked","missing"].includes(item.dataset.mode);
+    apply.disabled=blocked;
+    apply.textContent=blocked?"Unavailable":"Apply";
+    apply.onclick=()=>status(item.dataset.pluginName,"Apply to selected object","Enter");
+  }
 
   function setSurface(kind,open){
     if(kind!=="colors")return;
@@ -857,18 +867,72 @@
     $(".scene-copy").style.color=state.selectedColor;setUndo(`${state.colorChannel} color`);syncColorBook();
     status("Color applied",`${state.colorChannel} ${state.selectedColor} · 1 Undo`,"⌘Z");
   }
+  const fileRootNames={city:"City Source",audio:"Audio Library",brand:"Brand Kit"};
+  function selectAssetTile(tile){
+    if(!tile)return;
+    state.selectedAsset=tile.dataset.asset||"";
+    $$(".asset-tile").forEach(item=>item.classList.toggle("on",item===tile));
+    const isFolder=state.assetSource==="files"&&Boolean(tile.dataset.fileDirectory);
+    $("#asset-foot-copy").textContent=isFolder?"FILES · FOLDER":state.assetSource==="files"?"FILES":"PROJECT";
+    $("#place-asset").textContent=isFolder?"OPEN":state.assetSource==="files"?"＋ INBOX":"PLACE";
+    status("Assets",`${state.selectedAsset} · ${isFolder?"Folder":state.assetSource==="files"?"Preview":"Project"}`,isFolder?"Double click / Enter":"Enter / Drag");
+  }
+  function renderFilePath(){
+    const path=$("#asset-path");
+    if(!path||!$("[data-file-root-select]"))return;
+    path.replaceChildren();
+    const segments=state.filePath?state.filePath.split("/"):[];
+    const appendCrumb=(label,depth)=>{
+      if(path.childNodes.length){
+        const divider=document.createElement("i");divider.textContent="/";path.append(divider);
+      }
+      const button=document.createElement("button");
+      button.textContent=label;button.dataset.fileCrumb=String(depth);path.append(button);
+    };
+    appendCrumb(fileRootNames[state.fileRoot]||state.fileRoot,0);
+    segments.forEach((segment,index)=>appendCrumb(segment,index+1));
+  }
+  function renderFileBrowser(){
+    if(!$("[data-file-root-select]"))return false;
+    $$("[data-file-root-select]").forEach(button=>button.classList.toggle("on",button.dataset.fileRootSelect===state.fileRoot));
+    renderFilePath();
+    const visible=$$(".asset-tile[data-asset-source-view='files']").filter(tile=>{
+      const show=tile.dataset.fileRoot===state.fileRoot&&(tile.dataset.filePath||"")===state.filePath;
+      tile.hidden=!show;return show;
+    });
+    $("#asset-source-title").textContent=fileRootNames[state.fileRoot]||"Registered folder";
+    $("#asset-scope-label").textContent=state.filePath?"FOLDER":"REGISTERED ROOT";
+    $("#asset-count").textContent=`${visible.length} ITEMS`;
+    $("#file-back").disabled=state.fileHistory.length===0;
+    $("#file-parent").disabled=!state.filePath;
+    selectAssetTile(visible[0]);
+    return true;
+  }
+  function navigateFile(root,path,record=true){
+    if(record&&(root!==state.fileRoot||path!==state.filePath)){
+      state.fileHistory.push({root:state.fileRoot,path:state.filePath});
+    }
+    state.fileRoot=root;state.filePath=path;renderFileBrowser();
+  }
+  function openSelectedFolder(){
+    const tile=$$(".asset-tile.on").find(item=>item.dataset.assetSourceView==="files");
+    if(tile?.dataset.fileDirectory)navigateFile(tile.dataset.fileRoot,tile.dataset.fileDirectory);
+  }
   function setAssetSource(source){
     state.assetSource=source;
     $$("[data-asset-source]").forEach(button=>button.classList.toggle("on",button.dataset.assetSource===source));
     $$("[data-asset-source-view]").forEach(item=>item.hidden=item.dataset.assetSourceView!==source);
     $$(".file-nav").forEach(button=>button.hidden=source!=="files");
+    if(source==="files"&&renderFileBrowser()){
+      status("Assets","Registered folders","");
+      return;
+    }
     $("#asset-path").textContent=source==="files"?"素材 / MV / night_drive / source":"night_drive / Assets";
     $("#asset-source-title").textContent=source==="files"?"External files":"Project assets";
     $("#asset-scope-label").textContent=source==="files"?"BROWSE / PREVIEW":"USED / UNPLACED";
     const visible=$$(".asset-tile").filter(tile=>tile.dataset.assetSourceView===source);
     $("#asset-count").textContent=`${visible.length} ITEMS`;
-    visible.forEach((tile,index)=>tile.classList.toggle("on",index===0));
-    state.selectedAsset=visible[0]?.dataset.asset||"";
+    selectAssetTile(visible[0]);
     $("#asset-foot-copy").textContent=source==="files"?"FILES":"PROJECT";
     $("#place-asset").textContent=source==="files"?"＋ INBOX":"PLACE";
     status("Assets",source==="files"?"External files":"Project assets","");
@@ -915,7 +979,35 @@
     status("Inbox",`${name}を受取 · Project配置なし`,"");
   }
 
-  $$(".vism[data-mode]").forEach(item=>item.onclick=()=>setMode(item.dataset.mode));
+  function commitPlugin(item,via){
+    const name=item.dataset.pluginName||item.textContent.trim();
+    if(["blocked","missing"].includes(item.dataset.mode)){
+      status(name,item.dataset.mode==="missing"?"Plugin missing":"Unavailable capability","Inspect");
+      return;
+    }
+    setMode(item.dataset.mode);
+    state.pluginHistory=[item.dataset.mode,...state.pluginHistory.filter(mode=>mode!==item.dataset.mode)];
+    renderPluginHistory();setUndo(`Add ${name}`);
+    status(name,`${via} · selected objectへ適用 · 1 Undo`,"⌘Z");
+  }
+  let draggedPlugin=null;
+  $$(".vism[data-mode]").forEach(item=>{
+    item.onclick=()=>{setMode(item.dataset.mode);updatePluginDetail(item)};
+    item.ondblclick=()=>commitPlugin(item,"Double click");
+    item.ondragstart=event=>{
+      if(!item.draggable)return;
+      draggedPlugin=item;event.dataTransfer?.setData("text/plain",item.dataset.pluginName||"Plugin");
+      $("#stage").classList.add("plugin-drop-ready");
+      status(item.dataset.pluginName,"Drag to an object · Esc to cancel","Drop");
+    };
+    item.ondragend=()=>{draggedPlugin=null;$("#stage").classList.remove("plugin-drop-ready")};
+  });
+  $("#stage").addEventListener("dragover",event=>{if(draggedPlugin)event.preventDefault()});
+  $("#stage").addEventListener("drop",event=>{
+    if(!draggedPlugin)return;
+    event.preventDefault();const item=draggedPlugin;draggedPlugin=null;
+    $("#stage").classList.remove("plugin-drop-ready");commitPlugin(item,"Drop");
+  });
   $$("[data-tab]").forEach(button=>button.onclick=()=>setBrowserTab(button.dataset.tab));
   $("#search").addEventListener("input",event=>{
     filterPlugins();
@@ -966,12 +1058,41 @@
   $("#surface-colors").onclick=()=>setSurface("colors",!$("#color-book-drawer").classList.contains("open"));
   $$("[data-close-surface]").forEach(button=>button.onclick=()=>setSurface(button.dataset.closeSurface,false));
   $$("[data-asset-source]").forEach(button=>button.onclick=()=>setAssetSource(button.dataset.assetSource));
-  $$(".asset-tile").forEach(tile=>tile.onclick=()=>{
-    state.selectedAsset=tile.dataset.asset; $$(".asset-tile").forEach(item=>item.classList.toggle("on",item===tile));
-    status("Assets",`${state.selectedAsset} · ${state.assetSource==="files"?"Preview":"Project"}`,"Enter / Drag");
+  $$("[data-file-root-select]").forEach(button=>button.onclick=()=>{
+    navigateFile(button.dataset.fileRootSelect,"");
+    status("Registered folder",fileRootNames[state.fileRoot],"Browse");
+  });
+  if($("#add-file-root"))$("#add-file-root").onclick=()=>status("Register folder","Choose another base folder · Workspace setting","Esc");
+  if($("#file-back"))$("#file-back").onclick=()=>{
+    const previous=state.fileHistory.pop();
+    if(previous)navigateFile(previous.root,previous.path,false);
+  };
+  if($("#file-parent"))$("#file-parent").onclick=()=>{
+    if(!state.filePath)return;
+    const parent=state.filePath.split("/").slice(0,-1).join("/");
+    navigateFile(state.fileRoot,parent);
+  };
+  if($("#asset-path"))$("#asset-path").onclick=event=>{
+    const crumb=event.target.closest("[data-file-crumb]");
+    if(!crumb)return;
+    const depth=Number(crumb.dataset.fileCrumb);
+    navigateFile(state.fileRoot,state.filePath.split("/").slice(0,depth).join("/"));
+  };
+  $$(".asset-tile").forEach(tile=>{
+    tile.onclick=()=>selectAssetTile(tile);
+    tile.ondblclick=()=>{if(state.assetSource==="files"&&tile.dataset.fileDirectory)openSelectedFolder()};
+    tile.onkeydown=event=>{
+      if(event.key==="Enter"&&state.assetSource==="files"&&tile.dataset.fileDirectory){
+        event.preventDefault();openSelectedFolder();
+      }
+    };
   });
   $("#place-asset").onclick=()=>{
-    if(state.assetSource==="files"){addInboxAsset(state.selectedAsset);return}
+    if(state.assetSource==="files"){
+      const selected=$$(".asset-tile.on").find(item=>item.dataset.assetSourceView==="files");
+      if(selected?.dataset.fileDirectory){openSelectedFolder();return}
+      addInboxAsset(state.selectedAsset);return;
+    }
     setUndo(`Place ${state.selectedAsset}`);status("Asset placed",`${state.selectedAsset}を配置 · 1 Undo`,"⌘Z");
   };
   $$(".inbox-item").forEach(bindInboxItem);

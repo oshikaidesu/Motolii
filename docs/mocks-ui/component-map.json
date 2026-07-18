@@ -585,12 +585,12 @@
         "U0e-2"
       ],
       "stateOwner": [
-        "User settings or workspace candidate for Collections, Tags, Recent, and view density",
-        "Transient for search, filters, selection, preview, and active Browser tab",
+        "User settings or workspace candidate for Collections, Tags, Recent, registered filesystem folders, last opened path, and view density",
+        "Transient for search, filters, selection, preview, active Browser tab, and folder traversal",
         "Document command only when a candidate is committed to a target"
       ],
       "status": "design-candidate",
-      "referenceRole": "shared Project and Plugin Browser grammar with thumbnail-first plugin results",
+      "referenceRole": "shared Project and Plugin Browser grammar with Effect Detail, direct effect application, and multiple registered filesystem roots",
       "eguiTarget": "comparison fixture for a shared internal egui Browser shell; not an adopted product component"
     }
   ]

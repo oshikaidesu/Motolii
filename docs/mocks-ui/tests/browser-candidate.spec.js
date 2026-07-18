@@ -23,6 +23,10 @@ test.describe("shared discovery Browser candidate", () => {
     ]);
     await expect(page.getByText("READY", { exact: true })).toHaveCount(0);
     await expect(page.getByText("AVAILABLE", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("complementary", { name: "Effect detail" })).toContainText(
+      "Layered light pulses",
+    );
+    await expect(page.getByRole("button", { name: "Apply" })).toHaveCount(0);
 
     await page.locator('[data-plugin-source="issues"]').click();
     await expect(
@@ -39,6 +43,28 @@ test.describe("shared discovery Browser candidate", () => {
     await expect(page.locator("#plugin-result-count")).toHaveText("1");
   });
 
+  test("applies a usable effect by drag and drop or double click", async ({
+    page,
+  }) => {
+    await openCandidate(page);
+
+    const glyph = page.locator('.candidate-plugin-card[data-mode="discover"]');
+    await glyph.click();
+    await expect(page.locator("#plugin-detail-name")).toHaveText("Glyph Current");
+    await expect(page.locator("#plugin-detail-description")).toContainText(
+      "flowing",
+    );
+
+    await glyph.dblclick();
+    await expect(page.locator("#undo-state")).toContainText(
+      "Add Glyph Current",
+    );
+
+    const echo = page.locator('.candidate-plugin-card[data-mode="installed"]');
+    await echo.dragTo(page.locator("#stage"));
+    await expect(page.locator("#undo-state")).toContainText("Add Echo Bloom");
+  });
+
   test("uses the same search, source rail, and result grid for Project and Files", async ({
     page,
   }) => {
@@ -51,8 +77,27 @@ test.describe("shared discovery Browser candidate", () => {
     await expect(page.locator(".candidate-asset-grid .asset-tile:visible")).toHaveCount(4);
 
     await page.locator('button[data-asset-source="files"]').click();
-    await expect(page.locator("#asset-path")).toContainText("source");
-    await expect(page.locator(".candidate-asset-grid .asset-tile:visible")).toHaveCount(6);
+    await expect(page.locator("[data-file-root-select]")).toHaveCount(3);
+    await expect(page.locator("#asset-path")).toContainText("City Source");
+    await expect(page.locator(".candidate-asset-grid .asset-tile:visible")).toHaveCount(2);
+    await expect(page.locator("#place-asset")).toHaveText("OPEN");
+
+    await page.locator('[data-file-root-select="audio"]').click();
+    await expect(page.locator("#asset-path")).toContainText("Audio Library");
+    await expect(page.locator(".candidate-asset-grid .asset-tile:visible")).toHaveCount(3);
+
+    await page
+      .locator('.asset-tile[data-file-root="audio"][data-file-directory="Hits"]')
+      .dblclick();
+    await expect(page.locator("#asset-path")).toContainText("Hits");
+    await expect(page.locator(".candidate-asset-grid .asset-tile:visible")).toHaveCount(2);
     await expect(page.locator("#place-asset")).toHaveText("＋ INBOX");
+
+    await page.locator("#file-parent").click();
+    await expect(page.locator("#asset-path")).not.toContainText("Hits");
+    await page.locator("#add-file-root").click();
+    await expect(page.locator("#status-body")).toContainText(
+      "Choose another base folder",
+    );
   });
 });
