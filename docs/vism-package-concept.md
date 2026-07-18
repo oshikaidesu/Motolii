@@ -33,15 +33,26 @@ MotoliiはVismを扱う最初のリファレンスHostを目指す。VismはMoto
 
 | 層 | 問うこと | 語彙 |
 |---|---|---|
-| 制作者 | 何を作品へ追加できるか | **Vism** |
+| 制作者 | 何を作品へ追加できるか | **プラグイン**。配置文脈ではEffect／Generator／Tool等の役割名 |
 | 構成作者 | どのVismをどう接続して用途にするか | **Kit** |
-| 配布・管理 | 誰が作り、何が必要で、どの版か | package identity / manifest |
+| 配布・開発 | 誰が作り、何が必要で、どの版か | **Vism** / `.vism` / package identity / manifest |
 | Host | どの入口で評価し、何を所有するか | plugin capability / kind |
 | 実装 | どう計算するか | Rust、WGSL、将来のWASM等 |
 
 一つのVismが一つのplugin kindと一致するとは限らない。ただし、独立して更新・差替えできるproviderとconsumerを一packageへ詰めず、まず小さなVismとKitの接続で表せるかを審判する。複数entryは同一lifecycle／compatibility責任から分離できない場合の候補であり、万能bundleの既定にはしない。
 
-> **Vismはユーザーが持ち運ぶ表現の単位、pluginはHostが実行責任を分ける境界である。**
+> **画面ではプラグインを選び、ファイルと開発者境界ではVismを扱い、Host内部ではplugin capabilityへ実行責任を分ける。**
+
+### 2.1 製品UIの語彙
+
+通常の制作画面で`Vism`や`.vism`を学習必須語彙にしない。
+
+- 発見・管理の総称は、既存ソフト利用者が意味を推測できる**プラグイン**とする。
+- Effect stackでは**エフェクト**、生成入口では**ジェネレーター**、一時編集では**ツール**のように、その場所での役割を主ラベルにする。
+- Vism packageが複数の役割を持ち得ても、通常一覧で内部entryや`PluginKind`を読ませない。
+- `Vism`と`.vism`は、開発者向け文書、ファイル選択、詳細な由来・診断、Advanced情報で識別できればよい。
+- プラグイン一覧は名前だけにせず、表現のthumbnail／preview、用途tag、導入・互換状態、同梱／local file等の由来を併用する。具体manifest fieldはPhase B/Cの決定前に固定しない。
+- ユーザーのFolder／Label／Historyはstable package identityを参照するUser library投影とし、install先、`.vism`配置path、package内部path、実装module階層から生成しない。更新・再導入・保存場所変更でユーザー整理を動かさず、実pathは必要時の診断／Developer infoへ隔離する。
 
 ## 3. Project、Preset、Asset、Cacheと混ぜない
 
@@ -72,7 +83,7 @@ Hostを越えて持ち運びたい意味である。
 - PreviewとExportで共有する評価意味。
 - migrationまたは互換性判定に必要な宣言。
 
-この層へMotoliiのSlint型、Timeline row、window座標、内部Document layout、CUDA/Metal/DX等を出さない。consumer Vismはprovider VismのIDでなく必要な型を宣言する。
+この層へMotoliiのegui/eframe/winit型、Timeline row、window座標、内部Document layout、CUDA/Metal/DX等を出さない。consumer Vismはprovider VismのIDでなく必要な型を宣言する。
 
 ### 4.2 Package
 
@@ -176,12 +187,14 @@ VismはVSTの映像版binary互換ではない。VSTから借りるのは、Host
 
 ユーザー向け名称は**Vism（ヴィズム）**、拡張子は**`.vism`**とする。`Visual Module`等の正式なバクロニムを与えず、一つの映像表現・作風を持ち運ぶ固有名詞として扱う。
 
-想定する利用者語彙:
+想定する通常UIの利用者語彙:
 
-- Vismを追加する。
-- 歌詞Vismを探す。
-- このProjectで使っているVismを確認する。
-- Vismが欠けている／更新できる。
+- プラグインを追加する。
+- 歌詞エフェクトを探す。
+- このProjectで使っているプラグインを確認する。
+- プラグインが欠けている／更新できる。
+
+開発者・配布・ファイル操作では「Vism package」「`.vism`ファイル」を使う。通常のBrowserやInspectorで拡張子を常設せず、ファイル由来の識別やAdvanced詳細を開いた時に表示する。
 
 ```text
 glow.vism
@@ -204,8 +217,9 @@ particle.vism
 | 可搬先をMotolii互換Host／fork群とする | **長期コンセプト決定** |
 | Project openとVism installを分離する | **安全原則** |
 | first-partyへ特権を与えない | **設計原則** |
-| Vismという名称 | **決定** |
+| Vismという名称 | **開発・配布境界の名称として決定** |
 | `.vism`拡張子 | **決定** |
+| 通常UIの総称 | **プラグイン。配置文脈ではエフェクト／ジェネレーター／ツール等** |
 | manifest / container / MIME / signing | **未決** |
 | 1 package内のcapability数 | **未決** |
 | Kit container／拡張子／linked update | **未決** |
