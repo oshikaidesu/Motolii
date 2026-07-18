@@ -104,16 +104,20 @@ CI URL付きで改めて記録する。
 5. `DocumentWriter::edit`はprelude互換の公開口として残り、追加利用禁止をAST/ownership側で追跡する
 6. stable IDの`from_raw` / `peek_next`は復元・test用途の公開面が残る
 
-## 未充足の形式証跡
+## 記録する実証跡（#217 / main）
 
-次は本ローカルレビューでは主張しない。
+前提コードのremote証跡:
 
-- `e58f0a4`を含む再締結候補のremote PR URL
-- remote CI run URL
-- 各ローカルcommitのmain到達
-- 再締結解除commitのmain到達
-- 解除後のM3入場PR採択
+- PR: `https://github.com/oshikaidesu/Motolii/pull/217`
+- main merge SHA: `fa6850a3981c319973cf120e64976e6f8d79b969`
+- PR CI: `https://github.com/oshikaidesu/Motolii/actions/runs/29646476618`
+- push CI: `https://github.com/oshikaidesu/Motolii/actions/runs/29646451595`
 
-したがって、実コード固定面のP0/P1は0だが、M3製品実装はまだ開始しない。
-次はA〜C証跡表を持つ再締結解除PRをmainへ到達させ、その後にM3入場PRで
-U0a以降を最新mainへ再翻訳する。
+上記は[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)のA〜C完了証跡表におけるコード到達・CI成功の根拠である。単独ではゲート解除、M3入場を意味しない。
+
+## 未達（本追補レビューでは主張しない）
+
+1. **本再締結宣言PR**のmain到達（ゲート文書の効力発生条件）
+2. **その後の別M3入場PR**（U0/U1依存の再翻訳と実装許可）
+
+したがって、実コード固定面のP0/P1は0だが、**本再締結宣言PRがmergeされるまで**M3製品実装は開始しない。merge後も製品実装の着手許可は自動解禁されず、別M3入場PRのみがU0/U1依存を最新mainへ再翻訳する。
