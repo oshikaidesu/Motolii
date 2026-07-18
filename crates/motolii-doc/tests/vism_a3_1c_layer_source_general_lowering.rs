@@ -6,7 +6,7 @@ use std::sync::{Arc, OnceLock};
 use motolii_core::{ColorSpace, FrameDesc, PixelFormat, RationalTime, TimeMap};
 use motolii_doc::{
     build_document_frame_graph, Clip, ClipSource, DocParam, Document, EvaluationTime, GraphError,
-    ItemEnvelope, PluginDiagnosticReason, Track, TrackItem, CLEAR_LAYER_SOURCE,
+    ItemEnvelope, PluginDiagnosticReason, Track, TrackItem, CLEAR_LAYER_SOURCE, RECT_LAYER_SOURCE,
 };
 use motolii_eval::{DataTracks, Value};
 use motolii_plugin::reference::{register_reference_contracts, CLEAR_LAYER_SOURCE as CLEAR_LS};
@@ -21,6 +21,9 @@ use motolii_render::RenderStep;
 const P1_PLUGIN_ID: &str = "test.layer_source.zero_input_fixture";
 const P1_COLOR: [f64; 4] = [0.1, 0.2, 0.3, 1.0];
 const P2_COLOR: [f64; 4] = [0.2, 0.4, 0.6, 1.0];
+const P4_CENTER: [f64; 2] = [0.1, -0.2];
+const P4_SIZE: [f64; 2] = [0.3, 0.4];
+const P4_COLOR: [f64; 4] = [0.5, 0.6, 0.7, 0.8];
 
 struct TestZeroInputLayerSource;
 
@@ -141,6 +144,41 @@ fn clear_layer_source_runtime() -> PluginRuntime {
     PluginRuntime::try_new(Arc::new(clear_layer_source_catalog()), registry).unwrap()
 }
 
+fn p4_rect_document() -> Document {
+    let mut doc = Document::new_current();
+    let layer = doc.layers.allocate("rect").unwrap();
+    let track = doc.track_ids.allocate("V1").unwrap();
+    doc.tracks.push(Track {
+        id: track,
+        items: vec![TrackItem::Clip(Clip {
+            envelope: ItemEnvelope::new(layer),
+            start: RationalTime::ZERO,
+            duration: RationalTime::from_seconds(1),
+            time_map: TimeMap::identity(),
+            source: ClipSource::Plugin {
+                plugin_id: RECT_LAYER_SOURCE.into(),
+                effect_version: 1,
+                params: BTreeMap::from([
+                    ("center".into(), DocParam::const_vec2(P4_CENTER)),
+                    ("size".into(), DocParam::const_vec2(P4_SIZE)),
+                    ("color".into(), DocParam::const_color(P4_COLOR)),
+                ]),
+                extra: Default::default(),
+            },
+        })],
+    });
+    doc.validate().unwrap();
+    doc
+}
+
+fn p4_empty_runtime() -> PluginRuntime {
+    PluginRuntime::try_new(
+        Arc::new(PluginCatalogBuilder::new().build().unwrap()),
+        PluginRegistry::new(),
+    )
+    .unwrap()
+}
+
 fn plugin_step(graph: &motolii_doc::DocumentFrameGraph) -> (&PluginId, &ResolvedParams) {
     graph
         .graph
@@ -240,6 +278,57 @@ fn n2_contract_only_runtime_rejected_layer_source() {
     assert!(diagnostics.iter().any(|d| {
         d.plugin_id == CLEAR_LAYER_SOURCE && d.reason == PluginDiagnosticReason::ExecutorMissing
     }));
+}
+
+#[test]
+fn p4_rect_overlay_path_unchanged() {
+    let runtime = p4_empty_runtime();
+    let built = build_document_frame_graph(
+        &p4_rect_document(),
+        EvaluationTime::new(RationalTime::ZERO),
+        FrameDesc::packed(16, 8, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true),
+        &DataTracks::new(),
+        &runtime,
+        None,
+    )
+    .unwrap();
+
+    let mut overlay_rect_count = 0usize;
+    let mut plugin_count = 0usize;
+    let mut overlay_rect_step = None;
+    for step in &built.graph.steps {
+        match step {
+            RenderStep::OverlayRect { overlay, .. } => {
+                overlay_rect_count += 1;
+                overlay_rect_step = Some(overlay);
+            }
+            RenderStep::Plugin { .. } => plugin_count += 1,
+            _ => {}
+        }
+    }
+    assert_eq!(
+        overlay_rect_count, 1,
+        "rect must lower to exactly one OverlayRect"
+    );
+    assert_eq!(
+        plugin_count, 0,
+        "effects-free rect must not emit Plugin steps"
+    );
+
+    let overlay = overlay_rect_step.expect("expected OverlayRect step");
+    assert_eq!(overlay.center.x, P4_CENTER[0]);
+    assert_eq!(overlay.center.y, P4_CENTER[1]);
+    assert_eq!(overlay.size.width, P4_SIZE[0]);
+    assert_eq!(overlay.size.height, P4_SIZE[1]);
+    assert_eq!(
+        overlay.color,
+        [
+            P4_COLOR[0] as f32,
+            P4_COLOR[1] as f32,
+            P4_COLOR[2] as f32,
+            P4_COLOR[3] as f32,
+        ]
+    );
 }
 
 #[test]
