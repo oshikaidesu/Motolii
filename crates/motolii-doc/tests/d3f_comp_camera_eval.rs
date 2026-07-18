@@ -3,24 +3,31 @@
 use std::collections::BTreeMap;
 
 use motolii_core::{
-    CanonicalPoint, ColorSpace, CompCamera, CompCameraError, FrameDesc, PixelFormat, RationalTime,
-    TimeMap,
+    CanonicalPoint, ColorSpace, CompCamera, CompCameraError, FrameDesc, PixelFormat, Quality,
+    RationalTime, TimeMap,
 };
 use motolii_doc::{
-    build_document_frame_graph,
+    build_document_frame_graph, migrate_bytes,
     param_eval::{eval_f64, eval_vec2, ResolvedLayerParams},
     CameraEvalError, Clip, ClipSource, CompCameraDoc, Composition, DocKeyframe, DocKeyframeTrack,
     DocParam, DocValue, Document, EvaluationTime, GraphError, ItemEnvelope, LayerId,
-    ParamEvalError, Track, TrackItem, RECT_LAYER_SOURCE,
+    ParamEvalError, Track, TrackItem, CLEAR_LAYER_SOURCE, RECT_LAYER_SOURCE,
 };
 use motolii_eval::{DataTracks, Interp, Value};
+use motolii_gpu::download_rgba;
 use motolii_plugin::PluginRuntime;
 use motolii_plugins_firstparty::first_party_runtime;
-use motolii_render::RenderStep;
+use motolii_render::{render_graph_cached, RenderGraphInputs, RenderSession, RenderStep};
+use motolii_testkit::{assert_rgba_close, compare_rgba, gpu_or_skip, tol, RgbaImageDesc};
+use serde_json::json;
 
 const W: u32 = 16;
 const H: u32 = 9;
+const CAM_G0_W: u32 = 16;
+const CAM_G0_H: u32 = 8;
 const COEFF_TOL: f32 = 1e-5;
+const CAM_G0_ORACLE: &str =
+    include_str!("../../motolii-render/tests/oracles/cam_g0_planar_identity.tsv");
 
 fn frame_desc() -> FrameDesc {
     FrameDesc::packed(W, H, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true)
@@ -41,6 +48,21 @@ fn identity_camera(doc: &Document) -> CompCamera {
     .unwrap()
 }
 
+fn clear_clip(layer: u64, color: [f64; 4]) -> Clip {
+    Clip {
+        envelope: ItemEnvelope::new(LayerId::from_raw(layer)),
+        start: RationalTime::ZERO,
+        duration: RationalTime::try_new(10, 1).unwrap(),
+        time_map: TimeMap::identity(),
+        source: ClipSource::Plugin {
+            plugin_id: CLEAR_LAYER_SOURCE.into(),
+            effect_version: 1,
+            params: BTreeMap::from([("color".into(), DocParam::const_color(color))]),
+            extra: Default::default(),
+        },
+    }
+}
+
 fn rect_clip(layer: u64, center: [f64; 2], size: [f64; 2], color: [f64; 4]) -> Clip {
     Clip {
         envelope: ItemEnvelope::new(LayerId::from_raw(layer)),
@@ -58,6 +80,159 @@ fn rect_clip(layer: u64, center: [f64; 2], size: [f64; 2], color: [f64; 4]) -> C
             extra: Default::default(),
         },
     }
+}
+
+fn cam_g0_frame_desc() -> FrameDesc {
+    FrameDesc::packed(
+        CAM_G0_W,
+        CAM_G0_H,
+        PixelFormat::Rgba8Unorm,
+        ColorSpace::Srgb,
+        true,
+    )
+}
+
+fn cam_g0_image_desc() -> RgbaImageDesc {
+    RgbaImageDesc {
+        width: CAM_G0_W,
+        height: CAM_G0_H,
+    }
+}
+
+fn rgba8(value: &str) -> [u8; 4] {
+    let values = value
+        .split(',')
+        .map(|component| component.parse::<u8>().expect("oracle rgba8 component"))
+        .collect::<Vec<_>>();
+    values
+        .try_into()
+        .expect("oracle rgba8 must have 4 components")
+}
+
+fn load_cam_g0_oracle_bytes() -> Vec<u8> {
+    let mut rgba_rows = Vec::new();
+    for line in CAM_G0_ORACLE.lines() {
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let fields = line.split('\t').collect::<Vec<_>>();
+        if let ["rgba", y, x, rgba] = fields.as_slice() {
+            rgba_rows.push((
+                y.parse::<u32>().expect("oracle rgba y"),
+                x.parse::<u32>().expect("oracle rgba x"),
+                rgba8(rgba),
+            ));
+        }
+    }
+    rgba_rows.sort_by_key(|(y, x, _)| (*y, *x));
+    let pixel_count = (CAM_G0_W * CAM_G0_H) as usize;
+    assert_eq!(
+        rgba_rows.len(),
+        pixel_count,
+        "CAM-G0 oracle rgba row count must match width*height"
+    );
+    let mut expected = vec![0u8; pixel_count * 4];
+    for (idx, (y, x, rgba)) in rgba_rows.into_iter().enumerate() {
+        assert_eq!((y, x), (idx as u32 / CAM_G0_W, idx as u32 % CAM_G0_W));
+        let i = idx * 4;
+        expected[i..i + 4].copy_from_slice(&rgba);
+    }
+    expected
+}
+
+fn build_cam_g0_document(camera: CompCameraDoc) -> Document {
+    let mut doc = Document::new_current();
+    doc.composition = Composition::try_new(
+        i64::from(CAM_G0_W),
+        i64::from(CAM_G0_H),
+        RationalTime::try_new(10, 1).unwrap(),
+        doc.composition.fps,
+    )
+    .unwrap();
+    doc.composition.camera = camera;
+    doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
+
+    let clear_layer = doc.layers.allocate("clear").unwrap();
+    let rect_layer = doc.layers.allocate("rect").unwrap();
+    let track_id = doc.track_ids.allocate("V1").unwrap();
+
+    let mut clear = clear_clip(clear_layer.get(), [0.0, 0.0, 0.0, 1.0]);
+    clear.envelope.layer_id = clear_layer;
+    let mut rect = rect_clip(
+        rect_layer.get(),
+        [0.0, 0.0],
+        [0.5, 0.5],
+        [1.0, 0.0, 0.0, 1.0],
+    );
+    rect.envelope.layer_id = rect_layer;
+
+    doc.tracks.push(Track {
+        id: track_id,
+        items: vec![TrackItem::Clip(clear), TrackItem::Clip(rect)],
+    });
+    doc.validate().unwrap();
+    doc
+}
+
+fn populate_cam_g0_scene(doc: &mut Document) {
+    doc.composition = Composition::try_new(
+        i64::from(CAM_G0_W),
+        i64::from(CAM_G0_H),
+        RationalTime::try_new(10, 1).unwrap(),
+        doc.composition.fps,
+    )
+    .unwrap();
+    doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
+
+    let clear_layer = doc.layers.allocate("clear").unwrap();
+    let rect_layer = doc.layers.allocate("rect").unwrap();
+    let track_id = doc.track_ids.allocate("V1").unwrap();
+
+    let mut clear = clear_clip(clear_layer.get(), [0.0, 0.0, 0.0, 1.0]);
+    clear.envelope.layer_id = clear_layer;
+    let mut rect = rect_clip(
+        rect_layer.get(),
+        [0.0, 0.0],
+        [0.5, 0.5],
+        [1.0, 0.0, 0.0, 1.0],
+    );
+    rect.envelope.layer_id = rect_layer;
+
+    doc.tracks.push(Track {
+        id: track_id,
+        items: vec![TrackItem::Clip(clear), TrackItem::Clip(rect)],
+    });
+    doc.validate().unwrap();
+}
+
+fn render_document_gpu(doc: &Document) -> Option<Vec<u8>> {
+    let gpu = gpu_or_skip()?;
+    let runtime = reference_runtime();
+    let built = build_document_frame_graph(
+        doc,
+        EvaluationTime::new(RationalTime::ZERO),
+        cam_g0_frame_desc(),
+        &DataTracks::new(),
+        &runtime,
+        None,
+    )
+    .unwrap();
+    let mut session = RenderSession::new(&gpu);
+    let rendered = render_graph_cached(
+        &gpu,
+        &mut session,
+        RationalTime::ZERO,
+        &built.graph,
+        &RenderGraphInputs {
+            camera: built.camera,
+            video_sources: &[],
+            source_time: Some(built.source_time),
+            plugins: Some(runtime.executors()),
+        },
+        Quality::FINAL,
+    )
+    .unwrap();
+    Some(download_rgba(&gpu, &rendered.texture).unwrap())
 }
 
 fn build_world_identity_rect_doc(camera: CompCameraDoc) -> Document {
@@ -542,4 +717,72 @@ fn camera_param_type_mismatch_is_typed() {
             ParamEvalError::DataTrackTypeMismatch { .. }
         ))
     ));
+}
+
+#[test]
+fn current_default_camera_document_gpu_matches_cam_g0_oracle() {
+    let doc = build_cam_g0_document(CompCameraDoc::default_planar_orthographic());
+    let actual = render_document_gpu(&doc).expect("gpu");
+    let expected = load_cam_g0_oracle_bytes();
+    assert_rgba_close(
+        "d3f-current-default-cam-g0",
+        cam_g0_image_desc(),
+        &actual,
+        &expected,
+        tol::EXACT,
+    );
+}
+
+#[test]
+fn migrated_default_camera_document_gpu_matches_cam_g0_oracle() {
+    let bytes = serde_json::to_vec(&json!({
+        "version": 4,
+        "min_reader_version": 1,
+        "composition": {
+            "aspect_num": CAM_G0_W,
+            "aspect_den": CAM_G0_H,
+            "duration": {"num": 10, "den": 1},
+            "fps": {"num": 30, "den": 1}
+        },
+        "bpm": {"num": 120, "den": 1}
+    }))
+    .unwrap();
+    let (mut doc, report) = migrate_bytes(&bytes).unwrap();
+    assert!(
+        report.steps.contains(&"insert_default_comp_camera"),
+        "steps={:?}",
+        report.steps
+    );
+    assert_eq!(
+        doc.composition.camera,
+        CompCameraDoc::default_planar_orthographic()
+    );
+    populate_cam_g0_scene(&mut doc);
+
+    let actual = render_document_gpu(&doc).expect("gpu");
+    let expected = load_cam_g0_oracle_bytes();
+    assert_rgba_close(
+        "d3f-migrated-default-cam-g0",
+        cam_g0_image_desc(),
+        &actual,
+        &expected,
+        tol::EXACT,
+    );
+}
+
+#[test]
+fn non_default_camera_document_gpu_does_not_match_cam_g0_oracle() {
+    let doc = build_cam_g0_document(CompCameraDoc::PlanarOrthographic {
+        center: DocParam::const_vec2([0.1, -0.05]),
+        roll_radians: DocParam::const_f64(0.25),
+        height: DocParam::const_f64(1.5),
+    });
+    let actual = render_document_gpu(&doc).expect("gpu");
+    let expected = load_cam_g0_oracle_bytes();
+    let diff = compare_rgba(cam_g0_image_desc(), &actual, &expected).unwrap();
+    assert!(
+        diff.stats.max_abs_diff > tol::EXACT,
+        "non-default camera must not match CAM-G0 oracle: max={}",
+        diff.stats.max_abs_diff
+    );
 }
