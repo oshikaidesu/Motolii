@@ -48,7 +48,7 @@ impl Quality {
             return desc;
         }
 
-        if desc.width % scale != 0 || desc.height % scale != 0 {
+        if !desc.width.is_multiple_of(scale) || !desc.height.is_multiple_of(scale) {
             return desc;
         }
 
