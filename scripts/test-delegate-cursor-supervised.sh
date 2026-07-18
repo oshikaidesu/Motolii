@@ -142,6 +142,7 @@ run_prepare "$order_file" \
 status="$RUN_STATUS"
 assert_status 1 "$status" "invalid Cursor supervisor result"
 [[ ! -e "$order_file" ]] || fail "invalid Cursor supervisor result: order file must not be created"
+assert_has_fragment "$TMP_ROOT/stdout.log" "still no marker" "invalid Cursor output visibility"
 
 task="execute task"
 task_hash="$(printf '%s' "$task" | shasum -a 256 | awk '{print $1}')"

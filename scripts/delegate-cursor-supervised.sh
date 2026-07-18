@@ -167,6 +167,7 @@ run_supervisor() {
         SUPERVISOR_BACKEND_USED="grok-build"
         return 0
       else
+        cp "$output.grok-build" "$output"
         echo "delegate-cursor-supervised: Grok Buildの結果マーカーが欠落・曖昧・末尾外です" >&2
       fi
     else
@@ -190,6 +191,7 @@ run_supervisor() {
     return 1
   fi
   if ! supervisor_result_is_valid "$output.cursor-grok" "$result_kind"; then
+    cp "$output.cursor-grok" "$output"
     echo "delegate-cursor-supervised: Cursor版Grokの結果マーカーが欠落・曖昧・末尾外です" >&2
     return 1
   fi
