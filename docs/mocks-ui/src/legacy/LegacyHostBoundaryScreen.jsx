@@ -31,12 +31,12 @@ function matches(node, { id, className }) {
   );
 }
 
-function createParserOptions() {
+function createParserOptions(BrowserComponent = LegacyBrowser) {
   const options = {
     replace(node) {
       const props = { node, options };
       if (matches(node, { className: "browser" })) {
-        return <LegacyBrowser {...props} />;
+        return <BrowserComponent {...props} />;
       }
       if (matches(node, { id: "color-book-drawer" })) {
         return <LegacyColorBook {...props} />;
@@ -132,10 +132,10 @@ function executeTrustedFixtureScript(fixture) {
   return cleanup;
 }
 
-function LegacyFixture({ fixture }) {
+function LegacyFixture({ fixture, BrowserComponent }) {
   const content = useMemo(
-    () => parse(legacyBody, createParserOptions()),
-    [],
+    () => parse(legacyBody, createParserOptions(BrowserComponent)),
+    [BrowserComponent],
   );
 
   useEffect(
@@ -153,6 +153,13 @@ function LegacyFixture({ fixture }) {
 
 export function LegacyHostBoundaryScreen({
   fixture = "all-surfaces",
+  BrowserComponent,
 }) {
-  return <LegacyFixture key={fixtureHash(fixture)} fixture={fixture} />;
+  return (
+    <LegacyFixture
+      key={fixtureHash(fixture)}
+      fixture={fixture}
+      BrowserComponent={BrowserComponent}
+    />
+  );
 }

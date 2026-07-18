@@ -9,6 +9,7 @@
 `src/legacy/LegacyHostBoundaryScreen.jsx`は、現行`m3-vism-host-boundary.html`をVite raw importし、`html-react-parser`でReact treeへ変換する。元CSS、class、ID、子DOMと、リポジトリ同梱の固定scriptを維持しながら、Browser、Color Book、Stage、Inspector、Timeline、Recovery、Settingsをnamed wrapperへ昇格する。
 
 - `#all-surfaces`ほか既存hashはparser-backedな現行参照を表示する。
+- `#plugin-browser-candidate`はBrowser wrapperだけを改善候補へ差し替え、Project / Pluginsの両方を共通`Search / Sources / Collections / Results`文法で比較する。現行参照や製品componentの採択ではない。
 - `#skeleton`は分解境界だけを確認する簡略版であり、視覚正本ではない。
 - bridgeが評価するscriptは静的raw importしたリポジトリ同梱fixtureだけである。外部HTMLや入力文字列を渡さない。
 - surfaceを本実装へ置き換える時は、該当wrapperだけを変更し、旧HTMLとのPlaywright画像比較を維持する。
@@ -20,7 +21,7 @@ npm run storybook
 npm run test:visual
 ```
 
-Storybookは現行参照とSkeletonを別階層に置く。Playwrightは旧HTMLとparser版を同じChrome・1440×900で撮影し、画像差分、主要surface座標、accessible landmarkを審判する。
+Storybookは現行参照、改善候補、Skeletonを分離する。Playwrightは旧HTMLとparser版を同じChrome・1440×900で撮影して参照bridgeの画像差分を審判し、改善候補は別の操作試験で共通Browser文法と逸脱状態だけの表示を確認する。
 
 ## 参照順位
 

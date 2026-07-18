@@ -572,6 +572,26 @@
       "status": "current-structural-golden",
       "referenceRole": "settings reference screen",
       "eguiTarget": "reference screen for the internal egui settings surface"
+    },
+    {
+      "id": "screen.plugin-browser-candidate",
+      "layer": "screen",
+      "jsx": "docs/mocks-ui/src/candidates/DiscoveryBrowserCandidate.jsx",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "aside.browser replaced at #plugin-browser-candidate"
+      },
+      "tickets": [
+        "U0e-2"
+      ],
+      "stateOwner": [
+        "User settings or workspace candidate for Collections, Tags, Recent, and view density",
+        "Transient for search, filters, selection, preview, and active Browser tab",
+        "Document command only when a candidate is committed to a target"
+      ],
+      "status": "design-candidate",
+      "referenceRole": "shared Project and Plugin Browser grammar with thumbnail-first plugin results",
+      "eguiTarget": "comparison fixture for a shared internal egui Browser shell; not an adopted product component"
     }
   ]
 }

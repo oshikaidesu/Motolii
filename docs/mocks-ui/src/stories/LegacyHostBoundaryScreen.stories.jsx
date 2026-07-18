@@ -1,3 +1,4 @@
+import { DiscoveryBrowserCandidate } from "../candidates/DiscoveryBrowserCandidate.jsx";
 import { LegacyHostBoundaryScreen } from "../legacy/index.js";
 import { expect, userEvent, within } from "storybook/test";
 
@@ -35,6 +36,14 @@ export const Settings = {
     fixture: "settings",
   },
   name: "#settings · user settings",
+};
+
+export const PluginDiscoveryCandidate = {
+  args: {
+    fixture: "plugin-browser-candidate",
+    BrowserComponent: DiscoveryBrowserCandidate,
+  },
+  name: "Plugin Browser · shared discovery shell candidate",
 };
 
 export const MissingPlugin = {

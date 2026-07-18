@@ -490,7 +490,7 @@
 (() => {
   const $ = selector => document.querySelector(selector);
   const $$ = selector => [...document.querySelectorAll(selector)];
-  const state = {mode:"installed", stageTool:"select", playing:false, start:0, raf:0, playheadPct:46, activeInterval:null, depthOpen:false, depthPhase:0, intensity:64, spread:42, automation:{position:true,depth:true,scale:false,rotation:false,opacity:true,intensity:true,spread:false}, activeParam:"intensity", easing:{interp:"Bezier",preset:"Smooth",x1:.34,y1:1.56,x2:.64,y2:1,overshoot:true}, easeDrag:null, curveTag:"all", curveFolder:"all", curveHistory:[], curveLibrary:[{name:"Smooth",interp:"Bezier",v:[.34,1.56,.64,1],tags:"goto",folder:""},{name:"Snap in",interp:"Bezier",v:[.7,0,.2,1],tags:"goto text",folder:"type"},{name:"Drift out",interp:"Bezier",v:[0,.4,.3,1],tags:"camera",folder:"camera"},{name:"Lyric pop",interp:"Bezier",v:[.2,1.35,.5,1],tags:"text",folder:"type"},{name:"Bounce",interp:"Bounce",v:[0,0,1,1],tags:"",folder:""}], zDrag:null, assetSource:"project", selectedAsset:"night_drive.wav", colorChannel:"Fill", selectedColor:"#df8b4d", appliedFill:"#df8b4d", appliedStroke:"#68a6d8", colorFolder:"all", colorTag:"all", colorHistory:["#df8b4d","#68a6d8","#ad82bf","#18202b","#62b4ae"], colorField:"triangle", colorResize:null, eyedropper:false, pluginFolder:"all", pluginLabel:"all", pluginView:"thumb", pluginHistory:["installed","missing"]};
+  const state = {mode:"installed", stageTool:"select", playing:false, start:0, raf:0, playheadPct:46, activeInterval:null, depthOpen:false, depthPhase:0, intensity:64, spread:42, automation:{position:true,depth:true,scale:false,rotation:false,opacity:true,intensity:true,spread:false}, activeParam:"intensity", easing:{interp:"Bezier",preset:"Smooth",x1:.34,y1:1.56,x2:.64,y2:1,overshoot:true}, easeDrag:null, curveTag:"all", curveFolder:"all", curveHistory:[], curveLibrary:[{name:"Smooth",interp:"Bezier",v:[.34,1.56,.64,1],tags:"goto",folder:""},{name:"Snap in",interp:"Bezier",v:[.7,0,.2,1],tags:"goto text",folder:"type"},{name:"Drift out",interp:"Bezier",v:[0,.4,.3,1],tags:"camera",folder:"camera"},{name:"Lyric pop",interp:"Bezier",v:[.2,1.35,.5,1],tags:"text",folder:"type"},{name:"Bounce",interp:"Bounce",v:[0,0,1,1],tags:"",folder:""}], zDrag:null, assetSource:"project", selectedAsset:"night_drive.wav", colorChannel:"Fill", selectedColor:"#df8b4d", appliedFill:"#df8b4d", appliedStroke:"#68a6d8", colorFolder:"all", colorTag:"all", colorHistory:["#df8b4d","#68a6d8","#ad82bf","#18202b","#62b4ae"], colorField:"triangle", colorResize:null, eyedropper:false, pluginSource:"all", pluginFolder:"all", pluginLabel:"all", pluginView:"thumb", pluginHistory:["installed","missing"]};
   const modeCopy = {
     installed:{accent:"#d4b36f",crumb:"Echo Bloom",stage:"ECHO BLOOM",badge:"",brief:""},
     discover:{accent:"#79aaa6",crumb:"Glyph Current",stage:"GLYPH CURRENT · DISCOVER",badge:"DISCOVERY PREVIEW · NOT IN PROJECT",brief:"Discovery preview · Project変更ゼロ"},
@@ -823,11 +823,18 @@
   }
   function filterPlugins(){
     const query=$("#search").value.trim().toLowerCase();
+    let count=0;
     $$(".vism[data-mode]").forEach(item=>{
+      const sourceMatch=state.pluginSource==="all"||
+        (state.pluginSource==="installed"&&item.dataset.mode==="installed")||
+        (state.pluginSource==="project"&&item.dataset.folder.split(" ").includes("project"))||
+        (state.pluginSource==="issues"&&["blocked","missing"].includes(item.dataset.mode));
       const folderMatch=state.pluginFolder==="all"||item.dataset.folder.split(" ").includes(state.pluginFolder);
       const labelMatch=state.pluginLabel==="all"||item.dataset.labels.split(" ").includes(state.pluginLabel);
-      item.hidden=!(folderMatch&&labelMatch&&(!query||item.dataset.search.includes(query)));
+      item.hidden=!(sourceMatch&&folderMatch&&labelMatch&&(!query||item.dataset.search.includes(query)));
+      if(!item.hidden)count++;
     });
+    if($("#plugin-result-count"))$("#plugin-result-count").textContent=String(count);
   }
   function renderPluginHistory(){
     const names={installed:"Echo Bloom",discover:"Glyph Current",blocked:"Fold Field",missing:"Ribbon Array"};
@@ -914,6 +921,34 @@
     filterPlugins();
   });
   $("#plugin-folder").onchange=event=>{state.pluginFolder=event.target.value;filterPlugins();status("Plugin folder","Folderで絞り込み","")};
+  $$("[data-plugin-source]").forEach(source=>source.onclick=()=>{
+    state.pluginSource=source.dataset.pluginSource; state.pluginFolder="all";
+    $$("[data-plugin-source]").forEach(item=>item.classList.toggle("on",item===source));
+    $$("[data-plugin-collection]").forEach(item=>item.classList.remove("on"));
+    if($("#plugin-recent-panel"))$("#plugin-recent-panel").hidden=true;
+    if($("#plugin-results"))$("#plugin-results").hidden=false;
+    filterPlugins(); status("Plugin Browser",source.getAttribute("aria-label")||source.textContent.trim(),"");
+  });
+  $$("[data-plugin-collection]").forEach(collection=>collection.onclick=()=>{
+    state.pluginSource="all"; state.pluginFolder=collection.dataset.pluginCollection;
+    $$("[data-plugin-source]").forEach(item=>item.classList.remove("on"));
+    $$("[data-plugin-collection]").forEach(item=>item.classList.toggle("on",item===collection));
+    if($("#plugin-recent-panel"))$("#plugin-recent-panel").hidden=true;
+    if($("#plugin-results"))$("#plugin-results").hidden=false;
+    filterPlugins(); status("Collection",collection.getAttribute("aria-label")||collection.textContent.trim(),"");
+  });
+  if($("#plugin-recent-toggle"))$("#plugin-recent-toggle").onclick=()=>{
+    const open=$("#plugin-recent-panel").hidden;
+    $("#plugin-recent-panel").hidden=!open; $("#plugin-results").hidden=open;
+    $("#plugin-recent-toggle").classList.toggle("on",open);
+    status("Recent",open?"Committed plugins":"","");
+  };
+  if($("#plugin-filter-toggle"))$("#plugin-filter-toggle").onclick=()=>{
+    const open=$("#plugin-filter-panel").hidden;
+    $("#plugin-filter-panel").hidden=!open;
+    $("#plugin-filter-toggle").setAttribute("aria-expanded",String(open));
+    status("Filters",open?"Filter results":"","");
+  };
   $$(".plugin-label").forEach(label=>label.onclick=()=>{
     state.pluginLabel=label.dataset.pluginLabel; $$(".plugin-label").forEach(item=>item.classList.toggle("on",item===label)); filterPlugins();
     status("Plugin label",`${label.textContent} filter`,"");

@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.jsx";
+import { DiscoveryBrowserCandidate } from "./candidates/DiscoveryBrowserCandidate.jsx";
 import { LegacyHostBoundaryScreen } from "./legacy/index.js";
 import { AllSurfacesScreen } from "./screens/AllSurfacesScreen.jsx";
 
@@ -40,6 +41,14 @@ const screenRegistry = {
     title: "Host boundary / settings",
     Component: LegacyHostBoundaryScreen,
     props: { fixture: "settings" },
+  },
+  "plugin-browser-candidate": {
+    title: "Plugin discovery / browser candidate",
+    Component: LegacyHostBoundaryScreen,
+    props: {
+      fixture: "plugin-browser-candidate",
+      BrowserComponent: DiscoveryBrowserCandidate,
+    },
   },
   skeleton: {
     title: "Component boundary skeleton",
