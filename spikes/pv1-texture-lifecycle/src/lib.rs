@@ -98,8 +98,8 @@ pub struct AutomationStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pv1Manifest {
-    pub ticket: &'static str,
-    pub spike_crate: &'static str,
+    pub ticket: String,
+    pub spike_crate: String,
     pub recorded_at: String,
     pub runner: String,
     pub environment_note: String,
@@ -114,8 +114,8 @@ pub struct Pv1Manifest {
 impl Pv1Manifest {
     pub fn skeleton_template() -> Self {
         Self {
-            ticket: TICKET,
-            spike_crate: "spikes/pv1-texture-lifecycle",
+            ticket: TICKET.into(),
+            spike_crate: "spikes/pv1-texture-lifecycle".into(),
             recorded_at: "未実走".into(),
             runner: String::new(),
             environment_note:
@@ -183,6 +183,17 @@ impl Pv1Manifest {
             last_counters: ResourceCounters::default(),
             last_state: "booting".into(),
         }
+    }
+
+    pub fn record_run(
+        &mut self,
+        recorded_at: String,
+        counters: ResourceCounters,
+        state: LifecycleState,
+    ) {
+        self.recorded_at = recorded_at;
+        self.last_counters = counters;
+        self.last_state = format!("{state:?}").to_lowercase();
     }
 }
 
@@ -777,6 +788,24 @@ mod slot_tests {
             decision,
             UiTickStatusDecision::ShowFatal(LifecycleError::CommandChannelClosed)
         );
+    }
+
+    #[test]
+    fn record_run_preserves_human_verdicts() {
+        let mut manifest = Pv1Manifest::skeleton_template();
+        manifest.human_checks[0].verdict = Verdict::Pass;
+        manifest.overall = Verdict::Pending;
+        let counters = ResourceCounters {
+            texture_create_count: 3,
+            ..ResourceCounters::default()
+        };
+
+        manifest.record_run("unix:123".into(), counters, LifecycleState::Displaying);
+
+        assert_eq!(manifest.human_checks[0].verdict, Verdict::Pass);
+        assert_eq!(manifest.overall, Verdict::Pending);
+        assert_eq!(manifest.last_counters, counters);
+        assert_eq!(manifest.last_state, "displaying");
     }
 
     #[test]

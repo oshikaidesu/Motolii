@@ -51,7 +51,8 @@ cargo build --release
 ### 自動層 実測 (2026-07-18)
 
 ```text
-running 7 tests
+running 8 tests
+test slot_tests::record_run_preserves_human_verdicts ... ok
 test slot_tests::ui_tick_command_channel_fatal_is_sticky_over_status_line ... ok
 test slot_tests::ui_tick_fatal_overrides_stale_status_line ... ok
 test slot_tests::ui_tick_status_line_used_when_no_poison ... ok
@@ -60,7 +61,7 @@ test slot_tests::replace_slot_returns_slot_poisoned_after_recovery_write ... ok
 test slot_tests::try_take_reports_poisoned_not_would_block ... ok
 test slot_tests::converge_mailbox_slot_poison_after_replace_error ... ok
 
-test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
 
 running 15 tests
 test manifest_overall_never_auto_passes_from_skeleton ... ok

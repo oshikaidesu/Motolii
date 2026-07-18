@@ -13,7 +13,7 @@
 
 1. `export CARGO_TARGET_DIR=/private/tmp/motolii-pv1-target && cd spikes/pv1-texture-lifecycle && cargo run --release`
 2. 任意: `PV1_EVIDENCE_DIR=../../docs/spikes/pv1-texture-lifecycle-evidence cargo run --release`
-   - **証跡 JSON は Status 受信毎ではなく、アプリ終了時（Shutdown→worker join 後）に 1 回だけ** `manifest-skeleton.json` を上書きする
+   - **証跡 JSON は Status 受信毎ではなく、アプリ終了時（Shutdown→worker join 後）に 1 回だけ** `manifest-skeleton.json` の実走時刻・counter・最終stateを更新する。既存の人間判定は保持する
 3. 人間審判完了後、各 `human_checks` / `backends` の `verdict` を手で `pass` または `fail` に更新
 4. **未実測の backend（DX12/Vulkan 等）は `pending` のまま** — pass と記録しない
 5. 全必須項目が pass のときのみ `overall` を `pass` に変更

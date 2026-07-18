@@ -12,7 +12,7 @@ use motolii_gpu::GpuCtx;
 use pv1_texture_lifecycle::{
     converge_mailbox_slot_poison, decide_ui_tick_status, format_status_snapshot, LatestSlot,
     LifecycleEngine, LifecycleError, LifecycleEvent, LifecycleState, Pv1Manifest, ResourceCounters,
-    SlotTake, StatusSnapshot, UiTickStatusDecision, Verdict, DEFAULT_HEIGHT, DEFAULT_WIDTH,
+    SlotTake, StatusSnapshot, UiTickStatusDecision, DEFAULT_HEIGHT, DEFAULT_WIDTH,
 };
 use slint::wgpu_29::wgpu;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -138,12 +138,13 @@ fn write_manifest_skeleton(
     state: LifecycleState,
 ) -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(out_dir)?;
-    let mut manifest = Pv1Manifest::skeleton_template();
-    manifest.recorded_at = unix_timestamp();
-    manifest.last_counters = counters;
-    manifest.last_state = format!("{state:?}").to_lowercase();
-    manifest.overall = Verdict::Pending;
     let path = out_dir.join("manifest-skeleton.json");
+    let mut manifest = match std::fs::read_to_string(&path) {
+        Ok(contents) => serde_json::from_str::<Pv1Manifest>(&contents)?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Pv1Manifest::skeleton_template(),
+        Err(e) => return Err(e.into()),
+    };
+    manifest.record_run(unix_timestamp(), counters, state);
     std::fs::write(&path, serde_json::to_string_pretty(&manifest)?)?;
     eprintln!("pv1 evidence: wrote {}", path.display());
     Ok(())
