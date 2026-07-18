@@ -4,6 +4,24 @@
 
 台帳はRust公開API、永続形式、製品component名、JSX props、製品token値を定めない。HTMLのDOM境界をegui境界へそのまま写す指示でもない。具体的な色、px、radiusは`U0e-2`の比較材料に留め、`G0-6H`の人間審判より前に`U0e-3`の製品値へ昇格させない。
 
+## 忠実再現bridge
+
+`src/legacy/LegacyHostBoundaryScreen.jsx`は、現行`m3-vism-host-boundary.html`をVite raw importし、`html-react-parser`でReact treeへ変換する。元CSS、class、ID、子DOMと、リポジトリ同梱の固定scriptを維持しながら、Browser、Color Book、Stage、Inspector、Timeline、Recovery、Settingsをnamed wrapperへ昇格する。
+
+- `#all-surfaces`ほか既存hashはparser-backedな現行参照を表示する。
+- `#skeleton`は分解境界だけを確認する簡略版であり、視覚正本ではない。
+- bridgeが評価するscriptは静的raw importしたリポジトリ同梱fixtureだけである。外部HTMLや入力文字列を渡さない。
+- surfaceを本実装へ置き換える時は、該当wrapperだけを変更し、旧HTMLとのPlaywright画像比較を維持する。
+
+```sh
+npm ci
+npm run dev -- --host 127.0.0.1
+npm run storybook
+npm run test:visual
+```
+
+Storybookは現行参照とSkeletonを別階層に置く。Playwrightは旧HTMLとparser版を同じChrome・1440×900で撮影し、画像差分、主要surface座標、accessible landmarkを審判する。
+
 ## 参照順位
 
 1. `docs/mocks/m3-vism-host-boundary.html`を現在の統合分解元とする。特に`#all-surfaces`はBrowserのProject/Pluginsを同時表示しないまま、Stage、Inspector、Timeline、Depth Rail、Color Bookを一画面で審判する。

@@ -22,7 +22,7 @@ function Fixture({ fixture, entry }) {
 
   return (
     <section data-fixture={fixture} aria-label={entry.title ?? fixture}>
-      <Screen />
+      <Screen {...entry.props} />
     </section>
   );
 }
@@ -49,11 +49,11 @@ export function App({ registry = {} }) {
     }
 
     return (
-      <main data-fixture={fixture}>
+      <div data-fixture={fixture}>
         {entries.map(([key, entry]) => (
           <Fixture key={key} fixture={key} entry={entry} />
         ))}
-      </main>
+      </div>
     );
   }
 
@@ -68,8 +68,8 @@ export function App({ registry = {} }) {
   }
 
   return (
-    <main data-fixture={fixture}>
+    <div data-fixture={fixture}>
       <Fixture fixture={fixture} entry={entry} />
-    </main>
+    </div>
   );
 }

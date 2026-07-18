@@ -6,7 +6,8 @@
 - [機械可読な対応表](../mocks-ui/component-map.json)
 - `docs/mocks-ui`は、現行HTMLを`tokens → primitives → patterns → surfaces → screens`へ分解して比較するモック専用基盤である。
 - React / JSXのprops、state、DOM event、CSS値、component境界をRust公開API、Document、User settings形式、egui公開component名へ転記しない。
-- 現在は`#all-surfaces`にBrowser、Stage、Inspector、Timelineを接続済み。既存HTMLとgoldenを置き換えず、同じ責務を再現できることを確認してからhash fixture単位で移す。
+- `#all-surfaces`ほか既存hashは、元HTMLを直接raw importするparser-backed React bridgeで忠実再現する。Browser、Stage、Inspector、Timeline等をnamed wrapperへ昇格し、旧HTMLとの画像比較を保ったまま面単位で置換する。
+- 手書きの簡略構成は`#skeleton`へ分離し、視覚正本や製品token判断には使わない。
 
 ローカル実行:
 
@@ -16,7 +17,7 @@ npm ci
 npm run dev -- --host 127.0.0.1
 ```
 
-`http://127.0.0.1:5173/#all-surfaces`が統合fixture、`#catalog`が登録済みscreen一覧である。
+`http://127.0.0.1:5173/#all-surfaces`が忠実再現した統合fixture、`#skeleton`が構造だけの簡略版、`#catalog`が登録済みscreen一覧である。部品・状態単位の確認は`npm run storybook`、旧新の自動比較は`npm run test:visual`を使う。
 
 ## モック共通規約
 

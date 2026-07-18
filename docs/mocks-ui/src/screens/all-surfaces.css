@@ -19,10 +19,11 @@ body {
   background: var(--mock-role-surface-app);
 }
 
-[data-fixture="all-surfaces"] {
+[data-fixture="skeleton"] {
   height: 100%;
 }
 
+@scope (.motolii-mock-app) {
 .motolii-mock-app {
   --mock-bg: var(--mock-role-surface-app);
   --mock-panel: var(--mock-role-surface-panel);
@@ -426,4 +427,5 @@ body {
 
 .mock-status span {
   color: var(--mock-muted);
+}
 }
