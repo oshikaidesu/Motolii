@@ -20,7 +20,7 @@
 |---|---|---|---|---|
 | GAP-14 | `DONE` | 参照中Delete=Reject、Unlink=RemoveUse、Copy Local=Materialize、orphan=Keep、未知plugin同一規則 | —（決定済） | [#166](https://github.com/oshikaidesu/Motolii/issues/166)、[lifecycle決定](2026-07-15-shared-effect-lifecycle-decision.md) |
 | D1l | `DONE`（main到達／再締結証跡待ち） | Definition/Use分離、ordered stack、inline migration、非隣接共有、GAP-14 lifecycle+journal/Undo境界、新規Document v4生成口 | M2再締結時の独立追補レビューと証跡対応付け | `a23a4ad`、`74af37e`、lint follow-up `02192c2` |
-| D3e | `READY` | 各Use位置で個別評価、Groupは子合成後1回、source非消費 | D1l実装main到達済み、D3 | 最新D1l型から専用評価PRを起票 |
+| D3e | `DONE` | 各Use位置で個別評価、Groupは子合成後1回、source非消費、prepared params評価 | D1l実装main到達済み、D3 | `crates/motolii-doc/tests/d3e_shared_effect_eval.rs`、`crates/motolii-export/tests/d3e_preview_export_same.rs` |
 
 ### GAP-14の出口（完了）
 

@@ -97,7 +97,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 | 優先 | ID | Phase | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
-| 1 | D3e | M2 | `ISSUE` | — | D1l実装はmain到達済み。既存Definition解決配線を完了扱いせず、M2仕様の8審判を専用PRへ転記 | Shared Effect評価を閉じる |
+| 1 | D3e | M2 | `DONE` | — | `apply_effect`をprepared recipe評価へ。`d3e_shared_effect_eval` + `d3e_preview_export_same` | Shared Effect評価を閉じる |
 | 2 | D1m | M2 | `DO` | — | project sidecar/session決定済み。公開raw-path mutationを残す必要が見えたらSTOP | 保存所有権を閉じる |
 | 3 | CAM-G0 | M2 | `DO` / `SPIKE` | — | planar v1 camera決定main到達済み。既存pixel fixture/classificationだけ | D1jを解禁 |
 | 4 | K0 | M4 | `DO` / `SPIKE` | [#167](https://github.com/oshikaidesu/Motolii/issues/167) | D3はmain到達済み。製品schema/APIへ焼かない独立fixtureに限定 | K1aをIssue化 |

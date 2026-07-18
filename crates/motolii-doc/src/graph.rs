@@ -615,11 +615,20 @@ impl<'a> GraphBuilder<'a> {
         definition: &crate::schema::EffectDefinition,
         layer: LayerId,
     ) -> Result<TextureId, GraphError> {
-        let resolved =
-            self.resolve_plugin_params(&definition.plugin_id, &definition.params, layer)?;
+        let recipe = self
+            .prepared
+            .get(&PluginSlotId::EffectDefinition(definition.id))
+            .ok_or_else(|| {
+                GraphError::PluginDiagnostics(vec![PluginDiagnostic {
+                    slot: PluginSlotId::EffectDefinition(definition.id),
+                    plugin_id: definition.plugin_id.clone(),
+                    reason: PluginDiagnosticReason::ContractMissing,
+                }])
+            })?;
+        let resolved = self.resolve_plugin_params(&recipe.plugin_id, &recipe.params, layer)?;
         let out = self.alloc_id();
         self.steps.push(RenderStep::Plugin {
-            id: self.resolve_plugin_id(&definition.plugin_id)?,
+            id: self.resolve_plugin_id(&recipe.plugin_id)?,
             params: resolved,
             inputs: vec![input],
             output: out,
@@ -919,6 +928,84 @@ mod vism_a3_1a_tests {
         assert!(matches!(
             err,
             GraphError::PreparedLayerSourceMissing { layer: got } if got == expected_layer
+        ));
+    }
+}
+
+#[cfg(test)]
+mod d3e_resolve_effect_tests {
+    use super::*;
+    use crate::{
+        Clip, ClipSource, DocParam, EffectDefinitionId, EffectId, EffectUse, ItemEnvelope, Track,
+        TrackItem, RECT_LAYER_SOURCE,
+    };
+    use motolii_core::{ColorSpace, FrameDesc, PixelFormat, RationalTime};
+    use motolii_eval::DataTracks;
+    use motolii_plugin::{reference::register_reference_plugins, PluginRegistry};
+
+    #[test]
+    fn missing_effect_definition_returns_typed_graph_error() {
+        let mut doc = Document::new_current();
+        let layer = doc.layers.allocate("clip").unwrap();
+        let track = doc.track_ids.allocate("V1").unwrap();
+        let dangling = EffectDefinitionId::from_raw(42);
+        let use_id = EffectId::from_raw(7);
+        let mut envelope = ItemEnvelope::new(layer);
+        envelope.effects.push(EffectUse {
+            id: use_id,
+            definition_id: dangling,
+        });
+        doc.tracks.push(Track {
+            id: track,
+            items: vec![TrackItem::Clip(Clip {
+                envelope,
+                start: RationalTime::ZERO,
+                duration: RationalTime::from_seconds(1),
+                time_map: Default::default(),
+                source: ClipSource::Plugin {
+                    plugin_id: RECT_LAYER_SOURCE.into(),
+                    effect_version: 1,
+                    params: BTreeMap::from([
+                        ("center".into(), DocParam::const_vec2([0.0, 0.0])),
+                        ("size".into(), DocParam::const_vec2([0.5, 0.5])),
+                        ("color".into(), DocParam::const_color([1.0, 0.0, 0.0, 1.0])),
+                    ]),
+                    extra: Default::default(),
+                },
+            })],
+        });
+
+        let mut registry = PluginRegistry::new();
+        register_reference_plugins(&mut registry).unwrap();
+        let tracks = DataTracks::new();
+        let prepared = PreparedDocumentPlugins::default();
+        let desc = FrameDesc::packed(16, 8, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let builder = GraphBuilder::new(
+            &doc,
+            desc,
+            RationalTime::ZERO,
+            &tracks,
+            &registry,
+            &prepared,
+            false,
+        );
+        let effect = match &doc.tracks[0].items[0] {
+            TrackItem::Clip(clip) => &clip.envelope.effects[0],
+            TrackItem::Group(_) => panic!("expected clip"),
+        };
+        let expected_layer = layer.get();
+        let err = builder
+            .resolve_effect_definition(effect, layer)
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            GraphError::MissingEffectDefinition {
+                layer: got_layer,
+                use_id: got_use,
+                definition_id: got_def,
+            } if got_layer == expected_layer
+                && got_use == use_id.get()
+                && got_def == dangling.get()
         ));
     }
 }
