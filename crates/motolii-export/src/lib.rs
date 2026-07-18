@@ -621,7 +621,6 @@ fn collect_video_assets_from_items(items: &[TrackItem], found: &mut Option<Asset
 }
 
 #[cfg(test)]
-#[allow(deprecated)]
 mod tests {
     use std::path::Path;
 
@@ -667,7 +666,7 @@ mod tests {
             VideoComponent,
         };
 
-        let mut doc = Document::new_v1();
+        let mut doc = Document::new_current();
         let audio_asset = doc.assets.allocate("sfx", "audio/wav", "h-audio").unwrap();
         let video_asset = doc.assets.allocate("bg", "video/mp4", "h-video").unwrap();
         let audio_layer = doc.layers.allocate("audio").unwrap();

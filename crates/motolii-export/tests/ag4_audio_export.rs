@@ -1,5 +1,3 @@
-#![allow(deprecated)]
-
 //! AG-4: fast path維持と mixed PCM export の審判。
 
 use std::collections::BTreeMap;
@@ -97,9 +95,7 @@ fn extract_f32_stereo(path: &Path, out: &Path, duration: &str) {
 }
 
 fn build_video_doc(video_name: &str) -> Document {
-    let mut doc = Document::new_v1();
-    doc.version = 3;
-    doc.min_reader_version = 3;
+    let mut doc = Document::new_current();
     doc.composition = Composition::try_new(
         W as i64,
         H as i64,

@@ -1,5 +1,3 @@
-#![allow(deprecated)]
-
 //! M1 出口デモ(ヒーロー)のE2Eゴールデン。
 //!
 //! 「実写(生成)背景 + Bezierイージングで右へ流れる四角シェイプ」を
@@ -53,12 +51,10 @@ fn eased_center_track() -> DocKeyframeTrack {
 }
 
 fn build_exit_demo_document(input_name: &str) -> Document {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     // KeyframeId 0,1 を使うためカウンタを先に進める(A8)。
     let _ = doc.next_stable_id.allocate().unwrap();
     let _ = doc.next_stable_id.allocate().unwrap();
-    doc.version = 2;
-    doc.min_reader_version = 2;
     doc.composition = Composition::try_new(
         W as i64,
         H as i64,
