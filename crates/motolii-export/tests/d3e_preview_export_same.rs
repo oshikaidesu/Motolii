@@ -6,10 +6,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use motolii_core::{
-    CanonicalPoint, ColorSpace, CompCamera, Fps, FrameDesc, PixelFormat, Quality, RationalTime,
-    TimeMap,
-};
+use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap};
 use motolii_doc::{
     build_document_frame_graph, resolve_asset_path, Asset, AssetId, Clip, ClipSource, Composition,
     DocParam, Document, EffectDefinition, EffectDefinitionId, EffectId, EffectUse, EvaluationTime,
@@ -175,14 +172,7 @@ fn render_preview_composition_rgba(gpu: &GpuCtx, doc: &Document, project_root: &
         .map(|(slot, texture)| (slot.texture_id, TextureRef { texture, desc }))
         .collect();
 
-    let camera = CompCamera::try_new(
-        CanonicalPoint::CENTER,
-        0.0,
-        1.0,
-        doc.composition.aspect_num(),
-        doc.composition.aspect_den(),
-    )
-    .unwrap();
+    let camera = built.camera;
 
     let mut session = RenderSession::new(gpu);
     let rendered = render_graph_cached(

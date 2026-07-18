@@ -231,13 +231,6 @@ pub fn export_document_video(
     }
 
     let desc = resolve_export_frame_desc(job.doc, job.project_root)?;
-    let camera = CompCamera::try_new(
-        CanonicalPoint::CENTER,
-        0.0,
-        1.0,
-        job.doc.composition.aspect_num(),
-        job.doc.composition.aspect_den(),
-    )?;
     let timeline_fps = job.doc.composition.fps;
     let soundtrack = resolve_audio_export(job)?;
 
@@ -308,7 +301,7 @@ pub fn export_document_video(
                 timeline_time,
                 &built.graph,
                 &RenderGraphInputs {
-                    camera,
+                    camera: built.camera,
                     video_sources: &video_inputs,
                     source_time: Some(built.source_time),
                     plugins: Some(job.runtime.executors()),

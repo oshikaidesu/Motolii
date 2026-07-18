@@ -3,9 +3,7 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
 
-use motolii_core::{
-    CanonicalPoint, ColorSpace, CompCamera, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap,
-};
+use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap};
 use motolii_doc::{
     build_document_frame_graph, Clip, ClipSource, Composition, DocParam, Document, DocumentError,
     DocumentPluginError, EffectDefinition, EffectDefinitionId, EffectId, EffectUse, EvaluationTime,
@@ -119,14 +117,6 @@ fn render_doc(doc: &mut Document) -> Option<Vec<u8>> {
     )
     .unwrap();
     let frame_desc = desc();
-    let camera = CompCamera::try_new(
-        CanonicalPoint::CENTER,
-        0.0,
-        1.0,
-        doc.composition.aspect_num(),
-        doc.composition.aspect_den(),
-    )
-    .unwrap();
     let gpu = gpu_or_skip()?;
     let runtime = reference_runtime();
     let built = build_document_frame_graph(
@@ -145,7 +135,7 @@ fn render_doc(doc: &mut Document) -> Option<Vec<u8>> {
         RationalTime::ZERO,
         &built.graph,
         &RenderGraphInputs {
-            camera,
+            camera: built.camera,
             video_sources: &[],
             source_time: Some(built.source_time),
             plugins: Some(runtime.executors()),
