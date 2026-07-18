@@ -107,19 +107,33 @@ scope、reference-frame比較、Undo履歴panel、annotation、任意guide、pre
 
 プラグイン、素材、Color、preset等、候補がユーザーの追加によって増える選択面は、名前検索だけの一覧にしない。次の整理・再発見機能を共通のUX必須条件とする。
 
-- **Folder**: ユーザーが任意のまとまりを作り、候補を移動・複数配置できる
-- **Label**: Folderを横断して用途・雰囲気・domain・`GO-TO`等の意味を複数付与できる。Host既定labelとユーザーlabelを見分けられる
-- **History**: 確定して使った候補を新しい順に再選択できる。hover preview、検索、Cancelは履歴へ追加しない
+- **Sources**: `All / Installed / Project Used / Missing`等、Hostが所有する客観的scope。候補の実装kindやinstall pathを上位navigationにしない
+- **Collections**: ユーザーが候補を複数所属できる仮想のまとまり。filesystemの単一親階層と誤認させないため、外部fileを辿る面以外では`Folder`を通常名にしない
+- **Tags / Filters**: Collectionを横断して用途・雰囲気・domain・状態等を複数条件で絞る。Host既定tagとユーザーtagを識別できる
+- **Recent**: 確定して使った候補を新しい順に再選択できるsource。hover preview、検索、Cancelは履歴へ追加しない
+
+Project ExplorerとPlugin Browserは同じBrowser shellを使う。上からSearch、左または折畳み領域にSources / Collections、中央にResults、必要時だけFilters / Detailを置き、keyboard focus移動、single click選択、preview、grid/list切替、履歴、drag/drop、`Enter`の意味を揃える。狭い常設panelではSources / CollectionsとResultsを優先し、Tags、Detail、管理操作を常時同時表示しない。
+
+Tagsは全候補の語彙をchipとして固定表示しない。現在scopeと検索結果に関連する少数をFilter Viewへ出し、選択に応じて結果件数と利用可能tagを更新する。複合条件を繰り返し使う場合は保存検索をCollection相当の入口へ置けるが、別の検索結果正本を作らない。
 
 候補の主な識別物が画像・色・音等である時は、その内容を最大面積で示し、名前、code、由来等の文字を常時主役にしない。ただしkeyboard、screen reader、検索用のaccessible nameと、必要時に開く詳細は失わない。
 
+Effect、Generator、transition等の結果を視覚で識別できる候補は、固定fixtureから決定的に生成したthumbnailをResultsの主役にする。通常cardはthumbnail、短い名前、kind icon、favorite入口までを基本とし、正常な`READY`、説明文、tag列、provider、install由来を反復表示しない。`Missing / Unavailable / Download required`等の逸脱だけをthumbnail上の状態として残し、詳細は選択後のDetail / Info / Developer infoへ下げる。
+
 視覚候補の棚は`single click = 選択／Preview`、`double click = 現在targetへCommit`を共通短縮操作にできる。double clickだけを唯一のCommit入口にはせず、keyboardの`Enter`と明示`Apply`を同じIntentへ接続する。Historyへ積むのはCommitだけであり、single click、hover、Cancelは積まない。
 
-星1〜5の評価は採用しない。候補ごとに「星1か星3か」を判断する仕事を増やし、主要preview面を反復iconで狭めるためである。優先度やお気に入り相当の整理は、意味を再利用できるLabelまたはFolderで表す。
+星1〜5の評価は採用しない。候補ごとに「星1か星3か」を判断する仕事を増やし、主要preview面を反復iconで狭めるためである。お気に入りは単一の再発見操作としてCollectionへ投影し、評価値やDocument意味にしない。
 
-Folder、Label、履歴は候補を探すためのUser settingsまたはWorkspace-session候補であり、配置・適用先のDocument意味とは分離する。保存場所と同期方式が未決の段階でDocument schemaへ焼かない。候補の選択・整理だけではUndoを作らず、配置やparameter適用をCommitした時だけ通常のD2 commandへ進む。
+Collections、Tags、Recent、保存検索は候補を探すためのUser settingsまたはWorkspace-session候補であり、配置・適用先のDocument意味とは分離する。保存場所と同期方式が未決の段階でDocument schemaへ焼かない。候補の選択・整理だけではUndoを作らず、配置やparameter適用をCommitした時だけ通常のD2 commandへ進む。
 
-FolderとLabelはcandidateの安定identityを参照するユーザー所有の仮想整理であり、install先、package内部path、filesystem階層、Cargo/module構造から生成しない。packageの更新、再導入、保存場所変更でユーザーの棚を移動・改名しない。由来や実fileは診断・Developer infoで別に読めても、整理の正本にしない。
+CollectionsとTagsはcandidateの安定identityを参照するユーザー所有の仮想整理であり、install先、package内部path、filesystem階層、Cargo/module構造から生成しない。packageの更新、再導入、保存場所変更でユーザーの棚を移動・改名しない。由来や実fileは診断・Developer infoで別に読めても、整理の正本にしない。
+
+先例として、Ableton Live 12はSearch / Sidebar label / Filter View / Tags / Resultsを一つのBrowserへ統合し、検索結果をsidebarへ保存できる。BitwigはSources / Filters / Results / Detailを共通化し、現在結果に関連するtagを優先表示する。Premiereは種類別bin、検索、attribute filter、Custom Binを同じEffects panelへ置く。CapCutは大量のEffectを目的・雰囲気categoryと視覚結果から探させる。Motoliiはこれらの製品固有分類を輸入せず、共通Browser文法と視覚候補のthumbnail優先だけを借りる。
+
+- [Ableton — The Live 12 Browser](https://help.ableton.com/hc/en-us/articles/12927340213660-The-Live-12-Browser)
+- [Bitwig — Common Browser Elements](https://www.bitwig.com/userguide/latest/common_browser_elements/)
+- [Adobe Premiere — Find and group effects](https://helpx.adobe.com/premiere/desktop/add-video-effects/apply-video-effects/find-and-group-effects.html)
+- [CapCut — rich media resources](https://www.capcut.com/resource/how-to-use-capcut)
 
 ## 4. 少数の共通操作文法
 

@@ -29,6 +29,15 @@ AEのように無彩色と文字ラベルへ識別を寄せすぎない。ユー
 
 色だけには依存しない。意味色にはicon、形、線種、pattern、位置のいずれかを必ず併用する。文字は正確な名称、数値、tooltip、screen reader用に残すが、主要状態の唯一の識別手段にしない。
 
+### Main chromeの言語量
+
+英語をsource localeにしても、Main toolsと固定領域の識別を長い英語labelへ依存させない。頻用かつ意味が安定した操作は同一icon・位置・shortcutで再発見できるようにし、文字は曖昧さを減らすために必要な最短labelへ限定する。
+
+- Select、Hand、Text、Camera等の頻用toolはiconを主役にし、accessible name、tooltip、focus時Infoで正確な英語名を補う
+- Motolii固有、結果が破壊的、またはiconだけでは対象scopeを推測できない操作は短い英語labelを残す。言語削減を理由に意味不明なiconを増やさない
+- panel見出し、選択対象名、検索結果名、値、診断理由は文字を残す。消す対象は反復する説明文、正常状態語、実装由来、同じ事実の重複labelである
+- iconだけのcontrolもkeyboard focus、screen reader、検索可能なCommand名を失わない。翻訳時にiconや配置を言語別へ変えない
+
 ## 情報を隠さず、一覧で所在を示す
 
 Motoliiは制作ツールなので、一般消費者向けアプリのように機能を大きな余白や段階的開示の奥へ隠さない。画面を軽く見せることより、どこに何の情報があるかを一目で把握できることを優先する。
