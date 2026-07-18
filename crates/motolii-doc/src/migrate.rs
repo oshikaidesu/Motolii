@@ -597,9 +597,10 @@ pub fn migrate_bytes_with_limits(
     // そのときseedキーは意味上seed:u64へ落ちるので件数減少を許容しない(拒否)。
     assert_counts_preserved(before_counts, after_rewrite)?;
 
-    if steps.contains(&"inject_stable_ids") || steps.contains(&"inline_effects_to_definition_use") {
-        bump_min_reader_for_nest_schema_change(&mut doc, LATEST_DOCUMENT_VERSION);
-    } else if steps.contains(&"insert_default_comp_camera") {
+    if steps.contains(&"inject_stable_ids")
+        || steps.contains(&"inline_effects_to_definition_use")
+        || steps.contains(&"insert_default_comp_camera")
+    {
         bump_min_reader_for_nest_schema_change(&mut doc, LATEST_DOCUMENT_VERSION);
     } else if doc_has_stable_ids(&doc) && doc.min_reader_version < LATEST_DOCUMENT_VERSION {
         // 既にidを持つ旧JSONでもvalidateのmin_reader下限を満たす。すでに下限を満たす

@@ -345,7 +345,6 @@ pub fn write_fresh_header(
 
 #[cfg(test)]
 mod fs_order_tests {
-    use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use motolii_core::RationalTime;
@@ -394,7 +393,7 @@ mod fs_order_tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let path = PathBuf::from(std::env::temp_dir()).join(format!("motolii-wal-order-{nanos}"));
+        let path = std::env::temp_dir().join(format!("motolii-wal-order-{nanos}"));
         std::fs::create_dir_all(&path).unwrap();
         let path = path.join("proj.json");
         let (doc, layer) = doc_with_clip();

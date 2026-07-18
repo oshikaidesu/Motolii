@@ -448,38 +448,6 @@ fn sync_dir(path: &Path) -> Result<(), SessionError> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::ffi::OsStr;
-
-    #[test]
-    fn os_str_starts_with_matches_corrupt_journal_prefix() {
-        let name = OsStr::new("journal.wal.corrupt-20260101");
-        assert!(os_str_starts_with(&name, "journal.wal.corrupt-"));
-    }
-
-    #[test]
-    fn os_str_starts_with_rejects_non_matching_name() {
-        let name = OsStr::new("journal.wal");
-        assert!(!os_str_starts_with(&name, "journal.wal.corrupt-"));
-    }
-
-    #[test]
-    fn os_str_starts_with_rejects_prefix_only_partial() {
-        let name = OsStr::new("journal.wal.corrupt");
-        assert!(!os_str_starts_with(&name, "journal.wal.corrupt-"));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn os_str_starts_with_non_utf8_name_matches_prefix_lossless() {
-        use std::os::unix::ffi::OsStrExt;
-        let name = OsStr::from_bytes(b"journal.wal.corrupt-\xFFtail");
-        assert!(os_str_starts_with(&name, "journal.wal.corrupt-"));
-    }
-}
-
 fn sync_dir_all(dir: &Path) -> Result<(), SessionError> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
@@ -493,4 +461,36 @@ fn sync_dir_all(dir: &Path) -> Result<(), SessionError> {
     }
     sync_dir(dir)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsStr;
+
+    #[test]
+    fn os_str_starts_with_matches_corrupt_journal_prefix() {
+        let name = OsStr::new("journal.wal.corrupt-20260101");
+        assert!(os_str_starts_with(name, "journal.wal.corrupt-"));
+    }
+
+    #[test]
+    fn os_str_starts_with_rejects_non_matching_name() {
+        let name = OsStr::new("journal.wal");
+        assert!(!os_str_starts_with(name, "journal.wal.corrupt-"));
+    }
+
+    #[test]
+    fn os_str_starts_with_rejects_prefix_only_partial() {
+        let name = OsStr::new("journal.wal.corrupt");
+        assert!(!os_str_starts_with(name, "journal.wal.corrupt-"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn os_str_starts_with_non_utf8_name_matches_prefix_lossless() {
+        use std::os::unix::ffi::OsStrExt;
+        let name = OsStr::from_bytes(b"journal.wal.corrupt-\xFFtail");
+        assert!(os_str_starts_with(name, "journal.wal.corrupt-"));
+    }
 }

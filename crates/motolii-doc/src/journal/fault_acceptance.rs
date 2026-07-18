@@ -1,7 +1,7 @@
 //! D1d fault-injection acceptance (crate-private unit tests; not journal-public).
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::journal::format::{journal_path_for_document, scan_journal, JournalScanStop};
@@ -26,11 +26,11 @@ fn unique_dir(tag: &str) -> PathBuf {
     dir
 }
 
-fn save_journal(path: &PathBuf, doc: &Document, options: &SaveProjectOptions) {
+fn save_journal(path: &Path, doc: &Document, options: &SaveProjectOptions) {
     save_project_with_journal(path, doc, options).expect("save with journal");
 }
 
-fn open_recovered(path: &PathBuf) -> crate::journal::RecoveryResult {
+fn open_recovered(path: &Path) -> crate::journal::RecoveryResult {
     open_project_with_limits(path, &ResourceLimits::production()).expect("open project")
 }
 
