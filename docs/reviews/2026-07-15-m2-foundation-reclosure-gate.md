@@ -12,10 +12,10 @@ M2のDocument意味・migration・Undo・評価順・所有権は、後続フェ
 
 - [M2コア締結宣言](2026-07-14-m2-core-closure.md)は、レビュー0件でのmerge後にCI未検出のP1が2件見つかり、撤回された
 - P1修復 #153/#154はmain到達済みだが、再締結の独立追補レビューは未完了
-- Shared Effectは意味とlifecycleを決定済みだが、D1l実装PR #173は未merge、D3eはD1l待ち
-- D5 PR #182は現行M3粗案のU1へ直接、U5へU1経由で依存するが、M2基盤再締結とは分離して完了を判定する
+- Shared EffectのD1l実装はmain到達済み（`a23a4ad`、`74af37e`、lint follow-up `02192c2`）。D3eの専用評価fixture／実装は未着手であり、D1lを含む再締結証跡表への対応付けも未完了
+- D5骨格はmain到達済み（`1cf4cb9`）だが、本番プレビューループ、GPU timestamp query収集、10分実機E2Eは未達。M2基盤再締結とは分離して完了を判定する
 - M3仕様はドラフトである。#180/#191は先行してmainへ入ったが、依存方向CIと空のUIクレート骨格に限る。これらをM3入場完了の根拠にしない
-- PR #176相当の未mergeブランチにはCompCamera、Param Pipeline、Element Domain等の将来境界案がある。これはmainの既決ではなく、採否を分割PRで決めるまで発注根拠にしない
+- PR #176相当の将来境界案は分割処分が進み、planar v1 camera決定とParam Pipeline／Element Domain／Constraint Graphの持越し境界はmain到達済み。CAM-G0以降のcamera実装とD1mは未着手であり、残る差分の棚卸しと再締結証跡への対応付けは未完了
 
 ## 再締結宣言の退出条件
 
@@ -33,10 +33,10 @@ M2のDocument意味・migration・Undo・評価順・所有権は、後続フェ
 
 | 対象 | mainでの状態 | 再締結までの処置 |
 |---|---|---|
-| #173 / D1l | lifecycleは決定済み、実装未merge | 独立コードレビュー後に修復・merge |
-| #176相当の将来境界文書群 | 未mergeの提案。下記ファイル集合を含む | 一括merge禁止。M2恒久面への影響ごとに採択・延期・棄却を分割記録。Param/Element/Constraintは2026-07-16持越し境界PRで処置 |
+| #173 / D1l | 実装main到達済み（`a23a4ad`、`74af37e`、`02192c2`）。再締結証跡表への対応付け未完了 | D3eを独立実装し、D1lのmigration／command／journal証跡を追補レビューで再確認 |
+| #176相当の将来境界文書群 | planar v1 camera決定とParam/Element/Constraint持越し処分はmain到達済み。camera実装と残差分監査は未完了 | 一括mergeせず、CAM-G0→D1j→D1k→D3fを直列実装。残差分を再締結証跡表で採択・延期・棄却へ対応付け |
 | main上の実装準備台帳にあるU1f/U2f/U2gと、依存欄へ残るD1k等の未翻訳参照語 | 意味決定の記録や参照語はmainにあるが、M3/M2正本のタスク表へ未翻訳 | 本ゲート中は`BLOCKED`。cameraのM2側はCAM-G0/D1j/D1k/D3fへ翻訳し、M3側は再締結後の入場PRで採否・ID・依存を再翻訳 |
-| #182 / D5 | Draft。現行M3粗案ではU1へ直接、U5へ間接依存 | M2基盤再締結の閉集合外。別レーンで判定 |
+| #182 / D5 | 骨格main到達済み（`1cf4cb9`）。本番preview／GPU計測／10分実機E2Eは未達 | M2基盤再締結の閉集合外。別レーンで完了判定 |
 | #179 | closed / 未merge | 旧M3入場判断として採用しない。再締結後の新しい入場PRで置換 |
 
 #176相当から棚卸し対象とする最小ファイル集合は、`docs/reviews/2026-07-14-unified-stage-camera-design.md`、`docs/reviews/2026-07-14-m2-exit-param-pipeline-disposition.md`、`docs/implementation-ledger.md`、`docs/interaction-simplicity-model.md`、同ブランチ版のM2/M3仕様である。main到達済みの`2026-07-14-motion-foundation-known-tech-disposition.md`は未merge集合に含めず、#176側との差分だけを採否確認する。差分からM2のschema/runtime/評価順へ影響する文書が追加で見つかった場合は、再締結PRの棚卸し表へ追加する。
@@ -84,9 +84,9 @@ M2のDocument意味・migration・Undo・評価順・所有権は、後続フェ
 ## 発注順
 
 1. 発効宣言PR（本PR）をmainへ到達させる。ここでは退出条件を満たした扱いにしない
-2. D1l PR #173を独立レビューし、P0/P1を修復してmergeする
+2. ~~D1l実装をmainへ到達させる~~（`a23a4ad`、`74af37e`、`02192c2`）。再締結時の独立追補レビューと証跡対応付けは手順6で行う
 3. D3eを最新D1l型からIssue化・実装する
-4. #176相当を恒久面ごとに棚卸しし、CompCameraとParam Pipeline等の採否・延期を小さいdecision/spec PRで閉じる
+4. #176相当のうちmain到達済みのcamera／Param・Element・Constraint決定を証跡表へ対応付け、残差分を恒久面ごとに採択・延期・棄却する。CAM-G0→D1j→D1k→D3fは別PRで直列実装する
 5. D1mを独立実装・レビューし、project-scoped sidecarとsession ownershipをmainへ到達させる
 6. M2追補実コードレビューを行い、発見事項を1件1PRで修復する
 7. 発効宣言とは別のM2基盤再締結PRで本書A〜Cの証跡表を埋め、ステータスを解除へ変更する
