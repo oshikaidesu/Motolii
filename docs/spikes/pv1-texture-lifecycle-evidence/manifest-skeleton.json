@@ -1,0 +1,76 @@
+{
+  "ticket": "PV-1",
+  "spike_crate": "spikes/pv1-texture-lifecycle",
+  "recorded_at": "未実走",
+  "runner": "",
+  "environment_note": "人間実機審判は開発主機 release build で実施。未実測は pending のまま。",
+  "overall": "pending",
+  "automation": {
+    "lifecycle_behavior_tests": "pending",
+    "release_build": "pending"
+  },
+  "human_checks": [
+    {
+      "id": "H1",
+      "spec": "単一window継続表示 ≥10分、破綻・黒画面なし",
+      "verdict": "pending",
+      "notes": ""
+    },
+    {
+      "id": "H2",
+      "spec": "resize 100回後も表示継続、不要な毎frame再生成感なし",
+      "verdict": "pending",
+      "notes": ""
+    },
+    {
+      "id": "H3",
+      "spec": "hide/show（単一window・Hide後自動Show往復）",
+      "verdict": "pending",
+      "notes": ""
+    },
+    {
+      "id": "H4",
+      "spec": "minimize相当→自動Restore往復",
+      "verdict": "pending",
+      "notes": ""
+    },
+    {
+      "id": "H5",
+      "spec": "明示texture再生成後の復帰",
+      "verdict": "pending",
+      "notes": ""
+    },
+    {
+      "id": "H6",
+      "spec": "DPI/monitor移動（可能な環境のみ）",
+      "verdict": "pending",
+      "notes": ""
+    }
+  ],
+  "backends": [
+    {
+      "backend": "Metal",
+      "verdict": "pending",
+      "notes": "開発主機で実測後に更新"
+    },
+    {
+      "backend": "DX12",
+      "verdict": "pending",
+      "notes": "未実測 — pending 維持"
+    },
+    {
+      "backend": "Vulkan",
+      "verdict": "pending",
+      "notes": "未実測 — pending 維持"
+    }
+  ],
+  "last_counters": {
+    "texture_create_count": 0,
+    "pipeline_create_count": 0,
+    "shader_module_create_count": 0,
+    "image_try_from_count": 0,
+    "content_update_count": 0,
+    "ui_property_set_count": 0
+  },
+  "last_state": "booting"
+}
