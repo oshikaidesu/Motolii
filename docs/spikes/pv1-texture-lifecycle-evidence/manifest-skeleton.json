@@ -31,8 +31,8 @@
     {
       "id": "H4",
       "spec": "minimize相当→自動Restore往復",
-      "verdict": "pending",
-      "notes": ""
+      "verdict": "pass",
+      "notes": "Minimize後、約400msで同一windowへ自動Restoreすることを実機確認。"
     },
     {
       "id": "H5",
@@ -51,7 +51,7 @@
     {
       "backend": "Metal",
       "verdict": "pending",
-      "notes": "Apple M4で部分実測済み。H1/H3 pass、残りの人間項目完了までbackend verdictはpending。"
+      "notes": "Apple M4で部分実測済み。H1/H3/H4 pass、残りの人間項目完了までbackend verdictはpending。"
     },
     {
       "backend": "DX12",
