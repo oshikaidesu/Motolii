@@ -11,6 +11,8 @@
 
 Motoliiは完成条件としてはMV制作ツールだが、長期的には**映像表現の共通実行環境と、その最初のリファレンスHost**を目指す。映像表現を特定project内の手順や巨大なtemplateへ閉じ込めず、時刻・入力・型付きparameterから結果を返す、小さく再利用可能な実行単位として扱う。制作者はそれをtimeline上で配置し、keyframe・ParamDriver・DataTrackで変調し、組み合わせて一本の作品を「演奏」できる。開発者は編集アプリ全体を作らず、ひとつの新しい表現へ集中できる。
 
+この持ち運べる映像表現の配布単位を**Vism（ヴィズム）**、拡張子を**`.vism`**とする。VismはProject、Preset、内部plugin kindの別名ではない。Vismは必要な型付きinputを宣言し、複数Vismのprovider選択・接続・初期値は**Kit**が目的単位へまとめ、Projectへ安全にmaterializeする。Motoliiは最初のHostとしてその境界を実証し、公開契約を継ぐ互換forkが同じ制作資産を扱える余地を残す。他製品共通規格は完成条件にしない。意味、package、Host integrationの分離は[Vismコンセプト](vism-package-concept.md)、Core/Vism/Kit/Projectの責任は[Vism / Kitモデル](vism-kit-model.md)を正本とする。
+
 これは**「映像制作におけるVST」**という比喩で捉えられる。VSTバイナリ互換、DAW化、音声プラグインの読み込みを目標にするという意味ではない。VSTから継承するのは、Hostと表現実装を分離し、時間・parameter・automation・保存互換を共通言語にすることで、小さな作者と制作資産の生態系を成立させた構造である。AEのプラグインAPIやproject構造を再現することも目的にしない。
 
 | 音楽制作での役割 | Motoliiでの対応 | 共通化する意味 |
@@ -70,15 +72,28 @@ Motoliiは完成条件としてはMV制作ツールだが、長期的には**映
 
 **シンプル化は初心者向けの機能制限ではなく、プロ向けの操作性能である**(2026-07-14決定)。同じ目的へ到達するためのクリック、判断、記憶、画面往復を減らし、映像表現へ使える集中力を残す。頻繁な操作を「プロならNull・式・プリコンポ・スクリプトで組める」と放置しない。熟練とは製品の穴を埋める手順の暗記ではなく、表現を選び制御できることである。
 
+### 軽快さは創作の試行回数を守る
+
+**Motoliiにおけるミニマリズムは、見た目や機能数の少なさではない。必要十分な表現力へ、最小の待ち時間・判断・管理コストで到達できることである。** 起動、素材投入、操作反映、preview、plugin導入の小さな摩擦は、それぞれが短くても「今これを試す」を諦めさせる。したがって軽快さは性能上の美点ではなく、思いつきを結果へ変えるまでの熱量と、一定時間内に試せる表現の数を守る制作機能として扱う。
+
+- **待たない**: 起動から編集可能になるまで、操作からpreviewへ反映されるまで、scrubして結果を確認するまでを短くする。平均fpsだけでなく、制作動線上の個々の待ちを測る。
+- **迷わない**: 目的へ到達するクリック、判断、記憶、画面往復を減らす。機能を隠して簡単に見せるのではなく、所在・因果・戻し方を一貫させる。
+- **抱えない**: 使わない機能、常駐処理、依存、設定、互換性責任を本体にも制作者にも背負わせない。小さなコアは薄いコアではなく、作品の持続性に必要な責任だけをHostが厳格に持つ。
+- **閉じ込めない**: 必要になった専門性はpluginで追加できる。ただし導入・更新・欠落診断・version・再現性の管理を属人的な手順へ投棄せず、拡張後も身軽さを失わない。
+
+この原則は「低機能な軽量版」を目指すものではない。AE級の表現力を一度に抱え込む巨大な操作面ではなく、型付きの小さな意味を合成し、必要な専門性だけを探索・追加できる構造で実現する。評価では機能一覧だけでなく、起動から最初の結果までの時間、操作反映遅延、目的達成までの判断数、一定時間内の試行回数、拡張後の常駐負荷と管理負荷を見る。体験側の審判は[UIコンセプト](ui-concept.md#柱5-軽さは機能)、拡張側の責任分界は[小さなコアと探索可能な拡張](extensible-core-model.md)を正本とする。
+
 - **高度な表現は制限せず、頻出手順を高度なまま放置しない**: 相対移動、追従、反復、遅延、ランダム化、奥行き展開、範囲選択等には、目的の名前を持つ直接操作または標準toolを用意する。内部プリミティブを手で配線することを通常手順にしない。
 - **同じ意味に3段の入口を持つ**: `Direct`(Canvas操作・shortcut) / `Tool`(目的単位の標準機能) / `Advanced`(評価列・明示scope等)は、別機能や別Document形式を作らず、同じ型付き意味へ正規化する。簡易UIで作った状態をAdvancedで検査・編集でき、Advancedへ移った時に作り直させない。隠れNull、隠れlayer、文字列expressionをUI糖衣の裏で生成しない。
 - **expressionは最後の脱出口であり、標準機能の代用品にしない**: 0から100まで書ける自由度は、Hostが反復需要を標準化しない理由にならない。同型の式・rig・pluginが繰り返し作られたら、`user plugin → 検証済みpreset → Hostの型付きprimitive/tool`の昇格候補として監査する。昇格は利用数だけで決めず、意味の安定、再現性、Undo、依存関係、可搬性を審判する。
 - **ユーザープラグインは責任の投棄先ではなく、安全な実験場**: 未知の表現と専門用途はpluginへ開く一方、型、純関数、明示依存、version、error、UI metadataの枠をHostが持つ。pluginがDocumentを任意変更し、他layerを名前検索し、隠れ状態・隠れcontroller・属人的な導入手順を作る設計にしない。編集基礎、project可読性、欠落plugin診断、配布整合はHost責務に残す。
+- **意味は厳格に、表現は自由にする**: 極端な値、逆転、発散、画面外、奇妙な組合せを安全の名で禁止しない。拒否するのは、因果を追えず局所回復できない仕組みである。失敗はCommit前に型付きで説明し、操作はCancel/Undo可能、画面外の対象も回収可能にする。UIは最初の実行可能なドキュメントとして働き、基本成果に外部manualを要求せず、疑問が生じた場所から現在の対象を引き継いでdocsへ進める。
+- **pluginは責任寿命で分ける**: 一回限りの編集はread-only snapshotからtyped command batchを提案するAuthoring Tool、継続する関係は入力・出力・scope・時間依存を宣言するBehavior、独自recipeが正本ならGenerator、画素・生成・simulation評価はRender系として扱う。これは将来境界の審判語彙であり、未凍結traitの実装許可ではない。自由なscript panelへDocument mutation、独自Undo、名前検索、隠れcontrollerをまとめて渡さない。
 - **ジェネラティブ表現はコンポジット境界へ翻訳する**: Motoliiは白紙から素材世界を作るCreative Coding環境ではない。基本Shapeは合成語彙としてHostが持ち、複雑な素材はSVG/glTF/画像/動画等で持ち込む。未知の表現は`編集時Materialize / tの純関数 / 宣言的時間窓 / Host所有Feedback・Simulation Bake / 外部素材`のいずれかへ置き、キャッシュ・状態復元・Undo・書き出し再現性の例外処理をユーザーへ渡さない。Shape/SVG/p5.js型入力の分界、実装懸念、審判は[ジェネラティブユーザー境界](generative-user-boundary.md)を正本とする。
 - **先例の良い意味論を積極的に取り込む**: 既存商用製品との互換性や販売上の都合をMotoliiの設計制約にしない。競合の操作・公開仕様・失敗例から学び、より小さく一貫した意味へ作り直す。ただし着想・意味論の参照と、コード・asset・商標・固有UIの複製は分け、ライセンスと出典規律を守る。
 - **改善可能性を互換性破壊の免罪符にしない**: 後から直せることは強みだが、公開Documentへ一度焼いた意味は利用者の制作資産になる。未決はplugin/preset/非永続UIで試し、意味が安定してから追加的schemaとして昇格する。既存fieldの再解釈ではなく、migrationと意味論goldenを伴う。
 
-フェーズ別の責務・代表操作・審判は[操作単純化モデル](interaction-simplicity-model.md)、既知の制作ソフト外殻・説明付き接続・共通component・操作互換性は[UI操作言語](ui-interaction-language.md)を正本とする。具体的な先例と未決事項は、[反復再発明の標準化監査](reviews/2026-07-14-repeated-wheel-standardization-audit.md)および[4ツールの称賛・日曜大工・根本ギャップ監査](reviews/2026-07-14-motion-tools-praise-diy-gap-audit.md)を参照する。特にAutograph型の`Generator → Modifier[] → Result`は相対補正と評価順を一般化する有力な先例だが、現行`ParamSource`の凍結面に触れるため、独立した反対側レビュー前には仕様化しない。
+フェーズ別の責務・代表操作・審判は[操作単純化モデル](interaction-simplicity-model.md)、既知の制作ソフト外殻・説明付き接続・共通component・操作互換性は[UI操作言語](ui-interaction-language.md)、利用者/開発者の学習曲線と編集pluginの責任境界は[小さなコアと探索可能な拡張](extensible-core-model.md)を正本とする。具体的な先例と未決事項は、[反復再発明の標準化監査](reviews/2026-07-14-repeated-wheel-standardization-audit.md)および[4ツールの称賛・日曜大工・根本ギャップ監査](reviews/2026-07-14-motion-tools-praise-diy-gap-audit.md)を参照する。特にAutograph型の`Generator → Modifier[] → Result`は相対補正と評価順を一般化する有力な先例だが、現行`ParamSource`の凍結面に触れるため、独立した反対側レビュー前には仕様化しない。
 
 ## このツールが「ではない」もの
 
@@ -171,8 +186,8 @@ Motoliiは完成条件としてはMV制作ツールだが、長期的には**映
   - **実装手段の追記(2026-07-10)**: サンプル数の口の実体は、`NodeDesc`の**宣言的時間フットプリント**(前後フレーム/サブフレームサンプルの静的宣言)として凍結ゲートで予約する。AE式の任意時刻アクセスAPIは採らない。[simulation-model.md](simulation-model.md)§6
 - **パーティクルシステムはファーストパーティ標準搭載(2026-07-10決定)**: AEが実用パーティクルをParticular/Stardust等の高価な外部プラグインに任せている構造(標準のCC Particle Worldは化石)を繰り返さない。歌詞プラグイン第1号(テキスト基盤の実力テスト)と対をなす**第2号=Simulation境界の実力テスト**として自分たちで作り同梱する。「ネイティブ」=コアレンダラへの焼き込みではなく標準搭載 — 実装は他の実機能と同じくプラグイン境界の上(ドッグフード、G-1)。既定は閉形式L0(ベイク不要・スクラブ自由)、衝突等を有効にするとL3(StateTrackベイク)へ自動昇格。**音楽同期エミッション(BPMグリッド/DataTrack駆動)を一級要件**とする。設計は[simulation-model.md](simulation-model.md)§8
 - **物理シミュレーション(布・液体・パーティクル)は「ホスト管理のベイク境界」を持つ一級プラグイン種別として設計に含める(2026-07-10決定、M5の2026-07-07決定の縮小改訂)**: レンダ経路(`render_frame(t)`・全render系trait)の純関数契約は不変のまま、逐次状態シミュレーションを`SimulationPlugin`(固定シード・固定タイムステップ・状態はホストが所有)+StateTrack(チェックポイント列の区間キャッシュ、キーはM4-K1と同一の枠)で扱う。根拠: 決定論とフレーム独立性は別物であり、固定シード+固定dtの逐次シムは完全に決定論的 — 失われるランダムアクセス性はベイクで回収できる。隠れ状態ハック(AviUtl/AE圏の定番)はキャッシュ/並列/シークでサイレントに壊れるため恒久禁止のまま。作者には時間軸自由度の5段はしご(閉形式tの純関数 / build_track内逐次 / 宣言的時間窓 / SimulationPlugin / 禁止)を提供する。**他シェイプとの相互作用(粒がロゴで跳ねる・布がシェイプに掛かる)はコライダー入力として一級対応**: シムノードが他レイヤーを参照し、ホストがSDF+解析プリミティブへ正規化して渡す(コライダーはキーフレーム駆動=tの純関数なので決定論は無傷。[simulation-model.md](simulation-model.md)§3.7)。ノード間の双方向結合(シムグラフ)のみv2。凍結ゲートでは口の予約のみ(`PluginKind::Simulation`は予約済み)、参照実装によるコード実証はv1.x。映画級の重いシミュレーションはBlender等でのベイク済みインポートを引き続き推奨。全設計は[simulation-model.md](simulation-model.md)
-- **プラグインUI境界は`NodeDesc`自動生成のみ(2026-07-12決定)**: v1の安定公開境界はパラメータ定義からの自動生成プロパティパネルだけ。`.slint`実行時ロード・wgpu自由描画・宣言レイアウト/ギズモは技術候補として棚に残すが、第三者向け契約としては未成立のため延期(ファーストパーティ実験→v1.x/v2で解凍)。**不変条件**: 将来カスタムUIを足しても、標準パネルだけで全パラメータを操作できること。根拠とサーチ記録は[reviews/2026-07-12-plugin-ui-v1-boundary.md](reviews/2026-07-12-plugin-ui-v1-boundary.md)
-- **UI基盤はSlint**(2026-07-08、S1スパイク合格を条件): wgpuテクスチャのゼロコピー埋め込み(A-1ブリッジ問題の消滅)と日本語IME実績を両立する唯一のRustネイティブ候補のため。WebView/Tauri案は廃止。日本語UIを一級の判断基準とする。詳細はM3仕様
+- **プラグインUI境界は`NodeDesc`自動生成のみ(2026-07-12決定、2026-07-18 toolkit再翻訳)**: v1の安定公開境界はパラメータ定義からの自動生成プロパティパネルだけ。plugin所有のegui/native UI code・wgpu自由描画・宣言レイアウト/ギズモは第三者向け契約として未成立のため公開しない。**不変条件**: 将来カスタムUIを足しても、標準パネルだけで全パラメータを操作できること。根拠は[plugin UI境界](reviews/2026-07-12-plugin-ui-v1-boundary.md)と[egui採用判断](reviews/2026-07-18-m3-egui-selection.md)
+- **UI基盤はegui**(2026-07-18変更): Motolii所有wgpu deviceとnative textureを共有し、CPU pixel bridgeを作らない。Apple M4 / Metalでpreview、resize/minimize/restore、日本語IMEを実機確認済み。egui/eframe/winit依存は`motolii-ui`へ隔離し、可変panelはMotolii所有layout modelからegui_tilesへ投影する。現行Slint骨格のコード移行はM2再締結後のM3入場PRで行う。詳細は[採用判断](reviews/2026-07-18-m3-egui-selection.md)とM3仕様
 - **UI操作言語は「既知の外殻、可視の因果、裏切らない共通部品」(2026-07-16決定)**: Browser / Stage / Inspector / Timeline等の学習済み制作ソフト語彙と基本gestureを維持し、独自性はtarget、scope、評価順、所有/共有、失敗理由の可視化へ使う。操作中の説明とpreviewは十分な面積へ昇格し、Simple / Advanced / pluginを同じDomain Intentと共通componentへ正規化する。共通componentから漏れ、選択・focus・Cancel・Undo・error・scale等を独自実装するUIは完成扱いしない。正本は[UI操作言語](ui-interaction-language.md)
 - **UIの視覚言語は「意味色で読む前に分かる、既存語彙へ馴染む」(2026-07-14決定)**: 操作動線はOpenCut、Flow/Alight Motion、一般的なトラック型UI。外観はAbletonのTimeline ViewとAppleの抑制された階層を参照するが、Ableton Arrangement Viewの構成とDAW操作モデルは採らない。AEのように無彩色と文字だけへ識別を寄せず、位置・形・icon・意味色を併用する。装飾gradient/glass/neon/card乱用は禁止。具体tokenと審判は[UI視覚言語](ui-visual-language.md)とM3 G0-6が正本
 - **UIは高密度一覧を隠さない(2026-07-14決定)**: 操作動線はOpenCut、Flow/Alight Motion、一般的なtrack型UI。色語彙はAbletonを参照し、位置・形・icon・意味色で文字を読む前に識別できるようにする。asset、effect、driver、timeline、transportの所在を大きな余白や深いnavigationへ隠さず、Blender型のcontext説明を右下/status領域へ置ける構造にする。正本は[UI視覚言語](ui-visual-language.md)と[高密度メインUIモック](mocks/README.md)

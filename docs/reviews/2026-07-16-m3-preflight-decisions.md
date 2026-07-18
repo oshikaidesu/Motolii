@@ -13,7 +13,7 @@ M3前に全ての色、寸法、性能値を推測で埋めることを「仕様
 | Gate | 判定 | M3前に固定するもの | 後続証拠を待つもの |
 |---|---|---|---|
 | G0-2 | **採用・完了** | inputの意味、状態の持ち場と寿命、keymap保存、v1 a11y保証/非保証 | OS別IME実機結果 |
-| G0-3 | **縮小採用・完了** | v1 public plugin UIはHost自動生成panelのみ。自由`.slint`/自由wgpu UIは公開しない | 型ごとの宣言語彙解凍、専用編集環境の再評価 |
+| G0-3 | **縮小採用・完了** | v1 public plugin UIはHost自動生成panelのみ。plugin所有toolkit/native UIと自由wgpu UIは公開しない | 型ごとの宣言語彙解凍、専用編集環境の再評価 |
 | G0-4 | **採用・完了** | 計測fixture、環境記録、操作列、集計、CI比較方法 | 製品fps/latency/memory絶対閾値 |
 | G0-6 | **手順確定・審判待ち** | token role、生成方式、reference screen、自動/人間審判 | 色、spacing、icon、motion、寸法の実値 |
 | G0-7 | **採用・完了** | 共通操作文法、component契約、入口間conformance | 各機能のfixture実装 |
@@ -27,7 +27,7 @@ G0-6とG0-8はM3全体を止める門ではない。依存するU0e/U0fだけを
 
 - `CommandId`は安定した意味IDとし、key、mouse button、modifier、device名を含めない。
 - input routerは少なくとも`Press / Release / Click / DragStart / DragUpdate / DragEnd / Cancel`を区別する。clickをpressの別名にしない。
-- 物理入力はkeymapで`CommandId`または型付きgesture intentへ変換し、その先のdomain intentにSlint型を出さない。
+- 物理入力はkeymapで`CommandId`または型付きgesture intentへ変換し、その先のdomain intentにegui/eframe/winit型を出さない。
 - IME preedit中の文字入力、候補確定、Enter/Escapeをshortcutより先に処理する。OS差をshortcut special-caseで隠さない。
 - pointer capture loss、window focus loss、Escapeは未commit gestureをCancelし、Document変更ゼロにする。
 
@@ -93,7 +93,7 @@ v1で保証しない:
 ### 3.2 v1公開契約
 
 - 全保存parameterは`NodeDesc`から生成するHost標準panelだけで編集・検査できる。
-- plugin同梱`.slint`の実行時ロードと、plugin所有wgpu UI textureはv1公開契約から削除する。
+- plugin所有のtoolkit/native UI codeと、plugin所有wgpu UI textureはv1公開契約から削除する。
 - file/asset/target picker、keyframe、DataTrack、error、Undo、focus、scale、themeはHost componentが所有する。
 - plugin固有の高度用途は、既存variant、宣言語彙の追加、専用semantic ValueTypeの順で解く。自由UIを先に開けない。
 - `ParamDef`/`ValueType`/Documentへ語彙を追加する場合は、それぞれの解凍、migration、互換、意味論goldenを先に通す。
@@ -151,7 +151,7 @@ v1で保証しない:
 
 ## 8. M3開始時の停止条件
 
-- UI都合でDocument field、px/DPI、Slint型、event列を保存したくなったら停止する。
+- UI都合でDocument field、px/DPI、egui/eframe/winit型、event列を保存したくなったら停止する。
 - plugin custom UI、WidgetHint、新ValueType、workspace永続形式を「ついで」に公開したくなったら停止する。
 - 配色/spacing/iconの局所literal、測定前のfps/memory公約、基準機不明の性能合否を追加したくなったら停止する。
 - 既存共通componentで表せない場合は、機能内で作らずcomponent契約の拡張として先に審査する。

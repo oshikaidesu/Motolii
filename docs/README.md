@@ -9,7 +9,7 @@
 
 - **何を作るか**: MV(ミュージックビデオ)制作のための、モーショングラフィック指向のコンポジットツール。AEの重さへの構造的な回答。3〜5分の動画を書き出せたら完成
 - **長期の北極星**: 映像表現を、時刻・入力・型付きparameterから決まる再利用可能な単位として演奏・保存・配布できる共通実行環境にする。「映像制作におけるVST」は構造の比喩であり、VST互換やDAW化は目標ではない([concept.md](concept.md#長期の北極星-映像表現を演奏再利用配布できる単位にする))
-- **技術スタック(確定)**: Rust + wgpu(レンダコア、VRAM常駐) / Slint(UI、wgpuゼロコピー統合。WebView/Tauri案は廃止) / ffmpegサイドカープロセス(デコード・エンコード) / Cargo workspace(`crates/motolii-*`)
+- **技術スタック(確定)**: Rust + wgpu(レンダコア、VRAM常駐) / egui(UI、既存wgpu device/native texture共有、toolkit依存は`motolii-ui`へ隔離) / ffmpegサイドカープロセス(デコード・エンコード) / Cargo workspace(`crates/motolii-*`)。現行Slint骨格の移行はM2再締結後のM3入場PRで行う
 - **開発方式**: 仕様書駆動の並列AIエージェント開発。凍結ゲート宣言済みだが、現在は[M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)を優先し、M3製品実装を停止中。M2再締結は別PRのA〜C証跡が必要
 - **設計目標の代表値**: 1080p動画レイヤー40本同時で破綻しない / プロセス強制終了しても編集を失わない(コマンドジャーナル) / フレーム並列(マルチコア)を構造で保証
 
@@ -38,9 +38,13 @@
 | [dev-experience.md](dev-experience.md) | 開発体験(DX): プラグイン/シェーダのホットリロードはしご(AE再起動地獄の予防) | 現行(2026-07-13。設計ノート、契約変更なし) |
 | [plugin-ui-model.md](plugin-ui-model.md) | プラグインUIモデル: 宣言語彙 vs 自由描画。M3着手前決定で縮小採用 | **採否済み分析**(v1はHost自動生成panel、自由UIは延期) |
 | [interaction-simplicity-model.md](interaction-simplicity-model.md) | 操作単純化モデル: Direct/Tool/Advanced正規化、plugin昇格、PP-Gate、M0〜M5割当 | 現行(2026-07-14。凍結済み公開契約は変更しない) |
+| [extensible-core-model.md](extensible-core-model.md) | 小さなコアと探索可能な拡張: 壊れない探索、編集pluginの責任寿命、Documentを増やさないアドレス可能な個体、表現domainを列挙しない能力境界(共通外殻/plugin payload、追加的進化)、性能上限を焼かない原則、穴埋めから遊びの探索への転換 | **設計原則**(2026-07-17。未凍結APIの実装許可ではない) |
+| [vism-package-concept.md](vism-package-concept.md) | Vism (`.vism`): Project・内部plugin kind・Host UIから分離して保存/共有/再利用する映像表現の配布単位。Motoliiは最初のHost、container/loaderは未決 | **コンセプト・名称・拡張子決定／ファイル形式未決**(2026-07-17。v1実装許可ではない) |
+| [vism-kit-model.md](vism-kit-model.md) | Core=文法、Vism=小さな表現、Kit=provider選択と型付き接続、Project=作品。BPM/Beatを例に、Vism直接依存を避けるmaterialize構成とfork能力の境界を定義 | **設計原則決定／schema・形式未決**(2026-07-17) |
 | [generative-user-boundary.md](generative-user-boundary.md) | ジェネラティブ表現とユーザー拡張の境界: Shape/SVG、p5.js型入力、Materialize/Live/Feedback/Simulation、Host責務 | **設計決定**(2026-07-15。未凍結runtimeの実装許可ではない) |
 | [ui-interaction-language.md](ui-interaction-language.md) | M3のUI操作言語: 既知の外殻、可視の因果、Parameter Panelを表現のホームにするUI力学、共通component契約、Simple/Advanced、漏れ実装の拒否 | **設計決定**(2026-07-16、Parameter Panel力学を2026-07-18追補) |
 | [ui-visual-language.md](ui-visual-language.md) | M3の視覚言語: 高密度一覧、意味色、既存UIへの馴染み、contrast、token規約、参照範囲 | 設計基準(具体token値はM3視覚確定(G0-6)待ち) |
+| [ui-score-model.md](ui-score-model.md) | 譜面UI構成モデル: 固定Laneを所有者にしない時間面、選択コンテキスト、Group関係ラベル、回帰審判 | **設計決定**(2026-07-17。公開API・schemaの実装許可ではない) |
 | [mocks/](mocks/README.md) | M3高密度メインUI(基準)+timeline/interaction/UI力学の比較モック台帳 | 視覚構成の基準モック |
 | [ui-concept.md](ui-concept.md) | UIコンセプト: 体験の北極星(譜面台・First Beat・五本柱)。散在するUI文書の層地図つき | **設計仮説・反対側レビュー待ち**(2026-07-16。契約・M3ステータス変更なし) |
 | [implementation-ledger.md](implementation-ledger.md) | 現場向け実装進行台帳: M0〜M5のNOW/NEXT/WAIT、依存、Issue昇格順 | **日々の発注入口**(意味・完了条件は各specが正本。M3行は再締結ゲート優先) |
@@ -53,6 +57,8 @@
 | [reviews/2026-07-16-m3-preflight-decisions.md](reviews/2026-07-16-m3-preflight-decisions.md) | M3着手前決定: input/状態寿命、plugin UI、性能測定、操作文法を固定し、見た目とresource実値を証拠待ちへ分離 | **設計決定**(G0-2/3/4/7完了) |
 | [reviews/2026-07-16-m3-ui-concept-to-tickets.md](reviews/2026-07-16-m3-ui-concept-to-tickets.md) | UIコンセプトを1 Issue=1 commitの実装粒へ分解。状態、入力、視覚、preview、共通操作、最初のEffect panelの依存と拒否条件 | **条件付き発注の正本／M2再締結中は停止**(U0b〜U4aの枝番) |
 | [reviews/2026-07-16-ui-update-forensics.md](reviews/2026-07-16-ui-update-forensics.md) | Figma/Ableton/AE/Blender/Godot/Home AssistantとLinux GUIの公式更新・fork履歴から、UI失敗、不安定platformの隔離、user拡張をMotoliiのcomponent審判へ変換 | **調査と採用審判**(AF-1〜17) |
+| [reviews/2026-07-17-non-video-workspace-asset-ui-prior-art.md](reviews/2026-07-17-non-video-workspace-asset-ui-prior-art.md) | 写真管理、3D／ゲーム制作、CAD、IDEから、外部素材探索、task別Workspace、自由配置、視線handoffを再調査。SourcesのTray／Drawer／Dock仮説とFocus Contract、比較モック審判へ翻訳 | **先例調査・翻訳仮説**(M3製品実装・公開APIの許可ではない) |
+| [reviews/2026-07-17-aviutl2-comment-voices.md](reviews/2026-07-17-aviutl2-comment-voices.md) | AviUtl2動画の公開コメント34件+表示返信から、軽さ/重さ、統合/分業、拡張/管理、移行/旧資産等の統一できない一次声を保存 | **一次声の観察台帳**(反対側レビュー前。設計根拠ではない) |
 | [reviews/2026-07-17-vism-a0-plugin-boundary-inventory.md](reviews/2026-07-17-vism-a0-plugin-boundary-inventory.md) | VSM-A0: 現行pluginの登録・保存・評価・migration境界をコード事実で分類 | **調査完了** |
 | [reviews/2026-07-17-vism-a7-bpm-datatrack-spike.md](reviews/2026-07-17-vism-a7-bpm-datatrack-spike.md) | VSM-A7: 現行BPM→DataTrack→DocParamの最小意味fixture | **spike完了** |
 | [reviews/2026-07-17-vism-a0d-contract-migration-ownership-decision.md](reviews/2026-07-17-vism-a0d-contract-migration-ownership-decision.md) | VSM-A0D: Document、plugin作者、Host catalog、executorの所有分離 | **設計決定** |
@@ -90,6 +96,10 @@
 | [reviews/2026-07-15-p5-generative-pattern-disposition.md](reviews/2026-07-15-p5-generative-pattern-disposition.md) | p5.js系ジェネ表現をone-shot/純関数/Feedback/Simulation/記録入力へ分類 | **調査・配置案**(2026-07-15) |
 | [reviews/2026-07-16-m3-ui-gap-survey.md](reviews/2026-07-16-m3-ui-gap-survey.md) | M3前UIギャップ調査: U1〜U8に席が無いUI領域(書き出し/保存/エラー表示等)とコア側前提の欠落(状態購読/ParamDefメタデータ/Transport等) | **調査メモ**(2026-07-16。採否はM3入場PRで) |
 | [reviews/2026-07-16-m3-ui-rapid-acceptance-prior-art.md](reviews/2026-07-16-m3-ui-rapid-acceptance-prior-art.md) | すぐに受け入れられたUIの先例集: 第一部=プロダクト単位の受容(界隈の期待リスト)、第二部=業界収斂した操作語彙+UX原理の一次資料(M3転移の本線)、第三部=後発の勝ち筋「どの操作も直感的」(Ableton→AEカウンター)。設計根拠ではない | 仮説メモ(2026-07-16) |
+| [reviews/2026-07-18-m3-egui-selection.md](reviews/2026-07-18-m3-egui-selection.md) | M3 UI基盤をSlintからeguiへ変更。既存wgpu device/native texture、lifecycle、日本語IME、可変panel、移行停止線 | **採否決定**(文書反映のみ。製品依存の移行はM3入場PR待ち) |
+| [reviews/2026-07-17-extensible-core-prior-art-translation.md](reviews/2026-07-17-extensible-core-prior-art-translation.md) | extensible-core §7(個体性)・§9(遊び)未決部の先例翻訳: 四段の個体性、選択≠Object化、宣言的介入(Pin/Impulse/Exclude)、集合所有の状態、上限非焼き込み、Preview縮退、遊びの観察を一次資料で確認しMotolii語彙へ翻訳。「既知で埋まる部分」と「埋まらない残り(介入正本の逆転・四段の利用者文法・遊びの判定)」を分離 | **調査第二陣**(2026-07-17。反対側レビュー待ち、設計根拠ではない) |
+| [reviews/2026-07-17-vism-implementation-plan.md](reviews/2026-07-17-vism-implementation-plan.md) | Vismを静的pluginの公開境界実証→typed provider/Kit→package意味→container/trust spike→loader/install→UI/headless互換Hostへ分けた実装順。自動完了条件、依存、LLM発注規律、STOP線つき | **実装ロードマップ案**(2026-07-17。package実装は未許可) |
+| [reviews/2026-07-17-vism-ready-counter-review-disposition.md](reviews/2026-07-17-vism-ready-counter-review-disposition.md) | 既存pluginのVism-ready化提案を実コードで反対側審判。A0復帰、consumer API不在、Sine migration／doc既知表、Macro非atomicを採用し、A0→A7→A0D→A0S→A0I→A1/A2→B0/B1/B2へ修正 | **採否決定**(2026-07-17。実装許可ではない) |
 
 ## 全体で守る規律(コードレビュー最重視項目)
 
@@ -116,4 +126,4 @@
 - **グループ仮出力(ベイク)**: プリコンポの代替。グループ出力を時間範囲でキャッシュし、編集で自動無効化
 - **SimulationPlugin / StateTrack**: 逐次状態シミュレーション(布・液体・パーティクル)のプラグイン境界と、そのベイク結果(チェックポイント列の区間キャッシュ)。状態はホストが所有し、`render_frame(t)`はベイク結果を読む純関数のまま(落とし穴F-12、[simulation-model.md](simulation-model.md)。口の予約段階)
 - **TemporalFootprint(時間窓)**: エコー/モーションブラー等が前後フレーム/サブフレームサンプルを読むための、`NodeDesc`への静的宣言(予約。任意時刻アクセスAPIは不採用)
-- **プラグインパネル(v1)**: `NodeDesc.params`からの自動生成プロパティパネルのみが公開UI境界。`.slint`/wgpuカスタムUIは延期([判定](reviews/2026-07-12-plugin-ui-v1-boundary.md))
+- **プラグインパネル(v1)**: `NodeDesc.params`からの自動生成プロパティパネルのみが公開UI境界。plugin所有egui/native/wgpu UIは公開しない([判定](reviews/2026-07-18-m3-egui-selection.md))

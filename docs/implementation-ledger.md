@@ -111,7 +111,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 |---|---|---|---|---|---|
 | 1 | D1j | M2 | `WAIT` | CAM-G0 merge（D1lはmain到達済み） | v5 planar camera schema/default migration |
 | 2 | U1b-1 | M3 | `WAIT` | U1a-1 merge | render worker/latest mailbox。古い結果E2EはU1b-2 |
-| 3 | U0b-2 | M3 | `WAIT` | U0b-1 merge | Slint非依存domain intent。U0c-1/U2a-1の入口 |
+| 3 | U0b-2 | M3 | `WAIT` | U0b-1 merge | toolkit非依存domain intent。U0c-1/U2a-1の入口 |
 | 4 | U3a | M3 | `WAIT` | U0a + U0b merge | timeline基盤、U2gのUI依存を解除 |
 | 5 | U2g | M3 | `WAIT` | D1l + D3e + U0e + U2b + U3a merge | Effect常時接続線 |
 | 6 | K1a | M4 | `WAIT` | K0 merge | ResourceLedgerとhard budget。backendの空きVRAM値を正本にしない |
@@ -145,7 +145,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 |---|---|---|---|
 | [#51](https://github.com/oshikaidesu/Motolii/issues/51) | `DECIDE` / stale | Issue本文の`camera: Option<CompCamera>`・`None=DEFAULT`は、現行D1j/D1kの「全Compositionに常在」「Render入力必須」「DEFAULT直書き拒否」と不一致 | #51をそのまま実装しない。D1j schema → D1k runtime → D3接続の3PRへ再翻訳する |
 | G0-2 | `DONE` | 入力/キーマップ/a11y最小意味論 | [M3着手前決定§2](reviews/2026-07-16-m3-preflight-decisions.md#2-g0-2-inputとui状態の意味)に従いU0bをIssue化 |
-| G0-3 | `DONE` / `縮小採用` | plugin UIモデル | v1はHost自動生成panelのみ。自由`.slint`/wgpu UIを実装しない |
+| G0-3 | `DONE` / `縮小採用` | plugin UIモデル | v1はHost自動生成panelのみ。plugin所有toolkit/native/wgpu UIを実装しない |
 | G0-4 | `DONE` | UI性能測定プロトコル | U1c/U3a等でraw結果を取り、絶対閾値は別改訂 |
 | G0-6H | `WAIT` / `HUMAN` | 視覚token/認知審判 | U0e-2が作る5 reference screenの目視後に具体tokenを固定しU0e-3へ |
 | G0-7 | `DONE` | Direct/Tool/Advanced conformance | UI操作言語とU2c fixtureへ従う |

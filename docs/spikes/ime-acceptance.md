@@ -2,6 +2,8 @@
 
 作成日: 2026-07-15 / Issue [#56](https://github.com/oshikaidesu/Motolii/issues/56)
 
+状態: **Slint用の歴史的未実走fixture**。2026-07-18にeguiへ変更し、macOSでは別の手動probeでPreedit 37件、Commit 5件、候補位置、変換中shortcut漏れ0を確認した。現行判断は[egui採用記録](../reviews/2026-07-18-m3-egui-selection.md)を正本とする。本fixtureをegui合格証拠として再利用しない。
+
 ## 結論 (M3 実装ガード1 / Issue #56 **未実走 — 実機審判 pending**)
 
 記録形式は [s1-slint.md](s1-slint.md)(INF-1) を参考にした。**本スパイクのラベルは INF-1 ではない** (M3-GUARD-1)。
