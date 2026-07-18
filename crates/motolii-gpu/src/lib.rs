@@ -9,6 +9,8 @@ mod transfer;
 mod yuv;
 
 pub use ctx::{drs_available, optional_features, GpuCtx, GpuError, GpuOrigin, GpuRuntimeError};
-pub use pipeline_cache::{CachedTexSampleUniform4, PipelineCache, PipelineCacheKey};
+pub use pipeline_cache::{
+    CachedFullscreenUniform16, CachedTexSampleUniform4, PipelineCache, PipelineCacheKey,
+};
 pub use transfer::{download_rgba, upload_rgba, RgbaDownloader, DEFAULT_DOWNLOAD_TIMEOUT};
 pub use yuv::{solid_yuv420p, ColorParams, YuvError, YuvToRgba};
