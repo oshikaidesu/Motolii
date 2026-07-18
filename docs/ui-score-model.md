@@ -1,6 +1,6 @@
 # 譜面UI構成モデル — Laneを所有者にしない時間面
 
-ステータス: **設計決定**(2026-07-17)。M3製品実装の許可、Document schema、公開UI API、具体的なSlint componentを確定する文書ではない。
+ステータス: **設計決定**(2026-07-17)。M3製品実装の許可、Document schema、公開UI API、具体的なegui componentを確定する文書ではない。
 
 ## 1. 目的
 

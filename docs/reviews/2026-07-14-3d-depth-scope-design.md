@@ -336,6 +336,8 @@ Camera:          3          2          1       (derived rank)
 ```
 
 - 主railは`position.z`の編集意味を守るためEdit-Space Z。rootではWorld Z、同一parentの子では共通parent Zとし、camera-space depthはderived rank/任意の読み取り専用monitorとして分離する
+- UIでは`Position X/Y`をStage平面、`Depth Z`を前後配置として別groupへ投影する。内部では同じ正準XYZと`position.z`を使い、Depth専用field、暗黙の3D mode、第二の所有者を作らない
+- `Depth Z`は平行移動、`Rotation Z`はZ軸まわりの回転であり、同じ`Z`名のcontrolやautomation channelへまとめない
 - mixed-parent選択は一括編集を拒否し、world位置を合わせるためのlocal XYZ書換えや自動reparent/group化を行わない
 - 再生・seek・camera animation中もmarker/rank/診断を評価snapshotへ追従させる
 - marker drag、range Expand/Compress、Distribute、Reverse、Flattenを通常Z値/keyframeへ直接書く
@@ -359,12 +361,12 @@ Canvas transform toolを次の明示モードへ分ける。
 | Tool | 永続的に変える値 | Canvas表現 | 変えない値 |
 |---|---|---|---|
 | `Scale` | `scale.x / scale.y` | bounding boxのcorner/edge handle、Scale icon、tabular差分 | `position.z` |
-| `Depth Move` | `position.z` | anchorから伸びるZ rail/axis arrow、`Z` icon、tabular差分 | scale |
+| `Depth Move` | `position.z` | anchorから伸びるDepth rail/axis arrow、`Depth` icon、tabular差分 | scale |
 
 追加規律:
 
 - active toolはshape + icon + labelで示し、色だけに依存しない
-- Inspector/timelineの`Position Z`と`Scale`は別行・別iconにし、操作中のchannelを示す
+- Inspector/timelineの`Position X/Y`、`Depth Z`、`Rotation Z`、`Scale`は別group・別iconにし、操作中のchannelを示す
 - orthographic cameraでもDepth MoveをScaleへ化けさせない。見かけサイズが不変でもZ値と遮蔽結果の変化を表示する
 - tool選択はTransient interaction(保存するなら帰属決定前のWorkspace/session候補)で、Document/ジャーナルへ入れない
 - 確定したscaleまたはposition.zだけをD2 commandへ渡し、1 drag=1 macro/Undoとする

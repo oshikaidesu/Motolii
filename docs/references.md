@@ -8,16 +8,17 @@
 
 | リポジトリ | ライセンス | 何を参考/利用するか |
 |---|---|---|
-| [OpenCut](https://github.com/OpenCut-app/OpenCut) | MIT | タイムラインUIの**操作仕様の参考のみ。コード流用は不可**(D-3改訂2026-07-08。UIはSlintで自前実装するためReactコンポーネントは流用対象外)。Rustコア(GPU compositor/effects/masks)は設計思想の参考 |
+| [OpenCut](https://github.com/OpenCut-app/OpenCut) | MIT | タイムラインUIの**操作仕様の参考のみ。コード流用は不可**(Rust/egui UIのためReact componentは流用対象外)。Rustコア(GPU compositor/effects/masks)は設計思想の参考 |
 | [ffmpeg-sidecar](https://github.com/nathanbabcock/ffmpeg-sidecar) | MIT | **B-2対策の本命**。ffmpegバイナリをサイドカープロセスとして起動しrawvideoフレームをIterator APIで受け取るRustクレート。M0-S2スパイクはまずこれを評価し、足りなければ自前パイプ実装 |
 | [wgpu](https://github.com/gfx-rs/wgpu) | Apache-2.0/MIT | レンダリングコアの土台(採用決定済み) |
-| [Vello](https://github.com/linebender/vello) | Apache-2.0/MIT | **採用決定(2026-07-10、S3スパイク合格)**。vello 0.9=wgpu29依存で本体と同一デバイス同居を実測確認。条件: Renderer長寿命保持(初期化~900ms)・出力straight alpha→境界でpremul化・**vello_svgは使わず**usvg→vello変換は自前(スパイクに雛形)。バージョン結合がSlint↔wgpu↔velloの三者になる点に注意(A-3)。詳細は[spikes/s3-vello.md](spikes/s3-vello.md) |
+| [Vello](https://github.com/linebender/vello) | Apache-2.0/MIT | **採用決定(2026-07-10、S3スパイク合格)**。vello 0.9=wgpu29依存で本体と同一device同居を実測確認。条件: Renderer長寿命保持(初期化~900ms)・出力straight alpha→境界でpremul化・**vello_svgは使わず**usvg→vello変換は自前。version結合がegui-wgpu↔wgpu↔velloの三者になる点に注意(A-3)。詳細は[spikes/s3-vello.md](spikes/s3-vello.md) |
 | [Symphonia](https://github.com/pdeljanov/Symphonia) | MPL-2.0 | Pure Rust音声デコード(MP3/AAC/FLAC/WAV等)。音声インポート(B-1)の第一候補。MPLはファイル単位コピーレフトなので依存利用は安全 |
 | [resvg / usvg](https://github.com/linebender/resvg) | MPL-2.0 | SVGパーサ(usvg: 参照解決済みの正規化ツリーを返す)。SVG読み込み(コンセプト決定でコア機能)の第一候補。linebender管理下で保守中。Vello描画と接続する(M4-K6) |
 | [rubato](https://github.com/HEnquist/rubato) | MIT | 音声リサンプリング。**明示**スクラブ/シャトルのバリスピード候補(自動フォールバック用途ではない — [D5先例調査](reviews/2026-07-14-d5-transport-prior-art.md))。デバイス≠素材レートの固定比変換にも候補 |
-| [Slint](https://github.com/slint-ui/slint) | GPL / **Royalty-Free(デスクトップ無償)** / 商用 | **UI基盤に採用決定(2026-07-08)**。公式wgpu統合(`unstable-wgpu-29`、`Image::try_from(wgpu::Texture)`でゼロコピー埋め込み)+日本語IME実績([2025年調査](https://www.boringcactus.com/2025/04/13/2025-survey-of-rust-gui-libraries.html)で合格)。[slint-interpreter](https://docs.rs/slint-interpreter)は.slint実行時ロードを提供するが、**v1プラグインパネル契約には使わない**(自動生成のみ。[plugin-ui-v1-boundary](reviews/2026-07-12-plugin-ui-v1-boundary.md))。Royalty-Freeライセンスの条文(帰属表示等)は配布前に精査 |
+| [egui](https://github.com/emilk/egui) / [egui_tiles](https://github.com/rerun-io/egui_tiles) | MIT OR Apache-2.0 | **UI基盤に採用決定(2026-07-18)**。egui-wgpu 0.35の`WgpuSetup::Existing`とnative textureをApple M4 / Metalで実測。日本語IME、resize/minimize/restore、idle停止も確認。egui_tilesはruntime投影先で、生Tree/TileIdを保存正本にしない。[採用判断](reviews/2026-07-18-m3-egui-selection.md) |
+| [Slint](https://github.com/slint-ui/slint) | GPL / Royalty-Free / 商用 | **歴史的な採用候補**。2026-07-08採用、S1合格後、2026-07-18にeguiへ置換。Manual wgpu共有、renderer feature、IMEの測定事実は[歴史証拠](spikes/s1-slint.md)として維持する |
 | [slint-off-thread-rendering](https://github.com/tronical/slint-off-thread-rendering) | MIT | Slint公式関係者の実験リポジトリ。**`require_wgpu_29(WGPUConfiguration::Manual)` を使う場合に、`default-features = false` でレンダラfeatureを明示固定する実例**。OpenGL/WGPUの混在ミスマッチを避ける設定の参照先 |
-| [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) | Apache-2.0 | Zed製Rust GPU UIフレームワーク。crates.ioに単体公開済み(v0.2系、pre-1.0でAPI変動あり)。IME実績あり。Slint不合格時の検討候補。[gpui-component](https://github.com/longbridge/gpui-component)(既製コンポーネント集)も存在 |
+| [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) | Apache-2.0 | Zed製Rust GPU UI framework。crates.ioに単体公開済み(v0.2系、pre-1.0でAPI変動あり)。IME実績あり。egui比較時の候補だったが不採用。[gpui-component](https://github.com/longbridge/gpui-component)も存在 |
 | [Theatre.js](https://github.com/theatre-js/theatre) | core: Apache-2.0 / **studio: AGPL-3.0** | キーフレーム編集UI(シーケンスエディタ+グラフエディタ)の操作仕様の参考。**studio側はAGPLなのでコード流用禁止**、coreのデータモデル(JSON書き出し形式)は参考可 |
 
 ## 設計参考のみ(GPL系・特殊ライセンス、コード流用不可)

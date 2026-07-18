@@ -24,7 +24,7 @@ AEがホットリロードできない構造要因は3つ:
 | ネイティブコードの差し替え | Zed / Lapce / Extism(WASMプラグイン) | ネイティブdylibのABI地獄を避け、wasmモジュールをランタイムでスワップ。エディタ再起動なし |
 | Rust dylibのホットリロード | hot-lib-reloader系 / Unreal Live Coding | Rustは型レイアウト・ABIが不安定で、実用化には(Unrealが払ったような)巨額の継続投資が要る。ZedらがWASMへ行ったのはこの回避が動機のひとつ(要一次資料確認) |
 | そもそも再起動を苦にしない | Blender(スクリプトreload+高速起動)ほか | 起動が数秒+セッション完全復元なら、再起動は反復手段として成立する |
-| エディタUI自体の反復 | **Slint公式live-preview**(1.13〜) | `slint/live-preview` feature+`SLINT_LIVE_PREVIEW=1`で、アプリ実行中に`.slint`編集→保存→即反映。プロパティ/モデル/コールバックは保持。別途`slint-interpreter`(実行時ロード)と`slint-viewer --auto-reload`もある。出典: [公式ブログ](https://slint.dev/blog/slint-1.13-released)(2026-07-13確認) |
+| エディタUI自体の反復 | **egui component分割+高速再build/再起動** | eguiはRustコードなのでSlintのmarkup live-preview相当を前提にしない。toolkit adapterと小さいcomponentへ分割し、`cargo watch`等の開発runner、INF-6のsession復元、windowなしmodel test、固定reference screenで反復する |
 
 ## 3. はしご(欲しい反復速度に対して最も安いレベルを選ぶ)
 
@@ -45,5 +45,5 @@ AEがホットリロードできない構造要因は3つ:
 ## 5. 決めないこと
 
 - レベル2(WASMスワップ)の具体設計はv2口の解凍時。その際は§2の先例表を一次資料で確認し反対側レビューを通す(規律1・2・6)
-- エディタUI(Slint側)のホットリロードは**自作案件ではない見込み** — Slint公式のlive-preview(§2)が既製で存在する。評価は**INF-8の非ブロッキング項目**(保持・反映遅延・エラー復旧の3基準。実走はINF-1と同じ実機作業でよいが、**Slint採否のP0ゲートには含めない** — live-preview不合格は基盤不採用理由にならないため)。本文書の設計対象はプラグイン・シェーダの反復に限る
-- v1 plugin UIはHost自動生成panelだけなので、UIのリロードはHost側の通常開発経路へ畳む。plugin同梱`.slint`/wgpu自由UIは[M3着手前決定](reviews/2026-07-16-m3-preflight-decisions.md)で延期済み。将来の宣言語彙は型ごとの解凍判断に従う
+- エディタUIの実行時ホットリロードはv1契約にしない。egui componentの再build/再起動時間、session復元、構文エラーからの再実行をINF-8の非ブロッキング計測へ置く。UI基盤の採否条件には戻さない
+- v1 plugin UIはHost自動生成panelだけなので、UIの反復はHost側の通常開発経路へ畳む。plugin所有のegui/native codeとwgpu自由UIは[M3着手前決定](reviews/2026-07-16-m3-preflight-decisions.md)どおり公開しない。将来の宣言語彙は型ごとの解凍判断に従う

@@ -39,7 +39,7 @@
 
 **Motoliiへの採用**:
 
-- v1 shellは固定分割から始め、dockingや浮遊panelを革新点にしない。
+- v1 shellは行方不明にならない統合presetから始めるが、利用者のdocking/tab/hide/restoreを制限しない。配置を革新点にせず、既定resetと安定した役割名で迷子を防ぐ。
 - iconだけへ寄せず、label/Info/semantic badgeを同じcomponent契約に含める。
 - 大きな配置変更は既定を一度に置換せず、reference screenと人間審判を通す。
 
