@@ -2,7 +2,9 @@
 
 作成日: 2026-07-17
 
-状態: **仕様決定／A0I-1〜3実装完了**。本書は[VSM-A0D](2026-07-17-vism-a0d-contract-migration-ownership-decision.md)の所有決定を、実装時に別解を発明できない公開型・呼出境界・拒否fixtureへ落とす。`.vism` manifest、動的loader、UI、永続schemaは対象外である。
+状態: **仕様決定／A0I-1〜3実装完了** + **D1m向け保存/open所有追補（docs only、コード未追随）**。本書は[VSM-A0D](2026-07-17-vism-a0d-contract-migration-ownership-decision.md)の所有決定を、実装時に別解を発明できない公開型・呼出境界・拒否fixtureへ落とす。`.vism` manifest、動的loader、UI、永続schemaは対象外である。
+
+> **2026-07-18追補（[D1m sidecar/session決定](2026-07-16-m2-project-sidecar-session-decision.md)統合）**: 下記「Conflict → Decision → 変えないもの」はA0I完了事実を取り消さず、D1m実装前の**所有改正**である。現行コードが既に`ProjectSession`付きであるとは読まない。
 
 関連文書: [VSM-A0 inventory](2026-07-17-vism-a0-plugin-boundary-inventory.md)、[Vism実装計画](2026-07-17-vism-implementation-plan.md)、[M2 Document仕様](../specs/M2-document-model.md)、[plugin作者規約](../plugin-authoring.md)
 
@@ -24,7 +26,9 @@ Document bytes
 - pluginのkind、version、parameter型／値域、migrationは`PluginCatalog`だけを正本にする。
 - graph、preview、exportは検証済みの`PluginRuntime`を必須引数にする。catalogを渡し忘れた実行経路をコンパイル可能にしない。
 - `DocumentWriter`はcatalogを保持する。既知pluginのparameterを編集した直後にcontract検査を行い、first-party ID表へ戻らない。
-- load／save／journal recoveryは構造保持の低水準境界としてcatalog非依存を維持する。製品openは別のcatalog必須入口を通る。
+- `load_document*`とjournal recoveryの**構造検査**は、意味のcatalog非依存（intrinsic validationのみ）を維持する。serdeによるunknown `extra`/plugin payload保持も維持する。
+- pathへ書く`save_document*`、journal recovery **mutation**、`migrate_document_file*`のroot-publicは[D1m](2026-07-16-m2-project-sidecar-session-decision.md)で廃止し、`ProjectSession`の`&mut` methodまたはcrate-private内部実装に限定する。
+- 製品openは`open_project_resolved`のみ。これは`ProjectSession::open`を内包し、exclusive lock guard（`ProjectSession`）を所有したまま返す唯一のcatalog必須façadeである。
 - raw Documentはprepared resolutionで変更しない。
 
 ## 2. crate依存方向
@@ -290,10 +294,10 @@ fromなし / toなし → versionとshapeの矛盾としてContractViolation
 | 入口 | intrinsic | catalog | executor | 処分 |
 |---|---:|---:|---:|---|
 | `Document::validate()` | 必須 | なし | なし | 名前／signature維持 |
-| `load_document*` | 必須 | なし | なし | 低水準raw loadとして維持 |
-| `save_document*` | 必須 | なし | なし | unknown保持用raw saveとして維持 |
-| journal recovery内部 | 必須 | なし | なし | recovery中にplugin codeを呼ばない |
-| `open_project_resolved` | 必須 | 必須 | 任意 | 製品openの新入口 |
+| `load_document*` | 必須 | なし | なし | catalogなしraw loadとして維持。unknown payload保持 |
+| `save_document*` | 必須 | なし | なし | unknown保持の構造意味は維持。**path書込みのroot-publicは廃止**しsession/`&mut ProjectSession`またはcrate-privateへ（[D1m](2026-07-16-m2-project-sidecar-session-decision.md)） |
+| journal recovery内部 | 必須 | なし | なし | 構造検査はcatalog非依存。recovery **mutation**はsession経由のみ。plugin codeを呼ばない |
+| `open_project_resolved` | 必須 | 必須 | 任意 | **唯一のcatalog必須製品open**。`ProjectSession::open`を内包しsessionを返す |
 | `DocumentWriter` | 必須 | 必須 | なし | constructorへcatalog追加 |
 | `build_document_frame_graph` | 済 | 必須 | 必須 | `PluginRuntime`を必須化 |
 | `export_document_video` | 済 | 必須 | 必須 | `ExportJob`へruntime追加 |
@@ -302,6 +306,7 @@ fromなし / toなし → versionとshapeの矛盾としてContractViolation
 
 ```rust
 pub struct ResolvedOpenProjectOutcome {
+    pub session: ProjectSession, // non-Clone; exclusive lock guard
     pub recovered: OpenProjectOutcome,
     pub plugins: PreparedDocumentPlugins,
 }
@@ -313,7 +318,9 @@ pub fn open_project_resolved(
 ) -> Result<ResolvedOpenProjectOutcome, ProjectError>;
 ```
 
-既存`open_project`／`open_project_with_limits`はjournal／recovery testとrepair toolの低水準入口として残すが、製品composition rootからの利用をAST gateで拒否する。openはcontract欠落等のdiagnosticを返して成功できる。install、network、build、executor呼出はしない。
+`open_project_resolved`は`ProjectSession::open`（acquire + recover）を内包し、返却時も`ProjectSession`をdropさせない。第二のcatalog必須製品open入口やtuple分割によるbypassを置かない。
+
+既存`open_project`／`open_project_with_limits`／`recover_project`は**crate-private / test-only**。製品composition root・repair toolからのsessionなし利用を禁止する。repairは`ProjectSession::acquire`（または`open`）後のみ。openはcontract欠落等のdiagnosticを返して成功できる。install、network、build、executor呼出はしない。
 
 Writer:
 
@@ -434,7 +441,28 @@ A1は[A1S公開crate境界仕様](2026-07-17-vism-a1-public-crate-boundary-spec.
 
 golden画像の期待値は変更しない。Opacity／Sineの既存意味を変える必要が出た場合はA0Iを止め、仕様へ戻る。
 
-## 11. 非目標
+## 11. D1m save/open ownership amendment (2026-07-18)
+
+### Conflict
+
+A0I完了時点の本書は、(1) `save_document*`をroot-public raw saveとして維持、(2) `open_project_resolved`をsessionなしの製品入口、(3) `open_project*`をrepair tool含む低水準入口として記述していた。[D1m](2026-07-16-m2-project-sidecar-session-decision.md)はroot-public path mutationの廃止、製品openのsession capability、低水準open/recoverのcrate-private化を要求する。
+
+### Decision
+
+1. **維持**: catalog非依存の`load_document*`とserde unknown payload保持。
+2. **廃止（root-public）**: path書込み`save_document*`、journal recovery mutation、`migrate_document_file*`。これらは`&mut ProjectSession`またはcrate-privateのみ。
+3. **製品open**: capability核は`ProjectSession::open`。catalog必須製品façadeはsessionを所有して返す`open_project_resolved`のみ（§7 signature）。
+4. **低水準**: `open_project*`／`recover_project`はcrate-private/test-only。repairはsession acquire後のみ。
+5. **非目標**: Save As、read-only fallback、lock steal、第二製品open入口。
+
+### 変えないもの
+
+- A0I-1〜3の完了SHAと実装事実（contract/catalog/runtime、prepared resolution、製品実行入口のAST gate）。
+- intrinsic／prepared／executorの三段境界とWriter/graph/exportのcatalog・runtime必須。
+- unknown plugin／`extra`のround-trip意味（path mutationをsessionへ移すだけで弱体化しない）。
+- 本追補はdocsのみ。コード・公開API・schema・testsはD1m実装発注まで変更しない。
+
+## 12. 非目標
 
 - `.vism`のpackage／entry identityを`PluginId`で決定しない。
 - manifest、container、署名、install store、version solverを作らない。
@@ -444,7 +472,7 @@ golden画像の期待値は変更しない。Opacity／Sineの既存意味を変
 - input port、provider、Kit、BPM gridをA0Iへ混ぜない。
 - `doc.layer_source.rect`を見かけ上plugin化しない。
 
-## 12. 審判
+## 13. 審判
 
 A0Sが固定するコアは「表現の種類」ではなく、未知の表現を壊さず保持し、知っている表現だけを宣言で検査し、実行可能な表現だけを明示的に実行する三段境界である。
 

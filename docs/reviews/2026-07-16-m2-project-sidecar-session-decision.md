@@ -2,6 +2,8 @@
 
 Status: **Decision / implementation not started**. This decision adds D1m to the M2 reclosure critical path. D1d's corruption recovery remains valid, but its current parent-directory-shared sidecar path and lack of inter-process ownership must not be treated as closed.
 
+> **2026-07-18 supplement ([VSM-A0S](2026-07-17-vism-a0s-contract-catalog-spec.md) alignment)**: The save/open ownership rows below are amended so D1m implementation cannot invent a second product open path or keep root-public path mutation. Code is not updated by this supplement.
+
 ## Finding
 
 The current `motolii_dir_for_document()` maps every project file in the same parent directory to the same `.motolii` directory. Consequently `journal.wal`, `catalog.json`, `generations/`, and restore markers collide across otherwise unrelated projects. In addition, the public open/save path does not hold an inter-process lock, so two Motolii processes can append or checkpoint the same journal concurrently.
@@ -72,7 +74,13 @@ Canonicalization must collapse existing-file symlink aliases. For a not-yet-crea
 
 ### 3. Public mutation requires the session capability
 
-All production mutations of the project file or its journal family require `&mut ProjectSession`: journal edit, checkpoint/save, recovery that writes markers/quarantines, document-file migration, and legacy-sidecar migration. D1m removes or makes crate-private the root-public raw-path mutation/open exports `save_project_with_journal`, `save_document`, `save_document_with_options`, `migrate_document_file`, `migrate_document_file_with_limits`, `open_project`, `open_project_with_limits`, `open_project_fs`, and `recover_project`; their internal implementations may remain behind session methods. `WalSession`, `commit_edit`, `checkpoint`, catalog save, recovery mutation, `*_fs`, and fault-injection helpers are crate-private or test-only and must not be root-public bypasses. The only product project-open entry is `ProjectSession::open`. Pure serialization to bytes and genuinely read-only load/inspect APIs may remain public.
+All production mutations of the project file or its journal family require `&mut ProjectSession`: journal edit, checkpoint/save, recovery that writes markers/quarantines, document-file migration, and legacy-sidecar migration. D1m removes or makes crate-private the root-public raw-path mutation/open exports `save_project_with_journal`, `save_document`, `save_document_with_options`, `migrate_document_file`, `migrate_document_file_with_limits`, `open_project`, `open_project_with_limits`, `open_project_fs`, and `recover_project`; their internal implementations may remain behind session methods. `WalSession`, `commit_edit`, `checkpoint`, catalog save, recovery mutation, `*_fs`, and fault-injection helpers are crate-private or test-only and must not be root-public bypasses.
+
+The capability core for project open is `ProjectSession::open` (acquire + recover). The sole catalog-required **product** open façade is `open_project_resolved` ([VSM-A0S §7](2026-07-17-vism-a0s-contract-catalog-spec.md)): it wraps `ProjectSession::open`, retains the non-`Clone` exclusive lock guard (`ProjectSession`), and returns `ResolvedOpenProjectOutcome { session, recovered, plugins }`. No second catalog-required product open entry or tuple-split bypass may be added.
+
+`load_document*` and serde unknown payload preservation remain public and catalog-independent per A0S; only **path mutation** moves behind session or crate-private. Pure serialization to bytes and genuinely read-only load/inspect APIs may remain public.
+
+Repair and recovery **mutation** require `ProjectSession::acquire` or `open` first. `recover_project` is crate-private/test-only and must not be a session-less product or repair entry.
 
 The in-process rule remains unchanged: only the editing thread owns `&mut ProjectSession` and mutates `Document`; workers read `Arc<Document>`. The OS lock adds inter-process ownership and does not replace the single-writer rule.
 
@@ -83,7 +91,7 @@ Cloud-sync software can ignore advisory locks. D1m therefore prevents cooperatin
 1. Two different project files in one directory produce disjoint journal, catalog, generation, restore-marker, and lock paths; saving/recovering either leaves the other's bytes and metadata unchanged.
 2. A subprocess holding a read-write session makes a second canonical or symlink-alias open fail immediately with `ProjectAlreadyOpen`. D1m adds a targeted Windows CI job in addition to the existing Linux job; macOS is run locally and its command/output recorded in the PR.
 3. After normal guard drop and after forced subprocess termination, a new session can acquire the lock and recover normally.
-4. All production mutation APIs require the session capability; an API review finds no public raw-path bypass.
+4. All production mutation APIs require the session capability; path mutation and low-level `open_project*` / `recover_project` are crate-private or test-only with no public bypass. The sole catalog-required product open is `open_project_resolved`, which owns and returns `ProjectSession`.
 5. Ordinary open never auto-adopts the shared legacy layout and returns `LegacySidecarRequiresExplicitMigration` without changing it. Explicit migration preserves the source, excludes `.motolii/media`, verifies the destination, and is restart-idempotent.
 6. Existing D1d corruption/fault/recovery **semantics and protected golden expectations** remain unchanged and green. Tests that hard-code the obsolete `.motolii` path may be mechanically changed to call the production path helper; expected errors, recovery documents, and golden values may not change. Finish with `cargo test --workspace`.
 7. `rg`/public-API review proves that root-public project mutation is available only through `&mut ProjectSession`; raw path-only functions and `WalSession` are not exported to product callers.
@@ -106,3 +114,18 @@ One ticket is one commit. D1m is implemented in the following order inside that 
 - Save As / rename API implementation.
 - Storing UI window/session state in `Document`.
 - Reinterpreting existing Document fields or changing render pixels.
+
+## A0S save/open ownership amendment (2026-07-18)
+
+### Conflict
+
+D1m originally stated the only product project-open entry is `ProjectSession::open`, while A0I completion documented `open_project_resolved` without session ownership and root-public `save_document*`.
+
+### Decision
+
+Align with [VSM-A0S §11](2026-07-17-vism-a0s-contract-catalog-spec.md): catalog-independent `load_document*` and unknown payload preservation stay public; path writes and recovery mutation require `&mut ProjectSession` or crate-private internals; product open is session-owning `open_project_resolved` wrapping `ProjectSession::open`; low-level open/recover and repair without session are forbidden.
+
+### Unchanged
+
+- Sidecar family, lock semantics, legacy migration table, and D1d recovery semantics.
+- No code, public API, schema, or test changes in this supplement.
