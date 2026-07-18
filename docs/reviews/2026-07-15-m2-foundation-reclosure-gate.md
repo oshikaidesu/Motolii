@@ -44,7 +44,7 @@ M2のDocument意味・migration・Undo・評価順・所有権は、後続フェ
 ### B. 意味の審判
 
 1. D1eを含む旧版コーパスのmigrationがin-place変更なし、再実行冪等、要素数・ID・未知field保持を満たす
-2. `Document::validate`が欠落参照、循環、型不一致、非有限値、未実装modeを黙って縮退せず型付き拒否する
+2. `Document::validate`が欠落参照、循環、型不一致、非有限値を黙って縮退せず型付き拒否する。`OverrunMode::Black`/`Loop`は保存可能な予約値として`validate`を通し、v1の全評価入口が`UnsupportedOverrunMode`で型付き拒否して黙ってFreezeへ縮退しない（D1g正本）
 3. D2のapply/revert、gesture merge、Undo/Redoがランダム操作列を含めて初期状態へ戻る。D1l操作はlifecycle決定のDelete Reject、Unlink、Copy Local、orphan保持、各操作1 Undoを個別に審判する
 4. D3のmask/group/effect/transform/LookAt・Follow・Parent評価順を意味論ゴールデンで固定する。D3eは非隣接共有、Group合成後1回、preview/export同一、欠落typed errorを個別に審判する。D3fは既定planar cameraで既存2D pixel不変とpreview/export同一を追加する
 5. 単一writerと`Arc<Document>`スナップショットを並行テストで確認し、UI/workerから直接書き換える公開口がない

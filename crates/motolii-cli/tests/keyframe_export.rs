@@ -1,4 +1,7 @@
-use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap};
+use motolii_core::{
+    CanonicalPoint, ColorSpace, CompCamera, Fps, FrameDesc, PixelFormat, Quality, RationalTime,
+    TimeMap,
+};
 use motolii_eval::{DataTracks, Interp, Keyframe, KeyframeTrack, ParamSource, Value};
 use motolii_gpu::download_rgba;
 use motolii_nodes::{CanonicalSize, ParamRectOverlay};
@@ -56,6 +59,14 @@ fn keyframed_overlay_matches_golden_at_start_mid_end() {
                 reports_source_time: true,
             },
             overlay: rect,
+            camera: CompCamera::try_new(
+                CanonicalPoint::CENTER,
+                0.0,
+                1.0,
+                i64::from(desc.width),
+                i64::from(desc.height),
+            )
+            .unwrap(),
         };
         let rendered = render_frame(&gpu, &request, Quality::FINAL).unwrap();
         let actual = download_rgba(&gpu, &rendered.texture).unwrap();

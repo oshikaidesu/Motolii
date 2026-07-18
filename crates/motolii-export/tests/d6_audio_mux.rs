@@ -1,5 +1,3 @@
-#![allow(deprecated)]
-
 //! D6: Document書き出しの楽曲mux + D1f書き出し厳格化。
 
 use std::collections::BTreeMap;
@@ -94,9 +92,7 @@ fn extract_pcm(path: &Path, out: &Path, start: Option<&str>, duration: &str) {
 }
 
 fn build_doc(video_name: &str, audio_name: Option<(&str, RationalTime)>) -> Document {
-    let mut doc = Document::new_v1();
-    doc.version = 2;
-    doc.min_reader_version = 2;
+    let mut doc = Document::new_current();
     doc.composition = Composition::try_new(
         W as i64,
         H as i64,

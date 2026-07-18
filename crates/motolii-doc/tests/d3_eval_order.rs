@@ -7,9 +7,9 @@ use std::collections::BTreeMap;
 use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap};
 use motolii_doc::param_eval::eval_doc_param;
 use motolii_doc::{
-    build_document_frame_graph, Clip, ClipSource, ClippingMaskSettings, DocParam, DocValue,
-    Document, EffectDefinition, EffectDefinitionId, EffectId, EffectUse, EvaluationTime, Group,
-    ItemEnvelope, MaskMode, ParamEvalError, Track, TrackItem, RECT_LAYER_SOURCE,
+    build_document_frame_graph, Clip, ClipSource, ClippingMaskSettings, Composition, DocParam,
+    DocValue, Document, EffectDefinition, EffectDefinitionId, EffectId, EffectUse, EvaluationTime,
+    Group, ItemEnvelope, MaskMode, ParamEvalError, Track, TrackItem, RECT_LAYER_SOURCE,
 };
 use motolii_eval::{DataTrack, DataTrackId, DataTracks, Value};
 use motolii_gpu::download_rgba;
@@ -79,13 +79,21 @@ fn rect_clip(layer: u64, center: [f64; 2], size: [f64; 2], color: [f64; 4]) -> C
     }
 }
 
-fn render_doc(doc: &Document) -> Option<Vec<u8>> {
+fn render_doc(doc: &mut Document) -> Option<Vec<u8>> {
+    doc.composition = Composition::try_new(
+        i64::from(W),
+        i64::from(H),
+        doc.composition.duration,
+        doc.composition.fps,
+    )
+    .unwrap();
+    let frame_desc = desc();
     let gpu = gpu_or_skip()?;
     let runtime = reference_runtime();
     let built = build_document_frame_graph(
         doc,
         EvaluationTime::new(RationalTime::ZERO),
-        desc(),
+        frame_desc,
         &DataTracks::new(),
         &runtime,
         None,
@@ -98,6 +106,7 @@ fn render_doc(doc: &Document) -> Option<Vec<u8>> {
         RationalTime::ZERO,
         &built.graph,
         &RenderGraphInputs {
+            camera: built.camera,
             video_sources: &[],
             source_time: Some(built.source_time),
             plugins: Some(runtime.executors()),
@@ -111,7 +120,7 @@ fn render_doc(doc: &Document) -> Option<Vec<u8>> {
 #[test]
 fn masked_group_effect_applies_before_clipping_mask() {
     let Some(_) = gpu_or_skip() else { return };
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let mask_layer = doc.layers.allocate("mask").unwrap();
     let content_layer = doc.layers.allocate("content").unwrap();
@@ -144,7 +153,7 @@ fn masked_group_effect_applies_before_clipping_mask() {
         id: track_id,
         items: vec![TrackItem::Clip(mask_clip), TrackItem::Clip(content_clip)],
     });
-    let actual = render_doc(&doc).expect("gpu");
+    let actual = render_doc(&mut doc).expect("gpu");
     let expected = expected_rect_frame(
         desc(),
         [0, 0, 0, 0],
@@ -168,7 +177,7 @@ fn masked_group_effect_applies_before_clipping_mask() {
 #[test]
 fn group_effect_stack_applies_after_children_composite() {
     let Some(_) = gpu_or_skip() else { return };
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let bg_layer = doc.layers.allocate("bg").unwrap();
     let child_layer = doc.layers.allocate("child").unwrap();
@@ -198,7 +207,7 @@ fn group_effect_stack_applies_after_children_composite() {
         id: track_id,
         items: vec![TrackItem::Clip(bg), TrackItem::Group(group)],
     });
-    let actual = render_doc(&doc).expect("gpu");
+    let actual = render_doc(&mut doc).expect("gpu");
     let transparent = [0u8, 0, 0, 0];
     let blue = [0u8, 0, 255, 255];
     let red_premul = [127u8, 0, 0, 127];
@@ -224,7 +233,7 @@ fn group_effect_stack_applies_after_children_composite() {
 #[test]
 fn visible_false_excludes_draw_but_keeps_mask_source() {
     let Some(_) = gpu_or_skip() else { return };
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let mask_layer = doc.layers.allocate("mask").unwrap();
     let content_layer = doc.layers.allocate("content").unwrap();
@@ -252,7 +261,7 @@ fn visible_false_excludes_draw_but_keeps_mask_source() {
         id: track_id,
         items: vec![TrackItem::Clip(mask_clip), TrackItem::Clip(content_clip)],
     });
-    let actual = render_doc(&doc).expect("gpu");
+    let actual = render_doc(&mut doc).expect("gpu");
     // マスク自体は描画されないが、マスク形状は content に効く。
     let expected = expected_rect_frame(
         desc(),
@@ -276,7 +285,7 @@ fn visible_false_excludes_draw_but_keeps_mask_source() {
 #[test]
 fn solo_draws_only_solo_set() {
     let Some(_) = gpu_or_skip() else { return };
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let a = doc.layers.allocate("a").unwrap();
     let b = doc.layers.allocate("b").unwrap();
@@ -290,7 +299,7 @@ fn solo_draws_only_solo_set() {
         id: track_id,
         items: vec![TrackItem::Clip(red), TrackItem::Clip(blue)],
     });
-    let actual = render_doc(&doc).expect("gpu");
+    let actual = render_doc(&mut doc).expect("gpu");
     let expected = expected_rect_frame(
         desc(),
         [0, 0, 0, 0],
@@ -313,7 +322,7 @@ fn solo_draws_only_solo_set() {
 #[test]
 fn lock_does_not_affect_draw_or_eval() {
     let Some(_) = gpu_or_skip() else { return };
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let layer = doc.layers.allocate("locked").unwrap();
     let track_id = doc.track_ids.allocate("V1").unwrap();
@@ -324,7 +333,7 @@ fn lock_does_not_affect_draw_or_eval() {
         id: track_id,
         items: vec![TrackItem::Clip(clip)],
     });
-    let actual = render_doc(&doc).expect("gpu");
+    let actual = render_doc(&mut doc).expect("gpu");
     let expected = expected_rect_frame(
         desc(),
         [0, 0, 0, 0],
@@ -389,7 +398,7 @@ fn data_track_matching_type_evaluates() {
 
 #[test]
 fn black_overrun_is_typed_error_not_silent_freeze() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let layer = doc.layers.allocate("clip").unwrap();
     let track_id = doc.track_ids.allocate("V1").unwrap();
@@ -416,7 +425,7 @@ fn black_overrun_is_typed_error_not_silent_freeze() {
 
 #[test]
 fn black_overrun_rejected_even_when_clip_inactive() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let layer = doc.layers.allocate("clip").unwrap();
     let track_id = doc.track_ids.allocate("V1").unwrap();
@@ -448,7 +457,7 @@ fn black_overrun_rejected_even_when_clip_inactive() {
 fn source_time_comes_from_video_clip_not_overlay() {
     use motolii_doc::{Asset, AssetId};
 
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let asset_id = AssetId::from_raw(0);
     doc.assets
@@ -507,7 +516,7 @@ fn source_time_comes_from_video_clip_not_overlay() {
 
 #[test]
 fn f3_effect_before_transform_in_graph_steps() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let layer = doc.layers.allocate("rect").unwrap();
     let track_id = doc.track_ids.allocate("V1").unwrap();
@@ -559,7 +568,7 @@ fn f3_effect_before_transform_in_graph_steps() {
 
 #[test]
 fn parent_transform_composes_into_affine_place() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let parent_layer = doc.layers.allocate("parent").unwrap();
     let child_layer = doc.layers.allocate("child").unwrap();
@@ -617,7 +626,7 @@ fn parent_transform_composes_into_affine_place() {
 fn two_video_assets_get_independent_slots() {
     use motolii_doc::{Asset, AssetId};
 
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let a0 = AssetId::from_raw(0);
     let a1 = AssetId::from_raw(1);

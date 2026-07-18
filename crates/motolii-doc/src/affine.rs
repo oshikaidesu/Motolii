@@ -6,7 +6,7 @@
 use std::collections::HashSet;
 use std::ops::Mul;
 
-use motolii_core::RationalTime;
+use motolii_core::{CompCamera, RationalTime};
 use motolii_eval::DataTracks;
 
 use crate::param::DocParam;
@@ -161,6 +161,20 @@ pub fn compose_local(
 /// 親空間へ: `M_world = M_parent · M_local`。
 pub fn compose_transform(parent: Affine2D, local: Affine2D) -> Affine2D {
     parent * local
+}
+
+/// view(camera) = S(1/h) · R(-roll) · T(-center)。D3f 単一投影用。
+pub(crate) fn camera_view_affine(camera: CompCamera) -> Affine2D {
+    let center = camera.center();
+    let inv_h = 1.0 / camera.height();
+    Affine2D::scale(inv_h, inv_h)
+        * Affine2D::rotation(-camera.roll_radians())
+        * Affine2D::translation(-center.x, -center.y)
+}
+
+/// view(camera) ∘ world を AffinePlace へ渡す合成。
+pub(crate) fn compose_camera_world(camera: CompCamera, world: Affine2D) -> Affine2D {
+    camera_view_affine(camera) * world
 }
 
 /// `lookup(layer)` は親レイヤーの `Transform2D` を返す。validate の森検査と揃える。

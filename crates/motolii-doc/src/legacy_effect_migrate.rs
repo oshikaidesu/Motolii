@@ -1493,13 +1493,19 @@ mod zero_inline_modern_tests {
     #[test]
     fn fully_modern_d1e_document_migrate_is_idempotent() {
         let root = json!({
-            "version": 4,
-            "min_reader_version": 4,
+            "version": 5,
+            "min_reader_version": 5,
             "composition": {
                 "aspect_num": 16,
                 "aspect_den": 9,
                 "duration": {"num": 10, "den": 1},
-                "fps": {"num": 30, "den": 1}
+                "fps": {"num": 30, "den": 1},
+                "camera": {
+                    "kind": "planar_orthographic",
+                    "center": {"const": {"Vec2": [0.0, 0.0]}},
+                    "roll_radians": {"const": {"F64": 0.0}},
+                    "height": {"const": {"F64": 1.0}}
+                }
             },
             "bpm": {"num": 120, "den": 1},
             "layers": {"next": 1, "entries": [{"id": 0, "name": "a"}]},

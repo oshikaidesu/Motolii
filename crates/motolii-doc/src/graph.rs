@@ -6,13 +6,14 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
-use motolii_core::{FrameDesc, RationalTime, TimeMapError};
+use motolii_core::{CompCamera, FrameDesc, RationalTime, TimeMapError};
 use motolii_eval::{DataTracks, Value};
 use motolii_nodes::{CanonicalPoint, CanonicalSize, ClippingMaskMode, CompositeMode, RectOverlay};
 use motolii_plugin::{NodeDesc, PluginId, PluginRegistry, PluginRuntime, ResolvedParams};
 use motolii_render::{LinearRenderGraph, RenderStep, SolidSource, TextureId};
 
-use crate::affine::Affine2D;
+use crate::affine::{compose_camera_world, Affine2D};
+use crate::camera_eval::{eval_comp_camera_doc, CameraEvalError};
 use crate::eval_time::EvaluationTime;
 use crate::param_eval::{
     eval_color, eval_doc_param, eval_f64, eval_vec2, ParamEvalError, ResolvedLayerParams,
@@ -37,6 +38,7 @@ pub struct VideoSlot {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DocumentFrameGraph {
+    pub camera: CompCamera,
     pub graph: LinearRenderGraph,
     pub video_slots: Vec<VideoSlot>,
     /// 代表 source_time(先頭の video slot。無ければ timeline)。
@@ -93,6 +95,8 @@ pub enum GraphError {
     },
     #[error("prepared LayerSource recipe missing for layer {layer}")]
     PreparedLayerSourceMissing { layer: u64 },
+    #[error(transparent)]
+    CameraEval(#[from] CameraEvalError),
 }
 
 /// ガード10: relative → absolute → same-name → hash。実在ファイルのみ返す。
@@ -144,6 +148,8 @@ pub fn build_document_frame_graph(
     runtime: &PluginRuntime,
     project_root: Option<&Path>,
 ) -> Result<DocumentFrameGraph, GraphError> {
+    // plugin validate が camera の typed 拒否(例: height<=0)を覆い隠さないよう先に評価する。
+    let camera = eval_comp_camera_doc(doc, eval, data_tracks)?;
     let prepared = doc.prepare_plugins(runtime.catalog())?;
     let mut diagnostics = prepared.diagnostics().to_vec();
     diagnostics.extend(prepared.execution_diagnostics(runtime));
@@ -153,12 +159,12 @@ pub fn build_document_frame_graph(
     let any_solo = document_has_solo(doc);
     let mut b = GraphBuilder::new(
         doc,
-        desc,
         eval.timeline_time,
         data_tracks,
         runtime.executors(),
         &prepared,
         any_solo,
+        camera,
     );
     let output = b.build_document(project_root)?;
     let source_time = b
@@ -167,6 +173,7 @@ pub fn build_document_frame_graph(
         .map(|s| s.source_time)
         .unwrap_or(eval.timeline_time);
     Ok(DocumentFrameGraph {
+        camera,
         graph: LinearRenderGraph {
             desc,
             steps: b.steps,
@@ -184,7 +191,7 @@ struct GraphBuilder<'a> {
     registry: &'a PluginRegistry,
     prepared: &'a PreparedDocumentPlugins,
     any_solo: bool,
-    frame_desc: FrameDesc,
+    camera: CompCamera,
     steps: Vec<RenderStep>,
     next_id: usize,
     transparent_id: Option<TextureId>,
@@ -197,12 +204,12 @@ struct GraphBuilder<'a> {
 impl<'a> GraphBuilder<'a> {
     fn new(
         doc: &'a Document,
-        desc: FrameDesc,
         timeline_time: RationalTime,
         tracks: &'a DataTracks,
         registry: &'a PluginRegistry,
         prepared: &'a PreparedDocumentPlugins,
         any_solo: bool,
+        camera: CompCamera,
     ) -> Self {
         Self {
             doc,
@@ -211,7 +218,7 @@ impl<'a> GraphBuilder<'a> {
             registry,
             prepared,
             any_solo,
-            frame_desc: desc,
+            camera,
             steps: Vec::new(),
             next_id: 0,
             transparent_id: None,
@@ -571,18 +578,27 @@ impl<'a> GraphBuilder<'a> {
         Ok(out)
     }
 
-    /// F-3 変形段。恒等ならスキップ。
+    /// 決定§2: center=0, roll=0, height=1 の bit 一致。approx skip はこのときだけ。
+    fn camera_is_bit_default(camera: CompCamera) -> bool {
+        let center = camera.center();
+        center.x == 0.0 && center.y == 0.0 && camera.roll_radians() == 0.0 && camera.height() == 1.0
+    }
+
+    /// F-3 変形段。既定 camera かつ view(camera)∘world が恒等ならスキップ。
     fn apply_world_transform(
         &mut self,
         input: TextureId,
         world: Affine2D,
         layer: LayerId,
     ) -> Result<TextureId, GraphError> {
-        if world.is_approx_identity() {
+        let combined = compose_camera_world(self.camera, world);
+        // 非既定 camera は 1e-12 approx で AffinePlace を省略しない。
+        if Self::camera_is_bit_default(self.camera) && combined.is_approx_identity() {
             return Ok(input);
         }
-        let aspect = self.frame_desc.width as f64 / self.frame_desc.height as f64;
-        let inverse_uv = world
+        let aspect =
+            self.doc.composition.aspect_num() as f64 / self.doc.composition.aspect_den() as f64;
+        let inverse_uv = combined
             .to_inverse_uv_matrix(aspect)
             .ok_or(GraphError::SingularTransform(layer.get()))?;
         let out = self.alloc_id();
@@ -906,20 +922,22 @@ mod vism_a3_1a_tests {
         register_reference_plugins(&mut registry).unwrap();
         let tracks = DataTracks::new();
         let prepared = PreparedDocumentPlugins::default();
+        let camera = CompCamera::try_new(
+            motolii_nodes::CanonicalPoint::CENTER,
+            0.0,
+            1.0,
+            doc.composition.aspect_num(),
+            doc.composition.aspect_den(),
+        )
+        .unwrap();
         let mut builder = GraphBuilder::new(
             &doc,
-            FrameDesc::packed(
-                16,
-                8,
-                motolii_core::PixelFormat::Rgba8Unorm,
-                motolii_core::ColorSpace::Srgb,
-                true,
-            ),
             RationalTime::ZERO,
             &tracks,
             &registry,
             &prepared,
             false,
+            camera,
         );
         let expected_layer = layer.get();
         let err = builder
@@ -939,7 +957,7 @@ mod d3e_resolve_effect_tests {
         Clip, ClipSource, DocParam, EffectDefinitionId, EffectId, EffectUse, ItemEnvelope, Track,
         TrackItem, RECT_LAYER_SOURCE,
     };
-    use motolii_core::{ColorSpace, FrameDesc, PixelFormat, RationalTime};
+    use motolii_core::RationalTime;
     use motolii_eval::DataTracks;
     use motolii_plugin::{reference::register_reference_plugins, PluginRegistry};
 
@@ -979,15 +997,22 @@ mod d3e_resolve_effect_tests {
         register_reference_plugins(&mut registry).unwrap();
         let tracks = DataTracks::new();
         let prepared = PreparedDocumentPlugins::default();
-        let desc = FrameDesc::packed(16, 8, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let camera = CompCamera::try_new(
+            motolii_nodes::CanonicalPoint::CENTER,
+            0.0,
+            1.0,
+            doc.composition.aspect_num(),
+            doc.composition.aspect_den(),
+        )
+        .unwrap();
         let builder = GraphBuilder::new(
             &doc,
-            desc,
             RationalTime::ZERO,
             &tracks,
             &registry,
             &prepared,
             false,
+            camera,
         );
         let effect = match &doc.tracks[0].items[0] {
             TrackItem::Clip(clip) => &clip.envelope.effects[0],

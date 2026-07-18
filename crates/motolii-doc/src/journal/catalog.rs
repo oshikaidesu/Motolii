@@ -141,13 +141,26 @@ pub fn load_catalog_fs(
     fs: &mut dyn JournalFs,
     document_path: &Path,
 ) -> Result<Option<GenerationCatalog>, CatalogError> {
-    let path = catalog_path_for_document(document_path);
+    load_catalog_at_family_root(fs, &motolii_dir_for_document(document_path))
+}
+
+pub(crate) fn load_catalog_at_family_root(
+    fs: &mut dyn JournalFs,
+    family_root: &Path,
+) -> Result<Option<GenerationCatalog>, CatalogError> {
+    let path = family_root.join(CATALOG_FILENAME);
     if !fs.exists(&path) {
         return Ok(None);
     }
     let bytes = fs.read(&path)?;
     let catalog: GenerationCatalog = serde_json::from_slice(&bytes)?;
     Ok(Some(catalog))
+}
+
+pub(crate) fn generation_path_at_family_root(family_root: &Path, generation_id: Uuid) -> PathBuf {
+    family_root
+        .join(GENERATIONS_DIR)
+        .join(format!("{generation_id}.json"))
 }
 
 pub fn load_catalog(document_path: &Path) -> Result<Option<GenerationCatalog>, CatalogError> {

@@ -48,7 +48,7 @@ fn rect_clip(layer: LayerId, xform: Transform2D) -> Clip {
 }
 
 fn look_at_doc(order_target_first: bool) -> (Document, LayerId, LayerId) {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let target = doc.layers.allocate("target").unwrap();
     let looker = doc.layers.allocate("looker").unwrap();
@@ -94,7 +94,7 @@ fn look_at_document_order_independent_same_rotation() {
 
 #[test]
 fn look_at_across_groups_uses_world_position() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let g_look = doc.layers.allocate("g_look").unwrap();
     let g_tgt = doc.layers.allocate("g_tgt").unwrap();
@@ -145,7 +145,7 @@ fn look_at_across_groups_uses_world_position() {
 
 #[test]
 fn look_at_across_transform_parent_uses_world_position() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let parent = doc.layers.allocate("parent").unwrap();
     let looker = doc.layers.allocate("looker").unwrap();
@@ -184,7 +184,7 @@ fn look_at_across_transform_parent_uses_world_position() {
 /// 親が回転しているとき、world 方向を placement 逆で local へ戻さないと向きがずれる。
 #[test]
 fn look_at_rotated_parent_maps_world_direction_to_local() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let parent = doc.layers.allocate("parent").unwrap();
     let looker = doc.layers.allocate("looker").unwrap();
@@ -222,7 +222,7 @@ fn look_at_rotated_parent_maps_world_direction_to_local() {
 
 #[test]
 fn look_at_parent_cycle_is_typed_spatial_link_cycle() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let a = doc.layers.allocate("a").unwrap();
     let b = doc.layers.allocate("b").unwrap();
@@ -255,7 +255,7 @@ fn look_at_parent_cycle_is_typed_spatial_link_cycle() {
 
 #[test]
 fn mutual_look_at_without_position_deps_ok() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let a = doc.layers.allocate("a").unwrap();
     let b = doc.layers.allocate("b").unwrap();

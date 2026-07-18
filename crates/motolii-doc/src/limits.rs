@@ -14,8 +14,8 @@ use thiserror::Error;
 
 use crate::param::DocParam;
 use crate::schema::{
-    Clip, ClipSource, EffectDefinition, Group, ItemEnvelope, PathOp, StandardShape, TrackItem,
-    Transform2D, VectorContent,
+    Clip, ClipSource, CompCameraDoc, EffectDefinition, Group, ItemEnvelope, PathOp, StandardShape,
+    TrackItem, Transform2D, VectorContent,
 };
 use crate::Document;
 
@@ -177,6 +177,7 @@ pub(crate) fn check_document_resource_limits(
     }
 
     check_extra(&doc.extra, "document.extra", limits)?;
+    check_comp_camera(&doc.composition.camera, "composition.camera", limits)?;
 
     for (i, def) in doc.effect_definitions.iter().enumerate() {
         check_effect_definition(def, &format!("effect_definitions[{i}]"), limits)?;
@@ -213,6 +214,24 @@ pub(crate) fn check_document_resource_limits(
         }
     }
     Ok(())
+}
+
+fn check_comp_camera(
+    camera: &CompCameraDoc,
+    path: &str,
+    limits: &ResourceLimits,
+) -> Result<(), ResourceLimitError> {
+    match camera {
+        CompCameraDoc::PlanarOrthographic {
+            center,
+            roll_radians,
+            height,
+        } => {
+            check_param(center, &format!("{path}.center"), limits)?;
+            check_param(roll_radians, &format!("{path}.roll_radians"), limits)?;
+            check_param(height, &format!("{path}.height"), limits)
+        }
+    }
 }
 
 fn check_track_item(

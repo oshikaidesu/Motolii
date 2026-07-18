@@ -76,3 +76,13 @@ jobs:
       - name: Test
         # M2E-3: Cargo.lock と乖離した解決を禁止し、依存ドリフトを検知する。
         run: cargo test --locked --workspace
+
+  d1m-lock-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust toolchain
+        run: rustup toolchain install stable --profile minimal
+      - uses: Swatinem/rust-cache@v2
+      - name: D1m session lock (Windows)
+        run: cargo test -p motolii-doc --test d1m_session_lock --locked -- --nocapture

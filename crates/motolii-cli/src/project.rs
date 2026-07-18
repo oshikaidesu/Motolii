@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 use motolii_core::{
-    ColorSpace, Fps, FrameDesc, PixelFormat, Quality, RationalTime, RationalTimeError, TimeMap,
-    TimeMapError,
+    CanonicalPoint, ColorSpace, CompCamera, Fps, FrameDesc, PixelFormat, Quality, RationalTime,
+    RationalTimeError, TimeMap, TimeMapError,
 };
 use motolii_eval::{DataTrackId, DataTracks, ParamSource, Value};
 use motolii_export::{export_overlay_video, ExportOverlayRequest, ExportReport};
@@ -150,6 +150,8 @@ pub enum ProjectError {
     TimeMap(#[from] TimeMapError),
     #[error(transparent)]
     RationalTime(#[from] RationalTimeError),
+    #[error(transparent)]
+    Camera(#[from] motolii_core::CompCameraError),
     #[error(transparent)]
     FirstParty(#[from] motolii_plugins_firstparty::FirstPartyError),
     #[error(
@@ -452,6 +454,13 @@ impl PreparedProject {
         let frame = self.read_source_frame(export_index)?;
         let overlay = self.overlay.eval(frame.pts, &self.data_tracks)?;
         let background = yuv.convert(gpu, &frame)?;
+        let camera = CompCamera::try_new(
+            CanonicalPoint::CENTER,
+            0.0,
+            1.0,
+            i64::from(self.render_desc.width),
+            i64::from(self.render_desc.height),
+        )?;
         let rendered = render_frame_with_background_texture(
             gpu,
             session,
@@ -464,6 +473,7 @@ impl PreparedProject {
                     desc: self.render_desc,
                 },
                 overlay,
+                camera,
             },
             Quality::FINAL,
         )?;

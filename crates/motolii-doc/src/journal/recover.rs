@@ -19,7 +19,7 @@ use super::catalog::{
 };
 use super::format::{
     journal_path_for_document, motolii_dir_for_document, scan_journal_bytes, scan_journal_fs,
-    JournalScanOutcome, JournalScanStop, ScanJournalOptions,
+    JournalRecordKind, JournalScanOutcome, JournalScanStop, ScanJournalOptions,
 };
 use super::fs::{DurabilityStage, FsError, JournalFs};
 use super::replay::{
@@ -219,7 +219,7 @@ fn marker_matches(marker: &RestoreAttemptMarker, scan: &JournalScanOutcome) -> b
 }
 
 /// 非破壊でプロジェクトを開く/回復する。
-pub fn recover_project(
+pub(crate) fn recover_project(
     fs: &mut dyn JournalFs,
     document_path: &Path,
     limits: &ResourceLimits,
@@ -433,6 +433,100 @@ pub fn recover_project(
         replay: Some(replay),
         warnings,
     })
+}
+
+/// D1m状態表向け: recoveryがmutation前に行う検査と同型の非破壊検証。
+pub(crate) fn verify_sidecar_family_at_root(
+    fs: &mut dyn JournalFs,
+    family_root: &Path,
+    limits: &ResourceLimits,
+) -> Result<(), RecoveryError> {
+    use super::catalog::{
+        generation_path_at_family_root, load_catalog_at_family_root, GENERATIONS_DIR,
+    };
+    use super::replay::{frames_through_last_commit, load_generation_via_fs};
+
+    let catalog = load_catalog_at_family_root(fs, family_root)?;
+    let journal_path = family_root.join("journal.wal");
+
+    let scan = if fs.exists(&journal_path) {
+        let jlen = fs.metadata_len(&journal_path)?;
+        limits
+            .check_journal_bytes(jlen)
+            .map_err(PersistError::from)?;
+        let options = ScanJournalOptions {
+            verify_prev_chain: true,
+            expected_project_id: catalog
+                .as_ref()
+                .filter(|c| !c.project_id.is_nil())
+                .map(|c| c.project_id),
+        };
+        Some(scan_journal_fs(fs, &journal_path, &options)?)
+    } else {
+        None
+    };
+
+    match (&catalog, &scan) {
+        (Some(cat), Some(scan)) => {
+            let committed = frames_through_last_commit(&scan.frames);
+            let tip_salt = super::wal::tip_generation_salt_from_frames(
+                scan.header.generation_salt,
+                &scan.frames,
+            );
+            if cat.project_id != scan.header.project_id {
+                return Err(RecoveryError::Unrecoverable {
+                    path: family_root.to_path_buf(),
+                });
+            }
+            if scan.stopped.is_none() && cat.generation_salt != tip_salt {
+                return Err(RecoveryError::Unrecoverable {
+                    path: family_root.to_path_buf(),
+                });
+            }
+            for entry in &cat.generations {
+                let Some(frame) = committed
+                    .iter()
+                    .find(|f| f.record_id == entry.journal_record)
+                else {
+                    return Err(RecoveryError::Unrecoverable {
+                        path: family_root.to_path_buf(),
+                    });
+                };
+                if frame.kind != JournalRecordKind::Snapshot || frame.snapshot_ref != Some(entry.id)
+                {
+                    return Err(RecoveryError::Unrecoverable {
+                        path: family_root.to_path_buf(),
+                    });
+                }
+                let gen_path = generation_path_at_family_root(family_root, entry.id);
+                load_generation_via_fs(fs, &gen_path, limits)?;
+            }
+        }
+        (None, Some(_)) => {
+            return Err(RecoveryError::Unrecoverable {
+                path: family_root.to_path_buf(),
+            });
+        }
+        (Some(_), None) => {
+            return Err(RecoveryError::Unrecoverable {
+                path: family_root.to_path_buf(),
+            });
+        }
+        (None, None) => {
+            let has_gens = fs.exists(&family_root.join(GENERATIONS_DIR));
+            let has_restore = fs.exists(&family_root.join(RESTORE_ATTEMPTED_FILENAME));
+            if has_gens || has_restore {
+                return Err(RecoveryError::Unrecoverable {
+                    path: family_root.to_path_buf(),
+                });
+            }
+            return Err(RecoveryError::Unrecoverable {
+                path: family_root.to_path_buf(),
+            });
+        }
+    }
+
+    Ok(())
 }
 
 /// テスト用: バイト列をscanするだけの薄い入口。

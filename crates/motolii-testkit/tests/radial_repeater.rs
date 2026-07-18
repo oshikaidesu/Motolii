@@ -2,14 +2,14 @@
 
 use std::f64::consts::PI;
 
-use motolii_core::{ColorSpace, CompCamera, FrameDesc, PixelFormat, RationalTime};
+use motolii_core::{CanonicalPoint, ColorSpace, CompCamera, FrameDesc, PixelFormat, RationalTime};
 use motolii_eval::Value;
 use motolii_gpu::PipelineCache;
 use motolii_plugin::{
     LayerSourceContext, LayerSourcePlugin, PluginError, ResolvedParams, TextureRef,
 };
 use motolii_plugin_radial_repeater::RADIAL_REPEATER_LAYER_SOURCE;
-use motolii_testkit::purity::render_layer_source_rgba;
+use motolii_testkit::purity::{render_layer_source_rgba, LayerSourceRenderRequest};
 use motolii_testkit::{assert_rgba_close, gpu_or_skip, tol, RgbaImageDesc};
 
 #[test]
@@ -19,20 +19,18 @@ fn radial_repeater_matches_independent_cpu_oracle() {
     let frame = FrameDesc::packed(48, 36, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
     let params = radial_params(7.0, 0.27, 0.055, 0.35, 0.85, [0.82, 0.41, 0.19, 0.72]);
     let t = RationalTime::try_new(5, 4).unwrap();
-    let ctx = layer_ctx();
+    let ctx = layer_ctx(frame);
     let mut pipelines = PipelineCache::new();
 
-    let gpu_rgba = render_layer_source_rgba(
-        "radial-oracle-gpu",
-        &gpu,
-        &mut pipelines,
-        &RADIAL_REPEATER_LAYER_SOURCE,
+    let request = LayerSourceRenderRequest {
+        plugin: &RADIAL_REPEATER_LAYER_SOURCE,
         t,
-        &params,
+        params: &params,
         ctx,
         frame,
-    )
-    .unwrap();
+    };
+    let gpu_rgba =
+        render_layer_source_rgba("radial-oracle-gpu", &gpu, &mut pipelines, &request).unwrap();
     let expected = cpu_oracle_rgba(
         frame,
         OracleParams {
@@ -66,20 +64,18 @@ fn phase_zero_places_first_instance_on_positive_x() {
     let frame = FrameDesc::packed(64, 64, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
     let params = radial_params(1.0, 0.30, 0.06, 0.0, 0.0, [1.0, 1.0, 1.0, 1.0]);
     let t = RationalTime::ZERO;
-    let ctx = layer_ctx();
+    let ctx = layer_ctx(frame);
     let mut pipelines = PipelineCache::new();
 
-    let rgba = render_layer_source_rgba(
-        "phase-zero-pos-x",
-        &gpu,
-        &mut pipelines,
-        &RADIAL_REPEATER_LAYER_SOURCE,
+    let request = LayerSourceRenderRequest {
+        plugin: &RADIAL_REPEATER_LAYER_SOURCE,
         t,
-        &params,
+        params: &params,
         ctx,
         frame,
-    )
-    .unwrap();
+    };
+    let rgba =
+        render_layer_source_rgba("phase-zero-pos-x", &gpu, &mut pipelines, &request).unwrap();
 
     let (peak_x, peak_y, peak_a) = brightest_pixel(&rgba, frame.width, frame.height);
     assert!(
@@ -105,20 +101,18 @@ fn positive_angular_speed_rotates_counterclockwise_with_time() {
     let frame = FrameDesc::packed(64, 64, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
     let params = radial_params(1.0, 0.30, 0.06, 0.0, PI / 2.0, [1.0, 1.0, 1.0, 1.0]);
     let t = RationalTime::from_seconds(1);
-    let ctx = layer_ctx();
+    let ctx = layer_ctx(frame);
     let mut pipelines = PipelineCache::new();
 
-    let rgba = render_layer_source_rgba(
-        "ccw-angular-speed",
-        &gpu,
-        &mut pipelines,
-        &RADIAL_REPEATER_LAYER_SOURCE,
+    let request = LayerSourceRenderRequest {
+        plugin: &RADIAL_REPEATER_LAYER_SOURCE,
         t,
-        &params,
+        params: &params,
         ctx,
         frame,
-    )
-    .unwrap();
+    };
+    let rgba =
+        render_layer_source_rgba("ccw-angular-speed", &gpu, &mut pipelines, &request).unwrap();
 
     let (peak_x, peak_y, peak_a) = brightest_pixel(&rgba, frame.width, frame.height);
     assert!(
@@ -144,29 +138,33 @@ fn n8_overlap_alpha_addition_rejected() {
     let color = [0.6, 0.3, 0.9, 0.8];
     let dot_radius = 0.08;
     let t = RationalTime::from_seconds(2);
-    let ctx = layer_ctx();
+    let ctx = layer_ctx(frame);
     let mut pipelines = PipelineCache::new();
 
     let one = render_layer_source_rgba(
         "n8-count-1",
         &gpu,
         &mut pipelines,
-        &RADIAL_REPEATER_LAYER_SOURCE,
-        t,
-        &radial_params(1.0, 0.0, dot_radius, 0.2, 0.4, color),
-        ctx,
-        frame,
+        &LayerSourceRenderRequest {
+            plugin: &RADIAL_REPEATER_LAYER_SOURCE,
+            t,
+            params: &radial_params(1.0, 0.0, dot_radius, 0.2, 0.4, color),
+            ctx,
+            frame,
+        },
     )
     .unwrap();
     let many = render_layer_source_rgba(
         "n8-count-64",
         &gpu,
         &mut pipelines,
-        &RADIAL_REPEATER_LAYER_SOURCE,
-        t,
-        &radial_params(64.0, 0.0, dot_radius, 0.2, 0.4, color),
-        ctx,
-        frame,
+        &LayerSourceRenderRequest {
+            plugin: &RADIAL_REPEATER_LAYER_SOURCE,
+            t,
+            params: &radial_params(64.0, 0.0, dot_radius, 0.2, 0.4, color),
+            ctx,
+            frame,
+        },
     )
     .unwrap();
 
@@ -183,31 +181,18 @@ fn p6_draft_final_same_t_params_desc() {
     let frame = FrameDesc::packed(24, 24, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
     let params = radial_params(5.0, 0.22, 0.04, 0.1, 0.25, [0.5, 0.7, 0.9, 0.6]);
     let t = RationalTime::from_seconds(3);
-    let ctx = layer_ctx();
+    let ctx = layer_ctx(frame);
     let mut pipelines = PipelineCache::new();
 
-    let first = render_layer_source_rgba(
-        "p6-first",
-        &gpu,
-        &mut pipelines,
-        &RADIAL_REPEATER_LAYER_SOURCE,
+    let request = LayerSourceRenderRequest {
+        plugin: &RADIAL_REPEATER_LAYER_SOURCE,
         t,
-        &params,
+        params: &params,
         ctx,
         frame,
-    )
-    .unwrap();
-    let second = render_layer_source_rgba(
-        "p6-second",
-        &gpu,
-        &mut pipelines,
-        &RADIAL_REPEATER_LAYER_SOURCE,
-        t,
-        &params,
-        ctx,
-        frame,
-    )
-    .unwrap();
+    };
+    let first = render_layer_source_rgba("p6-first", &gpu, &mut pipelines, &request).unwrap();
+    let second = render_layer_source_rgba("p6-second", &gpu, &mut pipelines, &request).unwrap();
 
     assert_eq!(
         first, second,
@@ -236,7 +221,7 @@ fn n10_zero_dimension_typed_rejection() {
     });
 
     let params = radial_params(1.0, 0.0, 0.04, 0.0, 0.0, [1.0, 1.0, 1.0, 1.0]);
-    let ctx = layer_ctx();
+    let ctx = layer_ctx(valid);
     let mut pipelines = PipelineCache::new();
 
     for (label, bad_desc) in [
@@ -267,9 +252,16 @@ fn n10_zero_dimension_typed_rejection() {
     }
 }
 
-fn layer_ctx() -> LayerSourceContext {
+fn layer_ctx(desc: FrameDesc) -> LayerSourceContext {
     LayerSourceContext {
-        camera: CompCamera::DEFAULT,
+        camera: CompCamera::try_new(
+            CanonicalPoint::CENTER,
+            0.0,
+            1.0,
+            i64::from(desc.width),
+            i64::from(desc.height),
+        )
+        .unwrap(),
     }
 }
 

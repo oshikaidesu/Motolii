@@ -4,11 +4,24 @@
 
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
-    asset_components_require_newer_reader, AudioComponent, AudioOutOfRange, Clip, ClipSource,
-    Document, DocumentError, ItemEnvelope, StreamKind, StreamSelector, Track, TrackItem,
-    VideoComponent, MIN_READER_VERSION_FOR_ASSET_COMPONENTS, READER_VERSION,
+    asset_components_require_newer_reader, migrate_bytes, AudioComponent, AudioOutOfRange, Clip,
+    ClipSource, CompCameraDoc, Document, DocumentError, ItemEnvelope, StreamKind, StreamSelector,
+    Track, TrackItem, VideoComponent, MIN_READER_VERSION_FOR_COMP_CAMERA, READER_VERSION,
+    WRITER_VERSION,
 };
 use serde_json::json;
+
+/// Legacy v2 wire without composition.camera (D1e migrate entry).
+fn legacy_v2_wire_without_camera(doc: &Document) -> Vec<u8> {
+    let mut value = serde_json::to_value(doc).unwrap();
+    value["version"] = json!(2);
+    value["min_reader_version"] = json!(2);
+    value["composition"]
+        .as_object_mut()
+        .unwrap()
+        .remove("camera");
+    serde_json::to_vec(&value).unwrap()
+}
 
 fn push_asset_clip(doc: &mut Document, source: ClipSource) {
     let layer = doc.layers.allocate("clip").unwrap();
@@ -151,9 +164,7 @@ fn vector_rejects_audio_component_field() {
 
 #[test]
 fn validate_rejects_wrong_stream_kind() {
-    let mut doc = Document::new_v1();
-    doc.version = MIN_READER_VERSION_FOR_ASSET_COMPONENTS;
-    doc.min_reader_version = MIN_READER_VERSION_FOR_ASSET_COMPONENTS;
+    let mut doc = Document::new_current();
     let asset = register_asset(&mut doc);
     push_asset_clip(
         &mut doc,
@@ -176,9 +187,7 @@ fn validate_rejects_wrong_stream_kind() {
 
 #[test]
 fn validate_rejects_empty_components() {
-    let mut doc = Document::new_v1();
-    doc.version = MIN_READER_VERSION_FOR_ASSET_COMPONENTS;
-    doc.min_reader_version = MIN_READER_VERSION_FOR_ASSET_COMPONENTS;
+    let mut doc = Document::new_current();
     let asset = register_asset(&mut doc);
     push_asset_clip(
         &mut doc,
@@ -196,9 +205,9 @@ fn validate_rejects_empty_components() {
 
 #[test]
 fn validate_requires_min_reader_for_audio_components() {
-    let mut doc = Document::new_v1();
-    doc.version = 2;
-    doc.min_reader_version = 2;
+    // Typed v2+camera cannot reach AssetComponentsRequireNewerReader (camera gate runs first).
+    // Legacy v2 wire without camera + audio components migrates to v5 with default camera.
+    let mut doc = Document::new_current();
     let asset = register_asset(&mut doc);
     push_asset_clip(
         &mut doc,
@@ -208,20 +217,31 @@ fn validate_requires_min_reader_for_audio_components() {
             audio: vec![AudioComponent::ordinal(0)],
         },
     );
-    assert!(matches!(
-        doc.validate(),
-        Err(DocumentError::AssetComponentsRequireNewerReader {
-            min_reader_version: 2,
-            required: MIN_READER_VERSION_FOR_ASSET_COMPONENTS,
-        })
-    ));
+    let bytes = legacy_v2_wire_without_camera(&doc);
+    let (migrated, report) = migrate_bytes(&bytes).unwrap();
+    assert!(report.steps.contains(&"insert_default_comp_camera"));
+    assert_eq!(migrated.version, WRITER_VERSION);
+    assert_eq!(
+        migrated.min_reader_version,
+        MIN_READER_VERSION_FOR_COMP_CAMERA
+    );
+    assert_eq!(
+        migrated.composition.camera,
+        CompCameraDoc::default_planar_orthographic()
+    );
+    let TrackItem::Clip(clip) = &migrated.tracks[0].items[0] else {
+        panic!("clip");
+    };
+    let ClipSource::Asset { audio, .. } = &clip.source else {
+        panic!("asset");
+    };
+    assert_eq!(audio.len(), 1);
+    migrated.validate().unwrap();
 }
 
 #[test]
 fn validate_accepts_audio_components_with_reader_gate() {
-    let mut doc = Document::new_v1();
-    doc.version = READER_VERSION;
-    doc.min_reader_version = MIN_READER_VERSION_FOR_ASSET_COMPONENTS;
+    let mut doc = Document::new_current();
     let asset = register_asset(&mut doc);
     push_asset_clip(
         &mut doc,
@@ -235,20 +255,35 @@ fn validate_accepts_audio_components_with_reader_gate() {
 }
 
 #[test]
-fn old_project_with_legacy_asset_still_validates_at_v2() {
-    let mut doc = Document::new_v1();
-    doc.version = 2;
-    doc.min_reader_version = 2;
+fn legacy_v2_asset_migrates_to_current_and_validates() {
+    // Legacy v2 wire (no camera) with video-only asset clip migrates to v5 and validates.
+    let mut doc = Document::new_current();
     let asset = register_asset(&mut doc);
     push_asset_clip(&mut doc, ClipSource::asset_video_only(asset));
-    doc.validate().unwrap();
+    let bytes = legacy_v2_wire_without_camera(&doc);
+    let (migrated, report) = migrate_bytes(&bytes).unwrap();
+    assert!(report.steps.contains(&"insert_default_comp_camera"));
+    assert_eq!(migrated.version, WRITER_VERSION);
+    assert_eq!(
+        migrated.composition.camera,
+        CompCameraDoc::default_planar_orthographic()
+    );
+    let TrackItem::Clip(clip) = &migrated.tracks[0].items[0] else {
+        panic!("clip");
+    };
+    match &clip.source {
+        ClipSource::Asset { video, audio, .. } => {
+            assert_eq!(*video, Some(VideoComponent::ordinal(0)));
+            assert!(audio.is_empty());
+        }
+        other => panic!("unexpected {other:?}"),
+    }
+    migrated.validate().unwrap();
 }
 
 #[test]
 fn negative_gain_is_rejected() {
-    let mut doc = Document::new_v1();
-    doc.version = READER_VERSION;
-    doc.min_reader_version = MIN_READER_VERSION_FOR_ASSET_COMPONENTS;
+    let mut doc = Document::new_current();
     let asset = register_asset(&mut doc);
     let mut audio = AudioComponent::ordinal(0);
     audio.gain = motolii_doc::DocParam::const_f64(-0.1);
@@ -277,9 +312,7 @@ fn open_mode_rejects_future_min_reader() {
 
 #[test]
 fn non_zero_video_ordinal_is_rejected() {
-    let mut doc = Document::new_v1();
-    doc.version = READER_VERSION;
-    doc.min_reader_version = MIN_READER_VERSION_FOR_ASSET_COMPONENTS;
+    let mut doc = Document::new_current();
     let asset = register_asset(&mut doc);
     push_asset_clip(
         &mut doc,
@@ -302,9 +335,7 @@ fn animated_audio_gain_duplicate_issues_fresh_keyframe_ids() {
     };
     use motolii_eval::Interp;
 
-    let mut doc = Document::new_v1();
-    doc.version = READER_VERSION;
-    doc.min_reader_version = MIN_READER_VERSION_FOR_ASSET_COMPONENTS;
+    let mut doc = Document::new_current();
     let asset = doc.assets.allocate("a", "audio/wav", "sha256:aa").unwrap();
     let layer = doc.layers.allocate("clip").unwrap();
     let track = doc.track_ids.allocate("V1").unwrap();
@@ -394,9 +425,7 @@ fn animated_audio_gain_respects_key_count_limit() {
     };
     use motolii_eval::Interp;
 
-    let mut doc = Document::new_v1();
-    doc.version = READER_VERSION;
-    doc.min_reader_version = MIN_READER_VERSION_FOR_ASSET_COMPONENTS;
+    let mut doc = Document::new_current();
     let asset = register_asset(&mut doc);
     let mut keys = DocKeyframeTrack::new();
     for (i, t) in [0i64, 1, 2].into_iter().enumerate() {
@@ -441,9 +470,7 @@ fn duplicate_audio_gain_keyframe_ids_are_rejected_without_remap() {
 
     // walker無しだと複製後に同一KeyframeIdが2箇所に残りDuplicateStableIdになることを
     // 回帰として固定する(remap実装が外れたら赤)。
-    let mut doc = Document::new_v1();
-    doc.version = READER_VERSION;
-    doc.min_reader_version = MIN_READER_VERSION_FOR_ASSET_COMPONENTS;
+    let mut doc = Document::new_current();
     let asset = register_asset(&mut doc);
     let shared = KeyframeId::from_raw(doc.next_stable_id.allocate().unwrap());
     let mut keys = DocKeyframeTrack::new();

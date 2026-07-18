@@ -1,6 +1,6 @@
 # M2 project sidecar identity / session ownership decision (2026-07-16)
 
-Status: **Decision / implementation not started**. This decision adds D1m to the M2 reclosure critical path. D1d's corruption recovery remains valid, but its current parent-directory-shared sidecar path and lack of inter-process ownership must not be treated as closed.
+Status: **Implementation landed** (D1m, branch `cursor/d1m-project-session`). D1d's corruption recovery remains valid on project-scoped sidecars with inter-process session ownership.
 
 > **2026-07-18 supplement ([VSM-A0S](2026-07-17-vism-a0s-contract-catalog-spec.md) alignment)**: The save/open ownership rows below are amended so D1m implementation cannot invent a second product open path or keep root-public path mutation. Code is not updated by this supplement.
 
@@ -38,7 +38,7 @@ The sidecar directory is not part of `Document` JSON and does not add a permanen
 
 The old parent-shared `<parent>/.motolii/` journal layout is legacy input only. **D1m never guesses or automatically adopts its owner**: the old catalog has no durable link to a document path, and equal document fingerprints can still belong to copies. A legacy or new **journal family exists** iff at least one of this closed set exists at its layout root: `journal.wal`, `catalog.json`, `generations/`, `restore_attempted.json`, or `journal.wal.corrupt-*`. The shared `.motolii/media` directory, unknown entries, a sibling lock file, and an empty directory do not establish a journal family.
 
-An explicit `ProjectSession::migrate_legacy_sidecar()` operation is the only adoption route. Calling it is the caller's ownership confirmation. While holding the sibling lock, it copies only the known journal family into sibling staging `<file-name>.motolii.importing`, verifies header/catalog/generation cross-references and recovery there, fsyncs it, and atomically renames the verified staging directory to `<file-name>.motolii` followed by parent-directory fsync. It does not copy the shared asset cache `.motolii/media`, delete/truncate the legacy source, or invent ownership for another project. Unknown legacy entries remain untouched and are reported diagnostically.
+An explicit `ProjectSession::migrate_legacy_sidecar()` operation is the only adoption route. Calling it is the caller's ownership confirmation. While holding the sibling lock, it copies only the known journal family into sibling staging `<file-name>.motolii.importing`, verifies header/catalog/generation cross-references and recovery there, fsyncs it, and atomically renames the verified staging directory to `<file-name>.motolii` followed by parent-directory fsync. It does not copy the shared asset cache `.motolii/media`, delete/truncate the legacy source, or invent ownership for another project. Unknown legacy entries remain untouched on disk; their entry names are reported only through the in-process diagnostic report defined in [Legacy sidecar migration diagnostic report (2026-07-18)](#legacy-sidecar-migration-diagnostic-report-2026-07-18) and are never persisted.
 
 An incomplete staging directory is never treated as an active family. Ordinary open returns typed `IncompleteLegacyMigration` without changing it. A new explicit migration call is the only repair authority: before retry it **must** atomically rename the old staging directory to `<file-name>.motolii.importing.failed-<UUIDv4>` and fsync the parent, then create/verify a fresh exact `.importing` staging copy from the untouched legacy source. If quarantine rename fails, retry stops with a typed I/O error. It must not delete or merge partial bytes, delete the legacy source, or silently prefer a partial/failing destination. Only the exact `<file-name>.motolii.importing` path is active staging; `failed-*` entries are diagnostics and never candidates.
 
@@ -56,11 +56,11 @@ The state table is closed:
 | Legacy family | Final path/family | Staging | Ordinary open | Explicit legacy migration |
 |---|---|---|---|---|
 | no | absent/empty | no | open main as a new/no-history session | `NoLegacySidecar` |
-| yes | absent/empty | no | `LegacySidecarRequiresExplicitMigration`, FS unchanged | if empty remove it, then copy→verify→atomic install |
-| yes/no | absent/empty | yes | `IncompleteLegacyMigration`, FS unchanged | quarantine staging, then retry only if legacy=yes; otherwise typed reject |
-| yes/no | unknown-only directory or non-directory | any | `DestinationPathOccupied`, FS unchanged | same typed reject; no overwrite/merge |
-| yes/no | valid family | any | use final; legacy/staging are not auto-merged | idempotent no-op only if final verifies; otherwise typed conflict |
-| yes/no | invalid family | any | typed `InvalidProjectSidecar`, no fallback | typed conflict; no overwrite/merge |
+| yes | absent/empty | no | `LegacySidecarRequiresExplicitMigration`, FS unchanged | if empty remove it, then copy→verify→atomic install → `Ok(Report { disposition: Installed, untouched_legacy_entries })` |
+| yes/no | absent/empty | yes | `IncompleteLegacyMigration`, FS unchanged | quarantine staging, then retry only if legacy=yes; otherwise typed reject (`Err`, no report) |
+| yes/no | unknown-only directory or non-directory | any | `DestinationPathOccupied`, FS unchanged | same typed reject (`Err`, no report); no overwrite/merge |
+| yes/no | valid family | any | use final; legacy/staging are not auto-merged | idempotent no-op only if final verifies → `Ok(Report { disposition: AlreadyValid, untouched_legacy_entries })`; otherwise typed conflict (`Err`, no report) |
+| yes/no | invalid family | any | typed `InvalidProjectSidecar`, no fallback | typed conflict (`Err`, no report); no overwrite/merge |
 
 “Valid” means the existing D1d bounded scan, catalog/header/generation cross-reference, and recovery checks succeed. A lock file or media-only shared directory does not change any row.
 
@@ -92,7 +92,7 @@ Cloud-sync software can ignore advisory locks. D1m therefore prevents cooperatin
 2. A subprocess holding a read-write session makes a second canonical or symlink-alias open fail immediately with `ProjectAlreadyOpen`. D1m adds a targeted Windows CI job in addition to the existing Linux job; macOS is run locally and its command/output recorded in the PR.
 3. After normal guard drop and after forced subprocess termination, a new session can acquire the lock and recover normally.
 4. All production mutation APIs require the session capability; path mutation and low-level `open_project*` / `recover_project` are crate-private or test-only with no public bypass. The sole catalog-required product open is `open_project_resolved`, which owns and returns `ProjectSession`.
-5. Ordinary open never auto-adopts the shared legacy layout and returns `LegacySidecarRequiresExplicitMigration` without changing it. Explicit migration preserves the source, excludes `.motolii/media`, verifies the destination, and is restart-idempotent.
+5. Ordinary open never auto-adopts the shared legacy layout and returns `LegacySidecarRequiresExplicitMigration` without changing it. Explicit migration preserves the source, excludes `.motolii/media`, verifies the destination, is restart-idempotent, and returns `Result<LegacySidecarMigrationReport, SessionError>` per [Legacy sidecar migration diagnostic report (2026-07-18)](#legacy-sidecar-migration-diagnostic-report-2026-07-18).
 6. Existing D1d corruption/fault/recovery **semantics and protected golden expectations** remain unchanged and green. Tests that hard-code the obsolete `.motolii` path may be mechanically changed to call the production path helper; expected errors, recovery documents, and golden values may not change. Finish with `cargo test --workspace`.
 7. `rg`/public-API review proves that root-public project mutation is available only through `&mut ProjectSession`; raw path-only functions and `WalSession` are not exported to product callers.
 
@@ -129,3 +129,82 @@ Align with [VSM-A0S §11](2026-07-17-vism-a0s-contract-catalog-spec.md): catalog
 
 - Sidecar family, lock semantics, legacy migration table, and D1d recovery semantics.
 - No code, public API, schema, or test changes in this supplement.
+
+## Legacy sidecar migration diagnostic report (2026-07-18)
+
+Status: **Implemented** (D1m diagnostic report, branch `cursor/d1m-project-session`). This supplement closes the unknown-legacy-entry diagnostic contract for D1m. It does not change family predicates, staging/atomic-install steps, lock semantics, or D1d recovery meaning.
+
+### Signature
+
+Normative for future D1m implementation — docs only in this supplement:
+
+```rust
+// normative for future D1m impl — docs only in this order
+fn migrate_legacy_sidecar(&mut self) -> Result<LegacySidecarMigrationReport, SessionError>;
+
+struct LegacySidecarMigrationReport {
+    disposition: LegacySidecarMigrationDisposition,
+    untouched_legacy_entries: Vec<OsString>,
+}
+
+enum LegacySidecarMigrationDisposition {
+    Installed,
+    AlreadyValid,
+}
+```
+
+`Ok` carries **only** `Installed` or `AlreadyValid`. Typed rejects (`NoLegacySidecar`, occupied/invalid/incomplete failures, I/O, lock errors, and all other `SessionError` variants) return `Err` with **no** report on the error side.
+
+### `untouched_legacy_entries`
+
+Scope: **legacy layout root** only — the parent-shared directory `<parent>/.motolii/` — **direct children** (non-recursive).
+
+A direct child is **copied** (member of the journal-family copy set) iff its entry name exactly matches one of:
+
+- `journal.wal`
+- `catalog.json` (future implementation must use the same name as D1d `CATALOG_FILENAME`)
+- `generations` (directory entry name; future implementation must use the same name as D1d `GENERATIONS_DIR`)
+- `restore_attempted.json` (future implementation must use the same name as D1d `RESTORE_ATTEMPTED_FILENAME`)
+- any name whose `OsStr` has the exact prefix `journal.wal.corrupt-` (same corrupt-stamp family as D1d recovery; no UTF-8 lossy conversion or additional normalization)
+
+Every other direct child name is **untouched**, including `media` and any unknown file or directory. Values are entry names only (`DirEntry::file_name()` equivalent), not absolute paths and not parent/child path concatenation.
+
+Sort order: **lossless platform-native `OsString::cmp` ascending**. UTF-8 conversion, Unicode/NFC normalization, locale sort, and case folding are forbidden.
+
+### Preflight timing and failure
+
+While holding the sibling lock:
+
+1. Perform the existing closed read-only classification, including final valid/invalid verification.
+2. After classification succeeds toward `Installed` or `AlreadyValid`, and **before** quarantine, copy, empty-final remove, or rename, read-only enumerate the legacy layout root and fix the report as a preflight snapshot.
+3. `read_dir` or entry acquisition failure → typed I/O `SessionError`, filesystem unchanged, and **no** `Ok` with an empty `Vec` masquerading as success.
+4. **`Installed`**: after mutation succeeds, return the **same** preflight report; do not re-enumerate and replace it post-install.
+5. **`AlreadyValid`** (final valid, idempotent no-op):
+   - legacy layout root directory exists → enumerate with the same diagnostic rules;
+   - legacy layout root absent → `untouched_legacy_entries = []`.
+6. The report is **non-persistent**: it is not saved to `Document`, catalog, journal, schema, wire formats, or any sidecar file, and is not serde-serialized. It exists only as the in-process return value.
+
+Future implementation must reuse existing path/name helpers without inventing duplicates: `motolii_dir_for_document` (current legacy root = parent-shared `.motolii`), D1d `CATALOG_FILENAME` / `GENERATIONS_DIR` / `RESTORE_ATTEMPTED_FILENAME`, and the existing `journal.wal.corrupt-{stamp}` recovery naming.
+
+### State-table return mapping
+
+| Outcome | Return value |
+|---|---|
+| explicit migrate succeeds (atomic install) | `Ok(LegacySidecarMigrationReport { disposition: Installed, untouched_legacy_entries })` |
+| final valid idempotent no-op | `Ok(LegacySidecarMigrationReport { disposition: AlreadyValid, untouched_legacy_entries })` |
+| `NoLegacySidecar`, occupied, invalid, incomplete failure, I/O | `Err(SessionError)`, no report |
+
+### Implementation-time required tests (not part of this docs-only supplement)
+
+Positive:
+
+- legacy root contains `media` plus an unknown file → `Installed` and `untouched_legacy_entries` lists both (copy-set names excluded), in `OsString::cmp` ascending order;
+- final valid with legacy root present → `AlreadyValid` with the same untouched rules;
+- final valid with legacy root absent → `AlreadyValid` with an empty `Vec`;
+- non-UTF entry names remain `OsString` without lossy conversion.
+
+Negative:
+
+- `NoLegacySidecar` and other typed rejects → `Err`, no report;
+- `read_dir` failure → typed I/O `Err`, filesystem unchanged, no `Ok` with an empty `Vec`;
+- quarantine/copy/remove/rename must not run before preflight enumeration (failure injection proves filesystem unchanged).

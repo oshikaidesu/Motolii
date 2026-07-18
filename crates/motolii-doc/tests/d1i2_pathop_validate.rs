@@ -11,7 +11,7 @@ use motolii_doc::{
 use serde_json::json;
 
 fn doc_with_modifiers(modifiers: Vec<PathOp>) -> Document {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let layer = doc.layers.allocate("a").unwrap();
     let tid = doc.track_ids.allocate("V1").unwrap();
     doc.tracks.push(Track {

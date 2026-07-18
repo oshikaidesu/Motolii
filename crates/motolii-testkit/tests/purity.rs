@@ -3,7 +3,9 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::OnceLock;
 
-use motolii_core::{ColorSpace, CompCamera, Fps, FrameDesc, PixelFormat, RationalTime};
+use motolii_core::{
+    CanonicalPoint, ColorSpace, CompCamera, Fps, FrameDesc, PixelFormat, RationalTime,
+};
 use motolii_eval::Value;
 use motolii_gpu::{GpuCtx, PipelineCache};
 use motolii_plugin::reference::{register_reference_plugins, CLEAR_FILTER, TINT_FILTER};
@@ -121,7 +123,14 @@ fn radial_repeater_layer_source_is_pure() {
         RationalTime::from_seconds(2),
         &params,
         LayerSourceContext {
-            camera: CompCamera::DEFAULT,
+            camera: CompCamera::try_new(
+                CanonicalPoint::CENTER,
+                0.0,
+                1.0,
+                i64::from(frame.width),
+                i64::from(frame.height),
+            )
+            .unwrap(),
         },
         frame,
     )

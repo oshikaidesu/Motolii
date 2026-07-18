@@ -172,6 +172,8 @@ fn render_preview_composition_rgba(gpu: &GpuCtx, doc: &Document, project_root: &
         .map(|(slot, texture)| (slot.texture_id, TextureRef { texture, desc }))
         .collect();
 
+    let camera = built.camera;
+
     let mut session = RenderSession::new(gpu);
     let rendered = render_graph_cached(
         gpu,
@@ -179,6 +181,7 @@ fn render_preview_composition_rgba(gpu: &GpuCtx, doc: &Document, project_root: &
         timeline,
         &built.graph,
         &RenderGraphInputs {
+            camera,
             video_sources: &video_inputs,
             source_time: Some(built.source_time),
             plugins: Some(runtime.executors()),

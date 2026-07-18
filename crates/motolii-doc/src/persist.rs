@@ -37,21 +37,18 @@ use crate::{Document, DocumentError};
 
 /// このリーダーが開ける`min_reader_version`の上限(=自版の読取能力)。
 ///
-/// D1lでEffectDefinition/EffectUse共有schemaを追加したため4へ。
-/// version 3以下(旧inline EffectInstance)はdefaultで読める。共有schemaを含む文書は
-/// `min_reader_version>=4`を要求し、旧readerの再保存消失を防ぐ。
-pub const READER_VERSION: u32 = 4;
+/// D1jで`CompCameraDoc`入り文書は`version=5`へ上がるため、読取/書込能力も5へ揃える。
+/// `Document.version`がこれを超える場合は`OpenMode::ReadOnlyNewer`(#101 / 監査S14)。
+pub const READER_VERSION: u32 = 5;
 
 /// このリーダーが**再保存・migrationしてよい**`Document.version`の上限(=自版の書込能力)。
-/// D1lのEffectDefinition入り文書は`version=4`へ上がるため、書き込み能力も4へ揃える。
-/// `Document.version`がこれを超える場合は`OpenMode::ReadOnlyNewer`(#101 / 監査S14)。
-pub const WRITER_VERSION: u32 = 4;
+pub const WRITER_VERSION: u32 = 5;
 
-const _: [(); 4] = [(); READER_VERSION as usize];
-const _: [(); 4] = [(); WRITER_VERSION as usize];
+const _: [(); 5] = [(); READER_VERSION as usize];
+const _: [(); 5] = [(); WRITER_VERSION as usize];
 const _: [(); READER_VERSION as usize] = [(); WRITER_VERSION as usize];
 const _: [(); READER_VERSION as usize] =
-    [(); crate::validate::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS as usize];
+    [(); crate::validate::MIN_READER_VERSION_FOR_COMP_CAMERA as usize];
 
 /// 読み/書き互換を分離した3状態(監査S14)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -122,6 +119,22 @@ pub enum PersistError {
         document_version: u32,
         writer_version: u32,
     },
+    /// D1j: 旧版文書はmigration経由でのみcameraを挿入する。現行writerはv5未満を再保存しない。
+    #[error(
+        "document version {document_version} must be migrated to at least {writer_version} before save"
+    )]
+    SaveRequiresMigration {
+        document_version: u32,
+        writer_version: u32,
+    },
+    /// D1j: v1–v4 JSONに`composition.camera`が載っている版偽装。
+    #[error(
+        "document version {document_version} must not carry composition.camera before v{required}; use migrate (D1j)"
+    )]
+    DisguisedCompCamera {
+        document_version: u32,
+        required: u32,
+    },
     /// テスト用 abort 注入。本番経路では返さない。
     #[error("save aborted after {stage:?} at {temp_path} (injection)")]
     Aborted {
@@ -178,6 +191,12 @@ pub struct SaveOptions {
 /// `ReadOnlyNewer`(自版より新しい`version`)・`Reject`(`min_reader_version`超過)からの
 /// 再保存・migrationはここで止める — 「未知ネストを読めたこと」と「再保存可能」を同一視しない。
 fn guard_open_mode_for_write(doc: &Document) -> Result<(), PersistError> {
+    if doc.version < WRITER_VERSION {
+        return Err(PersistError::SaveRequiresMigration {
+            document_version: doc.version,
+            writer_version: WRITER_VERSION,
+        });
+    }
     match classify_open_mode(doc.version, doc.min_reader_version) {
         OpenMode::ReadWrite => Ok(()),
         OpenMode::ReadOnlyNewer => Err(PersistError::SaveRejectedReadOnlyNewer {
@@ -200,11 +219,11 @@ pub fn check_migration_allowed(doc: &Document) -> Result<(), PersistError> {
 /// 検証→一意temp→fsync→置換→dir fsync。
 ///
 /// 失敗時に途中のtempは可能な範囲で掃除しない(注入テストが残骸を観察できるようにする)。
-pub fn save_document(path: &Path, doc: &Document) -> Result<(), PersistError> {
+pub(crate) fn save_document(path: &Path, doc: &Document) -> Result<(), PersistError> {
     save_document_with_options(path, doc, &SaveOptions::default())
 }
 
-pub fn save_document_with_options(
+pub(crate) fn save_document_with_options(
     path: &Path,
     doc: &Document,
     options: &SaveOptions,
@@ -299,6 +318,7 @@ pub fn load_document_bytes_with_limits(
     limits.check_file_bytes(bytes.len() as u64)?;
     // 全文デシリアライズ前に版だけ読む — 未知フィールドで落ちる前にOpenModeを判定するため
     let header: VersionHeader = serde_json::from_slice(bytes)?;
+    reject_disguised_comp_camera_wire(&header)?;
     let open_mode = classify_open_mode(header.version, header.min_reader_version);
     if let OpenMode::Reject = open_mode {
         return Err(PersistError::ReaderTooOld {
@@ -316,15 +336,41 @@ pub fn load_document_bytes_with_limits(
     })
 }
 
+#[derive(Debug, Deserialize, Default)]
+struct CompositionHeader {
+    #[serde(default)]
+    camera: Option<serde::de::IgnoredAny>,
+}
+
 #[derive(Debug, Deserialize)]
 struct VersionHeader {
     version: u32,
     #[serde(default = "default_min_reader")]
     min_reader_version: u32,
+    #[serde(default)]
+    composition: CompositionHeader,
 }
 
 fn default_min_reader() -> u32 {
     1
+}
+
+fn reject_disguised_comp_camera_wire(header: &VersionHeader) -> Result<(), PersistError> {
+    if header.version >= crate::validate::MIN_READER_VERSION_FOR_COMP_CAMERA {
+        return Ok(());
+    }
+    let has_camera = header.composition.camera.is_some();
+    crate::Document::reject_disguised_comp_camera_wire(header.version, has_camera).map_err(|e| {
+        match e {
+            crate::validate::DocumentError::CompCameraDisguisedOldVersion { version, required } => {
+                PersistError::DisguisedCompCamera {
+                    document_version: version,
+                    required,
+                }
+            }
+            other => PersistError::Validate(other),
+        }
+    })
 }
 
 static TEMP_SEQ: AtomicU64 = AtomicU64::new(0);
@@ -450,7 +496,7 @@ mod tests {
     fn roundtrip_save_load() {
         let dir = unique_dir();
         let path = dir.join("proj.json");
-        let doc = Document::new_v1();
+        let doc = Document::new_current();
         save_document(&path, &doc).unwrap();
         let loaded = load_document(&path).unwrap();
         assert_eq!(loaded, doc);

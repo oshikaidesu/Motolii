@@ -27,6 +27,17 @@ use super::format::{
     encode_frame, encode_header, journal_path_for_document, motolii_dir_for_document,
     read_or_create_header, JournalFrame, JournalHeader, JournalRecordKind, HEADER_LEN,
 };
+
+/// Checkpoint frame 走査後の実効 generation salt。
+pub(crate) fn tip_generation_salt_from_frames(header_salt: u64, frames: &[JournalFrame]) -> u64 {
+    let mut salt = header_salt;
+    for frame in frames {
+        if frame.kind == JournalRecordKind::Checkpoint && frame.payload.len() >= 8 {
+            salt = u64::from_le_bytes(frame.payload[0..8].try_into().expect("new salt"));
+        }
+    }
+    salt
+}
 use super::fs::{DurabilityStage, FsError, JournalFs};
 use super::replay::{
     checkpoint_payload, document_fingerprint, edit_payload, snapshot_payload, JournalEdit,
@@ -52,7 +63,6 @@ pub enum WalError {
 
 #[derive(Debug, Clone)]
 pub struct WalSession {
-    pub project_id: Uuid,
     pub header: JournalHeader,
     pub catalog: GenerationCatalog,
     pub last_record: Option<Uuid>,
@@ -91,19 +101,8 @@ impl WalSession {
             match super::format::scan_journal_bytes(&data, &Default::default()) {
                 Ok(scan) => {
                     // Checkpoint後の実効saltをsessionへ引き継ぐ(ヘッダ先頭の旧saltのままにしない)。
-                    let tip_salt = {
-                        let mut salt = scan.header.generation_salt;
-                        for frame in &scan.frames {
-                            if frame.kind == JournalRecordKind::Checkpoint
-                                && frame.payload.len() >= 8
-                            {
-                                salt = u64::from_le_bytes(
-                                    frame.payload[0..8].try_into().expect("new salt"),
-                                );
-                            }
-                        }
-                        salt
-                    };
+                    let tip_salt =
+                        tip_generation_salt_from_frames(scan.header.generation_salt, &scan.frames);
                     (scan.frames.last().map(|f| f.record_id), tip_salt)
                 }
                 Err(_) => (None, header.generation_salt),
@@ -116,7 +115,6 @@ impl WalSession {
         let mut catalog = catalog;
         catalog.generation_salt = tip_salt;
         Ok(Self {
-            project_id,
             header,
             catalog,
             last_record,
@@ -343,4 +341,128 @@ pub fn write_fresh_header(
     fs.write_create(journal_path, &encode_header(header))?;
     fs.sync_file(journal_path)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod fs_order_tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use motolii_core::RationalTime;
+    use uuid::Uuid;
+
+    use crate::journal::replay::JournalEdit;
+    use crate::{
+        Clip, ClipSource, Command, DocParam, Document, ItemEnvelope, LayerId, ResourceLimits,
+        ScalarPropertyId, Track, TrackItem,
+    };
+
+    use super::*;
+    use crate::journal::fs::{FsOpKind, RecordingFs, StdFs};
+
+    fn set_opacity_cmd(layer: LayerId, old: f64, new: f64) -> JournalEdit {
+        JournalEdit::new(Command::SetProperty {
+            target: layer,
+            property: ScalarPropertyId::Opacity,
+            old_value: DocParam::const_f64(old),
+            new_value: DocParam::const_f64(new),
+        })
+    }
+
+    fn doc_with_clip() -> (Document, LayerId) {
+        let mut doc = Document::new_current();
+        let layer = doc.layers.allocate("a").unwrap();
+        let track = doc.track_ids.allocate("V1").unwrap();
+        let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
+        doc.tracks.push(Track {
+            id: track,
+            items: vec![TrackItem::Clip(Clip {
+                envelope: ItemEnvelope::new(layer),
+                start: RationalTime::ZERO,
+                duration: RationalTime::try_new(5, 1).unwrap(),
+                time_map: Default::default(),
+                source: ClipSource::asset_video_only(asset),
+            })],
+        });
+        doc.validate().expect("fixture must validate");
+        (doc, layer)
+    }
+
+    #[test]
+    fn commit_and_checkpoint_fsync_order_is_fixed() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("motolii-wal-order-{nanos}"));
+        std::fs::create_dir_all(&path).unwrap();
+        let path = path.join("proj.json");
+        let (doc, layer) = doc_with_clip();
+
+        let (mut fs, log) = RecordingFs::new(StdFs);
+        let project_id = Uuid::new_v4();
+        let salt = 0x1111_2222_3333_4444;
+        let mut session = WalSession::open_or_create(&mut fs, &path, project_id, salt, 5).unwrap();
+
+        commit_edit(
+            &mut fs,
+            &mut session,
+            &set_opacity_cmd(layer, 1.0, 0.5),
+            &ResourceLimits::production(),
+        )
+        .unwrap();
+
+        {
+            let ops = log.lock().unwrap();
+            let stages: Vec<_> = ops
+                .iter()
+                .filter(|o| o.kind == FsOpKind::NoteStage)
+                .map(|o| o.detail.clone())
+                .collect();
+            assert!(
+                stages.windows(4).any(|w| {
+                    w[0].contains("JournalAppend")
+                        && w[1].contains("JournalFsync")
+                        && w[2].contains("JournalAppend")
+                        && w[3].contains("JournalFsync")
+                }),
+                "commit order must be append→fsync→append→fsync, got {stages:?}"
+            );
+        }
+
+        log.lock().unwrap().clear();
+        checkpoint(
+            &mut fs,
+            &path,
+            &mut session,
+            &doc,
+            &CheckpointOptions::default(),
+            &ResourceLimits::production(),
+        )
+        .unwrap();
+
+        let ops = log.lock().unwrap();
+        let stages: Vec<_> = ops
+            .iter()
+            .filter(|o| o.kind == FsOpKind::NoteStage)
+            .map(|o| o.detail.clone())
+            .collect();
+        let required = [
+            "MainTempWrite",
+            "MainTempFsync",
+            "MainRename",
+            "MainDirFsync",
+            "CheckpointAppend",
+            "CheckpointFsync",
+            "CatalogWrite",
+            "CatalogFsync",
+        ];
+        let mut pos = 0usize;
+        for req in required {
+            let found = stages[pos..]
+                .iter()
+                .position(|s| s.contains(req))
+                .unwrap_or_else(|| panic!("missing stage {req} in {stages:?}"));
+            pos += found + 1;
+        }
+    }
 }
