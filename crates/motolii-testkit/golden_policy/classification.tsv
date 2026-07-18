@@ -8,6 +8,7 @@
 # 台帳は M2E-2 の golden/** 保護領域外に置き、本ディレクトリを CODEOWNERS で別保護する。
 semantic	crates/motolii-doc/tests/d1i2_pathop_geometry.rs
 semantic	crates/motolii-doc/tests/oracles/d1i3_blend_mode.tsv
+semantic	crates/motolii-render/tests/oracles/cam_g0_planar_identity.tsv
 semantic	crates/motolii-doc/tests/d1i3_lookat_follow.rs
 semantic	crates/motolii-doc/tests/d1i3_bezier_solver.rs
 semantic	crates/motolii-doc/tests/d1i3_transform_compose.rs
