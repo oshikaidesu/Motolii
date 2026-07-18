@@ -2794,6 +2794,7 @@ dependencies = [
  "motolii-gpu",
  "motolii-plugin",
  "motolii-plugin-opacity",
+ "motolii-plugin-radial-repeater",
  "motolii-plugin-sine",
  "motolii-plugins-firstparty",
  "serde",

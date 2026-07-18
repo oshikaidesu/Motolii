@@ -17,6 +17,7 @@ wgpu.workspace = true
 
 [dev-dependencies]
 motolii-plugin-opacity.workspace = true
+motolii-plugin-radial-repeater.workspace = true
 motolii-plugin-sine.workspace = true
 motolii-plugins-firstparty.workspace = true
 

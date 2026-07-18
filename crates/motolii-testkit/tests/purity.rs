@@ -3,19 +3,21 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::OnceLock;
 
-use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, RationalTime};
+use motolii_core::{ColorSpace, CompCamera, Fps, FrameDesc, PixelFormat, RationalTime};
 use motolii_eval::Value;
 use motolii_gpu::{GpuCtx, PipelineCache};
 use motolii_plugin::reference::{register_reference_plugins, CLEAR_FILTER, TINT_FILTER};
 use motolii_plugin::{
-    FilterPlugin, NodeDesc, ParamDriverContext, PluginError, PluginId, PluginKind, PluginRegistry,
-    RenderCtx, ResolvedParams, TextureRef,
+    FilterPlugin, LayerSourceContext, NodeDesc, ParamDriverContext, PluginError, PluginId,
+    PluginKind, PluginRegistry, RenderCtx, ResolvedParams, TextureRef,
 };
 use motolii_plugin_opacity::OPACITY_FILTER;
+use motolii_plugin_radial_repeater::RADIAL_REPEATER_LAYER_SOURCE;
 use motolii_plugin_sine::SINE_PARAM_DRIVER;
 use motolii_plugins_firstparty::first_party_registry;
 use motolii_testkit::purity::{
-    assert_filter_pure, assert_param_driver_pure, assert_registry_pure, RegistryPurityProbe,
+    assert_filter_pure, assert_layer_source_pure, assert_param_driver_pure, assert_registry_pure,
+    RegistryPurityProbe,
 };
 use motolii_testkit::{gpu_or_skip, TestkitError};
 
@@ -97,6 +99,31 @@ fn sine_param_driver_is_pure() {
             sample_rate: Fps::try_new(8, 1).unwrap(),
         },
         &params,
+    )
+    .unwrap();
+}
+
+#[test]
+fn radial_repeater_layer_source_is_pure() {
+    let Some(gpu) = gpu_or_skip() else { return };
+    let frame = FrameDesc::packed(16, 12, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+    let mut params = ResolvedParams::new();
+    params.insert("count", Value::F64(9.0));
+    params.insert("radius", Value::F64(0.28));
+    params.insert("dot_radius", Value::F64(0.05));
+    params.insert("phase", Value::F64(0.15));
+    params.insert("angular_speed", Value::F64(0.7));
+    params.insert("color", Value::Color([0.25, 0.55, 0.85, 0.65]));
+    assert_layer_source_pure(
+        "radial-repeater-pure",
+        &gpu,
+        &RADIAL_REPEATER_LAYER_SOURCE,
+        RationalTime::from_seconds(2),
+        &params,
+        LayerSourceContext {
+            camera: CompCamera::DEFAULT,
+        },
+        frame,
     )
     .unwrap();
 }
