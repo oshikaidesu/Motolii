@@ -11,7 +11,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use motolii_audio::{AudioProgram, CANONICAL_SAMPLE_RATE};
-use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap};
+use motolii_core::{
+    CanonicalPoint, ColorSpace, CompCamera, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap,
+};
 use motolii_doc::{
     build_document_frame_graph, resolve_asset_path, AssetId, ClipSource, Document, EvaluationTime,
     GraphError, PluginDiagnostic, TrackItem,
@@ -76,6 +78,8 @@ pub enum ExportError {
     Plugin(#[from] motolii_plugin::PluginError),
     #[error(transparent)]
     RationalTime(#[from] motolii_core::RationalTimeError),
+    #[error(transparent)]
+    Camera(#[from] motolii_core::CompCameraError),
     #[error("document has no video source clip")]
     NoVideoSource,
     #[error("asset {0} path could not be resolved")]
@@ -142,6 +146,13 @@ pub fn export_overlay_video(
     let mut downloader = RgbaDownloader::new();
     let mut encoder = Encoder::open(request.output_path, &desc, info.fps, request.qp0)?;
     let mut render_session = RenderSession::new(gpu);
+    let camera = CompCamera::try_new(
+        CanonicalPoint::CENTER,
+        0.0,
+        1.0,
+        i64::from(desc.width),
+        i64::from(desc.height),
+    )?;
     let mut frames_written = 0usize;
     let tracks = request.data_tracks.clone();
     let mut loop_error: Option<ExportError> = None;
@@ -176,6 +187,7 @@ pub fn export_overlay_video(
                         desc,
                     },
                     overlay,
+                    camera,
                 },
                 Quality::FINAL,
             )?;
@@ -219,6 +231,13 @@ pub fn export_document_video(
     }
 
     let desc = resolve_export_frame_desc(job.doc, job.project_root)?;
+    let camera = CompCamera::try_new(
+        CanonicalPoint::CENTER,
+        0.0,
+        1.0,
+        job.doc.composition.aspect_num(),
+        job.doc.composition.aspect_den(),
+    )?;
     let timeline_fps = job.doc.composition.fps;
     let soundtrack = resolve_audio_export(job)?;
 
@@ -289,6 +308,7 @@ pub fn export_document_video(
                 timeline_time,
                 &built.graph,
                 &RenderGraphInputs {
+                    camera,
                     video_sources: &video_inputs,
                     source_time: Some(built.source_time),
                     plugins: Some(job.runtime.executors()),

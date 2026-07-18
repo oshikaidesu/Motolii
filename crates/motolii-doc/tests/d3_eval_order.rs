@@ -4,12 +4,14 @@
 
 use std::collections::BTreeMap;
 
-use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap};
+use motolii_core::{
+    CanonicalPoint, ColorSpace, CompCamera, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap,
+};
 use motolii_doc::param_eval::eval_doc_param;
 use motolii_doc::{
-    build_document_frame_graph, Clip, ClipSource, ClippingMaskSettings, DocParam, DocValue,
-    Document, EffectDefinition, EffectDefinitionId, EffectId, EffectUse, EvaluationTime, Group,
-    ItemEnvelope, MaskMode, ParamEvalError, Track, TrackItem, RECT_LAYER_SOURCE,
+    build_document_frame_graph, Clip, ClipSource, ClippingMaskSettings, Composition, DocParam,
+    DocValue, Document, EffectDefinition, EffectDefinitionId, EffectId, EffectUse, EvaluationTime,
+    Group, ItemEnvelope, MaskMode, ParamEvalError, Track, TrackItem, RECT_LAYER_SOURCE,
 };
 use motolii_eval::{DataTrack, DataTrackId, DataTracks, Value};
 use motolii_gpu::download_rgba;
@@ -79,13 +81,29 @@ fn rect_clip(layer: u64, center: [f64; 2], size: [f64; 2], color: [f64; 4]) -> C
     }
 }
 
-fn render_doc(doc: &Document) -> Option<Vec<u8>> {
+fn render_doc(doc: &mut Document) -> Option<Vec<u8>> {
+    doc.composition = Composition::try_new(
+        i64::from(W),
+        i64::from(H),
+        doc.composition.duration,
+        doc.composition.fps,
+    )
+    .unwrap();
+    let frame_desc = desc();
+    let camera = CompCamera::try_new(
+        CanonicalPoint::CENTER,
+        0.0,
+        1.0,
+        doc.composition.aspect_num(),
+        doc.composition.aspect_den(),
+    )
+    .unwrap();
     let gpu = gpu_or_skip()?;
     let runtime = reference_runtime();
     let built = build_document_frame_graph(
         doc,
         EvaluationTime::new(RationalTime::ZERO),
-        desc(),
+        frame_desc,
         &DataTracks::new(),
         &runtime,
         None,
@@ -98,6 +116,7 @@ fn render_doc(doc: &Document) -> Option<Vec<u8>> {
         RationalTime::ZERO,
         &built.graph,
         &RenderGraphInputs {
+            camera,
             video_sources: &[],
             source_time: Some(built.source_time),
             plugins: Some(runtime.executors()),
@@ -144,7 +163,7 @@ fn masked_group_effect_applies_before_clipping_mask() {
         id: track_id,
         items: vec![TrackItem::Clip(mask_clip), TrackItem::Clip(content_clip)],
     });
-    let actual = render_doc(&doc).expect("gpu");
+    let actual = render_doc(&mut doc).expect("gpu");
     let expected = expected_rect_frame(
         desc(),
         [0, 0, 0, 0],
@@ -198,7 +217,7 @@ fn group_effect_stack_applies_after_children_composite() {
         id: track_id,
         items: vec![TrackItem::Clip(bg), TrackItem::Group(group)],
     });
-    let actual = render_doc(&doc).expect("gpu");
+    let actual = render_doc(&mut doc).expect("gpu");
     let transparent = [0u8, 0, 0, 0];
     let blue = [0u8, 0, 255, 255];
     let red_premul = [127u8, 0, 0, 127];
@@ -252,7 +271,7 @@ fn visible_false_excludes_draw_but_keeps_mask_source() {
         id: track_id,
         items: vec![TrackItem::Clip(mask_clip), TrackItem::Clip(content_clip)],
     });
-    let actual = render_doc(&doc).expect("gpu");
+    let actual = render_doc(&mut doc).expect("gpu");
     // マスク自体は描画されないが、マスク形状は content に効く。
     let expected = expected_rect_frame(
         desc(),
@@ -290,7 +309,7 @@ fn solo_draws_only_solo_set() {
         id: track_id,
         items: vec![TrackItem::Clip(red), TrackItem::Clip(blue)],
     });
-    let actual = render_doc(&doc).expect("gpu");
+    let actual = render_doc(&mut doc).expect("gpu");
     let expected = expected_rect_frame(
         desc(),
         [0, 0, 0, 0],
@@ -324,7 +343,7 @@ fn lock_does_not_affect_draw_or_eval() {
         id: track_id,
         items: vec![TrackItem::Clip(clip)],
     });
-    let actual = render_doc(&doc).expect("gpu");
+    let actual = render_doc(&mut doc).expect("gpu");
     let expected = expected_rect_frame(
         desc(),
         [0, 0, 0, 0],

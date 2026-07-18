@@ -3,9 +3,11 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
 
-use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap};
+use motolii_core::{
+    CanonicalPoint, ColorSpace, CompCamera, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap,
+};
 use motolii_doc::{
-    build_document_frame_graph, Clip, ClipSource, DocParam, Document, DocumentError,
+    build_document_frame_graph, Clip, ClipSource, Composition, DocParam, Document, DocumentError,
     DocumentPluginError, EffectDefinition, EffectDefinitionId, EffectId, EffectUse, EvaluationTime,
     GraphError, Group, ItemEnvelope, PluginDiagnosticReason, PluginSlotId, Track, TrackItem,
     RECT_LAYER_SOURCE,
@@ -108,13 +110,29 @@ fn clear_params(color: [f64; 4]) -> BTreeMap<String, DocParam> {
     BTreeMap::from([("color".into(), DocParam::const_color(color))])
 }
 
-fn render_doc(doc: &Document) -> Option<Vec<u8>> {
+fn render_doc(doc: &mut Document) -> Option<Vec<u8>> {
+    doc.composition = Composition::try_new(
+        i64::from(W),
+        i64::from(H),
+        doc.composition.duration,
+        doc.composition.fps,
+    )
+    .unwrap();
+    let frame_desc = desc();
+    let camera = CompCamera::try_new(
+        CanonicalPoint::CENTER,
+        0.0,
+        1.0,
+        doc.composition.aspect_num(),
+        doc.composition.aspect_den(),
+    )
+    .unwrap();
     let gpu = gpu_or_skip()?;
     let runtime = reference_runtime();
     let built = build_document_frame_graph(
         doc,
         EvaluationTime::new(RationalTime::ZERO),
-        desc(),
+        frame_desc,
         &DataTracks::new(),
         &runtime,
         None,
@@ -127,6 +145,7 @@ fn render_doc(doc: &Document) -> Option<Vec<u8>> {
         RationalTime::ZERO,
         &built.graph,
         &RenderGraphInputs {
+            camera,
             video_sources: &[],
             source_time: Some(built.source_time),
             plugins: Some(runtime.executors()),
@@ -303,10 +322,10 @@ fn p1_non_adjacent_shared_definition_matches_inline_copies() {
     append_three_layer_stack(&mut shared_doc, shared_def);
     shared_doc.validate().unwrap();
     assert_non_adjacent_shared_use_items(&shared_doc, shared_def);
-    let inline = build_inline_stack_positions();
+    let mut inline = build_inline_stack_positions();
 
-    let shared_pixels = render_doc(&shared_doc).expect("gpu");
-    let inline_pixels = render_doc(&inline).expect("gpu");
+    let shared_pixels = render_doc(&mut shared_doc).expect("gpu");
+    let inline_pixels = render_doc(&mut inline).expect("gpu");
     assert_eq!(
         sample_pixel_at_center(&shared_pixels, [-1.4, 0.45])[3],
         0,
@@ -333,11 +352,11 @@ fn p2_definition_param_change_updates_all_uses() {
     );
     append_three_layer_stack(&mut built, shared_def);
     built.validate().unwrap();
-    let before = render_doc(&built).expect("gpu");
+    let before = render_doc(&mut built).expect("gpu");
 
     let definition = built.effect_definition_mut(shared_def).unwrap();
     definition.params = tint_params([1.0, 0.0, 0.0, 1.0]);
-    let after = render_doc(&built).expect("gpu");
+    let after = render_doc(&mut built).expect("gpu");
 
     assert_ne!(
         sample_pixel_at_center(&before, [-0.62, 0.0]),
@@ -396,13 +415,13 @@ fn p3_use_reorder_affects_only_target_layer_region() {
     });
     doc.validate().unwrap();
 
-    let before = render_doc(&doc).expect("gpu");
+    let before = render_doc(&mut doc).expect("gpu");
 
     match &mut doc.tracks[0].items[0] {
         TrackItem::Clip(clip) => clip.envelope.effects.reverse(),
         _ => panic!("expected clip"),
     };
-    let after = render_doc(&doc).expect("gpu");
+    let after = render_doc(&mut doc).expect("gpu");
 
     assert_ne!(
         sample_pixel_at_center(&before, [-0.55, 0.0]),
@@ -450,7 +469,7 @@ fn p4_group_effect_applies_once_after_child_composite() {
         items: vec![TrackItem::Group(group), TrackItem::Clip(external)],
     });
     group_doc.validate().unwrap();
-    let group_once = render_doc(&group_doc).expect("gpu");
+    let group_once = render_doc(&mut group_doc).expect("gpu");
     let external_pixel = sample_pixel_at_center(&group_once, [0.62, 0.0]);
     assert_eq!(external_pixel[0], 0);
     assert_eq!(external_pixel[2], 0);
@@ -484,7 +503,7 @@ fn p4_group_effect_applies_once_after_child_composite() {
         items: vec![TrackItem::Clip(ca_clip), TrackItem::Clip(cb_clip)],
     });
     per_child_doc.validate().unwrap();
-    let per_child = render_doc(&per_child_doc).expect("gpu");
+    let per_child = render_doc(&mut per_child_doc).expect("gpu");
 
     assert_ne!(
         sample_pixel_at_center(&group_once, [0.0, 0.0]),
@@ -533,7 +552,7 @@ fn p5_timeline_order_and_layer_rename_leave_pixels_unchanged() {
         ],
     });
     doc.validate().unwrap();
-    let baseline = render_doc(&doc).expect("gpu");
+    let baseline = render_doc(&mut doc).expect("gpu");
     assert_eq!(
         sample_pixel_at_center(&baseline, [-0.65, 0.0]),
         [0, 255, 0, 255]
@@ -548,7 +567,7 @@ fn p5_timeline_order_and_layer_rename_leave_pixels_unchanged() {
     );
 
     doc.tracks[0].items.rotate_left(1);
-    let reordered = render_doc(&doc).expect("gpu");
+    let reordered = render_doc(&mut doc).expect("gpu");
     assert_rgba_close(
         "d3e-p5-timeline-order",
         image_desc(),
@@ -560,7 +579,7 @@ fn p5_timeline_order_and_layer_rename_leave_pixels_unchanged() {
     doc.layers.remove(left).unwrap();
     doc.layers.restore(left, "renamed-left").unwrap();
     assert_eq!(doc.layers.display_name(left), Some("renamed-left"));
-    let renamed = render_doc(&doc).expect("gpu");
+    let renamed = render_doc(&mut doc).expect("gpu");
     assert_rgba_close(
         "d3e-p5-layer-rename",
         image_desc(),

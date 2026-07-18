@@ -452,7 +452,7 @@ pub fn tmp_dir(tag: &str) -> PathBuf {
 pub mod purity {
     use std::collections::HashMap;
 
-    use motolii_core::{CompCamera, Fps, FrameDesc, Quality, RationalTime};
+    use motolii_core::{CanonicalPoint, CompCamera, Fps, FrameDesc, Quality, RationalTime};
     use motolii_eval::DataTrack;
     use motolii_gpu::{download_rgba, upload_rgba, GpuCtx, PipelineCache};
     use motolii_plugin::{
@@ -823,7 +823,14 @@ pub mod purity {
                     sample_rate: Fps::try_new(8, 1).unwrap(),
                 },
                 layer: LayerSourceContext {
-                    camera: CompCamera::DEFAULT,
+                    camera: CompCamera::try_new(
+                        CanonicalPoint::CENTER,
+                        0.0,
+                        1.0,
+                        i64::from(frame.width),
+                        i64::from(frame.height),
+                    )
+                    .expect("registry purity probe camera"),
                 },
             }
         }

@@ -3,7 +3,10 @@
 
 use std::collections::BTreeMap;
 
-use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap};
+use motolii_core::{
+    CanonicalPoint as CoreCanonicalPoint, ColorSpace, CompCamera, FrameDesc, PixelFormat, Quality,
+    RationalTime, TimeMap,
+};
 use motolii_gpu::download_rgba;
 use motolii_nodes::{CanonicalPoint, CanonicalSize, RectOverlay};
 use motolii_render::{render_frame, RenderFrameRequest, SolidSource};
@@ -192,6 +195,14 @@ fn cam_g0_planar_identity_matches_semantic_oracle() {
         timeline_time: fixture.timeline_time,
         source: fixture.source,
         overlay: fixture.overlay,
+        camera: CompCamera::try_new(
+            CoreCanonicalPoint::CENTER,
+            0.0,
+            1.0,
+            i64::from(fixture.desc.width),
+            i64::from(fixture.desc.height),
+        )
+        .unwrap(),
     };
 
     let rendered = render_frame(&gpu, &request, fixture.quality).unwrap();

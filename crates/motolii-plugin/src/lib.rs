@@ -1261,10 +1261,9 @@ pub mod reference {
             encoder: &mut wgpu::CommandEncoder,
             _t: RationalTime,
             params: &ResolvedParams,
-            ctx: LayerSourceContext,
+            _ctx: LayerSourceContext,
             output: TextureRef<'_>,
         ) -> Result<(), PluginError> {
-            ctx.camera.validate().map_err(PluginError::Render)?;
             clear_texture(
                 encoder,
                 output,

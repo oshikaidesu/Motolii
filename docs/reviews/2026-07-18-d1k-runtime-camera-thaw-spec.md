@@ -4,7 +4,7 @@
 
 正本チェーン: [planar v1 camera 決定](2026-07-16-m2-comp-camera-decision.md) → 本解凍記録 → D1k 実装 → D3f Document camera 接続。
 
-レーン: `CAM-G0 (DONE)` → `D1j (DONE)` → **`D1k-S (本記録)`** → `D1k (WAIT)` → `D3f (WAIT)`。
+レーン: `CAM-G0 (DONE)` → `D1j (DONE)` → **`D1k-S (本記録)`** → `D1k (DONE)` → `D3f (WAIT)`。
 
 ## 1. 解凍三要素
 
@@ -153,7 +153,7 @@ pixel_y = (1 - ndc_y) * H / 2
 
 - NDC は Y-up。ラスタ pixel は Y-down。
 - `world_to_ndc`: 非有限 world 入力を拒否する。計算 NDC が非有限なら `NonFiniteNdc` で typed reject する。
-- **`world_to_ndc` は `height * a`（すなわち `height * aspect_num / aspect_den`）を浮動小数点の中間積として形成してはならない**。`ndc_x` は overflow-aware な逐次比評価で求める（推奨順序: `((q.x / height) * 2.0) * aspect_den / aspect_num`、または同等の scaled algorithm）。各段で有限性を確認し、数学的に有限な結果を `NonFiniteNdc` で誤拒否してはならない。
+- **`world_to_ndc` は `height * a`（すなわち `height * aspect_num / aspect_den`）を浮動小数点の中間積として形成してはならない**。`ndc_x` は overflow-aware な逐次比評価で求める（推奨順序: `((q.x / height) * 2.0 / aspect_num) * aspect_den`、または `((q.x / height) * 2.0) * (aspect_den / aspect_num)` と同等の scaled algorithm）。各段で有限性を確認し、数学的に有限な結果を `NonFiniteNdc` で誤拒否してはならない。
 - `ndc_to_pixel`: 非有限 NDC を拒否し、**先に** `ensure_matches_frame_desc` を呼ぶ。計算 `PixelPoint` が非有限なら typed reject。
 - `world_to_pixel`: 上記2メソッドの `Result` 合成のみ。別方程式を持たない。
 
@@ -320,7 +320,7 @@ camera / frame aspect の一致は render 境界（§4.3）で `ensure_matches_f
 - `1920×1080` Draft scale 2 → `960×540`（metadata 保全・stride 再計算）
 - `16×9` Draft scale 2 → 入力 `16×9` 不変
 - 巨大 `width` で候補 packed stride が `checked_mul` overflow する Draft scale → 入力 descriptor 不変（panic / wrap 禁止）
-- **`world_to_ndc` 評価順序回帰（正例）**: `q.x = f64::MAX / 4`、`height = f64::MAX / 2`、aspect `4/1`（`aspect_num=4`, `aspect_den=1`）。`height * aspect` を浮動小数点中間積として形成すると overflow するが、正しい `ndc_x` は有限・非ゼロで **`0.25`**（camera 方程式 fixture の stated numerical tolerance 内）。`NonFiniteNdc` を返してはならない。評価は `((q.x / height) * 2.0) * aspect_den / aspect_num` 等の scaled algorithm を用いる
+- **`world_to_ndc` 評価順序回帰（正例）**: `q.x = f64::MAX / 4`、`height = f64::MAX / 2`、aspect `4/1`（`aspect_num=4`, `aspect_den=1`）。`height * aspect` を浮動小数点中間積として形成すると overflow するが、正しい `ndc_x` は有限・非ゼロで **`0.25`**（camera 方程式 fixture の stated numerical tolerance 内）。`NonFiniteNdc` を返してはならない。加えて、`aspect_num=i64::MAX`、`aspect_den=i64::MAX-2`、`q.x=f64::MAX/4`、`height=1`でも、分母を先に適用して有限な結果を誤拒否しない
 - preview / export が同一 render 関数（`Quality` のみ差）
 - `LayerSourceContext` へ graph camera がそのまま伝播
 - 全公開 render entry が `Quality::render_desc` より前に元 `FrameDesc` で `ensure_matches_frame_desc` する

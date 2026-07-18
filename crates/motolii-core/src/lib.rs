@@ -10,7 +10,7 @@ mod time;
 mod time_map;
 mod wide_div;
 
-pub use camera::CompCamera;
+pub use camera::{CompCamera, CompCameraError};
 pub use canonical::{
     CanonicalPoint, CanonicalSize, PixelPoint, PixelSize, ViewportTransform, ViewportTransformError,
 };
