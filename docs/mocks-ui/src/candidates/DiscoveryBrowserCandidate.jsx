@@ -67,11 +67,17 @@ function CandidatePluginBrowser() {
         </button>
         <span className="plugin-view-toggle" aria-label="Result view">
           <button
-            className="on"
-            data-plugin-view="thumb"
-            aria-label="Thumbnail view"
+            data-plugin-view="visual"
+            aria-label="Thumbnail-only view"
           >
             ▦
+          </button>
+          <button
+            className="on"
+            data-plugin-view="thumb"
+            aria-label="Thumbnail and name view"
+          >
+            ▤
           </button>
           <button data-plugin-view="detail" aria-label="List view">
             ☷

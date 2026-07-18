@@ -1052,7 +1052,8 @@
   $$("[data-plugin-view]").forEach(button=>button.onclick=()=>{
     state.pluginView=button.dataset.pluginView; $("#vism-browser").dataset.view=state.pluginView;
     $$("[data-plugin-view]").forEach(item=>item.classList.toggle("on",item===button));
-    status("Plugin Browser",state.pluginView==="thumb"?"Overlay表示":"詳細card表示","");
+    const viewCopy={visual:"Thumbnail only",thumb:"Thumbnail + name",detail:"List"};
+    status("Plugin Browser",viewCopy[state.pluginView],"");
   });
   $("#plugin-thumb-size").oninput=event=>{
     $("#vism-browser").style.setProperty("--plugin-thumb-size",`${event.target.value}px`);

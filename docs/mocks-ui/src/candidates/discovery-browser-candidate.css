@@ -250,6 +250,24 @@
   cursor: grabbing;
 }
 
+#vism-browser.candidate-plugin-browser[data-view="visual"] .candidate-plugin-grid {
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+}
+
+#vism-browser.candidate-plugin-browser[data-view="visual"] .candidate-plugin-card {
+  min-height: 88px;
+  grid-template-rows: 88px;
+}
+
+#vism-browser.candidate-plugin-browser[data-view="visual"] .candidate-plugin-card .plugin-thumb {
+  height: 88px;
+  border-bottom: 0;
+}
+
+#vism-browser.candidate-plugin-browser[data-view="visual"] .candidate-card-name {
+  display: none;
+}
+
 #stage.plugin-drop-ready {
   outline: 2px dashed var(--way-plugins);
   outline-offset: -4px;

@@ -28,6 +28,17 @@ test.describe("shared discovery Browser candidate", () => {
     );
     await expect(page.getByRole("button", { name: "Apply" })).toHaveCount(0);
 
+    await page.getByRole("button", { name: "Thumbnail-only view" }).click();
+    await expect(page.locator("#vism-browser")).toHaveAttribute(
+      "data-view",
+      "visual",
+    );
+    await expect(page.locator(".candidate-card-name:visible")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Echo Bloom" })).toBeVisible();
+    await page
+      .getByRole("button", { name: "Thumbnail and name view" })
+      .click();
+
     await page.locator('[data-plugin-source="issues"]').click();
     await expect(
       page.locator(".candidate-plugin-card:visible"),
