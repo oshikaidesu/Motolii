@@ -1,0 +1,572 @@
+{
+  "schemaVersion": 1,
+  "scope": "M3 mock decomposition inventory",
+  "authority": {
+    "isProductApi": false,
+    "isPersistenceFormat": false,
+    "isProductTokenDecision": false,
+    "note": "This map names mock-only composition units. JSX props, selectors, and component boundaries do not define Rust or egui public APIs."
+  },
+  "referenceSources": [
+    {
+      "file": "docs/mocks/m3-vism-host-boundary.html",
+      "role": "current-integrated-reference",
+      "status": "active",
+      "entryFixtures": [
+        "#asset-explorer",
+        "#inbox-empty",
+        "#color-book",
+        "#z-rail",
+        "#easing-interval",
+        "#all-surfaces",
+        "#settings"
+      ],
+      "notes": "Primary decomposition source. #all-surfaces is the integrated structural golden; it does not authorize product implementation or settle token values."
+    },
+    {
+      "file": "docs/mocks/m3-main-ui-v3-monochrome.html",
+      "role": "current-structural-reference",
+      "status": "active",
+      "entryFixtures": [
+        "#preview-first",
+        "#asset-explorer",
+        "#color-palette"
+      ],
+      "notes": "M3 structural golden and comparison source for layout, density, causality, Z, and Group meaning. Concrete color values are not product tokens."
+    },
+    {
+      "file": "docs/mocks/m3-main-ui-v4-generative.html",
+      "role": "active-specialized-comparison",
+      "status": "candidate",
+      "entryFixtures": [],
+      "notes": "Generative-boundary structural golden candidate; not the default component decomposition source."
+    },
+    {
+      "file": "docs/mocks/m3-main-ui-v5-color-dynamics.html",
+      "role": "active-design-comparison",
+      "status": "candidate",
+      "entryFixtures": [],
+      "notes": "State-fixture and visual mapping candidates for G0-6; no candidate fixes product token values before human review."
+    },
+    {
+      "file": "docs/mocks/m3-plugin-boundary-learning.html",
+      "role": "active-specialized-comparison",
+      "status": "candidate",
+      "entryFixtures": [],
+      "notes": "Small-core and plugin-responsibility learning fixture; it does not define plugin traits, custom UI APIs, or Document schema."
+    },
+    {
+      "file": "docs/mocks/m3-main-ui-v1.html",
+      "role": "historical-baseline",
+      "status": "comparison-only",
+      "entryFixtures": [
+        "#dark",
+        "#light"
+      ],
+      "notes": "Retained for visual-composition comparison. New decomposition work must not treat it as the current integrated reference."
+    },
+    {
+      "file": "docs/mocks/m3-main-ui-v2.html",
+      "role": "historical-comparison",
+      "status": "comparison-only",
+      "entryFixtures": [],
+      "notes": "Grid-oriented comparison proposal."
+    },
+    {
+      "file": "docs/mocks/m3-timeline-v0.svg",
+      "role": "historical-comparison",
+      "status": "comparison-only",
+      "entryFixtures": [],
+      "notes": "Static timeline comparison; not a product UI or golden."
+    },
+    {
+      "file": "docs/mocks/m3-interaction-v0.html",
+      "role": "historical-comparison",
+      "status": "comparison-only",
+      "entryFixtures": [],
+      "notes": "State-step comparison; not a token or product UI decision."
+    },
+    {
+      "file": "docs/mocks/m3-ui-dynamics-v1.html",
+      "role": "historical-comparison",
+      "status": "comparison-only",
+      "entryFixtures": [],
+      "notes": "Interaction-dynamics comparison; not an amendment of the current integrated reference."
+    }
+  ],
+  "components": [
+    {
+      "id": "primitive.action-button",
+      "layer": "primitive",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".btn"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "shared visual primitive",
+      "eguiTarget": "internal egui Button presentation; no exported component API"
+    },
+    {
+      "id": "primitive.icon-button",
+      "layer": "primitive",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".cmdtool, .toolbtn"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "shared icon and focus-state fixture",
+      "eguiTarget": "internal egui icon button using the reviewed icon grid"
+    },
+    {
+      "id": "primitive.semantic-badge",
+      "layer": "primitive",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".badge, .tag, .thumb-state, .stage-badge"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3",
+        "U2c-3"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "semantic state shown by text or shape in addition to color",
+      "eguiTarget": "internal egui semantic badge"
+    },
+    {
+      "id": "primitive.parameter-scrub",
+      "layer": "primitive",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".scrub[data-param]"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3",
+        "U4a-1",
+        "U4a-2"
+      ],
+      "stateOwner": [
+        "Transient preview during gesture",
+        "Document through a command on commit"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "unbounded numeric parameter interaction fixture",
+      "eguiTarget": "internal egui parameter scrub selected by the host control mapping"
+    },
+    {
+      "id": "primitive.automation-mark",
+      "layer": "primitive",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".automation-mark"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3",
+        "U4a-2"
+      ],
+      "stateOwner": [
+        "Document for automation enable and keys",
+        "Transient for hover and focus"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "automation availability, enablement, and current-key projection",
+      "eguiTarget": "internal egui automation marker adjacent to a host parameter control"
+    },
+    {
+      "id": "primitive.keyframe-marker",
+      "layer": "primitive",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".inline-key"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3"
+      ],
+      "stateOwner": [
+        "Document for keyframe data",
+        "Transient for selection and focus projection"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "key presence and selection projection independent of object color",
+      "eguiTarget": "internal egui painted keyframe marker"
+    },
+    {
+      "id": "primitive.color-swatch",
+      "layer": "primitive",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".book-swatch, .book-color, .color-chip"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3"
+      ],
+      "stateOwner": [
+        "User settings or workspace candidate for library organization and history",
+        "Transient for preview",
+        "Document Color parameter through a command on commit"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "color-first selection and preview fixture",
+      "eguiTarget": "internal egui swatch and selection outline"
+    },
+    {
+      "id": "pattern.panel-header",
+      "layer": "pattern",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".panel-head, .surface-head, .timeline-head"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "shared surface identity and compact actions",
+      "eguiTarget": "internal egui panel heading composition"
+    },
+    {
+      "id": "pattern.candidate-shelf",
+      "layer": "pattern",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".plugin-shelf, .book-body, .curve-shelf"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3"
+      ],
+      "stateOwner": [
+        "User settings for folders, labels, confirmed-use history, and saved curves",
+        "Transient for current preview"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "folder, cross-cutting labels, confirmed-use history, and visual candidate identity",
+      "eguiTarget": "internal egui candidate-shelf composition reused by eligible libraries"
+    },
+    {
+      "id": "pattern.parameter-row",
+      "layer": "pattern",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "#inspector .row"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3",
+        "U4a-1",
+        "U4a-2"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "host-owned label, control, automation, and feedback composition",
+      "eguiTarget": "internal egui host parameter row generated from toolkit-independent mapping"
+    },
+    {
+      "id": "pattern.diagnostic-feedback",
+      "layer": "pattern",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".notice.error, .lifecycle, .stage-hud"
+      },
+      "tickets": [
+        "U2c-3",
+        "U2c-4",
+        "U2c-5"
+      ],
+      "stateOwner": [
+        "Transient diagnostic projection",
+        "Domain error remains owned by its existing source"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "brief/context/inspect feedback without silent disabled state",
+      "eguiTarget": "internal egui projection of a typed diagnostic envelope"
+    },
+    {
+      "id": "pattern.status-brief",
+      "layer": "pattern",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "footer.status"
+      },
+      "tickets": [
+        "U2c-3",
+        "U2c-5"
+      ],
+      "stateOwner": "Transient",
+      "status": "reference-candidate",
+      "referenceRole": "result plus shortest cause and optional next input",
+      "eguiTarget": "internal egui status projection"
+    },
+    {
+      "id": "pattern.transport",
+      "layer": "pattern",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".transport"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "time navigation and the interval-easing entry fixture",
+      "eguiTarget": "internal egui transport composition"
+    },
+    {
+      "id": "surface.browser",
+      "layer": "surface",
+      "jsx": "docs/mocks-ui/src/surfaces/BrowserSurface.jsx",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "aside.browser"
+      },
+      "tickets": [
+        "U0e-2",
+        "U1a-2"
+      ],
+      "stateOwner": [
+        "User settings for virtual plugin organization and display density",
+        "Workspace-session or Transient for active tab, search, view, and filesystem selection",
+        "Document only through an existing placement command"
+      ],
+      "status": "current-reference",
+      "referenceRole": "single Browser surface switching Project and Plugins",
+      "eguiTarget": "egui panel content hosted by the toolkit-independent layout intent"
+    },
+    {
+      "id": "surface.stage-viewport",
+      "layer": "surface",
+      "jsx": "docs/mocks-ui/src/surfaces/StageSurface.jsx",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".stage-shell"
+      },
+      "tickets": [
+        "U0e-2",
+        "U1a-1",
+        "U1b-1",
+        "U1b-2"
+      ],
+      "stateOwner": [
+        "Document frame as read-only projection",
+        "Transient for selection bounds, connection preview, tool HUD, and view interaction"
+      ],
+      "status": "current-reference",
+      "referenceRole": "primary viewport and static-frame shell fixture",
+      "eguiTarget": "egui panel displaying a shared native GPU texture without CPU readback"
+    },
+    {
+      "id": "surface.inspector",
+      "layer": "surface",
+      "jsx": "docs/mocks-ui/src/surfaces/InspectorSurface.jsx",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "aside#inspector"
+      },
+      "tickets": [
+        "U0e-2",
+        "U1a-2",
+        "U4a-1",
+        "U4a-2"
+      ],
+      "stateOwner": [
+        "Document values as projection",
+        "Transient for the current selection and parameter preview"
+      ],
+      "status": "current-reference",
+      "referenceRole": "host-standard selected-object and generated plugin parameter surface",
+      "eguiTarget": "egui panel whose parameter controls are generated by host-owned mapping"
+    },
+    {
+      "id": "surface.timeline",
+      "layer": "surface",
+      "jsx": "docs/mocks-ui/src/surfaces/TimelineSurface.jsx",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "section#timeline"
+      },
+      "tickets": [
+        "U0e-2",
+        "U1a-2"
+      ],
+      "stateOwner": [
+        "Document time objects and keyframes as projection",
+        "Transient for playhead, selection, hover, and open overlays",
+        "Provider snapshot for readiness projection"
+      ],
+      "status": "current-reference",
+      "referenceRole": "packed single time plane without fixed owner lanes",
+      "eguiTarget": "egui timeline panel with custom painting over read-only snapshots"
+    },
+    {
+      "id": "surface.depth-rail",
+      "layer": "surface",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "#depth-rail"
+      },
+      "tickets": [
+        "U0e-2"
+      ],
+      "stateOwner": [
+        "Workspace-session or Transient for open state",
+        "Document position.z through the existing command on commit",
+        "Transient for drag preview"
+      ],
+      "status": "current-reference",
+      "referenceRole": "explicit Edit-Space Z projection and editing fixture",
+      "eguiTarget": "internal egui custom-painted depth rail within the timeline surface"
+    },
+    {
+      "id": "surface.inbox",
+      "layer": "surface",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "aside#inbox"
+      },
+      "tickets": [
+        "U0e-2"
+      ],
+      "stateOwner": [
+        "Each referenced asset, review note, or background job remains in its canonical owner",
+        "User settings for Tip read or dismiss state"
+      ],
+      "status": "current-reference",
+      "referenceRole": "projection of unresolved or unconfirmed items, not a second store",
+      "eguiTarget": "egui list projection embedded at the edge of the timeline"
+    },
+    {
+      "id": "surface.easing-graph",
+      "layer": "surface",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "aside#easing-panel"
+      },
+      "tickets": [
+        "U0e-2"
+      ],
+      "stateOwner": [
+        "Transient for target derivation, preview, and panel visibility",
+        "Document interpolation through one command on commit"
+      ],
+      "status": "current-reference",
+      "referenceRole": "one adjacent-key interval graph view",
+      "eguiTarget": "internal egui popup with custom curve painting and handle controls"
+    },
+    {
+      "id": "surface.curve-shelf",
+      "layer": "surface",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "aside#curve-shelf"
+      },
+      "tickets": [
+        "U0e-2"
+      ],
+      "stateOwner": [
+        "User settings for saved curves, folders, labels, history, and favorite",
+        "Transient for preview",
+        "Document interpolation through one command on apply"
+      ],
+      "status": "current-reference-with-open-item",
+      "referenceRole": "user curve library; favorite immediate-apply remains an explicit mock open item",
+      "eguiTarget": "internal egui candidate shelf attached to the easing surface"
+    },
+    {
+      "id": "surface.color-book",
+      "layer": "surface",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "section#color-book-drawer"
+      },
+      "tickets": [
+        "U0e-2"
+      ],
+      "stateOwner": [
+        "User settings or workspace candidate for palette organization, history, swatch size, and drawer width",
+        "Transient for sample and swatch preview",
+        "Document Color parameter through one command on commit"
+      ],
+      "status": "current-reference",
+      "referenceRole": "explicitly opened color management drawer",
+      "eguiTarget": "egui drawer composed from the candidate-shelf and color control fixtures"
+    },
+    {
+      "id": "surface.plugin-recovery",
+      "layer": "surface",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "section#recovery"
+      },
+      "tickets": [
+        "U2c-4",
+        "U2c-5"
+      ],
+      "stateOwner": [
+        "Document retains unresolved plugin identity and payload",
+        "Transient for dialog visibility and candidate inspection"
+      ],
+      "status": "boundary-reference-only",
+      "referenceRole": "recovery inspection with install flow intentionally undecided",
+      "eguiTarget": "internal egui diagnostic inspection dialog; no install API implied"
+    },
+    {
+      "id": "surface.settings",
+      "layer": "surface",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "section#settings-sheet"
+      },
+      "tickets": [
+        "U0e-2"
+      ],
+      "stateOwner": "User settings",
+      "status": "current-reference",
+      "referenceRole": "low-frequency environment preferences with Document and Undo unchanged",
+      "eguiTarget": "egui settings surface; storage model remains outside this mock map"
+    },
+    {
+      "id": "screen.main-all-surfaces",
+      "layer": "screen",
+      "jsx": "docs/mocks-ui/src/screens/AllSurfacesScreen.jsx",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "body at #all-surfaces"
+      },
+      "tickets": [
+        "U0e-2",
+        "U1a-1",
+        "U1a-2"
+      ],
+      "status": "current-structural-golden",
+      "referenceRole": "integrated Browser, Stage, Inspector, Timeline, Depth Rail, and Color Book fixture",
+      "eguiTarget": "reference screen assembled from internal egui surfaces"
+    },
+    {
+      "id": "screen.settings",
+      "layer": "screen",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "body at #settings"
+      },
+      "tickets": [
+        "U0e-2"
+      ],
+      "stateOwner": "User settings",
+      "status": "current-structural-golden",
+      "referenceRole": "settings reference screen",
+      "eguiTarget": "reference screen for the internal egui settings surface"
+    }
+  ]
+}
