@@ -1,7 +1,10 @@
 use std::collections::BTreeSet;
 
 use motolii_plugin::reference::{reference_catalog, register_reference_plugins};
-use motolii_plugin::{MigrationOp, MigrationStep, PluginKind, PluginRegistry};
+use motolii_plugin::{
+    F64Domain, MigrationOp, MigrationStep, ParamDef, PluginId, PluginKind, PluginRegistry, Value,
+    ValueType,
+};
 use motolii_plugin_radial_repeater::radial_repeater_contract;
 use motolii_plugin_sine::sine_contract;
 use motolii_plugins_firstparty::{first_party_catalog, first_party_registry, first_party_runtime};
@@ -107,6 +110,62 @@ fn executor_id_set(registry: &PluginRegistry) -> BTreeSet<String> {
     .into_iter()
     .flat_map(|kind| registry.iter(kind).map(|(id, _)| id.0.to_string()))
     .collect()
+}
+
+#[test]
+fn p5_radial_repeater_contract_enumeration() {
+    let catalog = first_party_catalog().unwrap();
+    let entry = catalog.get("core.layer_source.radial_repeater").unwrap();
+
+    assert_eq!(entry.kind, PluginKind::LayerSource);
+    assert_eq!(entry.node.id, PluginId("core.layer_source.radial_repeater"));
+    assert_eq!(entry.node.version, 1);
+    assert_eq!(entry.node.display_name, "Radial Repeater");
+    assert_eq!(entry.node.category, "Generate");
+    assert_eq!(entry.node.tags, &["radial", "repeater", "generate"]);
+    assert_eq!(entry.node.min_inputs, 0);
+    assert_eq!(entry.node.max_inputs, 0);
+    assert_eq!(entry.migrations, Vec::<MigrationStep>::new());
+
+    let expected_params = vec![
+        ParamDef {
+            id: "count",
+            value_type: ValueType::F64,
+            default: Value::F64(12.0),
+            f64_domain: Some(F64Domain::new(Some(1.0), Some(64.0), true)),
+        },
+        ParamDef {
+            id: "radius",
+            value_type: ValueType::F64,
+            default: Value::F64(0.30),
+            f64_domain: Some(F64Domain::new(Some(0.0), None, false)),
+        },
+        ParamDef {
+            id: "dot_radius",
+            value_type: ValueType::F64,
+            default: Value::F64(0.04),
+            f64_domain: Some(F64Domain::new(Some(0.0), None, false)),
+        },
+        ParamDef {
+            id: "phase",
+            value_type: ValueType::F64,
+            default: Value::F64(0.0),
+            f64_domain: None,
+        },
+        ParamDef {
+            id: "angular_speed",
+            value_type: ValueType::F64,
+            default: Value::F64(0.0),
+            f64_domain: None,
+        },
+        ParamDef {
+            id: "color",
+            value_type: ValueType::Color,
+            default: Value::Color([1.0, 1.0, 1.0, 1.0]),
+            f64_domain: None,
+        },
+    ];
+    assert_eq!(entry.node.params, expected_params);
 }
 
 #[test]

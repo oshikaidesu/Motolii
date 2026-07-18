@@ -2,7 +2,7 @@
 
 作成日: 2026-07-18
 
-状態: **Host cache GAP 訂正済み／A3-0・A3-2・A3-3 実装完了**。本書は [VSM-A3D §11](2026-07-18-vism-a3d-radial-repeater-decision.md#11-a3s-handoff-質問未決のまま残す) の 9 質問をすべて閉じ、一般 `LayerSource` を **ID allowlist なし**で prepared recipe → runtime `RenderStep::Plugin` へ下ろす契約を固定する。[VSM-A3S-F1](2026-07-17-vism-implementation-plan.md) で A3-2 着手前監査により判明した公開 Host `PipelineCache` 境界欠落を訂正し、`VSM-A3-0` を §10 に挿入した。`motolii-gpu` の `get_or_create_fullscreen_uniform16` 定型は A3-0 実装で到達済み。
+状態: **Host cache GAP 訂正済み／VSM-A3 全件（A3-0〜A3-4）実装完了**。本書は [VSM-A3D §11](2026-07-18-vism-a3d-radial-repeater-decision.md#11-a3s-handoff-質問未決のまま残す) の 9 質問をすべて閉じ、一般 `LayerSource` を **ID allowlist なし**で prepared recipe → runtime `RenderStep::Plugin` へ下ろす契約を固定する。[VSM-A3S-F1](2026-07-17-vism-implementation-plan.md) で A3-2 着手前監査により判明した公開 Host `PipelineCache` 境界欠落を訂正し、`VSM-A3-0` を §10 に挿入した。`motolii-gpu` の `get_or_create_fullscreen_uniform16` 定型は A3-0 実装で到達済み。
 
 関連正本: [VSM-A3D Radial Repeater 採用](2026-07-18-vism-a3d-radial-repeater-decision.md)、[VSM-A0S Contract Catalog](2026-07-17-vism-a0s-contract-catalog-spec.md)、[VSM-A1S 公開 crate 境界](2026-07-17-vism-a1-public-crate-boundary-spec.md)、[VSM-A3R 調査](2026-07-18-vism-a3-external-expression-survey.md)、[Vism実装計画](2026-07-17-vism-implementation-plan.md)
 
@@ -263,7 +263,7 @@ A3 実装時（本発注外）の拘束:
 | **VSM-A3-0**（**完了**） | `motolii-gpu::PipelineCache` に最小 `get_or_create_fullscreen_uniform16(gpu, PipelineCacheKey)` と内部 cached pipeline を追加。façade（既存 `PipelineCache` 再 export）経由で外部 crate が利用可能にする | `motolii-gpu`（＋façade 到達を示す最小 test。必要なら `motolii-plugin` test のみ） | generic bind layout、raw resource allocation API、任意 uniform size、compute 抽象、plugin trait／Document／schema、Radial Repeater 本体、画素／WGSL 意味 |
 | VSM-A3-2（**完了**） | `radial_repeater` 外部 crate＋contract／executor＋firstparty 登録＋parity／allowlist | `plugins/*`＋firstparty | graph 再設計・画素意味変更・A3-0 の再実装 |
 | VSM-A3-3（**完了**） | VRAM golden／union・premul・純関数／Draft=Final | testkit／plugin shader | schema・Panel |
-| VSM-A3-4 | 非 UI Contract 列挙 fixture（U4a 手渡し十分性） | 試験のみ | Slint・U4a 本体 |
+| VSM-A3-4（**完了**） | 非 UI Contract 列挙 fixture（U4a 手渡し十分性） | 試験のみ | Slint・U4a 本体 |
 
 依存順: A3-1aとA3-1bは本仕様だけに依存し、別境界としてどちらからでも統合できる。
 A3-1cはA3-1a後。**A3-2は A3-1c かつ A3-0 後**（A3-1bとは独立）。A3-3／A3-4は
