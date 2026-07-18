@@ -149,10 +149,12 @@ run_supervisor() {
   local output="$1"
   local prompt="$2"
   local result_kind="$3"
-  local cursor_mode_args=(--mode ask)
-  if [[ "$result_kind" == "verdict" ]]; then
+  local cursor_mode_args=(--trust)
+  if [[ "$result_kind" == "order" ]]; then
+    cursor_mode_args+=(--mode ask)
+  else
     # headless標準modeを--forceなしで使い、read-only shell検証を可能にする。
-    cursor_mode_args=()
+    :
   fi
   prompt="Do not spawn subagents or delegate any part of this task. Complete the requested read-only work yourself in this run and return the required terminal marker.
 
@@ -194,7 +196,7 @@ $prompt"
   fi
 
   echo "delegate-cursor-supervised: Cursor版Grokへフォールバックします" >&2
-  if ! run_agent "$output.cursor-grok" "$CURSOR_AGENT_BIN" -p --trust "${cursor_mode_args[@]}" \
+  if ! run_agent "$output.cursor-grok" "$CURSOR_AGENT_BIN" -p "${cursor_mode_args[@]}" \
     --output-format text --model "$CURSOR_GROK_MODEL" --workspace "$WORKTREE" "$prompt"; then
     return 1
   fi
