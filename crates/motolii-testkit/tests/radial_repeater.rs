@@ -9,7 +9,7 @@ use motolii_plugin::{
     LayerSourceContext, LayerSourcePlugin, PluginError, ResolvedParams, TextureRef,
 };
 use motolii_plugin_radial_repeater::RADIAL_REPEATER_LAYER_SOURCE;
-use motolii_testkit::purity::render_layer_source_rgba;
+use motolii_testkit::purity::{render_layer_source_rgba, LayerSourceRenderRequest};
 use motolii_testkit::{assert_rgba_close, gpu_or_skip, tol, RgbaImageDesc};
 
 #[test]
@@ -22,17 +22,15 @@ fn radial_repeater_matches_independent_cpu_oracle() {
     let ctx = layer_ctx(frame);
     let mut pipelines = PipelineCache::new();
 
-    let gpu_rgba = render_layer_source_rgba(
-        "radial-oracle-gpu",
-        &gpu,
-        &mut pipelines,
-        &RADIAL_REPEATER_LAYER_SOURCE,
+    let request = LayerSourceRenderRequest {
+        plugin: &RADIAL_REPEATER_LAYER_SOURCE,
         t,
-        &params,
+        params: &params,
         ctx,
         frame,
-    )
-    .unwrap();
+    };
+    let gpu_rgba =
+        render_layer_source_rgba("radial-oracle-gpu", &gpu, &mut pipelines, &request).unwrap();
     let expected = cpu_oracle_rgba(
         frame,
         OracleParams {
@@ -69,17 +67,15 @@ fn phase_zero_places_first_instance_on_positive_x() {
     let ctx = layer_ctx(frame);
     let mut pipelines = PipelineCache::new();
 
-    let rgba = render_layer_source_rgba(
-        "phase-zero-pos-x",
-        &gpu,
-        &mut pipelines,
-        &RADIAL_REPEATER_LAYER_SOURCE,
+    let request = LayerSourceRenderRequest {
+        plugin: &RADIAL_REPEATER_LAYER_SOURCE,
         t,
-        &params,
+        params: &params,
         ctx,
         frame,
-    )
-    .unwrap();
+    };
+    let rgba =
+        render_layer_source_rgba("phase-zero-pos-x", &gpu, &mut pipelines, &request).unwrap();
 
     let (peak_x, peak_y, peak_a) = brightest_pixel(&rgba, frame.width, frame.height);
     assert!(
@@ -108,17 +104,15 @@ fn positive_angular_speed_rotates_counterclockwise_with_time() {
     let ctx = layer_ctx(frame);
     let mut pipelines = PipelineCache::new();
 
-    let rgba = render_layer_source_rgba(
-        "ccw-angular-speed",
-        &gpu,
-        &mut pipelines,
-        &RADIAL_REPEATER_LAYER_SOURCE,
+    let request = LayerSourceRenderRequest {
+        plugin: &RADIAL_REPEATER_LAYER_SOURCE,
         t,
-        &params,
+        params: &params,
         ctx,
         frame,
-    )
-    .unwrap();
+    };
+    let rgba =
+        render_layer_source_rgba("ccw-angular-speed", &gpu, &mut pipelines, &request).unwrap();
 
     let (peak_x, peak_y, peak_a) = brightest_pixel(&rgba, frame.width, frame.height);
     assert!(
@@ -151,22 +145,26 @@ fn n8_overlap_alpha_addition_rejected() {
         "n8-count-1",
         &gpu,
         &mut pipelines,
-        &RADIAL_REPEATER_LAYER_SOURCE,
-        t,
-        &radial_params(1.0, 0.0, dot_radius, 0.2, 0.4, color),
-        ctx,
-        frame,
+        &LayerSourceRenderRequest {
+            plugin: &RADIAL_REPEATER_LAYER_SOURCE,
+            t,
+            params: &radial_params(1.0, 0.0, dot_radius, 0.2, 0.4, color),
+            ctx,
+            frame,
+        },
     )
     .unwrap();
     let many = render_layer_source_rgba(
         "n8-count-64",
         &gpu,
         &mut pipelines,
-        &RADIAL_REPEATER_LAYER_SOURCE,
-        t,
-        &radial_params(64.0, 0.0, dot_radius, 0.2, 0.4, color),
-        ctx,
-        frame,
+        &LayerSourceRenderRequest {
+            plugin: &RADIAL_REPEATER_LAYER_SOURCE,
+            t,
+            params: &radial_params(64.0, 0.0, dot_radius, 0.2, 0.4, color),
+            ctx,
+            frame,
+        },
     )
     .unwrap();
 
@@ -186,28 +184,15 @@ fn p6_draft_final_same_t_params_desc() {
     let ctx = layer_ctx(frame);
     let mut pipelines = PipelineCache::new();
 
-    let first = render_layer_source_rgba(
-        "p6-first",
-        &gpu,
-        &mut pipelines,
-        &RADIAL_REPEATER_LAYER_SOURCE,
+    let request = LayerSourceRenderRequest {
+        plugin: &RADIAL_REPEATER_LAYER_SOURCE,
         t,
-        &params,
+        params: &params,
         ctx,
         frame,
-    )
-    .unwrap();
-    let second = render_layer_source_rgba(
-        "p6-second",
-        &gpu,
-        &mut pipelines,
-        &RADIAL_REPEATER_LAYER_SOURCE,
-        t,
-        &params,
-        ctx,
-        frame,
-    )
-    .unwrap();
+    };
+    let first = render_layer_source_rgba("p6-first", &gpu, &mut pipelines, &request).unwrap();
+    let second = render_layer_source_rgba("p6-second", &gpu, &mut pipelines, &request).unwrap();
 
     assert_eq!(
         first, second,

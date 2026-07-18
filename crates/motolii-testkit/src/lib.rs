@@ -612,6 +612,15 @@ pub mod purity {
         }
     }
 
+    /// LayerSource render の意味入力(testkit purity 専用)。
+    pub struct LayerSourceRenderRequest<'a> {
+        pub plugin: &'a dyn LayerSourcePlugin,
+        pub t: RationalTime,
+        pub params: &'a ResolvedParams,
+        pub ctx: LayerSourceContext,
+        pub frame: FrameDesc,
+    }
+
     /// LayerSource を1回 render し、出力 RGBA を返す(testkit 専用の正規 1 経路)。
     ///
     /// 各呼び出しは別 encoder / 別 `queue.submit` 境界に置く(M2E-9 follow-up)。
@@ -619,27 +628,24 @@ pub mod purity {
         label: &str,
         gpu: &GpuCtx,
         pipelines: &mut PipelineCache,
-        plugin: &dyn LayerSourcePlugin,
-        t: RationalTime,
-        params: &ResolvedParams,
-        ctx: LayerSourceContext,
-        frame: FrameDesc,
+        request: &LayerSourceRenderRequest<'_>,
     ) -> Result<Vec<u8>, TestkitError> {
-        let output = empty_target(gpu, frame, &format!("{label}-ls"));
+        let output = empty_target(gpu, request.frame, &format!("{label}-ls"));
         let mut encoder = gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some(label) });
-        plugin
+        request
+            .plugin
             .render(
                 gpu,
                 pipelines,
                 &mut encoder,
-                t,
-                params,
-                ctx,
+                request.t,
+                request.params,
+                request.ctx,
                 TextureRef {
                     texture: &output,
-                    desc: frame,
+                    desc: request.frame,
                 },
             )
             .map_err(|source| TestkitError::PluginFailed {
@@ -663,26 +669,15 @@ pub mod purity {
         frame: FrameDesc,
     ) -> Result<(), TestkitError> {
         let mut pipelines = PipelineCache::new();
-        let a = render_layer_source_rgba(
-            &format!("{label}-ls-a"),
-            gpu,
-            &mut pipelines,
+        let request = LayerSourceRenderRequest {
             plugin,
             t,
             params,
             ctx,
             frame,
-        )?;
-        let b = render_layer_source_rgba(
-            &format!("{label}-ls-b"),
-            gpu,
-            &mut pipelines,
-            plugin,
-            t,
-            params,
-            ctx,
-            frame,
-        )?;
+        };
+        let a = render_layer_source_rgba(&format!("{label}-ls-a"), gpu, &mut pipelines, &request)?;
+        let b = render_layer_source_rgba(&format!("{label}-ls-b"), gpu, &mut pipelines, &request)?;
         let img = RgbaImageDesc {
             width: frame.width,
             height: frame.height,
