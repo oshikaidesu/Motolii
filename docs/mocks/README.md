@@ -1,5 +1,7 @@
 # M3 UIモック
 
+> **ARCHIVED — 新規変更禁止**: 現行の実行入口は`codex/m3-mock-components` worktreeの`docs/mocks-ui/`にあるReact/Viteモック、資料全体の参照順位は[M3 UI参照地図](../ui-reference-map.md)である。このディレクトリのHTMLとgoldenは明示的なparity検査・履歴確認専用であり、新しいUI判断、操作追加、golden更新の実装先または製品仕様ではない。通常動線からはReact側の`#archive/*`を経由してのみ参照する。
+
 ## モック共通規約
 
 - 審判用の入場・状態切替はhash（例: `#all-surfaces`）で行い、製品chromeへ審判用button・注記・fixture名を混ぜない。
@@ -81,6 +83,22 @@
   --screenshot=docs/mocks/m3-vism-host-boundary-settings-golden.png \
   'file://'"$PWD/docs/mocks/m3-vism-host-boundary.html#settings"
 ```
+
+## Browser再編の採否記録（2026-07-19）: Media / Effects / Objects
+
+- 対象: 分解台帳(`docs/mocks-ui`)のDiscovery Browser候補`#plugin-browser-candidate`が持つ`Media / Plugins / Elements`の3タブ構成。
+- 決定: 日常Browserの一次分類を**ユーザー目的の3タブ`Media / Effects / Objects`**にする。`Media`=外部ファイル由来の配置、`Effects`=既存Object/barへ付着・作用、`Objects`=新しいObject/barの作成（従属カテゴリ`Shapes / Text / Layers / Generators`）。実装単位(`Plugins`)を一次navigationにしない。
+- 帰属の判定規則はdropの結果で決める: **新しいbar/objectができる=Objects、既存のbar/objectに載る=Effects**。plugin/built-inの別を帰属に使わない。Behavior系（既存objectのparameterを駆動）はEffects。Authoring Tool系（選択群への一回性操作）は棚ではなくTool語彙の家とし、Effectsへ混ぜない。
+- 由来（Built-in / provider名）は二次情報とする: 平常時のカードは沈黙し、DETAIL・hover Info・従属PROVIDERフィルタ・Plugin Managerだけが由来を語る。導入状態`Installed`は管理概念としてsource railから外す。未導入候補を日常棚へ混ぜず、獲得導線はManager側の席とする（install実装・trust・署名は未決のまま。実行ボタンを提供しない現行制約を維持）。
+- `Plugins`タブは廃止し、install / update / version / 互換 / 欠損解決を扱う**Plugin Manager**をSettings側へ置く。recovery drawerの内容はManagerの欠損ビューへ統合する。Missing / Unavailable候補は使用文脈の家（Effects / Objects）にバッジ付きで残し、Inspect診断のrecovery candidateからManagerの該当項目へジャンプする（Settings送りで回復導線を遠くしない）。
+- 検索は家の当てずっぽうを要求しない: タブ内検索0件時に他タブのヒット数を提示する（例: `Objects に 3件`）。
+- 命名の根拠と予約語: Alight Motionの`Elements`は共有・再利用できるリンク付きGroupの固有概念であり（[AM公式ガイド](https://support.alightmotion.com/hc/en-us/articles/10536791122449-Elements-The-Complete-Guide)、2026-07-19実機確認）、汎用の作成物一覧へ転用しない。**`Elements`はAMと同じ意味（複合再利用Object）でObjects配下へ採用し（同日追補参照）、`Templates`の扱いは未決として温存する**。総称`Objects`と「第三者もカテゴリへ入る」分類はApple Motion Libraryを先例とする（[Libraryカテゴリ](https://support.apple.com/en-gb/guide/motion/motn04c9aef2/mac) / [Generator=新規layer](https://support.apple.com/guide/motion/add-a-generator-motn16405b9f/6.3/mac/15.6) / [Filter=既存layerへ適用](https://support.apple.com/guide/motion/motn169f7e4e/mac)）。既知語彙の借用は「同じ意味で既知」の場合だけ有効で、固有概念語の転用は将来衝突を生む。
+- 現行候補モックからの除去: (1) PluginsタブとObjectsの間の**Generator重複**（`Glyph Current` / `Ribbon Array` / `Particle Field`をObjects › Generatorsへ統合。`Ribbon Array`はMISSINGバッジで残す） (2) **`Camera`カード**（[M3仕様の統一Camera節](../specs/M3-ui-integration.md)「CompCameraが常在し、通常UIで3D camera追加操作を作らない」と矛盾）。Scene型フィルタも空になるため外す。
+- drop文法は棚単位で不変にする: Effectsの期待target=既存Object/bar（Stageヒットテスト+HoverValid outline、空白drop=Cancel）。Objects / Mediaの期待target=Stage空間位置またはTimeline時間位置。double click / `Enter`は[UI操作言語§3.2](../ui-interaction-language.md)の棚共通短縮に接続する（Effects=選択中objectへ適用、Objects / Media=Stage中央+playhead時刻へ配置）。
+- 追補（同日）: **`Preset`は再利用の形式であり、機能上の所属ではない**。preset化された候補は機能の家に置き、所属先の操作文法を引き継ぐ（Effect preset=対象Objectが必要、Object preset=新規Objectを作る）。**`Elements`はAM固有概念と同義の「複数Object/Effectを内包できる再利用可能な複合Object」としてObjects配下に置く**。家は配置結果で判定する: 1つのShapeを作る=`Shapes`（ユーザー保存は`My Shapes`）、1つの設定済みObjectを作る=各カテゴリのpreset、Groupを作る=`Elements`。ElementがEffectを内包していても、そのEffect preset自体はElementsへ移らない。
+- 追補時点の未決（モック確認で判定する）: (1) Preset / My Shapesを独立サブカテゴリにするか、型カテゴリ×由来フィルタ（`Built-in / My`）の直交軸にするか (2) Style（既存Text/Shapeへのparameter束コピー。Effect stackへ載らない）の家と、Effect presetとの表示区別 (3) Element instanceのリンク意味（更新伝播・detach・所有者: User library / Project同梱 / 配布package）— 共有Effect Definitionの先例と突合し、恒久形式を本モックで焼かない (4) 保存入口の文法（選択→保存、内容から保存先を自動提案し確定は明示。保存はUser settings側でUndoを作らない=MY CURVES先例）
+- 本記録で必要になるcanon改訂（別PR・反対側レビュー対象）: [UIコンセプト柱3](../ui-concept.md)の生成入口語彙（総称タブ=`Objects`、`ジェネレーター`はObjects内の従属カテゴリ名として存続）、[UI操作言語§3](../ui-interaction-language.md)の既定配置「左: Project Explorer / Plugin Browser」→「左: Browser（Media / Effects / Objects）」。canon改訂が合流するまで、本記録の効力はモック候補の採否に限る。
+- これは製品コード・公開API・永続形式・plugin kind分類（`NodeDesc`等）の変更ではない。`Objects/Effects`分類をDocument型やpackage manifestへ焼かない。
 
 ## 小さなコア / plugin責任境界モック（2026-07-17）
 

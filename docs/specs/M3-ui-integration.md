@@ -71,6 +71,8 @@ A-1(→**egui-wgpuの既存device/native texture共有で構造的に解消**。
 - Camera toolとHand/Stage View toolはicon、frame形状、操作結果で識別でき、色だけ/labelだけへ依存しない
 - UIでは平面配置の`Position X/Y`と前後配置の`Depth Z`を独立した操作groupへ投影する。これは同じ正準XYZの`position.z`を編集するUI上の意味分離であり、Depth専用field、第二の所有者、暗黙の3D modeを追加しない。`Depth Z`の平行移動と`Rotation Z`（Z軸まわりの回転）も別control・別automation channelとして識別可能にする
 - Depth Railは現在時刻の評価へ追従し、明示的に開いた時だけ直接操作できる。automation中のdragは現在時刻のZ keyを更新または追加し、静的Depthのdragだけではautomationを開始しない。Cameraはworld上の文脈marker、Particle系はEmitter／生成元をmarkerとして扱い、camera-space depthやParticle個体群を第二の編集正本にしない。詳細と負例は[譜面UI構成モデル](../ui-score-model.md)を正本とする
+- Timeline barの選択は開いているDepth Railの同じstable IDへfocusするが、通常bar clickだけではRailを自動展開しない。bar内または譜面headerの明示Depth iconからRailを開いて対象へfocusできるようにする。同一Zは件数付きstackとして表示し、hover／選択だけの扇状展開や表示衝突回避のための自動Z変更を行わない
+- 同じparentの選択Objectを指定した奥端・手前端へauthoring orderで等間隔配置する`Layer Order Distribute`を、context menuではなくDepth Railの常設iconから使えるようにする。Groupは親側の1 markerと`Edit Children`中のparent-local子scopeを混在させず、mixed-parent選択は変更ゼロで拒否理由を示す
 
 ## プレビュー出力の寿命(`RenderedFrame` / G-1)
 

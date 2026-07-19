@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# docs整合チェッカー: 台帳の抜け・重複・リンク切れを機械検証する。
+# 根拠: 2026-07-19 docs体系化(入口台帳から36件のreview文書が欠落し、
+# 既決事項が逆引きできず旧仕様が混在した再発防止)。
+# 使い方: scripts/check-docs.sh   (リポジトリルートから)
+set -u
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DOCS="$ROOT/docs"
+FAIL=0
+
+err() { echo "NG: $1"; FAIL=1; }
+
+# 1. reviews/ の全ファイルが reviews/README.md の索引に登録されていること
+for f in "$DOCS"/reviews/*.md; do
+  b="$(basename "$f")"
+  [ "$b" = "README.md" ] && continue
+  grep -q "$b" "$DOCS/reviews/README.md" || err "reviews索引に未登録: docs/reviews/$b"
+done
+
+# 2. docs/README.md ファイルマップにリンク先の重複行がないこと
+# (要旨セル内の相互参照は正当なので、表の先頭セルのリンクだけを見る)
+dups=$(grep -oE '^\| \[[^]]+\]\((reviews/[^)#]+\.md)\)' "$DOCS/README.md" \
+  | grep -oE 'reviews/[^)#]+\.md' | sort | uniq -d)
+if [ -n "$dups" ]; then
+  while IFS= read -r d; do
+    err "docs/README.md に重複掲載: ${d#](}"
+  done <<< "$dups"
+fi
+
+# 3. docs/**/*.md のローカルmdリンクが実在すること(#fragmentは除去して判定)
+python3 - "$DOCS" <<'PY'
+import os, re, sys
+docs = sys.argv[1]
+link_re = re.compile(r'\]\(([^)]+)\)')
+fail = False
+for dirpath, _, files in os.walk(docs):
+    for name in files:
+        if not name.endswith('.md'):
+            continue
+        path = os.path.join(dirpath, name)
+        text = open(path, encoding='utf-8').read()
+        for target in link_re.findall(text):
+            if target.startswith(('http://', 'https://', 'mailto:', '#')):
+                continue
+            target = target.split('#')[0].strip()
+            if not target:
+                continue
+            resolved = os.path.normpath(os.path.join(dirpath, target))
+            if not os.path.exists(resolved):
+                rel = os.path.relpath(path, os.path.dirname(docs))
+                print(f"NG: リンク切れ {rel} -> {target}")
+                fail = True
+sys.exit(1 if fail else 0)
+PY
+[ $? -ne 0 ] && FAIL=1
+
+# 4. decision-index.md の状態語彙が固定集合に収まっていること
+if [ -f "$DOCS/decision-index.md" ]; then
+  bad=$(awk -F'|' '/^\|/ && NF>=6 && $2 !~ /主題|---/ {
+    gsub(/^[ \t]+|[ \t]+$/, "", $4);
+    if ($4 !~ /^(決定|縮小採用|延期|棄却|撤回|未統一|観察|比較中|停止線)$/) print $4
+  }' "$DOCS/decision-index.md" | sort -u)
+  if [ -n "$bad" ]; then
+    while IFS= read -r w; do
+      err "decision-index.md に未定義の状態語彙: 「$w」(許可: 決定/縮小採用/延期/棄却/撤回/未統一/観察/比較中/停止線)"
+    done <<< "$bad"
+  fi
+else
+  err "docs/decision-index.md が存在しない"
+fi
+
+if [ $FAIL -eq 0 ]; then
+  echo "OK: docs整合チェック全項目通過"
+else
+  echo "FAILED: 上記を修正するか、意図的なら該当規則を docs/reviews/README.md の登録規則ごと改訂する"
+fi
+exit $FAIL
