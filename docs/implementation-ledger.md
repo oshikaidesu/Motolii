@@ -98,7 +98,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | 優先 | ID | Phase | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
 | 1 | U0b-1 | M3 | `DO` | — | U0a/G0-2/D2完了。状態分類型+fixtureだけ。workspace永続形式を作らない | U0b-2をIssue化 |
-| 2 | U0e-1 | M3 | `DO` | — | U0a完了。PR #184から生成機構だけ抽出し、具体token値を採らない | U0e-2をIssue化 |
+| 2 | U0e-1 | M3 | `DONE` | — | fixture限定typed DTCG形、決定的adapter生成、check/write、手編集拒否、原子的temp cleanupを自動審判。製品token値なし | U0e-2をIssue化 |
 | 3 | U1a-1 | M3 | `DO` | — | U0a/G0-1/D3完了。egui shell+既存device+静止viewportだけ | U1b-1をIssue化 |
 | 4 | K0 | M4 | `DO` / `SPIKE` | [#167](https://github.com/oshikaidesu/Motolii/issues/167) | D3はmain到達済み。製品schema/APIへ焼かない独立fixtureに限定 | K1aをIssue化 |
 | 5 | P0I | M5 | `DO` / `SPIKE` | [#170](https://github.com/oshikaidesu/Motolii/issues/170) | 独立。製品schema/APIを追加しない | P7aをIssue化 |

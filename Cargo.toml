@@ -53,6 +53,7 @@ egui-winit = "0.35"
 egui_tiles = "0.16"
 winit = "0.30"
 serde_json = "1"
+sha2 = "0.10"
 thiserror = "2"
 image = { version = "0.25", default-features = false, features = ["png"] }
 # egui-wgpuとコアで同じwgpuメジャーを共有する。

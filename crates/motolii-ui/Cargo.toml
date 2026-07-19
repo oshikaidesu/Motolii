@@ -11,5 +11,13 @@ egui-wgpu.workspace = true
 egui-winit.workspace = true
 egui_tiles.workspace = true
 motolii-gpu.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 winit.workspace = true
+
+[[bin]]
+name = "u0e1-tokens"
+path = "src/bin/u0e1_tokens.rs"
+test = false
