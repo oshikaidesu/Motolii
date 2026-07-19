@@ -1,6 +1,6 @@
 # M3 UI参照地図
 
-更新日: 2026-07-19
+更新日: 2026-07-20
 
 M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決める。会話履歴、スクリーンショット、旧HTML、React prototypeのいずれも、単独では製品仕様にならない。
 
@@ -10,10 +10,23 @@ M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決
 |---|---|---|---|
 | 規範 | 状態所有、Undo、入力、意味、受け入れ条件 | [M3仕様](specs/M3-ui-integration.md)、[UI操作言語](ui-interaction-language.md)、[UI視覚言語](ui-visual-language.md)、[UI境界規律](reviews/2026-07-14-m3-ui-boundary-prevention.md) | prototypeや会話から直接上書きせず、仕様・決定台帳を先に改訂する |
 | 現行prototype | 現在ブラウザで比較する操作・構成 | `docs/mocks-ui/README.md`(React/Viteモック。`codex/m3-mock-components`ブランチ側に実体) | hash fixture、操作試験、比較台帳を一緒に更新する。React/CSS値を製品契約へ焼かない |
+| 製品実装先例 | eguiで高密度shell、時間面、GPU viewport、selection、component、試験を成立させた実装資産 | [Rerun先例調査](reviews/2026-07-20-rerun-prior-art-survey.md)、[Rerun学習・転移計画](reviews/2026-07-20-rerun-learning-transfer-plan.md) | Rerunの画面・語彙・schemaを模倣せず、Reactモックの要求をeguiへ翻訳する実装先例として読む。個別資産は`DEPEND/VENDOR/PORT/PATTERN/REJECT`で裁定する |
 | 採否台帳 | 先例、観察、未決、棄却、停止線 | `reviews/`の対象別decision／observation ledger | 出典、Motoliiへの翻訳、反映先を分ける |
 | 移行互換 | React移行中の視覚parityと未置換領域 | [旧HTMLモック台帳](mocks/README.md)、`mocks-ui/src/legacy/` | 新しい判断を追加しない。React-native置換後に参照専用へ縮退する |
 | 証拠 | ユーザー撮影画像、golden、操作記録 | `reviews/evidence/`、Playwright結果 | 版、OS、fixture、viewport、操作列をmanifest化する |
 | 履歴 | Codexタスク、git履歴 | Codexタスク一覧、git log | 決定の探索にだけ使い、現行仕様として引用しない |
+
+## Reactモック、Rerun、Motolii正本の役割
+
+三者を競合するUI正本として扱わない。
+
+| 資料 | 答える問い | 答えない問い |
+|---|---|---|
+| Reactモック | Motoliiで何を見せ、どう操作させたいか | eguiでどう実装するか、Documentへ何を保存するか |
+| Rerun | eguiで高密度な製品shell、時間面、GPU viewport、selection、component、試験をどう成立させたか | Motoliiの作品意味、編集command、clip/keyframe操作 |
+| Motolii規範・仕様 | 状態の持ち場、Undo、公開契約、受け入れ条件 | 具体token値や未採択component実装 |
+
+実装時は`React要求 → Motolii意味・状態 → Rerun先例 → Motolii component`の順で翻訳する。Rerunに存在することだけを理由に機能を足さず、Reactモックに存在することだけを理由に未決意味を実装しない。
 
 ## React移行の実状態
 
@@ -81,7 +94,8 @@ npm run dev -- --host 127.0.0.1
 1. 変更する意味と状態所有が規範層にあるか確認する。
 2. 現行prototypeの対象hashと、React-native／bridgeの所有境界を特定する。
 3. 先例やスクリーンショットは観察台帳へ記録し、観察と採用を分ける。
-4. React candidate、操作試験、component map、採否台帳を同じ判断単位で更新する。
-5. 旧HTMLへ新機能を追加しない。parity維持に必要な変更だけを許し、置換後は削除候補にする。
+4. Rerunを参照する場合は監査commit、対象crate/file、転移分類、持ち込まない意味を記録する。
+5. React candidate、操作試験、component map、採否台帳を同じ判断単位で更新する。
+6. 旧HTMLへ新機能を追加しない。parity維持に必要な変更だけを許し、置換後は削除候補にする。
 
 会話中に論点が広がった場合も、この順序を適用する。新しい用語、用途、状態所有、操作、配布単位、既存決定との矛盾が出た時点で、コード変更を続ける前に観察／比較中／決定／棄却／停止のどれかを台帳へ記録する。まだ雑談の範囲で実装判断へ影響しない案は記録を強制しない。
