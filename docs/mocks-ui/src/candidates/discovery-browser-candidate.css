@@ -184,7 +184,7 @@
 #vism-browser.candidate-plugin-browser .candidate-plugin-card .plugin-thumb {
   width: 100%;
   height: auto;
-  aspect-ratio: 1;
+  aspect-ratio: 16 / 9;
   display: block;
   border-bottom: 1px solid var(--line);
 }

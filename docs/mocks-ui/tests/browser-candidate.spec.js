@@ -71,6 +71,8 @@ test.describe("shared discovery Browser candidate", () => {
     await page
       .getByRole("button", { name: "Thumbnail and name view" })
       .click();
+    const namedThumbnailBox = await firstCard.locator(".plugin-thumb").boundingBox();
+    expect(namedThumbnailBox.width / namedThumbnailBox.height).toBeGreaterThan(1.7);
 
     await page.locator('[data-plugin-source="issues"]').click();
     await expect(
