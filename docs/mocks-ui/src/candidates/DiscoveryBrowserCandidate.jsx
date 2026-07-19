@@ -214,6 +214,16 @@ function CandidatePluginBrowser() {
   );
 }
 
+function CandidateBrowserTabs() {
+  return (
+    <div className="browser-tabs">
+      <button className="browser-tab" data-tab="project">Assets</button>
+      <button className="browser-tab" data-tab="files">Files</button>
+      <button className="browser-tab on" data-tab="vism">Plugins</button>
+    </div>
+  );
+}
+
 function AssetTile({
   source,
   asset,
@@ -248,7 +258,7 @@ function CandidateProjectBrowser() {
       className="project-explorer candidate-project-browser"
       id="project-browser"
       hidden
-      data-info="Project Explorer|Browse project assets and files with the same shell as Plugins"
+      data-info="Asset and File Browser|Keep project assets and filesystem roots in separate top-level views"
     >
       <div className="candidate-search-row">
         <input
@@ -257,20 +267,6 @@ function CandidateProjectBrowser() {
           placeholder="Search"
           aria-label="Search assets"
         />
-        <button
-          className="asset-source-tab on"
-          data-asset-source="project"
-          aria-label="Project assets"
-        >
-          ◇
-        </button>
-        <button
-          className="asset-source-tab"
-          data-asset-source="files"
-          aria-label="External files"
-        >
-          ▣
-        </button>
         <button className="candidate-icon-button" aria-label="List view">☷</button>
         <button className="btn quiet file-nav" id="file-back" hidden aria-label="Back">‹</button>
         <button className="btn quiet file-nav" id="file-parent" hidden aria-label="Parent folder">↑</button>
@@ -369,6 +365,25 @@ export function DiscoveryBrowserCandidate({ node, options }) {
   const candidateOptions = {
     ...options,
     replace(child) {
+      if (
+        child.type === "tag" &&
+        child.attribs?.class?.split(" ").includes("browser-tabs")
+      ) {
+        return <CandidateBrowserTabs />;
+      }
+      if (
+        child.type === "tag" &&
+        child.attribs?.class?.split(" ").includes("panel-head") &&
+        child.children?.some(
+          (entry) => entry.type === "text" && entry.data.includes("Browser"),
+        )
+      ) {
+        return (
+          <div className="panel-head">
+            Browser <small>ASSETS / FILES / PLUGINS</small>
+          </div>
+        );
+      }
       if (
         child.type === "tag" &&
         child.attribs?.id === "vism-browser"

@@ -143,13 +143,19 @@ test.describe("shared discovery Browser candidate", () => {
   }) => {
     await openCandidate(page);
 
-    await page.locator('button[data-tab="project"]').click();
+    await expect(page.locator(".browser-tabs .browser-tab")).toHaveText([
+      "Assets",
+      "Files",
+      "Plugins",
+    ]);
+    await page.getByRole("button", { name: "Assets" }).click();
     await expect(page.locator(".candidate-project-browser")).toBeVisible();
     await expect(page.getByRole("searchbox", { name: "Search assets" })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Asset sources" })).toBeVisible();
     await expect(page.locator(".candidate-asset-grid .asset-tile:visible")).toHaveCount(4);
+    await expect(page.locator("[data-asset-source]")).toHaveCount(0);
 
-    await page.locator('button[data-asset-source="files"]').click();
+    await page.getByRole("button", { name: "Files" }).click();
     await expect(page.locator("[data-file-root-select]")).toHaveCount(3);
     await expect(page.locator("#asset-path")).toContainText("City Source");
     await expect(page.locator(".candidate-asset-grid .asset-tile:visible")).toHaveCount(2);

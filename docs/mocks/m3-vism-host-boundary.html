@@ -971,8 +971,8 @@
     const isVism=tab==="vism";
     $$("[data-tab]").forEach(button=>button.classList.toggle("on",button.dataset.tab===tab));
     $("#vism-browser").hidden=!isVism;$("#project-browser").hidden=isVism;
-    if(!isVism)setAssetSource(state.assetSource);
-    status(isVism?"Plugin Browser":"Project Explorer","","");
+    if(!isVism)setAssetSource(tab==="files"?"files":"project");
+    status(isVism?"Plugin Browser":tab==="files"?"File Explorer":"Project Assets","","");
   }
   function syncInbox(){
     const count=$$("#inbox-list .inbox-item").length;

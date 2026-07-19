@@ -2,6 +2,10 @@
   overflow: hidden;
 }
 
+.browser-candidate .browser-tabs {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .candidate-plugin-browser {
   --plugin-thumb-size: 92px;
   height: calc(100% - 57px);
@@ -407,12 +411,6 @@
 
 .project-explorer.candidate-project-browser[hidden] {
   display: none;
-}
-
-.candidate-project-browser .candidate-search-row .asset-source-tab {
-  width: 25px;
-  height: 25px;
-  padding: 0;
 }
 
 .candidate-project-browser .file-nav {
