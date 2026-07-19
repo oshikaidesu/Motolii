@@ -109,6 +109,8 @@
 | [2026-07-17-vism-a7-bpm-datatrack-spike.md](2026-07-17-vism-a7-bpm-datatrack-spike.md) | VSM-A7 — BPMから既存DataTrackへの意味spike |
 | [2026-07-17-vism-implementation-plan.md](2026-07-17-vism-implementation-plan.md) | Vism実装計画 — 公開境界の反証から配布へ |
 | [2026-07-17-vism-ready-counter-review-disposition.md](2026-07-17-vism-ready-counter-review-disposition.md) | Vism-ready化提案の反対側レビュー採否 |
+| [2026-07-18-d1k-runtime-camera-thaw-spec.md](2026-07-18-d1k-runtime-camera-thaw-spec.md) | D1k-S CQ-5 解凍記録: runtime planar `CompCamera`と必須camera-bearing render signature(2026-07-18) |
+| [2026-07-18-m2-foundation-supplementary-code-review.md](2026-07-18-m2-foundation-supplementary-code-review.md) | M2基盤再締結・独立追補実コードレビュー(2026-07-18) |
 | [2026-07-18-m3-egui-selection.md](2026-07-18-m3-egui-selection.md) | M3 UI基盤 egui採用判断(2026-07-18) |
 | [2026-07-18-m3-gpu-preview-viewport-prior-art.md](2026-07-18-m3-gpu-preview-viewport-prior-art.md) | M3 GPU Preview / Viewport先例調査 |
 | [2026-07-18-vism-a3-external-expression-survey.md](2026-07-18-vism-a3-external-expression-survey.md) | VSM-A3R — 外部表現・Expression・Add-onの責任分類 |
