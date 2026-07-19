@@ -124,6 +124,8 @@ mod tests {
                 "egui_wgpu::",
                 "egui_winit::",
                 "egui_tiles::",
+                "egui_taffy::",
+                "taffy::",
                 "winit::",
             ];
             assert!(

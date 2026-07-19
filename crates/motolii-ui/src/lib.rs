@@ -3,6 +3,7 @@
 //! toolkit APIはprivate module内に閉じ、domain/coreの公開契約へは出さない。
 
 mod app;
+mod browser_panel_spike;
 mod display_pool;
 mod layout_preset;
 mod shell;

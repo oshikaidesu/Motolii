@@ -27,6 +27,8 @@ const TOOLKIT_PATHS: &[&str] = &[
     "egui_wgpu::",
     "egui_winit::",
     "egui_tiles::",
+    "egui_taffy::",
+    "taffy::",
     "winit::",
 ];
 

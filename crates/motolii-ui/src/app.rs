@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use egui::Vec2;
 
+use crate::browser_panel_spike::BrowserPanelState;
 use crate::display_pool::DisplayPool;
 use crate::layout_preset;
 
@@ -17,6 +18,7 @@ pub(crate) struct MotoliiApp {
     _pool: Arc<DisplayPool>,
     viewport_texture: egui::TextureId,
     viewport_size: Vec2,
+    browser: BrowserPanelState,
     frames_seen: u32,
     auto_close_after_frames: Option<u32>,
 }
@@ -40,6 +42,7 @@ impl MotoliiApp {
             _pool: pool,
             viewport_texture,
             viewport_size: Vec2::new(desc.width as f32, desc.height as f32),
+            browser: BrowserPanelState::default(),
             frames_seen: 0,
             auto_close_after_frames,
         })
@@ -48,7 +51,12 @@ impl MotoliiApp {
 
 impl eframe::App for MotoliiApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        layout_preset::paint(ui, self.viewport_texture, self.viewport_size);
+        layout_preset::paint(
+            ui,
+            self.viewport_texture,
+            self.viewport_size,
+            &mut self.browser,
+        );
         if let Some(limit) = self.auto_close_after_frames {
             self.frames_seen = self.frames_seen.saturating_add(1);
             if self.frames_seen >= limit {

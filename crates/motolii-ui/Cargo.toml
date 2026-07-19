@@ -10,6 +10,7 @@ egui.workspace = true
 egui-wgpu.workspace = true
 egui-winit.workspace = true
 egui_tiles.workspace = true
+egui_taffy.workspace = true
 motolii-core.workspace = true
 motolii-doc.workspace = true
 motolii-eval.workspace = true
@@ -22,3 +23,6 @@ winit.workspace = true
 
 [dev-dependencies]
 motolii-testkit.workspace = true
+
+[build-dependencies]
+serde_json.workspace = true

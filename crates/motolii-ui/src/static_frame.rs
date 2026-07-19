@@ -227,9 +227,10 @@ mod tests {
         assert_eq!(first, second);
         assert_eq!(DisplayPool::register_count_for_test(), 1);
 
+        let mut browser = crate::browser_panel_spike::BrowserPanelState::default();
         for _ in 0..3 {
             egui::__run_test_ui(|ui| {
-                crate::layout_preset::paint(ui, first, egui::vec2(320.0, 180.0));
+                crate::layout_preset::paint(ui, first, egui::vec2(320.0, 180.0), &mut browser);
             });
         }
         assert_eq!(DisplayPool::register_count_for_test(), 1);

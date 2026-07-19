@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "surfaces": [
+    {
+      "id": "explorer",
+      "label": "Explorer",
+      "sources": ["Project", "Files", "Inbox"],
+      "cards": [
+        {"id": "night-drive", "glyph": "▶", "name": "night-drive.mp4", "kind": "Video"},
+        {"id": "main-vocal", "glyph": "♫", "name": "main-vocal.wav", "kind": "Audio"},
+        {"id": "title-mark", "glyph": "◇", "name": "title-mark.svg", "kind": "Vector"}
+      ]
+    },
+    {
+      "id": "plugins",
+      "label": "Plugins",
+      "sources": ["All", "Motion", "Color", "Text"],
+      "cards": [
+        {"id": "echo-bloom", "glyph": "◎", "name": "Echo Bloom", "kind": "Effect"},
+        {"id": "type-pulse", "glyph": "T", "name": "Type Pulse", "kind": "Text motion"},
+        {"id": "chromatic-shift", "glyph": "◫", "name": "Chromatic Shift", "kind": "Effect"}
+      ]
+    },
+    {
+      "id": "gen",
+      "label": "Gen",
+      "sources": ["All", "Generators", "Text", "Packs"],
+      "cards": [
+        {"id": "glyph-current", "glyph": "G", "name": "Glyph Current", "kind": "Generator"},
+        {"id": "particle-field", "glyph": "✣", "name": "Particle Field", "kind": "Generator"},
+        {"id": "ribbon-array", "glyph": "≋", "name": "Ribbon Array", "kind": "Generator"},
+        {"id": "type-pulse-gen", "glyph": "T", "name": "Type Pulse", "kind": "Text"}
+      ]
+    }
+  ]
+}

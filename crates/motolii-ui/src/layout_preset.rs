@@ -2,19 +2,26 @@
 
 use egui::{TextureId, Ui, Vec2};
 
+use crate::browser_panel_spike::{self, BrowserPanelState};
+
 pub(crate) const BROWSER_PANEL: &str = "motolii-browser";
 pub(crate) const INSPECTOR_PANEL: &str = "motolii-inspector";
 pub(crate) const TIMELINE_PANEL: &str = "motolii-timeline";
 pub(crate) const STATUS_PANEL: &str = "motolii-status";
 pub(crate) const STAGE_LABEL: &str = "Stage (Preview)";
 
-pub(crate) fn paint(ui: &mut Ui, viewport_texture: TextureId, viewport_size: Vec2) {
+pub(crate) fn paint(
+    ui: &mut Ui,
+    viewport_texture: TextureId,
+    viewport_size: Vec2,
+    browser: &mut BrowserPanelState,
+) {
     egui::Panel::left(BROWSER_PANEL)
-        .resizable(false)
-        .default_size(200.0)
+        .resizable(true)
+        .default_size(330.0)
+        .min_size(220.0)
         .show(ui, |ui| {
-            ui.heading("Browser");
-            ui.label("Assets placeholder");
+            browser_panel_spike::paint(ui, browser);
         });
 
     egui::Panel::right(INSPECTOR_PANEL)
