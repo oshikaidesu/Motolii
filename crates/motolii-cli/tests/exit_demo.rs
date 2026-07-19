@@ -1,5 +1,3 @@
-#![allow(deprecated)]
-
 //! M1 出口デモ(ヒーロー)のE2Eゴールデン。
 //!
 //! 「実写(生成)背景 + Bezierイージングで右へ流れる四角シェイプ」を
@@ -11,8 +9,9 @@ use std::path::Path;
 use motolii_cli::export_document;
 use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, RationalTime, TimeMap};
 use motolii_doc::{
-    save_document, Asset, AssetId, Clip, ClipSource, Composition, DocKeyframe, DocKeyframeTrack,
-    DocParam, DocValue, Document, ItemEnvelope, KeyframeId, Track, TrackItem, RECT_LAYER_SOURCE,
+    Asset, AssetId, Clip, ClipSource, Composition, DocKeyframe, DocKeyframeTrack, DocParam,
+    DocValue, Document, ItemEnvelope, KeyframeId, ProjectSession, ResourceLimits, SaveOptions,
+    Track, TrackItem, RECT_LAYER_SOURCE,
 };
 use motolii_eval::Interp;
 use motolii_media::{probe, read_frame_at, Encoder};
@@ -52,12 +51,10 @@ fn eased_center_track() -> DocKeyframeTrack {
 }
 
 fn build_exit_demo_document(input_name: &str) -> Document {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     // KeyframeId 0,1 を使うためカウンタを先に進める(A8)。
     let _ = doc.next_stable_id.allocate().unwrap();
     let _ = doc.next_stable_id.allocate().unwrap();
-    doc.version = 2;
-    doc.min_reader_version = 2;
     doc.composition = Composition::try_new(
         W as i64,
         H as i64,
@@ -156,7 +153,13 @@ fn exit_demo_video_bg_plus_eased_rect_matches_golden() {
 
     let doc = build_exit_demo_document("input.mp4");
     doc.validate().unwrap();
-    save_document(&document_path, &doc).unwrap();
+    {
+        let mut session =
+            ProjectSession::acquire(&document_path, &ResourceLimits::production()).unwrap();
+        session
+            .save_document(&doc, &SaveOptions::default())
+            .unwrap();
+    }
 
     let report = export_document(&gpu, &document_path, &output, Some(N_FRAMES), true).unwrap();
     assert_eq!(report.frames_written, N_FRAMES);

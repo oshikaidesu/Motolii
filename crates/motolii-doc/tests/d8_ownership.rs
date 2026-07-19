@@ -10,7 +10,9 @@ use std::sync::{Arc, Barrier};
 use std::thread;
 use std::time::Duration;
 
-use motolii_doc::{render_with_snapshot, Bpm, Document, DocumentWriter, WriterMessage};
+use motolii_doc::{
+    render_with_snapshot, Bpm, Document, DocumentWriter, WriterMessage, WRITER_VERSION,
+};
 use motolii_plugin::reference::reference_catalog;
 
 fn assert_send_sync<T: Send + Sync>() {}
@@ -26,11 +28,11 @@ fn arc_document_is_send_sync_for_reader_threads() {
 
 #[test]
 fn render_thread_finishes_on_stale_snapshot_while_writer_edits() {
-    let mut writer = reference_writer(Document::new_v1());
+    let mut writer = reference_writer(Document::new_current());
     let initial_bpm = writer.snapshot().bpm.num();
     let snap = writer.snapshot();
-    assert_eq!(snap.version, 1);
-    assert_eq!(render_with_snapshot(&snap), 1);
+    assert_eq!(snap.version, WRITER_VERSION);
+    assert_eq!(render_with_snapshot(&snap), WRITER_VERSION);
 
     let barrier = Arc::new(Barrier::new(2));
     let snap_for_render = Arc::clone(&snap);
@@ -59,7 +61,7 @@ fn render_thread_finishes_on_stale_snapshot_while_writer_edits() {
     barrier.wait();
     for i in 0..2_000 {
         writer.edit(|doc| {
-            doc.version = 2;
+            doc.version = WRITER_VERSION + 1;
             doc.bpm = Bpm::try_new(120 + (i % 40), 1).unwrap();
         });
         if i % 200 == 0 {
@@ -70,14 +72,14 @@ fn render_thread_finishes_on_stale_snapshot_while_writer_edits() {
     let (checksum, seen_version, seen_bpm, _) = render.join().unwrap();
     assert!(checksum > 0);
     // 古いスナップショットの観測値は編集前のまま
-    assert_eq!(seen_version, 1);
+    assert_eq!(seen_version, WRITER_VERSION);
     assert_eq!(seen_bpm, initial_bpm);
-    assert_eq!(snap.version, 1);
+    assert_eq!(snap.version, WRITER_VERSION);
     assert_eq!(snap.bpm.num(), initial_bpm);
 
     // writer側は最新
     let after = writer.snapshot();
-    assert_eq!(after.version, 2);
+    assert_eq!(after.version, WRITER_VERSION + 1);
     assert_ne!(after.bpm.num(), initial_bpm);
     assert!(writer.revision >= 2_000);
 }
@@ -92,7 +94,7 @@ fn background_thread_delivers_message_only_writer_applies() {
             .unwrap();
     });
 
-    let mut writer = reference_writer(Document::new_v1());
+    let mut writer = reference_writer(Document::new_current());
     let before = writer.snapshot();
     assert_eq!(before.bpm.num(), Bpm::DEFAULT.num());
 
@@ -108,7 +110,7 @@ fn background_thread_delivers_message_only_writer_applies() {
 
 #[test]
 fn multiple_reader_threads_share_one_immutable_snapshot() {
-    let mut writer = reference_writer(Document::new_v1());
+    let mut writer = reference_writer(Document::new_current());
     writer.edit(|doc| {
         doc.bpm = Bpm::try_new(132, 1).unwrap();
     });
@@ -122,7 +124,7 @@ fn multiple_reader_threads_share_one_immutable_snapshot() {
         handles.push(thread::spawn(move || {
             barrier.wait();
             assert_eq!(snap.bpm.num(), 132);
-            assert_eq!(render_with_snapshot(&snap), 1);
+            assert_eq!(render_with_snapshot(&snap), WRITER_VERSION);
             snap.version
         }));
     }
@@ -135,9 +137,9 @@ fn multiple_reader_threads_share_one_immutable_snapshot() {
     });
 
     for h in handles {
-        assert_eq!(h.join().unwrap(), 1);
+        assert_eq!(h.join().unwrap(), WRITER_VERSION);
     }
-    assert_eq!(snap.version, 1);
+    assert_eq!(snap.version, WRITER_VERSION);
     assert_eq!(snap.bpm.num(), 132);
     assert_eq!(writer.snapshot().version, 9);
 }

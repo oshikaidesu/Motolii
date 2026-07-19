@@ -359,7 +359,7 @@ fn scaffold_golden_stub() {{
 }}
 """
     elif kind == "layer_source":
-        body = f"""use motolii_core::{{ColorSpace, CompCamera, FrameDesc, PixelFormat, RationalTime}};
+        body = f"""use motolii_core::{{CanonicalPoint, ColorSpace, CompCamera, FrameDesc, PixelFormat, RationalTime}};
 use motolii_eval::Value;
 use motolii_gpu::{{download_rgba, PipelineCache}};
 use motolii_plugin::{{LayerSourceContext, LayerSourcePlugin, ResolvedParams, TextureRef}};
@@ -380,7 +380,14 @@ fn scaffold_is_pure() {{
         RationalTime::ZERO,
         &params,
         LayerSourceContext {{
-            camera: CompCamera::DEFAULT,
+            camera: CompCamera::try_new(
+                CanonicalPoint::CENTER,
+                0.0,
+                1.0,
+                i64::from(frame.width),
+                i64::from(frame.height),
+            )
+            .unwrap(),
         }},
         frame,
     )
@@ -424,7 +431,14 @@ fn scaffold_golden_stub() {{
             RationalTime::ZERO,
             &params,
             LayerSourceContext {{
-                camera: CompCamera::DEFAULT,
+                camera: CompCamera::try_new(
+                    CanonicalPoint::CENTER,
+                    0.0,
+                    1.0,
+                    i64::from(frame.width),
+                    i64::from(frame.height),
+                )
+                .unwrap(),
             }},
             TextureRef {{
                 texture: &output,

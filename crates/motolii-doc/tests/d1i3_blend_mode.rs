@@ -136,7 +136,7 @@ fn rect_clip(layer: u64, color: [f64; 4]) -> Clip {
 }
 
 fn composite_mode_in_graph(blend: BlendMode) -> CompositeMode {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let bg = doc.layers.allocate("bg").unwrap();
     let fg = doc.layers.allocate("fg").unwrap();

@@ -17,7 +17,7 @@ use motolii_plugins_firstparty::first_party_catalog;
 use serde_json::{json, Map};
 
 fn minimal_asset_clip_doc() -> (Document, motolii_doc::LayerId) {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let layer = doc.layers.allocate("layer").unwrap();
     let track_id = doc.track_ids.allocate("V1").unwrap();
     let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
@@ -57,8 +57,8 @@ fn unknown_effect_plugin_id_loads_warns_and_roundtrips() {
     }
 
     // 1. load成功 = validateが通る(D1a/D1hの拒否対象ではない)
-    doc.version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
-    doc.min_reader_version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
+    doc.version = motolii_doc::WRITER_VERSION;
+    doc.min_reader_version = motolii_doc::MIN_READER_VERSION_FOR_COMP_CAMERA;
     doc.validate()
         .expect("unknown plugin_id must not fail validate (open side)");
 
@@ -87,7 +87,7 @@ fn unknown_effect_plugin_id_loads_warns_and_roundtrips() {
 
 #[test]
 fn unknown_clip_source_plugin_id_loads_warns_and_roundtrips() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let layer = doc.layers.allocate("layer").unwrap();
     let track_id = doc.track_ids.allocate("V1").unwrap();
     let mut extra = Map::new();
@@ -146,8 +146,8 @@ fn known_plugin_future_version_is_degraded_not_a_downgrade_error() {
         });
     }
 
-    doc.version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
-    doc.min_reader_version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
+    doc.version = motolii_doc::WRITER_VERSION;
+    doc.min_reader_version = motolii_doc::MIN_READER_VERSION_FOR_COMP_CAMERA;
     doc.validate()
         .expect("future effect_version must not be a hard error");
     let resolved = doc
@@ -184,8 +184,8 @@ fn known_plugin_current_version_has_no_warning() {
             definition_id: def_id,
         });
     }
-    doc.version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
-    doc.min_reader_version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
+    doc.version = motolii_doc::WRITER_VERSION;
+    doc.min_reader_version = motolii_doc::MIN_READER_VERSION_FOR_COMP_CAMERA;
     doc.validate().unwrap();
     assert!(doc
         .prepare_plugins(&first_party_catalog().unwrap())
@@ -215,8 +215,8 @@ fn plugin_kind_mismatch_in_effect_slot_is_typed_error() {
             definition_id: def_id,
         });
     }
-    doc.version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
-    doc.min_reader_version = motolii_doc::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
+    doc.version = motolii_doc::WRITER_VERSION;
+    doc.min_reader_version = motolii_doc::MIN_READER_VERSION_FOR_COMP_CAMERA;
     doc.validate()
         .expect("intrinsic validation does not know plugin kinds");
     let err = doc
@@ -239,7 +239,7 @@ fn plugin_kind_mismatch_in_effect_slot_is_typed_error() {
 #[test]
 fn plugin_kind_mismatch_in_clip_source_slot_is_typed_error() {
     // core.filter.opacity は Filter 種別。ClipSource::Plugin(LayerSourceスロット)は誤り。
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let layer = doc.layers.allocate("layer").unwrap();
     let track_id = doc.track_ids.allocate("V1").unwrap();
     doc.tracks.push(Track {
@@ -279,13 +279,19 @@ fn plugin_kind_mismatch_in_clip_source_slot_is_typed_error() {
 fn raw_json_with_unknown_plugin_id_and_future_version_loads_and_preserves_extra() {
     // 実際のJSON経由(load_document_bytes相当)でも同じ契約が成立することを固定する。
     let input = json!({
-        "version": 4,
-        "min_reader_version": 4,
+        "version": 5,
+        "min_reader_version": 5,
         "composition": {
             "aspect_num": 16,
             "aspect_den": 9,
             "duration": {"num": 10, "den": 1},
-            "fps": {"num": 30, "den": 1}
+            "fps": {"num": 30, "den": 1},
+            "camera": {
+                "kind": "planar_orthographic",
+                "center": {"const": {"Vec2": [0.0, 0.0]}},
+                "roll_radians": {"const": {"F64": 0.0}},
+                "height": {"const": {"F64": 1.0}}
+            }
         },
         "bpm": {"num": 120, "den": 1},
         "layers": {"next": 1, "entries": [{"id": 0, "name": "L"}]},

@@ -211,6 +211,45 @@ fn blend_mode_harness_runtime_wiring_change_is_allowed() {
     assert!(ok, "semantic harness change must be allowed: {msg}");
 }
 
+#[test]
+fn cam_g0_oracle_is_semantic_and_harness_is_not() {
+    let root = workspace_root();
+    let tsv = std::fs::read_to_string(
+        root.join("crates/motolii-testkit/golden_policy/classification.tsv"),
+    )
+    .expect("read classification.tsv");
+    assert!(tsv.lines().any(|line| {
+        line == "semantic\tcrates/motolii-render/tests/oracles/cam_g0_planar_identity.tsv"
+    }));
+    assert!(!tsv
+        .lines()
+        .any(|line| { line == "semantic\tcrates/motolii-render/tests/cam_g0_planar_identity.rs" }));
+}
+
+#[test]
+fn cam_g0_oracle_modification_is_rejected() {
+    let (ok, msg) = run_policy(
+        None,
+        false,
+        "M\tcrates/motolii-render/tests/oracles/cam_g0_planar_identity.tsv\n",
+    );
+    assert!(!ok, "expected fail for semantic oracle modify: {msg}");
+    assert!(
+        msg.contains("semantic golden modified"),
+        "unexpected: {msg}"
+    );
+}
+
+#[test]
+fn cam_g0_harness_change_is_allowed() {
+    let (ok, msg) = run_policy(
+        None,
+        false,
+        "M\tcrates/motolii-render/tests/cam_g0_planar_identity.rs\n",
+    );
+    assert!(ok, "CAM-G0 harness change must be allowed: {msg}");
+}
+
 /// 台帳ブートストラップPR相当: HEADでsemantic登録済みの既存ファイルを同時に書き換えても拒否する。
 /// (base未登録を理由に M を許可するとS16が初回PRで空洞化する)
 #[test]

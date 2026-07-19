@@ -1,6 +1,6 @@
 //! D1aスキーマ本体: コンポ/トラック/クリップ/グループ/エンベロープ。
 //!
-//! `CompCamera`はここに入れない(#55 / 監査C-7)。入れる判断はCQ-5が先。
+//! D1j: `Composition.camera`は`CompCameraDoc::PlanarOrthographic`のみ。
 
 use std::collections::BTreeMap;
 
@@ -31,14 +31,37 @@ pub enum CompositionError {
     NonPositiveAspectDen(i64),
 }
 
+/// コンポジションカメラ(D1j)。永続variantは`PlanarOrthographic`のみ。
+#[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CompCameraDoc {
+    PlanarOrthographic {
+        center: DocParam,
+        roll_radians: DocParam,
+        height: DocParam,
+    },
+}
+
+impl CompCameraDoc {
+    /// 既定: center [0,0]、roll 0、height 1（すべて Const）。
+    pub fn default_planar_orthographic() -> Self {
+        Self::PlanarOrthographic {
+            center: DocParam::const_vec2([0.0, 0.0]),
+            roll_radians: DocParam::const_f64(0.0),
+            height: DocParam::const_f64(1.0),
+        }
+    }
+}
+
 /// コンポ設定。高さは正準空間で常に1.0 — 幅は有理数アスペクト。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Composition {
     /// 正準幅 = aspect_num/aspect_den(既約・正)。高さは1.0固定。
     aspect_num: i64,
     aspect_den: i64,
     pub duration: RationalTime,
     pub fps: Fps,
+    pub camera: CompCameraDoc,
 }
 
 #[derive(DeserializeDerive)]
@@ -47,6 +70,7 @@ struct RawComposition {
     aspect_den: i64,
     duration: RationalTime,
     fps: Fps,
+    camera: CompCameraDoc,
 }
 
 impl<'de> Deserialize<'de> for Composition {
@@ -55,8 +79,11 @@ impl<'de> Deserialize<'de> for Composition {
         D: Deserializer<'de>,
     {
         let raw = RawComposition::deserialize(deserializer)?;
-        Composition::try_new(raw.aspect_num, raw.aspect_den, raw.duration, raw.fps)
-            .map_err(de::Error::custom)
+        let mut composition =
+            Composition::try_new(raw.aspect_num, raw.aspect_den, raw.duration, raw.fps)
+                .map_err(de::Error::custom)?;
+        composition.camera = raw.camera;
+        Ok(composition)
     }
 }
 
@@ -79,6 +106,7 @@ impl Composition {
             aspect_den: aspect_den / g as i64,
             duration,
             fps,
+            camera: CompCameraDoc::default_planar_orthographic(),
         })
     }
 
@@ -92,11 +120,11 @@ impl Composition {
         .expect("16/9")
     }
 
-    pub fn aspect_num(self) -> i64 {
+    pub fn aspect_num(&self) -> i64 {
         self.aspect_num
     }
 
-    pub fn aspect_den(self) -> i64 {
+    pub fn aspect_den(&self) -> i64 {
         self.aspect_den
     }
 }

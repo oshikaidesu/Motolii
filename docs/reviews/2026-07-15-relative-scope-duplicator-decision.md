@@ -137,7 +137,7 @@ value      = pcg32(RandomKey)
 
 ## 6. 実装順
 
-この順序は意味決定間の依存を示すが、M3製品実装の着手許可ではない。[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)の発効中はU1f/U2f/U2gを停止し、再締結後のM3入場PRでIDと依存を再翻訳する。
+この順序は意味決定間の依存を示すが、M3製品実装の着手許可ではない。[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)は解除済みだが、M3入場PRでIDと依存を再翻訳するまでU1f/U2f/U2gを停止する。
 
 1. M3-U2f: modifier+drag one-shot Relative Move
 2. M3-U1f: K0を待たず透けるStage/off-frame selection

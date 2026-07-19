@@ -47,15 +47,29 @@ impl Quality {
         if scale == 1 {
             return desc;
         }
-        let width = (desc.width / scale).max(1);
-        let height = (desc.height / scale).max(1);
-        FrameDesc::packed(
-            width,
-            height,
-            desc.format,
-            desc.color_space,
-            desc.premultiplied,
-        )
+
+        if !desc.width.is_multiple_of(scale) || !desc.height.is_multiple_of(scale) {
+            return desc;
+        }
+
+        let w = desc.width / scale;
+        let h = desc.height / scale;
+
+        if i128::from(w) * i128::from(desc.height) != i128::from(h) * i128::from(desc.width) {
+            return desc;
+        }
+
+        let bpp = match desc.format.bytes_per_pixel() {
+            Some(bpp) => bpp,
+            None => return desc,
+        };
+
+        if w.checked_mul(bpp).is_none() {
+            return desc;
+        }
+
+        FrameDesc::try_packed(w, h, desc.format, desc.color_space, desc.premultiplied)
+            .unwrap_or(desc)
     }
 }
 
@@ -90,5 +104,48 @@ mod tests {
         let scaled = q.render_desc(desc);
         assert_eq!(scaled.width, 1);
         assert_eq!(scaled.height, 1);
+    }
+
+    #[test]
+    fn draft_render_desc_preserves_metadata_and_recomputes_stride() {
+        let desc = FrameDesc::packed(1920, 1080, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let scaled = Quality::DRAFT.render_desc(desc);
+        assert_eq!(scaled.width, 960);
+        assert_eq!(scaled.height, 540);
+        assert_eq!(scaled.format, desc.format);
+        assert_eq!(scaled.color_space, desc.color_space);
+        assert_eq!(scaled.premultiplied, desc.premultiplied);
+        assert_eq!(scaled.stride, 960 * 4);
+    }
+
+    #[test]
+    fn draft_render_desc_leaves_non_divisible_dimensions_unchanged() {
+        let desc = FrameDesc::packed(16, 9, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        assert_eq!(Quality::DRAFT.render_desc(desc), desc);
+    }
+
+    #[test]
+    fn draft_render_desc_leaves_odd_dimensions_unchanged() {
+        let desc = FrameDesc::packed(13, 7, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        assert_eq!(Quality::DRAFT.render_desc(desc), desc);
+    }
+
+    #[test]
+    fn draft_render_desc_leaves_non_packed_format_unchanged() {
+        let desc = FrameDesc::yuv(1920, 1080, PixelFormat::Yuv420p, ColorSpace::Rec709Limited);
+        assert_eq!(Quality::DRAFT.render_desc(desc), desc);
+    }
+
+    #[test]
+    fn draft_render_desc_leaves_stride_overflow_unchanged() {
+        let desc = FrameDesc {
+            width: 2_147_483_648,
+            height: 1_080,
+            stride: 1,
+            format: PixelFormat::Rgba8Unorm,
+            color_space: ColorSpace::Srgb,
+            premultiplied: true,
+        };
+        assert_eq!(Quality::DRAFT.render_desc(desc), desc);
     }
 }

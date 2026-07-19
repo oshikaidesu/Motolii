@@ -10,7 +10,7 @@ use motolii_doc::{
 use serde_json::json;
 
 fn valid_minimal_raster() -> Document {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let layer = doc.layers.allocate("a").unwrap();
     let tid = doc.track_ids.allocate("V1").unwrap();
     let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
@@ -137,7 +137,7 @@ fn serde_rejects_modifiers_on_asset_source() {
 
 #[test]
 fn validate_rejects_video_as_svg_asset() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let video = doc.assets.allocate("clip", "video/mp4", "h").unwrap();
     let layer = doc.layers.allocate("v").unwrap();
     let tid = doc.track_ids.allocate("V1").unwrap();
@@ -168,7 +168,7 @@ fn validate_rejects_video_as_svg_asset() {
 
 #[test]
 fn validate_accepts_svg_asset_type() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let svg = doc.assets.allocate("icon", "image/svg+xml", "h").unwrap();
     let layer = doc.layers.allocate("v").unwrap();
     let tid = doc.track_ids.allocate("V1").unwrap();
@@ -192,7 +192,7 @@ fn validate_accepts_svg_asset_type() {
 
 #[test]
 fn validate_rejects_non_font_for_text_path() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let video = doc.assets.allocate("clip", "video/mp4", "h").unwrap();
     let layer = doc.layers.allocate("v").unwrap();
     let tid = doc.track_ids.allocate("V1").unwrap();
@@ -222,7 +222,7 @@ fn validate_rejects_non_font_for_text_path() {
 
 #[test]
 fn validate_accepts_font_ttf_for_text_path() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let font = doc.assets.allocate("face", "font/ttf", "h").unwrap();
     let layer = doc.layers.allocate("v").unwrap();
     let tid = doc.track_ids.allocate("V1").unwrap();

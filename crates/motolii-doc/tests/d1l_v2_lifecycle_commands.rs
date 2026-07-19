@@ -1,6 +1,6 @@
 //! D1l Stage B-1/2: v2 lifecycle command と reservation 契約の固定。
 
-mod common;
+pub mod common;
 
 use std::collections::BTreeMap;
 
@@ -12,7 +12,8 @@ use motolii_doc::{
     DocKeyframe, DocKeyframeTrack, DocParam, DocValue, Document, EffectDefinition,
     EffectDefinitionId, EffectId, EffectInstance, EffectUse, ItemEnvelope, KeyframeId, LayerId,
     ParentLocator, PersistError, ResourceLimits, ScalarPropertyId, StableIdReservation, Track,
-    TrackId, TrackItem, MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS, WRITER_VERSION,
+    TrackId, TrackItem, MIN_READER_VERSION_FOR_COMP_CAMERA,
+    MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS, WRITER_VERSION,
 };
 use motolii_eval::Interp;
 use serde_json::{json, Value as JsonValue};
@@ -575,10 +576,7 @@ fn gate_rejects_v1_v2_v3_and_future_or_read_only_documents_without_mutation() {
             WRITER_VERSION + 1,
             MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
         ),
-        (
-            WRITER_VERSION,
-            MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS + 1,
-        ),
+        (WRITER_VERSION, MIN_READER_VERSION_FOR_COMP_CAMERA + 1),
     ];
     for (version, min_reader_version) in modes {
         let mut doc = f.doc.clone();
@@ -617,12 +615,18 @@ fn v4_inline_effect_envelope_json() -> JsonValue {
 fn v4_document_shell(envelope: JsonValue) -> JsonValue {
     json!({
         "version": WRITER_VERSION,
-        "min_reader_version": MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
+        "min_reader_version": MIN_READER_VERSION_FOR_COMP_CAMERA,
         "composition": {
             "aspect_num": 16,
             "aspect_den": 9,
             "duration": {"num": 10, "den": 1},
-            "fps": {"num": 30, "den": 1}
+            "fps": {"num": 30, "den": 1},
+            "camera": {
+                "kind": "planar_orthographic",
+                "center": {"const": {"Vec2": [0.0, 0.0]}},
+                "roll_radians": {"const": {"F64": 0.0}},
+                "height": {"const": {"F64": 1.0}}
+            }
         },
         "bpm": {"num": 120, "den": 1},
         "layers": {"next": 1, "entries": [{"id": 0, "name": "a"}]},
@@ -906,14 +910,11 @@ fn v1_add_effect_remove_effect_shape_is_unchanged() {
 }
 
 #[test]
-fn sanity_fixture_uses_current_v4_writer_contract() {
+fn sanity_fixture_uses_current_v5_writer_contract() {
     let f = v4_fixture();
     assert_eq!(f.doc.version, WRITER_VERSION);
-    assert_eq!(
-        f.doc.min_reader_version,
-        MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS
-    );
-    assert_eq!(f.doc.version, 4);
-    assert_eq!(f.doc.min_reader_version, 4);
+    assert_eq!(f.doc.min_reader_version, MIN_READER_VERSION_FOR_COMP_CAMERA);
+    assert_eq!(f.doc.version, 5);
+    assert_eq!(f.doc.min_reader_version, 5);
     let _ = f.track;
 }

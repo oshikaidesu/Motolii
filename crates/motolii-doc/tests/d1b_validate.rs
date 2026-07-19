@@ -6,7 +6,7 @@ use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
     AssetId, Clip, ClipSource, DocParam, Document, DocumentError, DocumentWriter, EffectDefinition,
     EffectDefinitionDraft, EffectDefinitionId, EffectId, EffectUse, ItemEnvelope, LayerId,
-    LookAtAxis, Soundtrack, Track, TrackId, TrackItem, MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
+    LookAtAxis, Soundtrack, Track, TrackId, TrackItem, MIN_READER_VERSION_FOR_COMP_CAMERA,
 };
 use motolii_plugin::reference::reference_catalog;
 use serde_json::Map;
@@ -18,7 +18,7 @@ fn reference_writer(doc: Document) -> DocumentWriter {
 }
 
 fn valid_minimal() -> Document {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let layer = doc.layers.allocate("a").unwrap();
     let tid = doc.track_ids.allocate("V1").unwrap();
     let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
@@ -170,8 +170,8 @@ fn empty_effect_definition_plugin_id_fails() {
             definition_id: def_id,
         });
     }
-    doc.version = 4;
-    doc.min_reader_version = 4;
+    doc.version = 5;
+    doc.min_reader_version = 5;
     assert!(matches!(
         doc.validate(),
         Err(DocumentError::EmptyEffectDefinitionPluginId { .. })
@@ -239,10 +239,10 @@ fn prepare_effect_keeps_current_version_and_writer_unchanged() {
     assert_eq!(writer.revision, revision_before);
     assert_eq!(writer.undo_len(), undo_before);
     assert_eq!(writer.redo_len(), redo_before);
-    assert_eq!(snap_before.version, 4);
+    assert_eq!(snap_before.version, 5);
     assert_eq!(
         snap_before.min_reader_version,
-        MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS
+        MIN_READER_VERSION_FOR_COMP_CAMERA
     );
     assert!(
         cmd.stable_id_reservation().is_some(),
@@ -257,8 +257,8 @@ fn prepare_effect_keeps_current_version_and_writer_unchanged() {
 fn stable_id_document_is_open_mode_read_write() {
     use motolii_doc::{classify_open_mode, OpenMode, READER_VERSION, WRITER_VERSION};
 
-    assert_eq!(READER_VERSION, 4);
-    assert_eq!(WRITER_VERSION, 4);
+    assert_eq!(READER_VERSION, 5);
+    assert_eq!(WRITER_VERSION, 5);
     assert_eq!(
         classify_open_mode(2, 2),
         OpenMode::ReadWrite,
@@ -320,7 +320,7 @@ fn parent_self_cycle_fails() {
 
 #[test]
 fn parent_mutual_cycle_fails() {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let a = doc.layers.allocate("a").unwrap();
     let b = doc.layers.allocate("b").unwrap();
     let tid = doc.track_ids.allocate("V1").unwrap();

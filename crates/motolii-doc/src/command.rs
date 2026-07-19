@@ -1391,7 +1391,7 @@ struct ReservationCommit {
 }
 
 pub(crate) fn guard_effect_lifecycle_document(doc: &Document) -> Result<(), CommandError> {
-    let required = validate::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS;
+    let required = validate::MIN_READER_VERSION_FOR_COMP_CAMERA;
     if doc.version != WRITER_VERSION || doc.min_reader_version != required {
         return Err(CommandError::EffectLifecycleRequiresV4Document {
             version: doc.version,

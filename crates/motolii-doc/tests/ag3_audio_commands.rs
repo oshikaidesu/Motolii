@@ -1,16 +1,16 @@
 #![allow(deprecated)]
 
 //! AG-3: audio component commandと分離macroの受け入れテスト。
+pub mod common;
 
 use std::path::Path;
 use std::sync::Arc;
 
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
-    build_import_clip_source, load_document, plan_detach_audio, save_document, AudioComponent,
-    Clip, ClipSource, Command, CommandError, DocParam, Document, DocumentError, DocumentWriter,
-    ImportAvMode, ItemEnvelope, ParentLocator, Track, TrackItem, VideoComponent,
-    MIN_READER_VERSION_FOR_ASSET_COMPONENTS,
+    build_import_clip_source, load_document, plan_detach_audio, AudioComponent, Clip, ClipSource,
+    Command, CommandError, DocParam, Document, DocumentError, DocumentWriter, ImportAvMode,
+    ItemEnvelope, ParentLocator, Track, TrackItem, VideoComponent,
 };
 use motolii_plugin::reference::reference_catalog;
 
@@ -25,9 +25,7 @@ struct Fixture {
 }
 
 fn fixture() -> Fixture {
-    let mut doc = Document::new_v1();
-    doc.version = MIN_READER_VERSION_FOR_ASSET_COMPONENTS;
-    doc.min_reader_version = MIN_READER_VERSION_FOR_ASSET_COMPONENTS;
+    let mut doc = Document::new_current();
     let asset = doc
         .assets
         .allocate("clip", "video/mp4", "sha256:a")
@@ -197,7 +195,7 @@ fn detach_survives_save_reload_and_undo_restores() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("doc.json");
-    save_document(Path::new(&path), &detached).unwrap();
+    common::session::save_document_via_session(Path::new(&path), &detached);
     let reloaded = load_document(Path::new(&path)).unwrap();
     reloaded.validate().unwrap();
     assert_detached_av_split(
@@ -395,7 +393,7 @@ fn mute_and_gain_survive_save_reload() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("doc.json");
-    save_document(Path::new(&path), &before).unwrap();
+    common::session::save_document_via_session(Path::new(&path), &before);
     let after = load_document(Path::new(&path)).unwrap();
     assert!(!audio_components(&after)[0].enabled);
     assert_eq!(audio_components(&after)[0].gain, DocParam::const_f64(0.3));

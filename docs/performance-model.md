@@ -140,13 +140,13 @@ Draft/Finalは同一`render_frame(t, Quality)`だが、Draftは`Quality::render_
 |---|---|
 | `scale == 1` | fullをそのまま返す(恒等) |
 | `scale > 1` かつ `full_w % scale == 0` かつ `full_h % scale == 0` | `w = full_w / scale`, `h = full_h / scale`(整数除算。切り捨ては発生しない) |
-| 各辺の下限 | `max(1, …)` — 少なくとも1ピクセル |
+| `scale > 1` かつ少なくとも一辺が非整除 | fullをそのまま返す。切り捨て・`max(1, …)`・stretch/crop/letterboxを行わない |
 
-**未決**: `full_w` または `full_h` が `scale` で整除しない場合の寸法。候補として偶数への切り上げ等が監査で挙がっているが **v1採択前**。現行実装は各辺を独立に `full_dim / scale`(Rust `u32`除算=切り捨て)し `max(1, …)` とする(`motolii-core/src/quality.rs`)。
+縮小候補は入力とexact rational aspectが一致し、packed strideをoverflowせず構築できる場合だけ採用する。非packed format、stride overflow、`FrameDesc::try_packed`失敗でもfullを完全不変で返す。正本は[D1k-S §5](reviews/2026-07-18-d1k-runtime-camera-thaw-spec.md#5-qualityrender_desc-契約signature-維持)。
 
 **運用前提**: コンポ/書き出しの代表解像度(1080p等)は `scale ∈ {2, 4}` で両辺整除する。非整除はエッジケース。
 
-**YUV**: 4:2:0経路は偶数寸法必須(`FrameDesc`検証)。丸め規則の最終採択時は偶数性との整合を審査する。
+**YUV**: 4:2:0経路は偶数寸法必須(`FrameDesc`検証)。`Quality::render_desc`は非packed formatを縮小せず入力descriptorを保つ。
 
 ### Draft/Final一致との関係
 

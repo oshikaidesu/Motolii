@@ -2,7 +2,10 @@
 
 use std::sync::Arc;
 
-use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, Quality, TimeMap};
+use motolii_core::{
+    CanonicalPoint as CoreCanonicalPoint, ColorSpace, CompCamera, Fps, FrameDesc, PixelFormat,
+    Quality, TimeMap,
+};
 use motolii_nodes::{CanonicalPoint, CanonicalSize, RectOverlay};
 use motolii_render::{render_frame, RenderFrameRequest, SolidSource};
 use motolii_testkit::gpu_or_skip;
@@ -48,6 +51,14 @@ fn transport_frame_plan_drives_render_with_quality_and_time() {
             },
             color: [1.0, 0.0, 0.0, 0.5],
         },
+        camera: CompCamera::try_new(
+            CoreCanonicalPoint::CENTER,
+            0.0,
+            1.0,
+            i64::from(desc.width),
+            i64::from(desc.height),
+        )
+        .unwrap(),
     };
 
     let rendered = render_frame(&gpu, &request, plan.quality).expect("render_frame");

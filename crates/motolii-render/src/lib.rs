@@ -36,6 +36,7 @@ pub struct RenderFrameRequest {
     pub source: SolidSource,
     /// Overlay色もstraight RGBAとして受け取り、OverlayNodeがpremul化する。
     pub overlay: RectOverlay,
+    pub camera: CompCamera,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -48,6 +49,7 @@ pub struct BackgroundTextureRequest<'a> {
     pub background: TextureRef<'a>,
     /// Overlay色はstraight RGBAとして受け取り、OverlayNodeがpremul化する。
     pub overlay: RectOverlay,
+    pub camera: CompCamera,
 }
 
 #[derive(Debug)]
@@ -169,6 +171,8 @@ pub enum RenderError {
     TimeMap(#[from] TimeMapError),
     #[error(transparent)]
     Gpu(#[from] GpuRuntimeError),
+    #[error(transparent)]
+    Camera(#[from] motolii_core::CompCameraError),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -183,8 +187,9 @@ enum TexProducer {
 }
 
 /// グラフ実行時に呼び出し側から注入するテクスチャとメタデータ。
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub struct RenderGraphInputs<'a> {
+    pub camera: CompCamera,
     pub video_sources: &'a [(TextureId, TextureRef<'a>)],
     /// 明示時はグラフ内のreporting SolidSourceを必須にしない。
     pub source_time: Option<RationalTime>,
@@ -320,13 +325,19 @@ pub fn render_frame(
     request: &RenderFrameRequest,
     quality: Quality,
 ) -> Result<RenderedFrame, RenderError> {
+    request.camera.ensure_matches_frame_desc(&request.desc)?;
     let mut session = RenderSession::new(gpu);
     render_graph_cached(
         gpu,
         &mut session,
         request.timeline_time,
         &linear_graph_from_request(request),
-        &RenderGraphInputs::default(),
+        &RenderGraphInputs {
+            camera: request.camera,
+            video_sources: &[],
+            source_time: None,
+            plugins: None,
+        },
         quality,
     )
 }
@@ -337,6 +348,7 @@ pub fn render_frame_with_background_texture(
     request: &BackgroundTextureRequest<'_>,
     quality: Quality,
 ) -> Result<RenderedFrame, RenderError> {
+    request.camera.ensure_matches_frame_desc(&request.desc)?;
     validate_render_desc(request.desc)?;
     validate_background_desc(request.desc, request.background.desc)?;
     // 外部背景経路も render_graph 一本化。オーバーレイ形状だけ毎フレーム差し替える。
@@ -351,6 +363,7 @@ pub fn render_frame_with_background_texture(
         request.timeline_time,
         &graph,
         &RenderGraphInputs {
+            camera: request.camera,
             video_sources: &[(TextureId(0), request.background)],
             source_time: Some(source_time),
             plugins: None,
@@ -363,15 +376,22 @@ pub fn render_graph(
     gpu: &GpuCtx,
     timeline_time: RationalTime,
     graph: &LinearRenderGraph,
+    camera: CompCamera,
     quality: Quality,
 ) -> Result<RenderedFrame, RenderError> {
+    camera.ensure_matches_frame_desc(&graph.desc)?;
     let mut session = RenderSession::new(gpu);
     render_graph_cached(
         gpu,
         &mut session,
         timeline_time,
         graph,
-        &RenderGraphInputs::default(),
+        &RenderGraphInputs {
+            camera,
+            video_sources: &[],
+            source_time: None,
+            plugins: None,
+        },
         quality,
     )
 }
@@ -411,6 +431,7 @@ fn render_graph_cached_inner(
 ) -> Result<RenderedFrame, RenderError> {
     // レンダ入口でデバイス健全性を確認する(M3E-5)。lost/uncapturedを型付きで返す。
     gpu.check_health()?;
+    inputs.camera.ensure_matches_frame_desc(&graph.desc)?;
     validate_render_desc(graph.desc)?;
     let graph_plan = validate_linear_graph(graph, timeline_time, inputs)?;
 
@@ -567,6 +588,7 @@ fn render_graph_cached_inner(
                     &mut encoder,
                     timeline_time,
                     quality,
+                    inputs.camera,
                     &textures,
                     desc,
                     out_ref,
@@ -935,6 +957,7 @@ fn dispatch_plugin(
     encoder: &mut wgpu::CommandEncoder,
     timeline_time: RationalTime,
     quality: Quality,
+    camera: CompCamera,
     textures: &[Option<wgpu::Texture>],
     desc: FrameDesc,
     output: TextureRef<'_>,
@@ -1001,9 +1024,7 @@ fn dispatch_plugin(
             encoder,
             timeline_time,
             params,
-            LayerSourceContext {
-                camera: CompCamera::DEFAULT,
-            },
+            LayerSourceContext { camera },
             output,
         )?;
         return Ok(());
@@ -1269,13 +1290,27 @@ fn to_u8(v: f32) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use motolii_core::{Fps, OverrunMode, Quality, TimeMap};
+    use motolii_core::{
+        CanonicalPoint as CoreCanonicalPoint, CompCamera, CompCameraError, Fps, OverrunMode,
+        Quality, TimeMap,
+    };
     use motolii_eval::Value;
     use motolii_gpu::download_rgba;
     use motolii_nodes::{CanonicalPoint, CanonicalSize};
     use motolii_plugin::reference::register_reference_plugins;
     use motolii_testkit::cpu_reference::{expected_fixed_graph, premul_over_u8};
     use motolii_testkit::{assert_rgba_close, gpu_or_skip, tol, RgbaImageDesc};
+
+    fn camera_for_desc(desc: FrameDesc) -> CompCamera {
+        CompCamera::try_new(
+            CoreCanonicalPoint::CENTER,
+            0.0,
+            1.0,
+            i64::from(desc.width),
+            i64::from(desc.height),
+        )
+        .unwrap()
+    }
 
     #[test]
     fn render_frame_runs_fixed_overlay_composite_graph() {
@@ -1348,7 +1383,12 @@ mod tests {
             &mut session,
             request.timeline_time,
             &linear_graph_from_request(&request),
-            &RenderGraphInputs::default(),
+            &RenderGraphInputs {
+                camera: camera_for_desc(request.desc),
+                video_sources: &[],
+                source_time: None,
+                plugins: None,
+            },
             Quality::FINAL,
         )
         .unwrap_err();
@@ -1367,6 +1407,7 @@ mod tests {
                     &gpu,
                     request.timeline_time,
                     &linear_graph_from_request(&request),
+                    request.camera,
                     quality,
                 )
                 .unwrap();
@@ -1424,8 +1465,10 @@ mod tests {
 
         let mut session = RenderSession::new(&gpu);
         let inputs = RenderGraphInputs {
+            camera: camera_for_desc(desc),
+            video_sources: &[],
+            source_time: None,
             plugins: Some(&registry),
-            ..RenderGraphInputs::default()
         };
 
         let rendered = render_graph_cached(
@@ -1473,9 +1516,13 @@ mod tests {
     fn rendered_frame_survives_next_render() {
         let Some(gpu) = gpu_or_skip() else { return };
         let mut session = RenderSession::new(&gpu);
-        let inputs = RenderGraphInputs::default();
-
         let first_request = centered_request();
+        let inputs = RenderGraphInputs {
+            camera: camera_for_desc(first_request.desc),
+            video_sources: &[],
+            source_time: None,
+            plugins: None,
+        };
         let first = render_graph_cached(
             &gpu,
             &mut session,
@@ -1521,7 +1568,12 @@ mod tests {
             &mut session,
             request.timeline_time,
             &linear_graph_from_request(&request),
-            &RenderGraphInputs::default(),
+            &RenderGraphInputs {
+                camera: camera_for_desc(request.desc),
+                video_sources: &[],
+                source_time: None,
+                plugins: None,
+            },
             Quality::FINAL,
         )
         .unwrap();
@@ -1543,8 +1595,13 @@ mod tests {
     fn contract_violation_pool_alias_corrupts_prior_frame_pixels() {
         let Some(gpu) = gpu_or_skip() else { return };
         let mut session = RenderSession::new(&gpu);
-        let inputs = RenderGraphInputs::default();
         let first_request = centered_request();
+        let inputs = RenderGraphInputs {
+            camera: camera_for_desc(first_request.desc),
+            video_sources: &[],
+            source_time: None,
+            plugins: None,
+        };
 
         let first = render_graph_cached_pool_alias_for_test(
             &gpu,
@@ -1622,8 +1679,10 @@ mod tests {
             RationalTime::ZERO,
             &graph,
             &RenderGraphInputs {
+                camera: camera_for_desc(desc),
+                video_sources: &[],
+                source_time: None,
                 plugins: Some(&registry),
-                ..RenderGraphInputs::default()
             },
             Quality::FINAL,
         )
@@ -1660,7 +1719,12 @@ mod tests {
                 &mut session,
                 request.timeline_time,
                 &graph,
-                &RenderGraphInputs::default(),
+                &RenderGraphInputs {
+                    camera: camera_for_desc(request.desc),
+                    video_sources: &[],
+                    source_time: None,
+                    plugins: None,
+                },
                 Quality::FINAL,
             )
             .unwrap();
@@ -1731,9 +1795,10 @@ mod tests {
             RationalTime::ZERO,
             &graph,
             &RenderGraphInputs {
-                plugins: Some(&registry),
+                camera: camera_for_desc(desc),
+                video_sources: &[],
                 source_time: Some(RationalTime::ZERO),
-                ..RenderGraphInputs::default()
+                plugins: Some(&registry),
             },
             Quality::FINAL,
         )
@@ -1741,6 +1806,148 @@ mod tests {
         assert!(
             matches!(err, RenderError::PluginInputCount { got: 0, .. }),
             "expected PluginInputCount, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn plugin_dispatch_forwards_graph_camera_to_layer_source_context() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        use std::sync::OnceLock;
+
+        use motolii_gpu::PipelineCache;
+        use motolii_plugin::{LayerSourcePlugin, NodeDesc, PluginError};
+
+        static SEEN_CENTER_X_BITS: AtomicU64 = AtomicU64::new(0);
+        static SEEN_CENTER_Y_BITS: AtomicU64 = AtomicU64::new(0);
+        static SEEN_ROLL_BITS: AtomicU64 = AtomicU64::new(0);
+        static SEEN_HEIGHT_BITS: AtomicU64 = AtomicU64::new(0);
+        static SEEN_ASPECT_NUM: AtomicU64 = AtomicU64::new(0);
+        static SEEN_ASPECT_DEN: AtomicU64 = AtomicU64::new(0);
+
+        struct CameraProbeLayerSource;
+        impl LayerSourcePlugin for CameraProbeLayerSource {
+            fn desc(&self) -> &NodeDesc {
+                static DESC: OnceLock<NodeDesc> = OnceLock::new();
+                DESC.get_or_init(|| NodeDesc {
+                    id: PluginId("test.layer_source.camera_probe_graph"),
+                    version: 1,
+                    display_name: "CameraProbeGraph",
+                    category: "Utility",
+                    tags: &["test"],
+                    params: vec![],
+                    min_inputs: 0,
+                    max_inputs: 0,
+                })
+            }
+
+            fn render(
+                &self,
+                _gpu: &GpuCtx,
+                _pipelines: &mut PipelineCache,
+                encoder: &mut wgpu::CommandEncoder,
+                _t: RationalTime,
+                _params: &ResolvedParams,
+                ctx: LayerSourceContext,
+                output: TextureRef<'_>,
+            ) -> Result<(), PluginError> {
+                let center = ctx.camera.center();
+                SEEN_CENTER_X_BITS.store(center.x.to_bits(), Ordering::SeqCst);
+                SEEN_CENTER_Y_BITS.store(center.y.to_bits(), Ordering::SeqCst);
+                SEEN_ROLL_BITS.store(ctx.camera.roll_radians().to_bits(), Ordering::SeqCst);
+                SEEN_HEIGHT_BITS.store(ctx.camera.height().to_bits(), Ordering::SeqCst);
+                SEEN_ASPECT_NUM.store(ctx.camera.aspect_num() as u64, Ordering::SeqCst);
+                SEEN_ASPECT_DEN.store(ctx.camera.aspect_den() as u64, Ordering::SeqCst);
+                let view = output
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+                encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("camera-probe-graph"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                Ok(())
+            }
+        }
+        static PROBE: CameraProbeLayerSource = CameraProbeLayerSource;
+
+        let Some(gpu) = gpu_or_skip() else { return };
+        let mut registry = PluginRegistry::new();
+        registry.register_layer_source(&PROBE).unwrap();
+
+        let desc = FrameDesc::packed(16, 9, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let graph_camera =
+            CompCamera::try_new(CoreCanonicalPoint { x: 0.1, y: -0.2 }, 0.5, 2.0, 16, 9).unwrap();
+        let graph = LinearRenderGraph {
+            desc,
+            steps: vec![RenderStep::Plugin {
+                id: PluginId("test.layer_source.camera_probe_graph"),
+                params: ResolvedParams::new(),
+                inputs: vec![],
+                output: TextureId(0),
+            }],
+            output: TextureId(0),
+        };
+
+        SEEN_CENTER_X_BITS.store(0, Ordering::SeqCst);
+        SEEN_CENTER_Y_BITS.store(0, Ordering::SeqCst);
+        SEEN_ROLL_BITS.store(0, Ordering::SeqCst);
+        SEEN_HEIGHT_BITS.store(0, Ordering::SeqCst);
+        SEEN_ASPECT_NUM.store(0, Ordering::SeqCst);
+        SEEN_ASPECT_DEN.store(0, Ordering::SeqCst);
+        render_graph_cached(
+            &gpu,
+            &mut RenderSession::new(&gpu),
+            RationalTime::ZERO,
+            &graph,
+            &RenderGraphInputs {
+                camera: graph_camera,
+                video_sources: &[],
+                source_time: Some(RationalTime::ZERO),
+                plugins: Some(&registry),
+            },
+            Quality::FINAL,
+        )
+        .unwrap();
+        assert_eq!(
+            f64::from_bits(SEEN_CENTER_X_BITS.load(Ordering::SeqCst)),
+            graph_camera.center().x,
+            "graph camera center.x must reach LayerSourceContext unchanged"
+        );
+        assert_eq!(
+            f64::from_bits(SEEN_CENTER_Y_BITS.load(Ordering::SeqCst)),
+            graph_camera.center().y,
+            "graph camera center.y must reach LayerSourceContext unchanged"
+        );
+        assert_eq!(
+            f64::from_bits(SEEN_ROLL_BITS.load(Ordering::SeqCst)),
+            graph_camera.roll_radians(),
+            "graph camera roll must reach LayerSourceContext unchanged"
+        );
+        assert_eq!(
+            f64::from_bits(SEEN_HEIGHT_BITS.load(Ordering::SeqCst)),
+            graph_camera.height(),
+            "graph camera height must reach LayerSourceContext unchanged"
+        );
+        assert_eq!(
+            SEEN_ASPECT_NUM.load(Ordering::SeqCst),
+            graph_camera.aspect_num() as u64,
+            "graph camera aspect_num must reach LayerSourceContext unchanged"
+        );
+        assert_eq!(
+            SEEN_ASPECT_DEN.load(Ordering::SeqCst),
+            graph_camera.aspect_den() as u64,
+            "graph camera aspect_den must reach LayerSourceContext unchanged"
         );
     }
 
@@ -1838,9 +2045,10 @@ mod tests {
             RationalTime::ZERO,
             &graph,
             &RenderGraphInputs {
-                plugins: Some(&registry),
+                camera: camera_for_desc(desc),
+                video_sources: &[],
                 source_time: Some(RationalTime::ZERO),
-                ..RenderGraphInputs::default()
+                plugins: Some(&registry),
             },
             Quality::DRAFT,
         )
@@ -1927,7 +2135,12 @@ mod tests {
                 &mut RenderSession::new(&gpu),
                 RationalTime::ZERO,
                 &graph,
-                &RenderGraphInputs::default(),
+                &RenderGraphInputs {
+                    camera: camera_for_desc(desc),
+                    video_sources: &[],
+                    source_time: None,
+                    plugins: None,
+                },
                 quality,
             )
             .unwrap();
@@ -1969,8 +2182,10 @@ mod tests {
             RationalTime::ZERO,
             &graph,
             &RenderGraphInputs {
+                camera: camera_for_desc(desc),
+                video_sources: &[],
+                source_time: None,
                 plugins: Some(&registry),
-                ..RenderGraphInputs::default()
             },
             Quality::FINAL,
         )
@@ -2016,8 +2231,10 @@ mod tests {
             RationalTime::ZERO,
             &graph,
             &RenderGraphInputs {
+                camera: camera_for_desc(desc),
+                video_sources: &[],
+                source_time: None,
                 plugins: Some(&registry),
-                ..RenderGraphInputs::default()
             },
             Quality::FINAL,
         )
@@ -2064,7 +2281,14 @@ mod tests {
             ],
             output: TextureId(1),
         };
-        let err = render_graph(&gpu, RationalTime::ZERO, &graph, Quality::FINAL).unwrap_err();
+        let err = render_graph(
+            &gpu,
+            RationalTime::ZERO,
+            &graph,
+            camera_for_desc(desc),
+            Quality::FINAL,
+        )
+        .unwrap_err();
         assert!(matches!(err, RenderError::MissingPluginRegistry));
     }
 
@@ -2090,6 +2314,7 @@ mod tests {
                     desc,
                 },
                 overlay: request.overlay,
+                camera: request.camera,
             },
             Quality::FINAL,
         )
@@ -2137,6 +2362,7 @@ mod tests {
                         desc,
                     },
                     overlay: request.overlay,
+                    camera: request.camera,
                 },
                 Quality::FINAL,
             )
@@ -2171,6 +2397,7 @@ mod tests {
                     desc,
                 },
                 overlay: request.overlay,
+                camera: request.camera,
             },
             Quality::DRAFT,
         )
@@ -2206,6 +2433,7 @@ mod tests {
             request.timeline_time,
             &graph,
             &RenderGraphInputs {
+                camera: camera_for_desc(desc),
                 video_sources: &[(
                     TextureId(0),
                     TextureRef {
@@ -2214,12 +2442,38 @@ mod tests {
                     },
                 )],
                 source_time: Some(RationalTime::ZERO),
-                ..RenderGraphInputs::default()
+                plugins: None,
             },
             Quality::FINAL,
         )
         .unwrap_err();
         assert!(matches!(err, RenderError::UnsupportedFrameDesc));
+    }
+
+    #[test]
+    fn render_graph_rejects_aspect_mismatch_camera_before_render_desc() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let request = centered_request();
+        let graph = linear_graph_from_request(&request);
+        let mismatch_camera =
+            CompCamera::try_new(CoreCanonicalPoint::CENTER, 0.0, 1.0, 16, 9).unwrap();
+        let err = render_graph(
+            &gpu,
+            request.timeline_time,
+            &graph,
+            mismatch_camera,
+            Quality::FINAL,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            RenderError::Camera(CompCameraError::AspectMismatch {
+                width,
+                height,
+                aspect_num: 16,
+                aspect_den: 9,
+            }) if width == request.desc.width && height == request.desc.height
+        ));
     }
 
     #[test]
@@ -2243,7 +2497,14 @@ mod tests {
             output: TextureId(0),
         };
 
-        let err = render_graph(&gpu, RationalTime::ZERO, &graph, Quality::FINAL).unwrap_err();
+        let err = render_graph(
+            &gpu,
+            RationalTime::ZERO,
+            &graph,
+            camera_for_desc(desc),
+            Quality::FINAL,
+        )
+        .unwrap_err();
         assert!(matches!(err, RenderError::MissingTexture(1)));
     }
 
@@ -2261,7 +2522,14 @@ mod tests {
             },
         });
 
-        let err = render_graph(&gpu, request.timeline_time, &graph, Quality::FINAL).unwrap_err();
+        let err = render_graph(
+            &gpu,
+            request.timeline_time,
+            &graph,
+            camera_for_desc(request.desc),
+            Quality::FINAL,
+        )
+        .unwrap_err();
         assert!(matches!(err, RenderError::MultipleReportingSources));
     }
 
@@ -2272,7 +2540,14 @@ mod tests {
         let mut graph = linear_graph_from_request(&request);
         graph.output = TextureId(99);
 
-        let err = render_graph(&gpu, request.timeline_time, &graph, Quality::FINAL).unwrap_err();
+        let err = render_graph(
+            &gpu,
+            request.timeline_time,
+            &graph,
+            camera_for_desc(request.desc),
+            Quality::FINAL,
+        )
+        .unwrap_err();
         assert!(matches!(err, RenderError::NonCompactTextureId(99)));
     }
 
@@ -2290,7 +2565,14 @@ mod tests {
             },
         });
 
-        let err = render_graph(&gpu, request.timeline_time, &graph, Quality::FINAL).unwrap_err();
+        let err = render_graph(
+            &gpu,
+            request.timeline_time,
+            &graph,
+            camera_for_desc(request.desc),
+            Quality::FINAL,
+        )
+        .unwrap_err();
         assert!(matches!(err, RenderError::DuplicateTextureWrite(0)));
     }
 
@@ -2301,7 +2583,14 @@ mod tests {
         request.source.reports_source_time = false;
         let graph = linear_graph_from_request(&request);
 
-        let err = render_graph(&gpu, request.timeline_time, &graph, Quality::FINAL).unwrap_err();
+        let err = render_graph(
+            &gpu,
+            request.timeline_time,
+            &graph,
+            camera_for_desc(request.desc),
+            Quality::FINAL,
+        )
+        .unwrap_err();
         assert!(matches!(err, RenderError::MissingSource));
     }
 
@@ -2321,7 +2610,14 @@ mod tests {
             },
         };
 
-        let err = render_graph(&gpu, request.timeline_time, &graph, Quality::FINAL).unwrap_err();
+        let err = render_graph(
+            &gpu,
+            request.timeline_time,
+            &graph,
+            camera_for_desc(request.desc),
+            Quality::FINAL,
+        )
+        .unwrap_err();
         assert!(matches!(
             err,
             RenderError::OverlayInputMustBeTransparentPrefill { input: 1 }
@@ -2341,7 +2637,14 @@ mod tests {
             output: TextureId(3),
         };
 
-        let err = render_graph(&gpu, request.timeline_time, &graph, Quality::FINAL).unwrap_err();
+        let err = render_graph(
+            &gpu,
+            request.timeline_time,
+            &graph,
+            camera_for_desc(request.desc),
+            Quality::FINAL,
+        )
+        .unwrap_err();
         assert!(matches!(
             err,
             RenderError::CompositeForegroundMustComeFromOverlay { foreground: 0 }
@@ -2389,6 +2692,7 @@ mod tests {
             RationalTime::ZERO,
             &graph,
             &RenderGraphInputs {
+                camera: camera_for_desc(desc),
                 video_sources: &[
                     (
                         TextureId(0),
@@ -2446,6 +2750,7 @@ mod tests {
                 },
                 color: [1.0, 0.0, 0.0, 1.0],
             },
+            camera: CompCamera::try_new(CoreCanonicalPoint::CENTER, 0.0, 1.0, 32, 16).unwrap(),
         };
 
         let final_frame = render_frame(&gpu, &request, Quality::FINAL).unwrap();
@@ -2493,8 +2798,9 @@ mod tests {
     }
 
     fn centered_request() -> RenderFrameRequest {
+        let desc = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
         RenderFrameRequest {
-            desc: FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true),
+            desc,
             timeline_time: RationalTime::try_from_frame(6, Fps::try_new(30, 1).unwrap()).unwrap(),
             source: SolidSource {
                 color: [0.0, 1.0, 0.0, 0.5],
@@ -2509,12 +2815,21 @@ mod tests {
                 },
                 color: [1.0, 0.0, 0.0, 0.5],
             },
+            camera: CompCamera::try_new(
+                CoreCanonicalPoint::CENTER,
+                0.0,
+                1.0,
+                i64::from(desc.width),
+                i64::from(desc.height),
+            )
+            .unwrap(),
         }
     }
 
     fn fractional_edge_request() -> RenderFrameRequest {
+        let desc = FrameDesc::packed(13, 7, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
         RenderFrameRequest {
-            desc: FrameDesc::packed(13, 7, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true),
+            desc,
             timeline_time: RationalTime::try_from_frame(11, Fps::try_new(24, 1).unwrap()).unwrap(),
             source: SolidSource {
                 color: [0.2, 0.6, 1.0, 0.75],
@@ -2529,6 +2844,14 @@ mod tests {
                 },
                 color: [1.0, 0.25, 0.0, 0.4],
             },
+            camera: CompCamera::try_new(
+                CoreCanonicalPoint::CENTER,
+                0.0,
+                1.0,
+                i64::from(desc.width),
+                i64::from(desc.height),
+            )
+            .unwrap(),
         }
     }
 }

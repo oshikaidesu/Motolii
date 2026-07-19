@@ -1,6 +1,7 @@
 #![allow(deprecated)]
 
 //! D1e: migration枠・旧形式変換・意味保存・OpenMode拒否。
+pub mod common;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -10,10 +11,10 @@ use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
     bump_min_reader_for_nest_schema_change, check_migration_allowed, count_document,
     legacy_timemap_source, load_document_bytes, load_document_bytes_with_limits, migrate_bytes,
-    migrate_bytes_with_limits, migrate_document_file, modern_timemap_source, save_document,
-    semantic_fingerprint, Clip, ClipSource, DocParam, Document, DocumentCounts, ItemEnvelope,
-    MigrateError, MigrateFileOptions, OpenMode, PersistError, ResourceLimits, Track, TrackItem,
-    VectorContent, BACKUP_SUFFIX, LATEST_DOCUMENT_VERSION, READER_VERSION, WRITER_VERSION,
+    migrate_bytes_with_limits, modern_timemap_source, semantic_fingerprint, Clip, ClipSource,
+    DocParam, Document, DocumentCounts, ItemEnvelope, MigrateError, MigrateFileOptions, OpenMode,
+    PersistError, ResourceLimits, Track, TrackItem, VectorContent, BACKUP_SUFFIX,
+    LATEST_DOCUMENT_VERSION, READER_VERSION, WRITER_VERSION,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -96,7 +97,8 @@ fn golden_corpus_migrates_both_legacy_generations() {
             assert!(
                 msg.contains("timeline_start")
                     || msg.contains("path_ops")
-                    || msg.contains("unknown field"),
+                    || msg.contains("unknown field")
+                    || msg.contains("missing field `camera`"),
                 "load must keep rejecting legacy for {}: {msg}",
                 entry.path
             );
@@ -349,6 +351,12 @@ fn dependency_edges_survive_migration() {
     });
     // 現行スキーマを一度legacy time_map風に壊してから戻す: timeline_startをJSONへ注入
     let mut value = serde_json::to_value(&doc).unwrap();
+    value["version"] = json!(1);
+    value["min_reader_version"] = json!(1);
+    value["composition"]
+        .as_object_mut()
+        .unwrap()
+        .remove("camera");
     value["tracks"][0]["items"][0]["time_map"] = json!({
         "source_start": {"num": 0, "den": 1},
         "timeline_start": {"num": 0, "den": 1},
@@ -379,7 +387,9 @@ fn migrate_file_backup_before_replace_and_fail_closed() {
     let original = fs::read(corpus_path("timeline_start/speed_clip.json")).unwrap();
     fs::write(&path, &original).unwrap();
 
-    let result = migrate_document_file(&path, &MigrateFileOptions::default()).unwrap();
+    let result =
+        common::session::migrate_document_file_via_session(&path, &MigrateFileOptions::default())
+            .unwrap();
     assert!(result.migrated);
     assert_eq!(fs::read(&result.backup_path).unwrap(), original);
     let loaded = load_document_bytes(&fs::read(&path).unwrap()).unwrap();
@@ -399,7 +409,9 @@ fn migrate_file_backup_before_replace_and_fail_closed() {
     let bak2 = path2.with_file_name(format!("legacy2.json{BACKUP_SUFFIX}"));
     let sentinel = b"last-known-good";
     fs::write(&bak2, sentinel).unwrap();
-    let err = migrate_document_file(&path2, &MigrateFileOptions::default()).unwrap_err();
+    let err =
+        common::session::migrate_document_file_via_session(&path2, &MigrateFileOptions::default())
+            .unwrap_err();
     assert!(matches!(err, MigrateError::BackupExists(_)));
     assert_eq!(fs::read(&bak2).unwrap(), sentinel);
     assert_eq!(fs::read(&path2).unwrap(), original);
@@ -412,16 +424,24 @@ fn dry_run_and_noop_do_not_touch_files() {
     let path = dir.join("legacy.json");
     let original = fs::read(corpus_path("path_ops/svg_with_ops.json")).unwrap();
     fs::write(&path, &original).unwrap();
-    let result = migrate_document_file(&path, &MigrateFileOptions { dry_run: true }).unwrap();
+    let result = common::session::migrate_document_file_via_session(
+        &path,
+        &MigrateFileOptions { dry_run: true },
+    )
+    .unwrap();
     assert!(result.migrated);
     assert!(!result.backup_path.exists());
     assert_eq!(fs::read(&path).unwrap(), original);
 
     let current = dir.join("current.json");
-    let doc = Document::new_v1();
-    save_document(&current, &doc).unwrap();
+    let doc = Document::new_current();
+    common::session::save_document_via_session(&current, &doc);
     let before = fs::read(&current).unwrap();
-    let noop = migrate_document_file(&current, &MigrateFileOptions::default()).unwrap();
+    let noop = common::session::migrate_document_file_via_session(
+        &current,
+        &MigrateFileOptions::default(),
+    )
+    .unwrap();
     assert!(!noop.migrated);
     assert!(!noop.backup_path.exists());
     assert_eq!(fs::read(&current).unwrap(), before);

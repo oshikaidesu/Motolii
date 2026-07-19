@@ -13,8 +13,8 @@ use std::collections::BTreeMap;
 
 use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap};
 use motolii_doc::{
-    build_document_frame_graph, Clip, ClipSource, ClippingMaskSettings, DocParam, Document,
-    EvaluationTime, ItemEnvelope, MaskMode, Track, TrackItem, RECT_LAYER_SOURCE,
+    build_document_frame_graph, Clip, ClipSource, ClippingMaskSettings, Composition, DocParam,
+    Document, EvaluationTime, ItemEnvelope, MaskMode, Track, TrackItem, RECT_LAYER_SOURCE,
 };
 use motolii_eval::DataTracks;
 use motolii_gpu::download_rgba;
@@ -65,7 +65,7 @@ fn clipped_doc(
     mode: MaskMode,
     mask_visible: bool,
 ) -> Document {
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(10, 1).unwrap();
     let mask_layer = doc.layers.allocate("mask").unwrap();
     let content_layer = doc.layers.allocate("content").unwrap();
@@ -96,13 +96,21 @@ fn clipped_doc(
     doc
 }
 
-fn render_doc(doc: &Document) -> Option<Vec<u8>> {
+fn render_doc(doc: &mut Document) -> Option<Vec<u8>> {
+    doc.composition = Composition::try_new(
+        i64::from(W),
+        i64::from(H),
+        doc.composition.duration,
+        doc.composition.fps,
+    )
+    .unwrap();
+    let frame_desc = desc();
     let gpu = gpu_or_skip()?;
     let runtime = reference_runtime();
     let built = build_document_frame_graph(
         doc,
         EvaluationTime::new(RationalTime::ZERO),
-        desc(),
+        frame_desc,
         &DataTracks::new(),
         &runtime,
         None,
@@ -115,6 +123,7 @@ fn render_doc(doc: &Document) -> Option<Vec<u8>> {
         RationalTime::ZERO,
         &built.graph,
         &RenderGraphInputs {
+            camera: built.camera,
             video_sources: &[],
             source_time: Some(built.source_time),
             plugins: Some(runtime.executors()),
@@ -167,7 +176,7 @@ fn mask_mode_maps_one_to_one_onto_clipping_mask_mode() {
 #[test]
 fn alpha_clip_hides_content_outside_shape_below() {
     let Some(_) = gpu_or_skip() else { return };
-    let doc = clipped_doc(
+    let mut doc = clipped_doc(
         [-0.25, 0.0],
         [0.5, 1.0],
         [1.0, 1.0, 1.0, 1.0],
@@ -175,7 +184,7 @@ fn alpha_clip_hides_content_outside_shape_below() {
         MaskMode::Alpha,
         false,
     );
-    let actual = render_doc(&doc).expect("gpu");
+    let actual = render_doc(&mut doc).expect("gpu");
     let expected = expected_rect_frame(
         desc(),
         [0, 0, 0, 0],
@@ -198,7 +207,7 @@ fn alpha_clip_hides_content_outside_shape_below() {
 #[test]
 fn invert_alpha_clip_shows_content_outside_shape_below() {
     let Some(_) = gpu_or_skip() else { return };
-    let doc = clipped_doc(
+    let mut doc = clipped_doc(
         [-0.25, 0.0],
         [0.5, 1.0],
         [1.0, 1.0, 1.0, 1.0],
@@ -206,7 +215,7 @@ fn invert_alpha_clip_shows_content_outside_shape_below() {
         MaskMode::InvertAlpha,
         false,
     );
-    let actual = render_doc(&doc).expect("gpu");
+    let actual = render_doc(&mut doc).expect("gpu");
     let mask = expected_rect_frame(
         desc(),
         [0, 0, 0, 0],
@@ -238,7 +247,7 @@ fn invert_alpha_clip_shows_content_outside_shape_below() {
 fn luminance_clip_uses_premul_bt709_not_alpha() {
     let Some(_) = gpu_or_skip() else { return };
     // 不透明赤: alpha=1 だが luma≈0.2126 → Alpha と差が出る。
-    let doc = clipped_doc(
+    let mut doc = clipped_doc(
         [-0.25, 0.0],
         [0.5, 1.0],
         [1.0, 0.0, 0.0, 1.0],
@@ -246,7 +255,7 @@ fn luminance_clip_uses_premul_bt709_not_alpha() {
         MaskMode::Luminance,
         false,
     );
-    let actual = render_doc(&doc).expect("gpu");
+    let actual = render_doc(&mut doc).expect("gpu");
     let mask = expected_rect_frame(
         desc(),
         [0, 0, 0, 0],
@@ -283,7 +292,7 @@ fn luminance_clip_uses_premul_bt709_not_alpha() {
 #[test]
 fn invert_luminance_clip_inverts_bt709_coverage() {
     let Some(_) = gpu_or_skip() else { return };
-    let doc = clipped_doc(
+    let mut doc = clipped_doc(
         [-0.25, 0.0],
         [0.5, 1.0],
         [1.0, 0.0, 0.0, 1.0],
@@ -291,7 +300,7 @@ fn invert_luminance_clip_inverts_bt709_coverage() {
         MaskMode::InvertLuminance,
         false,
     );
-    let actual = render_doc(&doc).expect("gpu");
+    let actual = render_doc(&mut doc).expect("gpu");
     let mask = expected_rect_frame(
         desc(),
         [0, 0, 0, 0],
@@ -324,7 +333,7 @@ fn invert_luminance_clip_inverts_bt709_coverage() {
 #[test]
 fn krista_style_visible_shape_below_composites_with_clipped_content() {
     let Some(_) = gpu_or_skip() else { return };
-    let doc = clipped_doc(
+    let mut doc = clipped_doc(
         [-0.25, 0.0],
         [0.5, 1.0],
         [1.0, 1.0, 1.0, 1.0],
@@ -332,7 +341,7 @@ fn krista_style_visible_shape_below_composites_with_clipped_content() {
         MaskMode::Alpha,
         true,
     );
-    let actual = render_doc(&doc).expect("gpu");
+    let actual = render_doc(&mut doc).expect("gpu");
     let mask_layer = expected_rect_frame(
         desc(),
         [0, 0, 0, 0],

@@ -57,7 +57,7 @@ impl LayerSourcePlugin for RadialRepeaterLayerSource {
         encoder: &mut wgpu::CommandEncoder,
         t: RationalTime,
         params: &ResolvedParams,
-        ctx: LayerSourceContext,
+        _ctx: LayerSourceContext,
         output: TextureRef<'_>,
     ) -> Result<(), PluginError> {
         if output.desc.width == 0 || output.desc.height == 0 {
@@ -65,7 +65,6 @@ impl LayerSourcePlugin for RadialRepeaterLayerSource {
                 "output dimensions must be non-zero".into(),
             ));
         }
-        ctx.camera.validate().map_err(PluginError::Render)?;
 
         let validated = validated_params(params)?;
         let width = output.desc.width as f32;

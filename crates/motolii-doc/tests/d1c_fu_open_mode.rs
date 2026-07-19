@@ -5,14 +5,16 @@
 //! 「未知ネストを読めたこと」と「再保存可能」を同一視しない — `ReadOnlyNewer`は読めても
 //! save/migrationは型付きエラーで拒否する。`Reject`はDocumentを一切返さない。
 
+pub mod common;
+
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use motolii_doc::{
     check_migration_allowed, classify_open_mode, load_document_bytes_with_limits,
-    load_document_with_limits, save_document, Document, OpenMode, PersistError, ResourceLimits,
-    READER_VERSION, WRITER_VERSION,
+    load_document_with_limits, Document, OpenMode, PersistError, ResourceLimits,
+    MIN_READER_VERSION_FOR_COMP_CAMERA, READER_VERSION, WRITER_VERSION,
 };
 
 fn unique_dir(tag: &str) -> PathBuf {
@@ -26,6 +28,17 @@ fn unique_dir(tag: &str) -> PathBuf {
 }
 
 fn minimal_json(version: u32, min_reader_version: u32) -> String {
+    let camera = if version >= WRITER_VERSION {
+        r#",
+                "camera": {
+                    "kind": "planar_orthographic",
+                    "center": {"const": {"Vec2": [0.0, 0.0]}},
+                    "roll_radians": {"const": {"F64": 0.0}},
+                    "height": {"const": {"F64": 1.0}}
+                }"#
+    } else {
+        ""
+    };
     format!(
         r#"{{
             "version": {version},
@@ -34,7 +47,7 @@ fn minimal_json(version: u32, min_reader_version: u32) -> String {
                 "aspect_num": 16,
                 "aspect_den": 9,
                 "duration": {{"num": 10, "den": 1}},
-                "fps": {{"num": 30, "den": 1}}
+                "fps": {{"num": 30, "den": 1}}{camera}
             }},
             "bpm": {{"num": 120, "den": 1}}
         }}"#
@@ -79,13 +92,13 @@ fn classify_reject_when_min_reader_exceeds_reader() {
 fn read_write_loads_and_saves() {
     let dir = unique_dir("rw");
     let path = dir.join("doc.json");
-    fs::write(&path, minimal_json(1, 1)).unwrap();
+    fs::write(&path, minimal_json(WRITER_VERSION, WRITER_VERSION)).unwrap();
 
     let opened = load_document_with_limits(&path, &ResourceLimits::production()).unwrap();
     assert_eq!(opened.open_mode, OpenMode::ReadWrite);
 
     check_migration_allowed(&opened.document).expect("ReadWrite must allow migration gate");
-    save_document(&path, &opened.document).expect("ReadWrite must allow save");
+    common::session::save_document_via_session(&path, &opened.document);
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -96,14 +109,23 @@ fn read_only_newer_loads_but_refuses_save() {
     let dir = unique_dir("ronewer");
     let path = dir.join("doc.json");
     let newer_version = WRITER_VERSION + 1;
-    fs::write(&path, minimal_json(newer_version, 1)).unwrap();
+    fs::write(
+        &path,
+        minimal_json(newer_version, MIN_READER_VERSION_FOR_COMP_CAMERA),
+    )
+    .unwrap();
 
     let opened = load_document_with_limits(&path, &ResourceLimits::production())
         .expect("ReadOnlyNewer must still return a Document");
     assert_eq!(opened.open_mode, OpenMode::ReadOnlyNewer);
     assert_eq!(opened.document.version, newer_version);
 
-    let save_err = save_document(&path, &opened.document).unwrap_err();
+    let save_err = common::session::save_document_via_session_with_options(
+        &path,
+        &opened.document,
+        &motolii_doc::SaveOptions::default(),
+    )
+    .unwrap_err();
     assert!(
         matches!(
             save_err,
@@ -135,7 +157,7 @@ fn read_only_newer_loads_but_refuses_save() {
 
 #[test]
 fn read_only_newer_bytes_variant_matches_open_mode() {
-    let bytes = minimal_json(WRITER_VERSION + 3, 1).into_bytes();
+    let bytes = minimal_json(WRITER_VERSION + 3, MIN_READER_VERSION_FOR_COMP_CAMERA).into_bytes();
     let opened = load_document_bytes_with_limits(&bytes, &ResourceLimits::production()).unwrap();
     assert_eq!(opened.open_mode, OpenMode::ReadOnlyNewer);
 }
@@ -179,7 +201,7 @@ fn reject_even_when_document_version_also_newer() {
 
 #[test]
 fn freshly_created_document_is_always_read_write() {
-    let doc = Document::new_v1();
+    let doc = Document::new_current();
     assert_eq!(
         classify_open_mode(doc.version, doc.min_reader_version),
         OpenMode::ReadWrite

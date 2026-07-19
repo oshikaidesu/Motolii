@@ -13,6 +13,7 @@ mod affine;
 mod asset;
 mod audio_edit;
 mod bpm;
+mod camera_eval;
 mod command;
 mod doc_keyframe;
 mod doc_value;
@@ -47,6 +48,7 @@ pub use affine::{compose_local, compose_transform, resolve_transform, Affine2D};
 pub use asset::{Asset, AssetError, AssetId, AssetTable};
 pub use audio_edit::{build_import_clip_source, plan_detach_audio, ImportAvMode};
 pub use bpm::{Bpm, BpmError};
+pub use camera_eval::CameraEvalError;
 pub use command::{
     collect_layer_ids, layer_names_for_item, Command, CommandError, CommandKind, GestureId,
     MergeKey, ParentLocator, PropertyId, ScalarPropertyId,
@@ -64,20 +66,21 @@ pub use graph::{
 };
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
 pub use journal::{
-    checkpoint_with_fault_plan, inject_bad_checksum_at_last_frame, inject_corrupt_journal_tail,
-    inject_salt_mismatch_frame, inject_unapplicable_committed_edit, load_catalog, open_project,
-    open_project_with_limits, save_project_with_journal, DurabilityStage, FaultPlan, FsOpKind,
-    GenerationCatalog, GenerationEntry, JournalEdit, JournalRecordKind, JournalScanStop,
-    OpenProjectOutcome, PinGenerationOptions, ProjectError, RecordingFs, RecoveryError,
-    RecoverySource, RotateOptions, SaveProjectOptions, StdFs, WalError, WalSession,
+    generation_path_for_document, journal_path_for_document,
+    legacy_shared_motolii_dir_for_document, legacy_staging_dir_for_document, load_catalog,
+    motolii_dir_for_document, project_lock_path_for_document, project_sidecar_dir_for_document,
+    restore_attempted_path, DurabilityStage, FaultPlan, FsOpKind, GenerationCatalog,
+    GenerationEntry, JournalEdit, JournalRecordKind, JournalScanStop,
+    LegacySidecarMigrationDisposition, LegacySidecarMigrationReport, OpenProjectOutcome,
+    PinGenerationOptions, ProjectError, ProjectSession, RecordingFs, RecoveryError, RecoverySource,
+    RotateOptions, SaveProjectOptions, SessionError, StdFs, WalError,
 };
 pub use limits::{ResourceLimitError, ResourceLimits};
 pub use migrate::{
     bump_min_reader_for_nest_schema_change, count_document, legacy_timemap_source, migrate_bytes,
-    migrate_bytes_with_limits, migrate_document_file, migrate_document_file_with_limits,
-    modern_timemap_source, semantic_fingerprint, DocumentCounts, MigrateError, MigrateFileOptions,
-    MigrateFileResult, MigrationReport, SemanticFingerprint, BACKUP_SUFFIX,
-    LATEST_DOCUMENT_VERSION,
+    migrate_bytes_with_limits, modern_timemap_source, semantic_fingerprint, DocumentCounts,
+    MigrateError, MigrateFileOptions, MigrateFileResult, MigrationReport, SemanticFingerprint,
+    BACKUP_SUFFIX, LATEST_DOCUMENT_VERSION,
 };
 pub use param::{DocParam, LookAtAxis};
 pub use param_eval::{eval_look_at_rotation, look_at_angle, ParamEvalError, ResolvedLayerParams};
@@ -85,9 +88,9 @@ pub use param_expect::{ExpectedValueType, ParamConstraints};
 pub use pathgeom::PathOpError;
 pub use persist::{
     check_migration_allowed, classify_open_mode, detect_cloud_sync, load_document,
-    load_document_bytes, load_document_bytes_with_limits, load_document_with_limits, save_document,
-    save_document_with_options, CloudSyncHint, OpenMode, OpenedDocument, PersistError,
-    SaveAbortAfter, SaveOptions, READER_VERSION, WRITER_VERSION,
+    load_document_bytes, load_document_bytes_with_limits, load_document_with_limits, CloudSyncHint,
+    OpenMode, OpenedDocument, PersistError, SaveAbortAfter, SaveOptions, READER_VERSION,
+    WRITER_VERSION,
 };
 pub use plugin_resolution::{
     open_project_resolved, prepare_plugin_recipe, DocumentPluginError, PluginDiagnostic,
@@ -96,7 +99,7 @@ pub use plugin_resolution::{
 };
 pub use schema::{
     asset_components_require_newer_reader, AudioComponent, AudioOutOfRange, BlendMode, Clip,
-    ClipSource, ClippingMaskSettings, CompositeOrder, Composition, CompositionError,
+    ClipSource, ClippingMaskSettings, CompCameraDoc, CompositeOrder, Composition, CompositionError,
     EffectDefinition, EffectInstance, EffectUse, Group, ItemEnvelope, LineJoin, MaskMode, PathOp,
     PointType, Soundtrack, SoundtrackError, StandardShape, StreamKind, StreamSelector, Track,
     TrackItem, Transform2D, TrimMode, VectorContent, VectorRecipe, VideoComponent,
@@ -108,7 +111,7 @@ pub use stable_id::{
 pub use track_id::{TrackId, TrackIdError, TrackIdTable};
 pub use undo::{Macro, UndoError, UndoHistory, UndoLimit};
 pub use validate::{
-    DocumentError, MIN_READER_VERSION_FOR_ASSET_COMPONENTS,
+    DocumentError, MIN_READER_VERSION_FOR_ASSET_COMPONENTS, MIN_READER_VERSION_FOR_COMP_CAMERA,
     MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
 };
 
@@ -117,8 +120,6 @@ fn default_min_reader_version() -> u32 {
 }
 
 /// プロジェクト状態。`ProjectV1`とは非継承・版番独立(M2E-11①)。
-///
-/// `CompCamera`は含めない(#55)。未知キーは`extra`に保持し再保存で書き戻す。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Document {
     pub version: u32,
@@ -152,7 +153,7 @@ impl Document {
     pub fn new_current() -> Self {
         Self::empty_at_version(
             persist::WRITER_VERSION,
-            validate::MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
+            validate::MIN_READER_VERSION_FOR_COMP_CAMERA,
         )
     }
 
@@ -553,26 +554,25 @@ mod tests {
 
     #[test]
     fn writer_is_sole_mutator_readers_get_arc() {
-        let mut writer = reference_writer(Document::new_v1());
+        let mut writer = reference_writer(Document::new_current());
         let snap_before = writer.snapshot();
-        assert_eq!(render_with_snapshot(&snap_before), 1);
+        assert_eq!(render_with_snapshot(&snap_before), WRITER_VERSION);
         assert_eq!(writer.revision, 0);
 
         writer.edit(|doc| {
-            doc.version = 2;
             doc.bpm = Bpm::try_new(140, 1).unwrap();
         });
         assert_eq!(writer.revision, 1);
 
         let snap_after = writer.snapshot();
-        assert_eq!(snap_before.version, 1);
-        assert_eq!(snap_after.version, 2);
+        assert_eq!(snap_before.version, WRITER_VERSION);
+        assert_eq!(snap_after.version, WRITER_VERSION);
         assert_ne!(snap_before.bpm, snap_after.bpm);
     }
 
     #[test]
     fn background_message_applies_only_via_writer() {
-        let mut writer = reference_writer(Document::new_v1());
+        let mut writer = reference_writer(Document::new_current());
         writer.apply(WriterMessage::SetBpm(Bpm::try_new(100, 1).unwrap()));
         assert_eq!(writer.snapshot().bpm.num(), 100);
         assert_eq!(writer.revision, 1);
@@ -580,7 +580,7 @@ mod tests {
 
     #[test]
     fn document_json_roundtrip_empty() {
-        let doc = Document::new_v1();
+        let doc = Document::new_current();
         let json = serde_json::to_string(&doc).unwrap();
         let back: Document = serde_json::from_str(&json).unwrap();
         assert_eq!(doc, back);
@@ -589,12 +589,18 @@ mod tests {
     #[test]
     fn min_reader_version_defaults_when_absent() {
         let json = r#"{
-            "version":1,
+            "version":5,
             "composition":{
                 "aspect_num":16,
                 "aspect_den":9,
                 "duration":{"num":10,"den":1},
-                "fps":{"num":30,"den":1}
+                "fps":{"num":30,"den":1},
+                "camera":{
+                    "kind":"planar_orthographic",
+                    "center":{"const":{"Vec2":[0.0,0.0]}},
+                    "roll_radians":{"const":{"F64":0.0}},
+                    "height":{"const":{"F64":1.0}}
+                }
             },
             "bpm":{"num":120,"den":1}
         }"#;

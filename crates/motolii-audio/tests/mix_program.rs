@@ -1,5 +1,3 @@
-#![allow(deprecated)]
-
 //! AG-2完了条件: Document由来AudioProgram、MixProducer、seek非block、overlap不変。
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -65,7 +63,7 @@ fn soundtrack_and_clip_audio_mix_together() {
     write_pcm16_wav(&bed, 48_000, 2, &[i16::MAX / 4, 0].repeat(480));
     write_pcm16_wav(&clip_wav, 48_000, 2, &[0, i16::MAX / 4].repeat(480));
 
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     doc.composition.duration = RationalTime::try_new(1, 1).unwrap();
     let bed_id = AssetId::from_raw(0);
     let clip_id = AssetId::from_raw(1);
@@ -115,8 +113,6 @@ fn soundtrack_and_clip_audio_mix_together() {
             },
         })],
     });
-    // video:None + audio は min_reader_version が必要
-    doc.min_reader_version = 3;
 
     let mut caches = HashMap::new();
     let program = AudioProgram::from_document(&doc, None, &mut caches).unwrap();
@@ -263,7 +259,7 @@ fn soundtrack_start_offset_shortens_timeline_duration() {
     }
     write_pcm16_wav(&bed, 48_000, 2, &samples);
 
-    let mut doc = Document::new_v1();
+    let mut doc = Document::new_current();
     let bed_id = AssetId::from_raw(0);
     doc.assets
         .insert(Asset {

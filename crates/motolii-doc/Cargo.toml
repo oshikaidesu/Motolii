@@ -17,6 +17,11 @@ thiserror.workspace = true
 crc32fast = "1"
 uuid = { version = "1", features = ["v4", "serde"] }
 
+[[bin]]
+name = "d1m-lock-holder"
+path = "src/bin/d1m_lock_holder.rs"
+test = false
+
 [dev-dependencies]
 motolii-gpu.workspace = true
 motolii-plugin.workspace = true
