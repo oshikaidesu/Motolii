@@ -29,6 +29,27 @@ M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決
 
 したがって、React上で表示されるだけではReact-native所有へ移ったと判定しない。`src/legacy/LegacyHostBoundaryScreen.jsx`またはraw HTML由来のDOM／scriptへ依存する領域は、旧仕様を増やさず、置換対象として台帳へ残す。
 
+## 統合モックの面 → 実装レーン対応(2026-07-19操作確認スナップショット)
+
+`#plugin-browser-candidate`は名前に反してBrowser単体ではなく、M3後半までを含む統合モックである。2026-07-19の操作確認時点の対応(現在地は日付時点のスナップショットであり、正本は[M3仕様](specs/M3-ui-integration.md)のタスク表):
+
+| モック内の面 | 対応する実装領域 | 2026-07-19時点 |
+|---|---|---|
+| egui shell・可変panel・Stage | U1a/U1b/U1f | U1a-1から着手可能 |
+| Effect Inspector・自動parameter panel | U4a | 基盤依存待ち |
+| packed Timeline・Group展開・選択 | U3a/U3b/U2h | 後続 |
+| Automation展開・Key Tools | P56/P60+U3系 | 一部prototype判断のまま |
+| Interval Easing・multi-key Graph View | U4b/U4e | 正式タスク化済み、後続 |
+| Effects Browser | U4d | 正式タスク化済み |
+| Media Browser・folder・Tag・複数選択 | U6 | 正式タスク化済み |
+| Create Browser・provider・generator | U9/Vism/Create境界 | 一部未統一 |
+| Depth Rail・分配 | ui-score/M5系 | M3だけでは閉じない |
+| readiness・rendering・stale表示 | U3f | M4 provider待ち |
+
+**発見入口だけが存在する面**: `Type Pulse`はEffects/Createの両面へカードとして出るが、選択してもStage/Inspectorは`Echo Bloom`のまま。つまり現行モックが持つのはText Motionの**発見入口**までで、`適用先preflight → Live Text生成/Animator追加 → Inspector切替 → Character Score展開 → Stage文字選択`のhandoffは未モックである。この接続は[TM翻訳](reviews/2026-07-19-m3-text-motion-task-translation.md)の後続であり、TM第1弾はBrowser非依存(通常のObject作成経路)で進める。
+
+三面構成(`Media / Create / Effects`)は下表のとおり**P41未統一のまま**であり、そのままegui/製品へ写さない。
+
 ## 既知の未統一
 
 現時点で次を一つの「現行仕様」として読んではならない。

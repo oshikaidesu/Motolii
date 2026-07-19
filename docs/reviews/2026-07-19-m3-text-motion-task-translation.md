@@ -13,7 +13,9 @@ Text 1 Object
 + timingはread-only投影
 ```
 
-含めない: 個別override書き戻し、本文編集後の和解の製品化、Ghost Pose編集、Detach / Materialize、第三者Animator Vism、3D、複数animator合成UI、プリセット群、CONTROL/RESULT二段UIの確定。
+含めない: 個別override書き戻し、本文編集後の和解の製品化、Ghost Pose編集、Detach / Materialize、第三者Animator Vism、3D、複数animator合成UI、プリセット群、CONTROL/RESULT二段UIの確定、**Browser発見入口からのapply handoff**。
+
+第1弾のText作成はBrowserカードではなく**通常のObject作成経路**で行う。現行統合モックの`Type Pulse`カード(Effects/Create両面)は発見入口までで、適用先preflight→生成→Inspector切替→Scoreのhandoffは未モック([ui-reference-map](../ui-reference-map.md)の対応表参照)。Browser分類自体がP41未統一のため、カード→適用のhandoffはU4d/U6とP41統一後のTM後続として接続する。
 
 **なぜ比較台帳が「比較中」のまま発注できるか**: 第1弾は台帳§3.2/§3.3の恒久スキーマ候補(override store・安定書記素ID・Needs Review状態)へ一切触れない。Documentへ保存されるのはText pluginの通常params(本文・style・Sequence規則)だけで、Character Scoreは評価結果のread-only投影、文字選択は評価時の一時identityで足りる。したがって**Identity/Reconcile gate(台帳§4.1 Gate 1)の通過を待たずに発注でき**、方式比較がどちらへ転んでも捨てるのはUI投影だけで済む。逆に、台帳の未決へ触れる書き戻し系(TM-5以降)は該当gate通過まで発注できない。
 
@@ -72,5 +74,7 @@ TM-3a / TM-4a(並列可)
     ↓
 TM-5以降はgate通過待ち(発注不可のまま)
 ```
+
+なおM5-P0IはTM第1弾の**契約上の遮断要件ではない**(公開trait・共通schemaへ触れないため)。硬い依存はM5-P6であり、TM接続をP0I後へ置くのはスケジューリング判断として採用する(ユーザー採用順序 2026-07-19: shell → Inspector最初のE2E → Timeline/選択同期 → 時間編集 → Browser → P0I/P6後にText MotionをCharacter Scoreへ接続)。
 
 M3仕様タスク表へのTM行転記と並列レーン文の更新は、`codex/m3-entry`統合後の別コミットで行う(本書§2がその文面の正本)。
