@@ -108,6 +108,36 @@ test.describe("shared discovery Browser candidate", () => {
     await expect(page.locator("#undo-state")).toContainText("Add Glyph Current");
   });
 
+  test("uses list taxonomy as contextual result navigation", async ({
+    page,
+  }) => {
+    await openCandidate(page);
+    await page.getByRole("button", { name: "List view" }).click();
+
+    const echoType = page.getByRole("navigation", { name: "Echo Bloom type" });
+    await expect(echoType).toBeVisible();
+    await expect(echoType).toContainText("Effect");
+    await expect(echoType).toContainText("Light");
+
+    await echoType.getByRole("button", { name: "Light" }).click();
+    await expect(page.locator(".candidate-plugin-card:visible")).toHaveCount(1);
+    await expect(page.locator("#plugin-result-count")).toHaveText("1");
+    await expect(page.locator("#plugin-taxonomy-clear")).toHaveText("Light ×");
+
+    await page.locator("#plugin-taxonomy-clear").click();
+    await expect(page.locator(".candidate-plugin-card:visible")).toHaveCount(4);
+    await expect(page.locator("#plugin-result-count")).toHaveText("4");
+
+    const glyphType = page.getByRole("navigation", {
+      name: "Glyph Current type",
+    });
+    await glyphType.getByRole("button", { name: "Generator" }).click();
+    await expect(page.locator(".candidate-plugin-card:visible")).toHaveCount(2);
+    await page.locator('[data-plugin-source="all"]').click();
+    await expect(page.locator(".candidate-plugin-card:visible")).toHaveCount(4);
+    await expect(page.locator("#plugin-taxonomy-clear")).toBeHidden();
+  });
+
   test("uses the same search, source rail, and result grid for Project and Files", async ({
     page,
   }) => {

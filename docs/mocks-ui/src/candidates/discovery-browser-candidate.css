@@ -176,9 +176,21 @@
 
 #vism-browser.candidate-plugin-browser .candidate-plugin-card {
   min-height: 0;
+  position: relative;
+  display: block;
+  overflow: hidden;
+}
+
+.candidate-plugin-card-main {
+  width: 100%;
+  min-width: 0;
   display: grid;
   grid-template-rows: auto 30px;
-  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
 }
 
 #vism-browser.candidate-plugin-browser .candidate-plugin-card .plugin-thumb {
@@ -235,6 +247,10 @@
   color: var(--ink);
 }
 
+.candidate-card-taxonomy {
+  display: none;
+}
+
 .candidate-plugin-card[draggable="true"] {
   cursor: grab;
 }
@@ -253,6 +269,10 @@
 #vism-browser.candidate-plugin-browser[data-view="visual"] .candidate-plugin-card {
   min-height: 0;
   aspect-ratio: 1;
+}
+
+#vism-browser.candidate-plugin-browser[data-view="visual"] .candidate-plugin-card-main {
+  height: 100%;
   grid-template-rows: minmax(0, 1fr);
 }
 
@@ -289,7 +309,10 @@
 #vism-browser.candidate-plugin-browser[data-view="detail"] .candidate-plugin-card {
   min-height: 64px;
   aspect-ratio: auto;
-  display: grid;
+}
+
+#vism-browser.candidate-plugin-browser[data-view="detail"] .candidate-plugin-card-main {
+  height: 64px;
   grid-template-columns: 62px minmax(0, 1fr);
   grid-template-rows: 64px;
 }
@@ -298,6 +321,65 @@
   height: 64px;
   border-right: 1px solid var(--line);
   border-bottom: 0;
+}
+
+#vism-browser.candidate-plugin-browser[data-view="detail"] .candidate-card-name {
+  align-items: flex-start;
+  padding-top: 10px;
+  padding-bottom: 25px;
+}
+
+#vism-browser.candidate-plugin-browser[data-view="detail"] .candidate-card-taxonomy {
+  position: absolute;
+  left: 68px;
+  right: 5px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  overflow: hidden;
+}
+
+.candidate-card-taxonomy button,
+.candidate-taxonomy-clear {
+  min-width: 0;
+  padding: 1px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: 9px var(--mono);
+}
+
+.candidate-card-taxonomy button {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidate-card-taxonomy button:hover,
+.candidate-card-taxonomy button.on,
+.candidate-taxonomy-clear:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.candidate-card-taxonomy span {
+  color: var(--line2);
+  font: 9px var(--mono);
+}
+
+.candidate-taxonomy-clear {
+  margin-left: auto;
+  border: 1px solid var(--line);
+  text-decoration: none;
+}
+
+.candidate-taxonomy-clear[hidden] {
+  display: none;
+}
+
+.candidate-taxonomy-clear:not([hidden]) + #plugin-result-count {
+  margin-left: 3px;
 }
 
 .candidate-recent .plugin-history-items {

@@ -13,11 +13,13 @@ function PluginCard({
   thumbnail,
   kind,
   name,
+  category,
+  subtype,
   state,
   selected = false,
 }) {
   return (
-    <button
+    <div
       className={`vism candidate-plugin-card${selected ? " on" : ""}`}
       data-mode={mode}
       data-folder={folder}
@@ -26,18 +28,30 @@ function PluginCard({
       data-plugin-name={name}
       data-plugin-kind={kind}
       draggable={!state}
-      aria-label={`${name}${state ? ` · ${state}` : ""}`}
     >
-      <span className={`plugin-thumb ${thumbnail}`}>
-        <span className="candidate-kind" aria-hidden="true">{kind}</span>
-        {state ? (
-          <span className={`thumb-state state ${mode}`}>{state}</span>
-        ) : null}
-      </span>
-      <span className="candidate-card-name">
-        <b>{name}</b>
-      </span>
-    </button>
+      <button
+        className="candidate-plugin-card-main"
+        aria-label={`${name}${state ? ` · ${state}` : ""}`}
+      >
+        <span className={`plugin-thumb ${thumbnail}`}>
+          <span className="candidate-kind" aria-hidden="true">{kind}</span>
+          {state ? (
+            <span className={`thumb-state state ${mode}`}>{state}</span>
+          ) : null}
+        </span>
+        <span className="candidate-card-name">
+          <b>{name}</b>
+        </span>
+      </button>
+      <nav
+        className="candidate-card-taxonomy"
+        aria-label={`${name} type`}
+      >
+        <button data-plugin-type={category.value}>{category.label}</button>
+        <span aria-hidden="true">›</span>
+        <button data-plugin-type={subtype.value}>{subtype.label}</button>
+      </nav>
+    </div>
   );
 }
 
@@ -125,6 +139,12 @@ function CandidatePluginBrowser() {
         <section className="candidate-results" id="plugin-results">
           <header className="candidate-results-head">
             <strong>Results</strong>
+            <button
+              className="candidate-taxonomy-clear"
+              id="plugin-taxonomy-clear"
+              aria-label="Clear effect type filter"
+              hidden
+            />
             <span id="plugin-result-count">4</span>
           </header>
           <div className="plugin-grid candidate-plugin-grid">
@@ -136,6 +156,8 @@ function CandidatePluginBrowser() {
               thumbnail="bloom"
               kind="FX"
               name="Echo Bloom"
+              category={{ value: "effect", label: "Effect" }}
+              subtype={{ value: "glow", label: "Light" }}
               selected
             />
             <PluginCard
@@ -146,6 +168,8 @@ function CandidatePluginBrowser() {
               thumbnail="glyph"
               kind="G"
               name="Glyph Current"
+              category={{ value: "generator", label: "Generator" }}
+              subtype={{ value: "text", label: "Text" }}
             />
             <PluginCard
               mode="blocked"
@@ -155,6 +179,8 @@ function CandidatePluginBrowser() {
               thumbnail="fold"
               kind="FX"
               name="Fold Field"
+              category={{ value: "effect", label: "Effect" }}
+              subtype={{ value: "space", label: "Spatial" }}
               state="Unavailable"
             />
             <PluginCard
@@ -165,6 +191,8 @@ function CandidatePluginBrowser() {
               thumbnail="ribbon"
               kind="G"
               name="Ribbon Array"
+              category={{ value: "generator", label: "Generator" }}
+              subtype={{ value: "array", label: "Array" }}
               state="Missing"
             />
           </div>
