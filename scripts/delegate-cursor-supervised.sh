@@ -2,12 +2,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GROK_BUILD_MODEL="${GROK_BUILD_MODEL:-grok-4.5}"
-CURSOR_GROK_MODEL="${CURSOR_GROK_MODEL:-cursor-grok-4.5-high-fast}"
+CURSOR_GROK_MODEL="${CURSOR_GROK_MODEL:-cursor-grok-4.5-high}"
 CURSOR_AGENT_BIN="${CURSOR_AGENT_BIN:-cursor-agent}"
-COMPOSER_MODEL="${CURSOR_COMPOSER_MODEL:-composer-2.5}"
-TIMEOUT_SECONDS="${GROK_SUPERVISED_TIMEOUT_SECONDS:-${CURSOR_SUPERVISED_TIMEOUT_SECONDS:-300}}"
-GROK_BUILD_FALLBACK_TO_CURSOR="${GROK_BUILD_FALLBACK_TO_CURSOR:-1}"
+COMPOSER_MODEL="${CURSOR_COMPOSER_MODEL:-composer-2.5-fast}"
+SUPERVISOR_TIMEOUT_SECONDS="${CURSOR_SUPERVISED_TIMEOUT_SECONDS:-300}"
+COMPOSER_TIMEOUT_SECONDS="${CURSOR_COMPOSER_TIMEOUT_SECONDS:-900}"
 HEARTBEAT_SECONDS="${CURSOR_SUPERVISED_HEARTBEAT_SECONDS:-30}"
 
 usage() {
@@ -53,20 +52,20 @@ if ! git -C "$WORKTREE" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "delegate-cursor-supervised: git worktreeではありません: $WORKTREE" >&2
   exit 2
 fi
-if [[ ! "$TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
-  echo "delegate-cursor-supervised: timeoutは正の整数で指定してください" >&2
+if [[ ! "$SUPERVISOR_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "delegate-cursor-supervised: CURSOR_SUPERVISED_TIMEOUT_SECONDSは正の整数で指定してください" >&2
+  exit 2
+fi
+if [[ ! "$COMPOSER_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "delegate-cursor-supervised: CURSOR_COMPOSER_TIMEOUT_SECONDSは正の整数で指定してください" >&2
   exit 2
 fi
 if [[ ! "$HEARTBEAT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
   echo "delegate-cursor-supervised: heartbeat間隔は正の整数で指定してください" >&2
   exit 2
 fi
-if [[ "$GROK_BUILD_FALLBACK_TO_CURSOR" != "0" && "$GROK_BUILD_FALLBACK_TO_CURSOR" != "1" ]]; then
-  echo "delegate-cursor-supervised: GROK_BUILD_FALLBACK_TO_CURSOR は0か1で指定してください" >&2
-  exit 2
-fi
-if [[ "$MODE" == "execute" ]] && ! command -v "$CURSOR_AGENT_BIN" >/dev/null 2>&1; then
-  echo "delegate-cursor-supervised: Composer用のCursor Agent CLI '$CURSOR_AGENT_BIN' が見つかりません" >&2
+if ! command -v "$CURSOR_AGENT_BIN" >/dev/null 2>&1; then
+  echo "delegate-cursor-supervised: Cursor Agent CLI '$CURSOR_AGENT_BIN' が見つかりません" >&2
   exit 127
 fi
 
@@ -78,24 +77,25 @@ trap cleanup EXIT
 
 run_agent() {
   local output="$1"
-  shift
-  echo "delegate-cursor-supervised: 起動: $1 (timeout=${TIMEOUT_SECONDS}s)" >&2
+  local timeout_seconds="$2"
+  shift 2
+  echo "delegate-cursor-supervised: 起動: $1 (timeout=${timeout_seconds}s)" >&2
   "$@" >"$output" 2>"$output.err" &
   local pid=$!
   (
     local elapsed=0
     local interval
-    while (( elapsed < TIMEOUT_SECONDS )); do
+    while (( elapsed < timeout_seconds )); do
       interval="$HEARTBEAT_SECONDS"
-      if (( elapsed + interval > TIMEOUT_SECONDS )); then
-        interval=$((TIMEOUT_SECONDS - elapsed))
+      if (( elapsed + interval > timeout_seconds )); then
+        interval=$((timeout_seconds - elapsed))
       fi
       sleep "$interval"
       elapsed=$((elapsed + interval))
       if ! kill -0 "$pid" 2>/dev/null; then
         exit 0
       fi
-      if (( elapsed < TIMEOUT_SECONDS )); then
+      if (( elapsed < timeout_seconds )); then
         echo "delegate-cursor-supervised: 実行継続中 (${elapsed}s)" >&2
       fi
     done
@@ -110,7 +110,7 @@ run_agent() {
   kill "$watchdog" 2>/dev/null || true
   wait "$watchdog" 2>/dev/null || true
   if [[ -f "$output.timeout" ]]; then
-    echo "delegate-cursor-supervised: ${TIMEOUT_SECONDS}秒でタイムアウトしました" >&2
+    echo "delegate-cursor-supervised: ${timeout_seconds}秒でタイムアウトしました" >&2
     status=124
   fi
   if [[ -s "$output.err" ]]; then
@@ -160,43 +160,8 @@ run_supervisor() {
 
 $prompt"
 
-  if command -v grok >/dev/null 2>&1; then
-    if run_agent "$output.grok-build" grok -p "$prompt" \
-      --cwd "$WORKTREE" \
-      --model "$GROK_BUILD_MODEL" \
-      --output-format plain \
-      --permission-mode plan \
-      --no-subagents \
-      --no-memory \
-      --disable-web-search; then
-      if grep -Eqi '402 Payment Required|spending-limit|run out of credits|responses API error' \
-        "$output.grok-build" "$output.grok-build.err"; then
-        echo "delegate-cursor-supervised: Grok Buildが利用上限を返しました" >&2
-      elif supervisor_result_is_valid "$output.grok-build" "$result_kind"; then
-        cp "$output.grok-build" "$output"
-        SUPERVISOR_BACKEND_USED="grok-build"
-        return 0
-      else
-        cp "$output.grok-build" "$output"
-        echo "delegate-cursor-supervised: Grok Buildの結果マーカーが欠落・曖昧・末尾外です" >&2
-      fi
-    else
-      echo "delegate-cursor-supervised: Grok Buildの実行に失敗しました" >&2
-    fi
-  else
-    echo "delegate-cursor-supervised: Grok Build CLI 'grok' が見つかりません" >&2
-  fi
-
-  if [[ "$GROK_BUILD_FALLBACK_TO_CURSOR" != "1" ]]; then
-    return 1
-  fi
-  if ! command -v "$CURSOR_AGENT_BIN" >/dev/null 2>&1; then
-    echo "delegate-cursor-supervised: フォールバック用のCursor Agent CLI '$CURSOR_AGENT_BIN' が見つかりません" >&2
-    return 127
-  fi
-
-  echo "delegate-cursor-supervised: Cursor版Grokへフォールバックします" >&2
-  if ! run_agent "$output.cursor-grok" "$CURSOR_AGENT_BIN" -p "${cursor_mode_args[@]}" \
+  if ! run_agent "$output.cursor-grok" "$SUPERVISOR_TIMEOUT_SECONDS" \
+    "$CURSOR_AGENT_BIN" -p "${cursor_mode_args[@]}" \
     --output-format text --model "$CURSOR_GROK_MODEL" --workspace "$WORKTREE" "$prompt"; then
     return 1
   fi
@@ -211,7 +176,7 @@ $prompt"
 
 if [[ "$MODE" == "prepare" ]]; then
   supervisor_prompt=$(cat <<EOF
-You are the on-site supervisor for Motolii. Work read-only. Read AGENTS.md and every required spec/review completely. Inspect the current worktree and existing diff. Translate the user intent into a binding implementation order for Composer 2.5; do not implement.
+You are the on-site supervisor for Motolii. Work read-only. Read AGENTS.md and every required spec/review completely. Inspect the current worktree and existing diff. Translate the user intent into a binding implementation order for Composer 2.5 Fast; do not implement.
 
 The order must contain: objective and user intent, current state and already-completed work, authoritative spec/task IDs, exact allowed files, explicit non-goals, existing helpers to reuse, invariants and atomicity, STOP conditions, required positive and negative tests, exact verification commands, and known integration gates. Do not permit allow/ignore/lint suppression, expected-value or golden rewrites, fixture special-cases, raw JSON/string scanners that bypass typed boundaries, public raw allocation/mutation APIs, serde defaults inventing durable meaning, duplicate planners/helpers, implicit migration, partial mutation, TODO stubs, or expansion into adjacent tasks.
 
@@ -274,8 +239,9 @@ EOF
 )
 
 echo
-echo "## 2. Composer 2.5 implementation (Codex-prechecked order)"
-if ! run_agent "$tmp_dir/implementation.txt" "$CURSOR_AGENT_BIN" -p --force --trust --output-format text \
+echo "## 2. Composer 2.5 Fast implementation (Codex-prechecked order)"
+if ! run_agent "$tmp_dir/implementation.txt" "$COMPOSER_TIMEOUT_SECONDS" \
+  "$CURSOR_AGENT_BIN" -p --force --trust --output-format text \
   --model "$COMPOSER_MODEL" --workspace "$WORKTREE" "$composer_prompt"; then
   cat "$tmp_dir/implementation.txt"
   exit 1

@@ -16,3 +16,106 @@
 - 出典は**再確認可能な公開恒久文書**(公式仕様・RFC・公式ブログ・学会誌・バグトラッカ)に限定する。調査ワークフローの「検証済み」申告や、出典URLの無い歴史詳細を根拠にしない
 - 判断が割れたら「**ユーザーデータまたは公開契約へ不可逆に焼くかどうか**」で決める。焼かない選択が可能なら、v1では小さい方を選ぶ(反対側レビューの判定基準)
 - LLM能力への言及は日付を添える。能力仮定は契約・スキーマ・ゲートに焼かず、日付+見直しトリガー付きで運用文書にのみ書く
+
+## 登録規則(2026-07-19制定)
+
+制定の経緯: 入口台帳([docs/README.md](../README.md))のファイルマップから36件のreview文書が欠落し、既決事項(例: [AM式高度イージング=区間補間の非破壊差し替え、2026-07-10決定](../concept.md))が後続作業から逆引きできず、モック・仕様に旧仕様が混在した。
+
+1. **新しいreview文書を作ったら、同じ変更で下の全文書索引に1行追加する**。入口台帳のファイルマップは「現役で参照される文書」の抜粋であり、全量はこの索引が正本
+2. **ユーザー決定・採否・撤回・未統一を含む文書は、[決定逆引き台帳](../decision-index.md)にも主題キーワードつきで1行登録する**。会話・commit履歴・エージェントセッションにしか残らない決定を作らない
+3. 状態語彙は固定集合とする: **決定 / 縮小採用 / 延期 / 棄却 / 撤回 / 未統一 / 観察 / 比較中 / 停止線**。この語彙の外の状態表現を新設しない(必要なら本規則を先に改訂する)
+4. `scripts/check-docs.sh` が索引の抜け・入口台帳の重複掲載・ローカルリンク切れ・状態語彙を機械検証する。docsを触る変更では実行してから終える
+
+## 全文書索引
+
+各文書の1行要旨と状態は文書冒頭が正本。ここはファイル名と表題のみ(抜け検出用の全量索引)。
+
+| ファイル | 表題 |
+|---|---|
+| [2026-07-09-R1-export-review.md](2026-07-09-R1-export-review.md) | コードレビュー所見 2026-07-09 (R1/Quality・export・cli周辺) |
+| [2026-07-09-R3-datatrack-review.md](2026-07-09-R3-datatrack-review.md) | コードレビュー所見 2026-07-09 (R3/DataTrack統合) |
+| [2026-07-10-M1-plugin-boundary-review.md](2026-07-10-M1-plugin-boundary-review.md) | 設計レビュー所見 2026-07-10 (M1完了後・プラグイン境界の凍結前監査) |
+| [2026-07-10-R8-vello-review.md](2026-07-10-R8-vello-review.md) | 軽量レビュー 2026-07-10 (R8/Vello採否スパイク) |
+| [2026-07-10-R9-real-material-checklist.md](2026-07-10-R9-real-material-checklist.md) | R9 実素材検証チェックリスト (T11) |
+| [2026-07-10-freeze-gate-declaration.md](2026-07-10-freeze-gate-declaration.md) | 凍結ゲート宣言(2026-07-10) |
+| [2026-07-10-freeze-gate-remaining.md](2026-07-10-freeze-gate-remaining.md) | 凍結ゲート残件(2026-07-10 監査) |
+| [2026-07-11-INF-7g-llm-plugin-demo.md](2026-07-11-INF-7g-llm-plugin-demo.md) | INF-7g: LLMプラグイン実演記録(2026-07-11) |
+| [2026-07-11-M2-entry-gate.md](2026-07-11-M2-entry-gate.md) | M2入場条件(2026-07-11。同日改訂: ゲート運用レビュー7点を反映) |
+| [2026-07-11-code-audit-pre-m2.md](2026-07-11-code-audit-pre-m2.md) | 実コード監査: M2並列解禁前に詰めるべき設計箇所(2026-07-11) |
+| [2026-07-12-M2E-2-ruleset-activation.md](2026-07-12-M2E-2-ruleset-activation.md) | M2E-2 ruleset 有効化ログ |
+| [2026-07-12-M2E-7-render-ctx-thaw.md](2026-07-12-M2E-7-render-ctx-thaw.md) | M2E-7 解凍手続き: Filter/Compositeへ`RenderCtx`を導入する |
+| [2026-07-12-M3-M4-gate-ledger.md](2026-07-12-M3-M4-gate-ledger.md) | 次フェーズ入場条件の候補台帳: M3/M4(2026-07-12) |
+| [2026-07-12-code-audit-2nd-d1.md](2026-07-12-code-audit-2nd-d1.md) | 第二実コード監査の裏取りと台帳化: D1系スキーマ・評価・永続(2026-07-12) |
+| [2026-07-12-d1-spec-holes-prior-art.md](2026-07-12-d1-spec-holes-prior-art.md) | D1スキーマ未決点の先例調査メモ(2026-07-12) |
+| [2026-07-12-m2-permanence-prevention.md](2026-07-12-m2-permanence-prevention.md) | M2恒久焼き込みの予防(2026-07-12) |
+| [2026-07-12-pathop-ae-cavalry-comparison.md](2026-07-12-pathop-ae-cavalry-comparison.md) | PathOp語彙比較: AE/Lottie × Cavalry(2026-07-12) |
+| [2026-07-12-plugin-ui-v1-boundary.md](2026-07-12-plugin-ui-v1-boundary.md) | 決定: v1プラグインUI境界は`NodeDesc`自動生成のみ(2026-07-12) |
+| [2026-07-12-prior-art-gap-counter-review.md](2026-07-12-prior-art-gap-counter-review.md) | 反対側レビュー: M3/プラグイン生態系の先例所見を最小化する(2026-07-12) |
+| [2026-07-12-prior-art-gap-survey.md](2026-07-12-prior-art-gap-survey.md) | 先例調査: M3/プラグイン生態系の考慮漏れ(2026-07-12) |
+| [2026-07-12-rework-prior-art.md](2026-07-12-rework-prior-art.md) | 出戻り: 先人の失敗後対応と、その反面(予防)(2026-07-12) |
+| [2026-07-12-success-prior-art.md](2026-07-12-success-prior-art.md) | 先例調査: 成功先例からの仮説メモ(2026-07-12) |
+| [2026-07-12-vertical-text-prior-art-counter-review.md](2026-07-12-vertical-text-prior-art-counter-review.md) | 反対側レビュー: 縦書き先例調査の再判定(2026-07-12) |
+| [2026-07-12-vertical-text-prior-art.md](2026-07-12-vertical-text-prior-art.md) | 先例調査: 縦書き(日本語縦組み)テキストレイアウトの既存実装分解(2026-07-12) |
+| [2026-07-13-decision-pack-adoption.md](2026-07-13-decision-pack-adoption.md) | 決定パック採択(2026-07-13ユーザー承認) |
+| [2026-07-13-readback-pipelining-prior-art.md](2026-07-13-readback-pipelining-prior-art.md) | 先例調査: GPU→CPUリードバック重畳とcold shader compileの解決例(2026-07-13) |
+| [2026-07-13-undecided-critical-path-confirm.md](2026-07-13-undecided-critical-path-confirm.md) | 友人レビュー確認: 未決事項とクリティカルパス(2026-07-13) |
+| [2026-07-13-wgpu-challenges-counter-review.md](2026-07-13-wgpu-challenges-counter-review.md) | 反対側レビュー: Rust+wgpu技術的課題調査の二重補正(2026-07-13) |
+| [2026-07-14-3d-depth-boundary-prior-art.md](2026-07-14-3d-depth-boundary-prior-art.md) | 先例調査: 「2Dレイヤー順合成×3D深度合成」の境界の切り方(2026-07-14) |
+| [2026-07-14-3d-depth-scope-design.md](2026-07-14-3d-depth-scope-design.md) | 2Dレイヤー順と3D深度合成の境界設計(2026-07-14) |
+| [2026-07-14-audio-generalization-design.md](2026-07-14-audio-generalization-design.md) | 音声を「楽曲1本」から一般メディアへ拡張する設計(2026-07-14) |
+| [2026-07-14-color-conversion-prior-art.md](2026-07-14-color-conversion-prior-art.md) | 色変換(プレビュー/書き出し不一致)の既知解調査メモ(2026-07-14) |
+| [2026-07-14-d5-transport-prior-art.md](2026-07-14-d5-transport-prior-art.md) | 先例調査: D5 Transport低速時戦略(2026-07-14) |
+| [2026-07-14-m2-core-closure.md](2026-07-14-m2-core-closure.md) | M2コア締結宣言(撤回済み) |
+| [2026-07-14-m2-exit-param-pipeline-disposition.md](2026-07-14-m2-exit-param-pipeline-disposition.md) | M2終了前判定 — Param Pipelineと操作単純化の持ち越し境界 |
+| [2026-07-14-m3-ui-boundary-counter-review.md](2026-07-14-m3-ui-boundary-counter-review.md) | 反対側レビュー: M3 UI境界規約を実装可能な最小形へ縮小する(2026-07-14) |
+| [2026-07-14-m3-ui-boundary-prevention.md](2026-07-14-m3-ui-boundary-prevention.md) | M3 UI境界汚染の予防(2026-07-14) |
+| [2026-07-14-motion-foundation-known-tech-disposition.md](2026-07-14-motion-foundation-known-tech-disposition.md) | Motion基盤候補の既知技術による処分決定(2026-07-14) |
+| [2026-07-14-motion-tools-praise-diy-gap-audit.md](2026-07-14-motion-tools-praise-diy-gap-audit.md) | モーショングラフィック4ツール 称賛・日曜大工・根本ギャップ監査 |
+| [2026-07-14-recent-concept-propagation-audit.md](2026-07-14-recent-concept-propagation-audit.md) | 直近コンセプトの全層反映監査(2026-07-14) |
+| [2026-07-14-repeated-wheel-standardization-audit.md](2026-07-14-repeated-wheel-standardization-audit.md) | AE反復再発明プラグイン標準化監査(2026-07-14) |
+| [2026-07-14-unified-stage-camera-design.md](2026-07-14-unified-stage-camera-design.md) | Stage / Output Frame / 統一カメラ設計(2026-07-14) |
+| [2026-07-15-d1l-copylocal-remint-counter-review.md](2026-07-15-d1l-copylocal-remint-counter-review.md) | D1l Copy Local内部ID契約 — 反対側レビューと採否 |
+| [2026-07-15-d1l-journal-revert-boundary-counter-review.md](2026-07-15-d1l-journal-revert-boundary-counter-review.md) | D1l journal/Undo/Writer追補 — 反対側レビューと採否 |
+| [2026-07-15-d1l-journal-revert-boundary-decision.md](2026-07-15-d1l-journal-revert-boundary-decision.md) | D1l journal互換・Undo等価・Writer採番境界 — 追補決定 |
+| [2026-07-15-implementation-readiness-ledger.md](2026-07-15-implementation-readiness-ledger.md) | Relative / Stage / Shared Effect / Bounds / Duplicator 実装準備台帳(2026-07-15) |
+| [2026-07-15-m2-foundation-reclosure-counter-review.md](2026-07-15-m2-foundation-reclosure-counter-review.md) | M2基盤再締結ゲート 反対側レビュー(2026-07-15) |
+| [2026-07-15-m2-foundation-reclosure-gate.md](2026-07-15-m2-foundation-reclosure-gate.md) | M2基盤再締結ゲート(2026-07-15) |
+| [2026-07-15-p5-generative-pattern-disposition.md](2026-07-15-p5-generative-pattern-disposition.md) | p5.js系ジェネラティブ表現の分類とMotoliiへの配置 |
+| [2026-07-15-prior-art-complaint-boundary-audit.md](2026-07-15-prior-art-complaint-boundary-audit.md) | 先例収束 / 日曜大工境界監査(2026-07-15) |
+| [2026-07-15-relative-scope-duplicator-decision.md](2026-07-15-relative-scope-duplicator-decision.md) | Relative Move / Timeline Effect Link / Duplicator決定(2026-07-15) |
+| [2026-07-15-shared-effect-lifecycle-decision.md](2026-07-15-shared-effect-lifecycle-decision.md) | Shared Effect lifecycle決定(GAP-14 / D1l実装ゲート) |
+| [2026-07-16-ae-layer-system-disposition.md](2026-07-16-ae-layer-system-disposition.md) | AEレイヤー方式への処置台帳と出戻り一次声調査 |
+| [2026-07-16-d1l-current-document-constructor-counter-review.md](2026-07-16-d1l-current-document-constructor-counter-review.md) | D1l新規Document v4生成契約 — 反対側レビューと採否 |
+| [2026-07-16-d1l-current-document-constructor-decision.md](2026-07-16-d1l-current-document-constructor-decision.md) | D1l新規Documentのv4到達境界 — 追補決定 |
+| [2026-07-16-d1l-new-v1-lint-conflict-decision.md](2026-07-16-d1l-new-v1-lint-conflict-decision.md) | D1l `new_v1` lintとprotected semantic testの矛盾解消決定(2026-07-16) |
+| [2026-07-16-m2-comp-camera-decision.md](2026-07-16-m2-comp-camera-decision.md) | M2 CompCamera決定 — planar v1、空間は追加的拡張(2026-07-16) |
+| [2026-07-16-m2-param-element-constraint-disposition.md](2026-07-16-m2-param-element-constraint-disposition.md) | M2 Param Pipeline / Element Domain / Constraint Graph処分(2026-07-16) |
+| [2026-07-16-m2-project-sidecar-session-decision.md](2026-07-16-m2-project-sidecar-session-decision.md) | M2 project sidecar identity / session所有決定(2026-07-16) |
+| [2026-07-16-m3-preflight-decisions.md](2026-07-16-m3-preflight-decisions.md) | M3着手前決定 — 操作の意味を固定し、見た目の実値は測って決める |
+| [2026-07-16-m3-ui-concept-to-tickets.md](2026-07-16-m3-ui-concept-to-tickets.md) | M3 UIコンセプトから実装チケットへの分解 |
+| [2026-07-16-m3-ui-gap-survey.md](2026-07-16-m3-ui-gap-survey.md) | M3前UIギャップ調査: U1〜U8に席が無いUI要素とコア側前提の欠落(2026-07-16) |
+| [2026-07-16-m3-ui-rapid-acceptance-prior-art.md](2026-07-16-m3-ui-rapid-acceptance-prior-art.md) | 先例調査: すぐに受け入れられたUI(2026-07-16) |
+| [2026-07-16-media-portability-gpu-resurvey-plan.md](2026-07-16-media-portability-gpu-resurvey-plan.md) | 再調査ラウンド起案: メディア可搬性(GAP-3/7)とGPUベンダ差(INF-3)(2026-07-16) |
+| [2026-07-16-ui-update-forensics.md](2026-07-16-ui-update-forensics.md) | UIアップデート考古学 — 改善履歴から潜在的な失敗を読む |
+| [2026-07-17-aviutl2-comment-voices.md](2026-07-17-aviutl2-comment-voices.md) | AviUtl2動画コメント欄 — 統一できない利用者の声 |
+| [2026-07-17-d1i4-semantic-oracle-boundary-decision.md](2026-07-17-d1i4-semantic-oracle-boundary-decision.md) | D1i-4 / S16: semantic oracle 保護境界の訂正 |
+| [2026-07-17-extensible-core-prior-art-translation.md](2026-07-17-extensible-core-prior-art-translation.md) | 個体性・介入・上限・縮退・遊びの先例翻訳(2026-07-17) |
+| [2026-07-17-non-video-workspace-asset-ui-prior-art.md](2026-07-17-non-video-workspace-asset-ui-prior-art.md) | 動画ソフト外から引き直すWorkspace・素材探索・視線設計 |
+| [2026-07-17-vism-a0-plugin-boundary-inventory.md](2026-07-17-vism-a0-plugin-boundary-inventory.md) | VSM-A0 — 現行plugin境界inventory |
+| [2026-07-17-vism-a0d-contract-migration-ownership-decision.md](2026-07-17-vism-a0d-contract-migration-ownership-decision.md) | VSM-A0D — plugin契約とmigrationの所有決定 |
+| [2026-07-17-vism-a0s-contract-catalog-spec.md](2026-07-17-vism-a0s-contract-catalog-spec.md) | VSM-A0S — Contract Catalogとprepared plugin解決仕様 |
+| [2026-07-17-vism-a1-public-crate-boundary-spec.md](2026-07-17-vism-a1-public-crate-boundary-spec.md) | VSM-A1S — Opacity外部crate化の公開境界仕様 |
+| [2026-07-17-vism-a2-legacy-project-migration-decision.md](2026-07-17-vism-a2-legacy-project-migration-decision.md) | VSM-A2S — 旧CLI ProjectV1 migration処分 |
+| [2026-07-17-vism-a7-bpm-datatrack-spike.md](2026-07-17-vism-a7-bpm-datatrack-spike.md) | VSM-A7 — BPMから既存DataTrackへの意味spike |
+| [2026-07-17-vism-implementation-plan.md](2026-07-17-vism-implementation-plan.md) | Vism実装計画 — 公開境界の反証から配布へ |
+| [2026-07-17-vism-ready-counter-review-disposition.md](2026-07-17-vism-ready-counter-review-disposition.md) | Vism-ready化提案の反対側レビュー採否 |
+| [2026-07-18-d1k-runtime-camera-thaw-spec.md](2026-07-18-d1k-runtime-camera-thaw-spec.md) | D1k-S CQ-5 解凍記録: runtime planar `CompCamera`と必須camera-bearing render signature(2026-07-18) |
+| [2026-07-18-m2-foundation-supplementary-code-review.md](2026-07-18-m2-foundation-supplementary-code-review.md) | M2基盤再締結・独立追補実コードレビュー(2026-07-18) |
+| [2026-07-18-m3-egui-selection.md](2026-07-18-m3-egui-selection.md) | M3 UI基盤 egui採用判断(2026-07-18) |
+| [2026-07-18-m3-gpu-preview-viewport-prior-art.md](2026-07-18-m3-gpu-preview-viewport-prior-art.md) | M3 GPU Preview / Viewport先例調査 |
+| [2026-07-18-vism-a3-external-expression-survey.md](2026-07-18-vism-a3-external-expression-survey.md) | VSM-A3R — 外部表現・Expression・Add-onの責任分類 |
+| [2026-07-18-vism-a3d-radial-repeater-decision.md](2026-07-18-vism-a3d-radial-repeater-decision.md) | VSM-A3D — 決定論的 2D Radial Repeater LayerSource 採用決定 |
+| [2026-07-18-vism-a3s-layersource-lowering-spec.md](2026-07-18-vism-a3s-layersource-lowering-spec.md) | VSM-A3S — 一般 LayerSource lowering 仕様 |
+| [2026-07-19-am-keyframe-graph-observation.md](2026-07-19-am-keyframe-graph-observation.md) | Alight Motionキーフレームグラフ観察台帳(AM実機確認。`codex/m3-mock-components`側から回収) |
+| [2026-07-19-m3-interaction-prototype-decision-ledger.md](2026-07-19-m3-interaction-prototype-decision-ledger.md) | M3操作prototype未決パラメータ台帳(2026-07-19。`codex/m3-mock-components`側から回収) |
+| [2026-07-19-lyric-motion-text-sequence-comparison.md](2026-07-19-lyric-motion-text-sequence-comparison.md) | リリックモーション: Text Sequence / Materialize 比較台帳(2026-07-19) |

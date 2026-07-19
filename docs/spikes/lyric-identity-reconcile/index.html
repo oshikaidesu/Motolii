@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Live Text Identity Fixture</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">NON-PERSISTENT FIXTURE · GATE 1</p>
+          <h1>「道」を足したら、何が残る？</h1>
+          <p class="lede">親はRandom In。子の「走」だけ、配置・大きさ・Timingを手で直した状態です。</p>
+        </div>
+        <div class="status" id="status">INITIAL</div>
+      </header>
+
+      <section class="controls" aria-label="Fixture controls">
+        <button id="reset">夜を走る に戻す</button>
+        <button id="insert-road" class="primary">夜の後に「道」を挿入</button>
+        <button id="replace-run">走 → 飛</button>
+        <button id="delete-run">走を削除</button>
+        <label>
+          Seed
+          <input id="seed" type="number" value="1842" />
+        </label>
+        <label>
+          Interval
+          <input id="interval" type="number" value="2" min="0" max="12" />
+          <span>f</span>
+        </label>
+      </section>
+
+      <section class="explanation" id="explanation"></section>
+
+      <section class="stage-panel">
+        <div class="panel-title">
+          <div>
+            <span>STAGE</span>
+            <strong>ghost = Random In / solid = final layout</strong>
+          </div>
+          <span class="seed-note">same seed + same ID = same entrance</span>
+        </div>
+        <div id="stage" class="stage" aria-label="Character stage"></div>
+      </section>
+
+      <section class="timeline-panel">
+        <div class="panel-title">
+          <div>
+            <span>CHARACTER SCORE</span>
+            <strong>親の結果を表示。子行はObjectではない</strong>
+          </div>
+        </div>
+        <div id="timeline" class="timeline"></div>
+      </section>
+
+      <section class="detail-grid">
+        <article>
+          <h2>Identity / Override</h2>
+          <div id="identity-table"></div>
+        </article>
+        <article>
+          <h2>Needs Review</h2>
+          <div id="review-list" class="empty">0件 — 黙った誤接続なし</div>
+        </article>
+      </section>
+
+      <section class="whole-edit">
+        <div>
+          <h2>全文変更も試す</h2>
+          <p>操作履歴が分からない変更は、共通prefix/suffixだけを保守的に保持します。</p>
+        </div>
+        <input id="whole-text" value="夜へ 深い夜へ" aria-label="Whole replacement text" />
+        <button id="apply-whole">保守的に和解</button>
+      </section>
+
+      <footer>
+        <strong>次段候補: Character Collision</strong>
+        <span>文字identityが成立した後、Random Inの途中へ衝突・落下・押し合いを足す。今回はphysics stateを保存しません。</span>
+      </footer>
+    </main>
+    <script type="module" src="./ui.mjs"></script>
+  </body>
+</html>

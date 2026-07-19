@@ -5,7 +5,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 ## 「発注」時のCursor自動委任
 
 - ユーザーが「発注して」「実装を発注」等、**発注を依頼動詞として明示した時だけ**自動委任を発火する。通常の「実装して」、説明・引用・ファイル内に現れただけの「発注」では発火しない
-- 発火時の役割は固定する。**主担当Codexは先例調査・コード事実の確認・長期展望と、恒久形式/公開API/plugin契約/停止線など重要境界の最終判断**を担う。**Grok BuildのGrok 4.5は現場監督**として、その調査結果・既存仕様・やりたいこと・現状差分から具体設計案、チケット分解、発注書案を作る。Codexは全文を代筆せず、実装前に正しさ・抜け・ユーザー意図・契約境界との一致だけを審査し、承認済み発注書だけを**Cursor Composer 2.5が受注者**として実装する。最後に同じGrok監督が差分を検収し、Codexが統合を判断する。Grokは仕様の未決事項や公開契約を発明せず、判断が必要なら`ORDER: STOP`でCodexへ戻す。Grok Build CLIの実行失敗時だけCursor版Grokへフォールバックし、`ORDER: STOP`や`VERDICT: REJECT`を失敗扱いして上書きしない
+- 発火時の役割は固定する。**主担当Codexは先例調査・コード事実の確認・長期展望と、恒久形式/公開API/plugin契約/停止線など重要境界の最終判断**を担う。**Cursor版Grok 4.5は現場監督**として、その調査結果・既存仕様・やりたいこと・現状差分から具体設計案、チケット分解、発注書案を作る。Codexは全文を代筆せず、実装前に正しさ・抜け・ユーザー意図・契約境界との一致だけを審査し、承認済み発注書だけを**Cursor Composer 2.5 Fastが受注者**として実装する。最後に同じGrok監督が差分を検収し、Codexが統合を判断する。Grokは仕様の未決事項や公開契約を発明せず、判断が必要なら`ORDER: STOP`でCodexへ戻す。監督・受注ともCursor Agent CLIへ直行し、`ORDER: STOP`や`VERDICT: REJECT`を別backendで上書きしない
 - 実装発注は隔離worktreeで二段階実行する。まず`./scripts/delegate-cursor-supervised.sh prepare <worktree> <order-file> "<task>"`でGrok案だけを生成して停止する。Codexは誤りがあればComposerへ流さずGrokへ差し戻す。正しければorder fileへ`CODEX PRECHECK: APPROVED`を明示し、`execute`で初めてComposerを起動する
 - Grokの発注書は対象仕様ID、目的、現状、変更許可ファイル、非目標、再利用箇所、STOP条件、必須負例、実行コマンドを含む。`ORDER: READY`かつCodex事前承認がない限りComposerを起動しない。Grok検収が`VERDICT: ACCEPT`でなければ差分を採用・commit・pushしない
 - `delegate-cursor-review.sh`の並列助言は調査・論点抽出専用であり、実装の指揮系統には使わない。Composerに仕様判断・発注範囲変更・代替設計をさせない
@@ -26,7 +26,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 4. M2 Document/スキーマ/ジャーナルに触る時: **先に**[docs/reviews/2026-07-12-m2-permanence-prevention.md](docs/reviews/2026-07-12-m2-permanence-prevention.md)(予防5手)。背景の先人調査は[rework-prior-art](docs/reviews/2026-07-12-rework-prior-art.md)
 5. M3製品実装に触る時: **先に**[docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md](docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md)を読み、ステータスが発効中なら実装を止める。調査・fixtureも公開APIや永続形式へ焼かない
 6. M3 UI/入力/タイムライン/プラグインパネルに触る時: **先に**[docs/reviews/2026-07-14-m3-ui-boundary-prevention.md](docs/reviews/2026-07-14-m3-ui-boundary-prevention.md)(UI境界の規律8本)
-7. M3の外観・timeline・panelに触る時: **先に**[docs/ui-visual-language.md](docs/ui-visual-language.md)と[高密度メインUIモック](docs/mocks/README.md)を読む。モックの具体色値や未決機能をそのまま契約へ焼かない
+7. M3の外観・timeline・panelに触る時: **先に**[M3 UI参照地図](docs/ui-reference-map.md)と[docs/ui-visual-language.md](docs/ui-visual-language.md)を読む。Reactモックの実体と`README.md`は`codex/m3-mock-components`側の接続済みworktreeで読み、main側にまだ無い時は`docs/mocks/`を代替の現行実装として変更せず、React側の統合または対象worktreeへの移動を先に行う。`docs/mocks/`は**ARCHIVED・新規変更禁止**。通常入場と`#catalog`はReact候補だけ、legacyは`#archive/*`とparity testだけから参照する。新しいUI判断、操作、goldenをHTMLへ入れようとした時点でSTOPし、`docs/mocks-ui/`のReact所有境界へ戻る。モックの具体色値や未決機能をそのまま契約へ焼かない
 
 ## 絶対規律(破ると設計の根拠が崩れる。レビュー最重視項目)
 
@@ -49,6 +49,10 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 
 ## ワークフロー
 
+- **会話中の仕様ドリフトを先に回収する**: 会話が当初の論点からずれ始めた、新しい用途・用語・状態所有・操作・配布形式へ広がった、既存決定と違う案が出た、と認識した時点で実装を一旦止める。会話を正本にせず、(1) 単なる観察は`docs/reviews/`のobservation、(2) 比較中の案はprototype／decision ledger、(3) 採択済みの意味は対象spec、(4) 後続課題はbacklogへ、**状態（観察／比較中／決定／棄却／停止）と非目標つき**でコードより先に記録する
+- **着手前に[決定逆引き台帳](docs/decision-index.md)を主題キーワードで引く**。既決を「未決」と誤認して埋め直さない。決定・撤回・未統一が新しく生まれたら、正本へ書いた上で同じ変更で台帳へ1行登録する(登録規則は[docs/reviews/README.md](docs/reviews/README.md))。docs/reviewsを触ったら`scripts/check-docs.sh`を通す
+- ドリフト検知時に既存仕様を黙って上書きしない。矛盾する旧記述と新案を同じ「現行」として残さず、未統一なら入口文書へ両者と解消条件を明記する。恒久形式、公開API、plugin契約、Document意味へ波及する場合は通常のSTOP条件と仕様改訂を優先する
+- 作業完了前に、その会話で新しく決まったこと、保留したこと、撤回したことがdocsへ回収され、Codexタスク履歴だけに残っていないか確認する。雑談的な発想は無理に規範化せず、実装判断へ影響し始めた時だけ台帳化する
 - **1チケット=1コミット**。完了時に仕様書のチケット表・実装状況表を更新する
 - 完了条件は自動判定(`cargo test`/ゴールデンイメージ)。「動いた気がする」を完了条件にしない
 - **テストを「直して」通さない**: ゴールデン参照画像・受け入れテストの削除・期待値書き換え・実装のspecial-caseで緑にすることを禁止。**テストが間違っていると思ったら実装を止めて報告する**。参照画像の正当な更新は理由を明記した独立PRに分離(specs/README.md 粒度ルール6、[pitfalls H-2](docs/pitfalls-and-roadmap.md))

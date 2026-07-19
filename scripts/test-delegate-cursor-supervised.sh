@@ -64,7 +64,7 @@ cat >"$FAKE_BIN/cursor-agent" <<'EOF'
 set -euo pipefail
 echo cursor-agent >>"$FAKE_CALL_LOG"
 printf 'cursor-agent-args:%s\n' "$*" >>"$FAKE_CALL_LOG"
-if [[ " $* " == *" --model composer-2.5 "* ]]; then
+if [[ " $* " == *" --model composer-2.5-fast "* ]]; then
   printf '%s\n' "${FAKE_COMPOSER_OUTPUT:-implementation complete}"
 else
   printf '%s\n' "${FAKE_CURSOR_OUTPUT:-}"
@@ -99,45 +99,43 @@ run_prepare() {
   fi
 }
 
-order_file="$TMP_ROOT/fallback-order.md"
+order_file="$TMP_ROOT/ready-order.md"
 run_prepare "$order_file" \
-  FAKE_GROK_OUTPUT="quota response without a contract marker" \
-  FAKE_CURSOR_OUTPUT=$'fallback order\nORDER: READY'
+  FAKE_GROK_OUTPUT=$'must not be used\nORDER: STOP' \
+  FAKE_CURSOR_OUTPUT=$'cursor order\nORDER: READY'
 status="$RUN_STATUS"
-assert_status 0 "$status" "markerless Grok fallback"
-assert_contains "$order_file" "SUPERVISOR_BACKEND: cursor-grok" "markerless Grok fallback"
+assert_status 0 "$status" "Cursor-only order"
+assert_contains "$order_file" "SUPERVISOR_BACKEND: cursor-grok" "Cursor-only order"
 assert_contains "$CALL_LOG" "cursor-agent" "explicit Cursor binary"
+assert_not_contains "$CALL_LOG" "grok" "Grok Build bypass"
 assert_has_fragment "$CALL_LOG" "--mode ask" "read-only order supervisor mode"
 assert_not_contains "$CALL_LOG" "agent" "generic agent collision"
 
 order_file="$TMP_ROOT/stop-order.md"
 run_prepare "$order_file" \
-  FAKE_GROK_OUTPUT=$'blocked by a real specification decision\nORDER: STOP' \
-  FAKE_CURSOR_OUTPUT=$'must not be used\nORDER: READY'
+  FAKE_CURSOR_OUTPUT=$'blocked by a real specification decision\nORDER: STOP'
 status="$RUN_STATUS"
 assert_status 3 "$status" "ORDER STOP preservation"
-assert_contains "$order_file" "SUPERVISOR_BACKEND: grok-build" "ORDER STOP preservation"
-assert_not_contains "$CALL_LOG" "cursor-agent" "ORDER STOP preservation"
+assert_contains "$order_file" "SUPERVISOR_BACKEND: cursor-grok" "ORDER STOP preservation"
+assert_contains "$CALL_LOG" "cursor-agent" "ORDER STOP preservation"
+assert_not_contains "$CALL_LOG" "grok" "ORDER STOP backend preservation"
 
 order_file="$TMP_ROOT/ambiguous-order.md"
 run_prepare "$order_file" \
-  FAKE_GROK_OUTPUT=$'ORDER: STOP\nORDER: READY' \
-  FAKE_CURSOR_OUTPUT=$'unambiguous fallback\nORDER: READY'
+  FAKE_CURSOR_OUTPUT=$'ORDER: STOP\nORDER: READY'
 status="$RUN_STATUS"
-assert_status 0 "$status" "ambiguous Grok fallback"
-assert_contains "$order_file" "SUPERVISOR_BACKEND: cursor-grok" "ambiguous Grok fallback"
+assert_status 1 "$status" "ambiguous Cursor rejection"
+[[ ! -e "$order_file" ]] || fail "ambiguous Cursor rejection: order file must not be created"
 
 order_file="$TMP_ROOT/nonterminal-order.md"
 run_prepare "$order_file" \
-  FAKE_GROK_OUTPUT=$'ORDER: READY\ntrailing text' \
-  FAKE_CURSOR_OUTPUT=$'terminal fallback\nORDER: READY'
+  FAKE_CURSOR_OUTPUT=$'ORDER: READY\ntrailing text'
 status="$RUN_STATUS"
-assert_status 0 "$status" "nonterminal Grok fallback"
-assert_contains "$order_file" "SUPERVISOR_BACKEND: cursor-grok" "nonterminal Grok fallback"
+assert_status 1 "$status" "nonterminal Cursor rejection"
+[[ ! -e "$order_file" ]] || fail "nonterminal Cursor rejection: order file must not be created"
 
 order_file="$TMP_ROOT/invalid-cursor-order.md"
 run_prepare "$order_file" \
-  FAKE_GROK_OUTPUT="no marker" \
   FAKE_CURSOR_OUTPUT="still no marker"
 status="$RUN_STATUS"
 assert_status 1 "$status" "invalid Cursor supervisor result"
@@ -149,7 +147,7 @@ task_hash="$(printf '%s' "$task" | shasum -a 256 | awk '{print $1}')"
 approved_order="$TMP_ROOT/approved-order.md"
 cat >"$approved_order" <<EOF
 ORDER: READY
-SUPERVISOR_BACKEND: grok-build
+SUPERVISOR_BACKEND: cursor-grok
 TASK_SHA256: $task_hash
 CODEX PRECHECK: APPROVED
 EOF
@@ -157,7 +155,7 @@ EOF
 if env -u CURSOR_AGENT -u CURSOR_AGENT_BIN \
     PATH="$FAKE_BIN:/usr/bin:/bin" \
     FAKE_CALL_LOG="$CALL_LOG" \
-    FAKE_GROK_OUTPUT=$'contract defect\nVERDICT: REJECT' \
+    FAKE_CURSOR_OUTPUT=$'contract defect\nVERDICT: REJECT' \
     CURSOR_SUPERVISED_HEARTBEAT_SECONDS=1 \
     CURSOR_SUPERVISED_TIMEOUT_SECONDS=5 \
     "$SCRIPT" execute "$WORKTREE" "$approved_order" "$task" \
@@ -168,14 +166,14 @@ else
 fi
 assert_status 4 "$status" "VERDICT REJECT preservation"
 assert_contains "$CALL_LOG" "cursor-agent" "Composer explicit Cursor binary"
-assert_contains "$CALL_LOG" "grok" "Grok inspection"
+assert_has_fragment "$CALL_LOG" "--model composer-2.5-fast" "Composer Fast model"
+assert_not_contains "$CALL_LOG" "grok" "Grok Build inspection bypass"
 assert_not_contains "$CALL_LOG" "agent" "execute generic agent collision"
 
 : >"$CALL_LOG"
 if env -u CURSOR_AGENT -u CURSOR_AGENT_BIN \
     PATH="$FAKE_BIN:/usr/bin:/bin" \
     FAKE_CALL_LOG="$CALL_LOG" \
-    FAKE_GROK_OUTPUT="inspection transport failure without verdict" \
     FAKE_CURSOR_OUTPUT=$'read-only inspection complete\nVERDICT: ACCEPT' \
     CURSOR_SUPERVISED_HEARTBEAT_SECONDS=1 \
     CURSOR_SUPERVISED_TIMEOUT_SECONDS=5 \
@@ -185,8 +183,8 @@ if env -u CURSOR_AGENT -u CURSOR_AGENT_BIN \
 else
   status=$?
 fi
-assert_status 0 "$status" "Cursor inspection fallback"
-inspection_args="$(grep -F -- '--model cursor-grok-4.5-high-fast' "$CALL_LOG")"
+assert_status 0 "$status" "Cursor inspection"
+inspection_args="$(grep -F -- '--model cursor-grok-4.5-high' "$CALL_LOG")"
 [[ -n "$inspection_args" ]] || fail "inspection supervisor model: cursor-grok args missing"
 [[ "$inspection_args" != *"--mode plan"* ]] || fail "inspection shell-capable standard mode: plan mode present"
 [[ "$inspection_args" == *"--force"* ]] || fail "inspection shell approval: force missing"
