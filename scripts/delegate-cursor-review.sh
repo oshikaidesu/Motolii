@@ -2,8 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-COMPOSER_MODEL="${CURSOR_COMPOSER_MODEL:-composer-2.5}"
-GROK_MODEL="${CURSOR_GROK_MODEL:-cursor-grok-4.5-high-fast}"
+CURSOR_AGENT_BIN="${CURSOR_AGENT_BIN:-cursor-agent}"
+COMPOSER_MODEL="${CURSOR_COMPOSER_MODEL:-composer-2.5-fast}"
+GROK_MODEL="${CURSOR_GROK_MODEL:-cursor-grok-4.5-high}"
 TIMEOUT_SECONDS="${CURSOR_DELEGATE_TIMEOUT_SECONDS:-180}"
 
 usage() {
@@ -21,8 +22,8 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   exit 0
 fi
 
-if ! command -v agent >/dev/null 2>&1; then
-  echo "delegate-cursor-review: Cursor Agent CLI 'agent' が見つかりません" >&2
+if ! command -v "$CURSOR_AGENT_BIN" >/dev/null 2>&1; then
+  echo "delegate-cursor-review: Cursor Agent CLI '$CURSOR_AGENT_BIN' が見つかりません" >&2
   exit 127
 fi
 
@@ -77,12 +78,12 @@ ${task}"
 
 cd "$ROOT_DIR"
 
-agent -p --trust --mode ask --output-format text \
+"$CURSOR_AGENT_BIN" -p --trust --mode ask --output-format text \
   --model "$COMPOSER_MODEL" "$composer_prompt" \
   >"$tmp_dir/composer.txt" 2>"$tmp_dir/composer.err" &
 composer_pid=$!
 
-agent -p --trust --mode ask --output-format text \
+"$CURSOR_AGENT_BIN" -p --trust --mode ask --output-format text \
   --model "$GROK_MODEL" "$grok_prompt" \
   >"$tmp_dir/grok.txt" 2>"$tmp_dir/grok.err" &
 grok_pid=$!
@@ -131,14 +132,14 @@ wait "$grok_watchdog_pid" 2>/dev/null
 set -e
 
 echo
-echo "## Grok 4.5 Fast (${GROK_MODEL})"
+echo "## Grok 4.5 (${GROK_MODEL})"
 cat "$tmp_dir/grok.txt"
 if [[ -s "$tmp_dir/grok.err" ]]; then
   echo "[stderr]" >&2
   cat "$tmp_dir/grok.err" >&2
 fi
 if [[ -f "$tmp_dir/grok.timeout" ]]; then
-  echo "delegate-cursor-review: Grok 4.5 Fastは${TIMEOUT_SECONDS}秒でタイムアウトしました" >&2
+  echo "delegate-cursor-review: Grok 4.5は${TIMEOUT_SECONDS}秒でタイムアウトしました" >&2
   grok_status=124
 fi
 
