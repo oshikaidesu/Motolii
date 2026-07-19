@@ -37,7 +37,9 @@ Text 1 Object
 | TM-7 | 第三者Animator開放(Effector評価形への合流) | M5-P0I spike、[vism-package-concept §11](../vism-package-concept.md)停止線 |
 | TM-8 | 3D(Transform3D delta / Spatial Score channels) | M5-P6契約とtext-model propertiesの正式拡張(台帳§9) |
 
-## 3. 枝番(1 Issue = 1 commit)
+## 3. 能力枝番(発注時にさらに1 Issue = 1 commitへ分ける)
+
+次の`TM-1a`〜`TM-4a`は、縦切りの受け入れ範囲を示す**親能力**であり、そのまま1 Issue / 1 commitとして発注しない。実装発注時は、§6の粗粒度レーンを起点に、domain/evaluation、toolkit非依存projection、egui adapter、E2Eを一つの検証可能な境界へ分ける。
 
 | ID | 内容 | 依存 | 完了条件 | 非目標/拒否条件 |
 |---|---|---|---|---|
@@ -78,3 +80,62 @@ TM-5以降はgate通過待ち(発注不可のまま)
 なおM5-P0IはTM第1弾の**契約上の遮断要件ではない**(公開trait・共通schemaへ触れないため)。硬い依存はM5-P6であり、TM接続をP0I後へ置くのはスケジューリング判断として採用する(ユーザー採用順序 2026-07-19: shell → Inspector最初のE2E → Timeline/選択同期 → 時間編集 → Browser → P0I/P6後にText MotionをCharacter Scoreへ接続)。
 
 M3仕様タスク表へのTM行転記と並列レーン文の更新は、`codex/m3-entry`統合後の別コミットで行う(本書§2がその文面の正本)。
+
+## 6. 粗粒度の並列実装台帳(Codex翻訳、2026-07-19)
+
+外部read-only助言で挙がった細粒IDをそのままロードマップへ並べず、利用者価値と契約境界が読める5レーンへ畳む。これは発注書ではなく、**並列化と合流点を判断するための台帳**である。各レーン内の1 commit粒度は、実際に発注する直前に[既存M3枝番規律](2026-07-16-m3-ui-concept-to-tickets.md)へ従って切る。
+
+| レーン | 目的 | 主な成果 | 硬い依存 | 他レーンとの関係 |
+|---|---|---|---|---|
+| **D: 先に決める** | 実装で未決を埋めない | `TM-D1`のSequence最小閉集合、`TM-D2`のP6到達確認、`TM-D3`の一時文字identityとreshape時失効規則 | なし。docs/fixtureのみ | P6実装、M3基盤、Gate 1/P0Iと並行できる |
+| **T: Text評価** | Text 1 Objectを描き、Random Entranceを評価する | 静的Text plugin、通常Object作成、L0 Random Entrance、seed/preview/export同値 | M5-P6。Random EntranceはさらにTM-D1 | UIを待たず進められる。U4a panel接続は別の合流作業 |
+| **S: Score投影** | 評価済み文字時間をread-onlyで見せる | toolkit非依存Score model、Timeline adapter、展開/折り畳み所有E2E | Random Entrance評価、U3aのlayout/hit-test面 | Text評価後、選択レーンと並行できる |
+| **C: 文字選択** | Stage / Score / Inspectorを同じ一時対象へ同期する | Transient selection model、Stage hit-test、各面の強調、三面同期E2E | Text cluster/bounds、TM-D3、U1a/U0b/U2cの必要枝番 | Score modelとStage面を別々に作り、最後の同期E2Eで合流する |
+| **H: Host接続** | Motolii標準操作としてTextを扱う | 通常作成command、自動parameter panel、nonblocking preview、Undo | Text評価、U2a/U2b/U4aの該当枝番 | Text pluginに独自UIを持たせず、既存Host境界へ後から接続する |
+
+### 6.1 並列wave
+
+```text
+Wave 0:  D(TM-D1/D2/D3) ─────┐
+         M5-P6 ──────────────┼─ 並行
+         M3 shell/U0/U1/U3/U4基盤 ┘
+
+Wave 1:  T 静的Text評価
+              ├─ H 通常Object作成・自動panel接続
+              └─ T Random Entrance評価
+
+Wave 2:  Random Entrance評価
+              ├─ S Score projection model
+              ├─ C Transient selection model
+              └─ seed/preview/export E2E
+
+Wave 3:  S Timeline adapter ─────┐
+         C Stage hit-test ───────┼─ 並行
+         H Inspector投影 ────────┘
+
+Wave 4:  展開所有E2E + 三面選択同期E2E
+```
+
+P0I、Gate 1残項目、Browser `Type Pulse` handoffはWave 0以降と並行してよいが、第1弾を遮断する硬依存ではない。逆にP6、TM-D1、TM-D3は、対応する実装へ入る前に満たす。
+
+### 6.2 発注時の分割規則
+
+- `Textを描く`、`Objectを作る`、`自動panelから編集する`を同じcommitへ入れない。
+- `Sequenceを評価する`と`preview/export同値を閉じる`を、評価核とE2Eの別境界として扱う。
+- `Scoreのdomain model`、`Timeline描画adapter`、`展開状態の所有E2E`を分ける。
+- `文字選択model`、`Stage hit-test`、`Score/Inspector投影`、`三面同期E2E`を分ける。
+- egui型、px/DPI、Timeline座標はtoolkit非依存modelへ入れない。
+- 各発注書には変更許可ファイル、非目標、STOP条件、必須負例を、その時点の実コードから確定して書く。粗い台帳からfile allowlistを推測しない。
+
+### 6.3 共通停止線
+
+いずれかのレーンで次が必要になった時点で、第1弾の実装を止めて対象gateへ戻す。
+
+- override store、安定書記素ID、Needs Review等の恒久状態
+- 公開`Element` / `EffectorPlugin` / evaluated-domain trait
+- 文字数分のDocument Object、保存Track、恒久Timeline row
+- Browserカードからのapply handoff、独自plugin panel
+- Ghost Pose、Detach、3D、物理、第三者Vism
+- CONTROL/RESULT二段UIやTiming Railの意味確定
+
+外部助言の重要度ラベルや仮file範囲は設計根拠として採用しない。採用したのは、現行`TM-1a`〜`TM-4a`を親能力へ戻し、実装時に評価・投影・adapter・E2Eを分離するという粒度補正である。
