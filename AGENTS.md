@@ -5,7 +5,8 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 ## 「発注」時のCursor自動委任
 
 - ユーザーが「発注して」「実装を発注」等、**発注を依頼動詞として明示した時だけ**自動委任を発火する。通常の「実装して」、説明・引用・ファイル内に現れただけの「発注」では発火しない
-- 発火時の役割は固定する。**主担当Codexは先例調査・コード事実の確認・長期展望と、恒久形式/公開API/plugin契約/停止線など重要境界の最終判断**を担う。**Cursor版Grok 4.5は現場監督**として、その調査結果・既存仕様・やりたいこと・現状差分から具体設計案、チケット分解、発注書案を作る。Codexは全文を代筆せず、実装前に正しさ・抜け・ユーザー意図・契約境界との一致だけを審査し、承認済み発注書だけを**Cursor Composer 2.5 Fastが受注者**として実装する。最後に同じGrok監督が差分を検収し、Codexが統合を判断する。Grokは仕様の未決事項や公開契約を発明せず、判断が必要なら`ORDER: STOP`でCodexへ戻す。監督・受注ともCursor Agent CLIへ直行し、`ORDER: STOP`や`VERDICT: REJECT`を別backendで上書きしない
+- **期限付き運用(2026-07-21まで)**: Cursor公式のGrok 4.5 first-party利用2倍期間中は、外部モデルの異なる目を入口と出口の両方に残すため、下記のGrok発注書作成とGrok検収を省略しない。消費抑制はレビュー回数削減ではなくStandardモデル既定で行う。**2026-07-22以降は自動で「関所だけ」へ変更せず**、First-Party/API残量、1チケット当たり消費、STOP/REJECTで見つかった有効指摘を確認してから本節を改訂する。この期限付き記述は将来の恒久契約ではない
+- 発火時の役割は固定する。**主担当Codexは先例調査・コード事実の確認・長期展望と、恒久形式/公開API/plugin契約/停止線など重要境界の最終判断**を担う。**Cursor版Grok 4.5 Standardは現場監督**として、その調査結果・既存仕様・やりたいこと・現状差分から具体設計案、チケット分解、発注書案を作る。Codexは全文を代筆せず、実装前に正しさ・抜け・ユーザー意図・契約境界との一致だけを審査し、承認済み発注書だけを**Cursor Composer 2.5 Standardが受注者**として実装する。最後に同じGrok監督が差分を検収し、Codexが統合を判断する。Fast variantは時間制約など明示理由がある単発実行だけに限定し、既定値へ戻さない。Grokは仕様の未決事項や公開契約を発明せず、判断が必要なら`ORDER: STOP`でCodexへ戻す。監督・受注ともCursor Agent CLIへ直行し、`ORDER: STOP`や`VERDICT: REJECT`を別backendで上書きしない
 - 実装発注は隔離worktreeで二段階実行する。まず`./scripts/delegate-cursor-supervised.sh prepare <worktree> <order-file> "<task>"`でGrok案だけを生成して停止する。Codexは誤りがあればComposerへ流さずGrokへ差し戻す。正しければorder fileへ`CODEX PRECHECK: APPROVED`を明示し、`execute`で初めてComposerを起動する
 - Grokの発注書は対象仕様ID、目的、現状、変更許可ファイル、非目標、再利用箇所、STOP条件、必須負例、実行コマンドを含む。`ORDER: READY`かつCodex事前承認がない限りComposerを起動しない。Grok検収が`VERDICT: ACCEPT`でなければ差分を採用・commit・pushしない
 - `delegate-cursor-review.sh`の並列助言は調査・論点抽出専用であり、実装の指揮系統には使わない。Composerに仕様判断・発注範囲変更・代替設計をさせない

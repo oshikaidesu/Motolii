@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CURSOR_GROK_MODEL="${CURSOR_GROK_MODEL:-cursor-grok-4.5-high}"
 CURSOR_AGENT_BIN="${CURSOR_AGENT_BIN:-cursor-agent}"
-COMPOSER_MODEL="${CURSOR_COMPOSER_MODEL:-composer-2.5-fast}"
+COMPOSER_MODEL="${CURSOR_COMPOSER_MODEL:-composer-2.5}"
 SUPERVISOR_TIMEOUT_SECONDS="${CURSOR_SUPERVISED_TIMEOUT_SECONDS:-300}"
 COMPOSER_TIMEOUT_SECONDS="${CURSOR_COMPOSER_TIMEOUT_SECONDS:-900}"
 HEARTBEAT_SECONDS="${CURSOR_SUPERVISED_HEARTBEAT_SECONDS:-30}"
@@ -176,7 +176,7 @@ $prompt"
 
 if [[ "$MODE" == "prepare" ]]; then
   supervisor_prompt=$(cat <<EOF
-You are the on-site supervisor for Motolii. Work read-only. Read AGENTS.md and every required spec/review completely. Inspect the current worktree and existing diff. Translate the user intent into a binding implementation order for Composer 2.5 Fast; do not implement.
+You are the on-site supervisor for Motolii. Work read-only. Read AGENTS.md and every required spec/review completely. Inspect the current worktree and existing diff. Translate the user intent into a binding implementation order for Composer 2.5 Standard; do not implement.
 
 The order must contain: objective and user intent, current state and already-completed work, authoritative spec/task IDs, exact allowed files, explicit non-goals, existing helpers to reuse, invariants and atomicity, STOP conditions, required positive and negative tests, exact verification commands, and known integration gates. Do not permit allow/ignore/lint suppression, expected-value or golden rewrites, fixture special-cases, raw JSON/string scanners that bypass typed boundaries, public raw allocation/mutation APIs, serde defaults inventing durable meaning, duplicate planners/helpers, implicit migration, partial mutation, TODO stubs, or expansion into adjacent tasks.
 
@@ -239,7 +239,7 @@ EOF
 )
 
 echo
-echo "## 2. Composer 2.5 Fast implementation (Codex-prechecked order)"
+echo "## 2. Composer 2.5 Standard implementation (Codex-prechecked order)"
 if ! run_agent "$tmp_dir/implementation.txt" "$COMPOSER_TIMEOUT_SECONDS" \
   "$CURSOR_AGENT_BIN" -p --force --trust --output-format text \
   --model "$COMPOSER_MODEL" --workspace "$WORKTREE" "$composer_prompt"; then

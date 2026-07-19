@@ -64,7 +64,7 @@ cat >"$FAKE_BIN/cursor-agent" <<'EOF'
 set -euo pipefail
 echo cursor-agent >>"$FAKE_CALL_LOG"
 printf 'cursor-agent-args:%s\n' "$*" >>"$FAKE_CALL_LOG"
-if [[ " $* " == *" --model composer-2.5-fast "* ]]; then
+if [[ " $* " == *" --model composer-2.5 "* ]]; then
   printf '%s\n' "${FAKE_COMPOSER_OUTPUT:-implementation complete}"
 else
   printf '%s\n' "${FAKE_CURSOR_OUTPUT:-}"
@@ -166,7 +166,7 @@ else
 fi
 assert_status 4 "$status" "VERDICT REJECT preservation"
 assert_contains "$CALL_LOG" "cursor-agent" "Composer explicit Cursor binary"
-assert_has_fragment "$CALL_LOG" "--model composer-2.5-fast" "Composer Fast model"
+assert_has_fragment "$CALL_LOG" "--model composer-2.5" "Composer Standard model"
 assert_not_contains "$CALL_LOG" "grok" "Grok Build inspection bypass"
 assert_not_contains "$CALL_LOG" "agent" "execute generic agent collision"
 
