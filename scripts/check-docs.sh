@@ -28,29 +28,32 @@ if [ -n "$dups" ]; then
   done <<< "$dups"
 fi
 
-# 3. docs/**/*.md のローカルmdリンクが実在すること(#fragmentは除去して判定)
-python3 - "$DOCS" <<'PY'
+# 3. AGENTS.md と docs/**/*.md のローカルmdリンクが実在すること
+# (#fragmentは除去して判定)。必読入口のリンク切れもdocsと同じ失敗にする。
+python3 - "$ROOT" <<'PY'
 import os, re, sys
-docs = sys.argv[1]
+root = sys.argv[1]
+docs = os.path.join(root, 'docs')
 link_re = re.compile(r'\]\(([^)]+)\)')
 fail = False
+paths = [os.path.join(root, 'AGENTS.md')]
 for dirpath, _, files in os.walk(docs):
     for name in files:
-        if not name.endswith('.md'):
+        if name.endswith('.md'):
+            paths.append(os.path.join(dirpath, name))
+for path in paths:
+    text = open(path, encoding='utf-8').read()
+    for target in link_re.findall(text):
+        if target.startswith(('http://', 'https://', 'mailto:', '#')):
             continue
-        path = os.path.join(dirpath, name)
-        text = open(path, encoding='utf-8').read()
-        for target in link_re.findall(text):
-            if target.startswith(('http://', 'https://', 'mailto:', '#')):
-                continue
-            target = target.split('#')[0].strip()
-            if not target:
-                continue
-            resolved = os.path.normpath(os.path.join(dirpath, target))
-            if not os.path.exists(resolved):
-                rel = os.path.relpath(path, os.path.dirname(docs))
-                print(f"NG: リンク切れ {rel} -> {target}")
-                fail = True
+        target = target.split('#')[0].strip()
+        if not target:
+            continue
+        resolved = os.path.normpath(os.path.join(os.path.dirname(path), target))
+        if not os.path.exists(resolved):
+            rel = os.path.relpath(path, root)
+            print(f"NG: リンク切れ {rel} -> {target}")
+            fail = True
 sys.exit(1 if fail else 0)
 PY
 [ $? -ne 0 ] && FAIL=1

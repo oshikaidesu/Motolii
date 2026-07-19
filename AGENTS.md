@@ -26,7 +26,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 4. M2 Document/スキーマ/ジャーナルに触る時: **先に**[docs/reviews/2026-07-12-m2-permanence-prevention.md](docs/reviews/2026-07-12-m2-permanence-prevention.md)(予防5手)。背景の先人調査は[rework-prior-art](docs/reviews/2026-07-12-rework-prior-art.md)
 5. M3製品実装に触る時: **先に**[docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md](docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md)を読み、ステータスが発効中なら実装を止める。調査・fixtureも公開APIや永続形式へ焼かない
 6. M3 UI/入力/タイムライン/プラグインパネルに触る時: **先に**[docs/reviews/2026-07-14-m3-ui-boundary-prevention.md](docs/reviews/2026-07-14-m3-ui-boundary-prevention.md)(UI境界の規律8本)
-7. M3の外観・timeline・panelに触る時: **先に**[M3 UI参照地図](docs/ui-reference-map.md)、[docs/ui-visual-language.md](docs/ui-visual-language.md)、[現行Reactモック](docs/mocks-ui/README.md)を読む。`docs/mocks/`は**ARCHIVED・新規変更禁止**。通常入場と`#catalog`はReact候補だけ、legacyは`#archive/*`とparity testだけから参照する。新しいUI判断、操作、goldenをHTMLへ入れようとした時点でSTOPし、`docs/mocks-ui/`のReact所有境界へ戻る。モックの具体色値や未決機能をそのまま契約へ焼かない
+7. M3の外観・timeline・panelに触る時: **先に**[M3 UI参照地図](docs/ui-reference-map.md)と[docs/ui-visual-language.md](docs/ui-visual-language.md)を読む。Reactモックの実体と`README.md`は`codex/m3-mock-components`側の接続済みworktreeで読み、main側にまだ無い時は`docs/mocks/`を代替の現行実装として変更せず、React側の統合または対象worktreeへの移動を先に行う。`docs/mocks/`は**ARCHIVED・新規変更禁止**。通常入場と`#catalog`はReact候補だけ、legacyは`#archive/*`とparity testだけから参照する。新しいUI判断、操作、goldenをHTMLへ入れようとした時点でSTOPし、`docs/mocks-ui/`のReact所有境界へ戻る。モックの具体色値や未決機能をそのまま契約へ焼かない
 
 ## 絶対規律(破ると設計の根拠が崩れる。レビュー最重視項目)
 
