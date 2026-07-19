@@ -491,6 +491,9 @@
   const $ = selector => document.querySelector(selector);
   const $$ = selector => [...document.querySelectorAll(selector)];
   const state = {mode:"installed", stageTool:"select", playing:false, start:0, raf:0, playheadPct:46, activeInterval:null, depthOpen:false, depthPhase:0, intensity:64, spread:42, automation:{position:true,depth:true,scale:false,rotation:false,opacity:true,intensity:true,spread:false}, activeParam:"intensity", easing:{interp:"Bezier",preset:"Smooth",x1:.34,y1:1.56,x2:.64,y2:1,overshoot:true}, easeDrag:null, curveTag:"all", curveFolder:"all", curveHistory:[], curveLibrary:[{name:"Smooth",interp:"Bezier",v:[.34,1.56,.64,1],tags:"goto",folder:""},{name:"Snap in",interp:"Bezier",v:[.7,0,.2,1],tags:"goto text",folder:"type"},{name:"Drift out",interp:"Bezier",v:[0,.4,.3,1],tags:"camera",folder:"camera"},{name:"Lyric pop",interp:"Bezier",v:[.2,1.35,.5,1],tags:"text",folder:"type"},{name:"Bounce",interp:"Bounce",v:[0,0,1,1],tags:"",folder:""}], zDrag:null, assetSource:"project", selectedAsset:"night_drive.wav", fileRoot:"city", filePath:"", fileHistory:[], colorChannel:"Fill", selectedColor:"#df8b4d", appliedFill:"#df8b4d", appliedStroke:"#68a6d8", colorFolder:"all", colorTag:"all", colorHistory:["#df8b4d","#68a6d8","#ad82bf","#18202b","#62b4ae"], colorField:"triangle", colorResize:null, eyedropper:false, pluginSource:"all", pluginFolder:"all", pluginLabel:"all", pluginView:"thumb", pluginHistory:["installed","missing"]};
+  if($("#vism-browser").classList.contains("candidate-plugin-browser")){
+    $("#plugin-thumb-size").min="64";$("#plugin-thumb-size").max="180";$("#plugin-thumb-size").value="80";
+  }
   const modeCopy = {
     installed:{accent:"#d4b36f",crumb:"Echo Bloom",stage:"ECHO BLOOM",badge:"",brief:""},
     discover:{accent:"#79aaa6",crumb:"Glyph Current",stage:"GLYPH CURRENT · DISCOVER",badge:"DISCOVERY PREVIEW · NOT IN PROJECT",brief:"Discovery preview · Project変更ゼロ"},

@@ -162,7 +162,10 @@
 #vism-browser.candidate-plugin-browser .candidate-plugin-grid {
   min-height: 0;
   align-content: start;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(var(--plugin-thumb-size), 100%), 1fr)
+  );
   gap: 1px;
   overflow: auto;
 }
@@ -172,14 +175,16 @@
 }
 
 #vism-browser.candidate-plugin-browser .candidate-plugin-card {
-  min-height: 106px;
+  min-height: 0;
   display: grid;
-  grid-template-rows: 78px 28px;
+  grid-template-rows: auto 30px;
   overflow: hidden;
 }
 
 #vism-browser.candidate-plugin-browser .candidate-plugin-card .plugin-thumb {
-  height: 78px;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
   display: block;
   border-bottom: 1px solid var(--line);
 }
@@ -239,16 +244,22 @@
 }
 
 #vism-browser.candidate-plugin-browser[data-view="visual"] .candidate-plugin-grid {
-  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(var(--plugin-thumb-size), 100%), 1fr)
+  );
 }
 
 #vism-browser.candidate-plugin-browser[data-view="visual"] .candidate-plugin-card {
-  min-height: 88px;
-  grid-template-rows: 88px;
+  min-height: 0;
+  aspect-ratio: 1;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 #vism-browser.candidate-plugin-browser[data-view="visual"] .candidate-plugin-card .plugin-thumb {
-  height: 88px;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1;
   border-bottom: 0;
 }
 
@@ -277,6 +288,7 @@
 
 #vism-browser.candidate-plugin-browser[data-view="detail"] .candidate-plugin-card {
   min-height: 64px;
+  aspect-ratio: auto;
   display: grid;
   grid-template-columns: 62px minmax(0, 1fr);
   grid-template-rows: 64px;

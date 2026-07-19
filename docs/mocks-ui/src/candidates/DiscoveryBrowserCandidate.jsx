@@ -47,6 +47,7 @@ function CandidatePluginBrowser() {
       id="vism-browser"
       className="candidate-plugin-browser"
       data-view="thumb"
+      style={{ "--plugin-thumb-size": "80px" }}
       data-info="Plugin Browser|Browse visual results with the same shell as Project"
     >
       <div className="candidate-search-row">

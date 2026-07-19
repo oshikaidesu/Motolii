@@ -37,6 +37,37 @@ test.describe("shared discovery Browser candidate", () => {
     );
     await expect(page.locator(".candidate-card-name:visible")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Echo Bloom" })).toBeVisible();
+    const firstCard = page.locator(".candidate-plugin-card").first();
+    const defaultBox = await firstCard.boundingBox();
+    expect(Math.abs(defaultBox.width - defaultBox.height)).toBeLessThan(1);
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page
+      .getByRole("dialog", { name: "Settings" })
+      .getByRole("button", { name: "Browser" })
+      .click();
+    const thumbnailSize = page.locator("#plugin-thumb-size");
+    await expect(thumbnailSize).toBeVisible();
+    await thumbnailSize.evaluate((control) => {
+      control.value = "64";
+      control.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.getByRole("button", { name: "Done" }).click();
+    const smallBox = await firstCard.boundingBox();
+    expect(Math.abs(smallBox.width - smallBox.height)).toBeLessThan(1);
+
+    await thumbnailSize.evaluate((control) => {
+      control.value = "160";
+      control.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const largeBox = await firstCard.boundingBox();
+    expect(Math.abs(largeBox.width - largeBox.height)).toBeLessThan(1);
+    expect(largeBox.width).toBeGreaterThan(smallBox.width + 20);
+
+    await thumbnailSize.evaluate((control) => {
+      control.value = "80";
+      control.dispatchEvent(new Event("input", { bubbles: true }));
+    });
     await page
       .getByRole("button", { name: "Thumbnail and name view" })
       .click();
