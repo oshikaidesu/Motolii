@@ -1800,8 +1800,15 @@ dependencies = [
  "egui-wgpu",
  "egui-winit",
  "egui_tiles",
+ "motolii-core",
+ "motolii-doc",
+ "motolii-eval",
  "motolii-gpu",
+ "motolii-plugins-firstparty",
+ "motolii-render",
+ "motolii-testkit",
  "thiserror 2.0.18",
+ "wgpu",
  "winit",
 ]
 

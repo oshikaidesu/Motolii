@@ -2,7 +2,13 @@
 //!
 //! toolkit APIはprivate module内に閉じ、domain/coreの公開契約へは出さない。
 
+mod app;
+mod display_pool;
+mod layout_preset;
 mod shell;
+mod static_frame;
+
+pub use shell::{run_shell, ShellError};
 
 /// 製品 UI クレートの識別子。依存方向 CI の許可リストと一致させる。
 pub const CRATE_ID: &str = "motolii-ui";
