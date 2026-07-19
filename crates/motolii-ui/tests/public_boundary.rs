@@ -98,6 +98,9 @@ fn exported_types_are_toolkit_free() {
     assert_no_toolkit_in_type_name::<motolii_ui::UiCrateInfo>();
     assert_no_toolkit_in_type_name::<motolii_ui::UiError>();
     assert_no_toolkit_in_type_name::<Result<motolii_ui::UiCrateInfo, motolii_ui::UiError>>();
+
+    assert_no_toolkit_in_type_name::<motolii_ui::UiStateOwner>();
+    assert_no_toolkit_in_type_name::<motolii_ui::WorkspaceSessionKind>();
 }
 
 #[test]

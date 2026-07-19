@@ -13,3 +13,7 @@ egui_tiles.workspace = true
 motolii-gpu.workspace = true
 thiserror.workspace = true
 winit.workspace = true
+
+[dev-dependencies]
+motolii-doc.workspace = true
+serde_json.workspace = true

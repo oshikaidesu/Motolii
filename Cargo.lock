@@ -1800,7 +1800,9 @@ dependencies = [
  "egui-wgpu",
  "egui-winit",
  "egui_tiles",
+ "motolii-doc",
  "motolii-gpu",
+ "serde_json",
  "thiserror 2.0.18",
  "winit",
 ]
