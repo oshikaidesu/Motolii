@@ -899,6 +899,28 @@
     appendCrumb(fileRootNames[state.fileRoot]||state.fileRoot,0);
     segments.forEach((segment,index)=>appendCrumb(segment,index+1));
   }
+  function renderFileTree(visible){
+    const tree=$("#file-tree");
+    if(!tree)return;
+    tree.replaceChildren();
+    const segments=state.filePath?state.filePath.split("/"):[];
+    const appendRow=(label,path,depth,relation)=>{
+      const button=document.createElement("button");
+      button.dataset.fileTreePath=path;button.dataset.fileTreeDepth=String(depth);
+      button.className=path===state.filePath?"current":relation;
+      const marker=document.createElement("i");marker.textContent=`L${depth}`;
+      const connector=document.createElement("b");connector.textContent=relation==="child"?"›":"▣";
+      const name=document.createElement("span");name.textContent=label;
+      button.append(marker,connector,name);tree.append(button);
+    };
+    appendRow(fileRootNames[state.fileRoot]||state.fileRoot,"",0,"ancestor");
+    segments.forEach((segment,index)=>{
+      appendRow(segment,segments.slice(0,index+1).join("/"),index+1,"ancestor");
+    });
+    visible.filter(tile=>tile.dataset.fileDirectory).forEach(tile=>{
+      appendRow(tile.dataset.asset,tile.dataset.fileDirectory,segments.length+1,"child");
+    });
+  }
   function renderFileBrowser(){
     if(!$("[data-file-root-select]"))return false;
     $$("[data-file-root-select]").forEach(button=>button.classList.toggle("on",button.dataset.fileRootSelect===state.fileRoot));
@@ -907,6 +929,7 @@
       const show=tile.dataset.fileRoot===state.fileRoot&&(tile.dataset.filePath||"")===state.filePath;
       tile.hidden=!show;return show;
     });
+    renderFileTree(visible);
     $("#asset-source-title").textContent=fileRootNames[state.fileRoot]||"Registered folder";
     $("#asset-scope-label").textContent=state.filePath?"FOLDER":"REGISTERED ROOT";
     $("#asset-count").textContent=`${visible.length} ITEMS`;
@@ -1100,6 +1123,10 @@
     if(!crumb)return;
     const depth=Number(crumb.dataset.fileCrumb);
     navigateFile(state.fileRoot,state.filePath.split("/").slice(0,depth).join("/"));
+  };
+  if($("#file-tree"))$("#file-tree").onclick=event=>{
+    const row=event.target.closest("[data-file-tree-path]");
+    if(row)navigateFile(state.fileRoot,row.dataset.fileTreePath);
   };
   $$(".asset-tile").forEach(tile=>{
     tile.onclick=()=>selectAssetTile(tile);

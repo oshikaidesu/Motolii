@@ -128,6 +128,8 @@ Plugin Resultsのcardには説明を反復しない。Projectへ追加済みのE
 
 外部filesystemを辿るExplorerでは、Collectionsとは別に複数の**Registered Folders**をWorkspace参照として持てる。各登録フォルダは利用者が明示的に許可した実directoryを起点とし、選択後はその配下だけを通常のfolder階層とbreadcrumbで辿る。登録、解除、並べ替え、最後に開いたpathはDocumentとUndoを変えず、登録フォルダをProject assetの所有者や仮想Collectionへ変換しない。OS権限、volume切断、移動・削除はtypedな逸脱状態として同じExplorerに示す。
 
+Explorerのfolder hierarchyは、深さに比例して大きなtab空白を入れない。ancestorと直下folderを同じ左端へ揃え、固定幅のdepth marker、folder icon、connector、current outlineで親子関係を示す。深さごとの小面積色または濃淡は補助手掛かりとして併用できるが、色だけを唯一の識別にしない。各ancestorとchildは同じrailから移動でき、breadcrumbと異なるpath正本を持たない。
+
 視覚候補の棚は`single click = 選択／Preview`、対象へのdrag/dropを基本Commit、`double click = 選択中targetへCommit`を共通短縮操作にする。double clickは有効な選択targetが読める時だけ有効にし、対象不在・型不一致・利用不能時は同じcardから理由を返す。keyboardの`Enter`も同じIntentへ接続し、反復する`Apply`ボタンを各候補やDetailへ置かない。Historyへ積むのはCommitだけであり、single click、hover、Cancelは積まない。
 
 星1〜5の評価は採用しない。候補ごとに「星1か星3か」を判断する仕事を増やし、主要preview面を反復iconで狭めるためである。お気に入りは単一の再発見操作としてCollectionへ投影し、評価値やDocument意味にしない。

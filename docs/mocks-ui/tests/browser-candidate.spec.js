@@ -154,6 +154,18 @@ test.describe("shared discovery Browser candidate", () => {
     await expect(page.locator("#asset-path")).toContainText("City Source");
     await expect(page.locator(".candidate-asset-grid .asset-tile:visible")).toHaveCount(2);
     await expect(page.locator("#place-asset")).toHaveText("OPEN");
+    const hierarchyRows = page.locator("#file-tree button");
+    await expect(hierarchyRows).toHaveCount(2);
+    await expect(hierarchyRows.nth(0)).toContainText("L0");
+    await expect(hierarchyRows.nth(1)).toContainText("L1");
+    const rootRow = await hierarchyRows.nth(0).boundingBox();
+    const childRow = await hierarchyRows.nth(1).boundingBox();
+    expect(Math.abs(rootRow.x - childRow.x)).toBeLessThan(1);
+
+    await hierarchyRows.nth(1).click();
+    await expect(page.locator("#asset-path")).toContainText("MV");
+    await expect(page.locator("#file-tree button.current")).toContainText("MV");
+    await expect(page.locator("#file-tree")).toContainText("night_drive");
 
     await page.locator('[data-file-root-select="audio"]').click();
     await expect(page.locator("#asset-path")).toContainText("Audio Library");

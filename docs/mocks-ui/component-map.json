@@ -590,7 +590,7 @@
         "Document command only when a candidate is committed to a target"
       ],
       "status": "design-candidate",
-      "referenceRole": "shared Project and Plugin Browser grammar with named, thumbnail-only, and taxonomy-navigable list views, direct effect application, Inspector-owned parameter description, and multiple registered filesystem roots",
+      "referenceRole": "shared Project and Plugin Browser grammar with named, thumbnail-only, and taxonomy-navigable list views, direct effect application, Inspector-owned parameter description, multiple registered filesystem roots, and non-indented hierarchy navigation",
       "eguiTarget": "comparison fixture for a shared internal egui Browser shell; not an adopted product component"
     }
   ]

@@ -311,6 +311,12 @@ function CandidateProjectBrowser() {
             <button className="candidate-register-folder" id="add-file-root">
               ＋ Add folder
             </button>
+            <div className="candidate-nav-title">Hierarchy</div>
+            <div
+              className="candidate-file-tree"
+              id="file-tree"
+              aria-label="Folder hierarchy"
+            />
           </div>
         </nav>
 

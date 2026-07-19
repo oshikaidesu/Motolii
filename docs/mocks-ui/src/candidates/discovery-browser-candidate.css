@@ -63,6 +63,7 @@
   padding: 4px;
   border-right: 1px solid var(--line);
   background: var(--bg);
+  overflow: auto;
 }
 
 .candidate-nav-title {
@@ -475,6 +476,76 @@
 .candidate-register-folder:hover {
   background: var(--raised);
   color: var(--ink);
+}
+
+.candidate-file-tree {
+  display: grid;
+  gap: 2px;
+}
+
+.candidate-file-tree button {
+  --depth-mark: color-mix(in srgb, var(--way-files) 45%, var(--bg));
+  width: 100%;
+  min-width: 0;
+  height: 27px;
+  display: grid;
+  grid-template-columns: 22px 13px minmax(0, 1fr);
+  align-items: center;
+  gap: 3px;
+  padding: 2px 3px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 9px;
+  text-align: left;
+}
+
+.candidate-file-tree button[data-file-tree-depth="0"] {
+  --depth-mark: color-mix(in srgb, var(--way-files) 85%, var(--bg));
+}
+
+.candidate-file-tree button[data-file-tree-depth="1"] {
+  --depth-mark: color-mix(in srgb, var(--way-files) 65%, var(--bg));
+}
+
+.candidate-file-tree button[data-file-tree-depth="3"] {
+  --depth-mark: color-mix(in srgb, var(--way-files) 30%, var(--bg));
+}
+
+.candidate-file-tree button i {
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border-left: 3px solid var(--depth-mark);
+  background: var(--raised);
+  color: var(--sub);
+  font: 8px var(--mono);
+  font-style: normal;
+}
+
+.candidate-file-tree button b {
+  color: var(--sub);
+  font: 9px var(--mono);
+  font-weight: 400;
+  text-align: center;
+}
+
+.candidate-file-tree button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidate-file-tree button:hover,
+.candidate-file-tree button.current {
+  border-color: var(--line2);
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.candidate-file-tree button.current {
+  outline: 1px solid var(--way-files);
+  outline-offset: -2px;
 }
 
 .candidate-asset-results {
