@@ -884,7 +884,7 @@ fn results(ui: &mut egui::Ui, state: &mut BrowserState) -> Option<&'static str> 
         inset_x: 5.0,
     }
     .show(ui, Layout::left_to_right(Align::Center), |ui| {
-        ui.label(RichText::new("Results").font(theme::interface_bold_font(11.0)));
+        ui.label(RichText::new("Results").font(theme::interface_bold_font(10.0)));
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             ui.add_space(5.0);
             ui.label(
@@ -969,7 +969,7 @@ fn effect_card(ui: &mut egui::Ui, effect: &Effect, state: &BrowserState, width: 
     } else {
         width.max(62.0)
     };
-    let name_height = if show_name { 33.0 } else { 0.0 };
+    let name_height = if show_name { 30.0 } else { 0.0 };
     let height = thumbnail_height + name_height;
     let (rect, response) = ui.allocate_exact_size(Vec2::new(width, height), Sense::click());
     let selected = state.selected == effect.id;

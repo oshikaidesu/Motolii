@@ -3,7 +3,7 @@ use eframe::egui::{
     self, pos2, vec2, Align2, Color32, FontId, Id, Rect, Response, Sense, Stroke, StrokeKind,
 };
 
-const HEADER_HEIGHT: f32 = 28.0;
+const HEADER_HEIGHT: f32 = 29.0;
 const KEY_TOOLS_WIDTH: f32 = 200.0;
 const BAND_RAIL_WIDTH: f32 = 54.0;
 const RULER_HEIGHT: f32 = 23.0;

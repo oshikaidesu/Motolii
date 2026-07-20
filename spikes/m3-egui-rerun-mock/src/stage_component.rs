@@ -4,7 +4,7 @@ use eframe::egui::{
     StrokeKind, Vec2,
 };
 
-const HEADER_HEIGHT: f32 = 30.0;
+const HEADER_HEIGHT: f32 = 29.0;
 const TRANSPORT_HEIGHT: f32 = 32.0;
 
 #[derive(Debug, Clone, Default)]
@@ -169,7 +169,7 @@ fn paint_canvas(painter: &egui::Painter, canvas: Rect) {
 }
 
 fn output_frame(canvas: Rect) -> Rect {
-    let max_width = (canvas.width() * 0.82).min(720.0);
+    let max_width = (canvas.width() * 0.822).min(720.0);
     let max_height = canvas.height() * 0.80;
     let width = max_width.min(max_height * 16.0 / 9.0).max(160.0);
     Rect::from_center_size(canvas.center(), Vec2::new(width, width * 9.0 / 16.0))

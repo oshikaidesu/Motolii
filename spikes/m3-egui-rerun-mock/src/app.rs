@@ -77,7 +77,8 @@ impl MotoliiMock {
             .show(root, |ui| {
                 paint_bottom_border(ui);
                 ui.horizontal_centered(|ui| {
-                    ui.add_space(8.0);
+                    ui.spacing_mut().item_spacing.x = 12.0;
+                    ui.add_space(12.0);
                     ui.label(RichText::new("MOTOLII").font(theme::interface_bold_font(12.0)));
                     ui.label(
                         RichText::new("night_drive.mtl").font(theme::interface_bold_font(11.0)),
@@ -88,13 +89,17 @@ impl MotoliiMock {
                             .color(theme::TEXT_SECONDARY),
                     );
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        ui.add_space(7.0);
-                        if ui.button("Export").clicked() {
+                        ui.spacing_mut().item_spacing.x = 5.0;
+                        ui.add_space(12.0);
+                        if ui
+                            .add_sized([56.0, 25.0], egui::Button::new("Export"))
+                            .clicked()
+                        {
                             self.state.status =
                                 "Export is outside this comparison prototype".into();
                         }
-                        if ui
-                            .add_enabled(!self.state.redo.is_empty(), egui::Button::new("Redo"))
+                        ui.add_space(15.0);
+                        if history_button(ui, 63.0, "Redo", false, !self.state.redo.is_empty())
                             .clicked()
                         {
                             if let Some(entry) = self.state.redo.pop() {
@@ -107,8 +112,7 @@ impl MotoliiMock {
                                 self.state.status = format!("Redo 1 · {}", entry.label);
                             }
                         }
-                        if ui
-                            .add_enabled(!self.state.undo.is_empty(), egui::Button::new("Undo"))
+                        if history_button(ui, 67.0, "Undo", true, !self.state.undo.is_empty())
                             .clicked()
                         {
                             if let Some(entry) = self.state.undo.pop() {
@@ -121,7 +125,10 @@ impl MotoliiMock {
                                 self.state.status = format!("Undo · {}", entry.label);
                             }
                         }
-                        if ui.button("Settings").clicked() {
+                        if ui
+                            .add_sized([66.0, 25.0], egui::Button::new("Settings"))
+                            .clicked()
+                        {
                             self.state.settings_open = !self.state.settings_open;
                         }
                     });
@@ -167,8 +174,8 @@ impl MotoliiMock {
 
     fn status_bar(&mut self, root: &mut egui::Ui) {
         egui::Panel::bottom("motolii-status")
-            .default_size(23.0)
-            .size_range(23.0..=23.0)
+            .default_size(24.0)
+            .size_range(24.0..=24.0)
             .frame(panel_frame(theme::APP, true))
             .show(root, |ui| {
                 ui.horizontal_centered(|ui| {
@@ -349,6 +356,41 @@ fn panel_frame(fill: egui::Color32, border: bool) -> egui::Frame {
             Stroke::NONE
         })
         .inner_margin(egui::Margin::ZERO)
+}
+
+fn history_button(
+    ui: &mut egui::Ui,
+    width: f32,
+    label: &str,
+    points_left: bool,
+    enabled: bool,
+) -> egui::Response {
+    let response = ui
+        .add_enabled_ui(enabled, |ui| {
+            ui.add_sized(
+                [width, 25.0],
+                egui::Button::new(RichText::new(label)),
+            )
+        })
+        .inner;
+    let color = if enabled {
+        theme::TEXT_SECONDARY
+    } else {
+        theme::TEXT_MUTED
+    };
+    let direction = if points_left { -1.0 } else { 1.0 };
+    let center = egui::pos2(response.rect.left() + 12.0, response.rect.center().y);
+    let points = vec![
+        center + egui::vec2(4.0 * direction, -4.0),
+        center + egui::vec2(0.5 * direction, -5.5),
+        center + egui::vec2(-3.5 * direction, -3.0),
+        center + egui::vec2(-direction, -2.5),
+        center + egui::vec2(2.5 * direction, -1.0),
+        center + egui::vec2(4.0 * direction, 2.5),
+    ];
+    ui.painter()
+        .add(egui::Shape::line(points, Stroke::new(1.0, color)));
+    response
 }
 
 fn paint_bottom_border(ui: &egui::Ui) {
