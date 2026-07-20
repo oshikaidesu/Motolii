@@ -2,7 +2,9 @@
 //!
 //! toolkit APIはprivate module内に閉じ、domain/coreの公開契約へは出さない。
 
+mod app;
 mod command_registry;
+mod display_slot;
 mod document_command_request;
 mod domain_intent;
 mod input_router;
@@ -10,6 +12,7 @@ mod keymap;
 mod keymap_codec;
 mod shell;
 mod state_ownership;
+mod static_preview;
 
 pub use command_registry::{
     builtin_command_registry, CommandId, CommandIdError, CommandMetadata, CommandRegistry,
@@ -31,7 +34,9 @@ pub use keymap_codec::{
     KeymapCodecError, KeymapCodecLimits, LimitKind, LoadedKeymap, OpaqueOperationReason,
     KEYMAP_CODEC_VERSION,
 };
+pub use shell::{run_shell, ShellError};
 pub use state_ownership::{UiStateLifetime, UiStateOwner};
+pub use static_preview::StaticPreviewError;
 
 /// 製品 UI クレートの識別子。依存方向 CI の許可リストと一致させる。
 pub const CRATE_ID: &str = "motolii-ui";
