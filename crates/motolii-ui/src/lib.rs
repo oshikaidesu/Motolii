@@ -2,9 +2,11 @@
 //!
 //! toolkit APIはprivate module内に閉じ、domain/coreの公開契約へは出さない。
 
+mod domain_intent;
 mod shell;
 mod state_ownership;
 
+pub use domain_intent::{DomainIntent, DomainIntentError};
 pub use state_ownership::{UiStateLifetime, UiStateOwner};
 
 /// 製品 UI クレートの識別子。依存方向 CI の許可リストと一致させる。
