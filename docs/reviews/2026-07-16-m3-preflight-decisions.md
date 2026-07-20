@@ -110,9 +110,30 @@ U0d-3のraw input監査は次の機械境界に限定する。
   `egui::{InputState, RawInput}`、`winit::event::{DeviceEvent, RawKeyEvent}`も拒否する。
   通常/raw/byte/raw-byte string、char、line comment、入れ子block comment内の
   禁止語を無視することを固定する。
-- 現行製品sourceにtoolkit raw inputを読むadapterはまだ無いため、許可fileはゼロとする。
-  現段階はkey/modifier variantだけでなく`WindowEvent`/`DeviceEvent`等のtoolkit event面
-  全体を許可file外ゼロとし、resize/close等を理由に暗黙のevent adapterを作らない。
+- U1a-2以前の製品sourceではtoolkit raw inputを読むadapterの許可fileはゼロだった。
+  U1a-2では`crates/motolii-ui/src/layout_runtime_adapter.rs`だけを、focus中separatorの
+  Arrow / Home / Escapeをprivate layout actionへ正規化する局所adapterとして許可する。
+  入力はeguiのfocus中separator response、raw key event、`ImeGateState`、継続resize状態。
+  安全中断だけは`egui::Event::PointerGone`と`egui::Event::WindowFocused(false)`も入力し、
+  それ以外のraw pointer/window eventを読まない。出力はprivateなresize/reset action、
+  または既存のtoolkit非依存`SafetyInterrupt::{PointerCaptureLost, WindowFocusLost}`だけで、
+  `CommandId`、`DomainIntent`、D2 commandへ接続しない。raw安全eventは一度だけ
+  `SafetyInterrupt`へ正規化し、同じ値を
+  `InputRouter::route(NormalizedInput::SafetyInterrupt(..))`とprivate layout reducerへ
+  配送する。routerはglobal gesture、layout reducerは継続resizeだけをcancelし、layout
+  reducerはrouterの`DomainIntent`を入力しない。`ImeGateState::PreeditActive`中はArrow / Home /
+  Escapeをlayout actionへ変換せずIMEを優先する。pointer capture lossはkeyとは別の
+  `SafetyInterrupt`として、window focus lossと同様に継続resizeをcancelするが、preedit中の
+  EscapeだけでなくIME非active時のEscapeもSafetyInterruptへは読み替えず、private cancel
+  actionに限定する。pointer dragとdouble clickは標準
+  `egui::Response`から読む。Viewのrestore/resetは標準menu/buttonのkeyboard activationを
+  使い、独自raw key分岐を持たない。
+- 上記単一file以外はkey/modifier variantだけでなく`WindowEvent`/`DeviceEvent`等の
+  toolkit event面全体を引き続きゼロとし、resize/close等を理由に暗黙のevent adapterを
+  作らない。許可file内でもlayout以外のkey、modifier、text、IME event、上記2種以外の
+  raw pointer/window event、device eventを読まず、alias/helper/macroで許可範囲を
+  広げない。監査は許可fileのpathだけで全禁止APIを免除せず、許可する識別子と入力種別の
+  閉集合も検査する。
   将来toolkit eventを`NormalizedInput`へ変換するprivate adapterが必要になった時は、
   adapterの入力、出力、IME優先、SafetyInterrupt、許可fileを仕様改訂で先に固定し、
   許可file外ゼロの負例、`CommandId`/keymap resolverを迂回した`DomainIntent`直接発行の
