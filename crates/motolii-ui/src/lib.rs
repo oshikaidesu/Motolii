@@ -4,6 +4,7 @@
 
 mod command_registry;
 mod domain_intent;
+mod input_router;
 mod shell;
 mod state_ownership;
 
@@ -12,6 +13,10 @@ pub use command_registry::{
     CommandRegistryError,
 };
 pub use domain_intent::{DomainIntent, DomainIntentError};
+pub use input_router::{
+    ImeGateState, InputPhase, InputRouter, InputRouterError, NormalizedInput, RouterOutput,
+    SafetyInterrupt,
+};
 pub use state_ownership::{UiStateLifetime, UiStateOwner};
 
 /// 製品 UI クレートの識別子。依存方向 CI の許可リストと一致させる。
