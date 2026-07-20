@@ -99,8 +99,10 @@ U0d-3のraw input監査は次の機械境界に限定する。
   `use egui::{Key, Modifiers as EguiModifiers}`のようなuse treeとaliasも元pathへ展開して
   拒否し、method callは空白の有無によらずmethod identifierで判定する。
   `motolii-ui::keymap::Modifiers`等の正規化済みdomain型名は拒否対象ではない。
-- scannerはaliasを元pathへ展開する。同一fileで同じalias spellingが複数の元pathへ
-  対応する場合とalias cycleは、scopeを推測して一方を選ばず監査失敗にする。
+- scannerはuse treeの各leafを元pathで照合する。`egui`/`winit`を起点とするrename、
+  crate/module alias、`extern crate ... as ...`、globは宣言自体を監査失敗にし、
+  raw APIをaliasの後ろへ隠せないようにする。raw inputと無関係なaliasはfile全域へ
+  flattenせず、別module/block scopeの同名aliasやcycleをraw input違反にしない。
 - 監査自身の負例はbrace import、alias、完全修飾path、method callの空白差を拒否し、
   `winit::event::KeyEvent`のuse alias、macro invocation/definition内の禁止pathも拒否する。
   `ctx.input(|i| i.modifiers.ctrl || !i.keys_down.is_empty())`、
