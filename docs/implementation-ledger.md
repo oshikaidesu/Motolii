@@ -106,7 +106,7 @@ Uシリーズ直列選択中は未選択とし、同時着手しない。
 | 順序 | ID | Phase | 状態 | 起票条件 | 次の出口 |
 |---|---|---|---|---|---|
 | 1 | D1j | M2 | `DONE` | CAM-G0 merge（D1lはmain到達済み） | v5 planar camera schema/default migration |
-| 2 | U1b-1 | M3 | `WAIT` | U1a-1 merge | render worker/latest mailbox。古い結果E2EはU1b-2 |
+| 2 | U1b-1 | M3 | `WAIT` | U1a-2 merge（直列順: U1a-1→U1a-1b→U1a-2の後） | render worker/latest mailbox。古い結果E2EはU1b-2 |
 | 3 | U0c-2 | M3 | `WAIT` | U0c-1 merge | input routerとIME preedit gate |
 | 4 | U3a | M3 | `WAIT` | U0a + U0b merge | timeline基盤、U2gのUI依存を解除 |
 | 5 | U2g | M3 | `WAIT` | D1l + D3e + U0e + U2b + U3a merge | Effect常時接続線 |

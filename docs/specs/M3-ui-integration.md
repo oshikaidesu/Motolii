@@ -81,7 +81,7 @@ A-1(→**egui-wgpuの既存device/native texture共有で構造的に解消**。
 1. **セッション中間プールとの分離**: `RenderSession` の ping-pong 中間バッファは次フレームで再利用される。
    `RenderedFrame.texture` は中間プールのエイリアスを返してはならず、**専用の出力コピー**を返す（現実装: `create_owned_output_texture` + GPU copy）。
 2. **呼び出し側の保持**: 同一 `RenderSession` で連続 `render_graph_cached` しても、**直前に返した `RenderedFrame` のピクセル内容は上書きされない**（出力コピー契約）。
-3. **U1（eguiプレビュー）の義務**: レンダスレッドからUIへdisplay textureを公開する前に、**表示用の独立コピー**を確保する（TextureIdを渡すだけでは不十分 — UIがsample中に次フレームが同じ面を触るtearingを防ぐ）。display poolのviewはpool生成時に一度native texture登録し、frame更新ごとに登録し直さない。GR-1 refcountプール前倒し時はこの節を更新する。
+3. **U1（eguiプレビュー）の義務**: レンダスレッドからUIへdisplay textureを公開する前に、**表示用の独立コピー**を確保する（TextureIdを渡すだけでは不十分 — UIがsample中に次フレームが同じ面を触るtearingを防ぐ）。display poolのviewはpool生成時に一度native texture登録し、frame更新およびpool extent不変のsurface resizeで登録し直さない。extentが変わる場合はpool retirement→新pool生成→新規登録だけを正規経路とし、既存poolのview差し替えを許さない。解除はpool retirement時のみ。GR-1 refcountプール前倒し時はこの節を更新する。
 
 製品プレビュー経路の正規入口は `render_graph_cached`（監査 G-3）。
 
