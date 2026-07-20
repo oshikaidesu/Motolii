@@ -5,7 +5,8 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 ## 「発注」時のCursor自動委任
 
 - ユーザーが「発注して」「実装を発注」等、**発注を依頼動詞として明示した時だけ**自動委任を発火する。通常の「実装して」、説明・引用・ファイル内に現れただけの「発注」では発火しない
-- 発火時の役割は固定する。**主担当Codexは先例調査・コード事実の確認・長期展望と、恒久形式/公開API/plugin契約/停止線など重要境界の最終判断**を担う。**Cursor版Grok 4.5は現場監督**として、その調査結果・既存仕様・やりたいこと・現状差分から具体設計案、チケット分解、発注書案を作る。Codexは全文を代筆せず、実装前に正しさ・抜け・ユーザー意図・契約境界との一致だけを審査し、承認済み発注書だけを**Cursor Composer 2.5 Fastが受注者**として実装する。最後に同じGrok監督が差分を検収し、Codexが統合を判断する。Grokは仕様の未決事項や公開契約を発明せず、判断が必要なら`ORDER: STOP`でCodexへ戻す。監督・受注ともCursor Agent CLIへ直行し、`ORDER: STOP`や`VERDICT: REJECT`を別backendで上書きしない
+- **期限付き運用(2026-07-21まで)**: Cursor公式のGrok 4.5 first-party利用2倍期間中は、外部モデルの異なる目を入口と出口の両方に残すため、下記のGrok発注書作成とGrok検収を省略しない。消費抑制はレビュー回数削減ではなくStandardモデル既定で行う。**2026-07-22以降は自動で「関所だけ」へ変更せず**、First-Party/API残量、1チケット当たり消費、STOP/REJECTで見つかった有効指摘を確認してから本節を改訂する。この期限付き記述は将来の恒久契約ではない
+- 発火時の役割は固定する。**主担当Codexは先例調査・コード事実の確認・長期展望と、恒久形式/公開API/plugin契約/停止線など重要境界の最終判断**を担う。**Cursor版Grok 4.5 Standardは現場監督**として、その調査結果・既存仕様・やりたいこと・現状差分から具体設計案、チケット分解、発注書案を作る。Codexは全文を代筆せず、実装前に正しさ・抜け・ユーザー意図・契約境界との一致だけを審査し、承認済み発注書だけを**Cursor Composer 2.5 Standardが受注者**として実装する。最後に同じGrok監督が差分を検収し、Codexが統合を判断する。Fast variantは時間制約など明示理由がある単発実行だけに限定し、既定値へ戻さない。Grokは仕様の未決事項や公開契約を発明せず、判断が必要なら`ORDER: STOP`でCodexへ戻す。監督・受注ともCursor Agent CLIへ直行し、`ORDER: STOP`や`VERDICT: REJECT`を別backendで上書きしない
 - 実装発注は隔離worktreeで二段階実行する。まず`./scripts/delegate-cursor-supervised.sh prepare <worktree> <order-file> "<task>"`でGrok案だけを生成して停止する。Codexは誤りがあればComposerへ流さずGrokへ差し戻す。正しければorder fileへ`CODEX PRECHECK: APPROVED`を明示し、`execute`で初めてComposerを起動する
 - Grokの発注書は対象仕様ID、目的、現状、変更許可ファイル、非目標、再利用箇所、STOP条件、必須負例、実行コマンドを含む。`ORDER: READY`かつCodex事前承認がない限りComposerを起動しない。Grok検収が`VERDICT: ACCEPT`でなければ差分を採用・commit・pushしない
 - `delegate-cursor-review.sh`の並列助言は調査・論点抽出専用であり、実装の指揮系統には使わない。Composerに仕様判断・発注範囲変更・代替設計をさせない
@@ -18,6 +19,21 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 - 発注書作成・実装・検収が失敗、STOP、REJECT、timeoutになっても、停止報告だけで未検収差分を放置しない。原因を分類し、発注書の差し戻し、実装修正、検収再実行のうち該当段階へ戻って、契約を迂回せず改善ループを回す。timeout時は残存差分と証跡を確認し、再開可能な段階から続ける。ループ中の差分は隔離worktreeに留め、`VERDICT: ACCEPT`前に採用・commit・pushしない
 - 同じ阻害要因が反復し、発注書・回答・差分・検収結果に有意な改善がなくなった場合だけループを止める。その際は、反復した阻害要因、試した修正、未解決の選択肢を示してユーザーの判断を仰ぐ。単なる難しさ、1回のtimeout、外部モデル片方の失敗を停止理由にしない
 
+### Rerun参照を含む発注の強制動線（無視禁止）
+
+Rerunは主要な製品先例だがMotoliiの仕様正本ではない。Rerunを参照する調査・設計・実装発注は、必ず **Motolii仕様 → 現行コード事実 → Rerun先例 → Motolii fixture** の順に通す。Rerunのcrate、型、画面、内部責任からMotoliiの目的・公開API・Document・plugin契約を逆算しない。正本と詳細動線は[Rerun学習・転移計画 §9](docs/reviews/2026-07-20-rerun-learning-transfer-plan.md#9-rerun参照を発注へ入れる強制動線)。候補assetの母集団と監査済み範囲は[Rerun source asset inventory](docs/reviews/2026-07-20-rerun-source-asset-inventory.md)を読み、同文書の「候補分類」を採用裁定として扱わない。
+
+Rerunを一度でも根拠・再利用箇所・変更案に含める発注書は、通常の必須項目に加えて次のラベルを順番どおり持たなければならない。欠落、順序逆転、内容不一致が一つでもあればCodex事前審査は承認せず、Composerを起動しない。
+
+1. `MOTOLII AUTHORITY`: 対象spec ID、決定、既存公開契約、完成条件
+2. `CODE FACT GAP`: 現行コードで未成立の事実と再現証跡
+3. `RERUN EVIDENCE`: 固定commit、packageだけでなく対象file/API、監査済み範囲と非証明範囲。Motolii要件そのものを書かない
+4. `TRANSFER CLASS`: 裁定済みの`DEPEND / VENDOR / PORT / PATTERN / REJECT`
+5. `TRANSFER LIMIT`: 変更許可ファイル、持込禁止型・状態・意味、既存境界で自作する比較案
+6. `MOTOLII ORACLE`: Rerunとの類似ではなくMotolii fixture/testで判定する合否
+
+次のどれかが起きた時点で`ORDER: STOP`とし、仕様を発明せずCodexへ戻す: Rerunの内部構造を採らないと実装不能に見える／package名またはinventoryの候補分類だけでasset範囲を決めた／未裁定assetの依存・vendoring・移植が必要／公開API・Document・plugin契約・永続形式の変更が必要／Rerunに無いMotolii固有要件を削る必要がある／Rerunの見た目やsnapshotへ合わせるため既存期待値を変更したくなった。検収はRerunへの外観・構造類似を合格根拠にせず、上記6ラベル、Motoliiの負例、依存差分、公開型、serde面、license由来を再確認する。
+
 ## 最初に読む
 
 1. [docs/README.md](docs/README.md) — プロジェクト全体像・ドキュメントの読む順序・用語
@@ -27,6 +43,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 5. M3製品実装に触る時: **先に**[docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md](docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md)を読み、ステータスが発効中なら実装を止める。調査・fixtureも公開APIや永続形式へ焼かない
 6. M3 UI/入力/タイムライン/プラグインパネルに触る時: **先に**[docs/reviews/2026-07-14-m3-ui-boundary-prevention.md](docs/reviews/2026-07-14-m3-ui-boundary-prevention.md)(UI境界の規律8本)
 7. M3の外観・timeline・panelに触る時: **先に**[M3 UI参照地図](docs/ui-reference-map.md)と[docs/ui-visual-language.md](docs/ui-visual-language.md)を読む。Reactモックの実体と`README.md`は`codex/m3-mock-components`側の接続済みworktreeで読み、main側にまだ無い時は`docs/mocks/`を代替の現行実装として変更せず、React側の統合または対象worktreeへの移動を先に行う。`docs/mocks/`は**ARCHIVED・新規変更禁止**。通常入場と`#catalog`はReact候補だけ、legacyは`#archive/*`とparity testだけから参照する。新しいUI判断、操作、goldenをHTMLへ入れようとした時点でSTOPし、`docs/mocks-ui/`のReact所有境界へ戻る。モックの具体色値や未決機能をそのまま契約へ焼かない
+8. Rerunのsource、crate、画面、実装patternを調査・発注・実装へ使う時: **先に**[Rerun source asset inventory](docs/reviews/2026-07-20-rerun-source-asset-inventory.md)と[Rerun学習・転移計画](docs/reviews/2026-07-20-rerun-learning-transfer-plan.md)、特に後者§4/§8/§9を読む。Rerun起点で発注書を書かない
 
 ## 絶対規律(破ると設計の根拠が崩れる。レビュー最重視項目)
 
