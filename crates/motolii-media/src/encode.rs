@@ -164,30 +164,39 @@ mod tests {
     fn finish_drains_stderr_before_wait_without_deadlock() {
         use std::os::unix::fs::PermissionsExt;
 
-        let dir =
-            std::env::temp_dir().join(format!("motolii-media-stderr-flood-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let fake_ffmpeg = dir.join("fake-ffmpeg");
-        // 一時ファイルへ書いてsync→renameし、Linuxの ETXTBSY(CIフレーク)を避ける。
-        let tmp = dir.join("fake-ffmpeg.tmp");
-        std::fs::write(
-            &tmp,
-            "#!/bin/sh\n\
-             cat >/dev/null\n\
-             i=0\n\
-             while [ \"$i\" -lt 20000 ]; do\n\
-               echo \"err $i\" 1>&2\n\
-               i=$((i+1))\n\
-             done\n\
-             exit 0\n",
-        )
-        .unwrap();
-        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755)).unwrap();
-        {
-            let f = std::fs::OpenOptions::new().write(true).open(&tmp).unwrap();
-            f.sync_all().unwrap();
+        struct RemoveDirOnDrop(std::path::PathBuf);
+        impl Drop for RemoveDirOnDrop {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
         }
-        std::fs::rename(&tmp, &fake_ffmpeg).unwrap();
+
+        let dir = std::env::temp_dir().join(format!(
+            "motolii-media-stderr-flood-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let _cleanup = RemoveDirOnDrop(dir.clone());
+        // 実行直前に作ったファイルはLinux runnerでETXTBSYになり得るため固定fixtureを使う。
+        let fake_ffmpeg = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/fake_ffmpeg_stderr_flood.sh");
+        let fixture_metadata = std::fs::metadata(&fake_ffmpeg)
+            .unwrap_or_else(|error| panic!("fixture {}: {error}", fake_ffmpeg.display()));
+        assert!(
+            fixture_metadata.is_file(),
+            "fixture {}",
+            fake_ffmpeg.display()
+        );
+        assert_ne!(
+            fixture_metadata.permissions().mode() & 0o111,
+            0,
+            "fixture is not executable: {}",
+            fake_ffmpeg.display()
+        );
 
         let desc = FrameDesc::packed(4, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false);
         let out = dir.join("out.mp4");
@@ -209,7 +218,5 @@ mod tests {
             Ok(result) => result.expect("finish failed"),
             Err(_) => panic!("finish deadlocked"),
         }
-
-        let _ = std::fs::remove_dir_all(dir);
     }
 }
