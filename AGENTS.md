@@ -100,7 +100,7 @@ Rerunを一度でも根拠・再利用箇所・変更案に含める発注書は
 
 M3仕様のGR-UI審判割当表で対象タスクに割り当てられた項目だけを確認する。非該当を形式的にYesにしない。該当項目が1つでもNoなら仕様改訂または依存待ちへ:
 
-1. **状態の持ち場が決まったか**: Document / User settings / Workspace-session候補 / Transientを分類したか
+1. **状態の持ち場が決まったか**: Document / User settings / Workspace profile / Project session / Transientの5層へ分類したか
 2. **書き込み口が一つか**: 永続編集はD2コマンドと単一writerだけを通るか
 3. **1ジェスチャー=1履歴か**: D2のmacro/merge/Undo単位を使い、未決transaction APIを発明していないか
 4. **UIスレッドを待たせないか**: worker分離、非blocking最新値mailbox、generation破棄があり、同期読み戻しが無いか
