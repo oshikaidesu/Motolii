@@ -102,6 +102,11 @@ fn exported_types_are_toolkit_free() {
     assert_no_toolkit_in_type_name::<motolii_ui::UiStateLifetime>();
     assert_no_toolkit_in_type_name::<motolii_ui::DomainIntent>();
     assert_no_toolkit_in_type_name::<motolii_ui::DomainIntentError>();
+    assert_no_toolkit_in_type_name::<motolii_ui::CommandId>();
+    assert_no_toolkit_in_type_name::<motolii_ui::CommandIdError>();
+    assert_no_toolkit_in_type_name::<motolii_ui::CommandMetadata>();
+    assert_no_toolkit_in_type_name::<motolii_ui::CommandRegistry>();
+    assert_no_toolkit_in_type_name::<motolii_ui::CommandRegistryError>();
     assert_no_toolkit_in_type_name::<Result<motolii_ui::UiCrateInfo, motolii_ui::UiError>>();
 }
 

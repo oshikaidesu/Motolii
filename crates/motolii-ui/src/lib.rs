@@ -2,10 +2,15 @@
 //!
 //! toolkit APIはprivate module内に閉じ、domain/coreの公開契約へは出さない。
 
+mod command_registry;
 mod domain_intent;
 mod shell;
 mod state_ownership;
 
+pub use command_registry::{
+    builtin_command_registry, CommandId, CommandIdError, CommandMetadata, CommandRegistry,
+    CommandRegistryError,
+};
 pub use domain_intent::{DomainIntent, DomainIntentError};
 pub use state_ownership::{UiStateLifetime, UiStateOwner};
 
