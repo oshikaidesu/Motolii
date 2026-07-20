@@ -15,4 +15,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+cargo_metadata.workspace = true
 motolii-doc.workspace = true
+proc-macro2 = "1"
+syn = { version = "2", features = ["full", "visit"] }
