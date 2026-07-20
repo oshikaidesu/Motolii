@@ -407,6 +407,40 @@ impl DocumentWriter {
         id
     }
 
+    /// 確定済みcommand列を新しい1 gestureとして一括適用する。
+    /// 途中失敗時はDocumentとwriterの履歴・世代・採番を呼び出し前へ戻す。
+    pub fn apply_macro(&mut self, commands: Vec<Command>) -> Result<GestureId, CommandError> {
+        if commands.is_empty() {
+            return Err(CommandError::EmptyMacro);
+        }
+
+        let before_doc = self.doc.clone();
+        let before_undo = self.undo.clone();
+        let before_revision = self.revision;
+        let before_next_gesture = self.next_gesture;
+        let gesture = self.begin_gesture();
+
+        for command in commands {
+            if let Err(error) = self.undo.push(&mut self.doc, gesture, command) {
+                self.doc = before_doc;
+                self.undo = before_undo;
+                self.revision = before_revision;
+                self.next_gesture = before_next_gesture;
+                return Err(error);
+            }
+            if let Err(error) = self.doc.prepare_plugins(&self.catalog) {
+                self.doc = before_doc;
+                self.undo = before_undo;
+                self.revision = before_revision;
+                self.next_gesture = before_next_gesture;
+                return Err(CommandError::Plugin(error));
+            }
+        }
+
+        self.revision = self.revision.wrapping_add(1);
+        Ok(gesture)
+    }
+
     /// atomic command(実装ガード5: 決定済みの値)を適用し、undo履歴へ積む。
     /// 単一writer境界(このメソッドだけがDocumentを書き換える)。
     pub fn apply_command(
