@@ -220,7 +220,11 @@ v1で保証しない:
 
 ## 6. G0-7: 操作文法を共通部品の契約にする
 
-[UI操作言語](../ui-interaction-language.md)を採用し、`Discover → Target → Preview → Commit / Cancel → Inspect → Undo`を共通状態遷移とする。Direct / Tool / Advancedは同じDomain Intentへ正規化し、入口差をDocumentへ保存しない。
+[UI操作言語](../ui-interaction-language.md)を採用し、
+`Discover → Target → [Preview] → Commit → Inspect`と
+`Target / Preview → Cancel`を6状態の共通状態遷移とする。Cancelは変更ゼロで待機へ戻る。
+UndoはこのTransient状態機械の外にある通常のD2 commandであり、Direct / Tool / Advancedは
+同じDomain Intentへ正規化し、入口差をDocumentへ保存しない。
 
 新機能は次を先に提出する:
 

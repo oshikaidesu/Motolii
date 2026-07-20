@@ -133,3 +133,4 @@
 | [2026-07-21-m3-u1b-1-render-worker-contract.md](2026-07-21-m3-u1b-1-render-worker-contract.md) | U1b-1 latest mailbox / render worker契約 |
 | [2026-07-21-m3-u1b-2-latest-projection-contract.md](2026-07-21-m3-u1b-2-latest-projection-contract.md) | U1b-2 latest result / event-loop投影契約 |
 | [2026-07-21-m3-u2b-1-single-writer-e2e-contract.md](2026-07-21-m3-u2b-1-single-writer-e2e-contract.md) | U2b-1 single writer配送E2E契約 |
+| [2026-07-21-m3-u2c-1-interaction-state-contract.md](2026-07-21-m3-u2c-1-interaction-state-contract.md) | U2c-1 共通interaction state machine契約 |
