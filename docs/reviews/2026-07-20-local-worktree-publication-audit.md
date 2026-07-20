@@ -4,9 +4,9 @@
 
 ## 1. 公開した現行文書経路
 
-| branch | 固定commit | 状態 | 外部環境での用途 |
+| branch | Rerun・Text Motion内容commit | 状態 | 外部環境での用途 |
 |---|---|---|---|
-| `codex/m3-text-motion-task-translation` | `5837808` | Draft PR #223 | Text Motionタスク翻訳、Rerun先例・139 package inventory、知覚表現の翻訳、Rerun発注動線のレビュー入口 |
+| `codex/m3-text-motion-task-translation` | `5837808` | Draft PR #223（本監査を後続commitで追加） | Text Motionタスク翻訳、Rerun先例・139 package inventory、知覚表現の翻訳、Rerun発注動線のレビュー入口 |
 
 このbranchだけが今回の正典更新候補である。Rerunのcrate依存、vendoring、移植、Document/plugin/public API変更は含まない。
 
