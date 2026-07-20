@@ -2,19 +2,26 @@
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::thread;
 
 use motolii_core::{ColorSpace, FrameDesc, PixelFormat, Quality, RationalTime, TimeMap};
+#[cfg(test)]
+use motolii_doc::build_document_frame_graph;
 use motolii_doc::{
-    build_document_frame_graph, Clip, ClipSource, DocParam, Document, EvaluationTime, ItemEnvelope,
-    LayerIdError, Track, TrackIdError, TrackItem, RECT_LAYER_SOURCE,
+    Clip, ClipSource, DocParam, Document, EvaluationTime, ItemEnvelope, LayerIdError, Track,
+    TrackIdError, TrackItem, RECT_LAYER_SOURCE,
 };
 use motolii_eval::DataTracks;
 use motolii_gpu::GpuCtx;
+#[cfg(test)]
 use motolii_plugins_firstparty::first_party_runtime;
+#[cfg(test)]
 use motolii_render::{render_graph_cached, RenderGraphInputs, RenderSession};
 
 use crate::display_slot::{DisplaySlot, DisplaySlotError, DisplaySlotEvidence};
+use crate::render_worker::{
+    RenderJoinError, RenderRequest, RenderSubmitError, RenderWorker, RenderWorkerError,
+    RenderWorkerStartError, RenderWorkerStatus,
+};
 
 const BOOTSTRAP_WIDTH: u32 = 64;
 const BOOTSTRAP_HEIGHT: u32 = 36;
@@ -143,16 +150,74 @@ pub(crate) fn prepare_in_setup_worker(
     document: Arc<Document>,
     desc: FrameDesc,
 ) -> Result<StaticPreview, StaticPreviewError> {
-    let handle = thread::Builder::new()
-        .name("motolii-u1a1-static-setup".into())
-        .spawn(move || {
-            prepare_static_viewport(gpu, document, EvaluationTime::new(RationalTime::ZERO), desc)
-        })?;
-    handle
-        .join()
-        .map_err(|_| StaticPreviewError::SetupThreadPanic)?
+    document.validate()?;
+    let document_json = serde_json::to_string(&*document)?;
+    let mut worker = RenderWorker::spawn(Arc::clone(&gpu)).map_err(map_worker_start_error)?;
+    let generation = worker
+        .submit(RenderRequest {
+            document,
+            data_tracks: Arc::new(DataTracks::new()),
+            evaluation_time: EvaluationTime::new(RationalTime::ZERO),
+            desc,
+            quality: Quality::DRAFT,
+        })
+        .map_err(map_submit_error)?;
+    if worker.latest_accepted_generation() != Some(generation) {
+        return Err(StaticPreviewError::SetupThreadPanic);
+    }
+    worker.close();
+    worker.join().map_err(map_join_error)?;
+    if worker.status() != RenderWorkerStatus::Closed {
+        return Err(StaticPreviewError::SetupThreadPanic);
+    }
+    let result = worker
+        .try_take_latest()
+        .ok_or(StaticPreviewError::SetupThreadPanic)?;
+    if result.generation != generation {
+        return Err(StaticPreviewError::SetupThreadPanic);
+    }
+    let rendered = result.result.map_err(map_worker_error)?;
+    let slot = DisplaySlot::copy_from_rendered(&gpu, &rendered)?;
+    gpu.check_health()?;
+    Ok(StaticPreview {
+        _gpu: gpu,
+        document_json,
+        slot,
+        render_count: 1,
+    })
 }
 
+fn map_worker_start_error(error: RenderWorkerStartError) -> StaticPreviewError {
+    match error {
+        RenderWorkerStartError::Runtime(error) => StaticPreviewError::Runtime(error),
+        RenderWorkerStartError::Spawn(error) => StaticPreviewError::SetupThreadSpawn(error),
+    }
+}
+
+fn map_submit_error(error: RenderSubmitError) -> StaticPreviewError {
+    match error {
+        RenderSubmitError::GenerationExhausted
+        | RenderSubmitError::Closed
+        | RenderSubmitError::WorkerStopped => StaticPreviewError::SetupThreadPanic,
+    }
+}
+
+fn map_join_error(_error: RenderJoinError) -> StaticPreviewError {
+    StaticPreviewError::SetupThreadPanic
+}
+
+fn map_worker_error(error: RenderWorkerError) -> StaticPreviewError {
+    match error {
+        RenderWorkerError::Runtime(error) => StaticPreviewError::Runtime(error),
+        RenderWorkerError::Document(error) => StaticPreviewError::Document(error),
+        RenderWorkerError::Graph(error) => StaticPreviewError::Graph(error),
+        RenderWorkerError::Render(error) => StaticPreviewError::Render(error),
+        RenderWorkerError::Gpu(error) => StaticPreviewError::Gpu(error),
+        RenderWorkerError::WorkerPanicked => StaticPreviewError::SetupThreadPanic,
+    }
+}
+
+#[cfg(test)]
 fn prepare_static_viewport(
     gpu: Arc<GpuCtx>,
     document: Arc<Document>,
