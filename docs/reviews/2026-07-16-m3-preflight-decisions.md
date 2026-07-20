@@ -26,6 +26,8 @@ G0-6とG0-8はM3全体を止める門ではない。依存するU0e/U0fだけを
 ### 2.1 inputは物理キーでなくCommandを正本にする
 
 - `CommandId`は安定した意味IDとし、key、mouse button、modifier、device名を含めない。
+- 組み込み`CommandId`の文字列表現は`motolii.`で始め、その後に1個以上の`.`区切りの意味segmentを置く。各segmentは小文字ASCII英字で始まり、以後は小文字ASCII英数字または`_`だけを使う。空segment、空白、大文字、先頭・末尾`.`、連続`.`を拒否する。例は`motolii.edit.delete_targeted_items`。表示名、翻訳文言、物理入力、画面入口からIDを生成せず、それらが変わってもIDを変えない。
+- この文字列表現はkeymap・JSON codecを定めない。U0c-1は検証済みIDとmetadata registryだけを作り、U0dが同じIDを永続keyとして利用する。adapter内の一時kindは`CommandId`へ昇格しない。
 - input routerは少なくとも`Press / Release / Click / DragStart / DragUpdate / DragEnd / Cancel`を区別する。clickをpressの別名にしない。
 - 物理入力はkeymapで`CommandId`または型付きgesture intentへ変換し、その先のdomain intentにegui/eframe/winit型を出さない。
 - IME preedit中の文字入力、候補確定、Enter/Escapeをshortcutより先に処理する。OS差をshortcut special-caseで隠さない。
