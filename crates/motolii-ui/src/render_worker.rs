@@ -579,7 +579,10 @@ mod tests {
 
     use super::*;
     use crate::static_preview::{bootstrap_document, bootstrap_frame_desc};
-    use crate::{InteractionState, InteractionStateMachine};
+    use crate::{
+        adapt_input_router_error, CommandId, DiagnosticReasonCode, InputRouterError,
+        InteractionState, InteractionStateMachine,
+    };
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum TestError {
@@ -702,6 +705,28 @@ mod tests {
         let committed = worker.submit(2).expect("commit control");
         assert!(committed > baseline);
         assert_eq!(worker.latest_accepted_generation(), Some(committed));
+        worker.close();
+        worker.join().expect("join");
+    }
+
+    #[test]
+    fn diagnostic_adaptation_does_not_advance_real_worker_generation() {
+        let mut worker =
+            LatestWorker::spawn("u2c4-diagnostic-generation", Ok::<_, TestError>, || {
+                TestError::Panicked
+            })
+            .expect("spawn");
+        let baseline = worker.submit(1_u64).expect("baseline");
+        let missing = CommandId::try_new("motolii.missing.command").unwrap();
+
+        let envelope =
+            adapt_input_router_error(&InputRouterError::UnknownCommandId { id: missing });
+
+        assert_eq!(envelope.reason(), DiagnosticReasonCode::UnknownCommand);
+        assert_eq!(worker.latest_accepted_generation(), Some(baseline));
+        let control = worker.submit(2).expect("control");
+        assert!(control > baseline);
+        assert_eq!(worker.latest_accepted_generation(), Some(control));
         worker.close();
         worker.join().expect("join");
     }
