@@ -3,6 +3,7 @@
 //! toolkit APIはprivate module内に閉じ、domain/coreの公開契約へは出さない。
 
 mod command_registry;
+mod document_command_request;
 mod domain_intent;
 mod input_router;
 mod keymap;
@@ -14,6 +15,7 @@ pub use command_registry::{
     builtin_command_registry, CommandId, CommandIdError, CommandMetadata, CommandRegistry,
     CommandRegistryError,
 };
+pub use document_command_request::{DocumentCommandRequest, DocumentCommandRequestError};
 pub use domain_intent::{DomainIntent, DomainIntentError};
 pub use input_router::{
     ImeGateState, InputPhase, InputRouter, InputRouterError, NormalizedInput, RouterOutput,

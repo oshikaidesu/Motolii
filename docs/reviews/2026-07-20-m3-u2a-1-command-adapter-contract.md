@@ -1,6 +1,6 @@
 # U2a-1 gesture command adapter契約
 
-ステータス: **決定**（U2a-0/U2a-1実装前の停止線を解消する契約）。対象は
+ステータス: **決定／U2a-0・U2a-1実装完了**（実装前の停止線を解消した契約）。対象は
 [M3仕様 U2a](../specs/M3-ui-integration.md)と
 [U2a-1](2026-07-16-m3-ui-concept-to-tickets.md)であり、D2の公開API、
 Document schema、journal/serialize形式、plugin契約を置換しない。
