@@ -157,7 +157,10 @@ mod tests {
     use motolii_plugin::PluginCatalogBuilder;
 
     use super::*;
-    use crate::{builtin_command_registry, CommandId, InputRouter, NormalizedInput};
+    use crate::{
+        builtin_command_registry, CommandId, InputRouter, InteractionState,
+        InteractionStateMachine, NormalizedInput,
+    };
 
     fn fixture() -> (Document, DocumentCommandRequest) {
         let mut document = Document::new_current();
@@ -304,5 +307,32 @@ mod tests {
             serde_json::to_vec(&*runtime.snapshot()).unwrap(),
             initial_json
         );
+    }
+
+    #[test]
+    fn target_and_preview_cancel_leave_edit_and_render_delivery_unchanged() {
+        for with_preview in [false, true] {
+            let (document, _) = fixture();
+            let initial_json = serde_json::to_vec(&document).unwrap();
+            let mut runtime = runtime(document);
+            let mut queue = DocumentEditQueue::default();
+            let mut machine = InteractionStateMachine::new();
+            machine.transition(InteractionState::Target).unwrap();
+            if with_preview {
+                machine.transition(InteractionState::Preview).unwrap();
+            }
+
+            machine.transition(InteractionState::Cancel).unwrap();
+            machine.transition(InteractionState::Discover).unwrap();
+
+            assert!(runtime.process_next(&mut queue).unwrap().is_none());
+            assert_eq!(queue.len(), 0);
+            assert_eq!(runtime.writer.revision, 0);
+            assert_eq!(runtime.history_lengths(), (0, 0));
+            assert_eq!(
+                serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+                initial_json
+            );
+        }
     }
 }

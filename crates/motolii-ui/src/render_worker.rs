@@ -579,6 +579,7 @@ mod tests {
 
     use super::*;
     use crate::static_preview::{bootstrap_document, bootstrap_frame_desc};
+    use crate::{InteractionState, InteractionStateMachine};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum TestError {
@@ -676,6 +677,31 @@ mod tests {
         assert_eq!(worker.latest_accepted_generation(), Some(last));
         assert_eq!(worker.pending_generation(), Some(last));
         release_tx.send(()).expect("release");
+        worker.close();
+        worker.join().expect("join");
+    }
+
+    #[test]
+    fn interaction_cancel_does_not_advance_real_worker_generation() {
+        let mut worker = LatestWorker::spawn("u2c1-cancel-generation", Ok::<_, TestError>, || {
+            TestError::Panicked
+        })
+        .expect("spawn");
+        let baseline = worker.submit(1_u64).expect("baseline");
+        for with_preview in [false, true] {
+            let mut machine = InteractionStateMachine::new();
+            machine.transition(InteractionState::Target).unwrap();
+            if with_preview {
+                machine.transition(InteractionState::Preview).unwrap();
+            }
+            machine.transition(InteractionState::Cancel).unwrap();
+            machine.transition(InteractionState::Discover).unwrap();
+
+            assert_eq!(worker.latest_accepted_generation(), Some(baseline));
+        }
+        let committed = worker.submit(2).expect("commit control");
+        assert!(committed > baseline);
+        assert_eq!(worker.latest_accepted_generation(), Some(committed));
         worker.close();
         worker.join().expect("join");
     }

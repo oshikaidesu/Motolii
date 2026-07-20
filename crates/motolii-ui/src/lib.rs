@@ -9,6 +9,7 @@ mod document_command_request;
 mod document_edit_runtime;
 mod domain_intent;
 mod input_router;
+mod interaction_state;
 mod keymap;
 mod keymap_codec;
 mod layout;
@@ -29,6 +30,9 @@ pub use domain_intent::{DomainIntent, DomainIntentError};
 pub use input_router::{
     ImeGateState, InputPhase, InputRouter, InputRouterError, NormalizedInput, RouterOutput,
     SafetyInterrupt,
+};
+pub use interaction_state::{
+    InteractionState, InteractionStateMachine, InteractionTransitionError,
 };
 pub use keymap::{
     resolve_keymap, AsciiKey, AsciiKeyError, Binding, BuiltinKeymap, DeltaOperation,
