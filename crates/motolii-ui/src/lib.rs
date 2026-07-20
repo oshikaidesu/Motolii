@@ -3,6 +3,9 @@
 //! toolkit APIはprivate module内に閉じ、domain/coreの公開契約へは出さない。
 
 mod shell;
+mod state_ownership;
+
+pub use state_ownership::{UiStateLifetime, UiStateOwner};
 
 /// 製品 UI クレートの識別子。依存方向 CI の許可リストと一致させる。
 pub const CRATE_ID: &str = "motolii-ui";
