@@ -118,6 +118,13 @@ fn exported_types_are_toolkit_free() {
     assert_no_toolkit_in_type_name::<motolii_ui::EffectiveTrigger>();
     assert_no_toolkit_in_type_name::<motolii_ui::KeymapResolution>();
     assert_no_toolkit_in_type_name::<motolii_ui::KeymapDiagnostic>();
+    assert_no_toolkit_in_type_name::<motolii_ui::KeymapCodecLimits>();
+    assert_no_toolkit_in_type_name::<motolii_ui::LimitKind>();
+    assert_no_toolkit_in_type_name::<motolii_ui::KeymapCodecError>();
+    assert_no_toolkit_in_type_name::<motolii_ui::OpaqueOperationReason>();
+    assert_no_toolkit_in_type_name::<motolii_ui::KeymapCodecDiagnostic>();
+    assert_no_toolkit_in_type_name::<motolii_ui::KeymapApplyError>();
+    assert_no_toolkit_in_type_name::<motolii_ui::LoadedKeymap>();
     assert_no_toolkit_in_type_name::<Result<motolii_ui::UiCrateInfo, motolii_ui::UiError>>();
 }
 

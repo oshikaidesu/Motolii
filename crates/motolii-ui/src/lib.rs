@@ -6,6 +6,7 @@ mod command_registry;
 mod domain_intent;
 mod input_router;
 mod keymap;
+mod keymap_codec;
 mod shell;
 mod state_ownership;
 
@@ -22,6 +23,11 @@ pub use keymap::{
     resolve_keymap, AsciiKey, AsciiKeyError, Binding, BuiltinKeymap, DeltaOperation,
     EffectiveTrigger, Gesture, KeyToken, KeymapDelta, KeymapDiagnostic, KeymapResolution, Modifier,
     ModifierError, Modifiers, PlatformBindingConstraints, PlatformCommandModifier, PointerButton,
+};
+pub use keymap_codec::{
+    decode_keymap_json, encode_keymap_json, KeymapApplyError, KeymapCodecDiagnostic,
+    KeymapCodecError, KeymapCodecLimits, LimitKind, LoadedKeymap, OpaqueOperationReason,
+    KEYMAP_CODEC_VERSION,
 };
 pub use state_ownership::{UiStateLifetime, UiStateOwner};
 
