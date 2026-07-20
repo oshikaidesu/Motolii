@@ -39,7 +39,7 @@
 | M0 | `DONE` | spike完了 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み |
 | M2 | **基盤再締結済み** | D1l、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。D5は再締結の閉集合外で、骨格到達・統合審判pending |
-| M3 | **段階発注可 / Uシリーズ直列選択中** | U0a、U0b-1、U0b-2、U0c-1、U0c-2、U0d-1、U0d-2、U0d-3、U2a-0、U2a-1、U1a-1完了。次はU1a-2を単独実行 |
+| M3 | **段階発注可 / Uシリーズ直列選択中** | U0a、U0b-1、U0b-2、U0c-1、U0c-2、U0d-1、U0d-2、U0d-3、U2a-0、U2a-1、U1a-1完了。U1a-2はGrok反対側批判で意味の割れを回収したlayout投影契約を先にmainへ到達させてから単独実装 |
 | M4 | **契約spike可** | K0でRoD/RoIのruntime契約を凍結。その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む |
 | M5 | **identity spike可** | P0IでDuplicator/Instance identityを凍結 |
 
@@ -93,7 +93,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 | 優先 | ID | Phase | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
-| 1 | U1a-2 | M3 | `DO` | — | U1a-1完了後、toolkit非依存panel layout intentと`egui_tiles` runtime投影だけを実装する | U1b-1を単独実行 |
+| 1 | U1a-2 | M3 | `ACTIVE` | — | U1a-1完了。[layout投影契約](reviews/2026-07-21-m3-u1a-2-layout-projection-contract.md)を先にmainへ到達させ、最新mainから固定5 role intentとruntime proposal往復だけを実装する | U1b-1を単独実行 |
 
 K0 [#167](https://github.com/oshikaidesu/Motolii/issues/167)とP0I
 [#170](https://github.com/oshikaidesu/Motolii/issues/170)は論理上`DO`の独立spikeだが、
