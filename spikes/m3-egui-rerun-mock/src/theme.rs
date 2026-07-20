@@ -15,6 +15,21 @@ pub const SHAPE: Color32 = Color32::from_rgb(170, 160, 208);
 pub const WARNING: Color32 = Color32::from_rgb(225, 138, 109);
 pub const WAY_STAGE: Color32 = Color32::from_rgb(188, 160, 114);
 pub const WAY_INSPECTOR: Color32 = Color32::from_rgb(142, 176, 134);
+pub const WAY_TIMELINE: Color32 = Color32::from_rgb(204, 149, 135);
+pub const OBJECT_AUDIO: Color32 = Color32::from_rgb(118, 170, 166);
+pub const OBJECT_GROUP: Color32 = Color32::from_rgb(154, 154, 192);
+pub const OBJECT_TITLE: Color32 = Color32::from_rgb(177, 155, 120);
+pub const OBJECT_CHILD: Color32 = Color32::from_rgb(141, 167, 135);
+pub const OBJECT_VIDEO_A: Color32 = Color32::from_rgb(190, 147, 136);
+pub const OBJECT_VIDEO_B: Color32 = Color32::from_rgb(133, 162, 192);
+
+pub fn display_font(size: f32) -> egui::FontId {
+    egui::FontId::new(size, FontFamily::Name("motolii-display-family".into()))
+}
+
+pub fn interface_bold_font(size: f32) -> egui::FontId {
+    egui::FontId::new(size, FontFamily::Name("motolii-bold-family".into()))
+}
 
 pub fn install(context: &egui::Context) {
     install_mock_fonts(context);
@@ -130,5 +145,43 @@ fn install_mock_fonts(context: &egui::Context) {
                 .push("motolii-cjk".into());
         }
     }
+    let display_family = FontFamily::Name("motolii-display-family".into());
+    let mut display_fonts = fonts
+        .families
+        .get(&FontFamily::Proportional)
+        .cloned()
+        .unwrap_or_default();
+    if let Ok(bytes) = std::fs::read("/System/Library/Fonts/Supplemental/Arial Black.ttf") {
+        fonts.font_data.insert(
+            "motolii-display".into(),
+            FontData::from_owned(bytes)
+                .tweak(FontTweak {
+                    hinting: Some(true),
+                    ..Default::default()
+                })
+                .into(),
+        );
+        display_fonts.insert(0, "motolii-display".into());
+    }
+    fonts.families.insert(display_family, display_fonts);
+    let bold_family = FontFamily::Name("motolii-bold-family".into());
+    let mut bold_fonts = fonts
+        .families
+        .get(&FontFamily::Proportional)
+        .cloned()
+        .unwrap_or_default();
+    if let Ok(bytes) = std::fs::read("/System/Library/Fonts/Supplemental/Arial Bold.ttf") {
+        fonts.font_data.insert(
+            "motolii-bold".into(),
+            FontData::from_owned(bytes)
+                .tweak(FontTweak {
+                    hinting: Some(true),
+                    ..Default::default()
+                })
+                .into(),
+        );
+        bold_fonts.insert(0, "motolii-bold".into());
+    }
+    fonts.families.insert(bold_family, bold_fonts);
     context.set_fonts(fonts);
 }

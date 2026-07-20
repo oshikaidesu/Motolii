@@ -73,13 +73,20 @@ impl MotoliiMock {
         egui::Panel::top("motolii-title")
             .default_size(34.0)
             .size_range(34.0..=34.0)
-            .frame(panel_frame(theme::RAISED, true))
+            .frame(panel_frame(theme::RAISED, false))
             .show(root, |ui| {
+                paint_bottom_border(ui);
                 ui.horizontal_centered(|ui| {
                     ui.add_space(8.0);
-                    ui.label(RichText::new("MOTOLII").strong().size(12.0));
-                    ui.label(RichText::new("night_drive.mtl").strong());
-                    ui.label(RichText::new("/ Main composition").color(theme::TEXT_SECONDARY));
+                    ui.label(RichText::new("MOTOLII").font(theme::interface_bold_font(12.0)));
+                    ui.label(
+                        RichText::new("night_drive.mtl").font(theme::interface_bold_font(11.0)),
+                    );
+                    ui.label(
+                        RichText::new("/ Main composition")
+                            .size(11.0)
+                            .color(theme::TEXT_SECONDARY),
+                    );
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         ui.add_space(7.0);
                         if ui.button("Export").clicked() {
@@ -126,10 +133,11 @@ impl MotoliiMock {
         egui::Panel::top("motolii-commands")
             .default_size(32.0)
             .size_range(32.0..=32.0)
-            .frame(panel_frame(theme::APP, true))
+            .frame(panel_frame(theme::APP, false))
             .show(root, |ui| {
+                paint_bottom_border(ui);
                 ui.horizontal_centered(|ui| {
-                    ui.add_space(4.0);
+                    ui.add_space(6.0);
                     for (icon, hint) in [
                         (ToolIcon::Select, "Select"),
                         (ToolIcon::Hand, "Hand"),
@@ -165,17 +173,6 @@ impl MotoliiMock {
             .show(root, |ui| {
                 ui.horizontal_centered(|ui| {
                     ui.add_space(8.0);
-                    let (marker, _) =
-                        ui.allocate_exact_size(egui::Vec2::splat(8.0), egui::Sense::hover());
-                    ui.painter().rect_filled(marker, 0.0, theme::WAY_INSPECTOR);
-                    ui.label(RichText::new(&self.state.status).color(theme::TEXT_SECONDARY));
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        ui.label(
-                            RichText::new("egui 0.35 · egui_tiles 0.16 · comparison prototype")
-                                .monospace()
-                                .color(theme::TEXT_MUTED),
-                        );
-                    });
                 });
             });
     }
@@ -354,6 +351,18 @@ fn panel_frame(fill: egui::Color32, border: bool) -> egui::Frame {
         .inner_margin(egui::Margin::ZERO)
 }
 
+fn paint_bottom_border(ui: &egui::Ui) {
+    let rect = ui.max_rect();
+    ui.painter().rect_filled(
+        egui::Rect::from_min_max(
+            egui::pos2(rect.left(), rect.bottom() - 1.0),
+            rect.right_bottom(),
+        ),
+        0.0,
+        theme::BORDER,
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -422,6 +431,14 @@ mod tests {
         let output = std::env::var("MOTOLII_KITTEST_CAPTURE")
             .expect("set MOTOLII_KITTEST_CAPTURE to a PNG path");
         let mut harness = harness();
+        if let Ok(tab) = std::env::var("MOTOLII_KITTEST_TAB") {
+            let label = match tab.as_str() {
+                "media" => "Media",
+                "create" => "Create",
+                _ => "Effects",
+            };
+            harness.get_by_label(label).click();
+        }
         harness.run_steps(3);
         harness
             .render()

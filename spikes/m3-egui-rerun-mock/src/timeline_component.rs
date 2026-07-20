@@ -4,7 +4,7 @@ use eframe::egui::{
 };
 
 const HEADER_HEIGHT: f32 = 28.0;
-const KEY_TOOLS_WIDTH: f32 = 202.0;
+const KEY_TOOLS_WIDTH: f32 = 200.0;
 const BAND_RAIL_WIDTH: f32 = 54.0;
 const RULER_HEIGHT: f32 = 23.0;
 const BAND_COUNT: usize = 5;
@@ -89,6 +89,23 @@ pub(crate) fn timeline_ui(ui: &mut egui::Ui, state: &mut TimelineState) {
     if plane.width() > 8.0 {
         paint_time_plane(ui, plane, state);
     }
+
+    painter.rect_filled(
+        Rect::from_min_size(
+            pos2(whole.left(), body.top() + 21.0),
+            vec2(whole.width(), 1.0),
+        ),
+        0.0,
+        theme::TEXT,
+    );
+    painter.rect_filled(
+        Rect::from_min_size(
+            pos2(plane.left(), body.top() + 22.0),
+            vec2(plane.width(), 2.0),
+        ),
+        0.0,
+        theme::PANEL,
+    );
 }
 
 fn paint_header(ui: &mut egui::Ui, rect: Rect, state: &mut TimelineState) {
@@ -98,10 +115,13 @@ fn paint_header(ui: &mut egui::Ui, rect: Rect, state: &mut TimelineState) {
         [rect.left_bottom(), rect.right_bottom()],
         Stroke::new(1.0, theme::BORDER),
     );
-    let depth = Rect::from_min_size(rect.min + vec2(3.0, 3.0), vec2(22.0, 21.0));
-    let _ = flat_button(ui, depth, "=", false, "timeline-depth");
+    let marker = Rect::from_min_size(rect.min + vec2(9.0, 10.0), vec2(8.0, 8.0));
+    painter.rect_filled(marker, 0.0, theme::WAY_TIMELINE);
+    let depth = Rect::from_min_size(rect.min + vec2(25.0, 3.0), vec2(24.0, 22.0));
+    let _ = flat_button(ui, depth, "", false, "timeline-depth");
+    paint_depth_icon(&painter, depth, theme::TEXT_MUTED);
     painter.text(
-        pos2(depth.right() + 7.0, rect.center().y),
+        pos2(depth.right() + 8.0, rect.center().y),
         Align2::LEFT_CENTER,
         "譜面 / Timeline",
         FontId::proportional(11.0),
@@ -120,8 +140,11 @@ fn paint_header(ui: &mut egui::Ui, rect: Rect, state: &mut TimelineState) {
         vec2(27.0, 22.0),
     );
     let graph_button = timeline_button.translate(vec2(29.0, 0.0));
-    let _ = flat_button(ui, timeline_button, "T", true, "timeline-view");
-    if flat_button(ui, graph_button, "~", false, "graph-view").clicked() {
+    let _ = flat_button(ui, timeline_button, "", true, "timeline-view");
+    paint_timeline_view_icon(&painter, timeline_button, theme::TEXT);
+    let graph = flat_button(ui, graph_button, "", false, "graph-view");
+    paint_graph_icon(&painter, graph_button, theme::TEXT_MUTED);
+    if graph.clicked() {
         state.status = "Graph View · prototype switch".into();
     }
 }
@@ -170,7 +193,7 @@ fn paint_key_tools(ui: &mut egui::Ui, rect: Rect, state: &mut TimelineState) {
     {
         state.key_tools_mode = KeyToolsMode::Layers;
     }
-    if flat_button(ui, close, "x", false, "timeline-key-tools-close").clicked() {
+    if flat_button(ui, close, "×", false, "timeline-key-tools-close").clicked() {
         state.key_tools_open = false;
         return;
     }
@@ -178,7 +201,7 @@ fn paint_key_tools(ui: &mut egui::Ui, rect: Rect, state: &mut TimelineState) {
     let content = rect.shrink2(vec2(6.0, 0.0));
     let mut y = mode_bar.bottom() + 7.0;
     let icon = if state.key_tools_mode == KeyToolsMode::Keys {
-        "K 6"
+        "◆ 0"
     } else {
         "L 1"
     };
@@ -216,7 +239,7 @@ fn paint_key_tools(ui: &mut egui::Ui, rect: Rect, state: &mut TimelineState) {
     y += 5.0;
 
     let sections = match state.key_tools_mode {
-        KeyToolsMode::Keys => [("|K|", "Align"), ("K/K", "Stagger"), ("<K>", "Stretch")],
+        KeyToolsMode::Keys => [("", "Align"), ("", "Stagger"), ("", "Stretch")],
         KeyToolsMode::Layers => [
             ("|L|", "Layer Align"),
             ("L/L", "Layer Stagger"),
@@ -233,10 +256,12 @@ fn paint_key_tools(ui: &mut egui::Ui, rect: Rect, state: &mut TimelineState) {
             KeyToolsMode::Keys => state.key_section == index,
             KeyToolsMode::Layers => state.layer_section == index,
         };
-        if outlined_button(ui, button, label, selected, ("key-section", index))
-            .on_hover_text(hint)
-            .clicked()
-        {
+        let response = outlined_button(ui, button, label, selected, ("key-section", index))
+            .on_hover_text(hint);
+        if state.key_tools_mode == KeyToolsMode::Keys {
+            paint_key_section_icon(&painter, button, index, selected);
+        }
+        if response.clicked() {
             match state.key_tools_mode {
                 KeyToolsMode::Keys => state.key_section = index,
                 KeyToolsMode::Layers => state.layer_section = index,
@@ -262,7 +287,7 @@ fn paint_key_tools(ui: &mut egui::Ui, rect: Rect, state: &mut TimelineState) {
     y += 13.0;
 
     let action_labels = match (state.key_tools_mode, section) {
-        (KeyToolsMode::Keys, 0) => ["|K", "K|K", "K|"],
+        (KeyToolsMode::Keys, 0) => ["", "", ""],
         (KeyToolsMode::Keys, 1) => ["K..K", "<>", "->"],
         (KeyToolsMode::Keys, _) => ["80%", "100%", "120%"],
         (KeyToolsMode::Layers, 0) => ["|L", "L|L", "L|"],
@@ -275,10 +300,116 @@ fn paint_key_tools(ui: &mut egui::Ui, rect: Rect, state: &mut TimelineState) {
             pos2(content.left() + index as f32 * (action_width + 3.0), y),
             vec2(action_width, 22.0),
         );
-        if outlined_button(ui, button, label, false, ("key-action", index)).clicked() {
-            state.status = format!("{section_title} {label} · preview only");
+        let response = outlined_button(ui, button, label, false, ("key-action", index));
+        if state.key_tools_mode == KeyToolsMode::Keys && section == 0 {
+            paint_key_action_icon(&painter, button, index);
+        }
+        if response.clicked() {
+            state.status = format!("{section_title} action {} · preview only", index + 1);
         }
     }
+}
+
+fn paint_key_section_icon(painter: &egui::Painter, rect: Rect, index: usize, selected: bool) {
+    let color = if selected {
+        theme::TEXT
+    } else {
+        theme::TEXT_SECONDARY
+    };
+    let center = rect.center();
+    match index {
+        0 => {
+            for x in [center.x - 13.0, center.x + 13.0] {
+                painter.line_segment(
+                    [pos2(x, center.y - 6.0), pos2(x, center.y + 6.0)],
+                    Stroke::new(1.0, color),
+                );
+            }
+            paint_diamond(painter, center, 3.5, color, true);
+        }
+        1 => {
+            paint_diamond(painter, center + vec2(-11.0, -4.0), 3.2, color, true);
+            paint_diamond(painter, center + vec2(11.0, 4.0), 3.2, color, true);
+            for step in 0..4 {
+                let t = (step as f32 + 0.5) / 4.0;
+                let point = pos2(
+                    egui::lerp(center.x - 7.0..=center.x + 7.0, t),
+                    egui::lerp(center.y - 3.0..=center.y + 3.0, t),
+                );
+                painter.circle_filled(point, 0.8, color);
+            }
+        }
+        _ => {
+            painter.line_segment(
+                [center + vec2(-13.0, 0.0), center + vec2(13.0, 0.0)],
+                Stroke::new(1.0, color),
+            );
+            paint_arrow_head(painter, center + vec2(-13.0, 0.0), false, color);
+            paint_arrow_head(painter, center + vec2(13.0, 0.0), true, color);
+            paint_diamond(painter, center, 3.4, color, true);
+        }
+    }
+}
+
+fn paint_key_action_icon(painter: &egui::Painter, rect: Rect, index: usize) {
+    let color = theme::TEXT_SECONDARY;
+    let center = rect.center();
+    match index {
+        0 => {
+            painter.line_segment(
+                [center + vec2(-6.0, -6.0), center + vec2(-6.0, 6.0)],
+                Stroke::new(1.0, color),
+            );
+            paint_diamond(painter, center + vec2(3.0, 0.0), 3.2, color, true);
+        }
+        1 => {
+            paint_diamond(painter, center + vec2(-10.0, 0.0), 3.0, color, true);
+            painter.line_segment(
+                [center + vec2(0.0, -6.0), center + vec2(0.0, 6.0)],
+                Stroke::new(1.0, color),
+            );
+            paint_diamond(painter, center + vec2(10.0, 0.0), 3.0, color, true);
+        }
+        _ => {
+            paint_diamond(painter, center + vec2(-3.0, 0.0), 3.2, color, true);
+            painter.line_segment(
+                [center + vec2(6.0, -6.0), center + vec2(6.0, 6.0)],
+                Stroke::new(1.0, color),
+            );
+        }
+    }
+}
+
+fn paint_diamond(
+    painter: &egui::Painter,
+    center: egui::Pos2,
+    radius: f32,
+    color: Color32,
+    fill: bool,
+) {
+    let points = vec![
+        center + vec2(0.0, -radius),
+        center + vec2(radius, 0.0),
+        center + vec2(0.0, radius),
+        center + vec2(-radius, 0.0),
+    ];
+    if fill {
+        painter.add(egui::Shape::convex_polygon(points, color, Stroke::NONE));
+    } else {
+        painter.add(egui::Shape::closed_line(points, Stroke::new(1.0, color)));
+    }
+}
+
+fn paint_arrow_head(painter: &egui::Painter, tip: egui::Pos2, points_right: bool, color: Color32) {
+    let direction = if points_right { -1.0 } else { 1.0 };
+    painter.line_segment(
+        [tip, tip + vec2(4.0 * direction, -3.0)],
+        Stroke::new(1.0, color),
+    );
+    painter.line_segment(
+        [tip, tip + vec2(4.0 * direction, 3.0)],
+        Stroke::new(1.0, color),
+    );
 }
 
 fn paint_action_rail(ui: &mut egui::Ui, rect: Rect, state: &mut TimelineState) {
@@ -422,75 +553,64 @@ fn paint_time_plane(ui: &mut egui::Ui, rect: Rect, state: &mut TimelineState) {
             pos2(egui::lerp(rect.x_range(), bar.start), top),
             pos2(
                 egui::lerp(rect.x_range(), bar.end),
-                top + (band_height - 6.0).max(20.0),
+                top + (band_height - 7.0).max(20.0),
             ),
         );
         let selected = state.selected_bar == bar.id;
         let dimmed =
             state.muted[bar.row] || (state.solo.iter().any(|value| *value) && !state.solo[bar.row]);
-        let fill = bar.color.gamma_multiply(if dimmed {
-            0.28
-        } else if selected {
-            0.90
+        let base_fill = if bar.id == "city" {
+            Color32::from_rgb(142, 166, 141)
         } else {
-            0.72
-        });
+            bar.color
+        };
+        let fill = if dimmed {
+            base_fill.gamma_multiply(0.28)
+        } else {
+            base_fill
+        };
         painter.rect_filled(bar_rect, 0.0, fill);
         painter.rect_stroke(
             bar_rect,
             0.0,
-            Stroke::new(
-                if selected { 2.0 } else { 1.0 },
-                if selected {
-                    theme::TEXT
-                } else {
-                    bar.color.gamma_multiply(0.9)
-                },
-            ),
+            Stroke::new(1.0, Color32::from_rgb(55, 55, 55)),
             StrokeKind::Inside,
         );
-
-        let kind = Rect::from_center_size(
-            pos2(bar_rect.left() + 11.0, bar_rect.center().y),
-            vec2(14.0, 14.0),
+        painter.line_segment(
+            [
+                pos2(bar_rect.left(), bar_rect.top() - 1.0),
+                pos2(bar_rect.right(), bar_rect.top() - 1.0),
+            ],
+            Stroke::new(1.0, mix_with_black(fill, 0.48)),
         );
-        painter.rect_stroke(
-            kind,
-            0.0,
-            Stroke::new(1.0, Color32::from_rgb(24, 24, 24)),
-            StrokeKind::Inside,
+        painter.line_segment(
+            [bar_rect.left_top(), bar_rect.right_top()],
+            Stroke::new(1.0, mix_with_white(fill, 0.15)),
         );
-        painter.text(
-            kind.center(),
-            Align2::CENTER_CENTER,
-            bar.kind,
-            FontId::monospace(7.0),
-            Color32::from_rgb(22, 22, 22),
-        );
-        painter.text(
-            pos2(kind.right() + 6.0, bar_rect.center().y),
-            Align2::LEFT_CENTER,
-            bar.label,
-            FontId::monospace(8.0),
-            Color32::from_rgb(20, 20, 20),
-        );
-
-        let right_label = if bar.id == "pulse" {
-            "S M  K 7   =  z 0"
-        } else if matches!(bar.id, "audio" | "city" | "title") {
-            "S M  K 2   ="
-        } else {
-            "S M  o+  ="
-        };
-        if bar_rect.width() > 145.0 {
-            painter.text(
-                pos2(bar_rect.right() - 6.0, bar_rect.center().y),
-                Align2::RIGHT_CENTER,
-                right_label,
-                FontId::monospace(7.0),
-                Color32::from_rgb(24, 24, 24),
+        if selected {
+            for offset in [-4.0, -3.0] {
+                painter.line_segment(
+                    [
+                        pos2(bar_rect.left(), bar_rect.top() + offset),
+                        pos2(bar_rect.right(), bar_rect.top() + offset),
+                    ],
+                    Stroke::new(1.0, theme::TEXT),
+                );
+            }
+            painter.line_segment(
+                [
+                    pos2(bar_rect.left(), bar_rect.bottom() + 1.0),
+                    pos2(bar_rect.right(), bar_rect.bottom() + 1.0),
+                ],
+                Stroke::new(1.0, theme::TEXT),
             );
         }
+        painter.rect_filled(
+            Rect::from_min_size(bar_rect.min, vec2(4.0, bar_rect.height())),
+            0.0,
+            Color32::from_rgb(58, 58, 58),
+        );
+        paint_bar_contents(&painter, bar_rect, bar.id, bar.kind, bar.label);
 
         let response = ui.interact(bar_rect, Id::new(("timeline-bar", bar.id)), Sense::click());
         if response.hovered() {
@@ -524,6 +644,253 @@ fn paint_time_plane(ui: &mut egui::Ui, rect: Rect, state: &mut TimelineState) {
         theme::TEXT,
         Stroke::NONE,
     ));
+}
+
+fn mix_with_black(color: Color32, amount: f32) -> Color32 {
+    Color32::from_rgb(
+        (color.r() as f32 * amount) as u8,
+        (color.g() as f32 * amount) as u8,
+        (color.b() as f32 * amount) as u8,
+    )
+}
+
+fn mix_with_white(color: Color32, amount: f32) -> Color32 {
+    Color32::from_rgb(
+        egui::lerp(color.r() as f32..=255.0, amount) as u8,
+        egui::lerp(color.g() as f32..=255.0, amount) as u8,
+        egui::lerp(color.b() as f32..=255.0, amount) as u8,
+    )
+}
+
+fn paint_bar_contents(painter: &egui::Painter, rect: Rect, id: &str, kind: &str, label: &str) {
+    let ink = Color32::from_rgb(17, 17, 17);
+    let muted = Color32::from_rgb(36, 36, 36);
+    let mut x = rect.left() + 8.0;
+    let kind_left = x;
+    x = bar_cell(
+        painter,
+        rect,
+        x,
+        15.0,
+        if id == "audio" { "" } else { kind },
+        false,
+    );
+    if id == "audio" {
+        paint_music_note(painter, bar_cell_rect(rect, kind_left, 15.0), ink);
+    }
+
+    match id {
+        "audio" => {
+            x = bar_cell(painter, rect, x + 3.0, 18.0, "S", true);
+            x = bar_cell(painter, rect, x + 2.0, 18.0, "M", true);
+            x = bar_cell(painter, rect, x + 2.0, 29.0, "◆ 1", true);
+            painter.text(
+                pos2(x + 8.0, rect.center().y),
+                Align2::LEFT_CENTER,
+                label,
+                FontId::monospace(8.0),
+                ink,
+            );
+            painter.text(
+                pos2(x + 92.0, rect.center().y),
+                Align2::LEFT_CENTER,
+                "╱╲╱▁╲╱╲▁╱╲",
+                FontId::monospace(8.0),
+                muted,
+            );
+        }
+        "pulse" => {
+            let fold_left = x + 3.0;
+            x = bar_cell(painter, rect, fold_left, 28.0, "", true);
+            paint_group_fold(painter, bar_cell_rect(rect, fold_left, 28.0), ink);
+            x = bar_cell(painter, rect, x + 2.0, 18.0, "S", true);
+            x = bar_cell(painter, rect, x + 2.0, 18.0, "M", true);
+            x = bar_cell(painter, rect, x + 2.0, 29.0, "◆ 3", true);
+            x = bar_cell(painter, rect, x + 5.0, 62.0, label, false);
+            painter.text(
+                pos2(x + 10.0, rect.center().y),
+                Align2::LEFT_CENTER,
+                "IN  →  Echo Bloom  →  OUT",
+                FontId::monospace(7.0),
+                ink,
+            );
+            let depth = bar_cell(painter, rect, x + 150.0, 18.0, "", true);
+            paint_depth_icon(
+                painter,
+                Rect::from_center_size(
+                    pos2(depth - 9.0, rect.center().y),
+                    vec2(18.0, (rect.height() - 8.0).max(16.0)),
+                ),
+                ink,
+            );
+        }
+        "city" => {
+            x = bar_cell(painter, rect, x + 3.0, 18.0, "S", true);
+            x = bar_cell(painter, rect, x + 2.0, 18.0, "M", true);
+            x = bar_cell(painter, rect, x + 2.0, 29.0, "◆ 1", true);
+            x = bar_cell(painter, rect, x + 5.0, 76.0, "Pulse rings", false);
+            painter.text(
+                pos2(x + 8.0, rect.center().y),
+                Align2::LEFT_CENTER,
+                label,
+                FontId::monospace(8.0),
+                ink,
+            );
+            let depth = bar_cell(painter, rect, x + 70.0, 18.0, "", true);
+            paint_depth_icon(
+                painter,
+                Rect::from_center_size(
+                    pos2(depth - 9.0, rect.center().y),
+                    vec2(18.0, (rect.height() - 8.0).max(16.0)),
+                ),
+                ink,
+            );
+        }
+        "title" => {
+            x = bar_cell(painter, rect, x + 3.0, 18.0, "S", true);
+            x = bar_cell(painter, rect, x + 2.0, 18.0, "M", true);
+            x = bar_cell(painter, rect, x + 2.0, 29.0, "◆ 1", true);
+            painter.text(
+                pos2(x + 8.0, rect.center().y),
+                Align2::LEFT_CENTER,
+                label,
+                FontId::monospace(8.0),
+                ink,
+            );
+            let depth = bar_cell(painter, rect, x + 93.0, 18.0, "", true);
+            paint_depth_icon(
+                painter,
+                Rect::from_center_size(
+                    pos2(depth - 9.0, rect.center().y),
+                    vec2(18.0, (rect.height() - 8.0).max(16.0)),
+                ),
+                ink,
+            );
+        }
+        _ => {
+            x = bar_cell(painter, rect, x + 3.0, 18.0, "S", true);
+            x = bar_cell(painter, rect, x + 2.0, 18.0, "M", true);
+            x = bar_cell(painter, rect, x + 2.0, 29.0, "◇+", true);
+            painter.text(
+                pos2(x + 8.0, rect.center().y),
+                Align2::LEFT_CENTER,
+                label,
+                FontId::monospace(8.0),
+                ink,
+            );
+            let depth = bar_cell(painter, rect, x + 94.0, 18.0, "", true);
+            paint_depth_icon(
+                painter,
+                Rect::from_center_size(
+                    pos2(depth - 9.0, rect.center().y),
+                    vec2(18.0, (rect.height() - 8.0).max(16.0)),
+                ),
+                ink,
+            );
+        }
+    }
+}
+
+fn bar_cell_rect(bar: Rect, x: f32, width: f32) -> Rect {
+    Rect::from_center_size(
+        pos2(x + width * 0.5, bar.center().y),
+        vec2(width, (bar.height() - 8.0).max(16.0)),
+    )
+}
+
+fn paint_music_note(painter: &egui::Painter, rect: Rect, color: Color32) {
+    let stem_x = rect.center().x + 2.0;
+    painter.line_segment(
+        [
+            pos2(stem_x, rect.center().y - 5.0),
+            pos2(stem_x, rect.center().y + 3.0),
+        ],
+        Stroke::new(1.0, color),
+    );
+    painter.line_segment(
+        [
+            pos2(stem_x, rect.center().y - 5.0),
+            pos2(stem_x + 4.0, rect.center().y - 4.0),
+        ],
+        Stroke::new(1.0, color),
+    );
+    painter.circle_filled(pos2(stem_x - 2.0, rect.center().y + 4.0), 2.0, color);
+}
+
+fn paint_group_fold(painter: &egui::Painter, rect: Rect, color: Color32) {
+    painter.add(egui::Shape::convex_polygon(
+        vec![
+            rect.center() + vec2(-8.0, -2.0),
+            rect.center() + vec2(-2.0, -2.0),
+            rect.center() + vec2(-5.0, 2.0),
+        ],
+        color,
+        Stroke::NONE,
+    ));
+    painter.circle_filled(rect.center() + vec2(6.0, 0.0), 3.0, color);
+}
+
+fn paint_depth_icon(painter: &egui::Painter, rect: Rect, color: Color32) {
+    for offset in [-3.0, 0.0, 3.0] {
+        painter.line_segment(
+            [
+                pos2(rect.center().x - 5.0, rect.center().y + offset),
+                pos2(rect.center().x + 5.0, rect.center().y + offset),
+            ],
+            Stroke::new(1.0, color),
+        );
+    }
+}
+
+fn paint_timeline_view_icon(painter: &egui::Painter, rect: Rect, color: Color32) {
+    let icon = Rect::from_center_size(rect.center(), vec2(10.0, 9.0));
+    painter.rect_stroke(icon, 0.0, Stroke::new(1.0, color), StrokeKind::Inside);
+    for y in [icon.top() + 3.0, icon.top() + 6.0] {
+        painter.line_segment(
+            [pos2(icon.left() + 2.0, y), pos2(icon.right() - 2.0, y)],
+            Stroke::new(1.0, color),
+        );
+    }
+}
+
+fn paint_graph_icon(painter: &egui::Painter, rect: Rect, color: Color32) {
+    let left = rect.left() + 6.0;
+    let right = rect.right() - 6.0;
+    let points = vec![
+        pos2(left, rect.center().y + 3.0),
+        pos2(left + (right - left) * 0.34, rect.center().y - 2.0),
+        pos2(left + (right - left) * 0.67, rect.center().y + 1.0),
+        pos2(right, rect.center().y - 4.0),
+    ];
+    painter.add(egui::Shape::line(points, Stroke::new(1.0, color)));
+}
+
+fn bar_cell(
+    painter: &egui::Painter,
+    bar: Rect,
+    x: f32,
+    width: f32,
+    label: &str,
+    filled: bool,
+) -> f32 {
+    let rect = bar_cell_rect(bar, x, width);
+    if filled {
+        painter.rect_filled(rect, 0.0, Color32::from_rgba_unmultiplied(8, 8, 8, 34));
+    }
+    painter.rect_stroke(
+        rect,
+        0.0,
+        Stroke::new(1.0, Color32::from_rgb(48, 48, 48)),
+        StrokeKind::Inside,
+    );
+    painter.text(
+        rect.center(),
+        Align2::CENTER_CENTER,
+        label,
+        FontId::monospace(if width > 40.0 { 7.0 } else { 8.0 }),
+        Color32::from_rgb(20, 20, 20),
+    );
+    rect.right()
 }
 
 fn flat_button(

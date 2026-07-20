@@ -155,7 +155,8 @@ fn identity_section(ui: &mut egui::Ui, fixture: EffectFixture) {
             ui.add_space(4.0);
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 2.0;
-                ui.label(RichText::new(fixture.name).strong().size(13.0));
+                ui.add_space(10.0);
+                ui.label(RichText::new(fixture.name).font(theme::interface_bold_font(13.0)));
                 ui.label(
                     RichText::new(fixture.subtitle)
                         .monospace()
@@ -276,20 +277,33 @@ fn scrub_row(
 ) -> Option<InspectorAction> {
     let mut action = None;
     property_row(ui, |ui| {
-        ui.allocate_ui_with_layout(
-            Vec2::new(92.0, 21.0),
-            Layout::left_to_right(Align::Center),
-            |ui| {
-                ui.label(RichText::new(label).size(10.0).color(theme::TEXT_SECONDARY));
-                if automation_mark(ui, *automated, &format!("{label} automation")).clicked() {
-                    *automated = !*automated;
-                    action = Some(InspectorAction::Commit {
-                        label: format!("{label} automation"),
-                        before,
-                    });
-                }
-            },
+        let (group, _) = ui.allocate_exact_size(Vec2::new(92.0, 21.0), Sense::hover());
+        ui.painter().text(
+            group.left_center(),
+            egui::Align2::LEFT_CENTER,
+            label,
+            FontId::proportional(10.0),
+            theme::TEXT_SECONDARY,
         );
+        let automation_offset = if label == "Spread" { 39.0 } else { 47.0 };
+        let automation = egui::Rect::from_min_size(
+            group.left_top() + Vec2::new(automation_offset, 1.5),
+            Vec2::splat(18.0),
+        );
+        if components::automation_mark_at(
+            ui,
+            automation,
+            *automated,
+            &format!("{label} automation"),
+        )
+        .clicked()
+        {
+            *automated = !*automated;
+            action = Some(InspectorAction::Commit {
+                label: format!("{label} automation"),
+                before,
+            });
+        }
 
         let slider_width = (ui.available_width() - 55.0).max(54.0);
         let response = scrub_control(ui, value, slider_width, !*drag_cancelled, label)
@@ -317,10 +331,6 @@ fn scrub_row(
         );
     });
     action
-}
-
-fn automation_mark(ui: &mut egui::Ui, active: bool, label: &str) -> egui::Response {
-    components::automation_mark(ui, active, label)
 }
 
 fn scrub_control(

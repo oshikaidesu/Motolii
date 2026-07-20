@@ -17,7 +17,7 @@ pub(crate) struct ComponentTokens {
 
 pub(crate) const TOKENS: ComponentTokens = ComponentTokens {
     panel_header_height: 29.0,
-    tab_height: 29.0,
+    tab_height: 28.0,
     section_header_height: 23.0,
     property_row_height: 27.0,
     control_height: 25.0,
@@ -182,19 +182,6 @@ pub(crate) fn tool_button(
     response
 }
 
-pub(crate) fn quiet_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
-    ui.add_sized(
-        [
-            TOKENS.control_height.max(label.len() as f32 * 7.0 + 14.0),
-            TOKENS.control_height,
-        ],
-        egui::Button::new(RichText::new(label).size(10.0).color(theme::TEXT_SECONDARY))
-            .fill(theme::PANEL)
-            .stroke(Stroke::new(1.0, theme::BORDER))
-            .corner_radius(TOKENS.corner_radius),
-    )
-}
-
 pub(crate) fn panel_header(ui: &mut egui::Ui, title: &str, detail: &str, marker_color: Color32) {
     Block {
         height: TOKENS.panel_header_height,
@@ -204,10 +191,14 @@ pub(crate) fn panel_header(ui: &mut egui::Ui, title: &str, detail: &str, marker_
         inset_x: TOKENS.inset,
     }
     .show(ui, Layout::left_to_right(Align::Center), |ui| {
-        ui.spacing_mut().item_spacing.x = TOKENS.gap;
+        ui.spacing_mut().item_spacing.x = 7.0;
         let (marker, _) = ui.allocate_exact_size(Vec2::splat(8.0), Sense::hover());
         ui.painter().rect_filled(marker, 0.0, marker_color);
-        ui.label(RichText::new(title).strong().color(theme::TEXT));
+        ui.label(
+            RichText::new(title)
+                .font(theme::interface_bold_font(11.0))
+                .color(theme::TEXT),
+        );
         if !detail.is_empty() {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 ui.add_space(TOKENS.inset);
@@ -300,16 +291,20 @@ pub(crate) fn property_row(ui: &mut egui::Ui, contents: impl FnOnce(&mut egui::U
         inset_x: TOKENS.inset,
     }
     .show(ui, Layout::left_to_right(Align::Center), |ui| {
-        ui.spacing_mut().item_spacing.x = 6.0;
+        ui.spacing_mut().item_spacing.x = TOKENS.gap;
         contents(ui);
         ui.add_space(3.0);
     });
 }
 
 pub(crate) fn property_label(ui: &mut egui::Ui, label: &str) {
-    ui.add_sized(
-        [92.0, 21.0],
-        egui::Label::new(RichText::new(label).size(10.0).color(theme::TEXT_SECONDARY)),
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(92.0, 21.0), Sense::hover());
+    ui.painter().text(
+        rect.left_center(),
+        egui::Align2::LEFT_CENTER,
+        label,
+        FontId::proportional(10.0),
+        theme::TEXT_SECONDARY,
     );
 }
 
@@ -341,8 +336,23 @@ pub(crate) fn tag(ui: &mut egui::Ui, text: &str, color: Color32) {
         });
 }
 
-pub(crate) fn automation_mark(ui: &mut egui::Ui, active: bool, label: &str) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(Vec2::splat(18.0), Sense::click());
+pub(crate) fn automation_mark_at(
+    ui: &mut egui::Ui,
+    rect: Rect,
+    active: bool,
+    label: &str,
+) -> egui::Response {
+    let response = ui.interact(rect, ui.id().with(label), Sense::click());
+    paint_automation_mark(ui, rect, active, label, response)
+}
+
+fn paint_automation_mark(
+    ui: &mut egui::Ui,
+    rect: Rect,
+    active: bool,
+    label: &str,
+    response: egui::Response,
+) -> egui::Response {
     let color = if active {
         theme::ACCENT
     } else {
