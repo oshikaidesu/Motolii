@@ -93,7 +93,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 | 優先 | ID | Phase | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
-| 1 | U0d-3 | M3 | `WAIT` | — | U0d-2のmain merge待ち。全登録commandの再割当conformanceとraw key監査だけを行う | U2a-1を単独実行 |
+| 1 | U0d-3 | M3 | `DO` | — | U0d-2完了。全登録commandの合成base再割当conformanceと、決定済みAST raw input監査（主審判）だけを行う | U2a-1を単独実行 |
 
 K0 [#167](https://github.com/oshikaidesu/Motolii/issues/167)とP0I
 [#170](https://github.com/oshikaidesu/Motolii/issues/170)は論理上`DO`の独立spikeだが、
