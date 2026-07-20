@@ -116,6 +116,9 @@ fn exported_types_are_toolkit_free() {
     assert_no_toolkit_in_type_name::<motolii_ui::RouterOutput>();
     assert_no_toolkit_in_type_name::<motolii_ui::InputRouter>();
     assert_no_toolkit_in_type_name::<motolii_ui::InputRouterError>();
+    assert_no_toolkit_in_type_name::<motolii_ui::InteractionState>();
+    assert_no_toolkit_in_type_name::<motolii_ui::InteractionStateMachine>();
+    assert_no_toolkit_in_type_name::<motolii_ui::InteractionTransitionError>();
     assert_no_toolkit_in_type_name::<motolii_ui::Gesture>();
     assert_no_toolkit_in_type_name::<motolii_ui::EffectiveTrigger>();
     assert_no_toolkit_in_type_name::<motolii_ui::KeymapResolution>();
