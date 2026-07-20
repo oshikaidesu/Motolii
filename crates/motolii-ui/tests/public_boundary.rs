@@ -1,4 +1,4 @@
-//! U0a: motolii-ui の公開 API が Slint 型を漏らさないことを走査する。
+//! U0a: motolii-uiの公開APIがUI toolkit型を漏らさないことを走査する。
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -21,7 +21,17 @@ fn collect_rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-fn slint_leaks_in_public_items(source: &str) -> Vec<String> {
+const TOOLKIT_PATHS: &[&str] = &[
+    "egui::",
+    "eframe::",
+    "egui_wgpu::",
+    "egui_winit::",
+    "egui_tiles::",
+    "winit::",
+    "slint::",
+];
+
+fn toolkit_leaks_in_public_items(source: &str) -> Vec<String> {
     let mut violations = Vec::new();
     let mut in_test_module = false;
 
@@ -44,7 +54,7 @@ fn slint_leaks_in_public_items(source: &str) -> Vec<String> {
         if trimmed.starts_with("pub(crate)") || trimmed.starts_with("pub(super)") {
             continue;
         }
-        if trimmed.contains("slint::") {
+        if TOOLKIT_PATHS.iter().any(|path| trimmed.contains(path)) {
             violations.push(format!("line {}: {trimmed}", line_no + 1));
         }
     }
@@ -53,7 +63,7 @@ fn slint_leaks_in_public_items(source: &str) -> Vec<String> {
 }
 
 #[test]
-fn public_items_do_not_reference_slint_types() {
+fn public_items_do_not_reference_toolkit_types() {
     let root = crate_src_root();
     let mut files = Vec::new();
     collect_rust_files(&root, &mut files);
@@ -65,35 +75,35 @@ fn public_items_do_not_reference_slint_types() {
     let mut all = Vec::new();
     for file in files {
         let text = fs::read_to_string(&file).unwrap();
-        for violation in slint_leaks_in_public_items(&text) {
+        for violation in toolkit_leaks_in_public_items(&text) {
             all.push(format!("{}: {violation}", file.display()));
         }
     }
 
     assert!(
         all.is_empty(),
-        "public API must not expose slint types: {all:#?}"
+        "public API must not expose UI toolkit types: {all:#?}"
     );
 }
 
 #[test]
-fn exported_types_are_slint_free() {
-    fn assert_no_slint_in_type_name<T>() {
+fn exported_types_are_toolkit_free() {
+    fn assert_no_toolkit_in_type_name<T>() {
         let name = std::any::type_name::<T>();
         assert!(
-            !name.contains("slint::"),
-            "exported type leaks slint in type_name: {name}"
+            !TOOLKIT_PATHS.iter().any(|path| name.contains(path)),
+            "exported type leaks UI toolkit in type_name: {name}"
         );
     }
 
-    assert_no_slint_in_type_name::<motolii_ui::UiCrateInfo>();
-    assert_no_slint_in_type_name::<motolii_ui::UiError>();
-    assert_no_slint_in_type_name::<Result<motolii_ui::UiCrateInfo, motolii_ui::UiError>>();
+    assert_no_toolkit_in_type_name::<motolii_ui::UiCrateInfo>();
+    assert_no_toolkit_in_type_name::<motolii_ui::UiError>();
+    assert_no_toolkit_in_type_name::<Result<motolii_ui::UiCrateInfo, motolii_ui::UiError>>();
 }
 
 #[test]
-fn crate_info_reports_linked_slint() {
-    let info = motolii_ui::crate_info().expect("slint should be linked in motolii-ui");
+fn crate_info_reports_linked_toolkit() {
+    let info = motolii_ui::crate_info().expect("egui should be linked in motolii-ui");
     assert_eq!(info.crate_id, motolii_ui::CRATE_ID);
-    assert!(info.slint_linked);
+    assert!(info.toolkit_linked);
 }

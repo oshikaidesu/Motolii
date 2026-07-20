@@ -95,7 +95,7 @@ Each ID is one commit/PR. Do not combine the baseline fixture, schema, runtime t
 
 ## M3 boundary
 
-This decision does not release the active M3 stop. After M2 reclosure and a new M3 entry decision, Stage/Output Frame UI may be translated into M3 task IDs. Camera gestures must use D2 one-gesture/one-history commands; Stage View gestures remain transient; Slint types and px/DPI do not enter the camera contract.
+This decision does not prescribe Stage/Output Frame UI timing. After M2 reclosure and U0a entry, Stage/Output Frame UI may be translated into M3 task IDs per row dependencies. Camera gestures must use D2 one-gesture/one-history commands; Stage View gestures remain transient; toolkit/egui types and px/DPI do not enter the camera contract.
 
 ## Non-goals
 

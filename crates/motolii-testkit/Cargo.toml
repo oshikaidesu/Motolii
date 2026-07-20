@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+cargo_metadata.workspace = true
 motolii-core.workspace = true
 motolii-eval.workspace = true
 motolii-gpu.workspace = true

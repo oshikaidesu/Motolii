@@ -245,7 +245,7 @@ A3 実装時（本発注外）の拘束:
 
 ### 9.2 不十分（A3D 意味正本に置く。`ParamDef` 新 field で埋めない）
 
-単位、+X 基準、CCW、union 説明、premul 規則は A3D §3–§4 を意味正本とする。製品 Panel conformance は M3-U4a＋必要なら GAP-13。M3 停止中の A3 完了条件は **非 UI Contract 列挙 fixture のみ**（A3D §6）。
+単位、+X 基準、CCW、union 説明、premul 規則は A3D §3–§4 を意味正本とする。製品 Panel conformance は M3-U4a＋必要なら GAP-13。U4a前の A3 完了条件は **非 UI Contract 列挙 fixture のみ**（A3D §6）。
 
 **正例 fixture 名**: `P5_radial_repeater_contract_enumeration` — display_name／6 params／domain／default の Contract 列挙。
 
@@ -267,7 +267,7 @@ A3 実装時（本発注外）の拘束:
 
 依存順: A3-1aとA3-1bは本仕様だけに依存し、別境界としてどちらからでも統合できる。
 A3-1cはA3-1a後。**A3-2は A3-1c かつ A3-0 後**（A3-1bとは独立）。A3-3／A3-4は
-A3-2後（相互には独立、M3停止中でも可）。VSM-A3完了には1bを含む全件のmain到達が必要。
+A3-2後（相互には独立、U4a前でも可）。VSM-A3完了には1bを含む全件のmain到達が必要。
 
 ### VSM-A3-0 固定レイアウト契約（完了条件）
 
@@ -431,7 +431,7 @@ cargo test --workspace
 
 ## 16. 既知の統合ゲート
 
-- M3 入場PR未採択 → UI／egui移行／U4a 実装禁止
+- egui U0a移行は本入場で充足 → U4a は個別依存のまま禁止
 - A3 実装は本 A3S `ORDER` 相当の分割発注＋反対側レビュー P0/P1=0 後
 - **A3-2 は A3-0 main 到達後**にのみ発注可（Host cache 定型が公開 façade 経由で到達していること）
 - A3-0 実装は別発注＋反対側レビュー P0/P1=0

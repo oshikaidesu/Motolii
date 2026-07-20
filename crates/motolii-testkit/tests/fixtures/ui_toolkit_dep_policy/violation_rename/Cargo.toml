@@ -1,0 +1,6 @@
+[package]
+name = "motolii-core"
+version = "0.0.0"
+
+[dependencies]
+ui_alias = { package = "egui", path = "../local_packages/egui" }

@@ -11,11 +11,11 @@
 | 項目 | 現行事実 |
 |---|---|
 | Motolii authority | M3仕様、[UI境界規律](2026-07-14-m3-ui-boundary-prevention.md)、[UI視覚言語](../ui-visual-language.md)、[UI参照地図](../ui-reference-map.md) |
-| 現行code | mainの`motolii-ui`はSlintのlink確認だけを持つ最小骨格。egui component、shell、fixtureはまだmainへ統合されていない |
+| 現行code | mainの`motolii-ui`はegui U0a骨格(link確認のみ)。component、shell、fixtureはまだmainへ統合されていない |
 | 現行prototype | `codex/m3-mock-components`(集計commit `7572376`)のReact component mapは、primitive 7、**pattern 13**(reference-candidate 6+design-candidate 7)、surface 12、screen 4の安定IDを持つ。branch移動で数は動くため、照合時は必ずcommitを添えて数え直す。React/DOM/CSS境界は製品APIではない |
 | 調査対象gap | eguiでdense component、Browser、form、診断、DnD、snapshot試験をどう小さく成立させるかの実装証拠がmainに無い |
 | 非目標 | Rerun風画面、Rerun command、Entity/Blueprint/store、theme値、font/icon、serdeをMotolii要件へ昇格しない |
-| 入場条件 | M3入場PRと個別転移裁定より前はread-only調査だけ。M1/M2の公開契約、Document、plugin契約を変更しない |
+| 入場条件 | U0a完了後、個別転移裁定より前はread-only調査だけ。M1/M2の公開契約、Document、plugin契約を変更しない |
 
 したがって本調査は`re_uiにあるものをMotoliiへ足す`のではなく、`React安定IDとM3 taskが既に要求する問題に、re_uiのどのfileが実装証拠を提供するか`を答える。
 

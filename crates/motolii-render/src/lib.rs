@@ -57,7 +57,7 @@ pub struct BackgroundTextureRequest<'a> {
 ///
 /// `texture` は `RenderSession` の ping-pong 中間バッファとは独立した出力コピー。
 /// 同一セッションで次の `render_graph_cached` を呼んでも、直前フレームのピクセルは上書きされない。
-/// Slint 等へ渡す前の表示用コピー義務は M3 仕様「プレビュー出力の寿命」節を参照。
+/// UI shell等へ渡す前の表示用コピー義務は M3 仕様「プレビュー出力の寿命」節を参照。
 pub struct RenderedFrame {
     pub texture: wgpu::Texture,
     pub desc: FrameDesc,

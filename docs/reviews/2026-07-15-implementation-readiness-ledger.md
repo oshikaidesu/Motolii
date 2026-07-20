@@ -2,7 +2,7 @@
 
 ステータス: **運用正本**。先例監査後の各タスクを、実装者が未決を推測せず着手できる単位へ分類する。Issue化は「意味が固定済みの実装」または「後続を凍結するため完了条件が固定済みのspike」に限る。
 
-[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。ただしM3の意味決定や既存Issueは着手許可ではなく、U1f/U2f/U2gを含む製品実装はM3入場PRでIDと依存を再翻訳するまで停止する。
+[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。U0a入場完了後、U1f/U2f/U2gは各行依存を満たせば発注できる（readiness表の`BLOCKED`は維持）。
 
 ## 状態語
 
@@ -36,9 +36,9 @@ GAP-14 lifecycle、PR #197、[2026-07-16新規Document v4生成追補](2026-07-1
 
 | ID | 状態 | 固定済み | 可変UI | 依存/Issue化 |
 |---|---|---|---|---|
-| U1f | `BLOCKED`（意味決定のみ保持） | Final frame不変、off-frame objectを表示/選択、K0を待たない、UI thread readback禁止 | scrim濃度、outline、full-pixel表示、境界装飾 | M3入場PR待ち。U1b/U0e/D1kは未翻訳候補。[#169](https://github.com/oshikaidesu/Motolii/issues/169)は着手不可 |
-| U2f | `BLOCKED`（意味決定のみ保持） | 全Position Const/keyへ同じEdit-Space差分、時刻/補間/接線不変、1 Undo、Cancel 0、Bake/offset/helperなし | modifier物理key、HUD、ghost、path表示 | M3入場PR待ち。U0c/U0d/U2a/U2cは未翻訳候補。[#168](https://github.com/oshikaidesu/Motolii/issues/168)は着手不可 |
-| U2g | `BLOCKED`（意味決定のみ保持） | Effect Definition out→Layer Use in、非隣接、1 drag=1 Use、Group/Explicit意味差 | gutter、routing、bundle/stub、socket形状 | D1l/D3e完了済み、M3入場PR待ち。Issue化しない |
+| U1f | `BLOCKED`（意味決定のみ保持） | Final frame不変、off-frame objectを表示/選択、K0を待たない、UI thread readback禁止 | scrim濃度、outline、full-pixel表示、境界装飾 | U1b/U0e/D1k依存待ち。[#169](https://github.com/oshikaidesu/Motolii/issues/169)は着手不可 |
+| U2f | `BLOCKED`（意味決定のみ保持） | 全Position Const/keyへ同じEdit-Space差分、時刻/補間/接線不変、1 Undo、Cancel 0、Bake/offset/helperなし | modifier物理key、HUD、ghost、path表示 | U0c/U0d/U2a/U2c依存待ち。[#168](https://github.com/oshikaidesu/Motolii/issues/168)は着手不可 |
+| U2g | `BLOCKED`（意味決定のみ保持） | Effect Definition out→Layer Use in、非隣接、1 drag=1 Use、Group/Explicit意味差 | gutter、routing、bundle/stub、socket形状 | D1l/D3e完了済み、U0e/U2b/U3a依存待ち。Issue化しない |
 
 ### UI PRの共通禁止
 
@@ -98,6 +98,6 @@ D3
   -> K1 cache
 ```
 
-図中のU2gを含むM3昇格はM3入場PR後に限る。入場前は上表の`BLOCKED`を優先する。
+図中のU2gを含むM3昇格はU0a入場後に限る。各行は上表の`BLOCKED`と依存を優先する。
 
 後続Issueを前倒し作成しない。前段merge時に型名・依存・fixtureを最新mainで再確認し、仕様とコードが一致した時点で1 Issue=1 PRへ翻訳する。

@@ -269,7 +269,7 @@ impl YuvToRgba {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Rgba8Unorm,
-                // TEXTURE_BINDING+RENDER_ATTACHMENT: Slint Image::try_fromの必須要件
+                // TEXTURE_BINDING+RENDER_ATTACHMENT: UI native texture登録の必須要件
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                     | wgpu::TextureUsages::COPY_SRC
                     | wgpu::TextureUsages::TEXTURE_BINDING,

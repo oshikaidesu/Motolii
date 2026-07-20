@@ -1,6 +1,6 @@
-//! Slint 依存はこの private module に閉じ、公開 API へ型を出さない。
+//! egui依存はこのprivate moduleに閉じ、公開APIへ型を出さない。
 
-/// 骨格段階ではウィンドウを立てず、リンク解決だけを確認する。
-pub(crate) fn slint_linked() -> bool {
-    !slint::SharedString::from("motolii-ui").is_empty()
+/// 骨格段階ではwindowを立てず、リンク解決だけを確認する。
+pub(crate) fn toolkit_linked() -> bool {
+    std::mem::size_of::<egui::Context>() > 0
 }

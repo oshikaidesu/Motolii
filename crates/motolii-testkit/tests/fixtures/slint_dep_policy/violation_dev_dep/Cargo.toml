@@ -1,7 +1,0 @@
-[package]
-name = "motolii-gpu"
-version = "0.1.0"
-edition = "2021"
-
-[dev-dependencies]
-slint-build = "1.17"

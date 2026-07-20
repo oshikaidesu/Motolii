@@ -1,0 +1,6 @@
+[package]
+name = "motolii-render"
+version = "0.0.0"
+
+[dev-dependencies]
+eframe = { path = "../local_packages/eframe" }

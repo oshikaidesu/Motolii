@@ -1,6 +1,6 @@
 # M3 UI基盤 egui採用判断（2026-07-18）
 
-ステータス: **採否決定 / 文書反映のみ**。M3のUI基盤をSlintからeguiへ変更する。[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済みだが、本判断だけでは製品実装を許可しない。現行`motolii-ui`骨格、workspace依存、Slint固有コメントとテスト名の移行は、M3入場PRで行う。
+ステータス: **採否決定 / U0a骨格移行完了**。M3のUI基盤をSlintからeguiへ変更する。[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。U0aで`motolii-ui` egui骨格、workspace依存、依存方向CI一般化を完了。U1a以降のshell/preview/panelは未着手。
 
 ## 1. 決定
 
@@ -19,7 +19,7 @@ Slint S1は2026-07-11時点のApple M4 / MetalでManual device共有とtexture i
 2. egui-wgpu 0.35は既存の`Instance / Adapter / Device / Queue`を渡す[`WgpuSetup::Existing`](https://docs.rs/egui-wgpu/0.35.0/egui_wgpu/enum.WgpuSetup.html)を通常の公開APIとして持つ
 3. 同じrendererは既存`TextureView`を[`register_native_texture`](https://docs.rs/egui-wgpu/0.35.0/egui_wgpu/struct.Renderer.html#method.register_native_texture)でoffscreen imageとして表示できる
 4. editor型の高密度UI、Host自動生成parameter panel、Rust/LLMによるcomponent単位の変更、利用者が組み替えられるpanel構成はimmediate modeと相性がよい
-5. 現行`motolii-ui`はSlint接続確認用の空骨格で、製品画面や`.slint` componentは未実装である。toolkitを変える費用が最小の時点である
+5. 判断時点（2026-07-18）の`motolii-ui`はSlint接続確認用の空骨格で、製品画面や`.slint` componentは未実装であった。toolkitを変える費用が最小の時点であった（U0a完了後はegui骨格へ置換済み）
 
 ## 3. Apple M4 / Metal実機証拠
 
@@ -71,22 +71,20 @@ toolkit変更で次を変えない。
 - timeline layout/hit-test/render modelはtoolkit非依存とし、大量widgetではなく単一wgpu面を使う
 - panel layoutの利用者設定をDocument、egui memory、`egui_tiles::Tree`の生serializeへ焼かない
 
-## 6. 移行停止線
+## 6. 移行停止線（歴史）
 
-M3入場PRまで行わないもの:
+U0a完了前に行わなかったもの（本入場でU0a相当は完了）:
 
-- workspaceのSlint依存削除とegui依存追加
-- `UiDeviceParts`、Slint固有コメント、依存方向テスト名の変更
-- `motolii-ui`製品shell、panel、preview、timeline実装
-- 公開API、Document schema、plugin ABI、永続設定形式の追加
+- ~~workspaceのSlint依存削除とegui依存追加~~ → **U0a完了**
+- ~~`UiDeviceParts`、Slint固有コメント、依存方向テスト名の変更~~ → **U0a完了**（`UiDeviceParts`名・公開形は不変）
+- `motolii-ui`製品shell、panel、preview、timeline実装 → **U1a以降**
+- 公開API、Document schema、plugin ABI、永続設定形式の追加 → **各タスク依存**
 
-M3入場PRでは次を同時に再翻訳する。
+U0aで完了した項目:
 
-1. G0-1を本判断と実機証拠へ差し替える
-2. Slint固有の依存方向CIを「UI toolkitは`motolii-ui`だけ」へ一般化する
-3. core-first既存device方式でWindow Surface互換adapterを確認する。失敗時だけ、surface-compatible deviceをshellが生成して`GpuCtx::from_device_queue()`へ渡す代替を仕様改訂する
-4. `egui_tiles`はruntime projectionに限定し、安定layout modelの所有層と保存寿命を先に決める
-5. 0.35で確認した`App::update`→`App::ui`等のAPI churnを製品全体へ漏らさないadapter testを置く
+1. G0-1を本判断と実機証拠へ差し替え
+2. Slint固有の依存方向CIを「UI toolkitは`motolii-ui`だけ」へ一般化
+3. egui骨格でのリンク確認（窓なし。device共有・native textureはU1a以降）
 
 ## 7. 歴史資料の扱い
 

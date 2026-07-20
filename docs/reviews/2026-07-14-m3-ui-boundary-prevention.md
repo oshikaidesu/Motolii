@@ -75,7 +75,7 @@ scale変更の自動審判は注入したscaleで同一操作から同一domain 
 - timeline layout/hit-test/render modelはウィンドウなしでテスト可能なtoolkit非依存moduleに置く
 - panel layoutはMotolii所有modelから`egui_tiles` runtime treeへ投影し、`Tree`/`TileId`/crateのserde形を保存正本にしない
 
-審判はCargo metadataの依存検査と公開型走査。callback adapterそのものをUIクレート外へ追い出すことは要求しない。
+審判はCargo metadataの直接依存検査（`package = "…"` renameを含む解決済みpackage名）と公開型走査。callback adapterそのものをUIクレート外へ追い出すことは要求しない。
 
 ### GR-UI-6. 負荷と測定方法を先に固定する
 

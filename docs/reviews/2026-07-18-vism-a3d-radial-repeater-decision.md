@@ -85,7 +85,7 @@ A3R の `spread`／`size`／`speed`／`seed` は採用しない。`size`→`dot_
 
 ## 6. Parameter Panel 要求と現行境界
 
-M3 製品 UI は[M2 再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)により停止中である。Slint 実装は非目標とし、次を要求する。
+M3 製品 UI は U4a 未着手である。歴史的 Slint 実装は非目標とし、次を要求する。
 
 1. A3 実装は現行 `NodeDesc`／`ParamDef` が持つ表示名、parameter ID、型、
    default、F64 domainを正しく宣言し、Catalogから列挙できることを非UI fixtureで
@@ -183,4 +183,4 @@ M3 製品 UI は[M2 再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.
 | ID | 依存 | 内容 |
 |---|---|---|
 | VSM-A3S | 本決定 | §11 の handoff 質問を仕様化。コードは触らない |
-| VSM-A3 | VSM-A3S | 本 v1 identity を A3S 一般経路と公開 API だけで外部 crate実装。M3停止中は現行Contract列挙fixtureだけを審判し、製品Panel適合はU4aへ分離 |
+| VSM-A3 | VSM-A3S | 本 v1 identity を A3S 一般経路と公開 API だけで外部 crate実装。U4a前は現行Contract列挙fixtureだけを審判し、製品Panel適合はU4aへ分離 |

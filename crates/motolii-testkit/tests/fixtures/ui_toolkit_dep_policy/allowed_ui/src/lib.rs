@@ -1,0 +1,1 @@
+//! Allowlisted UI crate fixture.

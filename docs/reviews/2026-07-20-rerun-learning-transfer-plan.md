@@ -250,7 +250,7 @@ M1/M2監査で不一致を見つけても、その場で旧フェーズを改修
 
 | 学習レーン | 主なM3/M5接続先 | 接続時に追加する審判 |
 |---|---|---|
-| RR-0 | M3入場PR、依存監査 | commit/license/version inventory |
+| RR-0 | U0a入場、依存監査 | commit/license/version inventory |
 | RR-1 | U0e-1/2/3、U0b、U4a、G0-6H | React↔egui component map、raw token拒否 |
 | RR-2 | U1a、U1e | layout model非Document、split/tab/hide/restore |
 | RR-3 | U3a、U3b、UI Score | semantic zoom、densityとindividual hit-testの切替 |
@@ -265,7 +265,7 @@ M1/M2監査で不一致を見つけても、その場で旧フェーズを改修
 
 ## 5. 入場前と入場後
 
-M3製品実装停止中でも可能:
+U0a入場前でも可能:
 
 - commit固定source読解
 - asset/license/version inventory
@@ -275,7 +275,7 @@ M3製品実装停止中でも可能:
 
 この段階のinventoryに付した`候補分類`は観察であり、§6の裁定済み分類ではない。
 
-M3入場PRと個別ゲート後だけ可能:
+U0a入場と個別ゲート後だけ可能:
 
 - workspace依存への`re_*`追加
 - `re_ui` code/font/iconのvendoring
