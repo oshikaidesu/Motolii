@@ -47,17 +47,20 @@ UI基盤の再検討(「UIはCPU描画でもよいのでは、プレビューだ
 | Rerunはロボティクス/CV向けマルチモーダルデータ可視化基盤。リポジトリはMIT/Apache-2.0デュアルで「Everything in this repository will stay open source and free」と明言 | [rerun-io/rerun README](https://github.com/rerun-io/rerun) |
 | 商用はオープンコア型(データカタログ/クラウド側)。資金は2025-03公表のシード | [Rerun公式ブログ](https://rerun.io/blog/physical-ai-data) |
 | egui作者Emil ErnerfeldtがRerun共同創業者であり、egui開発はRerunがスポンサー | [emilk GitHub profile](https://github.com/emilk)、[egui README](https://github.com/emilk/egui) |
-| mainのworkspace依存は **wgpu 29 / egui 0.35 / eframe 0.35 / egui-wgpu 0.35 / egui_tiles 0.16** — [egui採用審査録](2026-07-18-m3-egui-selection.md)の検証構成と完全同世代 | [rerun Cargo.toml](https://github.com/rerun-io/rerun/blob/main/Cargo.toml) |
-| 最新リリース0.34.1(2026-07-07)、通算80リリース、開発活発 | [Releases](https://github.com/rerun-io/rerun/releases) |
-| `re_ui`(テーマ・フォント・アイコン・widgetヘルパー)は`(MIT OR Apache-2.0) AND OFL-1.1`でcrates.io公開(0.34.1、2026-07-07。crates.io APIで確認)。カタログは`cargo r -p re_ui --example re_ui_example` | [crates.io/crates/re_ui](https://crates.io/crates/re_ui)、[re_ui README](https://github.com/rerun-io/rerun/blob/main/crates/viewer/re_ui/README.md) |
+| mainのworkspace依存は **wgpu 29 / egui 0.35 / eframe 0.35 / egui-wgpu 0.35 / egui_tiles 0.16** — [egui採用審査録](2026-07-18-m3-egui-selection.md)の検証構成と完全同世代 | [rerun Cargo.toml](https://github.com/rerun-io/rerun/blob/954bf95a4e1a01de4cb67e0e92b8a5e059ee2b8e/Cargo.toml)(監査commit固定) |
+| 同世代依存は**alphaのmainだけでなく安定出荷版でも成立**: 0.34.1(tag commit `4efb18f`、2026-07-07)がegui 0.35.0 / egui_tiles 0.16.0 / egui_table 0.9.0 / wgpu 29.0 / winit 0.30.13へ依存し、`[patch.crates-io]`は全行コメントアウト(**egui forkへのpatchなし**、crates.io公開版のみ) | [Cargo.toml @0.34.1](https://github.com/rerun-io/rerun/blob/0.34.1/Cargo.toml) |
+| 最新リリース0.34.1(2026-07-07)、通算80リリース、開発活発。直近cadenceはminor概ね月次+随時patch(0.32.0=5/13、0.33.0=5/29、0.34.0=7/6等) | [Releases](https://github.com/rerun-io/rerun/releases) |
+| `re_ui`(テーマ・フォント・アイコン・widgetヘルパー)は`(MIT OR Apache-2.0) AND OFL-1.1`でcrates.io公開(0.34.1、2026-07-07。crates.io APIで確認)。**累計公開版数278**(rc含むロックステップ発行)。カタログは`cargo r -p re_ui --example re_ui_example` | [crates.io/crates/re_ui](https://crates.io/crates/re_ui)、[re_ui README](https://github.com/rerun-io/rerun/blob/954bf95a4e1a01de4cb67e0e92b8a5e059ee2b8e/crates/viewer/re_ui/README.md) |
 | re_uiからコードを抜き出してegui外観を改善する第三者crateの前例がある | [Gui-Yom/egui_ui_refresh](https://github.com/Gui-Yom/egui_ui_refresh) |
-| `re_renderer`は自前wgpuレンダラ(Vello不使用)で「スタンドアロン利用可・viewer非依存」をREADMEが明言 | [re_renderer README](https://github.com/rerun-io/rerun/blob/main/crates/viewer/re_renderer/README.md) |
-| wgpu統合は`egui_wgpu::CallbackTrait`でeguiと同一RenderPassへ直接描画(同一device/queue)。テクスチャ登録方式とは別解 | [re_renderer_callback.rs](https://github.com/rerun-io/rerun/blob/main/crates/viewer/re_viewer_context/src/gpu_bridge/re_renderer_callback.rs) |
-| Blueprint: 表示レイアウトをrecordingと別の独立ストアのデータとして持ち、毎フレーム`egui_tiles::Tree`へ投影、変更はdeferred commandでフレーム末尾適用 | [Blueprints concept](https://rerun.io/docs/concepts/blueprints)、[ViewportBlueprint実装](https://github.com/rerun-io/rerun/blob/main/crates/viewer/re_viewport_blueprint/src/viewport_blueprint.rs) |
-| viewerのundoはblueprintストアのタイムトラベルとして実装(0.21) | [公式ブログ](https://rerun.io/blog/graphs) |
-| time panelは個別イベントを描かず「UIピクセル単位の密度ヒストグラム+ブラー+前フレーム最大値による動的正規化」で大規模イベントをピクセル数比例コストで描画 | [data_density_graph.rs](https://github.com/rerun-io/rerun/blob/main/crates/viewer/re_time_panel/src/data_density_graph.rs) |
-| re_rendererのrenderer群: mesh(glTF)・point_cloud・depth_cloud・lines・rectangles・world_grid・compositor等。draw_phases配下に`picking_layer.rs`(GPU picking)と`outlines.rs`(選択輪郭) | [renderer/](https://github.com/rerun-io/rerun/tree/main/crates/viewer/re_renderer/src/renderer)、[draw_phases/](https://github.com/rerun-io/rerun/tree/main/crates/viewer/re_renderer/src/draw_phases) |
-| 動画はVideoAsset(mp4)/VideoStreamの再生対応(H.264/265はFFmpeg経由、AV1ソフトデコーダ内蔵)。再生専用でフレーム編集・エンコードは範囲外 | [Video reference](https://rerun.io/docs/reference/video) |
+| `re_renderer`は自前wgpuレンダラ(Vello不使用)で「スタンドアロン利用可・viewer非依存」をREADMEが明言 | [re_renderer README](https://github.com/rerun-io/rerun/blob/954bf95a4e1a01de4cb67e0e92b8a5e059ee2b8e/crates/viewer/re_renderer/README.md) |
+| wgpu統合は`egui_wgpu::CallbackTrait`でeguiと同一RenderPassへ直接描画(同一device/queue)。`prepare()`が`ViewBuilder::draw()`のcommand bufferを返し、`paint()`が`set_viewport`+`ViewBuilder::composite()`でegui render passへ合成(egui-wgpu既定のviewport clamp回避をコメントで明記)。テクスチャ登録方式とは別解 | [re_renderer_callback.rs](https://github.com/rerun-io/rerun/blob/954bf95a4e1a01de4cb67e0e92b8a5e059ee2b8e/crates/viewer/re_viewer_context/src/gpu_bridge/re_renderer_callback.rs) |
+| Blueprint: 表示レイアウトをrecordingと別の独立ストアのデータとして持ち、毎フレーム`egui_tiles::Tree`へ投影、変更はdeferred commandでフレーム末尾適用。公式docは「Viewerで見た目を変える操作は、実際にはblueprintを変更している」「blueprintはrecordingと同じEntity Component Systemの**ただのデータ**」と明言し、`.rbl` fileとしてSave/Open/drag&drop可能("portable and can be version-controlled") | [Blueprints concept](https://rerun.io/docs/concepts/blueprints)、[blueprints.md(repo内doc)](https://github.com/rerun-io/rerun/blob/0.34.1/docs/content/concepts/visualization/blueprints.md)、[ViewportBlueprint実装](https://github.com/rerun-io/rerun/blob/954bf95a4e1a01de4cb67e0e92b8a5e059ee2b8e/crates/viewer/re_viewport_blueprint/src/viewport_blueprint.rs) |
+| viewerのundoはblueprintストアのタイムトラベルとして実装(0.21)。導入要望は[#3135](https://github.com/rerun-io/rerun/issues/3135)(0.21完了)、regression「Undo is broken」[#10304](https://github.com/rerun-io/rerun/issues/10304)は0.24.0で修正 — time travel undoにも保守費が実在する | [公式ブログ](https://rerun.io/blog/graphs)、各issue |
+| time panelは個別イベントを描かず「UIピクセル単位の密度ヒストグラム+ブラー+前フレーム最大値による動的正規化」で大規模イベントをピクセル数比例コストで描画 | [data_density_graph.rs](https://github.com/rerun-io/rerun/blob/954bf95a4e1a01de4cb67e0e92b8a5e059ee2b8e/crates/viewer/re_time_panel/src/data_density_graph.rs) |
+| re_rendererのrenderer群: mesh(glTF)・point_cloud・depth_cloud・lines・rectangles・world_grid・compositor等。draw_phases配下に`picking_layer.rs`(GPU picking)と`outlines.rs`(選択輪郭) | [renderer/](https://github.com/rerun-io/rerun/tree/954bf95a4e1a01de4cb67e0e92b8a5e059ee2b8e/crates/viewer/re_renderer/src/renderer)、[draw_phases/](https://github.com/rerun-io/rerun/tree/954bf95a4e1a01de4cb67e0e92b8a5e059ee2b8e/crates/viewer/re_renderer/src/draw_phases) |
+| 動画はVideoAsset(mp4)/VideoStreamの再生対応(H.264/265はFFmpeg経由、AV1ソフトデコーダ内蔵)。再生専用でフレーム編集・エンコードは範囲外。0.34.1の`re_video` featureは`default = ["av1", "ffmpeg"]`で、**H.264経路は`ffmpeg-sidecar`(CLI) — [references.md](../references.md)のB-2本命と同一crate**。AV1は`dav1d`(Linux ARM64除外、`nasm` feature)、webはWebCodecs | [Video reference](https://rerun.io/docs/reference/video)、[re_video Cargo.toml @0.34.1](https://github.com/rerun-io/rerun/blob/0.34.1/crates/utils/re_video/Cargo.toml) |
+| viewer本体のCJK表示は未解決: 同梱fontがInter単一のため日本語label(`歩行`等)が豆腐表示になるissueがopen(2026-05-14起票、label: blocked / egui / bug、"Requires egui/eframe work") | [#12770](https://github.com/rerun-io/rerun/issues/12770) |
+| `.rrd`の互換保証は「現在のversionは直前のversionが生成したfileを常に開ける」のみ(完全な前方/後方互換なし) | [ARCHITECTURE.md @0.34.1](https://github.com/rerun-io/rerun/blob/0.34.1/ARCHITECTURE.md) |
 | ダーク専用だったviewerへライトモードを後付けした事例(0.24) | [0.24リリースブログ](https://rerun.io/blog/release-0.24) |
 | 全`re_*`crateはリリースごとにロックステップ更新で、semver安定性の約束はない | [Releases](https://github.com/rerun-io/rerun/releases)の各リリースノート |
 
@@ -85,7 +88,7 @@ UI基盤の再検討(「UIはCPU描画でもよいのでは、プレビューだ
 - `re_time_panel`そのもの(chunk store深結合、キーフレーム編集要件を満たさない)
 - recordingの編集系全般: Document編集・D2 command/単一writer型undo・clip/keyframe作成・カーブエディタ・書き出し。Rerunのtime panelには時間移動・再生・密度表示があるが、Motoliiの編集timelineそのものではない。Blueprint等のviewer状態編集を、映像Document編集の先例へ読み替えない
 - M5の意味論の心臓部: 遮蔽ポリシー3方式・soft alpha対応意味論([M5 spec](../specs/M5-3d-and-post.md)方針)・`Preserve Appearance`解析補正・Depth Rail UI言語。Rerunに同種の問題設定が存在しない
-- IME実証: RerunにはIMEを酷使する画面がなく、eguiのCJK IME既知問題([egui#3060](https://github.com/emilk/egui/issues/3060)、[Linux #5544](https://github.com/emilk/egui/issues/5544))の反証にならない。[egui採用審査録](2026-07-18-m3-egui-selection.md)のmacOS実機確認+Windows運用確認の方針を変えない
+- IME実証: RerunにはIMEを酷使する画面がなく、eguiのCJK IME既知問題([egui#3060](https://github.com/emilk/egui/issues/3060)、[Linux #5544](https://github.com/emilk/egui/issues/5544))の反証にならない。むしろCJK**表示**すら未解決である([#12770](https://github.com/rerun-io/rerun/issues/12770)、blocked/egui) — egui実運用最大級のRerunでもfont同梱なしではCJKが成立しない事実は、[egui採用審査録](2026-07-18-m3-egui-selection.md)§4「CJK font同梱またはOS font resolver必須」(G0-6)を**待っても解決しない**方向で補強する。macOS実機確認+Windows運用確認の方針を変えない
 
 ## 4. 台帳整合
 
@@ -105,9 +108,9 @@ UI基盤の再検討(「UIはCPU描画でもよいのでは、プレビューだ
 
 規律2に従い、採用判定前に独立レビューで以下を再判定する。
 
-1. **vendoring追従コスト**: re_uiはsemver約束なしのロックステップ更新。egui本体のバージョンをMotoliiが上げるたびvendoredコードの手動追従が要る。追従を放棄した場合の固定費用と、自作した場合の初期費用の比較
+1. **vendoring追従コスト**: re_uiはsemver約束なしのロックステップ更新。egui本体のバージョンをMotoliiが上げるたびvendoredコードの手動追従が要る。追従を放棄した場合の固定費用と、自作した場合の初期費用の比較。定量の入力: minor概ね月次+随時patchのcadence、`re_ui`累計278版(§2)、README自己申告"Expect breaking changes!"
 2. **描画基盤の二本立て**: M5でre_renderer(fork)を使うとVello系と自前3D系の二本の描画基盤を保守することになる。参照のみに留めて自前実装する案との比較。re_rendererはWebGL互換tier等Motoliiに不要な複雑さも含む
-3. **blueprint式undoの転移条件**: 「undo=ストアのタイムトラベル」はRerunでは表示設定のみが対象。MotoliiはDocument編集undo(D2/単一writer/ジャーナル)が主で、Workspace-session候補(panel配置等)はUndo対象外と既決([P48/P49](2026-07-19-m3-interaction-prototype-decision-ledger.md))。輸入すべき部分が実は無い可能性
+3. **blueprint式undoの転移条件**: 「undo=ストアのタイムトラベル」はRerunでは表示設定のみが対象。MotoliiはDocument編集undo(D2/単一writer/ジャーナル)が主で、Workspace-session候補(panel配置等)はUndo対象外と既決([P48/P49](2026-07-19-m3-interaction-prototype-decision-ledger.md))。輸入すべき部分が実は無い可能性。またRerun自身も「Undo is broken」regression([#10304](https://github.com/rerun-io/rerun/issues/10304)、0.24.0修正)を経ており、time travel方式が保守簡単という主張の根拠にしない
 4. **即時モード+巨大Documentの再計算**: Rerunはクエリキャッシュ層で緩和した。Motoliiの評価snapshot設計で同種のフレーム毎コストがどこに出るかをfixtureで確認するまで「Rerunが証明した」と言わない
 5. **単一実例依存**: 「eguiの大規模製品実証」は実質Rerun一件で、egui作者がRerun CTOであることは「eguiの優先順位がRerunの需要に引っ張られる」リスクと表裏。反例(egui採用を撤回した製品)の探索が未実施
 6. **CJK/IMEの空白**(§3記載): Rerunの実績はこの領域の証拠として使用禁止

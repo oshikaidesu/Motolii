@@ -9,7 +9,7 @@
 | リポジトリ | ライセンス | 何を参考/利用するか |
 |---|---|---|
 | [OpenCut](https://github.com/OpenCut-app/OpenCut) | MIT | タイムラインUIの**操作仕様の参考のみ。コード流用は不可**(Rust/egui UIのためReact componentは流用対象外)。Rustコア(GPU compositor/effects/masks)は設計思想の参考 |
-| [ffmpeg-sidecar](https://github.com/nathanbabcock/ffmpeg-sidecar) | MIT | **B-2対策の本命**。ffmpegバイナリをサイドカープロセスとして起動しrawvideoフレームをIterator APIで受け取るRustクレート。M0-S2スパイクはまずこれを評価し、足りなければ自前パイプ実装 |
+| [ffmpeg-sidecar](https://github.com/nathanbabcock/ffmpeg-sidecar) | MIT | **B-2対策の本命**。ffmpegバイナリをサイドカープロセスとして起動しrawvideoフレームをIterator APIで受け取るRustクレート。M0-S2スパイクはまずこれを評価し、足りなければ自前パイプ実装。Rerun 0.34.1の`re_video`もH.264デコードに同crateを採用しており独立収束の傍証([Rerun先例調査](reviews/2026-07-20-rerun-prior-art-survey.md)) |
 | [wgpu](https://github.com/gfx-rs/wgpu) | Apache-2.0/MIT | レンダリングコアの土台(採用決定済み) |
 | [Vello](https://github.com/linebender/vello) | Apache-2.0/MIT | **採用決定(2026-07-10、S3スパイク合格)**。vello 0.9=wgpu29依存で本体と同一device同居を実測確認。条件: Renderer長寿命保持(初期化~900ms)・出力straight alpha→境界でpremul化・**vello_svgは使わず**usvg→vello変換は自前。version結合がegui-wgpu↔wgpu↔velloの三者になる点に注意(A-3)。詳細は[spikes/s3-vello.md](spikes/s3-vello.md) |
 | [Symphonia](https://github.com/pdeljanov/Symphonia) | MPL-2.0 | Pure Rust音声デコード(MP3/AAC/FLAC/WAV等)。音声インポート(B-1)の第一候補。MPLはファイル単位コピーレフトなので依存利用は安全 |
@@ -36,6 +36,7 @@
 ## その他の依存候補(定番、必要時に評価)
 
 - 音声出力: [cpal](https://github.com/RustAudio/cpal)(音声主クロック実装の土台)
+- 大量行table widget: [egui_table](https://github.com/rerun-io/egui_table)(MIT OR Apache-2.0、rerun-io保守、egui 0.35対応。sticky header・"millions of rows"・可変行高。Browser/Inspector大量行の**未評価候補** — 内部結合の`re_dataframe_ui`と違い外部leaf crateなので`DEPEND`比較対象。[Rerun inventory §5.6](reviews/2026-07-20-rerun-source-asset-inventory.md))
 - WASMランタイム: [wasmtime](https://github.com/bytecodealliance/wasmtime)(5-1のWASMパラメータプラグイン、v2)
 - プラグインのクラッシュ隔離(設計思想の参考): **Bitwig Studio** — 別プロセスサンドボックス+5段階ホスティングモードで「1プラグインの異常が本体を落とさない/再生を止めない/自動再ロード」の模範(Abletonはネイティブ隔離なし=1個で全体が落ちる、が反面教師)。ただし音声バッファ前提でIPCが安いため、GPU(MB級・VRAM常駐)へは階層別に輸入する(concept.md「クラッシュ隔離を階層化」参照)
 - 「馬鹿正直にシミュレートしない」の先行実証(設計思想の参考、いずれもクローズド): **[Furikake](https://aescripts.com/furikake/)** — AEの軽量粒子プラグイン。物理を「重力/風=閉形式・乱流=ノイズ変位・バウンス=解析反射」の f(t) に畳める力だけに選定し、粒子間相互作用を持たないことで O(N)・マルチコア・MFR対応の"バカ軽さ"を成立させた(concept.md根本コンセプトの母数)。**Alight Motion** — バウンス/バネ/段階移動を物理シミュでなくパラメトリック補間型([Animation Easing Curves](https://support.alightmotion.com/hc/en-us/articles/10536934703889-Animation-Easing-Curves))に畳み、AEでは`valueAtTime`式が必須だった領域をGUI選択肢化(Interp設計に採用済み)
