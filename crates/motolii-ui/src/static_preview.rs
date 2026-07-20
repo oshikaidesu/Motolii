@@ -197,12 +197,19 @@ fn prepare_static_viewport(
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use egui_wgpu::{Renderer, RendererOptions};
+    use motolii_doc::journal::{FaultInjectingFs, FaultPlan, JournalFs};
+    use motolii_doc::DocumentWriter;
     use motolii_gpu::{download_rgba, GpuRuntimeError};
+    use motolii_plugins_firstparty::first_party_catalog;
     use motolii_testkit::unavailable_dep;
 
     use super::*;
     use crate::app::{ShellLifecycleInput, StaticViewportProjection};
+    use crate::layout::{LayoutAction, LayoutConstraints, PanelRole, SeparatorAction, SplitAxis};
+    use crate::layout_authority::{LayoutAuthority, RuntimeFrameEdit};
 
     const RED: [f64; 4] = [1.0, 0.0, 0.0, 1.0];
     const GREEN: [f64; 4] = [0.0, 1.0, 0.0, 1.0];
@@ -285,6 +292,103 @@ mod tests {
                 .expect("shell lifecycle must preserve preview evidence");
         }
         assert_eq!(preview.invariant_evidence(), before);
+    }
+
+    #[test]
+    fn layout_operation_sequence_cannot_change_document_or_display_evidence() {
+        let Ok(gpu) = GpuCtx::new_headless() else {
+            unavailable_dep("GPU adapter", "new_headless failed");
+            return;
+        };
+        let document = Arc::new(bootstrap_document().expect("fixture"));
+        let gpu = Arc::new(gpu);
+        let preview = prepare_static_viewport(
+            Arc::clone(&gpu),
+            Arc::clone(&document),
+            EvaluationTime::new(RationalTime::ZERO),
+            bootstrap_frame_desc().expect("desc"),
+        )
+        .expect("preview");
+        let writer = DocumentWriter::new(
+            (*document).clone(),
+            Arc::new(first_party_catalog().expect("catalog")),
+        )
+        .expect("writer");
+        let journal_path = Path::new("/motolii/u1a2.journal");
+        let mut journal_fs = FaultInjectingFs::new(FaultPlan::None);
+        journal_fs
+            .write_create(journal_path, b"existing-journal-frame")
+            .unwrap();
+        journal_fs.sync_file(journal_path).unwrap();
+        let journal_before = journal_fs.durable_get(journal_path).unwrap().to_vec();
+        let evaluation_before = download_rgba(&gpu, preview.slot().texture()).unwrap();
+        let before = (
+            serde_json::to_vec(&*document).unwrap(),
+            writer.revision,
+            writer.undo_len(),
+            writer.redo_len(),
+            journal_before,
+            preview.invariant_evidence(),
+        );
+        let constraints = LayoutConstraints {
+            viewport_width: 1_000.0,
+            stage_min_width: 320.0,
+        };
+        let mut authority = LayoutAuthority::built_in().unwrap();
+        let mut proposal = authority.intent().clone();
+        proposal
+            .move_tab_for_test(PanelRole::Browser, PanelRole::Inspector, constraints)
+            .unwrap();
+        proposal.select_tab_for_test(PanelRole::Browser).unwrap();
+        authority.replace_runtime_for_test(proposal).unwrap();
+        authority
+            .reconcile_runtime_frame(false, RuntimeFrameEdit::Commit, true, constraints)
+            .unwrap();
+
+        let mut proposal = authority.intent().clone();
+        proposal
+            .move_split_for_test(
+                PanelRole::Timeline,
+                PanelRole::Stage,
+                SplitAxis::Vertical,
+                false,
+                constraints,
+            )
+            .unwrap();
+        authority.replace_runtime_for_test(proposal).unwrap();
+        authority
+            .reconcile_runtime_frame(false, RuntimeFrameEdit::Commit, true, constraints)
+            .unwrap();
+        for action in [
+            LayoutAction::Hide(PanelRole::Inspector),
+            LayoutAction::Restore(PanelRole::Inspector),
+            LayoutAction::Separator {
+                path: vec![],
+                boundary: 0,
+                action: SeparatorAction::Reset,
+            },
+            LayoutAction::ResetPreset,
+        ] {
+            authority.apply(action, constraints).unwrap();
+        }
+        let after = (
+            serde_json::to_vec(&*document).unwrap(),
+            writer.revision,
+            writer.undo_len(),
+            writer.redo_len(),
+            journal_fs.durable_get(journal_path).unwrap().to_vec(),
+            preview.invariant_evidence(),
+        );
+        assert_eq!(after, before);
+        let reevaluated = prepare_static_viewport(
+            Arc::clone(&gpu),
+            Arc::clone(&document),
+            EvaluationTime::new(RationalTime::ZERO),
+            bootstrap_frame_desc().expect("desc"),
+        )
+        .expect("reevaluation");
+        let evaluation_after = download_rgba(&gpu, reevaluated.slot().texture()).unwrap();
+        assert_eq!(evaluation_after, evaluation_before);
     }
 
     #[test]

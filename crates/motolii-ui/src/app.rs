@@ -3,12 +3,28 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use egui_tiles::{Behavior, EditAction, Tile, TileId, Tiles, UiResponse};
+
+use crate::command_registry::builtin_command_registry;
+use crate::input_router::{ImeGateState, InputRouter, NormalizedInput};
+use crate::layout::{LayoutAction, LayoutConstraints, PanelRole, SeparatorAction};
+use crate::layout_authority::{LayoutAuthority, RuntimeFrameEdit};
+use crate::layout_runtime::{RuntimeLayout, RuntimeSeparator};
+use crate::layout_runtime_adapter::{
+    read_layout_cancel, read_safety_interrupt, read_separator_action,
+};
 use crate::static_preview::{StaticPreview, StaticPreviewEvidence};
+
+const DEFAULT_STAGE_MIN_POINTS: f32 = 320.0;
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum AppConstructionError {
     #[error("wgpu render state is not available")]
     MissingWgpuRenderState,
+    #[error(transparent)]
+    CommandRegistry(#[from] crate::CommandRegistryError),
+    #[error(transparent)]
+    Layout(#[from] crate::layout::LayoutError),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,6 +91,11 @@ pub(crate) struct MotoliiApp {
     paint_count: u32,
     smoke: Option<LifecycleSmoke>,
     smoke_outcome: Arc<Mutex<LifecycleSmokeOutcome>>,
+    layout_authority: LayoutAuthority,
+    input_router: InputRouter,
+    ime_gate: ImeGateState,
+    layout_evidence_logged: bool,
+    layout_failure: Option<String>,
 }
 
 impl MotoliiApp {
@@ -103,6 +124,7 @@ impl MotoliiApp {
             evidence.render_count
         );
         let projection = StaticViewportProjection::new(&preview);
+        let layout_authority = LayoutAuthority::built_in()?;
         Ok(Self {
             preview,
             texture_id,
@@ -110,6 +132,11 @@ impl MotoliiApp {
             paint_count: 0,
             smoke: lifecycle_smoke.then(LifecycleSmoke::new),
             smoke_outcome,
+            layout_authority,
+            input_router: InputRouter::new(builtin_command_registry()?),
+            ime_gate: ImeGateState::Inactive,
+            layout_evidence_logged: false,
+            layout_failure: None,
         })
     }
 
@@ -158,18 +185,262 @@ impl eframe::App for MotoliiApp {
             }
         }
 
-        let desc = self.preview.slot().desc();
-        let source_size = egui::vec2(desc.width as f32, desc.height as f32);
-        let target_size = fit_inside(source_size, available);
-        ui.centered_and_justified(|ui| {
-            ui.push_id("motolii-stage-viewport", |ui| {
-                ui.add(
-                    egui::Image::from_texture((self.texture_id, source_size))
-                        .fit_to_exact_size(target_size),
-                );
+        let mut requested_action = None;
+        egui::MenuBar::new().ui(ui, |ui| {
+            ui.menu_button("View", |ui| {
+                for role in PanelRole::AUXILIARY {
+                    let visible = self.layout_authority.intent().is_visible(role);
+                    let (_, action) = view_role_button(ui, role, visible);
+                    if let Some(action) = action {
+                        requested_action = Some(action);
+                        ui.close();
+                    }
+                }
+                if ui.button("Reset layout").clicked() {
+                    requested_action = Some(LayoutAction::ResetPreset);
+                    ui.close();
+                }
             });
         });
+
+        egui::Panel::bottom("motolii-status")
+            .resizable(false)
+            .show(ui, |ui| {
+                ui.label("Status");
+            });
+
+        egui::CentralPanel::default().show(ui, |ui| {
+            let constraints = layout_constraints(ui.available_width());
+            if let Some(action) = requested_action.take() {
+                if let Err(error) = self.layout_authority.apply(action, constraints) {
+                    self.observe_layout_failure(error);
+                }
+            }
+
+            let safety = read_safety_interrupt(ui);
+            if let Some(safety) = safety {
+                if let Err(error) = self
+                    .input_router
+                    .route(NormalizedInput::SafetyInterrupt(safety))
+                {
+                    self.observe_layout_failure_message(error.to_string());
+                }
+            }
+            let cancel_runtime_frame = safety.is_some()
+                || read_layout_cancel(ui, self.layout_authority.gesture_in_flight(), self.ime_gate);
+
+            let mut behavior = PanelBehavior {
+                preview: &self.preview,
+                texture_id: self.texture_id,
+                edits: Vec::new(),
+                visibility_edited: false,
+            };
+            self.layout_authority
+                .runtime_mut()
+                .tree_mut()
+                .ui(&mut behavior, ui);
+            if !self.layout_evidence_logged {
+                eprintln!(
+                    "U1A2_LAYOUT signature={}",
+                    self.layout_authority.intent().canonical_signature()
+                );
+                self.layout_evidence_logged = true;
+            }
+
+            let edits = behavior.edits;
+            let runtime_edit = if edits
+                .iter()
+                .any(|edit| matches!(edit, EditAction::TileResized | EditAction::TileDragged))
+            {
+                RuntimeFrameEdit::Continuous
+            } else if !edits.is_empty() || behavior.visibility_edited {
+                RuntimeFrameEdit::Commit
+            } else {
+                RuntimeFrameEdit::None
+            };
+            let gesture_finished =
+                edits.contains(&EditAction::TileDropped) || ui.ctx().drag_stopped_id().is_some();
+
+            if cancel_runtime_frame {
+                if let Err(error) = self.layout_authority.reconcile_runtime_frame(
+                    true,
+                    runtime_edit,
+                    gesture_finished,
+                    constraints,
+                ) {
+                    self.observe_layout_failure(error);
+                }
+                return;
+            }
+
+            let separator_actions =
+                collect_separator_actions(ui, self.layout_authority.runtime(), self.ime_gate);
+            let separator_consumed_runtime_edit = !separator_actions.is_empty();
+            for (separator, action) in separator_actions {
+                if action == SeparatorAction::Cancel {
+                    if let Err(error) = self.layout_authority.reconcile_runtime_frame(
+                        true,
+                        RuntimeFrameEdit::None,
+                        false,
+                        constraints,
+                    ) {
+                        self.observe_layout_failure(error);
+                    }
+                    continue;
+                }
+                if let Err(error) = self.layout_authority.apply(
+                    LayoutAction::Separator {
+                        path: separator.path,
+                        boundary: separator.boundary,
+                        action,
+                    },
+                    constraints,
+                ) {
+                    self.observe_layout_failure(error);
+                }
+            }
+            if let Err(error) = self.layout_authority.reconcile_runtime_frame(
+                false,
+                runtime_edit_after_separator_action(runtime_edit, separator_consumed_runtime_edit),
+                gesture_finished,
+                constraints,
+            ) {
+                self.observe_layout_failure(error);
+            }
+        });
     }
+}
+
+fn runtime_edit_after_separator_action(
+    runtime_edit: RuntimeFrameEdit,
+    separator_action_consumed: bool,
+) -> RuntimeFrameEdit {
+    if separator_action_consumed {
+        RuntimeFrameEdit::None
+    } else {
+        runtime_edit
+    }
+}
+
+impl MotoliiApp {
+    fn observe_layout_failure(&mut self, error: crate::layout::LayoutError) {
+        self.observe_layout_failure_message(error.to_string());
+    }
+
+    fn observe_layout_failure_message(&mut self, message: String) {
+        eprintln!("U1A2_LAYOUT_REJECT error={message}");
+        self.layout_failure = Some(message);
+    }
+}
+
+struct PanelBehavior<'a> {
+    preview: &'a StaticPreview,
+    texture_id: egui::TextureId,
+    edits: Vec<EditAction>,
+    visibility_edited: bool,
+}
+
+impl Behavior<PanelRole> for PanelBehavior<'_> {
+    fn pane_ui(&mut self, ui: &mut egui::Ui, _tile_id: TileId, pane: &mut PanelRole) -> UiResponse {
+        match pane {
+            PanelRole::Stage => paint_stage(ui, self.preview, self.texture_id),
+            role => {
+                let response = ui.add(egui::Label::new(role.title()).sense(egui::Sense::drag()));
+                if response.drag_started() {
+                    return UiResponse::DragStarted;
+                }
+            }
+        }
+        UiResponse::None
+    }
+
+    fn tab_title_for_pane(&mut self, pane: &PanelRole) -> egui::WidgetText {
+        pane.title().into()
+    }
+
+    fn is_tab_closable(&self, tiles: &Tiles<PanelRole>, tile_id: TileId) -> bool {
+        tiles
+            .get_pane(&tile_id)
+            .is_some_and(|role| role.is_auxiliary())
+    }
+
+    fn on_tab_close(&mut self, tiles: &mut Tiles<PanelRole>, tile_id: TileId) -> bool {
+        if tiles
+            .get_pane(&tile_id)
+            .is_some_and(|role| role.is_auxiliary())
+        {
+            tiles.set_visible(tile_id, false);
+            self.visibility_edited = true;
+        }
+        false
+    }
+
+    fn is_tile_draggable(&self, tiles: &Tiles<PanelRole>, tile_id: TileId) -> bool {
+        matches!(
+            tiles.get(tile_id),
+            Some(Tile::Pane(role)) if role.is_auxiliary()
+        )
+    }
+
+    fn on_edit(&mut self, edit_action: EditAction) {
+        self.edits.push(edit_action);
+    }
+}
+
+fn paint_stage(ui: &mut egui::Ui, preview: &StaticPreview, texture_id: egui::TextureId) {
+    let desc = preview.slot().desc();
+    let source_size = egui::vec2(desc.width as f32, desc.height as f32);
+    let target_size = fit_inside(source_size, ui.available_size());
+    ui.centered_and_justified(|ui| {
+        ui.push_id("motolii-stage-viewport", |ui| {
+            ui.add(
+                egui::Image::from_texture((texture_id, source_size)).fit_to_exact_size(target_size),
+            );
+        });
+    });
+}
+
+fn layout_constraints(viewport_width: f32) -> LayoutConstraints {
+    let safe_width = viewport_width.max(2.0);
+    LayoutConstraints {
+        viewport_width: safe_width,
+        stage_min_width: DEFAULT_STAGE_MIN_POINTS.min(safe_width * 0.75),
+    }
+}
+
+fn view_role_button(
+    ui: &mut egui::Ui,
+    role: PanelRole,
+    visible: bool,
+) -> (egui::Response, Option<LayoutAction>) {
+    let response = ui.button(if visible {
+        format!("Hide {}", role.title())
+    } else {
+        format!("Restore {}", role.title())
+    });
+    let action = response.clicked().then_some(if visible {
+        LayoutAction::Hide(role)
+    } else {
+        LayoutAction::Restore(role)
+    });
+    (response, action)
+}
+
+fn collect_separator_actions(
+    ui: &mut egui::Ui,
+    runtime: &RuntimeLayout,
+    ime_gate: ImeGateState,
+) -> Vec<(RuntimeSeparator, SeparatorAction)> {
+    let mut actions = Vec::new();
+    for separator in runtime.separators().iter().cloned() {
+        let Some(response) = runtime.separator_response(ui, &separator) else {
+            continue;
+        };
+        if let Some(action) = read_separator_action(ui, &response, separator.axis, ime_gate) {
+            actions.push((separator, action));
+        }
+    }
+    actions
 }
 
 fn fit_inside(source: egui::Vec2, available: egui::Vec2) -> egui::Vec2 {
@@ -300,6 +571,48 @@ mod tests {
         assert_eq!(
             fit_inside(egui::vec2(16.0, 9.0), egui::vec2(320.0, 100.0)),
             egui::vec2(1600.0 / 9.0, 100.0)
+        );
+    }
+
+    #[test]
+    fn hidden_role_restores_through_the_product_view_button_with_enter() {
+        let constraints = layout_constraints(1_000.0);
+        let mut authority = LayoutAuthority::built_in().unwrap();
+        authority
+            .apply(LayoutAction::Hide(PanelRole::Browser), constraints)
+            .unwrap();
+        let context = egui::Context::default();
+        let _ = context.run_ui(Default::default(), |ui| {
+            let (response, action) = view_role_button(ui, PanelRole::Browser, false);
+            assert!(action.is_none());
+            response.request_focus();
+        });
+        let input = egui::RawInput {
+            events: vec![egui::Event::Key {
+                key: egui::Key::Enter,
+                physical_key: Some(egui::Key::Enter),
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            ..Default::default()
+        };
+        let _ = context.run_ui(input, |ui| {
+            let (_, action) = view_role_button(ui, PanelRole::Browser, false);
+            authority.apply(action.unwrap(), constraints).unwrap();
+        });
+        assert!(authority.intent().is_visible(PanelRole::Browser));
+    }
+
+    #[test]
+    fn native_double_click_reset_suppresses_tiles_mean_proposal() {
+        assert_eq!(
+            runtime_edit_after_separator_action(RuntimeFrameEdit::Continuous, true),
+            RuntimeFrameEdit::None
+        );
+        assert_eq!(
+            runtime_edit_after_separator_action(RuntimeFrameEdit::Continuous, false),
+            RuntimeFrameEdit::Continuous
         );
     }
 }
