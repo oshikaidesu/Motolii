@@ -376,6 +376,23 @@ pub fn unavailable_dep(dep: &str, detail: &str) -> bool {
     apply_skip_decision(dep, skip_decision(false, deps_required()), detail)
 }
 
+/// OSの対話window/displayが利用できる時だけ実機smokeを実行する。
+///
+/// `MOTOLII_REQUIRE_GPU`はheadless GPUとmedia toolのCI必須性を表し、
+/// 対話desktopの存在までは要求しない。構造試験を別に常時実行したうえで、
+/// 実windowだけを補助審判にする試験から使う。
+pub fn interactive_window_or_skip(available: bool, detail: &str) -> bool {
+    apply_skip_decision(
+        "interactive window",
+        if available {
+            SkipDecision::Run
+        } else {
+            SkipDecision::Skip
+        },
+        detail,
+    )
+}
+
 /// 外部ツールの状態。「未導入」と「導入済みだが実行失敗」を区別する。
 #[derive(Debug)]
 pub enum ToolStatus {

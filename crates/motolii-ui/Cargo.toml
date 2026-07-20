@@ -10,14 +10,20 @@ egui.workspace = true
 egui-wgpu.workspace = true
 egui-winit.workspace = true
 egui_tiles.workspace = true
+motolii-core.workspace = true
 motolii-doc.workspace = true
+motolii-eval.workspace = true
+motolii-gpu.workspace = true
+motolii-plugins-firstparty.workspace = true
+motolii-render.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+wgpu.workspace = true
 
 [dev-dependencies]
 cargo_metadata.workspace = true
-motolii-core.workspace = true
+motolii-testkit.workspace = true
 motolii-plugin.workspace = true
 proc-macro2 = "1"
 syn = { version = "2", features = ["full", "visit"] }
