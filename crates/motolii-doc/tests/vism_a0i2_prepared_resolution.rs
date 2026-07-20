@@ -264,6 +264,43 @@ fn failed_plugin_edit_restores_raw_document_revision_and_undo() {
 }
 
 #[test]
+fn failed_plugin_command_in_macro_restores_all_writer_state() {
+    let catalog = Arc::new(first_party_catalog().unwrap());
+    let (doc, layer, effect, _) = document_with_effect(
+        "core.filter.opacity",
+        1,
+        BTreeMap::from([("amount".into(), DocParam::const_f64(0.5))]),
+    );
+    let mut writer = DocumentWriter::new(doc, catalog).unwrap();
+    let before = serde_json::to_vec(&*writer.snapshot()).unwrap();
+    let revision = writer.revision;
+
+    let error = writer
+        .apply_macro(vec![
+            Command::SetProperty {
+                target: layer,
+                property: ScalarPropertyId::Position,
+                old_value: DocParam::const_vec2([0.0, 0.0]),
+                new_value: DocParam::const_vec2([0.25, -0.25]),
+            },
+            Command::SetProperty {
+                target: layer,
+                property: ScalarPropertyId::EffectParam(effect, "amount".into()),
+                old_value: DocParam::const_f64(0.5),
+                new_value: DocParam::const_f64(1.01),
+            },
+        ])
+        .unwrap_err();
+
+    assert!(matches!(error, CommandError::Plugin(_)));
+    assert_eq!(serde_json::to_vec(&*writer.snapshot()).unwrap(), before);
+    assert_eq!(writer.revision, revision);
+    assert_eq!(writer.undo_len(), 0);
+    assert_eq!(writer.redo_len(), 0);
+    assert_eq!(writer.begin_gesture().get(), 0);
+}
+
+#[test]
 fn unknown_plugin_roundtrips_and_does_not_block_unrelated_edit() {
     let catalog = Arc::new(first_party_catalog().unwrap());
     let (doc, layer, _, definition) = document_with_effect(
