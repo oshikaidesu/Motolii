@@ -7,7 +7,10 @@ use std::path::{Path, PathBuf};
 use cargo_metadata::MetadataCommand;
 use proc_macro2::{Delimiter, TokenStream, TokenTree};
 use syn::visit::Visit;
-use syn::{Attribute, ExprMethodCall, ItemExternCrate, ItemUse, Macro, Meta, UseTree};
+use syn::{
+    Attribute, ExprField, ExprMethodCall, ItemExternCrate, ItemMod, ItemUse, Macro, Member, Meta,
+    UseTree,
+};
 
 const FORBIDDEN_BARE_IDENTIFIERS: &[&str] = &[
     "KeyCode",
@@ -188,17 +191,24 @@ fn paths_in_tokens(tokens: TokenStream) -> Vec<TokenPath> {
 
 struct RawInputVisitor {
     forbid_ui_input_methods: bool,
+    layout_adapter: bool,
     violations: Vec<String>,
 }
 
 impl RawInputVisitor {
     fn method_is_forbidden(&self, method: &str) -> bool {
-        FORBIDDEN_KEY_METHODS.contains(&method)
-            || (self.forbid_ui_input_methods && FORBIDDEN_UI_INPUT_METHODS.contains(&method))
+        if self.layout_adapter {
+            matches!(method, "key_released" | "key_down" | "input_mut")
+        } else {
+            FORBIDDEN_KEY_METHODS.contains(&method)
+                || (self.forbid_ui_input_methods && FORBIDDEN_UI_INPUT_METHODS.contains(&method))
+        }
     }
 
     fn inspect_segments(&mut self, segments: Vec<String>, origin: &str) {
-        if path_is_forbidden(&segments) {
+        if path_is_forbidden(&segments)
+            && !(self.layout_adapter && layout_adapter_path_is_allowed(&segments))
+        {
             self.violations
                 .push(format!("{origin}: {}", segments.join("::")));
         }
@@ -224,6 +234,19 @@ impl RawInputVisitor {
 }
 
 impl<'ast> Visit<'ast> for RawInputVisitor {
+    fn visit_item_mod(&mut self, item: &'ast ItemMod) {
+        let test_only = item.attrs.iter().any(|attribute| {
+            matches!(
+                &attribute.meta,
+                Meta::List(list)
+                    if list.path.is_ident("cfg") && list.tokens.to_string() == "test"
+            )
+        });
+        if !test_only {
+            syn::visit::visit_item_mod(self, item);
+        }
+    }
+
     fn visit_path(&mut self, path: &'ast syn::Path) {
         self.inspect_segments(
             path.segments
@@ -240,6 +263,15 @@ impl<'ast> Visit<'ast> for RawInputVisitor {
             self.violations.push(format!("method: {}", call.method));
         }
         syn::visit::visit_expr_method_call(self, call);
+    }
+
+    fn visit_expr_field(&mut self, field: &'ast ExprField) {
+        if self.layout_adapter
+            && matches!(&field.member, Member::Named(member) if member != "events")
+        {
+            self.violations.push("layout adapter field".into());
+        }
+        syn::visit::visit_expr_field(self, field);
     }
 
     fn visit_item_use(&mut self, item_use: &'ast ItemUse) {
@@ -277,14 +309,40 @@ impl<'ast> Visit<'ast> for RawInputVisitor {
     }
 }
 
-fn audit_source(source: &str, forbid_ui_input_methods: bool) -> Result<Vec<String>, syn::Error> {
+fn audit_source(
+    source: &str,
+    forbid_ui_input_methods: bool,
+    layout_adapter: bool,
+) -> Result<Vec<String>, syn::Error> {
     let file = syn::parse_file(source)?;
     let mut visitor = RawInputVisitor {
         forbid_ui_input_methods,
+        layout_adapter,
         violations: Vec::new(),
     };
     visitor.visit_file(&file);
     Ok(visitor.violations)
+}
+
+fn layout_adapter_path_is_allowed(segments: &[String]) -> bool {
+    let allowed_key = matches!(
+        segments,
+        [egui, key, variant]
+            if egui == "egui"
+                && key == "Key"
+                && matches!(
+                    variant.as_str(),
+                    "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" | "Home" | "Escape"
+                )
+    );
+    let allowed_safety = matches!(
+        segments,
+        [egui, event, variant]
+            if egui == "egui"
+                && event == "Event"
+                && matches!(variant.as_str(), "PointerGone" | "WindowFocused")
+    );
+    allowed_key || allowed_safety
 }
 
 fn workspace_root() -> PathBuf {
@@ -354,9 +412,14 @@ fn workspace_product_sources_have_no_raw_toolkit_input() {
 
     let mut violations = Vec::new();
     let ui_source = workspace_root().join("crates/motolii-ui/src");
+    let layout_adapter = ui_source.join("layout_runtime_adapter.rs");
     for path in files {
         let source = fs::read_to_string(&path).unwrap();
-        match audit_source(&source, path.starts_with(&ui_source)) {
+        match audit_source(
+            &source,
+            path.starts_with(&ui_source),
+            path == layout_adapter,
+        ) {
             Ok(found) => {
                 violations.extend(
                     found
@@ -407,7 +470,7 @@ fn audit_rejects_paths_aliases_methods_and_macro_tokens() {
     ];
 
     for source in rejected {
-        let violations = audit_source(source, true).unwrap();
+        let violations = audit_source(source, true, false).unwrap();
         assert!(
             !violations.is_empty(),
             "raw input fixture unexpectedly passed: {source}"
@@ -429,21 +492,61 @@ fn audit_ignores_literals_comments_and_domain_modifiers() {
         fn normalized(_: Modifiers) {}
     "###;
 
-    assert!(audit_source(accepted, true).unwrap().is_empty());
-    assert!(
-        audit_source("fn domain<T>(value: &T) { value.input(|_| {}); }", false)
-            .unwrap()
-            .is_empty()
-    );
+    assert!(audit_source(accepted, true, false).unwrap().is_empty());
+    assert!(audit_source(
+        "fn domain<T>(value: &T) { value.input(|_| {}); }",
+        false,
+        false
+    )
+    .unwrap()
+    .is_empty());
     assert!(audit_source(
         "use first as duplicate; mod nested { use second as duplicate; }",
+        false,
         false,
     )
     .unwrap()
     .is_empty());
     assert!(
-        audit_source("use second as first; use first as second;", false)
+        audit_source("use second as first; use first as second;", false, false)
             .unwrap()
             .is_empty()
     );
+}
+
+#[test]
+fn layout_adapter_accepts_only_the_specified_raw_closed_set() {
+    let accepted = r#"
+        fn read(ui: &egui::Ui) {
+            ui.input(|input| {
+                let _ = input.key_pressed(egui::Key::ArrowLeft);
+                let _ = input.key_pressed(egui::Key::ArrowRight);
+                let _ = input.key_pressed(egui::Key::ArrowUp);
+                let _ = input.key_pressed(egui::Key::ArrowDown);
+                let _ = input.key_pressed(egui::Key::Home);
+                let _ = input.key_pressed(egui::Key::Escape);
+                for event in &input.events {
+                    match event {
+                        egui::Event::PointerGone | egui::Event::WindowFocused(false) => {}
+                        _ => {}
+                    }
+                }
+            });
+        }
+    "#;
+    assert!(audit_source(accepted, true, true).unwrap().is_empty());
+
+    let rejected = [
+        "fn f(ui: &egui::Ui) { ui.input(|i| i.key_pressed(egui::Key::A)); }",
+        "fn f(ui: &egui::Ui) { ui.input(|i| i.modifiers.ctrl); }",
+        "fn f(ui: &egui::Ui) { ui.input_mut(|_| {}); }",
+        "fn f(_: egui::Event) {}",
+        "fn f(_: winit::event::WindowEvent) {}",
+    ];
+    for source in rejected {
+        assert!(
+            !audit_source(source, true, true).unwrap().is_empty(),
+            "layout adapter fixture unexpectedly passed: {source}"
+        );
+    }
 }

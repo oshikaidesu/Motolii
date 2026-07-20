@@ -36,6 +36,7 @@ fn product_window_resizes_minimizes_and_restores() {
         "U1A1_LIFECYCLE minimize",
         "U1A1_LIFECYCLE restore",
         "U1A1_LIFECYCLE passed",
+        "U1A2_LAYOUT",
     ] {
         assert!(log.contains(marker), "missing {marker}: {log}");
     }
@@ -56,6 +57,17 @@ fn product_window_resizes_minimizes_and_restores() {
         line_with(&log, "U1A1_LIFECYCLE passed").contains("paint_count="),
         "restore did not record a subsequent paint: {log}"
     );
+    let layout = line_with(&log, "U1A2_LAYOUT");
+    for surface in [
+        "H[1:P:Browser,3:P:Stage,1:P:Inspector]",
+        "1:P:Timeline",
+        "status=Status",
+    ] {
+        assert!(
+            layout.contains(surface),
+            "five-surface layout evidence missing {surface}: {log}"
+        );
+    }
 }
 
 fn line_with<'a>(log: &'a str, marker: &str) -> &'a str {
