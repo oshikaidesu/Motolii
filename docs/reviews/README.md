@@ -131,3 +131,4 @@
 | [2026-07-21-m3-u1a-1-static-viewport-contract.md](2026-07-21-m3-u1a-1-static-viewport-contract.md) | U1a-1 静止viewport実装前契約 |
 | [2026-07-21-m3-u1a-2-layout-projection-contract.md](2026-07-21-m3-u1a-2-layout-projection-contract.md) | U1a-2 panel layout intent / runtime投影契約 |
 | [2026-07-21-m3-u1b-1-render-worker-contract.md](2026-07-21-m3-u1b-1-render-worker-contract.md) | U1b-1 latest mailbox / render worker契約 |
+| [2026-07-21-m3-u1b-2-latest-projection-contract.md](2026-07-21-m3-u1b-2-latest-projection-contract.md) | U1b-2 latest result / event-loop投影契約 |
