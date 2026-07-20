@@ -3,13 +3,13 @@ import { LegacyHostBoundaryScreen } from "../legacy/index.js";
 import { expect, userEvent, within } from "storybook/test";
 
 const meta = {
-  title: "M3 References/Current HTML/Host Boundary",
+  title: "M3 Archive/Legacy HTML/Host Boundary",
   component: LegacyHostBoundaryScreen,
   parameters: {
     docs: {
       description: {
         component:
-          "現行HTMLを段階分解するための比較基準。JSXのpropsやDOM境界を製品APIへ転記しない。",
+          "アーカイブ済みHTMLのparity比較専用。新しいUI判断を追加せず、JSXのpropsやDOM境界を製品APIへ転記しない。",
       },
     },
   },
@@ -21,21 +21,21 @@ export const AllSurfaces = {
   args: {
     fixture: "all-surfaces",
   },
-  name: "#all-surfaces · integrated reference",
+  name: "archive/#all-surfaces · integrated reference",
 };
 
 export const AssetExplorer = {
   args: {
     fixture: "asset-explorer",
   },
-  name: "#asset-explorer · project files",
+  name: "archive/#asset-explorer · project files",
 };
 
 export const Settings = {
   args: {
     fixture: "settings",
   },
-  name: "#settings · user settings",
+  name: "archive/#settings · user settings",
 };
 
 export const PluginDiscoveryCandidate = {

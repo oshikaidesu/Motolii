@@ -1,0 +1,91 @@
+.app[data-resizable-layout="true"] {
+  grid-template-rows:
+    34px
+    32px
+    minmax(260px, 1fr)
+    var(--mock-timeline-size)
+    24px;
+}
+
+.app[data-resizable-layout="true"] .workspace {
+  grid-template-columns:
+    var(--mock-browser-size)
+    minmax(440px, 1fr)
+    var(--mock-inspector-size);
+}
+
+.app[data-resizable-layout="true"] .timeline {
+  position: relative;
+}
+
+.react-panel-separator {
+  position: absolute;
+  z-index: 41;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  touch-action: none;
+}
+
+.react-panel-separator::after {
+  position: absolute;
+  background: var(--line);
+  content: "";
+}
+
+.react-panel-separator--browser,
+.react-panel-separator--inspector {
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  cursor: ew-resize;
+}
+
+.react-panel-separator--browser {
+  left: calc(var(--mock-browser-size) - 4px);
+}
+
+.react-panel-separator--inspector {
+  right: calc(var(--mock-inspector-size) - 4px);
+}
+
+.react-panel-separator--browser::after,
+.react-panel-separator--inspector::after {
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+}
+
+.react-panel-separator--timeline {
+  top: -4px;
+  right: 0;
+  left: 0;
+  height: 9px;
+  cursor: ns-resize;
+}
+
+.react-panel-separator--timeline::after {
+  top: 4px;
+  right: 0;
+  left: 0;
+  height: 1px;
+}
+
+.react-panel-separator:hover,
+.react-panel-separator:focus-visible,
+.react-panel-separator.is-dragging {
+  background: color-mix(in srgb, var(--active) 16%, transparent);
+}
+
+.react-panel-separator:hover::after,
+.react-panel-separator:focus-visible::after,
+.react-panel-separator.is-dragging::after {
+  background: var(--active);
+}
+
+.react-panel-separator:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}

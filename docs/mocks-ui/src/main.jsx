@@ -2,45 +2,55 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.jsx";
 import { DiscoveryBrowserCandidate } from "./candidates/DiscoveryBrowserCandidate.jsx";
+import { EasingGraphCandidate } from "./candidates/EasingGraphCandidate.jsx";
+import { GraphViewCandidate } from "./candidates/GraphViewCandidate.jsx";
+import { TimelineCandidate } from "./candidates/TimelineCandidate.jsx";
 import { LegacyHostBoundaryScreen } from "./legacy/index.js";
 import { AllSurfacesScreen } from "./screens/AllSurfacesScreen.jsx";
 
 // 各画面担当はこのregistryへfixtureを足し、Appの経路解決を共有する。
 const screenRegistry = {
-  "all-surfaces": {
-    title: "Host boundary / all surfaces",
+  "archive/all-surfaces": {
+    title: "Archive / host boundary / all surfaces",
     Component: LegacyHostBoundaryScreen,
     props: { fixture: "all-surfaces" },
+    archive: true,
   },
-  "asset-explorer": {
-    title: "Host boundary / asset explorer",
+  "archive/asset-explorer": {
+    title: "Archive / host boundary / asset explorer",
     Component: LegacyHostBoundaryScreen,
     props: { fixture: "asset-explorer" },
+    archive: true,
   },
-  "inbox-empty": {
-    title: "Host boundary / empty inbox",
+  "archive/inbox-empty": {
+    title: "Archive / host boundary / empty inbox",
     Component: LegacyHostBoundaryScreen,
     props: { fixture: "inbox-empty" },
+    archive: true,
   },
-  "color-book": {
-    title: "Host boundary / color book",
+  "archive/color-book": {
+    title: "Archive / host boundary / color book",
     Component: LegacyHostBoundaryScreen,
     props: { fixture: "color-book" },
+    archive: true,
   },
-  "z-rail": {
-    title: "Host boundary / depth rail",
+  "archive/z-rail": {
+    title: "Archive / host boundary / depth rail",
     Component: LegacyHostBoundaryScreen,
     props: { fixture: "z-rail" },
+    archive: true,
   },
-  "easing-interval": {
-    title: "Host boundary / easing interval",
+  "archive/easing-interval": {
+    title: "Archive / host boundary / easing interval",
     Component: LegacyHostBoundaryScreen,
     props: { fixture: "easing-interval" },
+    archive: true,
   },
-  settings: {
-    title: "Host boundary / settings",
+  "archive/settings": {
+    title: "Archive / host boundary / settings",
     Component: LegacyHostBoundaryScreen,
     props: { fixture: "settings" },
+    archive: true,
   },
   "plugin-browser-candidate": {
     title: "Plugin discovery / browser candidate",
@@ -48,7 +58,15 @@ const screenRegistry = {
     props: {
       fixture: "plugin-browser-candidate",
       BrowserComponent: DiscoveryBrowserCandidate,
+      EasingGraphComponent: EasingGraphCandidate,
+      GraphViewComponent: GraphViewCandidate,
+      TimelineComponent: TimelineCandidate,
+      resizableLayout: true,
     },
+  },
+  "graph-view-candidate": {
+    title: "Multi-key Graph View candidate",
+    Component: GraphViewCandidate,
   },
   skeleton: {
     title: "Component boundary skeleton",

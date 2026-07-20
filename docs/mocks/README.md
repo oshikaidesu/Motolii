@@ -1,5 +1,7 @@
 # M3 UIモック
 
+> **ARCHIVED — 新規変更禁止**: 現行の実行入口は[React/Viteモック](../mocks-ui/README.md)、資料全体の参照順位は[M3 UI参照地図](../ui-reference-map.md)である。このディレクトリのHTMLとgoldenは明示的なparity検査・履歴確認専用であり、新しいUI判断、操作追加、golden更新の実装先または製品仕様ではない。通常動線からは`#archive/*`を経由してのみ参照する。
+
 ## JSX分解基盤
 
 - [部品台帳と並行所有ルール](../mocks-ui/README.md)
@@ -29,18 +31,19 @@ npm run dev -- --host 127.0.0.1
 ## Plugin UI / Vism package境界モック（2026-07-17）
 
 - [m3-vism-host-boundary.html](m3-vism-host-boundary.html)
-- 一枚審判fixture: [Assets](m3-vism-host-boundary.html#asset-explorer) / [Inbox Empty + Tip](m3-vism-host-boundary.html#inbox-empty) / [Color Book](m3-vism-host-boundary.html#color-book) / [Depth Rail](m3-vism-host-boundary.html#z-rail) / [Easing区間](m3-vism-host-boundary.html#easing-interval) / [全部載せ](m3-vism-host-boundary.html#all-surfaces) / [Settings](m3-vism-host-boundary.html#settings)
+- 一枚審判fixture: [Media](m3-vism-host-boundary.html#asset-explorer) / [Inbox Empty + Tip](m3-vism-host-boundary.html#inbox-empty) / [Color Book](m3-vism-host-boundary.html#color-book) / [Depth Rail](m3-vism-host-boundary.html#z-rail) / [Easing区間](m3-vism-host-boundary.html#easing-interval) / [全部載せ](m3-vism-host-boundary.html#all-surfaces) / [Settings](m3-vism-host-boundary.html#settings)
 - 対象: [Vismコンセプト](../vism-package-concept.md)の「未知の表現を受け止めるHost外殻」を、M3製品コードから隔離して検証する。
 - `Plugin Browser / Host標準Inspector / missing recovery`の3面を同じ制作画面へ置き、表現thumbnail・用途Label・由来からの発見、Project instanceとの分離、欠落時payload保持、無関係編集、必要export拒否、Project openとinstallの分離をfixture化する。通常UIは「プラグイン」または配置文脈の「エフェクト」等を使い、`Vism`／`.vism`はDeveloper infoへ下げる。
-- Plugin BrowserはProject Explorerと同じ`Search → Sources / Collections → Results`のBrowser shellへ統合する。`All / Installed / Project Used / Missing`はHost source、Favorites等はUser Collection、確定使用履歴はRecent sourceとして役割を分ける。狭いpanelではSearch直下にkind tag/filter行を挟まずResultsへ視線を繋ぎ、Sources / Collectionsと分類責任が重なる`All / FX / Gen / Text`等を常設しない。Collectionはstable package identityを参照する仮想User libraryであり、install先、package内部path、`.vism`のfilesystem階層を反映しない。
+- Plugin BrowserはMedia Browserと同じ`Search → Sources / Collections → Results`のBrowser shellへ統合する。通常sourceは`All / Installed / Project Used / Recent`に絞り、Favorites等はUser Collectionとして役割を分ける。`Issues`は常設sourceにせず、`Missing / Unavailable`はAll結果上の逸脱表示、検索、diagnosticから発見できるようにする。狭いpanelではSearch直下にkind tag/filter行を挟まずResultsへ視線を繋ぎ、Sources / Collectionsと分類責任が重なる`All / FX / Gen / Text`等を常設しない。SourcesとCollectionsの行高・section間隔は同じ高密度scaleへ揃え、見出し上下の空白で分離しない。Collectionはstable package identityを参照する仮想User libraryであり、install先、package内部path、`.vism`のfilesystem階層を反映しない。
 - Plugin Resultsの既定は視覚結果を最大面積にした名前付きthumbnail gridとし、必要なら名前行を隠して画像面を増やす`thumbnail-only`とlistへ切り替えられる。thumbnail-onlyは文字を縮小せず、accessible name、focus、tooltip、kind、`MISSING / UNAVAILABLE`を維持する。thumbnail寸法は`Settings → Browser`のUser settingで変更でき、thumbnail-onlyだけを正方形、名前付きgridを横長画像＋名前行とし、利用可能幅に応じて列数を自動変更する。通常cardはthumbnail、短い名前、kind iconを基本とし、正常な`READY / AVAILABLE`、説明、tag列、由来を反復表示しない。Projectへ追加済みのEffectを操作する時だけ、短い説明と用途をInspectorのEffect parameter領域先頭へ置き、対象Objectとの関係以外のparameter群は同じfocus面へ並べない。Browserへ別Detailを作らず、由来・capability・providerはInfo / Developer infoへ下げる。適用はcardを対象Objectへdrag/dropする操作を基本とし、選択中Objectが有効ならdouble clickまたは`Enter`を同じCommit Intentへ接続する。反復`Apply`ボタンは置かない。view切替とthumbnail寸法は表示だけのUser settingで、Collection、選択、Documentを変えない。
 - List modeは名前領域の上下を空白にせず、Host taxonomyを`Effect › Light`等で表示する。segment clickはその種類へResultsを絞り、Results headerに現在scopeを示す。これはSearch下の常設tag行ではなく候補自身から辿る文脈navigationであり、`All`で解除する。ユーザーtag、Collection、package pathは同じtaxonomyへ混ぜない。
 - 基準モックのDepth RailをTimeline直上へ統合し、現在時刻の`Edit-Space Z`をROOT／GROUP別に表示・dragできる。既定は閉じ、譜面headerのDepth iconまたは`#z-rail`で明示的に開く。Timeline本体は固定名列・1項目1横行・Lane所有を持たず、左端の単一`Inbox`と、全barを衝突回避だけでpackingする一枚の時間面から成る。Inboxは未配置素材、未解決review note、未確認background job等の「まだ片付いていないもの」への参照だけを受け取り、選択・hoverへ追従しない。値はInspector、接続はArchitect、操作説明は下端Statusへ分離する。Object bar内の接続要約、readiness区間、操作中parameterのkeyframeは同じ時間面で読む。`Position X/Y`と`Depth Z`のUI分離は2026-07-17改訂で実施済み。
-- `#all-surfaces`はHost標準Inspector、Stage、譜面、Depth Railを残したまま、BrowserとColor Bookを同時に表示する旧構造goldenである。改善候補`#plugin-browser-candidate`ではBrowser最上位を`Assets / Files / Plugins`の三面に分け、同時表示や入れ子のsource切替を作らない。
-- Assetsと外部filesystem Explorerは別window・popupへ分けず、同じBrowser shellの最上位`Assets / Files / Plugins`で明示切替する。AssetsとFile Explorerを一面へ混ぜず、Search、Results、grid/list、keyboard選択、previewの操作文法だけを共有し、file path移動はFiles固有の操作とする。Filesには実directoryへのWorkspace参照であるRegistered Foldersを複数登録でき、各登録フォルダを基準にその配下をbreadcrumbとfolder tileで辿る。登録・解除・最後に開いたpath、検索・preview・選択はDocumentとUndoを変えず、CollectionやProject asset所有へ転写しない。`Add to Inbox`は未配置参照をInboxへ受け取るだけでDocument配置を作らず、Assets側の`Place selected`だけが既存Document意味への1 gesture=1 Undoとなる。Inbox、filesystem選択、Browserの表示状態をDocumentの第二のasset所有者へしない。
-- FILESのHierarchy railはtab空白でindentせず、全folder名を同じ左端へ揃える。`L0 / L1 / L2` depth marker、folder icon、ancestor/child connector、current outlineを主手掛かりとし、小面積の濃淡色は補助に留める。現在pathのancestorと直下folderだけを表示して情報を増殖させず、clickで同じfilesystem pathへ移動する。
+- `#all-surfaces`はHost標準Inspector、Stage、譜面、Depth Railを残したまま、BrowserとColor Bookを同時に表示する旧構造goldenである。改善候補`#plugin-browser-candidate`ではBrowser最上位を`Media / Plugins`の二面に整理し、AssetsとExplorerの重複入口を撤去する。
+- Project Assetと外部filesystem候補は同じ`Media` Browserへ統合する。source railに`All Media / Project / Registered folders / Collections / Recent`を置き、Search、Results、grid/list、keyboard選択、previewを共有する。`All Media`はcanonical file identityでdedupeし、既にProjectへ登録済みなら同じ結果に`IN PROJECT`、`UNPLACED`、`MISSING`等の関係を表示する。Registered Foldersは複数登録でき、各基準folderの配下をbreadcrumbとfolder tileで辿る。登録・解除・最後に開いたpath、検索・preview・選択はDocumentとUndoを変えず、CollectionやProject Asset所有へ転写しない。外部候補の`Add to Inbox`は未配置参照を受け取るだけでDocument配置を作らず、Project登録済み素材の`Place`だけが既存Document意味への1 gesture=1 Undoとなる。
+- Media Resultsは`thumbnail-only / thumbnail+name / list`を切り替えられ、視覚探索を主にする既定は`thumbnail-only`とする。Mediaのthumbnail枠は全modeで16:9へ固定し、元素材は`contain`相当で全体を収め、中央crop、自動トリミング、縦横比変更をしない。余った領域はneutralなletterboxとする。thumbnail-onlyでもaccessible name、focus、tooltip、Project関係状態を失わず、文字を小さくして画像内へ詰め込まない。ただしfolderは画像だけで識別できないため、16:9枠を崩さない下端overlayでfolder名を常時表示し、通常Media名だけを省略する。表示modeはUser setting候補で、素材のIn/Out、Document、Undoを変更しない。
+- Registered FolderのHierarchy railはtab空白でindentせず、全folder名を同じ左端へ揃える。`L0 / L1 / L2` depth marker、folder icon、ancestor/child connector、current outlineを主手掛かりとし、小面積の濃淡色は補助に留める。現在pathのancestorと直下folderだけを表示して情報を増殖させず、clickで同じfilesystem pathへ移動する。
 - Inboxは異種データを一形式へ混ぜる保存庫ではない。asset、review note、background jobは各正規状態が所有し、Inboxは未整理・未確認状態だけを参照する。配置・解決・確認・dismiss後は一覧から外す。通常操作history、全asset、全note、設定、command launcherは蓄積しない。空の時だけ一件のTipを表示でき、既読/dismissはUser setting、Document・Undo不変とする。
-- Abletonの色による再発見を先例に、固定領域へ小面積のwayfinding colorを反復する。Project、Files/Inbox、Plugins、Stage、Inspector、Timelineは見出し先頭の同形markerと選択tab下辺で場所を識別する。Timeline barはカテゴリ色へ固定せず、安定Object IDからpalette slotを決定して単色面を割り当てる。見た目は多様でも再描画ごとの乱数ではなく、同じObjectは同色、同じmp4同士でも別色になる。同種素材が続いても個体を追えることが目的であり、種類はicon・名称・bar形状、選択はoutline、warning/errorは固有icon・線種で読む。任意色を保存するDocument fieldは本モックから追加しない。Inbox内はasset / note / jobのicon形と小面積の種別色を併用する。
+- Abletonの色による再発見を先例に、固定領域へ小面積のwayfinding colorを反復する。Media、Inbox、Plugins、Stage、Inspector、Timelineは見出し先頭の同形markerと選択tab下辺で場所を識別する。Media内のProjectと登録folderは別領域色にせず、source icon、名称、選択outline、関係表示で読む。Timeline barはカテゴリ色へ固定せず、安定Object IDからpalette slotを決定して単色面を割り当てる。見た目は多様でも再描画ごとの乱数ではなく、同じObjectは同色、同じmp4同士でも別色になる。同種素材が続いても個体を追えることが目的であり、種類はicon・名称・bar形状、選択はoutline、warning/errorは固有icon・線種で読む。任意色を保存するDocument fieldは本モックから追加しない。Inbox内はasset / note / jobのicon形と小面積の種別色を併用する。
 - 全体色味はApple Dark Mode / AccessibilityとAdobe Spectrumの暗色UI規約を参照して再調整した。UI土台を純黒寄りから`bg / panel / raised / hover`の明度階層へ持ち上げるが、ベース面はRGB各成分を揃えたneutral grayとし、寒色・暖色どちらの温度も持たせない。作品Stage内の黒は変更しない。TLのObject paletteはOKLCHで近い知覚明度・低いchromaへ揃えた候補をsRGBへ変換し、固色色面には全slot共通の暗色文字を置く。選択は白outline、warning/errorは別tokenと形で示す。これらのhex値はモック候補であり、G0-6のtheme token値を固定しない。
 - Color Bookは明示的に開く管理drawerであり、通常の色編集入口はInspectorの`Fill`/`Stroke`に留める。swatchは文字やHEX一覧ではなく色面を主役にし、Folder、複数Label、確定使用だけのHistoryから再発見する。星1〜5は候補ごとの評価入力と反復iconを増やすため撤回した。解決済みColor値だけを既存parameterへコピーし、外部paletteへのlive bindingや独立した色所有者を作らない。
 - Color生成は色環と内側fieldで行い、field形状`Triangle / Square`は低頻度なので独立Settingsへ置く。スポイトは独立iconからStage sampling previewへ入り、`Esc`で変更ゼロ。swatch寸法slider（Settings）とdrawer左端dragは別々のUser settingで、px値をDocumentへ流さない。
@@ -77,7 +80,7 @@ npm run dev -- --host 127.0.0.1
 | v3のGroup Z、child composite、Driver波形、Effect stack | Host標準InspectorのGroup Composition / Driver / Applied Plugins |
 | v3のbeat ruler、楽曲基準、key区間、前後key移動 | Laneを所有者にしない時間面とTransport |
 | preview-firstの選択接続要約、Group/child label、readiness | 接続はArchitect、局所要約とreadinessはpacked bar・bar下辺pattern |
-| Asset Explorer / Assets / Color Book / Settings / Plugin Browser | 同じBrowser shellの最上位`Assets / Files / Plugins`。Color Bookだけを管理drawerに残す |
+| Asset Explorer / Assets / Files / Color Book / Settings / Plugin Browser | 同じBrowser shellの最上位を`Media / Plugins`へ整理。Mediaのsource railで`All Media / Project / Registered folders / Collections / Recent`を切り替え、Color Bookだけを管理drawerに残す |
 | 左下の未使用領域、review note、未配置素材、background job、Tip | 未整理状態だけを受け取るInbox。空時のみTip |
 
 次は統合しない。固定Track/Lane、全parameterの常設展開、Inspectorの複製、共有Effectを独立したDocument所有者にするconnection gutterは、その後の設計決定で撤回済みだからである。常設の講義文・正常時の状態語・同義の重複commit入口・審判用toolbar入口も同様に撤回済みとして扱い、復活させない。必要な意味だけをpacked bar、Inbox、Inspector、Architect、Easing panelへ分配する。
@@ -165,7 +168,7 @@ npm run dev -- --host 127.0.0.1
 1. ~~右下/status領域へ短いcontext説明を追加する~~ → v2のstatus barで収載済み（Blenderはこの機能だけの参考）
 2. ~~timelineをさらに高くした比較案を同じfixtureで作る~~ → v2で作成済み。G0-6でv1/v2を同一viewport比較する
 3. light/dark、grayscale、CVD、125/150/200% scaleで所在認知を比較する
-4. hover/focus/drag/trim/easingを操作できるprototypeへ進める
+4. hover/focus/drag/trim/easingを操作できるprototypeへ進める。未決パラメータ、比較仮説、判定語は[操作prototype未決パラメータ台帳](../reviews/2026-07-19-m3-interaction-prototype-decision-ledger.md)で管理し、READMEやHTMLの都合で既定値へ昇格しない
 
 ---
 

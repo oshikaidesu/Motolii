@@ -168,7 +168,7 @@ test.describe("legacy mock visual parity", () => {
     try {
       const [legacy, react] = await Promise.all([
         capture(legacyPage, `${LEGACY_URL}#all-surfaces`),
-        capture(reactPage, `${REACT_URL}#all-surfaces`, {
+        capture(reactPage, `${REACT_URL}#archive/all-surfaces`, {
           parserBridge: true,
         }),
       ]);
@@ -228,7 +228,7 @@ test.describe("legacy mock visual parity", () => {
       try {
         const [legacy, react] = await Promise.all([
           capture(legacyPage, `${LEGACY_URL}#${fixture}`),
-          capture(reactPage, `${REACT_URL}#${fixture}`, {
+          capture(reactPage, `${REACT_URL}#archive/${fixture}`, {
             parserBridge: true,
           }),
         ]);

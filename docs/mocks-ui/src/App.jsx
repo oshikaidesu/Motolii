@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 
-export const DEFAULT_FIXTURE = "all-surfaces";
+export const DEFAULT_FIXTURE = "plugin-browser-candidate";
 export const CATALOG_FIXTURE = "catalog";
+export const ARCHIVE_CATALOG_FIXTURE = "archive/catalog";
 
 function fixtureFromHash() {
   const fixture = decodeURIComponent(window.location.hash.slice(1)).trim();
@@ -38,8 +39,15 @@ export function App({ registry = {} }) {
 
   const entries = Object.entries(registry);
 
-  if (fixture === CATALOG_FIXTURE) {
-    if (entries.length === 0) {
+  if (
+    fixture === CATALOG_FIXTURE ||
+    fixture === ARCHIVE_CATALOG_FIXTURE
+  ) {
+    const wantsArchive = fixture === ARCHIVE_CATALOG_FIXTURE;
+    const visibleEntries = entries.filter(
+      ([, entry]) => Boolean(entry.archive) === wantsArchive,
+    );
+    if (visibleEntries.length === 0) {
       return (
         <Placeholder
           fixture={fixture}
@@ -50,7 +58,7 @@ export function App({ registry = {} }) {
 
     return (
       <div data-fixture={fixture}>
-        {entries.map(([key, entry]) => (
+        {visibleEntries.map(([key, entry]) => (
           <Fixture key={key} fixture={key} entry={entry} />
         ))}
       </div>

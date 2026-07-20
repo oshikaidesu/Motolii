@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import parse from "html-react-parser";
+import parse, { domToReact } from "html-react-parser";
 import {
   LegacyBrowser,
   LegacyColorBook,
@@ -15,6 +15,12 @@ import {
   legacyScript,
   legacyStyle,
 } from "./legacySource";
+import {
+  ResizableLegacyApp,
+  ResizableLegacyTimeline,
+  ResizableLegacyWorkspace,
+  ResizableTimelineSurface,
+} from "../layout/ResizablePanelLayout.jsx";
 
 const initializationKey = Symbol.for("motolii.legacyHostBoundary.cleanup");
 
@@ -31,7 +37,26 @@ function matches(node, { id, className }) {
   );
 }
 
-function createParserOptions(BrowserComponent = LegacyBrowser) {
+function findDescendant(node, target) {
+  if (matches(node, target)) {
+    return node;
+  }
+  for (const child of node.children ?? []) {
+    const match = findDescendant(child, target);
+    if (match) {
+      return match;
+    }
+  }
+  return null;
+}
+
+function createParserOptions(
+  BrowserComponent = LegacyBrowser,
+  EasingGraphComponent = null,
+  GraphViewComponent = null,
+  TimelineComponent = null,
+  resizableLayout = false,
+) {
   const options = {
     replace(node) {
       const props = { node, options };
@@ -47,6 +72,46 @@ function createParserOptions(BrowserComponent = LegacyBrowser) {
       if (matches(node, { id: "inspector" })) {
         return <LegacyInspector {...props} />;
       }
+      if (
+        TimelineComponent &&
+        matches(node, { id: "timeline" })
+      ) {
+        const curveShelf = findDescendant(node, { id: "curve-shelf" });
+        const componentProps = {
+          EasingGraphComponent,
+          GraphViewComponent,
+          legacyCurveShelf: curveShelf
+            ? domToReact([curveShelf], options)
+            : null,
+        };
+        if (resizableLayout) {
+          return (
+            <ResizableTimelineSurface
+              Component={TimelineComponent}
+              componentProps={componentProps}
+            />
+          );
+        }
+        return <TimelineComponent {...componentProps} />;
+      }
+      if (
+        EasingGraphComponent &&
+        matches(node, { id: "easing-panel" })
+      ) {
+        return <EasingGraphComponent />;
+      }
+      if (
+        resizableLayout &&
+        matches(node, { className: "workspace" })
+      ) {
+        return <ResizableLegacyWorkspace {...props} />;
+      }
+      if (
+        resizableLayout &&
+        matches(node, { id: "timeline" })
+      ) {
+        return <ResizableLegacyTimeline {...props} />;
+      }
       if (matches(node, { id: "timeline" })) {
         return <LegacyTimeline {...props} />;
       }
@@ -57,6 +122,9 @@ function createParserOptions(BrowserComponent = LegacyBrowser) {
         return <LegacySettings {...props} />;
       }
       if (matches(node, { className: "app" })) {
+        if (resizableLayout) {
+          return <ResizableLegacyApp {...props} />;
+        }
         return <LegacyOriginalElement {...props} />;
       }
       return undefined;
@@ -132,10 +200,33 @@ function executeTrustedFixtureScript(fixture) {
   return cleanup;
 }
 
-function LegacyFixture({ fixture, BrowserComponent }) {
+function LegacyFixture({
+  fixture,
+  BrowserComponent,
+  EasingGraphComponent,
+  GraphViewComponent,
+  TimelineComponent,
+  resizableLayout,
+}) {
   const content = useMemo(
-    () => parse(legacyBody, createParserOptions(BrowserComponent)),
-    [BrowserComponent],
+    () =>
+      parse(
+        legacyBody,
+        createParserOptions(
+          BrowserComponent,
+          EasingGraphComponent,
+          GraphViewComponent,
+          TimelineComponent,
+          resizableLayout,
+        ),
+      ),
+    [
+      BrowserComponent,
+      EasingGraphComponent,
+      GraphViewComponent,
+      TimelineComponent,
+      resizableLayout,
+    ],
   );
 
   useEffect(
@@ -154,12 +245,20 @@ function LegacyFixture({ fixture, BrowserComponent }) {
 export function LegacyHostBoundaryScreen({
   fixture = "all-surfaces",
   BrowserComponent,
+  EasingGraphComponent,
+  GraphViewComponent,
+  TimelineComponent,
+  resizableLayout = false,
 }) {
   return (
     <LegacyFixture
       key={fixtureHash(fixture)}
       fixture={fixture}
       BrowserComponent={BrowserComponent}
+      EasingGraphComponent={EasingGraphComponent}
+      GraphViewComponent={GraphViewComponent}
+      TimelineComponent={TimelineComponent}
+      resizableLayout={resizableLayout}
     />
   );
 }
