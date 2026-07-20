@@ -53,7 +53,7 @@ D1l DONE → D3e → U2g（M3入場後）→ K2
 
 Selected U series:
 U0a DONE → U0b-1 DONE → U0b-2 DONE → U0c-1 → U0c-2 → U0d-1 → U0d-2 → U0d-3
-→ U2a-1 → U1a-1 → U1a-2 → U1b-1 → U1b-2 → U2b-1 → U2c-1〜5
+→ U2a-1 → U1a-1 → U1a-1b → U1a-2 → U1b-1 → U1b-2 → U2b-1 → U2c-1〜5
 → U0e-1 → U0e-2 → G0-6H → U0e-3 → U3a → U4a-1 → U4a-2
 
 Unified Camera:
