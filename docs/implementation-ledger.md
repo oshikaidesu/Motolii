@@ -6,7 +6,7 @@
 
 ## 使い方
 
-1. まず本ページの「今すぐ着手できるもの」から1件を選ぶ。
+1. まず本ページの「現在選択中の1件」を確認する。
 2. Issueと該当する[マイルストーン仕様](specs/README.md)のタスク行・実装ガードを読む。
 3. 依存が1件でも未mergeなら着手しない。
 4. 完了時は、実装PR内で仕様のタスク表と本ページを同時に更新する。
@@ -39,11 +39,11 @@
 | M0 | `DONE` | spike完了 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み |
 | M2 | **基盤再締結済み** | D1l、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。D5は再締結の閉集合外で、骨格到達・統合審判pending |
-| M3 | **段階発注可** | U0a egui骨格+依存方向CI完了。U0b以降は各行依存に従い個別発注 |
+| M3 | **段階発注可 / Uシリーズ直列選択中** | U0a egui骨格+依存方向CI完了。U0b-1から1枝番ずつ直列実行 |
 | M4 | **契約spike可** | K0でRoD/RoIのruntime契約を凍結。その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む |
 | M5 | **identity spike可** | P0IでDuplicator/Instance identityを凍結 |
 
-[M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3はU0a入場完了後、各タスクの依存を満たせば段階発注できる。
+[M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3はU0a入場完了後に段階発注可だが、現在選択中のUシリーズはSelected U seriesの前枝番がmainへ到達した時だけ次の1枝番を発注する。
 
 ## 主クリティカルパス
 
@@ -51,22 +51,13 @@
 Shared Effect:
 D1l DONE → D3e → U2g（M3入場後）→ K2
 
-M3 shell / preview:
-U0a DONE → U1a-1 → U1b-1 → U1b-2 → U1f #169
-                                  └→ U2b-1 → U2c-1〜5 → U2f #168
+Selected U series:
+U0a DONE → U0b-1 → U0b-2 → U0c-1 → U0c-2 → U0d-1 → U0d-2 → U0d-3
+→ U2a-1 → U1a-1 → U1a-2 → U1b-1 → U1b-2 → U2b-1 → U2c-1〜5
+→ U0e-1 → U0e-2 → G0-6H → U0e-3 → U3a → U4a-1 → U4a-2
 
 Unified Camera:
 CAM-G0 → D1j → D1k-S → D1k → D3f → U1f #169 → U2d
-
-Timeline Effect UI:
-U0a + G0-2 → U0b-1 → U0b-2 → U3a
-D1l + D3e + U3a → U2g
-
-UI input / keymap:
-U0b-1 → U0b-2 → U0c-1 → U0c-2 → U0d-1 → U0d-2 → U0d-3
-
-Visual language:
-U0e-1 generator → U0e-2 reference fixture → G0-6H human review → U0e-3 product values/components
 
 Rerun learning（製品実装ではないsource監査はM3入場前も可）:
 RR-0 inventory → RR-1〜RR-8 asset判定 → RR-9統合縦切り
@@ -95,17 +86,18 @@ Duplicator:
 P0I #170 → P7a → P7b → P7c → P7U
 ```
 
-## 今すぐ着手できるもの
+## 現在選択中の1件
 
-並行レーン。同じクレート・契約に触れる場合はPR間の競合を先に確認する。
+全体には独立spikeもあるが、ユーザー選択中のUシリーズは意味・所有境界を優先して
+1チケットずつ直列に進める。旧night 3分岐は直接統合しない。
 
 | 優先 | ID | Phase | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
-| 1 | D3e | M2 | `DONE` | — | `apply_effect`をprepared recipe評価へ。`d3e_shared_effect_eval` + `d3e_preview_export_same` | Shared Effect評価を閉じる |
-| 2 | D1m | M2 | `DONE` | — | session所有open + project-scoped sidecar + `LegacySidecarMigrationReport` + fault inject 公開閉鎖（`d1m_*` / `d1d_journal` / fault unit） | 再締結証跡B.journal/sessionへ |
-| 3 | CAM-G0 | M2 | `DONE` | — | harness+oracle+classification+golden policy断言。D1j解禁前提充足 | D1jを解禁 |
-| 4 | K0 | M4 | `DO` / `SPIKE` | [#167](https://github.com/oshikaidesu/Motolii/issues/167) | D3はmain到達済み。製品schema/APIへ焼かない独立fixtureに限定 | K1aをIssue化 |
-| 5 | P0I | M5 | `DO` / `SPIKE` | [#170](https://github.com/oshikaidesu/Motolii/issues/170) | 独立。製品schema/APIを追加しない | P7aをIssue化 |
+| 1 | U0b-1 | M3 | `DO` | — | U0a/G0-2/D2完了。G0-2の5層所有表を型とfixtureへ写し、新しい意味・永続形式を発明しない | U0b-2をIssue化 |
+
+K0 [#167](https://github.com/oshikaidesu/Motolii/issues/167)とP0I
+[#170](https://github.com/oshikaidesu/Motolii/issues/170)は論理上`DO`の独立spikeだが、
+Uシリーズ直列選択中は未選択とし、同時着手しない。
 
 ## 次にIssue化するもの
 
@@ -157,11 +149,11 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 ## M3への入場判定
 
-U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除済み。下表の各タスクは個別依存を満たせば発注できる。#180/#191≠入場完了。
+U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除済み。下表は論理上の直前条件を示すが、現在のUシリーズではSelected U seriesの直列順が追加の運用条件となる。#180/#191≠入場完了。
 
 | 目的 | 必要な直前条件 |
 |---|---|
-| UI shellを始める | U0a完了 + U1a依存 |
+| UI shellを始める | Selected U seriesのU2a-1までmain到達 + U1a固有依存 |
 | Rerun sourceを読む・資産分類する | 入場前も可。commit/license/version、Motoliiへの転移条件、`DEPEND/VENDOR/PORT/PATTERN/REJECT`だけを文書化 |
 | Rerun由来crate追加・vendoring・移植を始める | U0a入場 + [Rerun学習・転移計画](reviews/2026-07-20-rerun-learning-transfer-plan.md)の対象RRレーン反対側レビュー |
 | 静止previewを出す | U0a + D3 + U1a |
@@ -175,7 +167,7 @@ U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除
 | resource設定を出す | G0-2 + G0-8 + U0b + K1a → U0f。設定はUser settings、pressure実測値はTransient |
 | 重いpreviewを追従させる | U1b + U1c + U5 + K1d → U1g。project fps/audio clockを変えず表示frameだけ落とす |
 
-したがって現在の短い運用判断は、**M2基盤再締結とD3e、D1m、CAM-G0、D1j、D1k-S、D1k、D3fは完了済みで、M3はU0a入場完了後に段階発注可**。Rerunのcommit固定source監査と資産分類は進めてよいが、crate追加・vendoring・移植は製品実装なのでU0a入場後に限る。D5は骨格を完了扱いせず、本番preview／GPU計測／実機E2Eを後続へ残す。次はU0b/U1a/U0eとRR-1〜RR-9を各行依存に従って発注する。
+したがって現在の短い運用判断は、**M2基盤再締結とD3e、D1m、CAM-G0、D1j、D1k-S、D1k、D3fは完了済みで、M3はU0a入場完了後に段階発注可**。ただし初回Uシリーズは並走させず、G0-2の5層所有を写す`U0b-1`から1チケットずつ直列に進める。Rerunのcommit固定source監査と資産分類は可能だが、現在のUシリーズ実装と並走させない。D5は骨格を完了扱いせず、本番preview／GPU計測／実機E2Eを後続へ残す。
 
 ## 更新規則
 
