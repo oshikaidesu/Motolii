@@ -1,7 +1,0 @@
-[package]
-name = "motolii-ui"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-slint = { version = "1.17", default-features = false }

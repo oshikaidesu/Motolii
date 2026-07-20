@@ -283,7 +283,7 @@ Arc<Document> ─┘                    └→ Domain Rejection
 
 これは概念上`Result<PreparedOperation, DomainRejection>`に相当するが、本節はRust公開signatureを凍結しない。重要なのは依存方向である。
 
-- Layer等のDocument objectはUI文言、Slint型、tooltip、`CommandId`を知らない。
+- Layer等のDocument objectはUI文言、toolkit型、tooltip、`CommandId`を知らない。
 - `ConnectionRejection`、`EditRejection`、`DropRejection`等は各domainに置き、原因の構造を失わない。
 - UI境界は領域固有rejectionを、小さな共通`Diagnostic Envelope`相当へ適応する。
 - 全domain errorを一つの巨大enumへ集約しない。共通化するのは表示に必要な最小意味だけ。
@@ -341,7 +341,7 @@ BrowserItem / DropTarget
 2. 新componentは状態matrix、keyboard、Cancel、Undo、error、scale、theme、accessibilityを同時に定義する。
 3. 同じIntentの複数入口をconformance fixtureへ通し、Document意味、Undo回数、Cancel結果を比較する。
 4. reference screenで既存componentと同居させ、追加分だけ別製品のように浮かないことを確認する。
-5. theme外raw color、独自spacing、独自icon、直接的なSlint型流出を機械検査する。
+5. theme外raw color、独自spacing、独自icon、直接的なtoolkit型流出を機械検査する。
 6. componentを迂回する局所UIは、理由、非目標、再利用不能の証拠、正規componentへ戻す条件を記録する。
 7. disabled/invalid fixtureはtyped reasonと回復方法を持ち、gray/dimだけの状態を拒否する。
 8. 同じrejectionをBrief/Context/Inspectへ投影してもreason code、subject ID、typed factsが一致し、表示文字列を再解析しない。

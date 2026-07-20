@@ -1,6 +1,6 @@
 # M2基盤再締結ゲート（2026-07-15）
 
-ステータス: **M2基盤再締結解除宣言**（main発効済み）。本書はM2基盤再締結のA〜C退出条件を充足したことを記録する正本である。再締結解除はmain上で発効済みであり、発効根拠はPR [#218](https://github.com/oshikaidesu/Motolii/pull/218) / merge SHA `cc87d8aa1d2cf2a2d24937d43e66c11df4aa769c` である。解除のコード証跡前提はPR [#217](https://github.com/oshikaidesu/Motolii/pull/217) / main `fa6850a3981c319973cf120e64976e6f8d79b969` / [PR CI](https://github.com/oshikaidesu/Motolii/actions/runs/29646476618) / [push CI](https://github.com/oshikaidesu/Motolii/actions/runs/29646451595) である。**M3製品実装の着手許可は自動解禁されず**、別のM3入場PRのみがU0/U1依存の再翻訳と実装許可を行える。
+ステータス: **M2基盤再締結解除宣言**（main発効済み）。本書はM2基盤再締結のA〜C退出条件を充足したことを記録する正本である。再締結解除はmain上で発効済みであり、発効根拠はPR [#218](https://github.com/oshikaidesu/Motolii/pull/218) / merge SHA `cc87d8aa1d2cf2a2d24937d43e66c11df4aa769c` である。解除のコード証跡前提はPR [#217](https://github.com/oshikaidesu/Motolii/pull/217) / main `fa6850a3981c319973cf120e64976e6f8d79b969` / [PR CI](https://github.com/oshikaidesu/Motolii/actions/runs/29646476618) / [push CI](https://github.com/oshikaidesu/Motolii/actions/runs/29646451595) である。**M3製品実装のU0a入場(egui骨格+依存方向CI)は本PRで条件充足**。#180/#191は隔離CIと空クレート骨格であり、入場完了を意味しない。
 
 ## 判断
 
@@ -94,8 +94,8 @@ M2のDocument意味・migration・Undo・評価順・所有権は、後続フェ
 
 - 再締結解除宣言（PR [#218](https://github.com/oshikaidesu/Motolii/pull/218) / `cc87d8aa1d2cf2a2d24937d43e66c11df4aa769c`）はmain上で発効済みである
 - **M3製品実装**（Documentを読むUI、domain intent、preview、入力、timeline、plugin panel等）**の着手許可は自動解禁されない**
-- **別のM3入場PRのみ**が、U0/U1依存の再翻訳と実装許可を行える
-- 許可済みの先行到達はmain上の#180/#191（依存方向CIと空UIクレート骨格）に限る。これらをM3入場完了の根拠にしない
+- **U0a入場完了後**、U0b以降は各行依存に従い段階発注できる
+- 許可済みの先行到達はmain上の#180/#191（依存方向CIと空UIクレート骨格）に加え、U0a egui骨格。これらをU1a以降の完了根拠にしない
 - 依存ゼロで製品コードを変更しない調査・fixture作成は可能。ただし結果を公開APIや永続形式へ焼かない
 
 ## 発注順
@@ -107,6 +107,6 @@ M2のDocument意味・migration・Undo・評価順・所有権は、後続フェ
 5. ~~D1mを独立実装・レビューし、project-scoped sidecarとsession ownershipをmainへ到達させる~~（#217 / `fa6850a3981c319973cf120e64976e6f8d79b969`）
 6. ~~M2追補実コードレビューを行い、P0/P1=0を確認する~~（[2026-07-18-m2-foundation-supplementary-code-review.md](2026-07-18-m2-foundation-supplementary-code-review.md)）
 7. ~~本書A〜Cの完了証跡表を充填し、ステータスを再締結解除宣言へ変更する~~（#218 / `cc87d8aa1d2cf2a2d24937d43e66c11df4aa769c`）
-8. その後にのみ、別のM3入場PRでU0/U1依存と自動審判を最新mainへ再翻訳する
+8. U0a入場完了後、U0b以降は各行依存に従い段階発注する
 
 D5統合/E2Eは手順7の再締結必須条件に含めない。順序を変える場合は本書の改訂PRを先に出す。

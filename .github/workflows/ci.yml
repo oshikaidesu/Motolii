@@ -67,8 +67,8 @@ jobs:
           BASE="origin/${{ github.base_ref }}"
           # merge-base 失敗はスクリプト側で fail-closed。浅掘り回避は checkout fetch-depth: 0。
           ./scripts/check-golden-update-policy.sh "$BASE"
-      - name: M3E-1 slint dependency direction gate
-        run: ./scripts/check-slint-deps.sh
+      - name: M3E-1 UI toolkit dependency direction gate
+        run: ./scripts/check-ui-toolkit-deps.sh
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy

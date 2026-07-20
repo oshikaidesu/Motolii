@@ -1,0 +1,6 @@
+[package]
+name = "motolii-ui"
+version = "0.0.0"
+
+[dependencies]
+egui = { path = "../local_packages/egui" }

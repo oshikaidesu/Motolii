@@ -1,0 +1,1 @@
+//! Rename-bypass negative fixture.
