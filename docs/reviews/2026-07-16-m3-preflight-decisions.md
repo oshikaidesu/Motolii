@@ -86,19 +86,31 @@ U0d-3のraw input監査は次の機械境界に限定する。
   lifetimeをcharと誤認しない。attribute、macro invocation、`macro_rules!` definitionの
   token treeもcodeとしてpathとidentifierを再帰監査し、AST visitorの外へ逃がさない。
 - ASTの識別子境界とpath segment列で
-  `egui::Key / egui::Modifiers / egui::PointerButton / egui::Event::Key /
-  egui::Event::PointerButton / winit::keyboard / KeyCode / PhysicalKey / NamedKey /
-  ModifiersState / MouseButton / KeyEvent / ElementState /
-  winit::event::KeyEvent / winit::event::ElementState / WindowEvent::KeyboardInput /
-  WindowEvent::ModifiersChanged / .key_pressed( / .key_released( / .key_down(`を拒否する。
+  `egui::Key / egui::Modifiers / egui::PointerButton / egui::Event /
+  egui::InputState / egui::RawInput / winit::keyboard / KeyCode / PhysicalKey / NamedKey /
+  ModifiersState / MouseButton / KeyEvent / ElementState / RawKeyEvent /
+  winit::event::KeyEvent / winit::event::ElementState / winit::event::RawKeyEvent /
+  winit::event::WindowEvent / winit::event::DeviceEvent / WindowEvent::KeyboardInput /
+  WindowEvent::ModifiersChanged / DeviceEvent::Key /
+  .key_pressed( / .key_released( / .key_down(`を拒否する。toolkitを直接依存できる
+  `motolii-ui`のproduct sourceでは、型推論で`InputState` pathを隠す
+  `egui::Context`と`egui::Ui`の`.input(`/`.input_mut(`を、receiver名によらず
+  method identifierで拒否する。
   `use egui::{Key, Modifiers as EguiModifiers}`のようなuse treeとaliasも元pathへ展開して
   拒否し、method callは空白の有無によらずmethod identifierで判定する。
   `motolii-ui::keymap::Modifiers`等の正規化済みdomain型名は拒否対象ではない。
+- scannerはaliasを元pathへ展開する。同一fileで同じalias spellingが複数の元pathへ
+  対応する場合とalias cycleは、scopeを推測して一方を選ばず監査失敗にする。
 - 監査自身の負例はbrace import、alias、完全修飾path、method callの空白差を拒否し、
   `winit::event::KeyEvent`のuse alias、macro invocation/definition内の禁止pathも拒否する。
+  `ctx.input(|i| i.modifiers.ctrl || !i.keys_down.is_empty())`、
+  `ui.input(|i| !i.events.is_empty())`、
+  `egui::{InputState, RawInput}`、`winit::event::{DeviceEvent, RawKeyEvent}`も拒否する。
   通常/raw/byte/raw-byte string、char、line comment、入れ子block comment内の
   禁止語を無視することを固定する。
 - 現行製品sourceにtoolkit raw inputを読むadapterはまだ無いため、許可fileはゼロとする。
+  現段階はkey/modifier variantだけでなく`WindowEvent`/`DeviceEvent`等のtoolkit event面
+  全体を許可file外ゼロとし、resize/close等を理由に暗黙のevent adapterを作らない。
   将来toolkit eventを`NormalizedInput`へ変換するprivate adapterが必要になった時は、
   adapterの入力、出力、IME優先、SafetyInterrupt、許可fileを仕様改訂で先に固定し、
   許可file外ゼロの負例、`CommandId`/keymap resolverを迂回した`DomainIntent`直接発行の
