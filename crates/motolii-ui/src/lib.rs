@@ -6,6 +6,7 @@ mod app;
 mod command_registry;
 mod display_slot;
 mod document_command_request;
+mod document_edit_runtime;
 mod domain_intent;
 mod input_router;
 mod keymap;

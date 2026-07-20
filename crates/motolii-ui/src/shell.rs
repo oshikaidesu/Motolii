@@ -3,18 +3,25 @@
 use std::sync::{Arc, Mutex};
 
 use motolii_core::{Quality, RationalTime};
-use motolii_doc::EvaluationTime;
+use motolii_doc::{
+    layer_names_for_item, Command, Document, DocumentWriter, EvaluationTime, ParentLocator,
+};
 use motolii_eval::DataTracks;
 use motolii_gpu::GpuCtx;
+use motolii_plugins_firstparty::first_party_catalog;
 
 use crate::app::{AppPreviewRuntime, AppSmokeConfig, LifecycleSmokeOutcome, MotoliiApp};
+use crate::document_edit_runtime::DocumentEditRuntime;
 use crate::render_worker::{RenderJoinError, RenderRequest, RenderWorker};
 use crate::static_preview::{
-    bootstrap_document, bootstrap_frame_desc, prepare_in_setup_worker, StaticPreviewError,
+    bootstrap_document, bootstrap_document_for_edit_smoke, bootstrap_frame_desc,
+    prepare_in_setup_worker, StaticPreviewError,
 };
+use crate::{DocumentCommandRequest, DomainIntent};
 
 const LIFECYCLE_SMOKE_ENV: &str = "MOTOLII_TEST_U1A1_LIFECYCLE";
 const LATEST_PREVIEW_SMOKE_ENV: &str = "MOTOLII_TEST_U1B2_LATEST";
+const DOCUMENT_EDIT_SMOKE_ENV: &str = "MOTOLII_TEST_U2B1_DOCUMENT";
 
 pub(crate) fn toolkit_linked() -> bool {
     std::mem::size_of::<egui::Context>() > 0
@@ -34,14 +41,29 @@ pub enum ShellError {
     LifecycleOutcomeLockPoisoned,
     #[error("U1a-1 lifecycle smoke failed: {reason}")]
     LifecycleSmokeFailed { reason: String },
+    #[error("U2b-1 bootstrap fixture has no removable track item")]
+    MissingDocumentEditFixture,
 }
 
 pub fn run_shell() -> Result<(), ShellError> {
     let lifecycle_smoke = std::env::var_os(LIFECYCLE_SMOKE_ENV).is_some();
     let latest_smoke = std::env::var_os(LATEST_PREVIEW_SMOKE_ENV).is_some();
+    let document_edit_smoke = std::env::var_os(DOCUMENT_EDIT_SMOKE_ENV).is_some();
     let (gpu, parts) = GpuCtx::new_for_ui()?;
     let gpu = Arc::new(gpu);
-    let document = Arc::new(bootstrap_document()?);
+    let document = if document_edit_smoke {
+        bootstrap_document_for_edit_smoke()?
+    } else {
+        bootstrap_document()?
+    };
+    let document_edit_request = document_edit_smoke
+        .then(|| bootstrap_delete_request(&document))
+        .transpose()?;
+    let catalog = first_party_catalog().map_err(|error| ShellError::Runtime(Box::new(error)))?;
+    let writer = DocumentWriter::new(document, Arc::new(catalog))
+        .map_err(|error| ShellError::Runtime(Box::new(error)))?;
+    let document_runtime = DocumentEditRuntime::new(writer);
+    let document = document_runtime.snapshot();
     let desc = bootstrap_frame_desc()?;
     let preview = Arc::new(prepare_in_setup_worker(
         Arc::clone(&gpu),
@@ -85,6 +107,7 @@ pub fn run_shell() -> Result<(), ShellError> {
                     preview: Arc::clone(&preview),
                     gpu: Arc::clone(&gpu),
                     render_client: render_client.clone(),
+                    document_runtime,
                     initial_request: RenderRequest {
                         document: Arc::clone(&initial_request.document),
                         data_tracks: Arc::clone(&initial_request.data_tracks),
@@ -96,6 +119,7 @@ pub fn run_shell() -> Result<(), ShellError> {
                 AppSmokeConfig {
                     lifecycle: lifecycle_smoke,
                     latest_preview: latest_smoke,
+                    document_edit: document_edit_request,
                     outcome: Arc::clone(&app_outcome),
                 },
             )
@@ -127,6 +151,30 @@ pub fn run_shell() -> Result<(), ShellError> {
         LifecycleSmokeOutcome::Failed(reason) => Err(ShellError::LifecycleSmokeFailed { reason }),
         LifecycleSmokeOutcome::NotRequested | LifecycleSmokeOutcome::Passed => Ok(()),
     }
+}
+
+fn bootstrap_delete_request(document: &Document) -> Result<DocumentCommandRequest, ShellError> {
+    let track = document
+        .tracks
+        .first()
+        .ok_or(ShellError::MissingDocumentEditFixture)?;
+    let item = track
+        .items
+        .first()
+        .cloned()
+        .ok_or(ShellError::MissingDocumentEditFixture)?;
+    let layer_names = layer_names_for_item(document, &item)
+        .map_err(|error| ShellError::Runtime(Box::new(error)))?;
+    DocumentCommandRequest::try_new(
+        DomainIntent::DeleteTargetedItems,
+        vec![Command::RemoveTrackItem {
+            parent: ParentLocator::Track(track.id),
+            index: 0,
+            item,
+            layer_names,
+        }],
+    )
+    .map_err(|error| ShellError::Runtime(Box::new(error)))
 }
 
 fn map_eframe_error(error: eframe::Error) -> ShellError {
