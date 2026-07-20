@@ -1835,6 +1835,7 @@ dependencies = [
  "egui-winit",
  "egui_tiles",
  "motolii-doc",
+ "serde",
  "serde_json",
  "thiserror 2.0.19",
 ]
