@@ -423,7 +423,7 @@ fn invoke_repaint_signal<P, R, E>(
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct RenderRequest {
     pub(crate) document: Arc<Document>,
     pub(crate) data_tracks: Arc<DataTracks>,

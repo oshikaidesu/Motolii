@@ -8,7 +8,11 @@ use motolii_gpu::GpuCtx;
 
 use crate::command_registry::builtin_command_registry;
 use crate::display_slot::DisplaySlotError;
-use crate::input_router::{ImeGateState, InputRouter, NormalizedInput};
+use crate::document_edit_runtime::{
+    DocumentEditActionKind, DocumentEditDispatchError, DocumentEditQueue, DocumentEditRuntime,
+    DocumentEditRuntimeError, PublishedDocument,
+};
+use crate::input_router::{ImeGateState, InputPhase, InputRouter, NormalizedInput};
 use crate::layout::{LayoutAction, LayoutConstraints, PanelRole, SeparatorAction};
 use crate::layout_authority::{LayoutAuthority, RuntimeFrameEdit};
 use crate::layout_runtime::{RuntimeLayout, RuntimeSeparator};
@@ -20,6 +24,7 @@ use crate::render_worker::{
     RepaintSignalEpoch, RepaintSignalRegistrationError,
 };
 use crate::static_preview::{StaticPreview, StaticPreviewEvidence};
+use crate::{CommandId, DocumentCommandRequest};
 
 const DEFAULT_STAGE_MIN_POINTS: f32 = 320.0;
 
@@ -150,6 +155,12 @@ pub(crate) struct MotoliiApp {
     latest_projection: LatestResultProjection,
     preview_failure: Option<PreviewProjectionFailure>,
     latest_smoke: Option<LatestPreviewSmoke>,
+    document_runtime: DocumentEditRuntime,
+    document_queue: DocumentEditQueue,
+    current_document: Arc<motolii_doc::Document>,
+    render_request_template: RenderRequest,
+    document_failure: Option<DocumentEditFailure>,
+    document_smoke: Option<DocumentEditSmoke>,
 }
 
 pub(crate) struct AppPreviewRuntime {
@@ -157,11 +168,13 @@ pub(crate) struct AppPreviewRuntime {
     pub(crate) gpu: Arc<GpuCtx>,
     pub(crate) render_client: RenderWorkerClient,
     pub(crate) initial_request: RenderRequest,
+    pub(crate) document_runtime: DocumentEditRuntime,
 }
 
 pub(crate) struct AppSmokeConfig {
     pub(crate) lifecycle: bool,
     pub(crate) latest_preview: bool,
+    pub(crate) document_edit: Option<DocumentCommandRequest>,
     pub(crate) outcome: Arc<Mutex<LifecycleSmokeOutcome>>,
 }
 
@@ -176,6 +189,7 @@ impl MotoliiApp {
             gpu,
             render_client,
             initial_request,
+            document_runtime,
         } = runtime;
         let render_state = cc
             .wgpu_render_state
@@ -189,6 +203,8 @@ impl MotoliiApp {
         };
         let repaint_context = cc.egui_ctx.clone();
         register_repaint_signal(&render_client, &repaint_context)?;
+        let render_request_template = initial_request.clone();
+        let current_document = document_runtime.snapshot();
         let initial_generation = render_client.submit(initial_request)?;
         let evidence = preview.invariant_evidence();
         eprintln!(
@@ -220,7 +236,15 @@ impl MotoliiApp {
             preview_failure: None,
             latest_smoke: smoke
                 .latest_preview
-                .then(|| LatestPreviewSmoke::new(evidence, initial_generation)),
+                .then(|| LatestPreviewSmoke::new(evidence.clone(), initial_generation)),
+            document_runtime,
+            document_queue: DocumentEditQueue::default(),
+            current_document,
+            render_request_template,
+            document_failure: None,
+            document_smoke: smoke
+                .document_edit
+                .map(|request| DocumentEditSmoke::new(evidence, request)),
         })
     }
 
@@ -236,6 +260,10 @@ impl eframe::App for MotoliiApp {
         self.recover_repaint_signal();
         self.drain_latest_result();
         if self.advance_latest_smoke(ctx) {
+            return;
+        }
+        self.process_document_edit(ctx);
+        if self.advance_document_smoke(ctx) {
             return;
         }
         let Some(smoke) = &mut self.smoke else {
@@ -414,6 +442,119 @@ fn runtime_edit_after_separator_action(
 }
 
 impl MotoliiApp {
+    fn process_document_edit(&mut self, ctx: &egui::Context) {
+        match self.document_runtime.process_next(&mut self.document_queue) {
+            Ok(Some(published)) => {
+                if let Err(error) = self.publish_document_snapshot(published) {
+                    self.record_smoke_failure(error.to_string());
+                    self.record_document_failure(error);
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+                ctx.request_repaint();
+            }
+            Ok(None) => {}
+            Err(error) => {
+                let reason = error.to_string();
+                self.record_document_failure(DocumentEditFailure::Runtime(error));
+                if self.document_smoke.is_some() {
+                    self.record_smoke_failure(reason);
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+            }
+        }
+    }
+
+    fn publish_document_snapshot(
+        &mut self,
+        published: PublishedDocument,
+    ) -> Result<(), DocumentEditFailure> {
+        self.current_document = published.snapshot;
+        let generation = self.render_client.submit(RenderRequest {
+            document: Arc::clone(&self.current_document),
+            data_tracks: Arc::clone(&self.render_request_template.data_tracks),
+            evaluation_time: self.render_request_template.evaluation_time,
+            desc: self.render_request_template.desc,
+            quality: self.render_request_template.quality,
+        })?;
+        if let Some(smoke) = &mut self.document_smoke {
+            smoke
+                .observe(
+                    published.kind,
+                    published.revision,
+                    &self.current_document,
+                    generation,
+                    &mut self.document_queue,
+                )
+                .map_err(DocumentEditFailure::Smoke)?;
+        }
+        Ok(())
+    }
+
+    fn advance_document_smoke(&mut self, ctx: &egui::Context) -> bool {
+        let Some(smoke) = &mut self.document_smoke else {
+            return false;
+        };
+        if !smoke.dispatched {
+            let initial_ready = self.latest_projection.last_displayed_generation
+                == self.render_client.latest_accepted_generation();
+            if initial_ready {
+                let output = self
+                    .input_router
+                    .route(NormalizedInput::Command {
+                        phase: InputPhase::Click,
+                        id: CommandId::try_new("motolii.edit.delete_targeted_items")
+                            .expect("built-in command ID"),
+                    })
+                    .expect("built-in command registry");
+                let request = smoke.request.take();
+                if let Err(error) = self.document_queue.push_prepared(output, request) {
+                    self.record_document_failure(DocumentEditFailure::Dispatch(error));
+                    self.record_smoke_failure(error.to_string());
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    return true;
+                }
+                smoke.dispatched = true;
+                ctx.request_repaint();
+            } else if Instant::now() >= smoke.deadline {
+                self.record_smoke_failure(
+                    "initial preview was not displayed before U2b-1 dispatch".into(),
+                );
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            } else {
+                ctx.request_repaint_after(smoke.deadline.saturating_duration_since(Instant::now()));
+            }
+            return true;
+        }
+
+        if let Some(expected_generation) = smoke.expected_redo_generation {
+            if self.latest_projection.last_displayed_generation == Some(expected_generation) {
+                let evidence = self.preview.invariant_evidence();
+                if evidence.slot.slot_id == smoke.baseline.slot.slot_id
+                    && evidence.slot.registration_count == smoke.baseline.slot.registration_count
+                {
+                    eprintln!(
+                        "U2B1_DOCUMENT passed slot={} registrations={} generation={} revisions=1,2,3",
+                        evidence.slot.slot_id,
+                        evidence.slot.registration_count,
+                        expected_generation.get()
+                    );
+                    if let Ok(mut outcome) = self.smoke_outcome.lock() {
+                        *outcome = LifecycleSmokeOutcome::Passed;
+                    }
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    return true;
+                }
+            }
+        }
+        if Instant::now() >= smoke.deadline {
+            self.record_smoke_failure("U2b-1 edit/Undo/Redo snapshot was not displayed".into());
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            return true;
+        }
+        ctx.request_repaint_after(smoke.deadline.saturating_duration_since(Instant::now()));
+        true
+    }
+
     fn recover_repaint_signal(&mut self) {
         let Some(failed_epoch) = self.render_client.failed_repaint_signal_epoch() else {
             return;
@@ -494,6 +635,11 @@ impl MotoliiApp {
         self.preview_failure = Some(error);
     }
 
+    fn record_document_failure(&mut self, error: DocumentEditFailure) {
+        eprintln!("U2B1_DOCUMENT_REJECT error={error}");
+        self.document_failure = Some(error);
+    }
+
     fn observe_layout_failure_message(&mut self, message: String) {
         eprintln!("U1A2_LAYOUT_REJECT error={message}");
         self.layout_failure = Some(message);
@@ -514,6 +660,88 @@ struct LatestPreviewSmoke {
     baseline: StaticPreviewEvidence,
     expected_generation: RenderGeneration,
     deadline: Instant,
+}
+
+#[derive(Debug, thiserror::Error)]
+enum DocumentEditFailure {
+    #[error(transparent)]
+    Dispatch(DocumentEditDispatchError),
+    #[error(transparent)]
+    Runtime(DocumentEditRuntimeError),
+    #[error(transparent)]
+    Submit(#[from] RenderSubmitError),
+    #[error(transparent)]
+    Smoke(#[from] DocumentEditSmokeError),
+}
+
+struct DocumentEditSmoke {
+    baseline: StaticPreviewEvidence,
+    request: Option<DocumentCommandRequest>,
+    dispatched: bool,
+    applied_json: Option<Vec<u8>>,
+    expected_redo_generation: Option<RenderGeneration>,
+    deadline: Instant,
+}
+
+impl DocumentEditSmoke {
+    fn new(baseline: StaticPreviewEvidence, request: DocumentCommandRequest) -> Self {
+        Self {
+            baseline,
+            request: Some(request),
+            dispatched: false,
+            applied_json: None,
+            expected_redo_generation: None,
+            deadline: Instant::now() + Duration::from_secs(5),
+        }
+    }
+
+    fn observe(
+        &mut self,
+        kind: DocumentEditActionKind,
+        revision: u64,
+        snapshot: &motolii_doc::Document,
+        generation: RenderGeneration,
+        queue: &mut DocumentEditQueue,
+    ) -> Result<(), DocumentEditSmokeError> {
+        let json = serde_json::to_vec(snapshot)?;
+        match (kind, revision) {
+            (DocumentEditActionKind::Apply, 1) => {
+                if json == self.baseline.document_json.as_bytes() {
+                    return Err(DocumentEditSmokeError::ApplyUnchanged);
+                }
+                self.applied_json = Some(json);
+                queue.push_undo();
+            }
+            (DocumentEditActionKind::Undo, 2) => {
+                if json != self.baseline.document_json.as_bytes() {
+                    return Err(DocumentEditSmokeError::UndoMismatch);
+                }
+                queue.push_redo();
+            }
+            (DocumentEditActionKind::Redo, 3) => {
+                if self.applied_json.as_deref() != Some(json.as_slice()) {
+                    return Err(DocumentEditSmokeError::RedoMismatch);
+                }
+                self.expected_redo_generation = Some(generation);
+            }
+            _ => return Err(DocumentEditSmokeError::UnexpectedOrder),
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+enum DocumentEditSmokeError {
+    #[error(transparent)]
+    Serialize(#[from] serde_json::Error),
+    #[error("U2b-1 apply did not change Document")]
+    ApplyUnchanged,
+    #[error("U2b-1 Undo did not restore the initial Document")]
+    UndoMismatch,
+    #[error("U2b-1 Redo did not restore the applied Document")]
+    RedoMismatch,
+    #[error("U2b-1 action order or revision was unexpected")]
+    UnexpectedOrder,
 }
 
 impl LatestPreviewSmoke {

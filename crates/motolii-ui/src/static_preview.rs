@@ -118,6 +118,35 @@ pub(crate) fn bootstrap_document() -> Result<Document, StaticPreviewError> {
     fixture_document(BOOTSTRAP_COLOR)
 }
 
+pub(crate) fn bootstrap_document_for_edit_smoke() -> Result<Document, StaticPreviewError> {
+    let mut document = fixture_document(BOOTSTRAP_COLOR)?;
+    let layer = document.layers.allocate("edit-survivor")?;
+    let item = TrackItem::Clip(Clip {
+        envelope: ItemEnvelope::new(layer),
+        start: RationalTime::ZERO,
+        duration: document.composition.duration,
+        time_map: TimeMap::identity(),
+        source: ClipSource::Plugin {
+            plugin_id: RECT_LAYER_SOURCE.into(),
+            effect_version: 1,
+            params: BTreeMap::from([
+                ("center".into(), DocParam::const_vec2([0.0, 0.0])),
+                ("size".into(), DocParam::const_vec2([4.0, 4.0])),
+                ("color".into(), DocParam::const_color([0.0, 0.0, 1.0, 1.0])),
+            ]),
+            extra: Default::default(),
+        },
+    });
+    document
+        .tracks
+        .first_mut()
+        .ok_or(StaticPreviewError::SetupThreadPanic)?
+        .items
+        .push(item);
+    document.validate()?;
+    Ok(document)
+}
+
 fn fixture_document(color: [f64; 4]) -> Result<Document, StaticPreviewError> {
     let mut document = Document::new_current();
     let layer = document.layers.allocate("static-preview")?;
