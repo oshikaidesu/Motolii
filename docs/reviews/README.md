@@ -119,3 +119,6 @@
 | [2026-07-19-am-keyframe-graph-observation.md](2026-07-19-am-keyframe-graph-observation.md) | Alight Motionキーフレームグラフ観察台帳(AM実機確認。`codex/m3-mock-components`側から回収) |
 | [2026-07-19-m3-interaction-prototype-decision-ledger.md](2026-07-19-m3-interaction-prototype-decision-ledger.md) | M3操作prototype未決パラメータ台帳(2026-07-19。`codex/m3-mock-components`側から回収) |
 | [2026-07-19-lyric-motion-text-sequence-comparison.md](2026-07-19-lyric-motion-text-sequence-comparison.md) | リリックモーション: Text Sequence / Materialize 比較台帳(2026-07-19) |
+| [2026-07-20-rerun-pinned-commit-source-inventory.md](2026-07-20-rerun-pinned-commit-source-inventory.md) | Rerun固定commit ソース資産inventory(2026-07-20) |
+| [2026-07-20-rerun-learning-transfer-plan.md](2026-07-20-rerun-learning-transfer-plan.md) | Rerun学習・転移計画(2026-07-20) |
+| [2026-07-20-rerun-prior-art-direction.md](2026-07-20-rerun-prior-art-direction.md) | Rerun先例調査・方向決定(2026-07-20) |
