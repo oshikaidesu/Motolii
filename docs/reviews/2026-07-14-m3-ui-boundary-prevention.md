@@ -59,7 +59,9 @@
 - requestへ単調増加generationを付け、古いcompleted frameをUIが表示しない
 - 実行中GPU workの強制cancelは要求しない
 - UI共有デバイスで`device.poll(Wait)`、`download_rgba`、フレームごとのGPUリソース生成をしない
-- native textureはdisplay pool生成時に登録し、毎frame sampler/bind groupを作らない
+- native textureはdisplay slot生成時に安定viewを作り、rendererを得られる
+  `eframe::CreationContext`で一度だけ登録する。毎frame、resize、DPI変更、
+  minimize/restoreごとにsampler/bind groupを作らない
 - 再生クロックをvsync/egui repaintへ従属させない
 
 mailboxはTokio `watch`相当の意味を要求するが、Tokio採用自体は決定しない。単なる容量1のblocking channelで代用しない。

@@ -39,7 +39,7 @@
 | M0 | `DONE` | spike完了 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み |
 | M2 | **基盤再締結済み** | D1l、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。D5は再締結の閉集合外で、骨格到達・統合審判pending |
-| M3 | **段階発注可 / Uシリーズ直列選択中** | U0a、U0b-1、U0b-2、U0c-1、U0c-2、U0d-1、U0d-2、U0d-3、U2a-0、U2a-1完了。次はU1a-1を単独実行 |
+| M3 | **段階発注可 / Uシリーズ直列選択中** | U0a、U0b-1、U0b-2、U0c-1、U0c-2、U0d-1、U0d-2、U0d-3、U2a-0、U2a-1完了。Grok反対側批判で割れを検出したため、U1a-1は静止viewport契約を先に固定してから単独実装 |
 | M4 | **契約spike可** | K0でRoD/RoIのruntime契約を凍結。その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む |
 | M5 | **identity spike可** | P0IでDuplicator/Instance identityを凍結 |
 
@@ -93,7 +93,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 | 優先 | ID | Phase | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
-| 1 | U1a-1 | M3 | `DO` | — | U0a、U0b-2、G0-1、D3、U2a-1完了。静止viewport shellだけを実装し、layout永続化・再生・workerを混ぜない | U1a-2を単独実行 |
+| 1 | U1a-1 | M3 | `ACTIVE` | — | U0a、U0b-2、G0-1、D3、U2a-1完了。[静止viewport契約](reviews/2026-07-21-m3-u1a-1-static-viewport-contract.md)を先にmainへ到達させ、最新mainからshellだけを実装する | U1a-2を単独実行 |
 
 K0 [#167](https://github.com/oshikaidesu/Motolii/issues/167)とP0I
 [#170](https://github.com/oshikaidesu/Motolii/issues/170)は論理上`DO`の独立spikeだが、

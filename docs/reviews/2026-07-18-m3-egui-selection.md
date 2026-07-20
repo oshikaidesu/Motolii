@@ -6,7 +6,7 @@
 
 - 製品UIはRust nativeの**egui**を使う。初期統合の検証版は`egui` / `eframe` / `egui-wgpu` / `egui-winit` 0.35、`egui_tiles` 0.16、wgpu 29を使った
 - `motolii-gpu`がwgpu device/queueを所有し、UI shellは`egui_wgpu::WgpuSetup::Existing`で借りる。第2deviceやCPU pixel bridgeを正規経路にしない
-- previewは同一device上の`Rgba8Unorm` `TextureView`を`egui_wgpu::Renderer::register_native_texture`で登録して表示する。安定したdisplay poolのviewはpool生成時に一度登録し、毎frame sampler/bind groupを作らない
+- previewは同一device上の`Rgba8Unorm` `TextureView`を`egui_wgpu::Renderer::register_native_texture`で登録して表示する。display slot生成時に安定viewを作り、rendererを得られる`eframe::CreationContext`で一度だけ登録する。毎frame、resize、DPI変更、minimize/restoreごとにsampler/bind groupを作らない
 - toolkit依存は`motolii-ui`内へ閉じ、domain intent、Document command、render/eval/plugin公開APIへegui/eframe/winit型を出さない
 - 可変panelは`egui_tiles`をruntime投影先の第一候補とする。`Tree`、`TileId`、crateのserde形を製品設定の正本にせず、Motolii所有の安定したlayout modelから投影する。利用者はpanelの分割、tab化、resize、表示/非表示、復帰を選べる
 - v1 plugin UIは従来どおり`NodeDesc`からHostが自動生成するpanelだけを公開境界とする。plugin所有のegui code、native widget、自由wgpu UIは公開しない
