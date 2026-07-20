@@ -1,10 +1,10 @@
-# Rerun先例調査: egui製プロダクトの資産地図(2026-07-20)
+# Rerun先例調査: egui製プロダクトの方向決定とspot audit(2026-07-20)
 
-ステータス: **決定**。M3 UI基盤はeguiを継続し、Rerunを制作ソフト級の外観・window/panel構成・時間面・GPU viewportを実装するための主要な製品先例とする(2026-07-20ユーザー決定)。Reactモックは引き続きMotolii固有の視覚・操作要求の正本候補であり、Rerunはそれをeguiへ移す際の実装資産地図として使う。
+ステータス: **決定**。M3 UI基盤はeguiを継続し、Rerunを制作ソフト級の外観・window/panel構成・時間面・GPU viewportを実装するための主要な製品先例とする(2026-07-20ユーザー決定)。Reactモックは引き続きMotolii固有の視覚・操作要求の正本候補である。本文書の資産記述は方向決定時に選んだspot auditであり、全量inventoryではない。
 
 この方向決定は、Rerunの各実装を無条件に採用する決定ではない。本文書の事実表から個別資産を移す時は[レビュー規律](README.md)規律1〜6に従い、crate依存の追加・fork・アルゴリズム移植は§5の反対側レビューと該当ゲート(M3入場PR、M5 decision PR)で判定する。[egui採用審査録(2026-07-18)](2026-07-18-m3-egui-selection.md)を置換せず、外観と実装先例の不足を事後補強する。
 
-具体的な学習順、RR-0〜9の成果物、既存M3/M5タスクへの接続、`DEPEND/VENDOR/PORT/PATTERN/REJECT`分類は[Rerun → Motolii学習・転移計画](2026-07-20-rerun-learning-transfer-plan.md)を運用正本とする。
+固定commitのpackage全量と見落としていた候補群は[Rerun source asset inventory](2026-07-20-rerun-source-asset-inventory.md)、具体的な学習順、RR-0〜9の成果物、既存M3/M5タスクへの接続、`DEPEND/VENDOR/PORT/PATTERN/REJECT`分類は[Rerun → Motolii学習・転移計画](2026-07-20-rerun-learning-transfer-plan.md)を運用正本とする。
 
 ## 1. 決定と経緯
 
@@ -61,7 +61,7 @@ UI基盤の再検討(「UIはCPU描画でもよいのでは、プレビューだ
 | ダーク専用だったviewerへライトモードを後付けした事例(0.24) | [0.24リリースブログ](https://rerun.io/blog/release-0.24) |
 | 全`re_*`crateはリリースごとにロックステップ更新で、semver安定性の約束はない | [Releases](https://github.com/rerun-io/rerun/releases)の各リリースノート |
 
-## 3. 資産地図
+## 3. 第一陣の資産候補（spot audit）
 
 ### 流用候補(採否は各ゲートで判定)
 
