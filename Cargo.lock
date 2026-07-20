@@ -1834,6 +1834,8 @@ dependencies = [
  "egui-wgpu",
  "egui-winit",
  "egui_tiles",
+ "motolii-doc",
+ "serde_json",
  "thiserror 2.0.19",
 ]
 
