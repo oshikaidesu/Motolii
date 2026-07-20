@@ -14,6 +14,7 @@ mod layout;
 mod layout_authority;
 mod layout_runtime;
 mod layout_runtime_adapter;
+mod render_worker;
 mod shell;
 mod state_ownership;
 mod static_preview;
