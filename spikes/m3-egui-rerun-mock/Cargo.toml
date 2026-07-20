@@ -1,0 +1,14 @@
+[package]
+name = "m3-egui-rerun-mock"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+eframe = { version = "0.35", default-features = false, features = ["wgpu", "x11", "wayland"] }
+egui_tiles = "0.16"
+
+[dev-dependencies]
+egui_kittest = { version = "0.35", features = ["eframe", "snapshot", "wgpu"] }
