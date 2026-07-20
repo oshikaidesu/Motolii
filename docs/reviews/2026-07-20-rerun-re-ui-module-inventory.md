@@ -106,6 +106,25 @@ main監査commitの[`Cargo.toml`](https://github.com/rerun-io/rerun/blob/954bf95
 
 粒化の停止線: この表は読解の完了条件であり、file単位の発注許可ではない。1裁定は§8のとおり1クラスタずつ、5分類のいずれか一つで閉じる。
 
+### 4.2 獲得価値の粒化 — 実証済みで再発明を節約できる設計判断(2026-07-20追補)
+
+§3〜§4.1は結合・リスク側(持ち込まない理由)を粒化した。本節はその対で、**採用可否と独立に、読むだけでMotoliiが再発明せずに済む「解決済みの設計判断」**を粒化する。いずれも一次sourceの該当行で確認済みの実装事実であり、「Rerunで動いている」以上の一般性は主張しない(反例未探索。仮説と整合する実証例として扱う)。
+
+| 解決済みの問題 | 実装事実(file、main監査commit) | Motoliiが節約する再発明 | 受け皿 |
+|---|---|---|---|
+| **immediate modeでの列揃え**: 1 passでは右列の揃え幅が決められない | `list_item/scope.rs` — frame nで各行が幅統計を蓄積→egui temporary memoryへ保存→frame n+1のlayoutが使う2 frame方式。ASCII図つきで文書化 | Inspectorのparameter row列揃えをwidget treeの再走査なしで成立させる方式の探索。M3で必ず踏む問題 | B(`pattern.parameter-row`)、U4a |
+| **hover buttonのclick競合**: hover判定でbuttonを出すと、click瞬間に消える | `item_buttons.rs` L42のコメント「`.hovered()`は使えない — clickの瞬間にbuttonが消える」+回避実装。既定は「hover時または選択時のみ表示」 | 高密度listの行内action(Browserの表示切替・削除等)で同じ地雷を踏んでから直す工数 | B、Browser hierarchy |
+| **2列property rowの標準形**: label+icon左列/編集可能右列、間隔管理、read-onlyヘルパー | `property_content.rs` L19-22, L37, L92, L106。「2〜3列を意味を保って畳む方法はない」という設計判断のコメントも残る | parameter rowの基本骨格と、狭幅時に「畳まない」判断の先例 | B、U4a |
+| **検索hitの全域highlight**: 階層pathに対するmatch範囲収集→`WidgetText`装飾の一貫pipeline | `filter_widget.rs` L288(path match+highlight range)、L384(early-outせず全match収集)、L573(range列→highlight済みWidgetText) | 検索一致表示をelide決定(P52)と両立させるためのrange→装飾変換の設計 | A、Browser検索 |
+| **theme編集の即時反映**: rebuildなしのtoken iteration | `hot_reload_design_tokens.rs` — cfg gate付き`notify` watcherでRON themeをlive reload(L52-64)。本番buildには含まれない | G0-6Hの人間審判とU0e token調整のiteration速度。「値を変えて見る」のたびのrebuild | E、U0e/G0-6H |
+| **階層DnDのdrop位置幾何**: before/inside/afterの判定とindicator描画位置 | `drag_and_drop.rs` — `DropTarget`がindicator span_x/position_y/親ID/挿入indexを一括で返す(L39-53)。root containerへの制限も型で表現(L8) | drop indicatorの座標計算とedge case(root直下・末尾挿入)の手探り。geometryだけ借りてcommand意味は自前、の分離が可能な形 | C、Browser/panel DnD |
+| **autocomplete候補のindent扱い**: 表示は字下げ、filter/確定時は除去 | `text_edit.rs` L14-16「Leading whitespaceはdisplay-only indentation」 | 候補listの視覚階層と入力値の分離という細部仕様。IME fixture設計時の観点にもなる | A、Browser検索入力 |
+| **通知の二面性**: 即時toastと履歴を同一状態から投影、未読level・NeverShowAgain | `notifications.rs` — `is_unread`/`unread_notification_level`(L123-291)、`NeverShowAgain`(L258) | 「toastを見逃したら消える」問題の解法形。U2c envelopeの投影先設計の下敷き | D、`pattern.diagnostic-feedback` |
+| **card格子のhover/drag描画** | `egui_ext/card_layout.rs` — `hover_fill`(L70-74)とdrag中interaction rectの扱い | Browser thumbnail格子のhover/drag視覚応答の初期値 | A、`pattern.candidate-shelf` |
+| **theme付きsnapshot harnessの最小形** | `testing.rs` 52行で`egui_kittest`にtheme文脈を注入。試験厚は更新頻度の高いmoduleに寄る(§4.1 E) | component snapshot基盤を52行規模から始められるという規模感の証拠 | E、U0e/G0-4 |
+
+読み方: この表の「節約」は**設計判断の探索費**であり、実装費のゼロ化ではない。回収先は各行の受け皿ticket/fixtureで、回収時に§6(CJK/IME)と§4.1の確認質問を併走させる。この表を根拠に分類(`DEPEND/VENDOR/PORT/PATTERN/REJECT`)を飛ばして発注することはできない。
+
 ## 5. React安定IDから見た優先照合
 
 `re_ui` module名から着手順を作らず、既存動線から次の小さい問題へ分ける。
