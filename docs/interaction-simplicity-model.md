@@ -266,6 +266,10 @@ G0の入力として次を確定する。
 4. 同じfixtureを各入口から操作し、最終DocumentまたはD2 command列が意味同値になる審判を決定。
 5. AE等との比較操作列は証拠として保存するが、競合よりNクリック少ないことを恒久契約にはしない。
 
+U2c-2のconformanceは実在する複数製品入口が前提である。初回はU4a-2のDirect入口と
+U4cのAdvanced入口が揃った後に実行し、未実装Toolは未実装と明記する。
+空harness、adapter kind、smoke注入、複数key bindingを入口数へ数えない。
+
 #### M3タスクへの割当
 
 | 責務 | 接続先 | 完了条件 |
