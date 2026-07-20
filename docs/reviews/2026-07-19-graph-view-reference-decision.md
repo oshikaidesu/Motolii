@@ -1,6 +1,6 @@
 # Graph View参照・比較決定
 
-日付: 2026-07-19  
+日付: 2026-07-19
 状態: **Graph View採択／React prototype比較中**
 
 ## 決定
