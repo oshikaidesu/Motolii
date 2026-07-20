@@ -1,0 +1,15 @@
+{
+  "source": "docs/mocks-ui/#plugin-browser-candidate",
+  "viewport": { "width": 1440.0, "height": 900.0 },
+  "elements": [
+    { "id": "title", "rect": { "x": 0.0, "y": 0.0, "width": 1440.0, "height": 33.9931 } },
+    { "id": "workspace", "rect": { "x": 0.0, "y": 65.9896, "width": 1440.0, "height": 540.0174 } },
+    { "id": "browser", "rect": { "x": 0.0, "y": 65.9896, "width": 283.9931, "height": 540.0174 } },
+    { "id": "inspector", "rect": { "x": 1114.0018, "y": 65.9896, "width": 325.9983, "height": 540.0174 } },
+    { "id": "timeline", "rect": { "x": 0.0, "y": 606.0070, "width": 1440.0, "height": 270.0 } },
+    { "id": "status", "rect": { "x": 0.0, "y": 876.0070, "width": 1440.0, "height": 23.9931 } },
+    { "id": "effects_search", "rect": { "x": 0.0, "y": 0.0, "width": 283.4375, "height": 35.9983 } },
+    { "id": "effects_rail", "rect": { "x": 0.0, "y": 35.9983, "width": 105.9983, "height": 447.0139 } },
+    { "id": "effects_results", "rect": { "x": 105.9983, "y": 35.9983, "width": 177.4392, "height": 447.0139 } }
+  ]
+}

@@ -8,7 +8,10 @@ publish = false
 
 [dependencies]
 eframe = { version = "0.35", default-features = false, features = ["wgpu", "x11", "wayland"] }
+egui_taffy = "0.13"
 egui_tiles = "0.16"
 
 [dev-dependencies]
 egui_kittest = { version = "0.35", features = ["eframe", "snapshot", "wgpu"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

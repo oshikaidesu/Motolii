@@ -3,7 +3,16 @@ use eframe::egui::{
     self, Align, Align2, Color32, FontId, Layout, Pos2, Rect, Response, RichText, Sense, Stroke,
     StrokeKind, Vec2,
 };
+use egui_taffy::taffy::{
+    self,
+    prelude::{fr, length, percent},
+};
+use egui_taffy::{tui, TuiBuilderLogic};
+use std::collections::BTreeMap;
 use std::sync::Arc;
+
+const REACT_SEARCH_HEIGHT: f32 = 36.0;
+const REACT_HIERARCHY_WIDTH: f32 = 106.0;
 
 const EFFECTS: [Effect; 3] = [
     Effect {
@@ -122,6 +131,7 @@ pub(crate) struct BrowserState {
     tag: Option<Tag>,
     pack: Option<Pack>,
     selected: &'static str,
+    layout_rects: BTreeMap<&'static str, Rect>,
 }
 
 impl Default for BrowserState {
@@ -135,6 +145,7 @@ impl Default for BrowserState {
             tag: None,
             pack: None,
             selected: "echo-bloom",
+            layout_rects: BTreeMap::new(),
         }
     }
 }
@@ -142,6 +153,11 @@ impl Default for BrowserState {
 impl BrowserState {
     pub(crate) fn selected(&self) -> &'static str {
         self.selected
+    }
+
+    #[cfg(test)]
+    pub(crate) fn layout_rect(&self, id: &str) -> Option<Rect> {
+        self.layout_rects.get(id).copied()
     }
 }
 
@@ -160,31 +176,82 @@ pub(crate) fn browser_ui(ui: &mut egui::Ui, state: &mut BrowserState) -> Option<
         return action;
     }
     let mut changed = None;
-    search_row(ui, state, "Search");
+    let layout_id = ui.id().with("react-effects-layout");
+    tui(ui, layout_id)
+        .reserve_available_space()
+        .style(taffy::Style {
+            display: taffy::Display::Grid,
+            grid_template_columns: vec![fr(1.0)],
+            grid_template_rows: vec![length(REACT_SEARCH_HEIGHT), fr(1.0)],
+            size: percent(1.0),
+            align_items: Some(taffy::AlignItems::Stretch),
+            justify_items: Some(taffy::AlignItems::Stretch),
+            ..Default::default()
+        })
+        .show(|tui| {
+            tui.style(taffy::Style {
+                size: taffy::Size {
+                    width: percent(1.0),
+                    height: length(REACT_SEARCH_HEIGHT),
+                },
+                ..Default::default()
+            })
+            .ui(|ui| {
+                record_layout(state, "effects_search", ui.max_rect());
+                search_row(ui, state, "Search");
+            });
 
-    let available = ui.available_size();
-    ui.allocate_ui_with_layout(available, Layout::left_to_right(Align::Min), |ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        ui.allocate_ui_with_layout(
-            Vec2::new(103.0, available.y),
-            Layout::top_down(Align::Min),
-            |ui| {
-                ui.painter().rect_filled(ui.max_rect(), 0.0, theme::APP);
-                egui::Frame::NONE
-                    .inner_margin(egui::Margin::same(3))
-                    .show(ui, |ui| source_rail(ui, state));
-            },
-        );
-        vertical_divider(ui, available.y);
-        ui.allocate_ui_with_layout(ui.available_size(), Layout::top_down(Align::Min), |ui| {
-            ui.painter().rect_filled(ui.max_rect(), 0.0, theme::BORDER);
-            changed = results(ui, state);
+            tui.style(taffy::Style {
+                display: taffy::Display::Grid,
+                grid_template_columns: vec![length(REACT_HIERARCHY_WIDTH), fr(1.0)],
+                grid_template_rows: vec![fr(1.0)],
+                size: percent(1.0),
+                align_items: Some(taffy::AlignItems::Stretch),
+                justify_items: Some(taffy::AlignItems::Stretch),
+                ..Default::default()
+            })
+            .add(|tui| {
+                tui.style(taffy::Style {
+                    min_size: taffy::Size {
+                        width: length(REACT_HIERARCHY_WIDTH),
+                        height: length(0.0),
+                    },
+                    ..Default::default()
+                })
+                .ui(|ui| {
+                    record_layout(state, "effects_rail", ui.max_rect());
+                    ui.painter().rect_filled(ui.max_rect(), 0.0, theme::APP);
+                    egui::Frame::NONE
+                        .inner_margin(egui::Margin::same(3))
+                        .show(ui, |ui| source_rail(ui, state));
+                    ui.painter().line_segment(
+                        [ui.max_rect().right_top(), ui.max_rect().right_bottom()],
+                        Stroke::new(1.0, theme::BORDER),
+                    );
+                });
+
+                tui.style(taffy::Style {
+                    min_size: taffy::Size {
+                        width: length(0.0),
+                        height: length(0.0),
+                    },
+                    ..Default::default()
+                })
+                .ui(|ui| {
+                    record_layout(state, "effects_results", ui.max_rect());
+                    ui.painter().rect_filled(ui.max_rect(), 0.0, theme::BORDER);
+                    changed = results(ui, state);
+                });
+            });
         });
-    });
     if let Some(id) = changed {
         action = Some(BrowserAction::EffectSelected(id));
     }
     action
+}
+
+fn record_layout(state: &mut BrowserState, id: &'static str, rect: Rect) {
+    state.layout_rects.insert(id, rect);
 }
 
 fn browser_header(ui: &mut egui::Ui, state: &mut BrowserState) -> Option<BrowserAction> {
@@ -248,31 +315,75 @@ fn simple_browser(ui: &mut egui::Ui, state: &mut BrowserState) {
             BrowserTab::Effects => unreachable!(),
         };
 
-    search_row(ui, state, placeholder);
     let footer_height = 28.0;
-    let body_size = Vec2::new(
-        ui.available_width(),
-        (ui.available_height() - footer_height).max(80.0),
-    );
-    ui.allocate_ui_with_layout(body_size, Layout::left_to_right(Align::Min), |ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        ui.allocate_ui_with_layout(
-            Vec2::new(103.0, body_size.y),
-            Layout::top_down(Align::Min),
-            |ui| {
+    tui(
+        ui,
+        ui.id()
+            .with(("react-simple-browser-layout", state.tab.index())),
+    )
+    .reserve_available_space()
+    .style(taffy::Style {
+        display: taffy::Display::Grid,
+        grid_template_columns: vec![fr(1.0)],
+        grid_template_rows: vec![length(REACT_SEARCH_HEIGHT), fr(1.0), length(footer_height)],
+        size: percent(1.0),
+        align_items: Some(taffy::AlignItems::Stretch),
+        justify_items: Some(taffy::AlignItems::Stretch),
+        ..Default::default()
+    })
+    .show(|tui| {
+        tui.style(taffy::Style {
+            size: taffy::Size {
+                width: percent(1.0),
+                height: length(REACT_SEARCH_HEIGHT),
+            },
+            ..Default::default()
+        })
+        .ui(|ui| {
+            record_layout(state, "simple_search", ui.max_rect());
+            search_row(ui, state, placeholder);
+        });
+
+        tui.style(taffy::Style {
+            display: taffy::Display::Grid,
+            grid_template_columns: vec![length(REACT_HIERARCHY_WIDTH), fr(1.0)],
+            grid_template_rows: vec![fr(1.0)],
+            size: percent(1.0),
+            align_items: Some(taffy::AlignItems::Stretch),
+            justify_items: Some(taffy::AlignItems::Stretch),
+            ..Default::default()
+        })
+        .add(|tui| {
+            tui.ui(|ui| {
+                record_layout(state, "simple_rail", ui.max_rect());
                 ui.painter().rect_filled(ui.max_rect(), 0.0, theme::APP);
                 egui::Frame::NONE
                     .inner_margin(egui::Margin::same(3))
                     .show(ui, |ui| simple_source_rail(ui, state.tab));
+                ui.painter().line_segment(
+                    [ui.max_rect().right_top(), ui.max_rect().right_bottom()],
+                    Stroke::new(1.0, theme::BORDER),
+                );
+            });
+            tui.ui(|ui| {
+                record_layout(state, "simple_results", ui.max_rect());
+                ui.painter().rect_filled(ui.max_rect(), 0.0, theme::BORDER);
+                simple_results(ui, state.tab, title, scope, items, &state.query);
+            });
+        });
+
+        tui.style(taffy::Style {
+            size: taffy::Size {
+                width: percent(1.0),
+                height: length(footer_height),
             },
-        );
-        vertical_divider(ui, body_size.y);
-        ui.allocate_ui_with_layout(ui.available_size(), Layout::top_down(Align::Min), |ui| {
-            ui.painter().rect_filled(ui.max_rect(), 0.0, theme::BORDER);
-            simple_results(ui, state.tab, title, scope, items, &state.query);
+            ..Default::default()
+        })
+        .ui(|ui| {
+            record_layout(state, "simple_footer", ui.max_rect());
+            simple_footer(ui, state.tab, footer_height);
         });
     });
-    simple_footer(ui, state.tab, footer_height);
 }
 
 fn simple_source_rail(ui: &mut egui::Ui, tab: BrowserTab) {
@@ -600,11 +711,6 @@ fn simple_footer(ui: &mut egui::Ui, tab: BrowserTab, height: f32) {
             );
         });
     });
-}
-
-fn vertical_divider(ui: &mut egui::Ui, height: f32) {
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(1.0, height), Sense::hover());
-    ui.painter().rect_filled(rect, 0.0, theme::BORDER);
 }
 
 fn search_row(ui: &mut egui::Ui, state: &mut BrowserState, placeholder: &str) {

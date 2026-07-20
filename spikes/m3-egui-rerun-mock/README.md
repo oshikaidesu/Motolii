@@ -10,6 +10,12 @@ Reactとの固定寸法と比較方法は[PARITY.md](PARITY.md)を参照。
 
 custom-painted controlにもAccessKitのrole・label・selected/valueを付与する。見た目だけのbuttonを作らず、keyboard/assistive technologyと`egui_kittest`が同じ操作対象を識別する。Inspector scrubはPreview、release時のmock-local 1 Undo、Esc取消を一つのtransactionとして扱う。
 
+## React layout転写
+
+既存component、paint、state、操作試験は残し、Browser内部の`Search / Hierarchy / Results / Footer`だけを`egui_taffy`のGridへ投影する。Reactのcomputed styleから得た固定矩形は`fixtures/react-layout-1440x900.json`へtest-only evidenceとして保存し、Document、公開API、Workspace profileの保存形式にはしない。
+
+`browser_taffy_rects_match_react_manifest`は、Reactの36 px検索行、106 px階層rail、残余Resultsという構造を1 logical px以内で比較する。Media / Effects / Createは同じlayout経路を通り、既存の各card描画と操作状態を子UIとして再利用する。
+
 Rerun `re_ui`からは`DesignTokens → egui::Style → leaf component`という分離だけを`PATTERN`として採る。Rerunの型、theme値、font、icon、RON、domain stateは引用・vendoringしない。
 
 ## Rerun転移記録

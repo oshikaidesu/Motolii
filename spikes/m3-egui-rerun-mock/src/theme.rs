@@ -1,4 +1,5 @@
 use eframe::egui::{self, Color32, FontData, FontDefinitions, FontFamily, FontTweak, Stroke};
+use std::num::NonZeroUsize;
 
 pub const APP: Color32 = Color32::from_rgb(20, 20, 20);
 pub const PANEL: Color32 = Color32::from_rgb(26, 26, 26);
@@ -33,6 +34,10 @@ pub fn interface_bold_font(size: f32) -> egui::FontId {
 
 pub fn install(context: &egui::Context) {
     install_mock_fonts(context);
+    // Taffyが実寸を得た同じframe内で再配置できるよう、比較spikeだけ2 passにする。
+    context.options_mut(|options| {
+        options.max_passes = NonZeroUsize::new(2).expect("two passes is non-zero");
+    });
     context.set_theme(egui::Theme::Dark);
 
     let mut visuals = egui::Visuals::dark();

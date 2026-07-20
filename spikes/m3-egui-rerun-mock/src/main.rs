@@ -3,6 +3,8 @@ mod browser_component;
 mod components;
 mod fixture;
 mod inspector_component;
+#[cfg(test)]
+mod layout_manifest;
 mod stage_component;
 mod theme;
 mod timeline_component;

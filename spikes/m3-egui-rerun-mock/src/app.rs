@@ -367,10 +367,7 @@ fn history_button(
 ) -> egui::Response {
     let response = ui
         .add_enabled_ui(enabled, |ui| {
-            ui.add_sized(
-                [width, 25.0],
-                egui::Button::new(RichText::new(label)),
-            )
+            ui.add_sized([width, 25.0], egui::Button::new(RichText::new(label)))
         })
         .inner;
     let color = if enabled {
@@ -465,6 +462,48 @@ mod tests {
         harness.drop_at(moved);
         harness.run();
         assert!(harness.state().state.undo.is_empty());
+    }
+
+    #[test]
+    fn browser_taffy_rects_match_react_manifest() {
+        let mut harness = harness();
+        harness.run_steps(3);
+
+        let manifest = crate::layout_manifest::react_1440x900();
+        let search = harness
+            .state()
+            .state
+            .browser
+            .layout_rect("effects_search")
+            .expect("search rect should be recorded");
+        let rail = harness
+            .state()
+            .state
+            .browser
+            .layout_rect("effects_rail")
+            .expect("rail rect should be recorded");
+        let results = harness
+            .state()
+            .state
+            .browser
+            .layout_rect("effects_results")
+            .expect("results rect should be recorded");
+
+        let expected_search = manifest.rect("effects_search").unwrap();
+        let expected_rail = manifest.rect("effects_rail").unwrap();
+        let expected_results = manifest.rect("effects_results").unwrap();
+        let tolerance = 1.0;
+
+        assert!((search.height() - expected_search.height).abs() <= tolerance);
+        assert!((rail.width() - expected_rail.width).abs() <= tolerance);
+        assert!((rail.top() - search.top() - expected_rail.y).abs() <= tolerance);
+        assert!((results.left() - search.left() - expected_results.x).abs() <= tolerance);
+        assert!((search.width() - rail.width() - results.width()).abs() <= tolerance);
+        assert!((rail.height() - results.height()).abs() <= tolerance);
+        assert!(
+            (expected_search.width - expected_rail.width - expected_results.width).abs()
+                <= tolerance
+        );
     }
 
     #[test]

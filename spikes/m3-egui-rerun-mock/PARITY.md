@@ -24,6 +24,8 @@ MOTOLII_KITTEST_CAPTURE=/tmp/motolii-egui-mock.png \
 
 画像比較と操作契約は分ける。画像側は上表の境界、16:9、選択枠・軌道・bar位置を確認する。操作側はtoolbar選択、Browser 3 tab・検索・選択、Inspector scrub/blend/automation、Stage transport、Timeline選択、panel resizeがmock-local stateだけを変えることを確認する。scrubはdrag中だけPreviewし、releaseで1回だけ履歴へ積み、Escでは開始値へ戻して履歴を作らない。
 
+Reactのcomputed style採寸は`fixtures/react-layout-1440x900.json`へ正規化して保存する。egui側は描画snapshotとは別に、Taffyが割り当てたBrowser内部矩形をtest-onlyで記録し、`browser_taffy_rects_match_react_manifest`で比較する。これにより、font raster差とlayout差を同じpixel diffへ混ぜない。
+
 共通componentへの移行時は、移行直前の1440×900 captureに対するImageMagick RMSEも確認する。構造改善を理由に見た目を変更せず、意図したReact parity修正だけを別に判定する。
 
 ## 意図的な差
