@@ -119,6 +119,13 @@ fn exported_types_are_toolkit_free() {
     assert_no_toolkit_in_type_name::<motolii_ui::InteractionState>();
     assert_no_toolkit_in_type_name::<motolii_ui::InteractionStateMachine>();
     assert_no_toolkit_in_type_name::<motolii_ui::InteractionTransitionError>();
+    assert_no_toolkit_in_type_name::<motolii_ui::DiagnosticEnvelope>();
+    assert_no_toolkit_in_type_name::<motolii_ui::DiagnosticReasonCode>();
+    assert_no_toolkit_in_type_name::<motolii_ui::DiagnosticActionKind>();
+    assert_no_toolkit_in_type_name::<motolii_ui::DiagnosticSubject>();
+    assert_no_toolkit_in_type_name::<motolii_ui::DiagnosticFact>();
+    assert_no_toolkit_in_type_name::<motolii_ui::DiagnosticRecoverability>();
+    assert_no_toolkit_in_type_name::<motolii_ui::UnsupportedDiagnosticSource>();
     assert_no_toolkit_in_type_name::<motolii_ui::Gesture>();
     assert_no_toolkit_in_type_name::<motolii_ui::EffectiveTrigger>();
     assert_no_toolkit_in_type_name::<motolii_ui::KeymapResolution>();

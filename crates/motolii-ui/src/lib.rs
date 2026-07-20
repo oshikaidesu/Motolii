@@ -4,6 +4,7 @@
 
 mod app;
 mod command_registry;
+mod diagnostic;
 mod display_slot;
 mod document_command_request;
 mod document_edit_runtime;
@@ -24,6 +25,11 @@ mod static_preview;
 pub use command_registry::{
     builtin_command_registry, CommandId, CommandIdError, CommandMetadata, CommandRegistry,
     CommandRegistryError,
+};
+pub use diagnostic::{
+    adapt_command_error, adapt_document_command_request_error, adapt_input_router_error,
+    DiagnosticActionKind, DiagnosticEnvelope, DiagnosticFact, DiagnosticReasonCode,
+    DiagnosticRecoverability, DiagnosticSubject, UnsupportedDiagnosticSource,
 };
 pub use document_command_request::{DocumentCommandRequest, DocumentCommandRequestError};
 pub use domain_intent::{DomainIntent, DomainIntentError};

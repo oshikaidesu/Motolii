@@ -158,7 +158,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        builtin_command_registry, CommandId, InputRouter, InteractionState,
+        adapt_document_command_request_error, builtin_command_registry, CommandId,
+        DiagnosticReasonCode, DocumentCommandRequestError, InputRouter, InteractionState,
         InteractionStateMachine, NormalizedInput,
     };
 
@@ -300,6 +301,30 @@ mod tests {
             runtime.process_next(&mut queue),
             Err(DocumentEditRuntimeError::Command(_))
         ));
+        assert_eq!(queue.len(), 0);
+        assert_eq!(runtime.writer.revision, 0);
+        assert_eq!(runtime.history_lengths(), (0, 0));
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
+    }
+
+    #[test]
+    fn diagnostic_adaptation_does_not_enqueue_or_mutate_document_runtime() {
+        let (document, _) = fixture();
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let mut runtime = runtime(document);
+        let mut queue = DocumentEditQueue::default();
+
+        let envelope =
+            adapt_document_command_request_error(&DocumentCommandRequestError::EmptyCommands);
+
+        assert_eq!(
+            envelope.reason(),
+            DiagnosticReasonCode::EmptyDocumentCommands
+        );
+        assert!(runtime.process_next(&mut queue).unwrap().is_none());
         assert_eq!(queue.len(), 0);
         assert_eq!(runtime.writer.revision, 0);
         assert_eq!(runtime.history_lengths(), (0, 0));

@@ -1,7 +1,7 @@
 # M3 U2c-4 Transient Diagnostic Envelope契約
 
 作成日: 2026-07-21
-状態: **決定 / U2c-4実装待ち**
+状態: **決定 / U2c-4実装完了**
 
 ## 1. 目的
 
