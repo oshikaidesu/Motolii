@@ -5,6 +5,7 @@
 mod command_registry;
 mod domain_intent;
 mod input_router;
+mod keymap;
 mod shell;
 mod state_ownership;
 
@@ -16,6 +17,11 @@ pub use domain_intent::{DomainIntent, DomainIntentError};
 pub use input_router::{
     ImeGateState, InputPhase, InputRouter, InputRouterError, NormalizedInput, RouterOutput,
     SafetyInterrupt,
+};
+pub use keymap::{
+    resolve_keymap, AsciiKey, AsciiKeyError, Binding, BuiltinKeymap, DeltaOperation,
+    EffectiveTrigger, Gesture, KeyToken, KeymapDelta, KeymapDiagnostic, KeymapResolution, Modifier,
+    ModifierError, Modifiers, PlatformBindingConstraints, PlatformCommandModifier, PointerButton,
 };
 pub use state_ownership::{UiStateLifetime, UiStateOwner};
 

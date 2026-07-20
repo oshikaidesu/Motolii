@@ -2,7 +2,7 @@
 
 use crate::{CommandId, CommandRegistry, DomainIntent};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum InputPhase {
     Press,
     Release,
