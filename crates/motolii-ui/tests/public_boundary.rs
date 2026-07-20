@@ -107,6 +107,13 @@ fn exported_types_are_toolkit_free() {
     assert_no_toolkit_in_type_name::<motolii_ui::CommandMetadata>();
     assert_no_toolkit_in_type_name::<motolii_ui::CommandRegistry>();
     assert_no_toolkit_in_type_name::<motolii_ui::CommandRegistryError>();
+    assert_no_toolkit_in_type_name::<motolii_ui::InputPhase>();
+    assert_no_toolkit_in_type_name::<motolii_ui::ImeGateState>();
+    assert_no_toolkit_in_type_name::<motolii_ui::SafetyInterrupt>();
+    assert_no_toolkit_in_type_name::<motolii_ui::NormalizedInput>();
+    assert_no_toolkit_in_type_name::<motolii_ui::RouterOutput>();
+    assert_no_toolkit_in_type_name::<motolii_ui::InputRouter>();
+    assert_no_toolkit_in_type_name::<motolii_ui::InputRouterError>();
     assert_no_toolkit_in_type_name::<Result<motolii_ui::UiCrateInfo, motolii_ui::UiError>>();
 }
 
