@@ -8,6 +8,8 @@ Reactとの固定寸法と比較方法は[PARITY.md](PARITY.md)を参照。
 
 `src/components.rs`がCSS相当の共通境界を持つ。`ComponentTokens`は寸法、`Block`はbackground・border・inset・固定height、leaf componentはpanel header、tabs、property row、value/tag、automation、scrub、tool/quiet buttonを担う。各surfaceは製品意味とstateだけを持ち、同じborderやpaddingを再実装しない。
 
+custom-painted controlにもAccessKitのrole・label・selected/valueを付与する。見た目だけのbuttonを作らず、keyboard/assistive technologyと`egui_kittest`が同じ操作対象を識別する。Inspector scrubはPreview、release時のmock-local 1 Undo、Esc取消を一つのtransactionとして扱う。
+
 Rerun `re_ui`からは`DesignTokens → egui::Style → leaf component`という分離だけを`PATTERN`として採る。Rerunの型、theme値、font、icon、RON、domain stateは引用・vendoringしない。
 
 ## Rerun転移記録

@@ -1,6 +1,8 @@
-use crate::browser_component::{browser_ui, BrowserState};
+use crate::browser_component::{browser_ui, BrowserAction, BrowserState};
 use crate::components::{self, ToolIcon};
-use crate::inspector_component::{inspector_ui, InspectorEffect, InspectorState};
+use crate::inspector_component::{
+    inspector_ui, InspectorAction, InspectorEffect, InspectorSnapshot, InspectorState,
+};
 use crate::stage_component::{stage_ui, StageState};
 use crate::theme;
 use crate::timeline_component::{timeline_ui, TimelineState};
@@ -29,6 +31,15 @@ struct MockState {
     browser_thumbnail_size: f32,
     status: String,
     last_timeline_status: String,
+    active_tool: ToolIcon,
+    undo: Vec<HistoryEntry>,
+    redo: Vec<HistoryEntry>,
+}
+
+#[derive(Debug, Clone)]
+struct HistoryEntry {
+    snapshot: InspectorSnapshot,
+    label: String,
 }
 
 impl Default for MockState {
@@ -43,6 +54,9 @@ impl Default for MockState {
             settings_open: false,
             browser_thumbnail_size: 80.0,
             status: "Echo Bloom · selected effect · mock state only".into(),
+            active_tool: ToolIcon::Select,
+            undo: Vec::new(),
+            redo: Vec::new(),
         }
     }
 }
@@ -72,8 +86,34 @@ impl MotoliiMock {
                             self.state.status =
                                 "Export is outside this comparison prototype".into();
                         }
-                        let _ = ui.add_enabled(false, egui::Button::new("Redo"));
-                        let _ = ui.add_enabled(false, egui::Button::new("Undo"));
+                        if ui
+                            .add_enabled(!self.state.redo.is_empty(), egui::Button::new("Redo"))
+                            .clicked()
+                        {
+                            if let Some(entry) = self.state.redo.pop() {
+                                let current = self.state.inspector.snapshot();
+                                self.state.inspector.restore(entry.snapshot);
+                                self.state.undo.push(HistoryEntry {
+                                    snapshot: current,
+                                    label: entry.label.clone(),
+                                });
+                                self.state.status = format!("Redo 1 · {}", entry.label);
+                            }
+                        }
+                        if ui
+                            .add_enabled(!self.state.undo.is_empty(), egui::Button::new("Undo"))
+                            .clicked()
+                        {
+                            if let Some(entry) = self.state.undo.pop() {
+                                let current = self.state.inspector.snapshot();
+                                self.state.inspector.restore(entry.snapshot);
+                                self.state.redo.push(HistoryEntry {
+                                    snapshot: current,
+                                    label: entry.label.clone(),
+                                });
+                                self.state.status = format!("Undo · {}", entry.label);
+                            }
+                        }
                         if ui.button("Settings").clicked() {
                             self.state.settings_open = !self.state.settings_open;
                         }
@@ -99,11 +139,12 @@ impl MotoliiMock {
                         (ToolIcon::Relative, "Relative Move"),
                         (ToolIcon::Camera, "Camera"),
                     ] {
-                        let selected = hint == "Select";
-                        if components::tool_button(ui, icon, selected)
+                        let selected = self.state.active_tool == icon;
+                        if components::tool_button(ui, icon, selected, hint)
                             .on_hover_text(hint)
                             .clicked()
                         {
+                            self.state.active_tool = icon;
                             self.state.status = format!("{hint} tool · prototype only");
                         }
                     }
@@ -218,10 +259,17 @@ impl egui_tiles::Behavior<PaneKind> for WorkspaceBehavior<'_> {
     ) -> UiResponse {
         match pane {
             PaneKind::Browser => {
-                if let Some(id) = browser_ui(ui, &mut self.state.browser) {
-                    self.state.inspector.selected_effect = inspector_effect(id);
-                    self.state.status =
-                        format!("{} · selected effect · Document unchanged", effect_name(id));
+                if let Some(action) = browser_ui(ui, &mut self.state.browser) {
+                    match action {
+                        BrowserAction::EffectSelected(id) => {
+                            self.state.inspector.selected_effect = inspector_effect(id);
+                            self.state.status = format!(
+                                "{} · selected effect · Document unchanged",
+                                effect_name(id)
+                            );
+                        }
+                        BrowserAction::Status(status) => self.state.status = status.into(),
+                    }
                 }
             }
             PaneKind::Stage => {
@@ -234,7 +282,24 @@ impl egui_tiles::Behavior<PaneKind> for WorkspaceBehavior<'_> {
                     self.state.status = "Next key".into();
                 }
             }
-            PaneKind::Inspector => inspector_ui(ui, &mut self.state.inspector),
+            PaneKind::Inspector => {
+                if let Some(action) = inspector_ui(ui, &mut self.state.inspector) {
+                    match action {
+                        InspectorAction::Commit { label, before } => {
+                            self.state.undo.push(HistoryEntry {
+                                snapshot: before,
+                                label: label.clone(),
+                            });
+                            self.state.redo.clear();
+                            self.state.status = format!("{label} committed · 1 Undo");
+                        }
+                        InspectorAction::Cancelled => {
+                            self.state.status =
+                                "Parameter preview cancelled · Document unchanged".into();
+                        }
+                    }
+                }
+            }
         }
         UiResponse::None
     }
@@ -292,18 +357,71 @@ fn panel_frame(fill: egui::Color32, border: bool) -> egui::Frame {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use egui_kittest::kittest::Queryable as _;
+
+    fn harness() -> egui_kittest::Harness<'static, MotoliiMock> {
+        egui_kittest::Harness::builder()
+            .with_size(egui::vec2(1440.0, 900.0))
+            .build_eframe(|creation_context| {
+                crate::theme::install(&creation_context.egui_ctx);
+                MotoliiMock::new()
+            })
+    }
+
+    #[test]
+    fn toolbar_tabs_and_mock_undo_are_live() {
+        let mut harness = harness();
+
+        harness.get_by_label("Hand").click();
+        harness.run();
+        assert_eq!(harness.state().state.active_tool, ToolIcon::Hand);
+
+        harness.get_by_label("Media").click();
+        harness.run();
+        assert!(harness.query_by_label_contains("night_drive.wav").is_some());
+
+        harness.get_by_label("Effects").click();
+        harness.run();
+        harness.get_by_label("Spread automation").click();
+        harness.run();
+        assert!(harness.state().state.inspector.spread_automated);
+        assert_eq!(harness.state().state.undo.len(), 1);
+
+        harness.get_by_label("Undo").click();
+        harness.run();
+        assert!(!harness.state().state.inspector.spread_automated);
+        assert_eq!(harness.state().state.redo.len(), 1);
+    }
+
+    #[test]
+    fn escape_cancels_scrub_preview_without_history() {
+        let mut harness = harness();
+        let center = harness
+            .get_by_role_and_label(egui::accesskit::Role::Slider, "Intensity")
+            .rect()
+            .center();
+
+        harness.drag_at(center);
+        harness.run();
+        let moved = center + egui::vec2(24.0, 0.0);
+        harness.hover_at(moved);
+        harness.run();
+        assert!(harness.state().state.inspector.intensity > 0.64);
+
+        harness.key_press(egui::Key::Escape);
+        harness.run();
+        assert_eq!(harness.state().state.inspector.intensity, 0.64);
+        harness.drop_at(moved);
+        harness.run();
+        assert!(harness.state().state.undo.is_empty());
+    }
 
     #[test]
     #[ignore = "manual visual inspection helper"]
     fn capture_full_mock() {
         let output = std::env::var("MOTOLII_KITTEST_CAPTURE")
             .expect("set MOTOLII_KITTEST_CAPTURE to a PNG path");
-        let mut harness = egui_kittest::Harness::builder()
-            .with_size(egui::vec2(1440.0, 900.0))
-            .build_eframe(|creation_context| {
-                crate::theme::install(&creation_context.egui_ctx);
-                MotoliiMock::new()
-            });
+        let mut harness = harness();
         harness.run_steps(3);
         harness
             .render()

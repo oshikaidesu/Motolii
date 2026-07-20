@@ -67,7 +67,7 @@ impl Block {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ToolIcon {
     Select,
     Hand,
@@ -78,7 +78,12 @@ pub(crate) enum ToolIcon {
     Camera,
 }
 
-pub(crate) fn tool_button(ui: &mut egui::Ui, icon: ToolIcon, selected: bool) -> egui::Response {
+pub(crate) fn tool_button(
+    ui: &mut egui::Ui,
+    icon: ToolIcon,
+    selected: bool,
+    label: &str,
+) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(Vec2::new(29.0, 24.0), Sense::click());
     let painter = ui.painter();
     if selected || response.hovered() {
@@ -171,6 +176,9 @@ pub(crate) fn tool_button(ui: &mut egui::Ui, icon: ToolIcon, selected: bool) -> 
             );
         }
     };
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::Button, ui.is_enabled(), selected, label)
+    });
     response
 }
 
@@ -333,7 +341,7 @@ pub(crate) fn tag(ui: &mut egui::Ui, text: &str, color: Color32) {
         });
 }
 
-pub(crate) fn automation_mark(ui: &mut egui::Ui, active: bool) -> egui::Response {
+pub(crate) fn automation_mark(ui: &mut egui::Ui, active: bool, label: &str) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(18.0), Sense::click());
     let color = if active {
         theme::ACCENT
@@ -364,12 +372,21 @@ pub(crate) fn automation_mark(ui: &mut egui::Ui, active: bool) -> egui::Response
     }
     ui.painter()
         .add(egui::Shape::closed_line(points, Stroke::new(1.0, color)));
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::Button, ui.is_enabled(), active, label)
+    });
     response
 }
 
-pub(crate) fn scrub_control(ui: &mut egui::Ui, value: &mut f32, width: f32) -> egui::Response {
+pub(crate) fn scrub_control(
+    ui: &mut egui::Ui,
+    value: &mut f32,
+    width: f32,
+    allow_drag: bool,
+    label: &str,
+) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(Vec2::new(width, 24.0), Sense::click_and_drag());
-    if response.dragged() {
+    if allow_drag && response.dragged() {
         let delta = ui.input(|input| input.pointer.delta().x);
         *value = scrubbed_value(*value, delta);
     }
@@ -428,6 +445,7 @@ pub(crate) fn scrub_control(ui: &mut egui::Ui, value: &mut f32, width: f32) -> e
         FontId::monospace(8.0),
         theme::ACCENT,
     );
+    response.widget_info(|| egui::WidgetInfo::slider(ui.is_enabled(), *value as f64, label));
     response.on_hover_cursor(egui::CursorIcon::ResizeHorizontal)
 }
 

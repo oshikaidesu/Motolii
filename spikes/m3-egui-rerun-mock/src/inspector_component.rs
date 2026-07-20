@@ -19,6 +19,8 @@ pub(crate) struct InspectorState {
     pub(crate) intensity_automated: bool,
     pub(crate) spread_automated: bool,
     pub(crate) developer_info_open: bool,
+    drag_original: Option<InspectorSnapshot>,
+    drag_cancelled: bool,
 }
 
 impl Default for InspectorState {
@@ -31,8 +33,48 @@ impl Default for InspectorState {
             intensity_automated: true,
             spread_automated: false,
             developer_info_open: false,
+            drag_original: None,
+            drag_cancelled: false,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct InspectorSnapshot {
+    intensity: f32,
+    spread: f32,
+    blend: BlendMode,
+    intensity_automated: bool,
+    spread_automated: bool,
+}
+
+impl InspectorState {
+    pub(crate) fn snapshot(&self) -> InspectorSnapshot {
+        InspectorSnapshot {
+            intensity: self.intensity,
+            spread: self.spread,
+            blend: self.blend,
+            intensity_automated: self.intensity_automated,
+            spread_automated: self.spread_automated,
+        }
+    }
+
+    pub(crate) fn restore(&mut self, snapshot: InspectorSnapshot) {
+        self.intensity = snapshot.intensity;
+        self.spread = snapshot.spread;
+        self.blend = snapshot.blend;
+        self.intensity_automated = snapshot.intensity_automated;
+        self.spread_automated = snapshot.spread_automated;
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum InspectorAction {
+    Commit {
+        label: String,
+        before: InspectorSnapshot,
+    },
+    Cancelled,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,7 +94,19 @@ impl BlendMode {
     }
 }
 
-pub(crate) fn inspector_ui(ui: &mut egui::Ui, state: &mut InspectorState) {
+pub(crate) fn inspector_ui(
+    ui: &mut egui::Ui,
+    state: &mut InspectorState,
+) -> Option<InspectorAction> {
+    let before = state.snapshot();
+    let mut action = None;
+    if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
+        if let Some(original) = state.drag_original {
+            state.restore(original);
+            state.drag_cancelled = true;
+            action = Some(InspectorAction::Cancelled);
+        }
+    }
     ui.spacing_mut().item_spacing.y = 0.0;
     ui.painter().rect_filled(ui.max_rect(), 0.0, theme::PANEL);
     panel_header(ui);
@@ -61,12 +115,16 @@ pub(crate) fn inspector_ui(ui: &mut egui::Ui, state: &mut InspectorState) {
     identity_section(ui, fixture);
 
     match state.selected_effect {
-        InspectorEffect::EchoBloom => echo_bloom_panel(ui, state, fixture),
+        InspectorEffect::EchoBloom => {
+            let panel_action = echo_bloom_panel(ui, state, fixture, before);
+            action = action.or(panel_action);
+        }
         InspectorEffect::TypePulse => type_pulse_panel(ui, fixture),
         InspectorEffect::FoldField => fold_field_panel(ui, fixture),
     }
 
     developer_info(ui, state, fixture);
+    action
 }
 
 fn panel_header(ui: &mut egui::Ui) {
@@ -110,22 +168,45 @@ fn identity_section(ui: &mut egui::Ui, fixture: EffectFixture) {
     horizontal_rule(ui);
 }
 
-fn echo_bloom_panel(ui: &mut egui::Ui, state: &mut InspectorState, fixture: EffectFixture) {
+fn echo_bloom_panel(
+    ui: &mut egui::Ui,
+    state: &mut InspectorState,
+    fixture: EffectFixture,
+    before: InspectorSnapshot,
+) -> Option<InspectorAction> {
     section_title(ui, "ECHO BLOOM", "HOST PANEL", None);
     description(
         ui,
         "Layered light pulses that follow the selected object. Adjust Intensity and Spread while watching the Stage.",
     );
     value_row(ui, "Input", "Pulse rings composite", Some("TEXTURE"));
-    scrub_row(
+    let mut action = scrub_row(
         ui,
         "Intensity",
         &mut state.intensity,
         &mut state.intensity_automated,
+        &mut state.drag_original,
+        &mut state.drag_cancelled,
+        before,
     );
-    scrub_row(ui, "Spread", &mut state.spread, &mut state.spread_automated);
-    blend_row(ui, &mut state.blend);
+    let spread_action = scrub_row(
+        ui,
+        "Spread",
+        &mut state.spread,
+        &mut state.spread_automated,
+        &mut state.drag_original,
+        &mut state.drag_cancelled,
+        before,
+    );
+    action = action.or(spread_action);
+    if blend_row(ui, &mut state.blend) {
+        action = Some(InspectorAction::Commit {
+            label: "Blend".into(),
+            before,
+        });
+    }
     let _ = fixture;
+    action
 }
 
 fn type_pulse_panel(ui: &mut egui::Ui, fixture: EffectFixture) {
@@ -184,21 +265,50 @@ fn value_row(ui: &mut egui::Ui, label: &str, value: &str, tag: Option<&str>) {
     });
 }
 
-fn scrub_row(ui: &mut egui::Ui, label: &str, value: &mut f32, automated: &mut bool) {
+fn scrub_row(
+    ui: &mut egui::Ui,
+    label: &str,
+    value: &mut f32,
+    automated: &mut bool,
+    drag_original: &mut Option<InspectorSnapshot>,
+    drag_cancelled: &mut bool,
+    before: InspectorSnapshot,
+) -> Option<InspectorAction> {
+    let mut action = None;
     property_row(ui, |ui| {
         ui.allocate_ui_with_layout(
             Vec2::new(92.0, 21.0),
             Layout::left_to_right(Align::Center),
             |ui| {
                 ui.label(RichText::new(label).size(10.0).color(theme::TEXT_SECONDARY));
-                if automation_mark(ui, *automated).clicked() {
+                if automation_mark(ui, *automated, &format!("{label} automation")).clicked() {
                     *automated = !*automated;
+                    action = Some(InspectorAction::Commit {
+                        label: format!("{label} automation"),
+                        before,
+                    });
                 }
             },
         );
 
         let slider_width = (ui.available_width() - 55.0).max(54.0);
-        scrub_control(ui, value, slider_width).on_hover_text("左右へdragしてPreview");
+        let response = scrub_control(ui, value, slider_width, !*drag_cancelled, label)
+            .on_hover_text("左右へdragしてPreview · Escで取消");
+        if response.drag_started() {
+            *drag_original = Some(before);
+            *drag_cancelled = false;
+        }
+        if response.drag_stopped() {
+            if *drag_cancelled {
+                *drag_cancelled = false;
+                *drag_original = None;
+            } else if let Some(original) = drag_original.take() {
+                action = Some(InspectorAction::Commit {
+                    label: format!("{label} {:.0}%", *value * 100.0),
+                    before: original,
+                });
+            }
+        }
         ui.label(
             RichText::new(if *automated { "AUTO ON" } else { "AUTO OFF" })
                 .monospace()
@@ -206,17 +316,25 @@ fn scrub_row(ui: &mut egui::Ui, label: &str, value: &mut f32, automated: &mut bo
                 .color(theme::TEXT_MUTED),
         );
     });
+    action
 }
 
-fn automation_mark(ui: &mut egui::Ui, active: bool) -> egui::Response {
-    components::automation_mark(ui, active)
+fn automation_mark(ui: &mut egui::Ui, active: bool, label: &str) -> egui::Response {
+    components::automation_mark(ui, active, label)
 }
 
-fn scrub_control(ui: &mut egui::Ui, value: &mut f32, width: f32) -> egui::Response {
-    components::scrub_control(ui, value, width)
+fn scrub_control(
+    ui: &mut egui::Ui,
+    value: &mut f32,
+    width: f32,
+    allow_drag: bool,
+    label: &str,
+) -> egui::Response {
+    components::scrub_control(ui, value, width, allow_drag, label)
 }
 
-fn blend_row(ui: &mut egui::Ui, blend: &mut BlendMode) {
+fn blend_row(ui: &mut egui::Ui, blend: &mut BlendMode) -> bool {
+    let before = *blend;
     property_row(ui, |ui| {
         property_label(ui, "Blend");
         egui::ComboBox::from_id_salt("inspector-blend-mode")
@@ -233,6 +351,7 @@ fn blend_row(ui: &mut egui::Ui, blend: &mut BlendMode) {
                 }
             });
     });
+    *blend != before
 }
 
 fn property_row(ui: &mut egui::Ui, contents: impl FnOnce(&mut egui::Ui)) {

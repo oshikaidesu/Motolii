@@ -54,6 +54,23 @@ enum ResultView {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BrowserTab {
+    Media,
+    Effects,
+    Create,
+}
+
+impl BrowserTab {
+    fn index(self) -> usize {
+        match self {
+            Self::Media => 0,
+            Self::Effects => 1,
+            Self::Create => 2,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Source {
     All,
     Used,
@@ -96,6 +113,7 @@ struct Effect {
 
 #[derive(Debug)]
 pub(crate) struct BrowserState {
+    tab: BrowserTab,
     query: String,
     view: ResultView,
     source: Source,
@@ -108,6 +126,7 @@ pub(crate) struct BrowserState {
 impl Default for BrowserState {
     fn default() -> Self {
         Self {
+            tab: BrowserTab::Effects,
             query: String::new(),
             view: ResultView::Thumb,
             source: Source::All,
@@ -125,11 +144,20 @@ impl BrowserState {
     }
 }
 
-pub(crate) fn browser_ui(ui: &mut egui::Ui, state: &mut BrowserState) -> Option<&'static str> {
+pub(crate) enum BrowserAction {
+    EffectSelected(&'static str),
+    Status(&'static str),
+}
+
+pub(crate) fn browser_ui(ui: &mut egui::Ui, state: &mut BrowserState) -> Option<BrowserAction> {
     ui.spacing_mut().item_spacing.y = 0.0;
     ui.painter().rect_filled(ui.max_rect(), 0.0, theme::PANEL);
 
-    browser_header(ui);
+    let mut action = browser_header(ui, state);
+    if state.tab != BrowserTab::Effects {
+        simple_browser(ui, state);
+        return action;
+    }
     let mut changed = None;
     search_row(ui, state);
     ui.add_space(5.0);
@@ -147,12 +175,141 @@ pub(crate) fn browser_ui(ui: &mut egui::Ui, state: &mut BrowserState) -> Option<
             changed = results(ui, state);
         });
     });
-    changed
+    if let Some(id) = changed {
+        action = Some(BrowserAction::EffectSelected(id));
+    }
+    action
 }
 
-fn browser_header(ui: &mut egui::Ui) {
+fn browser_header(ui: &mut egui::Ui, state: &mut BrowserState) -> Option<BrowserAction> {
     components::panel_header(ui, "Browser", "MEDIA / CREATE / EFFECTS", theme::SHAPE);
-    let _ = components::tabs(ui, &["Media", "Effects", "Create"], 1, theme::SHAPE);
+    let clicked = components::tabs(
+        ui,
+        &["Media", "Effects", "Create"],
+        state.tab.index(),
+        theme::SHAPE,
+    );
+    clicked.map(|index| {
+        state.tab = match index {
+            0 => BrowserTab::Media,
+            2 => BrowserTab::Create,
+            _ => BrowserTab::Effects,
+        };
+        state.query.clear();
+        match state.tab {
+            BrowserTab::Media => BrowserAction::Status("Media browser · 6 items"),
+            BrowserTab::Effects => BrowserAction::Status("Effects browser · 3 results"),
+            BrowserTab::Create => BrowserAction::Status("Create browser · 8 registered items"),
+        }
+    })
+}
+
+fn simple_browser(ui: &mut egui::Ui, state: &mut BrowserState) {
+    let (placeholder, title, scope, items): (&str, &str, &str, &[(&str, &str, &str)]) =
+        match state.tab {
+            BrowserTab::Media => (
+                "Search media",
+                "All Media",
+                "6 ITEMS",
+                &[
+                    ("♪", "night_drive.wav", "PROJECT · USED"),
+                    ("◇", "logo.svg", "PROJECT · UNPLACED"),
+                    ("▧", "grain.png", "PROJECT · USED"),
+                    ("▶", "city_loop.mp4", "PROJECT · INBOX"),
+                    ("♪", "impact_04.wav", "AUDIO LIBRARY"),
+                    ("▧", "paper.png", "BRAND KIT"),
+                ],
+            ),
+            BrowserTab::Create => (
+                "Search create items",
+                "All Create items",
+                "REGISTERED PROVIDERS · 8",
+                &[
+                    ("□", "Rectangle", "SHAPE · BUILT-IN"),
+                    ("○", "Ellipse", "SHAPE · BUILT-IN"),
+                    ("T", "Text", "LAYER · BUILT-IN"),
+                    ("■", "Solid", "LAYER · BUILT-IN"),
+                    ("G", "Glyph Current", "GENERATOR · MOTION KIT"),
+                    ("T", "Type Pulse", "TEXT · MOTION KIT"),
+                    ("≋", "Ribbon Array", "MISSING · MOTION KIT"),
+                    ("✣", "Particle Field", "GENERATOR · ORBIT FORGE"),
+                ],
+            ),
+            BrowserTab::Effects => unreachable!(),
+        };
+
+    ui.horizontal(|ui| {
+        let width = (ui.available_width() - 81.0).max(52.0);
+        ui.add_sized(
+            [width, components::TOKENS.control_height],
+            egui::TextEdit::singleline(&mut state.query).hint_text(placeholder),
+        );
+        view_button(ui, state, ResultView::Visual, "S", "Thumbnail-only view");
+        view_button(ui, state, ResultView::Thumb, "G", "Thumbnail and name view");
+        view_button(ui, state, ResultView::Detail, "L", "List view");
+    });
+    ui.separator();
+    ui.horizontal(|ui| {
+        ui.allocate_ui_with_layout(
+            Vec2::new(106.0, ui.available_height()),
+            Layout::top_down(Align::Min),
+            |ui| {
+                let labels: &[(&str, &str)] = if state.tab == BrowserTab::Media {
+                    &[
+                        ("A", "All Media"),
+                        ("◆", "Project"),
+                        ("↺", "Recent"),
+                        ("▣", "City Source"),
+                        ("◎", "Favorites"),
+                        ("Aa", "Brand"),
+                    ]
+                } else {
+                    &[
+                        ("A", "All"),
+                        ("↺", "Recent"),
+                        ("○", "Shapes"),
+                        ("▱", "Layers"),
+                        ("✣", "Generators"),
+                        ("M", "Built-in"),
+                    ]
+                };
+                for (index, (glyph, label)) in labels.iter().enumerate() {
+                    let _ = nav_row(ui, glyph, label, index == 0, None);
+                }
+                section_title(ui, "Packs");
+                let _ = nav_row(ui, "P", "Motion Kit α", false, None);
+            },
+        );
+        ui.separator();
+        ui.vertical(|ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(title).strong());
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.label(
+                        RichText::new(scope)
+                            .monospace()
+                            .size(8.0)
+                            .color(theme::TEXT_MUTED),
+                    );
+                });
+            });
+            ui.separator();
+            let query = state.query.to_ascii_lowercase();
+            for (glyph, name, detail) in items.iter().filter(|(_, name, detail)| {
+                query.is_empty()
+                    || name.to_ascii_lowercase().contains(&query)
+                    || detail.to_ascii_lowercase().contains(&query)
+            }) {
+                let response = ui.add_sized(
+                    [ui.available_width(), 42.0],
+                    egui::Button::new(format!("{glyph}   {name}\n      {detail}"))
+                        .fill(theme::PANEL)
+                        .stroke(Stroke::new(1.0, theme::BORDER)),
+                );
+                response.on_hover_text("Double-click or drag to Stage");
+            }
+        });
+    });
 }
 
 fn search_row(ui: &mut egui::Ui, state: &mut BrowserState) {

@@ -22,7 +22,7 @@ MOTOLII_KITTEST_CAPTURE=/tmp/motolii-egui-mock.png \
   capture_full_mock -- --ignored
 ```
 
-画像比較と操作契約は分ける。画像側は上表の境界、16:9、選択枠・軌道・bar位置を確認する。操作側はBrowser検索・選択、Inspector scrub/blend、Stage transport、Timeline選択、panel resizeがmock-local stateだけを変えることを確認する。
+画像比較と操作契約は分ける。画像側は上表の境界、16:9、選択枠・軌道・bar位置を確認する。操作側はtoolbar選択、Browser 3 tab・検索・選択、Inspector scrub/blend/automation、Stage transport、Timeline選択、panel resizeがmock-local stateだけを変えることを確認する。scrubはdrag中だけPreviewし、releaseで1回だけ履歴へ積み、Escでは開始値へ戻して履歴を作らない。
 
 共通componentへの移行時は、移行直前の1440×900 captureに対するImageMagick RMSEも確認する。構造改善を理由に見た目を変更せず、意図したReact parity修正だけを別に判定する。
 
@@ -31,4 +31,4 @@ MOTOLII_KITTEST_CAPTURE=/tmp/motolii-egui-mock.png \
 - ReactのWeb icon fontは持ち込まず、eguiで確実に描画できる文字またはprimitiveへ置換する。
 - macOSではReactのfallbackと同じSF UI / SF Monoをsystem fontから読む。font rasterizer差によるsubpixel anti-aliasingだけはpixel一致の対象外。
 - Inspectorの値操作は通常sliderではなく、Reactと同じ24 px高の無限目盛scrub（10 px minor、50 px major、中央指標、右35 px値表示）で判定する。
-- Document、Undo、plugin host、GPU previewには接続しない。
+- Document、製品Undo、plugin host、GPU previewには接続しない。Undo/Redo表示は操作文法を比較するmock-local snapshotだけを対象にする。
