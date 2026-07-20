@@ -27,5 +27,6 @@ MOTOLII_KITTEST_CAPTURE=/tmp/motolii-egui-mock.png \
 ## 意図的な差
 
 - ReactのWeb icon fontは持ち込まず、eguiで確実に描画できる文字またはprimitiveへ置換する。
-- font rasterizer差によるsubpixel anti-aliasingはpixel一致の対象外。領域境界と情報階層を一致対象にする。
+- macOSではReactのfallbackと同じSF UI / SF Monoをsystem fontから読む。font rasterizer差によるsubpixel anti-aliasingだけはpixel一致の対象外。
+- Inspectorの値操作は通常sliderではなく、Reactと同じ24 px高の無限目盛scrub（10 px minor、50 px major、中央指標、右35 px値表示）で判定する。
 - Document、Undo、plugin host、GPU previewには接続しない。

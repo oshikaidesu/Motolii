@@ -92,20 +92,20 @@ pub(crate) fn stage_ui(ui: &mut egui::Ui, state: &mut StageState) {
         |ui| {
             ui.spacing_mut().item_spacing.x = 5.0;
             ui.add_space(8.0);
-            if quiet_button(ui, "|<")
+            if quiet_button(ui, "|‹")
                 .on_hover_text("Previous key")
                 .clicked()
             {
                 state.previous_key_requested = true;
             }
-            let play_glyph = if state.playing { "[]" } else { ">" };
+            let play_glyph = if state.playing { "■" } else { "▶" };
             if quiet_button(ui, play_glyph)
                 .on_hover_text(if state.playing { "Pause" } else { "Play" })
                 .clicked()
             {
                 state.playing = !state.playing;
             }
-            if quiet_button(ui, ">|").on_hover_text("Next key").clicked() {
+            if quiet_button(ui, "›|").on_hover_text("Next key").clicked() {
                 state.next_key_requested = true;
             }
             ui.label(

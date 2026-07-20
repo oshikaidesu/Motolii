@@ -1,4 +1,4 @@
-use eframe::egui::{self, Color32, FontData, FontDefinitions, FontFamily, Stroke};
+use eframe::egui::{self, Color32, FontData, FontDefinitions, FontFamily, FontTweak, Stroke};
 
 pub const APP: Color32 = Color32::from_rgb(20, 20, 20);
 pub const PANEL: Color32 = Color32::from_rgb(26, 26, 26);
@@ -17,7 +17,7 @@ pub const WAY_STAGE: Color32 = Color32::from_rgb(188, 160, 114);
 pub const WAY_INSPECTOR: Color32 = Color32::from_rgb(142, 176, 134);
 
 pub fn install(context: &egui::Context) {
-    install_cjk_fallback(context);
+    install_mock_fonts(context);
     context.set_theme(egui::Theme::Dark);
 
     let mut visuals = egui::Visuals::dark();
@@ -71,26 +71,64 @@ pub fn install(context: &egui::Context) {
     context.set_style_of(egui::Theme::Dark, style);
 }
 
-fn install_cjk_fallback(context: &egui::Context) {
-    const CANDIDATES: &[&str] = &[
+fn install_mock_fonts(context: &egui::Context) {
+    const CJK_CANDIDATES: &[&str] = &[
         "/System/Library/Fonts/Hiragino Sans GB.ttc",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
     ];
-    let Some(bytes) = CANDIDATES.iter().find_map(|path| std::fs::read(path).ok()) else {
-        return;
-    };
-
     let mut fonts = FontDefinitions::default();
-    fonts
-        .font_data
-        .insert("motolii-cjk".into(), FontData::from_owned(bytes).into());
-    for family in [FontFamily::Proportional, FontFamily::Monospace] {
+
+    if let Ok(bytes) = std::fs::read("/System/Library/Fonts/SFNS.ttf") {
+        fonts.font_data.insert(
+            "motolii-interface".into(),
+            FontData::from_owned(bytes)
+                .tweak(FontTweak {
+                    scale: 1.18,
+                    y_offset_factor: 0.02,
+                    hinting: Some(true),
+                    ..Default::default()
+                })
+                .into(),
+        );
         fonts
             .families
-            .entry(family)
+            .entry(FontFamily::Proportional)
             .or_default()
-            .push("motolii-cjk".into());
+            .insert(0, "motolii-interface".into());
+    }
+    if let Ok(bytes) = std::fs::read("/System/Library/Fonts/SFNSMono.ttf") {
+        fonts.font_data.insert(
+            "motolii-technical".into(),
+            FontData::from_owned(bytes)
+                .tweak(FontTweak {
+                    scale: 1.14,
+                    y_offset_factor: 0.02,
+                    hinting: Some(true),
+                    ..Default::default()
+                })
+                .into(),
+        );
+        fonts
+            .families
+            .entry(FontFamily::Monospace)
+            .or_default()
+            .insert(0, "motolii-technical".into());
+    }
+    if let Some(bytes) = CJK_CANDIDATES
+        .iter()
+        .find_map(|path| std::fs::read(path).ok())
+    {
+        fonts
+            .font_data
+            .insert("motolii-cjk".into(), FontData::from_owned(bytes).into());
+        for family in [FontFamily::Proportional, FontFamily::Monospace] {
+            fonts
+                .families
+                .entry(family)
+                .or_default()
+                .push("motolii-cjk".into());
+        }
     }
     context.set_fonts(fonts);
 }

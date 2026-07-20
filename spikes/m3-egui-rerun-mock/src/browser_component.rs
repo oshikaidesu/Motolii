@@ -132,6 +132,7 @@ pub(crate) fn browser_ui(ui: &mut egui::Ui, state: &mut BrowserState) -> Option<
     browser_header(ui);
     let mut changed = None;
     search_row(ui, state);
+    ui.add_space(5.0);
     ui.separator();
 
     let available = ui.available_size();
@@ -236,8 +237,8 @@ fn source_rail(ui: &mut egui::Ui, state: &mut BrowserState) {
 
     for (source, glyph, label) in [
         (Source::All, "A", "All"),
-        (Source::Used, "U", "Used"),
-        (Source::Recent, "R", "Recent"),
+        (Source::Used, "◇", "Used"),
+        (Source::Recent, "↺", "Recent"),
     ] {
         if nav_row(ui, glyph, label, state.source == source, None).clicked() {
             state.source = source;
@@ -248,7 +249,7 @@ fn source_rail(ui: &mut egui::Ui, state: &mut BrowserState) {
 
     section_title(ui, "Collections");
     for (collection, glyph, label) in [
-        (Collection::Favorites, "O", "Favorites"),
+        (Collection::Favorites, "◎", "Favorites"),
         (Collection::Type, "Aa", "Type"),
     ] {
         let selected = state.collection == Some(collection);
@@ -260,10 +261,10 @@ fn source_rail(ui: &mut egui::Ui, state: &mut BrowserState) {
 
     section_title(ui, "Tags");
     for (tag, glyph, label) in [
-        (Tag::GoTo, "O", "Go-to"),
+        (Tag::GoTo, "◎", "Go-to"),
         (Tag::Atmosphere, "@", "Atmosphere"),
         (Tag::Kinetic, "~", "Kinetic"),
-        (Tag::Review, "K", "Review"),
+        (Tag::Review, "✓", "Review"),
     ] {
         let selected = state.tag == Some(tag);
         if nav_row(ui, glyph, label, selected, Some(tag_count(tag))).clicked() {
@@ -273,7 +274,7 @@ fn source_rail(ui: &mut egui::Ui, state: &mut BrowserState) {
 
     section_title(ui, "Packs");
     let selected = state.pack == Some(Pack::MotionKitAlpha);
-    if nav_row(ui, "P", "Motion Kit A", selected, None).clicked() {
+    if nav_row(ui, "P", "Motion Kit α", selected, None).clicked() {
         state.pack = if selected {
             None
         } else {
@@ -283,7 +284,7 @@ fn source_rail(ui: &mut egui::Ui, state: &mut BrowserState) {
     }
 
     ui.add_space(6.0);
-    ui.add_sized([100.0, 24.0], egui::Button::new("+ Save current..."))
+    ui.add_sized([100.0, 24.0], egui::Button::new("＋ Save current…"))
         .on_hover_text("Save current effect");
 }
 
@@ -487,7 +488,7 @@ fn effect_card(ui: &mut egui::Ui, effect: &Effect, state: &BrowserState, width: 
         painter.text(
             mark_center,
             Align2::CENTER_CENTER,
-            ">",
+            "▶",
             FontId::proportional(8.0),
             theme::TEXT_SECONDARY,
         );

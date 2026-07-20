@@ -3,7 +3,7 @@ use crate::inspector_component::{inspector_ui, InspectorEffect, InspectorState};
 use crate::stage_component::{stage_ui, StageState};
 use crate::theme;
 use crate::timeline_component::{timeline_ui, TimelineState};
-use eframe::egui::{self, Align, Layout, RichText, Stroke};
+use eframe::egui::{self, Align, Layout, Rect, RichText, Sense, Stroke, StrokeKind, Vec2};
 use egui_tiles::{Container, Tile, Tree, UiResponse};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,18 +89,17 @@ impl MotoliiMock {
             .show(root, |ui| {
                 ui.horizontal_centered(|ui| {
                     ui.add_space(4.0);
-                    for (glyph, hint) in [
-                        ("V", "Select"),
-                        ("C", "Camera"),
-                        ("O", "Shape"),
-                        ("T", "Text"),
-                        ("~", "Pen"),
-                        ("Z", "Depth"),
-                        ("[]", "Frame"),
+                    for (icon, hint) in [
+                        (ToolIcon::Select, "Select"),
+                        (ToolIcon::Hand, "Hand"),
+                        (ToolIcon::Shape, "Shape"),
+                        (ToolIcon::Text, "Text"),
+                        (ToolIcon::Connect, "Connect"),
+                        (ToolIcon::Relative, "Relative Move"),
+                        (ToolIcon::Camera, "Camera"),
                     ] {
                         let selected = hint == "Select";
-                        if ui
-                            .selectable_label(selected, glyph)
+                        if tool_button(ui, icon, selected)
                             .on_hover_text(hint)
                             .clicked()
                         {
@@ -173,6 +172,113 @@ impl MotoliiMock {
                 );
             });
     }
+}
+
+#[derive(Clone, Copy)]
+enum ToolIcon {
+    Select,
+    Hand,
+    Shape,
+    Text,
+    Connect,
+    Relative,
+    Camera,
+}
+
+fn tool_button(ui: &mut egui::Ui, icon: ToolIcon, selected: bool) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(29.0, 24.0), Sense::click());
+    let painter = ui.painter();
+    if selected || response.hovered() {
+        painter.rect_filled(
+            rect,
+            0.0,
+            if selected {
+                theme::RAISED
+            } else {
+                theme::HOVER
+            },
+        );
+        painter.rect_stroke(
+            rect,
+            0.0,
+            Stroke::new(1.0, if selected { theme::TEXT } else { theme::BORDER }),
+            StrokeKind::Inside,
+        );
+    }
+    let c = rect.center();
+    let stroke = Stroke::new(1.15, theme::TEXT_SECONDARY);
+    match icon {
+        ToolIcon::Select => {
+            painter.line_segment([c + Vec2::new(-5.0, -5.0), c + Vec2::new(4.0, 4.0)], stroke);
+            painter.line_segment(
+                [c + Vec2::new(-5.0, -5.0), c + Vec2::new(-4.0, 1.0)],
+                stroke,
+            );
+            painter.line_segment(
+                [c + Vec2::new(-5.0, -5.0), c + Vec2::new(1.0, -4.0)],
+                stroke,
+            );
+        }
+        ToolIcon::Hand => {
+            painter.line_segment([c + Vec2::new(-5.0, 0.0), c + Vec2::new(5.0, 0.0)], stroke);
+            painter.line_segment([c + Vec2::new(0.0, -5.0), c + Vec2::new(0.0, 5.0)], stroke);
+            painter.line_segment([c + Vec2::new(-3.5, -3.5), c + Vec2::new(3.5, 3.5)], stroke);
+            painter.line_segment([c + Vec2::new(3.5, -3.5), c + Vec2::new(-3.5, 3.5)], stroke);
+        }
+        ToolIcon::Shape => {
+            painter.add(egui::Shape::closed_line(
+                vec![
+                    c + Vec2::new(0.0, -5.0),
+                    c + Vec2::new(5.0, 0.0),
+                    c + Vec2::new(0.0, 5.0),
+                    c + Vec2::new(-5.0, 0.0),
+                ],
+                stroke,
+            ));
+        }
+        ToolIcon::Text => {
+            painter.text(
+                c,
+                egui::Align2::CENTER_CENTER,
+                "T",
+                egui::FontId::proportional(11.0),
+                theme::TEXT_SECONDARY,
+            );
+        }
+        ToolIcon::Connect => {
+            painter.line_segment(
+                [c + Vec2::new(-5.0, 3.0), c + Vec2::new(-1.0, -3.0)],
+                stroke,
+            );
+            painter.line_segment([c + Vec2::new(-1.0, -3.0), c + Vec2::new(4.0, 2.0)], stroke);
+            painter.circle_filled(c + Vec2::new(-5.0, 3.0), 1.5, theme::TEXT_SECONDARY);
+            painter.circle_filled(c + Vec2::new(4.0, 2.0), 1.5, theme::TEXT_SECONDARY);
+        }
+        ToolIcon::Relative => {
+            painter.add(egui::Shape::closed_line(
+                vec![
+                    c + Vec2::new(0.0, -5.0),
+                    c + Vec2::new(5.0, 5.0),
+                    c + Vec2::new(-5.0, 5.0),
+                ],
+                stroke,
+            ));
+        }
+        ToolIcon::Camera => {
+            painter.rect_stroke(
+                Rect::from_center_size(c, Vec2::new(10.0, 8.0)),
+                0.0,
+                stroke,
+                StrokeKind::Inside,
+            );
+            painter.rect_filled(
+                Rect::from_center_size(c, Vec2::new(4.0, 3.0)),
+                0.0,
+                theme::TEXT_SECONDARY,
+            );
+        }
+    }
+    response
 }
 
 impl eframe::App for MotoliiMock {

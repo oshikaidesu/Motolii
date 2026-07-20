@@ -1,6 +1,6 @@
 use crate::theme;
 use eframe::egui::{
-    self, Align, Color32, FontId, Layout, Rect, RichText, Sense, Stroke, StrokeKind, Vec2,
+    self, pos2, Align, Color32, FontId, Layout, Rect, RichText, Sense, Stroke, StrokeKind, Vec2,
 };
 
 const PANEL_HEADER_HEIGHT: f32 = 29.0;
@@ -231,45 +231,14 @@ fn scrub_row(ui: &mut egui::Ui, label: &str, value: &mut f32, automated: &mut bo
             Layout::left_to_right(Align::Center),
             |ui| {
                 ui.label(RichText::new(label).size(10.0).color(theme::TEXT_SECONDARY));
-                let mark = if *automated { "K" } else { "o" };
-                if ui
-                    .add_sized(
-                        [18.0, 18.0],
-                        egui::Button::new(RichText::new(mark).size(9.0).color(if *automated {
-                            theme::ACCENT
-                        } else {
-                            theme::TEXT_MUTED
-                        }))
-                        .fill(theme::APP)
-                        .stroke(Stroke::new(
-                            1.0,
-                            if *automated {
-                                theme::ACCENT
-                            } else {
-                                theme::BORDER
-                            },
-                        ))
-                        .corner_radius(0.0),
-                    )
-                    .clicked()
-                {
+                if automation_mark(ui, *automated).clicked() {
                     *automated = !*automated;
                 }
             },
         );
 
         let slider_width = (ui.available_width() - 55.0).max(54.0);
-        let response = ui.add_sized(
-            [slider_width, 21.0],
-            egui::Slider::new(value, 0.0..=1.0).show_value(false),
-        );
-        response.on_hover_text("左右へdragしてPreview");
-        ui.label(
-            RichText::new(format!("{:.0}%", *value * 100.0))
-                .monospace()
-                .size(8.0)
-                .color(theme::ACCENT),
-        );
+        scrub_control(ui, value, slider_width).on_hover_text("左右へdragしてPreview");
         ui.label(
             RichText::new(if *automated { "AUTO ON" } else { "AUTO OFF" })
                 .monospace()
@@ -277,6 +246,113 @@ fn scrub_row(ui: &mut egui::Ui, label: &str, value: &mut f32, automated: &mut bo
                 .color(theme::TEXT_MUTED),
         );
     });
+}
+
+fn automation_mark(ui: &mut egui::Ui, active: bool) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(18.0), Sense::click());
+    let color = if active {
+        theme::ACCENT
+    } else {
+        theme::TEXT_MUTED
+    };
+    ui.painter().rect_filled(rect, 0.0, theme::APP);
+    ui.painter().rect_stroke(
+        rect,
+        0.0,
+        Stroke::new(1.0, if active { theme::ACCENT } else { theme::BORDER }),
+        StrokeKind::Inside,
+    );
+    let center = rect.center();
+    let points = vec![
+        center + Vec2::new(0.0, -4.0),
+        center + Vec2::new(4.0, 0.0),
+        center + Vec2::new(0.0, 4.0),
+        center + Vec2::new(-4.0, 0.0),
+    ];
+    if active {
+        ui.painter().rect_stroke(
+            rect.shrink(2.0),
+            0.0,
+            Stroke::new(1.0, theme::ACCENT.gamma_multiply(0.25)),
+            StrokeKind::Inside,
+        );
+    }
+    ui.painter()
+        .add(egui::Shape::closed_line(points, Stroke::new(1.0, color)));
+    response
+}
+
+fn scrub_control(ui: &mut egui::Ui, value: &mut f32, width: f32) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, 24.0), Sense::click_and_drag());
+    if response.dragged() {
+        let delta = ui.input(|input| input.pointer.delta().x);
+        *value = scrubbed_value(*value, delta);
+    }
+
+    let painter = ui.painter();
+    let border = if response.dragged() {
+        theme::ACCENT
+    } else {
+        theme::BORDER
+    };
+    painter.rect_filled(rect, 0.0, theme::APP);
+    painter.rect_stroke(rect, 0.0, Stroke::new(1.0, border), StrokeKind::Inside);
+
+    let dial = Rect::from_min_max(
+        rect.left_top() + Vec2::new(4.0, 3.0),
+        rect.right_bottom() - Vec2::new(43.0, 3.0),
+    );
+    let shift = (*value * 200.0) % 50.0;
+    let mut x = dial.left() - 50.0 + shift;
+    while x <= dial.right() + 50.0 {
+        let major = (((x - dial.left() - shift) / 50.0).round() as i32).rem_euclid(1) == 0;
+        painter.line_segment(
+            [
+                pos2(x, if major { dial.top() } else { dial.center().y }),
+                pos2(x, dial.bottom()),
+            ],
+            Stroke::new(
+                1.0,
+                if major {
+                    theme::ACCENT
+                } else {
+                    theme::BORDER_STRONG
+                },
+            ),
+        );
+        for minor in 1..5 {
+            let minor_x = x + minor as f32 * 10.0;
+            painter.line_segment(
+                [pos2(minor_x, dial.center().y), pos2(minor_x, dial.bottom())],
+                Stroke::new(1.0, theme::BORDER_STRONG),
+            );
+        }
+        x += 50.0;
+    }
+    painter.line_segment(
+        [
+            pos2(dial.center().x, dial.top()),
+            pos2(dial.center().x, dial.bottom()),
+        ],
+        Stroke::new(1.0, theme::TEXT),
+    );
+    let value_rect = Rect::from_min_max(
+        pos2(rect.right() - 43.0, rect.top() + 1.0),
+        rect.right_bottom() - Vec2::splat(1.0),
+    );
+    painter.rect_filled(value_rect, 0.0, theme::APP);
+    painter.text(
+        value_rect.center(),
+        egui::Align2::CENTER_CENTER,
+        format!("{:.0}%", *value * 100.0),
+        FontId::monospace(8.0),
+        theme::ACCENT,
+    );
+    response.on_hover_cursor(egui::CursorIcon::ResizeHorizontal)
+}
+
+fn scrubbed_value(value: f32, pointer_delta: f32) -> f32 {
+    (value + pointer_delta / 100.0).clamp(0.0, 1.0)
 }
 
 fn blend_row(ui: &mut egui::Ui, blend: &mut BlendMode) {
@@ -448,5 +524,17 @@ fn effect_fixture(effect: InspectorEffect) -> EffectFixture {
             identity: "demo.fold-field",
             accent: theme::WARNING,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::scrubbed_value;
+
+    #[test]
+    fn scrub_is_horizontal_and_clamped() {
+        assert_eq!(scrubbed_value(0.64, 10.0), 0.74);
+        assert_eq!(scrubbed_value(0.95, 20.0), 1.0);
+        assert_eq!(scrubbed_value(0.05, -20.0), 0.0);
     }
 }
