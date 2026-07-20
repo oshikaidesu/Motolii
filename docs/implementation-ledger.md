@@ -39,7 +39,7 @@
 | M0 | `DONE` | spike完了 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み |
 | M2 | **基盤再締結済み** | D1l、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。D5は再締結の閉集合外で、骨格到達・統合審判pending |
-| M3 | **段階発注可 / Uシリーズ直列選択中** | U0a、U0b-1、U0b-2、U0c-1、U0c-2、U0d-1、U0d-2、U0d-3、U2a-0、U2a-1、U1a-1、U1a-2、U1b-1完了。次はU1b-2を単独実装 |
+| M3 | **段階発注可 / Uシリーズ直列選択中** | U0a、U0b-1、U0b-2、U0c-1、U0c-2、U0d-1、U0d-2、U0d-3、U2a-0、U2a-1、U1a-1、U1a-2、U1b-1、U1b-2完了。次はU2b-1を単独実装 |
 | M4 | **契約spike可** | K0でRoD/RoIのruntime契約を凍結。その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む |
 | M5 | **identity spike可** | P0IでDuplicator/Instance identityを凍結 |
 
@@ -53,7 +53,7 @@ D1l DONE → D3e → U2g（M3入場後）→ K2
 
 Selected U series:
 U0a DONE → U0b-1 DONE → U0b-2 DONE → U0c-1 DONE → U0c-2 DONE → U0d-1 DONE → U0d-2 DONE → U0d-3 DONE
-→ U2a-0 DONE → U2a-1 DONE → U1a-1 DONE → U1a-2 DONE → U1b-1 DONE → U1b-2 → U2b-1 → U2c-1〜5
+→ U2a-0 DONE → U2a-1 DONE → U1a-1 DONE → U1a-2 DONE → U1b-1 DONE → U1b-2 DONE → U2b-1 → U2c-1〜5
 → U0e-1 → U0e-2 → G0-6H → U0e-3 → U3a → U4a-1 → U4a-2
 
 Unified Camera:
@@ -93,7 +93,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 | 優先 | ID | Phase | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
-| 1 | U1b-2 | M3 | `DO` | — | U1b-1完了。最新mainからstale resultのevent-loop投影だけを実装する | U2b-1を単独実行 |
+| 1 | U2b-1 | M3 | `DO` | — | U1b-2完了。最新mainからUI→single writer→`Arc<Document>`購読E2Eだけを実装する | U2c-1を単独実行 |
 
 K0 [#167](https://github.com/oshikaidesu/Motolii/issues/167)とP0I
 [#170](https://github.com/oshikaidesu/Motolii/issues/170)は論理上`DO`の独立spikeだが、
@@ -106,7 +106,7 @@ Uシリーズ直列選択中は未選択とし、同時着手しない。
 | 順序 | ID | Phase | 状態 | 起票条件 | 次の出口 |
 |---|---|---|---|---|---|
 | 1 | D1j | M2 | `DONE` | CAM-G0 merge（D1lはmain到達済み） | v5 planar camera schema/default migration |
-| 2 | U1b-1 | M3 | `DONE` | U1a-2 merge | render worker/latest mailbox。古い結果E2EはU1b-2 |
+| 2 | U1b-2 | M3 | `DONE` | U1b-1 merge | 最新世代だけをevent loopで表示し、古い結果を破棄 |
 | 3 | U3a | M3 | `WAIT` | U0a + U0b merge | timeline基盤、U2gのUI依存を解除 |
 | 4 | U2g | M3 | `WAIT` | D1l + D3e + U0e + U2b + U3a merge | Effect常時接続線 |
 | 5 | K1a | M4 | `WAIT` | K0 merge | ResourceLedgerとhard budget。backendの空きVRAM値を正本にしない |
@@ -166,7 +166,7 @@ U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除
 | resource設定を出す | G0-2 + G0-8 + U0b + K1a → U0f。設定はUser settings、pressure実測値はTransient |
 | 重いpreviewを追従させる | U1b + U1c + U5 + K1d → U1g。project fps/audio clockを変えず表示frameだけ落とす |
 
-したがって現在の短い運用判断は、**M2基盤再締結とD3e、D1m、CAM-G0、D1j、D1k-S、D1k、D3f、M3 U0a、U0b-1、U0b-2、U0c-1、U0c-2、U0d-1、U0d-2、U0d-3、U2a-0、U2a-1、U1a-1、U1a-2、U1b-1は完了済み**。初回Uシリーズは並走させず、U1b-1のmain merge後に`U1b-2`だけを進める。Rerunのcommit固定source監査と資産分類は可能だが、現在のUシリーズ実装と並走させない。D5は骨格を完了扱いせず、本番preview／GPU計測／実機E2Eを後続へ残す。
+したがって現在の短い運用判断は、**M2基盤再締結とD3e、D1m、CAM-G0、D1j、D1k-S、D1k、D3f、M3 U0a、U0b-1、U0b-2、U0c-1、U0c-2、U0d-1、U0d-2、U0d-3、U2a-0、U2a-1、U1a-1、U1a-2、U1b-1、U1b-2は完了済み**。初回Uシリーズは並走させず、U1b-2のmain merge後に`U2b-1`だけを進める。Rerunのcommit固定source監査と資産分類は可能だが、現在のUシリーズ実装と並走させない。D5は骨格を完了扱いせず、本番preview／GPU計測／実機E2Eを後続へ残す。
 
 ## 更新規則
 

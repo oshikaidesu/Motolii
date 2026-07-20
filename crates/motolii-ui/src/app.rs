@@ -4,14 +4,20 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use egui_tiles::{Behavior, EditAction, Tile, TileId, Tiles, UiResponse};
+use motolii_gpu::GpuCtx;
 
 use crate::command_registry::builtin_command_registry;
+use crate::display_slot::DisplaySlotError;
 use crate::input_router::{ImeGateState, InputRouter, NormalizedInput};
 use crate::layout::{LayoutAction, LayoutConstraints, PanelRole, SeparatorAction};
 use crate::layout_authority::{LayoutAuthority, RuntimeFrameEdit};
 use crate::layout_runtime::{RuntimeLayout, RuntimeSeparator};
 use crate::layout_runtime_adapter::{
     read_layout_cancel, read_safety_interrupt, read_separator_action,
+};
+use crate::render_worker::{
+    RenderGeneration, RenderRequest, RenderSubmitError, RenderWorkerClient, RenderWorkerError,
+    RepaintSignalEpoch, RepaintSignalRegistrationError,
 };
 use crate::static_preview::{StaticPreview, StaticPreviewEvidence};
 
@@ -25,6 +31,10 @@ pub(crate) enum AppConstructionError {
     CommandRegistry(#[from] crate::CommandRegistryError),
     #[error(transparent)]
     Layout(#[from] crate::layout::LayoutError),
+    #[error(transparent)]
+    Submit(#[from] RenderSubmitError),
+    #[error(transparent)]
+    RepaintSignal(#[from] RepaintSignalRegistrationError),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -77,10 +87,47 @@ impl StaticViewportProjection {
             ShellLifecycleInput::Minimized => self.minimized = true,
             ShellLifecycleInput::Restored => self.minimized = false,
         }
-        if preview.invariant_evidence() != self.baseline {
+        let current = preview.invariant_evidence();
+        if current.document_json != self.baseline.document_json
+            || current.slot.slot_id != self.baseline.slot.slot_id
+            || current.slot.registration_count != self.baseline.slot.registration_count
+            || current.render_count != self.baseline.render_count
+        {
             return Err(LifecycleInvariantError);
         }
         Ok(())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+enum PreviewProjectionFailure {
+    #[error(transparent)]
+    Worker(RenderWorkerError),
+    #[error(transparent)]
+    Display(DisplaySlotError),
+    #[error(transparent)]
+    RepaintSignal(RepaintSignalRegistrationError),
+}
+
+#[derive(Debug, Default)]
+struct LatestResultProjection {
+    last_displayed_generation: Option<RenderGeneration>,
+}
+
+impl LatestResultProjection {
+    fn accepts(
+        &self,
+        result_generation: RenderGeneration,
+        latest_accepted_generation: Option<RenderGeneration>,
+    ) -> bool {
+        Some(result_generation) == latest_accepted_generation
+            && self
+                .last_displayed_generation
+                .is_none_or(|displayed| result_generation > displayed)
+    }
+
+    fn commit(&mut self, generation: RenderGeneration) {
+        self.last_displayed_generation = Some(generation);
     }
 }
 
@@ -96,15 +143,40 @@ pub(crate) struct MotoliiApp {
     ime_gate: ImeGateState,
     layout_evidence_logged: bool,
     layout_failure: Option<String>,
+    gpu: Arc<GpuCtx>,
+    render_client: RenderWorkerClient,
+    repaint_context: egui::Context,
+    last_handled_signal_failure: Option<RepaintSignalEpoch>,
+    latest_projection: LatestResultProjection,
+    preview_failure: Option<PreviewProjectionFailure>,
+    latest_smoke: Option<LatestPreviewSmoke>,
+}
+
+pub(crate) struct AppPreviewRuntime {
+    pub(crate) preview: Arc<StaticPreview>,
+    pub(crate) gpu: Arc<GpuCtx>,
+    pub(crate) render_client: RenderWorkerClient,
+    pub(crate) initial_request: RenderRequest,
+}
+
+pub(crate) struct AppSmokeConfig {
+    pub(crate) lifecycle: bool,
+    pub(crate) latest_preview: bool,
+    pub(crate) outcome: Arc<Mutex<LifecycleSmokeOutcome>>,
 }
 
 impl MotoliiApp {
     pub(crate) fn new(
         cc: &eframe::CreationContext<'_>,
-        preview: Arc<StaticPreview>,
-        lifecycle_smoke: bool,
-        smoke_outcome: Arc<Mutex<LifecycleSmokeOutcome>>,
+        runtime: AppPreviewRuntime,
+        smoke: AppSmokeConfig,
     ) -> Result<Self, AppConstructionError> {
+        let AppPreviewRuntime {
+            preview,
+            gpu,
+            render_client,
+            initial_request,
+        } = runtime;
         let render_state = cc
             .wgpu_render_state
             .as_ref()
@@ -115,6 +187,9 @@ impl MotoliiApp {
                 .slot()
                 .register_once(&render_state.device, &mut renderer)
         };
+        let repaint_context = cc.egui_ctx.clone();
+        register_repaint_signal(&render_client, &repaint_context)?;
+        let initial_generation = render_client.submit(initial_request)?;
         let evidence = preview.invariant_evidence();
         eprintln!(
             "U1A1_REGISTER slot={} texture={texture_id:?} registrations={} copies={} renders={}",
@@ -130,13 +205,22 @@ impl MotoliiApp {
             texture_id,
             projection,
             paint_count: 0,
-            smoke: lifecycle_smoke.then(LifecycleSmoke::new),
-            smoke_outcome,
+            smoke: smoke.lifecycle.then(LifecycleSmoke::new),
+            smoke_outcome: smoke.outcome,
             layout_authority,
             input_router: InputRouter::new(builtin_command_registry()?),
             ime_gate: ImeGateState::Inactive,
             layout_evidence_logged: false,
             layout_failure: None,
+            gpu,
+            render_client,
+            repaint_context,
+            last_handled_signal_failure: None,
+            latest_projection: LatestResultProjection::default(),
+            preview_failure: None,
+            latest_smoke: smoke
+                .latest_preview
+                .then(|| LatestPreviewSmoke::new(evidence, initial_generation)),
         })
     }
 
@@ -149,6 +233,11 @@ impl MotoliiApp {
 
 impl eframe::App for MotoliiApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.recover_repaint_signal();
+        self.drain_latest_result();
+        if self.advance_latest_smoke(ctx) {
+            return;
+        }
         let Some(smoke) = &mut self.smoke else {
             return;
         };
@@ -156,6 +245,8 @@ impl eframe::App for MotoliiApp {
             ctx,
             self.paint_count,
             self.texture_id,
+            self.latest_projection.last_displayed_generation
+                == self.render_client.latest_accepted_generation(),
             &mut self.projection,
             &self.preview,
         ) {
@@ -323,13 +414,115 @@ fn runtime_edit_after_separator_action(
 }
 
 impl MotoliiApp {
+    fn recover_repaint_signal(&mut self) {
+        let Some(failed_epoch) = self.render_client.failed_repaint_signal_epoch() else {
+            return;
+        };
+        if self.last_handled_signal_failure == Some(failed_epoch) {
+            return;
+        }
+        match register_repaint_signal(&self.render_client, &self.repaint_context) {
+            Ok(()) => self.last_handled_signal_failure = Some(failed_epoch),
+            Err(error) => {
+                self.record_preview_failure(PreviewProjectionFailure::RepaintSignal(error));
+            }
+        }
+    }
+
+    fn drain_latest_result(&mut self) {
+        let Some(result) = self.render_client.try_take_latest() else {
+            return;
+        };
+        let latest = self.render_client.latest_accepted_generation();
+        if !self.latest_projection.accepts(result.generation, latest) {
+            return;
+        }
+        let rendered = match result.result {
+            Ok(rendered) => rendered,
+            Err(error) => {
+                self.record_preview_failure(PreviewProjectionFailure::Worker(error));
+                return;
+            }
+        };
+        if let Err(error) = self.preview.slot().copy(&self.gpu, &rendered) {
+            self.record_preview_failure(PreviewProjectionFailure::Display(error));
+            return;
+        }
+        self.latest_projection.commit(result.generation);
+    }
+
+    fn advance_latest_smoke(&mut self, ctx: &egui::Context) -> bool {
+        let Some(smoke) = &self.latest_smoke else {
+            return false;
+        };
+        if self.latest_projection.last_displayed_generation == Some(smoke.expected_generation) {
+            let evidence = self.preview.invariant_evidence();
+            if evidence.slot.slot_id == smoke.baseline.slot.slot_id
+                && evidence.slot.registration_count == smoke.baseline.slot.registration_count
+                && evidence.slot.copy_count == smoke.baseline.slot.copy_count + 1
+                && evidence.document_json == smoke.baseline.document_json
+            {
+                eprintln!(
+                    "U1B2_LATEST passed slot={} registrations={} copies={} generation={}",
+                    evidence.slot.slot_id,
+                    evidence.slot.registration_count,
+                    evidence.slot.copy_count,
+                    smoke.expected_generation.get()
+                );
+                if let Ok(mut outcome) = self.smoke_outcome.lock() {
+                    *outcome = LifecycleSmokeOutcome::Passed;
+                }
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                return true;
+            }
+        }
+        if Instant::now() >= smoke.deadline {
+            self.record_smoke_failure("latest preview result was not projected".into());
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            return true;
+        }
+        ctx.request_repaint_after(smoke.deadline.saturating_duration_since(Instant::now()));
+        false
+    }
+
     fn observe_layout_failure(&mut self, error: crate::layout::LayoutError) {
         self.observe_layout_failure_message(error.to_string());
+    }
+
+    fn record_preview_failure(&mut self, error: PreviewProjectionFailure) {
+        eprintln!("U1B2_PREVIEW_REJECT error={error}");
+        self.preview_failure = Some(error);
     }
 
     fn observe_layout_failure_message(&mut self, message: String) {
         eprintln!("U1A2_LAYOUT_REJECT error={message}");
         self.layout_failure = Some(message);
+    }
+}
+
+fn register_repaint_signal(
+    client: &RenderWorkerClient,
+    context: &egui::Context,
+) -> Result<(), RepaintSignalRegistrationError> {
+    let context = context.clone();
+    client
+        .register_repaint_signal(Arc::new(move || context.request_repaint()))
+        .map(|_| ())
+}
+
+struct LatestPreviewSmoke {
+    baseline: StaticPreviewEvidence,
+    expected_generation: RenderGeneration,
+    deadline: Instant,
+}
+
+impl LatestPreviewSmoke {
+    fn new(baseline: StaticPreviewEvidence, expected_generation: RenderGeneration) -> Self {
+        Self {
+            baseline,
+            expected_generation,
+            deadline: Instant::now() + Duration::from_secs(5),
+        }
     }
 }
 
@@ -459,6 +652,7 @@ struct LifecycleSmoke {
 
 #[derive(Debug, Clone, Copy)]
 enum SmokePhase {
+    AwaitInitialPreview,
     Resize,
     Minimize,
     Restore,
@@ -468,8 +662,8 @@ enum SmokePhase {
 impl LifecycleSmoke {
     fn new() -> Self {
         Self {
-            phase: SmokePhase::Resize,
-            deadline: Instant::now(),
+            phase: SmokePhase::AwaitInitialPreview,
+            deadline: Instant::now() + Duration::from_secs(5),
             restore_paint_count: 0,
         }
     }
@@ -479,16 +673,28 @@ impl LifecycleSmoke {
         ctx: &egui::Context,
         paint_count: u32,
         texture_id: egui::TextureId,
+        initial_preview_ready: bool,
         projection: &mut StaticViewportProjection,
         preview: &StaticPreview,
     ) -> Result<Option<LifecycleSmokeOutcome>, String> {
         let now = Instant::now();
-        if now < self.deadline {
+        if !matches!(self.phase, SmokePhase::AwaitInitialPreview) && now < self.deadline {
             ctx.request_repaint_after(self.deadline - now);
             return Ok(None);
         }
         let evidence = preview.invariant_evidence();
         match self.phase {
+            SmokePhase::AwaitInitialPreview => {
+                if initial_preview_ready {
+                    self.phase = SmokePhase::Resize;
+                    self.deadline = now;
+                    ctx.request_repaint();
+                } else if now >= self.deadline {
+                    return Err("initial worker preview was not displayed".into());
+                } else {
+                    ctx.request_repaint_after(self.deadline - now);
+                }
+            }
             SmokePhase::Resize => {
                 projection
                     .observe(ShellLifecycleInput::Resized([800.0, 520.0]), preview)
@@ -614,5 +820,26 @@ mod tests {
             runtime_edit_after_separator_action(RuntimeFrameEdit::Continuous, false),
             RuntimeFrameEdit::Continuous
         );
+    }
+
+    #[test]
+    fn reversed_delivery_keeps_generation_two_after_one_copy() {
+        let generation_one = RenderGeneration::new(1).unwrap();
+        let generation_two = RenderGeneration::new(2).unwrap();
+        let mut projection = LatestResultProjection::default();
+        let latest = Some(generation_two);
+        let mut copied = Vec::new();
+
+        if projection.accepts(generation_two, latest) {
+            copied.push(2);
+            projection.commit(generation_two);
+        }
+        if projection.accepts(generation_one, latest) {
+            copied.push(1);
+            projection.commit(generation_one);
+        }
+
+        assert_eq!(copied, vec![2]);
+        assert_eq!(projection.last_displayed_generation, Some(generation_two));
     }
 }
