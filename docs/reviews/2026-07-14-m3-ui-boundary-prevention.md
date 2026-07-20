@@ -45,7 +45,11 @@
 - ドラッグ途中をDocumentへ仮適用するか、UI overlayで表示するか
 - cancel/フォーカス喪失/ウィンドウ終了時のtransaction意味論
 
-これらはD2完成後、U2aでQt型macro/mergeの区別を参考に型とプロパティテストを先に決める。
+これらはD2完成後も一括して発明しない。U2a-1は
+[gesture command adapter契約](2026-07-20-m3-u2a-1-command-adapter-contract.md)により、
+決定済みcommandを伴うruntime-only requestと初回適用前Cancelだけへ縮小した。
+適用後Cancel、drag途中の仮適用／overlay、公開gesture lifecycleは、必要になる個別
+チケットで型とプロパティテストを先に決める。
 
 ### GR-UI-3. UIスレッドを待たせず、最新要求だけを表示する
 
