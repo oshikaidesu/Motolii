@@ -1,5 +1,6 @@
 mod app;
 mod browser_component;
+mod components;
 mod fixture;
 mod inspector_component;
 mod stage_component;

@@ -1,4 +1,4 @@
-use crate::theme;
+use crate::{components, theme};
 use eframe::egui::{
     self, Align, Align2, Color32, FontId, Layout, Pos2, Rect, RichText, Sense, Stroke, StrokeKind,
     Vec2,
@@ -43,10 +43,10 @@ pub(crate) fn stage_ui(ui: &mut egui::Ui, state: &mut StageState) {
         |ui| {
             ui.spacing_mut().item_spacing.x = 5.0;
             ui.add_space(8.0);
-            if quiet_button(ui, "Fit").clicked() {
+            if components::quiet_button(ui, "Fit").clicked() {
                 state.fit_requested = true;
             }
-            let _ = quiet_button(ui, "100%");
+            let _ = components::quiet_button(ui, "100%");
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 ui.add_space(9.0);
@@ -92,20 +92,23 @@ pub(crate) fn stage_ui(ui: &mut egui::Ui, state: &mut StageState) {
         |ui| {
             ui.spacing_mut().item_spacing.x = 5.0;
             ui.add_space(8.0);
-            if quiet_button(ui, "|‹")
+            if components::quiet_button(ui, "|‹")
                 .on_hover_text("Previous key")
                 .clicked()
             {
                 state.previous_key_requested = true;
             }
             let play_glyph = if state.playing { "■" } else { "▶" };
-            if quiet_button(ui, play_glyph)
+            if components::quiet_button(ui, play_glyph)
                 .on_hover_text(if state.playing { "Pause" } else { "Play" })
                 .clicked()
             {
                 state.playing = !state.playing;
             }
-            if quiet_button(ui, "›|").on_hover_text("Next key").clicked() {
+            if components::quiet_button(ui, "›|")
+                .on_hover_text("Next key")
+                .clicked()
+            {
                 state.next_key_requested = true;
             }
             ui.label(
@@ -130,16 +133,6 @@ pub(crate) fn stage_ui(ui: &mut egui::Ui, state: &mut StageState) {
             });
         },
     );
-}
-
-fn quiet_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
-    ui.add_sized(
-        [25.0_f32.max(label.len() as f32 * 7.0 + 14.0), 25.0],
-        egui::Button::new(RichText::new(label).size(10.0).color(theme::TEXT_SECONDARY))
-            .fill(theme::PANEL)
-            .stroke(Stroke::new(1.0, theme::BORDER))
-            .corner_radius(2.0),
-    )
 }
 
 fn paint_canvas(painter: &egui::Painter, canvas: Rect) {

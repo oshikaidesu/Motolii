@@ -4,6 +4,12 @@
 このcrateはroot workspaceから隔離し、Document、公開API、plugin契約、永続形式を定義しない。
 Reactとの固定寸法と比較方法は[PARITY.md](PARITY.md)を参照。
 
+## Component層
+
+`src/components.rs`がCSS相当の共通境界を持つ。`ComponentTokens`は寸法、`Block`はbackground・border・inset・固定height、leaf componentはpanel header、tabs、property row、value/tag、automation、scrub、tool/quiet buttonを担う。各surfaceは製品意味とstateだけを持ち、同じborderやpaddingを再実装しない。
+
+Rerun `re_ui`からは`DesignTokens → egui::Style → leaf component`という分離だけを`PATTERN`として採る。Rerunの型、theme値、font、icon、RON、domain stateは引用・vendoringしない。
+
 ## Rerun転移記録
 
 1. `MOTOLII AUTHORITY`: `M3 U0e / U1a / U3a / U4a / U4d / U6`。画面と操作の参照はReact fixture、状態所有と完成条件はM3仕様を正とする。

@@ -1,4 +1,4 @@
-use crate::theme;
+use crate::{components, theme};
 use eframe::egui::{
     self, Align, Align2, Color32, FontId, Layout, Pos2, Rect, Response, RichText, Sense, Stroke,
     StrokeKind, Vec2,
@@ -151,58 +151,15 @@ pub(crate) fn browser_ui(ui: &mut egui::Ui, state: &mut BrowserState) -> Option<
 }
 
 fn browser_header(ui: &mut egui::Ui) {
-    let width = ui.available_width();
-    let header = Rect::from_min_size(ui.cursor().min, Vec2::new(width, 29.0));
-    ui.painter().rect_filled(header, 0.0, theme::RAISED);
-    ui.painter().line_segment(
-        [header.left_bottom(), header.right_bottom()],
-        Stroke::new(1.0, theme::BORDER),
-    );
-    ui.allocate_ui_with_layout(header.size(), Layout::left_to_right(Align::Center), |ui| {
-        ui.add_space(9.0);
-        let (marker, _) = ui.allocate_exact_size(Vec2::new(7.0, 7.0), Sense::hover());
-        ui.painter().rect_filled(marker, 0.0, theme::SHAPE);
-        ui.label(RichText::new("Browser").strong());
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            ui.add_space(7.0);
-            ui.label(
-                RichText::new("MEDIA / CREATE / EFFECTS")
-                    .monospace()
-                    .size(7.0)
-                    .color(theme::TEXT_MUTED),
-            );
-        });
-    });
-
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing = Vec2::ZERO;
-        for (label, active) in [("Media", false), ("Effects", true), ("Create", false)] {
-            let response = ui.add_sized(
-                [width / 3.0, 29.0],
-                egui::Button::new(RichText::new(label).size(10.0))
-                    .fill(theme::PANEL)
-                    .stroke(Stroke::NONE)
-                    .corner_radius(0.0),
-            );
-            if active {
-                ui.painter().rect_filled(
-                    Rect::from_min_size(
-                        Pos2::new(response.rect.left(), response.rect.bottom() - 2.0),
-                        Vec2::new(response.rect.width(), 2.0),
-                    ),
-                    0.0,
-                    theme::SHAPE,
-                );
-            }
-        }
-    });
+    components::panel_header(ui, "Browser", "MEDIA / CREATE / EFFECTS", theme::SHAPE);
+    let _ = components::tabs(ui, &["Media", "Effects", "Create"], 1, theme::SHAPE);
 }
 
 fn search_row(ui: &mut egui::Ui, state: &mut BrowserState) {
     ui.horizontal(|ui| {
         let field_width = (ui.available_width() - 81.0).max(52.0);
         ui.add_sized(
-            [field_width, 25.0],
+            [field_width, components::TOKENS.control_height],
             egui::TextEdit::singleline(&mut state.query)
                 .hint_text("Search")
                 .desired_width(field_width),
@@ -222,7 +179,10 @@ fn view_button(
 ) {
     if ui
         .add_sized(
-            [25.0, 25.0],
+            [
+                components::TOKENS.control_height,
+                components::TOKENS.control_height,
+            ],
             egui::Button::selectable(state.view == view, glyph),
         )
         .on_hover_text(hint)

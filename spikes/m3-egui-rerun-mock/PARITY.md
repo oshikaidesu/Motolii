@@ -24,6 +24,8 @@ MOTOLII_KITTEST_CAPTURE=/tmp/motolii-egui-mock.png \
 
 画像比較と操作契約は分ける。画像側は上表の境界、16:9、選択枠・軌道・bar位置を確認する。操作側はBrowser検索・選択、Inspector scrub/blend、Stage transport、Timeline選択、panel resizeがmock-local stateだけを変えることを確認する。
 
+共通componentへの移行時は、移行直前の1440×900 captureに対するImageMagick RMSEも確認する。構造改善を理由に見た目を変更せず、意図したReact parity修正だけを別に判定する。
+
 ## 意図的な差
 
 - ReactのWeb icon fontは持ち込まず、eguiで確実に描画できる文字またはprimitiveへ置換する。

@@ -1,11 +1,7 @@
-use crate::theme;
+use crate::{components, theme};
 use eframe::egui::{
-    self, pos2, Align, Color32, FontId, Layout, Rect, RichText, Sense, Stroke, StrokeKind, Vec2,
+    self, Align, Color32, FontId, Layout, RichText, Sense, Stroke, StrokeKind, Vec2,
 };
-
-const PANEL_HEADER_HEIGHT: f32 = 29.0;
-const SECTION_HEADER_HEIGHT: f32 = 23.0;
-const PROPERTY_ROW_HEIGHT: f32 = 27.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum InspectorEffect {
@@ -74,21 +70,7 @@ pub(crate) fn inspector_ui(ui: &mut egui::Ui, state: &mut InspectorState) {
 }
 
 fn panel_header(ui: &mut egui::Ui) {
-    let rect = Rect::from_min_size(
-        ui.cursor().min,
-        Vec2::new(ui.available_width(), PANEL_HEADER_HEIGHT),
-    );
-    ui.painter().rect_filled(rect, 0.0, theme::RAISED);
-    ui.painter().line_segment(
-        [rect.left_bottom(), rect.right_bottom()],
-        Stroke::new(1.0, theme::BORDER),
-    );
-    ui.allocate_ui_with_layout(rect.size(), Layout::left_to_right(Align::Center), |ui| {
-        ui.add_space(9.0);
-        let (marker, _) = ui.allocate_exact_size(Vec2::splat(8.0), Sense::hover());
-        ui.painter().rect_filled(marker, 0.0, theme::WAY_INSPECTOR);
-        ui.label(RichText::new("Inspector").strong().color(theme::TEXT));
-    });
+    components::panel_header(ui, "Inspector", "", theme::WAY_INSPECTOR);
 }
 
 fn identity_section(ui: &mut egui::Ui, fixture: EffectFixture) {
@@ -178,29 +160,7 @@ fn fold_field_panel(ui: &mut egui::Ui, fixture: EffectFixture) {
 }
 
 fn section_title(ui: &mut egui::Ui, left: &str, right: &str, right_color: Option<Color32>) {
-    let rect = Rect::from_min_size(
-        ui.cursor().min,
-        Vec2::new(ui.available_width(), SECTION_HEADER_HEIGHT),
-    );
-    ui.painter().rect_filled(rect, 0.0, theme::APP);
-    ui.allocate_ui_with_layout(rect.size(), Layout::left_to_right(Align::Center), |ui| {
-        ui.add_space(9.0);
-        ui.label(
-            RichText::new(left)
-                .monospace()
-                .size(8.0)
-                .color(theme::TEXT_MUTED),
-        );
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            ui.add_space(9.0);
-            ui.label(
-                RichText::new(right)
-                    .monospace()
-                    .size(8.0)
-                    .color(right_color.unwrap_or(theme::TEXT_SECONDARY)),
-            );
-        });
-    });
+    components::section_header(ui, left, right, right_color);
 }
 
 fn description(ui: &mut egui::Ui, text: &str) {
@@ -249,110 +209,11 @@ fn scrub_row(ui: &mut egui::Ui, label: &str, value: &mut f32, automated: &mut bo
 }
 
 fn automation_mark(ui: &mut egui::Ui, active: bool) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(Vec2::splat(18.0), Sense::click());
-    let color = if active {
-        theme::ACCENT
-    } else {
-        theme::TEXT_MUTED
-    };
-    ui.painter().rect_filled(rect, 0.0, theme::APP);
-    ui.painter().rect_stroke(
-        rect,
-        0.0,
-        Stroke::new(1.0, if active { theme::ACCENT } else { theme::BORDER }),
-        StrokeKind::Inside,
-    );
-    let center = rect.center();
-    let points = vec![
-        center + Vec2::new(0.0, -4.0),
-        center + Vec2::new(4.0, 0.0),
-        center + Vec2::new(0.0, 4.0),
-        center + Vec2::new(-4.0, 0.0),
-    ];
-    if active {
-        ui.painter().rect_stroke(
-            rect.shrink(2.0),
-            0.0,
-            Stroke::new(1.0, theme::ACCENT.gamma_multiply(0.25)),
-            StrokeKind::Inside,
-        );
-    }
-    ui.painter()
-        .add(egui::Shape::closed_line(points, Stroke::new(1.0, color)));
-    response
+    components::automation_mark(ui, active)
 }
 
 fn scrub_control(ui: &mut egui::Ui, value: &mut f32, width: f32) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, 24.0), Sense::click_and_drag());
-    if response.dragged() {
-        let delta = ui.input(|input| input.pointer.delta().x);
-        *value = scrubbed_value(*value, delta);
-    }
-
-    let painter = ui.painter();
-    let border = if response.dragged() {
-        theme::ACCENT
-    } else {
-        theme::BORDER
-    };
-    painter.rect_filled(rect, 0.0, theme::APP);
-    painter.rect_stroke(rect, 0.0, Stroke::new(1.0, border), StrokeKind::Inside);
-
-    let dial = Rect::from_min_max(
-        rect.left_top() + Vec2::new(4.0, 3.0),
-        rect.right_bottom() - Vec2::new(43.0, 3.0),
-    );
-    let shift = (*value * 200.0) % 50.0;
-    let mut x = dial.left() - 50.0 + shift;
-    while x <= dial.right() + 50.0 {
-        let major = (((x - dial.left() - shift) / 50.0).round() as i32).rem_euclid(1) == 0;
-        painter.line_segment(
-            [
-                pos2(x, if major { dial.top() } else { dial.center().y }),
-                pos2(x, dial.bottom()),
-            ],
-            Stroke::new(
-                1.0,
-                if major {
-                    theme::ACCENT
-                } else {
-                    theme::BORDER_STRONG
-                },
-            ),
-        );
-        for minor in 1..5 {
-            let minor_x = x + minor as f32 * 10.0;
-            painter.line_segment(
-                [pos2(minor_x, dial.center().y), pos2(minor_x, dial.bottom())],
-                Stroke::new(1.0, theme::BORDER_STRONG),
-            );
-        }
-        x += 50.0;
-    }
-    painter.line_segment(
-        [
-            pos2(dial.center().x, dial.top()),
-            pos2(dial.center().x, dial.bottom()),
-        ],
-        Stroke::new(1.0, theme::TEXT),
-    );
-    let value_rect = Rect::from_min_max(
-        pos2(rect.right() - 43.0, rect.top() + 1.0),
-        rect.right_bottom() - Vec2::splat(1.0),
-    );
-    painter.rect_filled(value_rect, 0.0, theme::APP);
-    painter.text(
-        value_rect.center(),
-        egui::Align2::CENTER_CENTER,
-        format!("{:.0}%", *value * 100.0),
-        FontId::monospace(8.0),
-        theme::ACCENT,
-    );
-    response.on_hover_cursor(egui::CursorIcon::ResizeHorizontal)
-}
-
-fn scrubbed_value(value: f32, pointer_delta: f32) -> f32 {
-    (value + pointer_delta / 100.0).clamp(0.0, 1.0)
+    components::scrub_control(ui, value, width)
 }
 
 fn blend_row(ui: &mut egui::Ui, blend: &mut BlendMode) {
@@ -375,50 +236,19 @@ fn blend_row(ui: &mut egui::Ui, blend: &mut BlendMode) {
 }
 
 fn property_row(ui: &mut egui::Ui, contents: impl FnOnce(&mut egui::Ui)) {
-    horizontal_rule(ui);
-    ui.allocate_ui_with_layout(
-        Vec2::new(ui.available_width(), PROPERTY_ROW_HEIGHT),
-        Layout::left_to_right(Align::Center),
-        |ui| {
-            ui.spacing_mut().item_spacing.x = 6.0;
-            ui.add_space(9.0);
-            contents(ui);
-            ui.add_space(3.0);
-        },
-    );
+    components::property_row(ui, contents);
 }
 
 fn property_label(ui: &mut egui::Ui, label: &str) {
-    ui.add_sized(
-        [92.0, 21.0],
-        egui::Label::new(RichText::new(label).size(10.0).color(theme::TEXT_SECONDARY)),
-    );
+    components::property_label(ui, label);
 }
 
 fn value_box(ui: &mut egui::Ui, value: &str) {
-    let width = (ui.available_width() - 61.0).max(70.0);
-    egui::Frame::NONE
-        .fill(theme::APP)
-        .stroke(Stroke::new(1.0, theme::BORDER))
-        .inner_margin(egui::Margin::symmetric(5, 2))
-        .show(ui, |ui| {
-            ui.set_width(width);
-            ui.label(
-                RichText::new(value)
-                    .monospace()
-                    .size(9.0)
-                    .color(theme::TEXT),
-            );
-        });
+    components::value_box(ui, value);
 }
 
 fn tag_label(ui: &mut egui::Ui, text: &str, color: Color32) {
-    egui::Frame::NONE
-        .stroke(Stroke::new(1.0, color))
-        .inner_margin(egui::Margin::symmetric(5, 2))
-        .show(ui, |ui| {
-            ui.label(RichText::new(text).monospace().size(7.0).color(color));
-        });
+    components::tag(ui, text, color);
 }
 
 fn notice(ui: &mut egui::Ui, title: &str, body: &str, color: Color32) {
@@ -474,14 +304,7 @@ fn developer_info(ui: &mut egui::Ui, state: &mut InspectorState, fixture: Effect
 }
 
 fn horizontal_rule(ui: &egui::Ui) {
-    let y = ui.cursor().top();
-    ui.painter().line_segment(
-        [
-            egui::pos2(ui.max_rect().left(), y),
-            egui::pos2(ui.max_rect().right(), y),
-        ],
-        Stroke::new(1.0, theme::BORDER),
-    );
+    components::horizontal_rule(ui);
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -524,17 +347,5 @@ fn effect_fixture(effect: InspectorEffect) -> EffectFixture {
             identity: "demo.fold-field",
             accent: theme::WARNING,
         },
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::scrubbed_value;
-
-    #[test]
-    fn scrub_is_horizontal_and_clamped() {
-        assert_eq!(scrubbed_value(0.64, 10.0), 0.74);
-        assert_eq!(scrubbed_value(0.95, 20.0), 1.0);
-        assert_eq!(scrubbed_value(0.05, -20.0), 0.0);
     }
 }
