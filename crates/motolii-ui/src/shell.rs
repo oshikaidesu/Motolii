@@ -2,14 +2,19 @@
 
 use std::sync::{Arc, Mutex};
 
+use motolii_core::{Quality, RationalTime};
+use motolii_doc::EvaluationTime;
+use motolii_eval::DataTracks;
 use motolii_gpu::GpuCtx;
 
-use crate::app::{LifecycleSmokeOutcome, MotoliiApp};
+use crate::app::{AppPreviewRuntime, AppSmokeConfig, LifecycleSmokeOutcome, MotoliiApp};
+use crate::render_worker::{RenderJoinError, RenderRequest, RenderWorker};
 use crate::static_preview::{
     bootstrap_document, bootstrap_frame_desc, prepare_in_setup_worker, StaticPreviewError,
 };
 
 const LIFECYCLE_SMOKE_ENV: &str = "MOTOLII_TEST_U1A1_LIFECYCLE";
+const LATEST_PREVIEW_SMOKE_ENV: &str = "MOTOLII_TEST_U1B2_LATEST";
 
 pub(crate) fn toolkit_linked() -> bool {
     std::mem::size_of::<egui::Context>() > 0
@@ -33,15 +38,26 @@ pub enum ShellError {
 
 pub fn run_shell() -> Result<(), ShellError> {
     let lifecycle_smoke = std::env::var_os(LIFECYCLE_SMOKE_ENV).is_some();
+    let latest_smoke = std::env::var_os(LATEST_PREVIEW_SMOKE_ENV).is_some();
     let (gpu, parts) = GpuCtx::new_for_ui()?;
     let gpu = Arc::new(gpu);
-    let document = bootstrap_document()?;
+    let document = Arc::new(bootstrap_document()?);
     let desc = bootstrap_frame_desc()?;
     let preview = Arc::new(prepare_in_setup_worker(
         Arc::clone(&gpu),
-        Arc::new(document),
+        Arc::clone(&document),
         desc,
     )?);
+    let mut render_worker = RenderWorker::spawn(Arc::clone(&gpu))
+        .map_err(|error| ShellError::Runtime(Box::new(error)))?;
+    let render_client = render_worker.client();
+    let initial_request = RenderRequest {
+        document,
+        data_tracks: Arc::new(DataTracks::new()),
+        evaluation_time: EvaluationTime::new(RationalTime::ZERO),
+        desc,
+        quality: Quality::DRAFT,
+    };
     let smoke_outcome = Arc::new(Mutex::new(LifecycleSmokeOutcome::NotRequested));
 
     let mut native_options = eframe::NativeOptions {
@@ -59,24 +75,49 @@ pub fn run_shell() -> Result<(), ShellError> {
         });
 
     let app_outcome = Arc::clone(&smoke_outcome);
-    eframe::run_native(
+    let run_result = eframe::run_native(
         "Motolii",
         native_options,
         Box::new(move |cc| {
             MotoliiApp::new(
                 cc,
-                Arc::clone(&preview),
-                lifecycle_smoke,
-                Arc::clone(&app_outcome),
+                AppPreviewRuntime {
+                    preview: Arc::clone(&preview),
+                    gpu: Arc::clone(&gpu),
+                    render_client: render_client.clone(),
+                    initial_request: RenderRequest {
+                        document: Arc::clone(&initial_request.document),
+                        data_tracks: Arc::clone(&initial_request.data_tracks),
+                        evaluation_time: initial_request.evaluation_time,
+                        desc: initial_request.desc,
+                        quality: initial_request.quality,
+                    },
+                },
+                AppSmokeConfig {
+                    lifecycle: lifecycle_smoke,
+                    latest_preview: latest_smoke,
+                    outcome: Arc::clone(&app_outcome),
+                },
             )
             .map(|app| Box::new(app) as Box<dyn eframe::App>)
             .map_err(|error| -> Box<dyn std::error::Error + Send + Sync> { Box::new(error) })
         }),
-    )
-    .map_err(|error| match error {
-        eframe::Error::AppCreation(source) => ShellError::AppConstruction(source),
-        other => ShellError::Runtime(Box::new(other)),
-    })?;
+    );
+    render_worker.close();
+    let join_result = render_worker.join();
+    match (run_result, join_result) {
+        (Ok(()), Ok(())) => {
+            eprintln!("U1B2_JOIN passed after_run_native=true");
+        }
+        (Err(runtime), Ok(())) => return Err(map_eframe_error(runtime)),
+        (Ok(()), Err(join)) => return Err(ShellError::Runtime(Box::new(join))),
+        (Err(runtime), Err(join)) => {
+            return Err(ShellError::Runtime(Box::new(CombinedRuntimeError {
+                runtime: Box::new(runtime),
+                join,
+            })));
+        }
+    }
 
     let outcome = smoke_outcome
         .lock()
@@ -86,4 +127,19 @@ pub fn run_shell() -> Result<(), ShellError> {
         LifecycleSmokeOutcome::Failed(reason) => Err(ShellError::LifecycleSmokeFailed { reason }),
         LifecycleSmokeOutcome::NotRequested | LifecycleSmokeOutcome::Passed => Ok(()),
     }
+}
+
+fn map_eframe_error(error: eframe::Error) -> ShellError {
+    match error {
+        eframe::Error::AppCreation(source) => ShellError::AppConstruction(source),
+        other => ShellError::Runtime(Box::new(other)),
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("eframe runtime and render worker shutdown both failed: {join}")]
+struct CombinedRuntimeError {
+    #[source]
+    runtime: Box<eframe::Error>,
+    join: RenderJoinError,
 }

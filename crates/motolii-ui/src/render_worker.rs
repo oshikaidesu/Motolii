@@ -12,17 +12,39 @@ use motolii_gpu::GpuCtx;
 use motolii_plugins_firstparty::first_party_runtime;
 use motolii_render::{render_graph_cached, RenderGraphInputs, RenderSession, RenderedFrame};
 
+type RepaintSignal = Arc<dyn Fn() + Send + Sync>;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct RenderGeneration(NonZeroU64);
 
 impl RenderGeneration {
-    fn new(value: u64) -> Option<Self> {
+    pub(crate) fn new(value: u64) -> Option<Self> {
         NonZeroU64::new(value).map(Self)
     }
 
     pub(crate) fn get(self) -> u64 {
         self.0.get()
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RepaintSignalEpoch(NonZeroU64);
+
+#[derive(Debug, thiserror::Error, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RepaintSignalRegistrationError {
+    #[error("repaint signal epoch space is exhausted")]
+    EpochExhausted,
+}
+
+struct RegisteredRepaintSignal {
+    epoch: RepaintSignalEpoch,
+    signal: RepaintSignal,
+}
+
+struct RepaintSignalState {
+    next_epoch: Option<RepaintSignalEpoch>,
+    current: Option<RegisteredRepaintSignal>,
+    failed_epoch: Option<RepaintSignalEpoch>,
 }
 
 #[derive(Debug)]
@@ -83,6 +105,7 @@ struct WorkerShared<P, R, E> {
     requests: Mutex<RequestState<P>>,
     request_ready: Condvar,
     result: Mutex<Option<StampedResult<R, E>>>,
+    repaint_signal: Mutex<RepaintSignalState>,
 }
 
 impl<P, R, E> WorkerShared<P, R, E> {
@@ -97,11 +120,29 @@ impl<P, R, E> WorkerShared<P, R, E> {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
+
+    fn lock_repaint_signal(&self) -> MutexGuard<'_, RepaintSignalState> {
+        self.repaint_signal
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
 }
 
 struct LatestWorker<P, R, E> {
     shared: Arc<WorkerShared<P, R, E>>,
     join: Option<JoinHandle<()>>,
+}
+
+struct LatestWorkerClient<P, R, E> {
+    shared: Arc<WorkerShared<P, R, E>>,
+}
+
+impl<P, R, E> Clone for LatestWorkerClient<P, R, E> {
+    fn clone(&self) -> Self {
+        Self {
+            shared: Arc::clone(&self.shared),
+        }
+    }
 }
 
 impl<P, R, E> LatestWorker<P, R, E>
@@ -134,6 +175,11 @@ where
             }),
             request_ready: Condvar::new(),
             result: Mutex::new(None),
+            repaint_signal: Mutex::new(RepaintSignalState {
+                next_epoch: Some(RepaintSignalEpoch(NonZeroU64::MIN)),
+                current: None,
+                failed_epoch: None,
+            }),
         });
         let worker_shared = Arc::clone(&shared);
         let join = thread::Builder::new().name(name.into()).spawn(move || {
@@ -148,6 +194,66 @@ where
         })
     }
 
+    fn submit(&self, payload: P) -> Result<RenderGeneration, RenderSubmitError> {
+        self.client().submit(payload)
+    }
+
+    fn latest_accepted_generation(&self) -> Option<RenderGeneration> {
+        self.client().latest_accepted_generation()
+    }
+
+    fn status(&self) -> RenderWorkerStatus {
+        self.client().status()
+    }
+
+    fn try_take_latest(&self) -> Option<StampedResult<R, E>> {
+        self.client().try_take_latest()
+    }
+
+    fn close(&self) {
+        let mut state = self.shared.lock_requests();
+        if state.status == RenderWorkerStatus::Running {
+            state.status = RenderWorkerStatus::Closing;
+            self.shared.request_ready.notify_one();
+        }
+    }
+
+    fn client(&self) -> LatestWorkerClient<P, R, E> {
+        LatestWorkerClient {
+            shared: Arc::clone(&self.shared),
+        }
+    }
+
+    fn join(&mut self) -> Result<(), RenderJoinError> {
+        self.close();
+        if let Some(join) = self.join.take() {
+            join.join().map_err(|_| RenderJoinError::ThreadPanicked)?;
+        }
+        match self.status() {
+            RenderWorkerStatus::WorkerPanicked {
+                running_generation,
+                abandoned_pending_generation,
+            } => Err(RenderJoinError::WorkerPanicked {
+                running_generation,
+                abandoned_pending_generation,
+            }),
+            RenderWorkerStatus::Running
+            | RenderWorkerStatus::Closing
+            | RenderWorkerStatus::Closed => Ok(()),
+        }
+    }
+
+    #[cfg(test)]
+    fn pending_generation(&self) -> Option<RenderGeneration> {
+        self.shared
+            .lock_requests()
+            .pending
+            .as_ref()
+            .map(|request| request.generation)
+    }
+}
+
+impl<P, R, E> LatestWorkerClient<P, R, E> {
     fn submit(&self, payload: P) -> Result<RenderGeneration, RenderSubmitError> {
         let mut state = self.shared.lock_requests();
         match state.status {
@@ -187,40 +293,35 @@ where
         self.shared.lock_result().take()
     }
 
-    fn close(&self) {
-        let mut state = self.shared.lock_requests();
-        if state.status == RenderWorkerStatus::Running {
-            state.status = RenderWorkerStatus::Closing;
-            self.shared.request_ready.notify_one();
+    fn register_repaint_signal(
+        &self,
+        signal: RepaintSignal,
+    ) -> Result<RepaintSignalEpoch, RepaintSignalRegistrationError> {
+        let epoch = {
+            let mut state = self.shared.lock_repaint_signal();
+            let epoch = state
+                .next_epoch
+                .ok_or(RepaintSignalRegistrationError::EpochExhausted)?;
+            state.next_epoch = epoch
+                .0
+                .get()
+                .checked_add(1)
+                .and_then(NonZeroU64::new)
+                .map(RepaintSignalEpoch);
+            state.current = Some(RegisteredRepaintSignal {
+                epoch,
+                signal: Arc::clone(&signal),
+            });
+            epoch
+        };
+        if self.shared.lock_result().is_some() {
+            invoke_repaint_signal(&self.shared, epoch, signal);
         }
+        Ok(epoch)
     }
 
-    fn join(&mut self) -> Result<(), RenderJoinError> {
-        self.close();
-        if let Some(join) = self.join.take() {
-            join.join().map_err(|_| RenderJoinError::ThreadPanicked)?;
-        }
-        match self.status() {
-            RenderWorkerStatus::WorkerPanicked {
-                running_generation,
-                abandoned_pending_generation,
-            } => Err(RenderJoinError::WorkerPanicked {
-                running_generation,
-                abandoned_pending_generation,
-            }),
-            RenderWorkerStatus::Running
-            | RenderWorkerStatus::Closing
-            | RenderWorkerStatus::Closed => Ok(()),
-        }
-    }
-
-    #[cfg(test)]
-    fn pending_generation(&self) -> Option<RenderGeneration> {
-        self.shared
-            .lock_requests()
-            .pending
-            .as_ref()
-            .map(|request| request.generation)
+    fn failed_repaint_signal_epoch(&self) -> Option<RepaintSignalEpoch> {
+        self.shared.lock_repaint_signal().failed_epoch
     }
 }
 
@@ -267,13 +368,16 @@ fn run_worker_loop<P, R, E>(
         let generation = request.generation;
         match catch_unwind(AssertUnwindSafe(|| execute(request.payload))) {
             Ok(result) => {
-                *shared.lock_result() = Some(StampedResult { generation, result });
+                publish_result(shared, StampedResult { generation, result });
             }
             Err(_) => {
-                *shared.lock_result() = Some(StampedResult {
-                    generation,
-                    result: Err(panic_error()),
-                });
+                publish_result(
+                    shared,
+                    StampedResult {
+                        generation,
+                        result: Err(panic_error()),
+                    },
+                );
                 let mut state = shared.lock_requests();
                 let abandoned_pending_generation =
                     state.pending.take().map(|pending| pending.generation);
@@ -285,6 +389,37 @@ fn run_worker_loop<P, R, E>(
                 return;
             }
         }
+    }
+}
+
+fn publish_result<P, R, E>(shared: &WorkerShared<P, R, E>, result: StampedResult<R, E>) {
+    *shared.lock_result() = Some(result);
+    let registered = shared
+        .lock_repaint_signal()
+        .current
+        .as_ref()
+        .map(|registered| (registered.epoch, Arc::clone(&registered.signal)));
+    if let Some((epoch, signal)) = registered {
+        invoke_repaint_signal(shared, epoch, signal);
+    }
+}
+
+fn invoke_repaint_signal<P, R, E>(
+    shared: &WorkerShared<P, R, E>,
+    epoch: RepaintSignalEpoch,
+    signal: RepaintSignal,
+) {
+    if catch_unwind(AssertUnwindSafe(|| signal())).is_ok() {
+        return;
+    }
+    let mut state = shared.lock_repaint_signal();
+    state.failed_epoch = Some(epoch);
+    if state
+        .current
+        .as_ref()
+        .is_some_and(|registered| registered.epoch == epoch)
+    {
+        state.current = None;
     }
 }
 
@@ -323,6 +458,11 @@ pub(crate) enum RenderWorkerStartError {
 
 pub(crate) struct RenderWorker {
     inner: LatestWorker<RenderRequest, RenderedFrame, RenderWorkerError>,
+}
+
+#[derive(Clone)]
+pub(crate) struct RenderWorkerClient {
+    inner: LatestWorkerClient<RenderRequest, RenderedFrame, RenderWorkerError>,
 }
 
 impl RenderWorker {
@@ -371,6 +511,12 @@ impl RenderWorker {
         self.inner.submit(request)
     }
 
+    pub(crate) fn client(&self) -> RenderWorkerClient {
+        RenderWorkerClient {
+            inner: self.inner.client(),
+        }
+    }
+
     pub(crate) fn latest_accepted_generation(&self) -> Option<RenderGeneration> {
         self.inner.latest_accepted_generation()
     }
@@ -394,8 +540,39 @@ impl RenderWorker {
     }
 }
 
+impl RenderWorkerClient {
+    pub(crate) fn submit(
+        &self,
+        request: RenderRequest,
+    ) -> Result<RenderGeneration, RenderSubmitError> {
+        self.inner.submit(request)
+    }
+
+    pub(crate) fn latest_accepted_generation(&self) -> Option<RenderGeneration> {
+        self.inner.latest_accepted_generation()
+    }
+
+    pub(crate) fn try_take_latest(
+        &self,
+    ) -> Option<StampedResult<RenderedFrame, RenderWorkerError>> {
+        self.inner.try_take_latest()
+    }
+
+    pub(crate) fn register_repaint_signal(
+        &self,
+        signal: RepaintSignal,
+    ) -> Result<RepaintSignalEpoch, RepaintSignalRegistrationError> {
+        self.inner.register_repaint_signal(signal)
+    }
+
+    pub(crate) fn failed_repaint_signal_epoch(&self) -> Option<RepaintSignalEpoch> {
+        self.inner.failed_repaint_signal_epoch()
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicU32, Ordering};
     use std::sync::mpsc;
 
     use motolii_testkit::unavailable_dep;
@@ -416,6 +593,7 @@ mod tests {
         assert_send_sync::<RenderRequest>();
         assert_send_sync::<StampedResult<RenderedFrame, RenderWorkerError>>();
         assert_send_sync::<Arc<WorkerShared<u64, u64, TestError>>>();
+        assert_send_sync::<LatestWorkerClient<u64, u64, TestError>>();
     }
 
     #[test]
@@ -623,5 +801,86 @@ mod tests {
                 "production render worker contains forbidden token {forbidden}"
             );
         }
+    }
+
+    #[test]
+    fn repaint_signal_covers_publish_before_and_after_registration() {
+        let calls = Arc::new(AtomicU32::new(0));
+        let mut worker = LatestWorker::spawn("u1b2-repaint-signal", Ok::<_, TestError>, || {
+            TestError::Panicked
+        })
+        .expect("spawn");
+        let client = worker.client();
+        let first_calls = Arc::clone(&calls);
+        client
+            .register_repaint_signal(Arc::new(move || {
+                first_calls.fetch_add(1, Ordering::Relaxed);
+            }))
+            .expect("register before publish");
+        client.submit(1).expect("submit first");
+        while calls.load(Ordering::Relaxed) == 0 {
+            thread::yield_now();
+        }
+        client.try_take_latest().expect("first result");
+
+        client.submit(2).expect("submit second");
+        while client.shared.lock_result().is_none() {
+            thread::yield_now();
+        }
+        let second_calls = Arc::clone(&calls);
+        client
+            .register_repaint_signal(Arc::new(move || {
+                second_calls.fetch_add(1, Ordering::Relaxed);
+            }))
+            .expect("register with retained result");
+
+        worker.close();
+        worker.join().expect("join");
+        assert!(calls.load(Ordering::Relaxed) >= 2);
+    }
+
+    #[test]
+    fn panicking_repaint_signal_is_removed_and_fresh_epoch_recovers() {
+        let panics = Arc::new(AtomicU32::new(0));
+        let recovered = Arc::new(AtomicU32::new(0));
+        let mut worker = LatestWorker::spawn("u1b2-repaint-panic", Ok::<_, TestError>, || {
+            TestError::Panicked
+        })
+        .expect("spawn");
+        let client = worker.client();
+        let panic_calls = Arc::clone(&panics);
+        let failed_epoch = client
+            .register_repaint_signal(Arc::new(move || {
+                panic_calls.fetch_add(1, Ordering::Relaxed);
+                panic!("injected repaint panic");
+            }))
+            .expect("register panic");
+        client.submit(1).expect("submit panic notification");
+        while client.failed_repaint_signal_epoch() != Some(failed_epoch) {
+            thread::yield_now();
+        }
+        assert_eq!(panics.load(Ordering::Relaxed), 1);
+
+        let recovered_calls = Arc::clone(&recovered);
+        client
+            .register_repaint_signal(Arc::new(move || {
+                recovered_calls.fetch_add(1, Ordering::Relaxed);
+            }))
+            .expect("register recovery");
+        client.try_take_latest().expect("retained result");
+        client.submit(2).expect("submit after recovery");
+        worker.close();
+        worker.join().expect("join");
+
+        assert_eq!(panics.load(Ordering::Relaxed), 1);
+        assert!(recovered.load(Ordering::Relaxed) >= 1);
+        assert_eq!(
+            client
+                .try_take_latest()
+                .expect("latest result")
+                .generation
+                .get(),
+            2
+        );
     }
 }

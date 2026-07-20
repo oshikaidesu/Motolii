@@ -32,7 +32,10 @@ fn event_loop_modules_cannot_render_join_or_read_back() {
         ("src/shell.rs", include_str!("../src/shell.rs")),
     ] {
         let file = syn::parse_file(source).unwrap_or_else(|error| panic!("{path}: {error}"));
-        let mut visitor = ForbiddenCallVisitor::default();
+        let mut visitor = ForbiddenCallVisitor {
+            allow_shell_join: path == "src/shell.rs",
+            ..Default::default()
+        };
         visitor.visit_file(&file);
         assert!(
             visitor.findings.is_empty(),
@@ -44,6 +47,18 @@ fn event_loop_modules_cannot_render_join_or_read_back() {
                 visitor.register_once_in_constructor, 1,
                 "app must call the register-once seam exactly once in its constructor"
             );
+            assert_eq!(visitor.shell_join_after_event_loop, 0);
+        } else {
+            assert_eq!(
+                visitor.shell_join_after_event_loop, 1,
+                "shell must own exactly one post-event-loop join"
+            );
+            let run_native = source.find("let run_result = eframe::run_native").unwrap();
+            let join = source.find("render_worker.join()").unwrap();
+            assert!(
+                run_native < join,
+                "render worker join must follow run_native return"
+            );
         }
     }
 }
@@ -53,10 +68,18 @@ struct ForbiddenCallVisitor {
     findings: Vec<String>,
     current_function: Option<String>,
     register_once_in_constructor: u32,
+    allow_shell_join: bool,
+    shell_join_after_event_loop: u32,
 }
 
 impl<'ast> Visit<'ast> for ForbiddenCallVisitor {
     fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
+        let previous = self.current_function.replace(node.sig.ident.to_string());
+        syn::visit::visit_block(self, &node.block);
+        self.current_function = previous;
+    }
+
+    fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
         let previous = self.current_function.replace(node.sig.ident.to_string());
         syn::visit::visit_block(self, &node.block);
         self.current_function = previous;
@@ -89,7 +112,12 @@ impl<'ast> Visit<'ast> for ForbiddenCallVisitor {
 
     fn visit_expr_method_call(&mut self, node: &'ast syn::ExprMethodCall) {
         let method = node.method.to_string();
-        if matches!(method.as_str(), "recv" | "join" | "poll" | "poll_wait") {
+        if method == "join"
+            && self.allow_shell_join
+            && self.current_function.as_deref() == Some("run_shell")
+        {
+            self.shell_join_after_event_loop += 1;
+        } else if matches!(method.as_str(), "recv" | "join" | "poll" | "poll_wait") {
             self.findings.push(method.clone());
         }
         if matches!(method.as_str(), "register_once" | "register_native_texture") {

@@ -78,7 +78,11 @@ impl DisplaySlot {
         Ok(slot)
     }
 
-    fn copy(&self, gpu: &GpuCtx, rendered: &RenderedFrame) -> Result<(), DisplaySlotError> {
+    pub(crate) fn copy(
+        &self,
+        gpu: &GpuCtx,
+        rendered: &RenderedFrame,
+    ) -> Result<(), DisplaySlotError> {
         if self.desc != rendered.desc {
             return Err(DisplaySlotError::DescriptorMismatch {
                 expected: self.desc,
