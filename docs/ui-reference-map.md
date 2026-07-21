@@ -1,6 +1,6 @@
 # M3 UI参照地図
 
-更新日: 2026-07-20
+更新日: 2026-07-22
 
 M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決める。会話履歴、スクリーンショット、旧HTML、React prototypeのいずれも、単独では製品仕様にならない。
 
@@ -9,7 +9,7 @@ M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決
 | 層 | 役割 | 正本／入口 | 変更時の規則 |
 |---|---|---|---|
 | 規範 | 状態所有、Undo、入力、意味、受け入れ条件 | [M3仕様](specs/M3-ui-integration.md)、[UI操作言語](ui-interaction-language.md)、[UI視覚言語](ui-visual-language.md)、[UI境界規律](reviews/2026-07-14-m3-ui-boundary-prevention.md) | prototypeや会話から直接上書きせず、仕様・決定台帳を先に改訂する |
-| 現行prototype | 現在ブラウザで比較する操作・構成 | `docs/mocks-ui/README.md`(React/Viteモック。`codex/m3-mock-components`ブランチ側に実体) | hash fixture、操作試験、比較台帳を一緒に更新する。React/CSS値を製品契約へ焼かない |
+| 現行prototype / React source asset | 現在ブラウザで比較する操作・構成と、React所有面を製品packageへ直接移すsource | `docs/mocks-ui/README.md`と固定commit `56c318ed`、[React製品資産の直接移管契約](reviews/2026-07-22-m3-react-product-asset-promotion-contract.md) | hash fixture、操作試験、比較台帳を一緒に更新する。React/CSS値を製品契約へ焼かず、縮約再実装で置換しない |
 | 製品実装先例 | 高密度shell、時間面、GPU viewport、selection、component、試験を成立させた実装資産 | [UI runtime責任境界](ui-runtime-architecture.md)、[Rerun先例調査](reviews/2026-07-20-rerun-prior-art-survey.md)、[Rerun学習・転移計画](reviews/2026-07-20-rerun-learning-transfer-plan.md) | Rerunの画面・語彙・schemaを模倣しない。React/native所有は正本に従い、toolkit横断patternだけを比較入力とする。egui固有assetはG0-9まで移植停止 |
 | 採否台帳 | 先例、観察、未決、棄却、停止線 | `reviews/`の対象別decision／observation ledger | 出典、Motoliiへの翻訳、反映先を分ける |
 | 移行互換 | React移行中の視覚parityと未置換領域 | [旧HTMLモック台帳](mocks/README.md)、`mocks-ui/src/legacy/` | 新しい判断を追加しない。React-native置換後に参照専用へ縮退する |
@@ -22,11 +22,14 @@ M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決
 
 | 資料 | 答える問い | 答えない問い |
 |---|---|---|
-| Reactモック | Motoliiで何を見せ、どう操作させたいか。G0-9ではcomponent、fixture、Storybook、Playwright、stable IDも製品候補資産 | React state、DOM event、CSS px、仮JSONをDocument/公開契約へ昇格すること |
+| Reactモック | Motoliiで何を見せ、どう操作させたいか。React所有面のcomponent、fixture、Storybook、Playwright、stable IDは直接所有移管する製品source asset | React state、DOM event、CSS px、仮JSONをDocument/公開契約へ昇格すること |
 | Rerun | 高密度な製品shell、時間面、GPU viewport、selection、component、試験をどう成立させたか | Motoliiの作品意味、編集command、clip/keyframe操作。egui固有assetの採用はG0-9待ち |
 | Motolii規範・仕様 | 状態の持ち場、Undo、公開契約、受け入れ条件 | 具体token値や未採択component実装 |
 
-実装時は`React要求 → Motolii意味・状態 → Rerun先例 → Motolii component`の順で翻訳する。Rerunに存在することだけを理由に機能を足さず、Reactモックに存在することだけを理由に未決意味を実装しない。
+React所有面の製品実装は[直接移管契約](reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)に従い、
+固定source assetをproduct ownerへ移してから、mock/legacy stateだけをMotoliiのprojection / intentへ交換する。
+別の縮約componentへ翻訳し直さない。Rerunに存在することだけを理由に機能を足さず、Reactモックに
+存在する表示だけを理由に未決のDocument意味を実装しない。
 
 ## React移行の実状態
 
@@ -34,13 +37,18 @@ M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決
 
 | fixture／領域 | 実装状態 | 現在の用途 |
 |---|---|---|
-| `#plugin-browser-candidate`のBrowser | React-native candidate | Discovery Browserの比較対象 |
-| `#plugin-browser-candidate`のEasing Graph view | React-native candidate＋legacy state adapter | AM差分の操作比較。区間導出とcurve状態はまだfixture adapter |
-| `#plugin-browser-candidate`のStage / Inspector / Timeline本体 / Settings | legacy HTMLをparseしたbridge | React候補と同じ画面で周辺文脈を保つ移行互換層 |
+| `#plugin-browser-candidate`のBrowser | React-native source asset | Discovery Browserを製品packageへ直接移管するauthority |
+| `#plugin-browser-candidate`のEasing Graph view | React-native source asset＋legacy state adapter | view/modelを直接移管する。区間導出とcurve状態はHost projectionへ交換する |
+| `#plugin-browser-candidate`の`KEYS / LAYERS` | `TimelineCandidate.jsx`内のReact-native subtree | tool panelだけを同じDOM/CSSで抽出・移管する。time surfaceは移さない |
+| `#plugin-browser-candidate`のInspector | legacy HTMLをparseしたbridge | 正しい独立React sourceは未成立。モック側で同形React化してから移管する |
+| `#plugin-browser-candidate`のStage / Timeline time surface / Settings | legacy bridgeまたはReact比較candidate | native製品面のoracle／周辺文脈。React製品runtimeへ直接持ち込まない |
 | `#archive/all-surfaces`等 | legacy HTMLをparseしたarchive bridge | 旧画面との視覚parity回帰。通常catalogへ出さない |
-| `#skeleton` | React-native分解骨格 | component責務と組立境界の確認。視覚正本ではない |
+| `#skeleton` | React-native分解骨格 | component責務と組立境界の確認。視覚正本でも、Inspector等の代替製品実装でもない |
 
-したがって、React上で表示されるだけではReact-native所有へ移ったと判定しない。`src/legacy/LegacyHostBoundaryScreen.jsx`またはraw HTML由来のDOM／scriptへ依存する領域は、旧仕様を増やさず、置換対象として台帳へ残す。
+したがって、React上で表示されるだけではReact-native所有へ移ったと判定しない。
+`src/legacy/LegacyHostBoundaryScreen.jsx`またはraw HTML由来のDOM／scriptへ依存する領域は、旧仕様を増やさず、
+固定モック内で同形Reactへ抽出してから製品ownerへ移す。正しいsourceが無いことを理由に、製品packageへ
+縮約版を先に作らない。
 
 ## 統合モックの面 → 実装レーン対応(2026-07-19操作確認スナップショット)
 

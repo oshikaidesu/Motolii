@@ -19,6 +19,36 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 - 発注書作成・実装・検収が失敗、STOP、REJECT、timeoutになっても、停止報告だけで未検収差分を放置しない。原因を分類し、発注書の差し戻し、実装修正、検収再実行のうち該当段階へ戻って、契約を迂回せず改善ループを回す。timeout時は残存差分と証跡を確認し、再開可能な段階から続ける。ループ中の差分は隔離worktreeに留め、`VERDICT: ACCEPT`前に採用・commit・pushしない
 - 同じ阻害要因が反復し、発注書・回答・差分・検収結果に有意な改善がなくなった場合だけループを止める。その際は、反復した阻害要因、試した修正、未解決の選択肢を示してユーザーの判断を仰ぐ。単なる難しさ、1回のtimeout、外部モデル片方の失敗を停止理由にしない
 
+### Reactモック製品資産を含む発注の強制動線（無視禁止）
+
+Browser、Inspector、`KEYS / LAYERS`、Easing Panel等のReact所有面は、
+[React製品資産の直接移管契約](docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)を先に読む。
+固定モックを見た目だけのoracleとして製品用componentを別途縮約再実装せず、固定sourceをproduct packageへ
+直接所有移管し、mockをproduct exportのconsumerへ反転する。mock固有state、legacy bridge、fixture adapterだけを
+Host projection / typed intentへ交換する。DOM/CSSを公開契約へ焼かない規律を、source assetを捨てる理由にしない。
+
+該当発注書は通常項目に加えて、次のラベルを順番どおり持たなければならない。
+
+1. `REACT AUTHORITY`: 対象面、移管契約、UI runtime境界、対応spec ID
+2. `SOURCE ASSET`: 固定SHA、旧path、export、CSS/model/test closure
+3. `PRESERVE`: DOM、class、stable ID、ARIA、interaction、visual state
+4. `REPLACE`: mock/legacy stateからprojection / intentへ交換する範囲
+5. `STATE OWNER`: Document / User settings / Workspace / Project session / Transient / local presentation
+6. `DIAGNOSTIC ROUTE`: 正しい製品画面とdevelopment専用契約確認画面の分離
+7. `NEGATIVE ORACLE`: 二重copy、legacy import、opaque-ID分岐、二重state、threshold変更の拒否
+8. `STOP`: 未決意味、公開契約、source不在、owner境界違反に遭遇した場合の停止
+
+欠落、順序逆転、固定SHA/pathとの不一致が一つでもあればCodex事前審査は承認せず、実装担当を起動しない。
+source assetがあるのに別leafを新設した、CSS修理だけでparityへ寄せ始めた、skeletonを製品面にした、
+`TimelineCandidate`全体をnative Timelineの代わりに持ち込んだ、productが`docs/mocks-ui`/legacy scriptをruntime
+importした、mock/productへ同じcomponent copyを残した、catalog ID/label/thumbnail tokenから欠落意味を推測した、
+ReactへDocument/selection/Undo正本を追加した、visual threshold/goldenを変えた、diagnostic routeだけを成果にした、
+のいずれかで`ORDER: STOP`とする。
+
+正しい独立React sourceが存在しない領域は製品packageへ縮約版を先に作らない。固定モック内で同形React化し、
+既存visual/interaction oracleへ合格してから所有移管する。presentation移管とHost state接続、WebView統合、D2 commitを
+一つの発注へ束ねない。
+
 ### Rerun参照を含む発注の強制動線（無視禁止）
 
 Rerunは主要な製品先例だがMotoliiの仕様正本ではない。Rerunを参照する調査・設計・実装発注は、必ず **Motolii仕様 → 現行コード事実 → Rerun先例 → Motolii fixture** の順に通す。Rerunのcrate、型、画面、内部責任からMotoliiの目的・公開API・Document・plugin契約を逆算しない。正本と詳細動線は[Rerun学習・転移計画 §9](docs/reviews/2026-07-20-rerun-learning-transfer-plan.md#9-rerun参照を発注へ入れる強制動線)。候補assetの母集団と監査済み範囲は[Rerun source asset inventory](docs/reviews/2026-07-20-rerun-source-asset-inventory.md)を読み、同文書の「候補分類」を採用裁定として扱わない。
@@ -42,7 +72,7 @@ Rerunを一度でも根拠・再利用箇所・変更案に含める発注書は
 4. M2 Document/スキーマ/ジャーナルに触る時: **先に**[docs/reviews/2026-07-12-m2-permanence-prevention.md](docs/reviews/2026-07-12-m2-permanence-prevention.md)(予防5手)。背景の先人調査は[rework-prior-art](docs/reviews/2026-07-12-rework-prior-art.md)
 5. M3製品実装に触る時: **先に**[docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md](docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md)を読み、ステータスが発効中なら実装を止める。調査・fixtureも公開APIや永続形式へ焼かない
 6. M3 UI/入力/タイムライン/プラグインパネルに触る時: **先に**[docs/reviews/2026-07-14-m3-ui-boundary-prevention.md](docs/reviews/2026-07-14-m3-ui-boundary-prevention.md)(UI境界の規律8本)
-7. M3の外観・timeline・panelに触る時: **先に**[M3 UI参照地図](docs/ui-reference-map.md)と[docs/ui-visual-language.md](docs/ui-visual-language.md)を読む。Reactモックの実体と`README.md`は`codex/m3-mock-components`側の接続済みworktreeで読み、main側にまだ無い時は`docs/mocks/`を代替の現行実装として変更せず、React側の統合または対象worktreeへの移動を先に行う。`docs/mocks/`は**ARCHIVED・新規変更禁止**。通常入場と`#catalog`はReact候補だけ、legacyは`#archive/*`とparity testだけから参照する。新しいUI判断、操作、goldenをHTMLへ入れようとした時点でSTOPし、`docs/mocks-ui/`のReact所有境界へ戻る。モックの具体色値や未決機能をそのまま契約へ焼かない
+7. M3の外観・timeline・panelに触る時: **先に**[M3 UI参照地図](docs/ui-reference-map.md)、[docs/ui-visual-language.md](docs/ui-visual-language.md)、[React製品資産の直接移管契約](docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)を読む。Reactモックの実体と`README.md`は固定commit `56c318edcddab7cf95d263cc2f7dd2b4e6791134`で読み、main側にまだ無い時は`docs/mocks/`を代替の現行実装として変更せず、React側の再結合または対象worktreeへの移動を先に行う。`docs/mocks/`は**ARCHIVED・新規変更禁止**。通常入場と`#catalog`はReact候補だけ、legacyは`#archive/*`とparity testだけから参照する。新しいUI判断、操作、goldenをHTMLへ入れようとした時点、またはReact source assetを縮約再実装しようとした時点でSTOPする。モックの具体色値や未決機能をDocument/公開契約へ焼かない
 8. Rerunのsource、crate、画面、実装patternを調査・発注・実装へ使う時: **先に**[Rerun source asset inventory](docs/reviews/2026-07-20-rerun-source-asset-inventory.md)と[Rerun学習・転移計画](docs/reviews/2026-07-20-rerun-learning-transfer-plan.md)、特に後者§4/§8/§9を読む。Rerun起点で発注書を書かない
 
 ## 絶対規律(破ると設計の根拠が崩れる。レビュー最重視項目)

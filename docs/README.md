@@ -47,19 +47,20 @@
 | [ui-interaction-language.md](ui-interaction-language.md) | M3のUI操作言語: 既知の外殻、可視の因果、Parameter Panelを表現のホームにするUI力学、共通component契約、Simple/Advanced、漏れ実装の拒否 | **設計決定**(2026-07-16、Parameter Panel力学を2026-07-18追補) |
 | [ui-visual-language.md](ui-visual-language.md) | M3の視覚言語: 高密度一覧、意味色、既存UIへの馴染み、contrast、token規約、参照範囲 | 設計基準(具体token値はM3視覚確定(G0-6)待ち) |
 | [ui-score-model.md](ui-score-model.md) | 譜面UI構成モデル: 固定Laneを所有者にしない時間面、選択コンテキスト、Group関係ラベル、回帰審判 | **設計決定**(2026-07-17。公開API・schemaの実装許可ではない) |
-| [ui-runtime-architecture.md](ui-runtime-architecture.md) | React/DOM chrome、native Stage/Timeline、headless interaction、1 surface/2 viewport/WebView islandsの責任境界 | **責任境界・surface topology決定**(2026-07-21。platform受入とrenderer採否はG0-9実機spike待ち) |
+| [ui-runtime-architecture.md](ui-runtime-architecture.md) | React/DOM chrome、native Stage/Timeline、headless interaction、React asset直接移管、1 surface/2 viewport/WebView islandsの責任境界 | **責任境界・surface topology決定**(React package移管可。platform受入とrenderer採否はG0-9実機spike待ち) |
 | [mocks/](mocks/README.md) | M3高密度メインUI(基準)+timeline/interaction/UI力学の比較モック台帳 | 視覚構成の基準モック |
 | [ui-reference-map.md](ui-reference-map.md) | M3 UI参照地図: 規範/prototype/採否台帳/移行互換/証拠/履歴の参照順位と、React移行の実状態・既知の未統一 | **運用正本**(2026-07-19。`codex/m3-mock-components`側から回収) |
 | [ui-concept.md](ui-concept.md) | UIコンセプト: 体験の北極星(譜面台・First Beat・五本柱)。散在するUI文書の層地図つき | **設計仮説・反対側レビュー待ち**(2026-07-16。契約・M3ステータス変更なし) |
 | [implementation-ledger.md](implementation-ledger.md) | 現場向け実装進行台帳: M0〜M5のNOW/NEXT/WAIT、依存、Issue昇格順 | **日々の発注入口**(意味・完了条件は各specが正本。M3は段階発注可) |
 | [backlog.md](backlog.md) | イシュー候補台帳(現在地サマリ+横断/新規ギャップ/v2バックログ) | 現行 |
-| [specs/](specs/README.md) | マイルストーン仕様書(エージェントへの発注書)。確定/ドラフトのステータスはspecs/README.md参照 | M0/M1確定、M2基盤再締結済み(D5は別レーン)、M3はG0-9中でtoolkit非依存のみ段階発注可、M4/M5ドラフト |
+| [specs/](specs/README.md) | マイルストーン仕様書(エージェントへの発注書)。確定/ドラフトのステータスはspecs/README.md参照 | M0/M1確定、M2基盤再締結済み(D5は別レーン)、M3はG0-9中でtoolkit非依存とReact asset直接移管R0〜R6だけ段階実装可、M4/M5ドラフト |
 | [reviews/](reviews/README.md) | レビュー規律+**全review文書の索引**(この表は現役参照の抜粋。全量はreviews/README.md側が正本で、`scripts/check-docs.sh`が抜けを検証) | 運用正本 |
-| [spikes/](spikes/) | スパイク結果報告(S1: Slint統合、S2: デコード、[S3(R8): Vello採否](spikes/s3-vello.md)、[G0-9: UI runtime部分比較](spikes/g0-9-ui-runtime.md)) | 個別文書の状態に従う |
+| [spikes/](spikes/) | スパイク結果報告(S1: Slint統合、S2: デコード、[S3(R8): Vello採否](spikes/s3-vello.md)、[G0-9: UI runtime部分比較](spikes/g0-9-ui-runtime.md)、[wgpu 29 surface host](spikes/g0-9-surface-host.md)、[native Timeline外観first pass](spikes/g0-9-timeline-visual-parity.md)) | 個別文書の状態に従う |
 | [reviews/2026-07-12-m2-permanence-prevention.md](reviews/2026-07-12-m2-permanence-prevention.md) | M2恒久焼き込みの**予防手順**(やること5手)。運用正本 | 現行 |
 | [reviews/2026-07-14-m3-ui-boundary-prevention.md](reviews/2026-07-14-m3-ui-boundary-prevention.md) | M3でUI都合をDocument・レンダ・公開契約へ逆流させない**予防手順**(規律8本) | 現行 |
 | [reviews/2026-07-14-m3-ui-boundary-counter-review.md](reviews/2026-07-14-m3-ui-boundary-counter-review.md) | M3 UI境界規約の反対側レビュー。R1〜R9を採用/縮小/延期で再判定 | 現行(判定反映済み) |
 | [reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md](reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md) | React/WebView、Host/community同一kit、native surface統合のG0-9証拠 | **責任境界・surface topology決定 / platform受入比較中** |
+| [reviews/2026-07-22-m3-react-product-asset-promotion-contract.md](reviews/2026-07-22-m3-react-product-asset-promotion-contract.md) | Reactモックを製品packageへ直接所有移管し、維持／交換境界、diagnostic route、発注・検収STOPを固定 | **決定 / 発注停止線**(明示再開まで発注しない) |
 | [reviews/2026-07-21-ui-surface-topology-decision.md](reviews/2026-07-21-ui-surface-topology-decision.md) | 1 top-level wgpu Surface、Stage/Timeline viewport、opaque child WebView islands | **topology決定 / platform受入継続** |
 | [reviews/2026-07-16-m3-preflight-decisions.md](reviews/2026-07-16-m3-preflight-decisions.md) | M3着手前決定: input/状態寿命、plugin UI、性能測定、操作文法を固定し、見た目とresource実値を証拠待ちへ分離 | **設計決定**(G0-2/4/7完了。G0-3は2026-07-21再評価中) |
 | [reviews/2026-07-20-m3-keymap-codec-contract.md](reviews/2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON wire・原本保全・migration境界 | **決定**(2026-07-20) |

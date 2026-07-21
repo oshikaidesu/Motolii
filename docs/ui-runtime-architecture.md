@@ -19,7 +19,8 @@ Native coordinator
 │  ├─ canonical display texture
 │  └─ handle / gizmo / roto presentation overlay
 └─ native wgpu Timeline
-   ├─ ruler / track header / lanes / clips / keys / playhead
+   ├─ time ruler / Z(depth) rail / row-synchronous controls
+   ├─ lanes / clips / keys / playhead
    └─ selection / marquee / graph / transient preview
 ```
 
@@ -29,11 +30,29 @@ React componentへ包めること自体はReact所有の理由にしない。
 
 StageとTimelineは、一つのzoom/scroll/focus/gestureへ高頻度同期する要素を領域内で分割しない。
 特にtrack headerだけをReact、key surfaceだけをnativeにする構成は採らない。Reactは外側のtoolbar、
-menu、popover、parameter編集を所有する。
+menu、popover、parameter編集を所有する。Timeline dock左の`KEYS / LAYERS`切替とAlign、Stagger、
+Stretch等のtool panelはtrack headerではなく、mode/formを選ぶReact chromeとする。一方、各rowと同じ
+scroll/zoom/selectionへ同期するS/M rail、time ruler、bar、key、playhead、およびZ軸Timeline / depth railは
+nativeが一体で所有する。
 
 Web所有panel内の小さなvisualizationは、DOMのform/a11y/component資産が主体で、native側へ
 semantic stateやinteraction stateを複製しない場合に限ってCanvasを使える。Stage、Timeline、roto、
 大量object/keyの直接操作面をこの例外へ入れない。
+
+### 1.1 React実装資産の所有
+
+React所有面は固定モックを外観だけの参考にして再実装せず、
+[React製品資産の直接移管契約](reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)に従って
+component、CSS、stable ID、ARIA、Storybook、Playwrightをproduct packageへ直接所有移管する。
+モックはproduct exportをfixtureで組み立てるconsumerへ反転し、mock/productへ同じcomponentの独立copyを残さない。
+
+交換するのはmock固有state、legacy HTML/script bridge、fixture adapterであり、Hostのrevision付きprojectionと
+typed intentへ一方向接続する。正しい独立React sourceが無いlegacy領域は、固定モック内で同形React化とparityを
+先に完了する。縮約component、skeleton、CSS後追い修理を製品面の代替にしない。
+
+このsource ownershipは内部実装の決定であり、DOM/CSSをDocument、永続形式、公開API、community互換契約へ
+昇格するものではない。またproduct-owned React packageの成立だけでWebView Host、sandbox、platform受入を
+合格にしない。
 
 ## 2. native surfaceは汎用UI toolkitを再実装しない
 
@@ -113,11 +132,17 @@ CompositionControllerは正規経路にしない。通常のwindowed child WebVi
 
 - React/WebView chrome + native Stage/Timelineという責任分担
 - ReactはDOMの優位性がある領域へ使い、高密度Canvas workspaceのownerにしない
+- Timelineの`KEYS / LAYERS` tool panelはReact、time/Z軸に同期するrail・bar・key・playheadはnative
 - Stage/Timelineのlayout、hit-test、interaction modelはtoolkit/renderer非依存に置く
 - native interactionはheadless部品を優先し、Motolii固有意味だけを自作する
 - React/nativeの両側へselection、snap、Undo、semantic stateを二重所有させない
 - Hostとcommunityは同じversioned React UI kitを使う長期原則
 - 1 top-level wgpu Surface + Stage/Timeline 2 viewport + opaque child WebView islandsという通常window topology
+
+二重所有の禁止は最適化方針ではなく不変条件である。Document編集はD2 single writerだけ、Transient selectionと
+sessionはHost coordinatorだけが所有する。React Inspector、native Preview、native Timelineは同じrevision付き
+snapshotのread-only projectionであり、独自writer、独自Undo、surface別selection正本を持たない。reload、detach、
+crash復旧では最新Host snapshotから再投影し、surface間の双方向state syncを追加しない。
 
 ### G0-9実機spikeまで未決
 

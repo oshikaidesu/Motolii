@@ -135,6 +135,9 @@
 | [2026-07-21-native-surface-renderer-counter-review.md](2026-07-21-native-surface-renderer-counter-review.md) | native surface renderer反対側レビュー(Fable回答・11問) |
 | [2026-07-21-native-surface-renderer-growth-review.md](2026-07-21-native-surface-renderer-growth-review.md) | native surface renderer伸長レビュー(Fable回答・機会と優先順位) |
 | [2026-07-21-ui-surface-topology-decision.md](2026-07-21-ui-surface-topology-decision.md) | 1 top-level wgpu Surface + Stage/Timeline viewport + opaque child WebView islandsのtopology決定 |
+| [2026-07-21-m3-product-mock-recovery-plan.md](2026-07-21-m3-product-mock-recovery-plan.md) | Rectangle製品縦切り・Timeline・複数Surface・隔離・OS受入の一括回収計画と停止線 |
+| [2026-07-21-m3-rectangle-drop-d2-contract-options.md](2026-07-21-m3-rectangle-drop-d2-contract-options.md) | Rectangle dropのD2個別契約案: LayerId原子性・exactly-once・selection・Undo/Redo |
+| [2026-07-22-m3-react-product-asset-promotion-contract.md](2026-07-22-m3-react-product-asset-promotion-contract.md) | Reactモックcomponentを製品packageへ直接所有移管し、縮約再実装と二重stateを拒否する契約 |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |
 | [2026-07-21-m3-u1a-1-static-viewport-contract.md](2026-07-21-m3-u1a-1-static-viewport-contract.md) | U1a-1 静止viewport実装前契約 |
