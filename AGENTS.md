@@ -6,9 +6,9 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 
 - ユーザーが「発注して」「実装を発注」等、**発注を依頼動詞として明示した時だけ**自動委任を発火する。通常の「実装して」、説明・引用・ファイル内に現れただけの「発注」では発火しない
 - **2026-07-22運用改訂**: Cursor/Grok/Composerの期限付き運用を終了し、Claude Codeへ切り替える。完全model IDを固定し、退役modelへ解決され得る`sonnet`/`opus` aliasは使わない。Claude Fableはユーザーが明示した時だけ使い、通常発注では消費しない
-- 発火時の役割は固定する。**主担当Codexは先例調査・コード事実の確認・長期展望と、恒久形式/公開API/plugin契約/停止線など重要境界の最終判断**を担う。**Claude Opus 4.8 (`claude-opus-4-8`)は現場監督**として具体設計案、チケット分解、発注書案をread-onlyで作る。Codexは実装前に正しさ・抜け・ユーザー意図・契約境界との一致を審査し、承認済み発注書だけを**Claude Sonnet 5 (`claude-sonnet-5`)が受注者**として実装する。最後にOpus 4.8がread-onlyで差分を検収し、Codexが統合を判断する。Opusは仕様の未決事項や公開契約を発明せず、判断が必要なら`ORDER: STOP`でCodexへ戻す。`ORDER: STOP`や`VERDICT: REJECT`を別backendで上書きしない
-- 実装発注は隔離worktreeで二段階実行する。まず`./scripts/delegate-claude-supervised.sh prepare <worktree> <order-file> "<task>"`でOpus案だけを生成して停止する。Codexは誤りがあればSonnetへ流さず差し戻す。正しければorder fileへ`CODEX PRECHECK: APPROVED`を明示し、`execute`で初めてSonnetを起動する
-- Opusの発注書は対象仕様ID、目的、現状、変更許可ファイル、非目標、再利用箇所、STOP条件、必須負例、実行コマンドを含む。`ORDER: READY`かつCodex事前承認がない限りSonnetを起動しない。Opus検収が`VERDICT: ACCEPT`でなければ実装差分を採用・commit・pushしない
+- 発火時の役割は固定する。**主担当Codexは先例調査・コード事実の確認・長期展望、発注書の正本化と、恒久形式/公開API/plugin契約/停止線など重要境界の最終判断**を担う。承認済み発注書だけを**Claude Sonnet 5 (`claude-sonnet-5`)が受注者**として実装し、**Claude Opus 4.8 (`claude-opus-4-8`)が実装担当とは別のread-only検収者**として実diffと試験を監査する。Codexが最後に統合を判断する。Opusの発注書draftは論点抽出用の任意助言であり、`ORDER: STOP`を別backendで上書きせず、未決をCodexが正本へ戻してから新しい発注書を作る
+- 実装発注は隔離worktreeで行う。Codexが対象仕様ID、目的、現状、変更許可ファイル、非目標、再利用箇所、STOP条件、必須負例、実行コマンドを含むclosed orderを作り、`ORDER: READY`、task hash、`CODEX PRECHECK: APPROVED`を明示してから`./scripts/delegate-claude-supervised.sh execute <worktree> <order-file> "<task>"`でSonnetを起動する。`prepare`はOpusのread-only助言が有用な時だけ使い、その出力を自動承認しない
+- Opus検収が`VERDICT: ACCEPT`でなければ実装差分を採用・commit・pushしない
 - `delegate-cursor-supervised.sh`と`delegate-cursor-review.sh`はClaude Codeが利用不能で、ユーザーへfallback理由を明示した場合だけ使う。並列助言は調査・論点抽出専用であり、実装の指揮系統には使わない。Sonnetに仕様判断・発注範囲変更・代替設計をさせない
 - 主担当は監督者として、外部エージェントの差分を仕様・依存・実装ガード・既存API・テスト期待値に照らしてコードレビューする。レビュー未完了の差分を採用せず、必要な修正と検証を行ってから主作業ツリーへ反映する
 - 実装発注は一度に1つの契約境界へ分割し、発注文に **変更許可ファイル・非目標・STOP条件・必須負例・実行コマンド** を明記する。複数境界を同時に満たす「便利な共通化」を発注側から要求しない
