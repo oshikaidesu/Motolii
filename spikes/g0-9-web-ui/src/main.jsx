@@ -257,6 +257,8 @@ function InteractionProbe() {
 function CommunitySandboxProbe() {
   const frameRef = useRef(null);
   const [result, setResult] = useState({ status: "pending" });
+  const [broker, setBroker] = useState({ handled: 0, allowed: [], denied: [] });
+  const brokerState = useRef({ handled: 0, allowed: [], denied: [] });
   const source = `<!doctype html><meta http-equiv="Content-Security-Policy"
     content="default-src 'none'; script-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; style-src 'unsafe-inline'">
     <style>body{background:#101720;color:#e7edf4;font:14px system-ui}button{color:inherit;background:#182331}</style>
@@ -271,14 +273,40 @@ function CommunitySandboxProbe() {
       catch (_) { blocked.network = true; }
       blocked.nativeBridge = typeof window.__TAURI__ === 'undefined';
       parent.postMessage({ type: 'g0-9-sandbox-result', blocked }, '*');
+      parent.postMessage({ type: 'g0-9-capability-request', capability: 'theme.read', requestId: 'theme-1' }, '*');
+      parent.postMessage({ type: 'g0-9-capability-request', capability: 'document.raw', requestId: 'raw-1' }, '*');
+      parent.postMessage({ type: 'g0-9-capability-request', capability: 'native.invoke', requestId: 'invoke-1' }, '*');
     })();
     <\/script>`;
 
   useEffect(() => {
     const receive = (event) => {
       if (event.source !== frameRef.current?.contentWindow || event.origin !== "null") return;
-      if (event.data?.type !== "g0-9-sandbox-result") return;
-      setResult({ status: "received", origin: event.origin, ...event.data.blocked });
+      if (event.data?.type === "g0-9-sandbox-result") {
+        setResult({ status: "received", origin: event.origin, ...event.data.blocked });
+        return;
+      }
+      if (event.data?.type !== "g0-9-capability-request") return;
+      const encoded = JSON.stringify(event.data);
+      const capability = event.data.capability;
+      const allowed = encoded.length <= 1024 && capability === "theme.read";
+      const next = {
+        handled: brokerState.current.handled + 1,
+        allowed: allowed
+          ? [...brokerState.current.allowed, capability]
+          : brokerState.current.allowed,
+        denied: allowed
+          ? brokerState.current.denied
+          : [...brokerState.current.denied, capability],
+      };
+      brokerState.current = next;
+      setBroker(next);
+      event.source.postMessage(
+        allowed
+          ? { type: "g0-9-capability-result", requestId: event.data.requestId, value: { theme: "dark" } }
+          : { type: "g0-9-capability-result", requestId: event.data.requestId, error: "denied" },
+        "*",
+      );
     };
     window.addEventListener("message", receive);
     return () => window.removeEventListener("message", receive);
@@ -289,6 +317,7 @@ function CommunitySandboxProbe() {
       <h2>Community sandbox negative probe</h2>
       <iframe ref={frameRef} title="Community panel sandbox" sandbox="allow-scripts" srcDoc={source} />
       <output data-testid="sandbox-state">{JSON.stringify(result)}</output>
+      <output data-testid="capability-broker-state">{JSON.stringify(broker)}</output>
     </section>
   );
 }

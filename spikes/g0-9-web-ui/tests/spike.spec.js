@@ -183,6 +183,14 @@ test("opaque community iframe exposes only the explicit message path", async ({ 
     network: true,
     nativeBridge: true,
   });
+  const broker = page.getByTestId("capability-broker-state");
+  await expect.poll(async () => JSON.parse(await broker.textContent()).handled).toBe(3);
+  expect(JSON.parse(await broker.textContent())).toEqual({
+    handled: 3,
+    allowed: ["theme.read"],
+    denied: ["document.raw", "native.invoke"],
+  });
+  const brokerResult = JSON.parse(await broker.textContent());
   await expect(page.getByTitle("Community panel sandbox").contentFrame()
     .getByRole("button", { name: "Community panel fixture" })).toBeVisible();
   const evidence = process.env.G0_9_SANDBOX_EVIDENCE;
@@ -192,11 +200,13 @@ test("opaque community iframe exposes only the explicit message path", async ({ 
       ticket: "G0-9",
       capturedAt: new Date().toISOString(),
       result,
+      broker: brokerResult,
       sandbox: "allow-scripts without allow-same-origin",
       csp: "harness inline script; default/connect/img none",
       boundaries: {
         separateWebViewValidated: false,
         nativeIpcNegativeValidated: false,
+        typedCapabilityBrokerValidated: true,
         loopCrashOomIsolationValidated: false,
       },
     }, null, 2)}\n`);

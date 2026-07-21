@@ -14,6 +14,20 @@ fn fs_main() -> @location(0) vec4f {
 }
 `;
 
+async function withDeadline(promise, milliseconds, label) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out`)), milliseconds);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function lowerBound(keys, time) {
   let low = 0;
   let high = keys.length;
@@ -43,12 +57,24 @@ export class TimelineRenderer {
       this.webgpu = { available: false, reason: "navigator.gpu unavailable" };
       return this.webgpu;
     }
-    const adapter = await navigator.gpu.requestAdapter();
+    let adapter;
+    try {
+      adapter = await withDeadline(navigator.gpu.requestAdapter(), 5_000, "WebGPU adapter");
+    } catch (error) {
+      this.webgpu = { available: false, reason: error.message };
+      return this.webgpu;
+    }
     if (!adapter) {
       this.webgpu = { available: false, reason: "requestAdapter returned null" };
       return this.webgpu;
     }
-    const device = await adapter.requestDevice();
+    let device;
+    try {
+      device = await withDeadline(adapter.requestDevice(), 5_000, "WebGPU device");
+    } catch (error) {
+      this.webgpu = { available: false, reason: error.message };
+      return this.webgpu;
+    }
     const gpuCanvas = document.createElement("canvas");
     gpuCanvas.width = this.canvas.width;
     gpuCanvas.height = this.canvas.height;

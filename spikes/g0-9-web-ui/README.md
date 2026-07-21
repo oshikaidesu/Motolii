@@ -12,7 +12,8 @@ React/Viteを製品へ組み込まず、G0-9の比較項目だけを隔離して
   marquee selectionを通し、選択をaccessible DOM proxyへ投影すること
 - IME boundary: composition中のshortcutを抑止し、composition event列をReact inputで保持すること
 - sandbox negative: opaque-origin iframeからparent DOM、storage、network、native bridgeへ直接触れず、
-  explicit `postMessage`だけを受けること
+  explicit `postMessage`だけを受けること。親側のfixture brokerは`theme.read`だけを許可し、
+  `document.raw`と`native.invoke`を拒否すること
 - object handles: Konva Transformerで2D move/scale/rotate/multi-select/Cancel/zoom-invariant hit target、
   Three.js TransformControlsで3D translate/rotate/scale、world/local、snap、camera操作排他を比較すること
 
