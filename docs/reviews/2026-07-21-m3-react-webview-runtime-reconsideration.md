@@ -190,11 +190,12 @@ Metalで再合格した。
 
 object handle追試では、Konva Transformerで2D move/scale/rotate/multi-select/Cancel、Three.js
 TransformControlsで3D translate/scale/rotate、world/local、snap、camera orbit排他を実mouseで確認した。
-これは既成DCC機構を再利用できる証拠であり、Three.jsを製品rendererへ採る決定ではない。M5 P2Uの
-ScaleとDepth Moveの別channel、perspective/orthographic、D2 Undoは未接続である。また第1hybrid候補の
-非重複sibling構成ではWeb Canvasのgizmoをnative Stageへ自動で重ねられないため、native wgpu描画と
-transparent/composition overlayを実機比較する。Host/communityのUI kit統一とStage描画surfaceの所有は
-別論点として扱う。
+これは既成DCC機構を再利用できる証拠であり、製品renderer/runtime採否の点数ではない。
+[Native Stage gizmo所有境界](2026-07-21-native-stage-gizmo-ownership.md)で、2D/3D handleはcanonical出力外の
+native wgpu presentation overlay、hit-testはCPU解析幾何、commitはD2が所有すると決定した。Webは同じkitの
+toolbar/control/a11y proxyを所有し、transparent/composition overlayをgizmo要件にしない。M5 P2Uの
+ScaleとDepth Moveの別channel、perspective/orthographic、D2 Undoは別Stage spikeで未接続である。
+Host/communityのUI kit統一とStage描画surfaceの所有は別論点として扱う。
 
 WebView/native StageはTexture共有でなく、opaque native StageとWebViewを非重複sibling surfaceとして
 OS compositorに合成する案を第1候補にする。Host/communityは同じversioned React kitを使うが、
@@ -203,6 +204,9 @@ community realmはnamed least-privileged WebView + typed Rust brokerを安全基
 bridgeの直接access拒否を部分確認したが、別WebViewのnative IPC、loop/crash/OOM隔離は未証明である。
 製品組込みと公開契約を許可する採択ではない。browser WebGPUとnative wgpuを
 同じdeviceとみなす禁止は維持する。
+
+したがってG0-9が比較するWeb runtime範囲はshell、panel、Browser、form、Timeline dense surface、hot reload、
+community realm、IME/a11y、offline配布である。Stage gizmoのvisual rendererは候補間の比較項目から外す。
 
 ## 6. 既存台帳の扱い
 

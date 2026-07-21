@@ -14,8 +14,8 @@
 | actual mouse drag / snap / canvas外移動 | **PARTIAL / automated** | Playwrightの実mouse inputでKonva group drag、10 CSS px `dragBoundFunc`、canvas外移動後Escapeを確認。Motolii RationalTime snapと実D2 Undoは未接続 |
 | pointer capture | **PASS / primitive** | DOM overlayで標準`setPointerCapture`を使い、surface外moveとrelease後capture解放を確認。`pointercancel`/pen/touch実機は未証明 |
 | marquee | **PASS / adapter** | Konva `Rect` + `Konva.Util.haveIntersection`で選択集合を生成。reverse marquee、edge-panは未証明 |
-| 2D object handle | **PASS / adapter** | Konva Transformerで実mouseのmove/scale/rotate、2 object選択、Escape取消、zoom後も14 CSS px表示/30 CSS px hit target、固定3操作のDOM proxyを確認。D2/正準transformは未接続 |
-| 3D object gizmo | **PARTIAL / adapter** | Three.js TransformControlsで実mouseのtranslate/scale/rotate、world/local、snap設定、drag中OrbitControls排他、Escape取消を確認。Three.jsを製品rendererとはしない |
+| 2D object handle | **PASS / prior-art adapter** | Konva Transformerで実mouseのmove/scale/rotate、2 object選択、Escape取消、zoom後も14 CSS px表示/30 CSS px hit target、固定3操作のDOM proxyを確認。製品Stage ownerはnative wgpuへ決定し、Web runtime選定の合格点から外す |
+| 3D object gizmo | **PARTIAL / prior-art adapter** | Three.js TransformControlsで実mouseのtranslate/scale/rotate、world/local、snap設定、drag中OrbitControls排他、Escape取消を確認。製品Stage ownerはnative wgpuで、Three.jsを製品renderer/runtimeとはしない |
 | M5 Scale / Depth Move分離 | **NOT VALIDATED** | 汎用3D translate/scale成立はP2U合格ではない。Scaleは`scale.x/y`だけ、Depth Moveは`position.z`だけ、perspective/orthographic・DPI・D2 Undoを既存M5 fixtureで別審判する |
 | Canvas a11y proxy | **PARTIAL / macOS実機** | proxyは選択数に比例させず1 focus target + count。SafariのmacOS AX treeでCanvas説明と選択listを確認。keyboard同等操作、VoiceOver読上げは未証明 |
 | IME gate | **PARTIAL / automated** | composition中のshortcut抑止とevent順をsynthetic eventで確認。macOS日本語IME候補窓、preedit、確定/取消は`PHYSICAL` |
@@ -23,7 +23,7 @@
 | Reactモック資産 | **PASS / fixed comparison** | 固定worktree build + 43 Playwright test。stress fixtureの製品component直接接続は未証明 |
 | native Stage + WebView | **RESEARCHED / spike required** | CPU readbackなしの非重複sibling surfaceは既成APIで成立見込み。native TextureのWebView共有ではない |
 | overlay / alpha / color | **PHYSICAL** | macOS透明wryはprivate API停止線。まずopaque Stage + 非重複WebView、overlayは別審判 |
-| native Stage上の3D gizmo合成 | **PHYSICAL / architecture** | 非重複sibling WebViewのDOM/Canvasはnative Stageへ自動で重ならない。native wgpu描画か透明/composition overlayかを、入力・occlusion・screen一定サイズと併せて実機比較する |
+| native Stage上の2D/3D gizmo | **OWNER DECIDED / spike required** | canonical出力外のnative wgpu presentation overlayが描画し、CPU解析幾何でhit-testする。transparent WebViewは比較対象から外し、occlusion、screen一定サイズ、M5意味、D2、a11y proxyを実機spikeする |
 | resize/minimize/restore/DPI/device lost | **PARTIAL** | 現行egui実window試験は合格。Safari実画面は最小化→Raise後もAX内容を保持。候補WKWebView/native Stage同居、DPI移動、device lostは未証明 |
 | Host/community同一kit | **DESIGN EVIDENCE** | 同一versioned React component/test kitを使う。権限realmまで同一にはしない |
 | community sandbox/権限 | **PARTIAL / automated** | opaque-origin iframeでparent DOM、storage、network、native bridgeの直接access拒否と明示messageだけを確認。named least-privileged WebView + Rust brokerを安全基準とし、iframeからnative IPC不能かは別負例が必要 |
@@ -75,22 +75,25 @@ browser WebGPU deviceとnative wgpu device/Textureを共有する方式ではな
 ### 2.3 2D handleと3D gizmo
 
 2Dは[Konva Transformer](https://konvajs.org/api/Konva.Transformer.html)の既成resize/rotate、
-multi-node、rotation snap、bound functionを使い、独自hit-testを増やさず実操作を再現した。
+multi-node、rotation snap、bound functionを使い、Web上の比較adapterで実操作を再現した。
 3Dは[Three.js TransformControls](https://threejs.org/docs/pages/TransformControls.html)で
 translate/rotate/scale、world/local、各snapを再現し、
 [OrbitControls](https://threejs.org/docs/pages/OrbitControls.html)をdrag中だけ無効化した。
 [Babylon.js Gizmo](https://doc.babylonjs.com/features/featuresDeepDive/mesh/gizmo)も同じ問題領域の既成先例である。
 
-ただしThree.jsはDCC操作機構の比較adapterであり、native Rust/wgpu Stageの置換でもMotoliiの
-Document/API正本でもない。Motoliiは[M5 P2U](../specs/M5-3d-and-post.md#見かけサイズを変える直接操作-scale--depth-move)どおり
+ただしKonva/Three.jsはDCC操作機構の比較adapterであり、native Rust/wgpu Stageの置換でもMotoliiの
+Document/API正本でもない。製品のhandle/gizmoは
+[Native Stage gizmo所有境界](../reviews/2026-07-21-native-stage-gizmo-ownership.md)どおりcanonical出力外の
+native wgpu presentation overlayが描き、少数固定形状はCPU解析幾何でhit-testする。Motoliiは
+[M5 P2U](../specs/M5-3d-and-post.md#見かけサイズを変える直接操作-scale--depth-move)どおり
 単一XYZ worldを維持し、見た目が似るScaleとDepth Moveを別操作・別channelにする。汎用`translate Z`
 をそのままDepth契約へ昇格しない。
 
 次のfixtureではperspective/orthographic、local/world、camera orbitとのpointer競合、camera距離・zoom・DPIに
 依存しないscreen-space hit target、前後遮蔽時の表示/picking、common-parentとmixed-parent拒否を測る。
-さらにhybrid第1候補の非重複siblingではWeb側gizmoをnative Stageへ重ねられないため、(a) native wgpuが
-gizmoを描きWeb UIは同じkitのtoolbar/a11y proxyを持つ案、(b) transparent/composition WebView overlay案を
-実機比較する。これはHost/communityのUI kitを分離する決定ではなく、Stage描画責任の比較である。
+Web UIは同じkitのtoolbar/a11y proxyを持つ。transparent/composition WebView overlayはgizmo要件から外し、
+opaque native Stage + 非重複sibling WebViewで責任分担する。次の実機spikeは所有者比較ではなく、native passの
+canonical画素非汚染、resource再利用/readback 0、occlusion、screen一定サイズ、D2/Cancelを審判する。
 
 ### 2.4 同一kitとcommunity保護領域
 

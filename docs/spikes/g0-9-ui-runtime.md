@@ -18,9 +18,10 @@ Document/API変更を許可しない。
 5. **大量dragは既成scene graphで候補を維持した**。20,000 visible keyを背景に、PixiJSと
    Konvaで最大10,000 key / 1,000 objectの選択overlayをgroup移動した。move中はReact stateと
    semantic commitを更新せず、Cancel復元、release 1回だけcommitするadapter条件を保った。
-6. **2D handleと3D gizmoの機構は既成技術で成立した**。Konva Transformerで2Dのmove/scale/rotate/
+6. **2D handleと3D gizmoの機構は既成技術で成立したが、Web runtime採否から外す**。Konva Transformerで2Dのmove/scale/rotate/
    multi-select、Three.js TransformControlsで3Dのtranslate/scale/rotate、world/local、snap、
-   camera操作排他、Cancelを実mouseで確認した。ただしnative Stage合成とM5 Scale/Depth分離は未合格である。
+   camera操作排他、Cancelを実mouseで確認した。製品描画はnative wgpu Stage presentation overlay、hit-testは
+   CPU解析幾何と決定した。M5 Scale/Depth分離とD2接続は別Stage spikeで未合格のままである。
 7. **G0-9の最終採否はまだ閉じない**。[全確認点マトリクス](g0-9-verification-matrix.md)で
    自動合格、部分合格、対象実機必須を分離した。actual mouse/snap/marquee/pointer capture primitiveと
    macOS WebKit/AXは前進したが、WebView/native Stage同居、IME/VoiceOver、sandbox負例、Windowsは残る。
@@ -48,8 +49,8 @@ Rust/native wgpu＝映像Stage/render core**という責任分担をhybrid候補
 製品runtime契約ではない。
 
 PixiJS、Konva、Three.jsはいずれもMIT。Three.jsをeager importした比較buildは最大chunk
-1,123.62 kB（gzip 314.76 kB）となり、Viteの500 kB警告が出た。3D gizmoをWeb側へ採る場合も
-shell起動時へ抱えずcode split/lazy loadを測るべき負債であり、機構成立だけで無視しない。
+1,123.62 kB（gzip 314.76 kB）となり、Viteの500 kB警告が出た。これはWeb側の機構比較費用であり、
+製品shellへThree.jsを同梱してStage gizmoを描かない判断を補強する。再現用spike依存は証拠として残す。
 
 ## 既知技術の調査結果
 
@@ -111,7 +112,7 @@ Document writerを呼ばない構成証拠である。
 Pixi surfaceは計測前にpixel extractionを1回だけ行い、背景色と異なる10,791 pixelを確認した。
 このreadbackはblank surface拒否用で、drag計測sampleには含めていない。
 
-### Object handle / 3D gizmo追試
+### Object handle / 3D gizmo追試（先例adapter限定）
 
 Playwrightの実mouse inputで次を確認した。
 
@@ -122,8 +123,11 @@ Playwrightの実mouse inputで次を確認した。
 - gizmo drag中だけOrbitControlsを無効化し、release後に復帰。Escape取消後commit 0
 - macOS SafariでThree.js WebGL描画と2D/3D toolbarのAX露出、AX経由のmode切替を確認
 
-これはUI adapterの成立証拠であり、Motolii D2、正準transform、native Stage合成、M5 P2Uの
-Scale/Depth Move分離は未接続である。3D objectが扱えることと、汎用3D modeを新設することも同義ではない。
+これはUI adapterの成立証拠であり、製品Web runtime選定の合格点ではない。
+[Native Stage gizmo所有境界](../reviews/2026-07-21-native-stage-gizmo-ownership.md)により、製品描画は
+canonical出力外のnative wgpu presentation overlay、hit-testはCPU解析幾何、commitはD2が所有する。
+Motolii D2、正準transform、M5 P2UのScale/Depth Move分離は別Stage spikeで未接続である。
+3D objectが扱えることと、汎用3D modeを新設することも同義ではない。
 
 証拠は[Web report](g0-9-web-ui-evidence/report.json)と
 [native timeline report](g0-9-web-ui-evidence/native-timeline-report.json)、
@@ -169,8 +173,8 @@ G0-9を閉じる前に少なくとも次を別スパイクで検証する。
 4. Hostとcommunityが同じReact kitを使いつつ、file/network/GPU/Document mutationを権限分離できるか
 5. 実ReactモックのBrowser/Timelineを今回のstress fixtureへ接続し、通常操作を保てるか
 6. Windows WebView実機とoffline配布、dev serverを出荷物へ含めないproduction bundle
-7. native Stage上の2D/3D handle描画またはoverlay合成を、screen-space hit target、occlusion、
-   camera操作排他、M5 Scale/Depth Move分離、D2 Undo/Cancelで成立させられるか
+7. G0-9とは別のM3/M5 native Stage spikeで、canonical出力外のwgpu overlayとCPU解析hit-testを、
+   screen-space hit target、occlusion、camera操作排他、M5 Scale/Depth Move分離、D2 Undo/Cancelで成立させる
 8. Canvas Timeline等の既成timelineを依存監査し、Motolii固有実装量をさらに削れるか
 
 上記の現在値、既成部品への割当、実機順序は
@@ -184,6 +188,7 @@ G0-9を閉じる前に少なくとも次を別スパイクで検証する。
 - HMR約17 msからplugin互換、sandbox、状態migrationまで解決済みと主張する
 - SwiftShaderの数値をApple MetalまたはWindows GPUの製品性能値にする
 - Three.js gizmoの成立から、非重複sibling WebViewがnative Stageへoverlayできるとみなす
+- Three.js/Konvaを製品Stage renderer、runtime選定点、Document/API正本にする
 - 汎用translate ZをM5のDepth Move契約またはScale/Depth分離の合格とみなす
 
 ## 再現

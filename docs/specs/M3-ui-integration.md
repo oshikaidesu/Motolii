@@ -20,7 +20,7 @@ A-1(egui候補は既存device/native texture共有を[採用時の実機証拠](
 | G0-6 | 視覚言語tokenと認知審判 | **手順完了・目視待ち** | [着手前決定§5](../reviews/2026-07-16-m3-preflight-decisions.md#5-g0-6-見た目はuxの投影として導出する)。U0e-1の生成機構、U0e-2Rの固定React比較baseline再結合、U0e-2のreference fixtureだけ先行可。具体token値と製品componentを入れるU0e-3はG0-6Hの人間審判まで待つ |
 | G0-7 | 操作単純化・共通componentゲート | **完了** | [UI操作言語](../ui-interaction-language.md)と[着手前決定§6](../reviews/2026-07-16-m3-preflight-decisions.md#6-g0-7-操作文法を共通部品の契約にする)をU2c conformanceへ固定 |
 | G0-8 | resource予算presetとpreview縮退設定 | **意味完了・実測待ち** | [着手前決定§7](../reviews/2026-07-16-m3-preflight-decisions.md#7-g0-8-resource値はm4の事実から決める)。具体値だけG0-4+M4-K1a後に決定 |
-| G0-9 | UI runtime再選定: egui / React-WebView / hybrid | **部分スパイク合格・全確認点経路割当・比較継続** | [部分スパイク](../spikes/g0-9-ui-runtime.md)と[確認点マトリクス](../spikes/g0-9-verification-matrix.md)。10,000 item、100,000 key、scene graph drag、HMR、actual mouse/snap/marquee/pointer capture、2D handle、3D gizmo、macOS WebKit/AXを部分確認。3DはM5 Scale/Depth分離とnative Stage overlayを未合格のまま保持する。第1hybrid候補はopaque native Stage + 非重複sibling WebView。同一community kitは別保護realmとtyped brokerを前提に負例検証する。IME/VoiceOver、WebView/native Stage同居、sandbox crash、Windows実機まではtoolkit固有実装と公開契約固定を停止 |
+| G0-9 | UI runtime再選定: egui / React-WebView / hybrid | **部分スパイク合格・全確認点経路割当・比較継続** | [部分スパイク](../spikes/g0-9-ui-runtime.md)と[確認点マトリクス](../spikes/g0-9-verification-matrix.md)。10,000 item、100,000 key、scene graph drag、HMR、actual mouse/snap/marquee/pointer capture、macOS WebKit/AXを部分確認。Konva/Threeの2D/3D handleは先例証拠に限定し、runtime採否から外す。[native Stage所有境界](../reviews/2026-07-21-native-stage-gizmo-ownership.md)は決定、M5 Scale/Depth・D2の実装spikeは未合格。第1hybrid候補はopaque native Stage + 非重複sibling WebView。同一community kitは別保護realmとtyped brokerを前提に負例検証する。IME/VoiceOver、WebView/native Stage同居、sandbox crash、Windows実機まではtoolkit固有実装と公開契約固定を停止 |
 
 以下は**M3入場(U0a完了)後**の論理依存表である。G0自体はM3全コードを一括停止する門ではないが、初回Uシリーズは下表の論理依存に加えて本書の直列運用を優先する。U1aはU0bの5層所有とdomain intentを待ち、custom UI追加タスクはG0-3の判定後に初めて起票する。U0〜U9を一括または並走発注しない。
 
@@ -30,6 +30,7 @@ A-1(egui候補は既存device/native texture共有を[採用時の実機証拠](
 
 - **egui候補**。[採用判断](../reviews/2026-07-18-m3-egui-selection.md)時の初期統合はegui/eframe/egui-wgpu/egui-winit 0.35、egui_tiles 0.16、wgpu 29の組合せをadapter内で固定した。versionはDocument/plugin契約へ出さない
 - プレビューは同一device上の`Rgba8Unorm` `TextureView`を`egui_wgpu::Renderer::register_native_texture`へ登録して表示する。display slot生成時にtextureと安定viewを一度作り、rendererを得られる`eframe::CreationContext`で一度だけnative texture登録する。frame更新、resize、DPI変更、minimize/restoreごとに登録し直さない
+- Stage上の2D handle、selection outline、3D gizmo、Depth rail/axisは、toolkitにかかわらずcanonical display texture後段のnative wgpu presentation overlayで描く。canonical render/exportへ焼かず、少数固定形状のhit-testはCPU解析幾何、確定はD2とする。Webはtoolbar/control/a11y proxyを所有できるが、transparent WebViewをgizmo要件にしない。実装許可ではなく、合格条件は[native Stage所有境界](../reviews/2026-07-21-native-stage-gizmo-ownership.md)を正とする
 - **wgpuバージョンはcoreとegui-wgpuで単一化**する。更新PRではCargo treeの重複拒否、既存device共有、native texture、resize/minimize/restoreを再検証する
 - egui/eframe/winitのAPI変更は`motolii-ui`内のadapterで吸収する。0.35で実際に発生した`App::update`→`App::ui`等の変更をdomain modelや他製品crateへ波及させない
 - OpenCut(MIT)はコード流用不可となった(React前提のため)。**操作仕様・レイアウトの参考のみ**に格下げ。操作動線はOpenCut、Flow/Alight Motion、一般的なトラック型UIを参照する。既知の外殻、操作トポロジー、共通component契約は[UI操作言語](../ui-interaction-language.md)を正本とする
