@@ -84,3 +84,121 @@ test("G0-9 dense Web UI evidence", async ({ page, request, browserName }) => {
     fs.writeFileSync(evidence, `${JSON.stringify(report, null, 2)}\n`);
   }
 });
+
+test("actual pointer drag, snap, cancel, marquee, and IME boundary", async ({ page }) => {
+  await page.goto("/");
+  const stage = page.getByTestId("interaction-stage");
+  await stage.scrollIntoViewIfNeeded();
+  const box = await stage.boundingBox();
+  expect(box).not.toBeNull();
+
+  const state = async () => JSON.parse(await page.getByTestId("interaction-state").textContent());
+  await page.mouse.move(box.x + 45, box.y + 53);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 118, box.y + 96, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => (await state()).commits).toBe(1);
+  expect((await state()).x % 10).toBe(0);
+  expect((await state()).y % 10).toBe(0);
+
+  await page.mouse.move(box.x + 115, box.y + 95);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width + 80, box.y + 180, { steps: 8 });
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  await expect.poll(async () => (await state()).cancels).toBe(1);
+  expect((await state()).commits).toBe(1);
+
+  await page.mouse.move(box.x + 20, box.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 250, box.y + 160, { steps: 8 });
+  await page.mouse.up();
+  const selection = await state();
+  expect(selection.selected.length).toBeGreaterThan(0);
+  await expect(page.getByRole("list", { name: "Selected keyframes" }).getByRole("button").first()).toBeVisible();
+  expect(await page.getByTestId("selection-proxy").getByRole("button").count()).toBe(1);
+
+  const captureProbe = page.getByTestId("capture-probe");
+  const captureBox = await captureProbe.boundingBox();
+  await page.mouse.move(captureBox.x + 20, captureBox.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(captureBox.x + captureBox.width + 200, captureBox.y - 80, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(async () => JSON.parse(await page.getByTestId("capture-state").textContent()).captured).toBe(false);
+  const capture = JSON.parse(await page.getByTestId("capture-state").textContent());
+  expect(capture.moves).toBeGreaterThan(0);
+  expect(capture.captured).toBe(false);
+
+  const input = page.getByTestId("ime-input");
+  await input.focus();
+  await input.dispatchEvent("compositionstart", { data: "に" });
+  await input.dispatchEvent("keydown", { key: "k", metaKey: true, isComposing: true });
+  await input.dispatchEvent("compositionupdate", { data: "日本" });
+  await input.dispatchEvent("compositionend", { data: "日本" });
+  let ime = JSON.parse(await page.getByTestId("ime-state").textContent());
+  expect(ime.shortcutCount).toBe(0);
+  expect(ime.events).toEqual(["compositionstart", "compositionupdate", "compositionend"]);
+  await input.press("Meta+k");
+  ime = JSON.parse(await page.getByTestId("ime-state").textContent());
+  expect(ime.shortcutCount).toBe(1);
+
+  const evidence = process.env.G0_9_INTERACTION_EVIDENCE;
+  if (evidence) {
+    fs.mkdirSync(path.dirname(evidence), { recursive: true });
+    fs.writeFileSync(evidence, `${JSON.stringify({
+      ticket: "G0-9",
+      capturedAt: new Date().toISOString(),
+      environment: { platform: os.platform(), release: os.release(), arch: os.arch() },
+      actualMouse: {
+        konvaDrag: true,
+        snappedCssPx: { x: selection.x, y: selection.y, grid: 10 },
+        escapedAfterOffSurfaceMove: selection.cancels === 1,
+        adapterCommits: selection.commits,
+        marqueeSelected: selection.selected.length,
+      },
+      pointerCapture: { surfaceExitMoves: capture.moves, released: !capture.captured },
+      accessibilityProxy: { domButtons: 1, selectedCount: selection.selected.length },
+      syntheticCompositionGate: ime,
+      boundaries: {
+        motoliiD2Connected: false,
+        rationalTimeSnapValidated: false,
+        physicalImeValidated: false,
+        voiceOverValidated: false,
+        penValidated: false,
+      },
+    }, null, 2)}\n`);
+  }
+});
+
+test("opaque community iframe exposes only the explicit message path", async ({ page }) => {
+  await page.goto("/");
+  const state = page.getByTestId("sandbox-state");
+  await expect.poll(async () => JSON.parse(await state.textContent()).status).toBe("received");
+  const result = JSON.parse(await state.textContent());
+  expect(result).toEqual({
+    status: "received",
+    origin: "null",
+    parentDocument: true,
+    storage: true,
+    network: true,
+    nativeBridge: true,
+  });
+  await expect(page.getByTitle("Community panel sandbox").contentFrame()
+    .getByRole("button", { name: "Community panel fixture" })).toBeVisible();
+  const evidence = process.env.G0_9_SANDBOX_EVIDENCE;
+  if (evidence) {
+    fs.mkdirSync(path.dirname(evidence), { recursive: true });
+    fs.writeFileSync(evidence, `${JSON.stringify({
+      ticket: "G0-9",
+      capturedAt: new Date().toISOString(),
+      result,
+      sandbox: "allow-scripts without allow-same-origin",
+      csp: "harness inline script; default/connect/img none",
+      boundaries: {
+        separateWebViewValidated: false,
+        nativeIpcNegativeValidated: false,
+        loopCrashOomIsolationValidated: false,
+      },
+    }, null, 2)}\n`);
+  }
+});

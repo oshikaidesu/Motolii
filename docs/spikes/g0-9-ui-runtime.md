@@ -18,8 +18,9 @@ Document/API変更を許可しない。
 5. **大量dragは既成scene graphで候補を維持した**。20,000 visible keyを背景に、PixiJSと
    Konvaで最大10,000 key / 1,000 objectの選択overlayをgroup移動した。move中はReact stateと
    semantic commitを更新せず、Cancel復元、release 1回だけcommitするadapter条件を保った。
-6. **G0-9の最終採否はまだ閉じない**。最大の未検証点はWebView内shellとnative wgpu Stageの
-   CPU readbackなし合成、IME/a11y、community plugin sandbox、Windows実機である。
+6. **G0-9の最終採否はまだ閉じない**。[全確認点マトリクス](g0-9-verification-matrix.md)で
+   自動合格、部分合格、対象実機必須を分離した。actual mouse/snap/marquee/pointer capture primitiveと
+   macOS WebKit/AXは前進したが、WebView/native Stage同居、IME/VoiceOver、sandbox負例、Windowsは残る。
 
 したがって現時点の方向は「React DOMかnative wgpuか」の二者択一ではなく、
 **React DOM＝shell/Browser/form、Canvas/browser WebGPU＝Web runtime内の高密度面、
@@ -151,6 +152,9 @@ G0-9を閉じる前に少なくとも次を別スパイクで検証する。
    offscreen drag、marquee、selected handleだけのa11y proxyを既成APIから組めるか
 8. Canvas Timeline等の既成timelineを依存監査し、Motolii固有実装量をさらに削れるか
 
+上記の現在値、既成部品への割当、実機順序は
+[G0-9全確認点マトリクス](g0-9-verification-matrix.md)を正とする。
+
 次のどれかを仮定した時点で停止する。
 
 - browser WebGPUとnative wgpuを同じ`GPUDevice`または共有Textureとして扱う
@@ -166,7 +170,9 @@ cd spikes/g0-9-web-ui
 npm ci
 npm audit --audit-level=moderate
 npm run build
-G0_9_EVIDENCE=../../docs/spikes/g0-9-web-ui-evidence/report.json npm test
+G0_9_EVIDENCE=../../docs/spikes/g0-9-web-ui-evidence/report.json \
+G0_9_INTERACTION_EVIDENCE=../../docs/spikes/g0-9-web-ui-evidence/interaction-report.json \
+G0_9_SANDBOX_EVIDENCE=../../docs/spikes/g0-9-web-ui-evidence/sandbox-report.json npm test
 
 cd ../..
 cargo test -p motolii-ui --test public_boundary --test u1a1_static_viewport

@@ -25,6 +25,52 @@ header {
 
 .grid {
   align-items: start;
+  flex-wrap: wrap;
+}
+
+.interaction-section {
+  margin-top: 16px;
+  max-width: 900px;
+}
+
+.interaction-stage {
+  width: 600px;
+  height: 240px;
+  border: 1px solid #33465b;
+  background: #101720;
+}
+
+.interaction-section output,
+.interaction-section label,
+.interaction-section ul {
+  display: block;
+  margin-top: 10px;
+}
+
+.capture-probe {
+  margin-top: 10px;
+  width: 180px;
+  padding: 8px;
+  border: 1px dashed #59c7ff;
+  user-select: none;
+  touch-action: none;
+}
+
+.sandbox-section {
+  margin-top: 16px;
+  max-width: 900px;
+}
+
+.sandbox-section iframe {
+  display: block;
+  width: 360px;
+  height: 80px;
+  border: 1px solid #33465b;
+}
+
+.sandbox-section output {
+  display: block;
+  margin-top: 10px;
 }
 
 section {

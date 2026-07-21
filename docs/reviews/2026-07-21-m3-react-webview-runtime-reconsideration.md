@@ -183,11 +183,18 @@ semantic commitをmove中に更新せず、Cancel復元とrelease時1 commitをa
 Vite HMRもRust再起動なしでacceptした。現行native wgpu timelineとegui shell境界もApple M4 /
 Metalで再合格した。
 
-これは局所WebGPUとhybrid候補を比較対象へ残す証拠であり、runtime採択ではない。browser側は
-SwiftShaderで、WebView組込み、native Stage texture共有、IME/a11y、plugin sandbox、Windowsを
-検証していない。Pixi Particle APIもexperimentalで、Konva/Pixiの個別pointer route、snap、
-offscreen drag、実D2 command接続は未検証である。特にbrowser WebGPUとnative wgpuを同じdeviceと
-みなす禁止は維持する。
+追試の現在値は[全確認点マトリクス](../spikes/g0-9-verification-matrix.md)へ分離した。Playwrightの
+実mouseでKonva group drag、10 CSS px snap、canvas外移動後Cancel、marqueeと標準pointer captureを
+確認し、macOS Safari実機ではWebKit描画とAX treeへのCanvas説明・bounded selection proxy公開を
+確認した。これはMotolii RationalTime snap、D2 Undo、日本語IME候補窓、VoiceOverの合格ではない。
+
+WebView/native StageはTexture共有でなく、opaque native StageとWebViewを非重複sibling surfaceとして
+OS compositorに合成する案を第1候補にする。Host/communityは同じversioned React kitを使うが、
+community realmはnamed least-privileged WebView + typed Rust brokerを安全基準に分離する。これらは
+一次資料上の候補である。軽量比較のopaque-origin iframeではparent DOM、storage、network、native
+bridgeの直接access拒否を部分確認したが、別WebViewのnative IPC、loop/crash/OOM隔離は未証明である。
+製品組込みと公開契約を許可する採択ではない。browser WebGPUとnative wgpuを
+同じdeviceとみなす禁止は維持する。
 
 ## 6. 既存台帳の扱い
 

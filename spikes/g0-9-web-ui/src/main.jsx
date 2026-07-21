@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import Konva from "konva";
 import { revision as hmrRevision } from "virtual:g0-9-hmr-probe";
 import { DynamicSceneBenchmark } from "./dynamic-scene-benchmark.js";
 import { browserItem, createTimelineFixture, fixture } from "./fixture.js";
@@ -114,6 +115,183 @@ function TimelineProbe() {
   );
 }
 
+function InteractionProbe() {
+  const hostRef = useRef(null);
+  const [interaction, setInteraction] = useState({ commits: 0, cancels: 0, selected: [], x: 40, y: 48 });
+  const [capture, setCapture] = useState({ moves: 0, cancels: 0, captured: false });
+  const [ime, setIme] = useState({ composing: false, shortcutCount: 0, events: [] });
+
+  useEffect(() => {
+    const stage = new Konva.Stage({ container: hostRef.current, width: 600, height: 240 });
+    const layer = new Konva.Layer();
+    const marquee = new Konva.Rect({ visible: false, fill: "#59c7ff33", stroke: "#59c7ff" });
+    const group = new Konva.Group({ x: 40, y: 48, draggable: true, name: "key-group" });
+    let dragOrigin = { x: group.x(), y: group.y() };
+    let cancelled = false;
+    let selectionStart = null;
+
+    for (let index = 0; index < 100; index += 1) {
+      group.add(new Konva.Rect({
+        x: (index % 20) * 24,
+        y: Math.floor(index / 20) * 18,
+        width: 8,
+        height: 8,
+        fill: index < 3 ? "#ffcd70" : "#73869c",
+        name: `key-${index}`,
+      }));
+    }
+    group.dragBoundFunc((position) => ({
+      x: Math.round(position.x / 10) * 10,
+      y: Math.round(position.y / 10) * 10,
+    }));
+    group.on("dragstart", () => {
+      dragOrigin = { x: group.x(), y: group.y() };
+      cancelled = false;
+    });
+    group.on("dragend", () => {
+      if (!cancelled && (group.x() !== dragOrigin.x || group.y() !== dragOrigin.y)) {
+        setInteraction((value) => ({
+          ...value, commits: value.commits + 1, x: group.x(), y: group.y(),
+        }));
+      }
+    });
+
+    stage.on("mousedown touchstart", (event) => {
+      if (event.target !== stage) return;
+      selectionStart = stage.getPointerPosition();
+      marquee.setAttrs({ x: selectionStart.x, y: selectionStart.y, width: 0, height: 0, visible: true });
+    });
+    stage.on("mousemove touchmove", () => {
+      if (!selectionStart) return;
+      const position = stage.getPointerPosition();
+      marquee.setAttrs({
+        x: Math.min(selectionStart.x, position.x),
+        y: Math.min(selectionStart.y, position.y),
+        width: Math.abs(position.x - selectionStart.x),
+        height: Math.abs(position.y - selectionStart.y),
+      });
+      layer.batchDraw();
+    });
+    stage.on("mouseup touchend", () => {
+      if (!selectionStart) return;
+      const box = marquee.getClientRect();
+      const selected = group.getChildren()
+        .filter((node) => Konva.Util.haveIntersection(box, node.getClientRect()))
+        .map((node) => node.name());
+      selectionStart = null;
+      marquee.visible(false);
+      setInteraction((value) => ({ ...value, selected }));
+    });
+
+    const cancel = (event) => {
+      if (event.key !== "Escape" || !group.isDragging()) return;
+      cancelled = true;
+      group.stopDrag();
+      group.position(dragOrigin);
+      layer.batchDraw();
+      setInteraction((value) => ({
+        ...value, cancels: value.cancels + 1, x: dragOrigin.x, y: dragOrigin.y,
+      }));
+    };
+    document.addEventListener("keydown", cancel);
+    layer.add(group, marquee);
+    stage.add(layer);
+    return () => {
+      document.removeEventListener("keydown", cancel);
+      stage.destroy();
+    };
+  }, []);
+
+  const recordComposition = (event) => setIme((value) => ({
+    ...value,
+    composing: event.type !== "compositionend",
+    events: [...value.events, event.type],
+  }));
+  const handleKeyDown = (event) => {
+    if (event.isComposing || ime.composing) return;
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      setIme((value) => ({ ...value, shortcutCount: value.shortcutCount + 1 }));
+    }
+  };
+
+  return (
+    <section className="interaction-section">
+      <h2>Actual interaction / IME / a11y proxy</h2>
+      <div ref={hostRef} className="interaction-stage" data-testid="interaction-stage" role="img"
+        aria-label="Timeline keyframe surface. Use the adjacent list to inspect the selection." />
+      <output data-testid="interaction-state">
+        {JSON.stringify(interaction)}
+      </output>
+      <div className="capture-probe" data-testid="capture-probe"
+        onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId);
+          setCapture((value) => ({ ...value, captured: true }));
+        }}
+        onPointerMove={(event) => {
+          if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+          setCapture((value) => ({ ...value, moves: value.moves + 1 }));
+        }}
+        onPointerUp={(event) => event.currentTarget.releasePointerCapture(event.pointerId)}
+        onLostPointerCapture={() => setCapture((value) => ({ ...value, captured: false }))}
+        onPointerCancel={() => setCapture((value) => ({ ...value, captured: false, cancels: value.cancels + 1 }))}>
+        Pointer capture probe
+      </div>
+      <output data-testid="capture-state">{JSON.stringify(capture)}</output>
+      <label>
+        Keyframe name
+        <input data-testid="ime-input" onCompositionStart={recordComposition}
+          onCompositionUpdate={recordComposition} onCompositionEnd={recordComposition}
+          onKeyDown={handleKeyDown} />
+      </label>
+      <output data-testid="ime-state">{JSON.stringify(ime)}</output>
+      <ul aria-label="Selected keyframes" data-testid="selection-proxy">
+        {interaction.selected.length === 0
+          ? <li>No keyframes selected</li>
+          : <li><button type="button">{interaction.selected[0]}</button>; {interaction.selected.length} selected</li>}
+      </ul>
+    </section>
+  );
+}
+
+function CommunitySandboxProbe() {
+  const frameRef = useRef(null);
+  const [result, setResult] = useState({ status: "pending" });
+  const source = `<!doctype html><meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; style-src 'unsafe-inline'">
+    <style>body{background:#101720;color:#e7edf4;font:14px system-ui}button{color:inherit;background:#182331}</style>
+    <button>Community panel fixture</button><script>
+    (async () => {
+      const blocked = {};
+      try { void parent.document.body; blocked.parentDocument = false; }
+      catch (_) { blocked.parentDocument = true; }
+      try { localStorage.setItem('g09', 'x'); blocked.storage = false; }
+      catch (_) { blocked.storage = true; }
+      try { await fetch('/__g0_9_forbidden'); blocked.network = false; }
+      catch (_) { blocked.network = true; }
+      blocked.nativeBridge = typeof window.__TAURI__ === 'undefined';
+      parent.postMessage({ type: 'g0-9-sandbox-result', blocked }, '*');
+    })();
+    <\/script>`;
+
+  useEffect(() => {
+    const receive = (event) => {
+      if (event.source !== frameRef.current?.contentWindow || event.origin !== "null") return;
+      if (event.data?.type !== "g0-9-sandbox-result") return;
+      setResult({ status: "received", origin: event.origin, ...event.data.blocked });
+    };
+    window.addEventListener("message", receive);
+    return () => window.removeEventListener("message", receive);
+  }, []);
+
+  return (
+    <section className="sandbox-section">
+      <h2>Community sandbox negative probe</h2>
+      <iframe ref={frameRef} title="Community panel sandbox" sandbox="allow-scripts" srcDoc={source} />
+      <output data-testid="sandbox-state">{JSON.stringify(result)}</output>
+    </section>
+  );
+}
+
 function App() {
   const [revision, setRevision] = useState(hmrRevision);
   if (import.meta.hot) {
@@ -129,6 +307,8 @@ function App() {
         <BrowserProbe />
         <TimelineProbe />
       </div>
+      <InteractionProbe />
+      <CommunitySandboxProbe />
     </main>
   );
 }
