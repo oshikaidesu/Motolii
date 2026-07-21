@@ -1,0 +1,68 @@
+{
+  "ticket": "G0-9",
+  "capturedAt": "2026-07-21T03:53:18.027Z",
+  "environment": {
+    "platform": "darwin",
+    "release": "24.5.0",
+    "arch": "arm64",
+    "browser": "chromium",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36"
+  },
+  "fixture": {
+    "id": "g0-9-dense-ui-v1",
+    "browserItems": 10000,
+    "clips": 1000,
+    "keyframes": 100000,
+    "tracks": 32,
+    "timelineSeconds": 240,
+    "browserViewport": [
+      420,
+      480
+    ],
+    "timelineViewport": [
+      1200,
+      512
+    ]
+  },
+  "browserVirtualization": {
+    "steps": 120,
+    "medianMs": 16.699999809265137,
+    "p95Ms": 18.199999809265137,
+    "domRows": 24
+  },
+  "timelineCanvas2d": {
+    "mode": "canvas2d",
+    "frames": 120,
+    "visibleKeys": 20000,
+    "medianMs": 3.9000000953674316,
+    "p95Ms": 5.299999713897705
+  },
+  "browserWebGpu": {
+    "available": true,
+    "reason": null,
+    "adapterInfo": {
+      "architecture": "swiftshader",
+      "description": "",
+      "device": "",
+      "vendor": "google"
+    },
+    "measurement": {
+      "mode": "webgpu",
+      "frames": 120,
+      "visibleKeys": 20000,
+      "medianMs": 3.700000286102295,
+      "p95Ms": 4
+    }
+  },
+  "hmr": {
+    "transport": "Vite accepted virtual-module update without Rust process restart",
+    "elapsedMs": 16,
+    "revisionBefore": 0,
+    "revisionAfter": 1
+  },
+  "boundaries": {
+    "nativeWgpuTextureSharedWithBrowser": false,
+    "productWebViewEmbedded": false,
+    "pluginSandboxValidated": false
+  }
+}

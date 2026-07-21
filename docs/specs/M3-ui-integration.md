@@ -20,7 +20,7 @@ A-1(egui候補は既存device/native texture共有を[採用時の実機証拠](
 | G0-6 | 視覚言語tokenと認知審判 | **手順完了・目視待ち** | [着手前決定§5](../reviews/2026-07-16-m3-preflight-decisions.md#5-g0-6-見た目はuxの投影として導出する)。U0e-1の生成機構、U0e-2Rの固定React比較baseline再結合、U0e-2のreference fixtureだけ先行可。具体token値と製品componentを入れるU0e-3はG0-6Hの人間審判まで待つ |
 | G0-7 | 操作単純化・共通componentゲート | **完了** | [UI操作言語](../ui-interaction-language.md)と[着手前決定§6](../reviews/2026-07-16-m3-preflight-decisions.md#6-g0-7-操作文法を共通部品の契約にする)をU2c conformanceへ固定 |
 | G0-8 | resource予算presetとpreview縮退設定 | **意味完了・実測待ち** | [着手前決定§7](../reviews/2026-07-16-m3-preflight-decisions.md#7-g0-8-resource値はm4の事実から決める)。具体値だけG0-4+M4-K1a後に決定 |
-| G0-9 | UI runtime再選定: egui / React-WebView / hybrid | **比較中・toolkit固有実装停止** | [再選定文書](../reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md)の同一fixtureでBrowser、Timeline、専用panel、native Stage合成、hot reload、Host/community同一kit、IME/a11y/securityを比較。browser WebGPUとnative wgpuの共有を仮定せず、採否と不採用理由を記録する |
+| G0-9 | UI runtime再選定: egui / React-WebView / hybrid | **部分スパイク合格・比較継続・toolkit固有実装停止** | [部分スパイク](../spikes/g0-9-ui-runtime.md)で10,000 item virtual DOM、100,000 key Canvas/browser WebGPU、Vite HMR、native wgpu基準を確認。次は製品候補WebViewでnative Stage合成、IME/a11y、同一community kitのsandbox、Windowsを審判する。browser WebGPUとnative wgpuの共有を仮定せず、採否と不採用理由を記録する |
 
 以下は**M3入場(U0a完了)後**の論理依存表である。G0自体はM3全コードを一括停止する門ではないが、初回Uシリーズは下表の論理依存に加えて本書の直列運用を優先する。U1aはU0bの5層所有とdomain intentを待ち、custom UI追加タスクはG0-3の判定後に初めて起票する。U0〜U9を一括または並走発注しない。
 

@@ -132,6 +132,17 @@ G0-9は製品UI runtimeの再選定ゲートである。候補は少なくとも
 - 自由UIを理由にDocument mutation、file/network、GPU resourceを無制限公開した
 - OpenCut、React Aria、TanStack、React Flowの内部状態をMotolii仕様へ逆算した
 
+### 5.4 2026-07-21 部分スパイク結果
+
+[G0-9 UI runtime部分スパイク](../spikes/g0-9-ui-runtime.md)で、React virtual listは
+10,000 itemを24 DOM rowへ限定し、1,000 clip / 100,000 keyのdense surfaceはCanvas 2Dと
+browser WebGPUの両経路で成立した。Vite HMRもRust再起動なしでacceptした。現行native wgpu
+timelineとegui shell境界もApple M4 / Metalで再合格した。
+
+これは局所WebGPUとhybrid候補を比較対象へ残す証拠であり、runtime採択ではない。browser側は
+SwiftShaderで、WebView組込み、native Stage texture共有、IME/a11y、plugin sandbox、Windowsを
+検証していない。特にbrowser WebGPUとnative wgpuを同じdeviceとみなす禁止は維持する。
+
 ## 6. 既存台帳の扱い
 
 - [egui採用判断](2026-07-18-m3-egui-selection.md)は削除しない。native wgpu共有、IME、CJK、lifecycle、計測の証拠として比較入力にする

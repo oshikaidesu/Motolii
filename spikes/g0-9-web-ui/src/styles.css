@@ -1,0 +1,65 @@
+:root {
+  color: #e7edf4;
+  background: #0b1017;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  padding: 20px;
+}
+
+header,
+.grid {
+  display: flex;
+  gap: 16px;
+}
+
+header {
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.grid {
+  align-items: start;
+}
+
+section {
+  background: #151d28;
+  border: 1px solid #2d3b4d;
+  padding: 12px;
+}
+
+.browser {
+  height: 480px;
+  width: 420px;
+  overflow: auto;
+  border: 1px solid #33465b;
+}
+
+.asset-row {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 28px;
+  border: 0;
+  border-bottom: 1px solid #263445;
+  color: inherit;
+  background: #182331;
+  text-align: left;
+}
+
+.asset-row:focus {
+  outline: 2px solid #59c7ff;
+  outline-offset: -2px;
+}
+
+canvas {
+  display: block;
+  width: 600px;
+  height: 256px;
+  border: 1px solid #33465b;
+}
