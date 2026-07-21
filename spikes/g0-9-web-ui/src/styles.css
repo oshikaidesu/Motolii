@@ -63,3 +63,20 @@ canvas {
   height: 256px;
   border: 1px solid #33465b;
 }
+
+.scene-probe {
+  margin-top: 8px;
+  max-height: 180px;
+  overflow: hidden;
+}
+
+.scene-probe canvas,
+.konva-probe > div {
+  display: block;
+  height: auto !important;
+  max-width: 100%;
+}
+
+.konva-probe {
+  display: none;
+}

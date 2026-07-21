@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { revision as hmrRevision } from "virtual:g0-9-hmr-probe";
+import { DynamicSceneBenchmark } from "./dynamic-scene-benchmark.js";
 import { browserItem, createTimelineFixture, fixture } from "./fixture.js";
 import { TimelineRenderer } from "./timeline-renderer.js";
 import "./styles.css";
@@ -47,14 +48,23 @@ function BrowserProbe() {
 
 function TimelineProbe() {
   const canvasRef = useRef(null);
+  const pixiHostRef = useRef(null);
+  const konvaHostRef = useRef(null);
   const rendererRef = useRef(null);
   const model = useMemo(() => createTimelineFixture(), []);
   const [gpuStatus, setGpuStatus] = useState("pending");
+  const [sceneStatus, setSceneStatus] = useState("pending");
 
   useEffect(() => {
     const renderer = new TimelineRenderer(canvasRef.current, model);
     rendererRef.current = renderer;
     renderer.drawCanvas(0, 48);
+    const dynamicScene = new DynamicSceneBenchmark();
+    const dynamicSceneReady = dynamicScene.initialize(pixiHostRef.current, konvaHostRef.current)
+      .then((result) => {
+        setSceneStatus(`${result.pixiRenderer}; ${result.visibleKeys} visible keys`);
+        return result;
+      });
     window.g09 = {
       fixture,
       measureBrowser: async (steps = 120) => {
@@ -81,6 +91,11 @@ function TimelineProbe() {
         setGpuStatus(result.available ? "available" : result.reason);
         return result;
       },
+      initializeDynamicScenes: () => dynamicSceneReady,
+      measureDynamicScenes: async (frames = 90) => {
+        await dynamicSceneReady;
+        return dynamicScene.measureAll(frames);
+      },
     };
     setGpuStatus(navigator.gpu ? "not initialized" : "navigator.gpu unavailable");
   }, [model]);
@@ -91,6 +106,10 @@ function TimelineProbe() {
       <canvas ref={canvasRef} width="1200" height="512" data-testid="timeline" />
       <p>1,000 clips / 100,000 keys; DOM children: canvas only</p>
       <output data-testid="webgpu-status">{gpuStatus}</output>
+      <h3>Known scene-graph drag probes</h3>
+      <div className="scene-probe" ref={pixiHostRef} />
+      <div className="scene-probe konva-probe" ref={konvaHostRef} />
+      <output data-testid="scene-status">{sceneStatus}</output>
     </section>
   );
 }

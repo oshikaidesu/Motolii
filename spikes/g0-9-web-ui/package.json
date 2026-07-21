@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "4.3.4",
+    "konva": "10.3.0",
+    "pixi.js": "8.19.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "vite": "6.4.3"

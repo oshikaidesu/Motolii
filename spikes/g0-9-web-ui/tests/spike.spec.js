@@ -22,7 +22,17 @@ test("G0-9 dense Web UI evidence", async ({ page, request, browserName }) => {
 
   const canvas = await page.evaluate(() => window.g09.measureTimeline("canvas2d", 120));
   expect(canvas.visibleKeys).toBeGreaterThan(10_000);
-  expect(await page.locator("canvas").count()).toBe(1);
+
+  const dynamicSceneInit = await page.evaluate(() => window.g09.initializeDynamicScenes());
+  expect(dynamicSceneInit.visibleKeys).toBe(20_000);
+  expect(dynamicSceneInit.pixiNonBackgroundPixels).toBeGreaterThan(10_000);
+  const dynamicDrag = await page.evaluate(() => window.g09.measureDynamicScenes(90));
+  for (const result of [...dynamicDrag.pixi, ...dynamicDrag.konva]) {
+    expect(result.semanticWritesDuringMove).toBe(0);
+    expect(result.cancelRestored).toBe(true);
+    expect(result.commitsOnRelease).toBe(1);
+    expect(Number.isFinite(result.p95Ms)).toBe(true);
+  }
 
   const webgpuInit = await page.evaluate(() => window.g09.initializeWebGpu());
   const webgpu = webgpuInit.available
@@ -49,6 +59,8 @@ test("G0-9 dense Web UI evidence", async ({ page, request, browserName }) => {
     fixture: await page.evaluate(() => window.g09.fixture),
     browserVirtualization: browser,
     timelineCanvas2d: canvas,
+    dynamicSceneInit,
+    dynamicDrag,
     browserWebGpu: {
       ...webgpuInit,
       measurement: webgpu,

@@ -65,13 +65,54 @@ Rust core
 
 ### 3.2 Timeline
 
-Timeline全体を解く単一libraryは確認できなかった。ただし両軸virtualization、Canvas/WebGPU描画、pointer capture、Reactの状態投影を組み合わせる部品はある。
+Timeline全体を扱う既成libraryも存在する。ただし2026-07-21時点では、そのままMotoliiの
+完成品として採るだけの成熟・keyframe stress証拠は確認できない。
+
+[Canvas Timeline](https://github.com/techsquidtv/canvas-timeline)はheadless state、snapping、
+command-stack history、React interaction layer、worker-backed Canvas rendererを分離した
+MPL-2.0の直接先例である。一方、現時点で0.1.0、9 stars、44 commitsで、対象runtimeは
+Node 24以上、React 19.2.7以上であり、100,000 keyの公開fixtureは確認できない。構造は学ぶが、
+依存採択は固定fixture、API/ライセンス/更新性監査まで保留する。
+
+[React Video Editor Timeline](https://www.reactvideoeditor.com/docs/core/components/timeline)は
+drag、snap、multi-select、zoom、Undo/Redoを持つcopy可能なReact実装だが、公式自身が開発中で、
+大規模project性能はbrowserやfile規模に依存すると明記する。これも先例であって性能証明ではない。
+
+[elah](https://www.elah.dev/)はReact UI、integer-frame timeline、Immer history、WebGL2、
+OffscreenCanvas、pure resolverを分離したApache-2.0のbrowser-native editor engineである。
+MotoliiのRust Document/render/exportを置換または二重化する採択はしないが、UI bindingとengineを
+分離し、drag中previewとcommitを分ける構造の比較資料にする。
 
 OpenCut v0.3.0は、[Timeline track内の全elementをReact DOMへ展開](https://github.com/opencut-app/opencut/blob/f4bd689f51cf12a4dd0a32f602f761be314d9686/apps/web/src/components/editor/panels/timeline/timeline-track.tsx)する一方、[audio waveformはCanvasでvisible rangeだけを描画](https://github.com/opencut-app/opencut/blob/f4bd689f51cf12a4dd0a32f602f761be314d9686/apps/web/src/components/editor/panels/timeline/audio-waveform.tsx)している。[Asset viewも同時点では全itemをDOM展開](https://github.com/opencut-app/opencut/blob/f4bd689f51cf12a4dd0a32f602f761be314d9686/apps/web/src/components/editor/panels/assets/views/assets.tsx)している。
 
 これはReact人口の多さだけで製品固有の2D virtualizationが自動完成しない反例である。同時に、DOMの操作性とCanvasの高密度描画を同じReact製品で混ぜる先例でもある。MotoliiはOpenCutの型・状態・DOM構造を輸入せず、visible range、virtualization、hit-test、selection維持をMotolii fixtureで判定する。
 
-### 3.3 Graph / 専用panel / LLM
+### 3.3 CanvasをDOM状に扱う既成scene graph
+
+[Konva](https://konvajs.org/docs/overview.html)はStage / Layer / Group / ShapeというDOM状の
+virtual nodeと、描画用Canvasとは別のhidden hit Canvasを持ち、event、drag、transform、layer単位の
+再描画を提供する。公式の[20,000 Nodes](https://konvajs.org/docs/sandbox/20000_Nodes.html)は
+20,000 circleすべてをhover/drag可能にし、drag対象を専用Layerへ移す既成patternを示す。
+Pen/Roto、少数の編集handle、直接操作の有力候補だが、100,000 keyを常時node化する採択はしない。
+
+[PixiJS scene graph](https://pixijs.com/8.x/guides/components/scene-objects)はContainer / Sprite /
+Graphics / Mesh等の階層とDOM風の
+[federated pointer events](https://pixijs.com/8.x/guides/components/events)を持つ。
+[ParticleContainer](https://pixijs.com/8.x/guides/components/scene-objects/particle-container)は公式に
+100,000 particle例を示し、position等をstatic/dynamicに分けてGPU uploadできる。ただしParticleは
+個別event、child、filterを省いた軽量型で、APIはstableだがexperimentalと明記される。
+したがってdense key描画はParticle/Mesh、選択handleだけ通常scene nodeという分担を候補にする。
+
+React統合には公式の薄いbindingである[@pixi/react](https://react.pixijs.io/getting-started)、
+pan / wheel / pinch / clamp / snapには
+[pixi-viewport](https://viewport.pixijs.io/jsdoc/index.html)がある。これらを無視してMotolii独自の
+JS scene graph、汎用gesture、viewportを先に作らない。
+
+[Fabric.js](https://fabricjs.com/docs/why-fabric/)もCanvas上のobject model、interaction、event、
+serialization、transform controlを提供する。Stage上の少数object編集候補として残すが、
+Document正本をFabric JSONへせず、dense Timeline性能は別fixtureなしに推定しない。
+
+### 3.4 Graph / 専用panel / LLM
 
 [React Flow](https://reactflow.dev/api-reference/react-flow)はcustom node、pan/zoom、selection、snap、visible element限定描画を提供し、[custom node](https://reactflow.dev/learn/customization/custom-nodes)には通常のReact componentを埋め込める。これはGraph、node editor、専用可視化panelの部品母集団が大きいことの証拠だが、Motolii TimelineやDocument意味の完成品ではない。
 
@@ -136,12 +177,17 @@ G0-9は製品UI runtimeの再選定ゲートである。候補は少なくとも
 
 [G0-9 UI runtime部分スパイク](../spikes/g0-9-ui-runtime.md)で、React virtual listは
 10,000 itemを24 DOM rowへ限定し、1,000 clip / 100,000 keyのdense surfaceはCanvas 2Dと
-browser WebGPUの両経路で成立した。Vite HMRもRust再起動なしでacceptした。現行native wgpu
-timelineとegui shell境界もApple M4 / Metalで再合格した。
+browser WebGPUの両経路で成立した。追試ではPixiJS 8.19.0とKonva 10.3.0を用い、20,000 visible
+keyの上で1 / 1,000 / 10,000 key、1 / 100 / 1,000 objectをgroup dragした。React stateと
+semantic commitをmove中に更新せず、Cancel復元とrelease時1 commitをadapter harnessで確認した。
+Vite HMRもRust再起動なしでacceptした。現行native wgpu timelineとegui shell境界もApple M4 /
+Metalで再合格した。
 
 これは局所WebGPUとhybrid候補を比較対象へ残す証拠であり、runtime採択ではない。browser側は
 SwiftShaderで、WebView組込み、native Stage texture共有、IME/a11y、plugin sandbox、Windowsを
-検証していない。特にbrowser WebGPUとnative wgpuを同じdeviceとみなす禁止は維持する。
+検証していない。Pixi Particle APIもexperimentalで、Konva/Pixiの個別pointer route、snap、
+offscreen drag、実D2 command接続は未検証である。特にbrowser WebGPUとnative wgpuを同じdeviceと
+みなす禁止は維持する。
 
 ## 6. 既存台帳の扱い
 

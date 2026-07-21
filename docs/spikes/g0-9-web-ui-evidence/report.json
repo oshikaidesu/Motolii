@@ -1,6 +1,6 @@
 {
   "ticket": "G0-9",
-  "capturedAt": "2026-07-21T03:53:18.027Z",
+  "capturedAt": "2026-07-21T04:31:14.523Z",
   "environment": {
     "platform": "darwin",
     "release": "24.5.0",
@@ -26,8 +26,8 @@
   },
   "browserVirtualization": {
     "steps": 120,
-    "medianMs": 16.699999809265137,
-    "p95Ms": 18.199999809265137,
+    "medianMs": 16.59999990463257,
+    "p95Ms": 18.699999809265137,
     "domRows": 24
   },
   "timelineCanvas2d": {
@@ -35,7 +35,202 @@
     "frames": 120,
     "visibleKeys": 20000,
     "medianMs": 3.9000000953674316,
-    "p95Ms": 5.299999713897705
+    "p95Ms": 5.400000095367432
+  },
+  "dynamicSceneInit": {
+    "pixiRenderer": "WebGLRenderer",
+    "pixiCompletionSync": "gl.finish",
+    "pixiNonBackgroundPixels": 10791,
+    "konvaRenderer": "Canvas2D scene canvas + hit canvas per Layer",
+    "visibleKeys": 20000
+  },
+  "dynamicDrag": {
+    "samples": 90,
+    "drawsPerSample": 5,
+    "pixi": [
+      {
+        "library": "pixi.js",
+        "renderer": "WebGLRenderer",
+        "kind": "key",
+        "selected": 1,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 1.5,
+        "medianMs": 0.1,
+        "p95Ms": 0.38000001907348635,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one ParticleContainer overlay; React state unchanged per frame"
+      },
+      {
+        "library": "pixi.js",
+        "renderer": "WebGLRenderer",
+        "kind": "key",
+        "selected": 1000,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 1.0999999046325684,
+        "medianMs": 0.1,
+        "p95Ms": 0.24000005722045897,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one ParticleContainer overlay; React state unchanged per frame"
+      },
+      {
+        "library": "pixi.js",
+        "renderer": "WebGLRenderer",
+        "kind": "key",
+        "selected": 10000,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 5,
+        "medianMs": 0.1,
+        "p95Ms": 0.32000007629394533,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one ParticleContainer overlay; React state unchanged per frame"
+      },
+      {
+        "library": "pixi.js",
+        "renderer": "WebGLRenderer",
+        "kind": "object",
+        "selected": 1,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 0.7000002861022949,
+        "medianMs": 0.060000038146972655,
+        "p95Ms": 0.08000001907348633,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one ParticleContainer overlay; React state unchanged per frame"
+      },
+      {
+        "library": "pixi.js",
+        "renderer": "WebGLRenderer",
+        "kind": "object",
+        "selected": 100,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 0.5,
+        "medianMs": 0.060000038146972655,
+        "p95Ms": 0.08000001907348633,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one ParticleContainer overlay; React state unchanged per frame"
+      },
+      {
+        "library": "pixi.js",
+        "renderer": "WebGLRenderer",
+        "kind": "object",
+        "selected": 1000,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 0.8000001907348633,
+        "medianMs": 0.060000038146972655,
+        "p95Ms": 0.08000001907348633,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one ParticleContainer overlay; React state unchanged per frame"
+      }
+    ],
+    "konva": [
+      {
+        "library": "konva",
+        "renderer": "Canvas2D drag Layer",
+        "kind": "key",
+        "selected": 1,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 1.4000000953674316,
+        "medianMs": 0,
+        "p95Ms": 0.02000007629394531,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one Group on a dedicated drag Layer; React state unchanged per frame"
+      },
+      {
+        "library": "konva",
+        "renderer": "Canvas2D drag Layer",
+        "kind": "key",
+        "selected": 1000,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 7.199999809265137,
+        "medianMs": 0.5199999809265137,
+        "p95Ms": 0.6800000190734863,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one Group on a dedicated drag Layer; React state unchanged per frame"
+      },
+      {
+        "library": "konva",
+        "renderer": "Canvas2D drag Layer",
+        "kind": "key",
+        "selected": 10000,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 46.09999990463257,
+        "medianMs": 5.019999980926514,
+        "p95Ms": 6.360000038146973,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one Group on a dedicated drag Layer; React state unchanged per frame"
+      },
+      {
+        "library": "konva",
+        "renderer": "Canvas2D drag Layer",
+        "kind": "object",
+        "selected": 1,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 0.9000000953674316,
+        "medianMs": 0,
+        "p95Ms": 0.019999980926513672,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one Group on a dedicated drag Layer; React state unchanged per frame"
+      },
+      {
+        "library": "konva",
+        "renderer": "Canvas2D drag Layer",
+        "kind": "object",
+        "selected": 100,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 1.6999998092651367,
+        "medianMs": 0.07999992370605469,
+        "p95Ms": 0.1,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one Group on a dedicated drag Layer; React state unchanged per frame"
+      },
+      {
+        "library": "konva",
+        "renderer": "Canvas2D drag Layer",
+        "kind": "object",
+        "selected": 1000,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 6.700000286102295,
+        "medianMs": 0.5800000190734863,
+        "p95Ms": 0.7199999809265136,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one Group on a dedicated drag Layer; React state unchanged per frame"
+      }
+    ]
   },
   "browserWebGpu": {
     "available": true,
@@ -50,13 +245,13 @@
       "mode": "webgpu",
       "frames": 120,
       "visibleKeys": 20000,
-      "medianMs": 3.700000286102295,
+      "medianMs": 3.799999713897705,
       "p95Ms": 4
     }
   },
   "hmr": {
     "transport": "Vite accepted virtual-module update without Rust process restart",
-    "elapsedMs": 16,
+    "elapsedMs": 17,
     "revisionBefore": 0,
     "revisionAfter": 1
   },
