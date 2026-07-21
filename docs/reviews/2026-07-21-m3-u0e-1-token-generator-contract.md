@@ -1,7 +1,12 @@
 # M3 U0e-1 DTCG token generator契約
 
 作成日: 2026-07-21
-状態: **決定 / U0e-1実装待ち**
+状態: **決定 / U0e-1実装完了**
+
+実装は`crates/motolii-ui-token-gen`と
+`crates/motolii-ui/tests/fixtures/u0e1-token-generator/`に閉じた。
+`generate`はfixture生成だけを明示実行し、通常検証はread-onlyの`check`を使う。
+製品token、`egui::Style`、component、theme設定には接続していない。
 
 ## 1. 目的
 
@@ -257,6 +262,15 @@ read-onlyで検出する。`generate`後にRust formatterやJSON formatterを別
    `./scripts/check-ui-toolkit-deps.sh`、
    `cargo clippy --workspace --all-targets -- -D warnings`、
    `cargo test --workspace`を通す
+
+commit済みfixtureの生成差分検査は次で再現する。
+
+```bash
+cargo run -p motolii-ui-token-gen -- check \
+  --theme fixture-dark=crates/motolii-ui/tests/fixtures/u0e1-token-generator/sources/fixture-dark.json \
+  --theme fixture-light=crates/motolii-ui/tests/fixtures/u0e1-token-generator/sources/fixture-light.json \
+  --out-dir crates/motolii-ui/tests/fixtures/u0e1-token-generator/generated
+```
 
 ## 9. 非目標
 
