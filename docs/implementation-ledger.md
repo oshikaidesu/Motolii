@@ -39,11 +39,11 @@
 | M0 | `DONE` | spike完了 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み |
 | M2 | **基盤再締結済み** | D1l、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。D5は再締結の閉集合外で、骨格到達・統合審判pending |
-| M3 | **G0-9 UI runtime再選定中 / 部分スパイク合格 / 比較・toolkit非依存だけ段階発注可** | U0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4はmain完了済みで比較証拠として保持。10,000 item virtual DOM、100,000 key Canvas/browser WebGPU、Vite HMRは部分合格。次は比較fixtureを戻すU0e-2Rで、WebView/native Stage合成等を未検証のまま採択しない。新しいtoolkit固有製品実装とplugin UI公開契約は停止 |
+| M3 | **UI責任境界決定 / G0-9 surface統合比較中** | React chrome + native Stage/Timeline + headless interactionを正本化。U0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4はmain完了済みでbaselineとして保持。次はU0e-2Rとwindowed spike。native layout/hit-test/gesture kernelはtoolkit/renderer非依存で進められるが、WebView/native製品統合、egui撤去、plugin UI公開契約は停止 |
 | M4 | **契約spike可** | K0でRoD/RoIのruntime契約を凍結。その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む |
 | M5 | **identity spike可** | P0IでDuplicator/Instance identityを凍結 |
 
-[M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3はU0a入場済みだが、[G0-9 UI runtime再選定](reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md)中はtoolkit固有のshell/panel/Timeline/Stage統合とplugin UI公開契約を発注しない。toolkit非依存タスクもSelected U seriesの前枝番がmainへ到達した時だけ次の1枝番を発注する。
+[M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3はU0a入場済みで、[UI runtime責任境界](ui-runtime-architecture.md)も決定済み。ただしG0-9中はWebView/native surfaceの製品統合とplugin UI公開契約を発注しない。headlessなTimeline/Stage projectionもSelected U seriesの前枝番がmainへ到達した時だけ次の1枝番を発注する。
 
 ## 主クリティカルパス
 
@@ -108,7 +108,7 @@ Uシリーズ直列選択中は未選択とし、同時着手しない。
 |---|---|---|---|---|---|
 | 1 | D1j | M2 | `DONE` | CAM-G0 merge（D1lはmain到達済み） | v5 planar camera schema/default migration |
 | 2 | U2b-1 | M3 | `DONE` | U1b-2 merge | prepared requestをsingle writerへ配送し、成功snapshotをUI/render workerへ購読 |
-| 3 | U3a | M3 | `WAIT` | G0-9 + U0a + U0b merge | 同一fixtureでDOM virtualization、Canvas/browser WebGPU、native wgpuを比較後にtimeline基盤を選ぶ |
+| 3 | U3a | M3 | `WAIT` | G0-9 windowed spike + U0a + U0b merge | native Timelineのtoolkit/renderer非依存layout/hit-test/headless gestureとdirect wgpu候補を同一fixtureで閉じる。Canvas/browser WebGPUは先例baselineで製品枝にしない |
 | 4 | U2g | M3 | `WAIT` | D1l + D3e + U0e + U2b + U3a merge | Effect常時接続線 |
 | 5 | K1a | M4 | `WAIT` | K0 merge | ResourceLedgerとhard budget。backendの空きVRAM値を正本にしない |
 | 6 | K1b | M4 | `WAIT` | K1a merge | cache同一性/LRU/並行store |

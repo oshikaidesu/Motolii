@@ -10,7 +10,7 @@ M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決
 |---|---|---|---|
 | 規範 | 状態所有、Undo、入力、意味、受け入れ条件 | [M3仕様](specs/M3-ui-integration.md)、[UI操作言語](ui-interaction-language.md)、[UI視覚言語](ui-visual-language.md)、[UI境界規律](reviews/2026-07-14-m3-ui-boundary-prevention.md) | prototypeや会話から直接上書きせず、仕様・決定台帳を先に改訂する |
 | 現行prototype | 現在ブラウザで比較する操作・構成 | `docs/mocks-ui/README.md`(React/Viteモック。`codex/m3-mock-components`ブランチ側に実体) | hash fixture、操作試験、比較台帳を一緒に更新する。React/CSS値を製品契約へ焼かない |
-| 製品実装先例 | 高密度shell、時間面、GPU viewport、selection、component、試験を成立させた実装資産 | [Rerun先例調査](reviews/2026-07-20-rerun-prior-art-survey.md)、[Rerun学習・転移計画](reviews/2026-07-20-rerun-learning-transfer-plan.md)、[UI runtime再選定](reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md) | Rerunの画面・語彙・schemaを模倣しない。toolkit横断patternは比較入力、egui固有assetはG0-9まで移植停止。個別資産は`DEPEND/VENDOR/PORT/PATTERN/REJECT`で裁定する |
+| 製品実装先例 | 高密度shell、時間面、GPU viewport、selection、component、試験を成立させた実装資産 | [UI runtime責任境界](ui-runtime-architecture.md)、[Rerun先例調査](reviews/2026-07-20-rerun-prior-art-survey.md)、[Rerun学習・転移計画](reviews/2026-07-20-rerun-learning-transfer-plan.md) | Rerunの画面・語彙・schemaを模倣しない。React/native所有は正本に従い、toolkit横断patternだけを比較入力とする。egui固有assetはG0-9まで移植停止 |
 | 採否台帳 | 先例、観察、未決、棄却、停止線 | `reviews/`の対象別decision／observation ledger | 出典、Motoliiへの翻訳、反映先を分ける |
 | 移行互換 | React移行中の視覚parityと未置換領域 | [旧HTMLモック台帳](mocks/README.md)、`mocks-ui/src/legacy/` | 新しい判断を追加しない。React-native置換後に参照専用へ縮退する |
 | 証拠 | ユーザー撮影画像、golden、操作記録 | `reviews/evidence/`、Playwright結果 | 版、OS、fixture、viewport、操作列をmanifest化する |

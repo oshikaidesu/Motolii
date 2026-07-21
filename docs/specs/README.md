@@ -15,7 +15,7 @@
 | [M0-spikes.md](M0-spikes.md) | 確定 |
 | [M1-vertical-slice.md](M1-vertical-slice.md) | 確定(M0の採否判断で該当箇所を更新) |
 | [M2-document-model.md](M2-document-model.md) | **基盤再締結済み / 段階発注可**(P1修復とA〜C証跡がmain発効済み。D5は再締結の閉集合外で統合/E2E審判pending) |
-| [M3-ui-integration.md](M3-ui-integration.md) | **ドラフト / toolkit非依存タスクのみ段階発注可**(U0a egui骨格は保持。G0-9でReact/WebView/局所WebGPUを再選定中) |
+| [M3-ui-integration.md](M3-ui-integration.md) | **ドラフト / UI責任境界決定・surface統合比較中**(React chrome + native Stage/Timeline + headless interactionは決定。WebView/native製品統合とplugin公開契約はG0-9実機待ち) |
 | [M4-cache-and-analysis.md](M4-cache-and-analysis.md) | ドラフト(K0 RoD/RoIは透過Stageと分離。旧K1をK1a〜K1dの台帳/並行store/階層退避/pressure制御へ分割。K2へShared Effect invalidationを追加。凍結ゲートで確定) |
 | [M5-3d-and-post.md](M5-3d-and-post.md) | ドラフト(P0I/P7でCavalry型Duplicator+stable seedを段階実装。凍結ゲートで確定) |
 

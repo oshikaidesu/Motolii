@@ -15,7 +15,8 @@
    合格判定の自動化、以後の性能回帰検知。
 2. **CI上のdeterministic render検証**: vello_cpuはGPU無しでpeniko/kurbo語彙のsceneをraster化できる。
    今回のCI再現でも判明した通り、GPU oracle系testはGPU無しcontainerでskipになる——vello_cpuで
-   golden image比較をCPU実行できれば、**GPU無しCIでも描画回帰を検知**できるようになる。有効化条件:
+   補助capture比較をCPU実行できれば、**GPU無しCIでも構造的な描画回帰を検知**できるようになる。ただし
+   GPU Velloとは別rendererなので画素正本やGPU goldenの代替にしない。有効化条件:
    vello_cpu出力とVello(GPU)出力の画素差が許容内であることの実測、および0.0.x APIの変動を
    spike/testツリー内へ隔離すること。受益先: CI、Japanese/CJK固定captureの自動比較。
 3. **coordinator契約の先行ドラフト**: anyrender `CustomPaintSource`のlifecycle 3操作（device受領/

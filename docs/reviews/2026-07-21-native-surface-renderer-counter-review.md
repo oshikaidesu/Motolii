@@ -16,8 +16,9 @@
    できる。**検出条件を置く**: 新規コードがdomain語彙（clip/key/snap）でなくUI語彙（widget/layout/
    style/theme）を公開し始めたら再発明が始まっている。Zed/Warpの「少数primitive + domain専用」先例は
    この範囲で成立を示す。処分: 命題維持、検出条件を停止線運用へ追加。
-2. **2 surfaceの最小安全構成**: wgpu 29では単一Instance/Adapter/Device/Queueへ複数Surfaceが公式
-   パターンで、Graphite desktopも同構成である。最小構成は (a) device/queue単一・surface別の
+2. **2 surfaceの最小安全構成**: wgpu 29では単一Instance/Adapter/Device/Queueから複数Surfaceを
+   構成できる。GraphiteのCEF共有texture合成は近接先例だが、複数`wgpu::Surface`の出荷証拠ではない。
+   Motoliiの最小候補は (a) device/queue単一・surface別の
    swapchain config、(b) 復旧をsurface単位（`Outdated`→reconfigure、`Lost`→surface再生成）、device
    lost診断のみ一元、(c) Stage/Timelineのencoderを独立submitとし**同一frame内の相互texture依存を
    作らない**、(d) 片surfaceのacquire失敗が他方のpresentをブロックしない独立frame pacing。macOSは
@@ -26,7 +27,8 @@
 3. **Vello局所境界の一元化**: 条件付きで可能である。Velloはtextureへ描きsurfaceを所有しないため、
    surface lost対応はMotolii surface層へ一元化でき、Vello Rendererはdevice lost時のみ再生成——境界は
    保てる。Glifo atlasはRenderer内部保有でcache寿命=Renderer寿命に一致する。**破れ検出条件**: 局所
-   passの起動が毎frameに達したら「局所」の定義が破れている（Timeline通常textの流入が典型経路）。
+   passがscene/input/Documentを所有し始めた、描画面積・primitive数・allocation・GPU時間がdirect
+   primitive本体と同規模になった時に「局所」の定義が破れている。毎frame起動だけでは違反にしない。
    Vello 0.9のGPU memory allocation未完はscene複雑度スパイクで予算超過し得るため、roto/curve編集の
    最悪ケースfixtureをspikeへ含める。処分: 命題維持、破れ検出条件と最悪ケースfixtureを追加。
 4. **typed bridgeに不足する最小event**: bounds/intent/semantic projectionに加え、(1) focus移譲の
@@ -86,7 +88,7 @@
 ## 4. 最終境界
 
 - 第一候補（direct wgpu + Vello局所 + React複合）: 維持。反証は構成できなかった
-- 追加した検出条件: UI語彙輸出の監視（§1-1）、局所pass毎frame化の検出（§1-3）、撤退順序（§1-6）
+- 追加した検出条件: UI語彙輸出の監視（§1-1）、局所passの所有/予算逸脱検出（§1-3）、撤退順序（§1-6）
 - spikeへ追加する測定: egui同条件fixture、roto/curve最悪ケース、focus譲渡API、DPI混在drag
 - 採否の正本は本回答でなく、[再選定](2026-07-21-native-surface-renderer-reselection.md)の自動/実機
   合格条件を満たすspike証拠とする

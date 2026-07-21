@@ -1,6 +1,6 @@
 # React複合下のnative surface renderer再選定（2026-07-21）
 
-状態: **比較中**。React/WebView複合を第一候補として維持し、React資産はAsset Browser、Inspector、
+状態: **責任境界決定 / renderer・surface統合比較中**。[UI runtime責任境界](../ui-runtime-architecture.md)によりReact/WebView複合とnative所有面を固定した。React資産はAsset Browser、Inspector、
 parameter/form、panel、toolbar、検索、設定、community UIへ使う。高頻度で同期して動くStageとTimelineは
 native所有とし、そこでegui widgetを使う前提を外す。製品native rendererの第一候補は既存deviceを使う
 direct wgpu、複雑path/textだけ採択済みVelloを局所利用する構成である。

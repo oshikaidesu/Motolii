@@ -18,7 +18,7 @@
 - **キーフレームUI決定(2026-07-09)**: AE式グラフビューは作らず、**Flow/アライトモーション式の区間イージングポップアップ**(cubic-bezier 4値、fps非依存)。空間モーションパスは別概念でv1コア外。
 - **スコープ決定(2026-07-09)**: **解析駆動は最終フェーズに後回し**。DataTrack/ParamDriverの“口”は凍結ゲートで予約。
 - **クレート**: `motolii-core` / `motolii-media` / `motolii-gpu` / `motolii-eval` / `motolii-nodes` / `motolii-plugin` / `motolii-render` / `motolii-export` / `motolii-cli` / `motolii-testkit` / `motolii-doc`。
-- **UI基盤リスク**: Slint/eguiの実機証拠とU0a骨格は保持。2026-07-21にReact/WebView、Host/community同一kit、hot reload、局所WebGPUを含む[G0-9再選定](reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md)を開始した。最大の未証明はnative wgpu StageとWebViewのCPU bridgeなし合成、plugin sandbox/compatibility、Timeline 2D virtualization。
+- **UI基盤リスク**: [UI runtime責任境界](ui-runtime-architecture.md)でReact chrome + native Stage/Timeline + headless interactionを決定し、Slint/eguiの実機証拠とU0a骨格はbaselineとして保持する。最大の未証明はnative wgpu surfaceとWebViewのCPU bridgeなし同居、focus/DPI/a11y、plugin sandbox/compatibility、windowed Timeline実測である。
 - **凍結ゲート状態**: **宣言**。改訂は宣言文書の解凍手続き(理由+migrate+ゴールデン)を通す。
 - **コントリビュータ導線(2026-07-10追記)**: 「乗ってもいいか」の最大欠落は視覚的証拠(GAP-11)と成功までの摩擦(GAP-9)。LLM委任の成否は**人間差し戻しをCIに移す**(INF-7)に依存。[plugin-authoring.md](plugin-authoring.md)§7の目視チェックリスト→機械判定が最安の一手。
 - **M2恒久焼き込みの予防(2026-07-12追記)**: 出戻りが最小の窓で予防を第一選択にする(H-4)。手順正本=[reviews/2026-07-12-m2-permanence-prevention.md](reviews/2026-07-12-m2-permanence-prevention.md)。先人対比=[rework-prior-art](reviews/2026-07-12-rework-prior-art.md)。運用入口=[AGENTS.md](../AGENTS.md)。
