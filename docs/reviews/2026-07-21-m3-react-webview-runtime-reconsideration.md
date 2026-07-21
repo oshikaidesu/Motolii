@@ -1,6 +1,6 @@
 # M3 React / WebView UI runtime再選定（2026-07-21）
 
-ステータス: **比較中**。2026-07-18のegui採用判断を歴史的証拠として保持しつつ、React / WebViewを製品UI runtime候補へ戻す。G0-9の比較が終わるまで、egui固有の製品shell・panel・Timeline実装と、plugin UI公開契約の固定を停止する。Rust/wgpu core、M2 Document、D2 command、単一writer、正準座標、preview/export同一評価、UI toolkit隔離は変更しない。
+ステータス: **比較中**。2026-07-18のegui採用判断と、現行mainで完了したegui shell、native texture preview、layout投影、render worker等を比較基準として保持しつつ、React / WebViewを製品UI runtime候補へ戻す。G0-9の比較が終わるまで、完了済み基準を越えるtoolkit固有の製品shell・panel・Timeline実装と、plugin UI公開契約の固定を停止する。Rust/wgpu core、M2 Document、D2 command、単一writer、正準座標、preview/export同一評価、UI toolkit隔離は変更しない。
 
 ## 1. 再選定を開く理由
 
@@ -138,7 +138,7 @@ G0-9は製品UI runtimeの再選定ゲートである。候補は少なくとも
 - [Rerun学習・転移計画](2026-07-20-rerun-learning-transfer-plan.md)のselection、density、cache、GPU lifecycle、testingはtoolkit横断の先例として残す。`re_ui`/`egui_tiles`/egui callbackの依存・vendoring・移植だけG0-9まで停止する
 - React component mapとStorybookは比較oracleへ昇格するが、DOM/CSSを仕様正本にしない
 - G0-3の`NodeDesc`自動panelは必須fallbackとして維持する。ただし「第三者の自由UIを長期に公開しない」という結論はG0-9とplugin sandbox/compatibility判断まで再固定しない
-- U0aのegui空骨格と依存方向CIは保持する。比較完了前に削除、拡張、公開型化しない
+- 現行mainのegui shell、native texture preview、layout投影、render worker、依存方向CIは比較基準として保持する。比較完了前に削除せず、toolkit固有の製品面をさらに拡張または公開型化しない
 
 ## 7. 現在の実装許可
 

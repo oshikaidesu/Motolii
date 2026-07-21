@@ -13,6 +13,14 @@ pub enum DomainIntent {
 }
 
 impl DomainIntent {
+    pub const ALL: [Self; 5] = [
+        Self::DeleteTargetedItems,
+        Self::EnableReduceMotion,
+        Self::ResetWorkspaceProfile,
+        Self::FitStageView,
+        Self::CancelInFlightGesture,
+    ];
+
     /// UI adapter内だけで使う一時kindを既知の目的へ変換する。
     ///
     /// `kind`は保存・再割当・安定識別に使わない。安定Command IDは後続の入力境界が所有する。

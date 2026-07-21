@@ -13,8 +13,8 @@ use std::fs;
 use std::path::Path;
 
 use motolii_testkit::{
-    apply_skip_decision, deps_required, parse_require_flag, skip_decision, tool_status,
-    SkipDecision, ToolStatus,
+    apply_skip_decision, deps_required, interactive_window_or_skip, parse_require_flag,
+    skip_decision, tool_status, SkipDecision, ToolStatus,
 };
 
 #[test]
@@ -32,6 +32,12 @@ fn decision_matrix_covers_all_cases() {
 fn apply_run_returns_true_and_skip_returns_false() {
     assert!(apply_skip_decision("dep", SkipDecision::Run, ""));
     assert!(!apply_skip_decision("dep", SkipDecision::Skip, "not found"));
+}
+
+#[test]
+fn interactive_window_is_optional_independently_of_gpu_requirement() {
+    assert!(interactive_window_or_skip(true, "available"));
+    assert!(!interactive_window_or_skip(false, "headless runner"));
 }
 
 /// 負例: Forbidはpanicする(=CIが赤になる)ことの直接検証。
@@ -196,7 +202,8 @@ fn no_hand_rolled_skip_paths_outside_testkit() {
     assert!(
         violations.is_empty(),
         "手書きスキップはM2E-1のポリシー(REQUIRE時panic)を迂回する抜け道。\
-         testkitのgpu_or_skip / ffmpeg_or_skip / unavailable_dep経由に置き換えること:\n{}",
+         testkitのgpu_or_skip / ffmpeg_or_skip / unavailable_dep / \
+         interactive_window_or_skip経由に置き換えること:\n{}",
         violations.join("\n")
     );
 }

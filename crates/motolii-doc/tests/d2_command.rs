@@ -685,6 +685,162 @@ fn duplicate_track_item_allocates_fresh_ids_via_writer() {
 // ---------------------------------------------------------------------------
 
 #[test]
+fn empty_macro_rejects_without_changing_writer_state() {
+    let f = fixture();
+    let mut writer = reference_writer(f.doc);
+    let gesture = writer.begin_gesture();
+    writer
+        .apply_command(
+            gesture,
+            Command::SetProperty {
+                target: f.layer,
+                property: ScalarPropertyId::Opacity,
+                old_value: DocParam::const_f64(1.0),
+                new_value: DocParam::const_f64(0.5),
+            },
+        )
+        .unwrap();
+    writer.undo().unwrap();
+
+    let before = serde_json::to_vec(&*writer.snapshot()).unwrap();
+    let before_revision = writer.revision;
+    let before_undo = writer.undo_len();
+    let before_redo = writer.redo_len();
+
+    assert_eq!(
+        writer.apply_macro(Vec::new()),
+        Err(CommandError::EmptyMacro)
+    );
+    assert_eq!(serde_json::to_vec(&*writer.snapshot()).unwrap(), before);
+    assert_eq!(writer.revision, before_revision);
+    assert_eq!(writer.undo_len(), before_undo);
+    assert_eq!(writer.redo_len(), before_redo);
+    assert_eq!(writer.begin_gesture().get(), 1);
+}
+
+#[test]
+fn macro_applies_once_and_undoes_and_redoes_as_one_gesture() {
+    let f = fixture();
+    let mut writer = reference_writer(f.doc.clone());
+
+    let gesture = writer
+        .apply_macro(vec![
+            Command::SetProperty {
+                target: f.layer,
+                property: ScalarPropertyId::Position,
+                old_value: DocParam::const_vec2([0.0, 0.0]),
+                new_value: DocParam::const_vec2([10.0, 0.0]),
+            },
+            Command::SetProperty {
+                target: f.layer,
+                property: ScalarPropertyId::Position,
+                old_value: DocParam::const_vec2([10.0, 0.0]),
+                new_value: DocParam::const_vec2([20.0, 0.0]),
+            },
+            Command::SetProperty {
+                target: f.other_layer,
+                property: ScalarPropertyId::Opacity,
+                old_value: DocParam::const_f64(1.0),
+                new_value: DocParam::const_f64(0.5),
+            },
+        ])
+        .unwrap();
+
+    assert_eq!(gesture.get(), 0);
+    assert_eq!(writer.revision, 1);
+    assert_eq!(writer.undo_len(), 1);
+    let applied = writer.snapshot();
+    let TrackItem::Clip(first) = &applied.tracks[0].items[0] else {
+        panic!("expected first fixture clip");
+    };
+    let TrackItem::Clip(second) = &applied.tracks[0].items[1] else {
+        panic!("expected second fixture clip");
+    };
+    assert_eq!(
+        first.envelope.transform.position,
+        DocParam::const_vec2([20.0, 0.0]),
+        "same-target updates must retain the final merged value"
+    );
+    assert_eq!(
+        second.envelope.opacity,
+        DocParam::const_f64(0.5),
+        "a different target must remain a distinct command in the macro"
+    );
+
+    writer.undo().unwrap();
+    assert_eq!(&*writer.snapshot(), &f.doc);
+    assert_eq!(writer.undo_len(), 0);
+    assert_eq!(writer.redo_len(), 1);
+
+    writer.redo().unwrap();
+    assert_eq!(writer.snapshot(), applied);
+    assert_eq!(writer.undo_len(), 1);
+    assert_eq!(writer.redo_len(), 0);
+}
+
+#[test]
+fn macro_command_failure_at_each_position_restores_all_writer_state() {
+    let f = fixture();
+
+    for failure_index in 0..3 {
+        let mut writer = reference_writer(f.doc.clone());
+        let prior_gesture = writer.begin_gesture();
+        writer
+            .apply_command(
+                prior_gesture,
+                Command::SetProperty {
+                    target: f.layer,
+                    property: ScalarPropertyId::Opacity,
+                    old_value: DocParam::const_f64(1.0),
+                    new_value: DocParam::const_f64(0.75),
+                },
+            )
+            .unwrap();
+        writer.undo().unwrap();
+
+        let valid_first = Command::SetProperty {
+            target: f.layer,
+            property: ScalarPropertyId::Position,
+            old_value: DocParam::const_vec2([0.0, 0.0]),
+            new_value: DocParam::const_vec2([10.0, 0.0]),
+        };
+        let invalid = Command::SetProperty {
+            target: LayerId::from_raw(u64::MAX),
+            property: ScalarPropertyId::Position,
+            old_value: DocParam::const_vec2([0.0, 0.0]),
+            new_value: DocParam::const_vec2([20.0, 0.0]),
+        };
+        let valid_last = Command::SetProperty {
+            target: f.other_layer,
+            property: ScalarPropertyId::Opacity,
+            old_value: DocParam::const_f64(1.0),
+            new_value: DocParam::const_f64(0.5),
+        };
+        let mut commands = vec![valid_first, valid_last];
+        commands.insert(failure_index, invalid);
+
+        let before = serde_json::to_vec(&*writer.snapshot()).unwrap();
+        let before_revision = writer.revision;
+        let before_undo = writer.undo_len();
+        let before_redo = writer.redo_len();
+
+        assert!(matches!(
+            writer.apply_macro(commands),
+            Err(CommandError::LayerNotFound(id)) if id == u64::MAX
+        ));
+        assert_eq!(
+            serde_json::to_vec(&*writer.snapshot()).unwrap(),
+            before,
+            "failure index {failure_index}"
+        );
+        assert_eq!(writer.revision, before_revision);
+        assert_eq!(writer.undo_len(), before_undo);
+        assert_eq!(writer.redo_len(), before_redo);
+        assert_eq!(writer.begin_gesture().get(), 1);
+    }
+}
+
+#[test]
 fn same_gesture_drag_merges_into_one_macro_and_undoes_atomically() {
     let f = fixture();
     let mut writer = reference_writer(f.doc.clone());

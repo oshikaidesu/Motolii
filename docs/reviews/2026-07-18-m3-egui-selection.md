@@ -1,12 +1,12 @@
 # M3 UI基盤 egui採用判断（2026-07-18）
 
-ステータス: **歴史的採否決定 / U0a骨格移行完了 / 2026-07-21再評価中**。本書の測定事実とU0a成果は保持するが、UI runtimeの現行採否は[React / WebView再選定 G0-9](2026-07-21-m3-react-webview-runtime-reconsideration.md)へ移った。G0-9完了までU1a以降のegui固有shell/preview/panel実装を停止する。
+ステータス: **歴史的採否決定 / egui比較基準成立 / 2026-07-21再評価中**。本書の測定事実と、現行mainで完了したU0a〜U0e-1、U1a-1/2、U1b-1/2等のegui基準実装は保持するが、UI runtimeの今後の採否は[React / WebView再選定 G0-9](2026-07-21-m3-react-webview-runtime-reconsideration.md)へ移った。G0-9完了まで、完了済み基準を越えるegui固有shell/panel/Timelineの製品実装を停止する。
 
 ## 1. 決定
 
 - 製品UIはRust nativeの**egui**を使う。初期統合の検証版は`egui` / `eframe` / `egui-wgpu` / `egui-winit` 0.35、`egui_tiles` 0.16、wgpu 29を使った
 - `motolii-gpu`がwgpu device/queueを所有し、UI shellは`egui_wgpu::WgpuSetup::Existing`で借りる。第2deviceやCPU pixel bridgeを正規経路にしない
-- previewは同一device上の`Rgba8Unorm` `TextureView`を`egui_wgpu::Renderer::register_native_texture`で登録して表示する。安定したdisplay poolのviewはpool生成時に一度登録し、毎frame sampler/bind groupを作らない
+- previewは同一device上の`Rgba8Unorm` `TextureView`を`egui_wgpu::Renderer::register_native_texture`で登録して表示する。display slot生成時に安定viewを作り、rendererを得られる`eframe::CreationContext`で一度だけ登録する。毎frame、resize、DPI変更、minimize/restoreごとにsampler/bind groupを作らない
 - toolkit依存は`motolii-ui`内へ閉じ、domain intent、Document command、render/eval/plugin公開APIへegui/eframe/winit型を出さない
 - 可変panelは`egui_tiles`をruntime投影先の第一候補とする。`Tree`、`TileId`、crateのserde形を製品設定の正本にせず、Motolii所有の安定したlayout modelから投影する。利用者はpanelの分割、tab化、resize、表示/非表示、復帰を選べる
 - v1 plugin UIは従来どおり`NodeDesc`からHostが自動生成するpanelだけを公開境界とする。plugin所有のegui code、native widget、自由wgpu UIは公開しない
@@ -77,14 +77,14 @@ U0a完了前に行わなかったもの（本入場でU0a相当は完了）:
 
 - ~~workspaceのSlint依存削除とegui依存追加~~ → **U0a完了**
 - ~~`UiDeviceParts`、Slint固有コメント、依存方向テスト名の変更~~ → **U0a完了**（`UiDeviceParts`名・公開形は不変）
-- `motolii-ui`製品shell、panel、preview、timeline実装 → **U1a以降**
+- ~~`motolii-ui`製品shell、静止preview、組み込みpanel layout、render worker~~ → **U1a-1/2・U1b-1/2完了**。追加のtoolkit固有panel/TimelineはG0-9待ち
 - 公開API、Document schema、plugin ABI、永続設定形式の追加 → **各タスク依存**
 
 U0aで完了した項目:
 
 1. G0-1を本判断と実機証拠へ差し替え
 2. Slint固有の依存方向CIを「UI toolkitは`motolii-ui`だけ」へ一般化
-3. egui骨格でのリンク確認（窓なし。device共有・native textureはU1a以降）
+3. egui骨格でのリンク確認（当時は窓なし。その後device共有・native textureはU1a-1で成立）
 
 ## 7. 歴史資料の扱い
 

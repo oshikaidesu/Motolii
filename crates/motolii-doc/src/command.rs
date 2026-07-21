@@ -129,6 +129,8 @@ pub struct MergeKey {
 
 #[derive(Debug, Clone, PartialEq, Error)]
 pub enum CommandError {
+    #[error("command macro must contain at least one command")]
+    EmptyMacro,
     #[error("layer {0} not found")]
     LayerNotFound(u64),
     #[error("track {0} not found")]
