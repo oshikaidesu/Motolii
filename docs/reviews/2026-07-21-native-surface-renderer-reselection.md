@@ -151,6 +151,8 @@ egui、Canvas/browser WebGPU、Pixi/Konva/Threeの既存結果はbaseline/oracle
 
 ## 6. Fableへ渡す反対側レビュー質問
 
+Fableの回答は[反対側レビュー](2026-07-21-native-surface-renderer-counter-review.md)へ記録済み。
+
 1. direct wgpuに寄せることで実質的な独自UI frameworkを再発明していないか。Motolii固有でない部分は何か。
 2. Stage/Timelineを2 surfaceに分ける場合、device/queue共有とplatform compositorの最小安全構成は何か。
 3. Timeline text/pathへVelloを局所使用する境界は、alpha、atlas、cache、surface lostで本当に一元化できるか。

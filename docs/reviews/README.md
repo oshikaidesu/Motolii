@@ -132,6 +132,7 @@
 | [2026-07-21-native-stage-gizmo-counter-review.md](2026-07-21-native-stage-gizmo-counter-review.md) | Native Stage gizmo案の反対側レビューと縮小採用 |
 | [2026-07-21-native-surface-renderer-reselection.md](2026-07-21-native-surface-renderer-reselection.md) | React複合下のnative Stage/Timeline renderer再選定とFableレビュー入口 |
 | [2026-07-21-native-surface-renderer-extended-search.md](2026-07-21-native-surface-renderer-extended-search.md) | native surface renderer拡張サーチ(egui以外の追加候補・先例・支援基盤) |
+| [2026-07-21-native-surface-renderer-counter-review.md](2026-07-21-native-surface-renderer-counter-review.md) | native surface renderer反対側レビュー(Fable回答・11問) |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |
 | [2026-07-21-m3-u1a-1-static-viewport-contract.md](2026-07-21-m3-u1a-1-static-viewport-contract.md) | U1a-1 静止viewport実装前契約 |

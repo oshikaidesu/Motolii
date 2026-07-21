@@ -152,6 +152,8 @@ HNに「Zed also stopped GPUI development」と題する2026-02のthread（[item
 
 ## 9. Fableへ追加する反証質問
 
+Fableの回答は[反対側レビュー](2026-07-21-native-surface-renderer-counter-review.md)へ記録済み。
+
 1. GraphiteがTauri/wryを放棄した「technical incompatibility」の具体は何で、Motoliiの非重複sibling
    WKWebView/WebView2構成にも該当するか。該当するならspike前に判定できるか。
 2. CEF OSR + 共有texture予備枝を持つ場合、第一候補（system WebView child）との分岐判定はどの証拠・
