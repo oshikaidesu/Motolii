@@ -1,0 +1,47 @@
+{
+  "ticket": "G0-9/M5-P2U comparison",
+  "capturedAt": "2026-07-21T07:42:56.146Z",
+  "environment": {
+    "platform": "darwin",
+    "release": "24.5.0",
+    "arch": "arm64"
+  },
+  "twoD": {
+    "move": true,
+    "scale": true,
+    "rotate": true,
+    "multiSelection": 2,
+    "visualCssPx": 14,
+    "hitCssPx": 30,
+    "zoomInvariant": true,
+    "escapeCancel": true,
+    "commitsAfterCancel": 0,
+    "proxyButtons": 3
+  },
+  "boundaries": {
+    "motoliiD2Connected": false,
+    "canonicalTransformValidated": false
+  },
+  "threeD": {
+    "actualTranslate": true,
+    "actualScale": true,
+    "actualRotate": true,
+    "worldAndLocalSpace": true,
+    "snappingConfigured": {
+      "translation": 0.25,
+      "rotationDegrees": 15,
+      "scale": 0.1
+    },
+    "cameraDisabledDuringGizmoDrag": true,
+    "escapeCancel": true,
+    "commitsAfterCancel": 0,
+    "proxyButtons": 5
+  },
+  "openBoundaries": {
+    "nativeStageCompositionValidated": false,
+    "perspectiveAndOrthographicValidated": false,
+    "occlusionAndConstantScreenSizeValidated": false,
+    "mixedParentMultiSelectionValidated": false,
+    "motoliiP2UScaleDepthSeparationValidated": false
+  }
+}

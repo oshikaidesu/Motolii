@@ -188,6 +188,14 @@ Metalで再合格した。
 確認し、macOS Safari実機ではWebKit描画とAX treeへのCanvas説明・bounded selection proxy公開を
 確認した。これはMotolii RationalTime snap、D2 Undo、日本語IME候補窓、VoiceOverの合格ではない。
 
+object handle追試では、Konva Transformerで2D move/scale/rotate/multi-select/Cancel、Three.js
+TransformControlsで3D translate/scale/rotate、world/local、snap、camera orbit排他を実mouseで確認した。
+これは既成DCC機構を再利用できる証拠であり、Three.jsを製品rendererへ採る決定ではない。M5 P2Uの
+ScaleとDepth Moveの別channel、perspective/orthographic、D2 Undoは未接続である。また第1hybrid候補の
+非重複sibling構成ではWeb Canvasのgizmoをnative Stageへ自動で重ねられないため、native wgpu描画と
+transparent/composition overlayを実機比較する。Host/communityのUI kit統一とStage描画surfaceの所有は
+別論点として扱う。
+
 WebView/native StageはTexture共有でなく、opaque native StageとWebViewを非重複sibling surfaceとして
 OS compositorに合成する案を第1候補にする。Host/communityは同じversioned React kitを使うが、
 community realmはnamed least-privileged WebView + typed Rust brokerを安全基準に分離する。これらは

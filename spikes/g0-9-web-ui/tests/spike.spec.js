@@ -202,3 +202,153 @@ test("opaque community iframe exposes only the explicit message path", async ({ 
     }, null, 2)}\n`);
   }
 });
+
+test("2D object handles move, scale, rotate, multi-select, cancel, zoom, and stay bounded", async ({ page }) => {
+  await page.goto("/");
+  const stage = page.getByTestId("object-handle-stage");
+  await stage.scrollIntoViewIfNeeded();
+  const box = await stage.boundingBox();
+  const read = async () => JSON.parse(await page.getByTestId("object-handle-state").textContent());
+
+  await page.mouse.move(box.x + 130, box.y + 120);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 190, box.y + 150, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => (await read()).lastAction).toBe("move");
+
+  await page.getByTestId("handles-reset").click();
+  await page.mouse.move(box.x + 200, box.y + 158);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 250, box.y + 205, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => (await read()).lastAction).toBe("scale");
+  expect((await read()).objects[0].scaleX).toBeGreaterThan(1);
+
+  await page.getByTestId("handles-reset").click();
+  await page.mouse.move(box.x + 140, box.y + 50);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 220, box.y + 120, { steps: 10 });
+  await page.mouse.up();
+  await expect.poll(async () => (await read()).lastAction).toBe("rotate");
+  expect(Math.abs((await read()).objects[0].rotation)).toBeGreaterThan(1);
+
+  await page.getByTestId("handles-reset").click();
+  await page.getByTestId("handles-multi").click();
+  expect((await read()).selection).toBe(2);
+  const proxy = page.getByRole("toolbar", { name: "Accessible object transform handles" });
+  expect(await proxy.getByRole("button").count()).toBe(3);
+  await proxy.getByRole("button", { name: "Scale selected objects up ten percent" }).click();
+  expect((await read()).objects.every((object) => object.scaleX === 1.1)).toBe(true);
+
+  await page.getByTestId("handles-zoom").click();
+  expect((await read()).zoom).toBe(2);
+  expect((await read()).visualCssPx).toBe(14);
+  expect((await read()).hitCssPx).toBe(30);
+
+  await page.getByTestId("handles-reset").click();
+  await page.mouse.move(box.x + 200, box.y + 158);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 255, box.y + 210, { steps: 8 });
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  await expect.poll(async () => (await read()).cancels).toBe(1);
+  const cancelled = await read();
+  expect(cancelled.commits).toBe(0);
+  expect(cancelled.objects[0].scaleX).toBe(1);
+
+  const evidence = process.env.G0_9_HANDLE_EVIDENCE;
+  if (evidence) {
+    fs.mkdirSync(path.dirname(evidence), { recursive: true });
+    fs.writeFileSync(evidence, `${JSON.stringify({
+      ticket: "G0-9/M5-P2U comparison",
+      capturedAt: new Date().toISOString(),
+      environment: { platform: os.platform(), release: os.release(), arch: os.arch() },
+      twoD: { move: true, scale: true, rotate: true, multiSelection: 2, visualCssPx: 14, hitCssPx: 30,
+        zoomInvariant: true, escapeCancel: true, commitsAfterCancel: cancelled.commits, proxyButtons: 3 },
+      boundaries: { motoliiD2Connected: false, canonicalTransformValidated: false },
+    }, null, 2)}\n`);
+  }
+});
+
+test("3D gizmo exposes DCC modes, spaces, snapping, camera exclusion, and actual axis drag", async ({ page }) => {
+  await page.goto("/");
+  const stage = page.getByTestId("spatial-gizmo-stage");
+  await stage.scrollIntoViewIfNeeded();
+  const box = await stage.boundingBox();
+  const read = async () => JSON.parse(await page.getByTestId("spatial-gizmo-state").textContent());
+  await expect.poll(async () => (await read()).object?.position).toBeTruthy();
+
+  await page.getByTestId("gizmo-translate").click();
+  const xHandle = await page.evaluate(() => window.g09SpatialGizmo.project("x"));
+  await page.mouse.move(box.x + xHandle.x, box.y + xHandle.y);
+  await page.mouse.down();
+  await expect.poll(async () => (await read()).cameraEnabled).toBe(false);
+  await page.mouse.move(box.x + xHandle.x + 90, box.y + xHandle.y + 18, { steps: 12 });
+  await page.mouse.up();
+  await expect.poll(async () => (await read()).commits).toBe(1);
+  const translated = await read();
+  expect(Math.abs(translated.object.position[0])).toBeGreaterThan(0);
+  expect(translated.cameraEnabled).toBe(true);
+
+  await page.getByTestId("gizmo-reset").click();
+  await page.getByTestId("gizmo-scale").click();
+  await page.mouse.move(box.x + xHandle.x, box.y + xHandle.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + xHandle.x + 70, box.y + xHandle.y + 14, { steps: 10 });
+  await page.mouse.up();
+  await expect.poll(async () => (await read()).commits).toBe(1);
+  expect(Math.abs((await read()).object.scale[0] - 1)).toBeGreaterThan(0.01);
+
+  await page.getByTestId("gizmo-reset").click();
+  await page.getByTestId("gizmo-rotate").click();
+  expect((await read()).mode).toBe("rotate");
+  const yHandle = await page.evaluate(() => window.g09SpatialGizmo.project("y"));
+  await page.mouse.move(box.x + yHandle.x, box.y + yHandle.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + xHandle.x, box.y + xHandle.y, { steps: 14 });
+  await page.mouse.up();
+  await expect.poll(async () => (await read()).commits).toBe(1);
+  expect((await read()).object.rotation.some((value) => Math.abs(value) > 0.01)).toBe(true);
+
+  await page.getByTestId("gizmo-space").click();
+  expect((await read()).space).toBe("local");
+
+  await page.getByTestId("gizmo-reset").click();
+  await page.getByTestId("gizmo-translate").click();
+  await page.mouse.move(box.x + xHandle.x, box.y + xHandle.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + xHandle.x + 60, box.y + xHandle.y + 12, { steps: 8 });
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  await expect.poll(async () => (await read()).cancels).toBe(1);
+  expect((await read()).commits).toBe(0);
+  expect((await read()).object.position).toEqual([0, 0, 0]);
+  expect(await page.getByRole("toolbar", { name: "3D transform modes" }).getByRole("button").count()).toBe(5);
+
+  const evidence = process.env.G0_9_HANDLE_EVIDENCE;
+  if (evidence) {
+    const previous = fs.existsSync(evidence) ? JSON.parse(fs.readFileSync(evidence, "utf8")) : {};
+    fs.mkdirSync(path.dirname(evidence), { recursive: true });
+    fs.writeFileSync(evidence, `${JSON.stringify({
+      ...previous,
+      threeD: {
+        actualTranslate: true,
+        actualScale: true,
+        actualRotate: true,
+        worldAndLocalSpace: true,
+        snappingConfigured: { translation: 0.25, rotationDegrees: 15, scale: 0.1 },
+        cameraDisabledDuringGizmoDrag: true,
+        escapeCancel: true,
+        commitsAfterCancel: (await read()).commits,
+        proxyButtons: 5,
+      },
+      openBoundaries: {
+        nativeStageCompositionValidated: false,
+        perspectiveAndOrthographicValidated: false,
+        occlusionAndConstantScreenSizeValidated: false,
+        mixedParentMultiSelectionValidated: false,
+        motoliiP2UScaleDepthSeparationValidated: false,
+      },
+    }, null, 2)}\n`);
+  }
+});

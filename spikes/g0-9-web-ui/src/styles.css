@@ -73,6 +73,45 @@ header {
   margin-top: 10px;
 }
 
+.handle-section {
+  margin-top: 16px;
+  max-width: 900px;
+}
+
+.handle-controls,
+.handle-a11y-proxy {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.object-handle-stage,
+.spatial-gizmo-stage {
+  width: 640px;
+  border: 1px solid #33465b;
+  background: #101720;
+  overflow: hidden;
+}
+
+.object-handle-stage {
+  height: 300px;
+}
+
+.spatial-gizmo-stage {
+  height: 360px;
+}
+
+.object-handle-stage canvas,
+.spatial-gizmo-stage canvas {
+  width: 640px !important;
+  height: auto !important;
+}
+
+.handle-section output {
+  display: block;
+  margin-top: 8px;
+}
+
 section {
   background: #151d28;
   border: 1px solid #2d3b4d;

@@ -5,6 +5,7 @@ import { revision as hmrRevision } from "virtual:g0-9-hmr-probe";
 import { DynamicSceneBenchmark } from "./dynamic-scene-benchmark.js";
 import { browserItem, createTimelineFixture, fixture } from "./fixture.js";
 import { TimelineRenderer } from "./timeline-renderer.js";
+import { ObjectHandleProbe, SpatialGizmoProbe } from "./object-handle-probes.jsx";
 import "./styles.css";
 
 function BrowserProbe() {
@@ -308,6 +309,8 @@ function App() {
         <TimelineProbe />
       </div>
       <InteractionProbe />
+      <ObjectHandleProbe />
+      <SpatialGizmoProbe />
       <CommunitySandboxProbe />
     </main>
   );
