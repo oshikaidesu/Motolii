@@ -1,0 +1,13 @@
+{
+  "ticket": "G0-9-timeline-visual-parity",
+  "status": "complete",
+  "adapter": "Apple M4",
+  "backend": "Metal",
+  "object_count": 5,
+  "rect_primitive_count": 151,
+  "text_run_count": 32,
+  "present_count": 120,
+  "readback_count": 0,
+  "semantic_state_owner_count": 1,
+  "pass": true
+}

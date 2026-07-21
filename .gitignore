@@ -5,6 +5,9 @@ spikes/vello-eval/target
 spikes/r9-preview/target
 spikes/ime-acceptance/target
 spikes/timeline-bench/target
+spikes/g0-9-surface-host/target
+spikes/g0-9-timeline-visual-parity/target
+spikes/g0-9-windowed-timeline/target
 /.tools
 # Claude Codeの個人設定と隔離worktreeを誤コミットしない
 /.claude/settings.local.json

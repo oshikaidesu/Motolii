@@ -9,7 +9,8 @@
 | 確認点 | 状態 | 証拠／次の審判 |
 |---|---|---|
 | Browser 10,000 item | **PASS / automated** | 24〜30 DOM row、stable ID選択。可変高tree/gridは未証明 |
-| Timeline 100,000 key描画 | **PASS / native owner・renderer spike required** | Canvas 2D/browser WebGPUは先例証拠へ限定。製品はdirect wgpu第一候補、Velloはpath/text局所利用。native headless基準はPASSだがwindow present/input/text/WebView同居は未証明 |
+| Timeline 100,000 key描画 | **PASS / capacity and rendering foundation** | 100kは常用規模を大きく超えるstress fixture。Apple M4/Metalの実windowで10k selected、opaque WKWebView 2枚、30.017秒を完走し、readback/resource hot-loop生成0、present間隔p95 17.006ms。約1.078秒の外れ値は診断記録として保持。text/icon/input/D2は別審判 |
+| native Timeline外観first pass | **PASS / isolated fixture** | React実画面をoracleに5 objectをdirect wgpu + glyphonで120 present、readback 0、semantic owner 1。React所有の`KEYS / LAYERS` tool panelはnativeへ複製しない。time planeとZ軸Timelineはnative所有。pixel parity、操作、theme、a11y、D2は別審判 |
 | 10,000 key group drag | **PASS / automated** | PixiJS/Konva adapter。move中semantic write 0、Cancel復元、release callback 1 |
 | actual mouse drag / snap / canvas外移動 | **PARTIAL / automated** | Playwrightの実mouse inputでKonva group drag、10 CSS px `dragBoundFunc`、canvas外移動後Escapeを確認。Motolii RationalTime snapと実D2 Undoは未接続 |
 | pointer capture | **PASS / primitive** | DOM overlayで標準`setPointerCapture`を使い、surface外moveとrelease後capture解放を確認。`pointercancel`/pen/touch実機は未証明 |
@@ -17,16 +18,16 @@
 | 2D object handle | **PASS / prior-art adapter** | Konva Transformerで実mouseのmove/scale/rotate、2 object選択、Escape取消、zoom後も14 CSS px表示/30 CSS px hit target、固定3操作のDOM proxyを確認。製品Stage ownerはnative wgpuへ決定し、Web runtime選定の合格点から外す |
 | 3D object gizmo | **PARTIAL / prior-art adapter** | Three.js TransformControlsで実mouseのtranslate/scale/rotate、world/local、snap設定、drag中OrbitControls排他、Escape取消を確認。製品Stage ownerはnative wgpuで、Three.jsを製品renderer/runtimeとはしない |
 | M5 Scale / Depth Move分離 | **NOT VALIDATED** | 汎用3D translate/scale成立はP2U合格ではない。Scaleは`scale.x/y`だけ、Depth Moveは`position.z`だけ、perspective/orthographic・DPI・D2 Undoを既存M5 fixtureで別審判する |
-| Canvas a11y proxy | **PARTIAL / macOS実機** | proxyは選択数に比例させず1 focus target + count。SafariのmacOS AX treeでCanvas説明と選択listを確認。keyboard同等操作、VoiceOver読上げは未証明 |
+| Canvas a11y proxy | **PARTIAL / macOS実機** | proxyは選択数に比例させず1 focus target + count。Safari fixtureではCanvas説明と選択listを確認したが、wgpu 29 hostのGPU Stage/TimelineはAX意味ノードを持たない。host側bounded proxy、keyboard同等操作、VoiceOver読上げは未証明 |
 | IME gate | **PARTIAL / automated** | composition中のshortcut抑止とevent順をsynthetic eventで確認。macOS日本語IME候補窓、preedit、確定/取消は`PHYSICAL` |
 | hot reload | **PASS / harness** | Vite virtual moduleをRust再起動なしでaccept。製品component state、plugin単体reloadは未証明 |
 | Reactモック資産 | **PASS / fixed comparison** | 固定worktree build + 43 Playwright test。stress fixtureの製品component直接接続は未証明 |
-| native Stage/Timeline + WebView | **TOPOLOGY PASS / platform acceptance required** | 1 top-level wgpu Surface内2 viewport + opaque child WKWebViewをmacOS実機で表示、resize、Web text focus、AX treeまで確認。wgpu 23公式sample派生なのでwgpu 29製品統合、Windows、DPI/capture/lostは未合格 |
+| native Stage/Timeline + WebView | **PASS / macOS fixture・platform acceptance継続** | 1 top-level Surface内2 viewport + opaque child WKWebView 2枚を実測。別fixtureでEditor/Previewを2 top-level/2 Surface、共有device、片側疑似lost、fullscreen、close/reopen、Host snapshot保持まで確認。Windows、異DPI、第二monitor、HDR、実lostは未合格 |
 | overlay / alpha / color | **PHYSICAL** | macOS透明wryはprivate API停止線。まずopaque Stage + 非重複WebView、overlayは別審判 |
 | native Stage上の2D/3D gizmo | **OWNER DECIDED / spike required** | canonical出力外のnative wgpu presentation overlayが描画し、CPU解析幾何でhit-testする。transparent WebViewは比較対象から外し、occlusion、screen一定サイズ、M5意味、D2、a11y proxyを実機spikeする |
-| resize/minimize/restore/DPI/device lost | **PARTIAL** | 現行egui実window試験に加え、macOS wry/WKWebView + 1 surface/2 viewportのwindow zoom追従を確認。resize 100回、minimize/restore、DPI移動、surface/device lostは未証明 |
+| resize/minimize/restore/DPI/device lost | **PARTIAL / macOS resize・restore PASS** | wgpu 29 hostで104 resizeと106 layout epoch、minimize/restoreとfullscreen進入後のnative/Web再描画を確認。focused WebViewからのfullscreen退出、異DPI monitor、surface/device lostは未証明 |
 | Host/community同一kit | **DESIGN EVIDENCE** | 同一versioned React component/test kitを使う。権限realmまで同一にはしない |
-| community sandbox/権限 | **PARTIAL / automated** | opaque-origin iframeでparent DOM、storage、network、native bridgeの直接access拒否と明示messageだけを確認。named least-privileged WebView + Rust brokerを安全基準とし、iframeからnative IPC不能かは別負例が必要 |
+| community sandbox/権限 | **PARTIAL / automated** | opaque-origin iframeでparent DOM、storage、network、native bridgeの直接access拒否を確認。fixture typed brokerは`theme.read`だけを許可し、`document.raw`/`native.invoke`を拒否。named least-privileged WebView + Rust brokerを安全基準とし、実WebViewからnative IPC不能かは別負例が必要 |
 | crash/loop/OOM隔離 | **PHYSICAL** | iframe/CSP/SESだけでは保証しない。別rendererの停止・単体reload・host継続を実測する |
 | offline production bundle | **PARTIAL** | Vite production static buildは成立。Windows WebView2 clean-machine install、runtime更新、CDN/dev-server 0は`PHYSICAL` |
 | Windows WebView/IME/GPU | **PHYSICAL** | Windows 10/11 + WebView2 + 実GPU + MS-IMEでのみ合格へ上げる |
@@ -70,8 +71,10 @@ wgpu Surface内にStage/Timelineをviewport/scissorで描き、opaque child WebV
 - macOSのwry透明化はprivate `drawsBackground`経路を使うため、App Store配布候補では停止線
 
 macOSではwry公式sampleと最小改変sampleでopaque child WKWebView、2 native viewport、window zoom、Web text
-focus、AX treeを実機確認した。残るresize 100回、0×0/minimize/restore、DPI、pointer capture、surface lost、
-Web content process終了、Windows、frame pacingを製品統合前の受入条件とする。
+focus、AX treeを実機確認した。さらに[wgpu 29 surface host](g0-9-surface-host.md)で104 resize、
+minimize/restore、fullscreen進入、nativeからWebViewへの境界drag、200 acquire/present、readback 0を確認した。残る0×0、
+異DPI、WebViewからnativeへのsemantic drag token、surface/device lost、Web content process終了、Windows、
+frame pacingを製品統合前の受入条件とする。
 
 ### 2.3 2D handleと3D gizmo
 

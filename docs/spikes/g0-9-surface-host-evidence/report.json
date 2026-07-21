@@ -1,0 +1,21 @@
+{
+  "acquire_count": 200,
+  "layout_epoch": 106,
+  "native_drag_crossed_webview": true,
+  "native_drag_moves": 2,
+  "native_drag_released": true,
+  "native_viewport_count": 2,
+  "present_count": 200,
+  "present_invariant": true,
+  "readback_count": 0,
+  "resize_events": 104,
+  "resize_pass": true,
+  "resize_target": 100,
+  "surface_count": 1,
+  "web_drag_ended": 1,
+  "web_drag_moved": 0,
+  "web_drag_started": 1,
+  "web_input_events": 4,
+  "webview_count": 2,
+  "wgpu_major": 29
+}
