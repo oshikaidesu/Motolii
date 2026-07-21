@@ -9,7 +9,7 @@
 | 確認点 | 状態 | 証拠／次の審判 |
 |---|---|---|
 | Browser 10,000 item | **PASS / automated** | 24〜30 DOM row、stable ID選択。可変高tree/gridは未証明 |
-| Timeline 100,000 key描画 | **PASS / automated** | Canvas 2D、browser WebGPU micro-probe、native wgpu基準。renderer間の速度比較ではない |
+| Timeline 100,000 key描画 | **PASS / native owner・renderer spike required** | Canvas 2D/browser WebGPUは先例証拠へ限定。製品はdirect wgpu第一候補、Velloはpath/text局所利用。native headless基準はPASSだがwindow present/input/text/WebView同居は未証明 |
 | 10,000 key group drag | **PASS / automated** | PixiJS/Konva adapter。move中semantic write 0、Cancel復元、release callback 1 |
 | actual mouse drag / snap / canvas外移動 | **PARTIAL / automated** | Playwrightの実mouse inputでKonva group drag、10 CSS px `dragBoundFunc`、canvas外移動後Escapeを確認。Motolii RationalTime snapと実D2 Undoは未接続 |
 | pointer capture | **PASS / primitive** | DOM overlayで標準`setPointerCapture`を使い、surface外moveとrelease後capture解放を確認。`pointercancel`/pen/touch実機は未証明 |
@@ -37,22 +37,23 @@
 
 ## 2. 既成技術から組む境界
 
-### 2.1 Timeline / Roto入力
+### 2.1 Timeline / Roto入力のWeb先例
 
-- dense key描画: PixiJS `ParticleContainer`。Particleを個別event/a11y nodeにしない
+- dense key描画: 製品はdirect wgpu primitive batch。PixiJS `ParticleContainer`は比較oracleだけにし、
+  Particleを個別event/a11y nodeにしないという負例を引き継ぐ
 - mouse/touch/pen継続: Web標準
   [`setPointerCapture`](https://developer.mozilla.org/en-US/docs/Web/API/Element/setPointerCapture)
 - pen: [Pointer Events Level 3](https://www.w3.org/TR/pointerevents3/)のpressure、tilt、
   `getCoalescedEvents()`。React独自pen protocolを作らない
-- pan/zoom/edge-pan: [pixi-viewport](https://viewport.pixijs.io/jsdoc/Viewport.html)。
-  `mouseEdges`のwindowed viewport制約はWebView実測する
-- marquee/少数handle: [Konva公式multi-select例](https://konvajs.org/docs/select_and_transform/Basic_demo.html)
+- pan/zoom/edge-pan: [pixi-viewport](https://viewport.pixijs.io/jsdoc/Viewport.html)は操作oracle。
+  native実装は同じfixtureをNormalizedInput/CPU hit-testへ接続する
+- marquee/少数handle: [Konva公式multi-select例](https://konvajs.org/docs/select_and_transform/Basic_demo.html)は操作oracle
 - form/focus: native input + React Aria。100,000 key分のDOM proxyを作らない
 
 [Canvas Timeline固定source](https://github.com/techsquidtv/canvas-timeline/blob/522ac2c68e3e024017648bef8125b9af4e51c5b5/packages/react/src/components/interactions/KeyframeInteractionLayer.tsx)
 にはpointer capture、document fallback、keyboard interactionがあるため先例として利用できる。一方、
 0.1.0 / MPL-2.0で独自state/historyを持ち、visible keyをDOM button化する。Motolii D2の正本へせず、
-入力patternとfixtureだけを監査する。
+入力patternとfixtureだけを監査し、Web libraryを製品native surfaceへ混ぜない。
 
 ### 2.2 WebViewとnative Stage
 
