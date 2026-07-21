@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PRIMARY_WORKTREE="$(git -C "$ROOT_DIR" worktree list --porcelain | awk '/^worktree / { print substr($0, 10); exit }')"
 CLAUDE_AGENT_BIN="${CLAUDE_AGENT_BIN:-claude}"
 CLAUDE_SUPERVISOR_MODEL="${CLAUDE_SUPERVISOR_MODEL:-claude-opus-4-8}"
 CLAUDE_IMPLEMENTER_MODEL="${CLAUDE_IMPLEMENTER_MODEL:-claude-sonnet-5}"
@@ -44,7 +45,7 @@ if [[ -z "${task//[[:space:]]/}" ]]; then
 fi
 
 task_hash="$(printf '%s' "$task" | shasum -a 256 | awk '{print $1}')"
-if [[ "$WORKTREE" == "$ROOT_DIR" ]]; then
+if [[ "$WORKTREE" == "$PRIMARY_WORKTREE" ]]; then
   echo "delegate-claude-supervised: 主作業ツリーへの実装発注は禁止です" >&2
   exit 2
 fi
