@@ -25,8 +25,9 @@ G0-6H後のU0e-3まで確定・導入しない。U0e-1で使うtoken値は
   DTCG 2025.10 JSONを単一正本とし、generator version、入力hash、生成先を固定して
   手編集・未生成差分を拒否すると決定している
 - [Uシリーズ分割](2026-07-16-m3-ui-concept-to-tickets.md#32-tokencomponenticonを3段階に分ける)は、
-  U0e-1をgenerator、U0e-2を5画面fixture、G0-6Hを人間審判、
-  U0e-3を製品値・component導入へ分離している
+  U0e-1をgenerator、U0e-2Rを固定React比較baseline再結合、
+  U0e-2を5画面fixture、G0-6Hを人間審判、U0e-3を製品値・component導入へ
+  分離している
 - DTCG Format / Color Module 2025.10は交換formatの正本である。
   Motoliiのrole名、製品値、egui投影先を定める根拠ではない
 - PR #184は証拠・抽出元であり、採用するのは型付きflatten、安定順生成、
