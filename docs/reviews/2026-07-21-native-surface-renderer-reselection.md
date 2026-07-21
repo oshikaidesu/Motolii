@@ -6,7 +6,8 @@ native所有とし、そこでegui widgetを使う前提を外す。製品native
 direct wgpu、複雑path/textだけ採択済みVelloを局所利用する構成である。
 
 本書はegui撤去、WebView採択、event-loop実装、公開API、Document、plugin GPU契約を許可しない。
-先に同一fixtureのwindowed spikeで反証する。
+先に同一fixtureのwindowed spikeで反証する。egui以外の追加候補・先例・支援基盤の続編サーチは
+[拡張サーチ](2026-07-21-native-surface-renderer-extended-search.md)を参照。
 
 ## 1. 問いの修正
 
