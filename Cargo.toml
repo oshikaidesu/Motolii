@@ -19,6 +19,7 @@ members = [
     "crates/motolii-audio",
     "crates/motolii-transport",
     "crates/motolii-ui",
+    "crates/motolii-ui-token-gen",
 ]
 
 [workspace.package]
@@ -53,6 +54,7 @@ egui-wgpu = "0.35"
 egui-winit = "0.35"
 egui_tiles = "0.16"
 serde_json = "1"
+sha2 = "0.10"
 thiserror = "2"
 image = { version = "0.25", default-features = false, features = ["png"] }
 # egui-wgpuとコアで同じwgpuメジャーを共有する。

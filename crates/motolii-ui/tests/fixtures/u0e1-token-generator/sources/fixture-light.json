@@ -1,0 +1,35 @@
+{
+  "$schema": "https://www.designtokens.org/schemas/2025.10/format.json",
+  "fixture-color": {
+    "$type": "color",
+    "sample": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0.875, 0.75, 0.5],
+        "alpha": 0.5
+      }
+    }
+  },
+  "fixture-space": {
+    "$type": "dimension",
+    "sample": {
+      "$value": {
+        "value": 11.25,
+        "unit": "px"
+      }
+    }
+  },
+  "fixture-motion": {
+    "duration": {
+      "$type": "duration",
+      "$value": {
+        "value": 275,
+        "unit": "ms"
+      }
+    },
+    "curve": {
+      "$type": "cubicBezier",
+      "$value": [0, 0, 1, 1]
+    }
+  }
+}

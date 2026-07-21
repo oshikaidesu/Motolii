@@ -1,0 +1,34 @@
+{
+  "schema": "https://www.designtokens.org/schemas/2025.10/format.json",
+  "generator": {
+    "id": "motolii-ui-token-gen",
+    "version": 1
+  },
+  "input_sha256": "be68440a944867f94298a64a8c7747f2387dc3e097e1a8e246fb23fb212a330a",
+  "themes": [
+    "fixture-dark",
+    "fixture-light"
+  ],
+  "tokens": [
+    {
+      "path": "fixture-color.sample",
+      "type": "color"
+    },
+    {
+      "path": "fixture-motion.curve",
+      "type": "cubicBezier"
+    },
+    {
+      "path": "fixture-motion.duration",
+      "type": "duration"
+    },
+    {
+      "path": "fixture-space.sample",
+      "type": "dimension"
+    }
+  ],
+  "outputs": [
+    "tokens.rs",
+    "manifest.json"
+  ]
+}
