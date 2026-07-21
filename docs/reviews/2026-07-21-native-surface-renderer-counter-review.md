@@ -5,6 +5,7 @@
 結論: **第一候補（direct wgpu primitive batch + Vello局所 + React複合）を覆す反証は構成できなかった**。
 ただし調査側に弱点3点があり、spike設計へ反映しない限り「比較した」とは言えない（§3）。
 本回答は助言であり、採否はMotolii fixtureと実機証拠で行う。Document/API/plugin契約を発明しない。
+伸ばす方向の対レビューは[伸長レビュー](2026-07-21-native-surface-renderer-growth-review.md)を参照。
 
 ## 1. 再選定§6への回答
 
