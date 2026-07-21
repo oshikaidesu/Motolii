@@ -142,8 +142,9 @@ run_supervisor() {
   if ! run_agent "$output" "$SUPERVISOR_TIMEOUT_SECONDS" \
     env CLAUDE_DELEGATED=1 "$CLAUDE_AGENT_BIN" -p \
       --model "$CLAUDE_SUPERVISOR_MODEL" \
-      --permission-mode plan \
+      --permission-mode default \
       --allowedTools Read,Glob,Grep,Bash \
+      --disallowedTools Edit,Write \
       --output-format text \
       "$prompt"; then
     return 1
@@ -170,7 +171,8 @@ raw scanners that bypass typed boundaries, public raw mutation APIs, invented
 serde defaults, duplicate planners/helpers, partial mutation, TODO stubs, and
 adjacent-ticket expansion.
 
-End with exactly ORDER: READY if fully specified, otherwise ORDER: STOP.
+The last non-empty line must be exactly plain text ORDER: READY if fully
+specified, otherwise ORDER: STOP. Do not bold it, quote it, or append text.
 
 User task:
 $task
@@ -262,7 +264,8 @@ logic, raw public APIs, non-atomic failure, unbounded work, and unfinished gates
 
 Classify P0/P1/P2 with file and line evidence. Any P0/P1, missing required test,
 out-of-allowlist edit, or unverifiable command requires rejection. End with one
-exact final line: VERDICT: ACCEPT or VERDICT: REJECT.
+exact plain-text final line: VERDICT: ACCEPT or VERDICT: REJECT. Do not bold it,
+quote it, or append text.
 
 Original user task:
 $task
