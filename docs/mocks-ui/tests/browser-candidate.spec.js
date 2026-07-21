@@ -19,12 +19,25 @@ test.describe("shared discovery Browser candidate", () => {
     await expect(
       page.locator('[data-react-surface="easing-graph"]'),
     ).toHaveCount(1);
+    await page
+      .getByRole("button", {
+        name: "Pulse ringsのAutomationを開く · 3 channel",
+      })
+      .click();
+    const intensityKey = page.getByRole("button", {
+      name: "Pulse rings · Intensity · Key 2",
+    });
+    await intensityKey.click();
     await expect(
-      page.locator('.inline-key[data-key-context="current"]'),
+      page.locator(
+        '.candidate-automation-key[data-key-context="current"]',
+      ),
     ).toHaveCount(3);
     await expect(
-      page.locator('.inline-key[data-key-context="context"]'),
-    ).toHaveCount(2);
+      page.locator(
+        '.candidate-automation-key[data-key-context="context"]',
+      ),
+    ).toHaveCount(4);
 
     await page
       .getByRole("button", {
@@ -121,17 +134,15 @@ test.describe("shared discovery Browser candidate", () => {
     }
 
     const keyShapeBefore = await page
-      .locator(".inline-key")
+      .locator(".candidate-automation-key")
       .evaluateAll((keys) =>
         keys.map((key) => ({
-          channel: key.dataset.channel,
+          channel: key.closest(".candidate-automation-row")?.dataset.channel,
           left: key.style.left,
-          filled: key.classList.contains("filled"),
+          pressed: key.getAttribute("aria-pressed"),
         })),
       );
-    const intervalStart = page.locator(
-      ".time-bar.selected .inline-key.key-selected",
-    ).first();
+    const intervalStart = intensityKey;
     await panel
       .getByRole("button", { name: "Elastic", exact: true })
       .click();
@@ -191,12 +202,12 @@ test.describe("shared discovery Browser candidate", () => {
       .getByRole("button", { name: "Steps", exact: true })
       .click();
     const keyShapeAfter = await page
-      .locator(".inline-key")
+      .locator(".candidate-automation-key")
       .evaluateAll((keys) =>
         keys.map((key) => ({
-          channel: key.dataset.channel,
+          channel: key.closest(".candidate-automation-row")?.dataset.channel,
           left: key.style.left,
-          filled: key.classList.contains("filled"),
+          pressed: key.getAttribute("aria-pressed"),
         })),
       );
     expect(keyShapeAfter).toEqual(keyShapeBefore);
