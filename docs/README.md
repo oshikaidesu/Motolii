@@ -10,8 +10,8 @@
 
 - **何を作るか**: MV(ミュージックビデオ)制作のための、モーショングラフィック指向のコンポジットツール。AEの重さへの構造的な回答。3〜5分の動画を書き出せたら完成
 - **長期の北極星**: 映像表現を、時刻・入力・型付きparameterから決まる再利用可能な単位として演奏・保存・配布できる共通実行環境にする。「映像制作におけるVST」は構造の比喩であり、VST互換やDAW化は目標ではない([concept.md](concept.md#長期の北極星-映像表現を演奏再利用配布できる単位にする))
-- **技術スタック(確定)**: Rust + wgpu(レンダコア、VRAM常駐) / egui(UI、既存wgpu device/native texture共有、toolkit依存は`motolii-ui`へ隔離。Rerunを主要製品先例として層別転移) / ffmpegサイドカープロセス(デコード・エンコード) / Cargo workspace(`crates/motolii-*`)。U0aでegui骨格完了。Rerun由来資産の個別採否は各行依存に従う
-- **開発方式**: 仕様書駆動の並列AIエージェント開発。[M2基盤再締結](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで発効済み。M3はU0a入場完了後、各タスクの依存を満たせば段階発注可
+- **技術スタック**: Rust + wgpu(レンダコア、VRAM常駐) / ffmpegサイドカープロセス(デコード・エンコード) / Cargo workspace(`crates/motolii-*`)は確定。UI toolkit依存を`motolii-ui`へ隔離する境界も不変。UI runtimeはeguiの既存wgpu共有証拠とU0a骨格を保持しつつ、React / WebView、同一community kit、hot reload、局所WebGPUを含む[G0-9再選定](reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md)へ移行した
+- **開発方式**: 仕様書駆動の並列AIエージェント開発。[M2基盤再締結](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで発効済み。M3はU0a入場済みだが、G0-9中はtoolkit非依存タスクだけ各依存に従い段階発注可
 - **設計目標の代表値**: 1080p動画レイヤー40本同時で破綻しない / プロセス強制終了しても編集を失わない(コマンドジャーナル) / フレーム並列(マルチコア)を構造で保証
 
 ## 読む順序(初見向け)
@@ -52,13 +52,14 @@
 | [ui-concept.md](ui-concept.md) | UIコンセプト: 体験の北極星(譜面台・First Beat・五本柱)。散在するUI文書の層地図つき | **設計仮説・反対側レビュー待ち**(2026-07-16。契約・M3ステータス変更なし) |
 | [implementation-ledger.md](implementation-ledger.md) | 現場向け実装進行台帳: M0〜M5のNOW/NEXT/WAIT、依存、Issue昇格順 | **日々の発注入口**(意味・完了条件は各specが正本。M3は段階発注可) |
 | [backlog.md](backlog.md) | イシュー候補台帳(現在地サマリ+横断/新規ギャップ/v2バックログ) | 現行 |
-| [specs/](specs/README.md) | マイルストーン仕様書(エージェントへの発注書)。確定/ドラフトのステータスはspecs/README.md参照 | M0/M1確定、M2基盤再締結済み(D5は別レーン)、M3ドラフト/段階発注可、M4/M5ドラフト |
+| [specs/](specs/README.md) | マイルストーン仕様書(エージェントへの発注書)。確定/ドラフトのステータスはspecs/README.md参照 | M0/M1確定、M2基盤再締結済み(D5は別レーン)、M3はG0-9中でtoolkit非依存のみ段階発注可、M4/M5ドラフト |
 | [reviews/](reviews/README.md) | レビュー規律+**全review文書の索引**(この表は現役参照の抜粋。全量はreviews/README.md側が正本で、`scripts/check-docs.sh`が抜けを検証) | 運用正本 |
 | [spikes/](spikes/) | スパイク結果報告(S1: Slint統合、S2: デコード、[S3(R8): Vello採否](spikes/s3-vello.md)) | 完了報告(歴史的記録、更新しない) |
 | [reviews/2026-07-12-m2-permanence-prevention.md](reviews/2026-07-12-m2-permanence-prevention.md) | M2恒久焼き込みの**予防手順**(やること5手)。運用正本 | 現行 |
 | [reviews/2026-07-14-m3-ui-boundary-prevention.md](reviews/2026-07-14-m3-ui-boundary-prevention.md) | M3でUI都合をDocument・レンダ・公開契約へ逆流させない**予防手順**(規律8本) | 現行 |
 | [reviews/2026-07-14-m3-ui-boundary-counter-review.md](reviews/2026-07-14-m3-ui-boundary-counter-review.md) | M3 UI境界規約の反対側レビュー。R1〜R9を採用/縮小/延期で再判定 | 現行(判定反映済み) |
-| [reviews/2026-07-16-m3-preflight-decisions.md](reviews/2026-07-16-m3-preflight-decisions.md) | M3着手前決定: input/状態寿命、plugin UI、性能測定、操作文法を固定し、見た目とresource実値を証拠待ちへ分離 | **設計決定**(G0-2/3/4/7完了) |
+| [reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md](reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md) | React/WebView、局所WebGPU、Host/community同一kitを比較するG0-9 UI runtime再選定 | **比較中 / toolkit固有実装停止線** |
+| [reviews/2026-07-16-m3-preflight-decisions.md](reviews/2026-07-16-m3-preflight-decisions.md) | M3着手前決定: input/状態寿命、plugin UI、性能測定、操作文法を固定し、見た目とresource実値を証拠待ちへ分離 | **設計決定**(G0-2/4/7完了。G0-3は2026-07-21再評価中) |
 | [reviews/2026-07-16-m3-ui-concept-to-tickets.md](reviews/2026-07-16-m3-ui-concept-to-tickets.md) | UIコンセプトを1 Issue=1 commitの実装粒へ分解。状態、入力、視覚、preview、共通操作、最初のEffect panelの依存と拒否条件 | **条件付き発注の正本**(U0b〜U4aの枝番。各行依存に従い発注可) |
 | [reviews/2026-07-16-ui-update-forensics.md](reviews/2026-07-16-ui-update-forensics.md) | Figma/Ableton/AE/Blender/Godot/Home AssistantとLinux GUIの公式更新・fork履歴から、UI失敗、不安定platformの隔離、user拡張をMotoliiのcomponent審判へ変換 | **調査と採用審判**(AF-1〜17) |
 | [reviews/2026-07-17-non-video-workspace-asset-ui-prior-art.md](reviews/2026-07-17-non-video-workspace-asset-ui-prior-art.md) | 写真管理、3D／ゲーム制作、CAD、IDEから、外部素材探索、task別Workspace、自由配置、視線handoffを再調査。SourcesのTray／Drawer／Dock仮説とFocus Contract、比較モック審判へ翻訳 | **先例調査・翻訳仮説**(M3製品実装・公開APIの許可ではない) |
@@ -96,7 +97,7 @@
 | [reviews/2026-07-15-p5-generative-pattern-disposition.md](reviews/2026-07-15-p5-generative-pattern-disposition.md) | p5.js系ジェネ表現をone-shot/純関数/Feedback/Simulation/記録入力へ分類 | **調査・配置案**(2026-07-15) |
 | [reviews/2026-07-16-m3-ui-gap-survey.md](reviews/2026-07-16-m3-ui-gap-survey.md) | M3前UIギャップ調査: U1〜U8に席が無いUI領域(書き出し/保存/エラー表示等)とコア側前提の欠落(状態購読/ParamDefメタデータ/Transport等) | **調査メモ**(2026-07-16。各項目の採否は個別M3チケット／依存充足後の裁定で決める) |
 | [reviews/2026-07-16-m3-ui-rapid-acceptance-prior-art.md](reviews/2026-07-16-m3-ui-rapid-acceptance-prior-art.md) | すぐに受け入れられたUIの先例集: 第一部=プロダクト単位の受容(界隈の期待リスト)、第二部=業界収斂した操作語彙+UX原理の一次資料(M3転移の本線)、第三部=後発の勝ち筋「どの操作も直感的」(Ableton→AEカウンター)。設計根拠ではない | 仮説メモ(2026-07-16) |
-| [reviews/2026-07-18-m3-egui-selection.md](reviews/2026-07-18-m3-egui-selection.md) | M3 UI基盤をSlintからeguiへ変更。既存wgpu device/native texture、lifecycle、日本語IME、可変panel、移行停止線 | **採否決定**(U0aで製品egui骨格完了。U1a以降は別チケット) |
+| [reviews/2026-07-18-m3-egui-selection.md](reviews/2026-07-18-m3-egui-selection.md) | M3 UI基盤をSlintからeguiへ変更した時点の既存wgpu device/native texture、lifecycle、日本語IME、可変panel証拠 | **歴史的採否決定**(U0a骨格保持。現行採否はG0-9再評価中) |
 | [reviews/2026-07-20-rerun-learning-transfer-plan.md](reviews/2026-07-20-rerun-learning-transfer-plan.md) | RerunのUI、時間面、GPU viewport、selection、実行系、試験系をRR-0〜9へ分解し、M1〜M5の関与、転移順、停止線、発注の強制動線を規定 | **方向決定／学習・発注運用正本**(source監査は可。依存・vendoring・移植はM3入場後。§9の順序と6ラベルは無視禁止) |
 | [reviews/2026-07-20-rerun-source-asset-inventory.md](reviews/2026-07-20-rerun-source-asset-inventory.md) | 固定commitの139 package、非コード資産、拡張example、Importer、Viewer MCP、試験基盤等を全体棚卸し | **観察**(package-levelは全量、file/API-levelは重点候補。候補分類は採用裁定ではない) |
 | [reviews/2026-07-20-rerun-re-ui-module-inventory.md](reviews/2026-07-20-rerun-re-ui-module-inventory.md) | `re_ui`をfile-levelへ分解し、React安定ID、M3 task、CJK/IME、転移候補、次のMotolii oracleへ対応付け | **観察／比較中**(一括DEPENDは棄却候補。個別分類は反対側レビュー前で、実装・発注許可ではない) |
@@ -131,4 +132,4 @@
 - **グループ仮出力(ベイク)**: プリコンポの代替。グループ出力を時間範囲でキャッシュし、編集で自動無効化
 - **SimulationPlugin / StateTrack**: 逐次状態シミュレーション(布・液体・パーティクル)のプラグイン境界と、そのベイク結果(チェックポイント列の区間キャッシュ)。状態はホストが所有し、`render_frame(t)`はベイク結果を読む純関数のまま(落とし穴F-12、[simulation-model.md](simulation-model.md)。口の予約段階)
 - **TemporalFootprint(時間窓)**: エコー/モーションブラー等が前後フレーム/サブフレームサンプルを読むための、`NodeDesc`への静的宣言(予約。任意時刻アクセスAPIは不採用)
-- **プラグインパネル(v1)**: `NodeDesc.params`からの自動生成プロパティパネルのみが公開UI境界。plugin所有egui/native/wgpu UIは公開しない([判定](reviews/2026-07-18-m3-egui-selection.md))
+- **プラグインパネル**: `NodeDesc.params`自動生成panelは全保存paramを操作できる必須fallback。G0-9完了までplugin所有egui/native/Web/wgpu UIを公開しない。Host/community同一kitのruntime・sandbox・互換・配布は[再選定](reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md)で比較中

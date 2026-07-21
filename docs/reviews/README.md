@@ -120,10 +120,11 @@
 | [2026-07-19-m3-interaction-prototype-decision-ledger.md](2026-07-19-m3-interaction-prototype-decision-ledger.md) | M3操作prototype未決パラメータ台帳(2026-07-19。`codex/m3-mock-components`側から回収) |
 | [2026-07-19-lyric-motion-text-sequence-comparison.md](2026-07-19-lyric-motion-text-sequence-comparison.md) | リリックモーション: Text Sequence / Materialize 比較台帳(2026-07-19) |
 | [2026-07-19-m3-text-motion-task-translation.md](2026-07-19-m3-text-motion-task-translation.md) | M3タスク翻訳: Text Motion(Live Text)縦切り第1弾(2026-07-19) |
-| [2026-07-20-rerun-prior-art-survey.md](2026-07-20-rerun-prior-art-survey.md) | Rerun先例調査と方向決定: Rerunを主要製品先例としてegui実装を継続 |
+| [2026-07-20-rerun-prior-art-survey.md](2026-07-20-rerun-prior-art-survey.md) | Rerun先例調査と歴史的方向決定: 主要製品先例は継続、egui固有転移はG0-9待ち |
 | [2026-07-20-rerun-learning-transfer-plan.md](2026-07-20-rerun-learning-transfer-plan.md) | Rerun → Motolii学習・転移計画: RR-0〜9、資産分類、M3/M5接続、停止線 |
 | [2026-07-20-rerun-source-asset-inventory.md](2026-07-20-rerun-source-asset-inventory.md) | Rerun固定commitの139 package全量と重点source資産の観察inventory |
 | [2026-07-20-rerun-re-ui-module-inventory.md](2026-07-20-rerun-re-ui-module-inventory.md) | Rerun `re_ui` module inventory: React安定ID・M3 task・CJK・転移候補のfile-level照合 |
 | [2026-07-20-m3-rerun-late-discovery-premortem.md](2026-07-20-m3-rerun-late-discovery-premortem.md) | M3/Rerun実装後半発覚プレモーテム: fixture正本、GPU表示寿命、stable identity、semantic zoom、転移粒度の先行処分 |
 | [2026-07-20-perceptual-expression-translation-decision.md](2026-07-20-perceptual-expression-translation-decision.md) | 知覚表現の翻訳 — Motolii Hostの役割 |
 | [2026-07-20-local-worktree-publication-audit.md](2026-07-20-local-worktree-publication-audit.md) | ローカルworktreeの公開・WIP保全・吸収済み・旧契約差分を分類した外部再開地図 |
+| [2026-07-21-m3-react-webview-runtime-reconsideration.md](2026-07-21-m3-react-webview-runtime-reconsideration.md) | M3 React / WebView UI runtime再選定（2026-07-21） |

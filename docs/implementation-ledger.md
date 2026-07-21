@@ -39,11 +39,11 @@
 | M0 | `DONE` | spike完了 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み |
 | M2 | **基盤再締結済み** | D1l、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。D5は再締結の閉集合外で、骨格到達・統合審判pending |
-| M3 | **段階発注可 / Uシリーズ直列選択中** | U0a、U0b-1、U0b-2完了。次はU0c-1を単独実行 |
+| M3 | **G0-9 UI runtime再選定中 / toolkit非依存だけ段階発注可** | U0a、U0b-1、U0b-2完了。U0c-1等のtoolkit非依存境界は既存依存に従い進行可。egui/React/WebView固有製品実装は停止 |
 | M4 | **契約spike可** | K0でRoD/RoIのruntime契約を凍結。その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む |
 | M5 | **identity spike可** | P0IでDuplicator/Instance identityを凍結 |
 
-[M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3はU0a入場完了後に段階発注可だが、現在選択中のUシリーズはSelected U seriesの前枝番がmainへ到達した時だけ次の1枝番を発注する。
+[M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3はU0a入場済みだが、[G0-9 UI runtime再選定](reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md)中はtoolkit固有のshell/panel/Timeline/Stage統合とplugin UI公開契約を発注しない。toolkit非依存タスクもSelected U seriesの前枝番がmainへ到達した時だけ次の1枝番を発注する。
 
 ## 主クリティカルパス
 

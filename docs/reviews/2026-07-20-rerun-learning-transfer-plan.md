@@ -1,6 +1,6 @@
 # Rerun → Motolii 学習・転移計画（2026-07-20）
 
-ステータス: **決定**。Rerunをegui製品実装の主要先例とし、外観だけでなくshell、時間面、GPU viewport、選択、実行系、試験系を層別に学ぶ。本文書は「何を、どの順で、どの境界まで習うか」の運用正本であり、個別crateの依存追加・vendoring・forkを単独では許可しない。
+ステータス: **決定**。Rerunを高密度UI、時間面、GPU viewport、選択、実行系、試験系の主要先例として層別に学ぶ。2026-07-21の[UI runtime再選定 G0-9](2026-07-21-m3-react-webview-runtime-reconsideration.md)中もtoolkit横断の観察は有効だが、`re_ui`、`egui_tiles`、egui callback等の依存・vendoring・移植は停止する。本文書は「何を、どの順で、どの境界まで習うか」の運用正本であり、個別crateの依存追加・vendoring・forkを単独では許可しない。
 
 決定の背景と方向決定時のspot auditは[Rerun先例調査](2026-07-20-rerun-prior-art-survey.md)、固定commitのpackage全量と調査入口は[Rerun source asset inventory](2026-07-20-rerun-source-asset-inventory.md)を併読する。Motoliiの状態所有・command・thread・単位・toolkit隔離は[GR-UI](2026-07-14-m3-ui-boundary-prevention.md)、製品UIの意味は[M3仕様](../specs/M3-ui-integration.md)と[UI操作言語](../ui-interaction-language.md)、見た目は[UI視覚言語](../ui-visual-language.md)が優先する。
 
@@ -13,9 +13,9 @@ Reactモック
 └─ Motoliiとして何を見せ、どう操作させるか
 
 Rerun
-└─ eguiで高密度viewerをどう製品として成立させたか
+└─ 高密度viewer、時間面、GPU scene、selection、cache、試験をどう成立させたか
 
-Motolii domain / command / renderer
+Motolii domain / command / renderer / G0-9 UI候補
 └─ 作品意味、編集、Undo、preview/export同一性
 ```
 

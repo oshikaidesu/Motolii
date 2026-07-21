@@ -54,7 +54,7 @@ VSM-A0I-1〜3でContract Catalog、Documentのprepared resolution、graph／expo
 
 ## 1.5. UIは書かない(v1)
 
-**v1のプラグイン公開契約にカスタムUIは無い。** ホストが`NodeDesc.params`からプロパティパネルを自動生成する(M3 U4)。plugin所有egui/native code・wgpu描画panel・独自widgetは契約外 — 書いてもホストはロードしない。判定: [reviews/2026-07-18-m3-egui-selection.md](reviews/2026-07-18-m3-egui-selection.md)。
+**現在のプラグイン公開契約にカスタムUIはまだ無い。** ホストが`NodeDesc.params`からプロパティパネルを自動生成する(M3 U4)。G0-9完了まではplugin所有egui/native/Web code・wgpu描画panel・独自widgetを書いてもホストはロードしない。Host/コミュニティ同一UI kitのruntime・sandbox・互換・配布は[再選定](reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md)で比較中であり、本書からAPIを推測しない。
 
 - パラメータは`ParamDef`で足りる粒度に抑える(スライダー/カラー等の自動生成で操作可能であること)
 - 将来カスタムUIが解凍されても、**自動生成パネルだけで全パラメータを操作できること**が不変条件
@@ -199,4 +199,4 @@ ParamDriverは`build_track`で`DataTrack`を返すだけ。ピクセルに触ら
 - `NodeDesc`の時間フットプリント宣言(前後フレーム/サブフレームサンプル。F-12) — 型`TemporalFootprint`と**`RenderCtx::temporal_footprint`口はM2E-7で予約**。窓テクスチャ解決はホスト側(未配線)
 - `SimulationPlugin` trait+StateTrack(F-12。`PluginKind::Simulation`はenum予約済み。traitシグネチャは[simulation-model.md](simulation-model.md)§3.2の叩き台を解凍手続きで確定)
 - **Backdrop input** — 画像処理はFilter/Composite pluginでよいが、timeline走査・「下のlayer」推論は禁止。Hostが評価地点の合成済みtextureを型付き入力として渡す口は[2026-07-15決定](reviews/2026-07-15-relative-scope-duplicator-decision.md)後も未凍結であり、scope/migration/cache key/循環拒否を同時に解凍するまで追加しない
-- **カスタムプラグインUI** — plugin所有egui/native code / wgpu自由描画は公開しない。Host所有の宣言レイアウト / gizmoは型ごとの解凍判断。v1公開境界外([egui-selection](reviews/2026-07-18-m3-egui-selection.md))
+- **カスタムプラグインUI** — G0-9完了までplugin所有egui/native/Web code / wgpu自由描画を公開しない。Host所有の宣言レイアウト / gizmoも型ごとの解凍判断。将来契約は[UI runtime再選定](reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md)から別途仕様化する

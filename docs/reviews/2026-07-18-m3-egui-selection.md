@@ -1,6 +1,6 @@
 # M3 UI基盤 egui採用判断（2026-07-18）
 
-ステータス: **採否決定 / U0a骨格移行完了**。M3のUI基盤をSlintからeguiへ変更する。[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。U0aで`motolii-ui` egui骨格、workspace依存、依存方向CI一般化を完了。U1a以降のshell/preview/panelは未着手。
+ステータス: **歴史的採否決定 / U0a骨格移行完了 / 2026-07-21再評価中**。本書の測定事実とU0a成果は保持するが、UI runtimeの現行採否は[React / WebView再選定 G0-9](2026-07-21-m3-react-webview-runtime-reconsideration.md)へ移った。G0-9完了までU1a以降のegui固有shell/preview/panel実装を停止する。
 
 ## 1. 決定
 

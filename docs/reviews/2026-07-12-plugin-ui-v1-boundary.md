@@ -1,6 +1,6 @@
 # 決定: v1プラグインUI境界は`NodeDesc`自動生成のみ(2026-07-12)
 
-ステータス: **確定**(ユーザー承認)
+ステータス: **歴史的決定 / 2026-07-21再評価中**。`NodeDesc`自動panel fallbackと比較前に自由UIを公開しない停止線は保持する。Host/コミュニティ同一UI kitを含む現在の採否は[React / WebView再選定 G0-9](2026-07-21-m3-react-webview-runtime-reconsideration.md)を正本とする。
 
 対象仕様: [M3-ui-integration.md](../specs/M3-ui-integration.md)「プラグインパネルの拡張方式」
 先行レビュー: [prior-art-gap-survey](2026-07-12-prior-art-gap-survey.md) / [counter-review](2026-07-12-prior-art-gap-counter-review.md) / [M3-M4-gate-ledger](2026-07-12-M3-M4-gate-ledger.md)
