@@ -16,14 +16,11 @@
    できる。**検出条件を置く**: 新規コードがdomain語彙（clip/key/snap）でなくUI語彙（widget/layout/
    style/theme）を公開し始めたら再発明が始まっている。Zed/Warpの「少数primitive + domain専用」先例は
    この範囲で成立を示す。処分: 命題維持、検出条件を停止線運用へ追加。
-2. **2 surfaceの最小安全構成**: wgpu 29では単一Instance/Adapter/Device/Queueから複数Surfaceを
-   構成できる。GraphiteのCEF共有texture合成は近接先例だが、複数`wgpu::Surface`の出荷証拠ではない。
-   Motoliiの最小候補は (a) device/queue単一・surface別の
-   swapchain config、(b) 復旧をsurface単位（`Outdated`→reconfigure、`Lost`→surface再生成）、device
-   lost診断のみ一元、(c) Stage/Timelineのencoderを独立submitとし**同一frame内の相互texture依存を
-   作らない**、(d) 片surfaceのacquire失敗が他方のpresentをブロックしない独立frame pacing。macOSは
-   同一window内の複数CAMetalLayer sublayerで先例十分。Windowsのchild HWND vs compositionと、DPI
-   混在monitor間dragが実測必要。処分: spike測定項目として具体化。
+2. **2 surfaceの最小安全構成**: この回答は比較入力としては正しいが、後続の
+   [surface topology決定](2026-07-21-ui-surface-topology-decision.md)で通常経路から棄却した。Stage/Timelineは
+   相互texture依存を持たず1枚のsurface texture内のviewport/scissorへ描けるため、複数swapchain、独立acquire、
+   surface別lost、frame pacingを増やす必要がない。1 top-level surface + opaque child WebView islandsを採り、
+   複数surfaceは通常経路が実機で修正不能な時だけ再比較する。処分: **回答を縮小し1 surfaceへ決定**。
 3. **Vello局所境界の一元化**: 条件付きで可能である。Velloはtextureへ描きsurfaceを所有しないため、
    surface lost対応はMotolii surface層へ一元化でき、Vello Rendererはdevice lost時のみ再生成——境界は
    保てる。Glifo atlasはRenderer内部保有でcache寿命=Renderer寿命に一致する。**破れ検出条件**: 局所

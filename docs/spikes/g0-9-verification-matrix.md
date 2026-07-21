@@ -21,10 +21,10 @@
 | IME gate | **PARTIAL / automated** | composition中のshortcut抑止とevent順をsynthetic eventで確認。macOS日本語IME候補窓、preedit、確定/取消は`PHYSICAL` |
 | hot reload | **PASS / harness** | Vite virtual moduleをRust再起動なしでaccept。製品component state、plugin単体reloadは未証明 |
 | Reactモック資産 | **PASS / fixed comparison** | 固定worktree build + 43 Playwright test。stress fixtureの製品component直接接続は未証明 |
-| native Stage + WebView | **RESEARCHED / spike required** | CPU readbackなしの非重複sibling surfaceは既成APIで成立見込み。native TextureのWebView共有ではない |
+| native Stage/Timeline + WebView | **TOPOLOGY PASS / platform acceptance required** | 1 top-level wgpu Surface内2 viewport + opaque child WKWebViewをmacOS実機で表示、resize、Web text focus、AX treeまで確認。wgpu 23公式sample派生なのでwgpu 29製品統合、Windows、DPI/capture/lostは未合格 |
 | overlay / alpha / color | **PHYSICAL** | macOS透明wryはprivate API停止線。まずopaque Stage + 非重複WebView、overlayは別審判 |
 | native Stage上の2D/3D gizmo | **OWNER DECIDED / spike required** | canonical出力外のnative wgpu presentation overlayが描画し、CPU解析幾何でhit-testする。transparent WebViewは比較対象から外し、occlusion、screen一定サイズ、M5意味、D2、a11y proxyを実機spikeする |
-| resize/minimize/restore/DPI/device lost | **PARTIAL** | 現行egui実window試験は合格。Safari実画面は最小化→Raise後もAX内容を保持。候補WKWebView/native Stage同居、DPI移動、device lostは未証明 |
+| resize/minimize/restore/DPI/device lost | **PARTIAL** | 現行egui実window試験に加え、macOS wry/WKWebView + 1 surface/2 viewportのwindow zoom追従を確認。resize 100回、minimize/restore、DPI移動、surface/device lostは未証明 |
 | Host/community同一kit | **DESIGN EVIDENCE** | 同一versioned React component/test kitを使う。権限realmまで同一にはしない |
 | community sandbox/権限 | **PARTIAL / automated** | opaque-origin iframeでparent DOM、storage、network、native bridgeの直接access拒否と明示messageだけを確認。named least-privileged WebView + Rust brokerを安全基準とし、iframeからnative IPC不能かは別負例が必要 |
 | crash/loop/OOM隔離 | **PHYSICAL** | iframe/CSP/SESだけでは保証しない。別rendererの停止・単体reload・host継続を実測する |
@@ -57,21 +57,21 @@
 
 ### 2.2 WebViewとnative Stage
 
-最初に試すのは、WebViewのshell/panelとopaqueなnative wgpu Stageを非重複のsibling rectangleへ
-置き、OS compositorに合成させる方式である。これはCPU readbackを不要にできる見込みが高いが、
-browser WebGPU deviceとnative wgpu device/Textureを共有する方式ではない。
+通常経路は[Surface topology決定](../reviews/2026-07-21-ui-surface-topology-decision.md)どおり、1 top-level
+wgpu Surface内にStage/Timelineをviewport/scissorで描き、opaque child WebView islandsをOS compositorで
+上へ合成する。これはCPU readbackを不要にし、browser WebGPU deviceとnative wgpu device/Textureを共有しない。
 
 - wryは[`build_as_child`](https://docs.rs/wry/latest/wry/struct.WebViewBuilder.html)と
   `set_bounds`を持つ
-- wgpuはmacOSのCore Animation layerとWindowsの
-  [`CompositionVisual`](https://docs.rs/wgpu/29.0.3/wgpu/enum.SurfaceTargetUnsafe.html)をsurface targetにできる
+- wgpuはtop-level windowのpresentable surfaceを持ち、Stage/Timelineは同じsurface textureのviewportを使う
 - Windowsの重なり合う構成には
   [WebView2 CompositionController](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/overview-features-apis#rendering-webview2-using-composition)
   があるが、stock wryの通常controllerではなく入力転送も必要なので第2候補
 - macOSのwry透明化はprivate `drawsBackground`経路を使うため、App Store配布候補では停止線
 
-最小sibling方式でもresize、0×0/minimize/restore、DPI、surface lost、Web content process終了、
-色/alpha、frame pacingをmacOSとWindowsの製品候補WebViewで再現してから採択する。
+macOSではwry公式sampleと最小改変sampleでopaque child WKWebView、2 native viewport、window zoom、Web text
+focus、AX treeを実機確認した。残るresize 100回、0×0/minimize/restore、DPI、pointer capture、surface lost、
+Web content process終了、Windows、frame pacingを製品統合前の受入条件とする。
 
 ### 2.3 2D handleと3D gizmo
 
@@ -137,12 +137,13 @@ repositoryへ保存していない。
 
 ## 4. 次の実機順序
 
-1. isolated wry sibling spikeをmacOS/Windowsで起動し、CPU readback counter 0を確認
-2. resize 100回、minimize/restore、異DPI monitor移動、surface/process lostを注入
+1. 決定済み1 surface/2 viewport + opaque WebView islandsをwgpu 29のisolated spikeへ移し、macOS/Windowsで
+   CPU readback counter 0を確認
+2. resize 100回、minimize/restore、異DPI monitor移動、pointer capture、surface/process lostを注入
 3. macOS日本語IME + VoiceOver、Windows MS-IME + NVDAを同じ入力fixtureで確認
 4. sandbox iframe対zero-capability WebViewへ攻撃、loop、OOM、version不一致fixtureを流す
 5. clean Windows 10/11でoffline install/start、dev server/CDN request 0を保存
 6. 実ペンでpressure、tilt、coalesced sample、cancelを確認
 
-この順序で非重複siblingが不合格なら透明overlay、Windows CompositionControllerへ進む。
+この順序でwindowed child WebViewがWindowsだけ不合格ならCompositionController、別window、CEF OSRの順で進む。
 macOS private API、CPU pixel fallback、raw plugin権限で合格を作らない。

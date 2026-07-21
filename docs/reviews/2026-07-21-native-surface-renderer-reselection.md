@@ -1,6 +1,6 @@
 # React複合下のnative surface renderer再選定（2026-07-21）
 
-状態: **責任境界決定 / renderer・surface統合比較中**。[UI runtime責任境界](../ui-runtime-architecture.md)によりReact/WebView複合とnative所有面を固定した。React資産はAsset Browser、Inspector、
+状態: **責任境界・surface topology決定 / renderer・platform受入比較中**。[UI runtime責任境界](../ui-runtime-architecture.md)によりReact/WebView複合とnative所有面を固定した。React資産はAsset Browser、Inspector、
 parameter/form、panel、toolbar、検索、設定、community UIへ使う。高頻度で同期して動くStageとTimelineは
 native所有とし、そこでegui widgetを使う前提を外す。製品native rendererの第一候補は既存deviceを使う
 direct wgpu、複雑path/textだけ採択済みVelloを局所利用する構成である。
@@ -100,22 +100,25 @@ data-drivenにGPUへ送る方式を採る。[Zed GPU UI設計](https://zed.dev/b
 ## 4. 暫定アーキテクチャ
 
 ```text
-React layout computes non-overlapping rectangles
+React panels propose layout edits
           │ typed bounds / intent / semantic projection
           ▼
-native coordinator
-  ├─ WebView child surfaces
-  ├─ Stage wgpu surface ─ canonical texture + presentation overlay
-  └─ Timeline wgpu surface ─ primitive batch + local Vello passes
+native coordinator / one layout epoch
+  ├─ opaque child WebView islands
+  └─ one top-level wgpu Surface / one acquire-present
+      ├─ Stage viewport ─ canonical texture + presentation overlay
+      └─ Timeline viewport ─ primitive batch + local Vello passes
               │
               ├─ CPU retained layout / cull / hit-test
               ├─ Transient preview (semantic write 0)
               └─ D2 commit once on release
 ```
 
-native surfaceが2枚必要か、同じsurface内の2 viewportにするかは未決である。WebView rectangleの間に
-native領域が分かれる通常layoutでは2 child surfaceが自然だが、device/queue共有、surface lost、DPI、
-z-order、focus、別window化をmacOS/Windows実機で測るまで固定しない。
+[surface topology決定](2026-07-21-ui-surface-topology-decision.md)により、通常windowは1 top-level
+`wgpu::Surface`内のStage/Timeline viewportと、dock/tab stackごとのopaque child WebView islandsへ固定した。
+別surface、transparent full-window WebView、CompositionController、CEFは通常経路にしない。topologyは
+macOS公式wry sampleの実機合成・resize・Web focus/AXで成立したが、wgpu 29製品統合、Windows、DPI/capture/lostは
+受入試験のままである。
 
 eguiは現行成立済みbaseline、debug/dev UI候補として残す。native Stage/Timelineの描画、layout、inputを
 egui callback/widgetへ新規実装せず、direct wgpu spikeが不合格だった場合だけ不足機能を具体的に比較へ戻す。
@@ -137,13 +140,15 @@ egui、Canvas/browser WebGPU、Pixi/Konva/Threeの既存結果はbaseline/oracle
 - pipeline/buffer/bind group/texture/font atlasをframe loop内で生成しない
 - UI threadの`poll(Wait)`、texture/buffer readback、worker join 0
 - React layout resizeとnative bounds更新後もDPI、hit target、time mapping、selection不変
-- Stage/Timelineが同じcore-owned device/queueを共有し、surface lostを個別復旧、device lostを一元診断
+- Stage/Timelineが同じcore-owned device/queueと1 surfaceを共有し、1回のacquire/presentで描画する。
+  surface lostを一元復旧し、device lostを一元診断
 - Velloを使う枝はRenderer長寿命、straight→premul単一境界、canonical/export画素非汚染
 - Japanese/CJK label、数値、icon、grayscale selectionを固定captureで確認
 
 ### 実機合格条件
 
-- macOS WKWebView + CAMetalLayer、Windows WebView2 + native wgpu child surfaceの非重複合成
+- macOS WKWebView child NSView + top-level CAMetalLayer、Windows windowed WebView2 child HWND +
+  top-level wgpu surfaceのopaque合成
 - resize、minimize/restore、DPI monitor移動、fullscreen/別window、focus traversal
 - native Timeline drag中にReact toolbar/Inspectorへfocusが飛ばず、終了後に明示操作で移動できる
 - VoiceOver/NVDAは全keyをnode化せず、選択・playhead・tool・現在値をbounded proxyで操作可能

@@ -8,9 +8,9 @@
 
 ## 1. すぐ伸ばせるもの（windowed spikeと同時に有効化可能）
 
-1. **GPU計測基盤**: wgpu-profilerはinterleaved command bufferを公式対応しており、Stage/Timeline
-   2 surface + 1 deviceの構成をそのまま計測できる。spike初日から入れれば、headless benchで測れなかった
-   「present込み・2 surface同時」のGPU時間が最初から機械可読evidenceになる。既存のevidence JSON慣行
+1. **GPU計測基盤**: wgpu-profilerはinterleaved command bufferを公式対応しており、決定済みの
+   1 surface内Stage/Timeline passをそのまま計測できる。spike初日から入れれば、headless benchで測れなかった
+   「present込み・2 viewport同時」のGPU時間が最初から機械可読evidenceになる。既存のevidence JSON慣行
    （g0-9）の自然な拡張。有効化条件: `Features::TIMESTAMP_QUERY`が対象GPUで立つこと。受益先: spike
    合格判定の自動化、以後の性能回帰検知。
 2. **CI上のdeterministic render検証**: vello_cpuはGPU無しでpeniko/kurbo語彙のsceneをraster化できる。

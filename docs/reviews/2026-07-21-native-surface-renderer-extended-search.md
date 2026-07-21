@@ -90,17 +90,27 @@ Motoliiへの含意: (1)再選定§6-6「child surfaceが不成立の時、CPU b
 Motoliiの非重複sibling構成（WKWebView/WebView2）にも当たるかは未検証で、spike前にCEF枝へ倒す根拠には
 ならない。
 
-### 5.2 Tauri v2 / wry — 必要な原始機能は公式実在、ただしunstable
+### 5.2 Tauri v2 / wry — 必要な原始機能は公式実在、topologyを実機確認
 
-- [wry公式`examples/wgpu.rs`](https://github.com/tauri-apps/wry/blob/dev/examples/wgpu.rs)がwinit +
-  wgpu描画 + `build_as_child`のchild WebViewを実演。Windowsは`with_clip_children(false)`が必要。
+- [wry公式`examples/wgpu.rs`（固定commit）](https://github.com/tauri-apps/wry/blob/6b61fcd58b699323ed16956648c3cf566c5da535/examples/wgpu.rs)がwinit +
+  wgpu描画 + `build_as_child`のchild WebViewを実演。Windowsで`with_clip_children(false)`が必要なのは
+  sampleの透明overlap時で、opaque非重複rectでは通常clippingを維持する。
 - [wry README](https://github.com/tauri-apps/wry): `build_as_child`は「macOS, Windows and Linux
   (X11 Only)」。**Waylandは非対応**でGTK埋込へ誘導。macOSの一部機能はprivate API使用。
 - Tauri v2のmultiwebviewは`unstable` feature gate（[PR #9059](https://github.com/tauri-apps/tauri/pull/9059)、2024-03merge）。
-  既知課題: macOSでclickまでkeyboard focusが入らない([tao #208](https://github.com/tauri-apps/tao/issues/208))、
-  wgpu例のWindows透過不全([wry #1331](https://github.com/tauri-apps/wry/issues/1331))。
+  ただしMotoliiはTauriの公開multiwebview APIを採択済みとはせず、wryのchild primitiveを比較する。
+- macOSでclickまでkeyboard focusが入らなかった[tao #208](https://github.com/tauri-apps/tao/issues/208)は
+  2022-10-28にwry #740で修正済み。現行問題の根拠でなくfocus回帰fixtureとする。
+- [wry #1331](https://github.com/tauri-apps/wry/issues/1331)はWindowsの透明overlapと
+  `WS_CLIPCHILDREN`の問題で、現行公式sampleは透明時だけclippingを無効化する。Motoliiのopaque非重複rectは
+  通常clippingを維持する。
 - wgpuを**WebViewの上**へ重ねる汎用patternは維持者公認では存在しない（[discussion #11944](https://github.com/tauri-apps/tauri/discussions/11944)）。
   Motoliiは非重複sibling前提なのでこの制約自体は既定計画と整合する。
+
+2026-07-21のmacOS実機で公式sampleとopaque/2 viewport最小改変を確認し、1 top-level wgpu Surface +
+opaque child WKWebViewの表示、window zoom、Web text focus、AX treeを通した。これを受け、
+[surface topology](2026-07-21-ui-surface-topology-decision.md)は1 surface内Stage/Timeline viewport + opaque
+WebView islandsへ決定した。公式sampleはwgpu 23依存なのでwgpu 29製品統合とWindows受入は未合格である。
 
 ### 5.3 対極と傍証
 
@@ -123,7 +133,7 @@ windowed spikeの優先度は上がる。
   「bounded proxy」a11y計画はこの機構でちょうど実装可能。未検証はWKWebView/WebView2自身のa11y treeとの
   縫合で、これをspike項目へ追加する。制約: cross-tree参照不可、multi-tree updateは非atomic。
 - **[wgpu-profiler](https://github.com/Wumpf/wgpu-profiler)**はinterleaved command bufferを公式対応し、
-  Stage/Timeline 2 surface + 1 deviceの計測に適合。`Features::TIMESTAMP_QUERY`必須。
+  1 surface内のStage/Timeline pass計測に適合。`Features::TIMESTAMP_QUERY`必須。
 - **wgpu 30.0.0が2026-07-01に出た**（[releases](https://github.com/gfx-rs/wgpu/releases)）。本比較の
   副作用でbumpしない。29固定の間はwgpu 30系ecosystem（femtovg等）とdevice共有不可という制約も固定される。
 - surface-lost対応の公式語彙: `SurfaceError::Outdated`→re-configure、`Lost`→surface再生成
@@ -146,9 +156,9 @@ HNに「Zed also stopped GPUI development」と題する2026-02のthread（[item
    共有GPU texture合成（child WebView不成立時の予備枝）。
 3. **watchlistの追加**（再確認トリガー付き）: vello_hybrid/vello_cpuのtop-level昇格声明、rive-rsの
    Rive Renderer backend出荷、ThorVGのLottie import役、parleyのtext layout役、wgpu 30系への移行時期。
-4. **リスク更新**: 同型構成の出荷実例ゼロにより、windowed spike（再選定§5）の優先度が上がる。spike
-   検証項目へ追加: wry `build_as_child`のfocus初回click問題、Windows `with_clip_children`、Wayland
-   非対応の扱い、AccessKit graft treeとWebView a11y treeの縫合。
+4. **リスク更新**: 同型構成の出荷実例ゼロは残るが、macOS公式sample派生実機でtopologyは成立した。
+   残るspike項目はfocus回帰、Windows標準windowed WebView2、DPI/capture/lost、Wayland非対応の扱い、
+   AccessKit graft treeとWebView a11y treeの縫合である。
 
 ## 9. Fableへ追加する反証質問
 

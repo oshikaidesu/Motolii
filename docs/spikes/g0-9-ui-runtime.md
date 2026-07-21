@@ -25,7 +25,8 @@ Document/API変更を許可しない。
    CPU解析幾何と決定した。M5 Scale/Depth分離とD2接続は別Stage spikeで未合格のままである。
 7. **G0-9の最終採否はまだ閉じない**。[全確認点マトリクス](g0-9-verification-matrix.md)で
    自動合格、部分合格、対象実機必須を分離した。actual mouse/snap/marquee/pointer capture primitiveと
-   macOS WebKit/AXは前進したが、WebView/native Stage同居、IME/VoiceOver、sandbox負例、Windowsは残る。
+   macOS WebKit/AXに加え、後続の公式wry派生実機spikeで1 surface/2 native viewport + opaque child WKWebView、
+   resize、Web focus/AXまで前進した。IME/VoiceOver、sandbox負例、Windows、DPI/capture/lostは残る。
 
 したがって現時点の方向は「React DOMかnative wgpuか」の二者択一ではなく、
 **React DOM＝shell/Browser/form/panel、Rust/native wgpu＝StageとTimelineの高頻度surface、
@@ -170,8 +171,9 @@ React候補の存在はこの成立証拠を撤回しない。
 
 G0-9を閉じる前に少なくとも次を別スパイクで検証する。
 
-1. macOS/Windowsの製品候補WebViewで、native wgpu StageをCPU pixel readbackなしに合成できるか
-2. resize、minimize/restore、DPI移動、overlay、alpha、色、device lost、古いgeneration破棄
+1. 決定済み[1 surface/2 viewport + opaque child WebView topology](../reviews/2026-07-21-ui-surface-topology-decision.md)を
+   wgpu 29の製品候補へ移し、WindowsでもCPU pixel readback 0を維持できるか
+2. resize 100回、minimize/restore、DPI移動、pointer capture、popup、色、surface/device lost、古いepoch破棄
 3. 日本語IME、keyboard/focus、screen readerとCanvas上のaccessible proxy
 4. Hostとcommunityが同じReact kitを使いつつ、file/network/GPU/Document mutationを権限分離できるか
 5. 実ReactモックのBrowser/Timelineを今回のstress fixtureへ接続し、通常操作を保てるか

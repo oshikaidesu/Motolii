@@ -1,6 +1,6 @@
 # UI runtime責任境界
 
-状態: **設計決定**（2026-07-21）。実装方式の一部はG0-9実機spike待ち。
+状態: **責任境界・surface topology決定**（2026-07-21）。platform受入とrenderer採否はG0-9実機spike待ち。
 
 Motoliiの製品UIは、Reactとnativeのどちらか一方へ全面統一しない。ReactはDOMが強い領域、
 native Rust/wgpuは高頻度GPU workspaceを所有する。この分割は採択済みであり、G0-9が今後比較するのは
@@ -86,15 +86,26 @@ direct wgpuは採択候補であって、headless benchmarkだけで製品render
 呼出頻度でなく、所有語彙、描画面積、primitive数、allocation、GPU時間で判定する。毎frame呼ばれても
 scene/input/Documentを所有せず予算内なら境界違反ではない。
 
-## 4. coordinator境界
+## 4. surface topologyとcoordinator境界
 
 React/native間を流せるのは、typed bounds、domain intent、read-only semantic projection、focus移譲、
 pointer capture境界、DPI epoch、bounded a11y projectionである。DOM event、CSS px、Canvas scene、
 toolkit object、raw GPU handleをDocumentやplugin契約へ流さない。
 
-React layoutとnative surfaceの矩形は非重複を第一候補にする。native surfaceが2枚か1 surface内2 viewportか、
-WKWebView/WebView2 childか別のcomposition方式かは未決である。CPU pixel bridgeとtransparent WebView overlayは
-正規経路にしない。
+通常windowはcore-owned device/queueへ接続した**トップレベル`wgpu::Surface`を1枚だけ**持つ。StageとTimelineは
+同じsurface texture、同じframe submission内のviewport/scissor rectangleとして描く。React chromeはdock/tab
+stackごとのopaque child WebView rectangleとしてOS compositorが上へ合成する。1 panelごとにWebViewを増やさず、
+同じversioned React bundleをrole付きで起動する。native rectangleをまたぐDOM popupだけ、必要寸法の一時opaque
+child WebViewを使える。
+
+coordinatorは単調増加`layout_epoch`ごとにchild WebViewのlogical bounds、native viewportのphysical bounds、
+hit-test transform、a11y rectangleを一括反映する。古いepochを部分反映せず、CSS px、AppKit point、Win32 pixel、
+DPIをDocument、D2、plugin契約へ流さない。
+
+Stage/Timeline別の複数surface、全画面transparent WebView、browser/native GPU texture共有、Windows
+CompositionControllerは正規経路にしない。通常のwindowed child WebViewがWindows実機で修正不能な失敗を再現した
+時だけCompositionController、別window、最後にCEF OSRの順で再審判する。証拠と停止線は
+[surface topology決定](reviews/2026-07-21-ui-surface-topology-decision.md)を正とする。
 
 ## 5. 決定済みと未決の境界
 
@@ -106,11 +117,11 @@ WKWebView/WebView2 childか別のcomposition方式かは未決である。CPU pi
 - native interactionはheadless部品を優先し、Motolii固有意味だけを自作する
 - React/nativeの両側へselection、snap、Undo、semantic stateを二重所有させない
 - Hostとcommunityは同じversioned React UI kitを使う長期原則
+- 1 top-level wgpu Surface + Stage/Timeline 2 viewport + opaque child WebView islandsという通常window topology
 
 ### G0-9実機spikeまで未決
 
-- native surface数とplatform compositor方式
-- macOS/Windowsのfocus、DPI、resize、z-order、surface lost、a11y tree接合
+- macOS/Windowsのfocus、DPI、resize、z-order、pointer capture、surface/device lost、a11y tree接合の受入
 - direct wgpu枝とdirect wgpu + Vello局所pass枝の製品採択
 - egui製品shellの撤去時期
 - community WebViewのsandbox、権限、互換、配布という公開契約
@@ -126,6 +137,7 @@ WKWebView/WebView2 childか別のcomposition方式かは未決である。CPU pi
 - [拡張サーチ](reviews/2026-07-21-native-surface-renderer-extended-search.md)
 - [Fable反対側レビュー](reviews/2026-07-21-native-surface-renderer-counter-review.md)
 - [Fable伸長レビュー](reviews/2026-07-21-native-surface-renderer-growth-review.md)
+- [surface topology決定](reviews/2026-07-21-ui-surface-topology-decision.md)
 - [G0-9部分スパイク](spikes/g0-9-ui-runtime.md)と[確認点マトリクス](spikes/g0-9-verification-matrix.md)
 
 実装合否と停止線は[M3仕様 G0-9/U3a](specs/M3-ui-integration.md)を正本とする。本書は設計責任を固定するが、

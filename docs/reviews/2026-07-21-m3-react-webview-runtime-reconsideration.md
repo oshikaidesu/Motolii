@@ -1,6 +1,6 @@
 # M3 React / WebView UI runtime再選定（2026-07-21）
 
-ステータス: **責任境界決定 / surface統合比較中**。本調査と後続反対側レビューを受け、React chrome + native Stage/Timeline + headless interactionを[UI runtime責任境界](../ui-runtime-architecture.md)へ正本化した。2026-07-18のegui shell等は比較baselineとして保持し、G0-9実機spikeまではWebView/native surface製品統合、egui撤去、plugin UI公開契約の固定を停止する。Rust/wgpu core、M2 Document、D2 command、単一writer、正準座標、preview/export同一評価、UI toolkit隔離は変更しない。
+ステータス: **責任境界・surface topology決定 / platform受入比較中**。本調査と後続レビューを受け、React chrome + native Stage/Timeline + headless interactionを[UI runtime責任境界](../ui-runtime-architecture.md)へ、通常windowを[1 top-level wgpu Surface + 2 native viewport + opaque child WebView islands](2026-07-21-ui-surface-topology-decision.md)へ正本化した。2026-07-18のegui shell等は比較baselineとして保持し、G0-9実機spikeまでは製品統合、egui撤去、plugin UI公開契約の固定を停止する。Rust/wgpu core、M2 Document、D2 command、単一writer、正準座標、preview/export同一評価、UI toolkit隔離は変更しない。
 
 ## 1. 再選定を開く理由
 
@@ -143,7 +143,7 @@ G0-9は製品UI runtimeの再選定ゲートである。候補は少なくとも
 
 1. 現行egui + native wgpu baseline
 2. React/WebView + DOM virtualization + Web所有panel内だけの局所Canvas/browser WebGPU
-3. React/WebView shell + native wgpu Stage/Timelineを別surfaceとして合成するhybrid
+3. React/WebView shell + native wgpu Stage/TimelineをOS compositorで合成するhybrid
 
 同じMotolii fixture、同じ操作、同じ計測手順で比較し、候補ごとに別の完成条件を置かない。
 
@@ -203,8 +203,9 @@ toolbar/control/a11y proxyを所有し、transparent/composition overlayをgizmo
 ScaleとDepth Moveの別channel、perspective/orthographic、D2 Undoは別Stage spikeで未接続である。
 Host/communityのUI kit統一とStage描画surfaceの所有は別論点として扱う。
 
-WebView/native StageはTexture共有でなく、opaque native StageとWebViewを非重複sibling surfaceとして
-OS compositorに合成する案を第1候補にする。Host/communityは同じversioned React kitを使うが、
+後続の[surface topology決定](2026-07-21-ui-surface-topology-decision.md)により、WebView/native Stageは
+Texture共有でなく、1 top-level wgpu Surface内のStage/Timeline viewportとopaque child WebView islandsを
+OS compositorで合成する。Host/communityは同じversioned React kitを使うが、
 community realmはnamed least-privileged WebView + typed Rust brokerを安全基準に分離する。これらは
 一次資料上の候補である。軽量比較のopaque-origin iframeではparent DOM、storage、network、native
 bridgeの直接access拒否を部分確認したが、別WebViewのnative IPC、loop/crash/OOM隔離は未証明である。
