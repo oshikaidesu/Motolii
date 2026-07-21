@@ -6,6 +6,11 @@
 
 譜面はDocumentの時間構造を読む投影であり、DAW/AE型の固定Track/Lane一覧ではない。モックを更新するたびに「1項目1横行」「固定名列」「横行固有control」が戻る出戻りを防ぐため、変えてよい見た目と変えてはいけない構成を分離する。
 
+固定React baselineの帯アクションrail、Automation展開、Key Tools、Group展開、
+multi-key Graph Viewは比較証拠として
+[M3 UI参照地図](ui-reference-map.md)とprototype台帳から参照する。本書の現行score、
+状態所有、受け入れ条件へは昇格させず、採択時は仕様・本書を先に改訂する。
+
 ## 2. 正準構成
 
 譜面は上から次の4層で構成する。

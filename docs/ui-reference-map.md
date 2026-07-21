@@ -9,7 +9,7 @@ M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決
 | 層 | 役割 | 正本／入口 | 変更時の規則 |
 |---|---|---|---|
 | 規範 | 状態所有、Undo、入力、意味、受け入れ条件 | [M3仕様](specs/M3-ui-integration.md)、[UI操作言語](ui-interaction-language.md)、[UI視覚言語](ui-visual-language.md)、[UI境界規律](reviews/2026-07-14-m3-ui-boundary-prevention.md) | prototypeや会話から直接上書きせず、仕様・決定台帳を先に改訂する |
-| 現行prototype | 現在ブラウザで比較する操作・構成 | `docs/mocks-ui/README.md`(React/Viteモック。`codex/m3-mock-components`ブランチ側に実体) | hash fixture、操作試験、比較台帳を一緒に更新する。React/CSS値を製品契約へ焼かない |
+| 現行prototype | 現在ブラウザで比較する操作・構成 | [React/Viteモック](mocks-ui/README.md) | hash fixture、操作試験、比較台帳を一緒に更新する。React/CSS値を製品契約へ焼かない |
 | 製品実装先例 | eguiで高密度shell、時間面、GPU viewport、selection、component、試験を成立させた実装資産 | [Rerun先例調査](reviews/2026-07-20-rerun-prior-art-survey.md)、[Rerun学習・転移計画](reviews/2026-07-20-rerun-learning-transfer-plan.md) | Rerunの画面・語彙・schemaを模倣せず、Reactモックの要求をeguiへ翻訳する実装先例として読む。個別資産は`DEPEND/VENDOR/PORT/PATTERN/REJECT`で裁定する |
 | 採否台帳 | 先例、観察、未決、棄却、停止線 | `reviews/`の対象別decision／observation ledger | 出典、Motoliiへの翻訳、反映先を分ける |
 | 移行互換 | React移行中の視覚parityと未置換領域 | [旧HTMLモック台帳](mocks/README.md)、`mocks-ui/src/legacy/` | 新しい判断を追加しない。React-native置換後に参照専用へ縮退する |
@@ -35,8 +35,10 @@ M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決
 | fixture／領域 | 実装状態 | 現在の用途 |
 |---|---|---|
 | `#plugin-browser-candidate`のBrowser | React-native candidate | Discovery Browserの比較対象 |
-| `#plugin-browser-candidate`のEasing Graph view | React-native candidate＋legacy state adapter | AM差分の操作比較。区間導出とcurve状態はまだfixture adapter |
-| `#plugin-browser-candidate`のStage / Inspector / Timeline本体 / Settings | legacy HTMLをparseしたbridge | React候補と同じ画面で周辺文脈を保つ移行互換層 |
+| `#plugin-browser-candidate`のInterval Easing Editor | React-native candidate＋legacy state adapter | AM差分の1区間操作比較。区間導出とcurve状態はまだfixture adapter |
+| `#plugin-browser-candidate`のTimeline dock Graph View／`#graph-view-candidate`の操作fixture | React-native candidate | Apple Motion構成、Cinema 4D tangent操作、Maya状態語彙、Blender navigationの比較。共通mock color roleへ接続するが製品state/APIではない |
+| `#plugin-browser-candidate`のTimeline本体 / Key Tools | React-native candidate＋legacy state adapter | 一枚のpacking時間面、無名帯アクションrail、Object bar内M/S、帯単位の一括M/Sと表示高調整、Automation済みchannelのAE型縦一覧、Timeline右端dockで`KEYS / LAYERS`を切り替えるKeystone 3型操作面の比較対象 |
+| `#plugin-browser-candidate`のStage / Inspector / Settings | legacy HTMLをparseしたbridge | React候補と同じ画面で周辺文脈を保つ移行互換層 |
 | `#archive/all-surfaces`等 | legacy HTMLをparseしたarchive bridge | 旧画面との視覚parity回帰。通常catalogへ出さない |
 | `#skeleton` | React-native分解骨格 | component責務と組立境界の確認。視覚正本ではない |
 
@@ -52,7 +54,7 @@ M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決
 | Effect Inspector・自動parameter panel | U4a | 基盤依存待ち |
 | packed Timeline・Group展開・選択 | U3a/U3b/U2h | 後続 |
 | Automation展開・Key Tools | P56/P60+U3系 | 一部prototype判断のまま |
-| Interval Easing・multi-key Graph View | U4b/U4e | 正式タスク化済み、後続 |
+| 区間Easing・multi-key Graph View候補 | U4b／task未決 | 区間EasingはU4b。multi-key Graph ViewはReact比較証拠で、製品採択・task化は未決 |
 | Effects Browser | U4d | 正式タスク化済み |
 | Media Browser・folder・Tag・複数選択 | U6 | 正式タスク化済み |
 | Create Browser・provider・generator | U9/Vism/Create境界 | 一部未統一 |
@@ -70,7 +72,7 @@ M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決
 | 論点 | 規範／記録 | React prototype | 扱い |
 |---|---|---|---|
 | Browser一次分類 | [UI操作言語](ui-interaction-language.md)には`Media / Plugins`が残る | `Media / Create / Effects` | **未統一**。prototype台帳P41で比較中。名称をDocument型、package kind、公開APIへ焼かない |
-| Easing Graph | M3 U4bは区間中心GraphとBezier編集を要求。高度型も2026-07-10に区間補間として採用済み | viewはReact候補へ置換し、AM差分とBounce / Elastic / Cyclic(Sine) / Random / Steps / Elastic Stepsを操作試験化。高度型の適用前後でkeyframe構造不変。区間導出とcurve状態はlegacy fixture adapterが残る | [AM観察台帳](reviews/2026-07-19-am-keyframe-graph-observation.md)で残差追跡。state adapter撤去と製品`Interp`接続を分ける |
+| 区間Easing / multi-key Graph View候補 | M3 U4bは1区間editor。multi-key Graph Viewは未採択 | U4bはAM差分と高度区間補間を操作試験化。ReactはTimeline dock統合と独立操作fixtureでGraph候補を比較 | [AM観察台帳](reviews/2026-07-19-am-keyframe-graph-observation.md)と[Graph View比較記録](reviews/2026-07-19-graph-view-reference-decision.md)を分けて参照し、React JSX／SVGや未決taskをeguiへ写経しない |
 | React移行完了の意味 | 旧READMEは旧HTMLを「現行参照」と表現していた | Vite上では動くがBrowser以外の主要surfaceはbridge | 実行基盤のReact化とsurface所有のReact-native化を別々に記録する |
 
 この表の未統一項目は、画面が動いていることや会話の新しさだけで解消しない。採否を決めたら、規範文書、prototype台帳、React fixture、試験を同じ変更単位で更新して本表から外す。
@@ -87,7 +89,7 @@ npm run dev -- --host 127.0.0.1
 - 全体回帰（archive）: `http://127.0.0.1:5173/#archive/all-surfaces`
 - Browser候補: `http://127.0.0.1:5173/#plugin-browser-candidate`
 - 分解骨格: `http://127.0.0.1:5173/#skeleton`
-- Storybookと試験: `docs/mocks-ui/README.md`(`codex/m3-mock-components`ブランチ側に実体)
+- Storybookと試験: [mocks-ui README](mocks-ui/README.md)
 
 ## 更新チェック
 

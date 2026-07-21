@@ -1,0 +1,29 @@
+{
+  "name": "motolii-mocks-ui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
+    "test:visual": "playwright test",
+    "test:visual:update": "playwright test --update-snapshots"
+  },
+  "dependencies": {
+    "html-react-parser": "^6.1.5",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@storybook/react-vite": "^10.5.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "pixelmatch": "^7.2.0",
+    "pngjs": "^7.0.0",
+    "storybook": "^10.5.2",
+    "vite": "^6.0.11"
+  }
+}
