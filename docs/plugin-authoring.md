@@ -8,6 +8,8 @@
 
 > v1は静的リンクのみ。dylib/WASM配布はv2。この文書は「書ける境界」を先に固定するためのもの。
 
+ここで固定するのはplugin ID、kind、parameter、入出力、失敗等の**意味**であり、現行`PluginId(&'static str)`や`&'static dyn Plugin`という所有／lifetime形を将来loaderのABIとして凍結するものではない。M1監査以来この区別は維持されており、v2のdynamic load、source配布、WASM境界へ進む時は所有形、ABI、version negotiationを独立contractで再締結する。現行のstatic型を、そのまま配布仕様や安全境界へ外挿しない。
+
 ## 0. この境界を作る理由
 
 Motoliiの長期の北極星は、映像表現を特定projectの手順から切り離し、実行・再利用・保存・配布できる単位にすることにある。「映像制作におけるVST」はHostと拡張単位を分ける構造の類比に限り、このplugin境界は単なる内製effect追加口ではない。Host全体をforkせず、ひとつの表現に集中できる作者面を作る。

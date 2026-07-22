@@ -40,7 +40,7 @@
 | [dev-experience.md](dev-experience.md) | 開発体験(DX): プラグイン/シェーダのホットリロードはしご(AE再起動地獄の予防) | 現行(2026-07-13。設計ノート、契約変更なし) |
 | [plugin-ui-model.md](plugin-ui-model.md) | プラグインUIモデル: 宣言語彙 vs 自由描画。M3着手前決定で縮小採用 | **採否済み分析**(v1はHost自動生成panel、自由UIは延期) |
 | [interaction-simplicity-model.md](interaction-simplicity-model.md) | 操作単純化モデル: Direct/Tool/Advanced正規化、plugin昇格、PP-Gate、M0〜M5割当 | 現行(2026-07-14。凍結済み公開契約は変更しない) |
-| [extensible-core-model.md](extensible-core-model.md) | 小さなコアと探索可能な拡張: 壊れない探索、編集pluginの責任寿命、Documentを増やさないアドレス可能な個体、表現domainを列挙しない能力境界(共通外殻/plugin payload、追加的進化)、性能上限を焼かない原則、穴埋めから遊びの探索への転換 | **設計原則**(2026-07-17。未凍結APIの実装許可ではない) |
+| [extensible-core-model.md](extensible-core-model.md) | 小さなコアと探索可能な拡張: Core kernel／bundled Host module／first-party／third-partyの分界、壊れない探索、編集pluginの責任寿命、Documentを増やさないアドレス可能な個体、表現domainを列挙しない能力境界、性能上限を焼かない原則 | **設計原則**(2026-07-17。`motolii-core` crateやUI runtimeの分類表ではなく、未凍結APIの実装許可でもない) |
 | [vism-package-concept.md](vism-package-concept.md) | Vism (`.vism`): Project・内部plugin kind・Host UIから分離して保存/共有/再利用する映像表現の配布単位。Motoliiは最初のHost、container/loaderは未決 | **コンセプト・名称・拡張子決定／ファイル形式未決**(2026-07-17。v1実装許可ではない) |
 | [vism-kit-model.md](vism-kit-model.md) | Core=文法、Vism=小さな表現、Kit=provider選択と型付き接続、Project=作品。BPM/Beatを例に、Vism直接依存を避けるmaterialize構成とfork能力の境界を定義 | **設計原則決定／schema・形式未決**(2026-07-17) |
 | [generative-user-boundary.md](generative-user-boundary.md) | ジェネラティブ表現とユーザー拡張の境界: Shape/SVG、p5.js型入力、Materialize/Live/Feedback/Simulation、Host責務 | **設計決定**(2026-07-15。未凍結runtimeの実装許可ではない) |
