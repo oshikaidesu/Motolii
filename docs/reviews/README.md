@@ -40,6 +40,7 @@
 | [2026-07-10-freeze-gate-declaration.md](2026-07-10-freeze-gate-declaration.md) | 凍結ゲート宣言(2026-07-10) |
 | [2026-07-10-freeze-gate-remaining.md](2026-07-10-freeze-gate-remaining.md) | 凍結ゲート残件(2026-07-10 監査) |
 | [2026-07-11-INF-7g-llm-plugin-demo.md](2026-07-11-INF-7g-llm-plugin-demo.md) | INF-7g: LLMプラグイン実演記録(2026-07-11) |
+| [2026-07-23-historical-llm-plugin-demo-lineage-recovery.md](2026-07-23-historical-llm-plugin-demo-lineage-recovery.md) | Unit 9E — INF-7g LLM Opacity実演の証明範囲と現行停止線 |
 | [2026-07-11-M2-entry-gate.md](2026-07-11-M2-entry-gate.md) | M2入場条件(2026-07-11。同日改訂: ゲート運用レビュー7点を反映) |
 | [2026-07-11-code-audit-pre-m2.md](2026-07-11-code-audit-pre-m2.md) | 実コード監査: M2並列解禁前に詰めるべき設計箇所(2026-07-11) |
 | [2026-07-12-M2E-2-ruleset-activation.md](2026-07-12-M2E-2-ruleset-activation.md) | M2E-2 ruleset 有効化ログ |
