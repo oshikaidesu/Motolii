@@ -98,6 +98,7 @@
 | [2026-07-23-historical-d1-code-audit-lineage-recovery.md](2026-07-23-historical-d1-code-audit-lineage-recovery.md) | Unit 4C-2 — 第二D1コード監査全4版を現行コードで再判定し、DataTrack identityとOTIO loss reportを再回収 |
 | [2026-07-23-historical-first-code-audit-lineage-recovery.md](2026-07-23-historical-first-code-audit-lineage-recovery.md) | Unit 4C-3 — M2前第一コード監査全2版を再判定し、実装済み群と公開runtime／M4／M5残件を分離 |
 | [2026-07-23-historical-render-ctx-thaw-lineage-recovery.md](2026-07-23-historical-render-ctx-thaw-lineage-recovery.md) | Unit 4D — RenderCtx解凍全2版、Quality製品配線追補、予約fieldの非証明範囲を処分 |
+| [2026-07-23-historical-test-oracle-ruleset-recovery.md](2026-07-23-historical-test-oracle-ruleset-recovery.md) | Unit 4E — M2E-2 ruleset有効化ログをlive設定へ再照合し、oracle保護の責任分離を固定 |
 | [2026-07-16-m3-preflight-decisions.md](2026-07-16-m3-preflight-decisions.md) | M3着手前決定 — 操作の意味を固定し、見た目の実値は測って決める |
 | [2026-07-16-m3-ui-concept-to-tickets.md](2026-07-16-m3-ui-concept-to-tickets.md) | M3 UIコンセプトから実装チケットへの分解 |
 | [2026-07-16-m3-ui-gap-survey.md](2026-07-16-m3-ui-gap-survey.md) | M3前UIギャップ調査: U1〜U8に席が無いUI要素とコア側前提の欠落(2026-07-16) |
