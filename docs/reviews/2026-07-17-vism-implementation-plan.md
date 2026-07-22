@@ -132,9 +132,10 @@ Phase Aの出口:
 | VSM-B3 | logical manifest、version、migration、依存解決の意味表。まだ直列化しない | VSM-B0〜B2 | package／entry／Kit／payload versionを分離。各fieldの作者、検査者、互換影響、未指定時とdowngrade／併存／循環の拒否表 | VSM-B2待ち |
 | VSM-B4 | payload classとfork capabilityを分類する | VSM-A3, VSM-A6, VSM-B2 | Declarative、WGSL、source+Host build、WASM、nativeとBase／Optional／Fork capabilityの可搬性・権限・再現性・DXを別評価 | VSM-A6待ち |
 | VSM-B5 | headless compatible runnerでUI／Document漏れを反証し、ISF／OpenFX adapter範囲を判定する | VSM-B2, VSM-B4 | Motolii UI／Documentなしで最小provider→consumerを評価。非対応能力は型付き診断。import／adapterのloss表 | VSM-B4待ち |
-| VSM-B6 | Phase Bの反対側レビュー | VSM-B0〜B5 | 事実、転移条件、より小さい形式、fork分断、供給網、安全性を独立判定し、P0/P1未解決0 | VSM-B0〜B5待ち |
+| VSM-B3H | Motolii運営の常設配布backendへ依存しない原則の下でhostless distribution topologyを方式決定するfixture。Kit／Plugin Set／Project Lock／catalog／artifact／install storeを分離し、まだ直列化しない | VSM-B3, VSM-B4 | 作者GitHub／静的HTTP／mirror／commercial local packageについて、source消失、tag差替え、offline、署名失効、lock再現、index競合を比較。外部service依存と、単一service消失後も残す正本・診断を明記 | VSM-B3/B4待ち |
+| VSM-B6 | Phase Bの反対側レビュー | VSM-B0〜B5, VSM-B3H | 事実、転移条件、より小さい形式、fork分断、供給網、安全性を独立判定し、P0/P1未解決0 | VSM-B0〜B5/B3H待ち |
 
-VSM-B0〜B6の意味決定ではRust struct、serde schema、公開enumを作らない。表・fixture・候補データだけで反証し、`BeatEvents`、`KitDefinition`、作者名、license等を現行`NodeDesc`へ足さない。実コードは独立したVSM-B2I以降である。`NodeDesc`はHostの評価／UI記述、manifestは配布責任であり、重なるfieldがあっても同一型とは限らない。
+VSM-B0〜B6とB3Hの意味決定ではRust struct、serde schema、公開enumを作らない。表・fixture・候補データだけで反証し、`BeatEvents`、`KitDefinition`、作者名、license等を現行`NodeDesc`へ足さない。実コードは独立したVSM-B2I以降である。`NodeDesc`はHostの評価／UI記述、manifestは配布責任であり、重なるfieldがあっても同一型とは限らない。`catalog`、`tap`、`lock`という歴史語からfile名やwire形式を逆算しない。
 
 ### Phase C — container、payload、trustを隔離spikeで比較する
 
@@ -204,8 +205,9 @@ M4 K1/K7後:
 
 公開境界の実証後:
   VSM-A1/A2 ─ VSM-B0 ─ VSM-B1 ─┐
-  VSM-A7 ────────────────────────┴─ VSM-B2（方式決定）─ VSM-B3
-  VSM-A3/A6 ────────────────────────────────┴─ VSM-B4 ─ VSM-B5 ─ VSM-B6
+  VSM-A7 ────────────────────────┴─ VSM-B2（方式決定）─ VSM-B3 ─┐
+  VSM-A3/A6 ────────────────────────────────┴─ VSM-B4 ─ VSM-B5 ├─ VSM-B6
+                                                    └─ VSM-B3H ─┘
 
 atomic batch成立後:
   VSM-B2 + M2-D2 + U9a相当 ─ VSM-B2I

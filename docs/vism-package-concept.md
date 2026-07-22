@@ -112,6 +112,22 @@ Motoliiが引き受ける投影である。
 
 同じVismを互換forkが扱う時、この層はそのHostが実装する。Motolii固有のUIをpackageの唯一の操作面にしない。互換性の反証には、別製品ではなくMotoliiのUI／Document実装を使わないheadless compatible runnerを用いる。
 
+### 4.4 配布topologyはpackage形式と分けて比較する
+
+Motolii projectは、常時稼働する中央配布backend、決済、download数、公式人気順位を自ら運営しない。発見・導入・更新の必須経路をMotolii運営serverへ依存させないことを配布の運用原則とする。
+
+その原則を満たす具体案として、作者GitHub、release、静的hosting、local commercial package等を正本とし、利用者が購読可能な静的indexをマージする**hostless配布topology**を比較する。外部providerやcommunity運営serviceを禁止する意味ではなく、単一serviceの存続を作品再現の前提にしない。
+
+ただし、これはGitHubを唯一のproviderにする決定でも、URLをpackage identityにする決定でもない。次を分離してfixture化するまで、公開catalog／tap／lock schemaを作らない。
+
+- 作者が管理するsourceと、配布・検証対象のimmutable artifact。
+- 発見用indexと、利用者が共有するPlugin Set（仮称）。
+- Projectが再現のために固定するProject Lockと、端末のinstall store。
+- source消失、tag差替え、mirror、offline、commercial local package、署名失効。
+- install確認とProject open。Project openはnetwork、install、build、code実行を起こさない。
+
+GitHub経由はこのtopologyを反証する有力fixtureであり、GitHub固有URL、Actions、Release構造をVismの恒久identityやDocumentへ焼く根拠ではない。具体的な比較順は[Vism実装計画](reviews/2026-07-17-vism-implementation-plan.md)の`VSM-B3H`、系譜は[歴史回収](reviews/2026-07-23-historical-vism-kit-distribution-lineage-recovery.md)を正本とする。
+
 ## 5. Vismが発明できるものと、Hostへ残すもの
 
 Vismは未知の**名詞**と**動詞**を発明できる。
@@ -226,6 +242,9 @@ particle.vism
 | 1 package内のcapability数 | **未決** |
 | Kit container／拡張子／linked update | **未決** |
 | source / native binary / WGSL / WASMの同梱方式 | **未決** |
+| Motolii運営の常設配布backendへ依存しない | **運用原則決定** |
+| 作者GitHub等＋静的indexのhostless配布topology | **具体方式はVSM-B3Hで比較** |
+| Plugin Set／Project Lock／catalog schema | **未決。Vism Kitとは別責任** |
 | marketplace / registry / trust policy | **v2・未決** |
 
 ## 11. 実装へ進む前の停止線
