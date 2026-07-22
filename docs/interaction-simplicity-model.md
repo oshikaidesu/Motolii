@@ -170,7 +170,7 @@ PP-Gate前のRelative Moveは**選択keyへ同じ差分を適用する1回のD2 
 
 ### 4.1 v1.x候補: One-Knob Macro Control
 
-AbletonのMacro Controlのように、**一つのcontrolから複数parameterを同時に動かす**入口は、複雑な設定を演奏可能な少数ノブへ畳めるためMotoliiとも相性がよい。ただしM3の基礎UIには入れず、v1.xの追加候補とする。
+AbletonのMacro Controlのように、**一つのcontrolから複数parameterを同時に動かす**入口は、複雑な設定を扱いやすい少数ノブへ畳めるためMotoliiとも相性がよい。ただしM3の基礎UIには入れず、v1.xの追加候補とする。
 
 これはD2の「複数commandを1 Undoにまとめるmacro」やshortcut macroとは別物である。保存される一対多のparameter driverになるため、実装前にPP-Gateを通す。
 
