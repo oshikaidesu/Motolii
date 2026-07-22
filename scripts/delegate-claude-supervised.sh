@@ -155,6 +155,280 @@ run_supervisor() {
   fi
 }
 
+# U0e-2の却下原因(発注書と正本の未照合)を再発させないためのgate。詳細:
+# docs/reviews/2026-07-22-u0e-2-delegation-guardrails.md
+REACT_LABELS_ORDERED=(
+  "REACT AUTHORITY:"
+  "SOURCE ASSET:"
+  "PRESERVE:"
+  "REPLACE:"
+  "STATE OWNER:"
+  "DIAGNOSTIC ROUTE:"
+  "NEGATIVE ORACLE:"
+  "STOP:"
+)
+
+gate_fail() {
+  echo "ORDER-GATE NG: $*" >&2
+  exit 3
+}
+
+gate_require_single_field() {
+  # 同じprefixの行が1つでも正規文法を外れたら、他に正しい行があっても採用しない
+  local file="$1" label="$2"
+  local lines line count=0 value=""
+  lines="$(grep -E "^${label}:" "$file" || true)"
+  if [[ -n "$lines" ]]; then
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^${label}:[[:space:]]*$ ]]; then
+        gate_fail "$label empty"
+      fi
+      if [[ ! "$line" =~ ^${label}:\ ([^[:space:]]+)$ ]]; then
+        gate_fail "$label malformed: ${line#${label}: }"
+      fi
+      value="${BASH_REMATCH[1]}"
+      count=$((count + 1))
+    done <<<"$lines"
+  fi
+  if [[ "$count" -eq 0 ]]; then
+    gate_fail "missing $label"
+  fi
+  if [[ "$count" -gt 1 ]]; then
+    gate_fail "duplicate $label"
+  fi
+  printf '%s' "$value"
+}
+
+gate_reject_symlink_components() {
+  # linkdir -> /outside のような中間componentの逃げ道も、最終componentのみの
+  # -Lや文字列上の".."判定では検出できないため、経路全componentを実体で歩いて確認する
+  local worktree="$1" rel_path="$2"
+  local cur="$worktree" part
+  local old_ifs="$IFS"
+  IFS='/'
+  for part in $rel_path; do
+    IFS="$old_ifs"
+    cur="$cur/$part"
+    if [[ -L "$cur" ]]; then
+      gate_fail "AUTHORITY path is a symlink: $rel_path"
+    fi
+    IFS='/'
+  done
+  IFS="$old_ifs"
+}
+
+gate_ledger_row_state() {
+  local ledger="$1" id="$2"
+  awk -v id="$id" '
+    BEGIN { in_section = 0; count = 0 }
+    /^## 現在選択中の1件/ { in_section = 1; next }
+    in_section && /^## / { in_section = 0 }
+    in_section && /^\|/ {
+      n = split($0, f, "|")
+      if (n < 5) next
+      gsub(/^[ \t]+|[ \t]+$/, "", f[3])
+      if (f[3] ~ /^-+$/) next
+      if (f[3] == id) {
+        state = f[5]
+        gsub(/^[ \t]+|[ \t]+$/, "", state)
+        gsub(/`/, "", state)
+        count++
+        result = state
+      }
+    }
+    END {
+      if (count == 0) { print "ABSENT"; exit }
+      if (count > 1) { print "AMBIGUOUS"; exit }
+      print result
+    }
+  ' "$ledger"
+}
+
+gate_check_base() {
+  local order_file="$1" worktree="$2"
+  local base_ref base_sha ref_name resolved_sha worktree_head
+
+  base_ref="$(gate_require_single_field "$order_file" "BASE_REF")"
+  if [[ ! "$base_ref" =~ ^refs/heads/[A-Za-z0-9._/-]+$ ]]; then
+    gate_fail "BASE_REF malformed: $base_ref"
+  fi
+  ref_name="${base_ref#refs/heads/}"
+  if [[ -z "$ref_name" || "$ref_name" == */ || "$ref_name" == *"//"* || \
+        "$ref_name" == *".."* || "$ref_name" == .* || "$ref_name" == */.* || \
+        "$ref_name" == *".lock" ]]; then
+    gate_fail "BASE_REF malformed: $base_ref"
+  fi
+
+  base_sha="$(gate_require_single_field "$order_file" "BASE_SHA")"
+  if [[ ! "$base_sha" =~ ^[0-9a-f]{40}$ ]]; then
+    gate_fail "BASE_SHA malformed: $base_sha"
+  fi
+
+  if ! resolved_sha="$(git -C "$worktree" rev-parse --verify --quiet "$base_ref" 2>/dev/null)"; then
+    gate_fail "BASE_REF does not resolve: $base_ref"
+  fi
+  if [[ "$resolved_sha" != "$base_sha" ]]; then
+    gate_fail "BASE_REF does not resolve to BASE_SHA"
+  fi
+
+  worktree_head="$(git -C "$worktree" rev-parse HEAD)"
+  if [[ "$worktree_head" != "$base_sha" ]]; then
+    gate_fail "worktree HEAD != BASE_SHA"
+  fi
+}
+
+gate_check_grain_and_dependencies() {
+  local order_file="$1" worktree="$2"
+  local ledger="$worktree/docs/implementation-ledger.md"
+  local grain grain_state dep_lines dep_id dep_state
+
+  if [[ ! -f "$ledger" ]]; then
+    gate_fail "docs/implementation-ledger.md missing in worktree"
+  fi
+
+  grain="$(gate_require_single_field "$order_file" "GRAIN")"
+  grain_state="$(gate_ledger_row_state "$ledger" "$grain")"
+  case "$grain_state" in
+    ABSENT) gate_fail "$grain not found in selected-work ledger" ;;
+    AMBIGUOUS) gate_fail "$grain has ambiguous selected-work ledger rows" ;;
+    DO) ;;
+    *) gate_fail "$grain is $grain_state; dispatch is forbidden" ;;
+  esac
+
+  dep_lines="$(grep -E '^DEPENDENCY:' "$order_file" || true)"
+  if [[ -z "$dep_lines" ]]; then
+    gate_fail "missing DEPENDENCY"
+  fi
+  while IFS= read -r dep_id; do
+    if [[ "$dep_id" =~ ^DEPENDENCY:[[:space:]]*$ ]]; then
+      gate_fail "DEPENDENCY empty"
+    fi
+    if [[ ! "$dep_id" =~ ^DEPENDENCY:\ ([^[:space:]]+)$ ]]; then
+      gate_fail "DEPENDENCY malformed: ${dep_id#DEPENDENCY: }"
+    fi
+    dep_id="${BASH_REMATCH[1]}"
+    dep_state="$(gate_ledger_row_state "$ledger" "$dep_id")"
+    case "$dep_state" in
+      ABSENT) gate_fail "dependency $dep_id not found in selected-work ledger" ;;
+      AMBIGUOUS) gate_fail "dependency $dep_id has ambiguous selected-work ledger rows" ;;
+      DONE) ;;
+      *) gate_fail "dependency $dep_id is $dep_state; dispatch is forbidden" ;;
+    esac
+  done <<<"$dep_lines"
+}
+
+gate_check_authorities() {
+  local order_file="$1" worktree="$2"
+  local authority_lines line auth_path auth_hash auth_full actual_hash
+
+  authority_lines="$(grep -E '^AUTHORITY:' "$order_file" || true)"
+  if [[ -z "$authority_lines" ]]; then
+    gate_fail "missing AUTHORITY"
+  fi
+  while IFS= read -r line; do
+    if [[ ! "$line" =~ ^AUTHORITY:\ ([^[:space:]]+)\ SHA256:([0-9a-f]{64})$ ]]; then
+      gate_fail "AUTHORITY malformed: ${line#AUTHORITY: }"
+    fi
+    auth_path="${BASH_REMATCH[1]}"
+    auth_hash="${BASH_REMATCH[2]}"
+    if [[ "$auth_path" == /* ]]; then
+      gate_fail "AUTHORITY absolute path: $auth_path"
+    fi
+    if [[ "$auth_path" == *".."* ]]; then
+      gate_fail "AUTHORITY path traversal: $auth_path"
+    fi
+    auth_full="$worktree/$auth_path"
+    # symlinkはworktree外への逃げ道になり得るため、経路や存在確認より先に拒否する
+    gate_reject_symlink_components "$worktree" "$auth_path"
+    if [[ ! -f "$auth_full" ]]; then
+      gate_fail "AUTHORITY file missing: $auth_path"
+    fi
+    actual_hash="$(shasum -a 256 "$auth_full" | awk '{print $1}')"
+    if [[ "$actual_hash" != "$auth_hash" ]]; then
+      gate_fail "authority hash mismatch: $auth_path"
+    fi
+  done <<<"$authority_lines"
+}
+
+gate_check_allowed_files() {
+  local order_file="$1"
+  local allowed_lines af
+
+  allowed_lines="$(grep -E '^ALLOWED_FILE:' "$order_file" || true)"
+  if [[ -z "$allowed_lines" ]]; then
+    gate_fail "missing ALLOWED_FILE"
+  fi
+  GATE_ALLOWED_FILES=()
+  while IFS= read -r af; do
+    if [[ "$af" =~ ^ALLOWED_FILE:[[:space:]]*$ ]]; then
+      gate_fail "ALLOWED_FILE empty"
+    fi
+    if [[ ! "$af" =~ ^ALLOWED_FILE:\ ([^[:space:]]+)$ ]]; then
+      gate_fail "ALLOWED_FILE malformed: ${af#ALLOWED_FILE: }"
+    fi
+    af="${BASH_REMATCH[1]}"
+    if [[ "$af" == /* ]]; then
+      gate_fail "ALLOWED_FILE absolute path: $af"
+    fi
+    if [[ "$af" == *".."* ]]; then
+      gate_fail "ALLOWED_FILE path traversal: $af"
+    fi
+    GATE_ALLOWED_FILES+=("$af")
+  done <<<"$allowed_lines"
+}
+
+gate_check_clean_worktree() {
+  local worktree="$1"
+  if [[ -n "$(git -C "$worktree" status --porcelain)" ]]; then
+    gate_fail "isolated worktree is not clean"
+  fi
+}
+
+gate_check_react_labels() {
+  local order_file="$1"
+  local is_react=0 af label matches count line_no last_line=0
+
+  if grep -qx 'REACT TASK: YES' "$order_file"; then
+    is_react=1
+  fi
+  for af in "${GATE_ALLOWED_FILES[@]}"; do
+    # docs/mocks-ui自身/直下の子孫だけを対象とし、docs/mocks-ui-legacy等の兄弟名を誤検知しない
+    if [[ "$af" == "docs/mocks-ui" || "$af" == docs/mocks-ui/* || "$af" == *.jsx ]]; then
+      is_react=1
+    fi
+  done
+  if [[ "$is_react" -eq 0 ]]; then
+    return
+  fi
+
+  for label in "${REACT_LABELS_ORDERED[@]}"; do
+    matches="$(grep -nE "^${label}" "$order_file" | cut -d: -f1 || true)"
+    count=0
+    [[ -z "$matches" ]] || count="$(printf '%s\n' "$matches" | wc -l | tr -d ' ')"
+    if [[ "$count" -eq 0 ]]; then
+      gate_fail "React guard label missing or out of order: $label"
+    fi
+    if [[ "$count" -gt 1 ]]; then
+      gate_fail "React guard label duplicated: $label"
+    fi
+    line_no="$matches"
+    if (( line_no <= last_line )); then
+      gate_fail "React guard label missing or out of order: $label"
+    fi
+    last_line="$line_no"
+  done
+}
+
+run_dispatch_gate() {
+  local order_file="$1" worktree="$2"
+  gate_check_base "$order_file" "$worktree"
+  gate_check_grain_and_dependencies "$order_file" "$worktree"
+  gate_check_authorities "$order_file" "$worktree"
+  gate_check_allowed_files "$order_file"
+  gate_check_clean_worktree "$worktree"
+  gate_check_react_labels "$order_file"
+}
+
 if [[ "$MODE" == "prepare" ]]; then
   supervisor_prompt=$(cat <<EOF
 You are the read-only on-site supervisor for Motolii. Do not edit files, commit,
@@ -171,8 +445,27 @@ raw scanners that bypass typed boundaries, public raw mutation APIs, invented
 serde defaults, duplicate planners/helpers, partial mutation, TODO stubs, and
 adjacent-ticket expansion.
 
-The last non-empty line must be exactly plain text ORDER: READY if fully
-specified, otherwise ORDER: STOP. Do not bold it, quote it, or append text.
+The order must also emit the fields the dispatch gate checks mechanically before
+Sonnet is started: exactly one \`GRAIN: <id>\`, exactly one
+\`BASE_REF: refs/heads/<full-branch-name>\`, exactly one full 40-hex
+\`BASE_SHA: <sha>\` that BASE_REF resolves to and that equals the isolated
+worktree HEAD, one or more \`DEPENDENCY: <id>\` lines, one or more
+\`AUTHORITY: <worktree-relative-path> SHA256:<64-hex>\` lines, and one or more
+\`ALLOWED_FILE: <worktree-relative-path-or-glob>\` lines. Before writing GRAIN or
+DEPENDENCY, read the target worktree's docs/implementation-ledger.md
+selected-work table and confirm GRAIN's own row states exactly \`DO\` and every
+DEPENDENCY row states exactly \`DONE\`; never infer these states from prose or
+from a different worktree. Before writing an AUTHORITY line, hash the file
+inside the target worktree and copy that exact hash. If the order touches a
+React surface (exact \`REACT TASK: YES\`, an ALLOWED_FILE under docs/mocks-ui, or
+an ALLOWED_FILE ending in .jsx), also include, exactly once and in this order:
+REACT AUTHORITY:, SOURCE ASSET:, PRESERVE:, REPLACE:, STATE OWNER:,
+DIAGNOSTIC ROUTE:, NEGATIVE ORACLE:, STOP:. Merely mentioning React in prose
+does not require these labels.
+
+The last non-empty line must be exactly plain text ORDER: READY only if every
+ledger, authority, and label fact above is mechanically true; otherwise end with
+plain text ORDER: STOP. Do not bold it, quote it, or append text.
 
 User task:
 $task
@@ -216,6 +509,8 @@ if ! grep -qx 'CODEX PRECHECK: APPROVED' "$ORDER_FILE"; then
   echo "delegate-claude-supervised: Codex事前承認がありません" >&2
   exit 3
 fi
+
+run_dispatch_gate "$ORDER_FILE" "$WORKTREE"
 
 cp "$ORDER_FILE" "$tmp_dir/order.txt"
 head_before="$(git -C "$WORKTREE" rev-parse HEAD)"
