@@ -102,6 +102,12 @@ first-party無特権は「第三者配布が完成した」という意味では
 6. **ループ内でGPUリソースを毎フレーム新規生成しない** — パイプライン/バッファは初期化時に作り再利用
 7. **公開APIで`assert!`/panicしない** — 入力起因は`PluginError`(または型付きResult)
 
+### 3.1 `TextureRef`と`FrameDesc`を分離しない
+
+`TextureRef`は借用`wgpu::Texture`と`FrameDesc`の対である。`FrameDesc`のwidth/height/stride/format/color space/premultipliedを入力の意味として読み、texture label、Host内部ID、cacheの状態から推測しない。`FrameDesc`はGPU handle、Document画像schema、Vism wire formatではない。
+
+M1仕様にあるplugin traitは歴史的skeletonで、現行signatureではない。作者は本書§5と`motolii-plugin`公開面を使う。`FrameDesc`の意味凍結と、constructor/serde/error面の現行gapは[共有型lineage回収](reviews/2026-07-23-historical-frame-desc-shared-types-lineage-recovery.md)を参照する。gapを回避する独自descriptor、文字列error、黙ったclampをplugin側へ作らない。
+
 ## 4. 推奨すること
 
 - **意図単位の1プラグイン** — 「グロー」「シェイク」のように完成した意図。原子プリミティブの組み立てをユーザーに強いない(F-8)

@@ -76,10 +76,12 @@ crates/
   motolii-cli      M1ドライバ(プロジェクト設定ファイル → 書き出し)
 ```
 
-## インターフェース契約(並列タスクの境界。変更は仕様書改訂PRを先に)
+## M1時点のインターフェース基線
+
+以下はM1で実証・凍結ゲートへ渡した**意味の基線**であり、現在のRust APIをそのまま転記したcode referenceではない。`FrameDesc`の6意味、GPU texture境界、純関数、preview/export共通評価は維持する。一方、plugin traitは後続の正規解凍で`PipelineCache`、`RenderCtx`、型付き`Result`、`LayerSourcePlugin`等を追加済みである。実装時は[plugin作者向け規約](../plugin-authoring.md)と`crates/motolii-plugin/src/lib.rs`を正とし、下の歴史的skeletonをcopyしない。全lineageの処分は[Unit 3C回収](../reviews/2026-07-23-historical-frame-desc-shared-types-lineage-recovery.md)を参照する。
 
 ```rust
-// motolii-core(S3の結果で最終化)
+// M1で固定した共有意味の概略。constructor/serde/error/Rust ABIの永久凍結ではない。
 pub struct RationalTime { pub num: i64, pub den: i64 }   // 秒 = num/den
 pub struct FrameDesc {
     pub width: u32, pub height: u32, pub stride: u32,
@@ -103,7 +105,8 @@ pub trait RenderNode {
               params: &ResolvedParams, inputs: &[TextureHandle]) -> TextureHandle;
 }
 
-// motolii-plugin(v1): プラグインは種別レジストリへ静的登録する。dylib/配布はv2。
+// M1時点のplugin入場skeleton。現在の正確なtrait signatureではない。
+// プラグインは種別レジストリへ静的登録する。dylib/配布はこのmilestoneの外。
 // Render系プラグインは必ずGPUテクスチャ境界で、CPUフレームを受け渡す製品経路は持たない。
 pub enum PluginKind { Input, Filter, ParamDriver, Composite, ScriptWasm }
 pub trait FilterPlugin {
