@@ -92,6 +92,7 @@
 | [2026-07-16-m2-comp-camera-decision.md](2026-07-16-m2-comp-camera-decision.md) | M2 CompCamera決定 — planar v1、空間は追加的拡張(2026-07-16) |
 | [2026-07-16-m2-param-element-constraint-disposition.md](2026-07-16-m2-param-element-constraint-disposition.md) | M2 Param Pipeline / Element Domain / Constraint Graph処分(2026-07-16) |
 | [2026-07-16-m2-project-sidecar-session-decision.md](2026-07-16-m2-project-sidecar-session-decision.md) | M2 project sidecar identity / session所有決定(2026-07-16) |
+| [2026-07-23-historical-d1m-sidecar-session-lineage-recovery.md](2026-07-23-historical-d1m-sidecar-session-lineage-recovery.md) | Unit 4A — D1m sidecar/session全6版、D1n分岐、A0S追補、legacy診断の処分 |
 | [2026-07-16-m3-preflight-decisions.md](2026-07-16-m3-preflight-decisions.md) | M3着手前決定 — 操作の意味を固定し、見た目の実値は測って決める |
 | [2026-07-16-m3-ui-concept-to-tickets.md](2026-07-16-m3-ui-concept-to-tickets.md) | M3 UIコンセプトから実装チケットへの分解 |
 | [2026-07-16-m3-ui-gap-survey.md](2026-07-16-m3-ui-gap-survey.md) | M3前UIギャップ調査: U1〜U8に席が無いUI要素とコア側前提の欠落(2026-07-16) |

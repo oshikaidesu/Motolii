@@ -2,6 +2,8 @@
 
 Status: **Implementation landed** (D1m, branch `cursor/d1m-project-session`). D1d's corruption recovery remains valid on project-scoped sidecars with inter-process session ownership.
 
+Historical lineage and branch disposition: [Unit 4A recovery](2026-07-23-historical-d1m-sidecar-session-lineage-recovery.md).
+
 > **2026-07-18 supplement ([VSM-A0S](2026-07-17-vism-a0s-contract-catalog-spec.md) alignment)**: The save/open ownership rows below were amended before D1m implementation so it could not invent a second product open path or keep root-public path mutation. The supplement itself was docs-only; the current D1m implementation now follows it.
 
 ## Finding
