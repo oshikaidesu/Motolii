@@ -1,0 +1,25 @@
+[package]
+name = "g0-9-easing-popup"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[package.metadata.bundle]
+name = "Motolii Easing Popup Spike"
+identifier = "com.motolii.spike.easing-popup"
+category = "public.app-category.graphics-design"
+short_description = "G0-9 native easing popup acceptance spike"
+
+# 製品workspaceから隔離し、popup platform APIと設定test doubleを公開契約へ焼かない。
+[workspace]
+
+[dependencies]
+bytemuck = { version = "1", features = ["derive"] }
+glyphon = "0.11"
+pollster = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+wgpu = "29"
+winit = "0.30.9"
+wry = "0.55.1"
