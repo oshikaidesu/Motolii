@@ -2,6 +2,8 @@
 
 Status: **Decision — adopt one composition camera, narrow the first permanent variant**. Implementation is D1j → D1k → D3f and must not start from the broader unmerged #176 shape.
 
+Historical note (2026-07-23): all three cutoff versions, including the semantic-oracle split and the later M3 boundary wording, are dispositioned in [Unit 4I recovery](2026-07-23-historical-m2-camera-contract-lineage-recovery.md). The planar Document/runtime lane is implemented; Stage/Output Frame product UI and the future Spatial variant remain separate downstream work.
+
 ## Known-technology check
 
 - glTF separates a camera's projection from its node transform; it does not encode pose as `position + target`. A camera looks down local -Z with local +Y up, while perspective `yfov` is radians and orthographic magnification is explicit ([Khronos glTF 2.0](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#reference-camera)).

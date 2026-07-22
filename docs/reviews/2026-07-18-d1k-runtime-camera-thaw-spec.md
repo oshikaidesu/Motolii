@@ -2,6 +2,8 @@
 
 ステータス: **【凍結】** — D1k 実装前の文書-only 契約。本記録が D1k の正本。
 
+歴史注記（2026-07-23）: cutoff全2版の実装前契約と実装到達後の数値順序訂正は[Unit 4I回収](2026-07-23-historical-m2-camera-contract-lineage-recovery.md)で処分した。下記レーン表はD1k到達時点の履歴であり、D3fは現在完了済み、M3-U1fは別の製品UI taskとして`BLOCKED`である。
+
 正本チェーン: [planar v1 camera 決定](2026-07-16-m2-comp-camera-decision.md) → 本解凍記録 → D1k 実装 → D3f Document camera 接続。
 
 レーン: `CAM-G0 (DONE)` → `D1j (DONE)` → **`D1k-S (本記録)`** → `D1k (DONE)` → `D3f (WAIT)`。

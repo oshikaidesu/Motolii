@@ -102,6 +102,7 @@
 | [2026-07-23-historical-m2-entry-gate-lineage-recovery.md](2026-07-23-historical-m2-entry-gate-lineage-recovery.md) | Unit 4F — M2入口ゲート全43版の限定gate、A→B→C順序、棄却案、完了再開、歴史的達成範囲を処分 |
 | [2026-07-23-historical-m2-reclosure-gate-lineage-recovery.md](2026-07-23-historical-m2-reclosure-gate-lineage-recovery.md) | Unit 4G — M2基盤再締結全14版のA/B/C証明、D1n分岐、解除とM3入場の責任分離を処分 |
 | [2026-07-23-historical-m2-supplementary-review-lineage-recovery.md](2026-07-23-historical-m2-supplementary-review-lineage-recovery.md) | Unit 4H — M2独立追補レビュー全3版の初回P1、修復再審査、証拠増分、P2現行処分を回収 |
+| [2026-07-23-historical-m2-camera-contract-lineage-recovery.md](2026-07-23-historical-m2-camera-contract-lineage-recovery.md) | Unit 4I — planar camera決定＋runtime解凍全5版のsemantic core／runtime／実UI分離とSpatial再入場条件を処分 |
 | [2026-07-16-m3-preflight-decisions.md](2026-07-16-m3-preflight-decisions.md) | M3着手前決定 — 操作の意味を固定し、見た目の実値は測って決める |
 | [2026-07-16-m3-ui-concept-to-tickets.md](2026-07-16-m3-ui-concept-to-tickets.md) | M3 UIコンセプトから実装チケットへの分解 |
 | [2026-07-16-m3-ui-gap-survey.md](2026-07-16-m3-ui-gap-survey.md) | M3前UIギャップ調査: U1〜U8に席が無いUI要素とコア側前提の欠落(2026-07-16) |
