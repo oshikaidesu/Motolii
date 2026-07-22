@@ -34,10 +34,15 @@ python3 - "$ROOT" <<'PY'
 import os, re, sys
 root = sys.argv[1]
 docs = os.path.join(root, 'docs')
+# npm ci/build/test:visual で docs 配下に現れる生成物・依存 dir へは降下しない
+SKIP_DIR_NAMES = frozenset({
+    "node_modules", "dist", "test-results", "playwright-report",
+})
 link_re = re.compile(r'\]\(([^)]+)\)')
 fail = False
 paths = [os.path.join(root, 'AGENTS.md')]
-for dirpath, _, files in os.walk(docs):
+for dirpath, dirnames, files in os.walk(docs):
+    dirnames[:] = [d for d in dirnames if d not in SKIP_DIR_NAMES]
     for name in files:
         if name.endswith('.md'):
             paths.append(os.path.join(dirpath, name))

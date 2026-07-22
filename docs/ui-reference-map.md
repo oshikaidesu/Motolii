@@ -60,7 +60,7 @@ React所有面の製品実装は[直接移管契約](reviews/2026-07-22-m3-react
 | Effect Inspector・自動parameter panel | U4a | 基盤依存待ち |
 | packed Timeline・Group展開・選択 | U3a/U3b/U2h | 後続 |
 | Automation展開・Key Tools | P56/P60+U3系 | 一部prototype判断のまま |
-| Interval Easing・multi-key Graph View | U4b/U4e | 正式タスク化済み、後続 |
+| 区間Easing・multi-key Graph View候補 | U4b／task未決 | 区間EasingはU4b。multi-key Graph ViewはReact比較証拠で、製品採択・task化は未決 |
 | Effects Browser | U4d | 正式タスク化済み |
 | Media Browser・folder・Tag・複数選択 | U6 | 正式タスク化済み |
 | Create Browser・provider・generator | U9/Vism/Create境界 | 一部未統一 |
@@ -95,7 +95,7 @@ npm run dev -- --host 127.0.0.1
 - 全体回帰（archive）: `http://127.0.0.1:5173/#archive/all-surfaces`
 - Browser候補: `http://127.0.0.1:5173/#plugin-browser-candidate`
 - 分解骨格: `http://127.0.0.1:5173/#skeleton`
-- Storybookと試験: `docs/mocks-ui/README.md`(`codex/m3-mock-components`ブランチ側に実体)
+- Storybookと試験: [mocks-ui README](mocks-ui/README.md)
 
 ## 更新チェック
 

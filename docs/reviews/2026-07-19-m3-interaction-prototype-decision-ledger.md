@@ -139,8 +139,17 @@ P47の状態は**比較中**。非目標:
 - Clip Trimのcommand、Undo、素材参照契約を作らない。
 - preview render／transcode API、worker構成、cache寿命を決めない。
 - GIF／動画を正準保存形式にせず、具体duration、frame rate、解像度を製品tokenへしない。
-
 採否条件は、Browser保存sheetとTimeline Loopの2 fixtureで、同じrange操作を説明なしに使えること、Escで各ownerが不変へ戻ること、片方のCommitが他方の状態を変更しないことを再現可能に確認すること。Clip Trimは第三の意味を混ぜず、共有primitiveの適用可能性だけを後続比較する。
+
+### 固定React baselineの補助観察（U0e-2R）
+
+固定commit `eb16d06f980b6f9bea3901b6f10cbcc21dbfb3d0`には、帯アクションrail、
+Object barのS/M、Automation channel展開、Key Tools、同一時間面のGroup展開、
+Interval Easing Editorとmulti-key Graph Viewの比較実装がある。branch側台帳は
+これらへP53〜P62を再利用していたため、mainのP53〜P61と衝突するIDを現行P項目へ
+統合しない。実装は比較証拠として保持するが、状態は**観察**であり、mainの
+P53採択とP54〜P61未決を上書きしない。製品採択には一意な新ID、状態所有、
+command/Undo、M3仕様と譜面UI構成モデルの先行改訂が必要である。
 
 ### 移行者の安心（AE / AviUtl。U4d / U2c / U1i / U0d / U1c系、2026-07-19追補）
 

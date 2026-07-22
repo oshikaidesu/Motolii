@@ -40,6 +40,7 @@ A-1(egui候補は既存device/native texture共有を[採用時の実機証拠](
 - UIの色値は固定実装にしない。組み込みLight/Darkと将来のcustom themeを同じsemantic token schemaで解決し、設定画面から選択・永続化する。初回既定はDark(土台dark neutralの規約と一致)、theme異常時も診断してDarkへfallbackする
 - タイムラインUIの状態管理はM2ドキュメントモデルに直結(UI独自の編集状態を二重に持たない)。編集操作は全てM2コマンドを発行する形
 - キーフレーム編集UIは**AE式の値グラフエディタを作らない**。**Flow/アライトモーション式の区間イージングエディタ**を採る: 2キーフレーム間を選択→ボタン→cubic-bezierイージングをポップアップ編集(プリセット+ハンドル)。データは`motolii-eval`の`Interp::Bezier{x1,y1,x2,y2}`(区間正規化位置に対する連続曲線=fps/解像度非依存)を編集するだけでスキーマ変更不要。オーバーシュートはyの[0,1]外で表現(y非クランプ維持)。詳細と根拠はconcept.md決定事項。シーケンス操作の参考にTheatre.jsは見てよい(AGPLのstudioコードは読まない・流用しない)。**空間モーションパス(位置の2D曲線)は時間イージングとは別概念**で、v1コアには入れない(プラグイン領域/v1後半)
+- AM公式再確認で見つかったcurrent/context key、Overshoot操作、Curve Copy/Pasteの差分は[AMキーフレームグラフ観察台帳](../reviews/2026-07-19-am-keyframe-graph-observation.md)で追跡する。Bounce / Elastic / Cyclic(Sine) / Random / Steps / Elastic Stepsは`concept.md`で採用済みの**区間補間**として表示し、適用時もkeyframeの個数・時刻・値は不変、選択区間のoutgoing interpolationだけを1 command／1 Undoで変更する。M3モックから未決のparameter既定値や永続形式を発明しない
 - パネルレイアウトは利用者が分割、tab化、resize、表示/非表示、復帰を選べる。`egui_tiles`をruntime投影先の第一候補とするが、その`Tree`/`TileId`/serde形を正本へせず、Motolii所有の安定layout modelから投影する。panelの初期配置は組み込みpresetであり固定契約ではない
 
 ## デバイスとスレッドの規約(第2回レビュー#1/#2を受けた確定事項)

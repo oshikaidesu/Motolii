@@ -22,6 +22,7 @@
 4. 実装に着手する時: [implementation-ledger.md](implementation-ledger.md)(NOW/NEXT/WAIT)→ [specs/README.md](specs/README.md)(プロセスとステータス表)→ 対象`specs/M*.md`(タスク表と**末尾の「実装ガード」節**の両方を読む)
 5. プラグインを書く/量産させる時: [plugin-authoring.md](plugin-authoring.md)(LLM/人間共通の契約・禁止事項・型紙)
 6. 依存・参考リポジトリを調べる時: [references.md](references.md)(ライセンス区分つき。GPL系はコードを読むことすら禁止)
+7. M3の画面・モック・スクリーンショットに触る時: [M3 UI参照地図](ui-reference-map.md)で、規範、React prototype、legacy bridge、証拠、履歴を区別する
 
 ## ファイルマップ
 
@@ -49,6 +50,7 @@
 | [ui-score-model.md](ui-score-model.md) | 時間面UI構成モデル: 固定Laneを所有者にしない時間投影、選択コンテキスト、Group関係ラベル、回帰審判 | **設計決定**(2026-07-17、2026-07-22用語訂正。公開API・schemaの実装許可ではない) |
 | [ui-runtime-architecture.md](ui-runtime-architecture.md) | React/DOM chrome、native Stage/Timeline、headless interaction、React asset直接移管、1 surface/2 viewport/WebView islandsの責任境界 | **責任境界・surface topology決定**(React package移管可。platform受入とrenderer採否はG0-9実機spike待ち) |
 | [mocks/](mocks/README.md) | M3高密度メインUI(基準)+timeline/interaction/UI力学の比較モック台帳 | 視覚構成の基準モック |
+| [mocks-ui/](mocks-ui/README.md) | React/Viteで動く固定source asset。hash fixture、Storybook、Playwright、component map | **現行prototype / 製品直接移管のsource**（一部surfaceはlegacy bridge） |
 | [ui-reference-map.md](ui-reference-map.md) | M3 UI参照地図: 規範/prototype/採否台帳/移行互換/証拠/履歴の参照順位と、React移行の実状態・既知の未統一 | **運用正本**(2026-07-19。`codex/m3-mock-components`側から回収) |
 | [ui-concept.md](ui-concept.md) | UIコンセプト: 表現をすぐ画にする制作面、最初の結果、五本柱 | **設計方針**(2026-07-22に音楽メタファーを撤回。契約・M3ステータス変更なし) |
 | [implementation-ledger.md](implementation-ledger.md) | 現場向け実装進行台帳: M0〜M5のNOW/NEXT/WAIT、依存、Issue昇格順 | **日々の発注入口**(意味・完了条件は各specが正本。M3は段階発注可) |
@@ -68,6 +70,7 @@
 | [reviews/2026-07-16-m3-preflight-decisions.md](reviews/2026-07-16-m3-preflight-decisions.md) | M3着手前決定: input/状態寿命、plugin UI、性能測定、操作文法を固定し、見た目とresource実値を証拠待ちへ分離 | **設計決定**(G0-2/4/7完了。G0-3は2026-07-21再評価中) |
 | [reviews/2026-07-20-m3-keymap-codec-contract.md](reviews/2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON wire・原本保全・migration境界 | **決定**(2026-07-20) |
 | [reviews/2026-07-16-m3-ui-concept-to-tickets.md](reviews/2026-07-16-m3-ui-concept-to-tickets.md) | UIコンセプトを1 Issue=1 commitの実装粒へ分解。状態、入力、視覚、preview、共通操作、最初のEffect panelの依存と拒否条件 | **条件付き発注の正本**(U0b〜U4aの枝番。各行依存に従い発注可) |
+| [reviews/2026-07-19-am-keyframe-graph-observation.md](reviews/2026-07-19-am-keyframe-graph-observation.md) | AMのCurve Editor公式事実、Motoliiへの採否、現行React fixtureとの差分、legacy bridge停止線 | **観察・差分台帳**（React-native置換待ち） |
 | [reviews/2026-07-16-ui-update-forensics.md](reviews/2026-07-16-ui-update-forensics.md) | Figma/Ableton/AE/Blender/Godot/Home AssistantとLinux GUIの公式更新・fork履歴から、UI失敗、不安定platformの隔離、user拡張をMotoliiのcomponent審判へ変換 | **調査と採用審判**(AF-1〜17) |
 | [reviews/2026-07-17-non-video-workspace-asset-ui-prior-art.md](reviews/2026-07-17-non-video-workspace-asset-ui-prior-art.md) | 写真管理、3D／ゲーム制作、CAD、IDEから、外部素材探索、task別Workspace、自由配置、視線handoffを再調査。SourcesのTray／Drawer／Dock仮説とFocus Contract、比較モック審判へ翻訳 | **先例調査・翻訳仮説**(M3製品実装・公開APIの許可ではない) |
 | [reviews/2026-07-17-aviutl2-comment-voices.md](reviews/2026-07-17-aviutl2-comment-voices.md) | AviUtl2動画の公開コメント34件+表示返信から、軽さ/重さ、統合/分業、拡張/管理、移行/旧資産等の統一できない一次声を保存 | **一次声の観察台帳**(反対側レビュー前。設計根拠ではない) |
