@@ -4,6 +4,8 @@
 正本の前提: [Explicit Definition/Use](2026-07-15-relative-scope-duplicator-decision.md)、[先例境界監査](2026-07-15-prior-art-complaint-boundary-audit.md)、[実装準備台帳](2026-07-15-implementation-readiness-ledger.md)。  
 本書は共有recipeの**削除・切断・ローカル化・orphan**だけを固定する。Product schema/API・D1l実装・Timeline UI・Composite Set・Backdropは非目標。
 
+歴史注記（2026-07-23）: cutoff全3版の初回lifecycle決定、Copy Local内部ID／予約区間追補、journal／Undo追補との再接続は[Unit 4J回収](2026-07-23-historical-shared-effect-lifecycle-lineage-recovery.md)で処分した。D1l/D3eは現在完了済みだが、Timeline接続UIのU2gは別taskとして`WAIT`である。
+
 ## 0. 判定語
 
 | 語 | 意味 |
