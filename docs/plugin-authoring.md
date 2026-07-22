@@ -197,7 +197,7 @@ ParamDriverは`build_track`で`DataTrack`を返すだけ。ピクセルに触ら
 - 評価コンテキストのinstance情報(F-7) — 現行予約`InstanceIndex(i,count)`をそのまま恒久化せず、M5-P0I/P7で`stable InstanceId + index/count + nested depth + position`へ解凍する。乱数identityにindexを使わず、`user_seed + InstanceId + channel`のPCG32だけを許可。P7前は`RenderCtx::instance`を拡張しない
 - サムネイル画像フィールド(F-8、口だけ将来)
 - ハンドルID化(A-3: 現状は`&wgpu::Texture`直渡し。内部更新閉じ込めは後続)
-- **ホスト所有PipelineCache**(F-10実証済み) / **GpuAssetCache結線はM2**。`ValueType::AssetRef`は予約済み
+- **ホスト所有PipelineCache**(F-10実証済み)。`ValueType::AssetRef`とDocument `AssetId`結線は実装済み。**GpuAssetCache／Importerは未実装・未凍結**で、M4/Vism/実素材fixtureを通すまで作者APIとして使えない([歴史回収](reviews/2026-07-23-historical-plugin-resource-runtime-lineage-recovery.md))
 - **時間参照 `CompLookbehind`**(F-11) — 型を予約([plugin-resources.md](plugin-resources.md)§6)。**配線口は`RenderCtx::lookbehind`(M2E-7)**。実装はM4後。**前フレームを`&self`に覚えて自作するのは§3-3違反で恒久却下** — 現時点で書けるのは現在フレームのみの空間グリッチまで
 - **テキスト組版**(F-6) — コアは `itemize` / `shape(軸・クラスタ対応表)` / `draw` のみ([M5-P6](specs/M5-3d-and-post.md))。一発`draw_text`やシェーピング自作は禁止。縦書き・ルビ・行組・歌詞タイミングはプラグインの領分
 - `NodeDesc`の時間フットプリント宣言(前後フレーム/サブフレームサンプル。F-12) — 型`TemporalFootprint`と**`RenderCtx::temporal_footprint`口はM2E-7で予約**。窓テクスチャ解決はホスト側(未配線)

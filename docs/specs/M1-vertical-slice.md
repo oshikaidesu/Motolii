@@ -15,7 +15,7 @@
 | T4 | **完了**: `motolii-testkit`。RGBAゴールデン比較(最大誤差/平均誤差/差分RGBA生成)を共通化し、`motolii-gpu`のYUVゴールデンテストをtestkit経由に置き換え済み。参照/actual/diffのPNG保存と`OC_TESTKIT_ARTIFACT_DIR`によるゴールデン失敗時の差分出力を追加 |
 | T6 | **完了**: `motolii-eval`(Value/KeyframeTrack/Interp/cubic_bezier_ease/DataTrack/ParamSource/DataTracks)。補間・イージング・DataTrack参照のテスト済み |
 | T7 | **完了**: `motolii-nodes`。正準座標→`ViewportTransform`集約。`FilterPlugin`/`OverlayNode`(矩形・円・線)/`CompositeNode`(normal/add/multiply)をGPUゴールデン化。Vello統合は凍結ゲート後(R8採用済み) |
-| T12 | **完了(所見1+2)**: レジストリディスパッチ(`RenderStep::Plugin`)+ホスト所有`PipelineCache`+参照`TintFilter`で再コンパイルなし実証。`AssetRef`予約済み。GpuAssetCache結線はM2 |
+| T12 | **完了(所見1+2)**: レジストリディスパッチ(`RenderStep::Plugin`)+ホスト所有`PipelineCache`+参照`TintFilter`で再コンパイルなし実証。`AssetRef`予約済み（Document結線も後続M2で完了）。GpuAssetCache/ImporterはM2完了範囲ではなく未実装・未凍結 |
 | T5 | **後方移動**: GPU色解析はプラグイン/解析拡張領域であり、M1完了条件から外す。M1では合成DataTrackまたはParamDriver参照プラグインで「値列がパラメータを駆動する」境界だけを検証する |
 | T11 | **完了(2026-07-10)**: 実素材(1080p/4K)で書き出し+GUIプレビュー(`spikes/r9-preview`)+主観品質OK。B-4はCI合成素材+手元実素材(`qp0: false`書き出し)で確認 |
 | T8 | **完了**: `RenderStep::VideoSource`+グラフ合流(R4)。中間RTは`RenderSession`ピンポン2枚でフレーム間再利用。Solid単色もセッションキャッシュ |
