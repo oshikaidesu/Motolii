@@ -143,6 +143,24 @@ CompositionControllerは正規経路にしない。通常のwindowed child WebVi
 時だけCompositionController、別window、最後にCEF OSRの順で再審判する。証拠と停止線は
 [surface topology決定](reviews/2026-07-21-ui-surface-topology-decision.md)を正とする。
 
+### 4.1 built-in WebView Hostの再入場条件
+
+[historical React / WebView lineage回収](reviews/2026-07-23-historical-react-webview-lineage-recovery.md)で、
+現行treeから失われていたbuilt-in Host foundationの不変条件を再採択した。これはproduct-owned React面を載せる
+bundled first-party Host moduleだけの条件であり、community custom UIや公開plugin runtimeを許可しない。
+
+- R0〜R6の固定source直接移管とmock consumer化を先行し、docs、mock、dev server、diagnostic routeをrelease sourceにしない
+- productionはnetwork 0の決定的offline bundleと閉じたasset manifestから起動し、CDN、localhost、HMR、file URL、未掲載assetを拒否する
+- Host所有のclosed typed schemaからWeb側型とconformance vectorを生成し、role、direction、instance epoch、sequence、size/depthをfail closedで検査する
+- IPC callbackはdecode、session gate、bounded event-loop inboxへのenqueueだけを行い、Document/D2へreentrant mutationしない
+- Host coordinatorがlayout/instance epoch、focus、reload、process lost、bounded retryを所有し、再生成時は最新Host snapshotから再投影する
+- navigation、new window、download、form、外部network、任意evalは既定denyとし、必要能力は後続のtyped capabilityで個別追加する
+
+旧H1 exact contractのpackage、dependency version、4 role、wire field、byte/depth/queue上限、custom schemeは現在の
+実装契約ではない。current source assetとprojection / intent、platform adapterが固まった後にclosed contractを
+再作成し、現行依存と一次資料で値を再固定する。React package成立だけでWebView/native統合、platform受入、
+community sandboxを合格にしない。
+
 ## 5. 決定済みと未決の境界
 
 ### 決定済み
