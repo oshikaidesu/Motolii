@@ -148,6 +148,7 @@
 | [2026-07-23-historical-react-webview-lineage-recovery.md](2026-07-23-historical-react-webview-lineage-recovery.md) | historical-only React/WebView文書を処分し、built-in Host不変条件と四面同期縦切りを現行境界へ再採択 |
 | [2026-07-23-historical-d2-selection-timeline-lineage-recovery.md](2026-07-23-historical-d2-selection-timeline-lineage-recovery.md) | historical-only Place/Add Key/selection/headless Timeline契約を採択済み・未実装follow-upへ回収 |
 | [2026-07-23-historical-core-plugin-boundary-lineage-recovery.md](2026-07-23-historical-core-plugin-boundary-lineage-recovery.md) | 小さなCore、M1 plugin境界、M2締結撤回の12履歴blobを処分し、crate／Host module／plugin／provenanceの混線を解消 |
+| [2026-07-23-historical-plugin-ui-lineage-recovery.md](2026-07-23-historical-plugin-ui-lineage-recovery.md) | plugin UI比較とv1境界の15履歴blobを処分し、自動panel未実装、G0-3/GAP-13停止線、宣言語彙の再入場条件を整理 |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |
 | [2026-07-21-m3-u1a-1-static-viewport-contract.md](2026-07-21-m3-u1a-1-static-viewport-contract.md) | U1a-1 静止viewport実装前契約 |

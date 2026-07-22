@@ -58,7 +58,7 @@ VSM-A0I-1〜3でContract Catalog、Documentのprepared resolution、graph／expo
 
 ## 1.5. UIは書かない(v1)
 
-**現在のプラグイン公開契約にカスタムUIはまだ無い。** ホストが`NodeDesc.params`からプロパティパネルを自動生成する(M3 U4)。plugin所有egui/native/Web code・wgpu描画panel・独自widgetを書いてもホストはロードしない。標準製品surfaceのnative／React選定はplugin分類と独立であり、custom UIのruntime・sandbox・互換・配布は[軸分離決定](reviews/2026-07-22-m3-surface-extension-axis-separation.md)に従ってG0-3 / GAP-13で比較する。本書からAPIを推測しない。
+**現在のプラグイン公開契約にカスタムUIはまだ無い。** `NodeDesc.params`からHost標準parameter panelを生成することはM3 U4aの必須fallbackとして決定済みだが、製品接続は未実装である。plugin所有egui/native/Web code・wgpu描画panel・独自widgetを書いてもホストはロードしない。標準製品surfaceのnative／React選定はplugin分類と独立であり、custom UIのruntime・sandbox・互換・配布は[軸分離決定](reviews/2026-07-22-m3-surface-extension-axis-separation.md)に従ってG0-3 / GAP-13で比較する。本書からAPIを推測しない。
 
 - パラメータは`ParamDef`で足りる粒度に抑える(スライダー/カラー等の自動生成で操作可能であること)
 - 将来カスタムUIが解凍されても、**自動生成パネルだけで全パラメータを操作できること**が不変条件
