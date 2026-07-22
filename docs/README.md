@@ -37,6 +37,7 @@
 | [reviews/2026-07-23-historical-frame-desc-shared-types-lineage-recovery.md](reviews/2026-07-23-historical-frame-desc-shared-types-lineage-recovery.md) | M1全28版からFrameDesc／TextureRefの生存意味、歴史的signature、現行安全性gapを分離 | **Unit 3C縮小採用／GAP-17未実装** |
 | [reviews/2026-07-23-historical-public-capability-provenance-lineage-recovery.md](reviews/2026-07-23-historical-public-capability-provenance-lineage-recovery.md) | A1公開crate、surface/provenance、creator連続体からbundled first-party source実証と未成立third-party runtimeを分離 | **Unit 3B-runtime-B2-A縮小採用** |
 | [reviews/2026-07-23-historical-vism-kit-distribution-lineage-recovery.md](reviews/2026-07-23-historical-vism-kit-distribution-lineage-recovery.md) | Vism／Kit／実装計画29版を処分し、構成、導入集合、再現lock、catalog、hostless配布を分離 | **Unit 9A縮小採用** |
+| [reviews/2026-07-23-historical-plugin-ecosystem-lineage-recovery.md](reviews/2026-07-23-historical-plugin-ecosystem-lineage-recovery.md) | 旧plugin ecosystemの未処分11版からcommunity politics、User library、look/primitiveと危険な旧schemaを分離 | **Unit 9B縮小採用** |
 | [plugin-resources.md](plugin-resources.md) | プラグインのリソースライフサイクル・アセット境界・時間参照(F-10/F-11) | **縮小採用**(PipelineCache/AssetRef/予約型は実装済み、GpuAssetCache/Importer/Feedback実行は未実装・未凍結) |
 | [references.md](references.md) | 依存候補・参考リポジトリ(ライセンス区分) | 現行 |
 | [ae-pain-points.md](ae-pain-points.md) | AEユーザー不満の体系化+我々の解決タグ(プラグイン窓口仮説の検証) | 現行 |
@@ -46,6 +47,7 @@
 | [extensible-core-model.md](extensible-core-model.md) | 小さなコアと探索可能な拡張: Core kernel／bundled Host module／first-party／third-partyの分界、壊れない探索、編集pluginの責任寿命、Documentを増やさないアドレス可能な個体、表現domainを列挙しない能力境界、性能上限を焼かない原則 | **設計原則**(2026-07-17。`motolii-core` crateやUI runtimeの分類表ではなく、未凍結APIの実装許可でもない) |
 | [vism-package-concept.md](vism-package-concept.md) | Vism (`.vism`): Project・内部plugin kind・Host UIから分離して保存/共有/再利用する映像表現の配布単位。Motoliiは最初のHost、container/loaderは未決 | **コンセプト・名称・拡張子決定／ファイル形式未決**(2026-07-17。v1実装許可ではない) |
 | [vism-kit-model.md](vism-kit-model.md) | Core=文法、Vism=小さな表現、Kit=provider選択と型付き接続、Project=作品。BPM/Beatを例に、Vism直接依存を避けるmaterialize構成とfork能力の境界を定義 | **設計原則決定／schema・形式未決**(2026-07-17) |
+| [community-distribution-model.md](community-distribution-model.md) | 中央人気／dedupeを持たず、分散地図、User library、Plugin Set、Project Lockで多数作者と複数界隈をつなぐcommunity運用 | **運用・ガバナンス原則決定／protocol・schema・製品UI未決**(2026-07-23) |
 | [generative-user-boundary.md](generative-user-boundary.md) | ジェネラティブ表現とユーザー拡張の境界: Shape/SVG、p5.js型入力、Materialize/Live/Feedback/Simulation、Host責務 | **設計決定**(2026-07-15。未凍結runtimeの実装許可ではない) |
 | [ui-interaction-language.md](ui-interaction-language.md) | M3のUI操作言語: 既知の外殻、可視の因果、Parameter Panelを表現のホームにするUI力学、共通component契約、Simple/Advanced、漏れ実装の拒否 | **設計決定**(2026-07-16、Parameter Panel力学を2026-07-18追補) |
 | [ui-visual-language.md](ui-visual-language.md) | M3の視覚言語: 高密度一覧、意味色、既存UIへの馴染み、contrast、token規約、参照範囲 | 設計基準(具体token値はM3視覚確定(G0-6)待ち) |

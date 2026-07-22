@@ -1,6 +1,6 @@
 # 「負けた仕様」の価値回収 — 系譜・理由・再入場条件を失わない処分法（2026-07-23）
 
-状態: **決定**（知識の処分方法と本書の個別判定。Plugin Set / Plugin Lockの製品仕様は比較中）
+状態: **決定**（知識の処分方法と本書の個別判定。Plugin Set / Project Lockの製品仕様は比較中）
 
 対象: 初期設計、後続で一般化・縮小・延期・棄却された案、現行正本から消えた配布構想。
 
@@ -23,7 +23,7 @@
 今回の重要な判定は二つである。
 
 - **single cameraと2.5Dは消えた仕様ではない。** single cameraは「全Compositionに単一`CompCamera`」、2.5Dは「2D/3Dを分けない単一XYZ世界と、Z遮蔽ポリシーの分離」へ一般化された。旧語を製品modeとして復活させず、現行設計の系譜として回収する。
-- **旧plugin ecosystemのKitは現行Vism Kitと別概念であり、価値が未回収だった。** 旧名を戻さず、共有する導入環境を仮称`Plugin Set`、作品の厳密再現を`Plugin Lock`として分離して再入場候補へ戻す。
+- **旧plugin ecosystemのKitは現行Vism Kitと別概念であり、価値が未回収だった。** 旧名を戻さず、共有する導入環境を仮称`Plugin Set`、作品の厳密再現を`Project Lock`として分離して再入場候補へ戻す。
 
 ## 2. 分別規則
 
@@ -36,7 +36,7 @@
 | 構文は負けたが不変条件は勝った | 現行正本への系譜を残す | `single camera` → 単一`CompCamera` |
 | 製品modeは負けたが世界モデルは勝った | 一般化後の規範を優先する | `2.5D mode` → 単一XYZ世界 + 遮蔽ポリシー |
 | 実装技術は負けたが責任分離は勝った | 技術名をarchive、境界理由を保持 | Tauri固定 → React/native責任境界 |
-| 名前が別概念へ再利用された | 旧名を戻さず役割を改名する | 旧Kit → Plugin Set / Lock、現行KitはVism合成 |
+| 名前が別概念へ再利用された | 旧名を戻さず役割を改名する | 旧Kit → Plugin Set / Project Lock、現行KitはVism合成 |
 | 必要は残るが前提が足りない | 再入場条件つき比較候補にする | hostless discovery / install / set共有 |
 
 ### 2.2 回収時に必須の情報
@@ -79,7 +79,7 @@
 | AviUtl2を土台として魔改造する | **負例** | UIやC ABIの先例は参照できるが、解析→生成、3D、cache、API変動をMotolii側で制御できないためHost依存案は戻さない | 本書の歴史出典。現行のAviUtl系観察とは別 |
 | vector-first / paper.jsを合成coreにする | **負例 + 成立理由** | vectorは重要な素材・上流表現だが、動画と3Dを合成する最終coreを置き換えない。特定JS library採用はarchiveのみ | [concept.md](../concept.md) |
 | GitHub等を作者正本とするhostlessな発見地図 | **再入場候補** | 価値を回収する。Motoliiが中央配布・決済・人気集計を所有しない原則は候補として維持するが、tap schemaやinstall方式は未決 | §4 |
-| 作品のplugin再現lockと、人へ渡すplugin一式 | **再入場候補** | 旧Kit名は復活させない。`Plugin Lock`と`Plugin Set`へ役割を分け、現行Vism Kitとの衝突を解消する | §4 |
+| 作品のplugin再現lockと、人へ渡すplugin一式 | **再入場候補** | 旧Kit名は復活させない。`Project Lock`と`Plugin Set`へ役割を分け、現行Vism Kitとの衝突を解消する | §4 |
 | text authority + verify / repair / doctor | **再入場候補 + 成立理由** | cacheや内部DBを唯一の正本にしない回復可能性は、creator/developer連続体を支える価値として回収する。CLI名とhash算法は未決 | §4 |
 
 ## 4. 回収する配布構想 — Vism Kitと混ぜない
@@ -90,9 +90,9 @@
 |---|---|---|---|
 | **Vism Kit** | Vism、型付き接続、provider、初期値、素材要求 | Projectへ表現をmaterializeする時 | 現行設計原則。名称維持 |
 | **Plugin Set**（仮称） | ある制作環境で使うplugin/packageの選択集合と紹介metadata | 他者の環境を「同じ入口」へ揃える時 | 今回再回収した比較候補 |
-| **Plugin Lock**（仮称） | Projectが実際に要求するidentity、version、source/contentの固定 | Projectを再現・診断する時 | 今回再回収した比較候補 |
+| **Project Lock**（仮称、旧Plugin Lock） | Projectが実際に要求するidentity、version、source/contentの固定 | Projectを再現・診断する時 | 今回再回収した比較候補 |
 
-Vism Kitは作品内の表現構成、Plugin Set / LockはHost環境の導入・再現である。一つのfileやschemaへ統合する決定ではない。
+Vism Kitは作品内の表現構成、Plugin Set / Project LockはHost環境の導入・再現である。一つのfileやschemaへ統合する決定ではない。
 
 ### 4.2 生き残らせる価値
 
@@ -102,7 +102,7 @@ Vism Kitは作品内の表現構成、Plugin Set / LockはHost環境の導入・
 2. **中央サーバを前提にしない**: 複数の分散indexを購読・マージできる。公開名称`tap`、URL慣例、署名方式、manifestはまだ決めない。
 3. **人気を正本にしない**: download数、trend、公式ランキングをHostが集計しない。地図はidentity、kind、tag、更新情報、sourceを示し、推薦の時間軸は外部記事や個人indexへ置ける。
 4. **伝播単位を個別packageだけにしない**: creatorが使う一式をPlugin Setとして渡し、受け手は不足分と外部購入が必要なものを確認して揃えられる。
-5. **作品再現と推薦を分ける**: ProjectのPlugin Lockは再現のため、Plugin Setは人に入口を渡すために使う。
+5. **作品再現と推薦を分ける**: Project Lockは再現のため、Plugin Setは人に入口を渡すために使う。
 6. **導入状態を観測・修復できる**: source/lock/manifest等のtext authorityから導入状態を再計算でき、cacheは破棄可能にする。失敗を隠さずverify、repair、doctor相当の診断面を持つ。
 7. **動的loaderと発見地図を同一タスクにしない**: loaderが未完成でも、first-party・静的登録・source一覧の発見と作者導線は独立して価値を持ち得る。
 
@@ -110,14 +110,14 @@ Vism Kitは作品内の表現構成、Plugin Set / LockはHost環境の導入・
 
 ### 4.3 再入場ゲート
 
-Plugin Set / Lock、分散index、install UIの仕様化は、次を順に満たした後に行う。
+Plugin Set / Project Lock、分散index、install UIの仕様化は、次を順に満たした後に行う。
 
 1. Vism/package identity、version、Host capability、provenanceの語彙が決まる。
 2. source、artifact、build、install、runtime loadを別状態として定義する。
 3. Lockが何を固定するか（source revision、content hash、artifact、target、commercial local package）をfixtureで比較する。
 4. 欠落、改竄、非互換、untrusted code、permission、撤去、作者URL消失のfailure matrixを作る。
 5. Project openがnetwork、install、build、任意code実行を暗黙に起こさない[VSM-A0Dの既決境界](2026-07-17-vism-a0d-contract-migration-ownership-decision.md)を維持する。
-6. Vism KitとPlugin Set / Lockが同じ名称、拡張子、parser、Document fieldを奪い合わない。
+6. Vism KitとPlugin Set / Project Lockが同じ名称、拡張子、parser、Document fieldを奪い合わない。
 7. 中央serverなしでの更新・失効・署名・mirror・商用導線を実fixtureで反証する。
 
 いずれかが未決なら、公開manifest、lock schema、拡張子、tap schema、install APIを実装しない。
