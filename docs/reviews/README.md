@@ -152,6 +152,7 @@
 | [2026-07-23-historical-plugin-resource-runtime-lineage-recovery.md](2026-07-23-historical-plugin-resource-runtime-lineage-recovery.md) | plugin resource/VSM-A0の5履歴blobを処分し、PipelineCache/AssetRef実装済みとGpuAssetCache/Importer/Feedback未実装を分離 |
 | [2026-07-23-historical-plugin-authoring-lineage-recovery.md](2026-07-23-historical-plugin-authoring-lineage-recovery.md) | plugin authoring全41版を処分し、static first-party実証、未実装の外部crate scaffold、native/WASM/Vism配布停止線を分離 |
 | [2026-07-23-historical-frame-desc-shared-types-lineage-recovery.md](2026-07-23-historical-frame-desc-shared-types-lineage-recovery.md) | M1全28版のFrameDesc／TextureRef共有型lineageを処分し、6意味の凍結、歴史的trait skeleton、現行constructor/serde/error gapを分離 |
+| [2026-07-23-historical-public-capability-provenance-lineage-recovery.md](2026-07-23-historical-public-capability-provenance-lineage-recovery.md) | A1公開crate全9版とsurface/provenance・creator連続体を処分し、bundled first-party source実証と未成立third-party runtimeを分離 |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |
 | [2026-07-21-m3-u1a-1-static-viewport-contract.md](2026-07-21-m3-u1a-1-static-viewport-contract.md) | U1a-1 静止viewport実装前契約 |

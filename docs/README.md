@@ -35,6 +35,7 @@
 | [pitfalls-and-roadmap.md](pitfalls-and-roadmap.md) | 落とし穴カタログ+ロードマップ+凍結ゲート | 現行 |
 | [plugin-authoring.md](plugin-authoring.md) | プラグイン作者向け規約(LLM/人間共通。static first-party公開façadeと未実装distributionを分離) | 現行(2026-07-23歴史回収で状態訂正) |
 | [reviews/2026-07-23-historical-frame-desc-shared-types-lineage-recovery.md](reviews/2026-07-23-historical-frame-desc-shared-types-lineage-recovery.md) | M1全28版からFrameDesc／TextureRefの生存意味、歴史的signature、現行安全性gapを分離 | **Unit 3C縮小採用／GAP-17未実装** |
+| [reviews/2026-07-23-historical-public-capability-provenance-lineage-recovery.md](reviews/2026-07-23-historical-public-capability-provenance-lineage-recovery.md) | A1公開crate、surface/provenance、creator連続体からbundled first-party source実証と未成立third-party runtimeを分離 | **Unit 3B-runtime-B2-A縮小採用** |
 | [plugin-resources.md](plugin-resources.md) | プラグインのリソースライフサイクル・アセット境界・時間参照(F-10/F-11) | **縮小採用**(PipelineCache/AssetRef/予約型は実装済み、GpuAssetCache/Importer/Feedback実行は未実装・未凍結) |
 | [references.md](references.md) | 依存候補・参考リポジトリ(ライセンス区分) | 現行 |
 | [ae-pain-points.md](ae-pain-points.md) | AEユーザー不満の体系化+我々の解決タグ(プラグイン窓口仮説の検証) | 現行 |
