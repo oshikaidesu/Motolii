@@ -2,7 +2,7 @@
 
 Status: **Implementation landed** (D1m, branch `cursor/d1m-project-session`). D1d's corruption recovery remains valid on project-scoped sidecars with inter-process session ownership.
 
-> **2026-07-18 supplement ([VSM-A0S](2026-07-17-vism-a0s-contract-catalog-spec.md) alignment)**: The save/open ownership rows below are amended so D1m implementation cannot invent a second product open path or keep root-public path mutation. Code is not updated by this supplement.
+> **2026-07-18 supplement ([VSM-A0S](2026-07-17-vism-a0s-contract-catalog-spec.md) alignment)**: The save/open ownership rows below were amended before D1m implementation so it could not invent a second product open path or keep root-public path mutation. The supplement itself was docs-only; the current D1m implementation now follows it.
 
 ## Finding
 
@@ -128,7 +128,7 @@ Align with [VSM-A0S §11](2026-07-17-vism-a0s-contract-catalog-spec.md): catalog
 ### Unchanged
 
 - Sidecar family, lock semantics, legacy migration table, and D1d recovery semantics.
-- No code, public API, schema, or test changes in this supplement.
+- The 2026-07-18 supplement itself changed no code, public API, schema, or tests. D1m was subsequently implemented against this amended ownership contract.
 
 ## Legacy sidecar migration diagnostic report (2026-07-18)
 
@@ -136,10 +136,10 @@ Status: **Implemented** (D1m diagnostic report, branch `cursor/d1m-project-sessi
 
 ### Signature
 
-Normative for future D1m implementation — docs only in this supplement:
+Implemented D1m signature. This was normative, docs-only text when the supplement was authored:
 
 ```rust
-// normative for future D1m impl — docs only in this order
+// implemented by D1m; this exact shape was fixed by the earlier docs-only supplement
 fn migrate_legacy_sidecar(&mut self) -> Result<LegacySidecarMigrationReport, SessionError>;
 
 struct LegacySidecarMigrationReport {
