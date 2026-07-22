@@ -11,7 +11,7 @@
 - **何を作るか**: MV(ミュージックビデオ)制作のための、モーショングラフィック指向のコンポジットツール。AEの重さへの構造的な回答。3〜5分の動画を書き出せたら完成
 - **長期の北極星**: 映像表現を、時刻・入力・型付きparameterから決まる再利用可能な単位として実行・保存・配布できる共通環境にする。制作者と開発者を固定身分にせず、利用→調整→構成→inspection→fork→authoring→共有を一つの経路にする。多数のcreator-authorが公開境界の上で独立して表現を増やせることを成長力とする。「映像制作におけるVST」はHostと拡張単位を分ける構造の類比に限り、音楽中心の製品像やDAW化は目標ではない([concept.md](concept.md#長期の北極星-映像表現を実行再利用配布できる単位にする)、[連続体決定](reviews/2026-07-22-creator-developer-continuum-decision.md))
 - **技術スタック**: Rust + wgpu(レンダコア、VRAM常駐) / ffmpegサイドカープロセス / Cargo workspaceは確定。UIは[React / WebView chrome + native Rust/wgpu Stage/Timeline](ui-runtime-architecture.md)へ責任分割し、通常windowは[1 top-level wgpu Surface + 2 native viewport + opaque child WebView islands](reviews/2026-07-21-ui-surface-topology-decision.md)へ固定した。native操作はrenderer非依存のheadless kernelへ置く。OS window、surface runtime、Core／Host module／plugin、first／third-partyの信頼境界は[軸分離決定](reviews/2026-07-22-m3-surface-extension-axis-separation.md)に従って別判定する
-- **開発方式**: 仕様書駆動の並列AIエージェント開発。[M2基盤再締結](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3はU0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4までmain到達済み。G0-9中も正本化したnative headless layout/hit-test等は進行可だが、WebView/native製品統合はplatform合格まで停止する。plugin UI公開契約はG0-3 / GAP-13の別審判まで停止する
+- **開発方式**: 仕様書駆動の並列AIエージェント開発。[M2基盤再締結](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。歴史から再採択したD1n external revisionは独立follow-up・未実装で、external change検出/cloud-safeは未達。M3はU0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4までmain到達済み。G0-9中も正本化したnative headless layout/hit-test等は進行可だが、WebView/native製品統合はplatform合格まで停止する。plugin UI公開契約はG0-3 / GAP-13の別審判まで停止する
 - **設計目標の代表値**: 1080p動画レイヤー40本同時で破綻しない / プロセス強制終了しても編集を失わない(コマンドジャーナル) / フレーム並列(マルチコア)を構造で保証
 
 ## 読む順序(初見向け)

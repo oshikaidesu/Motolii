@@ -84,7 +84,7 @@ Repair and recovery **mutation** require `ProjectSession::acquire` or `open` fir
 
 The in-process rule remains unchanged: only the editing thread owns `&mut ProjectSession` and mutates `Document`; workers read `Arc<Document>`. The OS lock adds inter-process ownership and does not replace the single-writer rule.
 
-Cloud-sync software can ignore advisory locks. D1m therefore prevents cooperating Motolii processes and path aliases from racing, but does not claim to solve remote synchronization. The existing external-change warning remains; compare-before-replace conflict handling is a separate D1n decision if the M2 follow-up review proves the current fingerprint checks insufficient.
+Cloud-sync software can ignore advisory locks. D1m therefore prevents cooperating Motolii processes and path aliases from racing, but does not claim to solve remote synchronization. 現行コード確認で保存直前のdisk-family比較が存在しないことを再確認したため、compare-before-mutation conflict handlingは[historical foundation回収 §3](2026-07-23-historical-foundation-lineage-recovery.md#3-d1n-external-revision再採択)でD1nとして再採択した。D1m完了をD1n完了またはcloud-safe保証と読まない。
 
 ## D1m completion judgment
 

@@ -144,6 +144,7 @@
 | [2026-07-22-ui-music-metaphor-retirement.md](2026-07-22-ui-music-metaphor-retirement.md) | 「演奏・譜面台・楽曲が背骨」を製品全体の比喩とする仮説を撤回し、音声機能と製品存在論を分離 |
 | [2026-07-23-losing-specification-value-recovery.md](2026-07-23-losing-specification-value-recovery.md) | 「負けた仕様」を主張単位で分類し、single camera／2.5Dの系譜と旧KitのPlugin Set／Lock価値を回収 |
 | [2026-07-23-historical-value-recovery-coverage-ledger.md](2026-07-23-historical-value-recovery-coverage-ledger.md) | 全refのMarkdown履歴を固定manifestとblob receiptで単位別回収するcoverage台帳 |
+| [2026-07-23-historical-foundation-lineage-recovery.md](2026-07-23-historical-foundation-lineage-recovery.md) | historical-only基盤文書を処分し、D1n external revisionを再採択、multi-key Graphを未採択候補へ訂正 |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |
 | [2026-07-21-m3-u1a-1-static-viewport-contract.md](2026-07-21-m3-u1a-1-static-viewport-contract.md) | U1a-1 静止viewport実装前契約 |

@@ -60,7 +60,7 @@ React所有面の製品実装は[直接移管契約](reviews/2026-07-22-m3-react
 | Effect Inspector・自動parameter panel | U4a | 基盤依存待ち |
 | packed Timeline・Group展開・選択 | U3a/U3b/U2h | 後続 |
 | Automation展開・Key Tools | P56/P60+U3系 | 一部prototype判断のまま |
-| Interval Easing・multi-key Graph View | U4b/U4e | 正式タスク化済み、後続 |
+| Interval Easing・multi-key Graph View | U4b / 未採択候補 | 区間EasingだけがU4bとして正式task。multi-key Graph Viewは現行M3にU4eが無く、[歴史回収](reviews/2026-07-23-historical-foundation-lineage-recovery.md#4-multi-key-graph-viewの再入場条件)の再入場条件待ち |
 | Effects Browser | U4d | 正式タスク化済み |
 | Media Browser・folder・Tag・複数選択 | U6 | 正式タスク化済み |
 | Create Browser・provider・generator | U9/Vism/Create境界 | 一部未統一 |
