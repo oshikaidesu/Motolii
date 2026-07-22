@@ -50,6 +50,7 @@
 | [2026-07-12-d1-spec-holes-prior-art.md](2026-07-12-d1-spec-holes-prior-art.md) | D1スキーマ未決点の先例調査メモ(2026-07-12) |
 | [2026-07-12-m2-permanence-prevention.md](2026-07-12-m2-permanence-prevention.md) | M2恒久焼き込みの予防(2026-07-12) |
 | [2026-07-23-historical-permanence-prevention-lineage-recovery.md](2026-07-23-historical-permanence-prevention-lineage-recovery.md) | Unit 4B — GR-PV予防5手全9版とstale branch回帰の処分 |
+| [2026-07-23-historical-d1-spec-holes-lineage-recovery.md](2026-07-23-historical-d1-spec-holes-lineage-recovery.md) | Unit 4C — D1仕様穴・TimeMap・Generator先例全12版の処分 |
 | [2026-07-12-pathop-ae-cavalry-comparison.md](2026-07-12-pathop-ae-cavalry-comparison.md) | PathOp語彙比較: AE/Lottie × Cavalry(2026-07-12) |
 | [2026-07-12-plugin-ui-v1-boundary.md](2026-07-12-plugin-ui-v1-boundary.md) | 決定: v1プラグインUI境界は`NodeDesc`自動生成のみ(2026-07-12) |
 | [2026-07-12-prior-art-gap-counter-review.md](2026-07-12-prior-art-gap-counter-review.md) | 反対側レビュー: M3/プラグイン生態系の先例所見を最小化する(2026-07-12) |
