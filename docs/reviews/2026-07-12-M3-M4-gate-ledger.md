@@ -8,6 +8,18 @@
 > **2026-07-15更新**: U1f透過StageをM4-K0最適化から分離。modifier+drag U2f、Shared Effect schema/eval D1l/D3e、常時from/in線U2gを追加した。M3側は[M3仕様](../specs/M3-ui-integration.md)を正本とする。静止preview(U1a)はD3、Transport UI(U5)だけがD5依存。
 >
 > **2026-07-16更新**: K7をgroup freezeのK7a〜K7cへ分割し、MVの通し確認を担う全曲Draft coverageをK8a/K8bとして追加した。K8の永続cache key・disk hard budget・再オープン再利用もM4ゲート対象とする。
+>
+> **2026-07-23現行再照合**: 第一コード監査の全2版を[Unit 4C-3](2026-07-23-historical-first-code-audit-lineage-recovery.md)で現行コードへ再照合した。下表は「2026-07-12に未完だったもの」をそのまま意味せず、各行の明示的な完了表示と本注記を併読する。残件をM2未完へ巻き戻さず、公開third-party runtime、M4 cache、M5 color/Velloという実際の解凍先で閉じる。
+
+### 2026-07-23 status差分
+
+| 状態 | ID | 現行事実 |
+|---|---|---|
+| **実装済み** | PB-1〜PB-5、PB-9、TM-1〜TM-5、GR-2、GR-5〜GR-7、SC-1〜SC-3、CQ-1、CQ-3〜CQ-5、EN-1〜EN-5、LG-1 | RenderCtx、typed params／registry purity／scaffold、Document時刻駆動export、GPU origin/health、FrameReader cancel、schema境界、camera/Quality、保護test基盤をコード・試験で確認 |
+| **部分** | PB-6、PB-8、LG-2 | 宣言的migrationは成立したがdesc schema/version snapshotは無い。`ViewportTransform`のtyped Resultとplugin公開面panic走査は成立したがcategoryは自由文字列。YUV保持契約はcommentだけ、Encoderのfinish忘れ警告は無い |
+| **未実装／予定先維持** | PB-7、PB-10、TM-6、TM-7、GR-1、GR-3、GR-4、CQ-2、CQ-6、CQ-7、CQ-8 | format付きpipeline key、動的ID寿命、raw duration、正準Value hash/区間query、refcount pool、VRAM生成口、1-frame encoder、Rec709変換点、PAR、GPU premul adapter、render desc対応表が現行コードに無い |
+
+PB-6〜PB-8/PB-10は公開third-party runtimeを実装した証拠にせず、Unit 3Bのruntime停止線と接続する。GR/TM残件はM4、CQ残件はM4/M5の既存解凍まで公開型・serde・pixel期待値を先に変えない。上表は新しい一括実装ticketではない。
 
 ## これは何か
 
