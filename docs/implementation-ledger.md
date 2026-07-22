@@ -39,7 +39,7 @@
 | M0 | `DONE` | spike完了 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み |
 | M2 | **基盤再締結済み / D1n follow-up pending** | D1l、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。D5は骨格到達・統合審判pending。歴史から再採択したD1n external revisionは未実装で、cloud-safe公約不可 |
-| M3 | **UI責任境界・surface topology決定 / G0-9 platform受入比較中** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4はmain完了済みでbaselineとして保持。次はU0e-2Rとwgpu 29 platform受入spike。native layout/hit-test/gesture kernelはtoolkit/renderer非依存で進められる。WebView/native製品統合とegui撤去はG0-9、plugin UI公開契約は分離したG0-3 / GAP-13まで停止 |
+| M3 | **UI責任境界・surface topology決定 / G0-9 platform受入比較中** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4はmain完了済みでbaselineとして保持。歴史回収でU2b-2 Place、U4b-0 Add Position Key、U2h-1 primary selection、U3a-1 headless Timelineを決定済み・未実装follow-upへ戻した。次のSelected U seriesはU0e-2Rで、再採択は優先順の追越しを許さない。U3a-1はtoolkit/renderer非依存でG0-9非依存、U3a-2 windowed rendererとWebView/native製品統合・egui撤去はG0-9、plugin UI公開契約は分離したG0-3 / GAP-13まで停止 |
 | M4 | **契約spike可** | K0でRoD/RoIのruntime契約を凍結。その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む |
 | M5 | **identity spike可** | P0IでDuplicator/Instance identityを凍結 |
 
@@ -108,17 +108,18 @@ Uシリーズ直列選択中は未選択とし、同時着手しない。
 |---|---|---|---|---|---|
 | 1 | D1j | M2 | `DONE` | CAM-G0 merge（D1lはmain到達済み） | v5 planar camera schema/default migration |
 | 2 | U2b-1 | M3 | `DONE` | U1b-2 merge | prepared requestをsingle writerへ配送し、成功snapshotをUI/render workerへ購読 |
-| 3 | U3a | M3 | `WAIT` | G0-9 windowed spike + U0a + U0b merge | native Timelineのtoolkit/renderer非依存layout/hit-test/headless gestureとdirect wgpu候補を同一fixtureで閉じる。Canvas/browser WebGPUは先例baselineで製品枝にしない |
-| 4 | U2g | M3 | `WAIT` | D1l + D3e + U0e + U2b + U3a merge | Effect常時接続線 |
-| 5 | K1a | M4 | `WAIT` | K0 merge | ResourceLedgerとhard budget。backendの空きVRAM値を正本にしない |
-| 6 | K1b | M4 | `WAIT` | K1a merge | cache同一性/LRU/並行store |
-| 7 | K1c | M4 | `WAIT` | K1a + K1b merge | VRAM/RAM/disk階層admissionと退避 |
-| 8 | K1d | M4 | `WAIT` | K1c + K4 merge | 容量pressureとdeadlineを分離したpreview縮退signal |
-| 9 | K7a | M4 | `WAIT` | K1b + K1c + D3 merge | group子合成のatomic bake成果物境界 |
-| 10 | K7b | M4 | `WAIT` | K7a + K2 merge | 依存時間区間だけの無効化と旧世代再利用 |
-| 11 | K7c | M4 | `WAIT` | K7a + K7b merge | bake hit時の内部graph置換と再freeze |
-| 12 | K8a | M4 | `WAIT` | K1b + K1c + K1d + D3 merge | 全曲Draft coverage planner |
-| 13 | K8b | M4 | `WAIT` | K7c + K8a + D5 merge | 100GB accounting fixtureと通し再生E2E |
+| 3 | U3a-1 | M3 | `WAIT` | Selected U seriesのU2c-5までmain到達（論理依存はU0a+U0bのみ） | toolkit/renderer非依存のDocument→Timeline projection/layout/cull/hit-testを小さなfixtureで閉じる。G0-9や100k再実測を入場条件にしない |
+| 4 | U3a-2 | M3 | `WAIT` | U3a-1 + G0-9 platform受入 | direct wgpu+Vello候補をwindowed fixture、input、WebView同居、presentまで閉じる。Canvas/browser WebGPUは先例baselineで製品枝にしない |
+| 5 | U2g | M3 | `WAIT` | D1l + D3e + U0e + U2b + U3a-2 merge | Effect常時接続線 |
+| 6 | K1a | M4 | `WAIT` | K0 merge | ResourceLedgerとhard budget。backendの空きVRAM値を正本にしない |
+| 7 | K1b | M4 | `WAIT` | K1a merge | cache同一性/LRU/並行store |
+| 8 | K1c | M4 | `WAIT` | K1a + K1b merge | VRAM/RAM/disk階層admissionと退避 |
+| 9 | K1d | M4 | `WAIT` | K1c + K4 merge | 容量pressureとdeadlineを分離したpreview縮退signal |
+| 10 | K7a | M4 | `WAIT` | K1b + K1c + D3 merge | group子合成のatomic bake成果物境界 |
+| 11 | K7b | M4 | `WAIT` | K7a + K2 merge | 依存時間区間だけの無効化と旧世代再利用 |
+| 12 | K7c | M4 | `WAIT` | K7a + K7b merge | bake hit時の内部graph置換と再freeze |
+| 13 | K8a | M4 | `WAIT` | K1b + K1c + K1d + D3 merge | 全曲Draft coverage planner |
+| 14 | K8b | M4 | `WAIT` | K7c + K8a + D5 merge | 100GB accounting fixtureと通し再生E2E |
 | 14 | U0f | M3 | `WAIT` | G0-2 + G0-8 + U0b + K1a merge | resource policyをUser settingsへ。Documentへ入れない |
 | 15 | U1g | M3 | `WAIT` | U1b + U1c + U5 + K1d merge | Transport時刻不変の最新frame表示/コマ落ち |
 | 16 | U1h | M3 | `WAIT` | U0e + U0f + U1g merge | Performance/Memory settingsとpressure HUD |
