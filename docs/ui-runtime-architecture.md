@@ -2,19 +2,24 @@
 
 状態: **責任境界・surface topology決定**（2026-07-21）。platform受入とrenderer採否はG0-9実機spike待ち。
 
+2026-07-22追補: 本書のnative／Reactは**presentation runtime**の分担であり、Core、bundled first-party Host module、first-party plugin、third-party pluginの分類ではない。OS window、surface実装、architectural role、provenance / trustは[軸分離決定](reviews/2026-07-22-m3-surface-extension-axis-separation.md)に従って独立に判定する。
+
 Motoliiの製品UIは、Reactとnativeのどちらか一方へ全面統一しない。ReactはDOMが強い領域、
 native Rust/wgpuは高頻度GPU workspaceを所有する。この分割は採択済みであり、G0-9が今後比較するのは
 責任境界そのものではなく、WebViewとnative surfaceを安全に同居させる実装方式である。
 
 ## 1. 所有境界
 
+以下は標準製品面の**surface所有**を示す。React面とnative面はいずれもbundled first-party Host moduleであり、公開pluginまたは第三者差替え点を意味しない。一つのOS window内へnative viewportとchild WebViewを同居させるため、`native window`／`React window`という呼称で責任を決めない。
+
 ```text
 Native coordinator
 ├─ React / WebView chrome
 │  ├─ Asset Browser
 │  ├─ Inspector / parameters / forms
+│  ├─ Easing trigger / current value summary
 │  ├─ panel / toolbar / dialog / search / settings
-│  └─ Hostとcommunityのversioned UI kit
+│  └─ product-owned versioned UI kit
 ├─ native wgpu Stage
 │  ├─ canonical display texture
 │  └─ handle / gizmo / roto presentation overlay
@@ -22,11 +27,16 @@ Native coordinator
    ├─ time ruler / Z(depth) rail / row-synchronous controls
    ├─ lanes / clips / keys / playhead
    └─ selection / marquee / graph / transient preview
+
+Native popup surface
+└─ Easing frame / preset library / form / curve / handles / drag preview
 ```
 
 React採択の理由は、CSS layout、form、text input、IME、a11y、component資産、hot reload、
 Storybook/Playwright、LLM生成容易性、community作者の入口である。Canvasやbrowser WebGPUを
 React componentへ包めること自体はReact所有の理由にしない。
+
+この作者入口は[Creator / Developer連続体](reviews/2026-07-22-creator-developer-continuum-decision.md)の一部である。製品作者だけが理解できる専用UI言語を増やさず、creatorが既存componentをinspectし、fixture上で変え、testし、将来の公開境界が定まった後にcommunity成果へ進める余地を保つ。ただしproduct packageへの到達可能性と、untrusted pluginへ同じorigin／process／権限を与えることは同義ではない。
 
 StageとTimelineは、一つのzoom/scroll/focus/gestureへ高頻度同期する要素を領域内で分割しない。
 特にtrack headerだけをReact、key surfaceだけをnativeにする構成は採らない。Reactは外側のtoolbar、
@@ -34,6 +44,13 @@ menu、popover、parameter編集を所有する。Timeline dock左の`KEYS / LAY
 Stretch等のtool panelはtrack headerではなく、mode/formを選ぶReact chromeとする。一方、各rowと同じ
 scroll/zoom/selectionへ同期するS/M rail、time ruler、bar、key、playhead、およびZ軸Timeline / depth railは
 nativeが一体で所有する。
+
+ただし高頻度curve操作を伴うEasing popupは一般popoverの例外である。
+[native Easing popup受入契約](reviews/2026-07-22-m3-native-easing-popup-acceptance.md)に従い、Reactは入口と
+現在値の要約だけを所有し、native wgpuはpopup frame、preset/user library、数値form、curve、grid、handle、
+drag previewを一体で所有する。Host coordinatorはnative popup windowのanchor、z-order、focus、dismiss、
+DPI/layout epochとUser settings codecを所有する。Reactモックから幅、枠、余白、情報階層を借りるが、
+React/nativeへcurve、preset thumbnail、Undoを二重所有させない。
 
 Web所有panel内の小さなvisualizationは、DOMのform/a11y/component資産が主体で、native側へ
 semantic stateやinteraction stateを複製しない場合に限ってCanvasを使える。Stage、Timeline、roto、
@@ -136,8 +153,9 @@ CompositionControllerは正規経路にしない。通常のwindowed child WebVi
 - Stage/Timelineのlayout、hit-test、interaction modelはtoolkit/renderer非依存に置く
 - native interactionはheadless部品を優先し、Motolii固有意味だけを自作する
 - React/nativeの両側へselection、snap、Undo、semantic stateを二重所有させない
-- Hostとcommunityは同じversioned React UI kitを使う長期原則
+- Hostとcommunityがcomponent/test語彙を再利用できる長期原則。ただし公開runtime、origin、process、権限、window topologyの同一化ではない
 - 1 top-level wgpu Surface + Stage/Timeline 2 viewport + opaque child WebView islandsという通常window topology
+- Timeline / Stage / Browser / Inspectorはbundled first-party Host moduleであり、surface runtimeからplugin分類を推論しない
 
 二重所有の禁止は最適化方針ではなく不変条件である。Document編集はD2 single writerだけ、Transient selectionと
 sessionはHost coordinatorだけが所有する。React Inspector、native Preview、native Timelineは同じrevision付き
@@ -149,8 +167,15 @@ crash復旧では最新Host snapshotから再投影し、surface間の双方向s
 - macOS/Windowsのfocus、DPI、resize、z-order、pointer capture、surface/device lost、a11y tree接合の受入
 - direct wgpu枝とdirect wgpu + Vello局所pass枝の製品採択
 - egui製品shellの撤去時期
-- community WebViewのsandbox、権限、互換、配布という公開契約
 - Linuxでsystem WebViewを使うかCEF比較へ進むか
+
+### G0-3 / GAP-13で未決
+
+- first-party pluginとthird-party pluginのcustom UI公開境界
+- community UIのsandbox、権限、互換、配布、署名、障害隔離
+- product-owned component/test語彙のうち、何を公開kitとしてversion保証するか
+
+G0-9のplatform証拠はG0-3へ入力できるが、G0-9合格だけでplugin UI公開契約を許可しない。逆にplugin sandbox未決を理由に、依存を満たしたbundled first-party製品surfaceまで第三者pluginと同じ停止線へ置かない。
 
 未決項目を理由に決定済み責任境界を再び「全面egui対全面React」の比較へ戻さない。逆に責任境界の決定を、
 未合格のWebView/native合成やplugin公開契約の実装許可として扱わない。

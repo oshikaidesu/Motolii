@@ -38,7 +38,7 @@ React所有面の製品実装は[直接移管契約](reviews/2026-07-22-m3-react
 | fixture／領域 | 実装状態 | 現在の用途 |
 |---|---|---|
 | `#plugin-browser-candidate`のBrowser | React-native source asset | Discovery Browserを製品packageへ直接移管するauthority |
-| `#plugin-browser-candidate`のEasing Graph view | React-native source asset＋legacy state adapter | view/modelを直接移管する。区間導出とcurve状態はHost projectionへ交換する |
+| `#plugin-browser-candidate`のEasing Graph view | React trigger source asset＋native popup oracle＋legacy state adapter | Graph icon/現在値要約だけを直接移管する。popup frame/preset/form/curveはnativeへ移し、React描画は幅・枠・余白・情報階層を含むvisual/interaction oracleとして維持する |
 | `#plugin-browser-candidate`の`KEYS / LAYERS` | `TimelineCandidate.jsx`内のReact-native subtree | tool panelだけを同じDOM/CSSで抽出・移管する。time surfaceは移さない |
 | `#plugin-browser-candidate`のInspector | legacy HTMLをparseしたbridge | 正しい独立React sourceは未成立。モック側で同形React化してから移管する |
 | `#plugin-browser-candidate`のStage / Timeline time surface / Settings | legacy bridgeまたはReact比較candidate | native製品面のoracle／周辺文脈。React製品runtimeへ直接持ち込まない |
@@ -78,7 +78,7 @@ React所有面の製品実装は[直接移管契約](reviews/2026-07-22-m3-react
 | 論点 | 規範／記録 | React prototype | 扱い |
 |---|---|---|---|
 | Browser一次分類 | [UI操作言語](ui-interaction-language.md)には`Media / Plugins`が残る | `Media / Create / Effects` | **未統一**。prototype台帳P41で比較中。名称をDocument型、package kind、公開APIへ焼かない |
-| Easing Graph | M3 U4bは区間中心GraphとBezier編集を要求。高度型も2026-07-10に区間補間として採用済み | viewはReact候補へ置換し、AM差分とBounce / Elastic / Cyclic(Sine) / Random / Steps / Elastic Stepsを操作試験化。高度型の適用前後でkeyframe構造不変。区間導出とcurve状態はlegacy fixture adapterが残る | [AM観察台帳](reviews/2026-07-19-am-keyframe-graph-observation.md)で残差追跡。state adapter撤去と製品`Interp`接続を分ける |
+| Easing Graph | M3 U4bは区間中心GraphとBezier編集を要求。高度型も2026-07-10に区間補間として採用済み | Reactはtrigger/現在値要約、native popupはframe/preset/user library/form/curve/grid/handleを所有する。固定React viewはpopup全体のvisual/interaction oracle。高度型の適用前後でkeyframe構造不変。区間導出とcurve状態はlegacy fixture adapterが残る | [native Easing popup受入契約](reviews/2026-07-22-m3-native-easing-popup-acceptance.md)と[AM観察台帳](reviews/2026-07-19-am-keyframe-graph-observation.md)で残差追跡。state adapter撤去と製品`Interp`接続を分ける |
 | React移行完了の意味 | 旧READMEは旧HTMLを「現行参照」と表現していた | Vite上では動くがBrowser以外の主要surfaceはbridge | 実行基盤のReact化とsurface所有のReact-native化を別々に記録する |
 
 この表の未統一項目は、画面が動いていることや会話の新しさだけで解消しない。採否を決めたら、規範文書、prototype台帳、React fixture、試験を同じ変更単位で更新して本表から外す。

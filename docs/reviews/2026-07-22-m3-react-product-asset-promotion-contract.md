@@ -5,7 +5,7 @@
 
 ## 1. 決定
 
-Browser、Inspector、Timeline左側の`KEYS / LAYERS` tool panel、Easing Panelなど
+Browser、Inspector、Timeline左側の`KEYS / LAYERS` tool panel、Easing triggerなど
 React所有面は、現行Reactモックを見た目だけの参考にして製品用へ作り直さない。
 固定したReact source assetを製品packageへ**直接所有移管**し、モック固有の状態と
 legacy bridgeだけをHostのprojection / intent境界へ交換する。
@@ -82,7 +82,7 @@ authorityの優先順は次とする。
 | 製品面 | 固定source | 処分 |
 |---|---|---|
 | Browser | `src/candidates/DiscoveryBrowserCandidate.jsx`、`discovery-browser-candidate.css` | componentとCSSを直接移管。legacy shellへのreplace hookだけ外す |
-| Easing Panel | `src/candidates/EasingGraphCandidate.jsx`、`easing-graph-candidate.css`、`easing-graph-model.js` | view/modelを直接移管し、区間とcurveをHost projectionへ接続 |
+| Easing trigger / popup oracle | `src/candidates/EasingGraphCandidate.jsx`、`easing-graph-candidate.css`、`easing-graph-model.js` | Graph icon/現在値要約だけを直接移管する。popup frame/preset/user library/form/curveはnativeへ移し、固定React描画とmodelは幅・枠・余白・情報階層を含むvisual/interaction oracleとして維持する |
 | `KEYS / LAYERS` | `src/candidates/TimelineCandidate.jsx`内の`.candidate-key-tools` subtree、`timeline-candidate.css`の対応規則 | native Timeline本体からReact tool panelだけを同じDOM/CSSのまま抽出して移管 |
 | Inspector | `src/legacy/LegacyHostBoundaryScreen.jsx`から`LegacyInspector`へ流れるlegacy DOM/script。`src/surfaces/InspectorSurface.jsx`は縮約skeleton | 正しい独立React componentがまだ無い。先にモック側でlegacy出力を同形Reactへ抽出し、parity後に移管する。skeletonを製品版として使わない |
 | 可変panel | `src/layout/ResizablePanelLayout.jsx`、`resizable-panel-layout.css` | Web所有panelのlayout componentだけを移管候補にする。native viewport境界はHost topologyに従う |
@@ -246,7 +246,7 @@ visual 1%は移管時の回帰検知上限であり、縮約再実装を1%まで
 
 1. **R0 source inventory**: 固定source、legacy依存、CSS/model/test closureを固定
 2. **R1 Browser ownership**: Browserをproduct ownerへ移し、mockをconsumerへ反転。意味変更なし
-3. **R2 Easing ownership**: Easing view/modelを同様に移す。Host curve接続は後続
+3. **R2 Easing trigger ownership**: Graph icon/現在値要約だけをproduct ownerへ移し、popup全体をnative oracleとして固定。Host/User settings/D2接続は後続
 4. **R3 KEYS/LAYERS extraction**: native Timeline本体からReact tool panelだけを抽出・移管
 5. **R4 Inspector React化**: legacy DOM/scriptを固定モック内で同形Reactへ抽出後、product ownerへ移す
 6. **R5 projection/intent**: 一面ずつmock stateをHost read modelへ交換
