@@ -215,7 +215,7 @@ HVR-D01の実corpus検査は少なくとも次を満たす。
 | HVR-G01 | `DONE` | 本決定 | projection、外部索引、receiptの責任が分離されている |
 | HVR-D01 | `DONE` | 決定的projection | fixture負例と実corpus 1,797/420/1,377が一致 |
 | HVR-D02 | `DONE` | Basic Memory opt-in runner | HVR-D01後。隔離設定、日本語smoke、障害時の縮退を確認 |
-| HVR-D03 | `DO` | repo-local回収skill | HVR-D01後。候補packetだけを作りreceiptを自動変更しない |
+| HVR-D03 | `DONE` | repo-local回収skill | HVR-D01後。候補packetだけを作りreceiptを自動変更しない |
 | HVR-D04 | `WAIT` | Unit 5N以降の運用 | HVR-D01〜D03後。候補packetを従来の単位別裁定へ渡す |
 
 Composer 2.5とGrokのread-only調査は論点抽出として並列に行える。実装は各行をclosed orderへ
