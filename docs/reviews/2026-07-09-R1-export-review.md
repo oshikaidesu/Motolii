@@ -3,6 +3,8 @@
 対象: R1実装時点の未コミット作業ツリー(R2は対象外)。8観点ファインダー+検証パスで確定した10件。
 修正したらチェックを入れ、修正コミットにこのファイルの項番を書くこと。
 
+> **歴史回収（2026-07-23）**: cutoff全5版は[Unit 5A](2026-07-23-historical-r1-export-gpu-safety-lineage-recovery.md)で処分済み。本文の`[x]`は現行完成証拠ではない。初期10件の主要修復は概ね維持されるが、continuous stderr drain／verified atomic artifact／teardown timeoutはGAP-26、GPU error taxonomy／poison typed failureはGAP-27で追跡する。部分mp4を成果物として残す追補案は現行M1 G3により棄却する。
+
 ## 重大(データ喪失・クラッシュ)
 
 - [x] **1. エクスポート中断でmp4が壊れる** — `crates/motolii-export/src/lib.rs:89`
