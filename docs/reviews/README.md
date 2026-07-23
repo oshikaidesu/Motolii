@@ -116,6 +116,7 @@
 | [2026-07-23-historical-wgpu-readback-cold-compile-lineage-recovery.md](2026-07-23-historical-wgpu-readback-cold-compile-lineage-recovery.md) | Unit 5C — wgpu課題／先例全4版の計測前優先度訂正、同期readback、product cold pipeline gapを処分 |
 | [2026-07-23-historical-d5-transport-lineage-recovery.md](2026-07-23-historical-d5-transport-lineage-recovery.md) | Unit 5D — D5 Transport全4版のaudio clock主、video drop、DRS縮退、device wait／D4-FU境界を処分 |
 | [2026-07-23-historical-color-export-lineage-recovery.md](2026-07-23-historical-color-export-lineage-recovery.md) | Unit 5E — 色変換／GPU export先例1版を処分し、GAP-31、TRC、readbackの責任を分離 |
+| [2026-07-23-historical-media-portability-gpu-resurvey-plan-recovery.md](2026-07-23-historical-media-portability-gpu-resurvey-plan-recovery.md) | Unit 5F — 可搬性／GPUベンダ差の未実施再調査計画1版を狭い再入場gateへ処分 |
 | [2026-07-16-m3-preflight-decisions.md](2026-07-16-m3-preflight-decisions.md) | M3着手前決定 — 操作の意味を固定し、見た目の実値は測って決める |
 | [2026-07-16-m3-ui-concept-to-tickets.md](2026-07-16-m3-ui-concept-to-tickets.md) | M3 UIコンセプトから実装チケットへの分解 |
 | [2026-07-16-m3-ui-gap-survey.md](2026-07-16-m3-ui-gap-survey.md) | M3前UIギャップ調査: U1〜U8に席が無いUI要素とコア側前提の欠落(2026-07-16) |
