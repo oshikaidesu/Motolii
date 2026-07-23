@@ -94,8 +94,8 @@ P0I #170 → P7a → P7b → P7c → P7U
 | 優先 | ID | Phase | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
 | 1 | U0e-2R | M3 | `DONE` | — | 固定React baseline `eb16d06`を最新mainへ再結合し、43 visual testとworkspace gateを通過 | GR-D1を単独実行 |
-| 2 | GR-D1 | M3 guard | `DONE` | — | Claude通常発注入口へBASE_REF/SHA・authority・粒状態・React labelのdispatch gateを実装し、専用負例・workspace試験・Opus検収ACCEPT | GR-D2を単独実行 |
-| 3 | GR-D2 | M3 guard | `DONE` | — | 変更許可閉集合、append-only検収証跡、timeout分離、検収者mutation拒否、検収resumeを実装し、専用負例・workspace試験・Opus検収ACCEPT | GR-R1/R2をDOへ移す |
+| 2 | GR-D1 | M3 guard | `DONE` | — | Terra実装 + Grok検収の通常発注入口へBASE_REF/SHA・authority・粒状態・React labelのdispatch gateを固定し、専用負例とworkspace試験を通過 | GR-D2を単独実行 |
+| 3 | GR-D2 | M3 guard | `DONE` | — | 変更許可閉集合、append-only検収証跡、timeout分離、検収者mutation拒否、検収resumeをTerra + Grok入口へ固定し、専用負例とworkspace試験を通過 | GR-R1/R2をDOへ移す |
 | 4 | GR-R1/R2 | M3 guard | `DO` | — | GR-D2完了。React provenance・route隔離・fixture因果・生token拒否を実装 | GR-R3をDOへ移す |
 | 5 | GR-R3 | M3 guard | `WAIT` | — | GR-R1/R2完了後、atomic swap・失敗注入・負例行列を固定 | U0e-2をDOへ戻す |
 | 6 | U0e-2 | M3 | `WAIT` | — | U0e-2Rは完了済み。GR-D1〜R3が全てDONEになるまで却下差分の修理発注を停止 | G0-6H assisted human stop |

@@ -3,7 +3,7 @@
 日付: 2026-07-22  
 状態: **決定 / 実装前停止線**  
 対象: CU-0A02 / U0e-2 の却下差分、React source asset を含む以後の発注、
-`scripts/delegate-claude-supervised.sh`
+`scripts/delegate-cursor-supervised.sh`
 
 ## 1. 結論
 
@@ -42,8 +42,8 @@ asset を含む次粒も実装発注しない。
 
 ### GR-D1: dispatch gate
 
-通常発注の正規入口である `scripts/delegate-claude-supervised.sh` は、発注実行前に発注書と正本を
-機械照合する。Claude Code が利用不能で fallback を明示した場合も、代替 runner は同等の gate を
+通常発注の正規入口である `scripts/delegate-cursor-supervised.sh` は、発注実行前に発注書と正本を
+機械照合する。Codex CLI または Cursor Grok が利用不能で Claude fallback を明示した場合も、代替 runner は同等の gate を
 通過しなければならない。
 
 - `BASE_REF` はCodexが選んだ完全な `refs/heads/...`、`BASE_SHA` はそのcommitと対象 worktree

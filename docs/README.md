@@ -61,6 +61,8 @@
 | [reviews/2026-07-12-m2-permanence-prevention.md](reviews/2026-07-12-m2-permanence-prevention.md) | M2恒久焼き込みの**予防手順**(やること5手)。運用正本 | 現行 |
 | [reviews/2026-07-14-m3-ui-boundary-prevention.md](reviews/2026-07-14-m3-ui-boundary-prevention.md) | M3でUI都合をDocument・レンダ・公開契約へ逆流させない**予防手順**(規律8本) | 現行 |
 | [reviews/2026-07-14-m3-ui-boundary-counter-review.md](reviews/2026-07-14-m3-ui-boundary-counter-review.md) | M3 UI境界規約の反対側レビュー。R1〜R9を採用/縮小/延期で再判定 | 現行(判定反映済み) |
+| [reviews/2026-07-22-m3-comfortable-use-work-map.md](reviews/2026-07-22-m3-comfortable-use-work-map.md) | 製品外殻からLocal Alpha、日常操作、Distribution Readyまでを制作経路で並べるM3大地図 | **粒度化・Fable全粒レビュー完了** |
+| [reviews/2026-07-22-m3-comfortable-use-granulation.md](reviews/2026-07-22-m3-comfortable-use-granulation.md) | 快適利用大地図を仕様判断・実装・E2E・実機審判の粒へ分け、依存とSTOPを固定 | **Fable P0/P1=0 / order draft母集団** |
 | [reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md](reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md) | React/WebView、Host/community同一kit、native surface統合のG0-9証拠 | **責任境界・surface topology決定 / platform受入比較中** |
 | [reviews/2026-07-22-m3-react-product-asset-promotion-contract.md](reviews/2026-07-22-m3-react-product-asset-promotion-contract.md) | Reactモックを製品packageへ直接所有移管し、維持／交換境界、diagnostic route、発注・検収STOPを固定 | **決定 / 発注停止線**(明示再開まで発注しない) |
 | [reviews/2026-07-22-m3-native-easing-popup-acceptance.md](reviews/2026-07-22-m3-native-easing-popup-acceptance.md) | React trigger、native wgpu popup全内容、Host popup lifecycle/User settingsの境界と実機審判 | **決定**(G0-9 isolated spikeを実行、製品U4b接続は停止) |
