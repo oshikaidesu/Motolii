@@ -17,7 +17,7 @@
 | T7 | **完了**: `motolii-nodes`。正準座標→`ViewportTransform`集約。`FilterPlugin`/`OverlayNode`(矩形・円・線)/`CompositeNode`(normal/add/multiply)をGPUゴールデン化。Vello統合は凍結ゲート後(R8採用済み) |
 | T12 | **完了(所見1+2)**: レジストリディスパッチ(`RenderStep::Plugin`)+ホスト所有`PipelineCache`+参照`TintFilter`で再コンパイルなし実証。`AssetRef`予約済み（Document結線も後続M2で完了）。GpuAssetCache/ImporterはM2完了範囲ではなく未実装・未凍結 |
 | T5 | **後方移動**: GPU色解析はプラグイン/解析拡張領域であり、M1完了条件から外す。M1では合成DataTrackまたはParamDriver参照プラグインで「値列がパラメータを駆動する」境界だけを検証する |
-| T11 | **完了(2026-07-10)**: 実素材(1080p/4K)で書き出し+GUIプレビュー(`spikes/r9-preview`)+主観品質OK。B-4はCI合成素材+手元実素材(`qp0: false`書き出し)で確認 |
+| T11 | **完了(2026-07-10、歴史sign-off)**: 実素材(1080p/4K)で書き出し+GUIプレビュー(`spikes/r9-preview`)+主観品質OK。B-4はCI合成素材+手元実素材(`qp0: false`書き出し)で確認。現行製品Stage／release受入への更新は[Unit 5H回収](../reviews/2026-07-23-historical-r9-real-material-export-acceptance-lineage-recovery.md)とGAP-32 |
 | T8 | **完了**: `RenderStep::VideoSource`+グラフ合流(R4)。中間RTは`RenderSession`ピンポン2枚でフレーム間再利用。Solid単色もセッションキャッシュ |
 | T9 | **完了**: `motolii-export`を追加し、`FrameReader`→`YuvToRgba`→`motolii-render`→`Encoder`の最小mp4書き出しループを実装。30fps×3秒のタイムコード焼き込み素材で全フレームの時刻対応を検証(R5)。書き出しmp4のBT.709 limited色タグをprobeで検証(R5) |
 | T10 | **完了**: `motolii-cli export-overlay` / `export-project`(versioned JSON)。JSON→`motolii-export`一気通貫。**M1出口デモ(実写(生成)背景 + Bezierイージングで右へ流れる矩形 → mp4)を正式サンプル `samples/exit-demo/` として同梱**し、**E2Eゴールデン `crates/motolii-cli/tests/exit_demo.rs`**(export経路でmp4化→出力mp4をデコード→先頭/中間/末尾で「背景動画の透過」+「矩形のイージング位置(左→右)」を検証。lavapipe+ffmpegで緑)を追加。キーフレーム/ParamDriver DataTrack駆動のゴールデンも済み。合成DataTrack接続の拡張は後続 |
@@ -37,7 +37,7 @@
 | R6 | **完了**: **motolii-testkit拡充**(T4残)。参照PNG保存・差分画像ファイル出力(ゴールデン失敗時のデバッグ運用) | なし | 意図的に壊したゴールデンで差分PNGが出力されるテストが通る |
 | R7 | **完了(2026-07-10)**: `OverlayNode`に円(`CircleOverlay`)・線(`LineOverlay`)追加、`CompositeMode`(Add/Multiply)追加。正準座標・premul契約維持。Vello統合はスコープ外 | R1 | 各形状・各ブレンドの複数解像度ゴールデンが通る |
 | R8 | **完了(2026-07-10)**: Vello**採用**。vello 0.9=wgpu29一致・実レンダ合格。条件(Renderer長寿命/straight→premul境界変換/usvgアダプタ自前)は[spikes/s3-vello.md](../spikes/s3-vello.md) | なし(独立スパイク) | 採否判断がドキュメント化される(コードは使い捨て可) |
-| R9 | **完了(2026-07-10)**: 実素材検証(T11)。`verify-b4`+`scripts/r9-verify.sh`+`spikes/r9-preview`。主観品質OK(人間サインオフ) → [reviews/2026-07-10-R9-real-material-checklist.md](../reviews/2026-07-10-R9-real-material-checklist.md) | R2 | 一致テストが通る+主観品質OK |
+| R9 | **完了(2026-07-10、歴史sign-off)**: 実素材検証(T11)。`verify-b4`+`scripts/r9-verify.sh`+`spikes/r9-preview`。主観品質OK(人間サインオフ) → [checklist](../reviews/2026-07-10-R9-real-material-checklist.md)、[現行適用範囲](../reviews/2026-07-23-historical-r9-real-material-export-acceptance-lineage-recovery.md) | R2 | 一致テストが通る+主観品質OK |
 
 並列性: **R1–R9完了(2026-07-10)**。M1残タスクチケット表は消化済み。
 **凍結ゲート残件 FG-C1〜C6 全緑 + レビュー3点対応(2026-07-10)**。

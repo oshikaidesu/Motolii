@@ -44,6 +44,7 @@
 | [reviews/2026-07-23-historical-color-export-lineage-recovery.md](reviews/2026-07-23-historical-color-export-lineage-recovery.md) | 色変換／GPU export先例1版を現行コードへ再照合し、重複GAP-14をGAP-31へ正規化、TRC／readback責任を分離 | **Unit 5E採択維持／GAP-31未実装** |
 | [reviews/2026-07-23-historical-media-portability-gpu-resurvey-plan-recovery.md](reviews/2026-07-23-historical-media-portability-gpu-resurvey-plan-recovery.md) | メディア可搬性／GPUベンダ差の未実施再調査計画1版を、GAP-3／7・K4とINF-3の狭い再入場gateへ再配置 | **Unit 5F計画維持／調査未実施** |
 | [reviews/2026-07-23-historical-vello-adoption-lineage-recovery.md](reviews/2026-07-23-historical-vello-adoption-lineage-recovery.md) | Vello採否レビュー／spike結果2版を現行局所renderer判断へ再照合し、成立性とK6／P6／U3a-2製品統合を分離 | **Unit 5G採択維持／製品未統合** |
+| [reviews/2026-07-23-historical-r9-real-material-export-acceptance-lineage-recovery.md](reviews/2026-07-23-historical-r9-real-material-export-acceptance-lineage-recovery.md) | R9実素材／書き出し受入4版を再照合し、M1歴史sign-offと現行製品release受入を分離 | **Unit 5H歴史完了維持／GAP-32** |
 | [plugin-resources.md](plugin-resources.md) | プラグインのリソースライフサイクル・アセット境界・時間参照(F-10/F-11) | **縮小採用**(PipelineCache/AssetRef/予約型は実装済み、GpuAssetCache/Importer/Feedback実行は未実装・未凍結) |
 | [references.md](references.md) | 依存候補・参考リポジトリ(ライセンス区分) | 現行 |
 | [ae-pain-points.md](ae-pain-points.md) | AEユーザー不満の体系化+我々の解決タグ(プラグイン窓口仮説の検証) | 現行 |
