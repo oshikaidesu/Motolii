@@ -39,6 +39,7 @@
 | [reviews/2026-07-23-historical-vism-kit-distribution-lineage-recovery.md](reviews/2026-07-23-historical-vism-kit-distribution-lineage-recovery.md) | Vism／Kit／実装計画29版を処分し、構成、導入集合、再現lock、catalog、hostless配布を分離 | **Unit 9A縮小採用** |
 | [reviews/2026-07-23-historical-plugin-ecosystem-lineage-recovery.md](reviews/2026-07-23-historical-plugin-ecosystem-lineage-recovery.md) | 旧plugin ecosystemの未処分11版からcommunity politics、User library、look/primitiveと危険な旧schemaを分離 | **Unit 9B縮小採用** |
 | [reviews/2026-07-23-historical-audio-generalization-lineage-recovery.md](reviews/2026-07-23-historical-audio-generalization-lineage-recovery.md) | 音声一般化全6版からcomponent／mix意味を維持し、旧Transport varispeed、製品mixed再生／UI未到達を分離 | **Unit 5B設計維持／GAP-28未実装** |
+| [reviews/2026-07-23-historical-wgpu-readback-cold-compile-lineage-recovery.md](reviews/2026-07-23-historical-wgpu-readback-cold-compile-lineage-recovery.md) | wgpu課題／先例全4版から同期readbackとcold pipeline捕捉面を再照合し、計測前の方式固定を拒否 | **Unit 5C延期維持／GAP-29・30未実装** |
 | [plugin-resources.md](plugin-resources.md) | プラグインのリソースライフサイクル・アセット境界・時間参照(F-10/F-11) | **縮小採用**(PipelineCache/AssetRef/予約型は実装済み、GpuAssetCache/Importer/Feedback実行は未実装・未凍結) |
 | [references.md](references.md) | 依存候補・参考リポジトリ(ライセンス区分) | 現行 |
 | [ae-pain-points.md](ae-pain-points.md) | AEユーザー不満の体系化+我々の解決タグ(プラグイン窓口仮説の検証) | 現行 |

@@ -113,6 +113,7 @@
 | [2026-07-23-historical-unified-stage-camera-ui-lineage-recovery.md](2026-07-23-historical-unified-stage-camera-ui-lineage-recovery.md) | Unit 4Q — 統一Stage／Camera UI全2版の旧schema分別、操作owner、off-frame同一world、分類軸の直交を処分 |
 | [2026-07-23-historical-r1-export-gpu-safety-lineage-recovery.md](2026-07-23-historical-r1-export-gpu-safety-lineage-recovery.md) | Unit 5A — R1 export／GPU safety全5版の実装修復、監査漏れ、未到達G1〜G8、GPU health driftを処分 |
 | [2026-07-23-historical-audio-generalization-lineage-recovery.md](2026-07-23-historical-audio-generalization-lineage-recovery.md) | Unit 5B — 音声一般化全6版の恒久意味、進捗表示、D5訂正、mixer coreと製品Transport／UI未到達を処分 |
+| [2026-07-23-historical-wgpu-readback-cold-compile-lineage-recovery.md](2026-07-23-historical-wgpu-readback-cold-compile-lineage-recovery.md) | Unit 5C — wgpu課題／先例全4版の計測前優先度訂正、同期readback、product cold pipeline gapを処分 |
 | [2026-07-16-m3-preflight-decisions.md](2026-07-16-m3-preflight-decisions.md) | M3着手前決定 — 操作の意味を固定し、見た目の実値は測って決める |
 | [2026-07-16-m3-ui-concept-to-tickets.md](2026-07-16-m3-ui-concept-to-tickets.md) | M3 UIコンセプトから実装チケットへの分解 |
 | [2026-07-16-m3-ui-gap-survey.md](2026-07-16-m3-ui-gap-survey.md) | M3前UIギャップ調査: U1〜U8に席が無いUI要素とコア側前提の欠落(2026-07-16) |
