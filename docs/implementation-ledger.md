@@ -93,7 +93,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 | 優先 | ID | Phase | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
-| 0 | CU-G01 | M3 spec | `ACTIVE` | — | G0-9、platform分類、快適利用W0gをlocal `G0-9L` / distribution `G0-9D`へ分離した改訂案。反対側レビュー待ちでW0bは停止維持 | 反対側レビューP0/P1=0後、CU-0G02を`DO`へ上げる |
+| 0 | CU-G01 | M3 spec | `DO` | — | G0-9、platform分類、快適利用W0gをlocal `G0-9L` / distribution `G0-9D`へ分離した改訂案。反対側レビュー待ちでW0bは停止維持 | Terraの仕様整合修正をGrokがP0/P1=0で検収後、Codexが採否しCU-0G02を`DO`へ上げる |
 | 1 | U0e-2R | M3 | `DONE` | — | 固定React baseline `eb16d06`を最新mainへ再結合し、43 visual testとworkspace gateを通過 | GR-D1を単独実行 |
 | 2 | GR-D1 | M3 guard | `DONE` | — | Terra実装 + Grok検収の通常発注入口へBASE_REF/SHA・authority・粒状態・React labelのdispatch gateを固定し、専用負例とworkspace試験を通過 | GR-D2を単独実行 |
 | 3 | GR-D2 | M3 guard | `DONE` | — | 変更許可閉集合、append-only検収証跡、timeout分離、検収者mutation拒否、検収resumeをTerra + Grok入口へ固定し、専用負例とworkspace試験を通過 | GR-R1/R2をDOへ移す |
