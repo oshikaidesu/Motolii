@@ -4,6 +4,8 @@
 対象: D1l PR #173 / PR #196追補  
 状態: 【決定】（最終反対側レビューP0/P1=0・merge可）
 
+歴史注記（2026-07-23）: cutoff全2版は[Unit 4M回収](2026-07-23-historical-d1l-journal-undo-lineage-recovery.md)で処分した。本文のv4はD1l着地時点で、現行Documentはv5。Effect用reservation閉集合6 variant／Writer prepare 3本は実装済み。後発枝のPosition Add Key 2 variant／4本目prepareは決定済み・未実装であり、現行正本はUnit 2C回収とM2 U4b-0である。既知Editのapply失敗にもsnapshot fallbackし得るlive driftはGAP-24で再開する。
+
 ## 1. 発見した停止要因
 
 PR #196追随実装のレビューで、次の3点が未決のまま残っていた。
