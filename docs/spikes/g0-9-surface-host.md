@@ -98,3 +98,43 @@ harness-localの観測能力だけを追加した。トポロジ（`surface_coun
 spikes/g0-9-surface-host/Cargo.toml`）に追加済みで、drag/resize/present/readback
 既存testは変更なく緑のまま。CU-0G03 DONEやG0-9L PASSはこの実装のどのテストも
 宣言しない。
+
+## CU-0G03H2 機械focus E2E追補（2026-07-24）
+
+CU-0G03の人間審判で、左WebViewからnative Timelineへの最初のTabでは
+`FocusCoordinator`が遷移する一方、`wry::focus_parent`後の親NSViewが次のTabを
+winitへ渡さず、実focus ringが停止する事実を観測した。内部coordinatorの値と
+実first-responderを同一視していたCU-0G03Hの機械審判不足であり、既知制約には
+格下げしない。
+
+CU-0G03H2は実NSWindowへTab / Shift+Tabを入力し、次の三点を1つのmanifestへ記録する。
+
+- native Stage → 左WebView → native Timeline → 右WebView → native Stageの正逆順
+- 各遷移後の`NSWindow.firstResponder` classと期待するnative/Web種別の一致
+- native NSEvent monitorまたはWebView DOM `keydown` relayの実到達元
+
+Ctrl / Option / Cmd等を伴うTabをnative focus relayとDOM relayが奪わないことは、
+OSのapp切替等をE2Eから起動しないよう純粋判定とrelay sourceのunit負例で固定する。
+
+これはfocus配送だけの機械E2Eであり、synthetic composition、文字列の直接設定、
+scripted VoiceOverを追加しない。実IME候補窓、VoiceOverの読み上げとfocus追従、
+fullscreen/minimize後のfocus/IME復帰はCU-0G03の人間審判に残す。製品window、
+Document、公開UI/keyboard契約、topology、CU-0G04のfailure injectionへ広げる
+必要が生じた場合は停止する。
+
+機械E2Eは次で実行し、process exit 0とreportの
+`automated_focus_pass == true`を両方要求する。
+
+```bash
+G0_9_RESIZE_TARGET=0 \
+G0_9_AUTOMATE_FOCUS=1 \
+G0_9_REPORT=/tmp/motolii-cu-0g03h2-focus-e2e.json \
+cargo run --manifest-path spikes/g0-9-surface-host/Cargo.toml
+jq -e '.automated_focus_pass == true' \
+  /tmp/motolii-cu-0g03h2-focus-e2e.json
+```
+
+固定Macで正逆8遷移すべてのrole、実first-responder種別、到達元が一致し、
+process exit 0と`automated_focus_pass == true`を確認した。20 lib + 7 main
+tests、workspace、docsが全緑で、Grok/FableともP0/P1=0、`VERDICT: ACCEPT`。
+これはCU-0G03 DONEまたはG0-9L PASSを宣言しない。

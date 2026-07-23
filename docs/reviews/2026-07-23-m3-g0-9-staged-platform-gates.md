@@ -82,15 +82,21 @@ direct wgpu、direct wgpu + Vello局所pass、現行egui baselineを次の同一
 
 ### L2. IME、VoiceOver、focus、keyboard
 
+local acceptance harnessは、人間審判の前に実NSWindowへTab / Shift+Tabを入力し、
+native → WebView → nativeの順序、`NSWindow.firstResponder`の実class、native
+NSEvent monitor / WebView DOM relayの到達元をmanifestへ機械記録する。focus
+coordinatorの内部値だけが移動した場合は不合格とする。
+
 人間が実windowで次を確認する。
 
 - 日本語IMEのpreedit、候補位置、確定、取消
 - composition中のEnter / Esc / Spaceがアプリshortcutへ漏れない
-- native → WebView → nativeのTab / Shift+Tabと明示focus移譲
+- 機械記録済みfocus経路へ実IMEとVoiceOverが追従する
 - bounded VoiceOver treeでBrowser/Inspector相当のheading/controlとStage/Timeline proxyを読める
 - fullscreen、minimize/restore後にfocusとIMEが復帰する
 
 文字列の直接設定、synthetic composition event、AX treeの取得だけでは合格にしない。
+機械focus試験を実IME、VoiceOver、fullscreen/minimize後の知覚審判の代用にしない。
 判定者、操作列、結果、既知の非対象をmanifestへ記録する。
 
 ### L3. lifecycle、geometry、failure recovery

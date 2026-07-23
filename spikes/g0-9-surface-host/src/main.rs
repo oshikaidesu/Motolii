@@ -1,16 +1,32 @@
 use std::{
     borrow::Cow,
     path::PathBuf,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::{Duration, Instant},
 };
 
 use accesskit::{Action, Node, NodeId, Rect as AccessRect, Role, Tree, TreeId, TreeUpdate};
+#[cfg(target_os = "macos")]
+use block2::RcBlock;
+#[cfg(target_os = "macos")]
+use core_graphics::{
+    event::{CGEvent, CGEventFlags, KeyCode},
+    event_source::{CGEventSource, CGEventSourceStateID},
+};
 use g0_9_surface_host::{
     AcceptanceCounters, AccessibilityProjection, AxNodeId, AxRole, CompositionState,
     FocusCoordinator, FocusRole, LifecycleRecorder, SemanticCounts, ShortcutKey, ShortcutSink,
     SurfaceLayout, WebMessage, WebSource, LEFT_WEBVIEW_WIDTH, RIGHT_WEBVIEW_WIDTH,
 };
+#[cfg(target_os = "macos")]
+use objc2::{rc::Retained, runtime::AnyObject};
+#[cfg(target_os = "macos")]
+use objc2_app_kit::{NSApplication, NSEvent, NSEventMask, NSEventModifierFlags};
+#[cfg(target_os = "macos")]
+use objc2_foundation::MainThreadMarker;
 use serde_json::json;
 use winit::{
     application::ApplicationHandler,
@@ -34,6 +50,17 @@ const AX_STAGE_CANVAS: NodeId = NodeId(2);
 const AX_TIMELINE: NodeId = NodeId(3);
 const AX_TIMELINE_TRACKS: NodeId = NodeId(4);
 const AX_TIMELINE_PLAYHEAD: NodeId = NodeId(5);
+const AUTOMATED_FOCUS_STEPS: [FocusRole; 8] = [
+    FocusRole::WebLeft,
+    FocusRole::NativeTimeline,
+    FocusRole::WebRight,
+    FocusRole::NativeStage,
+    FocusRole::WebRight,
+    FocusRole::NativeTimeline,
+    FocusRole::WebLeft,
+    FocusRole::NativeStage,
+];
+const MAX_FOCUS_OBSERVATIONS: usize = 64;
 
 fn ax_node_id(id: AxNodeId) -> NodeId {
     match id {
@@ -109,6 +136,7 @@ fn build_accessibility_tree(focus: FocusRole, layout: SurfaceLayout) -> TreeUpda
 enum UserEvent {
     WebMessage(String),
     Accesskit(accesskit_winit::Event),
+    NativeTab { backward: bool },
 }
 
 impl From<accesskit_winit::Event> for UserEvent {
@@ -131,6 +159,38 @@ enum RenderOutcome {
     Reconfigure,
     Skip,
     Validation,
+}
+
+struct FocusObservation {
+    role: FocusRole,
+    source: &'static str,
+    responder_class: String,
+    responder_family: &'static str,
+    matches_role: bool,
+}
+
+struct AutomatedFocusCheck {
+    step: usize,
+    awaiting_result: bool,
+    started: bool,
+    next_action: Instant,
+    deadline: Instant,
+    pass: Option<bool>,
+    error: Option<String>,
+}
+
+impl AutomatedFocusCheck {
+    fn new(now: Instant) -> Self {
+        Self {
+            step: 0,
+            awaiting_result: false,
+            started: false,
+            next_action: now,
+            deadline: now + Duration::from_secs(15),
+            pass: None,
+            error: None,
+        }
+    }
 }
 
 impl GfxState {
@@ -336,6 +396,11 @@ struct State {
     fullscreen_active: bool,
     left_ready: bool,
     right_ready: bool,
+    native_focus_active: Arc<AtomicBool>,
+    #[cfg(target_os = "macos")]
+    native_tab_monitor: Option<Retained<AnyObject>>,
+    focus_observations: Vec<FocusObservation>,
+    automated_focus: Option<AutomatedFocusCheck>,
 }
 
 impl State {
@@ -347,6 +412,13 @@ impl State {
         let report_path = std::env::var_os("G0_9_REPORT")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("/tmp/motolii-g0-9-surface-host-report.json"));
+        let native_focus_active = Arc::new(AtomicBool::new(true));
+        #[cfg(target_os = "macos")]
+        let native_tab_monitor =
+            install_native_tab_monitor(proxy.clone(), Arc::clone(&native_focus_active));
+        let automated_focus = std::env::var_os("G0_9_AUTOMATE_FOCUS")
+            .is_some()
+            .then(|| AutomatedFocusCheck::new(Instant::now()));
         Self {
             proxy,
             window: None,
@@ -373,6 +445,11 @@ impl State {
             fullscreen_active: false,
             left_ready: false,
             right_ready: false,
+            native_focus_active,
+            #[cfg(target_os = "macos")]
+            native_tab_monitor,
+            focus_observations: Vec::new(),
+            automated_focus,
         }
     }
 
@@ -383,7 +460,11 @@ impl State {
     /// `Window::focus_window`だけではWKWebView側がmacOSのfirst responderの
     /// ままになり実際には移動しないため、wryの`focus_parent`で明示的に
     /// resignさせる。
-    fn apply_focus(&mut self, role: FocusRole) {
+    fn apply_focus(&mut self, role: FocusRole, source: &'static str) {
+        self.native_focus_active.store(
+            matches!(role, FocusRole::NativeStage | FocusRole::NativeTimeline),
+            Ordering::Release,
+        );
         match role {
             FocusRole::WebLeft => {
                 if let Some(webview) = &self.left_webview {
@@ -407,6 +488,18 @@ impl State {
         if let (Some(layout), Some(adapter)) = (self.layout, &mut self.accesskit) {
             adapter.update_if_active(|| build_accessibility_tree(role, layout));
         }
+        let (responder_class, responder_family) = actual_first_responder();
+        let expected_family = focus_role_family(role);
+        if self.focus_observations.len() == MAX_FOCUS_OBSERVATIONS {
+            self.focus_observations.remove(0);
+        }
+        self.focus_observations.push(FocusObservation {
+            role,
+            source,
+            responder_class,
+            responder_family,
+            matches_role: responder_family == expected_family,
+        });
     }
 
     /// native領域(Stage/Timeline)への実クリックはOSがそのままfirst
@@ -416,7 +509,7 @@ impl State {
         let role = native_click_role(self.cursor_y, layout);
         if role != self.focus.current() {
             self.focus.sync_current(role);
-            self.apply_focus(role);
+            self.apply_focus(role, "native-click");
             self.publish_report();
         }
     }
@@ -505,7 +598,13 @@ impl State {
             // フォーカス移動なので、epochを消費しない同期として扱いつつ、
             // OSアクセシビリティ側のfocusedノードも同じ投影で追従させる。
             WebMessage::FocusIn => {
+                // native移譲後に遅延したIPCが届いてもcoordinatorをWebへ
+                // 巻き戻さないよう、実first-responderとの一致を先に要求する。
+                if actual_first_responder().1 != "web" {
+                    return;
+                }
                 let role = source.focus_role();
+                self.native_focus_active.store(false, Ordering::Release);
                 self.focus.sync_current(role);
                 if let (Some(layout), Some(adapter)) = (self.layout, &mut self.accesskit) {
                     adapter.update_if_active(|| build_accessibility_tree(role, layout));
@@ -515,11 +614,11 @@ impl State {
             // なく、WebView側スクリプトが中継した実イベントに従う。
             WebMessage::TabForward => {
                 let role = self.focus.tab_forward();
-                self.apply_focus(role);
+                self.apply_focus(role, "web-dom");
             }
             WebMessage::TabBackward => {
                 let role = self.focus.tab_backward();
-                self.apply_focus(role);
+                self.apply_focus(role, "web-dom");
             }
             WebMessage::ShortcutEnter => self.observe_shortcut(ShortcutKey::Enter),
             WebMessage::ShortcutEscape => self.observe_shortcut(ShortcutKey::Escape),
@@ -536,7 +635,7 @@ impl State {
             }
             WebMessage::FocusRequest { target, epoch } => {
                 match self.focus.request_focus(target, epoch) {
-                    Ok(role) => self.apply_focus(role),
+                    Ok(role) => self.apply_focus(role, "web-focus-request"),
                     Err(_) => return,
                 }
             }
@@ -583,6 +682,24 @@ impl State {
     fn publish_report(&self) {
         let minimize = self.minimize_lifecycle.observation();
         let fullscreen = self.fullscreen_lifecycle.observation();
+        let focus_observations = self
+            .focus_observations
+            .iter()
+            .map(|observation| {
+                json!({
+                    "role": focus_role_wire(observation.role),
+                    "source": observation.source,
+                    "responder_class": observation.responder_class,
+                    "responder_family": observation.responder_family,
+                    "matches_role": observation.matches_role,
+                })
+            })
+            .collect::<Vec<_>>();
+        let automated_focus_pass = self.automated_focus.as_ref().and_then(|check| check.pass);
+        let automated_focus_error = self
+            .automated_focus
+            .as_ref()
+            .and_then(|check| check.error.as_deref());
         let report = json!({
             "wgpu_major": 29,
             "surface_count": 1,
@@ -632,6 +749,9 @@ impl State {
             "fullscreen_lifecycle_restored_ime_owner": fullscreen
                 .restored_ime_owner
                 .map(focus_role_wire),
+            "focus_observations": focus_observations,
+            "automated_focus_pass": automated_focus_pass,
+            "automated_focus_error": automated_focus_error,
         });
         let _ = std::fs::write(
             &self.report_path,
@@ -705,6 +825,15 @@ impl ApplicationHandler<UserEvent> for State {
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: UserEvent) {
         match event {
             UserEvent::WebMessage(message) => self.consume_web_message(&message),
+            UserEvent::NativeTab { backward } => {
+                let role = if backward {
+                    self.focus.tab_backward()
+                } else {
+                    self.focus.tab_forward()
+                };
+                self.apply_focus(role, "native-monitor");
+                self.publish_report();
+            }
             UserEvent::Accesskit(event) => match event.window_event {
                 accesskit_winit::WindowEvent::InitialTreeRequested => {
                     let focus = self.focus.current();
@@ -722,7 +851,7 @@ impl ApplicationHandler<UserEvent> for State {
                         if let Some(target) = target {
                             let epoch = self.focus.epoch();
                             if let Ok(role) = self.focus.request_focus(target, epoch) {
-                                self.apply_focus(role);
+                                self.apply_focus(role, "accesskit");
                                 self.publish_report();
                             }
                         }
@@ -848,13 +977,14 @@ impl ApplicationHandler<UserEvent> for State {
             WindowEvent::KeyboardInput { event, .. } => {
                 if event.state == ElementState::Pressed && !event.repeat {
                     match event.logical_key {
+                        #[cfg(not(target_os = "macos"))]
                         Key::Named(NamedKey::Tab) => {
                             let role = if self.shift_held {
                                 self.focus.tab_backward()
                             } else {
                                 self.focus.tab_forward()
                             };
-                            self.apply_focus(role);
+                            self.apply_focus(role, "winit");
                             self.publish_report();
                         }
                         Key::Named(NamedKey::Enter) => self.observe_shortcut(ShortcutKey::Enter),
@@ -940,6 +1070,211 @@ impl ApplicationHandler<UserEvent> for State {
         } else {
             event_loop.set_control_flow(ControlFlow::WaitUntil(self.next_resize));
         }
+        self.advance_automated_focus(event_loop, now);
+    }
+}
+
+impl State {
+    fn fail_automated_focus(&mut self, event_loop: &ActiveEventLoop, error: String) {
+        if let Some(check) = &mut self.automated_focus {
+            check.pass = Some(false);
+            check.error = Some(error);
+        }
+        self.publish_report();
+        event_loop.exit();
+    }
+
+    fn advance_automated_focus(&mut self, event_loop: &ActiveEventLoop, now: Instant) {
+        let Some(check) = self.automated_focus.as_ref() else {
+            return;
+        };
+        if check.pass.is_some() {
+            return;
+        }
+        if now >= check.deadline {
+            self.fail_automated_focus(event_loop, "focus E2E timeout".to_owned());
+            return;
+        }
+        if self.resize_requests < self.resize_target || !self.left_ready || !self.right_ready {
+            event_loop.set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(25)));
+            return;
+        }
+        if !check.started {
+            self.focus.sync_current(FocusRole::NativeStage);
+            self.apply_focus(FocusRole::NativeStage, "automated-start");
+            let check = self.automated_focus.as_mut().unwrap();
+            check.started = true;
+            check.next_action = now + Duration::from_millis(150);
+            let next_action = check.next_action;
+            self.publish_report();
+            event_loop.set_control_flow(ControlFlow::WaitUntil(next_action));
+            return;
+        }
+
+        let next_action = check.next_action;
+        if now < next_action {
+            event_loop.set_control_flow(ControlFlow::WaitUntil(next_action));
+            return;
+        }
+
+        if check.awaiting_result {
+            let step = check.step;
+            let expected_role = AUTOMATED_FOCUS_STEPS[step];
+            let expected_source = if step % 2 == 0 {
+                "native-monitor"
+            } else {
+                "web-dom"
+            };
+            let observed = self.focus_observations.last();
+            let valid = self.focus.current() == expected_role
+                && observed.is_some_and(|observation| {
+                    observation.role == expected_role
+                        && observation.source == expected_source
+                        && observation.matches_role
+                });
+            if !valid {
+                let actual_source = observed
+                    .map(|observation| observation.source)
+                    .unwrap_or("none");
+                self.fail_automated_focus(
+                    event_loop,
+                    format!(
+                        "step {step}: expected {}/{expected_source}, got {}/{}",
+                        focus_role_wire(expected_role),
+                        focus_role_wire(self.focus.current()),
+                        actual_source
+                    ),
+                );
+                return;
+            }
+
+            let check = self.automated_focus.as_mut().unwrap();
+            check.step += 1;
+            check.awaiting_result = false;
+            if check.step == AUTOMATED_FOCUS_STEPS.len() {
+                check.pass = Some(true);
+                self.publish_report();
+                event_loop.exit();
+                return;
+            }
+            check.next_action = now + Duration::from_millis(100);
+            event_loop.set_control_flow(ControlFlow::WaitUntil(check.next_action));
+            return;
+        }
+
+        let backward = check.step >= 4;
+        if let Err(error) = post_tab_to_current_process(backward) {
+            self.fail_automated_focus(event_loop, error.to_owned());
+            return;
+        }
+        let check = self.automated_focus.as_mut().unwrap();
+        check.awaiting_result = true;
+        check.next_action = now + Duration::from_millis(350);
+        event_loop.set_control_flow(ControlFlow::WaitUntil(check.next_action));
+    }
+}
+
+fn focus_role_family(role: FocusRole) -> &'static str {
+    match role {
+        FocusRole::NativeStage | FocusRole::NativeTimeline => "native",
+        FocusRole::WebLeft | FocusRole::WebRight => "web",
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn actual_first_responder() -> (String, &'static str) {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return ("not-main-thread".to_owned(), "unknown");
+    };
+    let app = NSApplication::sharedApplication(mtm);
+    let Some(window) = app.keyWindow() else {
+        return ("no-key-window".to_owned(), "unknown");
+    };
+    let Some(responder) = window.firstResponder() else {
+        return ("none".to_owned(), "unknown");
+    };
+    let class_name = responder.class().name().to_owned();
+    let family = if class_name.contains("WK") || class_name.contains("Web") {
+        "web"
+    } else {
+        "native"
+    };
+    (class_name, family)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn actual_first_responder() -> (String, &'static str) {
+    ("unsupported".to_owned(), "unknown")
+}
+
+#[cfg(target_os = "macos")]
+fn post_tab_to_current_process(backward: bool) -> Result<(), &'static str> {
+    let source = CGEventSource::new(CGEventSourceStateID::Private)
+        .map_err(|_| "CGEventSource creation failed")?;
+    let down = CGEvent::new_keyboard_event(source.clone(), KeyCode::TAB, true)
+        .map_err(|_| "Tab key-down creation failed")?;
+    let up = CGEvent::new_keyboard_event(source, KeyCode::TAB, false)
+        .map_err(|_| "Tab key-up creation failed")?;
+    if backward {
+        down.set_flags(CGEventFlags::CGEventFlagShift);
+        up.set_flags(CGEventFlags::CGEventFlagShift);
+    }
+    let pid = std::process::id() as i32;
+    down.post_to_pid(pid);
+    up.post_to_pid(pid);
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn post_tab_to_current_process(_backward: bool) -> Result<(), &'static str> {
+    Err("macOSだけがfocus E2Eを実行できる")
+}
+
+#[cfg(target_os = "macos")]
+fn install_native_tab_monitor(
+    proxy: EventLoopProxy<UserEvent>,
+    native_focus_active: Arc<AtomicBool>,
+) -> Option<Retained<AnyObject>> {
+    let handler = RcBlock::new(move |event: std::ptr::NonNull<NSEvent>| {
+        let event = unsafe { event.as_ref() };
+        let direction = unsafe {
+            native_tab_direction(event.keyCode(), event.isARepeat(), event.modifierFlags())
+        };
+        if native_focus_active.load(Ordering::Acquire) && direction.is_some() {
+            let backward = direction.unwrap();
+            let _ = proxy.send_event(UserEvent::NativeTab { backward });
+            std::ptr::null_mut()
+        } else {
+            event as *const NSEvent as *mut NSEvent
+        }
+    });
+    unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::KeyDown, &handler) }
+}
+
+#[cfg(target_os = "macos")]
+fn native_tab_direction(
+    key_code: u16,
+    is_repeat: bool,
+    modifiers: NSEventModifierFlags,
+) -> Option<bool> {
+    let disallowed = NSEventModifierFlags::NSEventModifierFlagControl
+        | NSEventModifierFlags::NSEventModifierFlagOption
+        | NSEventModifierFlags::NSEventModifierFlagCommand
+        | NSEventModifierFlags::NSEventModifierFlagNumericPad
+        | NSEventModifierFlags::NSEventModifierFlagHelp
+        | NSEventModifierFlags::NSEventModifierFlagFunction;
+    if key_code != 48 || is_repeat || modifiers.intersects(disallowed) {
+        return None;
+    }
+    Some(modifiers.contains(NSEventModifierFlags::NSEventModifierFlagShift))
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for State {
+    fn drop(&mut self) {
+        if let Some(monitor) = self.native_tab_monitor.take() {
+            unsafe { NSEvent::removeMonitor(&monitor) };
+        }
     }
 }
 
@@ -972,6 +1307,7 @@ document.addEventListener('compositionupdate', () => window.ipc.postMessage('com
 document.addEventListener('compositionend', () => window.ipc.postMessage('composition-end'));
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Tab') {
+    if (event.metaKey || event.ctrlKey || event.altKey) { return; }
     event.preventDefault();
     window.ipc.postMessage(event.shiftKey ? 'tab-backward' : 'tab-forward');
     return;
@@ -1021,6 +1357,13 @@ fn main() {
     let proxy = event_loop.create_proxy();
     let mut state = State::new(proxy);
     event_loop.run_app(&mut state).expect("surface host");
+    if state
+        .automated_focus
+        .as_ref()
+        .is_some_and(|check| check.pass != Some(true))
+    {
+        std::process::exit(1);
+    }
 }
 
 #[cfg(test)]
@@ -1060,5 +1403,48 @@ mod tests {
             let _ = ax_node_id(node.id);
             let _ = ax_role(node.role);
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_tab_monitor_accepts_plain_and_shift_tab() {
+        assert_eq!(
+            native_tab_direction(48, false, NSEventModifierFlags::empty()),
+            Some(false)
+        );
+        assert_eq!(
+            native_tab_direction(48, false, NSEventModifierFlags::NSEventModifierFlagShift),
+            Some(true)
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_tab_monitor_rejects_repeat_and_other_keys() {
+        assert_eq!(
+            native_tab_direction(48, true, NSEventModifierFlags::empty()),
+            None
+        );
+        assert_eq!(
+            native_tab_direction(36, false, NSEventModifierFlags::empty()),
+            None
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_tab_monitor_does_not_steal_modified_tab() {
+        for modifier in [
+            NSEventModifierFlags::NSEventModifierFlagCommand,
+            NSEventModifierFlags::NSEventModifierFlagControl,
+            NSEventModifierFlags::NSEventModifierFlagOption,
+        ] {
+            assert_eq!(native_tab_direction(48, false, modifier), None);
+        }
+    }
+
+    #[test]
+    fn web_tab_relay_does_not_steal_non_shift_modifiers() {
+        assert!(RELAY_SCRIPT.contains("event.metaKey || event.ctrlKey || event.altKey"));
     }
 }
