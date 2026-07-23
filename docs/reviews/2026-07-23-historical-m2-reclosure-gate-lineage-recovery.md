@@ -4,7 +4,7 @@
 
 対象: `docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md`のcutoff全14版。
 
-関連: [M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)、[独立追補レビュー](2026-07-18-m2-foundation-supplementary-code-review.md)、[M2入口ゲート回収](2026-07-23-historical-m2-entry-gate-lineage-recovery.md)、[historical foundation回収](2026-07-23-historical-foundation-lineage-recovery.md)、[coverage台帳](2026-07-23-historical-value-recovery-coverage-ledger.md)
+関連: [M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)、[gate反対側レビュー回収](2026-07-23-historical-reclosure-counter-review-evidence-recovery.md)、[独立追補レビュー](2026-07-18-m2-foundation-supplementary-code-review.md)、[M2入口ゲート回収](2026-07-23-historical-m2-entry-gate-lineage-recovery.md)、[historical foundation回収](2026-07-23-historical-foundation-lineage-recovery.md)、[coverage台帳](2026-07-23-historical-value-recovery-coverage-ledger.md)
 
 ## 1. 結論
 
