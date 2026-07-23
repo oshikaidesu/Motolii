@@ -1,8 +1,8 @@
 use std::{path::PathBuf, sync::Arc};
 
-use g0_9_timeline_visual_parity::{
-    build_depth_scene, build_scene, DepthSession, RectPrimitive, TextPrimitive, VisualParityReport,
-    AUTO_PRESENT_TARGET, DEPTH_FIXTURE_HEIGHT, FIXTURE_HEIGHT, FIXTURE_WIDTH, OBJECTS,
+use g0_9_graph_view::{
+    build_scene, hit_target, plot_contains, GraphSession, Primitive, Report, TextPrimitive, HEIGHT,
+    WIDTH,
 };
 use glyphon::{
     Attrs, Buffer, Cache, Color, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache,
@@ -13,9 +13,12 @@ use winit::{
     dpi::LogicalSize,
     event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
-    keyboard::{KeyCode, PhysicalKey},
+    keyboard::{KeyCode, ModifiersState, PhysicalKey},
     window::{Window, WindowId},
 };
+
+const AUTO_PRESENT_TARGET: u32 = 120;
+const PRIMITIVE_CAPACITY: usize = 1_024;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -40,8 +43,8 @@ struct GfxState {
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     screen_buffer: wgpu::Buffer,
-    rect_buffer: wgpu::Buffer,
-    rect_count: u32,
+    primitive_buffer: wgpu::Buffer,
+    primitive_count: u32,
     font_system: FontSystem,
     swash_cache: SwashCache,
     viewport: Viewport,
@@ -53,23 +56,23 @@ struct GfxState {
 }
 
 impl GfxState {
-    fn new(window: &Arc<Window>, depth: bool, depth_session: &DepthSession) -> Self {
+    fn new(window: &Arc<Window>, session: &GraphSession) -> Self {
         let instance = wgpu::Instance::default();
         let surface = instance
             .create_surface(Arc::clone(window))
-            .expect("timeline surface");
+            .expect("graph view surface");
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: Some(&surface),
             force_fallback_adapter: false,
         }))
-        .expect("surface adapter");
+        .expect("graph view adapter");
         let adapter_info = adapter.get_info();
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-            label: Some("g0-9-timeline-visual-parity"),
+            label: Some("g0-9-graph-view"),
             ..Default::default()
         }))
-        .expect("surface device");
+        .expect("graph view device");
         let capabilities = surface.get_capabilities(&adapter);
         let format = capabilities
             .formats
@@ -91,19 +94,19 @@ impl GfxState {
         surface.configure(&device, &config);
 
         let screen_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("timeline-screen-uniform"),
+            label: Some("graph-view-screen"),
             size: std::mem::size_of::<ScreenUniform>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let rect_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("timeline-visual-primitives"),
-            size: (std::mem::size_of::<RectPrimitive>() * 512) as u64,
+        let primitive_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("graph-view-primitives"),
+            size: (std::mem::size_of::<Primitive>() * PRIMITIVE_CAPACITY) as u64,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("timeline-visual-bind-group-layout"),
+        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("graph-view-bind-layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::VERTEX,
@@ -116,30 +119,30 @@ impl GfxState {
             }],
         });
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("timeline-visual-bind-group"),
-            layout: &bind_group_layout,
+            label: Some("graph-view-bind-group"),
+            layout: &layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: screen_buffer.as_entire_binding(),
             }],
         });
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("timeline-visual-shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("timeline.wgsl").into()),
+            label: Some("graph-view-shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("graph.wgsl").into()),
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("timeline-visual-pipeline-layout"),
-            bind_group_layouts: &[Some(&bind_group_layout)],
+            label: Some("graph-view-pipeline-layout"),
+            bind_group_layouts: &[Some(&layout)],
             immediate_size: 0,
         });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("timeline-visual-pipeline"),
+            label: Some("graph-view-pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
                 buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<RectPrimitive>() as u64,
+                    array_stride: std::mem::size_of::<Primitive>() as u64,
                     step_mode: wgpu::VertexStepMode::Instance,
                     attributes: &[
                         wgpu::VertexAttribute {
@@ -153,9 +156,14 @@ impl GfxState {
                             shader_location: 1,
                         },
                         wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Uint32,
+                            format: wgpu::VertexFormat::Float32x4,
                             offset: 32,
                             shader_location: 2,
+                        },
+                        wgpu::VertexAttribute {
+                            format: wgpu::VertexFormat::Uint32,
+                            offset: 48,
+                            shader_location: 3,
                         },
                     ],
                 }],
@@ -177,15 +185,11 @@ impl GfxState {
             multiview_mask: None,
             cache: None,
         });
-
-        let font_system = FontSystem::new();
-        let swash_cache = SwashCache::new();
         let cache = Cache::new(&device);
         let viewport = Viewport::new(&device, &cache);
         let mut atlas = TextAtlas::new(&device, &queue, &cache, format);
         let text_renderer =
             TextRenderer::new(&mut atlas, &device, wgpu::MultisampleState::default(), None);
-
         let mut state = Self {
             surface,
             device,
@@ -194,10 +198,10 @@ impl GfxState {
             pipeline,
             bind_group,
             screen_buffer,
-            rect_buffer,
-            rect_count: 0,
-            font_system,
-            swash_cache,
+            primitive_buffer,
+            primitive_count: 0,
+            font_system: FontSystem::new(),
+            swash_cache: SwashCache::new(),
             viewport,
             atlas,
             text_renderer,
@@ -205,51 +209,47 @@ impl GfxState {
             adapter: adapter_info.name,
             backend: format!("{:?}", adapter_info.backend),
         };
-        state.update_scene(depth, depth_session);
+        state.update_scene(session);
         state
     }
 
-    fn configure(&mut self, width: u32, height: u32, depth: bool, depth_session: &DepthSession) {
+    fn configure(&mut self, width: u32, height: u32, session: &GraphSession) {
         if width == 0 || height == 0 {
             return;
         }
         self.config.width = width;
         self.config.height = height;
         self.surface.configure(&self.device, &self.config);
-        self.update_scene(depth, depth_session);
+        self.update_scene(session);
     }
 
-    fn update_scene(&mut self, depth: bool, depth_session: &DepthSession) {
-        let scale_x = self.config.width as f32 / FIXTURE_WIDTH;
-        let logical_height = if depth {
-            DEPTH_FIXTURE_HEIGHT
-        } else {
-            FIXTURE_HEIGHT
-        };
-        let scale_y = self.config.height as f32 / logical_height;
-        let scene = if depth {
-            build_depth_scene(depth_session, FIXTURE_WIDTH, DEPTH_FIXTURE_HEIGHT)
-        } else {
-            build_scene(FIXTURE_WIDTH, FIXTURE_HEIGHT)
-        };
-        let scaled_rects = scene
-            .rects
+    fn update_scene(&mut self, session: &GraphSession) {
+        let scale_x = self.config.width as f32 / WIDTH;
+        let scale_y = self.config.height as f32 / HEIGHT;
+        let scene = build_scene(session);
+        let scaled = scene
+            .primitives
             .into_iter()
             .map(|mut primitive| {
-                primitive.rect[0] *= scale_x;
-                primitive.rect[1] *= scale_y;
-                primitive.rect[2] *= scale_x;
-                primitive.rect[3] *= scale_y;
+                primitive.bounds[0] *= scale_x;
+                primitive.bounds[1] *= scale_y;
+                primitive.bounds[2] *= scale_x;
+                primitive.bounds[3] *= scale_y;
+                if primitive.shape == 3 {
+                    primitive.extra[0] *= scale_x;
+                    primitive.extra[1] *= scale_y;
+                    primitive.extra[2] *= scale_x.min(scale_y);
+                }
                 primitive
             })
             .collect::<Vec<_>>();
         assert!(
-            scaled_rects.len() <= 512,
-            "fixture exceeded static primitive capacity"
+            scaled.len() <= PRIMITIVE_CAPACITY,
+            "fixture exceeded primitive capacity"
         );
-        self.rect_count = scaled_rects.len() as u32;
+        self.primitive_count = scaled.len() as u32;
         self.queue
-            .write_buffer(&self.rect_buffer, 0, bytemuck::cast_slice(&scaled_rects));
+            .write_buffer(&self.primitive_buffer, 0, bytemuck::cast_slice(&scaled));
         self.queue.write_buffer(
             &self.screen_buffer,
             0,
@@ -298,7 +298,7 @@ impl GfxState {
                 areas,
                 &mut self.swash_cache,
             )
-            .expect("prepare timeline text");
+            .expect("prepare graph view text");
     }
 
     fn render(&mut self) -> bool {
@@ -320,19 +320,19 @@ impl GfxState {
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("timeline-visual-frame"),
+                label: Some("graph-view-frame"),
             });
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("timeline-visual-pass"),
+                label: Some("graph-view-pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
                             r: 0.018,
-                            g: 0.020,
-                            b: 0.022,
+                            g: 0.019,
+                            b: 0.021,
                             a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,
@@ -346,11 +346,11 @@ impl GfxState {
             });
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &self.bind_group, &[]);
-            pass.set_vertex_buffer(0, self.rect_buffer.slice(..));
-            pass.draw(0..6, 0..self.rect_count);
+            pass.set_vertex_buffer(0, self.primitive_buffer.slice(..));
+            pass.draw(0..6, 0..self.primitive_count);
             self.text_renderer
                 .render(&self.atlas, &self.viewport, &mut pass)
-                .expect("render timeline text");
+                .expect("render graph view text");
         }
         self.queue.submit([encoder.finish()]);
         frame.present();
@@ -371,7 +371,7 @@ fn prepare_text(
     buffer.set_size(
         font_system,
         Some(text.width * scale_x),
-        Some(text.height * scale_y),
+        Some(font_size * 1.6),
     );
     let family = if text.monospace {
         Family::Monospace
@@ -398,9 +398,7 @@ fn prepare_text(
             right: ((text.left + text.width) * scale_x)
                 .ceil()
                 .min(surface_width as f32) as i32,
-            bottom: ((text.top + text.height) * scale_y)
-                .ceil()
-                .min(surface_height as f32) as i32,
+            bottom: (top + font_size * 1.6).ceil().min(surface_height as f32) as i32,
         },
         color: Color::rgba(text.color[0], text.color[1], text.color[2], text.color[3]),
     }
@@ -408,40 +406,42 @@ fn prepare_text(
 
 struct App {
     auto: bool,
-    depth: bool,
     report_path: PathBuf,
     window: Option<Arc<Window>>,
     gfx: Option<GfxState>,
-    depth_session: DepthSession,
+    session: GraphSession,
     cursor: [f32; 2],
     previous_cursor: [f32; 2],
+    drag_token: Option<u64>,
     panning: bool,
+    modifiers: ModifiersState,
+    next_token: u64,
     present_count: u32,
 }
 
 impl App {
-    fn new(auto: bool, depth: bool) -> Self {
+    fn new(auto: bool) -> Self {
         Self {
             auto,
-            depth,
-            report_path: std::env::var_os("G0_9_TIMELINE_VISUAL_REPORT")
+            report_path: std::env::var_os("G0_9_GRAPH_VIEW_REPORT")
                 .map(PathBuf::from)
-                .unwrap_or_else(|| {
-                    PathBuf::from("/tmp/motolii-g0-9-timeline-visual-parity-report.json")
-                }),
+                .unwrap_or_else(|| PathBuf::from("/tmp/motolii-g0-9-graph-view-report.json")),
             window: None,
             gfx: None,
-            depth_session: DepthSession::default(),
+            session: GraphSession::default(),
             cursor: [0.0; 2],
             previous_cursor: [0.0; 2],
+            drag_token: None,
             panning: false,
+            modifiers: ModifiersState::empty(),
+            next_token: 1,
             present_count: 0,
         }
     }
 
     fn refresh(&mut self) {
         if let Some(gfx) = self.gfx.as_mut() {
-            gfx.update_scene(self.depth, &self.depth_session);
+            gfx.update_scene(&self.session);
         }
         if let Some(window) = self.window.as_ref() {
             window.request_redraw();
@@ -450,36 +450,37 @@ impl App {
 
     fn write_report(&self) {
         let gfx = self.gfx.as_ref().expect("gfx state");
-        let scene = if self.depth {
-            build_depth_scene(&self.depth_session, FIXTURE_WIDTH, DEPTH_FIXTURE_HEIGHT)
-        } else {
-            build_scene(FIXTURE_WIDTH, FIXTURE_HEIGHT)
-        };
-        let report = VisualParityReport {
-            ticket: if self.depth {
-                "G0-9-native-depth-rail"
-            } else {
-                "G0-9-timeline-visual-parity"
-            },
-            status: "complete",
+        let scene = build_scene(&self.session);
+        let report = Report {
+            ticket: "G0-9-native-graph-view",
+            status: "fixture-complete",
             adapter: gfx.adapter.clone(),
             backend: gfx.backend.clone(),
-            object_count: OBJECTS.len(),
-            rect_primitive_count: scene.rects.len(),
+            channel_count: self.session.channels.len(),
+            key_count: self
+                .session
+                .channels
+                .iter()
+                .map(|channel| channel.keys.len())
+                .sum(),
+            primitive_count: scene.primitives.len(),
             text_run_count: scene.texts.len(),
+            semantic_commit_count: self.session.semantic_commit_count,
+            selected_key_count: self.session.selection.len(),
+            navigation_change_count: self.session.navigation_change_count,
+            selection_change_count: self.session.selection_change_count,
+            readback_count: self.session.readback_count,
+            hot_drag_resource_creation_count: self.session.hot_resource_creation_count,
             present_count: self.present_count,
-            readback_count: 0,
-            semantic_state_owner_count: 1,
-            semantic_commit_count: self.depth_session.semantic_commit_count,
-            navigation_change_count: self.depth_session.navigation_change_count,
-            selection_change_count: self.depth_session.selection_change_count,
-            pass: self.present_count >= AUTO_PRESENT_TARGET,
+            pass: self.present_count >= AUTO_PRESENT_TARGET
+                && self.session.readback_count == 0
+                && self.session.hot_resource_creation_count == 0,
         };
         std::fs::write(
             &self.report_path,
             serde_json::to_vec_pretty(&report).expect("serialize report"),
         )
-        .expect("write report");
+        .expect("write graph view report");
         println!(
             "{}",
             serde_json::to_string_pretty(&report).expect("print report")
@@ -496,23 +497,12 @@ impl ApplicationHandler for App {
             event_loop
                 .create_window(
                     Window::default_attributes()
-                        .with_title(if self.depth {
-                            "Motolii native Depth Rail"
-                        } else {
-                            "Motolii native Timeline visual parity"
-                        })
-                        .with_inner_size(LogicalSize::new(
-                            FIXTURE_WIDTH as f64,
-                            if self.depth {
-                                DEPTH_FIXTURE_HEIGHT as f64
-                            } else {
-                                FIXTURE_HEIGHT as f64
-                            },
-                        )),
+                        .with_title("Motolii native Blender-like Graph View")
+                        .with_inner_size(LogicalSize::new(WIDTH as f64, HEIGHT as f64)),
                 )
-                .expect("timeline window"),
+                .expect("graph view window"),
         );
-        self.gfx = Some(GfxState::new(&window, self.depth, &self.depth_session));
+        self.gfx = Some(GfxState::new(&window, &self.session));
         self.window = Some(window);
     }
 
@@ -535,19 +525,62 @@ impl ApplicationHandler for App {
             }
             WindowEvent::Resized(size) => {
                 if let Some(gfx) = self.gfx.as_mut() {
-                    gfx.configure(size.width, size.height, self.depth, &self.depth_session);
+                    gfx.configure(size.width, size.height, &self.session);
                 }
                 window.request_redraw();
             }
-            WindowEvent::CursorMoved { position, .. } if self.depth => {
+            WindowEvent::CursorMoved { position, .. } => {
                 let scale = window.scale_factor();
                 self.previous_cursor = self.cursor;
                 self.cursor = [(position.x / scale) as f32, (position.y / scale) as f32];
-                if self.panning
+                let changed = if self.drag_token.is_some() {
+                    self.session.update_drag_screen(self.cursor)
+                } else if self.panning {
+                    self.session.pan_by_view([
+                        self.cursor[0] - self.previous_cursor[0],
+                        self.cursor[1] - self.previous_cursor[1],
+                    ])
+                } else {
+                    self.session.update_marquee(self.cursor)
+                };
+                if changed {
+                    self.refresh();
+                }
+            }
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+                ..
+            } => {
+                if let Some(target) = hit_target(&self.session, self.cursor) {
+                    let token = self.next_token;
+                    self.next_token += 1;
+                    if self.session.begin_drag_at(
+                        target,
+                        token,
+                        Some(self.cursor),
+                        self.modifiers.shift_key(),
+                    ) {
+                        self.drag_token = Some(token);
+                        self.refresh();
+                    }
+                } else if plot_contains(self.cursor)
                     && self
-                        .depth_session
-                        .pan(self.cursor[0] - self.previous_cursor[0])
+                        .session
+                        .begin_marquee(self.cursor, self.modifiers.shift_key())
                 {
+                    self.refresh();
+                }
+            }
+            WindowEvent::MouseInput {
+                state: ElementState::Released,
+                button: MouseButton::Left,
+                ..
+            } => {
+                if let Some(token) = self.drag_token.take() {
+                    self.session.release(token);
+                    self.refresh();
+                } else if self.session.release_marquee() {
                     self.refresh();
                 }
             }
@@ -555,44 +588,49 @@ impl ApplicationHandler for App {
                 state: ElementState::Pressed,
                 button: MouseButton::Middle,
                 ..
-            } if self.depth => self.panning = true,
+            } if plot_contains(self.cursor) => {
+                self.panning = true;
+            }
             WindowEvent::MouseInput {
                 state: ElementState::Released,
                 button: MouseButton::Middle,
                 ..
-            } if self.depth => self.panning = false,
-            WindowEvent::MouseWheel { delta, .. } if self.depth => {
+            } => {
+                self.panning = false;
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
                 let amount = match delta {
                     MouseScrollDelta::LineDelta(_, y) => y as f64 * 0.12,
                     MouseScrollDelta::PixelDelta(position) => position.y * 0.005,
                 };
-                if self.depth_session.zoom(self.cursor[0], amount.exp()) {
+                if self.session.zoom_about_screen(self.cursor, amount.exp()) {
                     self.refresh();
                 }
             }
-            WindowEvent::Focused(false) if self.depth => {
+            WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers.state(),
+            WindowEvent::Focused(false) => {
                 self.panning = false;
-                if self.depth_session.cancel() {
+                if self.session.cancel() {
+                    self.drag_token = None;
                     self.refresh();
                 }
             }
-            WindowEvent::KeyboardInput { event, .. }
-                if self.depth && event.state == ElementState::Pressed =>
-            {
+            WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 let changed = match event.physical_key {
-                    PhysicalKey::Code(KeyCode::KeyD) => {
-                        self.depth_session.begin_distribution(1, -0.25, 0.25)
+                    PhysicalKey::Code(KeyCode::Escape) => {
+                        self.drag_token = None;
+                        self.panning = false;
+                        self.session.cancel()
                     }
-                    PhysicalKey::Code(KeyCode::KeyR) => {
-                        self.depth_session.toggle_distribution_reverse()
-                    }
-                    PhysicalKey::Code(KeyCode::Enter) => self.depth_session.apply_distribution(1),
-                    PhysicalKey::Code(KeyCode::Escape) => self.depth_session.cancel(),
                     PhysicalKey::Code(KeyCode::Home) => {
-                        self.depth_session.fit_all();
+                        self.session.fit_all();
                         true
                     }
-                    PhysicalKey::Code(KeyCode::KeyC) => self.depth_session.focus("city-grid"),
+                    PhysicalKey::Code(KeyCode::KeyF) => self.session.fit_selection(),
+                    PhysicalKey::Code(KeyCode::KeyS) => {
+                        self.session.toggle_snap();
+                        true
+                    }
                     _ => false,
                 };
                 if changed {
@@ -623,10 +661,9 @@ impl ApplicationHandler for App {
 
 fn main() {
     let auto = std::env::args().any(|arg| arg == "--auto");
-    let depth = cfg!(feature = "depth-default") || std::env::args().any(|arg| arg == "--depth");
     let event_loop = EventLoop::new().expect("event loop");
     event_loop.set_control_flow(ControlFlow::Wait);
     event_loop
-        .run_app(&mut App::new(auto, depth))
-        .expect("run visual parity spike");
+        .run_app(&mut App::new(auto))
+        .expect("run graph view spike");
 }

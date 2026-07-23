@@ -69,4 +69,8 @@ unit testは5件で、stable ID、normalized range、必要role、DPI非依存lo
 - icon/fontの視覚差、倍率別hit target、bounded AccessKit projection
 - Windows WebView2とのz-order、focus、DPI、MS-IME
 
-pixel完全一致、製品D2、Z軸depth semantics、IME/a11y、Windows受入はこのPASSに含めない。
+pixel完全一致、製品D2、IME/a11y、Windows受入はこのPASSに含めない。
+
+2026-07-22追補: 同じcrateの`--depth`枝でnative Depth Rail core fixtureを追加し、同一Z stack、parent scope、
+Layer Order Distribute preview / Reverse / Apply / Cancel、pan/zoomとMetal 120 presentまで合格した。結果は
+[native Depth Rail spike](g0-9-native-depth-rail.md)を正とする。正式D2、Auto Key、Preserve Appearanceは未接続である。

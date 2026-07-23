@@ -1,0 +1,46 @@
+{
+  "date": "2026-07-22",
+  "fixture": "spikes/g0-9-timeline-visual-parity",
+  "panel_roles": [
+    "Stage",
+    "Timeline",
+    "GraphEditor",
+    "Browser",
+    "Inspector"
+  ],
+  "layout_engine": {
+    "name": "taffy",
+    "version": "0.12.2",
+    "ownership": "logical_geometry_only"
+  },
+  "operations": {
+    "detach_all_roles": true,
+    "resize_detached_window_all_roles": true,
+    "redock_as_tab_all_roles": true,
+    "redock_as_split_all_roles": true,
+    "nested_horizontal_vertical_split": true,
+    "tabs_share_rectangle": true
+  },
+  "guards": {
+    "panel_min_logical_size": [120.0, 90.0],
+    "window_min_logical_size": [320.0, 240.0],
+    "split_ratio_range": [0.15, 0.85],
+    "reject_nan_or_infinity": true,
+    "rectangles_within_window_bounds": true
+  },
+  "state_invariants": {
+    "snapshot_revision": 17,
+    "selection": "pulse-rings",
+    "semantic_commits": 0,
+    "document_or_undo_owner_in_layout": false
+  },
+  "automated_tests": 16,
+  "pass": true,
+  "not_proven": [
+    "product renderer and WebView integration",
+    "mouse dock preview and tab tear-off",
+    "cross-window OS drop",
+    "mixed-DPI monitor movement",
+    "Windows WebView2"
+  ]
+}

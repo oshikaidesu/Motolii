@@ -1,0 +1,18 @@
+{
+  "ticket": "G0-9-native-graph-view",
+  "status": "fixture-complete",
+  "adapter": "Apple M4",
+  "backend": "Metal",
+  "channel_count": 3,
+  "key_count": 9,
+  "primitive_count": 203,
+  "text_run_count": 48,
+  "semantic_commit_count": 0,
+  "selected_key_count": 1,
+  "navigation_change_count": 0,
+  "selection_change_count": 0,
+  "readback_count": 0,
+  "hot_drag_resource_creation_count": 0,
+  "present_count": 120,
+  "pass": true
+}

@@ -45,6 +45,16 @@ Stretch等のtool panelはtrack headerではなく、mode/formを選ぶReact chr
 scroll/zoom/selectionへ同期するS/M rail、time ruler、bar、key、playhead、およびZ軸Timeline / depth railは
 nativeが一体で所有する。
 
+Stage panel自体は複合panelとする。Preview canvas、Output Frame、object bounds、path、handle、gizmoはnative wgpu
+viewportが所有し、panel header、Fit / magnification / view mode、transport button、timecode、quality/status表示は
+React chromeが所有する。React帯とnative viewportは同じStage panelの子として一緒にdock / detach / resizeし、互いに
+重ならないopaque rectangleへ配置する。透明WebViewをPreview上へ被せず、pointer captureが必要なscrubや直接操作は
+nativeへ残す。React controlはtyped command intentだけをHostへ送り、playback、playhead、selectionの正本を持たない。
+表示更新はHostの最新snapshotを一方向に投影し、frameごとのmessage backlogを作らない。
+
+将来のKBar型command stripや追加transport controlもこのReact chrome seamへ置ける。ただし特定library、JS component、
+command配置、第三者拡張APIを現時点の製品契約へ焼かず、既存`CommandId` / typed intent境界を再利用する。
+
 ただし高頻度curve操作を伴うEasing popupは一般popoverの例外である。
 [native Easing popup受入契約](reviews/2026-07-22-m3-native-easing-popup-acceptance.md)に従い、Reactは入口と
 現在値の要約だけを所有し、native wgpuはpopup frame、preset/user library、数値form、curve、grid、handle、
@@ -148,6 +158,7 @@ CompositionControllerは正規経路にしない。通常のwindowed child WebVi
 ### 決定済み
 
 - React/WebView chrome + native Stage/Timelineという責任分担
+- StageはReact header/transport + native Preview canvasを一つのdockable複合panelとして扱う。透明overlayは使わない
 - ReactはDOMの優位性がある領域へ使い、高密度Canvas workspaceのownerにしない
 - Timelineの`KEYS / LAYERS` tool panelはReact、time/Z軸に同期するrail・bar・key・playheadはnative
 - Stage/Timelineのlayout、hit-test、interaction modelはtoolkit/renderer非依存に置く
@@ -161,6 +172,12 @@ CompositionControllerは正規経路にしない。通常のwindowed child WebVi
 sessionはHost coordinatorだけが所有する。React Inspector、native Preview、native Timelineは同じrevision付き
 snapshotのread-only projectionであり、独自writer、独自Undo、surface別selection正本を持たない。reload、detach、
 crash復旧では最新Host snapshotから再投影し、surface間の双方向state syncを追加しない。
+
+通常製品panelのplacement能力もrole別に分けない。Stage / Timeline / Graph / Browser / Inspectorは同じdock treeで
+tab化、horizontal / vertical split、divider resize、top-level detach / re-dock、window resizeを行える。modal、popover、
+toastはdock panelではない。headless layoutはlogical rectangleだけを計算し、window位置、DPI、split比をDocumentへ
+書かず、panelを移してもHost snapshot、selection、Undo ownerを増やさない。isolated fixtureの合否と未証明範囲は
+[detachable panel / multi-window契約](reviews/2026-07-22-m3-detachable-panel-window-contract.md)を正とする。
 
 ### G0-9実機spikeまで未決
 

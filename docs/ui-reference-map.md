@@ -50,6 +50,20 @@ React所有面の製品実装は[直接移管契約](reviews/2026-07-22-m3-react
 固定モック内で同形Reactへ抽出してから製品ownerへ移す。正しいsourceが無いことを理由に、製品packageへ
 縮約版を先に作らない。
 
+### 座標描画面の機械監査（2026-07-22）
+
+固定commit `56c318ed`のReact sourceを`canvas` / SVG / pointer / absolute-positionで走査した結果、literal
+`<canvas>`と`getContext()`は0件だった。Canvas相当の座標描画面はEasing SVG、Multi-key Graph View SVG、
+Timeline time/Z projectionであり、Easing、通常Timeline、Multi-key Graph View、Depth Railはnative isolated core
+fixtureまで到達した。Graph ViewとDepth Railはいずれも外観・headless基本操作までで、AX/D2と
+製品input接続を後続する。Stage gizmoはモック移植でなくnative presentation overlayの製品実装として別に扱う。
+
+詳細なsource別分類、進行順、非目標は
+[React coordinate surface機械監査](reviews/2026-07-22-m3-react-coordinate-surface-audit.md)を正とする。
+`KEYS / LAYERS`、Align / Stagger / Stretch、小さなStagger説明SVGはReact所有のままで、nativeへ複製しない。
+Multi-key Graph Viewの具体的な操作トポロジー、Blender先例の利用範囲、GPL停止線は
+[native Multi-key Graph View受入契約](reviews/2026-07-22-m3-native-multi-key-graph-view-acceptance.md)に従う。
+
 ## 統合モックの面 → 実装レーン対応(2026-07-19操作確認スナップショット)
 
 `#plugin-browser-candidate`は名前に反してBrowser単体ではなく、M3後半までを含む統合モックである。2026-07-19の操作確認時点の対応(現在地は日付時点のスナップショットであり、正本は[M3仕様](specs/M3-ui-integration.md)のタスク表):

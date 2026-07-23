@@ -1,0 +1,29 @@
+{
+  "date": "2026-07-22",
+  "platform": "macOS",
+  "adapter": "Apple M4",
+  "backend": "Metal",
+  "initial_projection": "four root objects at z=0 shown as one 0 × 4 stack",
+  "checks": [
+    {
+      "action": "open Layer Order Distribute preview",
+      "input": "D",
+      "result": "four markers previewed from -0.25 to +0.25 in authoring order",
+      "semantic_commit_delta": 0
+    },
+    {
+      "action": "reverse distribution",
+      "input": "R",
+      "result": "the same depth set was reassigned in reverse order",
+      "semantic_commit_delta": 0
+    },
+    {
+      "action": "apply distribution",
+      "input": "Enter",
+      "result": "preview styling cleared and the four assigned depths remained",
+      "semantic_commit_delta": 1
+    }
+  ],
+  "readback_count": 0,
+  "pass": true
+}

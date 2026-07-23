@@ -26,6 +26,11 @@ community panelは同じUI kitを使うが、権限分離が必要な時は別We
 同じWebView内、native rectangleをまたぐpopupだけを必要寸法の一時child WebViewへ出す。透明な全画面WebView、
 WebViewの穴、browser/native GPU texture共有を前提にしない。
 
+Stageは一つのdockable複合panelとして、Reactのopaque header / transport帯とnative Preview viewportを非重複rectで
+並べる。Fit、倍率、再生、step、timecode、quality/status等の低頻度chromeはReact、映像、Output Frame、handle、gizmo、
+高頻度scrubはnativeが所有する。detach時はStage全体を移し、移動先top-levelの1 Surface内viewportと同version React
+bundleを同じlayout epochで再配置する。React帯だけ、またはPreviewだけを別のsemantic ownerとして切り離さない。
+
 ## 2. platformの具体
 
 ### macOS

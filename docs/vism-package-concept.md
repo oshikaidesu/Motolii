@@ -138,6 +138,20 @@ Vismは別Vismの実装identityを直接要求しない。`BeatEvents`、texture
 
 v1のKitは宣言をProjectへ1 macroでmaterializeし、展開後は通常のVism instanceと接続として編集する。Kit runtimeを常駐させず、Kit更新で既存Projectを自動変更しない。詳しい責任とBPM例は[Vism / Kitモデル](vism-kit-model.md)を正本とする。
 
+### 5.2 外向きDeliveryはv1映像だけに閉じ、能力席だけ残す
+
+v1の製品出力は、既存`ExportJob`が同じ`render_frame(t, Quality)`を通して作る**音声mux込みの完成映像**に限定する。Lottie、animated SVG、OTIO、別Host project、Web runtime package、外部serviceへのpublishをVism完成条件へ含めず、`.vism` loaderより先にExporter APIを実装しない。
+
+一方、Bodymovin型の成果を将来「未知の外向き動詞」として追加できるよう、**Delivery Adapter capabilityの席**は閉じない。席を残すとは、現時点でmanifest field、trait、artifact schema、拡張子を予約することではない。将来の比較で、少なくとも次を満たす一般能力として追加できることを意味する。
+
+- Project／selection／canonical frame等のversion付きread-only入力を宣言し、生Document schema走査へ依存しない
+- 対応外のeffect、Vism、font、expressionをpreflightで型付き診断し、黙って欠落させない
+- 出力artifactのdestination、上書き、取消、検証、atomic publishをHostが所有する
+- filesystem／network permissionとsecretをpackage／Projectの保存値から分離する
+- Delivery AdapterがDocumentを書き換えず、通常の映像Exportと別の作品意味を発明しない
+
+具体的なadapterが通常Vismか別のHost adapter成果物かは未決である。将来の追加点はこのcapability境界とし、特定のLottie JSON fieldや外部runtime型をDocument、Core、Vism packageの恒久形式へ先回りして焼かない。
+
 ## 6. Projectから見たVism
 
 ProjectはVism実装の内部構造ではなく、少なくとも概念上次を参照する。
@@ -216,6 +230,8 @@ particle.vism
 | Vismと内部plugin kindを分離する | **設計原則** |
 | Vismは型を要求し、具体provider選択をKitへ置く | **設計原則** |
 | v1 Kitはmaterialize型 | **設計方向／schema未決** |
+| v1の外向き出力 | **音声mux込み完成映像だけ** |
+| Delivery Adapter | **将来capabilityの席を保持／trait・schema・成果物分類は未決** |
 | 可搬先をMotolii互換Host／fork群とする | **長期コンセプト決定** |
 | Project openとVism installを分離する | **安全原則** |
 | first-partyへ特権を与えない | **設計原則** |
