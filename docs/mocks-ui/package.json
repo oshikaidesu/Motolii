@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "test:reference-guard": "node --test guard-tests/*.test.mjs && node scripts/reference-guard.mjs check-registry src/main.jsx",
+    "test:reference-guard": "node --test guard-tests/*.test.mjs && node scripts/reference-guard.mjs check-registry src/main.jsx && node scripts/reference-guard.mjs check-manifest reference-provenance.json",
+    "generate-reference": "node scripts/reference-cli.mjs generate",
+    "check-reference": "node scripts/reference-cli.mjs check",
     "test:visual": "playwright test",
     "test:visual:update": "playwright test --update-snapshots"
   },
@@ -21,7 +23,8 @@
   "devDependencies": {
     "@babel/parser": "7.29.7",
     "@babel/traverse": "7.29.7",
-    "@playwright/test": "^1.61.1",
+    "@fontsource/inter": "5.3.0",
+    "@playwright/test": "1.61.1",
     "@storybook/react-vite": "^10.5.2",
     "@vitejs/plugin-react": "^4.3.4",
     "pixelmatch": "^7.2.0",

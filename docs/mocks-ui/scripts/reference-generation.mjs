@@ -16,6 +16,7 @@ const MANIFEST_FIELDS = new Set([
   "generation",
   "browserVersion",
   "sourceManifestSha256",
+  "transformVersion",
   "screens",
   "captures",
 ]);
@@ -125,6 +126,7 @@ export function validateReferenceGeneration(
   {
     browserVersion,
     sourceManifestSha256,
+    transformVersion,
     expectedScreens,
     expectedVariants,
   } = {},
@@ -132,6 +134,7 @@ export function validateReferenceGeneration(
   requireClosedValidation({
     browserVersion,
     sourceManifestSha256,
+    transformVersion,
     expectedScreens,
     expectedVariants,
   });
@@ -143,6 +146,12 @@ export function validateReferenceGeneration(
   }
   if (!SHA256.test(manifest.sourceManifestSha256 ?? "")) {
     reject("RG3-SCHEMA", "sourceManifestSha256 must be a SHA-256");
+  }
+  if (typeof manifest.transformVersion !== "string" || manifest.transformVersion.length === 0) {
+    reject("RG3-SCHEMA", "transformVersion is required");
+  }
+  if (transformVersion !== undefined && manifest.transformVersion !== transformVersion) {
+    reject("RG3-SOURCE", "transform version does not match the generation");
   }
   if (browserVersion !== undefined && manifest.browserVersion !== browserVersion) {
     reject("RG3-BROWSER", `browser ${browserVersion} does not match ${manifest.browserVersion}`);
@@ -257,6 +266,7 @@ function requireClosedValidation(validation) {
     !validation ||
     typeof validation.browserVersion !== "string" ||
     !SHA256.test(validation.sourceManifestSha256 ?? "") ||
+    typeof validation.transformVersion !== "string" ||
     !Array.isArray(validation.expectedScreens) ||
     !Array.isArray(validation.expectedVariants)
   ) {

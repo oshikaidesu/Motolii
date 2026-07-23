@@ -47,6 +47,23 @@ test.describe("React panel layout", () => {
     await expect(page.locator('[data-fixture="skeleton"]')).toHaveCount(0);
   });
 
+  test("keeps all five reference screens off every catalog", async ({ page }) => {
+    for (const route of ["catalog", "archive/catalog"]) {
+      await page.goto(`${REACT_URL}#${route}`);
+      await expect(page.locator('[data-fixture^="reference/"]')).toHaveCount(0);
+    }
+    for (const screen of [
+      "empty-browser",
+      "mixed-timeline",
+      "parameter-easing",
+      "stage-frame-tools",
+      "shared-effect-relative",
+    ]) {
+      await page.goto(`${REACT_URL}#reference/${screen}`);
+      await expect(page.locator(`[data-reference-screen="${screen}"]`)).toBeVisible();
+    }
+  });
+
   test("resizes Browser, Inspector, and Timeline independently", async ({
     page,
   }) => {

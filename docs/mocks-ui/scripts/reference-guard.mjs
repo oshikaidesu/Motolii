@@ -443,7 +443,13 @@ async function resolveRelativeImport(root, importer, source) {
   const base = path.resolve(path.dirname(importer), source);
   const candidates = path.extname(base)
     ? [base]
-    : [base, ...[".js", ".jsx", ".mjs", ".css"].map((ext) => `${base}${ext}`)];
+    : [
+        base,
+        ...[".js", ".jsx", ".mjs", ".css"].map((ext) => `${base}${ext}`),
+        ...[".js", ".jsx", ".mjs", ".css"].map((ext) =>
+          path.join(base, `index${ext}`),
+        ),
+      ];
   for (const candidate of candidates) {
     try {
       await readFile(candidate);
@@ -677,6 +683,37 @@ function forbidLegacyRuntime(relativePath) {
 export async function verifyReferenceManifest(root, manifest) {
   root = path.resolve(root);
   validateManifestShape(manifest);
+  const supplementalFiles = [
+    ...(manifest.transformationSource ? [manifest.transformationSource] : []),
+    ...(manifest.fontFiles ?? []),
+  ];
+  for (const [index, entry] of supplementalFiles.entries()) {
+    const supplementalPath = safeRelativePath(
+      entry?.path,
+      `supplementalFiles[${index}].path`,
+    );
+    if (!/^[0-9a-f]{64}$/.test(entry?.sha256 ?? "")) {
+      reject("RG-SCHEMA", `${supplementalPath} has invalid supplemental SHA-256`);
+    }
+    if ((await sha256File(absoluteFrom(root, supplementalPath))) !== entry.sha256) {
+      reject("RG-PROVENANCE", `${supplementalPath} supplemental SHA-256 does not match manifest`);
+    }
+  }
+  if (manifest.toolchain) {
+    const packageLock = JSON.parse(
+      await readFile(absoluteFrom(root, "package-lock.json"), "utf8"),
+    );
+    for (const tool of Object.values(manifest.toolchain)) {
+      const locked = packageLock.packages?.[`node_modules/${tool?.package}`];
+      if (
+        typeof tool?.package !== "string" ||
+        locked?.version !== tool.version ||
+        locked?.integrity !== tool.integrity
+      ) {
+        reject("RG-PROVENANCE", `toolchain lock mismatch: ${tool?.package}`);
+      }
+    }
+  }
   const registryModule = safeRelativePath(
     manifest.registryModule,
     "registryModule",

@@ -50,7 +50,7 @@ fn plugin_shape(layer: motolii_doc::LayerId, center: [f64; 2]) -> Clip {
     }
 }
 
-fn expected_document() -> Document {
+fn fixture_document() -> Document {
     let mut doc = Document::new_current();
     doc.min_reader_version = doc
         .min_reader_version
@@ -182,7 +182,7 @@ fn committed_reference_document_is_current_valid_and_byte_canonical() {
     let bytes = include_bytes!("../../../docs/mocks-ui/fixtures/reference-document.json");
     let before = bytes.to_vec();
     let loaded = motolii_doc::load_document_bytes(bytes).unwrap();
-    let expected = expected_document();
+    let expected = fixture_document();
     assert_eq!(loaded, expected);
     assert_eq!(
         bytes,

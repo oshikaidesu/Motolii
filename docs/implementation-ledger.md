@@ -39,7 +39,7 @@
 | M0 | `DONE` | spike完了 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み |
 | M2 | **基盤再締結済み** | D1l、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。D5は再締結の閉集合外で、骨格到達・統合審判pending |
-| M3 | **UI責任境界・surface topology決定 / G0-9 platform受入比較中** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4、U0e-2R、GR-D1〜R3は完了済みでbaselineとして保持。全guard検収済みのため次はU0e-2。native layout/hit-test/gesture kernelはtoolkit/renderer非依存で進められる。WebView/native製品統合とegui撤去はG0-9、plugin UI公開契約は分離したG0-3 / GAP-13まで停止 |
+| M3 | **UI責任境界・surface topology決定 / G0-6H人間審判待ち** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0a〜U0e-2、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4、U0e-2R、GR-D1〜R3は完了済み。5 reference screenと30 PNGを固定したため、次はG0-6Hの人間審判。native layout/hit-test/gesture kernelはtoolkit/renderer非依存で進められる。WebView/native製品統合とegui撤去はG0-9、plugin UI公開契約は分離したG0-3 / GAP-13まで停止 |
 | M4 | **契約spike可** | K0でRoD/RoIのruntime契約を凍結。その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む |
 | M5 | **identity spike可** | P0IでDuplicator/Instance identityを凍結 |
 
@@ -98,7 +98,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | 3 | GR-D2 | M3 guard | `DONE` | — | 変更許可閉集合、append-only検収証跡、timeout分離、検収者mutation拒否、検収resumeをTerra + Grok入口へ固定し、専用負例とworkspace試験を通過 | GR-R1/R2をDOへ移す |
 | 4 | GR-R1/R2 | M3 guard | `DONE` | — | manifestのpath/export/SHAとAST/PostCSS closure、実render nodeへのfixture投影、route隔離、三層因果、raw token拒否を43負例・44 visual・Grok P0/P1=0で固定 | GR-R3をDOへ移す |
 | 5 | GR-R3 | M3 guard | `DONE` | — | immutable generation + atomic CURRENT、PNG byte/RGBA、閉schema、17 I/O失敗点、全negative matrixを70 testsとGrok P0/P1=0で固定 | U0e-2をDOへ戻す |
-| 6 | U0e-2 | M3 | `DO` | — | U0e-2RとGR-D1〜R3完了。既存React資産の直接合成として5 reference screen、三層fixture、30 PNG、manifestを実装 | G0-6H assisted human stop |
+| 6 | U0e-2 | M3 | `DONE` | — | 同一三層fixtureを既存React Surfaceへ直接投影する5 reference screen、固定Chromium/font、normal+5派生の30 PNG、provenance/atomic generation/read-only checkを固定 | G0-6H assisted human stop |
 | 7 | U2c-2 | M3 | `WAIT` | — | U4a-2のDirect製品入口とU4cのAdvanced製品入口が揃うまで空harnessを作らない | 実在入口のDocument意味/Undo同値conformance |
 
 K0 [#167](https://github.com/oshikaidesu/Motolii/issues/167)とP0I
@@ -148,7 +148,7 @@ Uシリーズ直列選択中は未選択とし、同時着手しない。
 | G0-2 | `DONE` | 入力/キーマップ/a11y最小意味論 | [M3着手前決定§2](reviews/2026-07-16-m3-preflight-decisions.md#2-g0-2-inputとui状態の意味)に従いU0bをIssue化 |
 | G0-3 | `WAIT` / `比較中` | plugin UIモデル | `NodeDesc`自動panel fallbackを維持し、公開kit、sandbox、権限、互換、配布をG0-9製品surface合否と分離して再評価。G0-9証拠は入力にできるが、比較前に公開UI APIを実装しない |
 | G0-4 | `DONE` | UI性能測定プロトコル | U1c/U3a等でraw結果を取り、絶対閾値は別改訂 |
-| G0-6H | `WAIT` / `HUMAN` | 視覚token/認知審判 | U0e-2が作る5 reference screenの目視後に具体tokenを固定しU0e-3へ |
+| G0-6H | `DO` / `HUMAN` | 視覚token/認知審判 | U0e-2の5 reference screenと30画像を`docs/mocks-ui/reference-handoff.md`の未記入templateで目視し、具体tokenを固定してU0e-3へ |
 | G0-7 | `DONE` | Direct/Tool/Advanced conformance | UI操作言語とU2c fixtureへ従う |
 | G0-8 | `WAIT` / `MEASURE` | resource予算preset/安全余白/hysteresisの具体値 | G0-4手順+K1a実測後に値だけ固定。P3/P3aの意味は変更しない |
 
@@ -172,7 +172,7 @@ U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除
 | resource設定を出す | G0-2 + G0-8 + U0b + K1a → U0f。設定はUser settings、pressure実測値はTransient |
 | 重いpreviewを追従させる | U1b + U1c + U5 + K1d → U1g。project fps/audio clockを変えず表示frameだけ落とす |
 
-したがって現在の短い運用判断は、**M2基盤再締結とD3e、D1m、CAM-G0、D1j、D1k-S、D1k、D3f、M3 U0a、U0b-1、U0b-2、U0c-1、U0c-2、U0d-1、U0d-2、U0d-3、U2a-0、U2a-1、U1a-1、U1a-2、U1b-1、U1b-2、U2b-1、U2c-1、U2c-4、U0e-1、U0e-2R、GR-D1、GR-D2、GR-R1/R2、GR-R3は完了済み**。次は`U0e-2`だけを進め、30画像とmanifestをG0-6Hの人間審判へ渡して停止する。`U2c-2`はU4a-2/U4cの実製品入口待ちとする。Rerunのcommit固定source監査と資産分類は可能だが、現在のUシリーズ実装と並走させない。D5は骨格を完了扱いせず、本番preview／GPU計測／実機E2Eを後続へ残す。
+したがって現在の短い運用判断は、**M2基盤再締結とD3e、D1m、CAM-G0、D1j、D1k-S、D1k、D3f、M3 U0a、U0b-1、U0b-2、U0c-1、U0c-2、U0d-1、U0d-2、U0d-3、U2a-0、U2a-1、U1a-1、U1a-2、U1b-1、U1b-2、U2b-1、U2c-1、U2c-4、U0e-1、U0e-2R、GR-D1、GR-D2、GR-R1/R2、GR-R3、U0e-2は完了済み**。次は`G0-6H`の人間審判だけを行い、未記入templateへ判定者・条件・採否理由を記録するまでU0e-3へ進まない。`U2c-2`はU4a-2/U4cの実製品入口待ちとする。Rerunのcommit固定source監査と資産分類は可能だが、現在のUシリーズ実装と並走させない。D5は骨格を完了扱いせず、本番preview／GPU計測／実機E2Eを後続へ残す。
 
 ## 更新規則
 

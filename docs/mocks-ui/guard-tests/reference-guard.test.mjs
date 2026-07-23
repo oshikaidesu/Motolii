@@ -184,6 +184,56 @@ test("accepts an exact imported source closure and all three causal layers", asy
   });
 });
 
+test("accepts the directory index imports used by fixed React source assets", async () => {
+  await withFixture(async (root, manifest) => {
+    const candidate = path.join(root, "src/candidate/Candidate.jsx");
+    const index = path.join(root, "src/candidate/index.jsx");
+    await writeFile(index, await readFile(candidate));
+    await rm(candidate);
+    await writeFile(
+      path.join(root, "src/reference/Screen.jsx"),
+      BASE_FILES["src/reference/Screen.jsx"].replace(
+        'from "../candidate/Candidate.jsx"',
+        'from "../candidate"',
+      ),
+    );
+    await writeFile(
+      path.join(root, "tests/candidate.test.js"),
+      BASE_FILES["tests/candidate.test.js"].replace(
+        'from "../src/candidate/Candidate.jsx"',
+        'from "../src/candidate"',
+      ),
+    );
+    const runtime = manifest.assets.find(
+      (asset) => asset.path === "src/candidate/Candidate.jsx",
+    );
+    runtime.path = "src/candidate/index.jsx";
+    runtime.sha256 = await sha256(index);
+    const evidence = manifest.assets.find(
+      (asset) => asset.path === "tests/candidate.test.js",
+    );
+    evidence.sha256 = await sha256(path.join(root, evidence.path));
+    manifest.screens[0].requiredImports[0].source = "src/candidate/index.jsx";
+    await verifyReferenceManifest(root, manifest);
+  });
+});
+
+test("pins supplemental transform and font evidence when declared", async () => {
+  await withFixture(async (root, manifest) => {
+    const filename = path.join(root, "fixtures/reference-font.woff2");
+    await writeFile(filename, "font-bytes");
+    manifest.fontFiles = [{
+      path: "fixtures/reference-font.woff2",
+      sha256: await sha256(filename),
+    }];
+    await verifyReferenceManifest(root, manifest);
+    manifest.fontFiles[0].sha256 = "0".repeat(64);
+    await expectGuard("RG-PROVENANCE", () =>
+      verifyReferenceManifest(root, manifest),
+    );
+  });
+});
+
 test("registry categories are static and disjoint", async () => {
   await withFixture(async (root) => {
     const routes = await inspectRegistry(path.join(root, "src/main.jsx"));

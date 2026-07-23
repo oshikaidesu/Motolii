@@ -24,7 +24,7 @@ body {
 }
 
 @scope (.motolii-mock-app) {
-.motolii-mock-app {
+:scope {
   --mock-bg: var(--mock-role-surface-app);
   --mock-panel: var(--mock-role-surface-panel);
   --mock-raised: var(--mock-role-surface-raised);
@@ -398,6 +398,10 @@ body {
 
 .object-1 { background: var(--mock-object-2); }
 .object-2 { background: var(--mock-object-3); }
+.object-3 { background: var(--mock-object-2); }
+.object-4 { background: var(--mock-object-3); }
+.object-5 { background: var(--mock-object-2); }
+.object-6 { background: var(--mock-object-3); }
 
 .playhead {
   position: absolute;

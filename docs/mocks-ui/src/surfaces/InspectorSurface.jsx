@@ -27,6 +27,9 @@ export function InspectorSurface({ fixture, plugin }) {
             <span>{parameter.name}</span>
             <output>{parameter.value}</output>
             <i data-state={parameter.automation}>AUTO {parameter.automation.toUpperCase()}</i>
+            {parameter.states?.map((state) => (
+              <i data-semantic-id={state.id} key={state.id}>{state.label}</i>
+            ))}
           </div>
         ))}
       </section>

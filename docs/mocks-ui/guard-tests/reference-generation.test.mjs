@@ -14,11 +14,13 @@ import {
 
 const BROWSER = "Chromium/149.0.7827.55";
 const SOURCE_SHA = "a".repeat(64);
+const TRANSFORM_VERSION = "reference-transform-test-v1";
 const SCREENS = ["screen-a"];
 const VARIANTS = ["normal", "grayscale"];
 const VALIDATION = {
   browserVersion: BROWSER,
   sourceManifestSha256: SOURCE_SHA,
+  transformVersion: TRANSFORM_VERSION,
   expectedScreens: SCREENS,
   expectedVariants: VARIANTS,
 };
@@ -44,6 +46,7 @@ function bundle(generation, marker) {
     generation,
     browserVersion: BROWSER,
     sourceManifestSha256: SOURCE_SHA,
+    transformVersion: TRANSFORM_VERSION,
     screens: [...SCREENS],
     captures: [
       {

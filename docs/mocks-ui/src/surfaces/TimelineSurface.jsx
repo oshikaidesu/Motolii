@@ -13,18 +13,26 @@ export function TimelineSurface({ fixture }) {
         <strong>DEPTH</strong>
         <span>ROOT</span>
         <div className="depth-axis">
-          <i style={{ left: "68%" }}>Emitter +.18</i>
-          <i style={{ left: "50%" }}>Text 0</i>
-          <i style={{ left: "91%" }}>CAM +.42 →</i>
+          {(fixture.depthLabels ?? ["Emitter +.18", "Text 0", "CAM +.42 →"]).map((label, index, labels) => (
+            <i
+              key={label}
+              style={{ left: `${((index + 1) / (labels.length + 1)) * 100}%` }}
+            >
+              {label}
+            </i>
+          ))}
         </div>
+        {fixture.statuses?.map((status) => (
+          <span data-semantic-id={status.id} key={status.id}>{status.label}</span>
+        ))}
       </div>
       <div className="timeline-body">
         <aside className="inbox">
           <strong>INBOX</strong>
-          <span>3</span>
-          <button>Asset · skyline.png</button>
-          <button>Note · Check beat</button>
-          <button>Job · Draft ready</button>
+          <span>{(fixture.inbox ?? ["Asset · skyline.png", "Note · Check beat", "Job · Draft ready"]).length}</span>
+          {(fixture.inbox ?? ["Asset · skyline.png", "Note · Check beat", "Job · Draft ready"]).map((entry) => (
+            <button key={entry}>{entry}</button>
+          ))}
         </aside>
         <div className="time-plane">
           {fixture.bars.map((bar, index) => (
@@ -36,6 +44,9 @@ export function TimelineSurface({ fixture }) {
               <strong>{bar.kind} · {bar.name}</strong>
               <span>{bar.depth}</span>
               {bar.flow && <small>{bar.flow}</small>}
+              {bar.states?.map((state) => (
+                <small data-semantic-id={state.id} key={state.id}>{state.label}</small>
+              ))}
             </div>
           ))}
           <span className="playhead" />

@@ -7,9 +7,39 @@ import { GraphViewCandidate } from "./candidates/GraphViewCandidate.jsx";
 import { TimelineCandidate } from "./candidates/TimelineCandidate.jsx";
 import { LegacyHostBoundaryScreen } from "./legacy/index.js";
 import { AllSurfacesScreen } from "./screens/AllSurfacesScreen.jsx";
+import { EmptyBrowserReference } from "./reference/EmptyBrowserReference.jsx";
+import { MixedTimelineReference } from "./reference/MixedTimelineReference.jsx";
+import { ParameterEasingReference } from "./reference/ParameterEasingReference.jsx";
+import { SharedEffectRelativeReference } from "./reference/SharedEffectRelativeReference.jsx";
+import { StageFrameToolsReference } from "./reference/StageFrameToolsReference.jsx";
 
 // 各画面担当はこのregistryへfixtureを足し、Appの経路解決を共有する。
 export const screenRegistry = {
+  "reference/empty-browser": {
+    title: "Reference / empty browser",
+    Component: EmptyBrowserReference,
+    catalogKind: "reference",
+  },
+  "reference/mixed-timeline": {
+    title: "Reference / mixed timeline",
+    Component: MixedTimelineReference,
+    catalogKind: "reference",
+  },
+  "reference/parameter-easing": {
+    title: "Reference / parameter easing",
+    Component: ParameterEasingReference,
+    catalogKind: "reference",
+  },
+  "reference/stage-frame-tools": {
+    title: "Reference / stage frame tools",
+    Component: StageFrameToolsReference,
+    catalogKind: "reference",
+  },
+  "reference/shared-effect-relative": {
+    title: "Reference / shared effect relative",
+    Component: SharedEffectRelativeReference,
+    catalogKind: "reference",
+  },
   "archive/all-surfaces": {
     title: "Archive / host boundary / all surfaces",
     Component: LegacyHostBoundaryScreen,
