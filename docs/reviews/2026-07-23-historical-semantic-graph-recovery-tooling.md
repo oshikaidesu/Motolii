@@ -124,6 +124,8 @@ python3 scripts/historical_semantic_index.py search \
 `--projection`と`--state`は絶対pathかつrepo外で、互いの内側ではならない。`index`は
 `manifest.tsv`、`edges.tsv`、`nodes/`を要求し、開始前後の全file path＋bytes SHA-256が
 一致しなければ失敗する。Basic Memoryへprojectionを書かせないため、全subprocessへ次を固定する。
+`PATH`と`HOME`だけは起動元から継承する。`HOME`は`uvx`の依存buildが利用者のtoolchain managerを
+解決するためであり、Basic Memory、embedding、uvの設定・cache先は次の専用stateへ上書きする。
 
 - `BASIC_MEMORY_CONFIG_DIR=<state>/config`
 - `BASIC_MEMORY_AUTO_UPDATE=false`
@@ -174,7 +176,7 @@ HVR-D01の実corpus検査は少なくとも次を満たす。
 |---|---|---|---|
 | HVR-G01 | `DONE` | 本決定 | projection、外部索引、receiptの責任が分離されている |
 | HVR-D01 | `DONE` | 決定的projection | fixture負例と実corpus 1,797/420/1,377が一致 |
-| HVR-D02 | `DO` | Basic Memory opt-in runner | HVR-D01後。隔離設定、日本語smoke、障害時の縮退を確認 |
+| HVR-D02 | `DONE` | Basic Memory opt-in runner | HVR-D01後。隔離設定、日本語smoke、障害時の縮退を確認 |
 | HVR-D03 | `WAIT` | repo-local回収skill | HVR-D01後。候補packetだけを作りreceiptを自動変更しない |
 | HVR-D04 | `WAIT` | Unit 5N以降の運用 | HVR-D01〜D03後。候補packetを従来の単位別裁定へ渡す |
 
