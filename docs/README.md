@@ -48,6 +48,7 @@
 | [reviews/2026-07-23-historical-s2-decode-pipeline-lineage-recovery.md](reviews/2026-07-23-historical-s2-decode-pipeline-lineage-recovery.md) | M0-S2 decode 6版を再照合し、採択済み自前pipe／CFR seekとVFR／process lifecycle未成立を分離 | **Unit 5I採択維持／K4・GAP-26** |
 | [reviews/2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md](reviews/2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md) | M4 cache／analysis仕様20版を再照合し、Host専権cache、StateTrack、敗北枝、未実装境界を再締結 | **Unit 5J決定維持／K0〜K8未実装** |
 | [reviews/2026-07-23-historical-performance-model-lineage-recovery.md](reviews/2026-07-23-historical-performance-model-lineage-recovery.md) | performance model 21版を再照合し、liveness-aware target poolを復元、性能仮説と実装事実を分離 | **Unit 5K規律維持／pool実装済み** |
+| [reviews/2026-07-23-historical-memory-model-lineage-recovery.md](reviews/2026-07-23-historical-memory-model-lineage-recovery.md) | memory model 6版を再照合し、VRAM／RAM／disk責任、hard budget、capacity／deadline境界を再締結 | **Unit 5L決定維持／K1・K7・K8未実装** |
 | [plugin-resources.md](plugin-resources.md) | プラグインのリソースライフサイクル・アセット境界・時間参照(F-10/F-11) | **縮小採用**(PipelineCache/AssetRef/予約型は実装済み、GpuAssetCache/Importer/Feedback実行は未実装・未凍結) |
 | [references.md](references.md) | 依存候補・参考リポジトリ(ライセンス区分) | 現行 |
 | [ae-pain-points.md](ae-pain-points.md) | AEユーザー不満の体系化+我々の解決タグ(プラグイン窓口仮説の検証) | 現行 |
