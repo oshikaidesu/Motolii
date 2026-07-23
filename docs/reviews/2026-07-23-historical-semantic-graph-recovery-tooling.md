@@ -110,6 +110,49 @@ local実行として扱う。「完全offline install」は主張しない。
 Basic Memoryが無い、起動しない、model取得に失敗する場合も、projection、手動検索、
 receipt coverageは成立し続けなければならない。
 
+### 4.1 HVR-D02 runner契約
+
+repo-local runnerはPython標準ライブラリだけで実装し、次のCLIだけを持つ。
+
+```text
+python3 scripts/historical_semantic_index.py index \
+  --repo-root <Motolii> --projection <HVR-D01出力> --state <生成state>
+python3 scripts/historical_semantic_index.py search \
+  --repo-root <Motolii> --state <生成state> --query <UTF-8文字列> [--page-size N]
+```
+
+`--projection`と`--state`は絶対pathかつrepo外で、互いの内側ではならない。`index`は
+`manifest.tsv`、`edges.tsv`、`nodes/`を要求し、開始前後の全file path＋bytes SHA-256が
+一致しなければ失敗する。Basic Memoryへprojectionを書かせないため、全subprocessへ次を固定する。
+
+- `BASIC_MEMORY_CONFIG_DIR=<state>/config`
+- `BASIC_MEMORY_AUTO_UPDATE=false`
+- `BASIC_MEMORY_SYNC_CHANGES=false`
+- `BASIC_MEMORY_ENSURE_FRONTMATTER_ON_SYNC=false`
+- `BASIC_MEMORY_SEMANTIC_SEARCH_ENABLED=true`
+- `BASIC_MEMORY_SEMANTIC_EMBEDDING_PROVIDER=fastembed`
+- `BASIC_MEMORY_SEMANTIC_EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`
+- `BASIC_MEMORY_SEMANTIC_EMBEDDING_CACHE_DIR=<state>/models`
+- `UV_CACHE_DIR=<state>/uv-cache`
+
+起動commandは常に
+`uvx --from basic-memory==0.22.1 basic-memory`とし、任意の`--offline`指定時だけ
+`uvx --offline`を加える。project名は`motolii-historical-recovery`へ固定する。`index`は
+`project add <name> <projection> --local --default`、`reindex --project <name> --full`、
+`status --project <name> --wait --timeout 300 --json --local`の順で成功を要求する。
+同じstate/projectの再登録が「already exists」でexit 0となる0.22.1のblack-box挙動は許容する。
+
+成功後だけ`<state>/hvr-index.json`へ、schema `1`、Basic Memory version、embedding model、
+project名、projection tree hashを記録する。時刻やrepo pathは記録しない。`search`はこのmarkerを
+照合し、`tool search-notes <query> --hybrid --project <name> --local --page-size <N>`のstdoutを
+そのまま返す。`page-size`は1〜100、空queryは拒否する。外部CLIのJSON/DBをMotoliiが解釈して
+coverageや裁定へ変換しない。
+
+unit testはfake `uvx`で引数・環境・失敗伝播・projection不変・marker・offlineを固定する。
+実Basic Memoryとmodel取得を伴う日本語smokeはopt-inで別実行し、CIへ入れない。smokeは
+日本語fixtureをindexし、hybrid searchが候補を返すことだけを確認する。順位・score・先頭一致を
+期待値にしない。
+
 ## 5. 機械審判
 
 HVR-D01の実corpus検査は少なくとも次を満たす。
