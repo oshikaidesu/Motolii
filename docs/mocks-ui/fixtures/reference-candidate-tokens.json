@@ -1,0 +1,42 @@
+{
+  "$schema": "https://www.designtokens.org/schemas/2025.10/format.json",
+  "candidate-color": {
+    "$type": "color",
+    "surface": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0.125, 0.145, 0.18],
+        "alpha": 1
+      }
+    },
+    "content": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0.82, 0.85, 0.91],
+        "alpha": 1
+      }
+    }
+  },
+  "candidate-space": {
+    "$type": "dimension",
+    "compact": {
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      }
+    }
+  },
+  "candidate-motion": {
+    "duration": {
+      "$type": "duration",
+      "$value": {
+        "value": 0.12,
+        "unit": "s"
+      }
+    },
+    "curve": {
+      "$type": "cubicBezier",
+      "$value": [0.2, 0, 0.2, 1]
+    }
+  }
+}

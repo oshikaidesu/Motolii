@@ -1,0 +1,36 @@
+@font-face {
+  font-family: "MotoliiReferenceInter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/reference-fonts/inter-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "MotoliiReferenceInter";
+  font-style: normal;
+  font-weight: 600;
+  font-display: block;
+  src: url("/reference-fonts/inter-latin-600-normal.woff2") format("woff2");
+}
+
+.motolii-mock-app[data-reference-screen] {
+  --mock-role-font-technical: "MotoliiReferenceInter", sans-serif;
+  --mock-mono: var(--mock-role-font-technical);
+  font-family: "MotoliiReferenceInter", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.motolii-mock-app:is(
+  [data-reference-screen="mixed-timeline"],
+  [data-reference-screen="shared-effect-relative"]
+) {
+  grid-template-rows: 34px 32px minmax(360px, 1fr) 392px 24px;
+}
+
+.motolii-mock-app:is(
+  [data-reference-screen="mixed-timeline"],
+  [data-reference-screen="shared-effect-relative"]
+) .timeline-body {
+  height: 320px;
+}

@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 1,
+  "registryModule": "src/main.jsx",
+  "referenceRoots": ["src/reference"],
+  "referenceFiles": [
+    "src/reference/EmptyBrowserReference.jsx",
+    "src/reference/MixedTimelineReference.jsx",
+    "src/reference/ParameterEasingReference.jsx",
+    "src/reference/ReferenceStateStrip.jsx",
+    "src/reference/SharedEffectRelativeReference.jsx",
+    "src/reference/StageFrameToolsReference.jsx",
+    "src/reference/fixtures.js",
+    "src/reference/loadReferenceFixtures.js",
+    "src/reference/reference-font.css"
+  ],
+  "assets": [
+    { "path": "fixtures/reference-candidate-tokens.json", "role": "runtime", "exports": [], "sha256": "4568cc386fe3c42f8bb5e75bf643081e84775545240c81e751db65eb453a192b" },
+    { "path": "fixtures/reference-document.json", "role": "runtime", "exports": [], "sha256": "a3b9212f13b586ec4a800390a1b524907defd32a85ee0d5bd74f5db6ae63397c" },
+    { "path": "fixtures/reference-scenes.json", "role": "runtime", "exports": [], "sha256": "220910b59723d3141885591cb5aab4a9ba688dbd1e796d18a59e6b771303a45b" },
+    { "path": "src/candidates/EasingGraphCandidate.jsx", "role": "runtime", "exports": ["EasingGraphCandidate"], "sha256": "1b1a3ab66808504d4356bbb8ffd65bb8ed9aa77726a71b65ffa6b26bd61b4a05" },
+    { "path": "src/candidates/easing-graph-candidate.css", "role": "runtime", "exports": [], "sha256": "644064b649778d6dfe08de4d73751d5e7b65b96133115eba07be799aeb8e0329" },
+    { "path": "src/candidates/easing-graph-model.js", "role": "runtime", "exports": [], "sha256": "22a6745bcd77b6f71f5c62563b0165f6161a234abebd2a10f326d210a0a6fad9" },
+    { "path": "src/primitives/index.jsx", "role": "runtime", "exports": [], "sha256": "005b5db5a71f75ab139d26f44169538f74d3711ca2244748e9b4a016088c9f8b" },
+    { "path": "src/primitives/primitives.css", "role": "runtime", "exports": [], "sha256": "f625758bbfb9db6577618584a79ef9e900510ffc96662c6b1f6191393590959c" },
+    { "path": "src/screens/all-surfaces.css", "role": "runtime", "exports": [], "sha256": "4c6f526ac31ec21351d8f8cda58fe0ef6788310c06abb0e7c857339d12dbdeff" },
+    { "path": "src/surfaces/BrowserSurface.jsx", "role": "runtime", "exports": ["BrowserSurface"], "sha256": "6de71d021df43f94d2f2848e542bb0cd4ad2125f6d5b60c45a9d57fd4b723b6f" },
+    { "path": "src/surfaces/InspectorSurface.jsx", "role": "runtime", "exports": ["InspectorSurface"], "sha256": "f5240b9d2879cd37b1db5911fc5e1e604fb8dc57d08d4e4e01f7804c4f53029c" },
+    { "path": "src/surfaces/StageSurface.jsx", "role": "runtime", "exports": ["StageSurface"], "sha256": "1f63b24a0cb35d8dac8e4f0a6223ba568970a801230d2312a123b9c5c7232358" },
+    { "path": "src/surfaces/TimelineSurface.jsx", "role": "runtime", "exports": ["TimelineSurface"], "sha256": "335eba6886f9804f4ce0c80555ef6d1a1e243fd7deb7458da031734a051dbe5f" },
+    { "path": "src/tokens/mock-candidates.css", "role": "runtime", "exports": [], "sha256": "7b7ee84a021f3caa0fc327509e41bb7efe30424d032468260159f971ee35b4af" },
+    { "path": "scripts/reference-capture.mjs", "role": "test", "exports": ["renderReferenceNormals"], "sha256": "457ef14c21fc19e402f3db8c41bf2cb1a1bece02452b8433a90c32ff12e1eddc" }
+  ],
+  "causalRenderer": {
+    "path": "scripts/reference-capture.mjs",
+    "export": "renderReferenceNormals"
+  },
+  "screens": [
+    {
+      "id": "empty-browser",
+      "route": "reference/empty-browser",
+      "module": "src/reference/EmptyBrowserReference.jsx",
+      "export": "EmptyBrowserReference",
+      "requiredImports": [
+        { "source": "src/surfaces/BrowserSurface.jsx", "imported": "BrowserSurface", "fixtureProp": "fixture" }
+      ]
+    },
+    {
+      "id": "mixed-timeline",
+      "route": "reference/mixed-timeline",
+      "module": "src/reference/MixedTimelineReference.jsx",
+      "export": "MixedTimelineReference",
+      "requiredImports": [
+        { "source": "src/surfaces/BrowserSurface.jsx", "imported": "BrowserSurface", "fixtureProp": "fixture" },
+        { "source": "src/surfaces/StageSurface.jsx", "imported": "StageSurface", "fixtureProp": "composition" },
+        { "source": "src/surfaces/InspectorSurface.jsx", "imported": "InspectorSurface", "fixtureProp": "fixture" },
+        { "source": "src/surfaces/TimelineSurface.jsx", "imported": "TimelineSurface", "fixtureProp": "fixture" }
+      ]
+    },
+    {
+      "id": "parameter-easing",
+      "route": "reference/parameter-easing",
+      "module": "src/reference/ParameterEasingReference.jsx",
+      "export": "ParameterEasingReference",
+      "requiredImports": [
+        { "source": "src/candidates/EasingGraphCandidate.jsx", "imported": "EasingGraphCandidate", "fixtureProp": "intervalContext" },
+        { "source": "src/surfaces/InspectorSurface.jsx", "imported": "InspectorSurface", "fixtureProp": "fixture" },
+        { "source": "src/surfaces/BrowserSurface.jsx", "imported": "BrowserSurface", "fixtureProp": "fixture" }
+      ]
+    },
+    {
+      "id": "stage-frame-tools",
+      "route": "reference/stage-frame-tools",
+      "module": "src/reference/StageFrameToolsReference.jsx",
+      "export": "StageFrameToolsReference",
+      "requiredImports": [
+        { "source": "src/surfaces/StageSurface.jsx", "imported": "StageSurface", "fixtureProp": "composition" },
+        { "source": "src/surfaces/BrowserSurface.jsx", "imported": "BrowserSurface", "fixtureProp": "fixture" },
+        { "source": "src/surfaces/InspectorSurface.jsx", "imported": "InspectorSurface", "fixtureProp": "fixture" },
+        { "source": "src/surfaces/TimelineSurface.jsx", "imported": "TimelineSurface", "fixtureProp": "fixture" }
+      ]
+    },
+    {
+      "id": "shared-effect-relative",
+      "route": "reference/shared-effect-relative",
+      "module": "src/reference/SharedEffectRelativeReference.jsx",
+      "export": "SharedEffectRelativeReference",
+      "requiredImports": [
+        { "source": "src/surfaces/TimelineSurface.jsx", "imported": "TimelineSurface", "fixtureProp": "fixture" },
+        { "source": "src/surfaces/BrowserSurface.jsx", "imported": "BrowserSurface", "fixtureProp": "fixture" },
+        { "source": "src/surfaces/InspectorSurface.jsx", "imported": "InspectorSurface", "fixtureProp": "fixture" },
+        { "source": "src/surfaces/StageSurface.jsx", "imported": "StageSurface", "fixtureProp": "composition" }
+      ]
+    }
+  ],
+  "fixtureLayers": [
+    {
+      "id": "document",
+      "path": "fixtures/reference-document.json",
+      "probe": { "pointer": "/layers/entries/2/name", "value": "Shared middle probe" },
+      "changedScreens": ["mixed-timeline", "parameter-easing", "stage-frame-tools", "shared-effect-relative"],
+      "unchangedScreens": ["empty-browser"]
+    },
+    {
+      "id": "scenes",
+      "path": "fixtures/reference-scenes.json",
+      "probe": { "pointer": "/screens/stage-frame-tools/focus", "value": "stage.hand" },
+      "changedScreens": ["stage-frame-tools"],
+      "unchangedScreens": ["empty-browser", "mixed-timeline", "parameter-easing", "shared-effect-relative"]
+    },
+    {
+      "id": "tokens",
+      "path": "fixtures/reference-candidate-tokens.json",
+      "probe": { "pointer": "/candidate-space/compact/$value/value", "value": 12 },
+      "changedScreens": ["empty-browser", "mixed-timeline", "parameter-easing", "stage-frame-tools", "shared-effect-relative"],
+      "unchangedScreens": []
+    }
+  ],
+  "capture": {
+    "name": "Chromium Headless Shell",
+    "version": "149.0.7827.55",
+    "revision": "1228",
+    "viewport": { "width": 1440, "height": 900 },
+    "deviceScaleFactor": 1,
+    "locale": "en-US",
+    "timezoneId": "UTC",
+    "colorScheme": "dark",
+    "reducedMotion": "reduce"
+  },
+  "transformVersion": "u0e2-srgb-machado-2009-v1",
+  "toolchain": {
+    "playwright": {
+      "package": "@playwright/test",
+      "version": "1.61.1",
+      "integrity": "sha512-8nKv6+0RJSL9FE4jYOEGXnPeM/Hg12qZpmqzZjRh3qM0Y7c3z1mrOTfFLids72RDQYVh9WpLEfR5WdpNX4fkig=="
+    },
+    "font": {
+      "package": "@fontsource/inter",
+      "version": "5.3.0",
+      "integrity": "sha512-RofMylZmjlJEfELXeNHFWBRcSs75rGU/6bV2S2jfnvv/3rPXPGe0LgUJTklcHZ9lM4OZmAVFhcJPnACfb91A3g=="
+    }
+  },
+  "transformationSource": {
+    "path": "scripts/reference-transform.mjs",
+    "sha256": "071fda5b5d824af1ff4224a459a1baafcf536dda9f7e349f5e1ce4c5101a948c"
+  },
+  "fontFiles": [
+    { "path": "public/reference-fonts/LICENSE", "sha256": "3b0a5fca3d17942cde889069889dedbbbd075e9b599968c82a95f4d944e9b345" },
+    { "path": "public/reference-fonts/inter-latin-400-normal.woff2", "sha256": "8909904ab6c872eb994093482a88a28eca2cd95912d7b6fecd72103b0dc07edc" },
+    { "path": "public/reference-fonts/inter-latin-600-normal.woff2", "sha256": "f9a06e79cd3a2a20951c0f0e28f66dd0e6d3fda73911d640a2125c8fcb78f21a" }
+  ]
+}

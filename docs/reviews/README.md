@@ -117,6 +117,7 @@
 | [2026-07-18-vism-a3d-radial-repeater-decision.md](2026-07-18-vism-a3d-radial-repeater-decision.md) | VSM-A3D — 決定論的 2D Radial Repeater LayerSource 採用決定 |
 | [2026-07-18-vism-a3s-layersource-lowering-spec.md](2026-07-18-vism-a3s-layersource-lowering-spec.md) | VSM-A3S — 一般 LayerSource lowering 仕様 |
 | [2026-07-19-am-keyframe-graph-observation.md](2026-07-19-am-keyframe-graph-observation.md) | Alight Motionキーフレームグラフ観察台帳(AM実機確認。`codex/m3-mock-components`側から回収) |
+| [2026-07-19-graph-view-reference-decision.md](2026-07-19-graph-view-reference-decision.md) | multi-key Graph ViewのReact比較記録。製品採択・M3 task化は未決 |
 | [2026-07-19-m3-interaction-prototype-decision-ledger.md](2026-07-19-m3-interaction-prototype-decision-ledger.md) | M3操作prototype未決パラメータ台帳(2026-07-19。`codex/m3-mock-components`側から回収) |
 | [2026-07-19-lyric-motion-text-sequence-comparison.md](2026-07-19-lyric-motion-text-sequence-comparison.md) | リリックモーション: Text Sequence / Materialize 比較台帳(2026-07-19) |
 | [2026-07-19-m3-text-motion-task-translation.md](2026-07-19-m3-text-motion-task-translation.md) | M3タスク翻訳: Text Motion(Live Text)縦切り第1弾(2026-07-19) |
@@ -147,10 +148,10 @@
 | [2026-07-22-m3-native-depth-rail-acceptance.md](2026-07-22-m3-native-depth-rail-acceptance.md) | React正本からnative Depth Railへ同一Z stack、scope、Layer Order Distributeを移すisolated受入契約 |
 | [2026-07-22-m3-detachable-panel-window-contract.md](2026-07-22-m3-detachable-panel-window-contract.md) | Timeline/Graphの分割を全製品panelへ一般化するdetach/re-dock・multi-window・単一snapshot契約 |
 | [2026-07-22-m3-surface-extension-axis-separation.md](2026-07-22-m3-surface-extension-axis-separation.md) | OS topology、presentation runtime、製品module、plugin、provenance/trustを別軸として固定 |
+| [2026-07-22-u0e-2-delegation-guardrails.md](2026-07-22-u0e-2-delegation-guardrails.md) | U0e-2縮約再実装を再発させないdispatch・source provenance・fixture因果・原子性・証跡ガード |
 | [2026-07-22-creator-developer-continuum-decision.md](2026-07-22-creator-developer-continuum-decision.md) | 利用者から作者までを一つの経路にし、React・Vism・first-party参照実装を多数作者の成長戦略へ統合 |
 | [2026-07-22-ui-music-metaphor-retirement.md](2026-07-22-ui-music-metaphor-retirement.md) | 「演奏・譜面台・楽曲が背骨」を製品全体の比喩とする仮説を撤回し、音声機能と製品存在論を分離 |
 | [2026-07-22-terra-grok-delegation-policy.md](2026-07-22-terra-grok-delegation-policy.md) | 速度優先期の通常発注をGPT-5.6 Terra実装 + Cursor Grok 4.5 High検収に固定する運用決定 |
-| [2026-07-22-u0e-2-delegation-guardrails.md](2026-07-22-u0e-2-delegation-guardrails.md) | U0e-2縮約再実装を再発させないdispatch・source provenance・fixture因果・原子性・証跡ガード |
 | [2026-07-23-parallel-order-pipeline-comparison.md](2026-07-23-parallel-order-pipeline-comparison.md) | closed orderを小さく保ったままpreflight・実装・検収を重ねる発注パイプライン並列化の比較案 |
 | [2026-07-23-first-party-vism-expression-demand-survey.md](2026-07-23-first-party-vism-expression-demand-survey.md) | AE・AviUtl 2・Cavalryからfirst-party pre-Vismの基礎primitiveとsignature表現需要を分ける初期調査 |
 | [2026-07-23-group-source-pool-cloner-concept.md](2026-07-23-group-source-pool-cloner-concept.md) | Groupの直接の子を割合つきprototype poolとしてClonerへ渡すMotolii固有概念の比較 |
