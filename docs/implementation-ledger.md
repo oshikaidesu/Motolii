@@ -39,7 +39,7 @@
 | M0 | `DONE` | spike完了 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み |
 | M2 | **基盤再締結済み** | D1l、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。D5は再締結の閉集合外で、骨格到達・統合審判pending |
-| M3 | **UI責任境界・surface topology決定 / G0-9 platform受入比較中** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4、U0e-2R、GR-D1/D2は完了済みでbaselineとして保持。U0e-2は発注guardのGR-D1〜R3が揃うまで停止し、次はGR-R1/R2。native layout/hit-test/gesture kernelはtoolkit/renderer非依存で進められる。WebView/native製品統合とegui撤去はG0-9、plugin UI公開契約は分離したG0-3 / GAP-13まで停止 |
+| M3 | **UI責任境界・surface topology決定 / G0-9 platform受入比較中** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4、U0e-2R、GR-D1/D2、GR-R1/R2は完了済みでbaselineとして保持。U0e-2は発注guardのGR-D1〜R3が揃うまで停止し、次はGR-R3。native layout/hit-test/gesture kernelはtoolkit/renderer非依存で進められる。WebView/native製品統合とegui撤去はG0-9、plugin UI公開契約は分離したG0-3 / GAP-13まで停止 |
 | M4 | **契約spike可** | K0でRoD/RoIのruntime契約を凍結。その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む |
 | M5 | **identity spike可** | P0IでDuplicator/Instance identityを凍結 |
 
@@ -96,8 +96,8 @@ P0I #170 → P7a → P7b → P7c → P7U
 | 1 | U0e-2R | M3 | `DONE` | — | 固定React baseline `eb16d06`を最新mainへ再結合し、43 visual testとworkspace gateを通過 | GR-D1を単独実行 |
 | 2 | GR-D1 | M3 guard | `DONE` | — | Terra実装 + Grok検収の通常発注入口へBASE_REF/SHA・authority・粒状態・React labelのdispatch gateを固定し、専用負例とworkspace試験を通過 | GR-D2を単独実行 |
 | 3 | GR-D2 | M3 guard | `DONE` | — | 変更許可閉集合、append-only検収証跡、timeout分離、検収者mutation拒否、検収resumeをTerra + Grok入口へ固定し、専用負例とworkspace試験を通過 | GR-R1/R2をDOへ移す |
-| 4 | GR-R1/R2 | M3 guard | `DO` | — | GR-D2完了。React provenance・route隔離・fixture因果・生token拒否を実装 | GR-R3をDOへ移す |
-| 5 | GR-R3 | M3 guard | `WAIT` | — | GR-R1/R2完了後、atomic swap・失敗注入・負例行列を固定 | U0e-2をDOへ戻す |
+| 4 | GR-R1/R2 | M3 guard | `DONE` | — | manifestのpath/export/SHAとAST/PostCSS closure、実render nodeへのfixture投影、route隔離、三層因果、raw token拒否を43負例・44 visual・Grok P0/P1=0で固定 | GR-R3をDOへ移す |
+| 5 | GR-R3 | M3 guard | `DO` | — | GR-R1/R2完了。atomic swap・失敗注入・負例行列を固定 | U0e-2をDOへ戻す |
 | 6 | U0e-2 | M3 | `WAIT` | — | U0e-2Rは完了済み。GR-D1〜R3が全てDONEになるまで却下差分の修理発注を停止 | G0-6H assisted human stop |
 | 7 | U2c-2 | M3 | `WAIT` | — | U4a-2のDirect製品入口とU4cのAdvanced製品入口が揃うまで空harnessを作らない | 実在入口のDocument意味/Undo同値conformance |
 
@@ -172,7 +172,7 @@ U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除
 | resource設定を出す | G0-2 + G0-8 + U0b + K1a → U0f。設定はUser settings、pressure実測値はTransient |
 | 重いpreviewを追従させる | U1b + U1c + U5 + K1d → U1g。project fps/audio clockを変えず表示frameだけ落とす |
 
-したがって現在の短い運用判断は、**M2基盤再締結とD3e、D1m、CAM-G0、D1j、D1k-S、D1k、D3f、M3 U0a、U0b-1、U0b-2、U0c-1、U0c-2、U0d-1、U0d-2、U0d-3、U2a-0、U2a-1、U1a-1、U1a-2、U1b-1、U1b-2、U2b-1、U2c-1、U2c-4、U0e-1、U0e-2R、GR-D1、GR-D2は完了済み**。次は`GR-R1/R2`だけを進め、GR-D1〜R3の各粒を検収済みにしてから`U0e-2`を再開する。`U2c-2`はU4a-2/U4cの実製品入口待ちとする。Rerunのcommit固定source監査と資産分類は可能だが、現在のUシリーズ実装と並走させない。D5は骨格を完了扱いせず、本番preview／GPU計測／実機E2Eを後続へ残す。
+したがって現在の短い運用判断は、**M2基盤再締結とD3e、D1m、CAM-G0、D1j、D1k-S、D1k、D3f、M3 U0a、U0b-1、U0b-2、U0c-1、U0c-2、U0d-1、U0d-2、U0d-3、U2a-0、U2a-1、U1a-1、U1a-2、U1b-1、U1b-2、U2b-1、U2c-1、U2c-4、U0e-1、U0e-2R、GR-D1、GR-D2、GR-R1/R2は完了済み**。次は`GR-R3`だけを進め、GR-D1〜R3の各粒を検収済みにしてから`U0e-2`を再開する。`U2c-2`はU4a-2/U4cの実製品入口待ちとする。Rerunのcommit固定source監査と資産分類は可能だが、現在のUシリーズ実装と並走させない。D5は骨格を完了扱いせず、本番preview／GPU計測／実機E2Eを後続へ残す。
 
 ## 更新規則
 

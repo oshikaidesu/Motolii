@@ -9,6 +9,7 @@
 React/Viteへの移行は実行基盤として完了しているが、全surfaceのReact-native化は完了していない。`src/legacy/LegacyHostBoundaryScreen.jsx`は、legacy `m3-vism-host-boundary.html`をVite raw importし、`html-react-parser`でReact treeへ変換する移行bridgeである。元CSS、class、ID、子DOMと、リポジトリ同梱の固定scriptを維持しながら、Browser、Color Book、Stage、Inspector、Timeline、Recovery、Settingsをnamed wrapperへ昇格する。
 
 - 通常入場（hashなし）と`#catalog`はReact候補だけを表示する。旧fixtureは`#archive/catalog`と`#archive/<fixture>`に隔離し、`#all-surfaces`等の旧hashは未登録として扱う。
+- registryの`catalogKind`は`candidate / reference / diagnostic / archive`の閉集合で、通常`#catalog`は`candidate`、`#archive/catalog`は`archive`だけを列挙する。referenceとdiagnosticは直URLだけで開き、一覧へ混ぜない。
 - `#archive/all-surfaces`ほかarchive hashはparser-backedな**legacy parity参照**を表示する。新しい判断の実装先ではない。
 - `#plugin-browser-candidate`はBrowser wrapper、Timeline、Interval Easing EditorをReact-native候補へ差し替える。multi-key Graph ViewはTimeline dock内の`譜面 / GRAPH`切替へ統合し、同じdock寸法と時間文脈を保つ。`#graph-view-candidate`は操作試験用の独立fixtureとして残す。Graph Viewと区間editorは同じsurface名・座標・状態所有へ統合しない。
 - Graph Viewの時間／値rangeとcurve演算は`src/candidates/graph-view-model.js`、React表示とpointer取得は`GraphViewCandidate.jsx`が所有する。modelはmock内部の比較seamであり、公開plugin APIや永続形式ではない。dock resize時はviewBoxを実寸へ合わせて表示座標だけを再投影し、rangeのauto-fitや非等方stretchを行わない。
@@ -30,10 +31,13 @@ React/Viteへの移行は実行基盤として完了しているが、全surface
 npm ci
 npm run dev -- --host 127.0.0.1
 npm run storybook
+npm run test:reference-guard
 npm run test:visual
 ```
 
 Storybookは現行参照、改善候補、Skeletonを分離する。Playwrightは旧HTMLとparser版を同じChrome・1440×900で撮影して参照bridgeの画像差分を審判し、改善候補は別の操作試験で共通Browser文法と逸脱状態だけの表示を確認する。
+
+`scripts/reference-guard.mjs`はGR-R1/R2のheadless guardである。U0e-2のprovenance manifestはreference leaf、固定source assetとtest evidenceのpath/export/SHA-256 closure、`reference/*` route、`document / scenes / tokens`の順の三層probe、固定normal capture renderer moduleを宣言する。Babel ASTとPostCSSで実importと無条件JSX合成、legacy/archive runtime、自己登録、copy、生色値、fixture load結果からsource component propへの到達を検査する。`verifyFixtureCausality`はmanifestでhash固定したrendererだけをloadし、同じ三pathへ各状態を二つの順序で再生して決定性と各層のnormal capture変化を検査する。semantic ID、画像類似、装飾import、path名やmutation hintだけではこのguardを通らない。
 
 通常動線:
 

@@ -43,9 +43,10 @@ export function App({ registry = {} }) {
     fixture === CATALOG_FIXTURE ||
     fixture === ARCHIVE_CATALOG_FIXTURE
   ) {
-    const wantsArchive = fixture === ARCHIVE_CATALOG_FIXTURE;
+    const visibleKind =
+      fixture === ARCHIVE_CATALOG_FIXTURE ? "archive" : "candidate";
     const visibleEntries = entries.filter(
-      ([, entry]) => Boolean(entry.archive) === wantsArchive,
+      ([, entry]) => entry.catalogKind === visibleKind,
     );
     if (visibleEntries.length === 0) {
       return (

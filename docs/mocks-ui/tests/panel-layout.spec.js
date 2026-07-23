@@ -32,6 +32,21 @@ test.describe("React panel layout", () => {
     ).toHaveCount(0);
   });
 
+  test("keeps candidate, diagnostic, and archive catalogs disjoint", async ({
+    page,
+  }) => {
+    await page.goto(`${REACT_URL}#catalog`);
+    await expect(page.locator('[data-fixture="plugin-browser-candidate"]')).toHaveCount(1);
+    await expect(page.locator('[data-fixture="graph-view-candidate"]')).toHaveCount(1);
+    await expect(page.locator('[data-fixture="skeleton"]')).toHaveCount(0);
+    await expect(page.locator('[data-fixture^="archive/"]')).toHaveCount(0);
+
+    await page.goto(`${REACT_URL}#archive/catalog`);
+    await expect(page.locator('section[data-fixture^="archive/"]')).toHaveCount(7);
+    await expect(page.locator('[data-fixture="plugin-browser-candidate"]')).toHaveCount(0);
+    await expect(page.locator('[data-fixture="skeleton"]')).toHaveCount(0);
+  });
+
   test("resizes Browser, Inspector, and Timeline independently", async ({
     page,
   }) => {

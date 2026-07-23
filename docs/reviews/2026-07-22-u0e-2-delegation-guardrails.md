@@ -1,7 +1,7 @@
 # U0e-2 発注失敗の原因と機械ガード
 
 日付: 2026-07-22  
-状態: **決定 / 実装前停止線**  
+状態: **決定 / GR-D1〜R2実装済み / GR-R3停止線**
 対象: CU-0A02 / U0e-2 の却下差分、React source asset を含む以後の発注、
 `scripts/delegate-cursor-supervised.sh`
 
@@ -84,6 +84,15 @@ ORDER-GATE NG: React guard label missing or out of order: <label>
 三層 fixture の値を一時 copy で一つずつ変え、該当 normal capture が変化しなければ失敗させる。
 これは画像類似ではなく `fixture -> projection` の因果 oracle である。戻り値を捨てる
 `loadReferenceFixtures(...)` と reference tree 内の生 hex / `rgb()` / inline color も拒否する。
+
+GR-R1/R2の機械境界は`docs/mocks-ui/scripts/reference-guard.mjs`、負例は
+`docs/mocks-ui/guard-tests/reference-guard.test.mjs`を正本とする。manifestのpath/export/SHA-256を
+Babel AST / PostCSSで実import closureへ照合し、central registryの`catalogKind`を
+`candidate / reference / diagnostic / archive`へ閉じる。三層因果は製品rendererを複製せず、
+`verifyFixtureCausality`はmanifestのtest evidenceとしてpath/export/SHA-256を固定したnormal capture
+rendererだけをloadする。原fixtureを不変にした一時copyの同じ三pathへbaselineと各一層変異を二つの
+異なる順序で再生し、同じ状態のcapture決定性と`document / scenes / tokens`それぞれの因果を判定する。
+U0e-2は実5画面とrendererをこの境界へ接続するが、guard自身へscreen固有stubや色値を追加しない。
 
 ### GR-R3: 原子性と負例行列
 
