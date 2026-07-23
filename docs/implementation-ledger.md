@@ -98,8 +98,8 @@ P0I #170 → P7a → P7b → P7c → P7U
 | 1 | U0e-2R | M3 | `DO` | — | U0e-1完了。固定React baseline `eb16d06`を最新mainへ再結合する | U0e-2を単独実行 |
 | 2 | U2c-2 | M3 | `WAIT` | — | U4a-2のDirect製品入口とU4cのAdvanced製品入口が揃うまで空harnessを作らない | 実在入口のDocument意味/Undo同値conformance |
 | 0 | HVR-G01 | History tooling | `DONE` | — | 意味グラフ補助境界を正本化 | HVR-D01の依存 |
-| 1 | HVR-D01 | History tooling | `DO` | — | HVR-G01完了。既存corpus/receiptを変更しない | 決定的な可搬projectionと負例 |
-| 2 | HVR-D02 | History tooling | `WAIT` | — | HVR-D01完了 | 任意のBasic Memory runner |
+| 1 | HVR-D01 | History tooling | `DONE` | — | HVR-G01完了。既存corpus/receiptを変更しない | 決定的な可搬projectionと負例 |
+| 2 | HVR-D02 | History tooling | `DO` | — | HVR-D01完了 | 任意のBasic Memory runner |
 | 3 | HVR-D03 | History tooling | `WAIT` | — | HVR-D01完了 | repo-local候補packet skill |
 | 4 | HVR-D04 | History tooling | `WAIT` | — | HVR-D01〜D03完了 | Unit 5N以降へ候補packetを投入 |
 

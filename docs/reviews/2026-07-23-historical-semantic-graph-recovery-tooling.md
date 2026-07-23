@@ -130,8 +130,8 @@ HVR-D01の実corpus検査は少なくとも次を満たす。
 | ID | 状態 | 境界 | 完了条件 |
 |---|---|---|---|
 | HVR-G01 | `DONE` | 本決定 | projection、外部索引、receiptの責任が分離されている |
-| HVR-D01 | `DO` | 決定的projection | fixture負例と実corpus 1,797/420/1,377が一致 |
-| HVR-D02 | `WAIT` | Basic Memory opt-in runner | HVR-D01後。隔離設定、日本語smoke、障害時の縮退を確認 |
+| HVR-D01 | `DONE` | 決定的projection | fixture負例と実corpus 1,797/420/1,377が一致 |
+| HVR-D02 | `DO` | Basic Memory opt-in runner | HVR-D01後。隔離設定、日本語smoke、障害時の縮退を確認 |
 | HVR-D03 | `WAIT` | repo-local回収skill | HVR-D01後。候補packetだけを作りreceiptを自動変更しない |
 | HVR-D04 | `WAIT` | Unit 5N以降の運用 | HVR-D01〜D03後。候補packetを従来の単位別裁定へ渡す |
 
