@@ -120,6 +120,7 @@
 | [2026-07-23-historical-vello-adoption-lineage-recovery.md](2026-07-23-historical-vello-adoption-lineage-recovery.md) | Unit 5G — Vello採否レビュー／spike結果2版の局所renderer採択、単一premul境界、製品未統合を処分 |
 | [2026-07-23-historical-r9-real-material-export-acceptance-lineage-recovery.md](2026-07-23-historical-r9-real-material-export-acceptance-lineage-recovery.md) | Unit 5H — R9実素材／B-4書き出し受入4版の歴史sign-offと現行release受入を分離 |
 | [2026-07-23-historical-s2-decode-pipeline-lineage-recovery.md](2026-07-23-historical-s2-decode-pipeline-lineage-recovery.md) | Unit 5I — M0-S2 decode 6版の採択済み自前pipe／CFR seekと未成立VFR／process lifecycleを分離 |
+| [2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md](2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md) | Unit 5J — M4 cache／analysis仕様20版のHost専権、完全key、StateTrack、敗北枝、未実装境界を再締結 |
 | [2026-07-16-m3-preflight-decisions.md](2026-07-16-m3-preflight-decisions.md) | M3着手前決定 — 操作の意味を固定し、見た目の実値は測って決める |
 | [2026-07-16-m3-ui-concept-to-tickets.md](2026-07-16-m3-ui-concept-to-tickets.md) | M3 UIコンセプトから実装チケットへの分解 |
 | [2026-07-16-m3-ui-gap-survey.md](2026-07-16-m3-ui-gap-survey.md) | M3前UIギャップ調査: U1〜U8に席が無いUI要素とコア側前提の欠落(2026-07-16) |
