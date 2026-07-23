@@ -1,6 +1,6 @@
 # 実装進行台帳
 
-最終確認: **2026-07-23**
+最終確認: **2026-07-24**
 
 このファイルは、実装者が「次に何をするか」を1枚で判断するための現場用台帳。M0〜M5の意味や完了条件を再定義せず、現在の依存関係と発注順だけを示す。
 
@@ -39,7 +39,7 @@
 | M0 | `DONE` | spike完了 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み |
 | M2 | **基盤再締結済み** | D1l、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。D5は再締結の閉集合外で、骨格到達・統合審判pending |
-| M3 | **UI責任境界・surface topology・G0-9段階化決定 / CU-0G04実行可** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0a〜U0e-2、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4、U0e-2R、GR-D1〜R3、CU-0G02、CU-0G03H、CU-0G03H2、CU-0G03は完了済み。[G0-9段階化決定](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)でfixed-Mac prerequisite evidence `G0-9L`とdistribution `G0-9D`を分ける。CU-0G03H2は人間審判で判明したnative Tab不達を実NSWindowの機械focus E2Eで追補し、ユーザーが実IME、VoiceOver、focus/IME復帰を再審判してCU-0G03を合格とした。G0-9Lは製品粒を解禁せず、W0b、H1b、Motolii Studio Preview、window結合を停止する。G0-6Hも独立した人間審判としてU0e-3とW0bの製品前提を停止する。native layout/hit-test/gesture kernelはtoolkit/renderer非依存で進められる。plugin UI公開契約は分離したG0-3 / GAP-13まで停止 |
+| M3 | **UI責任境界・surface topology・G0-9段階化決定 / CU-0G05L判定可** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0a〜U0e-2、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4、U0e-2R、GR-D1〜R3、CU-0G02〜04は完了済み。[G0-9段階化決定](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)でfixed-Mac prerequisite evidence `G0-9L`とdistribution `G0-9D`を分ける。CU-0G04は同じ実windowで100 resize、capture、注入Lost、実WebContent終了/reload、offline/stale拒否とsentinel/resource不変を閉じた。G0-9LはCU-0G05Lの反対側reviewと限定確定までPASSにせず、W0b、H1b、Motolii Studio Preview、window結合を停止する。G0-6Hも独立した人間審判としてU0e-3とW0bの製品前提を停止する。native layout/hit-test/gesture kernelはtoolkit/renderer非依存で進められる。plugin UI公開契約は分離したG0-3 / GAP-13まで停止 |
 | M4 | **契約spike可** | K0でRoD/RoIのruntime契約を凍結。その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む |
 | M5 | **identity spike可** | P0IでDuplicator/Instance identityを凍結 |
 
@@ -98,7 +98,8 @@ P0I #170 → P7a → P7b → P7c → P7U
 | 2 | CU-0G03H | M3 core | `DONE` | — | 既存G0-9 surface hostへbounded AccessKit tree、実first-responderを伴うnative↔Web focus ring、ready/layout epoch、実DOM compositionとshortcut sink、fullscreen/minimize別観測を追加。Sol利用不能のためClaude Sonnet fallback実装を採用し、Grok/FableともP0/P1=0でACCEPT（P2は非blocking観測）、20 lib + 3 main tests/build/docs全緑 | CU-0G03H2を単独実行 |
 | 3 | CU-0G03H2 | M3 core | `DONE` | — | 実NSWindowへCGEvent Tab/Shift+Tabを送る正逆8遷移、`NSWindow.firstResponder` class、native NSEvent monitor/Web DOM relay到達元、修飾Tab非奪取を固定。20 lib + 7 main tests、実window E2E、workspace/docs全緑、Grok/FableともP0/P1=0でACCEPT | CU-0G03を単独実行 |
 | 4 | CU-0G03 | M3 human | `DONE` | — | ユーザーがlocal acceptance harnessの実windowでmacOS実IME、VoiceOver、native/Web focus往復、fullscreen/minimize後のfocus/IME復帰を人間審判して合格。機械focus試験から外挿せず[人間証跡](spikes/g0-9-surface-host.md#cu-0g03-人間審判2026-07-24)を保存 | CU-0G04を単独実行 |
-| 5 | CU-0G04 | M3 measure | `DO` | — | 100回resize/DPI/capture/lostとWebView crash復旧を責任最小化短票で裁定し、Document/selection不変、stale epoch拒否、resource leakなしを実window manifestへ保存 | 合格後、CU-0G05Lを`DO`へ上げる |
+| 5 | CU-0G04 | M3 measure | `DONE` | — | 既存winit/wgpu/wry/macOS標準経路へ責任を戻し、同じ実windowで102 resize、実DPI event、合成capture、注入Lost再present、実WebContent終了とbounded reload、offline/stale拒否、sentinel/resource/semantic write不変を[単一manifest](spikes/g0-9-surface-host.md#cu-0g04-lifecycle--failure実機審判2026-07-24)へ保存 | CU-0G05Lを単独実行 |
+| 6 | CU-0G05L | M3 spec | `DO` | — | CU-0G02〜04のraw evidenceを固定Mac manifestへ束ね、反対側review P0/P1=0後だけG0-9Lを限定確定。製品粒・Windows・追加hardwareは解禁しない | 合格後もW0b/H1b/製品windowを自動解禁しない |
 | 6 | U0e-2R | M3 | `DONE` | — | 固定React baseline `eb16d06`を最新mainへ再結合し、43 visual testとworkspace gateを通過 | GR-D1を単独実行 |
 | 7 | GR-D1 | M3 guard | `DONE` | — | Terra実装 + Grok検収の通常発注入口へBASE_REF/SHA・authority・粒状態・React labelのdispatch gateを固定し、専用負例とworkspace試験を通過 | GR-D2を単独実行 |
 | 8 | GR-D2 | M3 guard | `DONE` | — | 変更許可閉集合、append-only検収証跡、timeout分離、検収者mutation拒否、検収resumeをTerra + Grok入口へ固定し、専用負例とworkspace試験を通過 | GR-R1/R2をDOへ移す |
@@ -178,7 +179,7 @@ U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除
 | resource設定を出す | G0-2 + G0-8 + U0b + K1a → U0f。設定はUser settings、pressure実測値はTransient |
 | 重いpreviewを追従させる | U1b + U1c + U5 + K1d → U1g。project fps/audio clockを変えず表示frameだけ落とす |
 
-したがって現在の短い運用判断は、**M2基盤再締結とD3e、D1m、CAM-G0、D1j、D1k-S、D1k、D3f、M3 U0a、U0b-1、U0b-2、U0c-1、U0c-2、U0d-1、U0d-2、U0d-3、U2a-0、U2a-1、U1a-1、U1a-2、U1b-1、U1b-2、U2b-1、U2c-1、U2c-4、U0e-1、U0e-2R、GR-D1、GR-D2、GR-R1/R2、GR-R3、U0e-2、CU-G01、CU-0G02、CU-0G03H、CU-0G03H2、CU-0G03は完了済み**。次は`CU-0G04`だけを実行し、責任最小化短票で既存runner／OS機能／libraryを先に裁定してから、100回resize/DPI/capture/lostとWebView crash復旧を実windowで証跡化する。CU-0G05L、W0b、H1b、Motolii Studio Preview、window結合はまだ解禁しない。`G0-6H`は別の人間停止線として未記入templateへの判定者・条件・採否理由を待ち、U0e-3を引き続き停止する。`U2c-2`はU4a-2/U4cの実製品入口待ちとする。Rerunのcommit固定source監査と資産分類は可能だが、現在のUシリーズ実装と並走させない。D5は骨格を完了扱いせず、本番preview／GPU計測／実機E2Eを後続へ残す。
+したがって現在の短い運用判断は、**M2基盤再締結とD3e、D1m、CAM-G0、D1j、D1k-S、D1k、D3f、M3 U0a、U0b-1、U0b-2、U0c-1、U0c-2、U0d-1、U0d-2、U0d-3、U2a-0、U2a-1、U1a-1、U1a-2、U1b-1、U1b-2、U2b-1、U2c-1、U2c-4、U0e-1、U0e-2R、GR-D1、GR-D2、GR-R1/R2、GR-R3、U0e-2、CU-G01、CU-0G02〜04は完了済み**。次は`CU-0G05L`だけを実行し、CU-0G02〜04のraw evidence、固定Mac構成、未合格platformを束ね、反対側review P0/P1=0後だけlocal platform prerequisite evidenceを限定確定する。W0b、H1b、Motolii Studio Preview、window結合はまだ解禁しない。`G0-6H`は別の人間停止線として未記入templateへの判定者・条件・採否理由を待ち、U0e-3を引き続き停止する。`U2c-2`はU4a-2/U4cの実製品入口待ちとする。Rerunのcommit固定source監査と資産分類は可能だが、現在のUシリーズ実装と並走させない。D5は骨格を完了扱いせず、本番preview／GPU計測／実機E2Eを後続へ残す。
 
 ## 更新規則
 

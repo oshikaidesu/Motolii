@@ -283,6 +283,13 @@ impl WebSource {
             Self::Right => FocusRole::WebRight,
         }
     }
+
+    pub fn wire_name(self) -> &'static str {
+        match self {
+            Self::Left => "left",
+            Self::Right => "right",
+        }
+    }
 }
 
 /// この列挙外は型付きparseエラーとし、部分文字列一致では推測しない。
@@ -320,6 +327,46 @@ pub enum WebMessageError {
     UnknownTarget,
     #[error("malformed focus-request epoch")]
     MalformedEpoch,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
+pub enum WebEnvelopeError {
+    #[error("unknown web message source")]
+    UnknownSource,
+    #[error("missing WebView instance epoch")]
+    MissingInstanceEpoch,
+    #[error("malformed WebView instance epoch")]
+    MalformedInstanceEpoch,
+    #[error("stale WebView instance epoch")]
+    StaleInstanceEpoch,
+}
+
+/// WebKit content processの再生成前に滞留したIPCを、message文法へ渡す前に
+/// instance epochで拒否する。
+pub fn validate_web_envelope(
+    raw: &str,
+    expected_left_epoch: u64,
+    expected_right_epoch: u64,
+) -> Result<(WebSource, &str), WebEnvelopeError> {
+    let mut fields = raw.splitn(3, ':');
+    let source =
+        WebSource::from_wire(fields.next().unwrap_or("")).ok_or(WebEnvelopeError::UnknownSource)?;
+    let epoch = fields
+        .next()
+        .ok_or(WebEnvelopeError::MissingInstanceEpoch)?
+        .parse::<u64>()
+        .map_err(|_| WebEnvelopeError::MalformedInstanceEpoch)?;
+    let message = fields
+        .next()
+        .ok_or(WebEnvelopeError::MissingInstanceEpoch)?;
+    let expected = match source {
+        WebSource::Left => expected_left_epoch,
+        WebSource::Right => expected_right_epoch,
+    };
+    if epoch != expected {
+        return Err(WebEnvelopeError::StaleInstanceEpoch);
+    }
+    Ok((source, message))
 }
 
 pub fn parse_web_message(raw: &str) -> Result<(WebSource, WebMessage), WebMessageError> {
@@ -861,6 +908,38 @@ mod tests {
             Err(FocusRequestError::StaleEpoch)
         );
         assert_eq!(coordinator, before);
+    }
+
+    #[test]
+    fn web_envelope_accepts_only_the_current_instance_epoch() {
+        assert_eq!(
+            validate_web_envelope("left:4:ready", 4, 9),
+            Ok((WebSource::Left, "ready"))
+        );
+        assert_eq!(
+            validate_web_envelope("right:9:input", 4, 9),
+            Ok((WebSource::Right, "input"))
+        );
+        assert_eq!(
+            validate_web_envelope("left:3:ready", 4, 9),
+            Err(WebEnvelopeError::StaleInstanceEpoch)
+        );
+    }
+
+    #[test]
+    fn web_envelope_rejects_unknown_or_malformed_fields() {
+        assert_eq!(
+            validate_web_envelope("middle:1:ready", 1, 1),
+            Err(WebEnvelopeError::UnknownSource)
+        );
+        assert_eq!(
+            validate_web_envelope("left:nope:ready", 1, 1),
+            Err(WebEnvelopeError::MalformedInstanceEpoch)
+        );
+        assert_eq!(
+            validate_web_envelope("left:1", 1, 1),
+            Err(WebEnvelopeError::MissingInstanceEpoch)
+        );
     }
 
     #[test]

@@ -157,3 +157,65 @@ synthetic focus結果から外挿した判定ではない。
 判定時の画面録画やVoiceOver raw logはrepositoryへ保存していない。人間審判の
 正本は本表とユーザーの合格報告であり、機械試験のmanifestとは分離する。
 CU-0G03の合格はCU-0G04、G0-9D、G0-6H、G0-3 / GAP-13を代替しない。
+
+## CU-0G04 lifecycle / failure実機審判（2026-07-24）
+
+`CU-0G03`と同じ実NSWindowを拡張し、別harnessの結果を足し合わせずL3の
+resize、capture、failure recovery、offline、epoch拒否を同じJSON manifestへ
+閉じた。製品Document、selection、historyは導入せず、read-only sentinelだけを
+failure前後で比較する。
+
+`RESPONSIBILITY DISPOSITION`: `REUSE / WRAP`。既存surface-hostと
+`winit` / `wgpu` / `wry` / macOS標準機能を使い、独自window runner、
+WebView監視framework、capture実装、process supervisorは新設しない。
+
+`EXISTING ROUTE`: 100 resizeとlayout epochは既存winit event loop、Lost注入後の
+再configureは既存`GfxState`、content-process終了通知とreloadはwry 0.55の
+`with_on_web_content_process_terminate_handler` / `WebView::reload`、合成window
+captureは`/usr/sbin/screencapture -l<windowNumber>`、process列挙／終了は
+macOSの`ps` / `kill`を使う。offline fixtureはwry custom protocolとCSP、
+navigation/new-window/download handlerの既定拒否へ載せる。
+
+`OWNED RESIDUE`: Motolii harnessが所有するのは、layout epochとは独立した
+WebView instance epoch、stale拒否、最大3回の100ms起点exponential backoff、
+固定sentinel不変条件、既存資源数とOS観測値の単一manifest集約だけである。
+
+`IMPORTED RESPONSIBILITY`: Tauri app shell、Appium/Playwright runner、
+ScreenCaptureKit wrapper、独自process tree library、外部DB/WALは取り込まない。
+OS process終了は起動前後の差分が「完全一致するWebKit WebContent executable
+ちょうど2件」の場合だけ、そのうち1件へ限定する。条件不一致なら何も終了せず
+typed failureで停止する。
+
+`EXIT`: 実windowの一続き実行で、100回以上のresize、DPI観測、合成capture、
+注入Lost後の再present、stale layout/WebView epoch拒否、実WebContent process
+終了後のcallback/backoff/reload/再Ready、offline既定拒否、sentinelとresource
+不変を同じmanifestに保存する。`actual_surface_lost_or_outdated == 0`は、
+固定Mac local gateが注入Lostを審判した事実を保ち、実hardware lostへ外挿しない。
+
+再現コマンド:
+
+```bash
+G0_9_AUTOMATE_LIFECYCLE=1 \
+G0_9_RESIZE_TARGET=100 \
+G0_9_REPORT=/tmp/motolii-cu0g04-report.json \
+G0_9_CAPTURE=/tmp/motolii-cu0g04-window.png \
+cargo run --manifest-path spikes/g0-9-surface-host/Cargo.toml
+jq -e '.resize_pass == true
+  and .present_invariant == true
+  and .cu_0g04.automated_pass == true
+  and .cu_0g04.sentinel_unchanged == true
+  and .cu_0g04.final_owned_web_content_processes == 2' \
+  /tmp/motolii-cu0g04-report.json
+```
+
+固定Macでexit 0となり、102 resize / layout epoch 104、scale factor 2.0 /
+実`ScaleFactorChanged` 1件、acquire/present 201/201、CPU readback 0、
+Lost注入/reconfigure/再present各1件、181,846-byteの合成capture、
+stale instance/layout epoch各1件拒否、WebContent実終了/callback/reload/
+再Ready各1件を記録した。GPU device 1、render pipeline 2、live WebView 2、
+終了復旧後のowned WebContent process 2、semantic write 0、revision 7と
+selection sentinel不変だった。
+
+これは`CU-0G04`の固定Mac evidenceであり、実hardware surface/device lost、
+Windows `ProcessFailed`、追加monitor/HDR、製品windowを合格にしない。
+`G0-9L`の限定確定は後続`CU-0G05L`で別に判定する。
