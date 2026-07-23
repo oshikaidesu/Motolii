@@ -138,3 +138,22 @@ jq -e '.automated_focus_pass == true' \
 process exit 0と`automated_focus_pass == true`を確認した。20 lib + 7 main
 tests、workspace、docsが全緑で、Grok/FableともP0/P1=0、`VERDICT: ACCEPT`。
 これはCU-0G03 DONEまたはG0-9L PASSを宣言しない。
+
+## CU-0G03 人間審判（2026-07-24）
+
+判定者であるユーザーが、同じlocal acceptance harnessの実windowで次を人間審判し、
+全項目の合格を報告した。この記録はCU-0G03の人間証跡であり、CU-0G03H2の
+synthetic focus結果から外挿した判定ではない。
+
+| 審判 | 結果 |
+|---|---|
+| macOS実日本語IMEのpreedit、候補位置、確定、取消 | PASS |
+| composition中のEnter / Esc / Spaceのshortcut sink漏出 | 0件 |
+| bounded AX treeのVoiceOver読み上げとfocus追従 | PASS |
+| native → WebView → nativeのfocus往復 | PASS |
+| fullscreen後のfocus / IME復帰 | PASS |
+| minimize / restore後のfocus / IME復帰 | PASS |
+
+判定時の画面録画やVoiceOver raw logはrepositoryへ保存していない。人間審判の
+正本は本表とユーザーの合格報告であり、機械試験のmanifestとは分離する。
+CU-0G03の合格はCU-0G04、G0-9D、G0-6H、G0-3 / GAP-13を代替しない。
