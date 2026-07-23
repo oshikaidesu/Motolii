@@ -2,6 +2,8 @@
 
 対象: 人間実施のR8スパイク。ドキュメント・使い捨てコード `spikes/vello-eval/`。
 
+> 2026-07-23歴史監査: cutoff全1版と結果報告全1版を[Unit 5G回収](2026-07-23-historical-vello-adoption-lineage-recovery.md)で処分した。採択はdirect wgpuを主、Velloを複雑path／textの局所passとする後続決定へ縮小して維持する。spikeは同一device／textureの成立性であり、現行workspace統合、K6／P6／U3a-2完了、Apple M4時間値のSLO化、semantic goldenの一斉再生成を証明しない。
+
 ## 判定: **承認**（採用決定を支持。ブロッカーなし）
 
 ### 合格理由
