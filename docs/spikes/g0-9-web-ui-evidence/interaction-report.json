@@ -1,0 +1,44 @@
+{
+  "ticket": "G0-9",
+  "capturedAt": "2026-07-21T05:40:34.147Z",
+  "environment": {
+    "platform": "darwin",
+    "release": "24.5.0",
+    "arch": "arm64"
+  },
+  "actualMouse": {
+    "konvaDrag": true,
+    "snappedCssPx": {
+      "x": 110,
+      "y": 90,
+      "grid": 10
+    },
+    "escapedAfterOffSurfaceMove": true,
+    "adapterCommits": 1,
+    "marqueeSelected": 24
+  },
+  "pointerCapture": {
+    "surfaceExitMoves": 6,
+    "released": true
+  },
+  "accessibilityProxy": {
+    "domButtons": 1,
+    "selectedCount": 24
+  },
+  "syntheticCompositionGate": {
+    "composing": false,
+    "shortcutCount": 1,
+    "events": [
+      "compositionstart",
+      "compositionupdate",
+      "compositionend"
+    ]
+  },
+  "boundaries": {
+    "motoliiD2Connected": false,
+    "rationalTimeSnapValidated": false,
+    "physicalImeValidated": false,
+    "voiceOverValidated": false,
+    "penValidated": false
+  }
+}

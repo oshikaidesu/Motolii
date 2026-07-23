@@ -1,0 +1,27 @@
+[package]
+name = "g0-9-timeline-visual-parity"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[package.metadata.bundle]
+name = "Motolii Depth Rail Spike"
+identifier = "com.motolii.spike.depth-rail"
+category = "public.app-category.developer-tools"
+
+[features]
+depth-default = []
+
+# 製品workspaceから隔離し、Reactのpx値やfixture stateを公開契約へ焼かない。
+[workspace]
+
+[dependencies]
+bytemuck = { version = "1", features = ["derive"] }
+glyphon = "0.11"
+pollster = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+taffy = { version = "=0.12.2", default-features = false, features = ["std", "flexbox", "taffy_tree"] }
+understory_view2d = "=0.1.0"
+wgpu = "29"
+winit = "0.30.9"

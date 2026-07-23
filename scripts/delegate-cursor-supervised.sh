@@ -4,10 +4,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CURSOR_GROK_MODEL="${CURSOR_GROK_MODEL:-cursor-grok-4.5-high}"
 CURSOR_AGENT_BIN="${CURSOR_AGENT_BIN:-cursor-agent}"
-COMPOSER_MODEL="${CURSOR_COMPOSER_MODEL:-composer-2.5}"
+CODEX_AGENT_BIN="${CODEX_AGENT_BIN:-codex}"
+TERRA_MODEL="${CODEX_TERRA_MODEL:-gpt-5.6-terra}"
 SUPERVISOR_TIMEOUT_SECONDS="${CURSOR_SUPERVISED_TIMEOUT_SECONDS:-300}"
-COMPOSER_TIMEOUT_SECONDS="${CURSOR_COMPOSER_TIMEOUT_SECONDS:-900}"
+INSPECTION_TIMEOUT_SECONDS="${CURSOR_INSPECTION_TIMEOUT_SECONDS:-900}"
+TERRA_TIMEOUT_SECONDS="${CODEX_TERRA_TIMEOUT_SECONDS:-900}"
 HEARTBEAT_SECONDS="${CURSOR_SUPERVISED_HEARTBEAT_SECONDS:-30}"
+GRAIN_LEDGER="$ROOT_DIR/docs/reviews/2026-07-22-m3-comfortable-use-granulation.md"
 
 usage() {
   echo "Usage: $0 prepare <isolated-worktree> <order-file> <task>"
@@ -17,6 +20,10 @@ usage() {
 
 if [[ -n "${CURSOR_AGENT:-}" ]]; then
   echo "delegate-cursor-supervised: Cursor子エージェントからの再帰実行は禁止です" >&2
+  exit 2
+fi
+if [[ -n "${CODEX_DELEGATED:-}" ]]; then
+  echo "delegate-cursor-supervised: Codex子エージェントからの再帰実行は禁止です" >&2
   exit 2
 fi
 
@@ -56,8 +63,12 @@ if [[ ! "$SUPERVISOR_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
   echo "delegate-cursor-supervised: CURSOR_SUPERVISED_TIMEOUT_SECONDSは正の整数で指定してください" >&2
   exit 2
 fi
-if [[ ! "$COMPOSER_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
-  echo "delegate-cursor-supervised: CURSOR_COMPOSER_TIMEOUT_SECONDSは正の整数で指定してください" >&2
+if [[ ! "$INSPECTION_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "delegate-cursor-supervised: CURSOR_INSPECTION_TIMEOUT_SECONDSは正の整数で指定してください" >&2
+  exit 2
+fi
+if [[ ! "$TERRA_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "delegate-cursor-supervised: CODEX_TERRA_TIMEOUT_SECONDSは正の整数で指定してください" >&2
   exit 2
 fi
 if [[ ! "$HEARTBEAT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
@@ -66,6 +77,10 @@ if [[ ! "$HEARTBEAT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
 fi
 if ! command -v "$CURSOR_AGENT_BIN" >/dev/null 2>&1; then
   echo "delegate-cursor-supervised: Cursor Agent CLI '$CURSOR_AGENT_BIN' が見つかりません" >&2
+  exit 127
+fi
+if ! command -v "$CODEX_AGENT_BIN" >/dev/null 2>&1; then
+  echo "delegate-cursor-supervised: Codex CLI '$CODEX_AGENT_BIN' が見つかりません" >&2
   exit 127
 fi
 
@@ -145,24 +160,189 @@ supervisor_result_is_valid() {
   ' "$output"
 }
 
+order_gate_fail() {
+  echo "ORDER-GATE NG: $*" >&2
+  return 1
+}
+
+order_gate() {
+  local order_file="$1"
+  local worktree="$2"
+  local base_sha grain actual_head authority_count=0
+  local authority_path authority_hash actual_hash allowed_count=0 allowed_path
+
+  base_sha="$(sed -n 's/^BASE_SHA: \([0-9a-f]\{40,64\}\)$/\1/p' "$order_file")"
+  if [[ -z "$base_sha" || "$(grep -c '^BASE_SHA:' "$order_file")" -ne 1 ]]; then
+    order_gate_fail "BASE_SHA must appear exactly once as a full commit id"
+    return 1
+  fi
+  actual_head="$(git -C "$worktree" rev-parse HEAD)"
+  if [[ "$actual_head" != "$base_sha" ]]; then
+    order_gate_fail "worktree HEAD != BASE_SHA ($actual_head != $base_sha)"
+    return 1
+  fi
+
+  grain="$(awk '/^GRAIN: / { count++; value = substr($0, 8) } END { if (count == 1) print value }' "$order_file")"
+  if [[ -z "$grain" || "$(grep -c '^GRAIN:' "$order_file")" -ne 1 ]]; then
+    order_gate_fail "GRAIN must appear exactly once"
+    return 1
+  fi
+  if [[ ! -f "$GRAIN_LEDGER" ]]; then
+    order_gate_fail "main grain ledger is missing: $GRAIN_LEDGER"
+    return 1
+  fi
+  if ! awk -F'|' -v grain="$grain" '
+      $2 ~ "^[[:space:]]*" grain "[[:space:]]*$" {
+        found = 1
+        state = $3
+        gsub(/`|[[:space:]]/, "", state)
+        if (state ~ /\/DO$/) ready = 1
+      }
+      END { exit !(found && ready) }
+    ' "$GRAIN_LEDGER"; then
+    order_gate_fail "$grain is not DO in main grain ledger; dispatch is forbidden"
+    return 1
+  fi
+
+  while IFS=$'\t' read -r authority_path authority_hash; do
+    [[ -n "$authority_path" ]] || continue
+    authority_count=$((authority_count + 1))
+    if [[ "$authority_path" = /* || "$authority_path" == ".." || "$authority_path" == ../* || "$authority_path" == */../* ]]; then
+      order_gate_fail "authority path must stay inside worktree: $authority_path"
+      return 1
+    fi
+    if [[ ! -f "$worktree/$authority_path" ]]; then
+      order_gate_fail "authority is missing from worktree: $authority_path"
+      return 1
+    fi
+    actual_hash="$(shasum -a 256 "$worktree/$authority_path" | awk '{print $1}')"
+    if [[ "$actual_hash" != "$authority_hash" ]]; then
+      order_gate_fail "authority hash mismatch: $authority_path"
+      return 1
+    fi
+  done < <(awk '
+    $1 == "AUTHORITY:" && NF == 3 && $3 ~ /^SHA256:/ {
+      hash = substr($3, 8)
+      if (length(hash) == 64 && hash !~ /[^0-9a-f]/) print $2 "\t" hash
+    }
+  ' "$order_file")
+  if [[ "$authority_count" -eq 0 || "$(grep -c '^AUTHORITY:' "$order_file")" -ne "$authority_count" ]]; then
+    order_gate_fail "AUTHORITY lines must use: AUTHORITY: <worktree-relative-path> SHA256:<64 hex>"
+    return 1
+  fi
+
+  while IFS= read -r allowed_path; do
+    [[ -n "$allowed_path" ]] || continue
+    allowed_count=$((allowed_count + 1))
+    if [[ "$allowed_path" = /* || "$allowed_path" == ".." || "$allowed_path" == ../* || "$allowed_path" == */../* ]]; then
+      order_gate_fail "allowed path must stay inside worktree: $allowed_path"
+      return 1
+    fi
+  done < <(awk '$1 == "ALLOWED_FILE:" && NF == 2 { print $2 }' "$order_file")
+  if [[ "$allowed_count" -eq 0 || "$(grep -c '^ALLOWED_FILE:' "$order_file")" -ne "$allowed_count" ]]; then
+    order_gate_fail "ALLOWED_FILE lines must use one worktree-relative glob per line"
+    return 1
+  fi
+
+  if [[ -n "$(git -C "$worktree" status --porcelain=v1 --untracked-files=all)" ]]; then
+    order_gate_fail "isolated worktree is not clean before implementation"
+    return 1
+  fi
+
+  if grep -qx 'REACT TASK: YES' "$order_file" ||
+     grep -Eq '^ALLOWED_FILE: (docs/mocks-ui(/|$)|.*\.jsx$)' "$order_file"; then
+    local labels=(
+      "REACT AUTHORITY"
+      "SOURCE ASSET"
+      "PRESERVE"
+      "REPLACE"
+      "STATE OWNER"
+      "DIAGNOSTIC ROUTE"
+      "NEGATIVE ORACLE"
+      "STOP"
+    )
+    local previous=0 label line
+    for label in "${labels[@]}"; do
+      line="$(awk -v label="$label" '$0 == label ":" || $0 == "`" label "`:" { print NR; exit }' "$order_file")"
+      if [[ -z "$line" || "$line" -le "$previous" ]]; then
+        order_gate_fail "React guard label missing or out of order: $label"
+        return 1
+      fi
+      previous="$line"
+    done
+  fi
+}
+
+path_is_allowed() {
+  local order_file="$1"
+  local changed_path="$2"
+  local pattern
+  while IFS= read -r pattern; do
+    [[ -n "$pattern" ]] || continue
+    if [[ "$changed_path" == $pattern ]]; then
+      return 0
+    fi
+  done < <(awk '$1 == "ALLOWED_FILE:" && NF == 2 { print $2 }' "$order_file")
+  return 1
+}
+
+scope_closure() {
+  local order_file="$1"
+  local worktree="$2"
+  local changed_path
+  while IFS= read -r changed_path; do
+    [[ -n "$changed_path" ]] || continue
+    if ! path_is_allowed "$order_file" "$changed_path"; then
+      echo "SCOPE NG: 変更許可外path: $changed_path" >&2
+      return 1
+    fi
+  done < <(
+    {
+      git -C "$worktree" diff --name-only
+      git -C "$worktree" diff --cached --name-only
+      git -C "$worktree" ls-files --others --exclude-standard
+    } | LC_ALL=C sort -u
+  )
+}
+
+persist_evidence() {
+  local stage="$1"
+  local output="$2"
+  [[ -d "$EVIDENCE_DIR" ]] || mkdir -p "$EVIDENCE_DIR"
+  [[ ! -f "$output" ]] || cp "$output" "$EVIDENCE_DIR/$stage.txt"
+  [[ ! -f "$output.err" ]] || cp "$output.err" "$EVIDENCE_DIR/$stage.err"
+  [[ ! -f "$output.timeout" ]] || cp "$output.timeout" "$EVIDENCE_DIR/$stage.timeout"
+}
+
+snapshot_worktree() {
+  local prefix="$1"
+  git -C "$WORKTREE" status --porcelain=v1 --untracked-files=all >"$EVIDENCE_DIR/$prefix.status"
+  git -C "$WORKTREE" diff --binary >"$EVIDENCE_DIR/$prefix.diff"
+}
+
 run_supervisor() {
   local output="$1"
   local prompt="$2"
   local result_kind="$3"
   local cursor_mode_args=(--trust)
+  local timeout_seconds="$SUPERVISOR_TIMEOUT_SECONDS"
   if [[ "$result_kind" == "order" ]]; then
     cursor_mode_args+=(--mode ask)
   else
     # headlessはread-only shellにも承認が要る。検収promptと事後差分審査で書込みを拒否する。
     cursor_mode_args+=(--force)
+    timeout_seconds="$INSPECTION_TIMEOUT_SECONDS"
   fi
   prompt="Do not spawn subagents or delegate any part of this task. Complete the requested read-only work yourself in this run and return the required terminal marker.
 
 $prompt"
 
-  if ! run_agent "$output.cursor-grok" "$SUPERVISOR_TIMEOUT_SECONDS" \
+  if ! run_agent "$output.cursor-grok" "$timeout_seconds" \
     "$CURSOR_AGENT_BIN" -p "${cursor_mode_args[@]}" \
     --output-format text --model "$CURSOR_GROK_MODEL" --workspace "$WORKTREE" "$prompt"; then
+    [[ ! -f "$output.cursor-grok" ]] || cp "$output.cursor-grok" "$output"
+    [[ ! -f "$output.cursor-grok.err" ]] || cp "$output.cursor-grok.err" "$output.err"
+    [[ ! -f "$output.cursor-grok.timeout" ]] || cp "$output.cursor-grok.timeout" "$output.timeout"
     return 1
   fi
   if ! supervisor_result_is_valid "$output.cursor-grok" "$result_kind"; then
@@ -176,9 +356,9 @@ $prompt"
 
 if [[ "$MODE" == "prepare" ]]; then
   supervisor_prompt=$(cat <<EOF
-You are the on-site supervisor for Motolii. Work read-only. Read AGENTS.md and every required spec/review completely. Inspect the current worktree and existing diff. Translate the user intent into a binding implementation order for Composer 2.5 Standard; do not implement.
+You are the on-site supervisor for Motolii. Work read-only. Read AGENTS.md and every required spec/review completely. Inspect the current worktree and existing diff. Translate the user intent into a binding implementation order for GPT-5.6 Terra; do not implement.
 
-The order must contain: objective and user intent, current state and already-completed work, authoritative spec/task IDs, exact allowed files, explicit non-goals, existing helpers to reuse, invariants and atomicity, STOP conditions, required positive and negative tests, exact verification commands, and known integration gates. Do not permit allow/ignore/lint suppression, expected-value or golden rewrites, fixture special-cases, raw JSON/string scanners that bypass typed boundaries, public raw allocation/mutation APIs, serde defaults inventing durable meaning, duplicate planners/helpers, implicit migration, partial mutation, TODO stubs, or expansion into adjacent tasks.
+The order must contain: objective and user intent, current state and already-completed work, authoritative spec/task IDs, exact allowed files, explicit non-goals, existing helpers to reuse, invariants and atomicity, STOP conditions, required positive and negative tests, exact verification commands, and known integration gates. It must also contain exactly one GRAIN line, exactly one BASE_SHA line equal to the isolated worktree HEAD, one or more AUTHORITY lines in the exact form AUTHORITY: <worktree-relative-path> SHA256:<64 lowercase hex>, and one ALLOWED_FILE: <worktree-relative-glob> line for every allowed path or closed subtree. Add REACT TASK: YES only when the implementation changes a React source asset or docs/mocks-ui/JSX runtime path; prose that merely discusses React does not make an infrastructure or documentation grain a React task. A grain may be READY only when its row is DO in the main comfortable-use granulation ledger and every authority exists inside the target worktree at that hash. Do not permit allow/ignore/lint suppression, expected-value or golden rewrites, fixture special-cases, raw JSON/string scanners that bypass typed boundaries, public raw allocation/mutation APIs, serde defaults inventing durable meaning, duplicate planners/helpers, implicit migration, partial mutation, TODO stubs, or expansion into adjacent tasks.
 
 If the task is ready and fully specified, end with exactly: ORDER: READY
 If any unresolved decision or dependency blocks implementation, end with exactly: ORDER: STOP
@@ -197,6 +377,8 @@ EOF
   {
     cat "$tmp_dir/order.txt"
     echo "SUPERVISOR_BACKEND: $SUPERVISOR_BACKEND_USED"
+    echo "SUPERVISOR_MODEL: $CURSOR_GROK_MODEL"
+    echo "IMPLEMENTER_MODEL: $TERRA_MODEL"
     echo "TASK_SHA256: $task_hash"
   } >"$ORDER_FILE"
   if ! grep -qx 'ORDER: READY' "$tmp_dir/order.txt"; then
@@ -220,14 +402,29 @@ if ! grep -qx "TASK_SHA256: $task_hash" "$ORDER_FILE"; then
   echo "delegate-cursor-supervised: 発注書とtaskが一致しません" >&2
   exit 3
 fi
+if ! grep -qx "SUPERVISOR_MODEL: $CURSOR_GROK_MODEL" "$ORDER_FILE" ||
+   ! grep -qx "IMPLEMENTER_MODEL: $TERRA_MODEL" "$ORDER_FILE"; then
+  echo "delegate-cursor-supervised: 発注書のモデル固定が現行のTerra + Grok運用と一致しません" >&2
+  exit 3
+fi
 if ! grep -qx 'CODEX PRECHECK: APPROVED' "$ORDER_FILE"; then
-  echo "delegate-cursor-supervised: Codex事前承認がないためComposerを起動しません" >&2
+  echo "delegate-cursor-supervised: Codex事前承認がないためTerraを起動しません" >&2
+  exit 3
+fi
+if ! order_gate "$ORDER_FILE" "$WORKTREE"; then
+  echo "delegate-cursor-supervised: 発注正本・粒状態・worktreeが一致しないためTerraを起動しません" >&2
   exit 3
 fi
 
+EVIDENCE_DIR="${ORDER_FILE}.evidence"
+mkdir -p "$EVIDENCE_DIR"
+rm -f "$EVIDENCE_DIR"/{order,implementation,inspection}.{txt,err,timeout} \
+  "$EVIDENCE_DIR"/{before-implementation,after-implementation,before-inspection,after-inspection}.{status,diff}
 cp "$ORDER_FILE" "$tmp_dir/order.txt"
+cp "$ORDER_FILE" "$EVIDENCE_DIR/order.txt"
+snapshot_worktree before-implementation
 
-composer_prompt=$(cat <<EOF
+terra_prompt=$(cat <<EOF
 You are the implementation contractor for Motolii. The order from the Grok supervisor below is binding. Read AGENTS.md and all sources named by the order. Implement only the allowed scope. You may not reinterpret requirements, broaden file scope, invent defaults, or substitute a local workaround. If the order cannot be implemented exactly, do not improvise: stop and report the conflicting spec/file evidence. Do not commit, push, or create a PR.
 
 Original user task:
@@ -239,14 +436,28 @@ EOF
 )
 
 echo
-echo "## 2. Composer 2.5 Standard implementation (Codex-prechecked order)"
-if ! run_agent "$tmp_dir/implementation.txt" "$COMPOSER_TIMEOUT_SECONDS" \
-  "$CURSOR_AGENT_BIN" -p --force --trust --output-format text \
-  --model "$COMPOSER_MODEL" --workspace "$WORKTREE" "$composer_prompt"; then
+echo "## 2. GPT-5.6 Terra implementation (Codex-prechecked order)"
+head_before="$(git -C "$WORKTREE" rev-parse HEAD)"
+if ! run_agent "$tmp_dir/implementation.txt" "$TERRA_TIMEOUT_SECONDS" \
+  env CODEX_DELEGATED=1 "$CODEX_AGENT_BIN" --ask-for-approval never exec \
+  --ephemeral --color never --model "$TERRA_MODEL" --sandbox danger-full-access \
+  --cd "$WORKTREE" "$terra_prompt"; then
+  persist_evidence implementation "$tmp_dir/implementation.txt"
+  snapshot_worktree after-implementation
   cat "$tmp_dir/implementation.txt"
   exit 1
 fi
+persist_evidence implementation "$tmp_dir/implementation.txt"
+snapshot_worktree after-implementation
 cat "$tmp_dir/implementation.txt"
+if [[ "$(git -C "$WORKTREE" rev-parse HEAD)" != "$head_before" ]]; then
+  echo "delegate-cursor-supervised: Terraがcommitを作成したため検収へ進みません" >&2
+  exit 5
+fi
+if ! scope_closure "$ORDER_FILE" "$WORKTREE"; then
+  echo "delegate-cursor-supervised: 変更許可閉集合に違反したため検収へ進みません" >&2
+  exit 6
+fi
 
 inspection_prompt=$(cat <<EOF
 You are the same on-site supervisor for Motolii. Work read-only. Do not create a plan, spawn subagents, or wait for another agent. Use read-only shell/tools now to inspect the actual git diff and rerun the required test evidence in the worktree. Verify it line-by-line against your binding order below and the authoritative specs. A green test suite is not sufficient. Look specifically for contract-avoidance hacks, scope/file drift, weakened tests, missing negative cases, duplicated logic, public raw APIs, implicit migration, non-atomic failure paths, unbounded work or allocation, wire incompatibility, and unfinished integration gates.
@@ -266,9 +477,19 @@ EOF
 
 echo
 echo "## 3. Grok supervisor inspection"
+snapshot_worktree before-inspection
 if ! run_supervisor "$tmp_dir/inspection.txt" "$inspection_prompt" verdict; then
+  persist_evidence inspection "$tmp_dir/inspection.txt"
+  snapshot_worktree after-inspection
   [[ ! -f "$tmp_dir/inspection.txt" ]] || cat "$tmp_dir/inspection.txt"
   exit 1
+fi
+persist_evidence inspection "$tmp_dir/inspection.txt"
+snapshot_worktree after-inspection
+if ! cmp -s "$EVIDENCE_DIR/before-inspection.status" "$EVIDENCE_DIR/after-inspection.status" ||
+   ! cmp -s "$EVIDENCE_DIR/before-inspection.diff" "$EVIDENCE_DIR/after-inspection.diff"; then
+  echo "INSPECT NG: 検収中にworktreeが変更されたためverdictを無効化します" >&2
+  exit 7
 fi
 cat "$tmp_dir/inspection.txt"
 if ! grep -qx 'VERDICT: ACCEPT' "$tmp_dir/inspection.txt"; then

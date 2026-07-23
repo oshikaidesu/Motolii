@@ -1,6 +1,6 @@
 # Rerun先例調査: egui製プロダクトの方向決定とspot audit(2026-07-20)
 
-ステータス: **決定**。M3 UI基盤はeguiを継続し、Rerunを制作ソフト級の外観・window/panel構成・時間面・GPU viewportを実装するための主要な製品先例とする(2026-07-20ユーザー決定)。Reactモックは引き続きMotolii固有の視覚・操作要求の正本候補である。本文書の資産記述は方向決定時に選んだspot auditであり、全量inventoryではない。
+ステータス: **歴史的決定 / toolkit採否は2026-07-21再評価中**。Rerunを高密度shell・window/panel構成・時間面・GPU viewportの主要製品先例とする判断は保持する。egui継続の結論だけは[UI runtime再選定 G0-9](2026-07-21-m3-react-webview-runtime-reconsideration.md)へ移り、egui固有assetの依存・vendoring・移植を停止した。ReactモックはMotolii固有の視覚・操作要求と製品候補component/fixtureの資産である。本文書の資産記述は方向決定時に選んだspot auditであり、全量inventoryではない。
 
 この方向決定は、Rerunの各実装を無条件に採用する決定ではない。本文書の事実表から個別資産を移す時は[レビュー規律](README.md)規律1〜6に従い、crate依存の追加・fork・アルゴリズム移植は§5の反対側レビューと該当ゲート(M3入場PR、M5 decision PR)で判定する。[egui採用審査録(2026-07-18)](2026-07-18-m3-egui-selection.md)を置換せず、外観と実装先例の不足を事後補強する。
 
@@ -97,7 +97,7 @@ UI基盤の再検討(「UIはCPU描画でもよいのでは、プレビューだ
 - egui採用([decision-index](../decision-index.md)「UI基盤 egui Slint toolkit」行): 同世代構成の大規模製品実証が存在する
 - 安定layout model→`egui_tiles`投影([egui採用審査録](2026-07-18-m3-egui-selection.md)§6): Blueprintが同構造の実証
 - panel可変レイアウト(P48/P49): egui_tiles 0.16の実戦検証
-- Rerunを主要な製品先例としてegui実装を継続する。Reactモックの視覚・操作要求とRerunの実装資産を混同せず、前者を「何を作るか」、後者を「eguiでどう成立させた先例があるか」に分ける
+- Rerunを主要な製品先例として継続する。Reactモックの視覚・操作要求/製品候補資産とRerunの実装資産を混同せず、前者を「何を作るか・再利用できるか」、後者を「高密度UIをどう成立させた先例があるか」に分ける。egui固有転移はG0-9まで停止する
 - Rerunの技術データ可視化構造を、Motoliiでは編集可能でポップな映像制作言語へ再翻訳する。Rerunの語彙・schema・画面構成そのものを製品契約へ焼かない
 
 **未裁定(採用前に決定が必要)**:

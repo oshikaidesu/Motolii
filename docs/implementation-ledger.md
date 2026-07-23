@@ -39,11 +39,11 @@
 | M0 | `DONE` | spike完了 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み |
 | M2 | **基盤再締結済み** | D1l、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。D5は再締結の閉集合外で、骨格到達・統合審判pending |
-| M3 | **段階発注可 / Uシリーズ直列選択中** | U0a、U0b-1、U0b-2、U0c-1、U0c-2、U0d-1、U0d-2、U0d-3、U2a-0、U2a-1、U1a-1、U1a-2、U1b-1、U1b-2、U2b-1、U2c-1、U2c-4、U0e-1完了。U2c-2は実製品入口待ち、次はU0e-2R |
+| M3 | **UI責任境界・surface topology決定 / G0-9 platform受入比較中** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4はmain完了済みでbaselineとして保持。次はU0e-2Rとwgpu 29 platform受入spike。native layout/hit-test/gesture kernelはtoolkit/renderer非依存で進められる。WebView/native製品統合とegui撤去はG0-9、plugin UI公開契約は分離したG0-3 / GAP-13まで停止 |
 | M4 | **契約spike可** | K0でRoD/RoIのruntime契約を凍結。その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む |
 | M5 | **identity spike可** | P0IでDuplicator/Instance identityを凍結 |
 
-[M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3はU0a入場完了後に段階発注可だが、現在選択中のUシリーズはSelected U seriesの前枝番がmainへ到達した時だけ次の1枝番を発注する。
+[M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3はU0a入場済みで、[UI runtime責任境界](ui-runtime-architecture.md)も決定済み。ただしG0-9中はWebView/native surfaceの製品統合を発注しない。plugin UI公開契約はG0-9合格と分離し、G0-3 / GAP-13の決定まで発注しない。headlessなTimeline/Stage projectionもSelected U seriesの前枝番がmainへ到達した時だけ次の1枝番を発注する。
 
 ## 主クリティカルパス
 
@@ -54,7 +54,7 @@ D1l DONE → D3e → U2g（M3入場後）→ K2
 Selected U series:
 U0a DONE → U0b-1 DONE → U0b-2 DONE → U0c-1 DONE → U0c-2 DONE → U0d-1 DONE → U0d-2 DONE → U0d-3 DONE
 → U2a-0 DONE → U2a-1 DONE → U1a-1 DONE → U1a-2 DONE → U1b-1 DONE → U1b-2 DONE → U2b-1 DONE → U2c-1 DONE
-→ U2c-4 DONE → U0e-1 DONE → U0e-2R → U0e-2 → G0-6H → U0e-3 → U2c-3 → U2c-5 → U3a → U4a-1 → U4a-2 → U4c → U2c-2
+→ U2c-4 DONE → U0e-1 DONE → U0e-2R → U0e-2 → G0-9 → G0-6H → U0e-3 → U2c-3 → U2c-5 → U3a → U4a-1 → U4a-2 → U4c → U2c-2
 
 Unified Camera:
 CAM-G0 → D1j → D1k-S → D1k → D3f → U1f #169 → U2d
@@ -108,7 +108,7 @@ Uシリーズ直列選択中は未選択とし、同時着手しない。
 |---|---|---|---|---|---|
 | 1 | D1j | M2 | `DONE` | CAM-G0 merge（D1lはmain到達済み） | v5 planar camera schema/default migration |
 | 2 | U2b-1 | M3 | `DONE` | U1b-2 merge | prepared requestをsingle writerへ配送し、成功snapshotをUI/render workerへ購読 |
-| 3 | U3a | M3 | `WAIT` | U0a + U0b merge | timeline基盤、U2gのUI依存を解除 |
+| 3 | U3a | M3 | `WAIT` | G0-9 windowed spike + U0a + U0b merge | native Timelineのtoolkit/renderer非依存layout/hit-test/headless gestureとdirect wgpu候補を同一fixtureで閉じる。Canvas/browser WebGPUは先例baselineで製品枝にしない |
 | 4 | U2g | M3 | `WAIT` | D1l + D3e + U0e + U2b + U3a merge | Effect常時接続線 |
 | 5 | K1a | M4 | `WAIT` | K0 merge | ResourceLedgerとhard budget。backendの空きVRAM値を正本にしない |
 | 6 | K1b | M4 | `WAIT` | K1a merge | cache同一性/LRU/並行store |
@@ -141,7 +141,7 @@ Uシリーズ直列選択中は未選択とし、同時着手しない。
 |---|---|---|---|
 | [#51](https://github.com/oshikaidesu/Motolii/issues/51) | `DECIDE` / stale | Issue本文の`camera: Option<CompCamera>`・`None=DEFAULT`は、現行D1j/D1kの「全Compositionに常在」「Render入力必須」「DEFAULT直書き拒否」と不一致 | #51をそのまま実装しない。D1j schema → D1k runtime → D3接続の3PRへ再翻訳する |
 | G0-2 | `DONE` | 入力/キーマップ/a11y最小意味論 | [M3着手前決定§2](reviews/2026-07-16-m3-preflight-decisions.md#2-g0-2-inputとui状態の意味)に従いU0bをIssue化 |
-| G0-3 | `DONE` / `縮小採用` | plugin UIモデル | v1はHost自動生成panelのみ。plugin所有toolkit/native/wgpu UIを実装しない |
+| G0-3 | `WAIT` / `比較中` | plugin UIモデル | `NodeDesc`自動panel fallbackを維持し、公開kit、sandbox、権限、互換、配布をG0-9製品surface合否と分離して再評価。G0-9証拠は入力にできるが、比較前に公開UI APIを実装しない |
 | G0-4 | `DONE` | UI性能測定プロトコル | U1c/U3a等でraw結果を取り、絶対閾値は別改訂 |
 | G0-6H | `WAIT` / `HUMAN` | 視覚token/認知審判 | U0e-2が作る5 reference screenの目視後に具体tokenを固定しU0e-3へ |
 | G0-7 | `DONE` | Direct/Tool/Advanced conformance | UI操作言語とU2c fixtureへ従う |

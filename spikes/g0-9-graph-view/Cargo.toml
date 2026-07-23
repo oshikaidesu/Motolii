@@ -1,0 +1,24 @@
+[package]
+name = "g0-9-graph-view"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[package.metadata.bundle]
+name = "Motolii Graph View Spike"
+identifier = "com.motolii.spike.graph-view"
+category = "public.app-category.graphics-design"
+short_description = "Native Blender-like multi-key graph fixture"
+
+# 製品workspaceから隔離し、fixtureのpx値と操作test doubleを公開契約へ焼かない。
+[workspace]
+
+[dependencies]
+bytemuck = { version = "1", features = ["derive"] }
+glyphon = "0.11"
+pollster = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+understory_view2d = "=0.1.0"
+wgpu = "29"
+winit = "0.30.9"

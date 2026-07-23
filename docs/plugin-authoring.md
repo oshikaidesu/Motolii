@@ -10,7 +10,9 @@
 
 ## 0. この境界を作る理由
 
-Motoliiの長期の北極星は、映像表現を特定projectの手順から切り離し、演奏・再利用・保存・配布できる単位にすることにある。「映像制作におけるVST」はその構造の比喩であり、このplugin境界は単なる内製effect追加口ではない。Host全体をforkせず、ひとつの表現に集中できる作者面を作る。
+Motoliiの長期の北極星は、映像表現を特定projectの手順から切り離し、実行・再利用・保存・配布できる単位にすることにある。「映像制作におけるVST」はHostと拡張単位を分ける構造の類比に限り、このplugin境界は単なる内製effect追加口ではない。Host全体をforkせず、ひとつの表現に集中できる作者面を作る。
+
+plugin作者は通常の制作者と別の身分ではない。既存表現を使い、調整し、接続し、inspectionやforkを経て新しい表現を共有するまでを同じ学習曲線に置く。first-party pluginは第三者が到達できない完成品ではなく、この規約、参照実装、scaffold、testkitだけで到達可能性を証明する手本とする([Creator / Developer連続体](reviews/2026-07-22-creator-developer-continuum-decision.md))。
 
 長期的なユーザー向け配布単位は[Vism](vism-package-concept.md)である。Vismは一つの持ち運べる映像表現、`Filter`等はHost内部の実行分類であり、同義ではない。Vismは別VismのIDを直接要求せず型付きinputを宣言し、具体provider・接続・初期値は[Kit](vism-kit-model.md)が束ねる。v1のpluginは静的リンクされたpre-Vism参照実装として、将来のpackage境界を公開契約だけで反証する。`.vism` loader、Kit schema、package manifestを本書から先行実装しない。
 
@@ -26,7 +28,7 @@ VSM-A0I-1〜3でContract Catalog、Documentのprepared resolution、graph／expo
 - Hostのcache、resource lifecycle、error、欠落診断、UI discoveryへ参加し、独自の裏口を作らない
 - 人間とLLMのどちらも、参照実装と機械判定可能なtestから適合性を確認できる
 
-詳しい設計審判とv1の非目標は[concept.md「長期の北極星」](concept.md#長期の北極星-映像表現を演奏再利用配布できる単位にする)を正本とする。以下の規約は、その北極星を現在の実装で守るための具体化である。
+詳しい設計審判とv1の非目標は[concept.md「長期の北極星」](concept.md#長期の北極星-映像表現を実行再利用配布できる単位にする)を正本とする。以下の規約は、その北極星を現在の実装で守るための具体化である。
 
 ## 1. 種別を選ぶ(混ぜない)
 
@@ -54,7 +56,7 @@ VSM-A0I-1〜3でContract Catalog、Documentのprepared resolution、graph／expo
 
 ## 1.5. UIは書かない(v1)
 
-**v1のプラグイン公開契約にカスタムUIは無い。** ホストが`NodeDesc.params`からプロパティパネルを自動生成する(M3 U4)。plugin所有egui/native code・wgpu描画panel・独自widgetは契約外 — 書いてもホストはロードしない。判定: [reviews/2026-07-18-m3-egui-selection.md](reviews/2026-07-18-m3-egui-selection.md)。
+**現在のプラグイン公開契約にカスタムUIはまだ無い。** ホストが`NodeDesc.params`からプロパティパネルを自動生成する(M3 U4)。plugin所有egui/native/Web code・wgpu描画panel・独自widgetを書いてもホストはロードしない。標準製品surfaceのnative／React選定はplugin分類と独立であり、custom UIのruntime・sandbox・互換・配布は[軸分離決定](reviews/2026-07-22-m3-surface-extension-axis-separation.md)に従ってG0-3 / GAP-13で比較する。本書からAPIを推測しない。
 
 - パラメータは`ParamDef`で足りる粒度に抑える(スライダー/カラー等の自動生成で操作可能であること)
 - 将来カスタムUIが解凍されても、**自動生成パネルだけで全パラメータを操作できること**が不変条件
@@ -199,4 +201,4 @@ ParamDriverは`build_track`で`DataTrack`を返すだけ。ピクセルに触ら
 - `NodeDesc`の時間フットプリント宣言(前後フレーム/サブフレームサンプル。F-12) — 型`TemporalFootprint`と**`RenderCtx::temporal_footprint`口はM2E-7で予約**。窓テクスチャ解決はホスト側(未配線)
 - `SimulationPlugin` trait+StateTrack(F-12。`PluginKind::Simulation`はenum予約済み。traitシグネチャは[simulation-model.md](simulation-model.md)§3.2の叩き台を解凍手続きで確定)
 - **Backdrop input** — 画像処理はFilter/Composite pluginでよいが、timeline走査・「下のlayer」推論は禁止。Hostが評価地点の合成済みtextureを型付き入力として渡す口は[2026-07-15決定](reviews/2026-07-15-relative-scope-duplicator-decision.md)後も未凍結であり、scope/migration/cache key/循環拒否を同時に解凍するまで追加しない
-- **カスタムプラグインUI** — plugin所有egui/native code / wgpu自由描画は公開しない。Host所有の宣言レイアウト / gizmoは型ごとの解凍判断。v1公開境界外([egui-selection](reviews/2026-07-18-m3-egui-selection.md))
+- **カスタムプラグインUI** — G0-3 / GAP-13の決定までplugin所有egui/native/Web code / wgpu自由描画を公開しない。G0-9の製品surface合格だけでは解除しない。Host所有の宣言レイアウト / gizmoも型ごとの解凍判断。将来契約は[UI runtime再選定](reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md)の証拠を入力に別途仕様化する

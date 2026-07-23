@@ -1,0 +1,27 @@
+{
+  "adapter": "Apple M4",
+  "backend": "Metal",
+  "bounded_accessibility_node_count": 7,
+  "hot_drag_resource_creation_count": 0,
+  "layout_epoch": 4,
+  "open_count": 1,
+  "placement": {
+    "height": 568,
+    "vertical": "Below",
+    "width": 1020,
+    "x": 1908,
+    "y": 446
+  },
+  "popup_content_owner": "native-wgpu",
+  "present_count": 10,
+  "react_owner": "trigger-and-summary-only",
+  "readback_count": 0,
+  "revision": 2,
+  "semantic_commit_count": 1,
+  "settings_write_count": 2,
+  "stale_open_rejected": 0,
+  "status": "isolated-spike",
+  "thumbnail_source": "typed-curve-projection",
+  "ticket": "G0-9-native-easing-popup",
+  "user_preset_count": 1
+}

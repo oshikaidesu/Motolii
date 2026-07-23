@@ -1,0 +1,51 @@
+{
+  "auto_stage": "Complete",
+  "detached_preview": {
+    "actual_surface_reconfigure_count": 0,
+    "close_count": 1,
+    "focus_gained_count": 3,
+    "focus_lost_count": 4,
+    "fullscreen_enter_observed_count": 1,
+    "fullscreen_exit_observed_count": 1,
+    "injected_surface_lost_count": 1,
+    "last_scale_factor": 2.0,
+    "layout_epoch": 12,
+    "present_count": 79,
+    "reopen_count": 1,
+    "resize_event_count": 8,
+    "scale_factor_event_count": 2,
+    "surface_reconfigure_count": 1,
+    "window_generation": 2
+  },
+  "editor": {
+    "actual_surface_reconfigure_count": 0,
+    "close_count": 0,
+    "focus_gained_count": 2,
+    "focus_lost_count": 2,
+    "fullscreen_enter_observed_count": 0,
+    "fullscreen_exit_observed_count": 0,
+    "injected_surface_lost_count": 0,
+    "last_scale_factor": 2.0,
+    "layout_epoch": 4,
+    "present_count": 99,
+    "reopen_count": 0,
+    "resize_event_count": 2,
+    "scale_factor_event_count": 1,
+    "surface_reconfigure_count": 0,
+    "window_generation": 1
+  },
+  "editor_presented_after_preview_close": true,
+  "fault_isolated_to_preview": true,
+  "host_state": {
+    "selected_id": "shape-spike-stable-0001",
+    "shape_count": 1,
+    "shape_id": "shape-spike-stable-0001"
+  },
+  "host_state_preserved": true,
+  "preview_open": true,
+  "shared_device_count": 1,
+  "status": "complete",
+  "surface_count_current": 2,
+  "surface_count_peak": 2,
+  "top_level_window_count": 2
+}

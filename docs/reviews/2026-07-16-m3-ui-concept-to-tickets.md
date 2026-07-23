@@ -1,7 +1,7 @@
 # M3 UIコンセプトから実装チケットへの分解
 
 日付: 2026-07-16
-状態: **条件付き実装発注の正本**。意味は[UI操作言語](../ui-interaction-language.md)と[UI視覚言語](../ui-visual-language.md)、境界は[M3 UI境界汚染の予防](2026-07-14-m3-ui-boundary-prevention.md)に従う。[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。U0a入場後の初回Uシリーズは、本書§5の順で1枝番ずつ直列発注する（枝番の完了主張はしない）
+状態: **条件付き実装発注の正本**。意味は[UI操作言語](../ui-interaction-language.md)と[UI視覚言語](../ui-visual-language.md)、境界は[M3 UI境界汚染の予防](2026-07-14-m3-ui-boundary-prevention.md)に従う。[M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。完了状態は各行とimplementation ledgerを正とし、残る初回Uシリーズは本書§5の順で1枝番ずつ直列発注する。G0-9完了までは完了済みegui実装を比較基準として保持し、toolkit固有の製品面を追加しない。
 
 ## 1. なぜ親タスクをそのまま実装しないか
 
@@ -29,7 +29,7 @@ main済み U0a
   → U1b-1 mailbox → U1b-2 stale result E2E
   → U2b-1 edit E2E → U2c-1 interaction state → U2c-4 diagnostic model
   → U0e-1 token生成基盤 → U0e-2R React baseline再結合 → U0e-2 reference fixture
-  → G0-6H 人間審判 → U0e-3 product token/component
+  → G0-9 UI runtime再選定 → G0-6H 人間審判 → U0e-3 product token/component
   → U2c-3 feedback component → U2c-5 diagnostic projection
   → U3a timeline foundation → U4a-1 parameter mapping → U4a-2 generated panel
   → U4c Advanced round-trip → U2c-2 real-entry conformance
