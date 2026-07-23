@@ -7,8 +7,9 @@ use std::{
 use g0_9_surface_host::{SurfaceLayout, LEFT_WEBVIEW_WIDTH, RIGHT_WEBVIEW_WIDTH};
 use g0_9_windowed_timeline::{
     acceptance_passes, build_vello_overlay_asset, make_key_instances, summarize_samples,
-    AcceptanceInput, FaceDescriptor, FixtureFont, ResourceCreationCounters, DEFAULT_MEASURE_FRAMES,
-    DEFAULT_MEASURE_SECONDS, DEFAULT_WARMUP_FRAMES, KEYFRAME_COUNT,
+    AcceptanceInput, FaceDescriptor, FixtureFont, RendererMode, RendererModeError,
+    ResourceCreationCounters, DEFAULT_MEASURE_FRAMES, DEFAULT_MEASURE_SECONDS,
+    DEFAULT_WARMUP_FRAMES, KEYFRAME_COUNT,
 };
 use serde::Serialize;
 use vello::{AaConfig, AaSupport, RenderParams, Renderer as VelloRenderer, RendererOptions};
@@ -50,9 +51,16 @@ struct GfxState {
     overlay_view: wgpu::TextureView,
     overlay_pipeline: wgpu::RenderPipeline,
     overlay_bind_group: wgpu::BindGroup,
+    egui: Option<EguiState>,
+    pixels_per_point: f32,
     adapter: String,
     backend: String,
     creations: ResourceCreationCounters,
+}
+
+struct EguiState {
+    context: egui::Context,
+    renderer: egui_wgpu::Renderer,
 }
 
 enum RenderOutcome {
@@ -64,7 +72,7 @@ enum RenderOutcome {
 }
 
 impl GfxState {
-    fn new(window: &Arc<Window>) -> Self {
+    fn new(window: &Arc<Window>, renderer_mode: RendererMode) -> Self {
         let instance = wgpu::Instance::default();
         let surface = instance
             .create_surface(Arc::clone(window))
@@ -317,6 +325,14 @@ impl GfxState {
         });
         creations.pipelines += 1;
 
+        let egui = match renderer_mode {
+            RendererMode::DirectVello => None,
+            RendererMode::EguiVello => Some(EguiState {
+                context: egui::Context::default(),
+                renderer: egui_wgpu::Renderer::new(&device, format, Default::default()),
+            }),
+        };
+
         Self {
             surface,
             device,
@@ -331,6 +347,8 @@ impl GfxState {
             overlay_view,
             overlay_pipeline,
             overlay_bind_group,
+            egui,
+            pixels_per_point: window.scale_factor() as f32,
             adapter: adapter_info.name,
             backend: format!("{:?}", adapter_info.backend),
             creations,
@@ -344,6 +362,10 @@ impl GfxState {
         self.config.width = width;
         self.config.height = height;
         self.surface.configure(&self.device, &self.config);
+    }
+
+    fn update_scale_factor(&mut self, scale_factor: f64) {
+        self.pixels_per_point = scale_factor as f32;
     }
 
     fn render(&mut self, layout: SurfaceLayout, frame_index: u64) -> RenderOutcome {
@@ -469,9 +491,90 @@ impl GfxState {
             );
             pass.draw(0..6, 0..1);
         }
-        self.queue.submit([encoder.finish()]);
+        let (egui_command_buffers, egui_texture_free) =
+            self.render_egui(&mut encoder, &view, layout);
+        self.queue
+            .submit(egui_command_buffers.into_iter().chain([encoder.finish()]));
+        if let Some(egui) = &mut self.egui {
+            for texture_id in egui_texture_free {
+                egui.renderer.free_texture(&texture_id);
+            }
+        }
         frame.present();
         RenderOutcome::Presented(started.elapsed())
+    }
+
+    fn render_egui(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        layout: SurfaceLayout,
+    ) -> (Vec<wgpu::CommandBuffer>, Vec<egui::TextureId>) {
+        let Some(egui) = &mut self.egui else {
+            return (Vec::new(), Vec::new());
+        };
+        let pixels_per_point = self.pixels_per_point;
+        let screen_rect = egui::Rect::from_min_size(
+            egui::Pos2::ZERO,
+            egui::vec2(
+                self.config.width as f32 / pixels_per_point,
+                self.config.height as f32 / pixels_per_point,
+            ),
+        );
+        let raw_input = egui::RawInput {
+            screen_rect: Some(screen_rect),
+            ..Default::default()
+        };
+        let native_clip_rect = egui::Rect::from_min_size(
+            egui::pos2(layout.native_x / pixels_per_point, 0.0),
+            egui::vec2(
+                layout.native_width / pixels_per_point,
+                self.config.height as f32 / pixels_per_point,
+            ),
+        );
+        let output = egui.context.run_ui(raw_input, |ui| {
+            ui.painter()
+                .rect_filled(native_clip_rect, 0.0, egui::Color32::TRANSPARENT);
+        });
+        let pixels_per_point = output.pixels_per_point;
+        let paint_jobs = egui.context.tessellate(output.shapes, pixels_per_point);
+        for (texture_id, image_delta) in &output.textures_delta.set {
+            egui.renderer
+                .update_texture(&self.device, &self.queue, *texture_id, image_delta);
+        }
+        let screen_descriptor = egui_wgpu::ScreenDescriptor {
+            size_in_pixels: [self.config.width, self.config.height],
+            pixels_per_point,
+        };
+        let command_buffers = egui.renderer.update_buffers(
+            &self.device,
+            &self.queue,
+            encoder,
+            &paint_jobs,
+            &screen_descriptor,
+        );
+        {
+            let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("windowed-timeline-egui-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            let mut render_pass = render_pass.forget_lifetime();
+            egui.renderer
+                .render(&mut render_pass, &paint_jobs, &screen_descriptor);
+        }
+        (command_buffers, output.textures_delta.free)
     }
 }
 
@@ -479,6 +582,7 @@ impl GfxState {
 struct Report<'a> {
     ticket: &'static str,
     status: &'static str,
+    renderer_mode: RendererMode,
     adapter: &'a str,
     backend: &'a str,
     surface_count: u32,
@@ -515,6 +619,7 @@ struct State {
     left_webview: Option<WebView>,
     right_webview: Option<WebView>,
     gfx: Option<GfxState>,
+    renderer_mode: RendererMode,
     layout: Option<SurfaceLayout>,
     warmup_target: u32,
     measured_target: u32,
@@ -539,6 +644,7 @@ impl State {
             left_webview: None,
             right_webview: None,
             gfx: None,
+            renderer_mode: renderer_mode_from_env(),
             layout: None,
             warmup_target: env_u32("G0_9_TIMELINE_WARMUP", DEFAULT_WARMUP_FRAMES),
             measured_target: env_u32("G0_9_TIMELINE_FRAMES", DEFAULT_MEASURE_FRAMES),
@@ -634,6 +740,7 @@ impl State {
         let report = Report {
             ticket: "G0-9-windowed-timeline",
             status,
+            renderer_mode: self.renderer_mode,
             adapter: &gfx.adapter,
             backend: &gfx.backend,
             surface_count: 1,
@@ -669,9 +776,9 @@ impl State {
                 .filter(|sample| **sample > 16.667)
                 .count(),
             pass,
-            measurement: "windowed wgpu Surface/Fifo acquire-to-present CPU wall time; 100,000 direct instances plus one fixed Vello text/path overlay every frame on the same device/queue; no device.poll wait and no readback",
+            measurement: "windowed wgpu Surface/Fifo acquire-to-present CPU wall time; 100,000 direct instances plus one fixed Vello text/path overlay every frame on the same device/queue; egui_vello additionally runs the egui-wgpu lifecycle with one transparent native-viewport primitive; no device.poll wait and no readback",
             limitations: [
-                "the fixed Vello overlay is not a typed renderer comparison or an egui branch",
+                "ResourceCreationCounters cover the spike-owned direct/Vello resources only, not egui-wgpu internal allocations",
                 "GPU timestamp queries and input latency are not included",
                 "macOS WKWebView child composition only; Windows WebView2 is untested",
             ],
@@ -695,7 +802,7 @@ impl ApplicationHandler for State {
                 )
                 .expect("timeline window"),
         );
-        let gfx = GfxState::new(&window);
+        let gfx = GfxState::new(&window, self.renderer_mode);
         let layout = SurfaceLayout::try_new(
             window.inner_size().width,
             window.inner_size().height,
@@ -744,6 +851,9 @@ impl ApplicationHandler for State {
                 }
             }
             WindowEvent::ScaleFactorChanged { .. } => {
+                if let (Some(gfx), Some(window)) = (&mut self.gfx, &self.window) {
+                    gfx.update_scale_factor(window.scale_factor());
+                }
                 self.update_layout();
                 if let Some(window) = &self.window {
                     window.request_redraw();
@@ -847,6 +957,23 @@ fn env_f64(name: &str, default: f64) -> f64 {
         .unwrap_or(default)
 }
 
+fn renderer_mode_from_env() -> RendererMode {
+    match std::env::var("G0_9_RENDERER_MODE") {
+        Ok(value) => parse_renderer_mode(Some(&value))
+            .expect("G0_9_RENDERER_MODE must be direct_vello or egui_vello"),
+        Err(std::env::VarError::NotPresent) => {
+            parse_renderer_mode(None).expect("the default renderer mode must be valid")
+        }
+        Err(std::env::VarError::NotUnicode(_)) => {
+            panic!("G0_9_RENDERER_MODE must be valid Unicode")
+        }
+    }
+}
+
+fn parse_renderer_mode(value: Option<&str>) -> Result<RendererMode, RendererModeError> {
+    value.unwrap_or("direct_vello").parse()
+}
+
 const LEFT_HTML: &str = r#"<!doctype html><html><head><meta charset="utf-8"><style>
 html,body{margin:0;height:100%;background:#22252b;color:#eef1f5;font:14px -apple-system,sans-serif}
 main{padding:18px}input,button{box-sizing:border-box;width:100%;font:inherit;margin:6px 0;padding:7px}
@@ -861,4 +988,169 @@ fn main() {
     let event_loop = EventLoop::new().expect("event loop");
     let mut state = State::new();
     event_loop.run_app(&mut state).expect("windowed timeline");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn renderer_mode_parser_accepts_only_canonical_modes() {
+        assert_eq!(parse_renderer_mode(None), Ok(RendererMode::DirectVello));
+        assert_eq!(
+            parse_renderer_mode(Some("direct_vello")),
+            Ok(RendererMode::DirectVello)
+        );
+        assert_eq!(
+            parse_renderer_mode(Some("egui_vello")),
+            Ok(RendererMode::EguiVello)
+        );
+    }
+
+    #[test]
+    fn renderer_mode_parser_rejects_empty_unknown_and_alias_modes() {
+        for mode in ["", "direct", "egui", "vello", "DIRECT_VELLO"] {
+            assert!(parse_renderer_mode(Some(mode)).is_err(), "{mode}");
+        }
+    }
+
+    #[test]
+    fn source_preserves_mode_gated_egui_lifecycle_and_submission_order() {
+        let implementation = include_str!("main.rs")
+            .split("\n#[cfg(test)]")
+            .next()
+            .expect("implementation source");
+        assert!(implementation.contains("RendererMode::DirectVello => None"));
+        assert!(implementation.contains("RendererMode::EguiVello => Some(EguiState"));
+        assert!(implementation.contains("egui.context.run_ui(raw_input, |ui|"));
+        assert!(!implementation.contains("egui.context.run(raw_input"));
+        assert!(implementation.contains("let pixels_per_point = output.pixels_per_point;"));
+        assert!(implementation
+            .contains(".submit(egui_command_buffers.into_iter().chain([encoder.finish()]));"));
+    }
+
+    #[test]
+    fn source_preserves_egui_texture_lifecycle_order() {
+        let implementation = include_str!("main.rs")
+            .split("\n#[cfg(test)]")
+            .next()
+            .expect("implementation source");
+        let render_egui = implementation
+            .split("fn render_egui(")
+            .nth(1)
+            .and_then(|tail| tail.split("\n}\n\n#[derive(Serialize)]").next())
+            .expect("egui render helper source section");
+        let frame_caller = implementation
+            .split("fn render(&mut self")
+            .nth(1)
+            .and_then(|tail| tail.split("\n    fn render_egui(").next())
+            .expect("frame caller source section");
+        let set = render_egui
+            .find("output.textures_delta.set")
+            .expect("texture set source");
+        let update_texture = render_egui
+            .find(".update_texture(")
+            .expect("texture update source");
+        let update_buffers = render_egui
+            .find(".update_buffers(")
+            .expect("buffer update source");
+        let render = render_egui.find(".render(").expect("egui render source");
+        let free_return = render_egui
+            .find("output.textures_delta.free")
+            .expect("texture free return source");
+        let submit = frame_caller
+            .find(".submit(egui_command_buffers.into_iter().chain([encoder.finish()]));")
+            .expect("frame submission source");
+        let free_texture = frame_caller
+            .find(".free_texture(")
+            .expect("texture release source");
+
+        assert!(
+            render_egui.contains("(command_buffers, output.textures_delta.free)"),
+            "egui helper must return the current frame free IDs to its caller",
+        );
+        assert!(
+            !render_egui.contains(".free_texture("),
+            "egui helper must not release textures before frame submission",
+        );
+        assert!(
+            set < update_texture
+                && update_texture < update_buffers
+                && update_buffers < render
+                && render < free_return,
+            "egui helper must return frees after set → update_texture → update_buffers → render",
+        );
+        assert!(
+            submit < free_texture,
+            "egui texture lifecycle must free_texture only after the current frame is submitted",
+        );
+    }
+
+    #[test]
+    fn source_keeps_the_100k_vello_workload_outside_the_mode_match() {
+        let implementation = include_str!("main.rs")
+            .split("\n#[cfg(test)]")
+            .next()
+            .expect("implementation source");
+        let key_upload = implementation
+            .find("make_key_instances(KEYFRAME_COUNT)")
+            .expect("100k key upload source");
+        let mode_match = implementation
+            .find("let egui = match renderer_mode")
+            .expect("renderer mode match source");
+        let render = implementation
+            .find("fn render(&mut self")
+            .expect("shared render source");
+
+        assert_eq!(
+            implementation
+                .matches("make_key_instances(KEYFRAME_COUNT)")
+                .count(),
+            1,
+            "100k key upload must have one source occurrence",
+        );
+        assert_eq!(
+            implementation
+                .matches("pass.draw(0..6, 0..KEYFRAME_COUNT as u32);")
+                .count(),
+            1,
+            "100k draw must have one source occurrence",
+        );
+        assert_eq!(
+            implementation.matches(".render_to_texture(").count(),
+            1,
+            "Vello workload must have one source occurrence",
+        );
+        assert!(
+            key_upload < mode_match && mode_match < render,
+            "the renderer mode match must follow common 100k setup and precede the shared render path",
+        );
+    }
+
+    #[test]
+    fn render_hot_loop_has_no_spike_owned_resource_creation_or_readback() {
+        let implementation = include_str!("main.rs")
+            .split("\n#[cfg(test)]")
+            .next()
+            .expect("implementation source");
+        let render = implementation
+            .split("fn render(&mut self")
+            .nth(1)
+            .and_then(|tail| tail.split("#[derive(Serialize)]").next())
+            .expect("render source section");
+        for forbidden in [
+            "create_buffer(",
+            "create_bind_group(",
+            "create_render_pipeline(",
+            "create_texture(",
+            "copy_texture",
+            "map_async",
+            "PollType::wait",
+        ] {
+            assert!(
+                !render.contains(forbidden),
+                "render hot loop contains forbidden call: {forbidden}",
+            );
+        }
+    }
 }

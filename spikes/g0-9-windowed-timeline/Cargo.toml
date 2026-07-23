@@ -10,6 +10,8 @@ default-run = "g0-9-windowed-timeline"
 
 [dependencies]
 bytemuck = { version = "1", features = ["derive"] }
+egui = "0.35.0"
+egui-wgpu = "0.35.0"
 fontique = "0.10"
 g0-9-surface-host = { path = "../g0-9-surface-host" }
 harfrust = "0.7"
