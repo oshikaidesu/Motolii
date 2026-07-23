@@ -8,6 +8,11 @@ use serde::{
 };
 use sha2::{Digest, Sha256};
 use thiserror::Error;
+use vello::{
+    kurbo::{Affine, Rect},
+    peniko::{Blob, Color, Fill, FontData},
+    Glyph, Scene,
+};
 
 pub const KEYFRAME_COUNT: usize = 100_000;
 pub const DEFAULT_WARMUP_FRAMES: u32 = 120;
@@ -390,6 +395,270 @@ fn glyph_digest(
 fn push_bytes(bytes: &mut Vec<u8>, value: &[u8]) {
     bytes.extend_from_slice(&(value.len() as u64).to_le_bytes());
     bytes.extend_from_slice(value);
+}
+
+pub const FIXTURE_OVERLAY_FONT_SIZE: f32 = 16.0;
+
+const FIXTURE_OVERLAY_ORIGINS: [(f32, f32); 4] =
+    [(16.0, 24.0), (16.0, 52.0), (16.0, 80.0), (16.0, 108.0)];
+
+struct FixtureFontBytes(Arc<[u8]>);
+
+impl AsRef<[u8]> for FixtureFontBytes {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct OverlayGlyph {
+    pub glyph_id: u32,
+    pub cluster: u32,
+    pub x: f32,
+    pub y: f32,
+    pub x_advance: f32,
+    pub y_advance: f32,
+    pub x_offset: f32,
+    pub y_offset: f32,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct OverlayRun {
+    pub label: String,
+    pub origin_x: f32,
+    pub origin_y: f32,
+    pub glyphs: Vec<OverlayGlyph>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct OverlayMetadata {
+    pub fixture_digest: String,
+    pub font_sha256: String,
+    pub glyph_digest: String,
+    pub label_count: usize,
+    pub run_count: usize,
+    pub glyph_count: usize,
+    pub path_count: usize,
+}
+
+pub struct VelloOverlayAsset {
+    pub metadata: OverlayMetadata,
+    pub runs: Vec<OverlayRun>,
+    scene: Scene,
+}
+
+impl VelloOverlayAsset {
+    pub fn scene(&self) -> &Scene {
+        &self.scene
+    }
+}
+
+impl fmt::Debug for VelloOverlayAsset {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("VelloOverlayAsset")
+            .field("metadata", &self.metadata)
+            .field("runs", &self.runs)
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, Debug, Error, PartialEq)]
+pub enum OverlayError {
+    #[error(transparent)]
+    Scenario(#[from] ScenarioError),
+    #[error("fixture font digest does not match its exact font bytes")]
+    FontDigestMismatch,
+    #[error("fixture glyph digest does not match its shaped labels")]
+    GlyphDigestMismatch,
+    #[error("fixture labels do not match the fixed overlay order")]
+    LabelOrder,
+    #[error("fixture face index {index} is not available in its exact bytes")]
+    InvalidFaceIndex { index: u32 },
+    #[error("fixture face has a zero units-per-em value")]
+    ZeroUnitsPerEm,
+    #[error("overlay font size must be finite and positive")]
+    InvalidFontSize,
+    #[error("overlay origin for label `{label}` is non-finite")]
+    NonFiniteOrigin { label: String },
+    #[error("overlay glyph run for label `{label}` is empty")]
+    EmptyGlyphRun { label: String },
+    #[error("overlay glyph run for label `{label}` contains glyph 0")]
+    MissingGlyph { label: String },
+    #[error("overlay glyph conversion for label `{label}` is non-finite")]
+    NonFiniteGlyph { label: String },
+}
+
+pub fn build_vello_overlay_asset(fixture: &FixtureFont) -> Result<VelloOverlayAsset, OverlayError> {
+    let font_size = FIXTURE_OVERLAY_FONT_SIZE;
+    if !font_size.is_finite() || font_size <= 0.0 {
+        return Err(OverlayError::InvalidFontSize);
+    }
+    if sha256_hex(&fixture.font_bytes) != fixture.font_sha256 {
+        return Err(OverlayError::FontDigestMismatch);
+    }
+    if glyph_digest(
+        &fixture.descriptor,
+        fixture.face_index,
+        fixture.coverage_codepoint_count,
+        &fixture.font_sha256,
+        &fixture.labels,
+    ) != fixture.glyph_digest
+    {
+        return Err(OverlayError::GlyphDigestMismatch);
+    }
+    if fixture.labels.len() != FIXTURE_CJK_LABELS.len()
+        || fixture
+            .labels
+            .iter()
+            .map(|label| label.label.as_str())
+            .ne(FIXTURE_CJK_LABELS.iter().copied())
+    {
+        return Err(OverlayError::LabelOrder);
+    }
+    let fixture_digest = ScenarioDefinition::fixed().digests()?.scenario_sha256;
+
+    let face = FontRef::from_index(&fixture.font_bytes, fixture.face_index).map_err(|_| {
+        OverlayError::InvalidFaceIndex {
+            index: fixture.face_index,
+        }
+    })?;
+    let shaping_data = ShaperData::new(&face);
+    let units_per_em = shaping_data.shaper(&face).build().units_per_em();
+    let scale = overlay_scale(font_size, units_per_em)?;
+    let runs = fixture
+        .labels
+        .iter()
+        .zip(FIXTURE_OVERLAY_ORIGINS)
+        .map(|(label, (origin_x, origin_y))| overlay_run(label, origin_x, origin_y, scale))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let font = FontData::new(
+        Blob::new(Arc::new(FixtureFontBytes(fixture.font_bytes.clone()))),
+        fixture.face_index,
+    );
+    let mut scene = Scene::new();
+    let path_count = append_overlay_paths(&mut scene);
+    for run in &runs {
+        scene
+            .draw_glyphs(&font)
+            .font_size(font_size)
+            .transform(Affine::IDENTITY)
+            .brush(Color::from_rgba8(230, 230, 230, 255))
+            .draw(
+                Fill::NonZero,
+                run.glyphs.iter().map(|glyph| Glyph {
+                    id: glyph.glyph_id,
+                    x: glyph.x,
+                    y: glyph.y,
+                }),
+            );
+    }
+    let glyph_count = runs.iter().map(|run| run.glyphs.len()).sum();
+    Ok(VelloOverlayAsset {
+        metadata: OverlayMetadata {
+            fixture_digest,
+            font_sha256: fixture.font_sha256.clone(),
+            glyph_digest: fixture.glyph_digest.clone(),
+            label_count: FIXTURE_CJK_LABELS.len(),
+            run_count: runs.len(),
+            glyph_count,
+            path_count,
+        },
+        runs,
+        scene,
+    })
+}
+
+fn overlay_scale(font_size: f32, units_per_em: i32) -> Result<f32, OverlayError> {
+    if units_per_em == 0 {
+        return Err(OverlayError::ZeroUnitsPerEm);
+    }
+    Ok(font_size / units_per_em as f32)
+}
+
+fn overlay_run(
+    label: &ShapedLabel,
+    origin_x: f32,
+    origin_y: f32,
+    scale: f32,
+) -> Result<OverlayRun, OverlayError> {
+    if !origin_x.is_finite() || !origin_y.is_finite() {
+        return Err(OverlayError::NonFiniteOrigin {
+            label: label.label.clone(),
+        });
+    }
+    if label.glyphs.is_empty() {
+        return Err(OverlayError::EmptyGlyphRun {
+            label: label.label.clone(),
+        });
+    }
+    let mut pen_x = origin_x;
+    let mut pen_y = origin_y;
+    let glyphs = label
+        .glyphs
+        .iter()
+        .map(|glyph| {
+            if glyph.glyph_id == 0 {
+                return Err(OverlayError::MissingGlyph {
+                    label: label.label.clone(),
+                });
+            }
+            let x_advance = glyph.x_advance as f32 * scale;
+            // Velloのglyph座標は画面Y-downで、harfrustのfont-unit Y-upをここで反転する。
+            let y_advance = -(glyph.y_advance as f32 * scale);
+            let x_offset = glyph.x_offset as f32 * scale;
+            let y_offset = -(glyph.y_offset as f32 * scale);
+            let x = pen_x + x_offset;
+            let y = pen_y + y_offset;
+            if [x, y, x_advance, y_advance, x_offset, y_offset]
+                .iter()
+                .any(|value| !value.is_finite())
+            {
+                return Err(OverlayError::NonFiniteGlyph {
+                    label: label.label.clone(),
+                });
+            }
+            pen_x += x_advance;
+            pen_y += y_advance;
+            Ok(OverlayGlyph {
+                glyph_id: glyph.glyph_id,
+                cluster: glyph.cluster,
+                x,
+                y,
+                x_advance,
+                y_advance,
+                x_offset,
+                y_offset,
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(OverlayRun {
+        label: label.label.clone(),
+        origin_x,
+        origin_y,
+        glyphs,
+    })
+}
+
+fn append_overlay_paths(scene: &mut Scene) -> usize {
+    for (rect, color) in [
+        (
+            Rect::new(0.0, 0.0, 240.0, 32.0),
+            Color::from_rgba8(34, 34, 34, 255),
+        ),
+        (
+            Rect::new(0.0, 32.0, 240.0, 128.0),
+            Color::from_rgba8(24, 24, 24, 255),
+        ),
+        (
+            Rect::new(176.0, 32.0, 178.0, 128.0),
+            Color::from_rgba8(255, 92, 92, 255),
+        ),
+    ] {
+        scene.fill(Fill::NonZero, Affine::IDENTITY, color, None, &rect);
+    }
+    3
 }
 
 #[repr(C)]
@@ -1431,6 +1700,186 @@ mod tests {
         assert!(!serde_json::to_string(&fixture)
             .unwrap()
             .contains("secret-font-bytes"));
+    }
+
+    #[test]
+    fn overlay_run_preserves_clusters_and_converts_font_units_to_vello_pixels() {
+        let label = ShapedLabel {
+            label: "label".to_owned(),
+            glyphs: vec![
+                PositionedGlyph {
+                    glyph_id: 7,
+                    cluster: 3,
+                    x_advance: 500,
+                    y_advance: 100,
+                    x_offset: 25,
+                    y_offset: 50,
+                },
+                PositionedGlyph {
+                    glyph_id: 9,
+                    cluster: 6,
+                    x_advance: 250,
+                    y_advance: -50,
+                    x_offset: -10,
+                    y_offset: 20,
+                },
+            ],
+        };
+        let run = overlay_run(&label, 10.0, 20.0, 0.02).unwrap();
+        assert_eq!(run.glyphs[0].glyph_id, 7);
+        assert_eq!(run.glyphs[0].cluster, 3);
+        assert_eq!(run.glyphs[0].x, 10.5);
+        assert_eq!(run.glyphs[0].y, 19.0);
+        assert_eq!(run.glyphs[1].glyph_id, 9);
+        assert_eq!(run.glyphs[1].cluster, 6);
+        assert_eq!(run.glyphs[1].x, 19.8);
+        assert_eq!(run.glyphs[1].y, 17.6);
+        assert_eq!(run.glyphs[1].x_advance, 5.0);
+        assert_eq!(run.glyphs[1].y_advance, 1.0);
+        assert_eq!(
+            overlay_run(&label, 10.0, 20.0, f32::INFINITY),
+            Err(OverlayError::NonFiniteGlyph {
+                label: "label".to_owned(),
+            })
+        );
+    }
+
+    #[test]
+    fn overlay_rejects_empty_runs_and_glyph_zero_with_typed_errors() {
+        let empty = ShapedLabel {
+            label: "empty".to_owned(),
+            glyphs: vec![],
+        };
+        assert_eq!(
+            overlay_run(&empty, 0.0, 0.0, 1.0),
+            Err(OverlayError::EmptyGlyphRun {
+                label: "empty".to_owned(),
+            })
+        );
+
+        let missing = ShapedLabel {
+            label: "missing".to_owned(),
+            glyphs: vec![PositionedGlyph {
+                glyph_id: 0,
+                cluster: 0,
+                x_advance: 0,
+                y_advance: 0,
+                x_offset: 0,
+                y_offset: 0,
+            }],
+        };
+        assert_eq!(
+            overlay_run(&missing, 0.0, 0.0, 1.0),
+            Err(OverlayError::MissingGlyph {
+                label: "missing".to_owned(),
+            })
+        );
+    }
+
+    #[test]
+    fn overlay_scale_rejects_zero_units_per_em() {
+        assert_eq!(
+            overlay_scale(FIXTURE_OVERLAY_FONT_SIZE, 0),
+            Err(OverlayError::ZeroUnitsPerEm)
+        );
+    }
+
+    #[test]
+    fn exact_fixture_builds_a_deterministic_vello_overlay_when_preflight_is_available() {
+        let Some(descriptor) = std::env::var("G0_9_CJK_FACE").ok() else {
+            eprintln!("SKIP: G0_9_CJK_FACE exact-face preflight is not configured");
+            return;
+        };
+        let descriptor = FaceDescriptor::parse(&descriptor).unwrap();
+        let fixture = match FixtureFont::build(descriptor) {
+            Ok(fixture) => fixture,
+            Err(error) => {
+                eprintln!("SKIP: exact-face preflight is unavailable: {error}");
+                return;
+            }
+        };
+        let first = build_vello_overlay_asset(&fixture).unwrap();
+        let second = build_vello_overlay_asset(&fixture).unwrap();
+        let scenario_digest = ScenarioDefinition::fixed()
+            .digests()
+            .unwrap()
+            .scenario_sha256;
+        assert_eq!(first.metadata, second.metadata);
+        assert_eq!(first.runs, second.runs);
+        assert_eq!(first.metadata.fixture_digest, scenario_digest);
+        assert_ne!(first.metadata.fixture_digest, FIXTURE_VERSION);
+        assert_eq!(first.metadata.font_sha256, fixture.font_sha256);
+        assert_eq!(first.metadata.glyph_digest, fixture.glyph_digest);
+        assert_eq!(first.metadata.label_count, FIXTURE_CJK_LABELS.len());
+        assert_eq!(first.metadata.run_count, fixture.labels.len());
+        assert_eq!(first.metadata.run_count, FIXTURE_OVERLAY_ORIGINS.len());
+        assert_eq!(first.metadata.path_count, 3);
+        let expected_glyph_count: usize =
+            fixture.labels.iter().map(|label| label.glyphs.len()).sum();
+        assert_eq!(first.metadata.glyph_count, expected_glyph_count);
+        assert_eq!(
+            first.metadata.glyph_count,
+            first.runs.iter().map(|run| run.glyphs.len()).sum::<usize>()
+        );
+        assert_ne!(first.metadata.glyph_count, KEYFRAME_COUNT);
+        let face = FontRef::from_index(&fixture.font_bytes, fixture.face_index).unwrap();
+        let units_per_em = ShaperData::new(&face).shaper(&face).build().units_per_em();
+        let scale = overlay_scale(FIXTURE_OVERLAY_FONT_SIZE, units_per_em).unwrap();
+        for ((run, shaped), expected_label) in first
+            .runs
+            .iter()
+            .zip(&fixture.labels)
+            .zip(FIXTURE_CJK_LABELS)
+        {
+            assert_eq!(run.label, *expected_label);
+            assert_eq!(run.glyphs.len(), shaped.glyphs.len());
+            let mut pen_x = run.origin_x;
+            let mut pen_y = run.origin_y;
+            for (glyph, shaped_glyph) in run.glyphs.iter().zip(&shaped.glyphs) {
+                assert_eq!(glyph.glyph_id, shaped_glyph.glyph_id);
+                assert_eq!(glyph.cluster, shaped_glyph.cluster);
+                let x_advance = shaped_glyph.x_advance as f32 * scale;
+                let y_advance = -(shaped_glyph.y_advance as f32 * scale);
+                let x_offset = shaped_glyph.x_offset as f32 * scale;
+                let y_offset = -(shaped_glyph.y_offset as f32 * scale);
+                assert_eq!(glyph.x, pen_x + x_offset);
+                assert_eq!(glyph.y, pen_y + y_offset);
+                assert_eq!(glyph.x_advance, x_advance);
+                assert_eq!(glyph.y_advance, y_advance);
+                assert_eq!(glyph.x_offset, x_offset);
+                assert_eq!(glyph.y_offset, y_offset);
+                pen_x += x_advance;
+                pen_y += y_advance;
+            }
+        }
+
+        let mut label_order = fixture.clone();
+        label_order.labels.swap(0, 1);
+        label_order.glyph_digest = glyph_digest(
+            &label_order.descriptor,
+            label_order.face_index,
+            label_order.coverage_codepoint_count,
+            &label_order.font_sha256,
+            &label_order.labels,
+        );
+        assert!(matches!(
+            build_vello_overlay_asset(&label_order),
+            Err(OverlayError::LabelOrder)
+        ));
+
+        let mut font_digest = fixture.clone();
+        font_digest.font_sha256 = "altered".to_owned();
+        assert!(matches!(
+            build_vello_overlay_asset(&font_digest),
+            Err(OverlayError::FontDigestMismatch)
+        ));
+
+        let mut glyph_digest = fixture;
+        glyph_digest.glyph_digest = "altered".to_owned();
+        assert!(matches!(
+            build_vello_overlay_asset(&glyph_digest),
+            Err(OverlayError::GlyphDigestMismatch)
+        ));
     }
 
     #[test]
