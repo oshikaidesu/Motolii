@@ -397,6 +397,23 @@ fn push_bytes(bytes: &mut Vec<u8>, value: &[u8]) {
     bytes.extend_from_slice(value);
 }
 
+/// この spike を構成する固定入力だけを同じ順で束ね、実行条件との混同を防ぐ。
+pub fn source_digest() -> String {
+    let mut source = Vec::new();
+    source.extend_from_slice(b"motolii.g0_9.source.v1\0");
+    for bytes in [
+        include_bytes!("../Cargo.toml").as_slice(),
+        include_bytes!("../Cargo.lock").as_slice(),
+        include_bytes!("lib.rs").as_slice(),
+        include_bytes!("main.rs").as_slice(),
+        include_bytes!("timeline.wgsl").as_slice(),
+        include_bytes!("overlay_composite.wgsl").as_slice(),
+    ] {
+        push_bytes(&mut source, bytes);
+    }
+    sha256_hex(&source)
+}
+
 pub const FIXTURE_OVERLAY_FONT_SIZE: f32 = 16.0;
 
 const FIXTURE_OVERLAY_ORIGINS: [(f32, f32); 4] =
@@ -1024,6 +1041,30 @@ pub enum RssError {
     EmptyReason,
 }
 
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum PsRssError {
+    #[error("ps RSS output must contain one positive integer")]
+    Shape,
+    #[error("ps RSS KiB value overflows bytes")]
+    Overflow,
+}
+
+pub fn rss_from_ps_output(output: &str) -> Result<Rss, PsRssError> {
+    let value = output.trim();
+    if value.is_empty()
+        || value.split_whitespace().count() != 1
+        || !value.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return Err(PsRssError::Shape);
+    }
+    let kib = value.parse::<u64>().map_err(|_| PsRssError::Shape)?;
+    if kib == 0 {
+        return Err(PsRssError::Shape);
+    }
+    let bytes = kib.checked_mul(1024).ok_or(PsRssError::Overflow)?;
+    Ok(Rss::Available { bytes })
+}
+
 impl Rss {
     pub fn validate(&self) -> Result<(), RssError> {
         match self {
@@ -1153,6 +1194,8 @@ pub enum ReportError {
     Completeness(#[from] CompletenessError),
     #[error("measured duration must be finite and non-negative")]
     Duration,
+    #[error("input timing must have one sample for each measured frame")]
+    InputSamples,
 }
 
 impl RawReport {
@@ -1175,6 +1218,9 @@ impl RawReport {
         self.rss.validate()?;
         if !self.measured_seconds.is_finite() || self.measured_seconds < 0.0 {
             return Err(ReportError::Duration);
+        }
+        if self.input_timing.samples != self.measured_frames as usize {
+            return Err(ReportError::InputSamples);
         }
         self.completeness.validate_shape()?;
         Ok(())
@@ -1331,6 +1377,50 @@ pub struct ComparisonResult {
     pub direct: RawReport,
     pub egui: RawReport,
     pub ratios: TimingRatios,
+}
+
+#[derive(Debug, Error)]
+pub enum ComparisonArtifactError {
+    #[error(transparent)]
+    Comparison(#[from] ComparisonError),
+    #[error("failed to serialize comparison artifact: {0}")]
+    Serialize(#[from] serde_json::Error),
+    #[error("comparison artifact I/O failed: {0}")]
+    Io(#[from] std::io::Error),
+}
+
+pub fn write_comparison_artifact(
+    path: &std::path::Path,
+    direct: RawReport,
+    egui: RawReport,
+) -> Result<ComparisonResult, ComparisonArtifactError> {
+    let result = compare_reports(direct, egui)?;
+    let encoded = serde_json::to_vec_pretty(&result)?;
+    let parent = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "comparison path has no UTF-8 file name",
+            )
+        })?;
+    let temporary = parent.join(format!(".{file_name}.{}.tmp", std::process::id()));
+    {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
+        use std::io::Write;
+        file.write_all(&encoded)?;
+        file.sync_all()?;
+    }
+    if let Err(error) = std::fs::rename(&temporary, path) {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(error.into());
+    }
+    Ok(result)
 }
 
 pub fn compare_reports(
@@ -1575,7 +1665,7 @@ mod tests {
         let render = source
             .split("fn render(&mut self")
             .nth(1)
-            .and_then(|tail| tail.split("#[derive(Serialize)]").next())
+            .and_then(|tail| tail.split("\n    fn render_egui(").next())
             .expect("render source section");
         for forbidden in [
             "create_buffer(",
@@ -1915,6 +2005,32 @@ mod tests {
     }
 
     #[test]
+    fn ps_rss_parser_rejects_malformed_zero_overflow_and_trailing_junk() {
+        assert_eq!(
+            rss_from_ps_output(" 12\n"),
+            Ok(Rss::Available { bytes: 12 * 1024 })
+        );
+        for output in ["", "0", "12 KiB", "12x", "12\n13"] {
+            assert!(
+                matches!(rss_from_ps_output(output), Err(PsRssError::Shape)),
+                "{output:?}"
+            );
+        }
+        assert_eq!(
+            rss_from_ps_output(&format!("{}", u64::MAX)),
+            Err(PsRssError::Overflow)
+        );
+    }
+
+    #[test]
+    fn source_digest_is_stable_and_not_renderer_specific() {
+        let first = source_digest();
+        assert_eq!(first, source_digest());
+        assert_eq!(first.len(), 64);
+        assert!(first.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    }
+
+    #[test]
     fn measurement_summary_checked_rejects_non_finite_values() {
         for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
             assert_eq!(
@@ -2023,6 +2139,7 @@ mod tests {
         }
         let mut early = direct.clone();
         early.measured_frames = 99;
+        early.input_timing.samples = 99;
         assert_eq!(
             compare_reports(early, egui.clone()),
             Err(ComparisonError::FrameCount)
@@ -2055,6 +2172,36 @@ mod tests {
                 CompletenessError::Incomplete
             )))
         ));
+    }
+
+    #[test]
+    fn comparison_artifact_is_atomic_and_failure_preserves_existing_output() {
+        let directory = std::env::temp_dir().join(format!(
+            "g0-9-compare-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&directory).unwrap();
+        let output = directory.join("comparison.json");
+        std::fs::write(&output, b"old artifact").unwrap();
+        let mut invalid = valid_report(RendererMode::DirectVello);
+        invalid.input_timing.samples = 99;
+        assert!(
+            write_comparison_artifact(&output, invalid, valid_report(RendererMode::EguiVello),)
+                .is_err()
+        );
+        assert_eq!(std::fs::read(&output).unwrap(), b"old artifact");
+        write_comparison_artifact(
+            &output,
+            valid_report(RendererMode::DirectVello),
+            valid_report(RendererMode::EguiVello),
+        )
+        .unwrap();
+        assert_ne!(std::fs::read(&output).unwrap(), b"old artifact");
+        std::fs::remove_dir_all(&directory).unwrap();
     }
 
     #[test]

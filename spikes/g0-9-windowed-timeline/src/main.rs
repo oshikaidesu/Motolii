@@ -1,17 +1,18 @@
 use std::{
     path::PathBuf,
+    process::Command,
     sync::Arc,
     time::{Duration, Instant},
 };
 
 use g0_9_surface_host::{SurfaceLayout, LEFT_WEBVIEW_WIDTH, RIGHT_WEBVIEW_WIDTH};
 use g0_9_windowed_timeline::{
-    acceptance_passes, build_vello_overlay_asset, make_key_instances, summarize_samples,
-    AcceptanceInput, FaceDescriptor, FixtureFont, RendererMode, RendererModeError,
-    ResourceCreationCounters, DEFAULT_MEASURE_FRAMES, DEFAULT_MEASURE_SECONDS,
+    build_vello_overlay_asset, make_key_instances, rss_from_ps_output, source_digest,
+    summarize_samples, EvidenceCompleteness, FaceDescriptor, FixtureFont, RawReport, RendererMode,
+    RendererModeError, ReportConditions, ResourceCreationCounters, ResourceCreationPhases, Rss,
+    ScenarioDefinition, ScenarioFrame, DEFAULT_MEASURE_FRAMES, DEFAULT_MEASURE_SECONDS,
     DEFAULT_WARMUP_FRAMES, KEYFRAME_COUNT,
 };
-use serde::Serialize;
 use vello::{AaConfig, AaSupport, RenderParams, Renderer as VelloRenderer, RendererOptions};
 use winit::{
     application::ApplicationHandler,
@@ -45,6 +46,7 @@ struct GfxState {
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     view_buffer: wgpu::Buffer,
+    instance_buffer: wgpu::Buffer,
     vello_renderer: VelloRenderer,
     vello_overlay: g0_9_windowed_timeline::VelloOverlayAsset,
     overlay_texture: wgpu::Texture,
@@ -56,6 +58,7 @@ struct GfxState {
     adapter: String,
     backend: String,
     creations: ResourceCreationCounters,
+    scripted_selected_key_index: Option<u32>,
 }
 
 struct EguiState {
@@ -64,7 +67,7 @@ struct EguiState {
 }
 
 enum RenderOutcome {
-    Presented(Duration),
+    Presented(Duration, Instant),
     Reconfigure,
     Skip,
     Validation,
@@ -341,6 +344,7 @@ impl GfxState {
             pipeline,
             bind_group,
             view_buffer,
+            instance_buffer,
             vello_renderer,
             vello_overlay,
             overlay_texture,
@@ -352,6 +356,7 @@ impl GfxState {
             adapter: adapter_info.name,
             backend: format!("{:?}", adapter_info.backend),
             creations,
+            scripted_selected_key_index: None,
         }
     }
 
@@ -368,7 +373,7 @@ impl GfxState {
         self.pixels_per_point = scale_factor as f32;
     }
 
-    fn render(&mut self, layout: SurfaceLayout, frame_index: u64) -> RenderOutcome {
+    fn render(&mut self, layout: SurfaceLayout, scenario: &ScenarioFrame) -> RenderOutcome {
         let started = Instant::now();
         debug_assert_eq!(self.overlay_texture.width(), OVERLAY_WIDTH);
         debug_assert_eq!(self.overlay_texture.height(), OVERLAY_HEIGHT);
@@ -386,11 +391,23 @@ impl GfxState {
         let view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        let phase = frame_index as f32 * 0.0125;
-        let pixels_per_second = 18.0 + phase.sin().abs() * 72.0;
-        let visible_seconds = layout.native_width / pixels_per_second;
-        let pan_seconds =
-            (phase * 0.37).sin().mul_add(0.5, 0.5) * (100.0 - visible_seconds).max(0.0);
+        if let Some(previous) = self
+            .scripted_selected_key_index
+            .replace(scenario.selected_key_index)
+        {
+            self.queue.write_buffer(
+                &self.instance_buffer,
+                u64::from(previous)
+                    * std::mem::size_of::<g0_9_windowed_timeline::KeyInstance>() as u64,
+                bytemuck::bytes_of(&scripted_key_instance(previous, previous % 10 == 0)),
+            );
+        }
+        self.queue.write_buffer(
+            &self.instance_buffer,
+            u64::from(scenario.selected_key_index)
+                * std::mem::size_of::<g0_9_windowed_timeline::KeyInstance>() as u64,
+            bytemuck::bytes_of(&scripted_key_instance(scenario.selected_key_index, true)),
+        );
         self.queue.write_buffer(
             &self.view_buffer,
             0,
@@ -398,8 +415,8 @@ impl GfxState {
                 viewport_pan_zoom: [
                     self.config.width as f32,
                     self.config.height as f32,
-                    pan_seconds,
-                    pixels_per_second,
+                    scenario.pan_seconds as f32,
+                    scenario.zoom_pixels_per_second as f32,
                 ],
                 track_origin: [
                     (self.config.height as f32 / 32.0).max(8.0),
@@ -409,6 +426,7 @@ impl GfxState {
                 ],
             }),
         );
+        let input_applied_at = Instant::now();
 
         if self
             .vello_renderer
@@ -501,7 +519,7 @@ impl GfxState {
             }
         }
         frame.present();
-        RenderOutcome::Presented(started.elapsed())
+        RenderOutcome::Presented(started.elapsed(), input_applied_at)
     }
 
     fn render_egui(
@@ -578,40 +596,13 @@ impl GfxState {
     }
 }
 
-#[derive(Serialize)]
-struct Report<'a> {
-    ticket: &'static str,
-    status: &'static str,
-    renderer_mode: RendererMode,
-    adapter: &'a str,
-    backend: &'a str,
-    surface_count: u32,
-    native_viewport_count: u32,
-    webview_count: u32,
-    keyframes: usize,
-    selected_keyframes: usize,
-    warmup_frames: u32,
-    measured_frames: u32,
-    measured_seconds: f64,
-    target_frames: u32,
-    target_seconds: f64,
-    acquire_count: u64,
-    present_count: u64,
-    surface_texture_view_count: u64,
-    readback_count: u64,
-    initialization_resource_creations: ResourceCreationCounters,
-    frame_resource_creations: ResourceCreationCounters,
-    median_frame_ms: f64,
-    p95_frame_ms: f64,
-    max_frame_ms: f64,
-    median_present_interval_ms: f64,
-    p95_present_interval_ms: f64,
-    max_present_interval_ms: f64,
-    throughput_fps: f64,
-    deadline_miss_16_667_count: usize,
-    pass: bool,
-    measurement: &'static str,
-    limitations: [&'static str; 3],
+fn scripted_key_instance(index: u32, selected: bool) -> g0_9_windowed_timeline::KeyInstance {
+    g0_9_windowed_timeline::KeyInstance {
+        time_seconds: (index % 10_000) as f32 * 0.01,
+        track: (index % 32) as f32,
+        selected: u32::from(selected),
+        _padding: 0,
+    }
 }
 
 struct State {
@@ -630,10 +621,15 @@ struct State {
     frame_samples_ms: Vec<f64>,
     present_interval_samples_ms: Vec<f64>,
     previous_present: Option<Instant>,
+    input_samples_ms: Vec<f64>,
     acquire_count: u64,
     present_count: u64,
+    skip_count: u64,
+    reconfigure_count: u64,
     readback_count: u64,
     initialization_baseline: ResourceCreationCounters,
+    warmup_resource_baseline: ResourceCreationCounters,
+    measurement_resource_baseline: ResourceCreationCounters,
     report_path: PathBuf,
 }
 
@@ -655,10 +651,15 @@ impl State {
             frame_samples_ms: Vec::new(),
             present_interval_samples_ms: Vec::new(),
             previous_present: None,
+            input_samples_ms: Vec::new(),
             acquire_count: 0,
             present_count: 0,
+            skip_count: 0,
+            reconfigure_count: 0,
             readback_count: 0,
             initialization_baseline: ResourceCreationCounters::default(),
+            warmup_resource_baseline: ResourceCreationCounters::default(),
+            measurement_resource_baseline: ResourceCreationCounters::default(),
             report_path: std::env::var_os("G0_9_TIMELINE_REPORT")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("/tmp/motolii-g0-9-windowed-timeline.json")),
@@ -701,93 +702,85 @@ impl State {
         self.layout = Some(layout);
     }
 
-    fn publish_report(&self, status: &'static str) {
+    fn publish_report(&self) {
         let Some(gfx) = &self.gfx else {
             return;
         };
-        let (median_frame_ms, p95_frame_ms, max_frame_ms) =
-            summarize_samples(&self.frame_samples_ms)
-                .map(|summary| {
-                    (
-                        summary.median_frame_ms,
-                        summary.p95_frame_ms,
-                        summary.max_frame_ms,
-                    )
-                })
-                .unwrap_or((0.0, 0.0, 0.0));
-        let (median_present_interval_ms, p95_present_interval_ms, max_present_interval_ms) =
-            summarize_samples(&self.present_interval_samples_ms)
-                .map(|summary| {
-                    (
-                        summary.median_frame_ms,
-                        summary.p95_frame_ms,
-                        summary.max_frame_ms,
-                    )
-                })
-                .unwrap_or((0.0, 0.0, 0.0));
-        let measured_seconds = self.measured_seconds();
-        let frame_creations = gfx.creations.delta(self.initialization_baseline);
-        let pass = acceptance_passes(AcceptanceInput {
-            measured_frames: self.measured_frames,
-            target_frames: self.measured_target,
-            measured_seconds,
-            target_seconds: self.seconds_target,
-            acquire_count: self.acquire_count,
-            present_count: self.present_count,
-            readback_count: self.readback_count,
-            frame_creations,
-        });
-        let report = Report {
-            ticket: "G0-9-windowed-timeline",
-            status,
-            renderer_mode: self.renderer_mode,
-            adapter: &gfx.adapter,
-            backend: &gfx.backend,
-            surface_count: 1,
-            native_viewport_count: 1,
-            webview_count: 2,
-            keyframes: KEYFRAME_COUNT,
-            selected_keyframes: 10_000,
-            warmup_frames: self.warmup_frames,
-            measured_frames: self.measured_frames,
-            measured_seconds,
-            target_frames: self.measured_target,
-            target_seconds: self.seconds_target,
-            acquire_count: self.acquire_count,
-            present_count: self.present_count,
-            surface_texture_view_count: self.acquire_count,
-            readback_count: self.readback_count,
-            initialization_resource_creations: self.initialization_baseline,
-            frame_resource_creations: frame_creations,
-            median_frame_ms,
-            p95_frame_ms,
-            max_frame_ms,
-            median_present_interval_ms,
-            p95_present_interval_ms,
-            max_present_interval_ms,
-            throughput_fps: if measured_seconds > 0.0 {
-                f64::from(self.measured_frames) / measured_seconds
-            } else {
-                0.0
-            },
-            deadline_miss_16_667_count: self
-                .present_interval_samples_ms
-                .iter()
-                .filter(|sample| **sample > 16.667)
-                .count(),
-            pass,
-            measurement: "windowed wgpu Surface/Fifo acquire-to-present CPU wall time; 100,000 direct instances plus one fixed Vello text/path overlay every frame on the same device/queue; egui_vello additionally runs the egui-wgpu lifecycle with one transparent native-viewport primitive; no device.poll wait and no readback",
-            limitations: [
-                "ResourceCreationCounters cover the spike-owned direct/Vello resources only, not egui-wgpu internal allocations",
-                "GPU timestamp queries and input latency are not included",
-                "macOS WKWebView child composition only; Windows WebView2 is untested",
-            ],
+        let Some(frame_timing) = summarize_samples(&self.frame_samples_ms) else {
+            return;
         };
+        let Some(present_timing) = summarize_samples(&self.present_interval_samples_ms) else {
+            return;
+        };
+        let Some(input_timing) = summarize_samples(&self.input_samples_ms) else {
+            return;
+        };
+        let rss = collect_rss();
+        let complete = self.measured_frames >= self.measured_target
+            && self.measured_seconds() >= self.seconds_target
+            && self.acquire_count != 0
+            && self.acquire_count == self.present_count
+            && self.readback_count == 0
+            && self.input_samples_ms.len() == self.measured_frames as usize
+            && matches!(rss, Rss::Available { .. });
+        let report = RawReport {
+            renderer: self.renderer_mode,
+            scenario_digest: ScenarioDefinition::fixed()
+                .digests()
+                .expect("fixed scenario")
+                .scenario_sha256,
+            input_digest: ScenarioDefinition::fixed()
+                .digests()
+                .expect("fixed scenario")
+                .input_sequence_sha256,
+            source_digest: source_digest(),
+            font_digest: gfx.vello_overlay.metadata.font_sha256.clone(),
+            glyph_digest: gfx.vello_overlay.metadata.glyph_digest.clone(),
+            conditions: ReportConditions {
+                device: format!("{}|{}", gfx.adapter, gfx.backend),
+                surface: format!("{:?}|fifo|1", gfx.config.format),
+                window: format!(
+                    "{}x{}@{}",
+                    gfx.config.width, gfx.config.height, gfx.pixels_per_point
+                ),
+                webview: "2-opaque-offline-child".to_owned(),
+                fixture: "g0-9-windowed-timeline.v1|1000-clips|100000-keys".to_owned(),
+                target: format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS),
+            },
+            measured_frames: self.measured_frames,
+            measured_seconds: self.measured_seconds(),
+            acquire_count: self.acquire_count,
+            present_count: self.present_count,
+            skip_count: self.skip_count,
+            reconfigure_count: self.reconfigure_count,
+            readback_count: self.readback_count,
+            frame_timing,
+            present_timing,
+            input_timing,
+            rss,
+            resource_creations: ResourceCreationPhases {
+                initialization: self.initialization_baseline,
+                warmup: self
+                    .warmup_resource_baseline
+                    .delta(self.initialization_baseline),
+                measured: gfx.creations.delta(self.measurement_resource_baseline),
+            },
+            completeness: if complete {
+                EvidenceCompleteness::Complete
+            } else {
+                EvidenceCompleteness::Incomplete {
+                    reason:
+                        "windowed measurement did not reach the required complete evidence state"
+                            .to_owned(),
+                }
+            },
+        };
+        report.validate().expect("strict raw report");
         std::fs::write(
             &self.report_path,
-            serde_json::to_vec_pretty(&report).expect("serialize report"),
+            serde_json::to_vec_pretty(&report).expect("serialize raw report"),
         )
-        .expect("write report");
+        .expect("write raw report");
     }
 }
 
@@ -826,6 +819,8 @@ impl ApplicationHandler for State {
             RIGHT_HTML,
         );
         self.initialization_baseline = gfx.creations;
+        self.warmup_resource_baseline = gfx.creations;
+        self.measurement_resource_baseline = gfx.creations;
         self.window = Some(window);
         self.left_webview = Some(left_webview);
         self.right_webview = Some(right_webview);
@@ -864,12 +859,20 @@ impl ApplicationHandler for State {
                     return;
                 };
                 let frame_index = u64::from(self.warmup_frames) + u64::from(self.measured_frames);
-                match self.gfx.as_mut().unwrap().render(layout, frame_index) {
-                    RenderOutcome::Presented(elapsed) => {
+                let scenario = ScenarioDefinition::fixed()
+                    .at(frame_index)
+                    .expect("fixed scenario frame");
+                match self.gfx.as_mut().unwrap().render(layout, &scenario) {
+                    RenderOutcome::Presented(elapsed, input_applied_at) => {
                         self.acquire_count += 1;
                         self.present_count += 1;
                         if self.warmup_frames < self.warmup_target {
                             self.warmup_frames += 1;
+                            self.warmup_resource_baseline = self.gfx.as_ref().unwrap().creations;
+                            if self.warmup_frames == self.warmup_target {
+                                self.measurement_resource_baseline =
+                                    self.gfx.as_ref().unwrap().creations;
+                            }
                         } else {
                             let presented_at = Instant::now();
                             self.measurement_started.get_or_insert(presented_at);
@@ -878,11 +881,16 @@ impl ApplicationHandler for State {
                                     presented_at.duration_since(previous).as_secs_f64() * 1000.0,
                                 );
                             }
+                            self.input_samples_ms.push(
+                                presented_at.duration_since(input_applied_at).as_secs_f64()
+                                    * 1000.0,
+                            );
                             self.measured_frames += 1;
                             self.frame_samples_ms.push(elapsed.as_secs_f64() * 1000.0);
                         }
                     }
                     RenderOutcome::Reconfigure => {
+                        self.reconfigure_count += 1;
                         if let Some(window) = &self.window {
                             let size = window.inner_size();
                             self.gfx
@@ -891,14 +899,16 @@ impl ApplicationHandler for State {
                                 .configure(size.width, size.height);
                         }
                     }
-                    RenderOutcome::Skip => {}
+                    RenderOutcome::Skip => {
+                        self.skip_count += 1;
+                    }
                     RenderOutcome::Validation => {
-                        self.publish_report("validation-error");
+                        self.publish_report();
                         event_loop.exit();
                         return;
                     }
                     RenderOutcome::VelloFailure => {
-                        self.publish_report("vello-render-error");
+                        self.publish_report();
                         event_loop.exit();
                         return;
                     }
@@ -906,7 +916,7 @@ impl ApplicationHandler for State {
                 let done = self.measured_frames >= self.measured_target
                     && self.measured_seconds() >= self.seconds_target;
                 if done {
-                    self.publish_report("complete");
+                    self.publish_report();
                     event_loop.exit();
                 } else if let Some(window) = &self.window {
                     window.set_title(&format!(
@@ -921,7 +931,7 @@ impl ApplicationHandler for State {
                 }
             }
             WindowEvent::CloseRequested => {
-                self.publish_report("closed-before-complete");
+                self.publish_report();
                 event_loop.exit();
             }
             _ => {}
@@ -940,6 +950,32 @@ fn make_webview(window: &Window, bounds: Rect, html: &'static str) -> WebView {
         .with_html(html)
         .build_as_child(window)
         .expect("opaque child webview")
+}
+
+fn collect_rss() -> Rss {
+    let pid = std::process::id().to_string();
+    match Command::new("/bin/ps")
+        .args(["-o", "rss=", "-p", &pid])
+        .output()
+    {
+        Ok(output) if output.status.success() => match String::from_utf8(output.stdout) {
+            Ok(stdout) => match rss_from_ps_output(&stdout) {
+                Ok(rss) => rss,
+                Err(error) => Rss::Unavailable {
+                    reason: format!("/bin/ps rss output rejected: {error}"),
+                },
+            },
+            Err(error) => Rss::Unavailable {
+                reason: format!("/bin/ps rss output was not UTF-8: {error}"),
+            },
+        },
+        Ok(output) => Rss::Unavailable {
+            reason: format!("/bin/ps exited with {status}", status = output.status),
+        },
+        Err(error) => Rss::Unavailable {
+            reason: format!("/bin/ps could not run: {error}"),
+        },
+    }
 }
 
 fn env_u32(name: &str, default: u32) -> u32 {
@@ -1038,7 +1074,7 @@ mod tests {
         let render_egui = implementation
             .split("fn render_egui(")
             .nth(1)
-            .and_then(|tail| tail.split("\n}\n\n#[derive(Serialize)]").next())
+            .and_then(|tail| tail.split("\n}\n\nfn scripted_key_instance").next())
             .expect("egui render helper source section");
         let frame_caller = implementation
             .split("fn render(&mut self")
@@ -1136,7 +1172,7 @@ mod tests {
         let render = implementation
             .split("fn render(&mut self")
             .nth(1)
-            .and_then(|tail| tail.split("#[derive(Serialize)]").next())
+            .and_then(|tail| tail.split("\n    fn render_egui(").next())
             .expect("render source section");
         for forbidden in [
             "create_buffer(",

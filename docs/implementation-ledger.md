@@ -39,7 +39,7 @@
 | M0 | `DONE` | spike完了 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み |
 | M2 | **基盤再締結済み** | D1l、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。D5は再締結の閉集合外で、骨格到達・統合審判pending |
-| M3 | **UI責任境界・surface topology・G0-9段階化決定 / CU-0G02着手可** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0a〜U0e-2、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4、U0e-2R、GR-D1〜R3は完了済み。[G0-9段階化決定](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)でfixed-Mac prerequisite evidence `G0-9L`とdistribution `G0-9D`を分ける。G0-9Lは製品粒を解禁せず、W0b、H1b、Motolii Studio Preview、window結合を停止する。G0-6Hも独立した人間審判としてU0e-3とW0bの製品前提を停止する。native layout/hit-test/gesture kernelはtoolkit/renderer非依存で進められる。plugin UI公開契約は分離したG0-3 / GAP-13まで停止 |
+| M3 | **UI責任境界・surface topology・G0-9段階化決定 / CU-0G03着手可** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0a〜U0e-2、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4、U0e-2R、GR-D1〜R3、CU-0G02は完了済み。[G0-9段階化決定](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)でfixed-Mac prerequisite evidence `G0-9L`とdistribution `G0-9D`を分ける。G0-9Lは製品粒を解禁せず、W0b、H1b、Motolii Studio Preview、window結合を停止する。G0-6Hも独立した人間審判としてU0e-3とW0bの製品前提を停止する。native layout/hit-test/gesture kernelはtoolkit/renderer非依存で進められる。plugin UI公開契約は分離したG0-3 / GAP-13まで停止 |
 | M4 | **契約spike可** | K0でRoD/RoIのruntime契約を凍結。その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む |
 | M5 | **identity spike可** | P0IでDuplicator/Instance identityを凍結 |
 
@@ -94,14 +94,15 @@ P0I #170 → P7a → P7b → P7c → P7U
 | 優先 | ID | Phase | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
 | 0 | CU-G01 | M3 spec | `DONE` | — | fixed-Mac prerequisite evidence `G0-9L` / distribution `G0-9D`へ分離し、製品粒非解禁とG0-6H独立をTerra実装、Grok P0/P1=0、runner ACCEPTで固定 | CU-0G02を単独実行 |
-| 1 | CU-0G02 | M3 measure | `DO` | — | CU-G01完了。既存G0-9 fixtureでdirect wgpu（Vello局所）対eguiを同一device/window/input条件比較し、絶対閾値を後付けしない | raw frame/input/memory evidenceを保存後、CU-0G03を`DO`へ上げる |
-| 2 | U0e-2R | M3 | `DONE` | — | 固定React baseline `eb16d06`を最新mainへ再結合し、43 visual testとworkspace gateを通過 | GR-D1を単独実行 |
-| 3 | GR-D1 | M3 guard | `DONE` | — | Terra実装 + Grok検収の通常発注入口へBASE_REF/SHA・authority・粒状態・React labelのdispatch gateを固定し、専用負例とworkspace試験を通過 | GR-D2を単独実行 |
-| 4 | GR-D2 | M3 guard | `DONE` | — | 変更許可閉集合、append-only検収証跡、timeout分離、検収者mutation拒否、検収resumeをTerra + Grok入口へ固定し、専用負例とworkspace試験を通過 | GR-R1/R2をDOへ移す |
-| 5 | GR-R1/R2 | M3 guard | `DONE` | — | manifestのpath/export/SHAとAST/PostCSS closure、実render nodeへのfixture投影、route隔離、三層因果、raw token拒否を43負例・44 visual・Grok P0/P1=0で固定 | GR-R3をDOへ移す |
-| 6 | GR-R3 | M3 guard | `DONE` | — | immutable generation + atomic CURRENT、PNG byte/RGBA、閉schema、17 I/O失敗点、全negative matrixを70 testsとGrok P0/P1=0で固定 | U0e-2をDOへ戻す |
-| 7 | U0e-2 | M3 | `DONE` | — | 同一三層fixtureを既存React Surfaceへ直接投影する5 reference screen、固定Chromium/font、normal+5派生の30 PNG、provenance/atomic generation/read-only checkを固定 | G0-6H assisted human stop |
-| 8 | U2c-2 | M3 | `WAIT` | — | U4a-2のDirect製品入口とU4cのAdvanced製品入口が揃うまで空harnessを作らない | 実在入口のDocument意味/Undo同値conformance |
+| 1 | CU-0G02 | M3 measure | `DONE` | — | 同一scenario/input/source digestでdirect wgpu（Vello局所）対eguiを各30秒実測し、raw frame/input/RSS、present/acquire、resource creation/readback、skipを証跡化。絶対閾値・勝者判定は追加せず、Terra実装、Grok P0/P1/P2=0、workspace試験全緑 | CU-0G03を単独実行 |
+| 2 | CU-0G03 | M3 human | `DO` | — | CU-G01/CU-0G02完了。実製品surfaceでmacOS IME/VoiceOver/focus/keyboard受入を行い、失敗を既知制約へ格下げしない | 受入証跡保存後、CU-0G04を`DO`へ上げる |
+| 3 | U0e-2R | M3 | `DONE` | — | 固定React baseline `eb16d06`を最新mainへ再結合し、43 visual testとworkspace gateを通過 | GR-D1を単独実行 |
+| 4 | GR-D1 | M3 guard | `DONE` | — | Terra実装 + Grok検収の通常発注入口へBASE_REF/SHA・authority・粒状態・React labelのdispatch gateを固定し、専用負例とworkspace試験を通過 | GR-D2を単独実行 |
+| 5 | GR-D2 | M3 guard | `DONE` | — | 変更許可閉集合、append-only検収証跡、timeout分離、検収者mutation拒否、検収resumeをTerra + Grok入口へ固定し、専用負例とworkspace試験を通過 | GR-R1/R2をDOへ移す |
+| 6 | GR-R1/R2 | M3 guard | `DONE` | — | manifestのpath/export/SHAとAST/PostCSS closure、実render nodeへのfixture投影、route隔離、三層因果、raw token拒否を43負例・44 visual・Grok P0/P1=0で固定 | GR-R3をDOへ移す |
+| 7 | GR-R3 | M3 guard | `DONE` | — | immutable generation + atomic CURRENT、PNG byte/RGBA、閉schema、17 I/O失敗点、全negative matrixを70 testsとGrok P0/P1=0で固定 | U0e-2をDOへ戻す |
+| 8 | U0e-2 | M3 | `DONE` | — | 同一三層fixtureを既存React Surfaceへ直接投影する5 reference screen、固定Chromium/font、normal+5派生の30 PNG、provenance/atomic generation/read-only checkを固定 | G0-6H assisted human stop |
+| 9 | U2c-2 | M3 | `WAIT` | — | U4a-2のDirect製品入口とU4cのAdvanced製品入口が揃うまで空harnessを作らない | 実在入口のDocument意味/Undo同値conformance |
 
 K0 [#167](https://github.com/oshikaidesu/Motolii/issues/167)とP0I
 [#170](https://github.com/oshikaidesu/Motolii/issues/170)は論理上`DO`の独立spikeだが、
