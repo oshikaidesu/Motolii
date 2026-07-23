@@ -1,7 +1,7 @@
 # UI runtime責任境界
 
-状態: **責任境界・surface topology決定**（2026-07-21）。platform受入は
-[G0-9段階化改訂案](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)の反対側レビュー待ちであり、
+状態: **責任境界・surface topology・G0-9段階化決定**（2026-07-23）。platform受入は
+[G0-9段階化決定](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)に従って実機証拠を待ち、
 renderer採否とWebView/native製品結合は引き続き停止する。
 
 2026-07-22追補: 本書のnative／Reactは**presentation runtime**の分担であり、Core、bundled first-party Host module、first-party plugin、third-party pluginの分類ではない。OS window、surface実装、architectural role、provenance / trustは[軸分離決定](reviews/2026-07-22-m3-surface-extension-axis-separation.md)に従って独立に判定する。
@@ -188,10 +188,10 @@ toastはdock panelではない。headless layoutはlogical rectangleだけを計
 - egui製品shellの撤去時期
 - Linuxでsystem WebViewを使うかCEF比較へ進むか
 
-G0-9Lは固定した主開発Mac構成だけの製品結合を限定解禁し、G0-9DはWindowsと追加hardwareを含む
-Distribution Readyを判定する。G0-9L合格後もparent G0-9、G0-9D、G0-3は未完了のまま残し、
-egui baselineを削除しない。段階化改訂案が反対側レビューでP0/P1=0になるまではG0-9L自体を
-決定済みと扱わず、W0b製品結合を実装しない。
+G0-9Lは固定した主開発Mac構成のplatform prerequisite evidenceだけを限定確定し、G0-9DはWindowsと追加hardwareを含む
+Distribution Readyを判定する。G0-9L合格後もparent G0-9、G0-9D、G0-6H、G0-3は未完了のまま残し、
+egui baselineを削除しない。G0-9LはW0b、H1b、Motolii Studio Preview、通常製品window結合を解禁しない。
+段階化は決定済みだがG0-9L自体は実機未合格であり、これらの製品結合を実装しない。
 
 ### G0-3 / GAP-13で未決
 
