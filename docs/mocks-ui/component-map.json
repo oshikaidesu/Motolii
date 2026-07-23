@@ -1,0 +1,782 @@
+{
+  "schemaVersion": 1,
+  "scope": "M3 mock decomposition inventory",
+  "authority": {
+    "isProductApi": false,
+    "isPersistenceFormat": false,
+    "isProductTokenDecision": false,
+    "note": "This map names mock-only composition units. JSX props, selectors, and component boundaries do not define Rust or egui public APIs."
+  },
+  "referenceSources": [
+    {
+      "file": "docs/mocks/m3-vism-host-boundary.html",
+      "role": "legacy-parity-source",
+      "status": "archived",
+      "entryFixtures": [
+        "#asset-explorer",
+        "#inbox-empty",
+        "#color-book",
+        "#z-rail",
+        "#easing-interval",
+        "#all-surfaces",
+        "#settings"
+      ],
+      "notes": "Archive-only parity source. React routes live under #archive/* and this source must not receive new UI decisions."
+    },
+    {
+      "file": "docs/mocks/m3-main-ui-v3-monochrome.html",
+      "role": "current-structural-reference",
+      "status": "active",
+      "entryFixtures": [
+        "#preview-first",
+        "#asset-explorer",
+        "#color-palette"
+      ],
+      "notes": "M3 structural golden and comparison source for layout, density, causality, Z, and Group meaning. Concrete color values are not product tokens."
+    },
+    {
+      "file": "docs/mocks/m3-main-ui-v4-generative.html",
+      "role": "active-specialized-comparison",
+      "status": "candidate",
+      "entryFixtures": [],
+      "notes": "Generative-boundary structural golden candidate; not the default component decomposition source."
+    },
+    {
+      "file": "docs/mocks/m3-main-ui-v5-color-dynamics.html",
+      "role": "active-design-comparison",
+      "status": "candidate",
+      "entryFixtures": [],
+      "notes": "State-fixture and visual mapping candidates for G0-6; no candidate fixes product token values before human review."
+    },
+    {
+      "file": "docs/mocks/m3-plugin-boundary-learning.html",
+      "role": "active-specialized-comparison",
+      "status": "candidate",
+      "entryFixtures": [],
+      "notes": "Small-core and plugin-responsibility learning fixture; it does not define plugin traits, custom UI APIs, or Document schema."
+    },
+    {
+      "file": "docs/mocks/m3-main-ui-v1.html",
+      "role": "historical-baseline",
+      "status": "comparison-only",
+      "entryFixtures": [
+        "#dark",
+        "#light"
+      ],
+      "notes": "Retained for visual-composition comparison. New decomposition work must not treat it as the current integrated reference."
+    },
+    {
+      "file": "docs/mocks/m3-main-ui-v2.html",
+      "role": "historical-comparison",
+      "status": "comparison-only",
+      "entryFixtures": [],
+      "notes": "Grid-oriented comparison proposal."
+    },
+    {
+      "file": "docs/mocks/m3-timeline-v0.svg",
+      "role": "historical-comparison",
+      "status": "comparison-only",
+      "entryFixtures": [],
+      "notes": "Static timeline comparison; not a product UI or golden."
+    },
+    {
+      "file": "docs/mocks/m3-interaction-v0.html",
+      "role": "historical-comparison",
+      "status": "comparison-only",
+      "entryFixtures": [],
+      "notes": "State-step comparison; not a token or product UI decision."
+    },
+    {
+      "file": "docs/mocks/m3-ui-dynamics-v1.html",
+      "role": "historical-comparison",
+      "status": "comparison-only",
+      "entryFixtures": [],
+      "notes": "Interaction-dynamics comparison; not an amendment of the current integrated reference."
+    }
+  ],
+  "components": [
+    {
+      "id": "primitive.action-button",
+      "layer": "primitive",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".btn"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "shared visual primitive",
+      "eguiTarget": "internal egui Button presentation; no exported component API"
+    },
+    {
+      "id": "primitive.icon-button",
+      "layer": "primitive",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".cmdtool, .toolbtn"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "shared icon and focus-state fixture",
+      "eguiTarget": "internal egui icon button using the reviewed icon grid"
+    },
+    {
+      "id": "primitive.semantic-badge",
+      "layer": "primitive",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".badge, .tag, .thumb-state, .stage-badge"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3",
+        "U2c-3"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "semantic state shown by text or shape in addition to color",
+      "eguiTarget": "internal egui semantic badge"
+    },
+    {
+      "id": "primitive.parameter-scrub",
+      "layer": "primitive",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".scrub[data-param]"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3",
+        "U4a-1",
+        "U4a-2"
+      ],
+      "stateOwner": [
+        "Transient preview during gesture",
+        "Document through a command on commit"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "unbounded numeric parameter interaction fixture",
+      "eguiTarget": "internal egui parameter scrub selected by the host control mapping"
+    },
+    {
+      "id": "primitive.automation-mark",
+      "layer": "primitive",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".automation-mark"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3",
+        "U4a-2"
+      ],
+      "stateOwner": [
+        "Document for automation enable and keys",
+        "Transient for hover and focus"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "automation availability, enablement, and current-key projection",
+      "eguiTarget": "internal egui automation marker adjacent to a host parameter control"
+    },
+    {
+      "id": "primitive.keyframe-marker",
+      "layer": "primitive",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".inline-key"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3"
+      ],
+      "stateOwner": [
+        "Document for keyframe data",
+        "Transient for selection and focus projection"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "key presence and selection projection independent of object color",
+      "eguiTarget": "internal egui painted keyframe marker"
+    },
+    {
+      "id": "primitive.color-swatch",
+      "layer": "primitive",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".book-swatch, .book-color, .color-chip"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3"
+      ],
+      "stateOwner": [
+        "User settings or workspace candidate for library organization and history",
+        "Transient for preview",
+        "Document Color parameter through a command on commit"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "color-first selection and preview fixture",
+      "eguiTarget": "internal egui swatch and selection outline"
+    },
+    {
+      "id": "pattern.panel-header",
+      "layer": "pattern",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".panel-head, .surface-head, .timeline-head"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "shared surface identity and compact actions",
+      "eguiTarget": "internal egui panel heading composition"
+    },
+    {
+      "id": "pattern.candidate-shelf",
+      "layer": "pattern",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".plugin-shelf, .book-body, .curve-shelf"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3"
+      ],
+      "stateOwner": [
+        "User settings for folders, labels, confirmed-use history, and saved curves",
+        "Transient for current preview"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "folder, cross-cutting labels, confirmed-use history, and visual candidate identity",
+      "eguiTarget": "internal egui candidate-shelf composition reused by eligible libraries"
+    },
+    {
+      "id": "pattern.discovery-browser-shell",
+      "layer": "pattern",
+      "jsx": "docs/mocks-ui/src/patterns/DiscoveryBrowser.jsx",
+      "source": {
+        "file": "docs/mocks-ui/src/candidates/DiscoveryBrowserCandidate.jsx",
+        "selector": ".candidate-search-row, .candidate-browser-layout, .candidate-results"
+      },
+      "tickets": [
+        "U0e-2",
+        "U4d",
+        "U6"
+      ],
+      "stateOwner": [
+        "User settings or workspace candidate for view, Collections, and file or directory Tags",
+        "Workspace-session or Transient for search, active source, multi-selection, folder traversal, and Folders or All files scope",
+        "Document only through a preflighted Commit Intent"
+      ],
+      "status": "design-candidate",
+      "referenceRole": "mock-only shared Search, Source rail, Collections, Results, and view-switch composition for Media, Create, and Effects, with a cross-view Pack scope, visible horizontal Tag-box shelf, checked-tag removal, Media multi-selection, and independent filesystem scope",
+      "eguiTarget": "comparison-only internal composition; JSX boundaries do not define a public egui component API"
+    },
+    {
+      "id": "pattern.discovery-candidate-commit",
+      "layer": "pattern",
+      "jsx": "docs/mocks-ui/src/candidates/DiscoveryBrowserCandidate.jsx",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".candidate-plugin-card[draggable], .asset-tile[draggable], .candidate-element-card[draggable]"
+      },
+      "tickets": [
+        "U4d",
+        "U6"
+      ],
+      "stateOwner": [
+        "Transient for selection, drag preview, target feedback, and cancellation",
+        "Document through one existing command only after a valid drop, double click, or Enter Commit Intent"
+      ],
+      "status": "design-candidate",
+      "referenceRole": "shared single-click preview, D&D primary commit, selected-target double-click or Enter shortcut, and context-command alternative grammar",
+      "eguiTarget": "toolkit-independent Commit Intent projected through internal egui interactions"
+    },
+    {
+      "id": "pattern.parameter-row",
+      "layer": "pattern",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "#inspector .row"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3",
+        "U4a-1",
+        "U4a-2"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "host-owned label, control, automation, and feedback composition",
+      "eguiTarget": "internal egui host parameter row generated from toolkit-independent mapping"
+    },
+    {
+      "id": "pattern.diagnostic-feedback",
+      "layer": "pattern",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".notice.error, .lifecycle, .stage-hud"
+      },
+      "tickets": [
+        "U2c-3",
+        "U2c-4",
+        "U2c-5"
+      ],
+      "stateOwner": [
+        "Transient diagnostic projection",
+        "Domain error remains owned by its existing source"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "brief/context/inspect feedback without silent disabled state",
+      "eguiTarget": "internal egui projection of a typed diagnostic envelope"
+    },
+    {
+      "id": "pattern.status-brief",
+      "layer": "pattern",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "footer.status"
+      },
+      "tickets": [
+        "U2c-3",
+        "U2c-5"
+      ],
+      "stateOwner": "Transient",
+      "status": "reference-candidate",
+      "referenceRole": "result plus shortest cause and optional next input",
+      "eguiTarget": "internal egui status projection"
+    },
+    {
+      "id": "pattern.transport",
+      "layer": "pattern",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".transport"
+      },
+      "tickets": [
+        "U0e-2",
+        "U0e-3"
+      ],
+      "status": "reference-candidate",
+      "referenceRole": "time navigation and the interval-easing entry fixture",
+      "eguiTarget": "internal egui transport composition"
+    },
+    {
+      "id": "surface.browser",
+      "layer": "surface",
+      "jsx": "docs/mocks-ui/src/legacy/LegacyRegions.jsx#LegacyBrowser",
+      "skeletonJsx": "docs/mocks-ui/src/surfaces/BrowserSurface.jsx",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "aside.browser"
+      },
+      "tickets": [
+        "U0e-2",
+        "U1a-2",
+        "U4d",
+        "U6"
+      ],
+      "stateOwner": [
+        "User settings for virtual plugin organization and display density",
+        "Workspace-session or Transient for active tab, search, view, and filesystem selection",
+        "Document only through an existing placement command"
+      ],
+      "status": "current-reference",
+      "referenceRole": "single Browser surface switching Media, Create, and Effects while retaining one Pack management scope",
+      "eguiTarget": "egui panel content hosted by the toolkit-independent layout intent"
+    },
+    {
+      "id": "surface.stage-viewport",
+      "layer": "surface",
+      "jsx": "docs/mocks-ui/src/legacy/LegacyRegions.jsx#LegacyStageShell",
+      "skeletonJsx": "docs/mocks-ui/src/surfaces/StageSurface.jsx",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": ".stage-shell"
+      },
+      "tickets": [
+        "U0e-2",
+        "U1a-1",
+        "U1b-1",
+        "U1b-2"
+      ],
+      "stateOwner": [
+        "Document frame as read-only projection",
+        "Transient for selection bounds, connection preview, tool HUD, and view interaction"
+      ],
+      "status": "current-reference",
+      "referenceRole": "primary viewport and static-frame shell fixture",
+      "eguiTarget": "egui panel displaying a shared native GPU texture without CPU readback"
+    },
+    {
+      "id": "surface.inspector",
+      "layer": "surface",
+      "jsx": "docs/mocks-ui/src/legacy/LegacyRegions.jsx#LegacyInspector",
+      "skeletonJsx": "docs/mocks-ui/src/surfaces/InspectorSurface.jsx",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "aside#inspector"
+      },
+      "tickets": [
+        "U0e-2",
+        "U1a-2",
+        "U4a-1",
+        "U4a-2"
+      ],
+      "stateOwner": [
+        "Document values as projection",
+        "Transient for the current selection and parameter preview"
+      ],
+      "status": "current-reference",
+      "referenceRole": "host-standard selected-object and generated plugin parameter surface",
+      "eguiTarget": "egui panel whose parameter controls are generated by host-owned mapping"
+    },
+    {
+      "id": "surface.timeline",
+      "layer": "surface",
+      "jsx": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
+      "skeletonJsx": "docs/mocks-ui/src/surfaces/TimelineSurface.jsx",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "section#timeline"
+      },
+      "tickets": [
+        "U0e-2",
+        "U1a-2"
+      ],
+      "stateOwner": [
+        "Document time objects and keyframes as projection",
+        "Workspace-session candidate for horizontal scroll and per-band packing display intervals adjusted only from the small visible grips with larger hit regions integrated into the unnamed band action rail beside Inbox; never Document or Undo",
+        "Unresolved Object state projection for Solo and Mute, with rail actions materialized onto the current band Object set and all/off/mixed derived from that set; React state does not define persistence, command, evaluation, parent-child propagation, or preview/export semantics",
+        "Transient Automation expansion, channel search, key/Object selection, mutually exclusive KEYS/LAYERS mode, modular operation sections, and explicit Object/Channel/Global grouping derived from the current selection; Key Tools dock placement and size are Workspace-session candidates; prototype edits preserve easing in React state and do not define Document schema, default keys, commands, or Undo",
+        "Transient for playhead, selection, hover, and open overlays",
+        "Provider snapshot for readiness projection"
+      ],
+      "status": "design-candidate",
+      "runtimeOwnership": "react-native Timeline in #plugin-browser-candidate; Inbox, Curve Shelf, and cross-surface fixture behavior retain legacy adapters during migration",
+      "referenceRole": "one packed time plane with a visible horizontal Beat ruler, plus an unnamed narrow band action rail whose right edge, header edge, and row edges exactly align with the time-plane left edge, ruler edge, and packing-guide edges; integrated two-line grips resize only one ownerless packing band and Solo/Mute actions materialize onto every Object currently on that band; Object-bar automation triggers expand only automated channels as AE-style rows and the independent right-docked Key Tools view switches mutually between KEYS operations with explicit Object/Channel/Global grouping and LAYERS operations, borrowing Keystone 3's modular sections without occupying Browser presets or Inspector parameters; fixed Object rows, name columns, lane-owned state, focus-only replacement, all-parameter expansion, and simultaneous display of every Key/Layer section are structurally rejected",
+      "eguiTarget": "Motolii-owned toolkit-independent timeline layout and Object state projection painted inside the egui timeline panel; JSX, CSS px, DOM scroll, and React state are not contract types"
+    },
+    {
+      "id": "surface.depth-rail",
+      "layer": "surface",
+      "jsx": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
+      "source": {
+        "file": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
+        "selector": ".z-rail"
+      },
+      "tickets": [
+        "U0e-2"
+      ],
+      "stateOwner": [
+        "Workspace-session or Transient for open state",
+        "Document position.z through the existing command on commit",
+        "Transient for Timeline selection focus, parent-local scope, Layer Order Distribute range, direction, and preview",
+        "Document child order remains read-only input and never changes as a side effect of depth distribution"
+      ],
+      "status": "design-candidate",
+      "runtimeOwnership": "React-native Depth Rail inside TimelineCandidate for #plugin-browser-candidate; archive fixtures remain parity-only",
+      "referenceRole": "explicit Edit-Space Z projection with coincident-count stacks instead of hover fan-out, stable-ID focus synchronized from Timeline without automatic panel opening, a visible Layer Order Distribute icon with far/near preview and Reverse/Apply/Cancel, and parent-local Group scope that never mixes a Group marker with its children",
+      "eguiTarget": "internal egui custom-painted depth rail within the timeline surface"
+    },
+    {
+      "id": "surface.inbox",
+      "layer": "surface",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "aside#inbox"
+      },
+      "tickets": [
+        "U0e-2"
+      ],
+      "stateOwner": [
+        "Each referenced asset, review note, or background job remains in its canonical owner",
+        "User settings for Tip read or dismiss state"
+      ],
+      "status": "current-reference",
+      "referenceRole": "projection of unresolved or unconfirmed items, not a second store",
+      "eguiTarget": "egui list projection embedded at the edge of the timeline"
+    },
+    {
+      "id": "surface.easing-graph",
+      "layer": "surface",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "aside#easing-panel"
+      },
+      "jsx": "docs/mocks-ui/src/candidates/EasingGraphCandidate.jsx",
+      "tickets": [
+        "U0e-2",
+        "U4b"
+      ],
+      "stateOwner": [
+        "Toolkit-independent Transient editor state for target derivation, interpolation kind, declared handles, drag snapshot, preview, and panel visibility",
+        "Document interpolation through one command on commit"
+      ],
+      "status": "design-candidate",
+      "runtimeOwnership": "react-native view in #plugin-browser-candidate; interval and curve state still use the legacy fixture script adapter",
+      "referenceRole": "one adjacent-key interval graph view with current/context key distinction, explicit Overshoot action, transient Copy, current-interval Paste, current-channel Paste all, and non-destructive advanced interval shapes (Bounce, Elastic, Cyclic/Sine, Random, Steps, Elastic Steps); Bounce, Elastic, Cyclic/Sine, and Random handle meanings are user-confirmed from captures while Steps families remain visibly labeled inferences; neither mapping defines persistence or public API; applying or adjusting a shape never adds, removes, moves, or changes the value of keyframes",
+      "eguiTarget": "internal egui popup projecting toolkit-independent Easing Editor state and BeginHandleDrag/Preview/Commit/Cancel intents through custom curve painting; JSX, DOM selectors, SVG nodes, egui Response/Rect, px, and DPI are not contract types"
+    },
+    {
+      "id": "surface.curve-shelf",
+      "layer": "surface",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "aside#curve-shelf"
+      },
+      "tickets": [
+        "U0e-2"
+      ],
+      "stateOwner": [
+        "User settings for saved curves, folders, labels, history, and favorite",
+        "Transient for preview",
+        "Document interpolation through one command on apply"
+      ],
+      "status": "current-reference-with-open-item",
+      "runtimeOwnership": "legacy-bridge",
+      "referenceRole": "user curve library; favorite immediate-apply remains an explicit mock open item",
+      "eguiTarget": "internal egui candidate shelf attached to the easing surface"
+    },
+    {
+      "id": "surface.color-book",
+      "layer": "surface",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "section#color-book-drawer"
+      },
+      "tickets": [
+        "U0e-2"
+      ],
+      "stateOwner": [
+        "User settings or workspace candidate for palette organization, history, swatch size, and drawer width",
+        "Transient for sample and swatch preview",
+        "Document Color parameter through one command on commit"
+      ],
+      "status": "current-reference",
+      "referenceRole": "explicitly opened color management drawer",
+      "eguiTarget": "egui drawer composed from the candidate-shelf and color control fixtures"
+    },
+    {
+      "id": "surface.plugin-recovery",
+      "layer": "surface",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "section#recovery"
+      },
+      "tickets": [
+        "U2c-4",
+        "U2c-5"
+      ],
+      "stateOwner": [
+        "Document retains unresolved plugin identity and payload",
+        "Transient for dialog visibility and candidate inspection"
+      ],
+      "status": "boundary-reference-only",
+      "referenceRole": "recovery inspection with install flow intentionally undecided",
+      "eguiTarget": "internal egui diagnostic inspection dialog; no install API implied"
+    },
+    {
+      "id": "surface.settings",
+      "layer": "surface",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "section#settings-sheet"
+      },
+      "tickets": [
+        "U0e-2"
+      ],
+      "stateOwner": "User settings",
+      "status": "current-reference",
+      "referenceRole": "low-frequency environment preferences with Document and Undo unchanged",
+      "eguiTarget": "egui settings surface; storage model remains outside this mock map"
+    },
+    {
+      "id": "pattern.browser-hierarchy-visibility",
+      "layer": "pattern",
+      "jsx": "docs/mocks-ui/src/candidates/DiscoveryBrowserCandidate.jsx",
+      "source": {
+        "file": "docs/mocks-ui/src/patterns/DiscoveryBrowser.jsx",
+        "selector": ".candidate-browser-nav"
+      },
+      "tickets": [
+        "U1e",
+        "U6"
+      ],
+      "stateOwner": "Workspace-session candidate; never Document or Undo",
+      "status": "design-candidate",
+      "runtimeOwnership": "react-native Browser layout state",
+      "referenceRole": "resizes the shared Sources, Registered folders, Collections, and Packs hierarchy at its divider, closes it by dragging to the left edge, and restores it from the closed HIERARCHY rail while preserving Results and selection",
+      "eguiTarget": "width and collapsed state in the Motolii-owned Browser panel layout model"
+    },
+    {
+      "id": "pattern.browser-organization-tags",
+      "layer": "pattern",
+      "jsx": "docs/mocks-ui/src/candidates/DiscoveryBrowserCandidate.jsx",
+      "source": {
+        "file": "docs/mocks-ui/src/candidates/DiscoveryBrowserCandidate.jsx",
+        "selector": ".candidate-organization-tags"
+      },
+      "tickets": [
+        "U4d",
+        "U6"
+      ],
+      "stateOwner": "Workspace metadata candidate; never Document, Undo, Host taxonomy, or plugin manifest",
+      "status": "design-candidate",
+      "runtimeOwnership": "React-native Browser organization state",
+      "referenceRole": "uses the Effect-style left-rail UI and the same drag-to-tag/filter grammar across Media, Effect, and Create while keeping each item kind's tag vocabulary separate",
+      "eguiTarget": "shared Browser tag projection backed by a Motolii-owned organization model; durable storage remains undecided"
+    },
+    {
+      "id": "pattern.browser-thumbnail-size",
+      "layer": "pattern",
+      "jsx": "docs/mocks-ui/src/candidates/DiscoveryBrowserCandidate.jsx",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "#plugin-thumb-size"
+      },
+      "tickets": [
+        "U4d",
+        "U6"
+      ],
+      "stateOwner": "User settings candidate; never Document or Undo",
+      "status": "design-candidate",
+      "runtimeOwnership": "existing Settings control bridged to React-native Browser root state",
+      "referenceRole": "generalizes the existing Plugin thumbnail size setting into one Browser thumbnail size value across Media, Effects, and Create result grids without adding a duplicate control",
+      "eguiTarget": "shared Browser display setting projected into each egui result grid"
+    },
+    {
+      "id": "pattern.browser-result-view-toggle",
+      "layer": "pattern",
+      "jsx": "docs/mocks-ui/src/patterns/DiscoveryBrowser.jsx",
+      "source": {
+        "file": "docs/mocks-ui/src/patterns/DiscoveryBrowser.jsx",
+        "selector": ".plugin-view-toggle"
+      },
+      "tickets": [
+        "U4d",
+        "U6"
+      ],
+      "stateOwner": "User settings or Workspace-session candidate; never Document or Undo",
+      "status": "design-candidate",
+      "runtimeOwnership": "shared React-native Browser view toggle",
+      "referenceRole": "offers thumbnail-only, thumbnail-and-name, and list modes to Media, Effects, and Create while preserving item identity and selection",
+      "eguiTarget": "one shared Browser result-view component with item-kind-specific thumbnail rendering"
+    },
+    {
+      "id": "pattern.resizable-panel-layout",
+      "layer": "pattern",
+      "jsx": "docs/mocks-ui/src/layout/ResizablePanelLayout.jsx",
+      "source": {
+        "file": "docs/specs/M3-ui-integration.md",
+        "selector": "可変panel / egui_tiles runtime projection"
+      },
+      "tickets": [
+        "U1e"
+      ],
+      "stateOwner": "Workspace-session candidate; never Document or Undo",
+      "status": "design-candidate",
+      "runtimeOwnership": "react-native layout shell around candidate surfaces",
+      "referenceRole": "stable Browser, Inspector, and Timeline identities with pointer and keyboard resizing; Stage receives the remaining area",
+      "eguiTarget": "Motolii-owned stable layout model projected into egui_tiles without serializing Tree or TileId"
+    },
+    {
+      "id": "surface.graph-view",
+      "layer": "surface",
+      "jsx": "docs/mocks-ui/src/candidates/GraphViewCandidate.jsx",
+      "source": {
+        "file": "docs/reviews/2026-07-19-graph-view-reference-decision.md",
+        "selector": "Graph View"
+      },
+      "tickets": [
+        "U4e"
+      ],
+      "stateOwner": [
+        "Document projection for key time, key value, and outgoing interval interpolation",
+        "Transient for focused channel, selection, drag preview, snapshot, pan, zoom, normalize, and view range",
+        "Document command only when a key or tangent gesture commits"
+      ],
+      "status": "design-candidate",
+      "runtimeOwnership": "React-native surface integrated as an exclusive Timeline dock view, with a standalone interaction fixture",
+      "referenceRole": "Apple Motion parameter-list and graph composition with Cinema 4D tangent gestures, Maya tangent vocabulary, Blender framing, explicit fit, shape-preserving key insertion, shared mock color roles, and a mock-internal pure curve/layout seam that is not a public plugin API",
+      "eguiTarget": "dockable Graph View projected from a toolkit-independent layout, hit-test, curve, and intent model after M3 entry"
+    },
+    {
+      "id": "screen.main-all-surfaces",
+      "layer": "screen",
+      "jsx": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
+      "skeletonJsx": "docs/mocks-ui/src/screens/AllSurfacesScreen.jsx",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "body at #all-surfaces"
+      },
+      "tickets": [
+        "U0e-2",
+        "U1a-1",
+        "U1a-2"
+      ],
+      "status": "archived-parity-golden",
+      "runtimeOwnership": "archive-legacy-bridge",
+      "referenceRole": "archived integrated Browser, Stage, Inspector, Timeline, Depth Rail, and Color Book fixture",
+      "eguiTarget": "reference screen assembled from internal egui surfaces"
+    },
+    {
+      "id": "screen.settings",
+      "layer": "screen",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "body at #settings"
+      },
+      "tickets": [
+        "U0e-2"
+      ],
+      "stateOwner": "User settings",
+      "status": "archived-parity-golden",
+      "referenceRole": "archived settings reference screen",
+      "eguiTarget": "reference screen for the internal egui settings surface"
+    },
+    {
+      "id": "screen.plugin-browser-candidate",
+      "layer": "screen",
+      "jsx": "docs/mocks-ui/src/candidates/DiscoveryBrowserCandidate.jsx",
+      "source": {
+        "file": "docs/mocks/m3-vism-host-boundary.html",
+        "selector": "aside.browser replaced at #plugin-browser-candidate"
+      },
+      "tickets": [
+        "U0e-2",
+        "U4d",
+        "U6"
+      ],
+      "stateOwner": [
+        "User settings or workspace candidate for Collections, Tags, Recent, registered filesystem folders, last opened path, and view density",
+        "Transient for search, filters, selection, hover or focus motion preview, save-sheet choices, active Browser tab, and folder traversal",
+        "Document command only when a candidate is committed to a target"
+      ],
+      "status": "design-candidate",
+      "runtimeOwnership": "react-native Browser inside a legacy-bridge host screen",
+      "referenceRole": "shared Browser grammar with top-level Media, Create, and Effects action views; one Pack remains a single management identity while its Media, new-object, and apply-to-target items are projected by use; a dual-action item may appear in Create and Effects with one stable identity and an action-specific structural-impact preview; saved candidates always have an automatically generated poster and may add a hover or focus motion preview from Auto, Record, or GIF/Video input; extracted mock-only Search, Source rail, Collections, Results, and view-switch composition; federated All Media, Project, registered-folder, Collection, Pack, and Recent sources; independent Browse folders and recursive All files filesystem scopes; file and folder multi-selection, persistent Tag-box drop targets, and checked-tag removal; 16:9 contain-only Media thumbnails; shared D&D, selected-target double-click or Enter, and right-click context-command Commit Intent; Inspector-owned parameter description; canonical media deduplication; and non-indented hierarchy navigation",
+      "eguiTarget": "comparison fixture for a shared internal egui Browser shell; not an adopted product component"
+    },
+    {
+      "id": "screen.graph-view-candidate",
+      "layer": "screen",
+      "jsx": "docs/mocks-ui/src/candidates/GraphViewCandidate.jsx",
+      "source": {
+        "file": "docs/reviews/2026-07-19-graph-view-reference-decision.md",
+        "selector": "Prototype審判"
+      },
+      "tickets": [
+        "U4e"
+      ],
+      "status": "design-candidate",
+      "runtimeOwnership": "standalone React-native hash fixture",
+      "referenceRole": "fixed Pulse rings fixture for primary/context curves, tangent constraints, snapshot, explicit framing, and shape-preserving key insertion",
+      "eguiTarget": "comparison screen only; not a product screen or public component"
+    }
+  ]
+}

@@ -1,0 +1,263 @@
+{
+  "ticket": "G0-9",
+  "capturedAt": "2026-07-21T05:40:32.941Z",
+  "environment": {
+    "platform": "darwin",
+    "release": "24.5.0",
+    "arch": "arm64",
+    "browser": "chromium",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36"
+  },
+  "fixture": {
+    "id": "g0-9-dense-ui-v1",
+    "browserItems": 10000,
+    "clips": 1000,
+    "keyframes": 100000,
+    "tracks": 32,
+    "timelineSeconds": 240,
+    "browserViewport": [
+      420,
+      480
+    ],
+    "timelineViewport": [
+      1200,
+      512
+    ]
+  },
+  "browserVirtualization": {
+    "steps": 120,
+    "medianMs": 16.699999809265137,
+    "p95Ms": 18.399999618530273,
+    "domRows": 24
+  },
+  "timelineCanvas2d": {
+    "mode": "canvas2d",
+    "frames": 120,
+    "visibleKeys": 20000,
+    "medianMs": 3.9000000953674316,
+    "p95Ms": 5.300000190734863
+  },
+  "dynamicSceneInit": {
+    "pixiRenderer": "WebGLRenderer",
+    "pixiCompletionSync": "gl.finish",
+    "pixiNonBackgroundPixels": 10791,
+    "konvaRenderer": "Canvas2D scene canvas + hit canvas per Layer",
+    "visibleKeys": 20000
+  },
+  "dynamicDrag": {
+    "samples": 90,
+    "drawsPerSample": 5,
+    "pixi": [
+      {
+        "library": "pixi.js",
+        "renderer": "WebGLRenderer",
+        "kind": "key",
+        "selected": 1,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 1.6000003814697266,
+        "medianMs": 0.060000038146972655,
+        "p95Ms": 0.3600000381469727,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one ParticleContainer overlay; React state unchanged per frame"
+      },
+      {
+        "library": "pixi.js",
+        "renderer": "WebGLRenderer",
+        "kind": "key",
+        "selected": 1000,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 1.1999998092651367,
+        "medianMs": 0.08000001907348633,
+        "p95Ms": 0.23999996185302735,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one ParticleContainer overlay; React state unchanged per frame"
+      },
+      {
+        "library": "pixi.js",
+        "renderer": "WebGLRenderer",
+        "kind": "key",
+        "selected": 10000,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 4.900000095367432,
+        "medianMs": 0.1,
+        "p95Ms": 0.46000003814697266,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one ParticleContainer overlay; React state unchanged per frame"
+      },
+      {
+        "library": "pixi.js",
+        "renderer": "WebGLRenderer",
+        "kind": "object",
+        "selected": 1,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 0.5999999046325684,
+        "medianMs": 0.060000038146972655,
+        "p95Ms": 0.08000001907348633,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one ParticleContainer overlay; React state unchanged per frame"
+      },
+      {
+        "library": "pixi.js",
+        "renderer": "WebGLRenderer",
+        "kind": "object",
+        "selected": 100,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 0.3000001907348633,
+        "medianMs": 0.060000038146972655,
+        "p95Ms": 0.08000001907348633,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one ParticleContainer overlay; React state unchanged per frame"
+      },
+      {
+        "library": "pixi.js",
+        "renderer": "WebGLRenderer",
+        "kind": "object",
+        "selected": 1000,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 1,
+        "medianMs": 0.07999992370605469,
+        "p95Ms": 0.08000001907348633,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one ParticleContainer overlay; React state unchanged per frame"
+      }
+    ],
+    "konva": [
+      {
+        "library": "konva",
+        "renderer": "Canvas2D drag Layer",
+        "kind": "key",
+        "selected": 1,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 1,
+        "medianMs": 0,
+        "p95Ms": 0.019999980926513672,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one Group on a dedicated drag Layer; React state unchanged per frame"
+      },
+      {
+        "library": "konva",
+        "renderer": "Canvas2D drag Layer",
+        "kind": "key",
+        "selected": 1000,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 12.5,
+        "medianMs": 0.6200000762939453,
+        "p95Ms": 1.3399999618530274,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one Group on a dedicated drag Layer; React state unchanged per frame"
+      },
+      {
+        "library": "konva",
+        "renderer": "Canvas2D drag Layer",
+        "kind": "key",
+        "selected": 10000,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 54.19999980926514,
+        "medianMs": 6.079999923706055,
+        "p95Ms": 7.3199999809265135,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one Group on a dedicated drag Layer; React state unchanged per frame"
+      },
+      {
+        "library": "konva",
+        "renderer": "Canvas2D drag Layer",
+        "kind": "object",
+        "selected": 1,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 1,
+        "medianMs": 0,
+        "p95Ms": 0.019999980926513672,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one Group on a dedicated drag Layer; React state unchanged per frame"
+      },
+      {
+        "library": "konva",
+        "renderer": "Canvas2D drag Layer",
+        "kind": "object",
+        "selected": 100,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 1.3999996185302734,
+        "medianMs": 0.08000001907348633,
+        "p95Ms": 0.1,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one Group on a dedicated drag Layer; React state unchanged per frame"
+      },
+      {
+        "library": "konva",
+        "renderer": "Canvas2D drag Layer",
+        "kind": "object",
+        "selected": 1000,
+        "frames": 450,
+        "samples": 90,
+        "setupMs": 6.099999904632568,
+        "medianMs": 0.7,
+        "p95Ms": 0.8600000381469727,
+        "semanticWritesDuringMove": 0,
+        "cancelRestored": true,
+        "commitsOnRelease": 1,
+        "updateStrategy": "translate one Group on a dedicated drag Layer; React state unchanged per frame"
+      }
+    ]
+  },
+  "browserWebGpu": {
+    "available": true,
+    "reason": null,
+    "adapterInfo": {
+      "architecture": "swiftshader",
+      "description": "",
+      "device": "",
+      "vendor": "google"
+    },
+    "measurement": {
+      "mode": "webgpu",
+      "frames": 120,
+      "visibleKeys": 20000,
+      "medianMs": 3.700000286102295,
+      "p95Ms": 3.9000000953674316
+    }
+  },
+  "hmr": {
+    "transport": "Vite accepted virtual-module update without Rust process restart",
+    "elapsedMs": 21,
+    "revisionBefore": 0,
+    "revisionAfter": 1
+  },
+  "boundaries": {
+    "nativeWgpuTextureSharedWithBrowser": false,
+    "productWebViewEmbedded": false,
+    "pluginSandboxValidated": false
+  }
+}

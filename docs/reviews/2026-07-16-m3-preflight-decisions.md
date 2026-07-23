@@ -13,7 +13,7 @@ M3前に全ての色、寸法、性能値を推測で埋めることを「仕様
 | Gate | 判定 | M3前に固定するもの | 後続証拠を待つもの |
 |---|---|---|---|
 | G0-2 | **採用・完了** | inputの意味、状態の持ち場と寿命、keymap保存、v1 a11y保証/非保証 | OS別IME実機結果 |
-| G0-3 | **縮小採用・完了** | v1 public plugin UIはHost自動生成panelのみ。plugin所有toolkit/native UIと自由wgpu UIは公開しない | 型ごとの宣言語彙解凍、専用編集環境の再評価 |
+| G0-3 | **2026-07-21再評価中 / 2026-07-22軸分離** | `NodeDesc`自動panel fallbackと比較前の自由UI非公開は維持。公開kit、sandbox、互換、配布はG0-3 / GAP-13で判定し、G0-9は製品surface証拠だけを渡す | [軸分離決定](2026-07-22-m3-surface-extension-axis-separation.md)、[React / WebView再選定](2026-07-21-m3-react-webview-runtime-reconsideration.md) |
 | G0-4 | **採用・完了** | 計測fixture、環境記録、操作列、集計、CI比較方法 | 製品fps/latency/memory絶対閾値 |
 | G0-6 | **手順確定・審判待ち** | token role、生成方式、reference screen、自動/人間審判 | 色、spacing、icon、motion、寸法の実値 |
 | G0-7 | **採用・完了** | 共通操作文法、component契約、入口間conformance | 各機能のfixture実装 |
@@ -162,6 +162,8 @@ v1で保証しない:
 非保証を理由に作品意味をpointer専用UIへ閉じ込めない。空間操作の結果はHost標準Inspectorから数値編集・検査できることをfallbackとする。
 
 ## 3. G0-3: plugin UIは「表現を開き、操作文法を閉じる」
+
+> **2026-07-21追記、2026-07-22訂正**: 本節は`NodeDesc` fallbackと自由UIを無審査公開しない停止線として保持する。公開kit、sandbox、権限、互換、配布はG0-3 / GAP-13で再評価する。G0-9は標準製品surfaceのplatform証拠を提供するが、その合格だけで自由UIを公開しない。
 
 ### 3.1 能力コーパスの判定
 

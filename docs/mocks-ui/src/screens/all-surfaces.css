@@ -1,0 +1,435 @@
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--mock-role-surface-app);
+}
+
+[data-fixture="skeleton"] {
+  height: 100%;
+}
+
+@scope (.motolii-mock-app) {
+:scope {
+  --mock-bg: var(--mock-role-surface-app);
+  --mock-panel: var(--mock-role-surface-panel);
+  --mock-raised: var(--mock-role-surface-raised);
+  --mock-line: var(--mock-role-border-default);
+  --mock-line-strong: var(--mock-role-border-strong);
+  --mock-ink: var(--mock-role-text-primary);
+  --mock-subtle: var(--mock-role-text-secondary);
+  --mock-muted: var(--mock-role-text-muted);
+  --mock-active: var(--mock-role-action-active);
+  --mock-warning: var(--mock-role-status-warning);
+  --mock-way-project: var(--mock-role-way-project);
+  --mock-way-plugins: var(--mock-role-way-plugins);
+  --mock-way-stage: var(--mock-role-way-stage);
+  --mock-way-inspector: var(--mock-role-way-inspector);
+  --mock-way-timeline: var(--mock-role-way-timeline);
+  --mock-object-2: var(--mock-role-shape);
+  --mock-object-3: var(--mock-role-data);
+  --mock-mono: var(--mock-role-font-technical);
+  display: grid;
+  grid-template-rows: 34px 32px minmax(360px, 1fr) 270px 24px;
+  min-width: 1080px;
+  height: 100vh;
+  background: var(--mock-panel);
+  color: var(--mock-ink);
+  font: 12px/1.35 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.motolii-mock-app button,
+.motolii-mock-app input {
+  color: inherit;
+  font: inherit;
+}
+
+.motolii-mock-app button {
+  border: 1px solid var(--mock-line);
+  background: var(--mock-panel);
+}
+
+.mock-titlebar,
+.mock-commandbar,
+.mock-status,
+.surface-title,
+.stage-tools,
+.transport {
+  display: flex;
+  align-items: center;
+}
+
+.mock-titlebar {
+  gap: 12px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--mock-line);
+  background: var(--mock-raised);
+}
+
+.wordmark {
+  letter-spacing: .08em;
+}
+
+.mock-grow,
+.quality {
+  margin-left: auto;
+}
+
+.mock-commandbar {
+  gap: 4px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--mock-line);
+  background: var(--mock-bg);
+}
+
+.mock-commandbar span {
+  margin-left: 10px;
+  color: var(--mock-subtle);
+}
+
+.mock-workspace {
+  display: grid;
+  grid-template-columns: 260px minmax(420px, 1fr) 294px;
+  min-height: 0;
+}
+
+.mock-surface {
+  min-width: 0;
+  border-right: 1px solid var(--mock-line);
+  background: var(--mock-panel);
+}
+
+.surface-title {
+  gap: 8px;
+  min-height: 29px;
+  padding: 0 9px;
+  border-bottom: 1px solid var(--mock-line);
+}
+
+.surface-title::before {
+  width: 6px;
+  height: 14px;
+  background: currentColor;
+  content: "";
+}
+
+.way-project { color: var(--mock-way-project); }
+.way-stage { color: var(--mock-way-stage); }
+.way-inspector { color: var(--mock-way-inspector); }
+.way-timeline { color: var(--mock-way-timeline); }
+
+.surface-title strong {
+  color: var(--mock-ink);
+}
+
+.mock-browser > .mock-tabs {
+  --mock-tab-accent: var(--mock-way-plugins);
+}
+
+.mock-browser > .mock-field-label {
+  padding: 8px;
+}
+
+.mock-browser .mock-search {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--mock-line);
+  background: var(--mock-bg);
+}
+
+.plugin-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--mock-line);
+}
+
+.plugin-card {
+  display: grid;
+  min-height: 112px;
+  padding: 0 8px 8px;
+  text-align: left;
+}
+
+.plugin-thumb {
+  height: 64px;
+  margin: 0 -8px 7px;
+  background:
+    radial-gradient(circle at 35% 45%, var(--mock-object-2), transparent 6%),
+    conic-gradient(from 90deg at 55% 50%, transparent, var(--mock-way-plugins), transparent);
+}
+
+.plugin-card small,
+.plugin-card i {
+  color: var(--mock-muted);
+  font-size: 9px;
+}
+
+.plugin-card i {
+  justify-self: end;
+  font-style: normal;
+  text-transform: uppercase;
+}
+
+.stage-tools,
+.transport {
+  gap: 5px;
+  height: 29px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--mock-line);
+  background: var(--mock-bg);
+}
+
+.stage-tools .stage-heading {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+}
+
+.mock-stage-shell {
+  display: grid;
+  grid-template-rows: 29px minmax(0, 1fr) 30px;
+}
+
+.stage-canvas {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #090909;
+}
+
+.output-frame {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: min(76%, 720px);
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid var(--mock-line-strong);
+  background: radial-gradient(circle at center, #2a1d34, #07080b 62%);
+}
+
+.output-frame strong {
+  z-index: 2;
+  font-size: clamp(20px, 4vw, 54px);
+  letter-spacing: .16em;
+}
+
+.output-frame small {
+  position: absolute;
+  bottom: 12px;
+  color: var(--mock-subtle);
+}
+
+.scene-orbit {
+  position: absolute;
+  width: 54%;
+  aspect-ratio: 1;
+  border: 2px solid var(--mock-object-2);
+  border-radius: 50%;
+  opacity: .7;
+}
+
+.orbit-a { transform: rotate(24deg) scaleY(.36); }
+.orbit-b { transform: rotate(-33deg) scaleY(.52); }
+
+.transport {
+  border-top: 1px solid var(--mock-line);
+  border-bottom: 0;
+  color: var(--mock-subtle);
+  font-size: 10px;
+}
+
+.transport strong {
+  color: var(--mock-ink);
+}
+
+.inspector-group {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border-bottom: 1px solid var(--mock-line);
+}
+
+.inspector-group > small {
+  color: var(--mock-muted);
+  font-size: 9px;
+  letter-spacing: .08em;
+}
+
+.parameter-row {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) auto;
+  gap: 4px 8px;
+  align-items: center;
+  min-height: 27px;
+}
+
+.parameter-row output {
+  min-width: 64px;
+  padding: 4px 6px;
+  border: 1px solid var(--mock-line);
+  background: var(--mock-bg);
+  text-align: right;
+}
+
+.parameter-row i {
+  grid-column: 2;
+  color: var(--mock-muted);
+  font: 8px var(--mock-mono);
+  font-style: normal;
+}
+
+.parameter-row i[data-state="on"] {
+  color: var(--mock-active);
+}
+
+.applied-plugin {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  align-items: center;
+  padding: 7px;
+  background: var(--mock-raised);
+}
+
+.applied-plugin small {
+  grid-column: 2;
+  color: var(--mock-muted);
+}
+
+.mock-timeline {
+  border-top: 1px solid var(--mock-line);
+}
+
+.mock-timeline > .surface-title {
+  height: 30px;
+}
+
+.mock-timeline > .surface-title span {
+  margin-left: auto;
+  color: var(--mock-subtle);
+}
+
+.depth-rail {
+  display: grid;
+  grid-template-columns: 64px 56px 1fr;
+  align-items: center;
+  height: 42px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--mock-line);
+  background: var(--mock-bg);
+  font-size: 9px;
+}
+
+.depth-axis {
+  position: relative;
+  height: 1px;
+  background: var(--mock-line-strong);
+}
+
+.depth-axis i {
+  position: absolute;
+  top: -10px;
+  padding: 2px 4px;
+  border: 1px solid var(--mock-line-strong);
+  background: var(--mock-raised);
+  font-style: normal;
+  transform: translateX(-50%);
+}
+
+.timeline-body {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  height: 197px;
+}
+
+.inbox {
+  display: grid;
+  align-content: start;
+  grid-template-columns: 1fr auto;
+  gap: 5px;
+  padding: 8px;
+  border-right: 1px solid var(--mock-line);
+  background: var(--mock-bg);
+}
+
+.inbox button {
+  grid-column: 1 / -1;
+  padding: 6px;
+  text-align: left;
+}
+
+.time-plane {
+  position: relative;
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 79px, var(--mock-line) 80px),
+    var(--mock-panel);
+}
+
+.time-bar {
+  position: absolute;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  height: 34px;
+  padding: 0 10px;
+  color: #151515;
+}
+
+.time-bar small {
+  margin-left: auto;
+}
+
+.object-1 { background: var(--mock-object-2); }
+.object-2 { background: var(--mock-object-3); }
+.object-3 { background: var(--mock-object-2); }
+.object-4 { background: var(--mock-object-3); }
+.object-5 { background: var(--mock-object-2); }
+.object-6 { background: var(--mock-object-3); }
+
+.playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 44%;
+  width: 1px;
+  background: var(--mock-warning);
+}
+
+.playhead::before {
+  position: absolute;
+  top: 0;
+  left: -4px;
+  border: 4px solid transparent;
+  border-top-color: var(--mock-warning);
+  content: "";
+}
+
+.mock-status {
+  gap: 8px;
+  padding: 0 9px;
+  border-top: 1px solid var(--mock-line);
+  background: var(--mock-bg);
+  font-size: 10px;
+}
+
+.mock-status span {
+  color: var(--mock-muted);
+}
+}

@@ -1,6 +1,6 @@
 # M3 UI参照地図
 
-更新日: 2026-07-20
+更新日: 2026-07-22
 
 M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決める。会話履歴、スクリーンショット、旧HTML、React prototypeのいずれも、単独では製品仕様にならない。
 
@@ -9,8 +9,8 @@ M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決
 | 層 | 役割 | 正本／入口 | 変更時の規則 |
 |---|---|---|---|
 | 規範 | 状態所有、Undo、入力、意味、受け入れ条件 | [M3仕様](specs/M3-ui-integration.md)、[UI操作言語](ui-interaction-language.md)、[UI視覚言語](ui-visual-language.md)、[UI境界規律](reviews/2026-07-14-m3-ui-boundary-prevention.md) | prototypeや会話から直接上書きせず、仕様・決定台帳を先に改訂する |
-| 現行prototype | 現在ブラウザで比較する操作・構成 | `docs/mocks-ui/README.md`(React/Viteモック。`codex/m3-mock-components`ブランチ側に実体) | hash fixture、操作試験、比較台帳を一緒に更新する。React/CSS値を製品契約へ焼かない |
-| 製品実装先例 | eguiで高密度shell、時間面、GPU viewport、selection、component、試験を成立させた実装資産 | [Rerun先例調査](reviews/2026-07-20-rerun-prior-art-survey.md)、[Rerun学習・転移計画](reviews/2026-07-20-rerun-learning-transfer-plan.md) | Rerunの画面・語彙・schemaを模倣せず、Reactモックの要求をeguiへ翻訳する実装先例として読む。個別資産は`DEPEND/VENDOR/PORT/PATTERN/REJECT`で裁定する |
+| 現行prototype / React source asset | 現在ブラウザで比較する操作・構成と、React所有面を製品packageへ直接移すsource | `docs/mocks-ui/README.md`と固定commit `56c318ed`、[React製品資産の直接移管契約](reviews/2026-07-22-m3-react-product-asset-promotion-contract.md) | hash fixture、操作試験、比較台帳を一緒に更新する。React/CSS値を製品契約へ焼かず、縮約再実装で置換しない |
+| 製品実装先例 | 高密度shell、時間面、GPU viewport、selection、component、試験を成立させた実装資産 | [UI runtime責任境界](ui-runtime-architecture.md)、[Rerun先例調査](reviews/2026-07-20-rerun-prior-art-survey.md)、[Rerun学習・転移計画](reviews/2026-07-20-rerun-learning-transfer-plan.md) | Rerunの画面・語彙・schemaを模倣しない。React/native所有は正本に従い、toolkit横断patternだけを比較入力とする。egui固有assetはG0-9まで移植停止 |
 | 採否台帳 | 先例、観察、未決、棄却、停止線 | `reviews/`の対象別decision／observation ledger | 出典、Motoliiへの翻訳、反映先を分ける |
 | 移行互換 | React移行中の視覚parityと未置換領域 | [旧HTMLモック台帳](mocks/README.md)、`mocks-ui/src/legacy/` | 新しい判断を追加しない。React-native置換後に参照専用へ縮退する |
 | 証拠 | ユーザー撮影画像、golden、操作記録 | `reviews/evidence/`、Playwright結果 | 版、OS、fixture、viewport、操作列をmanifest化する |
@@ -22,11 +22,14 @@ M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決
 
 | 資料 | 答える問い | 答えない問い |
 |---|---|---|
-| Reactモック | Motoliiで何を見せ、どう操作させたいか | eguiでどう実装するか、Documentへ何を保存するか |
-| Rerun | eguiで高密度な製品shell、時間面、GPU viewport、selection、component、試験をどう成立させたか | Motoliiの作品意味、編集command、clip/keyframe操作 |
+| Reactモック | Motoliiで何を見せ、どう操作させたいか。React所有面のcomponent、fixture、Storybook、Playwright、stable IDは直接所有移管する製品source asset | React state、DOM event、CSS px、仮JSONをDocument/公開契約へ昇格すること |
+| Rerun | 高密度な製品shell、時間面、GPU viewport、selection、component、試験をどう成立させたか | Motoliiの作品意味、編集command、clip/keyframe操作。egui固有assetの採用はG0-9待ち |
 | Motolii規範・仕様 | 状態の持ち場、Undo、公開契約、受け入れ条件 | 具体token値や未採択component実装 |
 
-実装時は`React要求 → Motolii意味・状態 → Rerun先例 → Motolii component`の順で翻訳する。Rerunに存在することだけを理由に機能を足さず、Reactモックに存在することだけを理由に未決意味を実装しない。
+React所有面の製品実装は[直接移管契約](reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)に従い、
+固定source assetをproduct ownerへ移してから、mock/legacy stateだけをMotoliiのprojection / intentへ交換する。
+別の縮約componentへ翻訳し直さない。Rerunに存在することだけを理由に機能を足さず、Reactモックに
+存在する表示だけを理由に未決のDocument意味を実装しない。
 
 ## React移行の実状態
 
@@ -34,13 +37,32 @@ M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決
 
 | fixture／領域 | 実装状態 | 現在の用途 |
 |---|---|---|
-| `#plugin-browser-candidate`のBrowser | React-native candidate | Discovery Browserの比較対象 |
-| `#plugin-browser-candidate`のEasing Graph view | React-native candidate＋legacy state adapter | AM差分の操作比較。区間導出とcurve状態はまだfixture adapter |
-| `#plugin-browser-candidate`のStage / Inspector / Timeline本体 / Settings | legacy HTMLをparseしたbridge | React候補と同じ画面で周辺文脈を保つ移行互換層 |
+| `#plugin-browser-candidate`のBrowser | React-native source asset | Discovery Browserを製品packageへ直接移管するauthority |
+| `#plugin-browser-candidate`のEasing Graph view | React trigger source asset＋native popup oracle＋legacy state adapter | Graph icon/現在値要約だけを直接移管する。popup frame/preset/form/curveはnativeへ移し、React描画は幅・枠・余白・情報階層を含むvisual/interaction oracleとして維持する |
+| `#plugin-browser-candidate`の`KEYS / LAYERS` | `TimelineCandidate.jsx`内のReact-native subtree | tool panelだけを同じDOM/CSSで抽出・移管する。time surfaceは移さない |
+| `#plugin-browser-candidate`のInspector | legacy HTMLをparseしたbridge | 正しい独立React sourceは未成立。モック側で同形React化してから移管する |
+| `#plugin-browser-candidate`のStage / Timeline time surface / Settings | legacy bridgeまたはReact比較candidate | native製品面のoracle／周辺文脈。React製品runtimeへ直接持ち込まない |
 | `#archive/all-surfaces`等 | legacy HTMLをparseしたarchive bridge | 旧画面との視覚parity回帰。通常catalogへ出さない |
-| `#skeleton` | React-native分解骨格 | component責務と組立境界の確認。視覚正本ではない |
+| `#skeleton` | React-native分解骨格 | component責務と組立境界の確認。視覚正本でも、Inspector等の代替製品実装でもない |
 
-したがって、React上で表示されるだけではReact-native所有へ移ったと判定しない。`src/legacy/LegacyHostBoundaryScreen.jsx`またはraw HTML由来のDOM／scriptへ依存する領域は、旧仕様を増やさず、置換対象として台帳へ残す。
+したがって、React上で表示されるだけではReact-native所有へ移ったと判定しない。
+`src/legacy/LegacyHostBoundaryScreen.jsx`またはraw HTML由来のDOM／scriptへ依存する領域は、旧仕様を増やさず、
+固定モック内で同形Reactへ抽出してから製品ownerへ移す。正しいsourceが無いことを理由に、製品packageへ
+縮約版を先に作らない。
+
+### 座標描画面の機械監査（2026-07-22）
+
+固定commit `56c318ed`のReact sourceを`canvas` / SVG / pointer / absolute-positionで走査した結果、literal
+`<canvas>`と`getContext()`は0件だった。Canvas相当の座標描画面はEasing SVG、Multi-key Graph View SVG、
+Timeline time/Z projectionであり、Easing、通常Timeline、Multi-key Graph View、Depth Railはnative isolated core
+fixtureまで到達した。Graph ViewとDepth Railはいずれも外観・headless基本操作までで、AX/D2と
+製品input接続を後続する。Stage gizmoはモック移植でなくnative presentation overlayの製品実装として別に扱う。
+
+詳細なsource別分類、進行順、非目標は
+[React coordinate surface機械監査](reviews/2026-07-22-m3-react-coordinate-surface-audit.md)を正とする。
+`KEYS / LAYERS`、Align / Stagger / Stretch、小さなStagger説明SVGはReact所有のままで、nativeへ複製しない。
+Multi-key Graph Viewの具体的な操作トポロジー、Blender先例の利用範囲、GPL停止線は
+[native Multi-key Graph View受入契約](reviews/2026-07-22-m3-native-multi-key-graph-view-acceptance.md)に従う。
 
 ## 統合モックの面 → 実装レーン対応(2026-07-19操作確認スナップショット)
 
@@ -48,11 +70,11 @@ M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決
 
 | モック内の面 | 対応する実装領域 | 2026-07-19時点 |
 |---|---|---|
-| egui shell・可変panel・Stage | U1a/U1b/U1f | U1a-1から着手可能 |
+| UI shell・可変panel・Stage | U1a/U1b/U1f | G0-9完了までtoolkit固有実装停止。fixture、境界、比較spikeだけ可 |
 | Effect Inspector・自動parameter panel | U4a | 基盤依存待ち |
 | packed Timeline・Group展開・選択 | U3a/U3b/U2h | 後続 |
 | Automation展開・Key Tools | P56/P60+U3系 | 一部prototype判断のまま |
-| Interval Easing・multi-key Graph View | U4b/U4e | 正式タスク化済み、後続 |
+| 区間Easing・multi-key Graph View候補 | U4b／task未決 | 区間EasingはU4b。multi-key Graph ViewはReact比較証拠で、製品採択・task化は未決 |
 | Effects Browser | U4d | 正式タスク化済み |
 | Media Browser・folder・Tag・複数選択 | U6 | 正式タスク化済み |
 | Create Browser・provider・generator | U9/Vism/Create境界 | 一部未統一 |
@@ -61,7 +83,7 @@ M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決
 
 **発見入口だけが存在する面**: `Type Pulse`はEffects/Createの両面へカードとして出るが、選択してもStage/Inspectorは`Echo Bloom`のまま。つまり現行モックが持つのはText Motionの**発見入口**までで、`適用先preflight → Live Text生成/Animator追加 → Inspector切替 → Character Score展開 → Stage文字選択`のhandoffは未モックである。この接続は[TM翻訳](reviews/2026-07-19-m3-text-motion-task-translation.md)の後続であり、TM第1弾はBrowser非依存(通常のObject作成経路)で進める。
 
-三面構成(`Media / Create / Effects`)は下表のとおり**P41未統一のまま**であり、そのままegui/製品へ写さない。
+三面構成(`Media / Create / Effects`)は下表のとおり**P41未統一のまま**であり、そのまま選択中のUI runtime/製品へ写さない。
 
 ## 既知の未統一
 
@@ -70,7 +92,7 @@ M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決
 | 論点 | 規範／記録 | React prototype | 扱い |
 |---|---|---|---|
 | Browser一次分類 | [UI操作言語](ui-interaction-language.md)には`Media / Plugins`が残る | `Media / Create / Effects` | **未統一**。prototype台帳P41で比較中。名称をDocument型、package kind、公開APIへ焼かない |
-| Easing Graph | M3 U4bは区間中心GraphとBezier編集を要求。高度型も2026-07-10に区間補間として採用済み | viewはReact候補へ置換し、AM差分とBounce / Elastic / Cyclic(Sine) / Random / Steps / Elastic Stepsを操作試験化。高度型の適用前後でkeyframe構造不変。区間導出とcurve状態はlegacy fixture adapterが残る | [AM観察台帳](reviews/2026-07-19-am-keyframe-graph-observation.md)で残差追跡。state adapter撤去と製品`Interp`接続を分ける |
+| Easing Graph | M3 U4bは区間中心GraphとBezier編集を要求。高度型も2026-07-10に区間補間として採用済み | Reactはtrigger/現在値要約、native popupはframe/preset/user library/form/curve/grid/handleを所有する。固定React viewはpopup全体のvisual/interaction oracle。高度型の適用前後でkeyframe構造不変。区間導出とcurve状態はlegacy fixture adapterが残る | [native Easing popup受入契約](reviews/2026-07-22-m3-native-easing-popup-acceptance.md)と[AM観察台帳](reviews/2026-07-19-am-keyframe-graph-observation.md)で残差追跡。state adapter撤去と製品`Interp`接続を分ける |
 | React移行完了の意味 | 旧READMEは旧HTMLを「現行参照」と表現していた | Vite上では動くがBrowser以外の主要surfaceはbridge | 実行基盤のReact化とsurface所有のReact-native化を別々に記録する |
 
 この表の未統一項目は、画面が動いていることや会話の新しさだけで解消しない。採否を決めたら、規範文書、prototype台帳、React fixture、試験を同じ変更単位で更新して本表から外す。
@@ -87,7 +109,7 @@ npm run dev -- --host 127.0.0.1
 - 全体回帰（archive）: `http://127.0.0.1:5173/#archive/all-surfaces`
 - Browser候補: `http://127.0.0.1:5173/#plugin-browser-candidate`
 - 分解骨格: `http://127.0.0.1:5173/#skeleton`
-- Storybookと試験: `docs/mocks-ui/README.md`(`codex/m3-mock-components`ブランチ側に実体)
+- Storybookと試験: [mocks-ui README](mocks-ui/README.md)
 
 ## 更新チェック
 

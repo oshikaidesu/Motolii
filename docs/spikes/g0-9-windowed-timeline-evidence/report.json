@@ -1,0 +1,47 @@
+{
+  "ticket": "G0-9-windowed-timeline",
+  "status": "complete",
+  "adapter": "Apple M4",
+  "backend": "Metal",
+  "surface_count": 1,
+  "native_viewport_count": 1,
+  "webview_count": 2,
+  "keyframes": 100000,
+  "selected_keyframes": 10000,
+  "warmup_frames": 120,
+  "measured_frames": 1729,
+  "measured_seconds": 30.016823708,
+  "target_frames": 100,
+  "target_seconds": 30,
+  "acquire_count": 1849,
+  "present_count": 1849,
+  "surface_texture_view_count": 1849,
+  "readback_count": 0,
+  "initialization_resource_creations": {
+    "pipelines": 1,
+    "buffers": 2,
+    "bind_groups": 1,
+    "textures": 0
+  },
+  "frame_resource_creations": {
+    "pipelines": 0,
+    "buffers": 0,
+    "bind_groups": 0,
+    "textures": 0
+  },
+  "median_frame_ms": 13.741333,
+  "p95_frame_ms": 15.351958,
+  "max_frame_ms": 1075.639292,
+  "median_present_interval_ms": 16.664084,
+  "p95_present_interval_ms": 17.006417,
+  "max_present_interval_ms": 1077.704208,
+  "throughput_fps": 57.60103123566641,
+  "deadline_miss_16_667_count": 849,
+  "pass": true,
+  "measurement": "windowed wgpu Surface/Fifo acquire-to-present CPU wall time; 100,000 direct instances every frame; no device.poll wait and no readback",
+  "limitations": [
+    "Vello and text/icon rendering are not included",
+    "GPU timestamp queries and input latency are not included",
+    "macOS WKWebView child composition only; Windows WebView2 is untested"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "ticket": "G0-9",
+  "capturedAt": "2026-07-21T12:18:29.124Z",
+  "result": {
+    "status": "received",
+    "origin": "null",
+    "parentDocument": true,
+    "storage": true,
+    "network": true,
+    "nativeBridge": true
+  },
+  "broker": {
+    "handled": 3,
+    "allowed": [
+      "theme.read"
+    ],
+    "denied": [
+      "document.raw",
+      "native.invoke"
+    ]
+  },
+  "sandbox": "allow-scripts without allow-same-origin",
+  "csp": "harness inline script; default/connect/img none",
+  "boundaries": {
+    "separateWebViewValidated": false,
+    "nativeIpcNegativeValidated": false,
+    "typedCapabilityBrokerValidated": true,
+    "loopCrashOomIsolationValidated": false
+  }
+}

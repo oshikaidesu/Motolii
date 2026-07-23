@@ -82,6 +82,18 @@ Helpやdocsは基本操作を成立させる前提ではない。操作によっ
 
 利用者のSimple / Advancedと同様、初心者plugin作者用の別世界を作らない。最小例から高度な時間依存や独自編集面へ進んでも、入力、出力、責任、失敗の同じ語彙を使う。
 
+### 2.4 利用者と開発者を固定身分にしない
+
+利用者と開発者は別製品、別community、別の意味体系に属する二種類の人ではない。同じ人が場面ごとに、既存表現を使う人、値を調整する人、接続を組む人、recipeを共有する人、Vismをforkする人、codeやcomponentを書く人、他者の成果を保守する人になる。
+
+```text
+Use → Tune → Compose → Inspect → Fork → Author → Publish → Reuse
+```
+
+この階段の各段で、対象identity、型付きparameter、入力、Preview、診断、versionを捨てて別toolへ移り直させない。codeを書かない利用者へauthoringの複雑さを常設せず、進みたい人にだけ現在の文脈を保った次の段を見せる。
+
+多数の作者が並行して表現を増やせることは、Motoliiの機能供給戦略である。ただし、空の本体を渡して利用者に基礎機能の穴埋めをさせる意味ではない。Hostは§3の共通責任と標準制作体験を持ち、作者は表現固有の発明へ集中する。詳細は[Creator / Developer連続体](reviews/2026-07-22-creator-developer-continuum-decision.md)を正本とする。
+
 ## 3. Hostが小さくても手放さない責任
 
 小さなコアは薄いコアではない。次は表現pluginやUI pluginへ投棄しない。
@@ -358,6 +370,8 @@ Host標準の Preview / Commit / Cancel / Undo / 診断
 
 標準搭載パーティクル([simulation-model §8](simulation-model.md))を含むfirst-party実装は、公開境界だけで書く(ドッグフード方針)。内部APIを使った瞬間、第三者は同じ遊びへ到達できなくなり、§6の昇格観測も歪む。公開境界で作れない部分が見つかった時は、その表現専用の裏口を足すのではなく、「どの共通能力が欠けているか」を特定し、能力一つの追加として審判する。
 
+first-partyは単なる同梱機能ではなく、次のcreator-authorが模倣、分解、fork、検証できる**実行可能な手本**である。source、scaffold、最小fixture、負例、conformance testを揃え、「標準品だから可能」を残さない。この到達可能性が、利用者から作者へ続く学習曲線の最終段を実物で証明する。
+
 ### 8.7 進化の手続き自体をコアの一部にする
 
 未来を予測できない以上、価値は変更を避けることではなく、破壊せず追加できることにある。
@@ -447,5 +461,6 @@ Host標準の Preview / Commit / Cancel / Undo / 診断
 - 新しい表現のために、表現名のHost API(`XxxPlugin`)を増やしていないか。既存能力の合成、または能力一つの追加へ分解したか(§8)。
 - 未知のcapability宣言と未知payloadを保持したままsave/reloadでき、plugin再導入で復元されるか。最終結果に必要な能力が欠けるexportは、黙ったfallbackでなく型付き拒否になるか(§8.3、§8.7)。
 - first-party実装が公開境界だけで書かれているか。不足があれば裏口ではなく、欠けた共通能力として特定したか(§8.6)。
+- 利用者が現在の対象と意味を保ったままTune / Compose / Inspect / Fork / Authorへ進めるか。作者になるために別の製品モデルを覚え直させていないか(§2.4)。
 
 どれかが未決なら、custom panelや汎用APIで先に包まない。非永続prototype、既存typed command、first-party実験の最小範囲へ戻し、意味が安定してから公開境界を増やす。

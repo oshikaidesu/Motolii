@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "locale": "en-US",
+  "viewport": {
+    "width": 1440,
+    "height": 900,
+    "deviceScaleFactor": 1
+  },
+  "screens": {
+    "empty-browser": {
+      "selection": [],
+      "focus": "browser.search",
+      "hover": "browser.empty.context"
+    },
+    "mixed-timeline": {
+      "selection": [0, 2, 4],
+      "focus": "timeline.shared-middle",
+      "hover": "timeline.bake-cache",
+      "muted": [1],
+      "keyframed": [2]
+    },
+    "parameter-easing": {
+      "selection": [2],
+      "focus": "easing.interval",
+      "hover": "parameter.warning",
+      "disabled": ["parameter.outside-interval"]
+    },
+    "stage-frame-tools": {
+      "selection": [4],
+      "focus": "stage.camera",
+      "hover": "stage.hand",
+      "outsideFrame": [0],
+      "scrimOpacity": 0.42
+    },
+    "shared-effect-relative": {
+      "selection": [0, 2, 4],
+      "focus": "effect.shared-definition",
+      "hover": "relative.hud",
+      "folded": true,
+      "dragMode": "relative"
+    }
+  }
+}

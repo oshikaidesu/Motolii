@@ -16,8 +16,8 @@
 - 対象: [Vismコンセプト](../vism-package-concept.md)の「未知の表現を受け止めるHost外殻」を、M3製品コードから隔離して検証する。
 - `Plugin Browser / Host標準Inspector / missing recovery`の3面を同じ制作画面へ置き、表現thumbnail・用途Label・由来からの発見、Project instanceとの分離、欠落時payload保持、無関係編集、必要export拒否、Project openとinstallの分離をfixture化する。通常UIは「プラグイン」または配置文脈の「エフェクト」等を使い、`Vism`／`.vism`はDeveloper infoへ下げる。
 - Plugin BrowserもFolder・Label・確定使用Historyを共通採用する。Folderはstable package identityを参照する仮想User libraryであり、install先、package内部path、`.vism`のfilesystem階層を反映しない。`THUMB`は名前・用途・状態をthumbnail上のoverlayへ載せ、`DETAIL`では由来を含む詳細を分離したcardとして表示する。thumbnail寸法sliderは表示密度だけを変えるUser settingとしてSettingsへ置き、Folder・選択・Documentを変えない。
-- 基準モックのDepth RailをTimeline直上へ統合し、現在時刻の`Edit-Space Z`をROOT／GROUP別に表示・dragできる。既定は閉じ、譜面headerのDepth iconまたは`#z-rail`で明示的に開く。Timeline本体は固定名列・1項目1横行・Lane所有を持たず、左端の単一`Inbox`と、全barを衝突回避だけでpackingする一枚の時間面から成る。Inboxは未配置素材、未解決review note、未確認background job等の「まだ片付いていないもの」への参照だけを受け取り、選択・hoverへ追従しない。値はInspector、接続はArchitect、操作説明は下端Statusへ分離する。Object bar内の接続要約、readiness区間、操作中parameterのkeyframeは同じ時間面で読む。`Position X/Y`と`Depth Z`のUI分離は2026-07-17改訂で実施済み。
-- `#all-surfaces`はHost標準Inspector、Stage、譜面、Depth Railを残したまま、BrowserのProject ExplorerとColor Bookを同時に表示する構造goldenである。Project / Pluginsは同じBrowserの明示tabなので同時表示せず、別画面の寄せ集めを作らない。
+- 基準モックのDepth RailをTimeline直上へ統合し、現在時刻の`Edit-Space Z`をROOT／GROUP別に表示・dragできる。既定は閉じ、時間面headerのDepth iconまたは`#z-rail`で明示的に開く。Timeline本体は固定名列・1項目1横行・Lane所有を持たず、左端の単一`Inbox`と、全barを衝突回避だけでpackingする一枚の時間面から成る。Inboxは未配置素材、未解決review note、未確認background job等の「まだ片付いていないもの」への参照だけを受け取り、選択・hoverへ追従しない。値はInspector、接続はArchitect、操作説明は下端Statusへ分離する。Object bar内の接続要約、readiness区間、操作中parameterのkeyframeは同じ時間面で読む。`Position X/Y`と`Depth Z`のUI分離は2026-07-17改訂で実施済み。
+- `#all-surfaces`はHost標準Inspector、Stage、時間面、Depth Railを残したまま、BrowserのProject ExplorerとColor Bookを同時に表示する構造goldenである。Project / Pluginsは同じBrowserの明示tabなので同時表示せず、別画面の寄せ集めを作らない。
 - AssetsはProject asset管理と外部filesystem Explorerを別window・popupへ分けない。従来のBrowser内`Project` tab自体をExplorer UIとし、その中で`PROJECT / FILES`を明示切替する。FILESの検索・preview・path・選択はWorkspace/TransientでUndoなし。`Add to Inbox`は未配置参照をInboxへ受け取るだけでDocument配置を作らず、PROJECT側の`Place selected`だけが既存Document意味への1 gesture=1 Undoとなる。Inbox、filesystem選択、Project tabの表示状態をDocumentの第二のasset所有者へしない。
 - Inboxは異種データを一形式へ混ぜる保存庫ではない。asset、review note、background jobは各正規状態が所有し、Inboxは未整理・未確認状態だけを参照する。配置・解決・確認・dismiss後は一覧から外す。通常操作history、全asset、全note、設定、command launcherは蓄積しない。空の時だけ一件のTipを表示でき、既読/dismissはUser setting、Document・Undo不変とする。
 - Abletonの色による再発見を先例に、固定領域へ小面積のwayfinding colorを反復する。Project、Files/Inbox、Plugins、Stage、Inspector、Timelineは見出し先頭の同形markerと選択tab下辺で場所を識別する。Timeline barはカテゴリ色へ固定せず、安定Object IDからpalette slotを決定して単色面を割り当てる。見た目は多様でも再描画ごとの乱数ではなく、同じObjectは同色、同じmp4同士でも別色になる。同種素材が続いても個体を追えることが目的であり、種類はicon・名称・bar形状、選択はoutline、warning/errorは固有icon・線種で読む。任意色を保存するDocument fieldは本モックから追加しない。Inbox内はasset / note / jobのicon形と小面積の種別色を併用する。
@@ -36,7 +36,7 @@
 - **モック残件 — お気に入りEasing即適用**: built-inとUser curveを通じてお気に入りは1個だけ持ち、Graph View左側の該当curve thumbnailへ小さな◎markを重ねて、どの形が即適用されるかを読む前に識別できるようにする。mark操作はお気に入りをUser settingへ保存するだけでDocument・Undoを変えず、最後に使用したcurveへ黙って追従しない。playheadがkey間にありGraph iconが点灯している時、single clickはGraph Viewを開き、double clickはお気に入りcurveを現在区間へ即適用して1 command / 1 Undoとする。double click判定中にsingle click側のpopupを確定表示せず、key上・区間外では両操作とも無効。お気に入り未設定時は初期既定を仕様で固定し、偶然の履歴先頭を使わない。
 - `Echo Bloom / Glyph Current / Fold Field / Ribbon Array`は責任境界を見るための仮想表現であり、plugin kind、package entry、manifest field、provider port、Kit schemaを決定しない。
 - recovery drawerはinstall実装ではない。由来、trust、権限、container、署名、transactional install storeが未決であることを画面内にも残し、実行ボタンを提供しない。
-- 引き算改訂（2026-07-17）: 審判向けの講義文・規則文を製品chromeから撤去した。Stage常設の説明カード、Inspector常設のLIFECYCLE表とBOUNDARY箇条書き、譜面ヘッダ・棚・Assets・Color Book・Easingの常設説明文、既定statusの長文とkey hintを削除し、同じ内容はhover / focusで一時表示するInfo（`data-info`→status）とDeveloper infoへ降格した。fixture名・審判語をUI文言へ出さない。
+- 引き算改訂（2026-07-17）: 審判向けの講義文・規則文を製品chromeから撤去した。Stage常設の説明カード、Inspector常設のLIFECYCLE表とBOUNDARY箇条書き、時間面header・棚・Assets・Color Book・Easingの常設説明文、既定statusの長文とkey hintを削除し、同じ内容はhover / focusで一時表示するInfo（`data-info`→status）とDeveloper infoへ降格した。fixture名・審判語をUI文言へ出さない。
 - 状態語は逸脱時のみ表示する。正常時のREADY表示（stage readout・SELECTED OBJECT・Applied Plugins）、`EVALUATING · SAME PATH FOR PREVIEW / EXPORT`バナー、`PLUGIN · HOST OWNED LIFECYCLE`・`HOST STANDARD`・`Host evaluated`等の不変ラベルを撤去した。stage badgeはdiscover / blocked / missingの逸脱専用とし、接続の詳細投影はArchitectへ分離する。アーキテクチャ公約はUIバナーではなく設計文書とDeveloper infoが持つ。
 - 同じ事実の家を減らした。BPM / SNAPはtransportのみ、Edit-Space Zはrail・bar badge・Inspectorの独立`Depth Z` groupのみ（identity行から削除、z-readoutはdrag中のみ）、Inspectorのobject-path行を削除。`Position X/Y`、`Depth Z`、`Rotation Z`を別control・別automation channelとして表示する。
 - 重複入口とfixture用chromeを削除した。Easingの`APPLY TO N KEYS`、toolbarの`ALL`と`ASSETS`（Project Explorerは既存Browserへ統合）、Overshoot toggle（preset名`SMOOTH`と導出`OVERSHOOT` badgeへ分離）。Browserカードの由来行は`DETAIL`表示のみとし、Transform行のautomation markへ`AUTO ON/OFF`の文字状態を併記した。
@@ -226,7 +226,7 @@
 
 ### 再判定（2026-07-16）
 
-`m3-ui-dynamics-v1.html`は状態機械を独立したシナリオ列として前面へ出し、楽曲基準線・高密度メイン画面・評価順より「力学のデモ」を主役にしたため、最新mainの[UIコンセプト](../ui-concept.md)を十分に投影していない。背景色と意味色の仮値も構造判断より先に視線を奪う。以後は**不採用比較案**とし、次のmonochrome構造試験を新しい比較入口にする。
+`m3-ui-dynamics-v1.html`は状態機械を独立したシナリオ列として前面へ出し、時間guide・高密度メイン画面・評価順より「力学のデモ」を主役にしたため、最新mainの[UIコンセプト](../ui-concept.md)を十分に投影していない。背景色と意味色の仮値も構造判断より先に視線を奪う。以後は**不採用比較案**とし、次のmonochrome構造試験を新しい比較入口にする。
 
 ## 高密度メインUI v3 — monochrome構造試験
 
@@ -235,7 +235,7 @@
 - [semantic color比較PNG](m3-main-ui-v3-semantic-color-golden.png)（1440×900 / device scale 1）
 - ステータス: **M3構造golden**。製品テーマとG0-6の具体token値を固定する色goldenではなく、同一fixtureの区画・密度・因果・Z/Group意味を固定する基準画像
 - UI色を黒〜無彩色へ限定し、種別・選択・接続・警告を位置、形、線種、pattern、明度で区別する。意味色が無い状態でも構造が成立するかを先に見る
-- v2の3-pane、高密度timeline、右Inspector、status barを維持し、[UIコンセプト](../ui-concept.md)の「楽曲が背骨」をTimeline最上段のロックされた波形+BPMグリッドとして中心へ置く
+- v2の3-pane、高密度Timeline、右Inspector、status barを維持する。Soundtrackがある時は波形、BPMがある時は拍gridを同じ時間guideとして表示するが、未設定時に空の楽曲領域を常設しない
 - 選択、説明付き接続、Relative Move、Camera/Hand、区間イージングは専用デモ画面へ分離せず、同じ制作画面の実操作として組み込む
 - animationはPlay時のplayheadと作品評価だけ。UI componentの装飾animationは使わない
 - Groupを再帰項目として展開し、子のXYZ、`Z Occlusion: OFF / Layer Order`と`ON / Group Depth`、子合成直後の仮出力点、Group stackの順を同じ画面へ収載する。Groupは固定canvas・固定尺を持たない。次回改訂ではXYZ表示を`Position X/Y`と`Depth Z`へ分ける
@@ -284,9 +284,9 @@ Timeline左端のconnection gutterは、共有`Effect Definition`の◇ `OUT`か
 
 ### Keyframe overview試験
 
-- preview-firstの譜面は1項目1横行、固定名列、横行固有のS/M・設定入口を持たない。全barを一枚の時間面へpackingし、縦位置は衝突回避の表示結果に限定する。barの移動・再packingでDocument上の所有者や評価順を変えない
-- Group本体barには`GROUP · 名前`、Group child barには`↳ 親Group名`を短く添える。これは[譜面UI構成モデル](../ui-score-model.md)に定めるDocument関係の局所投影であり、固定名列、専用横行、縦帯、独立`Lane`を復活させない
-- 選択導線はbar直接選択、Depth Rail、明示検索に分け、左端Inboxを項目一覧や横行headerへ転用しない。Inboxは未配置素材・未解決note・未確認jobだけを参照し、選択・hoverへ追従しない。bar/searchのclick・keyboard移動は同じ安定IDをStage/譜面/Inspectorへ投影するだけでDocument・Undoを変えず、値・enable・Effect parameter等の設定入口も追加しない。keyframe clickは時間選択に留め、Easingはkey間で点灯するPreview下のGraph iconから開く
+- preview-firstの時間面は1項目1横行、固定名列、横行固有のS/M・設定入口を持たない。全barを一枚の時間面へpackingし、縦位置は衝突回避の表示結果に限定する。barの移動・再packingでDocument上の所有者や評価順を変えない
+- Group本体barには`GROUP · 名前`、Group child barには`↳ 親Group名`を短く添える。これは[時間面UI構成モデル](../ui-score-model.md)に定めるDocument関係の局所投影であり、固定名列、専用横行、縦帯、独立`Lane`を復活させない
+- 選択導線はbar直接選択、Depth Rail、明示検索に分け、左端Inboxを項目一覧や横行headerへ転用しない。Inboxは未配置素材・未解決note・未確認jobだけを参照し、選択・hoverへ追従しない。bar/searchのclick・keyboard移動は同じ安定IDをStage/時間面/Inspectorへ投影するだけでDocument・Undoを変えず、値・enable・Effect parameter等の設定入口も追加しない。keyframe clickは時間選択に留め、Easingはkey間で点灯するPreview下のGraph iconから開く
 - bar下辺にはprovider snapshot由来の`ready / rendering / stale / unavailable`を時間区間patternとして置ける。これはreadinessの投影であり、cache/bake policyやDocumentを変更するcontrolにしない
 - 通常状態では独立parameter行を常設せず、Inspectorで現在操作しているchannelのkeyだけを対応Object/Clipバー上へ重ねる。Position YからOpacityへ操作対象を変えると、同じ場所でmarker集合とchannel badgeが切り替わる
 - Preview下のGraph iconは、playheadが同一channelの隣接key間にある時だけ点灯する。key上・区間外では消灯し、key clickだけではGraph Viewを開かない。独立した`Lane`や常設`キー詳細`という所有者を作らず、automation可能な全parameterを展開しない
@@ -344,14 +344,14 @@ done
 
 ### このモックで答える問い
 
-1. 色を全て外しても、楽曲基準線、clip種別、selection、keyframe区間、Effect接続、stale/errorを追えるか
-2. 初見で左=素材、中央=Stage、右=選択の意味、下=楽曲を背骨にした譜面と推測できるか
+1. 色を全て外しても、時間guide、clip種別、selection、keyframe区間、Effect接続、stale/errorを追えるか
+2. 初見で左=素材と表現、中央=Stage、右=選択の意味、下=時間面と推測できるか
 3. 操作中だけでなく確定後も、Inspector badgeとTimeline connection gutterからscope・由来・評価順を追えるか
 4. CameraとHandのどちらがDocument/Undoを変えるか、色や画面遷移なしで説明できるか
 5. Space再生時に動くものが作品とplayheadだけで、UI演出が制作内容より前へ出ていないか
 6. 密度を落とさず、disabled/errorの理由と次の一手へstatus/Inspectorから到達できるか
 7. 2D objectも同じXYZ worldにあり、Z値とGroup内の遮蔽方式をTimeline・Stage・Inspectorの3箇所から同じ意味として追えるか
-8. Groupが「別タイムライン」ではなく同じ譜面上の再帰項目で、子合成→仮出力→Group Effectの順を読み違えないか
+8. Groupが「別Timeline」ではなく同じ時間面上の再帰項目で、子合成→仮出力→Group Effectの順を読み違えないか
 
 ## 高密度メインUI v4 — 生成境界の1画面収載
 
@@ -359,7 +359,7 @@ done
 - [構造golden PNG](m3-main-ui-v4-generative-golden.png)（1440×900 / device scale 1）
 - [semantic color比較PNG](m3-main-ui-v4-generative-color-golden.png)（1440×900 / device scale 1）
 - ステータス: **生成境界の構造golden候補**。v3の区画・token・monochrome先行規約を維持したまま、[generative-user-boundary.md](../generative-user-boundary.md)の5経路(A Materialize / B Pure Live / C Temporal Window / D Bake / E External)を専用デモ画面へ分離せず、同じ制作画面の実物として1枚へ収載する
-- 「全機能が一覧で確認できる」高密度方針は、golden審判とも整合する: 1枚のPNG差分で楽曲基準線・5経路badge・seed・preflight・bake進捗/dirty/checkpoint・診断区分を同時に人間審判でき、機能ごとの画面遷移スクリーンショットを廃せる。人のチェックが最大コストである現段階の審判時間をここで削る
+- 「全機能が一覧で確認できる」高密度方針は、golden審判とも整合する: 1枚のPNG差分で時間guide・5経路badge・seed・preflight・bake進捗/dirty/checkpoint・診断区分を同時に人間審判でき、機能ごとの画面遷移スクリーンショットを廃せる。人のチェックが最大コストである現段階の審判時間をここで削る
 - Timelineへ経路の実物を1行ずつ並べる: Materialize済みGroup(seed badge・子は手編集可能な通常Shape)、Live `f(t)` overlay(入力宣言badge)、Temporal Window(−8f宣言のみの予約行)、Simulation Bake(進捗・dirty斜線・▲checkpoint)、External素材(glTF/動画)
 - 右Inspectorは同文書§7の制作体験を実物化する: 実行前に入力・seed・出力個数・経路区分が見える生成レシピ、Liveの由来と現在時刻評価値(Advanced)、Bakeの進捗・dirty・推定コスト・取消、SVG importの採用/拒否を型付き診断(Materialize可能 / Feedbackが必要 / 禁止能力)で示す
 - 経路の切替はsegmentedにあるが自動昇格しない。status barが常に「診断は自動・確定は明示操作」を説明する
@@ -382,7 +382,7 @@ golden再生成:
 
 ### このモックで答える問い
 
-1. 5経路が同じ譜面・同じ時刻tを読むことを、色なしでも1画面から説明できるか
+1. 5経路が同じ時間面・同じ時刻`t`を読むことを、色なしでも1画面から説明できるか
 2. Materialize結果が「生成物」ではなく通常Shapeであり、手編集がseed再実行に破壊されないことをTimelineの子行から読めるか
 3. 実行前(入力・seed・出力個数・preflight・1 Undo)と実行後(badge・因果)の両方をInspectorだけで追えるか
 4. Bakeの進捗・dirty区間・checkpoint・推定コスト・取消がHost所有として1箇所に見え、半端なstateが残らない契約を説明できるか

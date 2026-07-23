@@ -66,7 +66,7 @@ v1の既定配置は、既存の制作ソフトで学習済みの役割へ合わ
 
 ```text
 上: transport / tool / project-level action
-左: Project Explorer / Plugin Browser
+左: Media Browser / Plugin Browser
 中央: Stage / Output Frame / direct manipulation
 右: 選択対象のInspector
 下: Timeline / time / order
@@ -74,8 +74,15 @@ v1の既定配置は、既存の制作ソフトで学習済みの役割へ合わ
 
 上記は**組み込み既定preset**であり固定契約ではない。利用者はpanelを分割、tab化、resize、表示/非表示、復帰でき、既定presetへresetできる。同じ機能を別の場所へ置いてもBrowser/Stage/Inspector/Timelineという役割名・icon・shortcut・domain intentは変えず、配置と機能意味を結合しない。
 
-- Project assetと外部filesystemは別popupへ分けず、既存Browserの`Project` tab内にある同じExplorer UIで`PROJECT / FILES`を切り替える。FILESの選択・previewはDocument外で、未配置素材はInboxへ受け取り、PROJECTからの配置確定だけをDocument commandにする。
+- Project Assetと外部filesystem候補は別popup・別top-level tabへ分けず、同じBrowser shellの`Media`へ統合する。`All Media / Project / 複数の登録folder / Collections / Recent`をsource railで切り替え、検索・結果・grid/list・preview・選択を共有する。`All Media`では同じfileをcanonical identityでdedupeし、Project登録状態を結果上へ示す。外部候補の選択・previewはDocument外で、未配置素材はInboxへ受け取り、Project登録済み素材からの配置確定だけをDocument commandにする。
 - Timeline左端のInboxは、未配置素材、未解決review note、未確認background job等の未整理参照だけを受け取る。選択・hoverへ追従せず、処理済みは外す。通常操作historyや全assetを蓄積せず、空の時だけTipを一件表示できる。
+- TimelineのInbox右隣には、従来の名前欄相当だが名前を持たない細い帯アクションrailを置いてよい。railのM/SはLane状態ではなく、押下時にそのpacking帯へ載るObject集合へ既存Object M/S intentを一括展開する短縮操作である。表示は対象集合の全ON / 全OFF / 混在から導出し、再packingだけで既適用Objectや新しい帯上Objectの状態を変えない。
+- railの各行は時間面の対応packing帯と同じ上下境界を使う。帯高のresizeは各行下辺の広いhit領域から始め、対応guideを強調し、触った帯だけを変える。railと時間面で別の行高を持つ、境界から離れたhandleを浮かせる、guideのどこでもresize可能にする、全帯共通の高さcontrolを置くことはしない。
+- Object bar内の`◆ n`をAutomationの明示入口にする。clickでそのObjectのAutomation済みchannel行だけをbar直下へ縦展開し、複数channelのkeyを同時に表示・選択できるようにする。Object本体のclickは選択のままとし、展開を兼用しない。
+- 未使用channelは`◆ n`の一覧へ事前展開せず、同じ面の`＋ Automationを追加…`から検索して追加する。Automationが0件のObjectも`◇＋`相当の小さな明示入口から追加へ到達できる。shortcutは補助入口であり、機能発見と完了に暗記を要求しない。
+- 選択keyの操作面はKeystone 3型のmodular sectionとし、必要なAlign / Stagger / Stretch等だけを開く。適用単位は`Object別 / Channel別 / 全選択`を明示controlで選び、modifierは同じmodeへの高速入口に留める。時刻や値を変更しても既存Easingを保持する。
+- Keystone型操作面は独立した`Key Tools` ViewとしてTimeline右端へ既定dockする。BrowserはPreset発見、InspectorはEffect parameter、Timelineはkey / Object選択を維持し、Key Toolsがそれらを占有しない。共通panel文法で移動、split、tab化、resizeできる。
+- Key Tools内部は`KEYS / LAYERS`を排他的に切り替える。KEYSは選択key向けsectionだけ、LAYERSは選択Object向けsectionだけを動的表示し、全機能を一面へ並べない。mode切替はDocument・Undo不変で、選択を失わない。
 
 次は原則として既存語彙を維持する。
 
@@ -107,19 +114,79 @@ scope、reference-frame比較、Undo履歴panel、annotation、任意guide、pre
 
 プラグイン、素材、Color、preset等、候補がユーザーの追加によって増える選択面は、名前検索だけの一覧にしない。次の整理・再発見機能を共通のUX必須条件とする。
 
-- **Folder**: ユーザーが任意のまとまりを作り、候補を移動・複数配置できる
-- **Label**: Folderを横断して用途・雰囲気・domain・`GO-TO`等の意味を複数付与できる。Host既定labelとユーザーlabelを見分けられる
-- **History**: 確定して使った候補を新しい順に再選択できる。hover preview、検索、Cancelは履歴へ追加しない
+- **Sources**: `All / Installed / Project Used / Missing`等、Hostが所有する客観的scope。候補の実装kindやinstall pathを上位navigationにしない
+- **Collections**: ユーザーが候補を複数所属できる仮想のまとまり。filesystemの単一親階層と誤認させないため、外部fileを辿る面以外では`Folder`を通常名にしない
+- **Tags / Filters**: Collectionを横断して用途・雰囲気・domain・状態等を複数条件で絞る。Host既定tagとユーザーtagを識別できる
+- **Recent**: 確定して使った候補を新しい順に再選択できるsource。hover preview、検索、Cancelは履歴へ追加しない
+
+Media BrowserとPlugin Browserは同じBrowser shellを使う。上からSearch、左または折畳み領域にSources / Collections、中央にResultsを置き、keyboard focus移動、single click選択、preview、grid/list切替、履歴、drag/drop、`Enter`の意味を揃える。狭い常設panelではSearchからResultsへの視線を遮るkind tag/filter行を置かず、Sources / Collectionsと分類責任を重複させない。高度な絞り込みが必要な時だけ別のFilter Viewへ開き、Tags、Detail、管理操作を常時同時表示しない。
+
+#### Plugin Browserの現行仕様
+
+Plugin BrowserはHost所有のdiscovery／適用面であり、plugin所有のcustom UIではない。現行モックで採択する構成を次へ固定し、具体的な色値、px寸法、icon glyph、React component名は固定しない。
+
+| 面 | 現行判断 |
+|---|---|
+| top-level | Browserは`Media / Plugins`の二面。Effect kind、install path、package形式をtop-level tabへ増やさない |
+| Sources | `All / Installed / Used / Recent`。`Issues`は通常sourceへ常設せず、`Missing / Unavailable`はAll結果、検索、diagnosticから発見する。正常なavailableとinstalledを同じ状態語で反復しない |
+| Collections | Favorites等のUser collection。stable package identityを参照し、install先、package内部path、Cargo/module階層をfolderとして見せない |
+| Results | 既定は横長thumbnail＋短い名前。`thumbnail-only`は正方形、`list`はthumbnail＋名前＋Host taxonomy。thumbnail寸法はUser setting候補で、文字を縮めず列数を再計算する |
+| taxonomy | listの`Effect › Light`等から結果を絞れる。Host定義の少数分類だけを使い、ユーザーtag、Collection、package pathを混ぜない。Search直下の`All / FX / Gen / Text`行は置かない |
+| Preview / Commit | single clickは選択／Preview、対象ObjectへのD&Dを基本Commit、有効な選択中Objectがあればdouble click／`Enter`も同じIntent。各cardやDetailへ`Apply`を反復しない |
+| Inspect | cardへ説明文を載せず、適用後に選択Effectの短い説明をInspectorのEffect parameter領域先頭へ置く。provider、capability、package identityはDeveloper infoへ分離する |
+| History / Undo | Recentへ積むのはCommitだけ。検索、hover、single click、view変更、thumbnail寸法、Collection操作ではDocument／Undo不変。適用は1 gesture＝1 command／1 Undo |
+| missing | Project openだけでinstall／実行しない。payload保持、無関係編集、必要export拒否を既存diagnosticへ投影し、recovery面から未決install契約を発明しない |
+
+SourcesとCollectionsは見出し上下の大きな空白で分けず、同じ高密度の行高と最小section間隔へ揃える。領域差は短い見出し、icon、境界、選択outlineで読み、余白を情報の代わりにしない。
+
+Tagsは全候補の語彙をchipとして固定表示しない。現在scopeと検索結果に関連する少数をFilter Viewへ出し、選択に応じて結果件数と利用可能tagを更新する。複合条件を繰り返し使う場合は保存検索をCollection相当の入口へ置けるが、別の検索結果正本を作らない。
 
 候補の主な識別物が画像・色・音等である時は、その内容を最大面積で示し、名前、code、由来等の文字を常時主役にしない。ただしkeyboard、screen reader、検索用のaccessible nameと、必要時に開く詳細は失わない。
 
-視覚候補の棚は`single click = 選択／Preview`、`double click = 現在targetへCommit`を共通短縮操作にできる。double clickだけを唯一のCommit入口にはせず、keyboardの`Enter`と明示`Apply`を同じIntentへ接続する。Historyへ積むのはCommitだけであり、single click、hover、Cancelは積まない。
+Effect、Generator、transition等の結果を視覚で識別できる候補は、固定fixtureから決定的に生成したthumbnailをResultsの主役にする。通常cardはthumbnail、短い名前、kind icon、favorite入口までを基本とし、正常な`READY`、説明文、tag列、provider、install由来を反復表示しない。`Missing / Unavailable / Download required`等の逸脱だけをthumbnail上の状態として残し、詳細は選択後のDetail / Info / Developer infoへ下げる。
 
-星1〜5の評価は採用しない。候補ごとに「星1か星3か」を判断する仕事を増やし、主要preview面を反復iconで狭めるためである。優先度やお気に入り相当の整理は、意味を再利用できるLabelまたはFolderで表す。
+視覚だけで候補を走査したい時のため、名前行を隠してthumbnail面を増やす`thumbnail-only`表示を選べる。これは可読文字を縮小したgridではなく、visible labelを省く明示viewである。各cardのaccessible name、keyboard focus、tooltip、kind、逸脱状態は維持し、選択後の説明はInspectorのEffect parameter領域で読める。名前付きgrid/listと同じ候補・選択・Commit Intentを投影し、別の棚や履歴を作らない。thumbnail寸法はUser settingで変更でき、`thumbnail-only`の画像面だけは列幅へ追従する正方形を保つ。名前付きgridは横長画像＋名前行とし、変更時は画像を歪めたり文字を縮めたりせず、利用可能幅と指定寸法からgrid列数を再計算する。
 
-Folder、Label、履歴は候補を探すためのUser settingsまたはWorkspace-session候補であり、配置・適用先のDocument意味とは分離する。保存場所と同期方式が未決の段階でDocument schemaへ焼かない。候補の選択・整理だけではUndoを作らず、配置やparameter適用をCommitした時だけ通常のD2 commandへ進む。
+List表示は名前周辺の空きをpaddingだけにせず、候補のtaxonomyを`Effect › Light`等の短い階層として示す。各segmentはその種類へResultsを絞る文脈navigationにできるが、全種類のtag chipをSearch直下へ再常設しない。現在の絞り込みはResults headerと選択状態で読め、`All` sourceまたは明示clearで解除できる。taxonomyはHostが定義する少数のeffect kindであり、ユーザーtag、Collection、package pathを同じ階層へ混ぜない。
 
-FolderとLabelはcandidateの安定identityを参照するユーザー所有の仮想整理であり、install先、package内部path、filesystem階層、Cargo/module構造から生成しない。packageの更新、再導入、保存場所変更でユーザーの棚を移動・改名しない。由来や実fileは診断・Developer infoで別に読めても、整理の正本にしない。
+Plugin Resultsのcardには説明を反復しない。Projectへ追加済みのEffectを操作する時は、短い説明と用途をInspectorのEffect parameter領域の先頭へ置き、選択中Effectとparameter群へ一緒に追従させる。このfocus中は対象Objectとの関係だけを残し、Object Transform等の別parameter群を同じInspectorへ並べない。Effect parameterを触っている間にBrowserの別Detailへ視線を往復させず、同じ説明をBrowserとInspectorの二箇所へ持たせない。詳細なcapability、provider、package identityはDeveloper infoへ分離し、短い説明を技術情報で埋めない。
+
+外部filesystemを辿るExplorerでは、Collectionsとは別に複数の**Registered Folders**をWorkspace参照として持てる。各登録フォルダは利用者が明示的に許可した実directoryを起点とし、選択後はその配下だけを通常のfolder階層とbreadcrumbで辿る。登録、解除、並べ替え、最後に開いたpathはDocumentとUndoを変えず、登録フォルダをProject assetの所有者や仮想Collectionへ変換しない。OS権限、volume切断、移動・削除はtypedな逸脱状態として同じExplorerに示す。
+
+Explorerのfolder hierarchyは、深さに比例して大きなtab空白を入れない。ancestorと直下folderを同じ左端へ揃え、固定幅のdepth marker、folder icon、connector、current outlineで親子関係を示す。深さごとの小面積色または濃淡は補助手掛かりとして併用できるが、色だけを唯一の識別にしない。各ancestorとchildは同じrailから移動でき、breadcrumbと異なるpath正本を持たない。
+
+filesystem Resultsには、サムネイル／名前付き／listとは独立して`Folders / All files`のscope切替を置く。`Folders`は現在directory直下のfolderとfileを表示して通常の階層移動を行い、`All files`は現在directory配下を再帰走査してfolderを除いたfileだけを平坦表示する。後者でもcanonical path、登録root、元folderを失わず、別のasset正本や自動Collectionを作らない。scope変更、走査、検索はDocument・Undo不変で、走査・metadata取得をUI threadで行わない。
+
+Media候補は標準の単一選択、modifierによる追加／解除、Shiftによる範囲選択に加え、pointerだけでも発見できる明示的な`Select` modeを持つ。Select mode中は各候補へcheckbox形状と選択数を表示する。modifierを知っていることを複数選択の前提にせず、通常時のsingle click previewと選択modeのtoggleを視覚的に区別する。
+
+Tagは事前に作成できる常設の**Tag box**としてResults直上の横方向shelfへ置き、file／folderまたは選択集合をboxへD&Dすると一括追加する。縦railの下へ隠して結果とDrop先を同時に見えなくせず、幅を超えるTagは横scrollする。box clickはそのTagの候補を表示し、件数を併記する。Tagを外す操作は逆向きdragや「どこにも属さない場所」へのdropにせず、選択後の`Tags…` menuへ現在付いているTagをcheck状態で示し、checked Tagを押すと選択集合から一括解除する。unchecked Tagは同じmenuから追加できる。Tag対象にはfileだけでなくfolderも含め、folderへのTagは配下fileへ暗黙伝播させない。Tagはstable file identityまたはdirectory identityを参照するWorkspace metadataであり、同一identityのAll結果とfolder結果へ一貫して投影し、Document、Undo、filesystem名、実directory構造を変更しない。rename／move／volume切断時のidentity追跡と同期方式が未決の間は永続schemaをモックから発明しない。
+
+視覚候補の棚は`single click = 選択／Preview`、対象へのdrag/dropを基本Commit、`double click = 選択中targetへCommit`を共通短縮操作にする。double clickは有効な選択targetが読める時だけ有効にし、対象不在・型不一致・利用不能時は同じcardから理由を返す。keyboardの`Enter`も同じIntentへ接続し、反復する`Apply`ボタンを各候補やDetailへ置かない。Historyへ積むのはCommitだけであり、single click、hover、Cancelは積まない。
+
+この操作はPluginだけの規則にせず、Media、Effect、Generator、preset等の**配置または適用できる全候補**へ同じCommit文法として適用する。
+
+| 操作 | 共通Intent | Commit条件 |
+|---|---|---|
+| single click | 候補を選択しPreview | Document、Undo、Recent不変 |
+| drag中 | 候補と許可targetを可視化 | Document不変。無効targetは形＋短い理由で拒否 |
+| 有効targetへdrop | drop位置・targetを明示したCommit | 1 gesture＝1 command＝1 Undo。外部Mediaの取込＋配置も分割しない |
+| double click / `Enter` | 現在読める選択targetへの同一Commit Intent | target不在、型不一致、利用不能なら変更ゼロ＋typed reason |
+| `Esc` / capture loss / target外drop | Cancel | Document、Undo、Recent不変 |
+
+folderは素材候補ではなくnavigationなので、drag適用の対象にしない。double click／`Enter`は配下へ移動し、Media配置と同じUndoを作らない。候補cardごとに専用`Apply`、`Place`、`Import`を反復せず、D&Dと同じpreflight／command経路へ接続する。
+
+星1〜5の評価は採用しない。候補ごとに「星1か星3か」を判断する仕事を増やし、主要preview面を反復iconで狭めるためである。お気に入りは単一の再発見操作としてCollectionへ投影し、評価値やDocument意味にしない。
+
+Collections、Tags、Recent、保存検索は候補を探すためのUser settingsまたはWorkspace-session候補であり、配置・適用先のDocument意味とは分離する。保存場所と同期方式が未決の段階でDocument schemaへ焼かない。候補の選択・整理だけではUndoを作らず、配置やparameter適用をCommitした時だけ通常のD2 commandへ進む。
+
+CollectionsとTagsはcandidateの安定identityを参照するユーザー所有の仮想整理であり、install先、package内部path、filesystem階層、Cargo/module構造から生成しない。packageの更新、再導入、保存場所変更でユーザーの棚を移動・改名しない。由来や実fileは診断・Developer infoで別に読めても、整理の正本にしない。
+
+先例として、Ableton Live 12はSearch / Sidebar label / Filter View / Tags / Resultsを一つのBrowserへ統合し、検索結果をsidebarへ保存できる。BitwigはSources / Filters / Results / Detailを共通化し、現在結果に関連するtagを優先表示する。Premiereは種類別bin、検索、attribute filter、Custom Binを同じEffects panelへ置く。CapCutは大量のEffectを目的・雰囲気categoryと視覚結果から探させる。Motoliiはこれらの製品固有分類を輸入せず、共通Browser文法と視覚候補のthumbnail優先だけを借りる。
+
+- [Ableton — The Live 12 Browser](https://help.ableton.com/hc/en-us/articles/12927340213660-The-Live-12-Browser)
+- [Bitwig — Common Browser Elements](https://www.bitwig.com/userguide/latest/common_browser_elements/)
+- [Adobe Premiere — Find and group effects](https://helpx.adobe.com/premiere/desktop/add-video-effects/apply-video-effects/find-and-group-effects.html)
+- [CapCut — rich media resources](https://www.capcut.com/resource/how-to-use-capcut)
 
 ## 4. 少数の共通操作文法
 
@@ -160,8 +227,12 @@ Transientな操作進行ではなくD2 commandであり、入口別の第7状態
 - 値がどこから来たかを別画面で探させず、parameter近傍のbadgeからAdvanced詳細へ辿れるようにする。
 - 数値parameterはpanel幅いっぱいのbarを暗黙の最小・最大として見せない。値面の左右dragによるscrub、明示的な数値入力、必要なら有限端を持たない横目盛が固定cursorの下を流れるdialを使い、画面比率と値域を分離する。目盛animationは操作量のfeedbackに限り、意味の唯一の手掛かりにせずreduced-motionで停止する。sliderは型として有限範囲が確定している値に限る。
 - automation可能なparameterは名前近傍の同じ位置へdiamond markを置き、Automation ON/OFFと現在時刻のkey有無を枠・diamond塗り・短い文字状態の複合で区別する。Timelineへ投影する現在channelのkeyと別のautomation正本をUI内に作らない。
-- Easingはkey単体の属性ではなく隣接key間の動きとして見せる。Preview直下のGraph iconはplayheadが同一channelの隣接key区間の内部にある時だけ点灯し、key上と区間外では操作不能にする。key clickをEasing入口にしない。Graph Viewは補間種別、value-time graph、Bezier handle、raw値を同じ区間で往復できるようにし、curve/preset適用はその1区間への1 commandとする。区間番号、key数、時刻範囲、key stripは重ねない。curve選択はGraph左右の余白へ形状thumbnailとして置き、名前はhover / focusのInfoとaccessible nameへ下げる。graph drag中はPreview、releaseは1 Undo、`Esc`/capture lossは変更ゼロ。
-- Easingのお気に入りはcurve thumbnail上の単一◎markで示す。これは星評価ではなく、Graph icon double clickで即適用される1個のUser settingである。mark変更はDocument・Undo不変、最後に使ったcurveへの自動追従は禁止する。点灯中Graph iconはsingle clickでGraph View、double clickでお気に入りを現在区間へ1 command / 1 Undoとし、double click判定でsingle clickのpopupを残さない。key上・区間外は無効とする。
+- Easingはkey単体の属性ではなく隣接key間の動きとして見せる。Preview直下のEasing iconはplayheadが同一channelの隣接key区間の内部にある時だけ点灯し、key上と区間外では操作不能にする。key clickをEasing入口にしない。Interval Easing Editorは補間種別、正規化time-remap curve、Bezier handle、raw値を同じ区間で往復できるようにし、curve/preset適用はその1区間への1 commandとする。区間番号、key数、時刻範囲、key stripは重ねない。curve選択はEditor左右の余白へ形状thumbnailとして置き、名前はhover / focusのInfoとaccessible nameへ下げる。handle drag中はPreview、releaseは1 Undo、`Esc`/capture lossは変更ゼロ。
+- AM固有の観察、採否候補、現行React fixtureとの差分は[AMキーフレームグラフ観察台帳](reviews/2026-07-19-am-keyframe-graph-observation.md)へ分離する。React上に表示されるlegacy bridgeの区間editorを、React-native実装または操作契約の完了証拠にしない。multi-key Graph Viewは[React比較記録](reviews/2026-07-19-graph-view-reference-decision.md)に留まり、本書やM3仕様の操作契約を上書きしない。
+- Easingのお気に入りはcurve thumbnail上の単一◎markで示す。これは星評価ではなく、Easing icon double clickで即適用される1個のUser settingである。mark変更はDocument・Undo不変、最後に使ったcurveへの自動追従は禁止する。点灯中Easing iconはsingle clickでInterval Easing Editor、double clickでお気に入りを現在区間へ1 command / 1 Undoとし、double click判定でsingle clickのpopupを残さない。key上・区間外は無効とする。
+
+- Graph ViewはInterval Easing Editorとは別のdock可能な作業面である。左にfocus対象を含むparameter list、右に実時間×実値のcurveを置き、focus中channelをprimary、他channelをcontextとして読む。Frame Selected、pan/zoom、display normalize、snapshot、channel filterは表示操作でDocument・Undo不変。key/handle dragはPreview、release 1 Undo、`Esc`/capture loss変更ゼロ。表示範囲はdrag中に自動変更せず、初回frameと明示Frame Selectedだけで変える。curve上へのkey追加は形状を維持し、隣接区間の暗黙再平滑化を禁止する。
+- 通常Groupは同じStageとTimeline上でfold / unfoldする。fold中はGroup bar 1本、unfold中はchildをその場へ展開し、double clickまたはfold iconを別Composition／別Previewへの遷移に使わない。Group barのS/MはGroup出力の試聴・隔離、unfoldはchild選択・並べ替え・Automation編集の入口として役割を分ける。開閉はDocumentとUndoを変えず、Group S/MからchildのS/M保存値を複製しない。
 - 空間parameterは内部型の対称性をそのままUIへ写さない。`Position X/Y`はStage平面、`Depth Z`は前後関係の独立操作面として投影するが、保存は同じ正準XYZの`position.z`を使う。Depth操作から暗黙の3D modeや第二のDepth正本を作らず、Z方向の平行移動と`Rotation Z`（Z軸まわりの回転）はlabel・control・automation channelを分ける。
 
 ### 5.2 現在操作中の情報へ面積を譲る
@@ -203,7 +274,7 @@ Effect、Vism、Host標準機能の実装方式が違っても、ユーザーが
 ```
 
 - ユーザーはparameterから始め、現在値、時間変化、値の由来、接続、errorを同じ行またはその文脈展開から辿る。値の決まり方ごとに別の操作世界へ移動させない。
-- Stageの直接操作、Timelineのkey、Graph View、接続pickerは同じparameter意味の投影・拡大面である。別の値、別のautomation、別の接続正本を所有せず、操作後はParameter Panelで結果と由来を検査できる。
+- Stageの直接操作、Timelineのkey、Graph View、Interval Easing Editor、接続pickerは同じparameter意味の投影・拡大面である。別の値、別のautomation、別の接続正本を所有せず、操作後はParameter Panelで結果と由来を検査できる。
 - plugin kind、executor crate、内部node構成はユーザーが通常操作で理解すべき分類にしない。表示名、parameter、意図、入力、結果を主語にし、実装由来は診断またはDeveloper infoへ下げる。
 - Expressionが与えていた実験性は、型付きDriver、Link、Preview、Cancel、Undo、極端値を許す探索へ回収する。`Wiggle`、`Loop`、`Map`等を文字列断片ではなく名前とparameterを持つ操作として、対象parameterの近傍から追加・調整・除去できるようにする。
 - 将来、数式・WASM等の高度入力を解凍しても、parameterから開く追加の値sourceとして扱う。それを標準作法、別project正本、自由なDocument mutation、他layerの名前検索へ昇格させない。詳細な解決順は[操作単純化モデル S-4](interaction-simplicity-model.md#s-4-expressionとpluginの位置)に従う。

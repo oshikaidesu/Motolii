@@ -1,0 +1,49 @@
+{
+  "date": "2026-07-22",
+  "platform": "macOS",
+  "input": "Computer Use pointer and keyboard",
+  "checks": [
+    {
+      "action": "React Graph button -> Host IPC -> native popup",
+      "result": "pass"
+    },
+    {
+      "action": "Bezier handle drag and release",
+      "result": "pass",
+      "semantic_commit_delta": 1
+    },
+    {
+      "action": "Fixed React oracle 56c318ed against native default and drag states",
+      "result": "pass for structure and visual language",
+      "native_logical_size": "510x284",
+      "verified": [
+        "header",
+        "three-column Bezier shelf",
+        "advanced interval shelf",
+        "tall graph and guides",
+        "two value cards",
+        "selection, focus, and user-favorite treatment"
+      ],
+      "not_claimed": "pixel-perfect golden or full hover/overshoot/cancel matrix"
+    },
+    {
+      "action": "Save user preset and favorite latest preset",
+      "result": "pass",
+      "settings_write_delta": 2
+    },
+    {
+      "action": "Escape closes popup",
+      "result": "pass",
+      "revision_before": 2,
+      "revision_after": 2,
+      "semantic_commit_before": 1,
+      "semantic_commit_after": 1,
+      "settings_write_before": 2,
+      "settings_write_after": 2
+    },
+    {
+      "action": "Process restart restores user preset and favorite",
+      "result": "pass"
+    }
+  ]
+}

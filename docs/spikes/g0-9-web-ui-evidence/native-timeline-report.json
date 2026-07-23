@@ -1,0 +1,18 @@
+{
+  "ticket": "G0-9-native-baseline-rerun",
+  "captured_at": "2026-07-21T12:52:00+09:00",
+  "adapter": "Apple M4",
+  "backend": "Metal",
+  "clips": 1000,
+  "keyframes": 100000,
+  "viewport": [1920, 512],
+  "warmup_frames": 120,
+  "measured_frames": 600,
+  "median_frame_ms": 4.166625,
+  "p95_frame_ms": 6.264334,
+  "visible_clips_last": 210,
+  "visible_keyframes_last": 20005,
+  "cpu_cull_upload_us_last": 5025,
+  "pass_under_historical_60fps_threshold": true,
+  "measurement": "native wgpu render_to_texture; each frame updates pan/zoom, CPU culls visible clips/keyframes, uploads instance buffer, submits and waits for GPU completion"
+}

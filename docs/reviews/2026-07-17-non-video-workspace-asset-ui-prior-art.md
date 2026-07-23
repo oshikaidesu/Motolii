@@ -25,7 +25,7 @@
 | Lightroom Classic | `Library`はimport・整理・比較・選択、`Develop`は編集というtask別module。Libraryで選んだ集合はFilmstripとして全moduleに残る | 素材探索を独立した主taskに昇格しつつ、選択中素材の小さなcontinuity surfaceだけをAnimateへ持ち越す | module切替で制作文脈を全面置換し、StageとTimelineをdrop先から消す構成 |
 | Godot | `AssetLib`が`2D / 3D / Script`と同格のmain screenにあり、外部資源の探索をEditor内の主作業として扱う | 外部素材探索をFile dialogより上位の制作面として扱う | AssetLibは主にaddon/package探索であり、media AssetとTimeline Instanceの所有契約は別途必要 |
 | Unreal Engine | 同じContent Browser系UIを、focusを失うと畳まれる`Content Drawer`、Dockした常設Browser、floating windowとして出せる | 一つのSources componentを一時Drawer／Dock／floatへ投影する。狭い別実装を作らない | 最大4個のContent Browserを別filterで開く設計。Motolii v1で複数selection正本・複数preview stateを許さない |
-| Logic Pro | Project Audio BrowserとAll Files Browserを分離し、Project内素材と外部filesystemの意味を同じmain window内で区別する。active window／areaにはkey focus表示がある | `PROJECT / FILES`を同じSources面のscopeとして分け、主役面を視覚的に一意化する | Screenset番号と任意window集合だけを初心者の主要導線にすること |
+| Logic Pro | Project Audio BrowserとAll Files Browserを分離し、Project内素材と外部filesystemの意味を同じmain window内で区別する。active window／areaにはkey focus表示がある | 一つのMedia BrowserからProjectと登録folderを選び、結果上ではProject登録状態を明示する | Screenset番号と任意window集合だけを初心者の主要導線にすること |
 | Blender | WorkspaceはArea/Editorの組合せで、Modeling、Animating、Scripting等のtaskに向けたpresetとして切り替える | Workspace名をpanel配置ではなく制作意図で定義する | predefined layoutだけで操作開始点・commit後の視線移動まで解決したと見なすこと |
 | Fusion | capabilityをpurpose-driven Workspaceへ分け、commandを起動した文脈でだけ現れるcontextual tabを持つ | 低頻度toolを常設せず、明示command後に必要な操作だけを昇格する | tool分類をDocument型やplugin kindの閉集合へ直結すること |
 | Maya | workflow別のfactory Workspaceとcustom Workspaceを持ち、factory defaultへresetできる。workspaceはuser directoryに保存されscene fileへ入らない | layoutはUser／Workspace state、作品はDocumentという境界、`Reset Workspace`、factory presetを採る | どのpanelも自由にdockできること自体を視線設計と呼ぶこと |
@@ -57,19 +57,21 @@ UnrealのContent Drawer／Content Browserは、狭い素材欄と広い管理画
 
 selection、query、Folder、Label、thumbnail size、preview、In/Outは同じstateを使う。形態ごとに別のAsset Browserを作らない。
 
-### 3.3 Project Assetと外部Fileは同じ面の異なるscopeにする
+### 3.3 Media Browserへ統合し、所有状態は混同しない
 
 Logic ProのProject Audio Browser／All Files Browserは、同じ「素材を探す」操作でも所有意味が違うことをUIで分ける。
 
-MotoliiのSourcesは少なくとも次を区別する。
+一方、AEViewer系の需要は、Import dialogやProject panelを往復せず、外部file、過去project、音声、画像をImport前にpreviewし、そのまま再利用することへ収束している。したがってMotoliiでは、`Assets`と`Explorer`を別のtop-level tabへ置かず、一つの`Media` Browserへ統合する。
 
-| Scope | 意味 | Document変更 |
+Media Browserのsource railは、`All Media`、`Project`、複数の登録folder、`Collections`、`Recent`を同じ場所に置く。検索、grid/list、thumbnail寸法、preview、selectionは共通にする。ただし表示を統合しても、少なくとも次の意味は維持する。
+
+| Source / 状態 | 意味 | Document変更 |
 |---|---|---|
-| `FILES` | filesystem上の外部候補。preview、検索、In/Out | なし |
+| 登録folder | filesystem上の外部候補。preview、検索、In/Out | なし |
 | `PROJECT` | Import済みAsset。未配置も存在できる | Import／relink等の正規commandだけ |
 | Timeline | Assetを参照する配置Object／Clip | 配置command |
 
-`FILES`上の候補が既にImport済みなら`IN PROJECT`として同じAsset identityへ解決し、再dragで重複Importせず新しい配置を作る。表示の重複は許容しても、所有者とidentityを重複させない。
+`All Media`は検索結果を連合表示するが、同じfileが既にImport済みなら一件へdedupeし、`IN PROJECT`、`UNPLACED`、`MISSING`等の関係を形と短い状態表示で示す。再dragでは重複Importせず同じAsset identityから新しい配置を作る。CollectionsとLabelは参照を束ねるだけで、fileやProject Assetを第二の所有物として複製しない。
 
 ### 3.4 主taskを切り替えてもcontinuity surfaceを残す
 
@@ -109,7 +111,7 @@ Motoliiでは次を条件にする。
 ### 採用仮説
 
 1. 外部素材探索をImport dialogではなく`Source`という第一級taskにする
-2. Sourcesは`PROJECT / FILES`を持つ一つのcomponentとする
+2. Sourcesは`Media`という一つのcomponentとし、`All Media / Project / 登録folder / Collections / Recent`をsource railで切り替える
 3. Tray／Drawer／Dock／floatは同じstateの表示密度違いとする
 4. 標準Workspaceは制作意図で名付け、主役面を一つにする
 5. layout customizationはUser／Workspace stateで、Document、Journal、Undoへ入れない
@@ -120,7 +122,7 @@ Motoliiでは次を条件にする。
 ### 拒否仮説
 
 1. Signal Path跡地の約200pxへ完全なAsset Browserを押し込む
-2. 狭いProject Asset panelと広いExternal Explorerを別実装・別selectionにする
+2. `Assets / Files / Explorer`を別top-level tab・別実装・別selectionにする
 3. 同じ外部FileをProject Assetとして重複Importする
 4. ユーザーがwindowを並べ替えるまで主要workflowが成立しない
 5. creatorへ生のwindow座標だけを渡させ、開始点・commit先・restoreを定義しない
@@ -176,3 +178,7 @@ Motoliiでは次を条件にする。
 - [VS Code — Custom Layout](https://code.visualstudio.com/docs/configure/custom-layout): layout customizationとZen mode
 - [Microsoft — Progressive disclosure controls](https://learn.microsoft.com/en-us/windows/win32/uxguide/ctrl-progressive-disclosure-controls): discoverability／stabilityリスク
 - [Microsoft — Guidelines for app help](https://learn.microsoft.com/en-us/windows/apps/design/in-app-help/guidelines-for-app-help): critical functionをHelpへ依存させない原則
+- [AEViewer公式](https://www.aeviewer.com/): media形式横断preview、subfolder検索、Collections、favorite folders、複数import方法
+- [Creative Dojo — AEViewer review](https://creativedojo.net/aeviewer/): AE Import dialogよりthumbnail／動画／波形探索が速いという観察と、Favorites等の分類が分かりにくいUX指摘
+- [After Effects利用者の再利用library開発背景](https://www.reddit.com/r/AfterEffects/comments/1t8f758/made_an_extension_that_saves_layers_comps_with/): 旧projectを開く、comp名だけで探す、missingをrelinkする、project全体をimportする負担
+- [大量音声素材の探索需要](https://www.reddit.com/r/editors/comments/xwewc2/media_asset_management_especially_for_large/): 大量import前の試聴、Bridge不足、team／cloud MAMは過大という利用者の声
