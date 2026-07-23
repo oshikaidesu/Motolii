@@ -1441,11 +1441,14 @@ and rerun required evidence now. Verify line-by-line against the binding order
 and authorities. Green tests alone are insufficient. Look for scope drift,
 contract-avoidance, weakened tests, missing negative cases, duplicate state or
 logic, raw public APIs, non-atomic failure, unbounded work, and unfinished gates.
+Do not search outside the selected worktree, run broad filesystem find commands,
+or launch background commands. Complete and reap every command before deciding.
 
 Classify P0/P1/P2 with file and line evidence. Any P0/P1, missing required test,
 out-of-allowlist edit, or unverifiable command requires rejection. End with one
 exact plain-text final line: VERDICT: ACCEPT or VERDICT: REJECT. Do not bold it,
-quote it, or append text.
+quote it, append text, run another tool, or report background command status
+after that line.
 
 Original user task:
 $task
