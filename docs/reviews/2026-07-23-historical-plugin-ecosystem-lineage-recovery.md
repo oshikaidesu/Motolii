@@ -2,6 +2,8 @@
 
 状態: **縮小採用**（未処分11 blobの処分、community politicsと旧schemaの分離）
 
+> **後続決定（2026-07-23）**: 本書で暫定名として採用した`Plugin Set`は、[Kit / Plugin Set統合決定](2026-07-23-vism-kit-rack-unification-decision.md)により独立artifactとして廃止した。接続済み一式はRack型Vism Kit、推薦だけの集合はcurator list／feedへ分ける。以下は当時のlineage処分記録として維持する。
+
 対象: historical-only `docs/plugin-ecosystem.md` 12版のうち、Unit 1で処分済みの最終版`9794b686`を除く11版。
 
 関連: [Community distribution model](../community-distribution-model.md)、[Unit 1](2026-07-23-losing-specification-value-recovery.md)、[Unit 9A](2026-07-23-historical-vism-kit-distribution-lineage-recovery.md)、[全歴史coverage台帳](2026-07-23-historical-value-recovery-coverage-ledger.md)

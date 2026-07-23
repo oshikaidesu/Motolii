@@ -58,8 +58,9 @@
 | [interaction-simplicity-model.md](interaction-simplicity-model.md) | 操作単純化モデル: Direct/Tool/Advanced正規化、plugin昇格、PP-Gate、M0〜M5割当 | 現行(2026-07-14。凍結済み公開契約は変更しない) |
 | [extensible-core-model.md](extensible-core-model.md) | 小さなコアと探索可能な拡張: Core kernel／bundled Host module／first-party／third-partyの分界、壊れない探索、編集pluginの責任寿命、Documentを増やさないアドレス可能な個体、表現domainを列挙しない能力境界、性能上限を焼かない原則 | **設計原則**(2026-07-17。`motolii-core` crateやUI runtimeの分類表ではなく、未凍結APIの実装許可でもない) |
 | [vism-package-concept.md](vism-package-concept.md) | Vism (`.vism`): Project・内部plugin kind・Host UIから分離して保存/共有/再利用する映像表現の配布単位。Motoliiは最初のHost、container/loaderは未決 | **コンセプト・名称・拡張子決定／ファイル形式未決**(2026-07-17。v1実装許可ではない) |
-| [vism-kit-model.md](vism-kit-model.md) | Core=文法、Vism=小さな表現、Kit=provider選択と型付き接続、Project=作品。BPM/Beatを例に、Vism直接依存を避けるmaterialize構成とfork能力の境界を定義 | **設計原則決定／schema・形式未決**(2026-07-17) |
-| [community-distribution-model.md](community-distribution-model.md) | 中央人気／dedupeを持たず、分散地図、User library、Plugin Set、Project Lockで多数作者と複数界隈をつなぐcommunity運用 | **運用・ガバナンス原則決定／protocol・schema・製品UI未決**(2026-07-23) |
+| [vism-kit-model.md](vism-kit-model.md) | Core=文法、Vism=小さな表現、Kit=provider選択・型付き接続・初期値・公開controlを持つRack型の作者成果、Project=作品。Vism直接依存を避けるmaterialize構成とfork能力の境界を定義 | **設計原則決定／schema・形式未決**(2026-07-17、2026-07-23用語統合) |
+| [reviews/2026-07-23-vism-kit-rack-unification-decision.md](reviews/2026-07-23-vism-kit-rack-unification-decision.md) | 独立Plugin Setを廃止し、接続済み一式をRack型Vism Kitへ、無関係な推薦集合をcurator list／feedへ分離 | **用語・責任統合決定／形式未決** |
+| [community-distribution-model.md](community-distribution-model.md) | 中央人気／dedupeを持たず、分散地図、User library、Rack型Vism Kit、外部curator list／feed、Project Lockで多数作者と複数界隈をつなぐcommunity運用 | **運用・ガバナンス原則決定／protocol・schema・製品UI未決**(2026-07-23) |
 | [generative-user-boundary.md](generative-user-boundary.md) | ジェネラティブ表現とユーザー拡張の境界: Shape/SVG、p5.js型入力、Materialize/Live/Feedback/Simulation、Host責務 | **設計決定**(2026-07-15。未凍結runtimeの実装許可ではない) |
 | [ui-interaction-language.md](ui-interaction-language.md) | M3のUI操作言語: 既知の外殻、可視の因果、Parameter Panelを表現のホームにするUI力学、共通component契約、Simple/Advanced、漏れ実装の拒否 | **設計決定**(2026-07-16、Parameter Panel力学を2026-07-18追補) |
 | [ui-visual-language.md](ui-visual-language.md) | M3の視覚言語: 高密度一覧、意味色、既存UIへの馴染み、contrast、token規約、参照範囲 | 設計基準(具体token値はM3視覚確定(G0-6)待ち) |

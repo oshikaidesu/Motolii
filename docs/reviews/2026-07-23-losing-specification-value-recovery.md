@@ -2,6 +2,8 @@
 
 状態: **決定**（知識の処分方法と本書の個別判定。Plugin Set / Project Lockの製品仕様は比較中）
 
+> **後続決定（2026-07-23）**: 本書で暫定回収した`Plugin Set`は、[Kit / Plugin Set統合決定](2026-07-23-vism-kit-rack-unification-decision.md)により独立artifactとして廃止した。接続済み一式はRack型のVism Kit、推薦だけの集合はcurator list／feedへ分ける。本書の歴史出典と当時の処分経緯は維持する。
+
 対象: 初期設計、後続で一般化・縮小・延期・棄却された案、現行正本から消えた配布構想。
 
 監査範囲: 本書は全歴史corpusの完了宣言ではない。ユーザーが挙げたsingle camera、2.5D、旧Kitを起点に、初期設計2文書と旧plugin ecosystem文書から現行判断へ影響する主張を回収する第一単位である。後続の歴史監査は§2の同じ分類へ追加する。

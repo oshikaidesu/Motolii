@@ -2,6 +2,8 @@
 
 状態: **縮小採用**（29 blobの処分、Kit責任とhostless配布候補の再接続）
 
+> **後続決定（2026-07-23）**: 本書で別責任として回収した`Plugin Set`は、[Kit / Plugin Set統合決定](2026-07-23-vism-kit-rack-unification-decision.md)により独立artifactとして廃止した。接続済み一式はRack型Vism Kit、推薦だけの集合はcurator list／feedへ分ける。以下は当時のlineage処分記録として維持する。
+
 対象: `vism-package-concept.md` 4版、`vism-kit-model.md` 3版、`vism-implementation-plan.md` cutoff 22版。
 
 関連: [全歴史coverage台帳](2026-07-23-historical-value-recovery-coverage-ledger.md)、[Vismコンセプト](../vism-package-concept.md)、[Vism / Kitモデル](../vism-kit-model.md)、[Vism実装計画](2026-07-17-vism-implementation-plan.md)、[「負けた仕様」の価値回収](2026-07-23-losing-specification-value-recovery.md)
