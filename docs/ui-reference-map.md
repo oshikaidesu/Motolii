@@ -4,13 +4,18 @@
 
 M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決める。会話履歴、スクリーンショット、旧HTML、React prototypeのいずれも、単独では製品仕様にならない。
 
-## 画面名
+## 画面名と実装状態
 
-- **Motolii Studio**: 利用者が起動するnative desktop製品。
-- **Motolii Studio Mock**: `docs/mocks-ui/`で動かすbrowser開発モック。視覚・操作比較とReact source asset確認のための成果物であり、製品Preview、配布物、native windowではない。
-- **Motolii Studio Preview**: Motolii Studioのsurfaceを一つのnative desktop実行ファイルへ統合した製品Previewだけに使う。既存`motolii_ui_shell` baseline、個別native spike、Motolii Studio Mockをこの名で呼ばない。
+固有名、成果物種別、結合段階は[UI成果物・実装状態の用語](ui-artifact-terminology.md)を正本とする。
 
-内部task IDの`G0-9 Native Product Mock`は発注・証跡の識別子であり、利用者へ見せる画面名にしない。
+- **Motolii Studio**: 利用者へ届けるnative desktop製品。
+- **Motolii Studio Mock**: `docs/mocks-ui/`で外部browserに表示する開発モック。
+- **Motolii Studio Preview**: 定義済みの製品surfaceを通常経路で一つのnative desktop実行ファイルへ結合した
+  preview build。現時点では未実装である。
+
+既存`motolii_ui_shell`は**Native Shell Baseline**、個別`g0-9-*` / `g0-10-*`は
+**Native Surface Spike**と呼ぶ。内部task IDの`G0-9 Native Product Mock`は発注・証跡の識別子に限定する。
+source assetまたはisolated spikeの成立を、product-integratedやpreview-runnableへ繰り上げない。
 
 ## 参照順位
 

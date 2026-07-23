@@ -49,6 +49,7 @@
 | [ui-visual-language.md](ui-visual-language.md) | M3の視覚言語: 高密度一覧、意味色、既存UIへの馴染み、contrast、token規約、参照範囲 | 設計基準(具体token値はM3視覚確定(G0-6)待ち) |
 | [ui-score-model.md](ui-score-model.md) | 時間面UI構成モデル: 固定Laneを所有者にしない時間投影、選択コンテキスト、Group関係ラベル、回帰審判 | **設計決定**(2026-07-17、2026-07-22用語訂正。公開API・schemaの実装許可ではない) |
 | [ui-runtime-architecture.md](ui-runtime-architecture.md) | React/DOM chrome、native Stage/Timeline、headless interaction、React asset直接移管、1 surface/2 viewport/WebView islandsの責任境界 | **責任境界・surface topology決定**(React package移管可。platform受入とrenderer採否はG0-9実機spike待ち) |
+| [ui-artifact-terminology.md](ui-artifact-terminology.md) | Motolii Studio / Mock / Preview、baseline、spike、source assetと製品結合段階を分離するUI成果物の命名正本 | **運用正本**(Previewは結合済みnative desktop実行物だけ。現時点では未実装) |
 | [mocks/](mocks/README.md) | M3高密度メインUI(基準)+timeline/interaction/UI力学の比較モック台帳 | 視覚構成の基準モック |
 | [mocks-ui/](mocks-ui/README.md) | React/Viteで動く固定source asset。hash fixture、Storybook、Playwright、component map | **現行prototype / 製品直接移管のsource**（一部surfaceはlegacy bridge） |
 | [ui-reference-map.md](ui-reference-map.md) | M3 UI参照地図: 規範/prototype/採否台帳/移行互換/証拠/履歴の参照順位と、React移行の実状態・既知の未統一 | **運用正本**(2026-07-19。`codex/m3-mock-components`側から回収) |
