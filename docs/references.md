@@ -54,6 +54,27 @@
 - タイムライン交換: [OpenTimelineIO](https://github.com/AcademySoftwareFoundation/OpenTimelineIO)(Apache-2.0。v2の書き出し候補。v1はスキーマの素性を寄せるのみ=F-5。座標系提案「単位なし・単一原点・Y-up」はF-1の正準座標系の参考元)
 - 並行テスト: [loom](https://github.com/tokio-rs/loom)(MIT。M4-K1のキャッシュ並行契約の検証候補=F-2)
 
+### 責任委譲候補（2026-07-24、未採択）
+
+[依存優先・責任最小化ゲート](reviews/2026-07-24-dependency-first-responsibility-gate.md)のFable read-only広域調査を
+Codexが縮小処分した候補。ここへの掲載は依存追加の許可ではない。対応粒の着手時にversion、license、
+maintenance、3 OS、既存fixtureとの適合を再確認する。
+
+| 一般問題 | 候補 | 評価する時点 | 委ねない責任 |
+|---|---|---|---|
+| native file dialog | [rfd](https://github.com/PolyMeilex/rfd) | New / Open / Saveの製品入口 | project lifecycle、typed failure、catalog、lock |
+| clipboard IO | [arboard](https://github.com/1Password/arboard) | Copy / Paste意味の仕様決定後 | payload、ID再採番、Undo、Document |
+| native menu | [muda](https://github.com/tauri-apps/muda) | OS menuが製品要件になった時 | CommandId、keymap、実行権限 |
+| CPU cache | [moka](https://github.com/moka-rs/moka) | M4のRAM cache粒 | VRAM texture寿命、invalidation意味、永続key |
+| screen reader smoke | [Guidepup](https://github.com/guidepup/guidepup) | macOS VoiceOver / Windows NVDAの前哨CI | 実IME、実機、人間審判 |
+| 構造snapshot | [insta](https://github.com/mitsuhiko/insta) | 更新不可侵を保つreview動線を先に作れた時 | semantic oracle、golden採否 |
+| 依存・license監査 | [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) | 手書き依存guardとの重複を整理する粒 | Motolii固有の依存方向と公開型検査 |
+| 公開API互換検査 | [cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-checks) | 凍結済み公開crateのbaselineを固定できた時 | 意味互換、serde、migration |
+| ffmpeg process管理 | [ffmpeg-sidecar](https://github.com/nathanbabcock/ffmpeg-sidecar) | 3 OS移植または既存wrapperの保守負担発生時 | decoder pool、VFR、色、golden、後始末 |
+
+`Tauri`全面導入、別full UI framework、`salsa`による評価正本の反転、外部DB／WALへのjournal移管、
+`ui-events`の二重導入は、現行責任を減らさないため再評価トリガーなしでは採らない。
+
 ## プラットフォーム母数の出典(2026-07-10。E章ターゲットOS/F-9の根拠)
 
 クロスプラットフォームを設計レベルの恒久要件とする母数根拠。クリエイティブ層のOS比率に信頼できる一次統計は存在しない(Adobeは非公表)ため、傾向の裏取りとして使う。
