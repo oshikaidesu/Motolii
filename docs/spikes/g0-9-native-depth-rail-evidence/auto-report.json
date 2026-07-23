@@ -1,0 +1,16 @@
+{
+  "ticket": "G0-9-native-depth-rail",
+  "status": "complete",
+  "adapter": "Apple M4",
+  "backend": "Metal",
+  "object_count": 5,
+  "rect_primitive_count": 25,
+  "text_run_count": 16,
+  "present_count": 120,
+  "readback_count": 0,
+  "semantic_state_owner_count": 1,
+  "semantic_commit_count": 0,
+  "navigation_change_count": 0,
+  "selection_change_count": 0,
+  "pass": true
+}

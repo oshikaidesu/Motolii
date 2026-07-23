@@ -1,6 +1,6 @@
 # 実装進行台帳
 
-最終確認: **2026-07-21**
+最終確認: **2026-07-23**
 
 このファイルは、実装者が「次に何をするか」を1枚で判断するための現場用台帳。M0〜M5の意味や完了条件を再定義せず、現在の依存関係と発注順だけを示す。
 
@@ -39,7 +39,7 @@
 | M0 | `DONE` | spike完了。S2は`ffmpeg-sidecar`クレート不採用、自前子process pipe／CFR seek成立まで。VFR、長尺／4K、pool、停止中readのkillは製品完成証拠にせずK4／GAP-26へ分離 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み。RenderTargetPoolは直列2枚を下限にbranch livenessで伸長するが、O(n²)未来scan最適化、fp16／path fusion、40-layer性能は未成立。R9/T11は当時の歴史sign-offで、現行製品Stage／実素材release受入はGAP-32。出荷hardening候補G1〜G8は完了条件外で、2026-07-23再照合の未到達process/artifact reliabilityはGAP-26、GPU health分類はGAP-27、同期export readbackの原因分離／staging採択はGAP-29、GPU RGB→YUV export接続はGAP-31。G7の同期1-frame boundedをcopy重畳完成、decode側GPU色変換や出力tagをinverse変換完成とみなさない |
 | M2 | **基盤再締結済み / narrow follow-up pending** | D1lのDocument／lifecycle意味、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。2026-07-23監査で`new_v1` enforcement driftをGAP-23、known Edit apply failureのsnapshot fallback driftをGAP-24、semantic oracle gate自己保護をGAP-25として狭く再開。Param Pipeline／Element Domain／Constraint GraphはM2-GAP-15の解凍gate前は未実装のままが正しい。D5は骨格到達・統合審判pendingで、AG-2 mixer coreは成立したが製品`PlaybackSession`のmixed `AudioProgram`接続はGAP-28。D1n external revisionも未実装で、cloud-safe公約不可 |
-| M3 | **UI責任境界・surface topology決定 / G0-9 platform受入比較中** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4はmain完了済みでbaselineとして保持。歴史回収でU2b-2 Place、U4b-0 Add Position Key、U2h-1 primary selection、U3a-1 headless Timelineを決定済み・未実装follow-upへ戻した。次のSelected U seriesはU0e-2Rで、再採択は優先順の追越しを許さない。U3a-1はtoolkit/renderer非依存でG0-9非依存、U3a-2 windowed rendererとWebView/native製品統合・egui撤去はG0-9、plugin UI公開契約は分離したG0-3 / GAP-13まで停止。product cold pipeline生成のcaller停止／捕捉面はINF-8 hot reloadと分けてGAP-30 |
+| M3 | **UI責任境界・surface topology決定 / G0-6H人間審判待ち** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0a〜U0e-2、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4、U0e-2R、GR-D1〜R3はmain到達済み。5 reference screenと30 PNGを固定したため次はG0-6Hの人間審判。歴史回収でU2b-2 Place、U4b-0 Add Position Key、U2h-1 primary selection、U3a-1 headless Timelineを決定済み・未実装follow-upへ戻したが、現行順序を追い越さない。U3a-1はtoolkit/renderer非依存、U3a-2とWebView/native製品統合・egui撤去はG0-9、plugin UI公開契約はG0-3 / GAP-13まで停止。product cold pipeline生成のcaller停止／捕捉面はINF-8 hot reloadと分けてGAP-30 |
 | M4 | **契約spike可** | [歴史20版再照合](reviews/2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md)と[memory model 6版再照合](reviews/2026-07-23-historical-memory-model-lineage-recovery.md)後もK0〜K8は未実装。K0でRoD/RoIのruntime契約を凍結し、その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む。現行`PipelineCache`／dynamic target pool／wgpu budget thresholdをResourceLedger、copy-out、disk store完成と数えない。K4の恒久`source_id`／再リンク／package意味はGAP-3／7の再調査前に焼かないが、このgateをK0や独立K1へ広げない。K6のVello／usvg製品統合は未実装で、R8成立性だけを完成証拠にしない |
 | M5 | **identity spike可** | P0IでDuplicator/Instance identityを凍結。P6のfontique／harfrust／Vello text stackは未実装で、K6とpremul adapterを重複実装しない |
 
@@ -54,7 +54,7 @@ D1l DONE → D3e → U2g（M3入場後）→ K2
 Selected U series:
 U0a DONE → U0b-1 DONE → U0b-2 DONE → U0c-1 DONE → U0c-2 DONE → U0d-1 DONE → U0d-2 DONE → U0d-3 DONE
 → U2a-0 DONE → U2a-1 DONE → U1a-1 DONE → U1a-2 DONE → U1b-1 DONE → U1b-2 DONE → U2b-1 DONE → U2c-1 DONE
-→ U2c-4 DONE → U0e-1 DONE → U0e-2R → U0e-2 → G0-9 → G0-6H → U0e-3 → U2c-3 → U2c-5 → U3a → U4a-1 → U4a-2 → U4c → U2c-2
+→ U2c-4 DONE → U0e-1 DONE → U0e-2R DONE → GR-D1 → GR-D2 → GR-R1/R2 → GR-R3 → U0e-2 → G0-9 → G0-6H → U0e-3 → U2c-3 → U2c-5 → U3a → U4a-1 → U4a-2 → U4c → U2c-2
 
 Unified Camera:
 CAM-G0 → D1j → D1k-S → D1k → D3f → U1f #169 → U2d
@@ -95,13 +95,18 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 | 優先 | ID | Phase | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
-| 1 | U0e-2R | M3 | `DO` | — | U0e-1完了。固定React baseline `eb16d06`を最新mainへ再結合する | U0e-2を単独実行 |
-| 2 | U2c-2 | M3 | `WAIT` | — | U4a-2のDirect製品入口とU4cのAdvanced製品入口が揃うまで空harnessを作らない | 実在入口のDocument意味/Undo同値conformance |
 | 0 | HVR-G01 | History tooling | `DONE` | — | 意味グラフ補助境界を正本化 | HVR-D01の依存 |
-| 1 | HVR-D01 | History tooling | `DONE` | — | HVR-G01完了。既存corpus/receiptを変更しない | 決定的な可搬projectionと負例 |
-| 2 | HVR-D02 | History tooling | `DONE` | — | HVR-D01完了 | 任意のBasic Memory runner |
-| 3 | HVR-D03 | History tooling | `DONE` | — | HVR-D01完了 | repo-local候補packet skill |
-| 4 | HVR-D04 | History tooling | `WAIT` | — | HVR-D01〜D03完了 | Unit 5N以降へ候補packetを投入 |
+| 1 | U0e-2R | M3 | `DONE` | — | 固定React baseline `eb16d06`を最新mainへ再結合し、43 visual testとworkspace gateを通過 | GR-D1を単独実行 |
+| 2 | GR-D1 | M3 guard | `DONE` | — | Terra実装 + Grok検収の通常発注入口へBASE_REF/SHA・authority・粒状態・React labelのdispatch gateを固定し、専用負例とworkspace試験を通過 | GR-D2を単独実行 |
+| 3 | GR-D2 | M3 guard | `DONE` | — | 変更許可閉集合、append-only検収証跡、timeout分離、検収者mutation拒否、検収resumeをTerra + Grok入口へ固定し、専用負例とworkspace試験を通過 | GR-R1/R2をDOへ移す |
+| 4 | GR-R1/R2 | M3 guard | `DONE` | — | manifestのpath/export/SHAとAST/PostCSS closure、実render nodeへのfixture投影、route隔離、三層因果、raw token拒否を43負例・44 visual・Grok P0/P1=0で固定 | GR-R3をDOへ移す |
+| 5 | GR-R3 | M3 guard | `DONE` | — | immutable generation + atomic CURRENT、PNG byte/RGBA、閉schema、17 I/O失敗点、全negative matrixを70 testsとGrok P0/P1=0で固定 | U0e-2をDOへ戻す |
+| 6 | U0e-2 | M3 | `DONE` | — | 同一三層fixtureを既存React Surfaceへ直接投影する5 reference screen、固定Chromium/font、normal+5派生の30 PNG、provenance/atomic generation/read-only checkを固定 | G0-6H assisted human stop |
+| 7 | U2c-2 | M3 | `WAIT` | — | U4a-2のDirect製品入口とU4cのAdvanced製品入口が揃うまで空harnessを作らない | 実在入口のDocument意味/Undo同値conformance |
+| 8 | HVR-D01 | History tooling | `DONE` | — | HVR-G01完了。既存corpus/receiptを変更しない | 決定的な可搬projectionと負例 |
+| 9 | HVR-D02 | History tooling | `DONE` | — | HVR-D01完了 | 任意のBasic Memory runner |
+| 10 | HVR-D03 | History tooling | `DONE` | — | HVR-D01完了 | repo-local候補packet skill |
+| 11 | HVR-D04 | History tooling | `WAIT` | — | HVR-D01〜D03完了 | Unit 5N以降へ候補packetを投入 |
 
 K0 [#167](https://github.com/oshikaidesu/Motolii/issues/167)とP0I
 [#170](https://github.com/oshikaidesu/Motolii/issues/170)は論理上`DO`の独立spikeだが、
@@ -151,7 +156,7 @@ Uシリーズ直列選択中は未選択とし、同時着手しない。
 | G0-2 | `DONE` | 入力/キーマップ/a11y最小意味論 | [M3着手前決定§2](reviews/2026-07-16-m3-preflight-decisions.md#2-g0-2-inputとui状態の意味)に従いU0bをIssue化 |
 | G0-3 | `WAIT` / `比較中` | plugin UIモデル | `NodeDesc`自動panel fallbackを維持し、公開kit、sandbox、権限、互換、配布をG0-9製品surface合否と分離して再評価。G0-9証拠は入力にできるが、比較前に公開UI APIを実装しない |
 | G0-4 | `DONE` | UI性能測定プロトコル | U1c/U3a等でraw結果を取り、絶対閾値は別改訂 |
-| G0-6H | `WAIT` / `HUMAN` | 視覚token/認知審判 | U0e-2が作る5 reference screenの目視後に具体tokenを固定しU0e-3へ |
+| G0-6H | `DO` / `HUMAN` | 視覚token/認知審判 | U0e-2の5 reference screenと30画像を`docs/mocks-ui/reference-handoff.md`の未記入templateで目視し、具体tokenを固定してU0e-3へ |
 | G0-7 | `DONE` | Direct/Tool/Advanced conformance | UI操作言語とU2c fixtureへ従う |
 | G0-8 | `WAIT` / `MEASURE` | resource予算preset/安全余白/hysteresisの具体値 | G0-4手順+K1a実測後に値だけ固定。P3/P3aの意味は変更しない |
 
@@ -175,7 +180,7 @@ U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除
 | resource設定を出す | G0-2 + G0-8 + U0b + K1a → U0f。設定はUser settings、pressure実測値はTransient |
 | 重いpreviewを追従させる | U1b + U1c + U5 + K1d → U1g。project fps/audio clockを変えず表示frameだけ落とす |
 
-したがって現在の短い運用判断は、**M2基盤再締結とD3e、D1m、CAM-G0、D1j、D1k-S、D1k、D3f、M3 U0a、U0b-1、U0b-2、U0c-1、U0c-2、U0d-1、U0d-2、U0d-3、U2a-0、U2a-1、U1a-1、U1a-2、U1b-1、U1b-2、U2b-1、U2c-1、U2c-4、U0e-1は完了済み**。初回Uシリーズは並走させず、次は`U0e-2R`だけを進める。`U2c-2`はU4a-2/U4cの実製品入口待ちとする。Rerunのcommit固定source監査と資産分類は可能だが、現在のUシリーズ実装と並走させない。D1nは独立した保存hardening follow-upとして未実装で、M3直列順を遡及停止しないがexternal change検出を完了扱いしない。D5は骨格を完了扱いせず、本番preview／GPU計測／実機E2Eを後続へ残す。
+したがって現在の短い運用判断は、**M2基盤再締結とD3e、D1m、CAM-G0、D1j、D1k-S、D1k、D3f、M3 U0a、U0b-1、U0b-2、U0c-1、U0c-2、U0d-1、U0d-2、U0d-3、U2a-0、U2a-1、U1a-1、U1a-2、U1b-1、U1b-2、U2b-1、U2c-1、U2c-4、U0e-1、U0e-2R、GR-D1、GR-D2、GR-R1/R2、GR-R3、U0e-2は完了済み**。次は`G0-6H`の人間審判だけを行い、未記入templateへ判定者・条件・採否理由を記録するまでU0e-3へ進まない。`U2c-2`はU4a-2/U4cの実製品入口待ちとする。Rerunのcommit固定source監査と資産分類は可能だが、現在のUシリーズ実装と並走させない。D1nは独立した保存hardening follow-upとして未実装で、M3直列順を遡及停止しないがexternal change検出を完了扱いしない。D5は骨格を完了扱いせず、本番preview／GPU計測／実機E2Eを後続へ残す。
 
 ## 更新規則
 

@@ -1,0 +1,784 @@
+{
+  "version": 5,
+  "min_reader_version": 5,
+  "composition": {
+    "aspect_num": 16,
+    "aspect_den": 9,
+    "duration": {
+      "num": 10,
+      "den": 1
+    },
+    "fps": {
+      "num": 30,
+      "den": 1
+    },
+    "camera": {
+      "kind": "planar_orthographic",
+      "center": {
+        "const": {
+          "Vec2": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "roll_radians": {
+        "const": {
+          "F64": 0.0
+        }
+      },
+      "height": {
+        "const": {
+          "F64": 1.0
+        }
+      }
+    }
+  },
+  "bpm": {
+    "num": 120,
+    "den": 1
+  },
+  "soundtrack": {
+    "asset": 0,
+    "start_offset": {
+      "num": 0,
+      "den": 1
+    },
+    "master_gain": 0.8
+  },
+  "assets": {
+    "next": 2,
+    "entries": [
+      {
+        "id": 0,
+        "name": "Reference AV",
+        "asset_type": "video/mp4",
+        "content_hash": "sha256:reference-av",
+        "path_project_relative": "media/reference-av.mp4",
+        "file_name": "reference-av.mp4",
+        "size_bytes": 1024,
+        "head_hash": "reference-head",
+        "tail_hash": "reference-tail"
+      },
+      {
+        "id": 1,
+        "name": "Reference Font",
+        "asset_type": "font/ttf",
+        "content_hash": "sha256:reference-font",
+        "path_project_relative": "fonts/reference.ttf",
+        "file_name": "reference.ttf",
+        "size_bytes": 512
+      }
+    ]
+  },
+  "layers": {
+    "next": 7,
+    "entries": [
+      {
+        "id": 0,
+        "name": "Shared left"
+      },
+      {
+        "id": 1,
+        "name": "Video + audio"
+      },
+      {
+        "id": 2,
+        "name": "Shared middle"
+      },
+      {
+        "id": 3,
+        "name": "Reference text"
+      },
+      {
+        "id": 4,
+        "name": "Shared right"
+      },
+      {
+        "id": 5,
+        "name": "Reference group"
+      },
+      {
+        "id": 6,
+        "name": "Group shape child"
+      }
+    ]
+  },
+  "track_ids": {
+    "next": 1,
+    "entries": [
+      {
+        "id": 0,
+        "name": "Reference timeline"
+      }
+    ]
+  },
+  "tracks": [
+    {
+      "id": 0,
+      "items": [
+        {
+          "kind": "clip",
+          "envelope": {
+            "layer_id": 0,
+            "effects": [
+              {
+                "id": 1,
+                "definition_id": 0
+              }
+            ],
+            "transform": {
+              "position": {
+                "const": {
+                  "Vec2": [
+                    0.0,
+                    0.0
+                  ]
+                }
+              },
+              "anchor": {
+                "const": {
+                  "Vec2": [
+                    0.0,
+                    0.0
+                  ]
+                }
+              },
+              "scale": {
+                "const": {
+                  "Vec2": [
+                    1.0,
+                    1.0
+                  ]
+                }
+              },
+              "rotation": {
+                "const": {
+                  "F64": 0.0
+                }
+              }
+            },
+            "clipping_mask": {
+              "enabled": false,
+              "mode": "alpha"
+            },
+            "blend": "normal",
+            "opacity": {
+              "const": {
+                "F64": 1.0
+              }
+            },
+            "visible": true,
+            "solo": false,
+            "lock": false
+          },
+          "start": {
+            "num": 0,
+            "den": 1
+          },
+          "duration": {
+            "num": 10,
+            "den": 1
+          },
+          "time_map": {
+            "source_start": {
+              "num": 0,
+              "den": 1
+            },
+            "speed_num": 1,
+            "speed_den": 1,
+            "overrun_mode": "freeze"
+          },
+          "source": {
+            "source": "plugin",
+            "plugin_id": "doc.layer_source.rect",
+            "effect_version": 1,
+            "params": {
+              "center": {
+                "const": {
+                  "Vec2": [
+                    -0.55,
+                    0.0
+                  ]
+                }
+              },
+              "color": {
+                "const": {
+                  "Color": [
+                    0.65,
+                    0.72,
+                    0.86,
+                    1.0
+                  ]
+                }
+              },
+              "size": {
+                "const": {
+                  "Vec2": [
+                    0.24,
+                    0.24
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "kind": "clip",
+          "envelope": {
+            "layer_id": 1,
+            "effects": [],
+            "transform": {
+              "position": {
+                "const": {
+                  "Vec2": [
+                    0.0,
+                    0.0
+                  ]
+                }
+              },
+              "anchor": {
+                "const": {
+                  "Vec2": [
+                    0.0,
+                    0.0
+                  ]
+                }
+              },
+              "scale": {
+                "const": {
+                  "Vec2": [
+                    1.0,
+                    1.0
+                  ]
+                }
+              },
+              "rotation": {
+                "const": {
+                  "F64": 0.0
+                }
+              }
+            },
+            "clipping_mask": {
+              "enabled": false,
+              "mode": "alpha"
+            },
+            "blend": "normal",
+            "opacity": {
+              "const": {
+                "F64": 1.0
+              }
+            },
+            "visible": true,
+            "solo": false,
+            "lock": false
+          },
+          "start": {
+            "num": 0,
+            "den": 1
+          },
+          "duration": {
+            "num": 10,
+            "den": 1
+          },
+          "time_map": {
+            "source_start": {
+              "num": 0,
+              "den": 1
+            },
+            "speed_num": 1,
+            "speed_den": 1,
+            "overrun_mode": "freeze"
+          },
+          "source": {
+            "source": "asset",
+            "asset": 0,
+            "audio": [
+              {
+                "stream": {
+                  "kind": "audio",
+                  "ordinal": 0
+                },
+                "enabled": true,
+                "gain": {
+                  "const": {
+                    "F64": 1.0
+                  }
+                },
+                "out_of_range": "silence"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "clip",
+          "envelope": {
+            "layer_id": 2,
+            "effects": [
+              {
+                "id": 3,
+                "definition_id": 2
+              },
+              {
+                "id": 4,
+                "definition_id": 0
+              }
+            ],
+            "transform": {
+              "position": {
+                "const": {
+                  "Vec2": [
+                    0.0,
+                    0.0
+                  ]
+                }
+              },
+              "anchor": {
+                "const": {
+                  "Vec2": [
+                    0.0,
+                    0.0
+                  ]
+                }
+              },
+              "scale": {
+                "const": {
+                  "Vec2": [
+                    1.0,
+                    1.0
+                  ]
+                }
+              },
+              "rotation": {
+                "const": {
+                  "F64": 0.0
+                }
+              }
+            },
+            "clipping_mask": {
+              "enabled": false,
+              "mode": "alpha"
+            },
+            "blend": "normal",
+            "opacity": {
+              "const": {
+                "F64": 1.0
+              }
+            },
+            "visible": true,
+            "solo": false,
+            "lock": false
+          },
+          "start": {
+            "num": 0,
+            "den": 1
+          },
+          "duration": {
+            "num": 10,
+            "den": 1
+          },
+          "time_map": {
+            "source_start": {
+              "num": 0,
+              "den": 1
+            },
+            "speed_num": 1,
+            "speed_den": 1,
+            "overrun_mode": "freeze"
+          },
+          "source": {
+            "source": "plugin",
+            "plugin_id": "doc.layer_source.rect",
+            "effect_version": 1,
+            "params": {
+              "center": {
+                "const": {
+                  "Vec2": [
+                    0.0,
+                    0.0
+                  ]
+                }
+              },
+              "color": {
+                "const": {
+                  "Color": [
+                    0.65,
+                    0.72,
+                    0.86,
+                    1.0
+                  ]
+                }
+              },
+              "size": {
+                "const": {
+                  "Vec2": [
+                    0.24,
+                    0.24
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "kind": "clip",
+          "envelope": {
+            "layer_id": 3,
+            "effects": [],
+            "transform": {
+              "position": {
+                "const": {
+                  "Vec2": [
+                    0.0,
+                    0.0
+                  ]
+                }
+              },
+              "anchor": {
+                "const": {
+                  "Vec2": [
+                    0.0,
+                    0.0
+                  ]
+                }
+              },
+              "scale": {
+                "const": {
+                  "Vec2": [
+                    1.0,
+                    1.0
+                  ]
+                }
+              },
+              "rotation": {
+                "const": {
+                  "F64": 0.0
+                }
+              }
+            },
+            "clipping_mask": {
+              "enabled": false,
+              "mode": "alpha"
+            },
+            "blend": "normal",
+            "opacity": {
+              "const": {
+                "F64": 1.0
+              }
+            },
+            "visible": true,
+            "solo": false,
+            "lock": false
+          },
+          "start": {
+            "num": 0,
+            "den": 1
+          },
+          "duration": {
+            "num": 10,
+            "den": 1
+          },
+          "time_map": {
+            "source_start": {
+              "num": 0,
+              "den": 1
+            },
+            "speed_num": 1,
+            "speed_den": 1,
+            "overrun_mode": "freeze"
+          },
+          "source": {
+            "source": "vector",
+            "recipe": {
+              "content": {
+                "kind": "text_path",
+                "text": "Motolii Reference",
+                "font_asset": 1
+              }
+            }
+          }
+        },
+        {
+          "kind": "clip",
+          "envelope": {
+            "layer_id": 4,
+            "effects": [
+              {
+                "id": 5,
+                "definition_id": 0
+              },
+              {
+                "id": 6,
+                "definition_id": 2
+              }
+            ],
+            "transform": {
+              "position": {
+                "const": {
+                  "Vec2": [
+                    0.0,
+                    0.0
+                  ]
+                }
+              },
+              "anchor": {
+                "const": {
+                  "Vec2": [
+                    0.0,
+                    0.0
+                  ]
+                }
+              },
+              "scale": {
+                "const": {
+                  "Vec2": [
+                    1.0,
+                    1.0
+                  ]
+                }
+              },
+              "rotation": {
+                "const": {
+                  "F64": 0.0
+                }
+              }
+            },
+            "clipping_mask": {
+              "enabled": false,
+              "mode": "alpha"
+            },
+            "blend": "normal",
+            "opacity": {
+              "const": {
+                "F64": 1.0
+              }
+            },
+            "visible": true,
+            "solo": false,
+            "lock": false
+          },
+          "start": {
+            "num": 0,
+            "den": 1
+          },
+          "duration": {
+            "num": 10,
+            "den": 1
+          },
+          "time_map": {
+            "source_start": {
+              "num": 0,
+              "den": 1
+            },
+            "speed_num": 1,
+            "speed_den": 1,
+            "overrun_mode": "freeze"
+          },
+          "source": {
+            "source": "plugin",
+            "plugin_id": "doc.layer_source.rect",
+            "effect_version": 1,
+            "params": {
+              "center": {
+                "const": {
+                  "Vec2": [
+                    0.55,
+                    0.0
+                  ]
+                }
+              },
+              "color": {
+                "const": {
+                  "Color": [
+                    0.65,
+                    0.72,
+                    0.86,
+                    1.0
+                  ]
+                }
+              },
+              "size": {
+                "const": {
+                  "Vec2": [
+                    0.24,
+                    0.24
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "kind": "group",
+          "envelope": {
+            "layer_id": 5,
+            "effects": [],
+            "transform": {
+              "position": {
+                "const": {
+                  "Vec2": [
+                    0.0,
+                    0.0
+                  ]
+                }
+              },
+              "anchor": {
+                "const": {
+                  "Vec2": [
+                    0.0,
+                    0.0
+                  ]
+                }
+              },
+              "scale": {
+                "const": {
+                  "Vec2": [
+                    1.0,
+                    1.0
+                  ]
+                }
+              },
+              "rotation": {
+                "const": {
+                  "F64": 0.0
+                }
+              }
+            },
+            "clipping_mask": {
+              "enabled": false,
+              "mode": "alpha"
+            },
+            "blend": "normal",
+            "opacity": {
+              "const": {
+                "F64": 1.0
+              }
+            },
+            "visible": true,
+            "solo": false,
+            "lock": false
+          },
+          "children": [
+            {
+              "kind": "clip",
+              "envelope": {
+                "layer_id": 6,
+                "effects": [],
+                "transform": {
+                  "position": {
+                    "const": {
+                      "Vec2": [
+                        0.0,
+                        0.0
+                      ]
+                    }
+                  },
+                  "anchor": {
+                    "const": {
+                      "Vec2": [
+                        0.0,
+                        0.0
+                      ]
+                    }
+                  },
+                  "scale": {
+                    "const": {
+                      "Vec2": [
+                        1.0,
+                        1.0
+                      ]
+                    }
+                  },
+                  "rotation": {
+                    "const": {
+                      "F64": 0.0
+                    }
+                  },
+                  "parent": 5
+                },
+                "clipping_mask": {
+                  "enabled": false,
+                  "mode": "alpha"
+                },
+                "blend": "normal",
+                "opacity": {
+                  "const": {
+                    "F64": 1.0
+                  }
+                },
+                "visible": true,
+                "solo": false,
+                "lock": false
+              },
+              "start": {
+                "num": 0,
+                "den": 1
+              },
+              "duration": {
+                "num": 10,
+                "den": 1
+              },
+              "time_map": {
+                "source_start": {
+                  "num": 0,
+                  "den": 1
+                },
+                "speed_num": 1,
+                "speed_den": 1,
+                "overrun_mode": "freeze"
+              },
+              "source": {
+                "source": "vector",
+                "recipe": {
+                  "content": {
+                    "kind": "standard_shape",
+                    "shape": "ellipse",
+                    "width": {
+                      "const": {
+                        "F64": 0.25
+                      }
+                    },
+                    "height": {
+                      "const": {
+                        "F64": 0.25
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "next_stable_id": 7,
+  "effect_definitions": [
+    {
+      "id": 0,
+      "plugin_id": "core.filter.opacity",
+      "effect_version": 1,
+      "enabled": true,
+      "params": {
+        "opacity": {
+          "const": {
+            "F64": 0.72
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "plugin_id": "core.filter.opacity",
+      "effect_version": 1,
+      "enabled": true,
+      "params": {
+        "opacity": {
+          "const": {
+            "F64": 0.72
+          }
+        }
+      }
+    }
+  ]
+}

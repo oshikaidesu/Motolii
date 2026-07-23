@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 1,
+  "generation": "u0e2-08f96cbd7754-85c0fc529ab1",
+  "browserVersion": "Chromium/149.0.7827.55",
+  "sourceManifestSha256": "08f96cbd77545e1734cc285970137ba20e1b9f31f3fac8f4e3704c467daa64a4",
+  "transformVersion": "u0e2-srgb-machado-2009-v1",
+  "screens": [
+    "empty-browser",
+    "mixed-timeline",
+    "parameter-easing",
+    "stage-frame-tools",
+    "shared-effect-relative"
+  ],
+  "captures": [
+    {
+      "path": "captures/empty-browser.normal.png",
+      "screen": "empty-browser",
+      "variant": "normal",
+      "sha256": "6a05d214c2b6f1d6e68218627a48779824dc8de0b807f5291f16f4885a9f9e41"
+    },
+    {
+      "path": "captures/empty-browser.lightness.png",
+      "screen": "empty-browser",
+      "variant": "lightness",
+      "sha256": "92dab8d2ace428e3caa6046e9c9034b3e463b8e4d62dd8dffc2ed97eab789f1c"
+    },
+    {
+      "path": "captures/empty-browser.grayscale.png",
+      "screen": "empty-browser",
+      "variant": "grayscale",
+      "sha256": "b5f92e273479661955705e60b753948767344f591b784f2fd05ec90e0fec1068"
+    },
+    {
+      "path": "captures/empty-browser.protanopia.png",
+      "screen": "empty-browser",
+      "variant": "protanopia",
+      "sha256": "065598bf7ff88f3ef236fe052fe43ac9ecdc9e2441dd999f1c65d500801b31fc"
+    },
+    {
+      "path": "captures/empty-browser.deuteranopia.png",
+      "screen": "empty-browser",
+      "variant": "deuteranopia",
+      "sha256": "fa52fca53bb332ede18619ff91afd9ca849174a0af92a4ba2a5e1f5406e7e5fc"
+    },
+    {
+      "path": "captures/empty-browser.tritanopia.png",
+      "screen": "empty-browser",
+      "variant": "tritanopia",
+      "sha256": "dbb0f36fa0781c0c20f44141a754afbfbf4cde94a742f769de0113241459e14d"
+    },
+    {
+      "path": "captures/mixed-timeline.normal.png",
+      "screen": "mixed-timeline",
+      "variant": "normal",
+      "sha256": "091737e1f78b2e8c551cc2311b218241ba0add40c4544ee922208ae986a02141"
+    },
+    {
+      "path": "captures/mixed-timeline.lightness.png",
+      "screen": "mixed-timeline",
+      "variant": "lightness",
+      "sha256": "9f9b44eaac112c4e850d8dc2bfbca7927d9d7589fe6780d08f25e157751fa101"
+    },
+    {
+      "path": "captures/mixed-timeline.grayscale.png",
+      "screen": "mixed-timeline",
+      "variant": "grayscale",
+      "sha256": "e282e5be1564e8839a607684e7b5a59b6ef64e74bed15b85770ac60f2fd29118"
+    },
+    {
+      "path": "captures/mixed-timeline.protanopia.png",
+      "screen": "mixed-timeline",
+      "variant": "protanopia",
+      "sha256": "95bc8e767177a130409d6fd92f6d19287d5e0d54352bc2c2f114c4558ef4586f"
+    },
+    {
+      "path": "captures/mixed-timeline.deuteranopia.png",
+      "screen": "mixed-timeline",
+      "variant": "deuteranopia",
+      "sha256": "f312b29b449f25584f17ad3e89a9bab7585fc6e5d199d4914efbec777fe31f3c"
+    },
+    {
+      "path": "captures/mixed-timeline.tritanopia.png",
+      "screen": "mixed-timeline",
+      "variant": "tritanopia",
+      "sha256": "1aad7d491365e895f53bbeea6da44b9d14a814f0581666685425a885ca658b9c"
+    },
+    {
+      "path": "captures/parameter-easing.normal.png",
+      "screen": "parameter-easing",
+      "variant": "normal",
+      "sha256": "d3ae0d3f841de2c96d28411f1abe5201dc0c40df0ce7f889259e86aacdd28395"
+    },
+    {
+      "path": "captures/parameter-easing.lightness.png",
+      "screen": "parameter-easing",
+      "variant": "lightness",
+      "sha256": "f3c38929b6505e8813cb5032c5b03f8422de51856d01a814e1074f6556ab4eac"
+    },
+    {
+      "path": "captures/parameter-easing.grayscale.png",
+      "screen": "parameter-easing",
+      "variant": "grayscale",
+      "sha256": "f53277811f33d7e81f109f7a30d29f3152ab52fb691ab41eb60c8be1d50e8d60"
+    },
+    {
+      "path": "captures/parameter-easing.protanopia.png",
+      "screen": "parameter-easing",
+      "variant": "protanopia",
+      "sha256": "4949c2dd639a2ea752d2afe2b9d9bebc854943dc98be7d0d6d9f60ea074af081"
+    },
+    {
+      "path": "captures/parameter-easing.deuteranopia.png",
+      "screen": "parameter-easing",
+      "variant": "deuteranopia",
+      "sha256": "6dd6cf33c508f999f8905a64ab56c0e44c34ce8e242907ef83e9cbc527aaccbc"
+    },
+    {
+      "path": "captures/parameter-easing.tritanopia.png",
+      "screen": "parameter-easing",
+      "variant": "tritanopia",
+      "sha256": "9fedf9ea052fdbdc2316284a4f83d191358fa409606205391712c2de47b2b719"
+    },
+    {
+      "path": "captures/stage-frame-tools.normal.png",
+      "screen": "stage-frame-tools",
+      "variant": "normal",
+      "sha256": "c89835cfaf314aa0bc3df98cef327aebf6e7d88b0433dd630365254f81b18c17"
+    },
+    {
+      "path": "captures/stage-frame-tools.lightness.png",
+      "screen": "stage-frame-tools",
+      "variant": "lightness",
+      "sha256": "413ca4f95564b06d6d15bf1356472bcf50d333251de572e6eefdb086bbcc186f"
+    },
+    {
+      "path": "captures/stage-frame-tools.grayscale.png",
+      "screen": "stage-frame-tools",
+      "variant": "grayscale",
+      "sha256": "864ca192f1dc27d088e009d0e392e59b761e91d4a5d3872475899aebd9331502"
+    },
+    {
+      "path": "captures/stage-frame-tools.protanopia.png",
+      "screen": "stage-frame-tools",
+      "variant": "protanopia",
+      "sha256": "ef6e1f79900ed11d86fb1c3b351561edd30035f82c41509d9da31905ae62f43b"
+    },
+    {
+      "path": "captures/stage-frame-tools.deuteranopia.png",
+      "screen": "stage-frame-tools",
+      "variant": "deuteranopia",
+      "sha256": "2c6f4ceb82cdea9dae83c2b64c9de7917c6e2ce09cfa41f3f054bad9e2878b42"
+    },
+    {
+      "path": "captures/stage-frame-tools.tritanopia.png",
+      "screen": "stage-frame-tools",
+      "variant": "tritanopia",
+      "sha256": "de8981cfacd05e07c602442141fefb68a08830775efc7eaa9a079441abc45ed2"
+    },
+    {
+      "path": "captures/shared-effect-relative.normal.png",
+      "screen": "shared-effect-relative",
+      "variant": "normal",
+      "sha256": "ff24acccd2f2ae2594baeea1ebe916887b60a1f37e243dfd561f51d9cb9fef75"
+    },
+    {
+      "path": "captures/shared-effect-relative.lightness.png",
+      "screen": "shared-effect-relative",
+      "variant": "lightness",
+      "sha256": "0e3412bd6c5c919e59340b23d48613defdc3bc34fe6c40f63862bde9a50587fc"
+    },
+    {
+      "path": "captures/shared-effect-relative.grayscale.png",
+      "screen": "shared-effect-relative",
+      "variant": "grayscale",
+      "sha256": "3f5f24f1573a4020f3e91efe381c10f29e77fca18808259e732594cac32971a7"
+    },
+    {
+      "path": "captures/shared-effect-relative.protanopia.png",
+      "screen": "shared-effect-relative",
+      "variant": "protanopia",
+      "sha256": "ee9fd12349f18ced59acea2d1705ec9e9ccd12ea8e33a7ae89c0bc3b27a1d6e0"
+    },
+    {
+      "path": "captures/shared-effect-relative.deuteranopia.png",
+      "screen": "shared-effect-relative",
+      "variant": "deuteranopia",
+      "sha256": "44295a03430503a66fe9b6c9265c1d437cfea678eaa7f03fcb5a04be8b0927a2"
+    },
+    {
+      "path": "captures/shared-effect-relative.tritanopia.png",
+      "screen": "shared-effect-relative",
+      "variant": "tritanopia",
+      "sha256": "a9f7c27326486c65f1f817834b1cb2d49d221127a2c675f928f74d53211d05fc"
+    }
+  ]
+}

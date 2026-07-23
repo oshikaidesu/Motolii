@@ -490,7 +490,17 @@
 (() => {
   const $ = selector => document.querySelector(selector);
   const $$ = selector => [...document.querySelectorAll(selector)];
-  const state = {mode:"installed", stageTool:"select", playing:false, start:0, raf:0, playheadPct:46, activeInterval:null, depthOpen:false, depthPhase:0, intensity:64, spread:42, automation:{position:true,depth:true,scale:false,rotation:false,opacity:true,intensity:true,spread:false}, activeParam:"intensity", easing:{interp:"Bezier",preset:"Smooth",x1:.34,y1:1.56,x2:.64,y2:1,overshoot:true}, easeDrag:null, curveTag:"all", curveFolder:"all", curveHistory:[], curveLibrary:[{name:"Smooth",interp:"Bezier",v:[.34,1.56,.64,1],tags:"goto",folder:""},{name:"Snap in",interp:"Bezier",v:[.7,0,.2,1],tags:"goto text",folder:"type"},{name:"Drift out",interp:"Bezier",v:[0,.4,.3,1],tags:"camera",folder:"camera"},{name:"Lyric pop",interp:"Bezier",v:[.2,1.35,.5,1],tags:"text",folder:"type"},{name:"Bounce",interp:"Bounce",v:[0,0,1,1],tags:"",folder:""}], zDrag:null, assetSource:"project", selectedAsset:"night_drive.wav", colorChannel:"Fill", selectedColor:"#df8b4d", appliedFill:"#df8b4d", appliedStroke:"#68a6d8", colorFolder:"all", colorTag:"all", colorHistory:["#df8b4d","#68a6d8","#ad82bf","#18202b","#62b4ae"], colorField:"triangle", colorResize:null, eyedropper:false, pluginFolder:"all", pluginLabel:"all", pluginView:"thumb", pluginHistory:["installed","missing"]};
+  const state = {mode:"installed", lastUndoLabel:"", stageTool:"select", playing:false, start:0, raf:0, playheadPct:46, activeInterval:null, depthOpen:false, depthPhase:0, intensity:64, spread:42, automation:{position:true,depth:true,scale:false,rotation:false,opacity:true,intensity:true,spread:false}, activeParam:"intensity", easing:{interp:"Bezier",preset:"Smooth",x1:.34,y1:1.56,x2:.64,y2:1,overshoot:true}, easeDrag:null, curveTag:"all", curveFolder:"all", curveHistory:[], curveLibrary:[{name:"Smooth",interp:"Bezier",v:[.34,1.56,.64,1],tags:"goto",folder:""},{name:"Snap in",interp:"Bezier",v:[.7,0,.2,1],tags:"goto text",folder:"type"},{name:"Drift out",interp:"Bezier",v:[0,.4,.3,1],tags:"camera",folder:"camera"},{name:"Lyric pop",interp:"Bezier",v:[.2,1.35,.5,1],tags:"text",folder:"type"},{name:"Bounce",interp:"Bounce",v:[0,0,1,1],tags:"",folder:""}], zDrag:null, assetSource:"project", selectedAsset:"night_drive.wav", selectedAssetTiles:new Set(), primaryAssetTile:null, assetSelectionAnchor:null, assetSelectionMode:false, mediaTagFilter:"", fileRoot:"city", filePath:"", fileHistory:[], fileScope:"folders", mediaView:"visual", colorChannel:"Fill", selectedColor:"#df8b4d", appliedFill:"#df8b4d", appliedStroke:"#68a6d8", colorFolder:"all", colorTag:"all", colorHistory:["#df8b4d","#68a6d8","#ad82bf","#18202b","#62b4ae"], colorField:"triangle", colorResize:null, eyedropper:false, pluginSource:"all", pluginFolder:"all", pluginLabel:"all", pluginView:"thumb", pluginHistory:["installed","missing"]};
+  state.elementType="all";state.elementProvider="all";state.elementView="grid";
+  state.elementHistory=["rectangle","text","particle-field"];
+  state.packScope="";
+  if($("#vism-browser").classList.contains("candidate-plugin-browser")){
+    $("#plugin-thumb-size").min="64";$("#plugin-thumb-size").max="180";$("#plugin-thumb-size").value="80";
+    if(!$("#redo")){
+      const redo=document.createElement("button");redo.className="btn quiet";redo.id="redo";redo.disabled=true;redo.textContent="↷ Redo";
+      $("#undo").after(redo);
+    }
+  }
   const modeCopy = {
     installed:{accent:"#d4b36f",crumb:"Echo Bloom",stage:"ECHO BLOOM",badge:"",brief:""},
     discover:{accent:"#79aaa6",crumb:"Glyph Current",stage:"GLYPH CURRENT · DISCOVER",badge:"DISCOVERY PREVIEW · NOT IN PROJECT",brief:"Discovery preview · Project変更ゼロ"},
@@ -499,17 +509,37 @@
   };
 
   let statusHome={title:"",body:"",key:""};
+  let suppressStatusInfoUntilPointerMove=false;
+  document.addEventListener("pointermove",()=>{suppressStatusInfoUntilPointerMove=false},{passive:true});
   function renderStatus(){
     $("#status-title").textContent=statusHome.title; $("#status-body").textContent=statusHome.body; $("#status-key").textContent=statusHome.key;
   }
   function status(title, body, key=""){
     statusHome={title,body,key}; renderStatus();
+    suppressStatusInfoUntilPointerMove=true;
   }
   function statusInfo(title, body, key=""){
     $("#status-title").textContent=title; $("#status-body").textContent=body; $("#status-key").textContent=key;
   }
+  const dragContext=$("#candidate-drag-context")||document.createElement("div");
+  dragContext.id="candidate-drag-context";dragContext.className="drag-context-tip";dragContext.hidden=true;
+  if(!dragContext.isConnected)document.body.append(dragContext);
+  function showDragContext(event,title,body,valid=true){
+    dragContext.classList.toggle("invalid",!valid);
+    dragContext.innerHTML=`<b>${title}</b><small>${body}</small>`;
+    dragContext.style.left=`${Math.min(innerWidth-245,event.clientX+14)}px`;
+    dragContext.style.top=`${Math.min(innerHeight-58,event.clientY+14)}px`;
+    dragContext.hidden=false;
+  }
+  function hideDragContext(){dragContext.hidden=true}
+  function handoff(element){
+    if(!element)return;
+    element.classList.remove("handoff");void element.offsetWidth;element.classList.add("handoff");
+  }
   function setUndo(label){
-    $("#undo").disabled=false; $("#undo-state").textContent="Undo 1 · "+label;
+    state.lastUndoLabel=label;$("#undo").disabled=false;
+    if($("#redo"))$("#redo").disabled=true;
+    $("#undo-state").textContent="Undo 1 · "+label;
   }
   function clearUndo(){
     $("#undo").disabled=true; $("#undo-state").textContent="";
@@ -531,6 +561,21 @@
   function inspector(mode){
     const head='<div class="panel-head">Inspector</div>';
     const objectAuto=(param,keys)=>`<span class="scrub-hint object-auto" id="${param}-object-state"><i>${state.automation[param]?"AUTO ON":"AUTO OFF"}</i>${keys?`<i>${keys}</i>`:""}</span>`;
+    const effectFocused=$("#vism-browser")?.classList.contains("candidate-plugin-browser");
+    const effectDescription=effectFocused
+      ?'<p class="effect-parameter-description" id="effect-parameter-description">Layered light pulses that follow the selected object. Adjust Intensity and Spread while watching the Stage.</p>'
+      :"";
+    if(mode==="installed"&&effectFocused)return head+`
+      <div class="section"><div class="section-title">EDITING EFFECT <span>ON OBJECT</span></div>
+        <div class="identity"><div class="icon">◎</div><div><b>Echo Bloom</b><small>Pulse rings · Effect</small></div></div>
+      </div>
+      <div class="section"><div class="section-title">ECHO BLOOM <span>HOST PANEL</span></div>${effectDescription}
+        <div class="row"><label>Input</label><span class="value">Pulse rings composite</span><span class="tag">TEXTURE</span></div>
+        <div class="row"><span class="param-label">Intensity <button class="automation-mark ${state.automation.intensity?"on":""}" data-automation="intensity" aria-pressed="${state.automation.intensity}" aria-label="Intensity automation ${state.automation.intensity?"on":"off"}"></button></span><button class="scrub" id="intensity" data-param="intensity" style="--dial-shift:${state.intensity*2}" aria-label="Intensity。無限目盛を左右dragして変更"><span class="scrub-dial" aria-hidden="true"></span><output id="intensity-read">${state.intensity}%</output></button><span class="scrub-hint" id="intensity-auto-state">${state.automation.intensity?"AUTO ON":"AUTO OFF"}</span></div>
+        <div class="row"><span class="param-label">Spread <button class="automation-mark ${state.automation.spread?"on":""}" data-automation="spread" aria-pressed="${state.automation.spread}" aria-label="Spread automation ${state.automation.spread?"on":"off"}"></button></span><button class="scrub" id="spread" data-param="spread" style="--dial-shift:${state.spread*2}" aria-label="Spread。無限目盛を左右dragして変更"><span class="scrub-dial" aria-hidden="true"></span><output id="spread-read">${state.spread}%</output></button><span class="scrub-hint" id="spread-auto-state">${state.automation.spread?"AUTO ON":"AUTO OFF"}</span></div>
+        <div class="row"><label>Blend</label><span class="value">Screen</span><span></span></div>
+      </div>
+      <details class="dev-info"><summary>Developer info</summary><div class="row"><label>Package</label><span class="value">Vism (.vism)</span><span></span></div><div class="row"><label>Identity</label><span class="value">demo.echo-bloom</span><span></span></div></details>`;
     if(mode==="installed") return head+`
       <div class="section"><div class="section-title">SELECTED OBJECT <span></span></div>
         <div class="identity"><div class="icon">G</div><div><b>Pulse rings</b><small>Group · 1 child</small></div></div>
@@ -557,7 +602,7 @@
       <div class="section"><div class="section-title">APPLIED PLUGINS <span>＋</span></div>
         <div class="applied-plugin"><span class="grip">::</span><span class="plugin-mini">◎</span><span><b>Echo Bloom</b><small>IN → Effect → OUT · selected</small></span></div>
       </div>
-      <div class="section"><div class="section-title">ECHO BLOOM <span>HOST PANEL</span></div>
+      <div class="section"><div class="section-title">ECHO BLOOM <span>HOST PANEL</span></div>${effectDescription}
         <div class="row"><label>Input</label><span class="value">Pulse rings composite</span><span class="tag">TEXTURE</span></div>
         <div class="row"><span class="param-label">Intensity <button class="automation-mark ${state.automation.intensity?"on":""}" data-automation="intensity" aria-pressed="${state.automation.intensity}" aria-label="Intensity automation ${state.automation.intensity?"on":"off"}"></button></span><button class="scrub" id="intensity" data-param="intensity" style="--dial-shift:${state.intensity*2}" aria-label="Intensity。無限目盛を左右dragして変更"><span class="scrub-dial" aria-hidden="true"></span><output id="intensity-read">${state.intensity}%</output></button><span class="scrub-hint" id="intensity-auto-state">${state.automation.intensity?"AUTO ON":"AUTO OFF"}</span></div>
         <div class="row"><span class="param-label">Spread <button class="automation-mark ${state.automation.spread?"on":""}" data-automation="spread" aria-pressed="${state.automation.spread}" aria-label="Spread automation ${state.automation.spread?"on":"off"}"></button></span><button class="scrub" id="spread" data-param="spread" style="--dial-shift:${state.spread*2}" aria-label="Spread。無限目盛を左右dragして変更"><span class="scrub-dial" aria-hidden="true"></span><output id="spread-read">${state.spread}%</output></button><span class="scrub-hint" id="spread-auto-state">${state.automation.spread?"AUTO ON":"AUTO OFF"}</span></div>
@@ -765,7 +810,7 @@
         syncColorBook(); setSurface("colors",true);
         status("Color Book",`${state.colorChannel} · Preview`,"Esc");
       }));
-      $("#link-target").onclick=()=>setStageTool("connect");
+      if($("#link-target"))$("#link-target").onclick=()=>setStageTool("connect");
     }
     if(state.mode==="discover"){
       $("#preview-vism").onclick=()=>status("Glyph Current","Preview · Project変更ゼロ","Esc");
@@ -789,7 +834,6 @@
     $("#inspector").innerHTML=inspector(mode); clearUndo(); bindInspector();
     status(copy.crumb,copy.brief,mode==="missing"?"Review recovery":"");
   }
-
   function setSurface(kind,open){
     if(kind!=="colors")return;
     const drawer=$("#color-book-drawer");
@@ -823,11 +867,34 @@
   }
   function filterPlugins(){
     const query=$("#search").value.trim().toLowerCase();
+    let count=0;
     $$(".vism[data-mode]").forEach(item=>{
+      const sourceMatch=state.pluginSource==="all"||
+        (state.pluginSource==="installed"&&item.dataset.mode==="installed")||
+        (state.pluginSource==="project"&&item.dataset.folder.split(" ").includes("project"))||
+        (state.pluginSource==="issues"&&["blocked","missing"].includes(item.dataset.mode));
       const folderMatch=state.pluginFolder==="all"||item.dataset.folder.split(" ").includes(state.pluginFolder);
       const labelMatch=state.pluginLabel==="all"||item.dataset.labels.split(" ").includes(state.pluginLabel);
-      item.hidden=!(folderMatch&&labelMatch&&(!query||item.dataset.search.includes(query)));
+      const packMatch=!state.packScope||item.dataset.pack===state.packScope;
+      item.hidden=!(sourceMatch&&folderMatch&&labelMatch&&packMatch&&(!query||item.dataset.search.includes(query)));
+      if(!item.hidden)count++;
     });
+    if($("#plugin-result-count"))$("#plugin-result-count").textContent=String(count);
+  }
+  function filterElements(){
+    if(!$("#elements-browser"))return;
+    const query=$("#element-search").value.trim().toLowerCase();
+    let count=0;
+    $$(".candidate-element-card").forEach(item=>{
+      const typeMatch=state.elementType==="all"||item.dataset.elementType===state.elementType;
+      const providerMatch=state.elementProvider==="all"||item.dataset.elementProvider===state.elementProvider;
+      const recentMatch=!$("#elements-browser").classList.contains("show-recent")||
+        state.elementHistory.includes(item.dataset.element);
+      const packMatch=!state.packScope||item.dataset.pack===state.packScope;
+      item.hidden=!(typeMatch&&providerMatch&&recentMatch&&packMatch&&(!query||item.dataset.search.includes(query)));
+      if(!item.hidden)count++;
+    });
+    $("#element-result-count").textContent=String(count);
   }
   function renderPluginHistory(){
     const names={installed:"Echo Bloom",discover:"Glyph Current",blocked:"Fold Field",missing:"Ribbon Array"};
@@ -850,28 +917,261 @@
     $(".scene-copy").style.color=state.selectedColor;setUndo(`${state.colorChannel} color`);syncColorBook();
     status("Color applied",`${state.colorChannel} ${state.selectedColor} · 1 Undo`,"⌘Z");
   }
+  const fileRootNames={city:"City Source",audio:"Audio Library",brand:"Brand Kit"};
+  function assetOrigin(tile){
+    return tile?.dataset.assetOrigin||state.assetSource;
+  }
+  function syncAssetSelection(primary=state.primaryAssetTile){
+    const selected=[...state.selectedAssetTiles].filter(tile=>document.contains(tile)&&!tile.hidden);
+    state.selectedAssetTiles=new Set(selected);
+    state.primaryAssetTile=selected.includes(primary)?primary:selected.at(-1)||null;
+    state.selectedAsset=state.primaryAssetTile?.dataset.asset||"";
+    $$(".asset-tile").forEach(item=>{
+      const isSelected=state.selectedAssetTiles.has(item);
+      item.classList.toggle("on",item===state.primaryAssetTile);
+      item.classList.toggle("multi-selected",isSelected);
+      item.setAttribute("aria-selected",String(isSelected));
+    });
+    if($("#asset-selection-count"))$("#asset-selection-count").textContent=`${selected.length} selected`;
+    if($("#open-media-tags"))$("#open-media-tags").disabled=selected.length===0;
+    if($("#media-tag-target-count"))$("#media-tag-target-count").textContent=`${selected.length} selected`;
+    const origin=assetOrigin(state.primaryAssetTile);
+    const isFolder=origin==="files"&&Boolean(state.primaryAssetTile?.dataset.fileDirectory);
+    $("#asset-foot-copy").textContent=isFolder?"FOLDER":origin==="files"?"EXTERNAL":"IN PROJECT";
+    if($("#place-asset")){
+      $("#place-asset").disabled=selected.length!==1;
+      $("#place-asset").textContent=isFolder?"OPEN":origin==="files"?"＋ INBOX":"PLACE";
+    }
+    syncMediaTagControls();
+  }
+  function selectAssetTile(tile,{additive=false,range=false}={}){
+    if(!tile)return;
+    const visible=mediaTilesForCurrentSource().filter(item=>!item.hidden);
+    if(range&&state.assetSelectionAnchor&&visible.includes(state.assetSelectionAnchor)){
+      const start=visible.indexOf(state.assetSelectionAnchor),end=visible.indexOf(tile);
+      if(!additive)state.selectedAssetTiles.clear();
+      visible.slice(Math.min(start,end),Math.max(start,end)+1).forEach(item=>state.selectedAssetTiles.add(item));
+    }else if(additive){
+      if(state.selectedAssetTiles.has(tile))state.selectedAssetTiles.delete(tile);
+      else state.selectedAssetTiles.add(tile);
+      state.assetSelectionAnchor=tile;
+    }else{
+      state.selectedAssetTiles=new Set([tile]);
+      state.assetSelectionAnchor=tile;
+    }
+    syncAssetSelection(tile);
+    const origin=assetOrigin(tile);
+    const isFolder=origin==="files"&&Boolean(tile.dataset.fileDirectory);
+    status("Media",`${state.selectedAssetTiles.size} selected · ${tile.dataset.asset}`,isFolder?"Double click / Enter":"Enter / Drag");
+  }
+  function mediaTilesForCurrentSource(){
+    return $$(".asset-tile").filter(tile=>{
+      if(state.assetSource==="files"){
+        const path=tile.dataset.filePath||"";
+        const inCurrentTree=!state.filePath||path===state.filePath||path.startsWith(`${state.filePath}/`);
+        return tile.dataset.assetSourceView==="files"&&
+          tile.dataset.fileRoot===state.fileRoot&&
+          (state.fileScope==="all-files"
+            ?inCurrentTree&&!tile.dataset.fileDirectory
+            :path===state.filePath);
+      }
+      return tile.dataset.assetSourceView===state.assetSource;
+    });
+  }
+  function applyMediaSearch(){
+    const query=$("#media-search")?.value.trim().toLowerCase()||"";
+    const candidates=mediaTilesForCurrentSource();
+    let count=0;
+    $$(".asset-tile").forEach(tile=>{
+      const tagMatch=!state.mediaTagFilter||
+        (tile.dataset.tags||"").split(" ").includes(state.mediaTagFilter);
+      const packMatch=!state.packScope||tile.dataset.pack===state.packScope;
+      const show=candidates.includes(tile)&&tagMatch&&packMatch&&(!query||
+        (tile.dataset.search||"").includes(query)||
+        (tile.dataset.tags||"").includes(query));
+      tile.hidden=!show;
+      if(show)count++;
+    });
+    if($("#asset-count"))$("#asset-count").textContent=`${count} ITEMS`;
+    state.selectedAssetTiles=new Set(
+      [...state.selectedAssetTiles].filter(tile=>candidates.includes(tile)&&!tile.hidden),
+    );
+    const selected=[...state.selectedAssetTiles].at(-1)||candidates.find(tile=>!tile.hidden);
+    if(selected&&state.selectedAssetTiles.size===0)state.selectedAssetTiles.add(selected);
+    syncAssetSelection(selected);
+  }
+  function renderFilePath(){
+    const path=$("#asset-path");
+    if(!path||!$("[data-file-root-select]"))return;
+    path.replaceChildren();
+    const segments=state.filePath?state.filePath.split("/"):[];
+    const appendCrumb=(label,depth)=>{
+      if(path.childNodes.length){
+        const divider=document.createElement("i");divider.textContent="/";path.append(divider);
+      }
+      const button=document.createElement("button");
+      button.textContent=label;button.dataset.fileCrumb=String(depth);path.append(button);
+    };
+    appendCrumb(fileRootNames[state.fileRoot]||state.fileRoot,0);
+    segments.forEach((segment,index)=>appendCrumb(segment,index+1));
+  }
+  function renderFileTree(visible){
+    const tree=$("#file-tree");
+    if(!tree)return;
+    tree.replaceChildren();
+    const segments=state.filePath?state.filePath.split("/"):[];
+    const appendRow=(label,path,depth,relation)=>{
+      const button=document.createElement("button");
+      button.dataset.fileTreePath=path;button.dataset.fileTreeDepth=String(depth);
+      button.className=path===state.filePath?"current":relation;
+      const marker=document.createElement("i");marker.textContent=`L${depth}`;
+      const connector=document.createElement("b");connector.textContent=relation==="child"?"›":"▣";
+      const name=document.createElement("span");name.textContent=label;
+      button.append(marker,connector,name);tree.append(button);
+    };
+    appendRow(fileRootNames[state.fileRoot]||state.fileRoot,"",0,"ancestor");
+    segments.forEach((segment,index)=>{
+      appendRow(segment,segments.slice(0,index+1).join("/"),index+1,"ancestor");
+    });
+    visible.filter(tile=>tile.dataset.fileDirectory).forEach(tile=>{
+      appendRow(tile.dataset.asset,tile.dataset.fileDirectory,segments.length+1,"child");
+    });
+  }
+  function renderFileBrowser(){
+    if(!$("[data-file-root-select]"))return false;
+    $$("[data-file-root-select]").forEach(button=>button.classList.toggle("on",button.dataset.fileRootSelect===state.fileRoot));
+    renderFilePath();
+    const visible=$$(".asset-tile[data-asset-source-view='files']").filter(tile=>
+      tile.dataset.fileRoot===state.fileRoot&&(tile.dataset.filePath||"")===state.filePath
+    );
+    applyMediaSearch();
+    renderFileTree(visible);
+    $("#asset-source-title").textContent=fileRootNames[state.fileRoot]||"Registered folder";
+    $("#asset-scope-label").textContent=state.fileScope==="all-files"
+      ?"ALL FILES"
+      :state.filePath?"FOLDER":"REGISTERED ROOT";
+    $("#file-back").disabled=state.fileHistory.length===0;
+    $("#file-parent").disabled=!state.filePath;
+    return true;
+  }
+  function navigateFile(root,path,record=true){
+    if(record&&(root!==state.fileRoot||path!==state.filePath)){
+      state.fileHistory.push({root:state.fileRoot,path:state.filePath});
+    }
+    state.fileRoot=root;state.filePath=path;renderFileBrowser();
+  }
+  function openSelectedFolder(){
+    const tile=state.primaryAssetTile;
+    if(tile?.dataset.fileDirectory)navigateFile(tile.dataset.fileRoot,tile.dataset.fileDirectory);
+  }
+  function commitAsset(tile,via,handoffTarget=$("#stage .selection-bounds")){
+    if(!tile||tile.dataset.fileDirectory)return;
+    selectAssetTile(tile);
+    const origin=assetOrigin(tile);
+    const verb=origin==="files"?"Import and place":"Place";
+    setUndo(`${verb} ${tile.dataset.asset}`);
+    handoff(handoffTarget);
+    status("Asset placed",`${via} · ${tile.dataset.asset} · 1 Undo`,"⌘Z");
+  }
+  function assetIdentity(tile){
+    const origin=assetOrigin(tile);
+    if(origin!=="files")return `${origin}:${tile.dataset.asset}`;
+    return tile.dataset.fileDirectory
+      ?`files:${tile.dataset.fileRoot}:dir:${tile.dataset.fileDirectory}`
+      :`files:${tile.dataset.fileRoot}:file:${tile.dataset.filePath||""}:${tile.dataset.asset}`;
+  }
+  function assetTagSet(tile){
+    return new Set((tile?.dataset.tags||"").split(" ").filter(Boolean));
+  }
+  function syncMediaTagControls(){
+    const all=$$(".asset-tile");
+    all.forEach(tile=>{
+      const tags=[...assetTagSet(tile)],badge=tile.querySelector(".asset-tags");
+      if(badge){badge.textContent=tags.join(" · ");badge.hidden=tags.length===0}
+    });
+    $$("[data-media-tag-box]").forEach(button=>{
+      const tag=button.dataset.mediaTagBox;
+      const identities=new Set(all.filter(tile=>assetTagSet(tile).has(tag)).map(assetIdentity));
+      const count=button.querySelector("b");if(count)count.textContent=String(identities.size);
+      button.classList.toggle("on",state.mediaTagFilter===tag);
+    });
+    const selected=[...state.selectedAssetTiles];
+    $$("[data-toggle-media-tag]").forEach(button=>{
+      const tag=button.dataset.toggleMediaTag;
+      const checked=selected.length>0&&selected.every(tile=>assetTagSet(tile).has(tag));
+      button.setAttribute("aria-pressed",String(checked));
+    });
+  }
+  function changeMediaTag(tag,mode="toggle",targets=[...state.selectedAssetTiles]){
+    const selected=targets.filter(tile=>document.contains(tile));
+    if(!tag||selected.length===0)return;
+    const identities=new Set(selected.map(assetIdentity));
+    const clones=$$(".asset-tile").filter(tile=>identities.has(assetIdentity(tile)));
+    const allTagged=selected.every(tile=>assetTagSet(tile).has(tag));
+    const add=mode==="add"||!allTagged;
+    clones.forEach(tile=>{
+      const tags=assetTagSet(tile);
+      if(add)tags.add(tag);else tags.delete(tag);
+      tile.dataset.tags=[...tags].join(" ");
+    });
+    syncMediaTagControls();
+    if(state.mediaTagFilter===tag&&!add)applyMediaSearch();
+    status("Media tags",`${add?"Added":"Removed"} ${tag} · ${identities.size} items · Workspace metadata`,"");
+  }
   function setAssetSource(source){
     state.assetSource=source;
     $$("[data-asset-source]").forEach(button=>button.classList.toggle("on",button.dataset.assetSource===source));
-    $$("[data-asset-source-view]").forEach(item=>item.hidden=item.dataset.assetSourceView!==source);
+    $$("[data-media-recent],[data-media-collection]").forEach(button=>button.classList.remove("on"));
+    $$("[data-file-root-select]").forEach(button=>button.classList.toggle("on",source==="files"&&button.dataset.fileRootSelect===state.fileRoot));
     $$(".file-nav").forEach(button=>button.hidden=source!=="files");
-    $("#asset-path").textContent=source==="files"?"素材 / MV / night_drive / source":"night_drive / Assets";
-    $("#asset-source-title").textContent=source==="files"?"External files":"Project assets";
-    $("#asset-scope-label").textContent=source==="files"?"BROWSE / PREVIEW":"USED / UNPLACED";
-    const visible=$$(".asset-tile").filter(tile=>tile.dataset.assetSourceView===source);
-    $("#asset-count").textContent=`${visible.length} ITEMS`;
-    visible.forEach((tile,index)=>tile.classList.toggle("on",index===0));
-    state.selectedAsset=visible[0]?.dataset.asset||"";
-    $("#asset-foot-copy").textContent=source==="files"?"FILES":"PROJECT";
-    $("#place-asset").textContent=source==="files"?"＋ INBOX":"PLACE";
-    status("Assets",source==="files"?"External files":"Project assets","");
+    if($("#file-scope-toggle"))$("#file-scope-toggle").hidden=source!=="files";
+    if($("#media-file-hierarchy"))$("#media-file-hierarchy").hidden=source!=="files";
+    if(source==="files"&&renderFileBrowser()){
+      status("Media","Registered folder","");
+      return;
+    }
+    const all=source==="all";
+    $("#asset-path").textContent=all?"All Media":"night_drive / Project";
+    $("#asset-source-title").textContent=all?"All Media":"Project";
+    $("#asset-scope-label").textContent=all?"PROJECT + REGISTERED FOLDERS":"USED / UNPLACED";
+    applyMediaSearch();
+    status("Media Browser",all?"All media":"Project assets","");
   }
   function setBrowserTab(tab){
-    const isVism=tab==="vism";
+    const isVism=tab==="effects";
+    const isElements=tab==="create";
     $$("[data-tab]").forEach(button=>button.classList.toggle("on",button.dataset.tab===tab));
-    $("#vism-browser").hidden=!isVism;$("#project-browser").hidden=isVism;
-    if(!isVism)setAssetSource(state.assetSource);
-    status(isVism?"Plugin Browser":"Project Explorer","","");
+    $("#vism-browser").hidden=!isVism;
+    $("#project-browser").hidden=isVism||isElements;
+    if($("#elements-browser"))$("#elements-browser").hidden=!isElements;
+    if(!isVism&&!isElements)setAssetSource($('[data-asset-source="all"]')?"all":"project");
+    status(isVism?"Effects Browser":isElements?"Create Browser":"Media Browser","","");
+  }
+  function setPackScope(pack){
+    state.packScope=pack;
+    const open=Boolean(pack);
+    $("#candidate-pack-scope").hidden=!open;
+    $(".browser").classList.toggle("pack-scoped",open);
+    $$("[data-pack-select]").forEach(button=>button.classList.toggle("on",button.dataset.packSelect===pack));
+    if(open){
+      state.elementType="all";state.elementProvider="all";
+      state.pluginSource="all";state.pluginFolder="all";state.pluginLabel="all";
+      state.assetSource="all";
+      $("#elements-browser").classList.remove("show-recent");
+      $$("[data-element-type-filter],[data-element-provider-filter]").forEach(button=>button.classList.remove("on"));
+      $$("[data-element-filter]").forEach(button=>button.classList.toggle("on",button.dataset.elementFilter==="all"));
+      $$("[data-plugin-source]").forEach(button=>button.classList.toggle("on",button.dataset.pluginSource==="all"));
+      $$("[data-asset-source]").forEach(button=>button.classList.toggle("on",button.dataset.assetSource==="all"));
+      $("#asset-source-title").textContent="Motion Kit α";
+      $("#asset-scope-label").textContent="PACK · MEDIA";
+      $("#element-result-title").textContent="Motion Kit α";
+    }else{
+      $("#asset-source-title").textContent="All Media";
+      $("#asset-scope-label").textContent="PROJECT + REGISTERED FOLDERS";
+      $("#element-result-title").textContent="All Create items";
+    }
+    filterPlugins();filterElements();applyMediaSearch();
+    status(open?"Motion Kit α":"Pack scope",open?"One pack · Media / Create / Effects":"All content","");
   }
   function syncInbox(){
     const count=$$("#inbox-list .inbox-item").length;
@@ -908,12 +1208,316 @@
     status("Inbox",`${name}を受取 · Project配置なし`,"");
   }
 
-  $$(".vism[data-mode]").forEach(item=>item.onclick=()=>setMode(item.dataset.mode));
+  function commitPlugin(item,via,targetName="selected object",handoffTarget=$("#stage .selection-bounds")){
+    const name=item.dataset.pluginName||item.textContent.trim();
+    if(["blocked","missing"].includes(item.dataset.mode)){
+      status(name,item.dataset.mode==="missing"?"Plugin missing":"Unavailable capability","Inspect");
+      return;
+    }
+    setMode(item.dataset.mode);
+    state.pluginHistory=[item.dataset.mode,...state.pluginHistory.filter(mode=>mode!==item.dataset.mode)];
+    renderPluginHistory();setUndo(`Add ${name}`);
+    handoff(handoffTarget);
+    status(name,`${via} · ${targetName}へ適用 · 1 Undo`,"⌘Z");
+  }
+  function commitElement(item,via,target="Stage",handoffTarget=$("#stage .selection-bounds")){
+    const name=item.dataset.elementName||item.textContent.trim();
+    state.elementHistory=[item.dataset.element,...state.elementHistory.filter(id=>id!==item.dataset.element)];
+    setUndo(`Add ${name}`);handoff(handoffTarget);
+    status(name,`${via} · ${target}へ作成 · 1 Undo`,"⌘Z");
+  }
+  let contextElement=null;
+  const elementMenu=$("#element-context-menu"),stageAddMenu=$("#stage-add-menu");
+  function closeContextMenus(){
+    if(elementMenu)elementMenu.hidden=true;
+    if(stageAddMenu)stageAddMenu.hidden=true;
+  }
+  function placeContextMenu(menu,event){
+    closeContextMenus();
+    menu.style.left=`${Math.min(innerWidth-165,event.clientX)}px`;
+    menu.style.top=`${Math.min(innerHeight-145,event.clientY)}px`;
+    menu.hidden=false;
+  }
+  if(elementMenu){
+    $$("[data-element-context-command]").forEach(button=>button.onclick=()=>{
+      if(!contextElement)return;
+      const command=button.dataset.elementContextCommand;
+      if(command==="add")commitElement(contextElement,"Context menu");
+      else if(command==="timeline")commitElement(contextElement,"Context menu","Timeline at playhead",$(".time-plane"));
+      else if(command==="favorite")status(contextElement.dataset.elementName,"Added to Favorites · User setting","");
+      else{
+        state.elementType="all";state.elementProvider=contextElement.dataset.elementProvider;
+        $$("[data-element-type-filter]").forEach(item=>item.classList.remove("on"));
+        $$("[data-element-provider-filter]").forEach(item=>item.classList.toggle("on",item.dataset.elementProviderFilter===state.elementProvider));
+        const provider=contextElement.querySelector(".candidate-element-preview small").textContent;
+        $("#element-result-title").textContent=provider;
+        filterElements();status("Provider",provider,"");
+      }
+      closeContextMenus();
+    });
+  }
+  if(stageAddMenu){
+    $$("[data-stage-add-element]").forEach(button=>button.onclick=()=>{
+      const id=button.dataset.stageAddElement;
+      if(id==="browse"){
+        setBrowserTab("create");$("#element-search").focus();
+      }else{
+        const item=$(`.candidate-element-card[data-element="${id}"]`);
+        if(item)commitElement(item,"Stage context menu");
+      }
+      closeContextMenus();
+    });
+    $("#stage").addEventListener("contextmenu",event=>{
+      if(event.target.closest(".scene-copy,.rings,.selection-bounds"))return;
+      event.preventDefault();placeContextMenu(stageAddMenu,event);
+    });
+  }
+  document.addEventListener("pointerdown",event=>{
+    if(!event.target.closest(".candidate-context-menu"))closeContextMenus();
+  });
+  let draggedElement=null;
+  $$(".candidate-element-card").forEach(item=>{
+    item.onclick=()=>{
+      $$(".candidate-element-card").forEach(card=>card.classList.toggle("on",card===item));
+      status(item.dataset.elementName,`${item.dataset.elementType} · ${item.querySelector(".candidate-element-preview small").textContent}`,"");
+    };
+    item.ondblclick=()=>{
+      if(item.dataset.elementState==="Missing"){
+        status(item.dataset.elementName,"Missing · Open Pack details for recovery","Inspect");
+        return;
+      }
+      commitElement(item,"Double click");
+    };
+    item.oncontextmenu=event=>{
+      event.preventDefault();contextElement=item;item.click();placeContextMenu(elementMenu,event);
+    };
+    item.ondragstart=event=>{
+      if(item.dataset.elementState==="Missing"){
+        event.preventDefault();
+        showDragContext(event,item.dataset.elementName,"Missing · Open Pack details",false);
+        status(item.dataset.elementName,"Missing · Motion Kit α requires recovery","Inspect");
+        return;
+      }
+      draggedElement=item;
+      event.dataTransfer?.setData("text/plain",item.dataset.elementName);
+      showDragContext(event,item.dataset.elementName,"Drop on Stage or Timeline");
+      status(item.dataset.elementName,"Choosing placement · Esc to cancel","Drop");
+    };
+    item.ondragend=()=>{
+      draggedElement=null;hideDragContext();
+      $("#stage").classList.remove("drop-hover-valid","drop-hover-invalid");
+      $("#timeline").classList.remove("timeline-drop-ready");
+      $("#timeline-drop-ghost")?.remove();
+    };
+  });
+  let draggedPlugin=null;
+  $$(".vism[data-mode]").forEach(item=>{
+    item.onclick=event=>{if(!event.target.closest("[data-plugin-type]"))setMode(item.dataset.mode)};
+    item.ondblclick=event=>{if(!event.target.closest("[data-plugin-type]"))commitPlugin(item,"Double click")};
+    item.onpointerdown=event=>{
+      if(!["blocked","missing"].includes(item.dataset.mode))return;
+      const reason=item.dataset.mode==="missing"
+        ?"Plugin is missing · Inspect recovery"
+        :"Capability unavailable · Inspect requirements";
+      showDragContext(event,item.dataset.pluginName,reason,false);
+      setTimeout(hideDragContext,1200);
+    };
+    item.ondragstart=event=>{
+      if(["blocked","missing"].includes(item.dataset.mode)){
+        event.preventDefault();
+        const reason=item.dataset.mode==="missing"
+          ?"Plugin is missing · Inspect recovery"
+          :"Capability unavailable · Inspect requirements";
+        showDragContext(event,item.dataset.pluginName,reason,false);
+        status(item.dataset.pluginName,reason,"Inspect");
+        return;
+      }
+      draggedPlugin=item;event.dataTransfer?.setData("text/plain",item.dataset.pluginName||"Plugin");
+      showDragContext(event,item.dataset.pluginName,"Drag over an object or Timeline bar");
+      status(item.dataset.pluginName,"Picking target · Esc to cancel","Drop");
+    };
+    item.ondragend=()=>{
+      draggedPlugin=null;hideDragContext();
+      $("#stage").classList.remove("plugin-drop-ready","drop-hover-valid","drop-hover-invalid");
+      $("#timeline").classList.remove("timeline-drop-ready");
+      $$(".time-bar").forEach(bar=>bar.classList.remove("drop-hover-valid"));
+    };
+  });
+  let draggedAsset=null;
+  function stageObjectAt(event){
+    return event.target.closest(".scene-copy,.rings,.selection-bounds")
+      ?$("#stage .selection-bounds")
+      :null;
+  }
+  $("#stage").addEventListener("dragover",event=>{
+    if(!draggedAsset&&!draggedPlugin&&!draggedElement)return;
+    event.preventDefault();
+    const folder=Boolean(draggedAsset?.dataset.fileDirectory),target=stageObjectAt(event);
+    const valid=Boolean(draggedElement)||!folder&&Boolean(target);
+    $("#stage").classList.toggle("drop-hover-valid",valid);
+    $("#stage").classList.toggle("drop-hover-invalid",!valid);
+    if(folder)showDragContext(event,"Cannot place folder","Open it and choose a file",false);
+    else if(draggedElement)showDragContext(event,draggedElement.dataset.elementName,"Drop to create at pointer · 1 Undo",true);
+    else if(!target)showDragContext(event,"No object under pointer","Move over the object or cancel",false);
+    else showDragContext(event,target=== $(".selection-bounds")?"Pulse rings":"Object","Drop to commit · 1 Undo",true);
+  });
+  $("#stage").addEventListener("drop",event=>{
+    if(!draggedAsset&&!draggedPlugin&&!draggedElement)return;
+    event.preventDefault();const target=stageObjectAt(event);
+    if(draggedElement){
+      const item=draggedElement;draggedElement=null;commitElement(item,"Stage drop","Stage",$("#stage .frame"));
+    }else if(!target||draggedAsset?.dataset.fileDirectory){
+      status("Drop cancelled",draggedAsset?.dataset.fileDirectory?"Folder cannot be placed":"No object under pointer","");
+    }else if(draggedPlugin){
+      const item=draggedPlugin;draggedPlugin=null;commitPlugin(item,"Stage drop","Pulse rings",target);
+    }else{
+      const tile=draggedAsset;draggedAsset=null;commitAsset(tile,"Stage drop",target);
+    }
+    hideDragContext();
+    $("#stage").classList.remove("asset-drop-ready","plugin-drop-ready","drop-hover-valid","drop-hover-invalid");
+  });
+  const timelinePlane=$(".time-plane");
+  timelinePlane.addEventListener("dragover",event=>{
+    if(!draggedAsset&&!draggedPlugin&&!draggedElement)return;
+    event.preventDefault();
+    const bar=event.target.closest(".time-bar");
+    const folder=Boolean(draggedAsset?.dataset.fileDirectory);
+    const valid=draggedPlugin?Boolean(bar):draggedElement||!folder;
+    $("#timeline").classList.toggle("timeline-drop-ready",valid);
+    $$(".time-bar").forEach(item=>item.classList.toggle("drop-hover-valid",item===bar&&valid));
+    if(folder){
+      showDragContext(event,"Cannot place folder","Open it and choose a file",false);
+      return;
+    }
+    if(draggedPlugin&&!bar){
+      showDragContext(event,"No Timeline object under pointer","Move over a bar or cancel",false);
+      return;
+    }
+    if(draggedAsset||draggedElement){
+      let ghost=$("#timeline-drop-ghost");
+      if(!ghost){ghost=document.createElement("div");ghost.id="timeline-drop-ghost";ghost.className="timeline-drop-ghost";timelinePlane.append(ghost)}
+      const rect=timelinePlane.getBoundingClientRect();
+      ghost.style.left=`${Math.max(0,Math.min(rect.width-76,event.clientX-rect.left))}px`;
+      ghost.textContent=draggedElement?.dataset.elementName||draggedAsset.dataset.asset;
+      showDragContext(event,"Timeline placement","Drop at cursor time · 1 Undo");
+    }else{
+      showDragContext(event,bar.dataset.name,"Drop effect on this Timeline object · 1 Undo");
+    }
+  });
+  timelinePlane.addEventListener("drop",event=>{
+    if(!draggedAsset&&!draggedPlugin&&!draggedElement)return;
+    event.preventDefault();const bar=event.target.closest(".time-bar");
+    if(draggedAsset?.dataset.fileDirectory||draggedPlugin&&!bar){
+      status("Drop cancelled",draggedAsset?.dataset.fileDirectory?"Folder cannot be placed":"No Timeline object under pointer","");
+    }else if(draggedPlugin){
+      const item=draggedPlugin;draggedPlugin=null;
+      commitPlugin(item,"Timeline drop",bar.dataset.name,bar);
+    }else if(draggedElement){
+      const item=draggedElement,ghost=$("#timeline-drop-ghost");
+      draggedElement=null;
+      const committed=document.createElement("div");
+      committed.className="clip time-bar handoff";committed.textContent=`◇ ${item.dataset.elementName}`;
+      committed.style.left=ghost?.style.left||"48%";committed.style.width="76px";committed.style.top="206px";
+      timelinePlane.append(committed);ghost?.remove();
+      commitElement(item,"Timeline drop","Timeline",committed);
+    }else{
+      const tile=draggedAsset,ghost=$("#timeline-drop-ghost");
+      draggedAsset=null;
+      const committed=document.createElement("div");
+      committed.className="clip time-bar handoff";committed.textContent=`▧ ${tile.dataset.asset}`;
+      committed.style.left=ghost?.style.left||"48%";committed.style.width="76px";committed.style.top="206px";
+      timelinePlane.append(committed);ghost?.remove();
+      commitAsset(tile,"Timeline drop",committed);
+    }
+    hideDragContext();$("#timeline").classList.remove("timeline-drop-ready");
+    $$(".time-bar").forEach(item=>item.classList.remove("drop-hover-valid"));
+  });
   $$("[data-tab]").forEach(button=>button.onclick=()=>setBrowserTab(button.dataset.tab));
+  $$("[data-pack-select]").forEach(button=>button.onclick=()=>setPackScope(button.dataset.packSelect));
+  $$("[data-pack-tab]").forEach(button=>button.onclick=()=>setBrowserTab(button.dataset.packTab));
+  if($("#candidate-pack-clear"))$("#candidate-pack-clear").onclick=()=>setPackScope("");
+  if($("#candidate-pack-open"))$("#candidate-pack-open").onclick=()=>status(
+    "Motion Kit α",
+    "Installed · 6 items · Update and license stay one Pack",
+    "Manage",
+  );
+  if($("#element-search"))$("#element-search").oninput=()=>filterElements();
+  $$("[data-element-type-filter]").forEach(button=>button.onclick=()=>{
+    state.elementType=button.dataset.elementTypeFilter;state.elementProvider="all";
+    $("#elements-browser").classList.remove("show-recent");
+    $$("[data-element-filter],[data-element-provider-filter]").forEach(item=>item.classList.remove("on"));
+    $$("[data-element-type-filter]").forEach(item=>item.classList.toggle("on",item===button));
+    $("#element-result-title").textContent=button.textContent.trim();
+    filterElements();status("Create",`${button.textContent.trim()} · registered types`,"");
+  });
+  $$("[data-element-provider-filter]").forEach(button=>button.onclick=()=>{
+    state.elementProvider=button.dataset.elementProviderFilter;state.elementType="all";
+    $("#elements-browser").classList.remove("show-recent");
+    $$("[data-element-filter],[data-element-type-filter]").forEach(item=>item.classList.remove("on"));
+    $$("[data-element-provider-filter]").forEach(item=>item.classList.toggle("on",item===button));
+    $("#element-result-title").textContent=button.textContent.trim();
+    filterElements();status("Create",`${button.textContent.trim()} provider`,"");
+  });
+  $$("[data-element-filter]").forEach(button=>button.onclick=()=>{
+    state.elementType="all";state.elementProvider="all";
+    $$("[data-element-type-filter],[data-element-provider-filter]").forEach(item=>item.classList.remove("on"));
+    $$("[data-element-filter]").forEach(item=>item.classList.toggle("on",item===button));
+    $("#elements-browser").classList.toggle("show-recent",button.dataset.elementFilter==="recent");
+    $("#element-result-title").textContent=button.dataset.elementFilter==="recent"?"Recent":"All Create items";
+    filterElements();status("Create",button.textContent.trim(),"");
+  });
+  $$("[data-element-view]").forEach(button=>button.onclick=()=>{
+    state.elementView=button.dataset.elementView;$("#elements-browser").dataset.view=state.elementView;
+    $$("[data-element-view]").forEach(item=>item.classList.toggle("on",item===button));
+    status("Create",state.elementView==="grid"?"Grid":"List","");
+  });
   $("#search").addEventListener("input",event=>{
     filterPlugins();
   });
   $("#plugin-folder").onchange=event=>{state.pluginFolder=event.target.value;filterPlugins();status("Plugin folder","Folderで絞り込み","")};
+  function clearPluginTaxonomy(){
+    state.pluginLabel="all";
+    $$("[data-plugin-type]").forEach(item=>item.classList.remove("on"));
+    if($("#plugin-taxonomy-clear")){
+      $("#plugin-taxonomy-clear").hidden=true;$("#plugin-taxonomy-clear").textContent="";
+    }
+  }
+  $$("[data-plugin-type]").forEach(button=>button.onclick=event=>{
+    event.stopPropagation();
+    state.pluginSource="all";state.pluginFolder="all";state.pluginLabel=button.dataset.pluginType;
+    $$("[data-plugin-source]").forEach(item=>item.classList.toggle("on",item.dataset.pluginSource==="all"));
+    $$("[data-plugin-collection]").forEach(item=>item.classList.remove("on"));
+    $$("[data-plugin-type]").forEach(item=>item.classList.toggle("on",item.dataset.pluginType===state.pluginLabel));
+    if($("#plugin-taxonomy-clear")){
+      $("#plugin-taxonomy-clear").hidden=false;$("#plugin-taxonomy-clear").textContent=`${button.textContent} ×`;
+    }
+    filterPlugins();status("Effect type",`${button.textContent} · Results`, "All to clear");
+  });
+  if($("#plugin-taxonomy-clear"))$("#plugin-taxonomy-clear").onclick=()=>{
+    clearPluginTaxonomy();filterPlugins();status("Effects Browser","All types","");
+  };
+  $$("[data-plugin-source]").forEach(source=>source.onclick=()=>{
+    state.pluginSource=source.dataset.pluginSource; state.pluginFolder="all";clearPluginTaxonomy();
+    $$("[data-plugin-source]").forEach(item=>item.classList.toggle("on",item===source));
+    $$("[data-plugin-collection]").forEach(item=>item.classList.remove("on"));
+    if($("#plugin-recent-panel"))$("#plugin-recent-panel").hidden=true;
+    if($("#plugin-results"))$("#plugin-results").hidden=false;
+    filterPlugins(); status("Effects Browser",source.getAttribute("aria-label")||source.textContent.trim(),"");
+  });
+  $$("[data-plugin-collection]").forEach(collection=>collection.onclick=()=>{
+    state.pluginSource="all"; state.pluginFolder=collection.dataset.pluginCollection;clearPluginTaxonomy();
+    $$("[data-plugin-source]").forEach(item=>item.classList.remove("on"));
+    $$("[data-plugin-collection]").forEach(item=>item.classList.toggle("on",item===collection));
+    if($("#plugin-recent-panel"))$("#plugin-recent-panel").hidden=true;
+    if($("#plugin-results"))$("#plugin-results").hidden=false;
+    filterPlugins(); status("Collection",collection.getAttribute("aria-label")||collection.textContent.trim(),"");
+  });
+  if($("#plugin-recent-toggle"))$("#plugin-recent-toggle").onclick=()=>{
+    const open=$("#plugin-recent-panel").hidden;
+    $("#plugin-recent-panel").hidden=!open; $("#plugin-results").hidden=open;
+    $("#plugin-recent-toggle").classList.toggle("on",open);
+    status("Recent",open?"Committed plugins":"","");
+  };
   $$(".plugin-label").forEach(label=>label.onclick=()=>{
     state.pluginLabel=label.dataset.pluginLabel; $$(".plugin-label").forEach(item=>item.classList.toggle("on",item===label)); filterPlugins();
     status("Plugin label",`${label.textContent} filter`,"");
@@ -921,23 +1525,285 @@
   $$("[data-plugin-view]").forEach(button=>button.onclick=()=>{
     state.pluginView=button.dataset.pluginView; $("#vism-browser").dataset.view=state.pluginView;
     $$("[data-plugin-view]").forEach(item=>item.classList.toggle("on",item===button));
-    status("Plugin Browser",state.pluginView==="thumb"?"Overlay表示":"詳細card表示","");
+    const viewCopy={visual:"Thumbnail only",thumb:"Thumbnail + name",detail:"List"};
+    status("Effects Browser",viewCopy[state.pluginView],"");
   });
   $("#plugin-thumb-size").oninput=event=>{
     $("#vism-browser").style.setProperty("--plugin-thumb-size",`${event.target.value}px`);
     status("Plugin thumbnail",`${event.target.value}px · User setting`,"");
   };
-  $("#add-plugin-folder").onclick=()=>status("New plugin folder","Folderを追加 · User library","Enter / Esc");
+  let previewChoice="auto";
+  let previewGenerated=false;
+  const previewRange={in:25,out:75,poster:52};
+  function previewTime(value){
+    const seconds=52.2+Number(value)*.04;
+    return `00:${seconds.toFixed(1).padStart(4,"0")}`;
+  }
+  function syncPreviewRange(changed){
+    const inInput=$("#candidate-range-in"),outInput=$("#candidate-range-out"),posterInput=$("#candidate-range-poster");
+    if(!inInput||!outInput||!posterInput)return;
+    previewRange.in=Number(inInput.value);previewRange.out=Number(outInput.value);previewRange.poster=Number(posterInput.value);
+    if(changed==="in"&&previewRange.in>previewRange.out-5)previewRange.in=previewRange.out-5;
+    if(changed==="out"&&previewRange.out<previewRange.in+5)previewRange.out=previewRange.in+5;
+    previewRange.poster=Math.max(previewRange.in,Math.min(previewRange.out,previewRange.poster));
+    inInput.value=previewRange.in;outInput.value=previewRange.out;posterInput.value=previewRange.poster;
+    const range=$("#candidate-preview-range");
+    range.style.setProperty("--range-in",`${previewRange.in}%`);
+    range.style.setProperty("--range-out",`${previewRange.out}%`);
+    range.style.setProperty("--range-poster",`${previewRange.poster}%`);
+    $("#candidate-range-in-copy").textContent=previewTime(previewRange.in);
+    $("#candidate-range-out-copy").textContent=previewTime(previewRange.out);
+    $("#candidate-range-duration").textContent=`${((previewRange.out-previewRange.in)*.04).toFixed(1)}s`;
+    previewGenerated=false;
+    $("#candidate-generate-preview").textContent="Generate preview";
+  }
+  function openSaveSheet(kind){
+    const sheet=$("#candidate-save-sheet");
+    previewChoice="auto";previewGenerated=false;
+    $$("[data-preview-choice]").forEach(button=>button.classList.toggle("on",button.dataset.previewChoice==="auto"));
+    $("#candidate-save-preview-stage").className="candidate-save-preview-stage motion";
+    $("#candidate-preview-copy").textContent="Auto · 2s around playhead";
+    $("#candidate-preview-range").classList.remove("poster-only");
+    previewRange.in=25;previewRange.out=75;previewRange.poster=52;
+    $("#candidate-range-in").value=previewRange.in;$("#candidate-range-out").value=previewRange.out;$("#candidate-range-poster").value=previewRange.poster;
+    syncPreviewRange();
+    $("#candidate-range-play").classList.remove("on");
+    $("#candidate-save-name").value=kind==="effect"?"Echo Bloom variation":"Pulse treatment";
+    sheet.dataset.saveKind=kind;sheet.hidden=false;
+    $("#candidate-save-name").focus();$("#candidate-save-name").select();
+    status("Save to Browser","Poster + motion previewを自動生成","Enter / Esc");
+  }
+  if($("#save-effect-item"))$("#save-effect-item").onclick=()=>openSaveSheet("effect");
+  if($("#save-create-item"))$("#save-create-item").onclick=()=>openSaveSheet("create");
+  if($("#candidate-save-close"))$("#candidate-save-close").onclick=()=>{
+    $("#candidate-save-sheet").hidden=true;status("Save cancelled","Browser変更ゼロ","");
+  };
+  const previewCopy={
+    auto:"Auto · 2s around playhead",
+    record:"Recording · 2s",
+    file:"GIF / Video · imported preview",
+    frame:"Current frame · poster only",
+  };
+  $$("[data-preview-choice]").forEach(button=>button.onclick=()=>{
+    previewChoice=button.dataset.previewChoice;
+    $$("[data-preview-choice]").forEach(item=>item.classList.toggle("on",item===button));
+    const stage=$("#candidate-save-preview-stage");
+    stage.className=`candidate-save-preview-stage ${previewChoice==="frame"?"":previewChoice==="record"?"recording":"motion"}`;
+    $("#candidate-preview-copy").textContent=previewCopy[previewChoice];
+    $("#candidate-preview-range").classList.toggle("poster-only",previewChoice==="frame");
+    $$(`#candidate-preview-range input`).forEach(input=>input.disabled=previewChoice==="frame");
+    previewGenerated=previewChoice==="frame";
+    status("Preview",previewCopy[previewChoice],previewChoice==="file"?"GIF / Video / sequence":"");
+  });
+  ["in","out","poster"].forEach(part=>{
+    const input=$(`#candidate-range-${part}`);
+    if(input)input.oninput=()=>syncPreviewRange(part);
+  });
+  if($("#candidate-range-play"))$("#candidate-range-play").onclick=event=>{
+    const playing=event.currentTarget.classList.toggle("on");
+    event.currentTarget.textContent=playing?"■ Stop":"▶ Loop";
+    $("#candidate-save-preview-stage").classList.toggle("motion",playing||previewChoice!=="frame");
+    status(playing?"Loop preview":"Preview paused",`${$("#candidate-range-duration").textContent} · Document unchanged`,"");
+  };
+  if($("#candidate-generate-preview"))$("#candidate-generate-preview").onclick=()=>{
+    const duration=$("#candidate-range-duration").textContent;
+    previewGenerated=true;
+    $("#candidate-generate-preview").textContent="Regenerate";
+    $("#candidate-preview-copy").textContent=`Ready · ${duration} rendered`;
+    status("Preview ready",`${duration} · Poster ${previewTime(previewRange.poster)} · Document unchanged`,"");
+  };
+  if($("#candidate-save-confirm"))$("#candidate-save-confirm").onclick=()=>{
+    const sheet=$("#candidate-save-sheet"),name=$("#candidate-save-name").value.trim()||"Untitled";
+    sheet.hidden=true;
+    const target=sheet.dataset.saveKind==="effect"?$("#save-effect-item"):$("#save-create-item");
+    handoff(target);
+    const result=previewGenerated?$("#candidate-preview-copy").textContent:`Poster saved · preview not generated`;
+    status("Saved to Browser",`${name} · ${result} · Document unchanged`,"");
+  };
   $("#surface-colors").onclick=()=>setSurface("colors",!$("#color-book-drawer").classList.contains("open"));
   $$("[data-close-surface]").forEach(button=>button.onclick=()=>setSurface(button.dataset.closeSurface,false));
-  $$("[data-asset-source]").forEach(button=>button.onclick=()=>setAssetSource(button.dataset.assetSource));
-  $$(".asset-tile").forEach(tile=>tile.onclick=()=>{
-    state.selectedAsset=tile.dataset.asset; $$(".asset-tile").forEach(item=>item.classList.toggle("on",item===tile));
-    status("Assets",`${state.selectedAsset} · ${state.assetSource==="files"?"Preview":"Project"}`,"Enter / Drag");
+  $$("[data-asset-source]").forEach(button=>button.onclick=()=>{
+    state.mediaTagFilter="";
+    syncMediaTagControls();
+    setAssetSource(button.dataset.assetSource);
   });
-  $("#place-asset").onclick=()=>{
-    if(state.assetSource==="files"){addInboxAsset(state.selectedAsset);return}
-    setUndo(`Place ${state.selectedAsset}`);status("Asset placed",`${state.selectedAsset}を配置 · 1 Undo`,"⌘Z");
+  $$("[data-file-root-select]").forEach(button=>button.onclick=()=>{
+    setAssetSource("files");
+    navigateFile(button.dataset.fileRootSelect,"");
+    status("Registered folder",fileRootNames[state.fileRoot],"Browse");
+  });
+  if($("#media-search"))$("#media-search").oninput=()=>applyMediaSearch();
+  $$("[data-file-scope]").forEach(button=>button.onclick=()=>{
+    state.fileScope=button.dataset.fileScope;
+    $$("[data-file-scope]").forEach(item=>{
+      const active=item===button;
+      item.classList.toggle("on",active);
+      item.setAttribute("aria-pressed",String(active));
+    });
+    renderFileBrowser();
+    status("Media view",state.fileScope==="folders"?"Folders":"All files","");
+  });
+  $$("[data-media-view]").forEach(button=>button.onclick=()=>{
+    state.mediaView=button.dataset.mediaView;
+    $("#project-browser").dataset.view=state.mediaView;
+    $$("[data-media-view]").forEach(item=>item.classList.toggle("on",item===button));
+    const viewCopy={visual:"Thumbnail only · 16:9 contain",grid:"Thumbnail + name · 16:9 contain",list:"List · 16:9 contain"};
+    status("Media Browser",viewCopy[state.mediaView],"");
+  });
+  if($("[data-media-recent]"))$("[data-media-recent]").onclick=event=>{
+    setAssetSource("all");
+    event.currentTarget.classList.add("on");
+    const recent=new Set(["night_drive.wav","city_loop.mp4","impact_04.wav"]);
+    $$(".asset-tile[data-asset-source-view='all']").forEach(tile=>tile.hidden=!recent.has(tile.dataset.asset));
+    $("#asset-source-title").textContent="Recent";
+    $("#asset-scope-label").textContent="COMMITTED + PREVIEWED";
+    $("#asset-count").textContent="3 ITEMS";
+    selectAssetTile($(".asset-tile[data-asset-source-view='all']:not([hidden])"));
+  };
+  $$("[data-media-collection]").forEach(button=>button.onclick=()=>{
+    setAssetSource("all");
+    button.classList.add("on");
+    const names=button.dataset.mediaCollection==="brand"
+      ?new Set(["logo.svg","grain.png","paper.png"])
+      :new Set(["night_drive.wav","logo.svg"]);
+    $$(".asset-tile[data-asset-source-view='all']").forEach(tile=>tile.hidden=!names.has(tile.dataset.asset));
+    $("#asset-source-title").textContent=button.textContent.trim();
+    $("#asset-scope-label").textContent="COLLECTION";
+    $("#asset-count").textContent=`${names.size} ITEMS`;
+    selectAssetTile($(".asset-tile[data-asset-source-view='all']:not([hidden])"));
+  });
+  if($("#add-file-root"))$("#add-file-root").onclick=()=>status("Register folder","Choose another base folder · Workspace setting","Esc");
+  if($("#file-back"))$("#file-back").onclick=()=>{
+    const previous=state.fileHistory.pop();
+    if(previous)navigateFile(previous.root,previous.path,false);
+  };
+  if($("#file-parent"))$("#file-parent").onclick=()=>{
+    if(!state.filePath)return;
+    const parent=state.filePath.split("/").slice(0,-1).join("/");
+    navigateFile(state.fileRoot,parent);
+  };
+  if($("#asset-path"))$("#asset-path").onclick=event=>{
+    const crumb=event.target.closest("[data-file-crumb]");
+    if(!crumb)return;
+    const depth=Number(crumb.dataset.fileCrumb);
+    navigateFile(state.fileRoot,state.filePath.split("/").slice(0,depth).join("/"));
+  };
+  if($("#file-tree"))$("#file-tree").onclick=event=>{
+    const row=event.target.closest("[data-file-tree-path]");
+    if(row)navigateFile(state.fileRoot,row.dataset.fileTreePath);
+  };
+  if($("#media-select-mode"))$("#media-select-mode").onclick=()=>{
+    state.assetSelectionMode=!state.assetSelectionMode;
+    if(state.assetSelectionMode){
+      state.selectedAssetTiles.clear();
+      syncAssetSelection(null);
+    }
+    $("#project-browser").dataset.selectMode=String(state.assetSelectionMode);
+    $("#media-select-mode").setAttribute("aria-pressed",String(state.assetSelectionMode));
+    $("#media-select-mode").textContent=state.assetSelectionMode?"Selecting":"Select";
+    if(!state.assetSelectionMode&&$("#media-tag-panel"))$("#media-tag-panel").hidden=true;
+    status("Media selection",state.assetSelectionMode?"Select multiple items":"Single selection","");
+  };
+  if($("#open-media-tags"))$("#open-media-tags").onclick=()=>{
+    const panel=$("#media-tag-panel"),open=panel.hidden;
+    panel.hidden=!open;
+    $("#open-media-tags").setAttribute("aria-expanded",String(open));
+  };
+  $$("[data-toggle-media-tag]").forEach(button=>button.onclick=()=>{
+    changeMediaTag(button.dataset.toggleMediaTag);
+  });
+  function bindMediaTagBox(button){
+    button.onclick=()=>{
+      state.mediaTagFilter=state.mediaTagFilter===button.dataset.mediaTagBox
+        ?""
+        :button.dataset.mediaTagBox;
+      syncMediaTagControls();applyMediaSearch();
+      $("#asset-source-title").textContent=state.mediaTagFilter
+        ?`Tag · ${button.querySelector("span").textContent}`
+        :(state.assetSource==="files"?fileRootNames[state.fileRoot]:state.assetSource==="project"?"Project":"All Media");
+    };
+    button.ondragover=event=>{
+      if(draggedAsset){
+        event.preventDefault();button.classList.add("drop-ready");
+        showDragContext(event,button.querySelector("span").textContent,"Drop to add tag · Undo unchanged");
+      }
+    };
+    button.ondragleave=()=>button.classList.remove("drop-ready");
+    button.ondrop=event=>{
+      if(!draggedAsset)return;
+      event.preventDefault();button.classList.remove("drop-ready");
+      const targets=state.selectedAssetTiles.has(draggedAsset)&&state.selectedAssetTiles.size>1
+        ?[...state.selectedAssetTiles]
+        :[draggedAsset];
+      changeMediaTag(button.dataset.mediaTagBox,"add",targets);
+      hideDragContext();
+    };
+  }
+  $$("[data-media-tag-box]").forEach(bindMediaTagBox);
+  if($("#add-media-tag"))$("#add-media-tag").onclick=()=>{
+    const form=$("#new-media-tag-form"),open=form.hidden;
+    form.hidden=!open;
+    if(open)$("#new-media-tag-name").focus();
+  };
+  if($("#create-media-tag"))$("#create-media-tag").onclick=()=>{
+    const input=$("#new-media-tag-name"),label=input.value.trim();
+    if(!label)return;
+    const key=label.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||`tag-${Date.now()}`;
+    if($(`[data-media-tag-box="${key}"]`)){status("Tag",`${label} already exists`,"");return}
+    const box=document.createElement("button");box.className="candidate-tag-box";box.dataset.mediaTagBox=key;
+    const icon=document.createElement("i");icon.setAttribute("aria-hidden","true");icon.textContent="#";
+    const name=document.createElement("span");name.textContent=label;
+    const count=document.createElement("b");count.textContent="0";
+    box.append(icon,name,count);$(".candidate-tag-shelf").insertBefore(box,$("#add-media-tag"));bindMediaTagBox(box);
+    const toggle=document.createElement("button");toggle.dataset.toggleMediaTag=key;toggle.textContent=label;
+    toggle.onclick=()=>changeMediaTag(key);$("#media-tag-panel > div").append(toggle);
+    input.value="";$("#new-media-tag-form").hidden=true;syncMediaTagControls();
+    status("Tag",`${label} box created · Workspace metadata`,"");
+  };
+  $$(".asset-tile").forEach(tile=>{
+    tile.onclick=event=>selectAssetTile(tile,{
+      additive:state.assetSelectionMode||event.metaKey||event.ctrlKey,
+      range:event.shiftKey,
+    });
+    tile.ondblclick=()=>{
+      if(assetOrigin(tile)==="files"&&tile.dataset.fileDirectory)openSelectedFolder();
+      else commitAsset(tile,"Double click");
+    };
+    tile.ondragstart=event=>{
+      if(!tile.draggable)return;
+      if(!state.selectedAssetTiles.has(tile))selectAssetTile(tile);
+      draggedAsset=tile;
+      event.dataTransfer?.setData("text/plain",tile.dataset.asset||"Media");
+      $$("[data-media-tag-box]").forEach(button=>button.classList.add("drop-ready"));
+      showDragContext(
+        event,
+        tile.dataset.asset,
+        tile.dataset.fileDirectory?"Drop on a Tag box":"Drop on a Tag, object, or Timeline",
+      );
+      status(tile.dataset.asset,tile.dataset.fileDirectory?"Tag target only":"Picking target · Esc to cancel","Drop");
+    };
+    tile.ondragend=()=>{
+      draggedAsset=null;hideDragContext();
+      $("#stage").classList.remove("asset-drop-ready","drop-hover-valid","drop-hover-invalid");
+      $("#timeline").classList.remove("timeline-drop-ready");
+      $("#timeline-drop-ghost")?.remove();
+      $$("[data-media-tag-box]").forEach(button=>button.classList.remove("drop-ready"));
+    };
+    tile.onkeydown=event=>{
+      if(event.key==="Enter"&&assetOrigin(tile)==="files"&&tile.dataset.fileDirectory){
+        event.preventDefault();openSelectedFolder();
+      }else if(event.key==="Enter"){
+        event.preventDefault();commitAsset(tile,"Enter");
+      }
+    };
+  });
+  if($("#place-asset"))$("#place-asset").onclick=()=>{
+    const selected=state.primaryAssetTile;
+    if(assetOrigin(selected)==="files"){
+      if(selected?.dataset.fileDirectory){openSelectedFolder();return}
+      addInboxAsset(state.selectedAsset);return;
+    }
+    commitAsset(selected,"Place button");
   };
   $$(".inbox-item").forEach(bindInboxItem);
   $("#dismiss-tip").onclick=()=>{$(".inbox-tip").hidden=true;status("Tip","Dismiss · User setting","")};
@@ -1144,7 +2010,17 @@
       status("Depth Z",`${marker.dataset.zName} ${formatZ(+marker.dataset.z)}${state.automation.depth?" · key":""} · 1 Undo`, "⌘Z");
     });
   });
-  $("#undo").onclick=()=>{clearUndo();status("Undo","1操作を取消","")};
+  $("#undo").onclick=()=>{
+    $("#undo").disabled=true;
+    if($("#redo"))$("#redo").disabled=false;
+    $("#undo-state").textContent=`Redo 1 · ${state.lastUndoLabel}`;
+    status("Undo",`${state.lastUndoLabel}を取消`,"⇧⌘Z");
+  };
+  if($("#redo"))$("#redo").onclick=()=>{
+    $("#redo").disabled=true;$("#undo").disabled=false;
+    $("#undo-state").textContent=`Undo 1 · ${state.lastUndoLabel}`;
+    status("Redo",`${state.lastUndoLabel}を再適用`,"⌘Z");
+  };
   $("#export").onclick=()=>state.mode==="missing"?status("Export blocked","必要なプラグインを評価できません","Review recovery"):status("Export","Final品質で評価","");
   $("#close-recovery").onclick=$("#cancel-recovery").onclick=()=>{$("#recovery").classList.remove("open");status("Ribbon Array","Close","")};
   $("#step-prev").onclick=()=>{$("#time").textContent="00:54.1";setPlayhead(28);updateDepthProjection(.18);status("Previous key","54.1 · key上ではEasing区間なし","←")};
@@ -1163,6 +2039,9 @@
     state.raf=requestAnimationFrame(frame);
   }
   addEventListener("keydown",event=>{
+    if(event.key==="Escape"&&!$("#candidate-save-sheet").hidden){
+      $("#candidate-save-close").click();return;
+    }
     if(event.key==="Escape"&&state.easeDrag){
       state.easing={...state.easeDrag.start}; state.easeDrag=null; renderEasingGraph(); status("Easing curve","Cancel · Document変更ゼロ",""); return;
     }
@@ -1191,7 +2070,8 @@
   $$("[data-info]").forEach(element=>{
     const [title,body,key=""]=element.dataset.info.split("|");
     const show=()=>statusInfo(title,body,key),hide=()=>renderStatus();
-    element.addEventListener("mouseenter",show); element.addEventListener("mouseleave",hide);
+    element.addEventListener("mouseenter",()=>{if(suppressStatusInfoUntilPointerMove)return;show()});
+    element.addEventListener("mouseleave",hide);
     element.addEventListener("focusin",show); element.addEventListener("focusout",hide);
   });
   setMode("installed");
@@ -1200,6 +2080,7 @@
   syncIntervalEasing();
   renderPluginHistory();
   filterPlugins();
+  filterElements();
   setAssetSource("project");
   syncInbox();
   if(location.hash==="#inbox-empty"){$$("#inbox-list .inbox-item").forEach(item=>item.remove());syncInbox()}

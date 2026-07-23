@@ -1,0 +1,42 @@
+{
+  "date": "2026-07-22",
+  "platform": "macOS",
+  "adapter": "Apple M4",
+  "backend": "Metal",
+  "checks": [
+    {
+      "action": "selected key i1 drag",
+      "from": { "time": 53.24, "value": 82.0 },
+      "to": { "time": 53.42, "value": 65.4 },
+      "semantic_commit_delta": 1,
+      "visual_result": "key, both handles, and active curve updated together"
+    },
+    {
+      "action": "selected key i1 outgoing tangent drag",
+      "semantic_commit_delta": 1,
+      "visual_result": "handle stem and cubic curve updated together"
+    },
+    {
+      "action": "wheel zoom then Fit All",
+      "semantic_commit_delta": 0,
+      "visual_result": "cursor-anchor zoom changed only the viewport and Fit All restored the full fixture"
+    },
+    {
+      "action": "blank-area marquee then Fit Selection",
+      "selected_key_count": 4,
+      "semantic_commit_delta": 0,
+      "visual_result": "four stable-ID keys selected and the viewport fitted them without a Document write"
+    }
+  ],
+  "headless_interaction_session": {
+    "semantic_commit_count": 0,
+    "navigation_change_count": 3,
+    "selection_change_count": 2
+  },
+  "prior_drag_session_final_semantic_commit_count": 2,
+  "readback_count": 0,
+  "hot_drag_resource_creation_count": 0,
+  "ax_observation": "GPU contents are not yet projected into the OS accessibility tree",
+  "middle_pan_observation": "not physically exercised because the Computer Use API cannot express a middle-button drag; covered by headless tests and the winit adapter",
+  "pass": true
+}

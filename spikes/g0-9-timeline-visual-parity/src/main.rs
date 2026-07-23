@@ -1,8 +1,8 @@
 use std::{path::PathBuf, sync::Arc};
 
 use g0_9_timeline_visual_parity::{
-    build_scene, RectPrimitive, TextPrimitive, VisualParityReport, AUTO_PRESENT_TARGET,
-    FIXTURE_HEIGHT, FIXTURE_WIDTH, OBJECTS,
+    build_depth_scene, build_scene, DepthSession, RectPrimitive, TextPrimitive, VisualParityReport,
+    AUTO_PRESENT_TARGET, DEPTH_FIXTURE_HEIGHT, FIXTURE_HEIGHT, FIXTURE_WIDTH, OBJECTS,
 };
 use glyphon::{
     Attrs, Buffer, Cache, Color, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache,
@@ -11,8 +11,9 @@ use glyphon::{
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
-    event::WindowEvent,
+    event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowId},
 };
 
@@ -52,7 +53,7 @@ struct GfxState {
 }
 
 impl GfxState {
-    fn new(window: &Arc<Window>) -> Self {
+    fn new(window: &Arc<Window>, depth: bool, depth_session: &DepthSession) -> Self {
         let instance = wgpu::Instance::default();
         let surface = instance
             .create_surface(Arc::clone(window))
@@ -204,24 +205,33 @@ impl GfxState {
             adapter: adapter_info.name,
             backend: format!("{:?}", adapter_info.backend),
         };
-        state.update_scene();
+        state.update_scene(depth, depth_session);
         state
     }
 
-    fn configure(&mut self, width: u32, height: u32) {
+    fn configure(&mut self, width: u32, height: u32, depth: bool, depth_session: &DepthSession) {
         if width == 0 || height == 0 {
             return;
         }
         self.config.width = width;
         self.config.height = height;
         self.surface.configure(&self.device, &self.config);
-        self.update_scene();
+        self.update_scene(depth, depth_session);
     }
 
-    fn update_scene(&mut self) {
+    fn update_scene(&mut self, depth: bool, depth_session: &DepthSession) {
         let scale_x = self.config.width as f32 / FIXTURE_WIDTH;
-        let scale_y = self.config.height as f32 / FIXTURE_HEIGHT;
-        let scene = build_scene(FIXTURE_WIDTH, FIXTURE_HEIGHT);
+        let logical_height = if depth {
+            DEPTH_FIXTURE_HEIGHT
+        } else {
+            FIXTURE_HEIGHT
+        };
+        let scale_y = self.config.height as f32 / logical_height;
+        let scene = if depth {
+            build_depth_scene(depth_session, FIXTURE_WIDTH, DEPTH_FIXTURE_HEIGHT)
+        } else {
+            build_scene(FIXTURE_WIDTH, FIXTURE_HEIGHT)
+        };
         let scaled_rects = scene
             .rects
             .into_iter()
@@ -398,16 +408,22 @@ fn prepare_text(
 
 struct App {
     auto: bool,
+    depth: bool,
     report_path: PathBuf,
     window: Option<Arc<Window>>,
     gfx: Option<GfxState>,
+    depth_session: DepthSession,
+    cursor: [f32; 2],
+    previous_cursor: [f32; 2],
+    panning: bool,
     present_count: u32,
 }
 
 impl App {
-    fn new(auto: bool) -> Self {
+    fn new(auto: bool, depth: bool) -> Self {
         Self {
             auto,
+            depth,
             report_path: std::env::var_os("G0_9_TIMELINE_VISUAL_REPORT")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| {
@@ -415,15 +431,36 @@ impl App {
                 }),
             window: None,
             gfx: None,
+            depth_session: DepthSession::default(),
+            cursor: [0.0; 2],
+            previous_cursor: [0.0; 2],
+            panning: false,
             present_count: 0,
+        }
+    }
+
+    fn refresh(&mut self) {
+        if let Some(gfx) = self.gfx.as_mut() {
+            gfx.update_scene(self.depth, &self.depth_session);
+        }
+        if let Some(window) = self.window.as_ref() {
+            window.request_redraw();
         }
     }
 
     fn write_report(&self) {
         let gfx = self.gfx.as_ref().expect("gfx state");
-        let scene = build_scene(FIXTURE_WIDTH, FIXTURE_HEIGHT);
+        let scene = if self.depth {
+            build_depth_scene(&self.depth_session, FIXTURE_WIDTH, DEPTH_FIXTURE_HEIGHT)
+        } else {
+            build_scene(FIXTURE_WIDTH, FIXTURE_HEIGHT)
+        };
         let report = VisualParityReport {
-            ticket: "G0-9-timeline-visual-parity",
+            ticket: if self.depth {
+                "G0-9-native-depth-rail"
+            } else {
+                "G0-9-timeline-visual-parity"
+            },
             status: "complete",
             adapter: gfx.adapter.clone(),
             backend: gfx.backend.clone(),
@@ -433,6 +470,9 @@ impl App {
             present_count: self.present_count,
             readback_count: 0,
             semantic_state_owner_count: 1,
+            semantic_commit_count: self.depth_session.semantic_commit_count,
+            navigation_change_count: self.depth_session.navigation_change_count,
+            selection_change_count: self.depth_session.selection_change_count,
             pass: self.present_count >= AUTO_PRESENT_TARGET,
         };
         std::fs::write(
@@ -456,15 +496,23 @@ impl ApplicationHandler for App {
             event_loop
                 .create_window(
                     Window::default_attributes()
-                        .with_title("Motolii native Timeline visual parity")
+                        .with_title(if self.depth {
+                            "Motolii native Depth Rail"
+                        } else {
+                            "Motolii native Timeline visual parity"
+                        })
                         .with_inner_size(LogicalSize::new(
                             FIXTURE_WIDTH as f64,
-                            FIXTURE_HEIGHT as f64,
+                            if self.depth {
+                                DEPTH_FIXTURE_HEIGHT as f64
+                            } else {
+                                FIXTURE_HEIGHT as f64
+                            },
                         )),
                 )
                 .expect("timeline window"),
         );
-        self.gfx = Some(GfxState::new(&window));
+        self.gfx = Some(GfxState::new(&window, self.depth, &self.depth_session));
         self.window = Some(window);
     }
 
@@ -481,12 +529,75 @@ impl ApplicationHandler for App {
             return;
         }
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => {
+                self.write_report();
+                event_loop.exit();
+            }
             WindowEvent::Resized(size) => {
                 if let Some(gfx) = self.gfx.as_mut() {
-                    gfx.configure(size.width, size.height);
+                    gfx.configure(size.width, size.height, self.depth, &self.depth_session);
                 }
                 window.request_redraw();
+            }
+            WindowEvent::CursorMoved { position, .. } if self.depth => {
+                let scale = window.scale_factor();
+                self.previous_cursor = self.cursor;
+                self.cursor = [(position.x / scale) as f32, (position.y / scale) as f32];
+                if self.panning
+                    && self
+                        .depth_session
+                        .pan(self.cursor[0] - self.previous_cursor[0])
+                {
+                    self.refresh();
+                }
+            }
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Middle,
+                ..
+            } if self.depth => self.panning = true,
+            WindowEvent::MouseInput {
+                state: ElementState::Released,
+                button: MouseButton::Middle,
+                ..
+            } if self.depth => self.panning = false,
+            WindowEvent::MouseWheel { delta, .. } if self.depth => {
+                let amount = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => y as f64 * 0.12,
+                    MouseScrollDelta::PixelDelta(position) => position.y * 0.005,
+                };
+                if self.depth_session.zoom(self.cursor[0], amount.exp()) {
+                    self.refresh();
+                }
+            }
+            WindowEvent::Focused(false) if self.depth => {
+                self.panning = false;
+                if self.depth_session.cancel() {
+                    self.refresh();
+                }
+            }
+            WindowEvent::KeyboardInput { event, .. }
+                if self.depth && event.state == ElementState::Pressed =>
+            {
+                let changed = match event.physical_key {
+                    PhysicalKey::Code(KeyCode::KeyD) => {
+                        self.depth_session.begin_distribution(1, -0.25, 0.25)
+                    }
+                    PhysicalKey::Code(KeyCode::KeyR) => {
+                        self.depth_session.toggle_distribution_reverse()
+                    }
+                    PhysicalKey::Code(KeyCode::Enter) => self.depth_session.apply_distribution(1),
+                    PhysicalKey::Code(KeyCode::Escape) => self.depth_session.cancel(),
+                    PhysicalKey::Code(KeyCode::Home) => {
+                        self.depth_session.fit_all();
+                        true
+                    }
+                    PhysicalKey::Code(KeyCode::KeyC) => self.depth_session.focus("city-grid"),
+                    _ => false,
+                };
+                if changed {
+                    self.refresh();
+                }
             }
             WindowEvent::RedrawRequested => {
                 if self.gfx.as_mut().is_some_and(GfxState::render) {
@@ -512,9 +623,10 @@ impl ApplicationHandler for App {
 
 fn main() {
     let auto = std::env::args().any(|arg| arg == "--auto");
+    let depth = cfg!(feature = "depth-default") || std::env::args().any(|arg| arg == "--depth");
     let event_loop = EventLoop::new().expect("event loop");
     event_loop.set_control_flow(ControlFlow::Wait);
     event_loop
-        .run_app(&mut App::new(auto))
+        .run_app(&mut App::new(auto, depth))
         .expect("run visual parity spike");
 }

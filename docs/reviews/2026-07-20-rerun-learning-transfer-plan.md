@@ -381,7 +381,7 @@ Codex事前審査は次を順に確認し、一つでもNoなら`CODEX PRECHECK:
 
 ### 9.4 実装中のSTOP
 
-次のどれかが起きたら、Composerは代替設計や仕様変更を行わず`ORDER: STOP`で戻す。
+次のどれかが起きたら、Terraは代替設計や仕様変更を行わず`ORDER: STOP`で戻す。
 
 - Rerun内部構造を採らないと既存Motolii契約では実装不能に見える
 - 未裁定asset、別crate、font、icon、shader、licenseを追加で持ち込む必要がある
@@ -413,7 +413,7 @@ Rerun sourceとの比較結果は補助証拠であり、Motolii fixture/testを
 - `re_*`依存、Blueprint field、Entity path、Rerun cache keyを実装担当の判断で追加できる
 - Rerunに存在しないためMotoliiの編集Undo、Vism/plugin拡張、IME、audio clock等を非目標へ落としている
 - Rerun snapshotへ合わせるためReact reference、意味論golden、既存test期待値の変更を許している
-- Composerへ分類、公開API、Document状態、代替設計の選択を委任している
+- Terraへ分類、公開API、Document状態、代替設計の選択を委任している
 
 ## 10. 完了の定義
 

@@ -13,3 +13,17 @@ cargo run --manifest-path spikes/g0-9-timeline-visual-parity/Cargo.toml -- --aut
 ```
 
 `--auto`は実windowで120 frame present後、計測reportを書いて終了する。
+
+Depth Railは`--depth`で起動する。
+
+```bash
+cargo run --manifest-path spikes/g0-9-timeline-visual-parity/Cargo.toml -- --depth
+```
+
+`D`でLayer Order Distribute preview、`R`でReverse、`Enter`でApply、`Esc`でCancel、wheelでzoom、
+middle dragでpan、`Home`でFit All、`C`で`ROOT / pulse-rings` child scopeへ切り替える。preview中はsemantic
+commit 0、Applyはexactly onceである。
+
+同crateには全通常panelのheadless dock fixtureも含む。Stage / Timeline / Graph / Browser / Inspectorを同じ
+`DockWorkspace`へ置き、detach、top-level resize、tab再ドック、horizontal / vertical split再ドックを試験する。
+`taffy`はlogical rectangle計算だけを担当し、Document、selection、Undo、panel identityを所有しない。
