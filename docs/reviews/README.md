@@ -123,6 +123,7 @@
 | [2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md](2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md) | Unit 5J — M4 cache／analysis仕様20版のHost専権、完全key、StateTrack、敗北枝、未実装境界を再締結 |
 | [2026-07-23-historical-performance-model-lineage-recovery.md](2026-07-23-historical-performance-model-lineage-recovery.md) | Unit 5K — performance model 21版の帯域規律、liveness-aware target pool、性能仮説／実装境界を再締結 |
 | [2026-07-23-historical-memory-model-lineage-recovery.md](2026-07-23-historical-memory-model-lineage-recovery.md) | Unit 5L — memory model 6版の階層責任、hard budget、capacity／deadline、K1／K7／K8未実装境界を再締結 |
+| [2026-07-23-historical-r3-datatrack-export-correctness-lineage-recovery.md](2026-07-23-historical-r3-datatrack-export-correctness-lineage-recovery.md) | Unit 5M — R3/DataTrack統合review 3版のfail-closed、export長、fallback、helper driftを現行再判定 |
 | [2026-07-16-m3-preflight-decisions.md](2026-07-16-m3-preflight-decisions.md) | M3着手前決定 — 操作の意味を固定し、見た目の実値は測って決める |
 | [2026-07-16-m3-ui-concept-to-tickets.md](2026-07-16-m3-ui-concept-to-tickets.md) | M3 UIコンセプトから実装チケットへの分解 |
 | [2026-07-16-m3-ui-gap-survey.md](2026-07-16-m3-ui-gap-survey.md) | M3前UIギャップ調査: U1〜U8に席が無いUI要素とコア側前提の欠落(2026-07-16) |
