@@ -65,7 +65,7 @@ A-1(egui候補は既存device/native texture共有を[採用時の実機証拠](
 
 ## Stage / Output Frame / 統一Camera
 
-正本は[統一カメラ設計](../reviews/2026-07-14-unified-stage-camera-design.md)。M3は完成画像だけを表示するpreview panelではなく、固定サイズを持たないStage上で同じworld/cameraを編集する。
+正本は[統一カメラ設計](../reviews/2026-07-14-unified-stage-camera-design.md)、旧schema案と現行UI境界の分別は[Unit 4Q歴史回収](../reviews/2026-07-23-historical-unified-stage-camera-ui-lineage-recovery.md)。M3は完成画像だけを表示するpreview panelではなく、固定サイズを持たないStage上で同じworld/cameraを編集する。
 
 - 全CompositionにM2-D1jの`CompCamera`が常在する。通常UIで「3D cameraを追加する」操作は作らない
 - `Output Frame`は`CompCamera`のprojection aperture。frameの移動・ズーム・回転はDocument cameraをD2 commandで編集し、書き出しへ影響する
