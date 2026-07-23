@@ -741,6 +741,41 @@ test("rejects missing, reordered, or renamed fixture layers", async () => {
   });
 });
 
+test("rejects malformed fixture documents and non-finite probe tokens", async (suite) => {
+  await suite.test("malformed document", async () => {
+    await withFixture(async (root, manifest) => {
+      await writeFile(
+        path.join(root, "fixtures/reference-document.json"),
+        '{"label":',
+      );
+      await expectGuard("RG-CAUSAL", () =>
+        verifyFixtureCausality({ root, manifest }),
+      );
+    });
+  });
+
+  await suite.test("schema-outside root", async () => {
+    await withFixture(async (root, manifest) => {
+      await writeFile(
+        path.join(root, "fixtures/reference-document.json"),
+        '[{"label":"document"}]\n',
+      );
+      await expectGuard("RG-CAUSAL", () =>
+        verifyFixtureCausality({ root, manifest }),
+      );
+    });
+  });
+
+  await suite.test("non-finite token", async () => {
+    await withFixture(async (root, manifest) => {
+      manifest.fixtureLayers[2].probe.value = Number.POSITIVE_INFINITY;
+      await expectGuard("RG-CAUSAL", () =>
+        verifyFixtureCausality({ root, manifest }),
+      );
+    });
+  });
+});
+
 test("rejects renderers that mutate a source fixture", async () => {
   await withFixture(async (root, manifest) => {
     const sourceFixture = JSON.stringify(

@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "test:reference-guard": "node --test guard-tests/reference-guard.test.mjs && node scripts/reference-guard.mjs check-registry src/main.jsx",
+    "test:reference-guard": "node --test guard-tests/*.test.mjs && node scripts/reference-guard.mjs check-registry src/main.jsx",
     "test:visual": "playwright test",
     "test:visual:update": "playwright test --update-snapshots"
   },

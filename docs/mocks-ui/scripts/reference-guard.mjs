@@ -1039,6 +1039,21 @@ function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function rejectNonFiniteNumbers(value, owner) {
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    reject("RG-CAUSAL", `${owner} contains a non-finite number`);
+  }
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) =>
+      rejectNonFiniteNumbers(entry, `${owner}[${index}]`),
+    );
+  } else if (value && typeof value === "object") {
+    for (const [key, entry] of Object.entries(value)) {
+      rejectNonFiniteNumbers(entry, `${owner}.${key}`);
+    }
+  }
+}
+
 function decodePointerToken(token) {
   return token.replaceAll("~1", "/").replaceAll("~0", "~");
 }
@@ -1156,6 +1171,7 @@ export async function verifyFixtureCausality({ root, manifest }) {
     ) {
       reject("RG-CAUSAL", `${layer.id} lacks a probe or changedScreens`);
     }
+    rejectNonFiniteNumbers(layer.probe.value, `${layer.id}.probe.value`);
     for (const screenId of [
       ...layer.changedScreens,
       ...(layer.unchangedScreens ?? []),
@@ -1188,7 +1204,15 @@ export async function verifyFixtureCausality({ root, manifest }) {
     const states = new Map();
     states.set("baseline", new Map(sourceBytes));
     for (const layer of layers) {
-      const parsed = JSON.parse(sourceBytes.get(layer.id).toString("utf8"));
+      let parsed;
+      try {
+        parsed = JSON.parse(sourceBytes.get(layer.id).toString("utf8"));
+      } catch (error) {
+        reject("RG-CAUSAL", `${layer.id} fixture is invalid JSON: ${error.message}`);
+      }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        reject("RG-CAUSAL", `${layer.id} fixture root must be an object`);
+      }
       setJsonPointer(parsed, layer.probe.pointer, layer.probe.value);
       const stateBytes = new Map(sourceBytes);
       stateBytes.set(

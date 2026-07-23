@@ -169,9 +169,9 @@ plugin契約、永続形式、未決UXを採択しない。
 
 | ID | 種類 / 状態 | 一成果 | 依存・再利用 | 合格と必須負例 | STOP |
 |---|---|---|---|---|---|
-| CU-GR01 | `GUARD / DO` | Fable原因レビューのdispatch・scope・検収証跡guardをclean integration branchへ固定 | U0e-2却下証跡、発注ガード正本、既存delegate test harness | stale BASE/authority、WAIT粒、React label欠落、許可外path、検収write/timeoutを実装担当起動前後で機械拒否 | bypass、公開契約変更、既存差分の巻込みが必要 |
-| CU-0A01 | `ASSET / DO` | U0e-2R固定React baselineを最新mainへ再結合 | U0e-1、固定`eb16d06` | React build/既存43 tests、後発decision保持。新UI判断・archive逆実装0 | 固定treeと一致しないsourceしかない |
-| CU-0A02 | `ASSET / WAIT` | U0e-2の5 reference screen入力を固定 | CU-0A01、U0e-2契約 | 同一fixtureのnormal/lightness/grayscale/CVD。人間判断をpixel testへ置換しない | fixture manifestのowner/formatが未決 |
+| CU-GR01 | `GUARD / DONE` | Fable原因レビューのdispatch・scope・検収証跡guardをclean integration branchへ固定 | U0e-2却下証跡、発注ガード正本、既存delegate test harness | stale BASE/authority、WAIT粒、React label欠落、許可外path、検収write/timeoutを実装担当起動前後で機械拒否 | bypass、公開契約変更、既存差分の巻込みが必要 |
+| CU-0A01 | `ASSET / DONE` | U0e-2R固定React baselineを最新mainへ再結合 | U0e-1、固定`eb16d06` | React build/既存43 tests、後発decision保持。新UI判断・archive逆実装0 | 固定treeと一致しないsourceしかない |
+| CU-0A02 | `ASSET / DO` | U0e-2の5 reference screen入力を固定 | CU-0A01、U0e-2契約 | 同一fixtureのnormal/lightness/grayscale/CVD。人間判断をpixel testへ置換しない | 現行codecで三層fixtureを閉じられない、または既存React source closureが不足 |
 | CU-0A03 | `SPEC / WAIT` | R0 source inventory/provenance manifest | CU-0A01、固定SHA`56c318ed` | path/export/CSS/model/test closure全列挙、legacyとnative面を誤分類しない | 固定sourceまたはclosure不在 |
 | CU-0A04 | `ASSET / WAIT` | R1 Browserをproduct ownerへ直接移管 | CU-0A03 | 17-state対象visual 1%以下、DOM/class/ARIA/interaction維持、mock側copy 0 | 別leaf/CSS後追い/opaque ID分岐が必要 |
 | CU-0A05 | `ASSET / WAIT` | R2 Easing trigger/要約だけを移管 | CU-0A04 | popup全体をnative oracleに残し、Reactにcurve/Undo state 0 | popup全体をReact製品面へ持込む必要がある |
