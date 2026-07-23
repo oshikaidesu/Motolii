@@ -31,3 +31,10 @@ corpusの再生成方法:
 ```
 
 再生成結果がcommitted `corpus.tsv`と一致しない場合、cutoff refが欠落したかGit objectが失われている。新しいrefの後発変更は既存corpusへ混ぜず、最終delta単位で別manifestに固定する。
+
+## 意味索引との境界
+
+[意味グラフ補助境界](../../2026-07-23-historical-semantic-graph-recovery-tooling.md)に従い、
+このdirectoryとGit objectだけがcoverageの入力正本である。Markdown projection、SQLite、
+embedding、検索rank、候補packetは再生成可能な派生物であり、ここへcommitせず、
+処分済み判定や`--complete`の代わりにしない。

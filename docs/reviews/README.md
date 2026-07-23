@@ -179,6 +179,7 @@
 | [2026-07-22-ui-music-metaphor-retirement.md](2026-07-22-ui-music-metaphor-retirement.md) | 「演奏・譜面台・楽曲が背骨」を製品全体の比喩とする仮説を撤回し、音声機能と製品存在論を分離 |
 | [2026-07-23-losing-specification-value-recovery.md](2026-07-23-losing-specification-value-recovery.md) | 「負けた仕様」を主張単位で分類し、single camera／2.5Dの系譜と旧KitのPlugin Set／Lock価値を回収 |
 | [2026-07-23-historical-value-recovery-coverage-ledger.md](2026-07-23-historical-value-recovery-coverage-ledger.md) | 全refのMarkdown履歴を固定manifestとblob receiptで単位別回収するcoverage台帳 |
+| [2026-07-23-historical-semantic-graph-recovery-tooling.md](2026-07-23-historical-semantic-graph-recovery-tooling.md) | Git corpus・receipt正本・決定的projection・任意の意味索引を分離する履歴回収tooling契約 |
 | [2026-07-23-historical-foundation-lineage-recovery.md](2026-07-23-historical-foundation-lineage-recovery.md) | historical-only基盤文書を処分し、D1n external revisionを再採択、multi-key Graphを未採択候補へ訂正 |
 | [2026-07-23-historical-react-webview-lineage-recovery.md](2026-07-23-historical-react-webview-lineage-recovery.md) | historical-only React/WebView文書を処分し、built-in Host不変条件と四面同期縦切りを現行境界へ再採択 |
 | [2026-07-23-historical-d2-selection-timeline-lineage-recovery.md](2026-07-23-historical-d2-selection-timeline-lineage-recovery.md) | historical-only Place/Add Key/selection/headless Timeline契約を採択済み・未実装follow-upへ回収 |

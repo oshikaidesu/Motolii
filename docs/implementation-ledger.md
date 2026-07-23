@@ -90,11 +90,18 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 全体には独立spikeもあるが、ユーザー選択中のUシリーズは意味・所有境界を優先して
 1チケットずつ直列に進める。旧night 3分岐は直接統合しない。
+[歴史価値回収の意味グラフ補助](reviews/2026-07-23-historical-semantic-graph-recovery-tooling.md)は
+製品境界を変更しない独立tooling laneとして並行できるが、同lane内では`DO`を1件だけにする。
 
 | 優先 | ID | Phase | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
 | 1 | U0e-2R | M3 | `DO` | — | U0e-1完了。固定React baseline `eb16d06`を最新mainへ再結合する | U0e-2を単独実行 |
 | 2 | U2c-2 | M3 | `WAIT` | — | U4a-2のDirect製品入口とU4cのAdvanced製品入口が揃うまで空harnessを作らない | 実在入口のDocument意味/Undo同値conformance |
+| 0 | HVR-G01 | History tooling | `DONE` | — | 意味グラフ補助境界を正本化 | HVR-D01の依存 |
+| 1 | HVR-D01 | History tooling | `DO` | — | HVR-G01完了。既存corpus/receiptを変更しない | 決定的な可搬projectionと負例 |
+| 2 | HVR-D02 | History tooling | `WAIT` | — | HVR-D01完了 | 任意のBasic Memory runner |
+| 3 | HVR-D03 | History tooling | `WAIT` | — | HVR-D01完了 | repo-local候補packet skill |
+| 4 | HVR-D04 | History tooling | `WAIT` | — | HVR-D01〜D03完了 | Unit 5N以降へ候補packetを投入 |
 
 K0 [#167](https://github.com/oshikaidesu/Motolii/issues/167)とP0I
 [#170](https://github.com/oshikaidesu/Motolii/issues/170)は論理上`DO`の独立spikeだが、
