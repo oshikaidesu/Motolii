@@ -155,6 +155,44 @@ unit testはfake `uvx`で引数・環境・失敗伝播・projection不変・mar
 日本語fixtureをindexし、hybrid searchが候補を返すことだけを確認する。順位・score・先頭一致を
 期待値にしない。
 
+### 4.2 HVR-D03 repo-local skill契約
+
+repo-local skillは`skills/historical-recovery/SKILL.md`を入口とし、skill名を
+`historical-recovery`へ固定する。「昔の案」「負けた仕様」「消えた構想」「以前の判断」など、
+現行正本だけでは答えられない設計考古学と再評価を依頼された時に使う。現行codeや正本だけの検索、
+receipt coverageの全件監査、未処分履歴の一括裁定、通常の実装作業には起動しない。
+
+skillは次の順序を変えない。
+
+1. `docs/decision-index.md`、本書、主題に対応する現行正本とcode事実を先に読む。
+2. HVR-D01 projectionをrepo外の一時directoryへ新規生成するか、同じ契約で生成済みの
+   repo外projectionを検証して使う。tracked file、既存projection、receiptは変更しない。
+3. 利用者がrepo外のHVR-D02 stateを明示し、有効な`hvr-index.json`がある場合だけ
+   `scripts/historical_semantic_index.py search`を使う。skill自身はBasic Memoryのinstall、
+   model取得、全量`index`を暗黙に開始しない。
+4. 意味索引が無い、失敗した、候補が弱い場合は、query語とその表記揺れを明示した上で
+   `rg`によるprojection本文検索と`manifest.tsv`のSHA/path参照へ縮退する。縮退をcoverage失敗や
+   「該当なし」の証明にしない。
+5. 候補を最大20 blobへ重複排除し、repo外の一時Markdownへcandidate packetを作る。各候補は
+   `blob SHA`、当時path、projection node path、取得経路、候補にした理由、既存receipt処分の有無を
+   持つ。score、順位、要約を採否や処分順へ変換しない。
+6. packetに入れた候補だけ本文を全文で読み、現行正本・code事実と比較する。各候補を
+   `観察 / 比較中 / 決定 / 棄却 / 停止`のいずれとして提案し、根拠SHA/path、現行との関係、
+   未読範囲と非証明範囲を併記する。
+7. packetをユーザーへ返して止まる。receipt、decision index、spec、ledger、codeを自動変更せず、
+   採択・再回収はHVR-D04以降の通常の単位別裁定へ渡す。
+
+packet冒頭にはtopic、query語、取得mode（`semantic / lexical / mixed`）、projection tree hash、
+corpus総数、処分済み数、未処分数、候補数を記録する。候補0件でもpacketを作り、検索語、検索範囲、
+意味索引の有無を残す。「全履歴を読んだ」「網羅した」「価値が無い」とは書かない。たとえば
+「AviUtl catalogとhostless配布案を探す」「single camera / 2.5Dの負けた仕様を再評価する」
+「Vism Kit構想から消えた価値を探す」は対象である。
+
+projection生成がHVR-D01審判を通らない、候補SHAをGit objectとして読めない、現行正本が未統一、
+receipt処分と候補本文が矛盾する、または候補から公開API・永続形式・Document・plugin契約を
+直接更新したくなった場合は`停止`として返す。意味索引の再構築、候補上限超過、receipt更新、
+正本改訂をskill内の便利な自動処理で補わない。
+
 ## 5. 機械審判
 
 HVR-D01の実corpus検査は少なくとも次を満たす。
@@ -177,7 +215,7 @@ HVR-D01の実corpus検査は少なくとも次を満たす。
 | HVR-G01 | `DONE` | 本決定 | projection、外部索引、receiptの責任が分離されている |
 | HVR-D01 | `DONE` | 決定的projection | fixture負例と実corpus 1,797/420/1,377が一致 |
 | HVR-D02 | `DONE` | Basic Memory opt-in runner | HVR-D01後。隔離設定、日本語smoke、障害時の縮退を確認 |
-| HVR-D03 | `WAIT` | repo-local回収skill | HVR-D01後。候補packetだけを作りreceiptを自動変更しない |
+| HVR-D03 | `DO` | repo-local回収skill | HVR-D01後。候補packetだけを作りreceiptを自動変更しない |
 | HVR-D04 | `WAIT` | Unit 5N以降の運用 | HVR-D01〜D03後。候補packetを従来の単位別裁定へ渡す |
 
 Composer 2.5とGrokのread-only調査は論点抽出として並列に行える。実装は各行をclosed orderへ
