@@ -4,6 +4,8 @@
 
 状態: **M2終了判定。実装仕様ではない。PP-Gateの反対側レビューは別途必須**
 
+歴史注記（2026-07-23）: cutoff版は[Unit 4N回収](2026-07-23-historical-param-element-constraint-lineage-recovery.md)で処分済み。現行`DocParam`は本判定どおり6 sourceのままで、PP-Gateは未発火・未実装。後続のElement Domain／Constraint Graph境界と合わせ、M2 task IDはglobal backlogの同名IDとの衝突を避けて`M2-GAP-15`と表記する。
+
 関連: [操作単純化モデル](../interaction-simplicity-model.md)、[凍結ゲート宣言](2026-07-10-freeze-gate-declaration.md)、[4ツール監査](2026-07-14-motion-tools-praise-diy-gap-audit.md)
 
 ## 1. 結論
