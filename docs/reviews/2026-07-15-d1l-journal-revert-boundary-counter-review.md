@@ -4,6 +4,8 @@
 対象: PR #197  
 状態: 最終反対側レビューP0/P1=0・merge可
 
+歴史注記（2026-07-23）: 本記録のcutoff 1版は、v1 adapter、Undo等価、Writer採番の開いた境界を閉じた独立検収証拠として[Unit 4K回収](2026-07-23-historical-d1l-counter-review-evidence-recovery.md)で処分した。timeoutや非実在pathを根拠にした指摘を合格・不合格票へ数えなかった経緯も、再利用する検収規律に含む。
+
 ## 初回判定
 
 Cursor Composer 2.5とGrok 4.5 Fastがcommit `d14a0c0`を独立に読み取り専用レビューした。両者とも方向は妥当としたが、P0/P1が残るためmerge不可と判定した。

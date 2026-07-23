@@ -3,6 +3,8 @@
 日付: 2026-07-12  
 対象: 凍結ゲート項目2(プラグインtrait) — [宣言](2026-07-10-freeze-gate-declaration.md)の解凍手続き3点セット
 
+> **2026-07-23現行注記**: 全2版と現在の実装を再照合した処分は[Unit 4D回収](2026-07-23-historical-render-ctx-thaw-lineage-recovery.md)を参照する。`RenderCtx`とQuality転送は現行契約として成立しているが、`instance`／`lookbehind`／`temporal_footprint`は型の予約であってHost解決・cache・simulation実装の証拠ではない。
+
 ## 1. 変更理由と実証
 
 **理由**: Filter/Composite の `render` が `t` を裸引数で受け、`Quality`・F-7 `InstanceIndex`・F-11 `CompLookbehind`・F-12 `TemporalFootprint` の口が無い。引数を増やすたびに全プラグインが破壊される(監査 P-1 / 入場条件 M2E-7)。`render_graph_cached` は Quality を解像度に畳み込むため、プラグインは TextureRef.desc から Draft/Final を判別できない。

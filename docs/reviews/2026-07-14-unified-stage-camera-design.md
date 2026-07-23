@@ -2,6 +2,8 @@
 
 ステータス: **【決定】**(ユーザー確認済み)。意味の正本は[concept.md](../concept.md)、実装順と審判は[M2](../specs/M2-document-model.md)・[M3](../specs/M3-ui-integration.md)・[M5](../specs/M5-3d-and-post.md)へ転記する。本書は決定理由と境界をまとめる。
 
+> **歴史回収（2026-07-23）**: cutoff全2版は[Unit 4Q](2026-07-23-historical-unified-stage-camera-ui-lineage-recovery.md)で処分済み。M2 schema/runtimeはplanar v1へ置換・実装済み、Stage View／Output Frame／off-frame UIは決定済み・未実装である。native／React presentationとCore／Host／plugin、first／third-partyを同じ分類軸にしない。
+
 > **M2 schema/runtime shape superseded (2026-07-18)**: §「永続カメラの最小意味」の `position`/`target`/`Orthographic`|`Perspective` スキーマ形と、§「実装順」2項の `Orthographic/Perspective` runtime 記述は、[2026-07-16 planar v1 camera 決定](2026-07-16-m2-comp-camera-decision.md)および[D1k-S CQ-5 解凍記録](2026-07-18-d1k-runtime-camera-thaw-spec.md)へ置換される。Stage View / 枠外表示 / M3 UI 境界の記述は引き続き有効。
 
 ## 決定

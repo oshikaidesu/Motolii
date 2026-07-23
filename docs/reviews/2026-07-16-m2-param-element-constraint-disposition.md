@@ -2,6 +2,8 @@
 
 Status: **Decision — defer from M2 permanent surface with explicit thaw gates**.
 
+Historical note (2026-07-23): the cutoff blob is dispositioned by [Unit 4N recovery](2026-07-23-historical-param-element-constraint-lineage-recovery.md). The live six-source `DocParam` still matches this decision; PP/ED/CG remain gates, not implemented abstractions. The M2-local task label is written `M2-GAP-15` to avoid collision with global backlog GAP-15 (basic Shape vocabulary).
+
 ## Question
 
 The unmerged #176 branch proposes future Param Pipeline, generic Element Domain, and Constraint Graph boundaries. The M2 reclosure gate requires an explicit adoption/defer/reject decision so M3 UI does not silently reinterpret existing `DocParam`, IDs, or evaluation order.

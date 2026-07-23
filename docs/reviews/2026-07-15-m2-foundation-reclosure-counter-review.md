@@ -2,6 +2,8 @@
 
 対象: PR #192。Composer 2.5とGrok 4.5 Fastへ同一の読み取り専用課題を発注し、主担当が`origin/main`との差分と未mergeブランチを再照合した。
 
+歴史注記（2026-07-23）: cutoff版は[Unit 4P回収](2026-07-23-historical-reclosure-counter-review-evidence-recovery.md)で処分済み。本レビューのP0/P1=0はgate発効PR #192だけの判定で、後のA〜C解除、コード到達、M3入場を証明しない。現在のM2／M3状態へ当時の停止線を再発効しない。
+
 ## 判定
 
 初版は**merge不可**。改訂と再レビューを重ね、最終版は**発効宣言PRとしてP0/P1=0、merge可**と判定した。M2再締結完了やM3製品実装の開始承認には使わない。

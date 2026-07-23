@@ -9,7 +9,7 @@
 | リポジトリ | ライセンス | 何を参考/利用するか |
 |---|---|---|
 | [OpenCut](https://github.com/OpenCut-app/OpenCut) | MIT | タイムラインUIの**操作仕様の参考のみ。コード流用は不可**(Rust/egui UIのためReact componentは流用対象外)。Rustコア(GPU compositor/effects/masks)は設計思想の参考 |
-| [ffmpeg-sidecar](https://github.com/nathanbabcock/ffmpeg-sidecar) | MIT | **B-2対策の本命**。ffmpegバイナリをサイドカープロセスとして起動しrawvideoフレームをIterator APIで受け取るRustクレート。M0-S2スパイクはまずこれを評価し、足りなければ自前パイプ実装。Rerun 0.34.1の`re_video`もH.264デコードに同crateを採用しており独立収束の傍証([Rerun先例調査](reviews/2026-07-20-rerun-prior-art-survey.md)) |
+| [ffmpeg-sidecar](https://github.com/nathanbabcock/ffmpeg-sidecar) | MIT | M0-S2で比較後、**Motolii依存としては不採用**。現行B-2はffprobe／ffmpeg CLIを自前の子process pipeで管理する。Rerun 0.34.1での同crate利用はprocess方式の反例探索に限り、Motoliiのcrate採択やdecode契約の根拠にしない（[S2回収](reviews/2026-07-23-historical-s2-decode-pipeline-lineage-recovery.md)、[Rerun先例調査](reviews/2026-07-20-rerun-prior-art-survey.md)） |
 | [wgpu](https://github.com/gfx-rs/wgpu) | Apache-2.0/MIT | レンダリングコアの土台(採用決定済み) |
 | [Vello](https://github.com/linebender/vello) | Apache-2.0/MIT | **採用決定(2026-07-10、S3スパイク合格)**。vello 0.9=wgpu29依存で本体と同一device同居を実測確認。条件: Renderer長寿命保持(初期化~900ms)・出力straight alpha→境界でpremul化・**vello_svgは使わず**usvg→vello変換は自前。version結合がegui-wgpu↔wgpu↔velloの三者になる点に注意(A-3)。詳細は[spikes/s3-vello.md](spikes/s3-vello.md) |
 | [Symphonia](https://github.com/pdeljanov/Symphonia) | MPL-2.0 | Pure Rust音声デコード(MP3/AAC/FLAC/WAV等)。音声インポート(B-1)の第一候補。MPLはファイル単位コピーレフトなので依存利用は安全 |
@@ -32,6 +32,7 @@
 | [OpenFX (OFX)](https://openfx.readthedocs.io/) / After Effects SDK | OFX=BSD系仕様 / AE=独自 | **プラグイン拡張が業界標準の枯れた手法である裏付け**。エフェクト=「画像(テクスチャ)in+パラメータ→out」、ネイティブ(ピクセル/GPU)+スクリプト(パラメータ/ロジック)の二層、動的C ABIロード — いずれもうちの設計(concept: プラグインファースト/5-1隔離方針)と同型。Nuke/DaVinci/Natron/FlameがOFX採用。**トレードオフの明文化**: v1は独自Rust trait API(単純境界=LLMで書きやすさ最優先)を採り**OFX非互換**のため、既存OFXプラグイン資産は継承しない(自前エコシステムを育てる前提)。「なぜOFXにしないか」を蒸し返さないための記録。動的ロード(C ABI/`abi_stable`)はv2 |
 | [Reco video-stitcher](https://github.com/reco-project/video-stitcher) | **AGPL-3.0**(+CLA) | 2カメラ映像のパノラマ合成ツール。**Slint GUI + wgpu(28)GPUパイプライン + ffmpegゼロコピーHWデコード(NVDEC/VideoToolbox)という、うちと同型の構成が実運用品質で成立している実証**(活発、1100+コミット)。学ぶ点: HWデコード→wgpuのゼロコピー統合(うちのv2スコープB-2の先行例)、push型フレーム投入APIと厳格な依存方向のクレート階層。wgpu 28使用 = Slintバージョン連動の現実の傍証 |
 | [rs-wgpu-video-player](https://github.com/singh-ps/rs-wgpu-video-player) | GPL-2.0(表記曖昧、GPL扱い) | Slint UI + ffmpeg + cpalの動画プレイヤー(小規模・初期段階)。**「音声サンプル消費クロックを主、遅れた映像フレームはドロップ」というM2トランスポート設計と同一の結論に独立到達**している点が裏付けとして貴重。一方で反面教師も明確: フレームは`SharedPixelBuffer`(CPU経路)でSlintに渡しており(うちが避けたコピー路線)、libswscaleでCPU色変換(レビュー指摘#2で排除した経路)。既知の限界(シーク未実装・長時間でA/Vドリフト・1スロットキューでフレーム落ち)は、うちの有理数時間・有界キュー設計が対処すべき点のリスト |
+| [Basic Memory](https://github.com/basicmachines-co/basic-memory) | AGPL-3.0 | 歴史価値回収の**任意の外部ローカル索引CLI**候補。0.22.1をblack-box検証し、公式文書だけを参照する。Motoliiへvendor/link/source copyせず、製品runtime・通常build・CI・coverageの必須依存にしない。可搬projection、receipt正本、生成物非commitの境界は[意味グラフ補助境界](reviews/2026-07-23-historical-semantic-graph-recovery-tooling.md)を正本とする |
 
 ## その他の依存候補(定番、必要時に評価)
 
@@ -71,5 +72,6 @@
 - GPUI: [crates.io](https://crates.io/crates/gpui), [gpui.rs](https://www.gpui.rs/)
 - Symphonia: [GitHub](https://github.com/pdeljanov/Symphonia)
 - Remotion: [ライセンス](https://www.remotion.dev/docs/license)
+- Basic Memory: [semantic search](https://docs.basicmemory.com/concepts/semantic-search)、[configuration](https://docs.basicmemory.com/reference/configuration)、[technical information](https://docs.basicmemory.com/reference/technical-information)、[FastEmbed supported models](https://qdrant.github.io/fastembed/examples/Supported_Models/)
 - Vello: [GitHub](https://github.com/linebender/vello)
 - Olive: [GitHub](https://github.com/olive-editor/olive) / Natron: [GitHub](https://github.com/NatronGitHub/Natron)

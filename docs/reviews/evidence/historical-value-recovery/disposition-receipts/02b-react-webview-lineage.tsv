@@ -1,0 +1,18 @@
+blob_sha	source_scope	disposition_document	publication
+831cc592f867cfdec26ff16decd1aeee81673dab	React mock decomposition README v1	2026-07-23-historical-react-webview-lineage-recovery.md	codex/historical-recovery-unit2b-react-webview
+949a9f646ad61fd078c7b2e136df940aa6a8e76c	React mock legacy bridge README v2	2026-07-23-historical-react-webview-lineage-recovery.md	codex/historical-recovery-unit2b-react-webview
+d6204e8a34946f7a86db4a028dda2eade4a74773	React mock Browser candidate README v3	2026-07-23-historical-react-webview-lineage-recovery.md	codex/historical-recovery-unit2b-react-webview
+65c8257df478568007bec24e01cf51dd45ab0ffc	React mock ownership README final	2026-07-23-historical-react-webview-lineage-recovery.md	codex/historical-recovery-unit2b-react-webview
+942b32654576d56d5cb175dfd5f1f8067d310d08	Browser egui taffy translation spike	2026-07-23-historical-react-webview-lineage-recovery.md	codex/historical-recovery-unit2b-react-webview
+68a602299058b7c6076ce5f1ac64d1c966d291cb	Tonight product vertical slice v1	2026-07-23-historical-react-webview-lineage-recovery.md	codex/historical-recovery-unit2b-react-webview
+91c06d485a1d0e28ce045338ca362aafb7d52234	Tonight product vertical slice selection revision	2026-07-23-historical-react-webview-lineage-recovery.md	codex/historical-recovery-unit2b-react-webview
+aae7f2632cf9605b885db5e08d963337b3368bb3	Tonight product vertical slice timeline revision	2026-07-23-historical-react-webview-lineage-recovery.md	codex/historical-recovery-unit2b-react-webview
+c4bd39d6d2d035590c089d3b24a88633c70c3e84	Tonight product vertical slice place core revision	2026-07-23-historical-react-webview-lineage-recovery.md	codex/historical-recovery-unit2b-react-webview
+4e8a551df26748f26e3cd5ba4467a5c605e61c4a	built-in WebView admission v1	2026-07-23-historical-react-webview-lineage-recovery.md	codex/historical-recovery-unit2b-react-webview
+72c6442ded8875b6bce4b4497b726d233fad4e4c	built-in WebView admission split revision	2026-07-23-historical-react-webview-lineage-recovery.md	codex/historical-recovery-unit2b-react-webview
+58e50c28bf52cbc7a673cddb09c5c84c7dd240bb	built-in WebView admission implementation revision	2026-07-23-historical-react-webview-lineage-recovery.md	codex/historical-recovery-unit2b-react-webview
+9644c5a577d36975991f9a226913aeb3d3c5b002	H1 exact contract dependency-wait revision	2026-07-23-historical-react-webview-lineage-recovery.md	codex/historical-recovery-unit2b-react-webview
+49dc2957cebf6ea649ccbdae3fc17da9c3a6e9e2	H1 exact contract implementation-entry revision	2026-07-23-historical-react-webview-lineage-recovery.md	codex/historical-recovery-unit2b-react-webview
+4d90711c169fc581ff297ce59707ab21984a72e4	H1 exact contract oracle-route correction	2026-07-23-historical-react-webview-lineage-recovery.md	codex/historical-recovery-unit2b-react-webview
+07c39295d394311b70a1802dd9fef156faf29932	H1a oracle route separation v1	2026-07-23-historical-react-webview-lineage-recovery.md	codex/historical-recovery-unit2b-react-webview
+8999bdd001e93bbc317ae51ec8ebaaf2249de03a	H1a oracle route test presentation revision	2026-07-23-historical-react-webview-lineage-recovery.md	codex/historical-recovery-unit2b-react-webview

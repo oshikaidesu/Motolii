@@ -5,6 +5,8 @@
 
 **判定: 完了** (2026-07-10、人間サインオフ)
 
+> 2026-07-23歴史監査: cutoff全4版を[Unit 5H回収](2026-07-23-historical-r9-real-material-export-acceptance-lineage-recovery.md)で処分した。本完了はM1当時の歴史sign-offとして維持するが、private素材、Slint／ProjectV1 preview、可変toleranceを現行製品Stage／release受入の証拠にしない。後継はGAP-32で、固定自動oracleと環境provenance付きhuman playbackを別審判にする。
+
 ## 前提
 
 - 開発主機(macOS想定)に ffmpeg / GPU(wgpu) あり

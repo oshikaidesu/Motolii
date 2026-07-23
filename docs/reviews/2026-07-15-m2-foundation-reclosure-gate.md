@@ -1,6 +1,8 @@
 # M2基盤再締結ゲート（2026-07-15）
 
-ステータス: **M2基盤再締結解除宣言**（main発効済み）。本書はM2基盤再締結のA〜C退出条件を充足したことを記録する正本である。再締結解除はmain上で発効済みであり、発効根拠はPR [#218](https://github.com/oshikaidesu/Motolii/pull/218) / merge SHA `cc87d8aa1d2cf2a2d24937d43e66c11df4aa769c` である。解除のコード証跡前提はPR [#217](https://github.com/oshikaidesu/Motolii/pull/217) / main `fa6850a3981c319973cf120e64976e6f8d79b969` / [PR CI](https://github.com/oshikaidesu/Motolii/actions/runs/29646476618) / [push CI](https://github.com/oshikaidesu/Motolii/actions/runs/29646451595) である。**M3製品実装のU0a入場(egui骨格+依存方向CI)は本PRで条件充足**。#180/#191は隔離CIと空クレート骨格であり、入場完了を意味しない。
+ステータス: **M2基盤再締結解除宣言**（main発効済み）。本書はM2基盤再締結のA〜C退出条件を充足したことを記録する正本である。再締結解除はmain上で発効済みであり、発効根拠はPR [#218](https://github.com/oshikaidesu/Motolii/pull/218) / merge SHA `cc87d8aa1d2cf2a2d24937d43e66c11df4aa769c` である。解除のコード証跡前提はPR [#217](https://github.com/oshikaidesu/Motolii/pull/217) / main `fa6850a3981c319973cf120e64976e6f8d79b969` / [PR CI](https://github.com/oshikaidesu/Motolii/actions/runs/29646476618) / [push CI](https://github.com/oshikaidesu/Motolii/actions/runs/29646451595) である。**M3製品実装のU0a入場(egui骨格+依存方向CI)は本PRで条件充足**。#180/#191は隔離CIと空クレート骨格であり、入場完了を意味しない。2026-07-23に[D1n external revision](2026-07-23-historical-foundation-lineage-recovery.md#3-d1n-external-revision再採択)を歴史から独立follow-upとして再採択した。これは本書の当時のA〜C証跡を遡及変更せず、未実装の間はexternal change検出/cloud-safeを公約しない。
+
+歴史注記（2026-07-23）: cutoff全14版の発効→分岐→解除→M3入場の意味変更は[Unit 4G回収](2026-07-23-historical-m2-reclosure-gate-lineage-recovery.md)で処分した。本書は再締結解除の正本であり、現在のM3進捗順序は[M3仕様](../specs/M3-ui-integration.md)と[implementation ledger](../implementation-ledger.md)を正とする。
 
 ## 判断
 
@@ -35,6 +37,7 @@ M2のDocument意味・migration・Undo・評価順・所有権は、後続フェ
 再締結の閉集合外（本宣言で完了主張しない）:
 
 - D5（本番previewループ、GPU timestamp query収集、10分実機E2E）
+- D1n（2026-07-23に歴史から再採択したexternal revision precondition。D1m完了と別）
 - 将来のM3 / M5 製品実装作業
 
 ### A. 恒久面の閉集合

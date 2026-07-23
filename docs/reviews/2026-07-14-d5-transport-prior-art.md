@@ -2,6 +2,8 @@
 
 ステータス: **【採択】2026-07-14**(ユーザー決定)。**レビュー修正**(レイテンシ=デバイス待ちのみ / D4-FU切り出し / DRS縮退 / 完了条件閾値)を仕様へ追記済み。
 
+> 2026-07-23歴史監査: cutoff全4版を[Unit 5D回収](2026-07-23-historical-d5-transport-lineage-recovery.md)で処分した。audio device clock常時主、video drop、GPU timestamp計測時だけのDRS、device waitだけの補償を維持する。現行コードはTransport／DRS骨格とheadless審判までで、本番Preview、実GPU timestamp配線、10分実機E2E、mixed `AudioProgram`接続は未完了である。
+
 ## これは何か
 
 D5(Transport)発注前の既製品サーチ。動機: 現行仕様[「音声トランスポート設計」](../specs/M2-document-model.md)3項の**バリスピードモード**(低速時=レンダ進捗がクロック所有者に交代し、音声が適応リサンプリングでピッチごと低速化。0.6xなら音も0.6x)が、ユーザーがAEで最悪と体験した挙動(ドロップアウト時に音が低速化し音ハメ不能)と同型ではないかという懸念(2026-07-14ユーザー提起)。調査は4レーン(動画プレイヤー/NLE/適応制御則/Rust部品)を一次資料(公式マニュアル・設計文書・実装ソース・原典論文)で実施した。

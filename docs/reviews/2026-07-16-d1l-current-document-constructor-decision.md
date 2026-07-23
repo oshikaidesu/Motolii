@@ -4,6 +4,8 @@
 対象: D1l PR #173 / PR #197追補
 状態: 【決定・2026-07-16 lint機構追補】（元決定の反対側レビューP0/P1=0。deprecated属性だけ[追補決定](2026-07-16-d1l-new-v1-lint-conflict-decision.md)で置換）
 
+歴史注記（2026-07-23）: cutoff全2版は[Unit 4L回収](2026-07-23-historical-d1l-constructor-lint-lineage-recovery.md)で処分した。本文のliteral v4はD1l着地時点であり、現行はcamera migration後のv5。`new_current()`／明示migrationの意味は実装済みだが、追補が棄却した`#[deprecated]`とlint suppressionは現行codeに残るため、lint機構だけをGAP-23で再開する。
+
 ## 1. 発見した停止要因
 
 PR #197はD1l Commandをversion 4へmigration済みのDocumentにだけ適用し、CommandとUndoは`version`/`min_reader_version`を変更しないと決定した。同時に、候補実装の公開`allocate_effect_*`は削除対象とした。

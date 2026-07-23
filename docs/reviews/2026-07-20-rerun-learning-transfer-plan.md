@@ -195,7 +195,7 @@ MotoliiではDocument snapshot、render/eval worker、latest-value mailbox、gen
 
 Rerunは再生・可視化の先例であり、Motoliiの編集、decode sidecar、audio master clock、export、色変換の正本ではない。`re_video`やFFmpeg構成をそのままD5へ持ち込まず、既存M2/D5契約との差分だけを抽出する。
 
-なお`re_video`のH.264経路は**MotoliiのB-2本命と同一の`ffmpeg-sidecar`(CLI)**である(0.34.1 `Cargo.toml`の`ffmpeg = ["dep:ffmpeg-sidecar"]`、[inventory §5.9](2026-07-20-rerun-source-asset-inventory.md))。これはffmpeg-sidecar採用判断の独立収束事例として記録するが、Rerunのdecode contract・色変換・presentation timingをD5/M2既決の代わりにしない。
+MotoliiのB-2正本は、M0-S2で`ffmpeg-sidecar`クレートを不採用とし、自前ffprobe／ffmpeg子process pipeを選んだ（[S2回収](2026-07-23-historical-s2-decode-pipeline-lineage-recovery.md)）。その上で見ると、`re_video`のH.264経路が0.34.1で`ffmpeg-sidecar`を使う事実は、process方式、codec fixture、cancellation／backpressureの**反例探索**に限る。Rerunのcrate選択、decode contract、色変換、presentation timingをMotoliiの採択へ逆流させない。
 
 ### RR-8 — Catalog、snapshot、性能証拠
 

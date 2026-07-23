@@ -11,7 +11,7 @@
 - **何を作るか**: MV(ミュージックビデオ)制作のための、モーショングラフィック指向のコンポジットツール。AEの重さへの構造的な回答。3〜5分の動画を書き出せたら完成
 - **長期の北極星**: 映像表現を、時刻・入力・型付きparameterから決まる再利用可能な単位として実行・保存・配布できる共通環境にする。制作者と開発者を固定身分にせず、利用→調整→構成→inspection→fork→authoring→共有を一つの経路にする。多数のcreator-authorが公開境界の上で独立して表現を増やせることを成長力とする。「映像制作におけるVST」はHostと拡張単位を分ける構造の類比に限り、音楽中心の製品像やDAW化は目標ではない([concept.md](concept.md#長期の北極星-映像表現を実行再利用配布できる単位にする)、[連続体決定](reviews/2026-07-22-creator-developer-continuum-decision.md))
 - **技術スタック**: Rust + wgpu(レンダコア、VRAM常駐) / ffmpegサイドカープロセス / Cargo workspaceは確定。UIは[React / WebView chrome + native Rust/wgpu Stage/Timeline](ui-runtime-architecture.md)へ責任分割し、通常windowは[1 top-level wgpu Surface + 2 native viewport + opaque child WebView islands](reviews/2026-07-21-ui-surface-topology-decision.md)へ固定した。native操作はrenderer非依存のheadless kernelへ置く。OS window、surface runtime、Core／Host module／plugin、first／third-partyの信頼境界は[軸分離決定](reviews/2026-07-22-m3-surface-extension-axis-separation.md)に従って別判定する
-- **開発方式**: 仕様書駆動の並列AIエージェント開発。[M2基盤再締結](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3はU0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4までmain到達済み。G0-9中も正本化したnative headless layout/hit-test等は進行可だが、WebView/native製品統合はplatform合格まで停止する。plugin UI公開契約はG0-3 / GAP-13の別審判まで停止する
+- **開発方式**: 仕様書駆動の並列AIエージェント開発。[M2基盤再締結](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。歴史から再採択したD1n external revisionは独立follow-up・未実装で、external change検出/cloud-safeは未達。M3はU0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4までmain到達済み。歴史からU2b-2 Place、U4b-0 Add Position Key、U2h-1 primary selection、U3a-1 headless Timelineを決定済み・未実装follow-upとして再採択した。G0-9中もU3a-1等のheadless layout/hit-testは論理上進行可だが、現在のSelected U series順は別に守り、WebView/native製品統合とU3a-2 windowed rendererはplatform合格まで停止する。plugin UI公開契約はG0-3 / GAP-13の別審判まで停止する
 - **設計目標の代表値**: 1080p動画レイヤー40本同時で破綻しない / プロセス強制終了しても編集を失わない(コマンドジャーナル) / フレーム並列(マルチコア)を構造で保証
 
 ## 読む順序(初見向け)
@@ -34,16 +34,34 @@
 | [memory-model.md](memory-model.md) | メモリ階層(VRAM/RAM/ディスク)の役割分担と容量疑念の台帳 | 現行 |
 | [simulation-model.md](simulation-model.md) | 時間軸の自由度モデル: 物理シミュレーション(SimulationPlugin+StateTrack)と前後フレーム参照(宣言的時間窓)の設計 | 現行(2026-07-10。口の予約段階、実装v1.x) |
 | [pitfalls-and-roadmap.md](pitfalls-and-roadmap.md) | 落とし穴カタログ+ロードマップ+凍結ゲート | 現行 |
-| [plugin-authoring.md](plugin-authoring.md) | プラグイン作者向け規約(LLM並列量産の契約書) | 現行(2026-07-10) |
-| [plugin-resources.md](plugin-resources.md) | プラグインのリソースライフサイクル・アセット境界・時間参照(F-10/F-11) | **凍結ゲートで確定**(実装残はM2) |
+| [plugin-authoring.md](plugin-authoring.md) | プラグイン作者向け規約(LLM/人間共通。static first-party公開façadeと未実装distributionを分離) | 現行(2026-07-23歴史回収で状態訂正) |
+| [reviews/2026-07-23-historical-frame-desc-shared-types-lineage-recovery.md](reviews/2026-07-23-historical-frame-desc-shared-types-lineage-recovery.md) | M1全28版からFrameDesc／TextureRefの生存意味、歴史的signature、現行安全性gapを分離 | **Unit 3C縮小採用／GAP-17未実装** |
+| [reviews/2026-07-23-historical-public-capability-provenance-lineage-recovery.md](reviews/2026-07-23-historical-public-capability-provenance-lineage-recovery.md) | A1公開crate、surface/provenance、creator連続体からbundled first-party source実証と未成立third-party runtimeを分離 | **Unit 3B-runtime-B2-A縮小採用** |
+| [reviews/2026-07-23-historical-vism-kit-distribution-lineage-recovery.md](reviews/2026-07-23-historical-vism-kit-distribution-lineage-recovery.md) | Vism／Kit／実装計画29版を処分し、構成、導入集合、再現lock、catalog、hostless配布を分離 | **Unit 9A縮小採用** |
+| [reviews/2026-07-23-historical-plugin-ecosystem-lineage-recovery.md](reviews/2026-07-23-historical-plugin-ecosystem-lineage-recovery.md) | 旧plugin ecosystemの未処分11版からcommunity politics、User library、look/primitiveと危険な旧schemaを分離 | **Unit 9B縮小採用** |
+| [reviews/2026-07-23-historical-audio-generalization-lineage-recovery.md](reviews/2026-07-23-historical-audio-generalization-lineage-recovery.md) | 音声一般化全6版からcomponent／mix意味を維持し、旧Transport varispeed、製品mixed再生／UI未到達を分離 | **Unit 5B設計維持／GAP-28未実装** |
+| [reviews/2026-07-23-historical-wgpu-readback-cold-compile-lineage-recovery.md](reviews/2026-07-23-historical-wgpu-readback-cold-compile-lineage-recovery.md) | wgpu課題／先例全4版から同期readbackとcold pipeline捕捉面を再照合し、計測前の方式固定を拒否 | **Unit 5C延期維持／GAP-29・30未実装** |
+| [reviews/2026-07-23-historical-d5-transport-lineage-recovery.md](reviews/2026-07-23-historical-d5-transport-lineage-recovery.md) | D5 Transport全4版からaudio clock主、video drop、DRS縮退、device wait／D4-FU境界を現行コードへ再照合 | **Unit 5D決定維持／製品統合pending** |
+| [reviews/2026-07-23-historical-color-export-lineage-recovery.md](reviews/2026-07-23-historical-color-export-lineage-recovery.md) | 色変換／GPU export先例1版を現行コードへ再照合し、重複GAP-14をGAP-31へ正規化、TRC／readback責任を分離 | **Unit 5E採択維持／GAP-31未実装** |
+| [reviews/2026-07-23-historical-media-portability-gpu-resurvey-plan-recovery.md](reviews/2026-07-23-historical-media-portability-gpu-resurvey-plan-recovery.md) | メディア可搬性／GPUベンダ差の未実施再調査計画1版を、GAP-3／7・K4とINF-3の狭い再入場gateへ再配置 | **Unit 5F計画維持／調査未実施** |
+| [reviews/2026-07-23-historical-vello-adoption-lineage-recovery.md](reviews/2026-07-23-historical-vello-adoption-lineage-recovery.md) | Vello採否レビュー／spike結果2版を現行局所renderer判断へ再照合し、成立性とK6／P6／U3a-2製品統合を分離 | **Unit 5G採択維持／製品未統合** |
+| [reviews/2026-07-23-historical-r9-real-material-export-acceptance-lineage-recovery.md](reviews/2026-07-23-historical-r9-real-material-export-acceptance-lineage-recovery.md) | R9実素材／書き出し受入4版を再照合し、M1歴史sign-offと現行製品release受入を分離 | **Unit 5H歴史完了維持／GAP-32** |
+| [reviews/2026-07-23-historical-s2-decode-pipeline-lineage-recovery.md](reviews/2026-07-23-historical-s2-decode-pipeline-lineage-recovery.md) | M0-S2 decode 6版を再照合し、採択済み自前pipe／CFR seekとVFR／process lifecycle未成立を分離 | **Unit 5I採択維持／K4・GAP-26** |
+| [reviews/2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md](reviews/2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md) | M4 cache／analysis仕様20版を再照合し、Host専権cache、StateTrack、敗北枝、未実装境界を再締結 | **Unit 5J決定維持／K0〜K8未実装** |
+| [reviews/2026-07-23-historical-performance-model-lineage-recovery.md](reviews/2026-07-23-historical-performance-model-lineage-recovery.md) | performance model 21版を再照合し、liveness-aware target poolを復元、性能仮説と実装事実を分離 | **Unit 5K規律維持／pool実装済み** |
+| [reviews/2026-07-23-historical-memory-model-lineage-recovery.md](reviews/2026-07-23-historical-memory-model-lineage-recovery.md) | memory model 6版を再照合し、VRAM／RAM／disk責任、hard budget、capacity／deadline境界を再締結 | **Unit 5L決定維持／K1・K7・K8未実装** |
+| [reviews/2026-07-23-historical-r3-datatrack-export-correctness-lineage-recovery.md](reviews/2026-07-23-historical-r3-datatrack-export-correctness-lineage-recovery.md) | R3/DataTrack統合review 3版を再照合し、当時完了と後続半開総尺／helper driftを分離 | **Unit 5M採択維持／後続意味優先** |
+| [plugin-resources.md](plugin-resources.md) | プラグインのリソースライフサイクル・アセット境界・時間参照(F-10/F-11) | **縮小採用**(PipelineCache/AssetRef/予約型は実装済み、GpuAssetCache/Importer/Feedback実行は未実装・未凍結) |
 | [references.md](references.md) | 依存候補・参考リポジトリ(ライセンス区分) | 現行 |
 | [ae-pain-points.md](ae-pain-points.md) | AEユーザー不満の体系化+我々の解決タグ(プラグイン窓口仮説の検証) | 現行 |
 | [dev-experience.md](dev-experience.md) | 開発体験(DX): プラグイン/シェーダのホットリロードはしご(AE再起動地獄の予防) | 現行(2026-07-13。設計ノート、契約変更なし) |
 | [plugin-ui-model.md](plugin-ui-model.md) | プラグインUIモデル: 宣言語彙 vs 自由描画。M3着手前決定で縮小採用 | **採否済み分析**(v1はHost自動生成panel、自由UIは延期) |
 | [interaction-simplicity-model.md](interaction-simplicity-model.md) | 操作単純化モデル: Direct/Tool/Advanced正規化、plugin昇格、PP-Gate、M0〜M5割当 | 現行(2026-07-14。凍結済み公開契約は変更しない) |
-| [extensible-core-model.md](extensible-core-model.md) | 小さなコアと探索可能な拡張: 壊れない探索、編集pluginの責任寿命、Documentを増やさないアドレス可能な個体、表現domainを列挙しない能力境界(共通外殻/plugin payload、追加的進化)、性能上限を焼かない原則、穴埋めから遊びの探索への転換 | **設計原則**(2026-07-17。未凍結APIの実装許可ではない) |
+| [extensible-core-model.md](extensible-core-model.md) | 小さなコアと探索可能な拡張: Core kernel／bundled Host module／first-party／third-partyの分界、壊れない探索、編集pluginの責任寿命、Documentを増やさないアドレス可能な個体、表現domainを列挙しない能力境界、性能上限を焼かない原則 | **設計原則**(2026-07-17。`motolii-core` crateやUI runtimeの分類表ではなく、未凍結APIの実装許可でもない) |
 | [vism-package-concept.md](vism-package-concept.md) | Vism (`.vism`): Project・内部plugin kind・Host UIから分離して保存/共有/再利用する映像表現の配布単位。Motoliiは最初のHost、container/loaderは未決 | **コンセプト・名称・拡張子決定／ファイル形式未決**(2026-07-17。v1実装許可ではない) |
-| [vism-kit-model.md](vism-kit-model.md) | Core=文法、Vism=小さな表現、Kit=provider選択と型付き接続、Project=作品。BPM/Beatを例に、Vism直接依存を避けるmaterialize構成とfork能力の境界を定義 | **設計原則決定／schema・形式未決**(2026-07-17) |
+| [vism-kit-model.md](vism-kit-model.md) | Core=文法、Vism=小さな表現、Kit=provider選択・型付き接続・初期値・公開controlを持つRack型の作者成果、Project=作品。Vism直接依存を避けるmaterialize構成とfork能力の境界を定義 | **設計原則決定／schema・形式未決**(2026-07-17、2026-07-23用語統合) |
+| [reviews/2026-07-23-vism-kit-rack-unification-decision.md](reviews/2026-07-23-vism-kit-rack-unification-decision.md) | 独立Plugin Setを廃止し、接続済み一式をRack型Vism Kitへ、無関係な推薦集合をcurator list／feedへ分離 | **用語・責任統合決定／形式未決** |
+| [community-distribution-model.md](community-distribution-model.md) | 中央人気／dedupeを持たず、分散地図、User library、Rack型Vism Kit、外部curator list／feed、Project Lockで多数作者と複数界隈をつなぐcommunity運用 | **運用・ガバナンス原則決定／protocol・schema・製品UI未決**(2026-07-23) |
 | [generative-user-boundary.md](generative-user-boundary.md) | ジェネラティブ表現とユーザー拡張の境界: Shape/SVG、p5.js型入力、Materialize/Live/Feedback/Simulation、Host責務 | **設計決定**(2026-07-15。未凍結runtimeの実装許可ではない) |
 | [ui-interaction-language.md](ui-interaction-language.md) | M3のUI操作言語: 既知の外殻、可視の因果、Parameter Panelを表現のホームにするUI力学、共通component契約、Simple/Advanced、漏れ実装の拒否 | **設計決定**(2026-07-16、Parameter Panel力学を2026-07-18追補) |
 | [ui-visual-language.md](ui-visual-language.md) | M3の視覚言語: 高密度一覧、意味色、既存UIへの馴染み、contrast、token規約、参照範囲 | 設計基準(具体token値はM3視覚確定(G0-6)待ち) |
@@ -81,11 +99,11 @@
 | [reviews/2026-07-17-vism-a0-plugin-boundary-inventory.md](reviews/2026-07-17-vism-a0-plugin-boundary-inventory.md) | VSM-A0: 現行pluginの登録・保存・評価・migration境界をコード事実で分類 | **調査完了** |
 | [reviews/2026-07-17-vism-a7-bpm-datatrack-spike.md](reviews/2026-07-17-vism-a7-bpm-datatrack-spike.md) | VSM-A7: 現行BPM→DataTrack→DocParamの最小意味fixture | **spike完了** |
 | [reviews/2026-07-17-vism-a0d-contract-migration-ownership-decision.md](reviews/2026-07-17-vism-a0d-contract-migration-ownership-decision.md) | VSM-A0D: Document、plugin作者、Host catalog、executorの所有分離 | **設計決定** |
-| [reviews/2026-07-17-vism-a0s-contract-catalog-spec.md](reviews/2026-07-17-vism-a0s-contract-catalog-spec.md) | VSM-A0S: Contract Catalog、prepared resolution、runtime公開境界 | **A0I-1〜3実装完了** + D1m保存/open所有追補（docs only） |
+| [reviews/2026-07-17-vism-a0s-contract-catalog-spec.md](reviews/2026-07-17-vism-a0s-contract-catalog-spec.md) | VSM-A0S: Contract Catalog、prepared resolution、runtime公開境界 | **A0I-1〜3 + D1m保存/open所有を実装済み** |
 | [reviews/2026-07-17-vism-a1-public-crate-boundary-spec.md](reviews/2026-07-17-vism-a1-public-crate-boundary-spec.md) | VSM-A1S: Opacity外部crate化のfaçade、依存allowlist、first-party組み立て、必須capability、移動前pixel gate | **A1-3完了** |
 | [reviews/2026-07-17-vism-a2-legacy-project-migration-decision.md](reviews/2026-07-17-vism-a2-legacy-project-migration-decision.md) | VSM-A2S: Sine外部crate化時の旧CLI ProjectV1 migration処分と公開façadeレビュー | **設計決定／A2実装可** |
 | [reviews/2026-07-18-vism-a3-external-expression-survey.md](reviews/2026-07-18-vism-a3-external-expression-survey.md) | VSM-A3R: AE Expression／Script／Effect、aescripts、Blender Driver／Geometry Nodes／Simulation／Add-onを責任分類し、Parameter Panel中心のA3候補へ翻訳 | **調査完了**（採用決定は[A3D](reviews/2026-07-18-vism-a3d-radial-repeater-decision.md)） |
-| [reviews/2026-07-18-vism-a3d-radial-repeater-decision.md](reviews/2026-07-18-vism-a3d-radial-repeater-decision.md) | VSM-A3D: 決定論的2D Radial Repeater LayerSource（`core.layer_source.radial_repeater` v1）のidentity・正準意味・parameter閉集合・UI投影要求・非目標 | **設計決定** |
+| [reviews/2026-07-18-vism-a3d-radial-repeater-decision.md](reviews/2026-07-18-vism-a3d-radial-repeater-decision.md) | VSM-A3D: 決定論的2D Radial Repeater LayerSource（`core.layer_source.radial_repeater` v1）のidentity・正準意味・parameter閉集合・UI投影要求・非目標 | **設計決定・VSM-A3実装完了** |
 | [reviews/2026-07-18-vism-a3s-layersource-lowering-spec.md](reviews/2026-07-18-vism-a3s-layersource-lowering-spec.md) | VSM-A3S: 一般LayerSource lowering（prepared→`RenderStep::Plugin`）、clear一般化、拒否分類、rect分離、画素契約、U4a handoff、A3分割発注表。[F1](reviews/2026-07-17-vism-implementation-plan.md)でHost cache GAPを訂正し、`VSM-A3-0`〜`VSM-A3-4`まで実装済み | **仕様・VSM-A3完了** |
 | [reviews/2026-07-14-unified-stage-camera-design.md](reviews/2026-07-14-unified-stage-camera-design.md) | 2D/3Dを分けない単一カメラ、Stage、Output Frame、枠外表示の意味と実装順 | **決定**(2026-07-14) |
 | [reviews/2026-07-14-recent-concept-propagation-audit.md](reviews/2026-07-14-recent-concept-propagation-audit.md) | 直近の根幹決定を意味・Document・評価・UI・依存・コードの6面で逆引きした未反映台帳 | 横断監査(2026-07-14) |
@@ -148,4 +166,4 @@
 - **グループ仮出力(ベイク)**: プリコンポの代替。グループ出力を時間範囲でキャッシュし、編集で自動無効化
 - **SimulationPlugin / StateTrack**: 逐次状態シミュレーション(布・液体・パーティクル)のプラグイン境界と、そのベイク結果(チェックポイント列の区間キャッシュ)。状態はホストが所有し、`render_frame(t)`はベイク結果を読む純関数のまま(落とし穴F-12、[simulation-model.md](simulation-model.md)。口の予約段階)
 - **TemporalFootprint(時間窓)**: エコー/モーションブラー等が前後フレーム/サブフレームサンプルを読むための、`NodeDesc`への静的宣言(予約。任意時刻アクセスAPIは不採用)
-- **プラグインパネル**: `NodeDesc.params`自動生成panelは全保存paramを操作できる必須fallback。plugin所有egui/native/Web/wgpu UIはG0-3 / GAP-13の公開・sandbox・互換・配布審判まで公開しない。標準製品surfaceのG0-9合格だけでは解除しない
+- **プラグインパネル**: `NodeDesc.params`自動生成panelは全保存paramを操作できる必須fallbackとして決定済みだが、製品U4aは未実装。plugin所有egui/native/Web/wgpu UIはG0-3 / GAP-13の公開・sandbox・互換・配布審判まで公開しない。標準製品surfaceのG0-9合格だけでは解除しない
