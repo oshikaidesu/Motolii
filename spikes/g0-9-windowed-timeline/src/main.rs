@@ -6,11 +6,12 @@ use std::{
 
 use g0_9_surface_host::{SurfaceLayout, LEFT_WEBVIEW_WIDTH, RIGHT_WEBVIEW_WIDTH};
 use g0_9_windowed_timeline::{
-    acceptance_passes, make_key_instances, summarize_samples, AcceptanceInput,
-    ResourceCreationCounters, DEFAULT_MEASURE_FRAMES, DEFAULT_MEASURE_SECONDS,
-    DEFAULT_WARMUP_FRAMES, KEYFRAME_COUNT,
+    acceptance_passes, build_vello_overlay_asset, make_key_instances, summarize_samples,
+    AcceptanceInput, FaceDescriptor, FixtureFont, ResourceCreationCounters, DEFAULT_MEASURE_FRAMES,
+    DEFAULT_MEASURE_SECONDS, DEFAULT_WARMUP_FRAMES, KEYFRAME_COUNT,
 };
 use serde::Serialize;
+use vello::{AaConfig, AaSupport, RenderParams, Renderer as VelloRenderer, RendererOptions};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -25,6 +26,8 @@ use wry::{
 
 const INITIAL_WIDTH: f64 = 1440.0;
 const INITIAL_HEIGHT: f64 = 900.0;
+const OVERLAY_WIDTH: u32 = 240;
+const OVERLAY_HEIGHT: u32 = 128;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -41,6 +44,12 @@ struct GfxState {
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     view_buffer: wgpu::Buffer,
+    vello_renderer: VelloRenderer,
+    vello_overlay: g0_9_windowed_timeline::VelloOverlayAsset,
+    overlay_texture: wgpu::Texture,
+    overlay_view: wgpu::TextureView,
+    overlay_pipeline: wgpu::RenderPipeline,
+    overlay_bind_group: wgpu::BindGroup,
     adapter: String,
     backend: String,
     creations: ResourceCreationCounters,
@@ -51,6 +60,7 @@ enum RenderOutcome {
     Reconfigure,
     Skip,
     Validation,
+    VelloFailure,
 }
 
 impl GfxState {
@@ -88,6 +98,130 @@ impl GfxState {
         surface.configure(&device, &config);
 
         let mut creations = ResourceCreationCounters::default();
+        let descriptor_text =
+            std::env::var("G0_9_CJK_FACE").expect("G0_9_CJK_FACE exact face descriptor");
+        let descriptor =
+            FaceDescriptor::parse(&descriptor_text).expect("G0_9_CJK_FACE exact face descriptor");
+        let fixture_font = FixtureFont::build(descriptor).expect("exact fixture font");
+        let vello_overlay = build_vello_overlay_asset(&fixture_font).expect("exact Vello overlay");
+        let vello_renderer = VelloRenderer::new(
+            &device,
+            RendererOptions {
+                use_cpu: false,
+                antialiasing_support: AaSupport::area_only(),
+                num_init_threads: std::num::NonZeroUsize::new(1),
+                pipeline_cache: None,
+            },
+        )
+        .expect("Vello renderer");
+
+        let overlay_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("timeline-vello-overlay-target"),
+            size: wgpu::Extent3d {
+                width: OVERLAY_WIDTH,
+                height: OVERLAY_HEIGHT,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        creations.textures += 1;
+        let overlay_view = overlay_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let overlay_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("timeline-vello-overlay-sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+            ..Default::default()
+        });
+        let overlay_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("timeline-vello-overlay-bind-group-layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
+        let overlay_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("timeline-vello-overlay-bind-group"),
+            layout: &overlay_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&overlay_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&overlay_sampler),
+                },
+            ],
+        });
+        creations.bind_groups += 1;
+        let overlay_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("timeline-vello-overlay-composite-shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("overlay_composite.wgsl").into()),
+        });
+        let overlay_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("timeline-vello-overlay-pipeline-layout"),
+                bind_group_layouts: &[Some(&overlay_bind_group_layout)],
+                immediate_size: 0,
+            });
+        let overlay_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("timeline-vello-overlay-composite-pipeline"),
+            layout: Some(&overlay_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &overlay_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &overlay_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::One,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                        alpha: wgpu::BlendComponent::OVER,
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+        creations.pipelines += 1;
+
         let keys = make_key_instances(KEYFRAME_COUNT);
         let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("timeline-100k-keys"),
@@ -191,6 +325,12 @@ impl GfxState {
             pipeline,
             bind_group,
             view_buffer,
+            vello_renderer,
+            vello_overlay,
+            overlay_texture,
+            overlay_view,
+            overlay_pipeline,
+            overlay_bind_group,
             adapter: adapter_info.name,
             backend: format!("{:?}", adapter_info.backend),
             creations,
@@ -208,6 +348,8 @@ impl GfxState {
 
     fn render(&mut self, layout: SurfaceLayout, frame_index: u64) -> RenderOutcome {
         let started = Instant::now();
+        debug_assert_eq!(self.overlay_texture.width(), OVERLAY_WIDTH);
+        debug_assert_eq!(self.overlay_texture.height(), OVERLAY_HEIGHT);
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame) => frame,
             wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
@@ -245,6 +387,25 @@ impl GfxState {
                 ],
             }),
         );
+
+        if self
+            .vello_renderer
+            .render_to_texture(
+                &self.device,
+                &self.queue,
+                self.vello_overlay.scene(),
+                &self.overlay_view,
+                &RenderParams {
+                    base_color: vello::peniko::Color::TRANSPARENT,
+                    width: OVERLAY_WIDTH,
+                    height: OVERLAY_HEIGHT,
+                    antialiasing_method: AaConfig::Area,
+                },
+            )
+            .is_err()
+        {
+            return RenderOutcome::VelloFailure;
+        }
 
         let mut encoder = self
             .device
@@ -290,6 +451,23 @@ impl GfxState {
                 self.config.height,
             );
             pass.draw(0..6, 0..KEYFRAME_COUNT as u32);
+            pass.set_pipeline(&self.overlay_pipeline);
+            pass.set_bind_group(0, &self.overlay_bind_group, &[]);
+            pass.set_viewport(
+                layout.native_x,
+                0.0,
+                OVERLAY_WIDTH as f32,
+                OVERLAY_HEIGHT as f32,
+                0.0,
+                1.0,
+            );
+            pass.set_scissor_rect(
+                layout.native_x.max(0.0) as u32,
+                0,
+                OVERLAY_WIDTH.min(layout.native_width.max(0.0) as u32),
+                OVERLAY_HEIGHT.min(self.config.height),
+            );
+            pass.draw(0..6, 0..1);
         }
         self.queue.submit([encoder.finish()]);
         frame.present();
@@ -421,12 +599,26 @@ impl State {
         let Some(gfx) = &self.gfx else {
             return;
         };
-        let Some(summary) = summarize_samples(&self.frame_samples_ms) else {
-            return;
-        };
-        let Some(interval_summary) = summarize_samples(&self.present_interval_samples_ms) else {
-            return;
-        };
+        let (median_frame_ms, p95_frame_ms, max_frame_ms) =
+            summarize_samples(&self.frame_samples_ms)
+                .map(|summary| {
+                    (
+                        summary.median_frame_ms,
+                        summary.p95_frame_ms,
+                        summary.max_frame_ms,
+                    )
+                })
+                .unwrap_or((0.0, 0.0, 0.0));
+        let (median_present_interval_ms, p95_present_interval_ms, max_present_interval_ms) =
+            summarize_samples(&self.present_interval_samples_ms)
+                .map(|summary| {
+                    (
+                        summary.median_frame_ms,
+                        summary.p95_frame_ms,
+                        summary.max_frame_ms,
+                    )
+                })
+                .unwrap_or((0.0, 0.0, 0.0));
         let measured_seconds = self.measured_seconds();
         let frame_creations = gfx.creations.delta(self.initialization_baseline);
         let pass = acceptance_passes(AcceptanceInput {
@@ -460,22 +652,26 @@ impl State {
             readback_count: self.readback_count,
             initialization_resource_creations: self.initialization_baseline,
             frame_resource_creations: frame_creations,
-            median_frame_ms: summary.median_frame_ms,
-            p95_frame_ms: summary.p95_frame_ms,
-            max_frame_ms: summary.max_frame_ms,
-            median_present_interval_ms: interval_summary.median_frame_ms,
-            p95_present_interval_ms: interval_summary.p95_frame_ms,
-            max_present_interval_ms: interval_summary.max_frame_ms,
-            throughput_fps: f64::from(self.measured_frames) / measured_seconds,
+            median_frame_ms,
+            p95_frame_ms,
+            max_frame_ms,
+            median_present_interval_ms,
+            p95_present_interval_ms,
+            max_present_interval_ms,
+            throughput_fps: if measured_seconds > 0.0 {
+                f64::from(self.measured_frames) / measured_seconds
+            } else {
+                0.0
+            },
             deadline_miss_16_667_count: self
                 .present_interval_samples_ms
                 .iter()
                 .filter(|sample| **sample > 16.667)
                 .count(),
             pass,
-            measurement: "windowed wgpu Surface/Fifo acquire-to-present CPU wall time; 100,000 direct instances every frame; no device.poll wait and no readback",
+            measurement: "windowed wgpu Surface/Fifo acquire-to-present CPU wall time; 100,000 direct instances plus one fixed Vello text/path overlay every frame on the same device/queue; no device.poll wait and no readback",
             limitations: [
-                "Vello and text/icon rendering are not included",
+                "the fixed Vello overlay is not a typed renderer comparison or an egui branch",
                 "GPU timestamp queries and input latency are not included",
                 "macOS WKWebView child composition only; Windows WebView2 is untested",
             ],
@@ -588,6 +784,11 @@ impl ApplicationHandler for State {
                     RenderOutcome::Skip => {}
                     RenderOutcome::Validation => {
                         self.publish_report("validation-error");
+                        event_loop.exit();
+                        return;
+                    }
+                    RenderOutcome::VelloFailure => {
+                        self.publish_report("vello-render-error");
                         event_loop.exit();
                         return;
                     }

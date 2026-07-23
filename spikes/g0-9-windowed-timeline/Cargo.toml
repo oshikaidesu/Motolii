@@ -3,6 +3,7 @@ name = "g0-9-windowed-timeline"
 version = "0.1.0"
 edition = "2021"
 publish = false
+default-run = "g0-9-windowed-timeline"
 
 # 製品workspaceから隔離し、公開API・Document・依存へ焼かない。
 [workspace]
