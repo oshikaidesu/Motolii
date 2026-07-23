@@ -745,9 +745,11 @@ assert_has_fragment "$CALL_LOG" "--model gpt-5.6-terra" "happy path Terra invoca
 assert_has_fragment "$CALL_LOG" "--model cursor-grok-4.5-high" "happy path Grok invocation"
 assert_has_fragment "$CALL_LOG" "--ask-for-approval never" "happy path Terra is noninteractive"
 assert_has_fragment "$CALL_LOG" "--sandbox danger-full-access" "happy path Terra uses the isolated worktree sandbox"
-assert_has_fragment "$CALL_LOG" "--mode ask" "happy path Grok inspection is read-only"
-if grep -q -- "--force" "$CALL_LOG"; then
-  fail "happy path dispatch: Grok inspection must not receive write-capable --force"
+assert_has_fragment "$CALL_LOG" "--mode plan" "happy path Grok inspection is read-only"
+assert_has_fragment "$CALL_LOG" "--force" "happy path Grok can rerun read-only evidence"
+assert_has_fragment "$CALL_LOG" "--sandbox enabled" "happy path Grok remains sandboxed"
+if grep -q -- "--mode ask" "$CALL_LOG"; then
+  fail "happy path dispatch: ask mode cannot rerun required evidence"
 fi
 terra_line="$(grep -n -- '--model gpt-5.6-terra' "$CALL_LOG" | head -1 | cut -d: -f1)"
 grok_line="$(grep -n -- '--model cursor-grok-4.5-high' "$CALL_LOG" | head -1 | cut -d: -f1)"
@@ -814,7 +816,9 @@ assert_contains "$order_file" "SUPERVISOR_MODEL: cursor-grok-4.5-high" "prepare 
 assert_contains "$order_file" "IMPLEMENTER_MODEL: gpt-5.6-terra" "prepare ORDER READY"
 assert_contains "$order_file" "TASK_SHA256: $(printf '%s' "prepare task" | shasum -a 256 | awk '{print $1}')" "prepare ORDER READY"
 assert_has_fragment "$CALL_LOG" "--model cursor-grok-4.5-high" "prepare fixed model id"
-assert_has_fragment "$CALL_LOG" "--mode ask" "prepare uses the non-editing Cursor mode"
+assert_has_fragment "$CALL_LOG" "--mode plan" "prepare uses the non-editing Cursor mode"
+assert_has_fragment "$CALL_LOG" "--force" "prepare can run read-only discovery commands"
+assert_has_fragment "$CALL_LOG" "--sandbox enabled" "prepare remains sandboxed"
 
 order_file="$TMP_ROOT/prepare-stop.md"
 run_prepare "$order_file" FAKE_GROK_OUTPUT=$'blocked by unresolved decision\nORDER: STOP'

@@ -203,9 +203,9 @@ run_supervisor() {
   local prompt="$2"
   local result_kind="$3"
   local timeout_seconds="${4:-$SUPERVISOR_TIMEOUT_SECONDS}"
-  # order作成も検収もCursor自身のread-only ask modeへ固定する。事後の
-  # fingerprint/scope検査は多層防御であり、write権限を与える理由にしない。
-  local cursor_mode_args=(--trust --mode ask)
+  # plan modeで編集を禁止しつつ、--forceでread-only shellの非対話実行だけを
+  # 可能にする。fingerprint/scope検査は、CLI側のmode退行も検出する多層防御。
+  local cursor_mode_args=(--trust --mode plan --force --sandbox enabled)
   if ! run_agent "$output" "$timeout_seconds" \
     env CURSOR_AGENT=1 "$CURSOR_AGENT_BIN" -p "${cursor_mode_args[@]}" \
       --output-format text \
