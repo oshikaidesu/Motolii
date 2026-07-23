@@ -108,6 +108,7 @@
 | [2026-07-23-historical-d1l-constructor-lint-lineage-recovery.md](2026-07-23-historical-d1l-constructor-lint-lineage-recovery.md) | Unit 4L — current constructor＋legacy lint全4版を処分し、Document意味完成とdoc-hidden／suppression実装driftを分離 |
 | [2026-07-23-historical-d1l-journal-undo-lineage-recovery.md](2026-07-23-historical-d1l-journal-undo-lineage-recovery.md) | Unit 4M — journal／Undo／Writer全2版のEffect実装、Position Add Key未実装追補、snapshot fallback driftを処分 |
 | [2026-07-23-historical-param-element-constraint-lineage-recovery.md](2026-07-23-historical-param-element-constraint-lineage-recovery.md) | Unit 4N — Param Pipeline／Element Domain／Constraint Graph全2版のsingle-source維持、三解凍gate、task ID衝突を処分 |
+| [2026-07-23-historical-semantic-oracle-boundary-recovery.md](2026-07-23-historical-semantic-oracle-boundary-recovery.md) | Unit 4O — D1i-4 semantic oracle訂正全1版のoracle／harness分離、段階移行、gate自己保護不足を処分 |
 | [2026-07-16-m3-preflight-decisions.md](2026-07-16-m3-preflight-decisions.md) | M3着手前決定 — 操作の意味を固定し、見た目の実値は測って決める |
 | [2026-07-16-m3-ui-concept-to-tickets.md](2026-07-16-m3-ui-concept-to-tickets.md) | M3 UIコンセプトから実装チケットへの分解 |
 | [2026-07-16-m3-ui-gap-survey.md](2026-07-16-m3-ui-gap-survey.md) | M3前UIギャップ調査: U1〜U8に席が無いUI要素とコア側前提の欠落(2026-07-16) |
