@@ -1,8 +1,16 @@
 # M3 UI参照地図
 
-更新日: 2026-07-22
+更新日: 2026-07-23
 
 M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決める。会話履歴、スクリーンショット、旧HTML、React prototypeのいずれも、単独では製品仕様にならない。
+
+## 画面名
+
+- **Motolii Studio**: 利用者が起動するnative desktop製品。
+- **Motolii Studio Mock**: `docs/mocks-ui/`で動かすbrowser開発モック。視覚・操作比較とReact source asset確認のための成果物であり、製品Preview、配布物、native windowではない。
+- **Motolii Studio Preview**: Motolii Studioのsurfaceを一つのnative desktop実行ファイルへ統合した製品Previewだけに使う。既存`motolii_ui_shell` baseline、個別native spike、Motolii Studio Mockをこの名で呼ばない。
+
+内部task IDの`G0-9 Native Product Mock`は発注・証跡の識別子であり、利用者へ見せる画面名にしない。
 
 ## 参照順位
 
@@ -22,7 +30,7 @@ M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決
 
 | 資料 | 答える問い | 答えない問い |
 |---|---|---|
-| Reactモック | Motoliiで何を見せ、どう操作させたいか。React所有面のcomponent、fixture、Storybook、Playwright、stable IDは直接所有移管する製品source asset | React state、DOM event、CSS px、仮JSONをDocument/公開契約へ昇格すること |
+| Reactモック（Motolii Studio Mock） | Motoliiで何を見せ、どう操作させたいか。React所有面のcomponent、fixture、Storybook、Playwright、stable IDは直接所有移管する製品source asset | React state、DOM event、CSS px、仮JSONをDocument/公開契約へ昇格すること。browserモックをnative製品Previewと呼ぶこと |
 | Rerun | 高密度な製品shell、時間面、GPU viewport、selection、component、試験をどう成立させたか | Motoliiの作品意味、編集command、clip/keyframe操作。egui固有assetの採用はG0-9待ち |
 | Motolii規範・仕様 | 状態の持ち場、Undo、公開契約、受け入れ条件 | 具体token値や未採択component実装 |
 
