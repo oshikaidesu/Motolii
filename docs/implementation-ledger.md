@@ -110,6 +110,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 | 優先 | ID | Phase / slice / checklist | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
+| — | CU-0A04 | M3 / VS-1 / A / R1 | `DONE` | — | CU-0A03、直接移管契約 | CU-0A05A |
 | 1 | CU-0A05A | M3 / VS-1 / A / R2A | `DO` | — | CU-0A04、固定SHA、直接移管契約 | CU-0A05B product ownership |
 | 2 | G0-6H | M3 evidence / VS-1 / visual | `DO / HUMAN` | — | 5 reference screenと30 PNG | U0e-3だけを解禁可 |
 | 3 | U2c-2 | M3 / VS-2 / D | `WAIT` | — | U4a-2のDirect製品入口とU4cのAdvanced製品入口 | 実在入口のDocument意味/Undo同値conformance |
