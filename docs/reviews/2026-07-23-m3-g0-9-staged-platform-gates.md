@@ -70,15 +70,23 @@ G0-9L合格後もW0b、H1b、製品window結合はそれぞれ別の停止中製
 
 ### L1. renderer同条件比較
 
-direct wgpu、direct wgpu + Vello局所pass、現行egui baselineを次の同一条件で比較する。
+[L1 renderer計測の正本修正](2026-07-24-m3-g0-9l-l1-measurement-amendment.md)に従い、
+direct wgpu primitive batch + Vello局所passの製品候補stackと、同じVello局所assetを
+持つ現行egui baselineを次の同一条件で比較する。direct wgpuとVello局所passを別armへ
+分けず、pure direct用のglyph rendererまたはtext/icon量の違う縮退fixtureを作らない。
 
 - 同じMac、OS、display、window寸法、present mode
 - 同じ1,000 clip / 100,000 key fixture、visible range、selection、text/icon量
 - 同じopaque WKWebView枚数、resize/input操作列、warm-up、測定時間
-- frame/input latency、CPU、GPU、memory、resource生成回数、readback回数のraw結果を保存
+- CPU側frame/input latency、pass別GPU timestamp query、RSS、resource生成回数、
+  readback回数のraw結果を保存する。Apple unified memoryから専用VRAM値を推測しない
+- instrumentation後の同一binary・同一sessionで両armを逐次再実行し、rustc、cargo、
+  locked dependency、実行commitをrawへ埋める
 
 絶対閾値を測定後に追加しない。採択は正しさ、resource hot-loop生成0、readback 0、
 既存G0-4手順のp50/p95と外れ値を根拠に記録する。egui baselineのsourceと試験を削除しない。
+CU-0G02の既存CPU/input/RSS rawは粒の証拠として保持するが、GPU rawを後付けせず、
+CU-0G02Bの同一session再実測までL1合格へ昇格しない。
 
 ### L2. IME、VoiceOver、focus、keyboard
 

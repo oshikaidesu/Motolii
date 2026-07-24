@@ -184,7 +184,8 @@ toastはdock panelではない。headless layoutはlogical rectangleだけを計
 ### G0-9L / G0-9Dで未決
 
 - macOS/Windowsのfocus、DPI、resize、z-order、pointer capture、surface/device lost、a11y tree接合の受入
-- direct wgpu枝とdirect wgpu + Vello局所pass枝の製品採択
+- direct wgpu primitive batch + Vello局所passの製品候補stackとegui baselineの最終採択、
+  およびprimitive / Vello責任境界のisolated capability確認
 - egui製品shellの撤去時期
 - Linuxでsystem WebViewを使うかCEF比較へ進むか
 

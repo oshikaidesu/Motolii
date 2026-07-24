@@ -157,6 +157,7 @@
 | [2026-07-23-first-party-vism-expression-demand-survey.md](2026-07-23-first-party-vism-expression-demand-survey.md) | AE・AviUtl 2・Cavalryからfirst-party pre-Vismの基礎primitiveとsignature表現需要を分ける初期調査 |
 | [2026-07-23-group-source-pool-cloner-concept.md](2026-07-23-group-source-pool-cloner-concept.md) | Groupの直接の子を割合つきprototype poolとしてClonerへ渡すMotolii固有概念の比較 |
 | [2026-07-24-dependency-first-responsibility-gate.md](2026-07-24-dependency-first-responsibility-gate.md) | 依存優先・責任最小化ゲート |
+| [2026-07-24-m3-g0-9l-l1-measurement-amendment.md](2026-07-24-m3-g0-9l-l1-measurement-amendment.md) | G0-9L L1の候補stack対baseline二armとGPU timestamp再実測の正本修正 |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |
 | [2026-07-21-m3-u1a-1-static-viewport-contract.md](2026-07-21-m3-u1a-1-static-viewport-contract.md) | U1a-1 静止viewport実装前契約 |
