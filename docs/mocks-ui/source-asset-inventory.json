@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "task": "CU-0A03",
+  "scope": "browser-only-r0-slice",
+  "completeR0": false,
+  "fixedSourceCommit": "56c318edcddab7cf95d263cc2f7dd2b4e6791134",
+  "authority": {
+    "isProductApi": false,
+    "isPersistenceFormat": false,
+    "isProductOwnerTransfer": false
+  },
+  "surfaces": [
+    {
+      "id": "browser",
+      "classification": "react-direct-promotion",
+      "componentPath": "docs/mocks-ui/src/candidates/DiscoveryBrowserCandidate.jsx",
+      "componentExport": "DiscoveryBrowserCandidate",
+      "runtimeClosure": [
+        {
+          "path": "docs/mocks-ui/src/candidates/DiscoveryBrowserCandidate.jsx",
+          "role": "runtime",
+          "sha256": "4edb3dfc49726aa700e77a14197571a43de2d80d9838a824c22cb68e0ac3d5b8"
+        },
+        {
+          "path": "docs/mocks-ui/src/candidates/discovery-browser-candidate.css",
+          "role": "runtime",
+          "sha256": "1dcb6afc3c16907366f6d73ed7cfb1b04c8cea872d169e959ead49b6c6cedccd"
+        },
+        {
+          "path": "docs/mocks-ui/src/patterns/DiscoveryBrowser.jsx",
+          "role": "runtime",
+          "sha256": "1d996ad66dba3ff7fb36cf811ce8d22faec1fee271a2dd5349d953a7cf89a2ea"
+        }
+      ],
+      "localImports": [
+        {
+          "kind": "css-side-effect",
+          "source": "docs/mocks-ui/src/candidates/discovery-browser-candidate.css",
+          "specifiers": []
+        },
+        {
+          "kind": "named",
+          "source": "docs/mocks-ui/src/patterns/DiscoveryBrowser.jsx",
+          "specifiers": [
+            "DiscoveryBrowserLayout",
+            "DiscoveryResults",
+            "DiscoverySearchBar",
+            "DiscoverySection",
+            "DiscoverySourceRail",
+            "DiscoveryViewToggle"
+          ]
+        }
+      ],
+      "externalPackages": [
+        "html-react-parser",
+        "react"
+      ]
+    }
+  ],
+  "modelClosure": [],
+  "behavioralTests": [
+    {
+      "path": "docs/mocks-ui/tests/browser-candidate.spec.js",
+      "route": "plugin-browser-candidate"
+    }
+  ]
+}
