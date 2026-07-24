@@ -216,6 +216,7 @@
 | [2026-07-25-parallel-human-response-frontier-execution-decision.md](2026-07-25-parallel-human-response-frontier-execution-decision.md) | 決定済みcontract上のprovider／consumer／fault／measureを並列に進め、通常製品routeの人間応答地点へrolling waveで返す実行決定。Fableを共有境界reviewへ限定し新しい直列barrierにしない |
 | [2026-07-25-parallel-lane-readiness-map.md](2026-07-25-parallel-lane-readiness-map.md) | Wave 0の7 lane、lane-local直列性、変更path衝突、Human Response Frontier、WAITを固定する着手地図 |
 | [2026-07-25-parallel-lane-readiness-fable-review.md](2026-07-25-parallel-lane-readiness-fable-review.md) | 並列レーン候補をFable 5で反対側レビューし、R2A/R2B混同とK0/P0I旧全体直列文言のP1二件を訂正後、再審査ACCEPTとなった記録 |
+| [2026-07-25-cu-0a05a-interrupted-worktree-restart-disposition.md](2026-07-25-cu-0a05a-interrupted-worktree-restart-disposition.md) | CU-0A05A旧隔離差分を完了証拠にせず、fresh baseへの縮小再適用と全証拠再取得を必須にする停止線 |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |
 | [2026-07-21-m3-u1a-1-static-viewport-contract.md](2026-07-21-m3-u1a-1-static-viewport-contract.md) | U1a-1 静止viewport実装前契約 |
