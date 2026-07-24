@@ -188,6 +188,62 @@ fn semantic_golden_modification_is_rejected() {
 }
 
 #[test]
+fn rename_of_unclassified_paths_is_allowed() {
+    // live CIの `git diff --name-status` はrename検出で R<score> 行を出す。
+    // 分類外パス同士のrenameはゲート対象外として通ること(2026-07-24 CI回帰)。
+    let (ok, msg) = run_policy(
+        None,
+        false,
+        "R099\tscripts/delegate-claude-supervised.sh\tscripts/archive/delegate-claude-supervised.sh\n",
+    );
+    assert!(ok, "rename of unclassified paths must pass: {msg}");
+}
+
+#[test]
+fn rename_away_of_semantic_golden_is_rejected() {
+    // renameは D(旧) + A(新) へ分解されるため、semanticのrename退避はDとして拒否される。
+    let (ok, msg) = run_policy(
+        None,
+        false,
+        "R100\tcrates/motolii-doc/tests/d1i2_pathop_geometry.rs\tcrates/motolii-doc/tests/d1i2_renamed.rs\n",
+    );
+    assert!(!ok, "semantic rename-away must fail: {msg}");
+    assert!(
+        msg.contains("semantic golden modified/deleted"),
+        "unexpected: {msg}"
+    );
+}
+
+#[test]
+fn typechange_of_semantic_golden_is_rejected() {
+    // T(typechange)は内容変更としてM扱い。semanticでは拒否される。
+    let (ok, msg) = run_policy(
+        None,
+        false,
+        "T\tcrates/motolii-doc/tests/d1i2_pathop_geometry.rs\n",
+    );
+    assert!(!ok, "semantic typechange must fail: {msg}");
+    assert!(
+        msg.contains("semantic golden modified/deleted"),
+        "unexpected: {msg}"
+    );
+}
+
+#[test]
+fn malformed_rename_line_is_fail_closed() {
+    let (ok, msg) = run_policy(None, false, "R099\tonly-one-path\n");
+    assert!(!ok, "malformed rename must fail closed: {msg}");
+    assert!(msg.contains("malformed rename line"), "unexpected: {msg}");
+}
+
+#[test]
+fn unknown_status_is_fail_closed() {
+    let (ok, msg) = run_policy(None, false, "X\tsome/path\n");
+    assert!(!ok, "unknown status must fail closed: {msg}");
+    assert!(msg.contains("bad status"), "unexpected: {msg}");
+}
+
+#[test]
 fn blend_mode_oracle_modification_is_rejected() {
     let (ok, msg) = run_policy(
         None,
