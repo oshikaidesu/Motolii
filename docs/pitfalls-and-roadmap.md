@@ -523,7 +523,7 @@ M1で実際に動いた形に基づき、以下を凍結してから並列化を
 
 ### M5: 3D合成とポストプロセス
 
-内容: glTF読み込み(OBJはglTF変換パス)を、M2/M3で成立済みの単一XYZ world/camera/Stageへ参加させる。全objectのZ/world transform、拡張可能なグループ遮蔽ポリシー(`Layer Order / Group Depth / AE-style Bins`)、Scale / Depth Move、Depth Rail、既存cameraのPerspective/Advanced操作、Z距離ポストブラー、色調整・グレイン。
+内容: glTF読み込み(OBJはglTF変換パス)を、M2/M3で成立済みの単一XYZ world／active camera／Stageへ参加させる。全objectのZ/world transform、拡張可能なグループ遮蔽ポリシー(`Layer Order / Group Depth / AE-style Bins`)、Scale / Depth Move、Depth Rail、[Camera Object / Provider決定](reviews/2026-07-24-camera-object-provider-decision.md)に基づく換装可能cameraとObservation、Z距離ポストブラー、色調整・グレイン。
 
 完了条件: 動画テクスチャ平面+glTFメッシュ+DataTrack/ParamDriver駆動オーバーレイ(キーフレーム/合成データ駆動)が1シーンで合成され、書き出せる。**実動画トラッキングを使う場合は最終フェーズ(解析駆動)完了後に接続する**。
 

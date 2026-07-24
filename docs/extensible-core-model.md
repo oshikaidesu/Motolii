@@ -24,6 +24,8 @@ Direct / Tool / Advanced / plugin UI
 
 小さいことは機能が少ないことではない。Hostが作品の持続性に必要な意味だけを厳格に所有し、表現の組合せと専門的な操作面を開くことである。
 
+その分界は[換装可能な意味の席／Provider／Effect分類](reviews/2026-07-24-replaceable-semantic-seat-decision.md)に従う。Hostはstable identity、lifetime、参照、Undo、typed outputというsemantic seatを所有し、具体評価をProviderへ開く。評価済みの値／像だけを変え、scene参加・sampling・identityを変えず、通常のeffect stack／render graph順で表現できる処理はEffect／Filterを第一選択とする。換装可能性はHost責任の放棄ではなく、seat stabilityとimplementation replaceabilityの両立である。
+
 ここでいうミニマリズムは、空の本体へ必要機能を各自で寄せ集めさせることでも、UIを疎に見せることでもない。**必要十分な表現力を保ちながら、使わない能力の常駐負荷と、使う能力の導入・更新・再現に伴う管理負荷を最小にすること**である。pluginで能力を追加できても、導入手順、version、欠落時の挙動、作品共有が利用者の記憶に依存するなら、Hostは小さく見えるだけで制作環境は小さくない。Hostの型付き契約、互換診断、lifecycle、共通UIと検証境界によって、拡張後も「待たない・迷わない・抱えない」を保つ。これはv1へmarketplaceや新しい配布契約を追加する決定ではない。
 
 > **意味は厳格に、表現は自由に。壊れ方は封じるが、暴れ方は封じない。**

@@ -69,6 +69,7 @@ A-1(egui候補は既存device/native texture共有を[採用時の実機証拠](
 
 - 全CompositionにM2-D1jの`CompCamera`が常在する。通常UIで「3D cameraを追加する」操作は作らない
 - `Output Frame`は`CompCamera`のprojection aperture。frameの移動・ズーム・回転はDocument cameraをD2 commandで編集し、書き出しへ影響する
+- 上記2項はM3が実装済みM2 Planar互換cameraを編集する現行入口である。将来のcamera modelは[Camera Object / Provider決定](../reviews/2026-07-24-camera-object-provider-decision.md)に従い換装可能Camera Objectへ出すが、M3 U2dから未決のprovider schema／公開intentを発明しない。Camera toolがHost UIであることをcamera実装のHost固定根拠にしない
 - `Stage View`のpan/zoom/`Fit Output / Selection / All`はworkspace/session候補で、Document serializeと書き出しへ影響しない。別preview cameraとしてdomainへ出さない
 - 2D objectも`z=0`の同じworld objectで、Output Frame外でもbounds、anchor、選択、hit-test、snapを維持する
 - 枠外は不透明グレーで隠さず、同じ時刻・camera・world評価の保守的Draftへ半透明scrimを重ねる。RoD/RoI最適化はM4-K0で後付けし、U1fの見た目をK0待ちにしない。Final出力範囲を広げず、GPU同期readbackでvisible boundsを求めない
