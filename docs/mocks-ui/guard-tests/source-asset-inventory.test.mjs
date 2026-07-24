@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { parse } from "@babel/parser";
+import { htmlToDOM } from "html-react-parser";
 import postcss from "postcss";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -138,6 +139,24 @@ const EXPECTED_PANEL_LAYOUT_EXCLUDED_BOUNDARY = [
 ];
 const EXPECTED_PANEL_LAYOUT_TEST_PATH = "docs/mocks-ui/tests/panel-layout.spec.js";
 const EXPECTED_PANEL_LAYOUT_TEST_HASH = "419c82363b37c6dbf97ef872f64351750946cd0dc79f664515f6f2bd9326b334";
+const EXPECTED_NATIVE_STAGE_TIME_CLOSURE = [
+  "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
+  "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
+  "docs/mocks-ui/src/legacy/legacySource.js",
+  "docs/mocks/m3-vism-host-boundary.html",
+  EXPECTED_TIMELINE_SOURCE,
+  EXPECTED_TIMELINE_CSS_SOURCE,
+];
+const EXPECTED_NATIVE_STAGE_TIME_HASHES = {
+  ...EXPECTED_INSPECTOR_LEGACY_HASHES,
+  ...EXPECTED_TIMELINE_RUNTIME_HASHES,
+};
+const EXPECTED_STAGE_ORACLE = ["stage-shell", "output-frame", "transport"];
+const EXPECTED_NATIVE_TIMELINE_ORACLE = EXPECTED_TIMELINE_NATIVE_ORACLE;
+const EXPECTED_STAGE_SURFACE_PATH = "docs/mocks-ui/src/surfaces/StageSurface.jsx";
+const EXPECTED_STAGE_SURFACE_HASH = "fec7b23593af66194895b736458297d99932a1dc9a6d37b8f38c95c25e31e46f";
+const EXPECTED_NATIVE_VISUAL_PARITY_HASH = "c71b2e34d343e21aa6a32387b0692897efd5d1f56931dc8c873fcb617e5687ef";
+const EXPECTED_NATIVE_TIMELINE_TEST_HASH = "0c0da4260662dbdcd7de89d7da247c3334db8fdfe29315f1ed77e43b0ac994f4";
 
 function hashBytes(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -320,7 +339,15 @@ function countJsxClass(ast, expectedClass) {
           attribute.type === "JSXAttribute" &&
           attribute.name.name === "className",
       );
-      if (className?.value?.type === "StringLiteral" && className.value.value === expectedClass) {
+      const classTokens = className?.value?.type === "StringLiteral"
+        ? className.value.value.split(/\s+/)
+        : className?.value?.type === "JSXExpressionContainer" &&
+            className.value.expression.type === "TemplateLiteral"
+          ? className.value.expression.quasis.flatMap((quasi) =>
+            (quasi.value.cooked ?? quasi.value.raw).split(/\s+/),
+          )
+          : [];
+      if (classTokens.includes(expectedClass)) {
         count += 1;
       }
     }
@@ -328,6 +355,68 @@ function countJsxClass(ast, expectedClass) {
   };
   visit(ast);
   return count;
+}
+
+function hasJsxIdentifier(ast, identifier) {
+  let found = false;
+  const visit = (value) => {
+    if (!value || typeof value !== "object" || found) return;
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (value.type === "JSXIdentifier" && value.name === identifier) {
+      found = true;
+      return;
+    }
+    Object.values(value).forEach(visit);
+  };
+  visit(ast);
+  return found;
+}
+
+function hasStageParserReplacement(ast) {
+  let replacementFound = false;
+  const visit = (value) => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (
+      value.type === "IfStatement" &&
+      value.test.type === "CallExpression" &&
+      value.test.callee.type === "Identifier" &&
+      value.test.callee.name === "matches" &&
+      value.test.arguments[1]?.type === "ObjectExpression" &&
+      value.test.arguments[1].properties.some(
+        (property) =>
+          property.type === "ObjectProperty" &&
+          property.key.type === "Identifier" &&
+          property.key.name === "className" &&
+          property.value.type === "StringLiteral" &&
+          property.value.value === "stage-shell",
+      )
+    ) {
+      replacementFound = hasJsxIdentifier(value.consequent, "LegacyStageShell");
+    }
+    Object.values(value).forEach(visit);
+  };
+  visit(ast);
+  return replacementFound;
+}
+
+function hasHtmlClass(node, className) {
+  return node?.attribs?.class?.split(/\s+/).includes(className) ?? false;
+}
+
+function findHtmlClass(node, className) {
+  if (hasHtmlClass(node, className)) return node;
+  for (const child of node?.children ?? []) {
+    const found = findHtmlClass(child, className);
+    if (found) return found;
+  }
+  return null;
 }
 
 function hasCssSelectorRoot(cssSource, rootSelector) {
@@ -345,6 +434,16 @@ function hasCssSelectorRoot(cssSource, rootSelector) {
           normalized.startsWith(`${rootSelector} >`)
         );
       }),
+  );
+}
+
+function hasCssClassToken(cssSource, className) {
+  const classPattern = new RegExp(`\\.${className}(?![A-Za-z0-9_-])`);
+  const stylesheet = postcss.parse(cssSource);
+  return stylesheet.nodes.some(
+    (node) =>
+      node.type === "rule" &&
+      node.selectors.some((selector) => classPattern.test(selector)),
   );
 }
 
@@ -464,6 +563,15 @@ async function validateInventory(manifest, options = {}) {
     panelLayoutAstSource,
     panelLayoutCssSource,
     panelLayoutTestAstSource,
+    stageHostAstSource,
+    stageRegionsAstSource,
+    stageLegacySourceAstSource,
+    stageRawHtmlSource,
+    nativeTimelineAstSource,
+    nativeTimelineCssSource,
+    stageSurfaceAstSource,
+    nativeVisualParityAstSource,
+    nativeTimelineTestAstSource,
     fixedSourceCommit = manifest.fixedSourceCommit,
   } = options;
 
@@ -498,7 +606,7 @@ async function validateInventory(manifest, options = {}) {
 
   assert.equal(manifest.modelClosure.length, 0);
   assert.equal(Array.isArray(manifest.surfaces), true);
-  assert.equal(manifest.surfaces.length, 5);
+  assert.equal(manifest.surfaces.length, 6);
   assert.equal(Array.isArray(manifest.behavioralTests), true);
   assert.equal(manifest.behavioralTests.length, 2);
 
@@ -900,6 +1008,126 @@ async function validateInventory(manifest, options = {}) {
     absoluteFromRelative(panelLayout.behavioralEvidence.path), "utf8",
   ));
   assert.ok(extractRouteFromTest(panelLayoutTestAst).includes(EXPECTED_TEST_ROUTE));
+
+  const nativeStageTime = manifest.surfaces[5];
+  ensureExactKeys(nativeStageTime, [
+    "id",
+    "classification",
+    "nativeOwner",
+    "reactPromotionBoundary",
+    "oracleClosure",
+    "stageOracle",
+    "timelineOracle",
+    "rejectedReactSurfaces",
+    "behavioralEvidence",
+  ]);
+  assert.equal(nativeStageTime.id, "native-stage-time-surface");
+  assert.equal(nativeStageTime.classification, "native-wgpu-owned-react-promotion-forbidden");
+  assert.equal(nativeStageTime.nativeOwner, "wgpu-stage-and-timeline");
+  assert.deepEqual(nativeStageTime.reactPromotionBoundary, []);
+  assert.deepEqual(nativeStageTime.stageOracle, EXPECTED_STAGE_ORACLE);
+  assert.deepEqual(nativeStageTime.timelineOracle, EXPECTED_NATIVE_TIMELINE_ORACLE);
+  assert.equal(nativeStageTime.oracleClosure.length, EXPECTED_NATIVE_STAGE_TIME_CLOSURE.length);
+  for (let index = 0; index < EXPECTED_NATIVE_STAGE_TIME_CLOSURE.length; index += 1) {
+    const expectedPath = EXPECTED_NATIVE_STAGE_TIME_CLOSURE[index];
+    const entry = nativeStageTime.oracleClosure[index];
+    ensureExactKeys(entry, ["path", "role", "sha256"]);
+    assert.equal(entry.path, expectedPath);
+    assert.equal(entry.role, index < 4 ? "legacy-oracle" : "react-oracle");
+    assert.equal(entry.sha256, EXPECTED_NATIVE_STAGE_TIME_HASHES[expectedPath]);
+    assert.equal(hashBytes(readBlobFromCommit(entry.path, fixedSourceCommit)), entry.sha256);
+    assert.equal(hashBytes(await readFile(absoluteFromRelative(entry.path))), entry.sha256);
+  }
+
+  assert.equal(nativeStageTime.rejectedReactSurfaces.length, 2);
+  const [rejectedStage, rejectedTimeline] = nativeStageTime.rejectedReactSurfaces;
+  ensureExactKeys(rejectedStage, ["path", "export", "sha256", "disposition"]);
+  assert.deepEqual(rejectedStage, {
+    path: EXPECTED_STAGE_SURFACE_PATH,
+    export: "StageSurface",
+    sha256: EXPECTED_STAGE_SURFACE_HASH,
+    disposition: "reference-surface-not-product-stage",
+  });
+  ensureExactKeys(rejectedTimeline, ["path", "export", "sha256", "disposition"]);
+  assert.deepEqual(rejectedTimeline, {
+    path: EXPECTED_TIMELINE_SOURCE,
+    export: "TimelineCandidate",
+    sha256: EXPECTED_TIMELINE_RUNTIME_HASHES[EXPECTED_TIMELINE_SOURCE],
+    disposition: "whole-container-not-product-timeline",
+  });
+  for (const rejected of nativeStageTime.rejectedReactSurfaces) {
+    assert.equal(hashBytes(readBlobFromCommit(rejected.path, fixedSourceCommit)), rejected.sha256);
+  }
+
+  assert.equal(nativeStageTime.behavioralEvidence.length, 2);
+  const [nativeParityEvidence, nativeTimelineEvidence] = nativeStageTime.behavioralEvidence;
+  ensureExactKeys(nativeParityEvidence, ["path", "reactRoute", "legacyOracleRoute", "sha256"]);
+  assert.deepEqual(nativeParityEvidence, {
+    path: EXPECTED_INSPECTOR_PARITY_PATH,
+    reactRoute: EXPECTED_INSPECTOR_REACT_ROUTE,
+    legacyOracleRoute: EXPECTED_INSPECTOR_LEGACY_ROUTE,
+    sha256: EXPECTED_NATIVE_VISUAL_PARITY_HASH,
+  });
+  ensureExactKeys(nativeTimelineEvidence, ["path", "route", "sha256"]);
+  assert.deepEqual(nativeTimelineEvidence, {
+    path: EXPECTED_TIMELINE_TEST_PATH,
+    route: EXPECTED_TEST_ROUTE,
+    sha256: EXPECTED_NATIVE_TIMELINE_TEST_HASH,
+  });
+  for (const evidence of nativeStageTime.behavioralEvidence) {
+    assert.equal(hashBytes(readBlobFromCommit(evidence.path, fixedSourceCommit)), evidence.sha256);
+  }
+
+  const stageHostAst = parseModule(stageHostAstSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_NATIVE_STAGE_TIME_CLOSURE[0]), "utf8",
+  ));
+  assert.ok(importsNamedExport(stageHostAst, "./LegacyRegions", "LegacyStageShell"));
+  assert.ok(importsSource(stageHostAst, "./legacySource"));
+  assert.ok(hasStageParserReplacement(stageHostAst));
+  const stageRegionsAst = parseModule(stageRegionsAstSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_NATIVE_STAGE_TIME_CLOSURE[1]), "utf8",
+  ));
+  assert.ok(collectNamedExports(stageRegionsAst).has("LegacyStageShell"));
+  const stageLegacySourceAst = parseModule(stageLegacySourceAstSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_NATIVE_STAGE_TIME_CLOSURE[2]), "utf8",
+  ));
+  assert.ok(importsSource(stageLegacySourceAst, "../../../mocks/m3-vism-host-boundary.html?raw"));
+  const rawHtml = stageRawHtmlSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_NATIVE_STAGE_TIME_CLOSURE[3]), "utf8",
+  );
+  const stageShell = findHtmlClass({ children: htmlToDOM(rawHtml) }, "stage-shell");
+  assert.ok(stageShell);
+  assert.ok(findHtmlClass(stageShell, "stage"));
+  assert.ok(findHtmlClass(stageShell, "frame"));
+  assert.ok(findHtmlClass(stageShell, "transport"));
+
+  const nativeTimelineAst = parseModule(nativeTimelineAstSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_TIMELINE_SOURCE), "utf8",
+  ));
+  for (const anchor of ["candidate-beat-ruler", "candidate-band-action-rail", "candidate-time-bar", "candidate-automation-key", "candidate-playhead", "candidate-pack-plane", "candidate-timeline-body"]) {
+    assert.ok(countJsxClass(nativeTimelineAst, anchor) > 0);
+  }
+  assert.ok(hasJsxIdentifier(nativeTimelineAst, "GraphViewComponent"));
+  const nativeCss = nativeTimelineCssSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_TIMELINE_CSS_SOURCE), "utf8",
+  );
+  for (const anchor of ["candidate-beat-ruler", "candidate-band-action-rail", "candidate-time-bar", "candidate-automation-key", "candidate-playhead", "candidate-pack-plane", "candidate-timeline-body"]) {
+    assert.ok(hasCssClassToken(nativeCss, anchor));
+  }
+  const stageSurfaceAst = parseModule(stageSurfaceAstSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_STAGE_SURFACE_PATH), "utf8",
+  ));
+  assert.ok(collectNamedExports(stageSurfaceAst).has(rejectedStage.export));
+  const nativeParityAst = parseModule(nativeVisualParityAstSource ?? await readFile(
+    absoluteFromRelative(nativeParityEvidence.path), "utf8",
+  ));
+  const nativeParityRoutes = extractRouteFromTest(nativeParityAst);
+  assert.ok(nativeParityRoutes.includes(nativeParityEvidence.reactRoute));
+  assert.ok(nativeParityRoutes.includes(nativeParityEvidence.legacyOracleRoute));
+  const nativeTimelineTestAst = parseModule(nativeTimelineTestAstSource ?? await readFile(
+    absoluteFromRelative(nativeTimelineEvidence.path), "utf8",
+  ));
+  assert.ok(extractRouteFromTest(nativeTimelineTestAst).includes(nativeTimelineEvidence.route));
 }
 
 test("accepts exact incomplete multi-surface R0 manifest and fixed-commit evidence", async () => {
@@ -1343,4 +1571,105 @@ test("rejects resizable panel layout AST, CSS selector, and route drift", async 
       await validateInventory(manifest, options);
     });
   }
+});
+
+test("rejects native Stage/time ownership, closure, oracle, rejected-surface, and evidence drift", async () => {
+  const manifest = await manifestFromDisk();
+  const mutateNativeStageTime = (patch) =>
+    withInventoryEntryAt(manifest, "surfaces", 5, patch);
+
+  for (const mutated of [
+    mutateNativeStageTime((surface) => ({ ...surface, classification: "react-direct-promotion" })),
+    mutateNativeStageTime((surface) => ({ ...surface, nativeOwner: "react-stage-and-timeline" })),
+    mutateNativeStageTime((surface) => ({ ...surface, reactPromotionBoundary: ["timeline"] })),
+    mutateNativeStageTime((surface) => ({
+      ...surface,
+      oracleClosure: [surface.oracleClosure[1], surface.oracleClosure[0], ...surface.oracleClosure.slice(2)],
+    })),
+    mutateNativeStageTime((surface) => ({
+      ...surface,
+      oracleClosure: surface.oracleClosure.map((entry, index) =>
+        index === 4 ? { ...entry, role: "legacy-oracle" } : entry,
+      ),
+    })),
+    mutateNativeStageTime((surface) => ({
+      ...surface,
+      oracleClosure: surface.oracleClosure.map((entry, index) =>
+        index === 5 ? { ...entry, sha256: "0".repeat(64) } : entry,
+      ),
+    })),
+    mutateNativeStageTime((surface) => ({ ...surface, stageOracle: surface.stageOracle.slice(0, 2) })),
+    mutateNativeStageTime((surface) => ({ ...surface, timelineOracle: surface.timelineOracle.slice(0, 7) })),
+    mutateNativeStageTime((surface) => ({
+      ...surface,
+      rejectedReactSurfaces: surface.rejectedReactSurfaces.map((entry, index) =>
+        index === 0 ? { ...entry, export: "LegacyStageShell" } : entry,
+      ),
+    })),
+    mutateNativeStageTime((surface) => ({
+      ...surface,
+      rejectedReactSurfaces: surface.rejectedReactSurfaces.map((entry, index) =>
+        index === 1 ? { ...entry, sha256: "0".repeat(64) } : entry,
+      ),
+    })),
+    mutateNativeStageTime((surface) => ({
+      ...surface,
+      rejectedReactSurfaces: surface.rejectedReactSurfaces.map((entry, index) =>
+        index === 1 ? { ...entry, disposition: "react-timeline-owner" } : entry,
+      ),
+    })),
+    mutateNativeStageTime((surface) => ({
+      ...surface,
+      behavioralEvidence: surface.behavioralEvidence.map((entry, index) =>
+        index === 0 ? { ...entry, sha256: "0".repeat(64) } : entry,
+      ),
+    })),
+    mutateNativeStageTime((surface) => ({
+      ...surface,
+      behavioralEvidence: surface.behavioralEvidence.map((entry, index) =>
+        index === 1 ? { ...entry, route: "archive/all-surfaces" } : entry,
+      ),
+    })),
+  ]) {
+    await assert.rejects(async () => {
+      await validateInventory(mutated);
+    });
+  }
+});
+
+test("rejects native Stage/time structured source anchors and key-glyph drift", async () => {
+  const manifest = await manifestFromDisk();
+  const host = await readFile(absoluteFromRelative(EXPECTED_NATIVE_STAGE_TIME_CLOSURE[0]), "utf8");
+  const regions = await readFile(absoluteFromRelative(EXPECTED_NATIVE_STAGE_TIME_CLOSURE[1]), "utf8");
+  const legacySource = await readFile(absoluteFromRelative(EXPECTED_NATIVE_STAGE_TIME_CLOSURE[2]), "utf8");
+  const rawHtml = await readFile(absoluteFromRelative(EXPECTED_NATIVE_STAGE_TIME_CLOSURE[3]), "utf8");
+  const timeline = await readFile(absoluteFromRelative(EXPECTED_TIMELINE_SOURCE), "utf8");
+  const css = await readFile(absoluteFromRelative(EXPECTED_TIMELINE_CSS_SOURCE), "utf8");
+  const parity = await readFile(absoluteFromRelative(EXPECTED_INSPECTOR_PARITY_PATH), "utf8");
+  const timelineTest = await readFile(absoluteFromRelative(EXPECTED_TIMELINE_TEST_PATH), "utf8");
+
+  for (const options of [
+    { stageHostAstSource: host.replace("<LegacyStageShell {...props} />", "<LegacyTimeline {...props} />") },
+    { stageRegionsAstSource: regions.replace("LegacyStageShell", "ArchivedStageShell") },
+    { stageLegacySourceAstSource: legacySource.replace("m3-vism-host-boundary.html?raw", "missing.html?raw") },
+    { stageRawHtmlSource: rawHtml.replace('class="stage-shell"', 'class="stage-panel"') },
+    { nativeTimelineAstSource: timeline.replace('className="candidate-automation-key"', 'className="candidate-automation-point"') },
+    { nativeTimelineCssSource: css.replaceAll(".candidate-automation-key", ".candidate-automation-point") },
+    { nativeVisualParityAstSource: parity.replace("#archive/all-surfaces", "#archive/stage") },
+    { nativeTimelineTestAstSource: timelineTest.replaceAll("#plugin-browser-candidate", "#archive/timeline") },
+  ]) {
+    await assert.rejects(async () => {
+      await validateInventory(manifest, options);
+    });
+  }
+});
+
+test("native key-glyph validation is independent from the KEYS/LAYERS tool-panel validator", async () => {
+  const manifest = await manifestFromDisk();
+  const timeline = await readFile(absoluteFromRelative(EXPECTED_TIMELINE_SOURCE), "utf8");
+  const css = await readFile(absoluteFromRelative(EXPECTED_TIMELINE_CSS_SOURCE), "utf8");
+  await validateInventory(manifest, {
+    nativeTimelineAstSource: timeline.replaceAll("candidate-key-tools", "candidate-tool-panel"),
+    nativeTimelineCssSource: css.replaceAll("candidate-key-tools", "candidate-tool-panel"),
+  });
 });

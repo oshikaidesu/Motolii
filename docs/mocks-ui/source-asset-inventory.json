@@ -270,6 +270,86 @@
         "route": "plugin-browser-candidate",
         "sha256": "419c82363b37c6dbf97ef872f64351750946cd0dc79f664515f6f2bd9326b334"
       }
+    },
+    {
+      "id": "native-stage-time-surface",
+      "classification": "native-wgpu-owned-react-promotion-forbidden",
+      "nativeOwner": "wgpu-stage-and-timeline",
+      "reactPromotionBoundary": [],
+      "oracleClosure": [
+        {
+          "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
+          "role": "legacy-oracle",
+          "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416"
+        },
+        {
+          "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
+          "role": "legacy-oracle",
+          "sha256": "8fb24e75abdb87dd52ae7d1c723782b42e67e486331aa04cbd498111a2733b3a"
+        },
+        {
+          "path": "docs/mocks-ui/src/legacy/legacySource.js",
+          "role": "legacy-oracle",
+          "sha256": "4fd547d2efa98d6d1fadf403b4ae2379abb0767d50cda172f8f6fa749a230e20"
+        },
+        {
+          "path": "docs/mocks/m3-vism-host-boundary.html",
+          "role": "legacy-oracle",
+          "sha256": "a20bd36d6b8b241ef4ec21adda6b045e470bf89fbc78e2788207aa6d0875ec68"
+        },
+        {
+          "path": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
+          "role": "react-oracle",
+          "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5"
+        },
+        {
+          "path": "docs/mocks-ui/src/candidates/timeline-candidate.css",
+          "role": "react-oracle",
+          "sha256": "ef984d9b365f4efbcb4bf8fc20034a0b54846ab4fb470ea8d6ec8b486aa71397"
+        }
+      ],
+      "stageOracle": [
+        "stage-shell",
+        "output-frame",
+        "transport"
+      ],
+      "timelineOracle": [
+        "ruler",
+        "rails",
+        "bars",
+        "keys",
+        "playhead",
+        "graph",
+        "packing plane",
+        "time surface"
+      ],
+      "rejectedReactSurfaces": [
+        {
+          "path": "docs/mocks-ui/src/surfaces/StageSurface.jsx",
+          "export": "StageSurface",
+          "sha256": "fec7b23593af66194895b736458297d99932a1dc9a6d37b8f38c95c25e31e46f",
+          "disposition": "reference-surface-not-product-stage"
+        },
+        {
+          "path": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
+          "export": "TimelineCandidate",
+          "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5",
+          "disposition": "whole-container-not-product-timeline"
+        }
+      ],
+      "behavioralEvidence": [
+        {
+          "path": "docs/mocks-ui/tests/visual-parity.spec.js",
+          "reactRoute": "archive/all-surfaces",
+          "legacyOracleRoute": "all-surfaces",
+          "sha256": "c71b2e34d343e21aa6a32387b0692897efd5d1f56931dc8c873fcb617e5687ef"
+        },
+        {
+          "path": "docs/mocks-ui/tests/timeline-candidate.spec.js",
+          "route": "plugin-browser-candidate",
+          "sha256": "0c0da4260662dbdcd7de89d7da247c3334db8fdfe29315f1ed77e43b0ac994f4"
+        }
+      ]
     }
   ],
   "modelClosure": [],
