@@ -1,32 +1,162 @@
 use std::{
     borrow::Cow,
+    collections::BTreeSet,
     path::PathBuf,
-    sync::Arc,
+    process::Command,
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc,
+    },
     time::{Duration, Instant},
 };
 
-use g0_9_surface_host::{
-    AcceptanceCounters, SurfaceLayout, LEFT_WEBVIEW_WIDTH, RIGHT_WEBVIEW_WIDTH,
+use accesskit::{Action, Node, NodeId, Rect as AccessRect, Role, Tree, TreeId, TreeUpdate};
+#[cfg(target_os = "macos")]
+use block2::RcBlock;
+#[cfg(target_os = "macos")]
+use core_graphics::{
+    event::{CGEvent, CGEventFlags, CGEventTapLocation, CGEventType, CGMouseButton, KeyCode},
+    event_source::{CGEventSource, CGEventSourceStateID},
+    geometry::CGPoint,
 };
+use g0_9_surface_host::{
+    validate_web_envelope, AcceptanceCounters, AccessibilityProjection, AxNodeId, AxRole,
+    CompositionState, FocusCoordinator, FocusRole, LifecycleRecorder, SemanticCounts, ShortcutKey,
+    ShortcutSink, SurfaceLayout, WebEnvelopeError, WebMessage, WebSource, LEFT_WEBVIEW_WIDTH,
+    RIGHT_WEBVIEW_WIDTH,
+};
+#[cfg(target_os = "macos")]
+use objc2::{rc::Retained, runtime::AnyObject};
+#[cfg(target_os = "macos")]
+use objc2_app_kit::{NSApplication, NSEvent, NSEventMask, NSEventModifierFlags, NSEventType};
+#[cfg(target_os = "macos")]
+use objc2_foundation::MainThreadMarker;
 use serde_json::json;
 use winit::{
     application::ApplicationHandler,
-    dpi::LogicalSize,
+    dpi::{LogicalSize, PhysicalSize},
     event::{ElementState, MouseButton, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
-    window::{Window, WindowId},
+    keyboard::{Key, ModifiersState, NamedKey},
+    window::{Fullscreen, Window, WindowId},
 };
 use wry::{
     dpi::{LogicalPosition as WebPosition, LogicalSize as WebSize},
-    Rect, WebView, WebViewBuilder,
+    http::{header::CONTENT_SECURITY_POLICY, header::CONTENT_TYPE, Response},
+    NewWindowResponse, Rect, WebView, WebViewBuilder,
 };
+#[cfg(target_os = "macos")]
+use wry::{WebViewBuilderExtDarwin, WebViewExtMacOS};
 
 const INITIAL_WIDTH: f64 = 1200.0;
 const INITIAL_HEIGHT: f64 = 800.0;
 
+const AX_ROOT: NodeId = NodeId(0);
+const AX_STAGE: NodeId = NodeId(1);
+const AX_STAGE_CANVAS: NodeId = NodeId(2);
+const AX_TIMELINE: NodeId = NodeId(3);
+const AX_TIMELINE_TRACKS: NodeId = NodeId(4);
+const AX_TIMELINE_PLAYHEAD: NodeId = NodeId(5);
+const AUTOMATED_FOCUS_STEPS: [FocusRole; 8] = [
+    FocusRole::WebLeft,
+    FocusRole::NativeTimeline,
+    FocusRole::WebRight,
+    FocusRole::NativeStage,
+    FocusRole::WebRight,
+    FocusRole::NativeTimeline,
+    FocusRole::WebLeft,
+    FocusRole::NativeStage,
+];
+const MAX_FOCUS_OBSERVATIONS: usize = 64;
+const WEB_RELOAD_LIMIT: u8 = 3;
+
+fn ax_node_id(id: AxNodeId) -> NodeId {
+    match id {
+        AxNodeId::Root => AX_ROOT,
+        AxNodeId::Stage => AX_STAGE,
+        AxNodeId::StageCanvas => AX_STAGE_CANVAS,
+        AxNodeId::Timeline => AX_TIMELINE,
+        AxNodeId::TimelineTracks => AX_TIMELINE_TRACKS,
+        AxNodeId::TimelinePlayhead => AX_TIMELINE_PLAYHEAD,
+    }
+}
+
+/// クリック物理座標をStage/Timelineどちらの領域かに写像する純粋関数。
+/// `SurfaceLayout::timeline_y`を境界として使い、`SurfaceLayout`自体が
+/// 保証する非重複分割にそのまま従う。
+fn native_click_role(cursor_y: f64, layout: SurfaceLayout) -> FocusRole {
+    if cursor_y < f64::from(layout.timeline_y) {
+        FocusRole::NativeStage
+    } else {
+        FocusRole::NativeTimeline
+    }
+}
+
+fn ax_role(role: AxRole) -> Role {
+    match role {
+        AxRole::Window => Role::Window,
+        AxRole::Pane => Role::Pane,
+        AxRole::Generic => Role::GenericContainer,
+    }
+}
+
+/// Documentが存在しないため、`SemanticCounts`は常に既定値のまま渡し、
+/// ノード数がclip/key/selection数に連動しないようにする。
+fn build_accessibility_tree(focus: FocusRole, layout: SurfaceLayout) -> TreeUpdate {
+    let projection = AccessibilityProjection::project(SemanticCounts::default(), layout);
+    let nodes = projection
+        .nodes()
+        .iter()
+        .map(|spec| {
+            let mut node = Node::new(ax_role(spec.role));
+            node.set_label(spec.label);
+            if !spec.children.is_empty() {
+                node.set_children(
+                    spec.children
+                        .iter()
+                        .copied()
+                        .map(ax_node_id)
+                        .collect::<Vec<_>>(),
+                );
+            }
+            node.set_bounds(AccessRect {
+                x0: spec.bounds.x0,
+                y0: spec.bounds.y0,
+                x1: spec.bounds.x1,
+                y1: spec.bounds.y1,
+            });
+            if spec.focusable {
+                node.add_action(Action::Focus);
+            }
+            (ax_node_id(spec.id), node)
+        })
+        .collect();
+
+    TreeUpdate {
+        nodes,
+        tree: Some(Tree::new(AX_ROOT)),
+        tree_id: TreeId::ROOT,
+        focus: ax_node_id(projection.focused(focus)),
+    }
+}
+
 #[derive(Debug)]
 enum UserEvent {
     WebMessage(String),
+    ProtocolRequest,
+    NavigationRejected,
+    NewWindowRejected,
+    DownloadRejected,
+    WebContentProcessTerminated(WebSource),
+    Accesskit(accesskit_winit::Event),
+    NativeTab { backward: bool },
+    NativePointerDragged { logical_x: f64 },
+}
+
+impl From<accesskit_winit::Event> for UserEvent {
+    fn from(event: accesskit_winit::Event) -> Self {
+        Self::Accesskit(event)
+    }
 }
 
 struct GfxState {
@@ -36,13 +166,46 @@ struct GfxState {
     config: wgpu::SurfaceConfiguration,
     stage_pipeline: wgpu::RenderPipeline,
     timeline_pipeline: wgpu::RenderPipeline,
+    inject_lost: bool,
 }
 
 enum RenderOutcome {
     Presented,
-    Reconfigure,
+    Reconfigure { injected: bool },
     Skip,
     Validation,
+}
+
+struct FocusObservation {
+    role: FocusRole,
+    source: &'static str,
+    responder_class: String,
+    responder_family: &'static str,
+    matches_role: bool,
+}
+
+struct AutomatedFocusCheck {
+    step: usize,
+    awaiting_result: bool,
+    started: bool,
+    next_action: Instant,
+    deadline: Instant,
+    pass: Option<bool>,
+    error: Option<String>,
+}
+
+impl AutomatedFocusCheck {
+    fn new(now: Instant) -> Self {
+        Self {
+            step: 0,
+            awaiting_result: false,
+            started: false,
+            next_action: now,
+            deadline: now + Duration::from_secs(15),
+            pass: None,
+            error: None,
+        }
+    }
 }
 
 impl GfxState {
@@ -87,6 +250,7 @@ impl GfxState {
             config,
             stage_pipeline,
             timeline_pipeline,
+            inject_lost: false,
         }
     }
 
@@ -100,6 +264,9 @@ impl GfxState {
     }
 
     fn render(&mut self, layout: SurfaceLayout) -> RenderOutcome {
+        if std::mem::take(&mut self.inject_lost) {
+            return RenderOutcome::Reconfigure { injected: true };
+        }
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame) => frame,
             wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
@@ -107,7 +274,7 @@ impl GfxState {
                 return RenderOutcome::Skip;
             }
             wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
-                return RenderOutcome::Reconfigure;
+                return RenderOutcome::Reconfigure { injected: false };
             }
             wgpu::CurrentSurfaceTexture::Validation => return RenderOutcome::Validation,
         };
@@ -166,6 +333,10 @@ impl GfxState {
         frame.present();
         RenderOutcome::Presented
     }
+
+    fn inject_surface_lost(&mut self) {
+        self.inject_lost = true;
+    }
 }
 
 fn create_pipeline(
@@ -222,6 +393,121 @@ fn fs_main() -> @location(0) vec4<f32> {{
     })
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SentinelSnapshot {
+    revision: u64,
+    selection: &'static str,
+}
+
+const SENTINEL: SentinelSnapshot = SentinelSnapshot {
+    revision: 7,
+    selection: "clip-sentinel",
+};
+
+#[derive(Debug, Default)]
+struct LifecycleEvidence {
+    scale_factor_events: u32,
+    surface_loss_injections: u32,
+    surface_reconfigures: u32,
+    actual_surface_lost_or_outdated: u32,
+    stale_instance_epoch_rejections: u32,
+    stale_layout_epoch_rejections: u32,
+    protocol_requests: u32,
+    navigation_rejections: u32,
+    new_window_rejections: u32,
+    download_rejections: u32,
+    web_process_terminations: u32,
+    web_reload_requests: u32,
+    web_ready_after_termination: u32,
+    capture_bytes: u64,
+    killed_web_content_pid: Option<u32>,
+    final_owned_web_content_processes: Option<usize>,
+    minimize_cycles: u32,
+    fullscreen_entries: u32,
+    fullscreen_exits: u32,
+    unavailable_intervals: u32,
+    unavailable_size_events: u32,
+    unavailable_acquire_skips: u32,
+    pointer_capture_starts: u32,
+    pointer_capture_moves: u32,
+    pointer_boundary_crossings: u32,
+    pointer_cancels: u32,
+    pointer_focus_losses: u32,
+    pointer_last_logical_x: Option<f64>,
+    post_operation_invariant_checks: u32,
+    bounds_layout_checks: u32,
+    stale_probe_invariant_checks: u32,
+}
+
+impl LifecycleEvidence {
+    fn l3_closure_complete(&self) -> bool {
+        self.minimize_cycles == 1
+            && self.fullscreen_entries == 1
+            && self.fullscreen_exits == 1
+            && self.unavailable_intervals == 1
+            && self.unavailable_size_events > 0
+            && self.unavailable_acquire_skips > 0
+            && self.pointer_capture_starts >= 2
+            && self.pointer_capture_moves >= 2
+            && self.pointer_boundary_crossings >= 2
+            && self.pointer_cancels >= 2
+            && self.pointer_focus_losses == 1
+            && self.post_operation_invariant_checks >= 7
+            && self.bounds_layout_checks >= 7
+            && self.stale_probe_invariant_checks == 1
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum LifecycleStep {
+    #[default]
+    Waiting,
+    AwaitMinimized,
+    AwaitRestored,
+    AwaitFullscreenEnter,
+    ExitFullscreen,
+    AwaitFullscreenExit,
+    AwaitUnavailableSkip,
+    AwaitUnavailableRestore,
+    StartPointerCancel,
+    AwaitPointerCancelBoundary,
+    AwaitPointerCancel,
+    StartPointerFocusLoss,
+    AwaitPointerFocusLossBoundary,
+    AwaitPointerFocusLoss,
+    AwaitStaleRejection,
+    AwaitSurfaceRecovery,
+    AwaitPolicyEvidence,
+    AwaitWebRecovery,
+    Complete,
+}
+
+struct AutomatedLifecycleCheck {
+    step: LifecycleStep,
+    next_action: Instant,
+    deadline: Instant,
+    pass: Option<bool>,
+    error: Option<String>,
+}
+
+struct PendingWebReload {
+    source: WebSource,
+    attempt: u8,
+    next_attempt: Instant,
+}
+
+impl AutomatedLifecycleCheck {
+    fn new(now: Instant) -> Self {
+        Self {
+            step: LifecycleStep::Waiting,
+            next_action: now,
+            deadline: now + Duration::from_secs(60),
+            pass: None,
+            error: None,
+        }
+    }
+}
+
 struct State {
     proxy: EventLoopProxy<UserEvent>,
     window: Option<Arc<Window>>,
@@ -231,11 +517,44 @@ struct State {
     layout: Option<SurfaceLayout>,
     counters: AcceptanceCounters,
     cursor_x: f64,
+    cursor_y: f64,
     native_drag_active: bool,
     resize_target: u32,
     resize_requests: u32,
     next_resize: Instant,
     report_path: PathBuf,
+    accesskit: Option<accesskit_winit::Adapter>,
+    focus: FocusCoordinator,
+    shortcut_sink: ShortcutSink,
+    composing_source: Option<WebSource>,
+    shift_held: bool,
+    minimize_lifecycle: LifecycleRecorder,
+    fullscreen_lifecycle: LifecycleRecorder,
+    occluded: bool,
+    fullscreen_active: bool,
+    left_ready: bool,
+    right_ready: bool,
+    native_focus_active: Arc<AtomicBool>,
+    #[cfg(target_os = "macos")]
+    native_tab_monitor: Option<Retained<AnyObject>>,
+    #[cfg(target_os = "macos")]
+    native_pointer_monitor: Option<Retained<AnyObject>>,
+    focus_observations: Vec<FocusObservation>,
+    automated_focus: Option<AutomatedFocusCheck>,
+    left_instance_epoch: Arc<AtomicU64>,
+    right_instance_epoch: Arc<AtomicU64>,
+    lifecycle: LifecycleEvidence,
+    automated_lifecycle: Option<AutomatedLifecycleCheck>,
+    capture_path: PathBuf,
+    initial_web_content_pids: BTreeSet<u32>,
+    surface_present_after_reconfigure: bool,
+    sentinel_before: SentinelSnapshot,
+    sentinel_after: SentinelSnapshot,
+    pending_web_reload: Option<PendingWebReload>,
+    temporarily_unavailable: bool,
+    unavailable_acquire_before: Option<u64>,
+    unavailable_restore_size: Option<PhysicalSize<u32>>,
+    stale_probe_focus_before: Option<FocusRole>,
 }
 
 impl State {
@@ -247,6 +566,21 @@ impl State {
         let report_path = std::env::var_os("G0_9_REPORT")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("/tmp/motolii-g0-9-surface-host-report.json"));
+        let native_focus_active = Arc::new(AtomicBool::new(true));
+        #[cfg(target_os = "macos")]
+        let native_tab_monitor =
+            install_native_tab_monitor(proxy.clone(), Arc::clone(&native_focus_active));
+        #[cfg(target_os = "macos")]
+        let native_pointer_monitor = install_native_pointer_monitor(proxy.clone());
+        let automated_focus = std::env::var_os("G0_9_AUTOMATE_FOCUS")
+            .is_some()
+            .then(|| AutomatedFocusCheck::new(Instant::now()));
+        let automated_lifecycle = std::env::var_os("G0_9_AUTOMATE_LIFECYCLE")
+            .is_some()
+            .then(|| AutomatedLifecycleCheck::new(Instant::now()));
+        let capture_path = std::env::var_os("G0_9_CAPTURE")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/tmp/motolii-g0-9-surface-host.png"));
         Self {
             proxy,
             window: None,
@@ -256,11 +590,142 @@ impl State {
             layout: None,
             counters: AcceptanceCounters::default(),
             cursor_x: 0.0,
+            cursor_y: 0.0,
             native_drag_active: false,
             resize_target,
             resize_requests: 0,
             next_resize: Instant::now() + Duration::from_millis(500),
             report_path,
+            accesskit: None,
+            focus: FocusCoordinator::new(0),
+            shortcut_sink: ShortcutSink::default(),
+            composing_source: None,
+            shift_held: false,
+            minimize_lifecycle: LifecycleRecorder::default(),
+            fullscreen_lifecycle: LifecycleRecorder::default(),
+            occluded: false,
+            fullscreen_active: false,
+            left_ready: false,
+            right_ready: false,
+            native_focus_active,
+            #[cfg(target_os = "macos")]
+            native_tab_monitor,
+            #[cfg(target_os = "macos")]
+            native_pointer_monitor,
+            focus_observations: Vec::new(),
+            automated_focus,
+            left_instance_epoch: Arc::new(AtomicU64::new(1)),
+            right_instance_epoch: Arc::new(AtomicU64::new(1)),
+            lifecycle: LifecycleEvidence::default(),
+            automated_lifecycle,
+            capture_path,
+            initial_web_content_pids: web_content_pids().unwrap_or_default(),
+            surface_present_after_reconfigure: false,
+            sentinel_before: SENTINEL,
+            sentinel_after: SENTINEL,
+            pending_web_reload: None,
+            temporarily_unavailable: false,
+            unavailable_acquire_before: None,
+            unavailable_restore_size: None,
+            stale_probe_focus_before: None,
+        }
+    }
+
+    fn ime_owner(&self) -> Option<FocusRole> {
+        self.composing_source.map(WebSource::focus_role)
+    }
+
+    /// `Window::focus_window`だけではWKWebView側がmacOSのfirst responderの
+    /// ままになり実際には移動しないため、wryの`focus_parent`で明示的に
+    /// resignさせる。
+    fn apply_focus(&mut self, role: FocusRole, source: &'static str) {
+        let pointer_focus_loss =
+            self.native_drag_active && matches!(role, FocusRole::WebLeft | FocusRole::WebRight);
+        self.native_focus_active.store(
+            matches!(role, FocusRole::NativeStage | FocusRole::NativeTimeline),
+            Ordering::Release,
+        );
+        match role {
+            FocusRole::WebLeft => {
+                if let Some(webview) = &self.left_webview {
+                    let _ = webview.focus();
+                }
+            }
+            FocusRole::WebRight => {
+                if let Some(webview) = &self.right_webview {
+                    let _ = webview.focus();
+                }
+            }
+            FocusRole::NativeStage | FocusRole::NativeTimeline => {
+                if let Some(window) = &self.window {
+                    window.focus_window();
+                }
+                if let Some(webview) = self.left_webview.as_ref().or(self.right_webview.as_ref()) {
+                    let _ = webview.focus_parent();
+                }
+            }
+        }
+        if pointer_focus_loss && actual_first_responder().1 == "web" {
+            self.cancel_automated_pointer_capture(true);
+        }
+        if let (Some(layout), Some(adapter)) = (self.layout, &mut self.accesskit) {
+            adapter.update_if_active(|| build_accessibility_tree(role, layout));
+        }
+        let (responder_class, responder_family) = actual_first_responder();
+        let expected_family = focus_role_family(role);
+        if self.focus_observations.len() == MAX_FOCUS_OBSERVATIONS {
+            self.focus_observations.remove(0);
+        }
+        self.focus_observations.push(FocusObservation {
+            role,
+            source,
+            responder_class,
+            responder_family,
+            matches_role: responder_family == expected_family,
+        });
+    }
+
+    /// native領域(Stage/Timeline)への実クリックはOSがそのままfirst
+    /// responderを渡すが、host側のFocusCoordinator/AX/reportは自動では
+    /// 追従しないため、`FocusIn`と同じ同期経路でここから明示的に揃える。
+    fn sync_native_click_focus(&mut self, layout: SurfaceLayout) {
+        let role = native_click_role(self.cursor_y, layout);
+        if role != self.focus.current() {
+            self.focus.sync_current(role);
+            self.apply_focus(role, "native-click");
+            self.publish_report();
+        }
+    }
+
+    /// `ready`未受信のWebViewへ先に配信すると未定義値を読んでしまい、
+    /// 後続の`request_focus`が失敗するため、受信済みのものだけへ配る。
+    fn push_epoch_to_ready_webviews(&self) {
+        let script = format!("window.__motoliiEpoch = {};", self.focus.epoch());
+        if self.left_ready {
+            if let Some(webview) = &self.left_webview {
+                let _ = webview.evaluate_script(&script);
+            }
+        }
+        if self.right_ready {
+            if let Some(webview) = &self.right_webview {
+                let _ = webview.evaluate_script(&script);
+            }
+        }
+    }
+
+    /// レイアウトepochと連動させることで、resize/scale変更前に発行された
+    /// Web側のfocus要求を確実に無効化する。
+    fn set_layout_epoch(&mut self, epoch: u64) {
+        self.counters.layout_epoch = epoch;
+        self.focus.set_epoch(epoch);
+        self.push_epoch_to_ready_webviews();
+    }
+
+    /// native winit経路とWebView内`keydown`中継の両方が同じ`ShortcutSink`を
+    /// 通ることで、composition中の抑制が発生元によらず一貫する。
+    fn observe_shortcut(&mut self, key: ShortcutKey) {
+        if self.shortcut_sink.observe(key) {
+            self.publish_report();
         }
     }
 
@@ -286,22 +751,158 @@ impl State {
         if let Some(webview) = &self.right_webview {
             webview.set_bounds(right).expect("right bounds");
         }
-        self.counters.layout_epoch += 1;
         self.layout = Some(layout);
+        self.set_layout_epoch(self.counters.layout_epoch + 1);
+        let focus = self.focus.current();
+        if let Some(adapter) = &mut self.accesskit {
+            adapter.update_if_active(|| build_accessibility_tree(focus, layout));
+        }
     }
 
-    fn consume_web_message(&mut self, message: &str) {
+    fn verify_l3_post_operation(&mut self) -> Result<(), String> {
+        let window = self
+            .window
+            .clone()
+            .ok_or_else(|| "window is unavailable".to_owned())?;
+        let size = window.inner_size();
+        self.update_layout(size.width, size.height);
+        let layout = self
+            .layout
+            .ok_or_else(|| "restored window has no valid layout".to_owned())?;
+        let expected_native_width = layout.logical_width - LEFT_WEBVIEW_WIDTH - RIGHT_WEBVIEW_WIDTH;
+        if expected_native_width <= 1.0
+            || layout.native_width <= 0.0
+            || layout.stage_height <= 0.0
+            || layout.timeline_height <= 0.0
+        {
+            return Err("restored bounds are invalid".to_owned());
+        }
+        if self.sentinel_before != self.sentinel_after {
+            return Err("sentinel changed during lifecycle operation".to_owned());
+        }
+        if self.counters.readback_count != 0 {
+            return Err("CPU readback occurred during lifecycle operation".to_owned());
+        }
+        self.lifecycle.bounds_layout_checks += 1;
+        self.lifecycle.post_operation_invariant_checks += 1;
+        Ok(())
+    }
+
+    fn cancel_automated_pointer_capture(&mut self, focus_loss: bool) {
+        if self.native_drag_active && self.automated_lifecycle.is_some() {
+            self.native_drag_active = false;
+            self.lifecycle.pointer_cancels += 1;
+            if focus_loss {
+                self.lifecycle.pointer_focus_losses += 1;
+            }
+        }
+    }
+
+    fn validate_l3_evidence(&self) -> Result<(), String> {
+        let evidence = &self.lifecycle;
+        if !evidence.l3_closure_complete() {
+            return Err("same-window L3 evidence is incomplete".to_owned());
+        }
+        if self.counters.readback_count != 0
+            || self.sentinel_before != self.sentinel_after
+            || !self.counters.present_invariant_holds()
+        {
+            return Err("same-window L3 invariants failed".to_owned());
+        }
+        Ok(())
+    }
+
+    /// パース失敗やstale epochのfocus要求は、状態・カウンタ・reportの
+    /// 変更前に必ずreturnする。
+    fn consume_web_message(&mut self, raw: &str) {
+        let (source, message_raw) = match validate_web_envelope(
+            raw,
+            self.left_instance_epoch.load(Ordering::Acquire),
+            self.right_instance_epoch.load(Ordering::Acquire),
+        ) {
+            Ok(envelope) => envelope,
+            Err(WebEnvelopeError::StaleInstanceEpoch) => {
+                self.lifecycle.stale_instance_epoch_rejections += 1;
+                self.publish_report();
+                return;
+            }
+            Err(_) => return,
+        };
+        let wire = format!("{}:{message_raw}", source.wire_name());
+        let Ok((_, message)) = g0_9_surface_host::parse_web_message(&wire) else {
+            return;
+        };
         match message {
-            value if value.ends_with(":drag-start") => self.counters.web_drag_started += 1,
-            value if value.ends_with(":drag-move") => self.counters.web_drag_moved += 1,
-            value if value.ends_with(":drag-end") => self.counters.web_drag_ended += 1,
-            value if value.ends_with(":input") => self.counters.web_input_events += 1,
-            "left:focus-right" => {
-                if let Some(webview) = &self.right_webview {
-                    let _ = webview.focus();
+            WebMessage::DragStart => self.counters.web_drag_started += 1,
+            WebMessage::DragMove => self.counters.web_drag_moved += 1,
+            WebMessage::DragEnd => self.counters.web_drag_ended += 1,
+            WebMessage::Input => self.counters.web_input_events += 1,
+            WebMessage::Ready => {
+                match source {
+                    WebSource::Left => self.left_ready = true,
+                    WebSource::Right => self.right_ready = true,
+                }
+                if self.lifecycle.web_process_terminations > 0 {
+                    self.lifecycle.web_ready_after_termination += 1;
+                }
+                if self
+                    .pending_web_reload
+                    .as_ref()
+                    .is_some_and(|pending| pending.source == source)
+                {
+                    self.pending_web_reload = None;
+                }
+                self.push_epoch_to_ready_webviews();
+            }
+            // `request_focus`を経ずにWebView内クリック等で実際に起きた
+            // フォーカス移動なので、epochを消費しない同期として扱いつつ、
+            // OSアクセシビリティ側のfocusedノードも同じ投影で追従させる。
+            WebMessage::FocusIn => {
+                // native移譲後に遅延したIPCが届いてもcoordinatorをWebへ
+                // 巻き戻さないよう、実first-responderとの一致を先に要求する。
+                if actual_first_responder().1 != "web" {
+                    return;
+                }
+                let role = source.focus_role();
+                self.native_focus_active.store(false, Ordering::Release);
+                self.focus.sync_current(role);
+                if let (Some(layout), Some(adapter)) = (self.layout, &mut self.accesskit) {
+                    adapter.update_if_active(|| build_accessibility_tree(role, layout));
                 }
             }
-            _ => {}
+            // Tab/Shift+Tabはブラウザ既定の移動やhost側の修飾キー推測では
+            // なく、WebView側スクリプトが中継した実イベントに従う。
+            WebMessage::TabForward => {
+                let role = self.focus.tab_forward();
+                self.apply_focus(role, "web-dom");
+            }
+            WebMessage::TabBackward => {
+                let role = self.focus.tab_backward();
+                self.apply_focus(role, "web-dom");
+            }
+            WebMessage::ShortcutEnter => self.observe_shortcut(ShortcutKey::Enter),
+            WebMessage::ShortcutEscape => self.observe_shortcut(ShortcutKey::Escape),
+            WebMessage::ShortcutSpace => self.observe_shortcut(ShortcutKey::Space),
+            WebMessage::CompositionStart => {
+                self.composing_source = Some(source);
+                self.shortcut_sink
+                    .set_composition(CompositionState::Composing);
+            }
+            WebMessage::CompositionUpdate => self.shortcut_sink.record_composition_update(),
+            WebMessage::CompositionEnd => {
+                self.composing_source = None;
+                self.shortcut_sink.set_composition(CompositionState::Idle);
+            }
+            WebMessage::FocusRequest { target, epoch } => {
+                match self.focus.request_focus(target, epoch) {
+                    Ok(role) => self.apply_focus(role, "web-focus-request"),
+                    Err(_) => {
+                        self.lifecycle.stale_layout_epoch_rejections += 1;
+                        self.publish_report();
+                        return;
+                    }
+                }
+            }
         }
         self.publish_report();
     }
@@ -326,16 +927,107 @@ impl State {
                 "WAIT"
             };
         format!(
-            "G0-9 wgpu29 | resize={resize} present={present} readback={} native-drag={native_drag} web={}/{}/{} input={}",
+            "G0-9 wgpu29 | resize={resize} present={present} readback={} native-drag={native_drag} web={}/{}/{} input={} focus={} ime={} shortcuts={}/{}/{} composition-updates={} fullscreen={}",
             self.counters.readback_count,
             self.counters.web_drag_started,
             self.counters.web_drag_moved,
             self.counters.web_drag_ended,
             self.counters.web_input_events,
+            focus_role_wire(self.focus.current()),
+            self.ime_owner().map(focus_role_wire).unwrap_or("none"),
+            self.shortcut_sink.counters().enter,
+            self.shortcut_sink.counters().escape,
+            self.shortcut_sink.counters().space,
+            self.shortcut_sink.composition_updates(),
+            self.fullscreen_active,
         )
     }
 
     fn publish_report(&self) {
+        let minimize = self.minimize_lifecycle.observation();
+        let fullscreen = self.fullscreen_lifecycle.observation();
+        let focus_observations = self
+            .focus_observations
+            .iter()
+            .map(|observation| {
+                json!({
+                    "role": focus_role_wire(observation.role),
+                    "source": observation.source,
+                    "responder_class": observation.responder_class,
+                    "responder_family": observation.responder_family,
+                    "matches_role": observation.matches_role,
+                })
+            })
+            .collect::<Vec<_>>();
+        let automated_focus_pass = self.automated_focus.as_ref().and_then(|check| check.pass);
+        let automated_focus_error = self
+            .automated_focus
+            .as_ref()
+            .and_then(|check| check.error.as_deref());
+        let l3_closure_report = json!({
+            "minimize_cycles": self.lifecycle.minimize_cycles,
+            "fullscreen_entries": self.lifecycle.fullscreen_entries,
+            "fullscreen_exits": self.lifecycle.fullscreen_exits,
+            "unavailable_intervals": self.lifecycle.unavailable_intervals,
+            "unavailable_size_events": self.lifecycle.unavailable_size_events,
+            "unavailable_acquire_skips": self.lifecycle.unavailable_acquire_skips,
+            "pointer_capture_starts": self.lifecycle.pointer_capture_starts,
+            "pointer_capture_moves": self.lifecycle.pointer_capture_moves,
+            "pointer_boundary_crossings": self.lifecycle.pointer_boundary_crossings,
+            "pointer_cancels": self.lifecycle.pointer_cancels,
+            "pointer_focus_losses": self.lifecycle.pointer_focus_losses,
+            "pointer_last_logical_x": self.lifecycle.pointer_last_logical_x,
+            "post_operation_invariant_checks": self
+                .lifecycle
+                .post_operation_invariant_checks,
+            "bounds_layout_checks": self.lifecycle.bounds_layout_checks,
+            "stale_probe_invariant_checks": self.lifecycle.stale_probe_invariant_checks,
+        });
+        let lifecycle_report = json!({
+            "scale_factor": self.layout.map(|layout| layout.scale_factor),
+            "scale_factor_events": self.lifecycle.scale_factor_events,
+            "surface_loss_injections": self.lifecycle.surface_loss_injections,
+            "surface_reconfigures": self.lifecycle.surface_reconfigures,
+            "actual_surface_lost_or_outdated": self.lifecycle.actual_surface_lost_or_outdated,
+            "surface_present_after_reconfigure": self.surface_present_after_reconfigure,
+            "stale_instance_epoch_rejections": self.lifecycle.stale_instance_epoch_rejections,
+            "stale_layout_epoch_rejections": self.lifecycle.stale_layout_epoch_rejections,
+            "left_webview_instance_epoch": self.left_instance_epoch.load(Ordering::Acquire),
+            "right_webview_instance_epoch": self.right_instance_epoch.load(Ordering::Acquire),
+            "offline_custom_protocol_requests": self.lifecycle.protocol_requests,
+            "navigation_rejections": self.lifecycle.navigation_rejections,
+            "new_window_rejections": self.lifecycle.new_window_rejections,
+            "download_rejections": self.lifecycle.download_rejections,
+            "network_requests_allowed": 0,
+            "web_process_terminations": self.lifecycle.web_process_terminations,
+            "web_reload_requests": self.lifecycle.web_reload_requests,
+            "web_ready_after_termination": self.lifecycle.web_ready_after_termination,
+            "capture_path": self.capture_path,
+            "capture_bytes": self.lifecycle.capture_bytes,
+            "killed_web_content_pid": self.lifecycle.killed_web_content_pid,
+            "final_owned_web_content_processes": self
+                .lifecycle
+                .final_owned_web_content_processes,
+            "l3_closure": l3_closure_report,
+            "gpu_device_creations": u32::from(self.gfx.is_some()),
+            "render_pipeline_creations": if self.gfx.is_some() { 2 } else { 0 },
+            "live_webviews": u32::from(self.left_webview.is_some())
+                + u32::from(self.right_webview.is_some()),
+            "semantic_writes": 0,
+            "sentinel_revision_before": self.sentinel_before.revision,
+            "sentinel_revision_after": self.sentinel_after.revision,
+            "sentinel_selection_before": self.sentinel_before.selection,
+            "sentinel_selection_after": self.sentinel_after.selection,
+            "sentinel_unchanged": self.sentinel_before == self.sentinel_after,
+            "automated_pass": self
+                .automated_lifecycle
+                .as_ref()
+                .and_then(|check| check.pass),
+            "automated_error": self
+                .automated_lifecycle
+                .as_ref()
+                .and_then(|check| check.error.as_deref()),
+        });
         let report = json!({
             "wgpu_major": 29,
             "surface_count": 1,
@@ -349,6 +1041,7 @@ impl State {
             "resize_events": self.counters.resize_events,
             "layout_epoch": self.counters.layout_epoch,
             "resize_pass": self.counters.resize_target_passes(self.resize_target),
+            "cu_0g04": lifecycle_report,
             "native_drag_moves": self.counters.native_drag_moves,
             "native_drag_crossed_webview": self.counters.native_drag_crossed_webview,
             "native_drag_released": self.counters.native_drag_released,
@@ -356,6 +1049,38 @@ impl State {
             "web_drag_moved": self.counters.web_drag_moved,
             "web_drag_ended": self.counters.web_drag_ended,
             "web_input_events": self.counters.web_input_events,
+            "focus_current": focus_role_wire(self.focus.current()),
+            "focus_epoch": self.focus.epoch(),
+            "ime_owner": self.ime_owner().map(focus_role_wire),
+            "shortcut_enter": self.shortcut_sink.counters().enter,
+            "shortcut_escape": self.shortcut_sink.counters().escape,
+            "shortcut_space": self.shortcut_sink.counters().space,
+            "composition_updates": self.shortcut_sink.composition_updates(),
+            "minimized": self.occluded,
+            "fullscreen_active": self.fullscreen_active,
+            "minimize_lifecycle_requested_focus": minimize.requested_focus.map(focus_role_wire),
+            "minimize_lifecycle_requested_ime_owner": minimize
+                .requested_ime_owner
+                .map(focus_role_wire),
+            "minimize_lifecycle_restored_focus": minimize.restored_focus.map(focus_role_wire),
+            "minimize_lifecycle_restored_ime_owner": minimize
+                .restored_ime_owner
+                .map(focus_role_wire),
+            "fullscreen_lifecycle_requested_focus": fullscreen
+                .requested_focus
+                .map(focus_role_wire),
+            "fullscreen_lifecycle_requested_ime_owner": fullscreen
+                .requested_ime_owner
+                .map(focus_role_wire),
+            "fullscreen_lifecycle_restored_focus": fullscreen
+                .restored_focus
+                .map(focus_role_wire),
+            "fullscreen_lifecycle_restored_ime_owner": fullscreen
+                .restored_ime_owner
+                .map(focus_role_wire),
+            "focus_observations": focus_observations,
+            "automated_focus_pass": automated_focus_pass,
+            "automated_focus_error": automated_focus_error,
         });
         let _ = std::fs::write(
             &self.report_path,
@@ -367,12 +1092,28 @@ impl State {
     }
 }
 
+fn focus_role_wire(role: FocusRole) -> &'static str {
+    match role {
+        FocusRole::NativeStage => "native-stage",
+        FocusRole::WebLeft => "web-left",
+        FocusRole::NativeTimeline => "native-timeline",
+        FocusRole::WebRight => "web-right",
+    }
+}
+
 impl ApplicationHandler<UserEvent> for State {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let attributes = Window::default_attributes()
             .with_title("G0-9 wgpu29 starting")
-            .with_inner_size(LogicalSize::new(INITIAL_WIDTH, INITIAL_HEIGHT));
+            .with_inner_size(LogicalSize::new(INITIAL_WIDTH, INITIAL_HEIGHT))
+            .with_visible(false);
         let window = Arc::new(event_loop.create_window(attributes).expect("host window"));
+        let accesskit = accesskit_winit::Adapter::with_event_loop_proxy(
+            event_loop,
+            &window,
+            self.proxy.clone(),
+        );
+        window.set_visible(true);
         let gfx = GfxState::new(&window);
         let initial = window.inner_size();
         let layout = SurfaceLayout::try_new(initial.width, initial.height, window.scale_factor())
@@ -380,22 +1121,24 @@ impl ApplicationHandler<UserEvent> for State {
         let left_webview = make_webview(
             &window,
             self.proxy.clone(),
-            "left",
+            WebSource::Left,
+            Arc::clone(&self.left_instance_epoch),
             Rect {
                 position: WebPosition::new(0.0, 0.0).into(),
                 size: WebSize::new(LEFT_WEBVIEW_WIDTH, layout.logical_height).into(),
             },
-            LEFT_HTML,
+            &left_html(),
         );
         let right_webview = make_webview(
             &window,
             self.proxy.clone(),
-            "right",
+            WebSource::Right,
+            Arc::clone(&self.right_instance_epoch),
             Rect {
                 position: WebPosition::new(layout.logical_width - RIGHT_WEBVIEW_WIDTH, 0.0).into(),
                 size: WebSize::new(RIGHT_WEBVIEW_WIDTH, layout.logical_height).into(),
             },
-            RIGHT_HTML,
+            &right_html(),
         );
 
         self.window = Some(window);
@@ -403,7 +1146,9 @@ impl ApplicationHandler<UserEvent> for State {
         self.right_webview = Some(right_webview);
         self.gfx = Some(gfx);
         self.layout = Some(layout);
-        self.counters.layout_epoch = 1;
+        self.accesskit = Some(accesskit);
+        // ここではepoch 1を設定するのみで、各WebViewへの配信は`ready`受信後。
+        self.set_layout_epoch(1);
         self.publish_report();
         self.window.as_ref().unwrap().request_redraw();
     }
@@ -411,6 +1156,75 @@ impl ApplicationHandler<UserEvent> for State {
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: UserEvent) {
         match event {
             UserEvent::WebMessage(message) => self.consume_web_message(&message),
+            UserEvent::ProtocolRequest => self.lifecycle.protocol_requests += 1,
+            UserEvent::NavigationRejected => self.lifecycle.navigation_rejections += 1,
+            UserEvent::NewWindowRejected => self.lifecycle.new_window_rejections += 1,
+            UserEvent::DownloadRejected => self.lifecycle.download_rejections += 1,
+            UserEvent::WebContentProcessTerminated(source) => {
+                self.lifecycle.web_process_terminations += 1;
+                let (epoch, ready) = match source {
+                    WebSource::Left => (&self.left_instance_epoch, &mut self.left_ready),
+                    WebSource::Right => (&self.right_instance_epoch, &mut self.right_ready),
+                };
+                *ready = false;
+                epoch.fetch_add(1, Ordering::AcqRel);
+                self.pending_web_reload = Some(PendingWebReload {
+                    source,
+                    attempt: 0,
+                    next_attempt: Instant::now() + Duration::from_millis(100),
+                });
+                self.publish_report();
+            }
+            UserEvent::NativeTab { backward } => {
+                let role = if backward {
+                    self.focus.tab_backward()
+                } else {
+                    self.focus.tab_forward()
+                };
+                self.apply_focus(role, "native-monitor");
+                self.publish_report();
+            }
+            UserEvent::NativePointerDragged { logical_x } => {
+                if self.native_drag_active {
+                    self.lifecycle.pointer_last_logical_x = Some(logical_x);
+                    self.counters.native_drag_moves += 1;
+                    self.lifecycle.pointer_capture_moves += 1;
+                    let crossed = self.layout.is_some_and(|layout| {
+                        logical_x < LEFT_WEBVIEW_WIDTH
+                            || logical_x >= layout.logical_width - RIGHT_WEBVIEW_WIDTH
+                    });
+                    if crossed && !self.counters.native_drag_crossed_webview {
+                        self.lifecycle.pointer_boundary_crossings += 1;
+                    }
+                    self.counters.native_drag_crossed_webview |= crossed;
+                    self.publish_report();
+                }
+            }
+            UserEvent::Accesskit(event) => match event.window_event {
+                accesskit_winit::WindowEvent::InitialTreeRequested => {
+                    let focus = self.focus.current();
+                    if let (Some(layout), Some(adapter)) = (self.layout, &mut self.accesskit) {
+                        adapter.update_if_active(|| build_accessibility_tree(focus, layout));
+                    }
+                }
+                accesskit_winit::WindowEvent::ActionRequested(request) => {
+                    if request.action == accesskit::Action::Focus {
+                        let target = match request.target_node {
+                            AX_STAGE => Some(FocusRole::NativeStage),
+                            AX_TIMELINE => Some(FocusRole::NativeTimeline),
+                            _ => None,
+                        };
+                        if let Some(target) = target {
+                            let epoch = self.focus.epoch();
+                            if let Ok(role) = self.focus.request_focus(target, epoch) {
+                                self.apply_focus(role, "accesskit");
+                                self.publish_report();
+                            }
+                        }
+                    }
+                }
+                accesskit_winit::WindowEvent::AccessibilityDeactivated => {}
+            },
         }
     }
 
@@ -420,10 +1234,23 @@ impl ApplicationHandler<UserEvent> for State {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
+        if let Some(window) = self.window.clone() {
+            if let Some(adapter) = &mut self.accesskit {
+                adapter.process_event(&window, &event);
+            }
+        }
         match event {
             WindowEvent::Resized(size) => {
                 if size.width > 0 && size.height > 0 {
                     self.counters.resize_events += 1;
+                    if self.temporarily_unavailable
+                        && self.window.as_ref().is_some_and(|window| {
+                            SurfaceLayout::try_new(size.width, size.height, window.scale_factor())
+                                .is_none()
+                        })
+                    {
+                        self.lifecycle.unavailable_size_events += 1;
+                    }
                     if let Some(gfx) = &mut self.gfx {
                         gfx.configure(size.width, size.height);
                     }
@@ -432,9 +1259,27 @@ impl ApplicationHandler<UserEvent> for State {
                         window.request_redraw();
                     }
                 }
+                // フルスクリーン切替はresizeを伴うため、`Occluded`ではなく
+                // ここでF11開始分の遷移を確定させる。
+                if let Some(window) = &self.window {
+                    let now_fullscreen = window.fullscreen().is_some();
+                    if now_fullscreen != self.fullscreen_active {
+                        let was_fullscreen = self.fullscreen_active;
+                        self.fullscreen_active = now_fullscreen;
+                        if !was_fullscreen && now_fullscreen {
+                            self.lifecycle.fullscreen_entries += 1;
+                        }
+                        if was_fullscreen && !now_fullscreen {
+                            self.lifecycle.fullscreen_exits += 1;
+                            self.fullscreen_lifecycle
+                                .record_restored(self.focus.current(), self.ime_owner());
+                        }
+                    }
+                }
                 self.publish_report();
             }
             WindowEvent::ScaleFactorChanged { .. } => {
+                self.lifecycle.scale_factor_events += 1;
                 if let Some(window) = self.window.clone() {
                     let size = window.inner_size();
                     self.update_layout(size.width, size.height);
@@ -443,6 +1288,11 @@ impl ApplicationHandler<UserEvent> for State {
                 self.publish_report();
             }
             WindowEvent::RedrawRequested => {
+                if self.temporarily_unavailable {
+                    self.lifecycle.unavailable_acquire_skips += 1;
+                    self.publish_report();
+                    return;
+                }
                 let Some(layout) = self.layout else {
                     return;
                 };
@@ -450,8 +1300,15 @@ impl ApplicationHandler<UserEvent> for State {
                     RenderOutcome::Presented => {
                         self.counters.acquire_count += 1;
                         self.counters.present_count += 1;
+                        if self.lifecycle.surface_reconfigures > 0 {
+                            self.surface_present_after_reconfigure = true;
+                        }
                     }
-                    RenderOutcome::Reconfigure => {
+                    RenderOutcome::Reconfigure { injected } => {
+                        self.lifecycle.surface_reconfigures += 1;
+                        if !injected {
+                            self.lifecycle.actual_surface_lost_or_outdated += 1;
+                        }
                         if let Some(window) = &self.window {
                             let size = window.inner_size();
                             self.gfx
@@ -468,12 +1325,18 @@ impl ApplicationHandler<UserEvent> for State {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor_x = position.x;
+                self.cursor_y = position.y;
                 if self.native_drag_active {
                     self.counters.native_drag_moves += 1;
                     if self
                         .layout
                         .is_some_and(|layout| layout.cursor_is_over_webview(position.x))
                     {
+                        if !self.counters.native_drag_crossed_webview
+                            && self.automated_lifecycle.is_some()
+                        {
+                            self.lifecycle.pointer_boundary_crossings += 1;
+                        }
                         self.counters.native_drag_crossed_webview = true;
                     }
                     self.publish_report();
@@ -485,13 +1348,16 @@ impl ApplicationHandler<UserEvent> for State {
                 ..
             } => match state {
                 ElementState::Pressed => {
-                    if self
-                        .layout
-                        .is_some_and(|layout| !layout.cursor_is_over_webview(self.cursor_x))
-                    {
-                        self.native_drag_active = true;
-                        self.counters.native_drag_crossed_webview = false;
-                        self.counters.native_drag_released = false;
+                    if let Some(layout) = self.layout {
+                        if !layout.cursor_is_over_webview(self.cursor_x) {
+                            self.native_drag_active = true;
+                            self.counters.native_drag_crossed_webview = false;
+                            self.counters.native_drag_released = false;
+                            if self.automated_lifecycle.is_some() {
+                                self.lifecycle.pointer_capture_starts += 1;
+                            }
+                            self.sync_native_click_focus(layout);
+                        }
                     }
                 }
                 ElementState::Released if self.native_drag_active => {
@@ -502,6 +1368,85 @@ impl ApplicationHandler<UserEvent> for State {
                 ElementState::Released => {}
             },
             WindowEvent::CursorLeft { .. } if self.native_drag_active => {
+                self.publish_report();
+            }
+            WindowEvent::ModifiersChanged(modifiers) => {
+                self.shift_held = modifiers.state().contains(ModifiersState::SHIFT);
+            }
+            WindowEvent::KeyboardInput { event, .. } => {
+                if event.state == ElementState::Pressed && !event.repeat {
+                    match event.logical_key {
+                        #[cfg(not(target_os = "macos"))]
+                        Key::Named(NamedKey::Tab) => {
+                            let role = if self.shift_held {
+                                self.focus.tab_backward()
+                            } else {
+                                self.focus.tab_forward()
+                            };
+                            self.apply_focus(role, "winit");
+                            self.publish_report();
+                        }
+                        Key::Named(NamedKey::Enter) => self.observe_shortcut(ShortcutKey::Enter),
+                        Key::Named(NamedKey::Escape) if self.native_drag_active => {
+                            self.cancel_automated_pointer_capture(false);
+                            self.publish_report();
+                        }
+                        Key::Named(NamedKey::Escape) => self.observe_shortcut(ShortcutKey::Escape),
+                        Key::Named(NamedKey::Space) => self.observe_shortcut(ShortcutKey::Space),
+                        // CU-0G04的な注入ではなくwinit標準APIのみで遷移を
+                        // 起こす。F11はフルスクリーンなので`Resized`側で、
+                        // F9は実際に確定した`Occluded`側で観測を確定する。
+                        Key::Named(NamedKey::F11) => {
+                            if let Some(window) = self.window.clone() {
+                                let entering = window.fullscreen().is_none();
+                                if entering {
+                                    self.fullscreen_lifecycle.record_pre_transition(
+                                        self.focus.current(),
+                                        self.ime_owner(),
+                                    );
+                                }
+                                let target = if entering {
+                                    Some(Fullscreen::Borderless(None))
+                                } else {
+                                    None
+                                };
+                                window.set_fullscreen(target);
+                                self.publish_report();
+                            }
+                        }
+                        Key::Named(NamedKey::F9) => {
+                            if let Some(window) = self.window.clone() {
+                                // pre_transitionの記録は`Occluded`側で
+                                // `is_minimized()`により実際の最小化が
+                                // 確認できてから行う。
+                                window.set_minimized(true);
+                                self.publish_report();
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            WindowEvent::Occluded(occluded) => {
+                // `Occluded(true)`は他ウィンドウに覆われた場合など最小化以外
+                // でも起きるため、`is_minimized()`で実際の最小化を確認できた
+                // ときだけ最小化として記録する。
+                let confirmed_minimized = occluded
+                    && self
+                        .window
+                        .as_ref()
+                        .and_then(|window| window.is_minimized())
+                        .unwrap_or(false);
+                if confirmed_minimized && !self.occluded {
+                    self.minimize_lifecycle
+                        .record_pre_transition(self.focus.current(), self.ime_owner());
+                    self.occluded = true;
+                } else if !occluded && self.occluded {
+                    self.minimize_lifecycle
+                        .record_restored(self.focus.current(), self.ime_owner());
+                    self.occluded = false;
+                    self.lifecycle.minimize_cycles += 1;
+                }
                 self.publish_report();
             }
             WindowEvent::CloseRequested => {
@@ -529,47 +1474,1054 @@ impl ApplicationHandler<UserEvent> for State {
         } else {
             event_loop.set_control_flow(ControlFlow::WaitUntil(self.next_resize));
         }
+        self.advance_automated_focus(event_loop, now);
+        self.advance_web_reload(event_loop, now);
+        self.advance_automated_lifecycle(event_loop, now);
+    }
+}
+
+impl State {
+    fn fail_automated_focus(&mut self, event_loop: &ActiveEventLoop, error: String) {
+        if let Some(check) = &mut self.automated_focus {
+            check.pass = Some(false);
+            check.error = Some(error);
+        }
+        self.publish_report();
+        event_loop.exit();
+    }
+
+    fn advance_automated_focus(&mut self, event_loop: &ActiveEventLoop, now: Instant) {
+        let Some(check) = self.automated_focus.as_ref() else {
+            return;
+        };
+        if check.pass.is_some() {
+            return;
+        }
+        if now >= check.deadline {
+            self.fail_automated_focus(event_loop, "focus E2E timeout".to_owned());
+            return;
+        }
+        if self.resize_requests < self.resize_target || !self.left_ready || !self.right_ready {
+            event_loop.set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(25)));
+            return;
+        }
+        if !check.started {
+            self.focus.sync_current(FocusRole::NativeStage);
+            self.apply_focus(FocusRole::NativeStage, "automated-start");
+            let check = self.automated_focus.as_mut().unwrap();
+            check.started = true;
+            check.next_action = now + Duration::from_millis(150);
+            let next_action = check.next_action;
+            self.publish_report();
+            event_loop.set_control_flow(ControlFlow::WaitUntil(next_action));
+            return;
+        }
+
+        let next_action = check.next_action;
+        if now < next_action {
+            event_loop.set_control_flow(ControlFlow::WaitUntil(next_action));
+            return;
+        }
+
+        if check.awaiting_result {
+            let step = check.step;
+            let expected_role = AUTOMATED_FOCUS_STEPS[step];
+            let expected_source = if step % 2 == 0 {
+                "native-monitor"
+            } else {
+                "web-dom"
+            };
+            let observed = self.focus_observations.last();
+            let valid = self.focus.current() == expected_role
+                && observed.is_some_and(|observation| {
+                    observation.role == expected_role
+                        && observation.source == expected_source
+                        && observation.matches_role
+                });
+            if !valid {
+                let actual_source = observed
+                    .map(|observation| observation.source)
+                    .unwrap_or("none");
+                self.fail_automated_focus(
+                    event_loop,
+                    format!(
+                        "step {step}: expected {}/{expected_source}, got {}/{}",
+                        focus_role_wire(expected_role),
+                        focus_role_wire(self.focus.current()),
+                        actual_source
+                    ),
+                );
+                return;
+            }
+
+            let check = self.automated_focus.as_mut().unwrap();
+            check.step += 1;
+            check.awaiting_result = false;
+            if check.step == AUTOMATED_FOCUS_STEPS.len() {
+                check.pass = Some(true);
+                self.publish_report();
+                event_loop.exit();
+                return;
+            }
+            check.next_action = now + Duration::from_millis(100);
+            event_loop.set_control_flow(ControlFlow::WaitUntil(check.next_action));
+            return;
+        }
+
+        let backward = check.step >= 4;
+        if let Err(error) = post_tab_to_current_process(backward) {
+            self.fail_automated_focus(event_loop, error.to_owned());
+            return;
+        }
+        let check = self.automated_focus.as_mut().unwrap();
+        check.awaiting_result = true;
+        check.next_action = now + Duration::from_millis(350);
+        event_loop.set_control_flow(ControlFlow::WaitUntil(check.next_action));
+    }
+}
+
+impl State {
+    fn advance_web_reload(&mut self, event_loop: &ActiveEventLoop, now: Instant) {
+        let Some(pending) = self.pending_web_reload.as_mut() else {
+            return;
+        };
+        if now < pending.next_attempt {
+            event_loop.set_control_flow(ControlFlow::WaitUntil(pending.next_attempt));
+            return;
+        }
+        let webview = match pending.source {
+            WebSource::Left => self.left_webview.as_ref(),
+            WebSource::Right => self.right_webview.as_ref(),
+        };
+        pending.attempt += 1;
+        self.lifecycle.web_reload_requests += 1;
+        if webview.is_some_and(|webview| webview.reload().is_ok()) {
+            let delay_ms = 100_u64 << pending.attempt;
+            pending.next_attempt = now + Duration::from_millis(delay_ms);
+            event_loop.set_control_flow(ControlFlow::WaitUntil(pending.next_attempt));
+            self.publish_report();
+            return;
+        }
+        if pending.attempt >= WEB_RELOAD_LIMIT {
+            if let Some(check) = &mut self.automated_lifecycle {
+                check.error = Some("WebView reload retry limit reached".to_owned());
+                check.pass = Some(false);
+            }
+            self.pending_web_reload = None;
+            self.publish_report();
+            event_loop.exit();
+            return;
+        }
+        let delay_ms = 100_u64 << pending.attempt;
+        pending.next_attempt = now + Duration::from_millis(delay_ms);
+        event_loop.set_control_flow(ControlFlow::WaitUntil(pending.next_attempt));
+        self.publish_report();
+    }
+
+    fn fail_automated_lifecycle(&mut self, event_loop: &ActiveEventLoop, error: String) {
+        if let Some(check) = &mut self.automated_lifecycle {
+            check.pass = Some(false);
+            check.error = Some(error);
+        }
+        self.publish_report();
+        event_loop.exit();
+    }
+
+    fn capture_composited_window(&mut self) -> Result<(), String> {
+        #[cfg(target_os = "macos")]
+        {
+            let webview = self
+                .left_webview
+                .as_ref()
+                .ok_or_else(|| "left WebView is unavailable".to_owned())?;
+            let window_id = webview.ns_window().windowNumber();
+            let status = Command::new("/usr/sbin/screencapture")
+                .arg("-x")
+                .arg("-o")
+                .arg(format!("-l{window_id}"))
+                .arg(&self.capture_path)
+                .status()
+                .map_err(|error| format!("screencapture launch failed: {error}"))?;
+            if !status.success() {
+                return Err(format!("screencapture exited with {status}"));
+            }
+            let bytes = std::fs::metadata(&self.capture_path)
+                .map_err(|error| format!("capture metadata failed: {error}"))?
+                .len();
+            if bytes == 0 {
+                return Err("composited capture was empty".to_owned());
+            }
+            self.lifecycle.capture_bytes = bytes;
+            Ok(())
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            Err("composited capture is only supported by this fixed-Mac gate".to_owned())
+        }
+    }
+
+    fn terminate_owned_web_content_process(&mut self) -> Result<(), String> {
+        let current = web_content_pids()?;
+        let candidates = current
+            .difference(&self.initial_web_content_pids)
+            .copied()
+            .collect::<Vec<_>>();
+        if candidates.len() != 2 {
+            return Err(format!(
+                "expected exactly two newly created WebContent processes, found {}",
+                candidates.len()
+            ));
+        }
+        let pid = candidates[0];
+        let status = Command::new("/bin/kill")
+            .arg("-KILL")
+            .arg(pid.to_string())
+            .status()
+            .map_err(|error| format!("WebContent termination failed: {error}"))?;
+        if !status.success() {
+            return Err(format!("kill exited with {status}"));
+        }
+        self.lifecycle.killed_web_content_pid = Some(pid);
+        Ok(())
+    }
+
+    fn advance_automated_lifecycle(&mut self, event_loop: &ActiveEventLoop, now: Instant) {
+        let Some(check) = self.automated_lifecycle.as_ref() else {
+            return;
+        };
+        if check.pass.is_some() {
+            return;
+        }
+        if now >= check.deadline {
+            self.fail_automated_lifecycle(event_loop, "lifecycle E2E timeout".to_owned());
+            return;
+        }
+        if self.resize_requests < self.resize_target || !self.left_ready || !self.right_ready {
+            event_loop.set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(25)));
+            return;
+        }
+        if now < check.next_action {
+            event_loop.set_control_flow(ControlFlow::WaitUntil(check.next_action));
+            return;
+        }
+
+        match check.step {
+            LifecycleStep::Waiting => {
+                let Some(window) = self.window.clone() else {
+                    self.fail_automated_lifecycle(event_loop, "window is unavailable".to_owned());
+                    return;
+                };
+                window.set_minimized(true);
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitMinimized;
+                check.next_action = now + Duration::from_millis(100);
+            }
+            LifecycleStep::AwaitMinimized => {
+                if !self.occluded {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                if let Some(window) = &self.window {
+                    window.set_minimized(false);
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitRestored;
+                check.next_action = now + Duration::from_millis(100);
+            }
+            LifecycleStep::AwaitRestored => {
+                if self.occluded || self.lifecycle.minimize_cycles == 0 {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                if let Err(error) = self.verify_l3_post_operation() {
+                    self.fail_automated_lifecycle(event_loop, error);
+                    return;
+                }
+                let Some(window) = self.window.clone() else {
+                    self.fail_automated_lifecycle(event_loop, "window is unavailable".to_owned());
+                    return;
+                };
+                self.fullscreen_lifecycle
+                    .record_pre_transition(self.focus.current(), self.ime_owner());
+                window.set_fullscreen(Some(Fullscreen::Borderless(None)));
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitFullscreenEnter;
+                check.next_action = now + Duration::from_millis(150);
+            }
+            LifecycleStep::AwaitFullscreenEnter => {
+                if !self.fullscreen_active || self.lifecycle.fullscreen_entries == 0 {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::ExitFullscreen;
+                check.next_action = now + Duration::from_secs(1);
+            }
+            LifecycleStep::ExitFullscreen => {
+                if let Err(error) = self.verify_l3_post_operation() {
+                    self.fail_automated_lifecycle(event_loop, error);
+                    return;
+                }
+                if let Some(window) = &self.window {
+                    window.set_fullscreen(None);
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitFullscreenExit;
+                check.next_action = now + Duration::from_millis(150);
+            }
+            LifecycleStep::AwaitFullscreenExit => {
+                if self.fullscreen_active || self.lifecycle.fullscreen_exits == 0 {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                if let Err(error) = self.verify_l3_post_operation() {
+                    self.fail_automated_lifecycle(event_loop, error);
+                    return;
+                }
+                let Some(window) = self.window.clone() else {
+                    self.fail_automated_lifecycle(event_loop, "window is unavailable".to_owned());
+                    return;
+                };
+                self.temporarily_unavailable = true;
+                self.unavailable_acquire_before = Some(self.counters.acquire_count);
+                self.unavailable_restore_size = Some(window.inner_size());
+                self.lifecycle.unavailable_intervals += 1;
+                let _ = window.request_inner_size(LogicalSize::new(1.0, 1.0));
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitUnavailableSkip;
+                check.next_action = now + Duration::from_millis(100);
+            }
+            LifecycleStep::AwaitUnavailableSkip => {
+                if self.lifecycle.unavailable_size_events == 0
+                    || self.lifecycle.unavailable_acquire_skips == 0
+                {
+                    if now
+                        >= self.automated_lifecycle.as_ref().unwrap().next_action
+                            + Duration::from_secs(2)
+                    {
+                        self.fail_automated_lifecycle(
+                            event_loop,
+                            "invalid-size window did not produce a redraw skip".to_owned(),
+                        );
+                        return;
+                    }
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
+                    }
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                if self.unavailable_acquire_before != Some(self.counters.acquire_count) {
+                    self.fail_automated_lifecycle(
+                        event_loop,
+                        "surface acquire advanced while the window was unavailable".to_owned(),
+                    );
+                    return;
+                }
+                if let (Some(window), Some(size)) = (&self.window, self.unavailable_restore_size) {
+                    let _ = window.request_inner_size(size);
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitUnavailableRestore;
+                check.next_action = now + Duration::from_millis(100);
+            }
+            LifecycleStep::AwaitUnavailableRestore => {
+                let restored = self.window.as_ref().is_some_and(|window| {
+                    self.unavailable_restore_size == Some(window.inner_size())
+                }) && self.layout.is_some();
+                if !restored {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                self.temporarily_unavailable = false;
+                if let Some(window) = &self.window {
+                    window.focus_window();
+                    window.request_redraw();
+                }
+                if let Err(error) = self.verify_l3_post_operation() {
+                    self.fail_automated_lifecycle(event_loop, error);
+                    return;
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::StartPointerCancel;
+                check.next_action = now + Duration::from_millis(200);
+            }
+            LifecycleStep::StartPointerCancel => {
+                #[cfg(target_os = "macos")]
+                {
+                    let Some(window) = &self.window else {
+                        self.fail_automated_lifecycle(
+                            event_loop,
+                            "window is unavailable".to_owned(),
+                        );
+                        return;
+                    };
+                    let Some(layout) = self.layout else {
+                        self.fail_automated_lifecycle(
+                            event_loop,
+                            "layout is unavailable".to_owned(),
+                        );
+                        return;
+                    };
+                    let (native, _) = match pointer_probe_points(window, layout) {
+                        Ok(points) => points,
+                        Err(error) => {
+                            self.fail_automated_lifecycle(event_loop, error);
+                            return;
+                        }
+                    };
+                    for event_type in [CGEventType::MouseMoved, CGEventType::LeftMouseDown] {
+                        if let Err(error) = post_mouse_to_current_process(event_type, native) {
+                            self.fail_automated_lifecycle(event_loop, error.to_owned());
+                            return;
+                        }
+                    }
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    self.fail_automated_lifecycle(
+                        event_loop,
+                        "pointer E2E is only supported by this fixed-Mac gate".to_owned(),
+                    );
+                    return;
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitPointerCancelBoundary;
+                check.next_action = now + Duration::from_millis(150);
+            }
+            LifecycleStep::AwaitPointerCancelBoundary => {
+                if self.lifecycle.pointer_capture_starts == 0 {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    let (Some(window), Some(layout)) = (&self.window, self.layout) else {
+                        self.fail_automated_lifecycle(
+                            event_loop,
+                            "window/layout is unavailable".to_owned(),
+                        );
+                        return;
+                    };
+                    let (_, web) = match pointer_probe_points(window, layout) {
+                        Ok(points) => points,
+                        Err(error) => {
+                            self.fail_automated_lifecycle(event_loop, error);
+                            return;
+                        }
+                    };
+                    if let Err(error) =
+                        post_mouse_to_current_process(CGEventType::LeftMouseDragged, web)
+                    {
+                        self.fail_automated_lifecycle(event_loop, error.to_owned());
+                        return;
+                    }
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitPointerCancel;
+                check.next_action = now + Duration::from_millis(150);
+            }
+            LifecycleStep::AwaitPointerCancel => {
+                if self.lifecycle.pointer_boundary_crossings == 0
+                    || self.lifecycle.pointer_capture_moves == 0
+                {
+                    if now
+                        >= self.automated_lifecycle.as_ref().unwrap().next_action
+                            + Duration::from_secs(2)
+                    {
+                        self.fail_automated_lifecycle(
+                            event_loop,
+                            "pointer did not cross the native/WebView boundary".to_owned(),
+                        );
+                        return;
+                    }
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                if let Err(error) = post_escape_to_current_process() {
+                    self.fail_automated_lifecycle(event_loop, error.to_owned());
+                    return;
+                }
+                #[cfg(target_os = "macos")]
+                if let (Some(window), Some(layout)) = (&self.window, self.layout) {
+                    if let Ok((_, web)) = pointer_probe_points(window, layout) {
+                        let _ = post_mouse_to_current_process(CGEventType::LeftMouseUp, web);
+                    }
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::StartPointerFocusLoss;
+                check.next_action = now + Duration::from_millis(200);
+            }
+            LifecycleStep::StartPointerFocusLoss => {
+                if self.lifecycle.pointer_cancels == 0 {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                self.apply_focus(FocusRole::NativeStage, "automated-pointer-start");
+                #[cfg(target_os = "macos")]
+                {
+                    let (Some(window), Some(layout)) = (&self.window, self.layout) else {
+                        self.fail_automated_lifecycle(
+                            event_loop,
+                            "window/layout is unavailable".to_owned(),
+                        );
+                        return;
+                    };
+                    let (native, _) = match pointer_probe_points(window, layout) {
+                        Ok(points) => points,
+                        Err(error) => {
+                            self.fail_automated_lifecycle(event_loop, error);
+                            return;
+                        }
+                    };
+                    for event_type in [CGEventType::MouseMoved, CGEventType::LeftMouseDown] {
+                        if let Err(error) = post_mouse_to_current_process(event_type, native) {
+                            self.fail_automated_lifecycle(event_loop, error.to_owned());
+                            return;
+                        }
+                    }
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitPointerFocusLossBoundary;
+                check.next_action = now + Duration::from_millis(150);
+            }
+            LifecycleStep::AwaitPointerFocusLossBoundary => {
+                if self.lifecycle.pointer_capture_starts < 2 {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    let (Some(window), Some(layout)) = (&self.window, self.layout) else {
+                        self.fail_automated_lifecycle(
+                            event_loop,
+                            "window/layout is unavailable".to_owned(),
+                        );
+                        return;
+                    };
+                    let (_, web) = match pointer_probe_points(window, layout) {
+                        Ok(points) => points,
+                        Err(error) => {
+                            self.fail_automated_lifecycle(event_loop, error);
+                            return;
+                        }
+                    };
+                    if let Err(error) =
+                        post_mouse_to_current_process(CGEventType::LeftMouseDragged, web)
+                    {
+                        self.fail_automated_lifecycle(event_loop, error.to_owned());
+                        return;
+                    }
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitPointerFocusLoss;
+                check.next_action = now + Duration::from_millis(150);
+            }
+            LifecycleStep::AwaitPointerFocusLoss => {
+                if self.lifecycle.pointer_boundary_crossings < 2 {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                self.apply_focus(FocusRole::WebLeft, "automated-pointer-focus-loss");
+                #[cfg(target_os = "macos")]
+                if let (Some(window), Some(layout)) = (&self.window, self.layout) {
+                    if let Ok((_, web)) = pointer_probe_points(window, layout) {
+                        let _ = post_mouse_to_current_process(CGEventType::LeftMouseUp, web);
+                    }
+                }
+                if self.lifecycle.pointer_focus_losses == 0 || self.lifecycle.pointer_cancels < 2 {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                if let Err(error) = self.verify_l3_post_operation() {
+                    self.fail_automated_lifecycle(event_loop, error);
+                    return;
+                }
+                self.stale_probe_focus_before = Some(self.focus.current());
+                let current_instance = self.left_instance_epoch.load(Ordering::Acquire);
+                let script = format!(
+                    "window.ipc.postMessage('{current_instance}:focus-request:web-right:0');\
+                     window.ipc.postMessage('0:focus-request:web-right:0');"
+                );
+                if self
+                    .left_webview
+                    .as_ref()
+                    .is_none_or(|webview| webview.evaluate_script(&script).is_err())
+                {
+                    self.fail_automated_lifecycle(
+                        event_loop,
+                        "stale epoch probe could not be sent".to_owned(),
+                    );
+                    return;
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitStaleRejection;
+                check.next_action = now + Duration::from_millis(150);
+            }
+            LifecycleStep::AwaitStaleRejection => {
+                if self.lifecycle.stale_instance_epoch_rejections == 0
+                    || self.lifecycle.stale_layout_epoch_rejections == 0
+                {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                if self.stale_probe_focus_before != Some(self.focus.current())
+                    || self.sentinel_before != self.sentinel_after
+                {
+                    self.fail_automated_lifecycle(
+                        event_loop,
+                        "stale epoch probe changed semantic state".to_owned(),
+                    );
+                    return;
+                }
+                self.lifecycle.stale_probe_invariant_checks += 1;
+                let Some(gfx) = &mut self.gfx else {
+                    self.fail_automated_lifecycle(
+                        event_loop,
+                        "wgpu state is unavailable".to_owned(),
+                    );
+                    return;
+                };
+                gfx.inject_surface_lost();
+                self.lifecycle.surface_loss_injections += 1;
+                self.surface_present_after_reconfigure = false;
+                if let Some(window) = &self.window {
+                    window.request_redraw();
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitSurfaceRecovery;
+                check.next_action = now + Duration::from_millis(100);
+            }
+            LifecycleStep::AwaitSurfaceRecovery => {
+                if !self.surface_present_after_reconfigure {
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
+                    }
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                if let Err(error) = self.verify_l3_post_operation() {
+                    self.fail_automated_lifecycle(event_loop, error);
+                    return;
+                }
+                if let Err(error) = self.capture_composited_window() {
+                    self.fail_automated_lifecycle(event_loop, error);
+                    return;
+                }
+                if let Some(webview) = &self.left_webview {
+                    let _ = webview.evaluate_script(
+                        "window.open('https://example.invalid/blocked');\
+                         const a=document.createElement('a');\
+                         a.href='data:text/plain,blocked';a.download='blocked.txt';a.click();\
+                         setTimeout(()=>{location.href='https://example.invalid/blocked'},150);",
+                    );
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitPolicyEvidence;
+                check.next_action = now + Duration::from_millis(700);
+            }
+            LifecycleStep::AwaitPolicyEvidence => {
+                if self.lifecycle.navigation_rejections == 0
+                    || self.lifecycle.new_window_rejections == 0
+                    || self.lifecycle.download_rejections == 0
+                {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                if let Err(error) = self.terminate_owned_web_content_process() {
+                    self.fail_automated_lifecycle(event_loop, error);
+                    return;
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitWebRecovery;
+                check.next_action = now + Duration::from_millis(100);
+            }
+            LifecycleStep::AwaitWebRecovery => {
+                if self.lifecycle.web_process_terminations == 0
+                    || self.lifecycle.web_reload_requests == 0
+                    || self.lifecycle.web_ready_after_termination == 0
+                {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                let current = match web_content_pids() {
+                    Ok(current) => current,
+                    Err(error) => {
+                        self.fail_automated_lifecycle(event_loop, error);
+                        return;
+                    }
+                };
+                let owned_count = current.difference(&self.initial_web_content_pids).count();
+                self.lifecycle.final_owned_web_content_processes = Some(owned_count);
+                if owned_count != 2 {
+                    self.fail_automated_lifecycle(
+                        event_loop,
+                        format!(
+                            "WebContent process count changed after recovery: expected 2, got {owned_count}"
+                        ),
+                    );
+                    return;
+                }
+                if let Err(error) = self.verify_l3_post_operation() {
+                    self.fail_automated_lifecycle(event_loop, error);
+                    return;
+                }
+                if let Err(error) = self.validate_l3_evidence() {
+                    self.fail_automated_lifecycle(event_loop, error);
+                    return;
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::Complete;
+                check.pass = Some(true);
+                self.publish_report();
+                event_loop.exit();
+                return;
+            }
+            LifecycleStep::Complete => return,
+        }
+        self.publish_report();
+        event_loop.set_control_flow(ControlFlow::WaitUntil(
+            self.automated_lifecycle.as_ref().unwrap().next_action,
+        ));
+    }
+}
+
+fn focus_role_family(role: FocusRole) -> &'static str {
+    match role {
+        FocusRole::NativeStage | FocusRole::NativeTimeline => "native",
+        FocusRole::WebLeft | FocusRole::WebRight => "web",
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn actual_first_responder() -> (String, &'static str) {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return ("not-main-thread".to_owned(), "unknown");
+    };
+    let app = NSApplication::sharedApplication(mtm);
+    let Some(window) = app.keyWindow() else {
+        return ("no-key-window".to_owned(), "unknown");
+    };
+    let Some(responder) = window.firstResponder() else {
+        return ("none".to_owned(), "unknown");
+    };
+    let class_name = responder.class().name().to_owned();
+    let family = if class_name.contains("WK") || class_name.contains("Web") {
+        "web"
+    } else {
+        "native"
+    };
+    (class_name, family)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn actual_first_responder() -> (String, &'static str) {
+    ("unsupported".to_owned(), "unknown")
+}
+
+#[cfg(target_os = "macos")]
+fn post_tab_to_current_process(backward: bool) -> Result<(), &'static str> {
+    let source = CGEventSource::new(CGEventSourceStateID::Private)
+        .map_err(|_| "CGEventSource creation failed")?;
+    let down = CGEvent::new_keyboard_event(source.clone(), KeyCode::TAB, true)
+        .map_err(|_| "Tab key-down creation failed")?;
+    let up = CGEvent::new_keyboard_event(source, KeyCode::TAB, false)
+        .map_err(|_| "Tab key-up creation failed")?;
+    if backward {
+        down.set_flags(CGEventFlags::CGEventFlagShift);
+        up.set_flags(CGEventFlags::CGEventFlagShift);
+    }
+    let pid = std::process::id() as i32;
+    down.post_to_pid(pid);
+    up.post_to_pid(pid);
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn post_tab_to_current_process(_backward: bool) -> Result<(), &'static str> {
+    Err("macOSだけがfocus E2Eを実行できる")
+}
+
+#[cfg(target_os = "macos")]
+fn pointer_probe_points(
+    window: &Window,
+    _layout: SurfaceLayout,
+) -> Result<(CGPoint, CGPoint), String> {
+    let origin = window
+        .inner_position()
+        .map_err(|error| format!("window inner position is unavailable: {error}"))?;
+    let origin_x = f64::from(origin.x);
+    let origin_y = f64::from(origin.y);
+    let y = origin_y + 120.0;
+    let native = CGPoint::new(origin_x + LEFT_WEBVIEW_WIDTH + 80.0, y);
+    let web = CGPoint::new(origin_x + LEFT_WEBVIEW_WIDTH - 220.0, y);
+    Ok((native, web))
+}
+
+#[cfg(target_os = "macos")]
+fn post_mouse_to_current_process(
+    event_type: CGEventType,
+    position: CGPoint,
+) -> Result<(), &'static str> {
+    let source = CGEventSource::new(CGEventSourceStateID::Private)
+        .map_err(|_| "CGEventSource creation failed")?;
+    let event = CGEvent::new_mouse_event(source, event_type, position, CGMouseButton::Left)
+        .map_err(|_| "CG mouse event creation failed")?;
+    event.post(CGEventTapLocation::HID);
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn post_escape_to_current_process() -> Result<(), &'static str> {
+    let source = CGEventSource::new(CGEventSourceStateID::Private)
+        .map_err(|_| "CGEventSource creation failed")?;
+    let down = CGEvent::new_keyboard_event(source.clone(), KeyCode::ESCAPE, true)
+        .map_err(|_| "Escape key-down creation failed")?;
+    let up = CGEvent::new_keyboard_event(source, KeyCode::ESCAPE, false)
+        .map_err(|_| "Escape key-up creation failed")?;
+    let pid = std::process::id() as i32;
+    down.post_to_pid(pid);
+    up.post_to_pid(pid);
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn post_escape_to_current_process() -> Result<(), &'static str> {
+    Err("macOSだけがlifecycle pointer E2Eを実行できる")
+}
+
+fn parse_web_content_pids(output: &str) -> BTreeSet<u32> {
+    const WEB_CONTENT_PATH: &str = "/System/Library/Frameworks/WebKit.framework/Versions/A/\
+XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent";
+    output
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.trim().splitn(2, char::is_whitespace);
+            let pid = fields.next()?.parse::<u32>().ok()?;
+            (fields.next()?.trim() == WEB_CONTENT_PATH).then_some(pid)
+        })
+        .collect()
+}
+
+#[cfg(target_os = "macos")]
+fn web_content_pids() -> Result<BTreeSet<u32>, String> {
+    let output = Command::new("/bin/ps")
+        .args(["-axo", "pid=,command="])
+        .output()
+        .map_err(|error| format!("WebContent process listing failed: {error}"))?;
+    if !output.status.success() {
+        return Err(format!("ps exited with {}", output.status));
+    }
+    Ok(parse_web_content_pids(&String::from_utf8_lossy(
+        &output.stdout,
+    )))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn web_content_pids() -> Result<BTreeSet<u32>, String> {
+    Err("WebContent process discovery is only supported by this fixed-Mac gate".to_owned())
+}
+
+#[cfg(target_os = "macos")]
+fn install_native_pointer_monitor(proxy: EventLoopProxy<UserEvent>) -> Option<Retained<AnyObject>> {
+    let handler = RcBlock::new(move |event: std::ptr::NonNull<NSEvent>| {
+        let event = unsafe { event.as_ref() };
+        if unsafe { event.r#type() } == NSEventType::LeftMouseDragged {
+            let logical_x = unsafe { event.locationInWindow().x };
+            let _ = proxy.send_event(UserEvent::NativePointerDragged { logical_x });
+        }
+        event as *const NSEvent as *mut NSEvent
+    });
+    unsafe {
+        NSEvent::addLocalMonitorForEventsMatchingMask_handler(
+            NSEventMask::LeftMouseDragged,
+            &handler,
+        )
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn install_native_tab_monitor(
+    proxy: EventLoopProxy<UserEvent>,
+    native_focus_active: Arc<AtomicBool>,
+) -> Option<Retained<AnyObject>> {
+    let handler = RcBlock::new(move |event: std::ptr::NonNull<NSEvent>| {
+        let event = unsafe { event.as_ref() };
+        let direction = unsafe {
+            native_tab_direction(event.keyCode(), event.isARepeat(), event.modifierFlags())
+        };
+        if let Some(backward) = direction.filter(|_| native_focus_active.load(Ordering::Acquire)) {
+            let _ = proxy.send_event(UserEvent::NativeTab { backward });
+            std::ptr::null_mut()
+        } else {
+            event as *const NSEvent as *mut NSEvent
+        }
+    });
+    unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::KeyDown, &handler) }
+}
+
+#[cfg(target_os = "macos")]
+fn native_tab_direction(
+    key_code: u16,
+    is_repeat: bool,
+    modifiers: NSEventModifierFlags,
+) -> Option<bool> {
+    let disallowed = NSEventModifierFlags::NSEventModifierFlagControl
+        | NSEventModifierFlags::NSEventModifierFlagOption
+        | NSEventModifierFlags::NSEventModifierFlagCommand
+        | NSEventModifierFlags::NSEventModifierFlagNumericPad
+        | NSEventModifierFlags::NSEventModifierFlagHelp
+        | NSEventModifierFlags::NSEventModifierFlagFunction;
+    if key_code != 48 || is_repeat || modifiers.intersects(disallowed) {
+        return None;
+    }
+    Some(modifiers.contains(NSEventModifierFlags::NSEventModifierFlagShift))
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for State {
+    fn drop(&mut self) {
+        if let Some(monitor) = self.native_tab_monitor.take() {
+            unsafe { NSEvent::removeMonitor(&monitor) };
+        }
+        if let Some(monitor) = self.native_pointer_monitor.take() {
+            unsafe { NSEvent::removeMonitor(&monitor) };
+        }
     }
 }
 
 fn make_webview(
     window: &Window,
     proxy: EventLoopProxy<UserEvent>,
-    role: &'static str,
+    source: WebSource,
+    instance_epoch: Arc<AtomicU64>,
     bounds: Rect,
-    html: &'static str,
+    html: &str,
 ) -> WebView {
-    WebViewBuilder::new()
+    let role = source.wire_name();
+    let protocol = format!("motolii-{role}");
+    let url = format!("{protocol}://fixture/{role}");
+    let protocol_proxy = proxy.clone();
+    let navigation_proxy = proxy.clone();
+    let new_window_proxy = proxy.clone();
+    let download_proxy = proxy.clone();
+    let termination_proxy = proxy.clone();
+    let fixture = html.to_owned();
+    let builder = WebViewBuilder::new()
         .with_bounds(bounds)
         .with_accept_first_mouse(true)
-        .with_html(html)
+        .with_custom_protocol(protocol.clone(), move |_webview_id, _request| {
+            let _ = protocol_proxy.send_event(UserEvent::ProtocolRequest);
+            let epoch = instance_epoch.load(Ordering::Acquire);
+            let body = fixture.replace("__INSTANCE_EPOCH__", &epoch.to_string());
+            Response::builder()
+                .header(CONTENT_TYPE, "text/html; charset=utf-8")
+                .header(
+                    CONTENT_SECURITY_POLICY,
+                    "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'",
+                )
+                .body(Cow::Owned(body.into_bytes()))
+                .expect("constant fixture response")
+        })
+        .with_url(url)
+        .with_navigation_handler(move |target| {
+            let allowed = target.starts_with(&format!("{protocol}:"));
+            if !allowed {
+                let _ = navigation_proxy.send_event(UserEvent::NavigationRejected);
+            }
+            allowed
+        })
+        .with_new_window_req_handler(move |_url, _features| {
+            let _ = new_window_proxy.send_event(UserEvent::NewWindowRejected);
+            NewWindowResponse::Deny
+        })
+        .with_download_started_handler(move |_url, _destination| {
+            let _ = download_proxy.send_event(UserEvent::DownloadRejected);
+            false
+        })
         .with_ipc_handler(move |request| {
             let _ = proxy.send_event(UserEvent::WebMessage(format!("{role}:{}", request.body())));
-        })
+        });
+    #[cfg(target_os = "macos")]
+    let builder = builder.with_on_web_content_process_terminate_handler(move || {
+        let _ = termination_proxy.send_event(UserEvent::WebContentProcessTerminated(source));
+    });
+    builder
         .build_as_child(window)
         .expect("opaque child webview")
 }
 
-const LEFT_HTML: &str = r#"<!doctype html><html><head><meta charset="utf-8"><style>
+/// ブラウザ既定のtab順序やキー処理に暗黙に消費させず、host側の単一
+/// FocusCoordinator/ShortcutSinkへ型付きIPCで中継する。両WebViewの
+/// 編集可能inputを含むdocument全体でcomposition/focusinを観測する。
+const RELAY_SCRIPT: &str = r#"
+window.__motoliiInstanceEpoch=__INSTANCE_EPOCH__;
+window.__motoliiSend=(message)=>window.ipc.postMessage(window.__motoliiInstanceEpoch+':'+message);
+window.__motoliiSend('ready');
+document.addEventListener('focusin', () => window.__motoliiSend('focus-in'));
+document.addEventListener('compositionstart', () => window.__motoliiSend('composition-start'));
+document.addEventListener('compositionupdate', () => window.__motoliiSend('composition-update'));
+document.addEventListener('compositionend', () => window.__motoliiSend('composition-end'));
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Tab') {
+    if (event.metaKey || event.ctrlKey || event.altKey) { return; }
+    event.preventDefault();
+    window.__motoliiSend(event.shiftKey ? 'tab-backward' : 'tab-forward');
+    return;
+  }
+  if (event.isComposing || event.keyCode === 229) { return; }
+  if (event.key === 'Enter') { window.__motoliiSend('shortcut-enter'); return; }
+  if (event.key === 'Escape') { window.__motoliiSend('shortcut-escape'); return; }
+  if (event.key === ' ') { window.__motoliiSend('shortcut-space'); }
+}, true);
+"#;
+
+const LEFT_HTML_BODY: &str = r#"<!doctype html><html><head><meta charset="utf-8"><style>
 html,body{margin:0;height:100%;background:#25272e;color:#f5f6f8;font:15px -apple-system,sans-serif}
 main{padding:18px}input,button{font:inherit;margin:4px 0;width:100%;box-sizing:border-box}
 #drag{margin-top:18px;padding:28px 8px;border:2px solid #6fa8ff;border-radius:8px;text-align:center;touch-action:none}
-</style></head><body><main><h2>Browser WebView</h2><label>Asset search<input aria-label="Asset search" value="cloud"></label>
-<button onclick="window.ipc.postMessage('focus-right')">Focus Inspector</button>
+</style></head><body><main><h2>Browser WebView</h2><label>Asset search (IME-capable)<input aria-label="Asset search" value="cloud"></label>
+<button onclick="window.__motoliiSend('focus-request:web-right:'+(window.__motoliiEpoch||0))">Focus Inspector</button>
+<button onclick="window.__motoliiSend('focus-request:native-timeline:'+(window.__motoliiEpoch||0))">Request Timeline Focus</button>
 <div id="drag" role="button" tabindex="0" aria-label="Drag asset to native Stage">Drag asset → Stage</div>
 <p id="status">opaque child view</p></main><script>
 const drag=document.querySelector('#drag');let moves=0;
-drag.addEventListener('pointerdown',e=>{moves=0;drag.setPointerCapture(e.pointerId);window.ipc.postMessage('drag-start')});
-drag.addEventListener('pointermove',e=>{if(e.buttons&&moves++<4)window.ipc.postMessage('drag-move')});
-drag.addEventListener('pointerup',()=>window.ipc.postMessage('drag-end'));
-document.querySelector('input').addEventListener('input',()=>window.ipc.postMessage('input'));
-</script></body></html>"#;
+drag.addEventListener('pointerdown',e=>{moves=0;drag.setPointerCapture(e.pointerId);window.__motoliiSend('drag-start')});
+drag.addEventListener('pointermove',e=>{if(e.buttons&&moves++<4)window.__motoliiSend('drag-move')});
+drag.addEventListener('pointerup',()=>window.__motoliiSend('drag-end'));
+const input=document.querySelector('input');
+input.addEventListener('input',()=>window.__motoliiSend('input'));
+</script>"#;
 
-const RIGHT_HTML: &str = r#"<!doctype html><html><head><meta charset="utf-8"><style>
+const RIGHT_HTML_BODY: &str = r#"<!doctype html><html><head><meta charset="utf-8"><style>
 html,body{margin:0;height:100%;background:#292b32;color:#f5f6f8;font:15px -apple-system,sans-serif}
 main{padding:18px}input,button{font:inherit;margin:4px 0;width:100%;box-sizing:border-box}
 </style></head><body><main><h2>Inspector WebView</h2><label>Opacity<input aria-label="Opacity" value="100%"></label>
-<button onclick="window.ipc.postMessage('input')">Apply</button><p>same React-kit boundary</p></main></body></html>"#;
+<button onclick="window.__motoliiSend('input')">Apply</button><p>same React-kit boundary</p></main>"#;
+
+fn left_html() -> String {
+    format!("{LEFT_HTML_BODY}<script>{RELAY_SCRIPT}</script></body></html>")
+}
+
+fn right_html() -> String {
+    format!("{RIGHT_HTML_BODY}<script>{RELAY_SCRIPT}</script></body></html>")
+}
 
 fn main() {
     let event_loop = EventLoop::<UserEvent>::with_user_event()
@@ -578,4 +2530,144 @@ fn main() {
     let proxy = event_loop.create_proxy();
     let mut state = State::new(proxy);
     event_loop.run_app(&mut state).expect("surface host");
+    if state
+        .automated_focus
+        .as_ref()
+        .is_some_and(|check| check.pass != Some(true))
+    {
+        std::process::exit(1);
+    }
+    if state
+        .automated_lifecycle
+        .as_ref()
+        .is_some_and(|check| check.pass != Some(true))
+    {
+        std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_click_above_timeline_boundary_resolves_to_stage() {
+        let layout = SurfaceLayout::try_new(2400, 1600, 2.0).unwrap();
+        assert_eq!(native_click_role(0.0, layout), FocusRole::NativeStage);
+        assert_eq!(
+            native_click_role(f64::from(layout.timeline_y) - 1.0, layout),
+            FocusRole::NativeStage
+        );
+    }
+
+    #[test]
+    fn native_click_on_or_below_timeline_boundary_resolves_to_timeline() {
+        let layout = SurfaceLayout::try_new(2400, 1600, 2.0).unwrap();
+        assert_eq!(
+            native_click_role(f64::from(layout.timeline_y), layout),
+            FocusRole::NativeTimeline
+        );
+        assert_eq!(
+            native_click_role(f64::from(layout.timeline_y) + 50.0, layout),
+            FocusRole::NativeTimeline
+        );
+    }
+
+    #[test]
+    fn ax_node_id_and_ax_role_cover_every_projection_node() {
+        let layout = SurfaceLayout::try_new(2400, 1600, 2.0).unwrap();
+        let projection = AccessibilityProjection::project(SemanticCounts::default(), layout);
+        for node in projection.nodes() {
+            // AxNodeId/AxRoleの各バリアントが未知値としてpanicせず既知の
+            // accesskit型へ写像できることを確認する。
+            let _ = ax_node_id(node.id);
+            let _ = ax_role(node.role);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_tab_monitor_accepts_plain_and_shift_tab() {
+        assert_eq!(
+            native_tab_direction(48, false, NSEventModifierFlags::empty()),
+            Some(false)
+        );
+        assert_eq!(
+            native_tab_direction(48, false, NSEventModifierFlags::NSEventModifierFlagShift),
+            Some(true)
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_tab_monitor_rejects_repeat_and_other_keys() {
+        assert_eq!(
+            native_tab_direction(48, true, NSEventModifierFlags::empty()),
+            None
+        );
+        assert_eq!(
+            native_tab_direction(36, false, NSEventModifierFlags::empty()),
+            None
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn native_tab_monitor_does_not_steal_modified_tab() {
+        for modifier in [
+            NSEventModifierFlags::NSEventModifierFlagCommand,
+            NSEventModifierFlags::NSEventModifierFlagControl,
+            NSEventModifierFlags::NSEventModifierFlagOption,
+        ] {
+            assert_eq!(native_tab_direction(48, false, modifier), None);
+        }
+    }
+
+    #[test]
+    fn web_tab_relay_does_not_steal_non_shift_modifiers() {
+        assert!(RELAY_SCRIPT.contains("event.metaKey || event.ctrlKey || event.altKey"));
+    }
+
+    #[test]
+    fn web_content_pid_parser_accepts_only_the_exact_xpc_executable() {
+        let exact = "/System/Library/Frameworks/WebKit.framework/Versions/A/\
+XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent";
+        let output = format!(
+            "  41 {exact}\n  42 {exact} --unexpected\n  43 /tmp/com.apple.WebKit.WebContent\n"
+        );
+        assert_eq!(parse_web_content_pids(&output), BTreeSet::from([41]));
+    }
+
+    #[test]
+    fn offline_fixture_relays_the_webview_instance_epoch() {
+        assert!(RELAY_SCRIPT.contains("__INSTANCE_EPOCH__"));
+        assert!(RELAY_SCRIPT.contains("window.__motoliiInstanceEpoch+':'+message"));
+    }
+
+    #[test]
+    fn l3_closure_rejects_missing_same_window_observations() {
+        assert!(!LifecycleEvidence::default().l3_closure_complete());
+    }
+
+    #[test]
+    fn l3_closure_requires_every_bounded_observation() {
+        let evidence = LifecycleEvidence {
+            minimize_cycles: 1,
+            fullscreen_entries: 1,
+            fullscreen_exits: 1,
+            unavailable_intervals: 1,
+            unavailable_size_events: 1,
+            unavailable_acquire_skips: 1,
+            pointer_capture_starts: 2,
+            pointer_capture_moves: 2,
+            pointer_boundary_crossings: 2,
+            pointer_cancels: 2,
+            pointer_focus_losses: 1,
+            post_operation_invariant_checks: 7,
+            bounds_layout_checks: 7,
+            stale_probe_invariant_checks: 1,
+            ..LifecycleEvidence::default()
+        };
+        assert!(evidence.l3_closure_complete());
+    }
 }

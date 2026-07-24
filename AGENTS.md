@@ -104,6 +104,7 @@ Rerunを一度でも根拠・再利用箇所・変更案に含める発注書は
 - 完了条件は自動判定(`cargo test`/ゴールデンイメージ)。「動いた気がする」を完了条件にしない
 - **テストを「直して」通さない**: ゴールデン参照画像・受け入れテストの削除・期待値書き換え・実装のspecial-caseで緑にすることを禁止。**テストが間違っていると思ったら実装を止めて報告する**。参照画像の正当な更新は理由を明記した独立PRに分離(specs/README.md 粒度ルール6、[pitfalls H-2](docs/pitfalls-and-roadmap.md))
 - **新規ヘルパーを書く前に既存を検索する**: 同等物が既にないかgrepしてから書く(LLM開発の最大の負債はコピペ増殖 — [pitfalls H-3](docs/pitfalls-and-roadmap.md))。テストヘルパーのtestkit集約ルールの一般化
+- **新しい汎用機構を自作する前に責任を処分する**: repo内経路、[決定逆引き台帳](docs/decision-index.md)、[参考ライブラリ一覧](docs/references.md)、一次資料の順に確認し、`REUSE / ADOPT / WRAP / EXTERNAL / BUILD / REJECT`と`RETIREMENT`を選ぶ。file dialog、clipboard、OS bridge、layout、cache、scheduler、codec、test runner等の一般問題を、初期差分が短いという理由だけで`BUILD`しない。製品外harness/toolは製品へimportしない`FROZEN / DELETE-LATER`証拠カプセルに閉じ、一般機能を持つ長寿命owner、公開面、状態正本、background service、platform abstractionを増やさない。後続ループは各粒を`PASS / REDUCE / STOP`で再判定し、前粒のadapterや採択を自動継承しない。依存候補の型・thread model・OS handleが公開API、Document、serde面へ漏れる、または絶対規律の正本を依存側へ移さないと使えない場合はSTOPする。詳細は[依存優先・責任最小化ゲート](docs/reviews/2026-07-24-dependency-first-responsibility-gate.md)
 - **仕様書の未決事項に依存するタスクに着手しない**: 未決を「もっともらしいデフォルト」で埋めない。仕様書改訂PRで先に潰す(specs/README.md 粒度ルール7、GR-PV)
 - **完了報告は証跡付き**: 実行したコマンドとテスト出力を添える。「動くはず」を報告にしない
 - 提出前に `cargo test --workspace` 全緑を確認

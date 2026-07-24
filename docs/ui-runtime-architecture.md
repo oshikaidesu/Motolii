@@ -204,12 +204,17 @@ toastはdock panelではない。headless layoutはlogical rectangleだけを計
 書かず、panelを移してもHost snapshot、selection、Undo ownerを増やさない。isolated fixtureの合否と未証明範囲は
 [detachable panel / multi-window契約](reviews/2026-07-22-m3-detachable-panel-window-contract.md)を正とする。
 
-### G0-9実機spikeまで未決
+### G0-9L限定確定 / G0-9D未決
 
 - macOS/Windowsのfocus、DPI、resize、z-order、pointer capture、surface/device lost、a11y tree接合の受入
 - direct wgpu枝とdirect wgpu + Vello局所pass枝の製品採択
 - egui baselineの撤去条件を満たすplatform証拠と代替診断経路
 - Linuxでsystem WebViewを使うかCEF比較へ進むか
+
+G0-9Lは固定した主開発Mac構成のplatform prerequisite evidenceだけを限定確定し、G0-9DはWindowsと追加hardwareを含む
+Distribution Readyを判定する。G0-9L合格後もparent G0-9、G0-9D、G0-6H、G0-3は未完了のまま残し、
+egui baselineを削除しない。G0-9LはW0b、H1b、Motolii Studio Preview、通常製品window結合を解禁しない。
+G0-9Lは固定Macのplatform prerequisite evidenceに限って実機合格したが、これらの製品結合を実装しない。
 
 ### G0-3 / GAP-13で未決
 

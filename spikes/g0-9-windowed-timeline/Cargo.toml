@@ -3,16 +3,24 @@ name = "g0-9-windowed-timeline"
 version = "0.1.0"
 edition = "2021"
 publish = false
+default-run = "g0-9-windowed-timeline"
 
 # 製品workspaceから隔離し、公開API・Document・依存へ焼かない。
 [workspace]
 
 [dependencies]
 bytemuck = { version = "1", features = ["derive"] }
+egui = "0.35.0"
+egui-wgpu = "0.35.0"
+fontique = "0.10"
 g0-9-surface-host = { path = "../g0-9-surface-host" }
+harfrust = "0.7"
 pollster = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
+vello = "0.9.0"
 wgpu = "29"
 winit = "0.30.9"
 wry = "0.55.1"
