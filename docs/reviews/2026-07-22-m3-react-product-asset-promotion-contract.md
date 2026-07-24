@@ -82,7 +82,7 @@ authorityの優先順は次とする。
 | 製品面 | 固定source | 処分 |
 |---|---|---|
 | Browser | `src/candidates/DiscoveryBrowserCandidate.jsx`、`discovery-browser-candidate.css` | componentとCSSを直接移管。legacy shellへのreplace hookだけ外す |
-| Easing trigger / popup oracle | `src/candidates/EasingGraphCandidate.jsx`、`easing-graph-candidate.css`、`easing-graph-model.js` | Graph icon/現在値要約だけを直接移管する。popup frame/preset/user library/form/curveはnativeへ移し、固定React描画とmodelは幅・枠・余白・情報階層を含むvisual/interaction oracleとして維持する |
+| Easing trigger / popup oracle | trigger DOM/CSSは`docs/mocks/m3-vism-host-boundary.html`の`#interval-easing`だけに存在し、`TimelineCandidate.jsx`はglobal DOM bridge。`EasingGraphCandidate.jsx`、CSS、modelはpopup全体 | triggerを固定mock内で同形React化してparity合格後にだけ直接移管する。既存の現在値要約authorityはobject・channelとpressed/disabledのaccessible stateまで。visible summary chromeは固定source不在の未決事項で発明しない。popup frame/preset/user library/form/curve/modelはnative oracleとして維持する |
 | `KEYS / LAYERS` | `src/candidates/TimelineCandidate.jsx`内の`.candidate-key-tools` subtree、`timeline-candidate.css`の対応規則 | native Timeline本体からReact tool panelだけを同じDOM/CSSのまま抽出して移管 |
 | Inspector | `src/legacy/LegacyHostBoundaryScreen.jsx`から`LegacyInspector`へ流れるlegacy DOM/script。`src/surfaces/InspectorSurface.jsx`は縮約skeleton | 正しい独立React componentがまだ無い。先にモック側でlegacy出力を同形Reactへ抽出し、parity後に移管する。skeletonを製品版として使わない |
 | 可変panel | `src/layout/ResizablePanelLayout.jsx`、`resizable-panel-layout.css` | Web所有panelのlayout componentだけを移管候補にする。native viewport境界はHost topologyに従う |
@@ -248,19 +248,21 @@ visual 1%は移管時の回帰検知上限であり、縮約再実装を1%まで
 
 1. **R0 source inventory**: 固定source、legacy依存、CSS/model/test closureを固定
 2. **R1 Browser ownership**: Browserをproduct ownerへ移し、mockをconsumerへ反転。意味変更なし
-3. **R2 Easing trigger ownership**: Graph icon/現在値要約だけをproduct ownerへ移し、popup全体をnative oracleとして固定。Host/User settings/D2接続は後続
-4. **R3 KEYS/LAYERS extraction**: native Timeline本体からReact tool panelだけを抽出・移管
-5. **R4 Inspector React化**: legacy DOM/scriptを固定モック内で同形Reactへ抽出後、product ownerへ移す
-6. **R5 projection/intent**: 一面ずつmock stateをHost read modelへ交換
-7. **R6 diagnostic routes**: 契約確認面をdevelopment専用routeへ分離
-8. **H1b WebView Host**: codec、offline bundle、focus/IME/AX、surface topologyへ接続
-9. **製品縦切り**: Rectangle D&D → D2 →同一LayerId Timeline/Inspector → key → easing → Undo
+3. **R2A Easing trigger mock-side extraction**: archived HTMLのbutton DOM/class/SVG/ARIA/interactionを固定mock内で同形React化し、既存parityへ合格。product package、Host接続、visible summary追加なし
+4. **R2B Easing trigger ownership**: R2Aの独立React sourceだけをproduct ownerへ移し、mockをconsumerへ反転。popup全体をnative oracleとして固定。Host/User settings/D2接続は後続
+5. **R3 KEYS/LAYERS extraction**: native Timeline本体からReact tool panelだけを抽出・移管
+6. **R4 Inspector React化**: legacy DOM/scriptを固定モック内で同形Reactへ抽出後、product ownerへ移す
+7. **R5 projection/intent**: 一面ずつmock stateをHost read modelへ交換
+8. **R6 diagnostic routes**: 契約確認面をdevelopment専用routeへ分離
+9. **H1b WebView Host**: codec、offline bundle、focus/IME/AX、surface topologyへ接続
+10. **製品縦切り**: Rectangle D&D → D2 →同一LayerId Timeline/Inspector → key → easing → Undo
 
 R0〜R6のReact asset作業は、WebView platform受入やplugin公開契約を決めない範囲で実施できる。
 H1b以降はG0-9、D2/D3、U2h/U3a等の既存停止線を引き続き満たす必要がある。
 
 2026-07-25現在、R0とR1は完了し、Browserの固定sourceは`ui/motolii-web`が所有して
-mockがproduct exportを読む。現在orderはR2である。R2以降とMotolii Studio Previewは未実装である。
+mockがproduct exportを読む。固定source再照合によりR2はR2A/R2Bへ分割し、現在orderはR2Aである。
+R2以降とMotolii Studio Previewは未実装である。
 
 ## 13. 既存文書との関係
 

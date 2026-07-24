@@ -58,9 +58,17 @@
     },
     {
       "id": "easing",
-      "classification": "react-trigger-native-popup-oracle",
+      "classification": "react-trigger-source-absent-native-popup-oracle",
+      "sourceStatus": "independent-react-trigger-source-absent",
+      "triggerAuthority": {
+        "path": "docs/mocks/m3-vism-host-boundary.html",
+        "sha256": "a20bd36d6b8b241ef4ec21adda6b045e470bf89fbc78e2788207aa6d0875ec68",
+        "selector": "#interval-easing",
+        "role": "archived-html-same-shape-extraction-authority"
+      },
       "componentPath": "docs/mocks-ui/src/candidates/EasingGraphCandidate.jsx",
       "componentExport": "EasingGraphCandidate",
+      "componentRole": "popup-native-oracle-not-trigger-source",
       "runtimeClosure": [
         {
           "path": "docs/mocks-ui/src/candidates/EasingGraphCandidate.jsx",
@@ -105,9 +113,10 @@
         "react"
       ],
       "promotionBoundary": [
-        "Graph trigger/icon",
-        "current-value summary"
+        "Graph trigger/icon after mock-side same-shape React extraction",
+        "accessible object/channel and pressed/disabled state"
       ],
+      "requiredNextAction": "mock-side-same-shape-react-trigger-extraction-and-parity-before-r2b",
       "nativeOracle": [
         "popup frame",
         "presets",

@@ -6,7 +6,7 @@
 
 ## 問い
 
-React所有面に相当するWebViewがGraph triggerと現在値要約だけを持ち、Hostが別native windowを生成し、そのwindow内の
+React所有面に相当するWebViewがGraph triggerとobject・channel・pressed/disabledのaccessible stateだけを持ち、Hostが別native windowを生成し、そのwindow内の
 preset shelf、user preset、Bezier curve、handle、数値表示をdirect wgpuで一体描画できるか。さらにcurveと
 presetをReact/nativeへ二重所有せず、drag releaseとUser settings writeを別のtyped intentとして数えられるか。
 
@@ -26,7 +26,7 @@ favorite表示を実機で比較した。Advanced cardsはこのspikeでは**外
 | 指標 | 結果 |
 |---|---:|
 | popup content owner | native-wgpu |
-| React owner | trigger-and-summary-only |
+| React owner | trigger-and-accessible-state-only |
 | GPU adapter / backend | Apple M4 / Metal |
 | handle drag release | semantic commit 1 |
 | preset save + favorite | settings write 2 |

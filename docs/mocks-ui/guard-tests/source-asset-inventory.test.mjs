@@ -56,10 +56,24 @@ const EXPECTED_EASING_RUNTIME_HASHES = {
   [EXPECTED_EASING_CSS_SOURCE]: "644064b649778d6dfe08de4d73751d5e7b65b96133115eba07be799aeb8e0329",
   [EXPECTED_EASING_MODEL_SOURCE]: "22a6745bcd77b6f71f5c62563b0165f6161a234abebd2a10f326d210a0a6fad9",
 };
+const EXPECTED_EASING_CLASSIFICATION =
+  "react-trigger-source-absent-native-popup-oracle";
+const EXPECTED_EASING_SOURCE_STATUS =
+  "independent-react-trigger-source-absent";
+const EXPECTED_EASING_TRIGGER_AUTHORITY = {
+  path: "docs/mocks/m3-vism-host-boundary.html",
+  sha256: "a20bd36d6b8b241ef4ec21adda6b045e470bf89fbc78e2788207aa6d0875ec68",
+  selector: "#interval-easing",
+  role: "archived-html-same-shape-extraction-authority",
+};
+const EXPECTED_EASING_COMPONENT_ROLE =
+  "popup-native-oracle-not-trigger-source";
 const EXPECTED_EASING_PROMOTION_BOUNDARY = [
-  "Graph trigger/icon",
-  "current-value summary",
+  "Graph trigger/icon after mock-side same-shape React extraction",
+  "accessible object/channel and pressed/disabled state",
 ];
+const EXPECTED_EASING_NEXT_ACTION =
+  "mock-side-same-shape-react-trigger-extraction-and-parity-before-r2b";
 const EXPECTED_EASING_NATIVE_ORACLE = [
   "popup frame",
   "presets",
@@ -419,6 +433,23 @@ function findHtmlClass(node, className) {
   return null;
 }
 
+function findHtmlId(node, id) {
+  if (node?.attribs?.id === id) return node;
+  for (const child of node?.children ?? []) {
+    const found = findHtmlId(child, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+function countHtmlTags(node, tagName) {
+  let count = node?.name === tagName ? 1 : 0;
+  for (const child of node?.children ?? []) {
+    count += countHtmlTags(child, tagName);
+  }
+  return count;
+}
+
 function hasCssSelectorRoot(cssSource, rootSelector) {
   const stylesheet = postcss.parse(cssSource);
   return stylesheet.nodes.some(
@@ -707,21 +738,51 @@ async function validateInventory(manifest, options = {}) {
   ensureExactKeys(easing, [
     "id",
     "classification",
+    "sourceStatus",
+    "triggerAuthority",
     "componentPath",
     "componentExport",
+    "componentRole",
     "runtimeClosure",
     "localImports",
     "externalPackages",
     "promotionBoundary",
+    "requiredNextAction",
     "nativeOracle",
     "behavioralEvidence",
   ]);
   assert.equal(easing.id, "easing");
-  assert.equal(easing.classification, "react-trigger-native-popup-oracle");
+  assert.equal(easing.classification, EXPECTED_EASING_CLASSIFICATION);
+  assert.equal(easing.sourceStatus, EXPECTED_EASING_SOURCE_STATUS);
+  ensureExactKeys(easing.triggerAuthority, ["path", "sha256", "selector", "role"]);
+  assert.deepEqual(easing.triggerAuthority, EXPECTED_EASING_TRIGGER_AUTHORITY);
+  assert.equal(
+    hashBytes(readBlobFromCommit(easing.triggerAuthority.path, fixedSourceCommit)),
+    easing.triggerAuthority.sha256,
+  );
+  assert.equal(
+    hashBytes(await readFile(absoluteFromRelative(easing.triggerAuthority.path))),
+    easing.triggerAuthority.sha256,
+  );
+  const triggerHtml = await readFile(
+    absoluteFromRelative(easing.triggerAuthority.path),
+    "utf8",
+  );
+  const trigger = findHtmlId({ children: htmlToDOM(triggerHtml) }, "interval-easing");
+  assert.ok(trigger);
+  assert.equal(trigger.name, "button");
+  assert.ok(hasHtmlClass(trigger, "interval-easing"));
+  assert.equal(trigger.attribs["aria-pressed"], "false");
+  assert.equal(trigger.attribs["aria-controls"], "easing-panel");
+  assert.equal(countHtmlTags(trigger, "svg"), 1);
+  assert.equal(countHtmlTags(trigger, "path"), 1);
+  assert.equal(countHtmlTags(trigger, "circle"), 2);
   assert.equal(easing.componentPath, EXPECTED_EASING_SOURCE);
   assert.equal(easing.componentExport, "EasingGraphCandidate");
+  assert.equal(easing.componentRole, EXPECTED_EASING_COMPONENT_ROLE);
   assert.deepEqual(easing.externalPackages, ["react"]);
   assert.deepEqual(easing.promotionBoundary, EXPECTED_EASING_PROMOTION_BOUNDARY);
+  assert.equal(easing.requiredNextAction, EXPECTED_EASING_NEXT_ACTION);
   assert.deepEqual(easing.nativeOracle, EXPECTED_EASING_NATIVE_ORACLE);
 
   const expectedEasingRuntimeOrder = [
@@ -1312,6 +1373,25 @@ test("rejects incomplete R0, wrong Easing classification, and changed Easing pac
     await validateInventory(wrongClassification);
   });
 
+  const fakeTriggerSource = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    sourceStatus: "independent-react-trigger-source-present",
+  }));
+  await assert.rejects(async () => {
+    await validateInventory(fakeTriggerSource);
+  });
+
+  const wrongTriggerAuthority = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    triggerAuthority: {
+      ...easing.triggerAuthority,
+      path: EXPECTED_EASING_SOURCE,
+    },
+  }));
+  await assert.rejects(async () => {
+    await validateInventory(wrongTriggerAuthority);
+  });
+
   const changedPackages = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
     ...easing,
     externalPackages: ["react", "react-dom"],
@@ -1356,6 +1436,25 @@ test("rejects Easing closure, ownership split, evidence, and extra local depende
   }));
   await assert.rejects(async () => {
     await validateInventory(promotedPopup);
+  });
+
+  const visibleSummary = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    promotionBoundary: [
+      easing.promotionBoundary[0],
+      "visible current-curve summary",
+    ],
+  }));
+  await assert.rejects(async () => {
+    await validateInventory(visibleSummary);
+  });
+
+  const promotedPopupComponent = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    componentRole: "product-trigger-source",
+  }));
+  await assert.rejects(async () => {
+    await validateInventory(promotedPopupComponent);
   });
 
   const missingEvidence = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({

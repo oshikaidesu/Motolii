@@ -23,7 +23,7 @@ browser WebGPU、Three.js、Konva、Pixiを製品描画runtimeとして使う箇
 
 | React source | 描画・入力の実体 | 製品owner | 現在地 |
 |---|---|---|---|
-| `EasingGraphCandidate.jsx` | 5 SVG、Bezier/高度preset path、handle pointer操作 | native popup。Reactはtriggerと現在値要約 | native `510 x 284`外観、drag 1 commit、user preset/favoriteのisolated spike合格。高度補間意味と全visual matrixは未接続 |
+| `EasingGraphCandidate.jsx` | 5 SVG、Bezier/高度preset path、handle pointer操作 | native popup。Reactはtriggerとobject・channel・pressed/disabledのaccessible state。visible summary chromeは未決 | native `510 x 284`外観、drag 1 commit、user preset/favoriteのisolated spike合格。高度補間意味と全visual matrixは未接続 |
 | `GraphViewCandidate.jsx` | 1 SVG、multi-channel curve、key/tangent drag、playhead、resize座標変換 | native Timeline系surface + headless interaction | Blender-like native core fixture合格。pan/zoom/marquee/AX、Motolii snapshot/D2接続は後続 |
 | `TimelineCandidate.jsx` time plane | absolute-position DOM、bar/key/playhead、row/depth投影 | native Timeline | time ruler、S/M rail、bar、key、playheadはnative外観first pass合格。headless操作、D2、AXは未接続 |
 | `TimelineCandidate.jsx` Depth Rail | absolute-position DOM上の一次元Z projection、stack、range、分布preview | native Z軸Timeline | ownerと意味は既決。native UI fixtureは未作成 |
