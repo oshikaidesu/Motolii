@@ -139,6 +139,16 @@ process exit 0と`automated_focus_pass == true`を確認した。20 lib + 7 main
 tests、workspace、docsが全緑で、Grok/FableともP0/P1=0、`VERDICT: ACCEPT`。
 これはCU-0G03 DONEまたはG0-9L PASSを宣言しない。
 
+CU-0G05LのL4正本照合で、当時のmachine focus JSONが`/tmp`だけにありrepositoryへ
+残っていないことを検出した。Fableのread-only助言を受け、実装を増やさずcommit
+`b48eb583`の既存commandを固定構成で再実行した。process exit 0、
+`automated_focus_pass == true`、初期観測1件と正逆8遷移のrole、実
+first-responder種別、到達元一致を
+[raw](g0-9-surface-host-evidence/focus-e2e-raw.json)と
+[envelope](g0-9-surface-host-evidence/focus-e2e-report.json)へ保持した。
+これはmachine focus rawの保存修復だけであり、人間IME/VoiceOver審判、製品window、
+L3 lifecycleを再判定しない。
+
 ## CU-0G03 人間審判（2026-07-24）
 
 判定者であるユーザーが、同じlocal acceptance harnessの実windowで次を人間審判し、

@@ -1,7 +1,7 @@
 # G0-9L L1 renderer計測の正本修正
 
 作成日: 2026-07-24
-状態: **決定 / Grok R2 P0/P1/P2=0 / G0-9L停止**
+状態: **決定 / CU-0G02B・CU-0G05L DONE / G0-9L fixed-Mac証拠限定PASS**
 
 ## 1. 検出した不整合
 
@@ -58,7 +58,8 @@ wgpu標準queryの一意slotを初期化時だけ確保し、測定終了後のG
 ## 4. 状態と非目標
 
 - CU-0G02は定義済み二方式のCPU/input/RSS比較として`DONE`を維持する
-- CU-0G02BHとCU-0G02Bは`DONE / FROZEN`、CU-0G05Lは未完了で、`G0-9L: PASS`を宣言しない
+- CU-0G02BH、CU-0G02B、CU-0G05Lは`DONE / FROZEN`。`G0-9L: PASS`は
+  fixed-Mac prerequisite evidenceだけに限定し、parent G0-9や製品粒の合格を宣言しない
 - 絶対閾値、renderer勝者、egui削除を決めない
 - GPU timestampを製品telemetry、profiling API、常設resourceへ昇格しない
 - W0b、H1b、Motolii Studio Preview、製品window、G0-9D、G0-6H、G0-3/GAP-13を解禁しない
@@ -82,16 +83,18 @@ CU-0G05Lのmanifestを再構築する。
 CU-0G02BHはwgpu標準query、初期化時のbounded query set、一意slot、測定後のGPU完了待ちと
 一括resolve/mapだけで閉じた。35 tests、両arm各5回×500 frameとゼロ値拒否修正後の各500
 frame実window診断を通し、Grok R2はP0/P1=0、`VERDICT: ACCEPT`だった。製品telemetryや
-profiler frameworkへ昇格せず`FROZEN / DELETE-LATER`とし、CU-0G02Bだけを`DO`へ上げる。
+profiler frameworkへ昇格せず`FROZEN / DELETE-LATER`とし、この時点でCU-0G02Bだけを
+`DO`へ上げた。
 
 CU-0G02Bは固定commit `7c3a590e33874d60f7fbb1e1ac40173011db7649`、同一session
 `cu-0g02b-20260724-01`で既存二armを各30秒再実測した。両armはcomplete、toolchain、
 lockfile、全digest、device/window条件が一致し、pixel readback 0、query result readback 1、
 測定中resource生成0を満たす。[typed raw](../spikes/g0-9-windowed-timeline.md#cu-0g02b-gpu-timestamp-raw-comparison2026-07-24)
 と比較artifactをGrokが再照合し、P0/P1=0、`VERDICT: ACCEPT`だった。CU-0G02Bを
-`DONE / FROZEN`、CU-0G05Lだけを`DO`へ上げる。
+`DONE / FROZEN`とし、この時点でCU-0G05Lだけを`DO`へ上げた。
 
 Grok R1のP1（topology正本に残った三arm表現）とP2を全件反映し、topology、
 renderer再選定、UI runtime、段階化L1を同じ意味へ揃えた。R2はP0/P1/P2=0、
 `VERDICT: ACCEPT`だったため本修正を決定し、その後のCU-0G02B実測・証拠reviewも
-P0/P1=0で完了した。現在はCU-0G02Bを`DONE / FROZEN`、CU-0G05Lだけを`DO`とする。
+P0/P1=0で完了した。さらにCU-0G05Lが単一manifestをGrok R2 P0/P1/P2=0で束ね、
+現在はCU-0G02BとCU-0G05Lを`DONE / FROZEN`とする。

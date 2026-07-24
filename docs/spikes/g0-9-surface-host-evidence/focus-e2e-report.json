@@ -1,0 +1,75 @@
+{
+  "ticket": "CU-0G05L L2 raw retention",
+  "captured_at": "2026-07-24",
+  "execution_commit": "b48eb583dd599c585a0ff49da744849631a21433",
+  "source_implementation_commits": [
+    "4bb7f220a8625bece3959c6f83d988288f6dab12",
+    "07286004d5fae8612441ed4520aaf7571bac57bb"
+  ],
+  "status": "raw_retained_review_pending",
+  "toolchain": {
+    "rustc": "1.96.1 (31fca3adb 2026-06-26)",
+    "cargo": "1.96.1 (356927216 2026-06-26)",
+    "wgpu": "29.0.4",
+    "wry": "0.55.1"
+  },
+  "fixed_configuration": {
+    "model_identifier": "Mac16,12",
+    "chip": "Apple M4",
+    "memory": "16 GB",
+    "gpu": "Apple M4",
+    "metal": "Metal 3",
+    "os": "macOS 15.5",
+    "os_build": "24F74",
+    "display": "Built-in Liquid Retina Display",
+    "display_resolution": "2560 x 1664 Retina",
+    "scale_factor": 2.0
+  },
+  "raw_report_path": "docs/spikes/g0-9-surface-host-evidence/focus-e2e-raw.json",
+  "raw_report_sha256": "81a64bc6ccdf1f6f119b17c1b6b2ebfd5325d460ac06c9c2e4240cee7fbbc43f",
+  "command": "G0_9_RESIZE_TARGET=0 G0_9_AUTOMATE_FOCUS=1 G0_9_REPORT=<path> cargo run --manifest-path spikes/g0-9-surface-host/Cargo.toml",
+  "process_exit": 0,
+  "assertions": {
+    "automated_focus_pass": true,
+    "automated_focus_error": null,
+    "initial_observation_count": 1,
+    "transition_observation_count": 8,
+    "all_observations_match_role": true,
+    "forward_roles": [
+      "native-stage",
+      "web-left",
+      "native-timeline",
+      "web-right",
+      "native-stage"
+    ],
+    "reverse_roles": [
+      "native-stage",
+      "web-right",
+      "native-timeline",
+      "web-left",
+      "native-stage"
+    ],
+    "native_sources": [
+      "automated-start",
+      "web-dom"
+    ],
+    "web_sources": [
+      "native-monitor"
+    ],
+    "shortcut_enter": 0,
+    "shortcut_escape": 0,
+    "shortcut_space": 0
+  },
+  "scope": {
+    "machine_focus_only": true,
+    "ime_or_voiceover_human_judgment": false,
+    "product_window": false,
+    "distribution_ready": false
+  },
+  "retirement": {
+    "state": "FROZEN / DELETE-LATER",
+    "product_import": false,
+    "forward_maintenance": false,
+    "rerun_scope": "only when this fixed configuration or retained evidence is invalidated"
+  }
+}

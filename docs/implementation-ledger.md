@@ -39,11 +39,11 @@
 | M0 | `DONE` | spike完了 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み |
 | M2 | **基盤再締結済み** | D1l、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。D5は再締結の閉集合外で、骨格到達・統合審判pending |
-| M3 | **UI責任境界・surface topology・G0-9段階化決定 / CU-0G05L再検収可** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0a〜U0e-2、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4、U0e-2R、GR-D1〜R3、CU-0G02〜04Bは完了済み。CU-0G05L反対側reviewで検出したL1三arm文言ドリフトはCU-0G02Aで候補stack対egui baselineへ修正し、GPU raw不足はCU-0G02BHのbounded wgpu query harnessとCU-0G02Bの同一session再実測で閉じた。G0-9LはCU-0G05Lの反対側reviewと限定確定までPASSにせず、W0b、H1b、Motolii Studio Preview、window結合を停止する。G0-6Hも独立した人間審判としてU0e-3とW0bの製品前提を停止する。native layout/hit-test/gesture kernelはtoolkit/renderer非依存で進められる。plugin UI公開契約は分離したG0-3 / GAP-13まで停止 |
+| M3 | **UI責任境界・surface topology・G0-9段階化決定 / G0-9L固定Mac証拠限定確定** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0a〜U0e-2、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4、U0e-2R、GR-D1〜R3、CU-0G02〜05Lは完了済み。L1正本修正、bounded wgpu query、同一session GPU再実測、L2/L3証拠を単一manifestへ束ね、Grok R2 P0/P1/P2=0で固定Mac prerequisite evidenceだけを限定確定した。parent G0-9、G0-9D、W0b、H1b、Motolii Studio Preview、window結合は未解禁。G0-6Hも独立した人間審判としてU0e-3とW0bの製品前提を停止する。native layout/hit-test/gesture kernelはtoolkit/renderer非依存で進められる。plugin UI公開契約は分離したG0-3 / GAP-13まで停止 |
 | M4 | **契約spike可** | K0でRoD/RoIのruntime契約を凍結。その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む |
 | M5 | **identity spike可** | P0IでDuplicator/Instance identityを凍結 |
 
-[M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3はU0a入場済みで、[UI runtime責任境界](ui-runtime-architecture.md)と[G0-9段階化](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)も決定済み。G0-9L実機合格まではWebView/native surfaceのplatform prerequisite evidenceを確定しない。G0-9L合格後も固定Macのplatform prerequisite evidenceだけを限定確定し、W0b、H1b、Motolii Studio Preview、window結合を解禁しない。G0-6Hは独立し、U0e-3とW0bの製品前提を止め続ける。G0-9DまでDistribution Readyを名乗らない。plugin UI公開契約はG0-9合格と分離し、G0-3 / GAP-13の決定まで発注しない。headlessなTimeline/Stage projectionもSelected U seriesの前枝番がmainへ到達した時だけ次の1枝番を発注する。
+[M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3はU0a入場済みで、[UI runtime責任境界](ui-runtime-architecture.md)と[G0-9段階化](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)も決定済み。G0-9Lは固定Macのplatform prerequisite evidenceだけを限定確定したが、W0b、H1b、Motolii Studio Preview、window結合を解禁しない。G0-6Hは独立し、U0e-3とW0bの製品前提を止め続ける。G0-9DまでDistribution Readyを名乗らない。plugin UI公開契約はG0-9合格と分離し、G0-3 / GAP-13の決定まで発注しない。headlessなTimeline/Stage projectionもSelected U seriesの前枝番がmainへ到達した時だけ次の1枝番を発注する。
 
 ## 主クリティカルパス
 
@@ -103,7 +103,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | 4 | CU-0G03 | M3 human | `DONE` | — | ユーザーがlocal acceptance harnessの実windowでmacOS実IME、VoiceOver、native/Web focus往復、fullscreen/minimize後のfocus/IME復帰を人間審判して合格。機械focus試験から外挿せず[人間証跡](spikes/g0-9-surface-host.md#cu-0g03-人間審判2026-07-24)を保存 | CU-0G04を単独実行 |
 | 5 | CU-0G04 | M3 measure | `DONE / FROZEN` | — | 既存winit/wgpu/wry/macOS標準経路へ責任を戻し、同じ実windowで102 resize、実DPI event、合成capture、注入Lost再present、実WebContent終了とbounded reload、offline/stale拒否、sentinel/resource/semantic write不変を[単一manifest](spikes/g0-9-surface-host-evidence/report.json)へ保存。commit `021a16e7`の固定Mac証拠カプセルとしてfreezeし、製品・後続粒へimportしない | CU-0G04Bを単独実行 |
 | 6 | CU-0G04B | M3 measure | `DONE / FROZEN` | — | Fable助言で検出したL3不足へ既存surface-hostだけを`REUSE / WRAP`し、一続きの実windowでminimize/restore、fullscreen往復、1×1一時不可用、pointer capture/cancel/focus lossを既存resize/stale/Lost/WebContent/offlineと[同じraw manifest](spikes/g0-9-surface-host-evidence/l3-closure-report.json)へ収録。33 tests、実window exit 0、workspace/docs全緑、Grok R2 P0/P1=0でACCEPT。`FROZEN / DELETE-LATER`として製品・後続粒へimportしない | CU-0G02BH→CU-0G02B後にCU-0G05L |
-| 7 | CU-0G05L | M3 spec | `DO` | — | CU-0G02B、CU-0G03〜04Bのraw evidenceを固定Mac manifestへ束ね、反対側review P0/P1=0後だけG0-9Lを限定確定。製品粒・Windows・追加hardwareは解禁しない | 合格後もW0b/H1b/製品windowを自動解禁しない |
+| 7 | CU-0G05L | M3 spec | `DONE / FROZEN` | — | CU-0G02B、CU-0G03〜04Bの8 retained pathを[固定Mac manifest](spikes/g0-9-local-platform-evidence/manifest.json)へ束ね、全SHA・commit・toolchain・未合格platformを照合。Grok R2 P0/P1/P2=0でACCEPTしG0-9Lを固定Mac証拠だけ限定確定。製品粒・Windows・追加hardwareは未解禁 | parent G0-9/G0-9D/W0b/H1b/製品windowを停止継続 |
 | 6 | U0e-2R | M3 | `DONE` | — | 固定React baseline `eb16d06`を最新mainへ再結合し、43 visual testとworkspace gateを通過 | GR-D1を単独実行 |
 | 7 | GR-D1 | M3 guard | `DONE` | — | Terra実装 + Grok検収の通常発注入口へBASE_REF/SHA・authority・粒状態・React labelのdispatch gateを固定し、専用負例とworkspace試験を通過 | GR-D2を単独実行 |
 | 8 | GR-D2 | M3 guard | `DONE` | — | 変更許可閉集合、append-only検収証跡、timeout分離、検収者mutation拒否、検収resumeをTerra + Grok入口へ固定し、専用負例とworkspace試験を通過 | GR-R1/R2をDOへ移す |
@@ -183,7 +183,7 @@ U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除
 | resource設定を出す | G0-2 + G0-8 + U0b + K1a → U0f。設定はUser settings、pressure実測値はTransient |
 | 重いpreviewを追従させる | U1b + U1c + U5 + K1d → U1g。project fps/audio clockを変えず表示frameだけ落とす |
 
-したがって現在の短い運用判断は、**M2基盤再締結とD3e、D1m、CAM-G0、D1j、D1k-S、D1k、D3f、M3 U0a、U0b-1、U0b-2、U0c-1、U0c-2、U0d-1、U0d-2、U0d-3、U2a-0、U2a-1、U1a-1、U1a-2、U1b-1、U1b-2、U2b-1、U2c-1、U2c-4、U0e-1、U0e-2R、GR-D1、GR-D2、GR-R1/R2、GR-R3、U0e-2、CU-G01、CU-0G02〜04B、CU-0G02A、CU-0G02BH、CU-0G02Bは完了済み**。次は`CU-0G05L`で固定Mac構成と未合格platformを束ね、反対側review P0/P1=0後だけlocal platform prerequisite evidenceを限定確定する。W0b、H1b、Motolii Studio Preview、window結合はまだ解禁しない。`G0-6H`は別の人間停止線として未記入templateへの判定者・条件・採否理由を待ち、U0e-3を引き続き停止する。`U2c-2`はU4a-2/U4cの実製品入口待ちとする。Rerunのcommit固定source監査と資産分類は可能だが、現在のUシリーズ実装と並走させない。D5は骨格を完了扱いせず、本番preview／GPU計測／実機E2Eを後続へ残す。
+したがって現在の短い運用判断は、**M2基盤再締結とD3e、D1m、CAM-G0、D1j、D1k-S、D1k、D3f、M3 U0a、U0b-1、U0b-2、U0c-1、U0c-2、U0d-1、U0d-2、U0d-3、U2a-0、U2a-1、U1a-1、U1a-2、U1b-1、U1b-2、U2b-1、U2c-1、U2c-4、U0e-1、U0e-2R、GR-D1、GR-D2、GR-R1/R2、GR-R3、U0e-2、CU-G01、CU-0G02〜05L、CU-0G02A、CU-0G02BH、CU-0G02Bは完了済み**。G0-9Lは固定Mac prerequisite evidenceだけを限定確定した。W0b、H1b、Motolii Studio Preview、window結合、parent G0-9/G0-9Dはまだ解禁しない。`G0-6H`は別の人間停止線として未記入templateへの判定者・条件・採否理由を待ち、U0e-3を引き続き停止する。`U2c-2`はU4a-2/U4cの実製品入口待ちとする。Rerunのcommit固定source監査と資産分類は可能だが、現在のUシリーズ実装と並走させない。D5は骨格を完了扱いせず、本番preview／GPU計測／実機E2Eを後続へ残す。
 
 ## 更新規則
 
