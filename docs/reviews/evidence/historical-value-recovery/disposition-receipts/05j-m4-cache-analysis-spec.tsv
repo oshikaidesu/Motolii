@@ -1,0 +1,21 @@
+blob_sha	source_scope	disposition_document	publication
+ca3b35e9569c3ad83114a36931ac6135c83fdd4e	M4 cache analysis spec initial	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis
+440451d154bb623c275e591af72e7f3030ffe25a	M4 cache analysis spec SVG branch A	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis
+d211b7b80a0145fb48d32b27fd88a9d016720e44	M4 cache analysis spec SVG branch B	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis
+48365ebe1cb58c4915c581723720bf6a86bce648	M4 cache concurrency contract initial	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis
+bf245dbe5487f1f76f0b6f9abb99a81beb2a4fb6	M4 memory model branch A	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis
+b63a42ab02132c91707f2ee19dc1c581827cf143	M4 memory model branch B	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis
+59230ff827cc1a529c1385f7d13f5a1e6e6b4dea	M4 analysis deferral version	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis
+da8f7dfa95b1410545a35efe185768c0bf65768b	M4 intermediate merge A	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis
+d73fdbc26e394394e4561d03a901230cf284e3c3	M4 intermediate merge B	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis
+4aec5951826a11e84f2127a8b9a24735b319727c	M4 StateTrack client branch	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis
+b7eec3ceec9d5ca411b429fc912f54696c3c2699	M4 simulation rejection branch A	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis
+477ffd71eccd782b6f730069fb918f81422102a7	M4 simulation rejection branch B	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis
+80910dd0f48fc5c66ec22b7f4b8a6382eb4ef14c	M4 Quality complete key version	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis
+04d776d5d657b46dd107abefab3e374f8c30e7ce	M4 StateTrack bake merge	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis
+7aefbc74072f678422e3b7396222f5eae3a0444b	M4 cache guards version	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis
+b01312042e8cfee80ff240d4bc16ffaad033b67f	M4 predictable recomputation version	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis
+3ead9c994261effbfef27f58ce50f2d4cbbc9003	M4 SpatialExtent and selective invalidation version	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis
+994723077882af5920f7b3228292c973138fa4fc	M4 ResourceLedger split version	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis
+361c52b3b0ec49ecc47a8cc239e02661fbc0c526	M4 group freeze and full composition coverage split	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis
+b8ecc767578e43b300a3802f51c4fcbc27fca6e1	M4 current toolkit independent version	2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md	codex/historical-recovery-unit5j-m4-cache-analysis

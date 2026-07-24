@@ -32,6 +32,7 @@
 | [OpenFX (OFX)](https://openfx.readthedocs.io/) / After Effects SDK | OFX=BSD系仕様 / AE=独自 | **プラグイン拡張が業界標準の枯れた手法である裏付け**。エフェクト=「画像(テクスチャ)in+パラメータ→out」、ネイティブ(ピクセル/GPU)+スクリプト(パラメータ/ロジック)の二層、動的C ABIロード — いずれもうちの設計(concept: プラグインファースト/5-1隔離方針)と同型。Nuke/DaVinci/Natron/FlameがOFX採用。**トレードオフの明文化**: v1は独自Rust trait API(単純境界=LLMで書きやすさ最優先)を採り**OFX非互換**のため、既存OFXプラグイン資産は継承しない(自前エコシステムを育てる前提)。「なぜOFXにしないか」を蒸し返さないための記録。動的ロード(C ABI/`abi_stable`)はv2 |
 | [Reco video-stitcher](https://github.com/reco-project/video-stitcher) | **AGPL-3.0**(+CLA) | 2カメラ映像のパノラマ合成ツール。**Slint GUI + wgpu(28)GPUパイプライン + ffmpegゼロコピーHWデコード(NVDEC/VideoToolbox)という、うちと同型の構成が実運用品質で成立している実証**(活発、1100+コミット)。学ぶ点: HWデコード→wgpuのゼロコピー統合(うちのv2スコープB-2の先行例)、push型フレーム投入APIと厳格な依存方向のクレート階層。wgpu 28使用 = Slintバージョン連動の現実の傍証 |
 | [rs-wgpu-video-player](https://github.com/singh-ps/rs-wgpu-video-player) | GPL-2.0(表記曖昧、GPL扱い) | Slint UI + ffmpeg + cpalの動画プレイヤー(小規模・初期段階)。**「音声サンプル消費クロックを主、遅れた映像フレームはドロップ」というM2トランスポート設計と同一の結論に独立到達**している点が裏付けとして貴重。一方で反面教師も明確: フレームは`SharedPixelBuffer`(CPU経路)でSlintに渡しており(うちが避けたコピー路線)、libswscaleでCPU色変換(レビュー指摘#2で排除した経路)。既知の限界(シーク未実装・長時間でA/Vドリフト・1スロットキューでフレーム落ち)は、うちの有理数時間・有界キュー設計が対処すべき点のリスト |
+| [Basic Memory](https://github.com/basicmachines-co/basic-memory) | AGPL-3.0 | 歴史価値回収の**任意の外部ローカル索引CLI**候補。0.22.1をblack-box検証し、公式文書だけを参照する。Motoliiへvendor/link/source copyせず、製品runtime・通常build・CI・coverageの必須依存にしない。可搬projection、receipt正本、生成物非commitの境界は[意味グラフ補助境界](reviews/2026-07-23-historical-semantic-graph-recovery-tooling.md)を正本とする |
 
 ## その他の依存候補(定番、必要時に評価)
 

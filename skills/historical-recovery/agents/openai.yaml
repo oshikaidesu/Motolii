@@ -1,0 +1,4 @@
+interface:
+  display_name: "Historical Recovery"
+  short_description: "Recover prior Motolii decisions on demand"
+  default_prompt: "Use $historical-recovery to find and assess prior Motolii design evidence for this topic."
