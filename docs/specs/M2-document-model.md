@@ -73,7 +73,7 @@ CompCameraDoc::PlanarOrthographic {
 - UIのdegree表示、logical/physical px、DPI、Stage View pan/zoom/fitはDocumentへ入れない
 - 全camera parameterは既存DocParamと同じ時刻`t`で評価し、D2 command/Undo/cache invalidationへ載せる
 - 非有限値・`height<=0`は型付きvalidate error。NDC方程式・Draft縮退・pixel変換・CQ-5解凍の詳細は正本へ委譲
-- Spatial/Perspective、target/up、複数cameraはM2非目標。M5以降の追加variant決定待ち（target制約は将来あってもpose保存にはしない）
+- Spatial/Perspective、target/up、複数cameraはM2非目標。M5以降の拡張は[Camera Object / Provider決定](../reviews/2026-07-24-camera-object-provider-decision.md)に基づくP3決定待ち（target制約は将来あってもpose保存にはしない）
 - 実装順は **CAM-G0→D1j→D1k-S→D1k→D3f のみ**。完了審判は[CompCameraレーン](#compcameraレーンm2再締結対象直列)へ委譲
 - 現行`motolii-core::CompCamera`のdegree/Perspective固定形をそのままserdeしない。D1jは追加schema+default migration、D1kはCQ-5 runtime契約+解凍へ分け、既存意味論goldenを更新で通さない
 

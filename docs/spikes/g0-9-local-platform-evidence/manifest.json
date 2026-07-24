@@ -1,0 +1,234 @@
+{
+  "ticket": "CU-0G05L",
+  "gate": "G0-9L",
+  "captured_at": "2026-07-24",
+  "status": "accepted_fixed_mac_only",
+  "gate_decision": "PASS_FIXED_MAC_PREREQUISITE_EVIDENCE_ONLY",
+  "bundle_base_commit": "7edfad810a1096ade789898d3602e40723d5cfde",
+  "responsibility_disposition": {
+    "class": "REUSE / FREEZE",
+    "new_runtime_code": false,
+    "new_product_dependency": false,
+    "product_import": false,
+    "forward_maintenance": false
+  },
+  "fixed_configuration": {
+    "hardware": "MacBook Air Mac16,12",
+    "chip": "Apple M4",
+    "memory": "16 GB unified memory",
+    "gpu": "Apple M4 8-core GPU",
+    "metal": "Metal 3",
+    "os": "macOS 15.5",
+    "os_build": "24F74",
+    "display": "Built-in Liquid Retina Display",
+    "display_resolution": "2560 x 1664 Retina",
+    "scale_factor": 2.0,
+    "display_count": 1,
+    "webview": "WKWebView via wry 0.55.1, opaque child WebView only",
+    "native_gpu": "wgpu 29, one top-level Surface, Stage and Timeline native viewports",
+    "product_topology": "native top-level window plus non-overlapping opaque WebView islands"
+  },
+  "toolchain": {
+    "rustc": "1.96.1 (31fca3adb 2026-06-26)",
+    "cargo": "1.96.1 (356927216 2026-06-26)",
+    "repository_channel": "stable",
+    "locked_dependencies": {
+      "wgpu": "29.0.4",
+      "wry": "0.55.1",
+      "vello": "0.9.0",
+      "egui": "0.35.0"
+    },
+    "provenance": {
+      "l1_embedded_in_both_raw_files": true,
+      "l2_rerun_verified": true,
+      "l3_embedded_in_report": true
+    }
+  },
+  "evidence": {
+    "l1_renderer_same_conditions": {
+      "status": "candidate_pass",
+      "execution_commit": "7c3a590e33874d60f7fbb1e1ac40173011db7649",
+      "measurement_session": "cu-0g02b-20260724-01",
+      "authority": "docs/spikes/g0-9-windowed-timeline.md#cu-0g02b-gpu-timestamp-raw-comparison2026-07-24",
+      "raw_files": [
+        {
+          "path": "docs/spikes/g0-9-windowed-timeline-evidence/gpu-direct-vello-raw.json",
+          "sha256": "32da35cb66a41f09ffce81db11340a0d7d1d32a4d5fff722a4ebe8cdcb6bf13a"
+        },
+        {
+          "path": "docs/spikes/g0-9-windowed-timeline-evidence/gpu-egui-vello-raw.json",
+          "sha256": "019880af80da82d893fde202379a0dd4305f2b10cf9617b472d702fb0f2783e1"
+        },
+        {
+          "path": "docs/spikes/g0-9-windowed-timeline-evidence/gpu-comparison.json",
+          "sha256": "32dfc0479a094de40f2d1b70d16b3b3f48f4fa98777da155970b95e684550b07"
+        }
+      ],
+      "same_condition_digests": {
+        "scenario": "089cbd008ee77673915eb71fed490b8564631edfc66175b18ea0e912b8ed1618",
+        "input": "56517a580ba7801e3e02eeac9176fbda91386822eb5fcffd54e8c8a8d8d42718",
+        "source": "14316ebe23e1f69a026002cc99c76f830b94666354c2d522fac7d2d143ee2331",
+        "font": "833776a6fd68e2c71c0c52fd8041195bd3d0a336cdb278170b7ad71c7e1b3475",
+        "glyph": "2a6986e5358823c013a965d206563e5f3b300f7af1b326e5dc8ca5d7abb44ddf"
+      },
+      "embedded_toolchain": {
+        "rustc": "rustc 1.96.1 (31fca3adb 2026-06-26)",
+        "cargo": "cargo 1.96.1 (356927216 2026-06-26)",
+        "lockfile_sha256": "6217d5946a84665bf61fcc4c3072d814364c5323c3376b0dbe9ba1ff40c26086"
+      },
+      "assertions": {
+        "both_complete": true,
+        "acquire_equals_present": true,
+        "pixel_readback_count": 0,
+        "query_result_readbacks_per_arm": 1,
+        "warmup_resource_creations": 0,
+        "measured_resource_creations": 0,
+        "input_samples_equal_measured_frames": true,
+        "rss_available": true,
+        "absolute_threshold_added": false,
+        "renderer_winner_declared": false,
+        "egui_baseline_retained": true
+      },
+      "reviewed_authority_amendment": "docs/reviews/2026-07-24-m3-g0-9l-l1-measurement-amendment.md"
+    },
+    "l2_focus_ime_voiceover_keyboard": {
+      "status": "candidate_pass",
+      "harness_implementation_commits": [
+        "4bb7f220a8625bece3959c6f83d988288f6dab12",
+        "07286004d5fae8612441ed4520aaf7571bac57bb"
+      ],
+      "raw_retention_execution_commit": "b48eb583dd599c585a0ff49da744849631a21433",
+      "machine_focus": {
+        "report": {
+          "path": "docs/spikes/g0-9-surface-host-evidence/focus-e2e-report.json",
+          "sha256": "469ba01fce8e53c77624df0c58bc2f654cdf4a7dcbda00fb404e1b14b247c692"
+        },
+        "raw": {
+          "path": "docs/spikes/g0-9-surface-host-evidence/focus-e2e-raw.json",
+          "sha256": "81a64bc6ccdf1f6f119b17c1b6b2ebfd5325d460ac06c9c2e4240cee7fbbc43f"
+        },
+        "process_exit": 0,
+        "automated_focus_pass": true,
+        "initial_observations": 1,
+        "forward_transitions": 4,
+        "reverse_transitions": 4,
+        "all_roles_and_responder_families_match": true
+      },
+      "human_judgment": {
+        "authority": "docs/spikes/g0-9-surface-host.md#cu-0g03-人間審判2026-07-24",
+        "judge": "user",
+        "judged_at": "2026-07-24",
+        "result": "PASS",
+        "items": [
+          "Japanese IME preedit, candidate position, commit, and cancel",
+          "Enter, Escape, and Space do not leak to app shortcuts during composition",
+          "native to WebView to native focus roundtrip",
+          "bounded VoiceOver reading and focus following",
+          "focus and IME restoration after fullscreen roundtrip",
+          "focus and IME restoration after minimize and restore"
+        ],
+        "raw_recording_retained": false,
+        "recording_requirement": "human attestation table is authoritative; video or raw VoiceOver log was not required"
+      },
+      "known_non_targets": [
+        "product window",
+        "Document",
+        "public UI or keyboard contract",
+        "Windows MS-IME and NVDA"
+      ]
+    },
+    "l3_lifecycle_geometry_failure_recovery": {
+      "status": "candidate_pass",
+      "initial_execution_base_commit": "021a16e7174575dd149bfb5dc279949638eec6b3",
+      "initial_report_envelope_commit": "f39c2278babcd34116c3a52e221c5d27ab15797b",
+      "closure_execution_base_commit": "f39c2278babcd34116c3a52e221c5d27ab15797b",
+      "closure_evidence_commit": "b48eb583dd599c585a0ff49da744849631a21433",
+      "execution_provenance": "report.json is the later envelope retained at initial_report_envelope_commit and names initial_execution_base_commit in its evidence_commit field; the closure raw was executed from closure_execution_base_commit, while source and evidence landed together in closure_evidence_commit, whose hash could not be embedded in its own files",
+      "files": [
+        {
+          "path": "docs/spikes/g0-9-surface-host-evidence/report.json",
+          "sha256": "deb915a8b316200f0a1548c88c32004adb842ce87deb47a199d1d8d5ca41acc7"
+        },
+        {
+          "path": "docs/spikes/g0-9-surface-host-evidence/l3-closure-raw.json",
+          "sha256": "1bc9e44c9348ab13d0409272101b8301b15972ee19689c3bae90e83916abfe2e"
+        },
+        {
+          "path": "docs/spikes/g0-9-surface-host-evidence/l3-closure-report.json",
+          "sha256": "b15334dda5b91fd13f8845a0ce6745cb70b971ba3ba9a4ee748f6381b734ff10"
+        }
+      ],
+      "same_window_closure": {
+        "resize_events": 108,
+        "layout_epoch": 116,
+        "minimize_restore_cycles": 1,
+        "fullscreen_entries": 1,
+        "fullscreen_exits": 1,
+        "zero_size_equivalent_intervals": 1,
+        "pointer_capture_starts": 2,
+        "pointer_boundary_crossings": 2,
+        "pointer_cancels": 2,
+        "pointer_focus_losses": 1,
+        "stale_instance_epoch_rejections": 1,
+        "stale_layout_epoch_rejections": 1,
+        "surface_loss_injections": 1,
+        "surface_reconfigures": 1,
+        "surface_present_after_reconfigure": true,
+        "web_process_terminations": 1,
+        "web_reload_requests": 1,
+        "web_ready_after_termination": 1,
+        "network_requests_allowed": 0,
+        "semantic_writes": 0,
+        "readback_count": 0,
+        "sentinel_unchanged": true,
+        "post_operation_invariant_checks": 7,
+        "bounds_layout_checks": 7
+      },
+      "scope": {
+        "surface_lost": "injected only",
+        "web_content_process": "actual targeted termination",
+        "capture_retained": false,
+        "capture_hash_and_visual_check_retained": true
+      }
+    }
+  },
+  "unpassed_platforms_and_capabilities": [
+    "Windows 10 and Windows 11",
+    "WebView2 and WebView2 runtime missing or offline installation",
+    "per-monitor-v2 DPI and movement between different-DPI displays",
+    "MS-IME and NVDA",
+    "WebView2 ProcessFailed recovery",
+    "second monitor and detach or re-dock",
+    "HDR and SDR differences",
+    "actual hardware surface or device loss",
+    "additional and distribution-target Mac configurations",
+    "Linux runtime and distribution"
+  ],
+  "non_unlocks": [
+    "parent G0-9 completion",
+    "G0-9D or Distribution Ready",
+    "G0-6H",
+    "U0e-3",
+    "W0b",
+    "H1b",
+    "Motolii Studio Preview",
+    "normal product window integration",
+    "G0-3 or GAP-13",
+    "community or arbitrary plugin UI",
+    "Document, journal, plugin ABI, or persistent layout changes",
+    "egui baseline deletion"
+  ],
+  "review": {
+    "required": "independent read-only opposite-side review with P0/P1=0",
+    "result": "ACCEPT_P0_P1_P2_0",
+    "reviewer": "cursor-grok-4.5-high",
+    "reviewed_at": "2026-07-24",
+    "round": 2
+  },
+  "retirement": {
+    "state": "FROZEN / DELETE-LATER",
+    "product_import": false,
+    "forward_maintenance": false,
+    "rerun_trigger": "fixed configuration, toolchain-relevant evidence, or referenced digest changes"
+  }
+}

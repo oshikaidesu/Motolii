@@ -1,12 +1,16 @@
 # 発注パイプライン並列化の比較案
 
-状態: **比較中**
+状態: **ARCHIVED**
+
+> 2026-07-25に[Opus 5 / Spark / Grok監督ループ](2026-07-25-opus-spark-grok-supervision-loop-decision.md)
+> が通常発注を置換したため、本書の旧model配置と複数実装lane案は現行dispatchへ使わない。
+> 一契約境界、独立検収、Codex最終採否の比較根拠だけを歴史資料として残す。
 
 日付: 2026-07-23
 
 ## 1. 問題
 
-現行のTerra + Grok発注運用は、1つの契約境界をclosed orderへ閉じ、隔離worktreeで実装し、独立検収後にCodexが統合する。この安全性は維持する。一方で、実装が終わってから次の調査・発注書作成・検収を始めると、モデルの実行時間ではなく工程間の待ち時間が全体速度を支配する。
+当時のTerra + Grok発注運用は、1つの契約境界をclosed orderへ閉じ、隔離worktreeで実装し、独立検収後にCodexが統合していた。この安全性は現行監督ループへ継承した。一方で、実装が終わってから次の調査・発注書作成・検収を始めると、モデルの実行時間ではなく工程間の待ち時間が全体速度を支配する。
 
 ここで比較するのは、1件の発注範囲を広げる案ではない。**契約境界ごとのclosed orderを小さいまま保ち、独立性を証明できる工程だけを重ねる運用**である。
 
@@ -43,7 +47,7 @@
 |---|---|---:|---|
 | `PREFLIGHT` | 仕様・決定台帳・コード事実・既存helper・負例の確認 | なし | 台帳・specが並走を許す対象だけ実装中も並行可 |
 | `ORDER DRAFT` | 次候補のclosed order草案とSTOP条件の準備 | order/evidence領域だけ | 対象が既に`DO`で、台帳・specが並走を許す時だけ並行可。承認・dispatchしない |
-| `COUNTER` | Grokによる通常read-only反証。Fableはユーザー明示の大地図・全体レビューだけ | なし | 対象と役割が重ならなければ並行可 |
+| `COUNTER` | Grokによる通常read-only反証。Fableはcomplex/cross-boundaryと大地図・全体レビューへ追加 | なし | 対象と役割が重ならなければ並行可 |
 | `IMPLEMENT` | Terraが承認済みclosed orderを隔離worktreeで実装 | 対象worktreeだけ | 独立性gate合格時だけ複数候補を比較 |
 | `VERIFY` | Grokが実diff・試験・scopeをread-only検収 | なし | 別実装やpreflightと並行可 |
 | `INTEGRATE` | Codexが仕様照合、必須試験、主枝への採否を決定 | 統合対象だけ | 原則1件ずつ直列 |
@@ -185,7 +189,7 @@ Fableには次を問う。
 
 ## 11. 採択前の停止線
 
-- FableレビューとCodex採否が完了するまで、`AGENTS.md`、delegate script、implementation ledgerのdispatch規則を変更しない
+- FableレビューとCodex採否が完了するまでdispatch規則を変更しない。2026-07-23に再回レビューとCodex採否を完了して旧[タスク適応型の発注運用](2026-07-22-terra-grok-delegation-policy.md)へ反映したが、同運用と本比較は2026-07-25にアーカイブした
 - 本書を根拠に複数Terra実装を開始しない
 - `GR-D1 / GR-D2`、review binding、delegate並行再入性が未合格の間はBも開始しない
 - review後も、ユーザーの明示的な発注なしに実装発注を開始しない

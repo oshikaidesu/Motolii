@@ -2,6 +2,8 @@
 
 状態: **決定**（歴史文書12 blobの処分、Core用語の現行分界を正本化）
 
+2026-07-25限定改訂: 本書が回収した「作品意味と回復可能性をHostが所有する」規律は維持する。[制御されたMicrokernelとHost capability module並列化決定](2026-07-25-controlled-microkernel-host-module-parallelism-decision.md)により、Host ownershipはauthority ownershipであり、具体実装は製品buildへ明示的にadmitされたHost capability moduleへ分離可能と明確化した。本書の「pluginへ渡さない」を、内部provider化まで禁止する根拠にしない。
+
 対象: `extensible-core-model`、その先例翻訳、M1 plugin境界監査、撤回済みM2コア締結宣言の4 path。
 
 関連: [全歴史coverage台帳](2026-07-23-historical-value-recovery-coverage-ledger.md)、[小さなコア](../extensible-core-model.md)、[surface実装と拡張所有の軸分離](2026-07-22-m3-surface-extension-axis-separation.md)、[plugin authoring](../plugin-authoring.md)

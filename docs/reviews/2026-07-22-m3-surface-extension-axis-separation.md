@@ -4,6 +4,8 @@
 
 状態: **決定**。製品UIのwindow／surface実装と、Core・first-party・third-party拡張の責任分類を独立に判定する。コード、公開plugin API、Document、永続形式は変更しない。
 
+2026-07-25限定改訂: [制御されたMicrokernelとHost capability module並列化決定](2026-07-25-controlled-microkernel-host-module-parallelism-decision.md)により、Core／Hostのarchitectural roleは「authority ownership」と「具体実装provider」をさらに分離する。本書のsurface runtime、公開plugin、provenance／trustの軸分離は維持するが、§2／§6の「Coreに残す」は具体実装を一枚岩のCoreへ固定する根拠にしない。
+
 ## 1. 決定
 
 これまで「native window対React window」と「Core対first-party／third-party plugin」を同じ選択として扱う記述があった。以後は少なくとも次の4軸を分離する。
@@ -13,9 +15,14 @@
 | OS topology | top-level window / child view / popup / detached window | window、focus、z-order、DPI、lifecycle |
 | presentation runtime | native wgpu / React・WebView / headless | 表示、layout、hit-test、入力adapter |
 | architectural role | Core kernel / bundled Host module / plugin | 作品意味、標準製品面、拡張境界のどこに属するか |
-| provenance / trust | first-party / third-party、trusted in-process / isolated realm | 配布、署名、権限、sandbox、障害隔離 |
+| provenance / execution trust | first-party / third-party、TCB role / untrusted isolated realm | 配布元と、権限、sandbox、障害隔離を独立判定 |
 
 一つのOS windowにnative viewportとopaque child WebViewを同居させられるため、nativeとReactを別windowの同義語にしない。nativeで描画するfirst-party Host moduleはnative pluginではなく、Reactで描画するfirst-party Host moduleもcommunity pluginではない。first-partyという供給元だけからCore所属や公開plugin契約参加を推論しない。
+
+2026-07-25信頼境界改訂により、公開plugin codeはfirst-party／third-partyを問わず非信頼とする。
+TCBに入るのはControlled Coreと製品buildへ明示的にadmitされたHost moduleであり、first-partyという
+provenanceだけでは入らない。現行static first-party pluginの同一process実行はコード事実であって
+隔離完成ではない。正本は[Controlled Microkernel決定 §6](2026-07-25-controlled-microkernel-host-module-parallelism-decision.md#6-pluginという語と信頼境界の分離)。
 
 ## 2. Motoliiの現行分類
 
@@ -53,7 +60,7 @@ G0-3 / GAP-13はplugin UI公開境界を判定する。対象はfirst-party plug
 - G0-9合格 ≠ custom plugin UI公開許可。
 - product-owned React package成立 ≠ community runtime成立。
 - 同じcomponent/test kitを再利用する長期原則 ≠ 同じorigin、process、権限、window topology。
-- third-party sandbox未決 ≠ first-party製品surface実装の全面停止。
+- plugin sandbox未決 ≠ first-party製品surface実装の全面停止。Host surfaceはpluginではなくTCB roleとして別審判する。
 
 plugin所有UI codeの公開契約は引き続き停止する。停止理由と解除審判はG0-3 / GAP-13へ置き、G0-9完了だけで解除しない。
 

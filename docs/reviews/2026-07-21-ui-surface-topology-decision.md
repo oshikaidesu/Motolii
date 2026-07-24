@@ -111,7 +111,10 @@ minimize/restore、fullscreen進入時描画、nativeからWebViewへの境界dr
   process failure、offline runtime
 - 共通: 100,000 keyのwindowed fixture、readback 0、frame内GPU resource生成0、surface/device lost、
   latest layout epoch、複数dock WebViewのHMR/state投影、popup WebView、community realm crash/loop
-- renderer: direct wgpuのみとdirect wgpu + Vello局所passを同条件egui baselineへ比較
+- renderer: direct wgpu primitive batch + Vello局所passの一つの製品候補stackを、同じ
+  path/text assetを持つegui baselineと比較する。2026-07-24の
+  [L1正本修正](2026-07-24-m3-g0-9l-l1-measurement-amendment.md)に従い、pure direct用の
+  glyph rendererまたはtext/icon量の違う第三armをG0-9Lへ新設しない
 
 通常windowed hostingでz-order、focus、DPI、captureの修正不能なplatform failureが再現した場合だけ、
 platform非対称のCompositionController、別window、最後にCEF OSRの順で再審判する。

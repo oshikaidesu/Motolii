@@ -16,7 +16,7 @@ spikes/g0-10-multi-surface-window/target
 /.claude/worktrees/
 # Rustワークスペースと無関係のNode実験(p5等)を誤コミットしない
 node_modules/
-package-lock.json
-package.json
+/package-lock.json
+/package.json
 # exit-demo のローカル生成物(input/出力mp4)はコミットしない
 samples/exit-demo/*.mp4

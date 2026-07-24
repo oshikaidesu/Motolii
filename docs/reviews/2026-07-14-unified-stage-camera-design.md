@@ -5,6 +5,8 @@
 > **歴史回収（2026-07-23）**: cutoff全2版は[Unit 4Q](2026-07-23-historical-unified-stage-camera-ui-lineage-recovery.md)で処分済み。M2 schema/runtimeはplanar v1へ置換・実装済み、Stage View／Output Frame／off-frame UIは決定済み・未実装である。native／React presentationとCore／Host／plugin、first／third-partyを同じ分類軸にしない。
 
 > **M2 schema/runtime shape superseded (2026-07-18)**: §「永続カメラの最小意味」の `position`/`target`/`Orthographic`|`Perspective` スキーマ形と、§「実装順」2項の `Orthographic/Perspective` runtime 記述は、[2026-07-16 planar v1 camera 決定](2026-07-16-m2-comp-camera-decision.md)および[D1k-S CQ-5 解凍記録](2026-07-18-d1k-runtime-camera-thaw-spec.md)へ置換される。Stage View / 枠外表示 / M3 UI 境界の記述は引き続き有効。
+>
+> **将来camera所有方針 superseded (2026-07-24)**: 単一active camera、単一world、Output Frame、Stage View分離、枠外表示は維持する。将来の具体camera modelをHostへ追加し続ける部分だけを[Camera Object / Provider決定](2026-07-24-camera-object-provider-decision.md)へ置換し、タイムライン上の換装可能Object／Providerとrepresentation非依存Observation Contractへ移す。
 
 ## 決定
 

@@ -1,4 +1,4 @@
-import { DiscoveryBrowserCandidate } from "../candidates/DiscoveryBrowserCandidate.jsx";
+import { DiscoveryBrowserCandidate } from "@motolii/motolii-web";
 import { LegacyHostBoundaryScreen } from "../legacy/index.js";
 import { expect, userEvent, within } from "storybook/test";
 

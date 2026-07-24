@@ -1,0 +1,375 @@
+{
+  "schemaVersion": 1,
+  "task": "CU-0A03",
+  "scope": "complete-r0-source-inventory",
+  "completeR0": true,
+  "fixedSourceCommit": "56c318edcddab7cf95d263cc2f7dd2b4e6791134",
+  "authority": {
+    "isProductApi": false,
+    "isPersistenceFormat": false,
+    "isProductOwnerTransfer": false
+  },
+  "surfaces": [
+    {
+      "id": "browser",
+      "classification": "react-direct-promotion",
+      "componentPath": "docs/mocks-ui/src/candidates/DiscoveryBrowserCandidate.jsx",
+      "componentExport": "DiscoveryBrowserCandidate",
+      "runtimeClosure": [
+        {
+          "path": "docs/mocks-ui/src/candidates/DiscoveryBrowserCandidate.jsx",
+          "role": "runtime",
+          "sha256": "4edb3dfc49726aa700e77a14197571a43de2d80d9838a824c22cb68e0ac3d5b8"
+        },
+        {
+          "path": "docs/mocks-ui/src/candidates/discovery-browser-candidate.css",
+          "role": "runtime",
+          "sha256": "1dcb6afc3c16907366f6d73ed7cfb1b04c8cea872d169e959ead49b6c6cedccd"
+        },
+        {
+          "path": "docs/mocks-ui/src/patterns/DiscoveryBrowser.jsx",
+          "role": "runtime",
+          "sha256": "1d996ad66dba3ff7fb36cf811ce8d22faec1fee271a2dd5349d953a7cf89a2ea"
+        }
+      ],
+      "localImports": [
+        {
+          "kind": "css-side-effect",
+          "source": "docs/mocks-ui/src/candidates/discovery-browser-candidate.css",
+          "specifiers": []
+        },
+        {
+          "kind": "named",
+          "source": "docs/mocks-ui/src/patterns/DiscoveryBrowser.jsx",
+          "specifiers": [
+            "DiscoveryBrowserLayout",
+            "DiscoveryResults",
+            "DiscoverySearchBar",
+            "DiscoverySection",
+            "DiscoverySourceRail",
+            "DiscoveryViewToggle"
+          ]
+        }
+      ],
+      "externalPackages": [
+        "html-react-parser",
+        "react"
+      ]
+    },
+    {
+      "id": "easing",
+      "classification": "react-trigger-source-absent-native-popup-oracle",
+      "sourceStatus": "independent-react-trigger-source-absent",
+      "triggerAuthority": {
+        "path": "docs/mocks/m3-vism-host-boundary.html",
+        "sha256": "a20bd36d6b8b241ef4ec21adda6b045e470bf89fbc78e2788207aa6d0875ec68",
+        "selector": "#interval-easing",
+        "role": "archived-html-same-shape-extraction-authority"
+      },
+      "componentPath": "docs/mocks-ui/src/candidates/EasingGraphCandidate.jsx",
+      "componentExport": "EasingGraphCandidate",
+      "componentRole": "popup-native-oracle-not-trigger-source",
+      "runtimeClosure": [
+        {
+          "path": "docs/mocks-ui/src/candidates/EasingGraphCandidate.jsx",
+          "role": "runtime",
+          "sha256": "1b1a3ab66808504d4356bbb8ffd65bb8ed9aa77726a71b65ffa6b26bd61b4a05"
+        },
+        {
+          "path": "docs/mocks-ui/src/candidates/easing-graph-candidate.css",
+          "role": "runtime",
+          "sha256": "644064b649778d6dfe08de4d73751d5e7b65b96133115eba07be799aeb8e0329"
+        },
+        {
+          "path": "docs/mocks-ui/src/candidates/easing-graph-model.js",
+          "role": "runtime",
+          "sha256": "22a6745bcd77b6f71f5c62563b0165f6161a234abebd2a10f326d210a0a6fad9"
+        }
+      ],
+      "localImports": [
+        {
+          "kind": "css-side-effect",
+          "source": "docs/mocks-ui/src/candidates/easing-graph-candidate.css",
+          "specifiers": []
+        },
+        {
+          "kind": "named",
+          "source": "docs/mocks-ui/src/candidates/easing-graph-model.js",
+          "specifiers": [
+            "ADVANCED_SPECS",
+            "PLOT",
+            "advancedPathPoints",
+            "clamp",
+            "makeInitialAdvancedParameters",
+            "pointFrom",
+            "snap",
+            "viewForOvershoot",
+            "xOf",
+            "yOf"
+          ]
+        }
+      ],
+      "externalPackages": [
+        "react"
+      ],
+      "promotionBoundary": [
+        "Graph trigger/icon after mock-side same-shape React extraction",
+        "accessible object/channel and pressed/disabled state"
+      ],
+      "requiredNextAction": "mock-side-same-shape-react-trigger-extraction-and-parity-before-r2b",
+      "nativeOracle": [
+        "popup frame",
+        "presets",
+        "user library",
+        "form",
+        "curve renderer",
+        "easing model"
+      ],
+      "behavioralEvidence": {
+        "path": "docs/mocks-ui/tests/browser-candidate.spec.js",
+        "route": "plugin-browser-candidate"
+      }
+    },
+    {
+      "id": "keys-layers",
+      "classification": "react-subtree-extraction-native-timeline-oracle",
+      "componentPath": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
+      "componentExport": "TimelineCandidate",
+      "runtimeClosure": [
+        {
+          "path": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
+          "role": "runtime",
+          "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5"
+        },
+        {
+          "path": "docs/mocks-ui/src/candidates/timeline-candidate.css",
+          "role": "runtime",
+          "sha256": "ef984d9b365f4efbcb4bf8fc20034a0b54846ab4fb470ea8d6ec8b486aa71397"
+        }
+      ],
+      "localImports": [
+        {
+          "kind": "css-side-effect",
+          "source": "docs/mocks-ui/src/candidates/timeline-candidate.css",
+          "specifiers": []
+        }
+      ],
+      "externalPackages": [
+        "react"
+      ],
+      "promotionBoundary": [
+        "candidate-key-tools subtree",
+        "candidate-key-tools-open reopen control"
+      ],
+      "nativeOracle": [
+        "ruler",
+        "rails",
+        "bars",
+        "keys",
+        "playhead",
+        "graph",
+        "packing plane",
+        "time surface"
+      ],
+      "modes": {
+        "keys": [
+          "align",
+          "stagger",
+          "stretch"
+        ],
+        "layers": [
+          "align",
+          "stagger",
+          "shift"
+        ]
+      },
+      "behavioralEvidence": {
+        "path": "docs/mocks-ui/tests/timeline-candidate.spec.js",
+        "route": "plugin-browser-candidate"
+      }
+    },
+    {
+      "id": "inspector",
+      "classification": "react-source-absent-legacy-parity-oracle",
+      "sourceStatus": "independent-react-source-absent",
+      "promotionBoundary": [],
+      "legacyOracleClosure": [
+        {
+          "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
+          "role": "oracle",
+          "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416"
+        },
+        {
+          "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
+          "role": "oracle",
+          "sha256": "8fb24e75abdb87dd52ae7d1c723782b42e67e486331aa04cbd498111a2733b3a"
+        },
+        {
+          "path": "docs/mocks-ui/src/legacy/legacySource.js",
+          "role": "oracle",
+          "sha256": "4fd547d2efa98d6d1fadf403b4ae2379abb0767d50cda172f8f6fa749a230e20"
+        },
+        {
+          "path": "docs/mocks/m3-vism-host-boundary.html",
+          "role": "oracle",
+          "sha256": "a20bd36d6b8b241ef4ec21adda6b045e470bf89fbc78e2788207aa6d0875ec68"
+        }
+      ],
+      "legacyExport": "LegacyInspector",
+      "rejectedSkeleton": {
+        "path": "docs/mocks-ui/src/surfaces/InspectorSurface.jsx",
+        "export": "InspectorSurface",
+        "sha256": "70e3f1094ae6188274779055d20385cccc2efabd7258b994eeba869e3ea82f90",
+        "disposition": "reduced-skeleton-not-product-source"
+      },
+      "requiredNextAction": "mock-side-same-shape-react-extraction-and-parity-before-r4",
+      "behavioralEvidence": {
+        "path": "docs/mocks-ui/tests/visual-parity.spec.js",
+        "reactRoute": "archive/all-surfaces",
+        "legacyOracleRoute": "all-surfaces"
+      }
+    },
+    {
+      "id": "resizable-panel-layout",
+      "classification": "react-layout-subtree-candidate-legacy-adapters-excluded",
+      "containerPath": "docs/mocks-ui/src/layout/ResizablePanelLayout.jsx",
+      "runtimeClosure": [
+        {
+          "path": "docs/mocks-ui/src/layout/ResizablePanelLayout.jsx",
+          "role": "runtime",
+          "sha256": "3af5334dff20551954e9fb7bac1cc1e5fdf894e357706a0d9a33fbe09d211359"
+        },
+        {
+          "path": "docs/mocks-ui/src/layout/resizable-panel-layout.css",
+          "role": "runtime",
+          "sha256": "d6ea3b03d48c2f8d5e3102b0a3712f1c6bdc825acdd4c80d6a57d637f89ec249"
+        }
+      ],
+      "namedExports": [
+        "ResizableLegacyApp",
+        "ResizableLegacyWorkspace",
+        "ResizableLegacyTimeline",
+        "ResizableTimelineSurface"
+      ],
+      "localImports": [
+        {
+          "kind": "css-side-effect",
+          "source": "docs/mocks-ui/src/layout/resizable-panel-layout.css",
+          "specifiers": []
+        }
+      ],
+      "externalPackages": [
+        "html-react-parser",
+        "react"
+      ],
+      "promotionBoundary": [
+        "layout sizing and clamping",
+        "PanelLayoutContext",
+        "PanelSeparator"
+      ],
+      "excludedBoundary": [
+        "html-react-parser legacy node/options adapters",
+        "ResizableLegacy* fixture wrappers",
+        "ResizableTimelineSurface fixture wrapper",
+        "native viewport bounds and topology"
+      ],
+      "stateOwner": "local-presentation-oracle",
+      "behavioralEvidence": {
+        "path": "docs/mocks-ui/tests/panel-layout.spec.js",
+        "route": "plugin-browser-candidate",
+        "sha256": "419c82363b37c6dbf97ef872f64351750946cd0dc79f664515f6f2bd9326b334"
+      }
+    },
+    {
+      "id": "native-stage-time-surface",
+      "classification": "native-wgpu-owned-react-promotion-forbidden",
+      "nativeOwner": "wgpu-stage-and-timeline",
+      "reactPromotionBoundary": [],
+      "oracleClosure": [
+        {
+          "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
+          "role": "legacy-oracle",
+          "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416"
+        },
+        {
+          "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
+          "role": "legacy-oracle",
+          "sha256": "8fb24e75abdb87dd52ae7d1c723782b42e67e486331aa04cbd498111a2733b3a"
+        },
+        {
+          "path": "docs/mocks-ui/src/legacy/legacySource.js",
+          "role": "legacy-oracle",
+          "sha256": "4fd547d2efa98d6d1fadf403b4ae2379abb0767d50cda172f8f6fa749a230e20"
+        },
+        {
+          "path": "docs/mocks/m3-vism-host-boundary.html",
+          "role": "legacy-oracle",
+          "sha256": "a20bd36d6b8b241ef4ec21adda6b045e470bf89fbc78e2788207aa6d0875ec68"
+        },
+        {
+          "path": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
+          "role": "react-oracle",
+          "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5"
+        },
+        {
+          "path": "docs/mocks-ui/src/candidates/timeline-candidate.css",
+          "role": "react-oracle",
+          "sha256": "ef984d9b365f4efbcb4bf8fc20034a0b54846ab4fb470ea8d6ec8b486aa71397"
+        }
+      ],
+      "stageOracle": [
+        "stage-shell",
+        "output-frame",
+        "transport"
+      ],
+      "timelineOracle": [
+        "ruler",
+        "rails",
+        "bars",
+        "keys",
+        "playhead",
+        "graph",
+        "packing plane",
+        "time surface"
+      ],
+      "rejectedReactSurfaces": [
+        {
+          "path": "docs/mocks-ui/src/surfaces/StageSurface.jsx",
+          "export": "StageSurface",
+          "sha256": "fec7b23593af66194895b736458297d99932a1dc9a6d37b8f38c95c25e31e46f",
+          "disposition": "reference-surface-not-product-stage"
+        },
+        {
+          "path": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
+          "export": "TimelineCandidate",
+          "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5",
+          "disposition": "whole-container-not-product-timeline"
+        }
+      ],
+      "behavioralEvidence": [
+        {
+          "path": "docs/mocks-ui/tests/visual-parity.spec.js",
+          "reactRoute": "archive/all-surfaces",
+          "legacyOracleRoute": "all-surfaces",
+          "sha256": "c71b2e34d343e21aa6a32387b0692897efd5d1f56931dc8c873fcb617e5687ef"
+        },
+        {
+          "path": "docs/mocks-ui/tests/timeline-candidate.spec.js",
+          "route": "plugin-browser-candidate",
+          "sha256": "0c0da4260662dbdcd7de89d7da247c3334db8fdfe29315f1ed77e43b0ac994f4"
+        }
+      ]
+    }
+  ],
+  "modelClosure": [],
+  "behavioralTests": [
+    {
+      "path": "docs/mocks-ui/tests/browser-candidate.spec.js",
+      "route": "plugin-browser-candidate"
+    },
+    {
+      "path": "docs/mocks-ui/tests/timeline-candidate.spec.js",
+      "route": "plugin-browser-candidate"
+    }
+  ]
+}

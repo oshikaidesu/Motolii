@@ -10,8 +10,8 @@
 
 - **何を作るか**: MV(ミュージックビデオ)制作のための、モーショングラフィック指向のコンポジットツール。AEの重さへの構造的な回答。3〜5分の動画を書き出せたら完成
 - **長期の北極星**: 映像表現を、時刻・入力・型付きparameterから決まる再利用可能な単位として実行・保存・配布できる共通環境にする。制作者と開発者を固定身分にせず、利用→調整→構成→inspection→fork→authoring→共有を一つの経路にする。多数のcreator-authorが公開境界の上で独立して表現を増やせることを成長力とする。「映像制作におけるVST」はHostと拡張単位を分ける構造の類比に限り、音楽中心の製品像やDAW化は目標ではない([concept.md](concept.md#長期の北極星-映像表現を実行再利用配布できる単位にする)、[連続体決定](reviews/2026-07-22-creator-developer-continuum-decision.md))
-- **技術スタック**: Rust + wgpu(レンダコア、VRAM常駐) / ffmpegサイドカープロセス / Cargo workspaceは確定。UIは[React / WebView chrome + native Rust/wgpu Stage/Timeline](ui-runtime-architecture.md)へ責任分割し、通常windowは[1 top-level wgpu Surface + 2 native viewport + opaque child WebView islands](reviews/2026-07-21-ui-surface-topology-decision.md)へ固定した。native操作はrenderer非依存のheadless kernelへ置く。OS window、surface runtime、Core／Host module／plugin、first／third-partyの信頼境界は[軸分離決定](reviews/2026-07-22-m3-surface-extension-axis-separation.md)に従って別判定する
-- **開発方式**: 仕様書駆動の並列AIエージェント開発。[M2基盤再締結](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。歴史から再採択したD1n external revisionは独立follow-up・未実装で、external change検出/cloud-safeは未達。M3はU0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4までmain到達済み。歴史からU2b-2 Place、U4b-0 Add Position Key、U2h-1 primary selection、U3a-1 headless Timelineを決定済み・未実装follow-upとして再採択した。G0-9中もU3a-1等のheadless layout/hit-testは論理上進行可だが、現在のSelected U series順は別に守り、WebView/native製品統合とU3a-2 windowed rendererはplatform合格まで停止する。plugin UI公開契約はG0-3 / GAP-13の別審判まで停止する
+- **技術スタック**: Rust + wgpu(レンダコア、VRAM常駐) / ffmpegサイドカープロセス / Cargo workspaceは確定。UIは[React / WebView chrome + native Rust/wgpu Stage/Timeline](ui-runtime-architecture.md)へ責任分割し、通常windowは[1 top-level wgpu Surface + 2 native viewport + opaque child WebView islands](reviews/2026-07-21-ui-surface-topology-decision.md)へ固定した。eguiは製品runtimeへ採用せず、既存shellを比較・診断baselineとして保持する。native操作はrenderer非依存のheadless kernelへ置く。OS window、surface runtime、Core／Host module／plugin、first／third-partyのprovenanceは別軸であり、公開plugin codeは供給元を問わず非信頼とする。TCBと信頼境界は[Controlled Microkernel決定 §6](reviews/2026-07-25-controlled-microkernel-host-module-parallelism-decision.md#6-pluginという語と信頼境界の分離)に従う
+- **開発方式**: 仕様書駆動の並列AIエージェント開発。Coreは[制御されたMicrokernel](reviews/2026-07-25-controlled-microkernel-host-module-parallelism-decision.md)としてauthorityとtyped protocolへ細くし、締結済みseat上のHost capability module／provider／consumer／表現pluginを製品全体の完成待ちから解放する。全seat inventoryやmilestone完了をbarrierにせず、[並列Human Response Frontier](reviews/2026-07-25-parallel-human-response-frontier-execution-decision.md)として通常製品routeで触る・見る・測る地点へrolling waveで返す。Fableは共有境界の非同期反対側reviewへ限定し、全leafの待ち行列にしない。[M2基盤再締結](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3は[縦slice実行方針](reviews/2026-07-24-m3-vertical-slice-execution-decision.md)に従い、通常製品routeから利用者成果までの接続で進捗を測る。現在はVS-1「Rectangle配置と三面投影、Undo/Redo」。U0e-2R/U0e-2、固定MacのG0-9L platform prerequisite evidence、React直接移管R0/R1は完了済みで、現在のenabling orderは`CU-0A05A / R2A Easing trigger mock-side extraction`である。Motolii Studio Previewはまだ未実装。G0-6HはU0e-3を止める並行人間審判、G0-9DはDistribution Ready用hardware gateとして分離する。plugin UI公開契約はG0-3 / GAP-13の別審判まで停止する
 - **設計目標の代表値**: 1080p動画レイヤー40本同時で破綻しない / プロセス強制終了しても編集を失わない(コマンドジャーナル) / フレーム並列(マルチコア)を構造で保証
 
 ## 読む順序(初見向け)
@@ -20,9 +20,9 @@
 2. [performance-model.md](performance-model.md) — 「なぜAEより軽くできるか」の物理(メモリ帯域モデル)、品質モード(Draft/Final)、並列性、40レイヤー目標の試算。**容量・VRAM上限への疑念は[memory-model.md](memory-model.md)(疑念台帳)へ**
 3. [pitfalls-and-roadmap.md](pitfalls-and-roadmap.md) — **最重要・最大**。落とし穴カタログ(A〜H、先行プロジェクト死因分析+LLM開発規律込み)とロードマップ(M0〜M5)、凍結ゲート
 4. 実装に着手する時: [implementation-ledger.md](implementation-ledger.md)(NOW/NEXT/WAIT)→ [specs/README.md](specs/README.md)(プロセスとステータス表)→ 対象`specs/M*.md`(タスク表と**末尾の「実装ガード」節**の両方を読む)
-5. プラグインを書く/量産させる時: [plugin-authoring.md](plugin-authoring.md)(LLM/人間共通の契約・禁止事項・型紙)
-6. 依存・参考リポジトリを調べる時: [references.md](references.md)(ライセンス区分つき。GPL系はコードを読むことすら禁止)
-7. M3の画面・モック・スクリーンショットに触る時: [M3 UI参照地図](ui-reference-map.md)で、規範、React prototype、legacy bridge、証拠、履歴を区別する
+5. UIを表示・起動・比較する時: [ui-artifact-terminology.md](ui-artifact-terminology.md)(要求名→成果物種別→実装状態。未実装のPreviewをMock/baseline/spikeで代替しない)→ [ui-reference-map.md](ui-reference-map.md)(対象surfaceの正本と実体)
+6. プラグインを書く/量産させる時: [plugin-authoring.md](plugin-authoring.md)(LLM/人間共通の契約・禁止事項・型紙)
+7. 依存・参考リポジトリを調べる時: [references.md](references.md)(ライセンス区分つき。GPL系はコードを読むことすら禁止)
 
 ## ファイルマップ
 
@@ -54,10 +54,10 @@
 | [plugin-resources.md](plugin-resources.md) | プラグインのリソースライフサイクル・アセット境界・時間参照(F-10/F-11) | **縮小採用**(PipelineCache/AssetRef/予約型は実装済み、GpuAssetCache/Importer/Feedback実行は未実装・未凍結) |
 | [references.md](references.md) | 依存候補・参考リポジトリ(ライセンス区分) | 現行 |
 | [ae-pain-points.md](ae-pain-points.md) | AEユーザー不満の体系化+我々の解決タグ(プラグイン窓口仮説の検証) | 現行 |
-| [dev-experience.md](dev-experience.md) | 開発体験(DX): プラグイン/シェーダのホットリロードはしご(AE再起動地獄の予防) | 現行(2026-07-13。設計ノート、契約変更なし) |
+| [dev-experience.md](dev-experience.md) | 開発体験(DX): WGSL差し替え→journal復元付き再起動→将来WASM交換のはしご。hot reloadとcrash recoveryをHost所有状態からの同じinstance交換路へ畳む | 現行(2026-07-25。runtime／ABI契約は未決) |
 | [plugin-ui-model.md](plugin-ui-model.md) | プラグインUIモデル: 宣言語彙 vs 自由描画。M3着手前決定で縮小採用 | **採否済み分析**(v1はHost自動生成panel、自由UIは延期) |
 | [interaction-simplicity-model.md](interaction-simplicity-model.md) | 操作単純化モデル: Direct/Tool/Advanced正規化、plugin昇格、PP-Gate、M0〜M5割当 | 現行(2026-07-14。凍結済み公開契約は変更しない) |
-| [extensible-core-model.md](extensible-core-model.md) | 小さなコアと探索可能な拡張: Core kernel／bundled Host module／first-party／third-partyの分界、壊れない探索、編集pluginの責任寿命、Documentを増やさないアドレス可能な個体、表現domainを列挙しない能力境界、性能上限を焼かない原則 | **設計原則**(2026-07-17。`motolii-core` crateやUI runtimeの分類表ではなく、未凍結APIの実装許可でもない) |
+| [extensible-core-model.md](extensible-core-model.md) | 小さなコアと探索可能な拡張: Controlled Core／admitted Host capability module／presentation module／非信頼first-party／third-party pluginの分界、締結後の並列化、編集pluginの責任寿命、Documentを増やさないアドレス可能な個体、表現domainを列挙しない能力境界 | **設計原則**(2026-07-17、2026-07-25 microkernel・信頼境界一般化。未凍結APIの実装許可ではない) |
 | [vism-package-concept.md](vism-package-concept.md) | Vism (`.vism`): Project・内部plugin kind・Host UIから分離して保存/共有/再利用する映像表現の配布単位。Motoliiは最初のHost、container/loaderは未決 | **コンセプト・名称・拡張子決定／ファイル形式未決**(2026-07-17。v1実装許可ではない) |
 | [vism-kit-model.md](vism-kit-model.md) | Core=文法、Vism=小さな表現、Kit=provider選択・型付き接続・初期値・公開controlを持つRack型の作者成果、Project=作品。Vism直接依存を避けるmaterialize構成とfork能力の境界を定義 | **設計原則決定／schema・形式未決**(2026-07-17、2026-07-23用語統合) |
 | [reviews/2026-07-23-vism-kit-rack-unification-decision.md](reviews/2026-07-23-vism-kit-rack-unification-decision.md) | 独立Plugin Setを廃止し、接続済み一式をRack型Vism Kitへ、無関係な推薦集合をcurator list／feedへ分離 | **用語・責任統合決定／形式未決** |
@@ -67,6 +67,7 @@
 | [ui-visual-language.md](ui-visual-language.md) | M3の視覚言語: 高密度一覧、意味色、既存UIへの馴染み、contrast、token規約、参照範囲 | 設計基準(具体token値はM3視覚確定(G0-6)待ち) |
 | [ui-score-model.md](ui-score-model.md) | 時間面UI構成モデル: 固定Laneを所有者にしない時間投影、選択コンテキスト、Group関係ラベル、回帰審判 | **設計決定**(2026-07-17、2026-07-22用語訂正。公開API・schemaの実装許可ではない) |
 | [ui-runtime-architecture.md](ui-runtime-architecture.md) | React/DOM chrome、native Stage/Timeline、headless interaction、React asset直接移管、1 surface/2 viewport/WebView islandsの責任境界 | **責任境界・surface topology決定**(React package移管可。platform受入とrenderer採否はG0-9実機spike待ち) |
+| [ui-artifact-terminology.md](ui-artifact-terminology.md) | Motolii Studio / Mock / Preview、baseline、spike、source assetと製品結合段階を分離するUI成果物の命名正本 | **運用正本**(Previewは結合済みnative desktop実行物だけ。現時点では未実装) |
 | [mocks/](mocks/README.md) | M3高密度メインUI(基準)+timeline/interaction/UI力学の比較モック台帳 | 視覚構成の基準モック |
 | [mocks-ui/](mocks-ui/README.md) | React/Viteで動く固定source asset。hash fixture、Storybook、Playwright、component map | **現行prototype / 製品直接移管のsource**（一部surfaceはlegacy bridge） |
 | [ui-reference-map.md](ui-reference-map.md) | M3 UI参照地図: 規範/prototype/採否台帳/移行互換/証拠/履歴の参照順位と、React移行の実状態・既知の未統一 | **運用正本**(2026-07-19。`codex/m3-mock-components`側から回収) |
@@ -79,7 +80,7 @@
 | [reviews/2026-07-12-m2-permanence-prevention.md](reviews/2026-07-12-m2-permanence-prevention.md) | M2恒久焼き込みの**予防手順**(やること5手)。運用正本 | 現行 |
 | [reviews/2026-07-14-m3-ui-boundary-prevention.md](reviews/2026-07-14-m3-ui-boundary-prevention.md) | M3でUI都合をDocument・レンダ・公開契約へ逆流させない**予防手順**(規律8本) | 現行 |
 | [reviews/2026-07-14-m3-ui-boundary-counter-review.md](reviews/2026-07-14-m3-ui-boundary-counter-review.md) | M3 UI境界規約の反対側レビュー。R1〜R9を採用/縮小/延期で再判定 | 現行(判定反映済み) |
-| [reviews/2026-07-22-m3-comfortable-use-work-map.md](reviews/2026-07-22-m3-comfortable-use-work-map.md) | 製品外殻からLocal Alpha、日常操作、Distribution Readyまでを制作経路で並べるM3大地図 | **粒度化・Fable全粒レビュー完了** |
+| [reviews/2026-07-22-m3-comfortable-use-work-map.md](reviews/2026-07-22-m3-comfortable-use-work-map.md) | 製品外殻からLocal Alpha、日常操作、Distribution Readyまでを制作経路で並べるM3大地図 | **粒度化・Fable全粒レビュー完了／2026-07-25 Wave 0同期済み** |
 | [reviews/2026-07-22-m3-comfortable-use-granulation.md](reviews/2026-07-22-m3-comfortable-use-granulation.md) | 快適利用大地図を仕様判断・実装・E2E・実機審判の粒へ分け、依存とSTOPを固定 | **Fable P0/P1=0 / order draft母集団** |
 | [reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md](reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md) | React/WebView、Host/community同一kit、native surface統合のG0-9証拠 | **責任境界・surface topology決定 / platform受入比較中** |
 | [reviews/2026-07-22-m3-react-product-asset-promotion-contract.md](reviews/2026-07-22-m3-react-product-asset-promotion-contract.md) | Reactモックを製品packageへ直接所有移管し、維持／交換境界、diagnostic route、発注・検収STOPを固定 | **決定 / 発注停止線**(明示再開まで発注しない) |
@@ -105,7 +106,13 @@
 | [reviews/2026-07-18-vism-a3-external-expression-survey.md](reviews/2026-07-18-vism-a3-external-expression-survey.md) | VSM-A3R: AE Expression／Script／Effect、aescripts、Blender Driver／Geometry Nodes／Simulation／Add-onを責任分類し、Parameter Panel中心のA3候補へ翻訳 | **調査完了**（採用決定は[A3D](reviews/2026-07-18-vism-a3d-radial-repeater-decision.md)） |
 | [reviews/2026-07-18-vism-a3d-radial-repeater-decision.md](reviews/2026-07-18-vism-a3d-radial-repeater-decision.md) | VSM-A3D: 決定論的2D Radial Repeater LayerSource（`core.layer_source.radial_repeater` v1）のidentity・正準意味・parameter閉集合・UI投影要求・非目標 | **設計決定・VSM-A3実装完了** |
 | [reviews/2026-07-18-vism-a3s-layersource-lowering-spec.md](reviews/2026-07-18-vism-a3s-layersource-lowering-spec.md) | VSM-A3S: 一般LayerSource lowering（prepared→`RenderStep::Plugin`）、clear一般化、拒否分類、rect分離、画素契約、U4a handoff、A3分割発注表。[F1](reviews/2026-07-17-vism-implementation-plan.md)でHost cache GAPを訂正し、`VSM-A3-0`〜`VSM-A3-4`まで実装済み | **仕様・VSM-A3完了** |
-| [reviews/2026-07-14-unified-stage-camera-design.md](reviews/2026-07-14-unified-stage-camera-design.md) | 2D/3Dを分けない単一カメラ、Stage、Output Frame、枠外表示の意味と実装順 | **決定**(2026-07-14) |
+| [reviews/2026-07-14-unified-stage-camera-design.md](reviews/2026-07-14-unified-stage-camera-design.md) | 2D/3Dを分けない単一active camera、Stage、Output Frame、枠外表示の意味。将来の具体camera所有だけ2026-07-24決定へ置換 | **決定**(2026-07-14、将来所有改訂) |
+| [reviews/2026-07-24-replaceable-semantic-seat-decision.md](reviews/2026-07-24-replaceable-semantic-seat-decision.md) | Host semantic seat、換装可能Provider、Effect／Filter分類、Content-Aware Scale候補の一般則 | **決定**(2026-07-24、Fable ACCEPT) |
+| [reviews/2026-07-24-camera-object-provider-decision.md](reviews/2026-07-24-camera-object-provider-decision.md) | Cameraをタイムライン上の換装可能Object／Providerとし、点群以後のrendererとrepresentation非依存Observation Contractで接続する | **決定**(2026-07-24、既存Planar互換不変) |
+| [reviews/2026-07-25-controlled-microkernel-host-module-parallelism-decision.md](reviews/2026-07-25-controlled-microkernel-host-module-parallelism-decision.md) | Coreをauthorityとtyped protocolへ細くし、Host capabilityを並列化する一般則。TCBをCore＋admitted Host moduleへ限定し、公開pluginはfirst/third-partyを問わず非信頼とする | **決定**(2026-07-25、[Fable反対側レビュー](reviews/2026-07-25-controlled-microkernel-fable-counter-review.md)訂正後ACCEPT、現行API／schema変更なし) |
+| [reviews/2026-07-25-parallel-human-response-frontier-execution-decision.md](reviews/2026-07-25-parallel-human-response-frontier-execution-decision.md) | 締結済みcontract上のlaneを全体barrierから解放し、通常製品routeの人間応答地点へrolling waveで返す。Fableを共有境界reviewへ限定する | **実行決定**(2026-07-25、既存未決／人間感覚gateは維持) |
+| [reviews/2026-07-25-parallel-lane-readiness-map.md](reviews/2026-07-25-parallel-lane-readiness-map.md) | Wave 0の製品資産、人間審判、Vism仕様、M4/M5 contract spike、M2修復をlane化し、変更pathとSTOPを固定 | **実行決定**(2026-07-25、[Fableレビュー](reviews/2026-07-25-parallel-lane-readiness-fable-review.md)の初回P1二件を訂正後ACCEPT) |
+| [reviews/2026-07-25-cu-0a05a-interrupted-worktree-restart-disposition.md](reviews/2026-07-25-cu-0a05a-interrupted-worktree-restart-disposition.md) | CU-0A05Aの旧隔離差分を証拠カプセルへ固定し、fresh baseへの縮小再適用、全試験・visual・Grok再取得を要求 | **停止線**(CU-0A05A自体は現行`DO`、旧差分の直接採用だけ禁止) |
 | [reviews/2026-07-14-recent-concept-propagation-audit.md](reviews/2026-07-14-recent-concept-propagation-audit.md) | 直近の根幹決定を意味・Document・評価・UI・依存・コードの6面で逆引きした未反映台帳 | 横断監査(2026-07-14) |
 | [reviews/2026-07-14-motion-foundation-known-tech-disposition.md](reviews/2026-07-14-motion-foundation-known-tech-disposition.md) | Relative Move、Bounds/ROI、Effect Scope、Instance/Elementを既知技術で再判定した最小契約 | **決定**(2026-07-14) |
 | [reviews/2026-07-15-relative-scope-duplicator-decision.md](reviews/2026-07-15-relative-scope-duplicator-decision.md) | modifier+drag、透過Stage、Explicit Definition/Use、Cavalry型Duplicator、stable seedの具体化 | **決定**(2026-07-15) |
@@ -129,7 +136,7 @@
 | [reviews/2026-07-15-p5-generative-pattern-disposition.md](reviews/2026-07-15-p5-generative-pattern-disposition.md) | p5.js系ジェネ表現をone-shot/純関数/Feedback/Simulation/記録入力へ分類 | **調査・配置案**(2026-07-15) |
 | [reviews/2026-07-16-m3-ui-gap-survey.md](reviews/2026-07-16-m3-ui-gap-survey.md) | M3前UIギャップ調査: U1〜U8に席が無いUI領域(書き出し/保存/エラー表示等)とコア側前提の欠落(状態購読/ParamDefメタデータ/Transport等) | **調査メモ**(2026-07-16。各項目の採否は個別M3チケット／依存充足後の裁定で決める) |
 | [reviews/2026-07-16-m3-ui-rapid-acceptance-prior-art.md](reviews/2026-07-16-m3-ui-rapid-acceptance-prior-art.md) | すぐに受け入れられたUIの先例集: 第一部=プロダクト単位の受容(界隈の期待リスト)、第二部=業界収斂した操作語彙+UX原理の一次資料(M3転移の本線)、第三部=後発の勝ち筋「どの操作も直感的」(Ableton→AEカウンター)。設計根拠ではない | 仮説メモ(2026-07-16) |
-| [reviews/2026-07-18-m3-egui-selection.md](reviews/2026-07-18-m3-egui-selection.md) | M3 UI基盤をSlintからeguiへ変更した時点の既存wgpu device/native texture、lifecycle、日本語IME、可変panel証拠 | **歴史的採否決定**(完了済みegui基準を保持。現行採否はG0-9再評価中) |
+| [reviews/2026-07-18-m3-egui-selection.md](reviews/2026-07-18-m3-egui-selection.md) | M3 UI基盤をSlintからeguiへ変更した時点の既存wgpu device/native texture、lifecycle、日本語IME、可変panel証拠と2026-07-24の処分 | **歴史的採用決定／製品runtime採用は撤回**(既存egui基準は比較・診断baseline限定) |
 | [reviews/2026-07-20-rerun-learning-transfer-plan.md](reviews/2026-07-20-rerun-learning-transfer-plan.md) | RerunのUI、時間面、GPU viewport、selection、実行系、試験系をRR-0〜9へ分解し、M1〜M5の関与、転移順、停止線、発注の強制動線を規定 | **方向決定／学習・発注運用正本**(source監査は可。依存・vendoring・移植はM3入場後。§9の順序と6ラベルは無視禁止) |
 | [reviews/2026-07-21-m3-u1a-1-static-viewport-contract.md](reviews/2026-07-21-m3-u1a-1-static-viewport-contract.md) | U1a-1の単一Document→display閉路、register-once、event-loop前setup、製品window lifecycle、中央Stage境界 | **実装完了**(旧night差分は直接統合せず、本契約から再実装。実monitor DPI移動はU1e) |
 | [reviews/2026-07-21-m3-u1a-2-layout-projection-contract.md](reviews/2026-07-21-m3-u1a-2-layout-projection-contract.md) | U1a-2の固定5 role layout intent、runtime proposal権限、局所input adapter、Stage/Status境界 | **実装完了**(Grok反対側レビュー ACCEPT、P0/P1=0。保存codecはU1a-3、自由dock実機はU1e) |
@@ -161,7 +168,7 @@
 - **Quality (Draft/Final)**: 同一レンダ関数に渡す品質パラメータ。Draft=1/2解像度(重い時1/4へ自動降格)・fp16。Finalのみ厳密
 - **DataTrack / ParamDriver**: 解析プラグインが生成する時系列データと、それでパラメータを駆動する仕組み(「解析→生成」がこのツールの長期的な強み)
 - **TimeMap**: クリップのソース時刻写像。v1は恒等+定数速度のみ実装、スキーマは初日から予約(落とし穴F-4)
-- **CompCamera**: 全Compositionに常在し、2D=`z=0`を含む全objectが共有する単一カメラ。Output Frameはその投影開口。Stage Viewのpan/zoomはDocument外で、別cameraではない
+- **Camera / Observation**: 全Compositionに単一active cameraの席が常在し、2D=`z=0`を含む全objectが同じ観測を共有する。既存`CompCameraDoc::PlanarOrthographic`は互換baseline、将来の具体modelは換装可能Camera Object／Provider。Output Frameはその投影開口で、Stage Viewのpan/zoomはDocument外
 - **凍結ゲート**: M1完了後、実際に動いたインターフェースだけを凍結して並列開発を解禁する関門。[宣言](reviews/2026-07-10-freeze-gate-declaration.md)済み(2026-07-10)。改訂は解凍手続き(理由+migrate+ゴールデン)を通す
 - **グループ仮出力(ベイク)**: プリコンポの代替。グループ出力を時間範囲でキャッシュし、編集で自動無効化
 - **SimulationPlugin / StateTrack**: 逐次状態シミュレーション(布・液体・パーティクル)のプラグイン境界と、そのベイク結果(チェックポイント列の区間キャッシュ)。状態はホストが所有し、`render_frame(t)`はベイク結果を読む純関数のまま(落とし穴F-12、[simulation-model.md](simulation-model.md)。口の予約段階)

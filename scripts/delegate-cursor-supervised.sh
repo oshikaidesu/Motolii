@@ -6,10 +6,13 @@ PRIMARY_WORKTREE_RAW="$(git -C "$ROOT_DIR" worktree list --porcelain | awk '/^wo
 PRIMARY_WORKTREE="$(cd "$PRIMARY_WORKTREE_RAW" && pwd -P)"
 CURSOR_AGENT_BIN="${CURSOR_AGENT_BIN:-cursor-agent}"
 CODEX_AGENT_BIN="${CODEX_AGENT_BIN:-codex}"
+CLAUDE_AGENT_BIN="${CLAUDE_AGENT_BIN:-claude}"
 CURSOR_GROK_MODEL="cursor-grok-4.5-high"
-TERRA_MODEL="gpt-5.6-terra"
+OPUS_MANAGER_MODEL="claude-opus-5"
+SPARK_MODEL="gpt-5.3-codex-spark"
+LOOP_PROFILE="opus-spark-grok"
 SUPERVISOR_TIMEOUT_SECONDS="${CURSOR_SUPERVISED_TIMEOUT_SECONDS:-600}"
-TERRA_TIMEOUT_SECONDS="${CODEX_TERRA_TIMEOUT_SECONDS:-1800}"
+SPARK_TIMEOUT_SECONDS="${CODEX_SPARK_TIMEOUT_SECONDS:-1800}"
 INSPECTION_TIMEOUT_SECONDS="${CURSOR_INSPECTION_TIMEOUT_SECONDS:-300}"
 HEARTBEAT_SECONDS="${CURSOR_SUPERVISED_HEARTBEAT_SECONDS:-30}"
 TERMINATION_GRACE_SECONDS="${CURSOR_TERMINATION_GRACE_SECONDS:-2}"
@@ -21,8 +24,21 @@ usage() {
   echo "       printf '%s\n' <task> | $0 prepare|execute <isolated-worktree> <order-file>"
 }
 
+order_value() {
+  local order_file="$1"
+  local key="$2"
+  awk -v prefix="$key: " '
+    index($0, prefix) == 1 { count++; value = substr($0, length(prefix) + 1) }
+    END { if (count == 1) print value }
+  ' "$order_file"
+}
+
 if [[ -n "${CURSOR_AGENT:-}" || -n "${CODEX_DELEGATED:-}" ]]; then
   echo "delegate-cursor-supervised: 外部子エージェントからの再帰実行は禁止です" >&2
+  exit 2
+fi
+if [[ -n "${CLAUDE_DELEGATED:-}" ]]; then
+  echo "delegate-cursor-supervised: Claude子エージェントからの再帰実行は禁止です" >&2
   exit 2
 fi
 
@@ -79,7 +95,7 @@ if [[ "$WORKTREE" != "$worktree_toplevel" ]]; then
   echo "delegate-cursor-supervised: WORKTREEはworktree toplevelではありません: $WORKTREE" >&2
   exit 2
 fi
-for value in "$SUPERVISOR_TIMEOUT_SECONDS" "$TERRA_TIMEOUT_SECONDS" "$INSPECTION_TIMEOUT_SECONDS" "$HEARTBEAT_SECONDS" "$TERMINATION_GRACE_SECONDS"; do
+for value in "$SUPERVISOR_TIMEOUT_SECONDS" "$SPARK_TIMEOUT_SECONDS" "$INSPECTION_TIMEOUT_SECONDS" "$HEARTBEAT_SECONDS" "$TERMINATION_GRACE_SECONDS"; do
   if [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
     echo "delegate-cursor-supervised: timeout/heartbeatは正の整数で指定してください" >&2
     exit 2
@@ -93,17 +109,21 @@ if ! command -v "$CODEX_AGENT_BIN" >/dev/null 2>&1; then
   echo "delegate-cursor-supervised: Codex CLI '$CODEX_AGENT_BIN' が見つかりません" >&2
   exit 127
 fi
+if ! command -v "$CLAUDE_AGENT_BIN" >/dev/null 2>&1; then
+  echo "delegate-cursor-supervised: Claude Code CLI '$CLAUDE_AGENT_BIN' が見つかりません" >&2
+  exit 127
+fi
 
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/motolii-cursor-supervised.XXXXXX")"
 # checkpointはmodel出力ではなくparent(この script)だけが書く。EVIDENCE_ROOT_FOR_TRAPが
 # 設定された後、CHECKPOINT_SETTLED=1でexitしない限り、EXIT trapがcheckpointを
-# 無効化する。これにより「Terra後のどの経路で抜けても、明示的にpublish/invalidateを
+# 無効化する。これにより「Spark後のどの経路で抜けても、明示的にpublish/invalidateを
 # 済ませていない限りcheckpointは無効」という不変条件を経路網羅なしで保証する
 EVIDENCE_ROOT_FOR_TRAP=""
 CHECKPOINT_SETTLED=0
 cleanup() {
   # $?をここで即時退避しないと、後続コマンドがrunnerの本来の終了statusを上書きしてしまう。
-  # trapはexitを呼ばないため、退避した値をevidenceへ書くだけで実際の終了statusは変わらない
+  # 後始末の成功を呼び出し側へ返さず、最後に元のstatusを明示してfail-closedを維持する
   local status=$?
   if [[ -n "${CURRENT_ATTEMPT_DIR:-}" ]]; then
     printf 'EXIT_STATUS: %s\n' "$status" >>"$CURRENT_ATTEMPT_DIR/stage-result.txt" 2>/dev/null || true
@@ -112,6 +132,8 @@ cleanup() {
     rm -f "$EVIDENCE_ROOT_FOR_TRAP/checkpoint.txt" 2>/dev/null || true
   fi
   rm -rf "$tmp_dir"
+  trap - EXIT
+  exit "$status"
 }
 trap cleanup EXIT
 
@@ -203,9 +225,9 @@ run_supervisor() {
   local prompt="$2"
   local result_kind="$3"
   local timeout_seconds="${4:-$SUPERVISOR_TIMEOUT_SECONDS}"
-  # order作成も検収もCursor自身のread-only ask modeへ固定する。事後の
-  # fingerprint/scope検査は多層防御であり、write権限を与える理由にしない。
-  local cursor_mode_args=(--trust --mode ask)
+  # plan modeで編集を禁止しつつ、--forceでread-only shellの非対話実行だけを
+  # 可能にする。fingerprint/scope検査は、CLI側のmode退行も検出する多層防御。
+  local cursor_mode_args=(--trust --mode plan --force --sandbox enabled)
   if ! run_agent "$output" "$timeout_seconds" \
     env CURSOR_AGENT=1 "$CURSOR_AGENT_BIN" -p "${cursor_mode_args[@]}" \
       --output-format text \
@@ -216,6 +238,26 @@ run_supervisor() {
   fi
   if ! result_is_valid "$output" "$result_kind"; then
     echo "delegate-cursor-supervised: Grokの結果markerが欠落・曖昧・末尾外です" >&2
+    return 1
+  fi
+}
+
+run_order_manager() {
+  local output="$1"
+  local prompt="$2"
+  local timeout_seconds="${3:-$SUPERVISOR_TIMEOUT_SECONDS}"
+  if ! run_agent "$output" "$timeout_seconds" \
+    env CLAUDE_DELEGATED=1 "$CLAUDE_AGENT_BIN" -p \
+      --model "$OPUS_MANAGER_MODEL" \
+      --permission-mode default \
+      --allowedTools Read,Glob,Grep,Bash \
+      --disallowedTools Edit,Write \
+      --output-format text \
+      "$prompt"; then
+    return 1
+  fi
+  if ! result_is_valid "$output" order; then
+    echo "delegate-cursor-supervised: Opus 5のORDER markerが欠落・曖昧・末尾外です" >&2
     return 1
   fi
 }
@@ -317,18 +359,18 @@ gate_reject_symlink_components() {
 }
 
 gate_ledger_row_state() {
-  local ledger="$1" id="$2"
-  awk -v id="$id" '
+  local ledger="$1" section="$2" id="$3" id_column="$4" state_column="$5"
+  awk -v section="$section" -v id="$id" -v id_column="$id_column" -v state_column="$state_column" '
     BEGIN { in_section = 0; count = 0 }
-    /^## 現在選択中の1件/ { in_section = 1; next }
-    in_section && /^## / { in_section = 0 }
+    $0 == "## " section { in_section = 1; next }
+    in_section && /^##+ / { in_section = 0 }
     in_section && /^\|/ {
       n = split($0, f, "|")
-      if (n < 5) next
-      gsub(/^[ \t]+|[ \t]+$/, "", f[3])
-      if (f[3] ~ /^-+$/) next
-      if (f[3] == id) {
-        state = f[5]
+      if (n <= id_column || n <= state_column) next
+      gsub(/^[ \t]+|[ \t]+$/, "", f[id_column])
+      if (f[id_column] ~ /^-+$/) next
+      if (f[id_column] == id) {
+        state = f[state_column]
         gsub(/^[ \t]+|[ \t]+$/, "", state)
         gsub(/`/, "", state)
         count++
@@ -386,10 +428,10 @@ gate_check_grain_and_dependencies() {
   fi
 
   grain="$(gate_require_single_field "$order_file" "GRAIN")"
-  grain_state="$(gate_ledger_row_state "$ledger" "$grain")"
+  grain_state="$(gate_ledger_row_state "$ledger" "現在の並列レーン" "$grain" 3 5)"
   case "$grain_state" in
-    ABSENT) gate_fail "$grain not found in selected-work ledger" ;;
-    AMBIGUOUS) gate_fail "$grain has ambiguous selected-work ledger rows" ;;
+    ABSENT) gate_fail "$grain not found in current-lane ledger" ;;
+    AMBIGUOUS) gate_fail "$grain has ambiguous current-lane ledger rows" ;;
     DO) ;;
     *) gate_fail "$grain is $grain_state; dispatch is forbidden" ;;
   esac
@@ -406,10 +448,10 @@ gate_check_grain_and_dependencies() {
       gate_fail "DEPENDENCY malformed: ${dep_id#DEPENDENCY: }"
     fi
     dep_id="${BASH_REMATCH[1]}"
-    dep_state="$(gate_ledger_row_state "$ledger" "$dep_id")"
+    dep_state="$(gate_ledger_row_state "$ledger" "発注依存証跡" "$dep_id" 2 3)"
     case "$dep_state" in
-      ABSENT) gate_fail "dependency $dep_id not found in selected-work ledger" ;;
-      AMBIGUOUS) gate_fail "dependency $dep_id has ambiguous selected-work ledger rows" ;;
+      ABSENT) gate_fail "dependency $dep_id not found in dependency-evidence ledger" ;;
+      AMBIGUOUS) gate_fail "dependency $dep_id has ambiguous dependency-evidence ledger rows" ;;
       DONE) ;;
       *) gate_fail "dependency $dep_id is $dep_state; dispatch is forbidden" ;;
     esac
@@ -567,7 +609,7 @@ gate_check_authorities_at_base() {
   done <<<"$authority_lines"
 }
 
-# inspectはTerraを再起動しないため、実装後に必ず汚れているworktreeを
+# inspectはSparkを再起動しないため、実装後に必ず汚れているworktreeを
 # 通常のclean gateへ通さず、base commit照合とscope/checkpoint検証だけを行う
 run_dispatch_gate_for_inspect() {
   local order_file="$1" worktree="$2"
@@ -1052,9 +1094,9 @@ build_out_of_scope_manifest() {
   rm -f "$records_file"
 }
 
-# expected-parent-digestはparent shell変数(Terra起動前にbuild_out_of_scope_manifestの
+# expected-parent-digestはparent shell変数(Spark起動前にbuild_out_of_scope_manifestの
 # 結果をhashした値)のみを権威として使う。永続化したevidence file自体を後から読み直して
-# 比較の権威にはしない(Terra/Grokのbash toolがevidence_rootへ書き込み得るため)
+# 比較の権威にはしない(Spark/Grokのbash toolがevidence_rootへ書き込み得るため)
 enforce_out_of_scope_manifest_unchanged() {
   local expected_digest="$1" post_manifest_file="$2" violations_file="$3" worktree="$4" pre_ignore_policy="$5"
   local post_digest named_violations_file post_ignore_policy
@@ -1123,7 +1165,7 @@ enforce_scope_closure() {
 }
 
 # ignore policy(.gitignore/.git/info/exclude/core.excludesFile)そのものの
-# hash。スコープ判定は通常の git status(--ignored無し)を使うため、Terraが
+# hash。スコープ判定は通常の git status(--ignored無し)を使うため、Sparkが
 # .gitignoreへ"*"を書いてから許可外fileを作ると、そのfileも.gitignore自身も
 # git statusから消え、スコープ違反として一切検知できなくなる。
 # .gitignore自身の列挙にはgit statusが使う除外規則(--exclude-standard)を
@@ -1296,13 +1338,13 @@ snapshot_worktree() {
   compute_fingerprint "$worktree" >"$outdir/${prefix}-fingerprint.sha256"
 }
 
-# Terraは許可済みfileの中身を変えてよいが、ignore policyそのものを変えて
+# Sparkは許可済みfileの中身を変えてよいが、ignore policyそのものを変えて
 # 許可外の変更をgit statusから隠すことは許さない。scope closureより前に
 # 独立して判定し、隠蔽が成立する前にfail closedする。
-# Terraのbash toolはevidence_root(worktree外)にも書き込み得るため、
-# pre-terraの永続evidence file自体を後から比較の権威に使うと、Terraがその
-# fileを書き換えて偽装できてしまう。before値はTerra起動前にこの関数の外側で
-# parent shell変数として確保させ、afterは(post-terra snapshotの永続fileを
+# Sparkのbash toolはevidence_root(worktree外)にも書き込み得るため、
+# pre-sparkの永続evidence file自体を後から比較の権威に使うと、Sparkがその
+# fileを書き換えて偽装できてしまう。before値はSpark起動前にこの関数の外側で
+# parent shell変数として確保させ、afterは(post-spark snapshotの永続fileを
 # 経由せず)ここで直接再計算した値を使う
 enforce_ignore_policy_unchanged() {
   local worktree="$1" attempt_dir="$2" before="$3" after_prefix="$4"
@@ -1319,7 +1361,7 @@ enforce_ignore_policy_unchanged() {
   fi
 }
 
-# TerraもGrokも承認済みorder本文をargv経由で読めるため、実装/検収stage中に
+# SparkもGrokも承認済みorder本文をargv経由で読めるため、実装/検収stage中に
 # 外部order fileまたはこの試行がcopyしたorder.txtのどちらかが変わっていないか
 # 直接hash比較する。fingerprintはworktree内しか見ないため、worktree外に置かれる
 # order fileの改変はこの独立チェックでしか捕まえられない
@@ -1363,7 +1405,7 @@ invalidate_checkpoint() {
 
 # inspectは、実装成功直後に残したcheckpointが現在のorder/task/base/head/
 # worktree fingerprintと完全一致する時だけ進む。driftや証跡欠落はEVIDENCE NG
-# とし、Terraは元よりGrokも起動しない。
+# とし、Sparkは元よりGrokも起動しない。
 # 比較は必ずこの関数がindependentに再計算した値(order_sha256/base_ref/base_sha/
 # head_now/fp_now)を基準に行い、checkpoint file自体を比較の権威にはしない。
 # 一致した値はVALIDATED_*globalへ残し、以降の再publishがcheckpoint fileの
@@ -1398,11 +1440,11 @@ validate_checkpoint() {
   [[ -n "$cp_head" && "$cp_head" == "$head_now" ]] || evidence_fail "worktree HEAD drifted from checkpoint"
   [[ -n "$cp_fp" && "$cp_fp" == "$fp_now" ]] || evidence_fail "worktree fingerprint drifted from checkpoint"
 
-  # checkpointが指す試行が実際に"STAGE: terra SUCCESS"をこの試行のstage-result.txtへ
+  # checkpointが指す試行が実際に"STAGE: spark SUCCESS"をこの試行のstage-result.txtへ
   # 記録済みでない限り、checkpoint fileの中身だけを信用しない
   if [[ ! -d "$evidence_root/$cp_attempt" ]] || \
-     ! grep -qx 'STAGE: terra SUCCESS' "$evidence_root/$cp_attempt/stage-result.txt" 2>/dev/null; then
-    evidence_fail "checkpoint attempt has no recorded terra success"
+     ! grep -qx 'STAGE: spark SUCCESS' "$evidence_root/$cp_attempt/stage-result.txt" 2>/dev/null; then
+    evidence_fail "checkpoint attempt has no recorded spark success"
   fi
 
   VALIDATED_ATTEMPT="$cp_attempt"
@@ -1441,11 +1483,14 @@ and rerun required evidence now. Verify line-by-line against the binding order
 and authorities. Green tests alone are insufficient. Look for scope drift,
 contract-avoidance, weakened tests, missing negative cases, duplicate state or
 logic, raw public APIs, non-atomic failure, unbounded work, and unfinished gates.
+Do not search outside the selected worktree, run broad filesystem find commands,
+or launch background commands. Complete and reap every command before deciding.
 
 Classify P0/P1/P2 with file and line evidence. Any P0/P1, missing required test,
 out-of-allowlist edit, or unverifiable command requires rejection. End with one
 exact plain-text final line: VERDICT: ACCEPT or VERDICT: REJECT. Do not bold it,
-quote it, or append text.
+quote it, append text, run another tool, or report background command status
+after that line.
 
 Original user task:
 $task
@@ -1462,7 +1507,7 @@ EOF
     snapshot_worktree "$worktree" "$attempt_dir" "post-grok"
     echo "STAGE: grok FAILED_OR_TIMEOUT" >>"$attempt_dir/stage-result.txt"
     # timeout/失敗自体はworktreeを汚していない限りcheckpointを潰さない。
-    # これにより後続のinspectがTerraを再実行せずに再開できる。ただしfingerprintが
+    # これにより後続のinspectがSparkを再実行せずに再開できる。ただしfingerprintが
     # 保たれていても、Grokのbash toolはworktree外の承認済みorder(外部fileとこの
     # 試行のcopyの両方)を書き換え得るため、republishする前に独立して確認する
     post_fp="$(cat "$attempt_dir/post-grok-fingerprint.sha256")"
@@ -1516,7 +1561,8 @@ EOF
     exit 4
   fi
   echo "STAGE: grok ACCEPT" >>"$attempt_dir/stage-result.txt"
-  echo "delegate-cursor-supervised: Grok検収ACCEPT。Codex最終レビュー待ちです"
+
+  echo "delegate-cursor-supervised: 必須検収ACCEPT。Codex最終レビュー待ちです"
 }
 
 run_dispatch_gate() {
@@ -1544,11 +1590,12 @@ record_base_metadata() {
 
 if [[ "$MODE" == "prepare" ]]; then
   supervisor_prompt=$(cat <<EOF
-You are the read-only on-site supervisor for Motolii. Do not edit files, commit,
-push, create a PR, spawn subagents, or delegate. Read AGENTS.md and every required
-authority completely. Inspect the current worktree and existing diff. Turn the
-user task into a binding implementation order for GPT-5.6 Terra. Do not invent
-unresolved product meaning or public contracts.
+You are the read-only construction manager for Motolii. Do not edit files,
+commit, push, create a PR, spawn subagents, or delegate during this order-draft
+stage. Read AGENTS.md and every required authority completely. Inspect the
+current worktree and existing diff. Turn the user task into exactly one
+self-contained mechanical grain and a binding implementation order for Codex
+Spark. Do not invent unresolved product meaning or public contracts.
 
 The order must contain objective, current code facts, authoritative spec/task IDs,
 an exact closed file allowlist, non-goals, helpers to reuse, invariants, STOP
@@ -1559,22 +1606,32 @@ serde defaults, duplicate planners/helpers, partial mutation, TODO stubs, and
 adjacent-ticket expansion.
 
 The order must also emit the fields the dispatch gate checks mechanically before
-Terra is started: exactly one \`GRAIN: <id>\`, exactly one
+Spark is started: exactly one \`GRAIN: <id>\`, exactly one
 \`BASE_REF: refs/heads/<full-branch-name>\`, exactly one full 40-hex
 \`BASE_SHA: <sha>\` that BASE_REF resolves to and that equals the isolated
 worktree HEAD, one or more \`DEPENDENCY: <id>\` lines, one or more
 \`AUTHORITY: <worktree-relative-path> SHA256:<64-hex>\` lines, and one or more
-\`ALLOWED_FILE: <worktree-relative-path-or-glob>\` lines. Before writing GRAIN or
-DEPENDENCY, read the target worktree's docs/implementation-ledger.md
-selected-work table and confirm GRAIN's own row states exactly \`DO\` and every
-DEPENDENCY row states exactly \`DONE\`; never infer these states from prose or
-from a different worktree. Before writing an AUTHORITY line, hash the file
+\`ALLOWED_FILE: <worktree-relative-path-or-glob>\` lines. Before writing GRAIN,
+read docs/implementation-ledger.md in the target worktree. In section
+"現在の並列レーン", confirm the GRAIN row state is exactly DO. Before writing
+DEPENDENCY, read section "発注依存証跡" in that same file and confirm every
+DEPENDENCY row state is exactly DONE; never infer these states from prose,
+another table, or a different worktree. Before writing an AUTHORITY line, hash the file
 inside the target worktree and copy that exact hash. If the order touches a
 React surface (exact \`REACT TASK: YES\`, an ALLOWED_FILE under docs/mocks-ui, or
 an ALLOWED_FILE ending in .jsx), also include, exactly once and in this order:
 REACT AUTHORITY:, SOURCE ASSET:, PRESERVE:, REPLACE:, STATE OWNER:,
 DIAGNOSTIC ROUTE:, NEGATIVE ORACLE:, STOP:. Merely mentioning React in prose
 does not require these labels.
+
+Make the Spark packet self-contained from the closed order, allowed files, and
+explicitly named authorities. Do not require inherited conversation history,
+repository-wide archaeology, multiple-spec meaning judgment, unspecified
+public-boundary discovery, or another model. If those are necessary, return
+ORDER: STOP so Codex can revise the parent task or ask Fable outside this loop.
+
+Do not repeat the Codex-owned loop/model labels in the draft; the dispatcher appends
+them after validating the terminal marker.
 
 The last non-empty line must be exactly plain text ORDER: READY only if every
 ledger, authority, and label fact above is mechanically true; otherwise end with
@@ -1584,21 +1641,22 @@ User task:
 $task
 EOF
   )
-  echo "## 1. Cursor Grok 4.5 High supervisor order draft"
-  if ! (cd "$WORKTREE" && run_supervisor "$tmp_dir/order.txt" "$supervisor_prompt" order); then
+  echo "## 1. Claude Opus 5 managed Spark order draft"
+  if ! (cd "$WORKTREE" && run_order_manager "$tmp_dir/order.txt" "$supervisor_prompt"); then
     [[ ! -f "$tmp_dir/order.txt" ]] || cat "$tmp_dir/order.txt"
     exit 1
   fi
   cat "$tmp_dir/order.txt"
   {
     cat "$tmp_dir/order.txt"
-    echo "SUPERVISOR_BACKEND: cursor-grok"
-    echo "SUPERVISOR_MODEL: $CURSOR_GROK_MODEL"
-    echo "IMPLEMENTER_MODEL: $TERRA_MODEL"
+    echo "LOOP_PROFILE: $LOOP_PROFILE"
+    echo "ORDER_MANAGER_MODEL: $OPUS_MANAGER_MODEL"
+    echo "IMPLEMENTER_MODEL: $SPARK_MODEL"
+    echo "REVIEW_MODEL: $CURSOR_GROK_MODEL"
     echo "TASK_SHA256: $task_hash"
   } >"$ORDER_FILE"
   if ! grep -qx 'ORDER: READY' "$tmp_dir/order.txt"; then
-    echo "delegate-cursor-supervised: GrokがREADYを出していません" >&2
+    echo "delegate-cursor-supervised: Opus 5がREADYを出していません" >&2
     exit 3
   fi
   echo "delegate-cursor-supervised: 発注書案を保存しました: $ORDER_FILE" >&2
@@ -1618,10 +1676,19 @@ if ! grep -qx "TASK_SHA256: $task_hash" "$ORDER_FILE"; then
   echo "delegate-cursor-supervised: 発注書とtaskが一致しません" >&2
   exit 3
 fi
-if ! grep -qx 'SUPERVISOR_BACKEND: cursor-grok' "$ORDER_FILE" ||
-   ! grep -qx "SUPERVISOR_MODEL: $CURSOR_GROK_MODEL" "$ORDER_FILE" ||
-   ! grep -qx "IMPLEMENTER_MODEL: $TERRA_MODEL" "$ORDER_FILE"; then
-  echo "delegate-cursor-supervised: 発注書のbackend/model固定が現行のTerra + Grok運用と一致しません" >&2
+ORDER_LOOP_PROFILE="$(order_value "$ORDER_FILE" LOOP_PROFILE)"
+ORDER_MANAGER_MODEL="$(order_value "$ORDER_FILE" ORDER_MANAGER_MODEL)"
+ORDER_IMPLEMENTER_MODEL="$(order_value "$ORDER_FILE" IMPLEMENTER_MODEL)"
+ORDER_REVIEW_MODEL="$(order_value "$ORDER_FILE" REVIEW_MODEL)"
+if [[ -z "$ORDER_LOOP_PROFILE" || -z "$ORDER_MANAGER_MODEL" || -z "$ORDER_IMPLEMENTER_MODEL" || -z "$ORDER_REVIEW_MODEL" ]]; then
+  echo "delegate-cursor-supervised: 発注書のloop/model指定が欠落または重複しています" >&2
+  exit 3
+fi
+if [[ "$ORDER_LOOP_PROFILE" != "$LOOP_PROFILE" ]] ||
+   [[ "$ORDER_MANAGER_MODEL" != "$OPUS_MANAGER_MODEL" ]] ||
+   [[ "$ORDER_IMPLEMENTER_MODEL" != "$SPARK_MODEL" ]] ||
+   [[ "$ORDER_REVIEW_MODEL" != "$CURSOR_GROK_MODEL" ]]; then
+  echo "delegate-cursor-supervised: 発注書のmodel経路がOpus/Spark/Grok監督ループと一致しません" >&2
   exit 3
 fi
 if ! grep -qx 'CODEX PRECHECK: APPROVED' "$ORDER_FILE"; then
@@ -1636,7 +1703,7 @@ attempt_dir="$(new_attempt_dir "$evidence_root")"
 CURRENT_ATTEMPT_DIR="$attempt_dir"
 attempt_name="$(basename "$attempt_dir")"
 cp "$ORDER_FILE" "$attempt_dir/order.txt"
-# Terra/Grokが起動する前の承認済みorder本文のhash。checkpointへはこの
+# Spark/Grokが起動する前の承認済みorder本文のhash。checkpointへはこの
 # pre-model hashだけを刻み、各stage後にこの値との一致を独立に再確認する
 approved_order_sha256="$(shasum -a 256 "$attempt_dir/order.txt" | awk '{print $1}')"
 printf '%s' "$task" >"$attempt_dir/task.txt"
@@ -1644,12 +1711,14 @@ printf '%s' "$task" >"$attempt_dir/task.txt"
   echo "MODE: $MODE"
   echo "TASK_SHA256: $task_hash"
   echo "WORKTREE: $WORKTREE"
-  echo "SUPERVISOR_MODEL: $CURSOR_GROK_MODEL"
-  echo "IMPLEMENTER_MODEL: $TERRA_MODEL"
+  echo "LOOP_PROFILE: $LOOP_PROFILE"
+  echo "ORDER_MANAGER_MODEL: $OPUS_MANAGER_MODEL"
+  echo "IMPLEMENTER_MODEL: $SPARK_MODEL"
+  echo "REVIEW_MODEL: $CURSOR_GROK_MODEL"
 } >"$attempt_dir/metadata.txt"
 
 if [[ "$MODE" == "inspect" ]]; then
-  # inspectはTerraを再起動しない。実装成功直後のcheckpointに現在の
+  # inspectはSparkを再起動しない。実装成功直後のcheckpointに現在の
   # order/task/base/head/worktree fingerprintが一致する時だけ、scope closureを
   # 再確認してGrokだけを起動する
   validate_checkpoint "$evidence_root" "$ORDER_FILE" "$task_hash" "$WORKTREE"
@@ -1666,21 +1735,21 @@ if [[ "$MODE" == "inspect" ]]; then
 fi
 
 run_dispatch_gate "$ORDER_FILE" "$WORKTREE"
-# Terra起動前に既存checkpointを即時無効化する。CHECKPOINT_SETTLEDは0のままにして
-# おくことで、Terraがcheckpoint.txtを自分で偽造してもEXIT trapが後始末する
+# Spark起動前に既存checkpointを即時無効化する。CHECKPOINT_SETTLEDは0のままにして
+# おくことで、Sparkがcheckpoint.txtを自分で偽造してもEXIT trapが後始末する
 rm -f "$evidence_root/checkpoint.txt"
 mark_checkpoint_at_risk "$evidence_root"
 record_base_metadata "$ORDER_FILE" "$attempt_dir"
-snapshot_worktree "$WORKTREE" "$attempt_dir" "pre-terra"
-# Terra起動前、この試行のevidence fileがまだ書き換えられていないうちに
+snapshot_worktree "$WORKTREE" "$attempt_dir" "pre-spark"
+# Spark起動前、この試行のevidence fileがまだ書き換えられていないうちに
 # ignore policy hashをparent shell変数として確保する(enforce_ignore_policy_unchanged
 # 側のコメント参照)
-pre_terra_ignore_policy="$(cat "$attempt_dir/pre-terra-ignore-policy.sha256")"
-# 同様に、生scope manifestのdigestもTerra起動前にparent shell変数として確保する。
+pre_spark_ignore_policy="$(cat "$attempt_dir/pre-spark-ignore-policy.sha256")"
+# 同様に、生scope manifestのdigestもSpark起動前にparent shell変数として確保する。
 # 永続化したevidence fileはcopyに過ぎず、比較の権威はこの変数だけが持つ
-build_out_of_scope_manifest "$WORKTREE" "$attempt_dir/pre-terra-out-of-scope-manifest.nul"
-pre_terra_manifest_digest="$(shasum -a 256 "$attempt_dir/pre-terra-out-of-scope-manifest.nul" | awk '{print $1}')"
-printf '%s\n' "$pre_terra_manifest_digest" >"$attempt_dir/pre-terra-out-of-scope-manifest.sha256"
+build_out_of_scope_manifest "$WORKTREE" "$attempt_dir/pre-spark-out-of-scope-manifest.nul"
+pre_spark_manifest_digest="$(shasum -a 256 "$attempt_dir/pre-spark-out-of-scope-manifest.nul" | awk '{print $1}')"
+printf '%s\n' "$pre_spark_manifest_digest" >"$attempt_dir/pre-spark-out-of-scope-manifest.sha256"
 
 head_before="$(git -C "$WORKTREE" rev-parse HEAD)"
 implementation_prompt=$(cat <<EOF
@@ -1701,44 +1770,44 @@ EOF
 )
 
 echo
-echo "## 2. GPT-5.6 Terra implementation"
-if ! run_agent "$attempt_dir/terra-stdout.txt" "$TERRA_TIMEOUT_SECONDS" \
+echo "## 2. Codex Spark implementation"
+if ! run_agent "$attempt_dir/spark-stdout.txt" "$SPARK_TIMEOUT_SECONDS" \
   env CODEX_DELEGATED=1 "$CODEX_AGENT_BIN" --ask-for-approval never exec \
-    --ephemeral --color never --model "$TERRA_MODEL" \
+    --ephemeral --color never --model "$SPARK_MODEL" \
     --sandbox danger-full-access --cd "$WORKTREE" \
     "$implementation_prompt"; then
-  [[ ! -f "$attempt_dir/terra-stdout.txt" ]] || cat "$attempt_dir/terra-stdout.txt"
-  snapshot_worktree "$WORKTREE" "$attempt_dir" "post-terra"
-  echo "STAGE: terra FAILED_OR_TIMEOUT" >>"$attempt_dir/stage-result.txt"
+  [[ ! -f "$attempt_dir/spark-stdout.txt" ]] || cat "$attempt_dir/spark-stdout.txt"
+  snapshot_worktree "$WORKTREE" "$attempt_dir" "post-spark"
+  echo "STAGE: spark FAILED_OR_TIMEOUT" >>"$attempt_dir/stage-result.txt"
   invalidate_checkpoint "$evidence_root"
   exit 1
 fi
-cat "$attempt_dir/terra-stdout.txt"
+cat "$attempt_dir/spark-stdout.txt"
 if [[ "$(git -C "$WORKTREE" rev-parse HEAD)" != "$head_before" ]]; then
   echo "delegate-cursor-supervised: 受注者がcommitを作成したため検収へ進みません" >&2
-  snapshot_worktree "$WORKTREE" "$attempt_dir" "post-terra"
-  echo "STAGE: terra COMMIT_FORBIDDEN" >>"$attempt_dir/stage-result.txt"
+  snapshot_worktree "$WORKTREE" "$attempt_dir" "post-spark"
+  echo "STAGE: spark COMMIT_FORBIDDEN" >>"$attempt_dir/stage-result.txt"
   invalidate_checkpoint "$evidence_root"
   exit 5
 fi
 
 # process group reap(run_agent内)後、通常のgit status由来のscope closureより先に、
-# parent保持のpre-Terra生manifest digestと直接突き合わせる
-build_out_of_scope_manifest "$WORKTREE" "$attempt_dir/post-terra-out-of-scope-manifest.nul"
-enforce_out_of_scope_manifest_unchanged "$pre_terra_manifest_digest" \
-  "$attempt_dir/post-terra-out-of-scope-manifest.nul" \
-  "$attempt_dir/post-terra-out-of-scope-manifest-violations.txt" \
-  "$WORKTREE" "$pre_terra_ignore_policy"
+# parent保持のpre-Spark生manifest digestと直接突き合わせる
+build_out_of_scope_manifest "$WORKTREE" "$attempt_dir/post-spark-out-of-scope-manifest.nul"
+enforce_out_of_scope_manifest_unchanged "$pre_spark_manifest_digest" \
+  "$attempt_dir/post-spark-out-of-scope-manifest.nul" \
+  "$attempt_dir/post-spark-out-of-scope-manifest-violations.txt" \
+  "$WORKTREE" "$pre_spark_ignore_policy"
 
-snapshot_worktree "$WORKTREE" "$attempt_dir" "post-terra"
-enforce_ignore_policy_unchanged "$WORKTREE" "$attempt_dir" "$pre_terra_ignore_policy" "post-terra"
-enforce_scope_closure "$WORKTREE" "$attempt_dir/post-terra-scope-violations.txt"
-# worktree fingerprintはworktree外のorder fileを見ないため、Terra実装中に
+snapshot_worktree "$WORKTREE" "$attempt_dir" "post-spark"
+enforce_ignore_policy_unchanged "$WORKTREE" "$attempt_dir" "$pre_spark_ignore_policy" "post-spark"
+enforce_scope_closure "$WORKTREE" "$attempt_dir/post-spark-scope-violations.txt"
+# worktree fingerprintはworktree外のorder fileを見ないため、Spark実装中に
 # 承認済みorder本文(外部fileとこの試行のcopyの両方)が変わっていないか独立に確認する
-verify_order_integrity "$ORDER_FILE" "$attempt_dir" "$approved_order_sha256" "terra implementation"
-echo "STAGE: terra SUCCESS" >>"$attempt_dir/stage-result.txt"
+verify_order_integrity "$ORDER_FILE" "$attempt_dir" "$approved_order_sha256" "spark implementation"
+echo "STAGE: spark SUCCESS" >>"$attempt_dir/stage-result.txt"
 
-post_impl_fp="$(cat "$attempt_dir/post-terra-fingerprint.sha256")"
+post_impl_fp="$(cat "$attempt_dir/post-spark-fingerprint.sha256")"
 base_ref_val="$(gate_require_single_field "$ORDER_FILE" "BASE_REF")"
 base_sha_val="$(gate_require_single_field "$ORDER_FILE" "BASE_SHA")"
 publish_checkpoint "$evidence_root" "$attempt_name" "$approved_order_sha256" "$task_hash" "$base_ref_val" "$base_sha_val" "$head_before" "$post_impl_fp"

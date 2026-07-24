@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "task": "CU-0A04",
+  "authority": "docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md",
+  "fixedSourceCommit": "56c318edcddab7cf95d263cc2f7dd2b4e6791134",
+  "sourceOwnership": {
+    "product": "@motolii/motolii-web",
+    "owner": "R1-browser",
+    "surface": "Browser",
+    "exports": [
+      {
+        "name": "DiscoveryBrowserCandidate",
+        "path": "src/index.js"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "type": "fixed-source-transfer",
+      "old": {
+        "component": "docs/mocks-ui/src/candidates/DiscoveryBrowserCandidate.jsx",
+        "css": "docs/mocks-ui/src/candidates/discovery-browser-candidate.css",
+        "pattern": "docs/mocks-ui/src/patterns/DiscoveryBrowser.jsx"
+      },
+      "current": {
+        "component": "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx",
+        "css": "ui/motolii-web/src/candidates/discovery-browser-candidate.css",
+        "pattern": "ui/motolii-web/src/patterns/DiscoveryBrowser.jsx"
+      }
+    }
+  ]
+}

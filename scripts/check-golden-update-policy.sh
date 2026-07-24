@@ -300,6 +300,10 @@ collect_changes() {
   fi
 }
 
+# 1入力行を "status<TAB>path" の1行以上へ正規化する。
+# rename(R<score>)は「旧パスの削除 + 新パスの追加」へ分解する: semantic の
+# rename退避は D として例外なく拒否され、迂回口にならない。typechange(T)は
+# 内容変更として M 扱い。未知statusは fail-closed のまま。
 normalize_change_line() {
   local line="$1"
   if [[ "$line" == *$'\t'* ]]; then
@@ -307,7 +311,16 @@ normalize_change_line() {
     local p="${line#*$'\t'}"
     case "$st" in
       A|M|D) printf '%s\t%s\n' "$st" "$p" ;;
-      *) die "bad status '$st' in --files-from line: $line" ;;
+      T) printf 'M\t%s\n' "$p" ;;
+      R|R[0-9][0-9][0-9])
+        local old="${p%%$'\t'*}"
+        local new="${p#*$'\t'}"
+        if [[ -z "$old" || -z "$new" || "$new" == "$p" ]]; then
+          die "malformed rename line (need R<score><TAB>old<TAB>new): $line"
+        fi
+        printf 'D\t%s\nA\t%s\n' "$old" "$new"
+        ;;
+      *) die "bad status '$st' in change line: $line" ;;
     esac
   else
     printf 'M\t%s\n' "$line"
@@ -348,10 +361,12 @@ collect_changes "$@" >"$CHANGES_FILE" || die "collect_changes failed (fail-close
 
 while IFS= read -r raw || [[ -n "${raw:-}" ]]; do
   [[ -z "$raw" ]] && continue
-  local_line="$(normalize_change_line "$raw")"
+  normalized="$(normalize_change_line "$raw")"
+  file_count=$((file_count + 1))
+  while IFS= read -r local_line; do
+  [[ -z "$local_line" ]] && continue
   status="${local_line%%$'\t'*}"
   path="${local_line#*$'\t'}"
-  file_count=$((file_count + 1))
 
   # 台帳パス自体の diff 行はスキップ(削りは enforce_base_classification_lock が審判)。
   if [[ "$path" == "$CLASSIFICATION_FILE" ]]; then
@@ -382,6 +397,7 @@ while IFS= read -r raw || [[ -n "${raw:-}" ]]; do
       fi
       ;;
   esac
+  done <<<"$normalized"
 done <"$CHANGES_FILE"
 
 if [[ "$failures" -gt 0 ]]; then

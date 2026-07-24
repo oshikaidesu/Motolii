@@ -15,7 +15,7 @@ After Effectsの標準effect／第三者plugin、AviUtl 2の公開script群、Ca
 - Vism package、container、loader、typed port、custom UIの実装許可
 - 第三者製品名・preset・見た目をfirst-party資産へ複製する許可
 
-Motolii側の正本は[Vism concept](../vism-package-concept.md)と[Vism実装計画](2026-07-17-vism-implementation-plan.md)である。v1のfirst-partyは静的plugin境界を外側から反証する**pre-Vism reference**であり、調査候補からpackage形式を逆算しない。
+Motolii側の正本は[Vism concept](../vism-package-concept.md)、[Vism実装計画](2026-07-17-vism-implementation-plan.md)、一覧入口である[Vismプラグインカタログ](../vism-plugin-catalog.md)である。v1のfirst-partyは静的plugin境界を外側から反証する**pre-Vism reference**であり、調査候補からpackage形式を逆算しない。
 
 ## 2. 外部で繰り返し現れる需要
 
@@ -224,3 +224,134 @@ first-party候補は「有名pluginに似ているか」でなく、次を満た
 - Motoliiの不足契約とSTOP条件
 
 この作品標本と反対側レビューを経るまで、§4をfirst-party実装順へ昇格しない。
+
+## 7. 2026-07-24 AE人気plugin再現候補サーチ
+
+### 7.1 「人気」の扱い
+
+単一marketplaceの売上順位は公開範囲と時期で変わるため、順位表を捏造しない。今回は次の複数signalを使い、**需要の反復**を探した。
+
+1. Adobeが現行の第三者plugin資料で標準的な製品群として明示している。
+2. 2025〜2026にも公式compatibility／release／製品更新が続いている。
+3. vendor suiteまたはmarketplaceで独立製品として長期維持されている。
+4. 別vendorが同じ表現需要を別実装で提供している。
+5. tutorial、preset、templateで他表現との組み合わせが反復する。
+
+[Adobeの現行第三者plugin一覧](https://helpx.adobe.com/ae_en/after-effects/plug-ins.html)はRed GiantのMagic Bullet／Trapcodeをfilm・broadcast post-productionのstandardと説明する。[Maxonの現行分類](https://support.maxon.net/hc/en-us/articles/21234625849116-What-happened-to-the-Magic-Bullet-Trapcode-VFX-and-Universe-folders)と[Universe locator](https://help.maxon.net/rg/en-us/Content/html/universe-tools-locator.html)は、Glow、Blur、Dither、Fractal、RGB Separation、Particle、Text、Transition等が2026時点でも一suite内の独立語彙として維持されていることを示す。[Red Giant 2026.2](https://support.maxon.net/hc/en-us/articles/24114684657692-Red-Giant-2026-2-0-December-3-2025)はAE内で全pluginを検索・preset閲覧するPlugin Pageを追加しており、本調査の「Plugin Browser型一覧」方針とも一致する。
+
+これは市場占有率の測定ではない。vendorの自己評価、価格、preset数をMotolii採択理由にせず、同じ需要が複数系統で生き残っているかだけを読む。
+
+### 7.2 候補の処分
+
+| 外部plugin／系統 | 反復する需要 | Motoliiでの処分 | カタログ反映 |
+|---|---|---|---|
+| Red Giant Optical Glow／各Glow、Deep Glow | 少ない調整で自然な広がり、HDR、downsample、品質調整 | 共通MULTIPASS能力の後にPerceptual Glow。色変換と一体化しない | 既存候補を維持 |
+| [Pixel Sorter 4](https://aescripts.com/pixel-sorter/) | threshold、direction、mask、noiseを持つGPU pixel sort。2026にもcross-host更新 | typed maskを受けるVRAM内Filter。CPU readback禁止 | 既存signature候補を強化 |
+| Trapcode Particular／Form、[Stardust](https://aescripts.com/stardust) | particle、replica、field、physics、3D objectを一つの制作語彙へする | L0 Particle、typed field、L3 Simulation、Kitへ分解。node UIと万能suiteを複製しない | 既存Particle／Repeaterを維持 |
+| [Plexus 3](https://aescripts.com/plexus/) | point間の距離等からline／facet／triangulationを生成するprocedural network | typed Point Setを読むConnected Points／Facets Vism。2Dから反証し、3D scene ownershipを奪わない | **新規候補** |
+| [Optical Flares](https://www.videocopilot.net/products/opticalflares/)／Real Lens Flares | flare object、occlusion、luminance source、mask、shimmerを再利用可能な光表現へまとめる | Lens Flare Vism + preset／Kit。AE light直参照、専用designer、vendor object型を公開契約へ写さない | **新規候補** |
+| Video Copilot Saber／Red Giant 3D Stroke／AutoFill | path、mask、text輪郭に沿う発光stroke、write-on、領域伝播 | Energy Strokeはpath→textureのL0。Shape Fillはarrival-time fieldをHost Bakeしてrenderを純関数化 | **新規候補** |
+| Video Copilot Heat Distortion／Red Giant Heatwave | noise fieldで局所的な熱揺らぎ／屈折を作る | deterministic field + Displace。field生成とconsumerを分離 | **新規候補** |
+| [TypeMonkey](https://aescripts.com/after-effects/text/typemonkey/)／Red Giant Text群／[Type](https://aescripts.com/type/) | kinetic layout、type-on、cursor、word／line単位animation、music marker同期 | Text Sequence、小Vism、Kit、必要時Authoring Toolへ分解。layer大量生成や独自cameraを正本にしない | Kinetic Word Layoutを追加 |
+| [BeatEdit](https://aescripts.com/after-effects/automation/audio/beatedit-for-after-effects/) | beat検出、選択、marker、key反復、staggerを一つの製品へまとめる | BPM Rhythm Vism、Audio Analysis provider、Beat Pulse consumer、Host marker／commandへ分解 | 既存BPM決定を強化 |
+| [Newton 4](https://aescripts.com/newton/) | AE layerを2D physicsへ送り、結果を編集へ戻す | Host所有Simulation／StateTrack Bake。Newton固有world／UIをVismへ複製しない | 既存SIM候補を維持 |
+| Universe／Sapphire等のTransition群 | wipe、glitch、light、blur、shakeを完成transitionとして探す | 2入力textureとTimeline transition placementを分離し、Shape Wipe等の小Vism + preset／Kitへ | **新規候補群** |
+| [Flow](https://aescripts.com/flow/)／Motion Tools系 | easing、anchor、key clone、sequence等の操作摩擦を解消する | Host command／easing UI／Authoring Tool。画を評価するVismへ入れない | 除外を維持 |
+| Element 3D | 3D object import、particle、material、camera、renderをAE内へ持ち込む | M5のHost-owned world／depth／Observation配布と、換装可能Camera Provider、scene renderer、小Vismへ分解。巨大なElement互換Vismを作らない | カタログ外 |
+
+### 7.3 新規候補の実装見通し
+
+#### Lens Flare
+
+最小形は`source position + intensity + seed + flare recipe → texture`のL0 LayerSource／Filter候補である。sourceは2D位置、typed luminance／mask、将来の3D light projectionを別providerとして受ける。flare element列、texture asset、occlusion、shimmerを一つの公開raw object treeへ固定しない。まず少数のclosed elementとpresetで意味を反証し、複数要素の構成はKit／private payload候補として別審判する。
+
+#### Energy Stroke
+
+path／mask／text outlineをtyped geometry inputとして受け、距離場またはstroke tessellationから発光線を描く。Glowとの組み合わせを専用実装へ閉じず、Stroke出力→Perceptual Glowの構成を第一候補にする。write-onはpath-local progressのL0で表現し、Text identityやshape編集を所有しない。
+
+#### Shape Fill / Write-on
+
+複雑領域を種点から自然に埋める到達時刻を毎frame再計算しない。編集時またはcache jobで`arrival-time field`をHost所有artifactへBakeし、render時は`field <= t`を読む純関数Filter／LayerSourceとする。plugin内cache、壁時計、前frame出力、同期CPU flood fillを禁止する。
+
+#### Connected Points / Facets
+
+入力を`Point Set + stable point identity + optional attributes`として比較し、距離、近傍数、thresholdからline／facetを決定的に生成する。Plexusのnode graphやAE light／null走査を持ち込まない。2D L0 fixtureでtyped input、stable identity、GPU populationを反証した後、3D point／depth occlusionをM5へ接続する。
+
+#### Transition
+
+表現計算とTimeline意味を分ける。Vismは`from texture + to texture + progress → output`を評価し、Hostはclip overlap、duration、trim、Undo、selectionを所有する。最初の候補はShape Wipe、Glitch Transition、Light／Bokeh Transitionだが、2入力typed portとtransition placementが未決の間は実装しない。
+
+### 7.4 非目標
+
+- 製品名、preset名、parameter名、UI、thumbnail、デフォルト値を複製しない。
+- 一suiteを一Vismへ再現しない。
+- AE layer、marker、light、effect stackの走査を公開契約へ持ち込まない。
+- 「人気」を理由にCore enum、Document field、raw plugin APIを追加しない。
+- vendorの宣伝文句、価格、更新年だけで採択順を決めない。
+
+## 8. 2026-07-24 AviUtl plugin／script候補サーチ
+
+### 8.1 調査範囲と用語
+
+AviUtlでは「plugin」が必ずしも画を作るeffectを意味しない。[AviUtl2利用案内](https://docs.aviutl2.jp/usage)は、scriptがanimation effect、custom object、camera effect、scene change、trackbar movement等を追加し、pluginが入出力、編集window、object、filter effect等を追加すると区別している。AviUtl 1.xの[Plugin SDK mirror](https://github.com/mtripg6666tdr/aviutl_plugin_sdk)にもfilter、input、output、color、languageの別系統がある。したがって本調査は拡張子や配布名でなく、**何を所有する成果物か**でVism、Kit、Host tool、Infrastructure、Adapterへ分類する。
+
+現在の候補母集団は、AviUtl 1.xで長く使われた公開script／pluginと、2026-07-24時点のGitHub [`aviutl2-script` topic](https://github.com/topics/aviutl2-script)に現れる公開repositoryである。topicのstar順は利用者全体の人気順位ではなく、公開GitHub上の発見signalにすぎない。現在も更新されるAviUtl2側を主にし、1.x側は再発明の継続性とHost境界の教訓を読む。
+
+### 8.2 候補の処分
+
+| AviUtl系統 | 反復する需要 | Motoliiでの処分 | カタログ反映 |
+|---|---|---|---|
+| [Basic系script](https://github.com/sigma-axis/aviutl2_script_Basic_S)、丸角矩形、回転補助、傾斜変形 | 標準Hostで足りないshape／transform primitiveの穴埋め | 丸角矩形と通常transformはHost Shape／Transform基礎能力。作風を持つwarpだけ小Vism。基礎不足をVism乱立で覆わない | Warpを維持、基本形は除外 |
+| [Stylize群](https://github.com/korarei/AviUtl2_Stylize_K_Script)のMosaic、Threshold、Posterize、Gradient Map、Tile／Repeat | 画像を少数の知覚primitiveで作風化し、組み合わせる | Pixelate、Dither／Halftone、Gradient Field、Tile等の小Filter／providerへ分解 | 既存候補を強化、Gradient Fieldを追加 |
+| Stylize群のASCII | 明暗を文字密度へ置換する映像表現 | typed glyph atlas／font assetを受けるASCII Raster。font選択UI、Text Document、組版正本はHost／Text側 | **新規候補** |
+| [Color Halftone](https://github.com/azurite581/AviUtl2-ColorHalftone)、Dither系script | 網点／patternを色・alpha・wipeにも再利用する | Halftone／Ditherを小Filterとして保持し、wipeはTransition Kitへ接続 | 既存候補を強化 |
+| [NTSC移植](https://github.com/sevenc-nanashi/ntsc-rs.anm2)、grunge、scan／bleed／noise系 | 古い映像・印刷物の素材感を小effectの組合せで作る | Grain、Scanline、RGB Split等 + VHS／NTSC Material Kit。時間窓が本質の成分だけL2 | 既存候補を強化 |
+| [Radial／Rotational／Directional composite blur](https://github.com/sigma-axis/aviutl2_script_RadRotDirBlur_S) | 複数の方向モデル、色収差を一つの操作語彙で使う | 共通sampling／Host transient textureを使うBlur小Vism群。色収差とtransitionを本体へ固定しない | **新規候補群** |
+| [Ground Shadow](https://github.com/sigma-axis/aviutl2_script_GroundShadow2_S)、長い影、neumorphism系 | alpha／shapeから立体感を持つ影や光を作る | typed alpha／path、投影面、方向から描くGround／Long Shadow。scene ownershipやlayer走査は持たない | **新規候補** |
+| [Page Roll](https://github.com/sigma-axis/aviutl2_script_PageRoll_S) | 紙を丸めるような変形とscene change | 2 texture、progress、deformationを評価するTransition Vism。Timeline overlap／UndoはHost | **新規候補** |
+| Kaleidoscope、Tile、Repeat、Point Zoom | 閉形式のsampling変形と反復 | Kaleidoscope／TileはSINGLE。Point Zoomはcamera操作ならHost、局所warpならWarp preset候補 | 既存候補を強化 |
+| [FlowType](https://github.com/korarei/AviUtl2_FlowType_K_Script)、[Auto Lyric Animation](https://github.com/korarei/AviUtl2_AutoLyricAnimation_K_Script) | text animationの生成支援と、完成したlyric motion | authoring assistantはHost tool、評価表現はText Sequence／小Vism／Kitへ分離 | Kinetic Lyrics／Word Layoutを強化 |
+| [Gradient Editor](https://github.com/azurite581/AviUtl2-GradientEditor) | 複数stopを視覚的に編集し、effectへ渡す | editorはHost parameter UI、Gradient Field／RampはVism provider | Gradient Fieldを追加 |
+| [Object Motion Blur](https://github.com/korarei/AviUtl2_ObjectMotionBlur_LK_Script) | object motionに基づく基礎的な時間sampling | 通常用途はHost render基礎能力。意図的なEcho／Slit ScanだけTemporal Vism | Vismから除外 |
+| Auto Clipping、Resize | 透明領域整理、sampling algorithm、領域管理 | Host render／bounds／quality基礎能力。個別表現Vismへしない | Vismから除外 |
+| [ShowWaveform](https://github.com/hebiiro/AviUtl-Plugin-ShowWaveform)、camera transform、layer ordering | Timeline診断、操作支援、編集効率 | 操作UIはHost Timeline／command／authoring tool。camera観測modelは換装可能なCamera Providerであり、Host固定実装の根拠にしない | Vismから除外 |
+| patch.aul、LuaJIT、plugin manager | runtime修正、高速化、配布・依存管理 | Host infrastructureとpackage lifecycleの先例。画を作るVismではない | Vismから除外 |
+| L-SMASH Works、x264／NVEnc等の入出力、PSD読込 | codec／format bridge、入出力、asset連携 | Input／Delivery／Asset adapter。Vismのtexture Filter契約へ混ぜない | Vismから除外 |
+
+この表は各repositoryの実装・parameter・UIを複製する採用表ではない。AviUtl文化から読むべき強いsignalは、巨大suiteよりも「不足を小scriptで埋め、それを組み合わせる」需要と、表現以外のpluginが同じ導入面へ集まるため分類が必要になる点である。
+
+### 8.3 新規候補の実装見通し
+
+#### Directional / Radial / Spin Blur
+
+共通入力を`texture + sampling path + radius/angle + quality → texture`として比較し、一方向、中心放射、中心回転を別々のGPU／resource backdoorで実装しない。Draft／Finalは同じ関数のsample数または近似精度だけを変える。Host所有の一時textureとpass記述が閉じるまでは、plugin内texture pool、CPU readback、loop内resource生成で先行しない。
+
+#### Ground / Long Shadow
+
+最小形は`alpha/path + light direction + projection recipe → shadow texture`である。2D閉形式で反証し、必要なblurは共通Blur Vism、highlightとの組合せはKitへ分ける。AviUtlのobject／layerを走査する互換APIや、将来の3D scene／light ownershipをこの候補へ焼かない。
+
+#### Gradient Field / Ramp
+
+Vismは正準位置とstop列からcolorまたはscalar fieldを決定的に評価する。stopの追加・並べ替え・color picker・preset管理はHost parameter UIであり、Vism固有editorを必須契約にしない。creative colorの生成とrender直前の表示色変換を分離し、Gradient Map consumerはtyped texture／field port成立後に接続する。
+
+#### ASCII Raster
+
+入力のcellごとの明暗をglyph selectionへ写し、atlasから描画するL0表現として始める。font fileの動的探索、IME、文字編集、書記素animationを所有しない。glyph集合、atlas、cell grid、seed付きshuffleを個別入力として反証し、Text Sequenceと接続する場合もidentityを二重化しない。
+
+#### Page Roll
+
+最小形は`from texture + to texture + progress + fold recipe → output`である。2D／限定2.5Dの変形と陰影を同じfixtureで固定し、camera、汎用mesh、clip overlap、duration、selection、UndoをVismへ持たせない。2入力typed portとTimeline transition placementが決まるまではGate待ちとする。
+
+### 8.4 並列実装と第三者接続への教訓
+
+AviUtlの公開文化は、小さなscript、編集plugin、入出力plugin、runtime patchが独立配布され、利用者環境で並存する実例である。一方で共有runtimeへの暗黙依存、配置規則、patch前提、同じ名前空間への混在は、Motoliiがそのまま再現してよい契約ではない。
+
+将来の各Vism実装laneは、同一Host能力を使っても互いの実装順へ依存しない。Blur、Gradient、Text、Transition等の共通能力は先に仕様IDとconformance fixtureを閉じ、個別Vismは公開されたversioned契約だけを消費する。第三者packageもfirst-partyと同じmanifest、capability、resource budget、failure isolation、typed port、determinism審判を通し、patch前提や具体plugin探索で接続しない。
+
+### 8.5 非目標
+
+- AviUtl／AviUtl2の全plugin、全script、配布siteを網羅した人気順位表にはしない。
+- `.auf`、`.anm`、`.anm2`等の形式、Lua／HLSL API、parameter名、UI、配置規則をMotolii契約へ複製しない。
+- Host基礎能力の不足を、first-party Vismの専用補助機能で隠さない。
+- patchや共有runtimeを前提にした暗黙依存を第三者package modelへ持ち込まない。
+- 候補追加だけを理由にDocument、Core enum、公開raw API、永続schemaを変更しない。

@@ -24,6 +24,10 @@ Direct / Tool / Advanced / plugin UI
 
 小さいことは機能が少ないことではない。Hostが作品の持続性に必要な意味だけを厳格に所有し、表現の組合せと専門的な操作面を開くことである。
 
+その分界は[換装可能な意味の席／Provider／Effect分類](reviews/2026-07-24-replaceable-semantic-seat-decision.md)に従う。Hostはstable identity、lifetime、参照、Undo、typed outputというsemantic seatを所有し、具体評価をProviderへ開く。評価済みの値／像だけを変え、scene参加・sampling・identityを変えず、通常のeffect stack／render graph順で表現できる処理はEffect／Filterを第一選択とする。換装可能性はHost責任の放棄ではなく、seat stabilityとimplementation replaceabilityの両立である。
+
+さらに[制御されたMicrokernelとHost capability module並列化決定](reviews/2026-07-25-controlled-microkernel-host-module-parallelism-decision.md)により、Host責任の所有と具体実装の所有を分ける。Coreはtyped protocol、revision、atomic commit、authority多重度を制御し、Document reducer、journal、Undo、評価、cache、resource、Preview、Export等の具体実装はadmitted Host capability moduleへ分離できる。これは外部pluginへ作品正本を委譲する決定ではなく、制御されたseat上の実装を並列化する決定である。
+
 ここでいうミニマリズムは、空の本体へ必要機能を各自で寄せ集めさせることでも、UIを疎に見せることでもない。**必要十分な表現力を保ちながら、使わない能力の常駐負荷と、使う能力の導入・更新・再現に伴う管理負荷を最小にすること**である。pluginで能力を追加できても、導入手順、version、欠落時の挙動、作品共有が利用者の記憶に依存するなら、Hostは小さく見えるだけで制作環境は小さくない。Hostの型付き契約、互換診断、lifecycle、共通UIと検証境界によって、拡張後も「待たない・迷わない・抱えない」を保つ。これはv1へmarketplaceや新しい配布契約を追加する決定ではない。
 
 > **意味は厳格に、表現は自由に。壊れ方は封じるが、暴れ方は封じない。**
@@ -36,12 +40,18 @@ Direct / Tool / Advanced / plugin UI
 
 | 呼称 | 所有するもの | 例 | pluginか |
 |---|---|---|---|
-| **Core kernel** | Document identity、時刻、D2／Undo、評価順、Preview／Export同一意味、cache／resource等の不変条件 | headlessな意味と契約 | いいえ。欠落可能な拡張へ委譲しない |
-| **bundled first-party Host module** | 標準製品面の投影、layout、hit-test、gesture adapter | native Stage／Timeline、React Browser／Inspector | いいえ。内部交換可能性だけで公開pluginにしない |
-| **first-party plugin** | 公開plugin境界上の表現固有計算 | Opacity、Sine、Radial Repeater | はい。第三者が到達できる参照実装 |
-| **third-party plugin** | 同じ公開能力上の外部作者成果 | 将来のEffect／Tool等 | はい。ただしtrust、sandbox、permissionは別審判 |
+| **Controlled Core kernel** | identity、canonical time、revision、typed capability、immutable snapshot、atomic commit、authority多重度、絶対規律のenforcement | headlessな意味、protocol、裁定 | いいえ。欠落可能な拡張へ委譲しない |
+| **admitted Host capability module** | TCBとしてCoreが制御するseatの具体実装 | Document reducer、journal、Undo projection、evaluator、cache、resource admission、asset resolver | 公開pluginではない。静的同梱でも独立contractとconformanceを持てる |
+| **bundled first-party presentation module** | 標準製品面の投影、layout、hit-test、gesture adapter | native Stage／Timeline、React Browser／Inspector | 公開pluginではない。Host capabilityのconsumer／adapter |
+| **first-party plugin** | 公開plugin境界上の非信頼な表現固有計算 | Opacity、Sine、Radial Repeater | はい。第三者が到達できる参照実装。出自による実行特権なし |
+| **third-party plugin** | 同じ非信頼な公開能力上の外部作者成果 | 将来のEffect／Tool等 | はい。同じcapability／sandbox／failure containmentへ通す |
 
 `motolii-core` crateは`FrameDesc`、`RationalTime`等の共有基礎型を置く実装packageであり、このarchitectural roleの全量でも所属判定表でもない。逆に標準TimelineやPreviewをnativeで描くこと、BrowserをReactで描くことだけでCoreまたはpluginへ分類しない。正確な4軸は[surface実装と拡張所有の軸分離](reviews/2026-07-22-m3-surface-extension-axis-separation.md)を正本とする。歴史上の「plugin境界凍結」「M2コア締結」「小さなコア」を同じ完了宣言として読まないための処分は[Core / plugin境界の歴史回収](reviews/2026-07-23-historical-core-plugin-boundary-lineage-recovery.md)に置く。
+
+「core plugin」という中間分類は置かない。Controlled Coreとadmitted Host capability moduleは製品のTCBであり、
+公開pluginではない。公開plugin境界へ出た実装はfirst-partyでも非信頼である。現在のstatic first-party実装は
+公開façadeの実証であって、将来のprocess／sandbox境界やクラッシュ隔離を証明しない。正本は
+[Controlled Microkernel決定 §6](reviews/2026-07-25-controlled-microkernel-host-module-parallelism-decision.md#6-pluginという語と信頼境界の分離)とする。
 
 ## 2. 学習曲線は利用者と開発者で同じ形にする
 
@@ -120,6 +130,21 @@ Use → Tune → Compose → Inspect → Fork → Author → Publish → Reuse
 - plugin欠落時の保持、診断、fallbackと再導入時の復元。
 
 pluginが所有してよいのは、専門的な**表現の計算**または同じHost意味へ到達する**操作面**である。作品全体の整合性と回復可能性はHostが所有する。
+
+### 3.1 Host所有は一枚岩の実装を意味しない
+
+上記はHostが守る意味とauthorityの一覧であり、すべてを一crate、一service、一発注列で実装する一覧ではない。
+Coreがidentity、revision、typed port、atomic commit、authority多重度を制御する限り、具体実装は
+製品buildへ明示的にadmitされたHost capability moduleへ分離できる。
+
+- Document commandの意味はdomain reducerが実装できるが、revision確定とsingle writerは一つ。
+- journalとUndoは別moduleにできるが、accepted commitとの順序と失敗時変更0は共通contract。
+- cacheとresource policyは交換できるが、plugin内hidden stateと予算迂回は許さない。
+- PreviewとExportは別consumerにできるが、同じ評価意味と色責任を通る。
+- UI surfaceは並列実装できるが、同じrevisionのsnapshotを読み、typed intentだけを返す。
+
+module化はdynamic load、第三者公開ABI、欠落可能性を要求しない。seatのcontract、fake／参照provider、
+正負conformanceが閉じた時点で、その実装laneを製品全体の完成待ちから解放する。
 
 ## 4. ピクセル以外を操作するpluginの責任寿命
 

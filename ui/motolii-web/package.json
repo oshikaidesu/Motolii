@@ -1,0 +1,17 @@
+{
+  "name": "@motolii/motolii-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src",
+    "source-provenance.json"
+  ],
+  "dependencies": {
+    "html-react-parser": "^6.1.5",
+    "react": "^19.0.0"
+  }
+}

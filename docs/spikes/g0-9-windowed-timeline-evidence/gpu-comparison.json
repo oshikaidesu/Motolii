@@ -1,0 +1,233 @@
+{
+  "direct": {
+    "renderer": "direct_vello",
+    "toolchain": {
+      "rustc": "rustc 1.96.1 (31fca3adb 2026-06-26)",
+      "cargo": "cargo 1.96.1 (356927216 2026-06-26)",
+      "execution_commit": "7c3a590e33874d60f7fbb1e1ac40173011db7649",
+      "measurement_session": "cu-0g02b-20260724-01",
+      "lockfile_sha256": "6217d5946a84665bf61fcc4c3072d814364c5323c3376b0dbe9ba1ff40c26086"
+    },
+    "scenario_digest": "089cbd008ee77673915eb71fed490b8564631edfc66175b18ea0e912b8ed1618",
+    "input_digest": "56517a580ba7801e3e02eeac9176fbda91386822eb5fcffd54e8c8a8d8d42718",
+    "source_digest": "14316ebe23e1f69a026002cc99c76f830b94666354c2d522fac7d2d143ee2331",
+    "font_digest": "833776a6fd68e2c71c0c52fd8041195bd3d0a336cdb278170b7ad71c7e1b3475",
+    "glyph_digest": "2a6986e5358823c013a965d206563e5f3b300f7af1b326e5dc8ca5d7abb44ddf",
+    "conditions": {
+      "device": "Apple M4|Metal",
+      "surface": "Bgra8UnormSrgb|fifo|1",
+      "window": "2880x1708@2",
+      "webview": "2-opaque-offline-child",
+      "fixture": "g0-9-windowed-timeline.v1|1000-clips|100000-keys",
+      "target": "aarch64-macos"
+    },
+    "measured_frames": 1802,
+    "measured_seconds": 30.450013958,
+    "acquire_count": 1922,
+    "present_count": 1922,
+    "skip_count": 3,
+    "reconfigure_count": 0,
+    "readback_count": 0,
+    "frame_timing": {
+      "samples": 1802,
+      "median_frame_ms": 12.473791,
+      "p95_frame_ms": 14.381041000000002,
+      "max_frame_ms": 17.163583
+    },
+    "present_timing": {
+      "samples": 1801,
+      "median_frame_ms": 16.65175,
+      "p95_frame_ms": 17.412,
+      "max_frame_ms": 19.950583
+    },
+    "input_timing": {
+      "samples": 1802,
+      "median_frame_ms": 1.999792,
+      "p95_frame_ms": 2.403166,
+      "max_frame_ms": 4.466708
+    },
+    "gpu_timing": {
+      "timestamp_period_ns": 1.0,
+      "sample_count": 1802,
+      "query_result_readbacks": 1,
+      "frame_aggregation": "sum_of_passes",
+      "frame": {
+        "samples": 1802,
+        "median_frame_ms": 4.6968749999999995,
+        "p95_frame_ms": 5.140583,
+        "max_frame_ms": 9.454708
+      },
+      "vello": {
+        "samples": 1802,
+        "median_frame_ms": 4.381291,
+        "p95_frame_ms": 4.86275,
+        "max_frame_ms": 9.430542
+      },
+      "native": {
+        "samples": 1802,
+        "median_frame_ms": 0.312125,
+        "p95_frame_ms": 2.746917,
+        "max_frame_ms": 3.015417
+      },
+      "egui": null
+    },
+    "rss": {
+      "available": {
+        "bytes": 152322048
+      }
+    },
+    "resource_creations": {
+      "initialization": {
+        "pipelines": 2,
+        "buffers": 4,
+        "bind_groups": 2,
+        "textures": 1,
+        "query_sets": 13
+      },
+      "warmup": {
+        "pipelines": 0,
+        "buffers": 0,
+        "bind_groups": 0,
+        "textures": 0,
+        "query_sets": 0
+      },
+      "measured": {
+        "pipelines": 0,
+        "buffers": 0,
+        "bind_groups": 0,
+        "textures": 0,
+        "query_sets": 0
+      }
+    },
+    "completeness": "complete"
+  },
+  "egui": {
+    "renderer": "egui_vello",
+    "toolchain": {
+      "rustc": "rustc 1.96.1 (31fca3adb 2026-06-26)",
+      "cargo": "cargo 1.96.1 (356927216 2026-06-26)",
+      "execution_commit": "7c3a590e33874d60f7fbb1e1ac40173011db7649",
+      "measurement_session": "cu-0g02b-20260724-01",
+      "lockfile_sha256": "6217d5946a84665bf61fcc4c3072d814364c5323c3376b0dbe9ba1ff40c26086"
+    },
+    "scenario_digest": "089cbd008ee77673915eb71fed490b8564631edfc66175b18ea0e912b8ed1618",
+    "input_digest": "56517a580ba7801e3e02eeac9176fbda91386822eb5fcffd54e8c8a8d8d42718",
+    "source_digest": "14316ebe23e1f69a026002cc99c76f830b94666354c2d522fac7d2d143ee2331",
+    "font_digest": "833776a6fd68e2c71c0c52fd8041195bd3d0a336cdb278170b7ad71c7e1b3475",
+    "glyph_digest": "2a6986e5358823c013a965d206563e5f3b300f7af1b326e5dc8ca5d7abb44ddf",
+    "conditions": {
+      "device": "Apple M4|Metal",
+      "surface": "Bgra8UnormSrgb|fifo|1",
+      "window": "2880x1708@2",
+      "webview": "2-opaque-offline-child",
+      "fixture": "g0-9-windowed-timeline.v1|1000-clips|100000-keys",
+      "target": "aarch64-macos"
+    },
+    "measured_frames": 1801,
+    "measured_seconds": 30.489054542,
+    "acquire_count": 1921,
+    "present_count": 1921,
+    "skip_count": 4,
+    "reconfigure_count": 0,
+    "readback_count": 0,
+    "frame_timing": {
+      "samples": 1801,
+      "median_frame_ms": 12.59275,
+      "p95_frame_ms": 14.082375,
+      "max_frame_ms": 18.553375
+    },
+    "present_timing": {
+      "samples": 1800,
+      "median_frame_ms": 16.668084,
+      "p95_frame_ms": 17.363792,
+      "max_frame_ms": 22.409792000000003
+    },
+    "input_timing": {
+      "samples": 1801,
+      "median_frame_ms": 2.1695830000000003,
+      "p95_frame_ms": 2.539792,
+      "max_frame_ms": 6.819084
+    },
+    "gpu_timing": {
+      "timestamp_period_ns": 1.0,
+      "sample_count": 1801,
+      "query_result_readbacks": 1,
+      "frame_aggregation": "sum_of_passes",
+      "frame": {
+        "samples": 1801,
+        "median_frame_ms": 4.757833,
+        "p95_frame_ms": 5.131959,
+        "max_frame_ms": 8.771125
+      },
+      "vello": {
+        "samples": 1801,
+        "median_frame_ms": 4.412583,
+        "p95_frame_ms": 4.821834,
+        "max_frame_ms": 7.848917
+      },
+      "native": {
+        "samples": 1801,
+        "median_frame_ms": 0.312208,
+        "p95_frame_ms": 2.755083,
+        "max_frame_ms": 3.177
+      },
+      "egui": {
+        "samples": 1801,
+        "median_frame_ms": 0.011958,
+        "p95_frame_ms": 0.283584,
+        "max_frame_ms": 3.23075
+      }
+    },
+    "rss": {
+      "available": {
+        "bytes": 129138688
+      }
+    },
+    "resource_creations": {
+      "initialization": {
+        "pipelines": 2,
+        "buffers": 4,
+        "bind_groups": 2,
+        "textures": 1,
+        "query_sets": 13
+      },
+      "warmup": {
+        "pipelines": 0,
+        "buffers": 0,
+        "bind_groups": 0,
+        "textures": 0,
+        "query_sets": 0
+      },
+      "measured": {
+        "pipelines": 0,
+        "buffers": 0,
+        "bind_groups": 0,
+        "textures": 0,
+        "query_sets": 0
+      }
+    },
+    "completeness": "complete"
+  },
+  "ratios": {
+    "frame_median": 1.0095367158228,
+    "frame_p95": 0.97923196241496,
+    "frame_max": 1.0809733026023762,
+    "present_median": 1.0009809179215399,
+    "present_p95": 0.9972313347116931,
+    "present_max": 1.1232650193731182,
+    "input_median": 1.0849043300503254,
+    "input_p95": 1.0568525020743469,
+    "input_max": 1.5266464698386375
+  },
+  "gpu_ratios": {
+    "frame_median": 1.0129784165003328,
+    "frame_p95": 0.9983223692721234,
+    "frame_max": 0.9276991949407638,
+    "vello_median": 1.0071421870859525,
+    "vello_p95": 0.9915858310626703,
+    "vello_max": 0.8322869459676866,
+    "native_median": 1.0002659191029235,
+    "native_p95": 1.0029727873102827,
+    "native_max": 1.0535856234809315
+  }
+}

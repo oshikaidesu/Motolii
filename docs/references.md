@@ -15,8 +15,8 @@
 | [Symphonia](https://github.com/pdeljanov/Symphonia) | MPL-2.0 | Pure Rust音声デコード(MP3/AAC/FLAC/WAV等)。音声インポート(B-1)の第一候補。MPLはファイル単位コピーレフトなので依存利用は安全 |
 | [resvg / usvg](https://github.com/linebender/resvg) | MPL-2.0 | SVGパーサ(usvg: 参照解決済みの正規化ツリーを返す)。SVG読み込み(コンセプト決定でコア機能)の第一候補。linebender管理下で保守中。Vello描画と接続する(M4-K6) |
 | [rubato](https://github.com/HEnquist/rubato) | MIT | 音声リサンプリング。**明示**スクラブ/シャトルのバリスピード候補(自動フォールバック用途ではない — [D5先例調査](reviews/2026-07-14-d5-transport-prior-art.md))。デバイス≠素材レートの固定比変換にも候補 |
-| [egui](https://github.com/emilk/egui) / [egui_tiles](https://github.com/rerun-io/egui_tiles) | MIT OR Apache-2.0 | **UI基盤に採用決定(2026-07-18)**。egui-wgpu 0.35の`WgpuSetup::Existing`とnative textureをApple M4 / Metalで実測。日本語IME、resize/minimize/restore、idle停止も確認。egui_tilesはruntime投影先で、生Tree/TileIdを保存正本にしない。[採用判断](reviews/2026-07-18-m3-egui-selection.md) |
-| [Rerun](https://github.com/rerun-io/rerun) | repository: MIT OR Apache-2.0、`re_ui`: `(MIT OR Apache-2.0) AND OFL-1.1` | **egui製品実装の主要先例(2026-07-20決定)**。同世代のegui 0.35 / egui_tiles 0.16 / wgpu 29で、`re_ui`、Viewport/Blueprint、Time Panel/density、selection、egui-wgpu callback、`re_renderer`、parallel View execution、snapshot試験を層別に学ぶ。Reactモックの要求を置換せず、資産ごとに`DEPEND/VENDOR/PORT/PATTERN/REJECT`を裁定する。[先例調査](reviews/2026-07-20-rerun-prior-art-survey.md)、[学習・転移計画](reviews/2026-07-20-rerun-learning-transfer-plan.md) |
+| [egui](https://github.com/emilk/egui) / [egui_tiles](https://github.com/rerun-io/egui_tiles) | MIT OR Apache-2.0 | **歴史的採用／製品runtime採用は2026-07-24撤回**。egui-wgpu 0.35の`WgpuSetup::Existing`とnative texture、日本語IME、resize/minimize/restore、idle停止の実測と既存shellは比較・診断baselineとして保持する。新規製品面や`egui_tiles`製品投影は実装しない。[採用・撤回記録](reviews/2026-07-18-m3-egui-selection.md) |
+| [Rerun](https://github.com/rerun-io/rerun) | repository: MIT OR Apache-2.0、`re_ui`: `(MIT OR Apache-2.0) AND OFL-1.1` | **高密度viewer／GPU lifecycle／試験の主要先例**。同世代egui構成の出荷証拠は既存baselineの反証に使うが、egui製品不採用後は`re_ui`、`egui_tiles`、egui callbackを製品へ`DEPEND/VENDOR/PORT`せず、toolkit横断の`PATTERN`だけをMotolii fixtureで裁定する。[先例調査](reviews/2026-07-20-rerun-prior-art-survey.md)、[学習・転移計画](reviews/2026-07-20-rerun-learning-transfer-plan.md) |
 | [Slint](https://github.com/slint-ui/slint) | GPL / Royalty-Free / 商用 | **歴史的な採用候補**。2026-07-08採用、S1合格後、2026-07-18にeguiへ置換。Manual wgpu共有、renderer feature、IMEの測定事実は[歴史証拠](spikes/s1-slint.md)として維持する |
 | [slint-off-thread-rendering](https://github.com/tronical/slint-off-thread-rendering) | MIT | Slint公式関係者の実験リポジトリ。**`require_wgpu_29(WGPUConfiguration::Manual)` を使う場合に、`default-features = false` でレンダラfeatureを明示固定する実例**。OpenGL/WGPUの混在ミスマッチを避ける設定の参照先 |
 | [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) | Apache-2.0 | Zed製Rust GPU UI framework。crates.ioに単体公開済み(v0.2系、pre-1.0でAPI変動あり)。IME実績あり。egui比較時の候補だったが不採用。[gpui-component](https://github.com/longbridge/gpui-component)も存在 |
@@ -37,9 +37,9 @@
 ## その他の依存候補(定番、必要時に評価)
 
 - 音声出力: [cpal](https://github.com/RustAudio/cpal)(音声主クロック実装の土台)
-- 大量行table widget: [egui_table](https://github.com/rerun-io/egui_table)(MIT OR Apache-2.0、rerun-io保守、egui 0.35対応。sticky header・"millions of rows"・可変行高。Browser/Inspector大量行の**未評価候補** — 内部結合の`re_dataframe_ui`と違い外部leaf crateなので`DEPEND`比較対象。[Rerun inventory §5.6](reviews/2026-07-20-rerun-source-asset-inventory.md))
+- 大量行tableの歴史的比較資料: [egui_table](https://github.com/rerun-io/egui_table)(MIT OR Apache-2.0、rerun-io保守、egui 0.35対応。sticky header・"millions of rows"・可変行高)。egui製品不採用後はBrowser/Inspectorの製品`DEPEND`候補にせず、virtualizationの`PATTERN`比較だけに使う。[Rerun inventory §5.6](reviews/2026-07-20-rerun-source-asset-inventory.md)
 - WASMランタイム: [wasmtime](https://github.com/bytecodealliance/wasmtime)(5-1のWASMパラメータプラグイン、v2)
-- プラグインのクラッシュ隔離(設計思想の参考): **Bitwig Studio** — 別プロセスサンドボックス+5段階ホスティングモードで「1プラグインの異常が本体を落とさない/再生を止めない/自動再ロード」の模範(Abletonはネイティブ隔離なし=1個で全体が落ちる、が反面教師)。ただし音声バッファ前提でIPCが安いため、GPU(MB級・VRAM常駐)へは階層別に輸入する(concept.md「クラッシュ隔離を階層化」参照)
+- プラグインのクラッシュ隔離(設計思想の参考): **[Bitwig Studio](https://www.bitwig.com/userguide/latest/vst_plug-in_handling_and_options/)** — `Within Bitwig / Together / By manufacturer / By plug-in / Individually`の5段階で、RAM／互換性と障害半径を選ぶ。別process modeではaudio engineや無関係pluginへの波及を減らし、crash時は通知から`Reload Plug-in`／`Reload All Plug-ins`を**明示操作**する。再生継続はmodeと落ちたpluginに依存し、自動reloadや常時完全隔離とは書かない。音声pluginの先例であり、GPU(MB級・VRAM常駐)のprocess間texture共有、Motoliiのhot reload、first-party trustを証明しない(concept.md「クラッシュ隔離を階層化」参照)
 - 「馬鹿正直にシミュレートしない」の先行実証(設計思想の参考、いずれもクローズド): **[Furikake](https://aescripts.com/furikake/)** — AEの軽量粒子プラグイン。物理を「重力/風=閉形式・乱流=ノイズ変位・バウンス=解析反射」の f(t) に畳める力だけに選定し、粒子間相互作用を持たないことで O(N)・マルチコア・MFR対応の"バカ軽さ"を成立させた(concept.md根本コンセプトの母数)。**Alight Motion** — バウンス/バネ/段階移動を物理シミュでなくパラメトリック補間型([Animation Easing Curves](https://support.alightmotion.com/hc/en-us/articles/10536934703889-Animation-Easing-Curves))に畳み、AEでは`valueAtTime`式が必須だった領域をGUI選択肢化(Interp設計に採用済み)
 - グループへのエフェクト適用の先人比較(設計思想の参考、2026-07-10。concept「プリコンポは作らない/項目エンベロープ」決定の母数): **Alight Motion** — グループを1つのレイヤーとして選択し、単体レイヤーと同様にエフェクト/アニメーションを適用できる([レイヤー管理ガイド](https://themotionalight.com/group-and-ungroup-layers-in-alight-motion/))=採用した意味論。**AviUtl** — [グループ制御](https://aviutl.info/guru-puseigyo/)はフィルタを対象オブジェクトへ**個別**適用する意味論のため、「合成結果1枚に掛ける」用途では[フレームバッファ](https://aviutl.info/hure-mubaffa/)(画面全体を掴む)への迂回が定番 — per-child意味論と「画面全体しか掴めない」迂回の両方が反面教師([複数オブジェクトへまとめてフィルタ](https://scrapbox.io/aviutl/%E8%A4%87%E6%95%B0%E3%81%AE%E3%82%AA%E3%83%96%E3%82%B8%E3%82%A7%E3%82%AF%E3%83%88%E3%81%AB%E3%81%BE%E3%81%A8%E3%82%81%E3%81%A6%E3%83%95%E3%82%A3%E3%83%AB%E3%82%BF%E3%82%92%E6%8E%9B%E3%81%91%E3%82%8B)も同趣旨)。**Photoshop/クリスタ** — グループ既定の「通過(pass through)」ブレンドは分離合成と排他の二重意味論(通過グループにはエフェクトが定義できない)であり、通過不採用の根拠
 - オープンプラグイン標準(設計思想の参考): [CLAP](https://github.com/free-audio/clap)(Bitwig+u-he、**MIT**、C-ABI、明快なスレッドモデル、プロセス外ホスティング対応、WASM版=WCLAPあり)。OFX/VSTと違いオープンで、我々のOSS思想と親和。そのまま採用ではなく境界設計の参考
@@ -54,6 +54,27 @@
 - パス演算子(AEシェイプ演算子ファミリー、F-13・concept 2026-07-10決定): [lottie-docs Shapes](https://lottiefiles.github.io/lottie-docs/shapes/) — BodymovinがAEシェイプレイヤーを書き出すため、パンク・膨張(`pb`)/ジグザグ(`zz`)/パスのオフセット(`op`)/角丸(`rd`)/トリムパス(`tm`)/ツイスト(`tw`)/リピーター(`rp`)/パス結合(`mm`)の**意味論とシリアライズが公開文書化済み**(「Adobe独占」はオーサリングUIの話であって数学ではない — スキーマ設計の直接の前例に使う)。数学の参照実装は [lottie-web](https://github.com/airbnb/lottie-web)(MIT)。[Glaxnimate](https://github.com/KDE/glaxnimate)(**GPL-3.0=設計参考のみ・コード流用不可**)はOffset Path/Zig Zag等を独立実装したデスクトップ実例。パスオフセットの幾何は [kurbo](https://github.com/linebender/kurbo)(Apache-2.0/MIT、Vello系列で依存済み)の`offset`/`stroke`モジュールが土台候補
 - タイムライン交換: [OpenTimelineIO](https://github.com/AcademySoftwareFoundation/OpenTimelineIO)(Apache-2.0。v2の書き出し候補。v1はスキーマの素性を寄せるのみ=F-5。座標系提案「単位なし・単一原点・Y-up」はF-1の正準座標系の参考元)
 - 並行テスト: [loom](https://github.com/tokio-rs/loom)(MIT。M4-K1のキャッシュ並行契約の検証候補=F-2)
+
+### 責任委譲候補（2026-07-24、未採択）
+
+[依存優先・責任最小化ゲート](reviews/2026-07-24-dependency-first-responsibility-gate.md)のFable read-only広域調査を
+Codexが縮小処分した候補。ここへの掲載は依存追加の許可ではない。対応粒の着手時にversion、license、
+maintenance、3 OS、既存fixtureとの適合を再確認する。
+
+| 一般問題 | 候補 | 評価する時点 | 委ねない責任 |
+|---|---|---|---|
+| native file dialog | [rfd](https://github.com/PolyMeilex/rfd) | New / Open / Saveの製品入口 | project lifecycle、typed failure、catalog、lock |
+| clipboard IO | [arboard](https://github.com/1Password/arboard) | Copy / Paste意味の仕様決定後 | payload、ID再採番、Undo、Document |
+| native menu | [muda](https://github.com/tauri-apps/muda) | OS menuが製品要件になった時 | CommandId、keymap、実行権限 |
+| CPU cache | [moka](https://github.com/moka-rs/moka) | M4のRAM cache粒 | VRAM texture寿命、invalidation意味、永続key |
+| screen reader smoke | [Guidepup](https://github.com/guidepup/guidepup) | macOS VoiceOver / Windows NVDAの前哨CI | 実IME、実機、人間審判 |
+| 構造snapshot | [insta](https://github.com/mitsuhiko/insta) | 更新不可侵を保つreview動線を先に作れた時 | semantic oracle、golden採否 |
+| 依存・license監査 | [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) | 手書き依存guardとの重複を整理する粒 | Motolii固有の依存方向と公開型検査 |
+| 公開API互換検査 | [cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-checks) | 凍結済み公開crateのbaselineを固定できた時 | 意味互換、serde、migration |
+| ffmpeg process管理 | [ffmpeg-sidecar](https://github.com/nathanbabcock/ffmpeg-sidecar) | 3 OS移植または既存wrapperの保守負担発生時 | decoder pool、VFR、色、golden、後始末 |
+
+`Tauri`全面導入、別full UI framework、`salsa`による評価正本の反転、外部DB／WALへのjournal移管、
+`ui-events`の二重導入は、現行責任を減らさないため再評価トリガーなしでは採らない。
 
 ## プラットフォーム母数の出典(2026-07-10。E章ターゲットOS/F-9の根拠)
 

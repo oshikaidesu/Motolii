@@ -43,7 +43,7 @@ M2のDocument意味・migration・Undo・評価順・所有権は、後続フェ
 ### A. 恒久面の閉集合
 
 1. **Shared Effect**: D1l schema/migrationをmainへ到達させ、その後にD3e評価接続を別PRで完了する。inline旧projectの要素数・順序・未知plugin field・pixelを保持し、Definition/Use欠落を型付き拒否する
-2. **CompCamera**: [planar v1決定](2026-07-16-m2-comp-camera-decision.md)をmainへ到達させ、CAM-G0既存pixel fixture→D1l後のD1j v5 schema+default migration→D1k runtime契約→D3f接続を別PRで直列化する。v1は特異点のない`PlanarOrthographic`だけを焼き、既存2D pixelを保持する。Spatial/PerspectiveはM5の追加variant決定まで未実装
+2. **CompCamera**: [planar v1決定](2026-07-16-m2-comp-camera-decision.md)をmainへ到達させ、CAM-G0既存pixel fixture→D1l後のD1j v5 schema+default migration→D1k runtime契約→D3f接続を別PRで直列化する。v1は特異点のない`PlanarOrthographic`だけを焼き、既存2D pixelを保持する。Spatial/Perspectiveは[Camera Object / Provider決定](2026-07-24-camera-object-provider-decision.md)に基づくM5 P3まで未実装とし、M2の出荷済みschemaへ追加しない
 3. **Param Pipeline / Element Domain / Constraint Graph**: [M2持越し境界](2026-07-16-m2-param-element-constraint-disposition.md)をmainへ到達させる。現行`DocParam`/typed ID/LookAt・Followの解釈を変えず、PP/ED/CG各解凍gate前にUI・Document・plugin ABIへ推測のpipeline/generic domain/graphを焼かない
 4. 下記の再締結棚卸しを、対象ごとの小さいdecision/spec PRで採択・延期・棄却する。Draft文書や別ブランチの台帳を暗黙の発注根拠にしない
 5. **Project sidecar / session ownership**: D1dの親directory共有`.motolii`衝突とprocess間lock未規定をD1mで修復する。同一directory複数projectの隔離、canonical path alias排他、legacy layoutの非破壊移行を満たすまで保存基盤を閉じない

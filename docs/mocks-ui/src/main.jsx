@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.jsx";
-import { DiscoveryBrowserCandidate } from "./candidates/DiscoveryBrowserCandidate.jsx";
+import { DiscoveryBrowserCandidate } from "@motolii/motolii-web";
 import { EasingGraphCandidate } from "./candidates/EasingGraphCandidate.jsx";
 import { GraphViewCandidate } from "./candidates/GraphViewCandidate.jsx";
 import { TimelineCandidate } from "./candidates/TimelineCandidate.jsx";
