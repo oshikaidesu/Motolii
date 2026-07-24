@@ -1,6 +1,6 @@
 # M3 快適利用ワークマップ粒度化（2026-07-22）
 
-状態: **Fable全粒レビュー合格 / Codex採否済み / 実装発注ではない**
+状態: **Fable全粒レビュー合格 / M3-A〜D動線再レビューACCEPT / Codex採否済み / 実装発注ではない**
 
 ## 1. 目的
 
@@ -42,6 +42,66 @@ plugin契約、永続形式、未決UXを採択しない。
 8. UI都合でDocument、journal、plugin/community公開契約、永続layout形式を増やさない
 9. golden、threshold、期待値を実装都合で変更しない
 10. 未決に遭遇した粒は隣接機能を実装せず`ORDER: STOP`で該当SPEC粒へ戻る
+
+### 3.1 M3-A〜D stage packet
+
+[M3仕様の統合の背骨](../specs/M3-ui-integration.md#m3-ad-統合の背骨)を、日々のIssue、closed order、
+検収、main反映へ接続する。作業単位は**一つのsurface slice × 一つのM3 stage × 一つの契約境界**とし、
+Browser、Inspector、KEYS/LAYERS、Easing、Stage、Timeline、window Host、D2接続を一枚へ束ねない。
+
+M3のIssue化、発注書、検収依頼は、通常項目に加えて次のstage packetを順番どおり持つ。
+
+1. `M3 STAGE`: `M3-A / M3-B / M3-C / M3-D`の一つ
+2. `M3 SURFACE SLICE`: 対象面、product/native/Host境界、対象外の隣接面
+3. `M3 ENTRY EVIDENCE`: 前stageの受入証跡、または`NOT APPLICABLE`のauthority
+4. `M3 CLOSES`: 今回閉じる一つの所有・projection・runtime・editing境界
+5. `M3 DOES NOT CLOSE`: 後段へ残す意味、platform、D2、配布、公開契約
+6. `M3 STATE OWNER`: Document / User settings / Workspace / Project session / Transient / local presentation
+7. `M3 AUTHORITY / TASK IDS`: spec、decision、CU/U/G ID、固定source/fixture
+8. `M3 POSITIVE ORACLE`: 成功時に新しく成立する観測可能な証拠
+9. `M3 NEGATIVE ORACLE`: Cancel、失敗、stale、reload、二重state、許可外依存等の拒否証拠
+10. `M3 STOP / RETURN`: 停止条件と、戻るSPEC/ASSET/CORE粒
+11. `M3 HANDOFF`: 次stageへ渡す成果物と、まだ`WAIT`の後続
+
+React source assetを扱う場合、このpacketは[直接移管契約](2026-07-22-m3-react-product-asset-promotion-contract.md)の
+`REACT AUTHORITY`〜`STOP`の8ラベルを置換しない。stage packetの後にReact必須blockを規定順で置く。
+Rerunを参照する場合も、AGENTS.mdの`MOTOLII AUTHORITY`〜`MOTOLII ORACLE`を別blockとして規定順で置く。
+stage packetの全ラベルは`M3 `prefixを保ち、React/Rerun機械guardが検査する同名ラベルを先取りしない。
+発注書実体では各ラベルを`M3 STAGE:`のような**ラベルだけの独立行**にし、内容は次行以降へ書く。
+`M3 STAGE: M3-A`のようなinline表記を使わない。後続のReact blockはscriptの機械guard書式、
+Rerun blockはAGENTS.mdとCodex precheckの規定書式に従う。
+
+### 3.2 stage入場・退出・戻り先
+
+| Stage | 入場証拠 | 退出証拠 | STOP時の戻り先 |
+|---|---|---|---|
+| **M3-A Presentation Ownership** | 固定source、surface owner、export/CSS/model/test closureが特定済み。native-only面は所有authorityを根拠に`NOT APPLICABLE`を明記 | productが単一owner、mockがconsumer、visual/interaction parity、legacy/runtime逆依存0、二重copy 0 | CU-0A03 source inventory、React直接移管契約、source不在なら同形React化判断 |
+| **M3-B Host Projection / Intent** | React所有面は対象M3-A受入済み。native-only/core sliceはownerとvisual oracleを明記。必要な意味とstate ownerが既決 | revision付きread-only projection、typed intent/codec、unknown/stale拒否、surface側semantic writer/Undo/selection正本0 | 対応SPEC粒、CU-G09等のread-model決定、未決なら公開APIやDocumentへ焼かず停止 |
+| **M3-C Product Runtime Integration** | 対象M3-B受入済み、CU-G01のlocal gateと該当platform証拠、topology/focus ownerが既決 | 通常製品route、1 surface/2 viewport/opaque WebView islands、focus/IME/AX、epoch、resize/lost/crash復旧 | CU-G01またはCU-0G02〜05L。Mac証拠をWindowsへ外挿しない |
+| **M3-D Editing Loop** | 対象M3-B受入済み。PRODUCT/E2Eを閉じる時はM3-Cも受入済み。D2意味、durability、Undo/selection policyが既決 | Transient preview→commit/cancel→D2 single writer→snapshot再投影。1 gesture=1 Undo、失敗=変更0、save/reopen/Export fixture | CU-G03/G07、CU-101/102/104等のSPEC粒、または既存M2 D2/journal authority |
+
+M3-Dのheadless `CORE`粒はM3-B後に準備できるが、M3-C前に製品統合やLocal Alpha完了を名乗らない。
+同様にM3-Aの全surface完了をM3-B全体の一括barrierにせず、対象sliceの証拠だけを追跡する。
+stageを飛ばす場合は暗黙に省略せず、`M3 ENTRY EVIDENCE`へ`NOT APPLICABLE`とそのauthorityを書く。
+
+### 3.3 選定からmain反映までの動線
+
+```text
+decision-indexで主題を逆引き
+  -> implementation-ledgerの「現在選択中の1件」を確認
+  -> 本書で該当CU粒の状態・論理依存・STOPを確認
+  -> M3 STAGEとM3 SURFACE SLICEを一つに固定
+  -> authorityと最新mainのコード事実を確認
+  -> stage packetを埋める
+  -> 1契約境界のclosed order / 実装 / 独立検収
+  -> 自動試験 + 必要なHUMAN/MEASURE/HARDWARE証拠
+  -> main到達後にspec task表・ledger・証拠を同じ変更で更新
+  -> M3 HANDOFFの次stageをWAITまたは次の1件として再判定
+```
+
+`M3 STOP / RETURN`へ到達したら、隣接stageの仮実装、縮約component、raw bridge、fixture special-caseで迂回しない。
+意味未決はSPEC、source不在はASSET、platform失敗はMEASURE/HARDWARE、編集原子性はCOREの該当粒へ戻す。
+Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コード事実、ledgerを再照合する。
 
 ## 4. 先行する仕様・順序粒
 
@@ -366,6 +426,18 @@ React直接移管契約、Rectangle D2契約、現行コード事実を横断監
 
 Fableの判定は助言であり、Codexが各指摘を正本とコード事実へ照合して上表のとおり採択した。これにより本書は
 closed orderを**作成できる母集団**になったが、各粒の`DECIDE/WAIT`、現行ledger、発注時precheckを解除しない。
+
+### 17.1 M3-A〜D動線のFable再レビュー（2026-07-24）
+
+M3-A〜Dのstage packet、入退出証拠、STOP時の戻り先、ledger動線を追加した後、
+Claude Code `claude-fable-5`へ実ファイルと機械guardをread-onlyで再監査させた。
+
+| 回 | 判定 | 指摘 | Codex採否 |
+|---|---|---|---|
+| 初回 | `VERDICT: ACCEPT` | P0=0 / P1=0 / P2=2。stage packetの`STATE OWNER`/`NEGATIVE ORACLE`がReact guardのfirst occurrenceと衝突し得る。親`U2c`のB表記と`U2c-2`のD表記が曖昧 | 全件採用。packet labelを`M3 `prefixへ統一し、U2c-1/4=B、U2c-2=D、枝番stageはledger+CU粒を正とした |
+| 再回 | `VERDICT: ACCEPT` | P0=0 / P1=0。初回P2解消。残るP2はReact orderのpositive guard test不足と、既存guardが必須ラベルのinline内容を受けない書式上の注意 | 動線は採用。ラベル独立行の書式を明記。positive guard testは安全側拒否を弱めず、今回のdocs変更へ混ぜない後続tooling課題 |
+
+再レビューはG/U/CU/Wの状態を変更せず、U0e-2Rだけが`DO`、U2c-2以下は既存依存どおり`WAIT`のままである。
 
 ## 18. 現在の停止線
 

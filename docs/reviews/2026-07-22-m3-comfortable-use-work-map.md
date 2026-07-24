@@ -27,6 +27,22 @@ React製品資産は[直接移管契約](2026-07-22-m3-react-product-asset-promo
 [M3 UI境界規律](2026-07-14-m3-ui-boundary-prevention.md)、製品surfaceは
 [UI runtime責任境界](../ui-runtime-architecture.md)とG0-9に従う。
 
+### 2.1 M3-A〜Dとの対応
+
+[M3仕様](../specs/M3-ui-integration.md#m3-ad-統合の背骨)は、実装時の統合の背骨を
+`M3-A Presentation Ownership → M3-B Host Projection / Intent → M3-C Product Runtime Integration
+→ M3-D Editing Loop`と呼ぶ。本書のW地点との対応は次の通り。
+
+| 段階 | 本書の主対応 | 役割 |
+|---|---|---|
+| M3-A | W0a | 製品資産の所有移管を閉じる |
+| M3-B | W0a〜W1のprojection/intent境界 | mock stateをHost境界へ交換する |
+| M3-C | W0g/W0b | platform gate後に通常製品windowを結合する |
+| M3-D | W1/W2とLocal Alpha fixture | D2/Undoを含む制作ループを閉じる |
+
+M3-A〜DはW0〜W6を置換しない。W3の実素材、W4の日常操作、W5の応答・復旧、W6の配布品質は、
+統合の背骨へ接続した後も独立したM3完成線として残る。
+
 ## 3. 二つの完成線
 
 ### 3.1 Local Alpha

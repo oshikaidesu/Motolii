@@ -149,11 +149,12 @@
 | [2026-07-22-m3-surface-extension-axis-separation.md](2026-07-22-m3-surface-extension-axis-separation.md) | OS topology、presentation runtime、製品module、plugin、provenance/trustを別軸として固定 |
 | [2026-07-22-creator-developer-continuum-decision.md](2026-07-22-creator-developer-continuum-decision.md) | 利用者から作者までを一つの経路にし、React・Vism・first-party参照実装を多数作者の成長戦略へ統合 |
 | [2026-07-22-ui-music-metaphor-retirement.md](2026-07-22-ui-music-metaphor-retirement.md) | 「演奏・譜面台・楽曲が背骨」を製品全体の比喩とする仮説を撤回し、音声機能と製品存在論を分離 |
-| [2026-07-22-terra-grok-delegation-policy.md](2026-07-22-terra-grok-delegation-policy.md) | 速度優先期の通常発注をGPT-5.6 Terra実装 + Cursor Grok 4.5 High検収に固定する運用決定 |
+| [2026-07-22-terra-grok-delegation-policy.md](2026-07-22-terra-grok-delegation-policy.md) | タスク級ごとに実装モデルを選び、Grok必須検収とClaude Code Fable追加検収を組み合わせる運用決定 |
 | [2026-07-22-u0e-2-delegation-guardrails.md](2026-07-22-u0e-2-delegation-guardrails.md) | U0e-2縮約再実装を再発させないdispatch・source provenance・fixture因果・原子性・証跡ガード |
 | [2026-07-23-parallel-order-pipeline-comparison.md](2026-07-23-parallel-order-pipeline-comparison.md) | closed orderを小さく保ったままpreflight・実装・検収を重ねる発注パイプライン並列化の比較案 |
-| [2026-07-23-first-party-vism-expression-demand-survey.md](2026-07-23-first-party-vism-expression-demand-survey.md) | AE・AviUtl 2・Cavalryからfirst-party pre-Vismの基礎primitiveとsignature表現需要を分ける初期調査 |
+| [2026-07-23-first-party-vism-expression-demand-survey.md](2026-07-23-first-party-vism-expression-demand-survey.md) | AE・AviUtl 1.x／2・Cavalryの表現需要と、人気plugin／公開script系統からVism候補、Host／Infrastructure／Adapter責任、Kitを分ける調査 |
 | [2026-07-23-group-source-pool-cloner-concept.md](2026-07-23-group-source-pool-cloner-concept.md) | Groupの直接の子を割合つきprototype poolとしてClonerへ渡すMotolii固有概念の比較 |
+| [2026-07-24-camera-object-provider-decision.md](2026-07-24-camera-object-provider-decision.md) | Cameraを換装可能なTimeline Object／Providerとし、点群・splat・volume等とrepresentation非依存Observation Contractで接続する決定 |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |
 | [2026-07-21-m3-u1a-1-static-viewport-contract.md](2026-07-21-m3-u1a-1-static-viewport-contract.md) | U1a-1 静止viewport実装前契約 |
@@ -165,3 +166,59 @@
 | [2026-07-21-m3-u2b-1-single-writer-e2e-contract.md](2026-07-21-m3-u2b-1-single-writer-e2e-contract.md) | U2b-1 single writer配送E2E契約 |
 | [2026-07-21-m3-u2c-1-interaction-state-contract.md](2026-07-21-m3-u2c-1-interaction-state-contract.md) | U2c-1 共通interaction state machine契約 |
 | [2026-07-21-m3-u2c-4-diagnostic-envelope-contract.md](2026-07-21-m3-u2c-4-diagnostic-envelope-contract.md) | U2c-4 Transient Diagnostic Envelope契約 |
+
+### 歴史価値回収（固定 corpus）
+
+| 文書 | 内容 |
+|---|---|
+| [2026-07-23-historical-semantic-graph-recovery-tooling.md](2026-07-23-historical-semantic-graph-recovery-tooling.md) | Git corpus・receipt・可搬projection・任意索引の責任境界 |
+| [2026-07-23-historical-value-recovery-coverage-ledger.md](2026-07-23-historical-value-recovery-coverage-ledger.md) | 固定manifestとblob receiptによるcoverage台帳 |
+| [2026-07-23-losing-specification-value-recovery.md](2026-07-23-losing-specification-value-recovery.md) | 旧仕様を主張単位で分類する回収方針 |
+| [2026-07-23-vism-kit-rack-unification-decision.md](2026-07-23-vism-kit-rack-unification-decision.md) | Vism Kit／Plugin Set／curator listの責任分離 |
+| [2026-07-23-historical-audio-generalization-lineage-recovery.md](2026-07-23-historical-audio-generalization-lineage-recovery.md) | 音声一般化の歴史回収 |
+| [2026-07-23-historical-color-export-lineage-recovery.md](2026-07-23-historical-color-export-lineage-recovery.md) | 色・exportの歴史回収 |
+| [2026-07-23-historical-core-plugin-boundary-lineage-recovery.md](2026-07-23-historical-core-plugin-boundary-lineage-recovery.md) | Core／Host／plugin境界の歴史回収 |
+| [2026-07-23-historical-d1-code-audit-lineage-recovery.md](2026-07-23-historical-d1-code-audit-lineage-recovery.md) | D1 code auditの歴史回収 |
+| [2026-07-23-historical-d1-spec-holes-lineage-recovery.md](2026-07-23-historical-d1-spec-holes-lineage-recovery.md) | D1仕様穴の歴史回収 |
+| [2026-07-23-historical-d1l-constructor-lint-lineage-recovery.md](2026-07-23-historical-d1l-constructor-lint-lineage-recovery.md) | constructor／lintの歴史回収 |
+| [2026-07-23-historical-d1l-counter-review-evidence-recovery.md](2026-07-23-historical-d1l-counter-review-evidence-recovery.md) | D1l反対側レビュー証拠の回収 |
+| [2026-07-23-historical-d1l-journal-undo-lineage-recovery.md](2026-07-23-historical-d1l-journal-undo-lineage-recovery.md) | journal／Undoの歴史回収 |
+| [2026-07-23-historical-d1m-sidecar-session-lineage-recovery.md](2026-07-23-historical-d1m-sidecar-session-lineage-recovery.md) | sidecar／sessionの歴史回収 |
+| [2026-07-23-historical-d2-selection-timeline-lineage-recovery.md](2026-07-23-historical-d2-selection-timeline-lineage-recovery.md) | D2／selection／Timelineの歴史回収 |
+| [2026-07-23-historical-d5-transport-lineage-recovery.md](2026-07-23-historical-d5-transport-lineage-recovery.md) | Transportの歴史回収 |
+| [2026-07-23-historical-first-code-audit-lineage-recovery.md](2026-07-23-historical-first-code-audit-lineage-recovery.md) | 第一code auditの歴史回収 |
+| [2026-07-23-historical-foundation-lineage-recovery.md](2026-07-23-historical-foundation-lineage-recovery.md) | 基盤文書の歴史回収 |
+| [2026-07-23-historical-frame-desc-shared-types-lineage-recovery.md](2026-07-23-historical-frame-desc-shared-types-lineage-recovery.md) | FrameDesc共有型の歴史回収 |
+| [2026-07-23-historical-llm-plugin-demo-lineage-recovery.md](2026-07-23-historical-llm-plugin-demo-lineage-recovery.md) | LLM plugin demo証拠の回収 |
+| [2026-07-23-historical-m2-camera-contract-lineage-recovery.md](2026-07-23-historical-m2-camera-contract-lineage-recovery.md) | M2 camera契約の歴史回収 |
+| [2026-07-23-historical-m2-entry-gate-lineage-recovery.md](2026-07-23-historical-m2-entry-gate-lineage-recovery.md) | M2入口gateの歴史回収 |
+| [2026-07-23-historical-m2-reclosure-gate-lineage-recovery.md](2026-07-23-historical-m2-reclosure-gate-lineage-recovery.md) | M2再締結gateの歴史回収 |
+| [2026-07-23-historical-m2-supplementary-review-lineage-recovery.md](2026-07-23-historical-m2-supplementary-review-lineage-recovery.md) | M2追補レビューの歴史回収 |
+| [2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md](2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md) | M4 cache／analysisの歴史回収 |
+| [2026-07-23-historical-media-portability-gpu-resurvey-plan-recovery.md](2026-07-23-historical-media-portability-gpu-resurvey-plan-recovery.md) | media可搬性／GPU再調査計画の回収 |
+| [2026-07-23-historical-memory-model-lineage-recovery.md](2026-07-23-historical-memory-model-lineage-recovery.md) | memory modelの歴史回収 |
+| [2026-07-23-historical-param-element-constraint-lineage-recovery.md](2026-07-23-historical-param-element-constraint-lineage-recovery.md) | Param／Element／Constraintの歴史回収 |
+| [2026-07-23-historical-performance-model-lineage-recovery.md](2026-07-23-historical-performance-model-lineage-recovery.md) | performance modelの歴史回収 |
+| [2026-07-23-historical-permanence-prevention-lineage-recovery.md](2026-07-23-historical-permanence-prevention-lineage-recovery.md) | 恒久焼き込み予防の歴史回収 |
+| [2026-07-23-historical-plugin-authoring-lineage-recovery.md](2026-07-23-historical-plugin-authoring-lineage-recovery.md) | plugin authoringの歴史回収 |
+| [2026-07-23-historical-plugin-ecosystem-lineage-recovery.md](2026-07-23-historical-plugin-ecosystem-lineage-recovery.md) | plugin ecosystemの歴史回収 |
+| [2026-07-23-historical-plugin-resource-runtime-lineage-recovery.md](2026-07-23-historical-plugin-resource-runtime-lineage-recovery.md) | plugin resource／runtimeの歴史回収 |
+| [2026-07-23-historical-plugin-ui-lineage-recovery.md](2026-07-23-historical-plugin-ui-lineage-recovery.md) | plugin UIの歴史回収 |
+| [2026-07-23-historical-public-capability-provenance-lineage-recovery.md](2026-07-23-historical-public-capability-provenance-lineage-recovery.md) | 公開capability／provenanceの歴史回収 |
+| [2026-07-23-historical-r1-export-gpu-safety-lineage-recovery.md](2026-07-23-historical-r1-export-gpu-safety-lineage-recovery.md) | R1 export／GPU safetyの歴史回収 |
+| [2026-07-23-historical-r3-datatrack-export-correctness-lineage-recovery.md](2026-07-23-historical-r3-datatrack-export-correctness-lineage-recovery.md) | R3 DataTrack／export correctnessの歴史回収 |
+| [2026-07-23-historical-r9-real-material-export-acceptance-lineage-recovery.md](2026-07-23-historical-r9-real-material-export-acceptance-lineage-recovery.md) | R9実素材／export受入の歴史回収 |
+| [2026-07-23-historical-react-webview-lineage-recovery.md](2026-07-23-historical-react-webview-lineage-recovery.md) | React／WebViewの歴史回収 |
+| [2026-07-23-historical-reclosure-counter-review-evidence-recovery.md](2026-07-23-historical-reclosure-counter-review-evidence-recovery.md) | 再締結反対側レビュー証拠の回収 |
+| [2026-07-23-historical-render-ctx-thaw-lineage-recovery.md](2026-07-23-historical-render-ctx-thaw-lineage-recovery.md) | RenderCtx解凍の歴史回収 |
+| [2026-07-23-historical-s2-decode-pipeline-lineage-recovery.md](2026-07-23-historical-s2-decode-pipeline-lineage-recovery.md) | S2 decode pipelineの歴史回収 |
+| [2026-07-23-historical-semantic-oracle-boundary-recovery.md](2026-07-23-historical-semantic-oracle-boundary-recovery.md) | semantic oracle境界の歴史回収 |
+| [2026-07-23-historical-shared-effect-lifecycle-lineage-recovery.md](2026-07-23-historical-shared-effect-lifecycle-lineage-recovery.md) | Shared Effect lifecycleの歴史回収 |
+| [2026-07-23-historical-test-oracle-ruleset-recovery.md](2026-07-23-historical-test-oracle-ruleset-recovery.md) | test oracle rulesetの歴史回収 |
+| [2026-07-23-historical-unified-stage-camera-ui-lineage-recovery.md](2026-07-23-historical-unified-stage-camera-ui-lineage-recovery.md) | Stage／Camera UIの歴史回収 |
+| [2026-07-23-historical-vello-adoption-lineage-recovery.md](2026-07-23-historical-vello-adoption-lineage-recovery.md) | Vello採否の歴史回収 |
+| [2026-07-23-historical-vism-a3-expression-layersource-lineage-recovery.md](2026-07-23-historical-vism-a3-expression-layersource-lineage-recovery.md) | Vism A3／LayerSourceの歴史回収 |
+| [2026-07-23-historical-vism-foundation-contract-lineage-recovery.md](2026-07-23-historical-vism-foundation-contract-lineage-recovery.md) | Vism foundation contractの歴史回収 |
+| [2026-07-23-historical-vism-kit-distribution-lineage-recovery.md](2026-07-23-historical-vism-kit-distribution-lineage-recovery.md) | Vism Kit／distributionの歴史回収 |
+| [2026-07-23-historical-wgpu-readback-cold-compile-lineage-recovery.md](2026-07-23-historical-wgpu-readback-cold-compile-lineage-recovery.md) | wgpu readback／cold compileの歴史回収 |
+| [2026-07-24-replaceable-semantic-seat-decision.md](2026-07-24-replaceable-semantic-seat-decision.md) | HVR-D04 Unit 8A — Host semantic seat、換装可能Provider、Effect／Filter分類とContent-Aware Scale候補 |

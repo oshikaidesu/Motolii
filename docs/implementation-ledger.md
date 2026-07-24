@@ -1,6 +1,6 @@
 # 実装進行台帳
 
-最終確認: **2026-07-21**
+最終確認: **2026-07-24**
 
 このファイルは、実装者が「次に何をするか」を1枚で判断するための現場用台帳。M0〜M5の意味や完了条件を再定義せず、現在の依存関係と発注順だけを示す。
 
@@ -39,11 +39,24 @@
 | M0 | `DONE` | spike完了 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み |
 | M2 | **基盤再締結済み** | D1l、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。D5は再締結の閉集合外で、骨格到達・統合審判pending |
-| M3 | **UI責任境界・surface topology決定 / G0-9 platform受入比較中** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4はmain完了済みでbaselineとして保持。次はU0e-2Rとwgpu 29 platform受入spike。native layout/hit-test/gesture kernelはtoolkit/renderer非依存で進められる。WebView/native製品統合とegui撤去はG0-9、plugin UI公開契約は分離したG0-3 / GAP-13まで停止 |
+| M3 | **M3-A〜D統合段階 / G0-9 platform受入比較中** | A=製品資産所有、B=Host projection/intent、C=製品runtime統合、D=D2/Undo制作ループ。既存G/U/CU/W IDを維持し、一面ごとに段階の証拠を閉じる。U0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4はmain完了済みでbaselineとして保持。次はU0e-2Rとwgpu 29 platform受入spike。native layout/hit-test/gesture kernelはtoolkit/renderer非依存で進められる。WebView/native製品統合とegui撤去はG0-9、plugin UI公開契約は分離したG0-3 / GAP-13まで停止 |
 | M4 | **契約spike可** | K0でRoD/RoIのruntime契約を凍結。その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む |
 | M5 | **identity spike可** | P0IでDuplicator/Instance identityを凍結 |
 
 [M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3はU0a入場済みで、[UI runtime責任境界](ui-runtime-architecture.md)も決定済み。ただしG0-9中はWebView/native surfaceの製品統合を発注しない。plugin UI公開契約はG0-9合格と分離し、G0-3 / GAP-13の決定まで発注しない。headlessなTimeline/Stage projectionもSelected U seriesの前枝番がmainへ到達した時だけ次の1枝番を発注する。
+
+### M3の1件を選ぶ動線
+
+M3は[stage packet](reviews/2026-07-22-m3-comfortable-use-granulation.md#31-m3-ad-stage-packet)を使い、
+一つのsurface sliceと一つのM3-A〜D stageだけを現在選択する。
+
+1. `decision-index.md`で主題を逆引きする
+2. 下の「現在選択中の1件」と該当CU粒の`DO/WAIT/STOP`を照合する
+3. `M3 ENTRY EVIDENCE`で前stageの証拠または`NOT APPLICABLE`のauthorityを確認する
+4. `M3 CLOSES / M3 DOES NOT CLOSE / M3 STOP / RETURN / M3 HANDOFF`を固定してからIssue化・発注する
+5. main到達後、spec task表・本台帳・証拠を同じ変更で更新して次stageを再判定する
+
+既存G/U/CU/W IDが意味と完了条件の正本であり、M3-A〜Dは現在地とhandoffを明示するための段階名である。
 
 ## 主クリティカルパス
 
@@ -91,10 +104,23 @@ P0I #170 → P7a → P7b → P7c → P7U
 全体には独立spikeもあるが、ユーザー選択中のUシリーズは意味・所有境界を優先して
 1チケットずつ直列に進める。旧night 3分岐は直接統合しない。
 
-| 優先 | ID | Phase | 状態 | Issue | 依存確認 | 完了後 |
-|---|---|---|---|---|---|---|
-| 1 | U0e-2R | M3 | `DO` | — | U0e-1完了。固定React baseline `eb16d06`を最新mainへ再結合する | U0e-2を単独実行 |
-| 2 | U2c-2 | M3 | `WAIT` | — | U4a-2のDirect製品入口とU4cのAdvanced製品入口が揃うまで空harnessを作らない | 実在入口のDocument意味/Undo同値conformance |
+| 優先 | ID | Phase | M3 stage | 状態 | Issue | 依存確認 | 完了後 |
+|---|---|---|---|---|---|---|---|
+| 1 | U0e-2R | M3 | M3-A | `DO` | — | U0e-1完了。固定React baseline `eb16d06`を最新mainへ再結合する | U0e-2を単独実行 |
+| 2 | U2c-2 | M3 | M3-D | `WAIT` | — | U4a-2のDirect製品入口とU4cのAdvanced製品入口が揃うまで空harnessを作らない | 実在入口のDocument意味/Undo同値conformance |
+
+### 独立 History tooling lane
+
+[歴史価値回収の意味グラフ補助](reviews/2026-07-23-historical-semantic-graph-recovery-tooling.md)は
+製品境界を変更しない独立tooling laneとして並行できる。同lane内では`DO`を1件だけにする。
+
+| ID | 状態 | 依存確認 | 完了後 |
+|---|---|---|---|
+| HVR-G01 | `DONE` | 意味グラフ補助境界を正本化 | HVR-D01の依存 |
+| HVR-D01 | `DONE` | HVR-G01完了。既存corpus/receiptを変更しない | 決定的な可搬projectionと負例 |
+| HVR-D02 | `DONE` | HVR-D01完了 | 任意のBasic Memory runner |
+| HVR-D03 | `DONE` | HVR-D01完了 | repo-local候補packet skill |
+| HVR-D04 | `ACTIVE` | HVR-D01〜D03完了、Unit 8A処分済み | 候補packetを単位別裁定へ渡し、残る単位を1件ずつ処分 |
 
 K0 [#167](https://github.com/oshikaidesu/Motolii/issues/167)とP0I
 [#170](https://github.com/oshikaidesu/Motolii/issues/170)は論理上`DO`の独立spikeだが、

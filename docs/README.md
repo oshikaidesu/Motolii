@@ -11,7 +11,7 @@
 - **何を作るか**: MV(ミュージックビデオ)制作のための、モーショングラフィック指向のコンポジットツール。AEの重さへの構造的な回答。3〜5分の動画を書き出せたら完成
 - **長期の北極星**: 映像表現を、時刻・入力・型付きparameterから決まる再利用可能な単位として実行・保存・配布できる共通環境にする。制作者と開発者を固定身分にせず、利用→調整→構成→inspection→fork→authoring→共有を一つの経路にする。多数のcreator-authorが公開境界の上で独立して表現を増やせることを成長力とする。「映像制作におけるVST」はHostと拡張単位を分ける構造の類比に限り、音楽中心の製品像やDAW化は目標ではない([concept.md](concept.md#長期の北極星-映像表現を実行再利用配布できる単位にする)、[連続体決定](reviews/2026-07-22-creator-developer-continuum-decision.md))
 - **技術スタック**: Rust + wgpu(レンダコア、VRAM常駐) / ffmpegサイドカープロセス / Cargo workspaceは確定。UIは[React / WebView chrome + native Rust/wgpu Stage/Timeline](ui-runtime-architecture.md)へ責任分割し、通常windowは[1 top-level wgpu Surface + 2 native viewport + opaque child WebView islands](reviews/2026-07-21-ui-surface-topology-decision.md)へ固定した。native操作はrenderer非依存のheadless kernelへ置く。OS window、surface runtime、Core／Host module／plugin、first／third-partyの信頼境界は[軸分離決定](reviews/2026-07-22-m3-surface-extension-axis-separation.md)に従って別判定する
-- **開発方式**: 仕様書駆動の並列AIエージェント開発。[M2基盤再締結](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3はU0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4までmain到達済み。G0-9中も正本化したnative headless layout/hit-test等は進行可だが、WebView/native製品統合はplatform合格まで停止する。plugin UI公開契約はG0-3 / GAP-13の別審判まで停止する
+- **開発方式**: 仕様書駆動の並列AIエージェント開発。[M2基盤再締結](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3は[統合の背骨](specs/M3-ui-integration.md#m3-ad-統合の背骨)をA=製品資産所有、B=Host projection/intent、C=製品runtime統合、D=D2/Undo制作ループへ分離し、既存G/U/CU/W IDを維持する。U0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4までmain到達済み。G0-9中も正本化したnative headless layout/hit-test等は進行可だが、WebView/native製品統合はplatform合格まで停止する。plugin UI公開契約はG0-3 / GAP-13の別審判まで停止する
 - **設計目標の代表値**: 1080p動画レイヤー40本同時で破綻しない / プロセス強制終了しても編集を失わない(コマンドジャーナル) / フレーム並列(マルチコア)を構造で保証
 
 ## 読む順序(初見向け)
@@ -43,6 +43,7 @@
 | [extensible-core-model.md](extensible-core-model.md) | 小さなコアと探索可能な拡張: 壊れない探索、編集pluginの責任寿命、Documentを増やさないアドレス可能な個体、表現domainを列挙しない能力境界(共通外殻/plugin payload、追加的進化)、性能上限を焼かない原則、穴埋めから遊びの探索への転換 | **設計原則**(2026-07-17。未凍結APIの実装許可ではない) |
 | [vism-package-concept.md](vism-package-concept.md) | Vism (`.vism`): Project・内部plugin kind・Host UIから分離して保存/共有/再利用する映像表現の配布単位。Motoliiは最初のHost、container/loaderは未決 | **コンセプト・名称・拡張子決定／ファイル形式未決**(2026-07-17。v1実装許可ではない) |
 | [vism-kit-model.md](vism-kit-model.md) | Core=文法、Vism=小さな表現、Kit=provider選択と型付き接続、Project=作品。BPM/Beatを例に、Vism直接依存を避けるmaterialize構成とfork能力の境界を定義 | **設計原則決定／schema・形式未決**(2026-07-17) |
+| [vism-plugin-catalog.md](vism-plugin-catalog.md) | Textを含む将来Vism／plugin表現を、利用者向け名称・カテゴリ・実装lane・時間性・状態から探すBrowser型一覧 | **計画台帳**(個別採択順・公開API・package形式の実装許可ではない) |
 | [generative-user-boundary.md](generative-user-boundary.md) | ジェネラティブ表現とユーザー拡張の境界: Shape/SVG、p5.js型入力、Materialize/Live/Feedback/Simulation、Host責務 | **設計決定**(2026-07-15。未凍結runtimeの実装許可ではない) |
 | [ui-interaction-language.md](ui-interaction-language.md) | M3のUI操作言語: 既知の外殻、可視の因果、Parameter Panelを表現のホームにするUI力学、共通component契約、Simple/Advanced、漏れ実装の拒否 | **設計決定**(2026-07-16、Parameter Panel力学を2026-07-18追補) |
 | [ui-visual-language.md](ui-visual-language.md) | M3の視覚言語: 高密度一覧、意味色、既存UIへの馴染み、contrast、token規約、参照範囲 | 設計基準(具体token値はM3視覚確定(G0-6)待ち) |
@@ -85,7 +86,9 @@
 | [reviews/2026-07-18-vism-a3-external-expression-survey.md](reviews/2026-07-18-vism-a3-external-expression-survey.md) | VSM-A3R: AE Expression／Script／Effect、aescripts、Blender Driver／Geometry Nodes／Simulation／Add-onを責任分類し、Parameter Panel中心のA3候補へ翻訳 | **調査完了**（採用決定は[A3D](reviews/2026-07-18-vism-a3d-radial-repeater-decision.md)） |
 | [reviews/2026-07-18-vism-a3d-radial-repeater-decision.md](reviews/2026-07-18-vism-a3d-radial-repeater-decision.md) | VSM-A3D: 決定論的2D Radial Repeater LayerSource（`core.layer_source.radial_repeater` v1）のidentity・正準意味・parameter閉集合・UI投影要求・非目標 | **設計決定** |
 | [reviews/2026-07-18-vism-a3s-layersource-lowering-spec.md](reviews/2026-07-18-vism-a3s-layersource-lowering-spec.md) | VSM-A3S: 一般LayerSource lowering（prepared→`RenderStep::Plugin`）、clear一般化、拒否分類、rect分離、画素契約、U4a handoff、A3分割発注表。[F1](reviews/2026-07-17-vism-implementation-plan.md)でHost cache GAPを訂正し、`VSM-A3-0`〜`VSM-A3-4`まで実装済み | **仕様・VSM-A3完了** |
-| [reviews/2026-07-14-unified-stage-camera-design.md](reviews/2026-07-14-unified-stage-camera-design.md) | 2D/3Dを分けない単一カメラ、Stage、Output Frame、枠外表示の意味と実装順 | **決定**(2026-07-14) |
+| [reviews/2026-07-14-unified-stage-camera-design.md](reviews/2026-07-14-unified-stage-camera-design.md) | 2D/3Dを分けない単一active camera、Stage、Output Frame、枠外表示の意味。将来の具体camera所有だけ2026-07-24決定へ置換 | **決定**(2026-07-14、将来所有改訂) |
+| [reviews/2026-07-24-replaceable-semantic-seat-decision.md](reviews/2026-07-24-replaceable-semantic-seat-decision.md) | Host semantic seat、換装可能Provider、Effect／Filter分類、Content-Aware Scale候補の一般則 | **決定**(2026-07-24、Fable ACCEPT) |
+| [reviews/2026-07-24-camera-object-provider-decision.md](reviews/2026-07-24-camera-object-provider-decision.md) | Cameraをタイムライン上の換装可能Object／Providerとし、点群以後のrendererとrepresentation非依存Observation Contractで接続する | **決定**(2026-07-24、既存Planar互換不変) |
 | [reviews/2026-07-14-recent-concept-propagation-audit.md](reviews/2026-07-14-recent-concept-propagation-audit.md) | 直近の根幹決定を意味・Document・評価・UI・依存・コードの6面で逆引きした未反映台帳 | 横断監査(2026-07-14) |
 | [reviews/2026-07-14-motion-foundation-known-tech-disposition.md](reviews/2026-07-14-motion-foundation-known-tech-disposition.md) | Relative Move、Bounds/ROI、Effect Scope、Instance/Elementを既知技術で再判定した最小契約 | **決定**(2026-07-14) |
 | [reviews/2026-07-15-relative-scope-duplicator-decision.md](reviews/2026-07-15-relative-scope-duplicator-decision.md) | modifier+drag、透過Stage、Explicit Definition/Use、Cavalry型Duplicator、stable seedの具体化 | **決定**(2026-07-15) |
@@ -141,7 +144,7 @@
 - **Quality (Draft/Final)**: 同一レンダ関数に渡す品質パラメータ。Draft=1/2解像度(重い時1/4へ自動降格)・fp16。Finalのみ厳密
 - **DataTrack / ParamDriver**: 解析プラグインが生成する時系列データと、それでパラメータを駆動する仕組み(「解析→生成」がこのツールの長期的な強み)
 - **TimeMap**: クリップのソース時刻写像。v1は恒等+定数速度のみ実装、スキーマは初日から予約(落とし穴F-4)
-- **CompCamera**: 全Compositionに常在し、2D=`z=0`を含む全objectが共有する単一カメラ。Output Frameはその投影開口。Stage Viewのpan/zoomはDocument外で、別cameraではない
+- **Camera / Observation**: 全Compositionに単一active cameraの席が常在し、2D=`z=0`を含む全objectが同じ観測を共有する。既存`CompCameraDoc::PlanarOrthographic`は互換baseline、将来の具体modelは換装可能Camera Object／Provider。Output Frameはその投影開口で、Stage Viewのpan/zoomはDocument外
 - **凍結ゲート**: M1完了後、実際に動いたインターフェースだけを凍結して並列開発を解禁する関門。[宣言](reviews/2026-07-10-freeze-gate-declaration.md)済み(2026-07-10)。改訂は解凍手続き(理由+migrate+ゴールデン)を通す
 - **グループ仮出力(ベイク)**: プリコンポの代替。グループ出力を時間範囲でキャッシュし、編集で自動無効化
 - **SimulationPlugin / StateTrack**: 逐次状態シミュレーション(布・液体・パーティクル)のプラグイン境界と、そのベイク結果(チェックポイント列の区間キャッシュ)。状態はホストが所有し、`render_frame(t)`はベイク結果を読む純関数のまま(落とし穴F-12、[simulation-model.md](simulation-model.md)。口の予約段階)

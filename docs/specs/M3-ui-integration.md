@@ -8,6 +8,27 @@
 
 A-1(egui候補は既存device/native texture共有を[採用時の実機証拠](../reviews/2026-07-18-m3-egui-selection.md)で確認済み。React/WebView/hybrid候補は[G0-9](../reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md)でCPU bridgeなしのStage接合を再審判)、D-3(OpenCut流用の期待値管理)。
 
+## M3-A〜D: 統合の背骨
+
+M3を一つの巨大な「UI実装」として扱わず、所有境界が異なる次の4段階へ分ける。
+これは既存のG/U/CU/WタスクIDを改名・再定義する新しいチケット体系ではなく、各タスクが
+どの完成線を閉じるかを示す運用上の段階名である。各段階は一つの発注へ束ねず、一面・一境界ずつ実装する。
+
+| 段階 | 閉じる境界 | 完成条件 | この段階へ含めないもの | 既存地図との対応 |
+|---|---|---|---|---|
+| **M3-A — Presentation Ownership** | 固定React source assetをproduct-owned packageへ直接所有移管し、mockをproduct exportのconsumerへ反転する | provenance、DOM/class/stable ID/ARIA、visual/interaction oracle、product→mock/legacy runtime import 0、二重copy 0 | Host transport、WebView製品window接続、Document編集、D2 commit | R0〜R6、CU-0A、W0a |
+| **M3-B — Host Projection / Intent** | mock/legacy stateをrevision付きread-only projectionとtyped intent/codecへ一方向に交換する | state ownerが明示され、React/nativeにDocument・selection・Undo正本がなく、stale/unknown入力を型付き拒否する | product windowへの実機結合、semantic write、Undo成立をprojection/codecだけで完了扱いすること | U0b/U0c/U0d/U2a/U2b、U2c-1/4、CU-G系 |
+| **M3-C — Product Runtime Integration** | React/WebView chrome、native Stage/Timeline、Host coordinatorを通常製品windowで結合する | G0-9の該当platform gate、1 surface/2 viewport/opaque WebView islands、focus/IME/AX、resize/DPI/capture/lost、WebView failure復旧 | plugin UI公開契約、全platform配布合格、制作機能の意味をwindow結合で発明すること | G0-9段階化、CU-0G/CU-0B、W0g/W0b |
+| **M3-D — Editing Loop** | typed intentをTransient preview、D2 single writer、commit/cancel、Undo/Redo、同revision再投影へ接続する | 一つの対象がStage/Timeline/Inspectorを貫き、1 gesture=1 Undo、Cancel/失敗=変更0、save/reopen/ExportまでLocal Alpha fixtureを完走する | 新しいDocument意味・公開API・plugin契約の発明、Distribution ReadyをLocal Alphaで代用すること | U2c-2、CU-1/CU-2、W1/W2、Local Alpha fixture |
+
+順序は「Aの全画面が終わるまでBを全面停止する」という全体barrierではない。一つの製品面について
+`A → B → C → D`の証拠を追跡できるようにし、別の面をまとめて先取りしない。M3全体の残作業である
+実素材、日常操作、高負荷時縮退、配布品質は[快適利用ワークマップ](../reviews/2026-07-22-m3-comfortable-use-work-map.md)の
+W3〜W6を正とし、M3-D完了やLocal Alphaと混同しない。Issue化、closed order、検収、main反映の実行動線は
+[快適利用粒度化のstage packet](../reviews/2026-07-22-m3-comfortable-use-granulation.md#31-m3-ad-stage-packet)に従う。
+表の「既存地図との対応」は親IDを一括分類するものではない。枝番が複数stageをまたぐ場合は、
+最新のimplementation ledgerのstage列と該当CU粒を正とする。
+
 ## M3仕様確定ゲート(G0)
 
 | ID | 内容 | 状態 | 確定条件 |
