@@ -221,3 +221,45 @@ selection sentinel不変だった。
 これは`CU-0G04`の固定Mac evidenceであり、実hardware surface/device lost、
 Windows `ProcessFailed`、追加monitor/HDR、製品windowを合格にしない。
 `G0-9L`の限定確定は後続`CU-0G05L`で別に判定する。
+
+## CU-0G04B L3同一実window閉包追補（2026-07-24）
+
+`CU-0G05L`着手前の正本照合で、CU-0G04の凍結manifestにはL3が要求する
+minimize/restore、fullscreen往復、0×0相当一時不可用、native/WebView境界の
+pointer capture/cancel/focus lossのraw観測が無いことを検出した。CU-0G03の
+人間証跡はfocus/IME復帰のL2審判であり、L3のbounds、sentinel、epoch、
+readback機械記録へ読み替えない。Fable read-only助言も`VERDICT: STOP`としたため、
+CU-0G05Lを進めず本追補粒へ戻した。
+
+`RESPONSIBILITY DISPOSITION`: `REUSE / WRAP`。既存surface-hostのwinit lifecycle、
+CGEvent、NSEvent local monitor、既存counter/manifestだけを使う。新しいwindow
+runner、pointer framework、process supervisor、製品APIは追加しない。
+
+同じ実windowの一続きの実行で、既存L3項目と不足項目を
+[追補manifest](g0-9-surface-host-evidence/l3-closure-report.json)へ収録した。
+
+- resize 108、layout epoch 116、acquire/present 205/205、readback 0
+- minimize/restore 1往復、fullscreen 1往復、1×1の一時不可用化1、acquire skip 4
+- native開始pointer capture 2、WebView境界crossing 2、move 2
+- Esc cancel 1、Web first responderへのfocus-loss cancel 1
+- stale instance/layout epoch拒否各1、拒否後のfocus/sentinel不変検査1
+- Lost注入/reconfigure/再present各1、WebContent終了/reload/再Ready各1
+- offline protocol 3、navigation/new-window/download拒否各1、network許可0
+- 各操作後のbounds/layoutとsentinel/readback検査7回、semantic write 0
+
+再現コマンド:
+
+```bash
+G0_9_AUTOMATE_LIFECYCLE=1 \
+G0_9_RESIZE_TARGET=100 \
+G0_9_REPORT=/tmp/motolii-cu0g04b-report.json \
+G0_9_CAPTURE=/tmp/motolii-cu0g04b-window.png \
+cargo run --manifest-path spikes/g0-9-surface-host/Cargo.toml
+```
+
+実window runはexit 0で、合成captureは181,846 byte、SHA-256
+`3595fb7018bfc23cb2e70b2272a7cbe482df9f4dbdba6720c4e98bff49931084`だった。
+Grok R2のread-only reviewはP0/P1=0、`VERDICT: ACCEPT`だったため、
+CU-0G04BをDONEとする。追補commitは`FROZEN / DELETE-LATER`とし、製品または
+後続粒へpointer/lifecycle adapterをimportしない。`G0-9L`の限定確定は
+後続CU-0G05Lの別判定まで宣言しない。

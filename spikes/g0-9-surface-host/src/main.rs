@@ -15,8 +15,9 @@ use accesskit::{Action, Node, NodeId, Rect as AccessRect, Role, Tree, TreeId, Tr
 use block2::RcBlock;
 #[cfg(target_os = "macos")]
 use core_graphics::{
-    event::{CGEvent, CGEventFlags, KeyCode},
+    event::{CGEvent, CGEventFlags, CGEventTapLocation, CGEventType, CGMouseButton, KeyCode},
     event_source::{CGEventSource, CGEventSourceStateID},
+    geometry::CGPoint,
 };
 use g0_9_surface_host::{
     validate_web_envelope, AcceptanceCounters, AccessibilityProjection, AxNodeId, AxRole,
@@ -27,13 +28,13 @@ use g0_9_surface_host::{
 #[cfg(target_os = "macos")]
 use objc2::{rc::Retained, runtime::AnyObject};
 #[cfg(target_os = "macos")]
-use objc2_app_kit::{NSApplication, NSEvent, NSEventMask, NSEventModifierFlags};
+use objc2_app_kit::{NSApplication, NSEvent, NSEventMask, NSEventModifierFlags, NSEventType};
 #[cfg(target_os = "macos")]
 use objc2_foundation::MainThreadMarker;
 use serde_json::json;
 use winit::{
     application::ApplicationHandler,
-    dpi::LogicalSize,
+    dpi::{LogicalSize, PhysicalSize},
     event::{ElementState, MouseButton, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
     keyboard::{Key, ModifiersState, NamedKey},
@@ -149,6 +150,7 @@ enum UserEvent {
     WebContentProcessTerminated(WebSource),
     Accesskit(accesskit_winit::Event),
     NativeTab { backward: bool },
+    NativePointerDragged { logical_x: f64 },
 }
 
 impl From<accesskit_winit::Event> for UserEvent {
@@ -420,12 +422,59 @@ struct LifecycleEvidence {
     capture_bytes: u64,
     killed_web_content_pid: Option<u32>,
     final_owned_web_content_processes: Option<usize>,
+    minimize_cycles: u32,
+    fullscreen_entries: u32,
+    fullscreen_exits: u32,
+    unavailable_intervals: u32,
+    unavailable_size_events: u32,
+    unavailable_acquire_skips: u32,
+    pointer_capture_starts: u32,
+    pointer_capture_moves: u32,
+    pointer_boundary_crossings: u32,
+    pointer_cancels: u32,
+    pointer_focus_losses: u32,
+    pointer_last_logical_x: Option<f64>,
+    post_operation_invariant_checks: u32,
+    bounds_layout_checks: u32,
+    stale_probe_invariant_checks: u32,
+}
+
+impl LifecycleEvidence {
+    fn l3_closure_complete(&self) -> bool {
+        self.minimize_cycles == 1
+            && self.fullscreen_entries == 1
+            && self.fullscreen_exits == 1
+            && self.unavailable_intervals == 1
+            && self.unavailable_size_events > 0
+            && self.unavailable_acquire_skips > 0
+            && self.pointer_capture_starts >= 2
+            && self.pointer_capture_moves >= 2
+            && self.pointer_boundary_crossings >= 2
+            && self.pointer_cancels >= 2
+            && self.pointer_focus_losses == 1
+            && self.post_operation_invariant_checks >= 7
+            && self.bounds_layout_checks >= 7
+            && self.stale_probe_invariant_checks == 1
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum LifecycleStep {
     #[default]
     Waiting,
+    AwaitMinimized,
+    AwaitRestored,
+    AwaitFullscreenEnter,
+    ExitFullscreen,
+    AwaitFullscreenExit,
+    AwaitUnavailableSkip,
+    AwaitUnavailableRestore,
+    StartPointerCancel,
+    AwaitPointerCancelBoundary,
+    AwaitPointerCancel,
+    StartPointerFocusLoss,
+    AwaitPointerFocusLossBoundary,
+    AwaitPointerFocusLoss,
     AwaitStaleRejection,
     AwaitSurfaceRecovery,
     AwaitPolicyEvidence,
@@ -452,7 +501,7 @@ impl AutomatedLifecycleCheck {
         Self {
             step: LifecycleStep::Waiting,
             next_action: now,
-            deadline: now + Duration::from_secs(30),
+            deadline: now + Duration::from_secs(60),
             pass: None,
             error: None,
         }
@@ -488,6 +537,8 @@ struct State {
     native_focus_active: Arc<AtomicBool>,
     #[cfg(target_os = "macos")]
     native_tab_monitor: Option<Retained<AnyObject>>,
+    #[cfg(target_os = "macos")]
+    native_pointer_monitor: Option<Retained<AnyObject>>,
     focus_observations: Vec<FocusObservation>,
     automated_focus: Option<AutomatedFocusCheck>,
     left_instance_epoch: Arc<AtomicU64>,
@@ -500,6 +551,10 @@ struct State {
     sentinel_before: SentinelSnapshot,
     sentinel_after: SentinelSnapshot,
     pending_web_reload: Option<PendingWebReload>,
+    temporarily_unavailable: bool,
+    unavailable_acquire_before: Option<u64>,
+    unavailable_restore_size: Option<PhysicalSize<u32>>,
+    stale_probe_focus_before: Option<FocusRole>,
 }
 
 impl State {
@@ -515,6 +570,8 @@ impl State {
         #[cfg(target_os = "macos")]
         let native_tab_monitor =
             install_native_tab_monitor(proxy.clone(), Arc::clone(&native_focus_active));
+        #[cfg(target_os = "macos")]
+        let native_pointer_monitor = install_native_pointer_monitor(proxy.clone());
         let automated_focus = std::env::var_os("G0_9_AUTOMATE_FOCUS")
             .is_some()
             .then(|| AutomatedFocusCheck::new(Instant::now()));
@@ -553,6 +610,8 @@ impl State {
             native_focus_active,
             #[cfg(target_os = "macos")]
             native_tab_monitor,
+            #[cfg(target_os = "macos")]
+            native_pointer_monitor,
             focus_observations: Vec::new(),
             automated_focus,
             left_instance_epoch: Arc::new(AtomicU64::new(1)),
@@ -565,6 +624,10 @@ impl State {
             sentinel_before: SENTINEL,
             sentinel_after: SENTINEL,
             pending_web_reload: None,
+            temporarily_unavailable: false,
+            unavailable_acquire_before: None,
+            unavailable_restore_size: None,
+            stale_probe_focus_before: None,
         }
     }
 
@@ -576,6 +639,8 @@ impl State {
     /// ままになり実際には移動しないため、wryの`focus_parent`で明示的に
     /// resignさせる。
     fn apply_focus(&mut self, role: FocusRole, source: &'static str) {
+        let pointer_focus_loss =
+            self.native_drag_active && matches!(role, FocusRole::WebLeft | FocusRole::WebRight);
         self.native_focus_active.store(
             matches!(role, FocusRole::NativeStage | FocusRole::NativeTimeline),
             Ordering::Release,
@@ -599,6 +664,9 @@ impl State {
                     let _ = webview.focus_parent();
                 }
             }
+        }
+        if pointer_focus_loss && actual_first_responder().1 == "web" {
+            self.cancel_automated_pointer_capture(true);
         }
         if let (Some(layout), Some(adapter)) = (self.layout, &mut self.accesskit) {
             adapter.update_if_active(|| build_accessibility_tree(role, layout));
@@ -689,6 +757,59 @@ impl State {
         if let Some(adapter) = &mut self.accesskit {
             adapter.update_if_active(|| build_accessibility_tree(focus, layout));
         }
+    }
+
+    fn verify_l3_post_operation(&mut self) -> Result<(), String> {
+        let window = self
+            .window
+            .clone()
+            .ok_or_else(|| "window is unavailable".to_owned())?;
+        let size = window.inner_size();
+        self.update_layout(size.width, size.height);
+        let layout = self
+            .layout
+            .ok_or_else(|| "restored window has no valid layout".to_owned())?;
+        let expected_native_width = layout.logical_width - LEFT_WEBVIEW_WIDTH - RIGHT_WEBVIEW_WIDTH;
+        if expected_native_width <= 1.0
+            || layout.native_width <= 0.0
+            || layout.stage_height <= 0.0
+            || layout.timeline_height <= 0.0
+        {
+            return Err("restored bounds are invalid".to_owned());
+        }
+        if self.sentinel_before != self.sentinel_after {
+            return Err("sentinel changed during lifecycle operation".to_owned());
+        }
+        if self.counters.readback_count != 0 {
+            return Err("CPU readback occurred during lifecycle operation".to_owned());
+        }
+        self.lifecycle.bounds_layout_checks += 1;
+        self.lifecycle.post_operation_invariant_checks += 1;
+        Ok(())
+    }
+
+    fn cancel_automated_pointer_capture(&mut self, focus_loss: bool) {
+        if self.native_drag_active && self.automated_lifecycle.is_some() {
+            self.native_drag_active = false;
+            self.lifecycle.pointer_cancels += 1;
+            if focus_loss {
+                self.lifecycle.pointer_focus_losses += 1;
+            }
+        }
+    }
+
+    fn validate_l3_evidence(&self) -> Result<(), String> {
+        let evidence = &self.lifecycle;
+        if !evidence.l3_closure_complete() {
+            return Err("same-window L3 evidence is incomplete".to_owned());
+        }
+        if self.counters.readback_count != 0
+            || self.sentinel_before != self.sentinel_after
+            || !self.counters.present_invariant_holds()
+        {
+            return Err("same-window L3 invariants failed".to_owned());
+        }
+        Ok(())
     }
 
     /// パース失敗やstale epochのfocus要求は、状態・カウンタ・reportの
@@ -843,6 +964,25 @@ impl State {
             .automated_focus
             .as_ref()
             .and_then(|check| check.error.as_deref());
+        let l3_closure_report = json!({
+            "minimize_cycles": self.lifecycle.minimize_cycles,
+            "fullscreen_entries": self.lifecycle.fullscreen_entries,
+            "fullscreen_exits": self.lifecycle.fullscreen_exits,
+            "unavailable_intervals": self.lifecycle.unavailable_intervals,
+            "unavailable_size_events": self.lifecycle.unavailable_size_events,
+            "unavailable_acquire_skips": self.lifecycle.unavailable_acquire_skips,
+            "pointer_capture_starts": self.lifecycle.pointer_capture_starts,
+            "pointer_capture_moves": self.lifecycle.pointer_capture_moves,
+            "pointer_boundary_crossings": self.lifecycle.pointer_boundary_crossings,
+            "pointer_cancels": self.lifecycle.pointer_cancels,
+            "pointer_focus_losses": self.lifecycle.pointer_focus_losses,
+            "pointer_last_logical_x": self.lifecycle.pointer_last_logical_x,
+            "post_operation_invariant_checks": self
+                .lifecycle
+                .post_operation_invariant_checks,
+            "bounds_layout_checks": self.lifecycle.bounds_layout_checks,
+            "stale_probe_invariant_checks": self.lifecycle.stale_probe_invariant_checks,
+        });
         let lifecycle_report = json!({
             "scale_factor": self.layout.map(|layout| layout.scale_factor),
             "scale_factor_events": self.lifecycle.scale_factor_events,
@@ -868,6 +1008,7 @@ impl State {
             "final_owned_web_content_processes": self
                 .lifecycle
                 .final_owned_web_content_processes,
+            "l3_closure": l3_closure_report,
             "gpu_device_creations": u32::from(self.gfx.is_some()),
             "render_pipeline_creations": if self.gfx.is_some() { 2 } else { 0 },
             "live_webviews": u32::from(self.left_webview.is_some())
@@ -1043,6 +1184,22 @@ impl ApplicationHandler<UserEvent> for State {
                 self.apply_focus(role, "native-monitor");
                 self.publish_report();
             }
+            UserEvent::NativePointerDragged { logical_x } => {
+                if self.native_drag_active {
+                    self.lifecycle.pointer_last_logical_x = Some(logical_x);
+                    self.counters.native_drag_moves += 1;
+                    self.lifecycle.pointer_capture_moves += 1;
+                    let crossed = self.layout.is_some_and(|layout| {
+                        logical_x < LEFT_WEBVIEW_WIDTH
+                            || logical_x >= layout.logical_width - RIGHT_WEBVIEW_WIDTH
+                    });
+                    if crossed && !self.counters.native_drag_crossed_webview {
+                        self.lifecycle.pointer_boundary_crossings += 1;
+                    }
+                    self.counters.native_drag_crossed_webview |= crossed;
+                    self.publish_report();
+                }
+            }
             UserEvent::Accesskit(event) => match event.window_event {
                 accesskit_winit::WindowEvent::InitialTreeRequested => {
                     let focus = self.focus.current();
@@ -1086,6 +1243,14 @@ impl ApplicationHandler<UserEvent> for State {
             WindowEvent::Resized(size) => {
                 if size.width > 0 && size.height > 0 {
                     self.counters.resize_events += 1;
+                    if self.temporarily_unavailable
+                        && self.window.as_ref().is_some_and(|window| {
+                            SurfaceLayout::try_new(size.width, size.height, window.scale_factor())
+                                .is_none()
+                        })
+                    {
+                        self.lifecycle.unavailable_size_events += 1;
+                    }
                     if let Some(gfx) = &mut self.gfx {
                         gfx.configure(size.width, size.height);
                     }
@@ -1101,7 +1266,11 @@ impl ApplicationHandler<UserEvent> for State {
                     if now_fullscreen != self.fullscreen_active {
                         let was_fullscreen = self.fullscreen_active;
                         self.fullscreen_active = now_fullscreen;
+                        if !was_fullscreen && now_fullscreen {
+                            self.lifecycle.fullscreen_entries += 1;
+                        }
                         if was_fullscreen && !now_fullscreen {
+                            self.lifecycle.fullscreen_exits += 1;
                             self.fullscreen_lifecycle
                                 .record_restored(self.focus.current(), self.ime_owner());
                         }
@@ -1119,6 +1288,11 @@ impl ApplicationHandler<UserEvent> for State {
                 self.publish_report();
             }
             WindowEvent::RedrawRequested => {
+                if self.temporarily_unavailable {
+                    self.lifecycle.unavailable_acquire_skips += 1;
+                    self.publish_report();
+                    return;
+                }
                 let Some(layout) = self.layout else {
                     return;
                 };
@@ -1158,6 +1332,11 @@ impl ApplicationHandler<UserEvent> for State {
                         .layout
                         .is_some_and(|layout| layout.cursor_is_over_webview(position.x))
                     {
+                        if !self.counters.native_drag_crossed_webview
+                            && self.automated_lifecycle.is_some()
+                        {
+                            self.lifecycle.pointer_boundary_crossings += 1;
+                        }
                         self.counters.native_drag_crossed_webview = true;
                     }
                     self.publish_report();
@@ -1174,6 +1353,9 @@ impl ApplicationHandler<UserEvent> for State {
                             self.native_drag_active = true;
                             self.counters.native_drag_crossed_webview = false;
                             self.counters.native_drag_released = false;
+                            if self.automated_lifecycle.is_some() {
+                                self.lifecycle.pointer_capture_starts += 1;
+                            }
                             self.sync_native_click_focus(layout);
                         }
                     }
@@ -1205,6 +1387,10 @@ impl ApplicationHandler<UserEvent> for State {
                             self.publish_report();
                         }
                         Key::Named(NamedKey::Enter) => self.observe_shortcut(ShortcutKey::Enter),
+                        Key::Named(NamedKey::Escape) if self.native_drag_active => {
+                            self.cancel_automated_pointer_capture(false);
+                            self.publish_report();
+                        }
                         Key::Named(NamedKey::Escape) => self.observe_shortcut(ShortcutKey::Escape),
                         Key::Named(NamedKey::Space) => self.observe_shortcut(ShortcutKey::Space),
                         // CU-0G04的な注入ではなくwinit標準APIのみで遷移を
@@ -1259,6 +1445,7 @@ impl ApplicationHandler<UserEvent> for State {
                     self.minimize_lifecycle
                         .record_restored(self.focus.current(), self.ime_owner());
                     self.occluded = false;
+                    self.lifecycle.minimize_cycles += 1;
                 }
                 self.publish_report();
             }
@@ -1520,6 +1707,349 @@ impl State {
 
         match check.step {
             LifecycleStep::Waiting => {
+                let Some(window) = self.window.clone() else {
+                    self.fail_automated_lifecycle(event_loop, "window is unavailable".to_owned());
+                    return;
+                };
+                window.set_minimized(true);
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitMinimized;
+                check.next_action = now + Duration::from_millis(100);
+            }
+            LifecycleStep::AwaitMinimized => {
+                if !self.occluded {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                if let Some(window) = &self.window {
+                    window.set_minimized(false);
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitRestored;
+                check.next_action = now + Duration::from_millis(100);
+            }
+            LifecycleStep::AwaitRestored => {
+                if self.occluded || self.lifecycle.minimize_cycles == 0 {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                if let Err(error) = self.verify_l3_post_operation() {
+                    self.fail_automated_lifecycle(event_loop, error);
+                    return;
+                }
+                let Some(window) = self.window.clone() else {
+                    self.fail_automated_lifecycle(event_loop, "window is unavailable".to_owned());
+                    return;
+                };
+                self.fullscreen_lifecycle
+                    .record_pre_transition(self.focus.current(), self.ime_owner());
+                window.set_fullscreen(Some(Fullscreen::Borderless(None)));
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitFullscreenEnter;
+                check.next_action = now + Duration::from_millis(150);
+            }
+            LifecycleStep::AwaitFullscreenEnter => {
+                if !self.fullscreen_active || self.lifecycle.fullscreen_entries == 0 {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::ExitFullscreen;
+                check.next_action = now + Duration::from_secs(1);
+            }
+            LifecycleStep::ExitFullscreen => {
+                if let Err(error) = self.verify_l3_post_operation() {
+                    self.fail_automated_lifecycle(event_loop, error);
+                    return;
+                }
+                if let Some(window) = &self.window {
+                    window.set_fullscreen(None);
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitFullscreenExit;
+                check.next_action = now + Duration::from_millis(150);
+            }
+            LifecycleStep::AwaitFullscreenExit => {
+                if self.fullscreen_active || self.lifecycle.fullscreen_exits == 0 {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                if let Err(error) = self.verify_l3_post_operation() {
+                    self.fail_automated_lifecycle(event_loop, error);
+                    return;
+                }
+                let Some(window) = self.window.clone() else {
+                    self.fail_automated_lifecycle(event_loop, "window is unavailable".to_owned());
+                    return;
+                };
+                self.temporarily_unavailable = true;
+                self.unavailable_acquire_before = Some(self.counters.acquire_count);
+                self.unavailable_restore_size = Some(window.inner_size());
+                self.lifecycle.unavailable_intervals += 1;
+                let _ = window.request_inner_size(LogicalSize::new(1.0, 1.0));
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitUnavailableSkip;
+                check.next_action = now + Duration::from_millis(100);
+            }
+            LifecycleStep::AwaitUnavailableSkip => {
+                if self.lifecycle.unavailable_size_events == 0
+                    || self.lifecycle.unavailable_acquire_skips == 0
+                {
+                    if now
+                        >= self.automated_lifecycle.as_ref().unwrap().next_action
+                            + Duration::from_secs(2)
+                    {
+                        self.fail_automated_lifecycle(
+                            event_loop,
+                            "invalid-size window did not produce a redraw skip".to_owned(),
+                        );
+                        return;
+                    }
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
+                    }
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                if self.unavailable_acquire_before != Some(self.counters.acquire_count) {
+                    self.fail_automated_lifecycle(
+                        event_loop,
+                        "surface acquire advanced while the window was unavailable".to_owned(),
+                    );
+                    return;
+                }
+                if let (Some(window), Some(size)) = (&self.window, self.unavailable_restore_size) {
+                    let _ = window.request_inner_size(size);
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitUnavailableRestore;
+                check.next_action = now + Duration::from_millis(100);
+            }
+            LifecycleStep::AwaitUnavailableRestore => {
+                let restored = self.window.as_ref().is_some_and(|window| {
+                    self.unavailable_restore_size == Some(window.inner_size())
+                }) && self.layout.is_some();
+                if !restored {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                self.temporarily_unavailable = false;
+                if let Some(window) = &self.window {
+                    window.focus_window();
+                    window.request_redraw();
+                }
+                if let Err(error) = self.verify_l3_post_operation() {
+                    self.fail_automated_lifecycle(event_loop, error);
+                    return;
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::StartPointerCancel;
+                check.next_action = now + Duration::from_millis(200);
+            }
+            LifecycleStep::StartPointerCancel => {
+                #[cfg(target_os = "macos")]
+                {
+                    let Some(window) = &self.window else {
+                        self.fail_automated_lifecycle(
+                            event_loop,
+                            "window is unavailable".to_owned(),
+                        );
+                        return;
+                    };
+                    let Some(layout) = self.layout else {
+                        self.fail_automated_lifecycle(
+                            event_loop,
+                            "layout is unavailable".to_owned(),
+                        );
+                        return;
+                    };
+                    let (native, _) = match pointer_probe_points(window, layout) {
+                        Ok(points) => points,
+                        Err(error) => {
+                            self.fail_automated_lifecycle(event_loop, error);
+                            return;
+                        }
+                    };
+                    for event_type in [CGEventType::MouseMoved, CGEventType::LeftMouseDown] {
+                        if let Err(error) = post_mouse_to_current_process(event_type, native) {
+                            self.fail_automated_lifecycle(event_loop, error.to_owned());
+                            return;
+                        }
+                    }
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    self.fail_automated_lifecycle(
+                        event_loop,
+                        "pointer E2E is only supported by this fixed-Mac gate".to_owned(),
+                    );
+                    return;
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitPointerCancelBoundary;
+                check.next_action = now + Duration::from_millis(150);
+            }
+            LifecycleStep::AwaitPointerCancelBoundary => {
+                if self.lifecycle.pointer_capture_starts == 0 {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    let (Some(window), Some(layout)) = (&self.window, self.layout) else {
+                        self.fail_automated_lifecycle(
+                            event_loop,
+                            "window/layout is unavailable".to_owned(),
+                        );
+                        return;
+                    };
+                    let (_, web) = match pointer_probe_points(window, layout) {
+                        Ok(points) => points,
+                        Err(error) => {
+                            self.fail_automated_lifecycle(event_loop, error);
+                            return;
+                        }
+                    };
+                    if let Err(error) =
+                        post_mouse_to_current_process(CGEventType::LeftMouseDragged, web)
+                    {
+                        self.fail_automated_lifecycle(event_loop, error.to_owned());
+                        return;
+                    }
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitPointerCancel;
+                check.next_action = now + Duration::from_millis(150);
+            }
+            LifecycleStep::AwaitPointerCancel => {
+                if self.lifecycle.pointer_boundary_crossings == 0
+                    || self.lifecycle.pointer_capture_moves == 0
+                {
+                    if now
+                        >= self.automated_lifecycle.as_ref().unwrap().next_action
+                            + Duration::from_secs(2)
+                    {
+                        self.fail_automated_lifecycle(
+                            event_loop,
+                            "pointer did not cross the native/WebView boundary".to_owned(),
+                        );
+                        return;
+                    }
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                if let Err(error) = post_escape_to_current_process() {
+                    self.fail_automated_lifecycle(event_loop, error.to_owned());
+                    return;
+                }
+                #[cfg(target_os = "macos")]
+                if let (Some(window), Some(layout)) = (&self.window, self.layout) {
+                    if let Ok((_, web)) = pointer_probe_points(window, layout) {
+                        let _ = post_mouse_to_current_process(CGEventType::LeftMouseUp, web);
+                    }
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::StartPointerFocusLoss;
+                check.next_action = now + Duration::from_millis(200);
+            }
+            LifecycleStep::StartPointerFocusLoss => {
+                if self.lifecycle.pointer_cancels == 0 {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                self.apply_focus(FocusRole::NativeStage, "automated-pointer-start");
+                #[cfg(target_os = "macos")]
+                {
+                    let (Some(window), Some(layout)) = (&self.window, self.layout) else {
+                        self.fail_automated_lifecycle(
+                            event_loop,
+                            "window/layout is unavailable".to_owned(),
+                        );
+                        return;
+                    };
+                    let (native, _) = match pointer_probe_points(window, layout) {
+                        Ok(points) => points,
+                        Err(error) => {
+                            self.fail_automated_lifecycle(event_loop, error);
+                            return;
+                        }
+                    };
+                    for event_type in [CGEventType::MouseMoved, CGEventType::LeftMouseDown] {
+                        if let Err(error) = post_mouse_to_current_process(event_type, native) {
+                            self.fail_automated_lifecycle(event_loop, error.to_owned());
+                            return;
+                        }
+                    }
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitPointerFocusLossBoundary;
+                check.next_action = now + Duration::from_millis(150);
+            }
+            LifecycleStep::AwaitPointerFocusLossBoundary => {
+                if self.lifecycle.pointer_capture_starts < 2 {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    let (Some(window), Some(layout)) = (&self.window, self.layout) else {
+                        self.fail_automated_lifecycle(
+                            event_loop,
+                            "window/layout is unavailable".to_owned(),
+                        );
+                        return;
+                    };
+                    let (_, web) = match pointer_probe_points(window, layout) {
+                        Ok(points) => points,
+                        Err(error) => {
+                            self.fail_automated_lifecycle(event_loop, error);
+                            return;
+                        }
+                    };
+                    if let Err(error) =
+                        post_mouse_to_current_process(CGEventType::LeftMouseDragged, web)
+                    {
+                        self.fail_automated_lifecycle(event_loop, error.to_owned());
+                        return;
+                    }
+                }
+                let check = self.automated_lifecycle.as_mut().unwrap();
+                check.step = LifecycleStep::AwaitPointerFocusLoss;
+                check.next_action = now + Duration::from_millis(150);
+            }
+            LifecycleStep::AwaitPointerFocusLoss => {
+                if self.lifecycle.pointer_boundary_crossings < 2 {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                self.apply_focus(FocusRole::WebLeft, "automated-pointer-focus-loss");
+                #[cfg(target_os = "macos")]
+                if let (Some(window), Some(layout)) = (&self.window, self.layout) {
+                    if let Ok((_, web)) = pointer_probe_points(window, layout) {
+                        let _ = post_mouse_to_current_process(CGEventType::LeftMouseUp, web);
+                    }
+                }
+                if self.lifecycle.pointer_focus_losses == 0 || self.lifecycle.pointer_cancels < 2 {
+                    event_loop
+                        .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                if let Err(error) = self.verify_l3_post_operation() {
+                    self.fail_automated_lifecycle(event_loop, error);
+                    return;
+                }
+                self.stale_probe_focus_before = Some(self.focus.current());
                 let current_instance = self.left_instance_epoch.load(Ordering::Acquire);
                 let script = format!(
                     "window.ipc.postMessage('{current_instance}:focus-request:web-right:0');\
@@ -1548,6 +2078,16 @@ impl State {
                         .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
                     return;
                 }
+                if self.stale_probe_focus_before != Some(self.focus.current())
+                    || self.sentinel_before != self.sentinel_after
+                {
+                    self.fail_automated_lifecycle(
+                        event_loop,
+                        "stale epoch probe changed semantic state".to_owned(),
+                    );
+                    return;
+                }
+                self.lifecycle.stale_probe_invariant_checks += 1;
                 let Some(gfx) = &mut self.gfx else {
                     self.fail_automated_lifecycle(
                         event_loop,
@@ -1572,6 +2112,10 @@ impl State {
                     }
                     event_loop
                         .set_control_flow(ControlFlow::WaitUntil(now + Duration::from_millis(50)));
+                    return;
+                }
+                if let Err(error) = self.verify_l3_post_operation() {
+                    self.fail_automated_lifecycle(event_loop, error);
                     return;
                 }
                 if let Err(error) = self.capture_composited_window() {
@@ -1632,6 +2176,14 @@ impl State {
                             "WebContent process count changed after recovery: expected 2, got {owned_count}"
                         ),
                     );
+                    return;
+                }
+                if let Err(error) = self.verify_l3_post_operation() {
+                    self.fail_automated_lifecycle(event_loop, error);
+                    return;
+                }
+                if let Err(error) = self.validate_l3_evidence() {
+                    self.fail_automated_lifecycle(event_loop, error);
                     return;
                 }
                 let check = self.automated_lifecycle.as_mut().unwrap();
@@ -1706,6 +2258,54 @@ fn post_tab_to_current_process(_backward: bool) -> Result<(), &'static str> {
     Err("macOSだけがfocus E2Eを実行できる")
 }
 
+#[cfg(target_os = "macos")]
+fn pointer_probe_points(
+    window: &Window,
+    _layout: SurfaceLayout,
+) -> Result<(CGPoint, CGPoint), String> {
+    let origin = window
+        .inner_position()
+        .map_err(|error| format!("window inner position is unavailable: {error}"))?;
+    let origin_x = f64::from(origin.x);
+    let origin_y = f64::from(origin.y);
+    let y = origin_y + 120.0;
+    let native = CGPoint::new(origin_x + LEFT_WEBVIEW_WIDTH + 80.0, y);
+    let web = CGPoint::new(origin_x + LEFT_WEBVIEW_WIDTH - 220.0, y);
+    Ok((native, web))
+}
+
+#[cfg(target_os = "macos")]
+fn post_mouse_to_current_process(
+    event_type: CGEventType,
+    position: CGPoint,
+) -> Result<(), &'static str> {
+    let source = CGEventSource::new(CGEventSourceStateID::Private)
+        .map_err(|_| "CGEventSource creation failed")?;
+    let event = CGEvent::new_mouse_event(source, event_type, position, CGMouseButton::Left)
+        .map_err(|_| "CG mouse event creation failed")?;
+    event.post(CGEventTapLocation::HID);
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn post_escape_to_current_process() -> Result<(), &'static str> {
+    let source = CGEventSource::new(CGEventSourceStateID::Private)
+        .map_err(|_| "CGEventSource creation failed")?;
+    let down = CGEvent::new_keyboard_event(source.clone(), KeyCode::ESCAPE, true)
+        .map_err(|_| "Escape key-down creation failed")?;
+    let up = CGEvent::new_keyboard_event(source, KeyCode::ESCAPE, false)
+        .map_err(|_| "Escape key-up creation failed")?;
+    let pid = std::process::id() as i32;
+    down.post_to_pid(pid);
+    up.post_to_pid(pid);
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn post_escape_to_current_process() -> Result<(), &'static str> {
+    Err("macOSだけがlifecycle pointer E2Eを実行できる")
+}
+
 fn parse_web_content_pids(output: &str) -> BTreeSet<u32> {
     const WEB_CONTENT_PATH: &str = "/System/Library/Frameworks/WebKit.framework/Versions/A/\
 XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent";
@@ -1736,6 +2336,24 @@ fn web_content_pids() -> Result<BTreeSet<u32>, String> {
 #[cfg(not(target_os = "macos"))]
 fn web_content_pids() -> Result<BTreeSet<u32>, String> {
     Err("WebContent process discovery is only supported by this fixed-Mac gate".to_owned())
+}
+
+#[cfg(target_os = "macos")]
+fn install_native_pointer_monitor(proxy: EventLoopProxy<UserEvent>) -> Option<Retained<AnyObject>> {
+    let handler = RcBlock::new(move |event: std::ptr::NonNull<NSEvent>| {
+        let event = unsafe { event.as_ref() };
+        if unsafe { event.r#type() } == NSEventType::LeftMouseDragged {
+            let logical_x = unsafe { event.locationInWindow().x };
+            let _ = proxy.send_event(UserEvent::NativePointerDragged { logical_x });
+        }
+        event as *const NSEvent as *mut NSEvent
+    });
+    unsafe {
+        NSEvent::addLocalMonitorForEventsMatchingMask_handler(
+            NSEventMask::LeftMouseDragged,
+            &handler,
+        )
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -1780,6 +2398,9 @@ fn native_tab_direction(
 impl Drop for State {
     fn drop(&mut self) {
         if let Some(monitor) = self.native_tab_monitor.take() {
+            unsafe { NSEvent::removeMonitor(&monitor) };
+        }
+        if let Some(monitor) = self.native_pointer_monitor.take() {
             unsafe { NSEvent::removeMonitor(&monitor) };
         }
     }
@@ -2021,5 +2642,32 @@ XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebC
     fn offline_fixture_relays_the_webview_instance_epoch() {
         assert!(RELAY_SCRIPT.contains("__INSTANCE_EPOCH__"));
         assert!(RELAY_SCRIPT.contains("window.__motoliiInstanceEpoch+':'+message"));
+    }
+
+    #[test]
+    fn l3_closure_rejects_missing_same_window_observations() {
+        assert!(!LifecycleEvidence::default().l3_closure_complete());
+    }
+
+    #[test]
+    fn l3_closure_requires_every_bounded_observation() {
+        let evidence = LifecycleEvidence {
+            minimize_cycles: 1,
+            fullscreen_entries: 1,
+            fullscreen_exits: 1,
+            unavailable_intervals: 1,
+            unavailable_size_events: 1,
+            unavailable_acquire_skips: 1,
+            pointer_capture_starts: 2,
+            pointer_capture_moves: 2,
+            pointer_boundary_crossings: 2,
+            pointer_cancels: 2,
+            pointer_focus_losses: 1,
+            post_operation_invariant_checks: 7,
+            bounds_layout_checks: 7,
+            stale_probe_invariant_checks: 1,
+            ..LifecycleEvidence::default()
+        };
+        assert!(evidence.l3_closure_complete());
     }
 }
