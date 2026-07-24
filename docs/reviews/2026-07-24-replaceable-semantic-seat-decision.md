@@ -4,6 +4,8 @@
 
 状態: **決定**
 
+2026-07-25一般化: [制御されたMicrokernelとHost capability module並列化決定](2026-07-25-controlled-microkernel-host-module-parallelism-decision.md)は、本書のsemantic seat／Provider分離をDocument、journal、Undo、評価、cache、resource、Preview、Export等のHost capabilityへ一般化する。seatの意味とauthorityをHostが所有する本書の規律は維持し、具体実装を一枚岩のCoreへ固定する読みだけを置換する。
+
 対象: HVR-D04 Unit 8A、Camera、Timeline Object、Vism Provider、Filter／Effect、将来の第三者実装
 
 ## 1. 問題

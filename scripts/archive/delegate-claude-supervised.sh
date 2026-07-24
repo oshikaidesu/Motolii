@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# ARCHIVED: 2026-07-25のOpus 5 / Spark / Grok監督ループ採択により正規経路から退役。
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"

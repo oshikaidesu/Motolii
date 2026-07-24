@@ -201,8 +201,9 @@
 | [2026-07-23-historical-vism-kit-distribution-lineage-recovery.md](2026-07-23-historical-vism-kit-distribution-lineage-recovery.md) | Vism package／Kit／実装計画29版を処分し、Kit構成とPlugin Set／Project Lock／catalog／hostless配布を別責任で再接続 |
 | [2026-07-23-historical-plugin-ecosystem-lineage-recovery.md](2026-07-23-historical-plugin-ecosystem-lineage-recovery.md) | 旧plugin ecosystemの未処分11版を処分し、中央人気／dedupeを持たないcommunity原則と旧tap/lock/build schemaを分離 |
 | [2026-07-23-vism-kit-rack-unification-decision.md](2026-07-23-vism-kit-rack-unification-decision.md) | 独立Plugin Setを廃止し、接続済み一式をRack型Vism Kitへ、推薦だけの集合をcurator list／feedへ分離 |
-| [2026-07-22-terra-grok-delegation-policy.md](2026-07-22-terra-grok-delegation-policy.md) | 速度優先期の通常発注をGPT-5.6 Terra実装 + Cursor Grok 4.5 High検収に固定する運用決定 |
-| [2026-07-23-parallel-order-pipeline-comparison.md](2026-07-23-parallel-order-pipeline-comparison.md) | closed orderを小さく保ったままpreflight・実装・検収を重ねる発注パイプライン並列化の比較案 |
+| [2026-07-22-terra-grok-delegation-policy.md](2026-07-22-terra-grok-delegation-policy.md) | **ARCHIVED** — task class別のLuna／Terra／Sol実装、Grok検収、Fable追加検収を定めた旧運用 |
+| [2026-07-25-opus-spark-grok-supervision-loop-decision.md](2026-07-25-opus-spark-grok-supervision-loop-decision.md) | 通常発注をCodex → Opus 5粒化 → Spark施工 → Grok独立検収 → Codex採否へ固定し、発注外のOpus 5 read-onlyコーディング相談も定める現行運用 |
+| [2026-07-23-parallel-order-pipeline-comparison.md](2026-07-23-parallel-order-pipeline-comparison.md) | **ARCHIVED** — 旧task-class運用上でpreflight・実装・検収を重ねた発注パイプライン比較 |
 | [2026-07-23-first-party-vism-expression-demand-survey.md](2026-07-23-first-party-vism-expression-demand-survey.md) | AE・AviUtl 1.x／2・Cavalryの表現需要と、人気plugin／公開script系統からVism候補、Host／Infrastructure／Adapter責任、Kitを分ける調査 |
 | [2026-07-23-group-source-pool-cloner-concept.md](2026-07-23-group-source-pool-cloner-concept.md) | Groupの直接の子を割合つきprototype poolとしてClonerへ渡すMotolii固有概念の比較 |
 | [2026-07-23-m3-g0-9-staged-platform-gates.md](2026-07-23-m3-g0-9-staged-platform-gates.md) | G0-9を固定Macのlocal prerequisite gateとdistribution gateへ段階化する決定 |
@@ -210,6 +211,11 @@
 | [2026-07-24-dependency-first-responsibility-gate.md](2026-07-24-dependency-first-responsibility-gate.md) | 汎用機構の着手前に既存経路と導入後の総責任を比較し、Motolii固有責任を最小化する決定 |
 | [2026-07-24-m3-g0-9l-l1-measurement-amendment.md](2026-07-24-m3-g0-9l-l1-measurement-amendment.md) | G0-9L L1 renderer比較armとfixed-Mac計測証拠の正本修正 |
 | [2026-07-24-m3-vertical-slice-execution-decision.md](2026-07-24-m3-vertical-slice-execution-decision.md) | M3進捗を通常製品routeから既存能力へ接続する縦sliceで管理し、A〜Dをchecklist、旧粒度化を履歴snapshotへ移す決定（Fable最終ACCEPT） |
+| [2026-07-25-controlled-microkernel-host-module-parallelism-decision.md](2026-07-25-controlled-microkernel-host-module-parallelism-decision.md) | Coreをauthorityとtyped protocolへ細くし、Host capabilityを並列化する。TCBをCore＋admitted Host moduleへ限定し、公開pluginは供給元を問わず非信頼とする決定 |
+| [2026-07-25-controlled-microkernel-fable-counter-review.md](2026-07-25-controlled-microkernel-fable-counter-review.md) | 全体並列化の現行コードseam、未成立境界、seat別判定、最小proof順序をFable 5で反対側検収。初回REVISE訂正後ACCEPT、P0/P1=0 |
+| [2026-07-25-parallel-human-response-frontier-execution-decision.md](2026-07-25-parallel-human-response-frontier-execution-decision.md) | 決定済みcontract上のprovider／consumer／fault／measureを並列に進め、通常製品routeの人間応答地点へrolling waveで返す実行決定。Fableを共有境界reviewへ限定し新しい直列barrierにしない |
+| [2026-07-25-parallel-lane-readiness-map.md](2026-07-25-parallel-lane-readiness-map.md) | Wave 0の7 lane、lane-local直列性、変更path衝突、Human Response Frontier、WAITを固定する着手地図 |
+| [2026-07-25-parallel-lane-readiness-fable-review.md](2026-07-25-parallel-lane-readiness-fable-review.md) | 並列レーン候補をFable 5で反対側レビューし、R2A/R2B混同とK0/P0I旧全体直列文言のP1二件を訂正後、再審査ACCEPTとなった記録 |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |
 | [2026-07-21-m3-u1a-1-static-viewport-contract.md](2026-07-21-m3-u1a-1-static-viewport-contract.md) | U1a-1 静止viewport実装前契約 |

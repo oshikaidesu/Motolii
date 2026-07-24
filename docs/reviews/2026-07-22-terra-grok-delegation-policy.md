@@ -1,8 +1,12 @@
 # タスク適応型の発注運用
 
-状態: **決定**
+状態: **ARCHIVED**
 
-日付: 2026-07-22（2026-07-24改訂）
+日付: 2026-07-22（2026-07-24改訂、2026-07-25アーカイブ）
+
+> 2026-07-25に[Opus 5 / Spark / Grok監督ループ](2026-07-25-opus-spark-grok-supervision-loop-decision.md)
+> へ置換した。本書のtask class、model routing、Fable必須検収、Grok order draftは現行運用ではない。
+> 比較経緯を残す歴史資料としてのみ参照する。
 
 ## 決定
 

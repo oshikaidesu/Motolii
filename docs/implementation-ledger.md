@@ -1,12 +1,12 @@
 # 実装進行台帳
 
-最終確認: **2026-07-24**
+最終確認: **2026-07-25**
 
 このファイルは、実装者が「次に何をするか」を1枚で判断するための現場用台帳。M0〜M5の意味や完了条件を再定義せず、現在の依存関係と発注順だけを示す。
 
 ## 使い方
 
-1. まず本ページの「現在選択中の1件」を確認する。
+1. まず本ページの「現在の並列レーン」を確認する。PRODUCT-ASSET内だけは現在選択中の1件を守る。
 2. Issueと該当する[マイルストーン仕様](specs/README.md)のタスク行・実装ガードを読む。
 3. 依存が1件でも未mergeなら着手しない。
 4. 完了時は、実装PR内で仕様のタスク表と本ページを同時に更新する。
@@ -51,7 +51,8 @@ M3は[縦slice実行方針](reviews/2026-07-24-m3-vertical-slice-execution-decis
 一つの現在sliceと、その出口へ必要な一つの契約境界だけを現在orderにする。
 
 1. `decision-index.md`で主題を逆引きする
-2. 下の「現在選択中の1件」と現在sliceのblocking decision、暫定mirrorの`DO/WAIT/STOP`を照合する
+2. 下の「現在の並列レーン」にあるPRODUCT-ASSETの現在粒と、現在sliceのblocking decision、
+   暫定mirrorの`DO/WAIT/STOP`を照合する
 3. `M3 ENTRY EVIDENCE`で直前成果と未到達の依存を確認する
 4. `M3 CLOSES / M3 DOES NOT CLOSE / M3 STOP / RETURN / M3 HANDOFF`を固定してからIssue化・発注する
 5. main到達後、spec task表・本台帳・証拠を同じ変更で更新して次orderをrollingに再判定する
@@ -103,17 +104,25 @@ Duplicator:
 P0I #170 → P7a → P7b → P7c → P7U
 ```
 
-## 現在選択中の1件
+## 現在の並列レーン
 
-現在sliceは**VS-1 Rectangle配置とUndo**。全体には独立spikeもあるが、製品laneは意味・所有境界を
-優先して1チケットずつ進める。旧night 3分岐は直接統合しない。
+現在sliceは**VS-1 Rectangle配置とUndo**。PRODUCT-ASSET laneは意味・所有境界を優先して
+1チケットずつ進めるが、この直列性を他の独立contract／repair／authoring laneへ波及させない。
+現在の全lane、変更path、STOP、Human Response Frontierは
+[並列レーン着手地図](reviews/2026-07-25-parallel-lane-readiness-map.md)を正とする。
+旧night 3分岐は直接統合しない。
 
-| 優先 | ID | Phase / slice / checklist | 状態 | Issue | 依存確認 | 完了後 |
+| lane | 現在粒 | Phase / slice / checklist | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
-| — | CU-0A04 | M3 / VS-1 / A / R1 | `DONE` | — | CU-0A03、直接移管契約 | CU-0A05A |
-| 1 | CU-0A05A | M3 / VS-1 / A / R2A | `DO` | — | CU-0A04、固定SHA、直接移管契約 | CU-0A05B product ownership |
-| 2 | G0-6H | M3 evidence / VS-1 / visual | `DO / HUMAN` | — | 5 reference screenと30 PNG | U0e-3だけを解禁可 |
-| 3 | U2c-2 | M3 / VS-2 / D | `WAIT` | — | U4a-2のDirect製品入口とU4cのAdvanced製品入口 | 実在入口のDocument意味/Undo同値conformance |
+| PRODUCT-ASSET | CU-0A05A | M3 / VS-1 / A / R2A | `DO` | — | CU-0A04、固定SHA、直接移管契約 | CU-0A05B product ownership |
+| VISUAL-RESPONSE | G0-6H | M3 evidence / VS-1 / visual | `DO / HUMAN` | — | 5 reference screenと30 PNG | U0e-3だけを解禁可 |
+| AUTHORING-SCAFFOLD | VSM-A4S | Vism / spec | `DO / SPEC` | — | VSM-A1/A2/A3、仕様と実装の別PR決定 | VSM-A4Iは全体レビュー後 |
+| SPATIAL-CONTRACT | K0 | M4 / contract spike | `DO` | [#167](https://github.com/oshikaidesu/Motolii/issues/167) | M2-D3、凍結ゲート解凍手続き | K1系を粒ごとに再判定 |
+| IDENTITY-CONTRACT | P0I | M5 / identity spike | `DO` | [#170](https://github.com/oshikaidesu/Motolii/issues/170) | 凍結ゲート、2026-07-15決定 | P7aをGR-PVで再判定 |
+| M2-REPAIR | GAP-23 | M2 / narrow repair | `DO` | — | M2基盤再締結、意味変更なし | GAP-24をlane内で次に判定 |
+| M2-REPAIR | GAP-24 | M2 / narrow repair | `WAIT` | — | GAP-23 | GAP-24後にclose |
+| ORACLE-GUARD | GAP-25 | M2 / guard repair | `DO / CHECK-PATH` | — | GAP-23との許可path非重複 | semantic oracle gate自己保護 |
+| PRODUCT-ASSET | U2c-2 | M3 / VS-2 / D | `WAIT` | — | U4a-2のDirect製品入口とU4cのAdvanced製品入口 | 実在入口のDocument意味/Undo同値conformance |
 
 ### 独立 History tooling lane
 
@@ -125,7 +134,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | 0 | HVR-G01 | History tooling | `DONE` | — | 意味グラフ補助境界を正本化 | HVR-D01の依存 |
 | 1 | U0e-2R | M3 | `DONE` | — | 固定React baseline `eb16d06`を最新mainへ再結合し、43 visual testとworkspace gateを通過 | GR-D1を単独実行 |
 | 2 | GR-D1 | M3 guard | `DONE` | — | Terra実装 + Grok検収の通常発注入口へBASE_REF/SHA・authority・粒状態・React labelのdispatch gateを固定し、専用負例とworkspace試験を通過 | GR-D2を単独実行 |
-| 3 | GR-D2 | M3 guard | `DONE` | — | 変更許可閉集合、append-only検収証跡、timeout分離、検収者mutation拒否、検収resumeをTerra + Grok入口へ固定し、専用負例とworkspace試験を通過 | GR-R1/R2をDOへ移す |
+| 3 | GR-D2 | M3 guard | `DONE` | — | 変更許可閉集合、append-only検収証跡、timeout分離、検収者mutation拒否、検収resumeをrunnerへ固定し、専用負例とworkspace試験を通過。旧Terra + Grok backendはアーカイブし、防護をOpus 5 + Spark + Grokへ継承 | GR-R1/R2をDOへ移す |
 | 4 | GR-R1/R2 | M3 guard | `DONE` | — | manifestのpath/export/SHAとAST/PostCSS closure、実render nodeへのfixture投影、route隔離、三層因果、raw token拒否を43負例・44 visual・Grok P0/P1=0で固定 | GR-R3をDOへ移す |
 | 5 | GR-R3 | M3 guard | `DONE` | — | immutable generation + atomic CURRENT、PNG byte/RGBA、閉schema、17 I/O失敗点、全negative matrixを70 testsとGrok P0/P1=0で固定 | U0e-2をDOへ戻す |
 | 6 | U0e-2 | M3 | `DONE` | — | 同一三層fixtureを既存React Surfaceへ直接投影する5 reference screen、固定Chromium/font、normal+5派生の30 PNG、provenance/atomic generation/read-only checkを固定 | G0-6H assisted human stop |
@@ -136,8 +145,25 @@ P0I #170 → P7a → P7b → P7c → P7U
 | 11 | HVR-D04 | History tooling | `WAIT` | — | HVR-D01〜D03完了 | Unit 5N以降へ候補packetを投入 |
 
 K0 [#167](https://github.com/oshikaidesu/Motolii/issues/167)とP0I
-[#170](https://github.com/oshikaidesu/Motolii/issues/170)は論理上`DO`の独立spikeだが、
-Uシリーズ直列選択中は未選択とし、同時着手しない。
+[#170](https://github.com/oshikaidesu/Motolii/issues/170)は、それぞれM4/M5の独立contract spikeとして
+PRODUCT-ASSETと同時着手できる。Selected U seriesの一時点`DO`一粒はPRODUCT-ASSET lane内だけに適用し、
+K0/P0I、M2 narrow repair、Vism spec laneを同じ待ち列へ入れない。共有contract変更または変更許可pathの
+重複が判明したlaneだけをSTOPし、他laneは継続する。
+
+## 発注依存証跡
+
+`DEPENDENCY`の機械判定専用表。現在粒の依存を散文や別phaseの状態から推測せず、この表で`DONE`の
+一意な行だけを受理する。完了証拠が変わった時は、該当spec／decisionと同じ変更で更新する。
+
+| ID | 状態 | 完了証拠 |
+|---|---|---|
+| CU-0A04 | `DONE` | R1 Browser ownership完了。現在粒`CU-0A05A`の直前product asset |
+| M1-FREEZE-GATE | `DONE` | [凍結ゲート宣言](reviews/2026-07-10-freeze-gate-declaration.md)がM2〜M5並列laneを解禁 |
+| M2-D3 | `DONE` | [M2仕様 D3](specs/M2-document-model.md)のDocument→render graph接続が完了 |
+| M2-FOUNDATION-RECLOSURE | `DONE` | [M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み |
+| VSM-A1 | `DONE` | Vism計画Phase Aのfirst-party公開境界監査完了 |
+| VSM-A2 | `DONE` | Vism計画Phase AのParamDriver外部crate参照実装完了 |
+| VSM-A3 | `DONE` | Vism計画Phase AのRadial Repeater実装・審判完了 |
 
 ## 次にIssue化するもの
 

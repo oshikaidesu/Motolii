@@ -10,6 +10,8 @@
 
 ここで固定するのはplugin ID、kind、parameter、入出力、失敗等の**意味**であり、現行`PluginId(&'static str)`や`&'static dyn Plugin`という所有／lifetime形を将来loaderのABIとして凍結するものではない。M1監査以来この区別は維持されており、dynamic load、source配布、WASM/native境界へ進む時は所有形、ABI、version negotiation、権限を独立contractで再締結する。現行のstatic型を、そのまま配布仕様や安全境界へ外挿しない。
 
+> **信頼境界:** first-partyはprovenanceと参照実装を表すだけで、実行上の特権や信頼を表さない。公開plugin境界を通るcodeは供給元を問わず非信頼とし、将来runtimeでは同じcapability制限、resource budget、failure containmentへ通す。Controlled Microkernelと製品buildへ明示的にadmitされたHost capability moduleだけがTCBであり、「core plugin」という例外分類は作らない。現行static first-partyは同一processなのでクラッシュ隔離をまだ満たさない。
+
 ## 0. この境界を作る理由
 
 Motoliiの長期の北極星は、映像表現を特定projectの手順から切り離し、実行・再利用・保存・配布できる単位にすることにある。「映像制作におけるVST」はHostと拡張単位を分ける構造の類比に限り、このplugin境界は単なる内製effect追加口ではない。Host全体をforkせず、ひとつの表現に集中できる作者面を作る。
@@ -32,7 +34,7 @@ VSM-A0I-1〜3でContract Catalog、Documentのprepared resolution、graph／expo
 | third-party install / load / update | 未実装 | `.vism` package、resolver、trust、権限、rollbackが未決 |
 | WASM / native payload runtime | 予約・比較前 | `PluginKind::ScriptWasm`はenum予約だけ。native Rust first-party crateの静的組み立てと、OS別binaryの動的loadを同義にしない |
 
-first-party無特権は「第三者配布が完成した」という意味ではない。現行成果は、同じ公開Rust façadeで表現計算を書けることの証明までである。作者が配布・導入できる成果物へ到達するには、authoring scaffoldとVism distribution/trustの二つの未実装境界が残る。
+first-party無特権は「第三者配布が完成した」または「現行static実行が安全境界を完成した」という意味ではない。現行成果は、同じ公開Rust façadeで表現計算を書けることの証明までである。作者が配布・導入できる成果物へ到達するには、authoring scaffoldとVism distribution/trustの二つの未実装境界が残る。
 
 そのため、pluginは一枚の絵を出せれば完成ではない。次の全条件を満たして初めて、作品に置ける表現単位になる。
 

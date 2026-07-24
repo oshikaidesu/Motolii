@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# ARCHIVED: 退役したClaude実装／Opus検収経路の歴史試験。
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

@@ -2,23 +2,30 @@
 
 Cursor / Claude Code / その他のLLMエージェント共通の入口。実装に着手する前にここを読む。
 
-## 「発注」時のタスク適応型自動委任
+## 「発注」時のOpus 5 / Spark / Grok監督ループ
 
 - ユーザーが「発注して」「実装を発注」等、**発注を依頼動詞として明示した時だけ**自動委任を発火する。通常の「実装して」、説明・引用・ファイル内に現れただけの「発注」では発火しない
-- **2026-07-24運用改訂**: Terra固定を撤回し、Codexが`mechanical / standard / rapid / complex / cross-boundary`から`TASK_CLASS`を選ぶ。対応する完全model IDは順に`gpt-5.3-codex-spark` / `gpt-5.6-luna-none-fast` / `gpt-5.6-terra` / `gpt-5.6-sol-none-fast` / `gpt-5.6-sol-none-fast`とし、aliasは使わない。価格・利用倍率・期間は固定せず、同一課題比較と利用可能性で見直す
-- `mechanical`のSpark発注は、会話履歴を引き継がず、closed order・変更許可ファイル・明示したauthorityだけで完結させる。repo横断の歴史調査、複数仕様の意味判断、未指定の公開境界探索が必要なら`mechanical`へ押し込まず、該当クラスへ上げる。Sparkの別利用枠が不足・一時停止した場合も、通常枠のモデルへ黙ってfallbackしない
-- 発火時の責任は固定する。**主担当Codexは先例調査・コード事実の確認・長期展望、タスク分類、発注書の正本化と、恒久形式/公開API/plugin契約/停止線など重要境界の最終判断**を担う。承認済み発注書だけを選択済みモデルが隔離worktreeで実装し、**Cursor Grok 4.5 High (`cursor-grok-4.5-high`)が全クラスで実装担当とは別のread-only検収者**として実diffと試験を監査する。`complex`と`cross-boundary`は、契約中のClaude Codeから**Fable 5 (`claude-fable-5`)も追加のread-only検収者**として起動する。大地図・全粒・設計比較・複数仕様横断もユーザーの個別指定を待たずFable候補にする。Codexが最後に統合を判断する
-- 実装発注は隔離worktreeで行う。Codexが対象仕様ID、目的、現状、変更許可ファイル、非目標、再利用箇所、STOP条件、必須負例、実行コマンドを含むclosed orderを作り、`ORDER: READY`、task hash、`TASK_CLASS`、完全model ID、`REVIEW_PROFILE`、`CODEX PRECHECK: APPROVED`を明示してから`./scripts/delegate-cursor-supervised.sh execute <worktree> <order-file> "<task>"`で選択済み受注者を起動する。`prepare`ではCodexが`DELEGATION_TASK_CLASS`を指定する。Grokの発注書draftは論点抽出用の任意助言であり、その出力を自動承認しない
-- Grok検収が`VERDICT: ACCEPT`でなければ実装差分を採用・commit・pushしない。Fable必須クラスはFable検収も`VERDICT: ACCEPT`でなければ採用しない。Claude Code利用枠不足やFable利用不能をGrokだけで黙って代替しない
-- `delegate-claude-supervised.sh`のClaude実装経路は選択済みCodexモデルまたはCursor Grokが利用不能で、ユーザーへfallback理由を明示した場合だけ使う。`delegate-cursor-review.sh`の並列助言は調査・論点抽出専用であり、実装の指揮系統には使わない。外部実装モデルに仕様判断・発注範囲変更・代替設計をさせない
-- 主担当は監督者として、外部エージェントの差分を仕様・依存・実装ガード・既存API・テスト期待値に照らしてコードレビューする。レビュー未完了の差分を採用せず、必要な修正と検証を行ってから主作業ツリーへ反映する
-- 実装発注は一度に1つの契約境界へ分割し、発注文に **変更許可ファイル・非目標・STOP条件・必須負例・実行コマンド** を明記する。複数境界を同時に満たす「便利な共通化」を発注側から要求しない
-- 外部実装には「例外追加・lint抑制・テスト期待値変更・生JSON/文字列走査・公開raw API・重複planner/helper」で契約を迂回しないよう明示する。必要に見えた時点で実装を止め、既存の正規境界と仕様IDを報告させる
-- 外部実装差分は、実装担当とは別のGrok read-only反対側レビューで **P0/P1=0** を確認するまで採用しない。Fable必須クラスはFableも同条件とする。テスト緑は採用条件の一部であって、契約適合の代わりにしない
-- 委任結果は根拠ではなく未検証の助言として扱う。最終判断、統合、必須テスト、完了報告は主担当が行う。実装・Grok・Fable子エージェントは委任を再帰実行しない
-- 外部モデルへ秘密情報、認証情報、未公開の個人データを渡さない。片方が失敗しても安全に進められる作業は続行し、完了報告に失敗を明記する。両方の成功を完了条件の代わりにしない
-- 発注書作成・実装・検収が失敗、STOP、REJECT、timeoutになっても、停止報告だけで未検収差分を放置しない。原因を分類し、発注書の差し戻し、実装修正、検収再実行のうち該当段階へ戻って、契約を迂回せず改善ループを回す。timeout時は残存差分と証跡を確認し、再開可能な段階から続ける。ループ中の差分は隔離worktreeに留め、`VERDICT: ACCEPT`前に採用・commit・pushしない
-- 同じ阻害要因が反復し、発注書・回答・差分・検収結果に有意な改善がなくなった場合だけループを止める。その際は、反復した阻害要因、試した修正、未解決の選択肢を示してユーザーの判断を仰ぐ。単なる難しさ、1回のtimeout、外部モデル片方の失敗を停止理由にしない
+- **2026-07-25運用改訂**: 通常発注は`Codex → Claude Opus 5 → Codex Spark → Cursor Grok 4.5 High → Codex`の一つのループへ固定する。完全model IDは順に`claude-opus-5` / `gpt-5.3-codex-spark` / `cursor-grok-4.5-high`とし、aliasを使わない。旧`mechanical / standard / rapid / complex / cross-boundary`分類、Luna/Terra/Sol routing、Fable必須検収は[旧運用](docs/reviews/2026-07-22-terra-grok-delegation-policy.md)としてアーカイブし、現行発注へ使わない
+- 発火時の責任は固定する。**主担当Codex**は先例調査、コード事実、長期展望、親task、恒久形式／公開API／plugin契約／停止線、Opus orderの事前承認、Grok結果の再照合、最終統合を所有する。**Claude Opus 5**は親taskを、会話履歴なしで完結する一つのSpark粒とclosed orderへ落とす施工管理者とする。**Codex Spark**は承認済みの一粒だけを隔離worktreeで実装する。**Cursor Grok 4.5 High**は実装担当から分離したread-only検収者として実diffと試験を監査する
+- Opus 5へ許す委任は一段だけであり、Spark以外を起動させない。一回のrunner実行は一つの`GRAIN`だけを扱い、Sparkは再委任しない。複数粒が必要なら、主担当Codexが各契約境界を確認してループを個別に回す
+- `./scripts/delegate-cursor-supervised.sh prepare <worktree> <order-file> "<task>"`でOpus 5にorder案を作らせる。orderには対象仕様ID、目的、現状、変更許可file、非目標、再利用箇所、STOP条件、必須負例、実行command、`ORDER: READY`、task hash、`LOOP_PROFILE: opus-spark-grok`、三つの完全model IDを含める。主担当Codexが`CODEX PRECHECK: APPROVED`を追記するまで`execute`でSparkを起動しない
+- Opus 5は仕様決定者ではない。親taskの公開API、Document意味、plugin契約、永続形式、変更許可範囲を変える必要が見えたら`ORDER: STOP`でCodexへ戻す。repo横断の歴史調査、複数仕様の意味判断、未指定の公開境界探索をSpark粒へ押し込まない
+- 実装発注は一度に1つの契約境界、隔離worktree、閉じたallowlistとする。外部実装には「例外追加・lint抑制・テスト期待値変更・生JSON/文字列走査・公開raw API・重複planner/helper」で契約を迂回させず、必要に見えた時点でSTOPさせる
+- Grok検収が`VERDICT: ACCEPT`かつ**P0/P1=0**でなければ実装差分を採用・commit・pushしない。Grokはorder再設計や実装修正をせず、REJECTをCodexへ返す。テスト緑は採用条件の一部であって、契約適合の代わりにしない
+- Fable 5は通常ループの段階または必須gateにしない。大地図、設計比較、共有公開境界など、主担当Codexが高難度の反対側助言を必要と判断した場合だけ、ループ外からread-onlyで直接呼ぶ
+- 主担当Codexは監督者として、OpusのorderとSparkの差分を仕様・依存・実装ガード・既存API・テスト期待値に照らして再確認する。外部出力は根拠でなく未検証の助言であり、最終判断、統合、必須テスト、完了報告は主担当が行う
+- model利用不能時に別modelへ黙ってfallbackしない。外部modelへ秘密情報、認証情報、未公開の個人データを渡さない
+- order作成、実装、検収が失敗、STOP、REJECT、timeoutになった場合はCodexへ戻す。Codexが原因を分類し、必要なら新しいOpus粒として再投入する。ループ中の差分は隔離worktreeに留め、`VERDICT: ACCEPT`前に採用・commit・pushしない
+- 同じ阻害要因が反復し、order、差分、検収結果に有意な改善がなくなった場合だけループを止める。その際は反復した阻害要因、試した修正、未解決の選択肢を示してユーザーの判断を仰ぐ
+
+## 発注外のOpus 5コーディングパートナー
+
+- `claude-opus-5`は発注時の施工管理者だけでなく、主担当Codexが日常的に意見を求める**広域コーディングパートナー**として使う。これは「発注」の自動委任トリガーとは独立し、ユーザーが個別にOpus利用を指定しなくても、別の視点が実装判断を実質的に良くする場面でCodexがread-only相談を起動できる
+- **相談トリガー**: 次のどれか一つが成立し、回答によって実装判断が変わり得る場合にOpus 5を呼ぶ。(1) 要求に複数の読みがあり実装・試験・状態所有が変わる、(2) 複数file/crateをまたぎ局所解が全体契約を壊し得る、(3) 原因仮説が複数あり一つへ早く収束しそう、(4) helper／依存／公開境界の再利用判断が割れる、(5) 計画の負例・STOP・非目標に漏れがありそう、(6) 小さな差分でもDocument／公開API／永続形式／Undo／plugin契約へ波及し得る、(7) Codexが未検証の「たぶん」「このはず」を根拠に進めようとしている、(8) 会話で生じた新しい意味と既存決定の整合を確認したい
+- **呼ばない条件**: 正本と変更箇所が一意な機械変更、単純な検索やコード事実だけで閉じる診断、回答を得ても判断が変わらない作業には形式的に呼ばない。相談待ちを通常作業の直列barrierにしない
+- **相談packet**: Opus 5へは、確定仕様とコード事実、Codexの仮説、迷っている選択肢、変えてはいけない境界、探してほしい反例・見落としを渡す。回答は`FACTS / INFERENCES / OPTIONS / RECOMMENDATION / STOP CONDITIONS`へ分けさせ、事実と推論を混ぜさせない
+- 発注外相談ではOpus 5に編集、commit、push、PR作成、Spark起動、再委任を許さない。closed orderや`CODEX PRECHECK`は不要だが、回答は根拠ではなく助言として扱い、Codexが正本・現行コード・試験へ再照合して判断する
+- **Fable昇格**: 大地図、長期展望、複数仕様の衝突、共有公開境界、恒久契約の新設・変更、またはCodexとOpus 5で結論が割れた場合はFable 5へread-only相談を昇格する。Opus 5の気軽な利用を、必要なFable相談の黙った代替にはしない
 
 ### Reactモック製品資産を含む発注の強制動線（無視禁止）
 
