@@ -120,12 +120,74 @@
         "path": "docs/mocks-ui/tests/browser-candidate.spec.js",
         "route": "plugin-browser-candidate"
       }
+    },
+    {
+      "id": "keys-layers",
+      "classification": "react-subtree-extraction-native-timeline-oracle",
+      "componentPath": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
+      "componentExport": "TimelineCandidate",
+      "runtimeClosure": [
+        {
+          "path": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
+          "role": "runtime",
+          "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5"
+        },
+        {
+          "path": "docs/mocks-ui/src/candidates/timeline-candidate.css",
+          "role": "runtime",
+          "sha256": "ef984d9b365f4efbcb4bf8fc20034a0b54846ab4fb470ea8d6ec8b486aa71397"
+        }
+      ],
+      "localImports": [
+        {
+          "kind": "css-side-effect",
+          "source": "docs/mocks-ui/src/candidates/timeline-candidate.css",
+          "specifiers": []
+        }
+      ],
+      "externalPackages": [
+        "react"
+      ],
+      "promotionBoundary": [
+        "candidate-key-tools subtree",
+        "candidate-key-tools-open reopen control"
+      ],
+      "nativeOracle": [
+        "ruler",
+        "rails",
+        "bars",
+        "keys",
+        "playhead",
+        "graph",
+        "packing plane",
+        "time surface"
+      ],
+      "modes": {
+        "keys": [
+          "align",
+          "stagger",
+          "stretch"
+        ],
+        "layers": [
+          "align",
+          "stagger",
+          "shift"
+        ]
+      },
+      "behavioralEvidence": {
+        "path": "docs/mocks-ui/tests/timeline-candidate.spec.js",
+        "route": "plugin-browser-candidate"
+      }
     }
   ],
   "modelClosure": [],
   "behavioralTests": [
     {
       "path": "docs/mocks-ui/tests/browser-candidate.spec.js",
+      "route": "plugin-browser-candidate"
+    },
+    {
+      "path": "docs/mocks-ui/tests/timeline-candidate.spec.js",
       "route": "plugin-browser-candidate"
     }
   ]

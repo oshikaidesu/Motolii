@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { parse } from "@babel/parser";
+import postcss from "postcss";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
@@ -66,6 +67,31 @@ const EXPECTED_EASING_NATIVE_ORACLE = [
   "curve renderer",
   "easing model",
 ];
+const EXPECTED_TIMELINE_SOURCE = "docs/mocks-ui/src/candidates/TimelineCandidate.jsx";
+const EXPECTED_TIMELINE_CSS_SOURCE = "docs/mocks-ui/src/candidates/timeline-candidate.css";
+const EXPECTED_TIMELINE_RUNTIME_HASHES = {
+  [EXPECTED_TIMELINE_SOURCE]: "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5",
+  [EXPECTED_TIMELINE_CSS_SOURCE]: "ef984d9b365f4efbcb4bf8fc20034a0b54846ab4fb470ea8d6ec8b486aa71397",
+};
+const EXPECTED_TIMELINE_PROMOTION_BOUNDARY = [
+  "candidate-key-tools subtree",
+  "candidate-key-tools-open reopen control",
+];
+const EXPECTED_TIMELINE_NATIVE_ORACLE = [
+  "ruler",
+  "rails",
+  "bars",
+  "keys",
+  "playhead",
+  "graph",
+  "packing plane",
+  "time surface",
+];
+const EXPECTED_TIMELINE_MODES = {
+  keys: ["align", "stagger", "stretch"],
+  layers: ["align", "stagger", "shift"],
+};
+const EXPECTED_TIMELINE_TEST_PATH = "docs/mocks-ui/tests/timeline-candidate.spec.js";
 
 function hashBytes(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -174,7 +200,7 @@ function collectCandidateImports(candidateAst, candidatePath) {
   };
 }
 
-function extractBrowserRouteFromTest(testAst) {
+function extractRouteFromTest(testAst) {
   const routes = [];
   const stack = [testAst];
   const routePattern = /^https?:\/\/[^"'\s]+#([^"'\s]+)$/;
@@ -198,9 +224,11 @@ function extractBrowserRouteFromTest(testAst) {
       return;
     }
 
-    if (value.type === "TemplateLiteral" && value.expressions.length === 0) {
-      const cooked = value.quasis[0].value.cooked ?? value.quasis[0].value.raw;
-      const match = routePattern.exec(cooked);
+    if (value.type === "TemplateLiteral") {
+      const cooked = value.quasis
+        .map((quasi) => quasi.value.cooked ?? quasi.value.raw)
+        .join("");
+      const match = routePattern.exec(cooked) ?? /#([^"'\s]+)$/.exec(cooked);
       if (match) {
         routes.push(match[1]);
       }
@@ -220,17 +248,66 @@ async function manifestFromDisk() {
   return JSON.parse(await readFile(MANIFEST_PATH, "utf8"));
 }
 
-function withBrowserSurface(manifest, browser) {
+function withInventoryEntryAt(manifest, collection, index, patch) {
   return {
     ...manifest,
-    surfaces: [browser, manifest.surfaces[1]],
+    [collection]: manifest[collection].map((entry, entryIndex) =>
+      entryIndex === index ? patch(entry) : entry,
+    ),
   };
+}
+
+function countJsxClass(ast, expectedClass) {
+  let count = 0;
+  const visit = (value) => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (
+      value.type === "JSXOpeningElement" &&
+      value.name.type === "JSXIdentifier"
+    ) {
+      const className = value.attributes.find(
+        (attribute) =>
+          attribute.type === "JSXAttribute" &&
+          attribute.name.name === "className",
+      );
+      if (className?.value?.type === "StringLiteral" && className.value.value === expectedClass) {
+        count += 1;
+      }
+    }
+    Object.values(value).forEach(visit);
+  };
+  visit(ast);
+  return count;
+}
+
+function hasCssSelectorRoot(cssSource, rootSelector) {
+  const stylesheet = postcss.parse(cssSource);
+  return stylesheet.nodes.some(
+    (node) =>
+      node.type === "rule" &&
+      node.selectors.some((selector) => {
+        const normalized = selector.trim();
+        return (
+          normalized === rootSelector ||
+          normalized.startsWith(`${rootSelector} `) ||
+          normalized.startsWith(`${rootSelector}:`) ||
+          normalized.startsWith(`${rootSelector}[`) ||
+          normalized.startsWith(`${rootSelector} >`)
+        );
+      }),
+  );
 }
 
 async function validateInventory(manifest, options = {}) {
   const {
     candidateAstSource,
     easingAstSource,
+    timelineAstSource,
+    timelineCssSource,
     fixedSourceCommit = manifest.fixedSourceCommit,
   } = options;
 
@@ -265,9 +342,9 @@ async function validateInventory(manifest, options = {}) {
 
   assert.equal(manifest.modelClosure.length, 0);
   assert.equal(Array.isArray(manifest.surfaces), true);
-  assert.equal(manifest.surfaces.length, 2);
+  assert.equal(manifest.surfaces.length, 3);
   assert.equal(Array.isArray(manifest.behavioralTests), true);
-  assert.equal(manifest.behavioralTests.length, 1);
+  assert.equal(manifest.behavioralTests.length, 2);
 
   const browser = manifest.surfaces[0];
   ensureExactKeys(browser, [
@@ -326,6 +403,9 @@ async function validateInventory(manifest, options = {}) {
   ensureExactKeys(manifest.behavioralTests[0], ["path", "route"]);
   assert.equal(manifest.behavioralTests[0].path, EXPECTED_TEST_PATH);
   assert.equal(manifest.behavioralTests[0].route, EXPECTED_TEST_ROUTE);
+  ensureExactKeys(manifest.behavioralTests[1], ["path", "route"]);
+  assert.equal(manifest.behavioralTests[1].path, EXPECTED_TIMELINE_TEST_PATH);
+  assert.equal(manifest.behavioralTests[1].route, EXPECTED_TEST_ROUTE);
 
   const candidateSource = candidateAstSource ?? (await readFile(
     absoluteFromRelative(browser.componentPath),
@@ -437,8 +517,81 @@ async function validateInventory(manifest, options = {}) {
 
   const testSource = await readFile(absoluteFromRelative(manifest.behavioralTests[0].path), "utf8");
   const testAst = parseModule(testSource);
-  const parsedRoutes = extractBrowserRouteFromTest(testAst);
+  const parsedRoutes = extractRouteFromTest(testAst);
   assert.deepEqual(parsedRoutes, [EXPECTED_TEST_ROUTE]);
+
+  const keysLayers = manifest.surfaces[2];
+  ensureExactKeys(keysLayers, [
+    "id",
+    "classification",
+    "componentPath",
+    "componentExport",
+    "runtimeClosure",
+    "localImports",
+    "externalPackages",
+    "promotionBoundary",
+    "nativeOracle",
+    "modes",
+    "behavioralEvidence",
+  ]);
+  assert.equal(keysLayers.id, "keys-layers");
+  assert.equal(keysLayers.classification, "react-subtree-extraction-native-timeline-oracle");
+  assert.equal(keysLayers.componentPath, EXPECTED_TIMELINE_SOURCE);
+  assert.equal(keysLayers.componentExport, "TimelineCandidate");
+  assert.deepEqual(keysLayers.externalPackages, ["react"]);
+  assert.deepEqual(keysLayers.promotionBoundary, EXPECTED_TIMELINE_PROMOTION_BOUNDARY);
+  assert.deepEqual(keysLayers.nativeOracle, EXPECTED_TIMELINE_NATIVE_ORACLE);
+  ensureExactKeys(keysLayers.modes, ["keys", "layers"]);
+  assert.deepEqual(keysLayers.modes, EXPECTED_TIMELINE_MODES);
+  assert.deepEqual(keysLayers.behavioralEvidence, manifest.behavioralTests[1]);
+
+  const expectedTimelineRuntimeOrder = [EXPECTED_TIMELINE_SOURCE, EXPECTED_TIMELINE_CSS_SOURCE];
+  assert.equal(keysLayers.runtimeClosure.length, expectedTimelineRuntimeOrder.length);
+  for (let index = 0; index < expectedTimelineRuntimeOrder.length; index += 1) {
+    const expectedPath = expectedTimelineRuntimeOrder[index];
+    const entry = keysLayers.runtimeClosure[index];
+    ensureExactKeys(entry, ["path", "role", "sha256"]);
+    assert.equal(entry.path, expectedPath);
+    assert.equal(entry.role, "runtime");
+    assert.equal(entry.sha256, EXPECTED_TIMELINE_RUNTIME_HASHES[expectedPath]);
+    assert.ok(!entry.path.includes("/legacy/") && !entry.path.includes("/archive/"));
+    assert.equal(hashBytes(readBlobFromCommit(entry.path, fixedSourceCommit)), entry.sha256);
+    assert.equal(hashBytes(await readFile(absoluteFromRelative(entry.path))), entry.sha256);
+  }
+
+  assert.equal(keysLayers.localImports.length, 1);
+  ensureExactKeys(keysLayers.localImports[0], ["kind", "source", "specifiers"]);
+  assert.equal(keysLayers.localImports[0].kind, "css-side-effect");
+  assert.equal(keysLayers.localImports[0].source, EXPECTED_TIMELINE_CSS_SOURCE);
+  assert.deepEqual(keysLayers.localImports[0].specifiers, []);
+
+  const timelineAst = parseModule(timelineAstSource ?? await readFile(
+    absoluteFromRelative(keysLayers.componentPath),
+    "utf8",
+  ));
+  assert.ok(collectNamedExports(timelineAst).has("TimelineCandidate"));
+  const timelineImports = collectCandidateImports(
+    timelineAst,
+    absoluteFromRelative(keysLayers.componentPath),
+  );
+  assert.deepEqual(timelineImports.externalPackages, ["react"]);
+  assert.deepEqual(Object.keys(timelineImports.localImports), [EXPECTED_TIMELINE_CSS_SOURCE]);
+  assert.equal(timelineImports.localImports[EXPECTED_TIMELINE_CSS_SOURCE].length, 0);
+  assert.equal(countJsxClass(timelineAst, "candidate-key-tools"), 1);
+  assert.equal(countJsxClass(timelineAst, "candidate-key-tools-open"), 1);
+
+  const cssSource = timelineCssSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_TIMELINE_CSS_SOURCE),
+    "utf8",
+  );
+  assert.ok(hasCssSelectorRoot(cssSource, ".candidate-key-tools"));
+  assert.ok(hasCssSelectorRoot(cssSource, ".candidate-key-tools-open"));
+
+  const timelineTestAst = parseModule(await readFile(
+    absoluteFromRelative(keysLayers.behavioralEvidence.path),
+    "utf8",
+  ));
+  assert.deepEqual(extractRouteFromTest(timelineTestAst), [EXPECTED_TEST_ROUTE]);
 }
 
 test("accepts exact incomplete multi-surface R0 manifest and fixed-commit evidence", async () => {
@@ -482,35 +635,32 @@ test("rejects non-empty model closure", async () => {
 test("rejects runtime closure reorder, missing, and hash mismatch", async () => {
   const manifest = await manifestFromDisk();
 
-  const reordered = withBrowserSurface(
-    manifest,
-    {
-      ...manifest.surfaces[0],
-        runtimeClosure: [
-          manifest.surfaces[0].runtimeClosure[0],
-          manifest.surfaces[0].runtimeClosure[2],
-          manifest.surfaces[0].runtimeClosure[1],
-        ],
-    },
-  );
+  const reordered = withInventoryEntryAt(manifest, "surfaces", 0, (browser) => ({
+    ...browser,
+    runtimeClosure: [
+      browser.runtimeClosure[0],
+      browser.runtimeClosure[2],
+      browser.runtimeClosure[1],
+    ],
+  }));
   await assert.rejects(async () => {
     await validateInventory(reordered);
   });
 
-  const missing = withBrowserSurface(manifest, {
-      ...manifest.surfaces[0],
-      runtimeClosure: manifest.surfaces[0].runtimeClosure.slice(0, 2),
-    });
+  const missing = withInventoryEntryAt(manifest, "surfaces", 0, (browser) => ({
+    ...browser,
+    runtimeClosure: browser.runtimeClosure.slice(0, 2),
+  }));
   await assert.rejects(async () => {
     await validateInventory(missing);
   });
 
-  const hashMismatch = withBrowserSurface(manifest, {
-      ...manifest.surfaces[0],
-      runtimeClosure: manifest.surfaces[0].runtimeClosure.map((entry, index) =>
+  const hashMismatch = withInventoryEntryAt(manifest, "surfaces", 0, (browser) => ({
+      ...browser,
+      runtimeClosure: browser.runtimeClosure.map((entry, index) =>
         index === 1 ? { ...entry, sha256: "0".repeat(64) } : entry,
       ),
-    });
+    }));
   await assert.rejects(async () => {
     await validateInventory(hashMismatch);
   });
@@ -518,17 +668,17 @@ test("rejects runtime closure reorder, missing, and hash mismatch", async () => 
 
 test("rejects extra runtime closure entry", async () => {
   const manifest = await manifestFromDisk();
-  const extra = withBrowserSurface(manifest, {
-      ...manifest.surfaces[0],
+  const extra = withInventoryEntryAt(manifest, "surfaces", 0, (browser) => ({
+      ...browser,
       runtimeClosure: [
-        ...manifest.surfaces[0].runtimeClosure,
+        ...browser.runtimeClosure,
         {
           path: EXPECTED_PATTERN_SOURCE,
           role: "runtime",
           sha256: EXPECTED_RUNTIME_HASHES[EXPECTED_PATTERN_SOURCE],
         },
       ],
-    });
+    }));
   await assert.rejects(async () => {
     await validateInventory(extra);
   });
@@ -537,18 +687,18 @@ test("rejects extra runtime closure entry", async () => {
 test("rejects missing or wrong component export and non-browser surface", async () => {
   const manifest = await manifestFromDisk();
 
-  const wrongExport = withBrowserSurface(manifest, {
-      ...manifest.surfaces[0],
+  const wrongExport = withInventoryEntryAt(manifest, "surfaces", 0, (browser) => ({
+      ...browser,
       componentExport: "BrowserCandidate",
-    });
+    }));
   await assert.rejects(async () => {
     await validateInventory(wrongExport);
   });
 
-  const nonBrowserSurface = withBrowserSurface(manifest, {
-      ...manifest.surfaces[0],
+  const nonBrowserSurface = withInventoryEntryAt(manifest, "surfaces", 0, (browser) => ({
+      ...browser,
       id: "inspector",
-    });
+    }));
   await assert.rejects(async () => {
     await validateInventory(nonBrowserSurface);
   });
@@ -568,9 +718,9 @@ test("rejects unexpected local imports outside declared runtime closure", async 
 
 test("rejects legacy/archive paths promoted in runtime closure", async () => {
   const manifest = await manifestFromDisk();
-  const withLegacy = withBrowserSurface(manifest, {
-      ...manifest.surfaces[0],
-      runtimeClosure: manifest.surfaces[0].runtimeClosure.map((entry) =>
+  const withLegacy = withInventoryEntryAt(manifest, "surfaces", 0, (browser) => ({
+      ...browser,
+      runtimeClosure: browser.runtimeClosure.map((entry) =>
         entry.path === EXPECTED_PATTERN_SOURCE
           ? {
             ...entry,
@@ -579,7 +729,7 @@ test("rejects legacy/archive paths promoted in runtime closure", async () => {
           }
           : entry,
       ),
-    });
+    }));
   await assert.rejects(async () => {
     await validateInventory(withLegacy);
   });
@@ -590,10 +740,10 @@ test("rejects missing or wrong test evidence route", async () => {
 
   const missingPath = {
     ...manifest,
-    behavioralTests: [{
-      ...manifest.behavioralTests[0],
+    ...withInventoryEntryAt(manifest, "behavioralTests", 0, (evidence) => ({
+      ...evidence,
       path: "docs/mocks-ui/tests/browser-candidate.spec.missing.js",
-    }],
+    })),
   };
   await assert.rejects(async () => {
     await validateInventory(missingPath);
@@ -601,10 +751,10 @@ test("rejects missing or wrong test evidence route", async () => {
 
   const wrongRoute = {
     ...manifest,
-    behavioralTests: [{
-      ...manifest.behavioralTests[0],
+    ...withInventoryEntryAt(manifest, "behavioralTests", 0, (evidence) => ({
+      ...evidence,
       route: "plugin-browser",
-    }],
+    })),
   };
   await assert.rejects(async () => {
     await validateInventory(wrongRoute);
@@ -619,24 +769,18 @@ test("rejects complete R0, wrong Easing classification, and changed Easing packa
     await validateInventory(complete);
   });
 
-  const wrongClassification = {
-    ...manifest,
-    surfaces: [
-      manifest.surfaces[0],
-      { ...manifest.surfaces[1], classification: "react-direct-promotion" },
-    ],
-  };
+  const wrongClassification = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    classification: "react-direct-promotion",
+  }));
   await assert.rejects(async () => {
     await validateInventory(wrongClassification);
   });
 
-  const changedPackages = {
-    ...manifest,
-    surfaces: [
-      manifest.surfaces[0],
-      { ...manifest.surfaces[1], externalPackages: ["react", "react-dom"] },
-    ],
-  };
+  const changedPackages = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    externalPackages: ["react", "react-dom"],
+  }));
   await assert.rejects(async () => {
     await validateInventory(changedPackages);
   });
@@ -645,71 +789,44 @@ test("rejects complete R0, wrong Easing classification, and changed Easing packa
 test("rejects Easing closure, ownership split, evidence, and extra local dependency", async () => {
   const manifest = await manifestFromDisk();
 
-  const wrongExport = {
-    ...manifest,
-    surfaces: [
-      manifest.surfaces[0],
-      { ...manifest.surfaces[1], componentExport: "EasingCandidate" },
-    ],
-  };
+  const wrongExport = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    componentExport: "EasingCandidate",
+  }));
   await assert.rejects(async () => {
     await validateInventory(wrongExport);
   });
 
-  const wrongHash = {
-    ...manifest,
-    surfaces: [
-      manifest.surfaces[0],
-      {
-        ...manifest.surfaces[1],
-        runtimeClosure: manifest.surfaces[1].runtimeClosure.map((entry, index) =>
+  const wrongHash = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+        ...easing,
+        runtimeClosure: easing.runtimeClosure.map((entry, index) =>
           index === 2 ? { ...entry, sha256: "0".repeat(64) } : entry,
         ),
-      },
-    ],
-  };
+      }));
   await assert.rejects(async () => {
     await validateInventory(wrongHash);
   });
 
-  const missingModel = {
-    ...manifest,
-    surfaces: [
-      manifest.surfaces[0],
-      {
-        ...manifest.surfaces[1],
-        runtimeClosure: manifest.surfaces[1].runtimeClosure.slice(0, 2),
-      },
-    ],
-  };
+  const missingModel = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    runtimeClosure: easing.runtimeClosure.slice(0, 2),
+  }));
   await assert.rejects(async () => {
     await validateInventory(missingModel);
   });
 
-  const promotedPopup = {
-    ...manifest,
-    surfaces: [
-      manifest.surfaces[0],
-      {
-        ...manifest.surfaces[1],
-        promotionBoundary: [...manifest.surfaces[1].promotionBoundary, "popup frame"],
-      },
-    ],
-  };
+  const promotedPopup = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    promotionBoundary: [...easing.promotionBoundary, "popup frame"],
+  }));
   await assert.rejects(async () => {
     await validateInventory(promotedPopup);
   });
 
-  const missingEvidence = {
-    ...manifest,
-    surfaces: [
-      manifest.surfaces[0],
-      {
-        ...manifest.surfaces[1],
-        behavioralEvidence: { ...manifest.surfaces[1].behavioralEvidence, route: "archive/easing" },
-      },
-    ],
-  };
+  const missingEvidence = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    behavioralEvidence: { ...easing.behavioralEvidence, route: "archive/easing" },
+  }));
   await assert.rejects(async () => {
     await validateInventory(missingEvidence);
   });
@@ -718,5 +835,53 @@ test("rejects Easing closure, ownership split, evidence, and extra local depende
   const injected = `${source}\nimport { load } from "../legacy/legacySource.js";\n`;
   await assert.rejects(async () => {
     await validateInventory(manifest, { easingAstSource: injected });
+  });
+});
+
+test("rejects KEYS/LAYERS promotion beyond the fixed Timeline subtree evidence", async () => {
+  const manifest = await manifestFromDisk();
+
+  const wrongBoundary = withInventoryEntryAt(manifest, "surfaces", 2, (keysLayers) => ({
+    ...keysLayers,
+    promotionBoundary: [...keysLayers.promotionBoundary, "ruler"],
+  }));
+  await assert.rejects(async () => {
+    await validateInventory(wrongBoundary);
+  });
+
+  const wrongNativeOracle = withInventoryEntryAt(manifest, "surfaces", 2, (keysLayers) => ({
+    ...keysLayers,
+    nativeOracle: keysLayers.nativeOracle.filter((entry) => entry !== "playhead"),
+  }));
+  await assert.rejects(async () => {
+    await validateInventory(wrongNativeOracle);
+  });
+
+  const wrongModes = withInventoryEntryAt(manifest, "surfaces", 2, (keysLayers) => ({
+    ...keysLayers,
+    modes: { ...keysLayers.modes, keys: ["align", "stagger"] },
+  }));
+  await assert.rejects(async () => {
+    await validateInventory(wrongModes);
+  });
+
+  const wrongEvidence = withInventoryEntryAt(manifest, "surfaces", 2, (keysLayers) => ({
+    ...keysLayers,
+    behavioralEvidence: { ...keysLayers.behavioralEvidence, path: EXPECTED_TEST_PATH },
+  }));
+  await assert.rejects(async () => {
+    await validateInventory(wrongEvidence);
+  });
+
+  const source = await readFile(absoluteFromRelative(EXPECTED_TIMELINE_SOURCE), "utf8");
+  const withoutReopenControl = source.replace('className="candidate-key-tools-open"', 'className="candidate-key-tools-closed"');
+  await assert.rejects(async () => {
+    await validateInventory(manifest, { timelineAstSource: withoutReopenControl });
+  });
+
+  const css = await readFile(absoluteFromRelative(EXPECTED_TIMELINE_CSS_SOURCE), "utf8");
+  const withoutToolPanelSelector = css.replaceAll(/\.candidate-key-tools(?!-open)/g, ".candidate-key-panel");
+  await assert.rejects(async () => {
+    await validateInventory(manifest, { timelineCssSource: withoutToolPanelSelector });
   });
 });
