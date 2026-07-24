@@ -108,11 +108,11 @@ P0I #170 → P7a → P7b → P7c → P7U
 現在sliceは**VS-1 Rectangle配置とUndo**。全体には独立spikeもあるが、製品laneは意味・所有境界を
 優先して1チケットずつ進める。旧night 3分岐は直接統合しない。
 
-| 優先 | ID | Phase | slice / checklist | 状態 | Issue | 依存確認 | 完了後 |
-|---|---|---|---|---|---|---|---|
-| 1 | CU-0A03 | M3 | VS-1 / A / R0 | `DO` | — | U0e-2R/U0e-2、固定React SHA`56c318ed`、直接移管契約 | R1 Browser ownershipを再判定 |
-| 2 | G0-6H | M3 evidence | VS-1 / visual | `DO / HUMAN` | — | 5 reference screenと30 PNG | U0e-3だけを解禁可 |
-| 3 | U2c-2 | M3 | VS-2 / D | `WAIT` | — | U4a-2のDirect製品入口とU4cのAdvanced製品入口 | 実在入口のDocument意味/Undo同値conformance |
+| 優先 | ID | Phase / slice / checklist | 状態 | Issue | 依存確認 | 完了後 |
+|---|---|---|---|---|---|---|
+| 1 | CU-0A03 | M3 / VS-1 / A / R0 | `DO` | — | U0e-2R/U0e-2、固定React SHA`56c318ed`、直接移管契約 | R1 Browser ownershipを再判定 |
+| 2 | G0-6H | M3 evidence / VS-1 / visual | `DO / HUMAN` | — | 5 reference screenと30 PNG | U0e-3だけを解禁可 |
+| 3 | U2c-2 | M3 / VS-2 / D | `WAIT` | — | U4a-2のDirect製品入口とU4cのAdvanced製品入口 | 実在入口のDocument意味/Undo同値conformance |
 
 ### 独立 History tooling lane
 
