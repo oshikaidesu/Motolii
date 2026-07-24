@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "task": "CU-0A03",
-  "scope": "browser-only-r0-slice",
+  "scope": "incomplete-multi-surface-r0-slice",
   "completeR0": false,
   "fixedSourceCommit": "56c318edcddab7cf95d263cc2f7dd2b4e6791134",
   "authority": {
@@ -55,6 +55,71 @@
         "html-react-parser",
         "react"
       ]
+    },
+    {
+      "id": "easing",
+      "classification": "react-trigger-native-popup-oracle",
+      "componentPath": "docs/mocks-ui/src/candidates/EasingGraphCandidate.jsx",
+      "componentExport": "EasingGraphCandidate",
+      "runtimeClosure": [
+        {
+          "path": "docs/mocks-ui/src/candidates/EasingGraphCandidate.jsx",
+          "role": "runtime",
+          "sha256": "1b1a3ab66808504d4356bbb8ffd65bb8ed9aa77726a71b65ffa6b26bd61b4a05"
+        },
+        {
+          "path": "docs/mocks-ui/src/candidates/easing-graph-candidate.css",
+          "role": "runtime",
+          "sha256": "644064b649778d6dfe08de4d73751d5e7b65b96133115eba07be799aeb8e0329"
+        },
+        {
+          "path": "docs/mocks-ui/src/candidates/easing-graph-model.js",
+          "role": "runtime",
+          "sha256": "22a6745bcd77b6f71f5c62563b0165f6161a234abebd2a10f326d210a0a6fad9"
+        }
+      ],
+      "localImports": [
+        {
+          "kind": "css-side-effect",
+          "source": "docs/mocks-ui/src/candidates/easing-graph-candidate.css",
+          "specifiers": []
+        },
+        {
+          "kind": "named",
+          "source": "docs/mocks-ui/src/candidates/easing-graph-model.js",
+          "specifiers": [
+            "ADVANCED_SPECS",
+            "PLOT",
+            "advancedPathPoints",
+            "clamp",
+            "makeInitialAdvancedParameters",
+            "pointFrom",
+            "snap",
+            "viewForOvershoot",
+            "xOf",
+            "yOf"
+          ]
+        }
+      ],
+      "externalPackages": [
+        "react"
+      ],
+      "promotionBoundary": [
+        "Graph trigger/icon",
+        "current-value summary"
+      ],
+      "nativeOracle": [
+        "popup frame",
+        "presets",
+        "user library",
+        "form",
+        "curve renderer",
+        "easing model"
+      ],
+      "behavioralEvidence": {
+        "path": "docs/mocks-ui/tests/browser-candidate.spec.js",
+        "route": "plugin-browser-candidate"
+      }
     }
   ],
   "modelClosure": [],

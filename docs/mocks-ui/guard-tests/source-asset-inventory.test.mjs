@@ -34,6 +34,38 @@ const EXPECTED_RUNTIME_HASHES = {
 const EXPECTED_EXTERNAL_PACKAGES = ["html-react-parser", "react"];
 const EXPECTED_TEST_ROUTE = "plugin-browser-candidate";
 const EXPECTED_TEST_PATH = "docs/mocks-ui/tests/browser-candidate.spec.js";
+const EXPECTED_EASING_SOURCE = "docs/mocks-ui/src/candidates/EasingGraphCandidate.jsx";
+const EXPECTED_EASING_CSS_SOURCE = "docs/mocks-ui/src/candidates/easing-graph-candidate.css";
+const EXPECTED_EASING_MODEL_SOURCE = "docs/mocks-ui/src/candidates/easing-graph-model.js";
+const EXPECTED_EASING_MODEL_IMPORTS = [
+  "ADVANCED_SPECS",
+  "PLOT",
+  "advancedPathPoints",
+  "clamp",
+  "makeInitialAdvancedParameters",
+  "pointFrom",
+  "snap",
+  "viewForOvershoot",
+  "xOf",
+  "yOf",
+];
+const EXPECTED_EASING_RUNTIME_HASHES = {
+  [EXPECTED_EASING_SOURCE]: "1b1a3ab66808504d4356bbb8ffd65bb8ed9aa77726a71b65ffa6b26bd61b4a05",
+  [EXPECTED_EASING_CSS_SOURCE]: "644064b649778d6dfe08de4d73751d5e7b65b96133115eba07be799aeb8e0329",
+  [EXPECTED_EASING_MODEL_SOURCE]: "22a6745bcd77b6f71f5c62563b0165f6161a234abebd2a10f326d210a0a6fad9",
+};
+const EXPECTED_EASING_PROMOTION_BOUNDARY = [
+  "Graph trigger/icon",
+  "current-value summary",
+];
+const EXPECTED_EASING_NATIVE_ORACLE = [
+  "popup frame",
+  "presets",
+  "user library",
+  "form",
+  "curve renderer",
+  "easing model",
+];
 
 function hashBytes(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -188,13 +220,24 @@ async function manifestFromDisk() {
   return JSON.parse(await readFile(MANIFEST_PATH, "utf8"));
 }
 
+function withBrowserSurface(manifest, browser) {
+  return {
+    ...manifest,
+    surfaces: [browser, manifest.surfaces[1]],
+  };
+}
+
 async function validateInventory(manifest, options = {}) {
-  const { candidateAstSource, fixedSourceCommit = manifest.fixedSourceCommit } = options;
+  const {
+    candidateAstSource,
+    easingAstSource,
+    fixedSourceCommit = manifest.fixedSourceCommit,
+  } = options;
 
   assert.equal(Object.getPrototypeOf(manifest), Object.prototype);
   assert.equal(manifest.schemaVersion, 1);
   assert.equal(manifest.task, "CU-0A03");
-  assert.equal(manifest.scope, "browser-only-r0-slice");
+  assert.equal(manifest.scope, "incomplete-multi-surface-r0-slice");
   assert.equal(manifest.completeR0, false);
   assert.equal(manifest.fixedSourceCommit, FIXED_SOURCE_COMMIT);
   assert.equal(fixedSourceCommit, FIXED_SOURCE_COMMIT);
@@ -222,12 +265,12 @@ async function validateInventory(manifest, options = {}) {
 
   assert.equal(manifest.modelClosure.length, 0);
   assert.equal(Array.isArray(manifest.surfaces), true);
-  assert.equal(manifest.surfaces.length, 1);
+  assert.equal(manifest.surfaces.length, 2);
   assert.equal(Array.isArray(manifest.behavioralTests), true);
   assert.equal(manifest.behavioralTests.length, 1);
 
-  const surface = manifest.surfaces[0];
-  ensureExactKeys(surface, [
+  const browser = manifest.surfaces[0];
+  ensureExactKeys(browser, [
     "id",
     "classification",
     "componentPath",
@@ -237,16 +280,16 @@ async function validateInventory(manifest, options = {}) {
     "externalPackages",
   ]);
 
-  assert.equal(surface.id, "browser");
-  assert.equal(surface.classification, "react-direct-promotion");
-  assert.equal(surface.componentPath, EXPECTED_BROWSER_SOURCE);
-  assert.equal(surface.componentExport, "DiscoveryBrowserCandidate");
-  assert.deepEqual(surface.externalPackages, EXPECTED_EXTERNAL_PACKAGES);
+  assert.equal(browser.id, "browser");
+  assert.equal(browser.classification, "react-direct-promotion");
+  assert.equal(browser.componentPath, EXPECTED_BROWSER_SOURCE);
+  assert.equal(browser.componentExport, "DiscoveryBrowserCandidate");
+  assert.deepEqual(browser.externalPackages, EXPECTED_EXTERNAL_PACKAGES);
 
-  assert.equal(Array.isArray(surface.runtimeClosure), true);
-  assert.equal(surface.runtimeClosure.length, 3);
-  assert.equal(Array.isArray(surface.localImports), true);
-  assert.equal(surface.localImports.length, 2);
+  assert.equal(Array.isArray(browser.runtimeClosure), true);
+  assert.equal(browser.runtimeClosure.length, 3);
+  assert.equal(Array.isArray(browser.localImports), true);
+  assert.equal(browser.localImports.length, 2);
 
   const expectedRuntimeOrder = [
     EXPECTED_BROWSER_SOURCE,
@@ -256,7 +299,7 @@ async function validateInventory(manifest, options = {}) {
 
   for (let index = 0; index < expectedRuntimeOrder.length; index += 1) {
     const expectedPath = expectedRuntimeOrder[index];
-    const entry = surface.runtimeClosure[index];
+    const entry = browser.runtimeClosure[index];
 
     ensureExactKeys(entry, ["path", "role", "sha256"]);
     assert.equal(entry.path, expectedPath);
@@ -271,21 +314,21 @@ async function validateInventory(manifest, options = {}) {
     assert.equal(hashBytes(worktreeBytes), entry.sha256);
   }
 
-  ensureExactKeys(surface.localImports[0], ["kind", "source", "specifiers"]);
-  ensureExactKeys(surface.localImports[1], ["kind", "source", "specifiers"]);
-  assert.equal(surface.localImports[0].kind, "css-side-effect");
-  assert.equal(surface.localImports[0].source, EXPECTED_CSS_SOURCE);
-  assert.deepEqual(surface.localImports[0].specifiers, []);
-  assert.equal(surface.localImports[1].kind, "named");
-  assert.equal(surface.localImports[1].source, EXPECTED_PATTERN_SOURCE);
-  assert.deepEqual(surface.localImports[1].specifiers, EXPECTED_PATTERN_IMPORTS);
+  ensureExactKeys(browser.localImports[0], ["kind", "source", "specifiers"]);
+  ensureExactKeys(browser.localImports[1], ["kind", "source", "specifiers"]);
+  assert.equal(browser.localImports[0].kind, "css-side-effect");
+  assert.equal(browser.localImports[0].source, EXPECTED_CSS_SOURCE);
+  assert.deepEqual(browser.localImports[0].specifiers, []);
+  assert.equal(browser.localImports[1].kind, "named");
+  assert.equal(browser.localImports[1].source, EXPECTED_PATTERN_SOURCE);
+  assert.deepEqual(browser.localImports[1].specifiers, EXPECTED_PATTERN_IMPORTS);
 
   ensureExactKeys(manifest.behavioralTests[0], ["path", "route"]);
   assert.equal(manifest.behavioralTests[0].path, EXPECTED_TEST_PATH);
   assert.equal(manifest.behavioralTests[0].route, EXPECTED_TEST_ROUTE);
 
   const candidateSource = candidateAstSource ?? (await readFile(
-    absoluteFromRelative(surface.componentPath),
+    absoluteFromRelative(browser.componentPath),
     "utf8",
   ));
   const candidateAst = parseModule(candidateSource);
@@ -294,7 +337,7 @@ async function validateInventory(manifest, options = {}) {
 
   const { localImports, externalPackages } = collectCandidateImports(
     candidateAst,
-    absoluteFromRelative(surface.componentPath),
+    absoluteFromRelative(browser.componentPath),
   );
 
   assert.deepEqual(externalPackages, EXPECTED_EXTERNAL_PACKAGES);
@@ -317,13 +360,88 @@ async function validateInventory(manifest, options = {}) {
     assert.ok(patternExports.has(required));
   }
 
+  const easing = manifest.surfaces[1];
+  ensureExactKeys(easing, [
+    "id",
+    "classification",
+    "componentPath",
+    "componentExport",
+    "runtimeClosure",
+    "localImports",
+    "externalPackages",
+    "promotionBoundary",
+    "nativeOracle",
+    "behavioralEvidence",
+  ]);
+  assert.equal(easing.id, "easing");
+  assert.equal(easing.classification, "react-trigger-native-popup-oracle");
+  assert.equal(easing.componentPath, EXPECTED_EASING_SOURCE);
+  assert.equal(easing.componentExport, "EasingGraphCandidate");
+  assert.deepEqual(easing.externalPackages, ["react"]);
+  assert.deepEqual(easing.promotionBoundary, EXPECTED_EASING_PROMOTION_BOUNDARY);
+  assert.deepEqual(easing.nativeOracle, EXPECTED_EASING_NATIVE_ORACLE);
+
+  const expectedEasingRuntimeOrder = [
+    EXPECTED_EASING_SOURCE,
+    EXPECTED_EASING_CSS_SOURCE,
+    EXPECTED_EASING_MODEL_SOURCE,
+  ];
+  assert.equal(easing.runtimeClosure.length, expectedEasingRuntimeOrder.length);
+  for (let index = 0; index < expectedEasingRuntimeOrder.length; index += 1) {
+    const expectedPath = expectedEasingRuntimeOrder[index];
+    const entry = easing.runtimeClosure[index];
+    ensureExactKeys(entry, ["path", "role", "sha256"]);
+    assert.equal(entry.path, expectedPath);
+    assert.equal(entry.role, "runtime");
+    assert.equal(entry.sha256, EXPECTED_EASING_RUNTIME_HASHES[expectedPath]);
+    assert.ok(!entry.path.includes("/legacy/") && !entry.path.includes("/archive/"));
+    assert.equal(hashBytes(readBlobFromCommit(entry.path, fixedSourceCommit)), entry.sha256);
+    assert.equal(hashBytes(await readFile(absoluteFromRelative(entry.path))), entry.sha256);
+  }
+
+  assert.equal(easing.localImports.length, 2);
+  ensureExactKeys(easing.localImports[0], ["kind", "source", "specifiers"]);
+  ensureExactKeys(easing.localImports[1], ["kind", "source", "specifiers"]);
+  assert.equal(easing.localImports[0].kind, "css-side-effect");
+  assert.equal(easing.localImports[0].source, EXPECTED_EASING_CSS_SOURCE);
+  assert.deepEqual(easing.localImports[0].specifiers, []);
+  assert.equal(easing.localImports[1].kind, "named");
+  assert.equal(easing.localImports[1].source, EXPECTED_EASING_MODEL_SOURCE);
+  assert.deepEqual(easing.localImports[1].specifiers, EXPECTED_EASING_MODEL_IMPORTS);
+
+  ensureExactKeys(easing.behavioralEvidence, ["path", "route"]);
+  assert.deepEqual(easing.behavioralEvidence, manifest.behavioralTests[0]);
+
+  const easingAst = parseModule(easingAstSource ?? await readFile(
+    absoluteFromRelative(easing.componentPath),
+    "utf8",
+  ));
+  assert.ok(collectNamedExports(easingAst).has("EasingGraphCandidate"));
+  const easingImports = collectCandidateImports(easingAst, absoluteFromRelative(easing.componentPath));
+  assert.deepEqual(easingImports.externalPackages, ["react"]);
+  assert.deepEqual(
+    Object.keys(easingImports.localImports).sort(),
+    [EXPECTED_EASING_CSS_SOURCE, EXPECTED_EASING_MODEL_SOURCE].sort(),
+  );
+  assert.equal(easingImports.localImports[EXPECTED_EASING_CSS_SOURCE].length, 0);
+  const modelSpecifiers = easingImports.localImports[EXPECTED_EASING_MODEL_SOURCE]
+    .filter((entry) => entry.kind === "named")
+    .map((entry) => entry.imported);
+  assert.deepEqual(modelSpecifiers, EXPECTED_EASING_MODEL_IMPORTS);
+  const modelExports = collectNamedExports(
+    parseModule(await readFile(absoluteFromRelative(EXPECTED_EASING_MODEL_SOURCE), "utf8")),
+  );
+  for (const required of EXPECTED_EASING_MODEL_IMPORTS) {
+    assert.ok(modelExports.has(required));
+  }
+
   const testSource = await readFile(absoluteFromRelative(manifest.behavioralTests[0].path), "utf8");
   const testAst = parseModule(testSource);
   const parsedRoutes = extractBrowserRouteFromTest(testAst);
   assert.deepEqual(parsedRoutes, [EXPECTED_TEST_ROUTE]);
 }
 
-test("accepts exact Browser-only R0 manifest and fixed-commit evidence", async () => {
+test("accepts exact incomplete multi-surface R0 manifest and fixed-commit evidence", async () => {
   const manifest = await manifestFromDisk();
   await validateInventory(manifest);
 });
@@ -364,43 +482,35 @@ test("rejects non-empty model closure", async () => {
 test("rejects runtime closure reorder, missing, and hash mismatch", async () => {
   const manifest = await manifestFromDisk();
 
-  const reordered = {
-    ...manifest,
-    surfaces: [
-      {
-        ...manifest.surfaces[0],
+  const reordered = withBrowserSurface(
+    manifest,
+    {
+      ...manifest.surfaces[0],
         runtimeClosure: [
           manifest.surfaces[0].runtimeClosure[0],
           manifest.surfaces[0].runtimeClosure[2],
           manifest.surfaces[0].runtimeClosure[1],
         ],
-      },
-    ],
-  };
+    },
+  );
   await assert.rejects(async () => {
     await validateInventory(reordered);
   });
 
-  const missing = {
-    ...manifest,
-    surfaces: [{
+  const missing = withBrowserSurface(manifest, {
       ...manifest.surfaces[0],
       runtimeClosure: manifest.surfaces[0].runtimeClosure.slice(0, 2),
-    }],
-  };
+    });
   await assert.rejects(async () => {
     await validateInventory(missing);
   });
 
-  const hashMismatch = {
-    ...manifest,
-    surfaces: [{
+  const hashMismatch = withBrowserSurface(manifest, {
       ...manifest.surfaces[0],
       runtimeClosure: manifest.surfaces[0].runtimeClosure.map((entry, index) =>
         index === 1 ? { ...entry, sha256: "0".repeat(64) } : entry,
       ),
-    }],
-  };
+    });
   await assert.rejects(async () => {
     await validateInventory(hashMismatch);
   });
@@ -408,9 +518,7 @@ test("rejects runtime closure reorder, missing, and hash mismatch", async () => 
 
 test("rejects extra runtime closure entry", async () => {
   const manifest = await manifestFromDisk();
-  const extra = {
-    ...manifest,
-    surfaces: [{
+  const extra = withBrowserSurface(manifest, {
       ...manifest.surfaces[0],
       runtimeClosure: [
         ...manifest.surfaces[0].runtimeClosure,
@@ -420,8 +528,7 @@ test("rejects extra runtime closure entry", async () => {
           sha256: EXPECTED_RUNTIME_HASHES[EXPECTED_PATTERN_SOURCE],
         },
       ],
-    }],
-  };
+    });
   await assert.rejects(async () => {
     await validateInventory(extra);
   });
@@ -430,24 +537,18 @@ test("rejects extra runtime closure entry", async () => {
 test("rejects missing or wrong component export and non-browser surface", async () => {
   const manifest = await manifestFromDisk();
 
-  const wrongExport = {
-    ...manifest,
-    surfaces: [{
+  const wrongExport = withBrowserSurface(manifest, {
       ...manifest.surfaces[0],
       componentExport: "BrowserCandidate",
-    }],
-  };
+    });
   await assert.rejects(async () => {
     await validateInventory(wrongExport);
   });
 
-  const nonBrowserSurface = {
-    ...manifest,
-    surfaces: [{
+  const nonBrowserSurface = withBrowserSurface(manifest, {
       ...manifest.surfaces[0],
       id: "inspector",
-    }],
-  };
+    });
   await assert.rejects(async () => {
     await validateInventory(nonBrowserSurface);
   });
@@ -467,9 +568,7 @@ test("rejects unexpected local imports outside declared runtime closure", async 
 
 test("rejects legacy/archive paths promoted in runtime closure", async () => {
   const manifest = await manifestFromDisk();
-  const withLegacy = {
-    ...manifest,
-    surfaces: [{
+  const withLegacy = withBrowserSurface(manifest, {
       ...manifest.surfaces[0],
       runtimeClosure: manifest.surfaces[0].runtimeClosure.map((entry) =>
         entry.path === EXPECTED_PATTERN_SOURCE
@@ -480,8 +579,7 @@ test("rejects legacy/archive paths promoted in runtime closure", async () => {
           }
           : entry,
       ),
-    }],
-  };
+    });
   await assert.rejects(async () => {
     await validateInventory(withLegacy);
   });
@@ -510,5 +608,115 @@ test("rejects missing or wrong test evidence route", async () => {
   };
   await assert.rejects(async () => {
     await validateInventory(wrongRoute);
+  });
+});
+
+test("rejects complete R0, wrong Easing classification, and changed Easing packages", async () => {
+  const manifest = await manifestFromDisk();
+
+  const complete = { ...manifest, completeR0: true };
+  await assert.rejects(async () => {
+    await validateInventory(complete);
+  });
+
+  const wrongClassification = {
+    ...manifest,
+    surfaces: [
+      manifest.surfaces[0],
+      { ...manifest.surfaces[1], classification: "react-direct-promotion" },
+    ],
+  };
+  await assert.rejects(async () => {
+    await validateInventory(wrongClassification);
+  });
+
+  const changedPackages = {
+    ...manifest,
+    surfaces: [
+      manifest.surfaces[0],
+      { ...manifest.surfaces[1], externalPackages: ["react", "react-dom"] },
+    ],
+  };
+  await assert.rejects(async () => {
+    await validateInventory(changedPackages);
+  });
+});
+
+test("rejects Easing closure, ownership split, evidence, and extra local dependency", async () => {
+  const manifest = await manifestFromDisk();
+
+  const wrongExport = {
+    ...manifest,
+    surfaces: [
+      manifest.surfaces[0],
+      { ...manifest.surfaces[1], componentExport: "EasingCandidate" },
+    ],
+  };
+  await assert.rejects(async () => {
+    await validateInventory(wrongExport);
+  });
+
+  const wrongHash = {
+    ...manifest,
+    surfaces: [
+      manifest.surfaces[0],
+      {
+        ...manifest.surfaces[1],
+        runtimeClosure: manifest.surfaces[1].runtimeClosure.map((entry, index) =>
+          index === 2 ? { ...entry, sha256: "0".repeat(64) } : entry,
+        ),
+      },
+    ],
+  };
+  await assert.rejects(async () => {
+    await validateInventory(wrongHash);
+  });
+
+  const missingModel = {
+    ...manifest,
+    surfaces: [
+      manifest.surfaces[0],
+      {
+        ...manifest.surfaces[1],
+        runtimeClosure: manifest.surfaces[1].runtimeClosure.slice(0, 2),
+      },
+    ],
+  };
+  await assert.rejects(async () => {
+    await validateInventory(missingModel);
+  });
+
+  const promotedPopup = {
+    ...manifest,
+    surfaces: [
+      manifest.surfaces[0],
+      {
+        ...manifest.surfaces[1],
+        promotionBoundary: [...manifest.surfaces[1].promotionBoundary, "popup frame"],
+      },
+    ],
+  };
+  await assert.rejects(async () => {
+    await validateInventory(promotedPopup);
+  });
+
+  const missingEvidence = {
+    ...manifest,
+    surfaces: [
+      manifest.surfaces[0],
+      {
+        ...manifest.surfaces[1],
+        behavioralEvidence: { ...manifest.surfaces[1].behavioralEvidence, route: "archive/easing" },
+      },
+    ],
+  };
+  await assert.rejects(async () => {
+    await validateInventory(missingEvidence);
+  });
+
+  const source = await readFile(absoluteFromRelative(EXPECTED_EASING_SOURCE), "utf8");
+  const injected = `${source}\nimport { load } from "../legacy/legacySource.js";\n`;
+  await assert.rejects(async () => {
+    await validateInventory(manifest, { easingAstSource: injected });
   });
 });
