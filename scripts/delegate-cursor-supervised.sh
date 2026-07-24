@@ -6,7 +6,9 @@ PRIMARY_WORKTREE_RAW="$(git -C "$ROOT_DIR" worktree list --porcelain | awk '/^wo
 PRIMARY_WORKTREE="$(cd "$PRIMARY_WORKTREE_RAW" && pwd -P)"
 CURSOR_AGENT_BIN="${CURSOR_AGENT_BIN:-cursor-agent}"
 CODEX_AGENT_BIN="${CODEX_AGENT_BIN:-codex}"
+CLAUDE_AGENT_BIN="${CLAUDE_AGENT_BIN:-claude}"
 CURSOR_GROK_MODEL="cursor-grok-4.5-high"
+FABLE_MODEL="${CLAUDE_FABLE_MODEL:-claude-fable-5}"
 TERRA_MODEL="gpt-5.6-terra"
 SUPERVISOR_TIMEOUT_SECONDS="${CURSOR_SUPERVISED_TIMEOUT_SECONDS:-600}"
 TERRA_TIMEOUT_SECONDS="${CODEX_TERRA_TIMEOUT_SECONDS:-1800}"
@@ -26,7 +28,7 @@ select_routing() {
   local task_class="$1"
   case "$task_class" in
     mechanical)
-      IMPLEMENTER_MODEL="gpt-5.4-mini-none"
+      IMPLEMENTER_MODEL="gpt-5.3-codex-spark"
       REVIEW_PROFILE="grok"
       ;;
     standard)
@@ -143,7 +145,7 @@ EVIDENCE_ROOT_FOR_TRAP=""
 CHECKPOINT_SETTLED=0
 cleanup() {
   # $?をここで即時退避しないと、後続コマンドがrunnerの本来の終了statusを上書きしてしまう。
-  # trapはexitを呼ばないため、退避した値をevidenceへ書くだけで実際の終了statusは変わらない
+  # 後始末の成功を呼び出し側へ返さず、最後に元のstatusを明示してfail-closedを維持する
   local status=$?
   if [[ -n "${CURRENT_ATTEMPT_DIR:-}" ]]; then
     printf 'EXIT_STATUS: %s\n' "$status" >>"$CURRENT_ATTEMPT_DIR/stage-result.txt" 2>/dev/null || true
@@ -152,6 +154,8 @@ cleanup() {
     rm -f "$EVIDENCE_ROOT_FOR_TRAP/checkpoint.txt" 2>/dev/null || true
   fi
   rm -rf "$tmp_dir"
+  trap - EXIT
+  exit "$status"
 }
 trap cleanup EXIT
 
@@ -1559,7 +1563,72 @@ EOF
     exit 4
   fi
   echo "STAGE: grok ACCEPT" >>"$attempt_dir/stage-result.txt"
-  echo "delegate-cursor-supervised: Grok検収ACCEPT。Codex最終レビュー待ちです"
+
+  if [[ "$REVIEW_PROFILE" == "grok+fable" ]]; then
+    local fable_prompt fable_pre_fp fable_post_fp
+    snapshot_worktree "$worktree" "$attempt_dir" "pre-fable"
+    fable_pre_fp="$(cat "$attempt_dir/pre-fable-fingerprint.sha256")"
+    fable_prompt=$(cat <<EOF
+You are the independent final counter-reviewer for Motolii. Work read-only in
+the current worktree. Do not edit files, commit, push, create a PR, spawn
+subagents, or delegate. Read AGENTS.md, the binding order, every named authority,
+the actual diff, and the required test evidence. Review the whole change for
+cross-file invariants, atomic failure behavior, contract drift, hidden public or
+durable meaning, missed negative cases, and locally-correct changes that violate
+the wider architecture. Do not accept merely because Grok accepted or tests are
+green.
+
+Classify findings P0/P1/P2 with file and line evidence. Any P0/P1, missing
+required evidence, or unresolved contract conflict requires rejection. End with
+one exact plain-text final line: VERDICT: ACCEPT or VERDICT: REJECT.
+
+Original user task:
+$task
+
+Binding order:
+$order_txt
+EOF
+    )
+    echo
+    echo "## 4. Claude Code Fable read-only inspection"
+    if ! (cd "$worktree" && run_agent "$attempt_dir/fable-inspection.txt" "$inspection_timeout" \
+      env CLAUDE_DELEGATED=1 "$CLAUDE_AGENT_BIN" -p \
+        --model "$FABLE_MODEL" \
+        --permission-mode default \
+        --allowedTools Read,Glob,Grep,Bash \
+        --disallowedTools Edit,Write \
+        --output-format text \
+        "$fable_prompt"); then
+      [[ ! -f "$attempt_dir/fable-inspection.txt" ]] || cat "$attempt_dir/fable-inspection.txt"
+      snapshot_worktree "$worktree" "$attempt_dir" "post-fable"
+      echo "STAGE: fable FAILED_OR_TIMEOUT" >>"$attempt_dir/stage-result.txt"
+      exit 1
+    fi
+    cat "$attempt_dir/fable-inspection.txt"
+    snapshot_worktree "$worktree" "$attempt_dir" "post-fable"
+    fable_post_fp="$(cat "$attempt_dir/post-fable-fingerprint.sha256")"
+    if [[ "$fable_post_fp" != "$fable_pre_fp" ]]; then
+      invalidate_checkpoint "$evidence_root"
+      inspect_fail "worktree fingerprint changed during Fable read-only inspection"
+    fi
+    if [[ "$(shasum -a 256 "$order_file" | awk '{print $1}')" != "$expected_order_sha256" || \
+          "$(shasum -a 256 "$attempt_dir/order.txt" | awk '{print $1}')" != "$expected_order_sha256" ]]; then
+      invalidate_checkpoint "$evidence_root"
+      evidence_fail "approved order mutated during Fable inspection"
+    fi
+    if ! result_is_valid "$attempt_dir/fable-inspection.txt" verdict; then
+      echo "delegate-cursor-supervised: Fableの結果markerが欠落・曖昧・末尾外です" >&2
+      echo "STAGE: fable INVALID" >>"$attempt_dir/stage-result.txt"
+      exit 1
+    fi
+    if ! grep -qx 'VERDICT: ACCEPT' "$attempt_dir/fable-inspection.txt"; then
+      echo "delegate-cursor-supervised: Fable検収REJECT。差分は隔離したまま採用しません" >&2
+      echo "STAGE: fable REJECT" >>"$attempt_dir/stage-result.txt"
+      exit 4
+    fi
+    echo "STAGE: fable ACCEPT" >>"$attempt_dir/stage-result.txt"
+  fi
+  echo "delegate-cursor-supervised: 必須検収ACCEPT。Codex最終レビュー待ちです"
 }
 
 run_dispatch_gate() {
@@ -1623,6 +1692,15 @@ REACT AUTHORITY:, SOURCE ASSET:, PRESERVE:, REPLACE:, STATE OWNER:,
 DIAGNOSTIC ROUTE:, NEGATIVE ORACLE:, STOP:. Merely mentioning React in prose
 does not require these labels.
 
+For a mechanical/Spark order, make the packet self-contained from the closed
+order, allowed files, and explicitly named authorities. Do not require inherited
+conversation history, repository-wide archaeology, multiple-spec meaning
+judgment, or unspecified public-boundary discovery. If those are necessary,
+return ORDER: STOP so Codex can select a higher task class.
+
+Do not repeat the Codex-owned routing labels in the draft; the dispatcher appends
+them after validating the terminal marker.
+
 The last non-empty line must be exactly plain text ORDER: READY only if every
 ledger, authority, and label fact above is mechanically true; otherwise end with
 plain text ORDER: STOP. Do not bold it, quote it, or append text.
@@ -1668,10 +1746,24 @@ if ! grep -qx "TASK_SHA256: $task_hash" "$ORDER_FILE"; then
   echo "delegate-cursor-supervised: 発注書とtaskが一致しません" >&2
   exit 3
 fi
+TASK_CLASS="$(order_value "$ORDER_FILE" TASK_CLASS)"
+ORDER_IMPLEMENTER_MODEL="$(order_value "$ORDER_FILE" IMPLEMENTER_MODEL)"
+ORDER_REVIEW_PROFILE="$(order_value "$ORDER_FILE" REVIEW_PROFILE)"
+ORDER_FABLE_MODEL="$(order_value "$ORDER_FILE" FABLE_MODEL)"
+if [[ -z "$TASK_CLASS" || -z "$ORDER_IMPLEMENTER_MODEL" || -z "$ORDER_REVIEW_PROFILE" || -z "$ORDER_FABLE_MODEL" ]]; then
+  echo "delegate-cursor-supervised: 発注書のTASK_CLASS/model/review指定が欠落または重複しています" >&2
+  exit 3
+fi
+if ! select_routing "$TASK_CLASS"; then
+  exit 3
+fi
+TERRA_MODEL="$IMPLEMENTER_MODEL"
 if ! grep -qx 'SUPERVISOR_BACKEND: cursor-grok' "$ORDER_FILE" ||
    ! grep -qx "SUPERVISOR_MODEL: $CURSOR_GROK_MODEL" "$ORDER_FILE" ||
-   ! grep -qx "IMPLEMENTER_MODEL: $TERRA_MODEL" "$ORDER_FILE"; then
-  echo "delegate-cursor-supervised: 発注書のbackend/model固定が現行のTerra + Grok運用と一致しません" >&2
+   [[ "$ORDER_IMPLEMENTER_MODEL" != "$IMPLEMENTER_MODEL" ]] ||
+   [[ "$ORDER_REVIEW_PROFILE" != "$REVIEW_PROFILE" ]] ||
+   [[ "$ORDER_FABLE_MODEL" != "$FABLE_MODEL" ]]; then
+  echo "delegate-cursor-supervised: 発注書のモデル経路がTASK_CLASS対応表と一致しません" >&2
   exit 3
 fi
 if ! grep -qx 'CODEX PRECHECK: APPROVED' "$ORDER_FILE"; then
@@ -1699,7 +1791,10 @@ printf '%s' "$task" >"$attempt_dir/task.txt"
   echo "TASK_SHA256: $task_hash"
   echo "WORKTREE: $WORKTREE"
   echo "SUPERVISOR_MODEL: $CURSOR_GROK_MODEL"
+  echo "TASK_CLASS: $TASK_CLASS"
   echo "IMPLEMENTER_MODEL: $TERRA_MODEL"
+  echo "REVIEW_PROFILE: $REVIEW_PROFILE"
+  echo "FABLE_MODEL: $FABLE_MODEL"
 } >"$attempt_dir/metadata.txt"
 
 if [[ "$MODE" == "inspect" ]]; then

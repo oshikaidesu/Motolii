@@ -205,7 +205,11 @@
 | [2026-07-23-parallel-order-pipeline-comparison.md](2026-07-23-parallel-order-pipeline-comparison.md) | closed orderを小さく保ったままpreflight・実装・検収を重ねる発注パイプライン並列化の比較案 |
 | [2026-07-23-first-party-vism-expression-demand-survey.md](2026-07-23-first-party-vism-expression-demand-survey.md) | AE・AviUtl 1.x／2・Cavalryの表現需要と、人気plugin／公開script系統からVism候補、Host／Infrastructure／Adapter責任、Kitを分ける調査 |
 | [2026-07-23-group-source-pool-cloner-concept.md](2026-07-23-group-source-pool-cloner-concept.md) | Groupの直接の子を割合つきprototype poolとしてClonerへ渡すMotolii固有概念の比較 |
+| [2026-07-23-m3-g0-9-staged-platform-gates.md](2026-07-23-m3-g0-9-staged-platform-gates.md) | G0-9を固定Macのlocal prerequisite gateとdistribution gateへ段階化する決定 |
 | [2026-07-24-camera-object-provider-decision.md](2026-07-24-camera-object-provider-decision.md) | Cameraを換装可能なTimeline Object／Providerとし、点群・splat・volume等とrepresentation非依存Observation Contractで接続する決定 |
+| [2026-07-24-dependency-first-responsibility-gate.md](2026-07-24-dependency-first-responsibility-gate.md) | 汎用機構の着手前に既存経路と導入後の総責任を比較し、Motolii固有責任を最小化する決定 |
+| [2026-07-24-m3-g0-9l-l1-measurement-amendment.md](2026-07-24-m3-g0-9l-l1-measurement-amendment.md) | G0-9L L1 renderer比較armとfixed-Mac計測証拠の正本修正 |
+| [2026-07-24-m3-vertical-slice-execution-decision.md](2026-07-24-m3-vertical-slice-execution-decision.md) | M3進捗を通常製品routeから既存能力へ接続する縦sliceで管理し、A〜Dをchecklist、旧粒度化を履歴snapshotへ移す決定（Fable最終ACCEPT） |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |
 | [2026-07-21-m3-u1a-1-static-viewport-contract.md](2026-07-21-m3-u1a-1-static-viewport-contract.md) | U1a-1 静止viewport実装前契約 |

@@ -237,7 +237,16 @@ fi
 printf '%s\n' "${FAKE_TERRA_OUTPUT:-implementation complete}"
 exit "${FAKE_TERRA_STATUS:-0}"
 EOF
-chmod +x "$FAKE_BIN/cursor-agent" "$FAKE_BIN/codex"
+
+cat >"$FAKE_BIN/claude" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo claude >>"$FAKE_CALL_LOG"
+printf 'claude-args:%s\n' "$*" >>"$FAKE_CALL_LOG"
+printf '%s\n' "${FAKE_CLAUDE_OUTPUT:-VERDICT: ACCEPT}"
+exit "${FAKE_CLAUDE_STATUS:-0}"
+EOF
+chmod +x "$FAKE_BIN/cursor-agent" "$FAKE_BIN/codex" "$FAKE_BIN/claude"
 
 task="GR-D1 dispatch gate execution"
 task_hash="$(printf '%s' "$task" | shasum -a 256 | awk '{print $1}')"
@@ -362,11 +371,33 @@ ALLOWED_FILE: scripts/delegate-cursor-supervised.sh
 ORDER: READY
 SUPERVISOR_BACKEND: cursor-grok
 SUPERVISOR_MODEL: cursor-grok-4.5-high
-IMPLEMENTER_MODEL: gpt-5.6-terra
+TASK_CLASS: standard
+IMPLEMENTER_MODEL: gpt-5.6-luna-none-fast
+REVIEW_PROFILE: grok
+FABLE_MODEL: claude-fable-5
 TASK_SHA256: $task_hash
 CODEX PRECHECK: APPROVED
 EOF
 }
+
+mechanical_order="$TMP_ROOT/mechanical-order.md"
+mechanical_output=$(cat <<EOF
+GRAIN: GR-D1
+BASE_REF: refs/heads/$WT_VALID_BRANCH
+BASE_SHA: $WT_VALID_BASE_SHA
+DEPENDENCY: U0e-2R
+AUTHORITY: AGENTS.md SHA256:$WT_VALID_AGENTS_HASH
+AUTHORITY: docs/implementation-ledger.md SHA256:$WT_VALID_LEDGER_HASH
+ALLOWED_FILE: scripts/delegate-cursor-supervised.sh
+ORDER: READY
+EOF
+)
+run_prepare "$mechanical_order" \
+  DELEGATION_TASK_CLASS=mechanical \
+  FAKE_GROK_OUTPUT="$mechanical_output"
+assert_status 0 "$RUN_STATUS" "mechanical routing"
+assert_contains "$mechanical_order" "IMPLEMENTER_MODEL: gpt-5.3-codex-spark" "mechanical Spark model"
+assert_contains "$mechanical_order" "REVIEW_PROFILE: grok" "mechanical review"
 
 write_order() {
   local file="$1"
@@ -520,7 +551,10 @@ ALLOWED_FILE: scripts/delegate-cursor-supervised.sh
 ORDER: READY
 SUPERVISOR_BACKEND: cursor-grok
 SUPERVISOR_MODEL: cursor-grok-4.5-high
-IMPLEMENTER_MODEL: gpt-5.6-terra
+TASK_CLASS: standard
+IMPLEMENTER_MODEL: gpt-5.6-luna-none-fast
+REVIEW_PROFILE: grok
+FABLE_MODEL: claude-fable-5
 TASK_SHA256: $task_hash
 CODEX PRECHECK: APPROVED
 EOF
@@ -539,7 +573,10 @@ ALLOWED_FILE: scripts/delegate-cursor-supervised.sh
 ORDER: READY
 SUPERVISOR_BACKEND: cursor-grok
 SUPERVISOR_MODEL: cursor-grok-4.5-high
-IMPLEMENTER_MODEL: gpt-5.6-terra
+TASK_CLASS: standard
+IMPLEMENTER_MODEL: gpt-5.6-luna-none-fast
+REVIEW_PROFILE: grok
+FABLE_MODEL: claude-fable-5
 TASK_SHA256: $task_hash
 CODEX PRECHECK: APPROVED
 EOF
@@ -558,7 +595,10 @@ ALLOWED_FILE: scripts/delegate-cursor-supervised.sh
 ORDER: READY
 SUPERVISOR_BACKEND: cursor-grok
 SUPERVISOR_MODEL: cursor-grok-4.5-high
-IMPLEMENTER_MODEL: gpt-5.6-terra
+TASK_CLASS: standard
+IMPLEMENTER_MODEL: gpt-5.6-luna-none-fast
+REVIEW_PROFILE: grok
+FABLE_MODEL: claude-fable-5
 TASK_SHA256: $task_hash
 CODEX PRECHECK: APPROVED
 EOF
@@ -577,7 +617,10 @@ ALLOWED_FILE: scripts/delegate-cursor-supervised.sh
 ORDER: READY
 SUPERVISOR_BACKEND: cursor-grok
 SUPERVISOR_MODEL: cursor-grok-4.5-high
-IMPLEMENTER_MODEL: gpt-5.6-terra
+TASK_CLASS: standard
+IMPLEMENTER_MODEL: gpt-5.6-luna-none-fast
+REVIEW_PROFILE: grok
+FABLE_MODEL: claude-fable-5
 TASK_SHA256: $task_hash
 CODEX PRECHECK: APPROVED
 EOF
@@ -596,7 +639,10 @@ ALLOWED_FILE: scripts/delegate-cursor-supervised.sh
 ORDER: READY
 SUPERVISOR_BACKEND: cursor-grok
 SUPERVISOR_MODEL: cursor-grok-4.5-high
-IMPLEMENTER_MODEL: gpt-5.6-terra
+TASK_CLASS: standard
+IMPLEMENTER_MODEL: gpt-5.6-luna-none-fast
+REVIEW_PROFILE: grok
+FABLE_MODEL: claude-fable-5
 TASK_SHA256: $task_hash
 CODEX PRECHECK: APPROVED
 EOF
@@ -615,7 +661,10 @@ ALLOWED_FILE: scripts/delegate-cursor-supervised.sh
 ORDER: READY
 SUPERVISOR_BACKEND: cursor-grok
 SUPERVISOR_MODEL: cursor-grok-4.5-high
-IMPLEMENTER_MODEL: gpt-5.6-terra
+TASK_CLASS: standard
+IMPLEMENTER_MODEL: gpt-5.6-luna-none-fast
+REVIEW_PROFILE: grok
+FABLE_MODEL: claude-fable-5
 TASK_SHA256: $task_hash
 CODEX PRECHECK: APPROVED
 EOF
@@ -661,7 +710,10 @@ STOP: unresolved meaning halts
 ORDER: READY
 SUPERVISOR_BACKEND: cursor-grok
 SUPERVISOR_MODEL: cursor-grok-4.5-high
-IMPLEMENTER_MODEL: gpt-5.6-terra
+TASK_CLASS: standard
+IMPLEMENTER_MODEL: gpt-5.6-luna-none-fast
+REVIEW_PROFILE: grok
+FABLE_MODEL: claude-fable-5
 TASK_SHA256: $task_hash
 CODEX PRECHECK: APPROVED
 EOF
@@ -703,7 +755,7 @@ order_file="$TMP_ROOT/order-stale-model.md"
 valid_order | sed 's/^IMPLEMENTER_MODEL:.*/IMPLEMENTER_MODEL: composer-2.5/' | write_order "$order_file"
 run_execute "$WT_VALID_DIR" "$order_file"
 assert_status 3 "$RUN_STATUS" "stale implementer model"
-assert_has_fragment "$TMP_ROOT/stderr.log" "backend/model固定が現行のTerra + Grok運用と一致しません" "stale implementer model"
+assert_has_fragment "$TMP_ROOT/stderr.log" "モデル経路がTASK_CLASS対応表と一致しません" "stale implementer model"
 assert_no_external_calls "stale implementer model"
 
 order_file="$TMP_ROOT/order-recursive.md"
@@ -741,7 +793,7 @@ run_execute "$WT_VALID_DIR" "$order_file" \
   FAKE_TERRA_OUTPUT="implementation complete" \
   FAKE_GROK_OUTPUT=$'inspection complete\nVERDICT: ACCEPT'
 assert_status 0 "$RUN_STATUS" "happy path dispatch"
-assert_has_fragment "$CALL_LOG" "--model gpt-5.6-terra" "happy path Terra invocation"
+assert_has_fragment "$CALL_LOG" "--model gpt-5.6-luna-none-fast" "happy path standard implementer invocation"
 assert_has_fragment "$CALL_LOG" "--model cursor-grok-4.5-high" "happy path Grok invocation"
 assert_has_fragment "$CALL_LOG" "--ask-for-approval never" "happy path Terra is noninteractive"
 assert_has_fragment "$CALL_LOG" "--sandbox danger-full-access" "happy path Terra uses the isolated worktree sandbox"
@@ -751,10 +803,10 @@ assert_has_fragment "$CALL_LOG" "--sandbox enabled" "happy path Grok remains san
 if grep -q -- "--mode ask" "$CALL_LOG"; then
   fail "happy path dispatch: ask mode cannot rerun required evidence"
 fi
-terra_line="$(grep -n -- '--model gpt-5.6-terra' "$CALL_LOG" | head -1 | cut -d: -f1)"
+terra_line="$(grep -n -- '--model gpt-5.6-luna-none-fast' "$CALL_LOG" | head -1 | cut -d: -f1)"
 grok_line="$(grep -n -- '--model cursor-grok-4.5-high' "$CALL_LOG" | head -1 | cut -d: -f1)"
 [[ "$terra_line" -lt "$grok_line" ]] || fail "happy path dispatch: Terra must run before Grok inspection"
-assert_has_fragment "$TMP_ROOT/stdout.log" "Grok検収ACCEPT" "happy path dispatch"
+assert_has_fragment "$TMP_ROOT/stdout.log" "必須検収ACCEPT" "happy path dispatch"
 
 run_execute "$WT_VALID_DIR" "$order_file" \
   FAKE_TERRA_REQUIRE_DEV_NULL=1 \
@@ -767,7 +819,7 @@ run_execute "$WT_VALID_DIR" "$order_file" \
   CURSOR_GROK_MODEL=cursor-grok-fast \
   FAKE_GROK_OUTPUT=$'inspection complete\nVERDICT: ACCEPT'
 assert_status 0 "$RUN_STATUS" "model environment overrides are ignored"
-assert_has_fragment "$CALL_LOG" "--model gpt-5.6-terra" "fixed Terra model ignores environment"
+assert_has_fragment "$CALL_LOG" "--model gpt-5.6-luna-none-fast" "fixed standard model ignores environment"
 assert_has_fragment "$CALL_LOG" "--model cursor-grok-4.5-high" "fixed Grok model ignores environment"
 if grep -Eq -- '--model (composer-2.5|cursor-grok-fast)' "$CALL_LOG"; then
   fail "model environment overrides must not reach external CLIs"
@@ -783,7 +835,7 @@ run_execute "$WT_VALID_DIR" "$order_file" \
   FAKE_TERRA_OUTPUT="implementation complete" \
   FAKE_GROK_OUTPUT=$'inspection complete\nVERDICT: ACCEPT'
 assert_status 0 "$RUN_STATUS" "React prose without markers"
-assert_has_fragment "$CALL_LOG" "--model gpt-5.6-terra" "React prose without markers reaches Terra"
+assert_has_fragment "$CALL_LOG" "--model gpt-5.6-luna-none-fast" "React prose without markers reaches implementer"
 
 order_file="$TMP_ROOT/order-react-valid.md"
 react_order_lines | write_order "$order_file"
@@ -791,7 +843,7 @@ run_execute "$WT_VALID_DIR" "$order_file" \
   FAKE_TERRA_OUTPUT="implementation complete" \
   FAKE_GROK_OUTPUT=$'inspection complete\nVERDICT: ACCEPT'
 assert_status 0 "$RUN_STATUS" "valid React order"
-assert_has_fragment "$CALL_LOG" "--model gpt-5.6-terra" "valid React order reaches Terra"
+assert_has_fragment "$CALL_LOG" "--model gpt-5.6-luna-none-fast" "valid React order reaches implementer"
 
 order_file="$TMP_ROOT/order-mocks-ui-non-jsx-no-labels.md"
 valid_order | sed -E "s#^ALLOWED_FILE: .*#ALLOWED_FILE: docs/mocks-ui/App.tsx#" | write_order "$order_file"
@@ -804,7 +856,7 @@ run_execute "$WT_VALID_DIR" "$order_file" \
   FAKE_TERRA_OUTPUT="implementation complete" \
   FAKE_GROK_OUTPUT=$'inspection complete\nVERDICT: ACCEPT'
 assert_status 0 "$RUN_STATUS" "docs/mocks-ui-legacy sibling does not trigger React labels"
-assert_has_fragment "$CALL_LOG" "--model gpt-5.6-terra" "docs/mocks-ui-legacy sibling reaches Terra"
+assert_has_fragment "$CALL_LOG" "--model gpt-5.6-luna-none-fast" "docs/mocks-ui-legacy sibling reaches implementer"
 
 WT_DIR="$WT_VALID_DIR"
 
@@ -813,7 +865,7 @@ run_prepare "$order_file" FAKE_GROK_OUTPUT=$'draft order\nORDER: READY'
 assert_status 0 "$RUN_STATUS" "prepare ORDER READY"
 assert_contains "$order_file" "SUPERVISOR_BACKEND: cursor-grok" "prepare ORDER READY"
 assert_contains "$order_file" "SUPERVISOR_MODEL: cursor-grok-4.5-high" "prepare ORDER READY"
-assert_contains "$order_file" "IMPLEMENTER_MODEL: gpt-5.6-terra" "prepare ORDER READY"
+assert_contains "$order_file" "IMPLEMENTER_MODEL: gpt-5.6-luna-none-fast" "prepare ORDER READY"
 assert_contains "$order_file" "TASK_SHA256: $(printf '%s' "prepare task" | shasum -a 256 | awk '{print $1}')" "prepare ORDER READY"
 assert_has_fragment "$CALL_LOG" "--model cursor-grok-4.5-high" "prepare fixed model id"
 assert_has_fragment "$CALL_LOG" "--mode plan" "prepare uses the non-editing Cursor mode"
@@ -993,7 +1045,7 @@ assert_file_exists "$evroot/checkpoint.txt" "GR-D2 inspection timeout preserves 
 run_inspect "$wt" "$order_file" \
   FAKE_GROK_OUTPUT=$'inspection complete\nVERDICT: ACCEPT'
 assert_status 0 "$RUN_STATUS" "GR-D2 resumed inspect ACCEPTs without Terra"
-if grep -q -- "--model gpt-5.6-terra" "$CALL_LOG"; then
+if grep -q -- "--model gpt-5.6-luna-none-fast" "$CALL_LOG"; then
   fail "GR-D2 resumed inspect ACCEPTs without Terra: Terra must not be invoked"
 fi
 assert_has_fragment "$CALL_LOG" "--model cursor-grok-4.5-high" "GR-D2 resumed inspect ACCEPTs without Terra"
@@ -1317,7 +1369,10 @@ ALLOWED_FILE: scripts/delegate-cursor-supervised.sh
 ORDER: READY
 SUPERVISOR_BACKEND: cursor-grok
 SUPERVISOR_MODEL: cursor-grok-4.5-high
-IMPLEMENTER_MODEL: gpt-5.6-terra
+TASK_CLASS: standard
+IMPLEMENTER_MODEL: gpt-5.6-luna-none-fast
+REVIEW_PROFILE: grok
+FABLE_MODEL: claude-fable-5
 TASK_SHA256: $task_hash
 CODEX PRECHECK: APPROVED
 EOF
@@ -1943,7 +1998,10 @@ ALLOWED_FILE: scripts/delegate-cursor-supervised.sh
 ORDER: READY
 SUPERVISOR_BACKEND: cursor-grok
 SUPERVISOR_MODEL: cursor-grok-4.5-high
-IMPLEMENTER_MODEL: gpt-5.6-terra
+TASK_CLASS: standard
+IMPLEMENTER_MODEL: gpt-5.6-luna-none-fast
+REVIEW_PROFILE: grok
+FABLE_MODEL: claude-fable-5
 TASK_SHA256: $task_hash
 CODEX PRECHECK: APPROVED
 EOF
@@ -2124,7 +2182,10 @@ ALLOWED_FILE: tracked-link
 ORDER: READY
 SUPERVISOR_BACKEND: cursor-grok
 SUPERVISOR_MODEL: cursor-grok-4.5-high
-IMPLEMENTER_MODEL: gpt-5.6-terra
+TASK_CLASS: standard
+IMPLEMENTER_MODEL: gpt-5.6-luna-none-fast
+REVIEW_PROFILE: grok
+FABLE_MODEL: claude-fable-5
 TASK_SHA256: $task_hash
 CODEX PRECHECK: APPROVED
 EOF
@@ -2371,19 +2432,19 @@ assert_has_fragment "$CALL_LOG" "--model cursor-grok-4.5-high" \
   "a pipe-buffer-exceeding git worktree list --porcelain output still reaches Grok on a valid isolated worktree"
 
 complex_order="$TMP_ROOT/complex-order.md"
-sed \
+valid_order | sed \
   -e 's/^TASK_CLASS:.*/TASK_CLASS: complex/' \
   -e 's/^IMPLEMENTER_MODEL:.*/IMPLEMENTER_MODEL: gpt-5.6-sol-none-fast/' \
   -e 's/^REVIEW_PROFILE:.*/REVIEW_PROFILE: grok+fable/' \
-  "$approved_order" >"$complex_order"
+  >"$complex_order"
 : >"$CALL_LOG"
 if env -u CURSOR_AGENT -u CURSOR_AGENT_BIN -u CODEX_DELEGATED -u CODEX_AGENT_BIN \
     PATH="$FAKE_BIN:/usr/bin:/bin" \
     FAKE_CALL_LOG="$CALL_LOG" \
-    FAKE_CURSOR_OUTPUT=$'Grok accepts\nVERDICT: ACCEPT' \
+    FAKE_GROK_OUTPUT=$'Grok accepts\nVERDICT: ACCEPT' \
     FAKE_CLAUDE_OUTPUT=$'Fable finds a boundary defect\nVERDICT: REJECT' \
     CURSOR_SUPERVISED_HEARTBEAT_SECONDS=1 \
-    "$SCRIPT" execute "$WORKTREE" "$complex_order" "$task" \
+    "$SCRIPT" execute "$WT_VALID_DIR" "$complex_order" "$task" \
     >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"; then
   status=0
 else
@@ -2396,10 +2457,10 @@ assert_has_fragment "$TMP_ROOT/stderr.log" "Fable検収REJECT" "Fable rejection 
 if env -u CURSOR_AGENT -u CURSOR_AGENT_BIN -u CODEX_DELEGATED -u CODEX_AGENT_BIN \
     PATH="$FAKE_BIN:/usr/bin:/bin" \
     FAKE_CALL_LOG="$CALL_LOG" \
-    FAKE_CURSOR_OUTPUT=$'Grok accepts\nVERDICT: ACCEPT' \
+    FAKE_GROK_OUTPUT=$'Grok accepts\nVERDICT: ACCEPT' \
     FAKE_CLAUDE_OUTPUT=$'Fable accepts\nVERDICT: ACCEPT' \
     CURSOR_SUPERVISED_HEARTBEAT_SECONDS=1 \
-    "$SCRIPT" execute "$WORKTREE" "$complex_order" "$task" \
+    "$SCRIPT" execute "$WT_VALID_DIR" "$complex_order" "$task" \
     >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"; then
   status=0
 else
@@ -2410,6 +2471,7 @@ assert_has_fragment "$CALL_LOG" "--model gpt-5.6-sol-none-fast" "complex Sol imp
 assert_contains "$CALL_LOG" "claude" "Claude Code Fable reviewer"
 assert_has_fragment "$CALL_LOG" "--model claude-fable-5" "Fable model"
 assert_has_fragment "$CALL_LOG" "--disallowedTools Edit,Write" "Fable read-only tools"
-assert_exists "$complex_order.evidence/fable-inspection.txt" "persistent Fable evidence"
+complex_attempt="$(latest_attempt_dir "$complex_order.evidence")"
+assert_file_exists "$complex_attempt/fable-inspection.txt" "persistent Fable evidence"
 
 echo "test-delegate-cursor-supervised: all tests passed"

@@ -78,6 +78,48 @@ else
   err "docs/decision-index.md が存在しない"
 fi
 
+# 5. UI表示・起動の入口が、成果物用語正本を参照地図より先に通ること
+python3 - "$ROOT" <<'PY'
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+agents = (root / "AGENTS.md").read_text(encoding="utf-8")
+readme = (root / "docs/README.md").read_text(encoding="utf-8")
+terms = (root / "docs/ui-artifact-terminology.md").read_text(encoding="utf-8")
+fail = False
+
+def require(condition, message):
+    global fail
+    if not condition:
+        print(f"NG: {message}")
+        fail = True
+
+agent_terms = agents.find("docs/ui-artifact-terminology.md")
+agent_map = agents.find("docs/ui-reference-map.md")
+require(agent_terms >= 0, "AGENTS.md のM3必読動線にUI成果物用語正本がない")
+require(agent_map >= 0, "AGENTS.md のM3必読動線にUI参照地図がない")
+require(
+    agent_terms >= 0 and agent_map >= 0 and agent_terms < agent_map,
+    "AGENTS.md はUI成果物用語正本をUI参照地図より先に読ませること",
+)
+require(
+    "[ui-artifact-terminology.md](ui-artifact-terminology.md)" in readme,
+    "docs/README.md の読む順序にUI成果物用語正本がない",
+)
+require(
+    "## 表示・起動要求の必須ルート" in terms,
+    "UI成果物用語正本に表示・起動要求の必須ルートがない",
+)
+require(
+    "最も近いもの」を自動で起動しない" in terms,
+    "UI成果物用語正本に代替起動の負例がない",
+)
+
+sys.exit(1 if fail else 0)
+PY
+[ $? -ne 0 ] && FAIL=1
+
 if [ $FAIL -eq 0 ]; then
   echo "OK: docs整合チェック全項目通過"
 else

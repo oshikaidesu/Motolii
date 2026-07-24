@@ -10,8 +10,8 @@
 
 - **何を作るか**: MV(ミュージックビデオ)制作のための、モーショングラフィック指向のコンポジットツール。AEの重さへの構造的な回答。3〜5分の動画を書き出せたら完成
 - **長期の北極星**: 映像表現を、時刻・入力・型付きparameterから決まる再利用可能な単位として実行・保存・配布できる共通環境にする。制作者と開発者を固定身分にせず、利用→調整→構成→inspection→fork→authoring→共有を一つの経路にする。多数のcreator-authorが公開境界の上で独立して表現を増やせることを成長力とする。「映像制作におけるVST」はHostと拡張単位を分ける構造の類比に限り、音楽中心の製品像やDAW化は目標ではない([concept.md](concept.md#長期の北極星-映像表現を実行再利用配布できる単位にする)、[連続体決定](reviews/2026-07-22-creator-developer-continuum-decision.md))
-- **技術スタック**: Rust + wgpu(レンダコア、VRAM常駐) / ffmpegサイドカープロセス / Cargo workspaceは確定。UIは[React / WebView chrome + native Rust/wgpu Stage/Timeline](ui-runtime-architecture.md)へ責任分割し、通常windowは[1 top-level wgpu Surface + 2 native viewport + opaque child WebView islands](reviews/2026-07-21-ui-surface-topology-decision.md)へ固定した。native操作はrenderer非依存のheadless kernelへ置く。OS window、surface runtime、Core／Host module／plugin、first／third-partyの信頼境界は[軸分離決定](reviews/2026-07-22-m3-surface-extension-axis-separation.md)に従って別判定する
-- **開発方式**: 仕様書駆動の並列AIエージェント開発。[M2基盤再締結](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。歴史から再採択したD1n external revisionは独立follow-up・未実装で、external change検出/cloud-safeは未達。M3はU0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4までmain到達済み。歴史からU2b-2 Place、U4b-0 Add Position Key、U2h-1 primary selection、U3a-1 headless Timelineを決定済み・未実装follow-upとして再採択した。G0-9中もU3a-1等のheadless layout/hit-testは論理上進行可だが、現在のSelected U series順は別に守り、WebView/native製品統合とU3a-2 windowed rendererはplatform合格まで停止する。plugin UI公開契約はG0-3 / GAP-13の別審判まで停止する
+- **技術スタック**: Rust + wgpu(レンダコア、VRAM常駐) / ffmpegサイドカープロセス / Cargo workspaceは確定。UIは[React / WebView chrome + native Rust/wgpu Stage/Timeline](ui-runtime-architecture.md)へ責任分割し、通常windowは[1 top-level wgpu Surface + 2 native viewport + opaque child WebView islands](reviews/2026-07-21-ui-surface-topology-decision.md)へ固定した。eguiは製品runtimeへ採用せず、既存shellを比較・診断baselineとして保持する。native操作はrenderer非依存のheadless kernelへ置く。OS window、surface runtime、Core／Host module／plugin、first／third-partyの信頼境界は[軸分離決定](reviews/2026-07-22-m3-surface-extension-axis-separation.md)に従って別判定する
+- **開発方式**: 仕様書駆動の並列AIエージェント開発。[M2基盤再締結](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3は[縦slice実行方針](reviews/2026-07-24-m3-vertical-slice-execution-decision.md)に従い、通常製品routeから利用者成果までの接続で進捗を測る。現在はVS-1「Rectangle配置と三面投影、Undo/Redo」。U0e-2R/U0e-2と固定MacのG0-9L platform prerequisite evidenceは完了済みで、次のenabling orderはReact直接移管R0のsource inventoryである。G0-6HはU0e-3を止める並行人間審判、G0-9DはDistribution Ready用hardware gateとして分離する。plugin UI公開契約はG0-3 / GAP-13の別審判まで停止する
 - **設計目標の代表値**: 1080p動画レイヤー40本同時で破綻しない / プロセス強制終了しても編集を失わない(コマンドジャーナル) / フレーム並列(マルチコア)を構造で保証
 
 ## 読む順序(初見向け)
@@ -20,9 +20,9 @@
 2. [performance-model.md](performance-model.md) — 「なぜAEより軽くできるか」の物理(メモリ帯域モデル)、品質モード(Draft/Final)、並列性、40レイヤー目標の試算。**容量・VRAM上限への疑念は[memory-model.md](memory-model.md)(疑念台帳)へ**
 3. [pitfalls-and-roadmap.md](pitfalls-and-roadmap.md) — **最重要・最大**。落とし穴カタログ(A〜H、先行プロジェクト死因分析+LLM開発規律込み)とロードマップ(M0〜M5)、凍結ゲート
 4. 実装に着手する時: [implementation-ledger.md](implementation-ledger.md)(NOW/NEXT/WAIT)→ [specs/README.md](specs/README.md)(プロセスとステータス表)→ 対象`specs/M*.md`(タスク表と**末尾の「実装ガード」節**の両方を読む)
-5. プラグインを書く/量産させる時: [plugin-authoring.md](plugin-authoring.md)(LLM/人間共通の契約・禁止事項・型紙)
-6. 依存・参考リポジトリを調べる時: [references.md](references.md)(ライセンス区分つき。GPL系はコードを読むことすら禁止)
-7. M3の画面・モック・スクリーンショットに触る時: [M3 UI参照地図](ui-reference-map.md)で、規範、React prototype、legacy bridge、証拠、履歴を区別する
+5. UIを表示・起動・比較する時: [ui-artifact-terminology.md](ui-artifact-terminology.md)(要求名→成果物種別→実装状態。未実装のPreviewをMock/baseline/spikeで代替しない)→ [ui-reference-map.md](ui-reference-map.md)(対象surfaceの正本と実体)
+6. プラグインを書く/量産させる時: [plugin-authoring.md](plugin-authoring.md)(LLM/人間共通の契約・禁止事項・型紙)
+7. 依存・参考リポジトリを調べる時: [references.md](references.md)(ライセンス区分つき。GPL系はコードを読むことすら禁止)
 
 ## ファイルマップ
 

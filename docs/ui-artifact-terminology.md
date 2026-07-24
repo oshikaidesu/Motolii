@@ -1,6 +1,6 @@
 # UI成果物・実装状態の用語
 
-更新日: 2026-07-23
+更新日: 2026-07-24
 
 この文書は、MotoliiのUIについて「何を起動したのか」「何が成立したのか」を同じ名前で報告するための
 用語正本である。見た目が似ていること、同じReact assetを使うこと、個別surfaceが動くことだけでは、
@@ -25,6 +25,32 @@ UIを呼ぶ時は、次の3軸を混ぜない。
 
 `Motolii Studio Preview`は説明用の愛称ではなく、結合状態を表す固有名として予約する。
 該当実行物が無い時は「表示できない」または「未実装」と報告し、最も近い別成果物をPreviewへ改名しない。
+
+## 表示・起動要求の必須ルート
+
+UIを表示、起動、再表示、比較する依頼では、branch名、crate名、見た目の近さから実行物を推測しない。
+コマンドを実行する前に、次の順序を必ず通す。
+
+1. ユーザーが指定した名前を、上の「固有名と成果物名」の一行へ完全一致で分類する。
+2. その行の「現在の実体」と、下の実装状態を確認する。
+3. 対象の通常起動経路と実行コマンドが正本に存在するか確認する。
+4. 起動前の更新では、起動する固有名、実行場所、役割を明示する。
+5. 起動後の完了報告では、実際に起動した固有名とコマンドを記録する。
+
+要求された成果物が未実装、起動不能、または通常起動経路を持たない場合は、そこで停止してその事実を報告する。
+Mock、Native Shell Baseline、Native Surface Spike、egui比較baseline等の「最も近いもの」を自動で起動しない。
+代替候補は固有名と差分を説明するだけに留め、ユーザーがその固有名を指定してから起動する。
+
+| ユーザーの要求 | 正しい最初の処置 | 禁止する代替 |
+|---|---|---|
+| `Motolii Studio`を起動 | 通常製品routeの実体と状態を確認する | Mock、baseline、spikeを製品として起動 |
+| `Motolii Studio Preview`を表示 | `preview-runnable`と文書化済み起動コマンドを確認する。現状は未実装と報告する | `docs/mocks-ui`、`motolii_ui_shell`、`g0-9-*`、`m3-egui-rerun-mock` |
+| `Motolii Studio Mock`を表示 | `docs/mocks-ui`の外部browser開発routeを使う | native製品windowと報告 |
+| `Native Shell Baseline`を表示 | `motolii_ui_shell`のbaseline routeを使う | 最新UIまたはPreviewと報告 |
+| 固有名を指定したspikeを表示 | 指定されたmanifest／fixtureだけを使う | 別spikeや製品Previewへ読み替え |
+
+単独の「プレビュー」がPreview buildとPreview viewportのどちらか判別できない場合だけ、起動前に対象を確認する。
+`Motolii Studio Preview`のように固有名が完全一致している場合は曖昧扱いせず、この表に従う。
 
 ## `native`、`React`、`WebView`、`hybrid`
 
@@ -91,4 +117,3 @@ UIを呼ぶ時は、次の3軸を混ぜない。
 - 内部task IDをユーザー向け製品名へ流用しない。
 - 「UI完成」「全部実装済み」と報告する時は、対象surface、結合段階、通過したspec/task IDを併記する。
 - 新しい実行物を追加する時は、コードより先にこの表の既存分類へ配置する。配置不能なら用語を先に決定する。
-
