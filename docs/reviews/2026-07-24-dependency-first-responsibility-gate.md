@@ -38,12 +38,46 @@ EXISTING ROUTE: repo内経路、既決候補、または該当なし
 OWNED RESIDUE: Motoliiに残す固有意味・性能境界
 IMPORTED RESPONSIBILITY: version、license、build、権限、OS差、供給網
 EXIT: adapter、fixture、交換時の限定範囲
+RETIREMENT: 製品へ残す範囲、証拠確定後にfreeze/deleteする範囲
 ```
 
 `BUILD`は悪い判定ではない。ただし、既存候補が契約を満たさない事実、Motolii固有として残る部分、
 公開型やDocumentへOS／vendor型を漏らさない境界を示す。調査のための大きな抽象化を先に作らない。
 
-## 3. STOP条件
+## 3. 製品外責任の予算
+
+製品とは異なるacceptance harness、移行tool、調査fixture、failure injectorは、
+長期保守する製品基盤ではなく**証拠カプセル**として扱う。存在を正当化できるのは、
+Motolii固有の合否を既存経路へ載せる最小adapterに閉じる場合だけである。
+
+証拠カプセルは次をすべて満たす。
+
+1. product crate、通常runtime、公開API、Document、serde面、plugin契約へ型・依存・状態を追加しない
+2. 一般機能はmaintained library、OSのsupported API / CLI、既存runnerを直接使い、
+   manager、scheduler、process supervisor、capture library、retry frameworkへ一般化しない
+3. `OWNED RESIDUE`の各項目はMotolii固有のoracle、epoch、fixture不変条件、manifest集約の
+   いずれかであり、一般機能が1件でも残れば短票へ差し戻す
+4. 外部process、window、fileを操作する場合は対象をread-onlyで完全解決し、不一致時は
+   何も変更せず停止する。全対象、名前部分一致、未解決glob、private APIを使わない
+5. 完了commit、対象OS/toolchain、再現command、raw evidenceを固定し、証拠確定後は
+   `FROZEN / DELETE-LATER`とする。将来OSで壊れても通常製品の保守義務へ自動昇格させない
+6. 後続製品codeは証拠カプセルをimportしない。同じ能力が製品に必要になった時は、
+   その時点の公式routeと製品契約で改めて責任処分する
+
+行数の少なさだけを予算にしない。重要なのは、長寿命のowner、公開面、状態正本、
+background service、platform abstractionを増やさないことである。一般機能を薄いadapterへ
+移しただけで複数粒から再利用し始めた場合は、証拠カプセルではなく新基盤なのでSTOPする。
+
+後続粒の「ループ」は調査と判定手順だけを反復する。前粒のadapter、採択、閾値を次粒へ
+自動継承せず、各粒で次のいずれかを確定してから実装する。
+
+- `PASS`: 既存routeとMotolii固有oracleだけで責任予算内
+- `REDUCE`: 一般責任をlibrary / OS / external runnerへ戻してから再判定
+- `STOP`: 責任予算を超えるため、手動審判、延期、粒の再分割、仕様縮小へ戻す
+
+`PASS`以外では実装ループへ入らない。複数粒を一括で`PASS`にしない。
+
+## 4. STOP条件
 
 次のどれかに当たれば実装を開始せず、責任処分へ戻る。
 
@@ -54,8 +88,12 @@ EXIT: adapter、fixture、交換時の限定範囲
 - download数、star数、採用企業だけで機能適合、保守継続、利用者数を証明したことにする
 - 実証済みの既存実装を、障害・保守費・移植費の証拠なしにlibraryへ全面置換する
 - test-only harnessを製品基盤へ昇格する、またはsynthetic試験を実IME／実機／人間審判へ読み替える
+- 証拠確定後にも保守するplatform abstraction、process supervisor、capture/input frameworkを
+  acceptance専用codeへ追加する
+- `RETIREMENT`が空、または「後で判断」となっており、製品と証拠カプセルの寿命を分離できない
+- 前粒の`PASS`やadapterを理由に、別の粒の責任処分を省略してループ実装する
 
-## 4. 2026-07-24 Fable広域調査の処分
+## 5. 2026-07-24 Fable広域調査の処分
 
 Fable 5へread-onlyで、workspace依存、CU粒度表、window/WebView、IME、Accessibility、layout、
 desktop E2E、GPU/text、media、Document、cache、plugin sandbox、test toolingを横断調査させた。
@@ -74,7 +112,7 @@ desktop E2E、GPU/text、media、Document、cache、plugin sandbox、test toolin
 登録する。各候補のversion、maintenance、OS supportは採択時に再確認し、この調査日時の値を恒久契約へ
 焼かない。
 
-## 5. 既完了粒と残粒への適用
+## 6. 既完了粒と残粒への適用
 
 既完了粒を一括で書き直さない。変更量、OS固有code、独自framework、保守事故の順に
 `KEEP / WRAP / TEST-ONLY / DELETE-LATER / REDUNDANT`を付け、後続製品経路が同じ証明を持つ時だけ
@@ -84,7 +122,14 @@ desktop E2E、GPU/text、media、Document、cache、plugin sandbox、test toolin
 完了条件を満たせるなら、粒IDを消さず実装量を減らす。粒は成果と審判の単位であり、自作code量の
 割当ではない。
 
-## 6. 非目標
+`CU-0G04`のlifecycle harnessはcommit `021a16e7`と固定Mac構成へ閉じた
+`WRAP / FROZEN / DELETE-LATER`証拠カプセルとする。wry callback、OS CLI、
+custom protocolを製品契約へ昇格せず、PID探索、capture、failure進行を後続粒から
+再利用しない。`CU-0G05L`でraw evidenceを限定確定した後は、同じcommitと構成の
+再現以外にforward-maintenanceを約束しない。OS/toolchain変更で再実行不能になった場合は、
+このadapterを通常保守せず、新しい公式routeを責任処分する。
+
+## 7. 非目標
 
 - この決定だけで新しいcrateやtoolをCargo workspaceへ追加しない
 - Fable候補を一括採用しない

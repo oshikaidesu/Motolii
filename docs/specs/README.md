@@ -29,7 +29,7 @@
 6. **テスト不可侵(報酬面の分離)**: ゴールデン参照画像・受け入れテストの改変を実装タスクに含めない。**テストが間違っていると思ったら実装を止めて報告する**(テストの削除・期待値書き換え・実装側のspecial-caseで「緑にする」ことを禁止)。参照画像の更新が正当な場合は、理由を明記した独立の「テスト更新PR」に分離する(根拠は[pitfalls H-2](../pitfalls-and-roadmap.md))。
 7. **着手前の導線**: 各仕様書末尾の**「実装ガード」節**と、タスクが触る領域の関連ドキュメント(方針節・落とし穴)を読んでから着手する。**仕様書の未決事項に依存するタスクには着手しない** — LLMエージェントは未決を「もっともらしいデフォルト」で静かに埋める(intent drift)。未決は仕様書改訂PRで先に潰す([pitfalls H-3](../pitfalls-and-roadmap.md))。
 8. **恒久焼き込みの予防**: Documentスキーマに触るタスクは、着手前に[permanence-prevention](../reviews/2026-07-12-m2-permanence-prevention.md)と[AGENTS.md](../../AGENTS.md)のGR-PVチェックを読む。**意味文書が先、コードは写し。テスト緑≠完了**([pitfalls H-4](../pitfalls-and-roadmap.md))。
-9. **依存優先・責任最小化**: 新しい汎用機構、OS統合、基盤、test harnessを作るタスクは、closed order前に[責任最小化ゲート](../reviews/2026-07-24-dependency-first-responsibility-gate.md)の短票で`REUSE / ADOPT / WRAP / EXTERNAL / BUILD`を裁定する。粒は自作code量ではなく成果と審判の単位なので、既存libraryや外部runnerで完了条件を満たせる場合は粒を消さず実装量を減らす。依存の人気だけで採用せず、減る責任と増える責任、型漏出、交換出口を対で確認する。
+9. **依存優先・責任最小化**: 新しい汎用機構、OS統合、基盤、test harnessを作るタスクは、closed order前に[責任最小化ゲート](../reviews/2026-07-24-dependency-first-responsibility-gate.md)の短票で`REUSE / ADOPT / WRAP / EXTERNAL / BUILD`と`RETIREMENT`を裁定する。製品外codeは製品へimportしない`FROZEN / DELETE-LATER`証拠カプセルへ閉じ、一般機能を持つ長寿命owner、公開面、状態正本、background service、platform abstractionを増やさない。粒は自作code量ではなく成果と審判の単位なので、既存libraryや外部runnerで完了条件を満たせる場合は粒を消さず実装量を減らす。後続ループは各粒で`PASS / REDUCE / STOP`を再判定し、前粒のadapterや採択を自動継承しない。
 
 ## 仕様書テンプレート
 

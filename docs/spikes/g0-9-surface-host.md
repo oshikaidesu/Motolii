@@ -208,9 +208,11 @@ jq -e '.resize_pass == true
   /tmp/motolii-cu0g04-report.json
 ```
 
+raw counter、実行commit、toolchain、固定構成、capture SHA-256、非対象は
+[evidence report](g0-9-surface-host-evidence/report.json)へ保存した。
 固定Macでexit 0となり、102 resize / layout epoch 104、scale factor 2.0 /
 実`ScaleFactorChanged` 1件、acquire/present 201/201、CPU readback 0、
-Lost注入/reconfigure/再present各1件、181,846-byteの合成capture、
+Lost注入/reconfigure/再present各1件、181,844-byteの合成capture、
 stale instance/layout epoch各1件拒否、WebContent実終了/callback/reload/
 再Ready各1件を記録した。GPU device 1、render pipeline 2、live WebView 2、
 終了復旧後のowned WebContent process 2、semantic write 0、revision 7と
