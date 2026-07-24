@@ -216,3 +216,4 @@
 | [2026-07-21-m3-u2b-1-single-writer-e2e-contract.md](2026-07-21-m3-u2b-1-single-writer-e2e-contract.md) | U2b-1 single writer配送E2E契約 |
 | [2026-07-21-m3-u2c-1-interaction-state-contract.md](2026-07-21-m3-u2c-1-interaction-state-contract.md) | U2c-1 共通interaction state machine契約 |
 | [2026-07-21-m3-u2c-4-diagnostic-envelope-contract.md](2026-07-21-m3-u2c-4-diagnostic-envelope-contract.md) | U2c-4 Transient Diagnostic Envelope契約 |
+| [2026-07-22-all-docs-reclosure-inventory.md](2026-07-22-all-docs-reclosure-inventory.md) | 全docs再締結監査・第0単位: 現行184件+全refs履歴のread-only棚卸しと衝突候補の証拠付き観察 |
