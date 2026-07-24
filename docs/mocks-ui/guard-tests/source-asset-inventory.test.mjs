@@ -113,6 +113,31 @@ const EXPECTED_INSPECTOR_NEXT_ACTION = "mock-side-same-shape-react-extraction-an
 const EXPECTED_INSPECTOR_PARITY_PATH = "docs/mocks-ui/tests/visual-parity.spec.js";
 const EXPECTED_INSPECTOR_REACT_ROUTE = "archive/all-surfaces";
 const EXPECTED_INSPECTOR_LEGACY_ROUTE = "all-surfaces";
+const EXPECTED_PANEL_LAYOUT_SOURCE = "docs/mocks-ui/src/layout/ResizablePanelLayout.jsx";
+const EXPECTED_PANEL_LAYOUT_CSS_SOURCE = "docs/mocks-ui/src/layout/resizable-panel-layout.css";
+const EXPECTED_PANEL_LAYOUT_RUNTIME_HASHES = {
+  [EXPECTED_PANEL_LAYOUT_SOURCE]: "3af5334dff20551954e9fb7bac1cc1e5fdf894e357706a0d9a33fbe09d211359",
+  [EXPECTED_PANEL_LAYOUT_CSS_SOURCE]: "d6ea3b03d48c2f8d5e3102b0a3712f1c6bdc825acdd4c80d6a57d637f89ec249",
+};
+const EXPECTED_PANEL_LAYOUT_EXPORTS = [
+  "ResizableLegacyApp",
+  "ResizableLegacyWorkspace",
+  "ResizableLegacyTimeline",
+  "ResizableTimelineSurface",
+];
+const EXPECTED_PANEL_LAYOUT_PROMOTION_BOUNDARY = [
+  "layout sizing and clamping",
+  "PanelLayoutContext",
+  "PanelSeparator",
+];
+const EXPECTED_PANEL_LAYOUT_EXCLUDED_BOUNDARY = [
+  "html-react-parser legacy node/options adapters",
+  "ResizableLegacy* fixture wrappers",
+  "ResizableTimelineSurface fixture wrapper",
+  "native viewport bounds and topology",
+];
+const EXPECTED_PANEL_LAYOUT_TEST_PATH = "docs/mocks-ui/tests/panel-layout.spec.js";
+const EXPECTED_PANEL_LAYOUT_TEST_HASH = "419c82363b37c6dbf97ef872f64351750946cd0dc79f664515f6f2bd9326b334";
 
 function hashBytes(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -341,6 +366,43 @@ function importsSource(ast, source) {
   );
 }
 
+function hasTopLevelVariable(ast, name) {
+  return ast.program.body.some(
+    (statement) =>
+      statement.type === "VariableDeclaration" &&
+      statement.declarations.some(
+        (declarator) => declarator.id.type === "Identifier" && declarator.id.name === name,
+      ),
+  );
+}
+
+function hasFunctionDeclaration(ast, name) {
+  return ast.program.body.some(
+    (statement) =>
+      statement.type === "FunctionDeclaration" && statement.id?.name === name,
+  );
+}
+
+function hasPanelSpec(ast, panel) {
+  return ast.program.body.some(
+    (statement) =>
+      statement.type === "VariableDeclaration" &&
+      statement.declarations.some(
+        (declarator) =>
+          declarator.id.type === "Identifier" &&
+          declarator.id.name === "PANEL_SPEC" &&
+          declarator.init?.type === "ObjectExpression" &&
+          declarator.init.properties.some(
+            (property) =>
+              property.type === "ObjectProperty" &&
+              property.key.type === "Identifier" &&
+              property.key.name === panel &&
+              property.value.type === "ObjectExpression",
+          ),
+      ),
+  );
+}
+
 function hasInspectorParserReplacement(ast) {
   const contains = (value, predicate) => {
     if (!value || typeof value !== "object") return false;
@@ -399,6 +461,9 @@ async function validateInventory(manifest, options = {}) {
     inspectorLegacySourceAstSource,
     inspectorSkeletonAstSource,
     inspectorParityAstSource,
+    panelLayoutAstSource,
+    panelLayoutCssSource,
+    panelLayoutTestAstSource,
     fixedSourceCommit = manifest.fixedSourceCommit,
   } = options;
 
@@ -433,7 +498,7 @@ async function validateInventory(manifest, options = {}) {
 
   assert.equal(manifest.modelClosure.length, 0);
   assert.equal(Array.isArray(manifest.surfaces), true);
-  assert.equal(manifest.surfaces.length, 4);
+  assert.equal(manifest.surfaces.length, 5);
   assert.equal(Array.isArray(manifest.behavioralTests), true);
   assert.equal(manifest.behavioralTests.length, 2);
 
@@ -756,6 +821,85 @@ async function validateInventory(manifest, options = {}) {
   const parityRoutes = extractRouteFromTest(parityAst);
   assert.ok(parityRoutes.includes(inspector.behavioralEvidence.reactRoute));
   assert.ok(parityRoutes.includes(inspector.behavioralEvidence.legacyOracleRoute));
+
+  const panelLayout = manifest.surfaces[4];
+  ensureExactKeys(panelLayout, [
+    "id",
+    "classification",
+    "containerPath",
+    "runtimeClosure",
+    "namedExports",
+    "localImports",
+    "externalPackages",
+    "promotionBoundary",
+    "excludedBoundary",
+    "stateOwner",
+    "behavioralEvidence",
+  ]);
+  assert.equal(panelLayout.id, "resizable-panel-layout");
+  assert.equal(panelLayout.classification, "react-layout-subtree-candidate-legacy-adapters-excluded");
+  assert.equal(panelLayout.containerPath, EXPECTED_PANEL_LAYOUT_SOURCE);
+  assert.deepEqual(panelLayout.namedExports, EXPECTED_PANEL_LAYOUT_EXPORTS);
+  assert.deepEqual(panelLayout.externalPackages, EXPECTED_EXTERNAL_PACKAGES);
+  assert.deepEqual(panelLayout.promotionBoundary, EXPECTED_PANEL_LAYOUT_PROMOTION_BOUNDARY);
+  assert.deepEqual(panelLayout.excludedBoundary, EXPECTED_PANEL_LAYOUT_EXCLUDED_BOUNDARY);
+  assert.equal(panelLayout.stateOwner, "local-presentation-oracle");
+
+  const expectedPanelLayoutRuntimeOrder = [EXPECTED_PANEL_LAYOUT_SOURCE, EXPECTED_PANEL_LAYOUT_CSS_SOURCE];
+  assert.equal(panelLayout.runtimeClosure.length, expectedPanelLayoutRuntimeOrder.length);
+  for (let index = 0; index < expectedPanelLayoutRuntimeOrder.length; index += 1) {
+    const expectedPath = expectedPanelLayoutRuntimeOrder[index];
+    const entry = panelLayout.runtimeClosure[index];
+    ensureExactKeys(entry, ["path", "role", "sha256"]);
+    assert.equal(entry.path, expectedPath);
+    assert.equal(entry.role, "runtime");
+    assert.equal(entry.sha256, EXPECTED_PANEL_LAYOUT_RUNTIME_HASHES[expectedPath]);
+    assert.equal(hashBytes(readBlobFromCommit(entry.path, fixedSourceCommit)), entry.sha256);
+    assert.equal(hashBytes(await readFile(absoluteFromRelative(entry.path))), entry.sha256);
+  }
+
+  assert.equal(panelLayout.localImports.length, 1);
+  ensureExactKeys(panelLayout.localImports[0], ["kind", "source", "specifiers"]);
+  assert.equal(panelLayout.localImports[0].kind, "css-side-effect");
+  assert.equal(panelLayout.localImports[0].source, EXPECTED_PANEL_LAYOUT_CSS_SOURCE);
+  assert.deepEqual(panelLayout.localImports[0].specifiers, []);
+
+  ensureExactKeys(panelLayout.behavioralEvidence, ["path", "route", "sha256"]);
+  assert.equal(panelLayout.behavioralEvidence.path, EXPECTED_PANEL_LAYOUT_TEST_PATH);
+  assert.equal(panelLayout.behavioralEvidence.route, EXPECTED_TEST_ROUTE);
+  assert.equal(panelLayout.behavioralEvidence.sha256, EXPECTED_PANEL_LAYOUT_TEST_HASH);
+  assert.equal(
+    hashBytes(readBlobFromCommit(panelLayout.behavioralEvidence.path, fixedSourceCommit)),
+    panelLayout.behavioralEvidence.sha256,
+  );
+
+  const panelLayoutAst = parseModule(panelLayoutAstSource ?? await readFile(
+    absoluteFromRelative(panelLayout.containerPath), "utf8",
+  ));
+  assert.deepEqual([...collectNamedExports(panelLayoutAst)].sort(), [...EXPECTED_PANEL_LAYOUT_EXPORTS].sort());
+  const panelLayoutImports = collectCandidateImports(
+    panelLayoutAst,
+    absoluteFromRelative(panelLayout.containerPath),
+  );
+  assert.deepEqual(panelLayoutImports.externalPackages, EXPECTED_EXTERNAL_PACKAGES);
+  assert.deepEqual(Object.keys(panelLayoutImports.localImports), [EXPECTED_PANEL_LAYOUT_CSS_SOURCE]);
+  assert.equal(panelLayoutImports.localImports[EXPECTED_PANEL_LAYOUT_CSS_SOURCE].length, 0);
+  assert.ok(hasTopLevelVariable(panelLayoutAst, "PanelLayoutContext"));
+  assert.ok(hasFunctionDeclaration(panelLayoutAst, "PanelSeparator"));
+  for (const panel of ["browser", "inspector", "timeline"]) {
+    assert.ok(hasPanelSpec(panelLayoutAst, panel));
+  }
+
+  const panelCss = panelLayoutCssSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_PANEL_LAYOUT_CSS_SOURCE), "utf8",
+  );
+  assert.ok(hasCssSelectorRoot(panelCss, '.app[data-resizable-layout="true"]'));
+  assert.ok(hasCssSelectorRoot(panelCss, ".react-panel-separator"));
+
+  const panelLayoutTestAst = parseModule(panelLayoutTestAstSource ?? await readFile(
+    absoluteFromRelative(panelLayout.behavioralEvidence.path), "utf8",
+  ));
+  assert.ok(extractRouteFromTest(panelLayoutTestAst).includes(EXPECTED_TEST_ROUTE));
 }
 
 test("accepts exact incomplete multi-surface R0 manifest and fixed-commit evidence", async () => {
@@ -1124,6 +1268,76 @@ test("rejects Inspector parser/export/raw-source/skeleton/parity evidence drift"
     { inspectorLegacySourceAstSource: legacySource.replace("m3-vism-host-boundary.html?raw", "missing.html?raw") },
     { inspectorSkeletonAstSource: skeleton.replace("InspectorSurface", "ArchivedInspectorSurface") },
     { inspectorParityAstSource: parity.replace("#archive/all-surfaces", "#archive/inspector") },
+  ]) {
+    await assert.rejects(async () => {
+      await validateInventory(manifest, options);
+    });
+  }
+});
+
+test("rejects resizable panel layout classification, closure, boundary, state, and evidence drift", async () => {
+  const manifest = await manifestFromDisk();
+  const mutatePanelLayout = (patch) =>
+    withInventoryEntryAt(manifest, "surfaces", 4, patch);
+
+  for (const mutated of [
+    mutatePanelLayout((panelLayout) => ({ ...panelLayout, classification: "react-direct-promotion" })),
+    mutatePanelLayout((panelLayout) => ({
+      ...panelLayout,
+      runtimeClosure: [panelLayout.runtimeClosure[1], panelLayout.runtimeClosure[0]],
+    })),
+    mutatePanelLayout((panelLayout) => ({
+      ...panelLayout,
+      runtimeClosure: panelLayout.runtimeClosure.map((entry, index) =>
+        index === 1 ? { ...entry, sha256: "0".repeat(64) } : entry,
+      ),
+    })),
+    mutatePanelLayout((panelLayout) => ({
+      ...panelLayout,
+      namedExports: panelLayout.namedExports.slice(0, 3),
+    })),
+    mutatePanelLayout((panelLayout) => ({
+      ...panelLayout,
+      externalPackages: ["react"],
+    })),
+    mutatePanelLayout((panelLayout) => ({
+      ...panelLayout,
+      promotionBoundary: ["PanelSeparator"],
+    })),
+    mutatePanelLayout((panelLayout) => ({
+      ...panelLayout,
+      excludedBoundary: panelLayout.excludedBoundary.slice(0, 3),
+    })),
+    mutatePanelLayout((panelLayout) => ({ ...panelLayout, stateOwner: "workspace-profile" })),
+    mutatePanelLayout((panelLayout) => ({
+      ...panelLayout,
+      behavioralEvidence: { ...panelLayout.behavioralEvidence, sha256: "0".repeat(64) },
+    })),
+    mutatePanelLayout((panelLayout) => ({
+      ...panelLayout,
+      behavioralEvidence: { ...panelLayout.behavioralEvidence, route: "archive/all-surfaces" },
+    })),
+  ]) {
+    await assert.rejects(async () => {
+      await validateInventory(mutated);
+    });
+  }
+});
+
+test("rejects resizable panel layout AST, CSS selector, and route drift", async () => {
+  const manifest = await manifestFromDisk();
+  const source = await readFile(absoluteFromRelative(EXPECTED_PANEL_LAYOUT_SOURCE), "utf8");
+  const css = await readFile(absoluteFromRelative(EXPECTED_PANEL_LAYOUT_CSS_SOURCE), "utf8");
+  const panelTest = await readFile(absoluteFromRelative(EXPECTED_PANEL_LAYOUT_TEST_PATH), "utf8");
+
+  for (const options of [
+    { panelLayoutAstSource: source.replace("PanelLayoutContext", "PanelContext") },
+    { panelLayoutAstSource: source.replace("function PanelSeparator", "function PanelResizeHandle") },
+    { panelLayoutAstSource: source.replace("const PANEL_SPEC", "const PANEL_SIZES") },
+    { panelLayoutAstSource: source.replace('import "./resizable-panel-layout.css";', "") },
+    { panelLayoutCssSource: css.replaceAll('.app[data-resizable-layout="true"]', ".app") },
+    { panelLayoutCssSource: css.replaceAll(".react-panel-separator", ".react-panel-handle") },
+    { panelLayoutTestAstSource: panelTest.replaceAll("#plugin-browser-candidate", "#archive/all-surfaces") },
   ]) {
     await assert.rejects(async () => {
       await validateInventory(manifest, options);

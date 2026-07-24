@@ -219,6 +219,57 @@
         "reactRoute": "archive/all-surfaces",
         "legacyOracleRoute": "all-surfaces"
       }
+    },
+    {
+      "id": "resizable-panel-layout",
+      "classification": "react-layout-subtree-candidate-legacy-adapters-excluded",
+      "containerPath": "docs/mocks-ui/src/layout/ResizablePanelLayout.jsx",
+      "runtimeClosure": [
+        {
+          "path": "docs/mocks-ui/src/layout/ResizablePanelLayout.jsx",
+          "role": "runtime",
+          "sha256": "3af5334dff20551954e9fb7bac1cc1e5fdf894e357706a0d9a33fbe09d211359"
+        },
+        {
+          "path": "docs/mocks-ui/src/layout/resizable-panel-layout.css",
+          "role": "runtime",
+          "sha256": "d6ea3b03d48c2f8d5e3102b0a3712f1c6bdc825acdd4c80d6a57d637f89ec249"
+        }
+      ],
+      "namedExports": [
+        "ResizableLegacyApp",
+        "ResizableLegacyWorkspace",
+        "ResizableLegacyTimeline",
+        "ResizableTimelineSurface"
+      ],
+      "localImports": [
+        {
+          "kind": "css-side-effect",
+          "source": "docs/mocks-ui/src/layout/resizable-panel-layout.css",
+          "specifiers": []
+        }
+      ],
+      "externalPackages": [
+        "html-react-parser",
+        "react"
+      ],
+      "promotionBoundary": [
+        "layout sizing and clamping",
+        "PanelLayoutContext",
+        "PanelSeparator"
+      ],
+      "excludedBoundary": [
+        "html-react-parser legacy node/options adapters",
+        "ResizableLegacy* fixture wrappers",
+        "ResizableTimelineSurface fixture wrapper",
+        "native viewport bounds and topology"
+      ],
+      "stateOwner": "local-presentation-oracle",
+      "behavioralEvidence": {
+        "path": "docs/mocks-ui/tests/panel-layout.spec.js",
+        "route": "plugin-browser-candidate",
+        "sha256": "419c82363b37c6dbf97ef872f64351750946cd0dc79f664515f6f2bd9326b334"
+      }
     }
   ],
   "modelClosure": [],
