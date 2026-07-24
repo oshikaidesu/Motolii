@@ -58,7 +58,7 @@ wgpu標準queryの一意slotを初期化時だけ確保し、測定終了後のG
 ## 4. 状態と非目標
 
 - CU-0G02は定義済み二方式のCPU/input/RSS比較として`DONE`を維持する
-- CU-0G02BHは`DONE / FROZEN`、CU-0G02BとCU-0G05Lは未完了で、`G0-9L: PASS`を宣言しない
+- CU-0G02BHとCU-0G02Bは`DONE / FROZEN`、CU-0G05Lは未完了で、`G0-9L: PASS`を宣言しない
 - 絶対閾値、renderer勝者、egui削除を決めない
 - GPU timestampを製品telemetry、profiling API、常設resourceへ昇格しない
 - W0b、H1b、Motolii Studio Preview、製品window、G0-9D、G0-6H、G0-3/GAP-13を解禁しない
@@ -75,15 +75,23 @@ wgpu標準queryの一意slotを初期化時だけ確保し、測定終了後のG
 
 ## 6. 完了条件
 
-本修正は反対側review P0/P1=0後にだけ決定へ上げる。その後CU-0G02Bを別粒・別commitで
-実測し、同じく反対側review P0/P1=0まで証拠を採用しない。CU-0G05Lは両者の完了後に
-manifestを再構築する。
+本修正は反対側review P0/P1=0後にだけ決定へ上げ、CU-0G02Bも別粒・別commitの
+反対側review P0/P1=0後にだけ証拠を採用する。この二段階を満たした後にだけ、
+CU-0G05Lのmanifestを再構築する。
 
 CU-0G02BHはwgpu標準query、初期化時のbounded query set、一意slot、測定後のGPU完了待ちと
 一括resolve/mapだけで閉じた。35 tests、両arm各5回×500 frameとゼロ値拒否修正後の各500
 frame実window診断を通し、Grok R2はP0/P1=0、`VERDICT: ACCEPT`だった。製品telemetryや
 profiler frameworkへ昇格せず`FROZEN / DELETE-LATER`とし、CU-0G02Bだけを`DO`へ上げる。
 
+CU-0G02Bは固定commit `7c3a590e33874d60f7fbb1e1ac40173011db7649`、同一session
+`cu-0g02b-20260724-01`で既存二armを各30秒再実測した。両armはcomplete、toolchain、
+lockfile、全digest、device/window条件が一致し、pixel readback 0、query result readback 1、
+測定中resource生成0を満たす。[typed raw](../spikes/g0-9-windowed-timeline.md#cu-0g02b-gpu-timestamp-raw-comparison2026-07-24)
+と比較artifactをGrokが再照合し、P0/P1=0、`VERDICT: ACCEPT`だった。CU-0G02Bを
+`DONE / FROZEN`、CU-0G05Lだけを`DO`へ上げる。
+
 Grok R1のP1（topology正本に残った三arm表現）とP2を全件反映し、topology、
 renderer再選定、UI runtime、段階化L1を同じ意味へ揃えた。R2はP0/P1/P2=0、
-`VERDICT: ACCEPT`だったため、本修正を決定としCU-0G02Bだけを次の実測粒へ上げる。
+`VERDICT: ACCEPT`だったため本修正を決定し、その後のCU-0G02B実測・証拠reviewも
+P0/P1=0で完了した。現在はCU-0G02Bを`DONE / FROZEN`、CU-0G05Lだけを`DO`とする。

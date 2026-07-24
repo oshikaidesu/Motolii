@@ -70,6 +70,46 @@ G0_9_CJK_FACE='Hiragino Sans|normal|normal|300' G0_9_RENDERER_MODE=egui_vello G0
 cargo run --release --manifest-path spikes/g0-9-windowed-timeline/Cargo.toml --bin g0_9_compare -- /tmp/cu-0g02-direct-raw.json /tmp/cu-0g02-egui-raw.json /tmp/cu-0g02-comparison.json
 ```
 
+## CU-0G02B GPU timestamp raw comparison（2026-07-24）
+
+CU-0G02BHの固定commit `7c3a590e33874d60f7fbb1e1ac40173011db7649`を使い、
+同一session `cu-0g02b-20260724-01`で既存二armを逐次再実行した。正本は
+[direct GPU raw](g0-9-windowed-timeline-evidence/gpu-direct-vello-raw.json)、
+[egui GPU raw](g0-9-windowed-timeline-evidence/gpu-egui-vello-raw.json)、typed
+[GPU comparison](g0-9-windowed-timeline-evidence/gpu-comparison.json)である。
+
+- rustc `1.96.1`、cargo `1.96.1`、lockfile SHA-256
+  `6217d5946a84665bf61fcc4c3072d814364c5323c3376b0dbe9ba1ff40c26086`
+- Apple M4 / Metal、`Bgra8UnormSrgb|fifo|1`、実surface `2880x1708@2`、
+  opaque offline child WebView 2枚
+- 共通scenario/input/source digest:
+  `089cbd008ee776…b8ed1618` / `56517a580ba7801…d8d42718` /
+  `14316ebe23e1f6…3ee2331`
+- font / glyph digest:
+  `833776a6fd68e2…e1b3475` / `2a6986e5358823…abb44ddf`
+
+| mode | measured | CPU frame p95 | GPU sum p95 | Vello GPU p95 | native GPU p95 | egui GPU p95 | RSS |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| direct_vello | 1,802 frames / 30.450 s | 14.381 ms | 5.141 ms | 4.863 ms | 2.747 ms | — | 152,322,048 B |
+| egui_vello | 1,801 frames / 30.489 s | 14.082 ms | 5.132 ms | 4.822 ms | 2.755 ms | 0.284 ms | 129,138,688 B |
+
+両rawは`complete`、acquire=present、pixel readback 0、query result readback 1、
+warm-up/measured中のpipeline/buffer/bind-group/texture/query-set生成0を満たす。
+timestamp periodは両armとも1 nsで、全sampleが非0かつ各pass内で非逆転である。
+比較artifactはtoolchain、execution commit、session、lockfile、全digest、device/window条件の
+完全一致を検査し、ratioだけを保存する。絶対閾値、renderer勝者、製品telemetryは追加しない。
+
+再現に用いた主要環境値:
+
+```text
+G0_9_CJK_FACE=Hiragino Sans|normal|normal|300
+G0_9_TIMELINE_WARMUP=120
+G0_9_TIMELINE_FRAMES=100
+G0_9_TIMELINE_SECONDS=30
+G0_9_EXECUTION_COMMIT=7c3a590e33874d60f7fbb1e1ac40173011db7649
+G0_9_MEASUREMENT_SESSION=cu-0g02b-20260724-01
+```
+
 ## 実装上の確認
 
 - 100,000 instanceは初期化時に1つのstorage bufferへuploadし、pan/zoomはuniformだけ更新する。
@@ -85,7 +125,7 @@ cargo run --release --manifest-path spikes/g0-9-windowed-timeline/Cargo.toml --b
 - density / cluster / individual semantic zoom
 - playhead、marquee、snap、hit-test、実pointer、10,000 key drag
 - drag中semantic write 0、release時D2 commit 1、Undo 1回
-- GPU timestamp query、VRAM
+- GPU timestamp queryの製品統合・常設telemetry、VRAM
 - resize、異DPI monitor、surface/device lost、Windows WebView2
 
 したがって次の縦切りは、同じwindowed harnessへtoolkit非依存layout/hit-testとTransient drag projectionを接続し、
