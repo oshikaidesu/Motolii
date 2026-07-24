@@ -9,13 +9,14 @@
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "test:reference-guard": "node --test guard-tests/*.test.mjs && node scripts/reference-guard.mjs check-registry src/main.jsx && node scripts/reference-guard.mjs check-manifest reference-provenance.json",
+    "test:reference-guard": "node --test guard-tests/*.test.mjs && node scripts/reference-guard.mjs check-registry src/main.jsx && node scripts/reference-guard.mjs check-manifest reference-provenance.json && node --test ../../ui/motolii-web/guard-tests/browser-ownership.test.mjs",
     "generate-reference": "node scripts/reference-cli.mjs generate",
     "check-reference": "node scripts/reference-cli.mjs check",
     "test:visual": "playwright test",
     "test:visual:update": "playwright test --update-snapshots"
   },
   "dependencies": {
+    "@motolii/motolii-web": "file:../../ui/motolii-web",
     "html-react-parser": "^6.1.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

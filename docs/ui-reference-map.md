@@ -50,7 +50,7 @@ React所有面の製品実装は[直接移管契約](reviews/2026-07-22-m3-react
 
 | fixture／領域 | 実装状態 | 現在の用途 |
 |---|---|---|
-| `#plugin-browser-candidate`のBrowser | React-native source asset | Discovery Browserを製品packageへ直接移管するauthority |
+| `#plugin-browser-candidate`のBrowser | React-native product asset（R1完了） | 固定sourceを`ui/motolii-web`が所有し、mockはproduct exportのconsumer。Host projection / typed intent接続はR5まで未実装 |
 | `#plugin-browser-candidate`のEasing Graph view | React trigger source asset＋native popup oracle＋legacy state adapter | Graph icon/現在値要約だけを直接移管する。popup frame/preset/form/curveはnativeへ移し、React描画は幅・枠・余白・情報階層を含むvisual/interaction oracleとして維持する |
 | `#plugin-browser-candidate`の`KEYS / LAYERS` | `TimelineCandidate.jsx`内のReact-native subtree | tool panelだけを同じDOM/CSSで抽出・移管する。time surfaceは移さない |
 | `#plugin-browser-candidate`のInspector | legacy HTMLをparseしたbridge | 正しい独立React sourceは未成立。モック側で同形React化してから移管する |

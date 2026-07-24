@@ -650,9 +650,6 @@ async function validateInventory(manifest, options = {}) {
 
     const commitBytes = readBlobFromCommit(entry.path, fixedSourceCommit);
     assert.equal(hashBytes(commitBytes), entry.sha256);
-
-    const worktreeBytes = await readFile(absoluteFromRelative(entry.path));
-    assert.equal(hashBytes(worktreeBytes), entry.sha256);
   }
 
   ensureExactKeys(browser.localImports[0], ["kind", "source", "specifiers"]);
@@ -671,10 +668,8 @@ async function validateInventory(manifest, options = {}) {
   assert.equal(manifest.behavioralTests[1].path, EXPECTED_TIMELINE_TEST_PATH);
   assert.equal(manifest.behavioralTests[1].route, EXPECTED_TEST_ROUTE);
 
-  const candidateSource = candidateAstSource ?? (await readFile(
-    absoluteFromRelative(browser.componentPath),
-    "utf8",
-  ));
+  const fixedBrowserSource = (await readBlobFromCommit(browser.componentPath, fixedSourceCommit)).toString("utf8");
+  const candidateSource = candidateAstSource ?? fixedBrowserSource;
   const candidateAst = parseModule(candidateSource);
   const candidateExports = collectNamedExports(candidateAst);
   assert.ok(candidateExports.has("DiscoveryBrowserCandidate"));
@@ -697,8 +692,12 @@ async function validateInventory(manifest, options = {}) {
   assert.equal(patternSpecifiers.length, EXPECTED_PATTERN_IMPORTS.length);
   assert.deepEqual(patternSpecifiers, EXPECTED_PATTERN_IMPORTS);
 
+  const fixedPatternSource = (await readBlobFromCommit(
+    EXPECTED_PATTERN_SOURCE,
+    fixedSourceCommit,
+  )).toString("utf8");
   const patternExports = collectNamedExports(
-    parseModule(await readFile(absoluteFromRelative(EXPECTED_PATTERN_SOURCE), "utf8")),
+    parseModule(fixedPatternSource),
   );
   for (const required of EXPECTED_PATTERN_IMPORTS) {
     assert.ok(patternExports.has(required));
@@ -1242,10 +1241,10 @@ test("rejects missing or wrong component export and non-browser surface", async 
 
 test("rejects unexpected local imports outside declared runtime closure", async () => {
   const manifest = await manifestFromDisk();
-  const source = await readFile(
-    absoluteFromRelative(manifest.surfaces[0].componentPath),
-    "utf8",
-  );
+  const source = (await readBlobFromCommit(
+    manifest.surfaces[0].componentPath,
+    manifest.fixedSourceCommit,
+  )).toString("utf8");
   const injected = `${source}\nimport { load } from "../legacy/legacySource.js";\n`;
   await assert.rejects(async () => {
     await validateInventory(manifest, { candidateAstSource: injected });
