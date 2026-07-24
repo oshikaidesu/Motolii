@@ -8,15 +8,15 @@
 
 | リポジトリ | ライセンス | 何を参考/利用するか |
 |---|---|---|
-| [OpenCut](https://github.com/OpenCut-app/OpenCut) | MIT | タイムラインUIの**操作仕様の参考のみ。コード流用は不可**(Rust/egui UIのためReact componentは流用対象外)。Rustコア(GPU compositor/effects/masks)は設計思想の参考 |
+| [OpenCut](https://github.com/OpenCut-app/OpenCut) | MIT | タイムラインUIの**操作仕様の参考のみ。コード流用は不可**。ReactであってもOpenCut固有のdata model/state/historyとMotoliiのnative Timeline、D2、single writerが衝突する。Rustコア(GPU compositor/effects/masks)は設計思想の参考 |
 | [ffmpeg-sidecar](https://github.com/nathanbabcock/ffmpeg-sidecar) | MIT | **B-2対策の本命**。ffmpegバイナリをサイドカープロセスとして起動しrawvideoフレームをIterator APIで受け取るRustクレート。M0-S2スパイクはまずこれを評価し、足りなければ自前パイプ実装。Rerun 0.34.1の`re_video`もH.264デコードに同crateを採用しており独立収束の傍証([Rerun先例調査](reviews/2026-07-20-rerun-prior-art-survey.md)) |
 | [wgpu](https://github.com/gfx-rs/wgpu) | Apache-2.0/MIT | レンダリングコアの土台(採用決定済み) |
 | [Vello](https://github.com/linebender/vello) | Apache-2.0/MIT | **採用決定(2026-07-10、S3スパイク合格)**。vello 0.9=wgpu29依存で本体と同一device同居を実測確認。条件: Renderer長寿命保持(初期化~900ms)・出力straight alpha→境界でpremul化・**vello_svgは使わず**usvg→vello変換は自前。version結合がegui-wgpu↔wgpu↔velloの三者になる点に注意(A-3)。詳細は[spikes/s3-vello.md](spikes/s3-vello.md) |
 | [Symphonia](https://github.com/pdeljanov/Symphonia) | MPL-2.0 | Pure Rust音声デコード(MP3/AAC/FLAC/WAV等)。音声インポート(B-1)の第一候補。MPLはファイル単位コピーレフトなので依存利用は安全 |
 | [resvg / usvg](https://github.com/linebender/resvg) | MPL-2.0 | SVGパーサ(usvg: 参照解決済みの正規化ツリーを返す)。SVG読み込み(コンセプト決定でコア機能)の第一候補。linebender管理下で保守中。Vello描画と接続する(M4-K6) |
 | [rubato](https://github.com/HEnquist/rubato) | MIT | 音声リサンプリング。**明示**スクラブ/シャトルのバリスピード候補(自動フォールバック用途ではない — [D5先例調査](reviews/2026-07-14-d5-transport-prior-art.md))。デバイス≠素材レートの固定比変換にも候補 |
-| [egui](https://github.com/emilk/egui) / [egui_tiles](https://github.com/rerun-io/egui_tiles) | MIT OR Apache-2.0 | **UI基盤に採用決定(2026-07-18)**。egui-wgpu 0.35の`WgpuSetup::Existing`とnative textureをApple M4 / Metalで実測。日本語IME、resize/minimize/restore、idle停止も確認。egui_tilesはruntime投影先で、生Tree/TileIdを保存正本にしない。[採用判断](reviews/2026-07-18-m3-egui-selection.md) |
-| [Rerun](https://github.com/rerun-io/rerun) | repository: MIT OR Apache-2.0、`re_ui`: `(MIT OR Apache-2.0) AND OFL-1.1` | **egui製品実装の主要先例(2026-07-20決定)**。同世代のegui 0.35 / egui_tiles 0.16 / wgpu 29で、`re_ui`、Viewport/Blueprint、Time Panel/density、selection、egui-wgpu callback、`re_renderer`、parallel View execution、snapshot試験を層別に学ぶ。Reactモックの要求を置換せず、資産ごとに`DEPEND/VENDOR/PORT/PATTERN/REJECT`を裁定する。[先例調査](reviews/2026-07-20-rerun-prior-art-survey.md)、[学習・転移計画](reviews/2026-07-20-rerun-learning-transfer-plan.md) |
+| [egui](https://github.com/emilk/egui) / [egui_tiles](https://github.com/rerun-io/egui_tiles) | MIT OR Apache-2.0 | **歴史的採用／製品runtime採用は2026-07-24撤回**。egui-wgpu 0.35の`WgpuSetup::Existing`とnative texture、日本語IME、resize/minimize/restore、idle停止の実測と既存shellは比較・診断baselineとして保持する。新規製品面や`egui_tiles`製品投影は実装しない。[採用・撤回記録](reviews/2026-07-18-m3-egui-selection.md) |
+| [Rerun](https://github.com/rerun-io/rerun) | repository: MIT OR Apache-2.0、`re_ui`: `(MIT OR Apache-2.0) AND OFL-1.1` | **高密度viewer／GPU lifecycle／試験の主要先例**。同世代egui構成の出荷証拠は既存baselineの反証に使うが、egui製品不採用後は`re_ui`、`egui_tiles`、egui callbackを製品へ`DEPEND/VENDOR/PORT`せず、toolkit横断の`PATTERN`だけをMotolii fixtureで裁定する。[先例調査](reviews/2026-07-20-rerun-prior-art-survey.md)、[学習・転移計画](reviews/2026-07-20-rerun-learning-transfer-plan.md) |
 | [Slint](https://github.com/slint-ui/slint) | GPL / Royalty-Free / 商用 | **歴史的な採用候補**。2026-07-08採用、S1合格後、2026-07-18にeguiへ置換。Manual wgpu共有、renderer feature、IMEの測定事実は[歴史証拠](spikes/s1-slint.md)として維持する |
 | [slint-off-thread-rendering](https://github.com/tronical/slint-off-thread-rendering) | MIT | Slint公式関係者の実験リポジトリ。**`require_wgpu_29(WGPUConfiguration::Manual)` を使う場合に、`default-features = false` でレンダラfeatureを明示固定する実例**。OpenGL/WGPUの混在ミスマッチを避ける設定の参照先 |
 | [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) | Apache-2.0 | Zed製Rust GPU UI framework。crates.ioに単体公開済み(v0.2系、pre-1.0でAPI変動あり)。IME実績あり。egui比較時の候補だったが不採用。[gpui-component](https://github.com/longbridge/gpui-component)も存在 |
@@ -37,7 +37,7 @@
 ## その他の依存候補(定番、必要時に評価)
 
 - 音声出力: [cpal](https://github.com/RustAudio/cpal)(音声主クロック実装の土台)
-- 大量行table widget: [egui_table](https://github.com/rerun-io/egui_table)(MIT OR Apache-2.0、rerun-io保守、egui 0.35対応。sticky header・"millions of rows"・可変行高。Browser/Inspector大量行の**未評価候補** — 内部結合の`re_dataframe_ui`と違い外部leaf crateなので`DEPEND`比較対象。[Rerun inventory §5.6](reviews/2026-07-20-rerun-source-asset-inventory.md))
+- 大量行tableの歴史的比較資料: [egui_table](https://github.com/rerun-io/egui_table)(MIT OR Apache-2.0、rerun-io保守、egui 0.35対応。sticky header・"millions of rows"・可変行高)。egui製品不採用後はBrowser/Inspectorの製品`DEPEND`候補にせず、virtualizationの`PATTERN`比較だけに使う。[Rerun inventory §5.6](reviews/2026-07-20-rerun-source-asset-inventory.md)
 - WASMランタイム: [wasmtime](https://github.com/bytecodealliance/wasmtime)(5-1のWASMパラメータプラグイン、v2)
 - プラグインのクラッシュ隔離(設計思想の参考): **Bitwig Studio** — 別プロセスサンドボックス+5段階ホスティングモードで「1プラグインの異常が本体を落とさない/再生を止めない/自動再ロード」の模範(Abletonはネイティブ隔離なし=1個で全体が落ちる、が反面教師)。ただし音声バッファ前提でIPCが安いため、GPU(MB級・VRAM常駐)へは階層別に輸入する(concept.md「クラッシュ隔離を階層化」参照)
 - 「馬鹿正直にシミュレートしない」の先行実証(設計思想の参考、いずれもクローズド): **[Furikake](https://aescripts.com/furikake/)** — AEの軽量粒子プラグイン。物理を「重力/風=閉形式・乱流=ノイズ変位・バウンス=解析反射」の f(t) に畳める力だけに選定し、粒子間相互作用を持たないことで O(N)・マルチコア・MFR対応の"バカ軽さ"を成立させた(concept.md根本コンセプトの母数)。**Alight Motion** — バウンス/バネ/段階移動を物理シミュでなくパラメトリック補間型([Animation Easing Curves](https://support.alightmotion.com/hc/en-us/articles/10536934703889-Animation-Easing-Curves))に畳み、AEでは`valueAtTime`式が必須だった領域をGUI選択肢化(Interp設計に採用済み)

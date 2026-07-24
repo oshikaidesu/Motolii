@@ -45,5 +45,5 @@ AEがホットリロードできない構造要因は3つ:
 ## 5. 決めないこと
 
 - レベル2(WASMスワップ)の具体設計はv2口の解凍時。その際は§2の先例表を一次資料で確認し反対側レビューを通す(規律1・2・6)
-- エディタUIの実行時ホットリロードはv1契約にしない。egui componentの再build/再起動時間、session復元、構文エラーからの再実行をINF-8の非ブロッキング計測へ置く。UI基盤の採否条件には戻さない
+- エディタUIの実行時ホットリロードはv1契約にしない。製品React componentのHMR／production bundle再読込、session再投影、構文エラーからの復旧をINF-8の非ブロッキング計測へ置く。既存egui shellの再buildはbaseline計測に限り、新しい製品開発経路にしない
 - v1 plugin UIはHost自動生成panelだけなので、UIの反復はHost側の通常開発経路へ畳む。plugin所有のegui/native codeとwgpu自由UIは[M3着手前決定](reviews/2026-07-16-m3-preflight-decisions.md)どおり公開しない。将来の宣言語彙は型ごとの解凍判断に従う

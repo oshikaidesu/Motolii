@@ -154,7 +154,7 @@
 - 組み込み2テーマ以外の配布テーマ内容。custom themeを追加できる契約だけを固定する
 - 未決と表示された音楽同期emission等の機能意味論
 - plugin custom UI、3D gizmo、任意track色の永続化
-- HTML/CSS/Canvasという実装方式。製品UIはM3仕様どおりegui shell + wgpu preview/timelineを使う
+- HTML/CSS/Canvasというlegacy実装方式。製品UIはM3仕様どおりReact/WebView chrome + native wgpu Stage/Timelineを使い、eguiは比較・診断baselineだけに残す
 
 ## 次の改訂
 
