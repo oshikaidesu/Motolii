@@ -4,6 +4,8 @@
 [M2基盤再締結ゲート](2026-07-15-m2-foundation-reclosure-gate.md)のCに必要な
 追補レビュー記録であり、単独ではゲート解除、main到達、remote CI成功、M3入場を意味しない。
 
+歴史注記（2026-07-23）: cutoff全3版のローカル審査→コード到達→解除宣言という証拠の増分と、P1修復・P2の現行処分は[Unit 4H回収](2026-07-23-historical-m2-supplementary-review-lineage-recovery.md)で再確認した。本書は2026-07-18の独立審査記録であり、現在のコード全体への継続的なP0/P1=0保証ではない。
+
 ## 役割と対象
 
 - 実装担当: Cursor Composer 2.5 Fast（各隔離worktree）

@@ -7,7 +7,7 @@
 ## 1. 問題
 
 [coverage台帳](2026-07-23-historical-value-recovery-coverage-ledger.md)はcutoff時点の
-Markdown blobを1,797件へ固定している。処分済み／未処分の現在値はreceipt正本から`check-historical-docs-recovery.sh`が算出し、coverage台帳に単位ごとのsnapshotを記録する。
+Markdown blobを1,797件へ固定し、現時点で420件を処分済み、1,377件を未処分としている。
 この全量性は必要だが、path名と手作業のtopic分割だけで関連主張を探すと、同じ意味の改名、
 撤回、後続実装への一般化を見落としやすい。
 
@@ -199,7 +199,7 @@ HVR-D01の実corpus検査は少なくとも次を満たす。
 
 - nodeが1,797件で重複SHAがない。
 - 全node本文が対応するGit blob bytesと一致する。
-- manifestの処分済み／未処分件数が、その時点の既存checker出力と一致する。
+- manifestの処分済み420件、未処分1,377件が既存checkerの結果と一致する。
 - receipt ID/pathは既存receiptからexact copyされ、未知SHA・二重処分を拒否する。
 - 同じ入力へ2回実行したdirectory treeのhashが一致する。
 - 日本語、空本文、front matter風本文を改変しないfixtureを持つ。
@@ -213,10 +213,10 @@ HVR-D01の実corpus検査は少なくとも次を満たす。
 | ID | 状態 | 境界 | 完了条件 |
 |---|---|---|---|
 | HVR-G01 | `DONE` | 本決定 | projection、外部索引、receiptの責任が分離されている |
-| HVR-D01 | `DONE` | 決定的projection | fixture負例、実corpus 1,797件、現在のreceipt件数がcheckerと一致 |
+| HVR-D01 | `DONE` | 決定的projection | fixture負例と実corpus 1,797/420/1,377が一致 |
 | HVR-D02 | `DONE` | Basic Memory opt-in runner | HVR-D01後。隔離設定、日本語smoke、障害時の縮退を確認 |
 | HVR-D03 | `DONE` | repo-local回収skill | HVR-D01後。候補packetだけを作りreceiptを自動変更しない |
-| HVR-D04 | `ACTIVE` | Unit 5N以降の運用 | Unit 8A完了。候補packetを従来の単位別裁定へ渡し、残る単位は1件ずつ処分 |
+| HVR-D04 | `WAIT` | Unit 5N以降の運用 | HVR-D01〜D03後。候補packetを従来の単位別裁定へ渡す |
 
 Composer 2.5とGrokのread-only調査は論点抽出として並列に行える。実装は各行をclosed orderへ
 分け、Terra実装と別担当Grok検収を経る。HVRは履歴回収の独立tooling laneであり、

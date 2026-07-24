@@ -2,6 +2,8 @@
 
 ステータス: **調査文書**(規律3: 仮説と整合する事例の収集。反例未探索。設計採用時は反対側レビュー併読=規律6)
 
+> 2026-07-23歴史監査: 本版を[Unit 5C回収](2026-07-23-historical-wgpu-readback-cold-compile-lineage-recovery.md)で処分した。先例が支えるのは「同期を避け、完了までのレイテンシを許容する」と一般解の存在までである。bounded ring本数、HW direct encode、prewarm列挙、非同期結果合流、Metal staging実体はMotoliiで未裁定のままGAP-29／30へ渡す。
+
 対象仮説: 「[wgpu課題反対側レビュー](2026-07-13-wgpu-challenges-counter-review.md)のB-1(リードバック重畳)とB-4(cold shader compile)は既知の問題であり、先行事例による解決例に溢れている」(ユーザー提起、2026-07-13)
 
 ## 結論(仮説と整合)

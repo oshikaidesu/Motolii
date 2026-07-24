@@ -4,6 +4,8 @@
 対象: [追補決定](2026-07-16-d1l-current-document-constructor-decision.md)
 状態: 最終反対側レビューP0/P1=0・merge可
 
+歴史注記（2026-07-23）: 本記録のcutoff 1版は、製品新規Documentの生成口欠落を実装候補から発見した独立検収証拠として[Unit 4K回収](2026-07-23-historical-d1l-counter-review-evidence-recovery.md)で処分した。当時のliteral v4はD1l着地時点の値であり、現行はcamera migration後のv5へ進んでいる。生きる契約は`new_current()`が現行writer/minimumを満たし、legacy生成口を製品経路へ戻さないことである。
+
 ## 発見経緯
 
 D1l実装候補`26aea92`の発注レビューで、Grok 4.5 Fastが「公開`allocate_effect_*`を削除すると、`Document::new_v1()`しかない新規文書がv4に到達できない」とSTOPした。現行constructor、version/min検証、PR #197のversion/min不変契約を独立に照合し、指摘を採用した。

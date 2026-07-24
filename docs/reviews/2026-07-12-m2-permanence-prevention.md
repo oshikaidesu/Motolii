@@ -1,11 +1,11 @@
 # M2恒久焼き込みの予防(2026-07-12)
 
-ステータス: **運用手順**(採用分)。先人調査の詳細・判定表は[2026-07-12-rework-prior-art.md](2026-07-12-rework-prior-art.md)。本ファイルは「何をすれば失敗しないか」だけを正本にする。
+ステータス: **運用手順**(採用分)。先人調査の詳細・判定表は[2026-07-12-rework-prior-art.md](2026-07-12-rework-prior-art.md)。本ファイルは「何をすれば失敗しないか」だけを正本にする。全9版の処分と分岐判定は[Unit 4B歴史回収](2026-07-23-historical-permanence-prevention-lineage-recovery.md)を参照。
 
 ## 前提
 
 - 入場ゲート達成後も、Documentスキーマへの**早焼き**が出戻りの本丸([入場ゲート](2026-07-11-M2-entry-gate.md)の3軸: 恒久性×並列初陣×検証の弱さ)
-- いまの出戻りはまだ最小(D1a〜c完了後のフォローアップ D1g/D1h/D1i)。**この窓が安い間に予防を固める**
+- 本手順を定めた時点の出戻りはまだ最小だった(D1a〜c完了後のフォローアップ D1g/D1h/D1i)。その安い窓で予防を固めた。初回M2再締結後も、新しい恒久面を解凍するたびに同じ手順を使う
 - 復旧(migration / Legacy variant / 全書き直し)は副次。Olive/OpenCut/Natronがやったのは失敗後の対応であり、本手順の主目的ではない
 
 ## やること(予防5手)
@@ -30,7 +30,7 @@
 - 未決のUI都合だった項目: コマンド粒度は**【決定】#103⑨**(2026-07-13)。波形ピークは低優先化済みでM3/U3任せ — 未決のまま実装デフォルト禁止の規律は維持
 - 画素アルゴリズムの「改善」(既存variantの意味変更) — 新variantにするか、意味論ゴールデンが無いなら触らない
 - CompCameraは[統一カメラ設計](2026-07-14-unified-stage-camera-design.md)で単位と意味を【決定】済み。ただしD1jの追加schema+default migration、D1kのruntime解凍、D3の接続順を飛ばして焼かない
-- Shared Effectは[2026-07-15決定](2026-07-15-relative-scope-duplicator-decision.md)のDefinition/Use意味だけをD1lで追加する。既存inline effectの一対一migration、未知field保持、順序pixel同一を満たす前にshapeを変えず、Composite Set/Backdrop/隣接scopeを便乗追加しない
+- Shared Effectは[Definition/Use決定](2026-07-15-relative-scope-duplicator-decision.md)と[lifecycle決定](2026-07-15-shared-effect-lifecycle-decision.md)で閉じた意味だけをD1lで追加した。既存inline effectの一対一migration、未知field保持、順序pixel同一を満たす前にshapeを変えず、Composite Set/Backdrop/隣接scopeを便乗追加しない
 
 **判定**: 「便利だからフィールド追加」は却下。席が要るなら仕様に【決定】を足してから。
 
@@ -46,7 +46,7 @@
 
 ### 4. 依存直列を飛ばさない
 
-M2並列レーン表が正本。いまの硬い線:
+M2並列レーン表が正本。次は初回M2で実際に適用し、現在は充足済みの硬い線である。進行中の依存はtask表を読み、現在は特にD1m→D1nを飛ばさない。
 
 - **D1i-2完了前にD3しない**
 - **D1c-FU(#101)完了前にD1d(#105)・D1e(#104)を実装しない**。`ResourceLimits`/`OpenMode`の重複定義を作らない

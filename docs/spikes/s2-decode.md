@@ -4,6 +4,8 @@
 
 注記: 本文中のS1/Slint採用状況は当時の履歴。現行UI基盤は2026-07-18の[egui採用判断](../reviews/2026-07-18-m3-egui-selection.md)を参照。
 
+2026-07-23歴史監査: cutoff全6版を[Unit 5I回収](../reviews/2026-07-23-historical-s2-decode-pipeline-lineage-recovery.md)で処分した。`ffmpeg-sidecar`**クレート不採用**と自前子process pipeは現行実装でも維持される。一方、VFRはrate差のheuristic拒否、長尺／4K throughput、bounded decoder pool、block中の確実なkillとcontinuous stderr drainは未成立であり、S2完了から製品media lifecycle完成を推論しない。
+
 ## 判断: ffmpeg-sidecarクレートは採用せず、自前パイプ実装(`motolii-media`)とする
 
 スパイクを使い捨てにせず、そのまま本体クレート`motolii-media`として実装・テストした(結果が明確だったため)。

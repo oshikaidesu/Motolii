@@ -3,6 +3,8 @@
 日付: 2026-07-10
 検証コード: `spikes/vello-eval/`(使い捨て、ルートworkspaceから隔離)
 
+> 2026-07-23歴史監査: 本結果とR8レビューの全2 blobを[Unit 5G回収](../reviews/2026-07-23-historical-vello-adoption-lineage-recovery.md)で処分した。これは固定時点のheadless成立性で、現行root workspaceはVello／usvg未統合である。後続正本はdirect wgpu primitiveを主、Velloを複雑path／textの局所passとする。version、性能値、最小adapterを恒久契約にせず、CQ-7の単一premul境界と利用者別fixtureを再入場条件にする。
+
 ## 結論: **採用**(条件3つ付き)
 
 ベクター描画基盤(SVG読み込み+プロシージャル図形)としてVello+usvgを採用する。

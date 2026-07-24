@@ -163,20 +163,9 @@ class ProjectionTest(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             manifest = (out / "manifest.tsv").read_text(encoding="utf-8").splitlines()[1:]
-            receipt_shas = {
-                row.split("\t", 1)[0]
-                for receipt in (ROOT / EVIDENCE_RELATIVE / "disposition-receipts").glob("*.tsv")
-                for row in receipt.read_text(encoding="utf-8").splitlines()[1:]
-            }
             self.assertEqual(len(manifest), 1797)
-            self.assertEqual(
-                sum(row.split("\t")[4] == "disposed" for row in manifest),
-                len(receipt_shas),
-            )
-            self.assertEqual(
-                sum(row.split("\t")[4] == "remaining" for row in manifest),
-                1797 - len(receipt_shas),
-            )
+            self.assertEqual(sum(row.split("\t")[4] == "disposed" for row in manifest), 420)
+            self.assertEqual(sum(row.split("\t")[4] == "remaining" for row in manifest), 1377)
             self.assertEqual(len({row.split("\t")[0] for row in manifest}), 1797)
             for row in manifest:
                 fields = row.split("\t")

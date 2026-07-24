@@ -2,7 +2,7 @@
 
 Status: **Decision — adopt one composition camera, narrow the first permanent variant**. Implementation is D1j → D1k → D3f and must not start from the broader unmerged #176 shape.
 
-> **§4 additive Spatial variant方針 superseded (2026-07-24)**: 将来のSpatial／Perspectiveを`CompCameraDoc`のHost-owned追加variantとして増やす方針は[Camera Object / Provider決定](2026-07-24-camera-object-provider-decision.md)へ置換する。§4の先決事項（orientation補間、handedness、clip、target constraint特異点、Planar切替、semantic golden）は新しいM5 P3の必須議題として引き継ぐ。§1〜3、実装ticket表、CAM-G0／D1j／D1k／D3fの出荷済み互換記録は不変であり、本文を歴史から消さない。
+Historical note (2026-07-23): all three cutoff versions, including the semantic-oracle split and the later M3 boundary wording, are dispositioned in [Unit 4I recovery](2026-07-23-historical-m2-camera-contract-lineage-recovery.md). The planar Document/runtime lane is implemented; Stage/Output Frame product UI and the future Spatial variant remain separate downstream work.
 
 ## Known-technology check
 

@@ -4,6 +4,8 @@
 対象: PR #196  
 目的: D1l実装へ恒久化する前に、Keyframe ID再採番、単調counter、journal replay、Undo/Redoの境界を反証する。
 
+歴史注記（2026-07-23）: 本記録のcutoff 1版は、journal再生不能、予約区間の穴、旧参照不足を段階的に発見した独立検収証拠として[Unit 4K回収](2026-07-23-historical-d1l-counter-review-evidence-recovery.md)で処分した。最終P0/P1=0だけを結論として切り出さず、初回・再レビューで採用した反例と一緒に読む。
+
 ## 初回判定
 
 Cursor Grok 4.5 Fastの読み取り専用レビューは **P0=1 / P1=4 / P2=3**。Composer 2.5は240秒でタイムアウトしたため、合格票として数えない。

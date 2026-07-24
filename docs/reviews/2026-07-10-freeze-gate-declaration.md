@@ -9,7 +9,7 @@
 
 | # | 項目 | 凍結面(狭い) | 明示的に凍結しないもの |
 |---|---|---|---|
-| 1 | `FrameDesc` / 色・premul | wgpu実装で検証した形 | — |
+| 1 | `FrameDesc` / 色・premul | width/height/stride/format/color space/premultipliedの明示意味、GPU境界と色/premul実証 | constructor名、public field/serde/error形、Rust ABI、Vism/WASM wire format |
 | 2 | プラグインtrait + 純関数契約 | Filter/ParamDriver/Compositeのレジストリ経由ディスパッチ、出力= f(t, inputs, params) | dylib/WASM(v2)、lifetime/`&'static`(項目16) |
 | 3 | ドキュメントスキーマ枠 | version + migrate 枠組みの存在 | 本スキーマ(トラック/クリップ)=M2-D1 |
 | 4 | `RationalTime` / `ParamEval` | 有理数時間・キーフレーム/DataTrack評価API | — |
@@ -44,6 +44,8 @@
 既知の解凍手続き待ち(2026-07-10マージ時点): **F-12 時間軸自由度の口の予約**(`SimulationPlugin` trait叩き台・`TemporalFootprint`・スキーマのシムノード席。[simulation-model.md](../simulation-model.md)、backlog FG-2)。設計は確定済みだが、項目2(プラグインtrait)と項目3(スキーマ枠)への口の追加になるため本手続きを通す。
 
 実施済み: **M2E-7 `RenderCtx`**(2026-07-12、[解凍記録](2026-07-12-M2E-7-render-ctx-thaw.md)) — Filter/Composite に Quality と予約口(InstanceIndex/CompLookbehind/TemporalFootprint)を `#[non_exhaustive]` 文脈へ畳んだ。F-12 の NodeDesc 宣言・SimulationPlugin・スキーマ席は未実施。
+
+追補(2026-07-23): `FrameDesc`のcutoff全28版を再監査し、6項目の意味は一貫していた一方、M1のplugin code blockはM2E-7以前のskeletonだと確認した。現行APIへの読み替えとconstructor/serde/error面の未解消gapは[Unit 3C歴史回収](2026-07-23-historical-frame-desc-shared-types-lineage-recovery.md)を正とする。gap修正は共有意味を消す理由ではなく、型付き拒否と互換審判を伴う独立解凍として扱う。
 
 ## 参照
 

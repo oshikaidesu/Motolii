@@ -8,8 +8,8 @@
 
 | リポジトリ | ライセンス | 何を参考/利用するか |
 |---|---|---|
-| [OpenCut](https://github.com/OpenCut-app/OpenCut) | MIT | タイムラインUIの**操作仕様の参考のみ。コード流用は不可**。ReactであってもOpenCut固有のdata model/state/historyとMotoliiのnative Timeline、D2、single writerが衝突する。Rustコア(GPU compositor/effects/masks)は設計思想の参考 |
-| [ffmpeg-sidecar](https://github.com/nathanbabcock/ffmpeg-sidecar) | MIT | **B-2対策の本命**。ffmpegバイナリをサイドカープロセスとして起動しrawvideoフレームをIterator APIで受け取るRustクレート。M0-S2スパイクはまずこれを評価し、足りなければ自前パイプ実装。Rerun 0.34.1の`re_video`もH.264デコードに同crateを採用しており独立収束の傍証([Rerun先例調査](reviews/2026-07-20-rerun-prior-art-survey.md)) |
+| [OpenCut](https://github.com/OpenCut-app/OpenCut) | MIT | タイムラインUIの**操作仕様の参考のみ。コード流用は不可**(Rust/egui UIのためReact componentは流用対象外)。Rustコア(GPU compositor/effects/masks)は設計思想の参考 |
+| [ffmpeg-sidecar](https://github.com/nathanbabcock/ffmpeg-sidecar) | MIT | M0-S2で比較後、**Motolii依存としては不採用**。現行B-2はffprobe／ffmpeg CLIを自前の子process pipeで管理する。Rerun 0.34.1での同crate利用はprocess方式の反例探索に限り、Motoliiのcrate採択やdecode契約の根拠にしない（[S2回収](reviews/2026-07-23-historical-s2-decode-pipeline-lineage-recovery.md)、[Rerun先例調査](reviews/2026-07-20-rerun-prior-art-survey.md)） |
 | [wgpu](https://github.com/gfx-rs/wgpu) | Apache-2.0/MIT | レンダリングコアの土台(採用決定済み) |
 | [Vello](https://github.com/linebender/vello) | Apache-2.0/MIT | **採用決定(2026-07-10、S3スパイク合格)**。vello 0.9=wgpu29依存で本体と同一device同居を実測確認。条件: Renderer長寿命保持(初期化~900ms)・出力straight alpha→境界でpremul化・**vello_svgは使わず**usvg→vello変換は自前。version結合がegui-wgpu↔wgpu↔velloの三者になる点に注意(A-3)。詳細は[spikes/s3-vello.md](spikes/s3-vello.md) |
 | [Symphonia](https://github.com/pdeljanov/Symphonia) | MPL-2.0 | Pure Rust音声デコード(MP3/AAC/FLAC/WAV等)。音声インポート(B-1)の第一候補。MPLはファイル単位コピーレフトなので依存利用は安全 |
@@ -72,5 +72,6 @@
 - GPUI: [crates.io](https://crates.io/crates/gpui), [gpui.rs](https://www.gpui.rs/)
 - Symphonia: [GitHub](https://github.com/pdeljanov/Symphonia)
 - Remotion: [ライセンス](https://www.remotion.dev/docs/license)
+- Basic Memory: [semantic search](https://docs.basicmemory.com/concepts/semantic-search)、[configuration](https://docs.basicmemory.com/reference/configuration)、[technical information](https://docs.basicmemory.com/reference/technical-information)、[FastEmbed supported models](https://qdrant.github.io/fastembed/examples/Supported_Models/)
 - Vello: [GitHub](https://github.com/linebender/vello)
 - Olive: [GitHub](https://github.com/olive-editor/olive) / Natron: [GitHub](https://github.com/NatronGitHub/Natron)

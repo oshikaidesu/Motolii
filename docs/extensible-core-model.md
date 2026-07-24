@@ -32,6 +32,19 @@ Direct / Tool / Advanced / plugin UI
 
 極端な値、逆転、発散、画面外、奇妙なeasing、通常想定しない組合せは正当な表現である。拒否するのは、名前検索、隠れcontroller、宣言されない状態、全体を評価不能にする循環、復元不能なmutation等、因果と回復を失わせる仕組みである。
 
+### 1.1 「小さなコア」はcrate名・UI実装・供給元ではない
+
+本書のCoreは、作品の意味と回復可能性を守る**architectural role**である。`motolii-core`というRust crateの公開item一覧、native／Reactというpresentation runtime、first／third-partyという供給元のどれとも同義ではない。
+
+| 呼称 | 所有するもの | 例 | pluginか |
+|---|---|---|---|
+| **Core kernel** | Document identity、時刻、D2／Undo、評価順、Preview／Export同一意味、cache／resource等の不変条件 | headlessな意味と契約 | いいえ。欠落可能な拡張へ委譲しない |
+| **bundled first-party Host module** | 標準製品面の投影、layout、hit-test、gesture adapter | native Stage／Timeline、React Browser／Inspector | いいえ。内部交換可能性だけで公開pluginにしない |
+| **first-party plugin** | 公開plugin境界上の表現固有計算 | Opacity、Sine、Radial Repeater | はい。第三者が到達できる参照実装 |
+| **third-party plugin** | 同じ公開能力上の外部作者成果 | 将来のEffect／Tool等 | はい。ただしtrust、sandbox、permissionは別審判 |
+
+`motolii-core` crateは`FrameDesc`、`RationalTime`等の共有基礎型を置く実装packageであり、このarchitectural roleの全量でも所属判定表でもない。逆に標準TimelineやPreviewをnativeで描くこと、BrowserをReactで描くことだけでCoreまたはpluginへ分類しない。正確な4軸は[surface実装と拡張所有の軸分離](reviews/2026-07-22-m3-surface-extension-axis-separation.md)を正本とする。歴史上の「plugin境界凍結」「M2コア締結」「小さなコア」を同じ完了宣言として読まないための処分は[Core / plugin境界の歴史回収](reviews/2026-07-23-historical-core-plugin-boundary-lineage-recovery.md)に置く。
+
 ## 2. 学習曲線は利用者と開発者で同じ形にする
 
 ### 2.1 UIは実行可能な最初のドキュメント

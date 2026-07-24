@@ -2,6 +2,8 @@
 
 Status: **Decision amendment — gate migration before further protected-harness repair**.
 
+Historical note (2026-07-23): the cutoff blob is dispositioned by [Unit 4O recovery](2026-07-23-historical-semantic-oracle-boundary-recovery.md). The oracle/harness split and BlendMode migration are implemented. The meaning contract remains complete; self-protection of the gate scripts and CI route is a separate narrow follow-up in GAP-25.
+
 ## 問題
 
 S16が固定するのは、既存variantの画素・幾何・写像の**意味**である。ところがD1i-4の初期実装は、期待値と、それを現行公開APIへ接続するtest harnessを同じRustファイルへ置き、そのファイル全体を`semantic`として凍結した。

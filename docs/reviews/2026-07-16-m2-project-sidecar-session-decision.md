@@ -2,7 +2,9 @@
 
 Status: **Implementation landed** (D1m, branch `cursor/d1m-project-session`). D1d's corruption recovery remains valid on project-scoped sidecars with inter-process session ownership.
 
-> **2026-07-18 supplement ([VSM-A0S](2026-07-17-vism-a0s-contract-catalog-spec.md) alignment)**: The save/open ownership rows below are amended so D1m implementation cannot invent a second product open path or keep root-public path mutation. Code is not updated by this supplement.
+Historical lineage and branch disposition: [Unit 4A recovery](2026-07-23-historical-d1m-sidecar-session-lineage-recovery.md).
+
+> **2026-07-18 supplement ([VSM-A0S](2026-07-17-vism-a0s-contract-catalog-spec.md) alignment)**: The save/open ownership rows below were amended before D1m implementation so it could not invent a second product open path or keep root-public path mutation. The supplement itself was docs-only; the current D1m implementation now follows it.
 
 ## Finding
 
@@ -84,7 +86,7 @@ Repair and recovery **mutation** require `ProjectSession::acquire` or `open` fir
 
 The in-process rule remains unchanged: only the editing thread owns `&mut ProjectSession` and mutates `Document`; workers read `Arc<Document>`. The OS lock adds inter-process ownership and does not replace the single-writer rule.
 
-Cloud-sync software can ignore advisory locks. D1m therefore prevents cooperating Motolii processes and path aliases from racing, but does not claim to solve remote synchronization. The existing external-change warning remains; compare-before-replace conflict handling is a separate D1n decision if the M2 follow-up review proves the current fingerprint checks insufficient.
+Cloud-sync software can ignore advisory locks. D1m therefore prevents cooperating Motolii processes and path aliases from racing, but does not claim to solve remote synchronization. 現行コード確認で保存直前のdisk-family比較が存在しないことを再確認したため、compare-before-mutation conflict handlingは[historical foundation回収 §3](2026-07-23-historical-foundation-lineage-recovery.md#3-d1n-external-revision再採択)でD1nとして再採択した。D1m完了をD1n完了またはcloud-safe保証と読まない。
 
 ## D1m completion judgment
 
@@ -128,7 +130,7 @@ Align with [VSM-A0S §11](2026-07-17-vism-a0s-contract-catalog-spec.md): catalog
 ### Unchanged
 
 - Sidecar family, lock semantics, legacy migration table, and D1d recovery semantics.
-- No code, public API, schema, or test changes in this supplement.
+- The 2026-07-18 supplement itself changed no code, public API, schema, or tests. D1m was subsequently implemented against this amended ownership contract.
 
 ## Legacy sidecar migration diagnostic report (2026-07-18)
 
@@ -136,10 +138,10 @@ Status: **Implemented** (D1m diagnostic report, branch `cursor/d1m-project-sessi
 
 ### Signature
 
-Normative for future D1m implementation — docs only in this supplement:
+Implemented D1m signature. This was normative, docs-only text when the supplement was authored:
 
 ```rust
-// normative for future D1m impl — docs only in this order
+// implemented by D1m; this exact shape was fixed by the earlier docs-only supplement
 fn migrate_legacy_sidecar(&mut self) -> Result<LegacySidecarMigrationReport, SessionError>;
 
 struct LegacySidecarMigrationReport {
