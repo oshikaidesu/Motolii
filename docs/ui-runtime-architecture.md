@@ -1,12 +1,18 @@
 # UI runtime責任境界
 
-状態: **責任境界・surface topology決定**（2026-07-21）。platform受入とrenderer採否はG0-9実機spike待ち。
+状態: **責任境界・surface topology・egui製品不採用を決定**（2026-07-21、2026-07-24追補）。platform受入とdirect wgpu／Vello局所利用のrenderer採否はG0-9実機spike待ち。
 
 2026-07-22追補: 本書のnative／Reactは**presentation runtime**の分担であり、Core、bundled first-party Host module、first-party plugin、third-party pluginの分類ではない。OS window、surface実装、architectural role、provenance / trustは[軸分離決定](reviews/2026-07-22-m3-surface-extension-axis-separation.md)に従って独立に判定する。
 
 Motoliiの製品UIは、Reactとnativeのどちらか一方へ全面統一しない。ReactはDOMが強い領域、
 native Rust/wgpuは高頻度GPU workspaceを所有する。この分割は採択済みであり、G0-9が今後比較するのは
 責任境界そのものではなく、WebViewとnative surfaceを安全に同居させる実装方式である。
+
+2026-07-24追補: eguiは標準製品runtimeの候補から外す。既存のegui shell、native texture preview、
+layout投影、render worker、IME/lifecycle証拠は比較・回帰・診断baselineとして保持するが、新しい製品panel、
+Timeline、Stage、theme、componentをeguiへ実装しない。React所有面をeguiへ再実装せず、native所有面を
+egui widget/callbackで包まない。既存baselineの物理撤去はG0-9のplatform受入と代替診断経路が成立した後の
+独立作業とし、direct wgpu枝の不合格だけでeguiを自動的に製品候補へ戻さない。再採用には本決定の明示改訂を要する。
 
 ## 1. 所有境界
 
@@ -126,7 +132,7 @@ UI framework再発明として停止する。
 - 複雑path、curve、roto、採択済みglyph描画: Velloを局所rendererとして再利用
 - font discovery/shaping: 採択済みfontique + harfrust。単純layoutで不足する実例が出た時だけParleyを比較
 - accessibility: AccessKitを基盤にし、全keyをnode化しないbounded semantic projectionを作る
-- egui: 成立済みbaseline/debug候補として、同条件windowed比較が終わるまで削除しない
+- egui: 製品runtimeには不採用。成立済みbaseline/debug・回帰比較として、G0-9のplatform受入と代替診断経路が閉じるまで削除しない
 
 direct wgpuは採択候補であって、headless benchmarkだけで製品renderer確定とはしない。Velloの「局所」は
 呼出頻度でなく、所有語彙、描画面積、primitive数、allocation、GPU時間で判定する。毎frame呼ばれても
@@ -167,6 +173,7 @@ CompositionControllerは正規経路にしない。通常のwindowed child WebVi
 - Hostとcommunityがcomponent/test語彙を再利用できる長期原則。ただし公開runtime、origin、process、権限、window topologyの同一化ではない
 - 1 top-level wgpu Surface + Stage/Timeline 2 viewport + opaque child WebView islandsという通常window topology
 - Timeline / Stage / Browser / Inspectorはbundled first-party Host moduleであり、surface runtimeからplugin分類を推論しない
+- eguiは製品runtimeへ採用せず、新しい製品surfaceを実装しない。既存shellは比較・診断baselineとして撤去条件成立まで保持する
 
 二重所有の禁止は最適化方針ではなく不変条件である。Document編集はD2 single writerだけ、Transient selectionと
 sessionはHost coordinatorだけが所有する。React Inspector、native Preview、native Timelineは同じrevision付き
@@ -183,7 +190,7 @@ toastはdock panelではない。headless layoutはlogical rectangleだけを計
 
 - macOS/Windowsのfocus、DPI、resize、z-order、pointer capture、surface/device lost、a11y tree接合の受入
 - direct wgpu枝とdirect wgpu + Vello局所pass枝の製品採択
-- egui製品shellの撤去時期
+- egui baselineの撤去条件を満たすplatform証拠と代替診断経路
 - Linuxでsystem WebViewを使うかCEF比較へ進むか
 
 ### G0-3 / GAP-13で未決
@@ -194,7 +201,7 @@ toastはdock panelではない。headless layoutはlogical rectangleだけを計
 
 G0-9のplatform証拠はG0-3へ入力できるが、G0-9合格だけでplugin UI公開契約を許可しない。逆にplugin sandbox未決を理由に、依存を満たしたbundled first-party製品surfaceまで第三者pluginと同じ停止線へ置かない。
 
-未決項目を理由に決定済み責任境界を再び「全面egui対全面React」の比較へ戻さない。逆に責任境界の決定を、
+未決項目を理由に決定済み責任境界やegui製品不採用を再び「全面egui対全面React」の比較へ戻さない。逆に責任境界の決定を、
 未合格のWebView/native合成やplugin公開契約の実装許可として扱わない。
 
 ## 6. 証拠と後続

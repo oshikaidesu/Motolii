@@ -1,6 +1,6 @@
 # React複合下のnative surface renderer再選定（2026-07-21）
 
-状態: **責任境界・surface topology決定 / renderer・platform受入比較中**。[UI runtime責任境界](../ui-runtime-architecture.md)によりReact/WebView複合とnative所有面を固定した。React資産はAsset Browser、Inspector、
+状態: **責任境界・surface topology・egui製品不採用を決定 / renderer・platform受入比較中**。[UI runtime責任境界](../ui-runtime-architecture.md)によりReact/WebView複合とnative所有面を固定した。React資産はAsset Browser、Inspector、
 parameter/form、panel、toolbar、検索、設定、community UIへ使う。高頻度で同期して動くStageとTimelineは
 native所有とし、そこでegui widgetを使う前提を外す。製品native rendererの第一候補は既存deviceを使う
 direct wgpu、複雑path/textだけ採択済みVelloを局所利用する構成である。
@@ -120,8 +120,8 @@ native coordinator / one layout epoch
 macOS公式wry sampleの実機合成・resize・Web focus/AXで成立したが、wgpu 29製品統合、Windows、DPI/capture/lostは
 受入試験のままである。
 
-eguiは現行成立済みbaseline、debug/dev UI候補として残す。native Stage/Timelineの描画、layout、inputを
-egui callback/widgetへ新規実装せず、direct wgpu spikeが不合格だった場合だけ不足機能を具体的に比較へ戻す。
+eguiは製品runtimeへ採用せず、現行成立済みbaseline、debug/dev・回帰比較としてだけ残す。native Stage/Timelineの描画、layout、inputを
+egui callback/widgetへ新規実装しない。direct wgpu spikeが不合格でもeguiを自動的に製品候補へ戻さず、不足機能と代替枝を独立に再審判する。
 
 ## 5. 次のwindowed spike
 

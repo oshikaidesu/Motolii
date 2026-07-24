@@ -39,7 +39,7 @@
 | M0 | `DONE` | spike完了 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み |
 | M2 | **基盤再締結済み** | D1l、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。D5は再締結の閉集合外で、骨格到達・統合審判pending |
-| M3 | **M3-A〜D統合段階 / G0-9 platform受入比較中** | A=製品資産所有、B=Host projection/intent、C=製品runtime統合、D=D2/Undo制作ループ。既存G/U/CU/W IDを維持し、一面ごとに段階の証拠を閉じる。U0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4はmain完了済みでbaselineとして保持。次はU0e-2Rとwgpu 29 platform受入spike。native layout/hit-test/gesture kernelはtoolkit/renderer非依存で進められる。WebView/native製品統合とegui撤去はG0-9、plugin UI公開契約は分離したG0-3 / GAP-13まで停止 |
+| M3 | **M3-A〜D統合段階 / egui製品不採用決定 / G0-9 platform受入比較中** | A=製品資産所有、B=Host projection/intent、C=製品runtime統合、D=D2/Undo制作ループ。既存G/U/CU/W IDを維持し、一面ごとに段階の証拠を閉じる。U0a〜U0e-1、U1a-1/2、U1b-1/2、U2a-0/1、U2b-1、U2c-1/4はmain完了済みでbaselineとして保持。eguiへ新規製品面を実装せず、既存shellは比較・診断baselineとして撤去条件成立まで保持する。次はU0e-2Rとwgpu 29 platform受入spike。native layout/hit-test/gesture kernelはtoolkit/renderer非依存で進められる。WebView/native製品統合と既存egui baseline撤去はG0-9、plugin UI公開契約は分離したG0-3 / GAP-13まで停止 |
 | M4 | **契約spike可** | K0でRoD/RoIのruntime契約を凍結。その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む |
 | M5 | **identity spike可** | P0IでDuplicator/Instance identityを凍結 |
 

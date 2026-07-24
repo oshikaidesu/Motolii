@@ -1,12 +1,12 @@
 # M3: UI統合
 
-ステータス: **ドラフト / UI責任境界・surface topology決定、platform受入比較中**([M2基盤再締結ゲート](../reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。[UI runtime責任境界](../ui-runtime-architecture.md)はReact chrome + native Stage/Timeline + headless interactionへ固定し、通常windowは[1 top-level wgpu Surface + 2 native viewport + opaque child WebView islands](../reviews/2026-07-21-ui-surface-topology-decision.md)へ固定した。React所有面は[直接移管契約](../reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)R0〜R6に従うproduct-owned packageとmock consumer化だけ先行可。現行mainのegui shell等は比較基準として保持し、G0-9実機spikeまではWebView/native製品統合とegui撤去を停止する。plugin UI公開契約はG0-9と分離したG0-3 / GAP-13の判断まで停止する。toolkit/renderer非依存の状態所有、layout/hit-test、domain intent、Command境界、Rust coreは各既存依存に従い進行可)
+ステータス: **ドラフト / UI責任境界・surface topology・egui製品不採用を決定、platform受入比較中**([M2基盤再締結ゲート](../reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。[UI runtime責任境界](../ui-runtime-architecture.md)はReact chrome + native Stage/Timeline + headless interactionへ固定し、通常windowは[1 top-level wgpu Surface + 2 native viewport + opaque child WebView islands](../reviews/2026-07-21-ui-surface-topology-decision.md)へ固定した。React所有面は[直接移管契約](../reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)R0〜R6に従うproduct-owned packageとmock consumer化だけ先行可。eguiは標準製品runtimeへ採用せず、現行mainのshell等を比較・診断baselineとして保持する。G0-9実機spikeまではWebView/native製品統合と既存baseline撤去を停止する。plugin UI公開契約はG0-9と分離したG0-3 / GAP-13の判断まで停止する。toolkit/renderer非依存の状態所有、layout/hit-test、domain intent、Command境界、Rust coreは各既存依存に従い進行可)
 
 > **着手前規約**: [M3 UI境界汚染の予防](../reviews/2026-07-14-m3-ui-boundary-prevention.md)のうち、後掲「GR-UI審判割当表」で対象タスクへ割り当てた項目を先に通す。全製品UIは[UI操作言語](../ui-interaction-language.md)、外観を伴うタスクは[UI視覚言語](../ui-visual-language.md)、[UI参照地図](../ui-reference-map.md)、[React製品資産の直接移管契約](../reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)、時間面・Timelineを伴うタスクは[時間面UI構成モデル](../ui-score-model.md)も適用する。React所有面は固定source assetを直接移管し、縮約再実装しない。モックの具体値・未決機能の意味論はDocument/公開契約ではない。非該当項目を形式的にYesにしない。Documentスキーマへ触る場合は[M2恒久焼き込みの予防](../reviews/2026-07-12-m2-permanence-prevention.md)も同時適用する。
 
 ## 目的(退治する落とし穴)
 
-A-1(egui候補は既存device/native texture共有を[採用時の実機証拠](../reviews/2026-07-18-m3-egui-selection.md)で確認済み。React/WebView/hybrid候補は[G0-9](../reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md)でCPU bridgeなしのStage接合を再審判)、D-3(OpenCut流用の期待値管理)。
+A-1(egui baselineは既存device/native texture共有を[採用時の実機証拠](../reviews/2026-07-18-m3-egui-selection.md)で確認済みだが製品runtimeには不採用。React/WebView/hybrid製品構成は[G0-9](../reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md)でCPU bridgeなしのStage接合を再審判)、D-3(OpenCut流用の期待値管理)。
 
 ## M3-A〜D: 統合の背骨
 
@@ -33,7 +33,7 @@ W3〜W6を正とし、M3-D完了やLocal Alphaと混同しない。Issue化、cl
 
 | ID | 内容 | 状態 | 確定条件 |
 |---|---|---|---|
-| G0-1 | eguiと既存wgpu共有の成立性 | **測定完了 / 採否はG0-9再評価中** | [egui採用判断](../reviews/2026-07-18-m3-egui-selection.md)。Apple M4 / Metalでcore-first device、native texture、lifecycle、日本語IMEを実機確認。証拠はG0-9比較入力として保持 |
+| G0-1 | eguiと既存wgpu共有の成立性 | **測定完了 / 製品runtime採用は撤回** | [egui採用判断](../reviews/2026-07-18-m3-egui-selection.md)。Apple M4 / Metalでcore-first device、native texture、lifecycle、日本語IMEを実機確認。証拠と既存実装はG0-9の比較・診断baselineとして保持し、新規製品面をeguiへ実装しない |
 | G0-2 | 入力/キーマップ/アクセシビリティ最小意味論(GAP-6) | **完了** | [着手前決定§2](../reviews/2026-07-16-m3-preflight-decisions.md#2-g0-2-inputとui状態の意味)。全shortcut再割当、安定Command、状態寿命、version付きJSON keymap、v1保証/非保証を固定 |
 | G0-3 | plugin UIモデル(GAP-13) | **再評価中 / 自動panel fallbackは維持** | [軸分離決定](../reviews/2026-07-22-m3-surface-extension-axis-separation.md)に従い、first/third-party pluginの公開kit、sandbox、権限、互換、配布をG0-9の製品surface合否と分離して比較する。G0-9証拠は入力にできるが完了だけで解除しない。`NodeDesc`自動panelだけで全保存paramを編集できる条件は維持し、比較前に自由UI公開契約を実装しない |
 | G0-4 | 性能測定プロトコル | **完了** | [着手前決定§4](../reviews/2026-07-16-m3-preflight-decisions.md#4-g0-4-性能測定プロトコル)。絶対閾値は初回実測後の独立改訂 |
@@ -41,15 +41,15 @@ W3〜W6を正とし、M3-D完了やLocal Alphaと混同しない。Issue化、cl
 | G0-6 | 視覚言語tokenと認知審判 | **手順完了・目視待ち** | [着手前決定§5](../reviews/2026-07-16-m3-preflight-decisions.md#5-g0-6-見た目はuxの投影として導出する)。U0e-1の生成機構、U0e-2Rの固定React比較baseline再結合、U0e-2のreference fixtureだけ先行可。具体token値と製品componentを入れるU0e-3はG0-6Hの人間審判まで待つ |
 | G0-7 | 操作単純化・共通componentゲート | **完了** | [UI操作言語](../ui-interaction-language.md)と[着手前決定§6](../reviews/2026-07-16-m3-preflight-decisions.md#6-g0-7-操作文法を共通部品の契約にする)をU2c conformanceへ固定 |
 | G0-8 | resource予算presetとpreview縮退設定 | **意味完了・実測待ち** | [着手前決定§7](../reviews/2026-07-16-m3-preflight-decisions.md#7-g0-8-resource値はm4の事実から決める)。具体値だけG0-4+M4-K1a後に決定 |
-| G0-9 | React chrome + native Stage/Timelineのsurface統合 | **責任境界・topology決定 / React asset直接移管可 / platform受入継続** | [UI runtime責任境界](../ui-runtime-architecture.md)、[軸分離決定](../reviews/2026-07-22-m3-surface-extension-axis-separation.md)、[React直接移管契約](../reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)、[surface topology決定](../reviews/2026-07-21-ui-surface-topology-decision.md)を正本とする。R0〜R6のproduct-owned React packageとmock consumer化は先行可。通常windowは1 top-level wgpu Surface内のStage/Timeline viewportとopaque child WebView islandsへ固定し、macOS公式wry sampleの実機合成・resize・Web focus/AXを確認済み。残る審判はdirect wgpu(+Vello局所)対egui同条件baseline、IME/VoiceOver、100回resize/DPI/capture/lost、WebView crash、Windows実機。合格までWebView/native製品統合・egui撤去を停止する。plugin sandbox／公開契約はG0-3で別判定し、G0-9合格へ含めない |
+| G0-9 | React chrome + native Stage/Timelineのsurface統合 | **責任境界・topology・egui製品不採用決定 / React asset直接移管可 / platform受入継続** | [UI runtime責任境界](../ui-runtime-architecture.md)、[軸分離決定](../reviews/2026-07-22-m3-surface-extension-axis-separation.md)、[React直接移管契約](../reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)、[surface topology決定](../reviews/2026-07-21-ui-surface-topology-decision.md)を正本とする。R0〜R6のproduct-owned React packageとmock consumer化は先行可。通常windowは1 top-level wgpu Surface内のStage/Timeline viewportとopaque child WebView islandsへ固定し、macOS公式wry sampleの実機合成・resize・Web focus/AXを確認済み。残る審判はdirect wgpu枝とdirect wgpu＋Vello局所枝を既存egui baselineへ回帰させない同条件比較、IME/VoiceOver、100回resize/DPI/capture/lost、WebView crash、Windows実機。eguiは製品候補に戻さない。合格までWebView/native製品統合と既存egui baseline撤去を停止する。plugin sandbox／公開契約はG0-3で別判定し、G0-9合格へ含めない |
 
 以下は**M3入場(U0a完了)後**の論理依存表である。G0自体はM3全コードを一括停止する門ではないが、初回Uシリーズは下表の論理依存に加えて本書の直列運用を優先する。U1aはU0bの5層所有とdomain intentを待ち、custom UI追加タスクはG0-3の判定後に初めて起票する。U0〜U9を一括または並走発注しない。
 
-## 方針(2026-07-21: UI責任境界・surface topology決定、G0-9 platform受入比較中)
+## 方針(2026-07-24: UI責任境界・surface topology・egui製品不採用決定、G0-9 platform受入比較中)
 
-以下のegui節は2026-07-18採用時のbaseline仕様と成立証拠として保持する。責任境界は[正本](../ui-runtime-architecture.md)へ移り、G0-9完了前のWebView/native統合やegui撤去の許可ではない。toolkit横断のDocument/command/thread/座標/preview規律は引き続き現行である。
+以下のegui節は2026-07-18採用時の歴史的baseline仕様と成立証拠として保持する。eguiは標準製品runtimeへ採用せず、新しい製品面を実装しない。責任境界は[正本](../ui-runtime-architecture.md)へ移り、G0-9完了前のWebView/native統合や既存baseline撤去の許可ではない。toolkit横断のDocument/command/thread/座標/preview規律は引き続き現行である。
 
-- **egui候補**。[採用判断](../reviews/2026-07-18-m3-egui-selection.md)時の初期統合はegui/eframe/egui-wgpu/egui-winit 0.35、egui_tiles 0.16、wgpu 29の組合せをadapter内で固定した。versionはDocument/plugin契約へ出さない
+- **egui歴史baseline**。[採用判断](../reviews/2026-07-18-m3-egui-selection.md)時の初期統合はegui/eframe/egui-wgpu/egui-winit 0.35、egui_tiles 0.16、wgpu 29の組合せをadapter内で固定した。versionはDocument/plugin契約へ出さず、新規製品面へ広げない
 - プレビューは同一device上の`Rgba8Unorm` `TextureView`を`egui_wgpu::Renderer::register_native_texture`へ登録して表示する。display slot生成時にtextureと安定viewを一度作り、rendererを得られる`eframe::CreationContext`で一度だけnative texture登録する。frame更新、resize、DPI変更、minimize/restoreごとに登録し直さない
 - Stage上の2D handle、selection outline、3D gizmo、Depth rail/axisは、toolkitにかかわらずcanonical display texture後段のnative wgpu presentation overlayで描く。canonical render/exportへ焼かず、少数固定形状のhit-testはCPU解析幾何、確定はD2とする。Webはtoolbar/control/a11y proxyを所有できるが、transparent WebViewをgizmo要件にしない。実装許可ではなく、合格条件は[native Stage所有境界](../reviews/2026-07-21-native-stage-gizmo-ownership.md)を正とする
 - **wgpuバージョンはcoreとegui-wgpuで単一化**する。更新PRではCargo treeの重複拒否、既存device共有、native texture、resize/minimize/restoreを再検証する
@@ -61,11 +61,11 @@ W3〜W6を正とし、M3-D完了やLocal Alphaと混同しない。Issue化、cl
 - UIの色値は固定実装にしない。組み込みLight/Darkと将来のcustom themeを同じsemantic token schemaで解決し、設定画面から選択・永続化する。初回既定はDark(土台dark neutralの規約と一致)、theme異常時も診断してDarkへfallbackする
 - タイムラインUIの状態管理はM2ドキュメントモデルに直結(UI独自の編集状態を二重に持たない)。編集操作は全てM2コマンドを発行する形
 - キーフレーム編集UIは**AE式の値グラフエディタを作らない**。**Flow/アライトモーション式の区間イージングエディタ**を採る: 2キーフレーム間を選択→ボタン→cubic-bezierイージングをポップアップ編集(プリセット+ハンドル)。データは`motolii-eval`の`Interp::Bezier{x1,y1,x2,y2}`(区間正規化位置に対する連続曲線=fps/解像度非依存)を編集するだけでスキーマ変更不要。オーバーシュートはyの[0,1]外で表現(y非クランプ維持)。詳細と根拠はconcept.md決定事項。シーケンス操作の参考にTheatre.jsは見てよい(AGPLのstudioコードは読まない・流用しない)。**空間モーションパス(位置の2D曲線)は時間イージングとは別概念**で、v1コアには入れない(プラグイン領域/v1後半)
-- パネルレイアウトは利用者が分割、tab化、resize、表示/非表示、復帰を選べる。`egui_tiles`をruntime投影先の第一候補とするが、その`Tree`/`TileId`/serde形を正本へせず、Motolii所有の安定layout modelから投影する。panelの初期配置は組み込みpresetであり固定契約ではない
+- パネルレイアウトは利用者が分割、tab化、resize、表示/非表示、復帰を選べる。`egui_tiles`は歴史baselineの投影先に限定し、製品runtime候補にしない。その`Tree`/`TileId`/serde形を正本へせず、Motolii所有の安定layout modelから投影する。panelの初期配置は組み込みpresetであり固定契約ではない
 
 ## デバイスとスレッドの規約(第2回レビュー#1/#2を受けた確定事項)
 
-1. **デバイスはコアが作り、egui shellは借りる**: `GpuCtx::new_for_ui()`がコンポジタ要件
+1. **歴史baselineではデバイスをコアが作り、egui shellは借りる**: `GpuCtx::new_for_ui()`がコンポジタ要件
    (`motolii_gpu::required_features()`/`check_minimum_limits()` — 単一の情報源。limitは最低ライン4096を検証した上でアダプタ実力値を要求する)を明示してデバイスを生成し、
    `egui_wgpu::WgpuSetup::Existing`でshellに渡す。逆(shellが作ったデバイスをコアが借りる)は通常経路にしない
    — feature/limitは生成時に確定し後から足せないため、M3統合直前に「必要featureが無い」で
