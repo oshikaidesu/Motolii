@@ -92,6 +92,27 @@ const EXPECTED_TIMELINE_MODES = {
   layers: ["align", "stagger", "shift"],
 };
 const EXPECTED_TIMELINE_TEST_PATH = "docs/mocks-ui/tests/timeline-candidate.spec.js";
+const EXPECTED_INSPECTOR_CLASSIFICATION = "react-source-absent-legacy-parity-oracle";
+const EXPECTED_INSPECTOR_SOURCE_STATUS = "independent-react-source-absent";
+const EXPECTED_INSPECTOR_LEGACY_CLOSURE = [
+  "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
+  "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
+  "docs/mocks-ui/src/legacy/legacySource.js",
+  "docs/mocks/m3-vism-host-boundary.html",
+];
+const EXPECTED_INSPECTOR_LEGACY_HASHES = {
+  "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416",
+  "docs/mocks-ui/src/legacy/LegacyRegions.jsx": "8fb24e75abdb87dd52ae7d1c723782b42e67e486331aa04cbd498111a2733b3a",
+  "docs/mocks-ui/src/legacy/legacySource.js": "4fd547d2efa98d6d1fadf403b4ae2379abb0767d50cda172f8f6fa749a230e20",
+  "docs/mocks/m3-vism-host-boundary.html": "a20bd36d6b8b241ef4ec21adda6b045e470bf89fbc78e2788207aa6d0875ec68",
+};
+const EXPECTED_INSPECTOR_LEGACY_EXPORT = "LegacyInspector";
+const EXPECTED_INSPECTOR_SKELETON_PATH = "docs/mocks-ui/src/surfaces/InspectorSurface.jsx";
+const EXPECTED_INSPECTOR_SKELETON_HASH = "70e3f1094ae6188274779055d20385cccc2efabd7258b994eeba869e3ea82f90";
+const EXPECTED_INSPECTOR_NEXT_ACTION = "mock-side-same-shape-react-extraction-and-parity-before-r4";
+const EXPECTED_INSPECTOR_PARITY_PATH = "docs/mocks-ui/tests/visual-parity.spec.js";
+const EXPECTED_INSPECTOR_REACT_ROUTE = "archive/all-surfaces";
+const EXPECTED_INSPECTOR_LEGACY_ROUTE = "all-surfaces";
 
 function hashBytes(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -302,12 +323,82 @@ function hasCssSelectorRoot(cssSource, rootSelector) {
   );
 }
 
+function importsNamedExport(ast, source, exported) {
+  return ast.program.body.some((statement) =>
+    statement.type === "ImportDeclaration" &&
+    statement.source.value === source &&
+    statement.specifiers.some(
+      (specifier) =>
+        specifier.type === "ImportSpecifier" &&
+        (specifier.imported.name ?? specifier.imported.value) === exported,
+    ),
+  );
+}
+
+function importsSource(ast, source) {
+  return ast.program.body.some(
+    (statement) => statement.type === "ImportDeclaration" && statement.source.value === source,
+  );
+}
+
+function hasInspectorParserReplacement(ast) {
+  const contains = (value, predicate) => {
+    if (!value || typeof value !== "object") return false;
+    if (predicate(value)) return true;
+    if (Array.isArray(value)) return value.some((entry) => contains(entry, predicate));
+    return Object.values(value).some((entry) => contains(entry, predicate));
+  };
+  const isInspectorMatch = (value) => {
+    if (
+      value.type !== "CallExpression" ||
+      value.callee.type !== "Identifier" ||
+      value.callee.name !== "matches" ||
+      value.arguments[1]?.type !== "ObjectExpression"
+    ) {
+      return false;
+    }
+    return value.arguments[1].properties.some(
+      (property) =>
+        property.type === "ObjectProperty" &&
+        property.key.type === "Identifier" &&
+        property.key.name === "id" &&
+        property.value.type === "StringLiteral" &&
+        property.value.value === "inspector",
+    );
+  };
+  let replacementFound = false;
+  const visit = (value) => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (value.type === "IfStatement" && contains(value.test, isInspectorMatch)) {
+      replacementFound ||= contains(
+        value.consequent,
+        (node) =>
+          node.type === "JSXOpeningElement" &&
+          node.name.type === "JSXIdentifier" &&
+          node.name.name === EXPECTED_INSPECTOR_LEGACY_EXPORT,
+      );
+    }
+    Object.values(value).forEach(visit);
+  };
+  visit(ast);
+  return replacementFound;
+}
+
 async function validateInventory(manifest, options = {}) {
   const {
     candidateAstSource,
     easingAstSource,
     timelineAstSource,
     timelineCssSource,
+    inspectorHostAstSource,
+    inspectorRegionsAstSource,
+    inspectorLegacySourceAstSource,
+    inspectorSkeletonAstSource,
+    inspectorParityAstSource,
     fixedSourceCommit = manifest.fixedSourceCommit,
   } = options;
 
@@ -342,7 +433,7 @@ async function validateInventory(manifest, options = {}) {
 
   assert.equal(manifest.modelClosure.length, 0);
   assert.equal(Array.isArray(manifest.surfaces), true);
-  assert.equal(manifest.surfaces.length, 3);
+  assert.equal(manifest.surfaces.length, 4);
   assert.equal(Array.isArray(manifest.behavioralTests), true);
   assert.equal(manifest.behavioralTests.length, 2);
 
@@ -592,6 +683,79 @@ async function validateInventory(manifest, options = {}) {
     "utf8",
   ));
   assert.deepEqual(extractRouteFromTest(timelineTestAst), [EXPECTED_TEST_ROUTE]);
+
+  const inspector = manifest.surfaces[3];
+  ensureExactKeys(inspector, [
+    "id",
+    "classification",
+    "sourceStatus",
+    "promotionBoundary",
+    "legacyOracleClosure",
+    "legacyExport",
+    "rejectedSkeleton",
+    "requiredNextAction",
+    "behavioralEvidence",
+  ]);
+  assert.equal(inspector.id, "inspector");
+  assert.equal(inspector.classification, EXPECTED_INSPECTOR_CLASSIFICATION);
+  assert.equal(inspector.sourceStatus, EXPECTED_INSPECTOR_SOURCE_STATUS);
+  assert.deepEqual(inspector.promotionBoundary, []);
+  assert.equal(inspector.legacyExport, EXPECTED_INSPECTOR_LEGACY_EXPORT);
+  assert.equal(inspector.requiredNextAction, EXPECTED_INSPECTOR_NEXT_ACTION);
+  assert.equal(inspector.legacyOracleClosure.length, EXPECTED_INSPECTOR_LEGACY_CLOSURE.length);
+  for (let index = 0; index < EXPECTED_INSPECTOR_LEGACY_CLOSURE.length; index += 1) {
+    const expectedPath = EXPECTED_INSPECTOR_LEGACY_CLOSURE[index];
+    const entry = inspector.legacyOracleClosure[index];
+    ensureExactKeys(entry, ["path", "role", "sha256"]);
+    assert.equal(entry.path, expectedPath);
+    assert.equal(entry.role, "oracle");
+    assert.equal(entry.sha256, EXPECTED_INSPECTOR_LEGACY_HASHES[expectedPath]);
+    assert.equal(hashBytes(readBlobFromCommit(entry.path, fixedSourceCommit)), entry.sha256);
+  }
+
+  ensureExactKeys(inspector.rejectedSkeleton, ["path", "export", "sha256", "disposition"]);
+  assert.equal(inspector.rejectedSkeleton.path, EXPECTED_INSPECTOR_SKELETON_PATH);
+  assert.equal(inspector.rejectedSkeleton.export, "InspectorSurface");
+  assert.equal(inspector.rejectedSkeleton.sha256, EXPECTED_INSPECTOR_SKELETON_HASH);
+  assert.equal(inspector.rejectedSkeleton.disposition, "reduced-skeleton-not-product-source");
+  assert.equal(
+    hashBytes(readBlobFromCommit(inspector.rejectedSkeleton.path, fixedSourceCommit)),
+    inspector.rejectedSkeleton.sha256,
+  );
+
+  ensureExactKeys(inspector.behavioralEvidence, ["path", "reactRoute", "legacyOracleRoute"]);
+  assert.equal(inspector.behavioralEvidence.path, EXPECTED_INSPECTOR_PARITY_PATH);
+  assert.equal(inspector.behavioralEvidence.reactRoute, EXPECTED_INSPECTOR_REACT_ROUTE);
+  assert.equal(inspector.behavioralEvidence.legacyOracleRoute, EXPECTED_INSPECTOR_LEGACY_ROUTE);
+
+  const hostAst = parseModule(inspectorHostAstSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_INSPECTOR_LEGACY_CLOSURE[0]), "utf8",
+  ));
+  assert.ok(importsNamedExport(hostAst, "./LegacyRegions", EXPECTED_INSPECTOR_LEGACY_EXPORT));
+  assert.ok(importsSource(hostAst, "./legacySource"));
+  assert.ok(hasInspectorParserReplacement(hostAst));
+
+  const regionsAst = parseModule(inspectorRegionsAstSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_INSPECTOR_LEGACY_CLOSURE[1]), "utf8",
+  ));
+  assert.ok(collectNamedExports(regionsAst).has(EXPECTED_INSPECTOR_LEGACY_EXPORT));
+
+  const legacySourceAst = parseModule(inspectorLegacySourceAstSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_INSPECTOR_LEGACY_CLOSURE[2]), "utf8",
+  ));
+  assert.ok(importsSource(legacySourceAst, "../../../mocks/m3-vism-host-boundary.html?raw"));
+
+  const skeletonAst = parseModule(inspectorSkeletonAstSource ?? await readFile(
+    absoluteFromRelative(inspector.rejectedSkeleton.path), "utf8",
+  ));
+  assert.ok(collectNamedExports(skeletonAst).has(inspector.rejectedSkeleton.export));
+
+  const parityAst = parseModule(inspectorParityAstSource ?? await readFile(
+    absoluteFromRelative(inspector.behavioralEvidence.path), "utf8",
+  ));
+  const parityRoutes = extractRouteFromTest(parityAst);
+  assert.ok(parityRoutes.includes(inspector.behavioralEvidence.reactRoute));
+  assert.ok(parityRoutes.includes(inspector.behavioralEvidence.legacyOracleRoute));
 }
 
 test("accepts exact incomplete multi-surface R0 manifest and fixed-commit evidence", async () => {
@@ -884,4 +1048,85 @@ test("rejects KEYS/LAYERS promotion beyond the fixed Timeline subtree evidence",
   await assert.rejects(async () => {
     await validateInventory(manifest, { timelineCssSource: withoutToolPanelSelector });
   });
+});
+
+test("rejects Inspector promotion, legacy oracle, skeleton, action, and parity route drift", async () => {
+  const manifest = await manifestFromDisk();
+  const mutateInspector = (patch) =>
+    withInventoryEntryAt(manifest, "surfaces", 3, patch);
+
+  for (const mutated of [
+    mutateInspector((inspector) => ({ ...inspector, promotionBoundary: ["InspectorSurface"] })),
+    mutateInspector((inspector) => ({ ...inspector, legacyOracleClosure: inspector.legacyOracleClosure.slice(0, 3) })),
+    mutateInspector((inspector) => ({
+      ...inspector,
+      legacyOracleClosure: [
+        inspector.legacyOracleClosure[1],
+        inspector.legacyOracleClosure[0],
+        ...inspector.legacyOracleClosure.slice(2),
+      ],
+    })),
+    mutateInspector((inspector) => ({
+      ...inspector,
+      legacyOracleClosure: inspector.legacyOracleClosure.map((entry, index) =>
+        index === 1 ? { ...entry, sha256: "0".repeat(64) } : entry,
+      ),
+    })),
+    mutateInspector((inspector) => ({ ...inspector, legacyExport: "LegacyTimeline" })),
+    mutateInspector((inspector) => ({
+      ...inspector,
+      rejectedSkeleton: { ...inspector.rejectedSkeleton, export: "LegacyInspector" },
+    })),
+    mutateInspector((inspector) => ({
+      ...inspector,
+      rejectedSkeleton: {
+        ...inspector.rejectedSkeleton,
+        path: "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
+      },
+    })),
+    mutateInspector((inspector) => ({
+      ...inspector,
+      rejectedSkeleton: {
+        ...inspector.rejectedSkeleton,
+        disposition: "promotion-candidate",
+      },
+    })),
+    mutateInspector((inspector) => ({
+      ...inspector,
+      requiredNextAction: "promote-inspector-skeleton",
+    })),
+    mutateInspector((inspector) => ({
+      ...inspector,
+      behavioralEvidence: { ...inspector.behavioralEvidence, reactRoute: "inspector" },
+    })),
+    mutateInspector((inspector) => ({
+      ...inspector,
+      behavioralEvidence: { ...inspector.behavioralEvidence, legacyOracleRoute: "archive/all-surfaces" },
+    })),
+  ]) {
+    await assert.rejects(async () => {
+      await validateInventory(mutated);
+    });
+  }
+});
+
+test("rejects Inspector parser/export/raw-source/skeleton/parity evidence drift", async () => {
+  const manifest = await manifestFromDisk();
+  const host = await readFile(absoluteFromRelative(EXPECTED_INSPECTOR_LEGACY_CLOSURE[0]), "utf8");
+  const regions = await readFile(absoluteFromRelative(EXPECTED_INSPECTOR_LEGACY_CLOSURE[1]), "utf8");
+  const legacySource = await readFile(absoluteFromRelative(EXPECTED_INSPECTOR_LEGACY_CLOSURE[2]), "utf8");
+  const skeleton = await readFile(absoluteFromRelative(EXPECTED_INSPECTOR_SKELETON_PATH), "utf8");
+  const parity = await readFile(absoluteFromRelative(EXPECTED_INSPECTOR_PARITY_PATH), "utf8");
+
+  for (const options of [
+    { inspectorHostAstSource: host.replace("<LegacyInspector {...props} />", "<LegacyTimeline {...props} />") },
+    { inspectorRegionsAstSource: regions.replace("LegacyInspector", "ArchivedInspector") },
+    { inspectorLegacySourceAstSource: legacySource.replace("m3-vism-host-boundary.html?raw", "missing.html?raw") },
+    { inspectorSkeletonAstSource: skeleton.replace("InspectorSurface", "ArchivedInspectorSurface") },
+    { inspectorParityAstSource: parity.replace("#archive/all-surfaces", "#archive/inspector") },
+  ]) {
+    await assert.rejects(async () => {
+      await validateInventory(manifest, options);
+    });
+  }
 });

@@ -178,6 +178,47 @@
         "path": "docs/mocks-ui/tests/timeline-candidate.spec.js",
         "route": "plugin-browser-candidate"
       }
+    },
+    {
+      "id": "inspector",
+      "classification": "react-source-absent-legacy-parity-oracle",
+      "sourceStatus": "independent-react-source-absent",
+      "promotionBoundary": [],
+      "legacyOracleClosure": [
+        {
+          "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
+          "role": "oracle",
+          "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416"
+        },
+        {
+          "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
+          "role": "oracle",
+          "sha256": "8fb24e75abdb87dd52ae7d1c723782b42e67e486331aa04cbd498111a2733b3a"
+        },
+        {
+          "path": "docs/mocks-ui/src/legacy/legacySource.js",
+          "role": "oracle",
+          "sha256": "4fd547d2efa98d6d1fadf403b4ae2379abb0767d50cda172f8f6fa749a230e20"
+        },
+        {
+          "path": "docs/mocks/m3-vism-host-boundary.html",
+          "role": "oracle",
+          "sha256": "a20bd36d6b8b241ef4ec21adda6b045e470bf89fbc78e2788207aa6d0875ec68"
+        }
+      ],
+      "legacyExport": "LegacyInspector",
+      "rejectedSkeleton": {
+        "path": "docs/mocks-ui/src/surfaces/InspectorSurface.jsx",
+        "export": "InspectorSurface",
+        "sha256": "70e3f1094ae6188274779055d20385cccc2efabd7258b994eeba869e3ea82f90",
+        "disposition": "reduced-skeleton-not-product-source"
+      },
+      "requiredNextAction": "mock-side-same-shape-react-extraction-and-parity-before-r4",
+      "behavioralEvidence": {
+        "path": "docs/mocks-ui/tests/visual-parity.spec.js",
+        "reactRoute": "archive/all-surfaces",
+        "legacyOracleRoute": "all-surfaces"
+      }
     }
   ],
   "modelClosure": [],
