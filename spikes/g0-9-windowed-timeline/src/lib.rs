@@ -705,6 +705,7 @@ pub struct ResourceCreationCounters {
     pub buffers: u64,
     pub bind_groups: u64,
     pub textures: u64,
+    pub query_sets: u64,
 }
 
 impl ResourceCreationCounters {
@@ -714,6 +715,7 @@ impl ResourceCreationCounters {
             buffers: self.buffers.saturating_sub(baseline.buffers),
             bind_groups: self.bind_groups.saturating_sub(baseline.bind_groups),
             textures: self.textures.saturating_sub(baseline.textures),
+            query_sets: self.query_sets.saturating_sub(baseline.query_sets),
         }
     }
 
@@ -1132,6 +1134,210 @@ pub struct ReportConditions {
     pub target: String,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ToolchainProvenance {
+    pub rustc: String,
+    pub cargo: String,
+    pub execution_commit: String,
+    pub measurement_session: String,
+    pub lockfile_sha256: String,
+}
+
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum ToolchainError {
+    #[error("toolchain field `{field}` must be non-empty and unpadded")]
+    Invalid { field: &'static str },
+    #[error("execution commit must be a full lowercase hexadecimal Git object ID")]
+    ExecutionCommit,
+    #[error("lockfile digest must be a lowercase SHA-256")]
+    LockfileDigest,
+}
+
+impl ToolchainProvenance {
+    pub fn validate(&self) -> Result<(), ToolchainError> {
+        for (field, value) in [
+            ("rustc", &self.rustc),
+            ("cargo", &self.cargo),
+            ("measurement_session", &self.measurement_session),
+        ] {
+            if value.is_empty() || value.trim() != value {
+                return Err(ToolchainError::Invalid { field });
+            }
+        }
+        if self.execution_commit.len() != 40
+            || !self
+                .execution_commit
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        {
+            return Err(ToolchainError::ExecutionCommit);
+        }
+        if self.lockfile_sha256.len() != 64
+            || !self
+                .lockfile_sha256
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        {
+            return Err(ToolchainError::LockfileDigest);
+        }
+        Ok(())
+    }
+}
+
+pub const GPU_TIMESTAMP_VALUES_PER_FRAME: usize = 6;
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GpuFrameAggregation {
+    SumOfPasses,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct GpuTimingReport {
+    pub timestamp_period_ns: f64,
+    pub sample_count: usize,
+    pub query_result_readbacks: u64,
+    pub frame_aggregation: GpuFrameAggregation,
+    pub frame: MeasurementSummary,
+    pub vello: MeasurementSummary,
+    pub native: MeasurementSummary,
+    pub egui: Option<MeasurementSummary>,
+}
+
+#[derive(Clone, Debug, Error, PartialEq)]
+pub enum GpuTimingError {
+    #[error("GPU timestamp period must be finite and positive")]
+    Period,
+    #[error("GPU timestamp raw value count does not match measured frames")]
+    RawCount,
+    #[error("GPU timestamp value is zero at sample {sample} marker {marker}")]
+    Zero { sample: usize, marker: usize },
+    #[error(
+        "GPU timestamp values are not monotonic at sample {sample} pass `{pass}`: {start} > {end}"
+    )]
+    NonMonotonic {
+        sample: usize,
+        pass: &'static str,
+        start: u64,
+        end: u64,
+    },
+    #[error("GPU timestamp samples do not match measured frames")]
+    SampleCount,
+    #[error("GPU timestamp query results must be read once after measurement")]
+    ReadbackCount,
+    #[error("egui GPU timing presence does not match renderer mode")]
+    EguiShape,
+    #[error("GPU timestamp samples could not be summarized")]
+    Summary,
+    #[error(transparent)]
+    Timing(#[from] TimingError),
+}
+
+impl GpuTimingReport {
+    pub fn from_ticks(
+        renderer: RendererMode,
+        raw_ticks: &[u64],
+        measured_frames: u32,
+        timestamp_period_ns: f64,
+    ) -> Result<Self, GpuTimingError> {
+        if !timestamp_period_ns.is_finite() || timestamp_period_ns <= 0.0 {
+            return Err(GpuTimingError::Period);
+        }
+        if raw_ticks.len() != measured_frames as usize * GPU_TIMESTAMP_VALUES_PER_FRAME {
+            return Err(GpuTimingError::RawCount);
+        }
+        let mut frame = Vec::with_capacity(measured_frames as usize);
+        let mut vello = Vec::with_capacity(measured_frames as usize);
+        let mut native = Vec::with_capacity(measured_frames as usize);
+        let mut egui = Vec::with_capacity(measured_frames as usize);
+        let elapsed_ms = |sample: usize, pass: &'static str, start: u64, end: u64| {
+            end.checked_sub(start)
+                .map(|ticks| ticks as f64 * timestamp_period_ns / 1_000_000.0)
+                .ok_or(GpuTimingError::NonMonotonic {
+                    sample,
+                    pass,
+                    start,
+                    end,
+                })
+        };
+        for (sample, values) in raw_ticks
+            .chunks_exact(GPU_TIMESTAMP_VALUES_PER_FRAME)
+            .enumerate()
+        {
+            if let Some(marker) = values.iter().position(|value| *value == 0) {
+                return Err(GpuTimingError::Zero { sample, marker });
+            }
+            let vello_ms = elapsed_ms(sample, "vello", values[0], values[1])?;
+            let native_ms = elapsed_ms(sample, "native", values[2], values[3])?;
+            let egui_ms = match renderer {
+                RendererMode::DirectVello => 0.0,
+                RendererMode::EguiVello => {
+                    let value = elapsed_ms(sample, "egui", values[4], values[5])?;
+                    egui.push(value);
+                    value
+                }
+            };
+            vello.push(vello_ms);
+            native.push(native_ms);
+            frame.push(vello_ms + native_ms + egui_ms);
+        }
+        let summarize = |samples: &[f64]| summarize_samples(samples).ok_or(GpuTimingError::Summary);
+        let report = Self {
+            timestamp_period_ns,
+            sample_count: measured_frames as usize,
+            query_result_readbacks: 1,
+            frame_aggregation: GpuFrameAggregation::SumOfPasses,
+            frame: summarize(&frame)?,
+            vello: summarize(&vello)?,
+            native: summarize(&native)?,
+            egui: match renderer {
+                RendererMode::DirectVello => None,
+                RendererMode::EguiVello => Some(summarize(&egui)?),
+            },
+        };
+        report.validate(renderer, measured_frames)?;
+        Ok(report)
+    }
+
+    pub fn validate(
+        &self,
+        renderer: RendererMode,
+        measured_frames: u32,
+    ) -> Result<(), GpuTimingError> {
+        if !self.timestamp_period_ns.is_finite() || self.timestamp_period_ns <= 0.0 {
+            return Err(GpuTimingError::Period);
+        }
+        let expected = measured_frames as usize;
+        if self.sample_count != expected
+            || self.frame.samples != expected
+            || self.vello.samples != expected
+            || self.native.samples != expected
+            || self
+                .egui
+                .as_ref()
+                .is_some_and(|summary| summary.samples != expected)
+        {
+            return Err(GpuTimingError::SampleCount);
+        }
+        if self.query_result_readbacks != 1 {
+            return Err(GpuTimingError::ReadbackCount);
+        }
+        match (renderer, &self.egui) {
+            (RendererMode::DirectVello, None) | (RendererMode::EguiVello, Some(_)) => {}
+            _ => return Err(GpuTimingError::EguiShape),
+        }
+        self.frame.validate()?;
+        self.vello.validate()?;
+        self.native.validate()?;
+        if let Some(egui) = &self.egui {
+            egui.validate()?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum ConditionError {
     #[error("report condition `{field}` must be non-empty and unpadded")]
@@ -1159,6 +1365,7 @@ impl ReportConditions {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct RawReport {
     pub renderer: RendererMode,
+    pub toolchain: ToolchainProvenance,
     pub scenario_digest: String,
     pub input_digest: String,
     pub source_digest: String,
@@ -1175,6 +1382,7 @@ pub struct RawReport {
     pub frame_timing: MeasurementSummary,
     pub present_timing: MeasurementSummary,
     pub input_timing: MeasurementSummary,
+    pub gpu_timing: GpuTimingReport,
     pub rss: Rss,
     pub resource_creations: ResourceCreationPhases,
     pub completeness: EvidenceCompleteness,
@@ -1186,6 +1394,10 @@ pub enum ReportError {
     InvalidDigest { field: &'static str },
     #[error(transparent)]
     Conditions(#[from] ConditionError),
+    #[error(transparent)]
+    Toolchain(#[from] ToolchainError),
+    #[error(transparent)]
+    GpuTiming(#[from] GpuTimingError),
     #[error(transparent)]
     Timing(#[from] TimingError),
     #[error(transparent)]
@@ -1212,9 +1424,12 @@ impl RawReport {
             }
         }
         self.conditions.validate()?;
+        self.toolchain.validate()?;
         self.frame_timing.validate()?;
         self.present_timing.validate()?;
         self.input_timing.validate()?;
+        self.gpu_timing
+            .validate(self.renderer, self.measured_frames)?;
         self.rss.validate()?;
         if !self.measured_seconds.is_finite() || self.measured_seconds < 0.0 {
             return Err(ReportError::Duration);
@@ -1231,6 +1446,7 @@ impl RawReport {
 #[serde(field_identifier, rename_all = "snake_case")]
 enum RawReportField {
     Renderer,
+    Toolchain,
     ScenarioDigest,
     InputDigest,
     SourceDigest,
@@ -1247,6 +1463,7 @@ enum RawReportField {
     FrameTiming,
     PresentTiming,
     InputTiming,
+    GpuTiming,
     Rss,
     ResourceCreations,
     Completeness,
@@ -1287,6 +1504,7 @@ impl<'de> Deserialize<'de> for RawReport {
                 }
                 fields! {
                     Renderer => renderer: RendererMode,
+                    Toolchain => toolchain: ToolchainProvenance,
                     ScenarioDigest => scenario_digest: String,
                     InputDigest => input_digest: String,
                     SourceDigest => source_digest: String,
@@ -1303,12 +1521,14 @@ impl<'de> Deserialize<'de> for RawReport {
                     FrameTiming => frame_timing: MeasurementSummary,
                     PresentTiming => present_timing: MeasurementSummary,
                     InputTiming => input_timing: MeasurementSummary,
+                    GpuTiming => gpu_timing: GpuTimingReport,
                     Rss => rss: Rss,
                     ResourceCreations => resource_creations: ResourceCreationPhases,
                     Completeness => completeness: EvidenceCompleteness,
                 }
                 let report = RawReport {
                     renderer,
+                    toolchain,
                     scenario_digest,
                     input_digest,
                     source_digest,
@@ -1325,6 +1545,7 @@ impl<'de> Deserialize<'de> for RawReport {
                     frame_timing,
                     present_timing,
                     input_timing,
+                    gpu_timing,
                     rss,
                     resource_creations,
                     completeness,
@@ -1373,10 +1594,24 @@ pub struct TimingRatios {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct GpuTimingRatios {
+    pub frame_median: f64,
+    pub frame_p95: f64,
+    pub frame_max: f64,
+    pub vello_median: f64,
+    pub vello_p95: f64,
+    pub vello_max: f64,
+    pub native_median: f64,
+    pub native_p95: f64,
+    pub native_max: f64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ComparisonResult {
     pub direct: RawReport,
     pub egui: RawReport,
     pub ratios: TimingRatios,
+    pub gpu_ratios: GpuTimingRatios,
 }
 
 #[derive(Debug, Error)]
@@ -1441,6 +1676,7 @@ pub fn compare_reports(
         ("source_digest", direct.source_digest == egui.source_digest),
         ("font_digest", direct.font_digest == egui.font_digest),
         ("glyph_digest", direct.glyph_digest == egui.glyph_digest),
+        ("toolchain", direct.toolchain == egui.toolchain),
         ("device", direct.conditions.device == egui.conditions.device),
         (
             "surface",
@@ -1456,6 +1692,10 @@ pub fn compare_reports(
             direct.conditions.fixture == egui.conditions.fixture,
         ),
         ("target", direct.conditions.target == egui.conditions.target),
+        (
+            "timestamp_period_ns",
+            direct.gpu_timing.timestamp_period_ns == egui.gpu_timing.timestamp_period_ns,
+        ),
     ] {
         if !equal {
             return Err(ComparisonError::Mismatch { field });
@@ -1529,10 +1769,49 @@ pub fn compare_reports(
             direct.input_timing.max_frame_ms,
         )?,
     };
+    let gpu_ratios = GpuTimingRatios {
+        frame_median: ratio(
+            egui.gpu_timing.frame.median_frame_ms,
+            direct.gpu_timing.frame.median_frame_ms,
+        )?,
+        frame_p95: ratio(
+            egui.gpu_timing.frame.p95_frame_ms,
+            direct.gpu_timing.frame.p95_frame_ms,
+        )?,
+        frame_max: ratio(
+            egui.gpu_timing.frame.max_frame_ms,
+            direct.gpu_timing.frame.max_frame_ms,
+        )?,
+        vello_median: ratio(
+            egui.gpu_timing.vello.median_frame_ms,
+            direct.gpu_timing.vello.median_frame_ms,
+        )?,
+        vello_p95: ratio(
+            egui.gpu_timing.vello.p95_frame_ms,
+            direct.gpu_timing.vello.p95_frame_ms,
+        )?,
+        vello_max: ratio(
+            egui.gpu_timing.vello.max_frame_ms,
+            direct.gpu_timing.vello.max_frame_ms,
+        )?,
+        native_median: ratio(
+            egui.gpu_timing.native.median_frame_ms,
+            direct.gpu_timing.native.median_frame_ms,
+        )?,
+        native_p95: ratio(
+            egui.gpu_timing.native.p95_frame_ms,
+            direct.gpu_timing.native.p95_frame_ms,
+        )?,
+        native_max: ratio(
+            egui.gpu_timing.native.max_frame_ms,
+            direct.gpu_timing.native.max_frame_ms,
+        )?,
+    };
     Ok(ComparisonResult {
         direct,
         egui,
         ratios,
+        gpu_ratios,
     })
 }
 
@@ -1565,9 +1844,30 @@ mod tests {
         MeasurementSummary::checked(100, 1.0, 2.0, 3.0).unwrap()
     }
 
+    fn valid_gpu_timing(renderer: RendererMode) -> GpuTimingReport {
+        GpuTimingReport {
+            timestamp_period_ns: 1.0,
+            sample_count: 100,
+            query_result_readbacks: 1,
+            frame_aggregation: GpuFrameAggregation::SumOfPasses,
+            frame: valid_summary(),
+            vello: valid_summary(),
+            native: valid_summary(),
+            egui: (renderer == RendererMode::EguiVello).then(valid_summary),
+        }
+    }
+
     fn valid_report(renderer: RendererMode) -> RawReport {
         RawReport {
             renderer,
+            toolchain: ToolchainProvenance {
+                rustc: "rustc 1.96.1".to_owned(),
+                cargo: "cargo 1.96.1".to_owned(),
+                execution_commit: "0123456789abcdef0123456789abcdef01234567".to_owned(),
+                measurement_session: "fixed-mac-session".to_owned(),
+                lockfile_sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                    .to_owned(),
+            },
             scenario_digest: "scenario".to_owned(),
             input_digest: "inputs".to_owned(),
             source_digest: "source".to_owned(),
@@ -1591,6 +1891,7 @@ mod tests {
             frame_timing: valid_summary(),
             present_timing: valid_summary(),
             input_timing: valid_summary(),
+            gpu_timing: valid_gpu_timing(renderer),
             rss: Rss::Available { bytes: 1 },
             resource_creations: ResourceCreationPhases {
                 initialization: ResourceCreationCounters::default(),
@@ -1663,7 +1964,7 @@ mod tests {
     fn render_hot_loop_has_no_tracked_resource_creation_or_readback_call() {
         let source = include_str!("main.rs");
         let render = source
-            .split("fn render(&mut self")
+            .split("fn render(")
             .nth(1)
             .and_then(|tail| tail.split("\n    fn render_egui(").next())
             .expect("render source section");
@@ -2059,9 +2360,70 @@ mod tests {
             result.ratios.input_median,
             result.ratios.input_p95,
             result.ratios.input_max,
+            result.gpu_ratios.frame_median,
+            result.gpu_ratios.frame_p95,
+            result.gpu_ratios.frame_max,
+            result.gpu_ratios.vello_median,
+            result.gpu_ratios.vello_p95,
+            result.gpu_ratios.vello_max,
+            result.gpu_ratios.native_median,
+            result.gpu_ratios.native_p95,
+            result.gpu_ratios.native_max,
         ] {
             assert!(ratio.is_finite());
         }
+    }
+
+    #[test]
+    fn gpu_timing_parses_exact_pass_boundaries_and_renderer_shape() {
+        let direct_ticks = [10, 20, 21, 31, 32, 32];
+        let direct =
+            GpuTimingReport::from_ticks(RendererMode::DirectVello, &direct_ticks, 1, 1_000.0)
+                .unwrap();
+        assert_eq!(direct.frame.median_frame_ms, 0.02);
+        assert_eq!(direct.vello.median_frame_ms, 0.01);
+        assert_eq!(direct.native.median_frame_ms, 0.01);
+        assert_eq!(direct.egui, None);
+
+        let egui_ticks = [10, 20, 21, 31, 32, 38];
+        let egui =
+            GpuTimingReport::from_ticks(RendererMode::EguiVello, &egui_ticks, 1, 1_000.0).unwrap();
+        assert_eq!(egui.egui.unwrap().median_frame_ms, 0.006);
+    }
+
+    #[test]
+    fn gpu_timing_rejects_missing_wrapped_and_cross_mode_evidence() {
+        assert_eq!(
+            GpuTimingReport::from_ticks(RendererMode::DirectVello, &[1, 2], 1, 1.0),
+            Err(GpuTimingError::RawCount),
+        );
+        assert_eq!(
+            GpuTimingReport::from_ticks(RendererMode::DirectVello, &[0, 2, 3, 4, 5, 5], 1, 1.0,),
+            Err(GpuTimingError::Zero {
+                sample: 0,
+                marker: 0,
+            }),
+        );
+        assert_eq!(
+            GpuTimingReport::from_ticks(
+                RendererMode::DirectVello,
+                &[10, 9, 11, 12, 13, 13],
+                1,
+                1.0,
+            ),
+            Err(GpuTimingError::NonMonotonic {
+                sample: 0,
+                pass: "vello",
+                start: 10,
+                end: 9,
+            }),
+        );
+        let mut direct = valid_gpu_timing(RendererMode::DirectVello);
+        direct.egui = Some(valid_summary());
+        assert_eq!(
+            direct.validate(RendererMode::DirectVello, 100),
+            Err(GpuTimingError::EguiShape),
+        );
     }
 
     #[test]
@@ -2112,6 +2474,19 @@ mod tests {
             );
             egui = valid_report(RendererMode::EguiVello);
         }
+        egui.toolchain.measurement_session = "other-session".to_owned();
+        assert_eq!(
+            compare_reports(direct.clone(), egui.clone()),
+            Err(ComparisonError::Mismatch { field: "toolchain" })
+        );
+        egui = valid_report(RendererMode::EguiVello);
+        egui.gpu_timing.timestamp_period_ns = 2.0;
+        assert_eq!(
+            compare_reports(direct, egui),
+            Err(ComparisonError::Mismatch {
+                field: "timestamp_period_ns"
+            })
+        );
     }
 
     #[test]
@@ -2140,6 +2515,10 @@ mod tests {
         let mut early = direct.clone();
         early.measured_frames = 99;
         early.input_timing.samples = 99;
+        early.gpu_timing.sample_count = 99;
+        early.gpu_timing.frame.samples = 99;
+        early.gpu_timing.vello.samples = 99;
+        early.gpu_timing.native.samples = 99;
         assert_eq!(
             compare_reports(early, egui.clone()),
             Err(ComparisonError::FrameCount)

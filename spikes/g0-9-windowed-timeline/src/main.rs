@@ -8,11 +8,13 @@ use std::{
 use g0_9_surface_host::{SurfaceLayout, LEFT_WEBVIEW_WIDTH, RIGHT_WEBVIEW_WIDTH};
 use g0_9_windowed_timeline::{
     build_vello_overlay_asset, make_key_instances, rss_from_ps_output, source_digest,
-    summarize_samples, EvidenceCompleteness, FaceDescriptor, FixtureFont, RawReport, RendererMode,
-    RendererModeError, ReportConditions, ResourceCreationCounters, ResourceCreationPhases, Rss,
-    ScenarioDefinition, ScenarioFrame, DEFAULT_MEASURE_FRAMES, DEFAULT_MEASURE_SECONDS,
-    DEFAULT_WARMUP_FRAMES, KEYFRAME_COUNT,
+    summarize_samples, EvidenceCompleteness, FaceDescriptor, FixtureFont, GpuTimingReport,
+    RawReport, RendererMode, RendererModeError, ReportConditions, ResourceCreationCounters,
+    ResourceCreationPhases, Rss, ScenarioDefinition, ScenarioFrame, ToolchainProvenance,
+    DEFAULT_MEASURE_FRAMES, DEFAULT_MEASURE_SECONDS, DEFAULT_WARMUP_FRAMES,
+    GPU_TIMESTAMP_VALUES_PER_FRAME, KEYFRAME_COUNT,
 };
+use sha2::{Digest, Sha256};
 use vello::{AaConfig, AaSupport, RenderParams, Renderer as VelloRenderer, RendererOptions};
 use winit::{
     application::ApplicationHandler,
@@ -30,6 +32,22 @@ const INITIAL_WIDTH: f64 = 1440.0;
 const INITIAL_HEIGHT: f64 = 900.0;
 const OVERLAY_WIDTH: u32 = 240;
 const OVERLAY_HEIGHT: u32 = 128;
+const MAX_GPU_TIMESTAMP_FRAMES: u32 = 8_190;
+const GPU_QUERIES_PER_SET: u32 = 4_092;
+const GPU_FRAMES_PER_QUERY_SET: u32 = GPU_QUERIES_PER_SET / GPU_TIMESTAMP_VALUES_PER_FRAME as u32;
+const GPU_QUERY_SET_COUNT: u32 = MAX_GPU_TIMESTAMP_FRAMES.div_ceil(GPU_FRAMES_PER_QUERY_SET);
+const GPU_TIMESTAMP_BYTES_PER_FRAME: u64 =
+    (GPU_TIMESTAMP_VALUES_PER_FRAME * std::mem::size_of::<u64>()) as u64;
+const GPU_QUERY_RESOLVE_STRIDE: u64 = (GPU_QUERIES_PER_SET as u64
+    * std::mem::size_of::<u64>() as u64)
+    .next_multiple_of(wgpu::QUERY_RESOLVE_BUFFER_ALIGNMENT);
+
+const GPU_VELLO_BEGIN: u32 = 0;
+const GPU_VELLO_END: u32 = 1;
+const GPU_NATIVE_BEGIN: u32 = 2;
+const GPU_NATIVE_END: u32 = 3;
+const GPU_EGUI_BEGIN: u32 = 4;
+const GPU_EGUI_END: u32 = 5;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -59,6 +77,147 @@ struct GfxState {
     backend: String,
     creations: ResourceCreationCounters,
     scripted_selected_key_index: Option<u32>,
+    gpu_timestamps: GpuTimestampRecorder,
+}
+
+struct GpuTimestampRecorder {
+    query_sets: Vec<wgpu::QuerySet>,
+    resolve_buffer: wgpu::Buffer,
+    readback_buffer: wgpu::Buffer,
+    timestamp_period_ns: f64,
+    recorded_frames: u32,
+}
+
+#[derive(Clone)]
+struct GpuTimestampFrame {
+    query_set: wgpu::QuerySet,
+    base: u32,
+}
+
+impl GpuTimestampRecorder {
+    fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
+        Self {
+            query_sets: (0..GPU_QUERY_SET_COUNT)
+                .map(|_| {
+                    device.create_query_set(&wgpu::QuerySetDescriptor {
+                        label: Some("g0-9-gpu-timestamp-queries"),
+                        ty: wgpu::QueryType::Timestamp,
+                        count: GPU_QUERIES_PER_SET,
+                    })
+                })
+                .collect(),
+            resolve_buffer: device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("g0-9-gpu-timestamp-resolve"),
+                size: GPU_QUERY_RESOLVE_STRIDE * u64::from(GPU_QUERY_SET_COUNT),
+                usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            }),
+            readback_buffer: device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("g0-9-gpu-timestamp-readback"),
+                size: GPU_TIMESTAMP_BYTES_PER_FRAME * u64::from(MAX_GPU_TIMESTAMP_FRAMES),
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            }),
+            timestamp_period_ns: f64::from(queue.get_timestamp_period()),
+            recorded_frames: 0,
+        }
+    }
+
+    fn frame(&self, sample_index: u32) -> GpuTimestampFrame {
+        assert!(
+            sample_index < MAX_GPU_TIMESTAMP_FRAMES,
+            "GPU timestamp sample capacity exceeded"
+        );
+        let set_index = sample_index / GPU_FRAMES_PER_QUERY_SET;
+        let frame_in_set = sample_index % GPU_FRAMES_PER_QUERY_SET;
+        GpuTimestampFrame {
+            query_set: self.query_sets[set_index as usize].clone(),
+            base: frame_in_set * GPU_TIMESTAMP_VALUES_PER_FRAME as u32,
+        }
+    }
+
+    fn begin_frame(&self, device: &wgpu::Device, queue: &wgpu::Queue, frame: &GpuTimestampFrame) {
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("g0-9-gpu-frame-begin"),
+        });
+        encoder.write_timestamp(&frame.query_set, frame.base + GPU_VELLO_BEGIN);
+        queue.submit([encoder.finish()]);
+    }
+
+    fn record_frame(&mut self, sample_index: u32) {
+        self.recorded_frames = self.recorded_frames.max(sample_index + 1);
+    }
+
+    fn collect(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        renderer: RendererMode,
+        measured_frames: u32,
+    ) -> GpuTimingReport {
+        assert_eq!(
+            self.recorded_frames, measured_frames,
+            "GPU timestamp frame count"
+        );
+        let (done_sender, done_receiver) = std::sync::mpsc::sync_channel(1);
+        queue.on_submitted_work_done(move || {
+            done_sender.send(()).expect("GPU timestamp work completion");
+        });
+        device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("wait for measured GPU work");
+        done_receiver.recv().expect("GPU work completion callback");
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("g0-9-gpu-timestamp-resolve"),
+        });
+        let mut remaining_frames = measured_frames;
+        let mut packed_offset = 0;
+        for (set_index, query_set) in self.query_sets.iter().enumerate() {
+            if remaining_frames == 0 {
+                break;
+            }
+            let frames = remaining_frames.min(GPU_FRAMES_PER_QUERY_SET);
+            let query_count = frames * GPU_TIMESTAMP_VALUES_PER_FRAME as u32;
+            let resolve_offset = set_index as u64 * GPU_QUERY_RESOLVE_STRIDE;
+            encoder.resolve_query_set(
+                query_set,
+                0..query_count,
+                &self.resolve_buffer,
+                resolve_offset,
+            );
+            let byte_len = u64::from(query_count) * std::mem::size_of::<u64>() as u64;
+            encoder.copy_buffer_to_buffer(
+                &self.resolve_buffer,
+                resolve_offset,
+                &self.readback_buffer,
+                packed_offset,
+                byte_len,
+            );
+            packed_offset += byte_len;
+            remaining_frames -= frames;
+        }
+        queue.submit([encoder.finish()]);
+        let byte_len = u64::from(measured_frames) * GPU_TIMESTAMP_BYTES_PER_FRAME;
+        let slice = self.readback_buffer.slice(0..byte_len);
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            sender.send(result).expect("GPU timestamp map result");
+        });
+        device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("wait for GPU timestamp query results");
+        receiver
+            .recv()
+            .expect("GPU timestamp map callback")
+            .expect("map GPU timestamp query results");
+        let mapped = slice.get_mapped_range();
+        let ticks = bytemuck::cast_slice::<u8, u64>(&mapped).to_vec();
+        drop(mapped);
+        self.readback_buffer.unmap();
+        GpuTimingReport::from_ticks(renderer, &ticks, measured_frames, self.timestamp_period_ns)
+            .expect("valid GPU timestamp report")
+    }
 }
 
 struct EguiState {
@@ -87,8 +246,15 @@ impl GfxState {
         }))
         .expect("surface adapter");
         let adapter_info = adapter.get_info();
+        let timestamp_features =
+            wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS;
+        assert!(
+            adapter.features().contains(timestamp_features),
+            "fixed-Mac adapter must support pass and encoder timestamp queries"
+        );
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("g0-9-windowed-timeline"),
+            required_features: timestamp_features,
             ..Default::default()
         }))
         .expect("surface device");
@@ -109,6 +275,9 @@ impl GfxState {
         surface.configure(&device, &config);
 
         let mut creations = ResourceCreationCounters::default();
+        let gpu_timestamps = GpuTimestampRecorder::new(&device, &queue);
+        creations.buffers += 2;
+        creations.query_sets += u64::from(GPU_QUERY_SET_COUNT);
         let descriptor_text =
             std::env::var("G0_9_CJK_FACE").expect("G0_9_CJK_FACE exact face descriptor");
         let descriptor =
@@ -357,6 +526,7 @@ impl GfxState {
             backend: format!("{:?}", adapter_info.backend),
             creations,
             scripted_selected_key_index: None,
+            gpu_timestamps,
         }
     }
 
@@ -373,7 +543,12 @@ impl GfxState {
         self.pixels_per_point = scale_factor as f32;
     }
 
-    fn render(&mut self, layout: SurfaceLayout, scenario: &ScenarioFrame) -> RenderOutcome {
+    fn render(
+        &mut self,
+        layout: SurfaceLayout,
+        scenario: &ScenarioFrame,
+        gpu_sample: Option<u32>,
+    ) -> RenderOutcome {
         let started = Instant::now();
         debug_assert_eq!(self.overlay_texture.width(), OVERLAY_WIDTH);
         debug_assert_eq!(self.overlay_texture.height(), OVERLAY_HEIGHT);
@@ -427,6 +602,12 @@ impl GfxState {
             }),
         );
         let input_applied_at = Instant::now();
+        let timestamp_frame =
+            gpu_sample.map(|sample_index| self.gpu_timestamps.frame(sample_index));
+        if let Some(frame) = &timestamp_frame {
+            self.gpu_timestamps
+                .begin_frame(&self.device, &self.queue, frame);
+        }
 
         if self
             .vello_renderer
@@ -447,13 +628,17 @@ impl GfxState {
             return RenderOutcome::VelloFailure;
         }
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("windowed-timeline-frame"),
-            });
+        let mut native_encoder =
+            self.device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("windowed-timeline-native-frame"),
+                });
+        if let Some(timestamp) = &timestamp_frame {
+            native_encoder.write_timestamp(&timestamp.query_set, timestamp.base + GPU_VELLO_END);
+            native_encoder.write_timestamp(&timestamp.query_set, timestamp.base + GPU_NATIVE_BEGIN);
+        }
         {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut pass = native_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("windowed-timeline-pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
@@ -509,10 +694,34 @@ impl GfxState {
             );
             pass.draw(0..6, 0..1);
         }
+        if let Some(timestamp) = &timestamp_frame {
+            native_encoder.write_timestamp(&timestamp.query_set, timestamp.base + GPU_NATIVE_END);
+            native_encoder.write_timestamp(&timestamp.query_set, timestamp.base + GPU_EGUI_BEGIN);
+            if self.egui.is_none() {
+                native_encoder.write_timestamp(&timestamp.query_set, timestamp.base + GPU_EGUI_END);
+            }
+        }
+        self.queue.submit([native_encoder.finish()]);
+        let mut egui_encoder =
+            self.device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("windowed-timeline-egui-frame"),
+                });
         let (egui_command_buffers, egui_texture_free) =
-            self.render_egui(&mut encoder, &view, layout);
-        self.queue
-            .submit(egui_command_buffers.into_iter().chain([encoder.finish()]));
+            self.render_egui(&mut egui_encoder, &view, layout);
+        if self.egui.is_some() {
+            if let Some(timestamp) = &timestamp_frame {
+                egui_encoder.write_timestamp(&timestamp.query_set, timestamp.base + GPU_EGUI_END);
+            }
+            self.queue.submit(
+                egui_command_buffers
+                    .into_iter()
+                    .chain([egui_encoder.finish()]),
+            );
+        }
+        if let Some(sample_index) = gpu_sample {
+            self.gpu_timestamps.record_frame(sample_index);
+        }
         if let Some(egui) = &mut self.egui {
             for texture_id in egui_texture_free {
                 egui.renderer.free_texture(&texture_id);
@@ -716,6 +925,12 @@ impl State {
             return;
         };
         let rss = collect_rss();
+        let gpu_timing = gfx.gpu_timestamps.collect(
+            &gfx.device,
+            &gfx.queue,
+            self.renderer_mode,
+            self.measured_frames,
+        );
         let complete = self.measured_frames >= self.measured_target
             && self.measured_seconds() >= self.seconds_target
             && self.acquire_count != 0
@@ -725,6 +940,7 @@ impl State {
             && matches!(rss, Rss::Available { .. });
         let report = RawReport {
             renderer: self.renderer_mode,
+            toolchain: collect_toolchain_provenance(),
             scenario_digest: ScenarioDefinition::fixed()
                 .digests()
                 .expect("fixed scenario")
@@ -757,6 +973,7 @@ impl State {
             frame_timing,
             present_timing,
             input_timing,
+            gpu_timing,
             rss,
             resource_creations: ResourceCreationPhases {
                 initialization: self.initialization_baseline,
@@ -862,7 +1079,14 @@ impl ApplicationHandler for State {
                 let scenario = ScenarioDefinition::fixed()
                     .at(frame_index)
                     .expect("fixed scenario frame");
-                match self.gfx.as_mut().unwrap().render(layout, &scenario) {
+                let gpu_sample =
+                    (self.warmup_frames >= self.warmup_target).then_some(self.measured_frames);
+                match self
+                    .gfx
+                    .as_mut()
+                    .unwrap()
+                    .render(layout, &scenario, gpu_sample)
+                {
                     RenderOutcome::Presented(elapsed, input_applied_at) => {
                         self.acquire_count += 1;
                         self.present_count += 1;
@@ -978,6 +1202,38 @@ fn collect_rss() -> Rss {
     }
 }
 
+fn collect_toolchain_provenance() -> ToolchainProvenance {
+    ToolchainProvenance {
+        rustc: command_version("rustc"),
+        cargo: command_version("cargo"),
+        execution_commit: std::env::var("G0_9_EXECUTION_COMMIT")
+            .expect("G0_9_EXECUTION_COMMIT full Git object ID"),
+        measurement_session: std::env::var("G0_9_MEASUREMENT_SESSION")
+            .expect("G0_9_MEASUREMENT_SESSION shared by both renderer arms"),
+        lockfile_sha256: {
+            let mut digest = Sha256::new();
+            digest.update(include_bytes!("../Cargo.lock"));
+            format!("{:x}", digest.finalize())
+        },
+    }
+}
+
+fn command_version(command: &str) -> String {
+    let output = Command::new(command)
+        .arg("--version")
+        .output()
+        .unwrap_or_else(|error| panic!("{command} --version failed: {error}"));
+    assert!(
+        output.status.success(),
+        "{command} --version exited with {}",
+        output.status
+    );
+    String::from_utf8(output.stdout)
+        .expect("toolchain version UTF-8")
+        .trim()
+        .to_owned()
+}
+
 fn env_u32(name: &str, default: u32) -> u32 {
     std::env::var(name)
         .ok()
@@ -1061,8 +1317,7 @@ mod tests {
         assert!(implementation.contains("egui.context.run_ui(raw_input, |ui|"));
         assert!(!implementation.contains("egui.context.run(raw_input"));
         assert!(implementation.contains("let pixels_per_point = output.pixels_per_point;"));
-        assert!(implementation
-            .contains(".submit(egui_command_buffers.into_iter().chain([encoder.finish()]));"));
+        assert!(implementation.contains(".chain([egui_encoder.finish()])"));
     }
 
     #[test]
@@ -1077,7 +1332,7 @@ mod tests {
             .and_then(|tail| tail.split("\n}\n\nfn scripted_key_instance").next())
             .expect("egui render helper source section");
         let frame_caller = implementation
-            .split("fn render(&mut self")
+            .split("fn render(")
             .nth(1)
             .and_then(|tail| tail.split("\n    fn render_egui(").next())
             .expect("frame caller source section");
@@ -1095,7 +1350,7 @@ mod tests {
             .find("output.textures_delta.free")
             .expect("texture free return source");
         let submit = frame_caller
-            .find(".submit(egui_command_buffers.into_iter().chain([encoder.finish()]));")
+            .find(".chain([egui_encoder.finish()])")
             .expect("frame submission source");
         let free_texture = frame_caller
             .find(".free_texture(")
@@ -1135,7 +1390,7 @@ mod tests {
             .find("let egui = match renderer_mode")
             .expect("renderer mode match source");
         let render = implementation
-            .find("fn render(&mut self")
+            .find("fn render(")
             .expect("shared render source");
 
         assert_eq!(
@@ -1170,7 +1425,7 @@ mod tests {
             .next()
             .expect("implementation source");
         let render = implementation
-            .split("fn render(&mut self")
+            .split("fn render(")
             .nth(1)
             .and_then(|tail| tail.split("\n    fn render_egui(").next())
             .expect("render source section");
@@ -1180,13 +1435,26 @@ mod tests {
             "create_render_pipeline(",
             "create_texture(",
             "copy_texture",
+            "copy_buffer_to_buffer",
             "map_async",
             "PollType::wait",
+            "resolve_query_set",
         ] {
             assert!(
                 !render.contains(forbidden),
                 "render hot loop contains forbidden call: {forbidden}",
             );
         }
+        let collect = implementation
+            .split("fn collect(")
+            .nth(1)
+            .and_then(|tail| tail.split("\n}\n\nstruct EguiState").next())
+            .expect("GPU collection source section");
+        assert!(collect.contains("on_submitted_work_done"));
+        assert!(collect.contains("resolve_query_set"));
+        assert!(collect.contains("map_async"));
+        assert!(collect.contains("PollType::wait_indefinitely"));
+        assert!(GPU_QUERIES_PER_SET <= wgpu::QUERY_SET_MAX_QUERIES);
+        assert!(GPU_QUERY_SET_COUNT * GPU_FRAMES_PER_QUERY_SET >= MAX_GPU_TIMESTAMP_FRAMES);
     }
 }

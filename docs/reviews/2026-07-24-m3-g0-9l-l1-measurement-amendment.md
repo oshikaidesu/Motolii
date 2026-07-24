@@ -50,10 +50,15 @@ instrumentation後の同一binaryを使い、同じsessionで`direct_vello`、`e
 warm-up、測定時間が一致しなければ不合格とする。既存CU-0G02 rawとの数値連結や、
 片armだけの再実行を禁止する。
 
+実行commitをrawへ固定するため、instrumentationは`CU-0G02BH`の独立commitへ先に閉じる。
+wgpu標準queryの一意slotを初期化時だけ確保し、測定終了後のGPU完了待ち、一括resolve、
+1回のmapだけを許す。Metal固有counter、profiler framework、製品telemetryへ広げず、
+0または逆転timestampが残る場合は実測へ進まずSTOPする。
+
 ## 4. 状態と非目標
 
 - CU-0G02は定義済み二方式のCPU/input/RSS比較として`DONE`を維持する
-- CU-0G02BとCU-0G05Lは未完了で、`G0-9L: PASS`を宣言しない
+- CU-0G02BHは`DONE / FROZEN`、CU-0G02BとCU-0G05Lは未完了で、`G0-9L: PASS`を宣言しない
 - 絶対閾値、renderer勝者、egui削除を決めない
 - GPU timestampを製品telemetry、profiling API、常設resourceへ昇格しない
 - W0b、H1b、Motolii Studio Preview、製品window、G0-9D、G0-6H、G0-3/GAP-13を解禁しない
@@ -73,6 +78,11 @@ warm-up、測定時間が一致しなければ不合格とする。既存CU-0G02
 本修正は反対側review P0/P1=0後にだけ決定へ上げる。その後CU-0G02Bを別粒・別commitで
 実測し、同じく反対側review P0/P1=0まで証拠を採用しない。CU-0G05Lは両者の完了後に
 manifestを再構築する。
+
+CU-0G02BHはwgpu標準query、初期化時のbounded query set、一意slot、測定後のGPU完了待ちと
+一括resolve/mapだけで閉じた。35 tests、両arm各5回×500 frameとゼロ値拒否修正後の各500
+frame実window診断を通し、Grok R2はP0/P1=0、`VERDICT: ACCEPT`だった。製品telemetryや
+profiler frameworkへ昇格せず`FROZEN / DELETE-LATER`とし、CU-0G02Bだけを`DO`へ上げる。
 
 Grok R1のP1（topology正本に残った三arm表現）とP2を全件反映し、topology、
 renderer再選定、UI runtime、段階化L1を同じ意味へ揃えた。R2はP0/P1/P2=0、
