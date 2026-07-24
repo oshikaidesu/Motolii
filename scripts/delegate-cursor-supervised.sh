@@ -5,10 +5,12 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CURSOR_GROK_MODEL="${CURSOR_GROK_MODEL:-cursor-grok-4.5-high}"
 CURSOR_AGENT_BIN="${CURSOR_AGENT_BIN:-cursor-agent}"
 CODEX_AGENT_BIN="${CODEX_AGENT_BIN:-codex}"
-TERRA_MODEL="${CODEX_TERRA_MODEL:-gpt-5.6-terra}"
+CLAUDE_AGENT_BIN="${CLAUDE_AGENT_BIN:-claude}"
+FABLE_MODEL="${CLAUDE_FABLE_MODEL:-claude-fable-5}"
 SUPERVISOR_TIMEOUT_SECONDS="${CURSOR_SUPERVISED_TIMEOUT_SECONDS:-300}"
 INSPECTION_TIMEOUT_SECONDS="${CURSOR_INSPECTION_TIMEOUT_SECONDS:-900}"
-TERRA_TIMEOUT_SECONDS="${CODEX_TERRA_TIMEOUT_SECONDS:-900}"
+IMPLEMENTER_TIMEOUT_SECONDS="${CODEX_IMPLEMENTER_TIMEOUT_SECONDS:-900}"
+FABLE_TIMEOUT_SECONDS="${CLAUDE_FABLE_TIMEOUT_SECONDS:-900}"
 HEARTBEAT_SECONDS="${CURSOR_SUPERVISED_HEARTBEAT_SECONDS:-30}"
 GRAIN_LEDGER="$ROOT_DIR/docs/reviews/2026-07-22-m3-comfortable-use-granulation.md"
 
@@ -16,6 +18,42 @@ usage() {
   echo "Usage: $0 prepare <isolated-worktree> <order-file> <task>"
   echo "       $0 execute <isolated-worktree> <approved-order-file> <task>"
   echo "       printf '%s\n' <task> | $0 prepare|execute <isolated-worktree> <order-file>"
+  echo "       prepare routing: DELEGATION_TASK_CLASS=mechanical|standard|rapid|complex|cross-boundary"
+}
+
+select_routing() {
+  local task_class="$1"
+  case "$task_class" in
+    mechanical)
+      IMPLEMENTER_MODEL="gpt-5.4-mini-none"
+      REVIEW_PROFILE="grok"
+      ;;
+    standard)
+      IMPLEMENTER_MODEL="gpt-5.6-luna-none-fast"
+      REVIEW_PROFILE="grok"
+      ;;
+    rapid)
+      IMPLEMENTER_MODEL="gpt-5.6-terra"
+      REVIEW_PROFILE="grok"
+      ;;
+    complex|cross-boundary)
+      IMPLEMENTER_MODEL="gpt-5.6-sol-none-fast"
+      REVIEW_PROFILE="grok+fable"
+      ;;
+    *)
+      echo "delegate-cursor-supervised: TASK_CLASSはmechanical/standard/rapid/complex/cross-boundaryから選んでください" >&2
+      return 1
+      ;;
+  esac
+}
+
+order_value() {
+  local order_file="$1"
+  local key="$2"
+  awk -v prefix="$key: " '
+    index($0, prefix) == 1 { count++; value = substr($0, length(prefix) + 1) }
+    END { if (count == 1) print value }
+  ' "$order_file"
 }
 
 if [[ -n "${CURSOR_AGENT:-}" ]]; then
@@ -24,6 +62,10 @@ if [[ -n "${CURSOR_AGENT:-}" ]]; then
 fi
 if [[ -n "${CODEX_DELEGATED:-}" ]]; then
   echo "delegate-cursor-supervised: Codex子エージェントからの再帰実行は禁止です" >&2
+  exit 2
+fi
+if [[ -n "${CLAUDE_DELEGATED:-}" ]]; then
+  echo "delegate-cursor-supervised: Claude子エージェントからの再帰実行は禁止です" >&2
   exit 2
 fi
 
@@ -67,8 +109,12 @@ if [[ ! "$INSPECTION_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
   echo "delegate-cursor-supervised: CURSOR_INSPECTION_TIMEOUT_SECONDSは正の整数で指定してください" >&2
   exit 2
 fi
-if [[ ! "$TERRA_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
-  echo "delegate-cursor-supervised: CODEX_TERRA_TIMEOUT_SECONDSは正の整数で指定してください" >&2
+if [[ ! "$IMPLEMENTER_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "delegate-cursor-supervised: CODEX_IMPLEMENTER_TIMEOUT_SECONDSは正の整数で指定してください" >&2
+  exit 2
+fi
+if [[ ! "$FABLE_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "delegate-cursor-supervised: CLAUDE_FABLE_TIMEOUT_SECONDSは正の整数で指定してください" >&2
   exit 2
 fi
 if [[ ! "$HEARTBEAT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
@@ -355,8 +401,20 @@ $prompt"
 }
 
 if [[ "$MODE" == "prepare" ]]; then
+  TASK_CLASS="${DELEGATION_TASK_CLASS:-standard}"
+  if ! select_routing "$TASK_CLASS"; then
+    exit 2
+  fi
   supervisor_prompt=$(cat <<EOF
-You are the on-site supervisor for Motolii. Work read-only. Read AGENTS.md and every required spec/review completely. Inspect the current worktree and existing diff. Translate the user intent into a binding implementation order for GPT-5.6 Terra; do not implement.
+You are the on-site supervisor for Motolii. Work read-only. Read AGENTS.md and every required spec/review completely. Inspect the current worktree and existing diff. Translate the user intent into a binding implementation order for the Codex implementer selected by Codex; do not implement or change the selected routing.
+
+Codex-selected routing:
+TASK_CLASS: $TASK_CLASS
+IMPLEMENTER_MODEL: $IMPLEMENTER_MODEL
+REVIEW_PROFILE: $REVIEW_PROFILE
+
+Do not repeat these routing labels in the draft; the dispatcher appends the
+Codex-owned values after validating your terminal marker.
 
 The order must contain: objective and user intent, current state and already-completed work, authoritative spec/task IDs, exact allowed files, explicit non-goals, existing helpers to reuse, invariants and atomicity, STOP conditions, required positive and negative tests, exact verification commands, and known integration gates. It must also contain exactly one GRAIN line, exactly one BASE_SHA line equal to the isolated worktree HEAD, one or more AUTHORITY lines in the exact form AUTHORITY: <worktree-relative-path> SHA256:<64 lowercase hex>, and one ALLOWED_FILE: <worktree-relative-glob> line for every allowed path or closed subtree. Add REACT TASK: YES only when the implementation changes a React source asset or docs/mocks-ui/JSX runtime path; prose that merely discusses React does not make an infrastructure or documentation grain a React task. A grain may be READY only when its row is DO in the main comfortable-use granulation ledger and every authority exists inside the target worktree at that hash. Do not permit allow/ignore/lint suppression, expected-value or golden rewrites, fixture special-cases, raw JSON/string scanners that bypass typed boundaries, public raw allocation/mutation APIs, serde defaults inventing durable meaning, duplicate planners/helpers, implicit migration, partial mutation, TODO stubs, or expansion into adjacent tasks.
 
@@ -378,7 +436,10 @@ EOF
     cat "$tmp_dir/order.txt"
     echo "SUPERVISOR_BACKEND: $SUPERVISOR_BACKEND_USED"
     echo "SUPERVISOR_MODEL: $CURSOR_GROK_MODEL"
-    echo "IMPLEMENTER_MODEL: $TERRA_MODEL"
+    echo "TASK_CLASS: $TASK_CLASS"
+    echo "IMPLEMENTER_MODEL: $IMPLEMENTER_MODEL"
+    echo "REVIEW_PROFILE: $REVIEW_PROFILE"
+    echo "FABLE_MODEL: $FABLE_MODEL"
     echo "TASK_SHA256: $task_hash"
   } >"$ORDER_FILE"
   if ! grep -qx 'ORDER: READY' "$tmp_dir/order.txt"; then
@@ -402,29 +463,46 @@ if ! grep -qx "TASK_SHA256: $task_hash" "$ORDER_FILE"; then
   echo "delegate-cursor-supervised: 発注書とtaskが一致しません" >&2
   exit 3
 fi
+TASK_CLASS="$(order_value "$ORDER_FILE" TASK_CLASS)"
+ORDER_IMPLEMENTER_MODEL="$(order_value "$ORDER_FILE" IMPLEMENTER_MODEL)"
+ORDER_REVIEW_PROFILE="$(order_value "$ORDER_FILE" REVIEW_PROFILE)"
+ORDER_FABLE_MODEL="$(order_value "$ORDER_FILE" FABLE_MODEL)"
+if [[ -z "$TASK_CLASS" || -z "$ORDER_IMPLEMENTER_MODEL" || -z "$ORDER_REVIEW_PROFILE" || -z "$ORDER_FABLE_MODEL" ]]; then
+  echo "delegate-cursor-supervised: 発注書のTASK_CLASS/model/review指定が欠落または重複しています" >&2
+  exit 3
+fi
+if ! select_routing "$TASK_CLASS"; then
+  exit 3
+fi
 if ! grep -qx "SUPERVISOR_MODEL: $CURSOR_GROK_MODEL" "$ORDER_FILE" ||
-   ! grep -qx "IMPLEMENTER_MODEL: $TERRA_MODEL" "$ORDER_FILE"; then
-  echo "delegate-cursor-supervised: 発注書のモデル固定が現行のTerra + Grok運用と一致しません" >&2
+   [[ "$ORDER_IMPLEMENTER_MODEL" != "$IMPLEMENTER_MODEL" ]] ||
+   [[ "$ORDER_REVIEW_PROFILE" != "$REVIEW_PROFILE" ]] ||
+   [[ "$ORDER_FABLE_MODEL" != "$FABLE_MODEL" ]]; then
+  echo "delegate-cursor-supervised: 発注書のモデル経路がTASK_CLASS対応表と一致しません" >&2
   exit 3
 fi
 if ! grep -qx 'CODEX PRECHECK: APPROVED' "$ORDER_FILE"; then
-  echo "delegate-cursor-supervised: Codex事前承認がないためTerraを起動しません" >&2
+  echo "delegate-cursor-supervised: Codex事前承認がないため実装担当を起動しません" >&2
   exit 3
 fi
 if ! order_gate "$ORDER_FILE" "$WORKTREE"; then
-  echo "delegate-cursor-supervised: 発注正本・粒状態・worktreeが一致しないためTerraを起動しません" >&2
+  echo "delegate-cursor-supervised: 発注正本・粒状態・worktreeが一致しないため実装担当を起動しません" >&2
   exit 3
+fi
+if [[ "$REVIEW_PROFILE" == "grok+fable" ]] && ! command -v "$CLAUDE_AGENT_BIN" >/dev/null 2>&1; then
+  echo "delegate-cursor-supervised: Fable必須クラスですがClaude Code '$CLAUDE_AGENT_BIN' が見つかりません" >&2
+  exit 127
 fi
 
 EVIDENCE_DIR="${ORDER_FILE}.evidence"
 mkdir -p "$EVIDENCE_DIR"
-rm -f "$EVIDENCE_DIR"/{order,implementation,inspection}.{txt,err,timeout} \
-  "$EVIDENCE_DIR"/{before-implementation,after-implementation,before-inspection,after-inspection}.{status,diff}
+rm -f "$EVIDENCE_DIR"/{order,implementation,inspection,fable-inspection}.{txt,err,timeout} \
+  "$EVIDENCE_DIR"/{before-implementation,after-implementation,before-inspection,after-inspection,before-fable-inspection,after-fable-inspection}.{status,diff}
 cp "$ORDER_FILE" "$tmp_dir/order.txt"
 cp "$ORDER_FILE" "$EVIDENCE_DIR/order.txt"
 snapshot_worktree before-implementation
 
-terra_prompt=$(cat <<EOF
+implementation_prompt=$(cat <<EOF
 You are the implementation contractor for Motolii. The order from the Grok supervisor below is binding. Read AGENTS.md and all sources named by the order. Implement only the allowed scope. You may not reinterpret requirements, broaden file scope, invent defaults, or substitute a local workaround. If the order cannot be implemented exactly, do not improvise: stop and report the conflicting spec/file evidence. Do not commit, push, or create a PR.
 
 Original user task:
@@ -436,12 +514,12 @@ EOF
 )
 
 echo
-echo "## 2. GPT-5.6 Terra implementation (Codex-prechecked order)"
+echo "## 2. $IMPLEMENTER_MODEL implementation (Codex-prechecked order)"
 head_before="$(git -C "$WORKTREE" rev-parse HEAD)"
-if ! run_agent "$tmp_dir/implementation.txt" "$TERRA_TIMEOUT_SECONDS" \
+if ! run_agent "$tmp_dir/implementation.txt" "$IMPLEMENTER_TIMEOUT_SECONDS" \
   env CODEX_DELEGATED=1 "$CODEX_AGENT_BIN" --ask-for-approval never exec \
-  --ephemeral --color never --model "$TERRA_MODEL" --sandbox danger-full-access \
-  --cd "$WORKTREE" "$terra_prompt"; then
+  --ephemeral --color never --model "$IMPLEMENTER_MODEL" --sandbox danger-full-access \
+  --cd "$WORKTREE" "$implementation_prompt"; then
   persist_evidence implementation "$tmp_dir/implementation.txt"
   snapshot_worktree after-implementation
   cat "$tmp_dir/implementation.txt"
@@ -451,7 +529,7 @@ persist_evidence implementation "$tmp_dir/implementation.txt"
 snapshot_worktree after-implementation
 cat "$tmp_dir/implementation.txt"
 if [[ "$(git -C "$WORKTREE" rev-parse HEAD)" != "$head_before" ]]; then
-  echo "delegate-cursor-supervised: Terraがcommitを作成したため検収へ進みません" >&2
+  echo "delegate-cursor-supervised: 実装担当がcommitを作成したため検収へ進みません" >&2
   exit 5
 fi
 if ! scope_closure "$ORDER_FILE" "$WORKTREE"; then
@@ -497,4 +575,64 @@ if ! grep -qx 'VERDICT: ACCEPT' "$tmp_dir/inspection.txt"; then
   exit 4
 fi
 
-echo "delegate-cursor-supervised: Grok検収ACCEPT。主担当の最終レビュー待ちです"
+if [[ "$REVIEW_PROFILE" == "grok+fable" ]]; then
+  fable_prompt=$(cat <<EOF
+You are the independent final counter-reviewer for Motolii. Work read-only in
+the current worktree. Do not edit files, commit, push, create a PR, spawn
+subagents, or delegate. Read AGENTS.md, the binding order, every named authority,
+the actual diff, and the required test evidence. Review the whole change for
+cross-file invariants, atomic failure behavior, contract drift, hidden public or
+durable meaning, missed negative cases, and locally-correct changes that violate
+the wider architecture. Do not accept merely because Grok accepted or tests are
+green.
+
+Classify findings P0/P1/P2 with file and line evidence. Any P0/P1, missing
+required evidence, or unresolved contract conflict requires rejection. End with
+exactly one line:
+VERDICT: ACCEPT
+or
+VERDICT: REJECT
+
+Original user task:
+$task
+
+Binding order:
+$(cat "$tmp_dir/order.txt")
+EOF
+  )
+
+  echo
+  echo "## 4. Claude Code Fable independent inspection"
+  snapshot_worktree before-fable-inspection
+  if ! (cd "$WORKTREE" && run_agent "$tmp_dir/fable-inspection.txt" "$FABLE_TIMEOUT_SECONDS" \
+    env CLAUDE_DELEGATED=1 "$CLAUDE_AGENT_BIN" -p \
+      --model "$FABLE_MODEL" \
+      --permission-mode default \
+      --allowedTools Read,Glob,Grep,Bash \
+      --disallowedTools Edit,Write \
+      --output-format text \
+      "$fable_prompt"); then
+    persist_evidence fable-inspection "$tmp_dir/fable-inspection.txt"
+    snapshot_worktree after-fable-inspection
+    [[ ! -f "$tmp_dir/fable-inspection.txt" ]] || cat "$tmp_dir/fable-inspection.txt"
+    exit 1
+  fi
+  persist_evidence fable-inspection "$tmp_dir/fable-inspection.txt"
+  snapshot_worktree after-fable-inspection
+  if ! cmp -s "$EVIDENCE_DIR/before-fable-inspection.status" "$EVIDENCE_DIR/after-fable-inspection.status" ||
+     ! cmp -s "$EVIDENCE_DIR/before-fable-inspection.diff" "$EVIDENCE_DIR/after-fable-inspection.diff"; then
+    echo "INSPECT NG: Fable検収中にworktreeが変更されたためverdictを無効化します" >&2
+    exit 7
+  fi
+  cat "$tmp_dir/fable-inspection.txt"
+  if ! supervisor_result_is_valid "$tmp_dir/fable-inspection.txt" verdict; then
+    echo "delegate-cursor-supervised: Fableの結果マーカーが欠落・曖昧・末尾外です" >&2
+    exit 1
+  fi
+  if ! grep -qx 'VERDICT: ACCEPT' "$tmp_dir/fable-inspection.txt"; then
+    echo "delegate-cursor-supervised: Fable検収REJECT。差分は隔離したまま採用しません" >&2
+    exit 4
+  fi
+fi
+
+echo "delegate-cursor-supervised: 必須検収ACCEPT。主担当の最終レビュー待ちです"

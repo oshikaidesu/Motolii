@@ -107,6 +107,15 @@ printf '%s\n' "${FAKE_TERRA_OUTPUT:-implementation complete}"
 exit "${FAKE_TERRA_STATUS:-0}"
 EOF
 
+cat >"$FAKE_BIN/claude" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo claude >>"$FAKE_CALL_LOG"
+printf 'claude-args:%s\n' "$*" >>"$FAKE_CALL_LOG"
+printf '%s\n' "${FAKE_CLAUDE_OUTPUT:-VERDICT: ACCEPT}"
+exit "${FAKE_CLAUDE_STATUS:-0}"
+EOF
+
 cat >"$FAKE_BIN/agent" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -114,7 +123,7 @@ echo agent >>"$FAKE_CALL_LOG"
 exit 99
 EOF
 
-chmod +x "$FAKE_BIN/grok" "$FAKE_BIN/cursor-agent" "$FAKE_BIN/codex" "$FAKE_BIN/agent"
+chmod +x "$FAKE_BIN/grok" "$FAKE_BIN/cursor-agent" "$FAKE_BIN/codex" "$FAKE_BIN/claude" "$FAKE_BIN/agent"
 
 run_prepare() {
   local order_file="$1"
@@ -142,11 +151,45 @@ status="$RUN_STATUS"
 assert_status 0 "$status" "Cursor-only order"
 assert_contains "$order_file" "SUPERVISOR_BACKEND: cursor-grok" "Cursor-only order"
 assert_contains "$order_file" "SUPERVISOR_MODEL: cursor-grok-4.5-high" "fixed Grok model"
-assert_contains "$order_file" "IMPLEMENTER_MODEL: gpt-5.6-terra" "fixed Terra model"
+assert_contains "$order_file" "TASK_CLASS: standard" "default task class"
+assert_contains "$order_file" "IMPLEMENTER_MODEL: gpt-5.6-luna-none-fast" "standard Codex model"
+assert_contains "$order_file" "REVIEW_PROFILE: grok" "standard review profile"
+assert_contains "$order_file" "FABLE_MODEL: claude-fable-5" "Claude Code Fable model"
 assert_contains "$CALL_LOG" "cursor-agent" "explicit Cursor binary"
 assert_not_contains "$CALL_LOG" "grok" "Grok Build bypass"
 assert_has_fragment "$CALL_LOG" "--mode ask" "read-only order supervisor mode"
 assert_not_contains "$CALL_LOG" "agent" "generic agent collision"
+
+mechanical_order="$TMP_ROOT/mechanical-order.md"
+run_prepare "$mechanical_order" \
+  DELEGATION_TASK_CLASS=mechanical \
+  FAKE_CURSOR_OUTPUT=$'mechanical order\nORDER: READY'
+assert_status 0 "$RUN_STATUS" "mechanical routing"
+assert_contains "$mechanical_order" "IMPLEMENTER_MODEL: gpt-5.4-mini-none" "mechanical model"
+assert_contains "$mechanical_order" "REVIEW_PROFILE: grok" "mechanical review"
+
+rapid_order="$TMP_ROOT/rapid-order.md"
+run_prepare "$rapid_order" \
+  DELEGATION_TASK_CLASS=rapid \
+  FAKE_CURSOR_OUTPUT=$'rapid order\nORDER: READY'
+assert_status 0 "$RUN_STATUS" "rapid routing"
+assert_contains "$rapid_order" "IMPLEMENTER_MODEL: gpt-5.6-terra" "rapid model"
+
+complex_draft="$TMP_ROOT/complex-draft.md"
+run_prepare "$complex_draft" \
+  DELEGATION_TASK_CLASS=complex \
+  FAKE_CURSOR_OUTPUT=$'complex order\nORDER: READY'
+assert_status 0 "$RUN_STATUS" "complex routing"
+assert_contains "$complex_draft" "IMPLEMENTER_MODEL: gpt-5.6-sol-none-fast" "complex model"
+assert_contains "$complex_draft" "REVIEW_PROFILE: grok+fable" "complex review"
+assert_not_contains "$CALL_LOG" "claude" "prepare does not spend Fable"
+
+invalid_class_order="$TMP_ROOT/invalid-class-order.md"
+run_prepare "$invalid_class_order" \
+  DELEGATION_TASK_CLASS=unknown \
+  FAKE_CURSOR_OUTPUT=$'must not run\nORDER: READY'
+assert_status 2 "$RUN_STATUS" "unknown task class rejection"
+assert_not_contains "$CALL_LOG" "cursor-agent" "unknown task class blocks supervisor"
 
 order_file="$TMP_ROOT/stop-order.md"
 run_prepare "$order_file" \
@@ -190,7 +233,10 @@ ALLOWED_FILE: docs/authority.md
 ORDER: READY
 SUPERVISOR_BACKEND: cursor-grok
 SUPERVISOR_MODEL: cursor-grok-4.5-high
-IMPLEMENTER_MODEL: gpt-5.6-terra
+TASK_CLASS: standard
+IMPLEMENTER_MODEL: gpt-5.6-luna-none-fast
+REVIEW_PROFILE: grok
+FABLE_MODEL: claude-fable-5
 TASK_SHA256: $task_hash
 CODEX PRECHECK: APPROVED
 EOF
@@ -208,10 +254,10 @@ else
   status=$?
 fi
 assert_status 4 "$status" "VERDICT REJECT preservation"
-assert_contains "$CALL_LOG" "codex" "Terra explicit Codex binary"
-assert_has_fragment "$CALL_LOG" "--model gpt-5.6-terra" "Terra fixed model"
-assert_has_fragment "$CALL_LOG" "--sandbox danger-full-access" "Terra isolated worktree permissions"
-assert_has_fragment "$CALL_LOG" "--ask-for-approval never" "Terra noninteractive approvals"
+assert_contains "$CALL_LOG" "codex" "Codex implementer binary"
+assert_has_fragment "$CALL_LOG" "--model gpt-5.6-luna-none-fast" "standard Luna model"
+assert_has_fragment "$CALL_LOG" "--sandbox danger-full-access" "Codex isolated worktree permissions"
+assert_has_fragment "$CALL_LOG" "--ask-for-approval never" "Codex noninteractive approvals"
 assert_not_contains "$CALL_LOG" "grok" "Grok Build inspection bypass"
 assert_not_contains "$CALL_LOG" "agent" "execute generic agent collision"
 assert_exists "$approved_order.evidence/order.txt" "persistent order evidence"
@@ -322,5 +368,47 @@ inspection_args="$(grep -F -- '--model cursor-grok-4.5-high' "$CALL_LOG")"
 [[ -n "$inspection_args" ]] || fail "inspection supervisor model: cursor-grok args missing"
 [[ "$inspection_args" != *"--mode plan"* ]] || fail "inspection shell-capable standard mode: plan mode present"
 [[ "$inspection_args" == *"--force"* ]] || fail "inspection shell approval: force missing"
+
+complex_order="$TMP_ROOT/complex-order.md"
+sed \
+  -e 's/^TASK_CLASS:.*/TASK_CLASS: complex/' \
+  -e 's/^IMPLEMENTER_MODEL:.*/IMPLEMENTER_MODEL: gpt-5.6-sol-none-fast/' \
+  -e 's/^REVIEW_PROFILE:.*/REVIEW_PROFILE: grok+fable/' \
+  "$approved_order" >"$complex_order"
+: >"$CALL_LOG"
+if env -u CURSOR_AGENT -u CURSOR_AGENT_BIN -u CODEX_DELEGATED -u CODEX_AGENT_BIN \
+    PATH="$FAKE_BIN:/usr/bin:/bin" \
+    FAKE_CALL_LOG="$CALL_LOG" \
+    FAKE_CURSOR_OUTPUT=$'Grok accepts\nVERDICT: ACCEPT' \
+    FAKE_CLAUDE_OUTPUT=$'Fable finds a boundary defect\nVERDICT: REJECT' \
+    CURSOR_SUPERVISED_HEARTBEAT_SECONDS=1 \
+    "$SCRIPT" execute "$WORKTREE" "$complex_order" "$task" \
+    >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"; then
+  status=0
+else
+  status=$?
+fi
+assert_status 4 "$status" "Fable rejection preservation"
+assert_has_fragment "$TMP_ROOT/stderr.log" "Fable検収REJECT" "Fable rejection message"
+
+: >"$CALL_LOG"
+if env -u CURSOR_AGENT -u CURSOR_AGENT_BIN -u CODEX_DELEGATED -u CODEX_AGENT_BIN \
+    PATH="$FAKE_BIN:/usr/bin:/bin" \
+    FAKE_CALL_LOG="$CALL_LOG" \
+    FAKE_CURSOR_OUTPUT=$'Grok accepts\nVERDICT: ACCEPT' \
+    FAKE_CLAUDE_OUTPUT=$'Fable accepts\nVERDICT: ACCEPT' \
+    CURSOR_SUPERVISED_HEARTBEAT_SECONDS=1 \
+    "$SCRIPT" execute "$WORKTREE" "$complex_order" "$task" \
+    >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"; then
+  status=0
+else
+  status=$?
+fi
+assert_status 0 "$status" "complex dual inspection"
+assert_has_fragment "$CALL_LOG" "--model gpt-5.6-sol-none-fast" "complex Sol implementer"
+assert_contains "$CALL_LOG" "claude" "Claude Code Fable reviewer"
+assert_has_fragment "$CALL_LOG" "--model claude-fable-5" "Fable model"
+assert_has_fragment "$CALL_LOG" "--disallowedTools Edit,Write" "Fable read-only tools"
+assert_exists "$complex_order.evidence/fable-inspection.txt" "persistent Fable evidence"
 
 echo "test-delegate-cursor-supervised: all tests passed"

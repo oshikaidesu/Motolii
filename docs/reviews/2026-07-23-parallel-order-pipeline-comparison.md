@@ -43,7 +43,7 @@
 |---|---|---:|---|
 | `PREFLIGHT` | 仕様・決定台帳・コード事実・既存helper・負例の確認 | なし | 台帳・specが並走を許す対象だけ実装中も並行可 |
 | `ORDER DRAFT` | 次候補のclosed order草案とSTOP条件の準備 | order/evidence領域だけ | 対象が既に`DO`で、台帳・specが並走を許す時だけ並行可。承認・dispatchしない |
-| `COUNTER` | Grokによる通常read-only反証。Fableはユーザー明示の大地図・全体レビューだけ | なし | 対象と役割が重ならなければ並行可 |
+| `COUNTER` | Grokによる通常read-only反証。Fableはcomplex/cross-boundaryと大地図・全体レビューへ追加 | なし | 対象と役割が重ならなければ並行可 |
 | `IMPLEMENT` | Terraが承認済みclosed orderを隔離worktreeで実装 | 対象worktreeだけ | 独立性gate合格時だけ複数候補を比較 |
 | `VERIFY` | Grokが実diff・試験・scopeをread-only検収 | なし | 別実装やpreflightと並行可 |
 | `INTEGRATE` | Codexが仕様照合、必須試験、主枝への採否を決定 | 統合対象だけ | 原則1件ずつ直列 |
@@ -185,7 +185,7 @@ Fableには次を問う。
 
 ## 11. 採択前の停止線
 
-- FableレビューとCodex採否が完了するまで、`AGENTS.md`、delegate script、implementation ledgerのdispatch規則を変更しない
+- FableレビューとCodex採否が完了するまでdispatch規則を変更しない。2026-07-23に再回レビューとCodex採否を完了し、以後は[タスク適応型の発注運用](2026-07-22-terra-grok-delegation-policy.md)を正とする
 - 本書を根拠に複数Terra実装を開始しない
 - `GR-D1 / GR-D2`、review binding、delegate並行再入性が未合格の間はBも開始しない
 - review後も、ユーザーの明示的な発注なしに実装発注を開始しない
