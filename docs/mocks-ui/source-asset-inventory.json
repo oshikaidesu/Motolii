@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "task": "CU-0A03",
-  "scope": "incomplete-multi-surface-r0-slice",
-  "completeR0": false,
+  "scope": "complete-r0-source-inventory",
+  "completeR0": true,
   "fixedSourceCommit": "56c318edcddab7cf95d263cc2f7dd2b4e6791134",
   "authority": {
     "isProductApi": false,

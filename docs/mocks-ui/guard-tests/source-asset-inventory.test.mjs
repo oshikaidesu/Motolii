@@ -578,8 +578,8 @@ async function validateInventory(manifest, options = {}) {
   assert.equal(Object.getPrototypeOf(manifest), Object.prototype);
   assert.equal(manifest.schemaVersion, 1);
   assert.equal(manifest.task, "CU-0A03");
-  assert.equal(manifest.scope, "incomplete-multi-surface-r0-slice");
-  assert.equal(manifest.completeR0, false);
+  assert.equal(manifest.scope, "complete-r0-source-inventory");
+  assert.equal(manifest.completeR0, true);
   assert.equal(manifest.fixedSourceCommit, FIXED_SOURCE_COMMIT);
   assert.equal(fixedSourceCommit, FIXED_SOURCE_COMMIT);
 
@@ -1130,7 +1130,7 @@ async function validateInventory(manifest, options = {}) {
   assert.ok(extractRouteFromTest(nativeTimelineTestAst).includes(nativeTimelineEvidence.route));
 }
 
-test("accepts exact incomplete multi-surface R0 manifest and fixed-commit evidence", async () => {
+test("accepts exact complete six-surface R0 manifest and fixed-commit evidence", async () => {
   const manifest = await manifestFromDisk();
   await validateInventory(manifest);
 });
@@ -1297,12 +1297,12 @@ test("rejects missing or wrong test evidence route", async () => {
   });
 });
 
-test("rejects complete R0, wrong Easing classification, and changed Easing packages", async () => {
+test("rejects incomplete R0, wrong Easing classification, and changed Easing packages", async () => {
   const manifest = await manifestFromDisk();
 
-  const complete = { ...manifest, completeR0: true };
+  const incomplete = { ...manifest, completeR0: false };
   await assert.rejects(async () => {
-    await validateInventory(complete);
+    await validateInventory(incomplete);
   });
 
   const wrongClassification = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
