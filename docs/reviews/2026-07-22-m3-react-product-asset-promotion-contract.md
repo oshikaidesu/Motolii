@@ -281,7 +281,7 @@ mock copy 0、Timeline state owner、product current-closureを固定した。�
 Easing旧path注入負例が同名bindingのparse errorでも緑になり得る観察を得たが、R3Bへ混ぜず
 独立guard repair候補とする。R4SでInspectorの独立React source不在を確認し、
 R4A unchanged-source oracle、R4B mock-side同形React化、R4C product ownershipへ分割した。
-R4Aは[#353](https://github.com/oshikaidesu/Motolii/pull/353)で完了し、R4Bは[#355](https://github.com/oshikaidesu/Motolii/pull/355)で固定mock内の同形React化と一方向legacy adapterを完了し、R4Cは[#357](https://github.com/oshikaidesu/Motolii/pull/357)でbyte同一product ownershipとmock consumer反転を完了した。R4系は閉じ、次はCU-0A08IのHost projection / typed intent境界を`READY-RECHECK`として再判定する。
+R4Aは[#353](https://github.com/oshikaidesu/Motolii/pull/353)で完了し、R4Bは[#355](https://github.com/oshikaidesu/Motolii/pull/355)で固定mock内の同形React化と一方向legacy adapterを完了し、R4Cは[#357](https://github.com/oshikaidesu/Motolii/pull/357)でbyte同一product ownershipとmock consumer反転を完了した。R4系は閉じた。CU-0A08I再判定では単一実装をSTOPし、CU-0A08IS read-model決定、CU-0A08IP fixture由来decoder、CU-0A08IT intent接続へ分割した。
 Motolii Studio Previewは未実装である。
 
 ## 13. 既存文書との関係
