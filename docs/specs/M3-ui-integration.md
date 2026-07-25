@@ -224,7 +224,7 @@ LLM向けの第2入口として**SVG materialize adapter**を分離する。SVG�
 空harnessで完了させず、U0e-3依存のU2c-3/5も先行しない。次にPR #184から生成機構だけを
 `U0e-1`へ抽出し、`U0e-2R`で固定React比較baselineをmainへ再結合してから
 `U0e-2`のreference fixtureを作った。U0e-2R/U0e-2とG0-9Lは完了済みで再実行しない。
-CU-0A03/R0、CU-0A04/R1 Browser ownership、CU-0A05A/R2A mock-side extractionは完了した。R2Aは[#341](https://github.com/oshikaidesu/Motolii/pull/341)で独立React Easing trigger、固定oracle／現行closure hash、Timeline由来`activeInterval`からcontrolled triggerへの単一owner、legacy write containmentを閉じた。次は`CU-0A05B/R2B product ownership`を`READY-RECHECK`として、同じsource assetのproduct packageへの直接所有移管、mockをproduct export consumerへ反転、mock/product二重copy 0を一つのclosed orderで審判する。既存の現在値要約authorityはobject・channelとpressed/disabledを表すaccessible labelまでとし、visible summary chromeを発明しない。R2全体とMotolii Studio Previewはまだ未実装である。G0-6HはU0e-3だけを止める並行人間審判、G0-9DはDistribution Readyまで待つ。
+CU-0A03/R0、CU-0A04/R1 Browser ownership、CU-0A05A/R2A mock-side extractionは完了した。R2Aは[#341](https://github.com/oshikaidesu/Motolii/pull/341)で独立React Easing trigger、固定oracle／現行closure hash、Timeline由来`activeInterval`からcontrolled triggerへの単一owner、legacy write containmentを閉じた。`CU-0A05B/R2B product ownership`は再判定を通過して`DO`。R2A新設sourceは固定commitに存在しないためinventoryをproduct側current path/currentSha256へ更新し、old→current移動は既存product provenanceへ追記する。同じsource assetのproduct packageへの直接所有移管、mockをproduct export consumerへ反転、mock/product二重copy 0を一つのclosed orderで審判する。既存の現在値要約authorityはobject・channelとpressed/disabledを表すaccessible labelまでとし、visible summary chromeを発明しない。R2全体とMotolii Studio Previewはまだ未実装である。G0-6HはU0e-3だけを止める並行人間審判、G0-9DはDistribution Readyまで待つ。
 以後の旧列`G0-6H→U0e-3→U2c-3/5→U3a→U4a-*→U4c→U2c-2`は自動的な強制順ではない。未決の順序を追い越して
 U2h、Rectangle D2、製品surfaceを実装しない。G0-8+K1a後のU0f、M4依存の
 U1g/U1h/U3f/U8b、D5依存のU5、GAP-16依存のU7、未統一Browser P41、
