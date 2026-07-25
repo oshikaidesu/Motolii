@@ -2,7 +2,7 @@
 
 ステータス: **ドラフト**(凍結ゲートで確定)
 
-2026-07-23歴史監査: cutoff全20版を[Unit 5J回収](../reviews/2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md)で処分した。Host専権cache、完全key、透明なmiss、並行契約、hard budget、render外StateTrackは維持する。現行codeにあるping-pong targetと`PipelineCache`はM4 store完成ではなく、K0〜K8は未実装のままである。
+2026-07-23歴史監査: cutoff全20版を[Unit 5J回収](../reviews/2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md)で処分した。Host専権cache、完全key、透明なmiss、並行契約、hard budget、render外StateTrackは維持する。現行codeにあるping-pong targetと`PipelineCache`はM4 store完成ではない。K0は2026-07-25に[契約凍結](../spikes/m4-k0-region-contract.md)(test-only、PR [#338](https://github.com/oshikaidesu/Motolii/pull/338))を通過したがruntime／公開APIへは未昇格で、K1〜K8は未実装のままである。
 
 ## 目的(退治する落とし穴)
 
@@ -34,7 +34,7 @@ M4は[操作単純化モデル](../interaction-simplicity-model.md)の**再計�
 
 | ID | 内容 | 依存 | 完了条件(概要) |
 |---|---|---|---|
-| K0 | [#167](https://github.com/oshikaidesu/Motolii/issues/167) **SpatialExtent / RoD / RoI契約spike+凍結判定**: `Finite(Aabb) / Infinite / Unknown`、output extent、要求出力から各入力regionへの逆伝播、Host clamp、transparent-black範囲外を既存render graph上で固定。最初は`Unknown`既定で正しさを保つ。Document schemaと最適化は触らない | 凍結ゲート解凍手続き, M2-D3 | (1)Blurが半径分入力regionを拡張 (2)transformが必要入力を逆写像 (3)無限generatorを有限Final/Stage要求へclamp (4)Unknown経路が全域評価とpixel一致 (5)過小Finiteを注入したconformanceが全域評価との差を検出して宣言を拒否 (6)未検証pluginはUnknown (7)正準座標のみ (8)同期readbackなし (9)preview/exportが同じ領域関数を使用 |
+| K0 | [#167](https://github.com/oshikaidesu/Motolii/issues/167) **SpatialExtent / RoD / RoI契約spike+凍結判定**: `Finite(Aabb) / Infinite / Unknown`、output extent、要求出力から各入力regionへの逆伝播、Host clamp、transparent-black範囲外を既存render graph上で固定。最初は`Unknown`既定で正しさを保つ。Document schemaと最適化は触らない。**凍結済み**(2026-07-25、[K0契約凍結報告](../spikes/m4-k0-region-contract.md)、[PR #338](https://github.com/oshikaidesu/Motolii/pull/338)): 9完了条件を15 testで固定。実装は`crates/motolii-render/tests/`のprivate modelに限り、`src/`・公開API・`motolii-testkit`へ昇格していない。accepted-conformance、singular-affine Unknown、昇格API依存のpost-reject trust断言は同報告で明示的に非目標 | 凍結ゲート解凍手続き, M2-D3 | (1)Blurが半径分入力regionを拡張 (2)transformが必要入力を逆写像 (3)無限generatorを有限Final/Stage要求へclamp (4)Unknown経路が全域評価とpixel一致 (5)過小Finiteを注入したconformanceが全域評価との差を検出して宣言を拒否 (6)未検証pluginはUnknown (7)正準座標のみ (8)同期readbackなし (9)preview/exportが同じ領域関数を使用 |
 | K1a | **ResourceLedger+hard budget基盤**: texture/buffer/cache/prefetch/stagingをowner・階層・resident/pinned別に事前見積りし、VRAM/RAM/ディスクと共有メモリ合算のhard capをadmission前に強制。wgpu `AllocatorReport`は診断照合、`MemoryBudgetThresholds`は対応backendの追加安全柵に限定 | K0, 凍結ゲート | (1)小さな注入予算で割当合計がcapを越えない (2)mip/sample/format/alignmentを含む見積り境界値 (3)allocator report=`None`でも同じ判定 (4)共有メモリ合算cap (5)全ownerの生存量が解放後ゼロ (6)拒否診断にowner/要求量/使用量/予算 (7)Document/plugin公開契約に予算・backend型なし |
 | K1b | **キャッシュ同一性+並行store**: 完全cache key、区間/Quality/RoD・RoI寄与、LRU metadata、計測フック、参照カウントhandle+遅延解放+単段lock | K1a, M2-D8 | キー網羅性変異と再計算範囲の単体試験。Unknown fallbackと最適化経路がpixel一致。使用中entryが無効化/追い出しされず、読み手・無効化・evict並行でdeadlockしないloomまたは反復stress test |
 | K1c | **階層admission+退避**: K1a予算とK1b storeを接続し、VRAM→RAM→disk降格、同期evict、disk watermark、全pin時の型付き拒否、確定出力だけの非同期copy-outを実装 | K1a, K1b | (1)VRAM/RAM/disk各capでLRU降格順が再現 (2)使用中entryを待たず別候補を選ぶ (3)全pin時にOS OOMへ進まず拒否 (4)数千frameで平衡水位へ収束 (5)壊れ/欠落cacheはmissへ縮退し同一machine/driverでFinal bit一致 (6)評価chain途中の同期readbackなし |
@@ -50,7 +50,7 @@ M4は[操作単純化モデル](../interaction-simplicity-model.md)の**再計�
 | K8a | **全曲Draft coverage planner**: Composition全尺を区間coverageとして管理し、foreground優先度を`再生に必要な次frame > 未被覆区間のDraft穴埋め > 現在位置周辺の高品質化 > 全曲の品質向上`に固定する。要求は最新再生位置で更新し、background jobは編集/UIを待たせない | K1b, K1c, K1d, M2-D3 | (1)固定操作列で優先順位が再現 (2)seek後は古い先読みより新位置の次frameが先 (3)再生停止中に全尺Draft coverageが単調増加 (4)編集で影響区間だけ未被覆へ戻る (5)全pin/低予算でもeditor操作をblockせず型付き理由を返す (6)planner状態はTransientでDocument/journalへ入らない |
 | K8b | **全曲Draftディスクキャッシュ+通し再生E2E**: 合成済みComposition Draftをレイヤー数非依存の1系列としてディスクへ置き、K7成果物を入力として再利用する。再生時は音声/Transportの作品時刻を正本にし、Draft hit、通常render、最新frame表示の順で追従する。Final書き出しへDraft成果物を混入しない | K7c, K8a, M2-D5 | (1)1080p/30fps/5分・40動画layerの容量accounting fixtureで、100GB disk budget内に全曲1/2 Draftと現在位置周辺10秒以上のFinal windowが収まり全尺coverage完了 (2)実データを100GB生成せずfake/sparse storeでhard capとevictionを検証 (3)曲頭→曲末の連続再生でaudio/Transport時刻不変、映像遅延時も作品時刻を遅らせない (4)ベイク済みgroup内部の再評価0 (5)1区間編集後も無関係な全曲coverageを保持 (6)同一machine/driverでFinal frameはcache有無によりbit不変 |
 
-並列レーン: K0はM2-D3後に独立実施できるが、M3-U1fの透過Stageをblockしない。K0→K1a→K1b→K1cと、K4は並行。K1c+K4→K1d。D3e+K1b→K2。K6は独立(UI接続はM3-U6と調整)。K1b+K1c+D3→K7a、K7a+K2→K7b→K7c。K1d+D3→K8a、K7c+K8a+D5→K8b。K3/K5は最終フェーズへ移動。
+並列レーン: K0はM2-D3後に独立実施して完了済みで、M3-U1fの透過Stageをblockしない。K1aはK0のtest-only成果を自動昇格せず責任最小化ゲートで再判定し、その後K1a→K1b→K1cと進め、K4は並行する。K1c+K4→K1d。D3e+K1b→K2。K6は独立(UI接続はM3-U6と調整)。K1b+K1c+D3→K7a、K7a+K2→K7b→K7c。K1d+D3→K8a、K7c+K8a+D5→K8b。K3/K5は最終フェーズへ移動。
 
 ## 実装ガード(先行ツールの失敗・ユーザー不満クロスチェック 2026-07-11)
 
