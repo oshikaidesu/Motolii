@@ -9,6 +9,7 @@
 | 状態 | 意味 | 実装者の行動 |
 |---|---|---|
 | `READY` | 意味・依存・完了条件・非目標が固定済み | 依存merge後、Issueから1 PRで実装 |
+| `READY-RECHECK` | 依存は満たしたが、依存元成果の責任範囲を再判定中 | closed orderを作らず、必要責任と非目標だけをread-only照合 |
 | `SPIKE` | 製品schema/APIは未決だが、比較fixtureと凍結出口が固定済み | fixture/reportだけを実装し、製品fieldを追加しない |
 | `WAIT` | 自身の意味は固定済みだが、前段の型/schemaが未merge | Issue化せず依存完了後に現物再確認 |
 | `BLOCKED` | 永続意味または公開契約に未決がある | 決定Issueだけ進め、製品実装禁止 |
@@ -50,8 +51,8 @@ GAP-14 lifecycle、PR #197、[2026-07-16新規Document v4生成追補](2026-07-1
 
 | ID | 状態 | 固定済み | spikeで決める | 依存/Issue化 |
 |---|---|---|---|---|
-| K0 | `SPIKE` | RoD≠RoI≠texture bounds、`Finite/Infinite/Unknown`、transparent-black範囲外、Unknown保守fallback、preview/export同一関数 | runtime型の最小形、各組込nodeの領域関数、Host clamp表 | D3後。[#167](https://github.com/oshikaidesu/Motolii/issues/167) |
-| K1 | `WAIT` | cache予算/LRU/並行安全の審判 | K0型を使うkey/window | K0後 |
+| K0 | `DONE` | [PR #338](https://github.com/oshikaidesu/Motolii/pull/338)でRoD≠RoI≠texture bounds、`Finite/Infinite/Unknown`、transparent-black範囲外、Unknown保守fallback、preview/export同一関数を15 testへ凍結 | test-onlyでありruntime型・公開API・testkit昇格は未実装 | [K0契約凍結報告](../spikes/m4-k0-region-contract.md)、[#167](https://github.com/oshikaidesu/Motolii/issues/167) |
+| K1 | `READY-RECHECK` | cache予算/LRU/並行安全の審判 | K0のprivate modelを自動採用せず、K1aが必要な責任を依存優先・責任最小化ゲートで再判定 | K0凍結済み。再判定後にK1aを別粒で起票 |
 | K2 | `WAIT` | Definition変更→全Use invalidation | D1lの実ID型 | D1l/D3e/K1後 |
 
 K0は最適化実装Issueではない。全域評価とのpixel一致を証明する領域契約spikeであり、Document schema、GPU alpha readback、tight Visual Bounds、固定VRAM予算を追加しない。

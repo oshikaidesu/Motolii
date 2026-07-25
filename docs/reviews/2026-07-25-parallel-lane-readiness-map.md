@@ -16,7 +16,9 @@ spike、M2の狭い修復、Vism作者入口を同じ待ち列へ入れない。
 
 | 状態 | 意味 |
 |---|---|
+| `DONE` | main到達済み。後続は成果範囲を自動拡張せず、各依存を再判定する |
 | `READY` | 現行authorityに意味・依存・完了条件・STOPがあり、closed order作成へ進める |
+| `READY-RECHECK` | 依存の完了条件は満たされたが、依存元の成果が当該粒の必要責任を含むかを再判定するまでclosed orderを作らない |
 | `READY-CHECK-PATH` | 意味は成立済み。変更許可file listの非重複を確認した時だけ起動できる |
 | `READY-SPEC` | 独立したspec/decisionだけ開始でき、実装はまだ待つ |
 | `READY-HUMAN` | 成立済み成果物への人間応答。無関係laneを止めない |
@@ -31,14 +33,15 @@ spike、M2の狭い修復、Vism作者入口を同じ待ち列へ入れない。
 | VISUAL-RESPONSE | `G0-6H` | `READY-HUMAN` | 5 reference screen / 30 PNGへの人間応答を記録 | `U0e-3`以外を止めない。pixel testで人間判断を代替しない | visual tokenと認知の応答 |
 | AUTHORING-SCAFFOLD | `VSM-A4S` | `READY-SPEC` | 外部crate作者scaffoldと既存in-tree generatorの責任を分けたclosed contract | package/install/manifest、dynamic loader、第三者配布完成、実装を含めない | `VSM-A4I`後に外部crate生成からconformanceまでのdeveloper response |
 | DELEGATION-GUARD | `GR-D3 / #329` | `DONE` | [#336](https://github.com/oshikaidesu/Motolii/pull/336)で既知のworktree-root派生物だけを検収前にfail-closed清掃し、ignored監査を維持 | `target/**` allowlist、fingerprint除外、`.gitignore`／build script／製品code変更、未知entry削除は引き続きSTOP | 人間応答なし。実K0停止形、Grok `ACCEPT`、CI 4/4で完了 |
-| SPATIAL-CONTRACT | `M4-K0 / #167` | `READY` | `Finite / Infinite / Unknown`、RoD/RoIのfixtureと凍結判定をfresh main/worktree/orderで再開 | 旧未検収worktreeの自動採用、未検証pluginのFinite扱い、同期readback、px/Document焼込み、legacy/deprecated constructorを使わない | Blur/transform/Unknown fallbackの比較fixture。製品操作面とは称さない |
+| SPATIAL-CONTRACT | `M4-K0 / #167` | `DONE` | [PR #338](https://github.com/oshikaidesu/Motolii/pull/338)で15 test契約凍結、Grok `ACCEPT` P0=0 P1=0 P2=1 | 旧未検収worktreeの自動採用、未検証pluginのFinite扱い、同期readback、px/Document焼込み、legacy/deprecated constructorを使わない | 人間応答なし。runtime昇格はK1a以降の別判断 |
 | IDENTITY-CONTRACT | `M5-P0I / #170` | `READY-SPEC` | Distribution continuity、transform合成、nested identity、domain寿命、cache入力境界、PRNG処分をdocs-onlyで決める | schema／公開Effector API／Rust fixture／golden追加、TextCluster内部写像やPrototype ownerの先取りをしない | 決定merge後にcount/reorder後の個体追従fixtureを分割して再入 |
 | M2-REPAIR | `GAP-23` → `GAP-24` | `WAIT` | 独立したD1i-4 LookAt/Follow oracle分離の採番・完了後に、25 suppressionの除去へ戻る | whole-file semantic分類、oracle値、期待値、regenerate markerを修復都合で変えない | 人間応答なし。先行oracle分離だけを別粒にする |
 | ORACLE-GUARD | `GAP-25` | `READY-CHECK-PATH` | workflow/script/protected pathのfail-closed負例 | oracle値、variant、toleranceを変えない。GAP-23との変更path重複時はGAP-23後へ直列化 | 人間応答なし。並列laneによるgate自己弱体化を拒否 |
 
-最小の即時並列集合は、GR-D3、PRODUCT-ASSETとP0Iのdocs decision、
+最小の即時並列集合は、PRODUCT-ASSETとP0Iのdocs decision、
 VISUAL-RESPONSE、AUTHORING-SCAFFOLDである。旧全体直列文言は撤回したままだが、P0I fixtureと
-GAP-23実装、K0再発注は各lane-localな前提へ戻す。GAP-25はGAP-23との変更許可pathを機械照合した後だけ起動する。
+GAP-23実装は各lane-localな前提へ戻す。K0は完了済みで、K1aは責任最小化の再判定まで起動しない。
+GAP-25はGAP-23との変更許可pathを機械照合した後だけ起動する。
 
 ## 4. lane所有と衝突規則
 
@@ -49,7 +52,7 @@ GAP-23実装、K0再発注は各lane-localな前提へ戻す。GAP-25はGAP-23�
 - K0はschemaと最適化を触らない。P0Iはdocs decisionだけを進め、製品schema、公開Effector API、
   fixture、goldenをまだ追加しない。
 - GR-D3は[#336](https://github.com/oshikaidesu/Motolii/pull/336)でmain統合済み。ignored pathの監査を弱めず、
-  未知の`target/` entryを削除しない契約を維持する。K0はfresh main/worktree/orderから再発注する。
+  未知の`target/` entryを削除しない契約を維持する。解禁後のK0は[#338](https://github.com/oshikaidesu/Motolii/pull/338)で完了した。
 - K0のfixtureは`new_v1`等のlegacy/deprecated constructorを使わない。P0I fixtureはdecision merge後に
   同じ負例を持つclosed orderへ分割する。
 - GAP-23/24は同じ`motolii-doc`を触り得るため、一つのM2-REPAIR lane内で直列にする。GAP-23の前に
@@ -82,8 +85,7 @@ Vism仕様laneへ波及させない。P0I fixtureとGAP-23実装のWAITは全体
 | render worker instance交換 | respawn/quiescence/rollback contractとtask IDが無い | current seamのread-only inventoryとfixture案 |
 | `INF-6` journal/session完全復元 | 通常編集commit点へのjournal接続と製品reopen routeが未成立 | apply→append→kill→replay oracleのspec候補 |
 | `INF-8` hot reload | INF-6、M4 cache、React product packageの依存 | WGSL watcher/HMR/restartを別粒へ分解するspec候補 |
-| `K1a`以後 | K0 | K0結果を自動採用せず各seatを再判定 |
-| `K0` | GR-D3 | fresh main/worktree/orderで15-test contract spikeを再発注 |
+| `K1a`以後 | 依存先行の責任最小化ゲート(K0依存は充足済み) | K0はtest-only契約凍結でruntime region関数を提供しない。K1aが必要とする責任を列挙し、K0成果を自動採用せずseat単位で再判定する(`READY-RECHECK`) |
 | `P0I` fixture | P0I docs decision | 意味decisionをmergeし、fixture粒と負例を分割して再判定 |
 | `P7a`以後 | P0I完了 | P0Iからschemaを自動生成せずGR-PV decisionへ戻す |
 | `GAP-23` | 独立D1i-4 LookAt/Follow oracle分離 | task IDとoracle artifact／harness閉包をspec化して先行 |
@@ -124,6 +126,7 @@ path衝突、legacy constructor、VSM-A4I全体review gateのP2も§4/§7へ反�
 3. `GAP-23`: 25件目のsuppressionがwhole-file semantic保護中のLookAt/Follow harnessにあり、
    GAP-23正本どおり独立D1i-4 oracle分離が先行する。
 
-K0のprivate test-only contract spikeはこの三件と契約境界が重ならない。ただし実施工で
-workspace試験の派生`target/`とrunner scope closureの衝突はGR-D3で解消した。旧K0隔離差分を採用せず、
-fresh main/worktree/orderから`READY`として再入する。
+K0のprivate test-only contract spikeはこの三件と契約境界が重ならない。実施工で生じた
+workspace試験の派生`target/`とrunner scope closureの衝突はGR-D3で解消し、旧K0隔離差分を採用せず
+fresh main/worktree/orderから再入した結果、[#338](https://github.com/oshikaidesu/Motolii/pull/338)で`DONE`となった。
+次はK1aを`READY-RECHECK`に留め、K0のprivate modelをruntimeへ自動昇格しない。
