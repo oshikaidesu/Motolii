@@ -532,6 +532,7 @@ export function TimelineCandidate({
   GraphViewComponent,
   legacyCurveShelf,
   resizeHandle,
+  onActiveIntervalChange,
 }) {
   const [packHeights, setPackHeights] = useState(() =>
     Array.from({ length: BAND_COUNT }, () => 34),
@@ -672,41 +673,11 @@ export function TimelineCandidate({
       startIndex,
       keyCount: sortedKeys.length,
     };
-  }, [automationByObject, focusedAutomation, objectOffsets]);
+  }, [automationByObject, focusedAutomation, objectOffsets, playheadLeft]);
 
-  // Preview transportはまだlegacy fixtureが所有しているため、React Timelineの
-  // focus区間をGraph入口へ一方向に投影する。旧inline-key探索は使わない。
   useEffect(() => {
-    const button = document.querySelector("#interval-easing");
-    if (!button) return undefined;
-    const syncButton = () => {
-      button.disabled = !activeInterval;
-      button.classList.toggle("on", Boolean(activeInterval));
-      button.setAttribute(
-        "aria-label",
-        activeInterval
-          ? `${activeInterval.objectName} · ${activeInterval.channel}のInterval Easing Editorを開く`
-          : "key間へ移動するとInterval Easing Editorを開けます",
-      );
-    };
-    syncButton();
-    // 親のlegacy初期化effectが初回だけ旧Timelineを読んだ後にも再投影する。
-    const frame = window.requestAnimationFrame(syncButton);
-    const openGraph = (event) => {
-      if (!activeInterval) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      const panel = document.querySelector("#easing-panel");
-      panel?.classList.add("open");
-      panel?.setAttribute("aria-hidden", "false");
-      button.setAttribute("aria-pressed", "true");
-    };
-    button.addEventListener("click", openGraph, true);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      button.removeEventListener("click", openGraph, true);
-    };
-  }, [activeInterval]);
+    onActiveIntervalChange?.(activeInterval);
+  }, [activeInterval, onActiveIntervalChange]);
 
   function toggle(setter, id) {
     setter((current) => {
