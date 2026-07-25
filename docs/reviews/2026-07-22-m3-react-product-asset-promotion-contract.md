@@ -260,9 +260,12 @@ visual 1%は移管時の回帰検知上限であり、縮約再実装を1%まで
 R0〜R6のReact asset作業は、WebView platform受入やplugin公開契約を決めない範囲で実施できる。
 H1b以降はG0-9、D2/D3、U2h/U3a等の既存停止線を引き続き満たす必要がある。
 
-2026-07-25現在、R0とR1は完了し、Browserの固定sourceは`ui/motolii-web`が所有して
-mockがproduct exportを読む。固定source再照合によりR2はR2A/R2Bへ分割し、現在orderはR2Aである。
-R2以降とMotolii Studio Previewは未実装である。
+2026-07-25現在、R0、R1、R2A、R2Bは完了した。BrowserとEasing triggerのReact sourceは
+`ui/motolii-web`が単独所有し、mockはproduct exportを一つのpackage import宣言から読む。
+Browserはfixed-source provenance、fixed commitに存在しないR2A由来のEasing triggerは
+product current-closure provenanceで固定した。次はR3 KEYS/LAYERS extractionを
+READY-RECHECKとし、native Timeline本体を持ち込まずtool panelだけを分離できる場合に限り発注する。
+R3以降とMotolii Studio Previewは未実装である。
 
 ## 13. 既存文書との関係
 
