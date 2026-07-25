@@ -29,7 +29,7 @@ spike、M2の狭い修復、Vism作者入口を同じ待ち列へ入れない。
 
 | lane | 現在粒 | 状態 | 最初の成果 | STOP / 負例 | Human Response Frontier |
 |---|---|---|---|---|---|
-| PRODUCT-ASSET | `CU-0A05A / R2A` | `READY-SPEC` | 固定hashと抽出後hashの役割、抽出後status、`activeInterval`の単一owner／登録経路をdocs-onlyで決める | product file、popup全体、curve/Undo state、visible summary chrome、固定blob assert弱体化、汎用抽出frameworkが必要ならSTOP | 決定merge後にarchived HTMLと同形React triggerのparity比較へ再入。product面の比較は`CU-0A05B`後 |
+| PRODUCT-ASSET | `CU-0A05A / R2A` | `READY`（ledger `DO`） | archived HTMLと同形のcontrolled React trigger、Timeline由来`activeInterval`の単一owner、既存visual/interaction parityをmock側だけで閉じる | product file、popup全体、curve/Undo state、visible summary chrome、固定blob assert弱体化、legacy/React二重owner、汎用抽出frameworkが必要ならSTOP | R2A ACCEPT後に`CU-0A05B`をREADY-RECHECK。product面の比較はR2B後 |
 | VISUAL-RESPONSE | `G0-6H` | `READY-HUMAN` | 5 reference screen / 30 PNGへの人間応答を記録 | `U0e-3`以外を止めない。pixel testで人間判断を代替しない | visual tokenと認知の応答 |
 | AUTHORING-SCAFFOLD | `VSM-A4S` | `READY-SPEC` | 外部crate作者scaffoldと既存in-tree generatorの責任を分けたclosed contract | package/install/manifest、dynamic loader、第三者配布完成、実装を含めない | `VSM-A4I`後に外部crate生成からconformanceまでのdeveloper response |
 | DELEGATION-GUARD | `GR-D3 / #329` | `DONE` | [#336](https://github.com/oshikaidesu/Motolii/pull/336)で既知のworktree-root派生物だけを検収前にfail-closed清掃し、ignored監査を維持 | `target/**` allowlist、fingerprint除外、`.gitignore`／build script／製品code変更、未知entry削除は引き続きSTOP | 人間応答なし。実K0停止形、Grok `ACCEPT`、CI 4/4で完了 |
@@ -38,15 +38,15 @@ spike、M2の狭い修復、Vism作者入口を同じ待ち列へ入れない。
 | M2-REPAIR | `GAP-23` → `GAP-24` | `WAIT` | 独立したD1i-4 LookAt/Follow oracle分離の採番・完了後に、25 suppressionの除去へ戻る | whole-file semantic分類、oracle値、期待値、regenerate markerを修復都合で変えない | 人間応答なし。先行oracle分離だけを別粒にする |
 | ORACLE-GUARD | `GAP-25` | `READY-CHECK-PATH` | workflow/script/protected pathのfail-closed負例 | oracle値、variant、toleranceを変えない。GAP-23との変更path重複時はGAP-23後へ直列化 | 人間応答なし。並列laneによるgate自己弱体化を拒否 |
 
-最小の即時並列集合は、PRODUCT-ASSETとP0Iのdocs decision、
+最小の即時並列集合は、PRODUCT-ASSETのR2A mock-side extraction、P0Iのdocs decision、
 VISUAL-RESPONSE、AUTHORING-SCAFFOLDである。旧全体直列文言は撤回したままだが、P0I fixtureと
 GAP-23実装は各lane-localな前提へ戻す。K0は完了済みで、K1aは責任最小化の再判定まで起動しない。
 GAP-25はGAP-23との変更許可pathを機械照合した後だけ起動する。
 
 ## 4. lane所有と衝突規則
 
-- PRODUCT-ASSETは先にR2Aのinventory／owner決定だけを閉じる。決定merge後も固定mockのReact source
-  closureだけを触り、`CU-0A05B`までproduct packageを触らない。
+- PRODUCT-ASSETはR2Aのinventory／owner decisionを閉じた。実装は固定mockのReact source closure
+  だけを触り、`CU-0A05B`までproduct packageを触らない。
 - VISUAL-RESPONSEの`reference-handoff.md`とPRODUCT-ASSETの変更file listを起動前に照合する。
 - AUTHORING-SCAFFOLDはspec/decisionだけ。runtime、package、Document、loaderを触らない。
 - K0はschemaと最適化を触らない。P0Iはdocs decisionだけを進め、製品schema、公開Effector API、
@@ -118,9 +118,11 @@ path衝突、legacy constructor、VSM-A4I全体review gateのP2も§4/§7へ反�
 2026-07-25のOpus 5 prepareとFable 5 read-only助言で、Spark起動前に次のlane-localな前提を検出した。
 いずれも実装、commit、pushは行っていない。
 
-1. `CU-0A05A`: 固定commit hashと抽出後working hashの別role、R2A後のstatus、Timelineからtriggerへの
-   単一owner経路が未決。legacy scriptは`#interval-easing`の第二mutatorでもあり、8 path内で二重ownerを
-   消せることを次のorderで先に証明する。
+1. `CU-0A05A`: 固定commit／trigger authorityは不変oracle、抽出後sourceは既存runtime closureの
+   mock-side provenanceとし、phase固有hash表を追加しない。decision merge後は本地図で`READY`
+   （implementation ledgerで`DO`）、R2A ACCEPT後は`DONE`かつ`CU-0A05B READY-RECHECK`とする。
+   Timelineだけが`activeInterval`を導出し、fixture adapterがlegacy trigger mutator/listenerを
+   exact-matchで封じ、controlled triggerへ一方向に配線する。
 2. `P0I`: 一つのfixture粒へ意味決定まで押し込んでいた。P0I自身が閉じるdocs decisionと、Text／Prototype
    側へ残す明示留保を分け、その後にfixtureを複数粒へ閉じる。
 3. `GAP-23`: 25件目のsuppressionがwhole-file semantic保護中のLookAt/Follow harnessにあり、
