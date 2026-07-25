@@ -6,7 +6,7 @@ import {
 import {
   InspectorCandidate,
   InspectorContext,
-} from "../candidates/InspectorCandidate.jsx";
+} from "@motolii/motolii-web";
 
 function OriginalElement({ node, options }) {
   return createElement(

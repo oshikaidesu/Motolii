@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
@@ -21,10 +21,18 @@ const LEGACY_HOST = join(
 );
 const LEGACY_REGIONS = join(root, "src/legacy/LegacyRegions.jsx");
 const INSPECTOR_CANDIDATE = join(
+  repoRoot,
+  "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
+);
+const INSPECTOR_CSS = join(
+  repoRoot,
+  "ui/motolii-web/src/candidates/inspector-candidate.css",
+);
+const MOCK_INSPECTOR_CANDIDATE = join(
   root,
   "src/candidates/InspectorCandidate.jsx",
 );
-const INSPECTOR_CSS = join(
+const MOCK_INSPECTOR_CSS = join(
   root,
   "src/candidates/inspector-candidate.css",
 );
@@ -248,4 +256,9 @@ test("inspector candidate avoids inline plugin history reconstruction", () => {
   assert.ok(!source.includes('querySelector("#plugin-history")'));
   assert.ok(!source.includes("plugin-history-item"));
   assert.ok(!/createElement\(\s*"button"\s*\)[\s\S]*plugin-history/.test(source));
+});
+
+test("mock-side inspector candidate paths are absent after product transfer", () => {
+  assert.equal(existsSync(MOCK_INSPECTOR_CANDIDATE), false);
+  assert.equal(existsSync(MOCK_INSPECTOR_CSS), false);
 });

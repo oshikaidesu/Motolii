@@ -32,12 +32,15 @@ const CURRENT_EASING_TRIGGER_SOURCE = "ui/motolii-web/src/candidates/EasingTrigg
 const CURRENT_EASING_TRIGGER_CSS = "ui/motolii-web/src/candidates/easing-trigger-candidate.css";
 const CURRENT_KEY_TOOLS_SOURCE = "ui/motolii-web/src/candidates/KeyToolsCandidate.jsx";
 const CURRENT_KEY_TOOLS_CSS = "ui/motolii-web/src/candidates/key-tools-candidate.css";
+const CURRENT_INSPECTOR_SOURCE = "ui/motolii-web/src/candidates/InspectorCandidate.jsx";
+const CURRENT_INSPECTOR_CSS = "ui/motolii-web/src/candidates/inspector-candidate.css";
 const PRODUCT_RUNTIME_MODULES = [
   CURRENT_BROWSER_INDEX,
   CURRENT_BROWSER_SOURCE,
   CURRENT_BROWSER_PATTERN,
   CURRENT_EASING_TRIGGER_SOURCE,
   CURRENT_KEY_TOOLS_SOURCE,
+  CURRENT_INSPECTOR_SOURCE,
 ];
 
 const FIXED_BROWSER_SOURCE = "docs/mocks-ui/src/candidates/DiscoveryBrowserCandidate.jsx";
@@ -47,6 +50,8 @@ const FIXED_EASING_TRIGGER_SOURCE = "docs/mocks-ui/src/candidates/EasingTriggerC
 const FIXED_EASING_TRIGGER_CSS = "docs/mocks-ui/src/candidates/easing-trigger-candidate.css";
 const FIXED_KEY_TOOLS_SOURCE = "docs/mocks-ui/src/candidates/KeyToolsCandidate.jsx";
 const FIXED_KEY_TOOLS_CSS = "docs/mocks-ui/src/candidates/key-tools-candidate.css";
+const FIXED_INSPECTOR_SOURCE = "docs/mocks-ui/src/candidates/InspectorCandidate.jsx";
+const FIXED_INSPECTOR_CSS = "docs/mocks-ui/src/candidates/inspector-candidate.css";
 
 const EXPECTED_EASING_TRIGGER_SHA256 =
   "6ae4cf7e79586e33cedaed0bb928daa34aa4b8ac9cdc9f6c494637875f502932";
@@ -56,8 +61,34 @@ const EXPECTED_KEY_TOOLS_SHA256 =
   "bf38656a99957a9f2d1465057820510f525fd394a3965cff9f291415223f87ba";
 const EXPECTED_KEY_TOOLS_CSS_SHA256 =
   "f84eb7f98f05844fa3bfc72b702cee2709f1fc0bb9be614f2b01039a65b5190d";
+const EXPECTED_INSPECTOR_SHA256 =
+  "1e0bdd3eebd665e517600af4db090f74d50951aef12fdd476e97a828de91a3e4";
+const EXPECTED_INSPECTOR_CSS_SHA256 =
+  "730e2861a893b2b07fa66d5acef0038a49bdcf337e8c5a037785b0a58d829cbe";
 
 const ALLOWED_EXTERNAL_PACKAGES = ["react", "html-react-parser"];
+
+function countNonOverlapping(text, needle) {
+  let count = 0;
+  let index = text.indexOf(needle);
+  while (index !== -1) {
+    count += 1;
+    index = text.indexOf(needle, index + needle.length);
+  }
+  return count;
+}
+
+function assertInspectorDomTokenCounts(source) {
+  assert.equal(countNonOverlapping(source, "document."), 3);
+  assert.equal(countNonOverlapping(source, 'document.addEventListener("keydown"'), 1);
+  assert.equal(countNonOverlapping(source, 'document.removeEventListener("keydown"'), 1);
+  assert.equal(countNonOverlapping(source, 'document.querySelector("#recovery")'), 1);
+  assert.equal(countNonOverlapping(source, "window."), 0);
+  assert.equal(countNonOverlapping(source, "useState"), 0);
+  assert.equal(countNonOverlapping(source, "useMemo"), 0);
+  assert.equal(countNonOverlapping(source, "localStorage"), 0);
+  assert.equal(countNonOverlapping(source, "fetch("), 0);
+}
 
 function hashBytes(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -203,6 +234,8 @@ function assertProductExportFromIndex(ast) {
   assert.equal(exportNames.has("DiscoveryBrowserCandidate"), true);
   assert.equal(exportNames.has("EasingTriggerCandidate"), true);
   assert.equal(exportNames.has("KeyToolsCandidate"), true);
+  assert.equal(exportNames.has("InspectorCandidate"), true);
+  assert.equal(exportNames.has("InspectorContext"), true);
   assert.equal(exportNames.has("default"), false);
 }
 
@@ -223,13 +256,15 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
   }
 
   assert.equal(productPackage.name, PRODUCT_NAME);
-  assert.equal(provenance.task, "CU-0A04 / CU-0A05B / CU-0A06B");
-  assert.equal(provenance.sourceOwnership.owner, "R1-browser / R2B-easing-trigger / R3B-key-tools");
-  assert.equal(provenance.sourceOwnership.surface, "Browser / Easing trigger / KEYS-LAYERS key tools");
+  assert.equal(provenance.task, "CU-0A04 / CU-0A05B / CU-0A06B / CU-0A07C");
+  assert.equal(provenance.sourceOwnership.owner, "R1-browser / R2B-easing-trigger / R3B-key-tools / R4C-inspector");
+  assert.equal(provenance.sourceOwnership.surface, "Browser / Easing trigger / KEYS-LAYERS key tools / Inspector");
   assert.deepEqual(provenance.sourceOwnership.exports, [
     { name: "DiscoveryBrowserCandidate", path: "src/index.js" },
     { name: "EasingTriggerCandidate", path: "src/index.js" },
     { name: "KeyToolsCandidate", path: "src/index.js" },
+    { name: "InspectorCandidate", path: "src/index.js" },
+    { name: "InspectorContext", path: "src/index.js" },
   ]);
   assert.deepEqual(provenance.migrations, [
     {
@@ -267,6 +302,17 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
         css: CURRENT_KEY_TOOLS_CSS,
       },
     },
+    {
+      type: "fixed-source-transfer",
+      old: {
+        component: FIXED_INSPECTOR_SOURCE,
+        css: FIXED_INSPECTOR_CSS,
+      },
+      current: {
+        component: CURRENT_INSPECTOR_SOURCE,
+        css: CURRENT_INSPECTOR_CSS,
+      },
+    },
   ]);
 
   const easingTriggerBytes = await readFile(abs(CURRENT_EASING_TRIGGER_SOURCE));
@@ -282,6 +328,12 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
   assert.throws(() => {
     readBlobFromCommit(FIXED_KEY_TOOLS_CSS, FIXED_SOURCE_COMMIT);
   });
+  assert.throws(() => {
+    readBlobFromCommit(FIXED_INSPECTOR_SOURCE, FIXED_SOURCE_COMMIT);
+  });
+  assert.throws(() => {
+    readBlobFromCommit(FIXED_INSPECTOR_CSS, FIXED_SOURCE_COMMIT);
+  });
 
   const keyToolsBytes = await readFile(abs(CURRENT_KEY_TOOLS_SOURCE));
   const keyToolsCssBytes = await readFile(abs(CURRENT_KEY_TOOLS_CSS));
@@ -289,6 +341,13 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
   assert.equal(hashBytes(keyToolsCssBytes), EXPECTED_KEY_TOOLS_CSS_SHA256);
   assert.equal(existsSync(abs(FIXED_KEY_TOOLS_SOURCE)), false);
   assert.equal(existsSync(abs(FIXED_KEY_TOOLS_CSS)), false);
+  assert.equal(existsSync(abs(FIXED_INSPECTOR_SOURCE)), false);
+  assert.equal(existsSync(abs(FIXED_INSPECTOR_CSS)), false);
+
+  const inspectorBytes = await readFile(abs(CURRENT_INSPECTOR_SOURCE));
+  const inspectorCssBytes = await readFile(abs(CURRENT_INSPECTOR_CSS));
+  assert.equal(hashBytes(inspectorBytes), EXPECTED_INSPECTOR_SHA256);
+  assert.equal(hashBytes(inspectorCssBytes), EXPECTED_INSPECTOR_CSS_SHA256);
 
   const indexSource = await readFile(abs("ui/motolii-web/src/index.js"), "utf8");
   const indexAst = parseModule(indexSource);
@@ -298,6 +357,7 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
   assert.deepEqual(exportNamedFrom, [
     "./candidates/DiscoveryBrowserCandidate.jsx",
     "./candidates/EasingTriggerCandidate.jsx",
+    "./candidates/InspectorCandidate.jsx",
     "./candidates/KeyToolsCandidate.jsx",
   ]);
 });
@@ -315,17 +375,29 @@ test("validates product export/consumer import topology via parsed AST", async (
   assert.equal(mainImports.includes("./candidates/EasingTriggerCandidate.jsx"), false);
   assert.equal(storyImports.includes("../candidates/DiscoveryBrowserCandidate.jsx"), false);
   assert.equal(mainImports.filter((importSource) => importSource === PRODUCT_NAME).length, 1);
+
+  const legacyRegionsSource = await readFile(path.join(DOCS_MOCKS_DIR, "src/legacy/LegacyRegions.jsx"), "utf8");
+  const legacyHostSource = await readFile(path.join(DOCS_MOCKS_DIR, "src/legacy/LegacyHostBoundaryScreen.jsx"), "utf8");
+  const regionsImports = collectConsumerBrowserImports(legacyRegionsSource);
+  const hostImports = collectConsumerBrowserImports(legacyHostSource);
+  assert.equal(regionsImports.filter((importSource) => importSource === PRODUCT_NAME).length, 1);
+  assert.equal(hostImports.filter((importSource) => importSource === PRODUCT_NAME).length, 1);
+  assert.equal(regionsImports.includes("../candidates/InspectorCandidate.jsx"), false);
+  assert.equal(hostImports.includes("../candidates/InspectorCandidate.jsx"), false);
 });
 
 test("rejects old source-path ownership and legacy/archive/raw-import closure from product runtime", async () => {
   const source = await readFile(abs(CURRENT_BROWSER_SOURCE), "utf8");
   const easingTriggerSource = await readFile(abs(CURRENT_EASING_TRIGGER_SOURCE), "utf8");
   const keyToolsSource = await readFile(abs(CURRENT_KEY_TOOLS_SOURCE), "utf8");
+  const inspectorSource = await readFile(abs(CURRENT_INSPECTOR_SOURCE), "utf8");
   assert.equal(existsSync(abs(FIXED_BROWSER_SOURCE)), false);
   assert.equal(existsSync(abs(FIXED_EASING_TRIGGER_SOURCE)), false);
   assert.equal(existsSync(abs(FIXED_EASING_TRIGGER_CSS)), false);
   assert.equal(existsSync(abs(FIXED_KEY_TOOLS_SOURCE)), false);
   assert.equal(existsSync(abs(FIXED_KEY_TOOLS_CSS)), false);
+  assert.equal(existsSync(abs(FIXED_INSPECTOR_SOURCE)), false);
+  assert.equal(existsSync(abs(FIXED_INSPECTOR_CSS)), false);
   assert.equal(existsSync(abs("docs/mocks-ui/src/patterns/DiscoveryBrowser.jsx")), false);
   assert.equal(existsSync(abs("docs/mocks-ui/src/candidates/discovery-browser-candidate.css")), false);
 
@@ -339,6 +411,9 @@ test("rejects old source-path ownership and legacy/archive/raw-import closure fr
   // 逆例は重複束縛のparse失敗ではなくvalidatorのimport境界拒否で落とす
   const forbiddenKeyToolsMockImport =
     `import { KeyToolsCandidate as ForbiddenMockKeyToolsCandidate } from "../../../docs/mocks-ui/src/candidates/KeyToolsCandidate.jsx";\n${keyToolsSource}`;
+
+  const forbiddenInspectorMockImport =
+    `import { InspectorCandidate as ForbiddenMockInspectorCandidate } from "../../../docs/mocks-ui/src/candidates/InspectorCandidate.jsx";\n${inspectorSource}`;
 
   const badCandidates = [
     [CURRENT_BROWSER_SOURCE, `import { LegacyHostBoundaryScreen } from "../legacy/LegacyHostBoundaryScreen.jsx";\n${source}`],
@@ -354,8 +429,13 @@ test("rejects old source-path ownership and legacy/archive/raw-import closure fr
     [CURRENT_KEY_TOOLS_SOURCE, `import boundary from "docs/mocks/m3-vism-host-boundary.html?raw";\n${keyToolsSource}`],
     [CURRENT_KEY_TOOLS_SOURCE, `import { bad } from "../legacy/legacySource.js";\n${keyToolsSource}`],
     [CURRENT_KEY_TOOLS_SOURCE, `import { TimelineCandidate } from "../../../docs/mocks-ui/src/candidates/TimelineCandidate.jsx";\n${keyToolsSource}`],
+    [CURRENT_INSPECTOR_SOURCE, forbiddenInspectorMockImport],
+    [CURRENT_INSPECTOR_SOURCE, `import boundary from "docs/mocks/m3-vism-host-boundary.html?raw";\n${inspectorSource}`],
+    [CURRENT_INSPECTOR_SOURCE, `import { bad } from "../legacy/legacySource.js";\n${inspectorSource}`],
+    [CURRENT_INSPECTOR_SOURCE, `import { createRoot } from "react-dom";\n${inspectorSource}`],
   ];
 
+  assert.doesNotThrow(() => parseModule(forbiddenInspectorMockImport));
   assert.doesNotThrow(() => parseModule(forbiddenKeyToolsMockImport));
 
   for (const [modulePath, candidate] of badCandidates) {
@@ -381,8 +461,26 @@ test("rejects old source-path ownership and legacy/archive/raw-import closure fr
     assert.ok(!keyToolsSource.includes(forbidden), `forbidden token ${forbidden}`);
   }
 
+  assertInspectorDomTokenCounts(inspectorSource);
+  assert.throws(() => {
+    assertInspectorDomTokenCounts(`${inspectorSource}\ndocument.querySelector("x");`);
+  });
+  assert.throws(() => {
+    assertInspectorDomTokenCounts(
+      inspectorSource.replace(
+        'document.addEventListener("keydown"',
+        'document.querySelector("keydown"',
+      ),
+    );
+  });
+
   const badIndexReexport = `export { EasingTriggerCandidate } from "../../../docs/mocks-ui/src/candidates/EasingTriggerCandidate.jsx";\n`;
+  const badInspectorIndexReexport =
+    `export { InspectorCandidate } from "../../../docs/mocks-ui/src/candidates/InspectorCandidate.jsx";\n`;
   assert.throws(() => {
     validateProductRuntimeSource(abs(CURRENT_BROWSER_INDEX), badIndexReexport);
+  });
+  assert.throws(() => {
+    validateProductRuntimeSource(abs(CURRENT_BROWSER_INDEX), badInspectorIndexReexport);
   });
 });

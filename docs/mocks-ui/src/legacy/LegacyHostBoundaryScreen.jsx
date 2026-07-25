@@ -23,7 +23,7 @@ import {
 } from "./legacySource";
 import {
   InspectorContext,
-} from "../candidates/InspectorCandidate.jsx";
+} from "@motolii/motolii-web";
 import {
   ResizableLegacyApp,
   ResizableLegacyTimeline,
