@@ -58,8 +58,8 @@
     },
     {
       "id": "easing",
-      "classification": "react-trigger-source-absent-native-popup-oracle",
-      "sourceStatus": "independent-react-trigger-source-absent",
+      "classification": "react-trigger-product-owned-native-popup-oracle",
+      "sourceStatus": "product-owned-react-trigger-source",
       "triggerAuthority": {
         "path": "docs/mocks/m3-vism-host-boundary.html",
         "sha256": "a20bd36d6b8b241ef4ec21adda6b045e470bf89fbc78e2788207aa6d0875ec68",
@@ -113,10 +113,10 @@
         "react"
       ],
       "promotionBoundary": [
-        "Graph trigger/icon after mock-side same-shape React extraction",
+        "product-owned trigger/icon with mock consumer",
         "accessible object/channel and pressed/disabled state"
       ],
-      "requiredNextAction": "mock-side-same-shape-react-trigger-extraction-and-parity-before-r2b",
+      "requiredNextAction": "host-projection-and-intent-after-r2b",
       "nativeOracle": [
         "popup frame",
         "presets",
@@ -130,16 +130,16 @@
         "route": "plugin-browser-candidate"
       },
       "triggerSource": {
-        "componentPath": "docs/mocks-ui/src/candidates/EasingTriggerCandidate.jsx",
+        "componentPath": "ui/motolii-web/src/candidates/EasingTriggerCandidate.jsx",
         "componentExport": "EasingTriggerCandidate",
         "runtimeClosure": [
           {
-            "path": "docs/mocks-ui/src/candidates/EasingTriggerCandidate.jsx",
+            "path": "ui/motolii-web/src/candidates/EasingTriggerCandidate.jsx",
             "role": "runtime",
             "currentSha256": "6ae4cf7e79586e33cedaed0bb928daa34aa4b8ac9cdc9f6c494637875f502932"
           },
           {
-            "path": "docs/mocks-ui/src/candidates/easing-trigger-candidate.css",
+            "path": "ui/motolii-web/src/candidates/easing-trigger-candidate.css",
             "role": "runtime",
             "currentSha256": "1e2d26d51c8ed7b322d6fa56123870842daeca41fd0815e7167055c2d87acfd8"
           }
@@ -147,12 +147,12 @@
         "localImports": [
           {
             "kind": "css-side-effect",
-            "source": "docs/mocks-ui/src/candidates/easing-trigger-candidate.css",
+            "source": "ui/motolii-web/src/candidates/easing-trigger-candidate.css",
             "specifiers": []
           }
         ],
         "externalPackages": [],
-        "provenanceRole": "mock-side-current-closure"
+        "provenanceRole": "product-owned-current-closure"
       }
     },
     {

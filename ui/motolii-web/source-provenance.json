@@ -1,15 +1,19 @@
 {
   "schemaVersion": 1,
-  "task": "CU-0A04",
+  "task": "CU-0A04 / CU-0A05B",
   "authority": "docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md",
   "fixedSourceCommit": "56c318edcddab7cf95d263cc2f7dd2b4e6791134",
   "sourceOwnership": {
     "product": "@motolii/motolii-web",
-    "owner": "R1-browser",
-    "surface": "Browser",
+    "owner": "R1-browser / R2B-easing-trigger",
+    "surface": "Browser / Easing trigger",
     "exports": [
       {
         "name": "DiscoveryBrowserCandidate",
+        "path": "src/index.js"
+      },
+      {
+        "name": "EasingTriggerCandidate",
         "path": "src/index.js"
       }
     ]
@@ -26,6 +30,17 @@
         "component": "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx",
         "css": "ui/motolii-web/src/candidates/discovery-browser-candidate.css",
         "pattern": "ui/motolii-web/src/patterns/DiscoveryBrowser.jsx"
+      }
+    },
+    {
+      "type": "fixed-source-transfer",
+      "old": {
+        "component": "docs/mocks-ui/src/candidates/EasingTriggerCandidate.jsx",
+        "css": "docs/mocks-ui/src/candidates/easing-trigger-candidate.css"
+      },
+      "current": {
+        "component": "ui/motolii-web/src/candidates/EasingTriggerCandidate.jsx",
+        "css": "ui/motolii-web/src/candidates/easing-trigger-candidate.css"
       }
     }
   ]
