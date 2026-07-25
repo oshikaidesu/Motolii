@@ -22,6 +22,9 @@ import {
   legacyStyle,
 } from "./legacySource";
 import {
+  InspectorContext,
+} from "../candidates/InspectorCandidate.jsx";
+import {
   ResizableLegacyApp,
   ResizableLegacyTimeline,
   ResizableLegacyWorkspace,
@@ -29,6 +32,7 @@ import {
 } from "../layout/ResizablePanelLayout.jsx";
 
 const initializationKey = Symbol.for("motolii.legacyHostBoundary.cleanup");
+const inspectorSinkKey = Symbol.for("motolii.legacyHostBoundary.inspector");
 
 const EasingTriggerContext = createContext(null);
 
@@ -40,6 +44,13 @@ function EasingTriggerSlot({ Component }) {
       pressed={value?.pressed ?? false}
     />
   );
+}
+
+class ContainmentInitializationError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ContainmentInitializationError";
+  }
 }
 
 class EasingContainmentInitializationError extends Error {
@@ -74,8 +85,23 @@ const EASING_CONTAINMENT_RULES = [
   },
 ];
 
-function containEasingTrigger(script) {
-  for (const { anchor } of EASING_CONTAINMENT_RULES) {
+const INSPECTOR_CONTAINMENT_RULES = [
+  {
+    anchor:
+      '$("#inspector").innerHTML=inspector(mode); clearUndo(); bindInspector();',
+    replacement:
+      'document.createElement("aside").innerHTML=inspector(mode); clearUndo();window[Symbol.for("motolii.legacyHostBoundary.inspector")]?.publish({mode,state,setUndo,status,projectAutomation,applyScrubValue,setSurface,syncColorBook,setStageTool,renderPluginHistory,setMode});',
+  },
+  {
+    anchor:
+      'if(chip){chip.style.setProperty("--chip",state.selectedColor);chip.dataset.label=state.selectedColor}',
+    replacement:
+      'if(chip)window[Symbol.for("motolii.legacyHostBoundary.inspector")]?.refresh()',
+  },
+];
+
+function containAnchors(script, rules, label) {
+  for (const { anchor } of rules) {
     let count = 0;
     let index = script.indexOf(anchor);
     while (index !== -1) {
@@ -83,16 +109,26 @@ function containEasingTrigger(script) {
       index = script.indexOf(anchor, index + anchor.length);
     }
     if (count !== 1) {
-      throw new EasingContainmentInitializationError(
-        `easing containment anchor ${JSON.stringify(anchor)} expected count 1, observed ${count}`,
-      );
+      const message = `${label} containment anchor ${JSON.stringify(anchor)} expected count 1, observed ${count}`;
+      if (label === "easing") {
+        throw new EasingContainmentInitializationError(message);
+      }
+      throw new ContainmentInitializationError(message);
     }
   }
   let contained = script;
-  for (const { anchor, replacement } of EASING_CONTAINMENT_RULES) {
+  for (const { anchor, replacement } of rules) {
     contained = contained.replace(anchor, replacement);
   }
   return contained;
+}
+
+function containEasingTrigger(script) {
+  return containAnchors(script, EASING_CONTAINMENT_RULES, "easing");
+}
+
+function containInspector(script) {
+  return containAnchors(script, INSPECTOR_CONTAINMENT_RULES, "inspector");
 }
 
 function matches(node, { id, className }) {
@@ -291,14 +327,30 @@ function LegacyFixture({
 }) {
   const [activeInterval, setActiveInterval] = useState(null);
   const [pressed, setPressed] = useState(false);
+  const [inspectorPayload, setInspectorPayload] = useState(null);
+  const [inspectorRefresh, setInspectorRefresh] = useState(0);
 
-  const containedScript = useMemo(
-    () =>
-      EasingTriggerComponent
-        ? containEasingTrigger(legacyScript)
-        : legacyScript,
-    [EasingTriggerComponent],
-  );
+  const containedScript = useMemo(() => {
+    let script = containInspector(legacyScript);
+    if (EasingTriggerComponent) {
+      script = containEasingTrigger(script);
+    }
+    return script;
+  }, [EasingTriggerComponent]);
+
+  useEffect(() => {
+    window[inspectorSinkKey] = {
+      publish: (payload) => {
+        setInspectorPayload(payload);
+      },
+      refresh: () => {
+        setInspectorRefresh((value) => value + 1);
+      },
+    };
+    return () => {
+      delete window[inspectorSinkKey];
+    };
+  }, []);
 
   const parsedContent = useMemo(
     () =>
@@ -379,9 +431,16 @@ function LegacyFixture({
   return (
     <>
       <style data-legacy-host-boundary>{legacyStyle}</style>
-      <EasingTriggerContext.Provider value={{ activeInterval, pressed }}>
-        {parsedContent}
-      </EasingTriggerContext.Provider>
+      <InspectorContext.Provider
+        value={{
+          payload: inspectorPayload,
+          refresh: inspectorRefresh,
+        }}
+      >
+        <EasingTriggerContext.Provider value={{ activeInterval, pressed }}>
+          {parsedContent}
+        </EasingTriggerContext.Provider>
+      </InspectorContext.Provider>
     </>
   );
 }

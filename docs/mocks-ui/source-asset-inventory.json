@@ -251,12 +251,13 @@
           "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
           "role": "oracle",
           "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416",
-          "currentSha256": "8d1e412e15f40c340a14bad4844177e0d68f37b7fe25e27f877f7a879c7a3ac9"
+          "currentSha256": "db51411bf3a894d36890f6f5a9f81edeb2c9aa92dd5e39af47d910ef1d03abc8"
         },
         {
           "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
           "role": "oracle",
-          "sha256": "8fb24e75abdb87dd52ae7d1c723782b42e67e486331aa04cbd498111a2733b3a"
+          "sha256": "8fb24e75abdb87dd52ae7d1c723782b42e67e486331aa04cbd498111a2733b3a",
+          "currentSha256": "07eb15b446cde327446abca0a37c261a457fe0b88c44d73273860cd2a487a539"
         },
         {
           "path": "docs/mocks-ui/src/legacy/legacySource.js",
@@ -344,12 +345,13 @@
           "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
           "role": "legacy-oracle",
           "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416",
-          "currentSha256": "8d1e412e15f40c340a14bad4844177e0d68f37b7fe25e27f877f7a879c7a3ac9"
+          "currentSha256": "db51411bf3a894d36890f6f5a9f81edeb2c9aa92dd5e39af47d910ef1d03abc8"
         },
         {
           "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
           "role": "legacy-oracle",
-          "sha256": "8fb24e75abdb87dd52ae7d1c723782b42e67e486331aa04cbd498111a2733b3a"
+          "sha256": "8fb24e75abdb87dd52ae7d1c723782b42e67e486331aa04cbd498111a2733b3a",
+          "currentSha256": "07eb15b446cde327446abca0a37c261a457fe0b88c44d73273860cd2a487a539"
         },
         {
           "path": "docs/mocks-ui/src/legacy/legacySource.js",
