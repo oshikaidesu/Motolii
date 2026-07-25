@@ -243,21 +243,24 @@
     },
     {
       "id": "inspector",
-      "classification": "react-source-absent-legacy-parity-oracle",
-      "sourceStatus": "independent-react-source-absent",
-      "promotionBoundary": [],
+      "classification": "react-product-owned-legacy-parity-oracle",
+      "sourceStatus": "product-owned-react-source",
+      "promotionBoundary": [
+        "product-owned Inspector presentation subtree with mock consumer",
+        "InspectorContext one-way legacy adapter channel"
+      ],
       "legacyOracleClosure": [
         {
           "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
           "role": "oracle",
           "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416",
-          "currentSha256": "db51411bf3a894d36890f6f5a9f81edeb2c9aa92dd5e39af47d910ef1d03abc8"
+          "currentSha256": "e28e641d8c07a82e5392ada73b935b32aa0ad580de2cb6088b77832e397c1e07"
         },
         {
           "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
           "role": "oracle",
           "sha256": "8fb24e75abdb87dd52ae7d1c723782b42e67e486331aa04cbd498111a2733b3a",
-          "currentSha256": "07eb15b446cde327446abca0a37c261a457fe0b88c44d73273860cd2a487a539"
+          "currentSha256": "6262df2c388cc86e0519aa6adc7f1b0d8d5c57dcff9db8f3f7e3cfe8b979a299"
         },
         {
           "path": "docs/mocks-ui/src/legacy/legacySource.js",
@@ -277,7 +280,34 @@
         "sha256": "70e3f1094ae6188274779055d20385cccc2efabd7258b994eeba869e3ea82f90",
         "disposition": "reduced-skeleton-not-product-source"
       },
-      "requiredNextAction": "mock-side-same-shape-react-extraction-and-parity-before-r4",
+      "requiredNextAction": "host-projection-and-intent-after-r4c",
+      "panelSource": {
+        "componentPath": "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
+        "componentExport": "InspectorCandidate",
+        "runtimeClosure": [
+          {
+            "path": "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
+            "role": "runtime",
+            "currentSha256": "1e0bdd3eebd665e517600af4db090f74d50951aef12fdd476e97a828de91a3e4"
+          },
+          {
+            "path": "ui/motolii-web/src/candidates/inspector-candidate.css",
+            "role": "runtime",
+            "currentSha256": "730e2861a893b2b07fa66d5acef0038a49bdcf337e8c5a037785b0a58d829cbe"
+          }
+        ],
+        "localImports": [
+          {
+            "kind": "css-side-effect",
+            "source": "ui/motolii-web/src/candidates/inspector-candidate.css",
+            "specifiers": []
+          }
+        ],
+        "externalPackages": [
+          "react"
+        ],
+        "provenanceRole": "product-owned-current-closure"
+      },
       "behavioralEvidence": {
         "path": "docs/mocks-ui/tests/visual-parity.spec.js",
         "reactRoute": "archive/all-surfaces",
@@ -345,13 +375,13 @@
           "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
           "role": "legacy-oracle",
           "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416",
-          "currentSha256": "db51411bf3a894d36890f6f5a9f81edeb2c9aa92dd5e39af47d910ef1d03abc8"
+          "currentSha256": "e28e641d8c07a82e5392ada73b935b32aa0ad580de2cb6088b77832e397c1e07"
         },
         {
           "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
           "role": "legacy-oracle",
           "sha256": "8fb24e75abdb87dd52ae7d1c723782b42e67e486331aa04cbd498111a2733b3a",
-          "currentSha256": "07eb15b446cde327446abca0a37c261a457fe0b88c44d73273860cd2a487a539"
+          "currentSha256": "6262df2c388cc86e0519aa6adc7f1b0d8d5c57dcff9db8f3f7e3cfe8b979a299"
         },
         {
           "path": "docs/mocks-ui/src/legacy/legacySource.js",

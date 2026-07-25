@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "task": "CU-0A04 / CU-0A05B / CU-0A06B",
+  "task": "CU-0A04 / CU-0A05B / CU-0A06B / CU-0A07C",
   "authority": "docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md",
   "fixedSourceCommit": "56c318edcddab7cf95d263cc2f7dd2b4e6791134",
   "sourceOwnership": {
     "product": "@motolii/motolii-web",
-    "owner": "R1-browser / R2B-easing-trigger / R3B-key-tools",
-    "surface": "Browser / Easing trigger / KEYS-LAYERS key tools",
+    "owner": "R1-browser / R2B-easing-trigger / R3B-key-tools / R4C-inspector",
+    "surface": "Browser / Easing trigger / KEYS-LAYERS key tools / Inspector",
     "exports": [
       {
         "name": "DiscoveryBrowserCandidate",
@@ -18,6 +18,14 @@
       },
       {
         "name": "KeyToolsCandidate",
+        "path": "src/index.js"
+      },
+      {
+        "name": "InspectorCandidate",
+        "path": "src/index.js"
+      },
+      {
+        "name": "InspectorContext",
         "path": "src/index.js"
       }
     ]
@@ -56,6 +64,17 @@
       "current": {
         "component": "ui/motolii-web/src/candidates/KeyToolsCandidate.jsx",
         "css": "ui/motolii-web/src/candidates/key-tools-candidate.css"
+      }
+    },
+    {
+      "type": "fixed-source-transfer",
+      "old": {
+        "component": "docs/mocks-ui/src/candidates/InspectorCandidate.jsx",
+        "css": "docs/mocks-ui/src/candidates/inspector-candidate.css"
+      },
+      "current": {
+        "component": "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
+        "css": "ui/motolii-web/src/candidates/inspector-candidate.css"
       }
     }
   ]
