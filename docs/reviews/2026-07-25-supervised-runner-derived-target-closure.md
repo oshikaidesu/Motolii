@@ -100,6 +100,26 @@ v6 protocolの`HEAD`と全refのsnapshotは、記録した値を後から照合�
 - 実在しない前提を満たしたことにして先へ進む方法
 - 手動のref記録だけを証跡とする方法
 
+## v6最終審査とv6.1例外
+
+v6はSpark施工と専用testを完了し、Grokも`VERDICT: ACCEPT`かつP0/P1=0を返した。しかしCodex最終審査で、
+空配列に対する`"${validated_entries[@]:-}"`が空文字を一回反復し、空の`target/`を
+`rm -rf "$root/"`で再帰削除した後に`rmdir`失敗でexit 7となる事実を確認した。これは
+「`target/` rootを再帰削除しない」というclosed order違反であり、Grok ACCEPTを採用根拠にせずv6差分を隔離した。
+commit、push、main採用は行わない。
+
+ユーザーの明示許可により、v6.1を次の一回だけの修復粒として認める。
+
+- fresh worktreeと新しいOpus closed orderを使い、v6隔離差分を自動採用しない。
+- 変更対象はrunner本体と専用testのまま広げない。
+- 空配列を一度も反復しない削除loopへ直し、空の`target/`が`rm -rf`を経ず`rmdir`だけで正常除去される負例を必須にする。
+- v6の全防護と既存負例を落とさず、Grok再検収とCodex最終審査を新しいdiffへ行う。
+- Sparkがcontext/token limitで停止した場合だけ、ユーザーがCursor Composerへの再投入を許可する。黙ってfallbackせず、
+  利用可能な完全model IDを確認して新しいclosed orderへ固定し、fresh worktreeで同じallowlist、STOP条件、Grok検収を
+  最初から通す。Sparkの未検収部分差分をComposerへ自動継承しない。
+
+この例外は空配列欠陥の修復とlimit時の担当交代だけを許し、通常発注のmodel routingや再試行規則を変更しない。
+
 ## 変更許可と非目標
 
 変更候補は`delegate-cursor-supervised.sh`と同runnerの専用testだけ。正確なallowlistはOpus orderと
