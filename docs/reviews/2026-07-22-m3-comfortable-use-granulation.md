@@ -237,7 +237,7 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 | CU-0A05A | `ASSET / DONE` | R2A archived HTMLのEasing triggerを固定mock内で同形React化 | CU-0A04 | [#341](https://github.com/oshikaidesu/Motolii/pull/341): button DOM/class/SVG/ARIA/disabled/pressed/open動作維持、既存parity不変、product差分0、Grok ACCEPT | — |
 | CU-0A05B | `ASSET / DONE` | R2B 同形React triggerをproduct ownerへ直接移管 | CU-0A05A | [#344](https://github.com/oshikaidesu/Motolii/pull/344): mock側copy 0、popup/modelはmockのnative oracle、Reactにcurve/Undo state 0、Grok ACCEPT | — |
 | CU-0A06A | `ASSET / DONE` | R3A KEYS/LAYERSを固定mock内で独立React source/CSSへ抽出 | CU-0A05B | [#347](https://github.com/oshikaidesu/Motolii/pull/347): 未変更sourceで6状態oracleを先に固定、panel DOM/CSS/ARIA維持、Timeline state移管0、Grok ACCEPT | — |
-| CU-0A06B | `ASSET / READY-RECHECK` | R3B R3A source/CSSをproduct ownerへbyte同一移管 | CU-0A06A | mock側copy 0、product export consumer反転、Timeline state識別子0 | JSX/CSSの内容変更、Host projection/intentが必要 |
+| CU-0A06B | `ASSET / DO` | R3B R3A source/CSSをproduct ownerへbyte同一移管 | CU-0A06A | mock側copy 0、product export consumer反転、Timeline state識別子0 | JSX/CSSの内容変更、Host projection/intentが必要 |
 | CU-0A07 | `ASSET / WAIT` | R4 Inspectorを固定mock内で同形React化して移管 | CU-0A06 | legacy parity後に単一owner、skeleton代用0、legacy runtime import 0 | 正しい同形componentを作れず意味発明が必要 |
 | CU-0A08B | `CORE / WAIT` | Browser fixture stateをrevision付きprojection/typed intentへ交換 | CU-0A04、CU-G09 | unknown/non-finite/oversized/dangling拒否、React semantic write 0 | catalog field不足をID/labelから推測したくなる |
 | CU-0A08E | `CORE / WAIT` | Easing trigger stateをHost projection/typed intentへ交換 | CU-0A05B、U4b契約 | key上/区間外disabled理由、curve state二重所有0 | Interp/区間意味の新契約が必要 |
@@ -450,7 +450,7 @@ Claude Code `claude-fable-5`へ実ファイルと機械guardをread-onlyで再�
 ## 18. 現在の停止線
 
 - 現在sliceとblocking decisionは[縦slice実行方針](2026-07-24-m3-vertical-slice-execution-decision.md)を正とする
-- U0e-2R/U0e-2、CU-0A03/R0、CU-0A04/R1、CU-0A05A/R2A、CU-0A05B/R2B、CU-0A06A/R3Aは完了済みで再実行しない。現在粒は`CU-0A06B / R3B KEYS/LAYERS product ownership`の`READY-RECHECK`であり、R3B以降とMotolii Studio Previewは未実装である
+- U0e-2R/U0e-2、CU-0A03/R0、CU-0A04/R1、CU-0A05A/R2A、CU-0A05B/R2B、CU-0A06A/R3Aは完了済みで再実行しない。現在粒は`CU-0A06B / R3B KEYS/LAYERS product ownership`の`DO`であり、R3B以降とMotolii Studio Previewは未実装である
 - CU-0G03はユーザーによる実windowの実IME／VoiceOver／復帰審判で合格し、CU-0G04Bまで責任最小化短票どおり既存winit/wgpu/wry/macOS標準経路を使う単一runのmanifestでL3を閉じた。CU-0G05L reviewでL1正本とGPU rawの不足を検出し、`CU-0G02A`で正本を修正した。`CU-0G02BH`はwgpu標準queryだけのbounded harnessを固定し、`CU-0G02B`はその実行commitを使う同一session再実測をGrok P0/P1=0で閉じた。CU-0G05Lは8 retained pathを単一manifestへ束ね、Grok R2 P0/P1/P2=0で固定Mac prerequisite evidenceだけを限定確定した。W0b、H1b、製品window、Windows/追加hardwareは解禁しない
 - G0-6HはU0e-3だけを止める並行人間審判であり、R0/R1とPreview骨格を直列停止しない
 - CU-G01〜CU-G10は仕様判断粒で、コード実装と同時に行わない
