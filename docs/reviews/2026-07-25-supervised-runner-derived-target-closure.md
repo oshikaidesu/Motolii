@@ -77,6 +77,29 @@ v6は次を必須とする:
 - 試行は一回に限る。
 - 失敗時にだけtest authorship撤回を留保する。
 
+## ref bootstrapのcanonical証跡
+
+v6 protocolの`HEAD`と全refのsnapshotは、記録した値を後から照合できて初めて証跡になる。runner自己更新の
+制約はこの照合を弱める理由にならず、通常ループを迂回する理由にもしない。
+
+1. Codex precheckの時点で、隔離worktreeの`git rev-parse HEAD`一行と`git show-ref`全行を`LC_ALL=C`で
+   整列した本文のSHA-256を一つだけ求め、これを`REF_DIGEST`としてorder証跡へ封じる。
+2. 算出は`--git-dir`と`--work-tree`を明示し、ambientな`GIT_*`をunsetした状態で行う。
+3. 既存のraw manifest、fingerprint、allowlist closure、ignored path監査、Grok検収は一つも変更しない。
+4. `VERDICT: ACCEPT`かつP0/P1=0の後、main採用より前に同じ手順で`REF_DIGEST`を再算出し、封じた値と比較する。
+5. 不一致なら差分を隔離処分し、test authorship撤回を留保してSTOPする。採用も再試行も自動化しない。
+6. 新runnerが同じ`REF_DIGEST`を自力で出せるようになった後は、手順1〜5の値を比較材料として使い、
+   人手の手順をそのまま恒久機構へ昇格させない。
+
+この節はdocsの訂正であり、v6の一回だけの施工試行を消費しない。
+
+次は採らない。
+
+- runnerを包むtemporary wrapperやgit hookで`REF_DIGEST`を作る方法
+- checkpointを手で作る方法、Grokを直接呼ぶ方法、未検収commitを置く方法
+- 実在しない前提を満たしたことにして先へ進む方法
+- 手動のref記録だけを証跡とする方法
+
 ## 変更許可と非目標
 
 変更候補は`delegate-cursor-supervised.sh`と同runnerの専用testだけ。正確なallowlistはOpus orderと
