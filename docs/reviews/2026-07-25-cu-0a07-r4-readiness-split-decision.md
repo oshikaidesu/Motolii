@@ -2,8 +2,8 @@
 
 - 日付: 2026-07-25
 - 状態: **決定**
-- 現在粒: **CU-0A07A / R4A DO**
-- 後続: **CU-0A07B / R4B WAIT、CU-0A07C / R4C WAIT**
+- 現在粒: **CU-0A07B / R4B DO**
+- 後続: **CU-0A07C / R4C WAIT**
 
 ## 1. 確認した事実
 
@@ -24,8 +24,8 @@ ARIA、操作を固定した証拠として不足する。
 | ID | 状態 | 一成果 | 依存 |
 |---|---|---|---|
 | CU-0A07S | `DONE` | 本決定で独立source不在と施工順を固定 | CU-0A06B |
-| CU-0A07A | `DO` | 未変更legacy sourceに構造・style・ARIA・操作oracleを追加 | CU-0A07S |
-| CU-0A07B | `WAIT` | 固定mock内でInspectorを同形React化し、legacy adapterを一方向投影へ封じる | CU-0A07A |
+| CU-0A07A | `DONE` | [#353](https://github.com/oshikaidesu/Motolii/pull/353)で未変更legacy sourceに構造・style・ARIA・操作oracleを追加 | CU-0A07S |
+| CU-0A07B | `DO` | 固定mock内でInspectorを同形React化し、legacy adapterを一方向投影へ封じる | CU-0A07A |
 | CU-0A07C | `WAIT` | R4BのJSX/CSSをbyte同一でproduct ownerへ移し、mockをconsumerへ反転 | CU-0A07B |
 
 R4Aは製品source、archived HTML、visual threshold、viewport、font、route、
