@@ -1,7 +1,18 @@
 # 監督runnerの派生`target/`閉包
 
-状態: **実行決定**。Issue [#329](https://github.com/oshikaidesu/Motolii/issues/329)を`GR-D3`として先行し、
-完了まで`M4-K0 / #167`の再発注を止める。
+状態: **完了**。Issue [#329](https://github.com/oshikaidesu/Motolii/issues/329)は
+[#336](https://github.com/oshikaidesu/Motolii/pull/336)でmainへ統合した。`M4-K0 / #167`は旧隔離差分を
+採用せず、fresh main/worktree/orderから再発注できる。
+
+## 完了証拠
+
+- Sparkのcontext/token limit停止後、文書化済みv6.1例外に従ってfresh worktreeの`composer-2.5`へ再投入し、
+  Spark部分差分は継承しなかった。
+- Cursor Grok 4.5 Highのread-only検収は`VERDICT: ACCEPT`、P0/P1/P2=0。
+- 専用runner試験、`cargo test --locked --workspace`、docs gate、CI 4/4が通過した。
+- 実K0停止形の既知三entryだけを除去し、K0差分hashとHEADを不変のまま、checkpoint不在をfail closedした。
+- 空`target/`は`rm -rf`へ渡さず`rmdir`だけで閉じ、未知entry、symlink、tracked path、削除失敗は内容を
+  保持して停止する負例を固定した。
 
 ## 観測
 
