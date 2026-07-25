@@ -136,8 +136,14 @@ const EXPECTED_TIMELINE_MODES = {
   layers: ["align", "stagger", "shift"],
 };
 const EXPECTED_TIMELINE_TEST_PATH = "docs/mocks-ui/tests/timeline-candidate.spec.js";
-const EXPECTED_KEY_TOOLS_SOURCE = "docs/mocks-ui/src/candidates/KeyToolsCandidate.jsx";
-const EXPECTED_KEY_TOOLS_CSS_SOURCE = "docs/mocks-ui/src/candidates/key-tools-candidate.css";
+const EXPECTED_KEY_TOOLS_SOURCE = "ui/motolii-web/src/candidates/KeyToolsCandidate.jsx";
+const EXPECTED_KEY_TOOLS_CSS_SOURCE = "ui/motolii-web/src/candidates/key-tools-candidate.css";
+const MOCK_KEY_TOOLS_SOURCE = "docs/mocks-ui/src/candidates/KeyToolsCandidate.jsx";
+const MOCK_KEY_TOOLS_CSS_SOURCE = "docs/mocks-ui/src/candidates/key-tools-candidate.css";
+const EXPECTED_KEY_TOOLS_SHA256 =
+  "bf38656a99957a9f2d1465057820510f525fd394a3965cff9f291415223f87ba";
+const EXPECTED_KEY_TOOLS_CSS_SHA256 =
+  "f84eb7f98f05844fa3bfc72b702cee2709f1fc0bb9be614f2b01039a65b5190d";
 const EXPECTED_TIMELINE_CSS_BASE_SHA256 =
   "ef984d9b365f4efbcb4bf8fc20034a0b54846ab4fb470ea8d6ec8b486aa71397";
 const EXPECTED_INSPECTOR_CLASSIFICATION = "react-source-absent-legacy-parity-oracle";
@@ -1101,7 +1107,7 @@ async function validateInventory(manifest, options = {}) {
   assert.equal(keysLayers.classification, "react-subtree-extraction-native-timeline-oracle");
   assert.equal(keysLayers.componentPath, EXPECTED_TIMELINE_SOURCE);
   assert.equal(keysLayers.componentExport, "TimelineCandidate");
-  assert.deepEqual(keysLayers.externalPackages, ["react"]);
+  assert.deepEqual(keysLayers.externalPackages, ["react", "@motolii/motolii-web"]);
   assert.deepEqual(keysLayers.promotionBoundary, EXPECTED_TIMELINE_PROMOTION_BOUNDARY);
   assert.deepEqual(keysLayers.nativeOracle, EXPECTED_TIMELINE_NATIVE_ORACLE);
   ensureExactKeys(keysLayers.modes, ["keys", "layers"]);
@@ -1120,7 +1126,7 @@ async function validateInventory(manifest, options = {}) {
   assert.equal(keysLayers.panelSource.componentExport, "KeyToolsCandidate");
   assert.equal(
     keysLayers.panelSource.provenanceRole,
-    "mock-side-current-closure",
+    "product-owned-current-closure",
   );
   const expectedPanelRuntimeOrder = [
     EXPECTED_KEY_TOOLS_SOURCE,
@@ -1140,6 +1146,12 @@ async function validateInventory(manifest, options = {}) {
       hashBytes(await readFile(absoluteFromRelative(entry.path))),
       entry.currentSha256,
     );
+    if (entry.path === EXPECTED_KEY_TOOLS_SOURCE) {
+      assert.equal(entry.currentSha256, EXPECTED_KEY_TOOLS_SHA256);
+    }
+    if (entry.path === EXPECTED_KEY_TOOLS_CSS_SOURCE) {
+      assert.equal(entry.currentSha256, EXPECTED_KEY_TOOLS_CSS_SHA256);
+    }
     assert.ok(!("sha256" in entry));
   }
   assert.equal(keysLayers.panelSource.localImports.length, 1);
@@ -1182,6 +1194,11 @@ async function validateInventory(manifest, options = {}) {
     "useRef",
     "useMemo",
     "useReducer",
+    "keyToolsOpen",
+    "selectedKeys",
+    "selectedObjects",
+    "applyKeyOperation",
+    "applyLayerOperation",
   ]) {
     assert.ok(!keyToolsRaw.includes(forbidden), `forbidden token ${forbidden}`);
   }
@@ -1222,10 +1239,9 @@ async function validateInventory(manifest, options = {}) {
     timelineAst,
     absoluteFromRelative(keysLayers.componentPath),
   );
-  assert.deepEqual(timelineImports.externalPackages, ["react"]);
+  assert.deepEqual(timelineImports.externalPackages, ["@motolii/motolii-web", "react"]);
   assert.deepEqual(Object.keys(timelineImports.localImports), [
     EXPECTED_TIMELINE_CSS_SOURCE,
-    EXPECTED_KEY_TOOLS_SOURCE,
   ]);
   assert.equal(timelineImports.localImports[EXPECTED_TIMELINE_CSS_SOURCE].length, 0);
   assert.equal(countJsxClass(timelineAst, "candidate-key-tools"), 0);
@@ -1901,6 +1917,74 @@ test("rejects KEYS/LAYERS promotion beyond the fixed Timeline subtree evidence",
   );
   await assert.rejects(async () => {
     await validateInventory(manifest, { keyToolsCssSource: withoutToolPanelSelector });
+  });
+
+  await assert.rejects(async () => {
+    await validateInventory(withInventoryEntryAt(manifest, "surfaces", 2, (keysLayers) => ({
+      ...keysLayers,
+      panelSource: {
+        ...keysLayers.panelSource,
+        provenanceRole: "mock-side-current-closure",
+      },
+    })));
+  });
+
+  await assert.rejects(async () => {
+    await validateInventory(withInventoryEntryAt(manifest, "surfaces", 2, (keysLayers) => ({
+      ...keysLayers,
+      panelSource: {
+        ...keysLayers.panelSource,
+        componentPath: MOCK_KEY_TOOLS_SOURCE,
+        runtimeClosure: keysLayers.panelSource.runtimeClosure.map((entry, index) =>
+          index === 0 ? { ...entry, path: MOCK_KEY_TOOLS_SOURCE } : entry,
+        ),
+      },
+    })));
+  });
+
+  await assert.rejects(async () => {
+    await validateInventory(withInventoryEntryAt(manifest, "surfaces", 2, (keysLayers) => ({
+      ...keysLayers,
+      panelSource: {
+        ...keysLayers.panelSource,
+        runtimeClosure: keysLayers.panelSource.runtimeClosure.map((entry) => ({
+          ...entry,
+          currentSha256: "0".repeat(64),
+        })),
+      },
+    })));
+  });
+
+  await assert.rejects(async () => {
+    await validateInventory(withInventoryEntryAt(manifest, "surfaces", 2, (keysLayers) => ({
+      ...keysLayers,
+      panelSource: {
+        ...keysLayers.panelSource,
+        runtimeClosure: keysLayers.panelSource.runtimeClosure.map((entry, index) =>
+          index === 0
+            ? { ...entry, sha256: entry.currentSha256 }
+            : entry,
+        ),
+      },
+    })));
+  });
+
+  await assert.rejects(async () => {
+    await validateInventory(withInventoryEntryAt(manifest, "surfaces", 2, (keysLayers) => ({
+      ...keysLayers,
+      externalPackages: ["react"],
+    })));
+  });
+
+  const timelineWithLocalKeyTools = (await readFile(
+    absoluteFromRelative(EXPECTED_TIMELINE_SOURCE),
+    "utf8",
+  )).replace(
+    'import { KeyToolsCandidate } from "@motolii/motolii-web";',
+    `import { KeyToolsCandidate } from "./KeyToolsCandidate.jsx";`,
+  );
+  await assert.rejects(async () => {
+    await validateInventory(manifest, { timelineAstSource: timelineWithLocalKeyTools });
   });
 });
 
