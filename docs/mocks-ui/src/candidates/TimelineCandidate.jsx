@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./timeline-candidate.css";
-import { KeyToolsCandidate } from "./KeyToolsCandidate.jsx";
+import { KeyToolsCandidate } from "@motolii/motolii-web";
 
 const OBJECTS = [
   {
