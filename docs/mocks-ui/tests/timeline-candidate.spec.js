@@ -599,3 +599,482 @@ test("横時間軸は左Key Toolsを固定したままscrollできる", async ({
     )
     .toBe(initialToolsX);
 });
+
+test("Key Toolsの六section状態をcomputed styleとARIAで固定する", async ({
+  page,
+}) => {
+  const tools = page.getByRole("complementary", { name: "Key Tools" });
+  const body = page.locator(".candidate-timeline-body");
+  const panelStyle = await tools.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      position: style.position,
+      width: style.width,
+      zIndex: style.zIndex,
+      borderRightWidth: style.borderRightWidth,
+      overflowY: style.overflowY,
+    };
+  });
+  expect(panelStyle.position).toBe("absolute");
+  expect(panelStyle.width).toBe("202px");
+  expect(panelStyle.zIndex).toBe("30");
+  expect(panelStyle.borderRightWidth).toBe("1px");
+  expect(panelStyle.overflowY).toBe("auto");
+
+  const sectionButtonStyle = await tools
+    .locator(".candidate-key-sections button")
+    .first()
+    .evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { height: style.height, fontSize: style.fontSize };
+    });
+  expect(sectionButtonStyle.height).toBe("28px");
+  expect(sectionButtonStyle.fontSize).toBe("9px");
+
+  const genericButtonHeight = await tools
+    .locator(".candidate-key-scope button")
+    .first()
+    .evaluate((element) => getComputedStyle(element).height);
+  expect(genericButtonHeight).toBe("18px");
+
+  const actions = tools.locator(".candidate-key-actions");
+  const actionsGrid = await actions.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      columns: style.gridTemplateColumns.split(" ").length,
+      display: style.display,
+    };
+  });
+  expect(actionsGrid.display).toBe("grid");
+  expect(actionsGrid.columns).toBe(3);
+  const actionsLabelColumn = await actions
+    .locator("small")
+    .evaluate((element) => getComputedStyle(element).gridColumn);
+  expect(actionsLabelColumn).toBe("1 / -1");
+
+  const pressedModeButton = tools.getByRole("button", { name: "KEYS" });
+  await expect(pressedModeButton).toHaveAttribute("aria-pressed", "true");
+  const pressedModeShadow = await pressedModeButton.evaluate(
+    (element) => getComputedStyle(element).boxShadow,
+  );
+  expect(pressedModeShadow).not.toBe("none");
+
+  const pressedScope = tools
+    .locator(".candidate-key-scope button[aria-pressed='true']")
+    .first();
+  const scopePressedBorder = await pressedScope.evaluate(
+    (element) => getComputedStyle(element).borderColor,
+  );
+  const scopeIdleBorder = await tools
+    .locator(".candidate-key-scope button[aria-pressed='false']")
+    .first()
+    .evaluate((element) => getComputedStyle(element).borderColor);
+  expect(scopePressedBorder).not.toBe(scopeIdleBorder);
+
+  const keysSections = [
+    {
+      name: "Align",
+      label: "ALIGN",
+      actionNames: ["開始へ整列", "Playheadへ整列", "終了へ整列"],
+      hasSvg: false,
+    },
+    {
+      name: "Stagger",
+      label: "STAGGER",
+      actionNames: ["等間隔に分布", "順序を反転"],
+      hasSvg: true,
+    },
+    {
+      name: "Stretch",
+      label: "STRETCH",
+      actionNames: ["80%", "120%"],
+      hasSvg: false,
+    },
+  ];
+  for (const section of keysSections) {
+    const sectionButton = tools.getByRole("button", {
+      name: section.name,
+      exact: true,
+    });
+    if ((await sectionButton.getAttribute("aria-expanded")) !== "true") {
+      await sectionButton.click();
+    }
+    await expect(sectionButton).toHaveAttribute("aria-expanded", "true");
+    for (const sibling of keysSections) {
+      if (sibling.name === section.name) continue;
+      await expect(
+        tools.getByRole("button", { name: sibling.name, exact: true }),
+      ).toHaveAttribute("aria-expanded", "false");
+    }
+    await expect(
+      tools.locator(".candidate-key-sections button"),
+    ).toHaveCount(3);
+    await expect(actions.locator("small")).toHaveText(section.label);
+    await expect(actions.getByRole("button")).toHaveCount(
+      section.actionNames.length,
+    );
+    const actionButtons = await actions.getByRole("button").all();
+    for (const [index, actionButton] of actionButtons.entries()) {
+      await expect(actionButton).toHaveAccessibleName(
+        section.actionNames[index],
+      );
+    }
+    if (section.hasSvg) {
+      const svgStyle = await actions.locator("svg").evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { height: style.height, gridColumn: style.gridColumn };
+      });
+      expect(svgStyle.height).toBe("48px");
+      expect(svgStyle.gridColumn).toBe("1 / -1");
+    }
+  }
+
+  await tools.getByRole("button", { name: "LAYERS" }).click();
+  const layerSections = [
+    {
+      name: "Layer Align",
+      label: "ALIGN",
+      actionNames: ["Layerを開始へ整列", "Layerを終了へ整列"],
+      hasSvg: false,
+    },
+    {
+      name: "Layer Stagger",
+      label: "STAGGER",
+      actionNames: ["Layerを等間隔に分布", "Layer順序を反転"],
+      hasSvg: false,
+    },
+    {
+      name: "Layer Shift",
+      label: "SHIFT",
+      actionNames: ["Layerを左へ移動", "Layerを右へ移動"],
+      hasSvg: false,
+    },
+  ];
+  for (const section of layerSections) {
+    const sectionButton = tools.getByRole("button", { name: section.name });
+    if ((await sectionButton.getAttribute("aria-expanded")) !== "true") {
+      await sectionButton.click();
+    }
+    await expect(sectionButton).toHaveAttribute("aria-expanded", "true");
+    for (const sibling of layerSections) {
+      if (sibling.name === section.name) continue;
+      await expect(
+        tools.getByRole("button", { name: sibling.name }),
+      ).toHaveAttribute("aria-expanded", "false");
+    }
+    await expect(
+      tools.locator(".candidate-key-sections button"),
+    ).toHaveCount(3);
+    await expect(actions.locator("small")).toHaveText(section.label);
+    await expect(actions.getByRole("button")).toHaveCount(
+      section.actionNames.length,
+    );
+    const actionButtons = await actions.getByRole("button").all();
+    for (const [index, actionButton] of actionButtons.entries()) {
+      await expect(actionButton).toHaveAccessibleName(
+        section.actionNames[index],
+      );
+    }
+  }
+
+  await expect(body).toHaveClass(/has-key-tools/);
+});
+
+test("Key ToolsはTimeline body左端に202px幅でdockする", async ({ page }) => {
+  const tools = page.getByRole("complementary", { name: "Key Tools" });
+  const body = page.locator(".candidate-timeline-body");
+  const rail = page.locator(".candidate-band-action-rail");
+  const viewport = page.locator(".candidate-time-viewport");
+  const toolsBox = await tools.boundingBox();
+  const bodyBox = await body.boundingBox();
+  const railBox = await rail.boundingBox();
+  const viewportBox = await viewport.boundingBox();
+  expect(toolsBox).not.toBeNull();
+  expect(bodyBox).not.toBeNull();
+  expect(toolsBox.x).toBe(bodyBox.x);
+  expect(toolsBox.width).toBe(202);
+  expect(toolsBox.x + toolsBox.width).toBe(railBox.x);
+  expect(railBox.x + railBox.width).toBe(viewportBox.x);
+});
+
+test("Key Toolsのkey scopeは三択排他でObject別が初期値", async ({ page }) => {
+  const tools = page.getByRole("complementary", { name: "Key Tools" });
+  const scopes = [
+    { label: "Object別", value: "object" },
+    { label: "Channel別", value: "channel" },
+    { label: "全選択", value: "global" },
+  ];
+  for (const scope of scopes) {
+    const button = tools.getByRole("button", { name: scope.label });
+    await expect(button).toHaveAttribute("aria-label", scope.label);
+  }
+  await expect(tools.getByRole("button", { name: "Object別" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(
+    tools.locator('.candidate-key-scope button[aria-pressed="true"]'),
+  ).toHaveCount(1);
+
+  await tools.getByRole("button", { name: "Channel別" }).click();
+  await expect(tools.getByRole("button", { name: "Channel別" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(
+    tools.locator('.candidate-key-scope button[aria-pressed="true"]'),
+  ).toHaveCount(1);
+
+  await tools.getByRole("button", { name: "全選択" }).click();
+  await expect(tools.getByRole("button", { name: "全選択" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(
+    tools.locator('.candidate-key-scope button[aria-pressed="true"]'),
+  ).toHaveCount(1);
+
+  await tools.getByRole("button", { name: "Object別" }).click();
+  await expect(tools.getByRole("button", { name: "Object別" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+});
+
+test("Key Toolsのsectionは再clickで折りたたみできる", async ({ page }) => {
+  const tools = page.getByRole("complementary", { name: "Key Tools" });
+  const actions = tools.locator(".candidate-key-actions");
+
+  const align = tools.getByRole("button", { name: "Align", exact: true });
+  await expect(align).toHaveAttribute("aria-expanded", "true");
+  await align.click();
+  await expect(align).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    tools.locator('.candidate-key-sections button[aria-expanded="true"]'),
+  ).toHaveCount(0);
+  await expect(actions.locator("small")).toHaveCount(0);
+  await expect(actions.getByRole("button")).toHaveCount(0);
+  await align.click();
+  await expect(align).toHaveAttribute("aria-expanded", "true");
+  await expect(actions.locator("small")).toHaveText("ALIGN");
+
+  await tools.getByRole("button", { name: "LAYERS" }).click();
+  const layerAlign = tools.getByRole("button", { name: "Layer Align" });
+  await expect(layerAlign).toHaveAttribute("aria-expanded", "true");
+  await layerAlign.click();
+  await expect(layerAlign).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    tools.locator('.candidate-key-sections button[aria-expanded="true"]'),
+  ).toHaveCount(0);
+  await expect(actions.locator("small")).toHaveCount(0);
+  await expect(actions.getByRole("button")).toHaveCount(0);
+  await layerAlign.click();
+  await expect(layerAlign).toHaveAttribute("aria-expanded", "true");
+  await expect(actions.locator("small")).toHaveText("ALIGN");
+});
+
+test("Key Toolsを閉じてもLAYERSとsection状態が保持される", async ({
+  page,
+}) => {
+  const tools = page.getByRole("complementary", { name: "Key Tools" });
+  const body = page.locator(".candidate-timeline-body");
+  const rail = page.locator(".candidate-band-action-rail");
+
+  await tools.getByRole("button", { name: "LAYERS" }).click();
+  await tools.getByRole("button", { name: "Layer Shift" }).click();
+  const railOpenLeft = await rail.evaluate(
+    (element) => element.getBoundingClientRect().left,
+  );
+
+  await tools.getByRole("button", { name: "Key Toolsを閉じる" }).click();
+  await expect(page.locator(".candidate-key-tools")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Key Toolsを開く" }),
+  ).toBeVisible();
+  await expect(body).not.toHaveClass(/has-key-tools/);
+  const railClosedLeft = await rail.evaluate(
+    (element) => element.getBoundingClientRect().left,
+  );
+  expect(railClosedLeft).toBeCloseTo(railOpenLeft - 202, 0);
+
+  await page.getByRole("button", { name: "Key Toolsを開く" }).click();
+  const reopened = page.getByRole("complementary", { name: "Key Tools" });
+  await expect(reopened).toBeVisible();
+  await expect(reopened.getByRole("button", { name: "LAYERS" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(
+    reopened.getByRole("button", { name: "Layer Shift" }),
+  ).toHaveAttribute("aria-expanded", "true");
+  const railReopenedLeft = await rail.evaluate(
+    (element) => element.getBoundingClientRect().left,
+  );
+  expect(railReopenedLeft).toBeCloseTo(railOpenLeft, 0);
+});
+
+test("Key ToolsのKEYS操作はObject別scopeで選択Keyだけを動かす", async ({
+  page,
+}) => {
+  await page
+    .getByRole("button", {
+      name: "Pulse ringsのAutomationを開く · 3 channel",
+    })
+    .click();
+  const key1 = page.getByRole("button", {
+    name: "Pulse rings · Intensity · Key 1",
+  });
+  const key2 = page.getByRole("button", {
+    name: "Pulse rings · Intensity · Key 2",
+  });
+  const key3 = page.getByRole("button", {
+    name: "Pulse rings · Intensity · Key 3",
+  });
+  const tools = page.getByRole("complementary", { name: "Key Tools" });
+  await tools.getByRole("button", { name: "Object別" }).click();
+
+  await key1.click();
+  await key3.click();
+  await expect(key1).toHaveAttribute("aria-pressed", "true");
+  await expect(key3).toHaveAttribute("aria-pressed", "true");
+  await expect(key2).toHaveAttribute("aria-pressed", "false");
+
+  const leftBeforeAlign = {
+    key1: await key1.evaluate((element) => element.style.left),
+    key2: await key2.evaluate((element) => element.style.left),
+    key3: await key3.evaluate((element) => element.style.left),
+  };
+  const minLeft = [leftBeforeAlign.key1, leftBeforeAlign.key3].sort()[0];
+  await tools.getByRole("button", { name: "開始へ整列" }).click();
+  await expect(key1).toHaveAttribute("style", /left:/);
+  expect(await key1.evaluate((element) => element.style.left)).toBe(minLeft);
+  expect(await key3.evaluate((element) => element.style.left)).toBe(minLeft);
+  expect(await key2.evaluate((element) => element.style.left)).toBe(
+    leftBeforeAlign.key2,
+  );
+
+  await key3.click();
+  await key2.click();
+  await key3.click();
+  await expect(key2).toHaveAttribute("aria-pressed", "true");
+  await expect(key3).toHaveAttribute("aria-pressed", "true");
+  await tools.getByRole("button", { name: "Stretch", exact: true }).click();
+  const leftBeforeStretch = {
+    key2: await key2.evaluate((element) => element.style.left),
+    key3: await key3.evaluate((element) => element.style.left),
+  };
+  const spanBefore = Math.abs(
+    parseFloat(leftBeforeStretch.key3) - parseFloat(leftBeforeStretch.key2),
+  );
+  expect(spanBefore).toBeGreaterThan(0);
+  await tools.getByRole("button", { name: "80%" }).click();
+  const leftAfterStretch = {
+    key2: await key2.evaluate((element) => element.style.left),
+    key3: await key3.evaluate((element) => element.style.left),
+  };
+  const orderedStretch = [
+    { id: "key2", left: parseFloat(leftAfterStretch.key2) },
+    { id: "key3", left: parseFloat(leftAfterStretch.key3) },
+  ].sort((a, b) => a.left - b.left);
+  expect(orderedStretch[0].left).toBe(
+    parseFloat(
+      orderedStretch[0].id === "key2"
+        ? leftBeforeStretch.key2
+        : leftBeforeStretch.key3,
+    ),
+  );
+  const spanAfter = Math.abs(
+    parseFloat(leftAfterStretch.key3) - parseFloat(leftAfterStretch.key2),
+  );
+  expect(spanAfter).toBeLessThan(spanBefore);
+
+  await tools.getByRole("button", { name: "Stagger", exact: true }).click();
+  await expect(key1).toHaveAttribute("aria-pressed", "true");
+  await expect(key2).toHaveAttribute("aria-pressed", "true");
+  await expect(key3).toHaveAttribute("aria-pressed", "true");
+  const spreadKey = page.getByRole("button", {
+    name: "Pulse rings · Spread · Key 1",
+  });
+  await expect(spreadKey).toHaveAttribute("aria-pressed", "false");
+  const spreadLeftBeforeStagger = await spreadKey.evaluate(
+    (element) => element.style.left,
+  );
+  await tools.getByRole("button", { name: "等間隔に分布" }).click();
+  const spaced = [
+    parseFloat(await key1.evaluate((element) => element.style.left)),
+    parseFloat(await key2.evaluate((element) => element.style.left)),
+    parseFloat(await key3.evaluate((element) => element.style.left)),
+  ].sort((a, b) => a - b);
+  expect(spaced[1] - spaced[0]).toBeGreaterThan(0);
+  expect(spaced[2] - spaced[1]).toBeCloseTo(spaced[1] - spaced[0], 6);
+  expect(await spreadKey.evaluate((element) => element.style.left)).toBe(
+    spreadLeftBeforeStagger,
+  );
+});
+
+test("Key ToolsのLAYERS操作は選択Object barだけを動かす", async ({
+  page,
+}) => {
+  const tools = page.getByRole("complementary", { name: "Key Tools" });
+  await tools.getByRole("button", { name: "LAYERS" }).click();
+  const pulseBar = page.locator(
+    '.candidate-time-bar[data-object-id="pulse-rings"]',
+  );
+  const nightBar = page.locator(
+    '.candidate-time-bar[data-object-id="night-drive"]',
+  );
+  const cityBar = page.locator(
+    '.candidate-time-bar[data-object-id="city-loop"]',
+  );
+  await page.keyboard.down("Shift");
+  await nightBar.click({ position: { x: 120, y: 10 } });
+  await page.keyboard.up("Shift");
+  await expect(pulseBar).toHaveAttribute("data-selected", "true");
+  await expect(nightBar).toHaveAttribute("data-selected", "true");
+  await expect(tools.getByText("▤ 2")).toBeVisible();
+
+  const cityLeftBefore = await cityBar.evaluate(
+    (element) => element.style.left,
+  );
+  await tools.getByRole("button", { name: "Layerを開始へ整列" }).click();
+  const pulseLeft = await pulseBar.evaluate((element) => element.style.left);
+  const nightLeft = await nightBar.evaluate((element) => element.style.left);
+  expect(pulseLeft).toBe(nightLeft);
+  expect(await cityBar.evaluate((element) => element.style.left)).toBe(
+    cityLeftBefore,
+  );
+
+  await tools.getByRole("button", { name: "Layer Shift" }).click();
+  const pulseBeforeShift = parseFloat(
+    await pulseBar.evaluate((element) => element.style.left),
+  );
+  const nightBeforeShift = parseFloat(
+    await nightBar.evaluate((element) => element.style.left),
+  );
+  await tools.getByRole("button", { name: "Layerを右へ移動" }).click();
+  expect(
+    parseFloat(await pulseBar.evaluate((element) => element.style.left)),
+  ).toBeCloseTo(pulseBeforeShift + 2, 5);
+  expect(
+    parseFloat(await nightBar.evaluate((element) => element.style.left)),
+  ).toBeCloseTo(nightBeforeShift + 2, 5);
+  expect(await cityBar.evaluate((element) => element.style.left)).toBe(
+    cityLeftBefore,
+  );
+});
+
+test("Key Toolsパネルは開閉で単一インスタンスだけ存在する", async ({
+  page,
+}) => {
+  await expect(page.locator(".candidate-key-tools")).toHaveCount(1);
+  await expect(page.locator(".candidate-key-tools-open")).toHaveCount(0);
+
+  const tools = page.getByRole("complementary", { name: "Key Tools" });
+  await tools.getByRole("button", { name: "Key Toolsを閉じる" }).click();
+  await expect(page.locator(".candidate-key-tools")).toHaveCount(0);
+  await expect(page.locator(".candidate-key-tools-open")).toHaveCount(1);
+
+  await page.getByRole("button", { name: "Key Toolsを開く" }).click();
+  await expect(page.locator(".candidate-key-tools")).toHaveCount(1);
+  await expect(page.locator(".candidate-key-tools-open")).toHaveCount(0);
+});

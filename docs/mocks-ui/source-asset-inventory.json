@@ -165,12 +165,13 @@
           "path": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
           "role": "runtime",
           "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5",
-          "currentSha256": "5273c79aa01748c1cc77a1972043114e98914561129143ae436f7d71d1c54fd2"
+          "currentSha256": "1ebef5378b7ca550e4b3a96de57299aea75be2d6a265a259994437615943d093"
         },
         {
           "path": "docs/mocks-ui/src/candidates/timeline-candidate.css",
           "role": "runtime",
-          "sha256": "ef984d9b365f4efbcb4bf8fc20034a0b54846ab4fb470ea8d6ec8b486aa71397"
+          "sha256": "ef984d9b365f4efbcb4bf8fc20034a0b54846ab4fb470ea8d6ec8b486aa71397",
+          "currentSha256": "9e08238e9325977bf2372366b7b6c7f33f30a5e0378b85f5890ece3ee973ae97"
         }
       ],
       "localImports": [
@@ -212,6 +213,31 @@
       "behavioralEvidence": {
         "path": "docs/mocks-ui/tests/timeline-candidate.spec.js",
         "route": "plugin-browser-candidate"
+      },
+      "panelSource": {
+        "componentPath": "docs/mocks-ui/src/candidates/KeyToolsCandidate.jsx",
+        "componentExport": "KeyToolsCandidate",
+        "runtimeClosure": [
+          {
+            "path": "docs/mocks-ui/src/candidates/KeyToolsCandidate.jsx",
+            "role": "runtime",
+            "currentSha256": "bf38656a99957a9f2d1465057820510f525fd394a3965cff9f291415223f87ba"
+          },
+          {
+            "path": "docs/mocks-ui/src/candidates/key-tools-candidate.css",
+            "role": "runtime",
+            "currentSha256": "f84eb7f98f05844fa3bfc72b702cee2709f1fc0bb9be614f2b01039a65b5190d"
+          }
+        ],
+        "localImports": [
+          {
+            "kind": "css-side-effect",
+            "source": "docs/mocks-ui/src/candidates/key-tools-candidate.css",
+            "specifiers": []
+          }
+        ],
+        "externalPackages": [],
+        "provenanceRole": "mock-side-current-closure"
       }
     },
     {
@@ -338,12 +364,13 @@
           "path": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
           "role": "react-oracle",
           "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5",
-          "currentSha256": "5273c79aa01748c1cc77a1972043114e98914561129143ae436f7d71d1c54fd2"
+          "currentSha256": "1ebef5378b7ca550e4b3a96de57299aea75be2d6a265a259994437615943d093"
         },
         {
           "path": "docs/mocks-ui/src/candidates/timeline-candidate.css",
           "role": "react-oracle",
-          "sha256": "ef984d9b365f4efbcb4bf8fc20034a0b54846ab4fb470ea8d6ec8b486aa71397"
+          "sha256": "ef984d9b365f4efbcb4bf8fc20034a0b54846ab4fb470ea8d6ec8b486aa71397",
+          "currentSha256": "9e08238e9325977bf2372366b7b6c7f33f30a5e0378b85f5890ece3ee973ae97"
         }
       ],
       "stageOracle": [
@@ -372,7 +399,7 @@
           "path": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
           "export": "TimelineCandidate",
           "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5",
-          "currentSha256": "5273c79aa01748c1cc77a1972043114e98914561129143ae436f7d71d1c54fd2",
+          "currentSha256": "1ebef5378b7ca550e4b3a96de57299aea75be2d6a265a259994437615943d093",
           "disposition": "whole-container-not-product-timeline"
         }
       ],

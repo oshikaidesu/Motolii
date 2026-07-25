@@ -136,6 +136,10 @@ const EXPECTED_TIMELINE_MODES = {
   layers: ["align", "stagger", "shift"],
 };
 const EXPECTED_TIMELINE_TEST_PATH = "docs/mocks-ui/tests/timeline-candidate.spec.js";
+const EXPECTED_KEY_TOOLS_SOURCE = "docs/mocks-ui/src/candidates/KeyToolsCandidate.jsx";
+const EXPECTED_KEY_TOOLS_CSS_SOURCE = "docs/mocks-ui/src/candidates/key-tools-candidate.css";
+const EXPECTED_TIMELINE_CSS_BASE_SHA256 =
+  "ef984d9b365f4efbcb4bf8fc20034a0b54846ab4fb470ea8d6ec8b486aa71397";
 const EXPECTED_INSPECTOR_CLASSIFICATION = "react-source-absent-legacy-parity-oracle";
 const EXPECTED_INSPECTOR_SOURCE_STATUS = "independent-react-source-absent";
 const EXPECTED_INSPECTOR_LEGACY_CLOSURE = [
@@ -773,6 +777,8 @@ async function validateInventory(manifest, options = {}) {
     nativeVisualParityAstSource,
     nativeTimelineTestAstSource,
     easingTriggerAstSource,
+    keyToolsAstSource,
+    keyToolsCssSource,
     legacyHostAstSource,
     fixedSourceCommit = manifest.fixedSourceCommit,
   } = options;
@@ -1089,6 +1095,7 @@ async function validateInventory(manifest, options = {}) {
     "nativeOracle",
     "modes",
     "behavioralEvidence",
+    "panelSource",
   ]);
   assert.equal(keysLayers.id, "keys-layers");
   assert.equal(keysLayers.classification, "react-subtree-extraction-native-timeline-oracle");
@@ -1100,6 +1107,90 @@ async function validateInventory(manifest, options = {}) {
   ensureExactKeys(keysLayers.modes, ["keys", "layers"]);
   assert.deepEqual(keysLayers.modes, EXPECTED_TIMELINE_MODES);
   assert.deepEqual(keysLayers.behavioralEvidence, manifest.behavioralTests[1]);
+
+  ensureExactKeys(keysLayers.panelSource, [
+    "componentPath",
+    "componentExport",
+    "runtimeClosure",
+    "localImports",
+    "externalPackages",
+    "provenanceRole",
+  ]);
+  assert.equal(keysLayers.panelSource.componentPath, EXPECTED_KEY_TOOLS_SOURCE);
+  assert.equal(keysLayers.panelSource.componentExport, "KeyToolsCandidate");
+  assert.equal(
+    keysLayers.panelSource.provenanceRole,
+    "mock-side-current-closure",
+  );
+  const expectedPanelRuntimeOrder = [
+    EXPECTED_KEY_TOOLS_SOURCE,
+    EXPECTED_KEY_TOOLS_CSS_SOURCE,
+  ];
+  assert.equal(
+    keysLayers.panelSource.runtimeClosure.length,
+    expectedPanelRuntimeOrder.length,
+  );
+  for (let index = 0; index < expectedPanelRuntimeOrder.length; index += 1) {
+    const expectedPath = expectedPanelRuntimeOrder[index];
+    const entry = keysLayers.panelSource.runtimeClosure[index];
+    ensureExactKeys(entry, ["path", "role", "currentSha256"]);
+    assert.equal(entry.path, expectedPath);
+    assert.equal(entry.role, "runtime");
+    assert.equal(
+      hashBytes(await readFile(absoluteFromRelative(entry.path))),
+      entry.currentSha256,
+    );
+    assert.ok(!("sha256" in entry));
+  }
+  assert.equal(keysLayers.panelSource.localImports.length, 1);
+  ensureExactKeys(keysLayers.panelSource.localImports[0], [
+    "kind",
+    "source",
+    "specifiers",
+  ]);
+  assert.equal(keysLayers.panelSource.localImports[0].kind, "css-side-effect");
+  assert.equal(
+    keysLayers.panelSource.localImports[0].source,
+    EXPECTED_KEY_TOOLS_CSS_SOURCE,
+  );
+  assert.deepEqual(keysLayers.panelSource.localImports[0].specifiers, []);
+  assert.deepEqual(keysLayers.panelSource.externalPackages, []);
+
+  const keyToolsAst = parseModule(
+    keyToolsAstSource ?? await readFile(absoluteFromRelative(EXPECTED_KEY_TOOLS_SOURCE), "utf8"),
+  );
+  assert.ok(collectNamedExports(keyToolsAst).has("KeyToolsCandidate"));
+  const keyToolsImports = collectCandidateImports(
+    keyToolsAst,
+    absoluteFromRelative(EXPECTED_KEY_TOOLS_SOURCE),
+  );
+  assert.deepEqual(keyToolsImports.externalPackages, []);
+  assert.deepEqual(Object.keys(keyToolsImports.localImports), [
+    EXPECTED_KEY_TOOLS_CSS_SOURCE,
+  ]);
+  assert.equal(countJsxClass(keyToolsAst, "candidate-key-tools"), 1);
+  assert.equal(countJsxClass(keyToolsAst, "candidate-key-tools-open"), 1);
+  const keyToolsRaw = keyToolsAstSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_KEY_TOOLS_SOURCE),
+    "utf8",
+  );
+  for (const forbidden of [
+    "document.",
+    "window.",
+    "useState",
+    "useEffect",
+    "useRef",
+    "useMemo",
+    "useReducer",
+  ]) {
+    assert.ok(!keyToolsRaw.includes(forbidden), `forbidden token ${forbidden}`);
+  }
+  const keyToolsCss = keyToolsCssSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_KEY_TOOLS_CSS_SOURCE),
+    "utf8",
+  );
+  assert.ok(hasCssSelectorRoot(keyToolsCss, ".candidate-key-tools"));
+  assert.ok(hasCssSelectorRoot(keyToolsCss, ".candidate-key-tools-open"));
 
   const expectedTimelineRuntimeOrder = [EXPECTED_TIMELINE_SOURCE, EXPECTED_TIMELINE_CSS_SOURCE];
   assert.equal(keysLayers.runtimeClosure.length, expectedTimelineRuntimeOrder.length);
@@ -1132,17 +1223,36 @@ async function validateInventory(manifest, options = {}) {
     absoluteFromRelative(keysLayers.componentPath),
   );
   assert.deepEqual(timelineImports.externalPackages, ["react"]);
-  assert.deepEqual(Object.keys(timelineImports.localImports), [EXPECTED_TIMELINE_CSS_SOURCE]);
+  assert.deepEqual(Object.keys(timelineImports.localImports), [
+    EXPECTED_TIMELINE_CSS_SOURCE,
+    EXPECTED_KEY_TOOLS_SOURCE,
+  ]);
   assert.equal(timelineImports.localImports[EXPECTED_TIMELINE_CSS_SOURCE].length, 0);
-  assert.equal(countJsxClass(timelineAst, "candidate-key-tools"), 1);
-  assert.equal(countJsxClass(timelineAst, "candidate-key-tools-open"), 1);
+  assert.equal(countJsxClass(timelineAst, "candidate-key-tools"), 0);
+  assert.equal(countJsxClass(timelineAst, "candidate-key-tools-open"), 0);
 
   const cssSource = timelineCssSource ?? await readFile(
     absoluteFromRelative(EXPECTED_TIMELINE_CSS_SOURCE),
     "utf8",
   );
-  assert.ok(hasCssSelectorRoot(cssSource, ".candidate-key-tools"));
-  assert.ok(hasCssSelectorRoot(cssSource, ".candidate-key-tools-open"));
+  assert.ok(!hasCssSelectorRoot(cssSource, ".candidate-key-tools"));
+  assert.ok(!hasCssSelectorRoot(cssSource, ".candidate-key-tools-open"));
+  const baseCssLines = readBlobFromCommit(
+    EXPECTED_TIMELINE_CSS_SOURCE,
+    fixedSourceCommit,
+  )
+    .toString("utf8")
+    .split("\n");
+  const reconstructedTimelineCss = [
+    ...baseCssLines.slice(0, 714),
+    keyToolsCss.trimEnd(),
+    "",
+    ...baseCssLines.slice(872),
+  ].join("\n");
+  assert.equal(
+    hashBytes(Buffer.from(reconstructedTimelineCss, "utf8")),
+    EXPECTED_TIMELINE_CSS_BASE_SHA256,
+  );
 
   const timelineTestAst = parseModule(await readFile(
     absoluteFromRelative(keysLayers.behavioralEvidence.path),
@@ -1772,16 +1882,25 @@ test("rejects KEYS/LAYERS promotion beyond the fixed Timeline subtree evidence",
     await validateInventory(wrongEvidence);
   });
 
-  const source = await readFile(absoluteFromRelative(EXPECTED_TIMELINE_SOURCE), "utf8");
-  const withoutReopenControl = source.replace('className="candidate-key-tools-open"', 'className="candidate-key-tools-closed"');
+  const source = await readFile(absoluteFromRelative(EXPECTED_KEY_TOOLS_SOURCE), "utf8");
+  const withoutReopenControl = source.replace(
+    'className="candidate-key-tools-open"',
+    'className="candidate-key-tools-closed"',
+  );
   await assert.rejects(async () => {
-    await validateInventory(manifest, { timelineAstSource: withoutReopenControl });
+    await validateInventory(manifest, { keyToolsAstSource: withoutReopenControl });
   });
 
-  const css = await readFile(absoluteFromRelative(EXPECTED_TIMELINE_CSS_SOURCE), "utf8");
-  const withoutToolPanelSelector = css.replaceAll(/\.candidate-key-tools(?!-open)/g, ".candidate-key-panel");
+  const keyToolsCss = await readFile(
+    absoluteFromRelative(EXPECTED_KEY_TOOLS_CSS_SOURCE),
+    "utf8",
+  );
+  const withoutToolPanelSelector = keyToolsCss.replaceAll(
+    /\.candidate-key-tools(?!-open)/g,
+    ".candidate-key-panel",
+  );
   await assert.rejects(async () => {
-    await validateInventory(manifest, { timelineCssSource: withoutToolPanelSelector });
+    await validateInventory(manifest, { keyToolsCssSource: withoutToolPanelSelector });
   });
 });
 
