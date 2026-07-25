@@ -51,6 +51,32 @@ runner自身を変更する粒では、親processはSpark起動前に旧script�
 通常の発注でもcargoを実行する場合はworktree外の`CARGO_TARGET_DIR`を必須とする。GR-D3が清掃するのは
 既知のfixture三entryだけであり、Cargo本体の`CACHEDIR.TAG`、`debug/`、`tmp/`を清掃対象へ広げない。
 
+## v4/v5失敗の共通分類
+v4とv5は症状が異なるが分類は同一で、authoring channelとfixtureのGit addressingであった。実装対象契約の欠陥ではない。
+
+## 既存閉包が止めなかった範囲
+既存のraw manifest、fingerprint、allowlist closureはignored mutationやscope逸脱を止めるが、この2件は止められなかった。防護を弱めた結果ではなく、防護の外側で起きた。
+
+## v4: linked worktreeの.git pointer
+v4で失敗した理由は、linked worktreeの`.git`がdirectoryではなくpointer fileであることを前提にしていなかったためである。branchは`codex/gr-d3-runner-target-closure-v4-20260725`、commitは`c7963144`、`.git`の扱いが未対応だった。
+
+## v5: 外側EOF衝突とambient shell
+v5で失敗した理由は、外側EOF衝突とambient shell環境の持ち込みによる。対象は`codex/gr-d3-runner-target-closure-v5-20260725`、`db90c6cc`である。
+
+## v4/v5差分の隔離処分
+v4とv5の差分は、どちらもGrok検収前、main到達前に隔離した。完了証拠とはせず、比較材料としてのみ扱う。
+
+## v6施工protocol
+v6は次を必須とする:
+- 隔離worktreeへの`apply_patch`のみを用いる。
+- `TMP_ROOT`は絶対pathで指定する。
+- `--git-dir`および`--work-tree`を明示する。
+- ambientな`GIT_*`はunsetする。
+- `HEAD`と全refのsnapshotを取得する。
+- `PASS`を採用根拠にしない。
+- 試行は一回に限る。
+- 失敗時にだけtest authorship撤回を留保する。
+
 ## 変更許可と非目標
 
 変更候補は`delegate-cursor-supervised.sh`と同runnerの専用testだけ。正確なallowlistはOpus orderと
