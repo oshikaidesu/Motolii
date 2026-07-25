@@ -21,11 +21,13 @@ Pre-1.0, under active development. The core is usable from the CLI; the desktop 
 
 ## Why Motolii
 
-After Effects established much of the language of modern motion graphics, but too much ordinary intent still passes through Null rigs, precompositions, expressions, scripts, and paid plugins. Each workaround is usable; together they tax experimentation. Professional power should not require artists to spend attention maintaining technique around the tool.
+After Effects established much of the language of modern motion graphics. Cavalry and Autograph demonstrate strong alternatives. AviUtl demonstrates how far a lightweight, locally run tool and its extension community can carry a creative culture. Motolii learns from these achievements while exploring how to preserve professional control and make common intent more direct.
 
-Cavalry and Autograph demonstrated strong alternatives, but [Cavalry's acquisition by Canva](https://www.canva.com/newsroom/news/mangoai-cavalry-acquisition/) and [Autograph's transition from Left Angle to Maxon](https://www.maxon.net/en/article/autograph-acquisition) also show the limit of a commercial counter: its future is not held by its user community. AviUtl showed how far a local, lightweight, community-extended tool can travel, while its closed, single-author core showed what plugins alone cannot repair.
+Motolii does not treat proprietary software as a failed choice. It chooses open source because it favors a future that does not have to converge on one universal host. Code, project semantics, tests, and design decisions remain inspectable and forkable, so different communities can continue the work, disagree with it, or build compatible hosts without asking one owner to define the future for everyone.
 
-Motolii's answer is not a novel compositing algorithm. It is a permissively licensed, local, forkable core that collects proven ideas, removes repeated workarounds, and keeps both common operations and advanced meanings explicit. The detailed evidence and design responses live in [`docs/ae-pain-points.md`](docs/ae-pain-points.md) and the [prior-art reviews](docs/reviews/); the README stays focused on the resulting tool.
+That choice does not make [Vism](docs/vism-package-concept.md) a universal plugin format. A Vism cannot currently be loaded into unrelated products such as After Effects or AviUtl. Motolii is its first host; the defined portability target is compatible hosts and forks that adopt the public contract. Adapters to other products may emerge later, but a universal cross-application standard is not a completion condition.
+
+Motolii's practical answer is a permissively licensed, local, forkable core that collects proven ideas, turns recurring workflows into explicit capabilities, and keeps both common operations and advanced meanings explicit. The detailed evidence and design responses live in [`docs/ae-pain-points.md`](docs/ae-pain-points.md) and the [prior-art reviews](docs/reviews/); the README stays focused on the resulting tool.
 
 ## Simple is not the same as beginner-only
 
