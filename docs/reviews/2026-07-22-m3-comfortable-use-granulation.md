@@ -235,8 +235,8 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 | CU-0A03 | `SPEC / DONE` | R0 source inventory/provenance manifest | CU-0A01、固定SHA`56c318ed` | path/export/CSS/model/test closure全列挙、legacyとnative面を誤分類しない | 固定sourceまたはclosure不在 |
 | CU-0A04 | `ASSET / DONE` | R1 Browserをproduct ownerへ直接移管 | CU-0A03 | 17-state対象visual 1%以下、DOM/class/ARIA/interaction維持、mock側copy 0 | 別leaf/CSS後追い/opaque ID分岐が必要 |
 | CU-0A05A | `ASSET / DONE` | R2A archived HTMLのEasing triggerを固定mock内で同形React化 | CU-0A04 | [#341](https://github.com/oshikaidesu/Motolii/pull/341): button DOM/class/SVG/ARIA/disabled/pressed/open動作維持、既存parity不変、product差分0、Grok ACCEPT | — |
-| CU-0A05B | `ASSET / DO` | R2B 同形React triggerをproduct ownerへ直接移管 | CU-0A05A | mock側copy 0、popup/modelはmockのnative oracle、Reactにcurve/Undo state 0 | popup全体またはHost projectionを同時に持込む必要がある |
-| CU-0A06 | `ASSET / WAIT` | R3 KEYS/LAYERS tool panelをnative Timelineから分離移管 | CU-0A05B | tool panel DOM/CSS維持、ruler/bar/key/playhead移管0 | TimelineCandidate全体のimportが必要 |
+| CU-0A05B | `ASSET / DONE` | R2B 同形React triggerをproduct ownerへ直接移管 | CU-0A05A | [#344](https://github.com/oshikaidesu/Motolii/pull/344): mock側copy 0、popup/modelはmockのnative oracle、Reactにcurve/Undo state 0、Grok ACCEPT | — |
+| CU-0A06 | `ASSET / READY-RECHECK` | R3 KEYS/LAYERS tool panelをnative Timelineから分離移管 | CU-0A05B | tool panel DOM/CSS維持、ruler/bar/key/playhead移管0 | TimelineCandidate全体のimportが必要 |
 | CU-0A07 | `ASSET / WAIT` | R4 Inspectorを固定mock内で同形React化して移管 | CU-0A06 | legacy parity後に単一owner、skeleton代用0、legacy runtime import 0 | 正しい同形componentを作れず意味発明が必要 |
 | CU-0A08B | `CORE / WAIT` | Browser fixture stateをrevision付きprojection/typed intentへ交換 | CU-0A04、CU-G09 | unknown/non-finite/oversized/dangling拒否、React semantic write 0 | catalog field不足をID/labelから推測したくなる |
 | CU-0A08E | `CORE / WAIT` | Easing trigger stateをHost projection/typed intentへ交換 | CU-0A05B、U4b契約 | key上/区間外disabled理由、curve state二重所有0 | Interp/区間意味の新契約が必要 |
@@ -449,7 +449,7 @@ Claude Code `claude-fable-5`へ実ファイルと機械guardをread-onlyで再�
 ## 18. 現在の停止線
 
 - 現在sliceとblocking decisionは[縦slice実行方針](2026-07-24-m3-vertical-slice-execution-decision.md)を正とする
-- U0e-2R/U0e-2、CU-0A03/R0、CU-0A04/R1、CU-0A05A/R2Aは完了済みで再実行しない。唯一の現在の製品orderは`CU-0A05B / R2B product ownership`の`DO`であり、R2全体とMotolii Studio Previewは未実装である
+- U0e-2R/U0e-2、CU-0A03/R0、CU-0A04/R1、CU-0A05A/R2A、CU-0A05B/R2Bは完了済みで再実行しない。現在粒は`CU-0A06 / R3 KEYS/LAYERS extraction`の`READY-RECHECK`であり、R3以降とMotolii Studio Previewは未実装である
 - CU-0G03はユーザーによる実windowの実IME／VoiceOver／復帰審判で合格し、CU-0G04Bまで責任最小化短票どおり既存winit/wgpu/wry/macOS標準経路を使う単一runのmanifestでL3を閉じた。CU-0G05L reviewでL1正本とGPU rawの不足を検出し、`CU-0G02A`で正本を修正した。`CU-0G02BH`はwgpu標準queryだけのbounded harnessを固定し、`CU-0G02B`はその実行commitを使う同一session再実測をGrok P0/P1=0で閉じた。CU-0G05Lは8 retained pathを単一manifestへ束ね、Grok R2 P0/P1/P2=0で固定Mac prerequisite evidenceだけを限定確定した。W0b、H1b、製品window、Windows/追加hardwareは解禁しない
 - G0-6HはU0e-3だけを止める並行人間審判であり、R0/R1とPreview骨格を直列停止しない
 - CU-G01〜CU-G10は仕様判断粒で、コード実装と同時に行わない

@@ -29,7 +29,7 @@ spike、M2の狭い修復、Vism作者入口を同じ待ち列へ入れない。
 
 | lane | 現在粒 | 状態 | 最初の成果 | STOP / 負例 | Human Response Frontier |
 |---|---|---|---|---|---|
-| PRODUCT-ASSET | `CU-0A05B / R2B` | `READY`（ledger `DO`） | [#341](https://github.com/oshikaidesu/Motolii/pull/341)で完了した独立React triggerをproduct packageへ直接所有移管し、mockをproduct export consumerへ反転、mock/product二重copy 0を閉じる。R2A新設sourceはproduct current path/currentSha256、移動は既存product provenanceへ記録する | popup全体、Host projection、curve/Undo state、visible summary chrome、固定blob assert弱体化、legacy runtime import、二重owner、product packageの未決公開契約が必要ならSTOP | R2B ACCEPT後にR2をDONEとし、CU-0A06をREADY-RECHECK |
+| PRODUCT-ASSET | `CU-0A06 / R3` | `READY-RECHECK` | [#344](https://github.com/oshikaidesu/Motolii/pull/344)でR2Bを完了。次はKEYS/LAYERS tool panelだけをnative Timeline本体から分離移管できる変更path・source closureを再確認する | TimelineCandidate全体、ruler/bar/key/playhead、Host projection/intent、Document/selection/Undo state、visible summary chromeが必要ならSTOP | fixed React sourceとnative Timeline oracleの境界を再確認後、tool panel単独の比較へ進む |
 | VISUAL-RESPONSE | `G0-6H` | `READY-HUMAN` | 5 reference screen / 30 PNGへの人間応答を記録 | `U0e-3`以外を止めない。pixel testで人間判断を代替しない | visual tokenと認知の応答 |
 | AUTHORING-SCAFFOLD | `VSM-A4S` | `READY-SPEC` | 外部crate作者scaffoldと既存in-tree generatorの責任を分けたclosed contract | package/install/manifest、dynamic loader、第三者配布完成、実装を含めない | `VSM-A4I`後に外部crate生成からconformanceまでのdeveloper response |
 | DELEGATION-GUARD | `GR-D3 / #329` | `DONE` | [#336](https://github.com/oshikaidesu/Motolii/pull/336)で既知のworktree-root派生物だけを検収前にfail-closed清掃し、ignored監査を維持 | `target/**` allowlist、fingerprint除外、`.gitignore`／build script／製品code変更、未知entry削除は引き続きSTOP | 人間応答なし。実K0停止形、Grok `ACCEPT`、CI 4/4で完了 |
