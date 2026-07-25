@@ -40,7 +40,7 @@
 | M0 | `DONE` | spike完了。S2は`ffmpeg-sidecar`クレート不採用、自前子process pipe／CFR seek成立まで。VFR、長尺／4K、pool、停止中readのkillは製品完成証拠にせずK4／GAP-26へ分離 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み。RenderTargetPoolは直列2枚を下限にbranch livenessで伸長するが、O(n²)未来scan最適化、fp16／path fusion、40-layer性能は未成立。R9/T11は当時の歴史sign-offで、現行製品Stage／実素材release受入はGAP-32。出荷hardening候補G1〜G8は完了条件外で、2026-07-23再照合の未到達process/artifact reliabilityはGAP-26、GPU health分類はGAP-27、同期export readbackの原因分離／staging採択はGAP-29、GPU RGB→YUV export接続はGAP-31。G7の同期1-frame boundedをcopy重畳完成、decode側GPU色変換や出力tagをinverse変換完成とみなさない |
 | M2 | **基盤再締結済み / narrow follow-up pending** | D1lのDocument／lifecycle意味、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。2026-07-23監査で`new_v1` enforcement driftをGAP-23、known Edit apply failureのsnapshot fallback driftをGAP-24、semantic oracle gate自己保護をGAP-25として狭く再開。Param Pipeline／Element Domain／Constraint GraphはM2-GAP-15の解凍gate前は未実装のままが正しい。D5は骨格到達・統合審判pendingで、AG-2 mixer coreは成立したが製品`PlaybackSession`のmixed `AudioProgram`接続はGAP-28。D1n external revisionも未実装で、cloud-safe公約不可 |
-| M3 | **VS-1 Rectangle配置とUndo / R2A mock-side extraction** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0e-2R/U0e-2、GR-D1〜R3、固定MacのG0-9L platform prerequisite evidence、固定SHA`56c318ed`の6面R0 source inventory、CU-0A04/R1 Browser ownershipは完了済み。Easing triggerの独立React source不在を受けR2を05A/05Bへ分割し、固定oracle／現行closure hash、R2A後status、`activeInterval`単一ownerの再入場decisionを閉じた。現在は`CU-0A05A / R2A`のfresh mock-side extractionを発注する。R2とMotolii Studio Previewは未実装。visible summary chromeは未決で実装しない。G0-6HはU0e-3を止める並行人間審判、G0-9DはDistribution Ready用hardware gate。eguiへ新規製品面を実装せず、plugin UI公開契約はG0-3 / GAP-13まで停止する |
+| M3 | **VS-1 Rectangle配置とUndo / R2B product ownership再判定** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0e-2R/U0e-2、GR-D1〜R3、固定MacのG0-9L platform prerequisite evidence、固定SHA`56c318ed`の6面R0 source inventory、CU-0A04/R1 Browser ownership、CU-0A05A/R2A mock-side extractionは完了済み。Easing triggerは独立React sourceとなり、Timeline由来`activeInterval`の単一owner、固定oracle／現行closure hash、legacy write containmentを[#341](https://github.com/oshikaidesu/Motolii/pull/341)で閉じた。次は`CU-0A05B / R2B`を`READY-RECHECK`としてproduct ownershipのclosed orderを作る。R2全体とMotolii Studio Previewは未実装。visible summary chromeは未決で実装しない。G0-6HはU0e-3を止める並行人間審判、G0-9DはDistribution Ready用hardware gate。eguiへ新規製品面を実装せず、plugin UI公開契約はG0-3 / GAP-13まで停止する |
 | M4 | **K0契約凍結済み(test-only) / K1a再判定** | [歴史20版再照合](reviews/2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md)と[memory model 6版再照合](reviews/2026-07-23-historical-memory-model-lineage-recovery.md)後、K0はRoD/RoIの契約意味をtest-only spikeで凍結済みで、K1〜K8は未実装。runtime実装はK1a以降の別粒とし、K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む。現行`PipelineCache`／dynamic target pool／wgpu budget thresholdをResourceLedger、copy-out、disk store完成と数えない。K4の恒久`source_id`／再リンク／package意味はGAP-3／7の再調査前に焼かないが、このgateをK0や独立K1へ広げない。K6のVello／usvg製品統合は未実装で、R8成立性だけを完成証拠にしない |
 | M5 | **identity meaning decision可 / fixture WAIT** | P0I自身が所有するcontinuity／transform／nested identity／寿命／cache入力境界／PRNG処分をdocsで先に閉じ、TextCluster内部写像とPrototype ownerは明示留保する。fixtureはdecision merge後に分割する。P6のfontique／harfrust／Vello text stackは未実装で、K6とpremul adapterを重複実装しない |
 
@@ -115,7 +115,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 | lane | 現在粒 | Phase / slice / checklist | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
-| PRODUCT-ASSET | CU-0A05A | M3 / VS-1 / A / R2A | `DO` | — | CU-0A04、固定SHA、直接移管契約。[再入場decision](reviews/2026-07-25-cu-0a05a-interrupted-worktree-restart-disposition.md#7-再入場decision)で固定oracle／現行closure hash、status、単一owner経路を決定。旧隔離差分は証拠カプセル | fresh mock-side extractionを発注し、ACCEPT後にCU-0A05BをREADY-RECHECK |
+| PRODUCT-ASSET | CU-0A05B | M3 / VS-1 / A / R2B | `READY-RECHECK` | — | CU-0A05Aを[#341](https://github.com/oshikaidesu/Motolii/pull/341)で完了。独立React trigger、固定oracle／現行closure hash、Timeline由来`activeInterval`単一owner、legacy containment、guard 100+3、browser 46、workspace、Grok `ACCEPT` P0/P1/P2=0 | product ownerへの直接移管だけをfresh orderへ閉じ、mock側copy 0とproduct consumer反転を審判する |
 | VISUAL-RESPONSE | G0-6H | M3 evidence / VS-1 / visual | `DO / HUMAN` | — | 5 reference screenと30 PNG | U0e-3だけを解禁可 |
 | AUTHORING-SCAFFOLD | VSM-A4S | Vism / spec | `DO / SPEC` | — | VSM-A1/A2/A3、仕様と実装の別PR決定 | VSM-A4Iは全体レビュー後 |
 | DELEGATION-GUARD | GR-D3 | supervised runner / derived output closure | `DONE` | [#329](https://github.com/oshikaidesu/Motolii/issues/329) | [#336](https://github.com/oshikaidesu/Motolii/pull/336)をmainへ統合。専用runner試験、workspace、docs、実K0停止形、Grok `ACCEPT`で閉包 | 解禁後のK0は[#338](https://github.com/oshikaidesu/Motolii/pull/338)で完了。既知派生物だけのfail-closed清掃を後続発注へ維持 |
@@ -159,7 +159,7 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 
 | ID | 状態 | 完了証拠 |
 |---|---|---|
-| CU-0A04 | `DONE` | R1 Browser ownership完了。現在粒`CU-0A05A`の直前product asset |
+| CU-0A05A | `DONE` | [#341](https://github.com/oshikaidesu/Motolii/pull/341)でR2A mock-side extraction完了。現在粒`CU-0A05B`の直前product asset |
 | GR-D2 | `DONE` | [監督ループ決定](reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md)へ変更許可閉集合、append-only証跡、timeout分離、検収者mutation拒否、resumeを継承済み |
 | GR-D3 | `DONE` | [#336](https://github.com/oshikaidesu/Motolii/pull/336)で既知三entryのfail-closed清掃、HEAD／全ref不変、実K0停止形とGrok到達を閉包 |
 | K0 | `DONE` | [#338](https://github.com/oshikaidesu/Motolii/pull/338)と[K0契約凍結報告](spikes/m4-k0-region-contract.md)で9条件を15 testに固定。**test-only契約凍結であり、runtime region関数・公開API・testkit昇格・ROI最適化は含まない**。K1系はこの行だけを根拠に起票しない |
@@ -238,7 +238,7 @@ U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除
 | resource設定を出す | G0-2 + G0-8 + U0b + K1a → U0f。設定はUser settings、pressure実測値はTransient |
 | 重いpreviewを追従させる | U1b + U1c + U5 + K1d → U1g。project fps/audio clockを変えず表示frameだけ落とす |
 
-したがって現在の短い運用判断は、**CU-0A03 / R0とCU-0A04 / R1 Browser ownershipは完了済み。固定SHAのEasing triggerはarchived HTMLにだけ存在し独立React sourceが無いためR2を05A/05Bへ分割した。VS-1の現在の製品orderは`CU-0A05A / R2A mock-side extraction`であり、同形React化と既存parityだけを閉じる。accessibleなobject・channel・pressed/disabled状態を超えるvisible summaryは未決・実装禁止。R2とMotolii Studio Previewは未実装。**G0-6Hは同時に進められる人間審判だが、未完了でもR0〜R2やPreview骨格を止めず、U0e-3だけを止める。G0-9DはDistribution Readyまで`WAIT / HARDWARE`。`U2c-2`はVS-2候補かつ実製品入口待ちである。D1n、D5等の独立follow-upをVS-1の再停止理由へしない。
+したがって現在の短い運用判断は、**CU-0A03 / R0、CU-0A04 / R1 Browser ownership、CU-0A05A / R2A mock-side extractionは完了済み。独立React Easing triggerとmock ownerは成立した。次は`CU-0A05B / R2B product ownership`を`READY-RECHECK`として、source assetの直接所有移管、mock consumer反転、mock/product二重copy 0だけをfresh orderへ閉じる。accessibleなobject・channel・pressed/disabled状態を超えるvisible summaryは未決・実装禁止。R2全体とMotolii Studio Previewは未実装。**G0-6Hは同時に進められる人間審判だが、未完了でもR0〜R2やPreview骨格を止めず、U0e-3だけを止める。G0-9DはDistribution Readyまで`WAIT / HARDWARE`。`U2c-2`はVS-2候補かつ実製品入口待ちである。D1n、D5等の独立follow-upをVS-1の再停止理由へしない。
 
 ## 更新規則
 

@@ -29,7 +29,7 @@ spike、M2の狭い修復、Vism作者入口を同じ待ち列へ入れない。
 
 | lane | 現在粒 | 状態 | 最初の成果 | STOP / 負例 | Human Response Frontier |
 |---|---|---|---|---|---|
-| PRODUCT-ASSET | `CU-0A05A / R2A` | `READY`（ledger `DO`） | archived HTMLと同形のcontrolled React trigger、Timeline由来`activeInterval`の単一owner、既存visual/interaction parityをmock側だけで閉じる | product file、popup全体、curve/Undo state、visible summary chrome、固定blob assert弱体化、legacy/React二重owner、汎用抽出frameworkが必要ならSTOP | R2A ACCEPT後に`CU-0A05B`をREADY-RECHECK。product面の比較はR2B後 |
+| PRODUCT-ASSET | `CU-0A05B / R2B` | `READY-RECHECK` | [#341](https://github.com/oshikaidesu/Motolii/pull/341)で完了した独立React triggerをproduct packageへ直接所有移管し、mockをproduct export consumerへ反転、mock/product二重copy 0を閉じる | popup全体、Host projection、curve/Undo state、visible summary chrome、固定blob assert弱体化、legacy runtime import、二重owner、product packageの未決公開契約が必要ならSTOP | R2B ACCEPT後にR2をDONEとし、CU-0A06をREADY-RECHECK |
 | VISUAL-RESPONSE | `G0-6H` | `READY-HUMAN` | 5 reference screen / 30 PNGへの人間応答を記録 | `U0e-3`以外を止めない。pixel testで人間判断を代替しない | visual tokenと認知の応答 |
 | AUTHORING-SCAFFOLD | `VSM-A4S` | `READY-SPEC` | 外部crate作者scaffoldと既存in-tree generatorの責任を分けたclosed contract | package/install/manifest、dynamic loader、第三者配布完成、実装を含めない | `VSM-A4I`後に外部crate生成からconformanceまでのdeveloper response |
 | DELEGATION-GUARD | `GR-D3 / #329` | `DONE` | [#336](https://github.com/oshikaidesu/Motolii/pull/336)で既知のworktree-root派生物だけを検収前にfail-closed清掃し、ignored監査を維持 | `target/**` allowlist、fingerprint除外、`.gitignore`／build script／製品code変更、未知entry削除は引き続きSTOP | 人間応答なし。実K0停止形、Grok `ACCEPT`、CI 4/4で完了 |
@@ -38,15 +38,15 @@ spike、M2の狭い修復、Vism作者入口を同じ待ち列へ入れない。
 | M2-REPAIR | `GAP-23` → `GAP-24` | `WAIT` | 独立したD1i-4 LookAt/Follow oracle分離の採番・完了後に、25 suppressionの除去へ戻る | whole-file semantic分類、oracle値、期待値、regenerate markerを修復都合で変えない | 人間応答なし。先行oracle分離だけを別粒にする |
 | ORACLE-GUARD | `GAP-25` | `READY-CHECK-PATH` | workflow/script/protected pathのfail-closed負例 | oracle値、variant、toleranceを変えない。GAP-23との変更path重複時はGAP-23後へ直列化 | 人間応答なし。並列laneによるgate自己弱体化を拒否 |
 
-最小の即時並列集合は、PRODUCT-ASSETのR2A mock-side extraction、P0Iのdocs decision、
+最小の即時並列集合は、PRODUCT-ASSETのR2B product ownership再判定、P0Iのdocs decision、
 VISUAL-RESPONSE、AUTHORING-SCAFFOLDである。旧全体直列文言は撤回したままだが、P0I fixtureと
 GAP-23実装は各lane-localな前提へ戻す。K0は完了済みで、K1aは責任最小化の再判定まで起動しない。
 GAP-25はGAP-23との変更許可pathを機械照合した後だけ起動する。
 
 ## 4. lane所有と衝突規則
 
-- PRODUCT-ASSETはR2Aのinventory／owner decisionを閉じた。実装は固定mockのReact source closure
-  だけを触り、`CU-0A05B`までproduct packageを触らない。
+- PRODUCT-ASSETはR2Aのinventory／mock owner実装を[#341](https://github.com/oshikaidesu/Motolii/pull/341)で閉じた。
+  R2Bは同じsource closureをproduct ownerへ直接移し、mockをconsumerへ反転する範囲だけを扱う。
 - VISUAL-RESPONSEの`reference-handoff.md`とPRODUCT-ASSETの変更file listを起動前に照合する。
 - AUTHORING-SCAFFOLDはspec/decisionだけ。runtime、package、Document、loaderを触らない。
 - K0はschemaと最適化を触らない。P0Iはdocs decisionだけを進め、製品schema、公開Effector API、
