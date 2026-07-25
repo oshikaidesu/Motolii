@@ -1,6 +1,6 @@
 # CU-0A06 / R3 KEYS/LAYERS readiness分割決定（2026-07-25）
 
-状態: **決定 / CU-0A06A DONE / CU-0A06B READY-RECHECK**
+状態: **決定 / CU-0A06A DONE / CU-0A06B DO**
 
 対象: M3 Presentation OwnershipのR3。固定commit
 `56c318edcddab7cf95d263cc2f7dd2b4e6791134`にあるKEYS/LAYERS tool panelを、
@@ -44,6 +44,13 @@ panel専用CSSは`docs/mocks-ui/src/candidates/key-tools-candidate.css`
 reference guard 100件・workspace全体を通過した。CU-0A06Bはこの二つのbytes、
 既存Easing product ownership topology、mock consumer反転、ownership guard closureを
 再確認してから`DO`へ上げる。
+
+再確認では、二つのsource hashが上記固定値と一致し、componentがhookless・props-onlyで
+外部packageを持たないこと、`TimelineCandidate`がselection・operation・open stateを引き続き
+所有することを確認した。`ui/motolii-web`にはR2Bで閉じたpackage export、bare consumer import、
+product current-closure provenance、mock copy不在、runtime import拒否の既存席があり、
+新helper・新package wiring・新公開契約なしで同じ境界を拡張できる。よってCU-0A06Bを`DO`へ上げる。
+JSX/CSS bytes、Timeline側幅変数、既存Playwright、visual thresholdを変える必要が出た場合はSTOPする。
 
 ## 3. visual matrixの適用
 

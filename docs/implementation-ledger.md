@@ -115,7 +115,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 | lane | 現在粒 | Phase / slice / checklist | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
-| PRODUCT-ASSET | CU-0A06B | M3 / VS-1 / A / R3B | `READY-RECHECK` | — | [#347](https://github.com/oshikaidesu/Motolii/pull/347)でCU-0A06Aを完了。独立KEYS/LAYERS JSX/CSS、6状態oracle、Timeline側state owner、mock-side current closureを固定 | R3Aのcomponent/CSSをbyte同一でproduct ownerへ移せるか再確認し、mock consumer反転・二重copy 0・ownership guard closureを一粒へ閉じる |
+| PRODUCT-ASSET | CU-0A06B | M3 / VS-1 / A / R3B | `DO` | — | [#347](https://github.com/oshikaidesu/Motolii/pull/347)の独立JSX/CSSは固定hash一致・hookless・props-only。既存Easingのproduct export、consumer import、current-closure provenance、ownership guardを変更せず再利用できる | component/CSSをbyte同一でproduct ownerへ移し、mock consumer反転・二重copy 0・Timeline-state漏洩拒否を一粒へ閉じる。ACCEPT後CU-0A07をREADY-RECHECKへ送る |
 | VISUAL-RESPONSE | G0-6H | M3 evidence / VS-1 / visual | `DO / HUMAN` | — | 5 reference screenと30 PNG | U0e-3だけを解禁可 |
 | AUTHORING-SCAFFOLD | VSM-A4S | Vism / spec | `DO / SPEC` | — | VSM-A1/A2/A3、仕様と実装の別PR決定 | VSM-A4Iは全体レビュー後 |
 | DELEGATION-GUARD | GR-D3 | supervised runner / derived output closure | `DONE` | [#329](https://github.com/oshikaidesu/Motolii/issues/329) | [#336](https://github.com/oshikaidesu/Motolii/pull/336)をmainへ統合。専用runner試験、workspace、docs、実K0停止形、Grok `ACCEPT`で閉包 | 解禁後のK0は[#338](https://github.com/oshikaidesu/Motolii/pull/338)で完了。既知派生物だけのfail-closed清掃を後続発注へ維持 |
@@ -162,6 +162,7 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | CU-0A05A | `DONE` | [#341](https://github.com/oshikaidesu/Motolii/pull/341)でR2A mock-side extraction完了。現在粒`CU-0A05B`の直前product asset |
 | CU-0A05B | `DONE` | [#344](https://github.com/oshikaidesu/Motolii/pull/344)でR2B product ownership完了。次粒`CU-0A06`をREADY-RECHECKへ送る |
 | CU-0A06 | `SPLIT` | readiness再確認で独立source不在を確認し、CU-0A06A mock-side extraction→CU-0A06B product ownershipへ分割 |
+| CU-0A06A | `DONE` | [#347](https://github.com/oshikaidesu/Motolii/pull/347)でR3A mock-side extraction、6状態oracle、独立JSX/CSS current closure、Grok ACCEPTを完了。現在粒`CU-0A06B`の直前product asset |
 | GR-D2 | `DONE` | [監督ループ決定](reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md)へ変更許可閉集合、append-only証跡、timeout分離、検収者mutation拒否、resumeを継承済み |
 | GR-D3 | `DONE` | [#336](https://github.com/oshikaidesu/Motolii/pull/336)で既知三entryのfail-closed清掃、HEAD／全ref不変、実K0停止形とGrok到達を閉包 |
 | K0 | `DONE` | [#338](https://github.com/oshikaidesu/Motolii/pull/338)と[K0契約凍結報告](spikes/m4-k0-region-contract.md)で9条件を15 testに固定。**test-only契約凍結であり、runtime region関数・公開API・testkit昇格・ROI最適化は含まない**。K1系はこの行だけを根拠に起票しない |
