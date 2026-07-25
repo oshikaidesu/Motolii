@@ -257,11 +257,14 @@ visual 1%は移管時の回帰検知上限であり、縮約再実装を1%まで
 4. **R2B Easing trigger ownership**: R2Aの独立React sourceだけをproduct ownerへ移し、mockをconsumerへ反転。popup全体をnative oracleとして固定。Host/User settings/D2接続は後続
 5. **R3A KEYS/LAYERS mock-side extraction**: 未変更sourceへ6状態oracleを固定し、native Timeline本体からReact tool panelとpanel専用CSSだけを固定mock内で分離
 6. **R3B KEYS/LAYERS ownership**: R3Aの独立React source/CSSをbyte同一でproduct ownerへ移し、mockをconsumerへ反転
-7. **R4 Inspector React化**: legacy DOM/scriptを固定モック内で同形Reactへ抽出後、product ownerへ移す
-8. **R5 projection/intent**: 一面ずつmock stateをHost read modelへ交換
-9. **R6 diagnostic routes**: 契約確認面をdevelopment専用routeへ分離
-10. **H1b WebView Host**: codec、offline bundle、focus/IME/AX、surface topologyへ接続
-11. **製品縦切り**: Rectangle D&D → D2 →同一LayerId Timeline/Inspector → key → easing → Undo
+7. **R4S Inspector split decision**: 独立source不在を確認し、R4A/R4B/R4Cの停止線を固定
+8. **R4A Inspector unchanged-source oracle**: legacy DOM/scriptを変更せず構造・style・ARIA・操作を固定
+9. **R4B Inspector mock React化**: 固定モック内で同形React化し、legacy adapterを一方向へ封じる
+10. **R4C Inspector ownership**: R4B source/CSSをbyte同一でproduct ownerへ移す
+11. **R5 projection/intent**: 一面ずつmock stateをHost read modelへ交換
+12. **R6 diagnostic routes**: 契約確認面をdevelopment専用routeへ分離
+13. **H1b WebView Host**: codec、offline bundle、focus/IME/AX、surface topologyへ接続
+14. **製品縦切り**: Rectangle D&D → D2 →同一LayerId Timeline/Inspector → key → easing → Undo
 
 R0〜R6のReact asset作業は、WebView platform受入やplugin公開契約を決めない範囲で実施できる。
 H1b以降はG0-9、D2/D3、U2h/U3a等の既存停止線を引き続き満たす必要がある。
@@ -276,8 +279,9 @@ tool panelとpanel専用CSSだけを分離し、6状態oracleとmock-side curren
 R3Bは[#350](https://github.com/oshikaidesu/Motolii/pull/350)でそのbytesをproduct ownerへ移し、
 mock copy 0、Timeline state owner、product current-closureを固定した。検収中に既存R2Bの
 Easing旧path注入負例が同名bindingのparse errorでも緑になり得る観察を得たが、R3Bへ混ぜず
-独立guard repair候補とする。現在粒はR4 Inspectorの`READY-RECHECK`である。
-R4以降とMotolii Studio Previewは未実装である。
+独立guard repair候補とする。R4SでInspectorの独立React source不在を確認し、
+R4A unchanged-source oracle、R4B mock-side同形React化、R4C product ownershipへ分割した。
+現在粒はR4Aの`DO`である。R4B以降とMotolii Studio Previewは未実装である。
 
 ## 13. 既存文書との関係
 

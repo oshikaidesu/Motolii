@@ -218,6 +218,7 @@
 | [2026-07-25-parallel-lane-readiness-fable-review.md](2026-07-25-parallel-lane-readiness-fable-review.md) | 並列レーン候補をFable 5で反対側レビューし、R2A/R2B混同とK0/P0I旧全体直列文言のP1二件を訂正後、再審査ACCEPTとなった記録 |
 | [2026-07-25-cu-0a05a-interrupted-worktree-restart-disposition.md](2026-07-25-cu-0a05a-interrupted-worktree-restart-disposition.md) | CU-0A05A旧隔離差分を完了証拠にしない停止線と、固定oracle／現行closure hash、status、single-owner triggerの再入場decision |
 | [2026-07-25-cu-0a06-r3-readiness-split-decision.md](2026-07-25-cu-0a06-r3-readiness-split-decision.md) | KEYS/LAYERS独立source不在を受け、R3をmock-side JSX/CSS抽出とbyte同一product ownershipへ分割する決定 |
+| [2026-07-25-cu-0a07-r4-readiness-split-decision.md](2026-07-25-cu-0a07-r4-readiness-split-decision.md) | Inspector独立React source不在を受け、R4を未変更source oracle、mock-side同形React化、byte同一product ownershipへ分割する決定 |
 | [2026-07-25-supervised-runner-derived-target-closure.md](2026-07-25-supervised-runner-derived-target-closure.md) | workspace試験が作る既知のworktree-root派生物を検収前にfail-closed清掃し、ignored scope監査を維持するGR-D3実行決定 |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |
