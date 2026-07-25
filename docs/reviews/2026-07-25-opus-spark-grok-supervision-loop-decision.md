@@ -61,9 +61,15 @@ Opus 5へ渡すpacketには次を含める。
 3. 判断に迷っている選択肢
 4. 変えてはいけない境界
 5. 探してほしい反例と見落とし
+6. 助言してほしい改善機会
 
-回答は`FACTS / INFERENCES / OPTIONS / RECOMMENDATION / STOP CONDITIONS`へ分けさせる。Codexは事実を再確認し、
-推論と推奨を採否してから実装判断へ使う。
+Opus 5は批判、反例、欠陥検出だけで回答を終えない。既存の目的、非目標、公開境界、停止線の内側で、
+より良い設計、実装順、既存機構の再利用、検証方法、簡素化、具体的な次の一手を能動的に助言する。
+Codexの案の良い部分は明示して伸ばし、問題には理由と実行可能な改善案を対で返す。未依頼のscope拡大や
+新しい恒久契約を、助言という名目で持ち込まない。
+
+回答は`FACTS / INFERENCES / OPTIONS / OPPORTUNITIES / ADVICE / RECOMMENDATION / STOP CONDITIONS`へ分けさせる。
+Codexは事実を再確認し、推論、機会、助言、推奨を採否してから実装判断へ使う。
 
 ### Fable昇格
 
