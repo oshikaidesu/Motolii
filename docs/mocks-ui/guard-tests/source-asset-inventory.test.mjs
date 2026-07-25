@@ -57,9 +57,9 @@ const EXPECTED_EASING_RUNTIME_HASHES = {
   [EXPECTED_EASING_MODEL_SOURCE]: "22a6745bcd77b6f71f5c62563b0165f6161a234abebd2a10f326d210a0a6fad9",
 };
 const EXPECTED_EASING_CLASSIFICATION =
-  "react-trigger-source-absent-native-popup-oracle";
+  "react-trigger-product-owned-native-popup-oracle";
 const EXPECTED_EASING_SOURCE_STATUS =
-  "independent-react-trigger-source-absent";
+  "product-owned-react-trigger-source";
 const EXPECTED_EASING_TRIGGER_AUTHORITY = {
   path: "docs/mocks/m3-vism-host-boundary.html",
   sha256: "a20bd36d6b8b241ef4ec21adda6b045e470bf89fbc78e2788207aa6d0875ec68",
@@ -69,11 +69,11 @@ const EXPECTED_EASING_TRIGGER_AUTHORITY = {
 const EXPECTED_EASING_COMPONENT_ROLE =
   "popup-native-oracle-not-trigger-source";
 const EXPECTED_EASING_PROMOTION_BOUNDARY = [
-  "Graph trigger/icon after mock-side same-shape React extraction",
+  "product-owned trigger/icon with mock consumer",
   "accessible object/channel and pressed/disabled state",
 ];
 const EXPECTED_EASING_NEXT_ACTION =
-  "mock-side-same-shape-react-trigger-extraction-and-parity-before-r2b";
+  "host-projection-and-intent-after-r2b";
 const EXPECTED_EASING_NATIVE_ORACLE = [
   "popup frame",
   "presets",
@@ -83,9 +83,11 @@ const EXPECTED_EASING_NATIVE_ORACLE = [
   "easing model",
 ];
 const EXPECTED_EASING_TRIGGER_SOURCE =
-  "docs/mocks-ui/src/candidates/EasingTriggerCandidate.jsx";
+  "ui/motolii-web/src/candidates/EasingTriggerCandidate.jsx";
 const EXPECTED_EASING_TRIGGER_CSS_SOURCE =
-  "docs/mocks-ui/src/candidates/easing-trigger-candidate.css";
+  "ui/motolii-web/src/candidates/easing-trigger-candidate.css";
+const MOCK_EASING_TRIGGER_SOURCE =
+  "docs/mocks-ui/src/candidates/EasingTriggerCandidate.jsx";
 const EXPECTED_EASING_TRIGGER_BUTTON_ATTRIBUTES = [
   "aria-controls",
   "aria-label",
@@ -996,7 +998,7 @@ async function validateInventory(manifest, options = {}) {
   ]);
   assert.equal(easing.triggerSource.componentPath, EXPECTED_EASING_TRIGGER_SOURCE);
   assert.equal(easing.triggerSource.componentExport, "EasingTriggerCandidate");
-  assert.equal(easing.triggerSource.provenanceRole, "mock-side-current-closure");
+  assert.equal(easing.triggerSource.provenanceRole, "product-owned-current-closure");
   const expectedTriggerRuntimeOrder = [
     EXPECTED_EASING_TRIGGER_SOURCE,
     EXPECTED_EASING_TRIGGER_CSS_SOURCE,
@@ -2106,6 +2108,25 @@ test("rejects easing trigger source drift, ownership violations, and containment
   await assert.rejects(() => validateInventory(withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
     ...easing,
     triggerAuthority: { ...easing.triggerAuthority, selector: "#missing" },
+  }))));
+
+  await assert.rejects(() => validateInventory(withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    triggerSource: {
+      ...easing.triggerSource,
+      componentPath: MOCK_EASING_TRIGGER_SOURCE,
+      runtimeClosure: easing.triggerSource.runtimeClosure.map((entry, index) =>
+        index === 0 ? { ...entry, path: MOCK_EASING_TRIGGER_SOURCE } : entry,
+      ),
+    },
+  }))));
+
+  await assert.rejects(() => validateInventory(withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    triggerSource: {
+      ...easing.triggerSource,
+      provenanceRole: "mock-side-current-closure",
+    },
   }))));
 
   await assert.rejects(() => validateInventory(manifest, {
