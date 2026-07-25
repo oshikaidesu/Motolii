@@ -236,7 +236,8 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 | CU-0A04 | `ASSET / DONE` | R1 Browserをproduct ownerへ直接移管 | CU-0A03 | 17-state対象visual 1%以下、DOM/class/ARIA/interaction維持、mock側copy 0 | 別leaf/CSS後追い/opaque ID分岐が必要 |
 | CU-0A05A | `ASSET / DONE` | R2A archived HTMLのEasing triggerを固定mock内で同形React化 | CU-0A04 | [#341](https://github.com/oshikaidesu/Motolii/pull/341): button DOM/class/SVG/ARIA/disabled/pressed/open動作維持、既存parity不変、product差分0、Grok ACCEPT | — |
 | CU-0A05B | `ASSET / DONE` | R2B 同形React triggerをproduct ownerへ直接移管 | CU-0A05A | [#344](https://github.com/oshikaidesu/Motolii/pull/344): mock側copy 0、popup/modelはmockのnative oracle、Reactにcurve/Undo state 0、Grok ACCEPT | — |
-| CU-0A06 | `ASSET / READY-RECHECK` | R3 KEYS/LAYERS tool panelをnative Timelineから分離移管 | CU-0A05B | tool panel DOM/CSS維持、ruler/bar/key/playhead移管0 | TimelineCandidate全体のimportが必要 |
+| CU-0A06A | `ASSET / DO` | R3A KEYS/LAYERSを固定mock内で独立React source/CSSへ抽出 | CU-0A05B | 未変更sourceで6状態oracleを先に固定、panel DOM/CSS/ARIA維持、Timeline state移管0 | TimelineCandidate全体、ruler/bar/key/playhead、selection/operation本体が必要 |
+| CU-0A06B | `ASSET / WAIT` | R3B R3A source/CSSをproduct ownerへbyte同一移管 | CU-0A06A | mock側copy 0、product export consumer反転、Timeline state識別子0 | JSX/CSSの内容変更、Host projection/intentが必要 |
 | CU-0A07 | `ASSET / WAIT` | R4 Inspectorを固定mock内で同形React化して移管 | CU-0A06 | legacy parity後に単一owner、skeleton代用0、legacy runtime import 0 | 正しい同形componentを作れず意味発明が必要 |
 | CU-0A08B | `CORE / WAIT` | Browser fixture stateをrevision付きprojection/typed intentへ交換 | CU-0A04、CU-G09 | unknown/non-finite/oversized/dangling拒否、React semantic write 0 | catalog field不足をID/labelから推測したくなる |
 | CU-0A08E | `CORE / WAIT` | Easing trigger stateをHost projection/typed intentへ交換 | CU-0A05B、U4b契約 | key上/区間外disabled理由、curve state二重所有0 | Interp/区間意味の新契約が必要 |
