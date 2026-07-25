@@ -3,6 +3,12 @@ import { expect, test } from "@playwright/test";
 const CANDIDATE_URL =
   "http://127.0.0.1:5173/#plugin-browser-candidate";
 
+const INTERVAL_EASING_PLAYHEAD_KEY_TRIGGER_MUTATION_NAMES = [
+  "aria-label",
+  "class",
+  "disabled",
+];
+
 async function openCandidate(page) {
   await page.goto(CANDIDATE_URL, { waitUntil: "domcontentloaded" });
   await page
@@ -1036,5 +1042,210 @@ test.describe("shared discovery Browser candidate", () => {
       "Document unchanged",
     );
     await expect(page.locator("#undo-state")).toHaveText("");
+  });
+
+  test("keeps interval easing trigger as React-owned attributes with a null onclick oracle", async ({
+    page,
+  }) => {
+    await openCandidate(page);
+
+    const trigger = page.locator("#interval-easing");
+    await expect(trigger).toHaveCount(1);
+    expect(
+      await trigger.evaluate((element) => element.onclick === null),
+    ).toBe(true);
+    await expect(trigger).toBeEnabled();
+    await expect(trigger).toHaveAttribute("aria-pressed", "false");
+    await expect(trigger).toHaveAccessibleName(
+      "Pulse rings · IntensityのInterval Easing Editorを開く",
+    );
+
+    const startObserver = async () =>
+      page.evaluate(() => {
+        window.__easingOracle = { trigger: [], panel: [] };
+        const record = (target, bucket) => {
+          const observer = new MutationObserver((records) => {
+            for (const record of records) {
+              if (record.type === "attributes") {
+                bucket.push({
+                  name: record.attributeName,
+                  oldValue: record.oldValue,
+                  value: target.getAttribute(record.attributeName),
+                });
+              }
+            }
+          });
+          observer.observe(target, {
+            attributes: true,
+            attributeOldValue: true,
+          });
+          return observer;
+        };
+        window.__easingOracle.triggerObserver = record(
+          document.querySelector("#interval-easing"),
+          window.__easingOracle.trigger,
+        );
+        window.__easingOracle.panelObserver = record(
+          document.querySelector("#easing-panel"),
+          window.__easingOracle.panel,
+        );
+      });
+
+    const readOracle = () =>
+      page.evaluate(() => ({
+        trigger: window.__easingOracle.trigger,
+        panel: window.__easingOracle.panel,
+      }));
+
+    const stopObserver = () =>
+      page.evaluate(() => {
+        window.__easingOracle.triggerObserver.disconnect();
+        window.__easingOracle.panelObserver.disconnect();
+      });
+
+    const nightStack = page.locator(
+      '.candidate-automation-stack[data-object-id="night-drive"]',
+    );
+    if (!(await nightStack.isVisible())) {
+      await page
+        .getByRole("button", {
+          name: "NIGHT DRIVEのAutomationを開く · 1 channel",
+        })
+        .click();
+    }
+
+    await startObserver();
+    await nightStack.locator(".candidate-automation-key").first().click();
+    let oracle = await readOracle();
+    await stopObserver();
+    expect(
+      oracle.trigger.filter((entry) => entry.name === "aria-pressed"),
+    ).toHaveLength(0);
+    expect(
+      oracle.trigger
+        .map((entry) => entry.name)
+        .filter(
+          (name) => !INTERVAL_EASING_PLAYHEAD_KEY_TRIGGER_MUTATION_NAMES.includes(name),
+        ),
+    ).toEqual([]);
+
+    await expect(trigger).toBeDisabled();
+    await expect(trigger).toHaveAttribute("aria-pressed", "false");
+    await expect(trigger).toHaveAccessibleName(
+      "key間へ移動するとInterval Easing Editorを開けます",
+    );
+    expect(
+      await trigger.evaluate((element) => element.onclick === null),
+    ).toBe(true);
+
+    const pulseStack = page.locator(
+      '.candidate-automation-stack[data-object-id="pulse-rings"]',
+    );
+    if (!(await pulseStack.isVisible())) {
+      await page
+        .getByRole("button", {
+          name: "Pulse ringsのAutomationを開く · 3 channel",
+        })
+        .click();
+    }
+
+    await startObserver();
+    await pulseStack.locator(".candidate-automation-key").nth(1).click();
+    oracle = await readOracle();
+    await stopObserver();
+    expect(
+      oracle.trigger.filter((entry) => entry.name === "aria-pressed"),
+    ).toHaveLength(0);
+    expect(
+      oracle.trigger
+        .map((entry) => entry.name)
+        .filter(
+          (name) => !INTERVAL_EASING_PLAYHEAD_KEY_TRIGGER_MUTATION_NAMES.includes(name),
+        ),
+    ).toEqual([]);
+
+    await expect(trigger).toBeEnabled();
+    await expect(trigger).toHaveAccessibleName(
+      "Pulse rings · IntensityのInterval Easing Editorを開く",
+    );
+
+    oracle = await (async () => {
+      await startObserver();
+      await trigger.click();
+      const snapshot = await readOracle();
+      await stopObserver();
+      return snapshot;
+    })();
+
+    expect(
+      await trigger.evaluate((element) => element.onclick === null),
+    ).toBe(true);
+    await expect(trigger).toHaveAttribute("aria-pressed", "true");
+    expect(
+      oracle.panel.filter(
+        (entry) => entry.name === "class" && entry.value?.includes("open"),
+      ),
+    ).toHaveLength(1);
+    expect(
+      oracle.trigger.filter(
+        (entry) =>
+          entry.name === "aria-pressed" &&
+          entry.oldValue === "false" &&
+          entry.value === "true",
+      ),
+    ).toHaveLength(1);
+
+    oracle = await (async () => {
+      await startObserver();
+      await page.locator("#close-easing").click();
+      const snapshot = await readOracle();
+      await stopObserver();
+      return snapshot;
+    })();
+
+    expect(
+      await trigger.evaluate((element) => element.onclick === null),
+    ).toBe(true);
+    await expect(trigger).toHaveAttribute("aria-pressed", "false");
+    expect(
+      oracle.trigger.filter(
+        (entry) =>
+          entry.name === "aria-pressed" &&
+          entry.oldValue === "true" &&
+          entry.value === "false",
+      ),
+    ).toHaveLength(1);
+    await expect(page.locator("#easing-panel")).not.toHaveClass(/open/);
+    expect(oracle.panel.filter((entry) => entry.name === "class")).toHaveLength(1);
+    expect(
+      oracle.panel.filter(
+        (entry) => entry.name === "class" && entry.value?.includes("open"),
+      ),
+    ).toHaveLength(0);
+
+    oracle = await (async () => {
+      await startObserver();
+      await trigger.click();
+      await stopObserver();
+      await startObserver();
+      await page.keyboard.press("Escape");
+      const snapshot = await readOracle();
+      await stopObserver();
+      return snapshot;
+    })();
+
+    await expect(page.locator("#easing-panel")).not.toHaveClass(/open/);
+    await expect(trigger).toHaveAttribute("aria-pressed", "false");
+    expect(
+      oracle.trigger.filter(
+        (entry) =>
+          entry.name === "aria-pressed" &&
+          entry.oldValue === "true" &&
+          entry.value === "false",
+      ),
+    ).toHaveLength(1);
+    expect(
+      await trigger.evaluate((element) => element.onclick === null),
+    ).toBe(true);
   });
 });

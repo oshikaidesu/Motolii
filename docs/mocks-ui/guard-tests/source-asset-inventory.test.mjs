@@ -82,6 +82,33 @@ const EXPECTED_EASING_NATIVE_ORACLE = [
   "curve renderer",
   "easing model",
 ];
+const EXPECTED_EASING_TRIGGER_SOURCE =
+  "docs/mocks-ui/src/candidates/EasingTriggerCandidate.jsx";
+const EXPECTED_EASING_TRIGGER_CSS_SOURCE =
+  "docs/mocks-ui/src/candidates/easing-trigger-candidate.css";
+const EXPECTED_EASING_TRIGGER_BUTTON_ATTRIBUTES = [
+  "aria-controls",
+  "aria-label",
+  "aria-pressed",
+  "className",
+  "data-info",
+  "disabled",
+  "id",
+];
+const EASING_CONTAINMENT_ANCHORS = [
+  'button=$("#interval-easing")',
+  '$("#interval-easing").setAttribute("aria-pressed","false");',
+  '$("#interval-easing").setAttribute("aria-pressed","true");',
+  '$("#interval-easing").onclick=',
+  '$("#interval-easing").click()',
+];
+const EASING_CONTAINMENT_REPLACEMENTS = [
+  'button=document.createElement("button")',
+  'document.createElement("button").setAttribute("aria-pressed","false");',
+  'document.createElement("button").setAttribute("aria-pressed","true");',
+  'document.createElement("button").onclick=',
+  'document.createElement("button").click()',
+];
 const EXPECTED_TIMELINE_SOURCE = "docs/mocks-ui/src/candidates/TimelineCandidate.jsx";
 const EXPECTED_TIMELINE_CSS_SOURCE = "docs/mocks-ui/src/candidates/timeline-candidate.css";
 const EXPECTED_TIMELINE_RUNTIME_HASHES = {
@@ -221,6 +248,146 @@ function collectNamedExports(ast) {
 
 function ensureExactKeys(value, allowed) {
   assert.deepEqual(Object.keys(value).sort(), [...allowed].sort());
+}
+
+function countNonOverlapping(source, needle) {
+  let count = 0;
+  let index = source.indexOf(needle);
+  while (index !== -1) {
+    count += 1;
+    index = source.indexOf(needle, index + needle.length);
+  }
+  return count;
+}
+
+async function assertRuntimeClosureEntry(entry, fixedSourceCommit, expectedSha256) {
+  if (entry.currentSha256) {
+    ensureExactKeys(entry, ["path", "role", "sha256", "currentSha256"]);
+    assert.equal(entry.sha256, expectedSha256);
+    assert.equal(hashBytes(readBlobFromCommit(entry.path, fixedSourceCommit)), entry.sha256);
+    assert.equal(
+      hashBytes(await readFile(absoluteFromRelative(entry.path))),
+      entry.currentSha256,
+    );
+    return;
+  }
+  ensureExactKeys(entry, ["path", "role", "sha256"]);
+  assert.equal(entry.sha256, expectedSha256);
+  assert.equal(hashBytes(readBlobFromCommit(entry.path, fixedSourceCommit)), entry.sha256);
+  assert.equal(hashBytes(await readFile(absoluteFromRelative(entry.path))), entry.sha256);
+}
+
+function easingTriggerButtonAttributes(ast) {
+  const names = [];
+  const visit = (value) => {
+    if (!value || typeof value !== "object") {
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (
+      value.type === "JSXOpeningElement" &&
+      value.name.type === "JSXIdentifier" &&
+      value.name.name === "button"
+    ) {
+      for (const attribute of value.attributes) {
+        if (attribute.type === "JSXAttribute" && attribute.name.type === "JSXIdentifier") {
+          names.push(attribute.name.name);
+        }
+      }
+    }
+    Object.values(value).forEach(visit);
+  };
+  visit(ast);
+  return names.sort();
+}
+
+function sourceUsesCaptureAddEventListener(source) {
+  const ast = parseModule(source);
+  let captureListenerFound = false;
+
+  const thirdArgumentEnablesCapture = (argument) => {
+    if (!argument) {
+      return false;
+    }
+    if (argument.type === "BooleanLiteral" && argument.value === true) {
+      return true;
+    }
+    if (argument.type === "ObjectExpression") {
+      return argument.properties.some((property) => {
+        if (property.type !== "ObjectProperty" || property.computed) {
+          return false;
+        }
+        const keyName =
+          property.key.type === "Identifier"
+            ? property.key.name
+            : property.key.type === "StringLiteral"
+              ? property.key.value
+              : null;
+        if (keyName !== "capture") {
+          return false;
+        }
+        return property.value.type === "BooleanLiteral" && property.value.value === true;
+      });
+    }
+    return false;
+  };
+
+  const visit = (value) => {
+    if (!value || typeof value !== "object") {
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (
+      value.type === "CallExpression" &&
+      value.callee.type === "MemberExpression" &&
+      value.callee.computed === false &&
+      value.callee.property.type === "Identifier" &&
+      value.callee.property.name === "addEventListener" &&
+      value.arguments.length >= 3 &&
+      thirdArgumentEnablesCapture(value.arguments[2])
+    ) {
+      captureListenerFound = true;
+    }
+    Object.values(value).forEach(visit);
+  };
+
+  visit(ast);
+  return captureListenerFound;
+}
+
+function assertSingleOwnerSourceScan(easingTriggerSource, timelineSource, legacyHostSource) {
+  const forbiddenPatterns = [
+    /MutationObserver/,
+    /stopImmediatePropagation/,
+    /\b[A-Za-z]*[Tt]ick[A-Za-z]*\b/,
+  ];
+  for (const source of [easingTriggerSource, timelineSource, legacyHostSource]) {
+    for (const pattern of forbiddenPatterns) {
+      assert.ok(!pattern.test(source), `forbidden pattern ${pattern} in scanned source`);
+    }
+    assert.ok(
+      !sourceUsesCaptureAddEventListener(source),
+      "addEventListener must not use capture",
+    );
+  }
+  assert.ok(
+    !/<EasingTriggerSlot[^>]*\bkey=/.test(legacyHostSource),
+    "EasingTriggerSlot must not receive a key prop",
+  );
+  const slotSection = legacyHostSource.split("function EasingTriggerSlot")[1]?.split(
+    "function createParserOptions",
+  )[0];
+  assert.ok(slotSection);
+  assert.ok(
+    !/<Component[^>]*\bkey=/.test(slotSection),
+    "EasingTriggerSlot Component must not receive a key prop",
+  );
 }
 
 function relFromRepo(absolutePath) {
@@ -603,6 +770,8 @@ async function validateInventory(manifest, options = {}) {
     stageSurfaceAstSource,
     nativeVisualParityAstSource,
     nativeTimelineTestAstSource,
+    easingTriggerAstSource,
+    legacyHostAstSource,
     fixedSourceCommit = manifest.fixedSourceCommit,
   } = options;
 
@@ -750,6 +919,7 @@ async function validateInventory(manifest, options = {}) {
     "requiredNextAction",
     "nativeOracle",
     "behavioralEvidence",
+    "triggerSource",
   ]);
   assert.equal(easing.id, "easing");
   assert.equal(easing.classification, EXPECTED_EASING_CLASSIFICATION);
@@ -816,6 +986,66 @@ async function validateInventory(manifest, options = {}) {
   ensureExactKeys(easing.behavioralEvidence, ["path", "route"]);
   assert.deepEqual(easing.behavioralEvidence, manifest.behavioralTests[0]);
 
+  ensureExactKeys(easing.triggerSource, [
+    "componentPath",
+    "componentExport",
+    "runtimeClosure",
+    "localImports",
+    "externalPackages",
+    "provenanceRole",
+  ]);
+  assert.equal(easing.triggerSource.componentPath, EXPECTED_EASING_TRIGGER_SOURCE);
+  assert.equal(easing.triggerSource.componentExport, "EasingTriggerCandidate");
+  assert.equal(easing.triggerSource.provenanceRole, "mock-side-current-closure");
+  const expectedTriggerRuntimeOrder = [
+    EXPECTED_EASING_TRIGGER_SOURCE,
+    EXPECTED_EASING_TRIGGER_CSS_SOURCE,
+  ];
+  assert.equal(easing.triggerSource.runtimeClosure.length, expectedTriggerRuntimeOrder.length);
+  for (let index = 0; index < expectedTriggerRuntimeOrder.length; index += 1) {
+    const expectedPath = expectedTriggerRuntimeOrder[index];
+    const entry = easing.triggerSource.runtimeClosure[index];
+    ensureExactKeys(entry, ["path", "role", "currentSha256"]);
+    assert.equal(entry.path, expectedPath);
+    assert.equal(entry.role, "runtime");
+    assert.equal(
+      hashBytes(await readFile(absoluteFromRelative(entry.path))),
+      entry.currentSha256,
+    );
+    assert.ok(!("sha256" in entry));
+  }
+  assert.equal(easing.triggerSource.localImports.length, 1);
+  ensureExactKeys(easing.triggerSource.localImports[0], ["kind", "source", "specifiers"]);
+  assert.equal(easing.triggerSource.localImports[0].kind, "css-side-effect");
+  assert.equal(easing.triggerSource.localImports[0].source, EXPECTED_EASING_TRIGGER_CSS_SOURCE);
+  assert.deepEqual(easing.triggerSource.localImports[0].specifiers, []);
+  assert.deepEqual(easing.triggerSource.externalPackages, []);
+
+  const easingTriggerAst = parseModule(easingTriggerAstSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_EASING_TRIGGER_SOURCE),
+    "utf8",
+  ));
+  assert.ok(collectNamedExports(easingTriggerAst).has("EasingTriggerCandidate"));
+  const easingTriggerImports = collectCandidateImports(
+    easingTriggerAst,
+    absoluteFromRelative(EXPECTED_EASING_TRIGGER_SOURCE),
+  );
+  assert.deepEqual(easingTriggerImports.externalPackages, []);
+  assert.deepEqual(Object.keys(easingTriggerImports.localImports), [
+    EXPECTED_EASING_TRIGGER_CSS_SOURCE,
+  ]);
+  assert.deepEqual(
+    easingTriggerButtonAttributes(easingTriggerAst),
+    EXPECTED_EASING_TRIGGER_BUTTON_ATTRIBUTES,
+  );
+  const easingTriggerRaw = easingTriggerAstSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_EASING_TRIGGER_SOURCE),
+    "utf8",
+  );
+  for (const forbidden of ["document.", "window.", "useState", "useEffect", "useRef", "onClick"]) {
+    assert.ok(!easingTriggerRaw.includes(forbidden), `forbidden token ${forbidden}`);
+  }
+
   const easingAst = parseModule(easingAstSource ?? await readFile(
     absoluteFromRelative(easing.componentPath),
     "utf8",
@@ -874,13 +1104,14 @@ async function validateInventory(manifest, options = {}) {
   for (let index = 0; index < expectedTimelineRuntimeOrder.length; index += 1) {
     const expectedPath = expectedTimelineRuntimeOrder[index];
     const entry = keysLayers.runtimeClosure[index];
-    ensureExactKeys(entry, ["path", "role", "sha256"]);
     assert.equal(entry.path, expectedPath);
     assert.equal(entry.role, "runtime");
-    assert.equal(entry.sha256, EXPECTED_TIMELINE_RUNTIME_HASHES[expectedPath]);
     assert.ok(!entry.path.includes("/legacy/") && !entry.path.includes("/archive/"));
-    assert.equal(hashBytes(readBlobFromCommit(entry.path, fixedSourceCommit)), entry.sha256);
-    assert.equal(hashBytes(await readFile(absoluteFromRelative(entry.path))), entry.sha256);
+    await assertRuntimeClosureEntry(
+      entry,
+      fixedSourceCommit,
+      EXPECTED_TIMELINE_RUNTIME_HASHES[expectedPath],
+    );
   }
 
   assert.equal(keysLayers.localImports.length, 1);
@@ -939,11 +1170,13 @@ async function validateInventory(manifest, options = {}) {
   for (let index = 0; index < EXPECTED_INSPECTOR_LEGACY_CLOSURE.length; index += 1) {
     const expectedPath = EXPECTED_INSPECTOR_LEGACY_CLOSURE[index];
     const entry = inspector.legacyOracleClosure[index];
-    ensureExactKeys(entry, ["path", "role", "sha256"]);
     assert.equal(entry.path, expectedPath);
     assert.equal(entry.role, "oracle");
-    assert.equal(entry.sha256, EXPECTED_INSPECTOR_LEGACY_HASHES[expectedPath]);
-    assert.equal(hashBytes(readBlobFromCommit(entry.path, fixedSourceCommit)), entry.sha256);
+    await assertRuntimeClosureEntry(
+      entry,
+      fixedSourceCommit,
+      EXPECTED_INSPECTOR_LEGACY_HASHES[expectedPath],
+    );
   }
 
   ensureExactKeys(inspector.rejectedSkeleton, ["path", "export", "sha256", "disposition"]);
@@ -1091,12 +1324,13 @@ async function validateInventory(manifest, options = {}) {
   for (let index = 0; index < EXPECTED_NATIVE_STAGE_TIME_CLOSURE.length; index += 1) {
     const expectedPath = EXPECTED_NATIVE_STAGE_TIME_CLOSURE[index];
     const entry = nativeStageTime.oracleClosure[index];
-    ensureExactKeys(entry, ["path", "role", "sha256"]);
     assert.equal(entry.path, expectedPath);
     assert.equal(entry.role, index < 4 ? "legacy-oracle" : "react-oracle");
-    assert.equal(entry.sha256, EXPECTED_NATIVE_STAGE_TIME_HASHES[expectedPath]);
-    assert.equal(hashBytes(readBlobFromCommit(entry.path, fixedSourceCommit)), entry.sha256);
-    assert.equal(hashBytes(await readFile(absoluteFromRelative(entry.path))), entry.sha256);
+    await assertRuntimeClosureEntry(
+      entry,
+      fixedSourceCommit,
+      EXPECTED_NATIVE_STAGE_TIME_HASHES[expectedPath],
+    );
   }
 
   assert.equal(nativeStageTime.rejectedReactSurfaces.length, 2);
@@ -1108,13 +1342,18 @@ async function validateInventory(manifest, options = {}) {
     sha256: EXPECTED_STAGE_SURFACE_HASH,
     disposition: "reference-surface-not-product-stage",
   });
-  ensureExactKeys(rejectedTimeline, ["path", "export", "sha256", "disposition"]);
-  assert.deepEqual(rejectedTimeline, {
-    path: EXPECTED_TIMELINE_SOURCE,
-    export: "TimelineCandidate",
-    sha256: EXPECTED_TIMELINE_RUNTIME_HASHES[EXPECTED_TIMELINE_SOURCE],
-    disposition: "whole-container-not-product-timeline",
-  });
+  ensureExactKeys(rejectedTimeline, ["path", "export", "sha256", "currentSha256", "disposition"]);
+  assert.equal(rejectedTimeline.path, EXPECTED_TIMELINE_SOURCE);
+  assert.equal(rejectedTimeline.export, "TimelineCandidate");
+  assert.equal(
+    rejectedTimeline.sha256,
+    EXPECTED_TIMELINE_RUNTIME_HASHES[EXPECTED_TIMELINE_SOURCE],
+  );
+  assert.equal(
+    rejectedTimeline.currentSha256,
+    hashBytes(await readFile(absoluteFromRelative(EXPECTED_TIMELINE_SOURCE))),
+  );
+  assert.equal(rejectedTimeline.disposition, "whole-container-not-product-timeline");
   for (const rejected of nativeStageTime.rejectedReactSurfaces) {
     assert.equal(hashBytes(readBlobFromCommit(rejected.path, fixedSourceCommit)), rejected.sha256);
   }
@@ -1188,6 +1427,30 @@ async function validateInventory(manifest, options = {}) {
     absoluteFromRelative(nativeTimelineEvidence.path), "utf8",
   ));
   assert.ok(extractRouteFromTest(nativeTimelineTestAst).includes(nativeTimelineEvidence.route));
+
+  const legacyHostSource = legacyHostAstSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_INSPECTOR_LEGACY_CLOSURE[0]),
+    "utf8",
+  );
+  for (const anchor of EASING_CONTAINMENT_ANCHORS) {
+    assert.equal(countNonOverlapping(rawHtml, anchor), 1, anchor);
+  }
+  for (const literal of [...EASING_CONTAINMENT_ANCHORS, ...EASING_CONTAINMENT_REPLACEMENTS]) {
+    assert.ok(legacyHostSource.includes(literal), `missing literal ${literal}`);
+  }
+  assert.ok(
+    legacyHostSource.includes("class EasingContainmentInitializationError extends Error"),
+  );
+  assert.ok(legacyHostSource.includes("new EasingContainmentInitializationError("));
+  assert.ok(!legacyHostSource.includes("containEasingTrigger") || !/throw new Error\(/.test(
+    legacyHostSource.split("function containEasingTrigger")[1]?.split("function createParserOptions")[0] ?? "",
+  ));
+
+  const timelineRaw = timelineAstSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_TIMELINE_SOURCE),
+    "utf8",
+  );
+  assertSingleOwnerSourceScan(easingTriggerRaw, timelineRaw, legacyHostSource);
 }
 
 test("accepts exact complete six-surface R0 manifest and fixed-commit evidence", async () => {
@@ -1770,4 +2033,169 @@ test("native key-glyph validation is independent from the KEYS/LAYERS tool-panel
     nativeTimelineAstSource: timeline.replaceAll("candidate-key-tools", "candidate-tool-panel"),
     nativeTimelineCssSource: css.replaceAll("candidate-key-tools", "candidate-tool-panel"),
   });
+});
+
+test("rejects easing trigger source drift, ownership violations, and containment regressions", async () => {
+  const manifest = await manifestFromDisk();
+  const easingTrigger = await readFile(absoluteFromRelative(EXPECTED_EASING_TRIGGER_SOURCE), "utf8");
+  const timeline = await readFile(absoluteFromRelative(EXPECTED_TIMELINE_SOURCE), "utf8");
+  const legacyHost = await readFile(absoluteFromRelative(EXPECTED_INSPECTOR_LEGACY_CLOSURE[0]), "utf8");
+  const rawHtml = await readFile(absoluteFromRelative(EXPECTED_EASING_TRIGGER_AUTHORITY.path), "utf8");
+
+  const withoutTriggerSource = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => {
+    const { triggerSource, ...rest } = easing;
+    return rest;
+  });
+  await assert.rejects(() => validateInventory(withoutTriggerSource));
+
+  const triggerShaAtFixed = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    triggerSource: {
+      ...easing.triggerSource,
+      runtimeClosure: easing.triggerSource.runtimeClosure.map((entry) => ({
+        ...entry,
+        sha256: "0".repeat(64),
+      })),
+    },
+  }));
+  await assert.rejects(() => validateInventory(triggerShaAtFixed));
+
+  const wrongCurrent = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    triggerSource: {
+      ...easing.triggerSource,
+      runtimeClosure: easing.triggerSource.runtimeClosure.map((entry) => ({
+        ...entry,
+        currentSha256: "0".repeat(64),
+      })),
+    },
+  }));
+  await assert.rejects(() => validateInventory(wrongCurrent));
+
+  const rewrittenFixed = withInventoryEntryAt(manifest, "surfaces", 2, (keysLayers) => ({
+    ...keysLayers,
+    runtimeClosure: keysLayers.runtimeClosure.map((entry, index) =>
+      index === 0 ? { ...entry, sha256: entry.currentSha256 } : entry,
+    ),
+  }));
+  await assert.rejects(() => validateInventory(rewrittenFixed));
+
+  const post05A = {
+    ...manifest,
+    post05AHashes: { [EXPECTED_EASING_TRIGGER_SOURCE]: "0".repeat(64) },
+  };
+  await assert.rejects(() => validateInventory(post05A));
+
+  const extraClosureKey = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    triggerSource: {
+      ...easing.triggerSource,
+      runtimeClosure: easing.triggerSource.runtimeClosure.map((entry) => ({
+        ...entry,
+        extra: true,
+      })),
+    },
+  }));
+  await assert.rejects(() => validateInventory(extraClosureKey));
+
+  await assert.rejects(() => validateInventory({
+    ...manifest,
+    fixedSourceCommit: "0000000000000000000000000000000000000000",
+  }));
+
+  await assert.rejects(() => validateInventory(withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    triggerAuthority: { ...easing.triggerAuthority, selector: "#missing" },
+  }))));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    easingTriggerAstSource: easingTrigger.replace(
+      "<button",
+      '<button type="button"',
+    ),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    easingTriggerAstSource: easingTrigger.replace(
+      'data-info="Easing Graph|key間にいる時だけ開けます|"',
+      'data-info="Easing Graph|key間にいる時だけ開けます|" data-testid="trigger"',
+    ),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    easingTriggerAstSource: easingTrigger.replace("disabled={!activeInterval}", "disabled={!activeInterval} onClick={() => {}}"),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    easingTriggerAstSource: easingTrigger.replace("export function", "export function X") + "\nconst x = document.body;",
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    timelineAstSource: `${timeline}\nconst observer = new MutationObserver(() => {});`,
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    timelineAstSource: timeline.replace("onActiveIntervalChange", "stopImmediatePropagation"),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    legacyHostAstSource: legacyHost.replace(
+      "<EasingTriggerSlot Component={EasingTriggerComponent} />",
+      "<EasingTriggerSlot key={fixture} Component={EasingTriggerComponent} />",
+    ),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    legacyHostAstSource: legacyHost.replace(
+      "const [pressed, setPressed] = useState(false);",
+      "const [pressed, setPressed] = useState(false);\n  const [tick, setTick] = useState(0);",
+    ),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    stageRawHtmlSource: rawHtml.replace(
+      EASING_CONTAINMENT_ANCHORS[0],
+      `${EASING_CONTAINMENT_ANCHORS[0]}\n${EASING_CONTAINMENT_ANCHORS[0]}`,
+    ),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    stageRawHtmlSource: rawHtml.replace(EASING_CONTAINMENT_ANCHORS[0], ""),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    legacyHostAstSource: legacyHost.replace(EASING_CONTAINMENT_ANCHORS[0], ""),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    legacyHostAstSource: legacyHost.replace(EASING_CONTAINMENT_REPLACEMENTS[0], ""),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    legacyHostAstSource: legacyHost.replace(
+      "new EasingContainmentInitializationError(",
+      "new Error(",
+    ),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    legacyHostAstSource: legacyHost.replace(
+      'button.addEventListener("click", openPanel);',
+      'button.addEventListener("click", (event) => { openPanel(event); }, true);',
+    ),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    legacyHostAstSource: legacyHost.replace(
+      'button.addEventListener("click", openPanel);',
+      'button.addEventListener("click", openPanel, { capture: true });',
+    ),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    easingTriggerAstSource: easingTrigger.replace(
+      "  return (",
+      "  const [openState, setOpenState] = useState(false);\n  return (",
+    ),
+  }));
 });

@@ -128,6 +128,31 @@
       "behavioralEvidence": {
         "path": "docs/mocks-ui/tests/browser-candidate.spec.js",
         "route": "plugin-browser-candidate"
+      },
+      "triggerSource": {
+        "componentPath": "docs/mocks-ui/src/candidates/EasingTriggerCandidate.jsx",
+        "componentExport": "EasingTriggerCandidate",
+        "runtimeClosure": [
+          {
+            "path": "docs/mocks-ui/src/candidates/EasingTriggerCandidate.jsx",
+            "role": "runtime",
+            "currentSha256": "6ae4cf7e79586e33cedaed0bb928daa34aa4b8ac9cdc9f6c494637875f502932"
+          },
+          {
+            "path": "docs/mocks-ui/src/candidates/easing-trigger-candidate.css",
+            "role": "runtime",
+            "currentSha256": "1e2d26d51c8ed7b322d6fa56123870842daeca41fd0815e7167055c2d87acfd8"
+          }
+        ],
+        "localImports": [
+          {
+            "kind": "css-side-effect",
+            "source": "docs/mocks-ui/src/candidates/easing-trigger-candidate.css",
+            "specifiers": []
+          }
+        ],
+        "externalPackages": [],
+        "provenanceRole": "mock-side-current-closure"
       }
     },
     {
@@ -139,7 +164,8 @@
         {
           "path": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
           "role": "runtime",
-          "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5"
+          "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5",
+          "currentSha256": "5273c79aa01748c1cc77a1972043114e98914561129143ae436f7d71d1c54fd2"
         },
         {
           "path": "docs/mocks-ui/src/candidates/timeline-candidate.css",
@@ -197,7 +223,8 @@
         {
           "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
           "role": "oracle",
-          "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416"
+          "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416",
+          "currentSha256": "8d1e412e15f40c340a14bad4844177e0d68f37b7fe25e27f877f7a879c7a3ac9"
         },
         {
           "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
@@ -289,7 +316,8 @@
         {
           "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
           "role": "legacy-oracle",
-          "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416"
+          "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416",
+          "currentSha256": "8d1e412e15f40c340a14bad4844177e0d68f37b7fe25e27f877f7a879c7a3ac9"
         },
         {
           "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
@@ -309,7 +337,8 @@
         {
           "path": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
           "role": "react-oracle",
-          "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5"
+          "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5",
+          "currentSha256": "5273c79aa01748c1cc77a1972043114e98914561129143ae436f7d71d1c54fd2"
         },
         {
           "path": "docs/mocks-ui/src/candidates/timeline-candidate.css",
@@ -343,6 +372,7 @@
           "path": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
           "export": "TimelineCandidate",
           "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5",
+          "currentSha256": "5273c79aa01748c1cc77a1972043114e98914561129143ae436f7d71d1c54fd2",
           "disposition": "whole-container-not-product-timeline"
         }
       ],
