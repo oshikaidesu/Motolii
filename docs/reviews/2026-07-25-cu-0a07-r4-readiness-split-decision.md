@@ -2,8 +2,8 @@
 
 - 日付: 2026-07-25
 - 状態: **決定**
-- 現在粒: **CU-0A07B / R4B DO**
-- 後続: **CU-0A07C / R4C WAIT**
+- 現在粒: **CU-0A07C / R4C DO**
+- 後続: **なし(R4C完了でR4系を閉じ、CU-0A08IはHost projection粒として別判定)**
 
 ## 1. 確認した事実
 
@@ -25,8 +25,8 @@ ARIA、操作を固定した証拠として不足する。
 |---|---|---|---|
 | CU-0A07S | `DONE` | 本決定で独立source不在と施工順を固定 | CU-0A06B |
 | CU-0A07A | `DONE` | [#353](https://github.com/oshikaidesu/Motolii/pull/353)で未変更legacy sourceに構造・style・ARIA・操作oracleを追加 | CU-0A07S |
-| CU-0A07B | `DO` | 固定mock内でInspectorを同形React化し、legacy adapterを一方向投影へ封じる | CU-0A07A |
-| CU-0A07C | `WAIT` | R4BのJSX/CSSをbyte同一でproduct ownerへ移し、mockをconsumerへ反転 | CU-0A07B |
+| CU-0A07B | `DONE` | [#355](https://github.com/oshikaidesu/Motolii/pull/355)で固定mock内でInspectorを同形React化し、legacy adapterを一方向投影へ封じる | CU-0A07A |
+| CU-0A07C | `DO` | R4BのJSX/CSSをbyte同一でproduct ownerへ移し、mockをconsumerへ反転 | CU-0A07B |
 
 R4Aは製品source、archived HTML、visual threshold、viewport、font、route、
 landmark、goldenを変更しない。既存two-page parity harnessを再利用し、

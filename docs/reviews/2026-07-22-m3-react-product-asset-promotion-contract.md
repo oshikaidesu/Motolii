@@ -281,8 +281,8 @@ mock copy 0、Timeline state owner、product current-closureを固定した。�
 Easing旧path注入負例が同名bindingのparse errorでも緑になり得る観察を得たが、R3Bへ混ぜず
 独立guard repair候補とする。R4SでInspectorの独立React source不在を確認し、
 R4A unchanged-source oracle、R4B mock-side同形React化、R4C product ownershipへ分割した。
-R4Aは[#353](https://github.com/oshikaidesu/Motolii/pull/353)で完了し、現在粒はR4Bの`DO`である。
-R4C以降とMotolii Studio Previewは未実装である。
+R4Aは[#353](https://github.com/oshikaidesu/Motolii/pull/353)で完了し、R4Bは[#355](https://github.com/oshikaidesu/Motolii/pull/355)で固定mock内の同形React化と一方向legacy adapterを完了し、現在粒はR4Cの`DO`である。
+Motolii Studio Previewは未実装である。
 
 ## 13. 既存文書との関係
 
