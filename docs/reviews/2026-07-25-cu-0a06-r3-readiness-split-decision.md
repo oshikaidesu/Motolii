@@ -1,6 +1,6 @@
 # CU-0A06 / R3 KEYS/LAYERS readiness分割決定（2026-07-25）
 
-状態: **決定 / CU-0A06A DONE / CU-0A06B DO**
+状態: **決定 / CU-0A06A DONE / CU-0A06B DONE**
 
 対象: M3 Presentation OwnershipのR3。固定commit
 `56c318edcddab7cf95d263cc2f7dd2b4e6791134`にあるKEYS/LAYERS tool panelを、
@@ -51,6 +51,12 @@ reference guard 100件・workspace全体を通過した。CU-0A06Bはこの二�
 product current-closure provenance、mock copy不在、runtime import拒否の既存席があり、
 新helper・新package wiring・新公開契約なしで同じ境界を拡張できる。よってCU-0A06Bを`DO`へ上げる。
 JSX/CSS bytes、Timeline側幅変数、既存Playwright、visual thresholdを変える必要が出た場合はSTOPする。
+
+CU-0A06Bは[#350](https://github.com/oshikaidesu/Motolii/pull/350)、merge
+`0631ef05a8705b3b92517cbe604a5383e49d731a`で完了した。二つの固定hashは不変、
+mock側copy 0、product named export、Timeline import-only反転、Timeline state owner、
+product current-closureを閉じた。GrokはP0/P1/P2=0、`VERDICT: ACCEPT`、reference guard
+100+3件、対象22件、全UI 54件、fmt/clippy/workspace全体を通過した。
 
 ## 3. visual matrixの適用
 
