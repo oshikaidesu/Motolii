@@ -16,6 +16,12 @@ SPARK_TIMEOUT_SECONDS="${CODEX_SPARK_TIMEOUT_SECONDS:-1800}"
 INSPECTION_TIMEOUT_SECONDS="${CURSOR_INSPECTION_TIMEOUT_SECONDS:-300}"
 HEARTBEAT_SECONDS="${CURSOR_SUPERVISED_HEARTBEAT_SECONDS:-30}"
 TERMINATION_GRACE_SECONDS="${CURSOR_TERMINATION_GRACE_SECONDS:-2}"
+DERIVED_TARGET_ROOT_NAME="target"
+DERIVED_TARGET_ENTRIES=(
+  "scaffold-plugin-fixture"
+  "new-plugin-scaffold-test"
+  "d1i4-empty-classification.tsv"
+)
 
 usage() {
   echo "Usage: $0 prepare <isolated-worktree> <order-file> <task>"
@@ -73,6 +79,15 @@ if [[ -z "${task//[[:space:]]/}" ]]; then
   usage >&2
   exit 2
 fi
+
+for _ambient_git_var in GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
+  GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE GIT_CEILING_DIRECTORIES \
+  GIT_DISCOVERY_ACROSS_FILESYSTEM; do
+  if [[ -n "${!_ambient_git_var:-}" ]]; then
+    echo "delegate-cursor-supervised: ambient Git addressing is forbidden: $_ambient_git_var" >&2
+    exit 2
+  fi
+done
 
 task_hash="$(printf '%s' "$task" | shasum -a 256 | awk '{print $1}')"
 if [[ "$WORKTREE" == "$PRIMARY_WORKTREE" ]]; then
@@ -314,6 +329,181 @@ git_capture_or_fail() {
   fi
 }
 
+git_explicit() {
+  local worktree="$1"
+  shift
+  local git_dir
+  git_dir="$(git -C "$worktree" rev-parse --absolute-git-dir)"
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
+    -u GIT_ALTERNATE_OBJECT_DIRECTORIES -u GIT_COMMON_DIR -u GIT_NAMESPACE \
+    -u GIT_CEILING_DIRECTORIES -u GIT_DISCOVERY_ACROSS_FILESYSTEM \
+    git --git-dir="$git_dir" --work-tree="$worktree" "$@"
+}
+
+compute_ref_digest() {
+  local worktree="$1"
+  local head_file show_ref_file sorted_file body_file show_ref_status
+  head_file="$(mktemp "$tmp_dir/ref-head.XXXXXX")"
+  show_ref_file="$(mktemp "$tmp_dir/ref-show-ref.XXXXXX")"
+  sorted_file="$(mktemp "$tmp_dir/ref-sorted.XXXXXX")"
+  body_file="$(mktemp "$tmp_dir/ref-body.XXXXXX")"
+  if ! git_explicit "$worktree" rev-parse HEAD >"$head_file"; then
+    echo "delegate-cursor-supervised: ref digest HEAD capture failed" >&2
+    exit 2
+  fi
+  set +e
+  git_explicit "$worktree" show-ref >"$show_ref_file" 2>/dev/null
+  show_ref_status=$?
+  set -e
+  if (( show_ref_status != 0 )); then
+    if (( show_ref_status == 1 )) && [[ ! -s "$show_ref_file" ]]; then
+      :
+    else
+      echo "delegate-cursor-supervised: ref digest show-ref capture failed (status $show_ref_status)" >&2
+      exit 2
+    fi
+  fi
+  cat "$head_file" "$show_ref_file" >"$body_file"
+  LC_ALL=C sort -o "$sorted_file" "$body_file"
+  shasum -a 256 "$sorted_file" | awk '{print $1}'
+}
+
+derived_target_closure_fail() {
+  local stage="$1"
+  local msg="SCOPE NG: derived target closure ($stage): $2"
+  echo "$msg" >&2
+  [[ -z "${CURRENT_ATTEMPT_DIR:-}" ]] || printf '%s\n' "$msg" >>"$CURRENT_ATTEMPT_DIR/stage-result.txt" 2>/dev/null || true
+  exit 7
+}
+
+derived_target_entry_is_known() {
+  local name="$1" known
+  for known in "${DERIVED_TARGET_ENTRIES[@]}"; do
+    if [[ "$name" == "$known" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+derived_target_entry_must_be_directory() {
+  local name="$1"
+  [[ "$name" == "scaffold-plugin-fixture" || "$name" == "new-plugin-scaffold-test" ]]
+}
+
+enforce_derived_target_closure() {
+  local worktree="$1" stage_label="$2"
+  local root="$worktree/$DERIVED_TARGET_ROOT_NAME"
+  local find_enum_file children=() i child base tracked_file desc_file path
+
+  if [[ ! -e "$root" && ! -L "$root" ]]; then
+    return 0
+  fi
+  if [[ -L "$root" ]]; then
+    derived_target_closure_fail "$stage_label" "target root is a symlink: $root"
+  fi
+  if [[ ! -d "$root" ]]; then
+    derived_target_closure_fail "$stage_label" "target root is not a directory: $root"
+  fi
+
+  find_enum_file="$(mktemp "$tmp_dir/target-enum.XXXXXX")"
+  if ! find "$root" -mindepth 1 -maxdepth 1 -print0 >"$find_enum_file"; then
+    derived_target_closure_fail "$stage_label" "failed to enumerate target root children"
+  fi
+  while IFS= read -r -d '' child || [[ -n "${child:-}" ]]; do
+    [[ -z "$child" ]] && continue
+    children+=("$child")
+  done <"$find_enum_file"
+
+  for (( i = 0; i < ${#children[@]}; i++ )); do
+    child="${children[i]}"
+    if [[ "$(dirname "$child")" != "$root" ]]; then
+      derived_target_closure_fail "$stage_label" "path escape: $child"
+    fi
+    base="$(basename "$child")"
+    if [[ -z "$base" ]]; then
+      derived_target_closure_fail "$stage_label" "empty basename under target root"
+    fi
+    if ! derived_target_entry_is_known "$base"; then
+      derived_target_closure_fail "$stage_label" "unknown target entry: $base"
+    fi
+    if [[ -L "$child" ]]; then
+      derived_target_closure_fail "$stage_label" "symlink child: $child"
+    fi
+    if derived_target_entry_must_be_directory "$base"; then
+      if [[ ! -d "$child" ]]; then
+        derived_target_closure_fail "$stage_label" "expected directory: $child"
+      fi
+    else
+      if [[ ! -f "$child" ]]; then
+        derived_target_closure_fail "$stage_label" "expected regular file: $child"
+      fi
+    fi
+    tracked_file="$(mktemp "$tmp_dir/target-tracked.XXXXXX")"
+    if ! git_explicit "$worktree" ls-files -z -- "target/$base" >"$tracked_file"; then
+      derived_target_closure_fail "$stage_label" "git ls-files failed for target/$base"
+    fi
+    if [[ -s "$tracked_file" ]]; then
+      derived_target_closure_fail "$stage_label" "tracked derived entry: target/$base"
+    fi
+    if [[ -d "$child" ]]; then
+      desc_file="$(mktemp "$tmp_dir/target-desc.XXXXXX")"
+      if ! find "$child" -mindepth 1 -print0 >"$desc_file"; then
+        derived_target_closure_fail "$stage_label" "failed to enumerate descendants of $child"
+      fi
+      while IFS= read -r -d '' path || [[ -n "${path:-}" ]]; do
+        [[ -z "$path" ]] && continue
+        case "$path" in
+          "$child"/*) ;;
+          *) derived_target_closure_fail "$stage_label" "path escape: $path" ;;
+        esac
+        if [[ -L "$path" ]]; then
+          derived_target_closure_fail "$stage_label" "nested symlink: $path"
+        fi
+        if [[ -d "$path" ]]; then
+          continue
+        fi
+        if [[ -f "$path" ]]; then
+          continue
+        fi
+        derived_target_closure_fail "$stage_label" "unexpected node type: $path"
+      done <"$desc_file"
+    fi
+  done
+
+  if [[ ! -w "$root" ]]; then
+    derived_target_closure_fail "$stage_label" "removal failed: target root is not writable"
+  fi
+
+  for (( i = 0; i < ${#children[@]}; i++ )); do
+    child="${children[i]}"
+    if [[ -z "$child" ]]; then
+      derived_target_closure_fail "$stage_label" "empty removal path"
+    fi
+    if [[ "$child" == "$root" || "$child" == "$root/" ]]; then
+      derived_target_closure_fail "$stage_label" "refusing to remove target root as child: $child"
+    fi
+    if [[ -z "$(basename "$child")" ]]; then
+      derived_target_closure_fail "$stage_label" "empty basename for removal: $child"
+    fi
+    if [[ -d "$child" && ! -L "$child" ]]; then
+      if ! rm -rf -- "$child"; then
+        derived_target_closure_fail "$stage_label" "removal failed: $child"
+      fi
+    elif [[ -f "$child" && ! -L "$child" ]]; then
+      if ! rm -f -- "$child"; then
+        derived_target_closure_fail "$stage_label" "removal failed: $child"
+      fi
+    else
+      derived_target_closure_fail "$stage_label" "unexpected child type at removal: $child"
+    fi
+  done
+
+  if ! rmdir "$root"; then
+    derived_target_closure_fail "$stage_label" "rmdir failed for target root: $root"
+  fi
+}
+
 gate_require_single_field() {
   # 同じprefixの行が1つでも正規文法を外れたら、他に正しい行があっても採用しない
   local file="$1" label="$2"
@@ -522,6 +712,9 @@ gate_check_allowed_files() {
     fi
     if [[ "$af" == *".."* ]]; then
       gate_fail "ALLOWED_FILE path traversal: $af"
+    fi
+    if [[ "${af%%/*}" == "target" ]]; then
+      gate_fail "ALLOWED_FILE covers derived target output: $af"
     fi
     GATE_ALLOWED_FILES+=("$af")
   done <<<"$allowed_lines"
@@ -1467,7 +1660,7 @@ run_inspection_stage() {
   local worktree="$1" task="$2" order_txt="$3" attempt_dir="$4" inspection_timeout="$5"
   local order_file="$6" expected_order_sha256="$7"
   local evidence_root="$8" cp_attempt_name="$9" cp_task_hash="${10}" cp_base_ref="${11}" cp_base_sha="${12}" cp_head="${13}" cp_fingerprint="${14}"
-  local pre_fp post_fp inspection_prompt
+  local pre_fp post_fp inspection_prompt grok_status=0
 
   snapshot_worktree "$worktree" "$attempt_dir" "pre-grok"
   pre_fp="$(cat "$attempt_dir/pre-grok-fingerprint.sha256")"
@@ -1502,7 +1695,10 @@ EOF
 
   echo
   echo "## 3. Cursor Grok 4.5 High read-only inspection"
-  if ! (cd "$worktree" && run_supervisor "$attempt_dir/grok-stdout.txt" "$inspection_prompt" verdict "$inspection_timeout"); then
+  grok_status=0
+  (cd "$worktree" && run_supervisor "$attempt_dir/grok-stdout.txt" "$inspection_prompt" verdict "$inspection_timeout") || grok_status=$?
+  enforce_derived_target_closure "$worktree" "post-grok"
+  if [[ "$grok_status" -ne 0 ]]; then
     [[ ! -f "$attempt_dir/grok-stdout.txt" ]] || cat "$attempt_dir/grok-stdout.txt"
     snapshot_worktree "$worktree" "$attempt_dir" "post-grok"
     echo "STAGE: grok FAILED_OR_TIMEOUT" >>"$attempt_dir/stage-result.txt"
@@ -1718,6 +1914,7 @@ printf '%s' "$task" >"$attempt_dir/task.txt"
 } >"$attempt_dir/metadata.txt"
 
 if [[ "$MODE" == "inspect" ]]; then
+  enforce_derived_target_closure "$WORKTREE" "inspect-resume"
   # inspectはSparkを再起動しない。実装成功直後のcheckpointに現在の
   # order/task/base/head/worktree fingerprintが一致する時だけ、scope closureを
   # 再確認してGrokだけを起動する
@@ -1750,6 +1947,8 @@ pre_spark_ignore_policy="$(cat "$attempt_dir/pre-spark-ignore-policy.sha256")"
 build_out_of_scope_manifest "$WORKTREE" "$attempt_dir/pre-spark-out-of-scope-manifest.nul"
 pre_spark_manifest_digest="$(shasum -a 256 "$attempt_dir/pre-spark-out-of-scope-manifest.nul" | awk '{print $1}')"
 printf '%s\n' "$pre_spark_manifest_digest" >"$attempt_dir/pre-spark-out-of-scope-manifest.sha256"
+pre_spark_ref_digest="$(compute_ref_digest "$WORKTREE")"
+printf '%s\n' "$pre_spark_ref_digest" >"$attempt_dir/pre-spark-ref-digest.sha256"
 
 head_before="$(git -C "$WORKTREE" rev-parse HEAD)"
 implementation_prompt=$(cat <<EOF
@@ -1790,6 +1989,21 @@ if [[ "$(git -C "$WORKTREE" rev-parse HEAD)" != "$head_before" ]]; then
   invalidate_checkpoint "$evidence_root"
   exit 5
 fi
+
+post_spark_ref_digest="$(compute_ref_digest "$WORKTREE")"
+if [[ "$post_spark_ref_digest" != "$pre_spark_ref_digest" ]]; then
+  {
+    echo "pre_spark_ref_digest=$pre_spark_ref_digest"
+    echo "post_spark_ref_digest=$post_spark_ref_digest"
+  } >"$attempt_dir/post-spark-ref-digest-violations.txt"
+  echo "REF NG: protected ref digest changed during implementation" >&2
+  snapshot_worktree "$WORKTREE" "$attempt_dir" "post-spark"
+  echo "STAGE: implementation REF_MUTATION_FORBIDDEN" >>"$attempt_dir/stage-result.txt"
+  invalidate_checkpoint "$evidence_root"
+  exit 5
+fi
+
+enforce_derived_target_closure "$WORKTREE" "post-spark"
 
 # process group reap(run_agent内)後、通常のgit status由来のscope closureより先に、
 # parent保持のpre-Spark生manifest digestと直接突き合わせる
