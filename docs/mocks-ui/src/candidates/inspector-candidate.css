@@ -1,0 +1,2 @@
+.inspector{border-left:1px solid var(--line)}
+.inspector .panel-head::before{background:var(--way-inspector)}
