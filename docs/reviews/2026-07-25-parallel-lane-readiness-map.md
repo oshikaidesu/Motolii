@@ -29,7 +29,7 @@ spike、M2の狭い修復、Vism作者入口を同じ待ち列へ入れない。
 
 | lane | 現在粒 | 状態 | 最初の成果 | STOP / 負例 | Human Response Frontier |
 |---|---|---|---|---|---|
-| PRODUCT-ASSET | `CU-0A06A / R3A` | `READY`（ledger `DO`） | [R3 readiness分割決定](2026-07-25-cu-0a06-r3-readiness-split-decision.md)に従い、未変更sourceへ6状態oracleを固定後、KEYS/LAYERS tool panel JSX/CSSだけを固定mock内で抽出する | TimelineCandidate全体、ruler/bar/key/playhead、Host projection/intent、Document/selection/Undo state、new PNG/goldenが必要ならSTOP | R3A ACCEPT後にCU-0A06BをREADY-RECHECK |
+| PRODUCT-ASSET | `CU-0A06B / R3B` | `READY-RECHECK` | [#347](https://github.com/oshikaidesu/Motolii/pull/347)で固定した独立KEYS/LAYERS JSX/CSSをbyte同一でproduct ownerへ移せるか、既存Easing ownership topologyとguardを再確認する | JSX/CSS内容変更、TimelineCandidate全体、Host projection/intent、Document/selection/Undo state、new PNG/goldenが必要ならSTOP | readiness成立時だけR3Bを`DO`。ACCEPT後にCU-0A07/R4をREADY-RECHECK |
 | VISUAL-RESPONSE | `G0-6H` | `READY-HUMAN` | 5 reference screen / 30 PNGへの人間応答を記録 | `U0e-3`以外を止めない。pixel testで人間判断を代替しない | visual tokenと認知の応答 |
 | AUTHORING-SCAFFOLD | `VSM-A4S` | `READY-SPEC` | 外部crate作者scaffoldと既存in-tree generatorの責任を分けたclosed contract | package/install/manifest、dynamic loader、第三者配布完成、実装を含めない | `VSM-A4I`後に外部crate生成からconformanceまでのdeveloper response |
 | DELEGATION-GUARD | `GR-D3 / #329` | `DONE` | [#336](https://github.com/oshikaidesu/Motolii/pull/336)で既知のworktree-root派生物だけを検収前にfail-closed清掃し、ignored監査を維持 | `target/**` allowlist、fingerprint除外、`.gitignore`／build script／製品code変更、未知entry削除は引き続きSTOP | 人間応答なし。実K0停止形、Grok `ACCEPT`、CI 4/4で完了 |

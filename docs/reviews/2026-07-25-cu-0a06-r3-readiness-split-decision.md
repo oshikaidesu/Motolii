@@ -1,6 +1,6 @@
 # CU-0A06 / R3 KEYS/LAYERS readiness分割決定（2026-07-25）
 
-状態: **決定 / CU-0A06A DO / CU-0A06B WAIT**
+状態: **決定 / CU-0A06A DONE / CU-0A06B READY-RECHECK**
 
 対象: M3 Presentation OwnershipのR3。固定commit
 `56c318edcddab7cf95d263cc2f7dd2b4e6791134`にあるKEYS/LAYERS tool panelを、
@@ -33,7 +33,17 @@ native Timeline本体、ruler、bar、key、playhead、packing stateから分離
    - mockをproduct export consumerへ反転し、mock側copyを0にする
    - existing ownership guardへ固定hash、import closure、Timeline-state識別子拒否を追加する
 
-R3AとR3Bを一つの変更許可へ束ねない。R3A完了後にR3Bを`READY-RECHECK`へ送る。
+R3AとR3Bを一つの変更許可へ束ねない。R3Aは
+[#347](https://github.com/oshikaidesu/Motolii/pull/347)、merge
+`3f3b174337ed6efbbc3c2e69ebf06109bf3119c0`で完了した。独立sourceは
+`docs/mocks-ui/src/candidates/KeyToolsCandidate.jsx`
+（SHA-256 `bf38656a99957a9f2d1465057820510f525fd394a3965cff9f291415223f87ba`）、
+panel専用CSSは`docs/mocks-ui/src/candidates/key-tools-candidate.css`
+（SHA-256 `f84eb7f98f05844fa3bfc72b702cee2709f1fc0bb9be614f2b01039a65b5190d`）
+として固定した。GrokはP0/P1/P2=0、`VERDICT: ACCEPT`、対象22件・全UI 54件・
+reference guard 100件・workspace全体を通過した。CU-0A06Bはこの二つのbytes、
+既存Easing product ownership topology、mock consumer反転、ownership guard closureを
+再確認してから`DO`へ上げる。
 
 ## 3. visual matrixの適用
 
