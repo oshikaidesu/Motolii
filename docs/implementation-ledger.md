@@ -117,7 +117,8 @@ P0I #170 → P7a → P7b → P7c → P7U
 | PRODUCT-ASSET | CU-0A05A | M3 / VS-1 / A / R2A | `DECIDE` | — | CU-0A04、固定SHA、直接移管契約。固定／抽出後hash、status、単一owner経路を先に決める。[旧隔離差分](reviews/2026-07-25-cu-0a05a-interrupted-worktree-restart-disposition.md)は証拠カプセル | decision merge後にmock-side extractionを再発注 |
 | VISUAL-RESPONSE | G0-6H | M3 evidence / VS-1 / visual | `DO / HUMAN` | — | 5 reference screenと30 PNG | U0e-3だけを解禁可 |
 | AUTHORING-SCAFFOLD | VSM-A4S | Vism / spec | `DO / SPEC` | — | VSM-A1/A2/A3、仕様と実装の別PR決定 | VSM-A4Iは全体レビュー後 |
-| SPATIAL-CONTRACT | K0 | M4 / contract spike | `DO` | [#167](https://github.com/oshikaidesu/Motolii/issues/167) | M2-D3、凍結ゲート解凍手続き | K1系を粒ごとに再判定 |
+| DELEGATION-GUARD | GR-D3 | supervised runner / derived output closure | `DO` | [#329](https://github.com/oshikaidesu/Motolii/issues/329) | GR-D2、K0で再現したworktree-root `target/`汚染 | 実停止経路でGrok到達を証明後、K0を再発注 |
+| SPATIAL-CONTRACT | K0 | M4 / contract spike | `WAIT` | [#167](https://github.com/oshikaidesu/Motolii/issues/167) | M2-D3、凍結ゲート解凍手続き、GR-D3 | fresh worktree/orderで再発注し、K1系を粒ごとに再判定 |
 | IDENTITY-CONTRACT | P0I | M5 / identity decision | `DECIDE` | [#170](https://github.com/oshikaidesu/Motolii/issues/170) | 凍結ゲート、2026-07-15決定。Text／Prototype側の未決は留保 | 意味decision後にfixture粒を分割して再判定 |
 | M2-REPAIR | GAP-23 | M2 / narrow repair | `WAIT` | — | 独立D1i-4 LookAt/Follow oracle分離の採番・完了 | GAP-23全25件を再発注し、後にGAP-24を判定 |
 | M2-REPAIR | GAP-24 | M2 / narrow repair | `WAIT` | — | GAP-23 | GAP-24後にclose |
