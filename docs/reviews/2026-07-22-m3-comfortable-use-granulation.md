@@ -241,11 +241,11 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 | CU-0A07S | `SPEC / DONE` | R4 Inspectorの独立source不在とA/B/C施工順を正本化 | CU-0A06B | oracle→mock React化→ownershipの停止線を固定 | — |
 | CU-0A07A | `ORACLE / DONE` | [#353](https://github.com/oshikaidesu/Motolii/pull/353)で未変更legacy Inspectorへ構造・style・ARIA・操作oracleを固定 | CU-0A07S | 5状態と主要操作を再現し、source/threshold/golden変更0 | — |
 | CU-0A07B | `ASSET / DONE` | [#355](https://github.com/oshikaidesu/Motolii/pull/355)で固定mock内でInspectorを同形React化しlegacy adapterを封じる | CU-0A07A | exact-count containment、双方向store 0、skeleton代用0 | — |
-| CU-0A07C | `ASSET / DO` | R4B source/CSSをproduct ownerへbyte同一移管 | CU-0A07B | mock copy 0、legacy runtime import 0、state owner維持 | source closureや公開境界の変更が必要 |
+| CU-0A07C | `ASSET / DONE` | [#357](https://github.com/oshikaidesu/Motolii/pull/357): R4B source/CSSをproduct ownerへbyte同一移管 | CU-0A07B | mock copy 0、legacy runtime import 0、state owner維持 | source closureや公開境界の変更が必要 |
 | CU-0A08B | `CORE / WAIT` | Browser fixture stateをrevision付きprojection/typed intentへ交換 | CU-0A04、CU-G09 | unknown/non-finite/oversized/dangling拒否、React semantic write 0 | catalog field不足をID/labelから推測したくなる |
 | CU-0A08E | `CORE / WAIT` | Easing trigger stateをHost projection/typed intentへ交換 | CU-0A05B、U4b契約 | key上/区間外disabled理由、curve state二重所有0 | Interp/区間意味の新契約が必要 |
 | CU-0A08K | `CORE / WAIT` | KEYS/LAYERS stateをHost projection/typed intentへ交換 | CU-0A06、既存U3a/U4a/U4b projection契約 | selection/packingをReactが所有しない、reloadでHostから復元 | native/React間に双方向storeが必要 |
-| CU-0A08I | `CORE / WAIT` | Inspectorのfixture stateを既決fieldだけのread-only Host projection/typed intent境界へ交換 | CU-0A07C、現行NodeDesc/DocParam | Document clone/history 0、unknown field typed拒否。実編集接続はU4a/U4cへ残す | 未決fieldを補わないと正しい製品面を表示できない |
+| CU-0A08I | `CORE / READY-RECHECK` | Inspectorのfixture stateを既決fieldだけのread-only Host projection/typed intent境界へ交換 | CU-0A07C、現行NodeDesc/DocParam | Document clone/history 0、unknown field typed拒否。実編集接続はU4a/U4cへ残す | 未決fieldを補わないと正しい製品面を表示できない |
 | CU-0A09 | `PRODUCT / WAIT` | R6 diagnostic routeをproduction navigationから分離 | CU-0A08B/E/K/I | 通常routeは正しい製品面、diagnosticはdevelopment限定 | diagnostic画面しか成立しない |
 
 React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`まで8ラベルを順番どおり持つ。
@@ -453,7 +453,7 @@ Claude Code `claude-fable-5`へ実ファイルと機械guardをread-onlyで再�
 ## 18. 現在の停止線
 
 - 現在sliceとblocking decisionは[縦slice実行方針](2026-07-24-m3-vertical-slice-execution-decision.md)を正とする
-- U0e-2R/U0e-2、CU-0A03/R0、CU-0A04/R1、CU-0A05A/R2A、CU-0A05B/R2B、CU-0A06A/R3A、CU-0A06B/R3B、CU-0A07S/R4S、CU-0A07A/R4A、CU-0A07B/R4Bは完了済みで再実行しない。現在粒は`CU-0A07C / R4C Inspector product ownership`の`DO`で、Motolii Studio Previewは未実装である
+- U0e-2R/U0e-2、CU-0A03/R0、CU-0A04/R1、CU-0A05A/R2A、CU-0A05B/R2B、CU-0A06A/R3A、CU-0A06B/R3B、CU-0A07S/R4S、CU-0A07A/R4A、CU-0A07B/R4B、CU-0A07C/R4Cは完了済みで再実行しない。現在粒は`CU-0A08I`の`READY-RECHECK`で、Motolii Studio Previewは未実装である
 - CU-0G03はユーザーによる実windowの実IME／VoiceOver／復帰審判で合格し、CU-0G04Bまで責任最小化短票どおり既存winit/wgpu/wry/macOS標準経路を使う単一runのmanifestでL3を閉じた。CU-0G05L reviewでL1正本とGPU rawの不足を検出し、`CU-0G02A`で正本を修正した。`CU-0G02BH`はwgpu標準queryだけのbounded harnessを固定し、`CU-0G02B`はその実行commitを使う同一session再実測をGrok P0/P1=0で閉じた。CU-0G05Lは8 retained pathを単一manifestへ束ね、Grok R2 P0/P1/P2=0で固定Mac prerequisite evidenceだけを限定確定した。W0b、H1b、製品window、Windows/追加hardwareは解禁しない
 - G0-6HはU0e-3だけを止める並行人間審判であり、R0/R1とPreview骨格を直列停止しない
 - CU-G01〜CU-G10は仕様判断粒で、コード実装と同時に行わない

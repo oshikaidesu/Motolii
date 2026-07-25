@@ -269,7 +269,7 @@ visual 1%は移管時の回帰検知上限であり、縮約再実装を1%まで
 R0〜R6のReact asset作業は、WebView platform受入やplugin公開契約を決めない範囲で実施できる。
 H1b以降はG0-9、D2/D3、U2h/U3a等の既存停止線を引き続き満たす必要がある。
 
-2026-07-25現在、R0、R1、R2A、R2B、R3A、R3Bは完了した。Browser、Easing trigger、
+2026-07-26現在、R0、R1、R2A、R2B、R3A、R3Bは完了した。Browser、Easing trigger、
 KEYS/LAYERSのReact sourceは
 `ui/motolii-web`が単独所有し、mockはproduct exportを一つのpackage import宣言から読む。
 Browserはfixed-source provenance、fixed commitに存在しないR2A由来のEasing triggerは
@@ -281,7 +281,7 @@ mock copy 0、Timeline state owner、product current-closureを固定した。�
 Easing旧path注入負例が同名bindingのparse errorでも緑になり得る観察を得たが、R3Bへ混ぜず
 独立guard repair候補とする。R4SでInspectorの独立React source不在を確認し、
 R4A unchanged-source oracle、R4B mock-side同形React化、R4C product ownershipへ分割した。
-R4Aは[#353](https://github.com/oshikaidesu/Motolii/pull/353)で完了し、R4Bは[#355](https://github.com/oshikaidesu/Motolii/pull/355)で固定mock内の同形React化と一方向legacy adapterを完了し、現在粒はR4Cの`DO`である。
+R4Aは[#353](https://github.com/oshikaidesu/Motolii/pull/353)で完了し、R4Bは[#355](https://github.com/oshikaidesu/Motolii/pull/355)で固定mock内の同形React化と一方向legacy adapterを完了し、R4Cは[#357](https://github.com/oshikaidesu/Motolii/pull/357)でbyte同一product ownershipとmock consumer反転を完了した。R4系は閉じ、次はCU-0A08IのHost projection / typed intent境界を`READY-RECHECK`として再判定する。
 Motolii Studio Previewは未実装である。
 
 ## 13. 既存文書との関係
