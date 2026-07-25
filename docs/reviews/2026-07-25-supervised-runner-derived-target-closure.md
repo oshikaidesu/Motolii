@@ -34,6 +34,23 @@ worktree-root派生物だけをfail-closedで清掃する。
 これにより保証は「ignored出力を見ない」ではなく「監督試行が残した既知の派生物は検収前に
 存在せず、それ以外のignored mutationは引き続き拒否する」となる。
 
+## runner自己更新のbootstrap
+
+runner自身を変更する粒では、親processはSpark起動前に旧scriptを読み込んでいるため、同じ試行中に
+新しい清掃処理を利用できない。これは通常ループを迂回する理由にはしない。
+
+1. Opus orderのin-loop commandは、worktree-root派生物を作らない専用runner testと構文／静的検査に限る。
+2. 旧runnerが実diffをscope closureし、checkpointを発行し、Grokが同じdiffをread-only検収する。
+3. `VERDICT: ACCEPT`かつP0/P1=0の後、commit前にCodexが外部`CARGO_TARGET_DIR`を指定して
+   `cargo test --locked --workspace`とdocs gateを実行し、証跡へ添付する。
+4. 新runner自身を使ったK0停止形の再現はdemonstration evidenceであり、Grok検収の代替にしない。
+
+直接Grokだけを呼ぶ、未検収commitを置く、temporary wrapperを信頼側へ置く、checkpointを手で作る、
+`target/**`を一時allowlistする方法は採らない。
+
+通常の発注でもcargoを実行する場合はworktree外の`CARGO_TARGET_DIR`を必須とする。GR-D3が清掃するのは
+既知のfixture三entryだけであり、Cargo本体の`CACHEDIR.TAG`、`debug/`、`tmp/`を清掃対象へ広げない。
+
 ## 変更許可と非目標
 
 変更候補は`delegate-cursor-supervised.sh`と同runnerの専用testだけ。正確なallowlistはOpus orderと
@@ -46,6 +63,7 @@ Codex precheckで現行コードへ再照合する。
 - ignored pathのfingerprint／raw manifest監査の削除または縮小
 - K0実装差分の採用、修正、copy
 - 汎用cache cleaner、background service、公開API
+- Cargo本体のbuild artifact清掃。発注側が外部`CARGO_TARGET_DIR`へ隔離する
 
 ## 負例と完了条件
 
