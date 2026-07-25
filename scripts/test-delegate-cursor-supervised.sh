@@ -34,8 +34,80 @@ sha256_file() {
   shasum -a 256 "$1" | awk '{print $1}'
 }
 
+GIT_UNSET=( -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY
+  -u GIT_ALTERNATE_OBJECT_DIRECTORIES -u GIT_COMMON_DIR -u GIT_NAMESPACE
+  -u GIT_CEILING_DIRECTORIES -u GIT_DISCOVERY_ACROSS_FILESYSTEM )
+
+git_fixture() {
+  local wt="$1"
+  shift
+  env "${GIT_UNSET[@]}" git --git-dir="$wt/.git" --work-tree="$wt" "$@"
+}
+
+canonical_ref_digest() {
+  local wt="$1"
+  local head_file show_ref_file combined_file sorted_file show_ref_status
+  head_file="$(mktemp "${TMP_ROOT}/ref-head.XXXXXX")"
+  show_ref_file="$(mktemp "${TMP_ROOT}/ref-show-ref.XXXXXX")"
+  combined_file="$(mktemp "${TMP_ROOT}/ref-combined.XXXXXX")"
+  sorted_file="$(mktemp "${TMP_ROOT}/ref-sorted.XXXXXX")"
+  if ! git_fixture "$wt" rev-parse HEAD >"$head_file"; then
+    fail "canonical ref digest: rev-parse HEAD failed"
+  fi
+  set +e
+  git_fixture "$wt" show-ref >"$show_ref_file" 2>/dev/null
+  show_ref_status=$?
+  set -e
+  if (( show_ref_status != 0 )); then
+    if (( show_ref_status == 1 )) && [[ ! -s "$show_ref_file" ]]; then
+      :
+    else
+      fail "canonical ref digest: show-ref failed (status $show_ref_status)"
+    fi
+  fi
+  cat "$head_file" "$show_ref_file" >"$combined_file"
+  LC_ALL=C sort -o "$sorted_file" "$combined_file"
+  shasum -a 256 "$sorted_file" | awk '{print $1}'
+}
+
+root_repo_git() {
+  env "${GIT_UNSET[@]}" git --git-dir="$ROOT_GIT_DIR" --work-tree="$ROOT_DIR" "$@"
+}
+
+canonical_root_ref_digest() {
+  local head_file show_ref_file combined_file sorted_file show_ref_status
+  head_file="$(mktemp "${TMP_ROOT}/root-ref-head.XXXXXX")"
+  show_ref_file="$(mktemp "${TMP_ROOT}/root-ref-show-ref.XXXXXX")"
+  combined_file="$(mktemp "${TMP_ROOT}/root-ref-combined.XXXXXX")"
+  sorted_file="$(mktemp "${TMP_ROOT}/root-ref-sorted.XXXXXX")"
+  if ! root_repo_git rev-parse HEAD >"$head_file"; then
+    fail "canonical root ref digest: rev-parse HEAD failed"
+  fi
+  set +e
+  root_repo_git show-ref >"$show_ref_file" 2>/dev/null
+  show_ref_status=$?
+  set -e
+  if (( show_ref_status != 0 )); then
+    if (( show_ref_status == 1 )) && [[ ! -s "$show_ref_file" ]]; then
+      :
+    else
+      fail "canonical root ref digest: show-ref failed (status $show_ref_status)"
+    fi
+  fi
+  cat "$head_file" "$show_ref_file" >"$combined_file"
+  LC_ALL=C sort -o "$sorted_file" "$combined_file"
+  shasum -a 256 "$sorted_file" | awk '{print $1}'
+}
+
+ROOT_GIT_DIR="$(git -C "$ROOT_DIR" rev-parse --absolute-git-dir)"
+ROOT_HEAD_BEFORE="$(root_repo_git rev-parse HEAD)"
+ROOT_REF_DIGEST_BEFORE="$(canonical_root_ref_digest)"
+
 FAKE_BIN="$TMP_ROOT/bin"
 CALL_LOG="$TMP_ROOT/calls.log"
+RM_ARGS_LOG="$TMP_ROOT/rm-args.log"
+RMDIR_ARGS_LOG="$TMP_ROOT/rmdir-args.log"
+export FAKE_TMP_ROOT="$TMP_ROOT"
 mkdir -p "$FAKE_BIN"
 
 cat >"$FAKE_BIN/claude" <<'EOF'
@@ -65,6 +137,151 @@ fi
 printf '%s\n' "${FAKE_GROK_OUTPUT:-VERDICT: ACCEPT}"
 EOF
 chmod +x "$FAKE_BIN/claude" "$FAKE_BIN/codex" "$FAKE_BIN/cursor-agent"
+
+cat >"$FAKE_BIN/rm" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+{
+  for arg in "$@"; do
+    printf '%s\0' "$arg"
+  done
+} >>"${FAKE_TMP_ROOT}/rm-args.log"
+/bin/rm "$@"
+EOF
+
+cat >"$FAKE_BIN/rmdir" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+{
+  for arg in "$@"; do
+    printf '%s\0' "$arg"
+  done
+} >>"${FAKE_TMP_ROOT}/rmdir-args.log"
+/bin/rmdir "$@"
+EOF
+chmod +x "$FAKE_BIN/rm" "$FAKE_BIN/rmdir"
+
+gr_d3_write_ledger() {
+  local wt="$1"
+  cat >"$wt/docs/implementation-ledger.md" <<'EOF'
+# ledger
+
+## 現在の並列レーン
+
+| lane | 現在粒 | Phase | 状態 | Issue | 依存確認 | 完了後 |
+|---|---|---|---|---|---|---|
+| PRODUCT | GRAIN-1 | M3 | `DO` | — | DEP-1 | next |
+| SPEC | SPEC-1 | Vism | `DO / SPEC` | — | DEP-1 | later |
+
+### 非dispatch補助表
+
+| 優先 | ID | Phase | 状態 | Issue | 依存確認 | 完了後 |
+|---|---|---|---|---|---|---|
+| 1 | GRAIN-1 | History | `WAIT` | — | blocked | later |
+
+## 発注依存証跡
+
+| ID | 状態 | 完了証拠 |
+|---|---|---|
+| DEP-1 | `DONE` | fixture |
+EOF
+}
+
+gr_d3_init_worktree() {
+  local wt="$1"
+  mkdir -p "$wt/docs"
+  git_fixture "$wt" init -q
+  git_fixture "$wt" config user.email test@example.com
+  git_fixture "$wt" config user.name test
+  git_fixture "$wt" checkout -q -b managed-grain
+  printf 'authority\n' >"$wt/AGENTS.md"
+  printf 'before\n' >"$wt/src.txt"
+  gr_d3_write_ledger "$wt"
+  git_fixture "$wt" add -A
+  git_fixture "$wt" commit -q -m init
+  printf '%s' "$(cd "$wt" && pwd -P)"
+}
+
+gr_d3_ready_order() {
+  local wt="$1" dest="$2"
+  local base_sha auth_hash task_hash
+  base_sha="$(git_fixture "$wt" rev-parse HEAD)"
+  auth_hash="$(sha256_file "$wt/AGENTS.md")"
+  task_hash="$(printf '%s' "$TASK" | shasum -a 256 | awk '{print $1}')"
+  cat >"$dest" <<EOF
+Objective: update the allowed fixture.
+GRAIN: GRAIN-1
+BASE_REF: refs/heads/managed-grain
+BASE_SHA: $base_sha
+DEPENDENCY: DEP-1
+AUTHORITY: AGENTS.md SHA256:$auth_hash
+ALLOWED_FILE: src.txt
+Non-goal: no adjacent edits.
+STOP: authority conflict.
+Test: git diff --check.
+ORDER: READY
+LOOP_PROFILE: opus-spark-grok
+ORDER_MANAGER_MODEL: claude-opus-5
+IMPLEMENTER_MODEL: gpt-5.3-codex-spark
+REVIEW_MODEL: cursor-grok-4.5-high
+TASK_SHA256: $task_hash
+CODEX PRECHECK: APPROVED
+EOF
+}
+
+assert_rm_never_removed_target_root() {
+  local wt="$1" label="$2"
+  local wt_real arg base
+  wt_real="$(cd "$wt" && pwd -P)"
+  [[ -f "$RM_ARGS_LOG" ]] || return 0
+  while IFS= read -r -d '' arg || [[ -n "${arg:-}" ]]; do
+    [[ -z "$arg" ]] && continue
+    [[ "$arg" == "--" ]] && continue
+    [[ "$arg" == -* ]] && continue
+    [[ "$arg" == "$wt_real/target" || "$arg" == "$wt_real/target/" ]] \
+      && fail "$label: rm invoked on target root: $arg"
+    if [[ "$arg" == */ ]]; then
+      base="$(basename "${arg%/}")"
+    else
+      base="$(basename "$arg")"
+    fi
+    [[ -n "$base" ]] || fail "$label: rm argument with empty basename: $arg"
+  done <"$RM_ARGS_LOG"
+}
+
+assert_rmdir_removed_target_root() {
+  local wt="$1" label="$2"
+  local wt_real target_root found=0 arg
+  wt_real="$(cd "$wt" && pwd -P)"
+  target_root="$wt_real/target"
+  [[ -f "$RMDIR_ARGS_LOG" ]] || fail "$label: missing rmdir log"
+  while IFS= read -r -d '' arg || [[ -n "${arg:-}" ]]; do
+    [[ -z "$arg" ]] && continue
+    if [[ "$arg" == "$target_root" ]]; then
+      found=1
+    fi
+  done <"$RMDIR_ARGS_LOG"
+  [[ "$found" -eq 1 ]] || fail "$label: rmdir never received target root (expected $target_root)"
+}
+
+create_three_known_target_entries() {
+  local wt="$1"
+  mkdir -p "$wt/target/scaffold-plugin-fixture/nested"
+  printf 'marker-scaffold\n' >"$wt/target/scaffold-plugin-fixture/nested/marker.txt"
+  mkdir -p "$wt/target/new-plugin-scaffold-test"
+  printf 'marker-scaffold-test\n' >"$wt/target/new-plugin-scaffold-test/marker.txt"
+  printf 'marker-tsv\n' >"$wt/target/d1i4-empty-classification.tsv"
+}
+
+assert_three_known_target_entries() {
+  local wt="$1" label="$2"
+  grep -Fqx 'marker-scaffold' "$wt/target/scaffold-plugin-fixture/nested/marker.txt" \
+    || fail "$label: scaffold marker missing"
+  grep -Fqx 'marker-scaffold-test' "$wt/target/new-plugin-scaffold-test/marker.txt" \
+    || fail "$label: scaffold-test marker missing"
+  grep -Fqx 'marker-tsv' "$wt/target/d1i4-empty-classification.tsv" \
+    || fail "$label: tsv marker missing"
+}
 
 WT="$TMP_ROOT/worktree"
 mkdir -p "$WT/docs"
@@ -128,7 +345,7 @@ EOF
 run_script() {
   : >"$CALL_LOG"
   set +e
-  env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
     PATH="$FAKE_BIN:/usr/bin:/bin" \
     FAKE_CALL_LOG="$CALL_LOG" \
     CURSOR_SUPERVISED_HEARTBEAT_SECONDS=1 \
@@ -145,7 +362,7 @@ assert_fragment "$CALL_LOG" "claude:-p --model claude-opus-5" "Opus is the order
 # Complete READY orderで正規metadataが追加されることを確認する。
 : >"$CALL_LOG"
 set +e
-env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" \
   FAKE_CALL_LOG="$CALL_LOG" \
   FAKE_OPUS_OUTPUT="$OPUS_READY" \
@@ -165,7 +382,7 @@ SPEC_ORDER="$TMP_ROOT/spec-order.md"
 sed 's/^GRAIN: GRAIN-1$/GRAIN: SPEC-1/' "$ORDER" >"$SPEC_ORDER"
 : >"$CALL_LOG"
 set +e
-env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" \
   FAKE_CALL_LOG="$CALL_LOG" \
   "$SCRIPT" execute "$WT" "$SPEC_ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
@@ -180,7 +397,7 @@ MISSING_DEP_ORDER="$TMP_ROOT/missing-dependency-order.md"
 sed 's/^DEPENDENCY: DEP-1$/DEPENDENCY: MISSING-DEP/' "$ORDER" >"$MISSING_DEP_ORDER"
 : >"$CALL_LOG"
 set +e
-env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" \
   FAKE_CALL_LOG="$CALL_LOG" \
   "$SCRIPT" execute "$WT" "$MISSING_DEP_ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
@@ -200,7 +417,7 @@ chmod +x "$SPARK_HOOK"
 
 : >"$CALL_LOG"
 set +e
-env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" \
   FAKE_CALL_LOG="$CALL_LOG" \
   FAKE_SPARK_HOOK="$SPARK_HOOK" \
@@ -226,7 +443,7 @@ EOF
 chmod +x "$GROK_HOOK"
 : >"$CALL_LOG"
 set +e
-env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" \
   FAKE_CALL_LOG="$CALL_LOG" \
   FAKE_GROK_HOOK="$GROK_HOOK" \
@@ -242,7 +459,7 @@ STALE_ORDER="$TMP_ROOT/stale-order.md"
 sed 's/^IMPLEMENTER_MODEL:.*/IMPLEMENTER_MODEL: gpt-5.6-terra/' "$ORDER" >"$STALE_ORDER"
 : >"$CALL_LOG"
 set +e
-env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" \
   FAKE_CALL_LOG="$CALL_LOG" \
   "$SCRIPT" execute "$WT" "$STALE_ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
@@ -253,11 +470,500 @@ assert_status 3 "$RUN_STATUS" "archived routing rejected"
 
 : >"$CALL_LOG"
 set +e
-env PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" CLAUDE_DELEGATED=1 \
+env "${GIT_UNSET[@]}" PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" CLAUDE_DELEGATED=1 \
   "$SCRIPT" prepare "$WT" "$ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
 assert_status 2 "$RUN_STATUS" "recursive Claude dispatch rejected"
 [[ ! -s "$CALL_LOG" ]] || fail "recursive dispatch must not invoke a model"
+
+# --- GR-D3 derived target closure oracles ---
+
+WT_D3="$TMP_ROOT/gr-d3-base"
+WT_D3="$(gr_d3_init_worktree "$WT_D3")"
+ORDER_D3="$TMP_ROOT/gr-d3-order.md"
+gr_d3_ready_order "$WT_D3" "$ORDER_D3"
+
+SPARK_POSITIVE="$TMP_ROOT/gr-d3-spark-positive.sh"
+cat >"$SPARK_POSITIVE" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "$WT_D3/target/scaffold-plugin-fixture/nested"
+printf 'nested\n' >"$WT_D3/target/scaffold-plugin-fixture/nested/file.txt"
+mkdir -p "$WT_D3/target/new-plugin-scaffold-test"
+printf 'spark-test\n' >"$WT_D3/target/new-plugin-scaffold-test/inside.txt"
+printf 'tsv-body\n' >"$WT_D3/target/d1i4-empty-classification.tsv"
+printf 'after\n' >>"$WT_D3/src.txt"
+EOF
+chmod +x "$SPARK_POSITIVE"
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_POSITIVE" \
+  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  "$SCRIPT" execute "$WT_D3" "$ORDER_D3" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 0 "$RUN_STATUS" "GR-D3 positive post-Spark closure"
+[[ ! -e "$WT_D3/target" ]] || fail "GR-D3 positive: target root still present"
+grep -Fqx 'after' "$WT_D3/src.txt" || fail "GR-D3 positive: allowed edit missing"
+latest_attempt="$(find "$ORDER_D3.evidence" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort | tail -n 1)"
+[[ -n "$latest_attempt" ]] || fail "GR-D3 ref digest oracle: missing execute attempt evidence"
+runner_ref_digest="$(tr -d '[:space:]' <"$latest_attempt/pre-spark-ref-digest.sha256")"
+canonical_ref_digest_value="$(canonical_ref_digest "$WT_D3")"
+[[ "$runner_ref_digest" == "$canonical_ref_digest_value" ]] \
+  || fail "GR-D3 ref digest recipe: runner=$runner_ref_digest canonical=$canonical_ref_digest_value"
+
+WT_EMPTY="$TMP_ROOT/gr-d3-empty-target"
+WT_EMPTY="$(gr_d3_init_worktree "$WT_EMPTY")"
+ORDER_EMPTY="$TMP_ROOT/gr-d3-order-empty.md"
+gr_d3_ready_order "$WT_EMPTY" "$ORDER_EMPTY"
+SPARK_EMPTY="$TMP_ROOT/gr-d3-spark-empty.sh"
+cat >"$SPARK_EMPTY" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "$WT_EMPTY/target"
+printf 'after\n' >>"$WT_EMPTY/src.txt"
+EOF
+chmod +x "$SPARK_EMPTY"
+: >"$RM_ARGS_LOG"
+: >"$RMDIR_ARGS_LOG"
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_EMPTY" \
+  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  "$SCRIPT" execute "$WT_EMPTY" "$ORDER_EMPTY" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 0 "$RUN_STATUS" "GR-D3 empty target oracle"
+[[ ! -e "$WT_EMPTY/target" ]] || fail "GR-D3 empty target: directory still present"
+assert_rm_never_removed_target_root "$WT_EMPTY" "GR-D3 empty target rm oracle"
+assert_rmdir_removed_target_root "$WT_EMPTY" "GR-D3 empty target rmdir oracle"
+
+WT_UNKNOWN="$TMP_ROOT/gr-d3-unknown"
+WT_UNKNOWN="$(gr_d3_init_worktree "$WT_UNKNOWN")"
+ORDER_UNKNOWN="$TMP_ROOT/gr-d3-order-unknown.md"
+gr_d3_ready_order "$WT_UNKNOWN" "$ORDER_UNKNOWN"
+SPARK_UNKNOWN="$TMP_ROOT/gr-d3-spark-unknown.sh"
+cat >"$SPARK_UNKNOWN" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "$WT_UNKNOWN/target/scaffold-plugin-fixture/nested"
+printf 'marker-scaffold\n' >"$WT_UNKNOWN/target/scaffold-plugin-fixture/nested/marker.txt"
+mkdir -p "$WT_UNKNOWN/target/new-plugin-scaffold-test"
+printf 'marker-scaffold-test\n' >"$WT_UNKNOWN/target/new-plugin-scaffold-test/marker.txt"
+printf 'marker-tsv\n' >"$WT_UNKNOWN/target/d1i4-empty-classification.tsv"
+printf 'unknown-marker\n' >"$WT_UNKNOWN/target/unknown-thing"
+printf 'after\n' >>"$WT_UNKNOWN/src.txt"
+EOF
+chmod +x "$SPARK_UNKNOWN"
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_UNKNOWN" \
+  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  "$SCRIPT" execute "$WT_UNKNOWN" "$ORDER_UNKNOWN" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 7 "$RUN_STATUS" "GR-D3 unknown child"
+assert_fragment "$TMP_ROOT/stderr.log" "unknown-thing" "GR-D3 unknown stderr"
+assert_three_known_target_entries "$WT_UNKNOWN" "GR-D3 unknown preservation"
+grep -Fqx 'unknown-marker' "$WT_UNKNOWN/target/unknown-thing" \
+  || fail "GR-D3 unknown: marker file missing"
+
+WT_SYMLINK_ROOT="$TMP_ROOT/gr-d3-symlink-root"
+WT_SYMLINK_ROOT="$(gr_d3_init_worktree "$WT_SYMLINK_ROOT")"
+ORDER_SYMLINK_ROOT="$TMP_ROOT/gr-d3-order-symlink-root.md"
+gr_d3_ready_order "$WT_SYMLINK_ROOT" "$ORDER_SYMLINK_ROOT"
+OUTSIDE_DIR="$TMP_ROOT/gr-d3-outside-marker"
+mkdir -p "$OUTSIDE_DIR"
+printf 'outside-marker\n' >"$OUTSIDE_DIR/marker.txt"
+SPARK_SYMLINK_ROOT="$TMP_ROOT/gr-d3-spark-symlink-root.sh"
+cat >"$SPARK_SYMLINK_ROOT" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+ln -s "$OUTSIDE_DIR" "$WT_SYMLINK_ROOT/target"
+printf 'after\n' >>"$WT_SYMLINK_ROOT/src.txt"
+EOF
+chmod +x "$SPARK_SYMLINK_ROOT"
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_SYMLINK_ROOT" \
+  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  "$SCRIPT" execute "$WT_SYMLINK_ROOT" "$ORDER_SYMLINK_ROOT" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 7 "$RUN_STATUS" "GR-D3 symlink target root"
+[[ -L "$WT_SYMLINK_ROOT/target" ]] || fail "GR-D3 symlink root: link removed"
+grep -Fqx 'outside-marker' "$OUTSIDE_DIR/marker.txt" || fail "GR-D3 symlink root: outside marker missing"
+
+WT_DANGLING="$TMP_ROOT/gr-d3-dangling-child"
+WT_DANGLING="$(gr_d3_init_worktree "$WT_DANGLING")"
+ORDER_DANGLING="$TMP_ROOT/gr-d3-order-dangling.md"
+gr_d3_ready_order "$WT_DANGLING" "$ORDER_DANGLING"
+SPARK_DANGLING="$TMP_ROOT/gr-d3-spark-dangling.sh"
+cat >"$SPARK_DANGLING" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "$WT_DANGLING/target/scaffold-plugin-fixture"
+printf 'real-scaffold\n' >"$WT_DANGLING/target/scaffold-plugin-fixture/marker.txt"
+ln -s "$WT_DANGLING/target/missing" "$WT_DANGLING/target/new-plugin-scaffold-test"
+printf 'marker-tsv\n' >"$WT_DANGLING/target/d1i4-empty-classification.tsv"
+printf 'after\n' >>"$WT_DANGLING/src.txt"
+EOF
+chmod +x "$SPARK_DANGLING"
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_DANGLING" \
+  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  "$SCRIPT" execute "$WT_DANGLING" "$ORDER_DANGLING" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 7 "$RUN_STATUS" "GR-D3 dangling known child"
+[[ -L "$WT_DANGLING/target/new-plugin-scaffold-test" ]] || fail "GR-D3 dangling: symlink removed"
+grep -Fqx 'real-scaffold' "$WT_DANGLING/target/scaffold-plugin-fixture/marker.txt" \
+  || fail "GR-D3 dangling: real sibling missing"
+
+WT_NESTED_LIVE="$TMP_ROOT/gr-d3-nested-live"
+WT_NESTED_LIVE="$(gr_d3_init_worktree "$WT_NESTED_LIVE")"
+ORDER_NESTED_LIVE="$TMP_ROOT/gr-d3-order-nested-live.md"
+gr_d3_ready_order "$WT_NESTED_LIVE" "$ORDER_NESTED_LIVE"
+SPARK_NESTED_LIVE="$TMP_ROOT/gr-d3-spark-nested-live.sh"
+cat >"$SPARK_NESTED_LIVE" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "$WT_NESTED_LIVE/target/scaffold-plugin-fixture"
+printf 'sibling\n' >"$WT_NESTED_LIVE/target/scaffold-plugin-fixture/sibling.txt"
+ln -s "$WT_NESTED_LIVE/target/scaffold-plugin-fixture/sibling.txt" \
+  "$WT_NESTED_LIVE/target/scaffold-plugin-fixture/live-link"
+mkdir -p "$WT_NESTED_LIVE/target/new-plugin-scaffold-test"
+printf 'marker-tsv\n' >"$WT_NESTED_LIVE/target/d1i4-empty-classification.tsv"
+printf 'after\n' >>"$WT_NESTED_LIVE/src.txt"
+EOF
+chmod +x "$SPARK_NESTED_LIVE"
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_NESTED_LIVE" \
+  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  "$SCRIPT" execute "$WT_NESTED_LIVE" "$ORDER_NESTED_LIVE" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 7 "$RUN_STATUS" "GR-D3 nested live symlink"
+[[ -L "$WT_NESTED_LIVE/target/scaffold-plugin-fixture/live-link" ]] \
+  || fail "GR-D3 nested live: symlink removed"
+grep -Fqx 'sibling' "$WT_NESTED_LIVE/target/scaffold-plugin-fixture/sibling.txt" \
+  || fail "GR-D3 nested live: sibling missing"
+
+WT_NESTED_DANGLING="$TMP_ROOT/gr-d3-nested-dangling"
+WT_NESTED_DANGLING="$(gr_d3_init_worktree "$WT_NESTED_DANGLING")"
+ORDER_NESTED_DANGLING="$TMP_ROOT/gr-d3-order-nested-dangling.md"
+gr_d3_ready_order "$WT_NESTED_DANGLING" "$ORDER_NESTED_DANGLING"
+SPARK_NESTED_DANGLING="$TMP_ROOT/gr-d3-spark-nested-dangling.sh"
+cat >"$SPARK_NESTED_DANGLING" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "$WT_NESTED_DANGLING/target/new-plugin-scaffold-test"
+printf 'keep-me\n' >"$WT_NESTED_DANGLING/target/new-plugin-scaffold-test/keep.txt"
+ln -s "$WT_NESTED_DANGLING/target/missing-inside" \
+  "$WT_NESTED_DANGLING/target/new-plugin-scaffold-test/dangle"
+mkdir -p "$WT_NESTED_DANGLING/target/scaffold-plugin-fixture"
+printf 'marker-tsv\n' >"$WT_NESTED_DANGLING/target/d1i4-empty-classification.tsv"
+printf 'after\n' >>"$WT_NESTED_DANGLING/src.txt"
+EOF
+chmod +x "$SPARK_NESTED_DANGLING"
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_NESTED_DANGLING" \
+  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  "$SCRIPT" execute "$WT_NESTED_DANGLING" "$ORDER_NESTED_DANGLING" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 7 "$RUN_STATUS" "GR-D3 nested dangling symlink"
+[[ -L "$WT_NESTED_DANGLING/target/new-plugin-scaffold-test/dangle" ]] \
+  || fail "GR-D3 nested dangling: symlink removed"
+grep -Fqx 'keep-me' "$WT_NESTED_DANGLING/target/new-plugin-scaffold-test/keep.txt" \
+  || fail "GR-D3 nested dangling: sibling missing"
+
+WT_TRACKED="$TMP_ROOT/gr-d3-tracked"
+WT_TRACKED="$(gr_d3_init_worktree "$WT_TRACKED")"
+ORDER_TRACKED="$TMP_ROOT/gr-d3-order-tracked.md"
+gr_d3_ready_order "$WT_TRACKED" "$ORDER_TRACKED"
+SPARK_TRACKED_SETUP="$TMP_ROOT/gr-d3-spark-tracked-setup.sh"
+cat >"$SPARK_TRACKED_SETUP" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'after\n' >>"$WT_TRACKED/src.txt"
+EOF
+chmod +x "$SPARK_TRACKED_SETUP"
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_TRACKED_SETUP" \
+  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  "$SCRIPT" execute "$WT_TRACKED" "$ORDER_TRACKED" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 0 "$RUN_STATUS" "GR-D3 tracked setup execute"
+mkdir -p "$WT_TRACKED/target"
+printf 'tracked-body\n' >"$WT_TRACKED/target/d1i4-empty-classification.tsv"
+git_fixture "$WT_TRACKED" add -f target/d1i4-empty-classification.tsv
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" \
+  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  "$SCRIPT" inspect "$WT_TRACKED" "$ORDER_TRACKED" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 7 "$RUN_STATUS" "GR-D3 tracked known path"
+assert_fragment "$TMP_ROOT/stderr.log" "tracked derived entry" "GR-D3 tracked message"
+grep -Fqx 'tracked-body' "$WT_TRACKED/target/d1i4-empty-classification.tsv" \
+  || fail "GR-D3 tracked: file content changed"
+git_fixture "$WT_TRACKED" rm --cached -f target/d1i4-empty-classification.tsv
+
+if [[ "$(id -u)" -eq 0 ]]; then
+  fail "GR-D3 removal failure test requires a non-root user"
+fi
+WT_REMOVAL="$TMP_ROOT/gr-d3-removal-fail"
+WT_REMOVAL="$(gr_d3_init_worktree "$WT_REMOVAL")"
+ORDER_REMOVAL="$TMP_ROOT/gr-d3-order-removal.md"
+gr_d3_ready_order "$WT_REMOVAL" "$ORDER_REMOVAL"
+SPARK_REMOVAL="$TMP_ROOT/gr-d3-spark-removal.sh"
+cat >"$SPARK_REMOVAL" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "$WT_REMOVAL/target/scaffold-plugin-fixture"
+printf 'm1\n' >"$WT_REMOVAL/target/scaffold-plugin-fixture/m.txt"
+mkdir -p "$WT_REMOVAL/target/new-plugin-scaffold-test"
+printf 'm2\n' >"$WT_REMOVAL/target/new-plugin-scaffold-test/m.txt"
+printf 'm3\n' >"$WT_REMOVAL/target/d1i4-empty-classification.tsv"
+chmod 555 "$WT_REMOVAL/target"
+if ( : >"$WT_REMOVAL/target/.probe" ) 2>/dev/null; then
+  echo "target directory remained writable after chmod 555" >&2
+  exit 1
+fi
+printf 'after\n' >>"$WT_REMOVAL/src.txt"
+EOF
+chmod +x "$SPARK_REMOVAL"
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_REMOVAL" \
+  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  "$SCRIPT" execute "$WT_REMOVAL" "$ORDER_REMOVAL" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+chmod u+w "$WT_REMOVAL/target" 2>/dev/null || true
+assert_status 7 "$RUN_STATUS" "GR-D3 deterministic removal failure"
+assert_fragment "$TMP_ROOT/stderr.log" "removal failed" "GR-D3 removal failure message"
+grep -Fqx 'm1' "$WT_REMOVAL/target/scaffold-plugin-fixture/m.txt" \
+  || fail "GR-D3 removal failure: content lost"
+
+WT_INSPECT_RESUME="$TMP_ROOT/gr-d3-inspect-resume"
+WT_INSPECT_RESUME="$(gr_d3_init_worktree "$WT_INSPECT_RESUME")"
+ORDER_INSPECT_RESUME="$TMP_ROOT/gr-d3-order-inspect-resume.md"
+gr_d3_ready_order "$WT_INSPECT_RESUME" "$ORDER_INSPECT_RESUME"
+SPARK_INSPECT_RESUME="$TMP_ROOT/gr-d3-spark-inspect-resume.sh"
+cat >"$SPARK_INSPECT_RESUME" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'after\n' >>"$WT_INSPECT_RESUME/src.txt"
+EOF
+chmod +x "$SPARK_INSPECT_RESUME"
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_INSPECT_RESUME" \
+  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  "$SCRIPT" execute "$WT_INSPECT_RESUME" "$ORDER_INSPECT_RESUME" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 0 "$RUN_STATUS" "GR-D3 inspect-resume setup execute"
+create_three_known_target_entries "$WT_INSPECT_RESUME"
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" \
+  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  "$SCRIPT" inspect "$WT_INSPECT_RESUME" "$ORDER_INSPECT_RESUME" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 0 "$RUN_STATUS" "GR-D3 inspect-resume closure"
+[[ ! -e "$WT_INSPECT_RESUME/target" ]] || fail "GR-D3 inspect-resume: target still present"
+
+WT_POST_GROK="$TMP_ROOT/gr-d3-post-grok"
+WT_POST_GROK="$(gr_d3_init_worktree "$WT_POST_GROK")"
+ORDER_POST_GROK="$TMP_ROOT/gr-d3-order-post-grok.md"
+gr_d3_ready_order "$WT_POST_GROK" "$ORDER_POST_GROK"
+SPARK_POST_GROK="$TMP_ROOT/gr-d3-spark-post-grok.sh"
+cat >"$SPARK_POST_GROK" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'after\n' >>"$WT_POST_GROK/src.txt"
+EOF
+chmod +x "$SPARK_POST_GROK"
+GROK_POST_GROK="$TMP_ROOT/gr-d3-grok-post-grok.sh"
+cat >"$GROK_POST_GROK" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "$WT_POST_GROK/target/scaffold-plugin-fixture"
+printf 'grok\n' >"$WT_POST_GROK/target/scaffold-plugin-fixture/g.txt"
+mkdir -p "$WT_POST_GROK/target/new-plugin-scaffold-test"
+printf 'grok2\n' >"$WT_POST_GROK/target/new-plugin-scaffold-test/g.txt"
+printf 'grok-tsv\n' >"$WT_POST_GROK/target/d1i4-empty-classification.tsv"
+EOF
+chmod +x "$GROK_POST_GROK"
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" \
+  FAKE_SPARK_HOOK="$SPARK_POST_GROK" FAKE_GROK_HOOK="$GROK_POST_GROK" \
+  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  "$SCRIPT" execute "$WT_POST_GROK" "$ORDER_POST_GROK" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 0 "$RUN_STATUS" "GR-D3 post-reaped-Grok closure"
+[[ ! -e "$WT_POST_GROK/target" ]] || fail "GR-D3 post-grok: target still present"
+
+WT_GROK_UNKNOWN="$TMP_ROOT/gr-d3-grok-unknown"
+WT_GROK_UNKNOWN="$(gr_d3_init_worktree "$WT_GROK_UNKNOWN")"
+ORDER_GROK_UNKNOWN="$TMP_ROOT/gr-d3-order-grok-unknown.md"
+gr_d3_ready_order "$WT_GROK_UNKNOWN" "$ORDER_GROK_UNKNOWN"
+SPARK_GROK_UNKNOWN="$TMP_ROOT/gr-d3-spark-grok-unknown.sh"
+cat >"$SPARK_GROK_UNKNOWN" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'after\n' >>"$WT_GROK_UNKNOWN/src.txt"
+EOF
+chmod +x "$SPARK_GROK_UNKNOWN"
+GROK_UNKNOWN="$TMP_ROOT/gr-d3-grok-unknown-hook.sh"
+cat >"$GROK_UNKNOWN" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "$WT_GROK_UNKNOWN/target"
+printf 'grok-unknown-marker\n' >"$WT_GROK_UNKNOWN/target/grok-unknown"
+EOF
+chmod +x "$GROK_UNKNOWN"
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" \
+  FAKE_SPARK_HOOK="$SPARK_GROK_UNKNOWN" FAKE_GROK_HOOK="$GROK_UNKNOWN" \
+  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  "$SCRIPT" execute "$WT_GROK_UNKNOWN" "$ORDER_GROK_UNKNOWN" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 7 "$RUN_STATUS" "GR-D3 post-grok unknown mutation"
+grep -Fqx 'grok-unknown-marker' "$WT_GROK_UNKNOWN/target/grok-unknown" \
+  || fail "GR-D3 grok unknown: mutation removed"
+[[ -f "${ORDER_GROK_UNKNOWN}.evidence/checkpoint.txt" ]] \
+  && fail "GR-D3 grok unknown: checkpoint must not remain after scope failure"
+
+WT_REF="$TMP_ROOT/gr-d3-ref-drift"
+WT_REF="$(gr_d3_init_worktree "$WT_REF")"
+ORDER_REF="$TMP_ROOT/gr-d3-order-ref.md"
+gr_d3_ready_order "$WT_REF" "$ORDER_REF"
+SPARK_REF="$TMP_ROOT/gr-d3-spark-ref.sh"
+cat >"$SPARK_REF" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+head="\$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
+  -u GIT_ALTERNATE_OBJECT_DIRECTORIES -u GIT_COMMON_DIR -u GIT_NAMESPACE \
+  -u GIT_CEILING_DIRECTORIES -u GIT_DISCOVERY_ACROSS_FILESYSTEM \
+  git --git-dir="$WT_REF/.git" --work-tree="$WT_REF" rev-parse HEAD)"
+env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
+  -u GIT_ALTERNATE_OBJECT_DIRECTORIES -u GIT_COMMON_DIR -u GIT_NAMESPACE \
+  -u GIT_CEILING_DIRECTORIES -u GIT_DISCOVERY_ACROSS_FILESYSTEM \
+  git --git-dir="$WT_REF/.git" --work-tree="$WT_REF" update-ref refs/heads/sneaky "\$head"
+printf 'after\n' >>"$WT_REF/src.txt"
+EOF
+chmod +x "$SPARK_REF"
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_REF" \
+  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  "$SCRIPT" execute "$WT_REF" "$ORDER_REF" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 5 "$RUN_STATUS" "GR-D3 ref digest drift"
+assert_fragment "$TMP_ROOT/stderr.log" "REF NG: protected ref digest changed during implementation" \
+  "GR-D3 ref stderr"
+
+WT_COMMIT="$TMP_ROOT/gr-d3-commit"
+WT_COMMIT="$(gr_d3_init_worktree "$WT_COMMIT")"
+ORDER_COMMIT="$TMP_ROOT/gr-d3-order-commit.md"
+gr_d3_ready_order "$WT_COMMIT" "$ORDER_COMMIT"
+SPARK_COMMIT="$TMP_ROOT/gr-d3-spark-commit.sh"
+cat >"$SPARK_COMMIT" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'after\n' >>"$WT_COMMIT/src.txt"
+env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
+  -u GIT_ALTERNATE_OBJECT_DIRECTORIES -u GIT_COMMON_DIR -u GIT_NAMESPACE \
+  -u GIT_CEILING_DIRECTORIES -u GIT_DISCOVERY_ACROSS_FILESYSTEM \
+  git --git-dir="$WT_COMMIT/.git" --work-tree="$WT_COMMIT" add src.txt
+env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
+  -u GIT_ALTERNATE_OBJECT_DIRECTORIES -u GIT_COMMON_DIR -u GIT_NAMESPACE \
+  -u GIT_CEILING_DIRECTORIES -u GIT_DISCOVERY_ACROSS_FILESYSTEM \
+  git --git-dir="$WT_COMMIT/.git" --work-tree="$WT_COMMIT" \
+  -c user.email=test@example.com -c user.name=test commit -q -m forbidden
+EOF
+chmod +x "$SPARK_COMMIT"
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_COMMIT" \
+  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  "$SCRIPT" execute "$WT_COMMIT" "$ORDER_COMMIT" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 5 "$RUN_STATUS" "GR-D3 commit rejection"
+grep -Fq -- "受注者がcommitを作成したため検収へ進みません" "$TMP_ROOT/stderr.log" \
+  || fail "GR-D3 commit forbidden message missing"
+
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  GIT_DIR="$WT_D3/.git" PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" \
+  "$SCRIPT" execute "$WT_D3" "$ORDER_D3" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 2 "$RUN_STATUS" "GR-D3 ambient GIT_DIR rejection"
+assert_fragment "$TMP_ROOT/stderr.log" "GIT_DIR" "GR-D3 ambient stderr"
+[[ ! -s "$CALL_LOG" ]] || fail "GR-D3 ambient: models must not run"
+
+TARGET_ALLOW_ORDER="$TMP_ROOT/gr-d3-target-allow-order.md"
+cp "$ORDER_D3" "$TARGET_ALLOW_ORDER"
+printf 'ALLOWED_FILE: target/scaffold-plugin-fixture\n' >>"$TARGET_ALLOW_ORDER"
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" \
+  "$SCRIPT" execute "$WT_D3" "$TARGET_ALLOW_ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 3 "$RUN_STATUS" "GR-D3 target allowlist rejection"
+assert_fragment "$TMP_ROOT/stderr.log" "ALLOWED_FILE covers derived target output" \
+  "GR-D3 target allowlist stderr"
+[[ ! -s "$CALL_LOG" ]] || fail "GR-D3 target allowlist: models must not run"
+
+grep -Fq -- '[@]:-' "$SCRIPT" && fail "GR-D3 static oracle: forbidden [@]:- token present in runner"
+
+ROOT_HEAD_AFTER="$(root_repo_git rev-parse HEAD)"
+ROOT_REF_DIGEST_AFTER="$(canonical_root_ref_digest)"
+[[ "$ROOT_HEAD_BEFORE" == "$ROOT_HEAD_AFTER" ]] \
+  || fail "implementation worktree ROOT HEAD changed during dedicated test run"
+[[ "$ROOT_REF_DIGEST_BEFORE" == "$ROOT_REF_DIGEST_AFTER" ]] \
+  || fail "implementation worktree ROOT ref digest changed during dedicated test run"
+echo "ROOT_HEAD_BEFORE=$ROOT_HEAD_BEFORE"
+echo "ROOT_REF_DIGEST_BEFORE=$ROOT_REF_DIGEST_BEFORE"
+echo "ROOT_HEAD_AFTER=$ROOT_HEAD_AFTER"
+echo "ROOT_REF_DIGEST_AFTER=$ROOT_REF_DIGEST_AFTER"
 
 echo "test-delegate-cursor-supervised: PASS"
