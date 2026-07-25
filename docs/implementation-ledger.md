@@ -159,6 +159,7 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | ID | 状態 | 完了証拠 |
 |---|---|---|
 | CU-0A04 | `DONE` | R1 Browser ownership完了。現在粒`CU-0A05A`の直前product asset |
+| GR-D2 | `DONE` | [監督ループ決定](reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md)へ変更許可閉集合、append-only証跡、timeout分離、検収者mutation拒否、resumeを継承済み |
 | M1-FREEZE-GATE | `DONE` | [凍結ゲート宣言](reviews/2026-07-10-freeze-gate-declaration.md)がM2〜M5並列laneを解禁 |
 | M2-D3 | `DONE` | [M2仕様 D3](specs/M2-document-model.md)のDocument→render graph接続が完了 |
 | M2-FOUNDATION-RECLOSURE | `DONE` | [M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み |
