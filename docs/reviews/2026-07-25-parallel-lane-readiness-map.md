@@ -29,7 +29,7 @@ spike、M2の狭い修復、Vism作者入口を同じ待ち列へ入れない。
 
 | lane | 現在粒 | 状態 | 最初の成果 | STOP / 負例 | Human Response Frontier |
 |---|---|---|---|---|---|
-| PRODUCT-ASSET | `CU-0A07 / R4` | `READY-RECHECK` | [#350](https://github.com/oshikaidesu/Motolii/pull/350)でR3Bを完了。Inspectorのlegacy parity oracle、独立React sourceの有無、CSS/model/test closure、state ownerを再確認する | skeleton代用、legacy runtime import、未決fieldの意味発明、Host projection/intent、new PNG/goldenが必要ならSTOP | readiness成立時だけR4を分割または`DO`へ上げる |
+| PRODUCT-ASSET | `CU-0A07A / R4A` | `READY`（ledger `DO`） | R4 readinessで独立React source不在を確認し、R4SでA/B/Cへ分割。未変更legacy sourceへ構造・style・ARIA・操作oracleを固定する | archived HTML、threshold、viewport/font、route/landmark/golden、製品sourceの変更が必要ならSTOP | R4A完了時だけR4Bを再判定する |
 | VISUAL-RESPONSE | `G0-6H` | `READY-HUMAN` | 5 reference screen / 30 PNGへの人間応答を記録 | `U0e-3`以外を止めない。pixel testで人間判断を代替しない | visual tokenと認知の応答 |
 | AUTHORING-SCAFFOLD | `VSM-A4S` | `READY-SPEC` | 外部crate作者scaffoldと既存in-tree generatorの責任を分けたclosed contract | package/install/manifest、dynamic loader、第三者配布完成、実装を含めない | `VSM-A4I`後に外部crate生成からconformanceまでのdeveloper response |
 | DELEGATION-GUARD | `GR-D3 / #329` | `DONE` | [#336](https://github.com/oshikaidesu/Motolii/pull/336)で既知のworktree-root派生物だけを検収前にfail-closed清掃し、ignored監査を維持 | `target/**` allowlist、fingerprint除外、`.gitignore`／build script／製品code変更、未知entry削除は引き続きSTOP | 人間応答なし。実K0停止形、Grok `ACCEPT`、CI 4/4で完了 |
