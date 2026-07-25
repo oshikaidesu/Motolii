@@ -115,7 +115,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 | lane | 現在粒 | Phase / slice / checklist | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
-| PRODUCT-ASSET | CU-0A06A | M3 / VS-1 / A / R3A | `DO` | — | [R3 readiness分割決定](reviews/2026-07-25-cu-0a06-r3-readiness-split-decision.md)で独立source不在、panel専用CSSの連続closure、Timeline側state owner、既存Playwright oracleを確認 | 未変更sourceへ6状態oracleを固定後、mock内でtool panel JSX/CSSだけを抽出する。完了後CU-0A06BをREADY-RECHECKへ送る |
+| PRODUCT-ASSET | CU-0A06B | M3 / VS-1 / A / R3B | `READY-RECHECK` | — | [#347](https://github.com/oshikaidesu/Motolii/pull/347)でCU-0A06Aを完了。独立KEYS/LAYERS JSX/CSS、6状態oracle、Timeline側state owner、mock-side current closureを固定 | R3Aのcomponent/CSSをbyte同一でproduct ownerへ移せるか再確認し、mock consumer反転・二重copy 0・ownership guard closureを一粒へ閉じる |
 | VISUAL-RESPONSE | G0-6H | M3 evidence / VS-1 / visual | `DO / HUMAN` | — | 5 reference screenと30 PNG | U0e-3だけを解禁可 |
 | AUTHORING-SCAFFOLD | VSM-A4S | Vism / spec | `DO / SPEC` | — | VSM-A1/A2/A3、仕様と実装の別PR決定 | VSM-A4Iは全体レビュー後 |
 | DELEGATION-GUARD | GR-D3 | supervised runner / derived output closure | `DONE` | [#329](https://github.com/oshikaidesu/Motolii/issues/329) | [#336](https://github.com/oshikaidesu/Motolii/pull/336)をmainへ統合。専用runner試験、workspace、docs、実K0停止形、Grok `ACCEPT`で閉包 | 解禁後のK0は[#338](https://github.com/oshikaidesu/Motolii/pull/338)で完了。既知派生物だけのfail-closed清掃を後続発注へ維持 |
