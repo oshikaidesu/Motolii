@@ -289,3 +289,4 @@
 | [2026-07-24-replaceable-semantic-seat-decision.md](2026-07-24-replaceable-semantic-seat-decision.md) | HVR-D04 Unit 8A — Host semantic seat、換装可能Provider、Effect／Filter分類とContent-Aware Scale候補 |
 | [2026-07-26-cu-0a08i-inspector-read-model-split-decision.md](2026-07-26-cu-0a08i-inspector-read-model-split-decision.md) | CU-0A08I Inspector read-model再判定・分割決定 |
 | [2026-07-26-cu-0a08is-inspector-read-model-inventory.md](2026-07-26-cu-0a08is-inspector-read-model-inventory.md) | CU-0A08IS Inspector read-model inventory・fixture拒否契約 |
+| [2026-07-26-u3a-1-headless-timeline-owner-visibility-split-decision.md](2026-07-26-u3a-1-headless-timeline-owner-visibility-split-decision.md) | U3a-1 headless Timeline owner/visibility分割決定 |
