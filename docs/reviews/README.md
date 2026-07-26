@@ -295,3 +295,4 @@
 | [2026-07-26-cu-102-fresh-layerid-addtrackitem-atomicity-decision.md](2026-07-26-cu-102-fresh-layerid-addtrackitem-atomicity-decision.md) | CU-102 fresh LayerId + AddTrackItem原子性決定 |
 | [2026-07-26-cu-g03-edit-durability-ordering-decision.md](2026-07-26-cu-g03-edit-durability-ordering-decision.md) | CU-G03 edit durability / publish順序決定 |
 | [2026-07-26-u3a-1-headless-timeline-owner-visibility-split-decision.md](2026-07-26-u3a-1-headless-timeline-owner-visibility-split-decision.md) | U3a-1 headless Timeline owner/visibility分割決定 |
+| [2026-07-27-cu-104-selection-publish-envelope-decision.md](2026-07-27-cu-104-selection-publish-envelope-decision.md) | CU-104 selection publish envelope決定 |
