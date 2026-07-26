@@ -63,6 +63,7 @@
 | [reviews/2026-07-23-vism-kit-rack-unification-decision.md](reviews/2026-07-23-vism-kit-rack-unification-decision.md) | 独立Plugin Setを廃止し、接続済み一式をRack型Vism Kitへ、無関係な推薦集合をcurator list／feedへ分離 | **用語・責任統合決定／形式未決** |
 | [community-distribution-model.md](community-distribution-model.md) | 中央人気／dedupeを持たず、分散地図、User library、Rack型Vism Kit、外部curator list／feed、Project Lockで多数作者と複数界隈をつなぐcommunity運用 | **運用・ガバナンス原則決定／protocol・schema・製品UI未決**(2026-07-23) |
 | [generative-user-boundary.md](generative-user-boundary.md) | ジェネラティブ表現とユーザー拡張の境界: Shape/SVG、p5.js型入力、Materialize/Live/Feedback/Simulation、Host責務 | **設計決定**(2026-07-15。未凍結runtimeの実装許可ではない) |
+| [reviews/2026-07-27-vism-authoring-journey-decision.md](reviews/2026-07-27-vism-authoring-journey-decision.md) | WGSL／Text／Path／Motion等の作者入口をpayload classとsemantic seatから分離し、推奨utility、typed identity、shader／asset closure、既知資産のauthoring時importを比較 | **比較中**(公開API・package形式・runtimeの実装許可ではない) |
 | [ui-interaction-language.md](ui-interaction-language.md) | M3のUI操作言語: 既知の外殻、可視の因果、Parameter Panelを表現のホームにするUI力学、共通component契約、Simple/Advanced、漏れ実装の拒否 | **設計決定**(2026-07-16、Parameter Panel力学を2026-07-18追補) |
 | [ui-visual-language.md](ui-visual-language.md) | M3の視覚言語: 高密度一覧、意味色、既存UIへの馴染み、contrast、token規約、参照範囲 | 設計基準(具体token値はM3視覚確定(G0-6)待ち) |
 | [ui-score-model.md](ui-score-model.md) | 時間面UI構成モデル: 固定Laneを所有者にしない時間投影、選択コンテキスト、Group関係ラベル、回帰審判 | **設計決定**(2026-07-17、2026-07-22用語訂正。公開API・schemaの実装許可ではない) |

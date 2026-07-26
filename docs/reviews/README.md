@@ -220,6 +220,7 @@
 | [2026-07-25-cu-0a06-r3-readiness-split-decision.md](2026-07-25-cu-0a06-r3-readiness-split-decision.md) | KEYS/LAYERS独立source不在を受け、R3をmock-side JSX/CSS抽出とbyte同一product ownershipへ分割する決定 |
 | [2026-07-25-cu-0a07-r4-readiness-split-decision.md](2026-07-25-cu-0a07-r4-readiness-split-decision.md) | Inspector独立React source不在を受け、R4を未変更source oracle、mock-side同形React化、byte同一product ownershipへ分割する決定 |
 | [2026-07-25-supervised-runner-derived-target-closure.md](2026-07-25-supervised-runner-derived-target-closure.md) | workspace試験が作る既知のworktree-root派生物を検収前にfail-closed清掃し、ignored scope監査を維持するGR-D3実行決定 |
+| [2026-07-27-vism-authoring-journey-decision.md](2026-07-27-vism-authoring-journey-decision.md) | 推奨pass shape／標準operation候補と独自WGSL、Text／Path／Motion作者入口、typed identity、自己完結shader／asset closure、既知資産のauthoring時importを分ける作者journey比較 |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |
 | [2026-07-21-m3-u1a-1-static-viewport-contract.md](2026-07-21-m3-u1a-1-static-viewport-contract.md) | U1a-1 静止viewport実装前契約 |

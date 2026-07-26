@@ -110,14 +110,14 @@ Vism実装の最初の意味課題はschemaではなく、次の三層を混ぜ�
 | VSM-A3-3 | Radial Repeater GPU画素意味の独立CPU oracle固定（union・premul・正準座標・純関数・P6/N8/N10） | VSM-A3-2 | testkit oracle／plugin最小bugfixのみ。schema・Panel・golden期待値書換え禁止。[A3S §10](2026-07-18-vism-a3s-layersource-lowering-spec.md#10-後続-vsm-a3-の契約境界分割発注表) | **実装完了**（本票） |
 | VSM-A3-4 | `first_party_catalog()`から`core.layer_source.radial_repeater` v1をA3D literal期待値へ直接assertする非UI Contract列挙fixture（P5） | VSM-A3-2 | Slint・U4a Panel・新公開API・`radial_repeater_contract()`追認を追加しない。[A3S §10](2026-07-18-vism-a3s-layersource-lowering-spec.md#10-後続-vsm-a3-の契約境界分割発注表) | **実装完了**（本票） |
 | VSM-A3 | A3D採択済みのRadial Repeater LayerSourceを、**A3-0完了後の公開Host cache**とA3S一般経路で別workspace crateに実装する | VSM-A3S, VSM-A3-0, VSM-A3-2 | VRAM常駐golden、Draft/Final同一関数、正準座標、private依存拒否。U4a前は現行Contract列挙fixtureだけを審判し、製品Parameter Panel適合はU4aへ分離する。[A3S §10](2026-07-18-vism-a3s-layersource-lowering-spec.md#10-後続-vsm-a3-の契約境界分割発注表) | **完了**（A3-1a／1b／1c／0／2／3／4） |
-| VSM-A4S | first-party無特権gateと**外部crate作者scaffold**の責任を仕様化する。既存`new-plugin.sh`のin-tree生成、package/install/manifest、loaderとは分離し、コードは触らない | VSM-A1, VSM-A2, VSM-A3 | 公開façadeだけを使う生成物、Host側conformance/purity/golden入口、private依存拒否、既存in-tree scaffold非破壊、A4Iの変更許可面とSTOPが未決なし | **仕様着手可**（A1の延期条件はA2/A3完了で解消） |
+| VSM-A4S | first-party無特権gateと**外部crate作者scaffold**の責任を仕様化する。既存`new-plugin.sh`のin-tree生成、package/install/manifest、loaderとは分離し、コードは触らない | VSM-A1, VSM-A2, VSM-A3 | [作者journey決定](2026-07-27-vism-authoring-journey-decision.md)のv1 source forkをRadial Repeater等からrebuild／restartまで通す。公開façadeだけを使う生成物、out-of-treeでも実行できるHost側conformance/purity/golden入口、private依存拒否、既存in-tree scaffold非破壊、A4Iの変更許可面とSTOPが未決なし。local Vism／package完成を称さない | **仕様着手可**（A1の延期条件はA2/A3完了で解消） |
 | VSM-A4I | A4Sに従い、同じ境界の外部crate作者scaffoldを実装する | VSM-A4S、§8.1の全体レビュー | (1)生成crateの通常依存は`motolii-plugin`だけ、dev/build依存・build.rs・private APIなし (2)Host側conformance/purity/golden入口を同時生成または型付き案内し、plugin crateからtestkitへ逆依存しない (3)first-party参照crateがHost内部crate／UI toolkit／OS・vendor APIへ依存するとCI赤 (4)package/install/manifestを生成せずVism完成を称さない (5)既存in-tree scaffoldの出力を壊さない | **WAIT**（A4Sと§8.1全体レビュー後。仕様と実装は別PR） |
 | VSM-A5 | kind横断の欠落／未来版／未知payload round-trip matrixを追加する | VSM-A1, VSM-A2, M2-D1f/D6 | open成功、byte意味保持、無関係編集成功、export型付き拒否、互換実装再導入後に評価復元 | M2再締結との調整待ち |
 | VSM-A6 | L3状態系を公開境界だけで実証する | SIM-1 | StateTrackをHostが所有し、plugin欠落時もDocument recipe保持。render pluginに隠れ可変状態なし | SIM-1待ち |
 | VSM-A7 | 現行`Document.bpm`から値列を導出し、既存`DataTrackId`→`DocParam::Data`結線でparameterを駆動する意味fixture。公開型・schemaは追加しない | VSM-A0 | 固定BPM→拍位置／値列がRationalTimeで決定的。既存param結線だけを使用し、「consumer Vism」や入力portを称さない。旧Project byte意味不変 | **完了**: [結果](2026-07-17-vism-a7-bpm-datatrack-spike.md)／test 3件 |
 | VSM-A7D | BPM／拍リズムの製品所有者をVism providerへ固定し、現行`Document.bpm`を互換入力として処分する。コードは触らない | VSM-A7, GR-PV | Coreは時刻／型／接続、BPM Rhythm Vismはrhythm data、HostはGrid projectionを所有。現行fieldの意味変更・migration・公開型追加なし | **決定完了**: [Vism / Kitモデル §9](../vism-kit-model.md#9-現行bpmからbpm-rhythm-vismへどう移るか) |
 | VSM-A8D | AE／AviUtl 2／Cavalryと主要第三者pluginをstress searchし、表現名でなく実行寿命とHost責任へ分類する。コードは触らない | VSM-A0, VSM-A3R | Glow／multi-pass、Kit級macro、外部job／Bake、temporal、Simulation、DeliveryをVism／Kit／Host tool／将来adapterへ処分し、package形式を逆算しない | **調査完了**: [需要調査](2026-07-23-first-party-vism-expression-demand-survey.md) |
-| VSM-A8G0 | Perceptual Glowをoracleに、単一用途APIでない共通multi-pass render capabilityの仕様境界を決める。コードは触らない | VSM-A8D | linear/HDR中間の決定責任、Host所有transient texture／pass scheduling／cache key、typed texture／mask入力、Quality縮退、予算拒否、色変換一元化の正負fixtureが未決なし。`GlowPlugin`、plugin内resource pool、毎frame生成を採らない | 仕様化待ち |
+| VSM-A8G0 | Perceptual Glowをoracleに、単一用途APIでない共通multi-pass render capabilityを、first／third-partyが同じように使うHost pass shapeとして仕様化する。コードは触らない | VSM-A8D | [作者journey決定](2026-07-27-vism-authoring-journey-decision.md)に従い、linear/HDR中間の決定責任、Host所有transient texture／pass scheduling／cache key、typed texture／mask入力、Quality縮退、予算拒否、色変換一元化の正負fixtureが未決なし。`GlowPlugin`、plugin内resource pool、毎frame生成、標準helperだけを表現上限にする設計を採らない | 仕様化待ち |
 | VSM-A8G1 | 採択済み共通multi-pass capabilityをHost公開境界へ実装する | VSM-A8G0, M4-K1a/K1b, M5中間形式決定 | Blur／Glow等の二つ以上のfixtureが同じHost所有resource経路を使い、loop内resource生成、同期readback、private依存、plugin内色変換が負例で落ちる。Draft／Finalは同一関数でQualityだけが異なる | **WAIT／M4・M5境界待ち** |
 | VSM-A8G2 | Perceptual Glowを別workspace crateのfirst-party pre-Vism Filterとして実装する | VSM-A4, VSM-A8G1 | 公開APIだけを使い、linear/HDR・alpha・mask・大半径・端部・非有限paramを独立oracleで審判。単一pass近似をFinalにせず、output color transformを含めない | VSM-A8G1待ち |
 | VSM-A8G3 | Glow実装を第三者と同じconformance、予算、性能、欠落経路で反対側検収する | VSM-A8G2 | first-party特例0、P0/P1=0、低予算の型付き拒否、cache/resource解放、preview/export一致を証跡化。合格前にpayload／containerを固定しない | VSM-A8G2待ち |
@@ -143,10 +143,11 @@ Phase Aの出口:
 | VSM-B2 | provider→consumerとmaterialize Kitの**方式決定fixture** | VSM-A7D, VSM-B0, VSM-B1 | BPM Rhythm Vism→Beat Pulseを代表fixtureに、(a)既存DataTrack→param、(b)入力portを持つconsumer plugin、(c)keyframe等を作るAuthoring Toolを比較し採否。(b)は公開API解凍、(c)はlive providerでないと明記。Kit identity採番、循環、欠落、展開後runtimeの意味表。コードは作らない | VSM-A7D/B0/B1待ち |
 | VSM-B2I | 採用方式のmaterialize Kit実装 | VSM-B2, M2-D2, M3-U9aまたは独立採択された同等のbatch preflight境界 | batch全体を開始snapshotへpreflight後だけ1 macro commit。途中command失敗、型不一致、循環、Cancel、staleでDocument／履歴変更ゼロ。現行`apply_command`逐次適用だけをatomic batchと称さない | **WAIT／atomic batch未実装** |
 | VSM-B3 | logical manifest、version、migration、依存解決の意味表。まだ直列化しない | VSM-B0〜B2 | package／entry／Kit／payload versionを分離。各fieldの作者、検査者、互換影響、未指定時とdowngrade／併存／循環の拒否表 | VSM-B2待ち |
-| VSM-B4 | payload classとfork capabilityを分類する | VSM-A3, VSM-A6, VSM-A8G3, VSM-B2 | Declarative、WGSL、source+Host build、WASM、nativeとBase／Optional／Fork capabilityの可搬性・権限・再現性・DXを別評価。multi-passを単一entryの偶然へ縮約しない | VSM-A6/A8G3待ち |
-| VSM-B5 | headless compatible runnerでUI／Document漏れを反証し、ISF／OpenFX adapter範囲を判定する | VSM-B2, VSM-B4 | Motolii UI／Documentなしで最小provider→consumerを評価。非対応能力は型付き診断。import／adapterのloss表 | VSM-B4待ち |
+| VSM-B4W | WGSL payloadの意味fixture。package schemaやloaderを作らず、shader closure、宣言binding適合、source authority／backend派生物、fork identity、GPU互換診断を比較する | VSM-B0, VSM-B1, VSM-A8G3 | global path／network依存0、別端末でsource authority再構成可能、派生GPU artifactはHost cacheだけ、raw WGSLは標準operationに制限されない。`PipelineCacheKey`／公開trait変更、container／manifest field予約なし | **WAIT／A8G3とB0/B1前に締結しない** |
+| VSM-B4 | payload classとfork capabilityを分類する | VSM-A3, VSM-A6, VSM-A8G3, VSM-B2, VSM-B4W | Declarative、WGSL、source+Host build、WASM、nativeとBase／Optional／Fork capabilityの可搬性・権限・再現性・DXを別評価。B4WのWGSLだけの結果を他payloadへ一般化せず、multi-passを単一entryの偶然へ縮約しない。Declarative例にはP6を消費するText recipeと既決`Vec<PathOp>`を合成するPath recipeを各1つ含め、cluster／vertex identityをrasterize前に保持する。新しい表現名kindは追加しない | VSM-A6/A8G3/B4W待ち |
+| VSM-B5 | headless compatible runnerでUI／Document漏れを反証し、ISF／OpenFX adapter範囲を判定する | VSM-B2, VSM-B4 | Motolii UI／Documentなしで最小provider→consumerを評価。GLSL／HLSL／ISF、SVG／Lottie等はruntime外部依存でなくauthoring時importとして比較し、非対応能力を型付き診断する。変換、source copy、由来、license claim、近似拒否、座標／時間／identity loss表。font／glyph／SVG等のasset closureをsystem path／networkなしで再構成する | VSM-B4待ち |
 | VSM-B3H | Motolii運営の常設配布backendへ依存しない原則の下でhostless distribution topologyを方式決定するfixture。Rack型Kit／curator list・feed／Project Lock／catalog／User library／artifact／install storeを分離し、まだ直列化しない | VSM-B3, VSM-B4 | 作者GitHub／静的HTTP／mirror／commercial local packageについて、source消失、tag差替え、offline、署名失効、lock再現、index競合を比較。read-only地図がloaderより先に成立する範囲、外部service依存、単一service消失後も残す正本・診断を明記。DL数、公式順位、中央dedupeを入れない。旧Plugin Setを別artifactへ戻さない | VSM-B3/B4待ち |
-| VSM-B6 | Phase Bの反対側レビュー | VSM-B0〜B5, VSM-B3H | 事実、転移条件、より小さい形式、fork分断、供給網、安全性を独立判定し、P0/P1未解決0 | VSM-B0〜B5/B3H待ち |
+| VSM-B6 | Phase Bの反対側レビュー | VSM-B0〜B5, VSM-B4W, VSM-B3H | 事実、転移条件、より小さい形式、fork分断、供給網、安全性を独立判定し、P0/P1未解決0 | VSM-B0〜B5/B4W/B3H待ち |
 
 VSM-B0〜B6とB3Hの意味決定ではRust struct、serde schema、公開enumを作らない。表・fixture・候補データだけで反証し、`BeatEvents`、`KitDefinition`、作者名、license等を現行`NodeDesc`へ足さない。実コードは独立したVSM-B2I以降である。`NodeDesc`はHostの評価／UI記述、manifestは配布責任であり、重なるfieldがあっても同一型とは限らない。`catalog`、`tap`、`lock`という歴史語からfile名やwire形式を逆算しない。
 
@@ -223,7 +224,8 @@ M4 K1a/K1b・M5中間形式決定後:
 公開境界の実証後:
   VSM-A1/A2 ─ VSM-B0 ─ VSM-B1 ─┐
   VSM-A7 ────────────────────────┴─ VSM-B2（方式決定）─ VSM-B3 ─┐
-  VSM-A3/A6/A8G3 ───────────────────────────┴─ VSM-B4 ─ VSM-B5 ├─ VSM-B6
+  VSM-A8G3 + VSM-B0/B1 ─ VSM-B4W ────────────────────────┐
+  VSM-A3/A6/A8G3 + VSM-B2 ────────────────────────┴─ VSM-B4 ─ VSM-B5 ├─ VSM-B6
                                                        └─ VSM-B3H ─┘
 
 atomic batch成立後:
