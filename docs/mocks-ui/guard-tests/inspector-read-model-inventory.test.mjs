@@ -583,10 +583,54 @@ function collectJsonKeys(value, out = new Set()) {
   return out;
 }
 
+const CU_TASK_ID_RE = /CU-[0-9A-Z]+(?:-[0-9A-Z]+)*/g;
+
+function staleEvaluationSegments(text) {
+  const segments = [];
+  for (const line of text.split("\n")) {
+    const sentences = [];
+    let sentStart = 0;
+    for (let i = 0; i < line.length; i++) {
+      if (line[i] === "。") {
+        sentences.push(line.slice(sentStart, i + 1));
+        sentStart = i + 1;
+      }
+    }
+    if (sentStart < line.length) {
+      sentences.push(line.slice(sentStart));
+    }
+    for (const sentence of sentences) {
+      const idMatches = [...sentence.matchAll(CU_TASK_ID_RE)];
+      if (idMatches.length <= 1) {
+        if (sentence.length > 0) {
+          segments.push(sentence);
+        }
+        continue;
+      }
+      let segStart = 0;
+      for (let j = 1; j < idMatches.length; j++) {
+        const cutAt = idMatches[j].index;
+        const piece = sentence.slice(segStart, cutAt);
+        if (piece.length > 0) {
+          segments.push(piece);
+        }
+        segStart = cutAt;
+      }
+      const tail = sentence.slice(segStart);
+      if (tail.length > 0) {
+        segments.push(tail);
+      }
+    }
+  }
+  return segments.filter((s) => s.length > 0);
+}
+
 function assertNoStale(text) {
-  for (const pattern of STALE_PATTERNS) {
-    if (pattern.test(text)) {
-      throw new Error(`stale pattern matched: ${pattern}`);
+  for (const segment of staleEvaluationSegments(text)) {
+    for (const pattern of STALE_PATTERNS) {
+      if (pattern.test(segment)) {
+        throw new Error(`stale pattern matched: ${pattern}`);
+      }
     }
   }
 }
@@ -896,6 +940,58 @@ test("T7 progress docs stale-free", () => {
     "docs/specs/M3-ui-integration.md",
     "docs/reviews/2026-07-25-parallel-lane-readiness-map.md",
   ];
+  assert.equal(STALE_PATTERNS.length, 5);
+  assert.equal(paths.length, 4);
+
+  const staleControls = [
+    ["S1", "CU-0A08IPは`DONE`。現在粒はCU-0A08ISで進行中である。"],
+    ["S2", "現在grainはCU-0A08ISである。"],
+    ["S3", "現在はCU-0A08ISで作業中である。"],
+    ["S4", "CU-0A08ISの現在状態は`DO`である。"],
+    ["S5", "| ORACLE-GUARD | CU-0A08IS | M3 | `DO` | — | |"],
+    [
+      "S6",
+      "READY-SPECの現行粒は完了しており、implementation ledger `DO` が残っている。",
+    ],
+  ];
+  for (const [label, sample] of staleControls) {
+    assert.throws(() => assertNoStale(sample), /stale pattern matched/, label);
+  }
+
+  const m3Spec = readFileSync(
+    join(repoRoot, "docs/specs/M3-ui-integration.md"),
+    "utf8",
+  );
+  const m3RegressionLine = m3Spec
+    .split("\n")
+    .find(
+      (line) =>
+        line.includes("CU-0A08IS") &&
+        line.includes("CU-0A08BP") &&
+        line.includes("`DO`"),
+    );
+  assert.ok(m3RegressionLine, "A1: unique M3-ui-integration regression line");
+
+  const acceptControls = [
+    ["A1", m3RegressionLine],
+    [
+      "A2",
+      "CU-0A08ISはinventoryを固定した。次のPRODUCT-ASSET粒は `CU-0A08BP`（`DO`）。",
+    ],
+    [
+      "A3",
+      "CU-0A08ISはinventoryを固定し、CU-0A08BPは`DO`である。",
+    ],
+    ["A4", "| CU-0A08IS | `DONE` |"],
+    [
+      "A5",
+      "READY-SPECはCU-0A08IS完了を記録し、次の実装粒はCU-0A08BPが`DO`である。",
+    ],
+  ];
+  for (const [label, sample] of acceptControls) {
+    assert.doesNotThrow(() => assertNoStale(sample), label);
+  }
+
   for (const rel of paths) {
     const text = readFileSync(join(repoRoot, rel), "utf8");
     try {
