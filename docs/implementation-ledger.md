@@ -123,7 +123,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | PRODUCT-ASSET | CU-G03D | M3 / VS-1 / SPEC / edit durability ordering decision | `DONE` | — | [CU-G03決定](reviews/2026-07-26-cu-g03-edit-durability-ordering-decision.md)で、既存D1m/D2/U2b-1 authorityへ照合し、単一command actionのdurability/publish順序とfailure authorityを確定 | 新payload、複数command耐久、CU-109 runtime配線を含めない |
 | PRODUCT-ASSET | CU-G03R | M2 prerequisite / committed Edit tail recovery guard | `DONE` | [#369](https://github.com/oshikaidesu/Motolii/pull/369) | catalog未反映committed tailをMainFile fast pathから既存replayへ送るprivate guard、stale-catalog負例、二重checkpoint対照。Grok ACCEPT P0/P1=0、CI 4/4 | catalog repair/truncate、新形式、GAP-24、poison/write拒否、CU-109は非目標のまま |
 | PRODUCT-ASSET | CU-101 | M3 / VS-1 / SPEC / Rectangle Place meaning | `DONE` | — | [U2b-2 Place product core再採択](reviews/2026-07-23-historical-d2-selection-timeline-lineage-recovery.md#3-u2b-2-place-product-core再採択) §3.2を現行authorityとして確認 | mandatory composition、top-level target、Rect recipe/size、canonical drop、Rectangle名、playhead〜composition endを閉じた。appearance/identity/durabilityは別粒 |
-| PRODUCT-ASSET | CU-102 | M3 / VS-1 / SPEC / fresh LayerId + AddTrackItem atomicity | `DO` | — | `CU-101`と`CU-G03`はDONE。歴史回収§3.1と既存D2/LayerIdTable/AddTrackItemへ照合 | live-next検査、失敗時counter/history/revision不変、journal互換だけを決定。CU-110実装を束ねない |
+| PRODUCT-ASSET | CU-102 | M3 / VS-1 / SPEC / fresh LayerId + AddTrackItem atomicity | `DONE` | — | [CU-102決定](reviews/2026-07-26-cu-102-fresh-layerid-addtrackitem-atomicity-decision.md)で歴史回収§3.1と既存D2/LayerIdTable/AddTrackItemへ照合 | fresh live-next一致+live不在、live mint 0、AddTrackItem 1件/apply_macro 1回、失敗不変、journal互換を閉じた。CU-110実装は非目標 |
 | PRODUCT-ASSET | CU-0A08IT | M3 / VS-1 / B / Direct Inspector connection | `WAIT` | — | CU-0A08IP `DONE` + U4a-2 Direct製品入口未成立 | Host transport・typed intent・JSX binding・`S`行は非目標のまま。Advanced入口のU4cはU2c-2依存 |
 | VISUAL-RESPONSE | G0-6H | M3 evidence / VS-1 / visual | `DO / HUMAN` | — | 5 reference screenと30 PNG | U0e-3だけを解禁可 |
 | AUTHORING-SCAFFOLD | VSM-A4S | Vism / spec | `DO / SPEC` | — | VSM-A1/A2/A3、仕様と実装の別PR決定 | VSM-A4Iは全体レビュー後 |
@@ -191,6 +191,7 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | CU-G03R | `DONE` | [#369](https://github.com/oshikaidesu/Motolii/pull/369)でcatalog未反映committed Edit tailをMainFile fast pathから既存replayへ送り、stale-catalog負例、main原本不変、純checkpoint・二重checkpoint対照、Grok ACCEPT P0/P1=0、CI 4/4を完了 |
 | CU-G03 | `DONE` | 子粒`CU-G03D`と`CU-G03R`が本表でともに`DONE` |
 | CU-101 | `DONE` | [U2b-2 Place product core再採択 §3.2](reviews/2026-07-23-historical-d2-selection-timeline-lineage-recovery.md#32-product-placeの閉じた意味)でtarget/start/duration/recipe/position/nameの閉じた値とappearance非目標を確認 |
+| CU-102 | `DONE` | [fresh LayerId + AddTrackItem原子性決定](reviews/2026-07-26-cu-102-fresh-layerid-addtrackitem-atomicity-decision.md)でclone候補、fresh live二条件、live mint 0、1 Command/1 macro、failure不変、既存journal互換を確定 |
 | U0a | `DONE` | [主クリティカルパス](#主クリティカルパス) Selected U series行の`U0a DONE`、[M3仕様 運用順](specs/M3-ui-integration.md)、[M3入場判定](#m3への入場判定) |
 | U0b-1 | `DONE` | [主クリティカルパス](#主クリティカルパス) Selected U series行の`U0b-1 DONE`、[M3仕様 運用順](specs/M3-ui-integration.md)、[M3入場判定](#m3への入場判定) |
 | U0b-2 | `DONE` | [主クリティカルパス](#主クリティカルパス) Selected U series行の`U0b-2 DONE`、[M3仕様 運用順](specs/M3-ui-integration.md)、[M3入場判定](#m3への入場判定) |
@@ -274,7 +275,7 @@ U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除
 | resource設定を出す | G0-2 + G0-8 + U0b + K1a → U0f。設定はUser settings、pressure実測値はTransient |
 | 重いpreviewを追従させる | U1b + U1c + U5 + K1d → U1g。project fps/audio clockを変えず表示frameだけ落とす |
 
-したがって現在の短い運用判断は、**CU-0A03 / R0からCU-0A07C / R4Cまでは完了済み。CU-0A08IP、`U3a-1S`/`U3a-1I`、`CU-G03D`/`CU-G03R`、親`CU-G03`、`CU-101`は`DONE`。次のPRODUCT-ASSET粒は`CU-102`（fresh LayerId + AddTrackItem原子性）を`DO / SPEC`とする。`CU-0A08IT`は`WAIT`（`U4a-2` Direct製品入口待ち）。`U2c-2`は`WAIT`（U4a-2 Direct + U4c Advanced）。G0-6HはU0e-3だけを止める。CU-109 runtime配線、CU-G09、CU-104は未着手のまま束ねない。Host transport、typed intent、JSX binding、`S`行の意味決定、Rust/schema/plugin変更を混ぜるならSTOPする。Motolii Studio Previewは未実装。**G0-6Hは同時に進められる人間審判だが、未完了でもR0〜R4やPreview骨格を止めず、U0e-3だけを止める。G0-9DはDistribution Readyまで`WAIT / HARDWARE`。`U2c-2`はVS-2候補かつ実製品入口待ちである。D1n、D5等の独立follow-upをVS-1の再停止理由へしない。
+したがって現在の短い運用判断は、**CU-0A03 / R0からCU-0A07C / R4Cまでは完了済み。CU-0A08IP、`U3a-1S`/`U3a-1I`、`CU-G03D`/`CU-G03R`、親`CU-G03`、`CU-101`、`CU-102`は`DONE`。次のPRODUCT-ASSET粒は別選定とする。`CU-0A08IT`は`WAIT`（`U4a-2` Direct製品入口待ち）。`U2c-2`は`WAIT`（U4a-2 Direct + U4c Advanced）。G0-6HはU0e-3だけを止める。CU-109 runtime配線、CU-G09、CU-104は未着手のまま束ねない。Host transport、typed intent、JSX binding、`S`行の意味決定、Rust/schema/plugin変更を混ぜるならSTOPする。Motolii Studio Previewは未実装。**G0-6Hは同時に進められる人間審判だが、未完了でもR0〜R4やPreview骨格を止めず、U0e-3だけを止める。G0-9DはDistribution Readyまで`WAIT / HARDWARE`。`U2c-2`はVS-2候補かつ実製品入口待ちである。D1n、D5等の独立follow-upをVS-1の再停止理由へしない。
 
 ## 更新規則
 

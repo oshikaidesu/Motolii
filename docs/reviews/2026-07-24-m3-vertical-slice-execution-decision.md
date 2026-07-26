@@ -106,7 +106,7 @@ VS-1には、実装orderより先に閉じる判断と順序改訂がある。�
 | Selected U seriesの順序 | CU-G02 | U4a/U4c/U2c-2へ先行する現行列と、VS-1に必要なU2h/Rectangle接続の矛盾を解消 | **DONE**。次PRODUCT-ASSET粒は`U3a-1`。[M3仕様 運用順](../specs/M3-ui-integration.md)、[implementation-ledger](../implementation-ledger.md)、[decision-index](../decision-index.md)を本変更で同時更新 |
 | journal durabilityとsnapshot publish順 | CU-G03 DONE / CU-109 WAIT | **CU-G03/D/R DONE**。単一command順序とcatalog未反映committed tail recovery guardを閉じた | [CU-G03決定](2026-07-26-cu-g03-edit-durability-ordering-decision.md)と[#369](https://github.com/oshikaidesu/Motolii/pull/369)を正とする。CU-109 runtime配線とUndo/Redo prepared-action順序は未完了 |
 | Browser catalog projection | CU-G09 | Rectangleを含むcardの型付きread modelとunknown/dangling拒否 | catalog ID/labelから意味を推測せず、projection契約決定までHost接続を停止 |
-| Rectangle Place意味とidentity | CU-101 DONE / CU-102 DO | target、start、duration、recipe、position、nameは歴史回収§3.2どおり確認済み。次にfresh LayerId、AddTrackItem原子性を閉じる | 既存Document意味だけで閉じ、appearance・公開raw mint・汎用transaction・CU-110実装を束ねない |
+| Rectangle Place意味とidentity | CU-101 DONE / CU-102 DONE | target、start、duration、recipe、position、nameは歴史回収§3.2どおり確認済み。[CU-102決定](2026-07-26-cu-102-fresh-layerid-addtrackitem-atomicity-decision.md)でfresh LayerIdとAddTrackItem原子性も閉じた | 既存Document意味だけで閉じ、appearance・公開raw mint・汎用transaction・CU-110実装を束ねない |
 | selection / Undo再投影 | CU-104 | commit/Undo/Redo後にTransient selectionと三面投影をどう更新するか | selectionをDocumentへ保存せず、policy決定までVS-1 E2Eを閉じない |
 
 上表は未決を決めたことにしない。各行を閉じる時はM3仕様または既存decisionへ結果を移し、
