@@ -205,10 +205,10 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 
 | 項目 | 内容 |
 |---|---|
-| 種類 / 状態 | `SPEC / DO`（CU-0A04 DONE） |
-| 一成果 | Browser itemごとのsubtype/availability/motion/impact/provider/tagをDocument外Host read modelへ閉じる |
-| authority | React直接移管契約 §7、G0-3分離、Browser既決表示 |
-| 変更面 | Host read-model decision、M3仕様/枝番表、decision index。Document/plugin公開契約は変更しない |
+| 種類 / 状態 | `SPEC / DONE`（CU-0A04 DONE、[CU-G09 Browser catalog projection契約決定](2026-07-26-cu-g09-browser-catalog-projection-contract-decision.md)） |
+| 一成果 | Browser catalog（`PluginCard`+`ElementCard`）のcarrier shape、`(scope_ref,item_id)` identity、fail-closed `B1`〜`B12`をDocument外Host read modelとして閉じた |
+| authority | React直接移管契約 §7、G0-3分離、Browser既決表示、CU-0A08IS §6a禁止key引き継ぎ |
+| 変更面 | [CU-G09決定](2026-07-26-cu-g09-browser-catalog-projection-contract-decision.md)、M3仕様/枝番表、decision index、implementation ledger。Document/plugin公開契約は変更しない |
 | 正例 | unknown/dangling/non-finite/oversizedをtyped拒否し、fixtureと製品が同じdecoderを使う |
 | 負例 | catalog ID/label/thumbnail token/indexから意味を推測、`??`でもっともらしく表示 |
 | STOP | 必要fieldがplugin/community公開契約またはDocument schema変更を要求 |
