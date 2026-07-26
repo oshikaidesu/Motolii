@@ -216,7 +216,8 @@ presentation ownership移管は次を全て満たして初めて合格とする�
 1. old path → product path → product export → mock consumerを列挙するprovenance manifestがある
 2. product runtime closureに`docs/mocks-ui`、`src/legacy`、raw HTML/script、archive importが無い
 3. mock側に同じcomponent/CSSの独立実装が無く、product exportを使う
-4. 固定fixtureのlandmark寸法が一致し、既存17-state visual matrixが各landmark 1%以下
+4. 固定fixtureのlandmark寸法が一致し、17-state visual matrixのうち対象surfaceに既存oracleが
+   あるstateを各landmark 1%以下または既存のcomputed style／ARIA／geometry oracleで審判する
 5. threshold、oracle commit、viewport、font、goldenを変更していない
 6. Storybook、keyboard、focus、selection、tab、search、preset操作が移管前と同じ
 7. product routeには正しい画面、diagnostic routeには縮約契約画面が表示される
@@ -226,7 +227,8 @@ presentation ownership移管は次を全て満たして初めて合格とする�
 11. 変更許可外、公開型、serde、Document、journal、plugin contractの差分が0
 12. read-only反対側レビューでP0/P1=0、Codex統合審査で本文書の各項を証跡付き確認する
 
-17-state visual matrixは次を閉集合とする。
+17-state visual matrixは全surfaceを横断する次の閉集合とする。一面の移管ごとに、legacy counterpartが
+存在しないstateへ新しいstored goldenを発明せず、そのsurfaceに既存のoracleがあるstateだけを適用する。
 
 - `initial`
 - Browser: `effects`、`create`、`media`、`grid`、`list`
@@ -238,6 +240,9 @@ presentation ownership移管は次を全て満たして初めて合格とする�
 各stateで`.browser`、`#inspector`、`.candidate-key-tools`、`#easing-panel`のうち表示対象を
 固定viewport、DPR 1、dark scheme、`ja-JP`、reduced motion、font ready後に比較する。
 非表示landmarkを空画像で合格させず、そのstateの表示契約に従って存在数0または1を明示する。
+KEYS/LAYERSはlegacy counterpartとstored PNGが存在しないため、R3Aで未変更sourceに対する6状態の
+computed style、ARIA、geometry oracleを既存Timeline Playwrightへ固定し、R3A抽出とR3B移管の
+両方で同じ期待値を変更せず再実行する。
 
 visual 1%は移管時の回帰検知上限であり、縮約再実装を1%まで近づければ直接移管と同等になる、という
 代替条件ではない。source provenance、single owner、closure合格が先である。
@@ -250,19 +255,34 @@ visual 1%は移管時の回帰検知上限であり、縮約再実装を1%まで
 2. **R1 Browser ownership**: Browserをproduct ownerへ移し、mockをconsumerへ反転。意味変更なし
 3. **R2A Easing trigger mock-side extraction**: archived HTMLのbutton DOM/class/SVG/ARIA/interactionを固定mock内で同形React化し、既存parityへ合格。product package、Host接続、visible summary追加なし
 4. **R2B Easing trigger ownership**: R2Aの独立React sourceだけをproduct ownerへ移し、mockをconsumerへ反転。popup全体をnative oracleとして固定。Host/User settings/D2接続は後続
-5. **R3 KEYS/LAYERS extraction**: native Timeline本体からReact tool panelだけを抽出・移管
-6. **R4 Inspector React化**: legacy DOM/scriptを固定モック内で同形Reactへ抽出後、product ownerへ移す
-7. **R5 projection/intent**: 一面ずつmock stateをHost read modelへ交換
-8. **R6 diagnostic routes**: 契約確認面をdevelopment専用routeへ分離
-9. **H1b WebView Host**: codec、offline bundle、focus/IME/AX、surface topologyへ接続
-10. **製品縦切り**: Rectangle D&D → D2 →同一LayerId Timeline/Inspector → key → easing → Undo
+5. **R3A KEYS/LAYERS mock-side extraction**: 未変更sourceへ6状態oracleを固定し、native Timeline本体からReact tool panelとpanel専用CSSだけを固定mock内で分離
+6. **R3B KEYS/LAYERS ownership**: R3Aの独立React source/CSSをbyte同一でproduct ownerへ移し、mockをconsumerへ反転
+7. **R4S Inspector split decision**: 独立source不在を確認し、R4A/R4B/R4Cの停止線を固定
+8. **R4A Inspector unchanged-source oracle**: legacy DOM/scriptを変更せず構造・style・ARIA・操作を固定
+9. **R4B Inspector mock React化**: 固定モック内で同形React化し、legacy adapterを一方向へ封じる
+10. **R4C Inspector ownership**: R4B source/CSSをbyte同一でproduct ownerへ移す
+11. **R5 projection/intent**: 一面ずつmock stateをHost read modelへ交換
+12. **R6 diagnostic routes**: 契約確認面をdevelopment専用routeへ分離
+13. **H1b WebView Host**: codec、offline bundle、focus/IME/AX、surface topologyへ接続
+14. **製品縦切り**: Rectangle D&D → D2 →同一LayerId Timeline/Inspector → key → easing → Undo
 
 R0〜R6のReact asset作業は、WebView platform受入やplugin公開契約を決めない範囲で実施できる。
 H1b以降はG0-9、D2/D3、U2h/U3a等の既存停止線を引き続き満たす必要がある。
 
-2026-07-25現在、R0とR1は完了し、Browserの固定sourceは`ui/motolii-web`が所有して
-mockがproduct exportを読む。固定source再照合によりR2はR2A/R2Bへ分割し、現在orderはR2Aである。
-R2以降とMotolii Studio Previewは未実装である。
+2026-07-26現在、R0、R1、R2A、R2B、R3A、R3Bは完了した。Browser、Easing trigger、
+KEYS/LAYERSのReact sourceは
+`ui/motolii-web`が単独所有し、mockはproduct exportを一つのpackage import宣言から読む。
+Browserはfixed-source provenance、fixed commitに存在しないR2A由来のEasing triggerは
+product current-closure provenanceで固定した。R3は独立source不在のためR3A/R3Bへ分割した。
+R3Aは[#347](https://github.com/oshikaidesu/Motolii/pull/347)でnative Timeline本体を持ち込まず
+tool panelとpanel専用CSSだけを分離し、6状態oracleとmock-side current closureを固定した。
+R3Bは[#350](https://github.com/oshikaidesu/Motolii/pull/350)でそのbytesをproduct ownerへ移し、
+mock copy 0、Timeline state owner、product current-closureを固定した。検収中に既存R2Bの
+Easing旧path注入負例が同名bindingのparse errorでも緑になり得る観察を得たが、R3Bへ混ぜず
+独立guard repair候補とする。R4SでInspectorの独立React source不在を確認し、
+R4A unchanged-source oracle、R4B mock-side同形React化、R4C product ownershipへ分割した。
+R4Aは[#353](https://github.com/oshikaidesu/Motolii/pull/353)で完了し、R4Bは[#355](https://github.com/oshikaidesu/Motolii/pull/355)で固定mock内の同形React化と一方向legacy adapterを完了し、R4Cは[#357](https://github.com/oshikaidesu/Motolii/pull/357)でbyte同一product ownershipとmock consumer反転を完了した。R4系は閉じた。CU-0A08I再判定では単一実装をSTOPし、CU-0A08IS read-model決定、CU-0A08IP fixture由来decoder、CU-0A08IT intent接続へ分割した。
+Motolii Studio Previewは未実装である。
 
 ## 13. 既存文書との関係
 

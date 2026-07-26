@@ -1,4 +1,10 @@
-import { useEffect, useMemo } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import parse, { domToReact } from "html-react-parser";
 import {
   LegacyBrowser,
@@ -16,6 +22,9 @@ import {
   legacyStyle,
 } from "./legacySource";
 import {
+  InspectorContext,
+} from "@motolii/motolii-web";
+import {
   ResizableLegacyApp,
   ResizableLegacyTimeline,
   ResizableLegacyWorkspace,
@@ -23,6 +32,104 @@ import {
 } from "../layout/ResizablePanelLayout.jsx";
 
 const initializationKey = Symbol.for("motolii.legacyHostBoundary.cleanup");
+const inspectorSinkKey = Symbol.for("motolii.legacyHostBoundary.inspector");
+
+const EasingTriggerContext = createContext(null);
+
+function EasingTriggerSlot({ Component }) {
+  const value = useContext(EasingTriggerContext);
+  return (
+    <Component
+      activeInterval={value?.activeInterval ?? null}
+      pressed={value?.pressed ?? false}
+    />
+  );
+}
+
+class ContainmentInitializationError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ContainmentInitializationError";
+  }
+}
+
+class EasingContainmentInitializationError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "EasingContainmentInitializationError";
+  }
+}
+
+const EASING_CONTAINMENT_RULES = [
+  {
+    anchor: 'button=$("#interval-easing")',
+    replacement: 'button=document.createElement("button")',
+  },
+  {
+    anchor: '$("#interval-easing").setAttribute("aria-pressed","false");',
+    replacement:
+      'document.createElement("button").setAttribute("aria-pressed","false");',
+  },
+  {
+    anchor: '$("#interval-easing").setAttribute("aria-pressed","true");',
+    replacement:
+      'document.createElement("button").setAttribute("aria-pressed","true");',
+  },
+  {
+    anchor: '$("#interval-easing").onclick=',
+    replacement: 'document.createElement("button").onclick=',
+  },
+  {
+    anchor: '$("#interval-easing").click()',
+    replacement: 'document.createElement("button").click()',
+  },
+];
+
+const INSPECTOR_CONTAINMENT_RULES = [
+  {
+    anchor:
+      '$("#inspector").innerHTML=inspector(mode); clearUndo(); bindInspector();',
+    replacement:
+      'document.createElement("aside").innerHTML=inspector(mode); clearUndo();window[Symbol.for("motolii.legacyHostBoundary.inspector")]?.publish({mode,state,setUndo,status,projectAutomation,applyScrubValue,setSurface,syncColorBook,setStageTool,renderPluginHistory,setMode});',
+  },
+  {
+    anchor:
+      'if(chip){chip.style.setProperty("--chip",state.selectedColor);chip.dataset.label=state.selectedColor}',
+    replacement:
+      'if(chip)window[Symbol.for("motolii.legacyHostBoundary.inspector")]?.refresh()',
+  },
+];
+
+function containAnchors(script, rules, label) {
+  for (const { anchor } of rules) {
+    let count = 0;
+    let index = script.indexOf(anchor);
+    while (index !== -1) {
+      count += 1;
+      index = script.indexOf(anchor, index + anchor.length);
+    }
+    if (count !== 1) {
+      const message = `${label} containment anchor ${JSON.stringify(anchor)} expected count 1, observed ${count}`;
+      if (label === "easing") {
+        throw new EasingContainmentInitializationError(message);
+      }
+      throw new ContainmentInitializationError(message);
+    }
+  }
+  let contained = script;
+  for (const { anchor, replacement } of rules) {
+    contained = contained.replace(anchor, replacement);
+  }
+  return contained;
+}
+
+function containEasingTrigger(script) {
+  return containAnchors(script, EASING_CONTAINMENT_RULES, "easing");
+}
+
+function containInspector(script) {
+  return containAnchors(script, INSPECTOR_CONTAINMENT_RULES, "inspector");
+}
 
 function matches(node, { id, className }) {
   if (node.type !== "tag") {
@@ -56,6 +163,8 @@ function createParserOptions(
   GraphViewComponent = null,
   TimelineComponent = null,
   resizableLayout = false,
+  EasingTriggerComponent = null,
+  onActiveIntervalChange = null,
 ) {
   const options = {
     replace(node) {
@@ -83,6 +192,7 @@ function createParserOptions(
           legacyCurveShelf: curveShelf
             ? domToReact([curveShelf], options)
             : null,
+          onActiveIntervalChange,
         };
         if (resizableLayout) {
           return (
@@ -99,6 +209,12 @@ function createParserOptions(
         matches(node, { id: "easing-panel" })
       ) {
         return <EasingGraphComponent />;
+      }
+      if (
+        EasingTriggerComponent &&
+        matches(node, { id: "interval-easing" })
+      ) {
+        return <EasingTriggerSlot Component={EasingTriggerComponent} />;
       }
       if (
         resizableLayout &&
@@ -138,7 +254,7 @@ function fixtureHash(fixture) {
   return normalized ? `#${normalized}` : "";
 }
 
-function executeTrustedFixtureScript(fixture) {
+function executeTrustedFixtureScript(fixture, script = legacyScript) {
   const host = document.querySelector(".app");
   if (!host || host[initializationKey]) {
     return () => {};
@@ -168,7 +284,7 @@ function executeTrustedFixtureScript(fixture) {
       `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`,
     );
     // sourceは上の静的importだけであり、外部HTMLや入力文字列は評価しない。
-    Function(`"use strict";\n${legacyScript}`)();
+    Function(`"use strict";\n${script}`)();
     host.dataset.parityReady = "true";
     initialized = true;
   } catch (error) {
@@ -206,9 +322,37 @@ function LegacyFixture({
   EasingGraphComponent,
   GraphViewComponent,
   TimelineComponent,
+  EasingTriggerComponent,
   resizableLayout,
 }) {
-  const content = useMemo(
+  const [activeInterval, setActiveInterval] = useState(null);
+  const [pressed, setPressed] = useState(false);
+  const [inspectorPayload, setInspectorPayload] = useState(null);
+  const [inspectorRefresh, setInspectorRefresh] = useState(0);
+
+  const containedScript = useMemo(() => {
+    let script = containInspector(legacyScript);
+    if (EasingTriggerComponent) {
+      script = containEasingTrigger(script);
+    }
+    return script;
+  }, [EasingTriggerComponent]);
+
+  useEffect(() => {
+    window[inspectorSinkKey] = {
+      publish: (payload) => {
+        setInspectorPayload(payload);
+      },
+      refresh: () => {
+        setInspectorRefresh((value) => value + 1);
+      },
+    };
+    return () => {
+      delete window[inspectorSinkKey];
+    };
+  }, []);
+
+  const parsedContent = useMemo(
     () =>
       parse(
         legacyBody,
@@ -218,6 +362,8 @@ function LegacyFixture({
           GraphViewComponent,
           TimelineComponent,
           resizableLayout,
+          EasingTriggerComponent,
+          setActiveInterval,
         ),
       ),
     [
@@ -226,18 +372,75 @@ function LegacyFixture({
       GraphViewComponent,
       TimelineComponent,
       resizableLayout,
+      EasingTriggerComponent,
     ],
   );
 
   useEffect(
-    () => executeTrustedFixtureScript(fixture),
-    [fixture],
+    () => executeTrustedFixtureScript(fixture, containedScript),
+    [fixture, containedScript],
   );
+
+  useEffect(() => {
+    if (!EasingTriggerComponent) {
+      return undefined;
+    }
+    const button = document.querySelector("#interval-easing");
+    if (!button) {
+      return undefined;
+    }
+    const openPanel = () => {
+      setPressed(true);
+      const panel = document.querySelector("#easing-panel");
+      panel?.classList.add("open");
+      panel?.setAttribute("aria-hidden", "false");
+    };
+    button.addEventListener("click", openPanel);
+    return () => {
+      button.removeEventListener("click", openPanel);
+    };
+  }, [EasingTriggerComponent]);
+
+  useEffect(() => {
+    if (!EasingTriggerComponent) {
+      return undefined;
+    }
+    const onCloseClick = (event) => {
+      if (event.target.closest("#close-easing")) {
+        setPressed(false);
+      }
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setPressed((current) => {
+          if (!current) {
+            return current;
+          }
+          return false;
+        });
+      }
+    };
+    document.addEventListener("click", onCloseClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("click", onCloseClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [EasingTriggerComponent]);
 
   return (
     <>
       <style data-legacy-host-boundary>{legacyStyle}</style>
-      {content}
+      <InspectorContext.Provider
+        value={{
+          payload: inspectorPayload,
+          refresh: inspectorRefresh,
+        }}
+      >
+        <EasingTriggerContext.Provider value={{ activeInterval, pressed }}>
+          {parsedContent}
+        </EasingTriggerContext.Provider>
+      </InspectorContext.Provider>
     </>
   );
 }
@@ -248,6 +451,7 @@ export function LegacyHostBoundaryScreen({
   EasingGraphComponent,
   GraphViewComponent,
   TimelineComponent,
+  EasingTriggerComponent,
   resizableLayout = false,
 }) {
   return (
@@ -258,6 +462,7 @@ export function LegacyHostBoundaryScreen({
       EasingGraphComponent={EasingGraphComponent}
       GraphViewComponent={GraphViewComponent}
       TimelineComponent={TimelineComponent}
+      EasingTriggerComponent={EasingTriggerComponent}
       resizableLayout={resizableLayout}
     />
   );

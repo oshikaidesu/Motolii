@@ -57,9 +57,9 @@ const EXPECTED_EASING_RUNTIME_HASHES = {
   [EXPECTED_EASING_MODEL_SOURCE]: "22a6745bcd77b6f71f5c62563b0165f6161a234abebd2a10f326d210a0a6fad9",
 };
 const EXPECTED_EASING_CLASSIFICATION =
-  "react-trigger-source-absent-native-popup-oracle";
+  "react-trigger-product-owned-native-popup-oracle";
 const EXPECTED_EASING_SOURCE_STATUS =
-  "independent-react-trigger-source-absent";
+  "product-owned-react-trigger-source";
 const EXPECTED_EASING_TRIGGER_AUTHORITY = {
   path: "docs/mocks/m3-vism-host-boundary.html",
   sha256: "a20bd36d6b8b241ef4ec21adda6b045e470bf89fbc78e2788207aa6d0875ec68",
@@ -69,11 +69,11 @@ const EXPECTED_EASING_TRIGGER_AUTHORITY = {
 const EXPECTED_EASING_COMPONENT_ROLE =
   "popup-native-oracle-not-trigger-source";
 const EXPECTED_EASING_PROMOTION_BOUNDARY = [
-  "Graph trigger/icon after mock-side same-shape React extraction",
+  "product-owned trigger/icon with mock consumer",
   "accessible object/channel and pressed/disabled state",
 ];
 const EXPECTED_EASING_NEXT_ACTION =
-  "mock-side-same-shape-react-trigger-extraction-and-parity-before-r2b";
+  "host-projection-and-intent-after-r2b";
 const EXPECTED_EASING_NATIVE_ORACLE = [
   "popup frame",
   "presets",
@@ -81,6 +81,35 @@ const EXPECTED_EASING_NATIVE_ORACLE = [
   "form",
   "curve renderer",
   "easing model",
+];
+const EXPECTED_EASING_TRIGGER_SOURCE =
+  "ui/motolii-web/src/candidates/EasingTriggerCandidate.jsx";
+const EXPECTED_EASING_TRIGGER_CSS_SOURCE =
+  "ui/motolii-web/src/candidates/easing-trigger-candidate.css";
+const MOCK_EASING_TRIGGER_SOURCE =
+  "docs/mocks-ui/src/candidates/EasingTriggerCandidate.jsx";
+const EXPECTED_EASING_TRIGGER_BUTTON_ATTRIBUTES = [
+  "aria-controls",
+  "aria-label",
+  "aria-pressed",
+  "className",
+  "data-info",
+  "disabled",
+  "id",
+];
+const EASING_CONTAINMENT_ANCHORS = [
+  'button=$("#interval-easing")',
+  '$("#interval-easing").setAttribute("aria-pressed","false");',
+  '$("#interval-easing").setAttribute("aria-pressed","true");',
+  '$("#interval-easing").onclick=',
+  '$("#interval-easing").click()',
+];
+const EASING_CONTAINMENT_REPLACEMENTS = [
+  'button=document.createElement("button")',
+  'document.createElement("button").setAttribute("aria-pressed","false");',
+  'document.createElement("button").setAttribute("aria-pressed","true");',
+  'document.createElement("button").onclick=',
+  'document.createElement("button").click()',
 ];
 const EXPECTED_TIMELINE_SOURCE = "docs/mocks-ui/src/candidates/TimelineCandidate.jsx";
 const EXPECTED_TIMELINE_CSS_SOURCE = "docs/mocks-ui/src/candidates/timeline-candidate.css";
@@ -107,8 +136,32 @@ const EXPECTED_TIMELINE_MODES = {
   layers: ["align", "stagger", "shift"],
 };
 const EXPECTED_TIMELINE_TEST_PATH = "docs/mocks-ui/tests/timeline-candidate.spec.js";
-const EXPECTED_INSPECTOR_CLASSIFICATION = "react-source-absent-legacy-parity-oracle";
-const EXPECTED_INSPECTOR_SOURCE_STATUS = "independent-react-source-absent";
+const EXPECTED_KEY_TOOLS_SOURCE = "ui/motolii-web/src/candidates/KeyToolsCandidate.jsx";
+const EXPECTED_KEY_TOOLS_CSS_SOURCE = "ui/motolii-web/src/candidates/key-tools-candidate.css";
+const MOCK_KEY_TOOLS_SOURCE = "docs/mocks-ui/src/candidates/KeyToolsCandidate.jsx";
+const MOCK_KEY_TOOLS_CSS_SOURCE = "docs/mocks-ui/src/candidates/key-tools-candidate.css";
+const EXPECTED_KEY_TOOLS_SHA256 =
+  "bf38656a99957a9f2d1465057820510f525fd394a3965cff9f291415223f87ba";
+const EXPECTED_KEY_TOOLS_CSS_SHA256 =
+  "f84eb7f98f05844fa3bfc72b702cee2709f1fc0bb9be614f2b01039a65b5190d";
+const EXPECTED_TIMELINE_CSS_BASE_SHA256 =
+  "ef984d9b365f4efbcb4bf8fc20034a0b54846ab4fb470ea8d6ec8b486aa71397";
+const EXPECTED_INSPECTOR_CLASSIFICATION = "react-product-owned-legacy-parity-oracle";
+const EXPECTED_INSPECTOR_SOURCE_STATUS = "product-owned-react-source";
+const EXPECTED_INSPECTOR_PROMOTION_BOUNDARY = [
+  "product-owned Inspector presentation subtree with mock consumer",
+  "InspectorContext one-way legacy adapter channel",
+];
+const EXPECTED_INSPECTOR_EXTERNAL_PACKAGES = ["react"];
+const MOCK_INSPECTOR_SOURCE = "docs/mocks-ui/src/candidates/InspectorCandidate.jsx";
+const EXPECTED_INSPECTOR_PRODUCT_SOURCE =
+  "ui/motolii-web/src/candidates/InspectorCandidate.jsx";
+const EXPECTED_INSPECTOR_PRODUCT_CSS =
+  "ui/motolii-web/src/candidates/inspector-candidate.css";
+const EXPECTED_INSPECTOR_SHA256 =
+  "1e0bdd3eebd665e517600af4db090f74d50951aef12fdd476e97a828de91a3e4";
+const EXPECTED_INSPECTOR_CSS_SHA256 =
+  "730e2861a893b2b07fa66d5acef0038a49bdcf337e8c5a037785b0a58d829cbe";
 const EXPECTED_INSPECTOR_LEGACY_CLOSURE = [
   "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
   "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
@@ -124,7 +177,7 @@ const EXPECTED_INSPECTOR_LEGACY_HASHES = {
 const EXPECTED_INSPECTOR_LEGACY_EXPORT = "LegacyInspector";
 const EXPECTED_INSPECTOR_SKELETON_PATH = "docs/mocks-ui/src/surfaces/InspectorSurface.jsx";
 const EXPECTED_INSPECTOR_SKELETON_HASH = "70e3f1094ae6188274779055d20385cccc2efabd7258b994eeba869e3ea82f90";
-const EXPECTED_INSPECTOR_NEXT_ACTION = "mock-side-same-shape-react-extraction-and-parity-before-r4";
+const EXPECTED_INSPECTOR_NEXT_ACTION = "host-projection-and-intent-after-r4c";
 const EXPECTED_INSPECTOR_PARITY_PATH = "docs/mocks-ui/tests/visual-parity.spec.js";
 const EXPECTED_INSPECTOR_REACT_ROUTE = "archive/all-surfaces";
 const EXPECTED_INSPECTOR_LEGACY_ROUTE = "all-surfaces";
@@ -221,6 +274,146 @@ function collectNamedExports(ast) {
 
 function ensureExactKeys(value, allowed) {
   assert.deepEqual(Object.keys(value).sort(), [...allowed].sort());
+}
+
+function countNonOverlapping(source, needle) {
+  let count = 0;
+  let index = source.indexOf(needle);
+  while (index !== -1) {
+    count += 1;
+    index = source.indexOf(needle, index + needle.length);
+  }
+  return count;
+}
+
+async function assertRuntimeClosureEntry(entry, fixedSourceCommit, expectedSha256) {
+  if (entry.currentSha256) {
+    ensureExactKeys(entry, ["path", "role", "sha256", "currentSha256"]);
+    assert.equal(entry.sha256, expectedSha256);
+    assert.equal(hashBytes(readBlobFromCommit(entry.path, fixedSourceCommit)), entry.sha256);
+    assert.equal(
+      hashBytes(await readFile(absoluteFromRelative(entry.path))),
+      entry.currentSha256,
+    );
+    return;
+  }
+  ensureExactKeys(entry, ["path", "role", "sha256"]);
+  assert.equal(entry.sha256, expectedSha256);
+  assert.equal(hashBytes(readBlobFromCommit(entry.path, fixedSourceCommit)), entry.sha256);
+  assert.equal(hashBytes(await readFile(absoluteFromRelative(entry.path))), entry.sha256);
+}
+
+function easingTriggerButtonAttributes(ast) {
+  const names = [];
+  const visit = (value) => {
+    if (!value || typeof value !== "object") {
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (
+      value.type === "JSXOpeningElement" &&
+      value.name.type === "JSXIdentifier" &&
+      value.name.name === "button"
+    ) {
+      for (const attribute of value.attributes) {
+        if (attribute.type === "JSXAttribute" && attribute.name.type === "JSXIdentifier") {
+          names.push(attribute.name.name);
+        }
+      }
+    }
+    Object.values(value).forEach(visit);
+  };
+  visit(ast);
+  return names.sort();
+}
+
+function sourceUsesCaptureAddEventListener(source) {
+  const ast = parseModule(source);
+  let captureListenerFound = false;
+
+  const thirdArgumentEnablesCapture = (argument) => {
+    if (!argument) {
+      return false;
+    }
+    if (argument.type === "BooleanLiteral" && argument.value === true) {
+      return true;
+    }
+    if (argument.type === "ObjectExpression") {
+      return argument.properties.some((property) => {
+        if (property.type !== "ObjectProperty" || property.computed) {
+          return false;
+        }
+        const keyName =
+          property.key.type === "Identifier"
+            ? property.key.name
+            : property.key.type === "StringLiteral"
+              ? property.key.value
+              : null;
+        if (keyName !== "capture") {
+          return false;
+        }
+        return property.value.type === "BooleanLiteral" && property.value.value === true;
+      });
+    }
+    return false;
+  };
+
+  const visit = (value) => {
+    if (!value || typeof value !== "object") {
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (
+      value.type === "CallExpression" &&
+      value.callee.type === "MemberExpression" &&
+      value.callee.computed === false &&
+      value.callee.property.type === "Identifier" &&
+      value.callee.property.name === "addEventListener" &&
+      value.arguments.length >= 3 &&
+      thirdArgumentEnablesCapture(value.arguments[2])
+    ) {
+      captureListenerFound = true;
+    }
+    Object.values(value).forEach(visit);
+  };
+
+  visit(ast);
+  return captureListenerFound;
+}
+
+function assertSingleOwnerSourceScan(easingTriggerSource, timelineSource, legacyHostSource) {
+  const forbiddenPatterns = [
+    /MutationObserver/,
+    /stopImmediatePropagation/,
+    /\b[A-Za-z]*[Tt]ick[A-Za-z]*\b/,
+  ];
+  for (const source of [easingTriggerSource, timelineSource, legacyHostSource]) {
+    for (const pattern of forbiddenPatterns) {
+      assert.ok(!pattern.test(source), `forbidden pattern ${pattern} in scanned source`);
+    }
+    assert.ok(
+      !sourceUsesCaptureAddEventListener(source),
+      "addEventListener must not use capture",
+    );
+  }
+  assert.ok(
+    !/<EasingTriggerSlot[^>]*\bkey=/.test(legacyHostSource),
+    "EasingTriggerSlot must not receive a key prop",
+  );
+  const slotSection = legacyHostSource.split("function EasingTriggerSlot")[1]?.split(
+    "function createParserOptions",
+  )[0];
+  assert.ok(slotSection);
+  assert.ok(
+    !/<Component[^>]*\bkey=/.test(slotSection),
+    "EasingTriggerSlot Component must not receive a key prop",
+  );
 }
 
 function relFromRepo(absolutePath) {
@@ -591,6 +784,7 @@ async function validateInventory(manifest, options = {}) {
     inspectorLegacySourceAstSource,
     inspectorSkeletonAstSource,
     inspectorParityAstSource,
+    inspectorAstSource,
     panelLayoutAstSource,
     panelLayoutCssSource,
     panelLayoutTestAstSource,
@@ -603,6 +797,10 @@ async function validateInventory(manifest, options = {}) {
     stageSurfaceAstSource,
     nativeVisualParityAstSource,
     nativeTimelineTestAstSource,
+    easingTriggerAstSource,
+    keyToolsAstSource,
+    keyToolsCssSource,
+    legacyHostAstSource,
     fixedSourceCommit = manifest.fixedSourceCommit,
   } = options;
 
@@ -750,6 +948,7 @@ async function validateInventory(manifest, options = {}) {
     "requiredNextAction",
     "nativeOracle",
     "behavioralEvidence",
+    "triggerSource",
   ]);
   assert.equal(easing.id, "easing");
   assert.equal(easing.classification, EXPECTED_EASING_CLASSIFICATION);
@@ -816,6 +1015,66 @@ async function validateInventory(manifest, options = {}) {
   ensureExactKeys(easing.behavioralEvidence, ["path", "route"]);
   assert.deepEqual(easing.behavioralEvidence, manifest.behavioralTests[0]);
 
+  ensureExactKeys(easing.triggerSource, [
+    "componentPath",
+    "componentExport",
+    "runtimeClosure",
+    "localImports",
+    "externalPackages",
+    "provenanceRole",
+  ]);
+  assert.equal(easing.triggerSource.componentPath, EXPECTED_EASING_TRIGGER_SOURCE);
+  assert.equal(easing.triggerSource.componentExport, "EasingTriggerCandidate");
+  assert.equal(easing.triggerSource.provenanceRole, "product-owned-current-closure");
+  const expectedTriggerRuntimeOrder = [
+    EXPECTED_EASING_TRIGGER_SOURCE,
+    EXPECTED_EASING_TRIGGER_CSS_SOURCE,
+  ];
+  assert.equal(easing.triggerSource.runtimeClosure.length, expectedTriggerRuntimeOrder.length);
+  for (let index = 0; index < expectedTriggerRuntimeOrder.length; index += 1) {
+    const expectedPath = expectedTriggerRuntimeOrder[index];
+    const entry = easing.triggerSource.runtimeClosure[index];
+    ensureExactKeys(entry, ["path", "role", "currentSha256"]);
+    assert.equal(entry.path, expectedPath);
+    assert.equal(entry.role, "runtime");
+    assert.equal(
+      hashBytes(await readFile(absoluteFromRelative(entry.path))),
+      entry.currentSha256,
+    );
+    assert.ok(!("sha256" in entry));
+  }
+  assert.equal(easing.triggerSource.localImports.length, 1);
+  ensureExactKeys(easing.triggerSource.localImports[0], ["kind", "source", "specifiers"]);
+  assert.equal(easing.triggerSource.localImports[0].kind, "css-side-effect");
+  assert.equal(easing.triggerSource.localImports[0].source, EXPECTED_EASING_TRIGGER_CSS_SOURCE);
+  assert.deepEqual(easing.triggerSource.localImports[0].specifiers, []);
+  assert.deepEqual(easing.triggerSource.externalPackages, []);
+
+  const easingTriggerAst = parseModule(easingTriggerAstSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_EASING_TRIGGER_SOURCE),
+    "utf8",
+  ));
+  assert.ok(collectNamedExports(easingTriggerAst).has("EasingTriggerCandidate"));
+  const easingTriggerImports = collectCandidateImports(
+    easingTriggerAst,
+    absoluteFromRelative(EXPECTED_EASING_TRIGGER_SOURCE),
+  );
+  assert.deepEqual(easingTriggerImports.externalPackages, []);
+  assert.deepEqual(Object.keys(easingTriggerImports.localImports), [
+    EXPECTED_EASING_TRIGGER_CSS_SOURCE,
+  ]);
+  assert.deepEqual(
+    easingTriggerButtonAttributes(easingTriggerAst),
+    EXPECTED_EASING_TRIGGER_BUTTON_ATTRIBUTES,
+  );
+  const easingTriggerRaw = easingTriggerAstSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_EASING_TRIGGER_SOURCE),
+    "utf8",
+  );
+  for (const forbidden of ["document.", "window.", "useState", "useEffect", "useRef", "onClick"]) {
+    assert.ok(!easingTriggerRaw.includes(forbidden), `forbidden token ${forbidden}`);
+  }
+
   const easingAst = parseModule(easingAstSource ?? await readFile(
     absoluteFromRelative(easing.componentPath),
     "utf8",
@@ -857,30 +1116,127 @@ async function validateInventory(manifest, options = {}) {
     "nativeOracle",
     "modes",
     "behavioralEvidence",
+    "panelSource",
   ]);
   assert.equal(keysLayers.id, "keys-layers");
   assert.equal(keysLayers.classification, "react-subtree-extraction-native-timeline-oracle");
   assert.equal(keysLayers.componentPath, EXPECTED_TIMELINE_SOURCE);
   assert.equal(keysLayers.componentExport, "TimelineCandidate");
-  assert.deepEqual(keysLayers.externalPackages, ["react"]);
+  assert.deepEqual(keysLayers.externalPackages, ["react", "@motolii/motolii-web"]);
   assert.deepEqual(keysLayers.promotionBoundary, EXPECTED_TIMELINE_PROMOTION_BOUNDARY);
   assert.deepEqual(keysLayers.nativeOracle, EXPECTED_TIMELINE_NATIVE_ORACLE);
   ensureExactKeys(keysLayers.modes, ["keys", "layers"]);
   assert.deepEqual(keysLayers.modes, EXPECTED_TIMELINE_MODES);
   assert.deepEqual(keysLayers.behavioralEvidence, manifest.behavioralTests[1]);
 
+  ensureExactKeys(keysLayers.panelSource, [
+    "componentPath",
+    "componentExport",
+    "runtimeClosure",
+    "localImports",
+    "externalPackages",
+    "provenanceRole",
+  ]);
+  assert.equal(keysLayers.panelSource.componentPath, EXPECTED_KEY_TOOLS_SOURCE);
+  assert.equal(keysLayers.panelSource.componentExport, "KeyToolsCandidate");
+  assert.equal(
+    keysLayers.panelSource.provenanceRole,
+    "product-owned-current-closure",
+  );
+  const expectedPanelRuntimeOrder = [
+    EXPECTED_KEY_TOOLS_SOURCE,
+    EXPECTED_KEY_TOOLS_CSS_SOURCE,
+  ];
+  assert.equal(
+    keysLayers.panelSource.runtimeClosure.length,
+    expectedPanelRuntimeOrder.length,
+  );
+  for (let index = 0; index < expectedPanelRuntimeOrder.length; index += 1) {
+    const expectedPath = expectedPanelRuntimeOrder[index];
+    const entry = keysLayers.panelSource.runtimeClosure[index];
+    ensureExactKeys(entry, ["path", "role", "currentSha256"]);
+    assert.equal(entry.path, expectedPath);
+    assert.equal(entry.role, "runtime");
+    assert.equal(
+      hashBytes(await readFile(absoluteFromRelative(entry.path))),
+      entry.currentSha256,
+    );
+    if (entry.path === EXPECTED_KEY_TOOLS_SOURCE) {
+      assert.equal(entry.currentSha256, EXPECTED_KEY_TOOLS_SHA256);
+    }
+    if (entry.path === EXPECTED_KEY_TOOLS_CSS_SOURCE) {
+      assert.equal(entry.currentSha256, EXPECTED_KEY_TOOLS_CSS_SHA256);
+    }
+    assert.ok(!("sha256" in entry));
+  }
+  assert.equal(keysLayers.panelSource.localImports.length, 1);
+  ensureExactKeys(keysLayers.panelSource.localImports[0], [
+    "kind",
+    "source",
+    "specifiers",
+  ]);
+  assert.equal(keysLayers.panelSource.localImports[0].kind, "css-side-effect");
+  assert.equal(
+    keysLayers.panelSource.localImports[0].source,
+    EXPECTED_KEY_TOOLS_CSS_SOURCE,
+  );
+  assert.deepEqual(keysLayers.panelSource.localImports[0].specifiers, []);
+  assert.deepEqual(keysLayers.panelSource.externalPackages, []);
+
+  const keyToolsAst = parseModule(
+    keyToolsAstSource ?? await readFile(absoluteFromRelative(EXPECTED_KEY_TOOLS_SOURCE), "utf8"),
+  );
+  assert.ok(collectNamedExports(keyToolsAst).has("KeyToolsCandidate"));
+  const keyToolsImports = collectCandidateImports(
+    keyToolsAst,
+    absoluteFromRelative(EXPECTED_KEY_TOOLS_SOURCE),
+  );
+  assert.deepEqual(keyToolsImports.externalPackages, []);
+  assert.deepEqual(Object.keys(keyToolsImports.localImports), [
+    EXPECTED_KEY_TOOLS_CSS_SOURCE,
+  ]);
+  assert.equal(countJsxClass(keyToolsAst, "candidate-key-tools"), 1);
+  assert.equal(countJsxClass(keyToolsAst, "candidate-key-tools-open"), 1);
+  const keyToolsRaw = keyToolsAstSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_KEY_TOOLS_SOURCE),
+    "utf8",
+  );
+  for (const forbidden of [
+    "document.",
+    "window.",
+    "useState",
+    "useEffect",
+    "useRef",
+    "useMemo",
+    "useReducer",
+    "keyToolsOpen",
+    "selectedKeys",
+    "selectedObjects",
+    "applyKeyOperation",
+    "applyLayerOperation",
+  ]) {
+    assert.ok(!keyToolsRaw.includes(forbidden), `forbidden token ${forbidden}`);
+  }
+  const keyToolsCss = keyToolsCssSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_KEY_TOOLS_CSS_SOURCE),
+    "utf8",
+  );
+  assert.ok(hasCssSelectorRoot(keyToolsCss, ".candidate-key-tools"));
+  assert.ok(hasCssSelectorRoot(keyToolsCss, ".candidate-key-tools-open"));
+
   const expectedTimelineRuntimeOrder = [EXPECTED_TIMELINE_SOURCE, EXPECTED_TIMELINE_CSS_SOURCE];
   assert.equal(keysLayers.runtimeClosure.length, expectedTimelineRuntimeOrder.length);
   for (let index = 0; index < expectedTimelineRuntimeOrder.length; index += 1) {
     const expectedPath = expectedTimelineRuntimeOrder[index];
     const entry = keysLayers.runtimeClosure[index];
-    ensureExactKeys(entry, ["path", "role", "sha256"]);
     assert.equal(entry.path, expectedPath);
     assert.equal(entry.role, "runtime");
-    assert.equal(entry.sha256, EXPECTED_TIMELINE_RUNTIME_HASHES[expectedPath]);
     assert.ok(!entry.path.includes("/legacy/") && !entry.path.includes("/archive/"));
-    assert.equal(hashBytes(readBlobFromCommit(entry.path, fixedSourceCommit)), entry.sha256);
-    assert.equal(hashBytes(await readFile(absoluteFromRelative(entry.path))), entry.sha256);
+    await assertRuntimeClosureEntry(
+      entry,
+      fixedSourceCommit,
+      EXPECTED_TIMELINE_RUNTIME_HASHES[expectedPath],
+    );
   }
 
   assert.equal(keysLayers.localImports.length, 1);
@@ -898,18 +1254,36 @@ async function validateInventory(manifest, options = {}) {
     timelineAst,
     absoluteFromRelative(keysLayers.componentPath),
   );
-  assert.deepEqual(timelineImports.externalPackages, ["react"]);
-  assert.deepEqual(Object.keys(timelineImports.localImports), [EXPECTED_TIMELINE_CSS_SOURCE]);
+  assert.deepEqual(timelineImports.externalPackages, ["@motolii/motolii-web", "react"]);
+  assert.deepEqual(Object.keys(timelineImports.localImports), [
+    EXPECTED_TIMELINE_CSS_SOURCE,
+  ]);
   assert.equal(timelineImports.localImports[EXPECTED_TIMELINE_CSS_SOURCE].length, 0);
-  assert.equal(countJsxClass(timelineAst, "candidate-key-tools"), 1);
-  assert.equal(countJsxClass(timelineAst, "candidate-key-tools-open"), 1);
+  assert.equal(countJsxClass(timelineAst, "candidate-key-tools"), 0);
+  assert.equal(countJsxClass(timelineAst, "candidate-key-tools-open"), 0);
 
   const cssSource = timelineCssSource ?? await readFile(
     absoluteFromRelative(EXPECTED_TIMELINE_CSS_SOURCE),
     "utf8",
   );
-  assert.ok(hasCssSelectorRoot(cssSource, ".candidate-key-tools"));
-  assert.ok(hasCssSelectorRoot(cssSource, ".candidate-key-tools-open"));
+  assert.ok(!hasCssSelectorRoot(cssSource, ".candidate-key-tools"));
+  assert.ok(!hasCssSelectorRoot(cssSource, ".candidate-key-tools-open"));
+  const baseCssLines = readBlobFromCommit(
+    EXPECTED_TIMELINE_CSS_SOURCE,
+    fixedSourceCommit,
+  )
+    .toString("utf8")
+    .split("\n");
+  const reconstructedTimelineCss = [
+    ...baseCssLines.slice(0, 714),
+    keyToolsCss.trimEnd(),
+    "",
+    ...baseCssLines.slice(872),
+  ].join("\n");
+  assert.equal(
+    hashBytes(Buffer.from(reconstructedTimelineCss, "utf8")),
+    EXPECTED_TIMELINE_CSS_BASE_SHA256,
+  );
 
   const timelineTestAst = parseModule(await readFile(
     absoluteFromRelative(keysLayers.behavioralEvidence.path),
@@ -927,24 +1301,99 @@ async function validateInventory(manifest, options = {}) {
     "legacyExport",
     "rejectedSkeleton",
     "requiredNextAction",
+    "panelSource",
     "behavioralEvidence",
   ]);
   assert.equal(inspector.id, "inspector");
   assert.equal(inspector.classification, EXPECTED_INSPECTOR_CLASSIFICATION);
   assert.equal(inspector.sourceStatus, EXPECTED_INSPECTOR_SOURCE_STATUS);
-  assert.deepEqual(inspector.promotionBoundary, []);
+  assert.deepEqual(inspector.promotionBoundary, EXPECTED_INSPECTOR_PROMOTION_BOUNDARY);
   assert.equal(inspector.legacyExport, EXPECTED_INSPECTOR_LEGACY_EXPORT);
   assert.equal(inspector.requiredNextAction, EXPECTED_INSPECTOR_NEXT_ACTION);
   assert.equal(inspector.legacyOracleClosure.length, EXPECTED_INSPECTOR_LEGACY_CLOSURE.length);
   for (let index = 0; index < EXPECTED_INSPECTOR_LEGACY_CLOSURE.length; index += 1) {
     const expectedPath = EXPECTED_INSPECTOR_LEGACY_CLOSURE[index];
     const entry = inspector.legacyOracleClosure[index];
-    ensureExactKeys(entry, ["path", "role", "sha256"]);
     assert.equal(entry.path, expectedPath);
     assert.equal(entry.role, "oracle");
-    assert.equal(entry.sha256, EXPECTED_INSPECTOR_LEGACY_HASHES[expectedPath]);
-    assert.equal(hashBytes(readBlobFromCommit(entry.path, fixedSourceCommit)), entry.sha256);
+    await assertRuntimeClosureEntry(
+      entry,
+      fixedSourceCommit,
+      EXPECTED_INSPECTOR_LEGACY_HASHES[expectedPath],
+    );
   }
+
+  ensureExactKeys(inspector.panelSource, [
+    "componentPath",
+    "componentExport",
+    "runtimeClosure",
+    "localImports",
+    "externalPackages",
+    "provenanceRole",
+  ]);
+  assert.equal(inspector.panelSource.componentPath, EXPECTED_INSPECTOR_PRODUCT_SOURCE);
+  assert.equal(inspector.panelSource.componentExport, "InspectorCandidate");
+  assert.equal(
+    inspector.panelSource.provenanceRole,
+    "product-owned-current-closure",
+  );
+  const expectedInspectorRuntimeOrder = [
+    EXPECTED_INSPECTOR_PRODUCT_SOURCE,
+    EXPECTED_INSPECTOR_PRODUCT_CSS,
+  ];
+  assert.equal(
+    inspector.panelSource.runtimeClosure.length,
+    expectedInspectorRuntimeOrder.length,
+  );
+  for (let index = 0; index < expectedInspectorRuntimeOrder.length; index += 1) {
+    const expectedPath = expectedInspectorRuntimeOrder[index];
+    const entry = inspector.panelSource.runtimeClosure[index];
+    ensureExactKeys(entry, ["path", "role", "currentSha256"]);
+    assert.equal(entry.path, expectedPath);
+    assert.equal(entry.role, "runtime");
+    assert.equal(
+      entry.currentSha256,
+      hashBytes(await readFile(absoluteFromRelative(entry.path))),
+    );
+    if (entry.path === EXPECTED_INSPECTOR_PRODUCT_SOURCE) {
+      assert.equal(entry.currentSha256, EXPECTED_INSPECTOR_SHA256);
+    }
+    if (entry.path === EXPECTED_INSPECTOR_PRODUCT_CSS) {
+      assert.equal(entry.currentSha256, EXPECTED_INSPECTOR_CSS_SHA256);
+    }
+  }
+  assert.equal(inspector.panelSource.localImports.length, 1);
+  ensureExactKeys(inspector.panelSource.localImports[0], [
+    "kind",
+    "source",
+    "specifiers",
+  ]);
+  assert.equal(inspector.panelSource.localImports[0].kind, "css-side-effect");
+  assert.equal(
+    inspector.panelSource.localImports[0].source,
+    EXPECTED_INSPECTOR_PRODUCT_CSS,
+  );
+  assert.deepEqual(inspector.panelSource.localImports[0].specifiers, []);
+  assert.deepEqual(inspector.panelSource.externalPackages, EXPECTED_INSPECTOR_EXTERNAL_PACKAGES);
+
+  const inspectorAst = parseModule(
+    inspectorAstSource ?? await readFile(absoluteFromRelative(EXPECTED_INSPECTOR_PRODUCT_SOURCE), "utf8"),
+  );
+  assert.ok(collectNamedExports(inspectorAst).has("InspectorCandidate"));
+  assert.ok(collectNamedExports(inspectorAst).has("InspectorContext"));
+  const inspectorImports = collectCandidateImports(
+    inspectorAst,
+    absoluteFromRelative(EXPECTED_INSPECTOR_PRODUCT_SOURCE),
+  );
+  assert.deepEqual(inspector.panelSource.externalPackages, inspectorImports.externalPackages);
+  assert.deepEqual(inspectorImports.externalPackages, EXPECTED_INSPECTOR_EXTERNAL_PACKAGES);
+  assert.deepEqual(
+    inspector.panelSource.localImports.map((entry) => entry.source),
+    Object.keys(inspectorImports.localImports),
+  );
+  assert.deepEqual(Object.keys(inspectorImports.localImports), [
+    EXPECTED_INSPECTOR_PRODUCT_CSS,
+  ]);
 
   ensureExactKeys(inspector.rejectedSkeleton, ["path", "export", "sha256", "disposition"]);
   assert.equal(inspector.rejectedSkeleton.path, EXPECTED_INSPECTOR_SKELETON_PATH);
@@ -966,12 +1415,14 @@ async function validateInventory(manifest, options = {}) {
   ));
   assert.ok(importsNamedExport(hostAst, "./LegacyRegions", EXPECTED_INSPECTOR_LEGACY_EXPORT));
   assert.ok(importsSource(hostAst, "./legacySource"));
+  assert.ok(importsSource(hostAst, "@motolii/motolii-web"));
   assert.ok(hasInspectorParserReplacement(hostAst));
 
   const regionsAst = parseModule(inspectorRegionsAstSource ?? await readFile(
     absoluteFromRelative(EXPECTED_INSPECTOR_LEGACY_CLOSURE[1]), "utf8",
   ));
   assert.ok(collectNamedExports(regionsAst).has(EXPECTED_INSPECTOR_LEGACY_EXPORT));
+  assert.ok(importsSource(regionsAst, "@motolii/motolii-web"));
 
   const legacySourceAst = parseModule(inspectorLegacySourceAstSource ?? await readFile(
     absoluteFromRelative(EXPECTED_INSPECTOR_LEGACY_CLOSURE[2]), "utf8",
@@ -1091,12 +1542,13 @@ async function validateInventory(manifest, options = {}) {
   for (let index = 0; index < EXPECTED_NATIVE_STAGE_TIME_CLOSURE.length; index += 1) {
     const expectedPath = EXPECTED_NATIVE_STAGE_TIME_CLOSURE[index];
     const entry = nativeStageTime.oracleClosure[index];
-    ensureExactKeys(entry, ["path", "role", "sha256"]);
     assert.equal(entry.path, expectedPath);
     assert.equal(entry.role, index < 4 ? "legacy-oracle" : "react-oracle");
-    assert.equal(entry.sha256, EXPECTED_NATIVE_STAGE_TIME_HASHES[expectedPath]);
-    assert.equal(hashBytes(readBlobFromCommit(entry.path, fixedSourceCommit)), entry.sha256);
-    assert.equal(hashBytes(await readFile(absoluteFromRelative(entry.path))), entry.sha256);
+    await assertRuntimeClosureEntry(
+      entry,
+      fixedSourceCommit,
+      EXPECTED_NATIVE_STAGE_TIME_HASHES[expectedPath],
+    );
   }
 
   assert.equal(nativeStageTime.rejectedReactSurfaces.length, 2);
@@ -1108,13 +1560,18 @@ async function validateInventory(manifest, options = {}) {
     sha256: EXPECTED_STAGE_SURFACE_HASH,
     disposition: "reference-surface-not-product-stage",
   });
-  ensureExactKeys(rejectedTimeline, ["path", "export", "sha256", "disposition"]);
-  assert.deepEqual(rejectedTimeline, {
-    path: EXPECTED_TIMELINE_SOURCE,
-    export: "TimelineCandidate",
-    sha256: EXPECTED_TIMELINE_RUNTIME_HASHES[EXPECTED_TIMELINE_SOURCE],
-    disposition: "whole-container-not-product-timeline",
-  });
+  ensureExactKeys(rejectedTimeline, ["path", "export", "sha256", "currentSha256", "disposition"]);
+  assert.equal(rejectedTimeline.path, EXPECTED_TIMELINE_SOURCE);
+  assert.equal(rejectedTimeline.export, "TimelineCandidate");
+  assert.equal(
+    rejectedTimeline.sha256,
+    EXPECTED_TIMELINE_RUNTIME_HASHES[EXPECTED_TIMELINE_SOURCE],
+  );
+  assert.equal(
+    rejectedTimeline.currentSha256,
+    hashBytes(await readFile(absoluteFromRelative(EXPECTED_TIMELINE_SOURCE))),
+  );
+  assert.equal(rejectedTimeline.disposition, "whole-container-not-product-timeline");
   for (const rejected of nativeStageTime.rejectedReactSurfaces) {
     assert.equal(hashBytes(readBlobFromCommit(rejected.path, fixedSourceCommit)), rejected.sha256);
   }
@@ -1188,6 +1645,30 @@ async function validateInventory(manifest, options = {}) {
     absoluteFromRelative(nativeTimelineEvidence.path), "utf8",
   ));
   assert.ok(extractRouteFromTest(nativeTimelineTestAst).includes(nativeTimelineEvidence.route));
+
+  const legacyHostSource = legacyHostAstSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_INSPECTOR_LEGACY_CLOSURE[0]),
+    "utf8",
+  );
+  for (const anchor of EASING_CONTAINMENT_ANCHORS) {
+    assert.equal(countNonOverlapping(rawHtml, anchor), 1, anchor);
+  }
+  for (const literal of [...EASING_CONTAINMENT_ANCHORS, ...EASING_CONTAINMENT_REPLACEMENTS]) {
+    assert.ok(legacyHostSource.includes(literal), `missing literal ${literal}`);
+  }
+  assert.ok(
+    legacyHostSource.includes("class EasingContainmentInitializationError extends Error"),
+  );
+  assert.ok(legacyHostSource.includes("new EasingContainmentInitializationError("));
+  assert.ok(!legacyHostSource.includes("containEasingTrigger") || !/throw new Error\(/.test(
+    legacyHostSource.split("function containEasingTrigger")[1]?.split("function createParserOptions")[0] ?? "",
+  ));
+
+  const timelineRaw = timelineAstSource ?? await readFile(
+    absoluteFromRelative(EXPECTED_TIMELINE_SOURCE),
+    "utf8",
+  );
+  assertSingleOwnerSourceScan(easingTriggerRaw, timelineRaw, legacyHostSource);
 }
 
 test("accepts exact complete six-surface R0 manifest and fixed-commit evidence", async () => {
@@ -1507,17 +1988,145 @@ test("rejects KEYS/LAYERS promotion beyond the fixed Timeline subtree evidence",
     await validateInventory(wrongEvidence);
   });
 
-  const source = await readFile(absoluteFromRelative(EXPECTED_TIMELINE_SOURCE), "utf8");
-  const withoutReopenControl = source.replace('className="candidate-key-tools-open"', 'className="candidate-key-tools-closed"');
+  const source = await readFile(absoluteFromRelative(EXPECTED_KEY_TOOLS_SOURCE), "utf8");
+  const withoutReopenControl = source.replace(
+    'className="candidate-key-tools-open"',
+    'className="candidate-key-tools-closed"',
+  );
   await assert.rejects(async () => {
-    await validateInventory(manifest, { timelineAstSource: withoutReopenControl });
+    await validateInventory(manifest, { keyToolsAstSource: withoutReopenControl });
   });
 
-  const css = await readFile(absoluteFromRelative(EXPECTED_TIMELINE_CSS_SOURCE), "utf8");
-  const withoutToolPanelSelector = css.replaceAll(/\.candidate-key-tools(?!-open)/g, ".candidate-key-panel");
+  const keyToolsCss = await readFile(
+    absoluteFromRelative(EXPECTED_KEY_TOOLS_CSS_SOURCE),
+    "utf8",
+  );
+  const withoutToolPanelSelector = keyToolsCss.replaceAll(
+    /\.candidate-key-tools(?!-open)/g,
+    ".candidate-key-panel",
+  );
   await assert.rejects(async () => {
-    await validateInventory(manifest, { timelineCssSource: withoutToolPanelSelector });
+    await validateInventory(manifest, { keyToolsCssSource: withoutToolPanelSelector });
   });
+
+  await assert.rejects(async () => {
+    await validateInventory(withInventoryEntryAt(manifest, "surfaces", 2, (keysLayers) => ({
+      ...keysLayers,
+      panelSource: {
+        ...keysLayers.panelSource,
+        provenanceRole: "mock-side-current-closure",
+      },
+    })));
+  });
+
+  await assert.rejects(async () => {
+    await validateInventory(withInventoryEntryAt(manifest, "surfaces", 2, (keysLayers) => ({
+      ...keysLayers,
+      panelSource: {
+        ...keysLayers.panelSource,
+        componentPath: MOCK_KEY_TOOLS_SOURCE,
+        runtimeClosure: keysLayers.panelSource.runtimeClosure.map((entry, index) =>
+          index === 0 ? { ...entry, path: MOCK_KEY_TOOLS_SOURCE } : entry,
+        ),
+      },
+    })));
+  });
+
+  await assert.rejects(async () => {
+    await validateInventory(withInventoryEntryAt(manifest, "surfaces", 2, (keysLayers) => ({
+      ...keysLayers,
+      panelSource: {
+        ...keysLayers.panelSource,
+        runtimeClosure: keysLayers.panelSource.runtimeClosure.map((entry) => ({
+          ...entry,
+          currentSha256: "0".repeat(64),
+        })),
+      },
+    })));
+  });
+
+  await assert.rejects(async () => {
+    await validateInventory(withInventoryEntryAt(manifest, "surfaces", 2, (keysLayers) => ({
+      ...keysLayers,
+      panelSource: {
+        ...keysLayers.panelSource,
+        runtimeClosure: keysLayers.panelSource.runtimeClosure.map((entry, index) =>
+          index === 0
+            ? { ...entry, sha256: entry.currentSha256 }
+            : entry,
+        ),
+      },
+    })));
+  });
+
+  await assert.rejects(async () => {
+    await validateInventory(withInventoryEntryAt(manifest, "surfaces", 2, (keysLayers) => ({
+      ...keysLayers,
+      externalPackages: ["react"],
+    })));
+  });
+
+  const timelineWithLocalKeyTools = (await readFile(
+    absoluteFromRelative(EXPECTED_TIMELINE_SOURCE),
+    "utf8",
+  )).replace(
+    'import { KeyToolsCandidate } from "@motolii/motolii-web";',
+    `import { KeyToolsCandidate } from "./KeyToolsCandidate.jsx";`,
+  );
+  await assert.rejects(async () => {
+    await validateInventory(manifest, { timelineAstSource: timelineWithLocalKeyTools });
+  });
+});
+
+test("rejects Inspector classification, promotion boundary, and external package drift", async () => {
+  const manifest = await manifestFromDisk();
+  const mutateInspector = (patch) =>
+    withInventoryEntryAt(manifest, "surfaces", 3, patch);
+
+  for (const mutated of [
+    mutateInspector((inspector) => ({
+      ...inspector,
+      classification: "react-source-absent-legacy-parity-oracle",
+    })),
+    mutateInspector((inspector) => ({ ...inspector, promotionBoundary: [] })),
+    mutateInspector((inspector) => ({
+      ...inspector,
+      promotionBoundary: [EXPECTED_INSPECTOR_PROMOTION_BOUNDARY[0]],
+    })),
+    mutateInspector((inspector) => ({
+      ...inspector,
+      promotionBoundary: [EXPECTED_INSPECTOR_PROMOTION_BOUNDARY[1]],
+    })),
+    mutateInspector((inspector) => ({
+      ...inspector,
+      promotionBoundary: [
+        "InspectorSurface",
+        EXPECTED_INSPECTOR_PROMOTION_BOUNDARY[1],
+      ],
+    })),
+    mutateInspector((inspector) => ({
+      ...inspector,
+      promotionBoundary: [
+        EXPECTED_INSPECTOR_PROMOTION_BOUNDARY[0],
+        "InspectorContext two-way legacy adapter channel",
+      ],
+    })),
+    mutateInspector((inspector) => ({
+      ...inspector,
+      panelSource: { ...inspector.panelSource, externalPackages: [] },
+    })),
+    mutateInspector((inspector) => ({
+      ...inspector,
+      panelSource: {
+        ...inspector.panelSource,
+        externalPackages: ["html-react-parser", "react"],
+      },
+    })),
+  ]) {
+    await assert.rejects(async () => {
+      await validateInventory(mutated);
+    });
+  }
 });
 
 test("rejects Inspector promotion, legacy oracle, skeleton, action, and parity route drift", async () => {
@@ -1580,6 +2189,120 @@ test("rejects Inspector promotion, legacy oracle, skeleton, action, and parity r
   }
 });
 
+test("rejects Inspector panelSource, product ownership, and legacy currentSha256 drift", async () => {
+  const manifest = await manifestFromDisk();
+  const inspector = manifest.surfaces[3];
+  const mutateInspector = (patch) =>
+    withInventoryEntryAt(manifest, "surfaces", 3, patch);
+  const oldHostCurrentSha256 = "db51411bf3a894d36890f6f5a9f81edeb2c9aa92dd5e39af47d910ef1d03abc8";
+  const oldRegionsCurrentSha256 = "07eb15b446cde327446abca0a37c261a457fe0b88c44d73273860cd2a487a539";
+
+  const withoutPanelSource = { ...inspector };
+  delete withoutPanelSource.panelSource;
+
+  for (const mutated of [
+    withInventoryEntryAt(manifest, "surfaces", 3, () => withoutPanelSource),
+    mutateInspector((entry) => ({
+      ...entry,
+      panelSource: {
+        ...entry.panelSource,
+        componentPath: MOCK_INSPECTOR_SOURCE,
+      },
+    })),
+    mutateInspector((entry) => ({
+      ...entry,
+      panelSource: { ...entry.panelSource, componentExport: "InspectorSurface" },
+    })),
+    mutateInspector((entry) => ({
+      ...entry,
+      panelSource: {
+        ...entry.panelSource,
+        runtimeClosure: [
+          entry.panelSource.runtimeClosure[1],
+          entry.panelSource.runtimeClosure[0],
+        ],
+      },
+    })),
+    mutateInspector((entry) => ({
+      ...entry,
+      panelSource: {
+        ...entry.panelSource,
+        runtimeClosure: entry.panelSource.runtimeClosure.map((closureEntry, index) =>
+          index === 0 ? { ...closureEntry, currentSha256: "0".repeat(64) } : closureEntry,
+        ),
+      },
+    })),
+    mutateInspector((entry) => ({
+      ...entry,
+      panelSource: { ...entry.panelSource, provenanceRole: "fixed-source-transfer" },
+    })),
+    mutateInspector((entry) => ({
+      ...entry,
+      panelSource: {
+        ...entry.panelSource,
+        externalPackages: [],
+      },
+    })),
+    mutateInspector((entry) => ({
+      ...entry,
+      panelSource: {
+        ...entry.panelSource,
+        externalPackages: ["html-react-parser"],
+      },
+    })),
+    mutateInspector((entry) => ({
+      ...entry,
+      sourceStatus: "independent-react-source-absent",
+    })),
+    mutateInspector((entry) => ({
+      ...entry,
+      requiredNextAction: "mock-side-same-shape-react-extraction-and-parity-before-r4",
+    })),
+    mutateInspector((entry) => ({
+      ...entry,
+      legacyOracleClosure: entry.legacyOracleClosure.map((closureEntry, index) =>
+        index === 1 ? { ...closureEntry, currentSha256: oldRegionsCurrentSha256 } : closureEntry,
+      ),
+    })),
+    withInventoryEntryAt(manifest, "surfaces", 5, (nativeStageTime) => ({
+      ...nativeStageTime,
+      oracleClosure: nativeStageTime.oracleClosure.map((closureEntry) =>
+        closureEntry.path === EXPECTED_INSPECTOR_LEGACY_CLOSURE[1]
+          ? { ...closureEntry, currentSha256: oldRegionsCurrentSha256 }
+          : closureEntry,
+      ),
+    })),
+  ]) {
+    await assert.rejects(async () => {
+      await validateInventory(mutated);
+    });
+  }
+
+  await assert.rejects(async () => {
+    await validateInventory(
+      withInventoryEntryAt(manifest, "surfaces", 3, (entry) => ({
+        ...entry,
+        legacyOracleClosure: entry.legacyOracleClosure.map((closureEntry, index) =>
+          index === 0 ? { ...closureEntry, currentSha256: oldHostCurrentSha256 } : closureEntry,
+        ),
+      })),
+    );
+  });
+
+  await assert.rejects(async () => {
+    await validateInventory(
+      withInventoryEntryAt(manifest, "surfaces", 5, (nativeStageTime) => ({
+        ...nativeStageTime,
+        oracleClosure: nativeStageTime.oracleClosure.map((closureEntry) =>
+          closureEntry.path === EXPECTED_INSPECTOR_LEGACY_CLOSURE[0]
+            ? { ...closureEntry, currentSha256: oldHostCurrentSha256 }
+            : closureEntry,
+        ),
+      })),
+    );
+  });
+});
+
 test("rejects Inspector parser/export/raw-source/skeleton/parity evidence drift", async () => {
   const manifest = await manifestFromDisk();
   const host = await readFile(absoluteFromRelative(EXPECTED_INSPECTOR_LEGACY_CLOSURE[0]), "utf8");
@@ -1587,6 +2310,10 @@ test("rejects Inspector parser/export/raw-source/skeleton/parity evidence drift"
   const legacySource = await readFile(absoluteFromRelative(EXPECTED_INSPECTOR_LEGACY_CLOSURE[2]), "utf8");
   const skeleton = await readFile(absoluteFromRelative(EXPECTED_INSPECTOR_SKELETON_PATH), "utf8");
   const parity = await readFile(absoluteFromRelative(EXPECTED_INSPECTOR_PARITY_PATH), "utf8");
+  const inspectorProduct = await readFile(
+    absoluteFromRelative(EXPECTED_INSPECTOR_PRODUCT_SOURCE),
+    "utf8",
+  );
 
   for (const options of [
     { inspectorHostAstSource: host.replace("<LegacyInspector {...props} />", "<LegacyTimeline {...props} />") },
@@ -1594,6 +2321,7 @@ test("rejects Inspector parser/export/raw-source/skeleton/parity evidence drift"
     { inspectorLegacySourceAstSource: legacySource.replace("m3-vism-host-boundary.html?raw", "missing.html?raw") },
     { inspectorSkeletonAstSource: skeleton.replace("InspectorSurface", "ArchivedInspectorSurface") },
     { inspectorParityAstSource: parity.replace("#archive/all-surfaces", "#archive/inspector") },
+    { inspectorAstSource: `${inspectorProduct}\nimport "react-dom";\n` },
   ]) {
     await assert.rejects(async () => {
       await validateInventory(manifest, options);
@@ -1770,4 +2498,188 @@ test("native key-glyph validation is independent from the KEYS/LAYERS tool-panel
     nativeTimelineAstSource: timeline.replaceAll("candidate-key-tools", "candidate-tool-panel"),
     nativeTimelineCssSource: css.replaceAll("candidate-key-tools", "candidate-tool-panel"),
   });
+});
+
+test("rejects easing trigger source drift, ownership violations, and containment regressions", async () => {
+  const manifest = await manifestFromDisk();
+  const easingTrigger = await readFile(absoluteFromRelative(EXPECTED_EASING_TRIGGER_SOURCE), "utf8");
+  const timeline = await readFile(absoluteFromRelative(EXPECTED_TIMELINE_SOURCE), "utf8");
+  const legacyHost = await readFile(absoluteFromRelative(EXPECTED_INSPECTOR_LEGACY_CLOSURE[0]), "utf8");
+  const rawHtml = await readFile(absoluteFromRelative(EXPECTED_EASING_TRIGGER_AUTHORITY.path), "utf8");
+
+  const withoutTriggerSource = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => {
+    const { triggerSource, ...rest } = easing;
+    return rest;
+  });
+  await assert.rejects(() => validateInventory(withoutTriggerSource));
+
+  const triggerShaAtFixed = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    triggerSource: {
+      ...easing.triggerSource,
+      runtimeClosure: easing.triggerSource.runtimeClosure.map((entry) => ({
+        ...entry,
+        sha256: "0".repeat(64),
+      })),
+    },
+  }));
+  await assert.rejects(() => validateInventory(triggerShaAtFixed));
+
+  const wrongCurrent = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    triggerSource: {
+      ...easing.triggerSource,
+      runtimeClosure: easing.triggerSource.runtimeClosure.map((entry) => ({
+        ...entry,
+        currentSha256: "0".repeat(64),
+      })),
+    },
+  }));
+  await assert.rejects(() => validateInventory(wrongCurrent));
+
+  const rewrittenFixed = withInventoryEntryAt(manifest, "surfaces", 2, (keysLayers) => ({
+    ...keysLayers,
+    runtimeClosure: keysLayers.runtimeClosure.map((entry, index) =>
+      index === 0 ? { ...entry, sha256: entry.currentSha256 } : entry,
+    ),
+  }));
+  await assert.rejects(() => validateInventory(rewrittenFixed));
+
+  const post05A = {
+    ...manifest,
+    post05AHashes: { [EXPECTED_EASING_TRIGGER_SOURCE]: "0".repeat(64) },
+  };
+  await assert.rejects(() => validateInventory(post05A));
+
+  const extraClosureKey = withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    triggerSource: {
+      ...easing.triggerSource,
+      runtimeClosure: easing.triggerSource.runtimeClosure.map((entry) => ({
+        ...entry,
+        extra: true,
+      })),
+    },
+  }));
+  await assert.rejects(() => validateInventory(extraClosureKey));
+
+  await assert.rejects(() => validateInventory({
+    ...manifest,
+    fixedSourceCommit: "0000000000000000000000000000000000000000",
+  }));
+
+  await assert.rejects(() => validateInventory(withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    triggerAuthority: { ...easing.triggerAuthority, selector: "#missing" },
+  }))));
+
+  await assert.rejects(() => validateInventory(withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    triggerSource: {
+      ...easing.triggerSource,
+      componentPath: MOCK_EASING_TRIGGER_SOURCE,
+      runtimeClosure: easing.triggerSource.runtimeClosure.map((entry, index) =>
+        index === 0 ? { ...entry, path: MOCK_EASING_TRIGGER_SOURCE } : entry,
+      ),
+    },
+  }))));
+
+  await assert.rejects(() => validateInventory(withInventoryEntryAt(manifest, "surfaces", 1, (easing) => ({
+    ...easing,
+    triggerSource: {
+      ...easing.triggerSource,
+      provenanceRole: "mock-side-current-closure",
+    },
+  }))));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    easingTriggerAstSource: easingTrigger.replace(
+      "<button",
+      '<button type="button"',
+    ),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    easingTriggerAstSource: easingTrigger.replace(
+      'data-info="Easing Graph|key間にいる時だけ開けます|"',
+      'data-info="Easing Graph|key間にいる時だけ開けます|" data-testid="trigger"',
+    ),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    easingTriggerAstSource: easingTrigger.replace("disabled={!activeInterval}", "disabled={!activeInterval} onClick={() => {}}"),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    easingTriggerAstSource: easingTrigger.replace("export function", "export function X") + "\nconst x = document.body;",
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    timelineAstSource: `${timeline}\nconst observer = new MutationObserver(() => {});`,
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    timelineAstSource: timeline.replace("onActiveIntervalChange", "stopImmediatePropagation"),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    legacyHostAstSource: legacyHost.replace(
+      "<EasingTriggerSlot Component={EasingTriggerComponent} />",
+      "<EasingTriggerSlot key={fixture} Component={EasingTriggerComponent} />",
+    ),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    legacyHostAstSource: legacyHost.replace(
+      "const [pressed, setPressed] = useState(false);",
+      "const [pressed, setPressed] = useState(false);\n  const [tick, setTick] = useState(0);",
+    ),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    stageRawHtmlSource: rawHtml.replace(
+      EASING_CONTAINMENT_ANCHORS[0],
+      `${EASING_CONTAINMENT_ANCHORS[0]}\n${EASING_CONTAINMENT_ANCHORS[0]}`,
+    ),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    stageRawHtmlSource: rawHtml.replace(EASING_CONTAINMENT_ANCHORS[0], ""),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    legacyHostAstSource: legacyHost.replace(EASING_CONTAINMENT_ANCHORS[0], ""),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    legacyHostAstSource: legacyHost.replace(EASING_CONTAINMENT_REPLACEMENTS[0], ""),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    legacyHostAstSource: legacyHost.replace(
+      "new EasingContainmentInitializationError(",
+      "new Error(",
+    ),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    legacyHostAstSource: legacyHost.replace(
+      'button.addEventListener("click", openPanel);',
+      'button.addEventListener("click", (event) => { openPanel(event); }, true);',
+    ),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    legacyHostAstSource: legacyHost.replace(
+      'button.addEventListener("click", openPanel);',
+      'button.addEventListener("click", openPanel, { capture: true });',
+    ),
+  }));
+
+  await assert.rejects(() => validateInventory(manifest, {
+    easingTriggerAstSource: easingTrigger.replace(
+      "  return (",
+      "  const [openState, setOpenState] = useState(false);\n  return (",
+    ),
+  }));
 });

@@ -58,8 +58,8 @@
     },
     {
       "id": "easing",
-      "classification": "react-trigger-source-absent-native-popup-oracle",
-      "sourceStatus": "independent-react-trigger-source-absent",
+      "classification": "react-trigger-product-owned-native-popup-oracle",
+      "sourceStatus": "product-owned-react-trigger-source",
       "triggerAuthority": {
         "path": "docs/mocks/m3-vism-host-boundary.html",
         "sha256": "a20bd36d6b8b241ef4ec21adda6b045e470bf89fbc78e2788207aa6d0875ec68",
@@ -113,10 +113,10 @@
         "react"
       ],
       "promotionBoundary": [
-        "Graph trigger/icon after mock-side same-shape React extraction",
+        "product-owned trigger/icon with mock consumer",
         "accessible object/channel and pressed/disabled state"
       ],
-      "requiredNextAction": "mock-side-same-shape-react-trigger-extraction-and-parity-before-r2b",
+      "requiredNextAction": "host-projection-and-intent-after-r2b",
       "nativeOracle": [
         "popup frame",
         "presets",
@@ -128,6 +128,31 @@
       "behavioralEvidence": {
         "path": "docs/mocks-ui/tests/browser-candidate.spec.js",
         "route": "plugin-browser-candidate"
+      },
+      "triggerSource": {
+        "componentPath": "ui/motolii-web/src/candidates/EasingTriggerCandidate.jsx",
+        "componentExport": "EasingTriggerCandidate",
+        "runtimeClosure": [
+          {
+            "path": "ui/motolii-web/src/candidates/EasingTriggerCandidate.jsx",
+            "role": "runtime",
+            "currentSha256": "6ae4cf7e79586e33cedaed0bb928daa34aa4b8ac9cdc9f6c494637875f502932"
+          },
+          {
+            "path": "ui/motolii-web/src/candidates/easing-trigger-candidate.css",
+            "role": "runtime",
+            "currentSha256": "1e2d26d51c8ed7b322d6fa56123870842daeca41fd0815e7167055c2d87acfd8"
+          }
+        ],
+        "localImports": [
+          {
+            "kind": "css-side-effect",
+            "source": "ui/motolii-web/src/candidates/easing-trigger-candidate.css",
+            "specifiers": []
+          }
+        ],
+        "externalPackages": [],
+        "provenanceRole": "product-owned-current-closure"
       }
     },
     {
@@ -139,12 +164,14 @@
         {
           "path": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
           "role": "runtime",
-          "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5"
+          "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5",
+          "currentSha256": "cb81b0d8463ad547123476d1c0e357e8354456813f32d91e4cfb63efe2be265d"
         },
         {
           "path": "docs/mocks-ui/src/candidates/timeline-candidate.css",
           "role": "runtime",
-          "sha256": "ef984d9b365f4efbcb4bf8fc20034a0b54846ab4fb470ea8d6ec8b486aa71397"
+          "sha256": "ef984d9b365f4efbcb4bf8fc20034a0b54846ab4fb470ea8d6ec8b486aa71397",
+          "currentSha256": "9e08238e9325977bf2372366b7b6c7f33f30a5e0378b85f5890ece3ee973ae97"
         }
       ],
       "localImports": [
@@ -155,7 +182,8 @@
         }
       ],
       "externalPackages": [
-        "react"
+        "react",
+        "@motolii/motolii-web"
       ],
       "promotionBoundary": [
         "candidate-key-tools subtree",
@@ -186,23 +214,53 @@
       "behavioralEvidence": {
         "path": "docs/mocks-ui/tests/timeline-candidate.spec.js",
         "route": "plugin-browser-candidate"
+      },
+      "panelSource": {
+        "componentPath": "ui/motolii-web/src/candidates/KeyToolsCandidate.jsx",
+        "componentExport": "KeyToolsCandidate",
+        "runtimeClosure": [
+          {
+            "path": "ui/motolii-web/src/candidates/KeyToolsCandidate.jsx",
+            "role": "runtime",
+            "currentSha256": "bf38656a99957a9f2d1465057820510f525fd394a3965cff9f291415223f87ba"
+          },
+          {
+            "path": "ui/motolii-web/src/candidates/key-tools-candidate.css",
+            "role": "runtime",
+            "currentSha256": "f84eb7f98f05844fa3bfc72b702cee2709f1fc0bb9be614f2b01039a65b5190d"
+          }
+        ],
+        "localImports": [
+          {
+            "kind": "css-side-effect",
+            "source": "ui/motolii-web/src/candidates/key-tools-candidate.css",
+            "specifiers": []
+          }
+        ],
+        "externalPackages": [],
+        "provenanceRole": "product-owned-current-closure"
       }
     },
     {
       "id": "inspector",
-      "classification": "react-source-absent-legacy-parity-oracle",
-      "sourceStatus": "independent-react-source-absent",
-      "promotionBoundary": [],
+      "classification": "react-product-owned-legacy-parity-oracle",
+      "sourceStatus": "product-owned-react-source",
+      "promotionBoundary": [
+        "product-owned Inspector presentation subtree with mock consumer",
+        "InspectorContext one-way legacy adapter channel"
+      ],
       "legacyOracleClosure": [
         {
           "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
           "role": "oracle",
-          "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416"
+          "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416",
+          "currentSha256": "e28e641d8c07a82e5392ada73b935b32aa0ad580de2cb6088b77832e397c1e07"
         },
         {
           "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
           "role": "oracle",
-          "sha256": "8fb24e75abdb87dd52ae7d1c723782b42e67e486331aa04cbd498111a2733b3a"
+          "sha256": "8fb24e75abdb87dd52ae7d1c723782b42e67e486331aa04cbd498111a2733b3a",
+          "currentSha256": "6262df2c388cc86e0519aa6adc7f1b0d8d5c57dcff9db8f3f7e3cfe8b979a299"
         },
         {
           "path": "docs/mocks-ui/src/legacy/legacySource.js",
@@ -222,7 +280,34 @@
         "sha256": "70e3f1094ae6188274779055d20385cccc2efabd7258b994eeba869e3ea82f90",
         "disposition": "reduced-skeleton-not-product-source"
       },
-      "requiredNextAction": "mock-side-same-shape-react-extraction-and-parity-before-r4",
+      "requiredNextAction": "host-projection-and-intent-after-r4c",
+      "panelSource": {
+        "componentPath": "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
+        "componentExport": "InspectorCandidate",
+        "runtimeClosure": [
+          {
+            "path": "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
+            "role": "runtime",
+            "currentSha256": "1e0bdd3eebd665e517600af4db090f74d50951aef12fdd476e97a828de91a3e4"
+          },
+          {
+            "path": "ui/motolii-web/src/candidates/inspector-candidate.css",
+            "role": "runtime",
+            "currentSha256": "730e2861a893b2b07fa66d5acef0038a49bdcf337e8c5a037785b0a58d829cbe"
+          }
+        ],
+        "localImports": [
+          {
+            "kind": "css-side-effect",
+            "source": "ui/motolii-web/src/candidates/inspector-candidate.css",
+            "specifiers": []
+          }
+        ],
+        "externalPackages": [
+          "react"
+        ],
+        "provenanceRole": "product-owned-current-closure"
+      },
       "behavioralEvidence": {
         "path": "docs/mocks-ui/tests/visual-parity.spec.js",
         "reactRoute": "archive/all-surfaces",
@@ -289,12 +374,14 @@
         {
           "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
           "role": "legacy-oracle",
-          "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416"
+          "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416",
+          "currentSha256": "e28e641d8c07a82e5392ada73b935b32aa0ad580de2cb6088b77832e397c1e07"
         },
         {
           "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
           "role": "legacy-oracle",
-          "sha256": "8fb24e75abdb87dd52ae7d1c723782b42e67e486331aa04cbd498111a2733b3a"
+          "sha256": "8fb24e75abdb87dd52ae7d1c723782b42e67e486331aa04cbd498111a2733b3a",
+          "currentSha256": "6262df2c388cc86e0519aa6adc7f1b0d8d5c57dcff9db8f3f7e3cfe8b979a299"
         },
         {
           "path": "docs/mocks-ui/src/legacy/legacySource.js",
@@ -309,12 +396,14 @@
         {
           "path": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
           "role": "react-oracle",
-          "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5"
+          "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5",
+          "currentSha256": "cb81b0d8463ad547123476d1c0e357e8354456813f32d91e4cfb63efe2be265d"
         },
         {
           "path": "docs/mocks-ui/src/candidates/timeline-candidate.css",
           "role": "react-oracle",
-          "sha256": "ef984d9b365f4efbcb4bf8fc20034a0b54846ab4fb470ea8d6ec8b486aa71397"
+          "sha256": "ef984d9b365f4efbcb4bf8fc20034a0b54846ab4fb470ea8d6ec8b486aa71397",
+          "currentSha256": "9e08238e9325977bf2372366b7b6c7f33f30a5e0378b85f5890ece3ee973ae97"
         }
       ],
       "stageOracle": [
@@ -343,6 +432,7 @@
           "path": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
           "export": "TimelineCandidate",
           "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5",
+          "currentSha256": "cb81b0d8463ad547123476d1c0e357e8354456813f32d91e4cfb63efe2be265d",
           "disposition": "whole-container-not-product-timeline"
         }
       ],

@@ -234,15 +234,21 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 | CU-0A02 | `ASSET / DONE` | U0e-2の5 reference screen入力を固定 | CU-0A01、U0e-2契約 | 同一fixtureのnormal/lightness/grayscale/CVDを30 PNGとprovenance/atomic generationへ固定。人間判断をpixel testへ置換しない | 現行codecで三層fixtureを閉じられない、または既存React source closureが不足 |
 | CU-0A03 | `SPEC / DONE` | R0 source inventory/provenance manifest | CU-0A01、固定SHA`56c318ed` | path/export/CSS/model/test closure全列挙、legacyとnative面を誤分類しない | 固定sourceまたはclosure不在 |
 | CU-0A04 | `ASSET / DONE` | R1 Browserをproduct ownerへ直接移管 | CU-0A03 | 17-state対象visual 1%以下、DOM/class/ARIA/interaction維持、mock側copy 0 | 別leaf/CSS後追い/opaque ID分岐が必要 |
-| CU-0A05A | `ASSET / DO` | R2A archived HTMLのEasing triggerを固定mock内で同形React化 | CU-0A04 | button DOM/class/SVG/ARIA/disabled/pressed/open動作維持、既存parity不変、product差分0 | visible summary、Interp意味、product fileが必要 |
-| CU-0A05B | `ASSET / WAIT` | R2B 同形React triggerをproduct ownerへ直接移管 | CU-0A05A | mock側copy 0、popup/modelはmockのnative oracle、Reactにcurve/Undo state 0 | popup全体またはHost projectionを同時に持込む必要がある |
-| CU-0A06 | `ASSET / WAIT` | R3 KEYS/LAYERS tool panelをnative Timelineから分離移管 | CU-0A05B | tool panel DOM/CSS維持、ruler/bar/key/playhead移管0 | TimelineCandidate全体のimportが必要 |
-| CU-0A07 | `ASSET / WAIT` | R4 Inspectorを固定mock内で同形React化して移管 | CU-0A06 | legacy parity後に単一owner、skeleton代用0、legacy runtime import 0 | 正しい同形componentを作れず意味発明が必要 |
+| CU-0A05A | `ASSET / DONE` | R2A archived HTMLのEasing triggerを固定mock内で同形React化 | CU-0A04 | [#341](https://github.com/oshikaidesu/Motolii/pull/341): button DOM/class/SVG/ARIA/disabled/pressed/open動作維持、既存parity不変、product差分0、Grok ACCEPT | — |
+| CU-0A05B | `ASSET / DONE` | R2B 同形React triggerをproduct ownerへ直接移管 | CU-0A05A | [#344](https://github.com/oshikaidesu/Motolii/pull/344): mock側copy 0、popup/modelはmockのnative oracle、Reactにcurve/Undo state 0、Grok ACCEPT | — |
+| CU-0A06A | `ASSET / DONE` | R3A KEYS/LAYERSを固定mock内で独立React source/CSSへ抽出 | CU-0A05B | [#347](https://github.com/oshikaidesu/Motolii/pull/347): 未変更sourceで6状態oracleを先に固定、panel DOM/CSS/ARIA維持、Timeline state移管0、Grok ACCEPT | — |
+| CU-0A06B | `ASSET / DONE` | R3B R3A source/CSSをproduct ownerへbyte同一移管 | CU-0A06A | [#350](https://github.com/oshikaidesu/Motolii/pull/350): mock側copy 0、product export consumer反転、Timeline state識別子0、Grok ACCEPT | — |
+| CU-0A07S | `SPEC / DONE` | R4 Inspectorの独立source不在とA/B/C施工順を正本化 | CU-0A06B | oracle→mock React化→ownershipの停止線を固定 | — |
+| CU-0A07A | `ORACLE / DONE` | [#353](https://github.com/oshikaidesu/Motolii/pull/353)で未変更legacy Inspectorへ構造・style・ARIA・操作oracleを固定 | CU-0A07S | 5状態と主要操作を再現し、source/threshold/golden変更0 | — |
+| CU-0A07B | `ASSET / DONE` | [#355](https://github.com/oshikaidesu/Motolii/pull/355)で固定mock内でInspectorを同形React化しlegacy adapterを封じる | CU-0A07A | exact-count containment、双方向store 0、skeleton代用0 | — |
+| CU-0A07C | `ASSET / DONE` | [#357](https://github.com/oshikaidesu/Motolii/pull/357): R4B source/CSSをproduct ownerへbyte同一移管 | CU-0A07B | mock copy 0、legacy runtime import 0、state owner維持 | source closureや公開境界の変更が必要 |
 | CU-0A08B | `CORE / WAIT` | Browser fixture stateをrevision付きprojection/typed intentへ交換 | CU-0A04、CU-G09 | unknown/non-finite/oversized/dangling拒否、React semantic write 0 | catalog field不足をID/labelから推測したくなる |
 | CU-0A08E | `CORE / WAIT` | Easing trigger stateをHost projection/typed intentへ交換 | CU-0A05B、U4b契約 | key上/区間外disabled理由、curve state二重所有0 | Interp/区間意味の新契約が必要 |
 | CU-0A08K | `CORE / WAIT` | KEYS/LAYERS stateをHost projection/typed intentへ交換 | CU-0A06、既存U3a/U4a/U4b projection契約 | selection/packingをReactが所有しない、reloadでHostから復元 | native/React間に双方向storeが必要 |
-| CU-0A08I | `CORE / WAIT` | Inspectorのfixture stateを既決fieldだけのread-only Host projection/typed intent境界へ交換 | CU-0A07、現行NodeDesc/DocParam | Document clone/history 0、unknown field typed拒否。実編集接続はU4a/U4cへ残す | 未決fieldを補わないと正しい製品面を表示できない |
-| CU-0A09 | `PRODUCT / WAIT` | R6 diagnostic routeをproduction navigationから分離 | CU-0A08B/E/K/I | 通常routeは正しい製品面、diagnosticはdevelopment限定 | diagnostic画面しか成立しない |
+| CU-0A08IS | `SPEC / DO` | Inspector全表示を既決sourceあり／未決へ分類しread-model入力と拒否条件を固定 | CU-0A07C | 1要素1source、未決推測0、code/API変更0 | Document/plugin/transport/intent意味の発明が必要 |
+| CU-0A08IP | `CORE / WAIT` | fixture由来read-only projection decoder。Host transportは非目標 | CU-0A08IS | unknown/non-finite/dangling/stale拒否、React semantic write 0 | 二重store、DOM変更、公開transportが必要 |
+| CU-0A08IT | `CORE / WAIT` | 既存DomainIntent→DocumentCommandRequest→D2へInspector操作を接続 | CU-0A08IP、U4a-2/U4c | 1 gesture=1 intent、Cancel/失敗=変更0 | 別intent終端、React Undo/selection正本が必要 |
+| CU-0A09 | `PRODUCT / WAIT` | R6 diagnostic routeをproduction navigationから分離 | CU-0A08B/E/K/IT | 通常routeは正しい製品面、diagnosticはdevelopment限定 | diagnostic画面しか成立しない |
 
 React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`まで8ラベルを順番どおり持つ。
 
@@ -449,7 +455,7 @@ Claude Code `claude-fable-5`へ実ファイルと機械guardをread-onlyで再�
 ## 18. 現在の停止線
 
 - 現在sliceとblocking decisionは[縦slice実行方針](2026-07-24-m3-vertical-slice-execution-decision.md)を正とする
-- U0e-2R/U0e-2、CU-0A03/R0、CU-0A04/R1は完了済みで再実行しない。固定SHAのtrigger source不在によりR2は05A/05Bへ分割した。唯一の現在の製品orderは`CU-0A05A / R2A mock-side extraction`であり、R2とMotolii Studio Previewは未実装である
+- U0e-2R/U0e-2、CU-0A03/R0、CU-0A04/R1、CU-0A05A/R2A、CU-0A05B/R2B、CU-0A06A/R3A、CU-0A06B/R3B、CU-0A07S/R4S、CU-0A07A/R4A、CU-0A07B/R4B、CU-0A07C/R4Cは完了済みで再実行しない。CU-0A08Iは分割済みで、現在粒は`CU-0A08IS`の`SPEC / DO`。Motolii Studio Previewは未実装である
 - CU-0G03はユーザーによる実windowの実IME／VoiceOver／復帰審判で合格し、CU-0G04Bまで責任最小化短票どおり既存winit/wgpu/wry/macOS標準経路を使う単一runのmanifestでL3を閉じた。CU-0G05L reviewでL1正本とGPU rawの不足を検出し、`CU-0G02A`で正本を修正した。`CU-0G02BH`はwgpu標準queryだけのbounded harnessを固定し、`CU-0G02B`はその実行commitを使う同一session再実測をGrok P0/P1=0で閉じた。CU-0G05Lは8 retained pathを単一manifestへ束ね、Grok R2 P0/P1/P2=0で固定Mac prerequisite evidenceだけを限定確定した。W0b、H1b、製品window、Windows/追加hardwareは解禁しない
 - G0-6HはU0e-3だけを止める並行人間審判であり、R0/R1とPreview骨格を直列停止しない
 - CU-G01〜CU-G10は仕様判断粒で、コード実装と同時に行わない

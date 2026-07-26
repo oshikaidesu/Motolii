@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./timeline-candidate.css";
+import { KeyToolsCandidate } from "@motolii/motolii-web";
 
 const OBJECTS = [
   {
@@ -532,6 +533,7 @@ export function TimelineCandidate({
   GraphViewComponent,
   legacyCurveShelf,
   resizeHandle,
+  onActiveIntervalChange,
 }) {
   const [packHeights, setPackHeights] = useState(() =>
     Array.from({ length: BAND_COUNT }, () => 34),
@@ -672,41 +674,11 @@ export function TimelineCandidate({
       startIndex,
       keyCount: sortedKeys.length,
     };
-  }, [automationByObject, focusedAutomation, objectOffsets]);
+  }, [automationByObject, focusedAutomation, objectOffsets, playheadLeft]);
 
-  // Preview transportはまだlegacy fixtureが所有しているため、React Timelineの
-  // focus区間をGraph入口へ一方向に投影する。旧inline-key探索は使わない。
   useEffect(() => {
-    const button = document.querySelector("#interval-easing");
-    if (!button) return undefined;
-    const syncButton = () => {
-      button.disabled = !activeInterval;
-      button.classList.toggle("on", Boolean(activeInterval));
-      button.setAttribute(
-        "aria-label",
-        activeInterval
-          ? `${activeInterval.objectName} · ${activeInterval.channel}のInterval Easing Editorを開く`
-          : "key間へ移動するとInterval Easing Editorを開けます",
-      );
-    };
-    syncButton();
-    // 親のlegacy初期化effectが初回だけ旧Timelineを読んだ後にも再投影する。
-    const frame = window.requestAnimationFrame(syncButton);
-    const openGraph = (event) => {
-      if (!activeInterval) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      const panel = document.querySelector("#easing-panel");
-      panel?.classList.add("open");
-      panel?.setAttribute("aria-hidden", "false");
-      button.setAttribute("aria-pressed", "true");
-    };
-    button.addEventListener("click", openGraph, true);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      button.removeEventListener("click", openGraph, true);
-    };
-  }, [activeInterval]);
+    onActiveIntervalChange?.(activeInterval);
+  }, [activeInterval, onActiveIntervalChange]);
 
   function toggle(setter, id) {
     setter((current) => {
@@ -1190,170 +1162,23 @@ export function TimelineCandidate({
             ))}
           </div>
         </div>
-        {keyToolsOpen ? (
-          <aside className="candidate-key-tools" aria-label="Key Tools">
-            <div className="candidate-key-mode">
-              <button
-                type="button"
-                aria-pressed={keyToolsMode === "keys"}
-                onClick={() => setKeyToolsMode("keys")}
-              >
-                KEYS
-              </button>
-              <button
-                type="button"
-                aria-pressed={keyToolsMode === "layers"}
-                onClick={() => setKeyToolsMode("layers")}
-              >
-                LAYERS
-              </button>
-              <button
-                type="button"
-                aria-label="Key Toolsを閉じる"
-                title="閉じる"
-                onClick={() => setKeyToolsOpen(false)}
-              >
-                ×
-              </button>
-            </div>
-            {keyToolsMode === "keys" ? (
-              <>
-                <div className="candidate-key-tools-head">
-                  <b>◆ {selectedKeys.size}</b>
-                  <div className="candidate-key-scope" aria-label="適用単位">
-                    {[
-                      ["object", "▤", "Object別"],
-                      ["channel", "⋮", "Channel別"],
-                      ["global", "◎", "全選択"],
-                    ].map(([value, icon, label]) => (
-                      <button
-                        type="button"
-                        aria-label={label}
-                        aria-pressed={keyScope === value}
-                        key={value}
-                        title={label}
-                        onClick={() => setKeyScope(value)}
-                      >
-                        {icon}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="candidate-key-sections">
-                  {[
-                    ["align", "┆◆┆", "Align"],
-                    ["stagger", "◆⋰◆", "Stagger"],
-                    ["stretch", "←◆→", "Stretch"],
-                  ].map(([section, icon, label]) => (
-                    <button
-                      type="button"
-                      aria-label={label}
-                      aria-expanded={keySection === section}
-                      key={section}
-                      title={label}
-                      onClick={() =>
-                        setKeySection((current) =>
-                          current === section ? null : section,
-                        )
-                      }
-                    >
-                      {icon}
-                    </button>
-                  ))}
-                </div>
-                <div className="candidate-key-actions">
-                  {keySection === "align" ? (
-                    <>
-                      <small>ALIGN</small>
-                      <button type="button" aria-label="開始へ整列" title="開始へ整列" onClick={() => applyKeyOperation("align-start")}>│◆</button>
-                      <button type="button" aria-label="Playheadへ整列" title="Playheadへ整列" onClick={() => applyKeyOperation("align-playhead")}>◆┆◆</button>
-                      <button type="button" aria-label="終了へ整列" title="終了へ整列" onClick={() => applyKeyOperation("align-end")}>◆│</button>
-                    </>
-                  ) : null}
-                  {keySection === "stagger" ? (
-                    <>
-                      <small>STAGGER</small>
-                      <svg viewBox="0 0 96 38" aria-hidden="true">
-                        <path d="M4 4 C28 4 64 34 92 34" />
-                        <circle cx="4" cy="4" r="2" />
-                        <circle cx="92" cy="34" r="2" />
-                      </svg>
-                      <button type="button" aria-label="等間隔に分布" title="等間隔に分布" onClick={() => applyKeyOperation("stagger")}>◆··◆</button>
-                      <button type="button" aria-label="順序を反転" title="順序を反転" onClick={() => applyKeyOperation("reverse")}>⇄</button>
-                    </>
-                  ) : null}
-                  {keySection === "stretch" ? (
-                    <>
-                      <small>STRETCH</small>
-                      <button type="button" onClick={() => applyKeyOperation("stretch-80")}>80%</button>
-                      <button type="button" onClick={() => applyKeyOperation("stretch-120")}>120%</button>
-                    </>
-                  ) : null}
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="candidate-key-tools-head">
-                  <b>▤ {selectedObjects.size}</b>
-                </div>
-                <div className="candidate-key-sections">
-                  {[
-                    ["align", "┆▤┆", "Layer Align"],
-                    ["stagger", "▤⋰▤", "Layer Stagger"],
-                    ["shift", "←▤→", "Layer Shift"],
-                  ].map(([section, icon, label]) => (
-                    <button
-                      type="button"
-                      aria-label={label}
-                      aria-expanded={layerSection === section}
-                      key={section}
-                      title={label}
-                      onClick={() =>
-                        setLayerSection((current) =>
-                          current === section ? null : section,
-                        )
-                      }
-                    >
-                      {icon}
-                    </button>
-                  ))}
-                </div>
-                <div className="candidate-key-actions">
-                  {layerSection === "align" ? (
-                    <>
-                      <small>ALIGN</small>
-                      <button type="button" aria-label="Layerを開始へ整列" onClick={() => applyLayerOperation("align-start")}>│▤</button>
-                      <button type="button" aria-label="Layerを終了へ整列" onClick={() => applyLayerOperation("align-end")}>▤│</button>
-                    </>
-                  ) : null}
-                  {layerSection === "stagger" ? (
-                    <>
-                      <small>STAGGER</small>
-                      <button type="button" aria-label="Layerを等間隔に分布" onClick={() => applyLayerOperation("stagger")}>▤··▤</button>
-                      <button type="button" aria-label="Layer順序を反転" onClick={() => applyLayerOperation("reverse")}>⇄</button>
-                    </>
-                  ) : null}
-                  {layerSection === "shift" ? (
-                    <>
-                      <small>SHIFT</small>
-                      <button type="button" aria-label="Layerを左へ移動" onClick={() => applyLayerOperation("shift-left")}>≪</button>
-                      <button type="button" aria-label="Layerを右へ移動" onClick={() => applyLayerOperation("shift-right")}>≫</button>
-                    </>
-                  ) : null}
-                </div>
-              </>
-            )}
-          </aside>
-        ) : (
-          <button
-            type="button"
-            className="candidate-key-tools-open"
-            aria-label="Key Toolsを開く"
-            onClick={() => setKeyToolsOpen(true)}
-          >
-            ◆
-          </button>
-        )}
+        <KeyToolsCandidate
+          open={keyToolsOpen}
+          onOpen={() => setKeyToolsOpen(true)}
+          onClose={() => setKeyToolsOpen(false)}
+          mode={keyToolsMode}
+          onModeChange={setKeyToolsMode}
+          keyCount={selectedKeys.size}
+          layerCount={selectedObjects.size}
+          scope={keyScope}
+          onScopeChange={setKeyScope}
+          keySection={keySection}
+          onKeySectionChange={setKeySection}
+          layerSection={layerSection}
+          onLayerSectionChange={setLayerSection}
+          onKeyOperation={applyKeyOperation}
+          onLayerOperation={applyLayerOperation}
+        />
         <div
           className="time-plane candidate-time-viewport"
           aria-label="Object barをpackingした一枚の時間面"
