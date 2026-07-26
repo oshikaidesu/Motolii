@@ -109,7 +109,7 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 
 | 項目 | 内容 |
 |---|---|
-| 種類 / 状態 | `SPEC / DECIDE` |
+| 種類 / 状態 | `SPEC / DONE` |
 | 一成果 | fixed-Mac platform prerequisite evidenceとdistribution gateを別ID・別証跡にする |
 | authority | M3 G0-9、product mock recovery §6、快適利用map §3.2/W0g |
 | 変更面 | `docs/specs/M3-ui-integration.md`、`docs/implementation-ledger.md`、`docs/ui-runtime-architecture.md`、G0-9現行decisionの追補、decision index |
@@ -121,7 +121,7 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 
 | 項目 | 内容 |
 |---|---|
-| 種類 / 状態 | `SPEC / WAIT`（CU-G01） |
+| 種類 / 状態 | `SPEC / DO`（CU-G01 `DONE`） |
 | 一成果 | Selected U seriesへRectangle D2、Vector、U3a、U2h subset、D5、project lifecycle、Exportの合流順を入れる |
 | authority | implementation ledger、M3直列順、Rectangle contract §10、work map §9.1 |
 | 変更面 | `docs/implementation-ledger.md`、`docs/specs/M3-ui-integration.md`、既存U枝番表、decision index |
