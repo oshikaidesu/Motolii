@@ -132,6 +132,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | PRODUCT-ASSET | CU-0A08IT | M3 / VS-1 / B / Direct Inspector connection | `WAIT` | — | CU-0A08IP `DONE` + U4a-2 Direct製品入口未成立 | Host transport・typed intent・JSX binding・`S`行は非目標のまま。Advanced入口のU4cはU2c-2依存 |
 | ORACLE-GUARD | CU-0A08IQ | M3 prerequisite / Inspector stale-pattern oracle precision | `DONE` | — | pre-edit inventory testで、完了済みInspector inventoryのtokenから別taskのBrowser decoder current-state tokenまで同一行を横断するT7誤検知を再現。hash driftとは独立 | 4 path・5 patternを維持し、sentence/task境界を越えない精密化、真のstale拒否、別task current-state受理を独立ticketで固定する。検査対象file/line個別除外、仕様本文整形、hash更新、BP差分は含めない |
 | ORACLE-GUARD | CU-0A08IR | M3 prerequisite / Inspector authority hash reclosure | `DONE` | — | `b0c0f916`でInspector分割決定の進行状態とDirect/U4c依存整理が正当に更新された一方、inventory guardの固定hashが旧blobのままであることを再現。CU-0A08IPの意味・実装は変更しない。pre-edit testで独立T7誤検知も判明したためCU-0A08IQ待ち | CU-0A08IQ完了後、authority本文を変更せずguardの固定hashだけを現行blobへ再締結して専用testと全reference guardを緑へ戻す。CU-0A08BPとは別ticket・別commit |
+| ORACLE-GUARD | CU-0A08BQ | M3 prerequisite / Browser completion-transition oracle precision | `DO` | — | 隔離BP v5でCU-0A08BPを`DONE`へ正当更新すると、T7 A1のlive selectorが別taskの状態語`DO`へ依存しているためreference guardが216中215となることを再現 | 4 path・5 patternを維持し、A1 selectorを状態非依存化してBP `DO`／`DONE` synthetic acceptを固定する。BP実装、仕様本文、authority hash、React／Rust変更は含めない |
 | VISUAL-RESPONSE | G0-6H | M3 evidence / VS-1 / visual | `DO / HUMAN` | — | 5 reference screenと30 PNG | U0e-3だけを解禁可 |
 | AUTHORING-SCAFFOLD | VSM-A4S | Vism / spec | `DO / SPEC` | — | VSM-A1/A2/A3、仕様と実装の別PR決定 | VSM-A4Iは全体レビュー後 |
 | DELEGATION-GUARD | GR-D3 | supervised runner / derived output closure | `DONE` | [#329](https://github.com/oshikaidesu/Motolii/issues/329) | [#336](https://github.com/oshikaidesu/Motolii/pull/336)をmainへ統合。専用runner試験、workspace、docs、実K0停止形、Grok `ACCEPT`で閉包 | 解禁後のK0は[#338](https://github.com/oshikaidesu/Motolii/pull/338)で完了。既知派生物だけのfail-closed清掃を後続発注へ維持 |
@@ -187,6 +188,8 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | CU-0A08I | `SPLIT` | [Inspector read-model分割決定](reviews/2026-07-26-cu-0a08i-inspector-read-model-split-decision.md)で、既決field不足、Host transport/selection不在、intentのU4a/U4c留保を確認。CU-0A08IS→CU-0A08IP→CU-0A08ITへ分割 |
 | CU-0A08IS | `DONE` | [Inspector read-model inventory](reviews/2026-07-26-cu-0a08is-inspector-read-model-inventory.md)、`docs/mocks-ui/guard-tests/inspector-read-model-inventory.test.mjs`、`node --test docs/mocks-ui/guard-tests/inspector-read-model-inventory.test.mjs` |
 | CU-0A08IP | `DONE` | `ui/motolii-web/src/read-model/inspectorReadModelDecoder.js`、`docs/mocks-ui/guard-tests/inspector-read-model-decoder.test.mjs`、`node --test docs/mocks-ui/guard-tests/inspector-read-model-decoder.test.mjs`（39）、`npm run test:reference-guard`（172） |
+| CU-0A08IQ | `DONE` | commit `6f259b6e`でT7のsentence/task境界精密化を完了 |
+| CU-0A08IR | `DONE` | commit `1cf46779`でInspector authority hash再締結を完了 |
 | CU-0A04 | `DONE` | [快適利用粒度化 W0表](reviews/2026-07-22-m3-comfortable-use-granulation.md)の`CU-0A04`行でR1 Browserのproduct ownerへの直接移管完了を確認 |
 | CU-0A08B | `SPLIT` | CU-G09完了後のreadiness再確認で、CU-G09 §4/§6/§7だけで閉じるCU-0A08BP pure decoderと、U4a-2を要するCU-0A08BT Host projection/typed intent/JSX接続へ分割 |
 | CU-G09O | `DONE` | [CU-G09O Browser decoder output契約決定](reviews/2026-07-26-cu-g09o-browser-decoder-output-contract-decision.md) |
