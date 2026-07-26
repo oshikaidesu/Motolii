@@ -243,7 +243,8 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 | CU-0A07B | `ASSET / DONE` | [#355](https://github.com/oshikaidesu/Motolii/pull/355)で固定mock内でInspectorを同形React化しlegacy adapterを封じる | CU-0A07A | exact-count containment、双方向store 0、skeleton代用0 | — |
 | CU-0A07C | `ASSET / DONE` | [#357](https://github.com/oshikaidesu/Motolii/pull/357): R4B source/CSSをproduct ownerへbyte同一移管 | CU-0A07B | mock copy 0、legacy runtime import 0、state owner維持 | source closureや公開境界の変更が必要 |
 | CU-0A08B | `CORE / SPLIT` | Browser接続をprojection decoderとtyped intentへ分離 | CU-0A04、CU-G09 | CU-0A08BP→CU-0A08BTの順で一契約境界ずつ閉じる | decoderとHost接続を一粒へ戻したくなる |
-| CU-0A08BP | `CORE / DO` | CU-G09準拠のproduct-owned・非export pure Browser catalog decoder | CU-0A04、CU-G09 | strict revision、unknown/non-finite/oversized/dangling/§6a禁止key拒否、React semantic write 0 | `S`行、drag payload、Host transport、JSX bindingが必要 |
+| CU-G09O | `SPEC / DO` | CU-G09の未決decoder出力shapeと拒否family写像を内部read-model契約として追補 | CU-G09 | validated snapshotのdeep clone、B11旧文言の明示撤回、B12不変条件化、B13/B14型gate、`S`意味追加0 | vocabularies/label経路を落とす、またはguard testを正本にしたくなる |
+| CU-0A08BP | `CORE / WAIT` | CU-G09/CU-G09O準拠のproduct-owned・非export pure Browser catalog decoder | CU-0A04、CU-G09、CU-G09O | strict revision、unknown/non-finite/oversized/dangling/§6a禁止key拒否、React semantic write 0 | `S`行、drag payload、Host transport、JSX bindingが必要 |
 | CU-0A08BT | `CORE / WAIT` | Browser projection/typed intentをHostとproduct JSXへ接続 | CU-0A08BP、U4a-2 | scoped identity、1 intent、stale/duplicate拒否、React正本0 | bare ID推測、別intent終端、UI所有Undo/selectionが必要 |
 | CU-0A08E | `CORE / WAIT` | Easing trigger stateをHost projection/typed intentへ交換 | CU-0A05B、U4b契約 | key上/区間外disabled理由、curve state二重所有0 | Interp/区間意味の新契約が必要 |
 | CU-0A08K | `CORE / WAIT` | KEYS/LAYERS stateをHost projection/typed intentへ交換 | CU-0A06、既存U3a/U4a/U4b projection契約 | selection/packingをReactが所有しない、reloadでHostから復元 | native/React間に双方向storeが必要 |
