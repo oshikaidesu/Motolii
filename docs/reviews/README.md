@@ -290,6 +290,7 @@
 | [2026-07-26-cu-0a08i-inspector-read-model-split-decision.md](2026-07-26-cu-0a08i-inspector-read-model-split-decision.md) | CU-0A08I Inspector read-model再判定・分割決定 |
 | [2026-07-26-cu-0a08is-inspector-read-model-inventory.md](2026-07-26-cu-0a08is-inspector-read-model-inventory.md) | CU-0A08IS Inspector read-model inventory・fixture拒否契約 |
 | [2026-07-26-cu-g09-browser-catalog-projection-contract-decision.md](2026-07-26-cu-g09-browser-catalog-projection-contract-decision.md) | CU-G09 Browser catalog projection契約決定 |
+| [2026-07-26-cu-g09o-browser-decoder-output-contract-decision.md](2026-07-26-cu-g09o-browser-decoder-output-contract-decision.md) | CU-G09O Browser decoder output契約決定 |
 | [2026-07-26-cu-102-fresh-layerid-addtrackitem-atomicity-decision.md](2026-07-26-cu-102-fresh-layerid-addtrackitem-atomicity-decision.md) | CU-102 fresh LayerId + AddTrackItem原子性決定 |
 | [2026-07-26-cu-g03-edit-durability-ordering-decision.md](2026-07-26-cu-g03-edit-durability-ordering-decision.md) | CU-G03 edit durability / publish順序決定 |
 | [2026-07-26-u3a-1-headless-timeline-owner-visibility-split-decision.md](2026-07-26-u3a-1-headless-timeline-owner-visibility-split-decision.md) | U3a-1 headless Timeline owner/visibility分割決定 |
