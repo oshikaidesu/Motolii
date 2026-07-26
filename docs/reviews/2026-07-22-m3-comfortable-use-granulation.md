@@ -133,7 +133,7 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 
 | 項目 | 内容 |
 |---|---|
-| 種類 / 状態 | 親`SPLIT`。`CU-G03D SPEC / DONE`、`CU-G03R M2 prerequisite / DO`（PRODUCT-ASSET lane、[CU-G03決定](2026-07-26-cu-g03-edit-durability-ordering-decision.md)） |
+| 種類 / 状態 | 親`DONE`。`CU-G03D SPEC / DONE`、`CU-G03R M2 prerequisite / DONE`（[#369](https://github.com/oshikaidesu/Motolii/pull/369)、[CU-G03決定](2026-07-26-cu-g03-edit-durability-ordering-decision.md)） |
 | 一成果 | VS-1の単一command actionについて、non-live preflight、journal commit、live Apply/Undo/Redo、revision、snapshot/selection publishの順序と失敗時正本を決定済み |
 | authority | M2 D1d/D1m/D2、U2b、Rectangle contract §8/§11 |
 | 変更面 | M2仕様のD2/journal追補、Rectangle D2 decision、M3 U2b依存記述、decision index |
@@ -282,7 +282,7 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 
 | ID | 種類 / 状態 | 一成果 | 依存 | 合格と必須負例 | STOP |
 |---|---|---|---|---|---|
-| CU-101 | `SPEC / WAIT` | Rectangle Placeのtarget/start/duration/recipe/position/nameを決定 | CU-G02 | 正準Y-up/RationalTime、UI px/DPI/DOM型0 | いずれかを暗黙defaultで埋める必要 |
+| CU-101 | `SPEC / DO` | Rectangle Placeのtarget/start/duration/recipe/position/nameを決定 | CU-G02 | 正準Y-up/RationalTime、UI px/DPI/DOM型0 | いずれかを暗黙defaultで埋める必要 |
 | CU-102 | `SPEC / WAIT` | fresh LayerId + AddTrackItem原子性を採択 | CU-101、CU-G03 | live-next検査、失敗時counter/history/revision不変、journal互換 | 公開raw ID mint/汎用transactionが必要 |
 | CU-103 | `CORE / WAIT` | `VectorRecipe::StandardShape::Rect`をD3/GPUへlower | M2 Vector意味、CU-101 | preview/export pixel同一、fixture rectで代用しない | 新Vector意味・golden更新が必要 |
 | CU-104 | `SPEC / WAIT` | U2h selection publish/Undo/Redo policyを決定 | CU-G02/03 | Document snapshotと整合したTransient selection envelope | selectionをDocument/journal/Undoへ保存したくなる |
