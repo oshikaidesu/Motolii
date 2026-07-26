@@ -133,13 +133,13 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 
 | 項目 | 内容 |
 |---|---|
-| 種類 / 状態 | `SPEC / DECIDE` |
-| 一成果 | `apply_macro`、journal commit、drag terminal、snapshot/selection publishの順序と失敗時正本を決める |
+| 種類 / 状態 | 親`SPLIT`。`CU-G03D SPEC / DONE`、`CU-G03R M2 prerequisite / DO`（PRODUCT-ASSET lane、[CU-G03決定](2026-07-26-cu-g03-edit-durability-ordering-decision.md)） |
+| 一成果 | VS-1の単一command actionについて、non-live preflight、journal commit、live Apply/Undo/Redo、revision、snapshot/selection publishの順序と失敗時正本を決定済み |
 | authority | M2 D1d/D1m/D2、U2b、Rectangle contract §8/§11 |
 | 変更面 | M2仕様のD2/journal追補、Rectangle D2 decision、M3 U2b依存記述、decision index |
-| 正例 | 成功時だけdurable editと整合snapshotが一度見え、reopenで同じDocument意味を復元する |
-| 負例 | journal失敗後に成功snapshotをpublish、UI retryで二重適用、selectionをjournalへ保存 |
-| STOP | crash境界の正本または既存journal互換を一意に決められない |
+| 正例 | Apply/Redoはforward、Undoはinverseを各1件durable commitし、live成功後だけreconcile済みsnapshotを一度publish。CU-G03Rはcatalog未反映committed tailにMainFileを返さず既存replayで最終Document意味を復元する |
+| 負例 | journal失敗後に成功snapshotをpublish、post-durable失敗をretry、UI retryで二重適用、selectionをjournalへ保存 |
+| STOP | 複数command macro耐久、journal payload/min-reader変更、public raw writer、再起動後Undo履歴が必要。CU-G03Rはcatalog repair/truncateやGAP-24を含めない |
 
 ### CU-G04 project lifecycle製品入口仕様
 
@@ -289,7 +289,7 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-105 | `CORE / WAIT` | U3a layout/hit-test/dense Timeline projectionを閉じる | 既存U3a | 1000 clip/100k key、zoom境界でselection/playhead/range不変。G0-9L evidenceを依存充足にしない | React TimelineまたはDOM identityが必要 |
 | CU-106 | `CORE / WAIT` | U2h selection kernelとessential focusを実装 | CU-104/105 | Stage/Timeline/Inspector同じstable ID、hidden selection件数+戻る | surface別selection storeが必要 |
 | CU-107 | `CORE / WAIT` | drag epoch/sequence/dedupe coordinatorを製品Hostへ接続 | 既存D&D spike、CU-0B05 | preview/terminal配送、Esc/outside/capture loss、stale/duplicateをD2未接続で検証 | transport IDをDocumentへ保存したくなる |
-| CU-109 | `CORE / WAIT` | journal commitとsnapshot publishをCU-G03順序で製品edit runtimeへ配線 | CU-G03、U2b/D1m | journal失敗時publish 0、再open同値、retry二重適用0 | UI側journal writerまたは新永続payloadが必要 |
+| CU-109 | `CORE / WAIT` | journal commitとsnapshot publishをCU-G03順序で製品edit runtimeへ配線 | CU-G03D、CU-G03R、U2b/D1m | journal失敗時publish 0、再open同値、retry二重適用0 | UI側journal writerまたは新永続payloadが必要 |
 | CU-110 | `CORE / WAIT` | Place intent/requestからfresh ID plannerと1 macro commitを接続 | CU-102/107/109 | preview中D2 0、valid dropでAddTrackItem/apply_macro各1、失敗/cancel 0 | 公開planner/汎用transactionまたはraw ID mintが必要 |
 | CU-111 | `PRODUCT / WAIT` | Undo/Redo製品CommandIdとsingle-writer配送を接続 | CU-109、U0c/U2b | 成功時だけsnapshot publish、失敗でDocument/history不変、UI history 0 | Undo/Redoをsurface別local stateにしたくなる |
 | CU-108 | `E2E / WAIT` | Rectangleを三面へ投影しUndo/Redoする | CU-103/106/110/111、CU-0B05 | 同じrevision/LayerId、Undoで三面から消えRedoで同ID復帰 | diagnostic/fixture-only rectしか表示できない |
