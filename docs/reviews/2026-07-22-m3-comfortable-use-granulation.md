@@ -121,7 +121,7 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 
 | 項目 | 内容 |
 |---|---|
-| 種類 / 状態 | `SPEC / DO`（CU-G01 `DONE`） |
+| 種類 / 状態 | `SPEC / DONE`（CU-G01 `DONE`） |
 | 一成果 | Selected U seriesへRectangle D2、Vector、U3a、U2h subset、D5、project lifecycle、Exportの合流順を入れる |
 | authority | implementation ledger、M3直列順、Rectangle contract §10、work map §9.1 |
 | 変更面 | `docs/implementation-ledger.md`、`docs/specs/M3-ui-integration.md`、既存U枝番表、decision index |
@@ -245,9 +245,9 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 | CU-0A08B | `CORE / WAIT` | Browser fixture stateをrevision付きprojection/typed intentへ交換 | CU-0A04、CU-G09 | unknown/non-finite/oversized/dangling拒否、React semantic write 0 | catalog field不足をID/labelから推測したくなる |
 | CU-0A08E | `CORE / WAIT` | Easing trigger stateをHost projection/typed intentへ交換 | CU-0A05B、U4b契約 | key上/区間外disabled理由、curve state二重所有0 | Interp/区間意味の新契約が必要 |
 | CU-0A08K | `CORE / WAIT` | KEYS/LAYERS stateをHost projection/typed intentへ交換 | CU-0A06、既存U3a/U4a/U4b projection契約 | selection/packingをReactが所有しない、reloadでHostから復元 | native/React間に双方向storeが必要 |
-| CU-0A08IS | `SPEC / DO` | Inspector全表示を既決sourceあり／未決へ分類しread-model入力と拒否条件を固定 | CU-0A07C | 1要素1source、未決推測0、code/API変更0 | Document/plugin/transport/intent意味の発明が必要 |
-| CU-0A08IP | `CORE / WAIT` | fixture由来read-only projection decoder。Host transportは非目標 | CU-0A08IS | unknown/non-finite/dangling/stale拒否、React semantic write 0 | 二重store、DOM変更、公開transportが必要 |
-| CU-0A08IT | `CORE / WAIT` | 既存DomainIntent→DocumentCommandRequest→D2へInspector操作を接続 | CU-0A08IP、U4a-2/U4c | 1 gesture=1 intent、Cancel/失敗=変更0 | 別intent終端、React Undo/selection正本が必要 |
+| CU-0A08IS | `SPEC / DONE` | Inspector全表示を既決sourceあり／未決へ分類しread-model入力と拒否条件を固定 | CU-0A07C | 1要素1source、未決推測0、code/API変更0 | Document/plugin/transport/intent意味の発明が必要 |
+| CU-0A08IP | `CORE / DONE` | fixture由来read-only projection decoder。Host transportは非目標 | CU-0A08IS | unknown/non-finite/dangling/stale拒否、React semantic write 0 | 二重store、DOM変更、公開transportが必要 |
+| CU-0A08IT | `CORE / WAIT` | 既存DomainIntent→DocumentCommandRequest→D2へInspector操作を接続 | CU-0A08IP、U4a-2 | 1 gesture=1 intent、Cancel/失敗=変更0 | 別intent終端、React Undo/selection正本が必要 |
 | CU-0A09 | `PRODUCT / WAIT` | R6 diagnostic routeをproduction navigationから分離 | CU-0A08B/E/K/IT | 通常routeは正しい製品面、diagnosticはdevelopment限定 | diagnostic画面しか成立しない |
 
 React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`まで8ラベルを順番どおり持つ。
@@ -455,7 +455,7 @@ Claude Code `claude-fable-5`へ実ファイルと機械guardをread-onlyで再�
 ## 18. 現在の停止線
 
 - 現在sliceとblocking decisionは[縦slice実行方針](2026-07-24-m3-vertical-slice-execution-decision.md)を正とする
-- U0e-2R/U0e-2、CU-0A03/R0、CU-0A04/R1、CU-0A05A/R2A、CU-0A05B/R2B、CU-0A06A/R3A、CU-0A06B/R3B、CU-0A07S/R4S、CU-0A07A/R4A、CU-0A07B/R4B、CU-0A07C/R4Cは完了済みで再実行しない。CU-0A08Iは分割済みで、現在粒は`CU-0A08IS`の`SPEC / DO`。Motolii Studio Previewは未実装である
+- U0e-2R/U0e-2、CU-0A03/R0、CU-0A04/R1、CU-0A05A/R2A、CU-0A05B/R2B、CU-0A06A/R3A、CU-0A06B/R3B、CU-0A07S/R4S、CU-0A07A/R4A、CU-0A07B/R4B、CU-0A07C/R4Cは完了済みで再実行しない。CU-0A08Iは分割済み。機械dispatchと現在粒は[implementation-ledger.md](../implementation-ledger.md)を唯一の正とする。Motolii Studio Previewは未実装である
 - CU-0G03はユーザーによる実windowの実IME／VoiceOver／復帰審判で合格し、CU-0G04Bまで責任最小化短票どおり既存winit/wgpu/wry/macOS標準経路を使う単一runのmanifestでL3を閉じた。CU-0G05L reviewでL1正本とGPU rawの不足を検出し、`CU-0G02A`で正本を修正した。`CU-0G02BH`はwgpu標準queryだけのbounded harnessを固定し、`CU-0G02B`はその実行commitを使う同一session再実測をGrok P0/P1=0で閉じた。CU-0G05Lは8 retained pathを単一manifestへ束ね、Grok R2 P0/P1/P2=0で固定Mac prerequisite evidenceだけを限定確定した。W0b、H1b、製品window、Windows/追加hardwareは解禁しない
 - G0-6HはU0e-3だけを止める並行人間審判であり、R0/R1とPreview骨格を直列停止しない
 - CU-G01〜CU-G10は仕様判断粒で、コード実装と同時に行わない

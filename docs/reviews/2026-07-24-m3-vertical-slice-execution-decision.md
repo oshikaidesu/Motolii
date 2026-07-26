@@ -103,7 +103,7 @@ VS-1には、実装orderより先に閉じる判断と順序改訂がある。�
 | Blocking decision | 旧CU対応 | 閉じること | 現行処分 |
 |---|---|---|---|
 | Local Alpha用platform gate | CU-G01 | **DONE**。G0-9Lは固定Mac prerequisite evidenceだけを限定確定し、G0-9DへWindows・追加hardware・配布対象Macを残す | [G0-9段階化](2026-07-23-m3-g0-9-staged-platform-gates.md)を正とし、W0b/H1b/Preview完成へ外挿しない |
-| Selected U seriesの順序 | CU-G02 | U4a/U4c/U2c-2へ先行する現行列と、VS-1に必要なU2h/Rectangle接続の矛盾を解消 | M3仕様とledgerを同じ変更で改訂するまで現行順を追い越さない |
+| Selected U seriesの順序 | CU-G02 | U4a/U4c/U2c-2へ先行する現行列と、VS-1に必要なU2h/Rectangle接続の矛盾を解消 | **DONE**。次PRODUCT-ASSET粒は`U3a-1`。[M3仕様 運用順](../specs/M3-ui-integration.md)、[implementation-ledger](../implementation-ledger.md)、[decision-index](../decision-index.md)を本変更で同時更新 |
 | journal durabilityとsnapshot publish順 | CU-G03/CU-109 | preflight、journal durability、Document適用、revision、snapshot publish、失敗時不変の順序 | 既存D1m/D2 authorityへ照合した仕様判断までRectangle commitを接続しない |
 | Browser catalog projection | CU-G09 | Rectangleを含むcardの型付きread modelとunknown/dangling拒否 | catalog ID/labelから意味を推測せず、projection契約決定までHost接続を停止 |
 | Rectangle Place意味とidentity | CU-101/CU-102 | target、start、duration、recipe、position、name、fresh LayerId、AddTrackItem原子性 | 既存Document意味だけで閉じる仕様判断までD2 orderを起こさない |

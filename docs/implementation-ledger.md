@@ -70,7 +70,7 @@ Selected U series:
 U0a DONE → U0b-1 DONE → U0b-2 DONE → U0c-1 DONE → U0c-2 DONE → U0d-1 DONE → U0d-2 DONE → U0d-3 DONE
 → U2a-0 DONE → U2a-1 DONE → U1a-1 DONE → U1a-2 DONE → U1b-1 DONE → U1b-2 DONE → U2b-1 DONE → U2c-1 DONE
 → U2c-4 DONE → U0e-1 DONE → U0e-2R DONE → GR-D1 DONE → GR-D2 DONE → GR-R1/R2 DONE → GR-R3 DONE → U0e-2 DONE
-→ G0-9L DONE → R0 source inventory DONE → R1 Browser ownership DONE → R2A/R2B Easing DONE → R3A/R3B KEYS/LAYERS DONE → R4S/R4A/R4B/R4C DONE → CU-0A08I SPLIT → CU-0A08IS DONE → CU-0A08IP DO → rolling VS-1 enabling order
+→ G0-9L DONE → R0 source inventory DONE → R1 Browser ownership DONE → R2A/R2B Easing DONE → R3A/R3B KEYS/LAYERS DONE → R4S/R4A/R4B/R4C DONE → CU-0A08I SPLIT → CU-0A08IS DONE → CU-0A08IP DONE → CU-G02 DONE → U3a-1 DO
 
 Parallel evidence:
 G0-6H HUMAN（U0e-3だけを停止） / G0-9D WAIT-HARDWARE（Distribution Ready）
@@ -116,7 +116,9 @@ P0I #170 → P7a → P7b → P7c → P7U
 | lane | 現在粒 | Phase / slice / checklist | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
 | PRODUCT-ASSET | CU-0A08IP | M3 / VS-1 / B / Inspector fixture decoder | `DONE` | — | [Inspector read-model inventory](reviews/2026-07-26-cu-0a08is-inspector-read-model-inventory.md)でCU-0A08IS閉包とCU-0A08IP着手境界を固定。`node --test docs/mocks-ui/guard-tests/inspector-read-model-decoder.test.mjs` 39/39、`npm run test:reference-guard` 172/172 | product-owned・非export pure decoder module。fixture/testのみ。Host transport・intent・JSX binding・`S`行・Rust/schema/plugin変更は非目標 |
-| PRODUCT-ASSET | CU-G02 | M3 / VS-1 / SPEC / Selected U series order | `DO` | — | CU-G01は[G0-9段階化](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)で完了済み。順序改訂はdocs-onlyで、同時点の次実装`DO`を1粒だけ選ぶ | M3仕様・U枝番表・decision indexを同じ変更で更新し、選んだ次粒だけを`DO`へ送る |
+| PRODUCT-ASSET | CU-G02 | M3 / VS-1 / SPEC / Selected U series order | `DONE` | — | CU-G01は[G0-9段階化](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)で完了済み。本変更でSelected U seriesの次実装粒をU3a-1に固定した | 次PRODUCT-ASSET粒は`U3a-1`。U4a-1/U2h-1は今回未選択。RectangleはCU-G09/CU-G03+CU-109/CU-101+CU-102/CU-104のまま未決 |
+| PRODUCT-ASSET | U3a-1 | M3 / VS-1 / B / headless Timeline projection | `DO` | — | `U0a`/`U0b-1`/`U0b-2`は[発注依存証跡](#発注依存証跡)で`DONE`。意味正本は[specs/M3-ui-integration.md](specs/M3-ui-integration.md) U3a行。G0-6H/U0e-3/U2c-3/U2c-5/G0-9は入場条件にしない | toolkit/renderer非依存のDocument→Timeline projection/layout/cull/hit-testを小さなfixtureで閉じる。G0-9や100k再実測を入場条件にしない |
+| PRODUCT-ASSET | CU-0A08IT | M3 / VS-1 / B / Direct Inspector connection | `WAIT` | — | CU-0A08IP `DONE` + U4a-2 Direct製品入口未成立 | Host transport・typed intent・JSX binding・`S`行は非目標のまま。Advanced入口のU4cはU2c-2依存 |
 | VISUAL-RESPONSE | G0-6H | M3 evidence / VS-1 / visual | `DO / HUMAN` | — | 5 reference screenと30 PNG | U0e-3だけを解禁可 |
 | AUTHORING-SCAFFOLD | VSM-A4S | Vism / spec | `DO / SPEC` | — | VSM-A1/A2/A3、仕様と実装の別PR決定 | VSM-A4Iは全体レビュー後 |
 | DELEGATION-GUARD | GR-D3 | supervised runner / derived output closure | `DONE` | [#329](https://github.com/oshikaidesu/Motolii/issues/329) | [#336](https://github.com/oshikaidesu/Motolii/pull/336)をmainへ統合。専用runner試験、workspace、docs、実K0停止形、Grok `ACCEPT`で閉包 | 解禁後のK0は[#338](https://github.com/oshikaidesu/Motolii/pull/338)で完了。既知派生物だけのfail-closed清掃を後続発注へ維持 |
@@ -125,7 +127,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | M2-REPAIR | GAP-23 | M2 / narrow repair | `WAIT` | — | 独立D1i-4 LookAt/Follow oracle分離の採番・完了 | GAP-23全25件を再発注し、後にGAP-24を判定 |
 | M2-REPAIR | GAP-24 | M2 / narrow repair | `WAIT` | — | GAP-23 | GAP-24後にclose |
 | ORACLE-GUARD | GAP-25 | M2 / guard repair | `DO / CHECK-PATH` | — | GAP-23との許可path非重複 | semantic oracle gate自己保護 |
-| PRODUCT-ASSET | U2c-2 | M3 / VS-2 / D | `WAIT` | — | U4a-2のDirect製品入口とU4cのAdvanced製品入口 | 実在入口のDocument意味/Undo同値conformance |
+| PRODUCT-ASSET | U2c-2 | M3 / VS-2 / D | `WAIT` | — | U4a-2（Direct）製品入口とU4c（Advanced）製品入口 | 実在入口のDocument意味/Undo同値conformance |
 
 ### 独立 History tooling lane
 
@@ -172,6 +174,10 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | CU-0A08I | `SPLIT` | [Inspector read-model分割決定](reviews/2026-07-26-cu-0a08i-inspector-read-model-split-decision.md)で、既決field不足、Host transport/selection不在、intentのU4a/U4c留保を確認。CU-0A08IS→CU-0A08IP→CU-0A08ITへ分割 |
 | CU-0A08IS | `DONE` | [Inspector read-model inventory](reviews/2026-07-26-cu-0a08is-inspector-read-model-inventory.md)、`docs/mocks-ui/guard-tests/inspector-read-model-inventory.test.mjs`、`node --test docs/mocks-ui/guard-tests/inspector-read-model-inventory.test.mjs` |
 | CU-0A08IP | `DONE` | `ui/motolii-web/src/read-model/inspectorReadModelDecoder.js`、`docs/mocks-ui/guard-tests/inspector-read-model-decoder.test.mjs`、`node --test docs/mocks-ui/guard-tests/inspector-read-model-decoder.test.mjs`（39）、`npm run test:reference-guard`（172） |
+| CU-G02 | `DONE` | 本変更でM3仕様[運用順](specs/M3-ui-integration.md)、[implementation-ledger](implementation-ledger.md)、[decision-index](decision-index.md)を同時更新し、次PRODUCT-ASSET粒を`U3a-1`へ固定した |
+| U0a | `DONE` | [主クリティカルパス](#主クリティカルパス) Selected U series行の`U0a DONE`、[M3仕様 運用順](specs/M3-ui-integration.md)、[M3入場判定](#m3への入場判定) |
+| U0b-1 | `DONE` | [主クリティカルパス](#主クリティカルパス) Selected U series行の`U0b-1 DONE`、[M3仕様 運用順](specs/M3-ui-integration.md)、[M3入場判定](#m3への入場判定) |
+| U0b-2 | `DONE` | [主クリティカルパス](#主クリティカルパス) Selected U series行の`U0b-2 DONE`、[M3仕様 運用順](specs/M3-ui-integration.md)、[M3入場判定](#m3への入場判定) |
 | CU-G01 | `DONE` | [G0-9段階化](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)で固定Mac prerequisite evidenceをG0-9Lへ限定し、G0-9DをDistribution Readyまで分離 |
 | GR-D2 | `DONE` | [監督ループ決定](reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md)へ変更許可閉集合、append-only証跡、timeout分離、検収者mutation拒否、resumeを継承済み |
 | GR-D3 | `DONE` | [#336](https://github.com/oshikaidesu/Motolii/pull/336)で既知三entryのfail-closed清掃、HEAD／全ref不変、実K0停止形とGrok到達を閉包 |
@@ -191,7 +197,7 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 |---|---|---|---|---|---|
 | 1 | D1j | M2 | `DONE` | CAM-G0 merge（D1lはmain到達済み） | v5 planar camera schema/default migration |
 | 2 | U2b-1 | M3 | `DONE` | U1b-2 merge | prepared requestをsingle writerへ配送し、成功snapshotをUI/render workerへ購読 |
-| 3 | U3a-1 | M3 | `WAIT` | Selected U seriesのU2c-5までmain到達（論理依存はU0a+U0bのみ） | toolkit/renderer非依存のDocument→Timeline projection/layout/cull/hit-testを小さなfixtureで閉じる。G0-9や100k再実測を入場条件にしない |
+| 3 | U3a-1 | M3 | `DO` | CU-G02で次粒に選定済み。論理依存の`U0a`/`U0b`は`DONE`。G0-6H/U0e-3/U2c-3/U2c-5/G0-9は入場条件にしない | toolkit/renderer非依存のDocument→Timeline projection/layout/cull/hit-testを小さなfixtureで閉じる。G0-9や100k再実測を入場条件にしない |
 | 4 | U3a-2 | M3 | `WAIT` | U3a-1 + G0-9 platform受入 | direct wgpu+Vello候補をwindowed fixture、input、WebView同居、presentまで閉じる。Canvas/browser WebGPUは先例baselineで製品枝にしない |
 | 5 | U2g | M3 | `WAIT` | D1l + D3e + U0e + U2b + U3a-2 merge | Effect常時接続線 |
 | 6 | K1a | M4 | `READY-RECHECK` | K0凍結(test-only)。依存先行の責任最小化ゲートでK1aが必要とする責任を列挙し、K0成果を自動採用せず再判定した後に起票 | ResourceLedgerとhard budget。backendの空きVRAM値を正本にしない |
@@ -251,7 +257,7 @@ U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除
 | resource設定を出す | G0-2 + G0-8 + U0b + K1a → U0f。設定はUser settings、pressure実測値はTransient |
 | 重いpreviewを追従させる | U1b + U1c + U5 + K1d → U1g。project fps/audio clockを変えず表示frameだけ落とす |
 
-したがって現在の短い運用判断は、**CU-0A03 / R0からCU-0A07C / R4Cまでは完了済み。CU-0A08Iは単一実装をSTOPし、Inspector read-model inventory で閉包済み。CU-0A08IPは fixture由来 read-only projection decoder（product-owned・非export、fixture/testのみ）で閉じ、次粒は`CU-0A08IT`。Host transport、typed intent、JSX binding、`S`行の意味決定、Rust/schema/plugin変更を混ぜるならSTOPする。Motolii Studio Previewは未実装。**G0-6Hは同時に進められる人間審判だが、未完了でもR0〜R4やPreview骨格を止めず、U0e-3だけを止める。G0-9DはDistribution Readyまで`WAIT / HARDWARE`。`U2c-2`はVS-2候補かつ実製品入口待ちである。D1n、D5等の独立follow-upをVS-1の再停止理由へしない。
+したがって現在の短い運用判断は、**CU-0A03 / R0からCU-0A07C / R4Cまでは完了済み。CU-0A08Iは単一実装をSTOPし、Inspector read-model inventory で閉包済み。CU-0A08IPは fixture由来 read-only projection decoder（product-owned・非export、fixture/testのみ）で`DONE`。次PRODUCT-ASSET粒は`U3a-1`。`CU-0A08IT`は`WAIT`（`U4a-2` Direct製品入口待ち）。`U2c-2`は`WAIT`（U4a-2 Direct + U4c Advanced）。G0-6HはU0e-3だけを止める。Rectangle経路はCU-G09 / CU-G03+CU-109 / CU-101+CU-102 / CU-104の未決SPECのまま束ねない。Host transport、typed intent、JSX binding、`S`行の意味決定、Rust/schema/plugin変更を混ぜるならSTOPする。Motolii Studio Previewは未実装。**G0-6Hは同時に進められる人間審判だが、未完了でもR0〜R4やPreview骨格を止めず、U0e-3だけを止める。G0-9DはDistribution Readyまで`WAIT / HARDWARE`。`U2c-2`はVS-2候補かつ実製品入口待ちである。D1n、D5等の独立follow-upをVS-1の再停止理由へしない。
 
 ## 更新規則
 
