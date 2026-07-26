@@ -29,7 +29,7 @@ const REF_DOC_PATH = join(
 const AUTHORITY_SHA256 = {
   "AGENTS.md": "aecc970b07098d423c52de5642fe6afc8038a309a4d7ea2027c4664c1b9cae4c",
   "docs/reviews/2026-07-26-cu-0a08i-inspector-read-model-split-decision.md":
-    "5dc69011567d7aa464b525774e447ed0e151c18c25a916bd5af2e0d45e3dc3c2",
+    "4ec2a5296944d60b9e75275b69b841d3600d9f158d63ffccf345dca05ae12182",
   "docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md":
     "5f632d2e7bb2632c47e4b92505add405c4fcfe70d0b104deb08b964797be652c",
   "ui/motolii-web/src/candidates/InspectorCandidate.jsx":
