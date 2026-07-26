@@ -962,15 +962,31 @@ test("T7 progress docs stale-free", () => {
     join(repoRoot, "docs/specs/M3-ui-integration.md"),
     "utf8",
   );
-  const m3RegressionLine = m3Spec
-    .split("\n")
-    .find(
+  const selectRegressionLines = (text) =>
+    text.split("\n").filter(
       (line) =>
-        line.includes("CU-0A08IS") &&
-        line.includes("CU-0A08BP") &&
-        line.includes("`DO`"),
+        line.includes("CU-0A08IS") && line.includes("CU-0A08BP"),
     );
-  assert.ok(m3RegressionLine, "A1: unique M3-ui-integration regression line");
+
+  const m3RegressionLines = selectRegressionLines(m3Spec);
+  assert.equal(
+    m3RegressionLines.length,
+    1,
+    "A1: unique M3-ui-integration regression line",
+  );
+  const m3RegressionLine = m3RegressionLines[0];
+
+  const syntheticBpDo =
+    "CU-0A08ISはinventoryを固定した。次のPRODUCT-ASSET粒は `CU-0A08BP`（`DO`）。";
+  const syntheticBpDone =
+    "CU-0A08ISはinventoryを固定した。次のPRODUCT-ASSET粒は `CU-0A08BP`（`DONE`）。";
+  assert.equal(selectRegressionLines(syntheticBpDo).length, 1, "A6 selector");
+  assert.equal(selectRegressionLines(syntheticBpDone).length, 1, "A7 selector");
+  assert.equal(
+    selectRegressionLines("CU-0A08ISだけの行\nCU-0A08BPだけの行").length,
+    0,
+    "A8 selector requires co-occurrence",
+  );
 
   const acceptControls = [
     ["A1", m3RegressionLine],
@@ -987,6 +1003,8 @@ test("T7 progress docs stale-free", () => {
       "A5",
       "READY-SPECはCU-0A08IS完了を記録し、次の実装粒はCU-0A08BPが`DO`である。",
     ],
+    ["A6", syntheticBpDo],
+    ["A7", syntheticBpDone],
   ];
   for (const [label, sample] of acceptControls) {
     assert.doesNotThrow(() => assertNoStale(sample), label);
