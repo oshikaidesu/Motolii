@@ -19,7 +19,7 @@ use super::catalog::{
 };
 use super::format::{
     journal_path_for_document, motolii_dir_for_document, scan_journal_bytes, scan_journal_fs,
-    JournalRecordKind, JournalScanOutcome, JournalScanStop, ScanJournalOptions,
+    JournalFrame, JournalRecordKind, JournalScanOutcome, JournalScanStop, ScanJournalOptions,
 };
 use super::fs::{DurabilityStage, FsError, JournalFs};
 use super::replay::{
@@ -174,6 +174,17 @@ fn copy_journal_to_corrupt(
     fs.write_create(&dest, &bytes)?;
     fs.sync_file(&dest)?;
     Ok(dest)
+}
+
+fn has_committed_edit_after_last_snapshot(committed: &[JournalFrame]) -> bool {
+    // Commit fsync後・catalog保存前のcrashで残るcommitted edit tailを取りこぼさないため。
+    let snapshot_pos = committed
+        .iter()
+        .rposition(|frame| frame.kind == JournalRecordKind::Snapshot);
+    let start = snapshot_pos.unwrap_or_default();
+    committed[start..]
+        .iter()
+        .any(|frame| frame.kind == JournalRecordKind::Edit)
 }
 
 fn write_recovered_doc(
@@ -337,7 +348,11 @@ pub(crate) fn recover_project(
 
     // tipとmainが一致し、かつcheckpoint以降の未反映Editが無いときだけmainを採用。
     if let (Some(m), Some(j)) = (main_fp, journal_fp) {
-        if m == j && scan.stopped.is_none() && catalog.edits_since_snapshot == 0 {
+        if m == j
+            && scan.stopped.is_none()
+            && catalog.edits_since_snapshot == 0
+            && !has_committed_edit_after_last_snapshot(committed)
+        {
             return Ok(RecoveryResult {
                 document: main.expect("main present"),
                 source: RecoverySource::MainFile,
