@@ -171,4 +171,5 @@ raw stack / raw writer / 汎用peekを公開しない。
 CU-G03Rは[#369](https://github.com/oshikaidesu/Motolii/pull/369)で既存replay guardと
 stale-catalog負例を閉じた。`CU-109`は本決定を直接authorityにできるが、
 Undo/Redo prepared-action順序を再確認するまで自動着手せず、他のVS-1 blocking decisionと
-同じ粒へ束ねない。次のPRODUCT-ASSET粒は`CU-101`（Rectangle Place意味決定）とする。
+同じ粒へ束ねない。後続`CU-101`は完了済みであり、現行の次PRODUCT-ASSET粒は
+`CU-102`（fresh LayerId + AddTrackItem原子性）とする。
