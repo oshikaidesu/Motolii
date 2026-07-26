@@ -66,6 +66,21 @@ const DO_TOKEN = /`(?:CORE \/ )?DO`/;
 const DONE_TOKEN = /`(?:CORE \/ )?DONE`/;
 const WAIT_TOKEN = /`(?:CORE \/ )?WAIT`/;
 
+function selectStaleBrowserDecoderLaneRows(ledgerText) {
+  const laneSection = ledgerText.split("## 現在の並列レーン")[1]?.split("##")[0] ?? "";
+  return laneSection
+    .split("\n")
+    .filter((line) => line.includes("|"))
+    .filter((line) => {
+      const cells = line.split("|").map((cell) => cell.trim());
+      return (
+        cells[1] === "PRODUCT-ASSET" &&
+        cells[2] === "CU-0A08BP" &&
+        DO_TOKEN.test(cells[4] ?? "")
+      );
+    });
+}
+
 function sha256File(relPath) {
   const abs = join(repoRoot, relPath);
   return createHash("sha256").update(readFileSync(abs)).digest("hex");
@@ -1291,13 +1306,29 @@ test("docs CU-0A08BT WAIT per mirror", () => {
   }
 });
 
-test("docs no new PRODUCT-ASSET DO lane", () => {
+test("docs no stale CU-0A08BP PRODUCT-ASSET DO lane", () => {
   const ledger = readFileSync(join(repoRoot, "docs/implementation-ledger.md"), "utf8");
-  const laneSection = ledger.split("## 現在の並列レーン")[1]?.split("##")[0] ?? "";
-  const hits = laneSection
-    .split("\n")
-    .filter((line) => line.includes("PRODUCT-ASSET") && DO_TOKEN.test(line));
-  assert.equal(hits.length, 0);
+  assert.equal(selectStaleBrowserDecoderLaneRows(ledger).length, 0);
+});
+
+test("docs no stale CU-0A08BP PRODUCT-ASSET DO lane synthetic negative", () => {
+  const syntheticLedger = `## 現在の並列レーン
+| lane | 現在粒 | Phase / slice / checklist | 状態 | Issue | 依存確認 | 完了後 |
+|---|---|---|---|---|---|---|
+| PRODUCT-ASSET | CU-0A08BP | M3 / VS-1 / SPEC / synthetic stale hit row | \`DO\` | — | synthetic hit for CU-0A08BP | state must match exact \`DO\` |
+`;
+  assert.equal(selectStaleBrowserDecoderLaneRows(syntheticLedger).length, 1);
+});
+
+test("docs no stale CU-0A08BP PRODUCT-ASSET DO lane synthetic positive", () => {
+  const syntheticLedger = `## 現在の並列レーン
+| lane | 現在粒 | Phase / slice / checklist | 状態 | Issue | 依存確認 | 完了後 |
+|---|---|---|---|---|---|---|
+| PRODUCT-ASSET | SYN-LANE-1 | M3 / VS-1 / SPEC / synthetic unrelated lane | \`DO\` | — | unrelated synthetic id should pass | only status match is for CU-0A08BP |
+| ORACLE-GUARD | CU-0A08BP | M3 prerequisite / synthetic lane mention | \`DO\` | — | mentions CU-0A08BP and DO in descriptive text | lane is the only mismatch |
+| PRODUCT-ASSET | CU-0A08BQ | M3 prerequisite / synthetic id mismatch | \`DO\` | — | mentions CU-0A08BP and DO in descriptive text | ID is the only mismatch |
+`;
+  assert.equal(selectStaleBrowserDecoderLaneRows(syntheticLedger).length, 0);
 });
 
 test("docs M3 spec A1 unique IS BP line", () => {
