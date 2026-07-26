@@ -283,7 +283,7 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | ID | 種類 / 状態 | 一成果 | 依存 | 合格と必須負例 | STOP |
 |---|---|---|---|---|---|
 | CU-101 | `SPEC / DONE` | Rectangle Placeのtarget/start/duration/recipe/position/nameを[歴史回収 §3.2](2026-07-23-historical-d2-selection-timeline-lineage-recovery.md#32-product-placeの閉じた意味)どおり確認 | CU-G02 | 正準Y-up/RationalTime、UI px/DPI/DOM型0。appearanceは未決のまま | いずれかを暗黙defaultで埋める必要 |
-| CU-102 | `SPEC / DO` | fresh LayerId + AddTrackItem原子性を採択 | CU-101、CU-G03 | live-next検査、失敗時counter/history/revision不変、journal互換 | 公開raw ID mint/汎用transactionが必要 |
+| CU-102 | `SPEC / DONE` | [fresh LayerId + AddTrackItem原子性決定](2026-07-26-cu-102-fresh-layerid-addtrackitem-atomicity-decision.md)を採択 | CU-101、CU-G03 | fresh live-next一致+live不在、live mint 0、失敗時counter/history/revision不変、journal互換 | 公開raw ID mint/汎用transactionが必要 |
 | CU-103 | `CORE / WAIT` | `VectorRecipe::StandardShape::Rect`をD3/GPUへlower | M2 Vector意味、CU-101 | preview/export pixel同一、fixture rectで代用しない | 新Vector意味・golden更新が必要 |
 | CU-104 | `SPEC / WAIT` | U2h selection publish/Undo/Redo policyを決定 | CU-G02/03 | Document snapshotと整合したTransient selection envelope | selectionをDocument/journal/Undoへ保存したくなる |
 | CU-105 | `CORE / WAIT` | U3a layout/hit-test/dense Timeline projectionを閉じる | 既存U3a | 1000 clip/100k key、zoom境界でselection/playhead/range不変。G0-9L evidenceを依存充足にしない | React TimelineまたはDOM identityが必要 |
