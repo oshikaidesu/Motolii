@@ -10,8 +10,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use motolii_core::RationalTime;
 use motolii_doc::journal::{
-    generation_path_for_document, journal_path_for_document, restore_attempted_path, scan_journal,
-    FaultInjectingFs, FaultPlan, JournalEdit, JournalFs, JournalRecordKind,
+    generation_path_for_document, journal_path_for_document, motolii_dir_for_document,
+    restore_attempted_path, scan_journal, FaultInjectingFs, FaultPlan, JournalEdit, JournalFs,
+    JournalRecordKind,
 };
 use motolii_doc::{
     load_catalog, Bpm, Clip, ClipSource, Command, DocParam, Document, ItemEnvelope, LayerId,
@@ -159,6 +160,81 @@ fn replay_applies_committed_edits_when_main_behind() {
         DocParam::const_f64(1.0)
     );
     assert!(opened.recovered_path.is_some());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn stale_catalog_committed_edit_tail_is_not_served_from_main_file() {
+    let dir = unique_dir("stale-catalog");
+    let path = dir.join("proj.json");
+    let (doc, layer) = doc_with_clip();
+    common::session::save_journal(&path, &doc, &SaveProjectOptions::default());
+
+    let catalog_path = motolii_dir_for_document(&path).join("catalog.json");
+    let stale_catalog = fs::read(&catalog_path).unwrap();
+
+    let edit = set_opacity_cmd(layer, 1.0, 0.25);
+    common::session::save_journal(
+        &path,
+        &doc,
+        &SaveProjectOptions {
+            journal_edit: Some(edit),
+            checkpoint: false,
+            ..Default::default()
+        },
+    );
+
+    fs::write(&catalog_path, stale_catalog).unwrap();
+
+    assert_eq!(
+        load_catalog(&path).unwrap().unwrap().edits_since_snapshot,
+        0
+    );
+    assert_eq!(
+        clip_opacity(&motolii_doc::load_document(&path).unwrap()),
+        DocParam::const_f64(1.0)
+    );
+
+    let (_session, opened) = common::session::open_recovered(&path);
+    assert_ne!(opened.source, RecoverySource::MainFile);
+    assert!(matches!(
+        opened.source,
+        RecoverySource::JournalReplay | RecoverySource::CommittedPrefixReplay
+    ));
+    assert_eq!(clip_opacity(&opened.document), DocParam::const_f64(0.25));
+    assert_eq!(
+        clip_opacity(&motolii_doc::load_document(&path).unwrap()),
+        DocParam::const_f64(1.0)
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn edit_between_two_checkpoints_still_recovers_from_main_file() {
+    let dir = unique_dir("checkpoint-double");
+    let path = dir.join("proj.json");
+    let (doc, layer) = doc_with_clip();
+    common::session::save_journal(&path, &doc, &SaveProjectOptions::default());
+
+    common::session::save_journal(
+        &path,
+        &doc,
+        &SaveProjectOptions {
+            journal_edit: Some(set_opacity_cmd(layer, 1.0, 0.5)),
+            checkpoint: false,
+            ..Default::default()
+        },
+    );
+
+    let (_session_before, opened_with_edit) = common::session::open_recovered(&path);
+    drop(_session_before);
+    let doc_with_edit = opened_with_edit.document.clone();
+
+    common::session::save_journal(&path, &doc_with_edit, &SaveProjectOptions::default());
+
+    let (_session, opened) = common::session::open_recovered(&path);
+    assert_eq!(opened.source, RecoverySource::MainFile);
+    assert_eq!(clip_opacity(&opened.document), DocParam::const_f64(0.5));
     let _ = fs::remove_dir_all(dir);
 }
 
