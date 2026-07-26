@@ -2,7 +2,7 @@
 
 - 日付: 2026-07-26
 - 状態: **決定**
-- 粒: **CU-0A08IS DONE** → 後続 **CU-0A08IP READY-RECHECK**
+- 粒: **CU-0A08IS DONE** → 後続 **CU-0A08IP DO**
 
 ## §1 FACTS
 
@@ -299,11 +299,17 @@
 | CAP-BLEND-MODE | ItemEnvelope.blend · schema.rs:442 | normal/add/multiply | installed.echo-blend-value | 未採用 |
 | CAP-FILL-STROKE | なし | — | installed.fill-chip | 未採用 |
 
+CU-0A08IT向け注記: discover / blocked / missing の可視名へ `CAP-LAYER-NAME` を接続するmappingは、runtime binding前に再照合する。CU-0A08ISの採用判定を配線決定として継承しない。
+
 ## §5 CU-0A08IP 受理入力契約
 
 ### §5.1 受理wrapper
 
-top-level object は **ちょうど4キー**: `fixtureRevision`（整数、decoder定数と等値）、`document`（現行Document JSON）、`nodes`（NodeDesc 由来配列、id は plugin-id 語彙）、`target`（`{ "layer_id": <u64> }`）。`screen` / `mode` / `scenes` / `tokens` は受理しない。
+top-level object は **ちょうど4キー**: `fixtureRevision`（整数、decoder定数 **1** と等値。`fixtureRevision = 1`）、`document`（現行Document JSON）、`nodes`（NodeDesc 由来配列、id は plugin-id 語彙）、`target`（`{ "layer_id": <u64> }`）。`screen` / `mode` / `scenes` / `tokens` は受理しない。
+
+各 `nodes` 要素は `{ "id": <plugin-id>, "params": [ { "id", "value_type", "default", "f64_domain"? } ] }` に固定する。`default` は既存 `Value` の external-tag JSON をそのまま用いる。`NodeDesc` / `ParamDef` へ serde derive を追加しない。
+
+受理fixtureの `nodes` は **1件のみ** とし、`plugins/motolii-plugin-opacity` の `opacity_filter_desc()`（`core.filter.opacity`、param `amount` / `F64` / default `{"F64":1.0}` / `f64_domain` は unit domain）に固定する。`effect_definitions[].params` の object key と `ParamDef.id` の一致照合は本契約の範囲外とする。
 
 ### §5.2 wrapperとDocument serdeの層分離
 
@@ -332,13 +338,17 @@ wrapper層は厳密4キー。document層は現行serdeに従い、flatten 位置
 | R13 | DOM変更: R4C由来のDOM / class / stable ID / ARIA / interaction / visual threshold / golden の変更 |
 | R14 | decoder出力wrapperまたはnode拡張に §6a 禁止key語彙を置くこと（入力 document / DocParam serde key には適用しない） |
 
+R10は blend / domain / default / opacity の**入力検証**のみを行う。blend を decoder 出力へ昇格させない（§4 `CAP-BLEND-MODE` は**未採用**のまま）。
+
 ### §6a R14の適用範囲
 
 R14は **decoder出力objectのkeyとnode拡張keyのみ**に適用する。`document` / `DocParam` / 既存serde面のkeyには適用しない。
 
 禁止key語彙（閉集合）: `fill_color`, `stroke_color`, `z_occlusion`, `occlusion_mode`, `depth_z`, `bake_point`, `composite_bake`, `driver_route`, `driver_routes`, `applied_plugin_history`, `availability`, `availability_lifecycle`, `effect_description`, `input_socket_label`, `socket_type_tag`, `link_label`, `link_target_label`, `primary_selection`, `selected_object`, `editing_effect`, `at_key`。
 
-R14 whitelist（交差してはならない）: `scale`, `blend`, `data`, `look_at`, `follow`, `params`, `extra`, `const`, `keyframes`, `vec2_axes`, `target`, `axis`, `offset`, `track`, `fallback`, `x`, `y`。さらに `docs/mocks-ui/fixtures/reference-document.json` の全keyとも交差してはならない。
+R14 whitelist（閉集合。禁止key語彙と交差してはならない）: `scale`, `blend`, `data`, `look_at`, `follow`, `params`, `extra`, `const`, `keyframes`, `vec2_axes`, `target`, `axis`, `offset`, `track`, `fallback`, `x`, `y`。
+
+R14 **禁止key語彙**（§6a 閉集合）は whitelist と互いに素であり、さらに `docs/mocks-ui/fixtures/reference-document.json` を再帰走査した全key集合とも**交差してはならない**（reference-document key との非交差要件は禁止setにのみ適用し、whitelist には課さない）。
 
 R7 / R11 / R14 の適用面は互いに素であり、R14は現行serdeの未知field保持を上書きしない。
 
@@ -349,7 +359,7 @@ R7 / R11 / R14 の適用面は互いに素であり、R14は現行serdeの未知
 非JSON・模式表記（そのまま入力しない）
 
 ```text
-fixtureRevision : 整数（decoder定数と等値）
+fixtureRevision : 1（decoder定数と等値）
 document        : docs/mocks-ui/fixtures/reference-document.json の現行Document object
 nodes           : NodeDesc 由来 entry の配列（id は plugin-id 文字列語彙）
 target          : { layer_id: u64 }
@@ -360,6 +370,10 @@ target          : { layer_id: u64 }
 ## §8 非目標・STOP
 
 decoder実装、Host transport、typed intent、React/CSS/DOM、Document/plugin公開契約の変更はSTOP。`S` の意味を決める必要が出たらSTOP。
+
+### §8.1 CU-0A08IP 着手境界（DO）
+
+CU-0A08IPの閉じた実装成果は、product-owned・非export の pure decoder module に限定する。呼び出しは fixture / test のみとし、Host transport、typed intent、JSX binding、`S` 行の意味決定、Rust / schema / plugin 契約変更は非目標のままとする。
 
 ## §9 coverage manifest
 
@@ -577,5 +591,6 @@ decoder実装、Host transport、typed intent、React/CSS/DOM、Document/plugin�
 - `loadReferenceFixtures.js` の fail-closed 形（`requireObject` / `requireFinite`）を CU-0A08IP が独自moduleで写す。汎用helperへ昇格しない。
 - `PluginDiagnosticReason`（`plugin_resolution.rs`）は blocked/missing の近接typed語彙。mock lifecycle 文言をそのまま昇格しない。
 - `S` が多く残るのは [分割決定](2026-07-26-cu-0a08i-inspector-read-model-split-decision.md)どおりの責任分割である。
+- CU-0A08ITへ渡す前に、discover / blocked / missing の layer 名mappingは §4 `CAP-LAYER-NAME` 注記どおり runtime binding 前に再照合する。
 
 <!-- STATS: section3=226 manifest=199 rules=14 forbidden=21 -->
