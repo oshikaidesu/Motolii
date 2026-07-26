@@ -1,6 +1,6 @@
 # CU-G03 edit durability / publish順序決定
 
-ステータス: **親SPLIT / CU-G03D 決定・DONE / CU-G03R 実装・DO**  
+ステータス: **親DONE / CU-G03D 決定・DONE / CU-G03R 実装・DONE**
 対象: M3 VS-1 Rectangle配置とUndo/Redo  
 親粒: `CU-G03`  
 子粒: `CU-G03D`（本決定）、`CU-G03R`（catalog未反映committed tail recovery guard）  
@@ -167,6 +167,8 @@ raw stack / raw writer / 汎用peekを公開しない。
 
 ## 9. 完了とhandoff
 
-本変更で親`CU-G03`を`SPLIT`、決定子`CU-G03D`を`DONE`、実装子`CU-G03R`を
-次のPRODUCT-ASSET粒`DO`とする。`CU-109`は本決定を直接authorityにできるが、
-`CU-G03R`完了前に着手せず、他のVS-1 blocking decisionと実装を同じ粒へ束ねない。
+親`CU-G03`、決定子`CU-G03D`、実装子`CU-G03R`は`DONE`。
+CU-G03Rは[#369](https://github.com/oshikaidesu/Motolii/pull/369)で既存replay guardと
+stale-catalog負例を閉じた。`CU-109`は本決定を直接authorityにできるが、
+Undo/Redo prepared-action順序を再確認するまで自動着手せず、他のVS-1 blocking decisionと
+同じ粒へ束ねない。次のPRODUCT-ASSET粒は`CU-101`（Rectangle Place意味決定）とする。
