@@ -1,0 +1,21 @@
+{
+  "fixtureRevision": 1,
+  "nodes": [
+    {
+      "id": "core.filter.opacity",
+      "params": [
+        {
+          "id": "amount",
+          "value_type": "F64",
+          "default": { "F64": 1.0 },
+          "f64_domain": {
+            "min_inclusive": 0.0,
+            "max_inclusive": 1.0,
+            "integer": false
+          }
+        }
+      ]
+    }
+  ],
+  "target": { "layer_id": 5 }
+}

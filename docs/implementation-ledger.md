@@ -115,7 +115,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 | lane | 現在粒 | Phase / slice / checklist | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
-| PRODUCT-ASSET | CU-0A08IP | M3 / VS-1 / B / Inspector fixture decoder | `DO` | — | [Inspector read-model inventory](reviews/2026-07-26-cu-0a08is-inspector-read-model-inventory.md)でCU-0A08IS閉包とCU-0A08IP着手境界を固定 | product-owned・非export pure decoder module。fixture/testのみ。Host transport・intent・JSX binding・`S`行・Rust/schema/plugin変更は非目標 |
+| PRODUCT-ASSET | CU-0A08IP | M3 / VS-1 / B / Inspector fixture decoder | `DONE` | — | [Inspector read-model inventory](reviews/2026-07-26-cu-0a08is-inspector-read-model-inventory.md)でCU-0A08IS閉包とCU-0A08IP着手境界を固定。`node --test docs/mocks-ui/guard-tests/inspector-read-model-decoder.test.mjs` 39/39、`npm run test:reference-guard` 172/172 | product-owned・非export pure decoder module。fixture/testのみ。Host transport・intent・JSX binding・`S`行・Rust/schema/plugin変更は非目標 |
 | VISUAL-RESPONSE | G0-6H | M3 evidence / VS-1 / visual | `DO / HUMAN` | — | 5 reference screenと30 PNG | U0e-3だけを解禁可 |
 | AUTHORING-SCAFFOLD | VSM-A4S | Vism / spec | `DO / SPEC` | — | VSM-A1/A2/A3、仕様と実装の別PR決定 | VSM-A4Iは全体レビュー後 |
 | DELEGATION-GUARD | GR-D3 | supervised runner / derived output closure | `DONE` | [#329](https://github.com/oshikaidesu/Motolii/issues/329) | [#336](https://github.com/oshikaidesu/Motolii/pull/336)をmainへ統合。専用runner試験、workspace、docs、実K0停止形、Grok `ACCEPT`で閉包 | 解禁後のK0は[#338](https://github.com/oshikaidesu/Motolii/pull/338)で完了。既知派生物だけのfail-closed清掃を後続発注へ維持 |
@@ -170,6 +170,7 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | CU-0A07C | `DONE` | [#357](https://github.com/oshikaidesu/Motolii/pull/357)でR4B InspectorのJSX/CSSをbyte同一でproduct ownerへ移し、mockを単一package importのconsumerへ反転。二重copy 0、legacy runtime import 0、source closure／公開境界／Host projectionの変更0。Grok ACCEPT P0=0 / P1=0 / P2=1（任意の重複負例提案は後続候補）、reference guard 109 + product guard 3、Playwright 71、docs／UI／fmt／clippy／workspace green、CI 4/4。次粒`CU-0A08I`を`READY-RECHECK`へ送る |
 | CU-0A08I | `SPLIT` | [Inspector read-model分割決定](reviews/2026-07-26-cu-0a08i-inspector-read-model-split-decision.md)で、既決field不足、Host transport/selection不在、intentのU4a/U4c留保を確認。CU-0A08IS→CU-0A08IP→CU-0A08ITへ分割 |
 | CU-0A08IS | `DONE` | [Inspector read-model inventory](reviews/2026-07-26-cu-0a08is-inspector-read-model-inventory.md)、`docs/mocks-ui/guard-tests/inspector-read-model-inventory.test.mjs`、`node --test docs/mocks-ui/guard-tests/inspector-read-model-inventory.test.mjs` |
+| CU-0A08IP | `DONE` | `ui/motolii-web/src/read-model/inspectorReadModelDecoder.js`、`docs/mocks-ui/guard-tests/inspector-read-model-decoder.test.mjs`、`node --test docs/mocks-ui/guard-tests/inspector-read-model-decoder.test.mjs`（39）、`npm run test:reference-guard`（172） |
 | GR-D2 | `DONE` | [監督ループ決定](reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md)へ変更許可閉集合、append-only証跡、timeout分離、検収者mutation拒否、resumeを継承済み |
 | GR-D3 | `DONE` | [#336](https://github.com/oshikaidesu/Motolii/pull/336)で既知三entryのfail-closed清掃、HEAD／全ref不変、実K0停止形とGrok到達を閉包 |
 | K0 | `DONE` | [#338](https://github.com/oshikaidesu/Motolii/pull/338)と[K0契約凍結報告](spikes/m4-k0-region-contract.md)で9条件を15 testに固定。**test-only契約凍結であり、runtime region関数・公開API・testkit昇格・ROI最適化は含まない**。K1系はこの行だけを根拠に起票しない |
@@ -248,7 +249,7 @@ U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除
 | resource設定を出す | G0-2 + G0-8 + U0b + K1a → U0f。設定はUser settings、pressure実測値はTransient |
 | 重いpreviewを追従させる | U1b + U1c + U5 + K1d → U1g。project fps/audio clockを変えず表示frameだけ落とす |
 
-したがって現在の短い運用判断は、**CU-0A03 / R0からCU-0A07C / R4Cまでは完了済み。CU-0A08Iは単一実装をSTOPし、Inspector read-model inventory で閉包済み。現在粒は`CU-0A08IP`であり、上表の並列レーン状態どおり product-owned・非export pure decoder module（fixture/testのみ）の実装closed orderを起票できる。Host transport、typed intent、JSX binding、`S`行の意味決定、Rust/schema/plugin変更を混ぜるならSTOPする。Motolii Studio Previewは未実装。**G0-6Hは同時に進められる人間審判だが、未完了でもR0〜R4やPreview骨格を止めず、U0e-3だけを止める。G0-9DはDistribution Readyまで`WAIT / HARDWARE`。`U2c-2`はVS-2候補かつ実製品入口待ちである。D1n、D5等の独立follow-upをVS-1の再停止理由へしない。
+したがって現在の短い運用判断は、**CU-0A03 / R0からCU-0A07C / R4Cまでは完了済み。CU-0A08Iは単一実装をSTOPし、Inspector read-model inventory で閉包済み。CU-0A08IPは fixture由来 read-only projection decoder（product-owned・非export、fixture/testのみ）で閉じ、次粒は`CU-0A08IT`。Host transport、typed intent、JSX binding、`S`行の意味決定、Rust/schema/plugin変更を混ぜるならSTOPする。Motolii Studio Previewは未実装。**G0-6Hは同時に進められる人間審判だが、未完了でもR0〜R4やPreview骨格を止めず、U0e-3だけを止める。G0-9DはDistribution Readyまで`WAIT / HARDWARE`。`U2c-2`はVS-2候補かつ実製品入口待ちである。D1n、D5等の独立follow-upをVS-1の再停止理由へしない。
 
 ## 更新規則
 
