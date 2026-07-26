@@ -137,6 +137,14 @@ fn exported_types_are_toolkit_free() {
     assert_no_toolkit_in_type_name::<motolii_ui::KeymapCodecDiagnostic>();
     assert_no_toolkit_in_type_name::<motolii_ui::KeymapApplyError>();
     assert_no_toolkit_in_type_name::<motolii_ui::LoadedKeymap>();
+    assert_no_toolkit_in_type_name::<motolii_ui::TimelineBar>();
+    assert_no_toolkit_in_type_name::<motolii_ui::TimelineHit>();
+    assert_no_toolkit_in_type_name::<motolii_ui::TimelineKey>();
+    assert_no_toolkit_in_type_name::<motolii_ui::TimelineMetrics>();
+    assert_no_toolkit_in_type_name::<motolii_ui::TimelineProjection>();
+    assert_no_toolkit_in_type_name::<motolii_ui::TimelineProjectionError>();
+    assert_no_toolkit_in_type_name::<motolii_ui::TimelineUnsupported>();
+    assert_no_toolkit_in_type_name::<motolii_ui::TimelineViewport>();
     assert_no_toolkit_in_type_name::<Result<motolii_ui::UiCrateInfo, motolii_ui::UiError>>();
 }
 

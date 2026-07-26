@@ -4,7 +4,7 @@
 - 状態: **決定**
 - U3a-1: **SPLIT**
 - U3a-1S: **DONE**
-- U3a-1I: **DO**
+- U3a-1I: **DONE**
 
 ## 1. 分割の結論
 
@@ -14,7 +14,7 @@
 |---|---|---|---|---|---|
 | U3a-1 | `SPLIT` | 親。分割証跡のみ | U0a, U0b-1, U0b-2 | 発注依存証跡に`SPLIT`行が一意に存在する | — |
 | U3a-1S | `DONE` | owner裁定とvisibility裁定を本文書で確定した | U0a, U0b-1, U0b-2 | 本文書§3/§4だけで`U3a-1I`のowner/visibilityが一意に決まる | — |
-| U3a-1I | `DO` | headless Timeline projection / layout / cull / hit-testの実装 | U3a-1S | 歴史回収§6の完成条件を小さな決定的Document fixtureで満たす | owner/visibility裁定の外へ出る必要が生じた |
+| U3a-1I | `DONE` | headless Timeline projection / layout / cull / hit-testの実装 | U3a-1S | 歴史回収§6の完成条件を小さな決定的Document fixtureで満たす | owner/visibility裁定の外へ出る必要が生じた |
 
 ## 2. 現行コード事実
 
@@ -80,6 +80,6 @@ metrics / viewport のexact Rust signature（型名・関数シグネチャ・�
 10. owner/visibility裁定を本commitで閉じきれず、`U3a-1S` を `DO` のまま残したくなった
 11. 変更後に `git status --porcelain` がallowlist外のpathを出力した
 
-## 7. 次粒（U3a-1I）の入場条件
+## 7. 完了証跡（U3a-1I）
 
-次のprepareが [../implementation-ledger.md](../implementation-ledger.md) の `現在の並列レーン` で `U3a-1I` を exact `DO`、`発注依存証跡` で `U3a-1S` を exact `DONE`、`U3a-1` を exact `SPLIT`、`U0a` / `U0b-1` / `U0b-2` を exact `DONE` と機械確認できること。意味正本は [../specs/M3-ui-integration.md](../specs/M3-ui-integration.md) U3a行と [歴史回収 §6](2026-07-23-historical-d2-selection-timeline-lineage-recovery.md) である。`U3a-1S`の後続粒を作らない。
+`U3a-1I`は`motolii-ui` crate内の`timeline_projection` moduleとしてheadless Timeline projection / layout / cull / hit-testを実装し、[../implementation-ledger.md](../implementation-ledger.md)の`発注依存証跡`で`DONE`とする。次のPRODUCT-ASSET粒は別の明示選定待ちであり、本変更はowner/visibility裁定（§3/§4）と制約6点を変更しない。`U3a-1S`の後続同名docs粒は作らない。
