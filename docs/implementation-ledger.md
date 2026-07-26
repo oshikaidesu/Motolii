@@ -116,6 +116,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | lane | 現在粒 | Phase / slice / checklist | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
 | PRODUCT-ASSET | CU-0A08IP | M3 / VS-1 / B / Inspector fixture decoder | `DONE` | — | [Inspector read-model inventory](reviews/2026-07-26-cu-0a08is-inspector-read-model-inventory.md)でCU-0A08IS閉包とCU-0A08IP着手境界を固定。`node --test docs/mocks-ui/guard-tests/inspector-read-model-decoder.test.mjs` 39/39、`npm run test:reference-guard` 172/172 | product-owned・非export pure decoder module。fixture/testのみ。Host transport・intent・JSX binding・`S`行・Rust/schema/plugin変更は非目標 |
+| PRODUCT-ASSET | CU-G02 | M3 / VS-1 / SPEC / Selected U series order | `DO` | — | CU-G01は[G0-9段階化](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)で完了済み。順序改訂はdocs-onlyで、同時点の次実装`DO`を1粒だけ選ぶ | M3仕様・U枝番表・decision indexを同じ変更で更新し、選んだ次粒だけを`DO`へ送る |
 | VISUAL-RESPONSE | G0-6H | M3 evidence / VS-1 / visual | `DO / HUMAN` | — | 5 reference screenと30 PNG | U0e-3だけを解禁可 |
 | AUTHORING-SCAFFOLD | VSM-A4S | Vism / spec | `DO / SPEC` | — | VSM-A1/A2/A3、仕様と実装の別PR決定 | VSM-A4Iは全体レビュー後 |
 | DELEGATION-GUARD | GR-D3 | supervised runner / derived output closure | `DONE` | [#329](https://github.com/oshikaidesu/Motolii/issues/329) | [#336](https://github.com/oshikaidesu/Motolii/pull/336)をmainへ統合。専用runner試験、workspace、docs、実K0停止形、Grok `ACCEPT`で閉包 | 解禁後のK0は[#338](https://github.com/oshikaidesu/Motolii/pull/338)で完了。既知派生物だけのfail-closed清掃を後続発注へ維持 |
@@ -171,6 +172,7 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | CU-0A08I | `SPLIT` | [Inspector read-model分割決定](reviews/2026-07-26-cu-0a08i-inspector-read-model-split-decision.md)で、既決field不足、Host transport/selection不在、intentのU4a/U4c留保を確認。CU-0A08IS→CU-0A08IP→CU-0A08ITへ分割 |
 | CU-0A08IS | `DONE` | [Inspector read-model inventory](reviews/2026-07-26-cu-0a08is-inspector-read-model-inventory.md)、`docs/mocks-ui/guard-tests/inspector-read-model-inventory.test.mjs`、`node --test docs/mocks-ui/guard-tests/inspector-read-model-inventory.test.mjs` |
 | CU-0A08IP | `DONE` | `ui/motolii-web/src/read-model/inspectorReadModelDecoder.js`、`docs/mocks-ui/guard-tests/inspector-read-model-decoder.test.mjs`、`node --test docs/mocks-ui/guard-tests/inspector-read-model-decoder.test.mjs`（39）、`npm run test:reference-guard`（172） |
+| CU-G01 | `DONE` | [G0-9段階化](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)で固定Mac prerequisite evidenceをG0-9Lへ限定し、G0-9DをDistribution Readyまで分離 |
 | GR-D2 | `DONE` | [監督ループ決定](reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md)へ変更許可閉集合、append-only証跡、timeout分離、検収者mutation拒否、resumeを継承済み |
 | GR-D3 | `DONE` | [#336](https://github.com/oshikaidesu/Motolii/pull/336)で既知三entryのfail-closed清掃、HEAD／全ref不変、実K0停止形とGrok到達を閉包 |
 | K0 | `DONE` | [#338](https://github.com/oshikaidesu/Motolii/pull/338)と[K0契約凍結報告](spikes/m4-k0-region-contract.md)で9条件を15 testに固定。**test-only契約凍結であり、runtime region関数・公開API・testkit昇格・ROI最適化は含まない**。K1系はこの行だけを根拠に起票しない |
