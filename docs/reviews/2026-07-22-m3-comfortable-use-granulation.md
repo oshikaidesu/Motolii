@@ -205,7 +205,7 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 
 | 項目 | 内容 |
 |---|---|
-| 種類 / 状態 | `SPEC / WAIT`（CU-0A04） |
+| 種類 / 状態 | `SPEC / DO`（CU-0A04 DONE） |
 | 一成果 | Browser itemごとのsubtype/availability/motion/impact/provider/tagをDocument外Host read modelへ閉じる |
 | authority | React直接移管契約 §7、G0-3分離、Browser既決表示 |
 | 変更面 | Host read-model decision、M3仕様/枝番表、decision index。Document/plugin公開契約は変更しない |
