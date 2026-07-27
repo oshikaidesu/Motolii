@@ -316,3 +316,4 @@
 | [2026-07-27-cu-109sp-cu-111-prepared-action-order-prerequisite-decision.md](2026-07-27-cu-109sp-cu-111-prepared-action-order-prerequisite-decision.md) | CU-109SP CU-109 / CU-111 prepared-action 順序前提（P1 precedence） |
 | [2026-07-27-cu-g04s0-session-source-selection-decision.md](2026-07-27-cu-g04s0-session-source-selection-decision.md) | CU-G04S0 VS-1 edit runtime ProjectSession source 判断の選定 |
 | [2026-07-27-cu-g04s-edit-runtime-session-source-decision.md](2026-07-27-cu-g04s-edit-runtime-session-source-decision.md) | CU-G04S VS-1 edit runtime session source / no-session / interim action disposition |
+| [2026-07-27-cu-g04sc0-product-path-handoff-selection-decision.md](2026-07-27-cu-g04sc0-product-path-handoff-selection-decision.md) | CU-G04SC0 VS-1 edit runtime product path handoff 判断の選定 |
