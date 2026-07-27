@@ -71,3 +71,9 @@ npm run check-reference
 - 次に解凍する粒: 未記入
 
 人間の記録が正本へ入るまで`U0e-3`、`U2c-3`、`U2c-5`へ進まない。
+
+## G0-6H-E 限定観察の非充足注記
+
+- この限定観察は、現行候補 `#plugin-browser-candidate` の 1440×900 dark normal 5 画面への肯定的応答に対する docs-only 記録を示す。
+- `reference-handoff.md` の Decision template と checklist は未充足のままとし、履行は観察台帳へ閉じる。
+- 同期参照は [G0-6H-E 限定観察](../reviews/2026-07-28-g0-6h-e-candidate-approval-observation.md)。

@@ -326,3 +326,4 @@
 | [2026-07-28-cu-107n-cu-107-narrow-prerequisite-closed-set.md](2026-07-28-cu-107n-cu-107-narrow-prerequisite-closed-set.md) | CU-107N CU-107 狭い名前付き前提の閉集合（4前提・単一 owner・依存順） |
 | [2026-07-28-cu-107w-w0-mirror-rewrite-decision.md](2026-07-28-cu-107w-w0-mirror-rewrite-decision.md) | CU-107W W0表・CU-110依存の閉集合名反映（次PRODUCT-ASSET `DO`未選定） |
 | [2026-07-28-g0-6h-e-candidate-approval-evidence-selection.md](2026-07-28-g0-6h-e-candidate-approval-evidence-selection.md) | G0-6H-E0 現行候補5画面承認証拠の限定取込選定 |
+| [2026-07-28-g0-6h-e-candidate-approval-observation.md](2026-07-28-g0-6h-e-candidate-approval-observation.md) | G0-6H-E 現行候補5画面承認の限定観察 |
