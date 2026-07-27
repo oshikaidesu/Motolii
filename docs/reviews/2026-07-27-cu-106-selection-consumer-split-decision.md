@@ -63,10 +63,10 @@ CU-106P実装時は、U2h-1PRで決定済みの順序と既存U2h-1I経路を再
 
 ## 5. 次の判断
 
-`U3a-2S0`で発注依存証跡を閉じた後、次のPRODUCT-ASSET判断は
-docs-only `U3a-2S`の`DO`とする。
+`U3a-2S0`で発注依存証跡を閉じた後のdocs-only `U3a-2S`は`DONE`であり、
 U3a-2の`G0-9`依存を、G0-9Lの固定Mac prerequisite evidenceで入場できる範囲と、
-G0-9DのWindows / 追加hardware / Distribution Readyまで待つ範囲へ分ける。
+G0-9DのWindows / 追加hardware / Distribution Readyまで待つ範囲へ分けた。
+現行の次のPRODUCT-ASSET判断はdocs-only `U3a-2R`の`DO`とする。
 windowed native Timelineを今どこまで施工できるかを決めるまで、CU-106P/Fを起動しない。
 
 ## 6. 非目標
