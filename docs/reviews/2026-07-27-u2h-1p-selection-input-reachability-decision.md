@@ -68,6 +68,6 @@ history / primary不変とする。存在拒否を先にするのは、dangling 
 
 ## 6. 引き渡し
 
-CU-105RとCU-106Sは完了し、U2h-1PはCU-106Pへ統合された。現行の次判断は
-発注依存証跡を閉じた後の`U3a-2S`の`DO`である。実consumer surfaceとproduction入力が成立するまで
+CU-105RとCU-106Sは完了し、U2h-1PはCU-106Pへ統合された。発注依存証跡を閉じた後の
+docs-only `U3a-2S`は`DONE`で、現行の次判断は`U3a-2R`の`DO`である。実consumer surfaceとproduction入力が成立するまで
 U2h-1P / CU-106P/Fのclosed orderを作らない。
