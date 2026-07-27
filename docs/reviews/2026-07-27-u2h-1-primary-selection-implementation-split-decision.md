@@ -4,8 +4,8 @@
 - 状態: **決定**
 - U2h-1: **SPLIT**
 - U2h-1S: **DONE**
-- U2h-1I: 次のPRODUCT-ASSET実装粒（`DO`、台帳lane表を正とする）
-- U2h-1P: `U2h-1I`より後の実装粒（順序の凍結はここまで）
+- U2h-1I: **DONE**
+- U2h-1P: 次のPRODUCT-ASSET実装粒（`DO`、台帳lane表を正とする）
 
 ## 0. 語彙（本決定内で一貫）
 
@@ -21,8 +21,8 @@
 |---|---|---|---|---|---|
 | U2h-1 | `SPLIT` | 親。分割証跡のみ | `U0c`,`U2a`,`U2b`,`U2c-1`,`U2c-4`（§0の三分を厳守） | 発注依存証跡に`SPLIT`行が一意 | — |
 | U2h-1S | `DONE` | 本決定で§4を正本化 | `CU-104`（意味・契約の閉じ済み正本）, `U2c-1`,`U2c-4`（§0・現在の入場証跡） | 本文書§0〜§4だけで`U2h-1I`/`U2h-1P`の境界が一意 | — |
-| U2h-1I | 次`DO` | 既存private Apply/Undo/Redo publication経路へのfield追加とreconcile | `U2h-1S` | CU-104 §7 **P1/P2/P3** | 第2 publish path・公開API化 |
-| U2h-1P | `U2h-1I`より後 | selection-only `ReplacePrimary`/`ClearPrimary`入力面 | `U2h-1I` | CU-104 §7 **P5** | `U2h-1P`を`U2h-1I`の入場gateにしない以外の順序固定 |
+| U2h-1I | `DONE` | 既存private Apply/Undo/Redo publication経路へのfield追加とreconcile | `U2h-1S` | CU-104 §7 **P1/P2/P3** | 第2 publish path・公開API化 |
+| U2h-1P | 次`DO` | selection-only `ReplacePrimary`/`ClearPrimary`入力面 | `U2h-1I` | CU-104 §7 **P5** | U2h-1Pより後のticket順序固定 |
 
 U2h-1の**現在の未解決gateは0件**である。`U2c-2`/`U2c-3`/`U2c-5`、`U0e-3`、`G0-6H`、`U3a-1`、`CU-105`は**現在の未解決gateではない**（「不要」「完了」とは書かない）。
 
@@ -48,7 +48,7 @@ M3仕様 U2h行、本決定、台帳lane行は同じことを同じ語で言う�
 - `U2c-1`/`U2c-4` を「唯一の依存」「唯一の歴史的依存」と**断定しない**。
 - 「U2c ownershipの整合待ち」表現は陳腐化。現在の入場証跡は `U2c-1`/`U2c-4` の完了で満たされている。
 
-## 4. U2h-1I（次実装粒）
+## 4. U2h-1I（完了済み実装粒）
 
 - 対象は**既存の private Apply/Undo/Redo publication経路**のみ。
 - `PublishedDocument` へ `primary: Option<LayerId>` と `projection_generation: u64` を CU-104 §4の閉集合どおり追加（private・`pub(crate)` 維持）。
@@ -56,7 +56,7 @@ M3仕様 U2h行、本決定、台帳lane行は同じことを同じ語で言う�
 - 必須正例: CU-104 §7 **P1 / P2 / P3**。
 - 再利用: 単一構築site（`document_edit_runtime.rs:108`）と `find_envelope`。新publish経路、第2 selection構造体、`LayerIdTable::contains` 相当の別存在checkは作らない。
 
-## 5. U2h-1P（U2h-1Iの後続実装粒）
+## 5. U2h-1P（次実装粒）
 
 - selection-onlyの `ReplacePrimary` / `ClearPrimary` 入力面のみ。
 - private action / kind の追加と、unknown / table-only IDのtyped rejectを含む。
@@ -86,7 +86,7 @@ CU-104 §7 **P4 Place receipt** は `CU-110` に留める。成功receiptはCU-1
 
 - `CU-109` / `CU-110` / `CU-111` / `CU-106` / `CU-105` / `U2h-2` の実装または意味変更。
 - 本粒での Rust / JS / fixture / guard test / golden 変更。
-- `U2h-1I` を次`DO`、`U2h-1P` をその後、以外の順序決定。
+- `U2h-1P`より後のticket順序決定。
 - 公開API、`Document`、serde、journal、Undo/history、ProjectSession、plugin契約の変更。
 - CU-104が閉じた owner / visibility / field閉集合 / generation規則 / reconcile時点の再決定。
 - 発注依存証跡への `U0c` / `U2a` / `U2b` 行の新設。
@@ -100,8 +100,8 @@ CU-104 §7 **P4 Place receipt** は `CU-110` に留める。成功receiptはCU-1
 4. P4をU2h-1I/U2h-1Pへ移す必要が見える
 5. `U2h-1P` と他ticketの相互順序を本粒で固定しないと書けないと判明
 6. §0の三語を混ぜた記述が unavoidable
-7. 台帳の `U2h-1S` が編集時点で `DO` 以外、または `CU-104`/`U2c-1`/`U2c-4` が `DONE` 以外
+7. 台帳の `U2h-1I` または `CU-104`/`U2c-1`/`U2c-4` が `DONE` 以外
 
-## 11. 将来の引き渡し（U2h-1I）
+## 11. U2h-1I完了後の引き渡し
 
-`U2h-1I`完了時は、既存private Apply/Undo/Redo経路へCU-104どおりのfieldとreconcileを実装し、[../implementation-ledger.md](../implementation-ledger.md)の`発注依存証跡`で`DONE`とする（本節は未実装の将来 handoff 条件であり、現時点の実装完了証跡ではない）。本変更はowner/visibility・P1〜P3帰属・§0語彙を変更しない。`U2h-1S`の後続同名docs粒は作らない。
+`U2h-1I`は、既存private Apply/Undo/Redo経路へCU-104どおりのfieldとreconcileを実装し、[../implementation-ledger.md](../implementation-ledger.md)の`発注依存証跡`で`DONE`になった。次粒`U2h-1P`はowner/visibility・P1〜P3帰属・§0語彙を変更せず、§5のselection-only入力面とP5だけを閉じる。`U2h-1S`の後続同名docs粒は作らない。
