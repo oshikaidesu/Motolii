@@ -307,7 +307,7 @@ Document/User settings/Workspace/Project session/Transientの新しい所有層�
 | keymap、resource policy、easing library | User settings |
 | panel配置、dock、detach、表示面積 | Workspace profile |
 | Timeline scroll/zoom、作業中のview | Project session。具体的な永続codecは既決範囲だけ |
-| playhead | runtime ownerはHost coordinator。再open時の永続化は未決であり、仕様判断前にProject sessionへ焼かない |
+| playhead | runtime ownerはHost coordinator。freshなHost coordinatorでprojectを再openした時は以前の値を復元せず、projectから決定的に定まる安全な初期位置へ戻す。具体値・五層owner・永続形式は未決（U3a-2Q-P2） |
 | selection、hover、drag、popup、診断、preview generation | Transient / Host coordinator |
 | focus-visible、未確定IME composition等 | local presentation。ただしHost意味の正本にしない |
 
