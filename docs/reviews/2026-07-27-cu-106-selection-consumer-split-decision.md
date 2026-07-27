@@ -67,7 +67,7 @@ CU-106P実装時は、U2h-1PRで決定済みの順序と既存U2h-1I経路を再
 U3a-2の`G0-9`依存を、G0-9Lの固定Mac prerequisite evidenceで入場できる範囲と、
 G0-9DのWindows / 追加hardware / Distribution Readyまで待つ範囲へ分けた。
 docs-only `U3a-2R`は`DONE`で、区分(D)のrenderer採択**範囲**を閉じた。
-現行の次PRODUCT-ASSET判断はdocs-only `U3a-2Q-P2`の`DONE`後の`U3a-2Q-P3` `DO`とする。
+現行の次PRODUCT-ASSET判断はdocs-only `U3a-2Q-P3`の`DONE`後の`U3a-2Q-P4` `DO`とする。
 semantic zoom責任所在は閉じたが、実consumer surfaceとproduction入力が成立するまでCU-106P/Fを起動しない。
 
 ## 6. 非目標
