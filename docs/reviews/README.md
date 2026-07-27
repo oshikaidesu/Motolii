@@ -309,3 +309,4 @@
 | [2026-07-27-u3a-2q-playhead-visible-range-owner-split-decision.md](2026-07-27-u3a-2q-playhead-visible-range-owner-split-decision.md) | U3a-2Q playhead / visible range owner 採択の分割判断 |
 | [2026-07-27-u3a-2q-p-playhead-owner-evidence-supplement.md](2026-07-27-u3a-2q-p-playhead-owner-evidence-supplement.md) | U3a-2Q-P playhead owner admissibility / evidence 補遺 |
 | [2026-07-27-u3a-2q-p2-playhead-reopen-lifetime-decision.md](2026-07-27-u3a-2q-p2-playhead-reopen-lifetime-decision.md) | U3a-2Q-P2 playhead 再 open lifetime 決定 |
+| [2026-07-27-u3a-2q-p3-playhead-future-restore-posture-decision.md](2026-07-27-u3a-2q-p3-playhead-future-restore-posture-decision.md) | U3a-2Q-P3 playhead 将来 reopen 復元 posture 決定 |
