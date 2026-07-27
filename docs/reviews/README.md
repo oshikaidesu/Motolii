@@ -319,3 +319,4 @@
 | [2026-07-27-cu-g04sc0-product-path-handoff-selection-decision.md](2026-07-27-cu-g04sc0-product-path-handoff-selection-decision.md) | CU-G04SC0 VS-1 edit runtime product path handoff 判断の選定 |
 | [2026-07-27-cu-g04sc-edit-runtime-product-path-handoff-decision.md](2026-07-27-cu-g04sc-edit-runtime-product-path-handoff-decision.md) | CU-G04SC VS-1 edit runtime product path handoff（argv carrier / entry境界 / fail-closed / test-flag降格） |
 | [2026-07-28-cu-110s-dependency-scope-decision-selection.md](2026-07-28-cu-110s-dependency-scope-decision-selection.md) | CU-110S CU-110 前提範囲（CU-107 依存）判断の選定 |
+| [2026-07-28-cu-110d-cu-107-dependency-scope-decision.md](2026-07-28-cu-110d-cu-107-dependency-scope-decision.md) | CU-110D CU-110 の CU-107 依存範囲裁定 |
