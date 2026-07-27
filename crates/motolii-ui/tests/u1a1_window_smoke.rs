@@ -124,7 +124,7 @@ fn latest_worker_result_reaches_the_product_event_loop() {
 }
 
 #[test]
-fn document_edit_roundtrip_reaches_the_product_preview() {
+fn document_edit_flag_without_project_path_is_diagnostic_only() {
     let _window_smoke_guard = WINDOW_SMOKE_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -142,6 +142,7 @@ fn document_edit_roundtrip_reaches_the_product_preview() {
     let executable = PathBuf::from(env!("CARGO_BIN_EXE_motolii_ui_shell"));
     let output = Command::new(executable)
         .env("MOTOLII_TEST_U2B1_DOCUMENT", "1")
+        .env("MOTOLII_TEST_U1A1_LIFECYCLE", "1")
         .output()
         .expect("launch product shell");
     let log = format!(
@@ -150,17 +151,11 @@ fn document_edit_roundtrip_reaches_the_product_preview() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(output.status.success(), "shell failed: {log}");
-    for marker in [
-        "U1A1_REGISTER",
-        "U2B1_DOCUMENT passed",
-        "U1B2_JOIN passed after_run_native=true",
-    ] {
-        assert!(log.contains(marker), "missing {marker}: {log}");
-    }
-    let document = line_with(&log, "U2B1_DOCUMENT passed");
-    assert!(document.contains("registrations=1"), "{log}");
-    assert!(document.contains("generation=4"), "{log}");
-    assert!(document.contains("revisions=1,2,3"), "{log}");
+    assert!(log.contains("U1A1_LIFECYCLE passed"), "{log}");
+    assert!(
+        !log.contains("U2B1_DOCUMENT passed"),
+        "zero argv must not run product edit smoke: {log}"
+    );
 }
 
 fn line_with<'a>(log: &'a str, marker: &str) -> &'a str {

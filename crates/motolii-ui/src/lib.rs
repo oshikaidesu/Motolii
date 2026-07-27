@@ -51,7 +51,7 @@ pub use keymap_codec::{
     KeymapCodecError, KeymapCodecLimits, LimitKind, LoadedKeymap, OpaqueOperationReason,
     KEYMAP_CODEC_VERSION,
 };
-pub use shell::{run_shell, ShellError};
+pub use shell::{run_shell, run_shell_with_project, ShellError};
 pub use state_ownership::{UiStateLifetime, UiStateOwner};
 pub use static_preview::StaticPreviewError;
 pub use timeline_projection::{
