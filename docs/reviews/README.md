@@ -305,3 +305,4 @@
 | [2026-07-27-u3a-2r-renderer-adoption-scope-decision.md](2026-07-27-u3a-2r-renderer-adoption-scope-decision.md) | U3a-2R windowed native Timeline renderer採択範囲決定 |
 | [2026-07-27-u3a-2z-semantic-zoom-responsibility-decision.md](2026-07-27-u3a-2z-semantic-zoom-responsibility-decision.md) | U3a-2Z windowed native Timeline semantic zoom責任所在決定 |
 | [2026-07-27-u3a-2a-renderer-adoption-decision.md](2026-07-27-u3a-2a-renderer-adoption-decision.md) | U3a-2A windowed native Timeline renderer採択決定 |
+| [2026-07-27-u3a-2p-playhead-visible-range-scope-decision.md](2026-07-27-u3a-2p-playhead-visible-range-scope-decision.md) | U3a-2P playhead / visible range owner 判断の範囲決定 |
