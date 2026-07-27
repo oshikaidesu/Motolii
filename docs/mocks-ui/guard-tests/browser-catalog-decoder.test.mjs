@@ -81,6 +81,14 @@ function selectStaleBrowserDecoderLaneRows(ledgerText) {
     });
 }
 
+const STALE_PROSE_LITERAL = "`CU-0A08BP`（`DO`）";
+
+function selectStaleBrowserDecoderProseLines(text) {
+  return text
+    .split("\n")
+    .filter((line) => line.includes(STALE_PROSE_LITERAL));
+}
+
 function sha256File(relPath) {
   const abs = join(repoRoot, relPath);
   return createHash("sha256").update(readFileSync(abs)).digest("hex");
@@ -1273,21 +1281,21 @@ test("docs stale mirror count", () => {
   assert.equal(MIRRORS.length, 6);
 });
 
-test("docs stale CU-0A08BP DO current lines zero", () => {
-  for (const rel of MIRRORS) {
-    const lines = readFileSync(join(repoRoot, rel), "utf8").split("\n");
-    const hits = lines.filter(
-      (line) => line.includes("CU-0A08BP") && DO_TOKEN.test(line) && !line.includes("CU-0A08BQ"),
-    );
-    assert.equal(hits.length, 0, rel);
-  }
-});
-
 test("docs stale literal CU-0A08BP (DO) zero", () => {
   for (const rel of MIRRORS) {
     const text = readFileSync(join(repoRoot, rel), "utf8");
-    assert.equal(text.includes("`CU-0A08BP`（`DO`）"), false, rel);
+    assert.equal(selectStaleBrowserDecoderProseLines(text).length, 0, rel);
   }
+});
+
+test("docs stale CU-0A08BP prose synthetic negative", () => {
+  const syntheticProse = "- `CU-0A08BP`（`DO`）は現在粒。\n";
+  assert.equal(selectStaleBrowserDecoderProseLines(syntheticProse).length, 1);
+});
+
+test("docs stale CU-0A08BP prose synthetic positive", () => {
+  const syntheticProse = "- `CU-0A08BP`は`DONE`。次粒`CU-0A08BS`は`DO`。\n";
+  assert.equal(selectStaleBrowserDecoderProseLines(syntheticProse).length, 0);
 });
 
 test("docs DONE line per mirror", () => {
