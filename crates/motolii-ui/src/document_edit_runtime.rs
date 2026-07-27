@@ -3,14 +3,20 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-use motolii_doc::{CommandError, Document, DocumentWriter, LayerId, UndoError};
+use motolii_doc::{
+    CommandError, Document, DocumentError, DocumentPluginError, DocumentWriter, JournalEdit,
+    LayerId, ProjectError, ProjectSession, SaveProjectOptions,
+};
+use motolii_plugin::PluginCatalog;
 
 use crate::{DocumentCommandRequest, DomainIntent, InputPhase, RouterOutput};
 
 #[derive(Debug)]
 pub(crate) enum DocumentEditAction {
     Apply(DocumentCommandRequest),
+    #[cfg(test)]
     Undo,
+    #[cfg(test)]
     Redo,
 }
 
@@ -18,7 +24,9 @@ impl DocumentEditAction {
     pub(crate) const fn kind(&self) -> DocumentEditActionKind {
         match self {
             Self::Apply(_) => DocumentEditActionKind::Apply,
+            #[cfg(test)]
             Self::Undo => DocumentEditActionKind::Undo,
+            #[cfg(test)]
             Self::Redo => DocumentEditActionKind::Redo,
         }
     }
@@ -27,7 +35,9 @@ impl DocumentEditAction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DocumentEditActionKind {
     Apply,
+    #[cfg(test)]
     Undo,
+    #[cfg(test)]
     Redo,
 }
 
@@ -59,10 +69,12 @@ impl DocumentEditQueue {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn push_undo(&mut self) {
         self.pending.push_back(DocumentEditAction::Undo);
     }
 
+    #[cfg(test)]
     pub(crate) fn push_redo(&mut self) {
         self.pending.push_back(DocumentEditAction::Redo);
     }
@@ -72,22 +84,66 @@ impl DocumentEditQueue {
     }
 
     #[cfg(test)]
-    fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.pending.len()
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeHealth {
+    Healthy,
+    Poisoned,
+}
+
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeTestFailpoint {
+    PostDurableLiveApply,
+    Reconcile,
+}
+
+#[cfg(test)]
+#[derive(Debug, Default)]
+struct RuntimeTestHooks {
+    failpoint: Option<RuntimeTestFailpoint>,
+}
+
 pub(crate) struct DocumentEditRuntime {
+    session: ProjectSession,
     writer: DocumentWriter,
+    catalog: Arc<PluginCatalog>,
+    health: RuntimeHealth,
+    #[cfg(test)]
+    test_hooks: RuntimeTestHooks,
 }
 
 impl DocumentEditRuntime {
-    pub(crate) fn new(writer: DocumentWriter) -> Self {
-        Self { writer }
+    pub(crate) fn new(
+        session: ProjectSession,
+        document_writer: DocumentWriter,
+        catalog: Arc<PluginCatalog>,
+    ) -> Self {
+        Self {
+            session,
+            writer: document_writer,
+            catalog,
+            health: RuntimeHealth::Healthy,
+            #[cfg(test)]
+            test_hooks: RuntimeTestHooks::default(),
+        }
+    }
+
+    #[cfg(test)]
+    fn set_test_failpoint(&mut self, failpoint: RuntimeTestFailpoint) {
+        self.test_hooks.failpoint = Some(failpoint);
     }
 
     pub(crate) fn snapshot(&self) -> Arc<Document> {
         self.writer.snapshot()
+    }
+
+    fn poison(&mut self) {
+        self.health = RuntimeHealth::Poisoned;
     }
 
     pub(crate) fn process_next(
@@ -96,6 +152,10 @@ impl DocumentEditRuntime {
         current_primary: Option<LayerId>,
         current_projection_generation: u64,
     ) -> Result<Option<PublishedDocument>, DocumentEditRuntimeError> {
+        if self.health == RuntimeHealth::Poisoned {
+            return Err(DocumentEditRuntimeError::SessionPoisoned);
+        }
+
         let Some(action) = queue.pop_front() else {
             return Ok(None);
         };
@@ -103,28 +163,82 @@ impl DocumentEditRuntime {
         let Some(next_projection_generation) = current_projection_generation.checked_add(1) else {
             return Err(DocumentEditRuntimeError::ProjectionGenerationExhausted);
         };
+
         match action {
-            DocumentEditAction::Apply(request) => {
-                self.writer.apply_macro(request.into_commands())?;
+            #[cfg(test)]
+            DocumentEditAction::Undo | DocumentEditAction::Redo => {
+                Err(DocumentEditRuntimeError::PreparedActionUnavailable)
             }
-            DocumentEditAction::Undo => self.writer.undo()?,
-            DocumentEditAction::Redo => self.writer.redo()?,
+            DocumentEditAction::Apply(request) => {
+                let mut commands = request.into_commands();
+                if commands.len() != 1 {
+                    return Err(DocumentEditRuntimeError::MultiCommandActionRejected);
+                }
+                let command = commands.remove(0);
+
+                let mut candidate: Document = (*self.writer.snapshot()).clone();
+                command.apply(&mut candidate)?;
+                candidate.validate()?;
+                candidate.prepare_plugins(&self.catalog)?;
+
+                let options = SaveProjectOptions {
+                    limits: *self.session.limits(),
+                    journal_edit: Some(JournalEdit::new(command.clone())),
+                    checkpoint: false,
+                    ..SaveProjectOptions::default()
+                };
+                if let Err(error) = self.session.save_with_journal(&candidate, &options) {
+                    self.poison();
+                    return Err(DocumentEditRuntimeError::JournalCommit(error));
+                }
+
+                #[cfg(test)]
+                if self.test_hooks.failpoint == Some(RuntimeTestFailpoint::PostDurableLiveApply) {
+                    self.poison();
+                    return Err(DocumentEditRuntimeError::PostDurableLiveApply(
+                        PostDurableLiveApplyError::InjectedInvariant,
+                    ));
+                }
+
+                if let Err(error) = self.writer.apply_macro(vec![command]) {
+                    self.poison();
+                    return Err(DocumentEditRuntimeError::PostDurableLiveApply(
+                        PostDurableLiveApplyError::Command(error),
+                    ));
+                }
+
+                #[cfg(test)]
+                if self.test_hooks.failpoint == Some(RuntimeTestFailpoint::Reconcile) {
+                    self.poison();
+                    return Err(DocumentEditRuntimeError::ReconcileFailed);
+                }
+
+                let snapshot = self.writer.snapshot();
+                let primary = current_primary.filter(|id| self.writer.find_envelope(*id).is_some());
+                Ok(Some(PublishedDocument {
+                    kind,
+                    revision: self.writer.revision,
+                    snapshot,
+                    primary,
+                    projection_generation: next_projection_generation,
+                }))
+            }
         }
-        let snapshot = self.writer.snapshot();
-        let primary = current_primary.filter(|id| self.writer.find_envelope(*id).is_some());
-        // snapshot()が同一writerのdocを複製し、find_envelopeと同じ内容を見て同一生成時点で整合するため。
-        Ok(Some(PublishedDocument {
-            kind,
-            revision: self.writer.revision,
-            snapshot,
-            primary,
-            projection_generation: next_projection_generation,
-        }))
     }
 
     #[cfg(test)]
     fn history_lengths(&self) -> (usize, usize) {
         (self.writer.undo_len(), self.writer.redo_len())
+    }
+
+    #[cfg(test)]
+    fn revision(&self) -> u64 {
+        self.writer.revision
+    }
+
+    #[cfg(test)]
+    fn is_poisoned(&self) -> bool {
+        self.health == RuntimeHealth::Poisoned
     }
 }
 
@@ -135,6 +249,15 @@ pub(crate) struct PublishedDocument {
     pub(crate) snapshot: Arc<Document>,
     pub(crate) primary: Option<LayerId>,
     pub(crate) projection_generation: u64,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum PostDurableLiveApplyError {
+    #[error(transparent)]
+    Command(#[from] CommandError),
+    #[cfg(test)]
+    #[error("injected post-durable live apply invariant")]
+    InjectedInvariant,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -154,23 +277,42 @@ pub(crate) enum DocumentEditDispatchError {
 pub(crate) enum DocumentEditRuntimeError {
     #[error("projection generation is exhausted at u64::MAX")]
     ProjectionGenerationExhausted,
+    #[error("document edit runtime session is poisoned")]
+    SessionPoisoned,
+    #[cfg(test)]
+    #[error("prepared undo/redo action is not available yet")]
+    PreparedActionUnavailable,
+    #[error("document edit action must contain exactly one command")]
+    MultiCommandActionRejected,
+    #[error(transparent)]
+    Document(#[from] DocumentError),
+    #[error(transparent)]
+    DocumentPlugin(#[from] DocumentPluginError),
+    #[error("journal durable commit failed")]
+    JournalCommit(#[source] Box<ProjectError>),
+    #[error("live apply failed after durable journal commit")]
+    PostDurableLiveApply(#[source] PostDurableLiveApplyError),
+    #[error("transient primary reconcile failed after durable commit and live apply")]
+    #[cfg(test)]
+    ReconcileFailed,
     #[error(transparent)]
     Command(#[from] CommandError),
-    #[error(transparent)]
-    Undo(#[from] UndoError),
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::fs;
     use std::sync::Arc;
 
     use motolii_core::RationalTime;
     use motolii_doc::{
-        layer_names_for_item, AssetId, Clip, ClipSource, Command, Document, DocumentWriter,
-        ItemEnvelope, LayerId, ParentLocator, Track, TrackId, TrackItem,
+        journal_path_for_document, layer_names_for_item, motolii_dir_for_document, AssetId, Clip,
+        ClipSource, Command, Document, DocumentError, DocumentPluginError, DocumentWriter,
+        ItemEnvelope, LayerId, ParentLocator, ProjectSession, ResourceLimits, SaveProjectOptions,
+        Track, TrackId, TrackItem,
     };
-    use motolii_plugin::PluginCatalogBuilder;
+    use motolii_testkit::tmp_dir;
 
     use super::*;
     use crate::{
@@ -178,6 +320,46 @@ mod tests {
         DiagnosticReasonCode, DocumentCommandRequestError, InputRouter, InteractionState,
         InteractionStateMachine, NormalizedInput,
     };
+
+    fn first_party_catalog() -> Arc<PluginCatalog> {
+        Arc::new(motolii_plugins_firstparty::first_party_catalog().expect("first party catalog"))
+    }
+
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn unique_tmp(tag: &str) -> std::path::PathBuf {
+        let id = TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        tmp_dir(&format!("{tag}-{id}"))
+    }
+
+    fn persist_project(path: &std::path::Path, document: &Document) {
+        let limits = ResourceLimits::production();
+        let mut session = ProjectSession::acquire(path, &limits).expect("acquire");
+        session
+            .save_with_journal(
+                document,
+                &SaveProjectOptions {
+                    limits,
+                    checkpoint: true,
+                    ..SaveProjectOptions::default()
+                },
+            )
+            .expect("initial checkpoint");
+    }
+
+    fn open_runtime(document: Document) -> (std::path::PathBuf, DocumentEditRuntime) {
+        let dir = unique_tmp("cu109-runtime-unit");
+        let path = dir.join("proj.json");
+        persist_project(&path, &document);
+        let limits = ResourceLimits::production();
+        let (session, opened) = ProjectSession::open(&path, &limits).expect("open");
+        let catalog = first_party_catalog();
+        let writer = DocumentWriter::new(opened.document, Arc::clone(&catalog)).expect("writer");
+        let runtime = DocumentEditRuntime::new(session, writer, catalog);
+        (path, runtime)
+    }
 
     fn fixture() -> (Document, DocumentCommandRequest) {
         let mut document = Document::new_current();
@@ -317,11 +499,6 @@ mod tests {
         .unwrap()
     }
 
-    fn runtime(document: Document) -> DocumentEditRuntime {
-        let catalog = PluginCatalogBuilder::new().build().unwrap();
-        DocumentEditRuntime::new(DocumentWriter::new(document, Arc::new(catalog)).unwrap())
-    }
-
     fn delete_output() -> RouterOutput {
         let mut router = InputRouter::new(builtin_command_registry().unwrap());
         router
@@ -332,16 +509,95 @@ mod tests {
             .unwrap()
     }
 
+    fn assert_preflight_rejection_invariants(
+        runtime: &DocumentEditRuntime,
+        queue: &DocumentEditQueue,
+        initial_json: &[u8],
+        pre_revision: u64,
+        pre_history: (usize, usize),
+    ) {
+        assert_eq!(queue.len(), 0);
+        assert_eq!(runtime.revision(), pre_revision);
+        assert_eq!(runtime.history_lengths(), pre_history);
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
+        assert!(!runtime.is_poisoned());
+    }
+
+    fn dangling_parent_after_remove_fixture() -> (Document, DocumentCommandRequest) {
+        let mut document = Document::new_current();
+        let deleted_layer = document.layers.allocate("deleted-parent").unwrap();
+        let survivor_layer = document.layers.allocate("survivor").unwrap();
+        let track = document.track_ids.allocate("V1").unwrap();
+        let asset = document
+            .assets
+            .allocate("media", "video/mp4", "hash")
+            .unwrap();
+
+        let deleted_item = TrackItem::Clip(Clip {
+            envelope: ItemEnvelope::new(deleted_layer),
+            start: RationalTime::ZERO,
+            duration: RationalTime::try_new(1, 1).unwrap(),
+            time_map: Default::default(),
+            source: ClipSource::asset_video_only(asset),
+        });
+
+        let mut survivor_envelope = ItemEnvelope::new(survivor_layer);
+        survivor_envelope.transform.parent = Some(deleted_layer);
+        let survivor_item = TrackItem::Clip(Clip {
+            envelope: survivor_envelope,
+            start: RationalTime::ZERO,
+            duration: RationalTime::try_new(1, 1).unwrap(),
+            time_map: Default::default(),
+            source: ClipSource::asset_video_only(asset),
+        });
+
+        document.tracks.push(Track {
+            id: track,
+            items: vec![deleted_item.clone(), survivor_item],
+        });
+        document.validate().unwrap();
+
+        let request = DocumentCommandRequest::try_new(
+            DomainIntent::DeleteTargetedItems,
+            vec![Command::RemoveTrackItem {
+                parent: ParentLocator::Track(track),
+                index: 0,
+                layer_names: layer_names_for_item(&document, &deleted_item).unwrap(),
+                item: deleted_item,
+            }],
+        )
+        .unwrap();
+
+        (document, request)
+    }
+
+    fn open_runtime_with_catalog(
+        document: Document,
+        catalog: Arc<PluginCatalog>,
+    ) -> (std::path::PathBuf, DocumentEditRuntime) {
+        let dir = unique_tmp("cu109-runtime-unit");
+        let path = dir.join("proj.json");
+        persist_project(&path, &document);
+        let limits = ResourceLimits::production();
+        let (session, opened) = ProjectSession::open(&path, &limits).expect("open");
+        let writer_catalog = first_party_catalog();
+        let writer =
+            DocumentWriter::new(opened.document, Arc::clone(&writer_catalog)).expect("writer");
+        let runtime = DocumentEditRuntime::new(session, writer, catalog);
+        (path, runtime)
+    }
+
     #[test]
-    fn apply_undo_redo_publish_new_snapshots_without_mutating_old_ones() {
+    fn apply_publishes_once_and_drains_queue() {
         let (document, request) = fixture();
         let initial_json = serde_json::to_vec(&document).unwrap();
-        let mut runtime = runtime(document);
+        let (_path, mut runtime) = open_runtime(document);
         let initial_snapshot = runtime.snapshot();
         let mut queue = DocumentEditQueue::default();
         queue.push_prepared(delete_output(), Some(request)).unwrap();
-        queue.push_undo();
-        queue.push_redo();
 
         let applied = runtime.process_next(&mut queue, None, 0).unwrap().unwrap();
         let applied_json = serde_json::to_vec(&*applied.snapshot).unwrap();
@@ -353,36 +609,49 @@ mod tests {
             serde_json::to_vec(&*initial_snapshot).unwrap(),
             initial_json
         );
+        assert_eq!(queue.len(), 0);
+        assert_eq!(applied.projection_generation, 1);
+    }
 
-        let undone = runtime
-            .process_next(&mut queue, applied.primary, applied.projection_generation)
-            .unwrap()
-            .unwrap();
-        assert_eq!(undone.kind, DocumentEditActionKind::Undo);
-        assert_eq!(undone.revision, 2);
-        assert_eq!(runtime.history_lengths(), (0, 1));
-        assert_eq!(serde_json::to_vec(&*undone.snapshot).unwrap(), initial_json);
+    #[test]
+    fn undo_and_redo_are_rejected_before_cu111() {
+        let (document, request) = fixture();
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_prepared(delete_output(), Some(request)).unwrap();
+        let _ = runtime.process_next(&mut queue, None, 0).unwrap();
+        let post_apply_json = serde_json::to_vec(&*runtime.snapshot()).unwrap();
+
+        queue.push_undo();
+        assert!(matches!(
+            runtime.process_next(&mut queue, None, 1),
+            Err(DocumentEditRuntimeError::PreparedActionUnavailable)
+        ));
+        assert_eq!(queue.len(), 0);
+        assert_eq!(runtime.revision(), 1);
         assert_eq!(
-            serde_json::to_vec(&*applied.snapshot).unwrap(),
-            applied_json
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            post_apply_json
         );
 
-        let redone = runtime
-            .process_next(&mut queue, undone.primary, undone.projection_generation)
-            .unwrap()
-            .unwrap();
-        assert_eq!(redone.kind, DocumentEditActionKind::Redo);
-        assert_eq!(redone.revision, 3);
-        assert_eq!(runtime.history_lengths(), (1, 0));
-        assert_eq!(serde_json::to_vec(&*redone.snapshot).unwrap(), applied_json);
-        assert_eq!(queue.len(), 0);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_redo();
+        assert!(matches!(
+            runtime.process_next(&mut queue, None, 1),
+            Err(DocumentEditRuntimeError::PreparedActionUnavailable)
+        ));
+        assert_eq!(runtime.revision(), 1);
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            post_apply_json
+        );
     }
 
     #[test]
     fn missing_request_and_empty_history_publish_nothing() {
         let (document, _) = fixture();
         let initial_json = serde_json::to_vec(&document).unwrap();
-        let mut runtime = runtime(document);
+        let (_path, mut runtime) = open_runtime(document);
         let mut queue = DocumentEditQueue::default();
 
         assert_eq!(
@@ -394,9 +663,9 @@ mod tests {
         queue.push_undo();
         assert!(matches!(
             runtime.process_next(&mut queue, None, 0),
-            Err(DocumentEditRuntimeError::Undo(_))
+            Err(DocumentEditRuntimeError::PreparedActionUnavailable)
         ));
-        assert_eq!(runtime.writer.revision, 0);
+        assert_eq!(runtime.revision(), 0);
         assert_eq!(runtime.history_lengths(), (0, 0));
         assert_eq!(
             serde_json::to_vec(&*runtime.snapshot()).unwrap(),
@@ -420,7 +689,9 @@ mod tests {
             }],
         )
         .unwrap();
-        let mut runtime = runtime(document);
+        let (_path, mut runtime) = open_runtime(document);
+        let pre_revision = runtime.revision();
+        let pre_history = runtime.history_lengths();
         let mut queue = DocumentEditQueue::default();
         queue.push_prepared(delete_output(), Some(request)).unwrap();
 
@@ -428,12 +699,134 @@ mod tests {
             runtime.process_next(&mut queue, None, 0),
             Err(DocumentEditRuntimeError::Command(_))
         ));
-        assert_eq!(queue.len(), 0);
-        assert_eq!(runtime.writer.revision, 0);
-        assert_eq!(runtime.history_lengths(), (0, 0));
-        assert_eq!(
-            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
-            initial_json
+        assert_preflight_rejection_invariants(
+            &runtime,
+            &queue,
+            &initial_json,
+            pre_revision,
+            pre_history,
+        );
+    }
+
+    #[test]
+    fn failed_validate_is_consumed_without_snapshot_or_history_change() {
+        let (document, request) = dangling_parent_after_remove_fixture();
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let (_path, mut runtime) = open_runtime(document);
+        let pre_revision = runtime.revision();
+        let pre_history = runtime.history_lengths();
+        let mut queue = DocumentEditQueue::default();
+        queue.push_prepared(delete_output(), Some(request)).unwrap();
+
+        let error = runtime
+            .process_next(&mut queue, None, 0)
+            .expect_err("dangling transform.parent must fail validate");
+        assert!(matches!(
+            error,
+            DocumentEditRuntimeError::Document(DocumentError::UnknownLayerId { .. })
+        ));
+        assert_preflight_rejection_invariants(
+            &runtime,
+            &queue,
+            &initial_json,
+            pre_revision,
+            pre_history,
+        );
+    }
+
+    fn plugin_clip_survivor_fixture() -> (Document, DocumentCommandRequest) {
+        let mut document = Document::new_current();
+        let removable = document.layers.allocate("removable").unwrap();
+        let plugin_layer = document.layers.allocate("plugin-survivor").unwrap();
+        let track = document.track_ids.allocate("V1").unwrap();
+        let asset = document
+            .assets
+            .allocate("media", "video/mp4", "hash")
+            .unwrap();
+
+        let removable_item = TrackItem::Clip(Clip {
+            envelope: ItemEnvelope::new(removable),
+            start: RationalTime::ZERO,
+            duration: RationalTime::try_new(1, 1).unwrap(),
+            time_map: Default::default(),
+            source: ClipSource::asset_video_only(asset),
+        });
+
+        let plugin_item = TrackItem::Clip(Clip {
+            envelope: ItemEnvelope::new(plugin_layer),
+            start: RationalTime::ZERO,
+            duration: RationalTime::try_new(1, 1).unwrap(),
+            time_map: Default::default(),
+            source: ClipSource::Plugin {
+                plugin_id: "core.layer_source.radial_repeater".into(),
+                effect_version: 1,
+                params: BTreeMap::from([("count".into(), motolii_doc::DocParam::const_f64(12.0))]),
+                extra: Default::default(),
+            },
+        });
+
+        document.tracks.push(Track {
+            id: track,
+            items: vec![removable_item.clone(), plugin_item],
+        });
+        document.validate().unwrap();
+
+        let request = DocumentCommandRequest::try_new(
+            DomainIntent::DeleteTargetedItems,
+            vec![Command::RemoveTrackItem {
+                parent: ParentLocator::Track(track),
+                index: 0,
+                layer_names: layer_names_for_item(&document, &removable_item).unwrap(),
+                item: removable_item,
+            }],
+        )
+        .unwrap();
+
+        (document, request)
+    }
+
+    #[test]
+    fn failed_prepare_plugins_is_consumed_without_snapshot_or_history_change() {
+        use motolii_plugin::PluginCatalogBuilder;
+
+        let (document, request) = plugin_clip_survivor_fixture();
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        // CU-109 製品配線では writer と runtime が同一 catalog を共有するため到達不能。
+        // prepare_plugins 前方ガードの単体試験としてだけ catalog 不一致を runtime に渡す。
+        let mut mismatched_contract = first_party_catalog()
+            .get("core.layer_source.radial_repeater")
+            .expect("radial repeater contract")
+            .clone();
+        mismatched_contract
+            .node
+            .params
+            .retain(|param| param.id != "count");
+        let mut builder = PluginCatalogBuilder::new();
+        builder
+            .register(mismatched_contract)
+            .expect("mismatched test contract");
+        let mismatched_catalog = Arc::new(builder.build().expect("mismatched catalog"));
+        let (_path, mut runtime) = open_runtime_with_catalog(document, mismatched_catalog);
+        let pre_revision = runtime.revision();
+        let pre_history = runtime.history_lengths();
+        let mut queue = DocumentEditQueue::default();
+        queue.push_prepared(delete_output(), Some(request)).unwrap();
+
+        let error = runtime
+            .process_next(&mut queue, None, 0)
+            .expect_err("mismatched runtime catalog must fail prepare_plugins");
+        assert!(matches!(
+            error,
+            DocumentEditRuntimeError::DocumentPlugin(
+                DocumentPluginError::ContractViolation { ref param, .. }
+            ) if param == "count"
+        ));
+        assert_preflight_rejection_invariants(
+            &runtime,
+            &queue,
+            &initial_json,
+            pre_revision,
+            pre_history,
         );
     }
 
@@ -442,99 +835,28 @@ mod tests {
         let (document, _) = fixture();
         let layer = fixture_layer(&document);
         let initial_json = serde_json::to_vec(&document).unwrap();
-        let mut runtime = runtime(document);
-        let pre_revision = runtime.writer.revision;
+        let (_path, mut runtime) = open_runtime(document);
+        let pre_revision = runtime.revision();
         let mut queue = DocumentEditQueue::default();
 
         assert!(runtime
             .process_next(&mut queue, Some(layer), 5)
             .unwrap()
             .is_none());
-        assert_eq!(runtime.writer.revision, pre_revision);
+        assert_eq!(runtime.revision(), pre_revision);
         assert_eq!(runtime.history_lengths(), (0, 0));
         assert_eq!(
             serde_json::to_vec(&*runtime.snapshot()).unwrap(),
             initial_json
         );
         assert_eq!(queue.len(), 0);
-    }
-
-    #[test]
-    fn failed_apply_publishes_nothing_and_advances_no_generation() {
-        let (document, _) = fixture();
-        let initial_json = serde_json::to_vec(&document).unwrap();
-        let layer = fixture_layer(&document);
-        let track = document.tracks[0].id;
-        let item = document.tracks[0].items[0].clone();
-        let request = DocumentCommandRequest::try_new(
-            DomainIntent::DeleteTargetedItems,
-            vec![Command::RemoveTrackItem {
-                parent: ParentLocator::Track(track),
-                index: 1,
-                layer_names: layer_names_for_item(&document, &item).unwrap(),
-                item,
-            }],
-        )
-        .unwrap();
-        let mut runtime = runtime(document);
-        let pre_revision = runtime.writer.revision;
-        let mut queue = DocumentEditQueue::default();
-        queue.push_prepared(delete_output(), Some(request)).unwrap();
-
-        assert!(matches!(
-            runtime.process_next(&mut queue, Some(layer), 0),
-            Err(DocumentEditRuntimeError::Command(_))
-        ));
-        assert_eq!(queue.len(), 0);
-        assert_eq!(runtime.writer.revision, pre_revision);
-        assert_eq!(runtime.history_lengths(), (0, 0));
-        assert_eq!(
-            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
-            initial_json
-        );
-    }
-
-    #[test]
-    fn failed_undo_and_redo_publish_nothing() {
-        let (document, _) = fixture();
-        let initial_json = serde_json::to_vec(&document).unwrap();
-        let mut runtime = runtime(document);
-        let pre_revision = runtime.writer.revision;
-
-        let mut queue = DocumentEditQueue::default();
-        queue.push_undo();
-        assert!(matches!(
-            runtime.process_next(&mut queue, None, 0),
-            Err(DocumentEditRuntimeError::Undo(_))
-        ));
-        assert_eq!(queue.len(), 0);
-        assert_eq!(runtime.writer.revision, pre_revision);
-        assert_eq!(runtime.history_lengths(), (0, 0));
-        assert_eq!(
-            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
-            initial_json
-        );
-
-        let mut queue = DocumentEditQueue::default();
-        queue.push_redo();
-        assert!(matches!(
-            runtime.process_next(&mut queue, None, 0),
-            Err(DocumentEditRuntimeError::Undo(_))
-        ));
-        assert_eq!(queue.len(), 0);
-        assert_eq!(runtime.writer.revision, pre_revision);
-        assert_eq!(runtime.history_lengths(), (0, 0));
-        assert_eq!(
-            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
-            initial_json
-        );
     }
 
     #[test]
     fn diagnostic_adaptation_does_not_enqueue_or_mutate_document_runtime() {
         let (document, _) = fixture();
         let initial_json = serde_json::to_vec(&document).unwrap();
-        let mut runtime = runtime(document);
+        let (_path, mut runtime) = open_runtime(document);
         let mut queue = DocumentEditQueue::default();
 
         let envelope =
@@ -546,7 +868,7 @@ mod tests {
         );
         assert!(runtime.process_next(&mut queue, None, 0).unwrap().is_none());
         assert_eq!(queue.len(), 0);
-        assert_eq!(runtime.writer.revision, 0);
+        assert_eq!(runtime.revision(), 0);
         assert_eq!(runtime.history_lengths(), (0, 0));
         assert_eq!(
             serde_json::to_vec(&*runtime.snapshot()).unwrap(),
@@ -559,7 +881,7 @@ mod tests {
         for with_preview in [false, true] {
             let (document, _) = fixture();
             let initial_json = serde_json::to_vec(&document).unwrap();
-            let mut runtime = runtime(document);
+            let (_path, mut runtime) = open_runtime(document);
             let mut queue = DocumentEditQueue::default();
             let mut machine = InteractionStateMachine::new();
             machine.transition(InteractionState::Target).unwrap();
@@ -572,7 +894,7 @@ mod tests {
 
             assert!(runtime.process_next(&mut queue, None, 0).unwrap().is_none());
             assert_eq!(queue.len(), 0);
-            assert_eq!(runtime.writer.revision, 0);
+            assert_eq!(runtime.revision(), 0);
             assert_eq!(runtime.history_lengths(), (0, 0));
             assert_eq!(
                 serde_json::to_vec(&*runtime.snapshot()).unwrap(),
@@ -585,7 +907,7 @@ mod tests {
     fn apply_success_retains_valid_primary_and_advances_generation_once() {
         let f = two_track_fixture();
         let surviving = f.surviving;
-        let mut runtime = runtime(f.document);
+        let (_path, mut runtime) = open_runtime(f.document);
         let mut queue = DocumentEditQueue::default();
         queue
             .push_prepared(delete_output(), Some(f.delete_request))
@@ -601,17 +923,13 @@ mod tests {
         assert_eq!(applied.projection_generation, 8);
         assert_eq!(runtime.history_lengths(), (1, 0));
         assert_eq!(queue.len(), 0);
-        assert!(runtime
-            .process_next(&mut queue, applied.primary, applied.projection_generation)
-            .unwrap()
-            .is_none());
     }
 
     #[test]
     fn apply_success_clears_primary_deleted_by_the_apply() {
         let (document, request) = fixture();
         let deleted = fixture_layer(&document);
-        let mut runtime = runtime(document);
+        let (_path, mut runtime) = open_runtime(document);
         let mut queue = DocumentEditQueue::default();
         queue.push_prepared(delete_output(), Some(request)).unwrap();
 
@@ -628,112 +946,9 @@ mod tests {
     }
 
     #[test]
-    fn undo_success_clears_primary_removed_by_the_undo() {
-        let f = two_track_fixture();
-        let mut runtime = runtime(f.document.clone());
-        let added_layer = runtime.writer.reserve_layer_id().unwrap();
-        let item = TrackItem::Clip(Clip {
-            envelope: ItemEnvelope::new(added_layer),
-            start: RationalTime::try_new(1, 1).unwrap(),
-            duration: RationalTime::try_new(1, 1).unwrap(),
-            time_map: Default::default(),
-            source: ClipSource::asset_video_only(f.asset),
-        });
-        let mut layer_names = BTreeMap::new();
-        layer_names.insert(added_layer, "seeded".to_string());
-        runtime
-            .writer
-            .apply_macro(vec![Command::AddTrackItem {
-                parent: ParentLocator::Track(f.surviving_track),
-                index: 1,
-                item,
-                layer_names,
-            }])
-            .unwrap();
-        assert!(runtime.writer.find_envelope(added_layer).is_some());
-        assert_eq!(runtime.writer.revision, 1);
-        assert_eq!(runtime.history_lengths(), (1, 0));
-
-        let mut queue = DocumentEditQueue::default();
-        queue.push_undo();
-        let undone = runtime
-            .process_next(&mut queue, Some(added_layer), 4)
-            .unwrap()
-            .unwrap();
-        assert_eq!(undone.kind, DocumentEditActionKind::Undo);
-        assert_eq!(undone.revision, 2);
-        assert_eq!(undone.projection_generation, 5);
-        assert_eq!(undone.primary, None);
-        assert!(runtime.writer.find_envelope(added_layer).is_none());
-        assert_eq!(queue.len(), 0);
-        assert!(runtime
-            .process_next(&mut queue, undone.primary, undone.projection_generation)
-            .unwrap()
-            .is_none());
-        assert_eq!(runtime.history_lengths(), (0, 1));
-    }
-
-    #[test]
-    fn undo_success_retains_primary_that_the_undo_restores() {
-        let (document, request) = fixture();
-        let layer = fixture_layer(&document);
-        let mut runtime = runtime(document);
-        let mut queue = DocumentEditQueue::default();
-        queue.push_prepared(delete_output(), Some(request)).unwrap();
-
-        let applied = runtime
-            .process_next(&mut queue, Some(layer), 0)
-            .unwrap()
-            .unwrap();
-        assert_eq!(applied.kind, DocumentEditActionKind::Apply);
-        assert_eq!(applied.projection_generation, 1);
-        assert_eq!(applied.primary, None);
-
-        queue.push_undo();
-        let undone = runtime
-            .process_next(&mut queue, Some(layer), applied.projection_generation)
-            .unwrap()
-            .unwrap();
-        // valid-retain under Undo: undo restores the target, so primary should remain Some.
-        assert_eq!(undone.kind, DocumentEditActionKind::Undo);
-        assert_eq!(undone.revision, 2);
-        assert_eq!(undone.projection_generation, 2);
-        assert_eq!(undone.primary, Some(layer));
-        assert!(runtime.writer.find_envelope(layer).is_some());
-    }
-
-    #[test]
-    fn redo_success_does_not_restore_cleared_primary() {
-        let (document, request) = fixture();
-        let layer = fixture_layer(&document);
-        let mut runtime = runtime(document);
-        let mut queue = DocumentEditQueue::default();
-        queue.push_prepared(delete_output(), Some(request)).unwrap();
-
-        let applied = runtime
-            .process_next(&mut queue, Some(layer), 0)
-            .unwrap()
-            .unwrap();
-        queue.push_undo();
-        let undone = runtime
-            .process_next(&mut queue, applied.primary, applied.projection_generation)
-            .unwrap()
-            .unwrap();
-        queue.push_redo();
-        let redone = runtime
-            .process_next(&mut queue, undone.primary, undone.projection_generation)
-            .unwrap()
-            .unwrap();
-        assert_eq!(redone.kind, DocumentEditActionKind::Redo);
-        assert_eq!(redone.revision, 3);
-        assert_eq!(redone.projection_generation, 3);
-        assert_eq!(redone.primary, None);
-    }
-
-    #[test]
     fn generation_at_max_minus_one_advances_to_max() {
         let (document, request) = fixture();
-        let mut runtime = runtime(document);
+        let (_path, mut runtime) = open_runtime(document);
         let mut queue = DocumentEditQueue::default();
         queue.push_prepared(delete_output(), Some(request)).unwrap();
 
@@ -748,8 +963,7 @@ mod tests {
     #[test]
     fn exhausted_generation_refuses_before_mutation_and_consumes_action() {
         let f = two_track_fixture();
-        let _ = (&f.delete_request, f.surviving);
-        let mut runtime = runtime(f.document.clone());
+        let (_path, mut runtime) = open_runtime(f.document.clone());
         let added_layer = runtime.writer.reserve_layer_id().unwrap();
         let item = TrackItem::Clip(Clip {
             envelope: ItemEnvelope::new(added_layer),
@@ -769,11 +983,9 @@ mod tests {
                 layer_names,
             }])
             .unwrap();
-        assert_eq!(runtime.writer.revision, 1);
-        assert_eq!(runtime.history_lengths(), (1, 0));
+        assert_eq!(runtime.revision(), 1);
 
-        let actions = ["apply", "undo", "redo"];
-        for action in actions {
+        for action in ["apply", "undo"] {
             let mut queue = DocumentEditQueue::default();
             match action {
                 "apply" => queue
@@ -783,21 +995,11 @@ mod tests {
                     )
                     .unwrap(),
                 "undo" => queue.push_undo(),
-                "redo" => {
-                    queue.push_undo();
-                    runtime
-                        .process_next(&mut queue, Some(added_layer), 0)
-                        .unwrap()
-                        .unwrap();
-                }
                 _ => unreachable!(),
-            }
-            if action == "redo" {
-                queue.push_redo();
             }
 
             let initial_json = serde_json::to_vec(&*runtime.snapshot()).unwrap();
-            let pre_revision = runtime.writer.revision;
+            let pre_revision = runtime.revision();
             let pre_history = runtime.history_lengths();
 
             match runtime.process_next(&mut queue, Some(added_layer), u64::MAX) {
@@ -805,7 +1007,7 @@ mod tests {
                 result => panic!("unexpected result: {result:?}"),
             }
             assert_eq!(queue.len(), 0);
-            assert_eq!(runtime.writer.revision, pre_revision);
+            assert_eq!(runtime.revision(), pre_revision);
             assert_eq!(runtime.history_lengths(), pre_history);
             assert_eq!(
                 serde_json::to_vec(&*runtime.snapshot()).unwrap(),
@@ -817,8 +1019,7 @@ mod tests {
     #[test]
     fn remaining_queue_drains_after_exhaustion_refusal() {
         let f = two_track_fixture();
-        let _ = (&f.delete_request, f.surviving);
-        let mut runtime = runtime(f.document.clone());
+        let (_path, mut runtime) = open_runtime(f.document.clone());
         let added_layer = runtime.writer.reserve_layer_id().unwrap();
         let item = TrackItem::Clip(Clip {
             envelope: ItemEnvelope::new(added_layer),
@@ -847,24 +1048,295 @@ mod tests {
             )
             .unwrap();
         queue.push_undo();
-        queue.push_redo();
 
         assert!(matches!(
             runtime.process_next(&mut queue, None, u64::MAX),
             Err(DocumentEditRuntimeError::ProjectionGenerationExhausted)
         ));
-        assert_eq!(queue.len(), 2);
-
-        let published = runtime.process_next(&mut queue, None, 4).unwrap().unwrap();
-        assert_eq!(published.primary, None);
-        assert_eq!(published.projection_generation, 5);
-        assert_eq!(runtime.writer.revision, 2);
-        assert_eq!(runtime.history_lengths(), (0, 1));
+        assert_eq!(queue.len(), 1);
 
         assert!(matches!(
-            runtime.process_next(&mut queue, published.primary, u64::MAX),
-            Err(DocumentEditRuntimeError::ProjectionGenerationExhausted)
+            runtime.process_next(&mut queue, None, 4),
+            Err(DocumentEditRuntimeError::PreparedActionUnavailable)
         ));
         assert_eq!(queue.len(), 0);
+        assert_eq!(runtime.revision(), 1);
+    }
+
+    #[test]
+    fn multi_command_apply_is_rejected_pre_mutation() {
+        let (document, _) = fixture();
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let track = document.tracks[0].id;
+        let item = document.tracks[0].items[0].clone();
+        let request = DocumentCommandRequest::try_new(
+            DomainIntent::DeleteTargetedItems,
+            vec![
+                Command::RemoveTrackItem {
+                    parent: ParentLocator::Track(track),
+                    index: 0,
+                    layer_names: layer_names_for_item(&document, &item).unwrap(),
+                    item: item.clone(),
+                },
+                Command::RemoveTrackItem {
+                    parent: ParentLocator::Track(track),
+                    index: 0,
+                    layer_names: layer_names_for_item(&document, &item).unwrap(),
+                    item,
+                },
+            ],
+        )
+        .unwrap();
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_prepared(delete_output(), Some(request)).unwrap();
+
+        assert!(matches!(
+            runtime.process_next(&mut queue, None, 0),
+            Err(DocumentEditRuntimeError::MultiCommandActionRejected)
+        ));
+        assert_eq!(runtime.revision(), 0);
+        assert!(!runtime.is_poisoned());
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
+    }
+
+    #[test]
+    fn journal_commit_failure_poisons_without_live_apply() {
+        let (document, request) = fixture();
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let (path, mut runtime) = open_runtime(document);
+        let journal = journal_path_for_document(&path);
+        drop(fs::remove_file(&journal));
+        fs::create_dir_all(&journal).unwrap();
+
+        let mut queue = DocumentEditQueue::default();
+        queue.push_prepared(delete_output(), Some(request)).unwrap();
+
+        assert!(matches!(
+            runtime.process_next(&mut queue, None, 0),
+            Err(DocumentEditRuntimeError::JournalCommit(_))
+        ));
+        assert!(runtime.is_poisoned());
+        assert_eq!(runtime.revision(), 0);
+        assert_eq!(runtime.history_lengths(), (0, 0));
+        assert_eq!(queue.len(), 0);
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
+    }
+
+    #[test]
+    fn post_durable_live_apply_failure_poisons_and_leaves_journal_durable() {
+        let (document, request) = fixture();
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let (path, mut runtime) = open_runtime(document);
+        runtime.set_test_failpoint(RuntimeTestFailpoint::PostDurableLiveApply);
+
+        let mut queue = DocumentEditQueue::default();
+        queue.push_prepared(delete_output(), Some(request)).unwrap();
+
+        assert!(matches!(
+            runtime.process_next(&mut queue, None, 0),
+            Err(DocumentEditRuntimeError::PostDurableLiveApply(
+                PostDurableLiveApplyError::InjectedInvariant
+            ))
+        ));
+        assert!(runtime.is_poisoned());
+        assert_eq!(runtime.revision(), 0);
+        assert_eq!(runtime.history_lengths(), (0, 0));
+        assert_eq!(queue.len(), 0);
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
+
+        drop(runtime);
+        let limits = ResourceLimits::production();
+        let (_session, opened) = ProjectSession::open(&path, &limits).expect("reopen");
+        assert!(opened.document.tracks[0].items.is_empty());
+    }
+
+    #[test]
+    fn reconcile_failure_poisons_without_publish() {
+        let (document, request) = fixture();
+        let (path, mut runtime) = open_runtime(document);
+        runtime.set_test_failpoint(RuntimeTestFailpoint::Reconcile);
+
+        let mut queue = DocumentEditQueue::default();
+        queue.push_prepared(delete_output(), Some(request)).unwrap();
+
+        assert!(matches!(
+            runtime.process_next(&mut queue, None, 0),
+            Err(DocumentEditRuntimeError::ReconcileFailed)
+        ));
+        assert!(runtime.is_poisoned());
+        assert_eq!(runtime.revision(), 1);
+        assert_eq!(queue.len(), 0);
+        let live_json = serde_json::to_vec(&*runtime.snapshot()).unwrap();
+
+        drop(runtime);
+        let limits = ResourceLimits::production();
+        let (_session, opened) = ProjectSession::open(&path, &limits).expect("reopen");
+        assert_eq!(serde_json::to_vec(&opened.document).unwrap(), live_json);
+    }
+
+    #[test]
+    fn poisoned_runtime_does_not_consume_queue_or_mutate_writer() {
+        let (document, request) = fixture();
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let (path, mut runtime) = open_runtime(document);
+        let journal = journal_path_for_document(&path);
+        drop(fs::remove_file(&journal));
+        fs::create_dir_all(&journal).unwrap();
+        let mut queue = DocumentEditQueue::default();
+        queue.push_prepared(delete_output(), Some(request)).unwrap();
+        let _ = runtime.process_next(&mut queue, None, 0);
+        assert!(runtime.is_poisoned());
+        assert_eq!(runtime.revision(), 0);
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
+        let (_document2, request2) = fixture();
+        queue
+            .push_prepared(delete_output(), Some(request2))
+            .unwrap();
+        let initial_len = queue.len();
+        let initial_json = serde_json::to_vec(&*runtime.snapshot()).unwrap();
+        let initial_revision = runtime.revision();
+        let initial_history = runtime.history_lengths();
+        let journal_entries_before = fs::read_dir(&journal).unwrap().count();
+
+        assert!(matches!(
+            runtime.process_next(&mut queue, None, 0),
+            Err(DocumentEditRuntimeError::SessionPoisoned)
+        ));
+        assert_eq!(queue.len(), initial_len);
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
+        assert_eq!(runtime.revision(), initial_revision);
+        assert_eq!(runtime.history_lengths(), initial_history);
+        assert_eq!(
+            fs::read_dir(&journal).unwrap().count(),
+            journal_entries_before
+        );
+    }
+
+    #[test]
+    fn reopen_restores_healthy_runtime_after_poison() {
+        let f = two_track_fixture();
+        let (path, mut runtime) = open_runtime(f.document.clone());
+        runtime.set_test_failpoint(RuntimeTestFailpoint::PostDurableLiveApply);
+        let mut queue = DocumentEditQueue::default();
+        queue
+            .push_prepared(delete_output(), Some(f.delete_request))
+            .unwrap();
+        let _ = runtime.process_next(&mut queue, None, 0);
+        assert!(runtime.is_poisoned());
+        assert_eq!(runtime.revision(), 0);
+        drop(runtime);
+
+        let limits = ResourceLimits::production();
+        let (session, opened) = ProjectSession::open(&path, &limits).expect("reopen");
+        let catalog = first_party_catalog();
+        let writer = DocumentWriter::new(opened.document, Arc::clone(&catalog)).unwrap();
+        let mut runtime = DocumentEditRuntime::new(session, writer, catalog);
+        assert!(!runtime.is_poisoned());
+
+        let mut queue = DocumentEditQueue::default();
+        queue
+            .push_prepared(
+                delete_output(),
+                Some(two_track_delete_request(
+                    runtime.snapshot().as_ref(),
+                    f.surviving,
+                )),
+            )
+            .unwrap();
+        let applied = runtime
+            .process_next(&mut queue, None, 0)
+            .unwrap()
+            .expect("reopened runtime must accept Apply");
+        assert_eq!(applied.kind, DocumentEditActionKind::Apply);
+        assert_eq!(applied.revision, 1);
+        assert_eq!(queue.len(), 0);
+    }
+
+    #[test]
+    fn duplicate_apply_after_success_is_rejected_at_preflight() {
+        let (document, request) = fixture();
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let track = document.tracks[0].id;
+        let item = document.tracks[0].items[0].clone();
+        let layer_names = layer_names_for_item(&document, &item).unwrap();
+        let (path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_prepared(delete_output(), Some(request)).unwrap();
+        let applied = runtime.process_next(&mut queue, None, 0).unwrap().unwrap();
+        assert_eq!(applied.revision, 1);
+        let post_apply_json = serde_json::to_vec(&*runtime.snapshot()).unwrap();
+        assert_ne!(post_apply_json, initial_json);
+        let journal = journal_path_for_document(&path);
+        let journal_size = fs::metadata(&journal).unwrap().len();
+        let request_again = DocumentCommandRequest::try_new(
+            DomainIntent::DeleteTargetedItems,
+            vec![Command::RemoveTrackItem {
+                parent: ParentLocator::Track(track),
+                index: 0,
+                layer_names,
+                item,
+            }],
+        )
+        .unwrap();
+        queue
+            .push_prepared(delete_output(), Some(request_again))
+            .unwrap();
+        let pre_revision = runtime.revision();
+        let pre_history = runtime.history_lengths();
+        assert!(matches!(
+            runtime.process_next(&mut queue, None, 1),
+            Err(DocumentEditRuntimeError::Command(_))
+        ));
+        assert_eq!(queue.len(), 0);
+        assert_eq!(runtime.revision(), pre_revision);
+        assert_eq!(runtime.history_lengths(), pre_history);
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            post_apply_json
+        );
+        assert_eq!(fs::metadata(&journal).unwrap().len(), journal_size);
+        assert!(!runtime.is_poisoned());
+    }
+
+    #[test]
+    fn journal_commit_precedes_live_apply_on_success() {
+        let (document, request) = fixture();
+        let (path, mut runtime) = open_runtime(document);
+        let journal = journal_path_for_document(&path);
+        let size_before = fs::metadata(&journal).map(|meta| meta.len()).unwrap_or(0);
+
+        let mut queue = DocumentEditQueue::default();
+        queue.push_prepared(delete_output(), Some(request)).unwrap();
+        let published = runtime.process_next(&mut queue, None, 0).unwrap().unwrap();
+        assert_eq!(published.revision, 1);
+        let size_after = fs::metadata(&journal).expect("journal").len();
+        assert!(size_after > size_before);
+        assert_eq!(queue.len(), 0);
+        assert_eq!(published.projection_generation, 1);
+    }
+
+    #[test]
+    fn sidecar_absent_before_initialized_project_open() {
+        let dir = unique_tmp("cu109-no-sidecar");
+        let path = dir.join("missing.json");
+        let limits = ResourceLimits::production();
+        assert!(ProjectSession::open(&path, &limits).is_err());
+        assert!(!motolii_dir_for_document(&path).exists());
     }
 }

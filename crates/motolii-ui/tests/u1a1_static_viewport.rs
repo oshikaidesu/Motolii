@@ -2,13 +2,15 @@
 
 use std::path::Path;
 
-use motolii_ui::{run_shell, ShellError};
+use motolii_ui::{run_shell, run_shell_with_project, ShellError};
 use syn::visit::Visit;
 
 #[test]
 fn public_shell_api_is_toolkit_free() {
     let entry: fn() -> Result<(), ShellError> = run_shell;
     let _ = entry;
+    let project_entry: fn(&Path) -> Result<(), ShellError> = run_shell_with_project;
+    let _ = project_entry;
     let name = std::any::type_name::<ShellError>();
     for forbidden in [
         "egui::",
@@ -114,7 +116,10 @@ impl<'ast> Visit<'ast> for ForbiddenCallVisitor {
         let method = node.method.to_string();
         if method == "join"
             && self.allow_shell_join
-            && self.current_function.as_deref() == Some("run_shell")
+            && matches!(
+                self.current_function.as_deref(),
+                Some("run_shell") | Some("run_shell_inner")
+            )
         {
             self.shell_join_after_event_loop += 1;
         } else if matches!(method.as_str(), "recv" | "join" | "poll" | "poll_wait") {

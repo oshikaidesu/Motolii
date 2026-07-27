@@ -155,7 +155,7 @@ pub(crate) struct MotoliiApp {
     latest_projection: LatestResultProjection,
     preview_failure: Option<PreviewProjectionFailure>,
     latest_smoke: Option<LatestPreviewSmoke>,
-    document_runtime: DocumentEditRuntime,
+    document_runtime: Option<DocumentEditRuntime>,
     document_queue: DocumentEditQueue,
     primary: Option<motolii_doc::LayerId>,
     projection_generation: u64,
@@ -173,7 +173,7 @@ pub(crate) struct AppPreviewRuntime {
     pub(crate) gpu: Arc<GpuCtx>,
     pub(crate) render_client: RenderWorkerClient,
     pub(crate) initial_request: RenderRequest,
-    pub(crate) document_runtime: DocumentEditRuntime,
+    pub(crate) document_runtime: Option<DocumentEditRuntime>,
 }
 
 pub(crate) struct AppSmokeConfig {
@@ -209,7 +209,10 @@ impl MotoliiApp {
         let repaint_context = cc.egui_ctx.clone();
         register_repaint_signal(&render_client, &repaint_context)?;
         let render_request_template = initial_request.clone();
-        let current_document = document_runtime.snapshot();
+        let current_document = match &document_runtime {
+            Some(runtime) => runtime.snapshot(),
+            None => Arc::clone(&initial_request.document),
+        };
         let initial_generation = render_client.submit(initial_request)?;
         let evidence = preview.invariant_evidence();
         eprintln!(
@@ -450,7 +453,10 @@ fn runtime_edit_after_separator_action(
 
 impl MotoliiApp {
     fn process_document_edit(&mut self, ctx: &egui::Context) {
-        match self.document_runtime.process_next(
+        let Some(document_runtime) = &mut self.document_runtime else {
+            return;
+        };
+        match document_runtime.process_next(
             &mut self.document_queue,
             self.primary,
             self.projection_generation,
@@ -549,7 +555,7 @@ impl MotoliiApp {
                     && evidence.slot.registration_count == smoke.baseline.slot.registration_count
                 {
                     eprintln!(
-                        "U2B1_DOCUMENT passed slot={} registrations={} generation={} revisions=1,2,3",
+                        "U2B1_DOCUMENT passed slot={} registrations={} generation={} revisions=1",
                         evidence.slot.slot_id,
                         evidence.slot.registration_count,
                         expected_generation.get()
@@ -563,7 +569,7 @@ impl MotoliiApp {
             }
         }
         if Instant::now() >= smoke.deadline {
-            self.record_smoke_failure("U2b-1 edit/Undo/Redo snapshot was not displayed".into());
+            self.record_smoke_failure("U2b-1 apply snapshot was not displayed".into());
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             return true;
         }
@@ -728,7 +734,7 @@ impl DocumentEditSmoke {
         revision: u64,
         snapshot: &motolii_doc::Document,
         generation: RenderGeneration,
-        queue: &mut DocumentEditQueue,
+        _queue: &mut DocumentEditQueue,
     ) -> Result<(), DocumentEditSmokeError> {
         let json = serde_json::to_vec(snapshot)?;
         match (kind, revision) {
@@ -737,18 +743,6 @@ impl DocumentEditSmoke {
                     return Err(DocumentEditSmokeError::ApplyUnchanged);
                 }
                 self.applied_json = Some(json);
-                queue.push_undo();
-            }
-            (DocumentEditActionKind::Undo, 2) => {
-                if json != self.baseline.document_json.as_bytes() {
-                    return Err(DocumentEditSmokeError::UndoMismatch);
-                }
-                queue.push_redo();
-            }
-            (DocumentEditActionKind::Redo, 3) => {
-                if self.applied_json.as_deref() != Some(json.as_slice()) {
-                    return Err(DocumentEditSmokeError::RedoMismatch);
-                }
                 self.expected_redo_generation = Some(generation);
             }
             _ => return Err(DocumentEditSmokeError::UnexpectedOrder),
@@ -763,10 +757,6 @@ enum DocumentEditSmokeError {
     Serialize(#[from] serde_json::Error),
     #[error("U2b-1 apply did not change Document")]
     ApplyUnchanged,
-    #[error("U2b-1 Undo did not restore the initial Document")]
-    UndoMismatch,
-    #[error("U2b-1 Redo did not restore the applied Document")]
-    RedoMismatch,
     #[error("U2b-1 action order or revision was unexpected")]
     UnexpectedOrder,
 }
