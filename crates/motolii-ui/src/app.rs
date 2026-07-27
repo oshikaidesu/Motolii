@@ -157,11 +157,16 @@ pub(crate) struct MotoliiApp {
     latest_smoke: Option<LatestPreviewSmoke>,
     document_runtime: DocumentEditRuntime,
     document_queue: DocumentEditQueue,
+    primary: Option<motolii_doc::LayerId>,
+    projection_generation: u64,
     current_document: Arc<motolii_doc::Document>,
     render_request_template: RenderRequest,
     document_failure: Option<DocumentEditFailure>,
     document_smoke: Option<DocumentEditSmoke>,
 }
+
+const INITIAL_PRIMARY: Option<motolii_doc::LayerId> = None;
+const INITIAL_PROJECTION_GENERATION: u64 = 0;
 
 pub(crate) struct AppPreviewRuntime {
     pub(crate) preview: Arc<StaticPreview>,
@@ -239,6 +244,8 @@ impl MotoliiApp {
                 .then(|| LatestPreviewSmoke::new(evidence.clone(), initial_generation)),
             document_runtime,
             document_queue: DocumentEditQueue::default(),
+            primary: INITIAL_PRIMARY,
+            projection_generation: INITIAL_PROJECTION_GENERATION,
             current_document,
             render_request_template,
             document_failure: None,
@@ -443,9 +450,13 @@ fn runtime_edit_after_separator_action(
 
 impl MotoliiApp {
     fn process_document_edit(&mut self, ctx: &egui::Context) {
-        match self.document_runtime.process_next(&mut self.document_queue) {
+        match self.document_runtime.process_next(
+            &mut self.document_queue,
+            self.primary,
+            self.projection_generation,
+        ) {
             Ok(Some(published)) => {
-                if let Err(error) = self.publish_document_snapshot(published) {
+                if let Err(error) = self.publish_document_snapshot(&published) {
                     self.record_smoke_failure(error.to_string());
                     self.record_document_failure(error);
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -466,9 +477,14 @@ impl MotoliiApp {
 
     fn publish_document_snapshot(
         &mut self,
-        published: PublishedDocument,
+        published: &PublishedDocument,
     ) -> Result<(), DocumentEditFailure> {
-        self.current_document = published.snapshot;
+        adopt_published_document(
+            &mut self.current_document,
+            &mut self.primary,
+            &mut self.projection_generation,
+            published,
+        );
         let generation = self.render_client.submit(RenderRequest {
             document: Arc::clone(&self.current_document),
             data_tracks: Arc::clone(&self.render_request_template.data_tracks),
@@ -644,6 +660,17 @@ impl MotoliiApp {
         eprintln!("U1A2_LAYOUT_REJECT error={message}");
         self.layout_failure = Some(message);
     }
+}
+
+fn adopt_published_document(
+    current_document: &mut Arc<motolii_doc::Document>,
+    primary: &mut Option<motolii_doc::LayerId>,
+    projection_generation: &mut u64,
+    published: &PublishedDocument,
+) {
+    *current_document = Arc::clone(&published.snapshot);
+    *primary = published.primary;
+    *projection_generation = published.projection_generation;
 }
 
 fn register_repaint_signal(
@@ -995,6 +1022,7 @@ fn log_lifecycle(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use motolii_doc::Document;
 
     #[test]
     fn fit_inside_preserves_aspect_without_window_state() {
@@ -1069,5 +1097,38 @@ mod tests {
 
         assert_eq!(copied, vec![2]);
         assert_eq!(projection.last_displayed_generation, Some(generation_two));
+    }
+
+    #[test]
+    fn initial_selection_fields_are_none_and_zero() {
+        assert_eq!(INITIAL_PRIMARY, None);
+        assert_eq!(INITIAL_PROJECTION_GENERATION, 0);
+    }
+
+    #[test]
+    fn adoption_replaces_document_primary_and_generation_together() {
+        let mut published_document = Document::new_current();
+        let published_layer = published_document.layers.allocate("published").unwrap();
+        let mut current_document = Arc::new(Document::new_current());
+        let mut primary = None;
+        let mut projection_generation = 0;
+        let published = PublishedDocument {
+            kind: DocumentEditActionKind::Apply,
+            revision: 7,
+            snapshot: Arc::new(published_document),
+            primary: Some(published_layer),
+            projection_generation: 9,
+        };
+
+        adopt_published_document(
+            &mut current_document,
+            &mut primary,
+            &mut projection_generation,
+            &published,
+        );
+
+        assert!(Arc::ptr_eq(&current_document, &published.snapshot));
+        assert_eq!(primary, Some(published_layer));
+        assert_eq!(projection_generation, 9);
     }
 }
