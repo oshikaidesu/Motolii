@@ -33,7 +33,7 @@ CU-105は「U3a layout/hit-test/dense Timeline projection」と
 | 1k clip / 100k key | `REDUCE` | 既存spikeをcapacity evidenceとして保持。testkit外部bench slotを再利用し、CI絶対閾値や第2 fixtureを作らない |
 | numeric metrics / viewport境界 | `PASS` | U3a-1Iのtyped validation / overflow / finite-coordinate test |
 | semantic zoom境界 | `STOP` | U3a-2。G0-9待ちのwindowed native Timelineで遠景density〜近景individualを比較する |
-| selection不変 | `STOP` | CU-106 primary-selection slice。U2h-1P P5と実在callerが成立した後に非vacuousなoracleを置く |
+| selection不変 | `STOP` | CU-106P。U2h-1P P5と実在callerが成立した後に非vacuousなoracleを置く |
 | playhead / range不変 | `STOP` | owner未決。CU-106分割またはU3a-2で状態層を決めるまで実装しない |
 
 CU-105の親行は`SPLIT`とする。U3a-1Iの成立済み責任を再び実装粒へ戻さず、
@@ -41,12 +41,13 @@ capacity / semantic zoom / selection-familyを別ownerへ配送したことをCU
 
 ## 4. 次の判断
 
-次は`CU-106S`を`READY-RECHECK`とする。CU-106の「U2h selection kernelとessential focus」を
-少なくともprimary selection / essential focusへ分け、次を確認する。
+`CU-106S`は[CU-106 selection consumer分割決定](2026-07-27-cu-106-selection-consumer-split-decision.md)で
+`DONE`となった。CU-106の「U2h selection kernelとessential focus」を
+primary selection / essential focusへ分け、次を確認した。
 
-1. U2h-1P producerと同じ差分で成立する最小production callerが現行runtimeにあるか。
-2. callerがU3a-2 / G0-9 product runtime待ちなら、producer-onlyコードを置かず`WAIT`へ戻すか。
-3. primary selectionへessential focus、三surface接続、hidden件数、additive/range/marquee/AXを束ねないか。
+1. U2h-1P producerと同じ差分で成立する最小production callerは現行runtimeに無い。
+2. callerはU3a-2入場範囲と実consumer surface待ちであり、CU-106P/Fを`WAIT`とした。
+3. primary selectionへessential focus、三surface接続、hidden件数、additive/range/marquee/AXを束ねない。
 
 CU-105Rの`PASS`を、windowed native Timeline、semantic zoom、selection consumerの完成証拠にしない。
 

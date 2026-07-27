@@ -300,3 +300,4 @@
 | [2026-07-27-cu-104e-projection-generation-exhaustion-decision.md](2026-07-27-cu-104e-projection-generation-exhaustion-decision.md) | CU-104E projection generation枯渇境界決定 |
 | [2026-07-27-u2h-1p-selection-input-reachability-decision.md](2026-07-27-u2h-1p-selection-input-reachability-decision.md) | U2h-1P selection入力到達性決定 |
 | [2026-07-27-cu-105-dense-timeline-responsibility-recheck.md](2026-07-27-cu-105-dense-timeline-responsibility-recheck.md) | CU-105 dense Timeline責任再確認 |
+| [2026-07-27-cu-106-selection-consumer-split-decision.md](2026-07-27-cu-106-selection-consumer-split-decision.md) | CU-106 selection consumer分割決定 |

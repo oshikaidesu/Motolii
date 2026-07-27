@@ -3,7 +3,7 @@
 - 日付: 2026-07-27
 - 状態: **決定**
 - U2h-1PR: **DONE**
-- U2h-1P: **WAIT**（CU-105再確認後、CU-106の最初のprimary-selection sliceへ統合）
+- U2h-1P: **WAIT**（[CU-106 selection consumer分割決定](2026-07-27-cu-106-selection-consumer-split-decision.md)のCU-106Pへ統合）
 
 ## 1. 発見した欠落
 
@@ -68,6 +68,6 @@ history / primary不変とする。存在拒否を先にするのは、dangling 
 
 ## 6. 引き渡し
 
-次のPRODUCT-ASSET判断はCU-105の`READY-RECHECK`である。完了済みU3a-1Iとの差分を
-`PASS / REDUCE / STOP`で処分し、重複projection / hit-test / fixtureを作らない。
-CU-105を再確認した結果がmainへ到達するまで、U2h-1P / CU-106のclosed orderを作らない。
+CU-105RとCU-106Sは完了し、U2h-1PはCU-106Pへ統合された。現行の次判断は
+`U3a-2S`の`READY-RECHECK`である。実consumer surfaceとproduction入力が成立するまで
+U2h-1P / CU-106P/Fのclosed orderを作らない。
