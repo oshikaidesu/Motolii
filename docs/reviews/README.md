@@ -313,3 +313,4 @@
 | [2026-07-27-u3a-2q-p4-playhead-five-layer-owner-adoption-decision.md](2026-07-27-u3a-2q-p4-playhead-five-layer-owner-adoption-decision.md) | U3a-2Q-P4 playhead 五層 state owner 採択 |
 | [2026-07-27-cu-109s0-readiness-recheck-selection-decision.md](2026-07-27-cu-109s0-readiness-recheck-selection-decision.md) | CU-109S0 CU-109 readiness / order-boundary recheck 選定 |
 | [2026-07-27-cu-109s-undo-redo-prepared-action-order-recheck.md](2026-07-27-cu-109s-undo-redo-prepared-action-order-recheck.md) | CU-109S Undo / Redo prepared-action 順序再確認 |
+| [2026-07-27-cu-109sp-cu-111-prepared-action-order-prerequisite-decision.md](2026-07-27-cu-109sp-cu-111-prepared-action-order-prerequisite-decision.md) | CU-109SP CU-109 / CU-111 prepared-action 順序前提（P1 precedence） |
