@@ -51,6 +51,11 @@ WGSLはpayload候補、JS／expressionはPP-Gate待ち、外部素材は既決�
 同じ成熟度の五つのruntimeやSDKではない。既知の学習資産を活かすのは各入口のauthoring時であり、
 外部runtimeの暗黙意味をMotoliiの保存・評価契約へ持ち込むことではない。
 
+代表Vismは、共通APIを先に正当化する看板ではなく、安易な一般化を壊すprobeとして使う。
+同じtexture-outの席にある二作で責任が反復しても、他のpayload／semantic seatへ一般化しない。
+推奨API候補へ昇格できるのは、`payload class × semantic seat`の異なる複数のマスで、
+同じHost責任と負例が再現した後だけである。
+
 ```text
 推奨operation / helper ─┐
 package-local source ───┼─ authoring時に閉じたshader closure
@@ -67,6 +72,11 @@ package-local source ───┼─ authoring時に閉じたshader closure
 |---|---|---|
 | Host cache keyは`id + &'static WGSL` | `crates/motolii-gpu/src/pipeline_cache.rs` | runtime所有shader textやlocal Vism loaderは現行公開面で表せない |
 | Host pass shapeはfullscreen uniform16とtexture＋sampler＋uniform4の二つ | 同上 | 現行の推奨APIはshader関数集でなくbinding／pipeline定型である |
+| Document loweringが作るplugin stepは0入力または1入力だが、Host内部には`ApplyMask(content, mask)`と`Composite(foreground, background)`がある | `crates/motolii-doc/src/graph.rs`、`crates/motolii-render/src/lib.rs` | 2入力は新概念ではないが、任意consumerへ公開するtyped port形とloweringは未成立 |
+| `RenderStep::Plugin`は複数入力を保持でき、`CompositePlugin`は2入力以上を宣言できる | `crates/motolii-render/src/lib.rs`、`crates/motolii-plugin/src/lib.rs` | 内部表現、plugin種別、Document到達路を同じ「multi-input API」と称さない |
+| 現行`GpuCtx`は`wgpu::Device`を公開している | `crates/motolii-gpu/src/ctx.rs` | Host所有resourceを将来契約としてまだ強制できていない。現状を安全性の完成証拠にしない |
+| purity helperは同じdesc、時刻、`Quality::FINAL`で二回の画素一致を審判する | `crates/motolii-testkit/src/lib.rs` | 評価順、instance再生成、中間時刻、解像度、Draft／Finalを含む一般conformanceは未成立 |
+| `PathOp`／`VectorContent`はDocument schemaにあるが、現行eval／renderはPathOpを評価しない | `crates/motolii-doc`、`crates/motolii-eval`、`crates/motolii-render` | Energy Strokeを今すぐPath基盤の実証と称すると、Vism fixtureとHost幾何能力の新設を束ねる |
 | Radial Repeaterはplugin所有の独自WGSL本文をHost pass shapeで実行する | `plugins/motolii-plugin-radial-repeater/src/lib.rs` | 「舗装路＋独自表現」のpre-Vism実証は既にある |
 | plugin identity、registry、trait objectは`'static` | `crates/motolii-plugin/src/lib.rs` | 現行v1はworkspace build時の静的compositionである |
 | first-party登録は明示composition root | `crates/motolii-plugins-firstparty/src/lib.rs` | source fork後は登録、rebuild、restartが必要 |
@@ -91,17 +101,19 @@ package-local source ───┼─ authoring時に閉じたshader closure
 
 ### 3.2 比較中 — package形式より先にfixtureで閉じる
 
-| 主題 | 比較する候補 | 合格条件 |
-|---|---|---|
-| 標準operation | Host pass shapeだけ／version付きhelper source／authoring時生成 | 独自WGSLを拒否せず、Host責任と作者責任を混ぜない |
-| shader closure | 保存時flatten／package-local module＋content hash／解決済みimmutable dependency | 別端末でglobal pathやnetworkなしに同じsource authorityを再構成できる |
-| asset closure | package-local font／glyph／SVG等の同梱、content identity、Host解決 | system font、絶対path、外部参照、networkなしに同じ入力authorityを再構成でき、欠落・代替を診断する |
-| typed中間値の寿命 | texture、text cluster／glyph、VectorRecipe／PathOp、DataTrack、instance set | rasterize前に必要なidentityを保持し、どの変換で何が失われるかをfixtureで説明できる |
-| 外部shader import | GLSL／HLSL／ISF等をauthoring時変換／source copy／非対応 | lossと由来を示し、runtime adapterや黙った近似にしない |
-| 外部vector／motion import | SVG／Lottie等をauthoring時に検証・正準化・materialize | Y-down／px／fps／外部参照等のlossを示し、外部runtimeを保存後の意味に残さない |
-| GPU互換 | 要求feature／limitとHost診断 | vendor／backend名で表現を分岐せず、非対応を型付き拒否する |
-| local fork identity | 上流由来＋独立identity／version | 上流更新や同名導入で既存Projectの意味を変更しない |
-| Kit selection closure | 選択対象、参照Definition、DataTrack、asset、scopeの包含／拒否表 | 名前検索やinstall pathから依存を推測しない |
+| 主題 | 比較する候補 | 主な置き場 | 合格条件 |
+|---|---|---|---|
+| 標準operation | Host pass shapeだけ／version付きhelper source／authoring時生成 | Host internal planner／utility／authoring recipe | 独自WGSLを拒否せず、Host責任と作者責任を混ぜない |
+| shader closure | 保存時flatten／package-local module＋content hash／解決済みimmutable dependency | package closure | 別端末でglobal pathやnetworkなしに同じsource authorityを再構成できる |
+| asset closure | package-local font／glyph／SVG等の同梱、content identity、Host解決 | package closure／Host asset resolver | system font、絶対path、外部参照、networkなしに同じ入力authorityを再構成でき、欠落・代替を診断する |
+| typed中間値の寿命 | texture、text cluster／glyph、VectorRecipe／PathOp、DataTrack、instance set | semantic seat／Host internal planner | rasterize前に必要なidentityを保持し、どの変換で何が失われるかをfixtureで説明できる |
+| multi-input | 既存Host step／DataTrack駆動／将来typed port | runtime graph／Document lowering | 役割が非対称な入力、arity、循環、欠落を`from/to/progress`へ縮約せず説明できる |
+| Field／SDF | texture＋値域宣言／typed field／Host正規化SDF | semantic seat／Host capability | mask、displace、simulation colliderの精度、符号、単位、所有者を一語へ潰さない |
+| 外部shader import | GLSL／HLSL／ISF等をauthoring時変換／source copy／非対応 | authoring frontend／package closure | lossと由来を示し、runtime adapterや黙った近似にしない |
+| 外部vector／motion import | SVG／Lottie等をauthoring時に検証・正準化・materialize | authoring frontend／typed recipe | Y-down／px／fps／外部参照等のlossを示し、外部runtimeを保存後の意味に残さない |
+| GPU互換 | 要求feature／limitとHost診断 | runtime admission／Host cache | vendor／backend名で表現を分岐せず、非対応を型付き拒否する |
+| local fork identity | 上流由来＋独立identity／version | package closure／User Library | 上流更新や同名導入で既存Projectの意味を変更しない |
+| Kit selection closure | 選択対象、参照Definition、DataTrack、asset、scopeの包含／拒否表 | authoring recipe／materialize | 名前検索やinstall pathから依存を推測しない |
 
 ここでいうclosureは「一fileへ文字列結合する」とは限らない。package-local moduleを保持する案も、
 保存時に一つのsourceへmaterializeする案も比較対象である。禁止するのは未解決依存を作者端末や
@@ -123,7 +135,9 @@ networkへ逃がすことであり、authoring支援のmodule性そのもので�
   install、外部process、未解決の外部shader依存へ到達しない。Host shader compileのadmissionは
   GAP-30の別審判に従う。
 - WGSLからparameter、UI、binding、migrationを自動発明し、宣言契約の正本にする。
-- pluginへ`wgpu::Device`、raw pipeline／bind group mutation、backend／vendor／OS APIを公開する。
+- 現行`GpuCtx`の`wgpu::Device`公開を、将来のVism契約、raw pipeline／bind group mutation、
+  backend／vendor／OS APIの公開許可へ拡大または追認する。現行未統一の解消は`VSM-A8G0`以降の
+  独立契約で扱う。
 - shader module、pipeline、Naga IR、Metal／DXIL／SPIR-V等の派生物を恒久正本にする。
 - compile失敗を黒frame、旧版への黙示fallback、近似shaderで隠す。
 - Text／Path／Shapeのtyped identityが必要な表現を、結果が似て見えるWGSL pixel処理へ黙って
@@ -283,17 +297,74 @@ Motolii内部のtarget語彙、fixture、診断を少数のtyped境界へ収束�
 | font／SVG／glyphも自己完結asset closureとして比較する | **採用** | shaderだけ環境依存を閉じてtext／vectorから再流入する穴を防ぐ |
 | LLM corpusを理由に対等なruntime入口を増やす | **棄却** | 外部意味の誤差とMotolii target語彙の分裂を招く。authoring時loss表で回収する |
 
+### 7.1 代表Vismを共通基盤へ一般化する反例
+
+同日、GL界隈の作例候補を加えた第二のread-only相談を行い、次を現行コードと正本へ再照合した。
+
+| 助言 | 処分 | 理由 |
+|---|---|---|
+| Liquid Field Transitionを最初の単体代表にする | **棄却** | 2 texture、Field、multi-pass、transition配置を一度に開き、`VSM-B2`、`VSM-A8G0`、M5中間形式、Timeline意味を束ねる |
+| Liquidを独立probe合格後のintegration fixtureとして残す | **採用** | 作例価値を残しつつ、`from/to/progress`や固定pass列を共通契約へ焼かない |
+| LiquidとEnergy Strokeの二例で共通APIを昇格する | **棄却** | どちらもtexture-out／GPU pixel／単一outputの同じsemantic seatであり、Text、Path identity、typed data、Host stateを反証しない |
+| 最初をField producer→Displace consumerの二Vism対へ縮小する | **比較中** | multi-pass、HDR、transition配置を開かず、役割非対称な入力、field値域、seed、正準座標を分離して問える |
+| Energy Strokeを直ちにPath基盤fixtureにする | **延期** | 現行PathOp評価／tessellationが未成立。先にGPU不要のPathOp順序・identity fixtureを置く |
+| Particle TrailとPhysarumを同じstateful例にする | **棄却** | 前者のHost所有Simulation stateと、自己出力feedbackの恒久禁止を区別する |
+| 二例反復を昇格条件にする | **棄却** | 同じseat内の変奏だけで一般化を通せる |
+| 異なる`payload class × semantic seat`で同じHost責任と負例が反復した時だけ昇格する | **採用** | 三軸分離を一般化gateにも適用し、作例固有recipeを公開APIと誤認しない |
+
+最小probeは次の順に分ける。これは新しいtask ID、公開graph、payload型の採択ではない。
+
+1. **Typed contact probe**: `base + modulator`の役割非対称な二入力を比較する。
+   `from + to + progress`をmulti-inputの一般形にしない。公開port形は`VSM-B2`まで決めない。
+2. **Field domain probe**: 一つの決定的scalar fieldをDisplaceとMaskの二consumerへ与え、
+   符号、値域、精度、正準単位を比較する。FieldをRGBA textureや新しい公開型と決めず、
+   [Simulation model §3.7](../simulation-model.md)の
+   Host正規化SDFと同じseatかも反証する。
+3. **Host multi-pass probe**: Blur／Perceptual Glowでpass fusion、Host所有transient、
+   Quality縮退、linear／HDR、budgetを`VSM-A8G0`の範囲だけで比較する。
+4. **WGSL closure probe**: shader source authority、binding、派生cache、fork identityだけを
+   `VSM-B4W`で比較する。
+5. **Integration probe**: 上の独立probeが閉じた後だけLiquid Field Transitionを使う。
+   metaball→threshold→displace→compositeを固定pass契約にせず、Glowは別Vism／Kit接続とする。
+6. **Path semantic probe**: `trim ∘ offset ≠ offset ∘ trim`、first vertex、進行方向、
+   open／closed、Repeater順序をGPUなしで固定する。Energy StrokeはM5-P6／GAP-15後の
+   Host幾何能力反証へ延期する。
+
+共通negative oracleは個別Vismへ埋め込まず、少なくとも次を同じ比較表から参照する。
+
+| fixture | 壊す安易な一般化 |
+|---|---|
+| 役割非対称な二入力 | multi-inputとは`from/to/progress`である |
+| 一fieldをDisplaceとMaskへ接続 | FieldとはRGBA textureまたは[0, 1] maskである |
+| 中間時刻、解像度、非整除寸法、別aspectのsweep | `progress=0/1`のendpoint一致だけで正しい |
+| 1 pass融合と複数passの同値、分離必須の大半径処理 | pass数は表現の恒久意味である／一見一Filterなら一passでよい |
+| 評価順入替え、instance再生成、別plugin交互実行、Document外seed拒否 | 同じinstanceを同条件で二回呼べばpure `f(t)`を証明できる |
+| PathOp順序、vertex／open-closed identity | stroke風の画素結果がPath意味論を証明する |
+
+### 7.2 GL作例資産の位置づけ
+
+| 一次資料 | 観察 | Motoliiでの処分 |
+|---|---|---|
+| [LYGIA](https://github.com/patriciogonzalezvivo/lygia) | draw、filter、SDF、simulate等を細粒shader関数へ分ける | utility候補の探索資産。分類をruntime型や必須stdlibへ転記しない |
+| [glsl-pipeline](https://github.com/patriciogonzalezvivo/glsl-pipeline) | buffer列とdouble bufferでmulti-pass／feedbackを構成する | pass依存の観察に使う。double bufferをFilterの隠れ状態へ移さない |
+| [GL Transitions](https://github.com/gl-transitions/gl-transitions) | `from + to + progress → color`とendpointを共通契約にする | Liquidのauthoring recipe／integration oracle。一般multi-input契約にしない |
+| [gpu-io examples](https://apps.amandaghassaei.com/gpu-io/examples/) | reaction diffusion、Physarum、field＋particle等のGPU例を持つ | Simulation／Feedbackの後続反例。通常Filterや初期probeへ入れない |
+| [img2sdf](https://github.com/ssav7912/img2sdf) | preprocess、jump flooding、distance、normalize、compositeを段階化する | SDFとmulti-passの後続反例。固定pass列やField公開型の根拠にしない |
+
 ## 8. 実装計画への配置
 
 - `VSM-A4S`: first-party source forkからrebuild／restartまでのv1作者journeyと、
   out-of-tree conformance入口を仕様化する。
 - `VSM-A8G0`: 単一Glow APIでなく、first／third-partyが同じHost pass shapeを使う境界として
-  multi-pass、HDR、typed texture／mask、budgetを締結する。
+  multi-pass、HDR、typed texture／mask、budgetを締結する。Host multi-pass probeより前に
+  Liquidの固定pass列や内蔵Glowを実装しない。
 - `VSM-B2`: Journey Bのselection closure、公開control、asset要求、拒否表を閉じる。
+  Typed contact／Field domain probeは比較資料であり、入力port実装の先行許可ではない。
 - `VSM-B4W`: WGSL payloadだけの意味fixture。closure、binding適合、source／派生物、
   fork identity、互換診断を比較する。A8G3とB0/B1前に締結しない。
 - `VSM-B4`: payload分類をWGSLの結果だけで一般化せず、P6を消費するText declarative recipeと、
-  既決`Vec<PathOp>`を合成するPath declarative recipeを意味fixtureへ含める。新しいkindは作らない。
+  既決`Vec<PathOp>`を合成するPath declarative recipeを意味fixtureへ含める。Path semantic probeを
+  Energy Strokeの画素結果で代替せず、新しいkindは作らない。
 - `VSM-B5`: GLSL／HLSL／ISF、SVG／Lottie等をruntime依存にせず、authoring時importの
   loss／由来／license／近似拒否表として比較する。
 
@@ -307,4 +378,6 @@ Motolii内部のtarget語彙、fixture、診断を少数のtyped境界へ収束�
 - P6のText基礎API、既決PathOp閉集合、GAP-15の未決Shape語彙を入口都合で変更しない。
 - SVG／Lottie／system font／WebGL runtimeを保存後の評価依存にしない。
 - shader tagを使用関数だけから公開metadataへ自動確定しない。
+- Liquid Field Transition、Energy Stroke、Field、SDF、`progress`、pass列を公開kind／port／payloadへ
+  予約しない。
 - VSM-B2I、A8G1以降、Phase C/Dを解禁しない。
