@@ -303,3 +303,4 @@
 | [2026-07-27-cu-106-selection-consumer-split-decision.md](2026-07-27-cu-106-selection-consumer-split-decision.md) | CU-106 selection consumer分割決定 |
 | [2026-07-27-u3a-2s-windowed-timeline-readiness-split-decision.md](2026-07-27-u3a-2s-windowed-timeline-readiness-split-decision.md) | U3a-2S windowed native Timeline readiness分割決定 |
 | [2026-07-27-u3a-2r-renderer-adoption-scope-decision.md](2026-07-27-u3a-2r-renderer-adoption-scope-decision.md) | U3a-2R windowed native Timeline renderer採択範囲決定 |
+| [2026-07-27-u3a-2z-semantic-zoom-responsibility-decision.md](2026-07-27-u3a-2z-semantic-zoom-responsibility-decision.md) | U3a-2Z windowed native Timeline semantic zoom責任所在決定 |
