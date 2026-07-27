@@ -323,3 +323,4 @@
 | [2026-07-28-cu-107s-split-concretization-scope-selection.md](2026-07-28-cu-107s-split-concretization-scope-selection.md) | CU-107S CU-107 分割具体化範囲の選定 |
 | [2026-07-28-cu-107d-cu-110-required-responsibility-scope-decision.md](2026-07-28-cu-107d-cu-110-required-responsibility-scope-decision.md) | CU-107D CU-110 が必要とする CU-107 責任範囲の先行限定 |
 | [2026-07-28-cu-107r-cu-110-required-responsibility-decision.md](2026-07-28-cu-107r-cu-110-required-responsibility-decision.md) | CU-107R CU-110 が必要とする CU-107 責任範囲の限定裁定 |
+| [2026-07-28-cu-107n-cu-107-narrow-prerequisite-closed-set.md](2026-07-28-cu-107n-cu-107-narrow-prerequisite-closed-set.md) | CU-107N CU-107 狭い名前付き前提の閉集合（4前提・単一 owner・依存順） |
