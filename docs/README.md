@@ -54,7 +54,8 @@
 | [plugin-resources.md](plugin-resources.md) | プラグインのリソースライフサイクル・アセット境界・時間参照(F-10/F-11) | **縮小採用**(PipelineCache/AssetRef/予約型は実装済み、GpuAssetCache/Importer/Feedback実行は未実装・未凍結) |
 | [references.md](references.md) | 依存候補・参考リポジトリ(ライセンス区分) | 現行 |
 | [ae-pain-points.md](ae-pain-points.md) | AEユーザー不満の体系化+我々の解決タグ(プラグイン窓口仮説の検証) | 現行 |
-| [dev-experience.md](dev-experience.md) | 開発体験(DX): WGSL差し替え→journal復元付き再起動→将来WASM交換のはしご。hot reloadとcrash recoveryをHost所有状態からの同じinstance交換路へ畳む | 現行(2026-07-25。runtime／ABI契約は未決) |
+| [dev-experience.md](dev-experience.md) | 開発体験(DX): WGSL差し替え→journal復元付き再起動→将来WASM交換のはしご。hot reloadとcrash recoveryをHost所有状態からの同じinstance交換路へ畳む | 現行(2026-07-27。runtime／ABI契約は未決) |
+| [reviews/2026-07-27-wgsl-hot-reload-author-journey.md](reviews/2026-07-27-wgsl-hot-reload-author-journey.md) | INF-8 WGSL hot reloadを保存から新frame表示までの作者経路、last-good、Export拒否、shader-only境界、負例へ具体化 | **比較中**(実装・公開API変更は未許可) |
 | [plugin-ui-model.md](plugin-ui-model.md) | プラグインUIモデル: 宣言語彙 vs 自由描画。M3着手前決定で縮小採用 | **採否済み分析**(v1はHost自動生成panel、自由UIは延期) |
 | [interaction-simplicity-model.md](interaction-simplicity-model.md) | 操作単純化モデル: Direct/Tool/Advanced正規化、plugin昇格、PP-Gate、M0〜M5割当 | 現行(2026-07-14。凍結済み公開契約は変更しない) |
 | [extensible-core-model.md](extensible-core-model.md) | 小さなコアと探索可能な拡張: Controlled Core／admitted Host capability module／presentation module／非信頼first-party／third-party pluginの分界、締結後の並列化、編集pluginの責任寿命、Documentを増やさないアドレス可能な個体、表現domainを列挙しない能力境界 | **設計原則**(2026-07-17、2026-07-25 microkernel・信頼境界一般化。未凍結APIの実装許可ではない) |

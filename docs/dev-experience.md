@@ -1,9 +1,9 @@
 # 開発体験(DX): ホットリロードと反復速度
 
 作成日: 2026-07-13
-更新日: 2026-07-25
+更新日: 2026-07-27
 ステータス: **設計ノート**(hot reloadの段階とcrash recoveryへの接続を固定するが、runtime／ABI／sandboxの公開契約は変更しない。先例表は未カウンターレビューの仮説 — [reviews/README.md](reviews/README.md)規律3に従い、v2口の解凍時に反対側レビューを通してから設計根拠化する)
-関連: [plugin-authoring.md](plugin-authoring.md)§3-3(純関数契約)、[plugin-resources.md](plugin-resources.md) D1(ホスト所有PipelineCache)、[Controlled Microkernel決定](reviews/2026-07-25-controlled-microkernel-host-module-parallelism-decision.md#6-pluginという語と信頼境界の分離)、[backlog.md](backlog.md) INF-6/INF-8/V2-1/V2-2、[ae-pain-points.md](ae-pain-points.md)
+関連: [plugin-authoring.md](plugin-authoring.md)§3-3(純関数契約)、[plugin-resources.md](plugin-resources.md) D1(ホスト所有PipelineCache)、[WGSL hot reload作者経路](reviews/2026-07-27-wgsl-hot-reload-author-journey.md)、[Controlled Microkernel決定](reviews/2026-07-25-controlled-microkernel-host-module-parallelism-decision.md#6-pluginという語と信頼境界の分離)、[backlog.md](backlog.md) INF-6/INF-8/V2-1/V2-2、[ae-pain-points.md](ae-pain-points.md)
 
 ## 1. 問題(なぜこの文書が要るか)
 
@@ -89,9 +89,18 @@ activate時に影響範囲を全無効化する。plugin IDだけの無効化を
 ## 4. 実装の注意(レベル0)
 
 - **開発ビルド限定の機能とし、製品経路・ゴールデンテストに影響させない**。ファイル監視はdevフラグ配下、CIでは無効
-- キャッシュ整合: パイプラインキーはWGSLソース(またはその内容ハッシュ)を含むdescriptorなので、ソース変更=別キー=自然に再コンパイルされる。**古いソースで描いたフレームキャッシュの無効化**だけ明示処理が要る(該当プラグインidの寄与するキーを落とす。M4キャッシュキー完全性の枠内)
-- コンパイルエラー時は直前の正常パイプラインで描き続け、エラーをUI/ログに出す(黒画面でループを止めない)
+- watcher eventは再読込のhintに限り、正確にsnapshotしたbytesをsource identityとする。内容identity、候補の新旧、active artifact、既存`RenderGeneration`、`DocumentRevision`を同じ「generation」へ畳まない
+- 候補は既存render workerのserial pointで最新だけをactivateし、その後に通常render requestを1件投入する。hot reload専用rendererやdisplayへの直接書込みを作らない
+- コンパイルエラー時は直前の正常artifactでPreviewを描き続け、`source != active`をdevelopment専用診断面へ表示する(黒画面でループを止めない)
+- 未反映sourceがあるExportはcanonical rendererへ入る前に型付き拒否する。Preview/Exportの描画関数を分岐させず、Export中の暗黙compileや旧artifact pinを行わない
+- parameter、binding、port、pass shape、asset closure、plugin契約の変更はshader-only reloadではなく`Rebuild required`とする
+- M4 frame cacheは未実装なのでINF-8からinvalidate APIを先行設計しない。将来はactive artifact identityをcache keyへ寄与させる
+- 最初のprobeでproduct向けbackground compiler serviceを作らない。pipeline生成はrender worker所有の同期処理から始め、dev-only compile hitchをevent→新frame表示で計測する
 - LLM量産ワークフローとの関係: エージェントの検証ループは既にヘッドレス(ゴールデン+purity)で回る。レベル0/1は**人間が目視したい局面**のためのもの
+
+状態、Preview/Export policy、shader-only境界、A→B→Aを含む必須負例は
+[WGSL hot reload作者経路](reviews/2026-07-27-wgsl-hot-reload-author-journey.md)を正本候補とする。
+INF-8実装時に公開`PipelineCache`、Document、永続形式、plugin payloadへ焼かず、公開境界変更が必要なら停止して仕様改訂へ戻す。
 
 ## 5. 決めないこと
 
