@@ -307,3 +307,4 @@
 | [2026-07-27-u3a-2a-renderer-adoption-decision.md](2026-07-27-u3a-2a-renderer-adoption-decision.md) | U3a-2A windowed native Timeline renderer採択決定 |
 | [2026-07-27-u3a-2p-playhead-visible-range-scope-decision.md](2026-07-27-u3a-2p-playhead-visible-range-scope-decision.md) | U3a-2P playhead / visible range owner 判断の範囲決定 |
 | [2026-07-27-u3a-2q-playhead-visible-range-owner-split-decision.md](2026-07-27-u3a-2q-playhead-visible-range-owner-split-decision.md) | U3a-2Q playhead / visible range owner 採択の分割判断 |
+| [2026-07-27-u3a-2q-p-playhead-owner-evidence-supplement.md](2026-07-27-u3a-2q-p-playhead-owner-evidence-supplement.md) | U3a-2Q-P playhead owner admissibility / evidence 補遺 |
