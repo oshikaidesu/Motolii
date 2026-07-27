@@ -296,3 +296,4 @@
 | [2026-07-26-cu-g03-edit-durability-ordering-decision.md](2026-07-26-cu-g03-edit-durability-ordering-decision.md) | CU-G03 edit durability / publish順序決定 |
 | [2026-07-26-u3a-1-headless-timeline-owner-visibility-split-decision.md](2026-07-26-u3a-1-headless-timeline-owner-visibility-split-decision.md) | U3a-1 headless Timeline owner/visibility分割決定 |
 | [2026-07-27-cu-104-selection-publish-envelope-decision.md](2026-07-27-cu-104-selection-publish-envelope-decision.md) | CU-104 selection publish envelope決定 |
+| [2026-07-27-u2h-1-primary-selection-implementation-split-decision.md](2026-07-27-u2h-1-primary-selection-implementation-split-decision.md) | U2h-1 primary selection implementation split決定 |
