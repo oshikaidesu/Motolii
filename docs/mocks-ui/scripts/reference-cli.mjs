@@ -1,8 +1,6 @@
 import { createHash } from "node:crypto";
-import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import {
   publishReferenceGeneration,
@@ -23,8 +21,8 @@ import {
   REFERENCE_TRANSFORM_VERSION,
   REFERENCE_VARIANTS,
 } from "./reference-transform.mjs";
+import { repositoryFingerprint } from "./repository-fingerprint.mjs";
 
-const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PROVENANCE_PATH = path.join(ROOT, "reference-provenance.json");
 const OUTPUT_ROOT = path.join(ROOT, "reference-output");
@@ -121,25 +119,6 @@ function validation(provenance) {
   };
 }
 
-async function repositoryFingerprint() {
-  const { stdout: names } = await execFileAsync(
-    "git",
-    ["ls-files", "-co", "--exclude-standard", "-z"],
-    { cwd: ROOT, encoding: "buffer", maxBuffer: 32 * 1024 * 1024 },
-  );
-  const files = names.toString("utf8").split("\0").filter(Boolean).sort();
-  const digest = createHash("sha256");
-  for (const filename of files) {
-    digest.update(filename).update("\0").update(await readFile(path.join(ROOT, filename)));
-  }
-  const { stdout: status } = await execFileAsync(
-    "git",
-    ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
-    { cwd: ROOT, encoding: "buffer", maxBuffer: 32 * 1024 * 1024 },
-  );
-  return sha256(Buffer.concat([Buffer.from(digest.digest("hex")), status]));
-}
-
 async function compareExpected(current, expected) {
   if (JSON.stringify(current.manifest) !== JSON.stringify(expected.manifest)) {
     throw new Error("committed reference manifest differs from the current fixed inputs");
@@ -187,7 +166,7 @@ async function generate() {
 }
 
 async function check() {
-  const before = await repositoryFingerprint();
+  const before = await repositoryFingerprint(ROOT);
   const provenance = await loadProvenance();
   const expected = await expectedBundle(provenance);
   const current = await readCurrentReferenceGeneration({
@@ -195,7 +174,7 @@ async function check() {
     validation: validation(provenance),
   });
   await compareExpected(current, expected);
-  const after = await repositoryFingerprint();
+  const after = await repositoryFingerprint(ROOT);
   if (before !== after) throw new Error("check-reference changed repository bytes or status");
   console.log(`reference generation OK: ${current.generation} (${current.captures.size} PNGs)`);
 }
