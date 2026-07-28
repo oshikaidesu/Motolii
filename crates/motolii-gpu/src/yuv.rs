@@ -411,4 +411,35 @@ mod tests {
             Err(YuvError::UnsupportedColorSpace(ColorSpace::Srgb))
         ));
     }
+
+    #[test]
+    fn retaining_three_converted_outputs_overwrites_the_first_two_slot_surface() {
+        let gpu = match GpuCtx::new_headless() {
+            Ok(gpu) => gpu,
+            Err(e) => {
+                motolii_testkit::unavailable_dep("GPU adapter", &e.to_string());
+                return;
+            }
+        };
+        let mut converter = YuvToRgba::new(&gpu);
+        let first_frame = solid_yuv420p(16, 16, 32, 128, 128, ColorSpace::Rec709Limited);
+        let second_frame = solid_yuv420p(16, 16, 96, 128, 128, ColorSpace::Rec709Limited);
+        let third_frame = solid_yuv420p(16, 16, 192, 128, 128, ColorSpace::Rec709Limited);
+
+        let first = converter.convert(&gpu, &first_frame).unwrap();
+        let first_before = crate::download_rgba(&gpu, &first).unwrap();
+        let _second = converter.convert(&gpu, &second_frame).unwrap();
+        let third = converter.convert(&gpu, &third_frame).unwrap();
+        let first_after = crate::download_rgba(&gpu, &first).unwrap();
+        let third_pixels = crate::download_rgba(&gpu, &third).unwrap();
+
+        assert_ne!(
+            first_before, first_after,
+            "holding more than two outputs must remain an explicit contract violation"
+        );
+        assert_eq!(
+            first_after, third_pixels,
+            "the third conversion reuses the first two-slot output surface"
+        );
+    }
 }
