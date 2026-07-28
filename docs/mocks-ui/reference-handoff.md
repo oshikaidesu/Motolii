@@ -129,3 +129,11 @@ npm run check-reference
 - 本粒は画像、script、fixture、media byte、token、threshold、golden、route 実装、manifest schema、hash algorithm、check command を決めていない。次粒 `G0-6H-V1` へ handoff する。
 - screen 1 の充足は `G0-6H-A` の empty Project + Project 外 `Starter Media` scenario の成立を条件とし、固定 byte は commit `e4ad5c9f` の fixture-only 証拠カプセルに閉じる。
 - 詳細への相対リンク [G0-6H-V0 現行route variant evidence契約](../reviews/2026-07-28-g0-6h-v0-current-route-variant-evidence-contract.md)。
+
+## G0-6H-V1S capture境界裁定の非充足注記
+
+- 本裁定は `G0-6H-S` / `G0-6H-M` / `G0-6H-A` / `G0-6H-AF` / `G0-6H-AG0` / `G0-6H-V0` の停止線を受けたうえで、`B-1` から `B-4` の責任境界を docs-only で確定する。
+- `B-1` は route同一性維持、`B-2` は development 専用 projection 境界、`B-3` は Starter Media の表示意味の停止線、`B-4` は capture 9軸記録責任の分割禁止を裁定する。
+- 本粒は画像・variant・generation・manifest schema・hash algorithm・check command の具体値、`route / query` 設定、script / fixture / `node_modules` / `ui/motolii-web/**` / `docs/mocks/**` 変更を決めない。
+- 本粒は `G0-6H-V1` の実装（capture 実施、具体値確定、schema、command、画像）へ進めない。
+- 詳細は [G0-6H-V1S 現行route capture境界の裁定](../reviews/2026-07-28-g0-6h-v1s-current-route-capture-boundary-decision.md)。
