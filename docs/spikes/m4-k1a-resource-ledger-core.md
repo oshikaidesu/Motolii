@@ -24,6 +24,8 @@ RETIREMENT: K1a完成後も正本台帳として維持。test-only ContractLedge
 - `MemoryTier`は`Vram / Ram / Disk`
 - `ResourceRequest`はowner、tier、bytes、pinnedを持つ
 - admissionはtier hard capと、設定時だけVRAM+RAM共有capをallocation前に判定する
+- pool世代のような複数resourceは一つのlock内で全要求をpreflightし、全件許可時だけrecordを
+  追加する。途中拒否では旧世代の会計も新世代候補の会計も変えない
 - 拒否はowner、tier、要求量、使用量、予算、発火したcapを保持する
 - `ResourceGrant`はallocation IDを所有し、Drop時にadmit済みrecordの量を返す
 - 呼び手はrelease量を再申告しない
@@ -43,6 +45,8 @@ RETIREMENT: K1a完成後も正本台帳として維持。test-only ContractLedge
 4. 同一ownerのVRAM/RAM、resident/pinnedを別々に観測できる
 5. 空ownerと0 byte要求を型付き拒否し、usageを変更しない
 6. release不整合後はsnapshotも新規admissionもfail closedする
+7. batchの途中要求がcapを越えたら部分grantを残さず、旧pool世代のgrantは有効なまま残る
+8. 許可されたbatchは各recordを一度ずつ解放する
 
 ## この粒が証明しないもの
 

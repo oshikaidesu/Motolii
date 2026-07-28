@@ -176,13 +176,16 @@ impl ResourceLedger {
     }
 
     pub fn admit(&self, request: ResourceRequest) -> Result<ResourceGrant, ResourceAdmissionError> {
-        if request.owner.label().is_empty() {
-            return Err(ResourceAdmissionError::EmptyOwner);
-        }
-        if request.bytes == 0 {
-            return Err(ResourceAdmissionError::ZeroBytes);
-        }
+        let mut grants = self.admit_batch(&[request])?;
+        grants
+            .pop()
+            .ok_or(ResourceAdmissionError::AccountingCorrupted)
+    }
 
+    pub fn admit_batch(
+        &self,
+        requests: &[ResourceRequest],
+    ) -> Result<Vec<ResourceGrant>, ResourceAdmissionError> {
         let mut state = self
             .state
             .lock()
@@ -190,85 +193,42 @@ impl ResourceLedger {
         if state.corrupted {
             return Err(ResourceAdmissionError::AccountingCorrupted);
         }
-        let tier_usage = state.usage.get(request.tier);
-        let tier_budget = self.budgets.for_tier(request.tier);
-        let next_tier = tier_usage.resident_bytes.checked_add(request.bytes).ok_or(
-            ResourceAdmissionError::AccountingOverflow {
-                owner: request.owner.label(),
-                tier: request.tier,
-            },
-        )?;
-        if next_tier > tier_budget {
-            return Err(ResourceAdmissionError::BudgetExceeded {
-                owner: request.owner.label(),
-                tier: request.tier,
-                requested_bytes: request.bytes,
-                used_bytes: tier_usage.resident_bytes,
-                budget_bytes: tier_budget,
-                cap: BudgetCap::Tier(request.tier),
+        let mut candidate_usage = state.usage;
+        let mut candidate_owners = state.owners.clone();
+        for &request in requests {
+            validate_request(request)?;
+            check_budget(self.budgets, candidate_usage, request)?;
+            add_usage(&mut candidate_usage, request)?;
+            add_owner_usage(&mut candidate_owners, request)?;
+        }
+
+        let request_count = u64::try_from(requests.len())
+            .map_err(|_| ResourceAdmissionError::AllocationIdExhausted)?;
+        let next_allocation_id = state
+            .next_allocation_id
+            .checked_add(request_count)
+            .ok_or(ResourceAdmissionError::AllocationIdExhausted)?;
+        let allocation_ids = state.next_allocation_id..next_allocation_id;
+        let mut grants = Vec::with_capacity(requests.len());
+        for (allocation_id, &request) in allocation_ids.zip(requests) {
+            state.allocations.insert(
+                allocation_id,
+                AllocationRecord {
+                    owner: request.owner,
+                    tier: request.tier,
+                    bytes: request.bytes,
+                    pinned: request.pinned,
+                },
+            );
+            grants.push(ResourceGrant {
+                allocation_id,
+                state: Arc::clone(&self.state),
             });
         }
-
-        if matches!(request.tier, MemoryTier::Vram | MemoryTier::Ram) {
-            if let Some(shared_budget) = self.budgets.shared_vram_ram_bytes {
-                let shared_used = state
-                    .usage
-                    .vram
-                    .resident_bytes
-                    .checked_add(state.usage.ram.resident_bytes)
-                    .ok_or(ResourceAdmissionError::AccountingOverflow {
-                        owner: request.owner.label(),
-                        tier: request.tier,
-                    })?;
-                let next_shared = shared_used.checked_add(request.bytes).ok_or(
-                    ResourceAdmissionError::AccountingOverflow {
-                        owner: request.owner.label(),
-                        tier: request.tier,
-                    },
-                )?;
-                if next_shared > shared_budget {
-                    return Err(ResourceAdmissionError::BudgetExceeded {
-                        owner: request.owner.label(),
-                        tier: request.tier,
-                        requested_bytes: request.bytes,
-                        used_bytes: shared_used,
-                        budget_bytes: shared_budget,
-                        cap: BudgetCap::SharedVramRam,
-                    });
-                }
-            }
-        }
-
-        let allocation_id = state.next_allocation_id;
-        state.next_allocation_id = state
-            .next_allocation_id
-            .checked_add(1)
-            .ok_or(ResourceAdmissionError::AllocationIdExhausted)?;
-        add_usage(&mut state.usage, request)?;
-        let owner_usage = state
-            .owners
-            .entry((request.owner, request.tier))
-            .or_default();
-        add_tier_usage(owner_usage, request.bytes, request.pinned).map_err(|_| {
-            ResourceAdmissionError::AccountingOverflow {
-                owner: request.owner.label(),
-                tier: request.tier,
-            }
-        })?;
-        state.allocations.insert(
-            allocation_id,
-            AllocationRecord {
-                owner: request.owner,
-                tier: request.tier,
-                bytes: request.bytes,
-                pinned: request.pinned,
-            },
-        );
-
-        Ok(ResourceGrant {
-            allocation_id,
-            state: Arc::clone(&self.state),
-        })
+        state.next_allocation_id = next_allocation_id;
+        state.usage = candidate_usage;
+        state.owners = candidate_owners;
+        Ok(grants)
     }
 
     pub fn snapshot(&self) -> Result<ResourceSnapshot, ResourceAdmissionError> {
@@ -290,6 +250,84 @@ impl ResourceLedger {
                 .collect(),
         })
     }
+}
+
+fn validate_request(request: ResourceRequest) -> Result<(), ResourceAdmissionError> {
+    if request.owner.label().is_empty() {
+        return Err(ResourceAdmissionError::EmptyOwner);
+    }
+    if request.bytes == 0 {
+        return Err(ResourceAdmissionError::ZeroBytes);
+    }
+    Ok(())
+}
+
+fn check_budget(
+    budgets: ResourceBudgets,
+    usage: TierTotals,
+    request: ResourceRequest,
+) -> Result<(), ResourceAdmissionError> {
+    let tier_usage = usage.get(request.tier);
+    let tier_budget = budgets.for_tier(request.tier);
+    let next_tier = tier_usage.resident_bytes.checked_add(request.bytes).ok_or(
+        ResourceAdmissionError::AccountingOverflow {
+            owner: request.owner.label(),
+            tier: request.tier,
+        },
+    )?;
+    if next_tier > tier_budget {
+        return Err(ResourceAdmissionError::BudgetExceeded {
+            owner: request.owner.label(),
+            tier: request.tier,
+            requested_bytes: request.bytes,
+            used_bytes: tier_usage.resident_bytes,
+            budget_bytes: tier_budget,
+            cap: BudgetCap::Tier(request.tier),
+        });
+    }
+
+    if matches!(request.tier, MemoryTier::Vram | MemoryTier::Ram) {
+        if let Some(shared_budget) = budgets.shared_vram_ram_bytes {
+            let shared_used = usage
+                .vram
+                .resident_bytes
+                .checked_add(usage.ram.resident_bytes)
+                .ok_or(ResourceAdmissionError::AccountingOverflow {
+                    owner: request.owner.label(),
+                    tier: request.tier,
+                })?;
+            let next_shared = shared_used.checked_add(request.bytes).ok_or(
+                ResourceAdmissionError::AccountingOverflow {
+                    owner: request.owner.label(),
+                    tier: request.tier,
+                },
+            )?;
+            if next_shared > shared_budget {
+                return Err(ResourceAdmissionError::BudgetExceeded {
+                    owner: request.owner.label(),
+                    tier: request.tier,
+                    requested_bytes: request.bytes,
+                    used_bytes: shared_used,
+                    budget_bytes: shared_budget,
+                    cap: BudgetCap::SharedVramRam,
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+fn add_owner_usage(
+    owners: &mut BTreeMap<(ResourceOwner, MemoryTier), TierUsage>,
+    request: ResourceRequest,
+) -> Result<(), ResourceAdmissionError> {
+    let owner_usage = owners.entry((request.owner, request.tier)).or_default();
+    add_tier_usage(owner_usage, request.bytes, request.pinned).map_err(|_| {
+        ResourceAdmissionError::AccountingOverflow {
+            owner: request.owner.label(),
+            tier: request.tier,
+        }
+    })
 }
 
 impl Drop for ResourceGrant {
@@ -539,6 +577,86 @@ mod tests {
                 .unwrap_err(),
             ResourceAdmissionError::ZeroBytes
         );
+        assert_eq!(ledger.snapshot().unwrap().vram, TierUsage::default());
+    }
+
+    #[test]
+    fn batch_rejection_keeps_previous_generation_and_adds_nothing() {
+        let ledger = ResourceLedger::new(budgets(None));
+        let old_generation = ledger
+            .admit(ResourceRequest {
+                owner: DECODE_POOL,
+                tier: MemoryTier::Vram,
+                bytes: 400,
+                pinned: true,
+            })
+            .unwrap();
+
+        assert_eq!(
+            ledger
+                .admit_batch(&[
+                    ResourceRequest {
+                        owner: DECODE_POOL,
+                        tier: MemoryTier::Vram,
+                        bytes: 400,
+                        pinned: true,
+                    },
+                    ResourceRequest {
+                        owner: DECODE_POOL,
+                        tier: MemoryTier::Vram,
+                        bytes: 400,
+                        pinned: true,
+                    },
+                ])
+                .unwrap_err(),
+            ResourceAdmissionError::BudgetExceeded {
+                owner: "decode-pool",
+                tier: MemoryTier::Vram,
+                requested_bytes: 400,
+                used_bytes: 800,
+                budget_bytes: 1_024,
+                cap: BudgetCap::Tier(MemoryTier::Vram),
+            }
+        );
+        assert_eq!(
+            ledger.snapshot().unwrap().vram,
+            TierUsage {
+                resident_bytes: 400,
+                pinned_bytes: 400,
+            }
+        );
+
+        drop(old_generation);
+        assert_eq!(ledger.snapshot().unwrap().vram, TierUsage::default());
+    }
+
+    #[test]
+    fn admitted_batch_releases_each_record_exactly_once() {
+        let ledger = ResourceLedger::new(budgets(None));
+        let mut grants = ledger
+            .admit_batch(&[
+                ResourceRequest {
+                    owner: RENDER_TARGET,
+                    tier: MemoryTier::Vram,
+                    bytes: 256,
+                    pinned: false,
+                },
+                ResourceRequest {
+                    owner: DECODE_POOL,
+                    tier: MemoryTier::Ram,
+                    bytes: 512,
+                    pinned: true,
+                },
+            ])
+            .unwrap();
+        assert_eq!(ledger.snapshot().unwrap().vram.resident_bytes, 256);
+        assert_eq!(ledger.snapshot().unwrap().ram.resident_bytes, 512);
+
+        drop(grants.pop());
+        assert_eq!(ledger.snapshot().unwrap().ram, TierUsage::default());
+        assert_eq!(ledger.snapshot().unwrap().vram.resident_bytes, 256);
+
+        drop(grants);
         assert_eq!(ledger.snapshot().unwrap().vram, TierUsage::default());
     }
 
