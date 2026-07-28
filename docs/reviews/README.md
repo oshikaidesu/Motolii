@@ -328,3 +328,4 @@
 | [2026-07-28-g0-6h-e-candidate-approval-evidence-selection.md](2026-07-28-g0-6h-e-candidate-approval-evidence-selection.md) | G0-6H-E0 現行候補5画面承認証拠の限定取込選定 |
 | [2026-07-28-g0-6h-e-candidate-approval-observation.md](2026-07-28-g0-6h-e-candidate-approval-observation.md) | G0-6H-E 現行候補5画面承認の限定観察 |
 | [2026-07-28-g0-6h-r0-reference-authority-reconciliation-selection.md](2026-07-28-g0-6h-r0-reference-authority-reconciliation-selection.md) | G0-6H-R0 reference authority再照合粒の選定 |
+| [2026-07-28-g0-6h-r-reference-authority-role-reconciliation-decision.md](2026-07-28-g0-6h-r-reference-authority-role-reconciliation-decision.md) | G0-6H-R reference authority役割再照合 |
