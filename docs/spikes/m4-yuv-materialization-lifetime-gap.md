@@ -35,6 +35,18 @@ bare `wgpu::Texture` cloneであり、3回目のconvertは1回目と同じsurfac
 次の製品修正は、少なくとも同一frameの全active sourceへ互いに異なるlive surfaceを与えなければならない。
 候補はstreamごとのmaterializer owner、Host管理lease、またはcacheへの明示copyである。
 
+2026-07-29の反例確認で、slot順をlane identityにする案は棄却した。active slot順はframeごとに変わり、
+将来の混在解像度で同じlaneがA/B/A/Bとresizeされるためである。test-only
+`m4_yuv_materialization_plan.rs`は次の候補規則だけを固定する。
+
+- laneは解像度別free-listから一batch内で重複なく選ぶ
+- source数が減って再び増えてもhigh-watermark laneを再利用する
+- 解像度順が反転してもwarmup後はlane数を増やさない
+- lane capは外から注入し、超過時はcandidate growthを一件もcommitしない
+
+これはGPU pool、参照handle、ResourceLedger admissionを実装済みとする証拠ではない。capの具体値を
+決めずにallocation規則の比較だけを先行させる。
+
 修正は次を同時に満たす必要がある。
 
 - pipeline/textureを毎frame生成しない
