@@ -72,6 +72,38 @@ closed order内で一意に固定する。
 - Vite config、route、hash key、query、window global、新しいserved entryは追加しない。
 - 通常の`vite` / `vite build`ではmode不一致となり、既存route出力を変更しない。
 
+## R-9 Browser空表示の閉集合
+
+- envelope時はMedia tabをactiveにし、Effects / Create tab buttonはchromeとして残すが、
+  Effects / Create faceのfixture contentは描画しない。
+- Media source railは既存`All Media` buttonだけを残す。Project / Recent buttonと、
+  Registered folders / Collections / Tags / Packs内のfixture itemは0件にする。section
+  headingと検索・view切替はchromeとして残す。
+- results titleは既存`All Media`、scope labelは空、countは`4 ITEMS`とする。
+- 4 tileは未選択で、footerは既存grammarの`0 selected`とする。Project copy、
+  status badge、pack scopeは表示しない。
+
+## R-10 Timeline空表示の閉集合
+
+- 既存5 bandの高さとpacking guide geometry、header、ruler、playhead、
+  `KEYS / LAYERS` panelをchromeとして維持する。
+- object bar、key、selection、automation shelf、depth rail / marker、object由来の
+  mute / solo controlとband一括actionを0件にする。
+- `KeyToolsCandidate`へ渡す`keyCount` / `layerCount`は0、scopeは既存defaultのままにする。
+- 空projection時のband数はobject配列から導出せず、現行geometryの5をdevelopment
+  presentation定数として使う。Documentや公開Timeline契約へ出さない。
+
+## R-11 V1E実装粒の分割
+
+`G0-6H-V1E`を次の二粒へ分割する。
+
+1. `G0-6H-V1EB`: product-owned Browserのdevelopment projection入力、R-9の描画、
+   R-7 provenance / ownership guard再締結だけを閉じる。
+2. `G0-6H-V1ET`: `V1EB`完了後、mock-owned Vite mode carrier、Stage / Inspector /
+   Timeline空投影、R-5 ready oracleを閉じる。
+
+`G0-6H-V1G`は`V1ET`完了まで待つ。
+
 ## 非目標
 
 - 本粒でReact / CSS / script / test / fixture / image / manifestを変更すること。
