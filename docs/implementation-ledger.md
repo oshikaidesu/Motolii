@@ -335,6 +335,7 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | G0-6H-V1P | `DONE` | [G0-6H-V1P裁定](reviews/2026-07-28-g0-6h-v1p-current-route-capture-prerequisite-decision.md)で、screen1 seam / screen2〜5 interaction oracle / font fixture観測境界の三問を裁定。 |
 | G0-6H-V1R | `DONE` | [G0-6H-V1R裁定](reviews/2026-07-28-g0-6h-v1r-envelope-generation-split-decision.md)で、screen 1のInspector / Stage / Timeline / Browser / ready oracleを閉じ、親V1をpresentation `V1E`とgeneration `V1G`へ分割。 |
 | G0-6H-V1EB | `DONE` | product-owned非公開Starter Media projection decoderを閉じた。Spark再実装、Grok `ACCEPT` P0/P1=0、専用94/94、reference guard 387/387、Browser ownership 3/3、reference generation 30 PNG、docs整合。component seamと実DOMは`G0-6H-V1ET`へ留保。 |
+| G0-6H-V1ETA | `DONE` | [G0-6H-V1ETA裁定](reviews/2026-07-28-g0-6h-v1eta-empty-projection-staging-decision.md)でV1ETをcarrier / Host、Browser、Timeline、統合readyへ段階化し、専用Playwright channel、selector閉集合、provenance再締結、ready意味を固定。 |
 | U2c-1 | `DONE` | [U2c-1 共通interaction state machine契約](reviews/2026-07-21-m3-u2c-1-interaction-state-contract.md)と[M3仕様](specs/M3-ui-integration.md)で、selectionを非目標とするtoolkit非依存6状態machineの実装完了を確認 |
 | U2c-4 | `DONE` | [U2c-4 Transient Diagnostic Envelope契約](reviews/2026-07-21-m3-u2c-4-diagnostic-envelope-contract.md)と[M3仕様](specs/M3-ui-integration.md)で、selection/target推測を持たない診断adapter境界の実装完了を確認 |
 | U0a | `DONE` | [主クリティカルパス](#主クリティカルパス) Selected U series行の`U0a DONE`、[M3仕様 運用順](specs/M3-ui-integration.md)、[M3入場判定](#m3への入場判定) |

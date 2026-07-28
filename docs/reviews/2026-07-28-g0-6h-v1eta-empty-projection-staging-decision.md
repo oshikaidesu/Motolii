@@ -48,7 +48,10 @@
   `docs/mocks-ui/playwright.current-route-capture.config.js`だけが所有する。
   web server commandは
   `npm run dev -- --mode current-route-capture --port 4174`、base URLは
-  `http://127.0.0.1:4174`、test directoryは既存`tests`内の専用spec一件へ限定する。
+  `http://127.0.0.1:4174`、test directoryは既存`tests`内の
+  `current-route-capture-v1etc.playwright.js`一件へ`testMatch`で限定する。
+  `.playwright.js`は通常`playwright.config.js`のdefault `*.spec.js` / `*.test.js`
+  collectionへ入らない。
 - 実行commandは
   `npx playwright test --config playwright.current-route-capture.config.js`とする。
   通常`playwright.config.js`と通常route testは変更しない。
@@ -66,7 +69,19 @@
 - DOM文字列の後処理、`innerHTML`書換え、legacy source変更、CSSでの単なる非表示を
   禁止する。
 - V1ETCの専用Playwrightはlegacy scriptが未実行であること、空Inspector、
-  Stageの維持selectorと除外selector、通常route不変を判定する。
+  Stageの維持selectorと除外selector、通常route不変を判定する。ready属性は待たず、
+  `#stage` visibleと`#inspector` attachedを待機条件にする。
+
+### source asset inventoryの再締結
+
+`docs/mocks-ui/source-asset-inventory.json`で
+`src/legacy/LegacyHostBoundaryScreen.jsx`の現行byteをpinする既存
+`currentSha256`だけを、V1ETC完了byteへ更新する。同じentryの固定commit、旧path、
+classification、closure memberと他entryを変更しない。
+`guard-tests/source-asset-inventory.test.mjs`のschema、期待値、thresholdは変更せず、
+既存のcurrent-byte照合とsynthetic mismatch拒否をそのまま審判にする。
+`LegacyRegions.jsx`を変更しない実装を優先し、変更が必要に見えた場合はそのpinを
+黙って更新せず`ORDER: STOP`とする。
 
 ## A-4 V1ETBのBrowser閉集合
 
