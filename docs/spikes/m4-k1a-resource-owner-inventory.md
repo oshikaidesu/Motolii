@@ -1,6 +1,6 @@
 # M4-K1a resource owner inventory
 
-状態: **VALIDATION PASS候補 / K1a未完了**
+状態: **VALIDATION PASS / K1a未完了**
 
 ## 目的
 
@@ -54,6 +54,7 @@ RETIREMENT: ResourceLedger接続後もraw allocation再流入のguardとして�
    pipeline uniform、node uniformを別seatとして維持する
 4. `wgpu_hal`、IOSurface、D3D11 texture、DMA-BUF、ExternalTexture等を、
    ResourceLedger entryなしに製品sourceへ追加できない
+5. 各seatにlifetime classとpeak multiplicityの根拠があり、call数だけを容量証明にしない
 
 このguardはRust ASTやwgpu allocation実体の証明ではない。callsiteが移動・増減した時に、
 owner分類を更新せず通過することを防ぐ変更検知器である。
@@ -69,8 +70,9 @@ owner分類を更新せず通過することを防ぐ変更検知器である。
 
 ## 次の判定
 
-**PASS条件**: inventory guardが全緑で、Opus 5助言を現行仕様・codeへ再照合し、
-ownerの公開enumやDocument意味を増やさずResourceLedgerの閉じた粒を作れる。
+**PASS**: inventory guard 3 testは全緑。Opus 5のread-only助言を現行仕様・codeへ再照合し、
+閉じたowner enumを`motolii-gpu`公開APIへ出す案と、台帳より先に`OwnerId` registryを作る案を棄却した。
+owner identityはtest-only inventoryの開いたdataに留め、製品へ残したのはchecked算術だけである。
 
 **STOP条件**: raw allocation数一致を「全memory会計済み」と読み替える、またはffmpeg/native
 decoderの不可視memoryをゼロとしてhard capを主張する。

@@ -279,6 +279,33 @@ mod tests {
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Countability {
+        HostAllocated,
+        HostAllocatedOpaqueFootprint,
+        Foreign,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    struct EstimatedBytes(u64);
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum ResourceFootprint {
+        Estimated(EstimatedBytes),
+        Opaque,
+        Foreign,
+    }
+
+    impl ResourceFootprint {
+        fn countability(self) -> Countability {
+            match self {
+                Self::Estimated(_) => Countability::HostAllocated,
+                Self::Opaque => Countability::HostAllocatedOpaqueFootprint,
+                Self::Foreign => Countability::Foreign,
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     struct Budgets {
         vram: u64,
         ram: u64,
@@ -294,127 +321,245 @@ mod tests {
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
-    struct AdmissionError {
-        owner: &'static str,
-        tier: Tier,
-        requested: u64,
-        used: u64,
-        budget: u64,
+    enum AdmissionError {
+        Uncountable {
+            owner: &'static str,
+            countability: Countability,
+        },
+        BudgetExceeded {
+            owner: &'static str,
+            tier: Tier,
+            requested: u64,
+            used: u64,
+            budget: u64,
+            cap: CapKind,
+        },
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum CapKind {
+        Individual,
+        Shared,
     }
 
     #[derive(Debug)]
     struct ContractLedger {
         budgets: Budgets,
-        usage: Usage,
+        usage: std::rc::Rc<std::cell::RefCell<Usage>>,
+    }
+
+    #[derive(Debug)]
+    struct AdmissionGrant {
+        usage: std::rc::Rc<std::cell::RefCell<Usage>>,
+        tier: Tier,
+        bytes: u64,
+    }
+
+    impl Drop for AdmissionGrant {
+        fn drop(&mut self) {
+            let mut usage = self.usage.borrow_mut();
+            let current = match self.tier {
+                Tier::Vram => &mut usage.vram,
+                Tier::Ram => &mut usage.ram,
+                Tier::Disk => &mut usage.disk,
+            };
+            *current = current
+                .checked_sub(self.bytes)
+                .expect("grant bytes cannot exceed admitted usage");
+        }
     }
 
     impl ContractLedger {
         fn admit(
-            &mut self,
+            &self,
             owner: &'static str,
             tier: Tier,
-            requested: u64,
-        ) -> Result<(), AdmissionError> {
+            footprint: ResourceFootprint,
+        ) -> Result<AdmissionGrant, AdmissionError> {
+            let ResourceFootprint::Estimated(EstimatedBytes(requested)) = footprint else {
+                return Err(AdmissionError::Uncountable {
+                    owner,
+                    countability: footprint.countability(),
+                });
+            };
+            let mut usage = self.usage.borrow_mut();
             let (used, budget) = match tier {
-                Tier::Vram => (self.usage.vram, self.budgets.vram),
-                Tier::Ram => (self.usage.ram, self.budgets.ram),
-                Tier::Disk => (self.usage.disk, self.budgets.disk),
+                Tier::Vram => (usage.vram, self.budgets.vram),
+                Tier::Ram => (usage.ram, self.budgets.ram),
+                Tier::Disk => (usage.disk, self.budgets.disk),
             };
             if used.checked_add(requested).is_none_or(|next| next > budget) {
-                return Err(AdmissionError {
+                return Err(AdmissionError::BudgetExceeded {
                     owner,
                     tier,
                     requested,
                     used,
                     budget,
+                    cap: CapKind::Individual,
                 });
             }
             if matches!(tier, Tier::Vram | Tier::Ram) {
                 if let Some(shared_budget) = self.budgets.shared {
-                    let shared_used = self.usage.vram + self.usage.ram;
+                    let shared_used = usage.vram.checked_add(usage.ram).ok_or(
+                        AdmissionError::BudgetExceeded {
+                            owner,
+                            tier,
+                            requested,
+                            used: u64::MAX,
+                            budget: shared_budget,
+                            cap: CapKind::Shared,
+                        },
+                    )?;
                     if shared_used
                         .checked_add(requested)
                         .is_none_or(|next| next > shared_budget)
                     {
-                        return Err(AdmissionError {
+                        return Err(AdmissionError::BudgetExceeded {
                             owner,
                             tier,
                             requested,
                             used: shared_used,
                             budget: shared_budget,
+                            cap: CapKind::Shared,
                         });
                     }
                 }
             }
             match tier {
-                Tier::Vram => self.usage.vram += requested,
-                Tier::Ram => self.usage.ram += requested,
-                Tier::Disk => self.usage.disk += requested,
+                Tier::Vram => usage.vram += requested,
+                Tier::Ram => usage.ram += requested,
+                Tier::Disk => usage.disk += requested,
             }
-            Ok(())
+            drop(usage);
+            Ok(AdmissionGrant {
+                usage: std::rc::Rc::clone(&self.usage),
+                tier,
+                bytes: requested,
+            })
         }
 
-        fn release(&mut self, tier: Tier, bytes: u64) {
-            match tier {
-                Tier::Vram => self.usage.vram -= bytes,
-                Tier::Ram => self.usage.ram -= bytes,
-                Tier::Disk => self.usage.disk -= bytes,
-            }
+        fn usage(&self) -> Usage {
+            *self.usage.borrow()
         }
     }
 
     #[test]
     fn hard_caps_reject_before_usage_exceeds_budget_and_report_context() {
-        let mut ledger = ContractLedger {
+        let ledger = ContractLedger {
             budgets: Budgets {
                 vram: 1_024,
                 ram: 2_048,
                 disk: 4_096,
                 shared: None,
             },
-            usage: Usage::default(),
+            usage: Default::default(),
         };
 
-        assert_eq!(ledger.admit("render-target", Tier::Vram, 768), Ok(()));
+        let grant = ledger
+            .admit(
+                "render-target",
+                Tier::Vram,
+                ResourceFootprint::Estimated(EstimatedBytes(768)),
+            )
+            .unwrap();
         assert_eq!(
-            ledger.admit("decoder-surface", Tier::Vram, 512),
-            Err(AdmissionError {
+            ledger
+                .admit(
+                    "decoder-surface",
+                    Tier::Vram,
+                    ResourceFootprint::Estimated(EstimatedBytes(512))
+                )
+                .unwrap_err(),
+            AdmissionError::BudgetExceeded {
                 owner: "decoder-surface",
                 tier: Tier::Vram,
                 requested: 512,
                 used: 768,
                 budget: 1_024,
-            })
+                cap: CapKind::Individual,
+            }
         );
-        assert_eq!(ledger.usage.vram, 768);
-        ledger.release(Tier::Vram, 768);
-        assert_eq!(ledger.usage, Usage::default());
+        assert_eq!(ledger.usage().vram, 768);
+        drop(grant);
+        assert_eq!(ledger.usage(), Usage::default());
     }
 
     #[test]
     fn shared_memory_cap_rejects_even_when_separate_caps_fit() {
-        let mut ledger = ContractLedger {
+        let ledger = ContractLedger {
             budgets: Budgets {
                 vram: 1_024,
                 ram: 1_024,
                 disk: 4_096,
                 shared: Some(1_200),
             },
-            usage: Usage::default(),
+            usage: Default::default(),
         };
 
-        ledger.admit("hot-cache", Tier::Vram, 800).unwrap();
+        let _hot = ledger
+            .admit(
+                "hot-cache",
+                Tier::Vram,
+                ResourceFootprint::Estimated(EstimatedBytes(800)),
+            )
+            .unwrap();
         assert_eq!(
-            ledger.admit("warm-cache", Tier::Ram, 600),
-            Err(AdmissionError {
+            ledger
+                .admit(
+                    "warm-cache",
+                    Tier::Ram,
+                    ResourceFootprint::Estimated(EstimatedBytes(600))
+                )
+                .unwrap_err(),
+            AdmissionError::BudgetExceeded {
                 owner: "warm-cache",
                 tier: Tier::Ram,
                 requested: 600,
                 used: 800,
                 budget: 1_200,
-            })
+                cap: CapKind::Shared,
+            }
         );
-        assert_eq!(ledger.usage.ram, 0);
-        assert_eq!(ledger.admit("disk-cache", Tier::Disk, 600), Ok(()));
+        assert_eq!(ledger.usage().ram, 0);
+        let _disk = ledger
+            .admit(
+                "disk-cache",
+                Tier::Disk,
+                ResourceFootprint::Estimated(EstimatedBytes(600)),
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn opaque_and_foreign_memory_are_typed_rejections() {
+        let ledger = ContractLedger {
+            budgets: Budgets {
+                vram: 1_024,
+                ram: 1_024,
+                disk: 4_096,
+                shared: Some(1_500),
+            },
+            usage: Default::default(),
+        };
+
+        assert_eq!(
+            ledger
+                .admit("depth24", Tier::Vram, ResourceFootprint::Opaque)
+                .unwrap_err(),
+            AdmissionError::Uncountable {
+                owner: "depth24",
+                countability: Countability::HostAllocatedOpaqueFootprint,
+            }
+        );
+        assert_eq!(
+            ledger
+                .admit("decoder-surface", Tier::Vram, ResourceFootprint::Foreign)
+                .unwrap_err(),
+            AdmissionError::Uncountable {
+                owner: "decoder-surface",
+                countability: Countability::Foreign,
+            }
+        );
+        assert_eq!(ledger.usage(), Usage::default());
     }
 }

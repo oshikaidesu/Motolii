@@ -46,7 +46,7 @@ RETIREMENT: checked copy-buffer見積りは製品経路へ残す。texture/admis
 
 ```text
 cargo test -p motolii-gpu --locked
-test result: ok. 8 passed; 0 failed
+test result: ok. 9 passed; 0 failed
 origin_guard: 6 passed
 swscale_reference: 1 passed
 vism_a3_0_fullscreen_uniform16_cache: 2 passed
@@ -70,6 +70,14 @@ OK: docs整合チェック全項目通過
 
 最後の項目は現時点ではtest-only modelである。K1a本体では、実際に作るtexture/bufferの全ownerを
 一つの台帳へ接続できることを確認してから製品codeへ移す。
+
+Opus 5のread-only再監査後、test-only admission modelは次を追加で固定した。
+
+- admission量はdescriptor見積り由来の`EstimatedBytes`からだけ受ける
+- grantがadmit時の量を保持し、Dropで返す。呼び手は解放量を再申告しない
+- 個別capと共有capを拒否診断で区別する
+- checkedな共有usage加算
+- footprint不明のHost allocationとForeign memoryを別の型付き拒否にする
 
 ## この検証が証明しないもの
 

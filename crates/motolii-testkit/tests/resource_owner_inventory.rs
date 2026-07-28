@@ -8,39 +8,84 @@ use std::path::{Path, PathBuf};
 struct InventoryEntry {
     relative_path: &'static str,
     raw_allocation_calls: usize,
-    owner_seats: &'static [&'static str],
+    owner_seats: &'static [OwnerSeat],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct OwnerSeat {
+    name: &'static str,
+    lifetime: &'static str,
+    peak_multiplicity: &'static str,
 }
 
 const INVENTORY: &[InventoryEntry] = &[
     InventoryEntry {
         relative_path: "crates/motolii-gpu/src/pipeline_cache.rs",
         raw_allocation_calls: 2,
-        owner_seats: &["pipeline-uniform"],
+        owner_seats: &[OwnerSeat {
+            name: "pipeline-uniform",
+            lifetime: "pipeline-cache-entry",
+            peak_multiplicity: "dynamic-by-cache-key",
+        }],
     },
     InventoryEntry {
         relative_path: "crates/motolii-gpu/src/transfer.rs",
         raw_allocation_calls: 2,
-        owner_seats: &["source-upload", "copy-out-staging"],
+        owner_seats: &[
+            OwnerSeat {
+                name: "source-upload",
+                lifetime: "caller-owned",
+                peak_multiplicity: "dynamic-by-live-caller",
+            },
+            OwnerSeat {
+                name: "copy-out-staging",
+                lifetime: "downloader-size-generation",
+                peak_multiplicity: "one-per-downloader",
+            },
+        ],
     },
     InventoryEntry {
         relative_path: "crates/motolii-gpu/src/yuv.rs",
         raw_allocation_calls: 3,
-        owner_seats: &["decode-materialization-pool"],
+        owner_seats: &[OwnerSeat {
+            name: "decode-materialization-pool",
+            lifetime: "converter-size-generation",
+            peak_multiplicity: "three-planes-two-outputs-one-uniform",
+        }],
     },
     InventoryEntry {
         relative_path: "crates/motolii-nodes/src/lib.rs",
         raw_allocation_calls: 5,
-        owner_seats: &["render-target", "node-uniform"],
+        owner_seats: &[
+            OwnerSeat {
+                name: "render-target",
+                lifetime: "render-session-graph-liveness",
+                peak_multiplicity: "dynamic-by-live-branch",
+            },
+            OwnerSeat {
+                name: "node-uniform",
+                lifetime: "node-or-render-call",
+                peak_multiplicity: "dynamic-by-active-node",
+            },
+        ],
     },
     InventoryEntry {
         relative_path: "crates/motolii-render/src/lib.rs",
         raw_allocation_calls: 1,
-        owner_seats: &["rendered-frame"],
+        owner_seats: &[OwnerSeat {
+            name: "rendered-frame",
+            lifetime: "consumer-handle",
+            peak_multiplicity: "dynamic-by-in-flight-generation",
+        }],
     },
     InventoryEntry {
         relative_path: "crates/motolii-ui/src/display_slot.rs",
         raw_allocation_calls: 1,
-        owner_seats: &["preview-display"],
+        owner_seats: &[OwnerSeat {
+            name: "preview-display",
+            lifetime: "host-and-ui-registration",
+            peak_multiplicity: "dynamic-by-display-generation",
+        }],
     },
 ];
 
@@ -127,6 +172,19 @@ fn every_product_raw_gpu_allocation_callsite_has_an_owner_seat() {
             !entry.owner_seats.is_empty(),
             "{relative} must have at least one owner seat"
         );
+        for seat in entry.owner_seats {
+            assert!(!seat.name.is_empty(), "{relative} has an empty owner name");
+            assert!(
+                !seat.lifetime.is_empty(),
+                "{relative}/{} has no lifetime class",
+                seat.name
+            );
+            assert!(
+                !seat.peak_multiplicity.is_empty(),
+                "{relative}/{} has no peak multiplicity",
+                seat.name
+            );
+        }
     }
 }
 
@@ -169,7 +227,7 @@ fn product_has_no_unaccounted_native_or_external_texture_import() {
 fn inventory_keeps_distinct_lifetime_seats() {
     let seats: Vec<_> = INVENTORY
         .iter()
-        .flat_map(|entry| entry.owner_seats.iter().copied())
+        .flat_map(|entry| entry.owner_seats.iter().map(|seat| seat.name))
         .collect();
     for required in [
         "source-upload",
