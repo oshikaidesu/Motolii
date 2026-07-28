@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import { StrictMode, useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.jsx";
 import { DiscoveryBrowserCandidate, EasingTriggerCandidate } from "@motolii/motolii-web";
@@ -25,6 +25,17 @@ const developmentMediaEnvelope = {
 };
 
 function DiscoveryBrowserCandidateWithDevelopmentProjection(props) {
+  useLayoutEffect(() => {
+    const rootNode = document.getElementById("root");
+    if (!rootNode) {
+      return;
+    }
+    rootNode.setAttribute("data-current-route-capture-ready", "true");
+    return () => {
+      rootNode.removeAttribute("data-current-route-capture-ready");
+    };
+  }, []);
+
   return (
     <DiscoveryBrowserCandidate
       {...props}

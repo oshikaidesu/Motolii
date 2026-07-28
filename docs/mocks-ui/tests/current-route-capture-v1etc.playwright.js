@@ -250,3 +250,146 @@ test.describe("G0-6H-V1ETT current-route-capture Timeline projection", () => {
     expect(pageErrors).toHaveLength(0);
   });
 });
+
+test.describe("G0-6H-V1ETE current-route-capture screen 1 ready oracle integration", () => {
+  test("waits on capture ready marker and revalidates A-3/A-4/A-5 on one page with archive cleanup", async ({
+    page,
+  }) => {
+    const pageErrors = [];
+    page.on("pageerror", (error) => {
+      pageErrors.push(error);
+    });
+
+    await page.goto(CAPTURE_ROUTE, { waitUntil: "domcontentloaded" });
+    await page
+      .locator('#root[data-current-route-capture-ready="true"]')
+      .waitFor({ state: "attached" });
+
+    const readyMarkers = page.locator("[data-current-route-capture-ready]");
+    await expect(readyMarkers).toHaveCount(1);
+    await expect(
+      page.locator("#root[data-current-route-capture-ready='true']"),
+    ).toHaveAttribute("id", "root");
+
+    const inspector = page.locator("#inspector");
+    await expect(inspector).toHaveCount(1);
+    await expect(inspector).toHaveJSProperty("tagName", "ASIDE");
+    await expect(inspector).toHaveClass("inspector");
+    await expect(page.locator("#inspector > *")).toHaveCount(0);
+
+    for (const selector of EMPTY_STAGE_SELECTORS) {
+      await expect(page.locator(selector)).toHaveCount(0);
+    }
+    for (const selector of PRESERVED_STAGE_SELECTORS) {
+      await expect(page.locator(selector)).toHaveCount(1);
+    }
+    await expect(page.locator("#stage")).toHaveAttribute("data-mode", "installed");
+    expect(
+      await page.locator(".app").getAttribute("data-parity-ready"),
+    ).toBeNull();
+
+    await expect(page.locator(".browser-tabs button")).toHaveCount(3);
+    await expect(page.locator('[data-tab="project"]')).toHaveClass(
+      /(?:^|\s)on(?:\s|$)/,
+    );
+    await expect(
+      page.locator('[data-tab="effects"]'),
+    ).not.toHaveClass(/(?:^|\s)on(?:\s|$)/);
+    await expect(
+      page.locator('[data-tab="create"]'),
+    ).not.toHaveClass(/(?:^|\s)on(?:\s|$)/);
+    await expect(page.locator("#asset-source-title")).toHaveText("All Media");
+    await expect(page.locator("#asset-scope-label")).toHaveCount(1);
+    await expect(page.locator("#asset-scope-label")).toHaveText("");
+    await expect(page.locator("#asset-count")).toHaveText("4 ITEMS");
+    await expect(page.locator("#asset-selection-count")).toHaveText("0 selected");
+
+    const tiles = page.locator(".candidate-asset-results .asset-tile");
+    await expect(tiles).toHaveCount(4);
+
+    const expectedTiles = [
+      { asset: "starter-clip.mp4", label: "starter-clip.mp4 · video/mp4", preview: "video" },
+      { asset: "starter-mark.svg", label: "starter-mark.svg · image/svg+xml", preview: "logo" },
+      { asset: "starter-still.png", label: "starter-still.png · image/png", preview: "texture" },
+      { asset: "starter-tone.wav", label: "starter-tone.wav · audio/wav", preview: "audio" },
+    ];
+
+    for (let i = 0; i < expectedTiles.length; i += 1) {
+      const tile = tiles.nth(i);
+      const expected = expectedTiles[i];
+      await expect(tile).toHaveAttribute("data-asset", expected.asset);
+      await expect(tile).toHaveAttribute("aria-label", expected.label);
+      await expect(tile.locator(".asset-preview")).toHaveClass(
+        `asset-preview ${expected.preview}`,
+      );
+    }
+
+    const resultsScope = page.locator(".candidate-asset-results");
+    await expect(resultsScope.locator(".is-selected")).toHaveCount(0);
+    await expect(resultsScope.locator('[aria-pressed="true"]')).toHaveCount(0);
+    await expect(resultsScope.locator("[data-asset-origin]")).toHaveCount(0);
+    await expect(resultsScope.locator("[data-pack]")).toHaveCount(0);
+
+    const timelineAbsentSelectors = [
+      ".candidate-time-bar",
+      "#vism-clip",
+      "[data-object-id]",
+      ".candidate-object-state",
+      ".candidate-sm",
+      ".candidate-group-fold",
+      ".candidate-group-lane-bg",
+      ".candidate-group-guide",
+      ".candidate-automation-trigger",
+      ".candidate-automation-stack",
+      ".candidate-automation-row",
+      ".candidate-automation-key",
+      ".candidate-automation-add-row",
+      ".candidate-automation-menu",
+      ".candidate-depth-open",
+      ".candidate-depth-value",
+      "#depth-rail",
+      ".z-rail",
+      "#depth-key",
+      "#z-axis",
+      "#z-readout",
+      ".candidate-depth-scope",
+      ".candidate-band-action-rail",
+      ".candidate-band-action-row",
+      ".candidate-band-sm",
+      ".candidate-pack-resize-zone",
+      '[data-selected="true"]',
+    ];
+
+    for (const selector of timelineAbsentSelectors) {
+      await expect(page.locator(selector)).toHaveCount(0);
+    }
+
+    await expect(page.locator("#timeline[data-react-surface='timeline']")).toHaveCount(
+      1,
+    );
+    await expect(page.locator(".candidate-timeline-head")).toHaveCount(1);
+    await expect(page.locator("#depth-toggle")).toHaveCount(1);
+    await expect(page.locator(".candidate-timeline-view-switch")).toHaveCount(1);
+    await expect(page.locator(".candidate-beat-ruler")).toHaveCount(1);
+    await expect(page.locator(".candidate-beat-ruler span")).toHaveCount(10);
+    await expect(page.locator("#playhead")).toHaveCount(1);
+    await expect(page.locator("#playhead")).toHaveAttribute(
+      "style",
+      /left:\s*62.5%/,
+    );
+    await expect(page.locator(".candidate-pack-guides")).toHaveCount(1);
+    await expect(page.locator(".candidate-pack-guides i")).toHaveCount(5);
+    await expect(page.locator(".candidate-key-tools")).toHaveCount(1);
+    await expect(
+      page.locator(".candidate-key-mode button[aria-pressed='true']"),
+    ).toHaveText("KEYS");
+    await expect(page.locator(".candidate-key-tools-head b")).toHaveText("◆ 0");
+
+    await page.goto(ARCHIVE_ROUTE, { waitUntil: "domcontentloaded" });
+    await page
+      .locator('.app[data-parity-ready="true"]')
+      .waitFor({ state: "visible" });
+    await expect(page.locator("[data-current-route-capture-ready]")).toHaveCount(0);
+    expect(pageErrors).toHaveLength(0);
+  });
+});
