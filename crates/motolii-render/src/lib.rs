@@ -1827,6 +1827,66 @@ mod tests {
     }
 
     #[test]
+    fn resize_success_releases_previous_render_target_generation() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let request = centered_request();
+        let alignment = TextureAllocationAlignment {
+            row_bytes: 1,
+            allocation_bytes: 1,
+        };
+        let old_bytes = render_target_bytes(request.desc, alignment);
+        let new_desc = FrameDesc {
+            width: request.desc.width * 2,
+            height: request.desc.height * 2,
+            ..request.desc
+        };
+        let new_bytes = render_target_bytes(new_desc, alignment);
+        let ledger = ResourceLedger::new(resource_budgets(old_bytes * 2 + new_bytes * 2));
+        let mut session = RenderSession::new_accounted(&gpu, ledger.clone(), alignment);
+        let inputs = RenderGraphInputs {
+            camera: camera_for_desc(request.desc),
+            video_sources: &[],
+            source_time: None,
+            plugins: None,
+        };
+        let _first = render_graph_cached(
+            &gpu,
+            &mut session,
+            request.timeline_time,
+            &linear_graph_from_request(&request),
+            &inputs,
+            Quality::FINAL,
+        )
+        .unwrap();
+        assert_eq!(
+            ledger.snapshot().unwrap().vram.resident_bytes,
+            old_bytes * 2
+        );
+
+        let mut resized = request;
+        resized.desc = new_desc;
+        let _second = render_graph_cached(
+            &gpu,
+            &mut session,
+            resized.timeline_time,
+            &linear_graph_from_request(&resized),
+            &RenderGraphInputs {
+                camera: camera_for_desc(new_desc),
+                ..inputs
+            },
+            Quality::FINAL,
+        )
+        .unwrap();
+
+        assert_eq!(session.ping_pong_len(), 2);
+        assert_eq!(session.ping_pong_generations(), 2);
+        assert_eq!(
+            ledger.snapshot().unwrap().vram.resident_bytes,
+            new_bytes * 2
+        );
+    }
+
+    #[test]
     fn branch_liveness_rejects_extra_target_before_pool_growth() {
         let Some(gpu) = gpu_or_skip() else { return };
         let request = centered_request();
