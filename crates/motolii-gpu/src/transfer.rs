@@ -16,24 +16,8 @@ const POLL_STEP: Duration = Duration::from_millis(10);
 /// 性能方針: 以後このテクスチャはVRAM常駐でエフェクトチェーンを流れ、CPUには戻さない。
 pub fn upload_rgba(gpu: &GpuCtx, desc: &FrameDesc, data: &[u8]) -> wgpu::Texture {
     assert_eq!(data.len(), desc.data_size(), "upload_rgba: size mismatch");
-    let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("rgba-upload"),
-        size: wgpu::Extent3d {
-            width: desc.width,
-            height: desc.height,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8Unorm,
-        // RENDER_ATTACHMENT+TEXTURE_BINDING: UI native texture登録の必須要件(yuv-outと同じ)
-        usage: wgpu::TextureUsages::TEXTURE_BINDING
-            | wgpu::TextureUsages::COPY_DST
-            | wgpu::TextureUsages::COPY_SRC
-            | wgpu::TextureUsages::RENDER_ATTACHMENT,
-        view_formats: &[],
-    });
+    let descriptor = rgba_upload_descriptor(*desc, "rgba-upload");
+    let texture = gpu.device.create_texture(&descriptor);
     gpu.queue.write_texture(
         wgpu::TexelCopyTextureInfo {
             texture: &texture,
@@ -54,6 +38,28 @@ pub fn upload_rgba(gpu: &GpuCtx, desc: &FrameDesc, data: &[u8]) -> wgpu::Texture
         },
     );
     texture
+}
+
+/// RGBA uploadの生成とResourceLedger見積りで共有するdescriptor。
+pub fn rgba_upload_descriptor(desc: FrameDesc, label: &str) -> wgpu::TextureDescriptor<'_> {
+    wgpu::TextureDescriptor {
+        label: Some(label),
+        size: wgpu::Extent3d {
+            width: desc.width,
+            height: desc.height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        // RENDER_ATTACHMENT+TEXTURE_BINDING: UI native texture登録の必須要件(yuv-outと同じ)
+        usage: wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_DST
+            | wgpu::TextureUsages::COPY_SRC
+            | wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    }
 }
 
 /// RGBA8テクスチャをCPUへダウンロードする(テスト・書き出し用)。

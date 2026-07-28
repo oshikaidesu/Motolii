@@ -22,5 +22,7 @@ pub use resource_ledger::{
     BudgetCap, MemoryTier, OwnerUsage, ResourceAdmissionError, ResourceBudgets, ResourceGrant,
     ResourceLedger, ResourceOwner, ResourceRequest, ResourceSnapshot, TierUsage,
 };
-pub use transfer::{download_rgba, upload_rgba, RgbaDownloader, DEFAULT_DOWNLOAD_TIMEOUT};
+pub use transfer::{
+    download_rgba, rgba_upload_descriptor, upload_rgba, RgbaDownloader, DEFAULT_DOWNLOAD_TIMEOUT,
+};
 pub use yuv::{solid_yuv420p, ColorParams, YuvError, YuvToRgba};

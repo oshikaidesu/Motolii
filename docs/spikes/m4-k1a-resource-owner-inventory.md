@@ -22,7 +22,7 @@ RETIREMENT: ResourceLedger接続後もraw allocation再流入のguardとして�
 
 | seat | 現行生成点 | tier | lifetime | K1a接続時の停止線 |
 |---|---|---|---|---|
-| `source-upload` | `motolii-gpu::upload_rgba` | VRAM | caller / render session | caller ownerを指定できない現signatureのまま全owner会計済みとしない |
+| `source-upload` | `motolii-gpu::upload_rgba` | VRAM | caller / render session | `RenderSession`内transparent/solidは`session-source`として接続済み。その他callerは未接続 |
 | `decode-materialization-pool` | `YuvToRgba::SizePool`のY/U/V、RGBA×2、uniform | VRAM | converter size generation | 寸法変更時は旧pool解放と新pool admissionを原子的に扱う |
 | `render-target` | `create_rgba_render_target`、`RenderTargetPool` | VRAM | render session / graph liveness | 明示accounted constructorは接続済み。legacy constructorとextra targetを未会計のまま完成扱いしない |
 | `rendered-frame` | `create_owned_output_texture` | VRAM | consumer handle | worker generation失効だけで生存handleを過小計上しない |

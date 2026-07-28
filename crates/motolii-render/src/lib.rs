@@ -8,9 +8,9 @@ use motolii_core::{
     TimeMap, TimeMapError,
 };
 use motolii_gpu::{
-    estimate_texture_bytes, upload_rgba, AllocationEstimateError, GpuCtx, GpuRuntimeError,
-    MemoryTier, PipelineCache, ResourceAdmissionError, ResourceGrant, ResourceLedger,
-    ResourceOwner, ResourceRequest, TextureAllocationAlignment,
+    estimate_texture_bytes, rgba_upload_descriptor, upload_rgba, AllocationEstimateError, GpuCtx,
+    GpuRuntimeError, MemoryTier, PipelineCache, ResourceAdmissionError, ResourceGrant,
+    ResourceLedger, ResourceOwner, ResourceRequest, TextureAllocationAlignment,
 };
 use motolii_nodes::{
     create_rgba_render_target, rgba_render_target_descriptor, AffinePlaceNode, ClippingMaskMode,
@@ -214,9 +214,9 @@ pub struct RenderSession {
     mask: MaskNode,
     affine_place: AffinePlaceNode,
     pipelines: PipelineCache,
-    transparent: Option<(FrameDesc, wgpu::Texture)>,
+    transparent: Option<(FrameDesc, AccountedSourceTexture)>,
     /// 単色Solidの再利用(毎フレームuploadしない)。
-    solid: Option<(FrameDesc, [f32; 4], wgpu::Texture)>,
+    solid: Option<(FrameDesc, [f32; 4], AccountedSourceTexture)>,
     /// 中間RTプール(performance-model §3 / M1-T8)。必要枚数はグラフ深度に応じて伸びる。
     ping: Option<RenderTargetPool>,
     accounting: Option<RenderTargetAccounting>,
@@ -235,6 +235,11 @@ struct AccountedRenderTarget {
     _grant: Option<ResourceGrant>,
 }
 
+struct AccountedSourceTexture {
+    texture: wgpu::Texture,
+    _grant: Option<ResourceGrant>,
+}
+
 #[derive(Clone)]
 struct RenderTargetAccounting {
     ledger: ResourceLedger,
@@ -242,6 +247,7 @@ struct RenderTargetAccounting {
 }
 
 const RENDER_TARGET_OWNER: ResourceOwner = ResourceOwner::new("render-target");
+const SESSION_SOURCE_OWNER: ResourceOwner = ResourceOwner::new("session-source");
 
 impl RenderSession {
     pub fn new(gpu: &GpuCtx) -> Self {
@@ -300,24 +306,58 @@ impl RenderSession {
             .unwrap_or_default()
     }
 
-    fn transparent_texture(&mut self, gpu: &GpuCtx, desc: FrameDesc) -> &wgpu::Texture {
+    fn transparent_texture(
+        &mut self,
+        gpu: &GpuCtx,
+        desc: FrameDesc,
+    ) -> Result<&wgpu::Texture, RenderError> {
         if self.transparent.as_ref().map(|(d, _)| *d) != Some(desc) {
-            let tex = upload_rgba(gpu, &desc, &solid_rgba(desc, [0.0, 0.0, 0.0, 0.0]));
-            self.transparent = Some((desc, tex));
+            let texture =
+                self.create_source_texture(gpu, desc, [0.0, 0.0, 0.0, 0.0], "transparent")?;
+            self.transparent = Some((desc, texture));
         }
-        &self.transparent.as_ref().unwrap().1
+        Ok(&self.transparent.as_ref().unwrap().1.texture)
     }
 
-    fn solid_texture(&mut self, gpu: &GpuCtx, desc: FrameDesc, color: [f32; 4]) -> &wgpu::Texture {
+    fn solid_texture(
+        &mut self,
+        gpu: &GpuCtx,
+        desc: FrameDesc,
+        color: [f32; 4],
+    ) -> Result<&wgpu::Texture, RenderError> {
         let hit = self
             .solid
             .as_ref()
             .is_some_and(|(d, c, _)| *d == desc && *c == color);
         if !hit {
-            let tex = upload_rgba(gpu, &desc, &solid_rgba(desc, color));
-            self.solid = Some((desc, color, tex));
+            let texture = self.create_source_texture(gpu, desc, color, "solid")?;
+            self.solid = Some((desc, color, texture));
         }
-        &self.solid.as_ref().unwrap().2
+        Ok(&self.solid.as_ref().unwrap().2.texture)
+    }
+
+    fn create_source_texture(
+        &self,
+        gpu: &GpuCtx,
+        desc: FrameDesc,
+        color: [f32; 4],
+        label: &str,
+    ) -> Result<AccountedSourceTexture, RenderError> {
+        let grant = if let Some(accounting) = &self.accounting {
+            let descriptor = rgba_upload_descriptor(desc, label);
+            Some(accounting.ledger.admit(ResourceRequest {
+                owner: SESSION_SOURCE_OWNER,
+                tier: MemoryTier::Vram,
+                bytes: estimate_texture_bytes(&descriptor, accounting.alignment)?,
+                pinned: true,
+            })?)
+        } else {
+            None
+        };
+        Ok(AccountedSourceTexture {
+            texture: upload_rgba(gpu, &desc, &solid_rgba(desc, color)),
+            _grant: grant,
+        })
     }
 
     /// 中間レンダターゲットを取得。`avoid` に載った面は入力として生存中なので避ける。
@@ -541,9 +581,9 @@ fn render_graph_cached_inner(
             }
             RenderStep::SolidSource { output, source } => {
                 let texture = if source.color == [0.0, 0.0, 0.0, 0.0] {
-                    session.transparent_texture(gpu, desc).clone()
+                    session.transparent_texture(gpu, desc)?.clone()
                 } else {
-                    session.solid_texture(gpu, desc, source.color).clone()
+                    session.solid_texture(gpu, desc, source.color)?.clone()
                 };
                 textures[output.0] = Some(texture);
             }
@@ -1685,6 +1725,10 @@ mod tests {
         .unwrap()
     }
 
+    fn source_texture_bytes(desc: FrameDesc, alignment: TextureAllocationAlignment) -> u64 {
+        estimate_texture_bytes(&rgba_upload_descriptor(desc, "accounting-test"), alignment).unwrap()
+    }
+
     fn resource_budgets(vram_bytes: u64) -> ResourceBudgets {
         ResourceBudgets {
             vram_bytes,
@@ -1702,8 +1746,9 @@ mod tests {
             row_bytes: 1,
             allocation_bytes: 1,
         };
-        let bytes = render_target_bytes(request.desc, alignment);
-        let ledger = ResourceLedger::new(resource_budgets(bytes * 2));
+        let target_bytes = render_target_bytes(request.desc, alignment);
+        let source_bytes = source_texture_bytes(request.desc, alignment);
+        let ledger = ResourceLedger::new(resource_budgets(target_bytes * 2 + source_bytes * 2));
         let mut session = RenderSession::new_accounted(&gpu, ledger.clone(), alignment);
 
         let rendered = render_graph_cached(
@@ -1721,11 +1766,150 @@ mod tests {
         )
         .unwrap();
         assert_eq!(session.ping_pong_len(), 2);
-        assert_eq!(ledger.snapshot().unwrap().vram.resident_bytes, bytes * 2);
+        assert_eq!(
+            ledger.snapshot().unwrap().vram.resident_bytes,
+            target_bytes * 2 + source_bytes * 2
+        );
 
         drop(session);
         assert_eq!(ledger.snapshot().unwrap().vram.resident_bytes, 0);
         drop(rendered);
+    }
+
+    #[test]
+    fn accounted_session_tracks_transparent_and_solid_sources() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let desc = centered_request().desc;
+        let alignment = TextureAllocationAlignment {
+            row_bytes: 1,
+            allocation_bytes: 1,
+        };
+        let bytes = source_texture_bytes(desc, alignment);
+        let ledger = ResourceLedger::new(resource_budgets(bytes * 2));
+        let mut session = RenderSession::new_accounted(&gpu, ledger.clone(), alignment);
+
+        session.transparent_texture(&gpu, desc).unwrap();
+        session
+            .solid_texture(&gpu, desc, [0.0, 1.0, 0.0, 0.5])
+            .unwrap();
+
+        let snapshot = ledger.snapshot().unwrap();
+        assert_eq!(snapshot.vram.resident_bytes, bytes * 2);
+        assert_eq!(
+            snapshot
+                .owners
+                .iter()
+                .find(|owner| owner.owner == SESSION_SOURCE_OWNER)
+                .unwrap()
+                .usage
+                .resident_bytes,
+            bytes * 2
+        );
+        drop(session);
+        assert_eq!(ledger.snapshot().unwrap().vram.resident_bytes, 0);
+    }
+
+    #[test]
+    fn source_replacement_refusal_keeps_old_texture_and_usage() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let desc = centered_request().desc;
+        let alignment = TextureAllocationAlignment {
+            row_bytes: 1,
+            allocation_bytes: 1,
+        };
+        let bytes = source_texture_bytes(desc, alignment);
+        let ledger = ResourceLedger::new(resource_budgets(bytes));
+        let mut session = RenderSession::new_accounted(&gpu, ledger.clone(), alignment);
+        let original = session
+            .solid_texture(&gpu, desc, [0.0, 1.0, 0.0, 0.5])
+            .unwrap()
+            .clone();
+        let original_pixels = download_rgba(&gpu, &original).unwrap();
+
+        let error = session
+            .solid_texture(&gpu, desc, [1.0, 0.0, 0.0, 0.5])
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            RenderError::ResourceAdmission(ResourceAdmissionError::BudgetExceeded {
+                owner: "session-source",
+                ..
+            })
+        ));
+        let retained = session
+            .solid_texture(&gpu, desc, [0.0, 1.0, 0.0, 0.5])
+            .unwrap();
+        assert_eq!(download_rgba(&gpu, retained).unwrap(), original_pixels);
+        assert_eq!(ledger.snapshot().unwrap().vram.resident_bytes, bytes);
+    }
+
+    #[test]
+    fn source_resize_releases_previous_generation_after_admission() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let old_desc = centered_request().desc;
+        let new_desc = FrameDesc::packed(
+            old_desc.width * 2,
+            old_desc.height * 2,
+            old_desc.format,
+            old_desc.color_space,
+            old_desc.premultiplied,
+        );
+        let alignment = TextureAllocationAlignment {
+            row_bytes: 1,
+            allocation_bytes: 1,
+        };
+        let old_bytes = source_texture_bytes(old_desc, alignment);
+        let new_bytes = source_texture_bytes(new_desc, alignment);
+        let ledger = ResourceLedger::new(resource_budgets(old_bytes + new_bytes));
+        let mut session = RenderSession::new_accounted(&gpu, ledger.clone(), alignment);
+
+        session.transparent_texture(&gpu, old_desc).unwrap();
+        assert_eq!(ledger.snapshot().unwrap().vram.resident_bytes, old_bytes);
+        session.transparent_texture(&gpu, new_desc).unwrap();
+        assert_eq!(ledger.snapshot().unwrap().vram.resident_bytes, new_bytes);
+    }
+
+    #[test]
+    fn accounted_and_unaccounted_solid_paths_match_pixels() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let request = centered_request();
+        let alignment = TextureAllocationAlignment {
+            row_bytes: 1,
+            allocation_bytes: 1,
+        };
+        let target_bytes = render_target_bytes(request.desc, alignment);
+        let source_bytes = source_texture_bytes(request.desc, alignment);
+        let ledger = ResourceLedger::new(resource_budgets(target_bytes * 2 + source_bytes * 2));
+        let graph = linear_graph_from_request(&request);
+        let inputs = RenderGraphInputs {
+            camera: camera_for_desc(request.desc),
+            video_sources: &[],
+            source_time: None,
+            plugins: None,
+        };
+        let accounted = render_graph_cached(
+            &gpu,
+            &mut RenderSession::new_accounted(&gpu, ledger, alignment),
+            request.timeline_time,
+            &graph,
+            &inputs,
+            Quality::FINAL,
+        )
+        .unwrap();
+        let unaccounted = render_graph_cached(
+            &gpu,
+            &mut RenderSession::new(&gpu),
+            request.timeline_time,
+            &graph,
+            &inputs,
+            Quality::FINAL,
+        )
+        .unwrap();
+
+        assert_eq!(
+            download_rgba(&gpu, &accounted.texture).unwrap(),
+            download_rgba(&gpu, &unaccounted.texture).unwrap()
+        );
     }
 
     #[test]
@@ -1736,8 +1920,9 @@ mod tests {
             row_bytes: 1,
             allocation_bytes: 1,
         };
-        let bytes = render_target_bytes(request.desc, alignment);
-        let ledger = ResourceLedger::new(resource_budgets(bytes * 2 - 1));
+        let target_bytes = render_target_bytes(request.desc, alignment);
+        let source_bytes = source_texture_bytes(request.desc, alignment);
+        let ledger = ResourceLedger::new(resource_budgets(target_bytes * 2 + source_bytes * 2 - 1));
         let mut session = RenderSession::new_accounted(&gpu, ledger.clone(), alignment);
 
         let error = render_graph_cached(
@@ -1763,7 +1948,10 @@ mod tests {
             })
         ));
         assert_eq!(session.ping_pong_len(), 0);
-        assert_eq!(ledger.snapshot().unwrap().vram.resident_bytes, 0);
+        assert_eq!(
+            ledger.snapshot().unwrap().vram.resident_bytes,
+            source_bytes * 2
+        );
     }
 
     #[test]
@@ -1775,13 +1963,18 @@ mod tests {
             allocation_bytes: 1,
         };
         let old_bytes = render_target_bytes(request.desc, alignment);
-        let new_desc = FrameDesc {
-            width: request.desc.width * 2,
-            height: request.desc.height * 2,
-            ..request.desc
-        };
+        let new_desc = FrameDesc::packed(
+            request.desc.width * 2,
+            request.desc.height * 2,
+            request.desc.format,
+            request.desc.color_space,
+            request.desc.premultiplied,
+        );
         let new_bytes = render_target_bytes(new_desc, alignment);
-        let ledger = ResourceLedger::new(resource_budgets(old_bytes * 2 + new_bytes * 2 - 1));
+        let new_source_bytes = source_texture_bytes(new_desc, alignment);
+        let ledger = ResourceLedger::new(resource_budgets(
+            old_bytes * 2 + new_source_bytes * 2 + new_bytes * 2 - 1,
+        ));
         let mut session = RenderSession::new_accounted(&gpu, ledger.clone(), alignment);
         let inputs = RenderGraphInputs {
             camera: camera_for_desc(request.desc),
@@ -1822,7 +2015,7 @@ mod tests {
         assert_eq!(session.ping_pong_generations(), 1);
         assert_eq!(
             ledger.snapshot().unwrap().vram.resident_bytes,
-            old_bytes * 2
+            old_bytes * 2 + new_source_bytes * 2
         );
     }
 
@@ -1835,13 +2028,18 @@ mod tests {
             allocation_bytes: 1,
         };
         let old_bytes = render_target_bytes(request.desc, alignment);
-        let new_desc = FrameDesc {
-            width: request.desc.width * 2,
-            height: request.desc.height * 2,
-            ..request.desc
-        };
+        let new_desc = FrameDesc::packed(
+            request.desc.width * 2,
+            request.desc.height * 2,
+            request.desc.format,
+            request.desc.color_space,
+            request.desc.premultiplied,
+        );
         let new_bytes = render_target_bytes(new_desc, alignment);
-        let ledger = ResourceLedger::new(resource_budgets(old_bytes * 2 + new_bytes * 2));
+        let new_source_bytes = source_texture_bytes(new_desc, alignment);
+        let ledger = ResourceLedger::new(resource_budgets(
+            old_bytes * 2 + new_source_bytes * 2 + new_bytes * 2,
+        ));
         let mut session = RenderSession::new_accounted(&gpu, ledger.clone(), alignment);
         let inputs = RenderGraphInputs {
             camera: camera_for_desc(request.desc),
@@ -1860,7 +2058,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             ledger.snapshot().unwrap().vram.resident_bytes,
-            old_bytes * 2
+            old_bytes * 2 + source_texture_bytes(request.desc, alignment) * 2
         );
 
         let mut resized = request;
@@ -1882,7 +2080,7 @@ mod tests {
         assert_eq!(session.ping_pong_generations(), 2);
         assert_eq!(
             ledger.snapshot().unwrap().vram.resident_bytes,
-            new_bytes * 2
+            new_bytes * 2 + new_source_bytes * 2
         );
     }
 
@@ -1896,7 +2094,8 @@ mod tests {
             allocation_bytes: 1,
         };
         let bytes = render_target_bytes(desc, alignment);
-        let ledger = ResourceLedger::new(resource_budgets(bytes * 2));
+        let source_bytes = source_texture_bytes(desc, alignment);
+        let ledger = ResourceLedger::new(resource_budgets(bytes * 2 + source_bytes));
         let mut session = RenderSession::new_accounted(&gpu, ledger.clone(), alignment);
         let graph = LinearRenderGraph {
             desc,
@@ -1951,7 +2150,10 @@ mod tests {
             })
         ));
         assert_eq!(session.ping_pong_len(), 2);
-        assert_eq!(ledger.snapshot().unwrap().vram.resident_bytes, bytes * 2);
+        assert_eq!(
+            ledger.snapshot().unwrap().vram.resident_bytes,
+            bytes * 2 + source_bytes
+        );
     }
 
     #[test]
