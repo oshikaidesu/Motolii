@@ -106,3 +106,10 @@ npm run check-reference
 - 本粒はmedia byte、path、schema、route、生成手段を決めていない。次粒 `G0-6H-AF` へhandoffする。
 - `G0-6H-V0`は本契約の統合まで`WAIT`を維持する。
 - 詳細への相対リンク [G0-6H-A empty Project + local Starter Media scenario / fixture 所有契約](../reviews/2026-07-28-g0-6h-a-empty-project-starter-media-scenario-contract.md)。
+
+## G0-6H-AF 媒体源・provenance裁定の非充足注記
+
+- 本裁定は媒体源と provenance class だけを閉じ、本資料の Decision template / checklist の充足に代替しない。
+- 採択は決定的生成、pinned vendoring の棄却は本 fixture に限り repo 全体の禁止ではない。
+- 本粒は path、file名、codec、schema、hash algorithm、生成command、tool version、byte を決めていない。次粒 `G0-6H-AG0` へ handoff する。
+- 詳細への相対リンク [G0-6H-AF Starter Media 媒体源・provenance class 裁定](../reviews/2026-07-28-g0-6h-af-starter-media-source-provenance-decision.md)。
