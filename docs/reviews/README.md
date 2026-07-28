@@ -218,6 +218,10 @@
 | [2026-07-25-parallel-lane-readiness-fable-review.md](2026-07-25-parallel-lane-readiness-fable-review.md) | 並列レーン候補をFable 5で反対側レビューし、R2A/R2B混同とK0/P0I旧全体直列文言のP1二件を訂正後、再審査ACCEPTとなった記録 |
 | [2026-07-25-cu-0a05a-interrupted-worktree-restart-disposition.md](2026-07-25-cu-0a05a-interrupted-worktree-restart-disposition.md) | CU-0A05A旧隔離差分を完了証拠にせず、fresh baseへの縮小再適用と全証拠再取得を必須にする停止線 |
 | [2026-07-25-supervised-runner-derived-target-closure.md](2026-07-25-supervised-runner-derived-target-closure.md) | workspace試験が作る既知のworktree-root派生物を検収前にfail-closed清掃し、ignored scope監査を維持するGR-D3実行決定 |
+| [2026-07-29-m5-render-contribution-evidence-wave.md](2026-07-29-m5-render-contribution-evidence-wave.md) | M5 P2D周辺のRender Contribution契約を、Motolii authority、Rerun転移裁定、ゲームエンジン一次資料翻訳の非重複docs三粒へ分ける親task |
+| [2026-07-29-m5-render-contribution-contract-draft.md](2026-07-29-m5-render-contribution-contract-draft.md) | P2D-RCA用のMotolii authority/current-code-fact起点Render Contribution契約draft登録template |
+| [2026-07-29-m5-rerun-render-contribution-evidence.md](2026-07-29-m5-rerun-render-contribution-evidence.md) | P2D-RCB用のRerun固定file/API監査、6ラベル、転移裁定登録template |
+| [2026-07-29-m5-render-phase-primary-source-evidence.md](2026-07-29-m5-render-phase-primary-source-evidence.md) | P2D-RCC用のrender phase／transparent／refraction一次資料とMotolii fixture翻訳登録template |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |
 | [2026-07-21-m3-u1a-1-static-viewport-contract.md](2026-07-21-m3-u1a-1-static-viewport-contract.md) | U1a-1 静止viewport実装前契約 |
