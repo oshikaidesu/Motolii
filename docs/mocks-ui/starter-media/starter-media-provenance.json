@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "capsuleId": "g0-6h-ag-starter-media",
+  "purpose": "Fixture-only evidence that project-external starter media bytes exist for the G0-6H empty-project scenario without registering them as Project assets.",
+  "scope": "project-external fixture-only; not a Project asset, Document, public API, plugin contract, persisted format, or production Registered folder",
+  "responsibilityDisposition": "WRAP",
+  "retirement": "FROZEN / DELETE-LATER",
+  "determinismClaim": "byte determinism is claimed only for the recorded toolchain on the recording host; cross-platform, cross-OS, and cross-toolchain byte determinism is not claimed",
+  "generator": {
+    "path": "scripts/starter-media-generation.mjs",
+    "sha256": "5dc589b59f4e8f3828e485ebb96b60441c03edaaa963b9c314cef54d0daed7a6"
+  },
+  "toolchain": {
+    "node": {
+      "version": "v22.16.0"
+    },
+    "pngjs": {
+      "package": "pngjs",
+      "version": "7.0.0",
+      "integrity": "sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow=="
+    },
+    "ffmpeg": {
+      "binary": "/opt/homebrew/bin/ffmpeg",
+      "version": "ffmpeg version 7.1.1 Copyright (c) 2000-2025 the FFmpeg developers"
+    }
+  },
+  "media": [
+    {
+      "path": "starter-media/media/starter-clip.mp4",
+      "mediaType": "video/mp4",
+      "byteLength": 37569,
+      "sha256": "6a89b4b87c39def042fd69acd5e92a38288279e143358c25bb6caff343c4c891",
+      "origin": "ffmpeg lavfi testsrc2 320x180 15fps 2.0s libx264 yuv420p +faststart bitexact",
+      "purpose": "Short H.264 clip proving an external video byte is available outside Project scope."
+    },
+    {
+      "path": "starter-media/media/starter-mark.svg",
+      "mediaType": "image/svg+xml",
+      "byteLength": 199,
+      "sha256": "f7e9d1f828cce049d15fb139449dc9332cfebd5bce600d841d2913fa7e51ea72",
+      "origin": "literal SVG string in starter-media-generation.mjs viewBox 0 0 64 64 ASCII-only",
+      "purpose": "Minimal vector mark showing declarative non-raster media exists as fixture bytes."
+    },
+    {
+      "path": "starter-media/media/starter-still.png",
+      "mediaType": "image/png",
+      "byteLength": 266139,
+      "sha256": "b75b4efbb0f89039b6cf170e7252f1b93d312621c2fa78fc277b74f0f8c824f4",
+      "origin": "pngjs PNG.sync.write 640x360 RGBA from pure (x,y) function bitexact",
+      "purpose": "Still image bytes demonstrating pngjs-generated raster media outside Project registration."
+    },
+    {
+      "path": "starter-media/media/starter-tone.wav",
+      "mediaType": "audio/wav",
+      "byteLength": 192078,
+      "sha256": "b9fb5441efa264d9cbba0d7e036ff76471d8ec351b3014d35de246d82503723e",
+      "origin": "ffmpeg lavfi sine 440Hz 48000Hz 2.0s pcm_s16le bitexact",
+      "purpose": "PCM WAV tone proving audio fixture bytes exist without AUDIO LIBRARY registration."
+    }
+  ]
+}
