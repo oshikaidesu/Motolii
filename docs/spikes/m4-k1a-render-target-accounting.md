@@ -57,3 +57,55 @@ Auto値やGPU名分岐は未採択である。供給元決定前にUI/exportへ�
 
 既存`RenderSession::new`は移行中のunaccounted経路として残る。この一owner成功だけをK1a完成、
 hard budget製品強制、最低スペック成立の証拠にしない。
+
+## 2026-07-29 budget provenance / reference handle判定
+
+状態: **STRUCTURAL DECISION / PRODUCT WIRING STOP**
+
+### budgetとalignmentの供給責任
+
+`ResourceBudgets`の製品ownerはrenderer、Document、pluginではなくHost runtime bootstrapとする。
+User settingsの`Auto`または明示絶対上限を、起動時にHostがVRAM/RAM/disk/shared capへ解決し、
+同じledgerをrender、decode、display、copy-out ownerへ注入する。UI toolkit、個別`RenderSession`、
+pluginが別予算を作らない。
+
+ただし`Auto`の数値は未決である。GPU名、総RAM、`ffmpeg -hwaccels`、一台のMac観測から算出せず、
+[hardware validation bundle](m4-hardware-validation-harness.md)の低スペックWindows gateと
+製品preview計測後にUser settings policyとして採択する。現在の製品callerが
+`RenderSession::new_accounted`へ移れないのは、constructor不足でなくこのpolicy入力がまだ無いためである。
+
+`TextureAllocationAlignment`はbackendから必ず取得できる事実値とは扱わない。descriptorのtight byte数と
+backend allocatorの実使用差を診断し、portableな保守的accounting policyを別途採択してHostから注入する。
+実装者が`row_bytes=1 / allocation_bytes=1`やcopy alignmentをproduct既定へ流用しない。
+
+### 既存型を変えないreference handle案の判定
+
+現行公開型を変えずに、underlying allocationとgrantの寿命を完全に一致させる案は無い。
+
+| 候補 | 判定 | 理由 |
+|---|---|---|
+| `RenderedFrame`へprivate grantを同居 | **正しい方向 / 仕様粒が先** | textureとgrantを同じownerへできるが、全field publicの現行構築契約を閉じる公開API変更になる |
+| 新しい`AccountedRenderedFrame` wrapper | **単独では不足** | consumerが裸の`RenderedFrame`/textureへ剥がすとgrantを先にDropできる |
+| session所有のbounded output pool | **棄却** | `RenderedFrame`は次renderとsession寿命を越えてpixelを保持できる契約であり、session Drop時に過小計上する |
+| raw texture identity registry | **棄却** | `wgpu::Texture::clone`と全Dropを追跡できず、hidden global stateと二重ownerを作る |
+| plugin conformance scannerだけでclone禁止 | **補助のみ** | 純関数違反の検出には使えるが、safe Rust型としてunderlying allocation寿命を証明しない |
+
+`RenderedFrame`はK1bの参照handle契約とM3 worker/display deliveryを同時に再照合し、
+opaqueな所有型、private field、accessor、consumer移行、旧構築口の扱いを仕様で先に決める。
+それまではoutput textureをaccountedと称しない。
+
+plugin `TextureRef`はborrow自体の寿命はrender callへ閉じるが、publicな
+`&wgpu::Texture`からthird-party pluginがraw handleをcloneして内部保持できる。
+これはplugin純関数契約違反として拒否すべきだが、K1aだけで能力を型から除去できない。
+texture view作成までopaque Host commandへ変える案はplugin ABIの大きな変更なので、このowner粒へ
+押し込まない。first-party pluginがcall外へ保持しないことと、任意third-party codeに対する
+強制所有権を同じ証明として扱わない。
+
+### 次の許可粒
+
+1. `RenderedFrame`所有変更の仕様粒: M3 delivery利用者とK1b handle要件を閉じ、公開互換方針と負例を決める
+2. Host budget policyの計測粒: bundleを低スペックWindowsと製品previewで実行し、観測とpolicy採択を分離する
+3. YUV materialization製品粒: 上記handleとbudget入力が成立後、size-keyed lane poolをatomic admissionへ接続する
+
+この順序より前に`RenderSession::new`を削除する、仮の巨大budgetで製品callerを移す、
+grantをsessionまたはglobal registryへ置く、plugin ABIを局所変更する場合はSTOPする。
