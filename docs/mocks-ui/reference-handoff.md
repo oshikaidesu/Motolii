@@ -121,3 +121,11 @@ npm run check-reference
 - 本粒は path、file名、codec、schema、hash algorithm、生成command、tool version、media byte を決めていない。次粒 `G0-6H-AG` へ handoff する。
 - generator / integrity check は製品 runtime から到達しない証拠カプセルとして後続粒に委ね、`G0-6H-V0` は `WAIT` を維持する。
 - 詳細への相対リンク [G0-6H-AG0 Starter Media generator / output closure 棚卸しと責任処分](../reviews/2026-07-28-g0-6h-ag0-starter-media-generator-closure-inventory.md)。
+
+## G0-6H-V0 variant evidence契約の非充足注記
+
+- 本契約は current-route evidence の要求だけを閉じ、本資料の Decision template / checklist の充足に代替しない。
+- 閉じた対象は5状態 semantic mapping、capture 環境9軸の閉集合、normal＋既存派生5件の計6 variant、immutable generation と SHA-256 manifest＋read-only 照合、human session 記録項目の閉集合。
+- 本粒は画像、script、fixture、media byte、token、threshold、golden、route 実装、manifest schema、hash algorithm、check command を決めていない。次粒 `G0-6H-V1` へ handoff する。
+- screen 1 の充足は `G0-6H-A` の empty Project + Project 外 `Starter Media` scenario の成立を条件とし、固定 byte は commit `e4ad5c9f` の fixture-only 証拠カプセルに閉じる。
+- 詳細への相対リンク [G0-6H-V0 現行route variant evidence契約](../reviews/2026-07-28-g0-6h-v0-current-route-variant-evidence-contract.md)。
