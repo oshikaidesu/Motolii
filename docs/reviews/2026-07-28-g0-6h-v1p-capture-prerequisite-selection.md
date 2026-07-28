@@ -46,5 +46,4 @@ seam が無く、後者の具体操作列と capture 時の font fixture 判定�
 
 ## 次の一粒
 
-**`G0-6H-V1P`** — 上記三問をdocsだけで閉じる。完了後に同じ
-`G0-6H-V1`を再び`DO`へ戻す。別の実装粒を新設しない。
+**`G0-6H-V1`** — [G0-6H-V1P裁定](2026-07-28-g0-6h-v1p-current-route-capture-prerequisite-decision.md)を完了したうえで、同じ`V1`を再び`DO`へ戻す。別の実装粒を新設しない。
