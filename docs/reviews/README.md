@@ -340,3 +340,4 @@
 | [2026-07-28-g0-6h-v0-current-route-variant-evidence-contract.md](2026-07-28-g0-6h-v0-current-route-variant-evidence-contract.md) | G0-6H-V0 現行route variant evidence契約 |
 | [2026-07-28-g0-6h-v1s-current-route-capture-boundary-decision.md](2026-07-28-g0-6h-v1s-current-route-capture-boundary-decision.md) | G0-6H-V1S 現行route capture境界の裁定 |
 | [2026-07-28-g0-6h-v1p-current-route-capture-prerequisite-decision.md](2026-07-28-g0-6h-v1p-current-route-capture-prerequisite-decision.md) | G0-6H-V1P 現行route capture前提の裁定 |
+| [2026-07-28-g0-6h-v1r-envelope-generation-split-decision.md](2026-07-28-g0-6h-v1r-envelope-generation-split-decision.md) | G0-6H-V1R envelope / generation分割の裁定 |
