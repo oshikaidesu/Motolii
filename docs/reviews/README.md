@@ -344,3 +344,4 @@
 | [2026-07-28-g0-6h-v1eta-empty-projection-staging-decision.md](2026-07-28-g0-6h-v1eta-empty-projection-staging-decision.md) | G0-6H-V1ETA empty projection段階化の裁定 |
 | [2026-07-28-g0-6h-v1etb-h-browser-post-promotion-authority-reclosure-decision.md](2026-07-28-g0-6h-v1etb-h-browser-post-promotion-authority-reclosure-decision.md) | G0-6H-V1ETB-H Browser post-promotion authority再締結の裁定 |
 | [2026-07-28-g0-6h-v1etb-p-browser-projection-consumer-capsule-boundary-decision.md](2026-07-28-g0-6h-v1etb-p-browser-projection-consumer-capsule-boundary-decision.md) | G0-6H-V1ETB-P Browser projection consumerとcapsule境界の裁定 |
+| [2026-07-28-g0-6h-v1etb-q-browser-route-oracle-allowlist-correction-decision.md](2026-07-28-g0-6h-v1etb-q-browser-route-oracle-allowlist-correction-decision.md) | G0-6H-V1ETB-Q Browser route oracle allowlist補正の裁定 |
