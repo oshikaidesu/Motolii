@@ -82,6 +82,79 @@ async function repositoryFingerprint() {
   return sha256(Buffer.concat([Buffer.from(digest.digest("hex")), status]));
 }
 
+const CAPSULE_TOKEN_ALLOWLIST = new Set([
+  "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx",
+  "ui/motolii-web/src/read-model/starterMediaProjectionDecoder.js",
+  "ui/motolii-web/source-provenance.json",
+  "ui/motolii-web/guard-tests/browser-ownership.test.mjs",
+]);
+
+const FORBIDDEN_CAPSULE_TOKENS = [
+  "starter-media",
+  "starterMedia",
+  "Starter Media",
+  "starter-media-generation",
+];
+
+const DECODER_IMPORT_LINE =
+  'import { decodeStarterMediaProjection as decodeProjection } from "../read-model/starterMediaProjectionDecoder.js";';
+
+const POST_PROMOTION_REASON_LITERAL = "development-only Starter Media projection";
+
+function relativeRepoPath(absolutePath) {
+  return path.relative(repoRoot, absolutePath).replaceAll(path.sep, "/");
+}
+
+function assertCapsuleTokenPolicy(fileRel, text) {
+  if (!CAPSULE_TOKEN_ALLOWLIST.has(fileRel)) {
+    for (const token of FORBIDDEN_CAPSULE_TOKENS) {
+      assert.ok(!text.includes(token), `${fileRel} must not mention ${token}`);
+    }
+    return;
+  }
+
+  assert.ok(!text.includes("starter-media-generation"), `${fileRel} must not mention starter-media-generation`);
+  assert.ok(!text.includes("starter-media/media/"), `${fileRel} must not mention starter-media/media/`);
+
+  if (fileRel === "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx") {
+    assert.ok(!text.includes("starter-media"), fileRel);
+    assert.ok(!text.includes("Starter Media"), fileRel);
+    assert.ok(text.includes(DECODER_IMPORT_LINE), fileRel);
+    const withoutImport = text.replace(DECODER_IMPORT_LINE, "");
+    assert.ok(!withoutImport.includes("starterMedia"), fileRel);
+    return;
+  }
+
+  if (fileRel === "ui/motolii-web/src/read-model/starterMediaProjectionDecoder.js") {
+    for (const token of FORBIDDEN_CAPSULE_TOKENS) {
+      assert.ok(!text.includes(token), `${fileRel} must not mention ${token}`);
+    }
+    return;
+  }
+
+  if (fileRel === "ui/motolii-web/source-provenance.json") {
+    for (const token of ["starter-media", "starterMedia", "starter-media-generation"]) {
+      assert.ok(!text.includes(token), `${fileRel} must not mention ${token}`);
+    }
+    assert.equal(
+      (text.match(/Starter Media/g) ?? []).length,
+      1,
+      fileRel,
+    );
+    assert.ok(text.includes(POST_PROMOTION_REASON_LITERAL), fileRel);
+    return;
+  }
+
+  if (fileRel === "ui/motolii-web/guard-tests/browser-ownership.test.mjs") {
+    for (const token of ["starter-media", "starterMedia", "starter-media-generation"]) {
+      assert.ok(!text.includes(token), `${fileRel} must not mention ${token}`);
+    }
+    assert.ok(text.includes(`"${POST_PROMOTION_REASON_LITERAL}"`), fileRel);
+    const withoutReason = text.split(`"${POST_PROMOTION_REASON_LITERAL}"`).join("");
+    assert.ok(!withoutReason.includes("Starter Media"), fileRel);
+  }
+}
+
 async function walkFiles(directory) {
   const result = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -235,15 +308,9 @@ test("starter-media capsule guard is read-only and network-free", async (t) => {
   ];
   for (const root of forbiddenRoots) {
     for (const file of await walkFiles(root)) {
+      const fileRel = relativeRepoPath(file);
       const text = await readFile(file, "utf8");
-      for (const token of [
-        "starter-media",
-        "starterMedia",
-        "Starter Media",
-        "starter-media-generation",
-      ]) {
-        assert.ok(!text.includes(token), `${file} must not mention ${token}`);
-      }
+      assertCapsuleTokenPolicy(fileRel, text);
     }
   }
 
@@ -449,5 +516,40 @@ test("readStarterMediaCapsule rejects absent and malformed capsule roots", async
   await expectReadFail("invalid manifest json", "SM-READ", async (tmpRoot) => {
     const capsuleRoot = path.join(tmpRoot, "starter-media");
     await writeClosedFiveFileCapsule(capsuleRoot, { manifestText: "{not-json" });
+  });
+});
+
+test("capsule token allowlist is exactly four worktree-relative paths", () => {
+  assert.deepEqual([...CAPSULE_TOKEN_ALLOWLIST].sort(), [
+    "ui/motolii-web/guard-tests/browser-ownership.test.mjs",
+    "ui/motolii-web/source-provenance.json",
+    "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx",
+    "ui/motolii-web/src/read-model/starterMediaProjectionDecoder.js",
+  ]);
+});
+
+test("starterMediaProjectionDecoder has zero forbidden capsule tokens", async () => {
+  const decoderPath = path.join(
+    repoRoot,
+    "ui/motolii-web/src/read-model/starterMediaProjectionDecoder.js",
+  );
+  const text = await readFile(decoderPath, "utf8");
+  for (const token of FORBIDDEN_CAPSULE_TOKENS) {
+    assert.ok(!text.includes(token));
+  }
+});
+
+test("capsule token policy rejects synthetic violations", () => {
+  assert.throws(() => {
+    assertCapsuleTokenPolicy(
+      "docs/mocks-ui/src/synthetic-token-violation.jsx",
+      'const x = "starter-media";',
+    );
+  });
+  assert.throws(() => {
+    assertCapsuleTokenPolicy(
+      "ui/motolii-web/source-provenance.json",
+      '{"reason":"starter-media-generation"}',
+    );
   });
 });

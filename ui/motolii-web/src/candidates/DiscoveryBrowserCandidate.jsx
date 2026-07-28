@@ -18,7 +18,24 @@ import {
   DiscoverySourceRail,
   DiscoveryViewToggle,
 } from "../patterns/DiscoveryBrowser.jsx";
+import { decodeStarterMediaProjection as decodeProjection } from "../read-model/starterMediaProjectionDecoder.js";
 import "./discovery-browser-candidate.css";
+
+function previewClassForMediaType(mediaType) {
+  if (mediaType === "video/mp4") {
+    return "video";
+  }
+  if (mediaType === "image/svg+xml") {
+    return "logo";
+  }
+  if (mediaType === "image/png") {
+    return "texture";
+  }
+  if (mediaType === "audio/wav") {
+    return "audio";
+  }
+  throw new TypeError(`unsupported mediaType ${mediaType}`);
+}
 
 const BrowserHierarchyContext = createContext(null);
 const EFFECT_TAGS = [
@@ -697,6 +714,16 @@ function CandidateCreateBrowser() {
   );
 }
 
+function CandidateBrowserTabsProjectionOnly() {
+  return (
+    <div className="browser-tabs">
+      <button className="browser-tab on" data-tab="project">Media</button>
+      <button className="browser-tab" data-tab="effects">Effects</button>
+      <button className="browser-tab" data-tab="create">Create</button>
+    </div>
+  );
+}
+
 function CandidateBrowserTabs() {
   return (
     <>
@@ -852,7 +879,119 @@ function AssetTile({
   );
 }
 
-function CandidateProjectBrowser() {
+function CandidateProjectBrowser({ mediaProjection }) {
+  if (mediaProjection) {
+    return (
+      <div
+        className="project-explorer candidate-project-browser"
+        id="project-browser"
+        data-view="visual"
+        data-info="Media Browser|Search project assets and registered folders from one surface"
+      >
+        <DiscoverySearchBar
+          inputId="media-search"
+          inputLabel="Search media"
+          actions={(
+            <DiscoveryViewToggle
+              label="Media result view"
+              options={[
+                {
+                  active: true,
+                  "data-media-view": "visual",
+                  "aria-label": "Media thumbnail-only view",
+                  children: "▦",
+                },
+                {
+                  "data-media-view": "grid",
+                  "aria-label": "Media thumbnail and name view",
+                  children: "▤",
+                },
+                {
+                  "data-media-view": "list",
+                  "aria-label": "Media list view",
+                  children: "☷",
+                },
+              ]}
+            />
+          )}
+        >
+          <button className="btn quiet file-nav" id="file-back" hidden aria-label="Back">‹</button>
+          <button className="btn quiet file-nav" id="file-parent" hidden aria-label="Parent folder">↑</button>
+        </DiscoverySearchBar>
+
+        <div className="candidate-asset-path-row">
+          <nav className="candidate-asset-path" id="asset-path" aria-label="Current folder">
+            All Media
+          </nav>
+          <span className="candidate-file-scope" id="file-scope-toggle" hidden>
+            <button className="on" data-file-scope="folders" aria-label="Browse folders" aria-pressed="true">Browse folders</button>
+            <button data-file-scope="all-files" aria-label="All files view" aria-pressed="false">All files</button>
+          </span>
+        </div>
+        <DiscoveryBrowserLayout>
+          <DiscoverySourceRail label="Media sources">
+            <div className="candidate-nav-group">
+              <button className="on" data-asset-source="all">
+                <i aria-hidden="true">▦</i><span>All Media</span>
+              </button>
+            </div>
+            <DiscoverySection title="Registered folders" />
+            <DiscoverySection title="Collections" />
+            <DiscoverySection title="Tags" />
+            <DiscoverySection title="Packs" />
+          </DiscoverySourceRail>
+
+          <DiscoveryResults
+            className="candidate-asset-results"
+            title="All Media"
+            titleId="asset-source-title"
+            scope={<></>}
+            scopeId="asset-scope-label"
+            count="4 ITEMS"
+            countId="asset-count"
+          >
+            <div className="asset-grid candidate-asset-grid">
+              {mediaProjection.media.map((entry) => (
+                <AssetTile
+                  key={entry.path}
+                  asset={entry.name}
+                  preview={previewClassForMediaType(entry.mediaType)}
+                  name={entry.name}
+                  meta={entry.mediaType}
+                />
+              ))}
+            </div>
+          </DiscoveryResults>
+        </DiscoveryBrowserLayout>
+
+        <section
+          className="candidate-tag-panel"
+          id="media-tag-panel"
+          aria-hidden="true"
+          hidden
+        >
+          <div>
+            <button data-toggle-media-tag="favorite">Favorite</button>
+            <button data-toggle-media-tag="brand">Brand</button>
+            <button data-toggle-media-tag="review">Review</button>
+            <button data-toggle-media-tag="audio">Audio</button>
+          </div>
+        </section>
+        <div className="surface-foot">
+          <span id="asset-foot-copy" hidden>PROJECT</span>
+          <span id="asset-selection-count">0 selected</span>
+          <button
+            className="btn quiet"
+            id="media-select-mode"
+            aria-pressed="false"
+          >
+            Select
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="project-explorer candidate-project-browser"
@@ -1056,7 +1195,10 @@ function CandidateProjectBrowser() {
   );
 }
 
-export function DiscoveryBrowserCandidate({ node, options }) {
+export function DiscoveryBrowserCandidate({ node, options, developmentProjection }) {
+  const mediaProjection = developmentProjection === undefined
+    ? undefined
+    : decodeProjection(developmentProjection);
   const [hierarchyWidth, setHierarchyWidth] = useState(106);
   const [thumbnailSize, setThumbnailSize] = useState(80);
   const hierarchyHidden = hierarchyWidth === 0;
@@ -1075,7 +1217,9 @@ export function DiscoveryBrowserCandidate({ node, options }) {
         child.type === "tag" &&
         child.attribs?.class?.split(" ").includes("browser-tabs")
       ) {
-        return <CandidateBrowserTabs />;
+        return mediaProjection
+          ? <CandidateBrowserTabsProjectionOnly />
+          : <CandidateBrowserTabs />;
       }
       if (
         child.type === "tag" &&
@@ -1095,13 +1239,15 @@ export function DiscoveryBrowserCandidate({ node, options }) {
         child.type === "tag" &&
         child.attribs?.id === "vism-browser"
       ) {
-        return <CandidatePluginBrowser />;
+        return mediaProjection ? <></> : <CandidatePluginBrowser />;
       }
       if (
         child.type === "tag" &&
         child.attribs?.id === "project-browser"
       ) {
-        return <CandidateProjectBrowser />;
+        return mediaProjection
+          ? <CandidateProjectBrowser mediaProjection={mediaProjection} />
+          : <CandidateProjectBrowser />;
       }
       return options.replace?.(child);
     },

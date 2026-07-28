@@ -23,6 +23,18 @@ const { parse } = requireFromMocks("@babel/parser");
 
 const FIXED_SOURCE_COMMIT = "56c318edcddab7cf95d263cc2f7dd2b4e6791134";
 const PRODUCT_NAME = "@motolii/motolii-web";
+const FIXED_BROWSER_COMPONENT_SHA256 =
+  "4edb3dfc49726aa700e77a14197571a43de2d80d9838a824c22cb68e0ac3d5b8";
+const POST_PROMOTION_TASK = "G0-6H-V1ETB";
+const POST_PROMOTION_FILE = "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx";
+const POST_PROMOTION_REASON = "development-only Starter Media projection";
+const POST_PROMOTION_ENTRY_KEYS = [
+  "task",
+  "file",
+  "reason",
+  "fixedSourceSha256",
+  "currentSha256",
+];
 
 const CURRENT_BROWSER_SOURCE = "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx";
 const CURRENT_BROWSER_CSS = "ui/motolii-web/src/candidates/discovery-browser-candidate.css";
@@ -88,6 +100,55 @@ function assertInspectorDomTokenCounts(source) {
   assert.equal(countNonOverlapping(source, "useMemo"), 0);
   assert.equal(countNonOverlapping(source, "localStorage"), 0);
   assert.equal(countNonOverlapping(source, "fetch("), 0);
+}
+
+function validatePostPromotionChanges(provenance, currentComponentSha256) {
+  const changes = provenance.postPromotionChanges;
+  if (changes === undefined) {
+    if (currentComponentSha256 !== FIXED_BROWSER_COMPONENT_SHA256) {
+      throw new Error("component bytes differ from fixed commit without postPromotionChanges");
+    }
+    return;
+  }
+  if (!Array.isArray(changes)) {
+    throw new Error("postPromotionChanges must be an array");
+  }
+  if (changes.length !== 1) {
+    throw new Error("postPromotionChanges must contain exactly one entry");
+  }
+  const entry = changes[0];
+  if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+    throw new Error("postPromotionChanges entry must be an object");
+  }
+  const keys = Object.keys(entry);
+  if (keys.length !== POST_PROMOTION_ENTRY_KEYS.length) {
+    throw new Error("postPromotionChanges entry has wrong key count");
+  }
+  for (const key of POST_PROMOTION_ENTRY_KEYS) {
+    if (!Object.hasOwn(entry, key)) {
+      throw new Error(`postPromotionChanges entry missing key ${key}`);
+    }
+  }
+  for (const key of keys) {
+    if (!POST_PROMOTION_ENTRY_KEYS.includes(key)) {
+      throw new Error(`postPromotionChanges entry has extra key ${key}`);
+    }
+  }
+  if (entry.task !== POST_PROMOTION_TASK) {
+    throw new Error("postPromotionChanges task literal mismatch");
+  }
+  if (entry.file !== POST_PROMOTION_FILE) {
+    throw new Error("postPromotionChanges file literal mismatch");
+  }
+  if (entry.reason !== POST_PROMOTION_REASON) {
+    throw new Error("postPromotionChanges reason literal mismatch");
+  }
+  if (entry.fixedSourceSha256 !== FIXED_BROWSER_COMPONENT_SHA256) {
+    throw new Error("postPromotionChanges fixedSourceSha256 mismatch");
+  }
+  if (entry.currentSha256 !== currentComponentSha256) {
+    throw new Error("postPromotionChanges currentSha256 mismatch");
+  }
 }
 
 function hashBytes(bytes) {
@@ -244,7 +305,6 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
   const provenance = JSON.parse(await readFile(path.join(PRODUCT_DIR, "source-provenance.json"), "utf8"));
 
   const fixedSourceMap = {
-    [FIXED_BROWSER_SOURCE]: CURRENT_BROWSER_SOURCE,
     [FIXED_BROWSER_CSS]: CURRENT_BROWSER_CSS,
     [FIXED_BROWSER_PATTERN]: CURRENT_BROWSER_PATTERN,
   };
@@ -253,6 +313,136 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
     const fixedBytes = readBlobFromCommit(fixedPath, FIXED_SOURCE_COMMIT);
     const worktreeBytes = await readFile(abs(currentPath));
     assert.equal(hashBytes(fixedBytes), hashBytes(worktreeBytes));
+  }
+
+  const browserComponentBytes = await readFile(abs(CURRENT_BROWSER_SOURCE));
+  const currentBrowserSha256 = hashBytes(browserComponentBytes);
+  validatePostPromotionChanges(provenance, currentBrowserSha256);
+
+  const negativeCases = [
+    {
+      label: "postPromotionChanges entry count 0",
+      provenance: { ...provenance, postPromotionChanges: [] },
+      componentSha256: currentBrowserSha256,
+    },
+    {
+      label: "postPromotionChanges entry count 2+",
+      provenance: {
+        ...provenance,
+        postPromotionChanges: [
+          provenance.postPromotionChanges[0],
+          { ...provenance.postPromotionChanges[0] },
+        ],
+      },
+      componentSha256: currentBrowserSha256,
+    },
+    {
+      label: "postPromotionChanges entry key missing",
+      provenance: {
+        ...provenance,
+        postPromotionChanges: [
+          {
+            task: POST_PROMOTION_TASK,
+            file: POST_PROMOTION_FILE,
+            reason: POST_PROMOTION_REASON,
+            fixedSourceSha256: FIXED_BROWSER_COMPONENT_SHA256,
+          },
+        ],
+      },
+      componentSha256: currentBrowserSha256,
+    },
+    {
+      label: "postPromotionChanges entry key extra",
+      provenance: {
+        ...provenance,
+        postPromotionChanges: [
+          {
+            ...provenance.postPromotionChanges[0],
+            extra: true,
+          },
+        ],
+      },
+      componentSha256: currentBrowserSha256,
+    },
+    {
+      label: "postPromotionChanges task literal mismatch",
+      provenance: {
+        ...provenance,
+        postPromotionChanges: [
+          {
+            ...provenance.postPromotionChanges[0],
+            task: "G0-6H-V1ETB-WRONG",
+          },
+        ],
+      },
+      componentSha256: currentBrowserSha256,
+    },
+    {
+      label: "postPromotionChanges file literal mismatch",
+      provenance: {
+        ...provenance,
+        postPromotionChanges: [
+          {
+            ...provenance.postPromotionChanges[0],
+            file: "ui/motolii-web/src/candidates/Wrong.jsx",
+          },
+        ],
+      },
+      componentSha256: currentBrowserSha256,
+    },
+    {
+      label: "postPromotionChanges reason literal mismatch",
+      provenance: {
+        ...provenance,
+        postPromotionChanges: [
+          {
+            ...provenance.postPromotionChanges[0],
+            reason: "wrong reason",
+          },
+        ],
+      },
+      componentSha256: currentBrowserSha256,
+    },
+    {
+      label: "postPromotionChanges fixedSourceSha256 mismatch",
+      provenance: {
+        ...provenance,
+        postPromotionChanges: [
+          {
+            ...provenance.postPromotionChanges[0],
+            fixedSourceSha256: `${FIXED_BROWSER_COMPONENT_SHA256.slice(0, 63)}0`,
+          },
+        ],
+      },
+      componentSha256: currentBrowserSha256,
+    },
+    {
+      label: "postPromotionChanges currentSha256 mismatch",
+      provenance: {
+        ...provenance,
+        postPromotionChanges: [
+          {
+            ...provenance.postPromotionChanges[0],
+            currentSha256: `${currentBrowserSha256.slice(0, 63)}0`,
+          },
+        ],
+      },
+      componentSha256: currentBrowserSha256,
+    },
+    {
+      label: "no postPromotionChanges with mismatched component bytes",
+      provenance: (() => {
+        const { postPromotionChanges: _removed, ...withoutChanges } = provenance;
+        return withoutChanges;
+      })(),
+      componentSha256: hashBytes(Buffer.from("independent-mismatched-browser-component-bytes-v1etb-guard")),
+    },
+  ];
+
+  for (const negativeCase of negativeCases) {
+    assert.throws(() => {
+      validatePostPromotionChanges(negativeCase.provenance, negativeCase.componentSha256);
+    });
   }
 
   assert.equal(productPackage.name, PRODUCT_NAME);

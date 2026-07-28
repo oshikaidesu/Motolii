@@ -20,13 +20,13 @@ const AUTHORITY_SHA256 = {
   "docs/mocks-ui/package.json":
     "34382a0e9f53dbd3abc61848d68ab5ccec425a3ffbf50700576512c99f111561",
   "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx":
-    "4edb3dfc49726aa700e77a14197571a43de2d80d9838a824c22cb68e0ac3d5b8",
+    "866124a69caaa168fa19c67e6c723db97fec67a61071bdbe66973576266c42f4",
   "ui/motolii-web/src/candidates/discovery-browser-candidate.css":
     "1dcb6afc3c16907366f6d73ed7cfb1b04c8cea872d169e959ead49b6c6cedccd",
   "ui/motolii-web/src/patterns/DiscoveryBrowser.jsx":
     "1d996ad66dba3ff7fb36cf811ce8d22faec1fee271a2dd5349d953a7cf89a2ea",
   "ui/motolii-web/source-provenance.json":
-    "938100f65a62dc804ce6304fad45ea5c31414249d6ade27ac47ae6a129a58732",
+    "859d64937ad042608088f331c89e8a8f914fcbe992092b63fbfacd9eeb7dfa75",
 };
 
 const FORBIDDEN_KEYS = [
