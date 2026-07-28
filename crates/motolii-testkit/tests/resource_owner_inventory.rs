@@ -242,3 +242,32 @@ fn inventory_keeps_distinct_lifetime_seats() {
         assert!(seats.contains(&required), "missing owner seat: {required}");
     }
 }
+
+#[test]
+fn document_and_plugin_contracts_do_not_expose_resource_accounting() {
+    let root = workspace_root();
+    let forbidden = [
+        "ResourceLedger",
+        "ResourceGrant",
+        "ResourceBudgets",
+        "ResourceRequest",
+        "TextureAllocationAlignment",
+    ];
+    let mut violations = Vec::new();
+    for relative_dir in ["crates/motolii-doc/src", "crates/motolii-plugin/src"] {
+        for source_path in rust_sources_below(&root, relative_dir) {
+            let source = fs::read_to_string(&source_path)
+                .unwrap_or_else(|error| panic!("read {} failed: {error}", source_path.display()));
+            for token in forbidden {
+                if source.contains(token) {
+                    violations.push(format!("{}: {token}", source_path.display()));
+                }
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "Host resource accounting must not enter Document/plugin contracts:\n{}",
+        violations.join("\n")
+    );
+}

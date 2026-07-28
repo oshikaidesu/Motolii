@@ -7,10 +7,14 @@ use motolii_core::{
     premultiply_rgba_f32, ColorSpace, CompCamera, FrameDesc, PixelFormat, Quality, RationalTime,
     TimeMap, TimeMapError,
 };
-use motolii_gpu::{upload_rgba, GpuCtx, GpuRuntimeError, PipelineCache};
+use motolii_gpu::{
+    estimate_texture_bytes, upload_rgba, AllocationEstimateError, GpuCtx, GpuRuntimeError,
+    MemoryTier, PipelineCache, ResourceAdmissionError, ResourceGrant, ResourceLedger,
+    ResourceOwner, ResourceRequest, TextureAllocationAlignment,
+};
 use motolii_nodes::{
-    create_rgba_render_target, AffinePlaceNode, ClippingMaskMode, CompositeMode, CompositeNode,
-    MaskNode, NodeError, OverlayNode, RectOverlay,
+    create_rgba_render_target, rgba_render_target_descriptor, AffinePlaceNode, ClippingMaskMode,
+    CompositeMode, CompositeNode, MaskNode, NodeError, OverlayNode, RectOverlay,
 };
 use motolii_plugin::{
     LayerSourceContext, PluginError, PluginId, PluginRegistry, RenderCtx, ResolvedParams,
@@ -172,6 +176,12 @@ pub enum RenderError {
     #[error(transparent)]
     Gpu(#[from] GpuRuntimeError),
     #[error(transparent)]
+    ResourceEstimate(#[from] AllocationEstimateError),
+    #[error(transparent)]
+    ResourceAdmission(#[from] ResourceAdmissionError),
+    #[error("render target accounting batch did not produce the requested resource count")]
+    ResourceBatchMismatch,
+    #[error(transparent)]
     Camera(#[from] motolii_core::CompCameraError),
 }
 
@@ -209,18 +219,44 @@ pub struct RenderSession {
     solid: Option<(FrameDesc, [f32; 4], wgpu::Texture)>,
     /// 中間RTプール(performance-model §3 / M1-T8)。必要枚数はグラフ深度に応じて伸びる。
     ping: Option<RenderTargetPool>,
+    accounting: Option<RenderTargetAccounting>,
 }
 
 struct RenderTargetPool {
     desc: FrameDesc,
-    buffers: Vec<wgpu::Texture>,
+    buffers: Vec<AccountedRenderTarget>,
     next: usize,
     /// プールを作り直した回数(テスト用)。
     generations: u64,
 }
 
+struct AccountedRenderTarget {
+    texture: wgpu::Texture,
+    _grant: Option<ResourceGrant>,
+}
+
+#[derive(Clone)]
+struct RenderTargetAccounting {
+    ledger: ResourceLedger,
+    alignment: TextureAllocationAlignment,
+}
+
+const RENDER_TARGET_OWNER: ResourceOwner = ResourceOwner::new("render-target");
+
 impl RenderSession {
     pub fn new(gpu: &GpuCtx) -> Self {
+        Self::new_inner(gpu, None)
+    }
+
+    pub fn new_accounted(
+        gpu: &GpuCtx,
+        ledger: ResourceLedger,
+        alignment: TextureAllocationAlignment,
+    ) -> Self {
+        Self::new_inner(gpu, Some(RenderTargetAccounting { ledger, alignment }))
+    }
+
+    fn new_inner(gpu: &GpuCtx, accounting: Option<RenderTargetAccounting>) -> Self {
         Self {
             overlay: OverlayNode::new(gpu),
             composite: CompositeNode::new(gpu),
@@ -230,6 +266,7 @@ impl RenderSession {
             transparent: None,
             solid: None,
             ping: None,
+            accounting,
         }
     }
 
@@ -257,7 +294,7 @@ impl RenderSession {
             .map(|p| {
                 p.buffers
                     .iter()
-                    .map(|tex| tex as *const wgpu::Texture)
+                    .map(|target| &target.texture as *const wgpu::Texture)
                     .collect()
             })
             .unwrap_or_default()
@@ -289,14 +326,17 @@ impl RenderSession {
         gpu: &GpuCtx,
         desc: FrameDesc,
         avoid: &[&wgpu::Texture],
-    ) -> wgpu::Texture {
+    ) -> Result<wgpu::Texture, RenderError> {
         if self.ping.as_ref().map(|p| p.desc) != Some(desc) {
-            let a = create_rgba_render_target(gpu, desc, "motolii-render-ping-a");
-            let b = create_rgba_render_target(gpu, desc, "motolii-render-ping-b");
+            let buffers = self.create_render_targets(
+                gpu,
+                desc,
+                &["motolii-render-ping-a", "motolii-render-ping-b"],
+            )?;
             let generations = self.ping.as_ref().map(|p| p.generations + 1).unwrap_or(1);
             self.ping = Some(RenderTargetPool {
                 desc,
-                buffers: vec![a, b],
+                buffers,
                 next: 0,
                 generations,
             });
@@ -305,18 +345,64 @@ impl RenderSession {
         let len = pool.buffers.len();
         for offset in 0..len {
             let idx = (pool.next + offset) % len;
-            let candidate = &pool.buffers[idx];
+            let candidate = &pool.buffers[idx].texture;
             if !avoid.contains(&candidate) {
                 pool.next = (idx + 1) % len;
-                return candidate.clone();
+                return Ok(candidate.clone());
             }
         }
-        let tex = create_rgba_render_target(gpu, desc, "motolii-render-ping-extra");
+        let mut targets = self.create_render_targets(gpu, desc, &["motolii-render-ping-extra"])?;
+        let target = targets.pop().ok_or(RenderError::ResourceBatchMismatch)?;
+        let tex = target.texture.clone();
+        let pool = self
+            .ping
+            .as_mut()
+            .ok_or(RenderError::ResourceBatchMismatch)?;
         let new_idx = pool.buffers.len();
-        pool.buffers.push(tex.clone());
+        pool.buffers.push(target);
         // 新規面を今回返したので、次のラウンドロビン開始位置はその次。
         pool.next = (new_idx + 1) % pool.buffers.len();
-        tex
+        Ok(tex)
+    }
+
+    fn create_render_targets(
+        &self,
+        gpu: &GpuCtx,
+        desc: FrameDesc,
+        labels: &[&str],
+    ) -> Result<Vec<AccountedRenderTarget>, RenderError> {
+        let grants = if let Some(accounting) = &self.accounting {
+            let requests = labels
+                .iter()
+                .map(|label| {
+                    let descriptor = rgba_render_target_descriptor(desc, label);
+                    Ok(ResourceRequest {
+                        owner: RENDER_TARGET_OWNER,
+                        tier: MemoryTier::Vram,
+                        bytes: estimate_texture_bytes(&descriptor, accounting.alignment)?,
+                        pinned: true,
+                    })
+                })
+                .collect::<Result<Vec<_>, AllocationEstimateError>>()?;
+            accounting.ledger.admit_batch(&requests)?
+        } else {
+            Vec::new()
+        };
+
+        let mut grant_iter = grants.into_iter();
+        let mut targets = Vec::with_capacity(labels.len());
+        for label in labels {
+            targets.push(AccountedRenderTarget {
+                texture: create_rgba_render_target(gpu, desc, label),
+                _grant: grant_iter.next(),
+            });
+        }
+        if grant_iter.next().is_some()
+            || (self.accounting.is_some() && targets.iter().any(|target| target._grant.is_none()))
+        {
+            return Err(RenderError::ResourceBatchMismatch);
+        }
+        Ok(targets)
     }
 }
 
@@ -467,7 +553,7 @@ fn render_graph_cached_inner(
                 overlay,
             } => {
                 let input_texture = texture_ref(&textures, desc, *input)?;
-                let output_texture = session.acquire_render_target(gpu, desc, &avoid);
+                let output_texture = session.acquire_render_target(gpu, desc, &avoid)?;
                 session.overlay.set_rect(*overlay);
                 session.overlay.render(
                     gpu,
@@ -486,7 +572,7 @@ fn render_graph_cached_inner(
             } => {
                 let background_texture = texture_ref(&textures, desc, *background)?;
                 let foreground_texture = texture_ref(&textures, desc, *foreground)?;
-                let output_texture = session.acquire_render_target(gpu, desc, &avoid);
+                let output_texture = session.acquire_render_target(gpu, desc, &avoid)?;
                 session.composite.set_mode(CompositeMode::Normal);
                 session.composite.render(
                     gpu,
@@ -508,7 +594,7 @@ fn render_graph_cached_inner(
             } => {
                 let background_texture = texture_ref(&textures, desc, *background)?;
                 let foreground_texture = texture_ref(&textures, desc, *foreground)?;
-                let output_texture = session.acquire_render_target(gpu, desc, &avoid);
+                let output_texture = session.acquire_render_target(gpu, desc, &avoid)?;
                 session.composite.set_mode(*mode);
                 session.composite.render(
                     gpu,
@@ -530,7 +616,7 @@ fn render_graph_cached_inner(
             } => {
                 let content_texture = texture_ref(&textures, desc, *content)?;
                 let mask_texture = texture_ref(&textures, desc, *mask)?;
-                let output_texture = session.acquire_render_target(gpu, desc, &avoid);
+                let output_texture = session.acquire_render_target(gpu, desc, &avoid)?;
                 session.mask.set_mode(*mode);
                 session.mask.render(
                     gpu,
@@ -549,7 +635,7 @@ fn render_graph_cached_inner(
                 inverse_uv,
             } => {
                 let input_texture = texture_ref(&textures, desc, *input)?;
-                let output_texture = session.acquire_render_target(gpu, desc, &avoid);
+                let output_texture = session.acquire_render_target(gpu, desc, &avoid)?;
                 session.affine_place.set_inverse_uv_matrix(*inverse_uv);
                 session.affine_place.render(
                     gpu,
@@ -568,7 +654,7 @@ fn render_graph_cached_inner(
                 output,
             } => {
                 let registry = inputs.plugins.ok_or(RenderError::MissingPluginRegistry)?;
-                let output_texture = session.acquire_render_target(gpu, desc, &avoid);
+                let output_texture = session.acquire_render_target(gpu, desc, &avoid)?;
                 let out_ref = TextureRef {
                     texture: &output_texture,
                     desc,
@@ -1295,7 +1381,7 @@ mod tests {
         Quality, TimeMap,
     };
     use motolii_eval::Value;
-    use motolii_gpu::download_rgba;
+    use motolii_gpu::{download_rgba, ResourceBudgets};
     use motolii_nodes::{CanonicalPoint, CanonicalSize};
     use motolii_plugin::reference::register_reference_plugins;
     use motolii_testkit::cpu_reference::{expected_fixed_graph, premul_over_u8};
@@ -1589,6 +1675,223 @@ mod tests {
                 "RenderedFrame.texture must not alias RenderSession ping-pong buffers"
             );
         }
+    }
+
+    fn render_target_bytes(desc: FrameDesc, alignment: TextureAllocationAlignment) -> u64 {
+        estimate_texture_bytes(
+            &rgba_render_target_descriptor(desc, "accounting-test"),
+            alignment,
+        )
+        .unwrap()
+    }
+
+    fn resource_budgets(vram_bytes: u64) -> ResourceBudgets {
+        ResourceBudgets {
+            vram_bytes,
+            ram_bytes: 1,
+            disk_bytes: 1,
+            shared_vram_ram_bytes: None,
+        }
+    }
+
+    #[test]
+    fn accounted_render_target_pool_releases_with_session() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let request = centered_request();
+        let alignment = TextureAllocationAlignment {
+            row_bytes: 1,
+            allocation_bytes: 1,
+        };
+        let bytes = render_target_bytes(request.desc, alignment);
+        let ledger = ResourceLedger::new(resource_budgets(bytes * 2));
+        let mut session = RenderSession::new_accounted(&gpu, ledger.clone(), alignment);
+
+        let rendered = render_graph_cached(
+            &gpu,
+            &mut session,
+            request.timeline_time,
+            &linear_graph_from_request(&request),
+            &RenderGraphInputs {
+                camera: camera_for_desc(request.desc),
+                video_sources: &[],
+                source_time: None,
+                plugins: None,
+            },
+            Quality::FINAL,
+        )
+        .unwrap();
+        assert_eq!(session.ping_pong_len(), 2);
+        assert_eq!(ledger.snapshot().unwrap().vram.resident_bytes, bytes * 2);
+
+        drop(session);
+        assert_eq!(ledger.snapshot().unwrap().vram.resident_bytes, 0);
+        drop(rendered);
+    }
+
+    #[test]
+    fn render_target_batch_rejects_before_creating_partial_pool() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let request = centered_request();
+        let alignment = TextureAllocationAlignment {
+            row_bytes: 1,
+            allocation_bytes: 1,
+        };
+        let bytes = render_target_bytes(request.desc, alignment);
+        let ledger = ResourceLedger::new(resource_budgets(bytes * 2 - 1));
+        let mut session = RenderSession::new_accounted(&gpu, ledger.clone(), alignment);
+
+        let error = render_graph_cached(
+            &gpu,
+            &mut session,
+            request.timeline_time,
+            &linear_graph_from_request(&request),
+            &RenderGraphInputs {
+                camera: camera_for_desc(request.desc),
+                video_sources: &[],
+                source_time: None,
+                plugins: None,
+            },
+            Quality::FINAL,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            RenderError::ResourceAdmission(ResourceAdmissionError::BudgetExceeded {
+                owner: "render-target",
+                tier: MemoryTier::Vram,
+                ..
+            })
+        ));
+        assert_eq!(session.ping_pong_len(), 0);
+        assert_eq!(ledger.snapshot().unwrap().vram.resident_bytes, 0);
+    }
+
+    #[test]
+    fn resize_refusal_keeps_previous_render_target_generation() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let request = centered_request();
+        let alignment = TextureAllocationAlignment {
+            row_bytes: 1,
+            allocation_bytes: 1,
+        };
+        let old_bytes = render_target_bytes(request.desc, alignment);
+        let new_desc = FrameDesc {
+            width: request.desc.width * 2,
+            height: request.desc.height * 2,
+            ..request.desc
+        };
+        let new_bytes = render_target_bytes(new_desc, alignment);
+        let ledger = ResourceLedger::new(resource_budgets(old_bytes * 2 + new_bytes * 2 - 1));
+        let mut session = RenderSession::new_accounted(&gpu, ledger.clone(), alignment);
+        let inputs = RenderGraphInputs {
+            camera: camera_for_desc(request.desc),
+            video_sources: &[],
+            source_time: None,
+            plugins: None,
+        };
+        let _first = render_graph_cached(
+            &gpu,
+            &mut session,
+            request.timeline_time,
+            &linear_graph_from_request(&request),
+            &inputs,
+            Quality::FINAL,
+        )
+        .unwrap();
+        assert_eq!(session.ping_pong_generations(), 1);
+
+        let mut resized = request;
+        resized.desc = new_desc;
+        let error = render_graph_cached(
+            &gpu,
+            &mut session,
+            resized.timeline_time,
+            &linear_graph_from_request(&resized),
+            &RenderGraphInputs {
+                camera: camera_for_desc(new_desc),
+                ..inputs
+            },
+            Quality::FINAL,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            RenderError::ResourceAdmission(ResourceAdmissionError::BudgetExceeded { .. })
+        ));
+        assert_eq!(session.ping_pong_len(), 2);
+        assert_eq!(session.ping_pong_generations(), 1);
+        assert_eq!(
+            ledger.snapshot().unwrap().vram.resident_bytes,
+            old_bytes * 2
+        );
+    }
+
+    #[test]
+    fn branch_liveness_rejects_extra_target_before_pool_growth() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let request = centered_request();
+        let desc = request.desc;
+        let alignment = TextureAllocationAlignment {
+            row_bytes: 1,
+            allocation_bytes: 1,
+        };
+        let bytes = render_target_bytes(desc, alignment);
+        let ledger = ResourceLedger::new(resource_budgets(bytes * 2));
+        let mut session = RenderSession::new_accounted(&gpu, ledger.clone(), alignment);
+        let graph = LinearRenderGraph {
+            desc,
+            steps: vec![
+                RenderStep::SolidSource {
+                    output: TextureId(0),
+                    source: SolidSource {
+                        color: [0.0, 0.0, 0.0, 0.0],
+                        time_map: TimeMap::identity(),
+                        reports_source_time: true,
+                    },
+                },
+                RenderStep::OverlayRect {
+                    input: TextureId(0),
+                    output: TextureId(1),
+                    overlay: request.overlay,
+                },
+                RenderStep::OverlayRect {
+                    input: TextureId(0),
+                    output: TextureId(2),
+                    overlay: request.overlay,
+                },
+                RenderStep::Composite {
+                    background: TextureId(1),
+                    foreground: TextureId(2),
+                    output: TextureId(3),
+                    mode: CompositeMode::Normal,
+                },
+            ],
+            output: TextureId(3),
+        };
+
+        let error = render_graph_cached(
+            &gpu,
+            &mut session,
+            request.timeline_time,
+            &graph,
+            &RenderGraphInputs {
+                camera: camera_for_desc(desc),
+                video_sources: &[],
+                source_time: None,
+                plugins: None,
+            },
+            Quality::FINAL,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            RenderError::ResourceAdmission(ResourceAdmissionError::BudgetExceeded {
+                owner: "render-target",
+                ..
+            })
+        ));
+        assert_eq!(session.ping_pong_len(), 2);
+        assert_eq!(ledger.snapshot().unwrap().vram.resident_bytes, bytes * 2);
     }
 
     #[test]

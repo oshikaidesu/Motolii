@@ -189,8 +189,11 @@ fn default_params(plugin: &'static dyn FilterPlugin) -> ResolvedParams {
     params
 }
 
-pub fn create_rgba_render_target(gpu: &GpuCtx, desc: FrameDesc, label: &str) -> wgpu::Texture {
-    gpu.device.create_texture(&wgpu::TextureDescriptor {
+pub fn rgba_render_target_descriptor<'a>(
+    desc: FrameDesc,
+    label: &'a str,
+) -> wgpu::TextureDescriptor<'a> {
+    wgpu::TextureDescriptor {
         label: Some(label),
         size: wgpu::Extent3d {
             width: desc.width,
@@ -205,7 +208,12 @@ pub fn create_rgba_render_target(gpu: &GpuCtx, desc: FrameDesc, label: &str) -> 
             | wgpu::TextureUsages::RENDER_ATTACHMENT
             | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
-    })
+    }
+}
+
+pub fn create_rgba_render_target(gpu: &GpuCtx, desc: FrameDesc, label: &str) -> wgpu::Texture {
+    gpu.device
+        .create_texture(&rgba_render_target_descriptor(desc, label))
 }
 
 #[repr(C)]

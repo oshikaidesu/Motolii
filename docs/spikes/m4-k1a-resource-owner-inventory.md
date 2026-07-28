@@ -24,7 +24,7 @@ RETIREMENT: ResourceLedger接続後もraw allocation再流入のguardとして�
 |---|---|---|---|---|
 | `source-upload` | `motolii-gpu::upload_rgba` | VRAM | caller / render session | caller ownerを指定できない現signatureのまま全owner会計済みとしない |
 | `decode-materialization-pool` | `YuvToRgba::SizePool`のY/U/V、RGBA×2、uniform | VRAM | converter size generation | 寸法変更時は旧pool解放と新pool admissionを原子的に扱う |
-| `render-target` | `create_rgba_render_target`、`RenderTargetPool` | VRAM | render session / graph liveness | extra targetをadmission前に増やさない |
+| `render-target` | `create_rgba_render_target`、`RenderTargetPool` | VRAM | render session / graph liveness | 明示accounted constructorは接続済み。legacy constructorとextra targetを未会計のまま完成扱いしない |
 | `rendered-frame` | `create_owned_output_texture` | VRAM | consumer handle | worker generation失効だけで生存handleを過小計上しない |
 | `preview-display` | `DisplaySlot` | VRAM | UI display generation | UI toolkitを台帳ownerにせずHost seatへ翻訳する |
 | `copy-out-staging` | `RgbaDownloader` | VRAM-visible buffer | downloader size generation | exportとcache copy-outを同じ未分離budgetへ黙って混ぜない |
@@ -55,13 +55,13 @@ RETIREMENT: ResourceLedger接続後もraw allocation再流入のguardとして�
 4. `wgpu_hal`、IOSurface、D3D11 texture、DMA-BUF、ExternalTexture等を、
    ResourceLedger entryなしに製品sourceへ追加できない
 5. 各seatにlifetime classとpeak multiplicityの根拠があり、call数だけを容量証明にしない
+6. ResourceLedger/budget/alignment型をDocument/plugin sourceへ露出しない
 
 このguardはRust ASTやwgpu allocation実体の証明ではない。callsiteが移動・増減した時に、
 owner分類を更新せず通過することを防ぐ変更検知器である。
 
 ## この粒が証明しないもの
 
-- ResourceLedgerの公開/内部型、RAII handle、並行admission
 - 全ownerの実割当接続、backend padding、allocator report差分
 - ffmpeg子processの厳密hard cap
 - hardware decoder surfaceのresident bytes
@@ -70,9 +70,9 @@ owner分類を更新せず通過することを防ぐ変更検知器である。
 
 ## 次の判定
 
-**PASS**: inventory guard 3 testは全緑。Opus 5のread-only助言を現行仕様・codeへ再照合し、
+**PASS**: inventory guard 4 testは全緑。Opus 5のread-only助言を現行仕様・codeへ再照合し、
 閉じたowner enumを`motolii-gpu`公開APIへ出す案と、台帳より先に`OwnerId` registryを作る案を棄却した。
-owner identityはtest-only inventoryの開いたdataに留め、製品へ残したのはchecked算術だけである。
+owner identityは開いた診断labelとし、最初の実ownerとして明示budgetの`RenderTargetPool`を接続した。
 
 **STOP条件**: raw allocation数一致を「全memory会計済み」と読み替える、またはffmpeg/native
 decoderの不可視memoryをゼロとしてhard capを主張する。
