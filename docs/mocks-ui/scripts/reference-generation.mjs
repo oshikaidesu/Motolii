@@ -1,15 +1,10 @@
-import { createHash, randomUUID } from "node:crypto";
-import {
-  mkdir,
-  open,
-  readFile,
-  readdir,
-  rename,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { PNG } from "pngjs";
+import {
+  publishImmutableGeneration,
+  readImmutableGeneration,
+} from "./immutable-generation.mjs";
 
 const MANIFEST_FIELDS = new Set([
   "schemaVersion",
@@ -247,20 +242,6 @@ export function validateReferenceGeneration(
   return { generation: manifest.generation, captures: bytesByPath };
 }
 
-async function syncFile(filename) {
-  const handle = await open(filename, "r");
-  try {
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-}
-
-async function perform(inject, checkpoint, operation) {
-  await inject?.(checkpoint);
-  return operation();
-}
-
 function requireClosedValidation(validation) {
   if (
     !validation ||
@@ -277,6 +258,13 @@ function requireClosedValidation(validation) {
   }
 }
 
+const REFERENCE_IMMUTABLE_POLICY = {
+  nonByteLikeKind: "schema",
+  invalidGenerationKind: "schema",
+  captureFilesystemKind: "read",
+  rethrowDomainError: (cause) => cause instanceof ReferenceGenerationError,
+};
+
 export async function publishReferenceGeneration({
   root,
   manifest,
@@ -286,108 +274,36 @@ export async function publishReferenceGeneration({
 }) {
   root = path.resolve(root);
   requireClosedValidation(validation);
-  const validated = validateReferenceGeneration(manifest, captures, validation);
-  const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
-  const generations = path.join(root, "generations");
-  const nonce = randomUUID();
-  const stage = path.join(generations, `.stage-${manifest.generation}-${nonce}`);
-  const destination = path.join(generations, manifest.generation);
-  const currentTemp = path.join(root, `.CURRENT-${nonce}`);
-  let stageMoved = false;
-  try {
-    await perform(inject, "mkdir-generations", () => mkdir(generations, { recursive: true }));
-    await perform(inject, "mkdir-stage", () => mkdir(stage));
-    const directories = new Set([path.join(stage, "captures")]);
-    for (const capturePath of validated.captures.keys()) {
-      directories.add(path.dirname(path.join(stage, capturePath)));
-    }
-    for (const directory of [...directories].sort()) {
-      await perform(inject, `mkdir-capture-directory:${path.relative(stage, directory)}`, () =>
-        mkdir(directory, { recursive: true }),
-      );
-    }
-    for (const [capturePath, bytes] of [...validated.captures].sort(([left], [right]) => left.localeCompare(right))) {
-      const filename = path.join(stage, capturePath);
-      await perform(inject, `write-capture:${capturePath}`, () => writeFile(filename, bytes, { flag: "wx" }));
-      await perform(inject, `sync-capture:${capturePath}`, () => syncFile(filename));
-    }
-    for (const directory of [...directories].sort().reverse()) {
-      await perform(
-        inject,
-        `sync-capture-directory:${path.relative(stage, directory)}`,
-        () => syncFile(directory),
-      );
-    }
-    const manifestPath = path.join(stage, "manifest.json");
-    await perform(inject, "write-manifest", () => writeFile(manifestPath, manifestBytes, { flag: "wx" }));
-    await perform(inject, "sync-manifest", () => syncFile(manifestPath));
-    await perform(inject, "sync-stage-directory", () => syncFile(stage));
-    await perform(inject, "rename-stage", () => rename(stage, destination));
-    stageMoved = true;
-    await perform(inject, "sync-generations-directory", () => syncFile(generations));
-    await perform(inject, "write-current-temp", () =>
-      writeFile(currentTemp, `${manifest.generation}\n`, { flag: "wx" }),
-    );
-    await perform(inject, "sync-current-temp", () => syncFile(currentTemp));
-    await perform(inject, "rename-current", () => rename(currentTemp, path.join(root, "CURRENT")));
-    await perform(inject, "sync-root-directory", () => syncFile(root));
-  } catch (cause) {
-    await rm(currentTemp, { force: true }).catch(() => {});
-    if (!stageMoved) await rm(stage, { recursive: true, force: true }).catch(() => {});
-    if (cause instanceof ReferenceGenerationError) throw cause;
-    reject("RG3-PUBLISH", `publication failed: ${cause.message}`, cause);
-  }
-}
-
-async function listCaptureFiles(directory, prefix = "captures") {
-  const result = [];
-  const entries = await readdir(directory, { withFileTypes: true });
-  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
-    const relative = `${prefix}/${entry.name}`;
-    const filename = path.join(directory, entry.name);
-    if (entry.isDirectory()) result.push(...(await listCaptureFiles(filename, relative)));
-    else if (entry.isFile()) result.push(relative);
-    else reject("RG3-CAPTURE", `non-file capture entry ${relative}`);
-  }
-  return result;
+  await publishImmutableGeneration({
+    root,
+    manifest,
+    captures,
+    inject,
+    validate: (referenceManifest, referenceCaptures) =>
+      validateReferenceGeneration(referenceManifest, referenceCaptures, validation),
+    fail(kind, message, cause) {
+      if (kind === "publish" && cause instanceof ReferenceGenerationError) throw cause;
+      if (kind === "schema") reject("RG3-SCHEMA", message, cause);
+      if (kind === "capture") reject("RG3-CAPTURE", message, cause);
+      reject("RG3-PUBLISH", message, cause);
+    },
+    policy: REFERENCE_IMMUTABLE_POLICY,
+  });
 }
 
 export async function readCurrentReferenceGeneration({ root, validation } = {}) {
   root = path.resolve(root);
   requireClosedValidation(validation);
-  let generation;
-  try {
-    generation = (await readFile(path.join(root, "CURRENT"), "utf8")).trim();
-  } catch (cause) {
-    reject("RG3-READ", `cannot read CURRENT: ${cause.message}`, cause);
-  }
-  safeGeneration(generation);
-  const directory = path.join(root, "generations", generation);
-  let manifest;
-  try {
-    manifest = JSON.parse(await readFile(path.join(directory, "manifest.json"), "utf8"));
-  } catch (cause) {
-    reject("RG3-READ", `cannot read manifest for ${generation}: ${cause.message}`, cause);
-  }
-  if (manifest.generation !== generation) {
-    reject("RG3-READ", "CURRENT and manifest name different generations");
-  }
-  const generationEntries = await readdir(directory, { withFileTypes: true });
-  const entryShape = generationEntries
-    .map((entry) => `${entry.name}:${entry.isDirectory() ? "directory" : entry.isFile() ? "file" : "other"}`)
-    .sort();
-  if (entryShape.join("\0") !== ["captures:directory", "manifest.json:file"].join("\0")) {
-    reject("RG3-READ", `generation ${generation} contains an undeclared root entry`);
-  }
-  const captures = new Map();
-  try {
-    for (const capturePath of await listCaptureFiles(path.join(directory, "captures"))) {
-      captures.set(capturePath, await readFile(path.join(directory, capturePath)));
-    }
-  } catch (cause) {
-    if (cause instanceof ReferenceGenerationError) throw cause;
-    reject("RG3-READ", `cannot read captures for ${generation}: ${cause.message}`, cause);
-  }
-  validateReferenceGeneration(manifest, captures, validation);
-  return { generation, manifest, captures };
+  return readImmutableGeneration({
+    root,
+    validate: (manifestToRead, capturesToRead) =>
+      validateReferenceGeneration(manifestToRead, capturesToRead, validation),
+    fail(kind, message, cause) {
+      if (kind === "schema") reject("RG3-SCHEMA", message, cause);
+      if (kind === "capture") reject("RG3-CAPTURE", message, cause);
+      if (kind === "publish") reject("RG3-PUBLISH", message, cause);
+      reject("RG3-READ", message, cause);
+    },
+    policy: REFERENCE_IMMUTABLE_POLICY,
+  });
 }

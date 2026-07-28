@@ -51,7 +51,7 @@ const AUTHORITY_SHA256 = {
   "docs/mocks-ui/guard-tests/inspector-containment.test.mjs":
     "8f5a32efdac280d7ea9c07b3336995828199d44dc743e613b4b6111236444a0b",
   "docs/mocks-ui/package.json":
-    "34382a0e9f53dbd3abc61848d68ab5ccec425a3ffbf50700576512c99f111561",
+    "d058d3c84d7b7cf688b576d6a5da32820b65405bf78ea06363380091a88b0cf6",
   "scripts/check-docs.sh":
     "7af62c013e65416c61ffc79ede7f125254231a6b4b88c0fe53c52c85868e6cd8",
 };

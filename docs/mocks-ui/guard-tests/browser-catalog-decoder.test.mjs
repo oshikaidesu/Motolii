@@ -18,7 +18,7 @@ const AUTHORITY_SHA256 = {
   "ui/motolii-web/src/index.js":
     "a2ec126a21dd4637fbe90480460d47e7c2a3258fdc37dd7cf1d19746c6224469",
   "docs/mocks-ui/package.json":
-    "34382a0e9f53dbd3abc61848d68ab5ccec425a3ffbf50700576512c99f111561",
+    "d058d3c84d7b7cf688b576d6a5da32820b65405bf78ea06363380091a88b0cf6",
   "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx":
     "866124a69caaa168fa19c67e6c723db97fec67a61071bdbe66973576266c42f4",
   "ui/motolii-web/src/candidates/discovery-browser-candidate.css":

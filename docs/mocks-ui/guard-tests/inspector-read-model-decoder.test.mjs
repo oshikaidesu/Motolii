@@ -29,7 +29,7 @@ const AUTHORITY_SHA256 = {
   "docs/mocks-ui/src/reference/loadReferenceFixtures.js":
     "8476efb890c753a6267c2f7a285f8c9ef37a9abeac51c40d75774fa4d0e97d5d",
   "docs/mocks-ui/package.json":
-    "34382a0e9f53dbd3abc61848d68ab5ccec425a3ffbf50700576512c99f111561",
+    "d058d3c84d7b7cf688b576d6a5da32820b65405bf78ea06363380091a88b0cf6",
 };
 
 const FORBIDDEN_R14 = [

@@ -348,10 +348,10 @@ describe("current-route capture", { concurrency: false }, () => {
   });
 
   test("no publication artifacts are emitted", async () => {
-    await getBundle();
+    const bundle = await getBundle();
     assert.equal(
-      existsSync(path.join(REPO_ROOT, "docs/mocks-ui/current-route-output")),
-      false,
+      bundle.repositoryFingerprint,
+      await repositoryFingerprint(REPO_ROOT),
     );
     assert.equal(existsSync(path.join(REPO_ROOT, "docs/mocks-ui/CURRENT")), false,
     );
