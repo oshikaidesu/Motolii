@@ -98,3 +98,11 @@ npm run check-reference
 - 記録済み可視事実だけを使い、隠れ状態、操作成功、capture metadata、route parityは判定していない。
 - `G0-6H-V0` は `WAIT` を維持し、empty-project scenarioの意味は本粒で定義していない。
 - 詳細は [G0-6H-M現行route element-level semantic gap map](../reviews/2026-07-28-g0-6h-m-current-route-semantic-gap-mapping.md)
+
+## G0-6H-A scenario / fixture契約の非充足注記
+
+- 本契約はscenario意味とfixture所有の停止線だけを閉じ、本資料のDecision template / checklistの充足には代替しない。
+- `Starter Media` fixtureはProject外のfixture-only源であり、Document / 製品runtime / 公開API / plugin / 永続形式 / production Registered folderの正本にならない。
+- 本粒はmedia byte、path、schema、route、生成手段を決めていない。次粒 `G0-6H-AF` へhandoffする。
+- `G0-6H-V0`は本契約の統合まで`WAIT`を維持する。
+- 詳細への相対リンク [G0-6H-A empty Project + local Starter Media scenario / fixture 所有契約](../reviews/2026-07-28-g0-6h-a-empty-project-starter-media-scenario-contract.md)。

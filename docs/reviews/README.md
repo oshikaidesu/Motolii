@@ -333,3 +333,4 @@
 | [2026-07-28-g0-6h-m0-current-route-semantic-gap-selection.md](2026-07-28-g0-6h-m0-current-route-semantic-gap-selection.md) | G0-6H-M0 現行route semantic gap確認粒の選定 |
 | [2026-07-28-g0-6h-m-current-route-semantic-gap-mapping.md](2026-07-28-g0-6h-m-current-route-semantic-gap-mapping.md) | G0-6H-M 現行route element-level semantic gap map |
 | [2026-07-28-g0-6h-a0-empty-project-starter-media-selection.md](2026-07-28-g0-6h-a0-empty-project-starter-media-selection.md) | G0-6H-A0 empty-project + Starter Media裁定の受領と契約粒選定 |
+| [2026-07-28-g0-6h-a-empty-project-starter-media-scenario-contract.md](2026-07-28-g0-6h-a-empty-project-starter-media-scenario-contract.md) | G0-6H-A empty Project + local Starter Media scenario / fixture 所有契約 |
