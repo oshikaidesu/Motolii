@@ -22,12 +22,13 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 
 pub const BASELINE_OUT_ENV: &str = "MOTOLII_PERF_BASELINE_OUT";
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// 外部ベンチの呼び出し口(未配線スロット — M3E-2)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -53,6 +54,20 @@ pub const EXTERNAL_BENCH_SLOTS: &[ExternalBenchSlot] = &[
         description: "performance-model §7: 40 active 1080p video layers frame time (future)",
         env_var: "MOTOLII_PERF_EXTERNAL_RENDER_1080P_40",
         invoke_hint: "(not implemented — U1 measurement will define PerfScenario)",
+    },
+    ExternalBenchSlot {
+        id: "decode-demand-matrix",
+        description: "M4 validation: sequential/seek-storm/parallel clip decode demand",
+        env_var: "MOTOLII_PERF_EXTERNAL_DECODE_MATRIX",
+        invoke_hint:
+            "(not implemented — fixture media and hardware decode route are still selected)",
+    },
+    ExternalBenchSlot {
+        id: "audio-mad-edit-density",
+        description:
+            "M4 validation: many short clips/effects aligned to audio without timeline stalls",
+        env_var: "MOTOLII_PERF_EXTERNAL_AUDIO_MAD",
+        invoke_hint: "(not implemented — raw metric fixture is the next validation grain)",
     },
 ];
 
@@ -81,8 +96,17 @@ pub struct PerfReport {
     pub schema_version: u32,
     pub harness: &'static str,
     pub recorded_at_unix_ms: u64,
+    pub hardware: HardwareProfile,
     pub samples: Vec<PerfSample>,
     pub external_bench_slots: &'static [ExternalBenchSlot],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HardwareProfile {
+    pub os: &'static str,
+    pub arch: &'static str,
+    pub logical_cpu_count: Option<usize>,
+    pub total_memory_bytes: Option<u64>,
 }
 
 /// 初期化クロージャの所要時間[ms]を計測する。
@@ -96,22 +120,41 @@ where
     (value, startup_ms)
 }
 
-/// Linux `/proc/self/status` の VmRSS を bytes で返す。他OSは `None`。
+/// Linux `/proc/self/status` またはmacOS `ps`のRSSをbytesで返す。
 pub fn current_rss_bytes() -> Option<u64> {
-    parse_vm_rss_kb(&read_proc_status()?).map(|kb| kb * 1024)
-}
-
-fn read_proc_status() -> Option<String> {
     #[cfg(target_os = "linux")]
     {
-        std::fs::read_to_string("/proc/self/status").ok()
+        parse_vm_rss_kb(&read_proc_status()?).and_then(|kb| kb.checked_mul(1024))
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
+    {
+        let pid = std::process::id().to_string();
+        let output = Command::new("ps")
+            .args(["-o", "rss=", "-p", &pid])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        String::from_utf8(output.stdout)
+            .ok()?
+            .trim()
+            .parse::<u64>()
+            .ok()?
+            .checked_mul(1024)
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         None
     }
 }
 
+#[cfg(target_os = "linux")]
+fn read_proc_status() -> Option<String> {
+    std::fs::read_to_string("/proc/self/status").ok()
+}
+
+#[cfg(any(target_os = "linux", test))]
 fn parse_vm_rss_kb(status: &str) -> Option<u64> {
     for line in status.lines() {
         if let Some(rest) = line.strip_prefix("VmRSS:") {
@@ -120,6 +163,48 @@ fn parse_vm_rss_kb(status: &str) -> Option<u64> {
         }
     }
     None
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_mem_total_kb(meminfo: &str) -> Option<u64> {
+    for line in meminfo.lines() {
+        if let Some(rest) = line.strip_prefix("MemTotal:") {
+            return rest.trim().trim_end_matches(" kB").trim().parse().ok();
+        }
+    }
+    None
+}
+
+fn total_memory_bytes() -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
+        parse_mem_total_kb(&meminfo)?.checked_mul(1024)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let output = Command::new("sysctl")
+            .args(["-n", "hw.memsize"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        String::from_utf8(output.stdout).ok()?.trim().parse().ok()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        None
+    }
+}
+
+fn hardware_profile() -> HardwareProfile {
+    HardwareProfile {
+        os: std::env::consts::OS,
+        arch: std::env::consts::ARCH,
+        logical_cpu_count: std::thread::available_parallelism().ok().map(usize::from),
+        total_memory_bytes: total_memory_bytes(),
+    }
 }
 
 /// 初期化直後に短いアイドル待ちを入れてRSSを読む。
@@ -151,13 +236,21 @@ fn headless_gpu_ctx() -> PerfSample {
     let (result, startup_ms) = measure_startup(motolii_gpu::GpuCtx::new_headless);
     match result {
         Ok(gpu) => {
+            let mut notes = HashMap::new();
+            if let Some(info) = &gpu.adapter_info {
+                notes.insert("adapter_name".into(), info.name.clone());
+                notes.insert("backend".into(), format!("{:?}", info.backend));
+                notes.insert("device_type".into(), format!("{:?}", info.device_type));
+                notes.insert("driver".into(), info.driver.clone());
+                notes.insert("driver_info".into(), info.driver_info.clone());
+            }
             drop(gpu);
             PerfSample {
                 id: id.into(),
                 status: SampleStatus::Ok,
                 startup_ms: Some(startup_ms),
                 idle_rss_bytes: idle_rss_after_init(Duration::from_millis(50)),
-                notes: HashMap::new(),
+                notes,
             }
         }
         Err(e) => {
@@ -171,6 +264,72 @@ fn headless_gpu_ctx() -> PerfSample {
                 notes,
             }
         }
+    }
+}
+
+fn ffmpeg_capabilities() -> PerfSample {
+    let id = "ffmpeg_capabilities";
+    let start = Instant::now();
+    let version = Command::new("ffmpeg").arg("-version").output();
+    let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
+    let Ok(version) = version else {
+        return PerfSample {
+            id: id.into(),
+            status: SampleStatus::Unavailable,
+            startup_ms: Some(elapsed_ms),
+            idle_rss_bytes: current_rss_bytes(),
+            notes: HashMap::new(),
+        };
+    };
+    if !version.status.success() {
+        let mut notes = HashMap::new();
+        notes.insert(
+            "error".into(),
+            String::from_utf8_lossy(&version.stderr).into(),
+        );
+        return PerfSample {
+            id: id.into(),
+            status: SampleStatus::Unavailable,
+            startup_ms: Some(elapsed_ms),
+            idle_rss_bytes: current_rss_bytes(),
+            notes,
+        };
+    }
+
+    let mut notes = HashMap::new();
+    let version_text = String::from_utf8_lossy(&version.stdout);
+    if let Some(line) = version_text.lines().next() {
+        notes.insert("version".into(), line.to_owned());
+    }
+    match Command::new("ffmpeg")
+        .args(["-hide_banner", "-hwaccels"])
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            let accelerators = String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty() && !line.starts_with("Hardware acceleration"))
+                .collect::<Vec<_>>()
+                .join(",");
+            notes.insert("hwaccels".into(), accelerators);
+        }
+        Ok(output) => {
+            notes.insert(
+                "hwaccels_error".into(),
+                String::from_utf8_lossy(&output.stderr).into(),
+            );
+        }
+        Err(error) => {
+            notes.insert("hwaccels_error".into(), error.to_string());
+        }
+    }
+    PerfSample {
+        id: id.into(),
+        status: SampleStatus::Ok,
+        startup_ms: Some(elapsed_ms),
+        idle_rss_bytes: current_rss_bytes(),
+        notes,
     }
 }
 
@@ -192,12 +351,14 @@ pub fn run_harness() -> PerfReport {
     let samples = vec![
         harness_self_check(),
         plugin_registry_init(),
+        ffmpeg_capabilities(),
         headless_gpu_ctx(),
     ];
     PerfReport {
         schema_version: SCHEMA_VERSION,
         harness: "motolii-testkit/perf",
         recorded_at_unix_ms: unix_ms_now(),
+        hardware: hardware_profile(),
         samples,
         external_bench_slots: EXTERNAL_BENCH_SLOTS,
     }
@@ -208,6 +369,13 @@ pub fn log_report_summary(report: &PerfReport) {
     eprintln!("=== motolii perf harness (M3E-2) ===");
     eprintln!("schema_version={}", report.schema_version);
     eprintln!("recorded_at_unix_ms={}", report.recorded_at_unix_ms);
+    eprintln!(
+        "hardware os={} arch={} logical_cpu_count={:?} total_memory_bytes={:?}",
+        report.hardware.os,
+        report.hardware.arch,
+        report.hardware.logical_cpu_count,
+        report.hardware.total_memory_bytes
+    );
     for sample in &report.samples {
         eprintln!(
             "  [{}] status={:?} startup_ms={:?} idle_rss_bytes={:?}",
@@ -287,6 +455,12 @@ mod tests {
     }
 
     #[test]
+    fn parse_total_memory_from_meminfo_text() {
+        let meminfo = "MemTotal:       16384256 kB\nMemFree:         1024 kB\n";
+        assert_eq!(parse_mem_total_kb(meminfo), Some(16_384_256));
+    }
+
+    #[test]
     fn measure_startup_returns_elapsed() {
         let (_, ms) = measure_startup(|| std::thread::sleep(Duration::from_millis(5)));
         assert!(ms >= 4.0);
@@ -296,6 +470,9 @@ mod tests {
     fn run_harness_includes_self_check_ok() {
         let report = run_harness();
         assert_eq!(report.schema_version, SCHEMA_VERSION);
+        assert_eq!(report.hardware.os, std::env::consts::OS);
+        assert_eq!(report.hardware.arch, std::env::consts::ARCH);
+        assert!(report.hardware.logical_cpu_count.is_some());
         let self_check = report
             .samples
             .iter()

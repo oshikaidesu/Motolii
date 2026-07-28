@@ -10,6 +10,9 @@ fn perf_harness_records_baseline_without_thresholds() {
 
     assert_eq!(report.schema_version, SCHEMA_VERSION);
     assert_eq!(report.harness, "motolii-testkit/perf");
+    assert_eq!(report.hardware.os, std::env::consts::OS);
+    assert_eq!(report.hardware.arch, std::env::consts::ARCH);
+    assert!(report.hardware.logical_cpu_count.is_some());
     assert!(!report.samples.is_empty());
     assert!(!report.external_bench_slots.is_empty());
 
@@ -36,6 +39,16 @@ fn perf_harness_records_baseline_without_thresholds() {
         .expect("headless_gpu_ctx sample");
     assert!(matches!(
         gpu.status,
+        SampleStatus::Ok | SampleStatus::Unavailable
+    ));
+
+    let ffmpeg = report
+        .samples
+        .iter()
+        .find(|s| s.id == "ffmpeg_capabilities")
+        .expect("ffmpeg_capabilities sample");
+    assert!(matches!(
+        ffmpeg.status,
         SampleStatus::Ok | SampleStatus::Unavailable
     ));
 
