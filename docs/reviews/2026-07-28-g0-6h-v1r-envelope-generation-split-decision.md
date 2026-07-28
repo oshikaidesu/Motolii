@@ -97,17 +97,19 @@ closed order内で一意に固定する。
 
 `G0-6H-V1E`を次の二粒へ分割する。
 
-1. `G0-6H-V1EB`: product-owned Browserの非公開development projection decoderと
-   入力seam、通常routeのDOM不変、R-7 provenance / ownership guard再締結だけを閉じる。
-   decoderの閉集合と拒否はpure test、入力なしの描画不変は既存Playwrightで判定する。
-2. `G0-6H-V1ET`: `V1EB`完了後、mock-owned Vite mode carrier、R-9 Browser描画、
+1. `G0-6H-V1EB`: product-owned Browserの非公開development projection decoderだけを
+   既存read-model decoder先例とpure testで閉じる。component、source asset byte、
+   provenance / ownership guardは変更しない。
+2. `G0-6H-V1ET`: `V1EB`完了後、product Browserの入力seam、R-7 provenance /
+   ownership guard再締結、mock-owned Vite mode carrier、R-9 Browser描画、
    Stage / Inspector / Timeline空投影、R-5 ready oracleを一つのroute-level
    Playwright oracleで閉じる。
 
-この分割では、`V1EB`だけでdevelopment projectionの実DOMを合格扱いしない。
-`V1ET`がcarrierを所有して初めてR-9の4 tile、`4 ITEMS`、`0 selected`と
-各空投影を同じ実行routeで判定する。`V1EB`のdecoderはpackage public exportへ出さず、
-Document、Browser catalog正本、通常routeの状態所有を増やさない。
+この分割では、`V1EB`へ未消費のcomponent seamを置かず、development projectionの
+実DOMを合格扱いしない。`V1ET`がcarrierとseamを同時に所有して初めてR-9の4 tile、
+`4 ITEMS`、`0 selected`と各空投影を同じ実行routeで判定し、その判定後にだけ
+post-promotion provenanceとguardを再締結する。`V1EB`のdecoderはpackage public
+exportへ出さず、Document、Browser catalog正本、通常routeの状態所有を増やさない。
 
 `G0-6H-V1G`は`V1ET`完了まで待つ。
 
