@@ -100,6 +100,8 @@ pub enum ResourceAdmissionError {
     },
     #[error("resource allocation id exhausted")]
     AllocationIdExhausted,
+    #[error("resource ledger accounting is corrupted")]
+    AccountingCorrupted,
     #[error("resource ledger lock is poisoned")]
     LockPoisoned,
 }
@@ -119,6 +121,7 @@ pub struct ResourceGrant {
 #[derive(Debug, Default)]
 struct LedgerState {
     next_allocation_id: u64,
+    corrupted: bool,
     usage: TierTotals,
     owners: BTreeMap<(ResourceOwner, MemoryTier), TierUsage>,
     allocations: HashMap<u64, AllocationRecord>,
@@ -184,6 +187,9 @@ impl ResourceLedger {
             .state
             .lock()
             .map_err(|_| ResourceAdmissionError::LockPoisoned)?;
+        if state.corrupted {
+            return Err(ResourceAdmissionError::AccountingCorrupted);
+        }
         let tier_usage = state.usage.get(request.tier);
         let tier_budget = self.budgets.for_tier(request.tier);
         let next_tier = tier_usage.resident_bytes.checked_add(request.bytes).ok_or(
@@ -270,6 +276,9 @@ impl ResourceLedger {
             .state
             .lock()
             .map_err(|_| ResourceAdmissionError::LockPoisoned)?;
+        if state.corrupted {
+            return Err(ResourceAdmissionError::AccountingCorrupted);
+        }
         Ok(ResourceSnapshot {
             vram: state.usage.vram,
             ram: state.usage.ram,
@@ -290,15 +299,22 @@ impl Drop for ResourceGrant {
             Err(poisoned) => poisoned.into_inner(),
         };
         let Some(record) = state.allocations.remove(&self.allocation_id) else {
+            state.corrupted = true;
             return;
         };
-        subtract_usage(&mut state.usage, record);
+        let totals_valid = subtract_usage(&mut state.usage, record);
         let key = (record.owner, record.tier);
-        if let Some(owner_usage) = state.owners.get_mut(&key) {
-            subtract_tier_usage(owner_usage, record.bytes, record.pinned);
-            if *owner_usage == TierUsage::default() {
+        let owner_valid = if let Some(owner_usage) = state.owners.get_mut(&key) {
+            let valid = subtract_tier_usage(owner_usage, record.bytes, record.pinned);
+            if valid && *owner_usage == TierUsage::default() {
                 state.owners.remove(&key);
             }
+            valid
+        } else {
+            false
+        };
+        if !totals_valid || !owner_valid {
+            state.corrupted = true;
         }
     }
 }
@@ -327,15 +343,28 @@ fn add_tier_usage(usage: &mut TierUsage, bytes: u64, pinned: bool) -> Result<(),
     Ok(())
 }
 
-fn subtract_usage(totals: &mut TierTotals, record: AllocationRecord) {
-    subtract_tier_usage(totals.get_mut(record.tier), record.bytes, record.pinned);
+fn subtract_usage(totals: &mut TierTotals, record: AllocationRecord) -> bool {
+    subtract_tier_usage(totals.get_mut(record.tier), record.bytes, record.pinned)
 }
 
-fn subtract_tier_usage(usage: &mut TierUsage, bytes: u64, pinned: bool) {
-    usage.resident_bytes = usage.resident_bytes.saturating_sub(bytes);
-    if pinned {
-        usage.pinned_bytes = usage.pinned_bytes.saturating_sub(bytes);
+fn subtract_tier_usage(usage: &mut TierUsage, bytes: u64, pinned: bool) -> bool {
+    let Some(resident_bytes) = usage.resident_bytes.checked_sub(bytes) else {
+        return false;
+    };
+    let pinned_bytes = if pinned {
+        let Some(pinned_bytes) = usage.pinned_bytes.checked_sub(bytes) else {
+            return false;
+        };
+        pinned_bytes
+    } else {
+        usage.pinned_bytes
+    };
+    if pinned_bytes > resident_bytes {
+        return false;
     }
+    usage.resident_bytes = resident_bytes;
+    usage.pinned_bytes = pinned_bytes;
+    true
 }
 
 #[cfg(test)]
@@ -511,5 +540,37 @@ mod tests {
             ResourceAdmissionError::ZeroBytes
         );
         assert_eq!(ledger.snapshot().unwrap().vram, TierUsage::default());
+    }
+
+    #[test]
+    fn release_inconsistency_fails_closed() {
+        let ledger = ResourceLedger::new(budgets(None));
+        let grant = ledger
+            .admit(ResourceRequest {
+                owner: RENDER_TARGET,
+                tier: MemoryTier::Vram,
+                bytes: 256,
+                pinned: true,
+            })
+            .unwrap();
+        ledger.state.lock().unwrap().usage.vram = TierUsage::default();
+
+        drop(grant);
+
+        assert_eq!(
+            ledger.snapshot().unwrap_err(),
+            ResourceAdmissionError::AccountingCorrupted
+        );
+        assert_eq!(
+            ledger
+                .admit(ResourceRequest {
+                    owner: RENDER_TARGET,
+                    tier: MemoryTier::Vram,
+                    bytes: 1,
+                    pinned: false,
+                })
+                .unwrap_err(),
+            ResourceAdmissionError::AccountingCorrupted
+        );
     }
 }

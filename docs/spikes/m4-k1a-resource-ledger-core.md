@@ -27,7 +27,10 @@ RETIREMENT: K1a完成後も正本台帳として維持。test-only ContractLedge
 - 拒否はowner、tier、要求量、使用量、予算、発火したcapを保持する
 - `ResourceGrant`はallocation IDを所有し、Drop時にadmit済みrecordの量を返す
 - 呼び手はrelease量を再申告しない
+- release時にtotalまたはowner会計の不整合を検出したら台帳をcorruptedへ遷移し、以後の
+  admissionとsnapshotを型付き拒否する。量を飽和減算して継続しない
 - snapshotはtier totalとowner/tier別resident/pinnedを返す
+- pinnedはこの粒では観測値であり、eviction可否をまだ決めない
 - allocator report、GPU名、空きVRAM、製品Auto値を判定入力にしない
 
 ## 自動審判
@@ -39,6 +42,7 @@ RETIREMENT: K1a完成後も正本台帳として維持。test-only ContractLedge
 3. UMA共有capは個別cap内でも合算超過を拒否する
 4. 同一ownerのVRAM/RAM、resident/pinnedを別々に観測できる
 5. 空ownerと0 byte要求を型付き拒否し、usageを変更しない
+6. release不整合後はsnapshotも新規admissionもfail closedする
 
 ## この粒が証明しないもの
 
@@ -48,6 +52,16 @@ RETIREMENT: K1a完成後も正本台帳として維持。test-only ContractLedge
 - eviction、pin解除、VRAM↔RAM↔disk移動、single-flight
 - device lost後のledger再生成
 - 製品のbudget既定値、比率、hysteresis
+- `ResourceLedger`のMutexをK1bのcache lookup/single-flight lockとして再利用すること
+
+## owner接続境界
+
+Fable 5のread-only境界レビューをMotoliiの現行コードへ再照合し、K1aではgenericな
+`TrackedTexture`を新設しない。各owner structが裸のGPU resourceとprivateなgrantを同居所有し、
+owned resourceをowner外へ返さない。pluginの`TextureRef`は借用のままで台帳型を公開しない。
+
+cache handleのclone、stale generation中の寿命、遅延releaseはK1bの動的所有であり、K1aの
+静的co-locationへ混ぜない。
 
 ## 次の判定
 
