@@ -383,7 +383,7 @@ where
     (value, startup_ms)
 }
 
-/// Linux `/proc/self/status` またはmacOS `ps`のRSSをbytesで返す。
+/// 対応OSのprocess working set/RSSをbytesで返す。
 pub fn current_rss_bytes() -> Option<u64> {
     #[cfg(target_os = "linux")]
     {
@@ -406,10 +406,35 @@ pub fn current_rss_bytes() -> Option<u64> {
             .ok()?
             .checked_mul(1024)
     }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(target_os = "windows")]
+    {
+        windows_current_working_set_bytes()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {
         None
     }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_current_working_set_bytes() -> Option<u64> {
+    use windows_sys::Win32::System::ProcessStatus::{
+        K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS,
+    };
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
+
+    let cb = u32::try_from(std::mem::size_of::<PROCESS_MEMORY_COUNTERS>()).ok()?;
+    let mut counters = PROCESS_MEMORY_COUNTERS {
+        cb,
+        ..PROCESS_MEMORY_COUNTERS::default()
+    };
+    // SAFETY: Windowsが要求するsizeをcbとbuffer長の両方へ渡し、呼出中bufferを占有する。
+    let succeeded =
+        unsafe { K32GetProcessMemoryInfo(GetCurrentProcess(), &mut counters, counters.cb) };
+    if succeeded == 0 {
+        return None;
+    }
+    u64::try_from(counters.WorkingSetSize).ok()
 }
 
 #[cfg(target_os = "linux")]
@@ -455,10 +480,31 @@ fn total_memory_bytes() -> Option<u64> {
         }
         String::from_utf8(output.stdout).ok()?.trim().parse().ok()
     }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(target_os = "windows")]
+    {
+        windows_total_memory_bytes()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {
         None
     }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_total_memory_bytes() -> Option<u64> {
+    use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+
+    let length = u32::try_from(std::mem::size_of::<MEMORYSTATUSEX>()).ok()?;
+    let mut status = MEMORYSTATUSEX {
+        dwLength: length,
+        ..MEMORYSTATUSEX::default()
+    };
+    // SAFETY: dwLengthをABIのstruct sizeへ固定し、呼出中bufferを占有する。
+    let succeeded = unsafe { GlobalMemoryStatusEx(&mut status) };
+    if succeeded == 0 {
+        return None;
+    }
+    Some(status.ullTotalPhys)
 }
 
 fn hardware_profile() -> HardwareProfile {
@@ -743,6 +789,13 @@ mod tests {
             .expect("self check sample");
         assert_eq!(self_check.status, SampleStatus::Ok);
         assert!(self_check.startup_ms.is_some());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_hardware_facts_include_memory_and_working_set() {
+        assert!(total_memory_bytes().is_some_and(|bytes| bytes > 0));
+        assert!(current_rss_bytes().is_some_and(|bytes| bytes > 0));
     }
 
     #[test]

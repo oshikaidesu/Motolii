@@ -16,6 +16,13 @@ serde_json.workspace = true
 thiserror.workspace = true
 wgpu.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+    "Win32_System_ProcessStatus",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+] }
+
 [dev-dependencies]
 motolii-plugin-opacity.workspace = true
 motolii-plugin-radial-repeater.workspace = true

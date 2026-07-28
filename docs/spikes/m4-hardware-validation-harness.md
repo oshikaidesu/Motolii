@@ -19,6 +19,18 @@
 `ffmpeg -hwaccels`の列挙は、実際に対象codec・pixel format・GPU import経路で速いことを
 証明しない。adapter名もVRAM空き量や安全なbudget値を証明しない。
 
+hardware memory factsの取得元はOSごとに閉じる。
+
+| OS | total physical memory | process resident memory |
+|---|---|---|
+| Windows | `GlobalMemoryStatusEx().ullTotalPhys` | `K32GetProcessMemoryInfo().WorkingSetSize` |
+| macOS | `sysctl hw.memsize` | `ps rss` |
+| Linux | `/proc/meminfo`の`MemTotal` | `/proc/self/status`の`VmRSS` |
+
+Windows adapterは既存依存閉包の`windows-sys`をtestkitからtarget限定で直接利用する。
+製品runtime、Document、plugin APIへOS handleやWindows型を出さない。Windows targetへの
+cross-`cargo check`でAPI/feature closureを固定し、値が正であることはWindows実機testで審判する。
+
 ## 再実行bundle
 
 最初に機種ごとの出力directoryへ、実行commit、hardware facts、全コマンドのargv、
@@ -52,6 +64,9 @@ release実行時間を実行者が確認してからmanifestの個別commandを�
 
 機種間比較は同じfixture revisionとMotolii commitで行う。現在はpass/fail閾値を持たず、
 取得不能は`Unavailable`として記録する。
+
+Windows実機で`total_memory_bytes`または各sampleの`idle_rss_bytes`が`null`なら、そのbundleは
+最低スペック比較へ採用しない。API取得失敗を0 bytesや推定値へ置き換えない。
 
 ## 観測とpolicyの分離
 
