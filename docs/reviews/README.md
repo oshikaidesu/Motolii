@@ -49,6 +49,7 @@
 | [2026-07-12-code-audit-2nd-d1.md](2026-07-12-code-audit-2nd-d1.md) | 第二実コード監査の裏取りと台帳化: D1系スキーマ・評価・永続(2026-07-12) |
 | [2026-07-12-d1-spec-holes-prior-art.md](2026-07-12-d1-spec-holes-prior-art.md) | D1スキーマ未決点の先例調査メモ(2026-07-12) |
 | [2026-07-12-m2-permanence-prevention.md](2026-07-12-m2-permanence-prevention.md) | M2恒久焼き込みの予防(2026-07-12) |
+| [2026-07-28-g0-6h-v1p-capture-prerequisite-selection.md](2026-07-28-g0-6h-v1p-capture-prerequisite-selection.md) | G0-6H-V1P capture前提の再選定 |
 | [2026-07-23-historical-permanence-prevention-lineage-recovery.md](2026-07-23-historical-permanence-prevention-lineage-recovery.md) | Unit 4B — GR-PV予防5手全9版とstale branch回帰の処分 |
 | [2026-07-23-historical-d1-spec-holes-lineage-recovery.md](2026-07-23-historical-d1-spec-holes-lineage-recovery.md) | Unit 4C — D1仕様穴・TimeMap・Generator先例全12版の処分 |
 | [2026-07-12-pathop-ae-cavalry-comparison.md](2026-07-12-pathop-ae-cavalry-comparison.md) | PathOp語彙比較: AE/Lottie × Cavalry(2026-07-12) |
