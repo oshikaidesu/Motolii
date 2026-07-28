@@ -228,6 +228,8 @@ Ableton Live 12のHigh Contrast optionを先例に、MotoliiはDark/Lightの名�
 
 次の5画面を同一の固定Document fixtureから作る。
 
+5画面の人間審判入力routeは、`G0-6H-S`で`#plugin-browser-candidate`（固定commit `56c318ed`）へ固定される。旧`#reference/*` generationは不変の再現・派生回帰証拠として保存し、required inputにしない。現行normal色5画面の承認はpartial evidenceに留まり、派生variantと記録されたhuman sessionを含むevidence contract（`G0-6H-V0`）が別途必要である。具体token値・閾値は引き続きG0-6で確定する。
+
 初期の構成比較には[高密度メインUIモック](mocks/README.md)(および過去モックの台帳)を使う。モック内の色値はtoken候補ではなく、構成と意味roleの比較専用とする。
 
 1. empty project + asset browser

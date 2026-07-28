@@ -63,6 +63,11 @@ React所有面の製品実装は[直接移管契約](reviews/2026-07-22-m3-react
 固定モック内で同形Reactへ抽出してから製品ownerへ移す。正しいsourceが無いことを理由に、製品packageへ
 縮約版を先に作らない。
 
+### G0-6H人間審判入力routeの裁定（2026-07-28）
+- 現行route `#plugin-browser-candidate`（固定commit `56c318ed`）がG0-6Hのforward-lookingなhuman-judgment入力routeとして単独採択される。
+- 旧`#reference/*` generation `u0e2-08f96cbd7754-85c0fc529ab1`は不変の再現/派生回帰証拠として残し、required human-judgment inputには用いない。
+- route裁定はvisual parityを主張せず、正本は[G0-6H-S](reviews/2026-07-28-g0-6h-s-human-judgment-input-route-decision.md)。
+
 ### 座標描画面の機械監査（2026-07-22）
 
 固定commit `56c318ed`のReact sourceを`canvas` / SVG / pointer / absolute-positionで走査した結果、literal

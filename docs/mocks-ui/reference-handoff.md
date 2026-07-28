@@ -84,3 +84,10 @@ npm run check-reference
 - 現行 `#plugin-browser-candidate` normal色5画面のproduct-owned React source authority は `56c318edcddab7cf95d263cc2f7dd2b4e6791134` であり（`ui/motolii-web/source-provenance.json`）、旧generation `u0e2-08f96cbd7754-85c0fc529ab1` のsource authority欄へ遡及記載しない。
 - 二commitのGit ancestry成立は系譜事実に留まり、route横断のvisual parity・人間承認・route同一性の根拠にはならない。`check-reference` 成功も固定generationのread-only再現証拠に留まり、現行候補5画面との同一性・本資料のDecision template充足・G0-6H完了の代替にはならない。
 - 本資料の Decision template と checklist は未充足のままとし、履行は [G0-6H-R authority役割再照合](../reviews/2026-07-28-g0-6h-r-reference-authority-role-reconciliation-decision.md) へ閉じる。`#reference/*` と `#plugin-browser-candidate` のどちらをG0-6H人間審判の入力routeとするかは `G0-6H-S` の裁定待ちとする。
+
+## G0-6H-S route裁定の非先取り注記
+
+- 本資料が固定する generation `u0e2-08f96cbd7754-85c0fc529ab1` と source authority `eb16d06f980b6f9bea3901b6f10cbcc21dbfb3d0` は不変のまま保存され、再現証拠および派生生成のderivation-regression証拠として維持される。
+- `G0-6H-S` により、以後のG0-6H人間審判入力routeは `#plugin-browser-candidate`（product-owned React source authority `56c318edcddab7cf95d263cc2f7dd2b4e6791134`）だけとなり、本資料の30 PNGはrequired human-judgment inputではなくなった。
+- 現行候補normal色5画面の承認はpartial evidenceに留まり、本資料のDecision template / checklistの充足、`G0-6H` / `CU-0B01` / `U0e-3` の完了・解禁に代替しない。
+- 現行route用のevidence contract（5状態semantic mapping、固定capture環境、normal＋lightness / grayscale / Machado CVD派生、immutable manifestとread-only check、記録されたhuman session）は要求として `G0-6H-V0` へhandoffし、本粒では実装しない。
