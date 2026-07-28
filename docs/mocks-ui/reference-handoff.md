@@ -91,3 +91,10 @@ npm run check-reference
 - `G0-6H-S` により、以後のG0-6H人間審判入力routeは `#plugin-browser-candidate`（product-owned React source authority `56c318edcddab7cf95d263cc2f7dd2b4e6791134`）だけとなり、本資料の30 PNGはrequired human-judgment inputではなくなった。
 - 現行候補normal色5画面の承認はpartial evidenceに留まり、本資料のDecision template / checklistの充足、`G0-6H` / `CU-0B01` / `U0e-3` の完了・解禁に代替しない。
 - 現行route用のevidence contract（5状態semantic mapping、固定capture環境、normal＋lightness / grayscale / Machado CVD派生、immutable manifestとread-only check、記録されたhuman session）は要求として `G0-6H-V0` へhandoffし、本粒では実装しない。
+
+## G0-6H-M semantic gap mapの非充足注記
+
+- element-level gap mapは `G0-6H-M` の観察記録へ閉じ、本資料の Decision template / checklist の充足には代替しない。
+- 記録済み可視事実だけを使い、隠れ状態、操作成功、capture metadata、route parityは判定していない。
+- `G0-6H-V0` は `WAIT` を維持し、empty-project scenarioの意味は本粒で定義していない。
+- 詳細は [G0-6H-M現行route element-level semantic gap map](../reviews/2026-07-28-g0-6h-m-current-route-semantic-gap-mapping.md)
