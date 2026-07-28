@@ -113,3 +113,11 @@ npm run check-reference
 - 採択は決定的生成、pinned vendoring の棄却は本 fixture に限り repo 全体の禁止ではない。
 - 本粒は path、file名、codec、schema、hash algorithm、生成command、tool version、byte を決めていない。次粒 `G0-6H-AG0` へ handoff する。
 - 詳細への相対リンク [G0-6H-AF Starter Media 媒体源・provenance class 裁定](../reviews/2026-07-28-g0-6h-af-starter-media-source-provenance-decision.md)。
+
+## G0-6H-AG0 generator責任処分の非充足注記
+
+- 本粒は generator / output closure の棚卸しと `WRAP` / `FROZEN / DELETE-LATER` 責任処分だけを閉じ、本資料の Decision template / checklist の充足に代替しない。
+- 採用は既存 `docs/mocks-ui` Node evidence route と外部 ffmpeg CLI 境界の WRAP。Rust test-local WAV helper の JS 境界越え再利用と、新規 codec / media framework / process supervisor / 製品 service の新設は棄却。
+- 本粒は path、file名、codec、schema、hash algorithm、生成command、tool version、media byte を決めていない。次粒 `G0-6H-AG` へ handoff する。
+- generator / integrity check は製品 runtime から到達しない証拠カプセルとして後続粒に委ね、`G0-6H-V0` は `WAIT` を維持する。
+- 詳細への相対リンク [G0-6H-AG0 Starter Media generator / output closure 棚卸しと責任処分](../reviews/2026-07-28-g0-6h-ag0-starter-media-generator-closure-inventory.md)。

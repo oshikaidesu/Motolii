@@ -335,3 +335,4 @@
 | [2026-07-28-g0-6h-a0-empty-project-starter-media-selection.md](2026-07-28-g0-6h-a0-empty-project-starter-media-selection.md) | G0-6H-A0 empty-project + Starter Media裁定の受領と契約粒選定 |
 | [2026-07-28-g0-6h-a-empty-project-starter-media-scenario-contract.md](2026-07-28-g0-6h-a-empty-project-starter-media-scenario-contract.md) | G0-6H-A empty Project + local Starter Media scenario / fixture 所有契約 |
 | [2026-07-28-g0-6h-af-starter-media-source-provenance-decision.md](2026-07-28-g0-6h-af-starter-media-source-provenance-decision.md) | G0-6H-AF Starter Media 媒体源・provenance class 裁定 |
+| [2026-07-28-g0-6h-ag0-starter-media-generator-closure-inventory.md](2026-07-28-g0-6h-ag0-starter-media-generator-closure-inventory.md) | G0-6H-AG0 Starter Media generator / output closure 棚卸しと責任処分 |
