@@ -13,6 +13,8 @@ import { ParameterEasingReference } from "./reference/ParameterEasingReference.j
 import { SharedEffectRelativeReference } from "./reference/SharedEffectRelativeReference.jsx";
 import { StageFrameToolsReference } from "./reference/StageFrameToolsReference.jsx";
 
+const currentRouteCapture = import.meta.env.MODE === "current-route-capture";
+
 // 各画面担当はこのregistryへfixtureを足し、Appの経路解決を共有する。
 export const screenRegistry = {
   "reference/empty-browser": {
@@ -100,6 +102,7 @@ export const screenRegistry = {
       TimelineComponent: TimelineCandidate,
       EasingTriggerComponent: EasingTriggerCandidate,
       resizableLayout: true,
+      developmentEmptyProjection: currentRouteCapture,
     },
     catalogKind: "candidate",
   },

@@ -254,7 +254,7 @@
           "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
           "role": "oracle",
           "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416",
-          "currentSha256": "e28e641d8c07a82e5392ada73b935b32aa0ad580de2cb6088b77832e397c1e07"
+          "currentSha256": "ee237bce75e7e05a55037e820b79dd9fa50c61fab48a63d1bbf00c5b3b99ad50"
         },
         {
           "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
@@ -375,7 +375,7 @@
           "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
           "role": "legacy-oracle",
           "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416",
-          "currentSha256": "e28e641d8c07a82e5392ada73b935b32aa0ad580de2cb6088b77832e397c1e07"
+          "currentSha256": "ee237bce75e7e05a55037e820b79dd9fa50c61fab48a63d1bbf00c5b3b99ad50"
         },
         {
           "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
