@@ -51,6 +51,27 @@ read-only助言と現行コードを再照合し、未決だった表示4点と�
 manifest field、command、hash closureはV0 V-7がV1へ委ねたmechanicsとして、V1Gの
 closed order内で一意に固定する。
 
+## R-7 Browser固定source lineage
+
+- 固定commit `56c318edcddab7cf95d263cc2f7dd2b4e6791134`のBrowser component
+  blobは、所有移管時のsource lineageとしてhashを保持する。
+- `G0-6H-V1E`は移管後のproduct-owned component改善であり、通常route不変を条件に
+  development専用projection seamを同じcomponentへ追加してよい。
+- `source-provenance.json`へpost-promotion changeのtask、対象file、理由を追加し、
+  Browser ownership guardは旧blob hash、変更後componentのcurrent hash、通常route
+  不変oracleを同時に審判する。
+- Browser CSSとpatternの固定byte一致は維持する。
+- これはvisual threshold / goldenの更新ではなく、旧sourceを捨てずに移管後変更を
+  追跡するprovenance再締結である。test削除、期待値緩和、source copyは許可しない。
+
+## R-8 development carrier
+
+- carrierはVite標準modeの`current-route-capture`を採る。
+- `docs/mocks-ui`のmock consumerだけが`import.meta.env.MODE`を読み、mode一致時だけ
+  typed envelopeを描画前に渡す。
+- Vite config、route、hash key、query、window global、新しいserved entryは追加しない。
+- 通常の`vite` / `vite build`ではmode不一致となり、既存route出力を変更しない。
+
 ## 非目標
 
 - 本粒でReact / CSS / script / test / fixture / image / manifestを変更すること。
