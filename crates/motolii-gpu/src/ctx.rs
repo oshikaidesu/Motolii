@@ -30,6 +30,8 @@ pub enum GpuRuntimeError {
     Poll(String),
     #[error("GPU operation timed out after {0:?}")]
     Timeout(std::time::Duration),
+    #[error("GPU resource size estimate overflowed")]
+    ResourceEstimateOverflow,
     #[error(
         "synchronous GPU readback (poll Wait / download_rgba) is forbidden on UI-shared device; use GpuCtx::new_headless() for export"
     )]

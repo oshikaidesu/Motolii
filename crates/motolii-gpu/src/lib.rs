@@ -3,6 +3,7 @@
 //! 性能方針(docs/performance-model.md): ピクセルはVRAM常駐が原則。
 //! CPU⇔GPU転送はデコード直後のアップロードとテスト/書き出しのダウンロードのみに限る。
 
+mod allocation;
 mod ctx;
 mod pipeline_cache;
 mod transfer;

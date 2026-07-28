@@ -1,5 +1,6 @@
 use motolii_core::FrameDesc;
 
+use crate::allocation::estimate_copy_buffer_bytes;
 use crate::{GpuCtx, GpuRuntimeError};
 
 use std::{
@@ -94,10 +95,9 @@ impl RgbaDownloader {
         gpu.ensure_sync_readback_allowed()?;
         let width = texture.width();
         let height = texture.height();
-        let unpadded = width * 4;
-        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-        let padded = unpadded.div_ceil(align) * align;
-        let required = (padded * height) as u64;
+        let (unpadded, padded, required) =
+            estimate_copy_buffer_bytes(width, height, 4, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
+                .map_err(|_| GpuRuntimeError::ResourceEstimateOverflow)?;
 
         if self.capacity != required {
             self.buffer = Some(gpu.device.create_buffer(&wgpu::BufferDescriptor {
