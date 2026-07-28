@@ -57,7 +57,10 @@ surface formatは未指定なら`nv12`。現段階のcommand比較はrotation 0�
 - decode surfaceからwgpu textureへのzero-copy、GPU color conversion、ResourceLedger計上は未接続
 - synthetic fixtureの結果を最低スペック保証、AviUtl2比較、スマホ比較へ使わない
 
-次は同じ要求列と実素材に対し、GPU import、copy/uploadを別列として測る。
+次は同じ要求列と実素材に対し、native decoder surface、GPU import、wgpu lowering、
+copy/uploadを別列として測る。現行stdout pipeはnative handleとsurface lifetimeを運べないため、
+codec flagの追加ではこの経路にならない。責任と合格gateは
+[GPU surface import境界](m4-gpu-surface-import-boundary.md)で分離する。
 画素一致または明示した色差審判を通るまで高速routeを採択しない。
 
 ## 2026-07-29 開発Mac観測

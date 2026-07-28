@@ -80,12 +80,19 @@ Windows実機で`total_memory_bytes`または各sampleの`idle_rss_bytes`が`nul
 backend別allocation観測、製品lifetime ownerを得た後、別のpolicy採択として決める。
 manifestへ数値を手入力して製品既定値の正本にしない。
 
-`external_gates`は`low_spec_windows`、`gpu_surface_import`、`product_preview_path`を
-`pending`で列挙する。一台のMac、CPU download、個別benchだけでは自動的にpassへ変わらない。
+`external_gates`は`low_spec_windows`、`native_decoder_surface_import`、
+`wgpu_external_texture_lowering`、`surface_lifetime_fence`、
+`gpu_surface_pixel_oracle`、`product_preview_path`を`pending`で列挙する。
+一台のMac、CPU download、個別benchだけでは自動的にpassへ変わらない。
+
+GPU関連gateを一つへ畳まない。native decoder surfaceの取得、OS/backend固有import、
+import済みplane viewのwgpu lowering、GPU完了までのsurface寿命、画素審判は別責任である。
+詳細は[GPU surface import境界](m4-gpu-surface-import-boundary.md)を正本とする。
 
 ## 残る粒
 
-1. OS hardware decodeは同じ入力・同じframe要求列でGPU import routeを測る
+1. OS hardware decodeは同じ入力・同じframe要求列で、native surface取得、import、
+   lowering、renderを分けて測る
 2. 音MAD fixtureは要求生成に続き、cancel、decode、upload/import、render、表示の
    raw時間とqueue深度を別々に記録する
 3. 低スペックWindows実機なしに「AviUtl2より軽い」「スマホより速い」を合格にしない
