@@ -1,16 +1,72 @@
 #[derive(Debug, thiserror::Error, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum AllocationEstimateError {
+pub enum AllocationEstimateError {
     #[error("allocation alignment must be greater than zero")]
     ZeroAlignment,
     #[error("resource size estimate overflowed u64")]
     Overflow,
+    #[error("texture extent, mip count, and sample count must be greater than zero")]
+    ZeroTextureExtent,
+    #[error("texture format has no portable copy block size")]
+    UnsupportedTextureFormat,
 }
 
-pub(crate) fn estimate_buffer_bytes(
-    size: u64,
-    alignment: u64,
-) -> Result<u64, AllocationEstimateError> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextureAllocationAlignment {
+    pub row_bytes: u64,
+    pub allocation_bytes: u64,
+}
+
+pub fn estimate_buffer_bytes(size: u64, alignment: u64) -> Result<u64, AllocationEstimateError> {
     align_up(size, alignment)
+}
+
+pub fn estimate_texture_bytes(
+    desc: &wgpu::TextureDescriptor<'_>,
+    alignment: TextureAllocationAlignment,
+) -> Result<u64, AllocationEstimateError> {
+    if desc.size.width == 0
+        || desc.size.height == 0
+        || desc.size.depth_or_array_layers == 0
+        || desc.mip_level_count == 0
+        || desc.sample_count == 0
+    {
+        return Err(AllocationEstimateError::ZeroTextureExtent);
+    }
+
+    let block_bytes = u64::from(
+        desc.format
+            .block_copy_size(None)
+            .ok_or(AllocationEstimateError::UnsupportedTextureFormat)?,
+    );
+    let (block_width, block_height) = desc.format.block_dimensions();
+    let mut total = 0_u64;
+
+    for mip in 0..desc.mip_level_count {
+        let width = mip_extent(desc.size.width, mip);
+        let height = mip_extent(desc.size.height, mip);
+        let depth_or_layers = match desc.dimension {
+            wgpu::TextureDimension::D3 => mip_extent(desc.size.depth_or_array_layers, mip),
+            wgpu::TextureDimension::D1 | wgpu::TextureDimension::D2 => {
+                desc.size.depth_or_array_layers
+            }
+        };
+        let blocks_per_row = u64::from(width.div_ceil(block_width));
+        let block_rows = u64::from(height.div_ceil(block_height));
+        let row_bytes = blocks_per_row
+            .checked_mul(block_bytes)
+            .ok_or(AllocationEstimateError::Overflow)?;
+        let padded_row_bytes = align_up(row_bytes, alignment.row_bytes)?;
+        let mip_bytes = padded_row_bytes
+            .checked_mul(block_rows)
+            .and_then(|bytes| bytes.checked_mul(u64::from(depth_or_layers)))
+            .and_then(|bytes| bytes.checked_mul(u64::from(desc.sample_count)))
+            .ok_or(AllocationEstimateError::Overflow)?;
+        total = total
+            .checked_add(mip_bytes)
+            .ok_or(AllocationEstimateError::Overflow)?;
+    }
+
+    align_up(total, alignment.allocation_bytes)
 }
 
 pub(crate) fn estimate_copy_buffer_bytes(
@@ -31,6 +87,10 @@ pub(crate) fn estimate_copy_buffer_bytes(
     Ok((unpadded_row, padded_row, total))
 }
 
+fn mip_extent(base: u32, mip: u32) -> u32 {
+    base.checked_shr(mip).unwrap_or(0).max(1)
+}
+
 fn align_up(value: u64, alignment: u64) -> Result<u64, AllocationEstimateError> {
     if alignment == 0 {
         return Err(AllocationEstimateError::ZeroAlignment);
@@ -47,80 +107,6 @@ fn align_up(value: u64, alignment: u64) -> Result<u64, AllocationEstimateError> 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    struct TextureAllocationAlignment {
-        row_bytes: u64,
-        allocation_bytes: u64,
-    }
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    enum TextureEstimateError {
-        Allocation(AllocationEstimateError),
-        ZeroTextureExtent,
-        UnsupportedTextureFormat,
-    }
-
-    fn estimate_texture_bytes(
-        desc: &wgpu::TextureDescriptor<'_>,
-        alignment: TextureAllocationAlignment,
-    ) -> Result<u64, TextureEstimateError> {
-        if desc.size.width == 0
-            || desc.size.height == 0
-            || desc.size.depth_or_array_layers == 0
-            || desc.mip_level_count == 0
-            || desc.sample_count == 0
-        {
-            return Err(TextureEstimateError::ZeroTextureExtent);
-        }
-
-        let block_bytes = u64::from(
-            desc.format
-                .block_copy_size(None)
-                .ok_or(TextureEstimateError::UnsupportedTextureFormat)?,
-        );
-        let (block_width, block_height) = desc.format.block_dimensions();
-        let mut total = 0_u64;
-
-        for mip in 0..desc.mip_level_count {
-            let width = mip_extent(desc.size.width, mip);
-            let height = mip_extent(desc.size.height, mip);
-            let depth_or_layers = match desc.dimension {
-                wgpu::TextureDimension::D3 => mip_extent(desc.size.depth_or_array_layers, mip),
-                wgpu::TextureDimension::D1 | wgpu::TextureDimension::D2 => {
-                    desc.size.depth_or_array_layers
-                }
-            };
-            let blocks_per_row = u64::from(width.div_ceil(block_width));
-            let block_rows = u64::from(height.div_ceil(block_height));
-            let row_bytes =
-                blocks_per_row
-                    .checked_mul(block_bytes)
-                    .ok_or(TextureEstimateError::Allocation(
-                        AllocationEstimateError::Overflow,
-                    ))?;
-            let padded_row_bytes = align_up(row_bytes, alignment.row_bytes)
-                .map_err(TextureEstimateError::Allocation)?;
-            let mip_bytes = padded_row_bytes
-                .checked_mul(block_rows)
-                .and_then(|bytes| bytes.checked_mul(u64::from(depth_or_layers)))
-                .and_then(|bytes| bytes.checked_mul(u64::from(desc.sample_count)))
-                .ok_or(TextureEstimateError::Allocation(
-                    AllocationEstimateError::Overflow,
-                ))?;
-            total = total
-                .checked_add(mip_bytes)
-                .ok_or(TextureEstimateError::Allocation(
-                    AllocationEstimateError::Overflow,
-                ))?;
-        }
-
-        align_up(total, alignment.allocation_bytes).map_err(TextureEstimateError::Allocation)
-    }
-
-    fn mip_extent(base: u32, mip: u32) -> u32 {
-        base.checked_shr(mip).unwrap_or(0).max(1)
-    }
 
     fn texture_desc(
         width: u32,
@@ -247,7 +233,7 @@ mod tests {
         );
         assert!(matches!(
             estimate_texture_bytes(&depth24, tight()),
-            Err(TextureEstimateError::UnsupportedTextureFormat)
+            Err(AllocationEstimateError::UnsupportedTextureFormat)
         ));
         assert_eq!(
             estimate_buffer_bytes(1, 0),

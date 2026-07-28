@@ -10,6 +10,10 @@ mod resource_ledger;
 mod transfer;
 mod yuv;
 
+pub use allocation::{
+    estimate_buffer_bytes, estimate_texture_bytes, AllocationEstimateError,
+    TextureAllocationAlignment,
+};
 pub use ctx::{drs_available, optional_features, GpuCtx, GpuError, GpuOrigin, GpuRuntimeError};
 pub use pipeline_cache::{
     CachedFullscreenUniform16, CachedTexSampleUniform4, PipelineCache, PipelineCacheKey,

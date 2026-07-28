@@ -16,7 +16,7 @@ EXISTING ROUTE: RgbaDownloaderの256-byte row alignment計算のみ。ResourceLe
 OWNED RESIDUE: Motolii Hostの割当事前見積り、hard cap、共有メモリ合算、拒否診断
 IMPORTED RESPONSIBILITY: wgpu 29のTextureFormat block footprintとCOPY_BYTES_PER_ROW_ALIGNMENT
 EXIT: wgpu型はmotolii-gpu内に閉じ、Document/plugin/serde面へ出さない
-RETIREMENT: checked copy-buffer見積りは製品経路へ残す。texture/admission modelはtest-onlyで、K1a本体へ自動昇格しない
+RETIREMENT: checked copy-buffer見積りとalignment注入式descriptor見積りは製品Host APIへ残す。admission modelはtest-onlyで、K1a本体へ自動昇格しない
 ```
 
 一般cache、allocator、schedulerは新設しない。wgpuのallocator reportは診断補助であり、この検証の
@@ -26,7 +26,7 @@ RETIREMENT: checked copy-buffer見積りは製品経路へ残す。texture/admis
 
 | path | role |
 |---|---|
-| `crates/motolii-gpu/src/allocation.rs` | checked alignment/copy-buffer見積り。textureとadmissionのmodelは`cfg(test)`内 |
+| `crates/motolii-gpu/src/allocation.rs` | checked alignment/copy-buffer/texture descriptor見積り。admission modelだけ`cfg(test)`内 |
 | `crates/motolii-gpu/src/transfer.rs` | `RgbaDownloader`が同じchecked見積りを製品経路で利用 |
 | `crates/motolii-gpu/src/ctx.rs` | copy-buffer算術overflowの型付きruntime error |
 
@@ -66,10 +66,12 @@ OK: docs整合チェック全項目通過
 
 - `RgbaDownloader`のchecked row alignmentと総buffer量
 - overflowをpanic/wrapさせず型付き失敗へ変える経路
-- `TextureFormat::block_dimensions` / `block_copy_size`を使うdescriptor見積り手順
+- `TextureFormat::block_dimensions` / `block_copy_size`を使い、alignmentを呼び手が明示する
+  `estimate_texture_bytes` Host API
 
-最後の項目は現時点ではtest-only modelである。K1a本体では、実際に作るtexture/bufferの全ownerを
-一つの台帳へ接続できることを確認してから製品codeへ移す。
+descriptor estimatorは同じ境界testを保ったまま製品codeへ昇格した。具体的なrow/allocation
+alignment値は固定せず、呼び手が明示する。K1a本体では実際に作るtexture/bufferの全ownerを
+一つの台帳へ接続する。
 
 Opus 5のread-only再監査後、test-only admission modelは次を追加で固定した。
 
@@ -90,7 +92,7 @@ Opus 5のread-only再監査後、test-only admission modelは次を追加で固�
 
 ## 次の判定
 
-**PASS**: checked見積りを製品download経路へ残し、次粒でK1a owner inventoryと外部memoryの
+**PASS**: checked見積りを製品download経路とHost descriptor APIへ残し、次粒でK1a owner inventoryと外部memoryの
 「数えられない場合の拒否」を閉じる。
 
 **STOP**: このprivate modelだけをResourceLedger完成、実機メモリ量、K1c階層成立の証拠として扱わない。
