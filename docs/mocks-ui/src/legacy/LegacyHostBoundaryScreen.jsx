@@ -207,6 +207,7 @@ function createParserOptions(
         const componentProps = {
           EasingGraphComponent,
           GraphViewComponent,
+          emptyProjection: emptyStageProjection,
           legacyCurveShelf: curveShelf
             ? domToReact([curveShelf], options)
             : null,
