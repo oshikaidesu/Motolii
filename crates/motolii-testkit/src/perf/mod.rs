@@ -15,12 +15,12 @@
 //!   cargo test -p motolii-testkit --test perf_harness -- --nocapture
 //! ```
 //!
-//! # 将来の外部ベンチ拡張点
+//! # 外部ベンチ拡張点
 //!
-//! [`EXTERNAL_BENCH_SLOTS`] にスロットを宣言し、配線時は各 `env_var` で
-//! `cargo test` / CI から起動する想定。現時点では定義と記録のみ。
+//! [`EXTERNAL_BENCH_SLOTS`] は実装済み／未実装を含む外部ベンチ入口を記録する。
+//! M4の機種別再実行recipeは [`m4_validation_manifest`] がshell非依存のargvとして返す。
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -29,6 +29,7 @@ use serde::Serialize;
 
 pub const BASELINE_OUT_ENV: &str = "MOTOLII_PERF_BASELINE_OUT";
 pub const SCHEMA_VERSION: u32 = 2;
+pub const M4_VALIDATION_BUNDLE_SCHEMA_VERSION: u32 = 1;
 
 /// 外部ベンチの呼び出し口(未配線スロット — M3E-2)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -59,17 +60,279 @@ pub const EXTERNAL_BENCH_SLOTS: &[ExternalBenchSlot] = &[
         id: "decode-demand-matrix",
         description: "M4 validation: sequential/seek-storm/parallel clip decode demand",
         env_var: "MOTOLII_PERF_EXTERNAL_DECODE_MATRIX",
-        invoke_hint:
-            "(not implemented — fixture media and hardware decode route are still selected)",
+        invoke_hint: "cargo test -p motolii-media --test decode_demand_bench record_decode_demand_matrix_without_thresholds -- --ignored --nocapture",
     },
     ExternalBenchSlot {
         id: "audio-mad-edit-density",
         description:
             "M4 validation: many short clips/effects aligned to audio without timeline stalls",
         env_var: "MOTOLII_PERF_EXTERNAL_AUDIO_MAD",
-        invoke_hint: "(not implemented — raw metric fixture is the next validation grain)",
+        invoke_hint: "cargo test --release -p motolii-doc --test audio_mad_density_bench record_audio_mad_graph_demand_without_thresholds -- --ignored --nocapture",
     },
 ];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ValidationKind {
+    Observation,
+    Contract,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ValidationCommand {
+    pub id: &'static str,
+    pub kind: ValidationKind,
+    pub program: &'static str,
+    pub args: &'static [&'static str],
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub env: BTreeMap<&'static str, String>,
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    pub required_user_env: &'static [&'static str],
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    pub optional_user_env: &'static [&'static str],
+    pub artifact: Option<&'static str>,
+    pub proves: &'static str,
+    pub does_not_prove: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UnresolvedPolicyInput {
+    pub id: &'static str,
+    pub selected_value: Option<u64>,
+    pub unit: &'static str,
+    pub evidence_required: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ExternalValidationGate {
+    pub id: &'static str,
+    pub status: &'static str,
+    pub required_evidence: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct M4ValidationManifest {
+    pub schema_version: u32,
+    pub repository_revision: Option<String>,
+    pub generated_artifacts: &'static [&'static str],
+    pub commands: Vec<ValidationCommand>,
+    pub unresolved_policy_inputs: &'static [UnresolvedPolicyInput],
+    pub external_gates: &'static [ExternalValidationGate],
+}
+
+const DECODE_ARGS: &[&str] = &[
+    "test",
+    "-p",
+    "motolii-media",
+    "--test",
+    "decode_demand_bench",
+    "record_decode_demand_matrix_without_thresholds",
+    "--",
+    "--ignored",
+    "--nocapture",
+];
+const AUDIO_MAD_ARGS: &[&str] = &[
+    "test",
+    "--release",
+    "-p",
+    "motolii-doc",
+    "--test",
+    "audio_mad_density_bench",
+    "record_audio_mad_graph_demand_without_thresholds",
+    "--",
+    "--ignored",
+    "--nocapture",
+];
+const LEDGER_ARGS: &[&str] = &["test", "-p", "motolii-gpu", "resource_ledger"];
+const TIER_TRANSFER_ARGS: &[&str] = &[
+    "test",
+    "-p",
+    "motolii-testkit",
+    "--test",
+    "m4_tier_transfer_contract",
+];
+const YUV_PLAN_ARGS: &[&str] = &[
+    "test",
+    "-p",
+    "motolii-testkit",
+    "--test",
+    "m4_yuv_materialization_plan",
+];
+
+const UNRESOLVED_POLICY_INPUTS: &[UnresolvedPolicyInput] = &[
+    UnresolvedPolicyInput {
+        id: "vram_hard_budget",
+        selected_value: None,
+        unit: "bytes",
+        evidence_required: "low-spec Windows working-set observations plus explicit product policy",
+    },
+    UnresolvedPolicyInput {
+        id: "texture_allocation_alignment",
+        selected_value: None,
+        unit: "bytes",
+        evidence_required: "backend allocation observations and a conservative accounting policy",
+    },
+    UnresolvedPolicyInput {
+        id: "yuv_live_lane_cap",
+        selected_value: None,
+        unit: "lanes",
+        evidence_required:
+            "corrected product lifetime owner plus mixed-resolution active-set measurements",
+    },
+];
+
+const EXTERNAL_VALIDATION_GATES: &[ExternalValidationGate] = &[
+    ExternalValidationGate {
+        id: "low_spec_windows",
+        status: "pending",
+        required_evidence: "same bundle and fixture revision on the target low-spec Windows persona",
+    },
+    ExternalValidationGate {
+        id: "gpu_surface_import",
+        status: "pending",
+        required_evidence: "same decode demand sequence through a GPU-import route with pixel oracle",
+    },
+    ExternalValidationGate {
+        id: "product_preview_path",
+        status: "pending",
+        required_evidence: "decode, upload/import, render, display, cancellation, and queue depth in Motolii Studio Preview",
+    },
+];
+
+pub fn m4_validation_manifest(
+    repository_revision: Option<String>,
+    artifact_dir: impl AsRef<Path>,
+) -> M4ValidationManifest {
+    let artifact_dir = artifact_dir.as_ref();
+    let artifact_path = |name: &str| artifact_dir.join(name).display().to_string();
+    let software_env = BTreeMap::from([(
+        "MOTOLII_DECODE_DEMAND_OUT",
+        artifact_path("decode-software.json"),
+    )]);
+    let hardware_env = BTreeMap::from([(
+        "MOTOLII_DECODE_DEMAND_OUT",
+        artifact_path("decode-hardware-download.json"),
+    )]);
+    let audio_mad_env = BTreeMap::from([(
+        "MOTOLII_AUDIO_MAD_DEMAND_OUT",
+        artifact_path("audio-mad-graph.json"),
+    )]);
+    M4ValidationManifest {
+        schema_version: M4_VALIDATION_BUNDLE_SCHEMA_VERSION,
+        repository_revision,
+        generated_artifacts: &["manifest.json", "hardware.json"],
+        commands: vec![
+            ValidationCommand {
+                id: "decode-software",
+                kind: ValidationKind::Observation,
+                program: "cargo",
+                args: DECODE_ARGS,
+                env: software_env,
+                required_user_env: &[],
+                optional_user_env: &["MOTOLII_DECODE_FIXTURE"],
+                artifact: Some("decode-software.json"),
+                proves: "software decode demand for sequential, seek, and parallel requests",
+                does_not_prove: "hardware decode, GPU import, preview latency, or a minimum specification",
+            },
+            ValidationCommand {
+                id: "decode-hardware-download",
+                kind: ValidationKind::Observation,
+                program: "cargo",
+                args: DECODE_ARGS,
+                env: hardware_env,
+                required_user_env: &[
+                    "MOTOLII_DECODE_HWACCEL",
+                    "MOTOLII_DECODE_HW_OUTPUT_FORMAT",
+                ],
+                optional_user_env: &[
+                    "MOTOLII_DECODE_FIXTURE",
+                    "MOTOLII_DECODE_HW_SURFACE_FORMAT",
+                ],
+                artifact: Some("decode-hardware-download.json"),
+                proves: "an explicitly configured hardware-surface-to-CPU-download comparison",
+                does_not_prove: "zero-copy GPU import or that hardware decode is faster",
+            },
+            ValidationCommand {
+                id: "audio-mad-graph-demand",
+                kind: ValidationKind::Observation,
+                program: "cargo",
+                args: AUDIO_MAD_ARGS,
+                env: audio_mad_env,
+                required_user_env: &[],
+                optional_user_env: &[],
+                artifact: Some("audio-mad-graph.json"),
+                proves: "Document-to-render-graph demand for the fixed 1,000-clip fixture",
+                does_not_prove: "decode, GPU render, display, UI responsiveness, or preview latency",
+            },
+            ValidationCommand {
+                id: "resource-ledger-contract",
+                kind: ValidationKind::Contract,
+                program: "cargo",
+                args: LEDGER_ARGS,
+                env: BTreeMap::new(),
+                required_user_env: &[],
+                optional_user_env: &[],
+                artifact: None,
+                proves: "typed hard-cap and accounting invariants",
+                does_not_prove: "a safe numeric budget for any device",
+            },
+            ValidationCommand {
+                id: "tier-transfer-contract",
+                kind: ValidationKind::Contract,
+                program: "cargo",
+                args: TIER_TRANSFER_ARGS,
+                env: BTreeMap::new(),
+                required_user_env: &[],
+                optional_user_env: &[],
+                artifact: None,
+                proves: "source retention, double-residency, LRU, cancellation, and stale-generation negatives",
+                does_not_prove: "product transfer throughput or eviction thresholds",
+            },
+            ValidationCommand {
+                id: "yuv-materialization-plan-contract",
+                kind: ValidationKind::Contract,
+                program: "cargo",
+                args: YUV_PLAN_ARGS,
+                env: BTreeMap::new(),
+                required_user_env: &[],
+                optional_user_env: &[],
+                artifact: None,
+                proves: "size-keyed lane reuse and atomic refusal in the test-only planner",
+                does_not_prove: "that the product YUV lifetime alias is fixed",
+            },
+        ],
+        unresolved_policy_inputs: UNRESOLVED_POLICY_INPUTS,
+        external_gates: EXTERNAL_VALIDATION_GATES,
+    }
+}
+
+pub fn write_m4_validation_bundle(
+    output_dir: impl AsRef<Path>,
+    repository_revision: Option<String>,
+) -> Result<M4ValidationManifest, BaselineError> {
+    let output_dir = output_dir.as_ref();
+    std::fs::create_dir_all(output_dir).map_err(|source| BaselineError::CreateDir {
+        path: output_dir.to_path_buf(),
+        source,
+    })?;
+    let hardware = run_harness();
+    write_baseline_json(output_dir.join("hardware.json"), &hardware)?;
+    let manifest = m4_validation_manifest(repository_revision, output_dir);
+    write_serialized_json(output_dir.join("manifest.json"), &manifest)?;
+    Ok(manifest)
+}
+
+fn write_serialized_json(
+    path: impl AsRef<Path>,
+    value: &impl Serialize,
+) -> Result<(), BaselineError> {
+    let path = path.as_ref();
+    let json = serde_json::to_string_pretty(value).map_err(BaselineError::Serialize)?;
+    std::fs::write(path, json).map_err(|source| BaselineError::Write {
+        path: path.to_path_buf(),
+        source,
+    })
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]

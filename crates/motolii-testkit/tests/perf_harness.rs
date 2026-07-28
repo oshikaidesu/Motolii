@@ -2,7 +2,10 @@
 //!
 //! 数値閾値は固定しない(M3ガード10)。構造と記録経路だけを審判する。
 
-use motolii_testkit::perf::{emit_baseline, run_harness, SampleStatus, SCHEMA_VERSION};
+use motolii_testkit::perf::{
+    emit_baseline, m4_validation_manifest, run_harness, write_m4_validation_bundle, SampleStatus,
+    ValidationKind, M4_VALIDATION_BUNDLE_SCHEMA_VERSION, SCHEMA_VERSION,
+};
 
 #[test]
 fn perf_harness_records_baseline_without_thresholds() {
@@ -53,4 +56,55 @@ fn perf_harness_records_baseline_without_thresholds() {
     ));
 
     emit_baseline(&report).expect("baseline emit");
+}
+
+#[test]
+fn m4_bundle_separates_observations_from_unresolved_policy() {
+    let artifact_dir = std::env::temp_dir().join("motolii-m4-manifest-contract");
+    let manifest = m4_validation_manifest(Some("fixture-revision".into()), &artifact_dir);
+
+    assert_eq!(manifest.schema_version, M4_VALIDATION_BUNDLE_SCHEMA_VERSION);
+    assert_eq!(
+        manifest.repository_revision.as_deref(),
+        Some("fixture-revision")
+    );
+    assert!(manifest.commands.iter().any(|command| {
+        command.id == "decode-software" && command.kind == ValidationKind::Observation
+    }));
+    assert!(manifest.commands.iter().any(|command| {
+        command.id == "resource-ledger-contract" && command.kind == ValidationKind::Contract
+    }));
+    assert!(manifest
+        .unresolved_policy_inputs
+        .iter()
+        .all(|input| input.selected_value.is_none()));
+    assert!(manifest
+        .external_gates
+        .iter()
+        .all(|gate| gate.status == "pending"));
+    let hardware = manifest
+        .commands
+        .iter()
+        .find(|command| command.id == "decode-hardware-download")
+        .expect("hardware-download command");
+    assert!(!hardware.env.contains_key("MOTOLII_DECODE_HWACCEL"));
+    assert!(hardware
+        .required_user_env
+        .contains(&"MOTOLII_DECODE_HWACCEL"));
+    assert!(!hardware
+        .optional_user_env
+        .contains(&"MOTOLII_DECODE_HWACCEL"));
+}
+
+#[test]
+fn m4_bundle_writes_only_manifest_and_hardware_inventory() {
+    let output_dir = motolii_testkit::tmp_dir("m4-validation-bundle");
+    let manifest =
+        write_m4_validation_bundle(&output_dir, Some("fixture-revision".into())).unwrap();
+
+    assert!(output_dir.join("manifest.json").is_file());
+    assert!(output_dir.join("hardware.json").is_file());
+    assert_eq!(manifest.generated_artifacts.len(), 2);
+    assert!(!output_dir.join("decode-software.json").exists());
+    assert!(!output_dir.join("audio-mad-graph.json").exists());
 }
