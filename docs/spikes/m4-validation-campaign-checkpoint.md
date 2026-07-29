@@ -2,7 +2,7 @@
 
 状態: **観察 — 構造検証PASS / 製品hard budget・実機性能未完了**
 
-基準commit: `e4790052de0fb0c04c7c9d3ee9ea4826c49b3ea1`
+基準: **この文書を含むcampaign checkpoint commit**
 
 ## 今回の問い
 
@@ -31,7 +31,7 @@ M3の背骨を待たずに、M4の正しさ、所有、階層、実機計測口�
 - software／hardware-download decode需要matrix
 - 1000短clip、最大active 4の音MAD編集密度fixture
 - OS、CPU、RAM、GPU adapter、FFmpeg、RSSを記録するhardware facts
-- 同じrecipeを別機種で再実行するmanifest schema v2
+- 同じrecipeを別機種で再実行するmanifest schema v3と専用executor
 
 test-only plannerやharnessを製品owner、公開API、Document、plugin契約へimportしない。
 
@@ -60,7 +60,8 @@ test-only plannerやharnessを製品owner、公開API、Document、plugin契約�
 
 ## 再実行gate
 
-manifest schema v2は全gateを`pending`で出力する。
+manifest schema v3は全gateを`pending`で出力する。専用executorは同じcommit／manifestを
+完全一致で確認し、既存artifactを上書きせずcommand単位の結果を保存する。
 
 | gate | 必要な証拠 |
 |---|---|
@@ -101,7 +102,6 @@ cargo clippy -p motolii-testkit --all-targets -- -D warnings
 ./scripts/check-docs.sh
 ```
 
-実bundleも生成し、`schema_version: 2`、command 6件、external gate 6件を確認した。
+実bundleも生成し、`schema_version: 3`、command 6件、external gate 6件を確認する。
 低スペックWindows実測と製品Previewは外部状態が必要な最終gateであり、このcheckpointで
 合格へ変更しない。
-

@@ -49,7 +49,7 @@ cargo run -p motolii-testkit --bin m4_validation_bundle -- C:\temp\motolii-m4-va
 生成するのは次の2ファイルだけである。
 
 - `hardware.json`: schema v2のOS、CPU、RAM、wgpu adapter、FFmpeg facts
-- `manifest.json`: schema v2のsoftware decode、hardware-download、音MAD、ResourceLedger、
+- `manifest.json`: schema v3のsoftware decode、hardware-download、音MAD、ResourceLedger、
   階層転送、YUV lane plannerの再実行recipeと分解済み外部gate
 
 `manifest.json`の`program`、`args`、`env`を配列のままrunnerへ渡す。shell文字列へ再結合する
@@ -61,6 +61,26 @@ hardware結果として保存しない。
 bundle作成時点ではdecode／音MADの計測を自動実行しない。実機の素材、OS固有surface、
 release実行時間を実行者が確認してからmanifestの個別commandを走らせ、同じdirectoryへ結果を
 追加する。
+
+個別commandはrepository rootから専用executorで実行する。
+
+```sh
+cargo run -p motolii-testkit --bin m4_validation_run -- \
+  /tmp/motolii-m4-validation decode-software
+```
+
+Windows PowerShell:
+
+```powershell
+cargo run -p motolii-testkit --bin m4_validation_run -- `
+  C:\temp\motolii-m4-validation decode-software
+```
+
+executorは現在のcommit、schema、絶対化したbundle pathからmanifestを再生成し、既存JSONとの
+完全一致を要求する。tracked、staged、untracked差分があるworktree、必須環境変数の未指定・空値、
+既存artifact／log／run recordへの上書き、成功終了後の期待artifact欠落をfail closedで拒否する。各実行は
+`run-<command-id>.json`、stdout、stderrを保存し、exit code、所要時間、artifact byte数を記録する。
+環境変数の値はrun recordへ複製せず、指定済みの名前だけを記録する。
 
 機種間比較は同じfixture revisionとMotolii commitで行う。現在はpass/fail閾値を持たず、
 取得不能は`Unavailable`として記録する。

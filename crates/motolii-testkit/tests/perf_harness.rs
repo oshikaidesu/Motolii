@@ -75,6 +75,10 @@ fn m4_bundle_separates_observations_from_unresolved_policy() {
         command.id == "resource-ledger-contract" && command.kind == ValidationKind::Contract
     }));
     assert!(manifest
+        .commands
+        .iter()
+        .all(|command| command.working_directory == "repository_root"));
+    assert!(manifest
         .unresolved_policy_inputs
         .iter()
         .all(|input| input.selected_value.is_none()));
@@ -82,11 +86,7 @@ fn m4_bundle_separates_observations_from_unresolved_policy() {
         .external_gates
         .iter()
         .all(|gate| gate.status == "pending"));
-    let external_gate_ids: Vec<_> = manifest
-        .external_gates
-        .iter()
-        .map(|gate| gate.id)
-        .collect();
+    let external_gate_ids: Vec<_> = manifest.external_gates.iter().map(|gate| gate.id).collect();
     assert_eq!(
         external_gate_ids,
         [

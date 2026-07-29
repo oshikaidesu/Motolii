@@ -29,7 +29,7 @@ use serde::Serialize;
 
 pub const BASELINE_OUT_ENV: &str = "MOTOLII_PERF_BASELINE_OUT";
 pub const SCHEMA_VERSION: u32 = 2;
-pub const M4_VALIDATION_BUNDLE_SCHEMA_VERSION: u32 = 2;
+pub const M4_VALIDATION_BUNDLE_SCHEMA_VERSION: u32 = 3;
 
 /// 外部ベンチの呼び出し口(未配線スロット — M3E-2)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -84,6 +84,7 @@ pub struct ValidationCommand {
     pub kind: ValidationKind,
     pub program: &'static str,
     pub args: &'static [&'static str],
+    pub working_directory: &'static str,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub env: BTreeMap<&'static str, String>,
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
@@ -246,6 +247,7 @@ pub fn m4_validation_manifest(
                 kind: ValidationKind::Observation,
                 program: "cargo",
                 args: DECODE_ARGS,
+                working_directory: "repository_root",
                 env: software_env,
                 required_user_env: &[],
                 optional_user_env: &["MOTOLII_DECODE_FIXTURE"],
@@ -258,6 +260,7 @@ pub fn m4_validation_manifest(
                 kind: ValidationKind::Observation,
                 program: "cargo",
                 args: DECODE_ARGS,
+                working_directory: "repository_root",
                 env: hardware_env,
                 required_user_env: &[
                     "MOTOLII_DECODE_HWACCEL",
@@ -276,6 +279,7 @@ pub fn m4_validation_manifest(
                 kind: ValidationKind::Observation,
                 program: "cargo",
                 args: AUDIO_MAD_ARGS,
+                working_directory: "repository_root",
                 env: audio_mad_env,
                 required_user_env: &[],
                 optional_user_env: &[],
@@ -288,6 +292,7 @@ pub fn m4_validation_manifest(
                 kind: ValidationKind::Contract,
                 program: "cargo",
                 args: LEDGER_ARGS,
+                working_directory: "repository_root",
                 env: BTreeMap::new(),
                 required_user_env: &[],
                 optional_user_env: &[],
@@ -300,6 +305,7 @@ pub fn m4_validation_manifest(
                 kind: ValidationKind::Contract,
                 program: "cargo",
                 args: TIER_TRANSFER_ARGS,
+                working_directory: "repository_root",
                 env: BTreeMap::new(),
                 required_user_env: &[],
                 optional_user_env: &[],
@@ -312,6 +318,7 @@ pub fn m4_validation_manifest(
                 kind: ValidationKind::Contract,
                 program: "cargo",
                 args: YUV_PLAN_ARGS,
+                working_directory: "repository_root",
                 env: BTreeMap::new(),
                 required_user_env: &[],
                 optional_user_env: &[],
@@ -334,9 +341,14 @@ pub fn write_m4_validation_bundle(
         path: output_dir.to_path_buf(),
         source,
     })?;
+    let output_dir =
+        std::fs::canonicalize(output_dir).map_err(|source| BaselineError::Canonicalize {
+            path: output_dir.to_path_buf(),
+            source,
+        })?;
     let hardware = run_harness();
     write_baseline_json(output_dir.join("hardware.json"), &hardware)?;
-    let manifest = m4_validation_manifest(repository_revision, output_dir);
+    let manifest = m4_validation_manifest(repository_revision, &output_dir);
     write_serialized_json(output_dir.join("manifest.json"), &manifest)?;
     Ok(manifest)
 }
@@ -758,6 +770,12 @@ pub fn write_baseline_json(
 pub enum BaselineError {
     #[error("failed to create baseline directory {path}: {source}")]
     CreateDir {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("failed to canonicalize baseline directory {path}: {source}")]
+    Canonicalize {
         path: PathBuf,
         #[source]
         source: std::io::Error,
