@@ -2,7 +2,7 @@
 
 作成日: 2026-07-29
 
-状態: **決定**（2026-07-29共通基盤改訂。旧`P2D-RCA/B/C`直発注は停止）
+状態: **完了／P2D-RCIで下流navigation失効**（証拠履歴として保持）
 
 親task ID: `P2D-RC0`
 
@@ -24,7 +24,8 @@
 
 この節は後続発注のnavigationであり、Render Contributionの正本や公開契約ではない。記述が引用先と
 衝突する場合は引用先が勝ち、leafはローカル解釈で解消せず`ORDER: STOP`する。`P2D-RCI`はこの節を
-意味根拠として引用せず、下記の元authorityを直接引用する。この節は`P2D-RCI`処分時に失効する。
+意味根拠として引用せず、下記の元authorityを直接引用する。この節は
+[P2D-RCI](2026-07-29-m5-render-contribution-integration-decision.md)で失効済みであり、後続発注のauthorityにしない。
 
 優先順位は次のとおり。後続grainは下位資料から上位の意味を逆算しない。
 
@@ -250,7 +251,7 @@ Motoliiへは方式や内部型でなく、次のfixture候補へ翻訳する。
 - 公開trait、Document schema、plugin契約、Vism/package形式を一つのdecisionで同時に決める必要がある。
 - First Vismのconformance役割と製品／配布意味が分離できていない。
 
-§10の共通負債を解消した後継は次の5 grainとする。固定template自体は主担当Codexが所有し、leafは
+§9の共通負債を解消した後継は次の5 grainとする。固定template自体は主担当Codexが所有し、leafは
 各fileの`転記欄`だけを変更する。RCA3、RCB3、RCC3三providerは同じbaseから並列dispatchできる。
 三providerの横断比較はACCEPT済みprovider観察が揃った後の`P2D-RCC5`へ直列化し、ここでは未登録とする。
 
@@ -285,7 +286,7 @@ RCA3の検収を待たず、terminalとなったRCB3／RCC3-BEVY／RCC3-UNREAL�
 Unreal／Bevyのcapsule非記載項目には固定`NO` fragmentを置ける。Rerun A6は固定`R-A6-LIM`を
 必須とし、phase enum、phase名、sort keyを公開契約または閉じた能力集合へ転移しない裁定全文を保持する。
 
-## 10. 再投入前の共通負債
+## 9. 再投入前の共通負債
 
 2026-07-29の並列一周では、三orderとも最初のCodex precheckで不備を検出した。主担当Codexが
 Opusを再起動せずorder案を機械修正し、同じ一周のSpark／Grokへ進めたが、採用差分は0件だった。
@@ -310,7 +311,7 @@ commit `3f384d6e`までに成立した。初回RCA3/RCB3/RCC3三providerのtermi
 今回の失敗はRender Contribution公開契約を決める根拠ではない。共通Host境界、Rerun転移裁定、
 六capsuleは有効なread-only基盤として維持する。
 
-## 9. Opus 5／Fable 5助言の処分
+## 10. Opus 5／Fable 5助言の処分
 
 2026-07-29、依頼元Codexセッション`019faae0-2508-7812-88cf-d6ad25973d38`から
 `claude-opus-5`と`claude-fable-5`をread-onlyで呼び、旧三loopの生証跡と本改訂diffを監査した。

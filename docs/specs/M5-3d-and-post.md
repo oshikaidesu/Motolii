@@ -156,7 +156,17 @@ M5は[操作単純化モデル](../interaction-simplicity-model.md)の最初の�
 | P2D-RCA7 | **停止／差分なし**。固定Motolii境界fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | Opus 3稿が形式収束せず`ORDER_INVALID`。Spark未起動。後継P2D-RCA8 |
 | P2D-RCB6 | **DONE**。A1〜A6一意対応を保つ固定Rerun fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | Grok `ACCEPT` P0/P1/P2=0、主担当再照合済み |
 | P2D-RCA8 | **DONE**。固定Motolii境界fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | Grok `ACCEPT` P0/P1/P2=0、主担当再照合済み |
-| P2D-RCI | 新しい証拠grainの統合とRender Contribution最終decision。必要ならcontract／private spike／schema／First Vism fixtureを再分割 | P2D-RCA8, P2D-RCB6, P2D-RCC5 | **WAIT**。Motolii authorityを正として統合し、公開境界または永続意味が未決なら実装解禁せずSTOP |
+| P2D-RCI | **DONE**。[Render Contribution統合decision](../reviews/2026-07-29-m5-render-contribution-integration-decision.md) | P2D-RCA8, P2D-RCB6, P2D-RCC5 | 意味だけを閉じ、公開trait／Document／方式は未決。private `P2D-RCS1`だけ解禁 |
+| P2D-RCS1 | opaque限定Group Depth private spike | P2D-RCI | `motolii-render`内部、Document／serde／公開API変更0。F1/F6 golden、group外pixel不変 |
+| P2D-RCD1 | 型付き要求／contribution seam decision | P2D-RCS1、P3またはcamera能力除外 | **WAIT**。公開Rust形とregistry多重度を実機反例後に決める |
+| P2D-RCD2 | policy／Depth Participant schema decision | P2D-RCD1、M2-D1e | **WAIT**。GR-PVと追加migration |
+| P2D-RCF1 | conformance harness／First Vism fixture | P2D-RCD1 | **WAIT**。first-party専用口なし |
+| P2D-RCT1 | cutout／soft alpha意味と診断 | P2D-RCD1 | **WAIT**。F2/F3、具体OIT方式は未決 |
+| P2D-RCO1 | transparent交差のOIT方式decision | P2D-RCT1、P2D-RCS1 | **WAIT**。方式、品質、budget、unsupportedを比較 |
+| P2D-RCFP1 | scene-color中間形式decision | M1、M4-K0 | **WAIT**。linear FP16推奨案を再裁定 |
+| P2D-RCR1 | scene-color／refraction入力契約 | P2D-RCD1、P2D-RCFP1 | **WAIT**。snapshot、範囲、順序、failure |
+| P2D-RCP1 | scene-color copy／subpass方式decision | P2D-RCR1、P2D-RCFP1 | **WAIT**。resource lifetime、同期、画面外sample、budget |
+| P2D-RCBUD1 | cache key／resource budget統合 | P2D-RCD1、M4-K1 | **WAIT**。Host計上とcache完全性 |
 | P2U | Stage transform toolの`Scale / Depth Move`分離。Scale handleとDepth rail/axisをM3-U2dのCamera/Object操作、既存toolbar/Inspector/timeline語彙へ統合 | P3, M2-D2, M3-U2d | (1)Scale dragはscaleだけ、Depth dragはposition.zだけをD2 command化 (2)各gestureがUndo 1回 (3)perspective/orthographic fixture (4)active toolを文字なし・grayscaleでも形/iconから識別 (5)DPI差で同じ正規化gestureが同じdomain値 (6)script不要で両channelへkeyframe可能 (7)`Position X/Y`・`Depth Z`・`Rotation Z`が別group/channelで、Depth操作から3D modeや第二のDepth fieldを生成しない (8)native wgpu presentation overlayがcanonical preview/export画素を変えず、frame内resource生成/GPU readback 0 (9)CPU解析hit-test、move中semantic write 0、Escape/focus lossの確定変更0 |
 | P2R | Depth Rail / 奥行き展開: 複数レイヤーのlive Z表示・直接編集・Layer Order Distribute・Expand/Compress/Reverse/Flatten・Preserve Appearance | P2U, P3, M2-D2, M3 | (1)再生/seekで評価済みEdit-Space Z markerとCamera Depth rankが追従 (2)rail viewportは再生中不変、範囲外indicator+Fit操作 (3)single/range dragと各actionがD2 macro 1回、Cancel変更ゼロ (4)Auto Key ON/OFF fixture (5)Preserve OFFはZのみ、ONはscreen anchor/sizeを維持し補正channelを可視化 (6)perspective/orthographic/rotated camera/common-parent/mixed-parent拒否fixture (7)100 layer/極端ZでUI非blocking・readbackなし (8)group/null/expression/専用channelを生成しない (9)occlusion policy別の同一Z配置fixture (10)Randomizeの同seed同結果・Explodeの有限値/near-plane診断 (11)同一parentの20〜100 layerが全てZ=0でも件数付きstackで識別でき、hover/選択だけで扇状展開または値変更しない (12)常設iconから指定near/far区間へauthoring orderで等間隔配置し、ReverseがZ集合だけを再割当する (13)Timeline選択は同じstable IDへfocusするが通常bar clickだけでは閉じたRailを開かない (14)親側のGroup 1 markerとEdit Childrenのparent-local子scopeを混在させない |
 | P4 | ポストプロセスNode群: ブラー(+Z距離マスク)、色調整(リフト/ガンマ/ゲイン)、グレイン | 凍結ゲート, M4-K0 | 各ノードのゴールデンテスト。Blurのinput regionが半径分拡張し、Unknown fallback/全域評価とpixel一致 |
@@ -167,7 +177,7 @@ M5は[操作単純化モデル](../interaction-simplicity-model.md)の最初の�
 | P7c | **first-party Behaviour**: Stagger、Random、Falloffを純関数`Behaviour(InstanceContext,t,params)->typed channel value/weight`として実装 | P7b | (1)Stagger=index/count順序、Random=`pcg32(hash(user_seed,InstanceId,channel_tag))`、Falloff=正準world距離 (2)Behaviour順序/enableで結果が決定 (3)Randomizeはseedを書換えるD2 commandだけ (4)再生/seek/thread順で乱数不変 (5)型不一致をtyped error (6)effect未使用時既存pixel同一 |
 | P7U | **Duplicator/Behaviour UI**: Input Shapes接続、Distribution、seed、per-instance channel、Stagger/Random/FalloffをTimeline/Inspector/Stageへ接続 | P7c, M3-U2c, M3-U2g | (1)source/Behaviour接続をfrom/inで可視化 (2)seed数値編集+明示Randomize、再評価で勝手に変化しない (3)instance選択はderived UI状態でDocumentへ1,000行を焼かない (4)Direct/Tool/Advancedが同Document意味 (5)1 gesture=1 Undo (6)1,000 instanceでUI非blocking |
 
-並列レーン: M2-D1j/D1k/D3とM3-U1f/U2dで2D world/camera/Stageを先に成立させ、K0は透過Stageと独立して進める。P0IとP1 importも互いおよびK0から独立し、P1合流後にP2。P0I→P7a、P2+P7a+K1→P7b→P7c→P7U。P2D-RC0、P2D-RCE0、GR-D4は成立した。RCC3-GODOTは完了、修理済みrunnerの固定配置RCA5/RCB5/RCC4B-BEVY/UNREALは独立に進める。横断RCC5はprovider三件後、P2D-RCIはRCA5/RCB5/RCC5後までWAIT。P2後はP2D/P2U/P3を依存に従って進め、P2U+P3後にP2R。P4はK0後、P6は独立、P5が合流点。world/cameraの成立をP1へ依存させない。
+並列レーン: M2-D1j/D1k/D3とM3-U1f/U2dで2D world/camera/Stageを先に成立させ、K0は透過Stageと独立して進める。P0IとP1 importも互いおよびK0から独立し、P1合流後にP2。P0I→P7a、P2+P7a+K1→P7b→P7c→P7U。P2D-RCIまで成立し、公開契約を焼かないprivate `P2D-RCS1`だけが次のDO。RCS1後にRCD1、RCD1後にschema／First Vism／alpha／refraction／budgetを分岐する。P2後はP2D/P2U/P3を依存に従って進め、P2U+P3後にP2R。P4はK0後、P6は独立、P5が合流点。world/cameraの成立をP1へ依存させない。
 
 ### P6 API契約(2026-07-10。プラグインが組版できるための口)
 
