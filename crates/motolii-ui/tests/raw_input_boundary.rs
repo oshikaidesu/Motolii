@@ -192,6 +192,7 @@ fn paths_in_tokens(tokens: TokenStream) -> Vec<TokenPath> {
 struct RawInputVisitor {
     forbid_ui_input_methods: bool,
     layout_adapter: bool,
+    product_window_adapter: bool,
     violations: Vec<String>,
 }
 
@@ -208,6 +209,7 @@ impl RawInputVisitor {
     fn inspect_segments(&mut self, segments: Vec<String>, origin: &str) {
         if path_is_forbidden(&segments)
             && !(self.layout_adapter && layout_adapter_path_is_allowed(&segments))
+            && !(self.product_window_adapter && product_window_adapter_path_is_allowed(&segments))
         {
             self.violations
                 .push(format!("{origin}: {}", segments.join("::")));
@@ -279,7 +281,9 @@ impl<'ast> Visit<'ast> for RawInputVisitor {
         collect_use_paths(&item_use.tree, &mut Vec::new(), &mut paths);
         for path in paths {
             if ((path.glob || path.alias.is_some()) && toolkit_glob_is_forbidden(&path.segments))
-                || path_is_forbidden(&path.segments)
+                || (path_is_forbidden(&path.segments)
+                    && !(self.product_window_adapter
+                        && product_window_adapter_path_is_allowed(&path.segments)))
             {
                 self.violations
                     .push(format!("use: {}", path.segments.join("::")));
@@ -313,15 +317,39 @@ fn audit_source(
     source: &str,
     forbid_ui_input_methods: bool,
     layout_adapter: bool,
+    product_window_adapter: bool,
 ) -> Result<Vec<String>, syn::Error> {
     let file = syn::parse_file(source)?;
     let mut visitor = RawInputVisitor {
         forbid_ui_input_methods,
         layout_adapter,
+        product_window_adapter,
         violations: Vec::new(),
     };
     visitor.visit_file(&file);
     Ok(visitor.violations)
+}
+
+fn product_window_adapter_path_is_allowed(segments: &[String]) -> bool {
+    matches!(
+        segments,
+        [winit, event, window_event]
+            if winit == "winit" && event == "event" && window_event == "WindowEvent"
+    ) || matches!(
+        segments,
+        [winit, event, window_event, variant]
+            if winit == "winit"
+                && event == "event"
+                && window_event == "WindowEvent"
+                && matches!(
+                    variant.as_str(),
+                    "CloseRequested"
+                        | "Resized"
+                        | "ScaleFactorChanged"
+                        | "Occluded"
+                        | "RedrawRequested"
+                )
+    )
 }
 
 fn layout_adapter_path_is_allowed(segments: &[String]) -> bool {
@@ -416,12 +444,14 @@ fn workspace_product_sources_have_no_raw_toolkit_input() {
     let mut violations = Vec::new();
     let ui_source = workspace_root().join("crates/motolii-ui/src");
     let layout_adapter = ui_source.join("layout_runtime_adapter.rs");
+    let product_window_adapter = ui_source.join("product_runtime_adapter.rs");
     for path in files {
         let source = fs::read_to_string(&path).unwrap();
         match audit_source(
             &source,
             path.starts_with(&ui_source),
             path == layout_adapter,
+            path == product_window_adapter,
         ) {
             Ok(found) => {
                 violations.extend(
@@ -473,7 +503,7 @@ fn audit_rejects_paths_aliases_methods_and_macro_tokens() {
     ];
 
     for source in rejected {
-        let violations = audit_source(source, true, false).unwrap();
+        let violations = audit_source(source, true, false, false).unwrap();
         assert!(
             !violations.is_empty(),
             "raw input fixture unexpectedly passed: {source}"
@@ -495,9 +525,12 @@ fn audit_ignores_literals_comments_and_domain_modifiers() {
         fn normalized(_: Modifiers) {}
     "###;
 
-    assert!(audit_source(accepted, true, false).unwrap().is_empty());
+    assert!(audit_source(accepted, true, false, false)
+        .unwrap()
+        .is_empty());
     assert!(audit_source(
         "fn domain<T>(value: &T) { value.input(|_| {}); }",
+        false,
         false,
         false
     )
@@ -507,14 +540,18 @@ fn audit_ignores_literals_comments_and_domain_modifiers() {
         "use first as duplicate; mod nested { use second as duplicate; }",
         false,
         false,
+        false,
     )
     .unwrap()
     .is_empty());
-    assert!(
-        audit_source("use second as first; use first as second;", false, false)
-            .unwrap()
-            .is_empty()
-    );
+    assert!(audit_source(
+        "use second as first; use first as second;",
+        false,
+        false,
+        false
+    )
+    .unwrap()
+    .is_empty());
 }
 
 #[test]
@@ -539,7 +576,9 @@ fn layout_adapter_accepts_only_the_specified_raw_closed_set() {
             });
         }
     "#;
-    assert!(audit_source(accepted, true, true).unwrap().is_empty());
+    assert!(audit_source(accepted, true, true, false)
+        .unwrap()
+        .is_empty());
 
     let rejected = [
         "fn f(ui: &egui::Ui) { ui.input(|i| i.key_pressed(egui::Key::A)); }",
@@ -550,8 +589,40 @@ fn layout_adapter_accepts_only_the_specified_raw_closed_set() {
     ];
     for source in rejected {
         assert!(
-            !audit_source(source, true, true).unwrap().is_empty(),
+            !audit_source(source, true, true, false).unwrap().is_empty(),
             "layout adapter fixture unexpectedly passed: {source}"
+        );
+    }
+}
+
+#[test]
+fn product_window_adapter_accepts_only_lifecycle_events() {
+    let accepted = r#"
+        fn adapt(event: winit::event::WindowEvent) {
+            match event {
+                winit::event::WindowEvent::CloseRequested
+                | winit::event::WindowEvent::Resized(_)
+                | winit::event::WindowEvent::ScaleFactorChanged { .. }
+                | winit::event::WindowEvent::Occluded(_)
+                | winit::event::WindowEvent::RedrawRequested => {}
+                _ => {}
+            }
+        }
+    "#;
+    assert!(audit_source(accepted, true, false, true)
+        .unwrap()
+        .is_empty());
+
+    for source in [
+        "fn f(_: winit::event::KeyEvent) {}",
+        "fn f(_: winit::event::DeviceEvent) {}",
+        "fn f(e: winit::event::WindowEvent) { if let winit::event::WindowEvent::KeyboardInput { .. } = e {} }",
+    ] {
+        assert!(
+            !audit_source(source, true, false, true)
+                .unwrap()
+                .is_empty(),
+            "product window adapter fixture unexpectedly passed: {source}"
         );
     }
 }
