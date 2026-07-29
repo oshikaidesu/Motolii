@@ -11,7 +11,7 @@ use wry::{
 
 use crate::browser_host::{BrowserHostSession, BrowserPlaceIntent};
 use crate::host_pointer_capture::{
-    HostPointerCandidate, PlatformPointerCapture, PlatformPointerCaptureError,
+    HostPointerCandidate, HostPointerClick, PlatformPointerCapture, PlatformPointerCaptureError,
 };
 use crate::native_host_layout::LogicalRect;
 
@@ -267,6 +267,16 @@ postMessage:(message)=>window.ipc.postMessage(message)
             .lock()
             .map_err(|_| BrowserHostRuntimeError::PointerCapturePoisoned)
             .map(|capture| capture.is_active())
+    }
+
+    pub(crate) fn poll_host_click(
+        &self,
+    ) -> Result<Option<HostPointerClick>, BrowserHostRuntimeError> {
+        self.pointer_capture
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::PointerCapturePoisoned)?
+            .poll_click()
+            .map_err(Into::into)
     }
 
     pub(crate) fn instance_epoch(&self) -> Result<u64, BrowserHostRuntimeError> {

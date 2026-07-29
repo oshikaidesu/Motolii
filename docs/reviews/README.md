@@ -401,3 +401,4 @@
 | [2026-07-29-cu-110pi-inspector-product-connection-split-decision.md](2026-07-29-cu-110pi-inspector-product-connection-split-decision.md) | CU-110PI Inspector通常製品接続 分割決定 |
 | [2026-07-29-cu-110pir-inspector-safe-read-only-branch-implementation-decision.md](2026-07-29-cu-110pir-inspector-safe-read-only-branch-implementation-decision.md) | CU-110PIR Inspector safe read-only branch 実装決定 |
 | [2026-07-30-cu-110pih-inspector-host-island-projection-implementation-decision.md](2026-07-30-cu-110pih-inspector-host-island-projection-implementation-decision.md) | CU-110PIH Inspector Host island projection 実装決定 |
+| [2026-07-30-cu-106p-native-timeline-primary-selection-implementation-decision.md](2026-07-30-cu-106p-native-timeline-primary-selection-implementation-decision.md) | CU-106P native Timeline primary selection 実装決定 |

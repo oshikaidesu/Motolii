@@ -25,8 +25,9 @@ winit.workspace = true
 wry.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
+block2.workspace = true
 objc2.workspace = true
-objc2-app-kit = { workspace = true, features = ["std", "NSEvent", "NSView", "NSWindow"] }
+objc2-app-kit = { workspace = true, features = ["block2", "std", "NSEvent", "NSView", "NSWindow"] }
 
 [dev-dependencies]
 cargo_metadata.workspace = true

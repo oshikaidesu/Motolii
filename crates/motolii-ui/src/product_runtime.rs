@@ -28,8 +28,8 @@ use crate::render_worker::{
 };
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
 use crate::timeline_projection::{
-    project_timeline, TimelineBar, TimelineMetrics, TimelineProjection, TimelineProjectionError,
-    TimelineViewport,
+    project_timeline, TimelineBar, TimelineHit, TimelineMetrics, TimelineProjection,
+    TimelineProjectionError, TimelineViewport,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -185,6 +185,15 @@ impl ProductTimelineProjection {
             projection,
             band_span,
         })
+    }
+
+    fn hit_test(&self, position: [f64; 2], layout: NativeHostLayout) -> Option<TimelineHit> {
+        if !layout.timeline.contains(position) {
+            return None;
+        }
+        let x = (position[0] - layout.timeline.x) / layout.timeline.width;
+        let y = ((position[1] - layout.timeline.y) / layout.timeline.height) * self.band_span;
+        Some(self.projection.hit_test(x, y))
     }
 }
 
@@ -507,6 +516,7 @@ impl ProductApp {
             }
         }
         if self.active_place.is_none() {
+            self.poll_host_input(event_loop);
             self.set_idle_control_flow(event_loop);
             return;
         }
@@ -707,6 +717,54 @@ impl ProductApp {
         match self.surface_retry_at {
             Some(retry_at) => event_loop.set_control_flow(ControlFlow::WaitUntil(retry_at)),
             None => event_loop.set_control_flow(ControlFlow::Wait),
+        }
+    }
+
+    pub(crate) fn poll_host_input(&mut self, event_loop: &ActiveEventLoop) {
+        if self.active_place.is_some() {
+            return;
+        }
+        let Some(browser) = &self.browser else {
+            return;
+        };
+        match browser.poll_host_click() {
+            Ok(Some(click)) => self.handle_timeline_click(event_loop, click.position),
+            Ok(None) => {}
+            Err(error) => self.fail(event_loop, error),
+        }
+    }
+
+    fn handle_timeline_click(&mut self, event_loop: &ActiveEventLoop, position: [f64; 2]) {
+        let Some(layout) = self.layout else {
+            return;
+        };
+        let Some(hit) = self.timeline_projection.hit_test(position, layout) else {
+            return;
+        };
+        match hit {
+            TimelineHit::Key { layer, .. } | TimelineHit::Bar { layer } => {
+                self.document_queue.push_replace_primary(layer);
+            }
+            TimelineHit::None => self.document_queue.push_clear_primary(),
+        }
+        match self.document_runtime.process_next(
+            &mut self.document_queue,
+            self.primary,
+            self.projection_generation,
+        ) {
+            Ok(Some(published)) => {
+                self.current_document = published.snapshot;
+                self.primary = published.primary;
+                self.projection_generation = published.projection_generation;
+                if let Some(inspector) = &self.inspector {
+                    if let Err(error) = inspector.publish(&self.current_document, self.primary) {
+                        return self.fail(event_loop, error);
+                    }
+                }
+                self.request_redraw();
+            }
+            Ok(None) => {}
+            Err(error) => self.fail(event_loop, error),
         }
     }
 
@@ -1357,6 +1415,29 @@ mod tests {
         assert!(rect.y > timeline.y);
         assert!(rect.height < timeline.height);
         assert!(rect.y + rect.height < timeline.y + timeline.height);
+    }
+
+    #[test]
+    fn timeline_native_point_reuses_the_typed_projection_hit() {
+        let document = crate::static_preview::bootstrap_document().unwrap();
+        let projection = ProductTimelineProjection::from_document(&document).unwrap();
+        let expected_layer = projection.projection.bars()[0].layer;
+        let layout = test_layout(9);
+        let center = [
+            layout.timeline.x + layout.timeline.width / 2.0,
+            layout.timeline.y + layout.timeline.height / 2.0,
+        ];
+
+        assert_eq!(
+            projection.hit_test(center, layout),
+            Some(TimelineHit::Bar {
+                layer: expected_layer
+            })
+        );
+        assert_eq!(
+            projection.hit_test([layout.stage.x, layout.stage.y], layout),
+            None
+        );
     }
 
     #[test]

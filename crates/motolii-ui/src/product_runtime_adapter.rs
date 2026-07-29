@@ -37,7 +37,7 @@ impl winit::application::ApplicationHandler<crate::product_runtime::ProductEvent
             }
             winit::event::WindowEvent::Occluded(occluded) => self.set_occluded(occluded),
             winit::event::WindowEvent::RedrawRequested => self.render(event_loop),
-            _ => {}
+            _ => self.poll_host_input(event_loop),
         }
     }
 }

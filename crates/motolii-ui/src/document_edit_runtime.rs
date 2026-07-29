@@ -17,6 +17,8 @@ use crate::{DocumentCommandRequest, DomainIntent, InputPhase, RouterOutput};
 pub(crate) enum DocumentEditAction {
     Apply(DocumentCommandRequest),
     PlaceRectangle(PlaceRectangleRequest),
+    ReplacePrimary(LayerId),
+    ClearPrimary,
     #[cfg(test)]
     Undo,
     #[cfg(test)]
@@ -28,6 +30,8 @@ impl DocumentEditAction {
         match self {
             Self::Apply(_) => DocumentEditActionKind::Apply,
             Self::PlaceRectangle(_) => DocumentEditActionKind::PlaceRectangle,
+            Self::ReplacePrimary(_) => DocumentEditActionKind::ReplacePrimary,
+            Self::ClearPrimary => DocumentEditActionKind::ClearPrimary,
             #[cfg(test)]
             Self::Undo => DocumentEditActionKind::Undo,
             #[cfg(test)]
@@ -40,6 +44,8 @@ impl DocumentEditAction {
 pub(crate) enum DocumentEditActionKind {
     Apply,
     PlaceRectangle,
+    ReplacePrimary,
+    ClearPrimary,
     #[cfg(test)]
     Undo,
     #[cfg(test)]
@@ -55,6 +61,15 @@ impl DocumentEditQueue {
     pub(crate) fn push_place_rectangle(&mut self, request: PlaceRectangleRequest) {
         self.pending
             .push_back(DocumentEditAction::PlaceRectangle(request));
+    }
+
+    pub(crate) fn push_replace_primary(&mut self, target: LayerId) {
+        self.pending
+            .push_back(DocumentEditAction::ReplacePrimary(target));
+    }
+
+    pub(crate) fn push_clear_primary(&mut self) {
+        self.pending.push_back(DocumentEditAction::ClearPrimary);
     }
 
     pub(crate) fn push_prepared(
@@ -176,16 +191,15 @@ impl DocumentEditRuntime {
             return Ok(None);
         };
         let kind = action.kind();
-        let Some(next_projection_generation) = current_projection_generation.checked_add(1) else {
-            return Err(DocumentEditRuntimeError::ProjectionGenerationExhausted);
-        };
-
         match action {
             #[cfg(test)]
             DocumentEditAction::Undo | DocumentEditAction::Redo => {
+                let _ = next_projection_generation(current_projection_generation)?;
                 Err(DocumentEditRuntimeError::PreparedActionUnavailable)
             }
             DocumentEditAction::Apply(request) => {
+                let next_projection_generation =
+                    next_projection_generation(current_projection_generation)?;
                 let mut commands = request.into_commands();
                 if commands.len() != 1 {
                     return Err(DocumentEditRuntimeError::MultiCommandActionRejected);
@@ -200,6 +214,8 @@ impl DocumentEditRuntime {
                 )
             }
             DocumentEditAction::PlaceRectangle(request) => {
+                let next_projection_generation =
+                    next_projection_generation(current_projection_generation)?;
                 let (command, layer_id, expected_live_next) =
                     prepare_rectangle_command(&self.writer.snapshot(), current_primary, request)?;
                 if self.writer.snapshot().layers.peek_next() != expected_live_next {
@@ -212,6 +228,37 @@ impl DocumentEditRuntime {
                     Some(layer_id),
                     next_projection_generation,
                 )
+            }
+            DocumentEditAction::ReplacePrimary(target) => {
+                if self.writer.find_envelope(target).is_none() {
+                    return Err(DocumentEditRuntimeError::SelectionTargetNotFound(target));
+                }
+                if current_primary == Some(target) {
+                    return Ok(None);
+                }
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                Ok(Some(PublishedDocument {
+                    kind,
+                    revision: self.writer.revision,
+                    snapshot: self.writer.snapshot(),
+                    primary: Some(target),
+                    projection_generation,
+                }))
+            }
+            DocumentEditAction::ClearPrimary => {
+                if current_primary.is_none() {
+                    return Ok(None);
+                }
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                Ok(Some(PublishedDocument {
+                    kind,
+                    revision: self.writer.revision,
+                    snapshot: self.writer.snapshot(),
+                    primary: None,
+                    projection_generation,
+                }))
             }
         }
     }
@@ -288,6 +335,12 @@ impl DocumentEditRuntime {
     fn is_poisoned(&self) -> bool {
         self.health == RuntimeHealth::Poisoned
     }
+}
+
+fn next_projection_generation(current: u64) -> Result<u64, DocumentEditRuntimeError> {
+    current
+        .checked_add(1)
+        .ok_or(DocumentEditRuntimeError::ProjectionGenerationExhausted)
 }
 
 fn prepare_rectangle_command(
@@ -419,6 +472,8 @@ pub(crate) enum DocumentEditDispatchError {
 pub(crate) enum DocumentEditRuntimeError {
     #[error("projection generation is exhausted at u64::MAX")]
     ProjectionGenerationExhausted,
+    #[error("selection target does not exist in the live Document: {0:?}")]
+    SelectionTargetNotFound(LayerId),
     #[error("document edit runtime session is poisoned")]
     SessionPoisoned,
     #[cfg(test)]
@@ -1561,6 +1616,103 @@ mod tests {
             Err(DocumentEditRuntimeError::NonFiniteDropPosition)
         ));
         assert_eq!(runtime.snapshot().layers.peek_next(), initial_next);
+        assert_eq!(runtime.revision(), 0);
+        assert_eq!(runtime.history_lengths(), (0, 0));
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
+    }
+
+    #[test]
+    fn selection_actions_publish_only_accepted_primary_changes() {
+        let (document, _) = fixture();
+        let selected = fixture_layer(&document);
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+
+        queue.push_replace_primary(selected);
+        let selected_publish = runtime
+            .process_next(&mut queue, None, 7)
+            .unwrap()
+            .expect("live target selection publishes");
+        assert_eq!(
+            selected_publish.kind,
+            DocumentEditActionKind::ReplacePrimary
+        );
+        assert_eq!(selected_publish.primary, Some(selected));
+        assert_eq!(selected_publish.projection_generation, 8);
+        assert_eq!(selected_publish.revision, 0);
+
+        queue.push_replace_primary(selected);
+        assert!(runtime
+            .process_next(&mut queue, Some(selected), u64::MAX)
+            .unwrap()
+            .is_none());
+
+        queue.push_clear_primary();
+        let clear_publish = runtime
+            .process_next(&mut queue, Some(selected), 8)
+            .unwrap()
+            .expect("non-empty primary clear publishes");
+        assert_eq!(clear_publish.kind, DocumentEditActionKind::ClearPrimary);
+        assert_eq!(clear_publish.primary, None);
+        assert_eq!(clear_publish.projection_generation, 9);
+        assert_eq!(clear_publish.revision, 0);
+
+        queue.push_clear_primary();
+        assert!(runtime
+            .process_next(&mut queue, None, u64::MAX)
+            .unwrap()
+            .is_none());
+
+        assert_eq!(queue.len(), 0);
+        assert_eq!(runtime.revision(), 0);
+        assert_eq!(runtime.history_lengths(), (0, 0));
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
+    }
+
+    #[test]
+    fn nonexistent_selection_rejects_before_same_id_or_generation_preflight() {
+        let (mut document, _) = fixture();
+        let table_only = document.layers.allocate("table-only").unwrap();
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_replace_primary(table_only);
+
+        assert!(matches!(
+            runtime.process_next(&mut queue, Some(table_only), u64::MAX),
+            Err(DocumentEditRuntimeError::SelectionTargetNotFound(target))
+                if target == table_only
+        ));
+        assert_eq!(queue.len(), 0);
+        assert_eq!(runtime.revision(), 0);
+        assert_eq!(runtime.history_lengths(), (0, 0));
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
+    }
+
+    #[test]
+    fn accepted_selection_change_rejects_generation_exhaustion_without_mutation() {
+        let (document, _) = fixture();
+        let selected = fixture_layer(&document);
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_replace_primary(selected);
+
+        assert!(matches!(
+            runtime.process_next(&mut queue, None, u64::MAX),
+            Err(DocumentEditRuntimeError::ProjectionGenerationExhausted)
+        ));
+        assert_eq!(queue.len(), 0);
         assert_eq!(runtime.revision(), 0);
         assert_eq!(runtime.history_lengths(), (0, 0));
         assert_eq!(
