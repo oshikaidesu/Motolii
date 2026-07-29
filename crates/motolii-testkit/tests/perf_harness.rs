@@ -3,8 +3,9 @@
 //! 数値閾値は固定しない(M3ガード10)。構造と記録経路だけを審判する。
 
 use motolii_testkit::perf::{
-    emit_baseline, m4_validation_manifest, run_harness, write_m4_validation_bundle, SampleStatus,
-    ValidationKind, M4_VALIDATION_BUNDLE_SCHEMA_VERSION, SCHEMA_VERSION,
+    emit_baseline, m4_validation_manifest, run_harness, write_m4_validation_bundle,
+    M4ValidationContext, SampleStatus, ValidationKind, M4_VALIDATION_BUNDLE_SCHEMA_VERSION,
+    M4_VALIDATION_CONTEXT_SCHEMA_VERSION, SCHEMA_VERSION,
 };
 
 #[test]
@@ -116,12 +117,22 @@ fn m4_bundle_separates_observations_from_unresolved_policy() {
 #[test]
 fn m4_bundle_writes_only_manifest_and_hardware_inventory() {
     let output_dir = motolii_testkit::tmp_dir("m4-validation-bundle");
+    let context = M4ValidationContext {
+        schema_version: M4_VALIDATION_CONTEXT_SCHEMA_VERSION,
+        machine_label: "test-machine".into(),
+        intended_persona: "test-persona".into(),
+        power_source: "ac".into(),
+        power_mode: "balanced".into(),
+        display_width_px: 1920,
+        display_height_px: 1080,
+    };
     let manifest =
-        write_m4_validation_bundle(&output_dir, Some("fixture-revision".into())).unwrap();
+        write_m4_validation_bundle(&output_dir, Some("fixture-revision".into()), &context).unwrap();
 
     assert!(output_dir.join("manifest.json").is_file());
     assert!(output_dir.join("hardware.json").is_file());
-    assert_eq!(manifest.generated_artifacts.len(), 2);
+    assert!(output_dir.join("context.json").is_file());
+    assert_eq!(manifest.generated_artifacts.len(), 3);
     assert!(!output_dir.join("decode-software.json").exists());
     assert!(!output_dir.join("audio-mad-graph.json").exists());
 }

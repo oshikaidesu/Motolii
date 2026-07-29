@@ -31,7 +31,7 @@ M3の背骨を待たずに、M4の正しさ、所有、階層、実機計測口�
 - software／hardware-download decode需要matrix
 - 1000短clip、最大active 4の音MAD編集密度fixture
 - OS、CPU、RAM、GPU adapter、FFmpeg、RSSを記録するhardware facts
-- 同じrecipeを別機種で再実行するmanifest schema v3と専用executor
+- 同じrecipeを別機種で再実行するmanifest schema v4、measurement context、専用executor
 
 test-only plannerやharnessを製品owner、公開API、Document、plugin契約へimportしない。
 
@@ -60,12 +60,14 @@ test-only plannerやharnessを製品owner、公開API、Document、plugin契約�
 
 ## 再実行gate
 
-manifest schema v3は全gateを`pending`で出力する。専用executorは同じcommit／manifestを
-完全一致で確認し、既存artifactを上書きせずcommand単位の結果を保存する。
+manifest schema v4は全gateを`pending`で出力する。bundle生成時に匿名化可能な機体ラベル、
+意図したpersona、AC/バッテリー、電源モード、表示解像度を`context.json`へ明示する。
+専用executorは同じcommit／manifestを完全一致で確認し、各runをhardware/context digestへ
+結び付け、既存artifactを上書きせずcommand単位の結果を保存する。
 
 | gate | 必要な証拠 |
 |---|---|
-| `low_spec_windows` | 同じcommit／fixture／bundleを対象persona実機で実行 |
+| `low_spec_windows` | 同じcommit／fixture／bundleを対象persona実機・明示measurement contextで実行 |
 | `native_decoder_surface_import` | CPU raw pipeなしのsurfaceとdevice identity |
 | `wgpu_external_texture_lowering` | import済みplaneと明示color descriptorからRGBA |
 | `surface_lifetime_fence` | GPU完了前のpool再利用・grant解放を拒否 |
@@ -102,11 +104,11 @@ cargo clippy -p motolii-testkit --all-targets -- -D warnings
 ./scripts/check-docs.sh
 ```
 
-実bundleも生成し、`schema_version: 3`、command 6件、external gate 6件を確認する。
+実bundleも生成し、`schema_version: 4`、command 6件、external gate 6件を確認する。
 低スペックWindows実測と製品Previewは外部状態が必要な最終gateであり、このcheckpointで
 合格へ変更しない。
 
-## 2026-07-29 local full replay
+## 2026-07-29 schema v3 local full replay
 
 clean commit `f321a5d87ce89e5cd93d4a723dc496e1ac5024f3`でbundleを新規生成し、
 専用executorから6 commandを直列実行した。verifier結果は次のとおり。
@@ -132,3 +134,8 @@ VideoToolbox download parallel wall: 418.24 ms
 これはlocal harnessの閉包証拠であり、hardware-downloadがsoftwareより遅いという従来観測を
 同一fixture digestつきで再現しただけである。native GPU surface import、低スペックWindows、
 製品Previewの性能を証明しない。
+
+後続のschema v4ではmeasurement contextを必須化したため、このschema v3 bundleは履歴証拠であり
+新しい実機matrixへ混在させない。schema v4のローカル再実行と低スペックWindows実行を次の証拠とする。
+対象personaのRAM量・GPU世代等の資格条件は未決であり、`intended_persona`文字列だけで
+`low_spec_windows`をpassへ変更しない。

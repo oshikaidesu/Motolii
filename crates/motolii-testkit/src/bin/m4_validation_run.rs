@@ -137,7 +137,8 @@ fn write_record(path: &Path, record: &ValidationRunRecord) -> Result<(), RunErro
 fn validate_bundle(output_dir: &Path, revision: &str) -> Result<Vec<ValidationCommand>, RunError> {
     let manifest_path = output_dir.join("manifest.json");
     let hardware_path = output_dir.join("hardware.json");
-    for path in [&manifest_path, &hardware_path] {
+    let context_path = output_dir.join("context.json");
+    for path in [&manifest_path, &hardware_path, &context_path] {
         if !path.is_file() {
             return Err(RunError::MissingBundleInput(path.to_path_buf()));
         }
@@ -177,6 +178,8 @@ fn run() -> Result<(PathBuf, bool), RunError> {
     let manifest_evidence = file_evidence(&output_dir.join("manifest.json"))
         .map_err(|error| RunError::ReadEvidence(error.to_string()))?;
     let hardware_evidence = file_evidence(&output_dir.join("hardware.json"))
+        .map_err(|error| RunError::ReadEvidence(error.to_string()))?;
+    let context_evidence = file_evidence(&output_dir.join("context.json"))
         .map_err(|error| RunError::ReadEvidence(error.to_string()))?;
     let command = commands
         .into_iter()
@@ -253,6 +256,7 @@ fn run() -> Result<(PathBuf, bool), RunError> {
         working_directory: command.working_directory.to_owned(),
         manifest_sha256: manifest_evidence.sha256,
         hardware_sha256: hardware_evidence.sha256,
+        context_sha256: context_evidence.sha256,
         started_at_unix_ms,
         duration_ms,
         success,

@@ -37,19 +37,28 @@ cross-`cargo check`でAPI/feature closureを固定し、値が正であること
 必要な環境変数、各結果が証明しない範囲を固定する。
 
 ```sh
-cargo run -p motolii-testkit --bin m4_validation_bundle -- /tmp/motolii-m4-validation
+cargo run -p motolii-testkit --bin m4_validation_bundle -- \
+  /tmp/motolii-m4-validation \
+  dev-mac development-mac ac automatic 1920 1080
 ```
 
-Windows PowerShellでは出力先だけをWindows pathへ変える。
+引数は順に、出力先、匿名化可能な機体ラベル、意図したpersonaラベル、`ac|battery`、
+OS上の電源モード名、測定時の表示幅・高さである。personaラベルは測定者の宣言であり、
+最低スペック資格の合格判定ではない。
+
+Windows PowerShellでは同じ条件を明示し、出力先だけをWindows pathへ変える。
 
 ```powershell
-cargo run -p motolii-testkit --bin m4_validation_bundle -- C:\temp\motolii-m4-validation
+cargo run -p motolii-testkit --bin m4_validation_bundle -- `
+  C:\temp\motolii-m4-validation `
+  hand-me-down-01 low-spec-windows-candidate ac balanced 1920 1080
 ```
 
-生成するのは次の2ファイルだけである。
+生成するのは次の3ファイルだけである。
 
 - `hardware.json`: schema v2のOS、CPU、RAM、wgpu adapter、FFmpeg facts
-- `manifest.json`: schema v3のsoftware decode、hardware-download、音MAD、ResourceLedger、
+- `context.json`: schema v1の機体／personaラベル、電源条件、表示解像度
+- `manifest.json`: schema v4のsoftware decode、hardware-download、音MAD、ResourceLedger、
   階層転送、YUV lane plannerの再実行recipeと分解済み外部gate
 
 `manifest.json`の`program`、`args`、`env`を配列のままrunnerへ渡す。shell文字列へ再結合する
@@ -80,7 +89,7 @@ executorは現在のcommit、schema、絶対化したbundle pathからmanifest�
 完全一致を要求する。tracked、staged、untracked差分があるworktree、必須環境変数の未指定・空値、
 既存artifact／log／run recordへの上書き、成功終了後の期待artifact欠落をfail closedで拒否する。各実行は
 `run-<command-id>.json`、stdout、stderrを保存し、exit code、所要時間、artifact byte数を記録する。
-manifest、hardware、stdout、stderr、結果artifactのSHA-256も記録し、後から同名fileへ
+manifest、hardware、context、stdout、stderr、結果artifactのSHA-256も記録し、後から同名fileへ
 差し替えた結果を同じ実行として扱わない。環境変数の値はrun recordへ複製せず、
 指定済みの名前だけを記録する。
 
@@ -91,9 +100,9 @@ cargo run -p motolii-testkit --bin m4_validation_verify -- \
   /tmp/motolii-m4-validation
 ```
 
-verifierは全commandのrevision、manifest/hardware digest、exit、log/artifact digest、
+verifierは全commandのrevision、manifest/hardware/context digest、exit、log/artifact digest、
 software/hardware decodeのfixture identityを照合する。hardware factsのOS、architecture、
-total memory、全必須sampleのRSSとstatusも確認する。ただし合格するのは
+total memory、全必須sampleのRSSとstatus、contextの必須項目と値域も確認する。ただし合格するのは
 `local_evidence_valid`だけであり、`low_spec_windows`、GPU surface import、製品Preview等の
 外部gateは`external_gates_pending`として残す。
 
@@ -102,6 +111,9 @@ total memory、全必須sampleのRSSとstatusも確認する。ただし合格�
 
 Windows実機で`total_memory_bytes`または各sampleの`idle_rss_bytes`が`null`なら、そのbundleは
 最低スペック比較へ採用しない。API取得失敗を0 bytesや推定値へ置き換えない。
+`context.json`の`intended_persona`へ`low-spec-windows`と書くだけでもgateは閉じない。
+現時点では対象personaの数値資格自体が未決であり、同じ機体でも電源・表示条件が異なるrunを
+同一条件として比較しないための来歴としてのみ使う。
 
 ## 観測とpolicyの分離
 

@@ -5,8 +5,8 @@ use sha2::{Digest, Sha256};
 
 use crate::perf::{m4_validation_manifest, M4_VALIDATION_BUNDLE_SCHEMA_VERSION, SCHEMA_VERSION};
 
-pub const M4_VALIDATION_RUN_SCHEMA_VERSION: u32 = 2;
-pub const M4_VALIDATION_VERIFICATION_SCHEMA_VERSION: u32 = 1;
+pub const M4_VALIDATION_RUN_SCHEMA_VERSION: u32 = 3;
+pub const M4_VALIDATION_VERIFICATION_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FileEvidence {
@@ -24,6 +24,7 @@ pub struct ValidationRunRecord {
     pub working_directory: String,
     pub manifest_sha256: String,
     pub hardware_sha256: String,
+    pub context_sha256: String,
     pub started_at_unix_ms: u64,
     pub duration_ms: u64,
     pub success: bool,
@@ -43,6 +44,8 @@ pub struct M4ValidationVerification {
     pub repository_revision: String,
     pub hardware_os: Option<String>,
     pub hardware_arch: Option<String>,
+    pub machine_label: Option<String>,
+    pub intended_persona: Option<String>,
     pub local_evidence_valid: bool,
     pub verified_commands: Vec<String>,
     pub failures: Vec<String>,
@@ -187,6 +190,42 @@ fn verify_hardware(
     (os, arch)
 }
 
+fn verify_context(
+    context: &serde_json::Value,
+    failures: &mut Vec<String>,
+) -> (Option<String>, Option<String>) {
+    if context
+        .get("schema_version")
+        .and_then(serde_json::Value::as_u64)
+        != Some(u64::from(crate::perf::M4_VALIDATION_CONTEXT_SCHEMA_VERSION))
+    {
+        failures.push("context.json: schema version mismatch".into());
+    }
+    let machine_label = nonempty_string(context.get("machine_label"));
+    let intended_persona = nonempty_string(context.get("intended_persona"));
+    let power_source = nonempty_string(context.get("power_source"));
+    let power_mode = nonempty_string(context.get("power_mode"));
+    if machine_label.is_none() || intended_persona.is_none() || power_mode.is_none() {
+        failures.push("context.json: required measurement label is missing".into());
+    }
+    if power_source
+        .as_deref()
+        .is_none_or(|value| !matches!(value, "ac" | "battery"))
+    {
+        failures.push("context.json: power source must be ac or battery".into());
+    }
+    for dimension in ["display_width_px", "display_height_px"] {
+        if context
+            .get(dimension)
+            .and_then(serde_json::Value::as_u64)
+            .is_none_or(|value| value == 0 || value > u64::from(u32::MAX))
+        {
+            failures.push(format!("context.json: {dimension} must be a positive u32"));
+        }
+    }
+    (machine_label, intended_persona)
+}
+
 fn fixture_identity(value: &serde_json::Value) -> Option<(u64, String)> {
     if value.get("schema_version")?.as_u64()? != 3 {
         return None;
@@ -203,6 +242,7 @@ pub fn verify_m4_validation_bundle(
 ) -> Result<M4ValidationVerification, VerificationError> {
     let manifest_path = output_dir.join("manifest.json");
     let hardware_path = output_dir.join("hardware.json");
+    let context_path = output_dir.join("context.json");
     let actual_manifest = read_value(&manifest_path)?;
     let expected_manifest =
         m4_validation_manifest(Some(repository_revision.to_owned()), output_dir);
@@ -213,8 +253,11 @@ pub fn verify_m4_validation_bundle(
     }
     let manifest_evidence = file_evidence(&manifest_path)?;
     let hardware_evidence = file_evidence(&hardware_path)?;
+    let context_evidence = file_evidence(&context_path)?;
     let hardware = read_value(&hardware_path)?;
     let (hardware_os, hardware_arch) = verify_hardware(&hardware, &mut failures);
+    let context = read_value(&context_path)?;
+    let (machine_label, intended_persona) = verify_context(&context, &mut failures);
     let mut verified_commands = Vec::new();
     let mut decode_identities = Vec::new();
 
@@ -240,9 +283,10 @@ pub fn verify_m4_validation_bundle(
         }
         if record.manifest_sha256 != manifest_evidence.sha256
             || record.hardware_sha256 != hardware_evidence.sha256
+            || record.context_sha256 != context_evidence.sha256
         {
             failures.push(format!(
-                "{}: manifest or hardware digest mismatch",
+                "{}: manifest, hardware, or context digest mismatch",
                 command.id
             ));
         }
@@ -322,6 +366,8 @@ pub fn verify_m4_validation_bundle(
         repository_revision: repository_revision.to_owned(),
         hardware_os,
         hardware_arch,
+        machine_label,
+        intended_persona,
         local_evidence_valid: failures.is_empty()
             && verified_commands.len() == expected_manifest.commands.len(),
         verified_commands,
@@ -351,6 +397,33 @@ mod tests {
             first_evidence.sha256,
             file_evidence(&second).unwrap().sha256
         );
+    }
+
+    #[test]
+    fn measurement_context_requires_explicit_comparable_conditions() {
+        let mut failures = Vec::new();
+        let context = json!({
+            "schema_version": crate::perf::M4_VALIDATION_CONTEXT_SCHEMA_VERSION,
+            "machine_label": "candidate-01",
+            "intended_persona": "low-spec-windows-candidate",
+            "power_source": "unknown",
+            "power_mode": "",
+            "display_width_px": 0,
+            "display_height_px": 1080
+        });
+        let labels = verify_context(&context, &mut failures);
+        assert_eq!(labels.0.as_deref(), Some("candidate-01"));
+        assert_eq!(labels.1.as_deref(), Some("low-spec-windows-candidate"));
+        assert_eq!(failures.len(), 3);
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("required measurement label")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("power source")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("display_width_px")));
     }
 
     #[test]
@@ -396,6 +469,20 @@ mod tests {
         std::fs::write(
             dir.join("hardware.json"),
             serde_json::to_vec_pretty(&hardware).unwrap(),
+        )
+        .unwrap();
+        let context = json!({
+            "schema_version": crate::perf::M4_VALIDATION_CONTEXT_SCHEMA_VERSION,
+            "machine_label": "fixture-machine",
+            "intended_persona": "candidate-only",
+            "power_source": "ac",
+            "power_mode": "balanced",
+            "display_width_px": 1920,
+            "display_height_px": 1080
+        });
+        std::fs::write(
+            dir.join("context.json"),
+            serde_json::to_vec_pretty(&context).unwrap(),
         )
         .unwrap();
 

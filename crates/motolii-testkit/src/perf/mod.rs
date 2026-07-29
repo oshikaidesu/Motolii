@@ -25,11 +25,12 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 pub const BASELINE_OUT_ENV: &str = "MOTOLII_PERF_BASELINE_OUT";
 pub const SCHEMA_VERSION: u32 = 2;
-pub const M4_VALIDATION_BUNDLE_SCHEMA_VERSION: u32 = 3;
+pub const M4_VALIDATION_BUNDLE_SCHEMA_VERSION: u32 = 4;
+pub const M4_VALIDATION_CONTEXT_SCHEMA_VERSION: u32 = 1;
 
 /// 外部ベンチの呼び出し口(未配線スロット — M3E-2)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -109,6 +110,17 @@ pub struct ExternalValidationGate {
     pub id: &'static str,
     pub status: &'static str,
     pub required_evidence: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct M4ValidationContext {
+    pub schema_version: u32,
+    pub machine_label: String,
+    pub intended_persona: String,
+    pub power_source: String,
+    pub power_mode: String,
+    pub display_width_px: u32,
+    pub display_height_px: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -240,7 +252,7 @@ pub fn m4_validation_manifest(
     M4ValidationManifest {
         schema_version: M4_VALIDATION_BUNDLE_SCHEMA_VERSION,
         repository_revision,
-        generated_artifacts: &["manifest.json", "hardware.json"],
+        generated_artifacts: &["manifest.json", "hardware.json", "context.json"],
         commands: vec![
             ValidationCommand {
                 id: "decode-software",
@@ -335,6 +347,7 @@ pub fn m4_validation_manifest(
 pub fn write_m4_validation_bundle(
     output_dir: impl AsRef<Path>,
     repository_revision: Option<String>,
+    context: &M4ValidationContext,
 ) -> Result<M4ValidationManifest, BaselineError> {
     let output_dir = output_dir.as_ref();
     std::fs::create_dir_all(output_dir).map_err(|source| BaselineError::CreateDir {
@@ -348,6 +361,7 @@ pub fn write_m4_validation_bundle(
         })?;
     let hardware = run_harness();
     write_baseline_json(output_dir.join("hardware.json"), &hardware)?;
+    write_serialized_json(output_dir.join("context.json"), context)?;
     let manifest = m4_validation_manifest(repository_revision, &output_dir);
     write_serialized_json(output_dir.join("manifest.json"), &manifest)?;
     Ok(manifest)
