@@ -65,6 +65,7 @@ pub(crate) struct ProductApp {
     browser_lifecycle: Option<BrowserLifecycleCoordinator>,
     browser_focus_target: BrowserFocusTarget,
     active_place: Option<BrowserPlaceIntent>,
+    place_preview: PlacePreviewPhase,
     pending_stage_drop: Option<PendingStageDrop>,
     surface_retry_at: Option<Instant>,
     failure: Option<String>,
@@ -76,6 +77,40 @@ struct PendingStageDrop {
     generation: u64,
     layout_epoch: u64,
     ndc: [f64; 2],
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct PlacePreviewProgress {
+    source: BrowserPlaceIntent,
+    generation: u64,
+    layout_epoch: u64,
+    stage_ndc: Option<[f64; 2]>,
+}
+
+#[derive(Debug, Default)]
+struct PlacePreviewPhase {
+    latest: Option<PlacePreviewProgress>,
+}
+
+impl PlacePreviewPhase {
+    fn deliver(
+        &mut self,
+        source: &BrowserPlaceIntent,
+        generation: u64,
+        position: [f64; 2],
+        layout: NativeHostLayout,
+    ) {
+        self.latest = Some(PlacePreviewProgress {
+            source: source.clone(),
+            generation,
+            layout_epoch: layout.epoch,
+            stage_ndc: layout.stage_ndc(position),
+        });
+    }
+
+    fn clear(&mut self) {
+        self.latest = None;
+    }
 }
 
 impl ProductApp {
@@ -101,6 +136,7 @@ impl ProductApp {
             browser_lifecycle: None,
             browser_focus_target: BrowserFocusTarget::Browser,
             active_place: None,
+            place_preview: PlacePreviewPhase::default(),
             pending_stage_drop: None,
             surface_retry_at: None,
             failure: None,
@@ -193,6 +229,7 @@ impl ProductApp {
                     if let Err(error) = browser.ensure_focus(self.browser_focus_target) {
                         return self.fail(event_loop, error);
                     }
+                    self.place_preview.clear();
                     self.active_place = Some(intent);
                 }
                 Ok(None) => {}
@@ -204,13 +241,22 @@ impl ProductApp {
             return;
         }
         match browser.poll_pointer_candidate() {
-            Ok(Some(HostPointerCandidate::Moved { .. })) => {
+            Ok(Some(HostPointerCandidate::Moved {
+                generation,
+                position,
+            })) => {
+                if let (Some(source), Some(layout)) = (&self.active_place, self.layout) {
+                    self.place_preview
+                        .deliver(source, generation, position, layout);
+                    self.request_redraw();
+                }
                 event_loop.set_control_flow(ControlFlow::Poll);
             }
             Ok(Some(HostPointerCandidate::Released {
                 generation,
                 position,
             })) => {
+                self.place_preview.clear();
                 if let (Some(source), Some(layout)) = (self.active_place.take(), self.layout) {
                     if let Some(ndc) = layout.stage_ndc(position) {
                         self.pending_stage_drop = Some(PendingStageDrop {
@@ -224,6 +270,7 @@ impl ProductApp {
                 self.set_idle_control_flow(event_loop);
             }
             Ok(Some(HostPointerCandidate::Cancelled { .. })) => {
+                self.place_preview.clear();
                 self.active_place = None;
                 self.set_idle_control_flow(event_loop);
             }
@@ -278,6 +325,7 @@ impl ProductApp {
             }
             BrowserRecoveryDecision::Degrade => {
                 self.active_place = None;
+                self.place_preview.clear();
                 self.browser.take();
                 Ok(())
             }
@@ -294,6 +342,7 @@ impl ProductApp {
             .clone()
             .ok_or(ProductRuntimeError::BrowserLifecycleUnavailable)?;
         self.active_place = None;
+        self.place_preview.clear();
         self.browser.take();
         let browser = build_browser_runtime(window, instance_epoch, source, self.proxy.clone())?;
         if let Some(layout) = self.layout {
@@ -787,6 +836,64 @@ pub(crate) enum ProductRuntimeError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use motolii_core::{ColorSpace, FrameDesc, PixelFormat};
+
+    fn test_layout(epoch: u64) -> NativeHostLayout {
+        let frame =
+            FrameDesc::try_packed(1920, 1080, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true)
+                .unwrap();
+        NativeHostLayout::try_new(epoch, 1000, 800, 1.0, frame).unwrap()
+    }
+
+    fn test_source() -> BrowserPlaceIntent {
+        BrowserPlaceIntent {
+            scope_ref: "builtin-stable".to_owned(),
+            item_id: "rectangle".to_owned(),
+        }
+    }
+
+    #[test]
+    fn moved_progress_creates_a_nonterminal_preview_phase() {
+        let layout = test_layout(9);
+        let center = [
+            layout.stage.x + layout.stage.width / 2.0,
+            layout.stage.y + layout.stage.height / 2.0,
+        ];
+        let source = test_source();
+        let mut phase = PlacePreviewPhase::default();
+
+        phase.deliver(&source, 4, center, layout);
+
+        assert_eq!(
+            phase.latest,
+            Some(PlacePreviewProgress {
+                source,
+                generation: 4,
+                layout_epoch: 9,
+                stage_ndc: Some([0.0, 0.0]),
+            })
+        );
+    }
+
+    #[test]
+    fn outside_progress_updates_preview_without_becoming_a_terminal() {
+        let layout = test_layout(9);
+        let source = test_source();
+        let mut phase = PlacePreviewPhase::default();
+        phase.deliver(&source, 4, [10.0, 10.0], layout);
+
+        assert_eq!(
+            phase.latest,
+            Some(PlacePreviewProgress {
+                source,
+                generation: 4,
+                layout_epoch: 9,
+                stage_ndc: None,
+            })
+        );
+        phase.clear();
+        assert_eq!(phase.latest, None);
+    }
 
     #[test]
     fn lifecycle_replaces_with_new_epochs_and_ignores_old_callbacks() {
