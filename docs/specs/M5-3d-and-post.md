@@ -154,7 +154,7 @@ M5は[操作単純化モデル](../interaction-simplicity-model.md)の最初の�
 | P2D-RCC5 | **DONE**。ACCEPT済みprovider観察のMotolii fixture軸比較 | P2D-RCC3-GODOT, P2D-RCC4B-BEVY/UNREAL | Grok `ACCEPT` P0/P1/P2=0、主担当再照合済み |
 | P2D-RCA6 | **停止／差分なし**。machine `COMMAND`版runnerによる固定Motolii境界fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | Opus本文のrunner所有操作列挙で`ORDER_INVALID`。Spark未起動。後継P2D-RCA7 |
 | P2D-RCA7 | **停止／差分なし**。固定Motolii境界fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | Opus 3稿が形式収束せず`ORDER_INVALID`。Spark未起動。後継P2D-RCA8 |
-| P2D-RCB6 | A1〜A6一意対応を保つ固定Rerun fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | 登録済み。既存6行を置換し、行追加なしの30 cell copyだけ |
+| P2D-RCB6 | **DONE**。A1〜A6一意対応を保つ固定Rerun fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | Grok `ACCEPT` P0/P1/P2=0、主担当再照合済み |
 | P2D-RCA8 | 固定Motolii境界fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | 登録済み。authority由来cardinality許可後のrunner、18 cell copyだけ |
 | P2D-RCI | 新しい証拠grainの統合とRender Contribution最終decision。必要ならcontract／private spike／schema／First Vism fixtureを再分割 | P2D-RCA8, P2D-RCB6, P2D-RCC5 | **WAIT**。Motolii authorityを正として統合し、公開境界または永続意味が未決なら実装解禁せずSTOP |
 | P2U | Stage transform toolの`Scale / Depth Move`分離。Scale handleとDepth rail/axisをM3-U2dのCamera/Object操作、既存toolbar/Inspector/timeline語彙へ統合 | P3, M2-D2, M3-U2d | (1)Scale dragはscaleだけ、Depth dragはposition.zだけをD2 command化 (2)各gestureがUndo 1回 (3)perspective/orthographic fixture (4)active toolを文字なし・grayscaleでも形/iconから識別 (5)DPI差で同じ正規化gestureが同じdomain値 (6)script不要で両channelへkeyframe可能 (7)`Position X/Y`・`Depth Z`・`Rotation Z`が別group/channelで、Depth操作から3D modeや第二のDepth fieldを生成しない (8)native wgpu presentation overlayがcanonical preview/export画素を変えず、frame内resource生成/GPU readback 0 (9)CPU解析hit-test、move中semantic write 0、Escape/focus lossの確定変更0 |

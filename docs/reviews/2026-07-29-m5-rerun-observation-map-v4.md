@@ -2,7 +2,7 @@
 
 作成日: 2026-07-29
 
-状態: **登録済み／P2D-RCB4未実行**
+状態: **完了／P2D-RCB6 Grok ACCEPT（P0/P1/P2=0）**
 
 変更許可: 本fileの`配置欄`だけ
 
@@ -74,12 +74,12 @@ A1〜A6の各行が固定fragment IDへ一対一で遡れ、A6が`R-A6-LIM`を�
 
 | asset | 固定観察 | 比較軸 | 非証明 | class | 持込禁止 |
 |---|---|---|---|---|---|
-| A1 | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| A2 | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| A3 | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| A4 | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| A5 | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| A6 | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
+| A1 | R-A1-OBS | R-A1-AXIS | R-VIS-NP | R-PATTERN | R-COMMON-LIM |
+| A2 | R-A2-OBS | R-A2-AXIS | R-VIS-NP | R-PATTERN | R-COMMON-LIM |
+| A3 | R-A3-OBS | R-A3-AXIS | R-VIS-NP | R-PATTERN | R-COMMON-LIM |
+| A4 | R-A4-OBS | R-A4-AXIS | R-VIEW-NP | R-PATTERN | R-COMMON-LIM |
+| A5 | R-A5-OBS | R-A5-AXIS | R-PHASE-NP | R-PATTERN | R-COMMON-LIM |
+| A6 | R-A6-OBS | R-A6-AXIS | R-PHASE-NP | R-REJECT | R-A6-LIM |
 
 ## STOP
 
