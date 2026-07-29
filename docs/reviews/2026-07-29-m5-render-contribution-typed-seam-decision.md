@@ -52,7 +52,8 @@ First Vismは専用type、feature、key、順序、package identity、registry�
 [alpha意味decision](2026-07-29-m5-render-contribution-alpha-semantics-decision.md)で独立に閉じた。
 同日に`P2D-RCF1`のharness設計と`P2D-RCD2`のschema設計も独立に閉じた。
 `P2D-RCO1`はv1方式非採択／typed unsupportedとして延期決定した。
-残る`P2D-RCFP1`、`P2D-RCR1`、`P2D-RCP1`、
+`P2D-RCFP1S`のscene-color意味と`P2D-RCR1`の入力契約も独立に閉じた。
+残る`P2D-RCFP1F`、`P2D-RCP1`、
 `P2D-RCBUD1`は各decisionまで`WAIT`とする。
 
 ## 9. STOP

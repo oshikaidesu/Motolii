@@ -171,7 +171,7 @@ M5は[操作単純化モデル](../interaction-simplicity-model.md)の最初の�
 | P2D-RCFP1S | scene-color色／alpha意味decision | M1 | **DONE**。[scene-color semantics](../reviews/2026-07-29-m5-scene-color-semantics-decision.md)でlinear-light、premultiplied、Host単一変換authority、truthful FrameDescを固定 |
 | P2D-RCFP1F | scene-color concrete format decision | P2D-RCFP1S、M4-K0、GPU evidence | **WAIT**。FP16候補のusage、precision、extent別byte量を実測 |
 | P2D-RCFP1 | scene-color中間形式umbrella | P2D-RCFP1S、P2D-RCFP1F | **WAIT**。意味DONE、具体format evidence待ち |
-| P2D-RCR1 | scene-color／refraction入力契約 | P2D-RCD1、P2D-RCFP1S、M4-K0 | **WAIT**。snapshot、範囲、順序、failure。copy方式は先取りしない |
+| P2D-RCR1 | scene-color／refraction入力契約 | P2D-RCD1、P2D-RCFP1S、M4-K0 | **DONE**。[input contract](../reviews/2026-07-29-m5-scene-color-input-contract-decision.md)でimmutable pre-requester snapshot、upstream order、K0 RoI、transparent-black domain外、whole-request failureを固定 |
 | P2D-RCP1 | scene-color copy／subpass方式decision | P2D-RCR1、P2D-RCFP1F | **WAIT**。resource lifetime、同期、画面外sample、budget |
 | P2D-RCBUD1 | cache key／resource budget統合 | P2D-RCD1、M4-K1 | **WAIT**。Host計上とcache完全性 |
 | P2U | Stage transform toolの`Scale / Depth Move`分離。Scale handleとDepth rail/axisをM3-U2dのCamera/Object操作、既存toolbar/Inspector/timeline語彙へ統合 | P3, M2-D2, M3-U2d | (1)Scale dragはscaleだけ、Depth dragはposition.zだけをD2 command化 (2)各gestureがUndo 1回 (3)perspective/orthographic fixture (4)active toolを文字なし・grayscaleでも形/iconから識別 (5)DPI差で同じ正規化gestureが同じdomain値 (6)script不要で両channelへkeyframe可能 (7)`Position X/Y`・`Depth Z`・`Rotation Z`が別group/channelで、Depth操作から3D modeや第二のDepth fieldを生成しない (8)native wgpu presentation overlayがcanonical preview/export画素を変えず、frame内resource生成/GPU readback 0 (9)CPU解析hit-test、move中semantic write 0、Escape/focus lossの確定変更0 |

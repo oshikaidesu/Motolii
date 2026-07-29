@@ -83,7 +83,7 @@ F1、F5、F6は外部先例の不足を理由に弱めない。AE-style Bins、U
 | `P2D-RCFP1S` | scene-color色／alpha意味decision | M1 | **DONE**。[scene-color semantics](2026-07-29-m5-scene-color-semantics-decision.md)でlinear-light、premultiplied、Host単一変換authority、truthful FrameDescを固定 |
 | `P2D-RCFP1F` | scene-color concrete format decision | P2D-RCFP1S、M4-K0、GPU evidence | **WAIT**。FP16候補のusage、precision、extent別byte量を実測 |
 | `P2D-RCFP1` | scene-color中間形式umbrella | P2D-RCFP1S、P2D-RCFP1F | **WAIT**。意味DONE、具体format evidence待ち |
-| `P2D-RCR1` | scene-color／refraction入力契約 | P2D-RCD1、P2D-RCFP1S、M4-K0 | **WAIT**。snapshot、範囲、順序、failure。copy／subpass方式を同時に固定しない |
+| `P2D-RCR1` | scene-color／refraction入力契約 | P2D-RCD1、P2D-RCFP1S、M4-K0 | **DONE**。[input contract](2026-07-29-m5-scene-color-input-contract-decision.md)でimmutable pre-requester snapshot、upstream order、K0 RoI、transparent-black domain外、whole-request failureを固定 |
 | `P2D-RCP1` | scene-color copy／subpass方式decision | P2D-RCR1、P2D-RCFP1F | **WAIT**。resource lifetime、同期、画面外sample、budgetを実機比較 |
 | `P2D-RCBUD1` | contribution cache key／resource budget統合 | P2D-RCD1、M4-K1 | **WAIT**。cache入力完全性とHost計上を固定 |
 

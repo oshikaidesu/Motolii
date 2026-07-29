@@ -148,7 +148,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | RENDER-CONTRIBUTION-ENGINE | P2D-RCC5 | M5 / P2D / fixture comparison | `DONE` | — | Grok ACCEPT P0/P1/P2=0、主担当再照合 | P2D-RCI入力 |
 | RENDER-CONTRIBUTION-INTEGRATION | P2D-RCI | M5 / P2D / semantic integration decision | `DONE` | — | 主担当Codex決定、Fable read-only反対側監査 | private RCS1だけ解禁 |
 | RENDER-CONTRIBUTION-SPIKE | P2D-RCS1 | M5 / P2D / private opaque Group Depth | `DONE` | — | Grok ACCEPT P0/P1=0、runner固定3 command exit 0、主担当再照合 | 実depth F1/F6、group外pixel不変、公開API／Document／serde変更0 |
-| RENDER-CONTRIBUTION-CONTRACT | P2D-RCD1 | M5 / P2D / typed seam decision | `DONE` | — | [typed seam decision](reviews/2026-07-29-m5-render-contribution-typed-seam-decision.md) | P2D-RCD2／RCF1／RCT1／RCO1 DONE。残るP2D-RCFP1、P2D-RCR1、P2D-RCP1、P2D-RCBUD1はWAIT |
+| RENDER-CONTRIBUTION-CONTRACT | P2D-RCD1 | M5 / P2D / typed seam decision | `DONE` | — | [typed seam decision](reviews/2026-07-29-m5-render-contribution-typed-seam-decision.md) | RCD2／RCF1／RCT1／RCO1／RCFP1S／RCR1 DONE。残るRCFP1F／RCP1／RCBUD1はWAIT |
 | RENDER-CONTRIBUTION-SCHEMA | P2D-RCD2 | M5 / P2D / policy schema decision | `DONE` | — | [schema decision](reviews/2026-07-29-m5-occlusion-policy-schema-decision.md) | Host semantic key、Group policy、Item participant、v6 migration、D2／Undo |
 | RENDER-CONTRIBUTION-SCHEMA | P2D-RCD2I | M5 / P2D / policy schema implementation | `WAIT` | — | P2D-RCD2、現行Document version 5前置確認 | v6 migration／command／semantic oracle |
 | RENDER-CONTRIBUTION-FIXTURE | P2D-RCF1 | M5 / P2D / conformance harness decision | `DONE` | — | [harness decision](reviews/2026-07-29-m5-render-contribution-conformance-harness-decision.md) | black-box観測、F1〜F6分担、First Vism無特権 |
@@ -161,7 +161,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | RENDER-CONTRIBUTION-FORMAT | P2D-RCFP1S | M5 / P2D / scene-color semantics | `DONE` | — | [scene-color semantics](reviews/2026-07-29-m5-scene-color-semantics-decision.md) | linear-light、premultiplied、Host単一変換authority、truthful FrameDesc |
 | RENDER-CONTRIBUTION-FORMAT | P2D-RCFP1F | M5 / P2D / concrete scene-color format | `WAIT` | — | P2D-RCFP1S、M4-K0、GPU evidence | FP16候補usage／precision／extent別byte量 |
 | RENDER-CONTRIBUTION-FORMAT | P2D-RCFP1 | M5 / P2D / scene-color format umbrella | `WAIT` | — | P2D-RCFP1S DONE、P2D-RCFP1F WAIT | concrete format evidence待ち |
-| RENDER-CONTRIBUTION-REFRACTION | P2D-RCR1 | M5 / P2D / scene-color input contract | `WAIT` | — | P2D-RCD1、P2D-RCFP1S、M4-K0 | snapshot、範囲、順序、failure |
+| RENDER-CONTRIBUTION-REFRACTION | P2D-RCR1 | M5 / P2D / scene-color input contract | `DONE` | — | [input contract](reviews/2026-07-29-m5-scene-color-input-contract-decision.md) | immutable pre-requester snapshot、upstream order、K0 RoI、transparent-black domain外、whole-request failure |
 | RENDER-CONTRIBUTION-COPY | P2D-RCP1 | M5 / P2D / scene-color copy decision | `WAIT` | — | P2D-RCR1、P2D-RCFP1F | lifetime、同期、画面外sample、budget |
 | RENDER-CONTRIBUTION-BUDGET | P2D-RCBUD1 | M5 / P2D / cache and budget integration | `WAIT` | — | P2D-RCD1、M4-K1 | Host計上とcache key完全性 |
 | M2-REPAIR | GAP-23 | M2 / narrow repair | `WAIT` | — | 独立D1i-4 LookAt/Follow oracle分離の採番・完了 | GAP-23全25件を再発注し、後にGAP-24を判定 |
