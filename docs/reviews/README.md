@@ -249,6 +249,7 @@
 | [2026-07-29-m5-render-contribution-conformance-harness-decision.md](2026-07-29-m5-render-contribution-conformance-harness-decision.md) | P2D-RCF1。provider中立black-box harness、F1〜F6分担、First Vism無特権条件を閉じるdecision |
 | [2026-07-29-m5-occlusion-policy-schema-decision.md](2026-07-29-m5-occlusion-policy-schema-decision.md) | P2D-RCD2。拡張可能なHost semantic policy key、Group policy、Item participant、migration／Undoを閉じるdecision |
 | [2026-07-29-m5-soft-alpha-oit-disposition.md](2026-07-29-m5-soft-alpha-oit-disposition.md) | P2D-RCO1。v1のOIT方式を採択せずsoft alpha typed unsupportedと将来比較gateを固定する延期decision |
+| [2026-07-29-m5-scene-color-semantics-decision.md](2026-07-29-m5-scene-color-semantics-decision.md) | P2D-RCFP1S。linear-light／premultiplied scene-color、Host単一変換authority、truthful FrameDescを閉じるdecision |
 | [2026-07-29-restartable-supervised-order-loop-decision.md](2026-07-29-restartable-supervised-order-loop-decision.md) | Codex-owned machine block、Opus施工本文、parent-owned outcome、terminal verdict、availability限定resumeを固定するGR-D4決定 |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |

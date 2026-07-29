@@ -158,9 +158,11 @@ P0I #170 → P7a → P7b → P7c → P7U
 | RENDER-CONTRIBUTION-FIXTURE | P2D-RCF1I-VISM | M5 / P2D / concrete First Vism fixture | `WAIT` | — | 製品表現選定、共通公開seam、対象能力decision | 専用type／key／registryなし |
 | RENDER-CONTRIBUTION-ALPHA | P2D-RCT1 | M5 / P2D / cutout soft alpha semantics | `DONE` | — | [alpha意味decision](reviews/2026-07-29-m5-render-contribution-alpha-semantics-decision.md) | F2/F3意味とtyped refusal固定。RCO1はv1方式非採択 |
 | RENDER-CONTRIBUTION-OIT | P2D-RCO1 | M5 / P2D / transparent OIT v1 disposition | `DONE / DEFERRED` | — | [OIT disposition](reviews/2026-07-29-m5-soft-alpha-oit-disposition.md) | v1方式非採択、shared-depth soft alpha typed unsupported、将来比較gate |
-| RENDER-CONTRIBUTION-FORMAT | P2D-RCFP1 | M5 / P2D / scene-color format decision | `WAIT` | — | M1、M4-K0 | linear FP16推奨案を再裁定 |
-| RENDER-CONTRIBUTION-REFRACTION | P2D-RCR1 | M5 / P2D / scene-color input contract | `WAIT` | — | P2D-RCD1、P2D-RCFP1 | snapshot、範囲、順序、failure |
-| RENDER-CONTRIBUTION-COPY | P2D-RCP1 | M5 / P2D / scene-color copy decision | `WAIT` | — | P2D-RCR1、P2D-RCFP1 | lifetime、同期、画面外sample、budget |
+| RENDER-CONTRIBUTION-FORMAT | P2D-RCFP1S | M5 / P2D / scene-color semantics | `DONE` | — | [scene-color semantics](reviews/2026-07-29-m5-scene-color-semantics-decision.md) | linear-light、premultiplied、Host単一変換authority、truthful FrameDesc |
+| RENDER-CONTRIBUTION-FORMAT | P2D-RCFP1F | M5 / P2D / concrete scene-color format | `WAIT` | — | P2D-RCFP1S、M4-K0、GPU evidence | FP16候補usage／precision／extent別byte量 |
+| RENDER-CONTRIBUTION-FORMAT | P2D-RCFP1 | M5 / P2D / scene-color format umbrella | `WAIT` | — | P2D-RCFP1S DONE、P2D-RCFP1F WAIT | concrete format evidence待ち |
+| RENDER-CONTRIBUTION-REFRACTION | P2D-RCR1 | M5 / P2D / scene-color input contract | `WAIT` | — | P2D-RCD1、P2D-RCFP1S、M4-K0 | snapshot、範囲、順序、failure |
+| RENDER-CONTRIBUTION-COPY | P2D-RCP1 | M5 / P2D / scene-color copy decision | `WAIT` | — | P2D-RCR1、P2D-RCFP1F | lifetime、同期、画面外sample、budget |
 | RENDER-CONTRIBUTION-BUDGET | P2D-RCBUD1 | M5 / P2D / cache and budget integration | `WAIT` | — | P2D-RCD1、M4-K1 | Host計上とcache key完全性 |
 | M2-REPAIR | GAP-23 | M2 / narrow repair | `WAIT` | — | 独立D1i-4 LookAt/Follow oracle分離の採番・完了 | GAP-23全25件を再発注し、後にGAP-24を判定 |
 | M2-REPAIR | GAP-24 | M2 / narrow repair | `WAIT` | — | GAP-23 | GAP-24後にclose |
