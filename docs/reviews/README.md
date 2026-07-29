@@ -386,3 +386,4 @@
 | [2026-07-29-cu-0b04na-product-window-lifecycle-adapter-boundary-decision.md](2026-07-29-cu-0b04na-product-window-lifecycle-adapter-boundary-decision.md) | CU-0B04NA product window lifecycle adapter境界決定 |
 | [2026-07-29-cu-0b04n-native-stage-surface-layout-implementation-decision.md](2026-07-29-cu-0b04n-native-stage-surface-layout-implementation-decision.md) | CU-0B04N native Stage Surface / layout epoch実装決定 |
 | [2026-07-29-cu-0b04r-browser-island-focus-geometry-implementation-decision.md](2026-07-29-cu-0b04r-browser-island-focus-geometry-implementation-decision.md) | CU-0B04R Browser island focus / geometry epoch実装決定 |
+| [2026-07-29-cu-0b05s-browser-lifecycle-reprojection-contract-decision.md](2026-07-29-cu-0b05s-browser-lifecycle-reprojection-contract-decision.md) | CU-0B05S Browser lifecycle再投影契約決定 |
