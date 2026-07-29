@@ -161,7 +161,7 @@ M5は[操作単純化モデル](../interaction-simplicity-model.md)の最初の�
 | P2D-RCD1 | 型付き要求／contribution seam decision | P2D-RCS1、RCI §2.2のcamera／Observation非所有 | **DONE**。[typed seam decision](../reviews/2026-07-29-m5-render-contribution-typed-seam-decision.md)が一／一／many、whole-request admission、F5継承、trust eligibility前段分離を固定。後続8件はWAIT、P3のObservation形は先取りしない |
 | P2D-RCD2 | policy／Depth Participant schema decision | P2D-RCD1、M2-D1e | **WAIT**。GR-PVと追加migration |
 | P2D-RCF1 | conformance harness／First Vism fixture | P2D-RCD1 | **WAIT**。first-party専用口なし |
-| P2D-RCT1 | cutout／soft alpha意味と診断 | P2D-RCD1 | **WAIT**。F2/F3、具体OIT方式は未決 |
+| P2D-RCT1 | cutout／soft alpha意味と診断 | P2D-RCD1 | **DONE**。[alpha意味decision](../reviews/2026-07-29-m5-render-contribution-alpha-semantics-decision.md)で明示class、binary cutout、fractional soft alpha、whole-request typed refusalを固定。具体OIT方式はP2D-RCO1 |
 | P2D-RCO1 | transparent交差のOIT方式decision | P2D-RCT1、P2D-RCS1 | **WAIT**。方式、品質、budget、unsupportedを比較 |
 | P2D-RCFP1 | scene-color中間形式decision | M1、M4-K0 | **WAIT**。linear FP16推奨案を再裁定 |
 | P2D-RCR1 | scene-color／refraction入力契約 | P2D-RCD1、P2D-RCFP1 | **WAIT**。snapshot、範囲、順序、failure |

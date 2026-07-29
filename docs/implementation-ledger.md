@@ -148,10 +148,10 @@ P0I #170 → P7a → P7b → P7c → P7U
 | RENDER-CONTRIBUTION-ENGINE | P2D-RCC5 | M5 / P2D / fixture comparison | `DONE` | — | Grok ACCEPT P0/P1/P2=0、主担当再照合 | P2D-RCI入力 |
 | RENDER-CONTRIBUTION-INTEGRATION | P2D-RCI | M5 / P2D / semantic integration decision | `DONE` | — | 主担当Codex決定、Fable read-only反対側監査 | private RCS1だけ解禁 |
 | RENDER-CONTRIBUTION-SPIKE | P2D-RCS1 | M5 / P2D / private opaque Group Depth | `DONE` | — | Grok ACCEPT P0/P1=0、runner固定3 command exit 0、主担当再照合 | 実depth F1/F6、group外pixel不変、公開API／Document／serde変更0 |
-| RENDER-CONTRIBUTION-CONTRACT | P2D-RCD1 | M5 / P2D / typed seam decision | `DONE` | — | [typed seam decision](reviews/2026-07-29-m5-render-contribution-typed-seam-decision.md) | P2D-RCD2、P2D-RCF1、P2D-RCT1、P2D-RCO1、P2D-RCFP1、P2D-RCR1、P2D-RCP1、P2D-RCBUD1はWAIT |
+| RENDER-CONTRIBUTION-CONTRACT | P2D-RCD1 | M5 / P2D / typed seam decision | `DONE` | — | [typed seam decision](reviews/2026-07-29-m5-render-contribution-typed-seam-decision.md) | P2D-RCT1 DONE。残るP2D-RCD2、P2D-RCF1、P2D-RCO1、P2D-RCFP1、P2D-RCR1、P2D-RCP1、P2D-RCBUD1はWAIT |
 | RENDER-CONTRIBUTION-SCHEMA | P2D-RCD2 | M5 / P2D / policy schema decision | `WAIT` | — | P2D-RCD1、M2-D1e | GR-PV、追加migration |
 | RENDER-CONTRIBUTION-FIXTURE | P2D-RCF1 | M5 / P2D / conformance harness | `WAIT` | — | P2D-RCD1 | First Vism専用口なし |
-| RENDER-CONTRIBUTION-ALPHA | P2D-RCT1 | M5 / P2D / cutout soft alpha semantics | `WAIT` | — | P2D-RCD1 | F2/F3、OIT方式別裁定 |
+| RENDER-CONTRIBUTION-ALPHA | P2D-RCT1 | M5 / P2D / cutout soft alpha semantics | `DONE` | — | [alpha意味decision](reviews/2026-07-29-m5-render-contribution-alpha-semantics-decision.md) | F2/F3意味とtyped refusal固定。OIT方式はP2D-RCO1 |
 | RENDER-CONTRIBUTION-OIT | P2D-RCO1 | M5 / P2D / transparent OIT decision | `WAIT` | — | P2D-RCT1、P2D-RCS1 | 方式、品質、budget、unsupported |
 | RENDER-CONTRIBUTION-FORMAT | P2D-RCFP1 | M5 / P2D / scene-color format decision | `WAIT` | — | M1、M4-K0 | linear FP16推奨案を再裁定 |
 | RENDER-CONTRIBUTION-REFRACTION | P2D-RCR1 | M5 / P2D / scene-color input contract | `WAIT` | — | P2D-RCD1、P2D-RCFP1 | snapshot、範囲、順序、failure |
