@@ -177,7 +177,7 @@ pub(crate) fn prepare_in_setup_worker(
         return Err(StaticPreviewError::SetupThreadPanic);
     }
     let rendered = result.result.map_err(map_worker_error)?;
-    let slot = DisplaySlot::copy_from_rendered(&gpu, &rendered)?;
+    let slot = DisplaySlot::copy_from_rendered(&gpu, &rendered.frame)?;
     gpu.check_health()?;
     Ok(StaticPreview {
         _gpu: gpu,

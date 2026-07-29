@@ -4,21 +4,24 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use egui_tiles::{Behavior, EditAction, Tile, TileId, Tiles, UiResponse};
+use motolii_core::{CanonicalPoint, CompCamera};
 use motolii_gpu::GpuCtx;
 
+use crate::browser_host::BrowserPlaceIntent;
 use crate::browser_host_runtime::{BrowserHostRuntime, BrowserHostRuntimeError};
 use crate::command_registry::builtin_command_registry;
 use crate::display_slot::DisplaySlotError;
 use crate::document_edit_runtime::{
     DocumentEditActionKind, DocumentEditDispatchError, DocumentEditQueue, DocumentEditRuntime,
-    DocumentEditRuntimeError, PublishedDocument,
+    DocumentEditRuntimeError, PlaceRectangleRequest, PublishedDocument,
 };
 use crate::input_router::{ImeGateState, InputPhase, InputRouter, NormalizedInput};
 use crate::layout::{LayoutAction, LayoutConstraints, PanelRole, SeparatorAction};
 use crate::layout_authority::{LayoutAuthority, RuntimeFrameEdit};
 use crate::layout_runtime::{RuntimeLayout, RuntimeSeparator};
 use crate::layout_runtime_adapter::{
-    read_layout_cancel, read_safety_interrupt, read_separator_action,
+    read_layout_cancel, read_safety_interrupt, read_separator_action, read_stage_drop_terminal,
+    StageDropTerminal,
 };
 use crate::render_worker::{
     RenderGeneration, RenderRequest, RenderSubmitError, RenderWorkerClient, RenderWorkerError,
@@ -170,6 +173,8 @@ pub(crate) struct MotoliiApp {
     document_smoke: Option<DocumentEditSmoke>,
     browser_host: Option<BrowserHostRuntime>,
     browser_host_failure: Option<String>,
+    active_browser_place: Option<BrowserPlaceIntent>,
+    latest_camera: Option<CompCamera>,
 }
 
 const INITIAL_PRIMARY: Option<motolii_doc::LayerId> = None;
@@ -224,7 +229,7 @@ impl MotoliiApp {
             let window = cc
                 .winit_window()
                 .ok_or(AppConstructionError::MissingNativeWindow)?;
-            Some(BrowserHostRuntime::new(window)?)
+            Some(BrowserHostRuntime::new(window, repaint_context.clone())?)
         } else {
             None
         };
@@ -272,6 +277,8 @@ impl MotoliiApp {
                 .map(|request| DocumentEditSmoke::new(evidence, request)),
             browser_host,
             browser_host_failure: None,
+            active_browser_place: None,
+            latest_camera: None,
         })
     }
 
@@ -286,6 +293,7 @@ impl eframe::App for MotoliiApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.recover_repaint_signal();
         self.drain_latest_result();
+        self.begin_browser_place();
         if self.advance_latest_smoke(ctx) {
             return;
         }
@@ -375,6 +383,7 @@ impl eframe::App for MotoliiApp {
 
         egui::CentralPanel::default().show(ui, |ui| {
             let constraints = layout_constraints(ui.available_width());
+            let layout_action_requested = requested_action.is_some();
             if let Some(action) = requested_action.take() {
                 if let Err(error) = self.layout_authority.apply(action, constraints) {
                     self.observe_layout_failure(error);
@@ -398,6 +407,7 @@ impl eframe::App for MotoliiApp {
                 texture_id: self.texture_id,
                 edits: Vec::new(),
                 visibility_edited: false,
+                stage_rect: None,
             };
             self.layout_authority
                 .runtime_mut()
@@ -424,6 +434,7 @@ impl eframe::App for MotoliiApp {
             };
             let gesture_finished =
                 edits.contains(&EditAction::TileDropped) || ui.ctx().drag_stopped_id().is_some();
+            let stage_rect = behavior.stage_rect;
 
             if cancel_runtime_frame {
                 if let Err(error) = self.layout_authority.reconcile_runtime_frame(
@@ -440,6 +451,19 @@ impl eframe::App for MotoliiApp {
             let separator_actions =
                 collect_separator_actions(ui, self.layout_authority.runtime(), self.ime_gate);
             let separator_consumed_runtime_edit = !separator_actions.is_empty();
+            if self.active_browser_place.is_some() {
+                let layout_changed = runtime_edit != RuntimeFrameEdit::None
+                    || layout_action_requested
+                    || separator_consumed_runtime_edit;
+                let terminal = if layout_changed {
+                    Some(StageDropTerminal::Cancel)
+                } else {
+                    stage_rect.and_then(|rect| read_stage_drop_terminal(ui, rect, self.ime_gate))
+                };
+                if let Some(terminal) = terminal {
+                    self.finish_browser_place(terminal);
+                }
+            }
             for (separator, action) in separator_actions {
                 if action == SeparatorAction::Cancel {
                     if let Err(error) = self.layout_authority.reconcile_runtime_frame(
@@ -642,11 +666,54 @@ impl MotoliiApp {
                 return;
             }
         };
-        if let Err(error) = self.preview.slot().copy(&self.gpu, &rendered) {
+        if let Err(error) = self.preview.slot().copy(&self.gpu, &rendered.frame) {
             self.record_preview_failure(PreviewProjectionFailure::Display(error));
             return;
         }
+        self.latest_camera = Some(rendered.camera);
         self.latest_projection.commit(result.generation);
+    }
+
+    fn begin_browser_place(&mut self) {
+        if self.active_browser_place.is_some() || self.browser_host_failure.is_some() {
+            return;
+        }
+        let Some(host) = &self.browser_host else {
+            return;
+        };
+        match host.take_place_intent() {
+            Ok(Some(intent)) => self.active_browser_place = Some(intent),
+            Ok(None) => {}
+            Err(error) => self.browser_host_failure = Some(error.to_string()),
+        }
+    }
+
+    fn finish_browser_place(&mut self, terminal: StageDropTerminal) {
+        let Some(_intent) = self.active_browser_place.take() else {
+            return;
+        };
+        let StageDropTerminal::Commit { ndc } = terminal else {
+            return;
+        };
+        let Some(camera) = self.latest_camera else {
+            self.browser_host_failure =
+                Some("Rectangle drop has no displayed camera projection".to_owned());
+            return;
+        };
+        let Some(position) = canonical_drop_from_ndc(camera, ndc) else {
+            self.browser_host_failure =
+                Some("Rectangle drop could not be converted to canonical coordinates".to_owned());
+            return;
+        };
+        self.document_queue
+            .push_place_rectangle(PlaceRectangleRequest {
+                position,
+                playhead: self
+                    .render_request_template
+                    .evaluation_time
+                    .timeline_time,
+            });
+        self.repaint_context.request_repaint();
     }
 
     fn advance_latest_smoke(&mut self, ctx: &egui::Context) -> bool {
@@ -811,12 +878,15 @@ struct PanelBehavior<'a> {
     texture_id: egui::TextureId,
     edits: Vec<EditAction>,
     visibility_edited: bool,
+    stage_rect: Option<egui::Rect>,
 }
 
 impl Behavior<PanelRole> for PanelBehavior<'_> {
     fn pane_ui(&mut self, ui: &mut egui::Ui, _tile_id: TileId, pane: &mut PanelRole) -> UiResponse {
         match pane {
-            PanelRole::Stage => paint_stage(ui, self.preview, self.texture_id),
+            PanelRole::Stage => {
+                self.stage_rect = Some(paint_stage(ui, self.preview, self.texture_id));
+            }
             role => {
                 let response = ui.add(egui::Label::new(role.title()).sense(egui::Sense::drag()));
                 if response.drag_started() {
@@ -860,17 +930,48 @@ impl Behavior<PanelRole> for PanelBehavior<'_> {
     }
 }
 
-fn paint_stage(ui: &mut egui::Ui, preview: &StaticPreview, texture_id: egui::TextureId) {
+fn paint_stage(
+    ui: &mut egui::Ui,
+    preview: &StaticPreview,
+    texture_id: egui::TextureId,
+) -> egui::Rect {
     let desc = preview.slot().desc();
     let source_size = egui::vec2(desc.width as f32, desc.height as f32);
     let target_size = fit_inside(source_size, ui.available_size());
-    ui.centered_and_justified(|ui| {
-        ui.push_id("motolii-stage-viewport", |ui| {
-            ui.add(
-                egui::Image::from_texture((texture_id, source_size)).fit_to_exact_size(target_size),
-            );
-        });
+    let rect = egui::Rect::from_center_size(ui.max_rect().center(), target_size);
+    ui.push_id("motolii-stage-viewport", |ui| {
+        ui.put(
+            rect,
+            egui::Image::from_texture((texture_id, source_size)).fit_to_exact_size(target_size),
+        );
     });
+    rect
+}
+
+fn canonical_drop_from_ndc(camera: CompCamera, ndc: [f64; 2]) -> Option<[f64; 2]> {
+    if !ndc[0].is_finite() || !ndc[1].is_finite() {
+        return None;
+    }
+    let qx = ndc[0] * camera.aspect_num() as f64 / camera.aspect_den() as f64
+        * camera.height()
+        / 2.0;
+    let qy = ndc[1] * camera.height() / 2.0;
+    let cos_r = camera.roll_radians().cos();
+    let sin_r = camera.roll_radians().sin();
+    let center = camera.center();
+    let point = CanonicalPoint {
+        x: center.x + cos_r * qx - sin_r * qy,
+        y: center.y + sin_r * qx + cos_r * qy,
+    };
+    let projected = camera.world_to_ndc(point).ok()?;
+    if !point.x.is_finite()
+        || !point.y.is_finite()
+        || (projected.0 - ndc[0]).abs() > 1e-9
+        || (projected.1 - ndc[1]).abs() > 1e-9
+    {
+        return None;
+    }
+    Some([point.x, point.y])
 }
 
 fn layout_constraints(viewport_width: f32) -> LayoutConstraints {
@@ -1128,6 +1229,28 @@ mod tests {
     fn initial_selection_fields_are_none_and_zero() {
         assert_eq!(INITIAL_PRIMARY, None);
         assert_eq!(INITIAL_PROJECTION_GENERATION, 0);
+    }
+
+    #[test]
+    fn stage_ndc_drop_roundtrips_through_the_displayed_camera() {
+        let camera = CompCamera::try_new(
+            CanonicalPoint { x: 0.3, y: -0.1 },
+            0.4,
+            1.5,
+            16,
+            9,
+        )
+        .unwrap();
+        let ndc = [0.25, -0.5];
+        let position = canonical_drop_from_ndc(camera, ndc).expect("canonical position");
+        let projected = camera
+            .world_to_ndc(CanonicalPoint {
+                x: position[0],
+                y: position[1],
+            })
+            .unwrap();
+        assert!((projected.0 - ndc[0]).abs() < 1e-9);
+        assert!((projected.1 - ndc[1]).abs() < 1e-9);
     }
 
     #[test]

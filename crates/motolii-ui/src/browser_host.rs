@@ -20,24 +20,27 @@ pub(crate) struct BrowserPlaceIntent {
 pub(crate) struct BrowserHostSession {
     instance_epoch: u64,
     last_sequence: u64,
+    rectangle_source: BrowserPlaceIntent,
     inbox: VecDeque<BrowserPlaceIntent>,
 }
 
 impl BrowserHostSession {
-    pub(crate) fn new(instance_epoch: u64, sequence: u64) -> Self {
+    pub(crate) fn new(
+        instance_epoch: u64,
+        sequence: u64,
+        rectangle_source: BrowserPlaceIntent,
+    ) -> Self {
         Self {
             instance_epoch,
             last_sequence: sequence,
+            rectangle_source,
             inbox: VecDeque::with_capacity(INBOX_CAPACITY),
         }
     }
 
-    pub(crate) fn snapshot_json(
-        &self,
-        source: &BrowserPlaceIntent,
-    ) -> Result<String, BrowserHostError> {
-        validate_id(&source.scope_ref, "scope_ref")?;
-        validate_id(&source.item_id, "item_id")?;
+    pub(crate) fn snapshot_json(&self) -> Result<String, BrowserHostError> {
+        validate_id(&self.rectangle_source.scope_ref, "scope_ref")?;
+        validate_id(&self.rectangle_source.item_id, "item_id")?;
         serde_json::to_string(&HostSnapshot {
             version: CODEC_VERSION,
             direction: HOST_TO_WEB,
@@ -46,8 +49,8 @@ impl BrowserHostSession {
             sequence: self.last_sequence.to_string(),
             browser: HostBrowser {
                 rectangle_source: WireSource {
-                    scope_ref: &source.scope_ref,
-                    item_id: &source.item_id,
+                    scope_ref: &self.rectangle_source.scope_ref,
+                    item_id: &self.rectangle_source.item_id,
                 },
             },
         })
@@ -88,6 +91,11 @@ impl BrowserHostSession {
         }
         validate_id(&message.source.scope_ref, "scope_ref")?;
         validate_id(&message.source.item_id, "item_id")?;
+        if message.source.scope_ref != self.rectangle_source.scope_ref
+            || message.source.item_id != self.rectangle_source.item_id
+        {
+            return Err(BrowserHostError::Source);
+        }
         if self.inbox.len() == INBOX_CAPACITY {
             return Err(BrowserHostError::InboxFull);
         }
@@ -99,7 +107,6 @@ impl BrowserHostSession {
         Ok(())
     }
 
-    #[cfg(test)]
     pub(crate) fn pop(&mut self) -> Option<BrowserPlaceIntent> {
         self.inbox.pop_front()
     }
@@ -190,6 +197,8 @@ pub(crate) enum BrowserHostError {
     Sequence { expected: u64, actual: u64 },
     #[error("Browser Host {field} must be a non-empty bounded identifier")]
     Identifier { field: &'static str },
+    #[error("Browser Host source does not match the admitted Rectangle source")]
+    Source,
     #[error("Browser Host inbox is full")]
     InboxFull,
 }
@@ -213,9 +222,9 @@ mod tests {
 
     #[test]
     fn snapshot_and_place_delivery_match_the_web_codec() {
-        let mut session = BrowserHostSession::new(7, 10);
+        let mut session = BrowserHostSession::new(7, 10, intent());
         assert_eq!(
-            session.snapshot_json(&intent()).unwrap(),
+            session.snapshot_json().unwrap(),
             r#"{"version":1,"direction":"host-to-web","role":"browser","instance_epoch":"7","sequence":"10","browser":{"rectangle_source":{"scope_ref":"catalog-scope-2","item_id":"rectangle"}}}"#
         );
         session.accept(&message("7", "11")).unwrap();
@@ -225,7 +234,7 @@ mod tests {
 
     #[test]
     fn rejects_stale_duplicate_gap_unknown_and_oversized_messages() {
-        let mut session = BrowserHostSession::new(7, 10);
+        let mut session = BrowserHostSession::new(7, 10, intent());
         assert!(matches!(
             session.accept(&message("6", "11")),
             Err(BrowserHostError::StaleInstance)
@@ -237,6 +246,14 @@ mod tests {
         assert!(matches!(
             session.accept(&message("7", "12")),
             Err(BrowserHostError::Sequence { .. })
+        ));
+        let wrong_source = message("7", "11").replace(
+            r#""item_id":"rectangle""#,
+            r#""item_id":"forged-rectangle""#,
+        );
+        assert!(matches!(
+            session.accept(&wrong_source),
+            Err(BrowserHostError::Source)
         ));
         assert!(matches!(
             session.accept(&message("07", "11")),
@@ -255,7 +272,7 @@ mod tests {
 
     #[test]
     fn full_inbox_does_not_consume_sequence() {
-        let mut session = BrowserHostSession::new(7, 0);
+        let mut session = BrowserHostSession::new(7, 0, intent());
         for sequence in 1..=INBOX_CAPACITY {
             session
                 .accept(&message("7", &sequence.to_string()))

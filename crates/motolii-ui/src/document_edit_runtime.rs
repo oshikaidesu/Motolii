@@ -1,11 +1,13 @@
 //! 確定済みDocument編集をsingle writerへ直列配送するprivate runtime。
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
+use motolii_core::{RationalTime, RationalTimeError};
 use motolii_doc::{
-    CommandError, Document, DocumentError, DocumentPluginError, DocumentWriter, JournalEdit,
-    LayerId, ProjectError, ProjectSession, SaveProjectOptions,
+    Clip, ClipSource, Command, CommandError, Document, DocumentError, DocumentPluginError,
+    DocumentWriter, ItemEnvelope, JournalEdit, LayerId, LayerIdError, ParentLocator, ProjectError,
+    ProjectSession, SaveProjectOptions, StandardShape, TrackItem, VectorContent, VectorRecipe,
 };
 use motolii_plugin::PluginCatalog;
 
@@ -14,6 +16,7 @@ use crate::{DocumentCommandRequest, DomainIntent, InputPhase, RouterOutput};
 #[derive(Debug)]
 pub(crate) enum DocumentEditAction {
     Apply(DocumentCommandRequest),
+    PlaceRectangle(PlaceRectangleRequest),
     #[cfg(test)]
     Undo,
     #[cfg(test)]
@@ -24,6 +27,7 @@ impl DocumentEditAction {
     pub(crate) const fn kind(&self) -> DocumentEditActionKind {
         match self {
             Self::Apply(_) => DocumentEditActionKind::Apply,
+            Self::PlaceRectangle(_) => DocumentEditActionKind::PlaceRectangle,
             #[cfg(test)]
             Self::Undo => DocumentEditActionKind::Undo,
             #[cfg(test)]
@@ -35,6 +39,7 @@ impl DocumentEditAction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DocumentEditActionKind {
     Apply,
+    PlaceRectangle,
     #[cfg(test)]
     Undo,
     #[cfg(test)]
@@ -47,6 +52,11 @@ pub(crate) struct DocumentEditQueue {
 }
 
 impl DocumentEditQueue {
+    pub(crate) fn push_place_rectangle(&mut self, request: PlaceRectangleRequest) {
+        self.pending
+            .push_back(DocumentEditAction::PlaceRectangle(request));
+    }
+
     pub(crate) fn push_prepared(
         &mut self,
         output: RouterOutput,
@@ -87,6 +97,12 @@ impl DocumentEditQueue {
     pub(crate) fn len(&self) -> usize {
         self.pending.len()
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct PlaceRectangleRequest {
+    pub(crate) position: [f64; 2],
+    pub(crate) playhead: RationalTime,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -175,55 +191,87 @@ impl DocumentEditRuntime {
                     return Err(DocumentEditRuntimeError::MultiCommandActionRejected);
                 }
                 let command = commands.remove(0);
-
-                let mut candidate: Document = (*self.writer.snapshot()).clone();
-                command.apply(&mut candidate)?;
-                candidate.validate()?;
-                candidate.prepare_plugins(&self.catalog)?;
-
-                let options = SaveProjectOptions {
-                    limits: *self.session.limits(),
-                    journal_edit: Some(JournalEdit::new(command.clone())),
-                    checkpoint: false,
-                    ..SaveProjectOptions::default()
-                };
-                if let Err(error) = self.session.save_with_journal(&candidate, &options) {
-                    self.poison();
-                    return Err(DocumentEditRuntimeError::JournalCommit(error));
-                }
-
-                #[cfg(test)]
-                if self.test_hooks.failpoint == Some(RuntimeTestFailpoint::PostDurableLiveApply) {
-                    self.poison();
-                    return Err(DocumentEditRuntimeError::PostDurableLiveApply(
-                        PostDurableLiveApplyError::InjectedInvariant,
-                    ));
-                }
-
-                if let Err(error) = self.writer.apply_macro(vec![command]) {
-                    self.poison();
-                    return Err(DocumentEditRuntimeError::PostDurableLiveApply(
-                        PostDurableLiveApplyError::Command(error),
-                    ));
-                }
-
-                #[cfg(test)]
-                if self.test_hooks.failpoint == Some(RuntimeTestFailpoint::Reconcile) {
-                    self.poison();
-                    return Err(DocumentEditRuntimeError::ReconcileFailed);
-                }
-
-                let snapshot = self.writer.snapshot();
-                let primary = current_primary.filter(|id| self.writer.find_envelope(*id).is_some());
-                Ok(Some(PublishedDocument {
+                self.commit_command(
+                    command,
                     kind,
-                    revision: self.writer.revision,
-                    snapshot,
-                    primary,
-                    projection_generation: next_projection_generation,
-                }))
+                    current_primary,
+                    current_primary,
+                    next_projection_generation,
+                )
+            }
+            DocumentEditAction::PlaceRectangle(request) => {
+                let (command, layer_id, expected_live_next) =
+                    prepare_rectangle_command(&self.writer.snapshot(), current_primary, request)?;
+                if self.writer.snapshot().layers.peek_next() != expected_live_next {
+                    return Err(DocumentEditRuntimeError::LayerIdReservationChanged);
+                }
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    Some(layer_id),
+                    next_projection_generation,
+                )
             }
         }
+    }
+
+    fn commit_command(
+        &mut self,
+        command: Command,
+        kind: DocumentEditActionKind,
+        current_primary: Option<LayerId>,
+        success_primary: Option<LayerId>,
+        projection_generation: u64,
+    ) -> Result<Option<PublishedDocument>, DocumentEditRuntimeError> {
+        let mut candidate: Document = (*self.writer.snapshot()).clone();
+        command.apply(&mut candidate)?;
+        candidate.validate()?;
+        candidate.prepare_plugins(&self.catalog)?;
+
+        let options = SaveProjectOptions {
+            limits: *self.session.limits(),
+            journal_edit: Some(JournalEdit::new(command.clone())),
+            checkpoint: false,
+            ..SaveProjectOptions::default()
+        };
+        if let Err(error) = self.session.save_with_journal(&candidate, &options) {
+            self.poison();
+            return Err(DocumentEditRuntimeError::JournalCommit(error));
+        }
+
+        #[cfg(test)]
+        if self.test_hooks.failpoint == Some(RuntimeTestFailpoint::PostDurableLiveApply) {
+            self.poison();
+            return Err(DocumentEditRuntimeError::PostDurableLiveApply(
+                PostDurableLiveApplyError::InjectedInvariant,
+            ));
+        }
+
+        if let Err(error) = self.writer.apply_macro(vec![command]) {
+            self.poison();
+            return Err(DocumentEditRuntimeError::PostDurableLiveApply(
+                PostDurableLiveApplyError::Command(error),
+            ));
+        }
+
+        #[cfg(test)]
+        if self.test_hooks.failpoint == Some(RuntimeTestFailpoint::Reconcile) {
+            self.poison();
+            return Err(DocumentEditRuntimeError::ReconcileFailed);
+        }
+
+        let snapshot = self.writer.snapshot();
+        let primary = success_primary
+            .or(current_primary)
+            .filter(|id| self.writer.find_envelope(*id).is_some());
+        Ok(Some(PublishedDocument {
+            kind,
+            revision: self.writer.revision,
+            snapshot,
+            primary,
+            projection_generation,
+        }))
     }
 
     #[cfg(test)]
@@ -239,6 +287,100 @@ impl DocumentEditRuntime {
     #[cfg(test)]
     fn is_poisoned(&self) -> bool {
         self.health == RuntimeHealth::Poisoned
+    }
+}
+
+fn prepare_rectangle_command(
+    snapshot: &Document,
+    current_primary: Option<LayerId>,
+    request: PlaceRectangleRequest,
+) -> Result<(Command, LayerId, u64), DocumentEditRuntimeError> {
+    if !request.position[0].is_finite() || !request.position[1].is_finite() {
+        return Err(DocumentEditRuntimeError::NonFiniteDropPosition);
+    }
+    if request.playhead < RationalTime::ZERO {
+        return Err(DocumentEditRuntimeError::PlayheadOutsideComposition);
+    }
+    let duration = snapshot.composition.duration.try_sub(request.playhead)?;
+    if duration < snapshot.composition.fps.frame_duration() {
+        return Err(DocumentEditRuntimeError::RemainingDurationBelowOneFrame);
+    }
+
+    let mut layers = snapshot.layers.clone();
+    let expected_live_next = layers.peek_next();
+    let layer_id = layers.reserve()?;
+    let (track_id, index) = rectangle_insertion(snapshot, current_primary)
+        .ok_or(DocumentEditRuntimeError::NoTrackForRectangle)?;
+
+    let mut envelope = ItemEnvelope::new(layer_id);
+    envelope.transform.position = motolii_doc::DocParam::const_vec2(request.position);
+    let item = TrackItem::Clip(Clip {
+        envelope,
+        start: request.playhead,
+        duration,
+        time_map: Default::default(),
+        source: ClipSource::Vector {
+            recipe: VectorRecipe {
+                content: VectorContent::StandardShape {
+                    shape: StandardShape::Rect {
+                        width: motolii_doc::DocParam::const_f64(0.2),
+                        height: motolii_doc::DocParam::const_f64(0.2),
+                    },
+                },
+                modifiers: Vec::new(),
+            },
+        },
+    });
+    Ok((
+        Command::AddTrackItem {
+            parent: ParentLocator::Track(track_id),
+            index,
+            item,
+            layer_names: BTreeMap::from([(layer_id, "Rectangle".to_owned())]),
+        },
+        layer_id,
+        expected_live_next,
+    ))
+}
+
+fn rectangle_insertion(
+    snapshot: &Document,
+    current_primary: Option<LayerId>,
+) -> Option<(motolii_doc::TrackId, usize)> {
+    if let Some(primary) = current_primary {
+        for track in &snapshot.tracks {
+            if let Some(index) = track
+                .items
+                .iter()
+                .position(|item| item_layer_id(item) == primary)
+            {
+                if rectangle_selection_is_compatible(&track.items[index]) {
+                    return Some((track.id, index + 1));
+                }
+                break;
+            }
+        }
+    }
+    snapshot
+        .tracks
+        .first()
+        .map(|track| (track.id, track.items.len()))
+}
+
+fn item_layer_id(item: &TrackItem) -> LayerId {
+    match item {
+        TrackItem::Clip(clip) => clip.envelope.layer_id,
+        TrackItem::Group(group) => group.envelope.layer_id,
+    }
+}
+
+fn rectangle_selection_is_compatible(item: &TrackItem) -> bool {
+    match item {
+        TrackItem::Group(_) => true,
+        TrackItem::Clip(clip) => match &clip.source {
+            ClipSource::Asset { video, .. } => video.is_some(),
+            ClipSource::Plugin { .. } | ClipSource::Vector { .. } => true,
+        },
     }
 }
 
@@ -284,6 +426,20 @@ pub(crate) enum DocumentEditRuntimeError {
     PreparedActionUnavailable,
     #[error("document edit action must contain exactly one command")]
     MultiCommandActionRejected,
+    #[error("Rectangle drop position must be finite canonical coordinates")]
+    NonFiniteDropPosition,
+    #[error("Rectangle playhead is outside the composition")]
+    PlayheadOutsideComposition,
+    #[error("Rectangle remaining duration is below one frame")]
+    RemainingDurationBelowOneFrame,
+    #[error("Rectangle placement requires an existing Track")]
+    NoTrackForRectangle,
+    #[error("Rectangle LayerId reservation changed before live apply")]
+    LayerIdReservationChanged,
+    #[error(transparent)]
+    LayerId(#[from] LayerIdError),
+    #[error(transparent)]
+    RationalTime(#[from] RationalTimeError),
     #[error(transparent)]
     Document(#[from] DocumentError),
     #[error(transparent)]
@@ -1329,6 +1485,88 @@ mod tests {
         assert!(size_after > size_before);
         assert_eq!(queue.len(), 0);
         assert_eq!(published.projection_generation, 1);
+    }
+
+    #[test]
+    fn rectangle_place_uses_one_add_command_and_publishes_the_same_layer_id() {
+        let (document, _) = fixture();
+        let selected = fixture_layer(&document);
+        let initial_next = document.layers.peek_next();
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_place_rectangle(PlaceRectangleRequest {
+            position: [0.25, -0.125],
+            playhead: RationalTime::try_new(1, 1).unwrap(),
+        });
+
+        let published = runtime
+            .process_next(&mut queue, Some(selected), 4)
+            .unwrap()
+            .expect("published Rectangle");
+        let placed = published.primary.expect("placed selection receipt");
+        assert_eq!(placed.get(), initial_next);
+        assert_eq!(published.kind, DocumentEditActionKind::PlaceRectangle);
+        assert_eq!(published.revision, 1);
+        assert_eq!(published.projection_generation, 5);
+        assert_eq!(runtime.history_lengths(), (1, 0));
+        assert_eq!(published.snapshot.tracks[0].items.len(), 2);
+        let TrackItem::Clip(clip) = &published.snapshot.tracks[0].items[1] else {
+            panic!("Rectangle must be a Clip");
+        };
+        assert_eq!(clip.envelope.layer_id, placed);
+        assert_eq!(
+            clip.envelope.transform.position,
+            motolii_doc::DocParam::const_vec2([0.25, -0.125])
+        );
+        assert_eq!(clip.start, RationalTime::try_new(1, 1).unwrap());
+        assert_eq!(
+            clip.duration,
+            published
+                .snapshot
+                .composition
+                .duration
+                .try_sub(clip.start)
+                .unwrap()
+        );
+        assert!(matches!(
+            clip.source,
+            ClipSource::Vector {
+                recipe: VectorRecipe {
+                    content: VectorContent::StandardShape {
+                        shape: StandardShape::Rect { .. }
+                    },
+                    ..
+                }
+            }
+        ));
+        assert_eq!(
+            published.snapshot.layers.display_name(placed),
+            Some("Rectangle")
+        );
+    }
+
+    #[test]
+    fn rejected_rectangle_place_changes_no_document_counter_history_or_revision() {
+        let (document, _) = fixture();
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let initial_next = document.layers.peek_next();
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_place_rectangle(PlaceRectangleRequest {
+            position: [f64::NAN, 0.0],
+            playhead: RationalTime::ZERO,
+        });
+        assert!(matches!(
+            runtime.process_next(&mut queue, None, 0),
+            Err(DocumentEditRuntimeError::NonFiniteDropPosition)
+        ));
+        assert_eq!(runtime.snapshot().layers.peek_next(), initial_next);
+        assert_eq!(runtime.revision(), 0);
+        assert_eq!(runtime.history_lengths(), (0, 0));
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
     }
 
     #[test]

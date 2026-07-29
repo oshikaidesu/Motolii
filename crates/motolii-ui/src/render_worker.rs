@@ -5,7 +5,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 
-use motolii_core::{FrameDesc, Quality};
+use motolii_core::{CompCamera, FrameDesc, Quality};
 use motolii_doc::{build_document_frame_graph, Document, EvaluationTime};
 use motolii_eval::DataTracks;
 use motolii_gpu::GpuCtx;
@@ -457,12 +457,18 @@ pub(crate) enum RenderWorkerStartError {
 }
 
 pub(crate) struct RenderWorker {
-    inner: LatestWorker<RenderRequest, RenderedFrame, RenderWorkerError>,
+    inner: LatestWorker<RenderRequest, RenderedPreview, RenderWorkerError>,
 }
 
 #[derive(Clone)]
 pub(crate) struct RenderWorkerClient {
-    inner: LatestWorkerClient<RenderRequest, RenderedFrame, RenderWorkerError>,
+    inner: LatestWorkerClient<RenderRequest, RenderedPreview, RenderWorkerError>,
+}
+
+#[derive(Debug)]
+pub(crate) struct RenderedPreview {
+    pub(crate) frame: RenderedFrame,
+    pub(crate) camera: CompCamera,
 }
 
 impl RenderWorker {
@@ -495,7 +501,10 @@ impl RenderWorker {
                 request.quality,
             )?;
             execute_gpu.check_health()?;
-            Ok(rendered)
+            Ok(RenderedPreview {
+                frame: rendered,
+                camera: built.camera,
+            })
         };
         Ok(Self {
             inner: LatestWorker::spawn("motolii-u1b1-render-worker", execute, || {
@@ -527,7 +536,7 @@ impl RenderWorker {
 
     pub(crate) fn try_take_latest(
         &self,
-    ) -> Option<StampedResult<RenderedFrame, RenderWorkerError>> {
+    ) -> Option<StampedResult<RenderedPreview, RenderWorkerError>> {
         self.inner.try_take_latest()
     }
 
@@ -554,7 +563,7 @@ impl RenderWorkerClient {
 
     pub(crate) fn try_take_latest(
         &self,
-    ) -> Option<StampedResult<RenderedFrame, RenderWorkerError>> {
+    ) -> Option<StampedResult<RenderedPreview, RenderWorkerError>> {
         self.inner.try_take_latest()
     }
 
@@ -595,7 +604,7 @@ mod tests {
     #[test]
     fn worker_handles_are_send_sync() {
         assert_send_sync::<RenderRequest>();
-        assert_send_sync::<StampedResult<RenderedFrame, RenderWorkerError>>();
+        assert_send_sync::<StampedResult<RenderedPreview, RenderWorkerError>>();
         assert_send_sync::<Arc<WorkerShared<u64, u64, TestError>>>();
         assert_send_sync::<LatestWorkerClient<u64, u64, TestError>>();
     }
@@ -822,7 +831,7 @@ mod tests {
         let result = worker.try_take_latest().expect("render result");
         assert_eq!(result.generation, generation);
         let rendered = result.result.expect("rendered frame");
-        assert_eq!(rendered.desc, Quality::DRAFT.render_desc(desc));
+        assert_eq!(rendered.frame.desc, Quality::DRAFT.render_desc(desc));
         assert_eq!(
             serde_json::to_string(&document).expect("serialize after"),
             before

@@ -340,7 +340,10 @@ fn layout_adapter_path_is_allowed(segments: &[String]) -> bool {
         [egui, event, variant]
             if egui == "egui"
                 && event == "Event"
-                && matches!(variant.as_str(), "PointerGone" | "WindowFocused")
+                && matches!(
+                    variant.as_str(),
+                    "PointerButton" | "PointerGone" | "WindowFocused"
+                )
     );
     allowed_key || allowed_safety
 }
@@ -527,7 +530,9 @@ fn layout_adapter_accepts_only_the_specified_raw_closed_set() {
                 let _ = input.key_pressed(egui::Key::Escape);
                 for event in &input.events {
                     match event {
-                        egui::Event::PointerGone | egui::Event::WindowFocused(false) => {}
+                        egui::Event::PointerButton { .. }
+                        | egui::Event::PointerGone
+                        | egui::Event::WindowFocused(false) => {}
                         _ => {}
                     }
                 }

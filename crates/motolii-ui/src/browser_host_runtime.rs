@@ -18,12 +18,15 @@ const HOST_CSS: &[u8] =
     include_bytes!("../../../ui/motolii-web/generated-host/assets/host-Dbykilq0.css");
 
 pub(crate) struct BrowserHostRuntime {
-    _session: Arc<Mutex<BrowserHostSession>>,
+    session: Arc<Mutex<BrowserHostSession>>,
     webview: WebView,
 }
 
 impl BrowserHostRuntime {
-    pub(crate) fn new(window: &winit::window::Window) -> Result<Self, BrowserHostRuntimeError> {
+    pub(crate) fn new(
+        window: &winit::window::Window,
+        repaint_context: egui::Context,
+    ) -> Result<Self, BrowserHostRuntimeError> {
         let elapsed = SystemTime::now().duration_since(UNIX_EPOCH)?;
         let epoch = u64::try_from(elapsed.as_millis())
             .map_err(|_| BrowserHostRuntimeError::EpochOverflow)?;
@@ -32,8 +35,8 @@ impl BrowserHostRuntime {
             scope_ref: format!("builtin-{epoch}"),
             item_id: "rectangle".to_owned(),
         };
-        let session = BrowserHostSession::new(epoch, 0);
-        let snapshot = session.snapshot_json(&source)?;
+        let session = BrowserHostSession::new(epoch, 0, source);
+        let snapshot = session.snapshot_json()?;
         let encoded_snapshot = serde_json::to_string(&snapshot)?;
         let initialization_script = format!(
             r#"window.__MOTOLII_BUILTIN_HOST__=Object.freeze({{
@@ -60,8 +63,9 @@ postMessage:(message)=>window.ipc.postMessage(message)
                 let raw = request.body();
                 match callback_session.lock() {
                     Ok(mut session) => {
-                        if let Err(error) = session.accept(raw) {
-                            eprintln!("Browser Host rejected message: {error}");
+                        match session.accept(raw) {
+                            Ok(()) => repaint_context.request_repaint(),
+                            Err(error) => eprintln!("Browser Host rejected message: {error}"),
                         }
                     }
                     Err(_) => eprintln!("Browser Host inbox lock is poisoned"),
@@ -69,9 +73,18 @@ postMessage:(message)=>window.ipc.postMessage(message)
             })
             .build_as_child(window)?;
         Ok(Self {
-            _session: session,
+            session,
             webview,
         })
+    }
+
+    pub(crate) fn take_place_intent(
+        &self,
+    ) -> Result<Option<BrowserPlaceIntent>, BrowserHostRuntimeError> {
+        self.session
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::InboxPoisoned)
+            .map(|mut session| session.pop())
     }
 
     pub(crate) fn set_bounds(&self, rect: egui::Rect) -> Result<(), BrowserHostRuntimeError> {
@@ -115,4 +128,6 @@ pub(crate) enum BrowserHostRuntimeError {
     Codec(#[from] crate::browser_host::BrowserHostError),
     #[error("Browser Host WebView failed")]
     WebView(#[from] wry::Error),
+    #[error("Browser Host inbox lock is poisoned")]
+    InboxPoisoned,
 }
