@@ -105,3 +105,30 @@ cargo clippy -p motolii-testkit --all-targets -- -D warnings
 実bundleも生成し、`schema_version: 3`、command 6件、external gate 6件を確認する。
 低スペックWindows実測と製品Previewは外部状態が必要な最終gateであり、このcheckpointで
 合格へ変更しない。
+
+## 2026-07-29 local full replay
+
+clean commit `f321a5d87ce89e5cd93d4a723dc496e1ac5024f3`でbundleを新規生成し、
+専用executorから6 commandを直列実行した。verifier結果は次のとおり。
+
+```text
+local_evidence_valid: true
+verified_commands: 6
+failures: 0
+external_gates_pending: 6
+```
+
+softwareとVideoToolbox hardware-downloadは同じ3,517,051-byte fixture、
+SHA-256 `9bc6ac659282be60c973d7ef292473b62f87cd85912e8eff5192dd0ef7cdb497`
+を使用した。frame 0は1,382,400 bytes中差分0だった。
+
+```text
+software command sequential 120 frame: 91.89 ms
+VideoToolbox download sequential 120 frame: 277.24 ms
+software command parallel wall: 171.69 ms
+VideoToolbox download parallel wall: 418.24 ms
+```
+
+これはlocal harnessの閉包証拠であり、hardware-downloadがsoftwareより遅いという従来観測を
+同一fixture digestつきで再現しただけである。native GPU surface import、低スペックWindows、
+製品Previewの性能を証明しない。
