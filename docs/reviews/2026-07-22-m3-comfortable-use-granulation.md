@@ -257,7 +257,7 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 | CU-0A08ITP-P | `SPEC / DONE` | Inspector component byteと専用post-promotion chain authorityを先行閉鎖 | CU-0A08IP、CU-0A08RS | [CU-0A08ITP-P改訂](2026-07-29-cu-0a08itp-p-inspector-post-promotion-authority-amendment.md)。Browser chain不変、Inspector専用5-key chainと正負matrix | 汎用multi-file chainまたは第三chainが必要 |
 | CU-0A08ITP | `PRODUCT / DONE` | decoded Inspector targetの既決3 fieldを既存installed identity JSXへ透過 | CU-0A08ITP-P、CU-0A08IP、CU-0A08RS | [CU-0A08ITP実装決定](2026-07-29-cu-0a08itp-inspector-read-projection-jsx-connection-implementation-decision.md)。runtime caller/Host wire/intent/他branch 0 | mock/dev producerまたは未決表示推測が必要 |
 | CU-0A08ITI | `CORE / WAIT` | Inspector typed intentとHost接続 | CU-0A08ITP、U4a-2 | 1 gesture=1 intent、React正本0 | 別intent終端、React Undo/selection正本が必要 |
-| CU-0A09 | `PRODUCT / WAIT` | R6 diagnostic routeをproduction navigationから分離 | CU-0A08B/E/K/IT | 通常routeは正しい製品面、diagnosticはdevelopment限定 | diagnostic画面しか成立しない |
+| CU-0A09 | `PRODUCT / SPLIT` | R6 diagnostic routeをproduction navigationから分離 | CU-0A08B/E/K/IT | Browser子粒`CU-0A09B`はlegacy-free product mountを`DONE`。残surfaceと通常製品routeは未完了、diagnosticはdevelopment限定 | diagnostic画面しか成立しない |
 
 React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`まで8ラベルを順番どおり持つ。
 

@@ -38,6 +38,7 @@ function previewClassForMediaType(mediaType) {
 }
 
 const BrowserHierarchyContext = createContext(null);
+const BrowserStandaloneContext = createContext(null);
 const EFFECT_TAGS = [
   { id: "go-to", label: "Go-to", icon: "◎" },
   { id: "atmosphere", label: "Atmosphere", icon: "◌" },
@@ -285,6 +286,7 @@ function PluginCard({
 }
 
 function CandidatePluginBrowser() {
+  const standalone = useContext(BrowserStandaloneContext);
   const itemIds = ["echo-bloom", "type-pulse", "fold-field"];
   const tagging = useCandidateTags(itemIds, {
     "echo-bloom": ["go-to", "atmosphere"],
@@ -298,6 +300,7 @@ function CandidatePluginBrowser() {
       id="vism-browser"
       className="candidate-plugin-browser"
       data-view="thumb"
+      hidden={standalone ? standalone.activeTab !== "effects" : false}
       style={{
         "--plugin-thumb-size":
           "var(--browser-thumbnail-size, 80px)",
@@ -535,6 +538,7 @@ function ElementCard({
 }
 
 function CandidateCreateBrowser({ scope_ref, item_id }) {
+  const standalone = useContext(BrowserStandaloneContext);
   const itemIds = [
     "rectangle",
     "ellipse",
@@ -571,7 +575,7 @@ function CandidateCreateBrowser({ scope_ref, item_id }) {
       className="candidate-elements-browser"
       id="elements-browser"
       data-view="grid"
-      hidden
+      hidden={standalone ? standalone.activeTab !== "create" : true}
       data-info="Create Browser|Browse every registered item that creates a Stage or Timeline object"
     >
       <DiscoverySearchBar
@@ -726,13 +730,22 @@ function CandidateBrowserTabsProjectionOnly() {
   );
 }
 
-function CandidateBrowserTabs({ rectangleIdentity }) {
+function CandidateBrowserTabs({
+  rectangleIdentity,
+  activeTab = "effects",
+  onTabChange,
+}) {
+  const tabProps = (tab) => ({
+    className: `browser-tab${activeTab === tab ? " on" : ""}`,
+    "data-tab": tab,
+    onClick: onTabChange ? () => onTabChange(tab) : undefined,
+  });
   return (
     <>
       <div className="browser-tabs">
-        <button className="browser-tab" data-tab="project">Media</button>
-        <button className="browser-tab on" data-tab="effects">Effects</button>
-        <button className="browser-tab" data-tab="create">Create</button>
+        <button {...tabProps("project")}>Media</button>
+        <button {...tabProps("effects")}>Effects</button>
+        <button {...tabProps("create")}>Create</button>
       </div>
       <div className="candidate-pack-scope" id="candidate-pack-scope" hidden>
         <button className="candidate-pack-identity" id="candidate-pack-open">
@@ -882,12 +895,17 @@ function AssetTile({
 }
 
 function CandidateProjectBrowser({ mediaProjection }) {
+  const standalone = useContext(BrowserStandaloneContext);
+  const browserHidden = standalone
+    ? standalone.activeTab !== "project"
+    : !mediaProjection;
   if (mediaProjection) {
     return (
       <div
         className="project-explorer candidate-project-browser"
         id="project-browser"
         data-view="visual"
+        hidden={browserHidden}
         data-info="Media Browser|Search project assets and registered folders from one surface"
       >
         <DiscoverySearchBar
@@ -998,7 +1016,7 @@ function CandidateProjectBrowser({ mediaProjection }) {
     <div
       className="project-explorer candidate-project-browser"
       id="project-browser"
-      hidden
+      hidden={browserHidden}
       data-view="visual"
       data-info="Media Browser|Search project assets and registered folders from one surface"
     >
@@ -1208,6 +1226,7 @@ export function DiscoveryBrowserCandidate({
     : decodeProjection(developmentProjection);
   const [hierarchyWidth, setHierarchyWidth] = useState(106);
   const [thumbnailSize, setThumbnailSize] = useState(80);
+  const [standaloneTab, setStandaloneTab] = useState("effects");
   const hierarchyHidden = hierarchyWidth === 0;
   const hierarchy = useMemo(
     () => ({
@@ -1216,6 +1235,14 @@ export function DiscoveryBrowserCandidate({
       restore: () => setHierarchyWidth(106),
     }),
     [hierarchyWidth],
+  );
+  const standalone = node === undefined;
+  const browserTabs = (
+    <CandidateBrowserTabs
+      rectangleIdentity={rectangleIdentity}
+      activeTab={standalone ? standaloneTab : "effects"}
+      onTabChange={standalone ? setStandaloneTab : undefined}
+    />
   );
   const candidateOptions = {
     ...options,
@@ -1226,7 +1253,7 @@ export function DiscoveryBrowserCandidate({
       ) {
         return mediaProjection
           ? <CandidateBrowserTabsProjectionOnly />
-          : <CandidateBrowserTabs rectangleIdentity={rectangleIdentity} />;
+          : browserTabs;
       }
       if (
         child.type === "tag" &&
@@ -1259,25 +1286,45 @@ export function DiscoveryBrowserCandidate({
       return options.replace?.(child);
     },
   };
+  const rootProps = {
+    className: `browser browser-candidate${hierarchyHidden ? " is-hierarchy-hidden" : ""}`,
+    "data-hierarchy-hidden": String(hierarchyHidden),
+    "data-browser-thumbnail-size": String(thumbnailSize),
+    style: {
+      "--browser-thumbnail-size": `${thumbnailSize}px`,
+    },
+  };
 
   return (
     <>
-      <BrowserThumbnailSizeSettingBridge onChange={setThumbnailSize} />
-      <BrowserHierarchyContext.Provider value={hierarchy}>
-        {createElement(
-          node.name,
-          {
-            ...attributesToProps(node.attribs, node.name),
-            className: `${node.attribs.class} browser-candidate${hierarchyHidden ? " is-hierarchy-hidden" : ""}`,
-            "data-hierarchy-hidden": String(hierarchyHidden),
-            "data-browser-thumbnail-size": String(thumbnailSize),
-            style: {
-              "--browser-thumbnail-size": `${thumbnailSize}px`,
+      {standalone ? null : (
+        <BrowserThumbnailSizeSettingBridge onChange={setThumbnailSize} />
+      )}
+      <BrowserStandaloneContext.Provider
+        value={standalone ? { activeTab: standaloneTab } : null}
+      >
+        <BrowserHierarchyContext.Provider value={hierarchy}>
+          {standalone ? (
+            <aside {...rootProps}>
+              <div className="panel-head">
+                Browser
+                <small>MEDIA / CREATE / EFFECTS</small>
+              </div>
+              {browserTabs}
+              <CandidatePluginBrowser />
+              <CandidateProjectBrowser />
+            </aside>
+          ) : createElement(
+            node.name,
+            {
+              ...attributesToProps(node.attribs, node.name),
+              ...rootProps,
+              className: `${node.attribs.class} browser-candidate${hierarchyHidden ? " is-hierarchy-hidden" : ""}`,
             },
-          },
-          domToReact(node.children ?? [], candidateOptions),
-        )}
-      </BrowserHierarchyContext.Provider>
+            domToReact(node.children ?? [], candidateOptions),
+          )}
+        </BrowserHierarchyContext.Provider>
+      </BrowserStandaloneContext.Provider>
     </>
   );
 }
