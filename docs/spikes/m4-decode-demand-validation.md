@@ -21,7 +21,8 @@ MP4の一枚あたりdecode速度だけでなく、Motoliiの主要操作が作�
 
 各要求のelapsed timeを生配列で残し、平均だけに畳み込まない。parallelは個別時間に加えて
 wall timeも残す。hardware routeを指定した場合はsoftwareとhardwareのframe 0をbyte単位で比較する。
-performance pass/fail閾値は持たない。
+report schema v3はfixture pathだけでなくbyte数とSHA-256を記録し、機種間で同名の別素材を
+比較しない。performance pass/fail閾値は持たない。
 
 ## 実行
 

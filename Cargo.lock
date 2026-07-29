@@ -1762,6 +1762,7 @@ dependencies = [
  "motolii-testkit",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 2.0.19",
 ]
 
@@ -1855,6 +1856,7 @@ dependencies = [
  "motolii-plugins-firstparty",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 2.0.19",
  "wgpu",
  "windows-sys 0.61.2",

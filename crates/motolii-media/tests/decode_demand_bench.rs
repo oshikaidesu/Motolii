@@ -1,6 +1,7 @@
 //! M4 decode需要matrix。閾値を持たない手動実機bench。
 
-use std::io;
+use std::fs::File;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Instant;
@@ -8,6 +9,7 @@ use std::time::Instant;
 use motolii_media::{probe, FrameReader};
 use motolii_testkit::{ffmpeg_or_skip, tmp_dir};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 
 const FIXTURE_ENV: &str = "MOTOLII_DECODE_FIXTURE";
 const OUTPUT_ENV: &str = "MOTOLII_DECODE_DEMAND_OUT";
@@ -62,6 +64,8 @@ struct CommandRouteComparison {
 struct DecodeDemandReport {
     schema_version: u32,
     fixture: String,
+    fixture_bytes: u64,
+    fixture_sha256: String,
     generated_fixture: bool,
     width: u32,
     height: u32,
@@ -116,6 +120,39 @@ fn fixture_path() -> (PathBuf, bool) {
         Some(path) => (PathBuf::from(path), false),
         None => (generated_fixture(), true),
     }
+}
+
+fn fixture_identity(path: &Path) -> (u64, String) {
+    let mut file = File::open(path).expect("open decode fixture for digest");
+    let mut digest = Sha256::new();
+    let mut bytes = 0_u64;
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .expect("read decode fixture for digest");
+        if read == 0 {
+            break;
+        }
+        bytes = bytes
+            .checked_add(read as u64)
+            .expect("fixture size overflow");
+        digest.update(&buffer[..read]);
+    }
+    (bytes, format!("{:x}", digest.finalize()))
+}
+
+#[test]
+fn fixture_identity_depends_on_content_not_path() {
+    let dir = tmp_dir("m4-decode-fixture-identity");
+    let first = dir.join("first.mp4");
+    let second = dir.join("second.mp4");
+    std::fs::write(&first, b"same-fixture").unwrap();
+    std::fs::write(&second, b"same-fixture").unwrap();
+
+    assert_eq!(fixture_identity(&first), fixture_identity(&second));
+    std::fs::write(&second, b"different-fixture").unwrap();
+    assert_ne!(fixture_identity(&first), fixture_identity(&second));
 }
 
 fn sequential_samples(path: &Path) -> Vec<DemandSample> {
@@ -389,6 +426,7 @@ fn record_decode_demand_matrix_without_thresholds() {
         return;
     }
     let (path, generated_fixture) = fixture_path();
+    let (fixture_bytes, fixture_sha256) = fixture_identity(&path);
     let info = probe(&path).expect("probe demand fixture");
     let sequential = sequential_samples(&path);
     let seeks = seek_samples(&path);
@@ -396,8 +434,10 @@ fn record_decode_demand_matrix_without_thresholds() {
     let command_route_comparison =
         hardware_route_from_env().map(|hardware| command_route_comparison(&path, &info, hardware));
     let report = DecodeDemandReport {
-        schema_version: 2,
+        schema_version: 3,
         fixture: path.display().to_string(),
+        fixture_bytes,
+        fixture_sha256,
         generated_fixture,
         width: info.width,
         height: info.height,

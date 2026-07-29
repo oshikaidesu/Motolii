@@ -80,7 +80,9 @@ executorは現在のcommit、schema、絶対化したbundle pathからmanifest�
 完全一致を要求する。tracked、staged、untracked差分があるworktree、必須環境変数の未指定・空値、
 既存artifact／log／run recordへの上書き、成功終了後の期待artifact欠落をfail closedで拒否する。各実行は
 `run-<command-id>.json`、stdout、stderrを保存し、exit code、所要時間、artifact byte数を記録する。
-環境変数の値はrun recordへ複製せず、指定済みの名前だけを記録する。
+manifest、hardware、stdout、stderr、結果artifactのSHA-256も記録し、後から同名fileへ
+差し替えた結果を同じ実行として扱わない。環境変数の値はrun recordへ複製せず、
+指定済みの名前だけを記録する。
 
 機種間比較は同じfixture revisionとMotolii commitで行う。現在はpass/fail閾値を持たず、
 取得不能は`Unavailable`として記録する。
