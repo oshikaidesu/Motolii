@@ -159,10 +159,12 @@ M5は[操作単純化モデル](../interaction-simplicity-model.md)の最初の�
 | P2D-RCI | **DONE**。[Render Contribution統合decision](../reviews/2026-07-29-m5-render-contribution-integration-decision.md) | P2D-RCA8, P2D-RCB6, P2D-RCC5 | 意味だけを閉じ、公開trait／Document／方式は未決。private `P2D-RCS1`だけ解禁 |
 | P2D-RCS1 | **DONE**。opaque限定Group Depth private spike | P2D-RCI | Grok `ACCEPT` P0/P1=0。`motolii-render`内部の実depth attachmentでF1/F6、group外pixel不変、FINAL/DRAFT同一評価関数。Document／serde／公開API変更0 |
 | P2D-RCD1 | 型付き要求／contribution seam decision | P2D-RCS1、RCI §2.2のcamera／Observation非所有 | **DONE**。[typed seam decision](../reviews/2026-07-29-m5-render-contribution-typed-seam-decision.md)が一／一／many、whole-request admission、F5継承、trust eligibility前段分離を固定。RCD2／RCF1／RCT1は独立decision済み。P3のObservation形は先取りしない |
+| P2D-RCD1A | public typed request／contribution API shape decision | P3 Observation decision、P2D-RCD1、P2D-RCT1、P2D-RCR1 | **WAIT**。P3前に`CompCamera`／private RCS1を公開形へしない |
+| P2D-RCD1I | public typed seam実装 | P2D-RCD1A | **WAIT**。schema／package／First Vism分岐なし |
 | P2D-RCD2 | policy／Depth Participant schema decision | P2D-RCD1、M2-D1e | **DONE**。[schema decision](../reviews/2026-07-29-m5-occlusion-policy-schema-decision.md)でHost semantic key、Group policy、Item participant、v6 migration、D2／Undoを固定 |
 | P2D-RCD2I | policy／Depth Participant schema実装 | P2D-RCD2 | **WAIT**。現行version 5前置確認後、v6 migration／command／oracleを一契約で実装 |
 | P2D-RCF1 | conformance harness decision／First Vism無特権契約 | P2D-RCD1 | **DONE**。[harness decision](../reviews/2026-07-29-m5-render-contribution-conformance-harness-decision.md)でblack-box観測、F1〜F6分担、既存testkit再利用、実装4粒を固定 |
-| P2D-RCF1I-BASE | F1／F5／F6 executable harness | P2D-RCF1、公開typed seam実装 | **WAIT**。private RCS1を昇格しない |
+| P2D-RCF1I-BASE | F1／F5／F6 executable harness | P2D-RCF1、P2D-RCD1I | **WAIT**。private RCS1を昇格しない |
 | P2D-RCF1I-ALPHA | F2／F3 executable harness | P2D-RCF1I-BASE、P2D-RCT1、P2D-RCO1 | **WAIT**。v1はcutout pixelとsoft-alpha typed unsupportedを審判。対応soft-alpha pixelは非目標 |
 | P2D-RCF1I-SCENE | F4 executable harness | P2D-RCFP1、P2D-RCR1、P2D-RCP1 | **WAIT**。scene-color方式を先取りしない |
 | P2D-RCF1I-VISM | concrete First Vism fixture | 製品表現選定、共通公開seam、対象能力decision | **WAIT**。専用type／key／registryなし |
@@ -184,7 +186,7 @@ M5は[操作単純化モデル](../interaction-simplicity-model.md)の最初の�
 | P7c | **first-party Behaviour**: Stagger、Random、Falloffを純関数`Behaviour(InstanceContext,t,params)->typed channel value/weight`として実装 | P7b | (1)Stagger=index/count順序、Random=`pcg32(hash(user_seed,InstanceId,channel_tag))`、Falloff=正準world距離 (2)Behaviour順序/enableで結果が決定 (3)Randomizeはseedを書換えるD2 commandだけ (4)再生/seek/thread順で乱数不変 (5)型不一致をtyped error (6)effect未使用時既存pixel同一 |
 | P7U | **Duplicator/Behaviour UI**: Input Shapes接続、Distribution、seed、per-instance channel、Stagger/Random/FalloffをTimeline/Inspector/Stageへ接続 | P7c, M3-U2c, M3-U2g | (1)source/Behaviour接続をfrom/inで可視化 (2)seed数値編集+明示Randomize、再評価で勝手に変化しない (3)instance選択はderived UI状態でDocumentへ1,000行を焼かない (4)Direct/Tool/Advancedが同Document意味 (5)1 gesture=1 Undo (6)1,000 instanceでUI非blocking |
 
-並列レーン: M2-D1j/D1k/D3とM3-U1f/U2dで2D world/camera/Stageを先に成立させ、K0は透過Stageと独立して進める。P0IとP1 importも互いおよびK0から独立し、P1合流後にP2。P0I→P7a、P2+P7a+K1→P7b→P7c→P7U。P2D-RCD1はDONEで、後続8件はWAITのまま維持。RCI §2.2のcamera／Observation非所有を保ち、P3の型は先取りしない。P2後はP2D/P2U/P3を依存に従って進め、P2U+P3後にP2R。P4はK0後、P6は独立、P5が合流点。world/cameraの成立をP1へ依存させない。
+並列レーン: M2-D1j/D1k/D3とM3-U1f/U2dで2D world/camera/Stageを先に成立させ、K0は透過Stageと独立して進める。P0IとP1 importも互いおよびK0から独立し、P1合流後にP2。P0I→P7a、P2+P7a+K1→P7b→P7c→P7U。P2Dの意味designは[締結地図](../reviews/2026-07-29-m5-render-contribution-design-closure-map.md)§2まで完了。RCD2IとRCFP1F evidenceは並列可、P3→RCD1A→RCD1I→RCF1I、RCFP1F→RCP1、M4-K1合流後にRCBUD1とする。RCI §2.2のcamera／Observation非所有を保ち、P3の型は先取りしない。P2後はP2D/P2U/P3を依存に従って進め、P2U+P3後にP2R。P4はK0後、P6は独立、P5が合流点。world/cameraの成立をP1へ依存させない。
 
 ### P6 API契約(2026-07-10。プラグインが組版できるための口)
 

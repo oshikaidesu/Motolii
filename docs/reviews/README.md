@@ -251,6 +251,7 @@
 | [2026-07-29-m5-soft-alpha-oit-disposition.md](2026-07-29-m5-soft-alpha-oit-disposition.md) | P2D-RCO1。v1のOIT方式を採択せずsoft alpha typed unsupportedと将来比較gateを固定する延期decision |
 | [2026-07-29-m5-scene-color-semantics-decision.md](2026-07-29-m5-scene-color-semantics-decision.md) | P2D-RCFP1S。linear-light／premultiplied scene-color、Host単一変換authority、truthful FrameDescを閉じるdecision |
 | [2026-07-29-m5-scene-color-input-contract-decision.md](2026-07-29-m5-scene-color-input-contract-decision.md) | P2D-RCR1。immutable scene-color snapshot、upstream order、K0 RoI、domain外、whole-request failureを閉じるdecision |
+| [2026-07-29-m5-render-contribution-design-closure-map.md](2026-07-29-m5-render-contribution-design-closure-map.md) | M5 Render Contributionの意味締結、public seam／GPU method／M4-K1 evidence gate、実装順を固定する地図 |
 | [2026-07-29-restartable-supervised-order-loop-decision.md](2026-07-29-restartable-supervised-order-loop-decision.md) | Codex-owned machine block、Opus施工本文、parent-owned outcome、terminal verdict、availability限定resumeを固定するGR-D4決定 |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |
