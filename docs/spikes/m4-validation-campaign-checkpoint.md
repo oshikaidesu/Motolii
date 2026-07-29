@@ -139,3 +139,30 @@ VideoToolbox download parallel wall: 418.24 ms
 新しい実機matrixへ混在させない。schema v4のローカル再実行と低スペックWindows実行を次の証拠とする。
 対象personaのRAM量・GPU世代等の資格条件は未決であり、`intended_persona`文字列だけで
 `low_spec_windows`をpassへ変更しない。
+
+## 2026-07-29 schema v4 local full replay
+
+clean commit `ddb58536f675328317fd12933a4f04755af0866c`から新規bundleを生成した。
+measurement contextはApple M4開発機、AC電源、Low Power Mode off、2560×1664で、
+context SHA-256は
+`853ce9ce13bc96e50a1d912c8202e6d37b4ac7e698aec043b834e64e7b00018b`である。
+6 run record全てが同じcontext digestを持ち、verifierは次を返した。
+
+```text
+manifest_schema_version: 4
+machine_label: dev-mac-m4
+intended_persona: development-mac
+local_evidence_valid: true
+verified_commands: 6
+failures: 0
+external_gates_pending: 6
+```
+
+softwareとVideoToolbox hardware-downloadはschema v3 replayと同じfixture digestを使用し、
+frame 0は1,382,400 bytes中差分0だった。この一回の観測ではcommand routeの120-frame
+sequentialがsoftware 93.12 ms、hardware-download 277.76 ms、8-way parallel wallが
+software 188.33 ms、hardware-download 461.79 msだった。音MAD fixtureは最大1016 graph steps、
+sequential最大3.33 ms、scrub最大0.97 msだった。
+
+これらはcontext来歴とharness再現性の証拠であり、製品Preview latencyや最低スペック性能SLOではない。
+schema v3との差や単回の時間値から退避閾値、先読み幅、VRAM予算を採択しない。
