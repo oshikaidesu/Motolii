@@ -85,6 +85,13 @@
       "reason": "development-only Starter Media projection",
       "fixedSourceSha256": "4edb3dfc49726aa700e77a14197571a43de2d80d9838a824c22cb68e0ac3d5b8",
       "currentSha256": "866124a69caaa168fa19c67e6c723db97fec67a61071bdbe66973576266c42f4"
+    },
+    {
+      "task": "CU-0A08BTP",
+      "file": "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx",
+      "reason": "VS-1 Rectangle scoped identity component input",
+      "fixedSourceSha256": "866124a69caaa168fa19c67e6c723db97fec67a61071bdbe66973576266c42f4",
+      "currentSha256": "c3d4b5800505390df2c34a9d69f7ad0a697ac19ed8dc5523245704500e171776"
     }
   ]
 }

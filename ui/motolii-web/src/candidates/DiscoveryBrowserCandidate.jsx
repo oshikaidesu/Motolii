@@ -534,7 +534,7 @@ function ElementCard({
   );
 }
 
-function CandidateCreateBrowser() {
+function CandidateCreateBrowser({ scope_ref, item_id }) {
   const itemIds = [
     "rectangle",
     "ellipse",
@@ -556,12 +556,14 @@ function CandidateCreateBrowser() {
     "particle-field": ["animated"],
   });
   const [selectedItem, setSelectedItem] = useState("rectangle");
-  const elementProps = (itemId) => ({
-    itemId,
-    selected: selectedItem === itemId,
-    tags: tagging.tagsFor(itemId),
-    tagVisible: tagging.isVisible(itemId),
-    onSelect: () => setSelectedItem(itemId),
+  const elementProps = (cardItemId, scopeRef, scopedItemId) => ({
+    itemId: cardItemId,
+    scopeRef,
+    scopedItemId,
+    selected: selectedItem === cardItemId,
+    tags: tagging.tagsFor(cardItemId),
+    tagVisible: tagging.isVisible(cardItemId),
+    onSelect: () => setSelectedItem(cardItemId),
   });
 
   return (
@@ -678,7 +680,7 @@ function CandidateCreateBrowser() {
           countId="element-result-count"
         >
           <div className="candidate-element-grid">
-            <ElementCard {...elementProps("rectangle")} element="rectangle" name="Rectangle" type="Shape" provider="Built-in" glyph="□" thumbnail="rectangle" />
+            <ElementCard {...elementProps("rectangle", scope_ref, item_id)} element="rectangle" name="Rectangle" type="Shape" provider="Built-in" glyph="□" thumbnail="rectangle" />
             <ElementCard {...elementProps("ellipse")} element="ellipse" name="Ellipse" type="Shape" provider="Built-in" glyph="○" thumbnail="ellipse" />
             <ElementCard {...elementProps("text")} element="text" name="Text" type="Layer" provider="Built-in" glyph="T" thumbnail="text" />
             <ElementCard {...elementProps("solid")} element="solid" name="Solid" type="Layer" provider="Built-in" glyph="■" thumbnail="solid" />
@@ -724,7 +726,7 @@ function CandidateBrowserTabsProjectionOnly() {
   );
 }
 
-function CandidateBrowserTabs() {
+function CandidateBrowserTabs({ rectangleIdentity }) {
   return (
     <>
       <div className="browser-tabs">
@@ -744,7 +746,7 @@ function CandidateBrowserTabs() {
         </nav>
         <button id="candidate-pack-clear" aria-label="Clear pack scope">×</button>
       </div>
-      <CandidateCreateBrowser />
+      <CandidateCreateBrowser {...rectangleIdentity} />
       <section
         className="candidate-save-sheet"
         id="candidate-save-sheet"
@@ -1195,7 +1197,12 @@ function CandidateProjectBrowser({ mediaProjection }) {
   );
 }
 
-export function DiscoveryBrowserCandidate({ node, options, developmentProjection }) {
+export function DiscoveryBrowserCandidate({
+  node,
+  options,
+  developmentProjection,
+  rectangleIdentity,
+}) {
   const mediaProjection = developmentProjection === undefined
     ? undefined
     : decodeProjection(developmentProjection);
@@ -1219,7 +1226,7 @@ export function DiscoveryBrowserCandidate({ node, options, developmentProjection
       ) {
         return mediaProjection
           ? <CandidateBrowserTabsProjectionOnly />
-          : <CandidateBrowserTabs />;
+          : <CandidateBrowserTabs rectangleIdentity={rectangleIdentity} />;
       }
       if (
         child.type === "tag" &&

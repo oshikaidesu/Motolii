@@ -21,7 +21,7 @@ const AUTHORITY_SHA256 = {
   "ui/motolii-web/src/index.js":
     "a2ec126a21dd4637fbe90480460d47e7c2a3258fdc37dd7cf1d19746c6224469",
   "ui/motolii-web/source-provenance.json":
-    "859d64937ad042608088f331c89e8a8f914fcbe992092b63fbfacd9eeb7dfa75",
+    "38f78e85fcf4df5c0b13980b0e6939b3b8d24aad817143d9cd2cf22a018ddb95",
   "ui/motolii-web/src/candidates/InspectorCandidate.jsx":
     "1e0bdd3eebd665e517600af4db090f74d50951aef12fdd476e97a828de91a3e4",
   "docs/mocks-ui/fixtures/reference-document.json":

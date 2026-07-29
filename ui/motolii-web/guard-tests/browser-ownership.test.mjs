@@ -411,6 +411,95 @@ function validatePrivateIdentitySeam(sourceText, componentName, identityFieldNam
   }
 }
 
+function findTopLevelFunction(ast, componentName) {
+  const declarations = ast.program.body
+    .map((node) =>
+      node.type === "ExportNamedDeclaration" ? node.declaration : node)
+    .filter(
+      (node) => node?.type === "FunctionDeclaration" && node.id?.name === componentName,
+    );
+  if (declarations.length !== 1) {
+    throw new Error(`${componentName} must have exactly one top-level declaration`);
+  }
+  return declarations[0];
+}
+
+function findOpeningElements(node, componentName) {
+  const elements = [];
+  const walk = (candidate) => {
+    if (!candidate || typeof candidate !== "object") {
+      return;
+    }
+    if (Array.isArray(candidate)) {
+      candidate.forEach(walk);
+      return;
+    }
+    if (
+      candidate.type === "JSXOpeningElement"
+      && candidate.name?.type === "JSXIdentifier"
+      && candidate.name.name === componentName
+    ) {
+      elements.push(candidate);
+    }
+    for (const child of Object.values(candidate)) {
+      walk(child);
+    }
+  };
+  walk(node);
+  return elements;
+}
+
+function directObjectBinding(component, propertyName) {
+  if (component.params.length !== 1 || component.params[0].type !== "ObjectPattern") {
+    throw new Error(`${component.id.name} must receive one object input`);
+  }
+  const matches = component.params[0].properties.filter(
+    (property) =>
+      property.type === "ObjectProperty"
+      && !property.computed
+      && property.key?.type === "Identifier"
+      && property.key.name === propertyName
+      && property.value?.type === "Identifier",
+  );
+  if (matches.length !== 1) {
+    throw new Error(`${component.id.name} must receive direct ${propertyName}`);
+  }
+  return matches[0].value.name;
+}
+
+function validateBrowserIdentityProjection(sourceText) {
+  const ast = parseModule(sourceText);
+  const root = findTopLevelFunction(ast, "DiscoveryBrowserCandidate");
+  const rootBinding = directObjectBinding(root, "rectangleIdentity");
+  const rootTargets = findOpeningElements(root.body, "CandidateBrowserTabs").filter(
+    (element) => element.attributes.some(
+      (attribute) =>
+        attribute.type === "JSXAttribute"
+        && attribute.name?.name === "rectangleIdentity"
+        && attribute.value?.type === "JSXExpressionContainer"
+        && attribute.value.expression?.type === "Identifier"
+        && attribute.value.expression.name === rootBinding,
+    ),
+  );
+  if (rootTargets.length !== 1) {
+    throw new Error("Browser root must pass rectangleIdentity directly to CandidateBrowserTabs once");
+  }
+
+  const tabs = findTopLevelFunction(ast, "CandidateBrowserTabs");
+  const tabsBinding = directObjectBinding(tabs, "rectangleIdentity");
+  const privateTargets = findOpeningElements(tabs.body, SEAM_COMPONENT_NAME).filter(
+    (element) => element.attributes.some(
+      (attribute) =>
+        attribute.type === "JSXSpreadAttribute"
+        && attribute.argument?.type === "Identifier"
+        && attribute.argument.name === tabsBinding,
+    ),
+  );
+  if (privateTargets.length !== 1) {
+    throw new Error("CandidateBrowserTabs must pass rectangleIdentity directly to private seam once");
+  }
+}
+
 function isForbiddenRelativeImport(importerPath, sourceValue) {
   if (!sourceValue.startsWith(".")) {
     return false;
@@ -531,6 +620,17 @@ test("validates module-private Browser identity input seam on synthetic sources"
   for (const [label, source] of negativeCases) {
     assert.throws(() => validate(source), label);
   }
+});
+
+test("validates product Browser identity projection into the private Rectangle seam", async () => {
+  const source = await readFile(abs(CURRENT_BROWSER_SOURCE), "utf8");
+  assert.doesNotThrow(() => validateBrowserIdentityProjection(source));
+  assert.doesNotThrow(() =>
+    validatePrivateIdentitySeam(
+      source,
+      SEAM_COMPONENT_NAME,
+      ["scope_ref", "item_id"],
+    ));
 });
 
 test("validates fixed Browser bytes and browser export mapping", async () => {

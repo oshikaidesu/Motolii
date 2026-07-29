@@ -175,7 +175,7 @@
     },
     {
       "path": "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx",
-      "sha256": "866124a69caaa168fa19c67e6c723db97fec67a61071bdbe66973576266c42f4"
+      "sha256": "c3d4b5800505390df2c34a9d69f7ad0a697ac19ed8dc5523245704500e171776"
     },
     {
       "path": "ui/motolii-web/src/candidates/EasingTriggerCandidate.jsx",
