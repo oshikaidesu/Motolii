@@ -147,11 +147,11 @@ M5は[操作単純化モデル](../interaction-simplicity-model.md)の最初の�
 | P2D-RCC4-BEVY | **停止／差分不採用**。固定Bevy fragment IDの5観測matrix配置 | P2D-RC0, P2D-RCE0, GR-D4 | Grok ACCEPT 0/0/0後、現行主担当固定配置と2 cell不一致。後継P2D-RCC4B-BEVY |
 | P2D-RCC4-UNREAL | **停止／差分なし**。固定Unreal fragment IDの5観測matrix配置 | P2D-RC0, P2D-RCE0, GR-D4 | Opus command-oracle不備6回反復。修理済みrunnerのP2D-RCC4B-UNREALへ |
 | P2D-RCA4 | **停止／差分なし**。固定Motolii境界fragment IDの6論点matrix配置 | P2D-RC0, P2D-RCE0, GR-D4 | Opus command-oracle不備4回反復。修理済みrunnerのP2D-RCA5へ |
-| P2D-RCC4B-BEVY | 現行主担当固定配置どおりのBevy fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | 登録済み。20 cellをtemplate記載どおりcopyするだけ |
+| P2D-RCC4B-BEVY | **DONE**。現行主担当固定配置どおりのBevy fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | Grok `ACCEPT` P0/P1/P2=0、主担当再照合済み |
 | P2D-RCA5 | **停止／差分なし**。現行主担当固定配置どおりのMotolii境界fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | command machine block前のbaseでOpus不備3回。後継P2D-RCA6 |
 | P2D-RCB5 | 現行主担当固定配置どおりのRerun fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | 登録済み。修理済みrunner、30 cell copyだけ |
 | P2D-RCC4B-UNREAL | **DONE**。現行主担当固定配置どおりのUnreal fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | Grok `ACCEPT` P0/P1/P2=0、主担当再照合済み |
-| P2D-RCC5 | ACCEPT済みprovider観察のMotolii fixture軸比較 | P2D-RCC3-GODOT, P2D-RCC4B-BEVY/UNREAL | **未登録／WAIT**。三provider完了後に固定templateとallowlistを別変更で登録 |
+| P2D-RCC5 | ACCEPT済みprovider観察のMotolii fixture軸比較 | P2D-RCC3-GODOT, P2D-RCC4B-BEVY/UNREAL | **登録設計可**。三provider完了。固定templateとallowlistを別変更で登録 |
 | P2D-RCA6 | machine `COMMAND`版runnerによる固定Motolii境界fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | 登録済み。18 cell copyだけ |
 | P2D-RCI | 新しい証拠grainの統合とRender Contribution最終decision。必要ならcontract／private spike／schema／First Vism fixtureを再分割 | P2D-RCA6, P2D-RCB5, P2D-RCC5 | **WAIT**。Motolii authorityを正として統合し、公開境界または永続意味が未決なら実装解禁せずSTOP |
 | P2U | Stage transform toolの`Scale / Depth Move`分離。Scale handleとDepth rail/axisをM3-U2dのCamera/Object操作、既存toolbar/Inspector/timeline語彙へ統合 | P3, M2-D2, M3-U2d | (1)Scale dragはscaleだけ、Depth dragはposition.zだけをD2 command化 (2)各gestureがUndo 1回 (3)perspective/orthographic fixture (4)active toolを文字なし・grayscaleでも形/iconから識別 (5)DPI差で同じ正規化gestureが同じdomain値 (6)script不要で両channelへkeyframe可能 (7)`Position X/Y`・`Depth Z`・`Rotation Z`が別group/channelで、Depth操作から3D modeや第二のDepth fieldを生成しない (8)native wgpu presentation overlayがcanonical preview/export画素を変えず、frame内resource生成/GPU readback 0 (9)CPU解析hit-test、move中semantic write 0、Escape/focus lossの確定変更0 |

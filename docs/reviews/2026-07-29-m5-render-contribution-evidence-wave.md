@@ -271,7 +271,7 @@ RCA3の検収を待たず、terminalとなったRCB3／RCC3-BEVY／RCC3-UNREAL�
 | `P2D-RCC4-BEVY` | 配置 | 本書§7、Bevy capsule | `2026-07-29-m5-bevy-observation-map-v4.md`の配置欄だけ | Grok ACCEPT 0/0/0だが、後発の主担当固定配置と2 cell不一致。差分不採用 |
 | `P2D-RCC4-UNREAL` | 配置 | 本書§7、Unreal capsule | `2026-07-29-m5-unreal-observation-map-v4.md`の配置欄だけ | Opus command-oracle不備が6回反復。Spark未起動で停止 |
 | `P2D-RCA4` | 配置 | 本書§2〜§3、§5と元authority | `2026-07-29-m5-render-contribution-boundary-map-v4.md`の配置欄だけ | Opus command-oracle不備が4回反復。Spark未起動で停止 |
-| `P2D-RCC4B-BEVY` | 配置 | 本書§7、Bevy capsule、v4主担当固定配置 | `2026-07-29-m5-bevy-observation-map-v4.md`の配置欄だけ | 登録済み |
+| `P2D-RCC4B-BEVY` | 配置 | 本書§7、Bevy capsule、v4主担当固定配置 | `2026-07-29-m5-bevy-observation-map-v4.md`の配置欄だけ | Grok `ACCEPT` P0/P1/P2=0。Spark `019fabbd-3570-7321-9673-465cbb2f2992`、主担当再照合済み |
 | `P2D-RCA5` | 配置 | 本書§2〜§3、§5、v4主担当固定配置 | `2026-07-29-m5-render-contribution-boundary-map-v4.md`の配置欄だけ | command machine block前のbaseでOpus不備3回。Spark未起動、差分なし |
 | `P2D-RCB5` | 配置 | 本書§2〜§3、§6、v4主担当固定配置 | `2026-07-29-m5-rerun-observation-map-v4.md`の配置欄だけ | 修理済みrunnerで登録済み |
 | `P2D-RCC4B-UNREAL` | 配置 | 本書§7、Unreal capsule、v4主担当固定配置 | `2026-07-29-m5-unreal-observation-map-v4.md`の配置欄だけ | Grok `ACCEPT` P0/P1/P2=0。Spark `019fabb7-a074-7443-81ff-ae5de35e0d20`、主担当再照合済み |

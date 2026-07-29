@@ -137,12 +137,12 @@ P0I #170 → P7a → P7b → P7c → P7U
 | RENDER-CONTRIBUTION-ENGINE | P2D-RCC4-BEVY | M5 / P2D / Bevy fragment map | `STOPPED` | — | Grok ACCEPT後、現行固定配置と2 cell不一致。差分不採用 | 後継P2D-RCC4B-BEVY |
 | RENDER-CONTRIBUTION-ENGINE | P2D-RCC4-UNREAL | M5 / P2D / Unreal fragment map | `STOPPED` | — | Opus command-oracle不備6回、Spark未起動 | 後継P2D-RCC4B-UNREAL |
 | RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA4 | M5 / P2D / boundary fragment map | `STOPPED` | — | Opus command-oracle不備4回、Spark未起動 | 後継P2D-RCA5 |
-| RENDER-CONTRIBUTION-ENGINE | P2D-RCC4B-BEVY | M5 / P2D / fixed Bevy fragment map | `DO` | — | 現行v4主担当固定配置 | 20 cell copyだけ |
+| RENDER-CONTRIBUTION-ENGINE | P2D-RCC4B-BEVY | M5 / P2D / fixed Bevy fragment map | `DONE` | — | Grok ACCEPT P0/P1/P2=0、主担当再照合 | RCC5入力 |
 | RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA5 | M5 / P2D / fixed boundary map | `STOPPED` | — | command machine block前、Opus不備3回、Spark未起動 | 後継P2D-RCA6 |
 | RENDER-CONTRIBUTION-RERUN | P2D-RCB5 | M5 / P2D / fixed Rerun map | `DO` | — | 修理済みrunner、現行固定配置 | 30 cell copyだけ |
 | RENDER-CONTRIBUTION-ENGINE | P2D-RCC4B-UNREAL | M5 / P2D / fixed Unreal map | `DONE` | — | Grok ACCEPT P0/P1/P2=0、主担当再照合 | RCC5入力 |
 | RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA6 | M5 / P2D / machine-command boundary map | `DO` | — | command machine block、現行固定配置 | 18 cell copyだけ |
-| RENDER-CONTRIBUTION-ENGINE | P2D-RCC5 | M5 / P2D / fixture comparison | `WAIT` | — | P2D-RCC3-GODOT、P2D-RCC4B-BEVY、P2D-RCC4-UNREAL | provider三件後に登録 |
+| RENDER-CONTRIBUTION-ENGINE | P2D-RCC5 | M5 / P2D / fixture comparison | `DO` | — | Godot、Bevy、Unrealの三provider DONE | 固定templateとallowlistを登録 |
 | M2-REPAIR | GAP-23 | M2 / narrow repair | `WAIT` | — | 独立D1i-4 LookAt/Follow oracle分離の採番・完了 | GAP-23全25件を再発注し、後にGAP-24を判定 |
 | M2-REPAIR | GAP-24 | M2 / narrow repair | `WAIT` | — | GAP-23 | GAP-24後にclose |
 | ORACLE-GUARD | GAP-25 | M2 / guard repair | `DO / CHECK-PATH` | — | GAP-23との許可path非重複 | semantic oracle gate自己保護 |

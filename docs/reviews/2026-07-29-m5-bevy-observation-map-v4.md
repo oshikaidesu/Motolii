@@ -2,7 +2,7 @@
 
 作成日: 2026-07-29
 
-状態: **登録済み／P2D-RCC4-BEVY未実行**
+状態: **完了／P2D-RCC4B-BEVY Grok ACCEPT（P0/P1/P2=0）**
 
 変更許可: 本fileの`配置欄`だけ
 
@@ -39,11 +39,11 @@ capsuleの記載を意味変更せずID化した固定fragmentで、leafは本�
 
 | 観測項目 | 観察fragment | source fragment | 非証明fragment | 持込禁止fragment |
 |---|---|---|---|---|
-| phase admission / ordering | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| depth / opaque / cutout / soft alpha | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| transparent交差 / sorting / OIT追加位置 | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| scene-color / refraction / resource lifetime | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| capability不足 / unsupported / cyclic read | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
+| phase admission / ordering | B-O1 B-O2 | B-SRC | B-NP | B-LIM |
+| depth / opaque / cutout / soft alpha | B-O2 | B-SRC | B-NP | B-LIM |
+| transparent交差 / sorting / OIT追加位置 | B-O2 B-O4 | B-SRC | B-NP | B-LIM |
+| scene-color / refraction / resource lifetime | B-O3 | B-SRC | B-NP | B-LIM |
+| capability不足 / unsupported / cyclic read | B-NO | B-SRC | B-NP | B-LIM |
 
 ## STOP
 
