@@ -139,10 +139,11 @@ P0I #170 → P7a → P7b → P7c → P7U
 | RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA4 | M5 / P2D / boundary fragment map | `STOPPED` | — | Opus command-oracle不備4回、Spark未起動 | 後継P2D-RCA5 |
 | RENDER-CONTRIBUTION-ENGINE | P2D-RCC4B-BEVY | M5 / P2D / fixed Bevy fragment map | `DONE` | — | Grok ACCEPT P0/P1/P2=0、主担当再照合 | RCC5入力 |
 | RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA5 | M5 / P2D / fixed boundary map | `STOPPED` | — | command machine block前、Opus不備3回、Spark未起動 | 後継P2D-RCA6 |
-| RENDER-CONTRIBUTION-RERUN | P2D-RCB5 | M5 / P2D / fixed Rerun map | `DO` | — | 修理済みrunner、現行固定配置 | 30 cell copyだけ |
+| RENDER-CONTRIBUTION-RERUN | P2D-RCB5 | M5 / P2D / fixed Rerun map | `STOPPED` | — | Grok REJECT P0=1、A1行二重挿入、差分不採用 | 後継P2D-RCB6 |
 | RENDER-CONTRIBUTION-ENGINE | P2D-RCC4B-UNREAL | M5 / P2D / fixed Unreal map | `DONE` | — | Grok ACCEPT P0/P1/P2=0、主担当再照合 | RCC5入力 |
 | RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA6 | M5 / P2D / machine-command boundary map | `STOPPED` | — | Opus本文のrunner所有操作列挙でORDER_INVALID、Spark未起動 | 後継P2D-RCA7 |
 | RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA7 | M5 / P2D / fixed boundary map | `DO` | — | 現行machine command runner、依頼本文の誤誘導を除去 | 18 cell copyだけ |
+| RENDER-CONTRIBUTION-RERUN | P2D-RCB6 | M5 / P2D / fixed Rerun map | `DO` | — | authority由来cardinality許可、A1〜A6一意対応 | 既存6行の30 cell copyだけ |
 | RENDER-CONTRIBUTION-ENGINE | P2D-RCC5 | M5 / P2D / fixture comparison | `DO` | — | 三provider DONE、固定v5 template登録済み | 24 cell copyだけ |
 | M2-REPAIR | GAP-23 | M2 / narrow repair | `WAIT` | — | 独立D1i-4 LookAt/Follow oracle分離の採番・完了 | GAP-23全25件を再発注し、後にGAP-24を判定 |
 | M2-REPAIR | GAP-24 | M2 / narrow repair | `WAIT` | — | GAP-23 | GAP-24後にclose |
