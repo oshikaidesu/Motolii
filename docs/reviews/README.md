@@ -389,3 +389,4 @@
 | [2026-07-29-cu-0b05s-browser-lifecycle-reprojection-contract-decision.md](2026-07-29-cu-0b05s-browser-lifecycle-reprojection-contract-decision.md) | CU-0B05S Browser lifecycle再投影契約決定 |
 | [2026-07-29-cu-0b05-browser-lifecycle-reprojection-implementation-decision.md](2026-07-29-cu-0b05-browser-lifecycle-reprojection-implementation-decision.md) | CU-0B05 Browser lifecycle再投影実装決定 |
 | [2026-07-29-cu-107pv-place-preview-delivery-implementation-decision.md](2026-07-29-cu-107pv-place-preview-delivery-implementation-decision.md) | CU-107PV Place preview配送実装決定 |
+| [2026-07-29-cu-107tc-place-terminal-cause-classification-implementation-decision.md](2026-07-29-cu-107tc-place-terminal-cause-classification-implementation-decision.md) | CU-107TC Place候補terminal原因分類実装決定 |

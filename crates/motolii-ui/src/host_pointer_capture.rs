@@ -5,11 +5,13 @@ pub(crate) struct HostPointerSample {
     pub(crate) position: [f64; 2],
     pub(crate) left_button_down: bool,
     pub(crate) window_focused: bool,
+    pub(crate) escape_pressed: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HostPointerCancel {
-    WindowFocusLost,
+    Escape,
+    CaptureLost,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -64,7 +66,14 @@ impl HostPointerCaptureState {
             self.active = None;
             return Some(HostPointerCandidate::Cancelled {
                 generation,
-                reason: HostPointerCancel::WindowFocusLost,
+                reason: HostPointerCancel::CaptureLost,
+            });
+        }
+        if sample.escape_pressed {
+            self.active = None;
+            return Some(HostPointerCandidate::Cancelled {
+                generation,
+                reason: HostPointerCancel::Escape,
             });
         }
         if sample.left_button_down {
@@ -90,6 +99,7 @@ impl HostPointerCaptureState {
 pub(crate) struct PlatformPointerCapture {
     window: objc2::rc::Retained<objc2_app_kit::NSWindow>,
     state: HostPointerCaptureState,
+    armed_after_event_timestamp: f64,
 }
 
 #[cfg(target_os = "macos")]
@@ -114,11 +124,20 @@ impl PlatformPointerCapture {
         Ok(Self {
             window,
             state: HostPointerCaptureState::default(),
+            armed_after_event_timestamp: 0.0,
         })
     }
 
     pub(crate) fn arm(&mut self) -> bool {
-        self.state.arm()
+        if !self.state.arm() {
+            return false;
+        }
+        self.armed_after_event_timestamp = self
+            .window
+            .currentEvent()
+            .map(|event| event.timestamp())
+            .unwrap_or(0.0);
+        true
     }
 
     pub(crate) fn is_active(&self) -> bool {
@@ -128,7 +147,7 @@ impl PlatformPointerCapture {
     pub(crate) fn poll(
         &mut self,
     ) -> Result<Option<HostPointerCandidate>, PlatformPointerCaptureError> {
-        use objc2_app_kit::NSEvent;
+        use objc2_app_kit::{NSEvent, NSEventType};
 
         let content = self
             .window
@@ -140,10 +159,19 @@ impl PlatformPointerCapture {
         let window_point = self.window.convertPointFromScreen(screen_point);
         let content_point = content.convertPoint_fromView(window_point, None);
         let content_height = content.bounds().size.height;
+        let window_focused = self.window.isKeyWindow();
+        let escape_pressed = window_focused
+            && self.window.currentEvent().is_some_and(|event| {
+                event.r#type() == NSEventType::KeyDown
+                    && event.keyCode() == 53
+                    && !event.isARepeat()
+                    && event.timestamp() > self.armed_after_event_timestamp
+            });
         let sample = HostPointerSample {
             position: [content_point.x, content_height - content_point.y],
             left_button_down: NSEvent::pressedMouseButtons() & 1 == 1,
-            window_focused: self.window.isKeyWindow(),
+            window_focused,
+            escape_pressed,
         };
         Ok(self.state.update(sample))
     }
@@ -199,6 +227,7 @@ mod tests {
             position: [120.0, 64.0],
             left_button_down,
             window_focused,
+            escape_pressed: false,
         }
     }
 
@@ -234,10 +263,27 @@ mod tests {
             capture.update(sample(true, false)),
             Some(HostPointerCandidate::Cancelled {
                 generation: 1,
-                reason: HostPointerCancel::WindowFocusLost
+                reason: HostPointerCancel::CaptureLost
             })
         );
         assert_eq!(capture.update(sample(false, true)), None);
+    }
+
+    #[test]
+    fn escape_cancels_active_capture_once() {
+        let mut capture = HostPointerCaptureState::default();
+        assert!(capture.arm());
+        let mut escaped = sample(true, true);
+        escaped.escape_pressed = true;
+
+        assert_eq!(
+            capture.update(escaped),
+            Some(HostPointerCandidate::Cancelled {
+                generation: 1,
+                reason: HostPointerCancel::Escape
+            })
+        );
+        assert_eq!(capture.update(escaped), None);
     }
 
     #[test]

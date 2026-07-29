@@ -14,7 +14,7 @@ use crate::browser_host_runtime::{
     BrowserFocusTarget, BrowserHostRuntime, BrowserHostRuntimeError, BrowserLifecycleEvent,
 };
 use crate::document_edit_runtime::DocumentEditRuntime;
-use crate::host_pointer_capture::HostPointerCandidate;
+use crate::host_pointer_capture::{HostPointerCancel, HostPointerCandidate};
 use crate::native_host_layout::{NativeHostLayout, PhysicalRect};
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
 
@@ -66,6 +66,7 @@ pub(crate) struct ProductApp {
     browser_focus_target: BrowserFocusTarget,
     active_place: Option<BrowserPlaceIntent>,
     place_preview: PlacePreviewPhase,
+    candidate_terminal: Option<ClassifiedPlaceTerminal>,
     pending_stage_drop: Option<PendingStageDrop>,
     surface_retry_at: Option<Instant>,
     failure: Option<String>,
@@ -77,6 +78,58 @@ struct PendingStageDrop {
     generation: u64,
     layout_epoch: u64,
     ndc: [f64; 2],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PlaceTerminalCause {
+    Escape,
+    OutsideStage,
+    CaptureLoss,
+    NoNonCommitCause,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct ClassifiedPlaceTerminal {
+    source: BrowserPlaceIntent,
+    generation: u64,
+    cause: PlaceTerminalCause,
+    layout_epoch: Option<u64>,
+    stage_ndc: Option<[f64; 2]>,
+}
+
+impl ClassifiedPlaceTerminal {
+    fn released(
+        source: BrowserPlaceIntent,
+        generation: u64,
+        position: [f64; 2],
+        layout: NativeHostLayout,
+    ) -> Self {
+        let stage_ndc = layout.stage_ndc(position);
+        Self {
+            source,
+            generation,
+            cause: if stage_ndc.is_some() {
+                PlaceTerminalCause::NoNonCommitCause
+            } else {
+                PlaceTerminalCause::OutsideStage
+            },
+            layout_epoch: Some(layout.epoch),
+            stage_ndc,
+        }
+    }
+
+    fn cancelled(source: BrowserPlaceIntent, generation: u64, reason: HostPointerCancel) -> Self {
+        Self {
+            source,
+            generation,
+            cause: match reason {
+                HostPointerCancel::Escape => PlaceTerminalCause::Escape,
+                HostPointerCancel::CaptureLost => PlaceTerminalCause::CaptureLoss,
+            },
+            layout_epoch: None,
+            stage_ndc: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -137,6 +190,7 @@ impl ProductApp {
             browser_focus_target: BrowserFocusTarget::Browser,
             active_place: None,
             place_preview: PlacePreviewPhase::default(),
+            candidate_terminal: None,
             pending_stage_drop: None,
             surface_retry_at: None,
             failure: None,
@@ -230,6 +284,7 @@ impl ProductApp {
                         return self.fail(event_loop, error);
                     }
                     self.place_preview.clear();
+                    self.candidate_terminal = None;
                     self.active_place = Some(intent);
                 }
                 Ok(None) => {}
@@ -257,21 +312,36 @@ impl ProductApp {
                 position,
             })) => {
                 self.place_preview.clear();
-                if let (Some(source), Some(layout)) = (self.active_place.take(), self.layout) {
-                    if let Some(ndc) = layout.stage_ndc(position) {
-                        self.pending_stage_drop = Some(PendingStageDrop {
-                            source,
-                            generation,
-                            layout_epoch: layout.epoch,
-                            ndc,
-                        });
-                    }
+                let Some(source) = self.active_place.take() else {
+                    self.set_idle_control_flow(event_loop);
+                    return;
+                };
+                let Some(layout) = self.layout else {
+                    return self.fail(
+                        event_loop,
+                        ProductRuntimeError::PlaceTerminalLayoutUnavailable,
+                    );
+                };
+                let terminal =
+                    ClassifiedPlaceTerminal::released(source, generation, position, layout);
+                if let Some(ndc) = terminal.stage_ndc {
+                    self.pending_stage_drop = Some(PendingStageDrop {
+                        source: terminal.source.clone(),
+                        generation,
+                        layout_epoch: layout.epoch,
+                        ndc,
+                    });
                 }
+                self.candidate_terminal = Some(terminal);
                 self.set_idle_control_flow(event_loop);
             }
-            Ok(Some(HostPointerCandidate::Cancelled { .. })) => {
+            Ok(Some(HostPointerCandidate::Cancelled { generation, reason })) => {
                 self.place_preview.clear();
-                self.active_place = None;
+                if let Some(source) = self.active_place.take() {
+                    self.candidate_terminal = Some(ClassifiedPlaceTerminal::cancelled(
+                        source, generation, reason,
+                    ));
+                }
                 self.set_idle_control_flow(event_loop);
             }
             Ok(None) => match browser.pointer_capture_is_active() {
@@ -283,6 +353,15 @@ impl ProductApp {
         }
         if let Some(drop) = &self.pending_stage_drop {
             let _ = (&drop.source, drop.generation, drop.layout_epoch, drop.ndc);
+        }
+        if let Some(terminal) = &self.candidate_terminal {
+            let _ = (
+                &terminal.source,
+                terminal.generation,
+                terminal.cause,
+                terminal.layout_epoch,
+                terminal.stage_ndc,
+            );
         }
     }
 
@@ -326,6 +405,7 @@ impl ProductApp {
             BrowserRecoveryDecision::Degrade => {
                 self.active_place = None;
                 self.place_preview.clear();
+                self.candidate_terminal = None;
                 self.browser.take();
                 Ok(())
             }
@@ -343,6 +423,7 @@ impl ProductApp {
             .ok_or(ProductRuntimeError::BrowserLifecycleUnavailable)?;
         self.active_place = None;
         self.place_preview.clear();
+        self.candidate_terminal = None;
         self.browser.take();
         let browser = build_browser_runtime(window, instance_epoch, source, self.proxy.clone())?;
         if let Some(layout) = self.layout {
@@ -829,6 +910,8 @@ pub(crate) enum ProductRuntimeError {
     BrowserInstanceEpochExhausted,
     #[error("Browser lifecycle coordinator is unavailable")]
     BrowserLifecycleUnavailable,
+    #[error("Place terminal cannot be classified without a native Host layout")]
+    PlaceTerminalLayoutUnavailable,
     #[error("native product runtime failed: {0}")]
     Runtime(String),
 }
@@ -893,6 +976,64 @@ mod tests {
         );
         phase.clear();
         assert_eq!(phase.latest, None);
+    }
+
+    #[test]
+    fn release_inside_stage_has_no_noncommit_cause() {
+        let layout = test_layout(9);
+        let position = [
+            layout.stage.x + layout.stage.width / 2.0,
+            layout.stage.y + layout.stage.height / 2.0,
+        ];
+
+        assert_eq!(
+            ClassifiedPlaceTerminal::released(test_source(), 4, position, layout),
+            ClassifiedPlaceTerminal {
+                source: test_source(),
+                generation: 4,
+                cause: PlaceTerminalCause::NoNonCommitCause,
+                layout_epoch: Some(9),
+                stage_ndc: Some([0.0, 0.0]),
+            }
+        );
+    }
+
+    #[test]
+    fn release_outside_stage_has_outside_cause() {
+        let layout = test_layout(9);
+
+        assert_eq!(
+            ClassifiedPlaceTerminal::released(test_source(), 4, [10.0, 10.0], layout),
+            ClassifiedPlaceTerminal {
+                source: test_source(),
+                generation: 4,
+                cause: PlaceTerminalCause::OutsideStage,
+                layout_epoch: Some(9),
+                stage_ndc: None,
+            }
+        );
+    }
+
+    #[test]
+    fn cancellation_reason_maps_exhaustively_to_noncommit_cause() {
+        for (reason, cause) in [
+            (HostPointerCancel::Escape, PlaceTerminalCause::Escape),
+            (
+                HostPointerCancel::CaptureLost,
+                PlaceTerminalCause::CaptureLoss,
+            ),
+        ] {
+            assert_eq!(
+                ClassifiedPlaceTerminal::cancelled(test_source(), 4, reason),
+                ClassifiedPlaceTerminal {
+                    source: test_source(),
+                    generation: 4,
+                    cause,
+                    layout_epoch: None,
+                    stage_ndc: None,
+                }
+            );
+        }
     }
 
     #[test]
