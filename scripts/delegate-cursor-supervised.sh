@@ -1848,8 +1848,10 @@ an exact closed file allowlist, non-goals, helpers to reuse, invariants, STOP
 conditions, positive and negative tests, and integration gates. Executable
 commands are already fixed by Codex in the COMMAND fields of the machine block.
 Do not repeat, paraphrase, extend, or add a command section. Do not prescribe
-grep, awk, sed, wc, find, line-number, token-presence, count-based acceptance
-oracles, checkout, reset, clean, deletion, or other diff-restoration actions.
+grep, awk, sed, wc, find, raw line-number or token-presence scanners,
+checkout, reset, clean, deletion, or other diff-restoration actions.
+Declarative completeness and cardinality already fixed by an authority or template
+may be stated as acceptance criteria; do not turn them into new executable scans.
 Scope, fingerprint, authority, manifest, marker, and command integrity are
 runner-owned gates. If the fixed commands are insufficient to make the grain
 safe, return ORDER: STOP.

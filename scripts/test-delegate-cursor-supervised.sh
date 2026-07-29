@@ -159,7 +159,8 @@ assert_has "$TMP_ROOT/stdout.log" "OUTCOME: DESIGN_STOP" "design stop outcome"
 [[ "$(sha256_file "$ORDER")" == "$seed_hash" ]] || fail "Opus STOP must not overwrite the manifest"
 assert_fragment "$CALL_LOG" "claude:-p --model claude-opus-5" "Opus is the order manager"
 assert_fragment "$CALL_LOG" "Do not repeat, paraphrase, extend, or add a command section" "prepare prompt command ownership guard"
-assert_fragment "$CALL_LOG" "grep, awk, sed, wc, find, line-number" "prepare prompt command-oracle guard"
+assert_fragment "$CALL_LOG" "grep, awk, sed, wc, find, raw line-number" "prepare prompt command-oracle guard"
+assert_fragment "$CALL_LOG" "Declarative completeness and cardinality already fixed" "prepare prompt authority-cardinality allowance"
 
 # Opus draftはCodex承認行やmachine fieldを自己発行できない。
 SELF_ORDER="$TMP_ROOT/self-approved-order.md"

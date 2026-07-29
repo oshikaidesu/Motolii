@@ -94,8 +94,9 @@ M5 fragment配置grainで、Opusが行番号、`grep` count、token presence、S
 orderへ発明し、意味が閉じていてもPRECHECKを反復停止させた。実行commandはmachine blockの
 `COMMAND`へ移し、既定`git diff --check`と、task／authorityが名指す既存script／testだけを
 `manifest --command`でCodexが追加する。Opus proseはcommand節を持たず、`COMMAND`の再記述も
-machine field違反として拒否する。独自`grep`／`awk`／`sed`／`wc`／`find`、行番号、token presence、
-件数oracle、checkout/reset/clean/deleteをOpus proseへ置かない。
+machine field違反として拒否する。独自`grep`／`awk`／`sed`／`wc`／`find`、raw行番号／token presence
+scanner、checkout/reset/clean/deleteをOpus proseへ置かない。authorityまたは固定template自身が宣言する
+全欄一致、行列対応、cardinalityは意味上の合否条件として許すが、新しい実行scanへ変換しない。
 scope、fingerprint、authority、manifest、marker、command integrityはrunner親processが検証する。
 追加oracleが無いと安全に閉じないgrainは、Opusがoracleを即席実装せず`ORDER: STOP`へ戻す。
 
