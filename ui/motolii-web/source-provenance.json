@@ -99,6 +99,13 @@
       "reason": "R6 Browser standalone mount without legacy parser input",
       "fixedSourceSha256": "c3d4b5800505390df2c34a9d69f7ad0a697ac19ed8dc5523245704500e171776",
       "currentSha256": "b2da9c62659ee9c19245115632b16d76fa38b34739946b901a5e7f6c8862a995"
+    },
+    {
+      "task": "CU-0A08BTI",
+      "file": "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx",
+      "reason": "VS-1 Rectangle Browser Place typed intent source",
+      "fixedSourceSha256": "b2da9c62659ee9c19245115632b16d76fa38b34739946b901a5e7f6c8862a995",
+      "currentSha256": "e05b8636d9d07d9cd75612b1025474e34eeec37ef673b377a79fddb5773e42f9"
     }
   ],
   "inspectorPostPromotionChanges": [

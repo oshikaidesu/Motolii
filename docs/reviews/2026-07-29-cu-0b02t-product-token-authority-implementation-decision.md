@@ -3,7 +3,7 @@
 - 日付: 2026-07-29
 - 状態: **実装完了 / DONE**
 - 親: `CU-0B02` / `U0e-3` **SPLIT**
-- 次の一粒: `CU-107PV` **PRODUCT-ASSET / DO**
+- 次の一粒: `CU-0A08BTI` **PRODUCT-ASSET / DO**
 
 ## 1. 成果
 
@@ -58,7 +58,6 @@ archived HTML、visual threshold、goldenは変更していない。
 ## 4. 次
 
 2026-07-29のユーザー優先順位に従い、token後続`CU-0B02R/N/C/I`は`WAIT`へ戻す。
-次のPRODUCT-ASSET `DO`はPlace配送連鎖の先頭`CU-107PV`だけとする。
-`CU-107PV → CU-107TC → CU-107AD → CU-107TD → CU-110 → CU-0A08BTI`
-の既決縦切りを優先し、token consumer、component state、icon、provenance修復を
-Rectangle配置の前へ追加しない。
+次のPRODUCT-ASSET `DO`はBrowser Place source `CU-0A08BTI`だけとする。
+`Browser → typed intent → Host → Place`の縦切りを優先し、token consumer、
+component state、icon、provenance修復をRectangle配置の前へ追加しない。

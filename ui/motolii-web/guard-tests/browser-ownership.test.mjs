@@ -805,6 +805,31 @@ test("validates product Browser identity projection into the private Rectangle s
     ));
 });
 
+test("emits one frozen Rectangle Place intent from the product Browser source seam", async () => {
+  const source = await readFile(abs(CURRENT_BROWSER_SOURCE), "utf8");
+  assert.equal(
+    source.includes("function createBrowserPlaceIntent(scope_ref, item_id)"),
+    true,
+  );
+  assert.equal(source.includes('kind: "browser.place"'), true);
+  assert.equal(
+    source.includes("source: Object.freeze({ scope_ref, item_id })"),
+    true,
+  );
+  assert.equal(
+    source.includes('element === "rectangle" && onPlaceIntent'),
+    true,
+  );
+  assert.equal(
+    source.includes("onPlaceIntent(createBrowserPlaceIntent(scopeRef, scopedItemId))"),
+    true,
+  );
+  assert.equal(
+    source.includes("<BrowserPlaceIntentContext.Provider value={onPlaceIntent ?? null}>"),
+    true,
+  );
+});
+
 test("validates decoded Inspector target projection into the existing identity JSX", async () => {
   const source = await readFile(abs(CURRENT_INSPECTOR_SOURCE), "utf8");
   assert.doesNotThrow(() => validateInspectorReadProjection(source));

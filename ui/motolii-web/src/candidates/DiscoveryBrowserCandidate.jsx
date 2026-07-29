@@ -39,6 +39,7 @@ function previewClassForMediaType(mediaType) {
 
 const BrowserHierarchyContext = createContext(null);
 const BrowserStandaloneContext = createContext(null);
+const BrowserPlaceIntentContext = createContext(null);
 const EFFECT_TAGS = [
   { id: "go-to", label: "Go-to", icon: "◎" },
   { id: "atmosphere", label: "Atmosphere", icon: "◌" },
@@ -51,6 +52,21 @@ const CREATE_TAGS = [
   { id: "animated", label: "Animated", icon: "⌁" },
   { id: "prototype", label: "Prototype", icon: "◇" },
 ];
+
+function createBrowserPlaceIntent(scope_ref, item_id) {
+  if (
+    typeof scope_ref !== "string"
+    || scope_ref.length === 0
+    || typeof item_id !== "string"
+    || item_id.length === 0
+  ) {
+    throw new TypeError("Rectangle Place source identity must be non-empty strings");
+  }
+  return Object.freeze({
+    kind: "browser.place",
+    source: Object.freeze({ scope_ref, item_id }),
+  });
+}
 
 function DiscoveryBrowserLayout(props) {
   const hierarchy = useContext(BrowserHierarchyContext);
@@ -491,7 +507,10 @@ function ElementCard({
   tags = [],
   tagVisible = true,
   onSelect,
+  scopeRef,
+  scopedItemId,
 }) {
+  const onPlaceIntent = useContext(BrowserPlaceIntentContext);
   return (
     <button
       className={`candidate-element-card${selected ? " on" : ""}`}
@@ -510,12 +529,15 @@ function ElementCard({
       draggable
       aria-label={`${name} · ${type} · ${provider}`}
       onClick={onSelect}
-      onDragStart={(event) =>
+      onDragStart={(event) => {
+        if (element === "rectangle" && onPlaceIntent) {
+          onPlaceIntent(createBrowserPlaceIntent(scopeRef, scopedItemId));
+        }
         event.dataTransfer.setData(
           "application/x-motolii-browser-item",
           itemId,
-        )
-      }
+        );
+      }}
     >
       <span className={`candidate-element-preview ${thumbnail}`}>
         <i aria-hidden="true">{glyph}</i>
@@ -1220,6 +1242,7 @@ export function DiscoveryBrowserCandidate({
   options,
   developmentProjection,
   rectangleIdentity,
+  onPlaceIntent,
 }) {
   const mediaProjection = developmentProjection === undefined
     ? undefined
@@ -1300,31 +1323,33 @@ export function DiscoveryBrowserCandidate({
       {standalone ? null : (
         <BrowserThumbnailSizeSettingBridge onChange={setThumbnailSize} />
       )}
-      <BrowserStandaloneContext.Provider
-        value={standalone ? { activeTab: standaloneTab } : null}
-      >
-        <BrowserHierarchyContext.Provider value={hierarchy}>
-          {standalone ? (
-            <aside {...rootProps}>
-              <div className="panel-head">
-                Browser
-                <small>MEDIA / CREATE / EFFECTS</small>
-              </div>
-              {browserTabs}
-              <CandidatePluginBrowser />
-              <CandidateProjectBrowser />
-            </aside>
-          ) : createElement(
-            node.name,
-            {
-              ...attributesToProps(node.attribs, node.name),
-              ...rootProps,
-              className: `${node.attribs.class} browser-candidate${hierarchyHidden ? " is-hierarchy-hidden" : ""}`,
-            },
-            domToReact(node.children ?? [], candidateOptions),
-          )}
-        </BrowserHierarchyContext.Provider>
-      </BrowserStandaloneContext.Provider>
+      <BrowserPlaceIntentContext.Provider value={onPlaceIntent ?? null}>
+        <BrowserStandaloneContext.Provider
+          value={standalone ? { activeTab: standaloneTab } : null}
+        >
+          <BrowserHierarchyContext.Provider value={hierarchy}>
+            {standalone ? (
+              <aside {...rootProps}>
+                <div className="panel-head">
+                  Browser
+                  <small>MEDIA / CREATE / EFFECTS</small>
+                </div>
+                {browserTabs}
+                <CandidatePluginBrowser />
+                <CandidateProjectBrowser />
+              </aside>
+            ) : createElement(
+              node.name,
+              {
+                ...attributesToProps(node.attribs, node.name),
+                ...rootProps,
+                className: `${node.attribs.class} browser-candidate${hierarchyHidden ? " is-hierarchy-hidden" : ""}`,
+              },
+              domToReact(node.children ?? [], candidateOptions),
+            )}
+          </BrowserHierarchyContext.Provider>
+        </BrowserStandaloneContext.Provider>
+      </BrowserPlaceIntentContext.Provider>
     </>
   );
 }
