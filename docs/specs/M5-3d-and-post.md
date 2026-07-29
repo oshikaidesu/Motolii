@@ -143,13 +143,16 @@ M5は[操作単純化モデル](../interaction-simplicity-model.md)の最初の�
 | P2D-RCC3-BEVY | **停止／差分不採用**。Bevy capsuleから固定5観測項目への転記 | P2D-RC0, P2D-RCE0, GR-D4 | Grok `REJECT` P0=0/P1=5。自由文を廃止したP2D-RCC4-BEVYへ置換 |
 | P2D-RCC3-GODOT | **DONE**。Godot capsuleから固定5観測項目への転記 | P2D-RC0, P2D-RCE0, GR-D4 | Grok `ACCEPT` P0/P1/P2=0。主担当再照合済み |
 | P2D-RCC3-UNREAL | **停止／差分なし**。Unreal capsuleから固定5観測項目への転記 | P2D-RC0, P2D-RCE0, GR-D4 | Opus `DESIGN_STOP`。非記載fragmentを固定したP2D-RCC4-UNREALへ置換 |
-| P2D-RCB4 | 固定Rerun fragment IDのA1〜A6 matrix配置 | P2D-RC0, P2D-RCE0, GR-D4 | 登録済み。A6は`R-A6-LIM`必須。自由文・ID追加禁止 |
+| P2D-RCB4 | **停止／差分なし**。固定Rerun fragment IDのA1〜A6 matrix配置 | P2D-RC0, P2D-RCE0, GR-D4 | Opus command-oracle不備3回反復。修理済みrunnerのP2D-RCB5へ |
 | P2D-RCC4-BEVY | **停止／差分不採用**。固定Bevy fragment IDの5観測matrix配置 | P2D-RC0, P2D-RCE0, GR-D4 | Grok ACCEPT 0/0/0後、現行主担当固定配置と2 cell不一致。後継P2D-RCC4B-BEVY |
-| P2D-RCC4-UNREAL | 固定Unreal fragment IDの5観測matrix配置 | P2D-RC0, P2D-RCE0, GR-D4 | 登録済み。非記載は固定`U-NO`、自由文・ID追加禁止 |
-| P2D-RCA4 | 固定Motolii境界fragment IDの6論点matrix配置 | P2D-RC0, P2D-RCE0, GR-D4 | 登録済み。要求／contribution、shared depth、方式未決を固定fragmentからのみ配置 |
+| P2D-RCC4-UNREAL | **停止／差分なし**。固定Unreal fragment IDの5観測matrix配置 | P2D-RC0, P2D-RCE0, GR-D4 | Opus command-oracle不備6回反復。修理済みrunnerのP2D-RCC4B-UNREALへ |
+| P2D-RCA4 | **停止／差分なし**。固定Motolii境界fragment IDの6論点matrix配置 | P2D-RC0, P2D-RCE0, GR-D4 | Opus command-oracle不備4回反復。修理済みrunnerのP2D-RCA5へ |
 | P2D-RCC4B-BEVY | 現行主担当固定配置どおりのBevy fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | 登録済み。20 cellをtemplate記載どおりcopyするだけ |
-| P2D-RCC5 | ACCEPT済みprovider観察のMotolii fixture軸比較 | P2D-RCC3-GODOT, P2D-RCC4B-BEVY, P2D-RCC4-UNREAL | **未登録／WAIT**。三provider完了後に固定templateとallowlistを別変更で登録 |
-| P2D-RCI | 新しい証拠grainの統合とRender Contribution最終decision。必要ならcontract／private spike／schema／First Vism fixtureを再分割 | P2D-RCA4, P2D-RCB4, P2D-RCC5 | **WAIT**。Motolii authorityを正として統合し、公開境界または永続意味が未決なら実装解禁せずSTOP |
+| P2D-RCA5 | 現行主担当固定配置どおりのMotolii境界fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | 登録済み。修理済みrunner、18 cell copyだけ |
+| P2D-RCB5 | 現行主担当固定配置どおりのRerun fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | 登録済み。修理済みrunner、30 cell copyだけ |
+| P2D-RCC4B-UNREAL | 現行主担当固定配置どおりのUnreal fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | 登録済み。修理済みrunner、20 cell copyだけ |
+| P2D-RCC5 | ACCEPT済みprovider観察のMotolii fixture軸比較 | P2D-RCC3-GODOT, P2D-RCC4B-BEVY/UNREAL | **未登録／WAIT**。三provider完了後に固定templateとallowlistを別変更で登録 |
+| P2D-RCI | 新しい証拠grainの統合とRender Contribution最終decision。必要ならcontract／private spike／schema／First Vism fixtureを再分割 | P2D-RCA5, P2D-RCB5, P2D-RCC5 | **WAIT**。Motolii authorityを正として統合し、公開境界または永続意味が未決なら実装解禁せずSTOP |
 | P2U | Stage transform toolの`Scale / Depth Move`分離。Scale handleとDepth rail/axisをM3-U2dのCamera/Object操作、既存toolbar/Inspector/timeline語彙へ統合 | P3, M2-D2, M3-U2d | (1)Scale dragはscaleだけ、Depth dragはposition.zだけをD2 command化 (2)各gestureがUndo 1回 (3)perspective/orthographic fixture (4)active toolを文字なし・grayscaleでも形/iconから識別 (5)DPI差で同じ正規化gestureが同じdomain値 (6)script不要で両channelへkeyframe可能 (7)`Position X/Y`・`Depth Z`・`Rotation Z`が別group/channelで、Depth操作から3D modeや第二のDepth fieldを生成しない (8)native wgpu presentation overlayがcanonical preview/export画素を変えず、frame内resource生成/GPU readback 0 (9)CPU解析hit-test、move中semantic write 0、Escape/focus lossの確定変更0 |
 | P2R | Depth Rail / 奥行き展開: 複数レイヤーのlive Z表示・直接編集・Layer Order Distribute・Expand/Compress/Reverse/Flatten・Preserve Appearance | P2U, P3, M2-D2, M3 | (1)再生/seekで評価済みEdit-Space Z markerとCamera Depth rankが追従 (2)rail viewportは再生中不変、範囲外indicator+Fit操作 (3)single/range dragと各actionがD2 macro 1回、Cancel変更ゼロ (4)Auto Key ON/OFF fixture (5)Preserve OFFはZのみ、ONはscreen anchor/sizeを維持し補正channelを可視化 (6)perspective/orthographic/rotated camera/common-parent/mixed-parent拒否fixture (7)100 layer/極端ZでUI非blocking・readbackなし (8)group/null/expression/専用channelを生成しない (9)occlusion policy別の同一Z配置fixture (10)Randomizeの同seed同結果・Explodeの有限値/near-plane診断 (11)同一parentの20〜100 layerが全てZ=0でも件数付きstackで識別でき、hover/選択だけで扇状展開または値変更しない (12)常設iconから指定near/far区間へauthoring orderで等間隔配置し、ReverseがZ集合だけを再割当する (13)Timeline選択は同じstable IDへfocusするが通常bar clickだけでは閉じたRailを開かない (14)親側のGroup 1 markerとEdit Childrenのparent-local子scopeを混在させない |
 | P4 | ポストプロセスNode群: ブラー(+Z距離マスク)、色調整(リフト/ガンマ/ゲイン)、グレイン | 凍結ゲート, M4-K0 | 各ノードのゴールデンテスト。Blurのinput regionが半径分拡張し、Unknown fallback/全域評価とpixel一致 |
@@ -160,7 +163,7 @@ M5は[操作単純化モデル](../interaction-simplicity-model.md)の最初の�
 | P7c | **first-party Behaviour**: Stagger、Random、Falloffを純関数`Behaviour(InstanceContext,t,params)->typed channel value/weight`として実装 | P7b | (1)Stagger=index/count順序、Random=`pcg32(hash(user_seed,InstanceId,channel_tag))`、Falloff=正準world距離 (2)Behaviour順序/enableで結果が決定 (3)Randomizeはseedを書換えるD2 commandだけ (4)再生/seek/thread順で乱数不変 (5)型不一致をtyped error (6)effect未使用時既存pixel同一 |
 | P7U | **Duplicator/Behaviour UI**: Input Shapes接続、Distribution、seed、per-instance channel、Stagger/Random/FalloffをTimeline/Inspector/Stageへ接続 | P7c, M3-U2c, M3-U2g | (1)source/Behaviour接続をfrom/inで可視化 (2)seed数値編集+明示Randomize、再評価で勝手に変化しない (3)instance選択はderived UI状態でDocumentへ1,000行を焼かない (4)Direct/Tool/Advancedが同Document意味 (5)1 gesture=1 Undo (6)1,000 instanceでUI非blocking |
 
-並列レーン: M2-D1j/D1k/D3とM3-U1f/U2dで2D world/camera/Stageを先に成立させ、K0は透過Stageと独立して進める。P0IとP1 importも互いおよびK0から独立し、P1合流後にP2。P0I→P7a、P2+P7a+K1→P7b→P7c→P7U。P2D-RC0、P2D-RCE0、GR-D4は成立した。RCC3-GODOTは完了、固定fragment配置RCA4/RCB4/RCC4-BEVY/UNREALは独立に進める。横断RCC5はprovider三件後、P2D-RCIはRCA4/RCB4/RCC5後までWAIT。P2後はP2D/P2U/P3を依存に従って進め、P2U+P3後にP2R。P4はK0後、P6は独立、P5が合流点。world/cameraの成立をP1へ依存させない。
+並列レーン: M2-D1j/D1k/D3とM3-U1f/U2dで2D world/camera/Stageを先に成立させ、K0は透過Stageと独立して進める。P0IとP1 importも互いおよびK0から独立し、P1合流後にP2。P0I→P7a、P2+P7a+K1→P7b→P7c→P7U。P2D-RC0、P2D-RCE0、GR-D4は成立した。RCC3-GODOTは完了、修理済みrunnerの固定配置RCA5/RCB5/RCC4B-BEVY/UNREALは独立に進める。横断RCC5はprovider三件後、P2D-RCIはRCA5/RCB5/RCC5後までWAIT。P2後はP2D/P2U/P3を依存に従って進め、P2U+P3後にP2R。P4はK0後、P6は独立、P5が合流点。world/cameraの成立をP1へ依存させない。
 
 ### P6 API契約(2026-07-10。プラグインが組版できるための口)
 
