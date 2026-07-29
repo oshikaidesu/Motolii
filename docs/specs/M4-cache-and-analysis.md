@@ -4,6 +4,42 @@
 
 2026-07-23歴史監査: cutoff全20版を[Unit 5J回収](../reviews/2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md)で処分した。Host専権cache、完全key、透明なmiss、並行契約、hard budget、render外StateTrackは維持する。現行codeにあるping-pong targetと`PipelineCache`はM4 store完成ではない。K0は2026-07-25に[契約凍結](../spikes/m4-k0-region-contract.md)(test-only、PR [#338](https://github.com/oshikaidesu/Motolii/pull/338))を通過したがruntime／公開APIへは未昇格で、K1〜K8は未実装のままである。
 
+## 着手前の必読導線（2026-07-29）
+
+K1a〜K1d、K4、decoder surface、`RenderedFrame`、Preview接続の調査・仕様・実装・発注は、
+この仕様だけから開始しない。次を順に読み、各文書の状態と停止線を引き継ぐ。
+
+1. [M4 validation campaign checkpoint](../spikes/m4-validation-campaign-checkpoint.md) —
+   製品へ残した純粋ロジック、testkitへ隔離した検証機構、未解決の公開所有境界
+2. [K1a render-target accounting](../spikes/m4-k1a-render-target-accounting.md) —
+   現行ResourceLedgerの成立範囲、Host budget policy、`RenderedFrame`寿命の停止線
+3. [GPU surface import境界](../spikes/m4-gpu-surface-import-boundary.md) —
+   native decoder surface、backend import、wgpu lowering、fence、画素oracleの責任分割
+4. [hardware validation harness](../spikes/m4-hardware-validation-harness.md) —
+   portable schema v5、低スペックWindows収集、機種間matrix、未決数値policy
+5. [YUV materialization lifetime gap](../spikes/m4-yuv-materialization-lifetime-gap.md) —
+   3本以上のlive video sourceで既存2面poolを性能・画素証拠に使えない停止線
+
+実装順の固定原則:
+
+- hardware decoderを有効化しただけで高速経路と呼ばない。CPU `hwdownload`→raw YUV→wgpu再uploadは
+  比較fallbackでありzero-copyの完成ではない
+- wgpu `ExternalTexture`は**import済みplane viewのlowering候補**であり、
+  `CVPixelBuffer`／D3D11 decoder surfaceを取り込む汎用native import APIではない
+- OS固有責任はHost内部の薄いplatform adapterへ閉じる。共通cache、Document、plugin契約、
+  cache keyへMetal／D3D／OS handleを出さない
+- 経路は`native surface取得 → device identity確認 → backend import → wgpu plane/lowering
+  → GPU完了までlease/fence保持 → ResourceLedger解放`へ分ける
+- macOS adapter、Windows adapter、surface lifetime、Ledger接続、Preview統合を一粒へ束ねない。
+  一つでも公開API、plugin ABI、永続形式、未裁定dependencyが必要なら実装を止めて独立仕様へ戻す
+- CPU decode/upload fallbackは画素の正しさを保つ正式縮退経路として残す。cacheの有無やadapter失敗で
+  `f(t, input, Quality)`の結果を変えない
+- VRAM予算、alignment、先読み、lane cap、warm-up／反復回数は実機bundleから別policy粒で採択する。
+  単一Mac、GPU名、`ffmpeg -hwaccels`列挙、単回benchから既定値を決めない
+
+上記の外部gateが未完でもK1のOS非依存純粋ロジックは進められる。ただしgateをpassと記録したり、
+CPU download値を製品Preview／低スペック保証へ外挿してはならない。
+
 ## 目的(退治する落とし穴)
 
 B-5(時系列依存とキャッシュ)、B-6(OpenCV依存)、F-2(キャッシュの並行契約 — Natronがデッドロックした正確なポイント)。
