@@ -81,6 +81,11 @@ const EXPECTED_INSPECTOR_CSS_SHA256 =
   "730e2861a893b2b07fa66d5acef0038a49bdcf337e8c5a037785b0a58d829cbe";
 
 const ALLOWED_EXTERNAL_PACKAGES = ["react", "html-react-parser"];
+const SEAM_COMPONENT_NAME = "CandidateCreateBrowser";
+const SEAM_CARD_COMPONENT_NAME = "ElementCard";
+const SEAM_CARD_SCOPE_ATTRIBUTE = "element";
+const SEAM_CARD_SCOPE_VALUE = "rectangle";
+const SEAM_ELEMENT_PROPS_NAME = "elementProps";
 
 function countNonOverlapping(text, needle) {
   let count = 0;
@@ -271,6 +276,141 @@ function collectNamedExports(ast) {
   return names;
 }
 
+function validatePrivateIdentitySeam(sourceText, componentName, identityFieldNames) {
+  const ast = parseModule(sourceText);
+  const declarations = ast.program.body.filter(
+    (node) => node.type === "FunctionDeclaration" && node.id?.name === componentName,
+  );
+  if (declarations.length !== 1) {
+    throw new Error("private seam component must have exactly one top-level declaration");
+  }
+  const directExport = ast.program.body.some(
+    (node) =>
+      (node.type === "ExportNamedDeclaration" || node.type === "ExportDefaultDeclaration")
+      && node.declaration?.id?.name === componentName,
+  );
+  if (directExport || collectNamedExports(ast).has(componentName)) {
+    throw new Error("private seam component must not be exported");
+  }
+
+  const component = declarations[0];
+  if (component.params.length !== 1 || component.params[0].type !== "ObjectPattern") {
+    throw new Error("private seam component must receive one object input");
+  }
+  const properties = component.params[0].properties;
+  if (
+    identityFieldNames.length !== 2
+    || properties.length !== identityFieldNames.length
+    || properties.some(
+      (property) =>
+        property.type !== "ObjectProperty"
+        || property.computed
+        || property.key?.type !== "Identifier"
+        || property.value?.type !== "Identifier",
+    )
+  ) {
+    throw new Error("private seam input must contain exactly two direct fields");
+  }
+  const propertyKeys = properties.map((property) => property.key.name);
+  if (
+    new Set(propertyKeys).size !== identityFieldNames.length
+    || identityFieldNames.some((fieldName) => !propertyKeys.includes(fieldName))
+  ) {
+    throw new Error("private seam input fields do not match the requested identity fields");
+  }
+
+  const bindings = new Map(
+    properties.map((property) => [property.value.name, { references: [], elements: [] }]),
+  );
+  const walk = (node, parent = null, grandparent = null, greatGrandparent = null) => {
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    if (Array.isArray(node)) {
+      node.forEach((child) => walk(child, parent, grandparent, greatGrandparent));
+      return;
+    }
+    if (node.type === "Identifier" && bindings.has(node.name)) {
+      const propertyKey =
+        (parent?.type === "ObjectProperty" || parent?.type === "ObjectMethod")
+        && parent.key === node
+        && !parent.computed;
+      const memberProperty =
+        (parent?.type === "MemberExpression" || parent?.type === "OptionalMemberExpression")
+        && parent.property === node
+        && !parent.computed;
+      if (!propertyKey && !memberProperty) {
+        const binding = bindings.get(node.name);
+        binding.references.push(node);
+        let element = null;
+        if (
+          parent?.type === "JSXExpressionContainer"
+          && grandparent?.type === "JSXAttribute"
+          && greatGrandparent?.type === "JSXOpeningElement"
+        ) {
+          element = greatGrandparent;
+        } else if (
+          parent?.type === "CallExpression"
+          && parent.arguments.includes(node)
+          && parent.callee?.type === "Identifier"
+          && parent.callee.name === SEAM_ELEMENT_PROPS_NAME
+          && parent.arguments[0]?.type === "StringLiteral"
+          && parent.arguments[0].value === SEAM_CARD_SCOPE_VALUE
+          && grandparent?.type === "JSXSpreadAttribute"
+          && grandparent.argument === parent
+          && greatGrandparent?.type === "JSXOpeningElement"
+        ) {
+          element = greatGrandparent;
+        }
+        if (element) {
+          binding.elements.push(element);
+        } else {
+          binding.invalidLocation = [
+            parent?.type,
+            grandparent?.type,
+            greatGrandparent?.type,
+          ];
+        }
+      }
+    }
+    for (const child of Object.values(node)) {
+      if (child !== parent && child !== grandparent && child !== greatGrandparent) {
+        walk(child, node, parent, grandparent);
+      }
+    }
+  };
+  walk(component.body);
+
+  const bindingValues = [...bindings.values()];
+  if (bindingValues.some((binding) => binding.references.length !== 1)) {
+    throw new Error("each identity field must have exactly one reference");
+  }
+  if (bindingValues.some((binding) => binding.elements.length !== 1)) {
+    const locations = bindingValues
+      .map((binding) => binding.invalidLocation?.join(" > "))
+      .filter(Boolean)
+      .join(", ");
+    throw new Error(`identity fields must pass through an allowed position: ${locations}`);
+  }
+  const element = bindingValues[0].elements[0];
+  if (bindingValues.some((binding) => binding.elements[0] !== element)) {
+    throw new Error("identity fields must reach the same card");
+  }
+  const isExpectedCard =
+    element.name?.type === "JSXIdentifier"
+    && element.name.name === SEAM_CARD_COMPONENT_NAME;
+  const hasExpectedScope = element.attributes.some(
+    (attribute) =>
+      attribute.type === "JSXAttribute"
+      && attribute.name?.name === SEAM_CARD_SCOPE_ATTRIBUTE
+      && attribute.value?.type === "StringLiteral"
+      && attribute.value.value === SEAM_CARD_SCOPE_VALUE,
+  );
+  if (!isExpectedCard || !hasExpectedScope) {
+    throw new Error("identity fields must reach the Rectangle card only");
+  }
+}
+
 function isForbiddenRelativeImport(importerPath, sourceValue) {
   if (!sourceValue.startsWith(".")) {
     return false;
@@ -334,6 +474,64 @@ function assertProductExportFromIndex(ast) {
   assert.equal(exportNames.has("InspectorContext"), true);
   assert.equal(exportNames.has("default"), false);
 }
+
+test("validates module-private Browser identity input seam on synthetic sources", () => {
+  const fields = ["SYN_FIELD_A", "SYN_FIELD_B"];
+  const validate = (source) =>
+    validatePrivateIdentitySeam(source, SEAM_COMPONENT_NAME, fields);
+  const positiveSources = [
+    ["P-A direct JSX attributes", `
+      function elementProps(itemId) { return { itemId }; }
+      function ElementCard() { return null; }
+      function CandidateCreateBrowser({ SYN_FIELD_A, SYN_FIELD_B }) {
+        const unrelated = useState(false);
+        return <>
+          <ElementCard {...elementProps("ellipse")} element="ellipse" />
+          <ElementCard {...elementProps("rectangle")} element="rectangle"
+            SYN_A_ATTR={SYN_FIELD_A} SYN_B_ATTR={SYN_FIELD_B} />
+        </>;
+      }
+    `],
+    ["P-B elementProps arguments", `
+      function elementProps(itemId, fieldA, fieldB) { return { itemId, fieldA, fieldB }; }
+      function ElementCard() { return null; }
+      function CandidateCreateBrowser({ SYN_FIELD_A, SYN_FIELD_B }) {
+        return <ElementCard
+          {...elementProps("rectangle", SYN_FIELD_A, SYN_FIELD_B)}
+          element="rectangle"
+        />;
+      }
+    `],
+  ];
+  for (const [label, source] of positiveSources) {
+    assert.doesNotThrow(() => validate(source), label);
+  }
+
+  const negativeCases = [
+    ["N-1 exported component", `export function CandidateCreateBrowser({ SYN_FIELD_A, SYN_FIELD_B }) { return <ElementCard element="rectangle" A={SYN_FIELD_A} B={SYN_FIELD_B} />; }`],
+    ["N-2 zero arguments", `function CandidateCreateBrowser() { return null; }`],
+    ["N-3 identifier argument", `function CandidateCreateBrowser(props) { return null; }`],
+    ["N-4 three fields", `function CandidateCreateBrowser({ SYN_FIELD_A, SYN_FIELD_B, SYN_FIELD_C }) { return <ElementCard element="rectangle" A={SYN_FIELD_A} B={SYN_FIELD_B} />; }`],
+    ["N-5 one field", `function CandidateCreateBrowser({ SYN_FIELD_A }) { return <ElementCard element="rectangle" A={SYN_FIELD_A} />; }`],
+    ["N-6 rest input", `function CandidateCreateBrowser({ SYN_FIELD_A, ...rest }) { return <ElementCard element="rectangle" A={SYN_FIELD_A} B={rest} />; }`],
+    ["N-7 default input", `function CandidateCreateBrowser({ SYN_FIELD_A = "rectangle", SYN_FIELD_B }) { return <ElementCard element="rectangle" A={SYN_FIELD_A} B={SYN_FIELD_B} />; }`],
+    ["N-8 catalog input", `function CandidateCreateBrowser({ SYN_CATALOG }) { const SYN_FIELD_A = SYN_CATALOG.a; const SYN_FIELD_B = SYN_CATALOG.b; return <ElementCard element="rectangle" A={SYN_FIELD_A} B={SYN_FIELD_B} />; }`],
+    ["N-9 member lookup", `function CandidateCreateBrowser({ SYN_FIELD_A, SYN_FIELD_B }) { return <ElementCard element="rectangle" A={SYN_FIELD_A.items} B={SYN_FIELD_B} />; }`],
+    ["N-10 map lookup", `function CandidateCreateBrowser({ SYN_FIELD_A, SYN_FIELD_B }) { return <ElementCard element="rectangle" A={SYN_MAP.get(SYN_FIELD_B)} B={SYN_FIELD_A} />; }`],
+    ["N-11 logical fallback", `function CandidateCreateBrowser({ SYN_FIELD_A, SYN_FIELD_B }) { return <ElementCard element="rectangle" A={SYN_FIELD_A || "rectangle"} B={SYN_FIELD_B} />; }`],
+    ["N-12 nullish default", `function CandidateCreateBrowser({ SYN_FIELD_A, SYN_FIELD_B }) { return <ElementCard element="rectangle" A={SYN_FIELD_A} B={SYN_FIELD_B ?? "rectangle"} />; }`],
+    ["N-13 conditional", `function CandidateCreateBrowser({ SYN_FIELD_A, SYN_FIELD_B }) { return <ElementCard element="rectangle" A={cond ? SYN_FIELD_A : "rectangle"} B={SYN_FIELD_B} />; }`],
+    ["N-14 Document owner", `function CandidateCreateBrowser({ SYN_FIELD_A, SYN_FIELD_B }) { document.title = SYN_FIELD_A; return <ElementCard element="rectangle" B={SYN_FIELD_B} />; }`],
+    ["N-15 selection and Undo owner", `function CandidateCreateBrowser({ SYN_FIELD_A, SYN_FIELD_B }) { const [x] = useState(SYN_FIELD_A); return <ElementCard element="rectangle" onSelect={() => commitUndo(SYN_FIELD_B)} />; }`],
+    ["N-16 non-Rectangle card", `function CandidateCreateBrowser({ SYN_FIELD_A, SYN_FIELD_B }) { return <ElementCard element="ellipse" A={SYN_FIELD_A} B={SYN_FIELD_B} />; }`],
+    ["N-17 bare itemId generalizes identity to all cards", `function CandidateCreateBrowser({ SYN_FIELD_A, SYN_FIELD_B }) { const itemId = "rectangle"; return <ElementCard {...elementProps(itemId, SYN_FIELD_A, SYN_FIELD_B)} element="rectangle" />; }`],
+    ["N-17b duplicate reference", `function CandidateCreateBrowser({ SYN_FIELD_A, SYN_FIELD_B }) { return <ElementCard element="rectangle" A={SYN_FIELD_A} A2={SYN_FIELD_A} B={SYN_FIELD_B} />; }`],
+    ["N-18 split cards or literal replacement", `function CandidateCreateBrowser({ SYN_FIELD_A, SYN_FIELD_B }) { return <><ElementCard element="rectangle" A={SYN_FIELD_A} identity="motion-kit.type-pulse" /><ElementCard element="ellipse" B={SYN_FIELD_B} /></>; }`],
+  ];
+  for (const [label, source] of negativeCases) {
+    assert.throws(() => validate(source), label);
+  }
+});
 
 test("validates fixed Browser bytes and browser export mapping", async () => {
   const productPackage = JSON.parse(await readFile(PRODUCT_PACKAGE, "utf8"));
