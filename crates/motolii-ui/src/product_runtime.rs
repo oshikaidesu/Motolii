@@ -68,6 +68,7 @@ pub(crate) struct ProductApp {
     active_place: Option<BrowserPlaceIntent>,
     place_preview: PlacePreviewPhase,
     terminal_admission: PlaceTerminalAdmission,
+    terminal_delivery: PlaceTerminalDelivery,
     candidate_terminal: Option<ClassifiedPlaceTerminal>,
     admitted_terminal: Option<ClassifiedPlaceTerminal>,
     pending_stage_drop: Option<PendingStageDrop>,
@@ -81,6 +82,33 @@ struct PendingStageDrop {
     generation: u64,
     layout_epoch: u64,
     ndc: [f64; 2],
+}
+
+#[derive(Debug, Default)]
+struct PlaceTerminalDelivery {
+    delivered_high_water: Option<u64>,
+}
+
+impl PlaceTerminalDelivery {
+    fn deliver(&mut self, terminal: &ClassifiedPlaceTerminal) -> Option<PendingStageDrop> {
+        if terminal.cause != PlaceTerminalCause::NoNonCommitCause
+            || self
+                .delivered_high_water
+                .is_some_and(|high_water| terminal.generation <= high_water)
+        {
+            return None;
+        }
+        let (Some(layout_epoch), Some(ndc)) = (terminal.layout_epoch, terminal.stage_ndc) else {
+            return None;
+        };
+        self.delivered_high_water = Some(terminal.generation);
+        Some(PendingStageDrop {
+            source: terminal.source.clone(),
+            generation: terminal.generation,
+            layout_epoch,
+            ndc,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -238,6 +266,7 @@ impl ProductApp {
             active_place: None,
             place_preview: PlacePreviewPhase::default(),
             terminal_admission: PlaceTerminalAdmission::default(),
+            terminal_delivery: PlaceTerminalDelivery::default(),
             candidate_terminal: None,
             admitted_terminal: None,
             pending_stage_drop: None,
@@ -387,6 +416,7 @@ impl ProductApp {
                 let terminal =
                     ClassifiedPlaceTerminal::released(source, generation, position, layout);
                 if self.terminal_admission.admit(&terminal) {
+                    self.pending_stage_drop = self.terminal_delivery.deliver(&terminal);
                     self.admitted_terminal = Some(terminal.clone());
                 }
                 self.candidate_terminal = Some(terminal);
@@ -1172,6 +1202,32 @@ mod tests {
         assert!(!admission.begin(7));
         assert!(!admission.begin(8));
         assert!(admission.begin(9));
+    }
+
+    #[test]
+    fn admitted_terminal_delivers_once_to_the_single_pending_boundary() {
+        let layout = test_layout(9);
+        let position = [
+            layout.stage.x + layout.stage.width / 2.0,
+            layout.stage.y + layout.stage.height / 2.0,
+        ];
+        let terminal = ClassifiedPlaceTerminal::released(test_source(), 4, position, layout);
+        let mut delivery = PlaceTerminalDelivery::default();
+
+        let delivered = delivery.deliver(&terminal).unwrap();
+        assert_eq!(delivered.generation, 4);
+        assert_eq!(delivered.layout_epoch, 9);
+        assert_eq!(delivered.ndc, [0.0, 0.0]);
+        assert!(delivery.deliver(&terminal).is_none());
+    }
+
+    #[test]
+    fn unadmitted_causes_cannot_enter_the_delivery_boundary() {
+        let mut delivery = PlaceTerminalDelivery::default();
+        for reason in [HostPointerCancel::Escape, HostPointerCancel::CaptureLost] {
+            let terminal = ClassifiedPlaceTerminal::cancelled(test_source(), 4, reason);
+            assert!(delivery.deliver(&terminal).is_none());
+        }
     }
 
     #[test]
