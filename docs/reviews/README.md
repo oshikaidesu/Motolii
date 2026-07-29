@@ -222,6 +222,13 @@
 | [2026-07-29-m5-render-contribution-contract-draft.md](2026-07-29-m5-render-contribution-contract-draft.md) | 停止した旧P2D-RCAの登録template。後続authorityにせず、別ID／allowlist登録まで再利用しない |
 | [2026-07-29-m5-rerun-render-contribution-evidence.md](2026-07-29-m5-rerun-render-contribution-evidence.md) | 停止した旧P2D-RCBの登録template。未裁定証拠取得と転移裁定を同じ発注へ戻さない |
 | [2026-07-29-m5-render-phase-primary-source-evidence.md](2026-07-29-m5-render-phase-primary-source-evidence.md) | 停止した旧P2D-RCCの登録template。複数provider取得とfixture翻訳を同じ発注へ戻さない |
+| [2026-07-29-m5-capsule-rerun-custom-visualizer.md](2026-07-29-m5-capsule-rerun-custom-visualizer.md) | Rerun固定commitの既存Spatial3DView拡張、visualizer、renderer／draw dataを判断なしで固定した証拠capsule |
+| [2026-07-29-m5-capsule-rerun-custom-view.md](2026-07-29-m5-capsule-rerun-custom-view.md) | Rerun固定commitの新View class登録を既存View拡張と分けて固定した証拠capsule |
+| [2026-07-29-m5-capsule-rerun-draw-phases.md](2026-07-29-m5-capsule-rerun-draw-phases.md) | Rerun固定commitのdraw data収集、phase sort／dispatch、固定phase語彙を判断なしで固定した証拠capsule |
+| [2026-07-29-m5-capsule-bevy-render-phases.md](2026-07-29-m5-capsule-bevy-render-phases.md) | Bevy 0.19公式docsのrender phase、opaque／transparent分離、prepass／OITを固定した証拠capsule |
+| [2026-07-29-m5-capsule-godot-transparency.md](2026-07-29-m5-capsule-godot-transparency.md) | Godot 4.6公式docsのtransparent sort限界とscreen／depth read制約を固定した証拠capsule |
+| [2026-07-29-m5-capsule-unreal-translucency.md](2026-07-29-m5-capsule-unreal-translucency.md) | Unreal Engine 5.8公式docsのtranslucency sort、pass、overdraw、refraction制約を固定した証拠capsule |
+| [2026-07-29-m5-rerun-transfer-adjudication.md](2026-07-29-m5-rerun-transfer-adjudication.md) | Rerun固定6 assetをMotolii authorityへ再照合し、A1〜A5をPATTERN、固定phase語彙A6をREJECTとした主担当Codex裁定 |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |
 | [2026-07-21-m3-u1a-1-static-viewport-contract.md](2026-07-21-m3-u1a-1-static-viewport-contract.md) | U1a-1 静止viewport実装前契約 |

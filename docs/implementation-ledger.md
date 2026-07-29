@@ -41,7 +41,7 @@
 | M2 | **基盤再締結済み / narrow follow-up pending** | D1lのDocument／lifecycle意味、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。2026-07-23監査で`new_v1` enforcement driftをGAP-23、known Edit apply failureのsnapshot fallback driftをGAP-24、semantic oracle gate自己保護をGAP-25として狭く再開。Param Pipeline／Element Domain／Constraint GraphはM2-GAP-15の解凍gate前は未実装のままが正しい。D5は骨格到達・統合審判pendingで、AG-2 mixer coreは成立したが製品`PlaybackSession`のmixed `AudioProgram`接続はGAP-28。D1n external revisionも未実装で、cloud-safe公約不可 |
 | M3 | **VS-1 Rectangle配置とUndo / R2A再入場decision** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0e-2R/U0e-2、GR-D1〜R3、固定MacのG0-9L platform prerequisite evidence、固定SHA`56c318ed`の6面R0 source inventory、CU-0A04/R1 Browser ownershipは完了済み。Easing triggerの独立React source不在を受けR2を05A/05Bへ分割したが、Opus prepareで固定／抽出後hash、status、単一owner経路の未決を検出した。現在は`CU-0A05A / R2A`のdocs decisionだけ進め、抽出実装はdecision merge後に再発注する。R2とMotolii Studio Previewは未実装。visible summary chromeは未決で実装しない。G0-6HはU0e-3を止める並行人間審判、G0-9DはDistribution Ready用hardware gate。eguiへ新規製品面を実装せず、plugin UI公開契約はG0-3 / GAP-13まで停止する |
 | M4 | **契約spike可** | [歴史20版再照合](reviews/2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md)と[memory model 6版再照合](reviews/2026-07-23-historical-memory-model-lineage-recovery.md)後もK0〜K8は未実装。K0でRoD/RoIのruntime契約を凍結し、その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む。現行`PipelineCache`／dynamic target pool／wgpu budget thresholdをResourceLedger、copy-out、disk store完成と数えない。K4の恒久`source_id`／再リンク／package意味はGAP-3／7の再調査前に焼かないが、このgateをK0や独立K1へ広げない。K6のVello／usvg製品統合は未実装で、R8成立性だけを完成証拠にしない |
-| M5 | **identity meaning decision可 / Render Contribution共通基盤DONE・再粒化WAIT / fixture WAIT** | P0I自身が所有するcontinuity／transform／nested identity／寿命／cache入力境界／PRNG処分をdocsで先に閉じ、TextCluster内部写像とPrototype ownerは明示留保する。P2D周辺は`P2D-RC0`共通基盤を参照し、旧RCA/B/Cを再発注しない。取得／転記／比較／裁定を分けた別ID登録、統合`P2D-RCI`、公開API、Document、plugin契約、実装はWAIT。P6のfontique／harfrust／Vello text stackは未実装で、K6とpremul adapterを重複実装しない |
+| M5 | **identity meaning decision可 / Render Contribution共通基盤・固定証拠DONE、再粒化WAIT / fixture WAIT** | P0I自身が所有するcontinuity／transform／nested identity／寿命／cache入力境界／PRNG処分をdocsで先に閉じ、TextCluster内部写像とPrototype ownerは明示留保する。P2D周辺は`P2D-RC0`共通基盤と`P2D-RCE0`固定capsule／Rerun裁定を参照し、旧RCA/B/Cを再発注しない。比較／転記／fixture翻訳を分けた別ID登録、統合`P2D-RCI`、公開API、Document、plugin契約、実装はWAIT。P6のfontique／harfrust／Vello text stackは未実装で、K6とpremul adapterを重複実装しない |
 
 [M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3はU0a入場済みで、[UI runtime責任境界](ui-runtime-architecture.md)と[G0-9段階化](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)も決定済み。G0-9Lは固定Macのplatform prerequisite evidenceだけを限定確定したが、W0b、H1b、Motolii Studio Preview、window結合を解禁しない。G0-6Hは独立し、U0e-3とW0bの製品前提を止め続ける。G0-9DまでDistribution Readyを名乗らない。plugin UI公開契約はG0-9合格と分離し、G0-3 / GAP-13の決定まで発注しない。headlessなTimeline/Stage projectionもSelected U seriesの前枝番がmainへ到達した時だけ次の1枝番を発注する。
 
@@ -123,6 +123,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA | M5 / P2D / authority draft | `WAIT` | — | 旧一括grainはGrok REJECT、差分不採用。P2D-RC0共通基盤とCodex固定比較軸を読む別ID／allowlist未登録 | 再登録まで発注しない |
 | RENDER-CONTRIBUTION-RERUN | P2D-RCB | M5 / P2D / Rerun evidence | `WAIT` | — | 旧一括grainはSpark context枯渇、差分なし。主担当Codexのcapsule取得／転移裁定と、裁定済み6ラベルを持つ別ID未登録 | 再登録まで発注しない |
 | RENDER-CONTRIBUTION-ENGINE | P2D-RCC | M5 / P2D / primary-source evidence | `WAIT` | — | 旧一括grainはSpark context枯渇、差分なし。provider family別capsuleとnetwork禁止比較の別ID未登録 | 再登録まで発注しない |
+| RENDER-CONTRIBUTION-EVIDENCE | P2D-RCE0 | M5 / P2D / fixed evidence acquisition | `DONE` | — | Rerun固定6 asset、Bevy 0.19、Godot 4.6、Unreal 5.8を6 capsuleへ固定。Rerun A1〜A5=`PATTERN`、A6=`REJECT` | 新しい比較／転記／fixture翻訳grainだけがread-only入力にする |
 | M2-REPAIR | GAP-23 | M2 / narrow repair | `WAIT` | — | 独立D1i-4 LookAt/Follow oracle分離の採番・完了 | GAP-23全25件を再発注し、後にGAP-24を判定 |
 | M2-REPAIR | GAP-24 | M2 / narrow repair | `WAIT` | — | GAP-23 | GAP-24後にclose |
 | ORACLE-GUARD | GAP-25 | M2 / guard repair | `DO / CHECK-PATH` | — | GAP-23との許可path非重複 | semantic oracle gate自己保護 |
@@ -170,6 +171,7 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | VSM-A2 | `DONE` | Vism計画Phase AのParamDriver外部crate参照実装完了 |
 | VSM-A3 | `DONE` | Vism計画Phase AのRadial Repeater実装・審判完了 |
 | P2D-RC0 | `DONE` | [Render Contribution証拠Wave親task](reviews/2026-07-29-m5-render-contribution-evidence-wave.md)が共通Host境界、固定語彙／anchor、code fact hash、共通非目標、責任分離、旧RCA/B/C停止、後続再登録WAITを固定 |
+| P2D-RCE0 | `DONE` | [Rerun転移裁定](reviews/2026-07-29-m5-rerun-transfer-adjudication.md)と6 evidence capsuleが固定source／version、license、非証明範囲、製品非import、削除条件、Rerun asset別分類を固定 |
 
 ## 次にIssue化するもの
 

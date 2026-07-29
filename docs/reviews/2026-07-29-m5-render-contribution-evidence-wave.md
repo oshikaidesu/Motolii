@@ -176,6 +176,12 @@ authority mapping、概念定義、比較を同時に行わない。旧RCA差分
 - `crates/viewer/re_renderer/src/draw_phases/draw_phase_manager.rs`のphase登録・実行責任。
 - `crates/viewer/re_renderer/src/draw_phases/mod.rs`のphase語彙。
 
+2026-07-29、上記6 assetを固定commitから取得し、三つのRerun capsuleへ分離した。
+[Rerun転移裁定](2026-07-29-m5-rerun-transfer-adjudication.md)でA1〜A5を`PATTERN`、
+固定phase語彙A6を`REJECT`と裁定済みである。同日、Bevy 0.19、Godot 4.6、Unreal Engine 5.8の
+公式一次資料をprovider family別capsuleへ固定した。これら6 capsuleと裁定書は`P2D-RCE0`の
+取得証拠であり、後続leafは再取得、network、分類変更を行わない。
+
 必要なfile/APIがこの集合外へ広がる場合は、主担当Codexが追加理由、license、監査範囲を示すだけに留め、
 そのassetは未裁定STOPとする。inventoryの候補分類を採用裁定へ転載しない。未裁定assetを含むorderは
 `TRANSFER CLASS`を満たせないためdispatchしない。
