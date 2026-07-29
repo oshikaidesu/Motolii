@@ -392,3 +392,4 @@
 | [2026-07-29-cu-107tc-place-terminal-cause-classification-implementation-decision.md](2026-07-29-cu-107tc-place-terminal-cause-classification-implementation-decision.md) | CU-107TC Place候補terminal原因分類実装決定 |
 | [2026-07-29-cu-107ad-place-terminal-admission-implementation-decision.md](2026-07-29-cu-107ad-place-terminal-admission-implementation-decision.md) | CU-107AD Place候補terminal admission実装決定 |
 | [2026-07-29-cu-107td-place-terminal-delivery-implementation-decision.md](2026-07-29-cu-107td-place-terminal-delivery-implementation-decision.md) | CU-107TD Place terminal配送実装決定 |
+| [2026-07-29-cu-107-place-coordinator-parent-closure-decision.md](2026-07-29-cu-107-place-coordinator-parent-closure-decision.md) | CU-107 Place coordinator親閉鎖決定 |

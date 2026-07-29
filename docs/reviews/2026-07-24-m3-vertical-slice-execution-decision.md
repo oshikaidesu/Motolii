@@ -114,7 +114,7 @@ VS-1には、実装orderより先に閉じる判断と順序改訂がある。�
 
 各行の長文セルに残る「次PRODUCT-ASSET `DO`は未選定」等は、その子粒完了時点の
 handoff履歴であり現在選定ではない。本表の現行選定はSelected U series行と
-[implementation ledger](../implementation-ledger.md)を正とし、親`CU-107`の閉鎖確認
+[implementation ledger](../implementation-ledger.md)を正とし、`CU-110`
 だけを次PRODUCT-ASSET `DO`とする。token後続`CU-0B02R/N/C/I`は`WAIT`、
 親`CU-0B02` / `U0e-3`は`SPLIT`である。
 独立ORACLE-GUARD `G0-6H-V1G-RP`は
