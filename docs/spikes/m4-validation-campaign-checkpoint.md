@@ -31,7 +31,7 @@ M3の背骨を待たずに、M4の正しさ、所有、階層、実機計測口�
 - software／hardware-download decode需要matrix
 - 1000短clip、最大active 4の音MAD編集密度fixture
 - OS、CPU、RAM、GPU adapter、FFmpeg、RSSを記録するhardware facts
-- 同じrecipeを別機種で再実行するmanifest schema v4、measurement context、専用executor
+- 同じrecipeを別機種で再実行・移送するmanifest schema v5、measurement context、専用executor
 - 完全検証済み・同一revision／fixtureのbundleだけを並べるmatrix schema v1
 
 test-only plannerやharnessを製品owner、公開API、Document、plugin契約へimportしない。
@@ -61,10 +61,11 @@ test-only plannerやharnessを製品owner、公開API、Document、plugin契約�
 
 ## 再実行gate
 
-manifest schema v4は全gateを`pending`で出力する。bundle生成時に匿名化可能な機体ラベル、
+manifest schema v5は全gateを`pending`で出力する。bundle生成時に匿名化可能な機体ラベル、
 意図したpersona、AC/バッテリー、電源モード、表示解像度を`context.json`へ明示する。
 専用executorは同じcommit／manifestを完全一致で確認し、各runをhardware/context digestへ
-結び付け、既存artifactを上書きせずcommand単位の結果を保存する。
+結び付け、既存artifactを上書きせずcommand単位の結果を保存する。manifestのartifact envと
+run recordのfile evidenceはbundle相対名であり、別機種からコピーしたdirectoryでも再検証できる。
 
 | gate | 必要な証拠 |
 |---|---|
@@ -105,7 +106,7 @@ cargo clippy -p motolii-testkit --all-targets -- -D warnings
 ./scripts/check-docs.sh
 ```
 
-実bundleも生成し、`schema_version: 4`、command 6件、external gate 6件を確認する。
+実bundleも生成し、`schema_version: 5`、command 6件、external gate 6件を確認する。
 低スペックWindows実測と製品Previewは外部状態が必要な最終gateであり、このcheckpointで
 合格へ変更しない。
 
@@ -137,7 +138,8 @@ VideoToolbox download parallel wall: 418.24 ms
 製品Previewの性能を証明しない。
 
 後続のschema v4ではmeasurement contextを必須化したため、このschema v3 bundleは履歴証拠であり
-新しい実機matrixへ混在させない。schema v4のローカル再実行と低スペックWindows実行を次の証拠とする。
+新しい実機matrixへ混在させない。portable schema v5のローカル再実行と低スペックWindows実行を
+次の証拠とする。
 対象personaのRAM量・GPU世代等の資格条件は未決であり、`intended_persona`文字列だけで
 `low_spec_windows`をpassへ変更しない。
 

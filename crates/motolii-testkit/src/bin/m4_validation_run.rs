@@ -4,7 +4,7 @@ use std::process::{Command, ExitCode};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use motolii_testkit::m4_validation::{
-    file_evidence, ValidationRunRecord, M4_VALIDATION_RUN_SCHEMA_VERSION,
+    bundle_file_evidence, file_evidence, ValidationRunRecord, M4_VALIDATION_RUN_SCHEMA_VERSION,
 };
 use motolii_testkit::perf::{
     m4_validation_manifest, ValidationCommand, M4_VALIDATION_BUNDLE_SCHEMA_VERSION,
@@ -48,6 +48,8 @@ enum RunError {
     },
     #[error("failed to encode run record: {0}")]
     Encode(#[from] serde_json::Error),
+    #[error("manifest bundle member is not one relative file component: {0}")]
+    UnsafeBundleMember(String),
     #[error("failed to read validation evidence: {0}")]
     ReadEvidence(String),
     #[error("failed to write {path}: {source}")]
@@ -101,6 +103,16 @@ fn present_environment(names: &[&'static str]) -> Vec<&'static str> {
 
 fn evidence_path(output_dir: &Path, command_id: &str, suffix: &str) -> PathBuf {
     output_dir.join(format!("run-{command_id}.{suffix}"))
+}
+
+fn bundle_member_path(output_dir: &Path, member: &str) -> Result<PathBuf, RunError> {
+    let mut components = Path::new(member).components();
+    if !matches!(components.next(), Some(std::path::Component::Normal(_)))
+        || components.next().is_some()
+    {
+        return Err(RunError::UnsafeBundleMember(member.to_owned()));
+    }
+    Ok(output_dir.join(member))
 }
 
 fn reject_existing(path: &Path) -> Result<(), RunError> {
@@ -207,7 +219,10 @@ fn run() -> Result<(PathBuf, bool), RunError> {
     for path in [&record_path, &stdout_path, &stderr_path] {
         reject_existing(path)?;
     }
-    let artifact_path = command.artifact.map(|name| output_dir.join(name));
+    let artifact_path = command
+        .artifact
+        .map(|name| bundle_member_path(&output_dir, name))
+        .transpose()?;
     if let Some(path) = &artifact_path {
         reject_existing(path)?;
     }
@@ -217,7 +232,10 @@ fn run() -> Result<(PathBuf, bool), RunError> {
     let mut process = Command::new(command.program);
     process.args(command.args).current_dir(&root);
     for (name, value) in &command.env {
-        process.env(name, OsString::from(value));
+        process.env(
+            name,
+            OsString::from(bundle_member_path(&output_dir, value)?),
+        );
     }
     let output = process.output();
     let duration_ms = start.elapsed().as_millis() as u64;
@@ -240,10 +258,11 @@ fn run() -> Result<(PathBuf, bool), RunError> {
     write_bytes(&stdout_path, &stdout)?;
     write_bytes(&stderr_path, &stderr)?;
 
-    let artifact = match artifact_path.as_deref() {
-        Some(path) if path.is_file() => {
-            Some(file_evidence(path).map_err(|error| RunError::ReadEvidence(error.to_string()))?)
-        }
+    let artifact = match (artifact_path.as_deref(), command.artifact) {
+        (Some(path), Some(name)) if path.is_file() => Some(
+            bundle_file_evidence(path, name)
+                .map_err(|error| RunError::ReadEvidence(error.to_string()))?,
+        ),
         _ => None,
     };
     let artifact_complete = command.artifact.is_none() || artifact.is_some();
@@ -264,9 +283,9 @@ fn run() -> Result<(PathBuf, bool), RunError> {
         spawn_error,
         required_user_env_present: required_present.into_iter().map(str::to_owned).collect(),
         optional_user_env_present: optional_present.into_iter().map(str::to_owned).collect(),
-        stdout_log: file_evidence(&stdout_path)
+        stdout_log: bundle_file_evidence(&stdout_path, &format!("run-{}.stdout.log", command.id))
             .map_err(|error| RunError::ReadEvidence(error.to_string()))?,
-        stderr_log: file_evidence(&stderr_path)
+        stderr_log: bundle_file_evidence(&stderr_path, &format!("run-{}.stderr.log", command.id))
             .map_err(|error| RunError::ReadEvidence(error.to_string()))?,
         artifact,
     };

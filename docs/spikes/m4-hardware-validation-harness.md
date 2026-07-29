@@ -58,11 +58,12 @@ cargo run -p motolii-testkit --bin m4_validation_bundle -- `
 
 - `hardware.json`: schema v2のOS、CPU、RAM、wgpu adapter、FFmpeg facts
 - `context.json`: schema v1の機体／personaラベル、電源条件、表示解像度
-- `manifest.json`: schema v4のsoftware decode、hardware-download、音MAD、ResourceLedger、
+- `manifest.json`: schema v5のsoftware decode、hardware-download、音MAD、ResourceLedger、
   階層転送、YUV lane plannerの再実行recipeと分解済み外部gate
 
-`manifest.json`の`program`、`args`、`env`を配列のままrunnerへ渡す。shell文字列へ再結合する
-必要はない。`required_user_env`は実行者がOSに合わせて必ず指定し、
+`manifest.json`の`program`と`args`を配列のままrunnerへ渡す。shell文字列へ再結合する
+必要はない。`env`の値はbundle直下の相対file名であり、executorだけが現地の絶対pathへ解決する。
+`required_user_env`は実行者がOSに合わせて必ず指定し、
 `optional_user_env`は実素材等の任意入力である。hardware-downloadでは少なくとも
 `MOTOLII_DECODE_HWACCEL`と`MOTOLII_DECODE_HW_OUTPUT_FORMAT`が必須であり、未指定のsoftware実行を
 hardware結果として保存しない。
@@ -85,13 +86,16 @@ cargo run -p motolii-testkit --bin m4_validation_run -- `
   C:\temp\motolii-m4-validation decode-software
 ```
 
-executorは現在のcommit、schema、絶対化したbundle pathからmanifestを再生成し、既存JSONとの
-完全一致を要求する。tracked、staged、untracked差分があるworktree、必須環境変数の未指定・空値、
+executorは現在のcommitとschemaからpath非依存manifestを再生成し、既存JSONとの完全一致を要求する。
+tracked、staged、untracked差分があるworktree、必須環境変数の未指定・空値、
 既存artifact／log／run recordへの上書き、成功終了後の期待artifact欠落をfail closedで拒否する。各実行は
 `run-<command-id>.json`、stdout、stderrを保存し、exit code、所要時間、artifact byte数を記録する。
 manifest、hardware、context、stdout、stderr、結果artifactのSHA-256も記録し、後から同名fileへ
 差し替えた結果を同じ実行として扱わない。環境変数の値はrun recordへ複製せず、
 指定済みの名前だけを記録する。
+run recordのlog／artifact pathもbundle直下の相対file名だけを記録し、`..`、絶対path、
+subdirectoryを拒否する。これにより完成bundleを別directory・別OSへコピーしても、内容とrevisionが
+同じならverify／matrix入力に使える。コピー後の検証で元の絶対pathを信頼しない。
 
 全command収集後は専用verifierを実行する。
 

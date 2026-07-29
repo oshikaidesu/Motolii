@@ -79,6 +79,11 @@ fn m4_bundle_separates_observations_from_unresolved_policy() {
         .commands
         .iter()
         .all(|command| command.working_directory == "repository_root"));
+    let other_dir = artifact_dir.with_file_name("motolii-m4-other-directory");
+    assert_eq!(
+        manifest,
+        m4_validation_manifest(Some("fixture-revision".into()), &other_dir)
+    );
     assert!(manifest
         .unresolved_policy_inputs
         .iter()
@@ -106,6 +111,10 @@ fn m4_bundle_separates_observations_from_unresolved_policy() {
         .find(|command| command.id == "decode-hardware-download")
         .expect("hardware-download command");
     assert!(!hardware.env.contains_key("MOTOLII_DECODE_HWACCEL"));
+    assert_eq!(
+        hardware.env.get("MOTOLII_DECODE_DEMAND_OUT"),
+        Some(&"decode-hardware-download.json".to_owned())
+    );
     assert!(hardware
         .required_user_env
         .contains(&"MOTOLII_DECODE_HWACCEL"));

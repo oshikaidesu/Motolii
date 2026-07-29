@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 
 use crate::perf::{m4_validation_manifest, M4_VALIDATION_BUNDLE_SCHEMA_VERSION, SCHEMA_VERSION};
 
-pub const M4_VALIDATION_RUN_SCHEMA_VERSION: u32 = 3;
+pub const M4_VALIDATION_RUN_SCHEMA_VERSION: u32 = 4;
 pub const M4_VALIDATION_VERIFICATION_SCHEMA_VERSION: u32 = 2;
 pub const M4_VALIDATION_MATRIX_SCHEMA_VERSION: u32 = 1;
 
@@ -124,6 +124,8 @@ pub enum VerificationError {
     },
     #[error("failed to encode expected manifest: {0}")]
     Encode(#[from] serde_json::Error),
+    #[error("bundle evidence name must be one relative file component: {0}")]
+    InvalidBundleEvidenceName(String),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -167,6 +169,23 @@ pub fn file_evidence(path: &Path) -> Result<FileEvidence, VerificationError> {
     })
 }
 
+pub fn bundle_file_evidence(
+    path: &Path,
+    bundle_name: &str,
+) -> Result<FileEvidence, VerificationError> {
+    let mut components = Path::new(bundle_name).components();
+    if !matches!(components.next(), Some(std::path::Component::Normal(_)))
+        || components.next().is_some()
+    {
+        return Err(VerificationError::InvalidBundleEvidenceName(
+            bundle_name.to_owned(),
+        ));
+    }
+    let mut evidence = file_evidence(path)?;
+    evidence.path = bundle_name.to_owned();
+    Ok(evidence)
+}
+
 fn read_value(path: &Path) -> Result<serde_json::Value, VerificationError> {
     let bytes = std::fs::read(path).map_err(|source| VerificationError::Read {
         path: path.to_path_buf(),
@@ -192,11 +211,12 @@ fn read_record(path: &Path) -> Result<ValidationRunRecord, VerificationError> {
 fn verify_file(
     label: &str,
     expected_path: &Path,
+    expected_bundle_name: &str,
     recorded: &FileEvidence,
     failures: &mut Vec<String>,
 ) {
-    if recorded.path != expected_path.display().to_string() {
-        failures.push(format!("{label}: recorded path does not match bundle path"));
+    if recorded.path != expected_bundle_name {
+        failures.push(format!("{label}: recorded bundle-relative path mismatch"));
         return;
     }
     match file_evidence(expected_path) {
@@ -678,19 +698,21 @@ pub fn verify_m4_validation_bundle(
         verify_file(
             &format!("{} stdout", command.id),
             &output_dir.join(format!("run-{}.stdout.log", command.id)),
+            &format!("run-{}.stdout.log", command.id),
             &record.stdout_log,
             &mut failures,
         );
         verify_file(
             &format!("{} stderr", command.id),
             &output_dir.join(format!("run-{}.stderr.log", command.id)),
+            &format!("run-{}.stderr.log", command.id),
             &record.stderr_log,
             &mut failures,
         );
         match (command.artifact, &record.artifact) {
             (Some(name), Some(artifact)) => {
                 let path = output_dir.join(name);
-                verify_file(command.id, &path, artifact, &mut failures);
+                verify_file(command.id, &path, name, artifact, &mut failures);
                 if matches!(command.id, "decode-software" | "decode-hardware-download") {
                     match read_value(&path).ok().as_ref().and_then(fixture_identity) {
                         Some(identity) => decode_identities.push((command.id, identity)),
@@ -765,6 +787,23 @@ mod tests {
             first_evidence.sha256,
             file_evidence(&second).unwrap().sha256
         );
+    }
+
+    #[test]
+    fn bundle_evidence_records_a_portable_member_name() {
+        let dir = crate::tmp_dir("m4-portable-evidence");
+        let path = dir.join("artifact.json");
+        std::fs::write(&path, b"portable").unwrap();
+        let evidence = bundle_file_evidence(&path, "artifact.json").unwrap();
+        assert_eq!(evidence.path, "artifact.json");
+        assert!(matches!(
+            bundle_file_evidence(&path, "../artifact.json"),
+            Err(VerificationError::InvalidBundleEvidenceName(_))
+        ));
+        assert!(matches!(
+            bundle_file_evidence(&path, "/artifact.json"),
+            Err(VerificationError::InvalidBundleEvidenceName(_))
+        ));
     }
 
     #[test]

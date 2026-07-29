@@ -29,7 +29,7 @@ use serde::{Deserialize, Serialize};
 
 pub const BASELINE_OUT_ENV: &str = "MOTOLII_PERF_BASELINE_OUT";
 pub const SCHEMA_VERSION: u32 = 2;
-pub const M4_VALIDATION_BUNDLE_SCHEMA_VERSION: u32 = 4;
+pub const M4_VALIDATION_BUNDLE_SCHEMA_VERSION: u32 = 5;
 pub const M4_VALIDATION_CONTEXT_SCHEMA_VERSION: u32 = 1;
 
 /// 外部ベンチの呼び出し口(未配線スロット — M3E-2)。
@@ -233,21 +233,19 @@ const EXTERNAL_VALIDATION_GATES: &[ExternalValidationGate] = &[
 
 pub fn m4_validation_manifest(
     repository_revision: Option<String>,
-    artifact_dir: impl AsRef<Path>,
+    _artifact_dir: impl AsRef<Path>,
 ) -> M4ValidationManifest {
-    let artifact_dir = artifact_dir.as_ref();
-    let artifact_path = |name: &str| artifact_dir.join(name).display().to_string();
     let software_env = BTreeMap::from([(
         "MOTOLII_DECODE_DEMAND_OUT",
-        artifact_path("decode-software.json"),
+        "decode-software.json".to_owned(),
     )]);
     let hardware_env = BTreeMap::from([(
         "MOTOLII_DECODE_DEMAND_OUT",
-        artifact_path("decode-hardware-download.json"),
+        "decode-hardware-download.json".to_owned(),
     )]);
     let audio_mad_env = BTreeMap::from([(
         "MOTOLII_AUDIO_MAD_DEMAND_OUT",
-        artifact_path("audio-mad-graph.json"),
+        "audio-mad-graph.json".to_owned(),
     )]);
     M4ValidationManifest {
         schema_version: M4_VALIDATION_BUNDLE_SCHEMA_VERSION,
