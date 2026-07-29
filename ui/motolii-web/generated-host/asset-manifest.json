@@ -4,22 +4,22 @@
     {
       "path": ".vite/manifest.json",
       "bytes": 180,
-      "sha256": "78e1e6767695a50faccc4ed79f2dda914b2bda4a38643ab42b312d9efe498f20"
+      "sha256": "2deaf7d384f09e07a0822d60c6590f130e31d93cd24a02ca7206d324d8dc75e6"
     },
     {
-      "path": "assets/host-CRv7Qcif.js",
-      "bytes": 269062,
-      "sha256": "1e5fe605845c12be2c317a12b737d54afabb985fa52adcdfb4892b483ca35de4"
+      "path": "assets/host-B6RM5CLf.css",
+      "bytes": 40707,
+      "sha256": "1f1325ede3eb7f59f537af5fe0cb4dd6adc2a3cbc919fa7c0b1bf1f3ce228f44"
     },
     {
-      "path": "assets/host-Dbykilq0.css",
-      "bytes": 37438,
-      "sha256": "8601147f5814d6ebd29b1795c1626918f32025e61382061e47adda29b06db21e"
+      "path": "assets/host-Ur5hKlzh.js",
+      "bytes": 269125,
+      "sha256": "d9e2af6cb397398d2780667b5a382341a2a2e2787825fa7c2aa9d33bf5c8dd45"
     },
     {
       "path": "host.html",
-      "bytes": 681,
-      "sha256": "eecb8447ae1620ee671644bd3dd898e286173c6c13a3dd8928b2336f09dbd377"
+      "bytes": 715,
+      "sha256": "abd98d614b6fda403151ad696a41022a30a8ff9ef344a1829ac64f84c668f4ad"
     }
   ]
 }

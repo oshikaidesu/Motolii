@@ -13,9 +13,9 @@ const PROTOCOL: &str = "motolii-browser";
 const ENTRY_URL: &str = "motolii-browser://product/host.html";
 const HOST_HTML: &[u8] = include_bytes!("../../../ui/motolii-web/generated-host/host.html");
 const HOST_JS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/host-CRv7Qcif.js");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/host-Ur5hKlzh.js");
 const HOST_CSS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/host-Dbykilq0.css");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/host-B6RM5CLf.css");
 
 pub(crate) struct BrowserHostRuntime {
     session: Arc<Mutex<BrowserHostSession>>,
@@ -96,8 +96,8 @@ postMessage:(message)=>window.ipc.postMessage(message)
 fn product_asset_response(path: &str) -> Response<Cow<'static, [u8]>> {
     let (content_type, body) = match path {
         "/" | "/host.html" => ("text/html; charset=utf-8", HOST_HTML),
-        "/assets/host-CRv7Qcif.js" => ("text/javascript; charset=utf-8", HOST_JS),
-        "/assets/host-Dbykilq0.css" => ("text/css; charset=utf-8", HOST_CSS),
+        "/assets/host-Ur5hKlzh.js" => ("text/javascript; charset=utf-8", HOST_JS),
+        "/assets/host-B6RM5CLf.css" => ("text/css; charset=utf-8", HOST_CSS),
         _ => {
             return Response::builder()
                 .status(404)
@@ -125,4 +125,29 @@ pub(crate) enum BrowserHostRuntimeError {
     WebView(#[from] wry::Error),
     #[error("Browser Host inbox lock is poisoned")]
     InboxPoisoned,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn embedded_host_html_references_the_embedded_assets() {
+        let html = std::str::from_utf8(HOST_HTML).expect("generated Host HTML is UTF-8");
+
+        for path in ["/assets/host-Ur5hKlzh.js", "/assets/host-B6RM5CLf.css"] {
+            assert!(html.contains(path));
+            let response = product_asset_response(path);
+            assert_eq!(response.status(), 200);
+            assert!(!response.body().is_empty());
+        }
+    }
+
+    #[test]
+    fn product_asset_response_rejects_unknown_paths() {
+        let response = product_asset_response("/assets/host-stale.js");
+
+        assert_eq!(response.status(), 404);
+        assert!(response.body().is_empty());
+    }
 }

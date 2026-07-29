@@ -1,5 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { DiscoveryBrowserCandidate } from "../index.js";
+import "../../../motolii-tokens/generated/tokens.css";
+import "./browser-host-screen.css";
 import {
   createBrowserHostSender,
   decodeBrowserHostSnapshot,
@@ -25,8 +27,10 @@ if (!container) {
 }
 
 createRoot(container).render(
-  <DiscoveryBrowserCandidate
-    rectangleIdentity={snapshot.rectangleIdentity}
-    onPlaceIntent={onPlaceIntent}
-  />,
+  <main className="browser-standalone-screen">
+    <DiscoveryBrowserCandidate
+      rectangleIdentity={snapshot.rectangleIdentity}
+      onPlaceIntent={onPlaceIntent}
+    />
+  </main>,
 );
