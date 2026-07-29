@@ -63,6 +63,6 @@
 
 ## 6. handoff
 
-`CU-110P`は`SPLIT`。`CU-110PS`と`CU-110PT0`は`DONE`。
-次の唯一のPRODUCT-ASSET `DO`は`CU-110PT`。
+`CU-110P`は`SPLIT`。`CU-110PS`、`CU-110PT0`、`CU-110PT`は`DONE`。
+次の唯一のPRODUCT-ASSET `DO`は`CU-110PI`。
 token後続は`WAIT`を維持する。

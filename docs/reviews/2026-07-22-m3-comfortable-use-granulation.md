@@ -318,8 +318,8 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-110P | `SPEC / SPLIT` | published snapshotの三面投影をStage / Timeline / Inspectorへ分割 | CU-110 | [CU-110P分割決定](2026-07-29-cu-110p-product-published-snapshot-projection-split-decision.md)。PS→PT→PI→CU-106P→CU-111→CU-108 | 三面同時pixel barrier、surface別storeが必要 |
 | CU-110PS | `PRODUCT / DONE` | latest published snapshotをnative Stageへ再投影 | CU-110P | [CU-110PS実装決定](2026-07-29-cu-110ps-native-stage-published-snapshot-projection-implementation-decision.md)。既存latest-only render workerと同じVRAM display slot、実Mac即時表示 | — |
 | CU-110PT0 | `SPEC / DONE` | native Timelineへ渡す非所有projection envelopeを確定 | CU-110PS、U3a-1I/U3a-2A | [CU-110PT0決定](2026-07-29-cu-110pt0-native-timeline-projection-envelope-decision.md)。composition全域から都度導出し、visible-range state / owner / defaultを作らない | interactive rangeまたは保存が必要 |
-| CU-110PT | `PRODUCT / DO` | latest published snapshotをnative Timelineへ投影 | CU-110PT0 | 既存headless projectionのnon-test caller、native bar描画 | React Timeline、新Document意味が必要 |
-| CU-110PI | `PRODUCT / WAIT` | latest published snapshot / primaryをproduct Inspector identityへ投影 | CU-110PT、CU-0A08IP/CU-0A08ITP | 既決3 fieldだけ、mock/S値/typed edit 0 | legacy/fixture/defaultが必要 |
+| CU-110PT | `PRODUCT / DONE` | latest published snapshotをnative Timelineへ投影 | CU-110PT0 | [CU-110PT実装決定](2026-07-29-cu-110pt-native-timeline-published-snapshot-projection-implementation-decision.md)。既存project_timeline→同じnative pass、実Mac drop後1→2 bar | — |
+| CU-110PI | `PRODUCT / DO` | latest published snapshot / primaryをproduct Inspector identityへ投影 | CU-110PT、CU-0A08IP/CU-0A08ITP | 既決3 fieldだけ、mock/S値/typed edit 0 | legacy/fixture/defaultが必要 |
 | CU-111 | `PRODUCT / WAIT` | Undo/Redo製品CommandIdとsingle-writer配送を接続 | CU-109、U0c/U2b | 成功時だけsnapshot publish、失敗でDocument/history不変、UI history 0 | Undo/Redoをsurface別local stateにしたくなる |
 | CU-108 | `E2E / WAIT` | Rectangleを三面へ投影しUndo/Redoする | CU-103/106/110/111、CU-0B05 | 同じrevision/LayerId、Undoで三面から消えRedoで同ID復帰 | diagnostic/fixture-only rectしか表示できない |
 

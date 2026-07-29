@@ -26,6 +26,10 @@ use crate::render_worker::{
     RenderGeneration, RenderRequest, RenderWorker, RenderWorkerClient, RenderWorkerError,
 };
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
+use crate::timeline_projection::{
+    project_timeline, TimelineBar, TimelineMetrics, TimelineProjection, TimelineProjectionError,
+    TimelineViewport,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ProductEvent {
@@ -71,7 +75,7 @@ pub(crate) fn run(document_runtime: DocumentEditRuntime) -> Result<(), ProductRu
         render_client,
         render_request_template,
         proxy,
-    );
+    )?;
     let run_result = event_loop.run_app(&mut app);
     render_worker.close();
     let join_result = render_worker.join();
@@ -94,6 +98,7 @@ pub(crate) struct ProductApp {
     render_client: RenderWorkerClient,
     render_request_template: RenderRequest,
     stage_projection: ProductStageProjection,
+    timeline_projection: ProductTimelineProjection,
     displayed_camera: motolii_core::CompCamera,
     document_runtime: DocumentEditRuntime,
     document_queue: DocumentEditQueue,
@@ -145,6 +150,39 @@ impl ProductStageProjection {
 
     fn commit(&mut self, generation: RenderGeneration) {
         self.last_displayed_generation = Some(generation);
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ProductTimelineProjection {
+    projection: TimelineProjection,
+    band_span: f64,
+}
+
+impl ProductTimelineProjection {
+    fn from_document(document: &motolii_doc::Document) -> Result<Self, TimelineProjectionError> {
+        let duration_seconds = document.composition.duration.as_seconds_f64();
+        let projection = project_timeline(
+            document,
+            &TimelineMetrics {
+                band_height: 1.0,
+                units_per_second: duration_seconds.recip(),
+                key_half_extent: 1.0,
+            },
+            &TimelineViewport {
+                start: RationalTime::ZERO,
+                end: document.composition.duration,
+            },
+        )?;
+        let band_span = projection
+            .bars()
+            .iter()
+            .map(|bar| bar.y_bottom)
+            .fold(1.0, f64::max);
+        Ok(Self {
+            projection,
+            band_span,
+        })
     }
 }
 
@@ -313,9 +351,11 @@ impl ProductApp {
         render_client: RenderWorkerClient,
         render_request_template: RenderRequest,
         proxy: EventLoopProxy<ProductEvent>,
-    ) -> Self {
+    ) -> Result<Self, ProductRuntimeError> {
         let displayed_camera = preview.camera();
-        Self {
+        let current_document = document_runtime.snapshot();
+        let timeline_projection = ProductTimelineProjection::from_document(&current_document)?;
+        Ok(Self {
             gfx: None,
             browser: None,
             window: None,
@@ -325,8 +365,9 @@ impl ProductApp {
             render_client,
             render_request_template,
             stage_projection: ProductStageProjection::default(),
+            timeline_projection,
             displayed_camera,
-            current_document: document_runtime.snapshot(),
+            current_document,
             document_runtime,
             document_queue: DocumentEditQueue::default(),
             primary: None,
@@ -347,7 +388,7 @@ impl ProductApp {
             pending_stage_drop: None,
             surface_retry_at: None,
             failure: None,
-        }
+        })
     }
 
     pub(crate) fn initialize(
@@ -553,6 +594,11 @@ impl ProductApp {
                     self.current_document = published.snapshot;
                     self.primary = published.primary;
                     self.projection_generation = published.projection_generation;
+                    self.timeline_projection =
+                        match ProductTimelineProjection::from_document(&self.current_document) {
+                            Ok(projection) => projection,
+                            Err(error) => return self.fail(event_loop, error),
+                        };
                     if let Err(error) = self.submit_stage_projection() {
                         return self.fail(event_loop, error);
                     }
@@ -724,7 +770,7 @@ impl ProductApp {
         else {
             return;
         };
-        match gfx.render(layout, window) {
+        match gfx.render(layout, window, &self.timeline_projection) {
             Ok(()) => {}
             Err(ProductSurfaceError::Recover) => {
                 gfx.reconfigure();
@@ -820,6 +866,7 @@ struct ProductSurface {
     preview_pipeline: wgpu::RenderPipeline,
     preview_bind_group: wgpu::BindGroup,
     timeline_pipeline: wgpu::RenderPipeline,
+    timeline_bar_pipeline: wgpu::RenderPipeline,
     occluded: bool,
 }
 
@@ -865,7 +912,10 @@ impl ProductSurface {
         surface.configure(&parts.device, &config);
         let (preview_pipeline, preview_bind_group) =
             create_preview_pipeline(&parts.device, format, preview.slot().view());
-        let timeline_pipeline = create_solid_pipeline(&parts.device, format);
+        let timeline_pipeline =
+            create_solid_pipeline(&parts.device, format, TIMELINE_BACKGROUND_SHADER);
+        let timeline_bar_pipeline =
+            create_solid_pipeline(&parts.device, format, TIMELINE_BAR_SHADER);
         Ok(Self {
             surface,
             gpu: Arc::clone(gpu),
@@ -873,6 +923,7 @@ impl ProductSurface {
             preview_pipeline,
             preview_bind_group,
             timeline_pipeline,
+            timeline_bar_pipeline,
             occluded: false,
         })
     }
@@ -894,6 +945,7 @@ impl ProductSurface {
         &mut self,
         layout: NativeHostLayout,
         window: &Window,
+        timeline_projection: &ProductTimelineProjection,
     ) -> Result<(), ProductSurfaceError> {
         if self.occluded || self.config.width == 0 || self.config.height == 0 {
             return Err(ProductSurfaceError::Skip);
@@ -953,6 +1005,11 @@ impl ProductSurface {
                 &self.timeline_pipeline,
                 None,
             );
+            for bar in timeline_projection.projection.bars() {
+                if let Some(rect) = timeline_bar_rect(layout, bar, timeline_projection.band_span) {
+                    draw_rect(&mut pass, rect, &self.timeline_bar_pipeline, None);
+                }
+            }
             draw_rect(
                 &mut pass,
                 layout.stage_physical,
@@ -965,6 +1022,42 @@ impl ProductSurface {
         frame.present();
         Ok(())
     }
+}
+
+fn timeline_bar_rect(
+    layout: NativeHostLayout,
+    bar: &TimelineBar,
+    band_span: f64,
+) -> Option<PhysicalRect> {
+    if !band_span.is_finite() || band_span <= 0.0 {
+        return None;
+    }
+    let x_start = bar.x_start.clamp(0.0, 1.0);
+    let x_end = bar.x_end.clamp(0.0, 1.0);
+    let y_top = (bar.y_top / band_span).clamp(0.0, 1.0);
+    let y_bottom = (bar.y_bottom / band_span).clamp(0.0, 1.0);
+    if x_end <= x_start || y_bottom <= y_top {
+        return None;
+    }
+    let timeline = layout.timeline_physical;
+    let left = (x_start * f64::from(timeline.width)).round() as u32;
+    let right = (x_end * f64::from(timeline.width)).round() as u32;
+    let top = (y_top * f64::from(timeline.height)).round() as u32;
+    let bottom = (y_bottom * f64::from(timeline.height)).round() as u32;
+    let scale = f64::from(timeline.width) / layout.timeline.width;
+    let gap = scale.round().max(1.0) as u32;
+    let y = timeline.y.checked_add(top)?.checked_add(gap)?;
+    let height = bottom
+        .checked_sub(top)?
+        .checked_sub(gap.saturating_mul(2))?;
+    let x = timeline.x.checked_add(left)?;
+    let width = right.checked_sub(left)?;
+    (width > 0 && height > 0).then_some(PhysicalRect {
+        x,
+        y,
+        width,
+        height,
+    })
 }
 
 fn draw_rect<'a>(
@@ -1047,8 +1140,9 @@ fn create_preview_pipeline(
 fn create_solid_pipeline(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
+    source: &'static str,
 ) -> wgpu::RenderPipeline {
-    create_pipeline(device, format, None, TIMELINE_SHADER)
+    create_pipeline(device, format, None, source)
 }
 
 fn create_pipeline(
@@ -1103,7 +1197,7 @@ struct VertexOut { @builtin(position) position: vec4<f32>, @location(0) uv: vec2
     return textureSample(source_texture, source_sampler, in.uv);
 }
 "#;
-const TIMELINE_SHADER: &str = r#"
+const TIMELINE_BACKGROUND_SHADER: &str = r#"
 struct VertexOut { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32> }
 @vertex fn vs_main(@builtin(vertex_index) index: u32) -> VertexOut {
     var positions = array<vec2<f32>, 3>(vec2(-1.0,-1.0), vec2(3.0,-1.0), vec2(-1.0,3.0));
@@ -1112,6 +1206,17 @@ struct VertexOut { @builtin(position) position: vec4<f32>, @location(0) uv: vec2
 }
 @fragment fn fs_main(_in: VertexOut) -> @location(0) vec4<f32> {
     return vec4(0.055, 0.058, 0.066, 1.0);
+}
+"#;
+const TIMELINE_BAR_SHADER: &str = r#"
+struct VertexOut { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32> }
+@vertex fn vs_main(@builtin(vertex_index) index: u32) -> VertexOut {
+    var positions = array<vec2<f32>, 3>(vec2(-1.0,-1.0), vec2(3.0,-1.0), vec2(-1.0,3.0));
+    var uvs = array<vec2<f32>, 3>(vec2(0.0,1.0), vec2(2.0,1.0), vec2(0.0,-1.0));
+    var out: VertexOut; out.position = vec4(positions[index],0.0,1.0); out.uv = uvs[index]; return out;
+}
+@fragment fn fs_main(_in: VertexOut) -> @location(0) vec4<f32> {
+    return vec4(0.8, 0.58431375, 0.5294118, 1.0);
 }
 "#;
 
@@ -1140,6 +1245,8 @@ pub(crate) enum ProductRuntimeError {
     RepaintSignal(#[from] crate::render_worker::RepaintSignalRegistrationError),
     #[error(transparent)]
     Display(#[from] crate::display_slot::DisplaySlotError),
+    #[error(transparent)]
+    TimelineProjection(#[from] TimelineProjectionError),
     #[error(transparent)]
     EventLoop(#[from] winit::error::EventLoopError),
     #[error(transparent)]
@@ -1202,6 +1309,38 @@ mod tests {
         projection.commit(two);
         assert!(!projection.accepts(two, Some(two)));
         assert!(!projection.accepts(one, Some(one)));
+    }
+
+    #[test]
+    fn timeline_projection_uses_the_document_envelope_without_owned_range_state() {
+        let document = crate::static_preview::bootstrap_document().unwrap();
+        let projection = ProductTimelineProjection::from_document(&document).unwrap();
+        let bar = projection.projection.bars().first().unwrap();
+
+        assert_eq!(projection.projection.bars().len(), 1);
+        assert_eq!(bar.x_start, 0.0);
+        assert_eq!(bar.x_end, 1.0);
+        assert_eq!(projection.band_span, 1.0);
+    }
+
+    #[test]
+    fn timeline_bar_maps_normalized_projection_into_the_native_rect() {
+        let document = crate::static_preview::bootstrap_document().unwrap();
+        let projection = ProductTimelineProjection::from_document(&document).unwrap();
+        let layout = test_layout(9);
+        let timeline = layout.timeline_physical;
+        let rect = timeline_bar_rect(
+            layout,
+            projection.projection.bars().first().unwrap(),
+            projection.band_span,
+        )
+        .unwrap();
+
+        assert_eq!(rect.x, timeline.x);
+        assert_eq!(rect.width, timeline.width);
+        assert!(rect.y > timeline.y);
+        assert!(rect.height < timeline.height);
+        assert!(rect.y + rect.height < timeline.y + timeline.height);
     }
 
     #[test]

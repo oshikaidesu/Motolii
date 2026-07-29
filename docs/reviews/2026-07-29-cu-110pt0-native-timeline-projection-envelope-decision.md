@@ -59,4 +59,5 @@ window size、DPI、monitor値をDocument、公開API、serdeへ流さない。
 3. key / semantic zoom / selection / hit-test / playheadを同じ粒へ含める必要が出る。
 4. 同期GPU readback、別surface、別rendererが必要になる。
 
-`CU-110PT0`は`DONE`。次の唯一のPRODUCT-ASSET `DO`は`CU-110PT`。
+`CU-110PT0`は`DONE`。後続`CU-110PT`も実装完了し、次の唯一のPRODUCT-ASSET
+`DO`は`CU-110PI`。
