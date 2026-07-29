@@ -231,14 +231,15 @@ Motoliiへは方式や内部型でなく、次のfixture候補へ翻訳する。
 
 2026-07-29、次の三grainを登録した。三つは同じbase commitから並列dispatchでき、変更pathは交差しない。
 
-| grain | 単一動詞 | read-only入力 | 変更許可 |
-|---|---|---|---|
-| `P2D-RCA2` | 比較 | 本書§2〜§3、§5と元authority | `2026-07-29-m5-render-contribution-boundary-comparison-v2.md`だけ |
-| `P2D-RCB2` | 転記 | 本書§2〜§3、§6、Rerun三capsule、転移裁定 | `2026-07-29-m5-rerun-render-contribution-evidence-v2.md`だけ |
-| `P2D-RCC2` | 比較 | 本書§2〜§3、§7、engine三capsule | `2026-07-29-m5-render-phase-fixture-comparison-v2.md`だけ |
+| grain | 単一動詞 | read-only入力 | 変更許可 | 実行結果 |
+|---|---|---|---|---|
+| `P2D-RCA2` | 比較 | 本書§2〜§3、§5と元authority | `2026-07-29-m5-render-contribution-boundary-comparison-v2.md`だけ | Spark成功後、Grokがmarkerなし空出力。ACCEPT条件未成立で不採用 |
+| `P2D-RCB2` | 転記 | 本書§2〜§3、§6、Rerun三capsule、転移裁定 | `2026-07-29-m5-rerun-render-contribution-evidence-v2.md`だけ | Grok `REJECT`、P0=1/P1=1。規範語の生文字列oracle衝突と監査対象見出し不一致 |
+| `P2D-RCC2` | 比較 | 本書§2〜§3、§7、engine三capsule | `2026-07-29-m5-render-phase-fixture-comparison-v2.md`だけ | Grok `REJECT`、P0=0/P1=5/P2=2。非証明形式、anchor、見出し、capsule超過断定 |
 
-`P2D-RCI`は上記三grainが完了し、各capsule／比較文書の事実、推論、裁定が分離された後だけ
-別grainとして登録する。旧`P2D-RCA/B/C`の完了を依存条件にしない。
+三差分はcommit、push、統合せず、各隔離worktreeへ未採用のまま残した。`P2D-RCI`は上記三grainの
+後継が登録・完了し、各capsule／比較文書の事実、推論、裁定が分離された後だけ別grainとして登録する。
+旧`P2D-RCA/B/C`と不採用`P2D-RCA2/B2/C2`を完了依存にしない。
 統合時も、証拠多数決で公開APIを決めない。Motolii authorityを正として反例を突き合わせ、
 必要ならcontract decision、private spike、schema decision、First Vism fixtureを別ticketへ再分割する。
 
@@ -248,6 +249,25 @@ Motoliiへは方式や内部型でなく、次のfixture候補へ翻訳する。
 - Rerunまたはゲームエンジンの内部責任を採らないと成立しない。
 - 公開trait、Document schema、plugin契約、Vism/package形式を一つのdecisionで同時に決める必要がある。
 - First Vismのconformance役割と製品／配布意味が分離できていない。
+
+## 10. 再投入前の共通負債
+
+2026-07-29の並列一周では、三orderとも最初のCodex precheckで不備を検出した。主担当Codexが
+Opusを再起動せずorder案を機械修正し、同じ一周のSpark／Grokへ進めたが、採用差分は0件だった。
+
+次の後継IDを登録する前に、次を満たす。
+
+1. 非証明文に含まれる「採用する根拠にしない」のような否定文を、単語の存在だけで違反にする
+   生文字列oracleを使わない。検査は変更節、field構造、裁定値、意味上の正負例へ限定する。
+2. Rerun転記はA1〜A6見出しと5 fieldを主担当Codexが固定したtemplateへし、Sparkへ見出し要約や
+   capsule文の言い換えをさせない。転記とMotolii fixture対応づけを同じ粒へ戻さない。
+3. engine比較は三family×六fixtureを一粒で作文させない。providerごとの固定観察転記と、
+   Motolii fixture軸の比較を別grainへ分け、capsuleに無い「証拠あり」や方式断定を禁止する。
+4. Grokがmarkerなし、空出力、timeoutなら票にせず不採用とする。別model fallbackや同一差分の
+   再検収を行わず、後継grainは新ID／新order／新証跡で登録する。
+
+今回の失敗はRender Contribution公開契約を決める根拠ではない。共通Host境界、Rerun転移裁定、
+六capsuleは有効なread-only基盤として維持する。
 
 ## 9. Opus 5／Fable 5助言の処分
 
