@@ -82,6 +82,23 @@ fn m4_bundle_separates_observations_from_unresolved_policy() {
         .external_gates
         .iter()
         .all(|gate| gate.status == "pending"));
+    let external_gate_ids: Vec<_> = manifest
+        .external_gates
+        .iter()
+        .map(|gate| gate.id)
+        .collect();
+    assert_eq!(
+        external_gate_ids,
+        [
+            "low_spec_windows",
+            "native_decoder_surface_import",
+            "wgpu_external_texture_lowering",
+            "surface_lifetime_fence",
+            "gpu_surface_pixel_oracle",
+            "product_preview_path",
+        ]
+    );
+    assert!(!external_gate_ids.contains(&"gpu_surface_import"));
     let hardware = manifest
         .commands
         .iter()

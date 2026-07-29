@@ -49,8 +49,8 @@ cargo run -p motolii-testkit --bin m4_validation_bundle -- C:\temp\motolii-m4-va
 生成するのは次の2ファイルだけである。
 
 - `hardware.json`: schema v2のOS、CPU、RAM、wgpu adapter、FFmpeg facts
-- `manifest.json`: software decode、hardware-download、音MAD、ResourceLedger、階層転送、
-  YUV lane plannerの再実行recipe
+- `manifest.json`: schema v2のsoftware decode、hardware-download、音MAD、ResourceLedger、
+  階層転送、YUV lane plannerの再実行recipeと分解済み外部gate
 
 `manifest.json`の`program`、`args`、`env`を配列のままrunnerへ渡す。shell文字列へ再結合する
 必要はない。`required_user_env`は実行者がOSに合わせて必ず指定し、

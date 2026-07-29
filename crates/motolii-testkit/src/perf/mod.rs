@@ -29,7 +29,7 @@ use serde::Serialize;
 
 pub const BASELINE_OUT_ENV: &str = "MOTOLII_PERF_BASELINE_OUT";
 pub const SCHEMA_VERSION: u32 = 2;
-pub const M4_VALIDATION_BUNDLE_SCHEMA_VERSION: u32 = 1;
+pub const M4_VALIDATION_BUNDLE_SCHEMA_VERSION: u32 = 2;
 
 /// 外部ベンチの呼び出し口(未配線スロット — M3E-2)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -188,9 +188,28 @@ const EXTERNAL_VALIDATION_GATES: &[ExternalValidationGate] = &[
         required_evidence: "same bundle and fixture revision on the target low-spec Windows persona",
     },
     ExternalValidationGate {
-        id: "gpu_surface_import",
+        id: "native_decoder_surface_import",
         status: "pending",
-        required_evidence: "same decode demand sequence through a GPU-import route with pixel oracle",
+        required_evidence:
+            "native decoder surface and device identity without a CPU raw-frame pipe",
+    },
+    ExternalValidationGate {
+        id: "wgpu_external_texture_lowering",
+        status: "pending",
+        required_evidence:
+            "imported plane views lowered through wgpu with an explicit color descriptor",
+    },
+    ExternalValidationGate {
+        id: "surface_lifetime_fence",
+        status: "pending",
+        required_evidence:
+            "negative tests prevent decoder-pool reuse and ledger release before GPU completion",
+    },
+    ExternalValidationGate {
+        id: "gpu_surface_pixel_oracle",
+        status: "pending",
+        required_evidence:
+            "same source, time, rotation, and color descriptor pass the declared pixel oracle",
     },
     ExternalValidationGate {
         id: "product_preview_path",
