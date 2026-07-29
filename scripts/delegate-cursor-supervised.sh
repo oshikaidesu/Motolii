@@ -16,12 +16,30 @@ SPARK_TIMEOUT_SECONDS="${CODEX_SPARK_TIMEOUT_SECONDS:-1800}"
 INSPECTION_TIMEOUT_SECONDS="${CURSOR_INSPECTION_TIMEOUT_SECONDS:-300}"
 HEARTBEAT_SECONDS="${CURSOR_SUPERVISED_HEARTBEAT_SECONDS:-30}"
 TERMINATION_GRACE_SECONDS="${CURSOR_TERMINATION_GRACE_SECONDS:-2}"
+MAX_REVIEW_UNAVAILABLE_ATTEMPTS="${CURSOR_REVIEW_UNAVAILABLE_ATTEMPTS:-3}"
+MACHINE_BLOCK_BEGIN="<!-- ORDER MACHINE BLOCK BEGIN -->"
+MACHINE_BLOCK_END="<!-- ORDER MACHINE BLOCK END -->"
+OUTCOME_EMITTED=0
 
 usage() {
-  echo "Usage: $0 prepare <isolated-worktree> <order-file> <task>"
+  echo "Usage: $0 manifest <isolated-worktree> <order-file> <task> <grain> <base-ref> [options]"
+  echo "         --dependency <id> --authority <path> --allowed-file <path-or-glob>"
+  echo "       $0 prepare <isolated-worktree> <order-file> <task>"
   echo "       $0 execute <isolated-worktree> <approved-order-file> <task>"
   echo "       $0 inspect <isolated-worktree> <approved-order-file> <task>"
   echo "       printf '%s\n' <task> | $0 prepare|execute <isolated-worktree> <order-file>"
+}
+
+emit_outcome() {
+  local outcome="$1"
+  if [[ "$OUTCOME_EMITTED" == "1" ]]; then
+    return
+  fi
+  OUTCOME_EMITTED=1
+  printf 'OUTCOME: %s\n' "$outcome"
+  [[ -z "${CURRENT_ATTEMPT_DIR:-}" ]] \
+    || printf 'OUTCOME: %s\n' "$outcome" >>"$CURRENT_ATTEMPT_DIR/stage-result.txt" 2>/dev/null \
+    || true
 }
 
 order_value() {
@@ -60,11 +78,49 @@ case "$ORDER_FILE" in
   *) ORDER_FILE="$(cd "$(dirname "$ORDER_FILE")" && pwd)/$(basename "$ORDER_FILE")" ;;
 esac
 shift 3
-if [[ "$MODE" != "prepare" && "$MODE" != "execute" && "$MODE" != "inspect" ]]; then
+if [[ "$MODE" != "manifest" && "$MODE" != "prepare" && "$MODE" != "execute" && "$MODE" != "inspect" ]]; then
   usage >&2
   exit 2
 fi
-if [[ "$#" -gt 0 ]]; then
+
+MANIFEST_GRAIN=""
+MANIFEST_BASE_REF=""
+MANIFEST_DEPENDENCIES=()
+MANIFEST_AUTHORITIES=()
+MANIFEST_ALLOWED_FILES=()
+if [[ "$MODE" == "manifest" ]]; then
+  if [[ "$#" -lt 3 ]]; then
+    usage >&2
+    exit 2
+  fi
+  task="$1"
+  MANIFEST_GRAIN="$2"
+  MANIFEST_BASE_REF="$3"
+  shift 3
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --dependency)
+        [[ "$#" -ge 2 ]] || { usage >&2; exit 2; }
+        MANIFEST_DEPENDENCIES+=("$2")
+        shift 2
+        ;;
+      --authority)
+        [[ "$#" -ge 2 ]] || { usage >&2; exit 2; }
+        MANIFEST_AUTHORITIES+=("$2")
+        shift 2
+        ;;
+      --allowed-file)
+        [[ "$#" -ge 2 ]] || { usage >&2; exit 2; }
+        MANIFEST_ALLOWED_FILES+=("$2")
+        shift 2
+        ;;
+      *)
+        usage >&2
+        exit 2
+        ;;
+    esac
+  done
+elif [[ "$#" -gt 0 ]]; then
   task="$*"
 else
   task="$(cat)"
@@ -95,21 +151,21 @@ if [[ "$WORKTREE" != "$worktree_toplevel" ]]; then
   echo "delegate-cursor-supervised: WORKTREEはworktree toplevelではありません: $WORKTREE" >&2
   exit 2
 fi
-for value in "$SUPERVISOR_TIMEOUT_SECONDS" "$SPARK_TIMEOUT_SECONDS" "$INSPECTION_TIMEOUT_SECONDS" "$HEARTBEAT_SECONDS" "$TERMINATION_GRACE_SECONDS"; do
+for value in "$SUPERVISOR_TIMEOUT_SECONDS" "$SPARK_TIMEOUT_SECONDS" "$INSPECTION_TIMEOUT_SECONDS" "$HEARTBEAT_SECONDS" "$TERMINATION_GRACE_SECONDS" "$MAX_REVIEW_UNAVAILABLE_ATTEMPTS"; do
   if [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
     echo "delegate-cursor-supervised: timeout/heartbeatは正の整数で指定してください" >&2
     exit 2
   fi
 done
-if ! command -v "$CURSOR_AGENT_BIN" >/dev/null 2>&1; then
+if [[ "$MODE" != "manifest" ]] && ! command -v "$CURSOR_AGENT_BIN" >/dev/null 2>&1; then
   echo "delegate-cursor-supervised: Cursor Agent CLI '$CURSOR_AGENT_BIN' が見つかりません" >&2
   exit 127
 fi
-if ! command -v "$CODEX_AGENT_BIN" >/dev/null 2>&1; then
+if [[ "$MODE" != "manifest" ]] && ! command -v "$CODEX_AGENT_BIN" >/dev/null 2>&1; then
   echo "delegate-cursor-supervised: Codex CLI '$CODEX_AGENT_BIN' が見つかりません" >&2
   exit 127
 fi
-if ! command -v "$CLAUDE_AGENT_BIN" >/dev/null 2>&1; then
+if [[ "$MODE" != "manifest" ]] && ! command -v "$CLAUDE_AGENT_BIN" >/dev/null 2>&1; then
   echo "delegate-cursor-supervised: Claude Code CLI '$CLAUDE_AGENT_BIN' が見つかりません" >&2
   exit 127
 fi
@@ -279,6 +335,7 @@ gate_fail() {
   local msg="ORDER-GATE NG: $*"
   echo "$msg" >&2
   [[ -z "${CURRENT_ATTEMPT_DIR:-}" ]] || printf '%s\n' "$msg" >>"$CURRENT_ATTEMPT_DIR/stage-result.txt" 2>/dev/null || true
+  emit_outcome "ORDER_INVALID"
   exit 3
 }
 
@@ -294,6 +351,78 @@ inspect_fail() {
   echo "$msg" >&2
   [[ -z "${CURRENT_ATTEMPT_DIR:-}" ]] || printf '%s\n' "$msg" >>"$CURRENT_ATTEMPT_DIR/stage-result.txt" 2>/dev/null || true
   exit 8
+}
+
+validate_machine_block() {
+  local order_file="$1"
+  local begin_lines end_lines begin_line end_line key matches line
+  begin_lines="$(grep -nFx "$MACHINE_BLOCK_BEGIN" "$order_file" | cut -d: -f1 || true)"
+  end_lines="$(grep -nFx "$MACHINE_BLOCK_END" "$order_file" | cut -d: -f1 || true)"
+  if [[ "$(printf '%s\n' "$begin_lines" | awk 'NF{n++} END{print n+0}')" -ne 1 ]] || \
+     [[ "$(printf '%s\n' "$end_lines" | awk 'NF{n++} END{print n+0}')" -ne 1 ]]; then
+    gate_fail "machine block delimiters must appear exactly once"
+  fi
+  begin_line="$begin_lines"
+  end_line="$end_lines"
+  if (( begin_line >= end_line )); then
+    gate_fail "machine block delimiters are out of order"
+  fi
+
+  for key in GRAIN BASE_REF BASE_SHA DEPENDENCY AUTHORITY ALLOWED_FILE \
+    LOOP_PROFILE ORDER_MANAGER_MODEL IMPLEMENTER_MODEL REVIEW_MODEL TASK_SHA256; do
+    matches="$(grep -nE "^${key}:" "$order_file" | cut -d: -f1 || true)"
+    if [[ -z "$matches" ]]; then
+      gate_fail "missing machine field $key"
+    fi
+    while IFS= read -r line; do
+      if (( line <= begin_line || line >= end_line )); then
+        gate_fail "machine field outside machine block: $key"
+      fi
+    done <<<"$matches"
+  done
+
+  matches="$(grep -nE '^CODEX PRECHECK:' "$order_file" | cut -d: -f1 || true)"
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    if (( line > begin_line && line < end_line )); then
+      gate_fail "CODEX PRECHECK must remain outside machine block"
+    fi
+  done <<<"$matches"
+}
+
+reject_manager_owned_fields() {
+  local draft="$1"
+  if grep -Eq '^(GRAIN|BASE_REF|BASE_SHA|DEPENDENCY|AUTHORITY|ALLOWED_FILE|LOOP_PROFILE|ORDER_MANAGER_MODEL|IMPLEMENTER_MODEL|REVIEW_MODEL|TASK_SHA256|CODEX PRECHECK):' "$draft" || \
+     grep -Fqx "$MACHINE_BLOCK_BEGIN" "$draft" || grep -Fqx "$MACHINE_BLOCK_END" "$draft"; then
+    echo "delegate-cursor-supervised: Opus draftにCodex所有fieldまたはmachine delimiterが含まれます" >&2
+    emit_outcome "ORDER_INVALID"
+    exit 3
+  fi
+}
+
+write_terminal_outcome() {
+  local evidence_root="$1" order_sha256="$2" fingerprint="$3" outcome="$4"
+  local terminal="$evidence_root/terminal-outcome.txt"
+  local tmp_terminal
+  tmp_terminal="$(mktemp "$evidence_root/terminal-outcome.tmp.XXXXXX")"
+  {
+    echo "ORDER_SHA256: $order_sha256"
+    echo "FINGERPRINT: $fingerprint"
+    echo "OUTCOME: $outcome"
+  } >"$tmp_terminal"
+  mv -f "$tmp_terminal" "$terminal"
+}
+
+count_review_unavailable() {
+  local evidence_root="$1"
+  local count=0 result_file
+  for result_file in "$evidence_root"/attempt-*/stage-result.txt; do
+    [[ -f "$result_file" ]] || continue
+    if grep -Fqx 'OUTCOME: REVIEW_UNAVAILABLE' "$result_file"; then
+      count=$((count + 1))
+    fi
+  done
+  printf '%s' "$count"
 }
 
 # git列挙が失敗した場合、素通り(空の成功集合)させず必ずfail closedする。
@@ -1413,6 +1542,9 @@ invalidate_checkpoint() {
 validate_checkpoint() {
   local evidence_root="$1" order_file="$2" task_hash="$3" worktree="$4"
   local checkpoint="$evidence_root/checkpoint.txt"
+  if [[ -f "$evidence_root/terminal-outcome.txt" ]]; then
+    evidence_fail "terminal review outcome already exists"
+  fi
   if [[ ! -f "$checkpoint" ]]; then
     evidence_fail "missing checkpoint"
   fi
@@ -1467,7 +1599,7 @@ run_inspection_stage() {
   local worktree="$1" task="$2" order_txt="$3" attempt_dir="$4" inspection_timeout="$5"
   local order_file="$6" expected_order_sha256="$7"
   local evidence_root="$8" cp_attempt_name="$9" cp_task_hash="${10}" cp_base_ref="${11}" cp_base_sha="${12}" cp_head="${13}" cp_fingerprint="${14}"
-  local pre_fp post_fp inspection_prompt
+  local pre_fp post_fp inspection_prompt unavailable_count
 
   snapshot_worktree "$worktree" "$attempt_dir" "pre-grok"
   pre_fp="$(cat "$attempt_dir/pre-grok-fingerprint.sha256")"
@@ -1506,8 +1638,19 @@ EOF
     [[ ! -f "$attempt_dir/grok-stdout.txt" ]] || cat "$attempt_dir/grok-stdout.txt"
     snapshot_worktree "$worktree" "$attempt_dir" "post-grok"
     echo "STAGE: grok FAILED_OR_TIMEOUT" >>"$attempt_dir/stage-result.txt"
-    # timeout/失敗自体はworktreeを汚していない限りcheckpointを潰さない。
-    # これにより後続のinspectがSparkを再実行せずに再開できる。ただしfingerprintが
+    # stdoutが0 byteのprocess級availability failureだけは、worktreeを汚して
+    # いない限りcheckpointを維持してinspect再開を許す。1 byteでも出力があり
+    # markerが不正ならprotocol failureとしてterminalにし、再投票させない。
+    # checkpointを維持する場合も、Grokのbash toolはworktree外の承認済みorderを
+    # 書き換え得るため、republish前に独立して確認する。
+    if [[ -s "$attempt_dir/grok-stdout.txt" ]]; then
+      invalidate_checkpoint "$evidence_root"
+      write_terminal_outcome "$evidence_root" "$expected_order_sha256" "$pre_fp" "REVIEW_INVALID"
+      emit_outcome "REVIEW_INVALID"
+      exit 11
+    fi
+    # timeout/起動失敗自体はworktreeを汚していない限りcheckpointを潰さない。
+    # これにより後続のinspectがSparkを再実行せずに再開できる。ただし、
     # 保たれていても、Grokのbash toolはworktree外の承認済みorder(外部fileとこの
     # 試行のcopyの両方)を書き換え得るため、republishする前に独立して確認する
     post_fp="$(cat "$attempt_dir/post-grok-fingerprint.sha256")"
@@ -1516,12 +1659,21 @@ EOF
       invalidate_checkpoint "$evidence_root"
       evidence_fail "approved order mutated during grok inspection"
     fi
-    if [[ "$post_fp" == "$pre_fp" ]]; then
-      publish_checkpoint "$evidence_root" "$cp_attempt_name" "$expected_order_sha256" "$cp_task_hash" "$cp_base_ref" "$cp_base_sha" "$cp_head" "$pre_fp"
-    else
+    if [[ "$post_fp" != "$pre_fp" ]]; then
       invalidate_checkpoint "$evidence_root"
+      record_scope_violations "$worktree" "$attempt_dir/post-grok-scope-violations.txt" || true
+      [[ ! -s "$attempt_dir/post-grok-scope-violations.txt" ]] || cat "$attempt_dir/post-grok-scope-violations.txt" >&2
+      inspect_fail "worktree fingerprint changed during unavailable review"
     fi
-    exit 1
+    unavailable_count="$(count_review_unavailable "$evidence_root")"
+    emit_outcome "REVIEW_UNAVAILABLE"
+    if (( unavailable_count + 1 >= MAX_REVIEW_UNAVAILABLE_ATTEMPTS )); then
+      invalidate_checkpoint "$evidence_root"
+      write_terminal_outcome "$evidence_root" "$expected_order_sha256" "$pre_fp" "REVIEW_UNAVAILABLE_EXHAUSTED"
+      exit 10
+    fi
+    publish_checkpoint "$evidence_root" "$cp_attempt_name" "$expected_order_sha256" "$cp_task_hash" "$cp_base_ref" "$cp_base_sha" "$cp_head" "$pre_fp"
+    exit 10
   fi
   cat "$attempt_dir/grok-stdout.txt"
 
@@ -1551,16 +1703,18 @@ EOF
     evidence_fail "approved order mutated during grok inspection"
   fi
 
-  # ここまでintegrityが保たれているため、ACCEPT/REJECTいずれの結果でも
-  # checkpointを(parent保持値で)再発行し、後続inspectの再開余地を残す
-  publish_checkpoint "$evidence_root" "$cp_attempt_name" "$expected_order_sha256" "$cp_task_hash" "$cp_base_ref" "$cp_base_sha" "$cp_head" "$pre_fp"
-
   if ! grep -qx 'VERDICT: ACCEPT' "$attempt_dir/grok-stdout.txt"; then
     echo "delegate-cursor-supervised: Grok検収REJECT。差分は隔離したまま採用しません" >&2
     echo "STAGE: grok REJECT" >>"$attempt_dir/stage-result.txt"
+    invalidate_checkpoint "$evidence_root"
+    write_terminal_outcome "$evidence_root" "$expected_order_sha256" "$pre_fp" "IMPLEMENTATION_REJECT"
+    emit_outcome "IMPLEMENTATION_REJECT"
     exit 4
   fi
   echo "STAGE: grok ACCEPT" >>"$attempt_dir/stage-result.txt"
+  invalidate_checkpoint "$evidence_root"
+  write_terminal_outcome "$evidence_root" "$expected_order_sha256" "$pre_fp" "COMPLETE"
+  emit_outcome "COMPLETE"
 
   echo "delegate-cursor-supervised: 必須検収ACCEPT。Codex最終レビュー待ちです"
 }
@@ -1588,7 +1742,85 @@ record_base_metadata() {
   } >>"$attempt_dir/metadata.txt"
 }
 
+if [[ "$MODE" == "manifest" ]]; then
+  if [[ -e "$ORDER_FILE" ]]; then
+    echo "delegate-cursor-supervised: manifest出力先が既に存在します: $ORDER_FILE" >&2
+    emit_outcome "ORDER_INVALID"
+    exit 3
+  fi
+  if [[ "${#MANIFEST_DEPENDENCIES[@]}" -eq 0 || "${#MANIFEST_AUTHORITIES[@]}" -eq 0 || \
+        "${#MANIFEST_ALLOWED_FILES[@]}" -eq 0 ]]; then
+    echo "delegate-cursor-supervised: manifestにはdependency/authority/allowed-fileが各1件以上必要です" >&2
+    emit_outcome "ORDER_INVALID"
+    exit 3
+  fi
+  manifest_base_sha="$(git -C "$WORKTREE" rev-parse --verify "$MANIFEST_BASE_REF" 2>/dev/null)" || {
+    echo "delegate-cursor-supervised: manifest BASE_REFを解決できません: $MANIFEST_BASE_REF" >&2
+    emit_outcome "ORDER_INVALID"
+    exit 3
+  }
+  manifest_tmp="$(mktemp "$(dirname "$ORDER_FILE")/.$(basename "$ORDER_FILE").manifest.XXXXXX")"
+  {
+    echo "$MACHINE_BLOCK_BEGIN"
+    echo "GRAIN: $MANIFEST_GRAIN"
+    echo "BASE_REF: $MANIFEST_BASE_REF"
+    echo "BASE_SHA: $manifest_base_sha"
+    for manifest_value in "${MANIFEST_DEPENDENCIES[@]}"; do
+      echo "DEPENDENCY: $manifest_value"
+    done
+    for manifest_value in "${MANIFEST_AUTHORITIES[@]}"; do
+      if [[ ! -f "$WORKTREE/$manifest_value" ]]; then
+        echo "delegate-cursor-supervised: manifest authorityが存在しません: $manifest_value" >&2
+        rm -f "$manifest_tmp"
+        emit_outcome "ORDER_INVALID"
+        exit 3
+      fi
+      echo "AUTHORITY: $manifest_value SHA256:$(shasum -a 256 "$WORKTREE/$manifest_value" | awk '{print $1}')"
+    done
+    for manifest_value in "${MANIFEST_ALLOWED_FILES[@]}"; do
+      echo "ALLOWED_FILE: $manifest_value"
+    done
+    echo "LOOP_PROFILE: $LOOP_PROFILE"
+    echo "ORDER_MANAGER_MODEL: $OPUS_MANAGER_MODEL"
+    echo "IMPLEMENTER_MODEL: $SPARK_MODEL"
+    echo "REVIEW_MODEL: $CURSOR_GROK_MODEL"
+    echo "TASK_SHA256: $task_hash"
+    echo "$MACHINE_BLOCK_END"
+  } >"$manifest_tmp"
+  validate_machine_block "$manifest_tmp"
+  gate_check_base "$manifest_tmp" "$WORKTREE"
+  gate_check_grain_and_dependencies "$manifest_tmp" "$WORKTREE"
+  gate_check_authorities "$manifest_tmp" "$WORKTREE"
+  gate_check_allowed_files "$manifest_tmp"
+  gate_check_clean_worktree "$WORKTREE"
+  mv -f "$manifest_tmp" "$ORDER_FILE"
+  emit_outcome "MANIFEST_READY"
+  exit 0
+fi
+
 if [[ "$MODE" == "prepare" ]]; then
+  if [[ ! -f "$ORDER_FILE" ]]; then
+    echo "delegate-cursor-supervised: Codex-owned machine manifestがありません" >&2
+    emit_outcome "ORDER_INVALID"
+    exit 3
+  fi
+  validate_machine_block "$ORDER_FILE"
+  if grep -qE '^CODEX PRECHECK:' "$ORDER_FILE"; then
+    echo "delegate-cursor-supervised: 承認済みorderへprepareを再実行できません" >&2
+    emit_outcome "ORDER_INVALID"
+    exit 3
+  fi
+  gate_check_base "$ORDER_FILE" "$WORKTREE"
+  gate_check_grain_and_dependencies "$ORDER_FILE" "$WORKTREE"
+  gate_check_authorities "$ORDER_FILE" "$WORKTREE"
+  gate_check_allowed_files "$ORDER_FILE"
+  gate_check_clean_worktree "$WORKTREE"
+  prepare_pre_fp="$(compute_fingerprint "$WORKTREE")"
+  machine_block="$(awk -v begin="$MACHINE_BLOCK_BEGIN" -v end="$MACHINE_BLOCK_END" '
+    $0 == begin { in_block=1 }
+    in_block { print }
+    $0 == end { exit }
+  ' "$ORDER_FILE")"
   supervisor_prompt=$(cat <<EOF
 You are the read-only construction manager for Motolii. Do not edit files,
 commit, push, create a PR, spawn subagents, or delegate during this order-draft
@@ -1605,19 +1837,15 @@ raw scanners that bypass typed boundaries, public raw mutation APIs, invented
 serde defaults, duplicate planners/helpers, partial mutation, TODO stubs, and
 adjacent-ticket expansion.
 
-The order must also emit the fields the dispatch gate checks mechanically before
-Spark is started: exactly one \`GRAIN: <id>\`, exactly one
-\`BASE_REF: refs/heads/<full-branch-name>\`, exactly one full 40-hex
-\`BASE_SHA: <sha>\` that BASE_REF resolves to and that equals the isolated
-worktree HEAD, one or more \`DEPENDENCY: <id>\` lines, one or more
-\`AUTHORITY: <worktree-relative-path> SHA256:<64-hex>\` lines, and one or more
-\`ALLOWED_FILE: <worktree-relative-path-or-glob>\` lines. Before writing GRAIN,
-read docs/implementation-ledger.md in the target worktree. In section
-"現在の並列レーン", confirm the GRAIN row state is exactly DO. Before writing
-DEPENDENCY, read section "発注依存証跡" in that same file and confirm every
-DEPENDENCY row state is exactly DONE; never infer these states from prose,
-another table, or a different worktree. Before writing an AUTHORITY line, hash the file
-inside the target worktree and copy that exact hash. If the order touches a
+Codex has already created and validated the machine block shown below. Do not
+repeat, quote, rewrite, or emit its delimiters or any of these machine fields:
+GRAIN, BASE_REF, BASE_SHA, DEPENDENCY, AUTHORITY, ALLOWED_FILE, LOOP_PROFILE,
+ORDER_MANAGER_MODEL, IMPLEMENTER_MODEL, REVIEW_MODEL, TASK_SHA256, or
+CODEX PRECHECK. Write only the construction-plan prose that follows the block.
+
+$machine_block
+
+Read every AUTHORITY named by that block completely. If the order touches a
 React surface (exact \`REACT TASK: YES\`, an ALLOWED_FILE under docs/mocks-ui, or
 an ALLOWED_FILE ending in .jsx), also include, exactly once and in this order:
 REACT AUTHORITY:, SOURCE ASSET:, PRESERVE:, REPLACE:, STATE OWNER:,
@@ -1630,9 +1858,6 @@ repository-wide archaeology, multiple-spec meaning judgment, unspecified
 public-boundary discovery, or another model. If those are necessary, return
 ORDER: STOP so Codex can revise the parent task or ask Fable outside this loop.
 
-Do not repeat the Codex-owned loop/model labels in the draft; the dispatcher appends
-them after validating the terminal marker.
-
 The last non-empty line must be exactly plain text ORDER: READY only if every
 ledger, authority, and label fact above is mechanically true; otherwise end with
 plain text ORDER: STOP. Do not bold it, quote it, or append text.
@@ -1644,23 +1869,36 @@ EOF
   echo "## 1. Claude Opus 5 managed Spark order draft"
   if ! (cd "$WORKTREE" && run_order_manager "$tmp_dir/order.txt" "$supervisor_prompt"); then
     [[ ! -f "$tmp_dir/order.txt" ]] || cat "$tmp_dir/order.txt"
+    if [[ -s "$tmp_dir/order.txt" ]]; then
+      emit_outcome "ORDER_INVALID"
+    else
+      emit_outcome "ORDER_MANAGER_UNAVAILABLE"
+    fi
     exit 1
   fi
-  cat "$tmp_dir/order.txt"
-  {
-    cat "$tmp_dir/order.txt"
-    echo "LOOP_PROFILE: $LOOP_PROFILE"
-    echo "ORDER_MANAGER_MODEL: $OPUS_MANAGER_MODEL"
-    echo "IMPLEMENTER_MODEL: $SPARK_MODEL"
-    echo "REVIEW_MODEL: $CURSOR_GROK_MODEL"
-    echo "TASK_SHA256: $task_hash"
-  } >"$ORDER_FILE"
-  if ! grep -qx 'ORDER: READY' "$tmp_dir/order.txt"; then
-    echo "delegate-cursor-supervised: Opus 5がREADYを出していません" >&2
+  prepare_post_fp="$(compute_fingerprint "$WORKTREE")"
+  if [[ "$prepare_post_fp" != "$prepare_pre_fp" ]]; then
+    echo "delegate-cursor-supervised: Opus prepare中にworktreeが変更されました" >&2
+    emit_outcome "ORDER_INVALID"
     exit 3
   fi
+  reject_manager_owned_fields "$tmp_dir/order.txt"
+  cat "$tmp_dir/order.txt"
+  if ! grep -qx 'ORDER: READY' "$tmp_dir/order.txt"; then
+    echo "delegate-cursor-supervised: Opus 5がREADYを出していません" >&2
+    emit_outcome "DESIGN_STOP"
+    exit 9
+  fi
+  assembled_order="$(mktemp "$(dirname "$ORDER_FILE")/.$(basename "$ORDER_FILE").assembled.XXXXXX")"
+  {
+    printf '%s\n\n' "$machine_block"
+    cat "$tmp_dir/order.txt"
+  } >"$assembled_order"
+  validate_machine_block "$assembled_order"
+  mv -f "$assembled_order" "$ORDER_FILE"
   echo "delegate-cursor-supervised: 発注書案を保存しました: $ORDER_FILE" >&2
   echo "delegate-cursor-supervised: Codex審査後に CODEX PRECHECK: APPROVED を追記してください" >&2
+  emit_outcome "ORDER_READY_FOR_CODEX"
   exit 0
 fi
 
@@ -1668,6 +1906,7 @@ if [[ ! -f "$ORDER_FILE" ]]; then
   echo "delegate-cursor-supervised: 承認対象の発注書がありません" >&2
   exit 2
 fi
+validate_machine_block "$ORDER_FILE"
 if ! grep -qx 'ORDER: READY' "$ORDER_FILE"; then
   echo "delegate-cursor-supervised: ORDER: READY がありません" >&2
   exit 3
@@ -1691,14 +1930,19 @@ if [[ "$ORDER_LOOP_PROFILE" != "$LOOP_PROFILE" ]] ||
   echo "delegate-cursor-supervised: 発注書のmodel経路がOpus/Spark/Grok監督ループと一致しません" >&2
   exit 3
 fi
-if ! grep -qx 'CODEX PRECHECK: APPROVED' "$ORDER_FILE"; then
-  echo "delegate-cursor-supervised: Codex事前承認がありません" >&2
+precheck_count="$(grep -Fxc 'CODEX PRECHECK: APPROVED' "$ORDER_FILE" || true)"
+if [[ "$precheck_count" -ne 1 ]]; then
+  echo "delegate-cursor-supervised: Codex事前承認が1件ではありません" >&2
+  emit_outcome "ORDER_INVALID"
   exit 3
 fi
 
 # GR-D2: 発注書ごとのevidence directoryへ、execute/inspectの各試行をappend-onlyで残す
 evidence_root="${ORDER_FILE}.evidence"
 mkdir -p "$evidence_root"
+if [[ -f "$evidence_root/terminal-outcome.txt" ]]; then
+  evidence_fail "terminal outcome already exists for this order"
+fi
 attempt_dir="$(new_attempt_dir "$evidence_root")"
 CURRENT_ATTEMPT_DIR="$attempt_dir"
 attempt_name="$(basename "$attempt_dir")"
@@ -1780,6 +2024,7 @@ if ! run_agent "$attempt_dir/spark-stdout.txt" "$SPARK_TIMEOUT_SECONDS" \
   snapshot_worktree "$WORKTREE" "$attempt_dir" "post-spark"
   echo "STAGE: spark FAILED_OR_TIMEOUT" >>"$attempt_dir/stage-result.txt"
   invalidate_checkpoint "$evidence_root"
+  emit_outcome "IMPLEMENTATION_FAILED"
   exit 1
 fi
 cat "$attempt_dir/spark-stdout.txt"
@@ -1788,6 +2033,7 @@ if [[ "$(git -C "$WORKTREE" rev-parse HEAD)" != "$head_before" ]]; then
   snapshot_worktree "$WORKTREE" "$attempt_dir" "post-spark"
   echo "STAGE: spark COMMIT_FORBIDDEN" >>"$attempt_dir/stage-result.txt"
   invalidate_checkpoint "$evidence_root"
+  emit_outcome "IMPLEMENTATION_INVALID"
   exit 5
 fi
 

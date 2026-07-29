@@ -118,6 +118,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | VISUAL-RESPONSE | G0-6H | M3 evidence / VS-1 / visual | `DO / HUMAN` | — | 5 reference screenと30 PNG | U0e-3だけを解禁可 |
 | AUTHORING-SCAFFOLD | VSM-A4S | Vism / spec | `DO / SPEC` | — | VSM-A1/A2/A3、仕様と実装の別PR決定 | VSM-A4Iは全体レビュー後 |
 | DELEGATION-GUARD | GR-D3 | supervised runner / derived output closure | `DO` | [#329](https://github.com/oshikaidesu/Motolii/issues/329) | GR-D2、K0で再現したworktree-root `target/`汚染 | 実停止経路でGrok到達を証明後、K0を再発注 |
+| DELEGATION-GUARD | GR-D4 | supervised runner / restartable order loop | `DONE` | — | GR-D2、M5 RCA2/B2/C2停止証跡、Opus/Fable read-only監査 | GR-D3を従来scopeのまま継続 |
 | SPATIAL-CONTRACT | K0 | M4 / contract spike | `WAIT` | [#167](https://github.com/oshikaidesu/Motolii/issues/167) | M2-D3、凍結ゲート解凍手続き、GR-D3 | fresh worktree/orderで再発注し、K1系を粒ごとに再判定 |
 | IDENTITY-CONTRACT | P0I | M5 / identity decision | `DECIDE` | [#170](https://github.com/oshikaidesu/Motolii/issues/170) | 凍結ゲート、2026-07-15決定。Text／Prototype側の未決は留保 | 意味decision後にfixture粒を分割して再判定 |
 | RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA | M5 / P2D / authority draft | `STOPPED` | — | 旧一括grainはGrok REJECT、差分不採用。後継P2D-RCA2登録済み | 旧IDを発注しない |
@@ -167,6 +168,7 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 |---|---|---|
 | CU-0A04 | `DONE` | R1 Browser ownership完了。現在粒`CU-0A05A`の直前product asset |
 | GR-D2 | `DONE` | [監督ループ決定](reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md)へ変更許可閉集合、append-only証跡、timeout分離、検収者mutation拒否、resumeを継承済み |
+| GR-D4 | `DONE` | [再開可能な監督発注loop](reviews/2026-07-29-restartable-supervised-order-loop-decision.md)と専用testがmachine block、prepare非破壊、parent outcome、terminal verdict、availability限定resumeを固定 |
 | M1-FREEZE-GATE | `DONE` | [凍結ゲート宣言](reviews/2026-07-10-freeze-gate-declaration.md)がM2〜M5並列laneを解禁 |
 | M2-D3 | `DONE` | [M2仕様 D3](specs/M2-document-model.md)のDocument→render graph接続が完了 |
 | M2-FOUNDATION-RECLOSURE | `DONE` | [M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み |

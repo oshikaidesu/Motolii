@@ -8,14 +8,14 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 - **2026-07-25運用改訂**: 通常発注は`Codex → Claude Opus 5 → Codex Spark → Cursor Grok 4.5 High → Codex`の一つのループへ固定する。完全model IDは順に`claude-opus-5` / `gpt-5.3-codex-spark` / `cursor-grok-4.5-high`とし、aliasを使わない。旧`mechanical / standard / rapid / complex / cross-boundary`分類、Luna/Terra/Sol routing、Fable必須検収は[旧運用](docs/reviews/2026-07-22-terra-grok-delegation-policy.md)としてアーカイブし、現行発注へ使わない
 - 発火時の責任は固定する。**主担当Codex**は先例調査、コード事実、長期展望、親task、恒久形式／公開API／plugin契約／停止線、Opus orderの事前承認、Grok結果の再照合、最終統合を所有する。**Claude Opus 5**は親taskを、会話履歴なしで完結する一つのSpark粒とclosed orderへ落とす施工管理者とする。**Codex Spark**は承認済みの一粒だけを隔離worktreeで実装する。**Cursor Grok 4.5 High**は実装担当から分離したread-only検収者として実diffと試験を監査する
 - Opus 5へ許す委任は一段だけであり、Spark以外を起動させない。一回のrunner実行は一つの`GRAIN`だけを扱い、Sparkは再委任しない。複数粒が必要なら、主担当Codexが各契約境界を確認してループを個別に回す
-- `./scripts/delegate-cursor-supervised.sh prepare <worktree> <order-file> "<task>"`でOpus 5にorder案を作らせる。orderには対象仕様ID、目的、現状、変更許可file、非目標、再利用箇所、STOP条件、必須負例、実行command、`ORDER: READY`、task hash、`LOOP_PROFILE: opus-spark-grok`、三つの完全model IDを含める。主担当Codexが`CODEX PRECHECK: APPROVED`を追記するまで`execute`でSparkを起動しない
+- `./scripts/delegate-cursor-supervised.sh manifest <worktree> <order-file> "<task>" <grain> <base-ref> --dependency ... --authority ... --allowed-file ...`でCodex-owned machine blockを先に作り、`prepare <worktree> <order-file> "<task>"`でOpus 5に施工本文だけを作らせる。machine block、task hash、`LOOP_PROFILE: opus-spark-grok`、三つの完全model IDはrunner親processが所有し、Opusは再記述しない。order本文には対象仕様ID、目的、現状、非目標、再利用箇所、STOP条件、必須負例、実行command、`ORDER: READY`を含める。主担当Codexだけがblock外へ`CODEX PRECHECK: APPROVED`を一度追記し、それまで`execute`でSparkを起動しない
 - Opus 5は仕様決定者ではない。親taskの公開API、Document意味、plugin契約、永続形式、変更許可範囲を変える必要が見えたら`ORDER: STOP`でCodexへ戻す。repo横断の歴史調査、複数仕様の意味判断、未指定の公開境界探索をSpark粒へ押し込まない
 - 実装発注は一度に1つの契約境界、隔離worktree、閉じたallowlistとする。外部実装には「例外追加・lint抑制・テスト期待値変更・生JSON/文字列走査・公開raw API・重複planner/helper」で契約を迂回させず、必要に見えた時点でSTOPさせる
 - Grok検収が`VERDICT: ACCEPT`かつ**P0/P1=0**でなければ実装差分を採用・commit・pushしない。Grokはorder再設計や実装修正をせず、REJECTをCodexへ返す。テスト緑は採用条件の一部であって、契約適合の代わりにしない
 - Fable 5は通常ループの段階または必須gateにしない。大地図、設計比較、共有公開境界など、主担当Codexが高難度の反対側助言を必要と判断した場合だけ、ループ外からread-onlyで直接呼ぶ
 - 主担当Codexは監督者として、OpusのorderとSparkの差分を仕様・依存・実装ガード・既存API・テスト期待値に照らして再確認する。外部出力は根拠でなく未検証の助言であり、最終判断、統合、必須テスト、完了報告は主担当が行う
 - model利用不能時に別modelへ黙ってfallbackしない。外部modelへ秘密情報、認証情報、未公開の個人データを渡さない
-- order作成、実装、検収が失敗、STOP、REJECT、timeoutになった場合はCodexへ戻す。Codexが原因を分類し、必要なら新しいOpus粒として再投入する。ループ中の差分は隔離worktreeに留め、`VERDICT: ACCEPT`前に採用・commit・pushしない
+- runner親processは`ORDER_INVALID / DESIGN_STOP / IMPLEMENTATION_FAILED / IMPLEMENTATION_INVALID / IMPLEMENTATION_REJECT / REVIEW_UNAVAILABLE / REVIEW_INVALID / COMPLETE`を`OUTCOME`へ記録する。`ORDER_INVALID`は形式修正、`DESIGN_STOP`は仕様へ戻す。Grok stdout 0 byteの`REVIEW_UNAVAILABLE`だけ同一checkpointから`inspect`でSparkなしに最大3回再開し、別modelへfallbackしない。`REJECT`、stdout非空のmarker不正、`ACCEPT`はterminalで同一diffを再検収せず、新grainへ戻す。ループ中の差分は隔離worktreeに留め、`VERDICT: ACCEPT`前に採用・commit・pushしない
 - 同じ阻害要因が反復し、order、差分、検収結果に有意な改善がなくなった場合だけループを止める。その際は反復した阻害要因、試した修正、未解決の選択肢を示してユーザーの判断を仰ぐ
 
 ## 発注外のOpus 5コーディングパートナー

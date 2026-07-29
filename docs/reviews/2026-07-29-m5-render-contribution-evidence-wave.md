@@ -263,8 +263,10 @@ Opusを再起動せずorder案を機械修正し、同じ一周のSpark／Grok�
    capsule文の言い換えをさせない。転記とMotolii fixture対応づけを同じ粒へ戻さない。
 3. engine比較は三family×六fixtureを一粒で作文させない。providerごとの固定観察転記と、
    Motolii fixture軸の比較を別grainへ分け、capsuleに無い「証拠あり」や方式断定を禁止する。
-4. Grokがmarkerなし、空出力、timeoutなら票にせず不採用とする。別model fallbackや同一差分の
-   再検収を行わず、後継grainは新ID／新order／新証跡で登録する。
+4. Grok stdoutが0 byteのprocess級利用不能だけは票とせず、
+   [再開可能な監督発注loop](2026-07-29-restartable-supervised-order-loop-decision.md)のcheckpointから
+   Sparkなしで最大3回まで再開する。stdoutが1 byte以上あるmarker不正、`REJECT`、`ACCEPT`はterminalで、
+   同一差分を再検収しない。別model fallbackを行わず、terminal後は新ID／新order／新証跡で登録する。
 
 今回の失敗はRender Contribution公開契約を決める根拠ではない。共通Host境界、Rerun転移裁定、
 六capsuleは有効なread-only基盤として維持する。

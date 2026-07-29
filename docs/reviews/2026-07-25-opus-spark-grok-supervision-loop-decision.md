@@ -89,6 +89,12 @@ Fable 5は大地図、長期展望、複数仕様の衝突、共有公開境界�
 - REJECT、STOP、timeout後の戻り先はCodexとする。Codexが原因を裁定してから、必要なら新しいOpus粒へ戻す
 - model利用不能時に別modelへ黙ってfallbackしない
 
+2026-07-29以降のorder組立、結果分類、availability再開は
+[再開可能な監督発注loop](2026-07-29-restartable-supervised-order-loop-decision.md)を正とする。
+Codex-owned machine blockとOpus施工本文を同じorder SHAで保護し、Grok stdout 0 byteの
+`REVIEW_UNAVAILABLE`だけを最大3回`inspect`で再開する。REJECT、非空marker不正、ACCEPTはterminalであり、
+同一diffを再検収しない。
+
 React製品資産とRerun参照を含む発注は、`AGENTS.md`の追加ラベル、順序、STOP条件をこのループより優先して
 満たす。ループの簡略化は製品契約の簡略化を意味しない。
 
@@ -106,3 +112,4 @@ React製品資産とRerun参照を含む発注は、`AGENTS.md`の追加ラベ�
 - orderのmodel/loop metadataが固定値と一致しない場合はdispatch前にfail closedする
 - 旧`TASK_CLASS` routingとFable必須検収を正規runnerから起動できない
 - runnerの負例試験と`./scripts/check-docs.sh`が通る
+- manifest、prepare非破壊、parent-owned outcome、terminal verdict、availability限定resumeが専用testで通る
