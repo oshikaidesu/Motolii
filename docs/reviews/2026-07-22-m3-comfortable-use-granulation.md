@@ -314,7 +314,7 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-107AD | `CORE / DONE` | 一active dragにつきadmittedを高々1件に抑え、staleおよびduplicateの候補をadmitしないこと | `CU-107TC`、`CU-107`経由の`CU-0B05` | [実装決定](2026-07-29-cu-107ad-place-terminal-admission-implementation-decision.md)。Product Host monotonic generation、active/high-water、noncommit retire、accepted delivery/D2 0 | — |
 | CU-107TD | `CORE / DONE` | admitごとにちょうど1回、単一の下流commit境界へ配送し、admitされていない候補を配送しないこと | `CU-107AD`、`CU-107`経由の`CU-0B05` | [実装決定](2026-07-29-cu-107td-place-terminal-delivery-implementation-decision.md)。admitted terminal→private PendingStageDrop一回、unadmitted/D2 0 | — |
 | CU-109 | `CORE / WAIT` | journal commitとsnapshot publishをCU-G03順序で製品edit runtimeへ配線 | CU-G03D、CU-G03R、U2b/D1m | journal失敗時publish 0、再open同値、retry二重適用0 | UI側journal writerまたは新永続payloadが必要 |
-| CU-110 | `CORE / WAIT` | Place intent/requestからfresh ID plannerと1 macro commitを接続 | `CU-102`、`CU-107PV`／`CU-107TC`／`CU-107AD`／`CU-107TD`、`CU-109` | preview中D2 0、valid dropでAddTrackItem/apply_macro各1、失敗/cancel 0 | 公開planner/汎用transactionまたはraw ID mintが必要 |
+| CU-110 | `CORE / DONE` | Place intent/requestからfresh ID plannerと1 macro commitを接続 | `CU-102`、`CU-107PV`／`CU-107TC`／`CU-107AD`／`CU-107TD`、`CU-109` | [実装決定](2026-07-29-cu-110-product-place-d2-commit-implementation-decision.md)。通常製品drop→canonical→Place request/process各1、実Mac journal AddTrackItem一件 | — |
 | CU-111 | `PRODUCT / WAIT` | Undo/Redo製品CommandIdとsingle-writer配送を接続 | CU-109、U0c/U2b | 成功時だけsnapshot publish、失敗でDocument/history不変、UI history 0 | Undo/Redoをsurface別local stateにしたくなる |
 | CU-108 | `E2E / WAIT` | Rectangleを三面へ投影しUndo/Redoする | CU-103/106/110/111、CU-0B05 | 同じrevision/LayerId、Undoで三面から消えRedoで同ID復帰 | diagnostic/fixture-only rectしか表示できない |
 

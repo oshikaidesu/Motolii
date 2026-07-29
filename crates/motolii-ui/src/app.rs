@@ -993,7 +993,7 @@ fn paint_stage(
     rect
 }
 
-fn canonical_drop_from_ndc(camera: CompCamera, ndc: [f64; 2]) -> Option<[f64; 2]> {
+pub(crate) fn canonical_drop_from_ndc(camera: CompCamera, ndc: [f64; 2]) -> Option<[f64; 2]> {
     if !ndc[0].is_finite() || !ndc[1].is_finite() {
         return None;
     }

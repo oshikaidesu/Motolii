@@ -75,6 +75,7 @@ pub(crate) struct StaticPreview {
     _gpu: Arc<GpuCtx>,
     document_json: String,
     slot: DisplaySlot,
+    camera: motolii_core::CompCamera,
     render_count: u32,
 }
 
@@ -86,6 +87,10 @@ impl StaticPreview {
 
     pub(crate) fn slot(&self) -> &DisplaySlot {
         &self.slot
+    }
+
+    pub(crate) fn camera(&self) -> motolii_core::CompCamera {
+        self.camera
     }
 
     pub(crate) fn invariant_evidence(&self) -> StaticPreviewEvidence {
@@ -178,11 +183,13 @@ pub(crate) fn prepare_in_setup_worker(
     }
     let rendered = result.result.map_err(map_worker_error)?;
     let slot = DisplaySlot::copy_from_rendered(&gpu, &rendered.frame)?;
+    let camera = rendered.camera;
     gpu.check_health()?;
     Ok(StaticPreview {
         _gpu: gpu,
         document_json,
         slot,
+        camera,
         render_count: 1,
     })
 }
@@ -256,6 +263,7 @@ fn prepare_static_viewport(
         _gpu: gpu,
         document_json,
         slot,
+        camera: built.camera,
         render_count: 1,
     })
 }

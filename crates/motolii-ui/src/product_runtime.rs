@@ -4,16 +4,20 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use motolii_core::RationalTime;
 use motolii_gpu::GpuCtx;
 use winit::dpi::LogicalSize;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::window::Window;
 
+use crate::app::canonical_drop_from_ndc;
 use crate::browser_host::BrowserPlaceIntent;
 use crate::browser_host_runtime::{
     BrowserFocusTarget, BrowserHostRuntime, BrowserHostRuntimeError, BrowserLifecycleEvent,
 };
-use crate::document_edit_runtime::DocumentEditRuntime;
+use crate::document_edit_runtime::{
+    DocumentEditQueue, DocumentEditRuntime, DocumentEditRuntimeError, PlaceRectangleRequest,
+};
 use crate::host_pointer_capture::{HostPointerCancel, HostPointerCandidate};
 use crate::native_host_layout::{NativeHostLayout, PhysicalRect};
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
@@ -57,7 +61,11 @@ pub(crate) struct ProductApp {
     gpu: Arc<GpuCtx>,
     parts: Option<ProductGpuParts>,
     preview: Arc<StaticPreview>,
-    _document_runtime: DocumentEditRuntime,
+    document_runtime: DocumentEditRuntime,
+    document_queue: DocumentEditQueue,
+    primary: Option<motolii_doc::LayerId>,
+    projection_generation: u64,
+    current_document: Arc<motolii_doc::Document>,
     proxy: EventLoopProxy<ProductEvent>,
     layout: Option<NativeHostLayout>,
     next_layout_epoch: u64,
@@ -255,7 +263,11 @@ impl ProductApp {
             gpu,
             parts: Some(parts),
             preview,
-            _document_runtime: document_runtime,
+            current_document: document_runtime.snapshot(),
+            document_runtime,
+            document_queue: DocumentEditQueue::default(),
+            primary: None,
+            projection_generation: 0,
             proxy,
             layout: None,
             next_layout_epoch: 1,
@@ -459,6 +471,30 @@ impl ProductApp {
                 terminal.layout_epoch,
                 terminal.stage_ndc,
             );
+        }
+        if let Some(drop) = self.pending_stage_drop.take() {
+            let Some(position) = canonical_drop_from_ndc(self.preview.camera(), drop.ndc) else {
+                return self.fail(event_loop, ProductRuntimeError::PlaceCanonicalConversion);
+            };
+            self.document_queue
+                .push_place_rectangle(PlaceRectangleRequest {
+                    position,
+                    playhead: RationalTime::ZERO,
+                });
+            match self.document_runtime.process_next(
+                &mut self.document_queue,
+                self.primary,
+                self.projection_generation,
+            ) {
+                Ok(Some(published)) => {
+                    self.current_document = published.snapshot;
+                    self.primary = published.primary;
+                    self.projection_generation = published.projection_generation;
+                    self.request_redraw();
+                }
+                Ok(None) => {}
+                Err(error) => self.fail(event_loop, error),
+            }
         }
     }
 
@@ -1017,6 +1053,10 @@ pub(crate) enum ProductRuntimeError {
     PlaceAdmissionGenerationRejected(u64),
     #[error("Place capture generation is exhausted")]
     PlaceGenerationExhausted,
+    #[error("Place Stage NDC could not be converted through the displayed camera")]
+    PlaceCanonicalConversion,
+    #[error(transparent)]
+    DocumentEdit(#[from] DocumentEditRuntimeError),
     #[error("native product runtime failed: {0}")]
     Runtime(String),
 }
