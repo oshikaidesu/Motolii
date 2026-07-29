@@ -356,3 +356,4 @@
 | [2026-07-29-cu-0a08bdd-browser-typed-intent-dependency-direction-decision.md](2026-07-29-cu-0a08bdd-browser-typed-intent-dependency-direction-decision.md) | CU-0A08BDD Browser typed-intent 依存方向の裁定 |
 | [2026-07-29-cu-0a08ss0-browser-place-source-seam-implementation-boundary-scope-selection.md](2026-07-29-cu-0a08ss0-browser-place-source-seam-implementation-boundary-scope-selection.md) | CU-0A08SS0 Browser Place source seam の最小実装境界 選定範囲 |
 | [2026-07-29-cu-0a08ssd-browser-place-source-seam-implementation-boundary-decision.md](2026-07-29-cu-0a08ssd-browser-place-source-seam-implementation-boundary-decision.md) | CU-0A08SSD Browser Place source seam の最小実装境界 裁定 |
+| [2026-07-29-cu-0a08ssc-browser-place-source-seam-contract-concretization-scope-selection.md](2026-07-29-cu-0a08ssc-browser-place-source-seam-contract-concretization-scope-selection.md) | CU-0A08SSC Browser Place source seam 契約具体化 選定範囲 |
