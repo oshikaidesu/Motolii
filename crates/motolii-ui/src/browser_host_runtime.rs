@@ -222,19 +222,24 @@ postMessage:(message)=>window.ipc.postMessage(message)
 
     pub(crate) fn take_place_intent(
         &self,
-    ) -> Result<Option<BrowserPlaceIntent>, BrowserHostRuntimeError> {
+        generation: u64,
+    ) -> Result<Option<(BrowserPlaceIntent, u64)>, BrowserHostRuntimeError> {
         let intent = self
             .session
             .lock()
             .map_err(|_| BrowserHostRuntimeError::InboxPoisoned)
             .map(|mut session| session.pop())?;
-        if intent.is_some() {
-            self.pointer_capture
-                .lock()
-                .map_err(|_| BrowserHostRuntimeError::PointerCapturePoisoned)?
-                .arm();
-        }
-        Ok(intent)
+        let Some(intent) = intent else {
+            return Ok(None);
+        };
+        let generation = self
+            .pointer_capture
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::PointerCapturePoisoned)?
+            .arm(generation)
+            .then_some(generation)
+            .ok_or(BrowserHostRuntimeError::PointerCaptureAlreadyActive)?;
+        Ok(Some((intent, generation)))
     }
 
     pub(crate) fn poll_pointer_candidate(
@@ -355,6 +360,8 @@ pub(crate) enum BrowserHostRuntimeError {
     InboxPoisoned,
     #[error("Browser Host pointer capture lock is poisoned")]
     PointerCapturePoisoned,
+    #[error("Browser Host pointer capture is already active")]
+    PointerCaptureAlreadyActive,
     #[error("Browser Host island state lock is poisoned")]
     IslandStatePoisoned,
     #[error(transparent)]

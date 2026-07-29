@@ -390,3 +390,4 @@
 | [2026-07-29-cu-0b05-browser-lifecycle-reprojection-implementation-decision.md](2026-07-29-cu-0b05-browser-lifecycle-reprojection-implementation-decision.md) | CU-0B05 Browser lifecycle再投影実装決定 |
 | [2026-07-29-cu-107pv-place-preview-delivery-implementation-decision.md](2026-07-29-cu-107pv-place-preview-delivery-implementation-decision.md) | CU-107PV Place preview配送実装決定 |
 | [2026-07-29-cu-107tc-place-terminal-cause-classification-implementation-decision.md](2026-07-29-cu-107tc-place-terminal-cause-classification-implementation-decision.md) | CU-107TC Place候補terminal原因分類実装決定 |
+| [2026-07-29-cu-107ad-place-terminal-admission-implementation-decision.md](2026-07-29-cu-107ad-place-terminal-admission-implementation-decision.md) | CU-107AD Place候補terminal admission実装決定 |

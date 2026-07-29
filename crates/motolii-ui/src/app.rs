@@ -174,6 +174,7 @@ pub(crate) struct MotoliiApp {
     document_smoke: Option<DocumentEditSmoke>,
     browser_host: Option<BrowserHostRuntime>,
     browser_host_failure: Option<String>,
+    browser_place_generation: u64,
     active_browser_place: Option<BrowserPlaceIntent>,
     latest_camera: Option<CompCamera>,
 }
@@ -286,6 +287,7 @@ impl MotoliiApp {
                 .map(|request| DocumentEditSmoke::new(evidence, request)),
             browser_host,
             browser_host_failure: None,
+            browser_place_generation: 0,
             active_browser_place: None,
             latest_camera: None,
         })
@@ -698,8 +700,12 @@ impl MotoliiApp {
         let Some(host) = &self.browser_host else {
             return;
         };
-        match host.take_place_intent() {
-            Ok(Some(intent)) => self.active_browser_place = Some(intent),
+        let generation = self.browser_place_generation.wrapping_add(1);
+        match host.take_place_intent(generation) {
+            Ok(Some((intent, generation))) => {
+                self.browser_place_generation = generation;
+                self.active_browser_place = Some(intent);
+            }
             Ok(None) => {}
             Err(error) => self.browser_host_failure = Some(error.to_string()),
         }

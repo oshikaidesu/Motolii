@@ -64,9 +64,12 @@ pub(crate) struct ProductApp {
     browser_source: Option<BrowserPlaceIntent>,
     browser_lifecycle: Option<BrowserLifecycleCoordinator>,
     browser_focus_target: BrowserFocusTarget,
+    next_place_generation: u64,
     active_place: Option<BrowserPlaceIntent>,
     place_preview: PlacePreviewPhase,
+    terminal_admission: PlaceTerminalAdmission,
     candidate_terminal: Option<ClassifiedPlaceTerminal>,
+    admitted_terminal: Option<ClassifiedPlaceTerminal>,
     pending_stage_drop: Option<PendingStageDrop>,
     surface_retry_at: Option<Instant>,
     failure: Option<String>,
@@ -132,6 +135,49 @@ impl ClassifiedPlaceTerminal {
     }
 }
 
+#[derive(Debug, Default)]
+struct PlaceTerminalAdmission {
+    active_generation: Option<u64>,
+    retired_high_water: Option<u64>,
+}
+
+impl PlaceTerminalAdmission {
+    fn begin(&mut self, generation: u64) -> bool {
+        if self.active_generation.is_some()
+            || self
+                .retired_high_water
+                .is_some_and(|high_water| generation <= high_water)
+        {
+            return false;
+        }
+        self.active_generation = Some(generation);
+        true
+    }
+
+    fn admit(&mut self, terminal: &ClassifiedPlaceTerminal) -> bool {
+        if self.active_generation != Some(terminal.generation) {
+            return false;
+        }
+        self.active_generation = None;
+        self.retired_high_water = Some(
+            self.retired_high_water
+                .map_or(terminal.generation, |high_water| {
+                    high_water.max(terminal.generation)
+                }),
+        );
+        terminal.cause == PlaceTerminalCause::NoNonCommitCause
+    }
+
+    fn retire_active(&mut self) {
+        if let Some(generation) = self.active_generation.take() {
+            self.retired_high_water = Some(
+                self.retired_high_water
+                    .map_or(generation, |high_water| high_water.max(generation)),
+            );
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 struct PlacePreviewProgress {
     source: BrowserPlaceIntent,
@@ -188,9 +234,12 @@ impl ProductApp {
             browser_source: None,
             browser_lifecycle: None,
             browser_focus_target: BrowserFocusTarget::Browser,
+            next_place_generation: 1,
             active_place: None,
             place_preview: PlacePreviewPhase::default(),
+            terminal_admission: PlaceTerminalAdmission::default(),
             candidate_terminal: None,
+            admitted_terminal: None,
             pending_stage_drop: None,
             surface_retry_at: None,
             failure: None,
@@ -277,14 +326,27 @@ impl ProductApp {
             return self.fail(event_loop, error);
         }
         if self.active_place.is_none() {
-            match browser.take_place_intent() {
-                Ok(Some(intent)) => {
+            let generation = self.next_place_generation;
+            let Some(next_generation) = generation.checked_add(1) else {
+                return self.fail(event_loop, ProductRuntimeError::PlaceGenerationExhausted);
+            };
+            match browser.take_place_intent(generation) {
+                Ok(Some((intent, generation))) => {
+                    self.next_place_generation = next_generation;
                     self.browser_focus_target = BrowserFocusTarget::Parent;
                     if let Err(error) = browser.ensure_focus(self.browser_focus_target) {
                         return self.fail(event_loop, error);
                     }
+                    if !self.terminal_admission.begin(generation) {
+                        return self.fail(
+                            event_loop,
+                            ProductRuntimeError::PlaceAdmissionGenerationRejected(generation),
+                        );
+                    }
                     self.place_preview.clear();
                     self.candidate_terminal = None;
+                    self.admitted_terminal = None;
+                    self.pending_stage_drop = None;
                     self.active_place = Some(intent);
                 }
                 Ok(None) => {}
@@ -324,13 +386,8 @@ impl ProductApp {
                 };
                 let terminal =
                     ClassifiedPlaceTerminal::released(source, generation, position, layout);
-                if let Some(ndc) = terminal.stage_ndc {
-                    self.pending_stage_drop = Some(PendingStageDrop {
-                        source: terminal.source.clone(),
-                        generation,
-                        layout_epoch: layout.epoch,
-                        ndc,
-                    });
+                if self.terminal_admission.admit(&terminal) {
+                    self.admitted_terminal = Some(terminal.clone());
                 }
                 self.candidate_terminal = Some(terminal);
                 self.set_idle_control_flow(event_loop);
@@ -338,9 +395,11 @@ impl ProductApp {
             Ok(Some(HostPointerCandidate::Cancelled { generation, reason })) => {
                 self.place_preview.clear();
                 if let Some(source) = self.active_place.take() {
-                    self.candidate_terminal = Some(ClassifiedPlaceTerminal::cancelled(
-                        source, generation, reason,
-                    ));
+                    let terminal = ClassifiedPlaceTerminal::cancelled(source, generation, reason);
+                    if self.terminal_admission.admit(&terminal) {
+                        self.admitted_terminal = Some(terminal.clone());
+                    }
+                    self.candidate_terminal = Some(terminal);
                 }
                 self.set_idle_control_flow(event_loop);
             }
@@ -359,6 +418,14 @@ impl ProductApp {
                 &terminal.source,
                 terminal.generation,
                 terminal.cause,
+                terminal.layout_epoch,
+                terminal.stage_ndc,
+            );
+        }
+        if let Some(terminal) = &self.admitted_terminal {
+            let _ = (
+                &terminal.source,
+                terminal.generation,
                 terminal.layout_epoch,
                 terminal.stage_ndc,
             );
@@ -405,7 +472,9 @@ impl ProductApp {
             BrowserRecoveryDecision::Degrade => {
                 self.active_place = None;
                 self.place_preview.clear();
+                self.terminal_admission.retire_active();
                 self.candidate_terminal = None;
+                self.admitted_terminal = None;
                 self.browser.take();
                 Ok(())
             }
@@ -423,7 +492,9 @@ impl ProductApp {
             .ok_or(ProductRuntimeError::BrowserLifecycleUnavailable)?;
         self.active_place = None;
         self.place_preview.clear();
+        self.terminal_admission.retire_active();
         self.candidate_terminal = None;
+        self.admitted_terminal = None;
         self.browser.take();
         let browser = build_browser_runtime(window, instance_epoch, source, self.proxy.clone())?;
         if let Some(layout) = self.layout {
@@ -912,6 +983,10 @@ pub(crate) enum ProductRuntimeError {
     BrowserLifecycleUnavailable,
     #[error("Place terminal cannot be classified without a native Host layout")]
     PlaceTerminalLayoutUnavailable,
+    #[error("Place admission rejected capture generation {0}")]
+    PlaceAdmissionGenerationRejected(u64),
+    #[error("Place capture generation is exhausted")]
+    PlaceGenerationExhausted,
     #[error("native product runtime failed: {0}")]
     Runtime(String),
 }
@@ -1034,6 +1109,69 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn admission_accepts_at_most_one_matching_commit_candidate() {
+        let layout = test_layout(9);
+        let position = [
+            layout.stage.x + layout.stage.width / 2.0,
+            layout.stage.y + layout.stage.height / 2.0,
+        ];
+        let terminal = ClassifiedPlaceTerminal::released(test_source(), 4, position, layout);
+        let mut admission = PlaceTerminalAdmission::default();
+
+        assert!(admission.begin(4));
+        assert!(admission.admit(&terminal));
+        assert!(!admission.admit(&terminal));
+        assert!(!admission.begin(4));
+    }
+
+    #[test]
+    fn noncommit_terminal_retires_generation_without_admission() {
+        let terminal =
+            ClassifiedPlaceTerminal::cancelled(test_source(), 4, HostPointerCancel::CaptureLost);
+        let mut admission = PlaceTerminalAdmission::default();
+
+        assert!(admission.begin(4));
+        assert!(!admission.admit(&terminal));
+        assert!(!admission.admit(&terminal));
+        assert!(!admission.begin(4));
+    }
+
+    #[test]
+    fn stale_terminal_does_not_retire_the_current_drag() {
+        let layout = test_layout(9);
+        let position = [
+            layout.stage.x + layout.stage.width / 2.0,
+            layout.stage.y + layout.stage.height / 2.0,
+        ];
+        let stale = ClassifiedPlaceTerminal::released(test_source(), 4, position, layout);
+        let current = ClassifiedPlaceTerminal::released(test_source(), 5, position, layout);
+        let mut admission = PlaceTerminalAdmission::default();
+
+        assert!(admission.begin(4));
+        assert!(admission.admit(&stale));
+        assert!(admission.begin(5));
+        assert!(!admission.admit(&stale));
+        assert!(admission.admit(&current));
+    }
+
+    #[test]
+    fn retained_high_water_rejects_replay_after_detail_eviction() {
+        let layout = test_layout(9);
+        let position = [
+            layout.stage.x + layout.stage.width / 2.0,
+            layout.stage.y + layout.stage.height / 2.0,
+        ];
+        let terminal = ClassifiedPlaceTerminal::released(test_source(), 8, position, layout);
+        let mut admission = PlaceTerminalAdmission::default();
+
+        assert!(admission.begin(8));
+        assert!(admission.admit(&terminal));
+        assert!(!admission.begin(7));
+        assert!(!admission.begin(8));
+        assert!(admission.begin(9));
     }
 
     #[test]

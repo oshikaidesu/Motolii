@@ -33,7 +33,6 @@ pub(crate) enum HostPointerCandidate {
 #[derive(Debug, Default)]
 pub(crate) struct HostPointerCaptureState {
     active: Option<ActiveCapture>,
-    next_generation: u64,
 }
 
 #[derive(Debug)]
@@ -47,13 +46,12 @@ impl HostPointerCaptureState {
         self.active.is_some()
     }
 
-    pub(crate) fn arm(&mut self) -> bool {
+    pub(crate) fn arm(&mut self, generation: u64) -> bool {
         if self.active.is_some() {
             return false;
         }
-        self.next_generation = self.next_generation.wrapping_add(1);
         self.active = Some(ActiveCapture {
-            generation: self.next_generation,
+            generation,
             last_pressed_position: None,
         });
         true
@@ -128,8 +126,8 @@ impl PlatformPointerCapture {
         })
     }
 
-    pub(crate) fn arm(&mut self) -> bool {
-        if !self.state.arm() {
+    pub(crate) fn arm(&mut self, generation: u64) -> bool {
+        if !self.state.arm(generation) {
             return false;
         }
         self.armed_after_event_timestamp = self
@@ -191,8 +189,8 @@ impl PlatformPointerCapture {
         Ok(Self::default())
     }
 
-    pub(crate) fn arm(&mut self) -> bool {
-        self.state.arm()
+    pub(crate) fn arm(&mut self, generation: u64) -> bool {
+        self.state.arm(generation)
     }
 
     pub(crate) fn is_active(&self) -> bool {
@@ -235,14 +233,14 @@ mod tests {
     fn typed_start_arms_only_one_capture() {
         let mut capture = HostPointerCaptureState::default();
 
-        assert!(capture.arm());
-        assert!(!capture.arm());
+        assert!(capture.arm(1));
+        assert!(!capture.arm(2));
     }
 
     #[test]
     fn first_poll_after_tracking_loop_still_emits_release() {
         let mut capture = HostPointerCaptureState::default();
-        assert!(capture.arm());
+        assert!(capture.arm(1));
 
         assert_eq!(
             capture.update(sample(false, true)),
@@ -257,7 +255,7 @@ mod tests {
     #[test]
     fn focus_loss_cancels_without_release() {
         let mut capture = HostPointerCaptureState::default();
-        assert!(capture.arm());
+        assert!(capture.arm(1));
 
         assert_eq!(
             capture.update(sample(true, false)),
@@ -272,7 +270,7 @@ mod tests {
     #[test]
     fn escape_cancels_active_capture_once() {
         let mut capture = HostPointerCaptureState::default();
-        assert!(capture.arm());
+        assert!(capture.arm(1));
         let mut escaped = sample(true, true);
         escaped.escape_pressed = true;
 
@@ -289,7 +287,7 @@ mod tests {
     #[test]
     fn release_uses_last_position_observed_while_pressed() {
         let mut capture = HostPointerCaptureState::default();
-        assert!(capture.arm());
+        assert!(capture.arm(1));
         assert_eq!(
             capture.update(sample(true, true)),
             Some(HostPointerCandidate::Moved {
