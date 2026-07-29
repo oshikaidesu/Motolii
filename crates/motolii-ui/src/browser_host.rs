@@ -287,4 +287,20 @@ mod tests {
             .accept(&message("7", &(INBOX_CAPACITY + 1).to_string()))
             .unwrap();
     }
+
+    #[test]
+    fn replacement_instance_keeps_source_but_rejects_old_epoch() {
+        let source = intent();
+        let mut replacement = BrowserHostSession::new(8, 0, source.clone());
+
+        assert!(replacement.snapshot_json().unwrap().contains(
+            r#""instance_epoch":"8","sequence":"0","browser":{"rectangle_source":{"scope_ref":"catalog-scope-2","item_id":"rectangle"}}"#
+        ));
+        assert!(matches!(
+            replacement.accept(&message("7", "1")),
+            Err(BrowserHostError::StaleInstance)
+        ));
+        replacement.accept(&message("8", "1")).unwrap();
+        assert_eq!(replacement.pop(), Some(source));
+    }
 }

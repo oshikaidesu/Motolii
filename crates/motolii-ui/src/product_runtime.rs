@@ -10,7 +10,9 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy}
 use winit::window::Window;
 
 use crate::browser_host::BrowserPlaceIntent;
-use crate::browser_host_runtime::{BrowserHostRuntime, BrowserHostRuntimeError};
+use crate::browser_host_runtime::{
+    BrowserFocusTarget, BrowserHostRuntime, BrowserHostRuntimeError, BrowserLifecycleEvent,
+};
 use crate::document_edit_runtime::DocumentEditRuntime;
 use crate::host_pointer_capture::HostPointerCandidate;
 use crate::native_host_layout::{NativeHostLayout, PhysicalRect};
@@ -19,6 +21,7 @@ use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, Stati
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ProductEvent {
     Wake,
+    BrowserLifecycle(BrowserLifecycleEvent),
 }
 
 pub(crate) fn run(document_runtime: DocumentEditRuntime) -> Result<(), ProductRuntimeError> {
@@ -58,6 +61,9 @@ pub(crate) struct ProductApp {
     proxy: EventLoopProxy<ProductEvent>,
     layout: Option<NativeHostLayout>,
     next_layout_epoch: u64,
+    browser_source: Option<BrowserPlaceIntent>,
+    browser_lifecycle: Option<BrowserLifecycleCoordinator>,
+    browser_focus_target: BrowserFocusTarget,
     active_place: Option<BrowserPlaceIntent>,
     pending_stage_drop: Option<PendingStageDrop>,
     surface_retry_at: Option<Instant>,
@@ -91,6 +97,9 @@ impl ProductApp {
             proxy,
             layout: None,
             next_layout_epoch: 1,
+            browser_source: None,
+            browser_lifecycle: None,
+            browser_focus_target: BrowserFocusTarget::Browser,
             active_place: None,
             pending_stage_drop: None,
             surface_retry_at: None,
@@ -117,13 +126,16 @@ impl ProductApp {
             .take()
             .ok_or(ProductRuntimeError::AlreadyInitialized)?;
         let gfx = ProductSurface::new(&window, parts, &self.gpu, &self.preview)?;
-        let wake_proxy = self.proxy.clone();
-        let browser = BrowserHostRuntime::new(
+        let initial_instance_epoch = BrowserHostRuntime::fresh_instance_epoch()?;
+        let browser_source = BrowserHostRuntime::built_in_rectangle_source(initial_instance_epoch);
+        let browser = build_browser_runtime(
             &window,
-            Arc::new(move || {
-                let _ = wake_proxy.send_event(ProductEvent::Wake);
-            }),
+            initial_instance_epoch,
+            browser_source.clone(),
+            self.proxy.clone(),
         )?;
+        self.browser_lifecycle = Some(BrowserLifecycleCoordinator::new(initial_instance_epoch)?);
+        self.browser_source = Some(browser_source);
         self.window = Some(window);
         self.browser = Some(browser);
         self.gfx = Some(gfx);
@@ -171,12 +183,19 @@ impl ProductApp {
         let Some(browser) = &self.browser else {
             return;
         };
-        if let Err(error) = browser.ensure_initial_focus() {
+        if let Err(error) = browser.ensure_focus(self.browser_focus_target) {
             return self.fail(event_loop, error);
         }
         if self.active_place.is_none() {
             match browser.take_place_intent() {
-                Ok(intent) => self.active_place = intent,
+                Ok(Some(intent)) => {
+                    self.browser_focus_target = BrowserFocusTarget::Parent;
+                    if let Err(error) = browser.ensure_focus(self.browser_focus_target) {
+                        return self.fail(event_loop, error);
+                    }
+                    self.active_place = Some(intent);
+                }
+                Ok(None) => {}
                 Err(error) => return self.fail(event_loop, error),
             }
         }
@@ -218,6 +237,71 @@ impl ProductApp {
         if let Some(drop) = &self.pending_stage_drop {
             let _ = (&drop.source, drop.generation, drop.layout_epoch, drop.ndc);
         }
+    }
+
+    pub(crate) fn handle_product_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        event: ProductEvent,
+    ) {
+        match event {
+            ProductEvent::Wake => self.request_redraw(),
+            ProductEvent::BrowserLifecycle(event) => {
+                if let Err(error) = self.handle_browser_lifecycle(event) {
+                    self.fail(event_loop, error);
+                }
+            }
+        }
+    }
+
+    fn handle_browser_lifecycle(
+        &mut self,
+        event: BrowserLifecycleEvent,
+    ) -> Result<(), ProductRuntimeError> {
+        let Some(active_epoch) = self
+            .browser
+            .as_ref()
+            .map(BrowserHostRuntime::instance_epoch)
+            .transpose()?
+        else {
+            return Ok(());
+        };
+        let decision = self
+            .browser_lifecycle
+            .as_mut()
+            .ok_or(ProductRuntimeError::BrowserLifecycleUnavailable)?
+            .observe(active_epoch, event)?;
+        match decision {
+            BrowserRecoveryDecision::Ignore => Ok(()),
+            BrowserRecoveryDecision::Replace { instance_epoch } => {
+                self.replace_browser(instance_epoch)
+            }
+            BrowserRecoveryDecision::Degrade => {
+                self.active_place = None;
+                self.browser.take();
+                Ok(())
+            }
+        }
+    }
+
+    fn replace_browser(&mut self, instance_epoch: u64) -> Result<(), ProductRuntimeError> {
+        let window = self
+            .window
+            .as_ref()
+            .ok_or(ProductRuntimeError::BrowserLifecycleUnavailable)?;
+        let source = self
+            .browser_source
+            .clone()
+            .ok_or(ProductRuntimeError::BrowserLifecycleUnavailable)?;
+        self.active_place = None;
+        self.browser.take();
+        let browser = build_browser_runtime(window, instance_epoch, source, self.proxy.clone())?;
+        if let Some(layout) = self.layout {
+            browser.set_bounds(layout.epoch, layout.browser)?;
+        }
+        self.browser = Some(browser);
+        self.request_redraw();
+        Ok(())
     }
 
     fn set_idle_control_flow(&self, event_loop: &ActiveEventLoop) {
@@ -288,6 +372,78 @@ impl ProductApp {
             Err(ProductSurfaceError::Skip) => {}
             Err(ProductSurfaceError::Fatal(reason)) => self.fail(event_loop, reason),
         }
+    }
+}
+
+fn build_browser_runtime(
+    window: &Window,
+    instance_epoch: u64,
+    source: BrowserPlaceIntent,
+    proxy: EventLoopProxy<ProductEvent>,
+) -> Result<BrowserHostRuntime, BrowserHostRuntimeError> {
+    let wake_proxy = proxy.clone();
+    let lifecycle_proxy = proxy;
+    BrowserHostRuntime::new(
+        window,
+        instance_epoch,
+        source,
+        Arc::new(move || {
+            let _ = wake_proxy.send_event(ProductEvent::Wake);
+        }),
+        Arc::new(move |event| {
+            let _ = lifecycle_proxy.send_event(ProductEvent::BrowserLifecycle(event));
+        }),
+    )
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BrowserRecoveryDecision {
+    Ignore,
+    Replace { instance_epoch: u64 },
+    Degrade,
+}
+
+#[derive(Debug)]
+struct BrowserLifecycleCoordinator {
+    next_instance_epoch: u64,
+    automatic_process_recovery_used: bool,
+    degraded: bool,
+}
+
+impl BrowserLifecycleCoordinator {
+    fn new(initial_instance_epoch: u64) -> Result<Self, ProductRuntimeError> {
+        Ok(Self {
+            next_instance_epoch: initial_instance_epoch
+                .checked_add(1)
+                .ok_or(ProductRuntimeError::BrowserInstanceEpochExhausted)?,
+            automatic_process_recovery_used: false,
+            degraded: false,
+        })
+    }
+
+    fn observe(
+        &mut self,
+        active_epoch: u64,
+        event: BrowserLifecycleEvent,
+    ) -> Result<BrowserRecoveryDecision, ProductRuntimeError> {
+        if self.degraded || event.instance_epoch() != active_epoch {
+            return Ok(BrowserRecoveryDecision::Ignore);
+        }
+        if matches!(event, BrowserLifecycleEvent::ProcessTerminated { .. })
+            && self.automatic_process_recovery_used
+        {
+            self.degraded = true;
+            return Ok(BrowserRecoveryDecision::Degrade);
+        }
+        if matches!(event, BrowserLifecycleEvent::ProcessTerminated { .. }) {
+            self.automatic_process_recovery_used = true;
+        }
+        let instance_epoch = self.next_instance_epoch;
+        self.next_instance_epoch = self
+            .next_instance_epoch
+            .checked_add(1)
+            .ok_or(ProductRuntimeError::BrowserInstanceEpochExhausted)?;
+        Ok(BrowserRecoveryDecision::Replace { instance_epoch })
     }
 }
 
@@ -620,6 +776,89 @@ pub(crate) enum ProductRuntimeError {
     AlreadyInitialized,
     #[error("native product layout epoch is exhausted")]
     LayoutEpochExhausted,
+    #[error("Browser instance epoch is exhausted")]
+    BrowserInstanceEpochExhausted,
+    #[error("Browser lifecycle coordinator is unavailable")]
+    BrowserLifecycleUnavailable,
     #[error("native product runtime failed: {0}")]
     Runtime(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lifecycle_replaces_with_new_epochs_and_ignores_old_callbacks() {
+        let mut lifecycle = BrowserLifecycleCoordinator::new(7).unwrap();
+
+        assert_eq!(
+            lifecycle
+                .observe(
+                    7,
+                    BrowserLifecycleEvent::ReloadStarted { instance_epoch: 7 }
+                )
+                .unwrap(),
+            BrowserRecoveryDecision::Replace { instance_epoch: 8 }
+        );
+        assert_eq!(
+            lifecycle
+                .observe(
+                    8,
+                    BrowserLifecycleEvent::ReloadStarted { instance_epoch: 7 }
+                )
+                .unwrap(),
+            BrowserRecoveryDecision::Ignore
+        );
+        assert_eq!(
+            lifecycle
+                .observe(
+                    8,
+                    BrowserLifecycleEvent::ReloadStarted { instance_epoch: 8 }
+                )
+                .unwrap(),
+            BrowserRecoveryDecision::Replace { instance_epoch: 9 }
+        );
+    }
+
+    #[test]
+    fn automatic_process_recovery_is_bounded_to_one_replacement() {
+        let mut lifecycle = BrowserLifecycleCoordinator::new(10).unwrap();
+
+        assert_eq!(
+            lifecycle
+                .observe(
+                    10,
+                    BrowserLifecycleEvent::ProcessTerminated { instance_epoch: 10 }
+                )
+                .unwrap(),
+            BrowserRecoveryDecision::Replace { instance_epoch: 11 }
+        );
+        assert_eq!(
+            lifecycle
+                .observe(
+                    11,
+                    BrowserLifecycleEvent::ProcessTerminated { instance_epoch: 11 }
+                )
+                .unwrap(),
+            BrowserRecoveryDecision::Degrade
+        );
+        assert_eq!(
+            lifecycle
+                .observe(
+                    11,
+                    BrowserLifecycleEvent::ReloadStarted { instance_epoch: 11 }
+                )
+                .unwrap(),
+            BrowserRecoveryDecision::Ignore
+        );
+    }
+
+    #[test]
+    fn lifecycle_epoch_exhaustion_is_typed() {
+        assert!(matches!(
+            BrowserLifecycleCoordinator::new(u64::MAX),
+            Err(ProductRuntimeError::BrowserInstanceEpochExhausted)
+        ));
+    }
 }

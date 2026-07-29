@@ -11,10 +11,10 @@ impl winit::application::ApplicationHandler<crate::product_runtime::ProductEvent
 
     fn user_event(
         &mut self,
-        _event_loop: &winit::event_loop::ActiveEventLoop,
-        _event: crate::product_runtime::ProductEvent,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        event: crate::product_runtime::ProductEvent,
     ) {
-        self.request_redraw();
+        self.handle_product_event(event_loop, event);
     }
 
     fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {

@@ -231,9 +231,13 @@ impl MotoliiApp {
                 .winit_window()
                 .ok_or(AppConstructionError::MissingNativeWindow)?;
             let wake_context = repaint_context.clone();
+            let instance_epoch = BrowserHostRuntime::fresh_instance_epoch()?;
             Some(BrowserHostRuntime::new(
                 window,
+                instance_epoch,
+                BrowserHostRuntime::built_in_rectangle_source(instance_epoch),
                 Arc::new(move || wake_context.request_repaint()),
+                Arc::new(|_| {}),
             )?)
         } else {
             None
