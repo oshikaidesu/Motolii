@@ -64,7 +64,7 @@ const MIRRORS = [
 
 const DO_TOKEN = /`(?:CORE \/ )?DO`/;
 const DONE_TOKEN = /`(?:CORE \/ )?DONE`/;
-const WAIT_TOKEN = /`(?:CORE \/ )?WAIT`/;
+const SPLIT_TOKEN = /`(?:CORE \/ )?SPLIT`/;
 
 function selectStaleBrowserDecoderLaneRows(ledgerText) {
   const laneSection = ledgerText.split("## 現在の並列レーン")[1]?.split("##")[0] ?? "";
@@ -1306,10 +1306,14 @@ test("docs DONE line per mirror", () => {
   }
 });
 
-test("docs CU-0A08BT WAIT per mirror", () => {
+test("docs parent CU-0A08BT SPLIT per mirror", () => {
   for (const rel of MIRRORS) {
     const lines = readFileSync(join(repoRoot, rel), "utf8").split("\n");
-    const hits = lines.filter((line) => line.includes("CU-0A08BT") && WAIT_TOKEN.test(line));
+    const hits = lines.filter(
+      (line) =>
+        /(?:`|\|\s*)CU-0A08BT(?:`|\s*\|)/.test(line) &&
+        SPLIT_TOKEN.test(line),
+    );
     assert.ok(hits.length >= 1, rel);
   }
 });
@@ -1343,5 +1347,5 @@ test("docs M3 spec A1 unique IS BP line", () => {
   const lines = readFileSync(join(repoRoot, "docs/specs/M3-ui-integration.md"), "utf8").split("\n");
   const both = lines.filter((line) => line.includes("CU-0A08IS") && line.includes("CU-0A08BP"));
   assert.equal(both.length, 1);
-  assert.equal(DO_TOKEN.test(both[0]), false);
+  assert.match(both[0], /`CU-0A08BP`は`DONE`/);
 });
