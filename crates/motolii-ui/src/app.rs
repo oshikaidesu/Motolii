@@ -708,10 +708,7 @@ impl MotoliiApp {
         self.document_queue
             .push_place_rectangle(PlaceRectangleRequest {
                 position,
-                playhead: self
-                    .render_request_template
-                    .evaluation_time
-                    .timeline_time,
+                playhead: self.render_request_template.evaluation_time.timeline_time,
             });
         self.repaint_context.request_repaint();
     }
@@ -952,9 +949,8 @@ fn canonical_drop_from_ndc(camera: CompCamera, ndc: [f64; 2]) -> Option<[f64; 2]
     if !ndc[0].is_finite() || !ndc[1].is_finite() {
         return None;
     }
-    let qx = ndc[0] * camera.aspect_num() as f64 / camera.aspect_den() as f64
-        * camera.height()
-        / 2.0;
+    let qx =
+        ndc[0] * camera.aspect_num() as f64 / camera.aspect_den() as f64 * camera.height() / 2.0;
     let qy = ndc[1] * camera.height() / 2.0;
     let cos_r = camera.roll_radians().cos();
     let sin_r = camera.roll_radians().sin();
@@ -1233,14 +1229,8 @@ mod tests {
 
     #[test]
     fn stage_ndc_drop_roundtrips_through_the_displayed_camera() {
-        let camera = CompCamera::try_new(
-            CanonicalPoint { x: 0.3, y: -0.1 },
-            0.4,
-            1.5,
-            16,
-            9,
-        )
-        .unwrap();
+        let camera =
+            CompCamera::try_new(CanonicalPoint { x: 0.3, y: -0.1 }, 0.4, 1.5, 16, 9).unwrap();
         let ndc = [0.25, -0.5];
         let position = canonical_drop_from_ndc(camera, ndc).expect("canonical position");
         let projected = camera

@@ -62,20 +62,15 @@ postMessage:(message)=>window.ipc.postMessage(message)
             .with_ipc_handler(move |request| {
                 let raw = request.body();
                 match callback_session.lock() {
-                    Ok(mut session) => {
-                        match session.accept(raw) {
-                            Ok(()) => repaint_context.request_repaint(),
-                            Err(error) => eprintln!("Browser Host rejected message: {error}"),
-                        }
-                    }
+                    Ok(mut session) => match session.accept(raw) {
+                        Ok(()) => repaint_context.request_repaint(),
+                        Err(error) => eprintln!("Browser Host rejected message: {error}"),
+                    },
                     Err(_) => eprintln!("Browser Host inbox lock is poisoned"),
                 }
             })
             .build_as_child(window)?;
-        Ok(Self {
-            session,
-            webview,
-        })
+        Ok(Self { session, webview })
     }
 
     pub(crate) fn take_place_intent(

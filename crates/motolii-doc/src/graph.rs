@@ -18,7 +18,10 @@ use crate::eval_time::EvaluationTime;
 use crate::param_eval::{
     eval_color, eval_doc_param, eval_f64, eval_vec2, ParamEvalError, ResolvedLayerParams,
 };
-use crate::schema::{BlendMode, Clip, ClipSource, Group, ItemEnvelope, MaskMode, TrackItem};
+use crate::schema::{
+    BlendMode, Clip, ClipSource, Group, ItemEnvelope, MaskMode, StandardShape, TrackItem,
+    VectorContent, VectorRecipe,
+};
 use crate::spatial_resolve::resolve_document_spaces;
 use crate::{
     AssetId, Document, DocumentPluginError, LayerId, PluginDiagnostic, PluginDiagnosticReason,
@@ -77,7 +80,7 @@ pub enum GraphError {
     PluginDiagnostics(Vec<PluginDiagnostic>),
     #[error("unsupported clip source plugin: {0}")]
     UnsupportedSourcePlugin(String),
-    #[error("VectorRecipe clip is not rasterized in D3 v1 (layer {0}); use Plugin rect or Asset")]
+    #[error("unsupported VectorRecipe source in D3 v1 (layer {0})")]
     UnsupportedVectorSource(u64),
     #[error("rect layer source missing param `{param}` (layer {layer})")]
     MissingRectParam { layer: u64, param: &'static str },
@@ -476,7 +479,7 @@ impl<'a> GraphBuilder<'a> {
             }
             // audio-only: visual graphへ参加しない(AG-1)。
             ClipSource::Asset { video: None, .. } => Ok(self.transparent()),
-            ClipSource::Vector { .. } => Err(GraphError::UnsupportedVectorSource(layer.get())),
+            ClipSource::Vector { recipe } => self.build_vector_source(recipe, layer),
             ClipSource::Plugin {
                 plugin_id, params, ..
             } if plugin_id == RECT_LAYER_SOURCE => self.build_rect_overlay(params, layer),
@@ -508,6 +511,41 @@ impl<'a> GraphBuilder<'a> {
                 Ok(out)
             }
         }
+    }
+
+    fn build_vector_source(
+        &mut self,
+        recipe: &VectorRecipe,
+        layer: LayerId,
+    ) -> Result<TextureId, GraphError> {
+        let VectorContent::StandardShape {
+            shape: StandardShape::Rect { width, height },
+        } = &recipe.content
+        else {
+            return Err(GraphError::UnsupportedVectorSource(layer.get()));
+        };
+        if !recipe.modifiers.is_empty() {
+            return Err(GraphError::UnsupportedVectorSource(layer.get()));
+        }
+        let pe = |source| GraphError::ParamEval {
+            layer: layer.get(),
+            source,
+        };
+        let width = eval_f64(
+            width,
+            self.timeline_time,
+            self.tracks,
+            &self.resolved_layers,
+        )
+        .map_err(pe)?;
+        let height = eval_f64(
+            height,
+            self.timeline_time,
+            self.tracks,
+            &self.resolved_layers,
+        )
+        .map_err(pe)?;
+        Ok(self.push_rect_overlay([0.0, 0.0], [width, height], [1.0, 1.0, 1.0, 1.0]))
     }
 
     fn build_rect_overlay(
@@ -553,6 +591,15 @@ impl<'a> GraphBuilder<'a> {
             &self.resolved_layers,
         )
         .map_err(pe)?;
+        Ok(self.push_rect_overlay(center, size, color))
+    }
+
+    fn push_rect_overlay(
+        &mut self,
+        center: [f64; 2],
+        size: [f64; 2],
+        color: [f64; 4],
+    ) -> TextureId {
         let pre = self.transparent();
         let out = self.alloc_id();
         self.steps.push(RenderStep::OverlayRect {
@@ -567,15 +614,10 @@ impl<'a> GraphBuilder<'a> {
                     width: size[0],
                     height: size[1],
                 },
-                color: [
-                    color[0] as f32,
-                    color[1] as f32,
-                    color[2] as f32,
-                    color[3] as f32,
-                ],
+                color: color.map(|channel| channel as f32),
             },
         });
-        Ok(out)
+        out
     }
 
     /// 決定§2: center=0, roll=0, height=1 の bit 一致。approx skip はこのときだけ。

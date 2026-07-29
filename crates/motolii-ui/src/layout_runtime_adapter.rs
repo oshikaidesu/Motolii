@@ -20,7 +20,8 @@ pub(crate) fn read_stage_drop_terminal(
                 event,
                 egui::Event::PointerGone | egui::Event::WindowFocused(false)
             )
-        }) || (ime_gate == ImeGateState::Inactive && input.key_pressed(egui::Key::Escape));
+        }) || (ime_gate == ImeGateState::Inactive
+            && input.key_pressed(egui::Key::Escape));
         let released_at = input.events.iter().rev().find_map(|event| match event {
             egui::Event::PointerButton {
                 pos,
@@ -29,12 +30,7 @@ pub(crate) fn read_stage_drop_terminal(
             } => Some(*pos),
             _ => None,
         });
-        resolve_stage_drop_terminal(
-            stage_rect,
-            released_at,
-            released_at.is_some(),
-            interrupted,
-        )
+        resolve_stage_drop_terminal(stage_rect, released_at, released_at.is_some(), interrupted)
     })
 }
 
