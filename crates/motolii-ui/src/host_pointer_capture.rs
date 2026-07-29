@@ -263,9 +263,10 @@ fn mac_history_trigger(event: &objc2_app_kit::NSEvent) -> Option<EffectiveTrigge
         return None;
     }
     let flags = event.modifierFlags();
+    let characters = event.charactersIgnoringModifiers()?.to_string();
     if !flags.contains(NSEventModifierFlags::Command)
         || flags.intersects(NSEventModifierFlags::Control | NSEventModifierFlags::Option)
-        || event.charactersIgnoringModifiers()?.to_string() != "z"
+        || !is_history_character(&characters)
     {
         return None;
     }
@@ -285,6 +286,11 @@ fn mac_history_trigger(event: &objc2_app_kit::NSEvent) -> Option<EffectiveTrigge
         modifiers,
         phase: InputPhase::Press,
     })
+}
+
+#[cfg(target_os = "macos")]
+fn is_history_character(characters: &str) -> bool {
+    characters.eq_ignore_ascii_case("z")
 }
 
 #[cfg(target_os = "macos")]
@@ -445,5 +451,14 @@ mod tests {
                 position: [120.0, 64.0]
             })
         );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn shifted_history_key_remains_the_same_physical_shortcut() {
+        assert!(is_history_character("z"));
+        assert!(is_history_character("Z"));
+        assert!(!is_history_character("x"));
+        assert!(!is_history_character("zz"));
     }
 }

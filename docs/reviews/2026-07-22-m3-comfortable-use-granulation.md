@@ -306,7 +306,7 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-104 | `SPEC / DONE` | U2h selection publish/Undo/Redo policyを決定 | CU-G02/03 | Document snapshotと整合したTransient selection envelope。owner・visibility・`projection_generation`更新条件・Apply/Undo/Redo後publish前reconcile時点だけをdocsで閉じる。決定証拠: [CU-104 selection publish envelope決定](2026-07-27-cu-104-selection-publish-envelope-decision.md) | selectionをDocument/journal/Undoへ保存、またはU2h-1/CU-109/CU-110/CU-111/consumer実装を束ねたくなる |
 | CU-105 | `CORE / SPLIT` | [CU-105責任再確認](2026-07-27-cu-105-dense-timeline-responsibility-recheck.md)でU3a-1I成立済み責任と後続を分離 | 既存U3a | layout/cull/hit-test=`PASS`、1k/100k=`REDUCE` capacity evidence、semantic zoom=U3a-2 `STOP`、selection/playhead/range=CU-106-family `STOP` | React Timeline、DOM identity、重複fixture/bench、絶対CI閾値が必要 |
 | CU-106 | `CORE / SPLIT` | [CU-106 selection consumer分割決定](2026-07-27-cu-106-selection-consumer-split-decision.md)でprimary selection consumerとessential focusを分離 | CU-104 + CU-105Rのselection handoff | CU-106P/Fへ配送し、親名でclosed orderを作らない | surface別selection store、lint抑制、dummy callerが必要 |
-| CU-106P | `CORE / DO` | U2h-1P P5 producerと実在するprimary selection consumerを同じ差分で成立 | U3a-2入場範囲決定 + CU-110PT non-test Timeline caller | native Timeline pointer入力、存在拒否→no-op→枯渇preflight、publish/generation負例 | public intent、smoke、test-only callerが必要 |
+| CU-106P | `CORE / DONE` | U2h-1P P5 producerと実在するprimary selection consumerを同じ差分で成立 | U3a-2入場範囲決定 + CU-110PT non-test Timeline caller | [実装決定](2026-07-30-cu-106p-native-timeline-primary-selection-implementation-decision.md)。native Timeline click→typed hit→primary publish→Inspector | — |
 | CU-106F | `CORE / WAIT` | essential focusをprimary selection / hoverと分離 | 実consumer surface + U3a-2 / Host focus owner | focus移譲とownerを一つにし、三surface/hidden/additiveを束ねない | surface別focus正本、未決input意味が必要 |
 | CU-107 | `CORE / DONE` | drag epoch/sequence/dedupe coordinatorを製品Hostへ接続 | 既存D&D spike、CU-0B05 | [親閉鎖決定](2026-07-29-cu-107-place-coordinator-parent-closure-decision.md)。4前提PV→TC→AD→TD完了、Browser intent→PendingStageDrop到達 | — |
 | CU-107PV | `CORE / DONE` | 非空虚なpreview phaseが存在し、preview配送がterminalを生じさせずに完結すること | `CU-107`経由の既存D&D spike、`CU-0B05` | [実装決定](2026-07-29-cu-107pv-place-preview-delivery-implementation-decision.md)。production Moved→private Host Transient progress、redraw/poll、terminal/D2 0 | — |
@@ -323,7 +323,7 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-110PIR | `PRODUCT / DONE` | InspectorCandidate内のsafe read-only target branch | CU-110PI | [実装決定](2026-07-29-cu-110pir-inspector-safe-read-only-branch-implementation-decision.md)。target 3 fieldだけ、94 guard + 8 parity | — |
 | CU-110PIH | `PRODUCT / DONE` | right Inspector WebViewへcurrent Document / primaryを投影 | CU-110PIR | [実装決定](2026-07-30-cu-110pih-inspector-host-island-projection-implementation-decision.md)。実Mac Rectangle / Clip、offline second child | — |
 | CU-111 | `PRODUCT / DONE` | Undo/Redo製品CommandIdとsingle-writer配送を接続 | CU-109、U0c/U2b | [実装決定](2026-07-30-cu-111-product-undo-redo-implementation-decision.md)。stable CommandId→既存resolver/router→journal-first single writer→三面再投影 | — |
-| CU-108 | `E2E / WAIT` | Rectangleを三面へ投影しUndo/Redoする | CU-103/106/110/111、CU-0B05 | 同じrevision/LayerId、Undoで三面から消えRedoで同ID復帰 | diagnostic/fixture-only rectしか表示できない |
+| CU-108 | `E2E / DONE` | Rectangleを三面へ投影しUndo/Redoする | CU-103/106/110/111、CU-0B05 | [E2E決定](2026-07-30-cu-108-rectangle-product-spine-e2e-decision.md)。実Mac通常製品route、journal Add/Remove/Addは同じLayerId 2、CU-104 Redo selection非復元 | — |
 
 ## 9. W2 制作ループ
 

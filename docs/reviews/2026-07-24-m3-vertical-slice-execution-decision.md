@@ -114,9 +114,10 @@ VS-1には、実装orderより先に閉じる判断と順序改訂がある。�
 
 各行の長文セルに残る「次PRODUCT-ASSET `DO`は未選定」等は、その子粒完了時点の
 handoff履歴であり現在選定ではない。本表の現行選定はSelected U series行と
-[implementation ledger](../implementation-ledger.md)を正とし、`CU-108`
-だけを次PRODUCT-ASSET `DO`とする。`CU-110PIR`と`CU-110PIH`はInspector通常製品接続を閉じ、
-`CU-106P`はnative Timeline selection、`CU-111`は製品Undo/Redo配送を閉じた。
+[implementation ledger](../implementation-ledger.md)を正とし、[CU-108 E2E決定](2026-07-30-cu-108-rectangle-product-spine-e2e-decision.md)で
+VS-1と通常製品spineを`DONE`とした。`CU-110PIR`と`CU-110PIH`はInspector通常製品接続、
+`CU-106P`はnative Timeline selection、`CU-111`は製品Undo/Redo配送を閉じ、
+実MacPlace→三面→Undo→Redoまで完走した。次PRODUCT-ASSET `DO`は未選定。
 `CU-110P`はStage / Timeline / Inspector投影へ
 分割済みで、順序は`CU-110PS → CU-110PT → CU-110PI → CU-106P → CU-111 → CU-108`。
 token後続`CU-0B02R/N/C/I`は`WAIT`、
