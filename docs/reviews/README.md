@@ -232,6 +232,11 @@
 | [2026-07-29-m5-render-contribution-boundary-comparison-v2.md](2026-07-29-m5-render-contribution-boundary-comparison-v2.md) | 停止したP2D-RCA2登録template。Spark差分はGrok有効判定なしで不採用 |
 | [2026-07-29-m5-rerun-render-contribution-evidence-v2.md](2026-07-29-m5-rerun-render-contribution-evidence-v2.md) | 停止したP2D-RCB2登録template。Spark差分はGrok P0=1/P1=1で不採用 |
 | [2026-07-29-m5-render-phase-fixture-comparison-v2.md](2026-07-29-m5-render-phase-fixture-comparison-v2.md) | 停止したP2D-RCC2登録template。Spark差分はGrok P0=0/P1=5/P2=2で不採用 |
+| [2026-07-29-m5-render-contribution-boundary-facts-v3.md](2026-07-29-m5-render-contribution-boundary-facts-v3.md) | P2D-RCA3の固定6行境界比較template。転記欄だけを変更する |
+| [2026-07-29-m5-rerun-observation-transcription-v3.md](2026-07-29-m5-rerun-observation-transcription-v3.md) | P2D-RCB3の固定A1〜A6×5 field転記template。fixture対応を分離する |
+| [2026-07-29-m5-bevy-observation-transcription-v3.md](2026-07-29-m5-bevy-observation-transcription-v3.md) | P2D-RCC3-BEVYのprovider別固定観察転記template |
+| [2026-07-29-m5-godot-observation-transcription-v3.md](2026-07-29-m5-godot-observation-transcription-v3.md) | P2D-RCC3-GODOTのprovider別固定観察転記template |
+| [2026-07-29-m5-unreal-observation-transcription-v3.md](2026-07-29-m5-unreal-observation-transcription-v3.md) | P2D-RCC3-UNREALのprovider別固定観察転記template |
 | [2026-07-29-restartable-supervised-order-loop-decision.md](2026-07-29-restartable-supervised-order-loop-decision.md) | Codex-owned machine block、Opus施工本文、parent-owned outcome、terminal verdict、availability限定resumeを固定するGR-D4決定 |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |

@@ -229,7 +229,7 @@ Motoliiへは方式や内部型でなく、次のfixture候補へ翻訳する。
 
 ## 8. 後続統合
 
-2026-07-29、次の三grainを登録した。三つは同じbase commitから並列dispatchでき、変更pathは交差しない。
+2026-07-29、最初の三grainを登録した。三つは同じbase commitから並列dispatchでき、変更pathは交差しない。
 
 | grain | 単一動詞 | read-only入力 | 変更許可 | 実行結果 |
 |---|---|---|---|---|
@@ -250,12 +250,24 @@ Motoliiへは方式や内部型でなく、次のfixture候補へ翻訳する。
 - 公開trait、Document schema、plugin契約、Vism/package形式を一つのdecisionで同時に決める必要がある。
 - First Vismのconformance役割と製品／配布意味が分離できていない。
 
+§10の共通負債を解消した後継は次の5 grainとする。固定template自体は主担当Codexが所有し、leafは
+各fileの`転記欄`だけを変更する。RCA3、RCB3、RCC3三providerは同じbaseから並列dispatchできる。
+三providerの横断比較は全RCC3が完了した後の`P2D-RCC4`へ直列化し、ここでは未登録とする。
+
+| grain | 単一動詞 | read-only入力 | 変更許可 | 状態 |
+|---|---|---|---|---|
+| `P2D-RCA3` | 比較 | 本書§2〜§3、§5と元authority | `2026-07-29-m5-render-contribution-boundary-facts-v3.md`の転記欄だけ | 登録済み |
+| `P2D-RCB3` | 転記 | 本書§2〜§3、§6、Rerun三capsule、転移裁定 | `2026-07-29-m5-rerun-observation-transcription-v3.md`の転記欄だけ | 登録済み |
+| `P2D-RCC3-BEVY` | 転記 | 本書§7、Bevy capsule | `2026-07-29-m5-bevy-observation-transcription-v3.md`の転記欄だけ | 登録済み |
+| `P2D-RCC3-GODOT` | 転記 | 本書§7、Godot capsule | `2026-07-29-m5-godot-observation-transcription-v3.md`の転記欄だけ | 登録済み |
+| `P2D-RCC3-UNREAL` | 転記 | 本書§7、Unreal capsule | `2026-07-29-m5-unreal-observation-transcription-v3.md`の転記欄だけ | 登録済み |
+
 ## 10. 再投入前の共通負債
 
 2026-07-29の並列一周では、三orderとも最初のCodex precheckで不備を検出した。主担当Codexが
 Opusを再起動せずorder案を機械修正し、同じ一周のSpark／Grokへ進めたが、採用差分は0件だった。
 
-次の後継IDを登録する前に、次を満たす。
+後継IDの登録前に、次を満たす。
 
 1. 非証明文に含まれる「採用する根拠にしない」のような否定文を、単語の存在だけで違反にする
    生文字列oracleを使わない。検査は変更節、field構造、裁定値、意味上の正負例へ限定する。
@@ -267,6 +279,9 @@ Opusを再起動せずorder案を機械修正し、同じ一周のSpark／Grok�
    [再開可能な監督発注loop](2026-07-29-restartable-supervised-order-loop-decision.md)のcheckpointから
    Sparkなしで最大3回まで再開する。stdoutが1 byte以上あるmarker不正、`REJECT`、`ACCEPT`はterminalで、
    同一差分を再検収しない。別model fallbackを行わず、terminal後は新ID／新order／新証跡で登録する。
+
+上記1〜4は、固定field template、provider別file、runner `manifest`／terminal outcome／checkpoint再開として
+commit `3f384d6e`までに成立した。これを根拠に§8のRCA3/RCB3/RCC3三providerだけを登録する。
 
 今回の失敗はRender Contribution公開契約を決める根拠ではない。共通Host境界、Rerun転移裁定、
 六capsuleは有効なread-only基盤として維持する。
