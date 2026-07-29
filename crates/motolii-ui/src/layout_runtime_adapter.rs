@@ -1,4 +1,4 @@
-//! U1a-2で仕様許可された単一のraw toolkit input adapter。
+//! U1a-2で仕様許可されたegui layout/input adapter。
 
 use crate::input_router::{ImeGateState, SafetyInterrupt};
 use crate::layout::{SeparatorAction, SplitAxis};

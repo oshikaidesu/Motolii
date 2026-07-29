@@ -11,6 +11,7 @@ use crate::browser_host::{BrowserHostSession, BrowserPlaceIntent};
 use crate::host_pointer_capture::{
     HostPointerCandidate, PlatformPointerCapture, PlatformPointerCaptureError,
 };
+use crate::native_host_layout::LogicalRect;
 
 const PROTOCOL: &str = "motolii-browser";
 const ENTRY_URL: &str = "motolii-browser://product/host.html";
@@ -29,7 +30,7 @@ pub(crate) struct BrowserHostRuntime {
 impl BrowserHostRuntime {
     pub(crate) fn new(
         window: &winit::window::Window,
-        repaint_context: egui::Context,
+        wake: Arc<dyn Fn() + Send + Sync>,
     ) -> Result<Self, BrowserHostRuntimeError> {
         let elapsed = SystemTime::now().duration_since(UNIX_EPOCH)?;
         let epoch = u64::try_from(elapsed.as_millis())
@@ -67,7 +68,7 @@ postMessage:(message)=>window.ipc.postMessage(message)
                 let raw = request.body();
                 match callback_session.lock() {
                     Ok(mut session) => match session.accept(raw) {
-                        Ok(()) => repaint_context.request_repaint(),
+                        Ok(()) => wake(),
                         Err(error) => eprintln!("Browser Host rejected message: {error}"),
                     },
                     Err(_) => eprintln!("Browser Host inbox lock is poisoned"),
@@ -109,12 +110,17 @@ postMessage:(message)=>window.ipc.postMessage(message)
             .map_err(Into::into)
     }
 
-    pub(crate) fn set_bounds(&self, rect: egui::Rect) -> Result<(), BrowserHostRuntimeError> {
+    pub(crate) fn pointer_capture_is_active(&self) -> Result<bool, BrowserHostRuntimeError> {
+        self.pointer_capture
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::PointerCapturePoisoned)
+            .map(|capture| capture.is_active())
+    }
+
+    pub(crate) fn set_bounds(&self, rect: LogicalRect) -> Result<(), BrowserHostRuntimeError> {
         self.webview.set_bounds(Rect {
-            position: wry::dpi::LogicalPosition::new(f64::from(rect.left()), f64::from(rect.top()))
-                .into(),
-            size: wry::dpi::LogicalSize::new(f64::from(rect.width()), f64::from(rect.height()))
-                .into(),
+            position: wry::dpi::LogicalPosition::new(rect.x, rect.y).into(),
+            size: wry::dpi::LogicalSize::new(rect.width, rect.height).into(),
         })?;
         Ok(())
     }

@@ -68,6 +68,11 @@ pub fn run_shell_with_project(project_path: &Path) -> Result<(), ShellError> {
         .is_some()
         .then(|| bootstrap_delete_request(runtime.snapshot().as_ref()))
         .transpose()?;
+    #[cfg(target_os = "macos")]
+    if document_edit_request.is_none() {
+        return crate::product_runtime::run(runtime)
+            .map_err(|error| ShellError::Runtime(Box::new(error)));
+    }
     let document = runtime.snapshot();
     run_shell_inner(document, Some(runtime), document_edit_request, false, false)
 }

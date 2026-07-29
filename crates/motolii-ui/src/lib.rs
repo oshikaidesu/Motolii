@@ -20,6 +20,11 @@ mod layout;
 mod layout_authority;
 mod layout_runtime;
 mod layout_runtime_adapter;
+mod native_host_layout;
+#[cfg(target_os = "macos")]
+mod product_runtime;
+#[cfg(target_os = "macos")]
+mod product_runtime_adapter;
 mod render_worker;
 mod shell;
 mod state_ownership;

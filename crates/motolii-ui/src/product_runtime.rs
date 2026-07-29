@@ -1,0 +1,622 @@
+//! macOS通常project sessionのdirect native Surface Host。
+
+use std::borrow::Cow;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use motolii_gpu::GpuCtx;
+use winit::dpi::LogicalSize;
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
+use winit::window::Window;
+
+use crate::browser_host::BrowserPlaceIntent;
+use crate::browser_host_runtime::{BrowserHostRuntime, BrowserHostRuntimeError};
+use crate::document_edit_runtime::DocumentEditRuntime;
+use crate::host_pointer_capture::HostPointerCandidate;
+use crate::native_host_layout::{NativeHostLayout, PhysicalRect};
+use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum ProductEvent {
+    Wake,
+}
+
+pub(crate) fn run(document_runtime: DocumentEditRuntime) -> Result<(), ProductRuntimeError> {
+    let document = document_runtime.snapshot();
+    let (gpu, parts) = GpuCtx::new_for_ui()?;
+    let parts = ProductGpuParts {
+        instance: parts.instance,
+        adapter: parts.adapter,
+        device: parts.device,
+    };
+    let gpu = Arc::new(gpu);
+    let preview = Arc::new(prepare_in_setup_worker(
+        Arc::clone(&gpu),
+        document,
+        bootstrap_frame_desc()?,
+    )?);
+    let event_loop = EventLoop::<ProductEvent>::with_user_event().build()?;
+    event_loop.set_control_flow(ControlFlow::Wait);
+    let proxy = event_loop.create_proxy();
+    let mut app = ProductApp::new(gpu, parts, preview, document_runtime, proxy);
+    event_loop.run_app(&mut app)?;
+    if let Some(error) = app.failure {
+        return Err(ProductRuntimeError::Runtime(error));
+    }
+    Ok(())
+}
+
+pub(crate) struct ProductApp {
+    // surface → WebView → Windowの順にdropし、AppKit backingを先に失わない。
+    gfx: Option<ProductSurface>,
+    browser: Option<BrowserHostRuntime>,
+    window: Option<Arc<Window>>,
+    gpu: Arc<GpuCtx>,
+    parts: Option<ProductGpuParts>,
+    preview: Arc<StaticPreview>,
+    _document_runtime: DocumentEditRuntime,
+    proxy: EventLoopProxy<ProductEvent>,
+    layout: Option<NativeHostLayout>,
+    next_layout_epoch: u64,
+    active_place: Option<BrowserPlaceIntent>,
+    pending_stage_drop: Option<PendingStageDrop>,
+    surface_retry_at: Option<Instant>,
+    failure: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct PendingStageDrop {
+    source: BrowserPlaceIntent,
+    generation: u64,
+    layout_epoch: u64,
+    ndc: [f64; 2],
+}
+
+impl ProductApp {
+    fn new(
+        gpu: Arc<GpuCtx>,
+        parts: ProductGpuParts,
+        preview: Arc<StaticPreview>,
+        document_runtime: DocumentEditRuntime,
+        proxy: EventLoopProxy<ProductEvent>,
+    ) -> Self {
+        Self {
+            gfx: None,
+            browser: None,
+            window: None,
+            gpu,
+            parts: Some(parts),
+            preview,
+            _document_runtime: document_runtime,
+            proxy,
+            layout: None,
+            next_layout_epoch: 1,
+            active_place: None,
+            pending_stage_drop: None,
+            surface_retry_at: None,
+            failure: None,
+        }
+    }
+
+    pub(crate) fn initialize(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+    ) -> Result<(), ProductRuntimeError> {
+        let window = Arc::new(
+            event_loop.create_window(
+                Window::default_attributes()
+                    .with_title("Motolii")
+                    .with_inner_size(LogicalSize::new(1200.0, 800.0))
+                    .with_visible(false),
+            )?,
+        );
+        // Metal sublayerをon-screenのcontent viewへ結び付けてからSurfaceを作る。
+        window.set_visible(true);
+        let parts = self
+            .parts
+            .take()
+            .ok_or(ProductRuntimeError::AlreadyInitialized)?;
+        let gfx = ProductSurface::new(&window, parts, &self.gpu, &self.preview)?;
+        let wake_proxy = self.proxy.clone();
+        let browser = BrowserHostRuntime::new(
+            &window,
+            Arc::new(move || {
+                let _ = wake_proxy.send_event(ProductEvent::Wake);
+            }),
+        )?;
+        self.window = Some(window);
+        self.browser = Some(browser);
+        self.gfx = Some(gfx);
+        self.update_layout()?;
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
+        Ok(())
+    }
+
+    pub(crate) fn update_layout(&mut self) -> Result<(), ProductRuntimeError> {
+        let Some(window) = &self.window else {
+            return Ok(());
+        };
+        let size = window.inner_size();
+        let Some(layout) = NativeHostLayout::try_new(
+            self.next_layout_epoch,
+            size.width,
+            size.height,
+            window.scale_factor(),
+            self.preview.slot().desc(),
+        ) else {
+            self.layout = None;
+            return Ok(());
+        };
+        self.next_layout_epoch = self
+            .next_layout_epoch
+            .checked_add(1)
+            .ok_or(ProductRuntimeError::LayoutEpochExhausted)?;
+        if let Some(browser) = &self.browser {
+            browser.set_bounds(layout.browser)?;
+        }
+        self.layout = Some(layout);
+        Ok(())
+    }
+
+    pub(crate) fn poll_browser(&mut self, event_loop: &ActiveEventLoop) {
+        if self
+            .surface_retry_at
+            .is_some_and(|retry_at| Instant::now() >= retry_at)
+        {
+            self.surface_retry_at = None;
+            self.request_redraw();
+        }
+        let Some(browser) = &self.browser else {
+            return;
+        };
+        if self.active_place.is_none() {
+            match browser.take_place_intent() {
+                Ok(intent) => self.active_place = intent,
+                Err(error) => return self.fail(event_loop, error),
+            }
+        }
+        if self.active_place.is_none() {
+            self.set_idle_control_flow(event_loop);
+            return;
+        }
+        match browser.poll_pointer_candidate() {
+            Ok(Some(HostPointerCandidate::Moved { .. })) => {
+                event_loop.set_control_flow(ControlFlow::Poll);
+            }
+            Ok(Some(HostPointerCandidate::Released {
+                generation,
+                position,
+            })) => {
+                if let (Some(source), Some(layout)) = (self.active_place.take(), self.layout) {
+                    if let Some(ndc) = layout.stage_ndc(position) {
+                        self.pending_stage_drop = Some(PendingStageDrop {
+                            source,
+                            generation,
+                            layout_epoch: layout.epoch,
+                            ndc,
+                        });
+                    }
+                }
+                self.set_idle_control_flow(event_loop);
+            }
+            Ok(Some(HostPointerCandidate::Cancelled { .. })) => {
+                self.active_place = None;
+                self.set_idle_control_flow(event_loop);
+            }
+            Ok(None) => match browser.pointer_capture_is_active() {
+                Ok(true) => event_loop.set_control_flow(ControlFlow::Poll),
+                Ok(false) => self.set_idle_control_flow(event_loop),
+                Err(error) => self.fail(event_loop, error),
+            },
+            Err(error) => self.fail(event_loop, error),
+        }
+        if let Some(drop) = &self.pending_stage_drop {
+            let _ = (&drop.source, drop.generation, drop.layout_epoch, drop.ndc);
+        }
+    }
+
+    fn set_idle_control_flow(&self, event_loop: &ActiveEventLoop) {
+        match self.surface_retry_at {
+            Some(retry_at) => event_loop.set_control_flow(ControlFlow::WaitUntil(retry_at)),
+            None => event_loop.set_control_flow(ControlFlow::Wait),
+        }
+    }
+
+    pub(crate) fn fail(&mut self, event_loop: &ActiveEventLoop, error: impl std::fmt::Display) {
+        self.failure = Some(error.to_string());
+        event_loop.exit();
+    }
+
+    pub(crate) fn request_redraw(&self) {
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
+    }
+
+    pub(crate) fn resize(&mut self, event_loop: &ActiveEventLoop, width: u32, height: u32) {
+        if let Some(gfx) = &mut self.gfx {
+            gfx.configure(width, height);
+        }
+        if let Err(error) = self.update_layout() {
+            self.fail(event_loop, error);
+            return;
+        }
+        if width > 0 && height > 0 {
+            self.render(event_loop);
+        }
+    }
+
+    pub(crate) fn scale_factor_changed(&mut self, event_loop: &ActiveEventLoop) {
+        let Some(window) = &self.window else {
+            return;
+        };
+        let size = window.inner_size();
+        self.resize(event_loop, size.width, size.height);
+    }
+
+    pub(crate) fn set_occluded(&mut self, occluded: bool) {
+        if let Some(gfx) = &mut self.gfx {
+            gfx.occluded = occluded;
+        }
+        if !occluded {
+            self.surface_retry_at = None;
+            self.request_redraw();
+        }
+    }
+
+    pub(crate) fn render(&mut self, event_loop: &ActiveEventLoop) {
+        let (Some(gfx), Some(layout), Some(window)) = (&mut self.gfx, self.layout, &self.window)
+        else {
+            return;
+        };
+        match gfx.render(layout, window) {
+            Ok(()) => {}
+            Err(ProductSurfaceError::Recover) => {
+                gfx.reconfigure();
+                window.request_redraw();
+            }
+            Err(ProductSurfaceError::Retry) => {
+                let retry_at = Instant::now() + Duration::from_millis(50);
+                self.surface_retry_at = Some(retry_at);
+                event_loop.set_control_flow(ControlFlow::WaitUntil(retry_at));
+            }
+            Err(ProductSurfaceError::Skip) => {}
+            Err(ProductSurfaceError::Fatal(reason)) => self.fail(event_loop, reason),
+        }
+    }
+}
+
+struct ProductSurface {
+    surface: wgpu::Surface<'static>,
+    gpu: Arc<GpuCtx>,
+    config: wgpu::SurfaceConfiguration,
+    preview_pipeline: wgpu::RenderPipeline,
+    preview_bind_group: wgpu::BindGroup,
+    timeline_pipeline: wgpu::RenderPipeline,
+    occluded: bool,
+}
+
+struct ProductGpuParts {
+    instance: wgpu::Instance,
+    adapter: wgpu::Adapter,
+    device: wgpu::Device,
+}
+
+impl ProductSurface {
+    fn new(
+        window: &Arc<Window>,
+        parts: ProductGpuParts,
+        gpu: &Arc<GpuCtx>,
+        preview: &StaticPreview,
+    ) -> Result<Self, ProductRuntimeError> {
+        let surface = parts.instance.create_surface(Arc::clone(window))?;
+        if !parts.adapter.is_surface_supported(&surface) {
+            return Err(ProductRuntimeError::SurfaceUnsupported);
+        }
+        let size = window.inner_size();
+        let capabilities = surface.get_capabilities(&parts.adapter);
+        let format = capabilities
+            .formats
+            .first()
+            .copied()
+            .ok_or(ProductRuntimeError::SurfaceUnsupported)?;
+        let alpha_mode = capabilities
+            .alpha_modes
+            .first()
+            .copied()
+            .ok_or(ProductRuntimeError::SurfaceUnsupported)?;
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format,
+            width: size.width.max(1),
+            height: size.height.max(1),
+            present_mode: wgpu::PresentMode::Fifo,
+            desired_maximum_frame_latency: 2,
+            alpha_mode,
+            view_formats: vec![],
+        };
+        surface.configure(&parts.device, &config);
+        let (preview_pipeline, preview_bind_group) =
+            create_preview_pipeline(&parts.device, format, preview.slot().view());
+        let timeline_pipeline = create_solid_pipeline(&parts.device, format);
+        Ok(Self {
+            surface,
+            gpu: Arc::clone(gpu),
+            config,
+            preview_pipeline,
+            preview_bind_group,
+            timeline_pipeline,
+            occluded: false,
+        })
+    }
+
+    fn configure(&mut self, width: u32, height: u32) {
+        if width == 0 || height == 0 {
+            return;
+        }
+        self.config.width = width;
+        self.config.height = height;
+        self.reconfigure();
+    }
+
+    fn reconfigure(&self) {
+        self.surface.configure(&self.gpu.device, &self.config);
+    }
+
+    fn render(
+        &mut self,
+        layout: NativeHostLayout,
+        window: &Window,
+    ) -> Result<(), ProductSurfaceError> {
+        if self.occluded || self.config.width == 0 || self.config.height == 0 {
+            return Err(ProductSurfaceError::Skip);
+        }
+        let frame = match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            wgpu::CurrentSurfaceTexture::Timeout => {
+                return Err(ProductSurfaceError::Retry);
+            }
+            wgpu::CurrentSurfaceTexture::Occluded => {
+                return Err(ProductSurfaceError::Retry);
+            }
+            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+                return Err(ProductSurfaceError::Recover);
+            }
+            wgpu::CurrentSurfaceTexture::Validation => {
+                return Err(ProductSurfaceError::Fatal(
+                    "native product Surface validation failed".to_owned(),
+                ));
+            }
+        };
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("motolii-product-native-frame"),
+            });
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("motolii-product-stage-timeline"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.018,
+                            g: 0.020,
+                            b: 0.024,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            draw_rect(
+                &mut pass,
+                layout.timeline_physical,
+                &self.timeline_pipeline,
+                None,
+            );
+            draw_rect(
+                &mut pass,
+                layout.stage_physical,
+                &self.preview_pipeline,
+                Some(&self.preview_bind_group),
+            );
+        }
+        self.gpu.queue.submit([encoder.finish()]);
+        window.pre_present_notify();
+        frame.present();
+        Ok(())
+    }
+}
+
+fn draw_rect<'a>(
+    pass: &mut wgpu::RenderPass<'a>,
+    rect: PhysicalRect,
+    pipeline: &'a wgpu::RenderPipeline,
+    bind_group: Option<&'a wgpu::BindGroup>,
+) {
+    if rect.width == 0 || rect.height == 0 {
+        return;
+    }
+    pass.set_pipeline(pipeline);
+    if let Some(bind_group) = bind_group {
+        pass.set_bind_group(0, bind_group, &[]);
+    }
+    pass.set_viewport(
+        rect.x as f32,
+        rect.y as f32,
+        rect.width as f32,
+        rect.height as f32,
+        0.0,
+        1.0,
+    );
+    pass.set_scissor_rect(rect.x, rect.y, rect.width, rect.height);
+    pass.draw(0..3, 0..1);
+}
+
+fn create_preview_pipeline(
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+    view: &wgpu::TextureView,
+) -> (wgpu::RenderPipeline, wgpu::BindGroup) {
+    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("motolii-product-preview-sampler"),
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        ..Default::default()
+    });
+    let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("motolii-product-preview-layout"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+    });
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("motolii-product-preview-bind-group"),
+        layout: &layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&sampler),
+            },
+        ],
+    });
+    (
+        create_pipeline(device, format, Some(&layout), PREVIEW_SHADER),
+        bind_group,
+    )
+}
+
+fn create_solid_pipeline(
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+) -> wgpu::RenderPipeline {
+    create_pipeline(device, format, None, TIMELINE_SHADER)
+}
+
+fn create_pipeline(
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+    bind_group_layout: Option<&wgpu::BindGroupLayout>,
+    source: &'static str,
+) -> wgpu::RenderPipeline {
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("motolii-product-native-shader"),
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(source)),
+    });
+    let layouts: Vec<_> = bind_group_layout.into_iter().map(Some).collect();
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("motolii-product-native-pipeline-layout"),
+        bind_group_layouts: &layouts,
+        immediate_size: 0,
+    });
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("motolii-product-native-pipeline"),
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs_main"),
+            buffers: &[],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(format.into())],
+            compilation_options: Default::default(),
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    })
+}
+
+const PREVIEW_SHADER: &str = r#"
+struct VertexOut { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32> }
+@vertex fn vs_main(@builtin(vertex_index) index: u32) -> VertexOut {
+    var positions = array<vec2<f32>, 3>(vec2(-1.0,-1.0), vec2(3.0,-1.0), vec2(-1.0,3.0));
+    var uvs = array<vec2<f32>, 3>(vec2(0.0,1.0), vec2(2.0,1.0), vec2(0.0,-1.0));
+    var out: VertexOut; out.position = vec4(positions[index],0.0,1.0); out.uv = uvs[index]; return out;
+}
+@group(0) @binding(0) var source_texture: texture_2d<f32>;
+@group(0) @binding(1) var source_sampler: sampler;
+@fragment fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
+    return textureSample(source_texture, source_sampler, in.uv);
+}
+"#;
+const TIMELINE_SHADER: &str = r#"
+struct VertexOut { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32> }
+@vertex fn vs_main(@builtin(vertex_index) index: u32) -> VertexOut {
+    var positions = array<vec2<f32>, 3>(vec2(-1.0,-1.0), vec2(3.0,-1.0), vec2(-1.0,3.0));
+    var uvs = array<vec2<f32>, 3>(vec2(0.0,1.0), vec2(2.0,1.0), vec2(0.0,-1.0));
+    var out: VertexOut; out.position = vec4(positions[index],0.0,1.0); out.uv = uvs[index]; return out;
+}
+@fragment fn fs_main(_in: VertexOut) -> @location(0) vec4<f32> {
+    return vec4(0.055, 0.058, 0.066, 1.0);
+}
+"#;
+
+enum ProductSurfaceError {
+    Recover,
+    Retry,
+    Skip,
+    Fatal(String),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum ProductRuntimeError {
+    #[error(transparent)]
+    Gpu(#[from] motolii_gpu::GpuError),
+    #[error(transparent)]
+    Preview(#[from] crate::static_preview::StaticPreviewError),
+    #[error(transparent)]
+    EventLoop(#[from] winit::error::EventLoopError),
+    #[error(transparent)]
+    Os(#[from] winit::error::OsError),
+    #[error(transparent)]
+    Surface(#[from] wgpu::CreateSurfaceError),
+    #[error(transparent)]
+    Browser(#[from] BrowserHostRuntimeError),
+    #[error("native product Surface is unsupported by the selected adapter")]
+    SurfaceUnsupported,
+    #[error("native product Host was initialized twice")]
+    AlreadyInitialized,
+    #[error("native product layout epoch is exhausted")]
+    LayoutEpochExhausted,
+    #[error("native product runtime failed: {0}")]
+    Runtime(String),
+}

@@ -41,6 +41,10 @@ struct ActiveCapture {
 }
 
 impl HostPointerCaptureState {
+    pub(crate) fn is_active(&self) -> bool {
+        self.active.is_some()
+    }
+
     pub(crate) fn arm(&mut self) -> bool {
         if self.active.is_some() {
             return false;
@@ -117,6 +121,10 @@ impl PlatformPointerCapture {
         self.state.arm()
     }
 
+    pub(crate) fn is_active(&self) -> bool {
+        self.state.is_active()
+    }
+
     pub(crate) fn poll(
         &mut self,
     ) -> Result<Option<HostPointerCandidate>, PlatformPointerCaptureError> {
@@ -157,6 +165,10 @@ impl PlatformPointerCapture {
 
     pub(crate) fn arm(&mut self) -> bool {
         self.state.arm()
+    }
+
+    pub(crate) fn is_active(&self) -> bool {
+        self.state.is_active()
     }
 
     pub(crate) fn poll(

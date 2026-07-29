@@ -230,7 +230,11 @@ impl MotoliiApp {
             let window = cc
                 .winit_window()
                 .ok_or(AppConstructionError::MissingNativeWindow)?;
-            Some(BrowserHostRuntime::new(window, repaint_context.clone())?)
+            let wake_context = repaint_context.clone();
+            Some(BrowserHostRuntime::new(
+                window,
+                Arc::new(move || wake_context.request_repaint()),
+            )?)
         } else {
             None
         };
@@ -373,11 +377,15 @@ impl eframe::App for MotoliiApp {
                 .max_size(420.0)
                 .show(ui, |_ui| {});
             if self.browser_host_failure.is_none() {
-                if let Some(Err(error)) = self
-                    .browser_host
-                    .as_ref()
-                    .map(|host| host.set_bounds(browser_panel.response.rect))
-                {
+                if let Some(Err(error)) = self.browser_host.as_ref().map(|host| {
+                    let rect = browser_panel.response.rect;
+                    host.set_bounds(crate::native_host_layout::LogicalRect {
+                        x: f64::from(rect.left()),
+                        y: f64::from(rect.top()),
+                        width: f64::from(rect.width()),
+                        height: f64::from(rect.height()),
+                    })
+                }) {
                     self.browser_host_failure = Some(error.to_string());
                 }
             }
