@@ -2,7 +2,7 @@
 
 作成日: 2026-07-29
 
-状態: **決定／P2D-RCI・P2D-RCS1 DONE／P2D-RCD1 DO**
+状態: **決定／P2D-RCI・P2D-RCS1・P2D-RCD1 DONE**
 
 ## 1. Authorityと入力
 
@@ -75,7 +75,7 @@ F1、F5、F6は外部先例の不足を理由に弱めない。AE-style Bins、U
 | ID | 契約境界 | 依存 | 状態／完成条件 |
 |---|---|---|---|
 | `P2D-RCS1` | private opaque Group Depth spike | P2D-RCI | **DONE**。Grok `ACCEPT` P0/P1=0。`motolii-render`内部の実depth attachmentでF1／F6、group外pixel不変、FINAL／DRAFT同一評価関数を確認。Document／serde／公開API変更0 |
-| `P2D-RCD1` | 型付き要求／contribution seam decision | P2D-RCS1、RCI §2.2のcamera／Observation非所有 | **DO（decisionのみ）**。Rust名、trait、registry多重度、能力の進化形を一つのseatとして決める。P3のObservation形は先取りしない |
+| `P2D-RCD1` | 型付き要求／contribution seam decision | P2D-RCS1、RCI §2.2のcamera／Observation非所有 | **DONE**。[typed seam decision](2026-07-29-m5-render-contribution-typed-seam-decision.md)がseam意味を固定。後続8件はWAIT、P3のObservation形は先取りしない |
 | `P2D-RCD2` | P2D policy／Depth Participant schema decision | P2D-RCD1、M2-D1e | **WAIT**。GR-PV、追加migration、Undo意味を別decisionで閉じる |
 | `P2D-RCF1` | 共通conformance harnessとFirst Vism fixture | P2D-RCD1 | **WAIT**。first-party専用口なし、F1〜F6とseat固有fixtureの分担を固定 |
 | `P2D-RCT1` | cutout／soft alpha意味と診断 | P2D-RCD1 | **WAIT**。F2／F3、黙示depth格上げ拒否。OIT方式は別裁定 |
@@ -90,10 +90,11 @@ F1、F5、F6は外部先例の不足を理由に弱めない。AE-style Bins、U
 `P2D-RCS1`は`motolii-render`内部のHost側spikeへ閉じ、既存
 `RenderSession`／`LinearRenderGraph`の内側でopaque限定の2面を扱う。fixture-localな非永続値で駆動し、
 `motolii-plugin`、Document、serde、wire、UI、soft alpha、refractionへ出さない。spikeの内部形を
-`P2D-RCD1`の公開契約根拠にせず、実機反例としてだけ入力する。この条件でF1／F6の実機証拠が
-Grok `ACCEPT` P0/P1=0に到達したため、次は`P2D-RCD1`の**docs decisionだけ**を解禁する。
-RCI §2.2でcontributionによるcamera／Observation所有を既に除外しているため、P3の型を待たずに
-非所有境界を維持したseam裁定はできるが、P3のObservation形やcamera capabilityは発明しない。
+`P2D-RCD1`の公開契約根拠にせず、実機反例としてだけ入力した。この条件でF1／F6の実機証拠が
+Grok `ACCEPT` P0/P1=0に到達した。その証拠を入力として、[typed seam decision](2026-07-29-m5-render-contribution-typed-seam-decision.md)が`P2D-RCD1`を閉じた。
+
+RCI §2.2でcontributionによるcamera／Observation所有を既に除外している。typed seam decisionは
+非所有境界を維持し、P3のObservation形やcamera capabilityを発明していない。
 
 ## 7. 失効と非決定
 
