@@ -32,6 +32,7 @@ M3の背骨を待たずに、M4の正しさ、所有、階層、実機計測口�
 - 1000短clip、最大active 4の音MAD編集密度fixture
 - OS、CPU、RAM、GPU adapter、FFmpeg、RSSを記録するhardware facts
 - 同じrecipeを別機種で再実行するmanifest schema v4、measurement context、専用executor
+- 完全検証済み・同一revision／fixtureのbundleだけを並べるmatrix schema v1
 
 test-only plannerやharnessを製品owner、公開API、Document、plugin契約へimportしない。
 
@@ -166,3 +167,13 @@ sequential最大3.33 ms、scrub最大0.97 msだった。
 
 これらはcontext来歴とharness再現性の証拠であり、製品Preview latencyや最低スペック性能SLOではない。
 schema v3との差や単回の時間値から退避閾値、先読み幅、VRAM予算を採択しない。
+
+## 機種間比較の停止線
+
+matrix schema v1は各bundleの完全verification、同一commit、同一fixture digestを前提に、
+measurement context、hardware facts、decode command比較、音MAD graph値を生のまま列挙する。
+別素材、別revision、不完全run、改変後artifactはfail closedで拒否する。
+
+比較器は比率、順位、閾値、推奨budget、最低スペック合否を計算せず、
+`thresholds_selected: false`と`low_spec_windows_gate_closed: false`を固定する。
+したがって開発Mac同士のsmokeやWindows一台の追加だけでexternal gateを閉じない。

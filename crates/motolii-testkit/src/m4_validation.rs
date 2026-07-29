@@ -7,6 +7,7 @@ use crate::perf::{m4_validation_manifest, M4_VALIDATION_BUNDLE_SCHEMA_VERSION, S
 
 pub const M4_VALIDATION_RUN_SCHEMA_VERSION: u32 = 3;
 pub const M4_VALIDATION_VERIFICATION_SCHEMA_VERSION: u32 = 2;
+pub const M4_VALIDATION_MATRIX_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FileEvidence {
@@ -52,6 +53,60 @@ pub struct M4ValidationVerification {
     pub external_gates_pending: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct DecodeRouteMetrics {
+    pub sequential_120_frames_ms: f64,
+    pub parallel_8_requests_wall_ms: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct AudioMadMetrics {
+    pub clip_count: u64,
+    pub effects_per_clip: u64,
+    pub max_active_video_slots: u64,
+    pub max_graph_steps: u64,
+    pub sequential_max_ms: f64,
+    pub scrub_max_ms: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct M4ValidationMatrixEntry {
+    pub bundle_path: String,
+    pub machine_label: String,
+    pub intended_persona: String,
+    pub power_source: String,
+    pub power_mode: String,
+    pub display_width_px: u64,
+    pub display_height_px: u64,
+    pub hardware_os: String,
+    pub hardware_arch: String,
+    pub logical_cpu_count: u64,
+    pub total_memory_bytes: u64,
+    pub gpu_adapter_name: String,
+    pub gpu_backend: String,
+    pub gpu_device_type: String,
+    pub gpu_driver: Option<String>,
+    pub ffmpeg_version: String,
+    pub hardware_decode_accel: String,
+    pub hardware_decode_output_format: String,
+    pub hardware_decode_surface_format: Option<String>,
+    pub software_decode: DecodeRouteMetrics,
+    pub hardware_download_decode: DecodeRouteMetrics,
+    pub frame_zero_differing_bytes: u64,
+    pub audio_mad: AudioMadMetrics,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct M4ValidationMatrix {
+    pub schema_version: u32,
+    pub repository_revision: String,
+    pub fixture_bytes: u64,
+    pub fixture_sha256: String,
+    pub thresholds_selected: bool,
+    pub low_spec_windows_gate_closed: bool,
+    pub entries: Vec<M4ValidationMatrixEntry>,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum VerificationError {
     #[error("failed to read {path}: {source}")]
@@ -68,6 +123,33 @@ pub enum VerificationError {
     },
     #[error("failed to encode expected manifest: {0}")]
     Encode(#[from] serde_json::Error),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum MatrixError {
+    #[error("at least two validation bundles are required")]
+    TooFewBundles,
+    #[error("bundle {path} did not pass local verification: {failures:?}")]
+    InvalidBundle {
+        path: PathBuf,
+        failures: Vec<String>,
+    },
+    #[error("bundle {path} is missing comparison field {field}")]
+    MissingField { path: PathBuf, field: &'static str },
+    #[error(
+        "bundle {path} used fixture {actual_bytes} bytes/{actual_sha256}, expected {expected_bytes} bytes/{expected_sha256}"
+    )]
+    FixtureMismatch {
+        path: PathBuf,
+        expected_bytes: u64,
+        expected_sha256: String,
+        actual_bytes: u64,
+        actual_sha256: String,
+    },
+    #[error("failed to verify bundle: {0}")]
+    Verification(#[from] VerificationError),
+    #[error("verified comparison set did not produce a fixture identity")]
+    MissingFixture,
 }
 
 pub fn file_evidence(path: &Path) -> Result<FileEvidence, VerificationError> {
@@ -234,6 +316,290 @@ fn fixture_identity(value: &serde_json::Value) -> Option<(u64, String)> {
         value.get("fixture_bytes")?.as_u64()?,
         value.get("fixture_sha256")?.as_str()?.to_owned(),
     ))
+}
+
+fn required_string(
+    value: &serde_json::Value,
+    field: &'static str,
+    path: &Path,
+) -> Result<String, MatrixError> {
+    nonempty_string(value.pointer(field)).ok_or_else(|| MatrixError::MissingField {
+        path: path.to_path_buf(),
+        field,
+    })
+}
+
+fn required_u64(
+    value: &serde_json::Value,
+    field: &'static str,
+    path: &Path,
+) -> Result<u64, MatrixError> {
+    value
+        .pointer(field)
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| MatrixError::MissingField {
+            path: path.to_path_buf(),
+            field,
+        })
+}
+
+fn required_f64(
+    value: &serde_json::Value,
+    field: &'static str,
+    path: &Path,
+) -> Result<f64, MatrixError> {
+    value
+        .pointer(field)
+        .and_then(serde_json::Value::as_f64)
+        .filter(|number| number.is_finite() && *number >= 0.0)
+        .ok_or_else(|| MatrixError::MissingField {
+            path: path.to_path_buf(),
+            field,
+        })
+}
+
+fn max_array_u64(
+    value: &serde_json::Value,
+    array_field: &'static str,
+    item_field: &'static str,
+    path: &Path,
+) -> Result<u64, MatrixError> {
+    value
+        .get(array_field)
+        .and_then(serde_json::Value::as_array)
+        .and_then(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.get(item_field)?.as_u64())
+                .max()
+        })
+        .ok_or_else(|| MatrixError::MissingField {
+            path: path.to_path_buf(),
+            field: array_field,
+        })
+}
+
+fn max_array_f64(
+    value: &serde_json::Value,
+    array_field: &'static str,
+    item_field: &'static str,
+    path: &Path,
+) -> Result<f64, MatrixError> {
+    value
+        .get(array_field)
+        .and_then(serde_json::Value::as_array)
+        .and_then(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.get(item_field)?.as_f64())
+                .filter(|number| number.is_finite() && *number >= 0.0)
+                .reduce(f64::max)
+        })
+        .ok_or_else(|| MatrixError::MissingField {
+            path: path.to_path_buf(),
+            field: array_field,
+        })
+}
+
+fn sample_note<'a>(
+    hardware: &'a serde_json::Value,
+    sample_id: &str,
+    field: &'static str,
+    path: &Path,
+) -> Result<&'a str, MatrixError> {
+    hardware
+        .get("samples")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|samples| {
+            samples.iter().find(|sample| {
+                sample.get("id").and_then(serde_json::Value::as_str) == Some(sample_id)
+            })
+        })
+        .and_then(|sample| sample.get("notes"))
+        .and_then(|notes| notes.get(field))
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| MatrixError::MissingField {
+            path: path.to_path_buf(),
+            field,
+        })
+}
+
+fn optional_sample_note(
+    hardware: &serde_json::Value,
+    sample_id: &str,
+    field: &str,
+) -> Option<String> {
+    hardware
+        .get("samples")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|samples| {
+            samples.iter().find(|sample| {
+                sample.get("id").and_then(serde_json::Value::as_str) == Some(sample_id)
+            })
+        })
+        .and_then(|sample| sample.get("notes"))
+        .and_then(|notes| notes.get(field))
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+}
+
+fn ensure_fixture_matches(
+    path: &Path,
+    expected: &(u64, String),
+    actual: &(u64, String),
+) -> Result<(), MatrixError> {
+    if expected == actual {
+        return Ok(());
+    }
+    Err(MatrixError::FixtureMismatch {
+        path: path.to_path_buf(),
+        expected_bytes: expected.0,
+        expected_sha256: expected.1.clone(),
+        actual_bytes: actual.0,
+        actual_sha256: actual.1.clone(),
+    })
+}
+
+fn matrix_entry(
+    output_dir: &Path,
+) -> Result<((u64, String), M4ValidationMatrixEntry), MatrixError> {
+    let context = read_value(&output_dir.join("context.json"))?;
+    let hardware = read_value(&output_dir.join("hardware.json"))?;
+    let decode = read_value(&output_dir.join("decode-hardware-download.json"))?;
+    let audio = read_value(&output_dir.join("audio-mad-graph.json"))?;
+    let fixture = fixture_identity(&decode).ok_or_else(|| MatrixError::MissingField {
+        path: output_dir.to_path_buf(),
+        field: "decode fixture identity",
+    })?;
+    let comparison =
+        decode
+            .get("command_route_comparison")
+            .ok_or_else(|| MatrixError::MissingField {
+                path: output_dir.to_path_buf(),
+                field: "command_route_comparison",
+            })?;
+    let software_decode = DecodeRouteMetrics {
+        sequential_120_frames_ms: required_f64(
+            comparison,
+            "/software/sequential/elapsed_ms",
+            output_dir,
+        )?,
+        parallel_8_requests_wall_ms: required_f64(
+            comparison,
+            "/software/parallel_wall_ms",
+            output_dir,
+        )?,
+    };
+    let hardware_download_decode = DecodeRouteMetrics {
+        sequential_120_frames_ms: required_f64(
+            comparison,
+            "/hardware/sequential/elapsed_ms",
+            output_dir,
+        )?,
+        parallel_8_requests_wall_ms: required_f64(
+            comparison,
+            "/hardware/parallel_wall_ms",
+            output_dir,
+        )?,
+    };
+    let audio_mad = AudioMadMetrics {
+        clip_count: required_u64(&audio, "/clip_count", output_dir)?,
+        effects_per_clip: required_u64(&audio, "/effects_per_clip", output_dir)?,
+        max_active_video_slots: max_array_u64(
+            &audio,
+            "sequential",
+            "active_video_slots",
+            output_dir,
+        )?
+        .max(max_array_u64(
+            &audio,
+            "scrub",
+            "active_video_slots",
+            output_dir,
+        )?),
+        max_graph_steps: max_array_u64(&audio, "sequential", "graph_steps", output_dir)?
+            .max(max_array_u64(&audio, "scrub", "graph_steps", output_dir)?),
+        sequential_max_ms: max_array_f64(&audio, "sequential", "elapsed_ms", output_dir)?,
+        scrub_max_ms: max_array_f64(&audio, "scrub", "elapsed_ms", output_dir)?,
+    };
+    let entry = M4ValidationMatrixEntry {
+        bundle_path: output_dir.display().to_string(),
+        machine_label: required_string(&context, "/machine_label", output_dir)?,
+        intended_persona: required_string(&context, "/intended_persona", output_dir)?,
+        power_source: required_string(&context, "/power_source", output_dir)?,
+        power_mode: required_string(&context, "/power_mode", output_dir)?,
+        display_width_px: required_u64(&context, "/display_width_px", output_dir)?,
+        display_height_px: required_u64(&context, "/display_height_px", output_dir)?,
+        hardware_os: required_string(&hardware, "/hardware/os", output_dir)?,
+        hardware_arch: required_string(&hardware, "/hardware/arch", output_dir)?,
+        logical_cpu_count: required_u64(&hardware, "/hardware/logical_cpu_count", output_dir)?,
+        total_memory_bytes: required_u64(&hardware, "/hardware/total_memory_bytes", output_dir)?,
+        gpu_adapter_name: sample_note(&hardware, "headless_gpu_ctx", "adapter_name", output_dir)?
+            .to_owned(),
+        gpu_backend: sample_note(&hardware, "headless_gpu_ctx", "backend", output_dir)?.to_owned(),
+        gpu_device_type: sample_note(&hardware, "headless_gpu_ctx", "device_type", output_dir)?
+            .to_owned(),
+        gpu_driver: optional_sample_note(&hardware, "headless_gpu_ctx", "driver"),
+        ffmpeg_version: sample_note(&hardware, "ffmpeg_capabilities", "version", output_dir)?
+            .to_owned(),
+        hardware_decode_accel: required_string(comparison, "/hardware/hwaccel", output_dir)?,
+        hardware_decode_output_format: required_string(
+            comparison,
+            "/hardware/hw_output_format",
+            output_dir,
+        )?,
+        hardware_decode_surface_format: nonempty_string(
+            comparison.pointer("/hardware/hw_surface_format"),
+        ),
+        software_decode,
+        hardware_download_decode,
+        frame_zero_differing_bytes: required_u64(
+            comparison,
+            "/frame_zero_diff/differing_bytes",
+            output_dir,
+        )?,
+        audio_mad,
+    };
+    Ok((fixture, entry))
+}
+
+pub fn compare_m4_validation_bundles(
+    output_dirs: &[PathBuf],
+    repository_revision: &str,
+) -> Result<M4ValidationMatrix, MatrixError> {
+    if output_dirs.len() < 2 {
+        return Err(MatrixError::TooFewBundles);
+    }
+    let mut expected_fixture = None;
+    let mut entries = Vec::with_capacity(output_dirs.len());
+    for output_dir in output_dirs {
+        let verification = verify_m4_validation_bundle(output_dir, repository_revision)?;
+        if !verification.local_evidence_valid {
+            return Err(MatrixError::InvalidBundle {
+                path: output_dir.clone(),
+                failures: verification.failures,
+            });
+        }
+        let (fixture, entry) = matrix_entry(output_dir)?;
+        if let Some(expected) = &expected_fixture {
+            ensure_fixture_matches(output_dir, expected, &fixture)?;
+        } else {
+            expected_fixture = Some(fixture.clone());
+        }
+        entries.push(entry);
+    }
+    let (fixture_bytes, fixture_sha256) = expected_fixture.ok_or(MatrixError::MissingFixture)?;
+    Ok(M4ValidationMatrix {
+        schema_version: M4_VALIDATION_MATRIX_SCHEMA_VERSION,
+        repository_revision: repository_revision.to_owned(),
+        fixture_bytes,
+        fixture_sha256,
+        thresholds_selected: false,
+        low_spec_windows_gate_closed: false,
+        entries,
+    })
 }
 
 pub fn verify_m4_validation_bundle(
@@ -424,6 +790,111 @@ mod tests {
         assert!(failures
             .iter()
             .any(|failure| failure.contains("display_width_px")));
+    }
+
+    #[test]
+    fn matrix_entry_extracts_only_declared_raw_measurements() {
+        let dir = crate::tmp_dir("m4-matrix-entry");
+        let context = json!({
+            "machine_label": "fixture-machine",
+            "intended_persona": "candidate",
+            "power_source": "ac",
+            "power_mode": "balanced",
+            "display_width_px": 1280,
+            "display_height_px": 720
+        });
+        let hardware = json!({
+            "hardware": {
+                "os": "windows",
+                "arch": "x86_64",
+                "logical_cpu_count": 4,
+                "total_memory_bytes": 8_589_934_592_u64
+            },
+            "samples": [
+                {
+                    "id": "headless_gpu_ctx",
+                    "notes": {
+                        "adapter_name": "fixture-gpu",
+                        "backend": "Dx12",
+                        "device_type": "IntegratedGpu",
+                        "driver": "fixture-driver"
+                    }
+                },
+                {
+                    "id": "ffmpeg_capabilities",
+                    "notes": {
+                        "version": "fixture-ffmpeg"
+                    }
+                }
+            ]
+        });
+        let decode = json!({
+            "schema_version": 3,
+            "fixture_bytes": 1234,
+            "fixture_sha256": "fixture-sha",
+            "command_route_comparison": {
+                "software": {
+                    "sequential": { "elapsed_ms": 10.0 },
+                    "parallel_wall_ms": 20.0
+                },
+                "hardware": {
+                    "hwaccel": "d3d11va",
+                    "hw_output_format": "d3d11",
+                    "hw_surface_format": "nv12",
+                    "sequential": { "elapsed_ms": 30.0 },
+                    "parallel_wall_ms": 40.0
+                },
+                "frame_zero_diff": { "differing_bytes": 0 }
+            }
+        });
+        let audio = json!({
+            "clip_count": 1000,
+            "effects_per_clip": 3,
+            "sequential": [{
+                "elapsed_ms": 5.0,
+                "active_video_slots": 4,
+                "graph_steps": 1016
+            }],
+            "scrub": [{
+                "elapsed_ms": 2.0,
+                "active_video_slots": 3,
+                "graph_steps": 1008
+            }]
+        });
+        for (name, value) in [
+            ("context.json", context),
+            ("hardware.json", hardware),
+            ("decode-hardware-download.json", decode),
+            ("audio-mad-graph.json", audio),
+        ] {
+            std::fs::write(dir.join(name), serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+        }
+        let (fixture, entry) = matrix_entry(&dir).unwrap();
+        assert_eq!(fixture, (1234, "fixture-sha".into()));
+        assert_eq!(entry.hardware_os, "windows");
+        assert_eq!(entry.hardware_decode_accel, "d3d11va");
+        assert_eq!(entry.ffmpeg_version, "fixture-ffmpeg");
+        assert_eq!(entry.software_decode.sequential_120_frames_ms, 10.0);
+        assert_eq!(
+            entry.hardware_download_decode.parallel_8_requests_wall_ms,
+            40.0
+        );
+        assert_eq!(entry.audio_mad.max_active_video_slots, 4);
+        assert_eq!(entry.audio_mad.max_graph_steps, 1016);
+        assert_eq!(entry.frame_zero_differing_bytes, 0);
+    }
+
+    #[test]
+    fn comparison_rejects_fixture_drift_and_single_bundle() {
+        let path = Path::new("candidate");
+        let mismatch =
+            ensure_fixture_matches(path, &(100, "first".into()), &(101, "second".into()))
+                .unwrap_err();
+        assert!(matches!(mismatch, MatrixError::FixtureMismatch { .. }));
+        assert!(matches!(
+            compare_m4_validation_bundles(&[path.into()], "revision"),
+            Err(MatrixError::TooFewBundles)
+        ));
     }
 
     #[test]

@@ -106,6 +106,30 @@ total memory、全必須sampleのRSSとstatus、contextの必須項目と値域�
 `local_evidence_valid`だけであり、`low_spec_windows`、GPU surface import、製品Preview等の
 外部gateは`external_gates_pending`として残す。
 
+## 機種間matrix
+
+2台以上の完全なbundleを集めた後は専用比較器で同じrevision／fixtureだけを並べる。
+
+```sh
+cargo run -p motolii-testkit --bin m4_validation_compare -- \
+  /tmp/motolii-m4-validation-dev \
+  /tmp/motolii-m4-validation-low-spec-windows
+```
+
+比較器は各bundleへ単体verifierを再適用し、一件でも不完全、改変済み、別revisionなら拒否する。
+decode fixtureのbyte数またはSHA-256が異なるbundleも拒否する。出力するのは次の生値だけである。
+
+- contextの機体／personaラベル、電源、表示解像度
+- OS、architecture、logical CPU数、物理RAM、wgpu adapter facts
+- 同一command内software／hardware-downloadの120-frame sequentialと8-request parallel wall
+- frame 0 differing bytes
+- 音MAD fixtureのclip／effect数、最大active slot、最大graph steps、sequential／scrub最大時間
+
+`cargo run`全体の時間、compile時間、run record生成時間は性能値へ混ぜない。
+matrix schema v1は`thresholds_selected: false`と`low_spec_windows_gate_closed: false`を固定する。
+比率、順位、合否、製品budgetは出力しない。単回値の比較を統計的な性能差や最低スペック認定へ
+昇格させず、反復数と採択policyは実機matrix取得後の別粒で決める。
+
 機種間比較は同じfixture revisionとMotolii commitで行う。現在はpass/fail閾値を持たず、
 取得不能は`Unavailable`として記録する。
 
