@@ -2,7 +2,7 @@
 
 作成日: 2026-07-29
 
-状態: **登録済み／P2D-RCA4未実行**
+状態: **完了／P2D-RCA8 Grok ACCEPT（P0/P1/P2=0）**
 
 変更許可: 本fileの`配置欄`だけ
 
@@ -50,12 +50,12 @@
 
 | ID | 論点 | 既決fragment | failure／負例fragment | code fact／未決fragment |
 |---|---|---|---|---|
-| Q1 | 要求とcontributionの分離 | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| Q2 | contributionが所有しないHost状態 | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| Q3 | opaque/cutout/soft alpha/scene-color-refraction | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| Q4 | 未知能力と追加的進化 | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| Q5 | First Vismのconformance fixture役割 | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| Q6 | 第二の未知表現 | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
+| Q1 | 要求とcontributionの分離 | C-Q1-REQ C-Q1-CONTRIB | C-Q1-NEG | C-CODE-GAP C-NOT-API C-RCI |
+| Q2 | contributionが所有しないHost状態 | C-Q2-NOOWN C-Q2-HOST | C-Q2-NEG | C-CODE-GAP C-NOT-API C-RCI |
+| Q3 | opaque/cutout/soft alpha/scene-color-refraction | C-Q3-CAPS | C-Q3-NEG | C-Q3-OPEN C-CODE-GAP C-RCI |
+| Q4 | 未知能力と追加的進化 | C-Q4-ADD | C-Q4-UNKNOWN | C-CODE-GAP C-RCI |
+| Q5 | First Vismのconformance fixture役割 | C-Q5-FIRST | C-Q5-NEG | C-NOT-API C-RCI |
+| Q6 | 第二の未知表現 | C-Q6-UNKNOWN | C-Q6-NEG | C-NOT-API C-RCI |
 
 ## STOP
 
