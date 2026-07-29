@@ -2,7 +2,8 @@
 
 use motolii_core::FrameDesc;
 
-use crate::layout::{BUILT_IN_TOP_SHARES, BUILT_IN_VERTICAL_SHARES};
+use crate::layout::{PanelLayout, PanelRole};
+use crate::layout_geometry::project_panel_rects;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct LogicalRect {
@@ -47,27 +48,30 @@ impl NativeHostLayout {
         physical_height: u32,
         scale_factor: f64,
         frame: FrameDesc,
-    ) -> Option<Self> {
+        authority: &PanelLayout,
+    ) -> Result<Option<Self>, NativeHostLayoutError> {
         if physical_width == 0
             || physical_height == 0
             || !scale_factor.is_finite()
             || scale_factor <= 0.0
         {
-            return None;
+            return Ok(None);
         }
         let width = f64::from(physical_width) / scale_factor;
         let height = f64::from(physical_height) / scale_factor;
-        let vertical_total = f64::from(BUILT_IN_VERTICAL_SHARES.iter().sum::<u32>());
-        let top_height = height * f64::from(BUILT_IN_VERTICAL_SHARES[0]) / vertical_total;
-        let top_total = f64::from(BUILT_IN_TOP_SHARES.iter().sum::<u32>());
-        let browser_width = width * f64::from(BUILT_IN_TOP_SHARES[0]) / top_total;
-        let inspector_width = width * f64::from(BUILT_IN_TOP_SHARES[2]) / top_total;
-        let stage_panel = LogicalRect {
-            x: browser_width,
-            y: 0.0,
-            width: width * f64::from(BUILT_IN_TOP_SHARES[1]) / top_total,
-            height: top_height,
+        // taffyの入力境界だけf32へ狭め、非finite/zeroはprojection側で拒否する。
+        let rects = project_panel_rects(authority, width as f32, height as f32)
+            .ok_or(NativeHostLayoutError::Projection)?;
+        let required = |role| {
+            rects
+                .get(&role)
+                .copied()
+                .ok_or(NativeHostLayoutError::RequiredRoleUnavailable { role })
         };
+        let browser = required(PanelRole::Browser)?;
+        let inspector = required(PanelRole::Inspector)?;
+        let stage_panel = required(PanelRole::Stage)?;
+        let timeline = required(PanelRole::Timeline)?;
         let source_aspect = f64::from(frame.width) / f64::from(frame.height);
         let panel_aspect = stage_panel.width / stage_panel.height;
         let (stage_width, stage_height) = if panel_aspect > source_aspect {
@@ -81,36 +85,22 @@ impl NativeHostLayout {
             width: stage_width,
             height: stage_height,
         };
-        let timeline = LogicalRect {
-            x: 0.0,
-            y: top_height,
-            width,
-            height: height - top_height,
-        };
-        Some(Self {
+        Ok(Some(Self {
             epoch,
-            browser: LogicalRect {
-                x: 0.0,
-                y: 0.0,
-                width: browser_width,
-                height: top_height,
-            },
-            inspector: LogicalRect {
-                x: width - inspector_width,
-                y: 0.0,
-                width: inspector_width,
-                height: top_height,
-            },
+            browser,
+            inspector,
             stage,
             timeline,
-            stage_physical: physical_rect(stage, scale_factor, physical_width, physical_height)?,
+            stage_physical: physical_rect(stage, scale_factor, physical_width, physical_height)
+                .ok_or(NativeHostLayoutError::Projection)?,
             timeline_physical: physical_rect(
                 timeline,
                 scale_factor,
                 physical_width,
                 physical_height,
-            )?,
-        })
+            )
+            .ok_or(NativeHostLayoutError::Projection)?,
+        }))
     }
 
     pub(crate) fn stage_ndc(self, point: [f64; 2]) -> Option<[f64; 2]> {
@@ -122,6 +112,14 @@ impl NativeHostLayout {
             1.0 - ((point[1] - self.stage.y) / self.stage.height) * 2.0,
         ])
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum NativeHostLayoutError {
+    #[error("native Host layout projection failed")]
+    Projection,
+    #[error("native Host layout required role {role:?} is unavailable")]
+    RequiredRoleUnavailable { role: PanelRole },
 }
 
 fn physical_rect(
@@ -166,7 +164,10 @@ mod tests {
 
     #[test]
     fn built_in_shares_project_one_stage_and_timeline_viewport() {
-        let layout = NativeHostLayout::try_new(7, 1000, 800, 1.0, frame()).unwrap();
+        let layout =
+            NativeHostLayout::try_new(7, 1000, 800, 1.0, frame(), &PanelLayout::built_in())
+                .unwrap()
+                .unwrap();
         assert_eq!(layout.epoch, 7);
         assert_eq!(layout.browser.width, 200.0);
         assert_eq!(layout.inspector.x, 800.0);
@@ -186,7 +187,10 @@ mod tests {
 
     #[test]
     fn stage_hit_test_is_latest_layout_local_and_y_up() {
-        let layout = NativeHostLayout::try_new(1, 1000, 800, 1.0, frame()).unwrap();
+        let layout =
+            NativeHostLayout::try_new(1, 1000, 800, 1.0, frame(), &PanelLayout::built_in())
+                .unwrap()
+                .unwrap();
         let center = [
             layout.stage.x + layout.stage.width / 2.0,
             layout.stage.y + layout.stage.height / 2.0,
@@ -197,5 +201,74 @@ mod tests {
             Some([-1.0, 1.0])
         );
         assert_eq!(layout.stage_ndc([10.0, 10.0]), None);
+    }
+
+    #[test]
+    fn mutated_authority_reaches_native_host_geometry() {
+        let mut authority = PanelLayout::built_in();
+        authority
+            .apply(
+                crate::layout::LayoutAction::Separator {
+                    path: vec![0],
+                    boundary: 0,
+                    action: crate::layout::SeparatorAction::IncreaseLeading,
+                },
+                crate::layout::LayoutConstraints {
+                    viewport_width: 1_000.0,
+                    stage_min_width: 320.0,
+                },
+            )
+            .unwrap();
+        let layout = NativeHostLayout::try_new(1, 1000, 800, 1.0, frame(), &authority)
+            .unwrap()
+            .unwrap();
+        assert!(layout.browser.width > 200.0);
+    }
+
+    #[test]
+    fn hidden_required_role_is_a_typed_error_not_a_blank_layout() {
+        let mut authority = PanelLayout::built_in();
+        authority
+            .apply(
+                crate::layout::LayoutAction::Hide(PanelRole::Inspector),
+                crate::layout::LayoutConstraints {
+                    viewport_width: 1_000.0,
+                    stage_min_width: 320.0,
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            NativeHostLayout::try_new(1, 1000, 800, 1.0, frame(), &authority),
+            Err(NativeHostLayoutError::RequiredRoleUnavailable {
+                role: PanelRole::Inspector
+            })
+        );
+    }
+
+    #[test]
+    fn dpi_projection_rounds_only_at_the_physical_boundary() {
+        for (physical_width, physical_height, scale) in [(2560, 1600, 2.0), (1920, 1080, 1.25)] {
+            let layout = NativeHostLayout::try_new(
+                1,
+                physical_width,
+                physical_height,
+                scale,
+                frame(),
+                &PanelLayout::built_in(),
+            )
+            .unwrap()
+            .unwrap();
+            let logical_width = f64::from(physical_width) / scale;
+            let tiled_width = layout.browser.width
+                + (layout.inspector.x - layout.browser.width)
+                + layout.inspector.width;
+            assert!((tiled_width - logical_width).abs() < 0.001);
+            assert!(layout.stage_physical.x + layout.stage_physical.width <= physical_width);
+            assert!(layout.stage_physical.y + layout.stage_physical.height <= physical_height);
+            assert_eq!(
+                layout.timeline_physical.y + layout.timeline_physical.height,
+                physical_height
+            );
+        }
     }
 }

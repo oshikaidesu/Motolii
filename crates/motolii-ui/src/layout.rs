@@ -127,8 +127,8 @@ impl Default for PanelLayout {
     }
 }
 
-pub(crate) const BUILT_IN_TOP_SHARES: [u32; 3] = [1, 3, 1];
-pub(crate) const BUILT_IN_VERTICAL_SHARES: [u32; 2] = [3, 1];
+const BUILT_IN_TOP_SHARES: [u32; 3] = [1, 3, 1];
+const BUILT_IN_VERTICAL_SHARES: [u32; 2] = [3, 1];
 
 impl PanelLayout {
     pub(crate) fn built_in() -> Self {

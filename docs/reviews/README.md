@@ -405,3 +405,4 @@
 | [2026-07-30-cu-111-product-undo-redo-implementation-decision.md](2026-07-30-cu-111-product-undo-redo-implementation-decision.md) | CU-111 製品Undo/Redo配送 実装決定 |
 | [2026-07-30-cu-108-rectangle-product-spine-e2e-decision.md](2026-07-30-cu-108-rectangle-product-spine-e2e-decision.md) | CU-108 Rectangle通常製品spine E2E決定 |
 | [2026-07-30-cu-108rds-drop-release-routing-repair-selection.md](2026-07-30-cu-108rds-drop-release-routing-repair-selection.md) | CU-108RDS drop release排他routing修復選定と次ゴールhandoff |
+| [2026-07-30-sd-02g-product-host-layout-geometry-implementation-decision.md](2026-07-30-sd-02g-product-host-layout-geometry-implementation-decision.md) | SD-02G product Host layout geometry単一owner実装 |

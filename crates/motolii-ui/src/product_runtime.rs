@@ -23,6 +23,7 @@ use crate::document_edit_runtime::{
 };
 use crate::host_pointer_capture::{HostPointerCancel, HostPointerCandidate};
 use crate::inspector_host_runtime::{InspectorHostRuntime, InspectorHostRuntimeError};
+use crate::layout_authority::LayoutAuthority;
 use crate::native_host_layout::{NativeHostLayout, PhysicalRect};
 use crate::render_worker::{
     RenderGeneration, RenderRequest, RenderWorker, RenderWorkerClient, RenderWorkerError,
@@ -117,6 +118,7 @@ pub(crate) struct ProductApp {
     projection_generation: u64,
     current_document: Arc<motolii_doc::Document>,
     proxy: EventLoopProxy<ProductEvent>,
+    layout_authority: LayoutAuthority,
     layout: Option<NativeHostLayout>,
     next_layout_epoch: u64,
     browser_source: Option<BrowserPlaceIntent>,
@@ -398,6 +400,7 @@ impl ProductApp {
             primary: None,
             projection_generation: 0,
             proxy,
+            layout_authority: LayoutAuthority::built_in()?,
             layout: None,
             next_layout_epoch: 1,
             browser_source: None,
@@ -468,7 +471,9 @@ impl ProductApp {
             size.height,
             window.scale_factor(),
             self.preview.slot().desc(),
-        ) else {
+            self.layout_authority.intent(),
+        )?
+        else {
             self.layout = None;
             return Ok(());
         };
@@ -1454,6 +1459,10 @@ pub(crate) enum ProductRuntimeError {
     Browser(#[from] BrowserHostRuntimeError),
     #[error(transparent)]
     Inspector(#[from] InspectorHostRuntimeError),
+    #[error(transparent)]
+    Layout(#[from] crate::layout::LayoutError),
+    #[error(transparent)]
+    NativeHostLayout(#[from] crate::native_host_layout::NativeHostLayoutError),
     #[error("native product Surface is unsupported by the selected adapter")]
     SurfaceUnsupported,
     #[error("native product Host was initialized twice")]
@@ -1501,7 +1510,16 @@ mod tests {
         let frame =
             FrameDesc::try_packed(1920, 1080, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true)
                 .unwrap();
-        NativeHostLayout::try_new(epoch, 1000, 800, 1.0, frame).unwrap()
+        NativeHostLayout::try_new(
+            epoch,
+            1000,
+            800,
+            1.0,
+            frame,
+            &crate::layout::PanelLayout::built_in(),
+        )
+        .unwrap()
+        .unwrap()
     }
 
     fn test_source() -> BrowserPlaceIntent {

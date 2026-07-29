@@ -20,6 +20,7 @@ mod keymap;
 mod keymap_codec;
 mod layout;
 mod layout_authority;
+mod layout_geometry;
 mod layout_runtime;
 mod layout_runtime_adapter;
 mod native_host_layout;
