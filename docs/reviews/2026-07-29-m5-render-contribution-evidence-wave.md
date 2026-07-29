@@ -268,9 +268,10 @@ RCA3の検収を待たず、terminalとなったRCB3／RCC3-BEVY／RCC3-UNREAL�
 | grain | 単一動詞 | read-only入力 | 変更許可 | 状態 |
 |---|---|---|---|---|
 | `P2D-RCB4` | 配置 | 本書§2〜§3、§6、Rerun三capsule、転移裁定 | `2026-07-29-m5-rerun-observation-map-v4.md`の配置欄だけ | 登録済み |
-| `P2D-RCC4-BEVY` | 配置 | 本書§7、Bevy capsule | `2026-07-29-m5-bevy-observation-map-v4.md`の配置欄だけ | 登録済み |
+| `P2D-RCC4-BEVY` | 配置 | 本書§7、Bevy capsule | `2026-07-29-m5-bevy-observation-map-v4.md`の配置欄だけ | Grok ACCEPT 0/0/0だが、後発の主担当固定配置と2 cell不一致。差分不採用 |
 | `P2D-RCC4-UNREAL` | 配置 | 本書§7、Unreal capsule | `2026-07-29-m5-unreal-observation-map-v4.md`の配置欄だけ | 登録済み |
 | `P2D-RCA4` | 配置 | 本書§2〜§3、§5と元authority | `2026-07-29-m5-render-contribution-boundary-map-v4.md`の配置欄だけ | 登録済み |
+| `P2D-RCC4B-BEVY` | 配置 | 本書§7、Bevy capsule、v4主担当固定配置 | `2026-07-29-m5-bevy-observation-map-v4.md`の配置欄だけ | 登録済み |
 
 配置欄は既存fragment IDだけを受け入れ、自由文、本文複製、言い換え、ID追加を拒否する。
 Unreal／Bevyのcapsule非記載項目には固定`NO` fragmentを置ける。Rerun A6は固定`R-A6-LIM`を
