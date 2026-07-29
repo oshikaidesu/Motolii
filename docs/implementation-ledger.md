@@ -148,8 +148,9 @@ P0I #170 → P7a → P7b → P7c → P7U
 | RENDER-CONTRIBUTION-ENGINE | P2D-RCC5 | M5 / P2D / fixture comparison | `DONE` | — | Grok ACCEPT P0/P1/P2=0、主担当再照合 | P2D-RCI入力 |
 | RENDER-CONTRIBUTION-INTEGRATION | P2D-RCI | M5 / P2D / semantic integration decision | `DONE` | — | 主担当Codex決定、Fable read-only反対側監査 | private RCS1だけ解禁 |
 | RENDER-CONTRIBUTION-SPIKE | P2D-RCS1 | M5 / P2D / private opaque Group Depth | `DONE` | — | Grok ACCEPT P0/P1=0、runner固定3 command exit 0、主担当再照合 | 実depth F1/F6、group外pixel不変、公開API／Document／serde変更0 |
-| RENDER-CONTRIBUTION-CONTRACT | P2D-RCD1 | M5 / P2D / typed seam decision | `DONE` | — | [typed seam decision](reviews/2026-07-29-m5-render-contribution-typed-seam-decision.md) | P2D-RCT1／RCF1 DONE。残るP2D-RCD2、P2D-RCO1、P2D-RCFP1、P2D-RCR1、P2D-RCP1、P2D-RCBUD1はWAIT |
-| RENDER-CONTRIBUTION-SCHEMA | P2D-RCD2 | M5 / P2D / policy schema decision | `WAIT` | — | P2D-RCD1、M2-D1e | GR-PV、追加migration |
+| RENDER-CONTRIBUTION-CONTRACT | P2D-RCD1 | M5 / P2D / typed seam decision | `DONE` | — | [typed seam decision](reviews/2026-07-29-m5-render-contribution-typed-seam-decision.md) | P2D-RCD2／RCT1／RCF1 DONE。残るP2D-RCO1、P2D-RCFP1、P2D-RCR1、P2D-RCP1、P2D-RCBUD1はWAIT |
+| RENDER-CONTRIBUTION-SCHEMA | P2D-RCD2 | M5 / P2D / policy schema decision | `DONE` | — | [schema decision](reviews/2026-07-29-m5-occlusion-policy-schema-decision.md) | Host semantic key、Group policy、Item participant、v6 migration、D2／Undo |
+| RENDER-CONTRIBUTION-SCHEMA | P2D-RCD2I | M5 / P2D / policy schema implementation | `WAIT` | — | P2D-RCD2、現行Document version 5前置確認 | v6 migration／command／semantic oracle |
 | RENDER-CONTRIBUTION-FIXTURE | P2D-RCF1 | M5 / P2D / conformance harness decision | `DONE` | — | [harness decision](reviews/2026-07-29-m5-render-contribution-conformance-harness-decision.md) | black-box観測、F1〜F6分担、First Vism無特権 |
 | RENDER-CONTRIBUTION-FIXTURE | P2D-RCF1I-BASE | M5 / P2D / F1 F5 F6 executable harness | `WAIT` | — | P2D-RCF1、公開typed seam実装 | private RCS1非昇格 |
 | RENDER-CONTRIBUTION-FIXTURE | P2D-RCF1I-ALPHA | M5 / P2D / F2 F3 executable harness | `WAIT` | — | P2D-RCF1I-BASE、P2D-RCT1 | 対応soft-alpha pixelはRCO1後 |

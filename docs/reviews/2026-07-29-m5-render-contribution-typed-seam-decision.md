@@ -50,8 +50,8 @@ First Vismは専用type、feature、key、順序、package identity、registry�
 
 本decision完了時点では後続8件を`WAIT`に維持した。2026-07-29に`P2D-RCT1`を
 [alpha意味decision](2026-07-29-m5-render-contribution-alpha-semantics-decision.md)で独立に閉じた。
-同日に`P2D-RCF1`のharness設計も独立に閉じた。残る`P2D-RCD2`、`P2D-RCO1`、
-`P2D-RCFP1`、`P2D-RCR1`、`P2D-RCP1`、
+同日に`P2D-RCF1`のharness設計と`P2D-RCD2`のschema設計も独立に閉じた。
+残る`P2D-RCO1`、`P2D-RCFP1`、`P2D-RCR1`、`P2D-RCP1`、
 `P2D-RCBUD1`は各decisionまで`WAIT`とする。
 
 ## 9. STOP

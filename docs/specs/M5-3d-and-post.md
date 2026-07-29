@@ -158,8 +158,9 @@ M5は[操作単純化モデル](../interaction-simplicity-model.md)の最初の�
 | P2D-RCA8 | **DONE**。固定Motolii境界fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | Grok `ACCEPT` P0/P1/P2=0、主担当再照合済み |
 | P2D-RCI | **DONE**。[Render Contribution統合decision](../reviews/2026-07-29-m5-render-contribution-integration-decision.md) | P2D-RCA8, P2D-RCB6, P2D-RCC5 | 意味だけを閉じ、公開trait／Document／方式は未決。private `P2D-RCS1`だけ解禁 |
 | P2D-RCS1 | **DONE**。opaque限定Group Depth private spike | P2D-RCI | Grok `ACCEPT` P0/P1=0。`motolii-render`内部の実depth attachmentでF1/F6、group外pixel不変、FINAL/DRAFT同一評価関数。Document／serde／公開API変更0 |
-| P2D-RCD1 | 型付き要求／contribution seam decision | P2D-RCS1、RCI §2.2のcamera／Observation非所有 | **DONE**。[typed seam decision](../reviews/2026-07-29-m5-render-contribution-typed-seam-decision.md)が一／一／many、whole-request admission、F5継承、trust eligibility前段分離を固定。後続8件はWAIT、P3のObservation形は先取りしない |
-| P2D-RCD2 | policy／Depth Participant schema decision | P2D-RCD1、M2-D1e | **WAIT**。GR-PVと追加migration |
+| P2D-RCD1 | 型付き要求／contribution seam decision | P2D-RCS1、RCI §2.2のcamera／Observation非所有 | **DONE**。[typed seam decision](../reviews/2026-07-29-m5-render-contribution-typed-seam-decision.md)が一／一／many、whole-request admission、F5継承、trust eligibility前段分離を固定。RCD2／RCF1／RCT1は独立decision済み。P3のObservation形は先取りしない |
+| P2D-RCD2 | policy／Depth Participant schema decision | P2D-RCD1、M2-D1e | **DONE**。[schema decision](../reviews/2026-07-29-m5-occlusion-policy-schema-decision.md)でHost semantic key、Group policy、Item participant、v6 migration、D2／Undoを固定 |
+| P2D-RCD2I | policy／Depth Participant schema実装 | P2D-RCD2 | **WAIT**。現行version 5前置確認後、v6 migration／command／oracleを一契約で実装 |
 | P2D-RCF1 | conformance harness decision／First Vism無特権契約 | P2D-RCD1 | **DONE**。[harness decision](../reviews/2026-07-29-m5-render-contribution-conformance-harness-decision.md)でblack-box観測、F1〜F6分担、既存testkit再利用、実装4粒を固定 |
 | P2D-RCF1I-BASE | F1／F5／F6 executable harness | P2D-RCF1、公開typed seam実装 | **WAIT**。private RCS1を昇格しない |
 | P2D-RCF1I-ALPHA | F2／F3 executable harness | P2D-RCF1I-BASE、P2D-RCT1 | **WAIT**。対応soft-alpha pixelはP2D-RCO1後 |
