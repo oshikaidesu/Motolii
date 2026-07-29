@@ -35,6 +35,8 @@ const POST_PROMOTION_ENTRY_KEYS = [
   "fixedSourceSha256",
   "currentSha256",
 ];
+const POST_PROMOTION_INDEX0_CURRENT_SHA256 =
+  "866124a69caaa168fa19c67e6c723db97fec67a61071bdbe66973576266c42f4";
 
 const CURRENT_BROWSER_SOURCE = "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx";
 const CURRENT_BROWSER_CSS = "ui/motolii-web/src/candidates/discovery-browser-candidate.css";
@@ -113,40 +115,73 @@ function validatePostPromotionChanges(provenance, currentComponentSha256) {
   if (!Array.isArray(changes)) {
     throw new Error("postPromotionChanges must be an array");
   }
-  if (changes.length !== 1) {
-    throw new Error("postPromotionChanges must contain exactly one entry");
+  if (changes.length < 1) {
+    throw new Error("postPromotionChanges must contain at least one entry");
   }
-  const entry = changes[0];
-  if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
-    throw new Error("postPromotionChanges entry must be an object");
-  }
-  const keys = Object.keys(entry);
-  if (keys.length !== POST_PROMOTION_ENTRY_KEYS.length) {
-    throw new Error("postPromotionChanges entry has wrong key count");
-  }
-  for (const key of POST_PROMOTION_ENTRY_KEYS) {
-    if (!Object.hasOwn(entry, key)) {
-      throw new Error(`postPromotionChanges entry missing key ${key}`);
+  for (const entry of changes) {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error("postPromotionChanges entry must be an object");
+    }
+    const keys = Object.keys(entry);
+    if (keys.length !== POST_PROMOTION_ENTRY_KEYS.length) {
+      throw new Error("postPromotionChanges entry has wrong key count");
+    }
+    for (const key of POST_PROMOTION_ENTRY_KEYS) {
+      if (!Object.hasOwn(entry, key)) {
+        throw new Error(`postPromotionChanges entry missing key ${key}`);
+      }
+    }
+    for (const key of keys) {
+      if (!POST_PROMOTION_ENTRY_KEYS.includes(key)) {
+        throw new Error(`postPromotionChanges entry has extra key ${key}`);
+      }
     }
   }
-  for (const key of keys) {
-    if (!POST_PROMOTION_ENTRY_KEYS.includes(key)) {
-      throw new Error(`postPromotionChanges entry has extra key ${key}`);
-    }
-  }
-  if (entry.task !== POST_PROMOTION_TASK) {
+  const index0 = changes[0];
+  if (index0.task !== POST_PROMOTION_TASK) {
     throw new Error("postPromotionChanges task literal mismatch");
   }
-  if (entry.file !== POST_PROMOTION_FILE) {
+  if (index0.file !== POST_PROMOTION_FILE) {
     throw new Error("postPromotionChanges file literal mismatch");
   }
-  if (entry.reason !== POST_PROMOTION_REASON) {
+  if (index0.reason !== POST_PROMOTION_REASON) {
     throw new Error("postPromotionChanges reason literal mismatch");
   }
-  if (entry.fixedSourceSha256 !== FIXED_BROWSER_COMPONENT_SHA256) {
+  if (index0.fixedSourceSha256 !== FIXED_BROWSER_COMPONENT_SHA256) {
     throw new Error("postPromotionChanges fixedSourceSha256 mismatch");
   }
-  if (entry.currentSha256 !== currentComponentSha256) {
+  if (index0.currentSha256 !== POST_PROMOTION_INDEX0_CURRENT_SHA256) {
+    throw new Error("postPromotionChanges index 0 currentSha256 mismatch");
+  }
+  const index0File = index0.file;
+  for (const entry of changes) {
+    if (entry.file !== index0File) {
+      throw new Error("postPromotionChanges file must match index 0");
+    }
+  }
+  for (let i = 1; i < changes.length; i += 1) {
+    const entry = changes[i];
+    if (typeof entry.task !== "string" || entry.task.length === 0) {
+      throw new Error("postPromotionChanges task must be non-empty string");
+    }
+    if (typeof entry.reason !== "string" || entry.reason.length === 0) {
+      throw new Error("postPromotionChanges reason must be non-empty string");
+    }
+  }
+  const seenTasks = new Set();
+  for (const entry of changes) {
+    if (seenTasks.has(entry.task)) {
+      throw new Error("postPromotionChanges task must be unique");
+    }
+    seenTasks.add(entry.task);
+  }
+  for (let i = 1; i < changes.length; i += 1) {
+    if (changes[i].fixedSourceSha256 !== changes[i - 1].currentSha256) {
+      throw new Error("postPromotionChanges hash chain break");
+    }
+  }
+  const lastEntry = changes[changes.length - 1];
+  if (lastEntry.currentSha256 !== currentComponentSha256) {
     throw new Error("postPromotionChanges currentSha256 mismatch");
   }
 }
@@ -319,45 +354,86 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
   const currentBrowserSha256 = hashBytes(browserComponentBytes);
   validatePostPromotionChanges(provenance, currentBrowserSha256);
 
+  const SYN_A = hashBytes(Buffer.from("cu-0a08ssci-p1-synthetic-chain-a"));
+  const SYN_B = hashBytes(Buffer.from("cu-0a08ssci-p1-synthetic-chain-b"));
+  const SYN_X = hashBytes(Buffer.from("cu-0a08ssci-p1-mismatched-live-bytes"));
+
+  const postPromotionEntry0 = provenance.postPromotionChanges[0];
+  const syntheticChainEntry1 = {
+    task: "CU-0A08SSCI-P1-SYN-1",
+    file: POST_PROMOTION_FILE,
+    reason: "synthetic post-promotion change 1",
+    fixedSourceSha256: POST_PROMOTION_INDEX0_CURRENT_SHA256,
+    currentSha256: SYN_A,
+  };
+  const syntheticChainEntry2 = {
+    task: "CU-0A08SSCI-P1-SYN-2",
+    file: POST_PROMOTION_FILE,
+    reason: "synthetic post-promotion change 2",
+    fixedSourceSha256: SYN_A,
+    currentSha256: SYN_B,
+  };
+  const validChain2 = [postPromotionEntry0, syntheticChainEntry1];
+  const validChain3 = [postPromotionEntry0, syntheticChainEntry1, syntheticChainEntry2];
+
+  assert.doesNotThrow(() => {
+    validatePostPromotionChanges(
+      { ...provenance, postPromotionChanges: validChain2 },
+      SYN_A,
+    );
+  });
+  assert.doesNotThrow(() => {
+    validatePostPromotionChanges(
+      { ...provenance, postPromotionChanges: validChain3 },
+      SYN_B,
+    );
+  });
+
   const negativeCases = [
     {
-      label: "postPromotionChanges entry count 0",
+      label: "R-1 postPromotionChanges entry count 0",
       provenance: { ...provenance, postPromotionChanges: [] },
       componentSha256: currentBrowserSha256,
     },
     {
-      label: "postPromotionChanges entry count 2+",
-      provenance: {
-        ...provenance,
-        postPromotionChanges: [
-          provenance.postPromotionChanges[0],
-          { ...provenance.postPromotionChanges[0] },
-        ],
-      },
-      componentSha256: currentBrowserSha256,
-    },
-    {
-      label: "postPromotionChanges entry key missing",
+      label: "R-2 postPromotionChanges entry key missing index 0",
       provenance: {
         ...provenance,
         postPromotionChanges: [
           {
-            task: POST_PROMOTION_TASK,
             file: POST_PROMOTION_FILE,
             reason: POST_PROMOTION_REASON,
             fixedSourceSha256: FIXED_BROWSER_COMPONENT_SHA256,
+            currentSha256: POST_PROMOTION_INDEX0_CURRENT_SHA256,
           },
         ],
       },
       componentSha256: currentBrowserSha256,
     },
     {
-      label: "postPromotionChanges entry key extra",
+      label: "R-2 postPromotionChanges entry key missing index 2",
+      provenance: {
+        ...provenance,
+        postPromotionChanges: [
+          postPromotionEntry0,
+          syntheticChainEntry1,
+          {
+            task: syntheticChainEntry2.task,
+            file: syntheticChainEntry2.file,
+            fixedSourceSha256: syntheticChainEntry2.fixedSourceSha256,
+            currentSha256: syntheticChainEntry2.currentSha256,
+          },
+        ],
+      },
+      componentSha256: SYN_B,
+    },
+    {
+      label: "R-3 postPromotionChanges entry key extra index 0",
       provenance: {
         ...provenance,
         postPromotionChanges: [
           {
-            ...provenance.postPromotionChanges[0],
+            ...postPromotionEntry0,
             extra: true,
           },
         ],
@@ -365,69 +441,172 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
       componentSha256: currentBrowserSha256,
     },
     {
-      label: "postPromotionChanges task literal mismatch",
+      label: "R-3 postPromotionChanges entry key extra index 1",
       provenance: {
         ...provenance,
         postPromotionChanges: [
+          postPromotionEntry0,
           {
-            ...provenance.postPromotionChanges[0],
-            task: "G0-6H-V1ETB-WRONG",
+            ...syntheticChainEntry1,
+            extra: true,
           },
         ],
       },
-      componentSha256: currentBrowserSha256,
+      componentSha256: SYN_A,
     },
     {
-      label: "postPromotionChanges file literal mismatch",
+      label: "R-4 postPromotionChanges index 0 task mismatch",
       provenance: {
         ...provenance,
         postPromotionChanges: [
           {
-            ...provenance.postPromotionChanges[0],
+            ...postPromotionEntry0,
+            task: "G0-6H-V1ETB-WRONG",
+          },
+          syntheticChainEntry1,
+        ],
+      },
+      componentSha256: SYN_A,
+    },
+    {
+      label: "R-4 postPromotionChanges index 0 file mismatch",
+      provenance: {
+        ...provenance,
+        postPromotionChanges: [
+          {
+            ...postPromotionEntry0,
+            file: "ui/motolii-web/src/candidates/Wrong.jsx",
+          },
+          syntheticChainEntry1,
+        ],
+      },
+      componentSha256: SYN_A,
+    },
+    {
+      label: "R-4 postPromotionChanges index 0 reason mismatch",
+      provenance: {
+        ...provenance,
+        postPromotionChanges: [
+          {
+            ...postPromotionEntry0,
+            reason: "wrong reason",
+          },
+          syntheticChainEntry1,
+        ],
+      },
+      componentSha256: SYN_A,
+    },
+    {
+      label: "R-4 postPromotionChanges index 0 fixedSourceSha256 mismatch",
+      provenance: {
+        ...provenance,
+        postPromotionChanges: [
+          {
+            ...postPromotionEntry0,
+            fixedSourceSha256: `${FIXED_BROWSER_COMPONENT_SHA256.slice(0, 63)}0`,
+          },
+          syntheticChainEntry1,
+        ],
+      },
+      componentSha256: SYN_A,
+    },
+    {
+      label: "R-4 postPromotionChanges index 0 currentSha256 mismatch",
+      provenance: {
+        ...provenance,
+        postPromotionChanges: [
+          {
+            ...postPromotionEntry0,
+            currentSha256: `${POST_PROMOTION_INDEX0_CURRENT_SHA256.slice(0, 63)}0`,
+          },
+          syntheticChainEntry1,
+        ],
+      },
+      componentSha256: SYN_A,
+    },
+    {
+      label: "R-5 postPromotionChanges tail currentSha256 mismatch",
+      provenance: { ...provenance, postPromotionChanges: validChain2 },
+      componentSha256: SYN_X,
+    },
+    {
+      label: "R-6 chain break at i=2",
+      provenance: {
+        ...provenance,
+        postPromotionChanges: [
+          postPromotionEntry0,
+          syntheticChainEntry1,
+          {
+            ...syntheticChainEntry2,
+            fixedSourceSha256: `${SYN_A.slice(0, 63)}0`,
+          },
+        ],
+      },
+      componentSha256: SYN_B,
+    },
+    {
+      label: "R-7 chain reorder breaks PC-7 at i=1",
+      provenance: {
+        ...provenance,
+        postPromotionChanges: [postPromotionEntry0, syntheticChainEntry2, syntheticChainEntry1],
+      },
+      componentSha256: SYN_A,
+    },
+    {
+      label: "R-8 postPromotionChanges index 1 empty task",
+      provenance: {
+        ...provenance,
+        postPromotionChanges: [
+          postPromotionEntry0,
+          {
+            ...syntheticChainEntry1,
+            task: "",
+          },
+        ],
+      },
+      componentSha256: SYN_A,
+    },
+    {
+      label: "R-8 postPromotionChanges index 1 empty reason",
+      provenance: {
+        ...provenance,
+        postPromotionChanges: [
+          postPromotionEntry0,
+          {
+            ...syntheticChainEntry1,
+            reason: "",
+          },
+        ],
+      },
+      componentSha256: SYN_A,
+    },
+    {
+      label: "R-8 postPromotionChanges index 1 duplicate task",
+      provenance: {
+        ...provenance,
+        postPromotionChanges: [
+          postPromotionEntry0,
+          {
+            ...syntheticChainEntry1,
+            task: POST_PROMOTION_TASK,
+          },
+        ],
+      },
+      componentSha256: SYN_A,
+    },
+    {
+      label: "R-8 postPromotionChanges index 1 file mismatch",
+      provenance: {
+        ...provenance,
+        postPromotionChanges: [
+          postPromotionEntry0,
+          {
+            ...syntheticChainEntry1,
             file: "ui/motolii-web/src/candidates/Wrong.jsx",
           },
         ],
       },
-      componentSha256: currentBrowserSha256,
-    },
-    {
-      label: "postPromotionChanges reason literal mismatch",
-      provenance: {
-        ...provenance,
-        postPromotionChanges: [
-          {
-            ...provenance.postPromotionChanges[0],
-            reason: "wrong reason",
-          },
-        ],
-      },
-      componentSha256: currentBrowserSha256,
-    },
-    {
-      label: "postPromotionChanges fixedSourceSha256 mismatch",
-      provenance: {
-        ...provenance,
-        postPromotionChanges: [
-          {
-            ...provenance.postPromotionChanges[0],
-            fixedSourceSha256: `${FIXED_BROWSER_COMPONENT_SHA256.slice(0, 63)}0`,
-          },
-        ],
-      },
-      componentSha256: currentBrowserSha256,
-    },
-    {
-      label: "postPromotionChanges currentSha256 mismatch",
-      provenance: {
-        ...provenance,
-        postPromotionChanges: [
-          {
-            ...provenance.postPromotionChanges[0],
-            currentSha256: `${currentBrowserSha256.slice(0, 63)}0`,
-          },
-        ],
-      },
-      componentSha256: currentBrowserSha256,
+      componentSha256: SYN_A,
     },
     {
       label: "no postPromotionChanges with mismatched component bytes",
