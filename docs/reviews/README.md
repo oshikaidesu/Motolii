@@ -358,5 +358,6 @@
 | [2026-07-29-cu-0a08ssd-browser-place-source-seam-implementation-boundary-decision.md](2026-07-29-cu-0a08ssd-browser-place-source-seam-implementation-boundary-decision.md) | CU-0A08SSD Browser Place source seam の最小実装境界 裁定 |
 | [2026-07-29-cu-0a08ssc-browser-place-source-seam-contract-concretization-scope-selection.md](2026-07-29-cu-0a08ssc-browser-place-source-seam-contract-concretization-scope-selection.md) | CU-0A08SSC Browser Place source seam 契約具体化 選定範囲 |
 | [2026-07-29-cu-0a08sscd-browser-place-source-seam-contract-concretization-decision.md](2026-07-29-cu-0a08sscd-browser-place-source-seam-contract-concretization-decision.md) | CU-0A08SSCD Browser Place source seam 契約具体化 裁定 |
+| [2026-07-29-cu-0a08ssci-browser-place-source-seam-prerequisite-order-decision.md](2026-07-29-cu-0a08ssci-browser-place-source-seam-prerequisite-order-decision.md) | CU-0A08SSCI Browser Place source seam 前提順序 裁定 |
 | [2026-07-29-cu-0a08sscs-browser-place-source-seam-implementation-scope-selection.md](2026-07-29-cu-0a08sscs-browser-place-source-seam-implementation-scope-selection.md) | CU-0A08SSCS Browser Place source seam 実装範囲 選定 |
 | [2026-07-29-cu-0a08sscsd-browser-place-source-seam-implementation-scope-decision.md](2026-07-29-cu-0a08sscsd-browser-place-source-seam-implementation-scope-decision.md) | CU-0A08SSCSD Browser Place source seam 実装範囲 裁定 |
