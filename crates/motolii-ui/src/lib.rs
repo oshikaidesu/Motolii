@@ -13,6 +13,8 @@ mod document_edit_runtime;
 mod domain_intent;
 mod host_pointer_capture;
 mod input_router;
+#[cfg(target_os = "macos")]
+mod inspector_host_runtime;
 mod interaction_state;
 mod keymap;
 mod keymap_codec;

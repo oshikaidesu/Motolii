@@ -19,9 +19,19 @@ const PROTOCOL: &str = "motolii-browser";
 const ENTRY_URL: &str = "motolii-browser://product/host.html";
 const HOST_HTML: &[u8] = include_bytes!("../../../ui/motolii-web/generated-host/host.html");
 const HOST_JS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/host-Ur5hKlzh.js");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/host-gJ40uukV.js");
 const HOST_CSS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/host-B6RM5CLf.css");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/host-4krs5Bey.css");
+const INSPECTOR_HTML: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/inspector.html");
+const INSPECTOR_JS: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/inspector-BMvtfoSi.js");
+const INSPECTOR_CSS: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/inspector-fMh9jxYJ.css");
+const SHARED_JS: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/tokens-4X_Bky8Q.js");
+const SHARED_CSS: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/tokens-Dq8978N5.css");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BrowserLifecycleEvent {
@@ -326,11 +336,16 @@ postMessage:(message)=>window.ipc.postMessage(message)
     }
 }
 
-fn product_asset_response(path: &str) -> Response<Cow<'static, [u8]>> {
+pub(crate) fn product_asset_response(path: &str) -> Response<Cow<'static, [u8]>> {
     let (content_type, body) = match path {
         "/" | "/host.html" => ("text/html; charset=utf-8", HOST_HTML),
-        "/assets/host-Ur5hKlzh.js" => ("text/javascript; charset=utf-8", HOST_JS),
-        "/assets/host-B6RM5CLf.css" => ("text/css; charset=utf-8", HOST_CSS),
+        "/inspector.html" => ("text/html; charset=utf-8", INSPECTOR_HTML),
+        "/assets/host-gJ40uukV.js" => ("text/javascript; charset=utf-8", HOST_JS),
+        "/assets/host-4krs5Bey.css" => ("text/css; charset=utf-8", HOST_CSS),
+        "/assets/inspector-BMvtfoSi.js" => ("text/javascript; charset=utf-8", INSPECTOR_JS),
+        "/assets/inspector-fMh9jxYJ.css" => ("text/css; charset=utf-8", INSPECTOR_CSS),
+        "/assets/tokens-4X_Bky8Q.js" => ("text/javascript; charset=utf-8", SHARED_JS),
+        "/assets/tokens-Dq8978N5.css" => ("text/css; charset=utf-8", SHARED_CSS),
         _ => {
             return Response::builder()
                 .status(404)
@@ -376,7 +391,7 @@ mod tests {
     fn embedded_host_html_references_the_embedded_assets() {
         let html = std::str::from_utf8(HOST_HTML).expect("generated Host HTML is UTF-8");
 
-        for path in ["/assets/host-Ur5hKlzh.js", "/assets/host-B6RM5CLf.css"] {
+        for path in ["/assets/host-gJ40uukV.js", "/assets/host-4krs5Bey.css"] {
             assert!(html.contains(path));
             let response = product_asset_response(path);
             assert_eq!(response.status(), 200);

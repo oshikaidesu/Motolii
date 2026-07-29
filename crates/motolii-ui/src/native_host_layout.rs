@@ -33,6 +33,7 @@ pub(crate) struct PhysicalRect {
 pub(crate) struct NativeHostLayout {
     pub(crate) epoch: u64,
     pub(crate) browser: LogicalRect,
+    pub(crate) inspector: LogicalRect,
     pub(crate) stage: LogicalRect,
     pub(crate) timeline: LogicalRect,
     pub(crate) stage_physical: PhysicalRect,
@@ -60,6 +61,7 @@ impl NativeHostLayout {
         let top_height = height * f64::from(BUILT_IN_VERTICAL_SHARES[0]) / vertical_total;
         let top_total = f64::from(BUILT_IN_TOP_SHARES.iter().sum::<u32>());
         let browser_width = width * f64::from(BUILT_IN_TOP_SHARES[0]) / top_total;
+        let inspector_width = width * f64::from(BUILT_IN_TOP_SHARES[2]) / top_total;
         let stage_panel = LogicalRect {
             x: browser_width,
             y: 0.0,
@@ -91,6 +93,12 @@ impl NativeHostLayout {
                 x: 0.0,
                 y: 0.0,
                 width: browser_width,
+                height: top_height,
+            },
+            inspector: LogicalRect {
+                x: width - inspector_width,
+                y: 0.0,
+                width: inspector_width,
                 height: top_height,
             },
             stage,
@@ -161,6 +169,8 @@ mod tests {
         let layout = NativeHostLayout::try_new(7, 1000, 800, 1.0, frame()).unwrap();
         assert_eq!(layout.epoch, 7);
         assert_eq!(layout.browser.width, 200.0);
+        assert_eq!(layout.inspector.x, 800.0);
+        assert_eq!(layout.inspector.width, 200.0);
         assert_eq!(
             layout.timeline,
             LogicalRect {

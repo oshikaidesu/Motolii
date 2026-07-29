@@ -21,6 +21,7 @@ use crate::document_edit_runtime::{
     DocumentEditQueue, DocumentEditRuntime, DocumentEditRuntimeError, PlaceRectangleRequest,
 };
 use crate::host_pointer_capture::{HostPointerCancel, HostPointerCandidate};
+use crate::inspector_host_runtime::{InspectorHostRuntime, InspectorHostRuntimeError};
 use crate::native_host_layout::{NativeHostLayout, PhysicalRect};
 use crate::render_worker::{
     RenderGeneration, RenderRequest, RenderWorker, RenderWorkerClient, RenderWorkerError,
@@ -91,6 +92,7 @@ pub(crate) struct ProductApp {
     // surface → WebView → Windowの順にdropし、AppKit backingを先に失わない。
     gfx: Option<ProductSurface>,
     browser: Option<BrowserHostRuntime>,
+    inspector: Option<InspectorHostRuntime>,
     window: Option<Arc<Window>>,
     gpu: Arc<GpuCtx>,
     parts: Option<ProductGpuParts>,
@@ -358,6 +360,7 @@ impl ProductApp {
         Ok(Self {
             gfx: None,
             browser: None,
+            inspector: None,
             window: None,
             gpu,
             parts: Some(parts),
@@ -418,10 +421,12 @@ impl ProductApp {
             browser_source.clone(),
             self.proxy.clone(),
         )?;
+        let inspector = InspectorHostRuntime::new(&window, &self.current_document, self.primary)?;
         self.browser_lifecycle = Some(BrowserLifecycleCoordinator::new(initial_instance_epoch)?);
         self.browser_source = Some(browser_source);
         self.window = Some(window);
         self.browser = Some(browser);
+        self.inspector = Some(inspector);
         self.gfx = Some(gfx);
         self.update_layout()?;
         if let Some(window) = &self.window {
@@ -451,6 +456,9 @@ impl ProductApp {
             .ok_or(ProductRuntimeError::LayoutEpochExhausted)?;
         if let Some(browser) = &self.browser {
             browser.set_bounds(layout.epoch, layout.browser)?;
+        }
+        if let Some(inspector) = &mut self.inspector {
+            inspector.set_bounds(layout.epoch, layout.inspector)?;
         }
         self.layout = Some(layout);
         Ok(())
@@ -594,6 +602,12 @@ impl ProductApp {
                     self.current_document = published.snapshot;
                     self.primary = published.primary;
                     self.projection_generation = published.projection_generation;
+                    if let Some(inspector) = &self.inspector {
+                        if let Err(error) = inspector.publish(&self.current_document, self.primary)
+                        {
+                            return self.fail(event_loop, error);
+                        }
+                    }
                     self.timeline_projection =
                         match ProductTimelineProjection::from_document(&self.current_document) {
                             Ok(projection) => projection,
@@ -1255,6 +1269,8 @@ pub(crate) enum ProductRuntimeError {
     Surface(#[from] wgpu::CreateSurfaceError),
     #[error(transparent)]
     Browser(#[from] BrowserHostRuntimeError),
+    #[error(transparent)]
+    Inspector(#[from] InspectorHostRuntimeError),
     #[error("native product Surface is unsupported by the selected adapter")]
     SurfaceUnsupported,
     #[error("native product Host was initialized twice")]

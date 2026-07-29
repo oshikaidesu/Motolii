@@ -10,7 +10,10 @@ export default defineConfig({
     manifest: true,
     outDir: "generated-host",
     rollupOptions: {
-      input: fileURLToPath(new URL("./host.html", import.meta.url)),
+      input: {
+        host: fileURLToPath(new URL("./host.html", import.meta.url)),
+        inspector: fileURLToPath(new URL("./inspector.html", import.meta.url)),
+      },
     },
   },
 });
