@@ -1,8 +1,10 @@
 # U0e-2 / G0-6H reference handoff
 
-状態: **自動生成完了 / 人間審判未実施 / U0e-3停止**
+状態: **自動生成完了 / 人間審判ACCEPT / U0e-3解禁**
 
-この資料は見た目の採否を記録しない。5画面と派生画像をG0-6Hの人間審判へ渡すための未記入templateである。
+この資料は5画面と派生画像をG0-6Hの人間審判へ渡した記録である。2026-07-29の
+最終sessionは現行live `#plugin-browser-candidate`を対象にし、詳細は
+[G0-6H人間審判ACCEPT](../reviews/2026-07-29-g0-6h-human-acceptance-decision.md)を正とする。
 
 ## 固定証拠
 
@@ -44,35 +46,41 @@ npm run check-reference
 - CVD/lightness/grayscale画像で意味の衝突が知覚されるか
 - 具体token値、製品theme、製品font、component stateを採択するか
 
-## 5秒課題と未記入checklist
+## 5秒課題と最終判定
 
-各行についてnormal、lightness、grayscale、protanopia、deuteranopia、tritanopiaを同じ表示環境で確認する。
+派生6 variantは機械回帰証拠として各行へ対応する。最終人間sessionはlive normal routeを総合判定する。
 
 | screen | 5秒課題 | 階層 | 識別 | 馴染み | 過剰装飾なし | 所見 |
 |---|---|---|---|---|---|---|
-| `empty-browser` | asset browser、transport、次に行う操作の説明口を指す | [ ] | [ ] | [ ] | [ ] | 未記入 |
-| `mixed-timeline` | 5種object、選択、mute、keyframe、bake/cacheを指す | [ ] | [ ] | [ ] | [ ] | 未記入 |
-| `parameter-easing` | 選択parameter、easing popup、focus、warning、disabledを指す | [ ] | [ ] | [ ] | [ ] | 未記入 |
-| `stage-frame-tools` | Output Frame、内外object、scrim、Select/Camera/Handを指す | [ ] | [ ] | [ ] | [ ] | 未記入 |
-| `shared-effect-relative` | 共有definitionの3 use、stack差、接続方向、fold数、Relative HUDを指す | [ ] | [ ] | [ ] | [ ] | 未記入 |
+| `empty-browser` | asset browser、transport、次に行う操作の説明口を指す | [x] | [x] | [x] | [x] | live route総合ACCEPT |
+| `mixed-timeline` | 5種object、選択、mute、keyframe、bake/cacheを指す | [x] | [x] | [x] | [x] | live route総合ACCEPT |
+| `parameter-easing` | 選択parameter、easing popup、focus、warning、disabledを指す | [x] | [x] | [x] | [x] | live route総合ACCEPT |
+| `stage-frame-tools` | Output Frame、内外object、scrim、Select/Camera/Handを指す | [x] | [x] | [x] | [x] | live route総合ACCEPT |
+| `shared-effect-relative` | 共有definitionの3 use、stack差、接続方向、fold数、Relative HUDを指す | [x] | [x] | [x] | [x] | live route総合ACCEPT |
+
+`[x]`はUI作者によるlive routeの総合ACCEPTを表す。派生bitmapを個別に人間確認した
+という意味ではなく、派生30 captureは機械回帰証拠として保持する。
 
 ## Decision template
 
-- 判定者: 未記入
-- 実施日: 未記入
-- 表示環境（OS / display / scale / ambient）: 未記入
-- 使用generation: `u0e2-08f96cbd7754-85c0fc529ab1`
-- 5秒課題の結果: 未記入
-- 採否: 未記入（`ACCEPT` / `REVISE`）
-- 採否理由: 未記入
-- 修正要求（screen / semantic role / observed problem）: 未記入
-- 採択する具体token候補: 未記入
-- 棄却する具体token候補: 未記入
-- 次に解凍する粒: 未記入
+- 判定者: プロジェクト所有者 / 対象UI作者
+- 実施日: 2026-07-29
+- 表示環境（OS / display / scale / ambient）: macOS / MacBook内蔵画面 / 100% / 暗い室内
+- 使用generation: current-route `44e538c97807-ead41d4d6562`を自動補助証拠として併置。人間入力はlive `#plugin-browser-candidate`
+- 5秒課題の結果: 5状態すべて総合`ACCEPT`
+- 採否: `ACCEPT`
+- 採否理由: UI作者が現行UIを完成と判断し、次はReact/native接続へ進むと明示
+- 修正要求（screen / semantic role / observed problem）: なし
+- 採択する具体token候補: 現行role token候補、既存component state、既存icon体系。U0e-3の機械検査を通して製品導入
+- 棄却する具体token候補: なし
+- 次に解凍する粒: `CU-0B02` / `U0e-3`
 
-人間の記録が正本へ入るまで`U0e-3`、`U2c-3`、`U2c-5`へ進まない。
+`U0e-3`を解禁する。`U2c-3`、`U2c-5`はU0e-3完了後の既存依存順を維持する。
 
 ## G0-6H-E 限定観察の非充足注記
+
+以下の非充足注記は2026-07-29最終人間sessionより前の履歴である。今回の
+最終ACCEPTがG0-6H状態を更新し、過去時点の証明範囲そのものは遡及変更しない。
 
 - この限定観察は、現行候補 `#plugin-browser-candidate` の 1440×900 dark normal 5 画面への肯定的応答に対する docs-only 記録を示す。
 - `reference-handoff.md` の Decision template と checklist は未充足のままとし、履行は観察台帳へ閉じる。
@@ -83,9 +91,12 @@ npm run check-reference
 - 本資料の固定証拠（:9-16）が指す React source authority `eb16d06f980b6f9bea3901b6f10cbcc21dbfb3d0` は、generation `u0e2-08f96cbd7754-85c0fc529ab1` に限った不変の再現source authorityであり、現行product surfaceの所有authorityではない。
 - 現行 `#plugin-browser-candidate` normal色5画面のproduct-owned React source authority は `56c318edcddab7cf95d263cc2f7dd2b4e6791134` であり（`ui/motolii-web/source-provenance.json`）、旧generation `u0e2-08f96cbd7754-85c0fc529ab1` のsource authority欄へ遡及記載しない。
 - 二commitのGit ancestry成立は系譜事実に留まり、route横断のvisual parity・人間承認・route同一性の根拠にはならない。`check-reference` 成功も固定generationのread-only再現証拠に留まり、現行候補5画面との同一性・本資料のDecision template充足・G0-6H完了の代替にはならない。
-- 本資料の Decision template と checklist は未充足のままとし、履行は [G0-6H-R authority役割再照合](../reviews/2026-07-28-g0-6h-r-reference-authority-role-reconciliation-decision.md) へ閉じる。`#reference/*` と `#plugin-browser-candidate` のどちらをG0-6H人間審判の入力routeとするかは `G0-6H-S` の裁定待ちとする。
+- 本項記録時点では Decision template と checklist は未充足だった。2026-07-29最終sessionの充足は冒頭Decision templateを正とし、履歴上の非充足を遡及変更しない。
 
 ## G0-6H-S route裁定の非先取り注記
+
+本項は2026-07-29最終人間sessionより前のroute裁定時点の証明範囲である。
+以下の「代替しない」は当時のpartial approvalだけを指し、冒頭の最終ACCEPTを否定しない。
 
 - 本資料が固定する generation `u0e2-08f96cbd7754-85c0fc529ab1` と source authority `eb16d06f980b6f9bea3901b6f10cbcc21dbfb3d0` は不変のまま保存され、再現証拠および派生生成のderivation-regression証拠として維持される。
 - `G0-6H-S` により、以後のG0-6H人間審判入力routeは `#plugin-browser-candidate`（product-owned React source authority `56c318edcddab7cf95d263cc2f7dd2b4e6791134`）だけとなり、本資料の30 PNGはrequired human-judgment inputではなくなった。

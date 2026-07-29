@@ -90,4 +90,4 @@ current-route evidence laneが新しいimmutable generationのpublicationを所�
 `CU-0A08BTP`は**DONE**。`CU-0A08BTI`は既決Place chain待ちの`WAIT`を維持する。
 最初の非mock runtime callerと通常製品route到達は、R6後のH1bが所有する。
 次のPRODUCT-ASSET `DO`は本粒では選定しない。current-route publicationの再生成を
-BTPや背骨の代替成果にせず、G0-6H evidence laneへ残す。
+BTPや背骨の代替成果にせず、後続`G0-6H-V1G-RP`へ移管する。

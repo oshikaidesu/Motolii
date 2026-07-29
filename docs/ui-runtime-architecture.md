@@ -213,8 +213,9 @@ toastはdock panelではない。headless layoutはlogical rectangleだけを計
 - Linuxでsystem WebViewを使うかCEF比較へ進むか
 
 G0-9Lは固定した主開発Mac構成のplatform prerequisite evidenceだけを限定確定し、G0-9DはWindowsと追加hardwareを含む
-Distribution Readyを判定する。G0-9L合格後もparent G0-9、G0-9D、G0-6H、G0-3は未完了のまま残し、
-egui baselineを削除しない。G0-9LはW0b、H1b、Motolii Studio Preview、通常製品window結合を解禁しない。
+Distribution Readyを判定する。G0-6Hは2026-07-29の人間`ACCEPT`で完了してU0e-3だけを解禁した。
+parent G0-9、G0-9D、G0-3は未完了のまま残し、egui baselineを削除しない。
+G0-9LまたはG0-6H単独ではW0b、H1b、Motolii Studio Preview、通常製品window結合を解禁しない。
 G0-9Lは固定Macのplatform prerequisite evidenceに限って実機合格したが、これらの製品結合を実装しない。
 
 ### G0-3 / GAP-13で未決

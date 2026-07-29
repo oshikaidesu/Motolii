@@ -281,8 +281,8 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 
 | ID | 種類 / 状態 | 一成果 | 依存 | 合格と必須負例 | STOP |
 |---|---|---|---|---|---|
-| CU-0B01 | `HUMAN / WAIT` | G0-6Hで5画面の階層・識別・馴染みを判定 | CU-0A02 | `docs/mocks-ui/reference-handoff.md`へ判定者/条件/採否理由を保存。agentが目視代行しない。G0-9L限定PASSを製品前提充足へ読み替えない | reference画面欠落 |
-| CU-0B02 | `PRODUCT / WAIT` | U0e-3 token/component state/iconを製品導入 | CU-0B01 | contrast/focus/意味色+形、raw color/spacing拒否 | 新画面固有componentが必要 |
+| CU-0B01 | `HUMAN / DONE` | G0-6Hで5画面の階層・識別・馴染みを判定 | CU-0A02 | [G0-6H人間審判ACCEPT](2026-07-29-g0-6h-human-acceptance-decision.md)。UI作者がMacBook内蔵画面/100%/暗い室内でlive routeを判定。agent目視代行0 | reference画面欠落 |
+| CU-0B02 | `PRODUCT / DO` | U0e-3 token/component state/iconを製品導入 | CU-0B01 | contrast/focus/意味色+形、raw color/spacing拒否 | 新画面固有componentが必要 |
 | CU-0B03 | `PRODUCT / WAIT` | H1b codec/offline bundle/mountをHostへ接続 | CU-0A09、別途確定する製品前提 | CDN/HMR/fixture script依存0、invalid/stale codec拒否。G0-9L evidenceを依存充足にしない | WebView transportを公開plugin APIへ一般化したくなる |
 | CU-0B04N | `PRODUCT / WAIT` | native Stage/Timeline viewportを1 top-level Surfaceへ接続 | CU-0B02、別途確定する製品前提 | 同一device/queue、CPU readback 0、viewport resizeでsemantic不変。G0-9L evidenceを依存充足にしない | native viewportごとに別正本Surfaceが必要 |
 | CU-0B04R | `PRODUCT / WAIT` | opaque child WebView islandsをHost layoutへ接続 | CU-0B03、CU-0B04N | transparent overlay 0、focus/geometry epoch、React semantic state 0。G0-9L evidenceを依存充足にしない | DOM/pxをnative/Document identityへ使いたくなる |
@@ -473,7 +473,7 @@ Claude Code `claude-fable-5`へ実ファイルと機械guardをread-onlyで再�
 - 現在sliceとblocking decisionは[縦slice実行方針](2026-07-24-m3-vertical-slice-execution-decision.md)を正とする
 - U0e-2R/U0e-2、CU-0A03/R0、CU-0A04/R1、CU-0A05A/R2A、CU-0A05B/R2B、CU-0A06A/R3A、CU-0A06B/R3B、CU-0A07S/R4S、CU-0A07A/R4A、CU-0A07B/R4B、CU-0A07C/R4Cは完了済みで再実行しない。CU-0A08Iは分割済み。機械dispatchと現在粒は[implementation-ledger.md](../implementation-ledger.md)を唯一の正とする。Motolii Studio Previewは未実装である
 - CU-0G03はユーザーによる実windowの実IME／VoiceOver／復帰審判で合格し、CU-0G04Bまで責任最小化短票どおり既存winit/wgpu/wry/macOS標準経路を使う単一runのmanifestでL3を閉じた。CU-0G05L reviewでL1正本とGPU rawの不足を検出し、`CU-0G02A`で正本を修正した。`CU-0G02BH`はwgpu標準queryだけのbounded harnessを固定し、`CU-0G02B`はその実行commitを使う同一session再実測をGrok P0/P1=0で閉じた。CU-0G05Lは8 retained pathを単一manifestへ束ね、Grok R2 P0/P1/P2=0で固定Mac prerequisite evidenceだけを限定確定した。W0b、H1b、製品window、Windows/追加hardwareは解禁しない
-- G0-6HはU0e-3だけを止める並行人間審判であり、R0/R1とPreview骨格を直列停止しない
+- G0-6Hは2026-07-29に人間`ACCEPT`で完了し、U0e-3だけを解禁した。R0/R1とPreview骨格へ遡及的な完了意味を足さない
 - CU-G01〜CU-G10は仕様判断粒で、コード実装と同時に行わない
 - closed orderはユーザーの明示的な発注時だけ作り、各粒の論理依存、現行ledger、仕様判断を再確認する
 - FableがP0/P1相当を出した場合は粒の修正へ戻り、レビューを再実行する

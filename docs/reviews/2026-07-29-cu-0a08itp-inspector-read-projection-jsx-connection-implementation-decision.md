@@ -119,11 +119,12 @@ npm run test:reference-guard
 旧immutable current-route generation
 `44e538c97807-ead41d4d6562`が保持するpre-BTP/pre-ITP manifest hashにより、
 現行provenance manifest hashとの一致検査とCLI checkが`CR2-SCHEMA`で拒否する。
-このgenerationの再publicationは本粒へ混ぜず、既存のG0-6H evidence laneに残す。
+このgenerationの再publicationは本粒へ混ぜず、後続`G0-6H-V1G-RP`へ移管する。
 
 ## 6. handoff
 
 親`CU-0A08IT`を`SPLIT`し、read-only projectionの`CU-0A08ITP`は**DONE**。
 typed intent / Host接続は`CU-0A08ITI`として既存`U4a-2`依存の`WAIT`を維持する。
 最初の非mock runtime callerと通常製品route到達はR6後のH1bが所有する。
-次のPRODUCT-ASSET `DO`は未選定（0件）。
+本ITP完了時点では次のPRODUCT-ASSET `DO`は未選定（0件）だった。
+2026-07-29のG0-6H人間ACCEPT後は`CU-0B02` / `U0e-3`を正とする。
