@@ -3,11 +3,12 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
+use motolii_testkit::m4_validation::{
+    file_evidence, ValidationRunRecord, M4_VALIDATION_RUN_SCHEMA_VERSION,
+};
 use motolii_testkit::perf::{
     m4_validation_manifest, ValidationCommand, M4_VALIDATION_BUNDLE_SCHEMA_VERSION,
 };
-use serde::Serialize;
-use sha2::{Digest, Sha256};
 
 #[derive(Debug, thiserror::Error)]
 enum RunError {
@@ -47,40 +48,14 @@ enum RunError {
     },
     #[error("failed to encode run record: {0}")]
     Encode(#[from] serde_json::Error),
+    #[error("failed to read validation evidence: {0}")]
+    ReadEvidence(String),
     #[error("failed to write {path}: {source}")]
     Write {
         path: PathBuf,
         #[source]
         source: std::io::Error,
     },
-}
-
-#[derive(Debug, Serialize)]
-struct FileEvidence {
-    path: String,
-    bytes: u64,
-    sha256: String,
-}
-
-#[derive(Debug, Serialize)]
-struct ValidationRunRecord {
-    schema_version: u32,
-    manifest_schema_version: u32,
-    repository_revision: String,
-    command_id: &'static str,
-    working_directory: &'static str,
-    manifest_sha256: String,
-    hardware_sha256: String,
-    started_at_unix_ms: u64,
-    duration_ms: u64,
-    success: bool,
-    exit_code: Option<i32>,
-    spawn_error: Option<String>,
-    required_user_env_present: Vec<&'static str>,
-    optional_user_env_present: Vec<&'static str>,
-    stdout_log: FileEvidence,
-    stderr_log: FileEvidence,
-    artifact: Option<FileEvidence>,
 }
 
 fn repository_root() -> PathBuf {
@@ -153,20 +128,6 @@ fn write_bytes(path: &Path, bytes: &[u8]) -> Result<(), RunError> {
     })
 }
 
-fn file_evidence(path: &Path) -> Result<FileEvidence, RunError> {
-    let bytes = std::fs::read(path).map_err(|source| RunError::Read {
-        path: path.to_path_buf(),
-        source,
-    })?;
-    let mut digest = Sha256::new();
-    digest.update(&bytes);
-    Ok(FileEvidence {
-        path: path.display().to_string(),
-        bytes: bytes.len() as u64,
-        sha256: format!("{:x}", digest.finalize()),
-    })
-}
-
 fn write_record(path: &Path, record: &ValidationRunRecord) -> Result<(), RunError> {
     let mut bytes = serde_json::to_vec_pretty(record)?;
     bytes.push(b'\n');
@@ -213,8 +174,10 @@ fn run() -> Result<(PathBuf, bool), RunError> {
     }
     let revision = repository_revision(&root).ok_or(RunError::RepositoryRevision)?;
     let commands = validate_bundle(&output_dir, &revision)?;
-    let manifest_evidence = file_evidence(&output_dir.join("manifest.json"))?;
-    let hardware_evidence = file_evidence(&output_dir.join("hardware.json"))?;
+    let manifest_evidence = file_evidence(&output_dir.join("manifest.json"))
+        .map_err(|error| RunError::ReadEvidence(error.to_string()))?;
+    let hardware_evidence = file_evidence(&output_dir.join("hardware.json"))
+        .map_err(|error| RunError::ReadEvidence(error.to_string()))?;
     let command = commands
         .into_iter()
         .find(|candidate| candidate.id == command_id)
@@ -275,17 +238,19 @@ fn run() -> Result<(PathBuf, bool), RunError> {
     write_bytes(&stderr_path, &stderr)?;
 
     let artifact = match artifact_path.as_deref() {
-        Some(path) if path.is_file() => Some(file_evidence(path)?),
+        Some(path) if path.is_file() => {
+            Some(file_evidence(path).map_err(|error| RunError::ReadEvidence(error.to_string()))?)
+        }
         _ => None,
     };
     let artifact_complete = command.artifact.is_none() || artifact.is_some();
     let success = status_success && artifact_complete;
     let record = ValidationRunRecord {
-        schema_version: 2,
+        schema_version: M4_VALIDATION_RUN_SCHEMA_VERSION,
         manifest_schema_version: M4_VALIDATION_BUNDLE_SCHEMA_VERSION,
         repository_revision: revision,
-        command_id: command.id,
-        working_directory: command.working_directory,
+        command_id: command.id.to_owned(),
+        working_directory: command.working_directory.to_owned(),
         manifest_sha256: manifest_evidence.sha256,
         hardware_sha256: hardware_evidence.sha256,
         started_at_unix_ms,
@@ -293,10 +258,12 @@ fn run() -> Result<(PathBuf, bool), RunError> {
         success,
         exit_code,
         spawn_error,
-        required_user_env_present: required_present,
-        optional_user_env_present: optional_present,
-        stdout_log: file_evidence(&stdout_path)?,
-        stderr_log: file_evidence(&stderr_path)?,
+        required_user_env_present: required_present.into_iter().map(str::to_owned).collect(),
+        optional_user_env_present: optional_present.into_iter().map(str::to_owned).collect(),
+        stdout_log: file_evidence(&stdout_path)
+            .map_err(|error| RunError::ReadEvidence(error.to_string()))?,
+        stderr_log: file_evidence(&stderr_path)
+            .map_err(|error| RunError::ReadEvidence(error.to_string()))?,
         artifact,
     };
     write_record(&record_path, &record)?;
@@ -341,25 +308,5 @@ mod tests {
         assert!(present_environment(&[name]).is_empty());
         // SAFETY: 上と同じ専用名を元へ戻す。
         unsafe { std::env::remove_var(name) };
-    }
-
-    #[test]
-    fn file_evidence_binds_bytes_and_content() {
-        let dir = motolii_testkit::tmp_dir("m4-run-file-evidence");
-        let first = dir.join("first.bin");
-        let second = dir.join("second.bin");
-        std::fs::write(&first, b"same-content").unwrap();
-        std::fs::write(&second, b"same-content").unwrap();
-
-        let first_evidence = file_evidence(&first).unwrap();
-        let second_evidence = file_evidence(&second).unwrap();
-        assert_eq!(first_evidence.bytes, 12);
-        assert_eq!(first_evidence.sha256, second_evidence.sha256);
-
-        std::fs::write(&second, b"changed").unwrap();
-        assert_ne!(
-            first_evidence.sha256,
-            file_evidence(&second).unwrap().sha256
-        );
     }
 }

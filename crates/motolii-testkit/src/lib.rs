@@ -12,6 +12,7 @@
 
 pub mod clipping_mask;
 pub mod cpu_reference;
+pub mod m4_validation;
 pub mod perf;
 pub mod tol;
 pub mod ui_toolkit_dep_policy;

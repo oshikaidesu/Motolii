@@ -84,6 +84,19 @@ manifest、hardware、stdout、stderr、結果artifactのSHA-256も記録し、�
 差し替えた結果を同じ実行として扱わない。環境変数の値はrun recordへ複製せず、
 指定済みの名前だけを記録する。
 
+全command収集後は専用verifierを実行する。
+
+```sh
+cargo run -p motolii-testkit --bin m4_validation_verify -- \
+  /tmp/motolii-m4-validation
+```
+
+verifierは全commandのrevision、manifest/hardware digest、exit、log/artifact digest、
+software/hardware decodeのfixture identityを照合する。hardware factsのOS、architecture、
+total memory、全必須sampleのRSSとstatusも確認する。ただし合格するのは
+`local_evidence_valid`だけであり、`low_spec_windows`、GPU surface import、製品Preview等の
+外部gateは`external_gates_pending`として残す。
+
 機種間比較は同じfixture revisionとMotolii commitで行う。現在はpass/fail閾値を持たず、
 取得不能は`Unavailable`として記録する。
 
