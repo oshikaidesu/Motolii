@@ -246,6 +246,7 @@
 | [2026-07-29-m5-render-contribution-parallel-wave-lessons.md](2026-07-29-m5-render-contribution-parallel-wave-lessons.md) | M5 Render Contribution並列Waveの教訓 |
 | [2026-07-29-m5-render-contribution-typed-seam-decision.md](2026-07-29-m5-render-contribution-typed-seam-decision.md) | P2D-RCD1。型付き要求とrender contributionのseam意味、一／一／many、whole-request admission、trust eligibility前段分離、First Vism conformance役割を閉じるtyped seam decision |
 | [2026-07-29-m5-render-contribution-alpha-semantics-decision.md](2026-07-29-m5-render-contribution-alpha-semantics-decision.md) | P2D-RCT1。opaque／cutout／soft alphaの明示意味、whole-request typed refusal、F2／F3 oracleを閉じるdecision |
+| [2026-07-29-m5-render-contribution-conformance-harness-decision.md](2026-07-29-m5-render-contribution-conformance-harness-decision.md) | P2D-RCF1。provider中立black-box harness、F1〜F6分担、First Vism無特権条件を閉じるdecision |
 | [2026-07-29-restartable-supervised-order-loop-decision.md](2026-07-29-restartable-supervised-order-loop-decision.md) | Codex-owned machine block、Opus施工本文、parent-owned outcome、terminal verdict、availability限定resumeを固定するGR-D4決定 |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |

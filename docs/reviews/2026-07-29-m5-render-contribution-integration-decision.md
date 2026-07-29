@@ -77,7 +77,7 @@ F1、F5、F6は外部先例の不足を理由に弱めない。AE-style Bins、U
 | `P2D-RCS1` | private opaque Group Depth spike | P2D-RCI | **DONE**。Grok `ACCEPT` P0/P1=0。`motolii-render`内部の実depth attachmentでF1／F6、group外pixel不変、FINAL／DRAFT同一評価関数を確認。Document／serde／公開API変更0 |
 | `P2D-RCD1` | 型付き要求／contribution seam decision | P2D-RCS1、RCI §2.2のcamera／Observation非所有 | **DONE**。[typed seam decision](2026-07-29-m5-render-contribution-typed-seam-decision.md)がseam意味を固定。後続8件はWAIT、P3のObservation形は先取りしない |
 | `P2D-RCD2` | P2D policy／Depth Participant schema decision | P2D-RCD1、M2-D1e | **WAIT**。GR-PV、追加migration、Undo意味を別decisionで閉じる |
-| `P2D-RCF1` | 共通conformance harnessとFirst Vism fixture | P2D-RCD1 | **WAIT**。first-party専用口なし、F1〜F6とseat固有fixtureの分担を固定 |
+| `P2D-RCF1` | 共通conformance harness decisionとFirst Vism無特権契約 | P2D-RCD1 | **DONE**。[harness decision](2026-07-29-m5-render-contribution-conformance-harness-decision.md)でblack-box観測、F1〜F6分担、既存testkit再利用、実装4粒を固定 |
 | `P2D-RCT1` | cutout／soft alpha意味と診断 | P2D-RCD1 | **DONE**。[alpha意味decision](2026-07-29-m5-render-contribution-alpha-semantics-decision.md)でF2／F3、明示class、黙示depth格上げ拒否、whole-request typed refusalを固定。OIT方式は別裁定 |
 | `P2D-RCO1` | transparent交差のOIT方式decision | P2D-RCT1、P2D-RCS1 | **WAIT**。方式、品質、budget、unsupportedを比較し、公開phase語彙へしない |
 | `P2D-RCFP1` | scene-color中間形式decision | M1、M4-K0 | **WAIT**。linear FP16推奨案を色一元化とbudgetへ照合 |
