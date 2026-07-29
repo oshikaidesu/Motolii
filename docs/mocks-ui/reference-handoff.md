@@ -71,9 +71,9 @@ npm run check-reference
 - 採否: `ACCEPT`
 - 採否理由: UI作者が現行UIを完成と判断し、次はReact/native接続へ進むと明示
 - 修正要求（screen / semantic role / observed problem）: なし
-- 採択する具体token候補: 現行role token候補、既存component state、既存icon体系。U0e-3の機械検査を通して製品導入
+- 採択する候補の送り先: 現行role token候補は`CU-0B02T`のDTCG/生成check、既存component stateは`CU-0B02C`、現行inline SVG/Unicode混在からのicon体系採択は`CU-0B02I`
 - 棄却する具体token候補: なし
-- 次に解凍する粒: `CU-0B02` / `U0e-3`
+- 次に解凍する粒: [CU-0B02S分割決定](../reviews/2026-07-29-cu-0b02s-product-token-ownership-split-decision.md)後の`CU-0B02T`
 
 `U0e-3`を解禁する。`U2c-3`、`U2c-5`はU0e-3完了後の既存依存順を維持する。
 

@@ -1,6 +1,6 @@
 # 実装進行台帳
 
-最終確認: **2026-07-28**
+最終確認: **2026-07-29**
 
 このファイルは、実装者が「次に何をするか」を1枚で判断するための現場用台帳。M0〜M5の意味や完了条件を再定義せず、現在の依存関係と発注順だけを示す。
 
@@ -40,7 +40,7 @@
 | M0 | `DONE` | spike完了。S2は`ffmpeg-sidecar`クレート不採用、自前子process pipe／CFR seek成立まで。VFR、長尺／4K、pool、停止中readのkillは製品完成証拠にせずK4／GAP-26へ分離 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み。RenderTargetPoolは直列2枚を下限にbranch livenessで伸長するが、O(n²)未来scan最適化、fp16／path fusion、40-layer性能は未成立。R9/T11は当時の歴史sign-offで、現行製品Stage／実素材release受入はGAP-32。出荷hardening候補G1〜G8は完了条件外で、2026-07-23再照合の未到達process/artifact reliabilityはGAP-26、GPU health分類はGAP-27、同期export readbackの原因分離／staging採択はGAP-29、GPU RGB→YUV export接続はGAP-31。G7の同期1-frame boundedをcopy重畳完成、decode側GPU色変換や出力tagをinverse変換完成とみなさない |
 | M2 | **基盤再締結済み / narrow follow-up pending** | D1lのDocument／lifecycle意味、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。2026-07-23監査で`new_v1` enforcement driftをGAP-23、known Edit apply failureのsnapshot fallback driftをGAP-24、semantic oracle gate自己保護をGAP-25として狭く再開。Param Pipeline／Element Domain／Constraint GraphはM2-GAP-15の解凍gate前は未実装のままが正しい。D5は骨格到達・統合審判pendingで、AG-2 mixer coreは成立したが製品`PlaybackSession`のmixed `AudioProgram`接続はGAP-28。D1n external revisionも未実装で、cloud-safe公約不可 |
-| M3 | **VS-1 Rectangle配置とUndo** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsが正本。React ownership R0〜R6 Browser、Browser/Inspector read-only projection、CU-109 edit durabilityまで成立。G0-6H/CU-0B01はUI作者の人間`ACCEPT`で`DONE`。次の唯一のPRODUCT-ASSET `DO`は`CU-0B02` / `U0e-3`。独立ORACLE-GUARD `G0-6H-V1G-RP`はcurrent-route provenance再publication debtを所有する。`CU-0A08BTI`/`CU-0A08ITI`/`U3a-2Q-V`は既存依存待ち。Motolii Studio Previewは未実装。G0-9DはDistribution Ready用hardware gate。eguiへ新規製品面を実装せず、plugin UI公開契約はG0-3 / GAP-13まで停止する |
+| M3 | **VS-1 Rectangle配置とUndo** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsが正本。React ownership R0〜R6 Browser、Browser/Inspector read-only projection、CU-109 edit durabilityまで成立。G0-6H/CU-0B01はUI作者の人間`ACCEPT`で`DONE`。`CU-0B02S`で親U0e-3を分割し、次の唯一のPRODUCT-ASSET `DO`はproduct-owned Dark DTCGとgenerator v2生成だけを閉じる`CU-0B02T`。独立ORACLE-GUARD `G0-6H-V1G-RP`はcurrent-route provenance再publication debtを所有する。`CU-0A08BTI`/`CU-0A08ITI`/`U3a-2Q-V`は既存依存待ち。Motolii Studio Previewは未実装。G0-9DはDistribution Ready用hardware gate。eguiへ新規製品面を実装せず、plugin UI公開契約はG0-3 / GAP-13まで停止する |
 | M4 | **K0契約凍結済み(test-only) / K1a再判定** | [歴史20版再照合](reviews/2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md)と[memory model 6版再照合](reviews/2026-07-23-historical-memory-model-lineage-recovery.md)後、K0はRoD/RoIの契約意味をtest-only spikeで凍結済みで、K1〜K8は未実装。runtime実装はK1a以降の別粒とし、K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む。現行`PipelineCache`／dynamic target pool／wgpu budget thresholdをResourceLedger、copy-out、disk store完成と数えない。K4の恒久`source_id`／再リンク／package意味はGAP-3／7の再調査前に焼かないが、このgateをK0や独立K1へ広げない。K6のVello／usvg製品統合は未実装で、R8成立性だけを完成証拠にしない |
 | M5 | **identity meaning decision可 / fixture WAIT** | P0I自身が所有するcontinuity／transform／nested identity／寿命／cache入力境界／PRNG処分をdocsで先に閉じ、TextCluster内部写像とPrototype ownerは明示留保する。fixtureはdecision merge後に分割する。P6のfontique／harfrust／Vello text stackは未実装で、K6とpremul adapterを重複実装しない |
 
@@ -209,8 +209,14 @@ P0I #170 → P7a → P7b → P7c → P7U
 | PRODUCT-ASSET | CU-0A08BTP | M3 / VS-1 / B / Browser read-only projection and JSX connection | `DONE` | [CU-0A08BTP実装決定](reviews/2026-07-29-cu-0a08btp-browser-read-projection-jsx-connection-implementation-decision.md) | `CU-0A08BP`／`CU-0A08RS`／`CU-0A08SSCI-P1`／`CU-0A08SSCI-I`／`CU-0A08SSCI-T1`は[発注依存証跡](#発注依存証跡)で`DONE` | decoded `(scope_ref, item_id)`をproduct Browser rootからprivate CandidateCreateBrowserへ非推測透過。AST 5/5、Browser 118/118、Inspector 39/39。旧immutable current-route generation `44e538c97807-ead41d4d6562`のmanifest hash再publication debtは`G0-6H-V1G-RP`所有。runtime producer/Host wire/intent/drag payload 0 |
 | PRODUCT-ASSET | CU-0A08BTI | M3 / VS-1 / B / Browser typed intent | `WAIT` | — | CU-0A08BTP + CU-0A08RMD + CU-0A08BDD + CU-107PV→CU-107TC→CU-107AD→CU-107TD | 既決Place chainへの1 intent。別終端、UI所有Undo/selectionは禁止 |
 | ORACLE-GUARD | CU-104R | M3 prerequisite / CU-104 completion mirror closure | `DONE` | — | 隔離CU-104 decision差分でCU-104を`DONE`へ正当更新した後、Grok検収がCU-104 next-DO／選定済み表現の残存と、SN6のpost-publish follow-up reconcile禁止欠落を検出。現行入口・台帳・M3運用順・縦slice・U枝番mirrorを`CU-104 DONE / 次PRODUCT-ASSET未選定`へ同期し、Browser専用test 113/115→115/115、`npm run test:reference-guard`、docs整合を完了 | guard期待値・CU-104意味・code/fixture・次粒選定を変更せず、U2h-1実装待ちを維持して完了表現だけを閉じた |
-| VISUAL-RESPONSE | G0-6H | M3 evidence / VS-1 / visual | `DONE / HUMAN ACCEPT` | [人間審判決定](reviews/2026-07-29-g0-6h-human-acceptance-decision.md) | UI作者がlive `#plugin-browser-candidate`をMacBook内蔵画面/100%/暗い室内で最終承認。current-route generation `44e538c97807-ead41d4d6562`は自動補助証拠 | `CU-0B02` / `U0e-3`を解禁。派生bitmap個別閲覧やlatest sourceとのbyte同一性は主張しない |
-| PRODUCT-ASSET | CU-0B02 | M3 / VS-1 / U0e-3 product token/component state/icon | `DO` | [G0-6H人間審判決定](reviews/2026-07-29-g0-6h-human-acceptance-decision.md) | `CU-0B01` / `G0-6H`は`DONE / ACCEPT`。U0e-1 generatorと現行role token候補を再照合 | 受理済み外観を変えず、DTCG単一正本、contrast/focus、意味色+形、gradient allowlist、raw color/spacing拒否を閉じる。native/WebView接続は別粒 |
+| VISUAL-RESPONSE | G0-6H | M3 evidence / VS-1 / visual | `DONE / HUMAN ACCEPT` | [人間審判決定](reviews/2026-07-29-g0-6h-human-acceptance-decision.md) | UI作者がlive `#plugin-browser-candidate`をMacBook内蔵画面/100%/暗い室内で最終承認。current-route generation `44e538c97807-ead41d4d6562`は自動補助証拠 | 親`CU-0B02` / `U0e-3`を解禁し、後続`CU-0B02S`でSPLIT済み。派生bitmap個別閲覧やlatest sourceとのbyte同一性は主張しない |
+| PRODUCT-ASSET | CU-0B02 | M3 / VS-1 / U0e-3 product token/component state/icon | `SPLIT` | [CU-0B02S分割決定](reviews/2026-07-29-cu-0b02s-product-token-ownership-split-decision.md) | token authority、React/native consumer、component state、icon判断をT/R/N/C/Iへ分離 | 一粒へ再結合しない |
+| PRODUCT-ASSET | CU-0B02S | M3 / VS-1 / SPEC / token ownership split | `DONE` | [CU-0B02S分割決定](reviews/2026-07-29-cu-0b02s-product-token-ownership-split-decision.md) | accepted routeのlegacy supplier、parallel mock supplier、native default visualsを再照合 | code/asset/token値変更0。次はTだけ |
+| PRODUCT-ASSET | CU-0B02T | M3 / VS-1 / U0e-3 product token authority | `DO` | [CU-0B02S分割決定](reviews/2026-07-29-cu-0b02s-product-token-ownership-split-decision.md) | `CU-0B02S`は[発注依存証跡](#発注依存証跡)で`DONE`。product Dark DTCG + profile分離generator v2 Rust/CSS/manifest、deterministic check、raw supplier拒否 | consumer配線、component、icon、Light/custom/object色を含めない |
+| PRODUCT-ASSET | CU-0B02R | M3 / VS-1 / React token consumer | `WAIT` | [CU-0B02S分割決定](reviews/2026-07-29-cu-0b02s-product-token-ownership-split-decision.md) | CU-0B02T待ち | accepted routeをgenerated CSS consumerへ反転 |
+| PRODUCT-ASSET | CU-0B02N | M3 / VS-1 / native token consumer | `WAIT` | [CU-0B02S分割決定](reviews/2026-07-29-cu-0b02s-product-token-ownership-split-decision.md) | CU-0B02T待ち | native shellを同じgenerated Rust adapterへ接続 |
+| PRODUCT-ASSET | CU-0B02C | M3 / VS-1 / component state ownership | `WAIT` | [CU-0B02S分割決定](reviews/2026-07-29-cu-0b02s-product-token-ownership-split-decision.md) | CU-0B02R待ち | 既存state sourceを直接所有移管 |
+| PRODUCT-ASSET | CU-0B02I | M3 / VS-1 / SPEC / icon system decision | `WAIT` | [CU-0B02S分割決定](reviews/2026-07-29-cu-0b02s-product-token-ownership-split-decision.md) | CU-0B02T待ち。統一source不在 | inline SVG/Unicode混在を採択済みicon systemと読まない |
 | ORACLE-GUARD | G0-6H-V1G-RP | M3 evidence maintenance / current-route provenance republication | `DO` | [G0-6H人間審判決定](reviews/2026-07-29-g0-6h-human-acceptance-decision.md) | `G0-6H-V1G` / `G0-6H`は[発注依存証跡](#発注依存証跡)で`DONE`。BTP/ITP後の既知`CR2-SCHEMA` 2件。旧generationはimmutableのまま保持 | 最新source closureから新generationを既存V1G commandでpublicationし、`CURRENT`を原子的に交換してread-only checkを緑へ戻す。human ACCEPT、token、golden、threshold、React byte変更0 |
 | VISUAL-RESPONSE | G0-6H-E0 | M3 evidence / VS-1 / approval evidence selection | `DONE` | — | 2026-07-28のユーザー承認と[選定決定](reviews/2026-07-28-g0-6h-e-candidate-approval-evidence-selection.md) | 承認範囲を拡張せずdocs-only `G0-6H-E`を選定 |
 | VISUAL-RESPONSE | G0-6H-E | M3 evidence / VS-1 / candidate approval evidence intake | `DONE` | [G0-6H-E限定観察](reviews/2026-07-28-g0-6h-e-candidate-approval-observation.md) | `G0-6H-E0`は[発注依存証跡](#発注依存証跡)で`DONE`。Grok `ACCEPT` P0/P1=0、`./scripts/check-docs.sh`、Browser decoder 118/118 | 現行候補normal色5画面への肯定的応答だけを記録。G0-6H/CU-0B01/U0e-3状態変更0 |
@@ -383,7 +389,8 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | CU-0A08SSCI-T | `DONE` | [CU-0A08SSCI-T裁定](reviews/2026-07-29-cu-0a08ssci-t-browser-private-component-verification-harness-boundary-decision.md)で候補(a) AST静的検査境界を採択し、次ORACLE-GUARD `` `DO` `` を`CU-0A08SSCI-T1`へ送った |
 | CU-0A08SSCI-T1 | `DONE` | [CU-0A08SSCI-T1実装決定](reviews/2026-07-29-cu-0a08ssci-t1-browser-private-component-verification-harness-implementation-decision.md)でsynthetic AST正負harnessを実装し、`(T)`をauthorityとguard実装の両面で閉じた |
 | G0-6H | `DONE` | [G0-6H人間審判ACCEPT](reviews/2026-07-29-g0-6h-human-acceptance-decision.md)で、UI作者がlive `#plugin-browser-candidate`をMacBook内蔵画面/100%/暗い室内で最終承認。派生bitmap個別閲覧は主張せず、既知provenance debtは`G0-6H-V1G-RP`へ分離 |
-| CU-0B01 | `DONE` | `G0-6H`の人間`ACCEPT`をW0b人間審判として閉じ、`CU-0B02` / `U0e-3`だけを次PRODUCT-ASSET `DO`へ解禁 |
+| CU-0B01 | `DONE` | `G0-6H`の人間`ACCEPT`をW0b人間審判として閉じ、親`CU-0B02` / `U0e-3`を解禁。後続`CU-0B02S`で分割済み |
+| CU-0B02S | `DONE` | [CU-0B02S分割決定](reviews/2026-07-29-cu-0b02s-product-token-ownership-split-decision.md)で親`CU-0B02` / `U0e-3`をT/R/N/C/Iへ分割し、次PRODUCT-ASSET `DO`を`CU-0B02T`へ送った |
 | G0-6H-E0 | `DONE` | [G0-6H-E0選定](reviews/2026-07-28-g0-6h-e-candidate-approval-evidence-selection.md)で、現行候補5画面へのユーザー承認を旧U0e-2 generation全体へ拡張せず記録するdocs-only `G0-6H-E`を選定 |
 | G0-6H-E | `DONE` | [G0-6H-E限定観察](reviews/2026-07-28-g0-6h-e-candidate-approval-observation.md)で、現行候補normal色5画面への肯定的応答を旧generation・派生variant・具体tokenへ拡張せず取込。Grok `ACCEPT` P0/P1=0、docs整合とBrowser decoder 118/118 |
 | G0-6H-R0 | `DONE` | [G0-6H-R0選定](reviews/2026-07-28-g0-6h-r0-reference-authority-reconciliation-selection.md)で、旧generation authorityと現行product source authorityの関係だけを再照合するdocs-only `G0-6H-R`を選定 |
@@ -477,7 +484,7 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | G0-2 | `DONE` | 入力/キーマップ/a11y最小意味論 | [M3着手前決定§2](reviews/2026-07-16-m3-preflight-decisions.md#2-g0-2-inputとui状態の意味)に従いU0bをIssue化 |
 | G0-3 | `WAIT` / `比較中` | plugin UIモデル | `NodeDesc`自動panel fallbackを維持し、公開kit、sandbox、権限、互換、配布をG0-9製品surface合否と分離して再評価。G0-9証拠は入力にできるが、比較前に公開UI APIを実装しない |
 | G0-4 | `DONE` | UI性能測定プロトコル | U1c/U3a等でraw結果を取り、絶対閾値は別改訂 |
-| G0-6H | `DONE` / `HUMAN ACCEPT` | 視覚token/認知審判 | [人間審判決定](reviews/2026-07-29-g0-6h-human-acceptance-decision.md)を正とし、次は`CU-0B02` / `U0e-3` |
+| G0-6H | `DONE` / `HUMAN ACCEPT` | 視覚token/認知審判 | [人間審判決定](reviews/2026-07-29-g0-6h-human-acceptance-decision.md)を正とし、親`CU-0B02` / `U0e-3`を解禁。現行次粒は`CU-0B02T` |
 | G0-7 | `DONE` | Direct/Tool/Advanced conformance | UI操作言語とU2c fixtureへ従う |
 | G0-8 | `WAIT` / `MEASURE` | resource予算preset/安全余白/hysteresisの具体値 | G0-4手順+K1a実測後に値だけ固定。P3/P3aの意味は変更しない |
 
@@ -501,7 +508,7 @@ U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除
 | resource設定を出す | G0-2 + G0-8 + U0b + K1a → U0f。設定はUser settings、pressure実測値はTransient |
 | 重いpreviewを追従させる | U1b + U1c + U5 + K1d → U1g。project fps/audio clockを変えず表示frameだけ落とす |
 
-現在の短い運用判断は、**G0-6H / CU-0B01は人間`ACCEPT`で`DONE`。次の唯一のPRODUCT-ASSET `DO`は`CU-0B02` / `U0e-3`。受理済み外観を変えず、token/component state/iconを製品導入する。R5 typed intent、H1b、W0b、native/WebView接続を同じ粒へ束ねない。G0-9DはDistribution Readyまで`WAIT / HARDWARE`。**
+現在の短い運用判断は、**G0-6H / CU-0B01は人間`ACCEPT`で`DONE`。親`CU-0B02` / `U0e-3`は`SPLIT`し、次の唯一のPRODUCT-ASSET `DO`は`CU-0B02T`。product-owned Dark DTCGとgenerator v2のRust/CSS/manifest生成だけを閉じ、React/native consumer、component state、icon採択、R5 typed intent、H1b、W0b、WebView接続を同じ粒へ束ねない。G0-9DはDistribution Readyまで`WAIT / HARDWARE`。**
 
 ## 更新規則
 

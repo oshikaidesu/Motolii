@@ -228,7 +228,7 @@ Ableton Live 12のHigh Contrast optionを先例に、MotoliiはDark/Lightの名�
 
 次の5画面を同一の固定Document fixtureから作る。
 
-5画面の人間審判入力routeは、`G0-6H-S`で`#plugin-browser-candidate`（固定commit `56c318ed`）へ固定される。旧`#reference/*` generationは不変の再現・派生回帰証拠として保存し、required inputにしない。現行route evidence contractと記録項目は成立済みで、2026-07-29にUI作者がlive routeを最終`ACCEPT`した。派生variantを1枚ずつ人間が閲覧したとは主張せず機械回帰証拠として保持する。具体token、component state、icon gridは`CU-0B02` / `U0e-3`で本節のcontrast/focus/意味色+形の審判を通して製品導入し、visual thresholdを変更しない。
+5画面の人間審判入力routeは、`G0-6H-S`で`#plugin-browser-candidate`（固定commit `56c318ed`）へ固定される。旧`#reference/*` generationは不変の再現・派生回帰証拠として保存し、required inputにしない。現行route evidence contractと記録項目は成立済みで、2026-07-29にUI作者がlive routeを最終`ACCEPT`した。派生variantを1枚ずつ人間が閲覧したとは主張せず機械回帰証拠として保持する。[CU-0B02S分割決定](reviews/2026-07-29-cu-0b02s-product-token-ownership-split-decision.md)に従い、具体tokenは`CU-0B02T`、component stateは`CU-0B02C`、未決icon gridは`CU-0B02I`で本節のcontrast/focus/意味色+形の審判を通して製品導入し、visual thresholdを変更しない。
 
 初期の構成比較には[高密度メインUIモック](mocks/README.md)(および過去モックの台帳)を使う。モック内の色値はtoken候補ではなく、構成と意味roleの比較専用とする。
 

@@ -376,3 +376,4 @@
 | [2026-07-29-cu-0a08sscsd-browser-place-source-seam-implementation-scope-decision.md](2026-07-29-cu-0a08sscsd-browser-place-source-seam-implementation-scope-decision.md) | CU-0A08SSCSD Browser Place source seam 実装範囲 裁定 |
 | [2026-07-29-cu-0a09s-r6-surface-closure-boundary-decision.md](2026-07-29-cu-0a09s-r6-surface-closure-boundary-decision.md) | CU-0A09S R6 surface closure boundary 決定 |
 | [2026-07-29-g0-6h-human-acceptance-decision.md](2026-07-29-g0-6h-human-acceptance-decision.md) | G0-6H 現行React UI 人間審判 ACCEPT |
+| [2026-07-29-cu-0b02s-product-token-ownership-split-decision.md](2026-07-29-cu-0b02s-product-token-ownership-split-decision.md) | CU-0B02S 製品token所有と接続粒の分割決定 |

@@ -282,9 +282,15 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | ID | 種類 / 状態 | 一成果 | 依存 | 合格と必須負例 | STOP |
 |---|---|---|---|---|---|
 | CU-0B01 | `HUMAN / DONE` | G0-6Hで5画面の階層・識別・馴染みを判定 | CU-0A02 | [G0-6H人間審判ACCEPT](2026-07-29-g0-6h-human-acceptance-decision.md)。UI作者がMacBook内蔵画面/100%/暗い室内でlive routeを判定。agent目視代行0 | reference画面欠落 |
-| CU-0B02 | `PRODUCT / DO` | U0e-3 token/component state/iconを製品導入 | CU-0B01 | contrast/focus/意味色+形、raw color/spacing拒否 | 新画面固有componentが必要 |
+| CU-0B02 | `PRODUCT / SPLIT` | U0e-3 token/component state/iconを製品導入 | CU-0B01 | [CU-0B02S](2026-07-29-cu-0b02s-product-token-ownership-split-decision.md)でT/R/N/C/Iへ分割 | 一粒でsupplier、React、native、component、iconを変更したくなる |
+| CU-0B02S | `SPEC / DONE` | token ownerと接続粒を固定 | CU-0B01 | supplier二重性、単一DTCG、v2生成境界、後続順を決定 | archived sourceを直接変更したくなる |
+| CU-0B02T | `PRODUCT / DO` | product Dark DTCGとgenerator v2 Rust/CSS/manifest | CU-0B02S、U0e-1 | 決定的生成、手編集/raw supplier拒否、Light/custom/object色発明0 | consumer配線または未決tokenが必要 |
+| CU-0B02R | `PRODUCT / WAIT` | accepted React routeをgenerated CSS consumerへ反転 | CU-0B02T | legacy token supplier退役、visual/DOM不変、二重supplier 0 | archived HTML変更またはthreshold変更が必要 |
+| CU-0B02N | `PRODUCT / WAIT` | native shellを同じgenerated Rust adapterへ接続 | CU-0B02T | 同じrole値、Document保存0、toolkit隔離 | native専用token正本が必要 |
+| CU-0B02C | `PRODUCT / WAIT` | 既存component stateを直接所有移管 | CU-0B02R | focus/hover/pressed/disabled/selected、copy 0 | 縮約再実装が必要 |
+| CU-0B02I | `SPEC / WAIT` | icon grid/stroke system採択 | CU-0B02T | inline SVG/Unicode混在をicon正本と誤認しない | source不在のまま実装したくなる |
 | CU-0B03 | `PRODUCT / WAIT` | H1b codec/offline bundle/mountをHostへ接続 | CU-0A09、別途確定する製品前提 | CDN/HMR/fixture script依存0、invalid/stale codec拒否。G0-9L evidenceを依存充足にしない | WebView transportを公開plugin APIへ一般化したくなる |
-| CU-0B04N | `PRODUCT / WAIT` | native Stage/Timeline viewportを1 top-level Surfaceへ接続 | CU-0B02、別途確定する製品前提 | 同一device/queue、CPU readback 0、viewport resizeでsemantic不変。G0-9L evidenceを依存充足にしない | native viewportごとに別正本Surfaceが必要 |
+| CU-0B04N | `PRODUCT / WAIT` | native Stage/Timeline viewportを1 top-level Surfaceへ接続 | CU-0B02N、別途確定する製品前提 | 同一device/queue、CPU readback 0、viewport resizeでsemantic不変。G0-9L evidenceを依存充足にしない | native viewportごとに別正本Surfaceが必要 |
 | CU-0B04R | `PRODUCT / WAIT` | opaque child WebView islandsをHost layoutへ接続 | CU-0B03、CU-0B04N | transparent overlay 0、focus/geometry epoch、React semantic state 0。G0-9L evidenceを依存充足にしない | DOM/pxをnative/Document identityへ使いたくなる |
 | CU-0B05 | `E2E / WAIT` | reload/crash/focus/resize後にHost snapshotから再投影 | CU-0B04N/R | 同じrevision/selection、old epoch拒否、Document/history不変 | surface間state同期が必要 |
 
@@ -316,7 +322,7 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 |---|---|---|---|---|---|
 | CU-201 | `CORE / WAIT` | U3b move/trim/snapをD2へ接続 | CU-105/106 | random操作列、相対位置、Undo全巻戻し、Cancel 0 | marker/beat未決を同時実装したくなる |
 | CU-202 | `CORE / WAIT` | U4a-1 ValueType→control→command対応model | U2b-1、既存U4a-1契約 | 全保存param対応またはtyped拒否、新ValueType 0 | plugin独自UIが必要 |
-| CU-203 | `PRODUCT / WAIT` | U2c-3共通feedback component | CU-0B02、U2c-1 | state matrix、理由+回復、色/文字単独依存拒否 | 個別picker/popup state machineが必要 |
+| CU-203 | `PRODUCT / WAIT` | U2c-3共通feedback component | CU-0B02C、U2c-1 | state matrix、理由+回復、色/文字単独依存拒否 | 個別picker/popup state machineが必要 |
 | CU-204 | `PRODUCT / WAIT` | U2c-5 Brief/Context/Inspect/Assistive投影 | CU-203、U2c-4 | reason/subject/facts一致、recovery通常Intent経由 | diagnosticからDocument直接mutationが必要 |
 | CU-205 | `PRODUCT / WAIT` | U4a-2自動Inspectorとnonblocking preview | CU-202/204、U1b | 100 slider updates、latest preview、1 gesture=1 Undo、stale拒否 | custom plugin panelへ逸脱 |
 | CU-206 | `PRODUCT / WAIT` | U4b keyframe/区間Easingを製品接続 | CU-205、native Easing core | drag write 0/release 1/Esc 0、非対象curve不変 | key構造やthreshold変更が必要 |
@@ -337,7 +343,7 @@ waveformはU3c、beat snapはU7としてpost-Alphaへ残し、この経路の暗
 | CU-301 | `PRODUCT / WAIT` | U6 Files/Project read-only探索と動画preview | CU-0B04N/R、U0e | UI thread decode 0、range変更でDocument/Undo不変、欠落/codec診断 | filesystem stateをDocumentへ保存したくなる |
 | CU-302 | `PRODUCT / WAIT` | U6 Inbox受取と動画配置 | CU-301、CU-G03、U2b | 確定時だけClip/TimeMapへ1 Undo、range負例、duplicate/stale拒否 | Inboxを第二asset owner/履歴にしたくなる |
 | CU-303 | `PRODUCT / WAIT` | Soundtrack 1本を設定 | CU-302、M2 audio境界 | Soundtrack無しでも同じ制作経路、設定1 Undo。欠落/corrupt/unsupported codecはtyped拒否 | 音楽中心別mode/timelineが必要 |
-| CU-304 | `PRODUCT / WAIT` | U1f Stage View/Output Frame/off-frame表示 | CU-0B02、D1k/D3f | pan/zoom/fitでDocument/Final不変、枠外選択可、readback 0 | K0最適化を完成条件にしたくなる |
+| CU-304 | `PRODUCT / WAIT` | U1f Stage View/Output Frame/off-frame表示 | CU-0B02N、D1k/D3f | pan/zoom/fitでDocument/Final不変、枠外選択可、readback 0 | K0最適化を完成条件にしたくなる |
 | CU-305 | `PRODUCT / WAIT` | U2d Camera/Output Frame直接操作 | CU-304、U2c | Camera 1 gesture=1 Undo、Hand/Fit workspaceのみ、DPI不変 | camera/object操作を混同 |
 | CU-306O | `PRODUCT / WAIT` | New/Open製品入口 | CU-G04 | session/catalog必須、lock/未来版/corrupt typed拒否 | raw open、lock steal、未決New defaultが必要 |
 | CU-306S | `PRODUCT / WAIT` | Save/reopen製品入口 | CU-G04、CU-G03、CU-306O | durable save/reopen同値、unknown保持、失敗時原本不変 | 未決Save As/Unsaved UXが必要 |

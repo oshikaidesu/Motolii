@@ -268,10 +268,15 @@ commit済みfixtureの生成差分検査は次で再現する。
 
 ```bash
 cargo run -p motolii-ui-token-gen -- check \
+  --profile v1-fixture \
   --theme fixture-dark=crates/motolii-ui/tests/fixtures/u0e1-token-generator/sources/fixture-dark.json \
   --theme fixture-light=crates/motolii-ui/tests/fixtures/u0e1-token-generator/sources/fixture-light.json \
   --out-dir crates/motolii-ui/tests/fixtures/u0e1-token-generator/generated
 ```
+
+2026-07-29の[CU-0B02S分割決定](2026-07-29-cu-0b02s-product-token-ownership-split-decision.md)で、
+製品bundle用v2と既存fixture用v1を明示profileで分離した。上の
+`--profile v1-fixture`は既存v1出力byteと意味を変えずに再現する。
 
 ## 9. 非目標
 
