@@ -23,7 +23,7 @@ OUTCOME_EMITTED=0
 
 usage() {
   echo "Usage: $0 manifest <isolated-worktree> <order-file> <task> <grain> <base-ref> [options]"
-  echo "         --dependency <id> --authority <path> --allowed-file <path-or-glob>"
+  echo "         --dependency <id> --authority <path> --allowed-file <path-or-glob> --command <existing-command>"
   echo "       $0 prepare <isolated-worktree> <order-file> <task>"
   echo "       $0 execute <isolated-worktree> <approved-order-file> <task>"
   echo "       $0 inspect <isolated-worktree> <approved-order-file> <task>"
@@ -88,6 +88,7 @@ MANIFEST_BASE_REF=""
 MANIFEST_DEPENDENCIES=()
 MANIFEST_AUTHORITIES=()
 MANIFEST_ALLOWED_FILES=()
+MANIFEST_COMMANDS=("git diff --check")
 if [[ "$MODE" == "manifest" ]]; then
   if [[ "$#" -lt 3 ]]; then
     usage >&2
@@ -112,6 +113,11 @@ if [[ "$MODE" == "manifest" ]]; then
       --allowed-file)
         [[ "$#" -ge 2 ]] || { usage >&2; exit 2; }
         MANIFEST_ALLOWED_FILES+=("$2")
+        shift 2
+        ;;
+      --command)
+        [[ "$#" -ge 2 ]] || { usage >&2; exit 2; }
+        MANIFEST_COMMANDS+=("$2")
         shift 2
         ;;
       *)
@@ -368,7 +374,7 @@ validate_machine_block() {
     gate_fail "machine block delimiters are out of order"
   fi
 
-  for key in GRAIN BASE_REF BASE_SHA DEPENDENCY AUTHORITY ALLOWED_FILE \
+  for key in GRAIN BASE_REF BASE_SHA DEPENDENCY AUTHORITY ALLOWED_FILE COMMAND \
     LOOP_PROFILE ORDER_MANAGER_MODEL IMPLEMENTER_MODEL REVIEW_MODEL TASK_SHA256; do
     matches="$(grep -nE "^${key}:" "$order_file" | cut -d: -f1 || true)"
     if [[ -z "$matches" ]]; then
@@ -392,9 +398,14 @@ validate_machine_block() {
 
 reject_manager_owned_fields() {
   local draft="$1"
-  if grep -Eq '^(GRAIN|BASE_REF|BASE_SHA|DEPENDENCY|AUTHORITY|ALLOWED_FILE|LOOP_PROFILE|ORDER_MANAGER_MODEL|IMPLEMENTER_MODEL|REVIEW_MODEL|TASK_SHA256|CODEX PRECHECK):' "$draft" || \
+  if grep -Eq '^(GRAIN|BASE_REF|BASE_SHA|DEPENDENCY|AUTHORITY|ALLOWED_FILE|COMMAND|LOOP_PROFILE|ORDER_MANAGER_MODEL|IMPLEMENTER_MODEL|REVIEW_MODEL|TASK_SHA256|CODEX PRECHECK):' "$draft" || \
      grep -Fqx "$MACHINE_BLOCK_BEGIN" "$draft" || grep -Fqx "$MACHINE_BLOCK_END" "$draft"; then
     echo "delegate-cursor-supervised: Opus draftにCodex所有fieldまたはmachine delimiterが含まれます" >&2
+    emit_outcome "ORDER_INVALID"
+    exit 3
+  fi
+  if grep -Eq 'git diff --check|cargo (test|check|clippy)|\./scripts/|(^|[[:space:]`])(grep|awk|sed|wc|find)[[:space:]]|git (checkout|reset|clean)' "$draft"; then
+    echo "delegate-cursor-supervised: Opus draftに親process所有commandまたは独自command oracleが含まれます" >&2
     emit_outcome "ORDER_INVALID"
     exit 3
   fi
@@ -1780,6 +1791,9 @@ if [[ "$MODE" == "manifest" ]]; then
     for manifest_value in "${MANIFEST_ALLOWED_FILES[@]}"; do
       echo "ALLOWED_FILE: $manifest_value"
     done
+    for manifest_value in "${MANIFEST_COMMANDS[@]}"; do
+      echo "COMMAND: $manifest_value"
+    done
     echo "LOOP_PROFILE: $LOOP_PROFILE"
     echo "ORDER_MANAGER_MODEL: $OPUS_MANAGER_MODEL"
     echo "IMPLEMENTER_MODEL: $SPARK_MODEL"
@@ -1831,14 +1845,14 @@ Spark. Do not invent unresolved product meaning or public contracts.
 
 The order must contain objective, current code facts, authoritative spec/task IDs,
 an exact closed file allowlist, non-goals, helpers to reuse, invariants, STOP
-conditions, positive and negative tests, and integration gates. Its executable
-commands are limited to existing repository scripts or test commands explicitly
-named by the task/authorities, plus git diff --check. Do not invent grep, awk,
-sed, wc, find, line-number, token-presence, or count-based acceptance oracles.
-Do not prescribe checkout, reset, clean, deletion, or other diff-restoration
-commands on STOP/failure. Scope, fingerprint, authority, manifest, and marker
-integrity are runner-owned gates, not prose commands. If a missing custom oracle
-is required to make the grain safe, return ORDER: STOP.
+conditions, positive and negative tests, and integration gates. Executable
+commands are already fixed by Codex in the COMMAND fields of the machine block.
+Do not repeat, paraphrase, extend, or add a command section. Do not prescribe
+grep, awk, sed, wc, find, line-number, token-presence, count-based acceptance
+oracles, checkout, reset, clean, deletion, or other diff-restoration actions.
+Scope, fingerprint, authority, manifest, marker, and command integrity are
+runner-owned gates. If the fixed commands are insufficient to make the grain
+safe, return ORDER: STOP.
 Forbid suppressions, expected-value or golden rewrites, fixture special-cases,
 raw scanners that bypass typed boundaries, public raw mutation APIs, invented
 serde defaults, duplicate planners/helpers, partial mutation, TODO stubs, and
@@ -1846,7 +1860,7 @@ adjacent-ticket expansion.
 
 Codex has already created and validated the machine block shown below. Do not
 repeat, quote, rewrite, or emit its delimiters or any of these machine fields:
-GRAIN, BASE_REF, BASE_SHA, DEPENDENCY, AUTHORITY, ALLOWED_FILE, LOOP_PROFILE,
+GRAIN, BASE_REF, BASE_SHA, DEPENDENCY, AUTHORITY, ALLOWED_FILE, COMMAND, LOOP_PROFILE,
 ORDER_MANAGER_MODEL, IMPLEMENTER_MODEL, REVIEW_MODEL, TASK_SHA256, or
 CODEX PRECHECK. Write only the construction-plan prose that follows the block.
 

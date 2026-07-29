@@ -91,10 +91,12 @@ Grok timeoutでもstdoutが1 byte以上残れば`REVIEW_INVALID`とする。avai
 ### 5.1 command oracleの親process所有
 
 M5 fragment配置grainで、Opusが行番号、`grep` count、token presence、STOP時の`git checkout`を
-orderへ発明し、意味が閉じていてもPRECHECKを反復停止させた。実行commandはtask／authorityが名指す
-既存script／testと`git diff --check`だけに限定する。独自`grep`／`awk`／`sed`／`wc`／`find`、
-行番号、token presence、件数oracle、checkout/reset/clean/deleteをOpus proseへ置かない。
-scope、fingerprint、authority、manifest、marker integrityはrunner親processが検証する。
+orderへ発明し、意味が閉じていてもPRECHECKを反復停止させた。実行commandはmachine blockの
+`COMMAND`へ移し、既定`git diff --check`と、task／authorityが名指す既存script／testだけを
+`manifest --command`でCodexが追加する。Opus proseはcommand節を持たず、`COMMAND`の再記述も
+machine field違反として拒否する。独自`grep`／`awk`／`sed`／`wc`／`find`、行番号、token presence、
+件数oracle、checkout/reset/clean/deleteをOpus proseへ置かない。
+scope、fingerprint、authority、manifest、marker、command integrityはrunner親processが検証する。
 追加oracleが無いと安全に閉じないgrainは、Opusがoracleを即席実装せず`ORDER: STOP`へ戻す。
 
 ## 6. 非目標と残余

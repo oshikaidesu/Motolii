@@ -123,7 +123,7 @@ OPUS_READY=$(cat <<'EOF'
 Objective: update the allowed fixture.
 Non-goal: no adjacent edits.
 STOP: authority conflict.
-Test: git diff --check.
+Test: parent-owned command gate.
 ORDER: READY
 EOF
 )
@@ -142,12 +142,15 @@ run_script() {
 }
 
 run_script manifest "$WT" "$ORDER" "$TASK" GRAIN-1 refs/heads/managed-grain \
-  --dependency DEP-1 --authority AGENTS.md --allowed-file src.txt
+  --dependency DEP-1 --authority AGENTS.md --allowed-file src.txt \
+  --command ./scripts/check-docs.sh
 assert_status 0 "$RUN_STATUS" "Codex-owned manifest"
 assert_has "$ORDER" "<!-- ORDER MACHINE BLOCK BEGIN -->" "machine block begin"
 assert_has "$ORDER" "<!-- ORDER MACHINE BLOCK END -->" "machine block end"
 assert_has "$ORDER" "GRAIN: GRAIN-1" "manifest grain"
 assert_has "$ORDER" "BASE_SHA: $BASE_SHA" "manifest base"
+assert_has "$ORDER" "COMMAND: git diff --check" "manifest parent-owned default command"
+assert_has "$ORDER" "COMMAND: ./scripts/check-docs.sh" "manifest parent-owned task command"
 
 seed_hash="$(sha256_file "$ORDER")"
 run_script prepare "$WT" "$ORDER" "$TASK"
@@ -155,8 +158,8 @@ assert_status 9 "$RUN_STATUS" "Opus STOP is a design stop"
 assert_has "$TMP_ROOT/stdout.log" "OUTCOME: DESIGN_STOP" "design stop outcome"
 [[ "$(sha256_file "$ORDER")" == "$seed_hash" ]] || fail "Opus STOP must not overwrite the manifest"
 assert_fragment "$CALL_LOG" "claude:-p --model claude-opus-5" "Opus is the order manager"
-assert_fragment "$CALL_LOG" "Do not invent grep, awk," "prepare prompt command-oracle guard"
-assert_fragment "$CALL_LOG" "Do not prescribe checkout, reset, clean, deletion" "prepare prompt destructive-restore guard"
+assert_fragment "$CALL_LOG" "Do not repeat, paraphrase, extend, or add a command section" "prepare prompt command ownership guard"
+assert_fragment "$CALL_LOG" "grep, awk, sed, wc, find, line-number" "prepare prompt command-oracle guard"
 
 # Opus draftはCodex承認行やmachine fieldを自己発行できない。
 SELF_ORDER="$TMP_ROOT/self-approved-order.md"
@@ -177,6 +180,26 @@ assert_status 3 "$RUN_STATUS" "Opus self-approval rejected"
 assert_has "$TMP_ROOT/stdout.log" "OUTCOME: ORDER_INVALID" "self-approval outcome"
 [[ "$(sha256_file "$SELF_ORDER")" == "$self_seed_hash" ]] \
   || fail "self-approved draft must not replace manifest"
+
+# Opus proseへ実行commandを戻さず、Codex-owned machine blockだけを権威にする。
+COMMAND_ORDER="$TMP_ROOT/command-leak-order.md"
+run_script manifest "$WT" "$COMMAND_ORDER" "$TASK" GRAIN-1 refs/heads/managed-grain \
+  --dependency DEP-1 --authority AGENTS.md --allowed-file src.txt \
+  --command ./scripts/check-docs.sh
+assert_status 0 "$RUN_STATUS" "command leak fixture manifest"
+command_seed_hash="$(sha256_file "$COMMAND_ORDER")"
+set +e
+env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+  FAKE_CALL_LOG="$CALL_LOG" \
+  FAKE_OPUS_OUTPUT=$'Objective: bypass command ownership.\nTest: git diff --check.\nORDER: READY' \
+  "$SCRIPT" prepare "$WT" "$COMMAND_ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 3 "$RUN_STATUS" "Opus command prose rejected"
+assert_has "$TMP_ROOT/stdout.log" "OUTCOME: ORDER_INVALID" "command prose outcome"
+[[ "$(sha256_file "$COMMAND_ORDER")" == "$command_seed_hash" ]] \
+  || fail "command-bearing draft must not replace manifest"
 
 # prepare中のBash経由worktree mutationは検出し、orderを非破壊で残す。
 MUTATION_ORDER="$TMP_ROOT/prepare-mutation-order.md"
