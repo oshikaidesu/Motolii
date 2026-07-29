@@ -352,3 +352,4 @@
 | [2026-07-29-cu-0a08rs-browser-inspector-read-projection-u4a2-dependency-decision.md](2026-07-29-cu-0a08rs-browser-inspector-read-projection-u4a2-dependency-decision.md) | CU-0A08RS Browser / Inspector read-only projection U4a-2 依存裁定 |
 | [2026-07-29-cu-0a08rm0-browser-typed-intent-dependency-adjudication-scope-selection.md](2026-07-29-cu-0a08rm0-browser-typed-intent-dependency-adjudication-scope-selection.md) | CU-0A08RM0 Browser typed-intent 依存裁定範囲の選定 |
 | [2026-07-29-cu-0a08rmd-browser-typed-intent-dependency-adjudication.md](2026-07-29-cu-0a08rmd-browser-typed-intent-dependency-adjudication.md) | CU-0A08RMD Browser typed-intent 依存裁定 |
+| [2026-07-29-cu-0a08bd0-browser-typed-intent-dependency-direction-scope-selection.md](2026-07-29-cu-0a08bd0-browser-typed-intent-dependency-direction-scope-selection.md) | CU-0A08BD0 Browser typed-intent 依存方向の選定範囲 |
