@@ -7,14 +7,46 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub const GENERATOR_ID: &str = "motolii-ui-token-gen";
-pub const GENERATOR_VERSION: u32 = 1;
 pub const SCHEMA_URI: &str = "https://www.designtokens.org/schemas/2025.10/format.json";
 const MAX_SOURCE_BYTES: usize = 1024 * 1024;
 const MAX_DEPTH: usize = 32;
 const MAX_TOKENS: usize = 4096;
 const MAX_SEGMENT_BYTES: usize = 128;
 const MAX_PATH_BYTES: usize = 512;
-const OUTPUTS: [&str; 2] = ["tokens.rs", "manifest.json"];
+const V1_OUTPUTS: [&str; 2] = ["tokens.rs", "manifest.json"];
+const V2_OUTPUTS: [&str; 3] = ["tokens.rs", "tokens.css", "manifest.json"];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BundleProfile {
+    V1Fixture,
+    V2Product,
+}
+
+impl BundleProfile {
+    pub fn parse(value: &str) -> Result<Self, Error> {
+        match value {
+            "v1-fixture" => Ok(Self::V1Fixture),
+            "v2-product" => Ok(Self::V2Product),
+            _ => Err(Error::UnknownProfile {
+                profile: value.to_owned(),
+            }),
+        }
+    }
+
+    fn version(self) -> u32 {
+        match self {
+            Self::V1Fixture => 1,
+            Self::V2Product => 2,
+        }
+    }
+
+    fn outputs(self) -> &'static [&'static str] {
+        match self {
+            Self::V1Fixture => &V1_OUTPUTS,
+            Self::V2Product => &V2_OUTPUTS,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ThemeSource {
@@ -25,11 +57,14 @@ pub struct ThemeSource {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GeneratedBundle {
     pub tokens_rs: Vec<u8>,
+    pub tokens_css: Option<Vec<u8>>,
     pub manifest_json: Vec<u8>,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("unknown bundle profile `{profile}`")]
+    UnknownProfile { profile: String },
     #[error("theme source list must not be empty")]
     NoThemes,
     #[error("source for theme `{theme}` exceeds 1 MiB")]
@@ -74,6 +109,11 @@ pub enum Error {
     FieldCollision { field: String, paths: Vec<String> },
     #[error("Rust field `{field}` from `{path}` is a keyword")]
     FieldKeyword { path: String, field: String },
+    #[error("CSS variable collision `{variable}` for paths {paths:?}")]
+    CssVariableCollision {
+        variable: String,
+        paths: Vec<String>,
+    },
     #[error("theme variant collision `{variant}` for IDs {ids:?}")]
     VariantCollision { variant: String, ids: Vec<String> },
     #[error("theme variant `{variant}` from `{id}` is a keyword")]
@@ -281,7 +321,7 @@ struct Manifest<'a> {
     input_sha256: &'a str,
     themes: Vec<&'a str>,
     tokens: Vec<ManifestToken<'a>>,
-    outputs: [&'static str; 2],
+    outputs: &'static [&'static str],
 }
 
 #[derive(Serialize)]
@@ -297,7 +337,14 @@ struct ManifestToken<'a> {
     kind: &'static str,
 }
 
-pub fn generate_bundle(mut sources: Vec<ThemeSource>) -> Result<GeneratedBundle, Error> {
+pub fn generate_bundle(sources: Vec<ThemeSource>) -> Result<GeneratedBundle, Error> {
+    generate_bundle_for(BundleProfile::V1Fixture, sources)
+}
+
+pub fn generate_bundle_for(
+    profile: BundleProfile,
+    mut sources: Vec<ThemeSource>,
+) -> Result<GeneratedBundle, Error> {
     if sources.is_empty() {
         return Err(Error::NoThemes);
     }
@@ -324,14 +371,19 @@ pub fn generate_bundle(mut sources: Vec<ThemeSource>) -> Result<GeneratedBundle,
     }
     validate_theme_parity(&themes)?;
     validate_identifiers(&themes)?;
+    if profile == BundleProfile::V2Product {
+        validate_css_identifiers(&themes)?;
+    }
 
-    let tokens_rs = render_rust(&themes, &input_sha256).into_bytes();
+    let tokens_rs = render_rust(profile.version(), &themes, &input_sha256).into_bytes();
+    let tokens_css = (profile == BundleProfile::V2Product)
+        .then(|| render_css(profile.version(), &themes, &input_sha256).into_bytes());
     let first = &themes[0];
     let manifest = Manifest {
         schema: SCHEMA_URI,
         generator: Generator {
             id: GENERATOR_ID,
-            version: GENERATOR_VERSION,
+            version: profile.version(),
         },
         input_sha256: &input_sha256,
         themes: themes.iter().map(|theme| theme.id.as_str()).collect(),
@@ -343,32 +395,55 @@ pub fn generate_bundle(mut sources: Vec<ThemeSource>) -> Result<GeneratedBundle,
                 kind: token.kind.as_str(),
             })
             .collect(),
-        outputs: OUTPUTS,
+        outputs: profile.outputs(),
     };
     let mut manifest_json = serde_json::to_string_pretty(&manifest)?.into_bytes();
     manifest_json.push(b'\n');
     Ok(GeneratedBundle {
         tokens_rs,
+        tokens_css,
         manifest_json,
     })
 }
 
 pub fn generate_to_dir(sources: Vec<ThemeSource>, out_dir: &Path) -> Result<(), Error> {
-    let bundle = generate_bundle(sources)?;
-    inspect_output_dir(out_dir, false)?;
+    generate_to_dir_for(BundleProfile::V1Fixture, sources, out_dir)
+}
+
+pub fn generate_to_dir_for(
+    profile: BundleProfile,
+    sources: Vec<ThemeSource>,
+    out_dir: &Path,
+) -> Result<(), Error> {
+    let bundle = generate_bundle_for(profile, sources)?;
+    inspect_output_dir(out_dir, profile.outputs(), false)?;
     fs::create_dir_all(out_dir).map_err(|source| Error::Io {
         path: out_dir.to_owned(),
         source,
     })?;
     write_output(out_dir.join("tokens.rs"), &bundle.tokens_rs)?;
+    if let Some(tokens_css) = &bundle.tokens_css {
+        write_output(out_dir.join("tokens.css"), tokens_css)?;
+    }
     write_output(out_dir.join("manifest.json"), &bundle.manifest_json)?;
     Ok(())
 }
 
 pub fn check_dir(sources: Vec<ThemeSource>, out_dir: &Path) -> Result<(), Error> {
-    let bundle = generate_bundle(sources)?;
-    inspect_output_dir(out_dir, true)?;
+    check_dir_for(BundleProfile::V1Fixture, sources, out_dir)
+}
+
+pub fn check_dir_for(
+    profile: BundleProfile,
+    sources: Vec<ThemeSource>,
+    out_dir: &Path,
+) -> Result<(), Error> {
+    let bundle = generate_bundle_for(profile, sources)?;
+    inspect_output_dir(out_dir, profile.outputs(), true)?;
     check_output(out_dir.join("tokens.rs"), &bundle.tokens_rs)?;
+    if let Some(tokens_css) = &bundle.tokens_css {
+        check_output(out_dir.join("tokens.css"), tokens_css)?;
+    }
     check_output(out_dir.join("manifest.json"), &bundle.manifest_json)?;
     Ok(())
 }
@@ -795,6 +870,23 @@ fn validate_identifiers(themes: &[Theme]) -> Result<(), Error> {
     Ok(())
 }
 
+fn validate_css_identifiers(themes: &[Theme]) -> Result<(), Error> {
+    let mut variables: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for path in themes[0].tokens.keys() {
+        variables
+            .entry(css_variable(path))
+            .or_default()
+            .push(path.clone());
+    }
+    if let Some((variable, paths)) = variables.iter().find(|(_, paths)| paths.len() > 1) {
+        return Err(Error::CssVariableCollision {
+            variable: variable.clone(),
+            paths: paths.clone(),
+        });
+    }
+    Ok(())
+}
+
 fn rust_keywords() -> BTreeSet<&'static str> {
     [
         "Self", "abstract", "as", "async", "await", "become", "box", "break", "const", "continue",
@@ -812,6 +904,10 @@ fn token_field(path: &str) -> String {
         .map(|segment| segment.replace('-', "_"))
         .collect::<Vec<_>>()
         .join("__")
+}
+
+fn css_variable(path: &str) -> String {
+    format!("--motolii-{}", path.replace('.', "-"))
 }
 
 fn theme_variant(id: &str) -> String {
@@ -835,9 +931,9 @@ fn bundle_hash(sources: &[ThemeSource]) -> String {
     format!("{:x}", digest.finalize())
 }
 
-fn render_rust(themes: &[Theme], hash: &str) -> String {
+fn render_rust(version: u32, themes: &[Theme], hash: &str) -> String {
     let mut output = format!(
-        "// @generated by {GENERATOR_ID} v{GENERATOR_VERSION}; DO NOT EDIT.\n// input-sha256: {hash}\n\n"
+        "// @generated by {GENERATOR_ID} v{version}; DO NOT EDIT.\n// input-sha256: {hash}\n\n"
     );
     output.push_str("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\npub enum GeneratedThemeId {\n");
     for theme in themes {
@@ -872,6 +968,39 @@ fn render_rust(themes: &[Theme], hash: &str) -> String {
     output
 }
 
+fn render_css(version: u32, themes: &[Theme], hash: &str) -> String {
+    let mut output = format!(
+        "/* @generated by {GENERATOR_ID} v{version}; DO NOT EDIT. */\n/* input-sha256: {hash} */\n\n"
+    );
+    for theme in themes {
+        output.push_str(&format!(":root[data-motolii-theme=\"{}\"] {{\n", theme.id));
+        for (path, token) in &theme.tokens {
+            output.push_str(&format!(
+                "  {}: {};\n",
+                css_variable(path),
+                render_css_value(token)
+            ));
+        }
+        output.push_str("}\n");
+    }
+    output
+}
+
+fn render_css_value(token: &Token) -> String {
+    match (&token.kind, &token.value) {
+        (TokenType::Color, TokenValue::Color([r, g, b, a])) => {
+            format!("#{r:02x}{g:02x}{b:02x}{a:02x}")
+        }
+        (TokenType::Dimension, TokenValue::Scalar(value)) => format!("{}px", value),
+        (TokenType::Duration, TokenValue::Scalar(value)) => format!("{}ms", value),
+        (TokenType::CubicBezier, TokenValue::Bezier(values)) => format!(
+            "cubic-bezier({}, {}, {}, {})",
+            values[0], values[1], values[2], values[3]
+        ),
+        _ => unreachable!("token kind and value are validated together"),
+    }
+}
+
 fn render_value(value: &TokenValue) -> String {
     match value {
         TokenValue::Color([r, g, b, a]) => {
@@ -892,7 +1021,7 @@ fn render_float(value: f32) -> String {
     format!("f32::from_bits(0x{:08x})", value.to_bits())
 }
 
-fn inspect_output_dir(out_dir: &Path, require_all: bool) -> Result<(), Error> {
+fn inspect_output_dir(out_dir: &Path, outputs: &[&str], require_all: bool) -> Result<(), Error> {
     if !out_dir.exists() {
         if require_all {
             return Err(Error::MissingOutput {
@@ -918,14 +1047,14 @@ fn inspect_output_dir(out_dir: &Path, require_all: bool) -> Result<(), Error> {
             path: path.clone(),
             source,
         })?;
-        if !OUTPUTS.contains(&name_text.as_ref()) || !file_type.is_file() {
+        if !outputs.contains(&name_text.as_ref()) || !file_type.is_file() {
             return Err(Error::UnexpectedOutputEntry { path });
         }
         found.insert(name_text.into_owned());
     }
     if require_all {
-        for output in OUTPUTS {
-            if !found.contains(output) {
+        for output in outputs {
+            if !found.contains(*output) {
                 return Err(Error::MissingOutput {
                     path: out_dir.join(output),
                 });

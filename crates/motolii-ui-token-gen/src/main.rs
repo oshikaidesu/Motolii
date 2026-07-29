@@ -1,4 +1,4 @@
-use motolii_ui_token_gen::{check_dir, generate_to_dir, ThemeSource};
+use motolii_ui_token_gen::{check_dir_for, generate_to_dir_for, BundleProfile, ThemeSource};
 use std::path::PathBuf;
 
 fn main() {
@@ -13,11 +13,21 @@ fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
     if operation != "generate" && operation != "check" {
         return Err(format!("unknown operation `{operation}`").into());
     }
+    let mut profile = None;
     let mut themes = Vec::new();
     let mut out_dir = None;
     let mut index = 1;
     while index < args.len() {
         match args[index].as_str() {
+            "--profile" => {
+                if profile.is_some() {
+                    return Err("duplicate --profile".into());
+                }
+                profile = Some(BundleProfile::parse(
+                    args.get(index + 1).ok_or("missing --profile value")?,
+                )?);
+                index += 2;
+            }
             "--theme" => {
                 let specification = args.get(index + 1).ok_or("missing --theme value")?;
                 let (id, path) = specification
@@ -41,10 +51,11 @@ fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
             argument => return Err(format!("unknown argument `{argument}`").into()),
         }
     }
+    let profile = profile.ok_or("missing --profile")?;
     let out_dir = out_dir.ok_or("missing --out-dir")?;
     match operation.as_str() {
-        "generate" => generate_to_dir(themes, &out_dir)?,
-        "check" => check_dir(themes, &out_dir)?,
+        "generate" => generate_to_dir_for(profile, themes, &out_dir)?,
+        "check" => check_dir_for(profile, themes, &out_dir)?,
         _ => unreachable!(),
     }
     Ok(())
