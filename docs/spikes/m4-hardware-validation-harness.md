@@ -86,6 +86,40 @@ cargo run -p motolii-testkit --bin m4_validation_run -- `
   C:\temp\motolii-m4-validation decode-software
 ```
 
+Windows実機の一括handoff例は次のとおり。`d3d11va`／`d3d11`／`nv12`はWindowsの第一候補であり、
+対象FFmpeg buildとGPU driverでの成立を実commandが審判する。
+
+```powershell
+$m4Bundle = "C:\temp\motolii-m4-validation"
+$env:MOTOLII_DECODE_HWACCEL = "d3d11va"
+$env:MOTOLII_DECODE_HW_OUTPUT_FORMAT = "d3d11"
+$env:MOTOLII_DECODE_HW_SURFACE_FORMAT = "nv12"
+
+$m4CommandIds = @(
+  "decode-software",
+  "decode-hardware-download",
+  "audio-mad-graph-demand",
+  "resource-ledger-contract",
+  "tier-transfer-contract",
+  "yuv-materialization-plan-contract"
+)
+
+foreach ($m4CommandId in $m4CommandIds) {
+  cargo run -p motolii-testkit --bin m4_validation_run -- $m4Bundle $m4CommandId
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+
+cargo run -p motolii-testkit --bin m4_validation_verify -- $m4Bundle
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+Compress-Archive -Path "$m4Bundle\*" -DestinationPath "$m4Bundle.zip"
+```
+
+先に`ffmpeg -hwaccels`で`d3d11va`が列挙されることは必要条件の一つだが、十分条件ではない。
+hardware commandが失敗した場合、software結果をhardware結果へ改名せず、そのbundleを不完全なまま
+保全して原因を記録する。QSV、DXVA2等へ切り替えるなら新しい空bundleを作り、contextとrouteを
+別証拠として収集する。
+
 executorは現在のcommitとschemaからpath非依存manifestを再生成し、既存JSONとの完全一致を要求する。
 tracked、staged、untracked差分があるworktree、必須環境変数の未指定・空値、
 既存artifact／log／run recordへの上書き、成功終了後の期待artifact欠落をfail closedで拒否する。各実行は
@@ -96,6 +130,8 @@ manifest、hardware、context、stdout、stderr、結果artifactのSHA-256も記
 run recordのlog／artifact pathもbundle直下の相対file名だけを記録し、`..`、絶対path、
 subdirectoryを拒否する。これにより完成bundleを別directory・別OSへコピーしても、内容とrevisionが
 同じならverify／matrix入力に使える。コピー後の検証で元の絶対pathを信頼しない。
+収集機ではbundleが記録したcommitをcheckoutし、archiveを新しいdirectoryへ展開してからverifierを
+再実行する。異なるHEADで旧bundleを受理する互換fallbackは持たない。
 
 全command収集後は専用verifierを実行する。
 
