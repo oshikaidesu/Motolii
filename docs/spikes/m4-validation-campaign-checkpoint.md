@@ -190,3 +190,19 @@ Low Power Mode off、2560×1664の独立bundleを2組直列再生した。両方
 526.48 / 362.35 ms、音MAD sequential最大は3.41 / 1.54 msと大きく揺れた。
 このA/Bは機種性能比較ではなく、単一runからbudgetやSLOを採択できない反例である。
 warm-up／反復回数／集約統計は未決のまま保持する。
+
+## 2026-07-29 portable schema v5 replay
+
+schema v4までのmanifestはartifact envとrun evidenceへ生成機の絶対pathを記録していたため、
+完成bundleをWindowsから収集機へ移すと正しい内容でもverify不能だった。portable schema v5では
+artifact env、stdout、stderr、結果artifactをbundle直下の相対file名へ限定し、executorだけが
+実行時の絶対pathへ解決する。`..`、絶対path、subdirectoryは拒否する。
+
+clean commit `449a68a31921058226fcb13c7adf9380ebca547a`でschema v5 bundleを6/6実行し、
+元directoryで`local_evidence_valid: true`を確認した。その全fileを別directoryへコピーし、
+コピー側でも6/6 verified、元＋コピーのmatrix schema v1生成を確認した。両entryは同じ
+3,517,051-byte fixture／SHA-256、context、hardware facts、測定値を保持した。
+
+これはdirectory移動への可搬性を証明する。Windows path文字列の混入、archive toolによる
+byte改変、異なるcommitでの再検証を自動的に許すものではない。内容digestまたはrevisionが違えば
+引き続きfail closedである。
