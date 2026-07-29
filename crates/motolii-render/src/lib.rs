@@ -2854,4 +2854,555 @@ mod tests {
             .unwrap(),
         }
     }
+
+    #[derive(Clone, Copy)]
+    struct P2dRcs1Quad {
+        rect: [f32; 4],
+        depth: f32,
+        color: [f32; 4],
+    }
+
+    impl P2dRcs1Quad {
+        fn uniform_bytes(self) -> [u8; 48] {
+            fn write_f32(bytes: &mut [u8], cursor: &mut usize, value: f32) {
+                let encoded = value.to_ne_bytes();
+                bytes[*cursor..*cursor + 4].copy_from_slice(&encoded);
+                *cursor += 4;
+            }
+
+            let mut out = [0u8; 48];
+            let mut cursor = 0usize;
+
+            for value in self.rect {
+                write_f32(&mut out, &mut cursor, value);
+            }
+            write_f32(&mut out, &mut cursor, self.depth);
+            write_f32(&mut out, &mut cursor, 0.0);
+            write_f32(&mut out, &mut cursor, 0.0);
+            write_f32(&mut out, &mut cursor, 0.0);
+            for value in self.color {
+                write_f32(&mut out, &mut cursor, value);
+            }
+
+            out
+        }
+    }
+
+    struct P2dRcs1Setup {
+        desc: FrameDesc,
+        pipeline: wgpu::RenderPipeline,
+        color_texture: wgpu::Texture,
+        color_view: wgpu::TextureView,
+        depth_texture: wgpu::Texture,
+        depth_view: wgpu::TextureView,
+        uniform_buffers: [wgpu::Buffer; 2],
+        bind_groups: [wgpu::BindGroup; 2],
+    }
+
+    impl P2dRcs1Setup {
+        fn new(gpu: &GpuCtx, base_desc: FrameDesc, quality: Quality) -> Self {
+            let desc = quality.render_desc(base_desc);
+            let color_texture = create_rgba_render_target(gpu, desc, "p2d-rcs1-group-depth-color");
+            let color_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+            let depth_texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("p2d-rcs1-group-depth-depth"),
+                size: wgpu::Extent3d {
+                    width: desc.width,
+                    height: desc.height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Depth32Float,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            let depth_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+            let shader = gpu
+                .device
+                .create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some("p2d-rcs1-group-depth-shader"),
+                    source: wgpu::ShaderSource::Wgsl(
+                        include_str!("p2d_rcs1_group_depth.wgsl").into(),
+                    ),
+                });
+            let bind_group_layout =
+                gpu.device
+                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: Some("p2d-rcs1-group-depth-bgl"),
+                        entries: &[wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        }],
+                    });
+            let pipeline_layout =
+                gpu.device
+                    .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                        label: Some("p2d-rcs1-group-depth-pl"),
+                        bind_group_layouts: &[Some(&bind_group_layout)],
+                        immediate_size: 0,
+                    });
+            let pipeline = gpu
+                .device
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("p2d-rcs1-group-depth-pipeline"),
+                    layout: Some(&pipeline_layout),
+                    vertex: wgpu::VertexState {
+                        module: &shader,
+                        entry_point: Some("vs_main"),
+                        buffers: &[],
+                        compilation_options: Default::default(),
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &shader,
+                        entry_point: Some("fs_main"),
+                        targets: &[Some(wgpu::ColorTargetState {
+                            format: wgpu::TextureFormat::Rgba8Unorm,
+                            blend: Some(wgpu::BlendState::REPLACE),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        })],
+                        compilation_options: Default::default(),
+                    }),
+                    primitive: wgpu::PrimitiveState::default(),
+                    depth_stencil: Some(wgpu::DepthStencilState {
+                        format: wgpu::TextureFormat::Depth32Float,
+                        depth_write_enabled: Some(true),
+                        depth_compare: Some(wgpu::CompareFunction::Less),
+                        stencil: wgpu::StencilState::default(),
+                        bias: wgpu::DepthBiasState::default(),
+                    }),
+                    multisample: wgpu::MultisampleState::default(),
+                    multiview_mask: None,
+                    cache: None,
+                });
+
+            let uniform_buffers = [
+                gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("p2d-rcs1-group-depth-ubo-a"),
+                    size: 48,
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                }),
+                gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("p2d-rcs1-group-depth-ubo-b"),
+                    size: 48,
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                }),
+            ];
+
+            let bind_groups = [
+                gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("p2d-rcs1-group-depth-bg-a"),
+                    layout: &bind_group_layout,
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: uniform_buffers[0].as_entire_binding(),
+                    }],
+                }),
+                gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("p2d-rcs1-group-depth-bg-b"),
+                    layout: &bind_group_layout,
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: uniform_buffers[1].as_entire_binding(),
+                    }],
+                }),
+            ];
+
+            Self {
+                desc,
+                pipeline,
+                color_texture,
+                color_view,
+                depth_texture,
+                depth_view,
+                uniform_buffers,
+                bind_groups,
+            }
+        }
+
+        fn render(&self, gpu: &GpuCtx, quads: [Option<P2dRcs1Quad>; 2]) -> Vec<u8> {
+            for (i, quad) in quads.into_iter().enumerate() {
+                if let Some(quad) = quad {
+                    let bytes = quad.uniform_bytes();
+                    gpu.queue.write_buffer(&self.uniform_buffers[i], 0, &bytes);
+                }
+            }
+
+            let mut encoder = gpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("p2d-rcs1-group-depth-encoder"),
+                });
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("p2d-rcs1-group-depth-pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &self.color_view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &self.depth_view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        stencil_ops: None,
+                    }),
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                pass.set_pipeline(&self.pipeline);
+                for i in 0..quads.len() {
+                    if quads[i].is_some() {
+                        pass.set_bind_group(0, &self.bind_groups[i], &[]);
+                        pass.draw(0..6, 0..1);
+                    }
+                }
+            }
+            gpu.queue.submit(Some(encoder.finish()));
+
+            download_rgba(gpu, &self.color_texture).unwrap()
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    struct P2dRcs1Rect {
+        left: u32,
+        top: u32,
+        right: u32,
+        bottom: u32,
+    }
+
+    fn p2d_rcs1_ndc_to_pixel_x(ndc: f32, width: u32) -> u32 {
+        let value = (ndc * 0.5 + 0.5) * width as f32;
+        if value <= 0.0 {
+            0
+        } else {
+            value.floor() as u32
+        }
+    }
+
+    fn p2d_rcs1_ndc_to_pixel_y(ndc: f32, height: u32) -> u32 {
+        let value = (-ndc * 0.5 + 0.5) * height as f32;
+        if value <= 0.0 {
+            0
+        } else {
+            value.floor() as u32
+        }
+    }
+
+    fn p2d_rcs1_rect_pixels(desc: FrameDesc, rect: [f32; 4]) -> P2dRcs1Rect {
+        let left = p2d_rcs1_ndc_to_pixel_x(rect[0], desc.width);
+        let right = p2d_rcs1_ndc_to_pixel_x(rect[2], desc.width);
+        let top = p2d_rcs1_ndc_to_pixel_y(rect[3], desc.height);
+        let bottom = p2d_rcs1_ndc_to_pixel_y(rect[1], desc.height);
+        P2dRcs1Rect {
+            left,
+            top,
+            right,
+            bottom,
+        }
+    }
+
+    fn p2d_rcs1_contains(rect: &P2dRcs1Rect, x: u32, y: u32) -> bool {
+        x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom
+    }
+
+    fn p2d_rcs1_expected(desc: FrameDesc, overlap_winner_is_a: bool) -> Vec<u8> {
+        let a_rect = p2d_rcs1_rect_pixels(desc, P2D_RCS1_QUAD_A_RECT);
+        let b_rect = p2d_rcs1_rect_pixels(desc, P2D_RCS1_QUAD_B_RECT);
+        let mut expected = vec![0u8; desc.data_size()];
+        for y in 0..desc.height {
+            for x in 0..desc.width {
+                let idx = ((y * desc.width + x) * 4) as usize;
+                let in_a = p2d_rcs1_contains(&a_rect, x, y);
+                let in_b = p2d_rcs1_contains(&b_rect, x, y);
+                let color = match (in_a, in_b) {
+                    (true, true) => {
+                        if overlap_winner_is_a {
+                            [255u8, 0u8, 0u8, 255u8]
+                        } else {
+                            [0u8, 0u8, 255u8, 255u8]
+                        }
+                    }
+                    (true, false) => [255u8, 0u8, 0u8, 255u8],
+                    (false, true) => [0u8, 0u8, 255u8, 255u8],
+                    (false, false) => [0u8, 0u8, 0u8, 0u8],
+                };
+                expected[idx..idx + 4].copy_from_slice(&color);
+            }
+        }
+        expected
+    }
+
+    fn p2d_rcs1_overlap_pixels(desc: FrameDesc) -> P2dRcs1Rect {
+        let a_rect = p2d_rcs1_rect_pixels(desc, P2D_RCS1_QUAD_A_RECT);
+        let b_rect = p2d_rcs1_rect_pixels(desc, P2D_RCS1_QUAD_B_RECT);
+        P2dRcs1Rect {
+            left: a_rect.left.max(b_rect.left),
+            top: a_rect.top.max(b_rect.top),
+            right: a_rect.right.min(b_rect.right),
+            bottom: a_rect.bottom.min(b_rect.bottom),
+        }
+    }
+
+    fn p2d_rcs1_has_group_delta(
+        baseline: &[u8],
+        actual: &[u8],
+        desc: FrameDesc,
+        group_rect: P2dRcs1Rect,
+    ) -> bool {
+        for y in group_rect.top..group_rect.bottom {
+            for x in group_rect.left..group_rect.right {
+                let idx = p2d_rcs1_pixel_offset(desc, x, y);
+                if actual[idx..idx + 4] != baseline[idx..idx + 4] {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn p2d_rcs1_group_box(desc: FrameDesc) -> P2dRcs1Rect {
+        p2d_rcs1_rect_pixels(desc, P2D_RCS1_GROUP_BOX_RECT)
+    }
+
+    fn p2d_rcs1_assert_exterior_unchanged(
+        baseline: &[u8],
+        actual: &[u8],
+        desc: FrameDesc,
+        group_rect: P2dRcs1Rect,
+    ) {
+        for y in 0..desc.height {
+            for x in 0..desc.width {
+                if p2d_rcs1_contains(&group_rect, x, y) {
+                    continue;
+                }
+                let idx = ((y * desc.width + x) * 4) as usize;
+                assert_eq!(
+                    &actual[idx..idx + 4],
+                    &baseline[idx..idx + 4],
+                    "outside group must match baseline at ({x},{y})"
+                );
+            }
+        }
+    }
+
+    fn p2d_rcs1_pixel_offset(desc: FrameDesc, x: u32, y: u32) -> usize {
+        ((y * desc.width + x) * 4) as usize
+    }
+
+    fn p2d_rcs1_case_quads(a_near: bool) -> [Option<P2dRcs1Quad>; 2] {
+        let quad_a = P2dRcs1Quad {
+            rect: P2D_RCS1_QUAD_A_RECT,
+            depth: if a_near { 0.25 } else { 0.75 },
+            color: [1.0, 0.0, 0.0, 1.0],
+        };
+        let quad_b = P2dRcs1Quad {
+            rect: P2D_RCS1_QUAD_B_RECT,
+            depth: if a_near { 0.75 } else { 0.25 },
+            color: [0.0, 0.0, 1.0, 1.0],
+        };
+        [Some(quad_a), Some(quad_b)]
+    }
+
+    fn p2d_rcs1_base_desc() -> FrameDesc {
+        FrameDesc::packed(32, 16, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true)
+    }
+    const P2D_RCS1_GROUP_BOX_RECT: [f32; 4] = [-0.5, -0.5, 0.5, 0.5];
+    const P2D_RCS1_QUAD_A_RECT: [f32; 4] = [-0.5, -0.5, 0.125, 0.5];
+    const P2D_RCS1_QUAD_B_RECT: [f32; 4] = [-0.125, -0.5, 0.5, 0.5];
+
+    #[test]
+    fn p2d_rcs1_f1_a_near_final() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let base_desc = p2d_rcs1_base_desc();
+        let setup = P2dRcs1Setup::new(&gpu, base_desc, Quality::FINAL);
+        let actual = setup.render(&gpu, p2d_rcs1_case_quads(true));
+        let overlap = p2d_rcs1_overlap_pixels(setup.desc);
+
+        assert_eq!(actual.len(), setup.desc.data_size() as usize);
+        assert_eq!(
+            setup.desc,
+            Quality::FINAL.render_desc(base_desc),
+            "setup must use fixed base-desc quality mapping"
+        );
+        let expected = p2d_rcs1_expected(setup.desc, true);
+        let baseline = setup.render(&gpu, [None, None]);
+        let group_rect = p2d_rcs1_group_box(setup.desc);
+        p2d_rcs1_assert_exterior_unchanged(&baseline, &actual, setup.desc, group_rect);
+        assert_eq!(
+            &actual[p2d_rcs1_pixel_offset(setup.desc, overlap.left, overlap.top)
+                ..p2d_rcs1_pixel_offset(setup.desc, overlap.left, overlap.top) + 4],
+            &expected[p2d_rcs1_pixel_offset(setup.desc, overlap.left, overlap.top)
+                ..p2d_rcs1_pixel_offset(setup.desc, overlap.left, overlap.top) + 4],
+            "overlap winner at A-near, final"
+        );
+        assert_eq!(actual, expected);
+        assert_ne!(actual, baseline);
+        assert!(p2d_rcs1_has_group_delta(
+            &baseline, &actual, setup.desc, group_rect
+        ));
+    }
+
+    #[test]
+    fn p2d_rcs1_f1_b_near_final() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let base_desc = p2d_rcs1_base_desc();
+        let setup = P2dRcs1Setup::new(&gpu, base_desc, Quality::FINAL);
+        let actual = setup.render(&gpu, p2d_rcs1_case_quads(false));
+        let expected = p2d_rcs1_expected(setup.desc, false);
+        let baseline = setup.render(&gpu, [None, None]);
+        let group_rect = p2d_rcs1_group_box(setup.desc);
+        p2d_rcs1_assert_exterior_unchanged(&baseline, &actual, setup.desc, group_rect);
+        assert_eq!(actual, expected);
+        assert!(p2d_rcs1_has_group_delta(
+            &baseline, &actual, setup.desc, group_rect
+        ));
+    }
+
+    #[test]
+    fn p2d_rcs1_f1_a_near_and_b_near_draft() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let base_desc = p2d_rcs1_base_desc();
+        let setup = P2dRcs1Setup::new(&gpu, base_desc, Quality::DRAFT);
+        let a_near = setup.render(&gpu, p2d_rcs1_case_quads(true));
+        let b_near = setup.render(&gpu, p2d_rcs1_case_quads(false));
+        let expected_a = p2d_rcs1_expected(setup.desc, true);
+        let expected_b = p2d_rcs1_expected(setup.desc, false);
+        let baseline = setup.render(&gpu, [None, None]);
+        let group_rect = p2d_rcs1_group_box(setup.desc);
+
+        assert_eq!(
+            setup.desc.width,
+            Quality::DRAFT.render_desc(base_desc).width
+        );
+        assert_eq!(
+            setup.desc.height,
+            Quality::DRAFT.render_desc(base_desc).height
+        );
+        assert!(a_near.iter().any(|&v| v != 0));
+        assert!(b_near.iter().any(|&v| v != 0));
+
+        assert_eq!(a_near, expected_a);
+        assert_eq!(b_near, expected_b);
+        assert_ne!(a_near, b_near);
+        p2d_rcs1_assert_exterior_unchanged(&baseline, &a_near, setup.desc, group_rect);
+        p2d_rcs1_assert_exterior_unchanged(&baseline, &b_near, setup.desc, group_rect);
+        assert!(p2d_rcs1_has_group_delta(
+            &baseline, &a_near, setup.desc, group_rect
+        ));
+        assert!(p2d_rcs1_has_group_delta(
+            &baseline, &b_near, setup.desc, group_rect
+        ));
+    }
+
+    #[test]
+    fn p2d_rcs1_f6_group_exterior_and_unused_contribution() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let base_desc = p2d_rcs1_base_desc();
+        let setup_final = P2dRcs1Setup::new(&gpu, base_desc, Quality::FINAL);
+        let setup_draft = P2dRcs1Setup::new(&gpu, base_desc, Quality::DRAFT);
+        let final_baseline = setup_final.render(&gpu, [None, None]);
+        let draft_baseline = setup_draft.render(&gpu, [None, None]);
+
+        let group_final = p2d_rcs1_group_box(setup_final.desc);
+        let group_draft = p2d_rcs1_group_box(setup_draft.desc);
+        let final_expected = vec![0u8; final_baseline.len()];
+        let draft_expected = vec![0u8; draft_baseline.len()];
+        assert_eq!(final_baseline, final_expected);
+        assert_eq!(draft_baseline, draft_expected);
+
+        let final_a_near = setup_final.render(&gpu, p2d_rcs1_case_quads(true));
+        let draft_a_near = setup_draft.render(&gpu, p2d_rcs1_case_quads(true));
+        p2d_rcs1_assert_exterior_unchanged(
+            &final_baseline,
+            &final_a_near,
+            setup_final.desc,
+            group_final,
+        );
+        p2d_rcs1_assert_exterior_unchanged(
+            &draft_baseline,
+            &draft_a_near,
+            setup_draft.desc,
+            group_draft,
+        );
+        assert_ne!(final_a_near, final_baseline);
+        assert_ne!(draft_a_near, draft_baseline);
+        assert!(p2d_rcs1_has_group_delta(
+            &final_baseline,
+            &final_a_near,
+            setup_final.desc,
+            group_final
+        ));
+        assert!(p2d_rcs1_has_group_delta(
+            &draft_baseline,
+            &draft_a_near,
+            setup_draft.desc,
+            group_draft
+        ));
+    }
+
+    #[test]
+    fn p2d_rcs1_f1_premultiplied_opaque_and_deterministic_evaluator() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let base_desc = p2d_rcs1_base_desc();
+        let setup = P2dRcs1Setup::new(&gpu, base_desc, Quality::FINAL);
+        let group_rect = p2d_rcs1_group_box(setup.desc);
+        let baseline = setup.render(&gpu, [None, None]);
+        let a_near = setup.render(&gpu, p2d_rcs1_case_quads(true));
+        let b_near = setup.render(&gpu, p2d_rcs1_case_quads(false));
+        let overlap = p2d_rcs1_overlap_pixels(setup.desc);
+        let expected = p2d_rcs1_expected(setup.desc, true);
+        let overlap_x = overlap.left;
+        let overlap_y = overlap.top;
+        assert_eq!(
+            &a_near[p2d_rcs1_pixel_offset(setup.desc, overlap_x, overlap_y)
+                ..p2d_rcs1_pixel_offset(setup.desc, overlap_x, overlap_y) + 4],
+            &[255, 0, 0, 255]
+        );
+        assert_eq!(
+            &b_near[p2d_rcs1_pixel_offset(setup.desc, overlap_x, overlap_y)
+                ..p2d_rcs1_pixel_offset(setup.desc, overlap_x, overlap_y) + 4],
+            &[0, 0, 255, 255]
+        );
+
+        for y in 0..setup.desc.height {
+            for x in 0..setup.desc.width {
+                if p2d_rcs1_contains(&group_rect, x, y) {
+                    let idx = p2d_rcs1_pixel_offset(setup.desc, x, y);
+                    if expected[idx..idx + 4] != [0, 0, 0, 0] {
+                        assert_eq!(a_near[idx + 3], 255, "winner pixels must be opaque");
+                    }
+                }
+            }
+        }
+
+        let expected_quality = Quality::FINAL.render_desc(base_desc);
+        assert_eq!(setup.desc, expected_quality);
+        assert_eq!(baseline.len(), setup.desc.data_size() as usize);
+        let a_repeat_1 = setup.render(&gpu, p2d_rcs1_case_quads(true));
+        let a_repeat_2 = setup.render(&gpu, p2d_rcs1_case_quads(true));
+        let a_repeat_3 = setup.render(&gpu, p2d_rcs1_case_quads(true));
+        assert_eq!(a_repeat_1, a_repeat_2);
+        assert_eq!(a_repeat_2, a_repeat_3);
+        assert_ne!(baseline, a_repeat_1);
+    }
 }
