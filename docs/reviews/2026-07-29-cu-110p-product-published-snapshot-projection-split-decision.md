@@ -12,8 +12,9 @@
 
 1. `CU-110PS`: 同じsnapshotを既存latest-only render workerへ送り、完了した最新generationだけを
    既存VRAM display slotへcopyしてnative Stageを更新する。
-2. `CU-110PT`: 同じsnapshotを既存`project_timeline`へ渡し、native Timeline viewportへ
-   barを描画する。選択入力は含めない。
+2. `CU-110PT`: [CU-110PT0](2026-07-29-cu-110pt0-native-timeline-projection-envelope-decision.md)の
+   非所有・非保存のcomposition全域envelopeと同じsnapshotを既存`project_timeline`へ渡し、
+   native Timeline viewportへbarを描画する。選択入力は含めない。
 3. `CU-110PI`: 同じsnapshotとprimaryから既決Inspector read-model inputを作り、
    product-owned `InspectorCandidate`の既存read-only identity projectionを通常製品WebViewへ載せる。
 
@@ -62,5 +63,6 @@
 
 ## 6. handoff
 
-`CU-110P`は`SPLIT`。次の唯一のPRODUCT-ASSET `DO`は`CU-110PS`。
+`CU-110P`は`SPLIT`。`CU-110PS`と`CU-110PT0`は`DONE`。
+次の唯一のPRODUCT-ASSET `DO`は`CU-110PT`。
 token後続は`WAIT`を維持する。
