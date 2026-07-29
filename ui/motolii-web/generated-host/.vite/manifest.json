@@ -1,0 +1,11 @@
+{
+  "host.html": {
+    "file": "assets/host-CRv7Qcif.js",
+    "name": "host",
+    "src": "host.html",
+    "isEntry": true,
+    "css": [
+      "assets/host-Dbykilq0.css"
+    ]
+  }
+}

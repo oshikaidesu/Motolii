@@ -8,10 +8,21 @@
   },
   "files": [
     "src",
-    "source-provenance.json"
+    "source-provenance.json",
+    "host.html",
+    "vite.host.config.js"
   ],
+  "scripts": {
+    "build:host": "vite build --config vite.host.config.js && node scripts/write-host-manifest.mjs",
+    "check:host": "node scripts/check-host-bundle.mjs"
+  },
   "dependencies": {
     "html-react-parser": "^6.1.5",
-    "react": "^19.0.0"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.7.0",
+    "vite": "^6.4.3"
   }
 }

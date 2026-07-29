@@ -379,3 +379,4 @@
 | [2026-07-29-cu-0b02s-product-token-ownership-split-decision.md](2026-07-29-cu-0b02s-product-token-ownership-split-decision.md) | CU-0B02S 製品token所有と接続粒の分割決定 |
 | [2026-07-29-cu-0b02t-product-token-authority-implementation-decision.md](2026-07-29-cu-0b02t-product-token-authority-implementation-decision.md) | CU-0B02T 製品token単一authority実装決定 |
 | [2026-07-29-cu-0a08bti-browser-place-typed-intent-implementation-decision.md](2026-07-29-cu-0a08bti-browser-place-typed-intent-implementation-decision.md) | CU-0A08BTI Browser Place typed intent実装決定 |
+| [2026-07-29-cu-0b03h-browser-host-contract-offline-mount-decision.md](2026-07-29-cu-0b03h-browser-host-contract-offline-mount-decision.md) | CU-0B03H Browser Host契約・offline mount決定 |
