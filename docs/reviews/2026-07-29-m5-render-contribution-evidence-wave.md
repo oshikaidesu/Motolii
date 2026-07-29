@@ -17,7 +17,7 @@
 - 共通のHost境界、用語、引用anchor、非目標、成立済みコード事実は主担当Codexが一度だけ固定する。
 - 外部証拠の取得／転記と、Motoliiへの比較／裁定を同じ発注へ束ねない。
 - 旧`P2D-RCA/B/C`の直接発注は、RCAがGrok `REJECT`、RCB/RCCがSpark context枯渇となったため停止する。
-- 後続grainのID、capsule path、allowlistを別変更で登録するまで再発注しない。
+- 旧IDは再発注しない。後続grainは別ID、capsule path、allowlistを§8で登録したものだけを使う。
 - 証拠統合、採否、最終契約決定は後続`P2D-RCI`へ残す。`P2D-RCI`は本Waveではdispatchしない。
 
 ## 2. Wave共通基盤
@@ -229,7 +229,15 @@ Motoliiへは方式や内部型でなく、次のfixture候補へ翻訳する。
 
 ## 8. 後続統合
 
-`P2D-RCI`は新しい後続grainが登録・完了し、各capsule／比較文書の事実、推論、裁定が分離された後だけ
+2026-07-29、次の三grainを登録した。三つは同じbase commitから並列dispatchでき、変更pathは交差しない。
+
+| grain | 単一動詞 | read-only入力 | 変更許可 |
+|---|---|---|---|
+| `P2D-RCA2` | 比較 | 本書§2〜§3、§5と元authority | `2026-07-29-m5-render-contribution-boundary-comparison-v2.md`だけ |
+| `P2D-RCB2` | 転記 | 本書§2〜§3、§6、Rerun三capsule、転移裁定 | `2026-07-29-m5-rerun-render-contribution-evidence-v2.md`だけ |
+| `P2D-RCC2` | 比較 | 本書§2〜§3、§7、engine三capsule | `2026-07-29-m5-render-phase-fixture-comparison-v2.md`だけ |
+
+`P2D-RCI`は上記三grainが完了し、各capsule／比較文書の事実、推論、裁定が分離された後だけ
 別grainとして登録する。旧`P2D-RCA/B/C`の完了を依存条件にしない。
 統合時も、証拠多数決で公開APIを決めない。Motolii authorityを正として反例を突き合わせ、
 必要ならcontract decision、private spike、schema decision、First Vism fixtureを別ticketへ再分割する。

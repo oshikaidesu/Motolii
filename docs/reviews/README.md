@@ -229,6 +229,9 @@
 | [2026-07-29-m5-capsule-godot-transparency.md](2026-07-29-m5-capsule-godot-transparency.md) | Godot 4.6公式docsのtransparent sort限界とscreen／depth read制約を固定した証拠capsule |
 | [2026-07-29-m5-capsule-unreal-translucency.md](2026-07-29-m5-capsule-unreal-translucency.md) | Unreal Engine 5.8公式docsのtranslucency sort、pass、overdraw、refraction制約を固定した証拠capsule |
 | [2026-07-29-m5-rerun-transfer-adjudication.md](2026-07-29-m5-rerun-transfer-adjudication.md) | Rerun固定6 assetをMotolii authorityへ再照合し、A1〜A5をPATTERN、固定phase語彙A6をREJECTとした主担当Codex裁定 |
+| [2026-07-29-m5-render-contribution-boundary-comparison-v2.md](2026-07-29-m5-render-contribution-boundary-comparison-v2.md) | P2D-RCA2専用。Motolii authority／code factだけで6論点を比較する一file allowlist |
+| [2026-07-29-m5-rerun-render-contribution-evidence-v2.md](2026-07-29-m5-rerun-render-contribution-evidence-v2.md) | P2D-RCB2専用。裁定済みRerun A1〜A6を分類変更なしで転記する一file allowlist |
+| [2026-07-29-m5-render-phase-fixture-comparison-v2.md](2026-07-29-m5-render-phase-fixture-comparison-v2.md) | P2D-RCC2専用。三engine capsuleを固定6 fixture候補で比較する一file allowlist |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |
 | [2026-07-21-m3-u1a-1-static-viewport-contract.md](2026-07-21-m3-u1a-1-static-viewport-contract.md) | U1a-1 静止viewport実装前契約 |
