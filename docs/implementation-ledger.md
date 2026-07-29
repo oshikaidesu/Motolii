@@ -140,7 +140,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | RENDER-CONTRIBUTION-ENGINE | P2D-RCC4B-BEVY | M5 / P2D / fixed Bevy fragment map | `DO` | — | 現行v4主担当固定配置 | 20 cell copyだけ |
 | RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA5 | M5 / P2D / fixed boundary map | `DO` | — | 修理済みrunner、現行固定配置 | 18 cell copyだけ |
 | RENDER-CONTRIBUTION-RERUN | P2D-RCB5 | M5 / P2D / fixed Rerun map | `DO` | — | 修理済みrunner、現行固定配置 | 30 cell copyだけ |
-| RENDER-CONTRIBUTION-ENGINE | P2D-RCC4B-UNREAL | M5 / P2D / fixed Unreal map | `DO` | — | 修理済みrunner、現行固定配置 | 20 cell copyだけ |
+| RENDER-CONTRIBUTION-ENGINE | P2D-RCC4B-UNREAL | M5 / P2D / fixed Unreal map | `DONE` | — | Grok ACCEPT P0/P1/P2=0、主担当再照合 | RCC5入力 |
 | RENDER-CONTRIBUTION-ENGINE | P2D-RCC5 | M5 / P2D / fixture comparison | `WAIT` | — | P2D-RCC3-GODOT、P2D-RCC4B-BEVY、P2D-RCC4-UNREAL | provider三件後に登録 |
 | M2-REPAIR | GAP-23 | M2 / narrow repair | `WAIT` | — | 独立D1i-4 LookAt/Follow oracle分離の採番・完了 | GAP-23全25件を再発注し、後にGAP-24を判定 |
 | M2-REPAIR | GAP-24 | M2 / narrow repair | `WAIT` | — | GAP-23 | GAP-24後にclose |

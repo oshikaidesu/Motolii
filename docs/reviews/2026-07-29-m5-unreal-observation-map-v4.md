@@ -2,7 +2,7 @@
 
 作成日: 2026-07-29
 
-状態: **登録済み／P2D-RCC4-UNREAL未実行**
+状態: **完了／P2D-RCC4B-UNREAL Grok ACCEPT（P0/P1/P2=0）**
 
 変更許可: 本fileの`配置欄`だけ
 
@@ -39,11 +39,11 @@
 
 | 観測項目 | 観察fragment | source fragment | 非証明fragment | 持込禁止fragment |
 |---|---|---|---|---|
-| phase admission / ordering | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| depth / opaque / cutout / soft alpha | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| transparent交差 / sorting / OIT追加位置 | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| scene-color / refraction / resource lifetime | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| capability不足 / unsupported / cyclic read | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
+| phase admission / ordering | U-O2 | U-SRC | U-NP | U-LIM |
+| depth / opaque / cutout / soft alpha | U-O1 U-O2 | U-SRC | U-NP | U-LIM |
+| transparent交差 / sorting / OIT追加位置 | U-O1 U-O3 | U-SRC | U-NP | U-LIM |
+| scene-color / refraction / resource lifetime | U-O2 U-O4 | U-SRC | U-NP | U-LIM |
+| capability不足 / unsupported / cyclic read | U-NO | U-SRC | U-NP | U-LIM |
 
 ## STOP
 

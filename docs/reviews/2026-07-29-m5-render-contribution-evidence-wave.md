@@ -274,7 +274,7 @@ RCA3の検収を待たず、terminalとなったRCB3／RCC3-BEVY／RCC3-UNREAL�
 | `P2D-RCC4B-BEVY` | 配置 | 本書§7、Bevy capsule、v4主担当固定配置 | `2026-07-29-m5-bevy-observation-map-v4.md`の配置欄だけ | 登録済み |
 | `P2D-RCA5` | 配置 | 本書§2〜§3、§5、v4主担当固定配置 | `2026-07-29-m5-render-contribution-boundary-map-v4.md`の配置欄だけ | 修理済みrunnerで登録済み |
 | `P2D-RCB5` | 配置 | 本書§2〜§3、§6、v4主担当固定配置 | `2026-07-29-m5-rerun-observation-map-v4.md`の配置欄だけ | 修理済みrunnerで登録済み |
-| `P2D-RCC4B-UNREAL` | 配置 | 本書§7、Unreal capsule、v4主担当固定配置 | `2026-07-29-m5-unreal-observation-map-v4.md`の配置欄だけ | 修理済みrunnerで登録済み |
+| `P2D-RCC4B-UNREAL` | 配置 | 本書§7、Unreal capsule、v4主担当固定配置 | `2026-07-29-m5-unreal-observation-map-v4.md`の配置欄だけ | Grok `ACCEPT` P0/P1/P2=0。Spark `019fabb7-a074-7443-81ff-ae5de35e0d20`、主担当再照合済み |
 
 配置欄は既存fragment IDだけを受け入れ、自由文、本文複製、言い換え、ID追加を拒否する。
 Unreal／Bevyのcapsule非記載項目には固定`NO` fragmentを置ける。Rerun A6は固定`R-A6-LIM`を
