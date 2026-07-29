@@ -163,11 +163,11 @@ M5は[操作単純化モデル](../interaction-simplicity-model.md)の最初の�
 | P2D-RCD2I | policy／Depth Participant schema実装 | P2D-RCD2 | **WAIT**。現行version 5前置確認後、v6 migration／command／oracleを一契約で実装 |
 | P2D-RCF1 | conformance harness decision／First Vism無特権契約 | P2D-RCD1 | **DONE**。[harness decision](../reviews/2026-07-29-m5-render-contribution-conformance-harness-decision.md)でblack-box観測、F1〜F6分担、既存testkit再利用、実装4粒を固定 |
 | P2D-RCF1I-BASE | F1／F5／F6 executable harness | P2D-RCF1、公開typed seam実装 | **WAIT**。private RCS1を昇格しない |
-| P2D-RCF1I-ALPHA | F2／F3 executable harness | P2D-RCF1I-BASE、P2D-RCT1 | **WAIT**。対応soft-alpha pixelはP2D-RCO1後 |
+| P2D-RCF1I-ALPHA | F2／F3 executable harness | P2D-RCF1I-BASE、P2D-RCT1、P2D-RCO1 | **WAIT**。v1はcutout pixelとsoft-alpha typed unsupportedを審判。対応soft-alpha pixelは非目標 |
 | P2D-RCF1I-SCENE | F4 executable harness | P2D-RCFP1、P2D-RCR1、P2D-RCP1 | **WAIT**。scene-color方式を先取りしない |
 | P2D-RCF1I-VISM | concrete First Vism fixture | 製品表現選定、共通公開seam、対象能力decision | **WAIT**。専用type／key／registryなし |
-| P2D-RCT1 | cutout／soft alpha意味と診断 | P2D-RCD1 | **DONE**。[alpha意味decision](../reviews/2026-07-29-m5-render-contribution-alpha-semantics-decision.md)で明示class、binary cutout、fractional soft alpha、whole-request typed refusalを固定。具体OIT方式はP2D-RCO1 |
-| P2D-RCO1 | transparent交差のOIT方式decision | P2D-RCT1、P2D-RCS1 | **WAIT**。方式、品質、budget、unsupportedを比較 |
+| P2D-RCT1 | cutout／soft alpha意味と診断 | P2D-RCD1 | **DONE**。[alpha意味decision](../reviews/2026-07-29-m5-render-contribution-alpha-semantics-decision.md)で明示class、binary cutout、fractional soft alpha、whole-request typed refusalを固定。RCO1はv1方式非採択 |
+| P2D-RCO1 | transparent交差のv1 disposition | P2D-RCT1、P2D-RCS1 | **DONE／延期**。[OIT disposition](../reviews/2026-07-29-m5-soft-alpha-oit-disposition.md)でv1は方式非採択、shared-depth soft alpha typed unsupported、将来比較gateを固定 |
 | P2D-RCFP1 | scene-color中間形式decision | M1、M4-K0 | **WAIT**。linear FP16推奨案を再裁定 |
 | P2D-RCR1 | scene-color／refraction入力契約 | P2D-RCD1、P2D-RCFP1 | **WAIT**。snapshot、範囲、順序、failure |
 | P2D-RCP1 | scene-color copy／subpass方式decision | P2D-RCR1、P2D-RCFP1 | **WAIT**。resource lifetime、同期、画面外sample、budget |

@@ -108,6 +108,6 @@ alpha classをDocumentへ保存する決定も行わない。現時点では型�
 ## 9. 後続
 
 `P2D-RCF1`は本decisionのF2／F3を共通harnessへ取り込める。
-`P2D-RCO1`はfractional alphaをopaque depthへ格上げしない不変条件を入力に、
-方式、保証、Quality、budget、unsupported matrixを別に選ぶ。
+`P2D-RCO1`はv1で方式を採択せず、shared-depth soft alphaをtyped unsupportedのまま延期した。
+将来scopeを改訂する場合だけ、本decisionの不変条件を入力に方式、保証、Quality、budgetを再比較する。
 `P2D-RCD2`はalpha class、fallback、OIT modeを永続化しない。
