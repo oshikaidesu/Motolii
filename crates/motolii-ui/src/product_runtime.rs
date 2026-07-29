@@ -4,7 +4,9 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use motolii_core::RationalTime;
+use motolii_core::{Quality, RationalTime};
+use motolii_doc::EvaluationTime;
+use motolii_eval::DataTracks;
 use motolii_gpu::GpuCtx;
 use winit::dpi::LogicalSize;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
@@ -20,6 +22,9 @@ use crate::document_edit_runtime::{
 };
 use crate::host_pointer_capture::{HostPointerCancel, HostPointerCandidate};
 use crate::native_host_layout::{NativeHostLayout, PhysicalRect};
+use crate::render_worker::{
+    RenderGeneration, RenderRequest, RenderWorker, RenderWorkerClient, RenderWorkerError,
+};
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
 
 #[derive(Debug, Clone, Copy)]
@@ -39,14 +44,39 @@ pub(crate) fn run(document_runtime: DocumentEditRuntime) -> Result<(), ProductRu
     let gpu = Arc::new(gpu);
     let preview = Arc::new(prepare_in_setup_worker(
         Arc::clone(&gpu),
-        document,
+        Arc::clone(&document),
         bootstrap_frame_desc()?,
     )?);
+    let mut render_worker = RenderWorker::spawn(Arc::clone(&gpu))?;
+    let render_client = render_worker.client();
     let event_loop = EventLoop::<ProductEvent>::with_user_event().build()?;
     event_loop.set_control_flow(ControlFlow::Wait);
     let proxy = event_loop.create_proxy();
-    let mut app = ProductApp::new(gpu, parts, preview, document_runtime, proxy);
-    event_loop.run_app(&mut app)?;
+    let wake_proxy = proxy.clone();
+    render_client.register_repaint_signal(Arc::new(move || {
+        let _ = wake_proxy.send_event(ProductEvent::Wake);
+    }))?;
+    let render_request_template = RenderRequest {
+        document,
+        data_tracks: Arc::new(DataTracks::new()),
+        evaluation_time: EvaluationTime::new(RationalTime::ZERO),
+        desc: bootstrap_frame_desc()?,
+        quality: Quality::DRAFT,
+    };
+    let mut app = ProductApp::new(
+        gpu,
+        parts,
+        preview,
+        document_runtime,
+        render_client,
+        render_request_template,
+        proxy,
+    );
+    let run_result = event_loop.run_app(&mut app);
+    render_worker.close();
+    let join_result = render_worker.join();
+    run_result?;
+    join_result?;
     if let Some(error) = app.failure {
         return Err(ProductRuntimeError::Runtime(error));
     }
@@ -61,6 +91,10 @@ pub(crate) struct ProductApp {
     gpu: Arc<GpuCtx>,
     parts: Option<ProductGpuParts>,
     preview: Arc<StaticPreview>,
+    render_client: RenderWorkerClient,
+    render_request_template: RenderRequest,
+    stage_projection: ProductStageProjection,
+    displayed_camera: motolii_core::CompCamera,
     document_runtime: DocumentEditRuntime,
     document_queue: DocumentEditQueue,
     primary: Option<motolii_doc::LayerId>,
@@ -90,6 +124,28 @@ struct PendingStageDrop {
     generation: u64,
     layout_epoch: u64,
     ndc: [f64; 2],
+}
+
+#[derive(Debug, Default)]
+struct ProductStageProjection {
+    last_displayed_generation: Option<RenderGeneration>,
+}
+
+impl ProductStageProjection {
+    fn accepts(
+        &self,
+        result_generation: RenderGeneration,
+        latest_accepted_generation: Option<RenderGeneration>,
+    ) -> bool {
+        Some(result_generation) == latest_accepted_generation
+            && self
+                .last_displayed_generation
+                .is_none_or(|displayed| result_generation > displayed)
+    }
+
+    fn commit(&mut self, generation: RenderGeneration) {
+        self.last_displayed_generation = Some(generation);
+    }
 }
 
 #[derive(Debug, Default)]
@@ -254,8 +310,11 @@ impl ProductApp {
         parts: ProductGpuParts,
         preview: Arc<StaticPreview>,
         document_runtime: DocumentEditRuntime,
+        render_client: RenderWorkerClient,
+        render_request_template: RenderRequest,
         proxy: EventLoopProxy<ProductEvent>,
     ) -> Self {
+        let displayed_camera = preview.camera();
         Self {
             gfx: None,
             browser: None,
@@ -263,6 +322,10 @@ impl ProductApp {
             gpu,
             parts: Some(parts),
             preview,
+            render_client,
+            render_request_template,
+            stage_projection: ProductStageProjection::default(),
+            displayed_camera,
             current_document: document_runtime.snapshot(),
             document_runtime,
             document_queue: DocumentEditQueue::default(),
@@ -473,7 +536,7 @@ impl ProductApp {
             );
         }
         if let Some(drop) = self.pending_stage_drop.take() {
-            let Some(position) = canonical_drop_from_ndc(self.preview.camera(), drop.ndc) else {
+            let Some(position) = canonical_drop_from_ndc(self.displayed_camera, drop.ndc) else {
                 return self.fail(event_loop, ProductRuntimeError::PlaceCanonicalConversion);
             };
             self.document_queue
@@ -490,6 +553,9 @@ impl ProductApp {
                     self.current_document = published.snapshot;
                     self.primary = published.primary;
                     self.projection_generation = published.projection_generation;
+                    if let Err(error) = self.submit_stage_projection() {
+                        return self.fail(event_loop, error);
+                    }
                     self.request_redraw();
                 }
                 Ok(None) => {}
@@ -504,7 +570,13 @@ impl ProductApp {
         event: ProductEvent,
     ) {
         match event {
-            ProductEvent::Wake => self.request_redraw(),
+            ProductEvent::Wake => {
+                if let Err(error) = self.drain_stage_projection() {
+                    self.fail(event_loop, error);
+                    return;
+                }
+                self.request_redraw();
+            }
             ProductEvent::BrowserLifecycle(event) => {
                 if let Err(error) = self.handle_browser_lifecycle(event) {
                     self.fail(event_loop, error);
@@ -576,6 +648,33 @@ impl ProductApp {
             Some(retry_at) => event_loop.set_control_flow(ControlFlow::WaitUntil(retry_at)),
             None => event_loop.set_control_flow(ControlFlow::Wait),
         }
+    }
+
+    fn submit_stage_projection(&self) -> Result<RenderGeneration, ProductRuntimeError> {
+        Ok(self.render_client.submit(RenderRequest {
+            document: Arc::clone(&self.current_document),
+            data_tracks: Arc::clone(&self.render_request_template.data_tracks),
+            evaluation_time: self.render_request_template.evaluation_time,
+            desc: self.render_request_template.desc,
+            quality: self.render_request_template.quality,
+        })?)
+    }
+
+    fn drain_stage_projection(&mut self) -> Result<(), ProductRuntimeError> {
+        let Some(result) = self.render_client.try_take_latest() else {
+            return Ok(());
+        };
+        if !self.stage_projection.accepts(
+            result.generation,
+            self.render_client.latest_accepted_generation(),
+        ) {
+            return Ok(());
+        }
+        let rendered = result.result?;
+        self.preview.slot().copy(&self.gpu, &rendered.frame)?;
+        self.displayed_camera = rendered.camera;
+        self.stage_projection.commit(result.generation);
+        Ok(())
     }
 
     pub(crate) fn fail(&mut self, event_loop: &ActiveEventLoop, error: impl std::fmt::Display) {
@@ -1030,6 +1129,18 @@ pub(crate) enum ProductRuntimeError {
     #[error(transparent)]
     Preview(#[from] crate::static_preview::StaticPreviewError),
     #[error(transparent)]
+    RenderWorkerStart(#[from] crate::render_worker::RenderWorkerStartError),
+    #[error(transparent)]
+    RenderWorkerJoin(#[from] crate::render_worker::RenderJoinError),
+    #[error(transparent)]
+    RenderSubmit(#[from] crate::render_worker::RenderSubmitError),
+    #[error(transparent)]
+    RenderWorker(#[from] RenderWorkerError),
+    #[error(transparent)]
+    RepaintSignal(#[from] crate::render_worker::RepaintSignalRegistrationError),
+    #[error(transparent)]
+    Display(#[from] crate::display_slot::DisplaySlotError),
+    #[error(transparent)]
     EventLoop(#[from] winit::error::EventLoopError),
     #[error(transparent)]
     Os(#[from] winit::error::OsError),
@@ -1078,6 +1189,19 @@ mod tests {
             scope_ref: "builtin-stable".to_owned(),
             item_id: "rectangle".to_owned(),
         }
+    }
+
+    #[test]
+    fn stage_projection_accepts_only_the_latest_new_generation() {
+        let one = RenderGeneration::new(1).unwrap();
+        let two = RenderGeneration::new(2).unwrap();
+        let mut projection = ProductStageProjection::default();
+
+        assert!(!projection.accepts(one, Some(two)));
+        assert!(projection.accepts(two, Some(two)));
+        projection.commit(two);
+        assert!(!projection.accepts(two, Some(two)));
+        assert!(!projection.accepts(one, Some(one)));
     }
 
     #[test]

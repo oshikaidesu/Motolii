@@ -316,8 +316,8 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-109 | `CORE / WAIT` | journal commitとsnapshot publishをCU-G03順序で製品edit runtimeへ配線 | CU-G03D、CU-G03R、U2b/D1m | journal失敗時publish 0、再open同値、retry二重適用0 | UI側journal writerまたは新永続payloadが必要 |
 | CU-110 | `CORE / DONE` | Place intent/requestからfresh ID plannerと1 macro commitを接続 | `CU-102`、`CU-107PV`／`CU-107TC`／`CU-107AD`／`CU-107TD`、`CU-109` | [実装決定](2026-07-29-cu-110-product-place-d2-commit-implementation-decision.md)。通常製品drop→canonical→Place request/process各1、実Mac journal AddTrackItem一件 | — |
 | CU-110P | `SPEC / SPLIT` | published snapshotの三面投影をStage / Timeline / Inspectorへ分割 | CU-110 | [CU-110P分割決定](2026-07-29-cu-110p-product-published-snapshot-projection-split-decision.md)。PS→PT→PI→CU-106P→CU-111→CU-108 | 三面同時pixel barrier、surface別storeが必要 |
-| CU-110PS | `PRODUCT / DO` | latest published snapshotをnative Stageへ再投影 | CU-110P | 既存latest-only render workerと同じVRAM display slot、stale拒否 | CPU readback、別rendererが必要 |
-| CU-110PT | `PRODUCT / WAIT` | latest published snapshotをnative Timelineへ投影 | CU-110PS、U3a-1I/U3a-2A | 既存headless projectionのnon-test caller、native bar描画 | React Timeline、新Document意味が必要 |
+| CU-110PS | `PRODUCT / DONE` | latest published snapshotをnative Stageへ再投影 | CU-110P | [CU-110PS実装決定](2026-07-29-cu-110ps-native-stage-published-snapshot-projection-implementation-decision.md)。既存latest-only render workerと同じVRAM display slot、実Mac即時表示 | — |
+| CU-110PT | `PRODUCT / DO` | latest published snapshotをnative Timelineへ投影 | CU-110PS、U3a-1I/U3a-2A | 既存headless projectionのnon-test caller、native bar描画 | React Timeline、新Document意味が必要 |
 | CU-110PI | `PRODUCT / WAIT` | latest published snapshot / primaryをproduct Inspector identityへ投影 | CU-110PT、CU-0A08IP/CU-0A08ITP | 既決3 fieldだけ、mock/S値/typed edit 0 | legacy/fixture/defaultが必要 |
 | CU-111 | `PRODUCT / WAIT` | Undo/Redo製品CommandIdとsingle-writer配送を接続 | CU-109、U0c/U2b | 成功時だけsnapshot publish、失敗でDocument/history不変、UI history 0 | Undo/Redoをsurface別local stateにしたくなる |
 | CU-108 | `E2E / WAIT` | Rectangleを三面へ投影しUndo/Redoする | CU-103/106/110/111、CU-0B05 | 同じrevision/LayerId、Undoで三面から消えRedoで同ID復帰 | diagnostic/fixture-only rectしか表示できない |
