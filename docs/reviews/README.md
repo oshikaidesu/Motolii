@@ -374,3 +374,4 @@
 | [2026-07-29-cu-0a08ssci-p1-browser-post-promotion-provenance-chain-guard-reconciliation-decision.md](2026-07-29-cu-0a08ssci-p1-browser-post-promotion-provenance-chain-guard-reconciliation-decision.md) | CU-0A08SSCI-P1 Browser post-promotion provenance chain guard 整合 |
 | [2026-07-29-cu-0a08sscs-browser-place-source-seam-implementation-scope-selection.md](2026-07-29-cu-0a08sscs-browser-place-source-seam-implementation-scope-selection.md) | CU-0A08SSCS Browser Place source seam 実装範囲 選定 |
 | [2026-07-29-cu-0a08sscsd-browser-place-source-seam-implementation-scope-decision.md](2026-07-29-cu-0a08sscsd-browser-place-source-seam-implementation-scope-decision.md) | CU-0A08SSCSD Browser Place source seam 実装範囲 裁定 |
+| [2026-07-29-cu-0a09s-r6-surface-closure-boundary-decision.md](2026-07-29-cu-0a09s-r6-surface-closure-boundary-decision.md) | CU-0A09S R6 surface closure boundary 決定 |
