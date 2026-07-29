@@ -350,6 +350,36 @@ export function InspectorCandidate({
   };
 
   const panelHead = <div className="panel-head">Inspector</div>;
+  const selectedObjectName =
+    inspectorReadModel === undefined
+      ? "Pulse rings"
+      : inspectorReadModel.target.layer_name;
+  const selectedObjectKind =
+    inspectorReadModel === undefined
+      ? "Group · 1 child"
+      : inspectorReadModel.target.item_kind === "group"
+        ? `Group · ${inspectorReadModel.target.child_count} ${
+            inspectorReadModel.target.child_count === 1 ? "child" : "children"
+          }`
+        : "Clip";
+  const targetIdentity = (
+    <div className="identity">
+      <div className="icon">G</div>
+      <div>
+        <b>{selectedObjectName}</b>
+        <small>{selectedObjectKind}</small>
+      </div>
+    </div>
+  );
+
+  if (mode === undefined && inspectorReadModel !== undefined) {
+    return (
+      <aside className="inspector" id="inspector">
+        {panelHead}
+        <div className="section">{targetIdentity}</div>
+      </aside>
+    );
+  }
 
   if (mode === "installed" && effectFocused) {
     return (
@@ -410,18 +440,6 @@ export function InspectorCandidate({
   }
 
   if (mode === "installed") {
-    const selectedObjectName =
-      inspectorReadModel === undefined
-        ? "Pulse rings"
-        : inspectorReadModel.target.layer_name;
-    const selectedObjectKind =
-      inspectorReadModel === undefined
-        ? "Group · 1 child"
-        : inspectorReadModel.target.item_kind === "group"
-          ? `Group · ${inspectorReadModel.target.child_count} ${
-              inspectorReadModel.target.child_count === 1 ? "child" : "children"
-            }`
-          : "Clip";
     const objectRow = (param, label, valueContent, keys, extraClass = "") => {
       const on = state.automation[param];
       return (
@@ -453,13 +471,7 @@ export function InspectorCandidate({
           <div className="section-title">
             SELECTED OBJECT <span />
           </div>
-          <div className="identity">
-            <div className="icon">G</div>
-            <div>
-              <b>{selectedObjectName}</b>
-              <small>{selectedObjectKind}</small>
-            </div>
-          </div>
+          {targetIdentity}
         </div>
         <div className="section">
           <div className="section-title">

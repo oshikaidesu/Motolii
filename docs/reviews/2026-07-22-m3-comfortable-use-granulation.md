@@ -320,8 +320,8 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-110PT0 | `SPEC / DONE` | native Timelineへ渡す非所有projection envelopeを確定 | CU-110PS、U3a-1I/U3a-2A | [CU-110PT0決定](2026-07-29-cu-110pt0-native-timeline-projection-envelope-decision.md)。composition全域から都度導出し、visible-range state / owner / defaultを作らない | interactive rangeまたは保存が必要 |
 | CU-110PT | `PRODUCT / DONE` | latest published snapshotをnative Timelineへ投影 | CU-110PT0 | [CU-110PT実装決定](2026-07-29-cu-110pt-native-timeline-published-snapshot-projection-implementation-decision.md)。既存project_timeline→同じnative pass、実Mac drop後1→2 bar | — |
 | CU-110PI | `SPEC / SPLIT` | latest published snapshot / primaryのInspector接続をReact受け口とHost islandへ分割 | CU-110PT、CU-0A08IP/CU-0A08ITP | [CU-110PI分割決定](2026-07-29-cu-110pi-inspector-product-connection-split-decision.md)。PIR→PIH | presentationとHost接続を束ねる |
-| CU-110PIR | `PRODUCT / DO` | InspectorCandidate内のsafe read-only target branch | CU-110PI | target 3 fieldだけ、既存5 branch不変 | mock state / S値 / editing callbackが必要 |
-| CU-110PIH | `PRODUCT / WAIT` | right Inspector WebViewへcurrent Document / primaryを投影 | CU-110PIR | offline bundle、既存decoder、second opaque child、intent 0 | public wire / second ownerが必要 |
+| CU-110PIR | `PRODUCT / DONE` | InspectorCandidate内のsafe read-only target branch | CU-110PI | [実装決定](2026-07-29-cu-110pir-inspector-safe-read-only-branch-implementation-decision.md)。target 3 fieldだけ、94 guard + 8 parity | — |
+| CU-110PIH | `PRODUCT / DO` | right Inspector WebViewへcurrent Document / primaryを投影 | CU-110PIR | offline bundle、既存decoder、second opaque child、intent 0 | public wire / second ownerが必要 |
 | CU-111 | `PRODUCT / WAIT` | Undo/Redo製品CommandIdとsingle-writer配送を接続 | CU-109、U0c/U2b | 成功時だけsnapshot publish、失敗でDocument/history不変、UI history 0 | Undo/Redoをsurface別local stateにしたくなる |
 | CU-108 | `E2E / WAIT` | Rectangleを三面へ投影しUndo/Redoする | CU-103/106/110/111、CU-0B05 | 同じrevision/LayerId、Undoで三面から消えRedoで同ID復帰 | diagnostic/fixture-only rectしか表示できない |
 

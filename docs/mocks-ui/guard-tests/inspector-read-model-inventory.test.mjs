@@ -33,7 +33,7 @@ const AUTHORITY_SHA256 = {
   "docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md":
     "5f632d2e7bb2632c47e4b92505add405c4fcfe70d0b104deb08b964797be652c",
   "ui/motolii-web/src/candidates/InspectorCandidate.jsx":
-    "a01e7431361fdbaf1bdc1f1836045835f501d72e9d62aba1bf833ba3d53cc140",
+    "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0",
   "docs/mocks-ui/fixtures/reference-document.json":
     "a3b9212f13b586ec4a800390a1b524907defd32a85ee0d5bd74f5db6ae63397c",
   "docs/mocks-ui/src/reference/loadReferenceFixtures.js":
@@ -123,7 +123,7 @@ const MODE_HEADINGS = [
   "§3.5 missing",
 ];
 
-const KEYS_LITERAL_LINES = new Set([479, 485, 504]);
+const KEYS_LITERAL_LINES = new Set([491, 497, 516]);
 
 const KNOWN_COMPONENTS = new Set([
   "EffectScrubRow",
@@ -174,6 +174,7 @@ export const SHARED_LEAF_SOURCES = [
   {
     key: "text|352|Inspector#1",
     consumers: [
+      "safe.chrome-panel-head",
       "installed-effect-focused.chrome-panel-head",
       "installed.chrome-panel-head",
       "discover.chrome-panel-head",
@@ -200,7 +201,7 @@ export const SHARED_LEAF_SOURCES = [
     ],
   },
   {
-    key: "class|432|automation-mark#1",
+    key: "class|450|automation-mark#1",
     consumers: [
       "installed.position-automation",
       "installed.depth-automation-mark",
@@ -241,7 +242,7 @@ export const SHARED_LEAF_SOURCES = [
     consumers: ["installed.object-hint-auto"],
   },
   {
-    key: "component|444|ObjectAutoHint#1",
+    key: "component|462|ObjectAutoHint#1",
     consumers: [
       "installed.position-object-hint",
       "installed.depth-object-hint",
@@ -249,6 +250,18 @@ export const SHARED_LEAF_SOURCES = [
       "installed.rotation-object-hint",
       "installed.opacity-object-hint",
     ],
+  },
+  {
+    key: "text|367|G#1",
+    consumers: ["safe.identity-icon", "installed.identity-icon"],
+  },
+  {
+    key: "dynamic|369|{selectedObjectName}#1",
+    consumers: ["safe.identity-name", "installed.identity-name"],
+  },
+  {
+    key: "dynamic|370|{selectedObjectKind}#1",
+    consumers: ["safe.identity-kind-child", "installed.identity-kind-child"],
   },
 ];
 

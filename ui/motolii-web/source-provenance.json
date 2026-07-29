@@ -115,6 +115,13 @@
       "reason": "VS-1 Inspector target read-only projection component input",
       "fixedSourceSha256": "1e0bdd3eebd665e517600af4db090f74d50951aef12fdd476e97a828de91a3e4",
       "currentSha256": "a01e7431361fdbaf1bdc1f1836045835f501d72e9d62aba1bf833ba3d53cc140"
+    },
+    {
+      "task": "CU-110PIR",
+      "file": "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
+      "reason": "VS-1 Inspector target-only safe product branch",
+      "fixedSourceSha256": "a01e7431361fdbaf1bdc1f1836045835f501d72e9d62aba1bf833ba3d53cc140",
+      "currentSha256": "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0"
     }
   ]
 }

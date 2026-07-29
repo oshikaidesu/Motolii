@@ -76,7 +76,7 @@ const EXPECTED_KEY_TOOLS_SHA256 =
 const EXPECTED_KEY_TOOLS_CSS_SHA256 =
   "f84eb7f98f05844fa3bfc72b702cee2709f1fc0bb9be614f2b01039a65b5190d";
 const EXPECTED_INSPECTOR_SHA256 =
-  "a01e7431361fdbaf1bdc1f1836045835f501d72e9d62aba1bf833ba3d53cc140";
+  "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0";
 const EXPECTED_INSPECTOR_CSS_SHA256 =
   "730e2861a893b2b07fa66d5acef0038a49bdcf337e8c5a037785b0a58d829cbe";
 const INSPECTOR_POST_PROMOTION_TASK = "CU-0A08ITP";
@@ -639,6 +639,64 @@ function validateInspectorReadProjection(sourceText) {
   ]);
 }
 
+function validateInspectorSafeBranch(sourceText) {
+  const ast = parseModule(sourceText);
+  const component = findTopLevelFunction(ast, "InspectorCandidate");
+  const statements = component.body.body;
+  const branch = statements.find(
+    (statement) =>
+      statement.type === "IfStatement"
+      && statement.test?.type === "LogicalExpression"
+      && statement.test.operator === "&&"
+      && statement.test.left?.type === "BinaryExpression"
+      && statement.test.left.operator === "==="
+      && statement.test.left.left?.type === "Identifier"
+      && statement.test.left.left.name === "mode"
+      && statement.test.left.right?.type === "Identifier"
+      && statement.test.left.right.name === "undefined"
+      && statement.test.right?.type === "BinaryExpression"
+      && statement.test.right.operator === "!=="
+      && statement.test.right.left?.type === "Identifier"
+      && statement.test.right.left.name === "inspectorReadModel"
+      && statement.test.right.right?.type === "Identifier"
+      && statement.test.right.right.name === "undefined",
+  );
+  if (!branch || branch.consequent?.type !== "BlockStatement") {
+    throw new Error("Inspector safe branch condition is missing");
+  }
+  const returned = branch.consequent.body.find(
+    (statement) => statement.type === "ReturnStatement",
+  )?.argument;
+  if (
+    returned?.type !== "JSXElement"
+    || returned.openingElement.name?.name !== "aside"
+  ) {
+    throw new Error("Inspector safe branch must return the product aside");
+  }
+  const expressionBindings = [];
+  const textValues = [];
+  const walk = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    if (
+      node.type === "JSXExpressionContainer"
+      && node.expression?.type === "Identifier"
+    ) {
+      expressionBindings.push(node.expression.name);
+    }
+    if (node.type === "JSXText" && node.value.trim() !== "") {
+      textValues.push(node.value.trim());
+    }
+    for (const child of Object.values(node)) walk(child);
+  };
+  walk(returned);
+  assert.deepEqual(expressionBindings, ["panelHead", "targetIdentity"]);
+  assert.deepEqual(textValues, []);
+}
+
 function validateBrowserIdentityProjection(sourceText) {
   const ast = parseModule(sourceText);
   const root = findTopLevelFunction(ast, "DiscoveryBrowserCandidate");
@@ -833,6 +891,7 @@ test("emits one frozen Rectangle Place intent from the product Browser source se
 test("validates decoded Inspector target projection into the existing identity JSX", async () => {
   const source = await readFile(abs(CURRENT_INSPECTOR_SOURCE), "utf8");
   assert.doesNotThrow(() => validateInspectorReadProjection(source));
+  assert.doesNotThrow(() => validateInspectorSafeBranch(source));
   for (const candidate of [
     source.replace(
       "inspectorReadModel.target.layer_name",
@@ -845,6 +904,18 @@ test("validates decoded Inspector target projection into the existing identity J
     `import { decodeInspectorReadModel } from "../read-model/inspectorReadModelDecoder.js";\n${source}`,
   ]) {
     assert.throws(() => validateInspectorReadProjection(candidate));
+  }
+  for (const candidate of [
+    source.replace(
+      "mode === undefined && inspectorReadModel !== undefined",
+      'mode === "installed"',
+    ),
+    source.replace(
+      '<div className="section">{targetIdentity}</div>',
+      '<div className="section">Pulse rings</div>',
+    ),
+  ]) {
+    assert.throws(() => validateInspectorSafeBranch(candidate));
   }
 });
 

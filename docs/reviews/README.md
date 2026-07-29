@@ -399,3 +399,4 @@
 | [2026-07-29-cu-110pt0-native-timeline-projection-envelope-decision.md](2026-07-29-cu-110pt0-native-timeline-projection-envelope-decision.md) | CU-110PT0 native Timeline投影envelope決定 |
 | [2026-07-29-cu-110pt-native-timeline-published-snapshot-projection-implementation-decision.md](2026-07-29-cu-110pt-native-timeline-published-snapshot-projection-implementation-decision.md) | CU-110PT native Timeline published snapshot投影 実装決定 |
 | [2026-07-29-cu-110pi-inspector-product-connection-split-decision.md](2026-07-29-cu-110pi-inspector-product-connection-split-decision.md) | CU-110PI Inspector通常製品接続 分割決定 |
+| [2026-07-29-cu-110pir-inspector-safe-read-only-branch-implementation-decision.md](2026-07-29-cu-110pir-inspector-safe-read-only-branch-implementation-decision.md) | CU-110PIR Inspector safe read-only branch 実装決定 |
