@@ -4,6 +4,9 @@
 
 状態: **決定**
 
+[Fable 5最終反対側レビュー](2026-07-29-m5-render-contribution-fable-final-review.md)は、
+初回REVISEの依存同期漏れを訂正後、`ACCEPT`、P0=0／P1=0／P2=0となった。
+
 ## 1. 結論
 
 Render Contributionの**意味設計**は閉じた。残る未決は、思考だけで埋める仕様穴ではなく、
@@ -91,7 +94,7 @@ M4-K1aの一owner accountingやprivate grantだけを、外部cloneを含むoutp
 
 ## 7. 実装可能な並列
 
-今すぐ並列に準備できる:
+今すぐ並列に発注前準備できる（状態は各仕様／台帳の`WAIT`を維持し、発注時に`ISSUE`／`DO`へ上げる）:
 
 - `P2D-RCD2I`: schema／migration／D2 command。render接続なし。
 - `P2D-RCFP1F`: private format evidence fixture。

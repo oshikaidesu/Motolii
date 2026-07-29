@@ -75,7 +75,7 @@ F1、F5、F6は外部先例の不足を理由に弱めない。AE-style Bins、U
 | ID | 契約境界 | 依存 | 状態／完成条件 |
 |---|---|---|---|
 | `P2D-RCS1` | private opaque Group Depth spike | P2D-RCI | **DONE**。Grok `ACCEPT` P0/P1=0。`motolii-render`内部の実depth attachmentでF1／F6、group外pixel不変、FINAL／DRAFT同一評価関数を確認。Document／serde／公開API変更0 |
-| `P2D-RCD1` | 型付き要求／contribution seam decision | P2D-RCS1、RCI §2.2のcamera／Observation非所有 | **DONE**。[typed seam decision](2026-07-29-m5-render-contribution-typed-seam-decision.md)がseam意味を固定。後続8件はWAIT、P3のObservation形は先取りしない |
+| `P2D-RCD1` | 型付き要求／contribution seam decision | P2D-RCS1、RCI §2.2のcamera／Observation非所有 | **DONE**。[typed seam decision](2026-07-29-m5-render-contribution-typed-seam-decision.md)がseam意味を固定。RCD1締結時点では後続8件がWAITだった。P3のObservation形は先取りしない |
 | `P2D-RCD2` | P2D policy／Depth Participant schema decision | P2D-RCD1、M2-D1e | **DONE**。[schema decision](2026-07-29-m5-occlusion-policy-schema-decision.md)でHost semantic key、Group policy、Item participant、v6 migration、D2／Undoを固定。実装はRCD2I |
 | `P2D-RCF1` | 共通conformance harness decisionとFirst Vism無特権契約 | P2D-RCD1 | **DONE**。[harness decision](2026-07-29-m5-render-contribution-conformance-harness-decision.md)でblack-box観測、F1〜F6分担、既存testkit再利用、実装4粒を固定 |
 | `P2D-RCT1` | cutout／soft alpha意味と診断 | P2D-RCD1 | **DONE**。[alpha意味decision](2026-07-29-m5-render-contribution-alpha-semantics-decision.md)でF2／F3、明示class、黙示depth格上げ拒否、whole-request typed refusalを固定。OIT方式は別裁定 |
@@ -83,9 +83,9 @@ F1、F5、F6は外部先例の不足を理由に弱めない。AE-style Bins、U
 | `P2D-RCFP1S` | scene-color色／alpha意味decision | M1 | **DONE**。[scene-color semantics](2026-07-29-m5-scene-color-semantics-decision.md)でlinear-light、premultiplied、Host単一変換authority、truthful FrameDescを固定 |
 | `P2D-RCFP1F` | scene-color concrete format decision | P2D-RCFP1S、M4-K0、GPU evidence | **WAIT**。FP16候補のusage、precision、extent別byte量を実測 |
 | `P2D-RCFP1` | scene-color中間形式umbrella | P2D-RCFP1S、P2D-RCFP1F | **WAIT**。意味DONE、具体format evidence待ち |
-| `P2D-RCR1` | scene-color／refraction入力契約 | P2D-RCD1、P2D-RCFP1S、M4-K0 | **DONE**。[input contract](2026-07-29-m5-scene-color-input-contract-decision.md)でimmutable pre-requester snapshot、upstream order、K0 RoI、transparent-black domain外、whole-request failureを固定 |
+| `P2D-RCR1` | scene-color／refraction入力契約 | P2D-RCD1、P2D-RCFP1S、M4-K0の既決RoD／RoI意味契約 | **DONE**。[input contract](2026-07-29-m5-scene-color-input-contract-decision.md)でimmutable pre-requester snapshot、upstream order、K0 RoI、transparent-black domain外、whole-request failureを固定。K0 runtime spikeのmergeは非依存 |
 | `P2D-RCP1` | scene-color copy／subpass方式decision | P2D-RCR1、P2D-RCFP1F | **WAIT**。resource lifetime、同期、画面外sample、budgetを実機比較 |
-| `P2D-RCBUD1` | contribution cache key／resource budget統合 | P2D-RCD1、M4-K1 | **WAIT**。cache入力完全性とHost計上を固定 |
+| `P2D-RCBUD1` | contribution cache key／resource budget統合 | P2D-RCD1、M4-K1、P2D-RCFP1F、P2D-RCP1 | **WAIT**。cache入力完全性とHost計上を固定 |
 
 ## 6. private seamの実機証拠と次の解禁
 

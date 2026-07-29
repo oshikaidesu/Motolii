@@ -252,6 +252,7 @@
 | [2026-07-29-m5-scene-color-semantics-decision.md](2026-07-29-m5-scene-color-semantics-decision.md) | P2D-RCFP1S。linear-light／premultiplied scene-color、Host単一変換authority、truthful FrameDescを閉じるdecision |
 | [2026-07-29-m5-scene-color-input-contract-decision.md](2026-07-29-m5-scene-color-input-contract-decision.md) | P2D-RCR1。immutable scene-color snapshot、upstream order、K0 RoI、domain外、whole-request failureを閉じるdecision |
 | [2026-07-29-m5-render-contribution-design-closure-map.md](2026-07-29-m5-render-contribution-design-closure-map.md) | M5 Render Contributionの意味締結、public seam／GPU method／M4-K1 evidence gate、実装順を固定する地図 |
+| [2026-07-29-m5-render-contribution-fable-final-review.md](2026-07-29-m5-render-contribution-fable-final-review.md) | M5 Render Contribution設計締結のFable 5最終反対側レビュー。初回REVISEの依存同期漏れを訂正し、再審査ACCEPT P0/P1/P2=0 |
 | [2026-07-29-restartable-supervised-order-loop-decision.md](2026-07-29-restartable-supervised-order-loop-decision.md) | Codex-owned machine block、Opus施工本文、parent-owned outcome、terminal verdict、availability限定resumeを固定するGR-D4決定 |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |

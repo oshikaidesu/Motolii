@@ -60,7 +60,7 @@ private setup、shader、resource配置、helper、型を公開harnessへ昇格�
 |---|---|---|
 | F1 opaque | A-near／B-nearでoverlap winner反転、外側不変、反復決定性、DRAFT／FINAL共通評価 | geometry／Observation adapterは公開seam実装後 |
 | F2 cutout | coveredが遮蔽、holeはcolor／depth不参加、fractional edgeをsolid化しない | 実行fixtureはRCT1を入力に実装 |
-| F3 soft alpha | 順序依存、非対応はtyped refusal、別class／policyへfallbackなし | 対応時のpixel保証はRCO1後 |
+| F3 soft alpha | 順序依存、非対応はtyped refusal、別class／policyへfallbackなし | 対応pixel保証は将来scope改訂と方式採択後。v1は非目標 |
 | F4 scene color | snapshot／range／order／failureを独立slotとし、別Export経路／隠れcopyを禁止 | RCFP1、RCR1、RCP1後 |
 | F5 unknown／不足 | whole-request typed refusal、Document／既存2D pixel不変、部分admission／provenance分岐なし | 型付き要求／failure実装後 |
 | F6 未使用 | baseline pixel不変、group外不変、反復決定性、同一評価関数 | 実Preview／Export E2E adapterは製品route成立後 |
@@ -99,7 +99,7 @@ First Vismは将来選ばれた最初の表現に課すconformance役割だけ�
 | ID | 実装粒 | 解禁条件 |
 |---|---|---|
 | `P2D-RCF1I-BASE` | F1／F5／F6 executable harness | 公開typed seam実装 |
-| `P2D-RCF1I-ALPHA` | F2／F3 executable harness | P2D-RCF1I-BASE、P2D-RCT1。対応soft-alpha pixelはP2D-RCO1後 |
+| `P2D-RCF1I-ALPHA` | F2／F3 executable harness | P2D-RCF1I-BASE、P2D-RCT1、P2D-RCO1のv1 disposition。v1はcutout pixelとsoft-alpha typed unsupportedを審判 |
 | `P2D-RCF1I-SCENE` | F4 executable harness | P2D-RCFP1、P2D-RCR1、P2D-RCP1 |
 | `P2D-RCF1I-VISM` | concrete First Vism fixture | 製品表現選定、共通公開seam、対象能力decision |
 
