@@ -26,7 +26,7 @@ const AUTHORITY_SHA256 = {
   "ui/motolii-web/src/patterns/DiscoveryBrowser.jsx":
     "1d996ad66dba3ff7fb36cf811ce8d22faec1fee271a2dd5349d953a7cf89a2ea",
   "ui/motolii-web/source-provenance.json":
-    "38f78e85fcf4df5c0b13980b0e6939b3b8d24aad817143d9cd2cf22a018ddb95",
+    "828ec46f0c418a38d52083ee44c6b00ba83c17fb92f4ab3d4c75e7737937a2f9",
 };
 
 const FORBIDDEN_KEYS = [

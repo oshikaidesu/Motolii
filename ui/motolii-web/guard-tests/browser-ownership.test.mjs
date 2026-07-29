@@ -76,9 +76,16 @@ const EXPECTED_KEY_TOOLS_SHA256 =
 const EXPECTED_KEY_TOOLS_CSS_SHA256 =
   "f84eb7f98f05844fa3bfc72b702cee2709f1fc0bb9be614f2b01039a65b5190d";
 const EXPECTED_INSPECTOR_SHA256 =
-  "1e0bdd3eebd665e517600af4db090f74d50951aef12fdd476e97a828de91a3e4";
+  "a01e7431361fdbaf1bdc1f1836045835f501d72e9d62aba1bf833ba3d53cc140";
 const EXPECTED_INSPECTOR_CSS_SHA256 =
   "730e2861a893b2b07fa66d5acef0038a49bdcf337e8c5a037785b0a58d829cbe";
+const INSPECTOR_POST_PROMOTION_TASK = "CU-0A08ITP";
+const INSPECTOR_POST_PROMOTION_FILE =
+  "ui/motolii-web/src/candidates/InspectorCandidate.jsx";
+const INSPECTOR_POST_PROMOTION_REASON =
+  "VS-1 Inspector target read-only projection component input";
+const FIXED_INSPECTOR_COMPONENT_SHA256 =
+  "1e0bdd3eebd665e517600af4db090f74d50951aef12fdd476e97a828de91a3e4";
 
 const ALLOWED_EXTERNAL_PACKAGES = ["react", "html-react-parser"];
 const SEAM_COMPONENT_NAME = "CandidateCreateBrowser";
@@ -188,6 +195,59 @@ function validatePostPromotionChanges(provenance, currentComponentSha256) {
   const lastEntry = changes[changes.length - 1];
   if (lastEntry.currentSha256 !== currentComponentSha256) {
     throw new Error("postPromotionChanges currentSha256 mismatch");
+  }
+}
+
+function validateInspectorPostPromotionChanges(provenance, currentComponentSha256) {
+  const changes = provenance.inspectorPostPromotionChanges;
+  if (!Array.isArray(changes) || changes.length < 1) {
+    throw new Error("inspectorPostPromotionChanges must be a non-empty array");
+  }
+  for (const entry of changes) {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error("inspectorPostPromotionChanges entry must be an object");
+    }
+    const keys = Object.keys(entry);
+    if (
+      keys.length !== POST_PROMOTION_ENTRY_KEYS.length
+      || POST_PROMOTION_ENTRY_KEYS.some((key) => !Object.hasOwn(entry, key))
+      || keys.some((key) => !POST_PROMOTION_ENTRY_KEYS.includes(key))
+    ) {
+      throw new Error("inspectorPostPromotionChanges entry keys mismatch");
+    }
+  }
+  const index0 = changes[0];
+  if (
+    index0.task !== INSPECTOR_POST_PROMOTION_TASK
+    || index0.file !== INSPECTOR_POST_PROMOTION_FILE
+    || index0.reason !== INSPECTOR_POST_PROMOTION_REASON
+    || index0.fixedSourceSha256 !== FIXED_INSPECTOR_COMPONENT_SHA256
+  ) {
+    throw new Error("inspectorPostPromotionChanges index 0 authority mismatch");
+  }
+  const seenTasks = new Set();
+  for (let index = 0; index < changes.length; index += 1) {
+    const entry = changes[index];
+    if (
+      entry.file !== INSPECTOR_POST_PROMOTION_FILE
+      || typeof entry.task !== "string"
+      || entry.task.length === 0
+      || typeof entry.reason !== "string"
+      || entry.reason.length === 0
+      || seenTasks.has(entry.task)
+    ) {
+      throw new Error("inspectorPostPromotionChanges append-only entry mismatch");
+    }
+    seenTasks.add(entry.task);
+    if (
+      index > 0
+      && entry.fixedSourceSha256 !== changes[index - 1].currentSha256
+    ) {
+      throw new Error("inspectorPostPromotionChanges hash chain break");
+    }
+  }
+  if (changes.at(-1).currentSha256 !== currentComponentSha256) {
+    throw new Error("inspectorPostPromotionChanges currentSha256 mismatch");
   }
 }
 
@@ -467,6 +527,118 @@ function directObjectBinding(component, propertyName) {
   return matches[0].value.name;
 }
 
+function validateInspectorReadProjection(sourceText) {
+  const ast = parseModule(sourceText);
+  const component = findTopLevelFunction(ast, "InspectorCandidate");
+  if (
+    component.params.length !== 1
+    || component.params[0].type !== "ObjectPattern"
+    || !component.params[0].properties.some(
+      (property) =>
+        property.type === "ObjectProperty"
+        && property.key?.type === "Identifier"
+        && property.key.name === "inspectorReadModel"
+        && property.value?.type === "Identifier"
+        && property.value.name === "inspectorReadModel",
+    )
+  ) {
+    throw new Error("InspectorCandidate must accept inspectorReadModel directly");
+  }
+  if (sourceText.includes("decodeInspectorReadModel")) {
+    throw new Error("InspectorCandidate must not decode its input");
+  }
+
+  const declarations = new Map();
+  const jsxBindings = [];
+  const walk = (node, parent = null, grandparent = null) => {
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    if (Array.isArray(node)) {
+      node.forEach((child) => walk(child, parent, grandparent));
+      return;
+    }
+    if (
+      node.type === "VariableDeclarator"
+      && node.id?.type === "Identifier"
+      && ["selectedObjectName", "selectedObjectKind"].includes(node.id.name)
+    ) {
+      declarations.set(node.id.name, node.init);
+    }
+    if (
+      node.type === "Identifier"
+      && ["selectedObjectName", "selectedObjectKind"].includes(node.name)
+      && parent?.type === "JSXExpressionContainer"
+      && grandparent?.type === "JSXElement"
+    ) {
+      jsxBindings.push({
+        binding: node.name,
+        element: grandparent.openingElement.name?.name,
+      });
+    }
+    for (const child of Object.values(node)) {
+      if (child !== parent && child !== grandparent) {
+        walk(child, node, parent);
+      }
+    }
+  };
+  walk(component.body);
+
+  if (declarations.size !== 2) {
+    throw new Error("Inspector target presentation must have exactly two bindings");
+  }
+  const memberPaths = (root) => {
+    const paths = [];
+    const visit = (node) => {
+      if (!node || typeof node !== "object") return;
+      if (Array.isArray(node)) {
+        node.forEach(visit);
+        return;
+      }
+      if (
+        node.type === "MemberExpression"
+        && !node.computed
+        && node.property?.type === "Identifier"
+      ) {
+        const parts = [];
+        let current = node;
+        while (
+          current?.type === "MemberExpression"
+          && !current.computed
+          && current.property?.type === "Identifier"
+        ) {
+          parts.unshift(current.property.name);
+          current = current.object;
+        }
+        if (current?.type === "Identifier" && current.name === "inspectorReadModel") {
+          paths.push(["inspectorReadModel", ...parts].join("."));
+        }
+      }
+      for (const child of Object.values(node)) visit(child);
+    };
+    visit(root);
+    return paths.filter(
+      (path) =>
+        !paths.some(
+          (candidate) =>
+            candidate.length > path.length && candidate.startsWith(`${path}.`),
+        ),
+    );
+  };
+  assert.deepEqual(memberPaths(declarations.get("selectedObjectName")), [
+    "inspectorReadModel.target.layer_name",
+  ]);
+  assert.deepEqual(memberPaths(declarations.get("selectedObjectKind")), [
+    "inspectorReadModel.target.item_kind",
+    "inspectorReadModel.target.child_count",
+    "inspectorReadModel.target.child_count",
+  ]);
+  assert.deepEqual(jsxBindings, [
+    { binding: "selectedObjectName", element: "b" },
+    { binding: "selectedObjectKind", element: "small" },
+  ]);
+}
+
 function validateBrowserIdentityProjection(sourceText) {
   const ast = parseModule(sourceText);
   const root = findTopLevelFunction(ast, "DiscoveryBrowserCandidate");
@@ -631,6 +803,148 @@ test("validates product Browser identity projection into the private Rectangle s
       SEAM_COMPONENT_NAME,
       ["scope_ref", "item_id"],
     ));
+});
+
+test("validates decoded Inspector target projection into the existing identity JSX", async () => {
+  const source = await readFile(abs(CURRENT_INSPECTOR_SOURCE), "utf8");
+  assert.doesNotThrow(() => validateInspectorReadProjection(source));
+  for (const candidate of [
+    source.replace(
+      "inspectorReadModel.target.layer_name",
+      "inspectorReadModel.target.layer_id",
+    ),
+    source.replace(
+      "<b>{selectedObjectName}</b>",
+      "<b>Pulse rings</b>",
+    ),
+    `import { decodeInspectorReadModel } from "../read-model/inspectorReadModelDecoder.js";\n${source}`,
+  ]) {
+    assert.throws(() => validateInspectorReadProjection(candidate));
+  }
+});
+
+test("validates Inspector post-promotion provenance as an append-only chain", async () => {
+  const provenance = JSON.parse(
+    await readFile(path.join(PRODUCT_DIR, "source-provenance.json"), "utf8"),
+  );
+  const currentInspectorSha256 = hashBytes(
+    await readFile(abs(CURRENT_INSPECTOR_SOURCE)),
+  );
+  assert.doesNotThrow(() =>
+    validateInspectorPostPromotionChanges(provenance, currentInspectorSha256));
+
+  const index0 = provenance.inspectorPostPromotionChanges[0];
+  const syntheticSha = hashBytes(Buffer.from("cu-0a08itp-inspector-chain-next"));
+  const syntheticEntry = {
+    task: "CU-0A08ITP-SYN",
+    file: INSPECTOR_POST_PROMOTION_FILE,
+    reason: "synthetic Inspector post-promotion change",
+    fixedSourceSha256: index0.currentSha256,
+    currentSha256: syntheticSha,
+  };
+  assert.doesNotThrow(() =>
+    validateInspectorPostPromotionChanges(
+      {
+        ...provenance,
+        inspectorPostPromotionChanges: [index0, syntheticEntry],
+      },
+      syntheticSha,
+    ));
+
+  const negativeCases = [
+    { ...provenance, inspectorPostPromotionChanges: undefined },
+    { ...provenance, inspectorPostPromotionChanges: [] },
+    { ...provenance, inspectorPostPromotionChanges: {} },
+    { ...provenance, inspectorPostPromotionChanges: [null] },
+    {
+      ...provenance,
+      inspectorPostPromotionChanges: [
+        {
+          task: index0.task,
+          file: index0.file,
+          reason: index0.reason,
+          fixedSourceSha256: index0.fixedSourceSha256,
+        },
+      ],
+    },
+    {
+      ...provenance,
+      inspectorPostPromotionChanges: [{ ...index0, extra: true }],
+    },
+    {
+      ...provenance,
+      inspectorPostPromotionChanges: [{ ...index0, task: "WRONG" }],
+    },
+    {
+      ...provenance,
+      inspectorPostPromotionChanges: [{ ...index0, file: "Wrong.jsx" }],
+    },
+    {
+      ...provenance,
+      inspectorPostPromotionChanges: [{ ...index0, reason: "wrong" }],
+    },
+    {
+      ...provenance,
+      inspectorPostPromotionChanges: [
+        {
+          ...index0,
+          fixedSourceSha256: `${FIXED_INSPECTOR_COMPONENT_SHA256.slice(0, 63)}0`,
+        },
+      ],
+    },
+    {
+      ...provenance,
+      inspectorPostPromotionChanges: [
+        index0,
+        { ...syntheticEntry, file: "Wrong.jsx" },
+      ],
+    },
+    {
+      ...provenance,
+      inspectorPostPromotionChanges: [
+        index0,
+        { ...syntheticEntry, task: "" },
+      ],
+    },
+    {
+      ...provenance,
+      inspectorPostPromotionChanges: [
+        index0,
+        { ...syntheticEntry, reason: "" },
+      ],
+    },
+    {
+      ...provenance,
+      inspectorPostPromotionChanges: [
+        index0,
+        { ...syntheticEntry, task: index0.task },
+      ],
+    },
+    {
+      ...provenance,
+      inspectorPostPromotionChanges: [
+        index0,
+        {
+          ...syntheticEntry,
+          fixedSourceSha256: `${index0.currentSha256.slice(0, 63)}0`,
+        },
+      ],
+    },
+    {
+      ...provenance,
+      inspectorPostPromotionChanges: [index0, syntheticEntry],
+      currentInspectorSha256,
+    },
+  ];
+  for (const candidate of negativeCases) {
+    assert.throws(() =>
+      validateInspectorPostPromotionChanges(
+        candidate,
+        candidate.currentInspectorSha256 ?? currentInspectorSha256,
+      ));
+  }
+  assert.throws(() =>
+    validateInspectorPostPromotionChanges(provenance, syntheticSha));
 });
 
 test("validates fixed Browser bytes and browser export mapping", async () => {
@@ -1014,6 +1328,10 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
   const inspectorBytes = await readFile(abs(CURRENT_INSPECTOR_SOURCE));
   const inspectorCssBytes = await readFile(abs(CURRENT_INSPECTOR_CSS));
   assert.equal(hashBytes(inspectorBytes), EXPECTED_INSPECTOR_SHA256);
+  validateInspectorPostPromotionChanges(
+    provenance,
+    hashBytes(inspectorBytes),
+  );
   assert.equal(hashBytes(inspectorCssBytes), EXPECTED_INSPECTOR_CSS_SHA256);
 
   const indexSource = await readFile(abs("ui/motolii-web/src/index.js"), "utf8");

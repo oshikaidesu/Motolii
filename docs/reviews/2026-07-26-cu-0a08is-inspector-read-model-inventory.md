@@ -6,8 +6,8 @@
 
 ## §1 FACTS
 
-- `ui/motolii-web/src/candidates/InspectorCandidate.jsx`（791行、SHA256 `1e0bdd3eebd665e517600af4db090f74d50951aef12fdd476e97a828de91a3e4`）は5つの相互排他branchを描画する: `installed && effectFocused`（L353）、`installed`（L411）、`discover`（L630）、`blocked`（L681）、default missing（L730）。
-- `panelHead` の `Inspector` literal は `return (` 外の **L351** にあり、§9 走査対象に含める。
+- `ui/motolii-web/src/candidates/InspectorCandidate.jsx`（804行、SHA256 `a01e7431361fdbaf1bdc1f1836045835f501d72e9d62aba1bf833ba3d53cc140`）は5つの相互排他branchを描画する: `installed && effectFocused`（L354）、`installed`（L412）、`discover`（L643）、`blocked`（L694）、default missing（L743）。
+- `panelHead` の `Inspector` literal は `return (` 外の **L352** にあり、§9 走査対象に含める。
 - `TrackItem` は内部タグ `kind` で `clip` / `group` を区別する（`schema.rs:193-196`）。`DocParam` だけが snake_case 外部タグ（`param.rs:25-44`）。
 - `BlendMode` は `normal` / `add` / `multiply` のみ（`schema.rs:442-447`）。mock の `Screen` は現行Documentで表現不能。
 - `docs/mocks-ui/fixtures/reference-document.json` は現行Documentの参照fixture。dangling 判定の layer 集合は `layers.entries`。
@@ -56,27 +56,27 @@
 | installed-effect-focused.devinfo-identity-label | InspectorCandidate.jsx:170 | Identity | U |
 | installed-effect-focused.devinfo-identity-value | InspectorCandidate.jsx:171 | demo.echo-bloom | A |
 | installed-effect-focused.devinfo-identity-third | InspectorCandidate.jsx:172 | (empty span) | U |
-| installed-effect-focused.chrome-panel-head | InspectorCandidate.jsx:351 | Inspector | U |
-| installed-effect-focused.chrome-aside | InspectorCandidate.jsx:355 | aside.inspector#inspector | U |
-| installed-effect-focused.section-editing-title | InspectorCandidate.jsx:359 | EDITING EFFECT | S |
-| installed-effect-focused.section-on-object | InspectorCandidate.jsx:359 | ON OBJECT | U |
-| installed-effect-focused.identity-icon | InspectorCandidate.jsx:362 | ◎ | U |
-| installed-effect-focused.identity-name | InspectorCandidate.jsx:364 | Echo Bloom | D |
-| installed-effect-focused.identity-subtitle | InspectorCandidate.jsx:365 | Pulse rings · Effect | S |
-| installed-effect-focused.host-panel-span | InspectorCandidate.jsx:371 | HOST PANEL | U |
-| installed-effect-focused.host-title | InspectorCandidate.jsx:371 | ECHO BLOOM | U |
-| installed-effect-focused.effect-description | InspectorCandidate.jsx:374 | Layered light pulses that follow the selected object. Adjust Intensity and Spread while watching the Stage. | S |
-| installed-effect-focused.effect-scrub-intensity-label | InspectorCandidate.jsx:384 | Intensity | U |
-| installed-effect-focused.effect-scrub-spread-label | InspectorCandidate.jsx:393 | Spread | U |
-| installed-effect-focused.input-label | InspectorCandidate.jsx:378 | Input | U |
-| installed-effect-focused.input-value | InspectorCandidate.jsx:379 | Pulse rings composite | S |
-| installed-effect-focused.input-tag | InspectorCandidate.jsx:380 | TEXTURE | S |
-| installed-effect-focused.effect-scrub-intensity | InspectorCandidate.jsx:382 | EffectScrubRow | U |
-| installed-effect-focused.effect-scrub-spread | InspectorCandidate.jsx:391 | EffectScrubRow | U |
-| installed-effect-focused.blend-label | InspectorCandidate.jsx:401 | Blend | U |
-| installed-effect-focused.blend-value | InspectorCandidate.jsx:402 | Screen | S |
-| installed-effect-focused.blend-third-cell | InspectorCandidate.jsx:403 | (empty span) | U |
-| installed-effect-focused.devinfo | InspectorCandidate.jsx:406 | DevInfoEffectFocused | U |
+| installed-effect-focused.chrome-panel-head | InspectorCandidate.jsx:352 | Inspector | U |
+| installed-effect-focused.chrome-aside | InspectorCandidate.jsx:356 | aside.inspector#inspector | U |
+| installed-effect-focused.section-editing-title | InspectorCandidate.jsx:360 | EDITING EFFECT | S |
+| installed-effect-focused.section-on-object | InspectorCandidate.jsx:360 | ON OBJECT | U |
+| installed-effect-focused.identity-icon | InspectorCandidate.jsx:363 | ◎ | U |
+| installed-effect-focused.identity-name | InspectorCandidate.jsx:365 | Echo Bloom | D |
+| installed-effect-focused.identity-subtitle | InspectorCandidate.jsx:366 | Pulse rings · Effect | S |
+| installed-effect-focused.host-panel-span | InspectorCandidate.jsx:372 | HOST PANEL | U |
+| installed-effect-focused.host-title | InspectorCandidate.jsx:372 | ECHO BLOOM | U |
+| installed-effect-focused.effect-description | InspectorCandidate.jsx:375 | Layered light pulses that follow the selected object. Adjust Intensity and Spread while watching the Stage. | S |
+| installed-effect-focused.effect-scrub-intensity-label | InspectorCandidate.jsx:385 | Intensity | U |
+| installed-effect-focused.effect-scrub-spread-label | InspectorCandidate.jsx:394 | Spread | U |
+| installed-effect-focused.input-label | InspectorCandidate.jsx:379 | Input | U |
+| installed-effect-focused.input-value | InspectorCandidate.jsx:380 | Pulse rings composite | S |
+| installed-effect-focused.input-tag | InspectorCandidate.jsx:381 | TEXTURE | S |
+| installed-effect-focused.effect-scrub-intensity | InspectorCandidate.jsx:383 | EffectScrubRow | U |
+| installed-effect-focused.effect-scrub-spread | InspectorCandidate.jsx:392 | EffectScrubRow | U |
+| installed-effect-focused.blend-label | InspectorCandidate.jsx:402 | Blend | U |
+| installed-effect-focused.blend-value | InspectorCandidate.jsx:403 | Screen | S |
+| installed-effect-focused.blend-third-cell | InspectorCandidate.jsx:404 | (empty span) | U |
+| installed-effect-focused.devinfo | InspectorCandidate.jsx:407 | DevInfoEffectFocused | U |
 
 ### §3.2 installed
 
@@ -106,88 +106,88 @@
 | installed.lifecycle-preview | InspectorCandidate.jsx:153 | Preview / Export | U |
 | installed.devinfo-lifecycle-host | InspectorCandidate.jsx:154 | HOST | U |
 | installed.lifecycle-cache | InspectorCandidate.jsx:154 | Cache / Resource | U |
-| installed.chrome-panel-head | InspectorCandidate.jsx:351 | Inspector | U |
-| installed.depth-automation-mark | InspectorCandidate.jsx:419 | automation-mark | S |
-| installed.opacity-automation-mark | InspectorCandidate.jsx:419 | automation-mark | S |
-| installed.position-automation | InspectorCandidate.jsx:419 | automation-mark | S |
-| installed.rotation-automation-mark | InspectorCandidate.jsx:419 | automation-mark | S |
-| installed.scale-automation-mark | InspectorCandidate.jsx:419 | automation-mark | S |
-| installed.depth-object-hint | InspectorCandidate.jsx:431 | ObjectAutoHint | U |
-| installed.opacity-object-hint | InspectorCandidate.jsx:431 | ObjectAutoHint | U |
-| installed.position-object-hint | InspectorCandidate.jsx:431 | ObjectAutoHint | U |
-| installed.rotation-object-hint | InspectorCandidate.jsx:431 | ObjectAutoHint | U |
-| installed.scale-object-hint | InspectorCandidate.jsx:431 | ObjectAutoHint | U |
-| installed.chrome-aside | InspectorCandidate.jsx:437 | aside.inspector#inspector | U |
-| installed.section-selected-subtitle | InspectorCandidate.jsx:441 | (empty span) | U |
-| installed.section-selected-title | InspectorCandidate.jsx:441 | SELECTED OBJECT | S |
-| installed.identity-icon | InspectorCandidate.jsx:444 | G | U |
-| installed.identity-name | InspectorCandidate.jsx:446 | Pulse rings | A |
-| installed.identity-kind-child | InspectorCandidate.jsx:447 | Group · 1 child | D |
-| installed.transform-object-span | InspectorCandidate.jsx:453 | OBJECT | U |
-| installed.transform-title | InspectorCandidate.jsx:453 | TRANSFORM | U |
-| installed.position-label | InspectorCandidate.jsx:457 | Position | U |
-| installed.position-x-label | InspectorCandidate.jsx:460 | X | U |
-| installed.position-x-value | InspectorCandidate.jsx:460 | 0.124 | D |
-| installed.position-y-label | InspectorCandidate.jsx:463 | Y | U |
-| installed.position-y-value | InspectorCandidate.jsx:463 | −0.082 | D |
-| installed.position-keys | InspectorCandidate.jsx:466 | 2 KEYS | D |
-| installed.depth-label | InspectorCandidate.jsx:470 | Depth Z | U |
-| installed.depth-value | InspectorCandidate.jsx:471 | 0.180 | S |
-| installed.depth-keys | InspectorCandidate.jsx:472 | 1 KEY | D |
-| installed.depth-at-key | InspectorCandidate.jsx:473 | at-key | U |
-| installed.scale-label | InspectorCandidate.jsx:477 | Scale | U |
-| installed.scale-value | InspectorCandidate.jsx:478 | 1.000 | S |
-| installed.scale-keys-closure | InspectorCandidate.jsx:479 | (no KEYS literal) | U |
-| installed.rotation-label | InspectorCandidate.jsx:483 | Rotation Z | U |
-| installed.rotation-value | InspectorCandidate.jsx:484 | 0.000 rad | D |
-| installed.rotation-keys-closure | InspectorCandidate.jsx:485 | (no KEYS literal) | U |
-| installed.opacity-label | InspectorCandidate.jsx:489 | Opacity | U |
-| installed.opacity-value | InspectorCandidate.jsx:490 | 100% | D |
-| installed.opacity-keys | InspectorCandidate.jsx:491 | 2 KEYS | D |
-| installed.appearance-object-span | InspectorCandidate.jsx:496 | OBJECT | U |
-| installed.appearance-title | InspectorCandidate.jsx:496 | APPEARANCE | U |
-| installed.fill-label | InspectorCandidate.jsx:499 | Fill | U |
-| installed.fill-chip | InspectorCandidate.jsx:501 | color-chip | S |
-| installed.fill-tag | InspectorCandidate.jsx:514 | COLOR | U |
-| installed.stroke-label | InspectorCandidate.jsx:517 | Stroke | U |
-| installed.stroke-chip | InspectorCandidate.jsx:519 | color-chip | S |
-| installed.stroke-tag | InspectorCandidate.jsx:532 | COLOR | U |
-| installed.group-edit-space | InspectorCandidate.jsx:537 | EDIT SPACE | U |
-| installed.group-title | InspectorCandidate.jsx:537 | GROUP COMPOSITION | U |
-| installed.z-label | InspectorCandidate.jsx:540 | Z Occlusion | S |
-| installed.z-off | InspectorCandidate.jsx:542 | OFF / Stack | S |
-| installed.z-on | InspectorCandidate.jsx:543 | ON / Group Z | S |
-| installed.z-tag | InspectorCandidate.jsx:545 | Z | U |
-| installed.composite-label | InspectorCandidate.jsx:548 | Composite | U |
-| installed.composite-value | InspectorCandidate.jsx:549 | Child → Group bake point | U |
-| installed.composite-third | InspectorCandidate.jsx:550 | (empty span) | U |
-| installed.link-label | InspectorCandidate.jsx:553 | Link | U |
-| installed.link-value | InspectorCandidate.jsx:560 | Position → target | S |
-| installed.link-tag | InspectorCandidate.jsx:562 | TYPED | U |
-| installed.driver-routes-span | InspectorCandidate.jsx:567 | 2 ROUTES | U |
-| installed.driver-title | InspectorCandidate.jsx:567 | DRIVER | U |
-| installed.driver-label | InspectorCandidate.jsx:570 | Audio Low | S |
-| installed.driver-svg | InspectorCandidate.jsx:571 | driver-mini | U |
-| installed.driver-tag | InspectorCandidate.jsx:576 | LIVE | S |
-| installed.plugins-add | InspectorCandidate.jsx:581 | ＋ | S |
-| installed.plugins-title | InspectorCandidate.jsx:581 | APPLIED PLUGINS | U |
-| installed.plugin-grip | InspectorCandidate.jsx:584 | :: | U |
-| installed.plugin-mini | InspectorCandidate.jsx:585 | ◎ | U |
-| installed.plugin-name | InspectorCandidate.jsx:587 | Echo Bloom | D |
-| installed.plugin-sub | InspectorCandidate.jsx:588 | IN → Effect → OUT · selected | S |
-| installed.echo-title | InspectorCandidate.jsx:594 | ECHO BLOOM | U |
-| installed.echo-host-panel-span | InspectorCandidate.jsx:594 | HOST PANEL | U |
-| installed.echo-input-label | InspectorCandidate.jsx:597 | Input | U |
-| installed.echo-input-value | InspectorCandidate.jsx:598 | Pulse rings composite | S |
-| installed.echo-input-tag | InspectorCandidate.jsx:599 | TEXTURE | S |
-| installed.echo-scrub-intensity | InspectorCandidate.jsx:601 | EffectScrubRow | U |
-| installed.echo-scrub-intensity-label | InspectorCandidate.jsx:603 | Intensity | U |
-| installed.echo-scrub-spread | InspectorCandidate.jsx:610 | EffectScrubRow | U |
-| installed.echo-scrub-spread-label | InspectorCandidate.jsx:612 | Spread | U |
-| installed.echo-blend-label | InspectorCandidate.jsx:620 | Blend | U |
-| installed.echo-blend-value | InspectorCandidate.jsx:621 | Screen | S |
-| installed.echo-blend-third | InspectorCandidate.jsx:622 | (empty span) | U |
-| installed.devinfo | InspectorCandidate.jsx:625 | DevInfoInstalled | U |
+| installed.chrome-panel-head | InspectorCandidate.jsx:352 | Inspector | U |
+| installed.depth-automation-mark | InspectorCandidate.jsx:432 | automation-mark | S |
+| installed.opacity-automation-mark | InspectorCandidate.jsx:432 | automation-mark | S |
+| installed.position-automation | InspectorCandidate.jsx:432 | automation-mark | S |
+| installed.rotation-automation-mark | InspectorCandidate.jsx:432 | automation-mark | S |
+| installed.scale-automation-mark | InspectorCandidate.jsx:432 | automation-mark | S |
+| installed.depth-object-hint | InspectorCandidate.jsx:444 | ObjectAutoHint | U |
+| installed.opacity-object-hint | InspectorCandidate.jsx:444 | ObjectAutoHint | U |
+| installed.position-object-hint | InspectorCandidate.jsx:444 | ObjectAutoHint | U |
+| installed.rotation-object-hint | InspectorCandidate.jsx:444 | ObjectAutoHint | U |
+| installed.scale-object-hint | InspectorCandidate.jsx:444 | ObjectAutoHint | U |
+| installed.chrome-aside | InspectorCandidate.jsx:450 | aside.inspector#inspector | U |
+| installed.section-selected-subtitle | InspectorCandidate.jsx:454 | (empty span) | U |
+| installed.section-selected-title | InspectorCandidate.jsx:454 | SELECTED OBJECT | S |
+| installed.identity-icon | InspectorCandidate.jsx:457 | G | U |
+| installed.identity-name | InspectorCandidate.jsx:459 | {selectedObjectName} | A |
+| installed.identity-kind-child | InspectorCandidate.jsx:460 | {selectedObjectKind} | D |
+| installed.transform-object-span | InspectorCandidate.jsx:466 | OBJECT | U |
+| installed.transform-title | InspectorCandidate.jsx:466 | TRANSFORM | U |
+| installed.position-label | InspectorCandidate.jsx:470 | Position | U |
+| installed.position-x-label | InspectorCandidate.jsx:473 | X | U |
+| installed.position-x-value | InspectorCandidate.jsx:473 | 0.124 | D |
+| installed.position-y-label | InspectorCandidate.jsx:476 | Y | U |
+| installed.position-y-value | InspectorCandidate.jsx:476 | −0.082 | D |
+| installed.position-keys | InspectorCandidate.jsx:479 | 2 KEYS | D |
+| installed.depth-label | InspectorCandidate.jsx:483 | Depth Z | U |
+| installed.depth-value | InspectorCandidate.jsx:484 | 0.180 | S |
+| installed.depth-keys | InspectorCandidate.jsx:485 | 1 KEY | D |
+| installed.depth-at-key | InspectorCandidate.jsx:486 | at-key | U |
+| installed.scale-label | InspectorCandidate.jsx:490 | Scale | U |
+| installed.scale-value | InspectorCandidate.jsx:491 | 1.000 | S |
+| installed.scale-keys-closure | InspectorCandidate.jsx:492 | (no KEYS literal) | U |
+| installed.rotation-label | InspectorCandidate.jsx:496 | Rotation Z | U |
+| installed.rotation-value | InspectorCandidate.jsx:497 | 0.000 rad | D |
+| installed.rotation-keys-closure | InspectorCandidate.jsx:498 | (no KEYS literal) | U |
+| installed.opacity-label | InspectorCandidate.jsx:502 | Opacity | U |
+| installed.opacity-value | InspectorCandidate.jsx:503 | 100% | D |
+| installed.opacity-keys | InspectorCandidate.jsx:504 | 2 KEYS | D |
+| installed.appearance-object-span | InspectorCandidate.jsx:509 | OBJECT | U |
+| installed.appearance-title | InspectorCandidate.jsx:509 | APPEARANCE | U |
+| installed.fill-label | InspectorCandidate.jsx:512 | Fill | U |
+| installed.fill-chip | InspectorCandidate.jsx:514 | color-chip | S |
+| installed.fill-tag | InspectorCandidate.jsx:527 | COLOR | U |
+| installed.stroke-label | InspectorCandidate.jsx:530 | Stroke | U |
+| installed.stroke-chip | InspectorCandidate.jsx:532 | color-chip | S |
+| installed.stroke-tag | InspectorCandidate.jsx:545 | COLOR | U |
+| installed.group-edit-space | InspectorCandidate.jsx:550 | EDIT SPACE | U |
+| installed.group-title | InspectorCandidate.jsx:550 | GROUP COMPOSITION | U |
+| installed.z-label | InspectorCandidate.jsx:553 | Z Occlusion | S |
+| installed.z-off | InspectorCandidate.jsx:555 | OFF / Stack | S |
+| installed.z-on | InspectorCandidate.jsx:556 | ON / Group Z | S |
+| installed.z-tag | InspectorCandidate.jsx:558 | Z | U |
+| installed.composite-label | InspectorCandidate.jsx:561 | Composite | U |
+| installed.composite-value | InspectorCandidate.jsx:562 | Child → Group bake point | U |
+| installed.composite-third | InspectorCandidate.jsx:563 | (empty span) | U |
+| installed.link-label | InspectorCandidate.jsx:566 | Link | U |
+| installed.link-value | InspectorCandidate.jsx:573 | Position → target | S |
+| installed.link-tag | InspectorCandidate.jsx:575 | TYPED | U |
+| installed.driver-routes-span | InspectorCandidate.jsx:580 | 2 ROUTES | U |
+| installed.driver-title | InspectorCandidate.jsx:580 | DRIVER | U |
+| installed.driver-label | InspectorCandidate.jsx:583 | Audio Low | S |
+| installed.driver-svg | InspectorCandidate.jsx:584 | driver-mini | U |
+| installed.driver-tag | InspectorCandidate.jsx:589 | LIVE | S |
+| installed.plugins-add | InspectorCandidate.jsx:594 | ＋ | S |
+| installed.plugins-title | InspectorCandidate.jsx:594 | APPLIED PLUGINS | U |
+| installed.plugin-grip | InspectorCandidate.jsx:597 | :: | U |
+| installed.plugin-mini | InspectorCandidate.jsx:598 | ◎ | U |
+| installed.plugin-name | InspectorCandidate.jsx:600 | Echo Bloom | D |
+| installed.plugin-sub | InspectorCandidate.jsx:601 | IN → Effect → OUT · selected | S |
+| installed.echo-title | InspectorCandidate.jsx:607 | ECHO BLOOM | U |
+| installed.echo-host-panel-span | InspectorCandidate.jsx:607 | HOST PANEL | U |
+| installed.echo-input-label | InspectorCandidate.jsx:610 | Input | U |
+| installed.echo-input-value | InspectorCandidate.jsx:611 | Pulse rings composite | S |
+| installed.echo-input-tag | InspectorCandidate.jsx:612 | TEXTURE | S |
+| installed.echo-scrub-intensity | InspectorCandidate.jsx:614 | EffectScrubRow | U |
+| installed.echo-scrub-intensity-label | InspectorCandidate.jsx:616 | Intensity | U |
+| installed.echo-scrub-spread | InspectorCandidate.jsx:623 | EffectScrubRow | U |
+| installed.echo-scrub-spread-label | InspectorCandidate.jsx:625 | Spread | U |
+| installed.echo-blend-label | InspectorCandidate.jsx:633 | Blend | U |
+| installed.echo-blend-value | InspectorCandidate.jsx:634 | Screen | S |
+| installed.echo-blend-third | InspectorCandidate.jsx:635 | (empty span) | U |
+| installed.devinfo | InspectorCandidate.jsx:638 | DevInfoInstalled | U |
 
 ### §3.3 discover
 
@@ -206,16 +206,16 @@
 | discover.lifecycle-code-none | InspectorCandidate.jsx:193#2 | NONE | S |
 | discover.lifecycle-standard-panel | InspectorCandidate.jsx:193 | Standard panel | U |
 | discover.lifecycle-standard-after | InspectorCandidate.jsx:194 | AVAILABLE AFTER ADD | S |
-| discover.chrome-panel-head | InspectorCandidate.jsx:351 | Inspector | U |
-| discover.chrome-aside | InspectorCandidate.jsx:632 | aside.inspector#inspector | U |
-| discover.not-in-project-span | InspectorCandidate.jsx:636 | NOT IN PROJECT | U |
-| discover.title | InspectorCandidate.jsx:636 | DISCOVERY | U |
-| discover.icon | InspectorCandidate.jsx:639 | 字 | U |
-| discover.name | InspectorCandidate.jsx:641 | Glyph Current | A |
-| discover.sub | InspectorCandidate.jsx:642 | Generator plugin · flowing type | S |
-| discover.preview-btn | InspectorCandidate.jsx:653 | Preview | S |
-| discover.add-btn | InspectorCandidate.jsx:672 | Add to selected object | S |
-| discover.devinfo | InspectorCandidate.jsx:676 | DevInfoDiscover | U |
+| discover.chrome-panel-head | InspectorCandidate.jsx:352 | Inspector | U |
+| discover.chrome-aside | InspectorCandidate.jsx:645 | aside.inspector#inspector | U |
+| discover.not-in-project-span | InspectorCandidate.jsx:649 | NOT IN PROJECT | U |
+| discover.title | InspectorCandidate.jsx:649 | DISCOVERY | U |
+| discover.icon | InspectorCandidate.jsx:652 | 字 | U |
+| discover.name | InspectorCandidate.jsx:654 | Glyph Current | A |
+| discover.sub | InspectorCandidate.jsx:655 | Generator plugin · flowing type | S |
+| discover.preview-btn | InspectorCandidate.jsx:666 | Preview | S |
+| discover.add-btn | InspectorCandidate.jsx:685 | Add to selected object | S |
+| discover.devinfo | InspectorCandidate.jsx:689 | DevInfoDiscover | U |
 
 ### §3.4 blocked
 
@@ -228,24 +228,24 @@
 | blocked.devinfo-identity-label | InspectorCandidate.jsx:210 | Identity | U |
 | blocked.devinfo-identity-value | InspectorCandidate.jsx:211 | demo.fold-field | A |
 | blocked.devinfo-identity-third | InspectorCandidate.jsx:212 | (empty span) | U |
-| blocked.chrome-panel-head | InspectorCandidate.jsx:351 | Inspector | U |
-| blocked.chrome-aside | InspectorCandidate.jsx:683 | aside.inspector#inspector | U |
-| blocked.title | InspectorCandidate.jsx:687 | DISCOVERY | U |
-| blocked.subtitle | InspectorCandidate.jsx:688 | UNAVAILABLE | S |
-| blocked.icon | InspectorCandidate.jsx:691 | ◇ | U |
-| blocked.name | InspectorCandidate.jsx:693 | Fold Field | A |
-| blocked.sub | InspectorCandidate.jsx:694 | Effect plugin · local file | S |
-| blocked.notice-title | InspectorCandidate.jsx:698 | このHostでは評価できません | S |
-| blocked.notice-body | InspectorCandidate.jsx:700 | 要求された能力が未対応です。近い既存Effectへ置換せず、非互換理由を表示します。 | S |
-| blocked.lifecycle-install | InspectorCandidate.jsx:703 | Install | U |
-| blocked.lifecycle-none | InspectorCandidate.jsx:703 | NONE | S |
-| blocked.lifecycle-not-started | InspectorCandidate.jsx:703 | NOT STARTED | S |
-| blocked.lifecycle-project | InspectorCandidate.jsx:703 | Project change | U |
-| blocked.lifecycle-fallback | InspectorCandidate.jsx:704 | Fallback | U |
-| blocked.lifecycle-refused | InspectorCandidate.jsx:704 | REFUSED | S |
-| blocked.inspect-btn | InspectorCandidate.jsx:719 | Inspect reason | S |
-| blocked.add-btn | InspectorCandidate.jsx:722 | Add | S |
-| blocked.devinfo | InspectorCandidate.jsx:725 | DevInfoBlocked | U |
+| blocked.chrome-panel-head | InspectorCandidate.jsx:352 | Inspector | U |
+| blocked.chrome-aside | InspectorCandidate.jsx:696 | aside.inspector#inspector | U |
+| blocked.title | InspectorCandidate.jsx:700 | DISCOVERY | U |
+| blocked.subtitle | InspectorCandidate.jsx:701 | UNAVAILABLE | S |
+| blocked.icon | InspectorCandidate.jsx:704 | ◇ | U |
+| blocked.name | InspectorCandidate.jsx:706 | Fold Field | A |
+| blocked.sub | InspectorCandidate.jsx:707 | Effect plugin · local file | S |
+| blocked.notice-title | InspectorCandidate.jsx:711 | このHostでは評価できません | S |
+| blocked.notice-body | InspectorCandidate.jsx:713 | 要求された能力が未対応です。近い既存Effectへ置換せず、非互換理由を表示します。 | S |
+| blocked.lifecycle-install | InspectorCandidate.jsx:716 | Install | U |
+| blocked.lifecycle-none | InspectorCandidate.jsx:716 | NONE | S |
+| blocked.lifecycle-not-started | InspectorCandidate.jsx:716 | NOT STARTED | S |
+| blocked.lifecycle-project | InspectorCandidate.jsx:716 | Project change | U |
+| blocked.lifecycle-fallback | InspectorCandidate.jsx:717 | Fallback | U |
+| blocked.lifecycle-refused | InspectorCandidate.jsx:717 | REFUSED | S |
+| blocked.inspect-btn | InspectorCandidate.jsx:732 | Inspect reason | S |
+| blocked.add-btn | InspectorCandidate.jsx:735 | Add | S |
+| blocked.devinfo | InspectorCandidate.jsx:738 | DevInfoBlocked | U |
 
 ### §3.5 missing
 
@@ -258,33 +258,33 @@
 | missing.devinfo-identity-label | InspectorCandidate.jsx:228 | Identity | U |
 | missing.devinfo-identity-value | InspectorCandidate.jsx:229 | demo.ribbon-array | A |
 | missing.devinfo-identity-third | InspectorCandidate.jsx:230 | (empty span) | U |
-| missing.chrome-panel-head | InspectorCandidate.jsx:351 | Inspector | U |
-| missing.chrome-aside | InspectorCandidate.jsx:731 | aside.inspector#inspector | U |
-| missing.title | InspectorCandidate.jsx:735 | PROJECT INSTANCE | S |
-| missing.subtitle | InspectorCandidate.jsx:736 | MISSING | S |
-| missing.icon | InspectorCandidate.jsx:743 | ? | U |
-| missing.name | InspectorCandidate.jsx:746 | Ribbon Array | A |
-| missing.sub | InspectorCandidate.jsx:747 | Plugin unavailable · Project instance retained | S |
-| missing.notice-title | InspectorCandidate.jsx:751 | 必要なプラグインを評価できません | S |
-| missing.notice-body | InspectorCandidate.jsx:753 | identity、version要求、instance payloadを保持しています。欠落中はpayloadを解釈して似た設定へ変換しません。 | S |
-| missing.lifecycle-available | InspectorCandidate.jsx:756 | AVAILABLE | S |
-| missing.lifecycle-open | InspectorCandidate.jsx:756 | Project open | U |
-| missing.lifecycle-succeeded | InspectorCandidate.jsx:756 | SUCCEEDED | S |
-| missing.lifecycle-unrelated | InspectorCandidate.jsx:756 | Unrelated edit | U |
-| missing.lifecycle-export | InspectorCandidate.jsx:757 | Required export | U |
-| missing.lifecycle-export-refused | InspectorCandidate.jsx:757 | REFUSED | S |
-| missing.lifecycle-payload | InspectorCandidate.jsx:757 | Payload | U |
-| missing.lifecycle-retained | InspectorCandidate.jsx:757 | RETAINED | S |
-| missing.review-btn | InspectorCandidate.jsx:769 | Review recovery | S |
-| missing.std-editable-span | InspectorCandidate.jsx:775 | EDITABLE | U |
-| missing.std-title | InspectorCandidate.jsx:775 | STANDARD TRANSFORM | U |
-| missing.std-position-label | InspectorCandidate.jsx:778 | Position | U |
-| missing.std-position-value | InspectorCandidate.jsx:779 | X 0.00 · Y 0.00 | S |
-| missing.std-position-third | InspectorCandidate.jsx:780 | (empty span) | U |
-| missing.std-scale-label | InspectorCandidate.jsx:783 | Scale | U |
-| missing.std-scale-value | InspectorCandidate.jsx:784 | 100% | S |
-| missing.std-scale-third | InspectorCandidate.jsx:785 | (empty span) | U |
-| missing.devinfo | InspectorCandidate.jsx:788 | DevInfoMissing | U |
+| missing.chrome-panel-head | InspectorCandidate.jsx:352 | Inspector | U |
+| missing.chrome-aside | InspectorCandidate.jsx:744 | aside.inspector#inspector | U |
+| missing.title | InspectorCandidate.jsx:748 | PROJECT INSTANCE | S |
+| missing.subtitle | InspectorCandidate.jsx:749 | MISSING | S |
+| missing.icon | InspectorCandidate.jsx:756 | ? | U |
+| missing.name | InspectorCandidate.jsx:759 | Ribbon Array | A |
+| missing.sub | InspectorCandidate.jsx:760 | Plugin unavailable · Project instance retained | S |
+| missing.notice-title | InspectorCandidate.jsx:764 | 必要なプラグインを評価できません | S |
+| missing.notice-body | InspectorCandidate.jsx:766 | identity、version要求、instance payloadを保持しています。欠落中はpayloadを解釈して似た設定へ変換しません。 | S |
+| missing.lifecycle-available | InspectorCandidate.jsx:769 | AVAILABLE | S |
+| missing.lifecycle-open | InspectorCandidate.jsx:769 | Project open | U |
+| missing.lifecycle-succeeded | InspectorCandidate.jsx:769 | SUCCEEDED | S |
+| missing.lifecycle-unrelated | InspectorCandidate.jsx:769 | Unrelated edit | U |
+| missing.lifecycle-export | InspectorCandidate.jsx:770 | Required export | U |
+| missing.lifecycle-export-refused | InspectorCandidate.jsx:770 | REFUSED | S |
+| missing.lifecycle-payload | InspectorCandidate.jsx:770 | Payload | U |
+| missing.lifecycle-retained | InspectorCandidate.jsx:770 | RETAINED | S |
+| missing.review-btn | InspectorCandidate.jsx:782 | Review recovery | S |
+| missing.std-editable-span | InspectorCandidate.jsx:788 | EDITABLE | U |
+| missing.std-title | InspectorCandidate.jsx:788 | STANDARD TRANSFORM | U |
+| missing.std-position-label | InspectorCandidate.jsx:791 | Position | U |
+| missing.std-position-value | InspectorCandidate.jsx:792 | X 0.00 · Y 0.00 | S |
+| missing.std-position-third | InspectorCandidate.jsx:793 | (empty span) | U |
+| missing.std-scale-label | InspectorCandidate.jsx:796 | Scale | U |
+| missing.std-scale-value | InspectorCandidate.jsx:797 | 100% | S |
+| missing.std-scale-third | InspectorCandidate.jsx:798 | (empty span) | U |
+| missing.devinfo | InspectorCandidate.jsx:801 | DevInfoMissing | U |
 
 ## §4 source capability候補
 
@@ -299,7 +299,7 @@
 | CAP-BLEND-MODE | ItemEnvelope.blend · schema.rs:442 | normal/add/multiply | installed.echo-blend-value | 未採用 |
 | CAP-FILL-STROKE | なし | — | installed.fill-chip | 未採用 |
 
-CU-0A08IT向け注記: discover / blocked / missing の可視名へ `CAP-LAYER-NAME` を接続するmappingは、runtime binding前に再照合する。CU-0A08ISの採用判定を配線決定として継承しない。
+CU-0A08ITPでinstalled分岐の `selectedObjectName` / `selectedObjectKind` はdecode済みtargetへ接続済み。discover / blocked / missing の可視名へ `CAP-LAYER-NAME` を接続するmappingは、runtime binding前に再照合する。CU-0A08ISの採用判定を他branchの配線決定として継承しない。
 
 ## §5 CU-0A08IP 受理入力契約
 
@@ -380,9 +380,9 @@ CU-0A08IPの閉じた実装成果は、product-owned・非export の pure decode
 抽出規則（Babel AST oracle）:
 
 1. `@babel/parser` + `@babel/traverse` で JSX を1回解析する。
-2. `JSXText` はノード全体を1レコードにする（`text = node.value.replace(/\s+/g," ").trim()`、`line = node.loc.start.line + leading whitespace 内の改行数`）。capitalized `JSXOpeningElement`、attribute-free `<span />`、`className` 文字列/テンプレート、可視 template/conditional、`objectRow` 第2引数label、第4引数 `keys-arg`、既知 component の `label` StringLiteral（`prop-label`、`aria-label` 除外）を multiset として記録する（重複除去しない）。canonical key は `kind|line|text#occ`（`occ` は同一 `(kind,line,text)` の走査順1-based）。
+2. `JSXText` はノード全体を1レコードにする（`text = node.value.replace(/\s+/g," ").trim()`、`line = node.loc.start.line + leading whitespace 内の改行数`）。capitalized `JSXOpeningElement`、attribute-free `<span />`、`className` 文字列/テンプレート、可視 template/conditional、installed identityの既知projection binding `{selectedObjectName}` / `{selectedObjectKind}`、`objectRow` 第2引数label、第4引数 `keys-arg`、既知 component の `label` StringLiteral（`prop-label`、`aria-label` 除外）を multiset として記録する（重複除去しない）。canonical key は `kind|line|text#occ`（`occ` は同一 `(kind,line,text)` の走査順1-based）。
 
-§9 sentinel: `PROJECT INSTANCE`（L735）、`Inspector`（L351）、`Vism (.vism)`（L144/L166/L184/L206/L224）。
+§9 sentinel: `PROJECT INSTANCE`（L748）、`Inspector`（L352）、`Vism (.vism)`（L144/L166/L184/L206/L224）。
 
 | 可視literal / component | JSX行 | 対応要素ID |
 |---|---|---|
@@ -439,152 +439,152 @@ CU-0A08IPの閉じた実装成果は、product-owned・非export の pure decode
 | Identity | 228 | missing.devinfo-identity-label |
 | demo.ribbon-array | 229 | missing.devinfo-identity-value |
 | (empty span) | 230 | missing.devinfo-identity-third |
-| Inspector | 351 | installed-effect-focused.chrome-panel-head |
-| aside.inspector#inspector | 355 | installed-effect-focused.chrome-aside |
-| EDITING EFFECT | 359 | installed-effect-focused.section-editing-title |
-| ON OBJECT | 359 | installed-effect-focused.section-on-object |
-| ◎ | 362 | installed-effect-focused.identity-icon |
-| Echo Bloom | 364 | installed-effect-focused.identity-name |
-| Pulse rings · Effect | 365 | installed-effect-focused.identity-subtitle |
-| ECHO BLOOM | 371 | installed-effect-focused.host-title |
-| HOST PANEL | 371 | installed-effect-focused.host-panel-span |
-| Layered light pulses that follow the selected object. Adjust Intensity and Spread while watching the Stage. | 374 | installed-effect-focused.effect-description |
-| Input | 378 | installed-effect-focused.input-label |
-| Pulse rings composite | 379 | installed-effect-focused.input-value |
-| TEXTURE | 380 | installed-effect-focused.input-tag |
-| EffectScrubRow | 382 | installed-effect-focused.effect-scrub-intensity |
-| Intensity | 384 | installed-effect-focused.effect-scrub-intensity-label |
-| EffectScrubRow | 391 | installed-effect-focused.effect-scrub-spread |
-| Spread | 393 | installed-effect-focused.effect-scrub-spread-label |
-| Blend | 401 | installed-effect-focused.blend-label |
-| Screen | 402 | installed-effect-focused.blend-value |
-| (empty span) | 403 | installed-effect-focused.blend-third-cell |
-| DevInfoEffectFocused | 406 | installed-effect-focused.devinfo |
-| automation-mark | 419 | installed.position-automation |
-| ObjectAutoHint | 431 | installed.position-object-hint |
-| aside.inspector#inspector | 437 | installed.chrome-aside |
-| SELECTED OBJECT | 441 | installed.section-selected-title |
-| (empty span) | 441 | installed.section-selected-subtitle |
-| G | 444 | installed.identity-icon |
-| Pulse rings | 446 | installed.identity-name |
-| Group · 1 child | 447 | installed.identity-kind-child |
-| TRANSFORM | 453 | installed.transform-title |
-| OBJECT | 453 | installed.transform-object-span |
-| X | 460 | installed.position-x-label |
-| 0.124 | 460 | installed.position-x-value |
-| Y | 463 | installed.position-y-label |
-| −0.082 | 463 | installed.position-y-value |
-| 0.180 | 471 | installed.depth-value |
-| 1.000 | 478 | installed.scale-value |
-| 0.000 rad | 484 | installed.rotation-value |
-| 100% | 490 | installed.opacity-value |
-| APPEARANCE | 496 | installed.appearance-title |
-| OBJECT | 496 | installed.appearance-object-span |
-| Fill | 499 | installed.fill-label |
-| color-chip | 501 | installed.fill-chip |
-| COLOR | 514 | installed.fill-tag |
-| Stroke | 517 | installed.stroke-label |
-| color-chip | 519 | installed.stroke-chip |
-| COLOR | 532 | installed.stroke-tag |
-| GROUP COMPOSITION | 537 | installed.group-title |
-| EDIT SPACE | 537 | installed.group-edit-space |
-| Z Occlusion | 540 | installed.z-label |
-| OFF / Stack | 542 | installed.z-off |
-| ON / Group Z | 543 | installed.z-on |
-| Z | 545 | installed.z-tag |
-| Composite | 548 | installed.composite-label |
-| Child → Group bake point | 549 | installed.composite-value |
-| (empty span) | 550 | installed.composite-third |
-| Link | 553 | installed.link-label |
-| Position → target | 560 | installed.link-value |
-| TYPED | 562 | installed.link-tag |
-| DRIVER | 567 | installed.driver-title |
-| 2 ROUTES | 567 | installed.driver-routes-span |
-| Audio Low | 570 | installed.driver-label |
-| driver-mini | 571 | installed.driver-svg |
-| LIVE | 576 | installed.driver-tag |
-| APPLIED PLUGINS | 581 | installed.plugins-title |
-| ＋ | 581 | installed.plugins-add |
-| :: | 584 | installed.plugin-grip |
-| ◎ | 585 | installed.plugin-mini |
-| Echo Bloom | 587 | installed.plugin-name |
-| IN → Effect → OUT · selected | 588 | installed.plugin-sub |
-| ECHO BLOOM | 594 | installed.echo-title |
-| HOST PANEL | 594 | installed.echo-host-panel-span |
-| Input | 597 | installed.echo-input-label |
-| Pulse rings composite | 598 | installed.echo-input-value |
-| TEXTURE | 599 | installed.echo-input-tag |
-| EffectScrubRow | 601 | installed.echo-scrub-intensity |
-| Intensity | 603 | installed.echo-scrub-intensity-label |
-| EffectScrubRow | 610 | installed.echo-scrub-spread |
-| Spread | 612 | installed.echo-scrub-spread-label |
-| Blend | 620 | installed.echo-blend-label |
-| Screen | 621 | installed.echo-blend-value |
-| (empty span) | 622 | installed.echo-blend-third |
-| DevInfoInstalled | 625 | installed.devinfo |
-| aside.inspector#inspector | 632 | discover.chrome-aside |
-| DISCOVERY | 636 | discover.title |
-| NOT IN PROJECT | 636 | discover.not-in-project-span |
-| 字 | 639 | discover.icon |
-| Glyph Current | 641 | discover.name |
-| Generator plugin · flowing type | 642 | discover.sub |
-| Preview | 653 | discover.preview-btn |
-| Add to selected object | 672 | discover.add-btn |
-| DevInfoDiscover | 676 | discover.devinfo |
-| aside.inspector#inspector | 683 | blocked.chrome-aside |
-| DISCOVERY | 687 | blocked.title |
-| UNAVAILABLE | 688 | blocked.subtitle |
-| ◇ | 691 | blocked.icon |
-| Fold Field | 693 | blocked.name |
-| Effect plugin · local file | 694 | blocked.sub |
-| このHostでは評価できません | 698 | blocked.notice-title |
-| 要求された能力が未対応です。近い既存Effectへ置換せず、非互換理由を表示します。 | 700 | blocked.notice-body |
-| Project change | 703 | blocked.lifecycle-project |
-| NONE | 703 | blocked.lifecycle-none |
-| Install | 703 | blocked.lifecycle-install |
-| NOT STARTED | 703 | blocked.lifecycle-not-started |
-| Fallback | 704 | blocked.lifecycle-fallback |
-| REFUSED | 704 | blocked.lifecycle-refused |
-| Inspect reason | 719 | blocked.inspect-btn |
-| Add | 722 | blocked.add-btn |
-| DevInfoBlocked | 725 | blocked.devinfo |
-| aside.inspector#inspector | 731 | missing.chrome-aside |
-| PROJECT INSTANCE | 735 | missing.title |
-| MISSING | 736 | missing.subtitle |
-| ? | 743 | missing.icon |
-| Ribbon Array | 746 | missing.name |
-| Plugin unavailable · Project instance retained | 747 | missing.sub |
-| 必要なプラグインを評価できません | 751 | missing.notice-title |
-| identity、version要求、instance payloadを保持しています。欠落中はpayloadを解釈して似た設定へ変換しません。 | 753 | missing.notice-body |
-| Project open | 756 | missing.lifecycle-open |
-| SUCCEEDED | 756 | missing.lifecycle-succeeded |
-| Unrelated edit | 756 | missing.lifecycle-unrelated |
-| AVAILABLE | 756 | missing.lifecycle-available |
-| Required export | 757 | missing.lifecycle-export |
-| REFUSED | 757 | missing.lifecycle-export-refused |
-| Payload | 757 | missing.lifecycle-payload |
-| RETAINED | 757 | missing.lifecycle-retained |
-| Review recovery | 769 | missing.review-btn |
-| STANDARD TRANSFORM | 775 | missing.std-title |
-| EDITABLE | 775 | missing.std-editable-span |
-| Position | 778 | missing.std-position-label |
-| X 0.00 · Y 0.00 | 779 | missing.std-position-value |
-| (empty span) | 780 | missing.std-position-third |
-| Scale | 783 | missing.std-scale-label |
-| 100% | 784 | missing.std-scale-value |
-| (empty span) | 785 | missing.std-scale-third |
-| DevInfoMissing | 788 | missing.devinfo |
-| Position | 457 | installed.position-label |
-| 2 KEYS | 466 | installed.position-keys |
-| Depth Z | 470 | installed.depth-label |
-| 1 KEY | 472 | installed.depth-keys |
-| at-key | 473 | installed.depth-at-key |
-| Scale | 477 | installed.scale-label |
-| (no KEYS literal) | 479 | installed.scale-keys-closure |
-| Rotation Z | 483 | installed.rotation-label |
-| (no KEYS literal) | 485 | installed.rotation-keys-closure |
-| Opacity | 489 | installed.opacity-label |
-| 2 KEYS | 491 | installed.opacity-keys |
+| Inspector | 352 | installed-effect-focused.chrome-panel-head |
+| aside.inspector#inspector | 356 | installed-effect-focused.chrome-aside |
+| EDITING EFFECT | 360 | installed-effect-focused.section-editing-title |
+| ON OBJECT | 360 | installed-effect-focused.section-on-object |
+| ◎ | 363 | installed-effect-focused.identity-icon |
+| Echo Bloom | 365 | installed-effect-focused.identity-name |
+| Pulse rings · Effect | 366 | installed-effect-focused.identity-subtitle |
+| ECHO BLOOM | 372 | installed-effect-focused.host-title |
+| HOST PANEL | 372 | installed-effect-focused.host-panel-span |
+| Layered light pulses that follow the selected object. Adjust Intensity and Spread while watching the Stage. | 375 | installed-effect-focused.effect-description |
+| Input | 379 | installed-effect-focused.input-label |
+| Pulse rings composite | 380 | installed-effect-focused.input-value |
+| TEXTURE | 381 | installed-effect-focused.input-tag |
+| EffectScrubRow | 383 | installed-effect-focused.effect-scrub-intensity |
+| Intensity | 385 | installed-effect-focused.effect-scrub-intensity-label |
+| EffectScrubRow | 392 | installed-effect-focused.effect-scrub-spread |
+| Spread | 394 | installed-effect-focused.effect-scrub-spread-label |
+| Blend | 402 | installed-effect-focused.blend-label |
+| Screen | 403 | installed-effect-focused.blend-value |
+| (empty span) | 404 | installed-effect-focused.blend-third-cell |
+| DevInfoEffectFocused | 407 | installed-effect-focused.devinfo |
+| automation-mark | 432 | installed.position-automation |
+| ObjectAutoHint | 444 | installed.position-object-hint |
+| aside.inspector#inspector | 450 | installed.chrome-aside |
+| SELECTED OBJECT | 454 | installed.section-selected-title |
+| (empty span) | 454 | installed.section-selected-subtitle |
+| G | 457 | installed.identity-icon |
+| {selectedObjectName} | 459 | installed.identity-name |
+| {selectedObjectKind} | 460 | installed.identity-kind-child |
+| TRANSFORM | 466 | installed.transform-title |
+| OBJECT | 466 | installed.transform-object-span |
+| X | 473 | installed.position-x-label |
+| 0.124 | 473 | installed.position-x-value |
+| Y | 476 | installed.position-y-label |
+| −0.082 | 476 | installed.position-y-value |
+| 0.180 | 484 | installed.depth-value |
+| 1.000 | 491 | installed.scale-value |
+| 0.000 rad | 497 | installed.rotation-value |
+| 100% | 503 | installed.opacity-value |
+| APPEARANCE | 509 | installed.appearance-title |
+| OBJECT | 509 | installed.appearance-object-span |
+| Fill | 512 | installed.fill-label |
+| color-chip | 514 | installed.fill-chip |
+| COLOR | 527 | installed.fill-tag |
+| Stroke | 530 | installed.stroke-label |
+| color-chip | 532 | installed.stroke-chip |
+| COLOR | 545 | installed.stroke-tag |
+| GROUP COMPOSITION | 550 | installed.group-title |
+| EDIT SPACE | 550 | installed.group-edit-space |
+| Z Occlusion | 553 | installed.z-label |
+| OFF / Stack | 555 | installed.z-off |
+| ON / Group Z | 556 | installed.z-on |
+| Z | 558 | installed.z-tag |
+| Composite | 561 | installed.composite-label |
+| Child → Group bake point | 562 | installed.composite-value |
+| (empty span) | 563 | installed.composite-third |
+| Link | 566 | installed.link-label |
+| Position → target | 573 | installed.link-value |
+| TYPED | 575 | installed.link-tag |
+| DRIVER | 580 | installed.driver-title |
+| 2 ROUTES | 580 | installed.driver-routes-span |
+| Audio Low | 583 | installed.driver-label |
+| driver-mini | 584 | installed.driver-svg |
+| LIVE | 589 | installed.driver-tag |
+| APPLIED PLUGINS | 594 | installed.plugins-title |
+| ＋ | 594 | installed.plugins-add |
+| :: | 597 | installed.plugin-grip |
+| ◎ | 598 | installed.plugin-mini |
+| Echo Bloom | 600 | installed.plugin-name |
+| IN → Effect → OUT · selected | 601 | installed.plugin-sub |
+| ECHO BLOOM | 607 | installed.echo-title |
+| HOST PANEL | 607 | installed.echo-host-panel-span |
+| Input | 610 | installed.echo-input-label |
+| Pulse rings composite | 611 | installed.echo-input-value |
+| TEXTURE | 612 | installed.echo-input-tag |
+| EffectScrubRow | 614 | installed.echo-scrub-intensity |
+| Intensity | 616 | installed.echo-scrub-intensity-label |
+| EffectScrubRow | 623 | installed.echo-scrub-spread |
+| Spread | 625 | installed.echo-scrub-spread-label |
+| Blend | 633 | installed.echo-blend-label |
+| Screen | 634 | installed.echo-blend-value |
+| (empty span) | 635 | installed.echo-blend-third |
+| DevInfoInstalled | 638 | installed.devinfo |
+| aside.inspector#inspector | 645 | discover.chrome-aside |
+| DISCOVERY | 649 | discover.title |
+| NOT IN PROJECT | 649 | discover.not-in-project-span |
+| 字 | 652 | discover.icon |
+| Glyph Current | 654 | discover.name |
+| Generator plugin · flowing type | 655 | discover.sub |
+| Preview | 666 | discover.preview-btn |
+| Add to selected object | 685 | discover.add-btn |
+| DevInfoDiscover | 689 | discover.devinfo |
+| aside.inspector#inspector | 696 | blocked.chrome-aside |
+| DISCOVERY | 700 | blocked.title |
+| UNAVAILABLE | 701 | blocked.subtitle |
+| ◇ | 704 | blocked.icon |
+| Fold Field | 706 | blocked.name |
+| Effect plugin · local file | 707 | blocked.sub |
+| このHostでは評価できません | 711 | blocked.notice-title |
+| 要求された能力が未対応です。近い既存Effectへ置換せず、非互換理由を表示します。 | 713 | blocked.notice-body |
+| Project change | 716 | blocked.lifecycle-project |
+| NONE | 716 | blocked.lifecycle-none |
+| Install | 716 | blocked.lifecycle-install |
+| NOT STARTED | 716 | blocked.lifecycle-not-started |
+| Fallback | 717 | blocked.lifecycle-fallback |
+| REFUSED | 717 | blocked.lifecycle-refused |
+| Inspect reason | 732 | blocked.inspect-btn |
+| Add | 735 | blocked.add-btn |
+| DevInfoBlocked | 738 | blocked.devinfo |
+| aside.inspector#inspector | 744 | missing.chrome-aside |
+| PROJECT INSTANCE | 748 | missing.title |
+| MISSING | 749 | missing.subtitle |
+| ? | 756 | missing.icon |
+| Ribbon Array | 759 | missing.name |
+| Plugin unavailable · Project instance retained | 760 | missing.sub |
+| 必要なプラグインを評価できません | 764 | missing.notice-title |
+| identity、version要求、instance payloadを保持しています。欠落中はpayloadを解釈して似た設定へ変換しません。 | 766 | missing.notice-body |
+| Project open | 769 | missing.lifecycle-open |
+| SUCCEEDED | 769 | missing.lifecycle-succeeded |
+| Unrelated edit | 769 | missing.lifecycle-unrelated |
+| AVAILABLE | 769 | missing.lifecycle-available |
+| Required export | 770 | missing.lifecycle-export |
+| REFUSED | 770 | missing.lifecycle-export-refused |
+| Payload | 770 | missing.lifecycle-payload |
+| RETAINED | 770 | missing.lifecycle-retained |
+| Review recovery | 782 | missing.review-btn |
+| STANDARD TRANSFORM | 788 | missing.std-title |
+| EDITABLE | 788 | missing.std-editable-span |
+| Position | 791 | missing.std-position-label |
+| X 0.00 · Y 0.00 | 792 | missing.std-position-value |
+| (empty span) | 793 | missing.std-position-third |
+| Scale | 796 | missing.std-scale-label |
+| 100% | 797 | missing.std-scale-value |
+| (empty span) | 798 | missing.std-scale-third |
+| DevInfoMissing | 801 | missing.devinfo |
+| Position | 470 | installed.position-label |
+| 2 KEYS | 479 | installed.position-keys |
+| Depth Z | 483 | installed.depth-label |
+| 1 KEY | 485 | installed.depth-keys |
+| at-key | 486 | installed.depth-at-key |
+| Scale | 490 | installed.scale-label |
+| (no KEYS literal) | 492 | installed.scale-keys-closure |
+| Rotation Z | 496 | installed.rotation-label |
+| (no KEYS literal) | 498 | installed.rotation-keys-closure |
+| Opacity | 502 | installed.opacity-label |
+| 2 KEYS | 504 | installed.opacity-keys |
 
 ## §10 OPPORTUNITIES / ADVICE
 

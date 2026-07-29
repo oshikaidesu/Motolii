@@ -93,5 +93,14 @@
       "fixedSourceSha256": "866124a69caaa168fa19c67e6c723db97fec67a61071bdbe66973576266c42f4",
       "currentSha256": "c3d4b5800505390df2c34a9d69f7ad0a697ac19ed8dc5523245704500e171776"
     }
+  ],
+  "inspectorPostPromotionChanges": [
+    {
+      "task": "CU-0A08ITP",
+      "file": "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
+      "reason": "VS-1 Inspector target read-only projection component input",
+      "fixedSourceSha256": "1e0bdd3eebd665e517600af4db090f74d50951aef12fdd476e97a828de91a3e4",
+      "currentSha256": "a01e7431361fdbaf1bdc1f1836045835f501d72e9d62aba1bf833ba3d53cc140"
+    }
   ]
 }

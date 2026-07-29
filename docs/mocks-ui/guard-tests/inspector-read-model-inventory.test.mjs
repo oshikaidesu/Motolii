@@ -33,7 +33,7 @@ const AUTHORITY_SHA256 = {
   "docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md":
     "5f632d2e7bb2632c47e4b92505add405c4fcfe70d0b104deb08b964797be652c",
   "ui/motolii-web/src/candidates/InspectorCandidate.jsx":
-    "1e0bdd3eebd665e517600af4db090f74d50951aef12fdd476e97a828de91a3e4",
+    "a01e7431361fdbaf1bdc1f1836045835f501d72e9d62aba1bf833ba3d53cc140",
   "docs/mocks-ui/fixtures/reference-document.json":
     "a3b9212f13b586ec4a800390a1b524907defd32a85ee0d5bd74f5db6ae63397c",
   "docs/mocks-ui/src/reference/loadReferenceFixtures.js":
@@ -123,7 +123,7 @@ const MODE_HEADINGS = [
   "§3.5 missing",
 ];
 
-const KEYS_LITERAL_LINES = new Set([466, 472, 491]);
+const KEYS_LITERAL_LINES = new Set([479, 485, 504]);
 
 const KNOWN_COMPONENTS = new Set([
   "EffectScrubRow",
@@ -172,7 +172,7 @@ export const OFF_BY_ONE_COLLISIONS = [];
 /** Shared AST source keys with multiple §3 consumer roles. */
 export const SHARED_LEAF_SOURCES = [
   {
-    key: "text|351|Inspector#1",
+    key: "text|352|Inspector#1",
     consumers: [
       "installed-effect-focused.chrome-panel-head",
       "installed.chrome-panel-head",
@@ -200,7 +200,7 @@ export const SHARED_LEAF_SOURCES = [
     ],
   },
   {
-    key: "class|419|automation-mark#1",
+    key: "class|432|automation-mark#1",
     consumers: [
       "installed.position-automation",
       "installed.depth-automation-mark",
@@ -241,7 +241,7 @@ export const SHARED_LEAF_SOURCES = [
     consumers: ["installed.object-hint-auto"],
   },
   {
-    key: "component|431|ObjectAutoHint#1",
+    key: "component|444|ObjectAutoHint#1",
     consumers: [
       "installed.position-object-hint",
       "installed.depth-object-hint",
@@ -369,6 +369,16 @@ export function extractInspectorAstRecords(source) {
             text: "AUTO ON / AUTO OFF",
           });
         }
+      }
+      if (
+        expr.type === "Identifier"
+        && ["selectedObjectName", "selectedObjectKind"].includes(expr.name)
+      ) {
+        records.push({
+          kind: "dynamic",
+          line: path.node.loc.start.line,
+          text: `{${expr.name}}`,
+        });
       }
     },
   });

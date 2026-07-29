@@ -245,6 +245,7 @@ export function InspectorCandidate({
   syncColorBook,
   setStageTool,
   renderPluginHistory,
+  inspectorReadModel,
 }) {
   const [, syncRender] = useReducer((n) => n + 1, 0);
   const scrubSessionRef = useRef(null);
@@ -409,6 +410,18 @@ export function InspectorCandidate({
   }
 
   if (mode === "installed") {
+    const selectedObjectName =
+      inspectorReadModel === undefined
+        ? "Pulse rings"
+        : inspectorReadModel.target.layer_name;
+    const selectedObjectKind =
+      inspectorReadModel === undefined
+        ? "Group · 1 child"
+        : inspectorReadModel.target.item_kind === "group"
+          ? `Group · ${inspectorReadModel.target.child_count} ${
+              inspectorReadModel.target.child_count === 1 ? "child" : "children"
+            }`
+          : "Clip";
     const objectRow = (param, label, valueContent, keys, extraClass = "") => {
       const on = state.automation[param];
       return (
@@ -443,8 +456,8 @@ export function InspectorCandidate({
           <div className="identity">
             <div className="icon">G</div>
             <div>
-              <b>Pulse rings</b>
-              <small>Group · 1 child</small>
+              <b>{selectedObjectName}</b>
+              <small>{selectedObjectKind}</small>
             </div>
           </div>
         </div>

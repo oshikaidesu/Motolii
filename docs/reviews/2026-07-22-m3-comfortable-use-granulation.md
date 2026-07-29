@@ -253,7 +253,10 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 | CU-0A08K | `CORE / WAIT` | KEYS/LAYERS stateをHost projection/typed intentへ交換 | CU-0A06、既存U3a/U4a/U4b projection契約 | selection/packingをReactが所有しない、reloadでHostから復元 | native/React間に双方向storeが必要 |
 | CU-0A08IS | `SPEC / DONE` | Inspector全表示を既決sourceあり／未決へ分類しread-model入力と拒否条件を固定 | CU-0A07C | 1要素1source、未決推測0、code/API変更0 | Document/plugin/transport/intent意味の発明が必要 |
 | CU-0A08IP | `CORE / DONE` | fixture由来read-only projection decoder。Host transportは非目標 | CU-0A08IS | unknown/non-finite/dangling/stale拒否、React semantic write 0 | 二重store、DOM変更、公開transportが必要 |
-| CU-0A08IT | `CORE / WAIT` | 既存DomainIntent→DocumentCommandRequest→D2へInspector操作を接続 | CU-0A08IP、U4a-2 | 1 gesture=1 intent、Cancel/失敗=変更0 | 別intent終端、React Undo/selection正本が必要 |
+| CU-0A08IT | `CORE / SPLIT` | Inspector read-only projectionとtyped intent/Host接続を分離 | CU-0A08IP | [CU-0A08ITP実装決定](2026-07-29-cu-0a08itp-inspector-read-projection-jsx-connection-implementation-decision.md)によりITP→ITIへ分割 | ITPを通常製品route完成と読み替えたくなる |
+| CU-0A08ITP-P | `SPEC / DONE` | Inspector component byteと専用post-promotion chain authorityを先行閉鎖 | CU-0A08IP、CU-0A08RS | [CU-0A08ITP-P改訂](2026-07-29-cu-0a08itp-p-inspector-post-promotion-authority-amendment.md)。Browser chain不変、Inspector専用5-key chainと正負matrix | 汎用multi-file chainまたは第三chainが必要 |
+| CU-0A08ITP | `PRODUCT / DONE` | decoded Inspector targetの既決3 fieldを既存installed identity JSXへ透過 | CU-0A08ITP-P、CU-0A08IP、CU-0A08RS | [CU-0A08ITP実装決定](2026-07-29-cu-0a08itp-inspector-read-projection-jsx-connection-implementation-decision.md)。runtime caller/Host wire/intent/他branch 0 | mock/dev producerまたは未決表示推測が必要 |
+| CU-0A08ITI | `CORE / WAIT` | Inspector typed intentとHost接続 | CU-0A08ITP、U4a-2 | 1 gesture=1 intent、React正本0 | 別intent終端、React Undo/selection正本が必要 |
 | CU-0A09 | `PRODUCT / WAIT` | R6 diagnostic routeをproduction navigationから分離 | CU-0A08B/E/K/IT | 通常routeは正しい製品面、diagnosticはdevelopment限定 | diagnostic画面しか成立しない |
 
 React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`まで8ラベルを順番どおり持つ。
