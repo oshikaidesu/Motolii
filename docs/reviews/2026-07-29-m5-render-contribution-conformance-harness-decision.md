@@ -21,7 +21,8 @@ First Vismの具体表現／製品／package／UIは後続実装粒へ分ける�
 1. 固定case入力と要求能力。
 2. whole-request admissionの全成功または構造化された型付き拒否。部分成功はない。
 3. admission前後のDocument／snapshot不変性。
-4. canonical RGBA結果、または拒否時の既存画素不変。
+4. 成功時のcanonical RGBA結果。拒否時はcanonical outputを要求せず、replacement contributionなし、
+   Document／他要求の既存画素不変を観測する。
 5. 同一入力反復の決定性。
 6. DRAFT／FINALが同じ評価関数を通り、差は`Quality`契約だけであること。
 7. 製品route成立後、Preview／Exportの両入口が同じ評価へ合流すること。
@@ -45,6 +46,10 @@ pass数、package identity、P3 Observation具体型は観測契約へ含めな�
 `motolii-testkit`から`motolii-render`への依存を追加しない。共通画像比較は
 `compare_rgba_labeled`、`assert_rgba_close_with_artifacts`、`tol::EXACT`／`GPU_RASTER`、
 `gpu_or_skip`を再利用し、thresholdやGPU skipをfixtureごとに複製しない。
+semantic oracle artifactだけを
+`crates/motolii-testkit/golden_policy/classification.tsv`へ登録し、
+API／fixture／runtime配線harnessと分離する。`scripts/check-golden-update-policy.sh`を通し、
+意味oracleを期待値更新で直さない。
 
 `P2D-RCS1`の二面反転、未使用baseline、group外比較、反復一致というfixture patternは再利用できるが、
 private setup、shader、resource配置、helper、型を公開harnessへ昇格またはcopyしない。
@@ -68,6 +73,8 @@ First Vismは将来選ばれた最初の表現に課すconformance役割だけ�
 
 - Host private crateへ依存せず、他providerと同じ公開seamを使う。
 - synthetic second fixture providerと同じcase corpus／runnerを使う。
+- second fixture providerは未知追加能力、矛盾要求、provenance差を意図的に作り、
+  adapterが入力構築以外でadmission／oracleへ影響できないことを負例で固定する。
 - harnessにFirst Vism ID、first-party provenance、専用feature、専用order／registry分岐を置かない。
 - 追加時に既存provider source、期待値、Document schemaを変更しない。
 - 対応能力だけ成功し、未対応能力をfake successにしない。
@@ -78,6 +85,7 @@ First Vismは将来選ばれた最初の表現に課すconformance役割だけ�
 - unknown要求を`Layer Order`、opaque、既存2Dへfallbackする。
 - capability集合の一部だけ受理して描画する。
 - rejection後にDocument、cache正本、既存pixelを変える。
+- rejectionにreplacement pixel／contributionを作り、成功扱いする。
 - First Vism ID／provenanceでHostが分岐する。
 - private RCS1型、shader、registry、raw callbackをharnessへ昇格する。
 - F2／F3を空case、opaque代用、smoke testで対応済みと称する。

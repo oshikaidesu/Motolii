@@ -21,8 +21,16 @@ package provenance、first-partyかどうか、名前、magic thresholdから推
 | class | 保証意味 | depth参加 |
 |---|---|---|
 | opaque | coverage全域が不透明 | 通常のdepth test／writeへ参加できる |
-| cutout | coverageが明示的に二値 | covered sampleだけが通常のdepth test／writeへ参加し、uncovered sampleはcolor／depthの双方へ寄与しない |
+| cutout | coverageが明示的に二値 | covered coverage elementだけが通常のdepth test／writeへ参加し、uncovered elementはcolor／depthの双方へ寄与しない |
 | soft alpha | fractional coverage／transmittanceを持ち、可視結果が順序依存 | opaque／cutout depth writerへ黙示格上げしない |
+
+この3 classは現時点の意味語彙であって閉じた最終enumではない。未知の追加classは既存classへ
+読み替えず型付き拒否する。
+
+coverage elementはrasterizerが一貫して評価する二値単位を意味し、pixel／fragment／MSAA sampleの
+どれかを本decisionで固定しない。uncovered elementは少なくともcanonical colorとshared depthへ
+寄与しない。stencil、ID、motion vector等の追加attachmentは、その能力を導入するdecisionで同じ
+不参加保証を個別に固定する。
 
 二値coverageをthreshold、analytic mask、alpha-to-coverage等のどの方式で生成するかは未決とする。
 実際の出力が宣言保証を満たせないcontributionはsoft alphaを要求するか、真実な複数contributionへ
@@ -39,6 +47,11 @@ transparent-intersection保証を選択policyと実行環境が提供する場�
 
 ## 4. typed failure意味
 
+本decisionでいう一要求は、**一つの意味seatが一回の評価に提出する一つの型付き要求**である。
+一要求は複数contributionを返せるがadmissionは全体でatomicとし、mixed alpha classの一部だけを
+受理しない。別seatの別要求を同じfailureへ巻き込むか、要求間をどう合成するかはHost ordering側の
+後続契約であり、本decisionでは決めない。
+
 failureは少なくとも次の意味を区別する。具体Rust名とpayload形は実装decisionへ残す。
 
 1. 選択policy／能力では要求alpha保証を提供できない。
@@ -46,7 +59,9 @@ failureは少なくとも次の意味を区別する。具体Rust名とpayload�
 3. conformanceで黙示promotion／fallbackが検出された。
 
 拒否は要求全体に対してatomicであり、要求したalpha classとpolicy文脈、fallback未適用を観測できる。
-拒否によってDocument、既存2D composition、既存画素を変更せず、代替policyを選ばない。
+拒否された要求からはreplacement contributionもcanonical outputも生成しない。Document、既存2D
+composition、他要求の既存画素を変更せず、代替policyを選ばない。UIが直前frameを保持するか、
+frame failureをどう表示するかはM3 presentation責務であり、RCT1のfallback pixelにしない。
 
 ## 5. F2／F3 oracle
 
@@ -62,6 +77,7 @@ failureは少なくとも次の意味を区別する。具体Rust名とpayload�
 - 二つのfractional surfaceで`A over B`と`B over A`が異なることを順序依存の意味oracleにする。
 - このfixtureは具体OIT方式や正解pixelを選ばない。
 - 非対応の共有depth要求は型付き拒否され、成功pixel、別policy、opaque／cutoutへfallbackしない。
+- 同一入力の拒否class／診断は反復して一致する。RCO1で対応をadmitする場合も結果は決定論的である。
 
 ## 6. 必須負例
 
@@ -71,6 +87,7 @@ failureは少なくとも次の意味を区別する。具体Rust名とpayload�
 - false binary保証をadmitし、描画後の見た目だけで失敗を発見する。
 - 非対応soft alphaを部分admission、`Layer Order`、別class／policyへfallbackする。
 - failureを非型付き文字列へ潰す、Document／既存画素を変える、代替policyを選ぶ。
+- 拒否要求の代替pixelをharnessが発明し、fallback成功として扱う。
 - First Vism専用alpha class、key、registry、経路を作る。
 
 ## 7. 非決定
