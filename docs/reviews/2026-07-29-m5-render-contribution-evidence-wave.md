@@ -252,15 +252,28 @@ Motoliiへは方式や内部型でなく、次のfixture候補へ翻訳する。
 
 §10の共通負債を解消した後継は次の5 grainとする。固定template自体は主担当Codexが所有し、leafは
 各fileの`転記欄`だけを変更する。RCA3、RCB3、RCC3三providerは同じbaseから並列dispatchできる。
-三providerの横断比較は全RCC3が完了した後の`P2D-RCC4`へ直列化し、ここでは未登録とする。
+三providerの横断比較はACCEPT済みprovider観察が揃った後の`P2D-RCC5`へ直列化し、ここでは未登録とする。
 
 | grain | 単一動詞 | read-only入力 | 変更許可 | 状態 |
 |---|---|---|---|---|
 | `P2D-RCA3` | 比較 | 本書§2〜§3、§5と元authority | `2026-07-29-m5-render-contribution-boundary-facts-v3.md`の転記欄だけ | 登録済み |
-| `P2D-RCB3` | 転記 | 本書§2〜§3、§6、Rerun三capsule、転移裁定 | `2026-07-29-m5-rerun-observation-transcription-v3.md`の転記欄だけ | 登録済み |
-| `P2D-RCC3-BEVY` | 転記 | 本書§7、Bevy capsule | `2026-07-29-m5-bevy-observation-transcription-v3.md`の転記欄だけ | 登録済み |
-| `P2D-RCC3-GODOT` | 転記 | 本書§7、Godot capsule | `2026-07-29-m5-godot-observation-transcription-v3.md`の転記欄だけ | 登録済み |
-| `P2D-RCC3-UNREAL` | 転記 | 本書§7、Unreal capsule | `2026-07-29-m5-unreal-observation-transcription-v3.md`の転記欄だけ | 登録済み |
+| `P2D-RCB3` | 転記 | 本書§2〜§3、§6、Rerun三capsule、転移裁定 | `2026-07-29-m5-rerun-observation-transcription-v3.md`の転記欄だけ | Grok `REJECT`、P0=0/P1=1。A6持込禁止の裁定理由欠落。差分不採用 |
+| `P2D-RCC3-BEVY` | 転記 | 本書§7、Bevy capsule | `2026-07-29-m5-bevy-observation-transcription-v3.md`の転記欄だけ | Grok `REJECT`、P0=0/P1=5。言い換えとcapsule外語彙。差分不採用 |
+| `P2D-RCC3-GODOT` | 転記 | 本書§7、Godot capsule | `2026-07-29-m5-godot-observation-transcription-v3.md`の転記欄だけ | Grok `ACCEPT`、P0/P1/P2=0。主担当再照合済み |
+| `P2D-RCC3-UNREAL` | 転記 | 本書§7、Unreal capsule | `2026-07-29-m5-unreal-observation-transcription-v3.md`の転記欄だけ | Opus `DESIGN_STOP`。capsule欠落時の表現未定義、差分なし |
+
+RCA3の検収を待たず、terminalとなったRCB3／RCC3-BEVY／RCC3-UNREALの後継を次の固定fragment
+配置grainへ再登録した。旧差分を入力にせず、主担当Codexが元capsule／裁定からfragmentを固定した。
+
+| grain | 単一動詞 | read-only入力 | 変更許可 | 状態 |
+|---|---|---|---|---|
+| `P2D-RCB4` | 配置 | 本書§2〜§3、§6、Rerun三capsule、転移裁定 | `2026-07-29-m5-rerun-observation-map-v4.md`の配置欄だけ | 登録済み |
+| `P2D-RCC4-BEVY` | 配置 | 本書§7、Bevy capsule | `2026-07-29-m5-bevy-observation-map-v4.md`の配置欄だけ | 登録済み |
+| `P2D-RCC4-UNREAL` | 配置 | 本書§7、Unreal capsule | `2026-07-29-m5-unreal-observation-map-v4.md`の配置欄だけ | 登録済み |
+
+配置欄は既存fragment IDだけを受け入れ、自由文、本文複製、言い換え、ID追加を拒否する。
+Unreal／Bevyのcapsule非記載項目には固定`NO` fragmentを置ける。Rerun A6は固定`R-A6-LIM`を
+必須とし、phase enum、phase名、sort keyを公開契約または閉じた能力集合へ転移しない裁定全文を保持する。
 
 ## 10. 再投入前の共通負債
 
@@ -281,7 +294,8 @@ Opusを再起動せずorder案を機械修正し、同じ一周のSpark／Grok�
    同一差分を再検収しない。別model fallbackを行わず、terminal後は新ID／新order／新証跡で登録する。
 
 上記1〜4は、固定field template、provider別file、runner `manifest`／terminal outcome／checkpoint再開として
-commit `3f384d6e`までに成立した。これを根拠に§8のRCA3/RCB3/RCC3三providerだけを登録する。
+commit `3f384d6e`までに成立した。初回RCA3/RCB3/RCC3三providerのterminal結果を受け、自由文転記の
+残余を固定fragment ID配置へさらに縮小した。
 
 今回の失敗はRender Contribution公開契約を決める根拠ではない。共通Host境界、Rerun転移裁定、
 六capsuleは有効なread-only基盤として維持する。

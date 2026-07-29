@@ -237,6 +237,9 @@
 | [2026-07-29-m5-bevy-observation-transcription-v3.md](2026-07-29-m5-bevy-observation-transcription-v3.md) | P2D-RCC3-BEVYのprovider別固定観察転記template |
 | [2026-07-29-m5-godot-observation-transcription-v3.md](2026-07-29-m5-godot-observation-transcription-v3.md) | P2D-RCC3-GODOTのprovider別固定観察転記template |
 | [2026-07-29-m5-unreal-observation-transcription-v3.md](2026-07-29-m5-unreal-observation-transcription-v3.md) | P2D-RCC3-UNREALのprovider別固定観察転記template |
+| [2026-07-29-m5-rerun-observation-map-v4.md](2026-07-29-m5-rerun-observation-map-v4.md) | P2D-RCB4の固定fragment ID配置template。A6裁定理由を固定する |
+| [2026-07-29-m5-bevy-observation-map-v4.md](2026-07-29-m5-bevy-observation-map-v4.md) | P2D-RCC4-BEVYの固定fragment ID配置template |
+| [2026-07-29-m5-unreal-observation-map-v4.md](2026-07-29-m5-unreal-observation-map-v4.md) | P2D-RCC4-UNREALの固定fragment ID配置template。非記載fragmentを持つ |
 | [2026-07-29-restartable-supervised-order-loop-decision.md](2026-07-29-restartable-supervised-order-loop-decision.md) | Codex-owned machine block、Opus施工本文、parent-owned outcome、terminal verdict、availability限定resumeを固定するGR-D4決定 |
 | [2026-07-20-m3-keymap-codec-contract.md](2026-07-20-m3-keymap-codec-contract.md) | U0d-2 keymap JSON codec契約 |
 | [2026-07-20-m3-u2a-1-command-adapter-contract.md](2026-07-20-m3-u2a-1-command-adapter-contract.md) | U2a-1 gesture command adapter契約 |

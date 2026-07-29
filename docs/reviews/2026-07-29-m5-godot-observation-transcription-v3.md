@@ -2,7 +2,7 @@
 
 作成日: 2026-07-29
 
-状態: **登録済み／P2D-RCC3-GODOT未実行**
+状態: **完了／P2D-RCC3-GODOT Grok ACCEPT（P0/P1/P2=0）**
 
 変更許可: 本fileの`転記欄`だけ
 
@@ -17,11 +17,11 @@
 
 | 観測項目 | capsuleの固定観察 | source anchor | 非証明 | Motoliiへ持込禁止 |
 |---|---|---|---|---|
-| phase admission / ordering | <!-- 転記欄 --> | <!-- 転記欄 --> | <!-- 転記欄 --> | <!-- 転記欄 --> |
-| depth / opaque / cutout / soft alpha | <!-- 転記欄 --> | <!-- 転記欄 --> | <!-- 転記欄 --> | <!-- 転記欄 --> |
-| transparent交差 / sorting / OIT追加位置 | <!-- 転記欄 --> | <!-- 転記欄 --> | <!-- 転記欄 --> | <!-- 転記欄 --> |
-| scene-color / refraction / resource lifetime | <!-- 転記欄 --> | <!-- 転記欄 --> | <!-- 転記欄 --> | <!-- 転記欄 --> |
-| capability不足 / unsupported / cyclic read | <!-- 転記欄 --> | <!-- 転記欄 --> | <!-- 転記欄 --> | <!-- 転記欄 --> |
+| phase admission / ordering | transparentはopaque後に描画され、object位置基準のback-to-front sortには重なり誤順序が残る。 | Godot 4.6／取得日2026-07-29／<https://docs.godotengine.org/en/4.6/tutorials/3d/3d_rendering_limitations.html>／<https://docs.godotengine.org/en/4.6/tutorials/shaders/shader_reference/spatial_shader.html> | Godot material mode、render priority、threshold、renderer別featureをMotolii要件にしない。 | FROZEN / DELETE-LATER / 製品import禁止 |
+| depth / opaque / cutout / soft alpha | Godot 4.6はOITを提供せず、alpha scissor、depth pre-pass、alpha hash等を用途別回避策とする。 | Godot 4.6／取得日2026-07-29／<https://docs.godotengine.org/en/4.6/tutorials/3d/3d_rendering_limitations.html>／<https://docs.godotengine.org/en/4.6/tutorials/shaders/shader_reference/spatial_shader.html> | Godot material mode、render priority、threshold、renderer別featureをMotolii要件にしない。 | FROZEN / DELETE-LATER / 製品import禁止 |
+| transparent交差 / sorting / OIT追加位置 | transparentはopaque後に描画され、object位置基準のback-to-front sortには重なり誤順序が残る。 Godot 4.6はOITを提供せず、alpha scissor、depth pre-pass、alpha hash等を用途別回避策とする。 `ALPHA`を書けばtransparent pipelineへ入り、sorting問題が生じ得る。 | Godot 4.6／取得日2026-07-29／<https://docs.godotengine.org/en/4.6/tutorials/3d/3d_rendering_limitations.html>／<https://docs.godotengine.org/en/4.6/tutorials/shaders/shader_reference/spatial_shader.html> | Godot material mode、render priority、threshold、renderer別featureをMotolii要件にしない。 | FROZEN / DELETE-LATER / 製品import禁止 |
+| scene-color / refraction / resource lifetime | transparent materialはscreen/depth textureへ現れず、screen-space reflection／refractionへ制限が出る。 | Godot 4.6／取得日2026-07-29／<https://docs.godotengine.org/en/4.6/tutorials/3d/3d_rendering_limitations.html>／<https://docs.godotengine.org/en/4.6/tutorials/shaders/shader_reference/spatial_shader.html> | Godot material mode、render priority、threshold、renderer別featureをMotolii要件にしない。 | FROZEN / DELETE-LATER / 製品import禁止 |
+| capability不足 / unsupported / cyclic read | 該当する固定観察なし。 | Godot 4.6／取得日2026-07-29／<https://docs.godotengine.org/en/4.6/tutorials/3d/3d_rendering_limitations.html>／<https://docs.godotengine.org/en/4.6/tutorials/shaders/shader_reference/spatial_shader.html> | Godot material mode、render priority、threshold、renderer別featureをMotolii要件にしない。 | FROZEN / DELETE-LATER / 製品import禁止 |
 
 ## 非目標
 
