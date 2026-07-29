@@ -20,9 +20,10 @@
 2. [performance-model.md](performance-model.md) — 「なぜAEより軽くできるか」の物理(メモリ帯域モデル)、品質モード(Draft/Final)、並列性、40レイヤー目標の試算。**容量・VRAM上限への疑念は[memory-model.md](memory-model.md)(疑念台帳)へ**
 3. [pitfalls-and-roadmap.md](pitfalls-and-roadmap.md) — **最重要・最大**。落とし穴カタログ(A〜H、先行プロジェクト死因分析+LLM開発規律込み)とロードマップ(M0〜M5)、凍結ゲート
 4. 実装に着手する時: [implementation-ledger.md](implementation-ledger.md)(NOW/NEXT/WAIT)→ [specs/README.md](specs/README.md)(プロセスとステータス表)→ 対象`specs/M*.md`(タスク表と**末尾の「実装ガード」節**の両方を読む)
-5. UIを表示・起動・比較する時: [ui-artifact-terminology.md](ui-artifact-terminology.md)(要求名→成果物種別→実装状態。未実装のPreviewをMock/baseline/spikeで代替しない)→ [ui-reference-map.md](ui-reference-map.md)(対象surfaceの正本と実体)
-6. プラグインを書く/量産させる時: [plugin-authoring.md](plugin-authoring.md)(LLM/人間共通の契約・禁止事項・型紙)
-7. 依存・参考リポジトリを調べる時: [references.md](references.md)(ライセンス区分つき。GPL系はコードを読むことすら禁止)
+5. M5 Render Contributionへ着手する時: [設計締結地図のStart Here](reviews/2026-07-29-m5-render-contribution-design-closure-map.md#0-start-here)→M5仕様→implementation ledger。停止済み証拠Waveを現行taskへ戻さない
+6. UIを表示・起動・比較する時: [ui-artifact-terminology.md](ui-artifact-terminology.md)(要求名→成果物種別→実装状態。未実装のPreviewをMock/baseline/spikeで代替しない)→ [ui-reference-map.md](ui-reference-map.md)(対象surfaceの正本と実体)
+7. プラグインを書く/量産させる時: [plugin-authoring.md](plugin-authoring.md)(LLM/人間共通の契約・禁止事項・型紙)
+8. 依存・参考リポジトリを調べる時: [references.md](references.md)(ライセンス区分つき。GPL系はコードを読むことすら禁止)
 
 ## ファイルマップ
 
@@ -73,8 +74,9 @@
 | [ui-reference-map.md](ui-reference-map.md) | M3 UI参照地図: 規範/prototype/採否台帳/移行互換/証拠/履歴の参照順位と、React移行の実状態・既知の未統一 | **運用正本**(2026-07-19。`codex/m3-mock-components`側から回収) |
 | [ui-concept.md](ui-concept.md) | UIコンセプト: 表現をすぐ画にする制作面、最初の結果、五本柱 | **設計方針**(2026-07-22に音楽メタファーを撤回。契約・M3ステータス変更なし) |
 | [implementation-ledger.md](implementation-ledger.md) | 現場向け実装進行台帳: M0〜M5のNOW/NEXT/WAIT、依存、Issue昇格順 | **日々の発注入口**(意味・完了条件は各specが正本。M3は段階発注可) |
+| [reviews/2026-07-29-m5-render-contribution-design-closure-map.md](reviews/2026-07-29-m5-render-contribution-design-closure-map.md) | M5 Render Contributionの締結済み意味、残るpublic／GPU／budget gate、履歴証拠の失効順位を一つにするStart Here | **M5 P2D運用入口**(Fable最終ACCEPT P0/P1/P2=0。実装完了を意味しない) |
 | [backlog.md](backlog.md) | イシュー候補台帳(現在地サマリ+横断/新規ギャップ/v2バックログ) | 現行 |
-| [specs/](specs/README.md) | マイルストーン仕様書(エージェントへの発注書)。確定/ドラフトのステータスはspecs/README.md参照 | M0/M1確定、M2基盤再締結済み(D5は別レーン)、M3はG0-9中でtoolkit非依存とReact asset直接移管R0〜R6だけ段階実装可、M4/M5ドラフト |
+| [specs/](specs/README.md) | マイルストーン仕様書(エージェントへの発注書)。確定/ドラフトのステータスはspecs/README.md参照 | M0/M1確定、M2基盤再締結済み(D5は別レーン)、M3はG0-9中、M4/M5ドラフト。ただしM5 P2Dの意味設計は締結済みで、残gateは上記Start Hereを正とする |
 | [reviews/](reviews/README.md) | レビュー規律+**全review文書の索引**(この表は現役参照の抜粋。全量はreviews/README.md側が正本で、`scripts/check-docs.sh`が抜けを検証) | 運用正本 |
 | [spikes/](spikes/) | スパイク結果報告(S1: Slint統合、S2: デコード、[S3(R8): Vello採否](spikes/s3-vello.md)、[G0-9: UI runtime部分比較](spikes/g0-9-ui-runtime.md)、[wgpu 29 surface host](spikes/g0-9-surface-host.md)、[native Timeline外観first pass](spikes/g0-9-timeline-visual-parity.md)、[native Easing popup](spikes/g0-9-native-easing-popup.md)、[native Graph View](spikes/g0-9-native-graph-view.md)、[native Depth Rail](spikes/g0-9-native-depth-rail.md)、[multi-Surface window](spikes/g0-10-multi-surface-window.md)) | 個別文書の状態に従う |
 | [reviews/2026-07-12-m2-permanence-prevention.md](reviews/2026-07-12-m2-permanence-prevention.md) | M2恒久焼き込みの**予防手順**(やること5手)。運用正本 | 現行 |

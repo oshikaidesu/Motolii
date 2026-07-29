@@ -93,6 +93,7 @@ provider identityをMotoliiの公開契約へ持ち込まずに比較できた�
 | ticket完了 | ticket IDのdocs横断検索、親decision・spec・ledger・索引の`DO/DONE/WAIT`整合 |
 | allowlist | clean baseからの変更path閉集合、新規file数 |
 | authority | manifest fingerprintと実file hash |
+| M5 P2D動線 | 締結地図への入口4文書+AGENTS到達、停止済み7 templateの`再発注禁止`とstale状態語不在 |
 
 `check-docs.sh`は索引、link、状態語彙を検査したが、固定本文の一文欠落や複数文書間の
 `DO/DONE`矛盾までは検出しなかった。`P2D-RCD1`では主担当がmarker間payloadを抽出して4,430 bytesの
@@ -100,6 +101,8 @@ provider identityをMotoliiの公開契約へ持ち込まずに比較できた�
 
 このbyte比較と横断状態照合は本Waveで有効性を確認した**標準化候補**であり、現時点で
 `delegate-cursor-supervised.sh`や`check-docs.sh`へ一般実装済みとは数えない。
+2026-07-29に`check-docs.sh`へ追加したのは上表のM5 P2D動線だけであり、
+ticket状態の横断推論、byte比較、一般的なworkflow gateを実装済みとは数えない。
 
 ## 7. 検収者と主担当の役割
 

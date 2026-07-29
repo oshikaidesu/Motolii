@@ -2,7 +2,7 @@
 
 作成日: 2026-07-29
 
-状態: **登録済み／P2D-RCC3-BEVY未実行**
+状態: **停止**（`P2D-RCC3-BEVY` Grok REJECT。後継`P2D-RCC4B-BEVY`を`P2D-RCC5`へ統合済み。再発注禁止）
 
 変更許可: 本fileの`転記欄`だけ
 

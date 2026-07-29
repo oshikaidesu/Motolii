@@ -7,6 +7,30 @@
 [Fable 5最終反対側レビュー](2026-07-29-m5-render-contribution-fable-final-review.md)は、
 初回REVISEの依存同期漏れを訂正後、`ACCEPT`、P0=0／P1=0／P2=0となった。
 
+## 0. Start Here
+
+M5 Render Contributionへ着手する時は、次の順だけを使う。
+
+1. 本地図§1〜§2と§8で、締結済み意味、残gate、「完了」の語彙を分離する。
+2. [M5仕様](../specs/M5-3d-and-post.md)で意味と完了条件を、
+   [implementation ledger](../implementation-ledger.md)で現在状態と発注順を確認する。
+3. 個別の意味が必要な時だけ、本地図§2から各decisionへ入る。
+4. [証拠Wave](2026-07-29-m5-render-contribution-evidence-wave.md)とcapsule／map／停止済みtemplateは、
+   決定理由を監査する履歴としてだけ読む。現行要件、状態、再発注の根拠にしない。
+
+M5内の権限順位は、repo共通の
+[台帳の責任分離](../implementation-ledger.md#この台帳の責任)を具体化して次の順とする。
+
+1. M5仕様と各decision: 意味、公開境界、完了条件。
+2. 本締結地図: decision間のgate構造と完了語彙。
+3. implementation ledger: 現在状態、発注順、後継粒。
+4. Fable最終レビューと並列Waveの教訓: 反対側審判／観察。authorityではない。
+5. evidence wave、capsule、map、停止済みtemplate: 履歴証拠。失効したnavigationや状態を復活させない。
+
+`P2D-RCA`／`RCB`／`RCC`から`RCA8`／`RCB6`／`RCC5`までの証拠粒は
+`P2D-RCI`へ統合済みであり、同じID、後継ID、別名で再発注しない。既決意味を再度開くのは、
+本地図§9のSTOPに該当する新しいコード反例、仕様衝突、またはscope改訂が生じた場合だけとする。
+
 ## 1. 結論
 
 Render Contributionの**意味設計**は閉じた。残る未決は、思考だけで埋める仕様穴ではなく、
@@ -19,15 +43,15 @@ method／public-boundary decisionを区別する。
 
 | ID | 閉じたもの |
 |---|---|
-| P2D-RCI | requirement／contribution分離、Host owner、追加的能力 |
-| P2D-RCS1 | opaque private feasibility。公開根拠にはしない |
-| P2D-RCD1 | 一／一／many、whole-request admission、trust前段 |
-| P2D-RCD2 | Group policy semantic key、Item participant、migration／Undo設計 |
-| P2D-RCF1 | provider中立harness、F1〜F6分担、First Vism無特権 |
-| P2D-RCT1 | opaque／cutout／soft-alpha意味とtyped failure |
-| P2D-RCO1 | v1 OIT方式非採択、shared-depth soft alpha typed unsupported |
-| P2D-RCFP1S | linear-light／premultiplied scene-color意味 |
-| P2D-RCR1 | immutable upstream snapshot、K0 RoI、domain外、failure |
+| [P2D-RCI](2026-07-29-m5-render-contribution-integration-decision.md) | requirement／contribution分離、Host owner、追加的能力 |
+| [P2D-RCS1](2026-07-29-m5-render-contribution-integration-decision.md#6-private-seamの実機証拠と次の解禁) | opaque private feasibility。公開根拠にはしない |
+| [P2D-RCD1](2026-07-29-m5-render-contribution-typed-seam-decision.md) | 一／一／many、whole-request admission、trust前段 |
+| [P2D-RCD2](2026-07-29-m5-occlusion-policy-schema-decision.md) | Group policy semantic key、Item participant、migration／Undo設計 |
+| [P2D-RCF1](2026-07-29-m5-render-contribution-conformance-harness-decision.md) | provider中立harness、F1〜F6分担、First Vism無特権 |
+| [P2D-RCT1](2026-07-29-m5-render-contribution-alpha-semantics-decision.md) | opaque／cutout／soft-alpha意味とtyped failure |
+| [P2D-RCO1](2026-07-29-m5-soft-alpha-oit-disposition.md) | v1 OIT方式非採択、shared-depth soft alpha typed unsupported |
+| [P2D-RCFP1S](2026-07-29-m5-scene-color-semantics-decision.md) | linear-light／premultiplied scene-color意味 |
+| [P2D-RCR1](2026-07-29-m5-scene-color-input-contract-decision.md) | immutable upstream snapshot、K0 RoI、domain外、failure |
 
 ## 3. public seam gate
 

@@ -31,6 +31,10 @@
 | `ACTIVE` | 実装または修復が進行中。重複着手しない |
 | `DONE` | main到達済み |
 | `LATER` | v1.xまたはv2へ明示延期 |
+| `STOPPED` | 終了した不採用／差分なし粒。同一IDを再発注せず、記載された後継または履歴文書を見る |
+
+`DO / HUMAN`、`DO / SPEC`、`DO / CHECK-PATH`、`WAIT / HARDWARE`、`DONE / DEFERRED`は、
+左側の状態に右側の審判種別／限定子を付けた複合表記であり、新しい状態を定義しない。
 
 ## 現在地
 
@@ -41,7 +45,7 @@
 | M2 | **基盤再締結済み / narrow follow-up pending** | D1lのDocument／lifecycle意味、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。2026-07-23監査で`new_v1` enforcement driftをGAP-23、known Edit apply failureのsnapshot fallback driftをGAP-24、semantic oracle gate自己保護をGAP-25として狭く再開。Param Pipeline／Element Domain／Constraint GraphはM2-GAP-15の解凍gate前は未実装のままが正しい。D5は骨格到達・統合審判pendingで、AG-2 mixer coreは成立したが製品`PlaybackSession`のmixed `AudioProgram`接続はGAP-28。D1n external revisionも未実装で、cloud-safe公約不可 |
 | M3 | **VS-1 Rectangle配置とUndo / R2A再入場decision** | React chrome + native Stage/Timeline + headless interaction、1 top-level wgpu Surface + 2 native viewport + opaque child WebView islandsを正本化。U0e-2R/U0e-2、GR-D1〜R3、固定MacのG0-9L platform prerequisite evidence、固定SHA`56c318ed`の6面R0 source inventory、CU-0A04/R1 Browser ownershipは完了済み。Easing triggerの独立React source不在を受けR2を05A/05Bへ分割したが、Opus prepareで固定／抽出後hash、status、単一owner経路の未決を検出した。現在は`CU-0A05A / R2A`のdocs decisionだけ進め、抽出実装はdecision merge後に再発注する。R2とMotolii Studio Previewは未実装。visible summary chromeは未決で実装しない。G0-6HはU0e-3を止める並行人間審判、G0-9DはDistribution Ready用hardware gate。eguiへ新規製品面を実装せず、plugin UI公開契約はG0-3 / GAP-13まで停止する |
 | M4 | **契約spike可** | [歴史20版再照合](reviews/2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md)と[memory model 6版再照合](reviews/2026-07-23-historical-memory-model-lineage-recovery.md)後もK0〜K8は未実装。K0でRoD/RoIのruntime契約を凍結し、その後K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む。現行`PipelineCache`／dynamic target pool／wgpu budget thresholdをResourceLedger、copy-out、disk store完成と数えない。K4の恒久`source_id`／再リンク／package意味はGAP-3／7の再調査前に焼かないが、このgateをK0や独立K1へ広げない。K6のVello／usvg製品統合は未実装で、R8成立性だけを完成証拠にしない |
-| M5 | **Render Contribution意味設計締結 / public・method evidence pending** | P0Iのidentity意味は別lane。P2DはRCI／RCD1／RCD2／RCF1／RCT1／RCO1／RCFP1S／RCR1をdecision済み。v1 OIT方式は非採択。残る設計gateはP3後のRCD1A、GPU evidence後のRCFP1F／RCP1、M4-K1 ownerとRCFP1F／RCP1合流後のRCBUD1。実装はRCD2I、RCD1I、RCF1I各枝へ分離し、P3 Observation、public API、resource methodを先取りしない。P6のfontique／harfrust／Vello text stackは未実装で、K6とpremul adapterを重複実装しない |
+| M5 | **Render Contribution意味設計締結 / public・method evidence pending** | [M5 Render Contribution設計締結地図](reviews/2026-07-29-m5-render-contribution-design-closure-map.md)を入口とする。P0Iのidentity意味は別lane。P2DはRCI／RCD1／RCD2／RCF1／RCT1／RCO1／RCFP1S／RCR1をdecision済み。v1 OIT方式は非採択。残る設計gateはP3後のRCD1A、GPU evidence後のRCFP1F／RCP1、M4-K1 ownerとRCFP1F／RCP1合流後のRCBUD1。実装はRCD2I、RCD1I、RCF1I各枝へ分離し、P3 Observation、public API、resource methodを先取りしない。P6のfontique／harfrust／Vello text stackは未実装で、K6とpremul adapterを重複実装しない |
 
 [M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3はU0a入場済みで、[UI runtime責任境界](ui-runtime-architecture.md)と[G0-9段階化](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)も決定済み。G0-9Lは固定Macのplatform prerequisite evidenceだけを限定確定したが、W0b、H1b、Motolii Studio Preview、window結合を解禁しない。G0-6Hは独立し、U0e-3とW0bの製品前提を止め続ける。G0-9DまでDistribution Readyを名乗らない。plugin UI公開契約はG0-9合格と分離し、G0-3 / GAP-13の決定まで発注しない。headlessなTimeline/Stage projectionもSelected U seriesの前枝番がmainへ到達した時だけ次の1枝番を発注する。
 
@@ -121,31 +125,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | DELEGATION-GUARD | GR-D4 | supervised runner / restartable order loop | `DONE` | — | GR-D2、M5 RCA2/B2/C2停止証跡、Opus/Fable read-only監査 | GR-D3を従来scopeのまま継続 |
 | SPATIAL-CONTRACT | K0 | M4 / contract spike | `WAIT` | [#167](https://github.com/oshikaidesu/Motolii/issues/167) | M2-D3、凍結ゲート解凍手続き、GR-D3 | fresh worktree/orderで再発注し、K1系を粒ごとに再判定 |
 | IDENTITY-CONTRACT | P0I | M5 / identity decision | `DECIDE` | [#170](https://github.com/oshikaidesu/Motolii/issues/170) | 凍結ゲート、2026-07-15決定。Text／Prototype側の未決は留保 | 意味decision後にfixture粒を分割して再判定 |
-| RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA | M5 / P2D / authority draft | `STOPPED` | — | 旧一括grainはGrok REJECT、差分不採用。後継P2D-RCA2登録済み | 旧IDを発注しない |
-| RENDER-CONTRIBUTION-RERUN | P2D-RCB | M5 / P2D / Rerun evidence | `STOPPED` | — | 旧一括grainはSpark context枯渇、差分なし。後継P2D-RCB2登録済み | 旧IDを発注しない |
-| RENDER-CONTRIBUTION-ENGINE | P2D-RCC | M5 / P2D / primary-source evidence | `STOPPED` | — | 旧一括grainはSpark context枯渇、差分なし。後継P2D-RCC2登録済み | 旧IDを発注しない |
-| RENDER-CONTRIBUTION-EVIDENCE | P2D-RCE0 | M5 / P2D / fixed evidence acquisition | `DONE` | — | Rerun固定6 asset、Bevy 0.19、Godot 4.6、Unreal 5.8を6 capsuleへ固定。Rerun A1〜A5=`PATTERN`、A6=`REJECT` | 新しい比較／転記／fixture翻訳grainだけがread-only入力にする |
-| RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA2 | M5 / P2D / boundary comparison | `STOPPED` | — | Spark成功、Grok有効markerなし。差分不採用 | 後継P2D-RCA3登録済み |
-| RENDER-CONTRIBUTION-RERUN | P2D-RCB2 | M5 / P2D / adjudicated evidence transcription | `STOPPED` | — | Grok REJECT P0=1/P1=1。差分不採用 | 後継P2D-RCB3登録済み |
-| RENDER-CONTRIBUTION-ENGINE | P2D-RCC2 | M5 / P2D / fixture evidence comparison | `STOPPED` | — | Grok REJECT P0=0/P1=5/P2=2。差分不採用 | 後継P2D-RCC3三provider登録済み |
-| RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA3 | M5 / P2D / fixed boundary comparison | `STOPPED` | — | Grok REJECT P0=2/P1=1、差分不採用 | 後継P2D-RCA4 |
-| RENDER-CONTRIBUTION-RERUN | P2D-RCB3 | M5 / P2D / fixed Rerun transcription | `STOPPED` | — | Grok REJECT P0=0/P1=1、差分不採用 | 後継P2D-RCB4 |
-| RENDER-CONTRIBUTION-ENGINE | P2D-RCC3-BEVY | M5 / P2D / Bevy transcription | `STOPPED` | — | Grok REJECT P0=0/P1=5、差分不採用 | 後継P2D-RCC4-BEVY |
-| RENDER-CONTRIBUTION-ENGINE | P2D-RCC3-GODOT | M5 / P2D / Godot transcription | `DONE` | — | Grok ACCEPT P0/P1/P2=0、主担当再照合 | RCC5入力 |
-| RENDER-CONTRIBUTION-ENGINE | P2D-RCC3-UNREAL | M5 / P2D / Unreal transcription | `STOPPED` | — | Opus DESIGN_STOP、差分なし | 後継P2D-RCC4-UNREAL |
-| RENDER-CONTRIBUTION-RERUN | P2D-RCB4 | M5 / P2D / fixed Rerun fragment map | `STOPPED` | — | Opus command-oracle不備3回、Spark未起動 | 後継P2D-RCB5 |
-| RENDER-CONTRIBUTION-ENGINE | P2D-RCC4-BEVY | M5 / P2D / Bevy fragment map | `STOPPED` | — | Grok ACCEPT後、現行固定配置と2 cell不一致。差分不採用 | 後継P2D-RCC4B-BEVY |
-| RENDER-CONTRIBUTION-ENGINE | P2D-RCC4-UNREAL | M5 / P2D / Unreal fragment map | `STOPPED` | — | Opus command-oracle不備6回、Spark未起動 | 後継P2D-RCC4B-UNREAL |
-| RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA4 | M5 / P2D / boundary fragment map | `STOPPED` | — | Opus command-oracle不備4回、Spark未起動 | 後継P2D-RCA5 |
-| RENDER-CONTRIBUTION-ENGINE | P2D-RCC4B-BEVY | M5 / P2D / fixed Bevy fragment map | `DONE` | — | Grok ACCEPT P0/P1/P2=0、主担当再照合 | RCC5入力 |
-| RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA5 | M5 / P2D / fixed boundary map | `STOPPED` | — | command machine block前、Opus不備3回、Spark未起動 | 後継P2D-RCA6 |
-| RENDER-CONTRIBUTION-RERUN | P2D-RCB5 | M5 / P2D / fixed Rerun map | `STOPPED` | — | Grok REJECT P0=1、A1行二重挿入、差分不採用 | 後継P2D-RCB6 |
-| RENDER-CONTRIBUTION-ENGINE | P2D-RCC4B-UNREAL | M5 / P2D / fixed Unreal map | `DONE` | — | Grok ACCEPT P0/P1/P2=0、主担当再照合 | RCC5入力 |
-| RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA6 | M5 / P2D / machine-command boundary map | `STOPPED` | — | Opus本文のrunner所有操作列挙でORDER_INVALID、Spark未起動 | 後継P2D-RCA7 |
-| RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA7 | M5 / P2D / fixed boundary map | `STOPPED` | — | Opus 3稿が形式収束せずORDER_INVALID、Spark未起動 | 後継P2D-RCA8 |
-| RENDER-CONTRIBUTION-RERUN | P2D-RCB6 | M5 / P2D / fixed Rerun map | `DONE` | — | Grok ACCEPT P0/P1/P2=0、主担当再照合 | P2D-RCI入力 |
-| RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA8 | M5 / P2D / fixed boundary map | `DONE` | — | Grok ACCEPT P0/P1/P2=0、主担当再照合 | P2D-RCI入力 |
-| RENDER-CONTRIBUTION-ENGINE | P2D-RCC5 | M5 / P2D / fixture comparison | `DONE` | — | Grok ACCEPT P0/P1/P2=0、主担当再照合 | P2D-RCI入力 |
+| RENDER-CONTRIBUTION-EVIDENCE-WAVE | P2D-RCA〜P2D-RCC5 | M5 / P2D / terminal evidence history | `DONE` | — | [証拠Wave §8](reviews/2026-07-29-m5-render-contribution-evidence-wave.md#8-後続統合)にSTOPPED／DONE全粒、後継、検収結果を保存。RCA8／RCB6／RCC5をRCIへ入力済み | 旧ID、後継ID、別名で再発注しない。[締結地図](reviews/2026-07-29-m5-render-contribution-design-closure-map.md)から現行contract粒へ入る |
 | RENDER-CONTRIBUTION-INTEGRATION | P2D-RCI | M5 / P2D / semantic integration decision | `DONE` | — | 主担当Codex決定、Fable read-only反対側監査 | private RCS1だけ解禁 |
 | RENDER-CONTRIBUTION-SPIKE | P2D-RCS1 | M5 / P2D / private opaque Group Depth | `DONE` | — | Grok ACCEPT P0/P1=0、runner固定3 command exit 0、主担当再照合 | 実depth F1/F6、group外pixel不変、公開API／Document／serde変更0 |
 | RENDER-CONTRIBUTION-CONTRACT | P2D-RCD1 | M5 / P2D / typed seam decision | `DONE` | — | [typed seam decision](reviews/2026-07-29-m5-render-contribution-typed-seam-decision.md) | RCD2／RCF1／RCT1／RCO1／RCFP1S／RCR1 DONE。残るRCFP1F／RCP1／RCBUD1はWAIT |

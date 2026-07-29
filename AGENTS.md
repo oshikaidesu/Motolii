@@ -76,13 +76,15 @@ Rerunを一度でも根拠・再利用箇所・変更案に含める発注書は
 ## 最初に読む
 
 1. [docs/README.md](docs/README.md) — プロジェクト全体像・ドキュメントの読む順序・用語
-2. 着手するフェーズの仕様書([docs/specs/](docs/specs/README.md)): タスク表(完了条件・依存つき)と、**末尾の「実装ガード」節**(先行ツールの失敗・ユーザー不満をタスクIDに紐付けた注意リスト。完了条件を追加している場合がある)
-3. プラグインを書く/量産する時: [docs/plugin-authoring.md](docs/plugin-authoring.md)(種別・NodeDesc必須欄・禁止事項・型紙)
-4. M2 Document/スキーマ/ジャーナルに触る時: **先に**[docs/reviews/2026-07-12-m2-permanence-prevention.md](docs/reviews/2026-07-12-m2-permanence-prevention.md)(予防5手)。背景の先人調査は[rework-prior-art](docs/reviews/2026-07-12-rework-prior-art.md)
-5. M3製品実装に触る時: **先に**[docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md](docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md)を読み、ステータスが発効中なら実装を止める。調査・fixtureも公開APIや永続形式へ焼かない
-6. M3 UI/入力/タイムライン/プラグインパネルに触る時: **先に**[docs/reviews/2026-07-14-m3-ui-boundary-prevention.md](docs/reviews/2026-07-14-m3-ui-boundary-prevention.md)(UI境界の規律8本)
-7. M3の外観・timeline・panelに触る時、またはUI実行物を表示・起動・比較する時: **最初に**[UI成果物・実装状態の用語](docs/ui-artifact-terminology.md)で要求名を成果物へ分類し、次に[M3 UI参照地図](docs/ui-reference-map.md)、[docs/ui-visual-language.md](docs/ui-visual-language.md)、[React製品資産の直接移管契約](docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)を読む。`Motolii Studio Preview`が未実装なら、Mock、Native Shell Baseline、個別spike、egui比較baselineを代替起動せず、未実装と報告する。別成果物を見せる時はユーザーがその固有名を指定した場合だけにする。Reactモックの実体と`README.md`は固定commit `56c318edcddab7cf95d263cc2f7dd2b4e6791134`で読み、main側にまだ無い時は`docs/mocks/`を代替の現行実装として変更せず、React側の再結合または対象worktreeへの移動を先に行う。`docs/mocks/`は**ARCHIVED・新規変更禁止**。通常入場と`#catalog`はReact候補だけ、legacyは`#archive/*`とparity testだけから参照する。新しいUI判断、操作、goldenをHTMLへ入れようとした時点、またはReact source assetを縮約再実装しようとした時点でSTOPする。モックの具体色値や未決機能をDocument/公開契約へ焼かない
-8. Rerunのsource、crate、画面、実装patternを調査・発注・実装へ使う時: **先に**[Rerun source asset inventory](docs/reviews/2026-07-20-rerun-source-asset-inventory.md)と[Rerun学習・転移計画](docs/reviews/2026-07-20-rerun-learning-transfer-plan.md)、特に後者§4/§8/§9を読む。Rerun起点で発注書を書かない
+2. [決定逆引き台帳](docs/decision-index.md)を主題キーワードで引き、既決を未決として作り直さない
+3. 着手するフェーズの仕様書([docs/specs/](docs/specs/README.md)): タスク表(完了条件・依存つき)と、**末尾の「実装ガード」節**(先行ツールの失敗・ユーザー不満をタスクIDに紐付けた注意リスト。完了条件を追加している場合がある)
+4. プラグインを書く/量産する時: [docs/plugin-authoring.md](docs/plugin-authoring.md)(種別・NodeDesc必須欄・禁止事項・型紙)
+5. M2 Document/スキーマ/ジャーナルに触る時: **先に**[docs/reviews/2026-07-12-m2-permanence-prevention.md](docs/reviews/2026-07-12-m2-permanence-prevention.md)(予防5手)。背景の先人調査は[rework-prior-art](docs/reviews/2026-07-12-rework-prior-art.md)
+6. M3製品実装に触る時: **先に**[docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md](docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md)を読み、ステータスが発効中なら実装を止める。調査・fixtureも公開APIや永続形式へ焼かない
+7. M3 UI/入力/タイムライン/プラグインパネルに触る時: **先に**[docs/reviews/2026-07-14-m3-ui-boundary-prevention.md](docs/reviews/2026-07-14-m3-ui-boundary-prevention.md)(UI境界の規律8本)
+8. M3の外観・timeline・panelに触る時、またはUI実行物を表示・起動・比較する時: **最初に**[UI成果物・実装状態の用語](docs/ui-artifact-terminology.md)で要求名を成果物へ分類し、次に[M3 UI参照地図](docs/ui-reference-map.md)、[docs/ui-visual-language.md](docs/ui-visual-language.md)、[React製品資産の直接移管契約](docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)を読む。`Motolii Studio Preview`が未実装なら、Mock、Native Shell Baseline、個別spike、egui比較baselineを代替起動せず、未実装と報告する。別成果物を見せる時はユーザーがその固有名を指定した場合だけにする。Reactモックの実体と`README.md`は固定commit `56c318edcddab7cf95d263cc2f7dd2b4e6791134`で読み、main側にまだ無い時は`docs/mocks/`を代替の現行実装として変更せず、React側の再結合または対象worktreeへの移動を先に行う。`docs/mocks/`は**ARCHIVED・新規変更禁止**。通常入場と`#catalog`はReact候補だけ、legacyは`#archive/*`とparity testだけから参照する。新しいUI判断、操作、goldenをHTMLへ入れようとした時点、またはReact source assetを縮約再実装しようとした時点でSTOPする。モックの具体色値や未決機能をDocument/公開契約へ焼かない
+9. Rerunのsource、crate、画面、実装patternを調査・発注・実装へ使う時: **先に**[Rerun source asset inventory](docs/reviews/2026-07-20-rerun-source-asset-inventory.md)と[Rerun学習・転移計画](docs/reviews/2026-07-20-rerun-learning-transfer-plan.md)、特に後者§4/§8/§9を読む。Rerun起点で発注書を書かない
+10. M5 `P2D`／Render Contributionに触る時: **先に**[M5 Render Contribution設計締結地図のStart Here](docs/reviews/2026-07-29-m5-render-contribution-design-closure-map.md#0-start-here)を読み、停止済み証拠Waveを現行taskへ戻さない
 
 ## 絶対規律(破ると設計の根拠が崩れる。レビュー最重視項目)
 

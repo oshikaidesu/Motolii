@@ -120,6 +120,56 @@ sys.exit(1 if fail else 0)
 PY
 [ $? -ne 0 ] && FAIL=1
 
+# 6. M5 Render Contributionの入口と停止済み証拠templateが再発注不能なこと
+python3 - "$ROOT" <<'PY'
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+route_name = "2026-07-29-m5-render-contribution-design-closure-map.md"
+route = root / "docs/reviews" / route_name
+entry_files = (
+    root / "AGENTS.md",
+    root / "docs/README.md",
+    root / "docs/specs/README.md",
+    root / "docs/implementation-ledger.md",
+    root / "docs/specs/M5-3d-and-post.md",
+)
+retired_templates = (
+    "2026-07-29-m5-render-contribution-contract-draft.md",
+    "2026-07-29-m5-rerun-render-contribution-evidence.md",
+    "2026-07-29-m5-render-phase-primary-source-evidence.md",
+    "2026-07-29-m5-render-contribution-boundary-facts-v3.md",
+    "2026-07-29-m5-rerun-observation-transcription-v3.md",
+    "2026-07-29-m5-bevy-observation-transcription-v3.md",
+    "2026-07-29-m5-unreal-observation-transcription-v3.md",
+)
+fail = False
+
+def require(condition, message):
+    global fail
+    if not condition:
+        print(f"NG: {message}")
+        fail = True
+
+route_text = route.read_text(encoding="utf-8")
+require("## 0. Start Here" in route_text, "M5 Render Contribution締結地図にStart Hereがない")
+
+for path in entry_files:
+    text = path.read_text(encoding="utf-8")
+    require(route_name in text, f"{path.relative_to(root)} からM5締結地図へ到達できない")
+
+for name in retired_templates:
+    path = root / "docs/reviews" / name
+    text = path.read_text(encoding="utf-8")
+    require("再発注禁止" in text, f"停止済みM5証拠templateに再発注禁止がない: {name}")
+    require("状態: **比較中**" not in text, f"停止済みM5証拠templateが比較中のまま: {name}")
+    require("未実行" not in text, f"実行済みM5証拠templateが未実行のまま: {name}")
+
+sys.exit(1 if fail else 0)
+PY
+[ $? -ne 0 ] && FAIL=1
+
 if [ $FAIL -eq 0 ]; then
   echo "OK: docs整合チェック全項目通過"
 else

@@ -2,6 +2,11 @@
 
 ステータス: **ドラフト**(凍結ゲートで確定)
 
+`P2D` Render Contributionへ着手する場合は、先に
+[設計締結地図のStart Here](../reviews/2026-07-29-m5-render-contribution-design-closure-map.md#0-start-here)を読む。
+意味設計は締結済みだが、public seam、GPU format／copy method、resource budget、実装完了は別gateである。
+停止済みの証拠Wave ID／templateを再発注しない。
+
 ## 目的(退治する落とし穴)
 
 C-4(2.5Dとブレンドモードの衝突)、F-1(glTFとの軸整合)、F-6(テキスト基盤の分界)。
@@ -236,7 +241,7 @@ AEの3世代の3D(Ray-traced CS6 / Cineware / Advanced 3D)の死因、glTF実装
 
 ## 未決事項
 
-- 3Dパスの中間フォーマット(HDRリニアで持つか、レイヤーごとに8bit確定か)。**実装ガード4の調査によりリニアFP16が推奨案**
+- 3Dパスの中間フォーマット(HDRリニアで持つか、レイヤーごとに8bit確定か)。**実装ガード4の調査によりリニアFP16が推奨案**。ただし`P2D-RCFP1S`でlinear-light／premultiplied意味と中間8bit量子化禁止は決定済みで、未決は`P2D-RCFP1F`の具体format実証だけとする
 - ~~縦書き対応の時期とスコープ(v1は横書きのみか)~~ → **判定(2026-07-12): v1は横書きのみ(縦書き延期)+ガード9据え置き**(回転ベースの反面事例2件=resvg・Flutter公式回答を調査で追加確認)。P6契約へは費用≈0の文言3点のみ先行反映(C-1/C-2/C-3、上記追記)。**C-4**(縦行送りメトリクス口)/**C-5**(縦メトリクス欠落診断)は延期=縦書き着手時の完了条件へ、**C-6**(sideways描画材料)は棄却=`glyph_transform`貫通で現契約に既にある、**C-7**(fallback縦適性)は論点記録のみ=実質の緩和策はガード8(a)同梱フォント下限保証。併読: [調査メモ](../reviews/2026-07-12-vertical-text-prior-art.md)・[反対側レビュー](../reviews/2026-07-12-vertical-text-prior-art-counter-review.md)
 - ~~モーションブラーはスコープ外のままでよいか~~ → 決定(2026-07-07): プラグイン領域。Quality型にサンプル数の口だけ確保
 - ~~テキストP6の一発API vs ラン単位~~ → **決定(2026-07-10)**: ラン単位3点セット(上記)
