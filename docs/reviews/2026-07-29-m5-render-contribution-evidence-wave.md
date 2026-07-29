@@ -276,7 +276,7 @@ RCA3の検収を待たず、terminalとなったRCB3／RCC3-BEVY／RCC3-UNREAL�
 | `P2D-RCB5` | 配置 | 本書§2〜§3、§6、v4主担当固定配置 | `2026-07-29-m5-rerun-observation-map-v4.md`の配置欄だけ | Grok `REJECT` P0=1。A1行二重挿入、差分不採用 |
 | `P2D-RCC4B-UNREAL` | 配置 | 本書§7、Unreal capsule、v4主担当固定配置 | `2026-07-29-m5-unreal-observation-map-v4.md`の配置欄だけ | Grok `ACCEPT` P0/P1/P2=0。Spark `019fabb7-a074-7443-81ff-ae5de35e0d20`、主担当再照合済み |
 | `P2D-RCA6` | 配置 | 本書§2〜§3、§5、v4主担当固定配置 | `2026-07-29-m5-render-contribution-boundary-map-v4.md`の配置欄だけ | Opus本文がrunner所有の復元操作を列挙し`ORDER_INVALID`。Spark未起動、差分なし |
-| `P2D-RCC5` | 配置 | ACCEPT済みGodot／Bevy／Unreal観察、§7 fixture候補 | `2026-07-29-m5-provider-fixture-map-v5.md`の配置欄だけ | 三provider完了後、固定24 cellとして登録済み |
+| `P2D-RCC5` | 配置 | ACCEPT済みGodot／Bevy／Unreal観察、§7 fixture候補 | `2026-07-29-m5-provider-fixture-map-v5.md`の配置欄だけ | Grok `ACCEPT` P0/P1/P2=0。Spark `019fabcd-b4e3-7243-9c56-1a6d3468c493`、主担当再照合済み |
 | `P2D-RCA7` | 配置 | 本書§2〜§3、§5、v4主担当固定配置 | `2026-07-29-m5-render-contribution-boundary-map-v4.md`の配置欄だけ | Opus 3稿が行番号／command再記述／ID数誤認で収束せず`ORDER_INVALID`。Spark未起動、差分なし |
 | `P2D-RCB6` | 配置 | 本書§2〜§3、§6、v4主担当固定配置 | `2026-07-29-m5-rerun-observation-map-v4.md`の配置欄だけ | authority由来のA1〜A6一意対応を負例へ固定し、同じ30 cellとして登録済み |
 | `P2D-RCA8` | 配置 | 本書§2〜§3、§5、v4主担当固定配置 | `2026-07-29-m5-render-contribution-boundary-map-v4.md`の配置欄だけ | authority由来cardinalityを許す中央prompt修理後、同じ固定18 cellとして登録済み |

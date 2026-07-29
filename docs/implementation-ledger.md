@@ -145,7 +145,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA7 | M5 / P2D / fixed boundary map | `STOPPED` | — | Opus 3稿が形式収束せずORDER_INVALID、Spark未起動 | 後継P2D-RCA8 |
 | RENDER-CONTRIBUTION-RERUN | P2D-RCB6 | M5 / P2D / fixed Rerun map | `DO` | — | authority由来cardinality許可、A1〜A6一意対応 | 既存6行の30 cell copyだけ |
 | RENDER-CONTRIBUTION-AUTHORITY | P2D-RCA8 | M5 / P2D / fixed boundary map | `DO` | — | authority由来cardinality許可後のrunner | 18 cell copyだけ |
-| RENDER-CONTRIBUTION-ENGINE | P2D-RCC5 | M5 / P2D / fixture comparison | `DO` | — | 三provider DONE、固定v5 template登録済み | 24 cell copyだけ |
+| RENDER-CONTRIBUTION-ENGINE | P2D-RCC5 | M5 / P2D / fixture comparison | `DONE` | — | Grok ACCEPT P0/P1/P2=0、主担当再照合 | P2D-RCI入力 |
 | M2-REPAIR | GAP-23 | M2 / narrow repair | `WAIT` | — | 独立D1i-4 LookAt/Follow oracle分離の採番・完了 | GAP-23全25件を再発注し、後にGAP-24を判定 |
 | M2-REPAIR | GAP-24 | M2 / narrow repair | `WAIT` | — | GAP-23 | GAP-24後にclose |
 | ORACLE-GUARD | GAP-25 | M2 / guard repair | `DO / CHECK-PATH` | — | GAP-23との許可path非重複 | semantic oracle gate自己保護 |

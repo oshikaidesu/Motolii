@@ -2,7 +2,7 @@
 
 作成日: 2026-07-29
 
-状態: **登録済み／P2D-RCC5未実行**
+状態: **完了／P2D-RCC5 Grok ACCEPT（P0/P1/P2=0）**
 
 変更許可: 本fileの`配置欄`だけ
 
@@ -53,12 +53,12 @@ Bevyの`B-*`とUnrealの`U-*`は各入力fileの固定fragment IDをそのまま
 
 | Motolii fixture候補 | Bevy観察 | Godot観察 | Unreal観察 | 横断coverage |
 |---|---|---|---|---|
-| F1 opaque Z交差反転 | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| F2 cutout depth／soft alpha非格上げ | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| F3 soft alpha順序／非対応診断 | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| F4 scene-color／refraction宣言 | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| F5 unknown／capability拒否 | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
-| F6 未使用pixel不変／Preview-Export同一 | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> | <!-- 配置欄 --> |
+| F1 opaque Z交差反転 | B-O2 | G-NO | U-NO | X-F1-GAP |
+| F2 cutout depth／soft alpha非格上げ | B-O2 | G-O2 | U-O1 U-O2 | X-F2-PARTIAL |
+| F3 soft alpha順序／非対応診断 | B-O2 B-O4 | G-O1 G-O2 G-O3 | U-O1 U-O3 | X-F3-PARTIAL |
+| F4 scene-color／refraction宣言 | B-O3 | G-O4 | U-O2 U-O4 | X-F4-PARTIAL |
+| F5 unknown／capability拒否 | B-NO | G-NO | U-NO | X-F5-GAP |
+| F6 未使用pixel不変／Preview-Export同一 | B-NO | G-NO | U-NO | X-F6-GAP |
 
 ## 非証明と非目標
 

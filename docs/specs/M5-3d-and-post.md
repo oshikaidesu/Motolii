@@ -151,7 +151,7 @@ M5は[操作単純化モデル](../interaction-simplicity-model.md)の最初の�
 | P2D-RCA5 | **停止／差分なし**。現行主担当固定配置どおりのMotolii境界fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | command machine block前のbaseでOpus不備3回。後継P2D-RCA6 |
 | P2D-RCB5 | **停止／差分不採用**。現行主担当固定配置どおりのRerun fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | Grok `REJECT` P0=1。A1行二重挿入。後継P2D-RCB6 |
 | P2D-RCC4B-UNREAL | **DONE**。現行主担当固定配置どおりのUnreal fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | Grok `ACCEPT` P0/P1/P2=0、主担当再照合済み |
-| P2D-RCC5 | ACCEPT済みprovider観察のMotolii fixture軸比較 | P2D-RCC3-GODOT, P2D-RCC4B-BEVY/UNREAL | **登録済み**。固定24 cellをtemplate記載どおりcopyするだけ |
+| P2D-RCC5 | **DONE**。ACCEPT済みprovider観察のMotolii fixture軸比較 | P2D-RCC3-GODOT, P2D-RCC4B-BEVY/UNREAL | Grok `ACCEPT` P0/P1/P2=0、主担当再照合済み |
 | P2D-RCA6 | **停止／差分なし**。machine `COMMAND`版runnerによる固定Motolii境界fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | Opus本文のrunner所有操作列挙で`ORDER_INVALID`。Spark未起動。後継P2D-RCA7 |
 | P2D-RCA7 | **停止／差分なし**。固定Motolii境界fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | Opus 3稿が形式収束せず`ORDER_INVALID`。Spark未起動。後継P2D-RCA8 |
 | P2D-RCB6 | A1〜A6一意対応を保つ固定Rerun fragment ID配置 | P2D-RC0, P2D-RCE0, GR-D4 | 登録済み。既存6行を置換し、行追加なしの30 cell copyだけ |
