@@ -155,6 +155,8 @@ assert_status 9 "$RUN_STATUS" "Opus STOP is a design stop"
 assert_has "$TMP_ROOT/stdout.log" "OUTCOME: DESIGN_STOP" "design stop outcome"
 [[ "$(sha256_file "$ORDER")" == "$seed_hash" ]] || fail "Opus STOP must not overwrite the manifest"
 assert_fragment "$CALL_LOG" "claude:-p --model claude-opus-5" "Opus is the order manager"
+assert_fragment "$CALL_LOG" "Do not invent grep, awk," "prepare prompt command-oracle guard"
+assert_fragment "$CALL_LOG" "Do not prescribe checkout, reset, clean, deletion" "prepare prompt destructive-restore guard"
 
 # Opus draftはCodex承認行やmachine fieldを自己発行できない。
 SELF_ORDER="$TMP_ROOT/self-approved-order.md"

@@ -1831,7 +1831,14 @@ Spark. Do not invent unresolved product meaning or public contracts.
 
 The order must contain objective, current code facts, authoritative spec/task IDs,
 an exact closed file allowlist, non-goals, helpers to reuse, invariants, STOP
-conditions, positive and negative tests, exact commands, and integration gates.
+conditions, positive and negative tests, and integration gates. Its executable
+commands are limited to existing repository scripts or test commands explicitly
+named by the task/authorities, plus git diff --check. Do not invent grep, awk,
+sed, wc, find, line-number, token-presence, or count-based acceptance oracles.
+Do not prescribe checkout, reset, clean, deletion, or other diff-restoration
+commands on STOP/failure. Scope, fingerprint, authority, manifest, and marker
+integrity are runner-owned gates, not prose commands. If a missing custom oracle
+is required to make the grain safe, return ORDER: STOP.
 Forbid suppressions, expected-value or golden rewrites, fixture special-cases,
 raw scanners that bypass typed boundaries, public raw mutation APIs, invented
 serde defaults, duplicate planners/helpers, partial mutation, TODO stubs, and

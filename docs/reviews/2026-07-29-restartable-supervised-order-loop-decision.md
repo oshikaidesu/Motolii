@@ -88,6 +88,15 @@ Grok timeoutでもstdoutが1 byte以上残れば`REVIEW_INVALID`とする。avai
 - `ORDER: STOP`、model利用不能、不正draftでは既存manifest/orderを上書きしない。
 - READY本文だけを同一filesystemの一時fileへ組み立て、検証後にatomic renameする。
 
+### 5.1 command oracleの親process所有
+
+M5 fragment配置grainで、Opusが行番号、`grep` count、token presence、STOP時の`git checkout`を
+orderへ発明し、意味が閉じていてもPRECHECKを反復停止させた。実行commandはtask／authorityが名指す
+既存script／testと`git diff --check`だけに限定する。独自`grep`／`awk`／`sed`／`wc`／`find`、
+行番号、token presence、件数oracle、checkout/reset/clean/deleteをOpus proseへ置かない。
+scope、fingerprint、authority、manifest、marker integrityはrunner親processが検証する。
+追加oracleが無いと安全に閉じないgrainは、Opusがoracleを即席実装せず`ORDER: STOP`へ戻す。
+
 ## 6. 非目標と残余
 
 - React 8ラベル、Rerun 6ラベルの位置／順序を変更しない。
@@ -103,6 +112,7 @@ Grok timeoutでもstdoutが1 byte以上残れば`REVIEW_INVALID`とする。avai
 - REJECT／invalid review／ACCEPT後は再`inspect`できない。
 - availabilityは3回でterminalになる。
 - reviewer mutation、ledger state、dependency、authority、allowlist、model routingの既存負例が維持される。
+- prepare promptが独自command oracleとdiff復元commandを禁止する。
 - `scripts/test-delegate-cursor-supervised.sh`、`scripts/check-docs.sh`、`git diff --check`が通る。
 
 ## 8. 助言の処分
