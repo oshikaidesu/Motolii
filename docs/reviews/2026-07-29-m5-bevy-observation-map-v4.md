@@ -22,6 +22,16 @@ capsuleの記載を意味変更せずID化した固定fragmentで、leafは本�
 - `B-NP`: Bevyの型、schedule、render graph、OIT方式、phase名をMotolii契約へ転記する根拠にしない。
 - `B-LIM`: FROZEN / DELETE-LATER / 製品import禁止。
 
+## 主担当固定配置
+
+- phase admission / ordering: `B-O1 B-O2 | B-SRC | B-NP | B-LIM`
+- depth / opaque / cutout / soft alpha: `B-O2 | B-SRC | B-NP | B-LIM`
+- transparent交差 / sorting / OIT追加位置: `B-O2 B-O4 | B-SRC | B-NP | B-LIM`
+- scene-color / refraction / resource lifetime: `B-O3 | B-SRC | B-NP | B-LIM`
+- capability不足 / unsupported / cyclic read: `B-NO | B-SRC | B-NP | B-LIM`
+
+`|`はmatrixの列境界であり、配置する文字列には含めない。
+
 ## 固定配置matrix
 
 各`配置欄`には上記IDだけを空白区切りで置く。観察は`B-O1`〜`B-O4`または`B-NO`、

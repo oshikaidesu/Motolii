@@ -33,6 +33,17 @@
 - `C-NOT-API`: 公開trait、Rust名、phase enum、Document、plugin契約、wire形式をこのgrainで決めない。
 - `C-RCI`: 最終採否と未決の処分は後続P2D-RCIへ戻す。
 
+## 主担当固定配置
+
+- Q1: `C-Q1-REQ C-Q1-CONTRIB | C-Q1-NEG | C-CODE-GAP C-NOT-API C-RCI`
+- Q2: `C-Q2-NOOWN C-Q2-HOST | C-Q2-NEG | C-CODE-GAP C-NOT-API C-RCI`
+- Q3: `C-Q3-CAPS | C-Q3-NEG | C-Q3-OPEN C-CODE-GAP C-RCI`
+- Q4: `C-Q4-ADD | C-Q4-UNKNOWN | C-CODE-GAP C-RCI`
+- Q5: `C-Q5-FIRST | C-Q5-NEG | C-NOT-API C-RCI`
+- Q6: `C-Q6-UNKNOWN | C-Q6-NEG | C-NOT-API C-RCI`
+
+`|`はmatrixの列境界であり、配置する文字列には含めない。
+
 ## 固定配置matrix
 
 各`配置欄`には上記IDだけを空白区切りで置く。本文複製、言い換え、新ID、authority外の方式を足さない。

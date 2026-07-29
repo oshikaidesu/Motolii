@@ -22,6 +22,16 @@
 - `U-NP`: Unreal material／pass／sort priority／IOR UIをMotoliiの公開語彙、Document、phase enumにしない。
 - `U-LIM`: FROZEN / DELETE-LATER / 製品import禁止。
 
+## 主担当固定配置
+
+- phase admission / ordering: `U-O2 | U-SRC | U-NP | U-LIM`
+- depth / opaque / cutout / soft alpha: `U-O1 U-O2 | U-SRC | U-NP | U-LIM`
+- transparent交差 / sorting / OIT追加位置: `U-O1 U-O3 | U-SRC | U-NP | U-LIM`
+- scene-color / refraction / resource lifetime: `U-O2 U-O4 | U-SRC | U-NP | U-LIM`
+- capability不足 / unsupported / cyclic read: `U-NO | U-SRC | U-NP | U-LIM`
+
+`|`はmatrixの列境界であり、配置する文字列には含めない。
+
 ## 固定配置matrix
 
 各`配置欄`には上記IDだけを空白区切りで置く。観察は`U-O1`〜`U-O4`または`U-NO`、

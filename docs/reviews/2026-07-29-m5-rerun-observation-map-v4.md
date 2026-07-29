@@ -57,6 +57,17 @@ A1〜A6の各行が固定fragment IDへ一対一で遡れ、A6が`R-A6-LIM`を�
 - `R-COMMON-LIM`: RerunのApp、Entity、ViewClass、Blueprint、store、query、draw-phase enum、sort key、serde、shader、dependency、UI stateをMotoliiへ持ち込まない。
 - `R-A6-LIM`: 固定phase enum、phase名、sort keyをMotoliiの公開契約または閉じた能力集合へ転移しない。
 
+## 主担当固定配置
+
+- A1: `R-A1-OBS | R-A1-AXIS | R-VIS-NP | R-PATTERN | R-COMMON-LIM`
+- A2: `R-A2-OBS | R-A2-AXIS | R-VIS-NP | R-PATTERN | R-COMMON-LIM`
+- A3: `R-A3-OBS | R-A3-AXIS | R-VIS-NP | R-PATTERN | R-COMMON-LIM`
+- A4: `R-A4-OBS | R-A4-AXIS | R-VIEW-NP | R-PATTERN | R-COMMON-LIM`
+- A5: `R-A5-OBS | R-A5-AXIS | R-PHASE-NP | R-PATTERN | R-COMMON-LIM`
+- A6: `R-A6-OBS | R-A6-AXIS | R-PHASE-NP | R-REJECT | R-A6-LIM`
+
+`|`はmatrixの列境界であり、配置する文字列には含めない。
+
 ## 固定配置matrix
 
 各`配置欄`へ上記IDだけを一つ置く。本文の複製、言い換え、複数IDの合成をしない。
