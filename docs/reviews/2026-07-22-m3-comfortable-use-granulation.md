@@ -322,7 +322,7 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-110PI | `SPEC / SPLIT` | latest published snapshot / primaryのInspector接続をReact受け口とHost islandへ分割 | CU-110PT、CU-0A08IP/CU-0A08ITP | [CU-110PI分割決定](2026-07-29-cu-110pi-inspector-product-connection-split-decision.md)。PIR→PIH | presentationとHost接続を束ねる |
 | CU-110PIR | `PRODUCT / DONE` | InspectorCandidate内のsafe read-only target branch | CU-110PI | [実装決定](2026-07-29-cu-110pir-inspector-safe-read-only-branch-implementation-decision.md)。target 3 fieldだけ、94 guard + 8 parity | — |
 | CU-110PIH | `PRODUCT / DONE` | right Inspector WebViewへcurrent Document / primaryを投影 | CU-110PIR | [実装決定](2026-07-30-cu-110pih-inspector-host-island-projection-implementation-decision.md)。実Mac Rectangle / Clip、offline second child | — |
-| CU-111 | `PRODUCT / WAIT` | Undo/Redo製品CommandIdとsingle-writer配送を接続 | CU-109、U0c/U2b | 成功時だけsnapshot publish、失敗でDocument/history不変、UI history 0 | Undo/Redoをsurface別local stateにしたくなる |
+| CU-111 | `PRODUCT / DONE` | Undo/Redo製品CommandIdとsingle-writer配送を接続 | CU-109、U0c/U2b | [実装決定](2026-07-30-cu-111-product-undo-redo-implementation-decision.md)。stable CommandId→既存resolver/router→journal-first single writer→三面再投影 | — |
 | CU-108 | `E2E / WAIT` | Rectangleを三面へ投影しUndo/Redoする | CU-103/106/110/111、CU-0B05 | 同じrevision/LayerId、Undoで三面から消えRedoで同ID復帰 | diagnostic/fixture-only rectしか表示できない |
 
 ## 9. W2 制作ループ

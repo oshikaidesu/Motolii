@@ -2,7 +2,7 @@
 
 use motolii_ui::{DomainIntent, DomainIntentError, UiStateOwner};
 
-const REPRESENTATIVE_OPERATIONS: [(u16, DomainIntent, UiStateOwner); 5] = [
+const REPRESENTATIVE_OPERATIONS: [(u16, DomainIntent, UiStateOwner); 7] = [
     (0, DomainIntent::DeleteTargetedItems, UiStateOwner::Document),
     (
         1,
@@ -20,6 +20,8 @@ const REPRESENTATIVE_OPERATIONS: [(u16, DomainIntent, UiStateOwner); 5] = [
         DomainIntent::CancelInFlightGesture,
         UiStateOwner::Transient,
     ),
+    (5, DomainIntent::Undo, UiStateOwner::Document),
+    (6, DomainIntent::Redo, UiStateOwner::Document),
 ];
 
 #[test]

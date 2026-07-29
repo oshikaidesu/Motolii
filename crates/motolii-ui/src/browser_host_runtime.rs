@@ -279,6 +279,16 @@ postMessage:(message)=>window.ipc.postMessage(message)
             .map_err(Into::into)
     }
 
+    pub(crate) fn poll_host_command(
+        &self,
+    ) -> Result<Option<crate::EffectiveTrigger>, BrowserHostRuntimeError> {
+        self.pointer_capture
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::PointerCapturePoisoned)?
+            .poll_command()
+            .map_err(Into::into)
+    }
+
     pub(crate) fn instance_epoch(&self) -> Result<u64, BrowserHostRuntimeError> {
         self.island
             .lock()
@@ -298,7 +308,12 @@ postMessage:(message)=>window.ipc.postMessage(message)
         {
             return Ok(());
         }
-        self.transfer_focus(target)
+        self.transfer_focus(target)?;
+        self.pointer_capture
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::PointerCapturePoisoned)?
+            .set_host_commands_enabled(target == BrowserFocusTarget::Parent);
+        Ok(())
     }
 
     pub(crate) fn set_bounds(

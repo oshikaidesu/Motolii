@@ -40,6 +40,8 @@ fn complete_metadata() -> Vec<CommandMetadata> {
             "Cancel",
             DomainIntent::CancelInFlightGesture,
         ),
+        metadata("motolii.edit.undo", "Undo", DomainIntent::Undo),
+        metadata("motolii.edit.redo", "Redo", DomainIntent::Redo),
     ]
 }
 
@@ -98,7 +100,7 @@ fn missing_and_duplicate_intent_are_rejected() {
     assert_eq!(
         CommandRegistry::try_new(missing).unwrap_err(),
         CommandRegistryError::MissingIntent {
-            intent: DomainIntent::CancelInFlightGesture
+            intent: DomainIntent::Redo
         }
     );
 

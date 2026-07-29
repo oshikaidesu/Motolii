@@ -18,7 +18,8 @@ use crate::browser_host_runtime::{
     BrowserFocusTarget, BrowserHostRuntime, BrowserHostRuntimeError, BrowserLifecycleEvent,
 };
 use crate::document_edit_runtime::{
-    DocumentEditQueue, DocumentEditRuntime, DocumentEditRuntimeError, PlaceRectangleRequest,
+    DocumentEditDispatchError, DocumentEditQueue, DocumentEditRuntime, DocumentEditRuntimeError,
+    PlaceRectangleRequest, PublishedDocument,
 };
 use crate::host_pointer_capture::{HostPointerCancel, HostPointerCandidate};
 use crate::inspector_host_runtime::{InspectorHostRuntime, InspectorHostRuntimeError};
@@ -30,6 +31,12 @@ use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, Stati
 use crate::timeline_projection::{
     project_timeline, TimelineBar, TimelineHit, TimelineMetrics, TimelineProjection,
     TimelineProjectionError, TimelineViewport,
+};
+use crate::{
+    builtin_command_registry, resolve_keymap, AsciiKey, Binding, BuiltinKeymap, CommandId,
+    CommandIdError, CommandRegistry, CommandRegistryError, EffectiveTrigger, Gesture, InputPhase,
+    InputRouter, InputRouterError, KeyToken, KeymapDelta, KeymapResolution, Modifier,
+    ModifierError, Modifiers, NormalizedInput, PlatformBindingConstraints, PlatformCommandModifier,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -104,6 +111,8 @@ pub(crate) struct ProductApp {
     displayed_camera: motolii_core::CompCamera,
     document_runtime: DocumentEditRuntime,
     document_queue: DocumentEditQueue,
+    input_router: InputRouter,
+    command_keymap: KeymapResolution,
     primary: Option<motolii_doc::LayerId>,
     projection_generation: u64,
     current_document: Arc<motolii_doc::Document>,
@@ -366,6 +375,8 @@ impl ProductApp {
         let displayed_camera = preview.camera();
         let current_document = document_runtime.snapshot();
         let timeline_projection = ProductTimelineProjection::from_document(&current_document)?;
+        let command_registry = builtin_command_registry()?;
+        let command_keymap = product_command_keymap(&command_registry)?;
         Ok(Self {
             gfx: None,
             browser: None,
@@ -382,6 +393,8 @@ impl ProductApp {
             current_document,
             document_runtime,
             document_queue: DocumentEditQueue::default(),
+            input_router: InputRouter::new(command_registry),
+            command_keymap,
             primary: None,
             projection_generation: 0,
             proxy,
@@ -724,10 +737,24 @@ impl ProductApp {
         if self.active_place.is_some() {
             return;
         }
-        let Some(browser) = &self.browser else {
-            return;
+        let command = {
+            let Some(browser) = &self.browser else {
+                return;
+            };
+            browser.poll_host_command()
         };
-        match browser.poll_host_click() {
+        match command {
+            Ok(Some(trigger)) => self.handle_history_trigger(event_loop, trigger),
+            Ok(None) => {}
+            Err(error) => return self.fail(event_loop, error),
+        }
+        let click = {
+            let Some(browser) = &self.browser else {
+                return;
+            };
+            browser.poll_host_click()
+        };
+        match click {
             Ok(Some(click)) => self.handle_timeline_click(event_loop, click.position),
             Ok(None) => {}
             Err(error) => self.fail(event_loop, error),
@@ -735,6 +762,12 @@ impl ProductApp {
     }
 
     fn handle_timeline_click(&mut self, event_loop: &ActiveEventLoop, position: [f64; 2]) {
+        self.browser_focus_target = BrowserFocusTarget::Parent;
+        if let Some(browser) = &self.browser {
+            if let Err(error) = browser.ensure_focus(self.browser_focus_target) {
+                return self.fail(event_loop, error);
+            }
+        }
         let Some(layout) = self.layout else {
             return;
         };
@@ -776,6 +809,58 @@ impl ProductApp {
             desc: self.render_request_template.desc,
             quality: self.render_request_template.quality,
         })?)
+    }
+
+    fn handle_history_trigger(&mut self, event_loop: &ActiveEventLoop, trigger: EffectiveTrigger) {
+        let Some(command) = self.command_keymap.get(&trigger).cloned() else {
+            return;
+        };
+        let output = match self.input_router.route(NormalizedInput::Command {
+            phase: InputPhase::Press,
+            id: command,
+        }) {
+            Ok(output) => output,
+            Err(error) => return self.fail(event_loop, error),
+        };
+        if let Err(error) = self.document_queue.push_prepared(output, None) {
+            return self.fail(event_loop, error);
+        }
+        match self.document_runtime.process_next(
+            &mut self.document_queue,
+            self.primary,
+            self.projection_generation,
+        ) {
+            Ok(Some(published)) => self.adopt_history_publish(event_loop, published),
+            Ok(None) => {}
+            Err(
+                DocumentEditRuntimeError::NothingToUndo | DocumentEditRuntimeError::NothingToRedo,
+            ) => {}
+            Err(error) => self.fail(event_loop, error),
+        }
+    }
+
+    fn adopt_history_publish(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        published: PublishedDocument,
+    ) {
+        self.current_document = published.snapshot;
+        self.primary = published.primary;
+        self.projection_generation = published.projection_generation;
+        if let Some(inspector) = &self.inspector {
+            if let Err(error) = inspector.publish(&self.current_document, self.primary) {
+                return self.fail(event_loop, error);
+            }
+        }
+        self.timeline_projection =
+            match ProductTimelineProjection::from_document(&self.current_document) {
+                Ok(projection) => projection,
+                Err(error) => return self.fail(event_loop, error),
+            };
+        if let Err(error) = self.submit_stage_projection() {
+            return self.fail(event_loop, error);
+        }
+        self.request_redraw();
     }
 
     fn drain_stage_projection(&mut self) -> Result<(), ProductRuntimeError> {
@@ -878,6 +963,46 @@ fn build_browser_runtime(
             let _ = lifecycle_proxy.send_event(ProductEvent::BrowserLifecycle(event));
         }),
     )
+}
+
+fn product_command_keymap(
+    registry: &CommandRegistry,
+) -> Result<KeymapResolution, ProductRuntimeError> {
+    let primary = Modifiers::try_new([Modifier::Primary])?;
+    let primary_shift = Modifiers::try_new([Modifier::Primary, Modifier::Shift])?;
+    let z = KeyToken::Ascii(AsciiKey::try_new('z')?);
+    let base = BuiltinKeymap::new(
+        1,
+        vec![
+            Binding {
+                gesture: Gesture::Keyboard {
+                    key: z,
+                    modifiers: primary,
+                    phase: InputPhase::Press,
+                },
+                command: CommandId::try_new("motolii.edit.undo")?,
+            },
+            Binding {
+                gesture: Gesture::Keyboard {
+                    key: z,
+                    modifiers: primary_shift,
+                    phase: InputPhase::Press,
+                },
+                command: CommandId::try_new("motolii.edit.redo")?,
+            },
+        ],
+    );
+    let resolution = resolve_keymap(
+        &base,
+        &KeymapDelta::default(),
+        &PlatformBindingConstraints::new(PlatformCommandModifier::Meta, Vec::new()),
+        registry,
+    );
+    if resolution.diagnostics().is_empty() {
+        Ok(resolution)
+    } else {
+        Err(ProductRuntimeError::CommandKeymap)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1349,6 +1474,20 @@ pub(crate) enum ProductRuntimeError {
     PlaceCanonicalConversion,
     #[error(transparent)]
     DocumentEdit(#[from] DocumentEditRuntimeError),
+    #[error(transparent)]
+    DocumentDispatch(#[from] DocumentEditDispatchError),
+    #[error(transparent)]
+    InputRouter(#[from] InputRouterError),
+    #[error(transparent)]
+    CommandRegistry(#[from] CommandRegistryError),
+    #[error(transparent)]
+    CommandId(#[from] CommandIdError),
+    #[error(transparent)]
+    Modifier(#[from] ModifierError),
+    #[error(transparent)]
+    AsciiKey(#[from] crate::AsciiKeyError),
+    #[error("product command keymap contains an invalid or conflicting binding")]
+    CommandKeymap,
     #[error("native product runtime failed: {0}")]
     Runtime(String),
 }
@@ -1438,6 +1577,33 @@ mod tests {
             projection.hit_test([layout.stage.x, layout.stage.y], layout),
             None
         );
+    }
+
+    #[test]
+    fn product_history_shortcuts_resolve_to_stable_command_ids() {
+        let registry = builtin_command_registry().unwrap();
+        let keymap = product_command_keymap(&registry).unwrap();
+        let z = KeyToken::Ascii(AsciiKey::try_new('z').unwrap());
+        let undo = EffectiveTrigger::Keyboard {
+            key: z,
+            modifiers: Modifiers::try_new([Modifier::Meta]).unwrap(),
+            phase: InputPhase::Press,
+        };
+        let redo = EffectiveTrigger::Keyboard {
+            key: z,
+            modifiers: Modifiers::try_new([Modifier::Meta, Modifier::Shift]).unwrap(),
+            phase: InputPhase::Press,
+        };
+
+        assert_eq!(
+            keymap.get(&undo).map(CommandId::as_str),
+            Some("motolii.edit.undo")
+        );
+        assert_eq!(
+            keymap.get(&redo).map(CommandId::as_str),
+            Some("motolii.edit.redo")
+        );
+        assert!(keymap.diagnostics().is_empty());
     }
 
     #[test]

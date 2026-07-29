@@ -7,7 +7,8 @@ use motolii_core::{RationalTime, RationalTimeError};
 use motolii_doc::{
     Clip, ClipSource, Command, CommandError, Document, DocumentError, DocumentPluginError,
     DocumentWriter, ItemEnvelope, JournalEdit, LayerId, LayerIdError, ParentLocator, ProjectError,
-    ProjectSession, SaveProjectOptions, StandardShape, TrackItem, VectorContent, VectorRecipe,
+    ProjectSession, SaveProjectOptions, StandardShape, TrackItem, UndoError, VectorContent,
+    VectorRecipe,
 };
 use motolii_plugin::PluginCatalog;
 
@@ -19,9 +20,7 @@ pub(crate) enum DocumentEditAction {
     PlaceRectangle(PlaceRectangleRequest),
     ReplacePrimary(LayerId),
     ClearPrimary,
-    #[cfg(test)]
     Undo,
-    #[cfg(test)]
     Redo,
 }
 
@@ -32,9 +31,7 @@ impl DocumentEditAction {
             Self::PlaceRectangle(_) => DocumentEditActionKind::PlaceRectangle,
             Self::ReplacePrimary(_) => DocumentEditActionKind::ReplacePrimary,
             Self::ClearPrimary => DocumentEditActionKind::ClearPrimary,
-            #[cfg(test)]
             Self::Undo => DocumentEditActionKind::Undo,
-            #[cfg(test)]
             Self::Redo => DocumentEditActionKind::Redo,
         }
     }
@@ -46,9 +43,7 @@ pub(crate) enum DocumentEditActionKind {
     PlaceRectangle,
     ReplacePrimary,
     ClearPrimary,
-    #[cfg(test)]
     Undo,
-    #[cfg(test)]
     Redo,
 }
 
@@ -80,17 +75,28 @@ impl DocumentEditQueue {
         let RouterOutput::Intent { phase, intent, .. } = output else {
             return Err(DocumentEditDispatchError::NotCommitIntent);
         };
-        if phase != InputPhase::Click || intent != DomainIntent::DeleteTargetedItems {
-            return Err(DocumentEditDispatchError::NotCommitIntent);
+        match (phase, intent) {
+            (InputPhase::Click, DomainIntent::DeleteTargetedItems) => {
+                let request = request.ok_or(DocumentEditDispatchError::MissingPreparedRequest)?;
+                if request.intent() != intent {
+                    return Err(DocumentEditDispatchError::IntentMismatch {
+                        routed: intent,
+                        request: request.intent(),
+                    });
+                }
+                self.pending.push_back(DocumentEditAction::Apply(request));
+            }
+            (InputPhase::Press, DomainIntent::Undo) if request.is_none() => {
+                self.pending.push_back(DocumentEditAction::Undo);
+            }
+            (InputPhase::Press, DomainIntent::Redo) if request.is_none() => {
+                self.pending.push_back(DocumentEditAction::Redo);
+            }
+            (InputPhase::Press, DomainIntent::Undo | DomainIntent::Redo) => {
+                return Err(DocumentEditDispatchError::UnexpectedPreparedRequest);
+            }
+            _ => return Err(DocumentEditDispatchError::NotCommitIntent),
         }
-        let request = request.ok_or(DocumentEditDispatchError::MissingPreparedRequest)?;
-        if request.intent() != intent {
-            return Err(DocumentEditDispatchError::IntentMismatch {
-                routed: intent,
-                request: request.intent(),
-            });
-        }
-        self.pending.push_back(DocumentEditAction::Apply(request));
         Ok(())
     }
 
@@ -126,6 +132,79 @@ enum RuntimeHealth {
     Poisoned,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HistoryDirection {
+    Undo,
+    Redo,
+}
+
+#[derive(Debug)]
+struct PreparedHistoryAction {
+    direction: HistoryDirection,
+    durable_command: Command,
+}
+
+#[derive(Debug, Default)]
+struct HistoryProjection {
+    undo: Vec<Command>,
+    redo: Vec<Command>,
+}
+
+impl HistoryProjection {
+    fn record_forward(&mut self, command: Command) {
+        self.undo.push(command);
+        self.redo.clear();
+    }
+
+    fn prepare(
+        &self,
+        direction: HistoryDirection,
+        writer: &DocumentWriter,
+    ) -> Result<PreparedHistoryAction, DocumentEditRuntimeError> {
+        if self.undo.len() != writer.undo_len() || self.redo.len() != writer.redo_len() {
+            return Err(DocumentEditRuntimeError::HistoryProjectionMismatch);
+        }
+        let forward = match direction {
+            HistoryDirection::Undo => self
+                .undo
+                .last()
+                .ok_or(DocumentEditRuntimeError::NothingToUndo)?,
+            HistoryDirection::Redo => self
+                .redo
+                .last()
+                .ok_or(DocumentEditRuntimeError::NothingToRedo)?,
+        };
+        let durable_command = match direction {
+            HistoryDirection::Undo => forward.inverse(),
+            HistoryDirection::Redo => forward.clone(),
+        };
+        Ok(PreparedHistoryAction {
+            direction,
+            durable_command,
+        })
+    }
+
+    fn accept(&mut self, direction: HistoryDirection) -> Result<(), DocumentEditRuntimeError> {
+        match direction {
+            HistoryDirection::Undo => {
+                let command = self
+                    .undo
+                    .pop()
+                    .ok_or(DocumentEditRuntimeError::HistoryProjectionMismatch)?;
+                self.redo.push(command);
+            }
+            HistoryDirection::Redo => {
+                let command = self
+                    .redo
+                    .pop()
+                    .ok_or(DocumentEditRuntimeError::HistoryProjectionMismatch)?;
+                self.undo.push(command);
+            }
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuntimeTestFailpoint {
@@ -144,6 +223,7 @@ pub(crate) struct DocumentEditRuntime {
     writer: DocumentWriter,
     catalog: Arc<PluginCatalog>,
     health: RuntimeHealth,
+    history_projection: HistoryProjection,
     #[cfg(test)]
     test_hooks: RuntimeTestHooks,
 }
@@ -159,6 +239,7 @@ impl DocumentEditRuntime {
             writer: document_writer,
             catalog,
             health: RuntimeHealth::Healthy,
+            history_projection: HistoryProjection::default(),
             #[cfg(test)]
             test_hooks: RuntimeTestHooks::default(),
         }
@@ -192,10 +273,21 @@ impl DocumentEditRuntime {
         };
         let kind = action.kind();
         match action {
-            #[cfg(test)]
-            DocumentEditAction::Undo | DocumentEditAction::Redo => {
-                let _ = next_projection_generation(current_projection_generation)?;
-                Err(DocumentEditRuntimeError::PreparedActionUnavailable)
+            DocumentEditAction::Undo => {
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                let action = self
+                    .history_projection
+                    .prepare(HistoryDirection::Undo, &self.writer)?;
+                self.commit_history_action(action, kind, current_primary, projection_generation)
+            }
+            DocumentEditAction::Redo => {
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                let action = self
+                    .history_projection
+                    .prepare(HistoryDirection::Redo, &self.writer)?;
+                self.commit_history_action(action, kind, current_primary, projection_generation)
             }
             DocumentEditAction::Apply(request) => {
                 let next_projection_generation =
@@ -271,21 +363,7 @@ impl DocumentEditRuntime {
         success_primary: Option<LayerId>,
         projection_generation: u64,
     ) -> Result<Option<PublishedDocument>, DocumentEditRuntimeError> {
-        let mut candidate: Document = (*self.writer.snapshot()).clone();
-        command.apply(&mut candidate)?;
-        candidate.validate()?;
-        candidate.prepare_plugins(&self.catalog)?;
-
-        let options = SaveProjectOptions {
-            limits: *self.session.limits(),
-            journal_edit: Some(JournalEdit::new(command.clone())),
-            checkpoint: false,
-            ..SaveProjectOptions::default()
-        };
-        if let Err(error) = self.session.save_with_journal(&candidate, &options) {
-            self.poison();
-            return Err(DocumentEditRuntimeError::JournalCommit(error));
-        }
+        self.commit_durable(&command)?;
 
         #[cfg(test)]
         if self.test_hooks.failpoint == Some(RuntimeTestFailpoint::PostDurableLiveApply) {
@@ -295,12 +373,13 @@ impl DocumentEditRuntime {
             ));
         }
 
-        if let Err(error) = self.writer.apply_macro(vec![command]) {
+        if let Err(error) = self.writer.apply_macro(vec![command.clone()]) {
             self.poison();
             return Err(DocumentEditRuntimeError::PostDurableLiveApply(
                 PostDurableLiveApplyError::Command(error),
             ));
         }
+        self.history_projection.record_forward(command);
 
         #[cfg(test)]
         if self.test_hooks.failpoint == Some(RuntimeTestFailpoint::Reconcile) {
@@ -319,6 +398,76 @@ impl DocumentEditRuntime {
             primary,
             projection_generation,
         }))
+    }
+
+    fn commit_history_action(
+        &mut self,
+        action: PreparedHistoryAction,
+        kind: DocumentEditActionKind,
+        current_primary: Option<LayerId>,
+        projection_generation: u64,
+    ) -> Result<Option<PublishedDocument>, DocumentEditRuntimeError> {
+        self.commit_durable(&action.durable_command)?;
+
+        #[cfg(test)]
+        if self.test_hooks.failpoint == Some(RuntimeTestFailpoint::PostDurableLiveApply) {
+            self.poison();
+            return Err(DocumentEditRuntimeError::PostDurableLiveApply(
+                PostDurableLiveApplyError::InjectedInvariant,
+            ));
+        }
+
+        let live_result = match action.direction {
+            HistoryDirection::Undo => self.writer.undo(),
+            HistoryDirection::Redo => self.writer.redo(),
+        };
+        if let Err(error) = live_result {
+            self.poison();
+            return Err(DocumentEditRuntimeError::PostDurableLiveApply(
+                PostDurableLiveApplyError::History(error),
+            ));
+        }
+        if self.history_projection.accept(action.direction).is_err() {
+            self.poison();
+            return Err(DocumentEditRuntimeError::PostDurableLiveApply(
+                PostDurableLiveApplyError::HistoryProjection,
+            ));
+        }
+
+        #[cfg(test)]
+        if self.test_hooks.failpoint == Some(RuntimeTestFailpoint::Reconcile) {
+            self.poison();
+            return Err(DocumentEditRuntimeError::ReconcileFailed);
+        }
+
+        let snapshot = self.writer.snapshot();
+        let primary = current_primary.filter(|id| self.writer.find_envelope(*id).is_some());
+        Ok(Some(PublishedDocument {
+            kind,
+            revision: self.writer.revision,
+            snapshot,
+            primary,
+            projection_generation,
+        }))
+    }
+
+    fn commit_durable(&mut self, command: &Command) -> Result<(), DocumentEditRuntimeError> {
+        let mut candidate: Document = (*self.writer.snapshot()).clone();
+        command.apply(&mut candidate)?;
+        candidate.validate()?;
+        candidate.prepare_plugins(&self.catalog)?;
+
+        let options = SaveProjectOptions {
+            limits: *self.session.limits(),
+            journal_edit: Some(JournalEdit::new(command.clone())),
+            checkpoint: false,
+            ..SaveProjectOptions::default()
+        };
+        if let Err(error) = self.session.save_with_journal(&candidate, &options) {
+            self.poison();
+            return Err(DocumentEditRuntimeError::JournalCommit(error));
+        }
+        Ok(())
     }
 
     #[cfg(test)]
@@ -450,6 +599,10 @@ pub(crate) struct PublishedDocument {
 pub(crate) enum PostDurableLiveApplyError {
     #[error(transparent)]
     Command(#[from] CommandError),
+    #[error(transparent)]
+    History(#[from] UndoError),
+    #[error("private history projection diverged after durable commit")]
+    HistoryProjection,
     #[cfg(test)]
     #[error("injected post-durable live apply invariant")]
     InjectedInvariant,
@@ -457,7 +610,7 @@ pub(crate) enum PostDurableLiveApplyError {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum DocumentEditDispatchError {
-    #[error("router output is not a committed delete intent")]
+    #[error("router output is not a supported committed Document intent")]
     NotCommitIntent,
     #[error("committed delete intent has no prepared Document request")]
     MissingPreparedRequest,
@@ -466,6 +619,8 @@ pub(crate) enum DocumentEditDispatchError {
         routed: DomainIntent,
         request: DomainIntent,
     },
+    #[error("Undo/Redo command must not carry a prepared Document request")]
+    UnexpectedPreparedRequest,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -476,9 +631,12 @@ pub(crate) enum DocumentEditRuntimeError {
     SelectionTargetNotFound(LayerId),
     #[error("document edit runtime session is poisoned")]
     SessionPoisoned,
-    #[cfg(test)]
-    #[error("prepared undo/redo action is not available yet")]
-    PreparedActionUnavailable,
+    #[error("nothing to undo")]
+    NothingToUndo,
+    #[error("nothing to redo")]
+    NothingToRedo,
+    #[error("private prepared-action projection does not match live Undo/Redo history")]
+    HistoryProjectionMismatch,
     #[error("document edit action must contain exactly one command")]
     MultiCommandActionRejected,
     #[error("Rectangle drop position must be finite canonical coordinates")]
@@ -720,6 +878,21 @@ mod tests {
             .unwrap()
     }
 
+    fn history_output(intent: DomainIntent) -> RouterOutput {
+        let id = match intent {
+            DomainIntent::Undo => "motolii.edit.undo",
+            DomainIntent::Redo => "motolii.edit.redo",
+            _ => panic!("history output requires Undo or Redo"),
+        };
+        let mut router = InputRouter::new(builtin_command_registry().unwrap());
+        router
+            .route(NormalizedInput::Command {
+                phase: InputPhase::Press,
+                id: CommandId::try_new(id).unwrap(),
+            })
+            .unwrap()
+    }
+
     fn assert_preflight_rejection_invariants(
         runtime: &DocumentEditRuntime,
         queue: &DocumentEditQueue,
@@ -825,37 +998,79 @@ mod tests {
     }
 
     #[test]
-    fn undo_and_redo_are_rejected_before_cu111() {
+    fn undo_and_redo_commit_durably_and_publish_once_each() {
         let (document, request) = fixture();
-        let (_path, mut runtime) = open_runtime(document);
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let (path, mut runtime) = open_runtime(document);
         let mut queue = DocumentEditQueue::default();
         queue.push_prepared(delete_output(), Some(request)).unwrap();
-        let _ = runtime.process_next(&mut queue, None, 0).unwrap();
+        let applied = runtime.process_next(&mut queue, None, 0).unwrap().unwrap();
         let post_apply_json = serde_json::to_vec(&*runtime.snapshot()).unwrap();
 
         queue.push_undo();
-        assert!(matches!(
-            runtime.process_next(&mut queue, None, 1),
-            Err(DocumentEditRuntimeError::PreparedActionUnavailable)
-        ));
+        let undone = runtime.process_next(&mut queue, None, 1).unwrap().unwrap();
+        assert_eq!(undone.kind, DocumentEditActionKind::Undo);
+        assert_eq!(undone.revision, 2);
+        assert_eq!(undone.projection_generation, 2);
+        assert_eq!(serde_json::to_vec(&*undone.snapshot).unwrap(), initial_json);
+        assert_eq!(runtime.history_lengths(), (0, 1));
         assert_eq!(queue.len(), 0);
-        assert_eq!(runtime.revision(), 1);
-        assert_eq!(
-            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
-            post_apply_json
-        );
 
-        let mut queue = DocumentEditQueue::default();
         queue.push_redo();
-        assert!(matches!(
-            runtime.process_next(&mut queue, None, 1),
-            Err(DocumentEditRuntimeError::PreparedActionUnavailable)
-        ));
-        assert_eq!(runtime.revision(), 1);
+        let redone = runtime.process_next(&mut queue, None, 2).unwrap().unwrap();
+        assert_eq!(redone.kind, DocumentEditActionKind::Redo);
+        assert_eq!(redone.revision, 3);
+        assert_eq!(redone.projection_generation, 3);
         assert_eq!(
-            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            serde_json::to_vec(&*redone.snapshot).unwrap(),
             post_apply_json
         );
+        assert_eq!(runtime.history_lengths(), (1, 0));
+        assert_eq!(applied.revision, 1);
+
+        drop(runtime);
+        let limits = ResourceLimits::production();
+        let (_session, reopened) = ProjectSession::open(&path, &limits).unwrap();
+        assert_eq!(
+            serde_json::to_vec(&reopened.document).unwrap(),
+            post_apply_json
+        );
+    }
+
+    #[test]
+    fn routed_history_commands_reconcile_selection_without_restoring_it_on_redo() {
+        let (document, _) = fixture();
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_place_rectangle(PlaceRectangleRequest {
+            position: [0.0, 0.0],
+            playhead: RationalTime::ZERO,
+        });
+        let placed = runtime.process_next(&mut queue, None, 0).unwrap().unwrap();
+        let selected = placed.primary.expect("Place selects the new Rectangle");
+
+        queue
+            .push_prepared(history_output(DomainIntent::Undo), None)
+            .unwrap();
+        let undone = runtime
+            .process_next(&mut queue, Some(selected), 1)
+            .unwrap()
+            .unwrap();
+        assert_eq!(undone.kind, DocumentEditActionKind::Undo);
+        assert_eq!(undone.primary, None);
+        assert!(runtime.writer.find_envelope(selected).is_none());
+
+        queue
+            .push_prepared(history_output(DomainIntent::Redo), None)
+            .unwrap();
+        let redone = runtime
+            .process_next(&mut queue, undone.primary, 2)
+            .unwrap()
+            .unwrap();
+        assert_eq!(redone.kind, DocumentEditActionKind::Redo);
+        assert_eq!(redone.primary, None);
+        assert!(runtime.writer.find_envelope(selected).is_some());
+        assert_eq!(runtime.history_lengths(), (1, 0));
     }
 
     #[test]
@@ -874,7 +1089,7 @@ mod tests {
         queue.push_undo();
         assert!(matches!(
             runtime.process_next(&mut queue, None, 0),
-            Err(DocumentEditRuntimeError::PreparedActionUnavailable)
+            Err(DocumentEditRuntimeError::NothingToUndo)
         ));
         assert_eq!(runtime.revision(), 0);
         assert_eq!(runtime.history_lengths(), (0, 0));
@@ -1268,7 +1483,7 @@ mod tests {
 
         assert!(matches!(
             runtime.process_next(&mut queue, None, 4),
-            Err(DocumentEditRuntimeError::PreparedActionUnavailable)
+            Err(DocumentEditRuntimeError::HistoryProjectionMismatch)
         ));
         assert_eq!(queue.len(), 0);
         assert_eq!(runtime.revision(), 1);

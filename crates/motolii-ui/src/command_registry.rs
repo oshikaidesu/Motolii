@@ -125,7 +125,7 @@ impl std::fmt::Display for CommandId {
     }
 }
 
-/// U0c-1で閉じた5代表commandのregistryを構築する。
+/// 製品入力へ接続済みの安定command registryを構築する。
 pub fn builtin_command_registry() -> Result<CommandRegistry, CommandRegistryError> {
     let entries = [
         builtin_metadata(
@@ -153,6 +153,8 @@ pub fn builtin_command_registry() -> Result<CommandRegistry, CommandRegistryErro
             "Cancel in-flight gesture",
             DomainIntent::CancelInFlightGesture,
         )?,
+        builtin_metadata("motolii.edit.undo", "Undo", DomainIntent::Undo)?,
+        builtin_metadata("motolii.edit.redo", "Redo", DomainIntent::Redo)?,
     ];
     CommandRegistry::try_new(entries)
 }

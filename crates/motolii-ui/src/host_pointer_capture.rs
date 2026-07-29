@@ -1,5 +1,7 @@
 //! WebView境界を越えるpointer lifecycleをHost内へ閉じる。
 
+use crate::{EffectiveTrigger, InputPhase, KeyToken, Modifier, Modifiers};
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct HostPointerSample {
     pub(crate) position: [f64; 2],
@@ -103,6 +105,8 @@ pub(crate) struct PlatformPointerCapture {
     window: objc2::rc::Retained<objc2_app_kit::NSWindow>,
     state: HostPointerCaptureState,
     click_inbox: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<HostPointerClick>>>,
+    command_inbox: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<EffectiveTrigger>>>,
+    host_commands_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
     click_monitor: objc2::rc::Retained<objc2::runtime::AnyObject>,
     armed_after_event_timestamp: f64,
 }
@@ -129,19 +133,33 @@ impl PlatformPointerCapture {
         let click_inbox =
             std::sync::Arc::new(std::sync::Mutex::new(std::collections::VecDeque::new()));
         let monitor_inbox = std::sync::Arc::clone(&click_inbox);
+        let command_inbox =
+            std::sync::Arc::new(std::sync::Mutex::new(std::collections::VecDeque::new()));
+        let monitor_command_inbox = std::sync::Arc::clone(&command_inbox);
+        let host_commands_enabled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let monitor_commands_enabled = std::sync::Arc::clone(&host_commands_enabled);
         let monitor_window = window.clone();
         let monitor =
             block2::RcBlock::new(move |event: std::ptr::NonNull<objc2_app_kit::NSEvent>| {
                 // SAFETY: AppKitはlocal monitor呼び出し中のevent生存を保証する。
                 let event = unsafe { event.as_ref() };
-                if let Some(content) = monitor_window.contentView() {
-                    let content_point =
-                        content.convertPoint_fromView(event.locationInWindow(), None);
-                    let content_height = content.bounds().size.height;
-                    if let Ok(mut inbox) = monitor_inbox.lock() {
-                        inbox.push_back(HostPointerClick {
-                            position: [content_point.x, content_height - content_point.y],
-                        });
+                if event.r#type() == objc2_app_kit::NSEventType::LeftMouseUp {
+                    if let Some(content) = monitor_window.contentView() {
+                        let content_point =
+                            content.convertPoint_fromView(event.locationInWindow(), None);
+                        let content_height = content.bounds().size.height;
+                        if let Ok(mut inbox) = monitor_inbox.lock() {
+                            inbox.push_back(HostPointerClick {
+                                position: [content_point.x, content_height - content_point.y],
+                            });
+                        }
+                    }
+                } else if monitor_commands_enabled.load(std::sync::atomic::Ordering::Acquire) {
+                    if let Some(trigger) = mac_history_trigger(event) {
+                        if let Ok(mut inbox) = monitor_command_inbox.lock() {
+                            inbox.push_back(trigger);
+                            return std::ptr::null_mut();
+                        }
                     }
                 }
                 event as *const objc2_app_kit::NSEvent as *mut objc2_app_kit::NSEvent
@@ -149,7 +167,7 @@ impl PlatformPointerCapture {
         // SAFETY: blockは受け取ったlive eventをそのまま返し、monitor tokenはDropで除去する。
         let click_monitor = unsafe {
             objc2_app_kit::NSEvent::addLocalMonitorForEventsMatchingMask_handler(
-                objc2_app_kit::NSEventMask::LeftMouseUp,
+                objc2_app_kit::NSEventMask::LeftMouseUp | objc2_app_kit::NSEventMask::KeyDown,
                 &monitor,
             )
         }
@@ -158,6 +176,8 @@ impl PlatformPointerCapture {
             window,
             state: HostPointerCaptureState::default(),
             click_inbox,
+            command_inbox,
+            host_commands_enabled,
             click_monitor,
             armed_after_event_timestamp: 0.0,
         })
@@ -219,6 +239,52 @@ impl PlatformPointerCapture {
             .map_err(|_| PlatformPointerCaptureError::ClickInboxPoisoned)
             .map(|mut inbox| inbox.pop_front())
     }
+
+    pub(crate) fn set_host_commands_enabled(&self, enabled: bool) {
+        self.host_commands_enabled
+            .store(enabled, std::sync::atomic::Ordering::Release);
+    }
+
+    pub(crate) fn poll_command(
+        &mut self,
+    ) -> Result<Option<EffectiveTrigger>, PlatformPointerCaptureError> {
+        self.command_inbox
+            .lock()
+            .map_err(|_| PlatformPointerCaptureError::CommandInboxPoisoned)
+            .map(|mut inbox| inbox.pop_front())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn mac_history_trigger(event: &objc2_app_kit::NSEvent) -> Option<EffectiveTrigger> {
+    use objc2_app_kit::NSEventModifierFlags;
+
+    if event.r#type() != objc2_app_kit::NSEventType::KeyDown || event.isARepeat() {
+        return None;
+    }
+    let flags = event.modifierFlags();
+    if !flags.contains(NSEventModifierFlags::Command)
+        || flags.intersects(NSEventModifierFlags::Control | NSEventModifierFlags::Option)
+        || event.charactersIgnoringModifiers()?.to_string() != "z"
+    {
+        return None;
+    }
+    let modifiers = Modifiers::try_new(
+        [
+            Some(Modifier::Meta),
+            flags
+                .contains(NSEventModifierFlags::Shift)
+                .then_some(Modifier::Shift),
+        ]
+        .into_iter()
+        .flatten(),
+    )
+    .ok()?;
+    Some(EffectiveTrigger::Keyboard {
+        key: KeyToken::Ascii(crate::AsciiKey::try_new('z').ok()?),
+        modifiers,
+        phase: InputPhase::Press,
+    })
 }
 
 #[cfg(target_os = "macos")]
@@ -262,6 +328,14 @@ impl PlatformPointerCapture {
     ) -> Result<Option<HostPointerClick>, PlatformPointerCaptureError> {
         Ok(None)
     }
+
+    pub(crate) fn set_host_commands_enabled(&self, _enabled: bool) {}
+
+    pub(crate) fn poll_command(
+        &mut self,
+    ) -> Result<Option<EffectiveTrigger>, PlatformPointerCaptureError> {
+        Ok(None)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -278,6 +352,8 @@ pub(crate) enum PlatformPointerCaptureError {
     EventMonitor,
     #[error("native pointer click inbox lock is poisoned")]
     ClickInboxPoisoned,
+    #[error("native command inbox lock is poisoned")]
+    CommandInboxPoisoned,
 }
 
 #[cfg(test)]
