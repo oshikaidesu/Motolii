@@ -60,5 +60,7 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # egui-wgpuとコアで同じwgpuメジャーを共有する。
 # 更新時はnative textureと既存device共有を同じPRで再検証する。
 wgpu = "29"
+winit = "0.30.9"
+wry = "0.55.1"
 # M2E-6: プロパティテストの正本。エージェントはこれ以外を独断導入しない(監査EN-5)。
 proptest = "1"

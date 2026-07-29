@@ -21,6 +21,8 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 wgpu.workspace = true
+winit.workspace = true
+wry.workspace = true
 
 [dev-dependencies]
 cargo_metadata.workspace = true

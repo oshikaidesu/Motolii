@@ -290,7 +290,7 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-0B02C | `PRODUCT / WAIT` | 既存component stateを直接所有移管 | CU-0B02R | focus/hover/pressed/disabled/selected、copy 0 | 縮約再実装が必要 |
 | CU-0B02I | `SPEC / WAIT` | icon grid/stroke system採択 | CU-0B02T | inline SVG/Unicode混在をicon正本と誤認しない | source不在のまま実装したくなる |
 | CU-0B03H | `PRODUCT / DONE` | H1b offline bundle / closed Host callback / mountの最小契約を固定 | CU-0A09B、CU-0A08BTI | [実装決定](2026-07-29-cu-0b03h-browser-host-contract-offline-mount-decision.md)。built-in Browser 1面、network 0、fixture caller 0、公開plugin API 0 | — |
-| CU-0B03 | `PRODUCT / DO` | H1b exact codecをnative Host inboxへ接続 | CU-0B03H | invalid/stale/duplicate/oversize拒否、callback内D2 0、bounded inbox | WebView transportを公開plugin APIへ一般化したくなる |
+| CU-0B03 | `PRODUCT / DONE` | H1b exact codecをnative Host inboxへ接続 | CU-0B03H | [実装決定](2026-07-29-cu-0b03-native-browser-host-codec-inbox-implementation-decision.md)。invalid/stale/duplicate/oversize拒否、callback内D2 0、bounded inbox、offline native WebView実caller | — |
 | CU-0B04N | `PRODUCT / WAIT` | native Stage/Timeline viewportを1 top-level Surfaceへ接続 | CU-0B02N、別途確定する製品前提 | 同一device/queue、CPU readback 0、viewport resizeでsemantic不変。G0-9L evidenceを依存充足にしない | native viewportごとに別正本Surfaceが必要 |
 | CU-0B04R | `PRODUCT / WAIT` | opaque child WebView islandsをHost layoutへ接続 | CU-0B03、CU-0B04N | transparent overlay 0、focus/geometry epoch、React semantic state 0。G0-9L evidenceを依存充足にしない | DOM/pxをnative/Document identityへ使いたくなる |
 | CU-0B05 | `E2E / WAIT` | reload/crash/focus/resize後にHost snapshotから再投影 | CU-0B04N/R | 同じrevision/selection、old epoch拒否、Document/history不変 | surface間state同期が必要 |

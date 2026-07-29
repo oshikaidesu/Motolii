@@ -380,3 +380,4 @@
 | [2026-07-29-cu-0b02t-product-token-authority-implementation-decision.md](2026-07-29-cu-0b02t-product-token-authority-implementation-decision.md) | CU-0B02T 製品token単一authority実装決定 |
 | [2026-07-29-cu-0a08bti-browser-place-typed-intent-implementation-decision.md](2026-07-29-cu-0a08bti-browser-place-typed-intent-implementation-decision.md) | CU-0A08BTI Browser Place typed intent実装決定 |
 | [2026-07-29-cu-0b03h-browser-host-contract-offline-mount-decision.md](2026-07-29-cu-0b03h-browser-host-contract-offline-mount-decision.md) | CU-0B03H Browser Host契約・offline mount決定 |
+| [2026-07-29-cu-0b03-native-browser-host-codec-inbox-implementation-decision.md](2026-07-29-cu-0b03-native-browser-host-codec-inbox-implementation-decision.md) | CU-0B03 native Browser Host codec/inbox実装決定 |

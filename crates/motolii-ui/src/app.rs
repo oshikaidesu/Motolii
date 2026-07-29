@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use egui_tiles::{Behavior, EditAction, Tile, TileId, Tiles, UiResponse};
 use motolii_gpu::GpuCtx;
 
+use crate::browser_host_runtime::{BrowserHostRuntime, BrowserHostRuntimeError};
 use crate::command_registry::builtin_command_registry;
 use crate::display_slot::DisplaySlotError;
 use crate::document_edit_runtime::{
@@ -40,6 +41,10 @@ pub(crate) enum AppConstructionError {
     Submit(#[from] RenderSubmitError),
     #[error(transparent)]
     RepaintSignal(#[from] RepaintSignalRegistrationError),
+    #[error("native window is not available for the Browser Host")]
+    MissingNativeWindow,
+    #[error(transparent)]
+    BrowserHost(#[from] BrowserHostRuntimeError),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -163,6 +168,8 @@ pub(crate) struct MotoliiApp {
     render_request_template: RenderRequest,
     document_failure: Option<DocumentEditFailure>,
     document_smoke: Option<DocumentEditSmoke>,
+    browser_host: Option<BrowserHostRuntime>,
+    browser_host_failure: Option<String>,
 }
 
 const INITIAL_PRIMARY: Option<motolii_doc::LayerId> = None;
@@ -213,6 +220,14 @@ impl MotoliiApp {
             Some(runtime) => runtime.snapshot(),
             None => Arc::clone(&initial_request.document),
         };
+        let browser_host = if document_runtime.is_some() {
+            let window = cc
+                .winit_window()
+                .ok_or(AppConstructionError::MissingNativeWindow)?;
+            Some(BrowserHostRuntime::new(window)?)
+        } else {
+            None
+        };
         let initial_generation = render_client.submit(initial_request)?;
         let evidence = preview.invariant_evidence();
         eprintln!(
@@ -255,6 +270,8 @@ impl MotoliiApp {
             document_smoke: smoke
                 .document_edit
                 .map(|request| DocumentEditSmoke::new(evidence, request)),
+            browser_host,
+            browser_host_failure: None,
         })
     }
 
@@ -337,6 +354,24 @@ impl eframe::App for MotoliiApp {
             .show(ui, |ui| {
                 ui.label("Status");
             });
+
+        if self.browser_host.is_some() {
+            let browser_panel = egui::Panel::left("motolii-browser-host")
+                .resizable(false)
+                .default_size(420.0)
+                .min_size(420.0)
+                .max_size(420.0)
+                .show(ui, |_ui| {});
+            if self.browser_host_failure.is_none() {
+                if let Some(Err(error)) = self
+                    .browser_host
+                    .as_ref()
+                    .map(|host| host.set_bounds(browser_panel.response.rect))
+                {
+                    self.browser_host_failure = Some(error.to_string());
+                }
+            }
+        }
 
         egui::CentralPanel::default().show(ui, |ui| {
             let constraints = layout_constraints(ui.available_width());
