@@ -103,6 +103,7 @@ pub struct M4ValidationMatrix {
     pub fixture_bytes: u64,
     pub fixture_sha256: String,
     pub thresholds_selected: bool,
+    pub repetition_policy_selected: bool,
     pub low_spec_windows_gate_closed: bool,
     pub entries: Vec<M4ValidationMatrixEntry>,
 }
@@ -597,6 +598,7 @@ pub fn compare_m4_validation_bundles(
         fixture_bytes,
         fixture_sha256,
         thresholds_selected: false,
+        repetition_policy_selected: false,
         low_spec_windows_gate_closed: false,
         entries,
     })

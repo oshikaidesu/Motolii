@@ -126,9 +126,10 @@ decode fixtureのbyte数またはSHA-256が異なるbundleも拒否する。出�
 - 音MAD fixtureのclip／effect数、最大active slot、最大graph steps、sequential／scrub最大時間
 
 `cargo run`全体の時間、compile時間、run record生成時間は性能値へ混ぜない。
-matrix schema v1は`thresholds_selected: false`と`low_spec_windows_gate_closed: false`を固定する。
+matrix schema v1は`thresholds_selected: false`、`repetition_policy_selected: false`、
+`low_spec_windows_gate_closed: false`を固定する。
 比率、順位、合否、製品budgetは出力しない。単回値の比較を統計的な性能差や最低スペック認定へ
-昇格させず、反復数と採択policyは実機matrix取得後の別粒で決める。
+昇格させず、warm-up、反復数、集約統計、外れ値規則は実機matrix取得後の別粒で決める。
 
 機種間比較は同じfixture revisionとMotolii commitで行う。現在はpass/fail閾値を持たず、
 取得不能は`Unavailable`として記録する。

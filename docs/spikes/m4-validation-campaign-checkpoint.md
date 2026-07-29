@@ -175,5 +175,16 @@ measurement context、hardware facts、decode command比較、音MAD graph値を
 別素材、別revision、不完全run、改変後artifactはfail closedで拒否する。
 
 比較器は比率、順位、閾値、推奨budget、最低スペック合否を計算せず、
-`thresholds_selected: false`と`low_spec_windows_gate_closed: false`を固定する。
+`thresholds_selected: false`、`repetition_policy_selected: false`、
+`low_spec_windows_gate_closed: false`を固定する。
 したがって開発Mac同士のsmokeやWindows一台の追加だけでexternal gateを閉じない。
+
+clean commit `7dc9039c9a40f859e7d241313a101cc4b2558e1d`で同じApple M4、AC、
+Low Power Mode off、2560×1664の独立bundleを2組直列再生した。両方とも6/6 verified、
+同じ3,517,051-byte fixture／SHA-256を使い、matrix schema v1が2 entryを出力した。
+異なるcommitの旧schema v4 bundleとの比較はmanifestと全run identity不一致でfail closedになった。
+
+同一機・同条件でも、software sequentialは194.59 / 126.60 ms、hardware-download sequentialは
+526.48 / 362.35 ms、音MAD sequential最大は3.41 / 1.54 msと大きく揺れた。
+このA/Bは機種性能比較ではなく、単一runからbudgetやSLOを採択できない反例である。
+warm-up／反復回数／集約統計は未決のまま保持する。
