@@ -350,3 +350,4 @@
 | [2026-07-29-g0-6h-v1g-p-current-route-generation-mechanics-decision.md](2026-07-29-g0-6h-v1g-p-current-route-generation-mechanics-decision.md) | G0-6H-V1G-P 現行route generation mechanics決定 |
 | [2026-07-29-cu-0a08rs0-browser-inspector-read-projection-dependency-scope-selection.md](2026-07-29-cu-0a08rs0-browser-inspector-read-projection-dependency-scope-selection.md) | CU-0A08RS0 Browser / Inspector read-projection 依存範囲の選定 |
 | [2026-07-29-cu-0a08rs-browser-inspector-read-projection-u4a2-dependency-decision.md](2026-07-29-cu-0a08rs-browser-inspector-read-projection-u4a2-dependency-decision.md) | CU-0A08RS Browser / Inspector read-only projection U4a-2 依存裁定 |
+| [2026-07-29-cu-0a08rm0-browser-typed-intent-dependency-adjudication-scope-selection.md](2026-07-29-cu-0a08rm0-browser-typed-intent-dependency-adjudication-scope-selection.md) | CU-0A08RM0 Browser typed-intent 依存裁定範囲の選定 |
