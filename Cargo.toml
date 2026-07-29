@@ -62,5 +62,7 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 wgpu = "29"
 winit = "0.30.9"
 wry = "0.55.1"
+objc2 = "0.6.4"
+objc2-app-kit = { version = "0.3.2", default-features = false }
 # M2E-6: プロパティテストの正本。エージェントはこれ以外を独断導入しない(監査EN-5)。
 proptest = "1"

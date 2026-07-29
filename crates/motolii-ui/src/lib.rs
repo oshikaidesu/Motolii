@@ -11,6 +11,7 @@ mod display_slot;
 mod document_command_request;
 mod document_edit_runtime;
 mod domain_intent;
+mod host_pointer_capture;
 mod input_router;
 mod interaction_state;
 mod keymap;

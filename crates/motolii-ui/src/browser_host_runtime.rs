@@ -8,6 +8,9 @@ use wry::http::{header::CONTENT_TYPE, Response};
 use wry::{NewWindowResponse, Rect, WebView, WebViewBuilder};
 
 use crate::browser_host::{BrowserHostSession, BrowserPlaceIntent};
+use crate::host_pointer_capture::{
+    HostPointerCandidate, PlatformPointerCapture, PlatformPointerCaptureError,
+};
 
 const PROTOCOL: &str = "motolii-browser";
 const ENTRY_URL: &str = "motolii-browser://product/host.html";
@@ -20,6 +23,7 @@ const HOST_CSS: &[u8] =
 pub(crate) struct BrowserHostRuntime {
     session: Arc<Mutex<BrowserHostSession>>,
     webview: WebView,
+    pointer_capture: Mutex<PlatformPointerCapture>,
 }
 
 impl BrowserHostRuntime {
@@ -70,16 +74,39 @@ postMessage:(message)=>window.ipc.postMessage(message)
                 }
             })
             .build_as_child(window)?;
-        Ok(Self { session, webview })
+        let pointer_capture = Mutex::new(PlatformPointerCapture::new(window)?);
+        Ok(Self {
+            session,
+            webview,
+            pointer_capture,
+        })
     }
 
     pub(crate) fn take_place_intent(
         &self,
     ) -> Result<Option<BrowserPlaceIntent>, BrowserHostRuntimeError> {
-        self.session
+        let intent = self
+            .session
             .lock()
             .map_err(|_| BrowserHostRuntimeError::InboxPoisoned)
-            .map(|mut session| session.pop())
+            .map(|mut session| session.pop())?;
+        if intent.is_some() {
+            self.pointer_capture
+                .lock()
+                .map_err(|_| BrowserHostRuntimeError::PointerCapturePoisoned)?
+                .arm();
+        }
+        Ok(intent)
+    }
+
+    pub(crate) fn poll_pointer_candidate(
+        &self,
+    ) -> Result<Option<HostPointerCandidate>, BrowserHostRuntimeError> {
+        self.pointer_capture
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::PointerCapturePoisoned)?
+            .poll()
+            .map_err(Into::into)
     }
 
     pub(crate) fn set_bounds(&self, rect: egui::Rect) -> Result<(), BrowserHostRuntimeError> {
@@ -125,6 +152,10 @@ pub(crate) enum BrowserHostRuntimeError {
     WebView(#[from] wry::Error),
     #[error("Browser Host inbox lock is poisoned")]
     InboxPoisoned,
+    #[error("Browser Host pointer capture lock is poisoned")]
+    PointerCapturePoisoned,
+    #[error(transparent)]
+    PointerCapture(#[from] PlatformPointerCaptureError),
 }
 
 #[cfg(test)]

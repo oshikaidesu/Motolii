@@ -15,6 +15,7 @@ use crate::document_edit_runtime::{
     DocumentEditActionKind, DocumentEditDispatchError, DocumentEditQueue, DocumentEditRuntime,
     DocumentEditRuntimeError, PlaceRectangleRequest, PublishedDocument,
 };
+use crate::host_pointer_capture::HostPointerCandidate;
 use crate::input_router::{ImeGateState, InputPhase, InputRouter, NormalizedInput};
 use crate::layout::{LayoutAction, LayoutConstraints, PanelRole, SeparatorAction};
 use crate::layout_authority::{LayoutAuthority, RuntimeFrameEdit};
@@ -294,6 +295,7 @@ impl eframe::App for MotoliiApp {
         self.recover_repaint_signal();
         self.drain_latest_result();
         self.begin_browser_place();
+        self.poll_browser_place_pointer();
         if self.advance_latest_smoke(ctx) {
             return;
         }
@@ -685,6 +687,31 @@ impl MotoliiApp {
             Ok(Some(intent)) => self.active_browser_place = Some(intent),
             Ok(None) => {}
             Err(error) => self.browser_host_failure = Some(error.to_string()),
+        }
+    }
+
+    fn poll_browser_place_pointer(&mut self) {
+        if self.active_browser_place.is_none() || self.browser_host_failure.is_some() {
+            return;
+        }
+        let Some(host) = &self.browser_host else {
+            return;
+        };
+        match host.poll_pointer_candidate() {
+            Ok(Some(HostPointerCandidate::Moved { .. })) => {
+                // WebKit tracking loop外でもreleaseを観測できるよう、active中はpollを継続する。
+                self.repaint_context.request_repaint();
+            }
+            Ok(Some(HostPointerCandidate::Released { .. }))
+            | Ok(Some(HostPointerCandidate::Cancelled { .. })) => {
+                // 本粒はcandidate取得まで。Stage admissionとD2は後続責任へ渡す。
+                self.active_browser_place = None;
+            }
+            Ok(None) => {}
+            Err(error) => {
+                self.active_browser_place = None;
+                self.browser_host_failure = Some(error.to_string());
+            }
         }
     }
 
