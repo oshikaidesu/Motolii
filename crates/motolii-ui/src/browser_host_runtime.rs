@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use wry::http::{header::CONTENT_TYPE, Response};
-use wry::{NewWindowResponse, Rect, WebView, WebViewBuilder};
+use wry::{NewWindowResponse, PageLoadEvent, Rect, WebView, WebViewBuilder};
 
 use crate::browser_host::{BrowserHostSession, BrowserPlaceIntent};
 use crate::host_pointer_capture::{
@@ -23,8 +23,68 @@ const HOST_CSS: &[u8] =
 
 pub(crate) struct BrowserHostRuntime {
     session: Arc<Mutex<BrowserHostSession>>,
+    island: Arc<Mutex<BrowserIslandState>>,
     webview: WebView,
     pointer_capture: Mutex<PlatformPointerCapture>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RequestedFocusOwner {
+    Parent,
+    Browser,
+}
+
+#[derive(Debug)]
+struct BrowserIslandState {
+    instance_epoch: u64,
+    initial_projection_ready: bool,
+    latest_layout_epoch: Option<u64>,
+    requested_focus_owner: Option<RequestedFocusOwner>,
+}
+
+impl BrowserIslandState {
+    fn new(instance_epoch: u64) -> Self {
+        Self {
+            instance_epoch,
+            initial_projection_ready: false,
+            latest_layout_epoch: None,
+            requested_focus_owner: None,
+        }
+    }
+
+    fn observe_initial_projection(&mut self, instance_epoch: u64) -> bool {
+        if instance_epoch != self.instance_epoch || self.initial_projection_ready {
+            return false;
+        }
+        self.initial_projection_ready = true;
+        true
+    }
+
+    fn should_apply_layout(&self, epoch: u64) -> bool {
+        self.latest_layout_epoch.is_none_or(|latest| epoch > latest)
+    }
+
+    fn commit_layout(&mut self, epoch: u64) {
+        if self.should_apply_layout(epoch) {
+            self.latest_layout_epoch = Some(epoch);
+        }
+    }
+
+    fn can_transfer_focus(&self) -> bool {
+        self.initial_projection_ready
+    }
+
+    fn should_transfer_focus(&self, owner: RequestedFocusOwner) -> bool {
+        self.can_transfer_focus() && self.requested_focus_owner != Some(owner)
+    }
+
+    fn needs_initial_focus(&self) -> bool {
+        self.can_transfer_focus() && self.requested_focus_owner.is_none()
+    }
+
+    fn commit_focus(&mut self, owner: RequestedFocusOwner) {
+        self.requested_focus_owner = Some(owner);
+    }
 }
 
 impl BrowserHostRuntime {
@@ -50,7 +110,11 @@ postMessage:(message)=>window.ipc.postMessage(message)
 }});"#
         );
         let session = Arc::new(Mutex::new(session));
+        let island = Arc::new(Mutex::new(BrowserIslandState::new(epoch)));
         let callback_session = Arc::clone(&session);
+        let callback_island = Arc::clone(&island);
+        let load_island = Arc::clone(&island);
+        let load_wake = Arc::clone(&wake);
         let webview = WebViewBuilder::new()
             .with_bounds(Rect {
                 position: wry::dpi::LogicalPosition::new(0.0, 0.0).into(),
@@ -64,11 +128,27 @@ postMessage:(message)=>window.ipc.postMessage(message)
             .with_navigation_handler(|target| target.starts_with("motolii-browser:"))
             .with_new_window_req_handler(|_url, _features| NewWindowResponse::Deny)
             .with_download_started_handler(|_url, _destination| false)
+            .with_on_page_load_handler(move |event, url| {
+                if matches!(event, PageLoadEvent::Finished) && url == ENTRY_URL {
+                    let changed = load_island
+                        .lock()
+                        .map(|mut island| island.observe_initial_projection(epoch))
+                        .unwrap_or(false);
+                    if changed {
+                        load_wake();
+                    }
+                }
+            })
             .with_ipc_handler(move |request| {
                 let raw = request.body();
                 match callback_session.lock() {
                     Ok(mut session) => match session.accept(raw) {
-                        Ok(()) => wake(),
+                        Ok(()) => {
+                            if let Ok(mut island) = callback_island.lock() {
+                                island.observe_initial_projection(epoch);
+                            }
+                            wake();
+                        }
                         Err(error) => eprintln!("Browser Host rejected message: {error}"),
                     },
                     Err(_) => eprintln!("Browser Host inbox lock is poisoned"),
@@ -78,6 +158,7 @@ postMessage:(message)=>window.ipc.postMessage(message)
         let pointer_capture = Mutex::new(PlatformPointerCapture::new(window)?);
         Ok(Self {
             session,
+            island,
             webview,
             pointer_capture,
         })
@@ -92,6 +173,7 @@ postMessage:(message)=>window.ipc.postMessage(message)
             .map_err(|_| BrowserHostRuntimeError::InboxPoisoned)
             .map(|mut session| session.pop())?;
         if intent.is_some() {
+            self.transfer_focus(RequestedFocusOwner::Parent)?;
             self.pointer_capture
                 .lock()
                 .map_err(|_| BrowserHostRuntimeError::PointerCapturePoisoned)?
@@ -117,11 +199,67 @@ postMessage:(message)=>window.ipc.postMessage(message)
             .map(|capture| capture.is_active())
     }
 
-    pub(crate) fn set_bounds(&self, rect: LogicalRect) -> Result<(), BrowserHostRuntimeError> {
+    pub(crate) fn ensure_initial_focus(&self) -> Result<(), BrowserHostRuntimeError> {
+        let should_focus = self
+            .island
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::IslandStatePoisoned)?
+            .needs_initial_focus();
+        if should_focus {
+            self.transfer_focus(RequestedFocusOwner::Browser)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn set_bounds(
+        &self,
+        layout_epoch: u64,
+        rect: LogicalRect,
+    ) -> Result<(), BrowserHostRuntimeError> {
+        if !self
+            .island
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::IslandStatePoisoned)?
+            .should_apply_layout(layout_epoch)
+        {
+            return Ok(());
+        }
         self.webview.set_bounds(Rect {
             position: wry::dpi::LogicalPosition::new(rect.x, rect.y).into(),
             size: wry::dpi::LogicalSize::new(rect.width, rect.height).into(),
         })?;
+        self.island
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::IslandStatePoisoned)?
+            .commit_layout(layout_epoch);
+        Ok(())
+    }
+
+    fn transfer_focus(&self, owner: RequestedFocusOwner) -> Result<(), BrowserHostRuntimeError> {
+        if !self
+            .island
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::IslandStatePoisoned)?
+            .can_transfer_focus()
+        {
+            return Err(BrowserHostRuntimeError::InitialProjectionNotReady);
+        }
+        if !self
+            .island
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::IslandStatePoisoned)?
+            .should_transfer_focus(owner)
+        {
+            return Ok(());
+        }
+        match owner {
+            RequestedFocusOwner::Parent => self.webview.focus_parent()?,
+            RequestedFocusOwner::Browser => self.webview.focus()?,
+        }
+        self.island
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::IslandStatePoisoned)?
+            .commit_focus(owner);
         Ok(())
     }
 }
@@ -160,6 +298,10 @@ pub(crate) enum BrowserHostRuntimeError {
     InboxPoisoned,
     #[error("Browser Host pointer capture lock is poisoned")]
     PointerCapturePoisoned,
+    #[error("Browser Host island state lock is poisoned")]
+    IslandStatePoisoned,
+    #[error("Browser Host initial projection is not ready for focus transfer")]
+    InitialProjectionNotReady,
     #[error(transparent)]
     PointerCapture(#[from] PlatformPointerCaptureError),
 }
@@ -186,5 +328,46 @@ mod tests {
 
         assert_eq!(response.status(), 404);
         assert!(response.body().is_empty());
+    }
+
+    #[test]
+    fn island_rejects_duplicate_and_stale_geometry_epochs() {
+        let mut island = BrowserIslandState::new(7);
+
+        assert!(island.should_apply_layout(10));
+        island.commit_layout(10);
+        assert!(!island.should_apply_layout(10));
+        assert!(!island.should_apply_layout(9));
+        assert!(island.should_apply_layout(11));
+    }
+
+    #[test]
+    fn initial_projection_is_single_shot_and_instance_scoped() {
+        let mut island = BrowserIslandState::new(7);
+
+        assert!(!island.can_transfer_focus());
+        assert!(!island.observe_initial_projection(6));
+        assert!(island.observe_initial_projection(7));
+        assert!(!island.observe_initial_projection(7));
+        assert!(island.can_transfer_focus());
+        assert!(island.needs_initial_focus());
+    }
+
+    #[test]
+    fn focus_state_records_only_an_explicit_host_request() {
+        let mut island = BrowserIslandState::new(7);
+
+        assert_eq!(island.requested_focus_owner, None);
+        island.commit_focus(RequestedFocusOwner::Parent);
+        assert!(!island.needs_initial_focus());
+        assert_eq!(
+            island.requested_focus_owner,
+            Some(RequestedFocusOwner::Parent)
+        );
+        island.commit_focus(RequestedFocusOwner::Browser);
+        assert_eq!(
+            island.requested_focus_owner,
+            Some(RequestedFocusOwner::Browser)
+        );
     }
 }

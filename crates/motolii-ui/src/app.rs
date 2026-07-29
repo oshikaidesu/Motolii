@@ -379,12 +379,15 @@ impl eframe::App for MotoliiApp {
             if self.browser_host_failure.is_none() {
                 if let Some(Err(error)) = self.browser_host.as_ref().map(|host| {
                     let rect = browser_panel.response.rect;
-                    host.set_bounds(crate::native_host_layout::LogicalRect {
-                        x: f64::from(rect.left()),
-                        y: f64::from(rect.top()),
-                        width: f64::from(rect.width()),
-                        height: f64::from(rect.height()),
-                    })
+                    host.set_bounds(
+                        u64::from(self.paint_count),
+                        crate::native_host_layout::LogicalRect {
+                            x: f64::from(rect.left()),
+                            y: f64::from(rect.top()),
+                            width: f64::from(rect.width()),
+                            height: f64::from(rect.height()),
+                        },
+                    )
                 }) {
                     self.browser_host_failure = Some(error.to_string());
                 }

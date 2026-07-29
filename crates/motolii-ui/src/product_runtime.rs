@@ -154,7 +154,7 @@ impl ProductApp {
             .checked_add(1)
             .ok_or(ProductRuntimeError::LayoutEpochExhausted)?;
         if let Some(browser) = &self.browser {
-            browser.set_bounds(layout.browser)?;
+            browser.set_bounds(layout.epoch, layout.browser)?;
         }
         self.layout = Some(layout);
         Ok(())
@@ -171,6 +171,9 @@ impl ProductApp {
         let Some(browser) = &self.browser else {
             return;
         };
+        if let Err(error) = browser.ensure_initial_focus() {
+            return self.fail(event_loop, error);
+        }
         if self.active_place.is_none() {
             match browser.take_place_intent() {
                 Ok(intent) => self.active_place = intent,
