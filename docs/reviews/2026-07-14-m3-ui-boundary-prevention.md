@@ -9,7 +9,7 @@
 - 本手順は[M2恒久焼き込み予防](2026-07-12-m2-permanence-prevention.md)を置き換えない。Documentスキーマへ触るタスクは両方を適用する
 - 全タスクへ同じチェックを課さない。各タスクが満たす審判はM3仕様の「GR-UI審判割当表」で決める
 
-## 規律8本
+## 規律9本
 
 ### GR-UI-1. 状態の所有者を先に決める
 
@@ -121,6 +121,40 @@ timeline/波形/keyframeを項目ごとのegui widgetで作らず、単一wgpu�
 
 自動審判はtheme外raw color、contrast、gradient許可list、component state matrix、reference screen golden/lightness差分。5秒識別、grayscale、既存UIとの馴染み、Timeline Viewとの同一fixture比較は人間審判として別に記録する。5秒は普遍的な認知研究の主張ではなく、M3内の比較条件である。
 
+### GR-UI-9. UI実装は数値ログと数値審判を残す
+
+layout、座標変換、DPI、hit-test、drag、render viewport、起動時間、frame time、resource量を
+変更するUI実装は、見た目だけで完了判定しない。入力から最終domain値までの変換境界を
+同じgeneration / revision / layout epochで結べる構造化数値ログと、代表点・境界・異なる
+scale factorを固定した自動試験を先に用意する。
+
+- 座標経路はraw platform point、platform座標向き、logical point、layout rect、NDC、正準値を記録する。
+- 性能経路は対象build、hardware、warm-up、試行数、p50 / p95とraw sampleの保存場所を記録する。
+- visual比較は入力寸法、device scale、viewport、source / output解像度を記録する。
+- 通常製品UIの縦sliceは起動phase、window / DPI / layout、WebView load / IPC / focus、
+  typed intent、preview submit / result、Document revision、Stage投影、Timeline projection /
+  hit、Inspector publish、Undo / Redo、surface recovery / failureを一つの構造化ログ系列で記録する。
+- 毎frameやpollの同値行を反復せず、連続値は変化時、状態は遷移時に記録する。ログ量でUIを
+  遅くしたり重要eventを埋没させない。
+- debug製品UIは数値ログを常時出す。release buildはdevelopment診断入口から明示的に有効化する。
+- ログはTransient診断であり、Document、journal、公開API、plugin契約、永続形式へ入れない。
+- 秘密情報、ユーザー入力本文、project内容を記録せず、数値と不透明なgeneration / revisionだけにする。
+
+ログの存在だけでは合格にしない。期待値をassertする自動試験を審判とし、実機の目視確認は
+ログの同一操作列と対応づけた補助証跡にする。必要な変換境界を数値化できない場合は、UI実装を
+進めず観測点の所有境界を先に決める。
+
+通常の実機確認は`./scripts/run-ui-trace.sh <project.json>`から起動する。stderrの構造化ログを
+`target/ui-traces/motolii-ui-<UTC timestamp>.log`へ同時保存し、確認後にstartup、failure、
+対象操作のgeneration / revision / layout epochを読む。`target/`内のログは開発証跡であり
+commitしない。PRへ証跡を添える場合は秘密情報を含まない該当行と測定条件だけをレビュー文書へ
+転記し、生ログ全体やproject内容をrepositoryへ保存しない。
+
+既存UIテストも、対象実装を変更する粒で同時に更新する。全テストへ無関係なダミー数値を
+追加するのではなく、layout / DPI / 入力 / hit-test / 描画 / 性能 / resource量を扱うテストは
+raw値と期待値を明示し、文字列codec、状態機械、公開境界だけを扱うテストは従来の意味審判を
+維持する。数値ログの必須field自体も契約テストで固定する。
+
 ## 停止条件
 
 - 状態の5層分類ができない: M3仕様改訂へ戻る
@@ -129,6 +163,7 @@ timeline/波形/keyframeを項目ごとのegui widgetで作らず、単一wgpu�
 - GAP-6/U0d-2 codec契約の外: 未決field・旧版変換・保存場所・presetを恒久keymap形式へ焼かない
 - IME不合格: shortcut special-caseで隠さず入力経路の仕様改訂へ戻る
 - performance測定条件未記録: 60fps達成/未達を完了報告に使わない
+- UI変換経路の数値ログまたは期待値assertがない: 目視だけで完了にせず、観測点を先に追加する
 - Documentまたは公開plugin契約の変更が必要: GR-PVまたは解凍手続きを先に行う
 
 ## エージェントの着手前チェック
@@ -144,6 +179,7 @@ M3仕様の審判割当表で対象タスクに割り当てられた項目だけ
 7. IME/別monitor/聴感等の人間審判を自動試験で代用していないか
 8. GAP-6のU0d-2 codec契約外やGAP-13等の未決を実装defaultで埋めていないか
 9. 主要状態を文字だけ/色だけで表していないか。新規componentが既存token体系から逸脱していないか
+10. UIの入力・変換・出力を同じgeneration / revision / layout epochで数値追跡でき、期待値をassertしているか
 
 ## 改訂記録
 
@@ -152,3 +188,4 @@ M3仕様の審判割当表で対象タスクに割り当てられた項目だけ
 - 2026-07-14: GR-UI-8を追加。操作参照と視覚参照を分離し、Timeline View限定、Arrangement View非採用、意味色と既存UIへの馴染みを審判化
 - 2026-07-18: [egui採用判断](2026-07-18-m3-egui-selection.md)を反映。GR-UI-3〜7をegui/native texture/egui_tiles境界へ再翻訳
 - 2026-07-20: G0-2で確定済みの5層所有語彙へ同期し、U0b-1が意味決定を発明しない停止線を明記
+- 2026-07-30: GR-UI-9を追加。全UI実装を構造化数値ログ、同一世代の変換追跡、数値assertで審判し、目視だけの完了判定を禁止

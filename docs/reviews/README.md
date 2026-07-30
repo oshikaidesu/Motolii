@@ -398,9 +398,11 @@
 | [2026-07-29-cu-110ps-native-stage-published-snapshot-projection-implementation-decision.md](2026-07-29-cu-110ps-native-stage-published-snapshot-projection-implementation-decision.md) | CU-110PS native Stage published snapshot投影 実装決定 |
 | [2026-07-29-cu-110pt0-native-timeline-projection-envelope-decision.md](2026-07-29-cu-110pt0-native-timeline-projection-envelope-decision.md) | CU-110PT0 native Timeline投影envelope決定 |
 | [2026-07-29-cu-110pt-native-timeline-published-snapshot-projection-implementation-decision.md](2026-07-29-cu-110pt-native-timeline-published-snapshot-projection-implementation-decision.md) | CU-110PT native Timeline published snapshot投影 実装決定 |
+| [2026-07-30-native-timeline-product-asset-transfer-implementation-decision.md](2026-07-30-native-timeline-product-asset-transfer-implementation-decision.md) | native Timeline比較面の通常製品window移管 実装決定 |
 | [2026-07-29-cu-110pi-inspector-product-connection-split-decision.md](2026-07-29-cu-110pi-inspector-product-connection-split-decision.md) | CU-110PI Inspector通常製品接続 分割決定 |
 | [2026-07-29-cu-110pir-inspector-safe-read-only-branch-implementation-decision.md](2026-07-29-cu-110pir-inspector-safe-read-only-branch-implementation-decision.md) | CU-110PIR Inspector safe read-only branch 実装決定 |
 | [2026-07-30-cu-110pih-inspector-host-island-projection-implementation-decision.md](2026-07-30-cu-110pih-inspector-host-island-projection-implementation-decision.md) | CU-110PIH Inspector Host island projection 実装決定 |
 | [2026-07-30-cu-106p-native-timeline-primary-selection-implementation-decision.md](2026-07-30-cu-106p-native-timeline-primary-selection-implementation-decision.md) | CU-106P native Timeline primary selection 実装決定 |
 | [2026-07-30-cu-111-product-undo-redo-implementation-decision.md](2026-07-30-cu-111-product-undo-redo-implementation-decision.md) | CU-111 製品Undo/Redo配送 実装決定 |
 | [2026-07-30-cu-108-rectangle-product-spine-e2e-decision.md](2026-07-30-cu-108-rectangle-product-spine-e2e-decision.md) | CU-108 Rectangle通常製品spine E2E決定 |
+| [2026-07-30-cu-108-product-connection-human-acceptance-observation.md](2026-07-30-cu-108-product-connection-human-acceptance-observation.md) | CU-108 通常製品接続の人間受け入れ観察 |

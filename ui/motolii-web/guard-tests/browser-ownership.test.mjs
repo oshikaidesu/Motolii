@@ -48,6 +48,7 @@ const CURRENT_KEY_TOOLS_SOURCE = "ui/motolii-web/src/candidates/KeyToolsCandidat
 const CURRENT_KEY_TOOLS_CSS = "ui/motolii-web/src/candidates/key-tools-candidate.css";
 const CURRENT_INSPECTOR_SOURCE = "ui/motolii-web/src/candidates/InspectorCandidate.jsx";
 const CURRENT_INSPECTOR_CSS = "ui/motolii-web/src/candidates/inspector-candidate.css";
+const CURRENT_STAGE_CHROME_SOURCE = "ui/motolii-web/src/candidates/StageChromeCandidate.jsx";
 const PRODUCT_RUNTIME_MODULES = [
   CURRENT_BROWSER_INDEX,
   CURRENT_BROWSER_SOURCE,
@@ -55,6 +56,7 @@ const PRODUCT_RUNTIME_MODULES = [
   CURRENT_EASING_TRIGGER_SOURCE,
   CURRENT_KEY_TOOLS_SOURCE,
   CURRENT_INSPECTOR_SOURCE,
+  CURRENT_STAGE_CHROME_SOURCE,
 ];
 
 const FIXED_BROWSER_SOURCE = "docs/mocks-ui/src/candidates/DiscoveryBrowserCandidate.jsx";
@@ -791,6 +793,8 @@ function assertProductExportFromIndex(ast) {
   assert.equal(exportNames.has("KeyToolsCandidate"), true);
   assert.equal(exportNames.has("InspectorCandidate"), true);
   assert.equal(exportNames.has("InspectorContext"), true);
+  assert.equal(exportNames.has("StageHeaderCandidate"), true);
+  assert.equal(exportNames.has("StageTransportCandidate"), true);
   assert.equal(exportNames.has("default"), false);
 }
 
@@ -1333,15 +1337,17 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
   }
 
   assert.equal(productPackage.name, PRODUCT_NAME);
-  assert.equal(provenance.task, "CU-0A04 / CU-0A05B / CU-0A06B / CU-0A07C");
-  assert.equal(provenance.sourceOwnership.owner, "R1-browser / R2B-easing-trigger / R3B-key-tools / R4C-inspector");
-  assert.equal(provenance.sourceOwnership.surface, "Browser / Easing trigger / KEYS-LAYERS key tools / Inspector");
+  assert.equal(provenance.task, "CU-0A04 / CU-0A05B / CU-0A06B / CU-0A07C / CU-108-STAGE-REPRODUCTION");
+  assert.equal(provenance.sourceOwnership.owner, "R1-browser / R2B-easing-trigger / R3B-key-tools / R4C-inspector / R5-stage-chrome");
+  assert.equal(provenance.sourceOwnership.surface, "Browser / Easing trigger / KEYS-LAYERS key tools / Inspector / Stage header-transport");
   assert.deepEqual(provenance.sourceOwnership.exports, [
     { name: "DiscoveryBrowserCandidate", path: "src/index.js" },
     { name: "EasingTriggerCandidate", path: "src/index.js" },
     { name: "KeyToolsCandidate", path: "src/index.js" },
     { name: "InspectorCandidate", path: "src/index.js" },
     { name: "InspectorContext", path: "src/index.js" },
+    { name: "StageHeaderCandidate", path: "src/index.js" },
+    { name: "StageTransportCandidate", path: "src/index.js" },
   ]);
   assert.deepEqual(provenance.migrations, [
     {
@@ -1388,6 +1394,19 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
       current: {
         component: CURRENT_INSPECTOR_SOURCE,
         css: CURRENT_INSPECTOR_CSS,
+      },
+    },
+    {
+      type: "fixed-source-reactification-transfer",
+      old: {
+        artifact: "docs/mocks/m3-vism-host-boundary.html",
+        selectors: ".stage-tools / .transport",
+        fixedCommit: FIXED_SOURCE_COMMIT,
+      },
+      current: {
+        component: CURRENT_STAGE_CHROME_SOURCE,
+        css: "ui/motolii-web/src/host/stage-host-screen.css",
+        entries: "ui/motolii-web/stage-header.html / ui/motolii-web/stage-transport.html",
       },
     },
   ]);
@@ -1440,7 +1459,49 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
     "./candidates/EasingTriggerCandidate.jsx",
     "./candidates/InspectorCandidate.jsx",
     "./candidates/KeyToolsCandidate.jsx",
+    "./candidates/StageChromeCandidate.jsx",
   ]);
+});
+
+test("keeps fixed Stage chrome DOM and private read-only Host projection", async () => {
+  const source = await readFile(abs(CURRENT_STAGE_CHROME_SOURCE), "utf8");
+  const bridge = await readFile(
+    abs("ui/motolii-web/src/host/stageHostBridge.js"),
+    "utf8",
+  );
+  const css = await readFile(
+    abs("ui/motolii-web/src/host/stage-host-screen.css"),
+    "utf8",
+  );
+
+  for (const token of [
+    'className="stage-tools"',
+    'className="toolbtn on"',
+    'id="stage-mode"',
+    'className="transport"',
+    'id="step-prev"',
+    'aria-label="前のkeyへ"',
+    'id="play"',
+    'id="step-next"',
+    'aria-label="次のkeyへ"',
+    'id="time"',
+    'className="quality"',
+  ]) {
+    assert.equal(source.includes(token), true, `missing fixed Stage token ${token}`);
+  }
+  for (const forbidden of ["useState", "useReducer", "localStorage", "fetch(", "document."]) {
+    assert.equal(source.includes(forbidden), false);
+    assert.equal(bridge.includes(forbidden), false);
+  }
+  for (const token of [
+    "height: 23px",
+    "min-width: 29px",
+    "border-bottom: 1px solid var(--line)",
+    "border-top: 1px solid var(--line)",
+    "font: 8px var(--mono)",
+  ]) {
+    assert.equal(css.includes(token), true, `missing fixed Stage CSS ${token}`);
+  }
 });
 
 test("validates product export/consumer import topology via parsed AST", async () => {

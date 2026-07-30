@@ -19,17 +19,35 @@ const PROTOCOL: &str = "motolii-browser";
 const ENTRY_URL: &str = "motolii-browser://product/host.html";
 const HOST_HTML: &[u8] = include_bytes!("../../../ui/motolii-web/generated-host/host.html");
 const HOST_JS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/host-gJ40uukV.js");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/host-U2PKaKi1.js");
 const HOST_CSS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/host-4krs5Bey.css");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/host-BTNUEeQC.css");
 const INSPECTOR_HTML: &[u8] =
     include_bytes!("../../../ui/motolii-web/generated-host/inspector.html");
 const INSPECTOR_JS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/inspector-BMvtfoSi.js");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/inspector-AsuNEztV.js");
 const INSPECTOR_CSS: &[u8] =
     include_bytes!("../../../ui/motolii-web/generated-host/assets/inspector-fMh9jxYJ.css");
+const STAGE_HEADER_HTML: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/stage-header.html");
+const STAGE_TRANSPORT_HTML: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/stage-transport.html");
+const TIMELINE_TOOLS_HTML: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/timeline-tools.html");
+const STAGE_HEADER_JS: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageHeader-Dc3Ipo6y.js");
+const STAGE_TRANSPORT_JS: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageTransport-B3FCEEvz.js");
+const STAGE_HOST_JS: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageHostBridge-DA8O00-R.js");
+const STAGE_HOST_CSS: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageHostBridge-ETwwNc59.css");
+const TIMELINE_TOOLS_JS: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/timelineTools-uxYDKYfL.js");
+const TIMELINE_TOOLS_CSS: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/timelineTools-CEMKvxwx.css");
 const SHARED_JS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/tokens-4X_Bky8Q.js");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/tokens-Bna1XoBQ.js");
 const SHARED_CSS: &[u8] =
     include_bytes!("../../../ui/motolii-web/generated-host/assets/tokens-Dq8978N5.css");
 
@@ -147,6 +165,11 @@ impl BrowserHostRuntime {
         wake: Arc<dyn Fn() + Send + Sync>,
         lifecycle: Arc<dyn Fn(BrowserLifecycleEvent) + Send + Sync>,
     ) -> Result<Self, BrowserHostRuntimeError> {
+        let created_at = std::time::Instant::now();
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=webview surface=browser event=create-start instance_epoch={}",
+            instance_epoch,
+        ));
         let session = BrowserHostSession::new(instance_epoch, 0, source);
         let snapshot = session.snapshot_json()?;
         let encoded_snapshot = serde_json::to_string(&snapshot)?;
@@ -162,6 +185,7 @@ postMessage:(message)=>window.ipc.postMessage(message)
         let callback_island = Arc::clone(&island);
         let load_island = Arc::clone(&island);
         let load_wake = Arc::clone(&wake);
+        let pointer_wake = Arc::clone(&wake);
         let load_lifecycle = Arc::clone(&lifecycle);
         let terminated_lifecycle = Arc::clone(&lifecycle);
         let webview = WebViewBuilder::new()
@@ -183,6 +207,11 @@ postMessage:(message)=>window.ipc.postMessage(message)
                 }
                 match event {
                     PageLoadEvent::Started => {
+                        crate::ui_numeric_trace::emit(format_args!(
+                            "kind=webview surface=browser event=load-started instance_epoch={} elapsed_ms={:.3}",
+                            instance_epoch,
+                            created_at.elapsed().as_secs_f64() * 1_000.0,
+                        ));
                         let reload = load_island
                             .lock()
                             .map(|mut island| island.observe_reload_started(instance_epoch))
@@ -192,6 +221,11 @@ postMessage:(message)=>window.ipc.postMessage(message)
                         }
                     }
                     PageLoadEvent::Finished => {
+                        crate::ui_numeric_trace::emit(format_args!(
+                            "kind=webview surface=browser event=load-finished instance_epoch={} elapsed_ms={:.3}",
+                            instance_epoch,
+                            created_at.elapsed().as_secs_f64() * 1_000.0,
+                        ));
                         let changed = load_island
                             .lock()
                             .map(|mut island| island.observe_initial_projection(instance_epoch))
@@ -210,6 +244,11 @@ postMessage:(message)=>window.ipc.postMessage(message)
                 match callback_session.lock() {
                     Ok(mut session) => match session.accept(raw) {
                         Ok(()) => {
+                            crate::ui_numeric_trace::emit(format_args!(
+                                "kind=webview surface=browser event=ipc-accepted instance_epoch={} bytes={}",
+                                instance_epoch,
+                                raw.len(),
+                            ));
                             if let Ok(mut island) = callback_island.lock() {
                                 island.observe_initial_projection(instance_epoch);
                             }
@@ -221,7 +260,12 @@ postMessage:(message)=>window.ipc.postMessage(message)
                 }
             })
             .build_as_child(window)?;
-        let pointer_capture = Mutex::new(PlatformPointerCapture::new(window)?);
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=webview surface=browser event=created instance_epoch={} elapsed_ms={:.3}",
+            instance_epoch,
+            created_at.elapsed().as_secs_f64() * 1_000.0,
+        ));
+        let pointer_capture = Mutex::new(PlatformPointerCapture::new(window, pointer_wake)?);
         Ok(Self {
             session,
             island,
@@ -249,6 +293,12 @@ postMessage:(message)=>window.ipc.postMessage(message)
             .arm(generation)
             .then_some(generation)
             .ok_or(BrowserHostRuntimeError::PointerCaptureAlreadyActive)?;
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=webview surface=browser event=intent-dequeued generation={} scope_bytes={} item_bytes={}",
+            generation,
+            intent.scope_ref.len(),
+            intent.item_id.len(),
+        ));
         Ok(Some((intent, generation)))
     }
 
@@ -333,6 +383,14 @@ postMessage:(message)=>window.ipc.postMessage(message)
             position: wry::dpi::LogicalPosition::new(rect.x, rect.y).into(),
             size: wry::dpi::LogicalSize::new(rect.width, rect.height).into(),
         })?;
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=webview surface=browser event=bounds layout_epoch={} x={:.3} y={:.3} width={:.3} height={:.3}",
+            layout_epoch,
+            rect.x,
+            rect.y,
+            rect.width,
+            rect.height,
+        ));
         self.island
             .lock()
             .map_err(|_| BrowserHostRuntimeError::IslandStatePoisoned)?
@@ -353,6 +411,9 @@ postMessage:(message)=>window.ipc.postMessage(message)
             BrowserFocusTarget::Parent => self.webview.focus_parent()?,
             BrowserFocusTarget::Browser => self.webview.focus()?,
         }
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=webview surface=browser event=focus target={target:?}"
+        ));
         self.island
             .lock()
             .map_err(|_| BrowserHostRuntimeError::IslandStatePoisoned)?
@@ -365,11 +426,24 @@ pub(crate) fn product_asset_response(path: &str) -> Response<Cow<'static, [u8]>>
     let (content_type, body) = match path {
         "/" | "/host.html" => ("text/html; charset=utf-8", HOST_HTML),
         "/inspector.html" => ("text/html; charset=utf-8", INSPECTOR_HTML),
-        "/assets/host-gJ40uukV.js" => ("text/javascript; charset=utf-8", HOST_JS),
-        "/assets/host-4krs5Bey.css" => ("text/css; charset=utf-8", HOST_CSS),
-        "/assets/inspector-BMvtfoSi.js" => ("text/javascript; charset=utf-8", INSPECTOR_JS),
+        "/stage-header.html" => ("text/html; charset=utf-8", STAGE_HEADER_HTML),
+        "/stage-transport.html" => ("text/html; charset=utf-8", STAGE_TRANSPORT_HTML),
+        "/timeline-tools.html" => ("text/html; charset=utf-8", TIMELINE_TOOLS_HTML),
+        "/assets/host-U2PKaKi1.js" => ("text/javascript; charset=utf-8", HOST_JS),
+        "/assets/host-BTNUEeQC.css" => ("text/css; charset=utf-8", HOST_CSS),
+        "/assets/inspector-AsuNEztV.js" => ("text/javascript; charset=utf-8", INSPECTOR_JS),
         "/assets/inspector-fMh9jxYJ.css" => ("text/css; charset=utf-8", INSPECTOR_CSS),
-        "/assets/tokens-4X_Bky8Q.js" => ("text/javascript; charset=utf-8", SHARED_JS),
+        "/assets/stageHeader-Dc3Ipo6y.js" => ("text/javascript; charset=utf-8", STAGE_HEADER_JS),
+        "/assets/stageTransport-B3FCEEvz.js" => {
+            ("text/javascript; charset=utf-8", STAGE_TRANSPORT_JS)
+        }
+        "/assets/stageHostBridge-DA8O00-R.js" => ("text/javascript; charset=utf-8", STAGE_HOST_JS),
+        "/assets/stageHostBridge-ETwwNc59.css" => ("text/css; charset=utf-8", STAGE_HOST_CSS),
+        "/assets/timelineTools-uxYDKYfL.js" => {
+            ("text/javascript; charset=utf-8", TIMELINE_TOOLS_JS)
+        }
+        "/assets/timelineTools-CEMKvxwx.css" => ("text/css; charset=utf-8", TIMELINE_TOOLS_CSS),
+        "/assets/tokens-Bna1XoBQ.js" => ("text/javascript; charset=utf-8", SHARED_JS),
         "/assets/tokens-Dq8978N5.css" => ("text/css; charset=utf-8", SHARED_CSS),
         _ => {
             return Response::builder()
@@ -416,7 +490,50 @@ mod tests {
     fn embedded_host_html_references_the_embedded_assets() {
         let html = std::str::from_utf8(HOST_HTML).expect("generated Host HTML is UTF-8");
 
-        for path in ["/assets/host-gJ40uukV.js", "/assets/host-4krs5Bey.css"] {
+        for path in ["/assets/host-U2PKaKi1.js", "/assets/host-BTNUEeQC.css"] {
+            assert!(html.contains(path));
+            let response = product_asset_response(path);
+            assert_eq!(response.status(), 200);
+            assert!(!response.body().is_empty());
+        }
+    }
+
+    #[test]
+    fn embedded_stage_chrome_references_only_served_product_assets() {
+        for (html, paths) in [
+            (
+                STAGE_HEADER_HTML,
+                [
+                    "/assets/stageHeader-Dc3Ipo6y.js",
+                    "/assets/stageHostBridge-ETwwNc59.css",
+                ],
+            ),
+            (
+                STAGE_TRANSPORT_HTML,
+                [
+                    "/assets/stageTransport-B3FCEEvz.js",
+                    "/assets/stageHostBridge-ETwwNc59.css",
+                ],
+            ),
+        ] {
+            let html = std::str::from_utf8(html).expect("generated Stage HTML is UTF-8");
+            for path in paths {
+                assert!(html.contains(path));
+                let response = product_asset_response(path);
+                assert_eq!(response.status(), 200);
+                assert!(!response.body().is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn embedded_timeline_tools_references_only_served_product_assets() {
+        let html = std::str::from_utf8(TIMELINE_TOOLS_HTML)
+            .expect("generated Timeline Tools HTML is UTF-8");
+        for path in [
+            "/assets/timelineTools-uxYDKYfL.js",
+            "/assets/timelineTools-CEMKvxwx.css",
+        ] {
             assert!(html.contains(path));
             let response = product_asset_response(path);
             assert_eq!(response.status(), 200);

@@ -24,14 +24,21 @@ mod layout_runtime;
 mod layout_runtime_adapter;
 mod native_host_layout;
 #[cfg(target_os = "macos")]
+mod native_timeline_renderer;
+#[cfg(target_os = "macos")]
 mod product_runtime;
 #[cfg(target_os = "macos")]
 mod product_runtime_adapter;
 mod render_worker;
 mod shell;
+#[cfg(target_os = "macos")]
+mod stage_chrome_host_runtime;
 mod state_ownership;
 mod static_preview;
 mod timeline_projection;
+#[cfg(target_os = "macos")]
+mod timeline_tools_host_runtime;
+mod ui_numeric_trace;
 
 pub use command_registry::{
     builtin_command_registry, CommandId, CommandIdError, CommandMetadata, CommandRegistry,

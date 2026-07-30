@@ -149,3 +149,4 @@ M3仕様のGR-UI審判割当表で対象タスクに割り当てられた項目�
 7. **未決を埋めていないか**: GAP-13/GAP-6等の判断前に公開UI APIや恒久設定形式を足していないか
 8. **審判が再現可能か**: fixture・command・合否条件があり、基準機性能とIME等の人間確認を自動試験から分離したか
 9. **読む前に識別できるか**: 主要状態を文字だけ/色だけで表さず、新規componentを既存のtheme・icon・spacingへ馴染ませたか
+10. **数値で審判できるか**: UIの起動、window/DPI/layout、WebView lifecycle/IPC/focus、typed intent、座標、hit-test、drag、preview submit/result、Document revision、Stage/Timeline/Inspector投影、Undo/Redo、surface recovery/failure、性能、resource量を同じgeneration / revision / layout epochの構造化ログで追跡し、代表点・境界・異scaleの期待値を自動試験でassertしたか。毎frameの同値行を反復せず、目視だけで完了にしない

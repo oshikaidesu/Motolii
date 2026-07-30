@@ -34,6 +34,9 @@ pub(crate) struct NativeHostLayout {
     pub(crate) epoch: u64,
     pub(crate) browser: LogicalRect,
     pub(crate) inspector: LogicalRect,
+    pub(crate) stage_header: LogicalRect,
+    pub(crate) stage_viewport: LogicalRect,
+    pub(crate) stage_transport: LogicalRect,
     pub(crate) stage: LogicalRect,
     pub(crate) timeline: LogicalRect,
     pub(crate) stage_physical: PhysicalRect,
@@ -68,16 +71,39 @@ impl NativeHostLayout {
             width: width * f64::from(BUILT_IN_TOP_SHARES[1]) / top_total,
             height: top_height,
         };
-        let source_aspect = f64::from(frame.width) / f64::from(frame.height);
-        let panel_aspect = stage_panel.width / stage_panel.height;
-        let (stage_width, stage_height) = if panel_aspect > source_aspect {
-            (stage_panel.height * source_aspect, stage_panel.height)
-        } else {
-            (stage_panel.width, stage_panel.width / source_aspect)
+        const STAGE_HEADER_HEIGHT: f64 = 30.0;
+        const STAGE_TRANSPORT_HEIGHT: f64 = 32.0;
+        const OUTPUT_FRAME_WIDTH_PERCENT: f64 = 82.0;
+        const OUTPUT_FRAME_MAX_WIDTH: f64 = 780.0;
+        let header_height = STAGE_HEADER_HEIGHT.min(stage_panel.height);
+        let transport_height =
+            STAGE_TRANSPORT_HEIGHT.min((stage_panel.height - header_height).max(0.0));
+        let stage_header = LogicalRect {
+            x: stage_panel.x,
+            y: stage_panel.y,
+            width: stage_panel.width,
+            height: header_height,
         };
+        let stage_viewport = LogicalRect {
+            x: stage_panel.x,
+            y: stage_panel.y + header_height,
+            width: stage_panel.width,
+            height: (stage_panel.height - header_height - transport_height).max(0.0),
+        };
+        let stage_transport = LogicalRect {
+            x: stage_panel.x,
+            y: stage_panel.y + stage_panel.height - transport_height,
+            width: stage_panel.width,
+            height: transport_height,
+        };
+        let source_aspect = f64::from(frame.width) / f64::from(frame.height);
+        let stage_width = (stage_viewport.width * OUTPUT_FRAME_WIDTH_PERCENT / 100.0)
+            .min(OUTPUT_FRAME_MAX_WIDTH)
+            .min(stage_viewport.height * source_aspect);
+        let stage_height = stage_width / source_aspect;
         let stage = LogicalRect {
-            x: stage_panel.x + (stage_panel.width - stage_width) / 2.0,
-            y: stage_panel.y + (stage_panel.height - stage_height) / 2.0,
+            x: stage_viewport.x + (stage_viewport.width - stage_width) / 2.0,
+            y: stage_viewport.y + (stage_viewport.height - stage_height) / 2.0,
             width: stage_width,
             height: stage_height,
         };
@@ -101,6 +127,9 @@ impl NativeHostLayout {
                 width: inspector_width,
                 height: top_height,
             },
+            stage_header,
+            stage_viewport,
+            stage_transport,
             stage,
             timeline,
             stage_physical: physical_rect(stage, scale_factor, physical_width, physical_height)?,
@@ -180,7 +209,25 @@ mod tests {
                 height: 200.0
             }
         );
-        assert_eq!(layout.stage_physical.width, 600);
+        assert_eq!(
+            layout.stage_header,
+            LogicalRect {
+                x: 200.0,
+                y: 0.0,
+                width: 600.0,
+                height: 30.0,
+            }
+        );
+        assert_eq!(
+            layout.stage_transport,
+            LogicalRect {
+                x: 200.0,
+                y: 568.0,
+                width: 600.0,
+                height: 32.0,
+            }
+        );
+        assert_eq!(layout.stage_physical.width, 492);
         assert_eq!(layout.timeline_physical.height, 200);
     }
 
@@ -197,5 +244,26 @@ mod tests {
             Some([-1.0, 1.0])
         );
         assert_eq!(layout.stage_ndc([10.0, 10.0]), None);
+    }
+
+    #[test]
+    fn retina_layout_keeps_pointer_and_stage_ndc_in_logical_points() {
+        let retina = NativeHostLayout::try_new(2, 2000, 1600, 2.0, frame()).unwrap();
+        let standard = NativeHostLayout::try_new(1, 1000, 800, 1.0, frame()).unwrap();
+        let center = [
+            retina.stage.x + retina.stage.width / 2.0,
+            retina.stage.y + retina.stage.height / 2.0,
+        ];
+
+        assert_eq!(retina.stage, standard.stage);
+        assert_eq!(retina.stage_ndc(center), Some([0.0, 0.0]));
+        assert_eq!(
+            retina.stage_physical.width,
+            standard.stage_physical.width * 2
+        );
+        assert_eq!(
+            retina.timeline_physical.height,
+            standard.timeline_physical.height * 2
+        );
     }
 }
