@@ -3,7 +3,7 @@
 - 日付: 2026-07-30
 - 状態: **決定**
 - `CU-108RDS`: **DONE**
-- 次PRODUCT-ASSET `DO`: `CU-108RD`
+- `CU-108RD`: **DONE**
 
 ## 1. 再現事実
 
@@ -149,3 +149,21 @@ bar move / trimとする。共有Document / D2 / Undoを同時編集せず、rea
 利用不能またはtimeoutなら、その事実を記録してCursor CLIのread-only助言へ切り替えられる。
 ただし正式な「発注」の`claude-opus-5` order gateをCursor reviewで代替した扱いにはせず、
 利用不能時は発注をSTOPする。
+
+## 7. CU-108RD実装証跡
+
+`CU-108RD`はHost private pointer境界の2ファイルだけで完了した。AppKit
+`LeftMouseUp`をexact top-down logical pointと単調sequenceを持つ一つのprivate queueへ入れ、
+arm後entryはPlaceがclaim-by-removalし、未claim entryだけを通常clickへ残す。global
+button-upだけのrelease、時刻fallback、座標一致抑制、Document / selection / Undo owner変更は
+追加していない。
+
+負例はunarmed / pre-arm / post-claim、claim一回、exact point、flipped view、overflowに加え、
+focus loss / Escape後に到着した物理UPがPlaceへ再利用されず、通常clickとして一回だけ
+`pop_unclaimed`できることを固定した。
+
+検証は`cargo fmt --all -- --check`、workspace clippy `-D warnings`、
+`cargo test -p motolii-ui --lib --locked`（120件）、`cargo test -p motolii-ui --locked`、
+`cargo test --workspace --locked`、UI toolkit dependency guardを通過した。正式監督ループは
+`claude-opus-5` → `gpt-5.3-codex-spark` → `cursor-grok-4.5-high`で実施し、
+最終検収は`VERDICT: ACCEPT`、P0/P1/P2=0だった。

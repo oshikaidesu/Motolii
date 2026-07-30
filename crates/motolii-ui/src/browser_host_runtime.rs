@@ -162,6 +162,7 @@ postMessage:(message)=>window.ipc.postMessage(message)
         let callback_island = Arc::clone(&island);
         let load_island = Arc::clone(&island);
         let load_wake = Arc::clone(&wake);
+        let pointer_capture_wake = Arc::clone(&wake);
         let load_lifecycle = Arc::clone(&lifecycle);
         let terminated_lifecycle = Arc::clone(&lifecycle);
         let webview = WebViewBuilder::new()
@@ -221,7 +222,8 @@ postMessage:(message)=>window.ipc.postMessage(message)
                 }
             })
             .build_as_child(window)?;
-        let pointer_capture = Mutex::new(PlatformPointerCapture::new(window)?);
+        let pointer_capture =
+            Mutex::new(PlatformPointerCapture::new(window, pointer_capture_wake)?);
         Ok(Self {
             session,
             island,
