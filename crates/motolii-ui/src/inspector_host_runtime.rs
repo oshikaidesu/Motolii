@@ -19,6 +19,7 @@ impl InspectorHostRuntime {
         document: &motolii_doc::Document,
         primary: Option<motolii_doc::LayerId>,
     ) -> Result<Self, InspectorHostRuntimeError> {
+        let created_at = std::time::Instant::now();
         let snapshot = snapshot_json(document, primary)?;
         let encoded_snapshot = javascript_json_parse_argument(&snapshot)?;
         let initialization_script = format!(
@@ -44,6 +45,11 @@ publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
             .with_url(ENTRY_URL)
             .with_navigation_handler(|target| target.starts_with("motolii-inspector:"))
             .build_as_child(window)?;
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=webview surface=inspector event=created elapsed_ms={:.3} primary_present={}",
+            created_at.elapsed().as_secs_f64() * 1_000.0,
+            primary.is_some(),
+        ));
         Ok(Self {
             webview,
             latest_layout_epoch: None,
@@ -80,6 +86,11 @@ publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
     ) -> Result<(), InspectorHostRuntimeError> {
         let snapshot = snapshot_json(document, primary)?;
         let encoded_snapshot = javascript_json_parse_argument(&snapshot)?;
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=webview surface=inspector event=publish primary_present={} payload_bytes={}",
+            primary.is_some(),
+            encoded_snapshot.len(),
+        ));
         self.webview.evaluate_script(&format!(
             "window.__MOTOLII_INSPECTOR_HOST__.publish(JSON.parse({encoded_snapshot}));"
         ))?;

@@ -531,6 +531,12 @@ function ElementCard({
       onClick={onSelect}
       onDragStart={(event) => {
         if (element === "rectangle" && onPlaceIntent) {
+          const proxy = event.currentTarget.querySelector(
+            ".candidate-native-drag-proxy",
+          );
+          if (proxy) {
+            event.dataTransfer.setDragImage(proxy, 0, 0);
+          }
           onPlaceIntent(createBrowserPlaceIntent(scopeRef, scopedItemId));
         }
         event.dataTransfer.setData(
@@ -539,6 +545,7 @@ function ElementCard({
         );
       }}
     >
+      <span className="candidate-native-drag-proxy" aria-hidden="true" />
       <span className={`candidate-element-preview ${thumbnail}`}>
         <i aria-hidden="true">{glyph}</i>
         <small>{provider}</small>

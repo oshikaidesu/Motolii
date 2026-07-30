@@ -1,0 +1,32 @@
+html,
+body,
+#motolii-timeline-tools-root,
+.timeline-tools-standalone-screen {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+.timeline-tools-standalone-screen {
+  --candidate-key-tools-width: 202px;
+  --bg: var(--motolii-color-surface-app);
+  --panel: var(--motolii-color-surface-panel);
+  --raised: var(--motolii-color-surface-raised);
+  --line: var(--motolii-color-border-default);
+  --line2: var(--motolii-color-border-strong);
+  --ink: var(--motolii-color-text-primary);
+  --sub: var(--motolii-color-text-secondary);
+  --muted: var(--motolii-color-text-muted);
+  --active: var(--motolii-color-action-active);
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  position: relative;
+  box-sizing: border-box;
+  background: var(--bg);
+}
+
+.timeline-tools-standalone-screen *,
+.timeline-tools-standalone-screen *::before,
+.timeline-tools-standalone-screen *::after {
+  box-sizing: border-box;
+}

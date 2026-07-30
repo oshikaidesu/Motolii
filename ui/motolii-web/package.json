@@ -11,6 +11,9 @@
     "source-provenance.json",
     "host.html",
     "inspector.html",
+    "stage-header.html",
+    "stage-transport.html",
+    "timeline-tools.html",
     "vite.host.config.js"
   ],
   "scripts": {

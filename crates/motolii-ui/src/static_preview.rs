@@ -23,8 +23,8 @@ use crate::render_worker::{
     RenderWorkerStartError, RenderWorkerStatus,
 };
 
-const BOOTSTRAP_WIDTH: u32 = 64;
-const BOOTSTRAP_HEIGHT: u32 = 36;
+const BOOTSTRAP_WIDTH: u32 = 1920;
+const BOOTSTRAP_HEIGHT: u32 = 1080;
 const BOOTSTRAP_COLOR: [f64; 4] = [0.0, 1.0, 0.0, 1.0];
 
 #[derive(Debug, thiserror::Error)]
@@ -286,6 +286,15 @@ mod tests {
 
     const RED: [f64; 4] = [1.0, 0.0, 0.0, 1.0];
     const GREEN: [f64; 4] = [0.0, 1.0, 0.0, 1.0];
+
+    #[test]
+    fn product_preview_starts_from_a_full_hd_composition() {
+        let desc = bootstrap_frame_desc().unwrap();
+        let rendered = Quality::DRAFT.render_desc(desc);
+
+        assert_eq!((desc.width, desc.height), (1920, 1080));
+        assert_eq!((rendered.width, rendered.height), (960, 540));
+    }
 
     #[test]
     fn one_private_path_proves_document_render_copy_and_register_once() {

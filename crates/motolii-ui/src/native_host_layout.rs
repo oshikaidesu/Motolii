@@ -79,9 +79,26 @@ impl NativeHostLayout {
         } else {
             (stage_panel.width, stage_panel.width / source_aspect)
         };
+        let stage_viewport = LogicalRect {
+            x: stage_panel.x,
+            y: stage_panel.y + header_height,
+            width: stage_panel.width,
+            height: (stage_panel.height - header_height - transport_height).max(0.0),
+        };
+        let stage_transport = LogicalRect {
+            x: stage_panel.x,
+            y: stage_panel.y + stage_panel.height - transport_height,
+            width: stage_panel.width,
+            height: transport_height,
+        };
+        let source_aspect = f64::from(frame.width) / f64::from(frame.height);
+        let stage_width = (stage_viewport.width * OUTPUT_FRAME_WIDTH_PERCENT / 100.0)
+            .min(OUTPUT_FRAME_MAX_WIDTH)
+            .min(stage_viewport.height * source_aspect);
+        let stage_height = stage_width / source_aspect;
         let stage = LogicalRect {
-            x: stage_panel.x + (stage_panel.width - stage_width) / 2.0,
-            y: stage_panel.y + (stage_panel.height - stage_height) / 2.0,
+            x: stage_viewport.x + (stage_viewport.width - stage_width) / 2.0,
+            y: stage_viewport.y + (stage_viewport.height - stage_height) / 2.0,
             width: stage_width,
             height: stage_height,
         };

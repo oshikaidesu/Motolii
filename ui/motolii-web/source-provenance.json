@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "task": "CU-0A04 / CU-0A05B / CU-0A06B / CU-0A07C",
+  "task": "CU-0A04 / CU-0A05B / CU-0A06B / CU-0A07C / CU-108-STAGE-REPRODUCTION",
   "authority": "docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md",
   "fixedSourceCommit": "56c318edcddab7cf95d263cc2f7dd2b4e6791134",
   "sourceOwnership": {
     "product": "@motolii/motolii-web",
-    "owner": "R1-browser / R2B-easing-trigger / R3B-key-tools / R4C-inspector",
-    "surface": "Browser / Easing trigger / KEYS-LAYERS key tools / Inspector",
+    "owner": "R1-browser / R2B-easing-trigger / R3B-key-tools / R4C-inspector / R5-stage-chrome",
+    "surface": "Browser / Easing trigger / KEYS-LAYERS key tools / Inspector / Stage header-transport",
     "exports": [
       {
         "name": "DiscoveryBrowserCandidate",
@@ -26,6 +26,14 @@
       },
       {
         "name": "InspectorContext",
+        "path": "src/index.js"
+      },
+      {
+        "name": "StageHeaderCandidate",
+        "path": "src/index.js"
+      },
+      {
+        "name": "StageTransportCandidate",
         "path": "src/index.js"
       }
     ]
@@ -76,6 +84,19 @@
         "component": "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
         "css": "ui/motolii-web/src/candidates/inspector-candidate.css"
       }
+    },
+    {
+      "type": "fixed-source-reactification-transfer",
+      "old": {
+        "artifact": "docs/mocks/m3-vism-host-boundary.html",
+        "selectors": ".stage-tools / .transport",
+        "fixedCommit": "56c318edcddab7cf95d263cc2f7dd2b4e6791134"
+      },
+      "current": {
+        "component": "ui/motolii-web/src/candidates/StageChromeCandidate.jsx",
+        "css": "ui/motolii-web/src/host/stage-host-screen.css",
+        "entries": "ui/motolii-web/stage-header.html / ui/motolii-web/stage-transport.html"
+      }
     }
   ],
   "postPromotionChanges": [
@@ -106,6 +127,13 @@
       "reason": "VS-1 Rectangle Browser Place typed intent source",
       "fixedSourceSha256": "b2da9c62659ee9c19245115632b16d76fa38b34739946b901a5e7f6c8862a995",
       "currentSha256": "e05b8636d9d07d9cd75612b1025474e34eeec37ef673b377a79fddb5773e42f9"
+    },
+    {
+      "task": "CU-108-HUMAN-ACCEPTANCE",
+      "file": "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx",
+      "reason": "suppress the WebKit DOM drag image while native Stage renders the typed Rectangle preview",
+      "fixedSourceSha256": "e05b8636d9d07d9cd75612b1025474e34eeec37ef673b377a79fddb5773e42f9",
+      "currentSha256": "88a595c4df18da9180bd5fd23486d3006b473a02bf0222650f9ab6d4ffc13e20"
     }
   ],
   "inspectorPostPromotionChanges": [
