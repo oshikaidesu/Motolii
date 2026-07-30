@@ -21,7 +21,7 @@ jobs:
         with:
           # merge-base が取れるよう履歴を確保(D1i-4 / M2E-2 ゲートの fail-closed 前提)
           fetch-depth: 0
-      - name: Install ffmpeg + software Vulkan + ALSA/fontconfig headers
+      - name: Install ffmpeg + software Vulkan + native Linux headers
         run: |
           # The runner's third-party Microsoft apt repo intermittently serves
           # an invalid InRelease, which makes `apt-get update` exit non-zero.
@@ -35,14 +35,22 @@ jobs:
           # D4のハードウェア再生テストは#[ignore]で既定スキップ、デコード/リング/
           # シミュレーション再生は常時緑(motolii-audio/tests/device_smoke.rs参照)。
           # libfontconfig1-dev: SlintのLinux文字描画依存をCIでビルドするために必要。
-          sudo apt-get install -y ffmpeg mesa-vulkan-drivers libasound2-dev libfontconfig1-dev
-      - name: Log mesa/ffmpeg/alsa/fontconfig versions (M2E-3 drift triage)
+          # libwebkit2gtk-4.1-dev: wryのLinux WebView依存。GTK/GLib/GIOの
+          # pkg-config metadataもこのdevelopment package closureから供給する。
+          sudo apt-get install -y \
+            ffmpeg \
+            mesa-vulkan-drivers \
+            libasound2-dev \
+            libfontconfig1-dev \
+            libwebkit2gtk-4.1-dev
+      - name: Log native Linux dependency versions (M2E-3 drift triage)
         run: |
           # 不変条件の証明ではなく、ドリフト時の一次切り分け用。
           ffmpeg -version
           dpkg -s mesa-vulkan-drivers
           dpkg -s libasound2-dev
           dpkg -s libfontconfig1-dev
+          dpkg -s libwebkit2gtk-4.1-dev
       - name: Delegation CLI boundary
         run: ./scripts/test-delegate-cursor-supervised.sh
       - name: Rust toolchain

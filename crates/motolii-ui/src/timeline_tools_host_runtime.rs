@@ -64,7 +64,7 @@ reportUnavailable:(target,operation)=>window.ipc.postMessage(JSON.stringify({{ki
     pub(crate) fn set_bounds(
         &mut self,
         layout_epoch: u64,
-        rect: LogicalRect,
+        rect: impl Into<Option<LogicalRect>>,
     ) -> Result<(), TimelineToolsHostRuntimeError> {
         if self
             .latest_layout_epoch
@@ -72,14 +72,18 @@ reportUnavailable:(target,operation)=>window.ipc.postMessage(JSON.stringify({{ki
         {
             return Ok(());
         }
-        self.webview.set_bounds(Rect {
-            position: wry::dpi::LogicalPosition::new(rect.x, rect.y).into(),
-            size: wry::dpi::LogicalSize::new(rect.width, rect.height).into(),
-        })?;
-        crate::ui_numeric_trace::emit(format_args!(
-            "kind=webview surface=timeline-tools event=bounds layout_epoch={} x={:.3} y={:.3} width={:.3} height={:.3}",
-            layout_epoch, rect.x, rect.y, rect.width, rect.height,
-        ));
+        let rect = rect.into();
+        if let Some(rect) = rect {
+            self.webview.set_bounds(Rect {
+                position: wry::dpi::LogicalPosition::new(rect.x, rect.y).into(),
+                size: wry::dpi::LogicalSize::new(rect.width, rect.height).into(),
+            })?;
+            crate::ui_numeric_trace::emit(format_args!(
+                "kind=webview surface=timeline-tools event=bounds layout_epoch={} x={:.3} y={:.3} width={:.3} height={:.3}",
+                layout_epoch, rect.x, rect.y, rect.width, rect.height,
+            ));
+        }
+        self.webview.set_visible(rect.is_some())?;
         self.latest_layout_epoch = Some(layout_epoch);
         Ok(())
     }
