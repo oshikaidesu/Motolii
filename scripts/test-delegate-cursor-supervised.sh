@@ -6,6 +6,10 @@ SCRIPT="$ROOT_DIR/scripts/delegate-cursor-supervised.sh"
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/motolii-opus-spark-grok-test.XXXXXX")"
 
 cleanup() {
+  if [[ "${MOTOLII_KEEP_TEST_TMP:-0}" == "1" ]]; then
+    echo "test-delegate-cursor-supervised: kept $TMP_ROOT" >&2
+    return
+  fi
   rm -rf "$TMP_ROOT"
 }
 trap cleanup EXIT
@@ -114,7 +118,15 @@ cat >"$FAKE_BIN/claude" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 echo "claude:$*" >>"$FAKE_CALL_LOG"
-printf '%s\n' "${FAKE_OPUS_OUTPUT:-ORDER: STOP}"
+if [[ "${FAKE_OPUS_STATUS:-0}" != "0" ]]; then
+  exit "$FAKE_OPUS_STATUS"
+fi
+default_output='{"type":"result","subtype":"success","structured_output":{"disposition":"STOP","findings":[],"reason":"fixture stop"}}'
+if [[ "$*" == *"--resume "* ]]; then
+  printf '%s\n' "${FAKE_OPUS_RETRY_OUTPUT:-${FAKE_OPUS_OUTPUT:-$default_output}}"
+else
+  printf '%s\n' "${FAKE_OPUS_OUTPUT:-$default_output}"
+fi
 EOF
 
 cat >"$FAKE_BIN/codex" <<'EOF'
@@ -216,6 +228,23 @@ BASE_SHA: $base_sha
 DEPENDENCY: DEP-1
 AUTHORITY: AGENTS.md SHA256:$auth_hash
 ALLOWED_FILE: src.txt
+READ_MODE: CAPSULE
+CONTEXT_FACT: src.txt is the only implementation fixture.
+READ_FILE: src.txt
+INTERNAL_TARGET: src.txt :: before
+TEST_TARGET: src.txt :: before
+REUSE_TARGET: src.txt :: before
+NEW_SURFACE: FORBIDDEN
+AUTHORITY_SPAN: ONE
+OWNER_CLOSURE: CLOSED
+CAUSE_CLOSURE: LOCALIZED
+CONTRACT_IMPACT: PRIVATE
+CONTRACT_CLOSURE: PRIVATE
+CONTRACT_AUTHORITY: NONE
+ORACLE_CLOSURE: CLOSED
+REUSE_CLOSURE: REUSE
+VIEW_PROFILE: CLOSED
+HAZARD_TAG: NONE
 Non-goal: no adjacent edits.
 STOP: authority conflict.
 Test: git diff --check.
@@ -291,6 +320,7 @@ git -C "$WT" config user.name test
 git -C "$WT" checkout -q -b managed-grain
 printf 'authority\n' >"$WT/AGENTS.md"
 printf 'before\n' >"$WT/src.txt"
+printf 'fixture oracle\n' >"$WT/test.txt"
 grep -Fqx '## 現在の並列レーン' "$ROOT_DIR/docs/implementation-ledger.md" \
   || fail "repository ledger current-lane heading is missing"
 grep -Fqx '## 発注依存証跡' "$ROOT_DIR/docs/implementation-ledger.md" \
@@ -323,11 +353,7 @@ git -C "$WT" commit -q -m init
 
 BASE_SHA="$(git -C "$WT" rev-parse HEAD)"
 AUTH_HASH="$(sha256_file "$WT/AGENTS.md")"
-TASK="managed grain implementation"
-TASK_HASH="$(printf '%s' "$TASK" | shasum -a 256 | awk '{print $1}')"
-ORDER="$TMP_ROOT/order.md"
-
-OPUS_READY=$(cat <<EOF
+TASK=$(cat <<EOF
 Objective: update the allowed fixture.
 GRAIN: GRAIN-1
 BASE_REF: refs/heads/managed-grain
@@ -335,12 +361,34 @@ BASE_SHA: $BASE_SHA
 DEPENDENCY: DEP-1
 AUTHORITY: AGENTS.md SHA256:$AUTH_HASH
 ALLOWED_FILE: src.txt
+ALLOWED_FILE: test.txt
+READ_MODE: CAPSULE
+CONTEXT_FACT: src.txt is the only implementation fixture.
+READ_FILE: src.txt
+READ_FILE: test.txt
+INTERNAL_TARGET: src.txt :: before
+TEST_TARGET: test.txt :: fixture oracle
+REUSE_TARGET: src.txt :: before
+NEW_SURFACE: FORBIDDEN
+AUTHORITY_SPAN: ONE
+OWNER_CLOSURE: CLOSED
+CAUSE_CLOSURE: LOCALIZED
+CONTRACT_IMPACT: PRIVATE
+CONTRACT_CLOSURE: PRIVATE
+CONTRACT_AUTHORITY: NONE
+ORACLE_CLOSURE: CLOSED
+REUSE_CLOSURE: REUSE
+VIEW_PROFILE: CLOSED
+HAZARD_TAG: NONE
 Non-goal: no adjacent edits.
 STOP: authority conflict.
 Test: git diff --check.
-ORDER: READY
 EOF
 )
+TASK_HASH="$(printf '%s' "$TASK" | shasum -a 256 | awk '{print $1}')"
+ORDER="$TMP_ROOT/order.md"
+OPUS_READY='{"type":"result","subtype":"success","structured_output":{"disposition":"READY","findings":[{"kind":"NEGATIVE_ORACLE","severity":"P2","delta":"src.txt must remain unchanged when authority validation fails."}],"reason":"fixture skeleton is closed"}}'
+OPUS_BLOCKING='{"type":"result","subtype":"success","structured_output":{"disposition":"READY","findings":[{"kind":"NEGATIVE_ORACLE","severity":"P1","delta":"Add an exact unchanged-file rejection oracle before implementation."}],"reason":"one blocking oracle gap remains"}}'
 
 run_script() {
   : >"$CALL_LOG"
@@ -358,6 +406,128 @@ run_script() {
 run_script prepare "$WT" "$ORDER" "$TASK"
 assert_status 3 "$RUN_STATUS" "Opus STOP fails closed"
 assert_fragment "$CALL_LOG" "claude:-p --model claude-opus-5" "Opus is the order manager"
+assert_fragment "$CALL_LOG" "--effort low" "Opus fast delta option"
+assert_fragment "$CALL_LOG" "--json-schema" "Opus typed delta schema"
+assert_fragment "$CALL_LOG" "--output-format json" "Opus JSON output"
+if grep -Fq -- "--no-session-persistence" "$CALL_LOG"; then
+  fail "typed delta must retain its session only for one schema retry"
+fi
+
+# P0/P1 deltaはSparkへの散文handoffにせず、Codex骨格のrevisionへ戻す。
+: >"$CALL_LOG"
+set +e
+env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+  FAKE_CALL_LOG="$CALL_LOG" \
+  FAKE_OPUS_OUTPUT="$OPUS_BLOCKING" \
+  "$SCRIPT" prepare "$WT" "$TMP_ROOT/blocking-order.md" "$TASK" \
+  >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 3 "$RUN_STATUS" "P0/P1 delta requires skeleton revision"
+grep -Fq -- "骨格とexact oracleへ織り込み" "$TMP_ROOT/stderr.log" \
+  || fail "blocking delta did not request skeleton revision"
+[[ ! -f "$TMP_ROOT/blocking-order.md" ]] || fail "blocking delta must not produce a dispatchable order"
+
+# WIDEはOpusを起動せずread-only探索へ戻す。
+WIDE_TASK="$(printf '%s\n' "$TASK" |
+  sed 's/^CAUSE_CLOSURE: LOCALIZED$/CAUSE_CLOSURE: COMPETING/; s/^VIEW_PROFILE: CLOSED$/VIEW_PROFILE: WIDE/')"
+: >"$CALL_LOG"
+run_script prepare "$WT" "$ORDER" "$WIDE_TASK"
+assert_status 3 "$RUN_STATUS" "WIDE prepare rejected before Opus"
+grep -Fq -- "VIEW_PROFILE WIDE requires read-only exploration" "$TMP_ROOT/stderr.log" \
+  || fail "WIDE rejection reason is missing"
+[[ ! -s "$CALL_LOG" ]] || fail "WIDE must fail before model invocation"
+
+# 狭いprofileへの手動overrideもOpus起動前に拒否する。
+MISMATCH_TASK="$(printf '%s\n' "$TASK" | sed 's/^OWNER_CLOSURE: CLOSED$/OWNER_CLOSURE: MULTIPLE_KNOWN/')"
+: >"$CALL_LOG"
+run_script prepare "$WT" "$ORDER" "$MISMATCH_TASK"
+assert_status 3 "$RUN_STATUS" "VIEW_PROFILE mismatch rejected"
+grep -Fq -- "VIEW_PROFILE mismatch: declared=CLOSED computed=ADJACENT" "$TMP_ROOT/stderr.log" \
+  || fail "profile mismatch reason is missing"
+[[ ! -s "$CALL_LOG" ]] || fail "profile mismatch must fail before model invocation"
+
+# 未決の恒久契約はWIDEとしてOpus起動前に止める。
+UNRESOLVED_PERMANENT_TASK="$(printf '%s\n' "$TASK" |
+  sed 's/^CONTRACT_IMPACT: PRIVATE$/CONTRACT_IMPACT: PERMANENT/;
+       s/^CONTRACT_CLOSURE: PRIVATE$/CONTRACT_CLOSURE: UNRESOLVED/;
+       s/^VIEW_PROFILE: CLOSED$/VIEW_PROFILE: WIDE/')"
+: >"$CALL_LOG"
+run_script prepare "$WT" "$ORDER" "$UNRESOLVED_PERMANENT_TASK"
+assert_status 3 "$RUN_STATUS" "unresolved permanent contract rejected"
+grep -Fq -- "VIEW_PROFILE WIDE requires read-only exploration" "$TMP_ROOT/stderr.log" \
+  || fail "unresolved permanent contract rejection reason is missing"
+[[ ! -s "$CALL_LOG" ]] || fail "unresolved permanent contract must fail before model invocation"
+
+# 決定済み恒久契約は、検証済みAUTHORITYと一致するreceiptがある場合だけ施工へ進める。
+FROZEN_PERMANENT_TASK="$(printf '%s\n' "$TASK" |
+  sed "s/^CONTRACT_IMPACT: PRIVATE$/CONTRACT_IMPACT: PERMANENT/;
+       s/^CONTRACT_CLOSURE: PRIVATE$/CONTRACT_CLOSURE: FROZEN/;
+       s/^CONTRACT_AUTHORITY: NONE$/CONTRACT_AUTHORITY: AGENTS.md@SHA256:$AUTH_HASH/;
+       s/^HAZARD_TAG: NONE$/HAZARD_TAG: PERSISTENCE/")"
+: >"$CALL_LOG"
+set +e
+env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+  FAKE_CALL_LOG="$CALL_LOG" \
+  FAKE_OPUS_OUTPUT="$OPUS_READY" \
+  "$SCRIPT" prepare "$WT" "$TMP_ROOT/frozen-permanent-order.md" "$FROZEN_PERMANENT_TASK" \
+  >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 0 "$RUN_STATUS" "frozen permanent contract prepare"
+assert_has "$TMP_ROOT/frozen-permanent-order.md" "CONTRACT_CLOSURE: FROZEN" \
+  "frozen permanent contract closure"
+assert_has "$TMP_ROOT/frozen-permanent-order.md" \
+  "CONTRACT_AUTHORITY: AGENTS.md@SHA256:$AUTH_HASH" "frozen contract authority receipt"
+
+# receiptがAUTHORITYのpath/hashと完全一致しなければmodel起動前に拒否する。
+BAD_FROZEN_TASK="$(printf '%s\n' "$FROZEN_PERMANENT_TASK" |
+  sed 's/^CONTRACT_AUTHORITY: .*$/CONTRACT_AUTHORITY: AGENTS.md@SHA256:0000000000000000000000000000000000000000000000000000000000000000/')"
+: >"$CALL_LOG"
+run_script prepare "$WT" "$ORDER" "$BAD_FROZEN_TASK"
+assert_status 3 "$RUN_STATUS" "mismatched frozen contract receipt rejected"
+grep -Fq -- "CONTRACT_AUTHORITY is not an exact verified AUTHORITY" "$TMP_ROOT/stderr.log" \
+  || fail "mismatched frozen contract receipt reason is missing"
+[[ ! -s "$CALL_LOG" ]] || fail "mismatched frozen receipt must fail before model invocation"
+
+# exact targetが不在ならOpus起動前に拒否する。
+MISSING_TARGET_TASK="$(printf '%s\n' "$TASK" |
+  sed 's/^INTERNAL_TARGET: src.txt :: before$/INTERNAL_TARGET: src.txt :: missing implementation anchor/')"
+: >"$CALL_LOG"
+run_script prepare "$WT" "$ORDER" "$MISSING_TARGET_TASK"
+assert_status 3 "$RUN_STATUS" "missing exact target rejected"
+grep -Fq -- "INTERNAL_TARGET anchor absent in src.txt" "$TMP_ROOT/stderr.log" \
+  || fail "missing target rejection reason is absent"
+[[ ! -s "$CALL_LOG" ]] || fail "missing exact target must fail before model invocation"
+
+# 通常粒は既存targetへ接続し、新しいcommand/mode/public surfaceを許可しない。
+NEW_SURFACE_TASK="$(printf '%s\n' "$TASK" |
+  sed 's/^NEW_SURFACE: FORBIDDEN$/NEW_SURFACE: ALLOWED/')"
+: >"$CALL_LOG"
+run_script prepare "$WT" "$ORDER" "$NEW_SURFACE_TASK"
+assert_status 3 "$RUN_STATUS" "new surface rejected"
+grep -Fq -- "NEW_SURFACE: FORBIDDEN must appear exactly once" "$TMP_ROOT/stderr.log" \
+  || fail "new surface rejection reason is absent"
+[[ ! -s "$CALL_LOG" ]] || fail "new surface must fail before model invocation"
+
+# 隣接軸はWIDEへ過剰拡大せず、Codexが隣接事実をcapsuleへ閉じた後のdelta検証を許す。
+ADJACENT_TASK="$(printf '%s\n' "$TASK" |
+  sed 's/^OWNER_CLOSURE: CLOSED$/OWNER_CLOSURE: MULTIPLE_KNOWN/; s/^VIEW_PROFILE: CLOSED$/VIEW_PROFILE: ADJACENT/')"
+: >"$CALL_LOG"
+set +e
+env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+  FAKE_CALL_LOG="$CALL_LOG" \
+  FAKE_OPUS_OUTPUT="$OPUS_READY" \
+  "$SCRIPT" prepare "$WT" "$TMP_ROOT/adjacent-order.md" "$ADJACENT_TASK" \
+  >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 0 "$RUN_STATUS" "ADJACENT prepare"
+assert_has "$TMP_ROOT/adjacent-order.md" "VIEW_PROFILE: ADJACENT" "adjacent profile"
+[[ "$(grep -c '^claude:' "$CALL_LOG")" -eq 1 ]] || fail "ADJACENT must invoke one typed delta validation"
 
 # Complete READY orderで正規metadataが追加されることを確認する。
 : >"$CALL_LOG"
@@ -375,7 +545,126 @@ assert_has "$ORDER" "ORDER_MANAGER_MODEL: claude-opus-5" "manager model"
 assert_has "$ORDER" "IMPLEMENTER_MODEL: gpt-5.3-codex-spark" "Spark model"
 assert_has "$ORDER" "REVIEW_MODEL: cursor-grok-4.5-high" "Grok model"
 assert_has "$ORDER" "TASK_SHA256: $TASK_HASH" "task binding"
+assert_has "$ORDER" "READ_MODE: CAPSULE" "bounded context mode"
+assert_has "$ORDER" "VIEW_PROFILE: CLOSED" "computed view profile"
+assert_has "$ORDER" "HAZARD_GUARD: NONE" "runner-owned hazard guard"
+assert_has "$ORDER" \
+  "OPUS_DELTA_FINDING: F1 NEGATIVE_ORACLE P2 src.txt must remain unchanged when authority validation fails." \
+  "typed delta finding"
+assert_has "$ORDER" "OPUS_DELTA_REASON: fixture skeleton is closed" "typed delta reason"
+
+# destructive filesystem grainは、Opusの気分に依存せず既知の機械guardを注入する。
+HAZARD_ORDER="$TMP_ROOT/hazard-order.md"
+HAZARD_TASK="$(printf '%s\n' "$TASK" | sed 's/^HAZARD_TAG: NONE$/HAZARD_TAG: DESTRUCTIVE_FS/')"
+: >"$CALL_LOG"
+set +e
+env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+  FAKE_CALL_LOG="$CALL_LOG" \
+  FAKE_OPUS_OUTPUT="$OPUS_READY" \
+  "$SCRIPT" prepare "$WT" "$HAZARD_ORDER" "$HAZARD_TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 0 "$RUN_STATUS" "destructive hazard prepare"
+assert_fragment "$HAZARD_ORDER" \
+  "HAZARD_GUARD: DESTRUCTIVE_FS requires exact non-empty resolved targets" \
+  "destructive filesystem guard"
+assert_has "$HAZARD_ORDER" \
+  "MECHANICAL_GUARD: reject empty collection expansion and the token sequence [@]:- on any recursive-delete path." \
+  "empty-array expansion guard"
+assert_fragment "$HAZARD_ORDER" \
+  "NEGATIVE_ORACLE: zero deletion targets must perform zero recursive removals" \
+  "zero-target negative oracle"
+
+# CLI自体の失敗はschema不正ではないためsame-session retryを行わない。
+: >"$CALL_LOG"
+set +e
+env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+  FAKE_CALL_LOG="$CALL_LOG" \
+  FAKE_OPUS_STATUS=42 \
+  "$SCRIPT" prepare "$WT" "$TMP_ROOT/cli-failure-order.md" "$TASK" \
+  >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 1 "$RUN_STATUS" "Opus CLI failure"
+[[ "$(grep -c '^claude:' "$CALL_LOG")" -eq 1 ]] || fail "CLI failure must not trigger schema retry"
+
+# schema不正は同じsessionへ一度だけ差戻し、二回目が正しければ採用する。
+RETRY_ORDER="$TMP_ROOT/retry-order.md"
+: >"$CALL_LOG"
+set +e
+env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+  FAKE_CALL_LOG="$CALL_LOG" \
+  FAKE_OPUS_OUTPUT='not-json' \
+  FAKE_OPUS_RETRY_OUTPUT="$OPUS_READY" \
+  "$SCRIPT" prepare "$WT" "$RETRY_ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 0 "$RUN_STATUS" "same-session schema retry succeeds"
+[[ "$(grep -c '^claude:' "$CALL_LOG")" -eq 2 ]] || fail "schema retry must invoke Claude exactly twice"
+assert_fragment "$CALL_LOG" "--resume " "schema retry resumes the same session"
+
+# 二回とも不正なら散文fallbackせず終了する。
+DOUBLE_BAD_ORDER="$TMP_ROOT/double-bad-order.md"
+: >"$CALL_LOG"
+set +e
+env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+  FAKE_CALL_LOG="$CALL_LOG" \
+  FAKE_OPUS_OUTPUT='not-json' \
+  FAKE_OPUS_RETRY_OUTPUT='still-not-json' \
+  "$SCRIPT" prepare "$WT" "$DOUBLE_BAD_ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 1 "$RUN_STATUS" "double schema failure"
+[[ "$(grep -c '^claude:' "$CALL_LOG")" -eq 2 ]] || fail "double schema failure must stop after two calls"
+grep -Fq -- "散文fallbackしません" "$TMP_ROOT/stderr.log" \
+  || fail "double schema failure did not report fail-closed fallback policy"
+
+# Codexが各deltaを実装／試験へどう閉じるか明記しない限り、Sparkを起動しない。
+UNRESOLVED_ORDER="$TMP_ROOT/unresolved-order.md"
+cp "$ORDER" "$UNRESOLVED_ORDER"
+printf 'CODEX PRECHECK: APPROVED\n' >>"$UNRESOLVED_ORDER"
+: >"$CALL_LOG"
+set +e
+env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+  FAKE_CALL_LOG="$CALL_LOG" \
+  "$SCRIPT" execute "$WT" "$UNRESOLVED_ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 3 "$RUN_STATUS" "unresolved Opus delta"
+grep -Fq -- "every Opus delta finding requires one matching DELTA_RESOLUTION" "$TMP_ROOT/stderr.log" \
+  || fail "missing delta resolution reason is absent"
+[[ ! -s "$CALL_LOG" ]] || fail "unresolved delta must fail before Spark"
+
+printf '%s\n' \
+  'DELTA_RESOLUTION: F1 Preserve the authority-failure fixture as an explicit unchanged-file negative test.' \
+  >>"$ORDER"
 printf 'CODEX PRECHECK: APPROVED\n' >>"$ORDER"
+
+# 読込予算超過は外部modelを起動する前にfail closedする。
+OVER_BUDGET_ORDER="$TMP_ROOT/over-budget-order.md"
+cp "$ORDER" "$OVER_BUDGET_ORDER"
+for n in $(seq 1 13); do
+  printf 'READ_FILE: read-%s.txt\n' "$n" >>"$OVER_BUDGET_ORDER"
+  printf 'read\n' >"$WT/read-$n.txt"
+done
+: >"$CALL_LOG"
+set +e
+env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+  FAKE_CALL_LOG="$CALL_LOG" \
+  "$SCRIPT" execute "$WT" "$OVER_BUDGET_ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 3 "$RUN_STATUS" "read budget overflow"
+grep -Fq -- "READ_FILE count must be 1..12" "$TMP_ROOT/stderr.log" \
+  || fail "read budget rejection reason is missing"
+[[ ! -s "$CALL_LOG" ]] || fail "read budget overflow must fail before model invocation"
+rm -f "$WT"/read-*.txt
 
 # 複合状態をDOへ緩めず、依存を散文や別表から推測しない。
 SPEC_ORDER="$TMP_ROOT/spec-order.md"
@@ -408,10 +697,50 @@ grep -Fq -- "dependency MISSING-DEP not found in dependency-evidence ledger" "$T
   || fail "missing dependency rejection reason is missing"
 [[ ! -s "$CALL_LOG" ]] || fail "missing dependency must fail before model invocation"
 
+# compiled grainの必須施工fieldが欠けたorderは、Spark起動前にfail closedする。
+MISSING_GRAIN_FIELD_ORDER="$TMP_ROOT/missing-grain-field-order.md"
+sed '/^Objective:/d' "$ORDER" >"$MISSING_GRAIN_FIELD_ORDER"
+: >"$CALL_LOG"
+set +e
+env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+  FAKE_CALL_LOG="$CALL_LOG" \
+  "$SCRIPT" execute "$WT" "$MISSING_GRAIN_FIELD_ORDER" "$TASK" \
+  >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 3 "$RUN_STATUS" "compiled grain missing required field"
+grep -Fq -- "order missing compiled Spark grain field: Objective" "$TMP_ROOT/stderr.log" \
+  || fail "compiled grain missing-field reason is absent"
+[[ ! -s "$CALL_LOG" ]] || fail "incomplete compiled grain must fail before Spark"
+
+# Sparkがworktree外の生成grainを改変しても、parent保持hashとの不一致で検収へ進めない。
+TAMPER_GRAIN_HOOK="$TMP_ROOT/tamper-grain-hook.sh"
+cat >"$TAMPER_GRAIN_HOOK" <<EOF
+#!/usr/bin/env bash
+attempt_dir="\$(find "${ORDER}.evidence" -maxdepth 1 -type d -name 'attempt-*' | sort | tail -n 1)"
+printf 'tampered\n' >>"\$attempt_dir/spark-compiled-grain.txt"
+printf 'after\n' >"$WT/src.txt"
+EOF
+chmod +x "$TAMPER_GRAIN_HOOK"
+: >"$CALL_LOG"
+set +e
+env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+  FAKE_CALL_LOG="$CALL_LOG" \
+  FAKE_SPARK_HOOK="$TAMPER_GRAIN_HOOK" \
+  "$SCRIPT" execute "$WT" "$ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 6 "$RUN_STATUS" "compiled grain mutation rejected"
+grep -Fq -- "compiled Spark grain mutated during Spark implementation" "$TMP_ROOT/stderr.log" \
+  || fail "compiled grain mutation reason is absent"
+printf 'before\n' >"$WT/src.txt"
+
 SPARK_HOOK="$TMP_ROOT/spark-hook.sh"
 cat >"$SPARK_HOOK" <<EOF
 #!/usr/bin/env bash
-printf 'after\n' >>"$WT/src.txt"
+printf 'after\n' >"$WT/src.txt"
 EOF
 chmod +x "$SPARK_HOOK"
 
@@ -428,12 +757,58 @@ set -e
 assert_status 0 "$RUN_STATUS" "Spark then Grok happy path"
 grep -Fq -- "--model gpt-5.3-codex-spark" "$CALL_LOG" || fail "Spark model was not invoked"
 grep -Fq -- "--model cursor-grok-4.5-high" "$CALL_LOG" || fail "Grok model was not invoked"
+assert_fragment "$CALL_LOG" "--ignore-user-config" "Spark ignores ambient user config"
+assert_fragment "$CALL_LOG" "--disable memories" "Spark memory is disabled"
+assert_fragment "$CALL_LOG" "--disable plugins" "Spark plugins are disabled"
+assert_fragment "$CALL_LOG" "--disable multi_agent" "Spark delegation is disabled"
+assert_fragment "$CALL_LOG" "--sandbox workspace-write" "Spark write scope is sandboxed"
+assert_fragment "$CALL_LOG" "TARGET_CAPSULE:" "Spark receives target capsule"
+assert_fragment "$CALL_LOG" "COMPILED_IMPLEMENTATION_GRAIN:" "Spark receives compiled grain"
+assert_fragment "$CALL_LOG" "=== src.txt line 1 anchor: before ===" "internal target neighborhood"
+assert_fragment "$CALL_LOG" "=== test.txt line 1 anchor: fixture oracle ===" "test target neighborhood"
+assert_fragment "$CALL_LOG" "new command, mode, public API" "new surface prohibition"
+assert_fragment "$CALL_LOG" "Run every Test and DELTA_RESOLUTION check" "Spark must run required tests"
 if grep -Fq -- "claude:" "$CALL_LOG"; then
   fail "execute must not rerun Opus or Fable"
 fi
 codex_line="$(grep -n '^codex:' "$CALL_LOG" | cut -d: -f1)"
 grok_line="$(grep -n '^cursor:' "$CALL_LOG" | cut -d: -f1)"
 [[ "$codex_line" -lt "$grok_line" ]] || fail "Spark must run before Grok"
+
+happy_attempt_name="$(awk -F': ' '$1=="ATTEMPT"{print $2}' "${ORDER}.evidence/checkpoint.txt")"
+happy_attempt="${ORDER}.evidence/$happy_attempt_name"
+assert_has "$happy_attempt/spark-compiled-grain.txt" \
+  "SPARK_GRAIN_VERSION: 1" "compiled grain version"
+assert_has "$happy_attempt/spark-compiled-grain.txt" \
+  "Objective: update the allowed fixture." "compiled objective"
+assert_has "$happy_attempt/spark-compiled-grain.txt" \
+  "ALLOWED_FILE: src.txt" "compiled allowlist"
+assert_has "$happy_attempt/spark-compiled-grain.txt" \
+  "DELTA_RESOLUTION: F1 Preserve the authority-failure fixture as an explicit unchanged-file negative test." \
+  "compiled delta resolution"
+assert_has "$happy_attempt/spark-compiled-grain.txt" \
+  "Test: git diff --check." "compiled test"
+if grep -Eq '^(AUTHORITY|BASE_SHA|VIEW_PROFILE|TASK_SHA256|CODEX PRECHECK|OPUS_DELTA_REASON):' \
+  "$happy_attempt/spark-compiled-grain.txt"; then
+  fail "compiled grain retained runner-only metadata"
+fi
+if grep -Fq -- "Original user task:" "$happy_attempt/spark-prompt.txt" ||
+   grep -Fq -- "Binding order:" "$happy_attempt/spark-prompt.txt"; then
+  fail "Spark prompt retained duplicated task or full order"
+fi
+[[ "$(grep -c '^Objective:' "$happy_attempt/spark-prompt.txt")" -eq 1 ]] \
+  || fail "Spark prompt must contain Objective exactly once"
+[[ "$(grep -c '^Test:' "$happy_attempt/spark-prompt.txt")" -eq 1 ]] \
+  || fail "Spark prompt must contain Test exactly once"
+assert_has "$happy_attempt/metadata.txt" \
+  "TARGET_CAPSULE_SHA256: $(sha256_file "$happy_attempt/spark-target-capsule.txt")" \
+  "target capsule hash evidence"
+assert_has "$happy_attempt/metadata.txt" \
+  "SPARK_GRAIN_SHA256: $(sha256_file "$happy_attempt/spark-compiled-grain.txt")" \
+  "compiled grain hash evidence"
+assert_has "$happy_attempt/metadata.txt" \
+  "SPARK_PROMPT_SHA256: $(sha256_file "$happy_attempt/spark-prompt.txt")" \
+  "Spark prompt hash evidence"
 
 GROK_HOOK="$TMP_ROOT/grok-hook.sh"
 cat >"$GROK_HOOK" <<EOF

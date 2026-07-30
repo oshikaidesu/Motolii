@@ -11,9 +11,9 @@ CURSOR_GROK_MODEL="cursor-grok-4.5-high"
 OPUS_MANAGER_MODEL="claude-opus-5"
 SPARK_MODEL="gpt-5.3-codex-spark"
 LOOP_PROFILE="opus-spark-grok"
-SUPERVISOR_TIMEOUT_SECONDS="${CURSOR_SUPERVISED_TIMEOUT_SECONDS:-600}"
+SUPERVISOR_TIMEOUT_SECONDS="${CURSOR_SUPERVISED_TIMEOUT_SECONDS:-300}"
 SPARK_TIMEOUT_SECONDS="${CODEX_SPARK_TIMEOUT_SECONDS:-1800}"
-INSPECTION_TIMEOUT_SECONDS="${CURSOR_INSPECTION_TIMEOUT_SECONDS:-300}"
+INSPECTION_TIMEOUT_SECONDS="${CURSOR_INSPECTION_TIMEOUT_SECONDS:-240}"
 HEARTBEAT_SECONDS="${CURSOR_SUPERVISED_HEARTBEAT_SECONDS:-30}"
 TERMINATION_GRACE_SECONDS="${CURSOR_TERMINATION_GRACE_SECONDS:-2}"
 DERIVED_TARGET_ROOT_NAME="target"
@@ -22,6 +22,36 @@ DERIVED_TARGET_ENTRIES=(
   "new-plugin-scaffold-test"
   "d1i4-empty-classification.tsv"
 )
+MAX_TASK_BYTES=12288
+MAX_ORDER_BYTES=32768
+MAX_AUTHORITY_COUNT=4
+MAX_ALLOWED_FILE_COUNT=8
+MAX_READ_FILE_COUNT=12
+MAX_READ_FILE_BYTES=131072
+MAX_TARGET_COUNT=4
+MAX_TARGET_ANCHOR_BYTES=240
+MAX_TARGET_CAPSULE_BYTES=49152
+MAX_SPARK_GRAIN_BYTES=16384
+TARGET_CONTEXT_BEFORE=40
+TARGET_CONTEXT_AFTER=80
+MAX_OPUS_DELTA_FINDINGS=5
+MAX_OPUS_DELTA_TEXT_BYTES=220
+MAX_OPUS_DELTA_REASON_BYTES=300
+SPARK_GRAIN_REQUIRED_LABELS=(
+  Objective
+  GRAIN
+  ALLOWED_FILE
+  CONTEXT_FACT
+  READ_FILE
+  INTERNAL_TARGET
+  TEST_TARGET
+  REUSE_TARGET
+  NEW_SURFACE
+  Non-goal
+  STOP
+  Test
+)
+OPUS_DELTA_SCHEMA='{"type":"object","additionalProperties":false,"properties":{"disposition":{"type":"string","enum":["READY","STOP","ESCALATE"]},"findings":{"type":"array","maxItems":5,"items":{"type":"object","additionalProperties":false,"properties":{"kind":{"type":"string","enum":["RISK","NEGATIVE_ORACLE","STOP","CORRECTION"]},"severity":{"type":"string","enum":["P0","P1","P2"]},"delta":{"type":"string","maxLength":220}},"required":["kind","severity","delta"]}},"reason":{"type":"string","maxLength":300}},"required":["disposition","findings","reason"]}'
 
 usage() {
   echo "Usage: $0 prepare <isolated-worktree> <order-file> <task>"
@@ -79,6 +109,11 @@ if [[ -z "${task//[[:space:]]/}" ]]; then
   usage >&2
   exit 2
 fi
+task_bytes="$(LC_ALL=C printf '%s' "$task" | wc -c | tr -d ' ')"
+if (( task_bytes > MAX_TASK_BYTES )); then
+  echo "delegate-cursor-supervised: taskが文脈予算 ${MAX_TASK_BYTES} bytesを超えています: $task_bytes" >&2
+  exit 2
+fi
 
 for _ambient_git_var in GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
   GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE GIT_CEILING_DIRECTORIES \
@@ -128,6 +163,14 @@ if ! command -v "$CLAUDE_AGENT_BIN" >/dev/null 2>&1; then
   echo "delegate-cursor-supervised: Claude Code CLI '$CLAUDE_AGENT_BIN' が見つかりません" >&2
   exit 127
 fi
+if ! command -v jq >/dev/null 2>&1; then
+  echo "delegate-cursor-supervised: typed delta parser 'jq' が見つかりません" >&2
+  exit 127
+fi
+if ! command -v uuidgen >/dev/null 2>&1; then
+  echo "delegate-cursor-supervised: typed delta session ID generator 'uuidgen' が見つかりません" >&2
+  exit 127
+fi
 
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/motolii-cursor-supervised.XXXXXX")"
 # checkpointはmodel出力ではなくparent(この script)だけが書く。EVIDENCE_ROOT_FOR_TRAPが
@@ -137,9 +180,10 @@ tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/motolii-cursor-supervised.XXXXXX")"
 EVIDENCE_ROOT_FOR_TRAP=""
 CHECKPOINT_SETTLED=0
 cleanup() {
-  # $?をここで即時退避しないと、後続コマンドがrunnerの本来の終了statusを上書きしてしまう。
+  # EXIT trapから明示的に渡されたstatusを即時退避する。trap内で`$?`を再評価すると、
+  # cleanup本体の最初のcommandや展開失敗経路がrunner本来のstatusを上書きし得る。
   # 後始末の成功を呼び出し側へ返さず、最後に元のstatusを明示してfail-closedを維持する
-  local status=$?
+  local status="$1"
   if [[ -n "${CURRENT_ATTEMPT_DIR:-}" ]]; then
     printf 'EXIT_STATUS: %s\n' "$status" >>"$CURRENT_ATTEMPT_DIR/stage-result.txt" 2>/dev/null || true
   fi
@@ -150,7 +194,7 @@ cleanup() {
   trap - EXIT
   exit "$status"
 }
-trap cleanup EXIT
+trap 'cleanup "$?"' EXIT
 
 mark_checkpoint_at_risk() {
   EVIDENCE_ROOT_FOR_TRAP="$1"
@@ -257,24 +301,77 @@ run_supervisor() {
   fi
 }
 
-run_order_manager() {
+opus_delta_is_valid() {
+  local output="$1"
+  jq -e \
+    --argjson max_findings "$MAX_OPUS_DELTA_FINDINGS" \
+    --argjson max_delta "$MAX_OPUS_DELTA_TEXT_BYTES" \
+    --argjson max_reason "$MAX_OPUS_DELTA_REASON_BYTES" '
+      .type == "result" and
+      .subtype == "success" and
+      (.structured_output | type) == "object" and
+      (.structured_output as $d |
+        (($d | keys | sort) == ["disposition", "findings", "reason"]) and
+        ($d.disposition == "READY" or $d.disposition == "STOP" or $d.disposition == "ESCALATE") and
+        (($d.findings | type) == "array") and
+        (($d.findings | length) <= $max_findings) and
+        all($d.findings[];
+          ((keys | sort) == ["delta", "kind", "severity"]) and
+          (.kind == "RISK" or .kind == "NEGATIVE_ORACLE" or .kind == "STOP" or .kind == "CORRECTION") and
+          (.severity == "P0" or .severity == "P1" or .severity == "P2") and
+          ((.delta | type) == "string") and
+          ((.delta | utf8bytelength) >= 1) and
+          ((.delta | utf8bytelength) <= $max_delta) and
+          ((.delta | test("[\\r\\n]")) | not)
+        ) and
+        (($d.reason | type) == "string") and
+        (($d.reason | utf8bytelength) >= 1) and
+        (($d.reason | utf8bytelength) <= $max_reason) and
+        (($d.reason | test("[\\r\\n]")) | not)
+      )
+    ' "$output" >/dev/null 2>&1
+}
+
+run_order_manager_delta() {
   local output="$1"
   local prompt="$2"
   local timeout_seconds="${3:-$SUPERVISOR_TIMEOUT_SECONDS}"
+  local session_id retry_prompt
+  session_id="$(uuidgen | tr '[:upper:]' '[:lower:]')"
   if ! run_agent "$output" "$timeout_seconds" \
     env CLAUDE_DELEGATED=1 "$CLAUDE_AGENT_BIN" -p \
       --model "$OPUS_MANAGER_MODEL" \
+      --effort low \
       --permission-mode default \
-      --allowedTools Read,Glob,Grep,Bash \
-      --disallowedTools Edit,Write \
-      --output-format text \
+      --tools "" \
+      --session-id "$session_id" \
+      --json-schema "$OPUS_DELTA_SCHEMA" \
+      --output-format json \
       "$prompt"; then
     return 1
   fi
-  if ! result_is_valid "$output" order; then
-    echo "delegate-cursor-supervised: Opus 5のORDER markerが欠落・曖昧・末尾外です" >&2
-    return 1
+  if opus_delta_is_valid "$output"; then
+    return 0
   fi
+
+  echo "delegate-cursor-supervised: Opus typed deltaがschema不正。same-sessionで一回だけ差戻します" >&2
+  retry_prompt="Your previous response was not a valid typed delta. Return only one JSON object matching the same supplied schema. Do not add prose, markdown, tools, or a full order."
+  if run_agent "$output.retry" "$timeout_seconds" \
+    env CLAUDE_DELEGATED=1 "$CLAUDE_AGENT_BIN" -p \
+      --model "$OPUS_MANAGER_MODEL" \
+      --effort low \
+      --permission-mode default \
+      --tools "" \
+      --resume "$session_id" \
+      --json-schema "$OPUS_DELTA_SCHEMA" \
+      --output-format json \
+      "$retry_prompt" &&
+      opus_delta_is_valid "$output.retry"; then
+    mv "$output.retry" "$output"
+    return 0
+  fi
+  echo "delegate-cursor-supervised: Opus typed deltaが二回ともschema不正。散文fallbackしません" >&2
+  return 1
 }
 
 # U0e-2の却下原因(発注書と正本の未照合)を再発させないためのgate。詳細:
@@ -533,7 +630,7 @@ gate_require_single_field() {
 gate_reject_symlink_components() {
   # linkdir -> /outside のような中間componentの逃げ道も、最終componentのみの
   # -Lや文字列上の".."判定では検出できないため、経路全componentを実体で歩いて確認する
-  local worktree="$1" rel_path="$2"
+  local worktree="$1" rel_path="$2" label="${3:-path}"
   local cur="$worktree" part
   local old_ifs="$IFS"
   IFS='/'
@@ -541,7 +638,7 @@ gate_reject_symlink_components() {
     IFS="$old_ifs"
     cur="$cur/$part"
     if [[ -L "$cur" ]]; then
-      gate_fail "AUTHORITY path is a symlink: $rel_path"
+      gate_fail "$label path is a symlink: $rel_path"
     fi
     IFS='/'
   done
@@ -679,7 +776,7 @@ gate_check_authorities() {
     gate_parse_authority_line "$line"
     auth_full="$worktree/$GATE_AUTH_PATH"
     # symlinkはworktree外への逃げ道になり得るため、経路や存在確認より先に拒否する
-    gate_reject_symlink_components "$worktree" "$GATE_AUTH_PATH"
+    gate_reject_symlink_components "$worktree" "$GATE_AUTH_PATH" "AUTHORITY"
     if [[ ! -f "$auth_full" ]]; then
       gate_fail "AUTHORITY file missing: $GATE_AUTH_PATH"
     fi
@@ -718,6 +815,396 @@ gate_check_allowed_files() {
     fi
     GATE_ALLOWED_FILES+=("$af")
   done <<<"$allowed_lines"
+}
+
+# 外部modelへ同じrepo正本を三重に読ませないため、通常orderを
+# Codex検証済みの小さな文脈カプセルへ機械的に閉じる。
+gate_check_context_budget() {
+  local order_file="$1" worktree="$2"
+  local order_bytes read_mode_count fact_count authority_count allowed_count read_count
+  local read_lines line read_path read_full read_bytes=0 duplicate_paths
+
+  order_bytes="$(LC_ALL=C wc -c <"$order_file" | tr -d ' ')"
+  if (( order_bytes > MAX_ORDER_BYTES )); then
+    gate_fail "order exceeds ${MAX_ORDER_BYTES}-byte context budget: $order_bytes"
+  fi
+
+  read_mode_count="$(grep -c '^READ_MODE: CAPSULE$' "$order_file" || true)"
+  [[ "$read_mode_count" -eq 1 ]] || gate_fail "READ_MODE: CAPSULE must appear exactly once"
+  fact_count="$(grep -c '^CONTEXT_FACT: [^[:space:]]' "$order_file" || true)"
+  (( fact_count >= 1 )) || gate_fail "missing non-empty CONTEXT_FACT"
+
+  authority_count="$(grep -c '^AUTHORITY:' "$order_file" || true)"
+  allowed_count="$(grep -c '^ALLOWED_FILE:' "$order_file" || true)"
+  read_count="$(grep -c '^READ_FILE:' "$order_file" || true)"
+  (( authority_count >= 1 && authority_count <= MAX_AUTHORITY_COUNT )) \
+    || gate_fail "AUTHORITY count must be 1..$MAX_AUTHORITY_COUNT: $authority_count"
+  (( allowed_count >= 1 && allowed_count <= MAX_ALLOWED_FILE_COUNT )) \
+    || gate_fail "ALLOWED_FILE count must be 1..$MAX_ALLOWED_FILE_COUNT: $allowed_count"
+  (( read_count >= 1 && read_count <= MAX_READ_FILE_COUNT )) \
+    || gate_fail "READ_FILE count must be 1..$MAX_READ_FILE_COUNT: $read_count"
+
+  read_lines="$(grep -E '^READ_FILE:' "$order_file" || true)"
+  duplicate_paths="$(printf '%s\n' "$read_lines" | sort | uniq -d)"
+  [[ -z "$duplicate_paths" ]] || gate_fail "READ_FILE duplicated: ${duplicate_paths#READ_FILE: }"
+  while IFS= read -r line; do
+    if [[ ! "$line" =~ ^READ_FILE:\ ([^[:space:]]+)$ ]]; then
+      gate_fail "READ_FILE must be one exact relative path: ${line#READ_FILE: }"
+    fi
+    read_path="${BASH_REMATCH[1]}"
+    if [[ "$read_path" == /* || "$read_path" == *".."* || "$read_path" == *[\*\?\[\]\{\}]* ]]; then
+      gate_fail "READ_FILE unsafe or non-exact path: $read_path"
+    fi
+    gate_reject_symlink_components "$worktree" "$read_path" "READ_FILE"
+    read_full="$worktree/$read_path"
+    [[ -f "$read_full" ]] || gate_fail "READ_FILE missing: $read_path"
+    read_bytes=$((read_bytes + $(LC_ALL=C wc -c <"$read_full" | tr -d ' ')))
+  done <<<"$read_lines"
+  (( read_bytes <= MAX_READ_FILE_BYTES )) \
+    || gate_fail "READ_FILE bytes exceed $MAX_READ_FILE_BYTES: $read_bytes"
+}
+
+gate_parse_target_line() {
+  local line="$1" label="$2"
+  if [[ ! "$line" =~ ^${label}:\ ([^[:space:]]+)\ ::\ (.+)$ ]]; then
+    gate_fail "$label must be '<path> :: <unique trimmed line>'"
+  fi
+  GATE_TARGET_PATH="${BASH_REMATCH[1]}"
+  GATE_TARGET_ANCHOR="${BASH_REMATCH[2]}"
+  if [[ "$GATE_TARGET_PATH" == /* || "$GATE_TARGET_PATH" == *".."* || \
+        "$GATE_TARGET_PATH" == *[\*\?\[\]\{\}]* ]]; then
+    gate_fail "$label unsafe path: $GATE_TARGET_PATH"
+  fi
+  if [[ "$GATE_TARGET_ANCHOR" =~ ^[[:space:]] || "$GATE_TARGET_ANCHOR" =~ [[:space:]]$ || \
+        "$GATE_TARGET_ANCHOR" == *$'\t'* ]]; then
+    gate_fail "$label anchor must be one trimmed line without tabs"
+  fi
+  local anchor_bytes
+  anchor_bytes="$(LC_ALL=C printf '%s' "$GATE_TARGET_ANCHOR" | wc -c | tr -d ' ')"
+  (( anchor_bytes >= 1 && anchor_bytes <= MAX_TARGET_ANCHOR_BYTES )) \
+    || gate_fail "$label anchor bytes must be 1..$MAX_TARGET_ANCHOR_BYTES: $anchor_bytes"
+}
+
+target_anchor_line_number() {
+  local full_path="$1" anchor="$2"
+  awk -v needle="$anchor" '
+    {
+      line = $0
+      sub(/^[ \t]+/, "", line)
+      sub(/[ \t]+$/, "", line)
+      if (line == needle) {
+        count++
+        line_number = NR
+      }
+    }
+    END {
+      if (count == 1) print line_number
+      else if (count == 0) print "ABSENT"
+      else print "AMBIGUOUS"
+    }
+  ' "$full_path"
+}
+
+gate_check_exact_targets() {
+  local order_file="$1" worktree="$2" source_mode="${3:-WORKTREE}"
+  local label lines count line line_number read_paths new_surface_count
+  local target_source target_tmp base_sha mode
+
+  read_paths="$(grep -E '^READ_FILE:' "$order_file" | sed 's/^READ_FILE: //')"
+  if [[ "$source_mode" == "BASE" ]]; then
+    base_sha="$(gate_require_single_field "$order_file" "BASE_SHA")"
+  elif [[ "$source_mode" != "WORKTREE" ]]; then
+    gate_fail "unknown exact-target source mode: $source_mode"
+  fi
+  for label in INTERNAL_TARGET TEST_TARGET REUSE_TARGET; do
+    lines="$(grep -E "^${label}:" "$order_file" || true)"
+    count="$(printf '%s\n' "$lines" | grep -c "^${label}:" || true)"
+    (( count >= 1 && count <= MAX_TARGET_COUNT )) \
+      || gate_fail "$label count must be 1..$MAX_TARGET_COUNT: $count"
+    while IFS= read -r line; do
+      gate_parse_target_line "$line" "$label"
+      printf '%s\n' "$read_paths" | grep -Fqx -- "$GATE_TARGET_PATH" \
+        || gate_fail "$label path is not a READ_FILE: $GATE_TARGET_PATH"
+      if [[ "$source_mode" == "WORKTREE" ]]; then
+        gate_reject_symlink_components "$worktree" "$GATE_TARGET_PATH" "$label"
+        [[ -f "$worktree/$GATE_TARGET_PATH" ]] \
+          || gate_fail "$label file missing: $GATE_TARGET_PATH"
+      fi
+      if [[ "$label" == "INTERNAL_TARGET" ]] && ! path_is_allowed "$GATE_TARGET_PATH"; then
+        gate_fail "INTERNAL_TARGET is outside ALLOWED_FILE: $GATE_TARGET_PATH"
+      fi
+      target_source="$worktree/$GATE_TARGET_PATH"
+      target_tmp=""
+      if [[ "$source_mode" == "BASE" ]]; then
+        mode="$(git -C "$worktree" ls-tree "$base_sha" -- "$GATE_TARGET_PATH" | awk '{print $1}')"
+        [[ -n "$mode" ]] || gate_fail "$label file missing at BASE_SHA: $GATE_TARGET_PATH"
+        [[ "$mode" != "120000" ]] || gate_fail "$label path is a symlink at BASE_SHA: $GATE_TARGET_PATH"
+        target_tmp="$(mktemp "$tmp_dir/motolii-target-base.XXXXXX")"
+        if ! git -C "$worktree" show "${base_sha}:${GATE_TARGET_PATH}" >"$target_tmp"; then
+          gate_fail "$label cannot read BASE_SHA file: $GATE_TARGET_PATH"
+        fi
+        target_source="$target_tmp"
+      fi
+      line_number="$(target_anchor_line_number "$target_source" "$GATE_TARGET_ANCHOR")"
+      [[ -z "$target_tmp" ]] || rm -f "$target_tmp"
+      case "$line_number" in
+        ABSENT) gate_fail "$label anchor absent in $GATE_TARGET_PATH: $GATE_TARGET_ANCHOR" ;;
+        AMBIGUOUS) gate_fail "$label anchor is not unique in $GATE_TARGET_PATH: $GATE_TARGET_ANCHOR" ;;
+      esac
+    done <<<"$lines"
+  done
+
+  new_surface_count="$(grep -c '^NEW_SURFACE: FORBIDDEN$' "$order_file" || true)"
+  [[ "$new_surface_count" -eq 1 ]] \
+    || gate_fail "NEW_SURFACE: FORBIDDEN must appear exactly once"
+}
+
+build_target_capsule() {
+  local order_file="$1" worktree="$2" output="$3"
+  local label line line_number start end key seen_file capsule_bytes
+
+  seen_file="$(mktemp "$tmp_dir/motolii-target-capsule-seen.XXXXXX")"
+  : >"$output"
+  for label in INTERNAL_TARGET TEST_TARGET REUSE_TARGET; do
+    while IFS= read -r line; do
+      gate_parse_target_line "$line" "$label"
+      key="$GATE_TARGET_PATH :: $GATE_TARGET_ANCHOR"
+      if grep -Fqx -- "$key" "$seen_file"; then
+        continue
+      fi
+      printf '%s\n' "$key" >>"$seen_file"
+      line_number="$(target_anchor_line_number "$worktree/$GATE_TARGET_PATH" "$GATE_TARGET_ANCHOR")"
+      start=$((line_number - TARGET_CONTEXT_BEFORE))
+      (( start >= 1 )) || start=1
+      end=$((line_number + TARGET_CONTEXT_AFTER))
+      {
+        printf '=== %s line %s anchor: %s ===\n' "$GATE_TARGET_PATH" "$line_number" "$GATE_TARGET_ANCHOR"
+        sed -n "${start},${end}p" "$worktree/$GATE_TARGET_PATH"
+        echo
+      } >>"$output"
+    done < <(grep -E "^${label}:" "$order_file")
+  done
+  rm -f "$seen_file"
+  capsule_bytes="$(LC_ALL=C wc -c <"$output" | tr -d ' ')"
+  (( capsule_bytes <= MAX_TARGET_CAPSULE_BYTES )) \
+    || gate_fail "target capsule exceeds $MAX_TARGET_CAPSULE_BYTES bytes: $capsule_bytes"
+}
+
+gate_check_compiled_grain_contract() {
+  local order_file="$1" label count
+  for label in "${SPARK_GRAIN_REQUIRED_LABELS[@]}"; do
+    count="$(grep -c "^${label}:" "$order_file" || true)"
+    (( count >= 1 )) || gate_fail "order missing compiled Spark grain field: $label"
+  done
+}
+
+# 承認済みorderはCodex/Grokの検証正本として保持する一方、Sparkには施工判断へ
+# 不要なprovenance、閉鎖判定、model routingを再送しない。未知の製品固有ラベルや
+# 自由記述は勝手に捨てず、runner所有の既知metadataだけを除く決定的な射影にする。
+build_compiled_spark_grain() {
+  local order_file="$1" output="$2"
+  local label expected_count actual_count grain_bytes
+
+  awk '
+    BEGIN { print "SPARK_GRAIN_VERSION: 1" }
+    /^(BASE_REF|BASE_SHA|DEPENDENCY|AUTHORITY|AUTHORITY_SPAN|OWNER_CLOSURE|CAUSE_CLOSURE|CONTRACT_IMPACT|CONTRACT_CLOSURE|CONTRACT_AUTHORITY|ORACLE_CLOSURE|REUSE_CLOSURE|VIEW_PROFILE|HAZARD_TAG|READ_MODE|ORDER|LOOP_PROFILE|ORDER_MANAGER_MODEL|IMPLEMENTER_MODEL|REVIEW_MODEL|TASK_SHA256|CODEX PRECHECK|OPUS_DELTA_REASON):/ {
+      next
+    }
+    { print }
+  ' "$order_file" >"$output"
+
+  [[ -s "$output" ]] || gate_fail "compiled Spark grain is empty"
+  if grep -Eq '^(BASE_REF|BASE_SHA|DEPENDENCY|AUTHORITY|AUTHORITY_SPAN|OWNER_CLOSURE|CAUSE_CLOSURE|CONTRACT_IMPACT|CONTRACT_CLOSURE|CONTRACT_AUTHORITY|ORACLE_CLOSURE|REUSE_CLOSURE|VIEW_PROFILE|HAZARD_TAG|READ_MODE|ORDER|LOOP_PROFILE|ORDER_MANAGER_MODEL|IMPLEMENTER_MODEL|REVIEW_MODEL|TASK_SHA256|CODEX PRECHECK|OPUS_DELTA_REASON):' "$output"; then
+    gate_fail "compiled Spark grain leaked runner-only metadata"
+  fi
+  [[ "$(grep -c '^SPARK_GRAIN_VERSION: 1$' "$output" || true)" -eq 1 ]] \
+    || gate_fail "compiled Spark grain version must appear exactly once"
+
+  # 施工に必要な閉集合は元orderと同数でなければならない。生成器の変更で一行でも
+  # 落ちた場合、短いが不完全なpromptをSparkへ送らずmodel起動前に失敗させる。
+  for label in "${SPARK_GRAIN_REQUIRED_LABELS[@]}"; do
+    expected_count="$(grep -c "^${label}:" "$order_file" || true)"
+    actual_count="$(grep -c "^${label}:" "$output" || true)"
+    (( expected_count >= 1 )) || gate_fail "order missing compiled Spark grain field: $label"
+    [[ "$actual_count" -eq "$expected_count" ]] \
+      || gate_fail "compiled Spark grain field count mismatch: $label"
+  done
+
+  grain_bytes="$(LC_ALL=C wc -c <"$output" | tr -d ' ')"
+  (( grain_bytes <= MAX_SPARK_GRAIN_BYTES )) \
+    || gate_fail "compiled Spark grain exceeds $MAX_SPARK_GRAIN_BYTES bytes: $grain_bytes"
+}
+
+gate_check_view_profile() {
+  local order_file="$1"
+  local authority_span owner_closure cause_closure contract_impact contract_closure
+  local contract_authority contract_authority_receipt
+  local oracle_closure reuse_closure declared_profile computed_profile hazard_tag
+
+  authority_span="$(gate_require_single_field "$order_file" "AUTHORITY_SPAN")"
+  owner_closure="$(gate_require_single_field "$order_file" "OWNER_CLOSURE")"
+  cause_closure="$(gate_require_single_field "$order_file" "CAUSE_CLOSURE")"
+  contract_impact="$(gate_require_single_field "$order_file" "CONTRACT_IMPACT")"
+  contract_closure="$(gate_require_single_field "$order_file" "CONTRACT_CLOSURE")"
+  contract_authority="$(gate_require_single_field "$order_file" "CONTRACT_AUTHORITY")"
+  oracle_closure="$(gate_require_single_field "$order_file" "ORACLE_CLOSURE")"
+  reuse_closure="$(gate_require_single_field "$order_file" "REUSE_CLOSURE")"
+  declared_profile="$(gate_require_single_field "$order_file" "VIEW_PROFILE")"
+  hazard_tag="$(gate_require_single_field "$order_file" "HAZARD_TAG")"
+
+  [[ "$authority_span" == "ONE" || "$authority_span" == "MULTIPLE" || "$authority_span" == "CONFLICTING" ]] \
+    || gate_fail "invalid AUTHORITY_SPAN: $authority_span"
+  [[ "$owner_closure" == "CLOSED" || "$owner_closure" == "MULTIPLE_KNOWN" || "$owner_closure" == "UNKNOWN" ]] \
+    || gate_fail "invalid OWNER_CLOSURE: $owner_closure"
+  [[ "$cause_closure" == "LOCALIZED" || "$cause_closure" == "COMPETING" || "$cause_closure" == "UNKNOWN" ]] \
+    || gate_fail "invalid CAUSE_CLOSURE: $cause_closure"
+  [[ "$contract_impact" == "PRIVATE" || "$contract_impact" == "SHARED" || "$contract_impact" == "PERMANENT" ]] \
+    || gate_fail "invalid CONTRACT_IMPACT: $contract_impact"
+  [[ "$contract_closure" == "PRIVATE" || "$contract_closure" == "FROZEN" || \
+     "$contract_closure" == "UNRESOLVED" ]] \
+    || gate_fail "invalid CONTRACT_CLOSURE: $contract_closure"
+  [[ "$oracle_closure" == "CLOSED" || "$oracle_closure" == "PARTIAL" || "$oracle_closure" == "ABSENT" ]] \
+    || gate_fail "invalid ORACLE_CLOSURE: $oracle_closure"
+  [[ "$reuse_closure" == "REUSE" || "$reuse_closure" == "CHOICE" || "$reuse_closure" == "NEW" ]] \
+    || gate_fail "invalid REUSE_CLOSURE: $reuse_closure"
+  [[ "$declared_profile" == "CLOSED" || "$declared_profile" == "ADJACENT" || "$declared_profile" == "WIDE" ]] \
+    || gate_fail "invalid VIEW_PROFILE: $declared_profile"
+  [[ "$hazard_tag" == "DESTRUCTIVE_FS" || "$hazard_tag" == "SECURITY" || \
+     "$hazard_tag" == "PERSISTENCE" || "$hazard_tag" == "CONCURRENCY" || \
+     "$hazard_tag" == "PLATFORM" || "$hazard_tag" == "NONE" ]] \
+    || gate_fail "invalid HAZARD_TAG: $hazard_tag"
+
+  case "$contract_impact:$contract_closure" in
+    PRIVATE:PRIVATE)
+      [[ "$contract_authority" == "NONE" ]] \
+        || gate_fail "private contract must use CONTRACT_AUTHORITY: NONE"
+      ;;
+    SHARED:FROZEN|PERMANENT:FROZEN)
+      [[ "$contract_authority" != "NONE" ]] \
+        || gate_fail "frozen $contract_impact contract requires CONTRACT_AUTHORITY receipt"
+      [[ "$contract_authority" =~ ^([^[:space:]@]+)@SHA256:([0-9a-f]{64})$ ]] \
+        || gate_fail "CONTRACT_AUTHORITY must be '<path>@SHA256:<64 lowercase hex>'"
+      contract_authority_receipt="${BASH_REMATCH[1]} SHA256:${BASH_REMATCH[2]}"
+      grep -Fqx -- "AUTHORITY: $contract_authority_receipt" "$order_file" \
+        || gate_fail "CONTRACT_AUTHORITY is not an exact verified AUTHORITY: $contract_authority"
+      ;;
+    SHARED:UNRESOLVED|PERMANENT:UNRESOLVED)
+      [[ "$contract_authority" == "NONE" ]] \
+        || gate_fail "unresolved contract must use CONTRACT_AUTHORITY: NONE"
+      ;;
+    *)
+      gate_fail "invalid contract impact/closure pair: $contract_impact/$contract_closure"
+      ;;
+  esac
+
+  if [[ "$authority_span" == "CONFLICTING" || "$owner_closure" == "UNKNOWN" || \
+        "$cause_closure" == "COMPETING" || "$cause_closure" == "UNKNOWN" || \
+        "$contract_closure" == "UNRESOLVED" || \
+        "$oracle_closure" == "ABSENT" || "$reuse_closure" == "NEW" ]]; then
+    computed_profile="WIDE"
+  elif [[ "$authority_span" == "ONE" && "$owner_closure" == "CLOSED" && \
+          "$cause_closure" == "LOCALIZED" && \
+          ( "$contract_closure" == "PRIVATE" || "$contract_closure" == "FROZEN" ) && \
+          "$oracle_closure" == "CLOSED" && "$reuse_closure" == "REUSE" ]]; then
+    computed_profile="CLOSED"
+  else
+    computed_profile="ADJACENT"
+  fi
+
+  [[ "$declared_profile" == "$computed_profile" ]] \
+    || gate_fail "VIEW_PROFILE mismatch: declared=$declared_profile computed=$computed_profile"
+  [[ "$computed_profile" != "WIDE" ]] \
+    || gate_fail "VIEW_PROFILE WIDE requires read-only exploration and cannot dispatch Spark"
+}
+
+prepare_skeleton_reject_reserved_fields() {
+  local skeleton_file="$1"
+  if grep -Eq '^(ORDER:|CODEX PRECHECK:|LOOP_PROFILE:|ORDER_MANAGER_MODEL:|IMPLEMENTER_MODEL:|REVIEW_MODEL:|TASK_SHA256:|SPARK_GRAIN_VERSION:|OPUS_DELTA_|DELTA_RESOLUTION:|HAZARD_GUARD:|MECHANICAL_GUARD:)' "$skeleton_file"; then
+    gate_fail "prepare skeleton contains runner-owned field"
+  fi
+}
+
+gate_check_delta_resolutions() {
+  local order_file="$1"
+  local finding_lines resolution_lines line finding_id resolution_id
+  local finding_ids="" resolution_ids="" count
+
+  finding_lines="$(grep -E '^OPUS_DELTA_FINDING:' "$order_file" || true)"
+  resolution_lines="$(grep -E '^DELTA_RESOLUTION:' "$order_file" || true)"
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    if [[ ! "$line" =~ ^OPUS_DELTA_FINDING:\ (F[1-5])\ (RISK|NEGATIVE_ORACLE|STOP|CORRECTION)\ (P0|P1|P2)\ (.+)$ ]]; then
+      gate_fail "OPUS_DELTA_FINDING malformed"
+    fi
+    finding_id="${BASH_REMATCH[1]}"
+    finding_ids+="${finding_id}"$'\n'
+  done <<<"$finding_lines"
+
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    if [[ ! "$line" =~ ^DELTA_RESOLUTION:\ (F[1-5])\ (.+)$ ]]; then
+      gate_fail "DELTA_RESOLUTION malformed"
+    fi
+    resolution_id="${BASH_REMATCH[1]}"
+    resolution_ids+="${resolution_id}"$'\n'
+  done <<<"$resolution_lines"
+
+  count="$(printf '%s' "$finding_ids" | grep -c '^F' || true)"
+  if (( count > MAX_OPUS_DELTA_FINDINGS )); then
+    gate_fail "too many OPUS_DELTA_FINDING entries: $count"
+  fi
+  [[ -z "$finding_ids" || -z "$(printf '%s' "$finding_ids" | sort | uniq -d)" ]] \
+    || gate_fail "duplicate OPUS_DELTA_FINDING ID"
+  [[ -z "$resolution_ids" || -z "$(printf '%s' "$resolution_ids" | sort | uniq -d)" ]] \
+    || gate_fail "duplicate DELTA_RESOLUTION ID"
+  if [[ "$(printf '%s' "$finding_ids" | sort)" != "$(printf '%s' "$resolution_ids" | sort)" ]]; then
+    gate_fail "every Opus delta finding requires one matching DELTA_RESOLUTION before precheck"
+  fi
+}
+
+append_hazard_guard() {
+  local order_file="$1" hazard_tag="$2"
+  case "$hazard_tag" in
+    DESTRUCTIVE_FS)
+      {
+        echo "HAZARD_GUARD: DESTRUCTIVE_FS requires exact non-empty resolved targets, containment checks, and fail-closed removal."
+        printf '%s%s%s\n' \
+          'MECHANICAL_GUARD: reject empty collection expansion and the token sequence [@]' \
+          ':-' ' on any recursive-delete path.'
+        echo "NEGATIVE_ORACLE: zero deletion targets must perform zero recursive removals and must not resolve to the owned root."
+      } >>"$order_file"
+      ;;
+    SECURITY)
+      {
+        echo "HAZARD_GUARD: SECURITY requires deny-by-default authority, bounded input, and typed rejection evidence."
+        echo "NEGATIVE_ORACLE: missing or forged authority must fail before mutation without widening permissions."
+      } >>"$order_file"
+      ;;
+    PERSISTENCE)
+      {
+        echo "HAZARD_GUARD: PERSISTENCE requires atomic commit, typed failure, and recovery evidence."
+        echo "NEGATIVE_ORACLE: interrupted or partial persistence must not become the accepted canonical state."
+      } >>"$order_file"
+      ;;
+    CONCURRENCY)
+      {
+        echo "HAZARD_GUARD: CONCURRENCY requires explicit owner, generation or ordering evidence, and bounded cancellation."
+        echo "NEGATIVE_ORACLE: stale or reordered work must not overwrite the current owner state."
+      } >>"$order_file"
+      ;;
+    PLATFORM)
+      {
+        echo "HAZARD_GUARD: PLATFORM requires the named target platform and portable command/tool assumptions."
+        echo "NEGATIVE_ORACLE: unsupported platform behavior must fail explicitly rather than silently fall back."
+      } >>"$order_file"
+      ;;
+    NONE)
+      echo "HAZARD_GUARD: NONE" >>"$order_file"
+      ;;
+    *)
+      gate_fail "cannot append unknown HAZARD_TAG: $hazard_tag"
+      ;;
+  esac
 }
 
 gate_check_clean_worktree() {
@@ -810,6 +1297,10 @@ run_dispatch_gate_for_inspect() {
   gate_check_grain_and_dependencies "$order_file" "$worktree"
   gate_check_authorities_at_base "$order_file" "$worktree"
   gate_check_allowed_files "$order_file"
+  gate_check_context_budget "$order_file" "$worktree"
+  gate_check_compiled_grain_contract "$order_file"
+  gate_check_exact_targets "$order_file" "$worktree" BASE
+  gate_check_view_profile "$order_file"
   gate_check_react_labels "$order_file"
 }
 
@@ -1568,6 +2059,15 @@ verify_order_integrity() {
   fi
 }
 
+verify_generated_file_integrity() {
+  local file="$1" expected_hash="$2" label="$3"
+  local actual_hash
+  [[ -f "$file" ]] || evidence_fail "$label disappeared during Spark implementation"
+  actual_hash="$(shasum -a 256 "$file" | awk '{print $1}')"
+  [[ "$actual_hash" == "$expected_hash" ]] \
+    || evidence_fail "$label mutated during Spark implementation"
+}
+
 # checkpointの発行(publish)/無効化(invalidate)は、この2関数を通じてのみ行う。
 # どちらもCHECKPOINT_SETTLED=1を立てて、EXIT trapによる無効化上書きを止める
 # ("settled"=現在のディスク状態が意図した最終状態である、という意味)
@@ -1672,8 +2172,11 @@ run_inspection_stage() {
   inspection_prompt=$(cat <<EOF
 You are the read-only acceptance supervisor for Motolii. Do not edit files,
 commit, push, create a PR, spawn subagents, or delegate. Inspect the actual diff
-and rerun required evidence now. Verify line-by-line against the binding order
-and authorities. Green tests alone are insufficient. Look for scope drift,
+and rerun the exact required evidence now. The binding order is the complete
+Codex-approved policy capsule for this grain. Open only READ_FILE paths, changed
+ALLOWED_FILE paths, and command output named by the order; do not reread all of
+AGENTS.md or whole specs and do not perform repository-wide archaeology. Verify
+line-by-line against the binding order. Green tests alone are insufficient. Look for scope drift,
 contract-avoidance, weakened tests, missing negative cases, duplicate state or
 logic, raw public APIs, non-atomic failure, unbounded work, and unfinished gates.
 Do not search outside the selected worktree, run broad filesystem find commands,
@@ -1767,6 +2270,10 @@ run_dispatch_gate() {
   gate_check_grain_and_dependencies "$order_file" "$worktree"
   gate_check_authorities "$order_file" "$worktree"
   gate_check_allowed_files "$order_file"
+  gate_check_context_budget "$order_file" "$worktree"
+  gate_check_compiled_grain_contract "$order_file"
+  gate_check_exact_targets "$order_file" "$worktree"
+  gate_check_view_profile "$order_file"
   gate_check_clean_worktree "$worktree"
   gate_check_react_labels "$order_file"
 }
@@ -1785,76 +2292,68 @@ record_base_metadata() {
 }
 
 if [[ "$MODE" == "prepare" ]]; then
+  skeleton_file="$tmp_dir/order-skeleton.txt"
+  printf '%s\n' "$task" >"$skeleton_file"
+  prepare_skeleton_reject_reserved_fields "$skeleton_file"
+  # Opusへ渡す前に、Codex骨格だけでbase、ledger、authority、scope、視野幅を
+  # 全て閉じる。WIDEや不一致はmodelに解釈させずここで差戻す。
+  run_dispatch_gate "$skeleton_file" "$WORKTREE"
+  hazard_tag="$(gate_require_single_field "$skeleton_file" "HAZARD_TAG")"
   supervisor_prompt=$(cat <<EOF
-You are the read-only construction manager for Motolii. Do not edit files,
-commit, push, create a PR, spawn subagents, or delegate during this order-draft
-stage. Read AGENTS.md and every required authority completely. Inspect the
-current worktree and existing diff. Turn the user task into exactly one
-self-contained mechanical grain and a binding implementation order for Codex
-Spark. Do not invent unresolved product meaning or public contracts.
+You are the read-only validator for one Motolii implementation grain. Do not use
+tools, edit, commit, push, create a PR, spawn subagents, delegate, inspect the
+repository, restate the order, or invent authority. Codex and the runner already
+validated BASE_SHA, ledger state, dependencies, authority hashes, allowlist,
+read set, exact internal/test/reuse targets, context budgets, VIEW_PROFILE,
+NEW_SURFACE, and HAZARD_TAG in the skeleton below.
+Those runner-owned fields are immutable.
 
-The order must contain objective, current code facts, authoritative spec/task IDs,
-an exact closed file allowlist, non-goals, helpers to reuse, invariants, STOP
-conditions, positive and negative tests, exact commands, and integration gates.
-Forbid suppressions, expected-value or golden rewrites, fixture special-cases,
-raw scanners that bypass typed boundaries, public raw mutation APIs, invented
-serde defaults, duplicate planners/helpers, partial mutation, TODO stubs, and
-adjacent-ticket expansion.
+Return only the supplied JSON Schema. disposition is READY when the skeleton is
+sufficient, STOP when it contradicts its own closed contract, and ESCALATE when
+the stated facts expose a wider unresolved problem. findings contain only the
+highest-severity missing RISK, NEGATIVE_ORACLE, STOP, or CORRECTION. Return at
+most $MAX_OPUS_DELTA_FINDINGS findings, each at most
+$MAX_OPUS_DELTA_TEXT_BYTES bytes. Prefer fewer findings. Do not repeat facts
+already present, propose optional hardening, expand product scope, or write a
+full order. Known hazard guards are injected mechanically after validation.
 
-The order must also emit the fields the dispatch gate checks mechanically before
-Spark is started: exactly one \`GRAIN: <id>\`, exactly one
-\`BASE_REF: refs/heads/<full-branch-name>\`, exactly one full 40-hex
-\`BASE_SHA: <sha>\` that BASE_REF resolves to and that equals the isolated
-worktree HEAD, one or more \`DEPENDENCY: <id>\` lines, one or more
-\`AUTHORITY: <worktree-relative-path> SHA256:<64-hex>\` lines, and one or more
-\`ALLOWED_FILE: <worktree-relative-path-or-glob>\` lines. Before writing GRAIN,
-read docs/implementation-ledger.md in the target worktree. In section
-"現在の並列レーン", confirm the GRAIN row state is exactly DO. Before writing
-DEPENDENCY, read section "発注依存証跡" in that same file and confirm every
-DEPENDENCY row state is exactly DONE; never infer these states from prose,
-another table, or a different worktree. Before writing an AUTHORITY line, hash the file
-inside the target worktree and copy that exact hash. If the order touches a
-React surface (exact \`REACT TASK: YES\`, an ALLOWED_FILE under docs/mocks-ui, or
-an ALLOWED_FILE ending in .jsx), also include, exactly once and in this order:
-REACT AUTHORITY:, SOURCE ASSET:, PRESERVE:, REPLACE:, STATE OWNER:,
-DIAGNOSTIC ROUTE:, NEGATIVE ORACLE:, STOP:. Merely mentioning React in prose
-does not require these labels.
-
-Make the Spark packet self-contained from the closed order, allowed files, and
-explicitly named authorities. Do not require inherited conversation history,
-repository-wide archaeology, multiple-spec meaning judgment, unspecified
-public-boundary discovery, or another model. If those are necessary, return
-ORDER: STOP so Codex can revise the parent task or ask Fable outside this loop.
-
-Do not repeat the Codex-owned loop/model labels in the draft; the dispatcher appends
-them after validating the terminal marker.
-
-The last non-empty line must be exactly plain text ORDER: READY only if every
-ledger, authority, and label fact above is mechanically true; otherwise end with
-plain text ORDER: STOP. Do not bold it, quote it, or append text.
-
-User task:
+Validated order skeleton:
 $task
 EOF
   )
-  echo "## 1. Claude Opus 5 managed Spark order draft"
-  if ! (cd "$WORKTREE" && run_order_manager "$tmp_dir/order.txt" "$supervisor_prompt"); then
-    [[ ! -f "$tmp_dir/order.txt" ]] || cat "$tmp_dir/order.txt"
+  echo "## 1. Claude Opus 5 typed order delta"
+  if ! (cd "$WORKTREE" && run_order_manager_delta "$tmp_dir/opus-result.json" "$supervisor_prompt"); then
+    [[ ! -f "$tmp_dir/opus-result.json" ]] || cat "$tmp_dir/opus-result.json"
     exit 1
   fi
-  cat "$tmp_dir/order.txt"
+  jq '.structured_output' "$tmp_dir/opus-result.json"
+  jq -c '.structured_output' "$tmp_dir/opus-result.json" >"$tmp_dir/opus-delta.json"
+  opus_disposition="$(jq -r '.disposition' "$tmp_dir/opus-delta.json")"
+  if [[ "$opus_disposition" != "READY" ]]; then
+    echo "delegate-cursor-supervised: Opus typed delta disposition=${opus_disposition}。Sparkは起動しません" >&2
+    exit 3
+  fi
+  blocking_delta_count="$(jq '[.findings[] | select(.severity == "P0" or .severity == "P1")] | length' \
+    "$tmp_dir/opus-delta.json")"
+  if (( blocking_delta_count > 0 )); then
+    echo "delegate-cursor-supervised: Opus P0/P1 deltaが${blocking_delta_count}件あります。骨格とexact oracleへ織り込み、prepareを再実行してください" >&2
+    exit 3
+  fi
+
+  cat "$skeleton_file" >"$ORDER_FILE"
+  append_hazard_guard "$ORDER_FILE" "$hazard_tag"
+  jq -r '.findings | to_entries[] | "OPUS_DELTA_FINDING: F\(.key + 1) \(.value.kind) \(.value.severity) \(.value.delta)"' \
+    "$tmp_dir/opus-delta.json" >>"$ORDER_FILE"
   {
-    cat "$tmp_dir/order.txt"
+    printf 'OPUS_DELTA_REASON: %s\n' "$(jq -r '.reason' "$tmp_dir/opus-delta.json")"
+    echo "ORDER: READY"
     echo "LOOP_PROFILE: $LOOP_PROFILE"
     echo "ORDER_MANAGER_MODEL: $OPUS_MANAGER_MODEL"
     echo "IMPLEMENTER_MODEL: $SPARK_MODEL"
     echo "REVIEW_MODEL: $CURSOR_GROK_MODEL"
     echo "TASK_SHA256: $task_hash"
-  } >"$ORDER_FILE"
-  if ! grep -qx 'ORDER: READY' "$tmp_dir/order.txt"; then
-    echo "delegate-cursor-supervised: Opus 5がREADYを出していません" >&2
-    exit 3
-  fi
+  } >>"$ORDER_FILE"
+  run_dispatch_gate "$ORDER_FILE" "$WORKTREE"
   echo "delegate-cursor-supervised: 発注書案を保存しました: $ORDER_FILE" >&2
   echo "delegate-cursor-supervised: Codex審査後に CODEX PRECHECK: APPROVED を追記してください" >&2
   exit 0
@@ -1891,6 +2390,7 @@ if ! grep -qx 'CODEX PRECHECK: APPROVED' "$ORDER_FILE"; then
   echo "delegate-cursor-supervised: Codex事前承認がありません" >&2
   exit 3
 fi
+gate_check_delta_resolutions "$ORDER_FILE"
 
 # GR-D2: 発注書ごとのevidence directoryへ、execute/inspectの各試行をappend-onlyで残す
 evidence_root="${ORDER_FILE}.evidence"
@@ -1951,29 +2451,51 @@ pre_spark_ref_digest="$(compute_ref_digest "$WORKTREE")"
 printf '%s\n' "$pre_spark_ref_digest" >"$attempt_dir/pre-spark-ref-digest.sha256"
 
 head_before="$(git -C "$WORKTREE" rev-parse HEAD)"
+target_capsule_file="$attempt_dir/spark-target-capsule.txt"
+compiled_grain_file="$attempt_dir/spark-compiled-grain.txt"
+spark_prompt_file="$attempt_dir/spark-prompt.txt"
+build_target_capsule "$ORDER_FILE" "$WORKTREE" "$target_capsule_file"
+build_compiled_spark_grain "$ORDER_FILE" "$compiled_grain_file"
 implementation_prompt=$(cat <<EOF
-You are the implementation contractor for Motolii. The binding order below was
-approved by Codex. Read AGENTS.md and every source
-named by the order. Implement only the allowed scope in the current isolated
-worktree. Do not write outside this worktree, reinterpret requirements, broaden
-file scope, invent defaults, weaken tests, commit, push, or create a PR. Do not
-run this delegation script recursively. If exact implementation is blocked, stop
-and report the conflicting authority and code evidence instead of improvising.
+You are the Spark implementation translator for one Codex-approved Motolii
+grain. Implement only the compiled grain below in the isolated worktree. Start
+from the target capsule; read only a bounded neighborhood in a named READ_FILE
+when a direct dependency requires it. Do not search the repository, reopen
+AGENTS.md or whole specs, broaden scope, invent defaults, weaken tests, add a
+new command, mode, public API, generic helper, or parallel path, write outside
+the worktree, commit, push, delegate, or rerun this runner. If the named targets
+cannot satisfy the grain, report the conflicting code fact without improvising.
+Run every Test and DELTA_RESOLUTION check before the final response; a failed or
+ambiguous check is a local STOP.
 
-Original user task:
-$task
+TARGET_CAPSULE:
+$(cat "$target_capsule_file")
 
-Binding order:
-$(cat "$attempt_dir/order.txt")
+COMPILED_IMPLEMENTATION_GRAIN:
+$(cat "$compiled_grain_file")
 EOF
 )
+printf '%s\n' "$implementation_prompt" >"$spark_prompt_file"
+target_capsule_sha256="$(shasum -a 256 "$target_capsule_file" | awk '{print $1}')"
+compiled_grain_sha256="$(shasum -a 256 "$compiled_grain_file" | awk '{print $1}')"
+spark_prompt_sha256="$(shasum -a 256 "$spark_prompt_file" | awk '{print $1}')"
+{
+  printf 'TARGET_CAPSULE_SHA256: %s\n' "$target_capsule_sha256"
+  printf 'SPARK_GRAIN_SHA256: %s\n' "$compiled_grain_sha256"
+  printf 'SPARK_PROMPT_SHA256: %s\n' "$spark_prompt_sha256"
+} >>"$attempt_dir/metadata.txt"
 
 echo
 echo "## 2. Codex Spark implementation"
 if ! run_agent "$attempt_dir/spark-stdout.txt" "$SPARK_TIMEOUT_SECONDS" \
   env CODEX_DELEGATED=1 "$CODEX_AGENT_BIN" --ask-for-approval never exec \
-    --ephemeral --color never --model "$SPARK_MODEL" \
-    --sandbox danger-full-access --cd "$WORKTREE" \
+    --ephemeral --ignore-user-config --ignore-rules --strict-config \
+    --disable memories --disable plugins --disable apps \
+    --disable browser_use --disable browser_use_external \
+    --disable browser_use_full_cdp_access --disable computer_use \
+    --disable multi_agent --disable multi_agent_v2 --disable skill_search \
+    --color never --model "$SPARK_MODEL" \
+    --sandbox workspace-write --cd "$WORKTREE" \
     "$implementation_prompt"; then
   [[ ! -f "$attempt_dir/spark-stdout.txt" ]] || cat "$attempt_dir/spark-stdout.txt"
   snapshot_worktree "$WORKTREE" "$attempt_dir" "post-spark"
@@ -1982,6 +2504,9 @@ if ! run_agent "$attempt_dir/spark-stdout.txt" "$SPARK_TIMEOUT_SECONDS" \
   exit 1
 fi
 cat "$attempt_dir/spark-stdout.txt"
+verify_generated_file_integrity "$target_capsule_file" "$target_capsule_sha256" "Spark target capsule"
+verify_generated_file_integrity "$compiled_grain_file" "$compiled_grain_sha256" "compiled Spark grain"
+verify_generated_file_integrity "$spark_prompt_file" "$spark_prompt_sha256" "Spark prompt"
 if [[ "$(git -C "$WORKTREE" rev-parse HEAD)" != "$head_before" ]]; then
   echo "delegate-cursor-supervised: 受注者がcommitを作成したため検収へ進みません" >&2
   snapshot_worktree "$WORKTREE" "$attempt_dir" "post-spark"
