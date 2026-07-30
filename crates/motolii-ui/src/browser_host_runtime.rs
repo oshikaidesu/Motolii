@@ -5,9 +5,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use wry::http::{header::CONTENT_TYPE, Response};
-use wry::{
-    NewWindowResponse, PageLoadEvent, Rect, WebView, WebViewBuilder, WebViewBuilderExtDarwin,
-};
+#[cfg(target_os = "macos")]
+use wry::WebViewBuilderExtDarwin;
+use wry::{NewWindowResponse, PageLoadEvent, Rect, WebView, WebViewBuilder};
 
 use crate::browser_host::{BrowserHostSession, BrowserPlaceIntent};
 use crate::host_pointer_capture::{
@@ -187,8 +187,7 @@ postMessage:(message)=>window.ipc.postMessage(message)
         let load_wake = Arc::clone(&wake);
         let pointer_capture_wake = Arc::clone(&wake);
         let load_lifecycle = Arc::clone(&lifecycle);
-        let terminated_lifecycle = Arc::clone(&lifecycle);
-        let webview = WebViewBuilder::new()
+        let webview_builder = WebViewBuilder::new()
             .with_bounds(Rect {
                 position: wry::dpi::LogicalPosition::new(0.0, 0.0).into(),
                 size: wry::dpi::LogicalSize::new(1.0, 1.0).into(),
@@ -235,10 +234,15 @@ postMessage:(message)=>window.ipc.postMessage(message)
                         }
                     }
                 }
-            })
-            .with_on_web_content_process_terminate_handler(move || {
+            });
+        #[cfg(target_os = "macos")]
+        let webview_builder = {
+            let terminated_lifecycle = Arc::clone(&lifecycle);
+            webview_builder.with_on_web_content_process_terminate_handler(move || {
                 terminated_lifecycle(BrowserLifecycleEvent::ProcessTerminated { instance_epoch });
             })
+        };
+        let webview = webview_builder
             .with_ipc_handler(move |request| {
                 let raw = request.body();
                 match callback_session.lock() {

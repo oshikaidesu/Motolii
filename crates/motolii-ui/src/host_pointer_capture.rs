@@ -1,6 +1,8 @@
 //! WebView境界を越えるpointer lifecycleをHost内へ閉じる。
 
-use crate::{EffectiveTrigger, InputPhase, KeyToken, Modifier, Modifiers};
+use crate::EffectiveTrigger;
+#[cfg(target_os = "macos")]
+use crate::{InputPhase, KeyToken, Modifier, Modifiers};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct HostPointerSample {
