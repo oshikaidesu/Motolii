@@ -199,11 +199,12 @@ impl ProductTimelineProjection {
     }
 
     fn hit_test(&self, position: [f64; 2], layout: NativeHostLayout) -> Option<TimelineHit> {
-        if !layout.timeline.contains(position) {
+        let timeline = layout.timeline?;
+        if !timeline.contains(position) {
             return None;
         }
-        let x = (position[0] - layout.timeline.x) / layout.timeline.width;
-        let y = ((position[1] - layout.timeline.y) / layout.timeline.height) * self.band_span;
+        let x = (position[0] - timeline.x) / timeline.width;
+        let y = ((position[1] - timeline.y) / timeline.height) * self.band_span;
         Some(self.projection.hit_test(x, y))
     }
 }
@@ -1201,15 +1202,14 @@ impl ProductSurface {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            draw_rect(
-                &mut pass,
-                layout.timeline_physical,
-                &self.timeline_pipeline,
-                None,
-            );
-            for bar in timeline_projection.projection.bars() {
-                if let Some(rect) = timeline_bar_rect(layout, bar, timeline_projection.band_span) {
-                    draw_rect(&mut pass, rect, &self.timeline_bar_pipeline, None);
+            if let Some(timeline) = layout.timeline_physical {
+                draw_rect(&mut pass, timeline, &self.timeline_pipeline, None);
+                for bar in timeline_projection.projection.bars() {
+                    if let Some(rect) =
+                        timeline_bar_rect(layout, bar, timeline_projection.band_span)
+                    {
+                        draw_rect(&mut pass, rect, &self.timeline_bar_pipeline, None);
+                    }
                 }
             }
             draw_rect(
@@ -1241,12 +1241,12 @@ fn timeline_bar_rect(
     if x_end <= x_start || y_bottom <= y_top {
         return None;
     }
-    let timeline = layout.timeline_physical;
+    let timeline = layout.timeline_physical?;
     let left = (x_start * f64::from(timeline.width)).round() as u32;
     let right = (x_end * f64::from(timeline.width)).round() as u32;
     let top = (y_top * f64::from(timeline.height)).round() as u32;
     let bottom = (y_bottom * f64::from(timeline.height)).round() as u32;
-    let scale = f64::from(timeline.width) / layout.timeline.width;
+    let scale = f64::from(timeline.width) / layout.timeline?.width;
     let gap = scale.round().max(1.0) as u32;
     let y = timeline.y.checked_add(top)?.checked_add(gap)?;
     let height = bottom
@@ -1507,19 +1507,16 @@ mod tests {
     use motolii_core::{ColorSpace, FrameDesc, PixelFormat};
 
     fn test_layout(epoch: u64) -> NativeHostLayout {
+        test_layout_with(epoch, crate::layout::PanelLayout::built_in())
+    }
+
+    fn test_layout_with(epoch: u64, authority: crate::layout::PanelLayout) -> NativeHostLayout {
         let frame =
             FrameDesc::try_packed(1920, 1080, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true)
                 .unwrap();
-        NativeHostLayout::try_new(
-            epoch,
-            1000,
-            800,
-            1.0,
-            frame,
-            &crate::layout::PanelLayout::built_in(),
-        )
-        .unwrap()
-        .unwrap()
+        NativeHostLayout::try_new(epoch, 1000, 800, 1.0, frame, &authority)
+            .unwrap()
+            .unwrap()
     }
 
     fn test_source() -> BrowserPlaceIntent {
@@ -1559,7 +1556,7 @@ mod tests {
         let document = crate::static_preview::bootstrap_document().unwrap();
         let projection = ProductTimelineProjection::from_document(&document).unwrap();
         let layout = test_layout(9);
-        let timeline = layout.timeline_physical;
+        let timeline = layout.timeline_physical.unwrap();
         let rect = timeline_bar_rect(
             layout,
             projection.projection.bars().first().unwrap(),
@@ -1581,8 +1578,8 @@ mod tests {
         let expected_layer = projection.projection.bars()[0].layer;
         let layout = test_layout(9);
         let center = [
-            layout.timeline.x + layout.timeline.width / 2.0,
-            layout.timeline.y + layout.timeline.height / 2.0,
+            layout.timeline.unwrap().x + layout.timeline.unwrap().width / 2.0,
+            layout.timeline.unwrap().y + layout.timeline.unwrap().height / 2.0,
         ];
 
         assert_eq!(
@@ -1595,6 +1592,33 @@ mod tests {
             projection.hit_test([layout.stage.x, layout.stage.y], layout),
             None
         );
+    }
+
+    #[test]
+    fn hidden_timeline_has_no_draw_rect_or_selection_hit() {
+        let document = crate::static_preview::bootstrap_document().unwrap();
+        let projection = ProductTimelineProjection::from_document(&document).unwrap();
+        let mut authority = crate::layout::PanelLayout::built_in();
+        authority
+            .apply(
+                crate::layout::LayoutAction::Hide(crate::layout::PanelRole::Timeline),
+                crate::layout::LayoutConstraints {
+                    viewport_width: 1_000.0,
+                    stage_min_width: 320.0,
+                },
+            )
+            .unwrap();
+        let layout = test_layout_with(10, authority);
+
+        assert_eq!(
+            timeline_bar_rect(
+                layout,
+                projection.projection.bars().first().unwrap(),
+                projection.band_span,
+            ),
+            None
+        );
+        assert_eq!(projection.hit_test([500.0, 700.0], layout), None);
     }
 
     #[test]

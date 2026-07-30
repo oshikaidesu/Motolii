@@ -53,7 +53,7 @@ publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
     pub(crate) fn set_bounds(
         &mut self,
         layout_epoch: u64,
-        rect: LogicalRect,
+        rect: impl Into<Option<LogicalRect>>,
     ) -> Result<(), InspectorHostRuntimeError> {
         if self
             .latest_layout_epoch
@@ -61,10 +61,14 @@ publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
         {
             return Ok(());
         }
-        self.webview.set_bounds(Rect {
-            position: wry::dpi::LogicalPosition::new(rect.x, rect.y).into(),
-            size: wry::dpi::LogicalSize::new(rect.width, rect.height).into(),
-        })?;
+        let rect = rect.into();
+        if let Some(rect) = rect {
+            self.webview.set_bounds(Rect {
+                position: wry::dpi::LogicalPosition::new(rect.x, rect.y).into(),
+                size: wry::dpi::LogicalSize::new(rect.width, rect.height).into(),
+            })?;
+        }
+        self.webview.set_visible(rect.is_some())?;
         self.latest_layout_epoch = Some(layout_epoch);
         Ok(())
     }

@@ -33,12 +33,12 @@ pub(crate) struct PhysicalRect {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct NativeHostLayout {
     pub(crate) epoch: u64,
-    pub(crate) browser: LogicalRect,
-    pub(crate) inspector: LogicalRect,
+    pub(crate) browser: Option<LogicalRect>,
+    pub(crate) inspector: Option<LogicalRect>,
     pub(crate) stage: LogicalRect,
-    pub(crate) timeline: LogicalRect,
+    pub(crate) timeline: Option<LogicalRect>,
     pub(crate) stage_physical: PhysicalRect,
-    pub(crate) timeline_physical: PhysicalRect,
+    pub(crate) timeline_physical: Option<PhysicalRect>,
 }
 
 impl NativeHostLayout {
@@ -68,10 +68,10 @@ impl NativeHostLayout {
                 .copied()
                 .ok_or(NativeHostLayoutError::RequiredRoleUnavailable { role })
         };
-        let browser = required(PanelRole::Browser)?;
-        let inspector = required(PanelRole::Inspector)?;
+        let browser = rects.get(&PanelRole::Browser).copied();
+        let inspector = rects.get(&PanelRole::Inspector).copied();
         let stage_panel = required(PanelRole::Stage)?;
-        let timeline = required(PanelRole::Timeline)?;
+        let timeline = rects.get(&PanelRole::Timeline).copied();
         let source_aspect = f64::from(frame.width) / f64::from(frame.height);
         let panel_aspect = stage_panel.width / stage_panel.height;
         let (stage_width, stage_height) = if panel_aspect > source_aspect {
@@ -93,13 +93,12 @@ impl NativeHostLayout {
             timeline,
             stage_physical: physical_rect(stage, scale_factor, physical_width, physical_height)
                 .ok_or(NativeHostLayoutError::Projection)?,
-            timeline_physical: physical_rect(
-                timeline,
-                scale_factor,
-                physical_width,
-                physical_height,
-            )
-            .ok_or(NativeHostLayoutError::Projection)?,
+            timeline_physical: timeline
+                .map(|timeline| {
+                    physical_rect(timeline, scale_factor, physical_width, physical_height)
+                        .ok_or(NativeHostLayoutError::Projection)
+                })
+                .transpose()?,
         }))
     }
 
@@ -169,11 +168,11 @@ mod tests {
                 .unwrap()
                 .unwrap();
         assert_eq!(layout.epoch, 7);
-        assert_eq!(layout.browser.width, 200.0);
-        assert_eq!(layout.inspector.x, 800.0);
-        assert_eq!(layout.inspector.width, 200.0);
+        assert_eq!(layout.browser.unwrap().width, 200.0);
+        assert_eq!(layout.inspector.unwrap().x, 800.0);
+        assert_eq!(layout.inspector.unwrap().width, 200.0);
         assert_eq!(
-            layout.timeline,
+            layout.timeline.unwrap(),
             LogicalRect {
                 x: 0.0,
                 y: 600.0,
@@ -182,7 +181,7 @@ mod tests {
             }
         );
         assert_eq!(layout.stage_physical.width, 600);
-        assert_eq!(layout.timeline_physical.height, 200);
+        assert_eq!(layout.timeline_physical.unwrap().height, 200);
     }
 
     #[test]
@@ -222,27 +221,43 @@ mod tests {
         let layout = NativeHostLayout::try_new(1, 1000, 800, 1.0, frame(), &authority)
             .unwrap()
             .unwrap();
-        assert!(layout.browser.width > 200.0);
+        assert!(layout.browser.unwrap().width > 200.0);
     }
 
     #[test]
-    fn hidden_required_role_is_a_typed_error_not_a_blank_layout() {
-        let mut authority = PanelLayout::built_in();
-        authority
-            .apply(
-                crate::layout::LayoutAction::Hide(PanelRole::Inspector),
-                crate::layout::LayoutConstraints {
-                    viewport_width: 1_000.0,
-                    stage_min_width: 320.0,
-                },
-            )
-            .unwrap();
-        assert_eq!(
-            NativeHostLayout::try_new(1, 1000, 800, 1.0, frame(), &authority),
-            Err(NativeHostLayoutError::RequiredRoleUnavailable {
-                role: PanelRole::Inspector
-            })
-        );
+    fn hidden_auxiliary_roles_are_absent_and_stage_consumes_the_freed_space() {
+        for role in PanelRole::AUXILIARY {
+            let mut authority = PanelLayout::built_in();
+            authority
+                .apply(
+                    crate::layout::LayoutAction::Hide(role),
+                    crate::layout::LayoutConstraints {
+                        viewport_width: 1_000.0,
+                        stage_min_width: 320.0,
+                    },
+                )
+                .unwrap();
+            let layout = NativeHostLayout::try_new(1, 1000, 800, 1.0, frame(), &authority)
+                .unwrap()
+                .unwrap();
+            match role {
+                PanelRole::Browser => {
+                    assert_eq!(layout.browser, None);
+                    assert_eq!(layout.stage.x, 0.0);
+                    assert!(layout.stage.width > 600.0);
+                }
+                PanelRole::Inspector => {
+                    assert_eq!(layout.inspector, None);
+                    assert!(layout.stage.width > 600.0);
+                }
+                PanelRole::Timeline => {
+                    assert_eq!(layout.timeline, None);
+                    assert_eq!(layout.timeline_physical, None);
+                    assert!(layout.stage.y > 200.0);
+                }
+                PanelRole::Stage => unreachable!(),
+            }
+        }
     }
 
     #[test]
@@ -259,14 +274,14 @@ mod tests {
             .unwrap()
             .unwrap();
             let logical_width = f64::from(physical_width) / scale;
-            let tiled_width = layout.browser.width
-                + (layout.inspector.x - layout.browser.width)
-                + layout.inspector.width;
+            let browser = layout.browser.unwrap();
+            let inspector = layout.inspector.unwrap();
+            let tiled_width = browser.width + (inspector.x - browser.width) + inspector.width;
             assert!((tiled_width - logical_width).abs() < 0.001);
             assert!(layout.stage_physical.x + layout.stage_physical.width <= physical_width);
             assert!(layout.stage_physical.y + layout.stage_physical.height <= physical_height);
             assert_eq!(
-                layout.timeline_physical.y + layout.timeline_physical.height,
+                layout.timeline_physical.unwrap().y + layout.timeline_physical.unwrap().height,
                 physical_height
             );
         }

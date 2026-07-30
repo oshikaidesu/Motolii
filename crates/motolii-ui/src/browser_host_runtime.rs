@@ -321,7 +321,7 @@ postMessage:(message)=>window.ipc.postMessage(message)
     pub(crate) fn set_bounds(
         &self,
         layout_epoch: u64,
-        rect: LogicalRect,
+        rect: impl Into<Option<LogicalRect>>,
     ) -> Result<(), BrowserHostRuntimeError> {
         if !self
             .island
@@ -331,10 +331,14 @@ postMessage:(message)=>window.ipc.postMessage(message)
         {
             return Ok(());
         }
-        self.webview.set_bounds(Rect {
-            position: wry::dpi::LogicalPosition::new(rect.x, rect.y).into(),
-            size: wry::dpi::LogicalSize::new(rect.width, rect.height).into(),
-        })?;
+        let rect = rect.into();
+        if let Some(rect) = rect {
+            self.webview.set_bounds(Rect {
+                position: wry::dpi::LogicalPosition::new(rect.x, rect.y).into(),
+                size: wry::dpi::LogicalSize::new(rect.width, rect.height).into(),
+            })?;
+        }
+        self.webview.set_visible(rect.is_some())?;
         self.island
             .lock()
             .map_err(|_| BrowserHostRuntimeError::IslandStatePoisoned)?
