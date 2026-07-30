@@ -175,7 +175,7 @@
     },
     {
       "path": "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx",
-      "sha256": "b2da9c62659ee9c19245115632b16d76fa38b34739946b901a5e7f6c8862a995"
+      "sha256": "88a595c4df18da9180bd5fd23486d3006b473a02bf0222650f9ab6d4ffc13e20"
     },
     {
       "path": "ui/motolii-web/src/candidates/EasingTriggerCandidate.jsx",
@@ -183,11 +183,15 @@
     },
     {
       "path": "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
-      "sha256": "a01e7431361fdbaf1bdc1f1836045835f501d72e9d62aba1bf833ba3d53cc140"
+      "sha256": "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0"
     },
     {
       "path": "ui/motolii-web/src/candidates/KeyToolsCandidate.jsx",
       "sha256": "bf38656a99957a9f2d1465057820510f525fd394a3965cff9f291415223f87ba"
+    },
+    {
+      "path": "ui/motolii-web/src/candidates/StageChromeCandidate.jsx",
+      "sha256": "32b50aec4d47a1858024a1060c64386c71422ebef4976ada007b2c02f409b127"
     },
     {
       "path": "ui/motolii-web/src/candidates/discovery-browser-candidate.css",
@@ -207,7 +211,7 @@
     },
     {
       "path": "ui/motolii-web/src/index.js",
-      "sha256": "a2ec126a21dd4637fbe90480460d47e7c2a3258fdc37dd7cf1d19746c6224469"
+      "sha256": "b5a245a4f04e53186603ee6212fc1c868683a36f81c0f14b4c4329975255a585"
     },
     {
       "path": "ui/motolii-web/src/patterns/DiscoveryBrowser.jsx",
