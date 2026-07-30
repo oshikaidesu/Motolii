@@ -13,6 +13,9 @@ export default defineConfig({
       input: {
         host: fileURLToPath(new URL("./host.html", import.meta.url)),
         inspector: fileURLToPath(new URL("./inspector.html", import.meta.url)),
+        stageHeader: fileURLToPath(new URL("./stage-header.html", import.meta.url)),
+        stageTransport: fileURLToPath(new URL("./stage-transport.html", import.meta.url)),
+        timelineTools: fileURLToPath(new URL("./timeline-tools.html", import.meta.url)),
       },
     },
   },

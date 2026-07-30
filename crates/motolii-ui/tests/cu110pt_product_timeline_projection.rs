@@ -1,4 +1,4 @@
-//! CU-110PT: published snapshotを既存headless projectionからnative Timeline barへ描く。
+//! CU-110PT: published snapshotを既存headless projectionからnative Timeline sceneへ描く。
 
 #[test]
 fn product_timeline_projects_the_adopted_snapshot_without_a_second_state_owner() {
@@ -16,9 +16,15 @@ fn product_timeline_projects_the_adopted_snapshot_without_a_second_state_owner()
     assert!(source.contains("start: RationalTime::ZERO"));
     assert!(source.contains("end: document.composition.duration"));
     assert!(publish.contains("ProductTimelineProjection::from_document(&self.current_document)"));
-    assert!(source.contains("timeline_projection.projection.bars()"));
-    assert!(source.contains("timeline_bar_rect("));
-    assert!(source.contains("&self.timeline_bar_pipeline"));
+    assert!(source.contains("native_timeline_renderer"));
+    assert!(source.contains("&timeline_projection.projection"));
+    assert!(source.contains("native_timeline_renderer.composite"));
+
+    let renderer = include_str!("../src/native_timeline_renderer.rs");
+    assert!(renderer.contains("for bar in projection.bars()"));
+    assert!(renderer.contains("for key in projection.keys()"));
+    assert!(renderer.contains("document.layers.display_name"));
+    assert!(renderer.contains("use_cpu: false"));
 
     for forbidden in [
         "TimelineHit::",
@@ -26,6 +32,7 @@ fn product_timeline_projects_the_adopted_snapshot_without_a_second_state_owner()
         "download_rgba",
         "read_buffer",
         "map_async",
+        "TimelineToolsHostRuntime::new",
     ] {
         assert!(
             !publish.contains(forbidden),

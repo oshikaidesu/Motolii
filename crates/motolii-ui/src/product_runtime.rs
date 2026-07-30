@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use motolii_core::{Quality, RationalTime};
+use motolii_core::{CanonicalPoint, Quality, RationalTime};
 use motolii_doc::EvaluationTime;
 use motolii_eval::DataTracks;
 use motolii_gpu::GpuCtx;
@@ -28,11 +28,13 @@ use crate::native_host_layout::{NativeHostLayout, PhysicalRect};
 use crate::render_worker::{
     RenderGeneration, RenderRequest, RenderWorker, RenderWorkerClient, RenderWorkerError,
 };
+use crate::stage_chrome_host_runtime::{StageChromeHostRuntime, StageChromeHostRuntimeError};
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
 use crate::timeline_projection::{
-    project_timeline, TimelineBar, TimelineHit, TimelineMetrics, TimelineProjection,
-    TimelineProjectionError, TimelineViewport,
+    project_timeline, TimelineHit, TimelineMetrics, TimelineProjection, TimelineProjectionError,
+    TimelineViewport,
 };
+use crate::timeline_tools_host_runtime::{TimelineToolsHostRuntime, TimelineToolsHostRuntimeError};
 use crate::{
     builtin_command_registry, resolve_keymap, AsciiKey, Binding, BuiltinKeymap, CommandId,
     CommandIdError, CommandRegistry, CommandRegistryError, EffectiveTrigger, Gesture, InputPhase,
@@ -47,19 +49,35 @@ pub(crate) enum ProductEvent {
 }
 
 pub(crate) fn run(document_runtime: DocumentEditRuntime) -> Result<(), ProductRuntimeError> {
+    let startup = Instant::now();
+    crate::ui_numeric_trace::emit(format_args!("kind=startup phase=begin elapsed_ms=0.000"));
     let document = document_runtime.snapshot();
+    let gpu_started = Instant::now();
     let (gpu, parts) = GpuCtx::new_for_ui()?;
+    crate::ui_numeric_trace::emit(format_args!(
+        "kind=startup phase=gpu-ready phase_ms={:.3} elapsed_ms={:.3}",
+        elapsed_ms(gpu_started),
+        elapsed_ms(startup),
+    ));
     let parts = ProductGpuParts {
         instance: parts.instance,
         adapter: parts.adapter,
         device: parts.device,
     };
     let gpu = Arc::new(gpu);
+    let preview_started = Instant::now();
     let preview = Arc::new(prepare_in_setup_worker(
         Arc::clone(&gpu),
         Arc::clone(&document),
         bootstrap_frame_desc()?,
     )?);
+    crate::ui_numeric_trace::emit(format_args!(
+        "kind=startup phase=preview-ready phase_ms={:.3} elapsed_ms={:.3} width={} height={}",
+        elapsed_ms(preview_started),
+        elapsed_ms(startup),
+        preview.slot().desc().width,
+        preview.slot().desc().height,
+    ));
     let mut render_worker = RenderWorker::spawn(Arc::clone(&gpu))?;
     let render_client = render_worker.client();
     let event_loop = EventLoop::<ProductEvent>::with_user_event().build()?;
@@ -85,9 +103,17 @@ pub(crate) fn run(document_runtime: DocumentEditRuntime) -> Result<(), ProductRu
         render_request_template,
         proxy,
     )?;
+    crate::ui_numeric_trace::emit(format_args!(
+        "kind=startup phase=event-loop-ready elapsed_ms={:.3}",
+        elapsed_ms(startup),
+    ));
     let run_result = event_loop.run_app(&mut app);
     render_worker.close();
     let join_result = render_worker.join();
+    crate::ui_numeric_trace::emit(format_args!(
+        "kind=shutdown phase=event-loop-exit elapsed_ms={:.3}",
+        elapsed_ms(startup),
+    ));
     run_result?;
     join_result?;
     if let Some(error) = app.failure {
@@ -101,6 +127,8 @@ pub(crate) struct ProductApp {
     gfx: Option<ProductSurface>,
     browser: Option<BrowserHostRuntime>,
     inspector: Option<InspectorHostRuntime>,
+    stage_chrome: Option<StageChromeHostRuntime>,
+    timeline_tools: Option<TimelineToolsHostRuntime>,
     window: Option<Arc<Window>>,
     gpu: Arc<GpuCtx>,
     parts: Option<ProductGpuParts>,
@@ -384,6 +412,8 @@ impl ProductApp {
             gfx: None,
             browser: None,
             inspector: None,
+            stage_chrome: None,
+            timeline_tools: None,
             window: None,
             gpu,
             parts: Some(parts),
@@ -424,6 +454,7 @@ impl ProductApp {
         &mut self,
         event_loop: &ActiveEventLoop,
     ) -> Result<(), ProductRuntimeError> {
+        let initialize_started = Instant::now();
         let window = Arc::new(
             event_loop.create_window(
                 Window::default_attributes()
@@ -432,13 +463,11 @@ impl ProductApp {
                     .with_visible(false),
             )?,
         );
-        // Metal sublayerをon-screenのcontent viewへ結び付けてからSurfaceを作る。
-        window.set_visible(true);
-        let parts = self
-            .parts
-            .take()
-            .ok_or(ProductRuntimeError::AlreadyInitialized)?;
-        let gfx = ProductSurface::new(&window, parts, &self.gpu, &self.preview)?;
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=startup phase=window-created phase_ms={:.3}",
+            elapsed_ms(initialize_started),
+        ));
+        let browser_started = Instant::now();
         let initial_instance_epoch = BrowserHostRuntime::fresh_instance_epoch()?;
         let browser_source = BrowserHostRuntime::built_in_rectangle_source(initial_instance_epoch);
         let browser = build_browser_runtime(
@@ -447,14 +476,58 @@ impl ProductApp {
             browser_source.clone(),
             self.proxy.clone(),
         )?;
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=startup phase=browser-created phase_ms={:.3} instance_epoch={}",
+            elapsed_ms(browser_started),
+            initial_instance_epoch,
+        ));
+        let inspector_started = Instant::now();
         let inspector = InspectorHostRuntime::new(&window, &self.current_document, self.primary)?;
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=startup phase=inspector-created phase_ms={:.3}",
+            elapsed_ms(inspector_started),
+        ));
+        let stage_chrome_started = Instant::now();
+        let stage_chrome = StageChromeHostRuntime::new(&window)?;
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=startup phase=stage-chrome-created phase_ms={:.3}",
+            elapsed_ms(stage_chrome_started),
+        ));
+        let timeline_tools_started = Instant::now();
+        let timeline_tools = TimelineToolsHostRuntime::new(
+            &window,
+            self.timeline_projection.projection.bars().len(),
+            self.timeline_projection.projection.keys().len(),
+        )?;
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=startup phase=timeline-tools-created phase_ms={:.3}",
+            elapsed_ms(timeline_tools_started),
+        ));
+        // WebViewの初期navigationをhidden中に開始し、白い未初期化面を見せない。
+        // Metal sublayerはon-screenのcontent viewへ結び付けてからSurfaceを作る。
+        window.set_visible(true);
+        let parts = self
+            .parts
+            .take()
+            .ok_or(ProductRuntimeError::AlreadyInitialized)?;
+        let gfx = ProductSurface::new(&window, parts, &self.gpu, &self.preview)?;
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=startup phase=surface-created elapsed_ms={:.3}",
+            elapsed_ms(initialize_started),
+        ));
         self.browser_lifecycle = Some(BrowserLifecycleCoordinator::new(initial_instance_epoch)?);
         self.browser_source = Some(browser_source);
         self.window = Some(window);
         self.browser = Some(browser);
         self.inspector = Some(inspector);
+        self.stage_chrome = Some(stage_chrome);
+        self.timeline_tools = Some(timeline_tools);
         self.gfx = Some(gfx);
         self.update_layout()?;
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=startup phase=initialized elapsed_ms={:.3}",
+            elapsed_ms(initialize_started),
+        ));
         if let Some(window) = &self.window {
             window.request_redraw();
         }
@@ -488,6 +561,54 @@ impl ProductApp {
         if let Some(inspector) = &mut self.inspector {
             inspector.set_bounds(layout.epoch, layout.inspector)?;
         }
+        if let Some(stage_chrome) = &mut self.stage_chrome {
+            stage_chrome.set_bounds(layout.epoch, layout.stage_header, layout.stage_transport)?;
+        }
+        if let Some(timeline_tools) = &mut self.timeline_tools {
+            timeline_tools.set_bounds(layout.epoch, key_tools_logical_rect(layout))?;
+        }
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=layout epoch={} physical_width={} physical_height={} scale_factor={:.3} \
+             browser_x={:.3} browser_y={:.3} browser_width={:.3} browser_height={:.3} \
+             stage_header_x={:.3} stage_header_y={:.3} stage_header_width={:.3} stage_header_height={:.3} \
+             stage_viewport_x={:.3} stage_viewport_y={:.3} stage_viewport_width={:.3} stage_viewport_height={:.3} \
+             stage_x={:.3} stage_y={:.3} stage_width={:.3} stage_height={:.3} \
+             stage_transport_x={:.3} stage_transport_y={:.3} stage_transport_width={:.3} stage_transport_height={:.3} \
+             inspector_x={:.3} inspector_y={:.3} inspector_width={:.3} inspector_height={:.3} \
+             timeline_x={:.3} timeline_y={:.3} timeline_width={:.3} timeline_height={:.3}",
+            layout.epoch,
+            size.width,
+            size.height,
+            window.scale_factor(),
+            layout.browser.x,
+            layout.browser.y,
+            layout.browser.width,
+            layout.browser.height,
+            layout.stage_header.x,
+            layout.stage_header.y,
+            layout.stage_header.width,
+            layout.stage_header.height,
+            layout.stage_viewport.x,
+            layout.stage_viewport.y,
+            layout.stage_viewport.width,
+            layout.stage_viewport.height,
+            layout.stage.x,
+            layout.stage.y,
+            layout.stage.width,
+            layout.stage.height,
+            layout.stage_transport.x,
+            layout.stage_transport.y,
+            layout.stage_transport.width,
+            layout.stage_transport.height,
+            layout.inspector.x,
+            layout.inspector.y,
+            layout.inspector.width,
+            layout.inspector.height,
+            layout.timeline.x,
+            layout.timeline.y,
+            layout.timeline.width,
+            layout.timeline.height,
+        ));
         self.layout = Some(layout);
         Ok(())
     }
@@ -529,6 +650,10 @@ impl ProductApp {
                     self.admitted_terminal = None;
                     self.pending_stage_drop = None;
                     self.active_place = Some(intent);
+                    crate::ui_numeric_trace::emit(format_args!(
+                        "kind=browser-intent generation={} state=armed",
+                        generation,
+                    ));
                 }
                 Ok(None) => {}
                 Err(error) => return self.fail(event_loop, error),
@@ -545,6 +670,29 @@ impl ProductApp {
                 position,
             })) => {
                 if let (Some(source), Some(layout)) = (&self.active_place, self.layout) {
+                    let stage_ndc = layout.stage_ndc(position);
+                    let changed = self.place_preview.latest.as_ref().is_none_or(|latest| {
+                        latest.generation != generation
+                            || latest.layout_epoch != layout.epoch
+                            || latest.stage_ndc != stage_ndc
+                    });
+                    if changed {
+                        crate::ui_numeric_trace::emit(format_args!(
+                            "kind=place-move generation={} layout_epoch={} logical_x={:.3} \
+                         logical_y={:.3} stage_x={:.3} stage_y={:.3} stage_width={:.3} \
+                         stage_height={:.3} ndc_x={} ndc_y={}",
+                            generation,
+                            layout.epoch,
+                            position[0],
+                            position[1],
+                            layout.stage.x,
+                            layout.stage.y,
+                            layout.stage.width,
+                            layout.stage.height,
+                            OptionalNumber(stage_ndc.map(|ndc| ndc[0])),
+                            OptionalNumber(stage_ndc.map(|ndc| ndc[1])),
+                        ));
+                    }
                     self.place_preview
                         .deliver(source, generation, position, layout);
                     self.request_redraw();
@@ -568,6 +716,22 @@ impl ProductApp {
                 };
                 let terminal =
                     ClassifiedPlaceTerminal::released(source, generation, position, layout);
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=place-release generation={} layout_epoch={} logical_x={:.3} \
+                     logical_y={:.3} stage_x={:.3} stage_y={:.3} stage_width={:.3} \
+                     stage_height={:.3} ndc_x={} ndc_y={} cause={:?}",
+                    generation,
+                    layout.epoch,
+                    position[0],
+                    position[1],
+                    layout.stage.x,
+                    layout.stage.y,
+                    layout.stage.width,
+                    layout.stage.height,
+                    OptionalNumber(terminal.stage_ndc.map(|ndc| ndc[0])),
+                    OptionalNumber(terminal.stage_ndc.map(|ndc| ndc[1])),
+                    terminal.cause,
+                ));
                 if self.terminal_admission.admit(&terminal) {
                     self.pending_stage_drop = self.terminal_delivery.deliver(&terminal);
                     self.admitted_terminal = Some(terminal.clone());
@@ -617,6 +781,16 @@ impl ProductApp {
             let Some(position) = canonical_drop_from_ndc(self.displayed_camera, drop.ndc) else {
                 return self.fail(event_loop, ProductRuntimeError::PlaceCanonicalConversion);
             };
+            crate::ui_numeric_trace::emit(format_args!(
+                "kind=place-command generation={} layout_epoch={} ndc_x={:.6} ndc_y={:.6} \
+                 canonical_x={:.6} canonical_y={:.6}",
+                drop.generation,
+                drop.layout_epoch,
+                drop.ndc[0],
+                drop.ndc[1],
+                position[0],
+                position[1],
+            ));
             self.document_queue
                 .push_place_rectangle(PlaceRectangleRequest {
                     position,
@@ -628,6 +802,7 @@ impl ProductApp {
                 self.projection_generation,
             ) {
                 Ok(Some(published)) => {
+                    trace_document_publish("place", &published);
                     self.current_document = published.snapshot;
                     self.primary = published.primary;
                     self.projection_generation = published.projection_generation;
@@ -642,6 +817,14 @@ impl ProductApp {
                             Ok(projection) => projection,
                             Err(error) => return self.fail(event_loop, error),
                         };
+                    trace_timeline_projection(
+                        "place",
+                        self.projection_generation,
+                        &self.timeline_projection,
+                    );
+                    if let Err(error) = self.publish_timeline_tools() {
+                        return self.fail(event_loop, error);
+                    }
                     if let Err(error) = self.submit_stage_projection() {
                         return self.fail(event_loop, error);
                     }
@@ -664,6 +847,9 @@ impl ProductApp {
                     self.fail(event_loop, error);
                     return;
                 }
+                // AppKit local monitorはwinit event配送後にclickを確定するため、
+                // wakeの同じturnでHost inboxまで排出して次の入力を待たせない。
+                self.poll_browser(event_loop);
                 self.request_redraw();
             }
             ProductEvent::BrowserLifecycle(event) => {
@@ -691,6 +877,13 @@ impl ProductApp {
             .as_mut()
             .ok_or(ProductRuntimeError::BrowserLifecycleUnavailable)?
             .observe(active_epoch, event)?;
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=browser-lifecycle active_epoch={} event_epoch={} event={:?} decision={:?}",
+            active_epoch,
+            event.instance_epoch(),
+            event,
+            decision,
+        ));
         match decision {
             BrowserRecoveryDecision::Ignore => Ok(()),
             BrowserRecoveryDecision::Replace { instance_epoch } => {
@@ -754,32 +947,42 @@ impl ProductApp {
             Ok(None) => {}
             Err(error) => return self.fail(event_loop, error),
         }
-        let click = {
-            let Some(browser) = &self.browser else {
-                return;
+        loop {
+            let click = {
+                let Some(browser) = &self.browser else {
+                    return;
+                };
+                browser.poll_host_click()
             };
-            browser.poll_host_click()
-        };
-        match click {
-            Ok(Some(click)) => self.handle_timeline_click(event_loop, click.position),
-            Ok(None) => {}
-            Err(error) => self.fail(event_loop, error),
+            match click {
+                Ok(Some(click)) => self.handle_timeline_click(event_loop, click.position),
+                Ok(None) => break,
+                Err(error) => {
+                    self.fail(event_loop, error);
+                    break;
+                }
+            }
         }
     }
 
     fn handle_timeline_click(&mut self, event_loop: &ActiveEventLoop, position: [f64; 2]) {
+        let Some(layout) = self.layout else {
+            return;
+        };
+        let hit = self.timeline_projection.hit_test(position, layout);
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=timeline-hit layout_epoch={} logical_x={:.3} logical_y={:.3} hit={:?}",
+            layout.epoch, position[0], position[1], hit,
+        ));
+        let Some(hit) = hit else {
+            return;
+        };
         self.browser_focus_target = BrowserFocusTarget::Parent;
         if let Some(browser) = &self.browser {
             if let Err(error) = browser.ensure_focus(self.browser_focus_target) {
                 return self.fail(event_loop, error);
             }
         }
-        let Some(layout) = self.layout else {
-            return;
-        };
-        let Some(hit) = self.timeline_projection.hit_test(position, layout) else {
-            return;
-        };
         match hit {
             TimelineHit::Key { layer, .. } | TimelineHit::Bar { layer } => {
                 self.document_queue.push_replace_primary(layer);
@@ -792,6 +995,7 @@ impl ProductApp {
             self.projection_generation,
         ) {
             Ok(Some(published)) => {
+                trace_document_publish("timeline-selection", &published);
                 self.current_document = published.snapshot;
                 self.primary = published.primary;
                 self.projection_generation = published.projection_generation;
@@ -808,13 +1012,22 @@ impl ProductApp {
     }
 
     fn submit_stage_projection(&self) -> Result<RenderGeneration, ProductRuntimeError> {
-        Ok(self.render_client.submit(RenderRequest {
+        let generation = self.render_client.submit(RenderRequest {
             document: Arc::clone(&self.current_document),
             data_tracks: Arc::clone(&self.render_request_template.data_tracks),
             evaluation_time: self.render_request_template.evaluation_time,
             desc: self.render_request_template.desc,
             quality: self.render_request_template.quality,
-        })?)
+        })?;
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=stage-submit generation={} projection_generation={} width={} height={} quality={:?}",
+            generation.get(),
+            self.projection_generation,
+            self.render_request_template.desc.width,
+            self.render_request_template.desc.height,
+            self.render_request_template.quality,
+        ));
+        Ok(generation)
     }
 
     fn handle_history_trigger(&mut self, event_loop: &ActiveEventLoop, trigger: EffectiveTrigger) {
@@ -850,6 +1063,7 @@ impl ProductApp {
         event_loop: &ActiveEventLoop,
         published: PublishedDocument,
     ) {
+        trace_document_publish("history", &published);
         self.current_document = published.snapshot;
         self.primary = published.primary;
         self.projection_generation = published.projection_generation;
@@ -863,10 +1077,28 @@ impl ProductApp {
                 Ok(projection) => projection,
                 Err(error) => return self.fail(event_loop, error),
             };
+        trace_timeline_projection(
+            "history",
+            self.projection_generation,
+            &self.timeline_projection,
+        );
+        if let Err(error) = self.publish_timeline_tools() {
+            return self.fail(event_loop, error);
+        }
         if let Err(error) = self.submit_stage_projection() {
             return self.fail(event_loop, error);
         }
         self.request_redraw();
+    }
+
+    fn publish_timeline_tools(&self) -> Result<(), ProductRuntimeError> {
+        if let Some(timeline_tools) = &self.timeline_tools {
+            timeline_tools.publish(
+                self.timeline_projection.projection.bars().len(),
+                self.timeline_projection.projection.keys().len(),
+            )?;
+        }
+        Ok(())
     }
 
     fn drain_stage_projection(&mut self) -> Result<(), ProductRuntimeError> {
@@ -877,16 +1109,30 @@ impl ProductApp {
             result.generation,
             self.render_client.latest_accepted_generation(),
         ) {
+            crate::ui_numeric_trace::emit(format_args!(
+                "kind=stage-result generation={} state=discarded latest_generation={}",
+                result.generation.get(),
+                self.render_client
+                    .latest_accepted_generation()
+                    .map_or(0, RenderGeneration::get),
+            ));
             return Ok(());
         }
         let rendered = result.result?;
         self.preview.slot().copy(&self.gpu, &rendered.frame)?;
         self.displayed_camera = rendered.camera;
         self.stage_projection.commit(result.generation);
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=stage-result generation={} state=displayed width={} height={}",
+            result.generation.get(),
+            self.preview.slot().desc().width,
+            self.preview.slot().desc().height,
+        ));
         Ok(())
     }
 
     pub(crate) fn fail(&mut self, event_loop: &ActiveEventLoop, error: impl std::fmt::Display) {
+        crate::ui_numeric_trace::emit(format_args!("kind=failure message={error}"));
         self.failure = Some(error.to_string());
         event_loop.exit();
     }
@@ -898,6 +1144,10 @@ impl ProductApp {
     }
 
     pub(crate) fn resize(&mut self, event_loop: &ActiveEventLoop, width: u32, height: u32) {
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=window event=resize physical_width={} physical_height={}",
+            width, height,
+        ));
         if let Some(gfx) = &mut self.gfx {
             gfx.configure(width, height);
         }
@@ -915,10 +1165,19 @@ impl ProductApp {
             return;
         };
         let size = window.inner_size();
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=window event=scale-factor-changed scale_factor={:.3} physical_width={} physical_height={}",
+            window.scale_factor(),
+            size.width,
+            size.height,
+        ));
         self.resize(event_loop, size.width, size.height);
     }
 
     pub(crate) fn set_occluded(&mut self, occluded: bool) {
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=window event=occlusion occluded={occluded}"
+        ));
         if let Some(gfx) = &mut self.gfx {
             gfx.occluded = occluded;
         }
@@ -929,23 +1188,87 @@ impl ProductApp {
     }
 
     pub(crate) fn render(&mut self, event_loop: &ActiveEventLoop) {
+        let place_overlay = self
+            .place_preview
+            .latest
+            .as_ref()
+            .and_then(|preview| preview.stage_ndc)
+            .and_then(|ndc| rectangle_place_overlay(self.displayed_camera, ndc));
         let (Some(gfx), Some(layout), Some(window)) = (&mut self.gfx, self.layout, &self.window)
         else {
             return;
         };
-        match gfx.render(layout, window, &self.timeline_projection) {
+        match gfx.render(
+            layout,
+            window,
+            &self.current_document,
+            &self.timeline_projection,
+            self.primary,
+            place_overlay.as_ref(),
+        ) {
             Ok(()) => {}
             Err(ProductSurfaceError::Recover) => {
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=surface state=recover layout_epoch={}",
+                    layout.epoch,
+                ));
                 gfx.reconfigure();
                 window.request_redraw();
             }
             Err(ProductSurfaceError::Retry) => {
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=surface state=retry layout_epoch={} retry_ms=50",
+                    layout.epoch,
+                ));
                 let retry_at = Instant::now() + Duration::from_millis(50);
                 self.surface_retry_at = Some(retry_at);
                 event_loop.set_control_flow(ControlFlow::WaitUntil(retry_at));
             }
             Err(ProductSurfaceError::Skip) => {}
             Err(ProductSurfaceError::Fatal(reason)) => self.fail(event_loop, reason),
+        }
+    }
+}
+
+fn elapsed_ms(started_at: Instant) -> f64 {
+    started_at.elapsed().as_secs_f64() * 1_000.0
+}
+
+fn trace_document_publish(route: &str, published: &PublishedDocument) {
+    crate::ui_numeric_trace::emit(format_args!(
+        "kind=document-publish route={} action={:?} revision={} projection_generation={} \
+         primary_present={} track_count={}",
+        route,
+        published.kind,
+        published.revision,
+        published.projection_generation,
+        published.primary.is_some(),
+        published.snapshot.tracks.len(),
+    ));
+}
+
+fn trace_timeline_projection(
+    route: &str,
+    projection_generation: u64,
+    projection: &ProductTimelineProjection,
+) {
+    crate::ui_numeric_trace::emit(format_args!(
+        "kind=timeline-projection route={} projection_generation={} bars={} keys={} unsupported={}",
+        route,
+        projection_generation,
+        projection.projection.bars().len(),
+        projection.projection.keys().len(),
+        projection.projection.unsupported().len(),
+    ));
+}
+
+struct OptionalNumber(Option<f64>);
+
+impl std::fmt::Display for OptionalNumber {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            Some(value) => write!(formatter, "{value:.6}"),
+            None => formatter.write_str("outside"),
         }
     }
 }
@@ -1068,8 +1391,10 @@ struct ProductSurface {
     config: wgpu::SurfaceConfiguration,
     preview_pipeline: wgpu::RenderPipeline,
     preview_bind_group: wgpu::BindGroup,
-    timeline_pipeline: wgpu::RenderPipeline,
-    timeline_bar_pipeline: wgpu::RenderPipeline,
+    native_timeline_renderer: NativeTimelineRenderer,
+    last_timeline_scene_trace: Option<(u64, usize, usize, usize, usize)>,
+    place_overlay_pipeline: wgpu::RenderPipeline,
+    place_overlay_vertices: wgpu::Buffer,
     occluded: bool,
 }
 
@@ -1115,18 +1440,30 @@ impl ProductSurface {
         surface.configure(&parts.device, &config);
         let (preview_pipeline, preview_bind_group) =
             create_preview_pipeline(&parts.device, format, preview.slot().view());
-        let timeline_pipeline =
-            create_solid_pipeline(&parts.device, format, TIMELINE_BACKGROUND_SHADER);
-        let timeline_bar_pipeline =
-            create_solid_pipeline(&parts.device, format, TIMELINE_BAR_SHADER);
+        let native_timeline_renderer = NativeTimelineRenderer::new(
+            &parts.device,
+            &gpu.queue,
+            format,
+            size.width,
+            size.height,
+        )?;
+        let place_overlay_pipeline = create_place_overlay_pipeline(&parts.device, format);
+        let place_overlay_vertices = parts.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("motolii-product-place-overlay-vertices"),
+            size: 48,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         Ok(Self {
             surface,
             gpu: Arc::clone(gpu),
             config,
             preview_pipeline,
             preview_bind_group,
-            timeline_pipeline,
-            timeline_bar_pipeline,
+            native_timeline_renderer,
+            last_timeline_scene_trace: None,
+            place_overlay_pipeline,
+            place_overlay_vertices,
             occluded: false,
         })
     }
@@ -1137,6 +1474,8 @@ impl ProductSurface {
         }
         self.config.width = width;
         self.config.height = height;
+        self.native_timeline_renderer
+            .resize(&self.gpu.device, width, height);
         self.reconfigure();
     }
 
@@ -1148,10 +1487,47 @@ impl ProductSurface {
         &mut self,
         layout: NativeHostLayout,
         window: &Window,
+        document: &motolii_doc::Document,
         timeline_projection: &ProductTimelineProjection,
+        primary: Option<motolii_doc::LayerId>,
+        place_overlay: Option<&RectanglePlaceOverlay>,
     ) -> Result<(), ProductSurfaceError> {
         if self.occluded || self.config.width == 0 || self.config.height == 0 {
             return Err(ProductSurfaceError::Skip);
+        }
+        let timeline_stats = self
+            .native_timeline_renderer
+            .prepare(
+                &self.gpu.device,
+                &self.gpu.queue,
+                layout,
+                document,
+                &timeline_projection.projection,
+                primary,
+            )
+            .map_err(|error| ProductSurfaceError::Fatal(error.to_string()))?;
+        let trace_key = (
+            layout.epoch,
+            timeline_stats.rows,
+            timeline_stats.bars,
+            timeline_stats.keys,
+            timeline_stats.text_runs,
+        );
+        if self.last_timeline_scene_trace != Some(trace_key) {
+            crate::ui_numeric_trace::emit(format_args!(
+                "kind=timeline-scene layout_epoch={} rows={} bars={} keys={} text_runs={} \
+                 physical_x={} physical_y={} physical_width={} physical_height={}",
+                layout.epoch,
+                timeline_stats.rows,
+                timeline_stats.bars,
+                timeline_stats.keys,
+                timeline_stats.text_runs,
+                layout.timeline_physical.x,
+                layout.timeline_physical.y,
+                layout.timeline_physical.width,
+                layout.timeline_physical.height,
+            ));
+            self.last_timeline_scene_trace = Some(trace_key);
         }
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame)
@@ -1218,6 +1594,30 @@ impl ProductSurface {
                 &self.preview_pipeline,
                 Some(&self.preview_bind_group),
             );
+            if let Some(place_overlay) = place_overlay {
+                let bytes = place_overlay.vertex_bytes();
+                self.gpu
+                    .queue
+                    .write_buffer(&self.place_overlay_vertices, 0, &bytes);
+                pass.set_pipeline(&self.place_overlay_pipeline);
+                pass.set_vertex_buffer(0, self.place_overlay_vertices.slice(..));
+                pass.set_viewport(
+                    layout.stage_physical.x as f32,
+                    layout.stage_physical.y as f32,
+                    layout.stage_physical.width as f32,
+                    layout.stage_physical.height as f32,
+                    0.0,
+                    1.0,
+                );
+                pass.set_scissor_rect(
+                    layout.stage_physical.x,
+                    layout.stage_physical.y,
+                    layout.stage_physical.width,
+                    layout.stage_physical.height,
+                );
+                pass.draw(0..6, 0..1);
+            }
+            self.native_timeline_renderer.composite(&mut pass);
         }
         self.gpu.queue.submit([encoder.finish()]);
         window.pre_present_notify();
@@ -1226,20 +1626,52 @@ impl ProductSurface {
     }
 }
 
-fn timeline_bar_rect(
-    layout: NativeHostLayout,
-    bar: &TimelineBar,
-    band_span: f64,
-) -> Option<PhysicalRect> {
-    if !band_span.is_finite() || band_span <= 0.0 {
-        return None;
+#[derive(Debug, Clone, PartialEq)]
+struct RectanglePlaceOverlay {
+    vertices: [[f32; 2]; 6],
+}
+
+impl RectanglePlaceOverlay {
+    fn vertex_bytes(&self) -> [u8; 48] {
+        let mut bytes = [0_u8; 48];
+        for (index, component) in self.vertices.iter().flatten().enumerate() {
+            let start = index * 4;
+            bytes[start..start + 4].copy_from_slice(&component.to_ne_bytes());
+        }
+        bytes
     }
-    let x_start = bar.x_start.clamp(0.0, 1.0);
-    let x_end = bar.x_end.clamp(0.0, 1.0);
-    let y_top = (bar.y_top / band_span).clamp(0.0, 1.0);
-    let y_bottom = (bar.y_bottom / band_span).clamp(0.0, 1.0);
-    if x_end <= x_start || y_bottom <= y_top {
-        return None;
+}
+
+fn rectangle_place_overlay(
+    camera: motolii_core::CompCamera,
+    ndc: [f64; 2],
+) -> Option<RectanglePlaceOverlay> {
+    let center = canonical_drop_from_ndc(camera, ndc)?;
+    let corners = [
+        CanonicalPoint {
+            x: center[0] - 0.1,
+            y: center[1] - 0.1,
+        },
+        CanonicalPoint {
+            x: center[0] + 0.1,
+            y: center[1] - 0.1,
+        },
+        CanonicalPoint {
+            x: center[0] + 0.1,
+            y: center[1] + 0.1,
+        },
+        CanonicalPoint {
+            x: center[0] - 0.1,
+            y: center[1] + 0.1,
+        },
+    ];
+    let mut projected = [[0.0_f32; 2]; 4];
+    for (target, corner) in projected.iter_mut().zip(corners) {
+        let (x, y) = camera.world_to_ndc(corner).ok()?;
+        if !x.is_finite() || !y.is_finite() {
+            return None;
+        }
+        *target = [x as f32, y as f32];
     }
     let timeline = layout.timeline_physical?;
     let left = (x_start * f64::from(timeline.width)).round() as u32;
@@ -1339,12 +1771,52 @@ fn create_preview_pipeline(
     )
 }
 
-fn create_solid_pipeline(
+fn create_place_overlay_pipeline(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
-    source: &'static str,
 ) -> wgpu::RenderPipeline {
-    create_pipeline(device, format, None, source)
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("motolii-product-place-overlay-shader"),
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(PLACE_OVERLAY_SHADER)),
+    });
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("motolii-product-place-overlay-layout"),
+        bind_group_layouts: &[],
+        immediate_size: 0,
+    });
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("motolii-product-place-overlay-pipeline"),
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs_main"),
+            buffers: &[wgpu::VertexBufferLayout {
+                array_stride: 8,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: &[wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x2,
+                    offset: 0,
+                    shader_location: 0,
+                }],
+            }],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    })
 }
 
 fn create_pipeline(
@@ -1399,26 +1871,13 @@ struct VertexOut { @builtin(position) position: vec4<f32>, @location(0) uv: vec2
     return textureSample(source_texture, source_sampler, in.uv);
 }
 "#;
-const TIMELINE_BACKGROUND_SHADER: &str = r#"
-struct VertexOut { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32> }
-@vertex fn vs_main(@builtin(vertex_index) index: u32) -> VertexOut {
-    var positions = array<vec2<f32>, 3>(vec2(-1.0,-1.0), vec2(3.0,-1.0), vec2(-1.0,3.0));
-    var uvs = array<vec2<f32>, 3>(vec2(0.0,1.0), vec2(2.0,1.0), vec2(0.0,-1.0));
-    var out: VertexOut; out.position = vec4(positions[index],0.0,1.0); out.uv = uvs[index]; return out;
+const PLACE_OVERLAY_SHADER: &str = r#"
+struct VertexOut { @builtin(position) position: vec4<f32> }
+@vertex fn vs_main(@location(0) position: vec2<f32>) -> VertexOut {
+    var out: VertexOut; out.position = vec4(position, 0.0, 1.0); return out;
 }
-@fragment fn fs_main(_in: VertexOut) -> @location(0) vec4<f32> {
-    return vec4(0.055, 0.058, 0.066, 1.0);
-}
-"#;
-const TIMELINE_BAR_SHADER: &str = r#"
-struct VertexOut { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32> }
-@vertex fn vs_main(@builtin(vertex_index) index: u32) -> VertexOut {
-    var positions = array<vec2<f32>, 3>(vec2(-1.0,-1.0), vec2(3.0,-1.0), vec2(-1.0,3.0));
-    var uvs = array<vec2<f32>, 3>(vec2(0.0,1.0), vec2(2.0,1.0), vec2(0.0,-1.0));
-    var out: VertexOut; out.position = vec4(positions[index],0.0,1.0); out.uv = uvs[index]; return out;
-}
-@fragment fn fs_main(_in: VertexOut) -> @location(0) vec4<f32> {
-    return vec4(0.8, 0.58431375, 0.5294118, 1.0);
+@fragment fn fs_main() -> @location(0) vec4<f32> {
+    return vec4(0.8, 0.58431375, 0.5294118, 0.42);
 }
 "#;
 
@@ -1552,9 +2011,7 @@ mod tests {
     }
 
     #[test]
-    fn timeline_bar_maps_normalized_projection_into_the_native_rect() {
-        let document = crate::static_preview::bootstrap_document().unwrap();
-        let projection = ProductTimelineProjection::from_document(&document).unwrap();
+    fn timeline_hit_content_starts_after_react_tools_and_native_rail() {
         let layout = test_layout(9);
         let timeline = layout.timeline_physical.unwrap();
         let rect = timeline_bar_rect(
