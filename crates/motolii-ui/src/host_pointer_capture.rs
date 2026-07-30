@@ -475,6 +475,43 @@ fn position_changed(previous: Option<[f64; 2]>, current: [f64; 2]) -> bool {
     })
 }
 
+// 非macOS adapterはnative eventを生成しないが、共有pointer契約の型ドリフトはCIで検出する。
+#[cfg(not(target_os = "macos"))]
+fn compile_pointer_contract() {
+    let mut queue = PointerUpQueue::default();
+    let _ = queue.enqueue([0.0, 0.0]);
+    let arm_sequence = queue.high_water();
+    let mut state = HostPointerCaptureState::default();
+    let _ = state.arm(1, arm_sequence);
+    let _ = state.is_active();
+    let _ = state.active_generation();
+    let _ = state.update(
+        HostPointerSample {
+            position: [0.0, 0.0],
+            left_button_down: false,
+            window_focused: true,
+            escape_pressed: false,
+        },
+        &mut queue,
+    );
+    let _ = queue.pop_unclaimed().map(|entry| HostPointerClick {
+        position: entry.position,
+    });
+    let _ = [
+        PlatformPointerCaptureError::WindowHandle,
+        PlatformPointerCaptureError::WrongPlatform,
+        PlatformPointerCaptureError::MissingView,
+        PlatformPointerCaptureError::MissingWindow,
+        PlatformPointerCaptureError::EventMonitor,
+        PlatformPointerCaptureError::UpQueuePoisoned,
+        PlatformPointerCaptureError::CommandInboxPoisoned,
+    ];
+    let _ = position_changed(None, [0.0, 0.0]);
+}
+
+#[cfg(not(target_os = "macos"))]
+const _: fn() = compile_pointer_contract;
+
 #[cfg(test)]
 mod tests {
     use super::*;

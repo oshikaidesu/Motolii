@@ -130,7 +130,13 @@ pub(crate) fn run(document_runtime: DocumentEditRuntime) -> Result<(), ProductRu
 
 // Linux/Windows CIでもmacOS製品runtime全体をcompileし、private境界の接続欠落を検出する。
 #[cfg(not(target_os = "macos"))]
-const _: fn(DocumentEditRuntime) -> Result<(), ProductRuntimeError> = run;
+fn compile_product_runtime() {
+    let _: fn(DocumentEditRuntime) -> Result<(), ProductRuntimeError> = run;
+    let _ = BrowserLifecycleEvent::ProcessTerminated { instance_epoch: 0 };
+}
+
+#[cfg(not(target_os = "macos"))]
+const _: fn() = compile_product_runtime;
 
 pub(crate) struct ProductApp {
     // surface → WebView → Windowの順にdropし、AppKit backingを先に失わない。
