@@ -27,7 +27,7 @@ const REF_DOC_PATH = join(
 );
 
 const AUTHORITY_SHA256 = {
-  "AGENTS.md": "aecc970b07098d423c52de5642fe6afc8038a309a4d7ea2027c4664c1b9cae4c",
+  "AGENTS.md": "eed6a826eb6222633118e293890124b1f217b4773ae32fc52155521a94a40711",
   "docs/reviews/2026-07-26-cu-0a08i-inspector-read-model-split-decision.md":
     "4ec2a5296944d60b9e75275b69b841d3600d9f158d63ffccf345dca05ae12182",
   "docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md":

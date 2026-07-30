@@ -23,7 +23,9 @@ import {
 import {
   publishCurrentRouteGeneration,
   readPublishedCurrentRouteGeneration,
+  validateCurrentRoutePublication,
 } from "../scripts/current-route-publication.mjs";
+import { currentRouteGenerationAction } from "../scripts/current-route-cli.mjs";
 import {
   REFERENCE_TRANSFORM_VERSION,
   REFERENCE_VARIANTS,
@@ -157,6 +159,22 @@ async function buildBundle(generation, sourceManifestSha) {
       captures: manifestCaptures,
     },
     captures,
+  };
+}
+
+function provenanceSuccessor(bundle, generation, sourceManifestSha256) {
+  return {
+    manifest: {
+      ...structuredClone(bundle.manifest),
+      generation,
+      sourceManifestSha256,
+    },
+    captures: new Map(
+      [...bundle.captures].map(([capturePath, bytes]) => [
+        capturePath,
+        Buffer.from(bytes),
+      ]),
+    ),
   };
 }
 
@@ -368,6 +386,104 @@ test("CLI check path is immutable and does not change repository fingerprint", a
     assert.equal(after, before);
 });
 
+test("generate decision allows only an exact provenance successor", async () => {
+  const manifestSource = await sourceManifestSha();
+  const current = await buildBundle("generation-action-old", manifestSource);
+  const identical = provenanceSuccessor(
+    current,
+    current.manifest.generation,
+    current.manifest.sourceManifestSha256,
+  );
+  const provenanceOnly = provenanceSuccessor(
+    current,
+    "generation-action-new",
+    "d".repeat(64),
+  );
+
+  assert.equal(
+    currentRouteGenerationAction(current, identical),
+    "already-published",
+  );
+  assert.equal(
+    currentRouteGenerationAction(current, provenanceOnly),
+    "publish-provenance-successor",
+  );
+
+  const changedCapture = provenanceSuccessor(
+    current,
+    "generation-action-capture",
+    "e".repeat(64),
+  );
+  const firstCapture = [...changedCapture.captures.keys()][0];
+  const changedBytes = png(251);
+  changedCapture.captures.set(firstCapture, changedBytes);
+  changedCapture.manifest.captures[0].sha256 = sha256(changedBytes);
+  assert.equal(
+    currentRouteGenerationAction(current, changedCapture),
+    "reject-capture-drift",
+  );
+
+  const changedEnvironment = provenanceSuccessor(
+    current,
+    "generation-action-environment",
+    "f".repeat(64),
+  );
+  changedEnvironment.manifest.environment.locale = "locale-y";
+  assert.equal(
+    currentRouteGenerationAction(current, changedEnvironment),
+    "reject-capture-drift",
+  );
+});
+
+test("source relaxation still validates schema and capture bytes", async () => {
+  const manifestSource = await sourceManifestSha();
+  const current = await buildBundle("generation-source-relaxation", manifestSource);
+  const stale = provenanceSuccessor(
+    current,
+    "generation-source-relaxation-stale",
+    "0".repeat(64),
+  );
+
+  assert.throws(
+    () => validateCurrentRoutePublication(stale.manifest, stale.captures),
+    (error) =>
+      error instanceof CurrentRouteGenerationError &&
+      error.code === "CR2-SCHEMA",
+  );
+  assert.doesNotThrow(() =>
+    validateCurrentRoutePublication(stale.manifest, stale.captures, {
+      requireCurrentSource: false,
+    }),
+  );
+
+  const firstCapture = [...stale.captures.keys()][0];
+  const damagedCaptures = new Map(stale.captures);
+  const damagedBytes = Buffer.from(damagedCaptures.get(firstCapture));
+  damagedBytes[0] ^= 0xff;
+  damagedCaptures.set(firstCapture, damagedBytes);
+  assert.throws(
+    () =>
+      validateCurrentRoutePublication(stale.manifest, damagedCaptures, {
+        requireCurrentSource: false,
+      }),
+    (error) =>
+      error instanceof CurrentRouteGenerationError &&
+      error.code === "CR2-CAPTURE",
+  );
+
+  assert.throws(
+    () =>
+      validateCurrentRoutePublication(
+        { ...stale.manifest, schemaVersion: 1 },
+        stale.captures,
+        { requireCurrentSource: false },
+      ),
+    (error) =>
+      error instanceof CurrentRouteGenerationError &&
+      error.code === "CR2-SCHEMA",
+  );
+});
+
 test("every publication checkpoint failure keeps only old or new complete generation", async (suite) => {
   const checkpoints = [];
   await temporaryRoot(async (root) => {
@@ -437,7 +553,7 @@ test("every publication checkpoint failure keeps only old or new complete genera
   }
 });
 
-test("publishing different generation or same generation into existing root is rejected", async () => {
+test("publishing a distinct successor advances CURRENT while republishing it is rejected", async () => {
   await temporaryRoot(async (root) => {
     const manifestSource = await sourceManifestSha();
     const first = await buildBundle("generation-diff-old", manifestSource);
@@ -449,6 +565,12 @@ test("publishing different generation or same generation into existing root is r
       captures: first.captures,
     });
 
+    await publishCurrentRouteGeneration({
+      root,
+      manifest: second.manifest,
+      captures: second.captures,
+    });
+
     await expectCode("CR2-PUBLISH", () =>
       publishCurrentRouteGeneration({
         root,
@@ -457,12 +579,11 @@ test("publishing different generation or same generation into existing root is r
       }),
     );
 
-    await expectCode("CR2-PUBLISH", () =>
-      publishCurrentRouteGeneration({
-        root,
-        manifest: first.manifest,
-        captures: first.captures,
-      }),
+    const current = await readPublishedCurrentRouteGeneration({ root });
+    assert.equal(current.generation, second.manifest.generation);
+    assert.deepEqual(
+      JSON.parse(await readFile(path.join(bundlePath(root, first.manifest.generation), "manifest.json"), "utf8")),
+      first.manifest,
     );
   });
 });
