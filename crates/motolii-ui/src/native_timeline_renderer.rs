@@ -11,8 +11,8 @@ use vello::{
     AaConfig, AaSupport, Glyph, RenderParams, Renderer, RendererOptions, Scene,
 };
 
-use crate::native_host_layout::{NativeHostLayout, PhysicalRect};
-use crate::timeline_projection::TimelineProjection;
+use crate::native_host_layout::NativeHostLayout;
+use crate::timeline_projection::{TimelineBar, TimelineProjection};
 
 const KEY_TOOLS_WIDTH: f64 = 202.0;
 const BAND_RAIL_WIDTH: f64 = 54.0;
@@ -209,12 +209,20 @@ impl NativeTimelineRenderer {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct TimelineSceneStats {
     pub(crate) rows: usize,
     pub(crate) bars: usize,
     pub(crate) keys: usize,
     pub(crate) text_runs: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct TimelineBarGeometry {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
 }
 
 struct TimelineFont {
@@ -261,8 +269,11 @@ fn build_scene(
     projection: &TimelineProjection,
     primary: Option<LayerId>,
 ) -> Result<(Scene, TimelineSceneStats), NativeTimelineRendererError> {
-    let timeline = layout.timeline_physical;
-    let scale = f64::from(timeline.width) / layout.timeline.width;
+    let (Some(timeline), Some(timeline_logical)) = (layout.timeline_physical, layout.timeline)
+    else {
+        return Ok((Scene::new(), TimelineSceneStats::default()));
+    };
+    let scale = f64::from(timeline.width) / timeline_logical.width;
     let key_tools_width = KEY_TOOLS_WIDTH * scale;
     let rail_width = BAND_RAIL_WIDTH * scale;
     let header_height = HEADER_HEIGHT * scale;
@@ -456,18 +467,25 @@ fn build_scene(
     }
 
     for bar in projection.bars() {
-        let bar_x = time_x + bar.x_start.clamp(0.0, 1.0) * (right - time_x);
-        let bar_right = time_x + bar.x_end.clamp(0.0, 1.0) * (right - time_x);
-        let row_y = content_y + f64::from(bar.band) * row_height;
-        let bar_y = row_y + 5.0 * scale;
-        let bar_height = (row_height - 10.0 * scale).max(12.0 * scale);
-        fill(&mut scene, bar_x, bar_y, bar_right - bar_x, bar_height, BAR);
+        let Some(geometry) =
+            timeline_bar_geometry(time_x, right, content_y, row_height, scale, bar)
+        else {
+            continue;
+        };
+        fill(
+            &mut scene,
+            geometry.x,
+            geometry.y,
+            geometry.width,
+            geometry.height,
+            BAR,
+        );
         outline(
             &mut scene,
-            bar_x,
-            bar_y,
-            bar_right - bar_x,
-            bar_height,
+            geometry.x,
+            geometry.y,
+            geometry.width,
+            geometry.height,
             if primary == Some(bar.layer) {
                 SELECTED
             } else {
@@ -481,8 +499,8 @@ fn build_scene(
         );
         fill(
             &mut scene,
-            bar_x + 7.0 * scale,
-            bar_y + 6.0 * scale,
+            geometry.x + 7.0 * scale,
+            geometry.y + 6.0 * scale,
             16.0 * scale,
             16.0 * scale,
             Color::from_rgba8(9, 10, 10, 210),
@@ -491,8 +509,8 @@ fn build_scene(
             &mut scene,
             font,
             "L",
-            bar_x + 12.0 * scale,
-            bar_y + 18.0 * scale,
+            geometry.x + 12.0 * scale,
+            geometry.y + 18.0 * scale,
             8.0 * scale,
             INK,
         )?;
@@ -501,8 +519,8 @@ fn build_scene(
             &mut scene,
             font,
             name,
-            bar_x + 31.0 * scale,
-            bar_y + 18.0 * scale,
+            geometry.x + 31.0 * scale,
+            geometry.y + 18.0 * scale,
             10.0 * scale,
             BAR_TEXT,
         )?;
@@ -539,6 +557,27 @@ fn build_scene(
             text_runs,
         },
     ))
+}
+
+fn timeline_bar_geometry(
+    time_x: f64,
+    right: f64,
+    content_y: f64,
+    row_height: f64,
+    scale: f64,
+    bar: &TimelineBar,
+) -> Option<TimelineBarGeometry> {
+    let x = time_x + bar.x_start.clamp(0.0, 1.0) * (right - time_x);
+    let bar_right = time_x + bar.x_end.clamp(0.0, 1.0) * (right - time_x);
+    let y = content_y + f64::from(bar.band) * row_height + 5.0 * scale;
+    let height = (row_height - 10.0 * scale).max(12.0 * scale);
+    let width = bar_right - x;
+    (width > 0.0 && height > 0.0).then_some(TimelineBarGeometry {
+        x,
+        y,
+        width,
+        height,
+    })
 }
 
 fn fill(scene: &mut Scene, x: f64, y: f64, width: f64, height: f64, color: Color) {
@@ -685,16 +724,101 @@ pub(crate) enum NativeTimelineRendererError {
 
 pub(crate) fn key_tools_logical_rect(
     layout: NativeHostLayout,
-) -> crate::native_host_layout::LogicalRect {
-    crate::native_host_layout::LogicalRect {
-        x: layout.timeline.x,
-        y: layout.timeline.y,
-        width: KEY_TOOLS_WIDTH.min(layout.timeline.width),
-        height: layout.timeline.height,
-    }
+) -> Option<crate::native_host_layout::LogicalRect> {
+    layout
+        .timeline
+        .map(|timeline| crate::native_host_layout::LogicalRect {
+            x: timeline.x,
+            y: timeline.y,
+            width: KEY_TOOLS_WIDTH.min(timeline.width),
+            height: timeline.height,
+        })
 }
 
-#[allow(dead_code)]
-fn _timeline_rect(layout: NativeHostLayout) -> PhysicalRect {
-    layout.timeline_physical
+pub(crate) fn timeline_time_surface_logical_rect(
+    layout: NativeHostLayout,
+) -> Option<crate::native_host_layout::LogicalRect> {
+    let timeline = layout.timeline?;
+    let x_offset = (KEY_TOOLS_WIDTH + BAND_RAIL_WIDTH).min(timeline.width);
+    let y_offset = (HEADER_HEIGHT + RULER_HEIGHT).min(timeline.height);
+    let width = timeline.width - x_offset;
+    let height = timeline.height - y_offset;
+    (width > 0.0 && height > 0.0).then_some(crate::native_host_layout::LogicalRect {
+        x: timeline.x + x_offset,
+        y: timeline.y + y_offset,
+        width,
+        height,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::timeline_projection::TimelineBar;
+
+    #[test]
+    fn shipped_bar_geometry_stays_inside_the_time_surface() {
+        let bar = TimelineBar {
+            layer: motolii_doc::LayerId::from_raw(1),
+            start: motolii_core::RationalTime::ZERO,
+            end: motolii_core::RationalTime::ZERO,
+            band: 0,
+            x_start: 0.0,
+            x_end: 1.0,
+            y_top: 0.0,
+            y_bottom: 1.0,
+        };
+        let geometry = timeline_bar_geometry(256.0, 1_000.0, 55.0, 145.0, 1.0, &bar).unwrap();
+
+        assert_eq!(geometry.x, 256.0);
+        assert_eq!(geometry.x + geometry.width, 1_000.0);
+        assert!(geometry.y >= 55.0);
+        assert!(geometry.y + geometry.height <= 200.0);
+    }
+
+    #[test]
+    fn hidden_timeline_builds_an_empty_scene_without_reading_font_data() {
+        let frame = motolii_core::FrameDesc::try_packed(
+            1920,
+            1080,
+            motolii_core::PixelFormat::Rgba8Unorm,
+            motolii_core::ColorSpace::Srgb,
+            true,
+        )
+        .unwrap();
+        let mut authority = crate::layout::PanelLayout::built_in();
+        authority
+            .apply(
+                crate::layout::LayoutAction::Hide(crate::layout::PanelRole::Timeline),
+                crate::layout::LayoutConstraints {
+                    viewport_width: 1_000.0,
+                    stage_min_width: 320.0,
+                },
+            )
+            .unwrap();
+        let layout = NativeHostLayout::try_new(1, 1_000, 800, 1.0, frame, &authority)
+            .unwrap()
+            .unwrap();
+        let document = crate::static_preview::bootstrap_document().unwrap();
+        let projection = crate::timeline_projection::project_timeline(
+            &document,
+            &crate::timeline_projection::TimelineMetrics {
+                band_height: 1.0,
+                units_per_second: document.composition.duration.as_seconds_f64().recip(),
+                key_half_extent: 1.0,
+            },
+            &crate::timeline_projection::TimelineViewport {
+                start: motolii_core::RationalTime::ZERO,
+                end: document.composition.duration,
+            },
+        )
+        .unwrap();
+        let font = TimelineFont {
+            bytes: Arc::from([]),
+            face_index: 0,
+        };
+
+        let (_, stats) = build_scene(&font, layout, &document, &projection, None).unwrap();
+        assert_eq!(stats, TimelineSceneStats::default());
+    }
 }
