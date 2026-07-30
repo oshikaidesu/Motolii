@@ -24,7 +24,11 @@ use crate::document_edit_runtime::{
 use crate::host_pointer_capture::{HostPointerCancel, HostPointerCandidate};
 use crate::inspector_host_runtime::{InspectorHostRuntime, InspectorHostRuntimeError};
 use crate::layout_authority::LayoutAuthority;
-use crate::native_host_layout::{NativeHostLayout, PhysicalRect};
+use crate::native_host_layout::{LogicalRect, NativeHostLayout, PhysicalRect};
+use crate::native_timeline_renderer::{
+    key_tools_logical_rect, timeline_time_surface_logical_rect, NativeTimelineRenderer,
+    NativeTimelineRendererError,
+};
 use crate::render_worker::{
     RenderGeneration, RenderRequest, RenderWorker, RenderWorkerClient, RenderWorkerError,
 };
@@ -121,6 +125,16 @@ pub(crate) fn run(document_runtime: DocumentEditRuntime) -> Result<(), ProductRu
     }
     Ok(())
 }
+
+// Linux/Windows CIでもmacOS製品runtime全体をcompileし、private境界の接続欠落を検出する。
+#[cfg(not(target_os = "macos"))]
+fn compile_product_runtime() {
+    let _: fn(DocumentEditRuntime) -> Result<(), ProductRuntimeError> = run;
+    let _ = BrowserLifecycleEvent::ProcessTerminated { instance_epoch: 0 };
+}
+
+#[cfg(not(target_os = "macos"))]
+const _: fn() = compile_product_runtime;
 
 pub(crate) struct ProductApp {
     // surface → WebView → Windowの順にdropし、AppKit backingを先に失わない。
@@ -227,12 +241,12 @@ impl ProductTimelineProjection {
     }
 
     fn hit_test(&self, position: [f64; 2], layout: NativeHostLayout) -> Option<TimelineHit> {
-        let timeline = layout.timeline?;
-        if !timeline.contains(position) {
+        let time_surface = timeline_time_surface_logical_rect(layout)?;
+        if !time_surface.contains(position) {
             return None;
         }
-        let x = (position[0] - timeline.x) / timeline.width;
-        let y = ((position[1] - timeline.y) / timeline.height) * self.band_span;
+        let x = (position[0] - time_surface.x) / time_surface.width;
+        let y = ((position[1] - time_surface.y) / time_surface.height) * self.band_span;
         Some(self.projection.hit_test(x, y))
     }
 }
@@ -567,23 +581,33 @@ impl ProductApp {
         if let Some(timeline_tools) = &mut self.timeline_tools {
             timeline_tools.set_bounds(layout.epoch, key_tools_logical_rect(layout))?;
         }
+        let hidden_rect = LogicalRect {
+            x: 0.0,
+            y: 0.0,
+            width: 0.0,
+            height: 0.0,
+        };
+        let browser = layout.browser.unwrap_or(hidden_rect);
+        let inspector = layout.inspector.unwrap_or(hidden_rect);
+        let timeline = layout.timeline.unwrap_or(hidden_rect);
         crate::ui_numeric_trace::emit(format_args!(
             "kind=layout epoch={} physical_width={} physical_height={} scale_factor={:.3} \
-             browser_x={:.3} browser_y={:.3} browser_width={:.3} browser_height={:.3} \
+             browser_visible={} browser_x={:.3} browser_y={:.3} browser_width={:.3} browser_height={:.3} \
              stage_header_x={:.3} stage_header_y={:.3} stage_header_width={:.3} stage_header_height={:.3} \
              stage_viewport_x={:.3} stage_viewport_y={:.3} stage_viewport_width={:.3} stage_viewport_height={:.3} \
              stage_x={:.3} stage_y={:.3} stage_width={:.3} stage_height={:.3} \
              stage_transport_x={:.3} stage_transport_y={:.3} stage_transport_width={:.3} stage_transport_height={:.3} \
-             inspector_x={:.3} inspector_y={:.3} inspector_width={:.3} inspector_height={:.3} \
-             timeline_x={:.3} timeline_y={:.3} timeline_width={:.3} timeline_height={:.3}",
+             inspector_visible={} inspector_x={:.3} inspector_y={:.3} inspector_width={:.3} inspector_height={:.3} \
+             timeline_visible={} timeline_x={:.3} timeline_y={:.3} timeline_width={:.3} timeline_height={:.3}",
             layout.epoch,
             size.width,
             size.height,
             window.scale_factor(),
-            layout.browser.x,
-            layout.browser.y,
-            layout.browser.width,
-            layout.browser.height,
+            layout.browser.is_some(),
+            browser.x,
+            browser.y,
+            browser.width,
+            browser.height,
             layout.stage_header.x,
             layout.stage_header.y,
             layout.stage_header.width,
@@ -600,14 +624,16 @@ impl ProductApp {
             layout.stage_transport.y,
             layout.stage_transport.width,
             layout.stage_transport.height,
-            layout.inspector.x,
-            layout.inspector.y,
-            layout.inspector.width,
-            layout.inspector.height,
-            layout.timeline.x,
-            layout.timeline.y,
-            layout.timeline.width,
-            layout.timeline.height,
+            layout.inspector.is_some(),
+            inspector.x,
+            inspector.y,
+            inspector.width,
+            inspector.height,
+            layout.timeline.is_some(),
+            timeline.x,
+            timeline.y,
+            timeline.width,
+            timeline.height,
         ));
         self.layout = Some(layout);
         Ok(())
@@ -1225,6 +1251,7 @@ impl ProductApp {
                 event_loop.set_control_flow(ControlFlow::WaitUntil(retry_at));
             }
             Err(ProductSurfaceError::Skip) => {}
+            Err(ProductSurfaceError::NativeTimeline(error)) => self.fail(event_loop, error),
             Err(ProductSurfaceError::Fatal(reason)) => self.fail(event_loop, reason),
         }
     }
@@ -1495,17 +1522,14 @@ impl ProductSurface {
         if self.occluded || self.config.width == 0 || self.config.height == 0 {
             return Err(ProductSurfaceError::Skip);
         }
-        let timeline_stats = self
-            .native_timeline_renderer
-            .prepare(
-                &self.gpu.device,
-                &self.gpu.queue,
-                layout,
-                document,
-                &timeline_projection.projection,
-                primary,
-            )
-            .map_err(|error| ProductSurfaceError::Fatal(error.to_string()))?;
+        let timeline_stats = self.native_timeline_renderer.prepare(
+            &self.gpu.device,
+            &self.gpu.queue,
+            layout,
+            document,
+            &timeline_projection.projection,
+            primary,
+        )?;
         let trace_key = (
             layout.epoch,
             timeline_stats.rows,
@@ -1514,20 +1538,22 @@ impl ProductSurface {
             timeline_stats.text_runs,
         );
         if self.last_timeline_scene_trace != Some(trace_key) {
-            crate::ui_numeric_trace::emit(format_args!(
-                "kind=timeline-scene layout_epoch={} rows={} bars={} keys={} text_runs={} \
-                 physical_x={} physical_y={} physical_width={} physical_height={}",
-                layout.epoch,
-                timeline_stats.rows,
-                timeline_stats.bars,
-                timeline_stats.keys,
-                timeline_stats.text_runs,
-                layout.timeline_physical.x,
-                layout.timeline_physical.y,
-                layout.timeline_physical.width,
-                layout.timeline_physical.height,
-            ));
-            self.last_timeline_scene_trace = Some(trace_key);
+            if let Some(timeline) = layout.timeline_physical {
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=timeline-scene layout_epoch={} rows={} bars={} keys={} text_runs={} \
+                     physical_x={} physical_y={} physical_width={} physical_height={}",
+                    layout.epoch,
+                    timeline_stats.rows,
+                    timeline_stats.bars,
+                    timeline_stats.keys,
+                    timeline_stats.text_runs,
+                    timeline.x,
+                    timeline.y,
+                    timeline.width,
+                    timeline.height,
+                ));
+                self.last_timeline_scene_trace = Some(trace_key);
+            }
         }
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame)
@@ -1578,16 +1604,6 @@ impl ProductSurface {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            if let Some(timeline) = layout.timeline_physical {
-                draw_rect(&mut pass, timeline, &self.timeline_pipeline, None);
-                for bar in timeline_projection.projection.bars() {
-                    if let Some(rect) =
-                        timeline_bar_rect(layout, bar, timeline_projection.band_span)
-                    {
-                        draw_rect(&mut pass, rect, &self.timeline_bar_pipeline, None);
-                    }
-                }
-            }
             draw_rect(
                 &mut pass,
                 layout.stage_physical,
@@ -1673,24 +1689,15 @@ fn rectangle_place_overlay(
         }
         *target = [x as f32, y as f32];
     }
-    let timeline = layout.timeline_physical?;
-    let left = (x_start * f64::from(timeline.width)).round() as u32;
-    let right = (x_end * f64::from(timeline.width)).round() as u32;
-    let top = (y_top * f64::from(timeline.height)).round() as u32;
-    let bottom = (y_bottom * f64::from(timeline.height)).round() as u32;
-    let scale = f64::from(timeline.width) / layout.timeline?.width;
-    let gap = scale.round().max(1.0) as u32;
-    let y = timeline.y.checked_add(top)?.checked_add(gap)?;
-    let height = bottom
-        .checked_sub(top)?
-        .checked_sub(gap.saturating_mul(2))?;
-    let x = timeline.x.checked_add(left)?;
-    let width = right.checked_sub(left)?;
-    (width > 0 && height > 0).then_some(PhysicalRect {
-        x,
-        y,
-        width,
-        height,
+    Some(RectanglePlaceOverlay {
+        vertices: [
+            projected[0],
+            projected[1],
+            projected[2],
+            projected[0],
+            projected[2],
+            projected[3],
+        ],
     })
 }
 
@@ -1881,11 +1888,18 @@ struct VertexOut { @builtin(position) position: vec4<f32> }
 }
 "#;
 
+#[derive(Debug, thiserror::Error)]
 enum ProductSurfaceError {
+    #[error("native product Surface must be reconfigured")]
     Recover,
+    #[error("native product Surface frame must be retried")]
     Retry,
+    #[error("native product Surface frame is skipped")]
     Skip,
+    #[error("native product Surface failed: {0}")]
     Fatal(String),
+    #[error(transparent)]
+    NativeTimeline(#[from] NativeTimelineRendererError),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -1918,6 +1932,12 @@ pub(crate) enum ProductRuntimeError {
     Browser(#[from] BrowserHostRuntimeError),
     #[error(transparent)]
     Inspector(#[from] InspectorHostRuntimeError),
+    #[error(transparent)]
+    StageChrome(#[from] StageChromeHostRuntimeError),
+    #[error(transparent)]
+    TimelineTools(#[from] TimelineToolsHostRuntimeError),
+    #[error(transparent)]
+    NativeTimeline(#[from] NativeTimelineRendererError),
     #[error(transparent)]
     Layout(#[from] crate::layout::LayoutError),
     #[error(transparent)]
@@ -2011,32 +2031,16 @@ mod tests {
     }
 
     #[test]
-    fn timeline_hit_content_starts_after_react_tools_and_native_rail() {
-        let layout = test_layout(9);
-        let timeline = layout.timeline_physical.unwrap();
-        let rect = timeline_bar_rect(
-            layout,
-            projection.projection.bars().first().unwrap(),
-            projection.band_span,
-        )
-        .unwrap();
-
-        assert_eq!(rect.x, timeline.x);
-        assert_eq!(rect.width, timeline.width);
-        assert!(rect.y > timeline.y);
-        assert!(rect.height < timeline.height);
-        assert!(rect.y + rect.height < timeline.y + timeline.height);
-    }
-
-    #[test]
-    fn timeline_native_point_reuses_the_typed_projection_hit() {
+    fn timeline_time_surface_reuses_the_typed_projection_hit_and_excludes_chrome() {
         let document = crate::static_preview::bootstrap_document().unwrap();
         let projection = ProductTimelineProjection::from_document(&document).unwrap();
         let expected_layer = projection.projection.bars()[0].layer;
         let layout = test_layout(9);
+        let timeline = layout.timeline.unwrap();
+        let time_surface = timeline_time_surface_logical_rect(layout).unwrap();
         let center = [
-            layout.timeline.unwrap().x + layout.timeline.unwrap().width / 2.0,
-            layout.timeline.unwrap().y + layout.timeline.unwrap().height / 2.0,
+            time_surface.x + time_surface.width / 2.0,
+            time_surface.y + time_surface.height / 2.0,
         ];
 
         assert_eq!(
@@ -2046,13 +2050,29 @@ mod tests {
             })
         );
         assert_eq!(
+            projection.hit_test([timeline.x + 100.0, time_surface.y + 10.0], layout),
+            None
+        );
+        assert_eq!(
+            projection.hit_test([timeline.x + 220.0, time_surface.y + 10.0], layout),
+            None
+        );
+        assert_eq!(
+            projection.hit_test([time_surface.x + 10.0, timeline.y + 15.0], layout),
+            None
+        );
+        assert_eq!(
+            projection.hit_test([time_surface.x + 10.0, timeline.y + 40.0], layout),
+            None
+        );
+        assert_eq!(
             projection.hit_test([layout.stage.x, layout.stage.y], layout),
             None
         );
     }
 
     #[test]
-    fn hidden_timeline_has_no_draw_rect_or_selection_hit() {
+    fn hidden_timeline_has_no_selection_hit() {
         let document = crate::static_preview::bootstrap_document().unwrap();
         let projection = ProductTimelineProjection::from_document(&document).unwrap();
         let mut authority = crate::layout::PanelLayout::built_in();
@@ -2067,14 +2087,6 @@ mod tests {
             .unwrap();
         let layout = test_layout_with(10, authority);
 
-        assert_eq!(
-            timeline_bar_rect(
-                layout,
-                projection.projection.bars().first().unwrap(),
-                projection.band_span,
-            ),
-            None
-        );
         assert_eq!(projection.hit_test([500.0, 700.0], layout), None);
     }
 
