@@ -34,8 +34,6 @@ use crate::render_worker::{
 };
 use crate::stage_chrome_host_runtime::{StageChromeHostRuntime, StageChromeHostRuntimeError};
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
-#[cfg(test)]
-use crate::timeline_projection::TimelineBar;
 use crate::timeline_projection::{
     project_timeline, TimelineHit, TimelineMetrics, TimelineProjection, TimelineProjectionError,
     TimelineViewport,
@@ -1703,50 +1701,6 @@ fn rectangle_place_overlay(
     })
 }
 
-#[cfg(test)]
-fn timeline_bar_rect(
-    layout: NativeHostLayout,
-    bar: &TimelineBar,
-    band_span: f64,
-) -> Option<PhysicalRect> {
-    if !band_span.is_finite() || band_span <= 0.0 {
-        return None;
-    }
-    let x_start = bar.x_start.clamp(0.0, 1.0);
-    let x_end = bar.x_end.clamp(0.0, 1.0);
-    let y_top = (bar.y_top / band_span).clamp(0.0, 1.0);
-    let y_bottom = (bar.y_bottom / band_span).clamp(0.0, 1.0);
-    if x_end <= x_start || y_bottom <= y_top {
-        return None;
-    }
-    let timeline = layout.timeline_physical?;
-    let timeline_logical = layout.timeline?;
-    let time_surface = timeline_time_surface_logical_rect(layout)?;
-    let scale_x = f64::from(timeline.width) / timeline_logical.width;
-    let scale_y = f64::from(timeline.height) / timeline_logical.height;
-    let content_x = timeline.x + ((time_surface.x - timeline_logical.x) * scale_x).round() as u32;
-    let content_y = timeline.y + ((time_surface.y - timeline_logical.y) * scale_y).round() as u32;
-    let content_width = (time_surface.width * scale_x).round() as u32;
-    let content_height = (time_surface.height * scale_y).round() as u32;
-    let left = (x_start * f64::from(content_width)).round() as u32;
-    let right = (x_end * f64::from(content_width)).round() as u32;
-    let top = (y_top * f64::from(content_height)).round() as u32;
-    let bottom = (y_bottom * f64::from(content_height)).round() as u32;
-    let gap = scale_y.round().max(1.0) as u32;
-    let y = content_y.checked_add(top)?.checked_add(gap)?;
-    let height = bottom
-        .checked_sub(top)?
-        .checked_sub(gap.saturating_mul(2))?;
-    let x = content_x.checked_add(left)?;
-    let width = right.checked_sub(left)?;
-    (width > 0 && height > 0).then_some(PhysicalRect {
-        x,
-        y,
-        width,
-        height,
-    })
-}
-
 fn draw_rect<'a>(
     pass: &mut wgpu::RenderPass<'a>,
     rect: PhysicalRect,
@@ -2077,26 +2031,6 @@ mod tests {
     }
 
     #[test]
-    fn timeline_bar_maps_normalized_projection_into_the_native_rect() {
-        let document = crate::static_preview::bootstrap_document().unwrap();
-        let projection = ProductTimelineProjection::from_document(&document).unwrap();
-        let layout = test_layout(9);
-        let timeline = layout.timeline_physical.unwrap();
-        let rect = timeline_bar_rect(
-            layout,
-            projection.projection.bars().first().unwrap(),
-            projection.band_span,
-        )
-        .unwrap();
-
-        assert!(rect.x > timeline.x);
-        assert!(rect.width < timeline.width);
-        assert!(rect.y > timeline.y);
-        assert!(rect.height < timeline.height);
-        assert!(rect.y + rect.height < timeline.y + timeline.height);
-    }
-
-    #[test]
     fn timeline_time_surface_reuses_the_typed_projection_hit_and_excludes_chrome() {
         let document = crate::static_preview::bootstrap_document().unwrap();
         let projection = ProductTimelineProjection::from_document(&document).unwrap();
@@ -2138,7 +2072,7 @@ mod tests {
     }
 
     #[test]
-    fn hidden_timeline_has_no_draw_rect_or_selection_hit() {
+    fn hidden_timeline_has_no_selection_hit() {
         let document = crate::static_preview::bootstrap_document().unwrap();
         let projection = ProductTimelineProjection::from_document(&document).unwrap();
         let mut authority = crate::layout::PanelLayout::built_in();
@@ -2153,14 +2087,6 @@ mod tests {
             .unwrap();
         let layout = test_layout_with(10, authority);
 
-        assert_eq!(
-            timeline_bar_rect(
-                layout,
-                projection.projection.bars().first().unwrap(),
-                projection.band_span,
-            ),
-            None
-        );
         assert_eq!(projection.hit_test([500.0, 700.0], layout), None);
     }
 
