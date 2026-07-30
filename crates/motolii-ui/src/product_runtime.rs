@@ -24,12 +24,17 @@ use crate::document_edit_runtime::{
 use crate::host_pointer_capture::{HostPointerCancel, HostPointerCandidate};
 use crate::inspector_host_runtime::{InspectorHostRuntime, InspectorHostRuntimeError};
 use crate::layout_authority::LayoutAuthority;
-use crate::native_host_layout::{NativeHostLayout, PhysicalRect};
+use crate::native_host_layout::{LogicalRect, NativeHostLayout, PhysicalRect};
+use crate::native_timeline_renderer::{
+    key_tools_logical_rect, NativeTimelineRenderer, NativeTimelineRendererError,
+};
 use crate::render_worker::{
     RenderGeneration, RenderRequest, RenderWorker, RenderWorkerClient, RenderWorkerError,
 };
 use crate::stage_chrome_host_runtime::{StageChromeHostRuntime, StageChromeHostRuntimeError};
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
+#[cfg(test)]
+use crate::timeline_projection::TimelineBar;
 use crate::timeline_projection::{
     project_timeline, TimelineHit, TimelineMetrics, TimelineProjection, TimelineProjectionError,
     TimelineViewport,
@@ -567,23 +572,33 @@ impl ProductApp {
         if let Some(timeline_tools) = &mut self.timeline_tools {
             timeline_tools.set_bounds(layout.epoch, key_tools_logical_rect(layout))?;
         }
+        let hidden_rect = LogicalRect {
+            x: 0.0,
+            y: 0.0,
+            width: 0.0,
+            height: 0.0,
+        };
+        let browser = layout.browser.unwrap_or(hidden_rect);
+        let inspector = layout.inspector.unwrap_or(hidden_rect);
+        let timeline = layout.timeline.unwrap_or(hidden_rect);
         crate::ui_numeric_trace::emit(format_args!(
             "kind=layout epoch={} physical_width={} physical_height={} scale_factor={:.3} \
-             browser_x={:.3} browser_y={:.3} browser_width={:.3} browser_height={:.3} \
+             browser_visible={} browser_x={:.3} browser_y={:.3} browser_width={:.3} browser_height={:.3} \
              stage_header_x={:.3} stage_header_y={:.3} stage_header_width={:.3} stage_header_height={:.3} \
              stage_viewport_x={:.3} stage_viewport_y={:.3} stage_viewport_width={:.3} stage_viewport_height={:.3} \
              stage_x={:.3} stage_y={:.3} stage_width={:.3} stage_height={:.3} \
              stage_transport_x={:.3} stage_transport_y={:.3} stage_transport_width={:.3} stage_transport_height={:.3} \
-             inspector_x={:.3} inspector_y={:.3} inspector_width={:.3} inspector_height={:.3} \
-             timeline_x={:.3} timeline_y={:.3} timeline_width={:.3} timeline_height={:.3}",
+             inspector_visible={} inspector_x={:.3} inspector_y={:.3} inspector_width={:.3} inspector_height={:.3} \
+             timeline_visible={} timeline_x={:.3} timeline_y={:.3} timeline_width={:.3} timeline_height={:.3}",
             layout.epoch,
             size.width,
             size.height,
             window.scale_factor(),
-            layout.browser.x,
-            layout.browser.y,
-            layout.browser.width,
-            layout.browser.height,
+            layout.browser.is_some(),
+            browser.x,
+            browser.y,
+            browser.width,
+            browser.height,
             layout.stage_header.x,
             layout.stage_header.y,
             layout.stage_header.width,
@@ -600,14 +615,16 @@ impl ProductApp {
             layout.stage_transport.y,
             layout.stage_transport.width,
             layout.stage_transport.height,
-            layout.inspector.x,
-            layout.inspector.y,
-            layout.inspector.width,
-            layout.inspector.height,
-            layout.timeline.x,
-            layout.timeline.y,
-            layout.timeline.width,
-            layout.timeline.height,
+            layout.inspector.is_some(),
+            inspector.x,
+            inspector.y,
+            inspector.width,
+            inspector.height,
+            layout.timeline.is_some(),
+            timeline.x,
+            timeline.y,
+            timeline.width,
+            timeline.height,
         ));
         self.layout = Some(layout);
         Ok(())
@@ -1514,20 +1531,22 @@ impl ProductSurface {
             timeline_stats.text_runs,
         );
         if self.last_timeline_scene_trace != Some(trace_key) {
-            crate::ui_numeric_trace::emit(format_args!(
-                "kind=timeline-scene layout_epoch={} rows={} bars={} keys={} text_runs={} \
-                 physical_x={} physical_y={} physical_width={} physical_height={}",
-                layout.epoch,
-                timeline_stats.rows,
-                timeline_stats.bars,
-                timeline_stats.keys,
-                timeline_stats.text_runs,
-                layout.timeline_physical.x,
-                layout.timeline_physical.y,
-                layout.timeline_physical.width,
-                layout.timeline_physical.height,
-            ));
-            self.last_timeline_scene_trace = Some(trace_key);
+            if let Some(timeline) = layout.timeline_physical {
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=timeline-scene layout_epoch={} rows={} bars={} keys={} text_runs={} \
+                     physical_x={} physical_y={} physical_width={} physical_height={}",
+                    layout.epoch,
+                    timeline_stats.rows,
+                    timeline_stats.bars,
+                    timeline_stats.keys,
+                    timeline_stats.text_runs,
+                    timeline.x,
+                    timeline.y,
+                    timeline.width,
+                    timeline.height,
+                ));
+                self.last_timeline_scene_trace = Some(trace_key);
+            }
         }
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame)
@@ -1578,16 +1597,6 @@ impl ProductSurface {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            if let Some(timeline) = layout.timeline_physical {
-                draw_rect(&mut pass, timeline, &self.timeline_pipeline, None);
-                for bar in timeline_projection.projection.bars() {
-                    if let Some(rect) =
-                        timeline_bar_rect(layout, bar, timeline_projection.band_span)
-                    {
-                        draw_rect(&mut pass, rect, &self.timeline_bar_pipeline, None);
-                    }
-                }
-            }
             draw_rect(
                 &mut pass,
                 layout.stage_physical,
@@ -1672,6 +1681,34 @@ fn rectangle_place_overlay(
             return None;
         }
         *target = [x as f32, y as f32];
+    }
+    Some(RectanglePlaceOverlay {
+        vertices: [
+            projected[0],
+            projected[1],
+            projected[2],
+            projected[0],
+            projected[2],
+            projected[3],
+        ],
+    })
+}
+
+#[cfg(test)]
+fn timeline_bar_rect(
+    layout: NativeHostLayout,
+    bar: &TimelineBar,
+    band_span: f64,
+) -> Option<PhysicalRect> {
+    if !band_span.is_finite() || band_span <= 0.0 {
+        return None;
+    }
+    let x_start = bar.x_start.clamp(0.0, 1.0);
+    let x_end = bar.x_end.clamp(0.0, 1.0);
+    let y_top = (bar.y_top / band_span).clamp(0.0, 1.0);
+    let y_bottom = (bar.y_bottom / band_span).clamp(0.0, 1.0);
+    if x_end <= x_start || y_bottom <= y_top {
+        return None;
     }
     let timeline = layout.timeline_physical?;
     let left = (x_start * f64::from(timeline.width)).round() as u32;
@@ -1919,6 +1956,12 @@ pub(crate) enum ProductRuntimeError {
     #[error(transparent)]
     Inspector(#[from] InspectorHostRuntimeError),
     #[error(transparent)]
+    StageChrome(#[from] StageChromeHostRuntimeError),
+    #[error(transparent)]
+    TimelineTools(#[from] TimelineToolsHostRuntimeError),
+    #[error(transparent)]
+    NativeTimeline(#[from] NativeTimelineRendererError),
+    #[error(transparent)]
     Layout(#[from] crate::layout::LayoutError),
     #[error(transparent)]
     NativeHostLayout(#[from] crate::native_host_layout::NativeHostLayoutError),
@@ -2011,7 +2054,9 @@ mod tests {
     }
 
     #[test]
-    fn timeline_hit_content_starts_after_react_tools_and_native_rail() {
+    fn timeline_bar_maps_normalized_projection_into_the_native_rect() {
+        let document = crate::static_preview::bootstrap_document().unwrap();
+        let projection = ProductTimelineProjection::from_document(&document).unwrap();
         let layout = test_layout(9);
         let timeline = layout.timeline_physical.unwrap();
         let rect = timeline_bar_rect(

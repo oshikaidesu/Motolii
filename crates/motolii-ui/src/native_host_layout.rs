@@ -35,6 +35,9 @@ pub(crate) struct NativeHostLayout {
     pub(crate) epoch: u64,
     pub(crate) browser: Option<LogicalRect>,
     pub(crate) inspector: Option<LogicalRect>,
+    pub(crate) stage_header: LogicalRect,
+    pub(crate) stage_viewport: LogicalRect,
+    pub(crate) stage_transport: LogicalRect,
     pub(crate) stage: LogicalRect,
     pub(crate) timeline: Option<LogicalRect>,
     pub(crate) stage_physical: PhysicalRect,
@@ -72,12 +75,16 @@ impl NativeHostLayout {
         let inspector = rects.get(&PanelRole::Inspector).copied();
         let stage_panel = required(PanelRole::Stage)?;
         let timeline = rects.get(&PanelRole::Timeline).copied();
-        let source_aspect = f64::from(frame.width) / f64::from(frame.height);
-        let panel_aspect = stage_panel.width / stage_panel.height;
-        let (stage_width, stage_height) = if panel_aspect > source_aspect {
-            (stage_panel.height * source_aspect, stage_panel.height)
-        } else {
-            (stage_panel.width, stage_panel.width / source_aspect)
+        const STAGE_HEADER_HEIGHT: f64 = 30.0;
+        const STAGE_TRANSPORT_HEIGHT: f64 = 32.0;
+        let header_height = STAGE_HEADER_HEIGHT.min(stage_panel.height);
+        let transport_height =
+            STAGE_TRANSPORT_HEIGHT.min((stage_panel.height - header_height).max(0.0));
+        let stage_header = LogicalRect {
+            x: stage_panel.x,
+            y: stage_panel.y,
+            width: stage_panel.width,
+            height: header_height,
         };
         let stage_viewport = LogicalRect {
             x: stage_panel.x,
@@ -92,10 +99,12 @@ impl NativeHostLayout {
             height: transport_height,
         };
         let source_aspect = f64::from(frame.width) / f64::from(frame.height);
-        let stage_width = (stage_viewport.width * OUTPUT_FRAME_WIDTH_PERCENT / 100.0)
-            .min(OUTPUT_FRAME_MAX_WIDTH)
-            .min(stage_viewport.height * source_aspect);
-        let stage_height = stage_width / source_aspect;
+        let viewport_aspect = stage_viewport.width / stage_viewport.height;
+        let (stage_width, stage_height) = if viewport_aspect > source_aspect {
+            (stage_viewport.height * source_aspect, stage_viewport.height)
+        } else {
+            (stage_viewport.width, stage_viewport.width / source_aspect)
+        };
         let stage = LogicalRect {
             x: stage_viewport.x + (stage_viewport.width - stage_width) / 2.0,
             y: stage_viewport.y + (stage_viewport.height - stage_height) / 2.0,
@@ -106,6 +115,9 @@ impl NativeHostLayout {
             epoch,
             browser,
             inspector,
+            stage_header,
+            stage_viewport,
+            stage_transport,
             stage,
             timeline,
             stage_physical: physical_rect(stage, scale_factor, physical_width, physical_height)

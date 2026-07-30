@@ -209,7 +209,7 @@ impl NativeTimelineRenderer {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct TimelineSceneStats {
     pub(crate) rows: usize,
     pub(crate) bars: usize,
@@ -261,8 +261,11 @@ fn build_scene(
     projection: &TimelineProjection,
     primary: Option<LayerId>,
 ) -> Result<(Scene, TimelineSceneStats), NativeTimelineRendererError> {
-    let timeline = layout.timeline_physical;
-    let scale = f64::from(timeline.width) / layout.timeline.width;
+    let (Some(timeline), Some(timeline_logical)) = (layout.timeline_physical, layout.timeline)
+    else {
+        return Ok((Scene::new(), TimelineSceneStats::default()));
+    };
+    let scale = f64::from(timeline.width) / timeline_logical.width;
     let key_tools_width = KEY_TOOLS_WIDTH * scale;
     let rail_width = BAND_RAIL_WIDTH * scale;
     let header_height = HEADER_HEIGHT * scale;
@@ -685,16 +688,18 @@ pub(crate) enum NativeTimelineRendererError {
 
 pub(crate) fn key_tools_logical_rect(
     layout: NativeHostLayout,
-) -> crate::native_host_layout::LogicalRect {
-    crate::native_host_layout::LogicalRect {
-        x: layout.timeline.x,
-        y: layout.timeline.y,
-        width: KEY_TOOLS_WIDTH.min(layout.timeline.width),
-        height: layout.timeline.height,
-    }
+) -> Option<crate::native_host_layout::LogicalRect> {
+    layout
+        .timeline
+        .map(|timeline| crate::native_host_layout::LogicalRect {
+            x: timeline.x,
+            y: timeline.y,
+            width: KEY_TOOLS_WIDTH.min(timeline.width),
+            height: timeline.height,
+        })
 }
 
 #[allow(dead_code)]
-fn _timeline_rect(layout: NativeHostLayout) -> PhysicalRect {
+fn _timeline_rect(layout: NativeHostLayout) -> Option<PhysicalRect> {
     layout.timeline_physical
 }

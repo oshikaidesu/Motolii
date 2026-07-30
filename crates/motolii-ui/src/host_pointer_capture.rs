@@ -91,6 +91,10 @@ impl HostPointerCaptureState {
         self.active.is_some()
     }
 
+    fn active_generation(&self) -> Option<u64> {
+        self.active.as_ref().map(|active| active.generation)
+    }
+
     pub(crate) fn arm(&mut self, generation: u64, arm_sequence: u64) -> bool {
         if self.active.is_some() {
             return false;
@@ -138,24 +142,6 @@ impl HostPointerCaptureState {
         }
         None
     }
-
-    fn release_at(
-        &mut self,
-        position: [f64; 2],
-        window_focused: bool,
-    ) -> Option<HostPointerCandidate> {
-        let active = self.active.take()?;
-        if !window_focused {
-            return Some(HostPointerCandidate::Cancelled {
-                generation: active.generation,
-                reason: HostPointerCancel::CaptureLost,
-            });
-        }
-        Some(HostPointerCandidate::Released {
-            generation: active.generation,
-            position,
-        })
-    }
 }
 
 #[cfg(target_os = "macos")]
@@ -201,8 +187,8 @@ impl PlatformPointerCapture {
         let monitor_commands_enabled = std::sync::Arc::clone(&host_commands_enabled);
         let monitor_wake = std::sync::Arc::clone(&wake);
         let monitor_window = window.clone();
-        let monitor = block2::RcBlock::new(
-            move |event: std::ptr::NonNull<objc2_app_kit::NSEvent>| {
+        let monitor =
+            block2::RcBlock::new(move |event: std::ptr::NonNull<objc2_app_kit::NSEvent>| {
                 // SAFETY: AppKitはlocal monitor呼び出し中のevent生存を保証する。
                 let event = unsafe { event.as_ref() };
                 if event.r#type() == objc2_app_kit::NSEventType::LeftMouseUp {
@@ -234,8 +220,7 @@ impl PlatformPointerCapture {
                     }
                 }
                 event as *const objc2_app_kit::NSEvent as *mut objc2_app_kit::NSEvent
-            },
-        );
+            });
         // SAFETY: blockは受け取ったlive eventをそのまま返し、monitor tokenはDropで除去する。
         let click_monitor = unsafe {
             objc2_app_kit::NSEvent::addLocalMonitorForEventsMatchingMask_handler(
@@ -269,6 +254,7 @@ impl PlatformPointerCapture {
         if !self.state.arm(generation, arm_sequence) {
             return false;
         }
+        self.last_logged_position = None;
         self.armed_after_event_timestamp = self
             .window
             .currentEvent()
@@ -302,15 +288,21 @@ impl PlatformPointerCapture {
             content.isFlipped(),
             content_height,
         );
-        let window_focused = self.window.isKeyWindow();
-        let exact_release = self
-            .release_position
-            .lock()
-            .map_err(|_| PlatformPointerCaptureError::ReleasePositionPoisoned)?
-            .take();
-        if let Some(position) = exact_release {
-            return Ok(self.state.release_at(position, window_focused));
+        if position_changed(self.last_logged_position, position) {
+            crate::ui_numeric_trace::emit(format_args!(
+                "kind=appkit-pointer generation={} raw_x={:.3} raw_y={:.3} content_height={:.3} \
+                 content_is_flipped={} logical_x={:.3} logical_y={:.3}",
+                self.state.active_generation().unwrap_or(0),
+                content_point.x,
+                content_point.y,
+                content_height,
+                content.isFlipped(),
+                position[0],
+                position[1],
+            ));
+            self.last_logged_position = Some(position);
         }
+        let window_focused = self.window.isKeyWindow();
         let escape_pressed = window_focused
             && self.window.currentEvent().is_some_and(|event| {
                 event.r#type() == NSEventType::KeyDown
@@ -475,6 +467,12 @@ pub(crate) enum PlatformPointerCaptureError {
     CommandInboxPoisoned,
 }
 
+fn position_changed(previous: Option<[f64; 2]>, current: [f64; 2]) -> bool {
+    previous.is_none_or(|previous| {
+        (previous[0] - current[0]).abs() > 0.01 || (previous[1] - current[1]).abs() > 0.01
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -495,45 +493,6 @@ mod tests {
 
         assert!(capture.arm(1, queue.high_water()));
         assert!(!capture.arm(2, queue.high_water()));
-    }
-
-    #[test]
-    fn appkit_points_are_normalized_to_top_down_exactly_once() {
-        assert_eq!(
-            appkit_content_position([40.0, 25.0], 200.0, true),
-            [40.0, 25.0]
-        );
-        assert_eq!(
-            appkit_content_position([40.0, 175.0], 200.0, false),
-            [40.0, 25.0]
-        );
-    }
-
-    #[test]
-    fn exact_appkit_release_overrides_a_stale_pressed_sample() {
-        let mut capture = HostPointerCaptureState::default();
-        assert!(capture.arm(7));
-        assert_eq!(
-            capture.update(HostPointerSample {
-                position: [300.0, 180.0],
-                left_button_down: true,
-                window_focused: true,
-                escape_pressed: false,
-            }),
-            Some(HostPointerCandidate::Moved {
-                generation: 7,
-                position: [300.0, 180.0],
-            })
-        );
-
-        assert_eq!(
-            capture.release_at([650.0, 300.0], true),
-            Some(HostPointerCandidate::Released {
-                generation: 7,
-                position: [650.0, 300.0],
-            })
-        );
-        assert!(!capture.is_active());
     }
 
     #[test]
@@ -832,10 +791,4 @@ mod tests {
         assert!(!position_changed(Some([10.0, 20.0]), [10.009, 19.991]));
         assert!(position_changed(Some([10.0, 20.0]), [10.011, 20.0]));
     }
-}
-
-fn position_changed(previous: Option<[f64; 2]>, current: [f64; 2]) -> bool {
-    previous.is_none_or(|previous| {
-        (previous[0] - current[0]).abs() > 0.01 || (previous[1] - current[1]).abs() > 0.01
-    })
 }

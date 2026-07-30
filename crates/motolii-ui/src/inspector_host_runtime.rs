@@ -73,6 +73,16 @@ publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
                 position: wry::dpi::LogicalPosition::new(rect.x, rect.y).into(),
                 size: wry::dpi::LogicalSize::new(rect.width, rect.height).into(),
             })?;
+            crate::ui_numeric_trace::emit(format_args!(
+                "kind=webview surface=inspector event=bounds layout_epoch={} visible=true \
+                 x={:.3} y={:.3} width={:.3} height={:.3}",
+                layout_epoch, rect.x, rect.y, rect.width, rect.height,
+            ));
+        } else {
+            crate::ui_numeric_trace::emit(format_args!(
+                "kind=webview surface=inspector event=bounds layout_epoch={} visible=false",
+                layout_epoch,
+            ));
         }
         self.webview.set_visible(rect.is_some())?;
         self.latest_layout_epoch = Some(layout_epoch);
