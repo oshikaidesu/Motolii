@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -47,8 +47,14 @@ function validateCurrentManifestSource(manifest) {
   }
 }
 
-export function validateCurrentRoutePublication(manifest, captures) {
-  validateCurrentManifestSource(manifest);
+export function validateCurrentRoutePublication(
+  manifest,
+  captures,
+  { requireCurrentSource = true } = {},
+) {
+  if (requireCurrentSource) {
+    validateCurrentManifestSource(manifest);
+  }
 
   const validatedManifest = validateCurrentRouteManifest(manifest, {
     expectedVariants: REFERENCE_VARIANTS,
@@ -98,11 +104,6 @@ function publishFail(kind, message, cause) {
 }
 
 export async function publishCurrentRouteGeneration({ root, manifest, captures, inject }) {
-  const currentPath = path.join(root, "CURRENT");
-  if (existsSync(currentPath) && !inject) {
-    throwRouteError("CR2-PUBLISH", "current generation already exists");
-  }
-
   return publishImmutableGeneration({
     root,
     manifest,
@@ -113,10 +114,17 @@ export async function publishCurrentRouteGeneration({ root, manifest, captures, 
   });
 }
 
-export async function readPublishedCurrentRouteGeneration({ root }) {
+export async function readPublishedCurrentRouteGeneration({
+  root,
+  requireCurrentSource = true,
+}) {
   return readImmutableGeneration({
     root,
-    validate: validateCurrentRoutePublication,
+    validate(manifest, captures) {
+      return validateCurrentRoutePublication(manifest, captures, {
+        requireCurrentSource,
+      });
+    },
     fail(kind, message, cause) {
       if (kind === "schema") return throwRouteError("CR2-SCHEMA", message, cause);
       if (kind === "capture") return throwRouteError("CR2-CAPTURE", message, cause);
