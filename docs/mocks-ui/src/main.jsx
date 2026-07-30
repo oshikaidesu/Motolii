@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import { StrictMode, useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.jsx";
 import { DiscoveryBrowserCandidate, EasingTriggerCandidate } from "@motolii/motolii-web";
@@ -12,6 +12,37 @@ import { MixedTimelineReference } from "./reference/MixedTimelineReference.jsx";
 import { ParameterEasingReference } from "./reference/ParameterEasingReference.jsx";
 import { SharedEffectRelativeReference } from "./reference/SharedEffectRelativeReference.jsx";
 import { StageFrameToolsReference } from "./reference/StageFrameToolsReference.jsx";
+
+const currentRouteCapture = import.meta.env.MODE === "current-route-capture";
+
+const developmentMediaEnvelope = {
+  media: [
+    { path: "starter-clip.mp4", mediaType: "video/mp4" },
+    { path: "starter-mark.svg", mediaType: "image/svg+xml" },
+    { path: "starter-still.png", mediaType: "image/png" },
+    { path: "starter-tone.wav", mediaType: "audio/wav" },
+  ],
+};
+
+function DiscoveryBrowserCandidateWithDevelopmentProjection(props) {
+  useLayoutEffect(() => {
+    const rootNode = document.getElementById("root");
+    if (!rootNode) {
+      return;
+    }
+    rootNode.setAttribute("data-current-route-capture-ready", "true");
+    return () => {
+      rootNode.removeAttribute("data-current-route-capture-ready");
+    };
+  }, []);
+
+  return (
+    <DiscoveryBrowserCandidate
+      {...props}
+      developmentProjection={developmentMediaEnvelope}
+    />
+  );
+}
 
 // 各画面担当はこのregistryへfixtureを足し、Appの経路解決を共有する。
 export const screenRegistry = {
@@ -94,12 +125,15 @@ export const screenRegistry = {
     Component: LegacyHostBoundaryScreen,
     props: {
       fixture: "plugin-browser-candidate",
-      BrowserComponent: DiscoveryBrowserCandidate,
+      BrowserComponent: currentRouteCapture
+        ? DiscoveryBrowserCandidateWithDevelopmentProjection
+        : DiscoveryBrowserCandidate,
       EasingGraphComponent: EasingGraphCandidate,
       GraphViewComponent: GraphViewCandidate,
       TimelineComponent: TimelineCandidate,
       EasingTriggerComponent: EasingTriggerCandidate,
       resizableLayout: true,
+      developmentEmptyProjection: currentRouteCapture,
     },
     catalogKind: "candidate",
   },

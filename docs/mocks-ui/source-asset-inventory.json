@@ -165,7 +165,7 @@
           "path": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
           "role": "runtime",
           "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5",
-          "currentSha256": "cb81b0d8463ad547123476d1c0e357e8354456813f32d91e4cfb63efe2be265d"
+          "currentSha256": "7c8fb02c38f80cbd046e0b2cd45516a451db9448f628287a6b6eed8cbc7d50a2"
         },
         {
           "path": "docs/mocks-ui/src/candidates/timeline-candidate.css",
@@ -254,7 +254,7 @@
           "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
           "role": "oracle",
           "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416",
-          "currentSha256": "e28e641d8c07a82e5392ada73b935b32aa0ad580de2cb6088b77832e397c1e07"
+          "currentSha256": "3243ffbc863f660ec527def954bf8358c381cd5a492cda13cb4ed95044c9f09e"
         },
         {
           "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
@@ -288,7 +288,7 @@
           {
             "path": "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
             "role": "runtime",
-            "currentSha256": "1e0bdd3eebd665e517600af4db090f74d50951aef12fdd476e97a828de91a3e4"
+            "currentSha256": "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0"
           },
           {
             "path": "ui/motolii-web/src/candidates/inspector-candidate.css",
@@ -375,7 +375,7 @@
           "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
           "role": "legacy-oracle",
           "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416",
-          "currentSha256": "e28e641d8c07a82e5392ada73b935b32aa0ad580de2cb6088b77832e397c1e07"
+          "currentSha256": "3243ffbc863f660ec527def954bf8358c381cd5a492cda13cb4ed95044c9f09e"
         },
         {
           "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
@@ -397,7 +397,7 @@
           "path": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
           "role": "react-oracle",
           "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5",
-          "currentSha256": "cb81b0d8463ad547123476d1c0e357e8354456813f32d91e4cfb63efe2be265d"
+          "currentSha256": "7c8fb02c38f80cbd046e0b2cd45516a451db9448f628287a6b6eed8cbc7d50a2"
         },
         {
           "path": "docs/mocks-ui/src/candidates/timeline-candidate.css",
@@ -432,7 +432,7 @@
           "path": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
           "export": "TimelineCandidate",
           "sha256": "c777d77a7d9403692090199e7fe7e5caec953e0f8509febaf7bc86f692764eb5",
-          "currentSha256": "cb81b0d8463ad547123476d1c0e357e8354456813f32d91e4cfb63efe2be265d",
+          "currentSha256": "7c8fb02c38f80cbd046e0b2cd45516a451db9448f628287a6b6eed8cbc7d50a2",
           "disposition": "whole-container-not-product-timeline"
         }
       ],

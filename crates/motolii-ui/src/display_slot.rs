@@ -133,6 +133,10 @@ impl DisplaySlot {
         self.desc
     }
 
+    pub(crate) fn view(&self) -> &wgpu::TextureView {
+        &self.view
+    }
+
     pub(crate) fn evidence(&self) -> DisplaySlotEvidence {
         DisplaySlotEvidence {
             slot_id: self.slot_id,

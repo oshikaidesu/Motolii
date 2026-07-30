@@ -1,0 +1,102 @@
+{
+  "schema": "https://www.designtokens.org/schemas/2025.10/format.json",
+  "generator": {
+    "id": "motolii-ui-token-gen",
+    "version": 2
+  },
+  "input_sha256": "90428f54abb3b45d8e089adc1bbad73f9607ab0c818709fa89efb753b5ad059b",
+  "themes": [
+    "motolii-dark"
+  ],
+  "tokens": [
+    {
+      "path": "color.action.active",
+      "type": "color"
+    },
+    {
+      "path": "color.border.default",
+      "type": "color"
+    },
+    {
+      "path": "color.border.strong",
+      "type": "color"
+    },
+    {
+      "path": "color.data",
+      "type": "color"
+    },
+    {
+      "path": "color.focus",
+      "type": "color"
+    },
+    {
+      "path": "color.shape",
+      "type": "color"
+    },
+    {
+      "path": "color.status.ok",
+      "type": "color"
+    },
+    {
+      "path": "color.status.warning",
+      "type": "color"
+    },
+    {
+      "path": "color.surface.app",
+      "type": "color"
+    },
+    {
+      "path": "color.surface.hover",
+      "type": "color"
+    },
+    {
+      "path": "color.surface.panel",
+      "type": "color"
+    },
+    {
+      "path": "color.surface.raised",
+      "type": "color"
+    },
+    {
+      "path": "color.text.muted",
+      "type": "color"
+    },
+    {
+      "path": "color.text.primary",
+      "type": "color"
+    },
+    {
+      "path": "color.text.secondary",
+      "type": "color"
+    },
+    {
+      "path": "color.way.files",
+      "type": "color"
+    },
+    {
+      "path": "color.way.inspector",
+      "type": "color"
+    },
+    {
+      "path": "color.way.plugins",
+      "type": "color"
+    },
+    {
+      "path": "color.way.project",
+      "type": "color"
+    },
+    {
+      "path": "color.way.stage",
+      "type": "color"
+    },
+    {
+      "path": "color.way.timeline",
+      "type": "color"
+    }
+  ],
+  "outputs": [
+    "tokens.rs",
+    "tokens.css",
+    "manifest.json"
+  ]
+}

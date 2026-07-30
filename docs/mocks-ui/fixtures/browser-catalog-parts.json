@@ -1,0 +1,177 @@
+{
+  "catalog_revision": 1,
+  "vocabularies": {
+    "scopes": [
+      { "id": "catalog-scope-1", "label": "catalog-scope-1", "scope_ref": null },
+      { "id": "catalog-scope-2", "label": "catalog-scope-2", "scope_ref": null }
+    ],
+    "taxonomies": [
+      { "id": "taxonomy-a", "label": "taxonomy-a", "scope_ref": "catalog-scope-1" },
+      { "id": "taxonomy-b", "label": "taxonomy-b", "scope_ref": "catalog-scope-1" },
+      { "id": "taxonomy-c", "label": "taxonomy-c", "scope_ref": "catalog-scope-2" },
+      { "id": "taxonomy-d", "label": "taxonomy-d", "scope_ref": null }
+    ],
+    "providers": [
+      { "id": "provider-a", "label": "provider-a", "scope_ref": null },
+      { "id": "provider-b", "label": "provider-b", "scope_ref": null },
+      { "id": "provider-c", "label": "provider-c", "scope_ref": null }
+    ],
+    "packs": [
+      { "id": "motion-kit-alpha", "label": "motion-kit-alpha", "scope_ref": null }
+    ],
+    "install_states": [
+      { "id": "install-state-a", "label": "install-state-a", "scope_ref": null },
+      { "id": "install-state-b", "label": "install-state-b", "scope_ref": null }
+    ],
+    "impact_units": [
+      { "id": "impact-unit-a", "label": "impact-unit-a", "scope_ref": null }
+    ],
+    "tags": [
+      { "id": "go-to", "label": "go-to", "scope_ref": null },
+      { "id": "atmosphere", "label": "atmosphere", "scope_ref": null },
+      { "id": "kinetic", "label": "kinetic", "scope_ref": null },
+      { "id": "review", "label": "review", "scope_ref": null },
+      { "id": "layout", "label": "layout", "scope_ref": null },
+      { "id": "brand-kit", "label": "brand-kit", "scope_ref": null },
+      { "id": "animated", "label": "animated", "scope_ref": null },
+      { "id": "prototype", "label": "prototype", "scope_ref": null }
+    ]
+  },
+  "catalogs": [
+    {
+      "scope_ref": "catalog-scope-1",
+      "items": [
+        {
+          "item_id": "echo-bloom",
+          "display_name": "Echo Bloom",
+          "taxonomy_refs": ["taxonomy-a", "taxonomy-b"],
+          "provider_ref": null,
+          "pack_ref": "motion-kit-alpha",
+          "install_state_ref": null,
+          "preview_kind": "motion",
+          "impact": null,
+          "tag_refs": ["go-to", "atmosphere"]
+        },
+        {
+          "item_id": "type-pulse",
+          "display_name": "Type Pulse",
+          "taxonomy_refs": ["taxonomy-a"],
+          "provider_ref": null,
+          "pack_ref": "motion-kit-alpha",
+          "install_state_ref": null,
+          "preview_kind": "motion",
+          "impact": {
+            "measures": [{ "amount": 12, "unit_ref": "impact-unit-a" }]
+          },
+          "tag_refs": ["kinetic"]
+        },
+        {
+          "item_id": "fold-field",
+          "display_name": "Fold Field",
+          "taxonomy_refs": ["taxonomy-a"],
+          "provider_ref": null,
+          "pack_ref": null,
+          "install_state_ref": "install-state-a",
+          "preview_kind": "poster",
+          "impact": null,
+          "tag_refs": ["review"]
+        }
+      ]
+    },
+    {
+      "scope_ref": "catalog-scope-2",
+      "items": [
+        {
+          "item_id": "rectangle",
+          "display_name": "Rectangle",
+          "taxonomy_refs": ["taxonomy-c"],
+          "provider_ref": "provider-a",
+          "pack_ref": null,
+          "install_state_ref": null,
+          "preview_kind": "poster",
+          "impact": null,
+          "tag_refs": ["layout"]
+        },
+        {
+          "item_id": "ellipse",
+          "display_name": "Ellipse",
+          "taxonomy_refs": ["taxonomy-c"],
+          "provider_ref": "provider-a",
+          "pack_ref": null,
+          "install_state_ref": null,
+          "preview_kind": "poster",
+          "impact": null,
+          "tag_refs": []
+        },
+        {
+          "item_id": "text",
+          "display_name": "Text",
+          "taxonomy_refs": ["taxonomy-c"],
+          "provider_ref": "provider-a",
+          "pack_ref": null,
+          "install_state_ref": null,
+          "preview_kind": "poster",
+          "impact": null,
+          "tag_refs": ["brand-kit"]
+        },
+        {
+          "item_id": "solid",
+          "display_name": "Solid",
+          "taxonomy_refs": ["taxonomy-c"],
+          "provider_ref": "provider-a",
+          "pack_ref": null,
+          "install_state_ref": null,
+          "preview_kind": "poster",
+          "impact": null,
+          "tag_refs": ["brand-kit"]
+        },
+        {
+          "item_id": "glyph-current",
+          "display_name": "Glyph Current",
+          "taxonomy_refs": ["taxonomy-c", "taxonomy-d"],
+          "provider_ref": "provider-b",
+          "pack_ref": "motion-kit-alpha",
+          "install_state_ref": null,
+          "preview_kind": "motion",
+          "impact": null,
+          "tag_refs": ["animated"]
+        },
+        {
+          "item_id": "type-pulse",
+          "display_name": "Type Pulse",
+          "taxonomy_refs": ["taxonomy-c"],
+          "provider_ref": "provider-b",
+          "pack_ref": "motion-kit-alpha",
+          "install_state_ref": null,
+          "preview_kind": "motion",
+          "impact": {
+            "measures": [{ "amount": 12, "unit_ref": "impact-unit-a" }]
+          },
+          "tag_refs": ["brand-kit", "animated"]
+        },
+        {
+          "item_id": "ribbon-array",
+          "display_name": "Ribbon Array",
+          "taxonomy_refs": ["taxonomy-c"],
+          "provider_ref": "provider-b",
+          "pack_ref": "motion-kit-alpha",
+          "install_state_ref": "install-state-b",
+          "preview_kind": "poster",
+          "impact": null,
+          "tag_refs": ["prototype"]
+        },
+        {
+          "item_id": "particle-field",
+          "display_name": "Particle Field",
+          "taxonomy_refs": ["taxonomy-c"],
+          "provider_ref": "provider-c",
+          "pack_ref": null,
+          "install_state_ref": null,
+          "preview_kind": "motion",
+          "impact": null,
+          "tag_refs": ["animated"]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "_tokens-4X_Bky8Q.js": {
+    "file": "assets/tokens-4X_Bky8Q.js",
+    "name": "tokens",
+    "css": [
+      "assets/tokens-Dq8978N5.css"
+    ]
+  },
+  "_tokens-Dq8978N5.css": {
+    "file": "assets/tokens-Dq8978N5.css",
+    "src": "_tokens-Dq8978N5.css"
+  },
+  "host.html": {
+    "file": "assets/host-gJ40uukV.js",
+    "name": "host",
+    "src": "host.html",
+    "isEntry": true,
+    "imports": [
+      "_tokens-4X_Bky8Q.js"
+    ],
+    "css": [
+      "assets/host-4krs5Bey.css"
+    ]
+  },
+  "inspector.html": {
+    "file": "assets/inspector-BMvtfoSi.js",
+    "name": "inspector",
+    "src": "inspector.html",
+    "isEntry": true,
+    "imports": [
+      "_tokens-4X_Bky8Q.js"
+    ],
+    "css": [
+      "assets/inspector-fMh9jxYJ.css"
+    ]
+  }
+}

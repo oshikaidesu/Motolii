@@ -534,6 +534,7 @@ export function TimelineCandidate({
   legacyCurveShelf,
   resizeHandle,
   onActiveIntervalChange,
+  emptyProjection = false,
 }) {
   const [packHeights, setPackHeights] = useState(() =>
     Array.from({ length: BAND_COUNT }, () => 34),
@@ -597,16 +598,22 @@ export function TimelineCandidate({
   const hasSolo = soloed.size > 0;
   const visibleObjects = useMemo(
     () =>
-      OBJECTS.filter(
-        (object) =>
-          !object.parentId || expandedGroups.has(object.parentId),
-      ),
-    [expandedGroups],
+      emptyProjection
+        ? []
+        : OBJECTS.filter(
+            (object) =>
+              !object.parentId || expandedGroups.has(object.parentId),
+          ),
+    [expandedGroups, emptyProjection],
   );
   const packLayout = useMemo(() => {
     let top = 0;
     const visibleBandIds = [
-      ...new Set(visibleObjects.map((object) => object.band)),
+      ...new Set(
+        emptyProjection
+          ? [0, 1, 2, 3, 4]
+          : visibleObjects.map((object) => object.band),
+      ),
     ].sort((a, b) => a - b);
     return visibleBandIds.map((bandId) => {
       const baseHeight = packHeights[bandId];
@@ -649,6 +656,7 @@ export function TimelineCandidate({
   const packContentHeight =
     packLayout[packLayout.length - 1]?.bottom ?? 0;
   const activeInterval = useMemo(() => {
+    if (emptyProjection) return null;
     const object = OBJECTS.find(
       (entry) => entry.id === focusedAutomation.objectId,
     );
@@ -1052,7 +1060,7 @@ export function TimelineCandidate({
         ) : null}
       </div>
 
-      <DepthRail
+      {!emptyProjection && <DepthRail
         depthByObject={depthByObject}
         depthOpen={depthOpen}
         depthScope={depthScope}
@@ -1077,7 +1085,7 @@ export function TimelineCandidate({
           setDepthScope(scope);
           setDepthToolOpen(false);
         }}
-      />
+      />}
 
       {/* legacy bridgeの初期化だけを満たし、製品面へInboxを再表示しない。 */}
       <div hidden aria-hidden="true">
@@ -1095,7 +1103,7 @@ export function TimelineCandidate({
           keyToolsOpen ? " has-key-tools" : ""
         }`}
       >
-        <div
+        {!emptyProjection && <div
           className="candidate-band-action-rail"
           aria-label="帯上のObjectを一括操作"
         >
@@ -1161,15 +1169,15 @@ export function TimelineCandidate({
               </div>
             ))}
           </div>
-        </div>
+        </div>}
         <KeyToolsCandidate
           open={keyToolsOpen}
           onOpen={() => setKeyToolsOpen(true)}
           onClose={() => setKeyToolsOpen(false)}
           mode={keyToolsMode}
           onModeChange={setKeyToolsMode}
-          keyCount={selectedKeys.size}
-          layerCount={selectedObjects.size}
+          keyCount={emptyProjection ? 0 : selectedKeys.size}
+          layerCount={emptyProjection ? 0 : selectedObjects.size}
           scope={keyScope}
           onScopeChange={setKeyScope}
           keySection={keySection}
@@ -1214,7 +1222,7 @@ export function TimelineCandidate({
                   />
                 ))}
               </div>
-              {OBJECTS.filter(
+              {visibleObjects.filter(
                 (object) =>
                   object.isGroup && expandedGroups.has(object.id),
               ).map((group) => {
@@ -1425,7 +1433,7 @@ export function TimelineCandidate({
                   </div>
                 );
               })}
-              {automationMenu
+              {!emptyProjection && automationMenu
                 ? (() => {
                     const object = OBJECTS.find(
                       (entry) => entry.id === automationMenu,

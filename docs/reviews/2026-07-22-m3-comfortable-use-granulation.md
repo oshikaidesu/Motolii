@@ -109,7 +109,7 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 
 | 項目 | 内容 |
 |---|---|
-| 種類 / 状態 | `SPEC / DECIDE` |
+| 種類 / 状態 | `SPEC / DONE` |
 | 一成果 | fixed-Mac platform prerequisite evidenceとdistribution gateを別ID・別証跡にする |
 | authority | M3 G0-9、product mock recovery §6、快適利用map §3.2/W0g |
 | 変更面 | `docs/specs/M3-ui-integration.md`、`docs/implementation-ledger.md`、`docs/ui-runtime-architecture.md`、G0-9現行decisionの追補、decision index |
@@ -121,7 +121,7 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 
 | 項目 | 内容 |
 |---|---|
-| 種類 / 状態 | `SPEC / WAIT`（CU-G01） |
+| 種類 / 状態 | `SPEC / DONE`（CU-G01 `DONE`） |
 | 一成果 | Selected U seriesへRectangle D2、Vector、U3a、U2h subset、D5、project lifecycle、Exportの合流順を入れる |
 | authority | implementation ledger、M3直列順、Rectangle contract §10、work map §9.1 |
 | 変更面 | `docs/implementation-ledger.md`、`docs/specs/M3-ui-integration.md`、既存U枝番表、decision index |
@@ -133,13 +133,13 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 
 | 項目 | 内容 |
 |---|---|
-| 種類 / 状態 | `SPEC / DECIDE` |
-| 一成果 | `apply_macro`、journal commit、drag terminal、snapshot/selection publishの順序と失敗時正本を決める |
+| 種類 / 状態 | 親`DONE`。`CU-G03D SPEC / DONE`、`CU-G03R M2 prerequisite / DONE`（[#369](https://github.com/oshikaidesu/Motolii/pull/369)、[CU-G03決定](2026-07-26-cu-g03-edit-durability-ordering-decision.md)） |
+| 一成果 | VS-1の単一command actionについて、non-live preflight、journal commit、live Apply/Undo/Redo、revision、snapshot/selection publishの順序と失敗時正本を決定済み |
 | authority | M2 D1d/D1m/D2、U2b、Rectangle contract §8/§11 |
 | 変更面 | M2仕様のD2/journal追補、Rectangle D2 decision、M3 U2b依存記述、decision index |
-| 正例 | 成功時だけdurable editと整合snapshotが一度見え、reopenで同じDocument意味を復元する |
-| 負例 | journal失敗後に成功snapshotをpublish、UI retryで二重適用、selectionをjournalへ保存 |
-| STOP | crash境界の正本または既存journal互換を一意に決められない |
+| 正例 | Apply/Redoはforward、Undoはinverseを各1件durable commitし、live成功後だけreconcile済みsnapshotを一度publish。CU-G03Rはcatalog未反映committed tailにMainFileを返さず既存replayで最終Document意味を復元する |
+| 負例 | journal失敗後に成功snapshotをpublish、post-durable失敗をretry、UI retryで二重適用、selectionをjournalへ保存 |
+| STOP | 複数command macro耐久、journal payload/min-reader変更、public raw writer、再起動後Undo履歴が必要。CU-G03Rはcatalog repair/truncateやGAP-24を含めない |
 
 ### CU-G04 project lifecycle製品入口仕様
 
@@ -205,10 +205,10 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 
 | 項目 | 内容 |
 |---|---|
-| 種類 / 状態 | `SPEC / WAIT`（CU-0A04） |
-| 一成果 | Browser itemごとのsubtype/availability/motion/impact/provider/tagをDocument外Host read modelへ閉じる |
-| authority | React直接移管契約 §7、G0-3分離、Browser既決表示 |
-| 変更面 | Host read-model decision、M3仕様/枝番表、decision index。Document/plugin公開契約は変更しない |
+| 種類 / 状態 | `SPEC / DONE`（CU-0A04 DONE、[CU-G09 Browser catalog projection契約決定](2026-07-26-cu-g09-browser-catalog-projection-contract-decision.md)） |
+| 一成果 | Browser catalog（`PluginCard`+`ElementCard`）のcarrier shape、`(scope_ref,item_id)` identity、fail-closed `B1`〜`B12`をDocument外Host read modelとして閉じた |
+| authority | React直接移管契約 §7、G0-3分離、Browser既決表示、CU-0A08IS §6a禁止key引き継ぎ |
+| 変更面 | [CU-G09決定](2026-07-26-cu-g09-browser-catalog-projection-contract-decision.md)、M3仕様/枝番表、decision index、implementation ledger。Document/plugin公開契約は変更しない |
 | 正例 | unknown/dangling/non-finite/oversizedをtyped拒否し、fixtureと製品が同じdecoderを使う |
 | 負例 | catalog ID/label/thumbnail token/indexから意味を推測、`??`でもっともらしく表示 |
 | STOP | 必要fieldがplugin/community公開契約またはDocument schema変更を要求 |
@@ -242,13 +242,23 @@ Fable/Grokの助言だけで`WAIT`を`DO`へ上げず、Codexがauthority、コ�
 | CU-0A07A | `ORACLE / DONE` | [#353](https://github.com/oshikaidesu/Motolii/pull/353)で未変更legacy Inspectorへ構造・style・ARIA・操作oracleを固定 | CU-0A07S | 5状態と主要操作を再現し、source/threshold/golden変更0 | — |
 | CU-0A07B | `ASSET / DONE` | [#355](https://github.com/oshikaidesu/Motolii/pull/355)で固定mock内でInspectorを同形React化しlegacy adapterを封じる | CU-0A07A | exact-count containment、双方向store 0、skeleton代用0 | — |
 | CU-0A07C | `ASSET / DONE` | [#357](https://github.com/oshikaidesu/Motolii/pull/357): R4B source/CSSをproduct ownerへbyte同一移管 | CU-0A07B | mock copy 0、legacy runtime import 0、state owner維持 | source closureや公開境界の変更が必要 |
-| CU-0A08B | `CORE / WAIT` | Browser fixture stateをrevision付きprojection/typed intentへ交換 | CU-0A04、CU-G09 | unknown/non-finite/oversized/dangling拒否、React semantic write 0 | catalog field不足をID/labelから推測したくなる |
+| CU-0A08B | `CORE / SPLIT` | Browser接続をprojection decoderとtyped intentへ分離 | CU-0A04、CU-G09 | CU-0A08BP→CU-0A08BTの順で一契約境界ずつ閉じる | decoderとHost接続を一粒へ戻したくなる |
+| CU-G09O | `SPEC / DONE` | CU-G09の未決decoder出力shapeと拒否family写像を内部read-model契約として追補 | CU-G09 | [CU-G09O Browser decoder output契約決定](2026-07-26-cu-g09o-browser-decoder-output-contract-decision.md): validated snapshotのdeep clone、B11旧文言の明示撤回、B12不変条件化、B13/B14型gate、`S`意味追加0 | vocabularies/label経路を落とす、またはguard testを正本にしたくなる |
+| CU-G09R | `SPEC / DONE` | Browser decoder拒否familyの重複・残余入力・CU-G09O I2外の空ID/ref境界を追補 | CU-G09、CU-G09O | 一つのmalformed入力を一つのfamilyへ決定的に帰属させ、全残余入力とI2外の空文字境界を処分し、`S`意味追加0 | test列挙や実装順を暗黙の正本にしたくなる |
+| CU-0A08BP | `CORE / DONE` | CU-G09/CU-G09O/CU-G09R準拠のproduct-owned・非export pure Browser catalog decoder | CU-0A04、CU-G09、CU-G09O、CU-G09R | strict revision、unknown/non-finite/oversized/dangling/§6a禁止key拒否、React semantic write 0 | `S`行、drag payload、Host transport、JSX bindingが必要 |
+| CU-0A08BT | `CORE / SPLIT` | Browser read-only projectionとtyped intentを分離 | CU-0A08BP | [CU-0A08BTR](2026-07-29-cu-0a08btr-browser-read-projection-dependency-reclosure-decision.md)によりBTP→BTIへ分割 | BTPを通常製品route完成と読み替えたくなる |
+| CU-0A08BTP | `PRODUCT / DONE` | decoded Rectangle identityのproduct component入力→private JSX透過 | CU-0A08BP、CU-0A08RS、CU-0A08SSCI-P1/I/T1 | [CU-0A08BTP実装決定](2026-07-29-cu-0a08btp-browser-read-projection-jsx-connection-implementation-decision.md)。Rectangle 1件、非推測、runtime caller/Host wire/intent 0 | mock/dev producerまたはidentity推測が必要 |
+| CU-0A08BTI | `CORE / DONE` | Browser Place typed intentをHost callbackへ接続 | CU-0A08BTP、CU-0A08RMD、CU-0A08BDD | [実装決定](2026-07-29-cu-0a08bti-browser-place-typed-intent-implementation-decision.md)。Rectangle 1 gesture=1 frozen intent、React正本0 | — |
 | CU-0A08E | `CORE / WAIT` | Easing trigger stateをHost projection/typed intentへ交換 | CU-0A05B、U4b契約 | key上/区間外disabled理由、curve state二重所有0 | Interp/区間意味の新契約が必要 |
 | CU-0A08K | `CORE / WAIT` | KEYS/LAYERS stateをHost projection/typed intentへ交換 | CU-0A06、既存U3a/U4a/U4b projection契約 | selection/packingをReactが所有しない、reloadでHostから復元 | native/React間に双方向storeが必要 |
-| CU-0A08IS | `SPEC / DO` | Inspector全表示を既決sourceあり／未決へ分類しread-model入力と拒否条件を固定 | CU-0A07C | 1要素1source、未決推測0、code/API変更0 | Document/plugin/transport/intent意味の発明が必要 |
-| CU-0A08IP | `CORE / WAIT` | fixture由来read-only projection decoder。Host transportは非目標 | CU-0A08IS | unknown/non-finite/dangling/stale拒否、React semantic write 0 | 二重store、DOM変更、公開transportが必要 |
-| CU-0A08IT | `CORE / WAIT` | 既存DomainIntent→DocumentCommandRequest→D2へInspector操作を接続 | CU-0A08IP、U4a-2/U4c | 1 gesture=1 intent、Cancel/失敗=変更0 | 別intent終端、React Undo/selection正本が必要 |
-| CU-0A09 | `PRODUCT / WAIT` | R6 diagnostic routeをproduction navigationから分離 | CU-0A08B/E/K/IT | 通常routeは正しい製品面、diagnosticはdevelopment限定 | diagnostic画面しか成立しない |
+| CU-0A08IS | `SPEC / DONE` | Inspector全表示を既決sourceあり／未決へ分類しread-model入力と拒否条件を固定 | CU-0A07C | 1要素1source、未決推測0、code/API変更0 | Document/plugin/transport/intent意味の発明が必要 |
+| CU-0A08IP | `CORE / DONE` | fixture由来read-only projection decoder。Host transportは非目標 | CU-0A08IS | unknown/non-finite/dangling/stale拒否、React semantic write 0 | 二重store、DOM変更、公開transportが必要 |
+| CU-0A08IT | `CORE / SPLIT` | Inspector read-only projectionとtyped intent/Host接続を分離 | CU-0A08IP | [CU-0A08ITP実装決定](2026-07-29-cu-0a08itp-inspector-read-projection-jsx-connection-implementation-decision.md)によりITP→ITIへ分割 | ITPを通常製品route完成と読み替えたくなる |
+| CU-0A08ITP-P | `SPEC / DONE` | Inspector component byteと専用post-promotion chain authorityを先行閉鎖 | CU-0A08IP、CU-0A08RS | [CU-0A08ITP-P改訂](2026-07-29-cu-0a08itp-p-inspector-post-promotion-authority-amendment.md)。Browser chain不変、Inspector専用5-key chainと正負matrix | 汎用multi-file chainまたは第三chainが必要 |
+| CU-0A08ITP | `PRODUCT / DONE` | decoded Inspector targetの既決3 fieldを既存installed identity JSXへ透過 | CU-0A08ITP-P、CU-0A08IP、CU-0A08RS | [CU-0A08ITP実装決定](2026-07-29-cu-0a08itp-inspector-read-projection-jsx-connection-implementation-decision.md)。runtime caller/Host wire/intent/他branch 0 | mock/dev producerまたは未決表示推測が必要 |
+| CU-0A08ITI | `CORE / WAIT` | Inspector typed intentとHost接続 | CU-0A08ITP、U4a-2 | 1 gesture=1 intent、React正本0 | 別intent終端、React Undo/selection正本が必要 |
+| CU-0A09 | `PRODUCT / SPLIT` | R6 diagnostic routeをproduction navigationから分離 | CU-0A08B/E/K/IT | [CU-0A09S](2026-07-29-cu-0a09s-r6-surface-closure-boundary-decision.md)で通常製品routeをH1b/W0bへ帰属。Browser子粒`CU-0A09B`は`DONE`、Inspector/KEYS-LAYERS/Easing triggerは各R5交換待ち | diagnostic画面しか成立しない |
+| CU-0A09S | `SPEC / DONE` | R6残surface閉集合と通常製品route帰属を固定 | CU-0A09B | Browser DONE、I/K/E WAIT、eligible R6実装0。R6↔H1b循環0、code/entry変更0 | R5未完了stateをfixture/defaultで埋めたくなる |
 
 React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`まで8ラベルを順番どおり持つ。
 
@@ -271,28 +281,49 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 
 | ID | 種類 / 状態 | 一成果 | 依存 | 合格と必須負例 | STOP |
 |---|---|---|---|---|---|
-| CU-0B01 | `HUMAN / WAIT` | G0-6Hで5画面の階層・識別・馴染みを判定 | CU-0A02 | `docs/mocks-ui/reference-handoff.md`へ判定者/条件/採否理由を保存。agentが目視代行しない。G0-9L限定PASSを製品前提充足へ読み替えない | reference画面欠落 |
-| CU-0B02 | `PRODUCT / WAIT` | U0e-3 token/component state/iconを製品導入 | CU-0B01 | contrast/focus/意味色+形、raw color/spacing拒否 | 新画面固有componentが必要 |
-| CU-0B03 | `PRODUCT / WAIT` | H1b codec/offline bundle/mountをHostへ接続 | CU-0A09、別途確定する製品前提 | CDN/HMR/fixture script依存0、invalid/stale codec拒否。G0-9L evidenceを依存充足にしない | WebView transportを公開plugin APIへ一般化したくなる |
-| CU-0B04N | `PRODUCT / WAIT` | native Stage/Timeline viewportを1 top-level Surfaceへ接続 | CU-0B02、別途確定する製品前提 | 同一device/queue、CPU readback 0、viewport resizeでsemantic不変。G0-9L evidenceを依存充足にしない | native viewportごとに別正本Surfaceが必要 |
-| CU-0B04R | `PRODUCT / WAIT` | opaque child WebView islandsをHost layoutへ接続 | CU-0B03、CU-0B04N | transparent overlay 0、focus/geometry epoch、React semantic state 0。G0-9L evidenceを依存充足にしない | DOM/pxをnative/Document identityへ使いたくなる |
-| CU-0B05 | `E2E / WAIT` | reload/crash/focus/resize後にHost snapshotから再投影 | CU-0B04N/R | 同じrevision/selection、old epoch拒否、Document/history不変 | surface間state同期が必要 |
+| CU-0B01 | `HUMAN / DONE` | G0-6Hで5画面の階層・識別・馴染みを判定 | CU-0A02 | [G0-6H人間審判ACCEPT](2026-07-29-g0-6h-human-acceptance-decision.md)。UI作者がMacBook内蔵画面/100%/暗い室内でlive routeを判定。agent目視代行0 | reference画面欠落 |
+| CU-0B02 | `PRODUCT / SPLIT` | U0e-3 token/component state/iconを製品導入 | CU-0B01 | [CU-0B02S](2026-07-29-cu-0b02s-product-token-ownership-split-decision.md)でT/R/N/C/Iへ分割 | 一粒でsupplier、React、native、component、iconを変更したくなる |
+| CU-0B02S | `SPEC / DONE` | token ownerと接続粒を固定 | CU-0B01 | supplier二重性、単一DTCG、v2生成境界、後続順を決定 | archived sourceを直接変更したくなる |
+| CU-0B02T | `PRODUCT / DONE` | product Dark DTCGとgenerator v2 Rust/CSS/manifest | CU-0B02S、U0e-1 | [実装決定](2026-07-29-cu-0b02t-product-token-authority-implementation-decision.md)。v1 byte不変、21 role、raw supplier拒否、Light/custom/object色発明0 | — |
+| CU-0B02R | `PRODUCT / WAIT` | accepted React routeをgenerated CSS consumerへ反転 | CU-0B02T | legacy token supplier退役、visual/DOM不変、二重supplier 0。Place縦切り完了まで優先度WAIT | archived HTML変更またはthreshold変更が必要 |
+| CU-0B02N | `PRODUCT / WAIT` | native shellを同じgenerated Rust adapterへ接続 | CU-0B02T | 同じrole値、Document保存0、toolkit隔離 | native専用token正本が必要 |
+| CU-0B02C | `PRODUCT / WAIT` | 既存component stateを直接所有移管 | CU-0B02R | focus/hover/pressed/disabled/selected、copy 0 | 縮約再実装が必要 |
+| CU-0B02I | `SPEC / WAIT` | icon grid/stroke system採択 | CU-0B02T | inline SVG/Unicode混在をicon正本と誤認しない | source不在のまま実装したくなる |
+| CU-0B03H | `PRODUCT / DONE` | H1b offline bundle / closed Host callback / mountの最小契約を固定 | CU-0A09B、CU-0A08BTI | [実装決定](2026-07-29-cu-0b03h-browser-host-contract-offline-mount-decision.md)。built-in Browser 1面、network 0、fixture caller 0、公開plugin API 0 | — |
+| CU-0B03 | `PRODUCT / DONE` | H1b exact codecをnative Host inboxへ接続 | CU-0B03H | [実装決定](2026-07-29-cu-0b03-native-browser-host-codec-inbox-implementation-decision.md)。invalid/stale/duplicate/oversize拒否、callback内D2 0、bounded inbox、offline native WebView実caller | — |
+| CU-0B04N | `PRODUCT / DONE` | native Stage/Timeline viewportを1 top-level Surfaceへ接続 | CU-0B04P、direct_vello renderer採択。CU-0B02N visual token consumerはgeometry/inputの入場条件にしない | [実装決定](2026-07-29-cu-0b04n-native-stage-surface-layout-implementation-decision.md)。同一device/queue、CPU readback 0、latest layout epoch hit-test、実Mac表示 | — |
+| CU-0B04R | `PRODUCT / DONE` | opaque child WebView islandsをHost layoutへ接続 | CU-0B03、CU-0B04N | [実装決定](2026-07-29-cu-0b04r-browser-island-focus-geometry-implementation-decision.md)。stale geometry拒否、requested focus owner、single-shot initial projection ready | — |
+| CU-0B05S | `SPEC / DONE` | Browser lifecycle再投影のinstance / sequence / retry意味を固定 | CU-0B03、CU-0B04N/R | [契約決定](2026-07-29-cu-0b05s-browser-lifecycle-reprojection-contract-decision.md)。drop-before-build、new epoch、sequence巻戻し0、process自動回復1回 | — |
+| CU-0B05 | `E2E / DONE` | reload/crash/focus/resize後にHost snapshotから再投影 | CU-0B04N/R、CU-0B05S | [実装決定](2026-07-29-cu-0b05-browser-lifecycle-reprojection-implementation-decision.md)。new epoch、old callback拒否、1回回復/二回目degraded、Document/history不変、実Mac process停止合格 | — |
 
 ## 8. W1 対象の連続性
 
 | ID | 種類 / 状態 | 一成果 | 依存 | 合格と必須負例 | STOP |
 |---|---|---|---|---|---|
-| CU-101 | `SPEC / WAIT` | Rectangle Placeのtarget/start/duration/recipe/position/nameを決定 | CU-G02 | 正準Y-up/RationalTime、UI px/DPI/DOM型0 | いずれかを暗黙defaultで埋める必要 |
-| CU-102 | `SPEC / WAIT` | fresh LayerId + AddTrackItem原子性を採択 | CU-101、CU-G03 | live-next検査、失敗時counter/history/revision不変、journal互換 | 公開raw ID mint/汎用transactionが必要 |
-| CU-103 | `CORE / WAIT` | `VectorRecipe::StandardShape::Rect`をD3/GPUへlower | M2 Vector意味、CU-101 | preview/export pixel同一、fixture rectで代用しない | 新Vector意味・golden更新が必要 |
-| CU-104 | `SPEC / WAIT` | U2h selection publish/Undo/Redo policyを決定 | CU-G02/03 | Document snapshotと整合したTransient selection envelope | selectionをDocument/journal/Undoへ保存したくなる |
-| CU-105 | `CORE / WAIT` | U3a layout/hit-test/dense Timeline projectionを閉じる | 既存U3a | 1000 clip/100k key、zoom境界でselection/playhead/range不変。G0-9L evidenceを依存充足にしない | React TimelineまたはDOM identityが必要 |
-| CU-106 | `CORE / WAIT` | U2h selection kernelとessential focusを実装 | CU-104/105 | Stage/Timeline/Inspector同じstable ID、hidden selection件数+戻る | surface別selection storeが必要 |
-| CU-107 | `CORE / WAIT` | drag epoch/sequence/dedupe coordinatorを製品Hostへ接続 | 既存D&D spike、CU-0B05 | preview/terminal配送、Esc/outside/capture loss、stale/duplicateをD2未接続で検証 | transport IDをDocumentへ保存したくなる |
-| CU-109 | `CORE / WAIT` | journal commitとsnapshot publishをCU-G03順序で製品edit runtimeへ配線 | CU-G03、U2b/D1m | journal失敗時publish 0、再open同値、retry二重適用0 | UI側journal writerまたは新永続payloadが必要 |
-| CU-110 | `CORE / WAIT` | Place intent/requestからfresh ID plannerと1 macro commitを接続 | CU-102/107/109 | preview中D2 0、valid dropでAddTrackItem/apply_macro各1、失敗/cancel 0 | 公開planner/汎用transactionまたはraw ID mintが必要 |
-| CU-111 | `PRODUCT / WAIT` | Undo/Redo製品CommandIdとsingle-writer配送を接続 | CU-109、U0c/U2b | 成功時だけsnapshot publish、失敗でDocument/history不変、UI history 0 | Undo/Redoをsurface別local stateにしたくなる |
-| CU-108 | `E2E / WAIT` | Rectangleを三面へ投影しUndo/Redoする | CU-103/106/110/111、CU-0B05 | 同じrevision/LayerId、Undoで三面から消えRedoで同ID復帰 | diagnostic/fixture-only rectしか表示できない |
+| CU-101 | `SPEC / DONE` | Rectangle Placeのtarget/start/duration/recipe/position/nameを[歴史回収 §3.2](2026-07-23-historical-d2-selection-timeline-lineage-recovery.md#32-product-placeの閉じた意味)どおり確認 | CU-G02 | 正準Y-up/RationalTime、UI px/DPI/DOM型0。appearanceは未決のまま | いずれかを暗黙defaultで埋める必要 |
+| CU-102 | `SPEC / DONE` | [fresh LayerId + AddTrackItem原子性決定](2026-07-26-cu-102-fresh-layerid-addtrackitem-atomicity-decision.md)を採択 | CU-101、CU-G03 | fresh live-next一致+live不在、live mint 0、失敗時counter/history/revision不変、journal互換 | 公開raw ID mint/汎用transactionが必要 |
+| CU-103 | `CORE / DONE` | `VectorRecipe::StandardShape::Rect`をD3/GPUへlower | M2 Vector意味、CU-101、[M2 D3 CU-103追補](../specs/M2-document-model.md) | 不透明白fill・strokeなしのRectだけを既存OverlayRectへlowerし、canonical GPU render試験合格、fixture rectで代用しない。非Rect Vectorはtyped reject | schema/style/public API追加、既存golden期待値変更、非Rectの黙示loweringが必要 |
+| CU-104 | `SPEC / DONE` | U2h selection publish/Undo/Redo policyを決定 | CU-G02/03 | Document snapshotと整合したTransient selection envelope。owner・visibility・`projection_generation`更新条件・Apply/Undo/Redo後publish前reconcile時点だけをdocsで閉じる。決定証拠: [CU-104 selection publish envelope決定](2026-07-27-cu-104-selection-publish-envelope-decision.md) | selectionをDocument/journal/Undoへ保存、またはU2h-1/CU-109/CU-110/CU-111/consumer実装を束ねたくなる |
+| CU-105 | `CORE / SPLIT` | [CU-105責任再確認](2026-07-27-cu-105-dense-timeline-responsibility-recheck.md)でU3a-1I成立済み責任と後続を分離 | 既存U3a | layout/cull/hit-test=`PASS`、1k/100k=`REDUCE` capacity evidence、semantic zoom=U3a-2 `STOP`、selection/playhead/range=CU-106-family `STOP` | React Timeline、DOM identity、重複fixture/bench、絶対CI閾値が必要 |
+| CU-106 | `CORE / SPLIT` | [CU-106 selection consumer分割決定](2026-07-27-cu-106-selection-consumer-split-decision.md)でprimary selection consumerとessential focusを分離 | CU-104 + CU-105Rのselection handoff | CU-106P/Fへ配送し、親名でclosed orderを作らない | surface別selection store、lint抑制、dummy callerが必要 |
+| CU-106P | `CORE / DONE` | U2h-1P P5 producerと実在するprimary selection consumerを同じ差分で成立 | U3a-2入場範囲決定 + CU-110PT non-test Timeline caller | [実装決定](2026-07-30-cu-106p-native-timeline-primary-selection-implementation-decision.md)。native Timeline click→typed hit→primary publish→Inspector | — |
+| CU-106F | `CORE / WAIT` | essential focusをprimary selection / hoverと分離 | 実consumer surface + U3a-2 / Host focus owner | focus移譲とownerを一つにし、三surface/hidden/additiveを束ねない | surface別focus正本、未決input意味が必要 |
+| CU-107 | `CORE / DONE` | drag epoch/sequence/dedupe coordinatorを製品Hostへ接続 | 既存D&D spike、CU-0B05 | [親閉鎖決定](2026-07-29-cu-107-place-coordinator-parent-closure-decision.md)。4前提PV→TC→AD→TD完了、Browser intent→PendingStageDrop到達 | — |
+| CU-107PV | `CORE / DONE` | 非空虚なpreview phaseが存在し、preview配送がterminalを生じさせずに完結すること | `CU-107`経由の既存D&D spike、`CU-0B05` | [実装決定](2026-07-29-cu-107pv-place-preview-delivery-implementation-decision.md)。production Moved→private Host Transient progress、redraw/poll、terminal/D2 0 | — |
+| CU-107TC | `CORE / DONE` | 各候補terminalへ、認可済みの非commit原因（Esc / outside / capture loss）のちょうど一つを付すか、そのいずれでもないと分類すること。分類は排他かつ網羅 | `CU-107PV`、`CU-107`経由の`CU-0B05` | [実装決定](2026-07-29-cu-107tc-place-terminal-cause-classification-implementation-decision.md)。private 4 variant、focused Escape / focus loss / latest Stage hit-test、admission/D2 0 | — |
+| CU-107AD | `CORE / DONE` | 一active dragにつきadmittedを高々1件に抑え、staleおよびduplicateの候補をadmitしないこと | `CU-107TC`、`CU-107`経由の`CU-0B05` | [実装決定](2026-07-29-cu-107ad-place-terminal-admission-implementation-decision.md)。Product Host monotonic generation、active/high-water、noncommit retire、accepted delivery/D2 0 | — |
+| CU-107TD | `CORE / DONE` | admitごとにちょうど1回、単一の下流commit境界へ配送し、admitされていない候補を配送しないこと | `CU-107AD`、`CU-107`経由の`CU-0B05` | [実装決定](2026-07-29-cu-107td-place-terminal-delivery-implementation-decision.md)。admitted terminal→private PendingStageDrop一回、unadmitted/D2 0 | — |
+| CU-109 | `CORE / WAIT` | journal commitとsnapshot publishをCU-G03順序で製品edit runtimeへ配線 | CU-G03D、CU-G03R、U2b/D1m | journal失敗時publish 0、再open同値、retry二重適用0 | UI側journal writerまたは新永続payloadが必要 |
+| CU-110 | `CORE / DONE` | Place intent/requestからfresh ID plannerと1 macro commitを接続 | `CU-102`、`CU-107PV`／`CU-107TC`／`CU-107AD`／`CU-107TD`、`CU-109` | [実装決定](2026-07-29-cu-110-product-place-d2-commit-implementation-decision.md)。通常製品drop→canonical→Place request/process各1、実Mac journal AddTrackItem一件 | — |
+| CU-110P | `SPEC / SPLIT` | published snapshotの三面投影をStage / Timeline / Inspectorへ分割 | CU-110 | [CU-110P分割決定](2026-07-29-cu-110p-product-published-snapshot-projection-split-decision.md)。PS→PT→PI→CU-106P→CU-111→CU-108 | 三面同時pixel barrier、surface別storeが必要 |
+| CU-110PS | `PRODUCT / DONE` | latest published snapshotをnative Stageへ再投影 | CU-110P | [CU-110PS実装決定](2026-07-29-cu-110ps-native-stage-published-snapshot-projection-implementation-decision.md)。既存latest-only render workerと同じVRAM display slot、実Mac即時表示 | — |
+| CU-110PT0 | `SPEC / DONE` | native Timelineへ渡す非所有projection envelopeを確定 | CU-110PS、U3a-1I/U3a-2A | [CU-110PT0決定](2026-07-29-cu-110pt0-native-timeline-projection-envelope-decision.md)。composition全域から都度導出し、visible-range state / owner / defaultを作らない | interactive rangeまたは保存が必要 |
+| CU-110PT | `PRODUCT / DONE` | latest published snapshotをnative Timelineへ投影 | CU-110PT0 | [CU-110PT実装決定](2026-07-29-cu-110pt-native-timeline-published-snapshot-projection-implementation-decision.md)。既存project_timeline→同じnative pass、実Mac drop後1→2 bar | — |
+| CU-110PI | `SPEC / SPLIT` | latest published snapshot / primaryのInspector接続をReact受け口とHost islandへ分割 | CU-110PT、CU-0A08IP/CU-0A08ITP | [CU-110PI分割決定](2026-07-29-cu-110pi-inspector-product-connection-split-decision.md)。PIR→PIH | presentationとHost接続を束ねる |
+| CU-110PIR | `PRODUCT / DONE` | InspectorCandidate内のsafe read-only target branch | CU-110PI | [実装決定](2026-07-29-cu-110pir-inspector-safe-read-only-branch-implementation-decision.md)。target 3 fieldだけ、94 guard + 8 parity | — |
+| CU-110PIH | `PRODUCT / DONE` | right Inspector WebViewへcurrent Document / primaryを投影 | CU-110PIR | [実装決定](2026-07-30-cu-110pih-inspector-host-island-projection-implementation-decision.md)。実Mac Rectangle / Clip、offline second child | — |
+| CU-111 | `PRODUCT / DONE` | Undo/Redo製品CommandIdとsingle-writer配送を接続 | CU-109、U0c/U2b | [実装決定](2026-07-30-cu-111-product-undo-redo-implementation-decision.md)。stable CommandId→既存resolver/router→journal-first single writer→三面再投影 | — |
+| CU-108 | `E2E / DONE` | Rectangleを三面へ投影しUndo/Redoする | CU-103/106/110/111、CU-0B05 | [E2E決定](2026-07-30-cu-108-rectangle-product-spine-e2e-decision.md)。実Mac通常製品route、journal Add/Remove/Addは同じLayerId 2、CU-104 Redo selection非復元 | — |
 
 ## 9. W2 制作ループ
 
@@ -300,7 +331,7 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 |---|---|---|---|---|---|
 | CU-201 | `CORE / WAIT` | U3b move/trim/snapをD2へ接続 | CU-105/106 | random操作列、相対位置、Undo全巻戻し、Cancel 0 | marker/beat未決を同時実装したくなる |
 | CU-202 | `CORE / WAIT` | U4a-1 ValueType→control→command対応model | U2b-1、既存U4a-1契約 | 全保存param対応またはtyped拒否、新ValueType 0 | plugin独自UIが必要 |
-| CU-203 | `PRODUCT / WAIT` | U2c-3共通feedback component | CU-0B02、U2c-1 | state matrix、理由+回復、色/文字単独依存拒否 | 個別picker/popup state machineが必要 |
+| CU-203 | `PRODUCT / WAIT` | U2c-3共通feedback component | CU-0B02C、U2c-1 | state matrix、理由+回復、色/文字単独依存拒否 | 個別picker/popup state machineが必要 |
 | CU-204 | `PRODUCT / WAIT` | U2c-5 Brief/Context/Inspect/Assistive投影 | CU-203、U2c-4 | reason/subject/facts一致、recovery通常Intent経由 | diagnosticからDocument直接mutationが必要 |
 | CU-205 | `PRODUCT / WAIT` | U4a-2自動Inspectorとnonblocking preview | CU-202/204、U1b | 100 slider updates、latest preview、1 gesture=1 Undo、stale拒否 | custom plugin panelへ逸脱 |
 | CU-206 | `PRODUCT / WAIT` | U4b keyframe/区間Easingを製品接続 | CU-205、native Easing core | drag write 0/release 1/Esc 0、非対象curve不変 | key構造やthreshold変更が必要 |
@@ -321,7 +352,7 @@ waveformはU3c、beat snapはU7としてpost-Alphaへ残し、この経路の暗
 | CU-301 | `PRODUCT / WAIT` | U6 Files/Project read-only探索と動画preview | CU-0B04N/R、U0e | UI thread decode 0、range変更でDocument/Undo不変、欠落/codec診断 | filesystem stateをDocumentへ保存したくなる |
 | CU-302 | `PRODUCT / WAIT` | U6 Inbox受取と動画配置 | CU-301、CU-G03、U2b | 確定時だけClip/TimeMapへ1 Undo、range負例、duplicate/stale拒否 | Inboxを第二asset owner/履歴にしたくなる |
 | CU-303 | `PRODUCT / WAIT` | Soundtrack 1本を設定 | CU-302、M2 audio境界 | Soundtrack無しでも同じ制作経路、設定1 Undo。欠落/corrupt/unsupported codecはtyped拒否 | 音楽中心別mode/timelineが必要 |
-| CU-304 | `PRODUCT / WAIT` | U1f Stage View/Output Frame/off-frame表示 | CU-0B02、D1k/D3f | pan/zoom/fitでDocument/Final不変、枠外選択可、readback 0 | K0最適化を完成条件にしたくなる |
+| CU-304 | `PRODUCT / WAIT` | U1f Stage View/Output Frame/off-frame表示 | CU-0B02N、D1k/D3f | pan/zoom/fitでDocument/Final不変、枠外選択可、readback 0 | K0最適化を完成条件にしたくなる |
 | CU-305 | `PRODUCT / WAIT` | U2d Camera/Output Frame直接操作 | CU-304、U2c | Camera 1 gesture=1 Undo、Hand/Fit workspaceのみ、DPI不変 | camera/object操作を混同 |
 | CU-306O | `PRODUCT / WAIT` | New/Open製品入口 | CU-G04 | session/catalog必須、lock/未来版/corrupt typed拒否 | raw open、lock steal、未決New defaultが必要 |
 | CU-306S | `PRODUCT / WAIT` | Save/reopen製品入口 | CU-G04、CU-G03、CU-306O | durable save/reopen同値、unknown保持、失敗時原本不変 | 未決Save As/Unsaved UXが必要 |
@@ -455,9 +486,9 @@ Claude Code `claude-fable-5`へ実ファイルと機械guardをread-onlyで再�
 ## 18. 現在の停止線
 
 - 現在sliceとblocking decisionは[縦slice実行方針](2026-07-24-m3-vertical-slice-execution-decision.md)を正とする
-- U0e-2R/U0e-2、CU-0A03/R0、CU-0A04/R1、CU-0A05A/R2A、CU-0A05B/R2B、CU-0A06A/R3A、CU-0A06B/R3B、CU-0A07S/R4S、CU-0A07A/R4A、CU-0A07B/R4B、CU-0A07C/R4Cは完了済みで再実行しない。CU-0A08Iは分割済みで、現在粒は`CU-0A08IS`の`SPEC / DO`。Motolii Studio Previewは未実装である
+- U0e-2R/U0e-2、CU-0A03/R0、CU-0A04/R1、CU-0A05A/R2A、CU-0A05B/R2B、CU-0A06A/R3A、CU-0A06B/R3B、CU-0A07S/R4S、CU-0A07A/R4A、CU-0A07B/R4B、CU-0A07C/R4Cは完了済みで再実行しない。CU-0A08Iは分割済み。機械dispatchと現在粒は[implementation-ledger.md](../implementation-ledger.md)を唯一の正とする。Motolii Studio Previewは未実装である
 - CU-0G03はユーザーによる実windowの実IME／VoiceOver／復帰審判で合格し、CU-0G04Bまで責任最小化短票どおり既存winit/wgpu/wry/macOS標準経路を使う単一runのmanifestでL3を閉じた。CU-0G05L reviewでL1正本とGPU rawの不足を検出し、`CU-0G02A`で正本を修正した。`CU-0G02BH`はwgpu標準queryだけのbounded harnessを固定し、`CU-0G02B`はその実行commitを使う同一session再実測をGrok P0/P1=0で閉じた。CU-0G05Lは8 retained pathを単一manifestへ束ね、Grok R2 P0/P1/P2=0で固定Mac prerequisite evidenceだけを限定確定した。W0b、H1b、製品window、Windows/追加hardwareは解禁しない
-- G0-6HはU0e-3だけを止める並行人間審判であり、R0/R1とPreview骨格を直列停止しない
+- G0-6Hは2026-07-29に人間`ACCEPT`で完了し、U0e-3だけを解禁した。R0/R1とPreview骨格へ遡及的な完了意味を足さない
 - CU-G01〜CU-G10は仕様判断粒で、コード実装と同時に行わない
 - closed orderはユーザーの明示的な発注時だけ作り、各粒の論理依存、現行ledger、仕様判断を再確認する
 - FableがP0/P1相当を出した場合は粒の修正へ戻り、レビューを再実行する

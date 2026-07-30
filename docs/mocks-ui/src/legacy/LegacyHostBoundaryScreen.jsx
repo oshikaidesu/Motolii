@@ -100,6 +100,15 @@ const INSPECTOR_CONTAINMENT_RULES = [
   },
 ];
 
+const EMPTY_STAGE_PROJECTION_CLASSES = [
+  "scene-copy",
+  "rings",
+  "selection-bounds",
+  "motion-path",
+  "stage-hud",
+  "stage-badge",
+];
+
 function containAnchors(script, rules, label) {
   for (const { anchor } of rules) {
     let count = 0;
@@ -165,9 +174,18 @@ function createParserOptions(
   resizableLayout = false,
   EasingTriggerComponent = null,
   onActiveIntervalChange = null,
+  emptyStageProjection = false,
 ) {
   const options = {
     replace(node) {
+      if (
+        emptyStageProjection &&
+        EMPTY_STAGE_PROJECTION_CLASSES.some((className) =>
+          matches(node, { className }),
+        )
+      ) {
+        return <></>;
+      }
       const props = { node, options };
       if (matches(node, { className: "browser" })) {
         return <BrowserComponent {...props} />;
@@ -189,6 +207,7 @@ function createParserOptions(
         const componentProps = {
           EasingGraphComponent,
           GraphViewComponent,
+          emptyProjection: emptyStageProjection,
           legacyCurveShelf: curveShelf
             ? domToReact([curveShelf], options)
             : null,
@@ -324,6 +343,7 @@ function LegacyFixture({
   TimelineComponent,
   EasingTriggerComponent,
   resizableLayout,
+  developmentEmptyProjection,
 }) {
   const [activeInterval, setActiveInterval] = useState(null);
   const [pressed, setPressed] = useState(false);
@@ -364,6 +384,7 @@ function LegacyFixture({
           resizableLayout,
           EasingTriggerComponent,
           setActiveInterval,
+          developmentEmptyProjection,
         ),
       ),
     [
@@ -373,12 +394,18 @@ function LegacyFixture({
       TimelineComponent,
       resizableLayout,
       EasingTriggerComponent,
+      developmentEmptyProjection,
     ],
   );
 
   useEffect(
-    () => executeTrustedFixtureScript(fixture, containedScript),
-    [fixture, containedScript],
+    () => {
+      if (developmentEmptyProjection) {
+        return undefined;
+      }
+      return executeTrustedFixtureScript(fixture, containedScript);
+    },
+    [fixture, containedScript, developmentEmptyProjection],
   );
 
   useEffect(() => {
@@ -453,6 +480,7 @@ export function LegacyHostBoundaryScreen({
   TimelineComponent,
   EasingTriggerComponent,
   resizableLayout = false,
+  developmentEmptyProjection = false,
 }) {
   return (
     <LegacyFixture
@@ -464,6 +492,7 @@ export function LegacyHostBoundaryScreen({
       TimelineComponent={TimelineComponent}
       EasingTriggerComponent={EasingTriggerComponent}
       resizableLayout={resizableLayout}
+      developmentEmptyProjection={developmentEmptyProjection}
     />
   );
 }

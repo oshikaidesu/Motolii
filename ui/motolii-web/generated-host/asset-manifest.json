@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "path": ".vite/manifest.json",
+      "bytes": 745,
+      "sha256": "e314adc2a80628f550037b4634627ae31efc39ac3c1948106a70fad4a8b429b2"
+    },
+    {
+      "path": "assets/host-4krs5Bey.css",
+      "bytes": 2414,
+      "sha256": "1c93ac04b52228cdb56728027656a23d52feafadf660da8f1627e349093a3bef"
+    },
+    {
+      "path": "assets/host-gJ40uukV.js",
+      "bytes": 2658,
+      "sha256": "37523fa2379a6dc78895c4437884daa54cac365f731cdf34a4e9a1ebf340025b"
+    },
+    {
+      "path": "assets/inspector-BMvtfoSi.js",
+      "bytes": 11932,
+      "sha256": "990533c9ce98ed653168ee21d951af741286fb48cfe6a71675875e67130f2cc7"
+    },
+    {
+      "path": "assets/inspector-fMh9jxYJ.css",
+      "bytes": 2352,
+      "sha256": "6e36177dd521ac1764b472b32cc610968ab17ae164568e7bc720554637ae855e"
+    },
+    {
+      "path": "assets/tokens-4X_Bky8Q.js",
+      "bytes": 284205,
+      "sha256": "fb098ff45c7694a0ce719708617f9e3e38569d3a7f8f8940dfdacf9b5d05da6c"
+    },
+    {
+      "path": "assets/tokens-Dq8978N5.css",
+      "bytes": 38294,
+      "sha256": "4051354e1ec5b47652cfc84f6736187521556f4991d15f591dfb192542a37a2f"
+    },
+    {
+      "path": "host.html",
+      "bytes": 869,
+      "sha256": "4ad3b06d65693be7d9f85557ae2a520ce5f0efa07ac027a700520d70950e04f3"
+    },
+    {
+      "path": "inspector.html",
+      "bytes": 883,
+      "sha256": "d9dca04484772c4d8ceee09bfe9d926471431015a417ed72eabe6b970b60eb69"
+    }
+  ]
+}

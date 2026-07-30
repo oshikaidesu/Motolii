@@ -18,9 +18,28 @@ import {
   DiscoverySourceRail,
   DiscoveryViewToggle,
 } from "../patterns/DiscoveryBrowser.jsx";
+import { decodeStarterMediaProjection as decodeProjection } from "../read-model/starterMediaProjectionDecoder.js";
 import "./discovery-browser-candidate.css";
 
+function previewClassForMediaType(mediaType) {
+  if (mediaType === "video/mp4") {
+    return "video";
+  }
+  if (mediaType === "image/svg+xml") {
+    return "logo";
+  }
+  if (mediaType === "image/png") {
+    return "texture";
+  }
+  if (mediaType === "audio/wav") {
+    return "audio";
+  }
+  throw new TypeError(`unsupported mediaType ${mediaType}`);
+}
+
 const BrowserHierarchyContext = createContext(null);
+const BrowserStandaloneContext = createContext(null);
+const BrowserPlaceIntentContext = createContext(null);
 const EFFECT_TAGS = [
   { id: "go-to", label: "Go-to", icon: "◎" },
   { id: "atmosphere", label: "Atmosphere", icon: "◌" },
@@ -33,6 +52,21 @@ const CREATE_TAGS = [
   { id: "animated", label: "Animated", icon: "⌁" },
   { id: "prototype", label: "Prototype", icon: "◇" },
 ];
+
+function createBrowserPlaceIntent(scope_ref, item_id) {
+  if (
+    typeof scope_ref !== "string"
+    || scope_ref.length === 0
+    || typeof item_id !== "string"
+    || item_id.length === 0
+  ) {
+    throw new TypeError("Rectangle Place source identity must be non-empty strings");
+  }
+  return Object.freeze({
+    kind: "browser.place",
+    source: Object.freeze({ scope_ref, item_id }),
+  });
+}
 
 function DiscoveryBrowserLayout(props) {
   const hierarchy = useContext(BrowserHierarchyContext);
@@ -268,6 +302,7 @@ function PluginCard({
 }
 
 function CandidatePluginBrowser() {
+  const standalone = useContext(BrowserStandaloneContext);
   const itemIds = ["echo-bloom", "type-pulse", "fold-field"];
   const tagging = useCandidateTags(itemIds, {
     "echo-bloom": ["go-to", "atmosphere"],
@@ -281,6 +316,7 @@ function CandidatePluginBrowser() {
       id="vism-browser"
       className="candidate-plugin-browser"
       data-view="thumb"
+      hidden={standalone ? standalone.activeTab !== "effects" : false}
       style={{
         "--plugin-thumb-size":
           "var(--browser-thumbnail-size, 80px)",
@@ -471,7 +507,10 @@ function ElementCard({
   tags = [],
   tagVisible = true,
   onSelect,
+  scopeRef,
+  scopedItemId,
 }) {
+  const onPlaceIntent = useContext(BrowserPlaceIntentContext);
   return (
     <button
       className={`candidate-element-card${selected ? " on" : ""}`}
@@ -490,12 +529,15 @@ function ElementCard({
       draggable
       aria-label={`${name} · ${type} · ${provider}`}
       onClick={onSelect}
-      onDragStart={(event) =>
+      onDragStart={(event) => {
+        if (element === "rectangle" && onPlaceIntent) {
+          onPlaceIntent(createBrowserPlaceIntent(scopeRef, scopedItemId));
+        }
         event.dataTransfer.setData(
           "application/x-motolii-browser-item",
           itemId,
-        )
-      }
+        );
+      }}
     >
       <span className={`candidate-element-preview ${thumbnail}`}>
         <i aria-hidden="true">{glyph}</i>
@@ -517,7 +559,8 @@ function ElementCard({
   );
 }
 
-function CandidateCreateBrowser() {
+function CandidateCreateBrowser({ scope_ref, item_id }) {
+  const standalone = useContext(BrowserStandaloneContext);
   const itemIds = [
     "rectangle",
     "ellipse",
@@ -539,12 +582,14 @@ function CandidateCreateBrowser() {
     "particle-field": ["animated"],
   });
   const [selectedItem, setSelectedItem] = useState("rectangle");
-  const elementProps = (itemId) => ({
-    itemId,
-    selected: selectedItem === itemId,
-    tags: tagging.tagsFor(itemId),
-    tagVisible: tagging.isVisible(itemId),
-    onSelect: () => setSelectedItem(itemId),
+  const elementProps = (cardItemId, scopeRef, scopedItemId) => ({
+    itemId: cardItemId,
+    scopeRef,
+    scopedItemId,
+    selected: selectedItem === cardItemId,
+    tags: tagging.tagsFor(cardItemId),
+    tagVisible: tagging.isVisible(cardItemId),
+    onSelect: () => setSelectedItem(cardItemId),
   });
 
   return (
@@ -552,7 +597,7 @@ function CandidateCreateBrowser() {
       className="candidate-elements-browser"
       id="elements-browser"
       data-view="grid"
-      hidden
+      hidden={standalone ? standalone.activeTab !== "create" : true}
       data-info="Create Browser|Browse every registered item that creates a Stage or Timeline object"
     >
       <DiscoverySearchBar
@@ -661,7 +706,7 @@ function CandidateCreateBrowser() {
           countId="element-result-count"
         >
           <div className="candidate-element-grid">
-            <ElementCard {...elementProps("rectangle")} element="rectangle" name="Rectangle" type="Shape" provider="Built-in" glyph="□" thumbnail="rectangle" />
+            <ElementCard {...elementProps("rectangle", scope_ref, item_id)} element="rectangle" name="Rectangle" type="Shape" provider="Built-in" glyph="□" thumbnail="rectangle" />
             <ElementCard {...elementProps("ellipse")} element="ellipse" name="Ellipse" type="Shape" provider="Built-in" glyph="○" thumbnail="ellipse" />
             <ElementCard {...elementProps("text")} element="text" name="Text" type="Layer" provider="Built-in" glyph="T" thumbnail="text" />
             <ElementCard {...elementProps("solid")} element="solid" name="Solid" type="Layer" provider="Built-in" glyph="■" thumbnail="solid" />
@@ -697,13 +742,32 @@ function CandidateCreateBrowser() {
   );
 }
 
-function CandidateBrowserTabs() {
+function CandidateBrowserTabsProjectionOnly() {
+  return (
+    <div className="browser-tabs">
+      <button className="browser-tab on" data-tab="project">Media</button>
+      <button className="browser-tab" data-tab="effects">Effects</button>
+      <button className="browser-tab" data-tab="create">Create</button>
+    </div>
+  );
+}
+
+function CandidateBrowserTabs({
+  rectangleIdentity,
+  activeTab = "effects",
+  onTabChange,
+}) {
+  const tabProps = (tab) => ({
+    className: `browser-tab${activeTab === tab ? " on" : ""}`,
+    "data-tab": tab,
+    onClick: onTabChange ? () => onTabChange(tab) : undefined,
+  });
   return (
     <>
       <div className="browser-tabs">
-        <button className="browser-tab" data-tab="project">Media</button>
-        <button className="browser-tab on" data-tab="effects">Effects</button>
-        <button className="browser-tab" data-tab="create">Create</button>
+        <button {...tabProps("project")}>Media</button>
+        <button {...tabProps("effects")}>Effects</button>
+        <button {...tabProps("create")}>Create</button>
       </div>
       <div className="candidate-pack-scope" id="candidate-pack-scope" hidden>
         <button className="candidate-pack-identity" id="candidate-pack-open">
@@ -717,7 +781,7 @@ function CandidateBrowserTabs() {
         </nav>
         <button id="candidate-pack-clear" aria-label="Clear pack scope">×</button>
       </div>
-      <CandidateCreateBrowser />
+      <CandidateCreateBrowser {...rectangleIdentity} />
       <section
         className="candidate-save-sheet"
         id="candidate-save-sheet"
@@ -852,12 +916,129 @@ function AssetTile({
   );
 }
 
-function CandidateProjectBrowser() {
+function CandidateProjectBrowser({ mediaProjection }) {
+  const standalone = useContext(BrowserStandaloneContext);
+  const browserHidden = standalone
+    ? standalone.activeTab !== "project"
+    : !mediaProjection;
+  if (mediaProjection) {
+    return (
+      <div
+        className="project-explorer candidate-project-browser"
+        id="project-browser"
+        data-view="visual"
+        hidden={browserHidden}
+        data-info="Media Browser|Search project assets and registered folders from one surface"
+      >
+        <DiscoverySearchBar
+          inputId="media-search"
+          inputLabel="Search media"
+          actions={(
+            <DiscoveryViewToggle
+              label="Media result view"
+              options={[
+                {
+                  active: true,
+                  "data-media-view": "visual",
+                  "aria-label": "Media thumbnail-only view",
+                  children: "▦",
+                },
+                {
+                  "data-media-view": "grid",
+                  "aria-label": "Media thumbnail and name view",
+                  children: "▤",
+                },
+                {
+                  "data-media-view": "list",
+                  "aria-label": "Media list view",
+                  children: "☷",
+                },
+              ]}
+            />
+          )}
+        >
+          <button className="btn quiet file-nav" id="file-back" hidden aria-label="Back">‹</button>
+          <button className="btn quiet file-nav" id="file-parent" hidden aria-label="Parent folder">↑</button>
+        </DiscoverySearchBar>
+
+        <div className="candidate-asset-path-row">
+          <nav className="candidate-asset-path" id="asset-path" aria-label="Current folder">
+            All Media
+          </nav>
+          <span className="candidate-file-scope" id="file-scope-toggle" hidden>
+            <button className="on" data-file-scope="folders" aria-label="Browse folders" aria-pressed="true">Browse folders</button>
+            <button data-file-scope="all-files" aria-label="All files view" aria-pressed="false">All files</button>
+          </span>
+        </div>
+        <DiscoveryBrowserLayout>
+          <DiscoverySourceRail label="Media sources">
+            <div className="candidate-nav-group">
+              <button className="on" data-asset-source="all">
+                <i aria-hidden="true">▦</i><span>All Media</span>
+              </button>
+            </div>
+            <DiscoverySection title="Registered folders" />
+            <DiscoverySection title="Collections" />
+            <DiscoverySection title="Tags" />
+            <DiscoverySection title="Packs" />
+          </DiscoverySourceRail>
+
+          <DiscoveryResults
+            className="candidate-asset-results"
+            title="All Media"
+            titleId="asset-source-title"
+            scope={<></>}
+            scopeId="asset-scope-label"
+            count="4 ITEMS"
+            countId="asset-count"
+          >
+            <div className="asset-grid candidate-asset-grid">
+              {mediaProjection.media.map((entry) => (
+                <AssetTile
+                  key={entry.path}
+                  asset={entry.name}
+                  preview={previewClassForMediaType(entry.mediaType)}
+                  name={entry.name}
+                  meta={entry.mediaType}
+                />
+              ))}
+            </div>
+          </DiscoveryResults>
+        </DiscoveryBrowserLayout>
+
+        <section
+          className="candidate-tag-panel"
+          id="media-tag-panel"
+          aria-hidden="true"
+          hidden
+        >
+          <div>
+            <button data-toggle-media-tag="favorite">Favorite</button>
+            <button data-toggle-media-tag="brand">Brand</button>
+            <button data-toggle-media-tag="review">Review</button>
+            <button data-toggle-media-tag="audio">Audio</button>
+          </div>
+        </section>
+        <div className="surface-foot">
+          <span id="asset-foot-copy" hidden>PROJECT</span>
+          <span id="asset-selection-count">0 selected</span>
+          <button
+            className="btn quiet"
+            id="media-select-mode"
+            aria-pressed="false"
+          >
+            Select
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="project-explorer candidate-project-browser"
       id="project-browser"
-      hidden
+      hidden={browserHidden}
       data-view="visual"
       data-info="Media Browser|Search project assets and registered folders from one surface"
     >
@@ -1056,9 +1237,19 @@ function CandidateProjectBrowser() {
   );
 }
 
-export function DiscoveryBrowserCandidate({ node, options }) {
+export function DiscoveryBrowserCandidate({
+  node,
+  options,
+  developmentProjection,
+  rectangleIdentity,
+  onPlaceIntent,
+}) {
+  const mediaProjection = developmentProjection === undefined
+    ? undefined
+    : decodeProjection(developmentProjection);
   const [hierarchyWidth, setHierarchyWidth] = useState(106);
   const [thumbnailSize, setThumbnailSize] = useState(80);
+  const [standaloneTab, setStandaloneTab] = useState("effects");
   const hierarchyHidden = hierarchyWidth === 0;
   const hierarchy = useMemo(
     () => ({
@@ -1068,6 +1259,14 @@ export function DiscoveryBrowserCandidate({ node, options }) {
     }),
     [hierarchyWidth],
   );
+  const standalone = node === undefined;
+  const browserTabs = (
+    <CandidateBrowserTabs
+      rectangleIdentity={rectangleIdentity}
+      activeTab={standalone ? standaloneTab : "effects"}
+      onTabChange={standalone ? setStandaloneTab : undefined}
+    />
+  );
   const candidateOptions = {
     ...options,
     replace(child) {
@@ -1075,7 +1274,9 @@ export function DiscoveryBrowserCandidate({ node, options }) {
         child.type === "tag" &&
         child.attribs?.class?.split(" ").includes("browser-tabs")
       ) {
-        return <CandidateBrowserTabs />;
+        return mediaProjection
+          ? <CandidateBrowserTabsProjectionOnly />
+          : browserTabs;
       }
       if (
         child.type === "tag" &&
@@ -1095,36 +1296,60 @@ export function DiscoveryBrowserCandidate({ node, options }) {
         child.type === "tag" &&
         child.attribs?.id === "vism-browser"
       ) {
-        return <CandidatePluginBrowser />;
+        return mediaProjection ? <></> : <CandidatePluginBrowser />;
       }
       if (
         child.type === "tag" &&
         child.attribs?.id === "project-browser"
       ) {
-        return <CandidateProjectBrowser />;
+        return mediaProjection
+          ? <CandidateProjectBrowser mediaProjection={mediaProjection} />
+          : <CandidateProjectBrowser />;
       }
       return options.replace?.(child);
+    },
+  };
+  const rootProps = {
+    className: `browser browser-candidate${hierarchyHidden ? " is-hierarchy-hidden" : ""}`,
+    "data-hierarchy-hidden": String(hierarchyHidden),
+    "data-browser-thumbnail-size": String(thumbnailSize),
+    style: {
+      "--browser-thumbnail-size": `${thumbnailSize}px`,
     },
   };
 
   return (
     <>
-      <BrowserThumbnailSizeSettingBridge onChange={setThumbnailSize} />
-      <BrowserHierarchyContext.Provider value={hierarchy}>
-        {createElement(
-          node.name,
-          {
-            ...attributesToProps(node.attribs, node.name),
-            className: `${node.attribs.class} browser-candidate${hierarchyHidden ? " is-hierarchy-hidden" : ""}`,
-            "data-hierarchy-hidden": String(hierarchyHidden),
-            "data-browser-thumbnail-size": String(thumbnailSize),
-            style: {
-              "--browser-thumbnail-size": `${thumbnailSize}px`,
-            },
-          },
-          domToReact(node.children ?? [], candidateOptions),
-        )}
-      </BrowserHierarchyContext.Provider>
+      {standalone ? null : (
+        <BrowserThumbnailSizeSettingBridge onChange={setThumbnailSize} />
+      )}
+      <BrowserPlaceIntentContext.Provider value={onPlaceIntent ?? null}>
+        <BrowserStandaloneContext.Provider
+          value={standalone ? { activeTab: standaloneTab } : null}
+        >
+          <BrowserHierarchyContext.Provider value={hierarchy}>
+            {standalone ? (
+              <aside {...rootProps}>
+                <div className="panel-head">
+                  Browser
+                  <small>MEDIA / CREATE / EFFECTS</small>
+                </div>
+                {browserTabs}
+                <CandidatePluginBrowser />
+                <CandidateProjectBrowser />
+              </aside>
+            ) : createElement(
+              node.name,
+              {
+                ...attributesToProps(node.attribs, node.name),
+                ...rootProps,
+                className: `${node.attribs.class} browser-candidate${hierarchyHidden ? " is-hierarchy-hidden" : ""}`,
+              },
+              domToReact(node.children ?? [], candidateOptions),
+            )}
+          </BrowserHierarchyContext.Provider>
+        </BrowserStandaloneContext.Provider>
+      </BrowserPlaceIntentContext.Provider>
     </>
   );
 }

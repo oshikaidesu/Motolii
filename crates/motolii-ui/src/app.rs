@@ -4,20 +4,25 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use egui_tiles::{Behavior, EditAction, Tile, TileId, Tiles, UiResponse};
+use motolii_core::{CanonicalPoint, CompCamera};
 use motolii_gpu::GpuCtx;
 
+use crate::browser_host::BrowserPlaceIntent;
+use crate::browser_host_runtime::{BrowserHostRuntime, BrowserHostRuntimeError};
 use crate::command_registry::builtin_command_registry;
 use crate::display_slot::DisplaySlotError;
 use crate::document_edit_runtime::{
     DocumentEditActionKind, DocumentEditDispatchError, DocumentEditQueue, DocumentEditRuntime,
-    DocumentEditRuntimeError, PublishedDocument,
+    DocumentEditRuntimeError, PlaceRectangleRequest, PublishedDocument,
 };
+use crate::host_pointer_capture::HostPointerCandidate;
 use crate::input_router::{ImeGateState, InputPhase, InputRouter, NormalizedInput};
 use crate::layout::{LayoutAction, LayoutConstraints, PanelRole, SeparatorAction};
 use crate::layout_authority::{LayoutAuthority, RuntimeFrameEdit};
 use crate::layout_runtime::{RuntimeLayout, RuntimeSeparator};
 use crate::layout_runtime_adapter::{
-    read_layout_cancel, read_safety_interrupt, read_separator_action,
+    read_layout_cancel, read_safety_interrupt, read_separator_action, read_stage_drop_terminal,
+    StageDropTerminal,
 };
 use crate::render_worker::{
     RenderGeneration, RenderRequest, RenderSubmitError, RenderWorkerClient, RenderWorkerError,
@@ -40,6 +45,10 @@ pub(crate) enum AppConstructionError {
     Submit(#[from] RenderSubmitError),
     #[error(transparent)]
     RepaintSignal(#[from] RepaintSignalRegistrationError),
+    #[error("native window is not available for the Browser Host")]
+    MissingNativeWindow,
+    #[error(transparent)]
+    BrowserHost(#[from] BrowserHostRuntimeError),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -155,20 +164,30 @@ pub(crate) struct MotoliiApp {
     latest_projection: LatestResultProjection,
     preview_failure: Option<PreviewProjectionFailure>,
     latest_smoke: Option<LatestPreviewSmoke>,
-    document_runtime: DocumentEditRuntime,
+    document_runtime: Option<DocumentEditRuntime>,
     document_queue: DocumentEditQueue,
+    primary: Option<motolii_doc::LayerId>,
+    projection_generation: u64,
     current_document: Arc<motolii_doc::Document>,
     render_request_template: RenderRequest,
     document_failure: Option<DocumentEditFailure>,
     document_smoke: Option<DocumentEditSmoke>,
+    browser_host: Option<BrowserHostRuntime>,
+    browser_host_failure: Option<String>,
+    browser_place_generation: u64,
+    active_browser_place: Option<BrowserPlaceIntent>,
+    latest_camera: Option<CompCamera>,
 }
+
+const INITIAL_PRIMARY: Option<motolii_doc::LayerId> = None;
+const INITIAL_PROJECTION_GENERATION: u64 = 0;
 
 pub(crate) struct AppPreviewRuntime {
     pub(crate) preview: Arc<StaticPreview>,
     pub(crate) gpu: Arc<GpuCtx>,
     pub(crate) render_client: RenderWorkerClient,
     pub(crate) initial_request: RenderRequest,
-    pub(crate) document_runtime: DocumentEditRuntime,
+    pub(crate) document_runtime: Option<DocumentEditRuntime>,
 }
 
 pub(crate) struct AppSmokeConfig {
@@ -204,7 +223,26 @@ impl MotoliiApp {
         let repaint_context = cc.egui_ctx.clone();
         register_repaint_signal(&render_client, &repaint_context)?;
         let render_request_template = initial_request.clone();
-        let current_document = document_runtime.snapshot();
+        let current_document = match &document_runtime {
+            Some(runtime) => runtime.snapshot(),
+            None => Arc::clone(&initial_request.document),
+        };
+        let browser_host = if document_runtime.is_some() {
+            let window = cc
+                .winit_window()
+                .ok_or(AppConstructionError::MissingNativeWindow)?;
+            let wake_context = repaint_context.clone();
+            let instance_epoch = BrowserHostRuntime::fresh_instance_epoch()?;
+            Some(BrowserHostRuntime::new(
+                window,
+                instance_epoch,
+                BrowserHostRuntime::built_in_rectangle_source(instance_epoch),
+                Arc::new(move || wake_context.request_repaint()),
+                Arc::new(|_| {}),
+            )?)
+        } else {
+            None
+        };
         let initial_generation = render_client.submit(initial_request)?;
         let evidence = preview.invariant_evidence();
         eprintln!(
@@ -239,12 +277,19 @@ impl MotoliiApp {
                 .then(|| LatestPreviewSmoke::new(evidence.clone(), initial_generation)),
             document_runtime,
             document_queue: DocumentEditQueue::default(),
+            primary: INITIAL_PRIMARY,
+            projection_generation: INITIAL_PROJECTION_GENERATION,
             current_document,
             render_request_template,
             document_failure: None,
             document_smoke: smoke
                 .document_edit
                 .map(|request| DocumentEditSmoke::new(evidence, request)),
+            browser_host,
+            browser_host_failure: None,
+            browser_place_generation: 0,
+            active_browser_place: None,
+            latest_camera: None,
         })
     }
 
@@ -259,6 +304,8 @@ impl eframe::App for MotoliiApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.recover_repaint_signal();
         self.drain_latest_result();
+        self.begin_browser_place();
+        self.poll_browser_place_pointer();
         if self.advance_latest_smoke(ctx) {
             return;
         }
@@ -328,8 +375,34 @@ impl eframe::App for MotoliiApp {
                 ui.label("Status");
             });
 
+        if self.browser_host.is_some() {
+            let browser_panel = egui::Panel::left("motolii-browser-host")
+                .resizable(false)
+                .default_size(420.0)
+                .min_size(420.0)
+                .max_size(420.0)
+                .show(ui, |_ui| {});
+            if self.browser_host_failure.is_none() {
+                if let Some(Err(error)) = self.browser_host.as_ref().map(|host| {
+                    let rect = browser_panel.response.rect;
+                    host.set_bounds(
+                        u64::from(self.paint_count),
+                        crate::native_host_layout::LogicalRect {
+                            x: f64::from(rect.left()),
+                            y: f64::from(rect.top()),
+                            width: f64::from(rect.width()),
+                            height: f64::from(rect.height()),
+                        },
+                    )
+                }) {
+                    self.browser_host_failure = Some(error.to_string());
+                }
+            }
+        }
+
         egui::CentralPanel::default().show(ui, |ui| {
             let constraints = layout_constraints(ui.available_width());
+            let layout_action_requested = requested_action.is_some();
             if let Some(action) = requested_action.take() {
                 if let Err(error) = self.layout_authority.apply(action, constraints) {
                     self.observe_layout_failure(error);
@@ -353,6 +426,7 @@ impl eframe::App for MotoliiApp {
                 texture_id: self.texture_id,
                 edits: Vec::new(),
                 visibility_edited: false,
+                stage_rect: None,
             };
             self.layout_authority
                 .runtime_mut()
@@ -379,6 +453,7 @@ impl eframe::App for MotoliiApp {
             };
             let gesture_finished =
                 edits.contains(&EditAction::TileDropped) || ui.ctx().drag_stopped_id().is_some();
+            let stage_rect = behavior.stage_rect;
 
             if cancel_runtime_frame {
                 if let Err(error) = self.layout_authority.reconcile_runtime_frame(
@@ -395,6 +470,19 @@ impl eframe::App for MotoliiApp {
             let separator_actions =
                 collect_separator_actions(ui, self.layout_authority.runtime(), self.ime_gate);
             let separator_consumed_runtime_edit = !separator_actions.is_empty();
+            if self.active_browser_place.is_some() {
+                let layout_changed = runtime_edit != RuntimeFrameEdit::None
+                    || layout_action_requested
+                    || separator_consumed_runtime_edit;
+                let terminal = if layout_changed {
+                    Some(StageDropTerminal::Cancel)
+                } else {
+                    stage_rect.and_then(|rect| read_stage_drop_terminal(ui, rect, self.ime_gate))
+                };
+                if let Some(terminal) = terminal {
+                    self.finish_browser_place(terminal);
+                }
+            }
             for (separator, action) in separator_actions {
                 if action == SeparatorAction::Cancel {
                     if let Err(error) = self.layout_authority.reconcile_runtime_frame(
@@ -443,9 +531,16 @@ fn runtime_edit_after_separator_action(
 
 impl MotoliiApp {
     fn process_document_edit(&mut self, ctx: &egui::Context) {
-        match self.document_runtime.process_next(&mut self.document_queue) {
+        let Some(document_runtime) = &mut self.document_runtime else {
+            return;
+        };
+        match document_runtime.process_next(
+            &mut self.document_queue,
+            self.primary,
+            self.projection_generation,
+        ) {
             Ok(Some(published)) => {
-                if let Err(error) = self.publish_document_snapshot(published) {
+                if let Err(error) = self.publish_document_snapshot(&published) {
                     self.record_smoke_failure(error.to_string());
                     self.record_document_failure(error);
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -466,9 +561,14 @@ impl MotoliiApp {
 
     fn publish_document_snapshot(
         &mut self,
-        published: PublishedDocument,
+        published: &PublishedDocument,
     ) -> Result<(), DocumentEditFailure> {
-        self.current_document = published.snapshot;
+        adopt_published_document(
+            &mut self.current_document,
+            &mut self.primary,
+            &mut self.projection_generation,
+            published,
+        );
         let generation = self.render_client.submit(RenderRequest {
             document: Arc::clone(&self.current_document),
             data_tracks: Arc::clone(&self.render_request_template.data_tracks),
@@ -533,7 +633,7 @@ impl MotoliiApp {
                     && evidence.slot.registration_count == smoke.baseline.slot.registration_count
                 {
                     eprintln!(
-                        "U2B1_DOCUMENT passed slot={} registrations={} generation={} revisions=1,2,3",
+                        "U2B1_DOCUMENT passed slot={} registrations={} generation={} revisions=1",
                         evidence.slot.slot_id,
                         evidence.slot.registration_count,
                         expected_generation.get()
@@ -547,7 +647,7 @@ impl MotoliiApp {
             }
         }
         if Instant::now() >= smoke.deadline {
-            self.record_smoke_failure("U2b-1 edit/Undo/Redo snapshot was not displayed".into());
+            self.record_smoke_failure("U2b-1 apply snapshot was not displayed".into());
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             return true;
         }
@@ -585,11 +685,80 @@ impl MotoliiApp {
                 return;
             }
         };
-        if let Err(error) = self.preview.slot().copy(&self.gpu, &rendered) {
+        if let Err(error) = self.preview.slot().copy(&self.gpu, &rendered.frame) {
             self.record_preview_failure(PreviewProjectionFailure::Display(error));
             return;
         }
+        self.latest_camera = Some(rendered.camera);
         self.latest_projection.commit(result.generation);
+    }
+
+    fn begin_browser_place(&mut self) {
+        if self.active_browser_place.is_some() || self.browser_host_failure.is_some() {
+            return;
+        }
+        let Some(host) = &self.browser_host else {
+            return;
+        };
+        let generation = self.browser_place_generation.wrapping_add(1);
+        match host.take_place_intent(generation) {
+            Ok(Some((intent, generation))) => {
+                self.browser_place_generation = generation;
+                self.active_browser_place = Some(intent);
+            }
+            Ok(None) => {}
+            Err(error) => self.browser_host_failure = Some(error.to_string()),
+        }
+    }
+
+    fn poll_browser_place_pointer(&mut self) {
+        if self.active_browser_place.is_none() || self.browser_host_failure.is_some() {
+            return;
+        }
+        let Some(host) = &self.browser_host else {
+            return;
+        };
+        match host.poll_pointer_candidate() {
+            Ok(Some(HostPointerCandidate::Moved { .. })) => {
+                // WebKit tracking loop外でもreleaseを観測できるよう、active中はpollを継続する。
+                self.repaint_context.request_repaint();
+            }
+            Ok(Some(HostPointerCandidate::Released { .. }))
+            | Ok(Some(HostPointerCandidate::Cancelled { .. })) => {
+                // 本粒はcandidate取得まで。Stage admissionとD2は後続責任へ渡す。
+                self.active_browser_place = None;
+            }
+            Ok(None) => {}
+            Err(error) => {
+                self.active_browser_place = None;
+                self.browser_host_failure = Some(error.to_string());
+            }
+        }
+    }
+
+    fn finish_browser_place(&mut self, terminal: StageDropTerminal) {
+        let Some(_intent) = self.active_browser_place.take() else {
+            return;
+        };
+        let StageDropTerminal::Commit { ndc } = terminal else {
+            return;
+        };
+        let Some(camera) = self.latest_camera else {
+            self.browser_host_failure =
+                Some("Rectangle drop has no displayed camera projection".to_owned());
+            return;
+        };
+        let Some(position) = canonical_drop_from_ndc(camera, ndc) else {
+            self.browser_host_failure =
+                Some("Rectangle drop could not be converted to canonical coordinates".to_owned());
+            return;
+        };
+        self.document_queue
+            .push_place_rectangle(PlaceRectangleRequest {
+                position,
+                playhead: self.render_request_template.evaluation_time.timeline_time,
+            });
+        self.repaint_context.request_repaint();
     }
 
     fn advance_latest_smoke(&mut self, ctx: &egui::Context) -> bool {
@@ -644,6 +813,17 @@ impl MotoliiApp {
         eprintln!("U1A2_LAYOUT_REJECT error={message}");
         self.layout_failure = Some(message);
     }
+}
+
+fn adopt_published_document(
+    current_document: &mut Arc<motolii_doc::Document>,
+    primary: &mut Option<motolii_doc::LayerId>,
+    projection_generation: &mut u64,
+    published: &PublishedDocument,
+) {
+    *current_document = Arc::clone(&published.snapshot);
+    *primary = published.primary;
+    *projection_generation = published.projection_generation;
 }
 
 fn register_repaint_signal(
@@ -701,7 +881,7 @@ impl DocumentEditSmoke {
         revision: u64,
         snapshot: &motolii_doc::Document,
         generation: RenderGeneration,
-        queue: &mut DocumentEditQueue,
+        _queue: &mut DocumentEditQueue,
     ) -> Result<(), DocumentEditSmokeError> {
         let json = serde_json::to_vec(snapshot)?;
         match (kind, revision) {
@@ -710,18 +890,6 @@ impl DocumentEditSmoke {
                     return Err(DocumentEditSmokeError::ApplyUnchanged);
                 }
                 self.applied_json = Some(json);
-                queue.push_undo();
-            }
-            (DocumentEditActionKind::Undo, 2) => {
-                if json != self.baseline.document_json.as_bytes() {
-                    return Err(DocumentEditSmokeError::UndoMismatch);
-                }
-                queue.push_redo();
-            }
-            (DocumentEditActionKind::Redo, 3) => {
-                if self.applied_json.as_deref() != Some(json.as_slice()) {
-                    return Err(DocumentEditSmokeError::RedoMismatch);
-                }
                 self.expected_redo_generation = Some(generation);
             }
             _ => return Err(DocumentEditSmokeError::UnexpectedOrder),
@@ -736,10 +904,6 @@ enum DocumentEditSmokeError {
     Serialize(#[from] serde_json::Error),
     #[error("U2b-1 apply did not change Document")]
     ApplyUnchanged,
-    #[error("U2b-1 Undo did not restore the initial Document")]
-    UndoMismatch,
-    #[error("U2b-1 Redo did not restore the applied Document")]
-    RedoMismatch,
     #[error("U2b-1 action order or revision was unexpected")]
     UnexpectedOrder,
 }
@@ -759,12 +923,15 @@ struct PanelBehavior<'a> {
     texture_id: egui::TextureId,
     edits: Vec<EditAction>,
     visibility_edited: bool,
+    stage_rect: Option<egui::Rect>,
 }
 
 impl Behavior<PanelRole> for PanelBehavior<'_> {
     fn pane_ui(&mut self, ui: &mut egui::Ui, _tile_id: TileId, pane: &mut PanelRole) -> UiResponse {
         match pane {
-            PanelRole::Stage => paint_stage(ui, self.preview, self.texture_id),
+            PanelRole::Stage => {
+                self.stage_rect = Some(paint_stage(ui, self.preview, self.texture_id));
+            }
             role => {
                 let response = ui.add(egui::Label::new(role.title()).sense(egui::Sense::drag()));
                 if response.drag_started() {
@@ -808,17 +975,47 @@ impl Behavior<PanelRole> for PanelBehavior<'_> {
     }
 }
 
-fn paint_stage(ui: &mut egui::Ui, preview: &StaticPreview, texture_id: egui::TextureId) {
+fn paint_stage(
+    ui: &mut egui::Ui,
+    preview: &StaticPreview,
+    texture_id: egui::TextureId,
+) -> egui::Rect {
     let desc = preview.slot().desc();
     let source_size = egui::vec2(desc.width as f32, desc.height as f32);
     let target_size = fit_inside(source_size, ui.available_size());
-    ui.centered_and_justified(|ui| {
-        ui.push_id("motolii-stage-viewport", |ui| {
-            ui.add(
-                egui::Image::from_texture((texture_id, source_size)).fit_to_exact_size(target_size),
-            );
-        });
+    let rect = egui::Rect::from_center_size(ui.max_rect().center(), target_size);
+    ui.push_id("motolii-stage-viewport", |ui| {
+        ui.put(
+            rect,
+            egui::Image::from_texture((texture_id, source_size)).fit_to_exact_size(target_size),
+        );
     });
+    rect
+}
+
+pub(crate) fn canonical_drop_from_ndc(camera: CompCamera, ndc: [f64; 2]) -> Option<[f64; 2]> {
+    if !ndc[0].is_finite() || !ndc[1].is_finite() {
+        return None;
+    }
+    let qx =
+        ndc[0] * camera.aspect_num() as f64 / camera.aspect_den() as f64 * camera.height() / 2.0;
+    let qy = ndc[1] * camera.height() / 2.0;
+    let cos_r = camera.roll_radians().cos();
+    let sin_r = camera.roll_radians().sin();
+    let center = camera.center();
+    let point = CanonicalPoint {
+        x: center.x + cos_r * qx - sin_r * qy,
+        y: center.y + sin_r * qx + cos_r * qy,
+    };
+    let projected = camera.world_to_ndc(point).ok()?;
+    if !point.x.is_finite()
+        || !point.y.is_finite()
+        || (projected.0 - ndc[0]).abs() > 1e-9
+        || (projected.1 - ndc[1]).abs() > 1e-9
+    {
+        return None;
+    }
+    Some([point.x, point.y])
 }
 
 fn layout_constraints(viewport_width: f32) -> LayoutConstraints {
@@ -995,6 +1192,7 @@ fn log_lifecycle(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use motolii_doc::Document;
 
     #[test]
     fn fit_inside_preserves_aspect_without_window_state() {
@@ -1069,5 +1267,54 @@ mod tests {
 
         assert_eq!(copied, vec![2]);
         assert_eq!(projection.last_displayed_generation, Some(generation_two));
+    }
+
+    #[test]
+    fn initial_selection_fields_are_none_and_zero() {
+        assert_eq!(INITIAL_PRIMARY, None);
+        assert_eq!(INITIAL_PROJECTION_GENERATION, 0);
+    }
+
+    #[test]
+    fn stage_ndc_drop_roundtrips_through_the_displayed_camera() {
+        let camera =
+            CompCamera::try_new(CanonicalPoint { x: 0.3, y: -0.1 }, 0.4, 1.5, 16, 9).unwrap();
+        let ndc = [0.25, -0.5];
+        let position = canonical_drop_from_ndc(camera, ndc).expect("canonical position");
+        let projected = camera
+            .world_to_ndc(CanonicalPoint {
+                x: position[0],
+                y: position[1],
+            })
+            .unwrap();
+        assert!((projected.0 - ndc[0]).abs() < 1e-9);
+        assert!((projected.1 - ndc[1]).abs() < 1e-9);
+    }
+
+    #[test]
+    fn adoption_replaces_document_primary_and_generation_together() {
+        let mut published_document = Document::new_current();
+        let published_layer = published_document.layers.allocate("published").unwrap();
+        let mut current_document = Arc::new(Document::new_current());
+        let mut primary = None;
+        let mut projection_generation = 0;
+        let published = PublishedDocument {
+            kind: DocumentEditActionKind::Apply,
+            revision: 7,
+            snapshot: Arc::new(published_document),
+            primary: Some(published_layer),
+            projection_generation: 9,
+        };
+
+        adopt_published_document(
+            &mut current_document,
+            &mut primary,
+            &mut projection_generation,
+            &published,
+        );
+
+        assert!(Arc::ptr_eq(&current_document, &published.snapshot));
+        assert_eq!(primary, Some(published_layer));
+        assert_eq!(projection_generation, 9);
     }
 }

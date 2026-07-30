@@ -1,10 +1,12 @@
 //! egui shell起動と既存wgpu device共有。
 
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use motolii_core::{Quality, RationalTime};
 use motolii_doc::{
     layer_names_for_item, Command, Document, DocumentWriter, EvaluationTime, ParentLocator,
+    ProjectSession, ResourceLimits,
 };
 use motolii_eval::DataTracks;
 use motolii_gpu::GpuCtx;
@@ -14,8 +16,7 @@ use crate::app::{AppPreviewRuntime, AppSmokeConfig, LifecycleSmokeOutcome, Motol
 use crate::document_edit_runtime::DocumentEditRuntime;
 use crate::render_worker::{RenderJoinError, RenderRequest, RenderWorker};
 use crate::static_preview::{
-    bootstrap_document, bootstrap_document_for_edit_smoke, bootstrap_frame_desc,
-    prepare_in_setup_worker, StaticPreviewError,
+    bootstrap_document, bootstrap_frame_desc, prepare_in_setup_worker, StaticPreviewError,
 };
 use crate::{DocumentCommandRequest, DomainIntent};
 
@@ -43,27 +44,48 @@ pub enum ShellError {
     LifecycleSmokeFailed { reason: String },
     #[error("U2b-1 bootstrap fixture has no removable track item")]
     MissingDocumentEditFixture,
+    #[error("project session could not be opened")]
+    ProjectSession(#[from] motolii_doc::SessionError),
 }
 
 pub fn run_shell() -> Result<(), ShellError> {
     let lifecycle_smoke = std::env::var_os(LIFECYCLE_SMOKE_ENV).is_some();
     let latest_smoke = std::env::var_os(LATEST_PREVIEW_SMOKE_ENV).is_some();
-    let document_edit_smoke = std::env::var_os(DOCUMENT_EDIT_SMOKE_ENV).is_some();
+    let document = Arc::new(bootstrap_document()?);
+    run_shell_inner(document, None, None, lifecycle_smoke, latest_smoke)
+}
+
+pub fn run_shell_with_project(project_path: &Path) -> Result<(), ShellError> {
+    let limits = ResourceLimits::production();
+    let (session, opened) = ProjectSession::open(project_path, &limits)?;
+    let document = opened.document;
+    let catalog =
+        Arc::new(first_party_catalog().map_err(|error| ShellError::Runtime(Box::new(error)))?);
+    let writer = DocumentWriter::new(document, Arc::clone(&catalog))
+        .map_err(|error| ShellError::Runtime(Box::new(error)))?;
+    let runtime = DocumentEditRuntime::new(session, writer, catalog);
+    let document_edit_request = std::env::var_os(DOCUMENT_EDIT_SMOKE_ENV)
+        .is_some()
+        .then(|| bootstrap_delete_request(runtime.snapshot().as_ref()))
+        .transpose()?;
+    #[cfg(target_os = "macos")]
+    if document_edit_request.is_none() {
+        return crate::product_runtime::run(runtime)
+            .map_err(|error| ShellError::Runtime(Box::new(error)));
+    }
+    let document = runtime.snapshot();
+    run_shell_inner(document, Some(runtime), document_edit_request, false, false)
+}
+
+fn run_shell_inner(
+    document: Arc<Document>,
+    document_runtime: Option<DocumentEditRuntime>,
+    document_edit_request: Option<DocumentCommandRequest>,
+    lifecycle_smoke: bool,
+    latest_smoke: bool,
+) -> Result<(), ShellError> {
     let (gpu, parts) = GpuCtx::new_for_ui()?;
     let gpu = Arc::new(gpu);
-    let document = if document_edit_smoke {
-        bootstrap_document_for_edit_smoke()?
-    } else {
-        bootstrap_document()?
-    };
-    let document_edit_request = document_edit_smoke
-        .then(|| bootstrap_delete_request(&document))
-        .transpose()?;
-    let catalog = first_party_catalog().map_err(|error| ShellError::Runtime(Box::new(error)))?;
-    let writer = DocumentWriter::new(document, Arc::new(catalog))
-        .map_err(|error| ShellError::Runtime(Box::new(error)))?;
-    let document_runtime = DocumentEditRuntime::new(writer);
-    let document = document_runtime.snapshot();
     let desc = bootstrap_frame_desc()?;
     let preview = Arc::new(prepare_in_setup_worker(
         Arc::clone(&gpu),
@@ -74,7 +96,7 @@ pub fn run_shell() -> Result<(), ShellError> {
         .map_err(|error| ShellError::Runtime(Box::new(error)))?;
     let render_client = render_worker.client();
     let initial_request = RenderRequest {
-        document,
+        document: Arc::clone(&document),
         data_tracks: Arc::new(DataTracks::new()),
         evaluation_time: EvaluationTime::new(RationalTime::ZERO),
         desc,

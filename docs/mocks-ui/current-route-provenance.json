@@ -1,0 +1,221 @@
+{
+  "schemaVersion": 2,
+  "assets": [
+    {
+      "path": "docs/mocks-ui/fixtures/reference-candidate-tokens.json",
+      "sha256": "4568cc386fe3c42f8bb5e75bf643081e84775545240c81e751db65eb453a192b"
+    },
+    {
+      "path": "docs/mocks-ui/fixtures/reference-document.json",
+      "sha256": "a3b9212f13b586ec4a800390a1b524907defd32a85ee0d5bd74f5db6ae63397c"
+    },
+    {
+      "path": "docs/mocks-ui/fixtures/reference-scenes.json",
+      "sha256": "220910b59723d3141885591cb5aab4a9ba688dbd1e796d18a59e6b771303a45b"
+    },
+    {
+      "path": "docs/mocks-ui/package-lock.json",
+      "sha256": "db5a1e7eab84a8a2c9c7f7833b34689921586fbe127830c64f62853759a65c6d"
+    },
+    {
+      "path": "docs/mocks-ui/public/reference-fonts/inter-latin-400-normal.woff2",
+      "sha256": "8909904ab6c872eb994093482a88a28eca2cd95912d7b6fecd72103b0dc07edc"
+    },
+    {
+      "path": "docs/mocks-ui/public/reference-fonts/inter-latin-600-normal.woff2",
+      "sha256": "f9a06e79cd3a2a20951c0f0e28f66dd0e6d3fda73911d640a2125c8fcb78f21a"
+    },
+    {
+      "path": "docs/mocks-ui/scripts/reference-transform.mjs",
+      "sha256": "071fda5b5d824af1ff4224a459a1baafcf536dda9f7e349f5e1ce4c5101a948c"
+    },
+    {
+      "path": "docs/mocks-ui/src/App.jsx",
+      "sha256": "77f156575fe92132a8d80c34d0508f4aad5c582951934574c3cd7477f29797d5"
+    },
+    {
+      "path": "docs/mocks-ui/src/candidates/EasingGraphCandidate.jsx",
+      "sha256": "1b1a3ab66808504d4356bbb8ffd65bb8ed9aa77726a71b65ffa6b26bd61b4a05"
+    },
+    {
+      "path": "docs/mocks-ui/src/candidates/GraphViewCandidate.jsx",
+      "sha256": "3c865757e1468ae9bdf4089781fe9fa649e6310280d2ef615ad28e4238407080"
+    },
+    {
+      "path": "docs/mocks-ui/src/candidates/TimelineCandidate.jsx",
+      "sha256": "7c8fb02c38f80cbd046e0b2cd45516a451db9448f628287a6b6eed8cbc7d50a2"
+    },
+    {
+      "path": "docs/mocks-ui/src/candidates/easing-graph-candidate.css",
+      "sha256": "644064b649778d6dfe08de4d73751d5e7b65b96133115eba07be799aeb8e0329"
+    },
+    {
+      "path": "docs/mocks-ui/src/candidates/easing-graph-model.js",
+      "sha256": "22a6745bcd77b6f71f5c62563b0165f6161a234abebd2a10f326d210a0a6fad9"
+    },
+    {
+      "path": "docs/mocks-ui/src/candidates/graph-view-candidate.css",
+      "sha256": "1026c6458c531edce31b74ce07771ee861de8e60224b8c3a3a73d0964793f65b"
+    },
+    {
+      "path": "docs/mocks-ui/src/candidates/graph-view-model.js",
+      "sha256": "d1d66a81bb4059e12261cad4b273ff31ee7b3d778c6befe9d88e61bea8724bce"
+    },
+    {
+      "path": "docs/mocks-ui/src/candidates/timeline-candidate.css",
+      "sha256": "9e08238e9325977bf2372366b7b6c7f33f30a5e0378b85f5890ece3ee973ae97"
+    },
+    {
+      "path": "docs/mocks-ui/src/fixtures/allSurfaces.js",
+      "sha256": "e9e982284f91784d23edd6e2bbb15ee8cc1bc96726263fe1c729a59c8d8ec174"
+    },
+    {
+      "path": "docs/mocks-ui/src/layout/ResizablePanelLayout.jsx",
+      "sha256": "3af5334dff20551954e9fb7bac1cc1e5fdf894e357706a0d9a33fbe09d211359"
+    },
+    {
+      "path": "docs/mocks-ui/src/layout/resizable-panel-layout.css",
+      "sha256": "d6ea3b03d48c2f8d5e3102b0a3712f1c6bdc825acdd4c80d6a57d637f89ec249"
+    },
+    {
+      "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
+      "sha256": "3243ffbc863f660ec527def954bf8358c381cd5a492cda13cb4ed95044c9f09e"
+    },
+    {
+      "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
+      "sha256": "6262df2c388cc86e0519aa6adc7f1b0d8d5c57dcff9db8f3f7e3cfe8b979a299"
+    },
+    {
+      "path": "docs/mocks-ui/src/legacy/index.js",
+      "sha256": "37c951fe190950a49c167bf19ad94cf2d631c13dc3423b79a41cb76c207adddf"
+    },
+    {
+      "path": "docs/mocks-ui/src/legacy/legacySource.js",
+      "sha256": "4fd547d2efa98d6d1fadf403b4ae2379abb0767d50cda172f8f6fa749a230e20"
+    },
+    {
+      "path": "docs/mocks-ui/src/main.jsx",
+      "sha256": "2164f5505b51adac31c07c09728573958af6276ae8a025a3700ebe0e2b02cf9f"
+    },
+    {
+      "path": "docs/mocks-ui/src/primitives/index.jsx",
+      "sha256": "005b5db5a71f75ab139d26f44169538f74d3711ca2244748e9b4a016088c9f8b"
+    },
+    {
+      "path": "docs/mocks-ui/src/primitives/primitives.css",
+      "sha256": "f625758bbfb9db6577618584a79ef9e900510ffc96662c6b1f6191393590959c"
+    },
+    {
+      "path": "docs/mocks-ui/src/reference/EmptyBrowserReference.jsx",
+      "sha256": "5f901c90546e0e4b477950b748dd1acb736a0cb04518d0e902c7118ec8f424bd"
+    },
+    {
+      "path": "docs/mocks-ui/src/reference/MixedTimelineReference.jsx",
+      "sha256": "50d948d562a68a5d61c304059062c0ee99952dcbf2fe30b85d7313d49bf57db2"
+    },
+    {
+      "path": "docs/mocks-ui/src/reference/ParameterEasingReference.jsx",
+      "sha256": "fe3fa1d367e7e89b8f410318b688de5b9c3f0351773f30c414ccc78a50a20a34"
+    },
+    {
+      "path": "docs/mocks-ui/src/reference/ReferenceStateStrip.jsx",
+      "sha256": "c0985a84f9e773ea3283ea9aabd17c75ecc3ca32bc6cc17d80dee91207522ba8"
+    },
+    {
+      "path": "docs/mocks-ui/src/reference/SharedEffectRelativeReference.jsx",
+      "sha256": "5f599618536e7462af13f187698c8960dee3b7d1ad2cd397665f49f2233bc9a2"
+    },
+    {
+      "path": "docs/mocks-ui/src/reference/StageFrameToolsReference.jsx",
+      "sha256": "545f92b2984c2b8b077e53ca64fa170643f12f7cf49b4e35a9e499399554bcdd"
+    },
+    {
+      "path": "docs/mocks-ui/src/reference/fixtures.js",
+      "sha256": "b45fe92213fe5bc6ebe3b1169cc49a878a00470eae03d2d205585ccda386b9b4"
+    },
+    {
+      "path": "docs/mocks-ui/src/reference/loadReferenceFixtures.js",
+      "sha256": "8476efb890c753a6267c2f7a285f8c9ef37a9abeac51c40d75774fa4d0e97d5d"
+    },
+    {
+      "path": "docs/mocks-ui/src/reference/reference-font.css",
+      "sha256": "8bb4122baef8f57b7dff5181eda98fb059505f9a9a6db3111994d9b60788aea3"
+    },
+    {
+      "path": "docs/mocks-ui/src/screens/AllSurfacesScreen.jsx",
+      "sha256": "d00bc40b5883ba1da972bfdea1d067c2f80b8e91ba1452a32fa83750f9d5a91d"
+    },
+    {
+      "path": "docs/mocks-ui/src/screens/all-surfaces.css",
+      "sha256": "4c6f526ac31ec21351d8f8cda58fe0ef6788310c06abb0e7c857339d12dbdeff"
+    },
+    {
+      "path": "docs/mocks-ui/src/surfaces/BrowserSurface.jsx",
+      "sha256": "6de71d021df43f94d2f2848e542bb0cd4ad2125f6d5b60c45a9d57fd4b723b6f"
+    },
+    {
+      "path": "docs/mocks-ui/src/surfaces/InspectorSurface.jsx",
+      "sha256": "f5240b9d2879cd37b1db5911fc5e1e604fb8dc57d08d4e4e01f7804c4f53029c"
+    },
+    {
+      "path": "docs/mocks-ui/src/surfaces/StageSurface.jsx",
+      "sha256": "1f63b24a0cb35d8dac8e4f0a6223ba568970a801230d2312a123b9c5c7232358"
+    },
+    {
+      "path": "docs/mocks-ui/src/surfaces/TimelineSurface.jsx",
+      "sha256": "335eba6886f9804f4ce0c80555ef6d1a1e243fd7deb7458da031734a051dbe5f"
+    },
+    {
+      "path": "docs/mocks-ui/src/tokens/mock-candidates.css",
+      "sha256": "7b7ee84a021f3caa0fc327509e41bb7efe30424d032468260159f971ee35b4af"
+    },
+    {
+      "path": "docs/mocks/m3-vism-host-boundary.html",
+      "sha256": "a20bd36d6b8b241ef4ec21adda6b045e470bf89fbc78e2788207aa6d0875ec68"
+    },
+    {
+      "path": "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx",
+      "sha256": "b2da9c62659ee9c19245115632b16d76fa38b34739946b901a5e7f6c8862a995"
+    },
+    {
+      "path": "ui/motolii-web/src/candidates/EasingTriggerCandidate.jsx",
+      "sha256": "6ae4cf7e79586e33cedaed0bb928daa34aa4b8ac9cdc9f6c494637875f502932"
+    },
+    {
+      "path": "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
+      "sha256": "a01e7431361fdbaf1bdc1f1836045835f501d72e9d62aba1bf833ba3d53cc140"
+    },
+    {
+      "path": "ui/motolii-web/src/candidates/KeyToolsCandidate.jsx",
+      "sha256": "bf38656a99957a9f2d1465057820510f525fd394a3965cff9f291415223f87ba"
+    },
+    {
+      "path": "ui/motolii-web/src/candidates/discovery-browser-candidate.css",
+      "sha256": "1dcb6afc3c16907366f6d73ed7cfb1b04c8cea872d169e959ead49b6c6cedccd"
+    },
+    {
+      "path": "ui/motolii-web/src/candidates/easing-trigger-candidate.css",
+      "sha256": "1e2d26d51c8ed7b322d6fa56123870842daeca41fd0815e7167055c2d87acfd8"
+    },
+    {
+      "path": "ui/motolii-web/src/candidates/inspector-candidate.css",
+      "sha256": "730e2861a893b2b07fa66d5acef0038a49bdcf337e8c5a037785b0a58d829cbe"
+    },
+    {
+      "path": "ui/motolii-web/src/candidates/key-tools-candidate.css",
+      "sha256": "f84eb7f98f05844fa3bfc72b702cee2709f1fc0bb9be614f2b01039a65b5190d"
+    },
+    {
+      "path": "ui/motolii-web/src/index.js",
+      "sha256": "a2ec126a21dd4637fbe90480460d47e7c2a3258fdc37dd7cf1d19746c6224469"
+    },
+    {
+      "path": "ui/motolii-web/src/patterns/DiscoveryBrowser.jsx",
+      "sha256": "1d996ad66dba3ff7fb36cf811ce8d22faec1fee271a2dd5349d953a7cf89a2ea"
+    },
+    {
+      "path": "ui/motolii-web/src/read-model/starterMediaProjectionDecoder.js",
+      "sha256": "c44a55b41c63fe4a1bb3c05c9a851a2558f80d8d8126d12fd8da1d5600296384"
+    }
+  ]
+}

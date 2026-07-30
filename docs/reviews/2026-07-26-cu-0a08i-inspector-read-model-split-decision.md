@@ -2,8 +2,9 @@
 
 - 日付: 2026-07-26
 - 状態: **決定**
-- 現在粒: **CU-0A08IS / Inspector read-model inventory DO**
-- 後続: **CU-0A08IP WAIT、CU-0A08IT WAIT**
+- 完了: **CU-0A08IS DONE**
+- CU-0A08IP: **DONE**
+- 後続: **CU-0A08IT WAIT**
 
 ## 1. 再判定の結論
 
@@ -14,9 +15,9 @@ projection由来とpresentation直書きの二重ownerを作るため、次の3�
 
 | ID | 状態 | 一成果 | 依存 | 合格 | STOP |
 |---|---|---|---|---|---|
-| CU-0A08IS | `SPEC / DO` | 全表示要素を既決sourceあり／未決へ分類し、projection decoderの閉じた入力と拒否条件を固定 | CU-0A07C | source型・file・test oracleが各要素にあり、未決を推測しない | Document field、plugin公開契約、transport、intent型の発明が必要 |
-| CU-0A08IP | `CORE / WAIT` | 決定済みread modelだけをfixture由来のfail-closed decoderへ落とす。Host transportとは呼ばない | CU-0A08IS | unknown enum/field、non-finite、dangling、fixture revision不一致拒否。React semantic writer 0 | 同一意味の二重store、DOM/class/ARIA変更、Host/WebView公開境界が必要 |
-| CU-0A08IT | `CORE / WAIT` | React操作を既存`DomainIntent`→`DocumentCommandRequest`→D2終端へ接続 | CU-0A08IP、U4a-2/U4c製品入口 | 1 gesture=1 intent、失敗/Cancel=変更0、並行writer 0 | U4a-2/U4c未成立、別intent終端、React側Undo/selection正本が必要 |
+| CU-0A08IS | `DONE` | 全表示要素を既決sourceあり／未決へ分類し、projection decoderの閉じた入力と拒否条件を固定 | CU-0A07C | source型・file・test oracleが各要素にあり、未決を推測しない | Document field、plugin公開契約、transport、intent型の発明が必要 |
+| CU-0A08IP | `DONE` | 決定済みread modelだけをfixture由来のfail-closed decoderへ落とす。Host transportとは呼ばない | CU-0A08IS | unknown enum/field、non-finite、dangling、fixture revision不一致拒否。React semantic writer 0 | 同一意味の二重store、DOM/class/ARIA変更、Host/WebView公開境界が必要 |
+| CU-0A08IT | `CORE / WAIT` | **Direct** Inspector接続: React操作を既存の intent→command→D2 終端へ接続 | CU-0A08IP `DONE`、U4a-2 Direct製品入口 | 1 gesture=1 intent、失敗/Cancel=変更0、並行writer 0 | U4a-2 Direct未成立、別intent終端、React側Undo/selection正本が必要。**U4cはAdvanced入口でありCU-0A08ITの依存ではない。U4cはU2c-2のAdvanced依存** |
 
 ## 2. 現行field照合
 

@@ -1,0 +1,492 @@
+//! product-owned Browser bundleをnative shellのopaque childへ載せるHost。
+
+use std::borrow::Cow;
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use wry::http::{header::CONTENT_TYPE, Response};
+use wry::{
+    NewWindowResponse, PageLoadEvent, Rect, WebView, WebViewBuilder, WebViewBuilderExtDarwin,
+};
+
+use crate::browser_host::{BrowserHostSession, BrowserPlaceIntent};
+use crate::host_pointer_capture::{
+    HostPointerCandidate, HostPointerClick, PlatformPointerCapture, PlatformPointerCaptureError,
+};
+use crate::native_host_layout::LogicalRect;
+
+const PROTOCOL: &str = "motolii-browser";
+const ENTRY_URL: &str = "motolii-browser://product/host.html";
+const HOST_HTML: &[u8] = include_bytes!("../../../ui/motolii-web/generated-host/host.html");
+const HOST_JS: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/host-gJ40uukV.js");
+const HOST_CSS: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/host-4krs5Bey.css");
+const INSPECTOR_HTML: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/inspector.html");
+const INSPECTOR_JS: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/inspector-BMvtfoSi.js");
+const INSPECTOR_CSS: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/inspector-fMh9jxYJ.css");
+const SHARED_JS: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/tokens-4X_Bky8Q.js");
+const SHARED_CSS: &[u8] =
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/tokens-Dq8978N5.css");
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BrowserLifecycleEvent {
+    ReloadStarted { instance_epoch: u64 },
+    ProcessTerminated { instance_epoch: u64 },
+}
+
+impl BrowserLifecycleEvent {
+    pub(crate) fn instance_epoch(self) -> u64 {
+        match self {
+            Self::ReloadStarted { instance_epoch } | Self::ProcessTerminated { instance_epoch } => {
+                instance_epoch
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BrowserFocusTarget {
+    Parent,
+    Browser,
+}
+
+pub(crate) struct BrowserHostRuntime {
+    session: Arc<Mutex<BrowserHostSession>>,
+    island: Arc<Mutex<BrowserIslandState>>,
+    webview: WebView,
+    pointer_capture: Mutex<PlatformPointerCapture>,
+}
+
+#[derive(Debug)]
+struct BrowserIslandState {
+    instance_epoch: u64,
+    initial_projection_ready: bool,
+    latest_layout_epoch: Option<u64>,
+    requested_focus_target: Option<BrowserFocusTarget>,
+    reload_reported: bool,
+}
+
+impl BrowserIslandState {
+    fn new(instance_epoch: u64) -> Self {
+        Self {
+            instance_epoch,
+            initial_projection_ready: false,
+            latest_layout_epoch: None,
+            requested_focus_target: None,
+            reload_reported: false,
+        }
+    }
+
+    fn observe_initial_projection(&mut self, instance_epoch: u64) -> bool {
+        if instance_epoch != self.instance_epoch || self.initial_projection_ready {
+            return false;
+        }
+        self.initial_projection_ready = true;
+        self.reload_reported = false;
+        true
+    }
+
+    fn observe_reload_started(&mut self, instance_epoch: u64) -> bool {
+        if instance_epoch != self.instance_epoch
+            || !self.initial_projection_ready
+            || self.reload_reported
+        {
+            return false;
+        }
+        self.initial_projection_ready = false;
+        self.reload_reported = true;
+        true
+    }
+
+    fn should_apply_layout(&self, epoch: u64) -> bool {
+        self.latest_layout_epoch.is_none_or(|latest| epoch > latest)
+    }
+
+    fn commit_layout(&mut self, epoch: u64) {
+        if self.should_apply_layout(epoch) {
+            self.latest_layout_epoch = Some(epoch);
+        }
+    }
+
+    fn can_transfer_focus(&self) -> bool {
+        self.initial_projection_ready
+    }
+
+    fn should_transfer_focus(&self, target: BrowserFocusTarget) -> bool {
+        self.can_transfer_focus() && self.requested_focus_target != Some(target)
+    }
+
+    fn commit_focus(&mut self, target: BrowserFocusTarget) {
+        self.requested_focus_target = Some(target);
+    }
+}
+
+impl BrowserHostRuntime {
+    pub(crate) fn fresh_instance_epoch() -> Result<u64, BrowserHostRuntimeError> {
+        let elapsed = SystemTime::now().duration_since(UNIX_EPOCH)?;
+        u64::try_from(elapsed.as_millis()).map_err(|_| BrowserHostRuntimeError::EpochOverflow)
+    }
+
+    pub(crate) fn built_in_rectangle_source(instance_epoch: u64) -> BrowserPlaceIntent {
+        BrowserPlaceIntent {
+            // scopeはHost projectionが発行するopaque identityで、表示値から導かない。
+            scope_ref: format!("builtin-{instance_epoch}"),
+            item_id: "rectangle".to_owned(),
+        }
+    }
+
+    pub(crate) fn new(
+        window: &winit::window::Window,
+        instance_epoch: u64,
+        source: BrowserPlaceIntent,
+        wake: Arc<dyn Fn() + Send + Sync>,
+        lifecycle: Arc<dyn Fn(BrowserLifecycleEvent) + Send + Sync>,
+    ) -> Result<Self, BrowserHostRuntimeError> {
+        let session = BrowserHostSession::new(instance_epoch, 0, source);
+        let snapshot = session.snapshot_json()?;
+        let encoded_snapshot = serde_json::to_string(&snapshot)?;
+        let initialization_script = format!(
+            r#"window.__MOTOLII_BUILTIN_HOST__=Object.freeze({{
+snapshot:JSON.parse({encoded_snapshot}),
+postMessage:(message)=>window.ipc.postMessage(message)
+}});"#
+        );
+        let session = Arc::new(Mutex::new(session));
+        let island = Arc::new(Mutex::new(BrowserIslandState::new(instance_epoch)));
+        let callback_session = Arc::clone(&session);
+        let callback_island = Arc::clone(&island);
+        let load_island = Arc::clone(&island);
+        let load_wake = Arc::clone(&wake);
+        let pointer_capture_wake = Arc::clone(&wake);
+        let load_lifecycle = Arc::clone(&lifecycle);
+        let terminated_lifecycle = Arc::clone(&lifecycle);
+        let webview = WebViewBuilder::new()
+            .with_bounds(Rect {
+                position: wry::dpi::LogicalPosition::new(0.0, 0.0).into(),
+                size: wry::dpi::LogicalSize::new(1.0, 1.0).into(),
+            })
+            .with_initialization_script(&initialization_script)
+            .with_custom_protocol(PROTOCOL.to_owned(), move |_webview_id, request| {
+                product_asset_response(request.uri().path())
+            })
+            .with_url(ENTRY_URL)
+            .with_navigation_handler(|target| target.starts_with("motolii-browser:"))
+            .with_new_window_req_handler(|_url, _features| NewWindowResponse::Deny)
+            .with_download_started_handler(|_url, _destination| false)
+            .with_on_page_load_handler(move |event, url| {
+                if url != ENTRY_URL {
+                    return;
+                }
+                match event {
+                    PageLoadEvent::Started => {
+                        let reload = load_island
+                            .lock()
+                            .map(|mut island| island.observe_reload_started(instance_epoch))
+                            .unwrap_or(false);
+                        if reload {
+                            load_lifecycle(BrowserLifecycleEvent::ReloadStarted { instance_epoch });
+                        }
+                    }
+                    PageLoadEvent::Finished => {
+                        let changed = load_island
+                            .lock()
+                            .map(|mut island| island.observe_initial_projection(instance_epoch))
+                            .unwrap_or(false);
+                        if changed {
+                            load_wake();
+                        }
+                    }
+                }
+            })
+            .with_on_web_content_process_terminate_handler(move || {
+                terminated_lifecycle(BrowserLifecycleEvent::ProcessTerminated { instance_epoch });
+            })
+            .with_ipc_handler(move |request| {
+                let raw = request.body();
+                match callback_session.lock() {
+                    Ok(mut session) => match session.accept(raw) {
+                        Ok(()) => {
+                            if let Ok(mut island) = callback_island.lock() {
+                                island.observe_initial_projection(instance_epoch);
+                            }
+                            wake();
+                        }
+                        Err(error) => eprintln!("Browser Host rejected message: {error}"),
+                    },
+                    Err(_) => eprintln!("Browser Host inbox lock is poisoned"),
+                }
+            })
+            .build_as_child(window)?;
+        let pointer_capture =
+            Mutex::new(PlatformPointerCapture::new(window, pointer_capture_wake)?);
+        Ok(Self {
+            session,
+            island,
+            webview,
+            pointer_capture,
+        })
+    }
+
+    pub(crate) fn take_place_intent(
+        &self,
+        generation: u64,
+    ) -> Result<Option<(BrowserPlaceIntent, u64)>, BrowserHostRuntimeError> {
+        let intent = self
+            .session
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::InboxPoisoned)
+            .map(|mut session| session.pop())?;
+        let Some(intent) = intent else {
+            return Ok(None);
+        };
+        let generation = self
+            .pointer_capture
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::PointerCapturePoisoned)?
+            .arm(generation)
+            .then_some(generation)
+            .ok_or(BrowserHostRuntimeError::PointerCaptureAlreadyActive)?;
+        Ok(Some((intent, generation)))
+    }
+
+    pub(crate) fn poll_pointer_candidate(
+        &self,
+    ) -> Result<Option<HostPointerCandidate>, BrowserHostRuntimeError> {
+        self.pointer_capture
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::PointerCapturePoisoned)?
+            .poll()
+            .map_err(Into::into)
+    }
+
+    pub(crate) fn pointer_capture_is_active(&self) -> Result<bool, BrowserHostRuntimeError> {
+        self.pointer_capture
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::PointerCapturePoisoned)
+            .map(|capture| capture.is_active())
+    }
+
+    pub(crate) fn poll_host_click(
+        &self,
+    ) -> Result<Option<HostPointerClick>, BrowserHostRuntimeError> {
+        self.pointer_capture
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::PointerCapturePoisoned)?
+            .poll_click()
+            .map_err(Into::into)
+    }
+
+    pub(crate) fn poll_host_command(
+        &self,
+    ) -> Result<Option<crate::EffectiveTrigger>, BrowserHostRuntimeError> {
+        self.pointer_capture
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::PointerCapturePoisoned)?
+            .poll_command()
+            .map_err(Into::into)
+    }
+
+    pub(crate) fn instance_epoch(&self) -> Result<u64, BrowserHostRuntimeError> {
+        self.island
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::IslandStatePoisoned)
+            .map(|island| island.instance_epoch)
+    }
+
+    pub(crate) fn ensure_focus(
+        &self,
+        target: BrowserFocusTarget,
+    ) -> Result<(), BrowserHostRuntimeError> {
+        if !self
+            .island
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::IslandStatePoisoned)?
+            .can_transfer_focus()
+        {
+            return Ok(());
+        }
+        self.transfer_focus(target)?;
+        self.pointer_capture
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::PointerCapturePoisoned)?
+            .set_host_commands_enabled(target == BrowserFocusTarget::Parent);
+        Ok(())
+    }
+
+    pub(crate) fn set_bounds(
+        &self,
+        layout_epoch: u64,
+        rect: impl Into<Option<LogicalRect>>,
+    ) -> Result<(), BrowserHostRuntimeError> {
+        if !self
+            .island
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::IslandStatePoisoned)?
+            .should_apply_layout(layout_epoch)
+        {
+            return Ok(());
+        }
+        let rect = rect.into();
+        if let Some(rect) = rect {
+            self.webview.set_bounds(Rect {
+                position: wry::dpi::LogicalPosition::new(rect.x, rect.y).into(),
+                size: wry::dpi::LogicalSize::new(rect.width, rect.height).into(),
+            })?;
+        }
+        self.webview.set_visible(rect.is_some())?;
+        self.island
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::IslandStatePoisoned)?
+            .commit_layout(layout_epoch);
+        Ok(())
+    }
+
+    fn transfer_focus(&self, target: BrowserFocusTarget) -> Result<(), BrowserHostRuntimeError> {
+        if !self
+            .island
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::IslandStatePoisoned)?
+            .should_transfer_focus(target)
+        {
+            return Ok(());
+        }
+        match target {
+            BrowserFocusTarget::Parent => self.webview.focus_parent()?,
+            BrowserFocusTarget::Browser => self.webview.focus()?,
+        }
+        self.island
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::IslandStatePoisoned)?
+            .commit_focus(target);
+        Ok(())
+    }
+}
+
+pub(crate) fn product_asset_response(path: &str) -> Response<Cow<'static, [u8]>> {
+    let (content_type, body) = match path {
+        "/" | "/host.html" => ("text/html; charset=utf-8", HOST_HTML),
+        "/inspector.html" => ("text/html; charset=utf-8", INSPECTOR_HTML),
+        "/assets/host-gJ40uukV.js" => ("text/javascript; charset=utf-8", HOST_JS),
+        "/assets/host-4krs5Bey.css" => ("text/css; charset=utf-8", HOST_CSS),
+        "/assets/inspector-BMvtfoSi.js" => ("text/javascript; charset=utf-8", INSPECTOR_JS),
+        "/assets/inspector-fMh9jxYJ.css" => ("text/css; charset=utf-8", INSPECTOR_CSS),
+        "/assets/tokens-4X_Bky8Q.js" => ("text/javascript; charset=utf-8", SHARED_JS),
+        "/assets/tokens-Dq8978N5.css" => ("text/css; charset=utf-8", SHARED_CSS),
+        _ => {
+            return Response::builder()
+                .status(404)
+                .body(Cow::Borrowed(&[] as &[u8]))
+                .expect("constant 404 response");
+        }
+    };
+    Response::builder()
+        .header(CONTENT_TYPE, content_type)
+        .body(Cow::Borrowed(body))
+        .expect("constant product asset response")
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum BrowserHostRuntimeError {
+    #[error("Browser Host clock is before the Unix epoch")]
+    Clock(#[from] std::time::SystemTimeError),
+    #[error("Browser Host epoch exceeds u64")]
+    EpochOverflow,
+    #[error("Browser Host JSON could not be encoded")]
+    Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    Codec(#[from] crate::browser_host::BrowserHostError),
+    #[error("Browser Host WebView failed")]
+    WebView(#[from] wry::Error),
+    #[error("Browser Host inbox lock is poisoned")]
+    InboxPoisoned,
+    #[error("Browser Host pointer capture lock is poisoned")]
+    PointerCapturePoisoned,
+    #[error("Browser Host pointer capture is already active")]
+    PointerCaptureAlreadyActive,
+    #[error("Browser Host island state lock is poisoned")]
+    IslandStatePoisoned,
+    #[error(transparent)]
+    PointerCapture(#[from] PlatformPointerCaptureError),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn embedded_host_html_references_the_embedded_assets() {
+        let html = std::str::from_utf8(HOST_HTML).expect("generated Host HTML is UTF-8");
+
+        for path in ["/assets/host-gJ40uukV.js", "/assets/host-4krs5Bey.css"] {
+            assert!(html.contains(path));
+            let response = product_asset_response(path);
+            assert_eq!(response.status(), 200);
+            assert!(!response.body().is_empty());
+        }
+    }
+
+    #[test]
+    fn product_asset_response_rejects_unknown_paths() {
+        let response = product_asset_response("/assets/host-stale.js");
+
+        assert_eq!(response.status(), 404);
+        assert!(response.body().is_empty());
+    }
+
+    #[test]
+    fn island_rejects_duplicate_and_stale_geometry_epochs() {
+        let mut island = BrowserIslandState::new(7);
+
+        assert!(island.should_apply_layout(10));
+        island.commit_layout(10);
+        assert!(!island.should_apply_layout(10));
+        assert!(!island.should_apply_layout(9));
+        assert!(island.should_apply_layout(11));
+    }
+
+    #[test]
+    fn initial_projection_is_single_shot_and_instance_scoped() {
+        let mut island = BrowserIslandState::new(7);
+
+        assert!(!island.can_transfer_focus());
+        assert!(!island.observe_initial_projection(6));
+        assert!(island.observe_initial_projection(7));
+        assert!(!island.observe_initial_projection(7));
+        assert!(island.can_transfer_focus());
+        assert!(island.should_transfer_focus(BrowserFocusTarget::Browser));
+    }
+
+    #[test]
+    fn focus_state_records_only_an_explicit_host_request() {
+        let mut island = BrowserIslandState::new(7);
+
+        assert_eq!(island.requested_focus_target, None);
+        island.commit_focus(BrowserFocusTarget::Parent);
+        assert_eq!(
+            island.requested_focus_target,
+            Some(BrowserFocusTarget::Parent)
+        );
+        island.commit_focus(BrowserFocusTarget::Browser);
+        assert_eq!(
+            island.requested_focus_target,
+            Some(BrowserFocusTarget::Browser)
+        );
+    }
+
+    #[test]
+    fn reload_is_reported_only_after_a_live_projection() {
+        let mut island = BrowserIslandState::new(7);
+
+        assert!(!island.observe_reload_started(7));
+        assert!(island.observe_initial_projection(7));
+        assert!(island.observe_reload_started(7));
+        assert!(!island.observe_reload_started(7));
+        assert!(!island.can_transfer_focus());
+        assert!(!island.observe_initial_projection(6));
+    }
+}

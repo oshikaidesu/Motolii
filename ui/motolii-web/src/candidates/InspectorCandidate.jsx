@@ -245,6 +245,7 @@ export function InspectorCandidate({
   syncColorBook,
   setStageTool,
   renderPluginHistory,
+  inspectorReadModel,
 }) {
   const [, syncRender] = useReducer((n) => n + 1, 0);
   const scrubSessionRef = useRef(null);
@@ -349,6 +350,36 @@ export function InspectorCandidate({
   };
 
   const panelHead = <div className="panel-head">Inspector</div>;
+  const selectedObjectName =
+    inspectorReadModel === undefined
+      ? "Pulse rings"
+      : inspectorReadModel.target.layer_name;
+  const selectedObjectKind =
+    inspectorReadModel === undefined
+      ? "Group · 1 child"
+      : inspectorReadModel.target.item_kind === "group"
+        ? `Group · ${inspectorReadModel.target.child_count} ${
+            inspectorReadModel.target.child_count === 1 ? "child" : "children"
+          }`
+        : "Clip";
+  const targetIdentity = (
+    <div className="identity">
+      <div className="icon">G</div>
+      <div>
+        <b>{selectedObjectName}</b>
+        <small>{selectedObjectKind}</small>
+      </div>
+    </div>
+  );
+
+  if (mode === undefined && inspectorReadModel !== undefined) {
+    return (
+      <aside className="inspector" id="inspector">
+        {panelHead}
+        <div className="section">{targetIdentity}</div>
+      </aside>
+    );
+  }
 
   if (mode === "installed" && effectFocused) {
     return (
@@ -440,13 +471,7 @@ export function InspectorCandidate({
           <div className="section-title">
             SELECTED OBJECT <span />
           </div>
-          <div className="identity">
-            <div className="icon">G</div>
-            <div>
-              <b>Pulse rings</b>
-              <small>Group · 1 child</small>
-            </div>
-          </div>
+          {targetIdentity}
         </div>
         <div className="section">
           <div className="section-title">

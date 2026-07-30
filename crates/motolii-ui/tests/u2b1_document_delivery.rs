@@ -38,6 +38,65 @@ fn private_runtime_is_the_only_ui_module_that_stores_the_writer() {
     }
 }
 
+#[test]
+fn browser_lifecycle_reprojection_cannot_reach_document_edits() {
+    let product = include_str!("../src/product_runtime.rs");
+    let browser = include_str!("../src/browser_host_runtime.rs");
+    let lifecycle = product
+        .split("pub(crate) fn handle_product_event")
+        .nth(1)
+        .expect("product lifecycle handler exists")
+        .split("fn set_idle_control_flow")
+        .next()
+        .expect("lifecycle and replacement path are bounded");
+
+    for forbidden in [
+        ".process_next(",
+        ".apply_macro(",
+        ".undo(",
+        ".redo(",
+        "push_place_rectangle",
+        "DocumentEditQueue",
+        "DocumentWriter",
+    ] {
+        assert!(
+            !lifecycle.contains(forbidden) && !browser.contains(forbidden),
+            "Browser lifecycle path reached Document/history operation: {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn browser_replacement_drops_old_island_before_building_the_new_one() {
+    let product = include_str!("../src/product_runtime.rs");
+    let replacement = product
+        .split("fn replace_browser(&mut self")
+        .nth(1)
+        .expect("replace_browser exists")
+        .split("fn set_idle_control_flow")
+        .next()
+        .expect("replace_browser has a bounded body");
+    let drop_old = replacement
+        .find("self.browser.take();")
+        .expect("old Browser island is dropped");
+    let build_new = replacement
+        .find("build_browser_runtime(window")
+        .expect("new Browser island is built");
+
+    assert!(
+        drop_old < build_new,
+        "new Browser island was built before the old island was dropped"
+    );
+    assert!(
+        replacement.contains(".browser_source"),
+        "replacement no longer reuses the stable Host projection source"
+    );
+    assert!(
+        replacement.contains("browser.set_bounds(layout.epoch, layout.browser)"),
+        "replacement no longer reapplies the latest Host layout"
+    );
+}
+
 #[derive(Default)]
 struct WriterBoundaryVisitor {
     findings: Vec<String>,

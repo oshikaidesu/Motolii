@@ -30,8 +30,8 @@ main済み U0a
   → U2b-1 edit E2E → U2c-1 interaction state → U2c-4 diagnostic model
   → U0e-1 token生成基盤 → U0e-2R React baseline再結合 → U0e-2 reference fixture
   → G0-9 UI runtime再選定 → G0-6H 人間審判 → U0e-3 product token/component
-  → U2c-3 feedback component → U2c-5 diagnostic projection
-  → U3a-1 headless timeline foundation → U4a-1 parameter mapping → U4a-2 generated panel
+  → U2c-3 feedback component → U2c-5 diagnostic projection（G0-6H lane。U3a-1の論理ブロックではない）
+  → U3a-1I headless timeline foundation `DONE`（論理依存はU0a+U0bのみ。docs-only `CU-104`も[selection publish envelope決定](../reviews/2026-07-27-cu-104-selection-publish-envelope-decision.md)を`DONE`とし、次PRODUCT-ASSET粒は未選定） → U4a-1 parameter mapping → U4a-2 generated panel
   → U4c Advanced round-trip → U2c-2 real-entry conformance
 ```
 
@@ -122,7 +122,7 @@ U4aを最初の縦切りにする理由は、Host所有の共通操作文法、�
    `U0e-2R`でmainへ再結合してから`U0e-2`のreference fixtureを作る。
    その後はG0-6Hで必ず人間へ戻す。具体token値と旧shellを製品へ持ち込まない。
    U0e-3依存のU2c-3/5もここで迂回しない
-7. G0-6H後は`U0e-3`→`U2c-3`→`U2c-5`→`U3a-1`→`U4a-*`→`U4c`を直列に進める。U3a-1は論理上G0-9非依存のheadless境界だが、本Selected U seriesではこの順を追い越さない。windowed rendererの`U3a-2`はG0-9後の別枝番。U4cで同じDocument意味のDirect/Advanced実製品入口が揃った後にだけU2c-2 conformanceを実行し、未実装Toolは未実装と明記する
+7. G0-6H後は`U0e-3`→`U2c-3`→`U2c-5`をG0-6H laneとして直列に進める（U3a-1の論理ブロックではない）。`U3a-1I`（headless Timeline projection）とdocs-only `CU-104`、docs-only `U2h-1S`は完了済み（`DONE`）。CU-104は[selection publish envelope決定](../reviews/2026-07-27-cu-104-selection-publish-envelope-decision.md)だけを閉じ、U2h-1I実装や`U4a-*`を束ねない。PRODUCT-ASSET laneの次実装粒は`U2h-1I`。`U4c`で同じDocument意味のDirect/Advanced実製品入口が揃った後にだけU2c-2 conformanceを実行し、未実装Toolは未実装と明記する。windowed rendererの`U3a-2`はG0-9後の別枝番のままとする。
 
 この直列順は論理上の依存が並列を許す場合にも初回運用として優先する。外部依存の
 G0-6H、G0-8/M4-K1a、M4-K1d/K7/K8、M2-D5、GAP-16、Browser P41等へ

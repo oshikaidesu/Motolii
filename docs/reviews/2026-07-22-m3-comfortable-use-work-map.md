@@ -138,7 +138,7 @@ M5-P0I、M2 narrow repair、Vism specを同じ待ち列へ入れない。M3内�
 | lane | 現在粒 | 本書との関係 | 直列化しない理由 |
 |---|---|---|---|
 | PRODUCT-ASSET | `CU-0A05A / R2A` | W0a。固定mock内のEasing trigger同形React化とparityだけ | W0a内では一粒ずつ進める |
-| VISUAL-RESPONSE | `G0-6H` | W0bへ渡す人間審判。`U0e-3`だけを停止 | 他laneのcontract spikeや修復を止めない |
+| VISUAL-RESPONSE | `G0-6H` | `DONE / HUMAN ACCEPT`。`U0e-3`だけを解禁 | 他laneのcontract spikeや修復へ完了意味を波及しない |
 | AUTHORING-SCAFFOLD | `VSM-A4S` | 本書外の作者入口spec。Local Alphaへ新しい表現意味を持ち込まない | specだけでproduct/runtimeを触らない |
 | SPATIAL-CONTRACT | `M4-K0` | 将来W5bへ合流するRoD/RoI contract spike | W0〜W2の製品資産順序へ依存しない |
 | IDENTITY-CONTRACT | `M5-P0I` | Vism/M5側のidentity fixture。本書のLocal Alpha blockerではない | 製品schema/APIを追加しない |
@@ -169,7 +169,7 @@ M5-P0I、M2 narrow repair、Vism specを同じ待ち列へ入れない。M3内�
 - parent G0-9の「全platform審判完了」とfixed-Mac evidenceの「限定確定」を混同しない
 
 段階化は完了済みだが、W0b、H1b、Motolii Studio Preview、window結合を単独では解禁しない。
-G0-6Hは独立し、U0e-3とW0bの製品前提を停止したままにする。
+G0-6Hは独立した人間`ACCEPT`で完了しU0e-3だけを解禁した。W0bの他の製品前提は停止したままとする。
 
 ### W0b 製品window統合
 
@@ -307,7 +307,7 @@ Document/User settings/Workspace/Project session/Transientの新しい所有層�
 | keymap、resource policy、easing library | User settings |
 | panel配置、dock、detach、表示面積 | Workspace profile |
 | Timeline scroll/zoom、作業中のview | Project session。具体的な永続codecは既決範囲だけ |
-| playhead | runtime ownerはHost coordinator。再open時の永続化は未決であり、仕様判断前にProject sessionへ焼かない |
+| playhead | runtime ownerはHost coordinator。state ownerはProject session（U3a-2Q-P4）。freshなHost coordinatorでprojectを再openした時は以前の値を復元せず、projectから決定的に定まる安全な初期位置へ戻す。将来のbest-effort復元は延期・追加可能で恒久棄却しない。具体値・永続形式・versionは未決 |
 | selection、hover、drag、popup、診断、preview generation | Transient / Host coordinator |
 | focus-visible、未確定IME composition等 | local presentation。ただしHost意味の正本にしない |
 

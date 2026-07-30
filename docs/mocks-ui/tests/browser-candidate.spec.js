@@ -14,6 +14,7 @@ async function openCandidate(page) {
   await page
     .locator('.app[data-parity-ready="true"]')
     .waitFor({ state: "visible" });
+  expect(await page.locator("#root").getAttribute("data-current-route-capture-ready")).toBeNull();
 }
 
 test.describe("shared discovery Browser candidate", () => {

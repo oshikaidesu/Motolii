@@ -3,24 +3,36 @@
 //! toolkit APIはprivate module内に閉じ、domain/coreの公開契約へは出さない。
 
 mod app;
+mod browser_host;
+mod browser_host_runtime;
 mod command_registry;
 mod diagnostic;
 mod display_slot;
 mod document_command_request;
 mod document_edit_runtime;
 mod domain_intent;
+mod host_pointer_capture;
 mod input_router;
+#[cfg(target_os = "macos")]
+mod inspector_host_runtime;
 mod interaction_state;
 mod keymap;
 mod keymap_codec;
 mod layout;
 mod layout_authority;
+mod layout_geometry;
 mod layout_runtime;
 mod layout_runtime_adapter;
+mod native_host_layout;
+#[cfg(target_os = "macos")]
+mod product_runtime;
+#[cfg(target_os = "macos")]
+mod product_runtime_adapter;
 mod render_worker;
 mod shell;
 mod state_ownership;
 mod static_preview;
+mod timeline_projection;
 
 pub use command_registry::{
     builtin_command_registry, CommandId, CommandIdError, CommandMetadata, CommandRegistry,
@@ -50,9 +62,13 @@ pub use keymap_codec::{
     KeymapCodecError, KeymapCodecLimits, LimitKind, LoadedKeymap, OpaqueOperationReason,
     KEYMAP_CODEC_VERSION,
 };
-pub use shell::{run_shell, ShellError};
+pub use shell::{run_shell, run_shell_with_project, ShellError};
 pub use state_ownership::{UiStateLifetime, UiStateOwner};
 pub use static_preview::StaticPreviewError;
+pub use timeline_projection::{
+    project_timeline, TimelineBar, TimelineHit, TimelineKey, TimelineMetrics, TimelineProjection,
+    TimelineProjectionError, TimelineUnsupported, TimelineViewport,
+};
 
 /// 製品 UI クレートの識別子。依存方向 CI の許可リストと一致させる。
 pub const CRATE_ID: &str = "motolii-ui";

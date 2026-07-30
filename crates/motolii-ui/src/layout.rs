@@ -127,6 +127,9 @@ impl Default for PanelLayout {
     }
 }
 
+const BUILT_IN_TOP_SHARES: [u32; 3] = [1, 3, 1];
+const BUILT_IN_VERTICAL_SHARES: [u32; 2] = [3, 1];
+
 impl PanelLayout {
     pub(crate) fn built_in() -> Self {
         Self {
@@ -140,13 +143,13 @@ impl PanelLayout {
                             LayoutNode::Pane(PanelRole::Stage),
                             LayoutNode::Pane(PanelRole::Inspector),
                         ],
-                        shares: vec![1, 3, 1],
-                        default_shares: vec![1, 3, 1],
+                        shares: BUILT_IN_TOP_SHARES.to_vec(),
+                        default_shares: BUILT_IN_TOP_SHARES.to_vec(),
                     },
                     LayoutNode::Pane(PanelRole::Timeline),
                 ],
-                shares: vec![3, 1],
-                default_shares: vec![3, 1],
+                shares: BUILT_IN_VERTICAL_SHARES.to_vec(),
+                default_shares: BUILT_IN_VERTICAL_SHARES.to_vec(),
             },
             hidden: BTreeSet::new(),
         }

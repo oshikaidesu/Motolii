@@ -10,15 +10,19 @@ pub enum DomainIntent {
     ResetWorkspaceProfile,
     FitStageView,
     CancelInFlightGesture,
+    Undo,
+    Redo,
 }
 
 impl DomainIntent {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 7] = [
         Self::DeleteTargetedItems,
         Self::EnableReduceMotion,
         Self::ResetWorkspaceProfile,
         Self::FitStageView,
         Self::CancelInFlightGesture,
+        Self::Undo,
+        Self::Redo,
     ];
 
     /// UI adapter内だけで使う一時kindを既知の目的へ変換する。
@@ -31,6 +35,8 @@ impl DomainIntent {
             2 => Ok(Self::ResetWorkspaceProfile),
             3 => Ok(Self::FitStageView),
             4 => Ok(Self::CancelInFlightGesture),
+            5 => Ok(Self::Undo),
+            6 => Ok(Self::Redo),
             got => Err(DomainIntentError::UnknownAdapterKind { got }),
         }
     }
@@ -43,6 +49,7 @@ impl DomainIntent {
             Self::ResetWorkspaceProfile => UiStateOwner::WorkspaceProfile,
             Self::FitStageView => UiStateOwner::ProjectSession,
             Self::CancelInFlightGesture => UiStateOwner::Transient,
+            Self::Undo | Self::Redo => UiStateOwner::Document,
         }
     }
 }

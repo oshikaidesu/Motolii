@@ -49,6 +49,7 @@
 | [2026-07-12-code-audit-2nd-d1.md](2026-07-12-code-audit-2nd-d1.md) | 第二実コード監査の裏取りと台帳化: D1系スキーマ・評価・永続(2026-07-12) |
 | [2026-07-12-d1-spec-holes-prior-art.md](2026-07-12-d1-spec-holes-prior-art.md) | D1スキーマ未決点の先例調査メモ(2026-07-12) |
 | [2026-07-12-m2-permanence-prevention.md](2026-07-12-m2-permanence-prevention.md) | M2恒久焼き込みの予防(2026-07-12) |
+| [2026-07-28-g0-6h-v1p-capture-prerequisite-selection.md](2026-07-28-g0-6h-v1p-capture-prerequisite-selection.md) | G0-6H-V1P capture前提の再選定 |
 | [2026-07-23-historical-permanence-prevention-lineage-recovery.md](2026-07-23-historical-permanence-prevention-lineage-recovery.md) | Unit 4B — GR-PV予防5手全9版とstale branch回帰の処分 |
 | [2026-07-23-historical-d1-spec-holes-lineage-recovery.md](2026-07-23-historical-d1-spec-holes-lineage-recovery.md) | Unit 4C — D1仕様穴・TimeMap・Generator先例全12版の処分 |
 | [2026-07-12-pathop-ae-cavalry-comparison.md](2026-07-12-pathop-ae-cavalry-comparison.md) | PathOp語彙比較: AE/Lottie × Cavalry(2026-07-12) |
@@ -164,6 +165,7 @@
 | [2026-07-20-perceptual-expression-translation-decision.md](2026-07-20-perceptual-expression-translation-decision.md) | 知覚表現の翻訳 — Motolii Hostの役割 |
 | [2026-07-20-local-worktree-publication-audit.md](2026-07-20-local-worktree-publication-audit.md) | ローカルworktreeの公開・WIP保全・吸収済み・旧契約差分を分類した外部再開地図 |
 | [2026-07-21-m3-react-webview-runtime-reconsideration.md](2026-07-21-m3-react-webview-runtime-reconsideration.md) | M3 React / WebView UI runtime再選定（2026-07-21） |
+| [2026-07-29-cu-0a09b-browser-standalone-mount-implementation-decision.md](2026-07-29-cu-0a09b-browser-standalone-mount-implementation-decision.md) | R6 Browser standalone mount実装決定 |
 | [2026-07-21-native-stage-gizmo-ownership.md](2026-07-21-native-stage-gizmo-ownership.md) | Native Stage gizmo所有境界: wgpu overlay / CPU picking / Web controls |
 | [2026-07-21-native-stage-gizmo-counter-review.md](2026-07-21-native-stage-gizmo-counter-review.md) | Native Stage gizmo案の反対側レビューと縮小採用 |
 | [2026-07-21-native-surface-renderer-reselection.md](2026-07-21-native-surface-renderer-reselection.md) | React複合下のnative Stage/Timeline renderer再選定とFableレビュー入口 |
@@ -288,3 +290,119 @@
 | [2026-07-23-historical-wgpu-readback-cold-compile-lineage-recovery.md](2026-07-23-historical-wgpu-readback-cold-compile-lineage-recovery.md) | wgpu readback／cold compileの歴史回収 |
 | [2026-07-24-replaceable-semantic-seat-decision.md](2026-07-24-replaceable-semantic-seat-decision.md) | HVR-D04 Unit 8A — Host semantic seat、換装可能Provider、Effect／Filter分類とContent-Aware Scale候補 |
 | [2026-07-26-cu-0a08i-inspector-read-model-split-decision.md](2026-07-26-cu-0a08i-inspector-read-model-split-decision.md) | CU-0A08I Inspector read-model再判定・分割決定 |
+| [2026-07-26-cu-0a08is-inspector-read-model-inventory.md](2026-07-26-cu-0a08is-inspector-read-model-inventory.md) | CU-0A08IS Inspector read-model inventory・fixture拒否契約 |
+| [2026-07-26-cu-g09-browser-catalog-projection-contract-decision.md](2026-07-26-cu-g09-browser-catalog-projection-contract-decision.md) | CU-G09 Browser catalog projection契約決定 |
+| [2026-07-26-cu-g09o-browser-decoder-output-contract-decision.md](2026-07-26-cu-g09o-browser-decoder-output-contract-decision.md) | CU-G09O Browser decoder output契約決定 |
+| [2026-07-26-cu-g09r-browser-decoder-rejection-precedence-decision.md](2026-07-26-cu-g09r-browser-decoder-rejection-precedence-decision.md) | CU-G09R Browser decoder拒否優先順決定 |
+| [2026-07-26-cu-102-fresh-layerid-addtrackitem-atomicity-decision.md](2026-07-26-cu-102-fresh-layerid-addtrackitem-atomicity-decision.md) | CU-102 fresh LayerId + AddTrackItem原子性決定 |
+| [2026-07-26-cu-g03-edit-durability-ordering-decision.md](2026-07-26-cu-g03-edit-durability-ordering-decision.md) | CU-G03 edit durability / publish順序決定 |
+| [2026-07-26-u3a-1-headless-timeline-owner-visibility-split-decision.md](2026-07-26-u3a-1-headless-timeline-owner-visibility-split-decision.md) | U3a-1 headless Timeline owner/visibility分割決定 |
+| [2026-07-27-cu-104-selection-publish-envelope-decision.md](2026-07-27-cu-104-selection-publish-envelope-decision.md) | CU-104 selection publish envelope決定 |
+| [2026-07-27-u2h-1-primary-selection-implementation-split-decision.md](2026-07-27-u2h-1-primary-selection-implementation-split-decision.md) | U2h-1 primary selection implementation split決定 |
+| [2026-07-27-cu-104e-projection-generation-exhaustion-decision.md](2026-07-27-cu-104e-projection-generation-exhaustion-decision.md) | CU-104E projection generation枯渇境界決定 |
+| [2026-07-27-u2h-1p-selection-input-reachability-decision.md](2026-07-27-u2h-1p-selection-input-reachability-decision.md) | U2h-1P selection入力到達性決定 |
+| [2026-07-27-cu-105-dense-timeline-responsibility-recheck.md](2026-07-27-cu-105-dense-timeline-responsibility-recheck.md) | CU-105 dense Timeline責任再確認 |
+| [2026-07-27-cu-106-selection-consumer-split-decision.md](2026-07-27-cu-106-selection-consumer-split-decision.md) | CU-106 selection consumer分割決定 |
+| [2026-07-27-u3a-2s-windowed-timeline-readiness-split-decision.md](2026-07-27-u3a-2s-windowed-timeline-readiness-split-decision.md) | U3a-2S windowed native Timeline readiness分割決定 |
+| [2026-07-27-u3a-2r-renderer-adoption-scope-decision.md](2026-07-27-u3a-2r-renderer-adoption-scope-decision.md) | U3a-2R windowed native Timeline renderer採択範囲決定 |
+| [2026-07-27-u3a-2z-semantic-zoom-responsibility-decision.md](2026-07-27-u3a-2z-semantic-zoom-responsibility-decision.md) | U3a-2Z windowed native Timeline semantic zoom責任所在決定 |
+| [2026-07-27-u3a-2a-renderer-adoption-decision.md](2026-07-27-u3a-2a-renderer-adoption-decision.md) | U3a-2A windowed native Timeline renderer採択決定 |
+| [2026-07-27-u3a-2p-playhead-visible-range-scope-decision.md](2026-07-27-u3a-2p-playhead-visible-range-scope-decision.md) | U3a-2P playhead / visible range owner 判断の範囲決定 |
+| [2026-07-27-u3a-2q-playhead-visible-range-owner-split-decision.md](2026-07-27-u3a-2q-playhead-visible-range-owner-split-decision.md) | U3a-2Q playhead / visible range owner 採択の分割判断 |
+| [2026-07-27-u3a-2q-p-playhead-owner-evidence-supplement.md](2026-07-27-u3a-2q-p-playhead-owner-evidence-supplement.md) | U3a-2Q-P playhead owner admissibility / evidence 補遺 |
+| [2026-07-27-u3a-2q-p2-playhead-reopen-lifetime-decision.md](2026-07-27-u3a-2q-p2-playhead-reopen-lifetime-decision.md) | U3a-2Q-P2 playhead 再 open lifetime 決定 |
+| [2026-07-27-u3a-2q-p3-playhead-future-restore-posture-decision.md](2026-07-27-u3a-2q-p3-playhead-future-restore-posture-decision.md) | U3a-2Q-P3 playhead 将来 reopen 復元 posture 決定 |
+| [2026-07-27-u3a-2q-p4-playhead-five-layer-owner-adoption-decision.md](2026-07-27-u3a-2q-p4-playhead-five-layer-owner-adoption-decision.md) | U3a-2Q-P4 playhead 五層 state owner 採択 |
+| [2026-07-27-cu-109s0-readiness-recheck-selection-decision.md](2026-07-27-cu-109s0-readiness-recheck-selection-decision.md) | CU-109S0 CU-109 readiness / order-boundary recheck 選定 |
+| [2026-07-27-cu-109s-undo-redo-prepared-action-order-recheck.md](2026-07-27-cu-109s-undo-redo-prepared-action-order-recheck.md) | CU-109S Undo / Redo prepared-action 順序再確認 |
+| [2026-07-27-cu-109sp-cu-111-prepared-action-order-prerequisite-decision.md](2026-07-27-cu-109sp-cu-111-prepared-action-order-prerequisite-decision.md) | CU-109SP CU-109 / CU-111 prepared-action 順序前提（P1 precedence） |
+| [2026-07-27-cu-g04s0-session-source-selection-decision.md](2026-07-27-cu-g04s0-session-source-selection-decision.md) | CU-G04S0 VS-1 edit runtime ProjectSession source 判断の選定 |
+| [2026-07-27-cu-g04s-edit-runtime-session-source-decision.md](2026-07-27-cu-g04s-edit-runtime-session-source-decision.md) | CU-G04S VS-1 edit runtime session source / no-session / interim action disposition |
+| [2026-07-27-cu-g04sc0-product-path-handoff-selection-decision.md](2026-07-27-cu-g04sc0-product-path-handoff-selection-decision.md) | CU-G04SC0 VS-1 edit runtime product path handoff 判断の選定 |
+| [2026-07-27-cu-g04sc-edit-runtime-product-path-handoff-decision.md](2026-07-27-cu-g04sc-edit-runtime-product-path-handoff-decision.md) | CU-G04SC VS-1 edit runtime product path handoff（argv carrier / entry境界 / fail-closed / test-flag降格） |
+| [2026-07-28-cu-110s-dependency-scope-decision-selection.md](2026-07-28-cu-110s-dependency-scope-decision-selection.md) | CU-110S CU-110 前提範囲（CU-107 依存）判断の選定 |
+| [2026-07-28-cu-110d-cu-107-dependency-scope-decision.md](2026-07-28-cu-110d-cu-107-dependency-scope-decision.md) | CU-110D CU-110 の CU-107 依存範囲裁定 |
+| [2026-07-28-cu-107s-split-concretization-scope-selection.md](2026-07-28-cu-107s-split-concretization-scope-selection.md) | CU-107S CU-107 分割具体化範囲の選定 |
+| [2026-07-28-cu-107d-cu-110-required-responsibility-scope-decision.md](2026-07-28-cu-107d-cu-110-required-responsibility-scope-decision.md) | CU-107D CU-110 が必要とする CU-107 責任範囲の先行限定 |
+| [2026-07-28-cu-107r-cu-110-required-responsibility-decision.md](2026-07-28-cu-107r-cu-110-required-responsibility-decision.md) | CU-107R CU-110 が必要とする CU-107 責任範囲の限定裁定 |
+| [2026-07-28-cu-107n-cu-107-narrow-prerequisite-closed-set.md](2026-07-28-cu-107n-cu-107-narrow-prerequisite-closed-set.md) | CU-107N CU-107 狭い名前付き前提の閉集合（4前提・単一 owner・依存順） |
+| [2026-07-28-cu-107w-w0-mirror-rewrite-decision.md](2026-07-28-cu-107w-w0-mirror-rewrite-decision.md) | CU-107W W0表・CU-110依存の閉集合名反映（次PRODUCT-ASSET `DO`未選定） |
+| [2026-07-28-g0-6h-e-candidate-approval-evidence-selection.md](2026-07-28-g0-6h-e-candidate-approval-evidence-selection.md) | G0-6H-E0 現行候補5画面承認証拠の限定取込選定 |
+| [2026-07-28-g0-6h-e-candidate-approval-observation.md](2026-07-28-g0-6h-e-candidate-approval-observation.md) | G0-6H-E 現行候補5画面承認の限定観察 |
+| [2026-07-28-g0-6h-r0-reference-authority-reconciliation-selection.md](2026-07-28-g0-6h-r0-reference-authority-reconciliation-selection.md) | G0-6H-R0 reference authority再照合粒の選定 |
+| [2026-07-28-g0-6h-r-reference-authority-role-reconciliation-decision.md](2026-07-28-g0-6h-r-reference-authority-role-reconciliation-decision.md) | G0-6H-R reference authority役割再照合 |
+| [2026-07-28-g0-6h-s-human-judgment-input-route-decision.md](2026-07-28-g0-6h-s-human-judgment-input-route-decision.md) | G0-6H-S 人間審判入力routeの裁定 |
+| [2026-07-28-g0-6h-m0-current-route-semantic-gap-selection.md](2026-07-28-g0-6h-m0-current-route-semantic-gap-selection.md) | G0-6H-M0 現行route semantic gap確認粒の選定 |
+| [2026-07-28-g0-6h-m-current-route-semantic-gap-mapping.md](2026-07-28-g0-6h-m-current-route-semantic-gap-mapping.md) | G0-6H-M 現行route element-level semantic gap map |
+| [2026-07-28-g0-6h-a0-empty-project-starter-media-selection.md](2026-07-28-g0-6h-a0-empty-project-starter-media-selection.md) | G0-6H-A0 empty-project + Starter Media裁定の受領と契約粒選定 |
+| [2026-07-28-g0-6h-a-empty-project-starter-media-scenario-contract.md](2026-07-28-g0-6h-a-empty-project-starter-media-scenario-contract.md) | G0-6H-A empty Project + local Starter Media scenario / fixture 所有契約 |
+| [2026-07-28-g0-6h-af-starter-media-source-provenance-decision.md](2026-07-28-g0-6h-af-starter-media-source-provenance-decision.md) | G0-6H-AF Starter Media 媒体源・provenance class 裁定 |
+| [2026-07-28-g0-6h-ag0-starter-media-generator-closure-inventory.md](2026-07-28-g0-6h-ag0-starter-media-generator-closure-inventory.md) | G0-6H-AG0 Starter Media generator / output closure 棚卸しと責任処分 |
+| [2026-07-28-g0-6h-v0-current-route-variant-evidence-contract.md](2026-07-28-g0-6h-v0-current-route-variant-evidence-contract.md) | G0-6H-V0 現行route variant evidence契約 |
+| [2026-07-28-g0-6h-v1s-current-route-capture-boundary-decision.md](2026-07-28-g0-6h-v1s-current-route-capture-boundary-decision.md) | G0-6H-V1S 現行route capture境界の裁定 |
+| [2026-07-28-g0-6h-v1p-current-route-capture-prerequisite-decision.md](2026-07-28-g0-6h-v1p-current-route-capture-prerequisite-decision.md) | G0-6H-V1P 現行route capture前提の裁定 |
+| [2026-07-28-g0-6h-v1r-envelope-generation-split-decision.md](2026-07-28-g0-6h-v1r-envelope-generation-split-decision.md) | G0-6H-V1R envelope / generation分割の裁定 |
+| [2026-07-28-g0-6h-v1eta-empty-projection-staging-decision.md](2026-07-28-g0-6h-v1eta-empty-projection-staging-decision.md) | G0-6H-V1ETA empty projection段階化の裁定 |
+| [2026-07-28-g0-6h-v1etb-h-browser-post-promotion-authority-reclosure-decision.md](2026-07-28-g0-6h-v1etb-h-browser-post-promotion-authority-reclosure-decision.md) | G0-6H-V1ETB-H Browser post-promotion authority再締結の裁定 |
+| [2026-07-28-g0-6h-v1etb-p-browser-projection-consumer-capsule-boundary-decision.md](2026-07-28-g0-6h-v1etb-p-browser-projection-consumer-capsule-boundary-decision.md) | G0-6H-V1ETB-P Browser projection consumerとcapsule境界の裁定 |
+| [2026-07-28-g0-6h-v1etb-q-browser-route-oracle-allowlist-correction-decision.md](2026-07-28-g0-6h-v1etb-q-browser-route-oracle-allowlist-correction-decision.md) | G0-6H-V1ETB-Q Browser route oracle allowlist補正の裁定 |
+| [2026-07-29-g0-6h-v1g-c-p-current-route-capture-environment-authority-correction-decision.md](2026-07-29-g0-6h-v1g-c-p-current-route-capture-environment-authority-correction-decision.md) | G0-6H-V1G-C-P 現行route capture環境 authority 補正決定 |
+| [2026-07-29-g0-6h-v1g-o-h-current-route-command-authority-hash-correction-decision.md](2026-07-29-g0-6h-v1g-o-h-current-route-command-authority-hash-correction-decision.md) | G0-6H-V1G-O-H 現行route command authority hash 補正決定 |
+| [2026-07-29-g0-6h-v1g-p-current-route-generation-mechanics-decision.md](2026-07-29-g0-6h-v1g-p-current-route-generation-mechanics-decision.md) | G0-6H-V1G-P 現行route generation mechanics決定 |
+| [2026-07-29-cu-0a08rs0-browser-inspector-read-projection-dependency-scope-selection.md](2026-07-29-cu-0a08rs0-browser-inspector-read-projection-dependency-scope-selection.md) | CU-0A08RS0 Browser / Inspector read-projection 依存範囲の選定 |
+| [2026-07-29-cu-0a08rs-browser-inspector-read-projection-u4a2-dependency-decision.md](2026-07-29-cu-0a08rs-browser-inspector-read-projection-u4a2-dependency-decision.md) | CU-0A08RS Browser / Inspector read-only projection U4a-2 依存裁定 |
+| [2026-07-29-cu-0a08rm0-browser-typed-intent-dependency-adjudication-scope-selection.md](2026-07-29-cu-0a08rm0-browser-typed-intent-dependency-adjudication-scope-selection.md) | CU-0A08RM0 Browser typed-intent 依存裁定範囲の選定 |
+| [2026-07-29-cu-0a08rmd-browser-typed-intent-dependency-adjudication.md](2026-07-29-cu-0a08rmd-browser-typed-intent-dependency-adjudication.md) | CU-0A08RMD Browser typed-intent 依存裁定 |
+| [2026-07-29-cu-0a08bd0-browser-typed-intent-dependency-direction-scope-selection.md](2026-07-29-cu-0a08bd0-browser-typed-intent-dependency-direction-scope-selection.md) | CU-0A08BD0 Browser typed-intent 依存方向の選定範囲 |
+| [2026-07-29-cu-0a08bdd-browser-typed-intent-dependency-direction-decision.md](2026-07-29-cu-0a08bdd-browser-typed-intent-dependency-direction-decision.md) | CU-0A08BDD Browser typed-intent 依存方向の裁定 |
+| [2026-07-29-cu-0a08btr-browser-read-projection-dependency-reclosure-decision.md](2026-07-29-cu-0a08btr-browser-read-projection-dependency-reclosure-decision.md) | CU-0A08BTR Browser read-projection 依存再締結 |
+| [2026-07-29-cu-0a08btp-browser-read-projection-jsx-connection-implementation-decision.md](2026-07-29-cu-0a08btp-browser-read-projection-jsx-connection-implementation-decision.md) | CU-0A08BTP Browser read projection / JSX connection 実装決定 |
+| [2026-07-29-cu-0a08itp-p-inspector-post-promotion-authority-amendment.md](2026-07-29-cu-0a08itp-p-inspector-post-promotion-authority-amendment.md) | CU-0A08ITP-P Inspector post-promotion authority 改訂 |
+| [2026-07-29-cu-0a08itp-inspector-read-projection-jsx-connection-implementation-decision.md](2026-07-29-cu-0a08itp-inspector-read-projection-jsx-connection-implementation-decision.md) | CU-0A08ITP Inspector read projection / JSX connection 実装決定 |
+| [2026-07-29-cu-0a08ss0-browser-place-source-seam-implementation-boundary-scope-selection.md](2026-07-29-cu-0a08ss0-browser-place-source-seam-implementation-boundary-scope-selection.md) | CU-0A08SS0 Browser Place source seam の最小実装境界 選定範囲 |
+| [2026-07-29-cu-0a08ssd-browser-place-source-seam-implementation-boundary-decision.md](2026-07-29-cu-0a08ssd-browser-place-source-seam-implementation-boundary-decision.md) | CU-0A08SSD Browser Place source seam の最小実装境界 裁定 |
+| [2026-07-29-cu-0a08ssc-browser-place-source-seam-contract-concretization-scope-selection.md](2026-07-29-cu-0a08ssc-browser-place-source-seam-contract-concretization-scope-selection.md) | CU-0A08SSC Browser Place source seam 契約具体化 選定範囲 |
+| [2026-07-29-cu-0a08sscd-browser-place-source-seam-contract-concretization-decision.md](2026-07-29-cu-0a08sscd-browser-place-source-seam-contract-concretization-decision.md) | CU-0A08SSCD Browser Place source seam 契約具体化 裁定 |
+| [2026-07-29-cu-0a08ssci-browser-place-source-seam-prerequisite-order-decision.md](2026-07-29-cu-0a08ssci-browser-place-source-seam-prerequisite-order-decision.md) | CU-0A08SSCI Browser Place source seam 前提順序 裁定 |
+| [2026-07-29-cu-0a08ssci-i-browser-scoped-identity-input-seam-contract-shape-decision.md](2026-07-29-cu-0a08ssci-i-browser-scoped-identity-input-seam-contract-shape-decision.md) | CU-0A08SSCI-I Browser scoped identity input seam 契約形 裁定 |
+| [2026-07-29-cu-0a08ssci-i0-browser-scoped-identity-input-seam-grain-numbering-decision.md](2026-07-29-cu-0a08ssci-i0-browser-scoped-identity-input-seam-grain-numbering-decision.md) | CU-0A08SSCI-I0 Browser scoped identity input seam grain numbering |
+| [2026-07-29-cu-0a08ssci-i0-browser-scoped-identity-input-seam-scope-selection.md](2026-07-29-cu-0a08ssci-i0-browser-scoped-identity-input-seam-scope-selection.md) | CU-0A08SSCI-I0 Browser scoped identity input seam 選定 |
+| [2026-07-29-cu-0a08ssci-t-browser-private-component-verification-harness-boundary-decision.md](2026-07-29-cu-0a08ssci-t-browser-private-component-verification-harness-boundary-decision.md) | CU-0A08SSCI-T Browser private component verification harness boundary |
+| [2026-07-29-cu-0a08ssci-t1-browser-private-component-verification-harness-implementation-decision.md](2026-07-29-cu-0a08ssci-t1-browser-private-component-verification-harness-implementation-decision.md) | CU-0A08SSCI-T1 Browser private component verification harness 実装決定 |
+| [2026-07-29-cu-0a08ssci-t0-browser-private-component-verification-harness-grain-numbering-decision.md](2026-07-29-cu-0a08ssci-t0-browser-private-component-verification-harness-grain-numbering-decision.md) | CU-0A08SSCI-T0 Browser private component verification harness grain numbering |
+| [2026-07-29-cu-0a08ssci-p-browser-post-promotion-provenance-chain-authority-amendment.md](2026-07-29-cu-0a08ssci-p-browser-post-promotion-provenance-chain-authority-amendment.md) | CU-0A08SSCI-P Browser post-promotion provenance chain authority 改訂 |
+| [2026-07-29-cu-0a08ssci-p1-browser-post-promotion-provenance-chain-guard-reconciliation-decision.md](2026-07-29-cu-0a08ssci-p1-browser-post-promotion-provenance-chain-guard-reconciliation-decision.md) | CU-0A08SSCI-P1 Browser post-promotion provenance chain guard 整合 |
+| [2026-07-29-cu-0a08sscs-browser-place-source-seam-implementation-scope-selection.md](2026-07-29-cu-0a08sscs-browser-place-source-seam-implementation-scope-selection.md) | CU-0A08SSCS Browser Place source seam 実装範囲 選定 |
+| [2026-07-29-cu-0a08sscsd-browser-place-source-seam-implementation-scope-decision.md](2026-07-29-cu-0a08sscsd-browser-place-source-seam-implementation-scope-decision.md) | CU-0A08SSCSD Browser Place source seam 実装範囲 裁定 |
+| [2026-07-29-cu-0a09s-r6-surface-closure-boundary-decision.md](2026-07-29-cu-0a09s-r6-surface-closure-boundary-decision.md) | CU-0A09S R6 surface closure boundary 決定 |
+| [2026-07-29-g0-6h-human-acceptance-decision.md](2026-07-29-g0-6h-human-acceptance-decision.md) | G0-6H 現行React UI 人間審判 ACCEPT |
+| [2026-07-29-cu-0b02s-product-token-ownership-split-decision.md](2026-07-29-cu-0b02s-product-token-ownership-split-decision.md) | CU-0B02S 製品token所有と接続粒の分割決定 |
+| [2026-07-29-cu-0b02t-product-token-authority-implementation-decision.md](2026-07-29-cu-0b02t-product-token-authority-implementation-decision.md) | CU-0B02T 製品token単一authority実装決定 |
+| [2026-07-29-cu-0a08bti-browser-place-typed-intent-implementation-decision.md](2026-07-29-cu-0a08bti-browser-place-typed-intent-implementation-decision.md) | CU-0A08BTI Browser Place typed intent実装決定 |
+| [2026-07-29-cu-0b03h-browser-host-contract-offline-mount-decision.md](2026-07-29-cu-0b03h-browser-host-contract-offline-mount-decision.md) | CU-0B03H Browser Host契約・offline mount決定 |
+| [2026-07-29-cu-0b03-native-browser-host-codec-inbox-implementation-decision.md](2026-07-29-cu-0b03-native-browser-host-codec-inbox-implementation-decision.md) | CU-0B03 native Browser Host codec/inbox実装決定 |
+| [2026-07-29-cu-0b04s-browser-native-place-terminal-ownership-reclosure-decision.md](2026-07-29-cu-0b04s-browser-native-place-terminal-ownership-reclosure-decision.md) | CU-0B04S Browser→native Place終端所有の再締結 |
+| [2026-07-29-cu-0b04p-host-platform-pointer-capture-implementation-decision.md](2026-07-29-cu-0b04p-host-platform-pointer-capture-implementation-decision.md) | CU-0B04P Host platform pointer capture実装決定 |
+| [2026-07-29-cu-0b04na-product-window-lifecycle-adapter-boundary-decision.md](2026-07-29-cu-0b04na-product-window-lifecycle-adapter-boundary-decision.md) | CU-0B04NA product window lifecycle adapter境界決定 |
+| [2026-07-29-cu-0b04n-native-stage-surface-layout-implementation-decision.md](2026-07-29-cu-0b04n-native-stage-surface-layout-implementation-decision.md) | CU-0B04N native Stage Surface / layout epoch実装決定 |
+| [2026-07-29-cu-0b04r-browser-island-focus-geometry-implementation-decision.md](2026-07-29-cu-0b04r-browser-island-focus-geometry-implementation-decision.md) | CU-0B04R Browser island focus / geometry epoch実装決定 |
+| [2026-07-29-cu-0b05s-browser-lifecycle-reprojection-contract-decision.md](2026-07-29-cu-0b05s-browser-lifecycle-reprojection-contract-decision.md) | CU-0B05S Browser lifecycle再投影契約決定 |
+| [2026-07-29-cu-0b05-browser-lifecycle-reprojection-implementation-decision.md](2026-07-29-cu-0b05-browser-lifecycle-reprojection-implementation-decision.md) | CU-0B05 Browser lifecycle再投影実装決定 |
+| [2026-07-29-cu-107pv-place-preview-delivery-implementation-decision.md](2026-07-29-cu-107pv-place-preview-delivery-implementation-decision.md) | CU-107PV Place preview配送実装決定 |
+| [2026-07-29-cu-107tc-place-terminal-cause-classification-implementation-decision.md](2026-07-29-cu-107tc-place-terminal-cause-classification-implementation-decision.md) | CU-107TC Place候補terminal原因分類実装決定 |
+| [2026-07-29-cu-107ad-place-terminal-admission-implementation-decision.md](2026-07-29-cu-107ad-place-terminal-admission-implementation-decision.md) | CU-107AD Place候補terminal admission実装決定 |
+| [2026-07-29-cu-107td-place-terminal-delivery-implementation-decision.md](2026-07-29-cu-107td-place-terminal-delivery-implementation-decision.md) | CU-107TD Place terminal配送実装決定 |
+| [2026-07-29-cu-107-place-coordinator-parent-closure-decision.md](2026-07-29-cu-107-place-coordinator-parent-closure-decision.md) | CU-107 Place coordinator親閉鎖決定 |
+| [2026-07-29-cu-110-product-place-d2-commit-implementation-decision.md](2026-07-29-cu-110-product-place-d2-commit-implementation-decision.md) | CU-110 通常製品Place D2 commit接続実装決定 |
+| [2026-07-29-cu-110p-product-published-snapshot-projection-split-decision.md](2026-07-29-cu-110p-product-published-snapshot-projection-split-decision.md) | CU-110P 通常製品published snapshot投影の分割決定 |
+| [2026-07-29-cu-110ps-native-stage-published-snapshot-projection-implementation-decision.md](2026-07-29-cu-110ps-native-stage-published-snapshot-projection-implementation-decision.md) | CU-110PS native Stage published snapshot投影 実装決定 |
+| [2026-07-29-cu-110pt0-native-timeline-projection-envelope-decision.md](2026-07-29-cu-110pt0-native-timeline-projection-envelope-decision.md) | CU-110PT0 native Timeline投影envelope決定 |
+| [2026-07-29-cu-110pt-native-timeline-published-snapshot-projection-implementation-decision.md](2026-07-29-cu-110pt-native-timeline-published-snapshot-projection-implementation-decision.md) | CU-110PT native Timeline published snapshot投影 実装決定 |
+| [2026-07-29-cu-110pi-inspector-product-connection-split-decision.md](2026-07-29-cu-110pi-inspector-product-connection-split-decision.md) | CU-110PI Inspector通常製品接続 分割決定 |
+| [2026-07-29-cu-110pir-inspector-safe-read-only-branch-implementation-decision.md](2026-07-29-cu-110pir-inspector-safe-read-only-branch-implementation-decision.md) | CU-110PIR Inspector safe read-only branch 実装決定 |
+| [2026-07-30-cu-110pih-inspector-host-island-projection-implementation-decision.md](2026-07-30-cu-110pih-inspector-host-island-projection-implementation-decision.md) | CU-110PIH Inspector Host island projection 実装決定 |
+| [2026-07-30-cu-106p-native-timeline-primary-selection-implementation-decision.md](2026-07-30-cu-106p-native-timeline-primary-selection-implementation-decision.md) | CU-106P native Timeline primary selection 実装決定 |
+| [2026-07-30-cu-111-product-undo-redo-implementation-decision.md](2026-07-30-cu-111-product-undo-redo-implementation-decision.md) | CU-111 製品Undo/Redo配送 実装決定 |
+| [2026-07-30-cu-108-rectangle-product-spine-e2e-decision.md](2026-07-30-cu-108-rectangle-product-spine-e2e-decision.md) | CU-108 Rectangle通常製品spine E2E決定 |
+| [2026-07-30-cu-108rds-drop-release-routing-repair-selection.md](2026-07-30-cu-108rds-drop-release-routing-repair-selection.md) | CU-108RDS drop release排他routing修復選定と次ゴールhandoff |
+| [2026-07-30-sd-02g-product-host-layout-geometry-implementation-decision.md](2026-07-30-sd-02g-product-host-layout-geometry-implementation-decision.md) | SD-02G product Host layout geometry単一owner実装 |

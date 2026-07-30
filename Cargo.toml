@@ -53,6 +53,7 @@ eframe = { version = "0.35", default-features = false, features = ["wgpu", "x11"
 egui-wgpu = "0.35"
 egui-winit = "0.35"
 egui_tiles = "0.16"
+taffy = { version = "=0.12.2", default-features = false, features = ["std", "flexbox", "taffy_tree"] }
 serde_json = "1"
 sha2 = "0.10"
 thiserror = "2"
@@ -60,5 +61,10 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # egui-wgpuとコアで同じwgpuメジャーを共有する。
 # 更新時はnative textureと既存device共有を同じPRで再検証する。
 wgpu = "29"
+winit = "0.30.9"
+wry = "0.55.1"
+block2 = "0.6.2"
+objc2 = "0.6.4"
+objc2-app-kit = { version = "0.3.2", default-features = false }
 # M2E-6: プロパティテストの正本。エージェントはこれ以外を独断導入しない(監査EN-5)。
 proptest = "1"
