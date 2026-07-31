@@ -375,6 +375,7 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | CU-0A08BS | `DONE` | `selectStaleBrowserDecoderProseLines`とsynthetic negative/positiveで、完全一致stale prose拒否と別粒`DO`同居受理を分離。`node --test docs/mocks-ui/guard-tests/browser-catalog-decoder.test.mjs`（118 pass）、`npm run test:reference-guard`、`./scripts/check-docs.sh` |
 | CU-G02 | `DONE` | 本変更でM3仕様[運用順](specs/M3-ui-integration.md)、[implementation-ledger](implementation-ledger.md)、[decision-index](decision-index.md)を同時更新し、次PRODUCT-ASSET粒を`U3a-1`へ固定した |
 | CU-G09 | `DONE` | [CU-G09 Browser catalog projection契約決定](reviews/2026-07-26-cu-g09-browser-catalog-projection-contract-decision.md) |
+| CU-205S | `DONE` | [CU-205S Opacity Direct通常製品route分割決定](reviews/2026-07-31-cu-205s-opacity-direct-route-split-decision.md)でB1/B2/T/P/W/E、private first-party snapshot語彙、正常系とCU-204P診断の分離を固定 |
 | U3a-1 | `SPLIT` | [U3a-1 owner/visibility分割決定](reviews/2026-07-26-u3a-1-headless-timeline-owner-visibility-split-decision.md)で、公開API STOPとpub再export成果の自己矛盾を解消するため`U3a-1S`（docs decision）→`U3a-1I`（実装）へ分割 |
 | U3a-1S | `DONE` | 本変更で[U3a-1 owner/visibility分割決定](reviews/2026-07-26-u3a-1-headless-timeline-owner-visibility-split-decision.md)を確定し、owner=`motolii-ui`内module、`motolii-timeline` crate=`REJECT`、visibility=pub再export+integration test（制約6点）を固定。`U3a-1I`のclosed orderは本文書を直接authorityにできる |
 | U3a-1I | `DONE` | headless Timeline projectionを`motolii-ui::timeline_projection`として実装し、小さな決定的Document fixtureで歴史回収§6のread-only projection/layout/cull/hit-testを閉じた |
