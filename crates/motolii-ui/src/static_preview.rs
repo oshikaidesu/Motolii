@@ -216,6 +216,7 @@ fn map_join_error(_error: RenderJoinError) -> StaticPreviewError {
 fn map_worker_error(error: RenderWorkerError) -> StaticPreviewError {
     match error {
         RenderWorkerError::Runtime(error) => StaticPreviewError::Runtime(error),
+        RenderWorkerError::Command(_) => StaticPreviewError::SetupThreadPanic,
         RenderWorkerError::Document(error) => StaticPreviewError::Document(error),
         RenderWorkerError::Graph(error) => StaticPreviewError::Graph(error),
         RenderWorkerError::Render(error) => StaticPreviewError::Render(error),
