@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use motolii_core::{CanonicalPoint, Quality, RationalTime};
-use motolii_doc::{EffectId, EvaluationTime};
+use motolii_doc::{Command, EffectId, EvaluationTime};
 use motolii_eval::DataTracks;
 use motolii_gpu::GpuCtx;
 use winit::dpi::LogicalSize;
@@ -22,7 +22,10 @@ use crate::document_edit_runtime::{
     DocumentEditRuntimeError, PlaceRectangleRequest, PublishedDocument,
 };
 use crate::host_pointer_capture::{HostPointerCancel, HostPointerCandidate};
-use crate::inspector_host_runtime::{InspectorHostRuntime, InspectorHostRuntimeError};
+use crate::inspector_host_runtime::{
+    resolve_effect_param_preview_command, InspectorGestureTerminal, InspectorGestureTerminalCause,
+    InspectorHostRuntime, InspectorHostRuntimeError,
+};
 use crate::layout_authority::LayoutAuthority;
 use crate::native_host_layout::{LogicalRect, NativeHostLayout, PhysicalRect};
 use crate::native_timeline_renderer::{
@@ -177,6 +180,7 @@ pub(crate) struct ProductApp {
     pending_stage_drop: Option<PendingStageDrop>,
     surface_retry_at: Option<Instant>,
     failure: Option<String>,
+    pending_inspector_commit: Option<InspectorGestureTerminal>,
 }
 
 #[derive(Debug, Clone)]
@@ -463,7 +467,16 @@ impl ProductApp {
             pending_stage_drop: None,
             surface_retry_at: None,
             failure: None,
+            pending_inspector_commit: None,
         })
+    }
+
+    pub(crate) fn take_pending_inspector_commit(&mut self) -> Option<InspectorGestureTerminal> {
+        let taken = self.pending_inspector_commit.take();
+        if taken.is_some() {
+            let _ = self.proxy.send_event(ProductEvent::Wake);
+        }
+        taken
     }
 
     pub(crate) fn initialize(
@@ -540,6 +553,13 @@ impl ProductApp {
         self.browser_source = Some(browser_source);
         self.window = Some(window);
         self.browser = Some(browser);
+        let wake_proxy = self.proxy.clone();
+        inspector
+            .register_wake(Arc::new(move || {
+                let _ = wake_proxy.send_event(ProductEvent::Wake);
+            }))
+            .map_err(InspectorHostRuntimeError::from)
+            .map_err(ProductRuntimeError::from)?;
         self.inspector = Some(inspector);
         self.stage_chrome = Some(stage_chrome);
         self.timeline_tools = Some(timeline_tools);
@@ -860,8 +880,7 @@ impl ProductApp {
                             &self.current_document,
                             self.primary,
                             self.active_effect_use,
-                        )
-                        {
+                        ) {
                             return self.fail(event_loop, error);
                         }
                     }
@@ -896,6 +915,10 @@ impl ProductApp {
     ) {
         match event {
             ProductEvent::Wake => {
+                if let Err(error) = self.process_inspector_gestures() {
+                    self.fail(event_loop, error);
+                    return;
+                }
                 if let Err(error) = self.drain_stage_projection() {
                     self.fail(event_loop, error);
                     return;
@@ -1069,14 +1092,108 @@ impl ProductApp {
         }
     }
 
-    fn submit_stage_projection(&self) -> Result<RenderGeneration, ProductRuntimeError> {
-        let generation = self.render_client.submit(RenderRequest {
-            document: Arc::clone(&self.current_document),
+    fn inspector_render_request(&self, document: Arc<motolii_doc::Document>) -> RenderRequest {
+        RenderRequest {
+            document,
             data_tracks: Arc::clone(&self.render_request_template.data_tracks),
             evaluation_time: self.render_request_template.evaluation_time,
             desc: self.render_request_template.desc,
             quality: self.render_request_template.quality,
-        })?;
+        }
+    }
+
+    fn submit_inspector_baseline(&self) -> Result<RenderGeneration, ProductRuntimeError> {
+        let generation = self
+            .render_client
+            .submit(self.inspector_render_request(Arc::clone(&self.current_document)))?;
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=inspector-submit route=baseline generation={} projection_generation={}",
+            generation.get(),
+            self.projection_generation,
+        ));
+        Ok(generation)
+    }
+
+    fn submit_inspector_preview(
+        &self,
+        document: Arc<motolii_doc::Document>,
+        preview_command: Command,
+    ) -> Result<RenderGeneration, ProductRuntimeError> {
+        let generation = self
+            .render_client
+            .submit_preview(self.inspector_render_request(document), preview_command)?;
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=inspector-submit route=preview generation={} projection_generation={}",
+            generation.get(),
+            self.projection_generation,
+        ));
+        Ok(generation)
+    }
+
+    fn process_inspector_gestures(&mut self) -> Result<(), ProductRuntimeError> {
+        if self.pending_inspector_commit.is_some() {
+            return Ok(());
+        }
+        let Some(inspector) = &self.inspector else {
+            return Ok(());
+        };
+        let document = Arc::clone(&self.current_document);
+        let mut needs_baseline = false;
+        let mut pending_commit = None;
+        loop {
+            let Some(terminal) = inspector
+                .take_terminal()
+                .map_err(InspectorHostRuntimeError::from)
+                .map_err(ProductRuntimeError::from)?
+            else {
+                break;
+            };
+            match terminal.cause {
+                InspectorGestureTerminalCause::Cancel => {
+                    needs_baseline = true;
+                }
+                InspectorGestureTerminalCause::Commit(value) => {
+                    match resolve_effect_param_preview_command(&document, &terminal.identity, value)
+                    {
+                        Some(command) => {
+                            pending_commit = Some((terminal, command));
+                            break;
+                        }
+                        None => needs_baseline = true,
+                    }
+                }
+            }
+        }
+        if let Some((terminal, command)) = pending_commit {
+            self.pending_inspector_commit = Some(terminal);
+            if needs_baseline {
+                self.submit_inspector_baseline()?;
+            }
+            self.submit_inspector_preview(Arc::clone(&document), command)?;
+            return Ok(());
+        }
+        let update = inspector
+            .take_latest_update()
+            .map_err(InspectorHostRuntimeError::from)
+            .map_err(ProductRuntimeError::from)?;
+        let had_update = update.is_some();
+        let preview = update.as_ref().and_then(|update| {
+            resolve_effect_param_preview_command(&document, &update.identity, update.value)
+        });
+        if needs_baseline || (had_update && preview.is_none()) {
+            self.submit_inspector_baseline()?;
+        }
+        let Some(command) = preview else {
+            return Ok(());
+        };
+        self.submit_inspector_preview(document, command)?;
+        Ok(())
+    }
+
+    fn submit_stage_projection(&self) -> Result<RenderGeneration, ProductRuntimeError> {
+        let generation = self
+            .render_client
+            .submit(self.inspector_render_request(Arc::clone(&self.current_document)))?;
         crate::ui_numeric_trace::emit(format_args!(
             "kind=stage-submit generation={} projection_generation={} width={} height={} quality={:?}",
             generation.get(),
@@ -1128,11 +1245,9 @@ impl ProductApp {
         self.primary = published.primary;
         self.projection_generation = published.projection_generation;
         if let Some(inspector) = &self.inspector {
-            if let Err(error) = inspector.publish(
-                &self.current_document,
-                self.primary,
-                self.active_effect_use,
-            ) {
+            if let Err(error) =
+                inspector.publish(&self.current_document, self.primary, self.active_effect_use)
+            {
                 return self.fail(event_loop, error);
             }
         }

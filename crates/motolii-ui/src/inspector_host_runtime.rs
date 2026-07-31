@@ -400,6 +400,49 @@ postMessage:(message)=>window.ipc.postMessage(message)
     }
 }
 
+pub(crate) fn resolve_effect_param_preview_command(
+    document: &motolii_doc::Document,
+    identity: &InspectorGestureIdentity,
+    new_value: f64,
+) -> Option<motolii_doc::Command> {
+    if identity.plugin_id != "core.filter.opacity"
+        || identity.effect_version != 1
+        || identity.param_id != "amount"
+        || !new_value.is_finite()
+        || !(0.0..=1.0).contains(&new_value)
+    {
+        return None;
+    }
+    let effect_use = document.find_effect_use(identity.layer_id, identity.effect_use_id)?;
+    if effect_use.definition_id != identity.definition_id {
+        return None;
+    }
+    let definition = document.effect_definition(effect_use.definition_id)?;
+    if definition.plugin_id != identity.plugin_id
+        || definition.effect_version != identity.effect_version
+        || definition.params.len() != 1
+    {
+        return None;
+    }
+    let old_value = definition.params.get("amount")?;
+    if !matches!(
+        old_value,
+        motolii_doc::DocParam::Const(motolii_doc::DocValue::F64(value))
+            if value.is_finite() && (0.0..=1.0).contains(value)
+    ) {
+        return None;
+    }
+    Some(motolii_doc::Command::SetProperty {
+        target: identity.layer_id,
+        property: motolii_doc::ScalarPropertyId::EffectParam(
+            identity.effect_use_id,
+            identity.param_id.clone(),
+        ),
+        old_value: old_value.clone(),
+        new_value: motolii_doc::DocParam::const_f64(new_value),
+    })
+}
+
 fn gesture_identity(
     document: &motolii_doc::Document,
     primary: Option<motolii_doc::LayerId>,
@@ -976,5 +1019,115 @@ mod tests {
         ));
         assert_eq!(inbox.active.as_ref().unwrap().last_sequence, 1);
         assert!(inbox.terminals.is_empty());
+    }
+
+    #[test]
+    fn resolve_preview_command_reads_snapshot_old_value_and_exact_identity() {
+        let (document, _, _, identity) = gesture_fixture();
+        let command =
+            resolve_effect_param_preview_command(&document, &identity, 0.41).expect("command");
+        match command {
+            motolii_doc::Command::SetProperty {
+                target,
+                property,
+                old_value,
+                new_value,
+            } => {
+                assert_eq!(target, identity.layer_id);
+                assert_eq!(
+                    property,
+                    motolii_doc::ScalarPropertyId::EffectParam(
+                        identity.effect_use_id,
+                        "amount".to_owned()
+                    )
+                );
+                assert_eq!(old_value, motolii_doc::DocParam::const_f64(0.72));
+                assert_eq!(new_value, motolii_doc::DocParam::const_f64(0.41));
+            }
+            other => panic!("unexpected command: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_preview_command_rejects_mismatched_contract_without_guessing() {
+        let (document, _, _, identity) = gesture_fixture();
+        let mismatches = [
+            InspectorGestureIdentity {
+                layer_id: motolii_doc::LayerId::from_raw(999),
+                ..identity.clone()
+            },
+            InspectorGestureIdentity {
+                effect_use_id: motolii_doc::EffectId::from_raw(999),
+                ..identity.clone()
+            },
+            InspectorGestureIdentity {
+                definition_id: motolii_doc::EffectDefinitionId::from_raw(999),
+                ..identity.clone()
+            },
+            InspectorGestureIdentity {
+                plugin_id: "core.filter.other".to_owned(),
+                ..identity.clone()
+            },
+            InspectorGestureIdentity {
+                effect_version: 2,
+                ..identity.clone()
+            },
+            InspectorGestureIdentity {
+                param_id: "opacity".to_owned(),
+                ..identity.clone()
+            },
+        ];
+        for mismatched in mismatches {
+            assert!(resolve_effect_param_preview_command(&document, &mismatched, 0.5).is_none());
+        }
+        assert!(resolve_effect_param_preview_command(&document, &identity, 1.1).is_none());
+    }
+
+    #[test]
+    fn terminal_batch_coalesces_cancel_before_exact_commit() {
+        let (document, layer_id, effect_use_id, identity) = gesture_fixture();
+        let terminals = [
+            InspectorGestureTerminal {
+                session: 1,
+                sequence: 2,
+                identity: identity.clone(),
+                cause: InspectorGestureTerminalCause::Cancel,
+            },
+            InspectorGestureTerminal {
+                session: 2,
+                sequence: 3,
+                identity: identity.clone(),
+                cause: InspectorGestureTerminalCause::Commit(0.55),
+            },
+        ];
+        let mut needs_baseline = false;
+        let mut pending_commit = None;
+        for terminal in terminals {
+            match terminal.cause {
+                InspectorGestureTerminalCause::Cancel => needs_baseline = true,
+                InspectorGestureTerminalCause::Commit(value) => {
+                    if let Some(command) =
+                        resolve_effect_param_preview_command(&document, &terminal.identity, value)
+                    {
+                        pending_commit = Some(command);
+                        break;
+                    }
+                    needs_baseline = true;
+                }
+            }
+        }
+        assert!(needs_baseline);
+        assert_eq!(
+            pending_commit,
+            Some(motolii_doc::Command::SetProperty {
+                target: layer_id,
+                property: motolii_doc::ScalarPropertyId::EffectParam(
+                    effect_use_id,
+                    "amount".to_owned()
+                ),
+                old_value: motolii_doc::DocParam::const_f64(0.72),
+                new_value: motolii_doc::DocParam::const_f64(0.55),
+            })
+        );
     }
 }
