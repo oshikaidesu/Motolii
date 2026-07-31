@@ -19,13 +19,13 @@ const PROTOCOL: &str = "motolii-browser";
 const ENTRY_URL: &str = "motolii-browser://product/host.html";
 const HOST_HTML: &[u8] = include_bytes!("../../../ui/motolii-web/generated-host/host.html");
 const HOST_JS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/host-xrDzqY7Q.js");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/host-B-XE4xF7.js");
 const HOST_CSS: &[u8] =
     include_bytes!("../../../ui/motolii-web/generated-host/assets/host-BTNUEeQC.css");
 const INSPECTOR_HTML: &[u8] =
     include_bytes!("../../../ui/motolii-web/generated-host/inspector.html");
 const INSPECTOR_JS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/inspector-CZmr_AtC.js");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/inspector-DMRbAE_f.js");
 const INSPECTOR_CSS: &[u8] =
     include_bytes!("../../../ui/motolii-web/generated-host/assets/inspector-fMh9jxYJ.css");
 const STAGE_HEADER_HTML: &[u8] =
@@ -35,19 +35,19 @@ const STAGE_TRANSPORT_HTML: &[u8] =
 const TIMELINE_TOOLS_HTML: &[u8] =
     include_bytes!("../../../ui/motolii-web/generated-host/timeline-tools.html");
 const STAGE_HEADER_JS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageHeader-B5JMD-q0.js");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageHeader-DG-vBaNG.js");
 const STAGE_TRANSPORT_JS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageTransport-033AeWO0.js");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageTransport-B8kB-Auq.js");
 const STAGE_HOST_JS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageHostBridge-39CF9q4X.js");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageHostBridge-DC0bxqKK.js");
 const STAGE_HOST_CSS: &[u8] =
     include_bytes!("../../../ui/motolii-web/generated-host/assets/stageHostBridge-ETwwNc59.css");
 const TIMELINE_TOOLS_JS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/timelineTools-CIvM4ocO.js");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/timelineTools-Cdb6B475.js");
 const TIMELINE_TOOLS_CSS: &[u8] =
     include_bytes!("../../../ui/motolii-web/generated-host/assets/timelineTools-CEMKvxwx.css");
 const SHARED_JS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/tokens--Xo9xXv8.js");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/tokens-CfIyaXn9.js");
 const SHARED_CSS: &[u8] =
     include_bytes!("../../../ui/motolii-web/generated-host/assets/tokens-_d9c2vBB.css");
 
@@ -453,21 +453,21 @@ pub(crate) fn product_asset_response(path: &str) -> Response<Cow<'static, [u8]>>
         "/stage-header.html" => ("text/html; charset=utf-8", STAGE_HEADER_HTML),
         "/stage-transport.html" => ("text/html; charset=utf-8", STAGE_TRANSPORT_HTML),
         "/timeline-tools.html" => ("text/html; charset=utf-8", TIMELINE_TOOLS_HTML),
-        "/assets/host-xrDzqY7Q.js" => ("text/javascript; charset=utf-8", HOST_JS),
+        "/assets/host-B-XE4xF7.js" => ("text/javascript; charset=utf-8", HOST_JS),
         "/assets/host-BTNUEeQC.css" => ("text/css; charset=utf-8", HOST_CSS),
-        "/assets/inspector-CZmr_AtC.js" => ("text/javascript; charset=utf-8", INSPECTOR_JS),
+        "/assets/inspector-DMRbAE_f.js" => ("text/javascript; charset=utf-8", INSPECTOR_JS),
         "/assets/inspector-fMh9jxYJ.css" => ("text/css; charset=utf-8", INSPECTOR_CSS),
-        "/assets/stageHeader-B5JMD-q0.js" => ("text/javascript; charset=utf-8", STAGE_HEADER_JS),
-        "/assets/stageTransport-033AeWO0.js" => {
+        "/assets/stageHeader-DG-vBaNG.js" => ("text/javascript; charset=utf-8", STAGE_HEADER_JS),
+        "/assets/stageTransport-B8kB-Auq.js" => {
             ("text/javascript; charset=utf-8", STAGE_TRANSPORT_JS)
         }
-        "/assets/stageHostBridge-39CF9q4X.js" => ("text/javascript; charset=utf-8", STAGE_HOST_JS),
+        "/assets/stageHostBridge-DC0bxqKK.js" => ("text/javascript; charset=utf-8", STAGE_HOST_JS),
         "/assets/stageHostBridge-ETwwNc59.css" => ("text/css; charset=utf-8", STAGE_HOST_CSS),
-        "/assets/timelineTools-CIvM4ocO.js" => {
+        "/assets/timelineTools-Cdb6B475.js" => {
             ("text/javascript; charset=utf-8", TIMELINE_TOOLS_JS)
         }
         "/assets/timelineTools-CEMKvxwx.css" => ("text/css; charset=utf-8", TIMELINE_TOOLS_CSS),
-        "/assets/tokens--Xo9xXv8.js" => ("text/javascript; charset=utf-8", SHARED_JS),
+        "/assets/tokens-CfIyaXn9.js" => ("text/javascript; charset=utf-8", SHARED_JS),
         "/assets/tokens-_d9c2vBB.css" => ("text/css; charset=utf-8", SHARED_CSS),
         _ => {
             return Response::builder()
@@ -515,9 +515,9 @@ mod tests {
         let html = std::str::from_utf8(HOST_HTML).expect("generated Host HTML is UTF-8");
 
         for path in [
-            "/assets/host-xrDzqY7Q.js",
+            "/assets/host-B-XE4xF7.js",
             "/assets/host-BTNUEeQC.css",
-            "/assets/tokens--Xo9xXv8.js",
+            "/assets/tokens-CfIyaXn9.js",
             "/assets/tokens-_d9c2vBB.css",
         ] {
             assert!(html.contains(path));
@@ -529,9 +529,9 @@ mod tests {
         let inspector =
             std::str::from_utf8(INSPECTOR_HTML).expect("generated Inspector HTML is UTF-8");
         for path in [
-            "/assets/inspector-CZmr_AtC.js",
+            "/assets/inspector-DMRbAE_f.js",
             "/assets/inspector-fMh9jxYJ.css",
-            "/assets/tokens--Xo9xXv8.js",
+            "/assets/tokens-CfIyaXn9.js",
             "/assets/tokens-_d9c2vBB.css",
         ] {
             assert!(inspector.contains(path));
@@ -547,20 +547,20 @@ mod tests {
             (
                 STAGE_HEADER_HTML,
                 [
-                    "/assets/stageHeader-B5JMD-q0.js",
-                    "/assets/stageHostBridge-39CF9q4X.js",
+                    "/assets/stageHeader-DG-vBaNG.js",
+                    "/assets/stageHostBridge-DC0bxqKK.js",
                     "/assets/stageHostBridge-ETwwNc59.css",
-                    "/assets/tokens--Xo9xXv8.js",
+                    "/assets/tokens-CfIyaXn9.js",
                     "/assets/tokens-_d9c2vBB.css",
                 ],
             ),
             (
                 STAGE_TRANSPORT_HTML,
                 [
-                    "/assets/stageTransport-033AeWO0.js",
-                    "/assets/stageHostBridge-39CF9q4X.js",
+                    "/assets/stageTransport-B8kB-Auq.js",
+                    "/assets/stageHostBridge-DC0bxqKK.js",
                     "/assets/stageHostBridge-ETwwNc59.css",
-                    "/assets/tokens--Xo9xXv8.js",
+                    "/assets/tokens-CfIyaXn9.js",
                     "/assets/tokens-_d9c2vBB.css",
                 ],
             ),
@@ -580,9 +580,9 @@ mod tests {
         let html = std::str::from_utf8(TIMELINE_TOOLS_HTML)
             .expect("generated Timeline Tools HTML is UTF-8");
         for path in [
-            "/assets/timelineTools-CIvM4ocO.js",
+            "/assets/timelineTools-Cdb6B475.js",
             "/assets/timelineTools-CEMKvxwx.css",
-            "/assets/tokens--Xo9xXv8.js",
+            "/assets/tokens-CfIyaXn9.js",
             "/assets/tokens-_d9c2vBB.css",
         ] {
             assert!(html.contains(path));
@@ -617,6 +617,13 @@ mod tests {
             "/assets/stageHostBridge-CVlt-md6.js",
             "/assets/timelineTools-BK7xXweN.js",
             "/assets/tokens-BQ3aCSlZ.js",
+            "/assets/host-xrDzqY7Q.js",
+            "/assets/inspector-CZmr_AtC.js",
+            "/assets/stageHeader-B5JMD-q0.js",
+            "/assets/stageTransport-033AeWO0.js",
+            "/assets/stageHostBridge-39CF9q4X.js",
+            "/assets/timelineTools-CIvM4ocO.js",
+            "/assets/tokens--Xo9xXv8.js",
         ] {
             let response = product_asset_response(path);
             assert_eq!(response.status(), 404);
