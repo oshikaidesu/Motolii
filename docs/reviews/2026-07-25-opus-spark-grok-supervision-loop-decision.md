@@ -8,9 +8,11 @@
 
 scope自己反証追補: 2026-07-31
 
+施工者固定化の収束追補: 2026-07-31
+
 ## 決定
 
-通常の実装発注は、次の単一ループへ固定する。
+通常の初回実装発注は、次のループを使う。
 
 ```text
 Codex → Claude Opus 5 → Codex Spark → Cursor Grok 4.5 High → Codex
@@ -20,15 +22,46 @@ Codex → Claude Opus 5 → Codex Spark → Cursor Grok 4.5 High → Codex
 |---|---|---|
 | 契約 | 主担当Codex | 仕様、コード事実、親task、変更可能境界、STOP条件、最終採否を所有する |
 | 施工管理 | `claude-opus-5` | Codex／runnerが埋めた骨格を検証し、見落としたrisk／負例／STOP／訂正だけを型付きdeltaで返す |
-| 施工 | `gpt-5.3-codex-spark` | 承認済みの一粒だけを隔離worktreeで実装し、必須試験を実行する |
+| 施工 | 初回は`gpt-5.3-codex-spark` | 承認済みの一粒だけを隔離worktreeで実装し、必須試験を実行する |
 | 独立検収 | `cursor-grok-4.5-high` | 実diffと試験をread-onlyで監査し、P0/P1の有無と`VERDICT`を返す |
 | 統合 | 主担当Codex | Grokの結果を未検証の助言として再照合し、採用、差戻し、STOPを決める |
 
-Opus 5の委任権は一段だけであり、Spark以外を起動せず、Sparkも再委任しない。一回のrunner実行は一つの
-`GRAIN`だけを扱う。複数粒が必要なら、主担当Codexが各粒の契約境界を確認した上でループを個別に回す。
+Opus 5の通常施工管理は一段だけであり、実装担当は再委任しない。一回の実装試行は一つの`GRAIN`だけを扱う。
+複数粒が必要なら、主担当Codexが各粒の契約境界を確認した上でループを個別に回す。
 
 Fable 5は通常ループの段階または必須gateにしない。大地図、設計比較、共有公開境界など、主担当Codexが
 高難度の反対側助言を必要と判断した場合だけ、通常ループの外からread-onlyで直接呼ぶ。
+
+## 施工者固定化を避ける収束gate
+
+REJECT後の次手を、検収理由の文字列一致や同一findingの反復回数だけで決めない。表面的なfinding名が変わっても、
+同じ設計前提が別の契約違反を生む、局所修正がregressionを移動させる、diffが増えても合格条件や負例の通過数が
+増えない場合は、同じ実装担当の局所最適化が施工を固定している。
+
+Codexは各REJECTを`ORDER_DEFECT / IMPLEMENTATION_DEFECT / EXECUTION_DEFECT / CONTRACT_UNRESOLVED`へ分類する。
+契約不足、未決意味、allowlist不足を実装担当交代で隠してはならない。再施工または担当交代を選ぶ前に、前回と
+今回を次の観測で比較し、`IMPLEMENTATION_PROGRESS: ADVANCING / STALLED / REGRESSING`を証跡へ残す。
+
+1. 解消したfindingと残存finding
+2. 新たに通った合格条件と必須負例
+3. 新規regressionと、欠陥が別箇所へ移動した事実
+4. diffが既存owner／writer／再利用境界へ近づいたか
+5. 実装担当固有の不採用前提が残っていないか
+
+`ADVANCING`なら同じ担当の再施工を許す。`STALLED / REGRESSING`、または一つの不採用前提が別名の欠陥を
+反復・移動させている場合は、原因ラベルの一致や複数回の同一findingを待たず、その粒の実装担当だけを
+`gpt-5.3-codex-spark` / `gpt-5.6-sol` / `gpt-5.6-terra` / `claude-opus-5`の別担当へ交代できる。
+これは旧task-class routingの復活ではなく、REJECT後の局所的な収束手段である。
+
+担当交代では`GRAIN`、authority、allowlist、read set、STOP、合格条件、必須負例、Grok検収者を固定する。
+order/evidenceへ`IMPLEMENTER_SELECTION: <完全model ID>`と
+`SELECTION_REASON: STALLED / REGRESSING / FIXED_ASSUMPTION`を残し、前担当の未受理部分差分を継承せず、
+freshな隔離差分として再施工する。model利用不能による黙ったfallback、scope拡大、oracle緩和には使わない。
+
+Opus 5を実装担当に選ぶ試行では、同じOpus 5に施工管理を兼任させない。主担当Codexが既承認orderを正本へ
+再照合して直接渡し、Grokの独立read-only検収とCodex最終採否を維持する。現行runnerの自動executeは
+初回Spark経路だけを実装済みとし、Sol／Terra／Opus 5への自動切替は別runner実装が入るまでCodex所有の
+有界な手動dispatchとして証跡化する。
 
 ## 速度改訂 — 読解を三重化しない
 
@@ -132,7 +165,7 @@ read set、実行commandはrunnerが機械骨格へ埋める。Opusは次のsche
 - `ADJACENT`はCodexが隣接caller／consumer／helper／試験をcapsuleへ追加してから厳格deltaへ送る
 - `WIDE`はSparkへ送らない。Opus、共有境界・長期展望ならFableへread-only探索を依頼し、authority、
   owner、原因、oracleを閉じた新しいcapsuleを作って再分類する
-- 広域探索の出力をそのまま実装orderにせず、最終的なSpark施工は必ず一つの閉じた契約境界へ戻す
+- 広域探索の出力をそのまま実装orderにせず、選択済み実装担当による施工は必ず一つの閉じた契約境界へ戻す
 
 視野幅と危険度は別軸とする。`HAZARD_TAG: DESTRUCTIVE_FS / SECURITY / PERSISTENCE / CONCURRENCY /
 PLATFORM / NONE`を付け、tagごとの既知負例、禁止構文、機械lintを骨格へ注入する。危険だがauthority、owner、
@@ -325,11 +358,12 @@ Fable 5は大地図、長期展望、複数仕様の衝突、共有公開境界�
 - runnerが骨格と承認deltaから作るorderには、対象spec/task ID、目的、現状、`GRAIN`、`BASE_REF`、
   `BASE_SHA`、依存、authority hash、変更許可file、非目標、再利用箇所、STOP条件、必須負例、実行command、
   六つの視野幅入力、`VIEW_PROFILE`、`HAZARD_TAG`、`READ_MODE: CAPSULE`、`CONTEXT_FACT:`、`READ_FILE:`を含める
-- 主担当Codexの`CODEX PRECHECK: APPROVED`前にSparkを起動しない
-- Sparkはorder外の探索、意味判断、範囲拡張、期待値・golden変更、lint抑制、commit、push、再委任をしない
+- 主担当Codexの`CODEX PRECHECK: APPROVED`前に実装担当を起動しない
+- 実装担当はorder外の探索、意味判断、範囲拡張、期待値・golden変更、lint抑制、commit、push、再委任をしない
 - Grokは実装もorder再設計もせず、実diff、authority、scope、負例、試験証跡だけを独立検収する
 - Grokが`VERDICT: ACCEPT`かつP0/P1=0でなければ採用、commit、pushしない
-- REJECT、STOP、timeout後の戻り先はCodexとする。Codexが原因を裁定してから、必要なら新しいOpus粒へ戻す
+- REJECT、STOP、timeout後の戻り先はCodexとする。Codexが原因と施工進捗を裁定し、契約修正、同担当再施工、
+  または契約を固定した実装担当交代を選ぶ
 - model利用不能時に別modelへ黙ってfallbackしない
 
 React製品資産とRerun参照を含む発注は、`AGENTS.md`の追加ラベル、順序、STOP条件をこのループより優先して
@@ -338,15 +372,19 @@ React製品資産とRerun参照を含む発注は、`AGENTS.md`の追加ラベ�
 ## アーカイブした方式
 
 [タスク適応型の発注運用](2026-07-22-terra-grok-delegation-policy.md)で定めた
-`mechanical / standard / rapid / complex / cross-boundary`分類、Luna/Terra/Solの実装routing、
+`mechanical / standard / rapid / complex / cross-boundary`分類、Luna/Terra/Solの常設実装routing、
 `complex / cross-boundary`でのFable必須検収、Grokによるorder draftは、2026-07-25をもって
-**ARCHIVED**とする。歴史的な比較根拠として残すが、現行dispatchの根拠にしない。
+**ARCHIVED**とする。歴史的な比較根拠として残すが、通常の初回dispatchの根拠にしない。REJECT後の
+`STALLED / REGRESSING / FIXED_ASSUMPTION`に限る実装担当交代はtask classでなく本決定の収束gateを根拠とする。
 
 ## 完了条件
 
-- `AGENTS.md`が本ループと同じ責任順序を示す
-- 正規runnerがOpus 5 order管理、Spark実装、Grok read-only検収の順だけを起動する
-- orderのmodel/loop metadataが固定値と一致しない場合はdispatch前にfail closedする
+- `AGENTS.md`が本ループと同じ責任順序、施工進捗判定、担当分離を示す
+- 正規runnerの初回経路がOpus 5 order管理、Spark実装、Grok read-only検収の順だけを起動する
+- REJECT後の証跡が原因名の一致でなく`ADVANCING / STALLED / REGRESSING`を判定し、担当交代時に
+  `IMPLEMENTER_SELECTION`と`SELECTION_REASON`を残す
+- Opus 5が実装する試行で施工管理を兼任せず、Grok独立検収とCodex最終採否を維持する
+- 初回runner orderのmodel/loop metadataが固定値と一致しない場合はdispatch前にfail closedする
 - task／order／authority／allowlist／read setが速度予算を超える場合はmodel起動前にfail closedする
 - internal／test／reuse targetが不在、重複、read set外、または実装targetがallowlist外ならmodel起動前にfail closedする
 - `NEW_SURFACE: FORBIDDEN`を固定し、target近傍だけのrunner生成capsuleをSparkへ渡す

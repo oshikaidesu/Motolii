@@ -204,7 +204,7 @@
 | [2026-07-23-historical-plugin-ecosystem-lineage-recovery.md](2026-07-23-historical-plugin-ecosystem-lineage-recovery.md) | 旧plugin ecosystemの未処分11版を処分し、中央人気／dedupeを持たないcommunity原則と旧tap/lock/build schemaを分離 |
 | [2026-07-23-vism-kit-rack-unification-decision.md](2026-07-23-vism-kit-rack-unification-decision.md) | 独立Plugin Setを廃止し、接続済み一式をRack型Vism Kitへ、推薦だけの集合をcurator list／feedへ分離 |
 | [2026-07-22-terra-grok-delegation-policy.md](2026-07-22-terra-grok-delegation-policy.md) | **ARCHIVED** — task class別のLuna／Terra／Sol実装、Grok検収、Fable追加検収を定めた旧運用 |
-| [2026-07-25-opus-spark-grok-supervision-loop-decision.md](2026-07-25-opus-spark-grok-supervision-loop-decision.md) | 通常発注をCodex → Opus 5粒化 → Spark施工 → Grok独立検収 → Codex採否へ固定し、発注外のOpus 5 read-onlyコーディング相談も定める現行運用 |
+| [2026-07-25-opus-spark-grok-supervision-loop-decision.md](2026-07-25-opus-spark-grok-supervision-loop-decision.md) | 初回発注をCodex → Opus 5粒化 → Spark施工 → Grok独立検収 → Codex採否とし、REJECT後に施工が停滞・後退するか固定前提で欠陥が移動する粒だけ、実装担当をSpark／Sol／Terra／Opus 5の別担当へ交代できる収束gateと発注外相談を定める現行運用 |
 | [2026-07-23-parallel-order-pipeline-comparison.md](2026-07-23-parallel-order-pipeline-comparison.md) | **ARCHIVED** — 旧task-class運用上でpreflight・実装・検収を重ねた発注パイプライン比較 |
 | [2026-07-23-first-party-vism-expression-demand-survey.md](2026-07-23-first-party-vism-expression-demand-survey.md) | AE・AviUtl 1.x／2・Cavalryの表現需要と、人気plugin／公開script系統からVism候補、Host／Infrastructure／Adapter責任、Kitを分ける調査 |
 | [2026-07-23-group-source-pool-cloner-concept.md](2026-07-23-group-source-pool-cloner-concept.md) | Groupの直接の子を割合つきprototype poolとしてClonerへ渡すMotolii固有概念の比較 |
