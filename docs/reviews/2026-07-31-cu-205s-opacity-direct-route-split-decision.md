@@ -277,6 +277,15 @@ control specを投影する。
 unsupported型を持つ架空first-party plugin、fixture Effect、diagnostic-only routeを
 `CU-204P`のtriggerとして追加しない。
 
+`CU-205P`はcommit `c0c1c741`で`DONE`。current primaryとHost Transient active Effect
+Useをexact Definition / plugin version / ordered parameterへ解決し、`first_party_catalog()`
+と`map_parameter_control()`由来の全node/controlをprivate Inspector Hostへ投影した。
+Opacity `amount`はEffect Use ID + param id、Const F64、domain `[0,1]`として既存
+`ScrubControl`へread-only表示し、active不在時のtarget-only branchを維持した。
+shipped bundleは二回生成の19-file tree一致、manifest推移closure内のaccepted source
+token、旧7 JS hashの404を閉じた。rolling実bytesで`motolii-ui`全緑、decoder 39/39、
+ownership 13/13、bundle check、各独立read-only検収P0/P1=0。次の実装粒は`CU-205W`。
+
 ## 7. CU-205W preview / gesture
 
 CU-205Wは`amount`の1 gestureを次へ接続する。
