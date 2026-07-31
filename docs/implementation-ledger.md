@@ -40,7 +40,7 @@
 | M0 | `DONE` | spike完了。S2は`ffmpeg-sidecar`クレート不採用、自前子process pipe／CFR seek成立まで。VFR、長尺／4K、pool、停止中readのkillは製品完成証拠にせずK4／GAP-26へ分離 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み。RenderTargetPoolは直列2枚を下限にbranch livenessで伸長するが、O(n²)未来scan最適化、fp16／path fusion、40-layer性能は未成立。R9/T11は当時の歴史sign-offで、現行製品Stage／実素材release受入はGAP-32。出荷hardening候補G1〜G8は完了条件外で、2026-07-23再照合の未到達process/artifact reliabilityはGAP-26、GPU health分類はGAP-27、同期export readbackの原因分離／staging採択はGAP-29、GPU RGB→YUV export接続はGAP-31。G7の同期1-frame boundedをcopy重畳完成、decode側GPU色変換や出力tagをinverse変換完成とみなさない |
 | M2 | **基盤再締結済み / narrow follow-up pending** | D1lのDocument／lifecycle意味、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。2026-07-23監査で`new_v1` enforcement driftをGAP-23、known Edit apply failureのsnapshot fallback driftをGAP-24、semantic oracle gate自己保護をGAP-25として狭く再開。Param Pipeline／Element Domain／Constraint GraphはM2-GAP-15の解凍gate前は未実装のままが正しい。D5は骨格到達・統合審判pendingで、AG-2 mixer coreは成立したが製品`PlaybackSession`のmixed `AudioProgram`接続はGAP-28。D1n external revisionも未実装で、cloud-safe公約不可 |
-| M3 | **VS-1 Rectangle配置とUndo `DONE` / VS-2 U4a-1 `DO`** | `CU-108`で通常製品routeのBrowser Rectangle→D2/journal→Stage/Timeline/Inspector同一snapshot→Undo/Redoを実Mac完走し、同じ`LayerId`のAdd/Remove/Addを確認した。`CU-108RD`で同一LeftMouseUpのPlace/Timeline排他配送、`SD-02G`で製品Host layout geometryも再締結済み。VS-2の次PRODUCT-ASSET `DO`は`U4a-1` parameter control modelで、U4a-2のInspector生成・preview・gesture接続は`WAIT`。Motolii Studio Previewは用語正本上未実装のままで、`preview-runnable`全6条件と文書化済み起動コマンドの現行証拠は未再締結。G0-9DはDistribution Ready用hardware gate。eguiへ新規製品面を実装せず、plugin UI公開契約はG0-3 / GAP-13まで停止する |
+| M3 | **VS-1 Rectangle配置とUndo `DONE` / VS-2 U4a-1 `DONE` / CU-0B02R `DO`** | `CU-108`で通常製品routeのBrowser Rectangle→D2/journal→Stage/Timeline/Inspector同一snapshot→Undo/Redoを実Mac完走した。`U4a-1` / `CU-202`はcommit `eb4e6658`でparameter control model、全first-party保存parameter conformance、既存SetProperty/EffectParam routeを閉じ、Grok `ACCEPT` P0/P1=0、workspace全緑。次PRODUCT-ASSET `DO`は`CU-0B02R`。`CU-0B02C → CU-203 → CU-204 → U4a-2`は`WAIT`。Motolii Studio Previewは用語正本上未実装、G0-9DはDistribution Ready用hardware gate、plugin UI公開契約はG0-3 / GAP-13まで停止する |
 | M4 | **K0契約凍結済み(test-only) / K1a再判定** | [歴史20版再照合](reviews/2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md)と[memory model 6版再照合](reviews/2026-07-23-historical-memory-model-lineage-recovery.md)後、K0はRoD/RoIの契約意味をtest-only spikeで凍結済みで、K1〜K8は未実装。runtime実装はK1a以降の別粒とし、K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む。現行`PipelineCache`／dynamic target pool／wgpu budget thresholdをResourceLedger、copy-out、disk store完成と数えない。K4の恒久`source_id`／再リンク／package意味はGAP-3／7の再調査前に焼かないが、このgateをK0や独立K1へ広げない。K6のVello／usvg製品統合は未実装で、R8成立性だけを完成証拠にしない |
 | M5 | **identity meaning decision可 / fixture WAIT** | P0I自身が所有するcontinuity／transform／nested identity／寿命／cache入力境界／PRNG処分をdocsで先に閉じ、TextCluster内部写像とPrototype ownerは明示留保する。fixtureはdecision merge後に分割する。P6のfontique／harfrust／Vello text stackは未実装で、K6とpremul adapterを重複実装しない |
 
@@ -113,7 +113,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 ## 現在の並列レーン
 
-現在sliceは**VS-2 parameter editing**で、最初のPRODUCT-ASSET粒は`U4a-1`。PRODUCT-ASSET laneは意味・所有境界を優先して
+現在sliceは**VS-2 parameter editing**で、次のPRODUCT-ASSET粒は`CU-0B02R`。PRODUCT-ASSET laneは意味・所有境界を優先して
 1チケットずつ進めるが、この直列性を他の独立contract／repair／authoring laneへ波及させない。
 現在の全lane、変更path、STOP、Human Response Frontierは
 [並列レーン着手地図](reviews/2026-07-25-parallel-lane-readiness-map.md)を正とする。
@@ -121,7 +121,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 | lane | 現在粒 | Phase / slice / checklist | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
-| PRODUCT-ASSET | U4a-1 | M3 / VS-2 / B / parameter control model | `DO` | — | `U2b-1` `DONE`。owner=`motolii-ui::parameter_control`。crate root公開面は`HostParameterControl`、getterだけの`ParameterControlSpec`、`ParameterControlError::UnsupportedValueType`、`map_parameter_control(&ParamDef)`の4項目へ固定し、plugin ABI・serde面にしない | F64 domain保持、Vec2/Vec3/Color対応、AssetRef typed rejection、全first-party保存param conformance、SetProperty/EffectParam routeを固定。上記以外の公開面、Document command意味、`DocumentCommandRequest`、Inspector生成、preview、gesture、toolkit型、製品UI接続は変更しない |
+| PRODUCT-ASSET | U4a-1 | M3 / VS-2 / B / parameter control model | `DONE` | `eb4e6658` | `U2b-1` `DONE`。Grok `ACCEPT` P0/P1=0、`cargo test --locked --workspace`、fmt、motolii-ui clippy、docs整合が全緑 | F64 domain保持、Vec2/Vec3/Color対応、AssetRef typed rejection、全first-party保存param conformance、SetProperty/EffectParam routeを固定。Inspector生成、preview、gesture、製品UI接続は後続 |
 | PRODUCT-ASSET | CU-0A08IP | M3 / VS-1 / B / Inspector fixture decoder | `DONE` | — | [Inspector read-model inventory](reviews/2026-07-26-cu-0a08is-inspector-read-model-inventory.md)でCU-0A08IS閉包とCU-0A08IP着手境界を固定。`node --test docs/mocks-ui/guard-tests/inspector-read-model-decoder.test.mjs` 39/39、`npm run test:reference-guard` 172/172 | product-owned・非export pure decoder module。fixture/testのみ。Host transport・intent・JSX binding・`S`行・Rust/schema/plugin変更は非目標 |
 | PRODUCT-ASSET | CU-G02 | M3 / VS-1 / SPEC / Selected U series order | `DONE` | — | CU-G01は[G0-9段階化](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)で完了済み。本変更でSelected U seriesの次実装粒をU3a-1に固定した | 当時の次PRODUCT-ASSET粒は`U3a-1`。U4a-1/U2h-1は未選択、Rectangle blocking decisionは個別粒へ分離した。現行状態は本表の各粒を正とする |
 | PRODUCT-ASSET | U3a-1S | M3 / VS-1 / SPEC / headless Timeline owner-visibility decision | `DONE` | — | 本変更で[U3a-1 owner/visibility分割決定](reviews/2026-07-26-u3a-1-headless-timeline-owner-visibility-split-decision.md)を確定。`U0a`/`U0b-1`/`U0b-2`は[発注依存証跡](#発注依存証跡)で`DONE` | owner=`motolii-ui`内module、`motolii-timeline` crate=`REJECT`、visibility=pub再export+integration test（制約6点）。後続の同名docs粒を作らない |
@@ -233,7 +233,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | PRODUCT-ASSET | CU-0B02 | M3 / VS-1 / U0e-3 product token/component state/icon | `SPLIT` | [CU-0B02S分割決定](reviews/2026-07-29-cu-0b02s-product-token-ownership-split-decision.md) | token authority、React/native consumer、component state、icon判断をT/R/N/C/Iへ分離 | 一粒へ再結合しない |
 | PRODUCT-ASSET | CU-0B02S | M3 / VS-1 / SPEC / token ownership split | `DONE` | [CU-0B02S分割決定](reviews/2026-07-29-cu-0b02s-product-token-ownership-split-decision.md) | accepted routeのlegacy supplier、parallel mock supplier、native default visualsを再照合 | code/asset/token値変更0。次はTだけ |
 | PRODUCT-ASSET | CU-0B02T | M3 / VS-1 / U0e-3 product token authority | `DONE` | [CU-0B02T実装決定](reviews/2026-07-29-cu-0b02t-product-token-authority-implementation-decision.md) | product Dark DTCG + profile分離generator v2 Rust/CSS/manifest、17 Rust + 3 product guard + 49 reference guard + compile 1 pass | consumer配線、component、icon、Light/custom/object色0 |
-| PRODUCT-ASSET | CU-0B02R | M3 / VS-1 / React token consumer | `WAIT` | [CU-0B02S分割決定](reviews/2026-07-29-cu-0b02s-product-token-ownership-split-decision.md) | `CU-0B02T`は[発注依存証跡](#発注依存証跡)で`DONE`。Place縦切り完了まで優先度WAIT | accepted routeをgenerated CSS consumerへ反転 |
+| PRODUCT-ASSET | CU-0B02R | M3 / VS-2 / React token consumer | `DO` | [CU-0B02S分割決定](reviews/2026-07-29-cu-0b02s-product-token-ownership-split-decision.md) | `CU-0B02T`とVS-1は`DONE`。Place縦切り優先の保留理由が解消 | accepted routeをgenerated CSS consumerへ反転。legacy supplier退役、visual/DOM/ARIA/interaction不変、二重supplier 0 |
 | PRODUCT-ASSET | CU-0B02N | M3 / VS-1 / native token consumer | `WAIT` | [CU-0B02S分割決定](reviews/2026-07-29-cu-0b02s-product-token-ownership-split-decision.md) | CU-0B02T待ち | native shellを同じgenerated Rust adapterへ接続 |
 | PRODUCT-ASSET | CU-0B02C | M3 / VS-1 / component state ownership | `WAIT` | [CU-0B02S分割決定](reviews/2026-07-29-cu-0b02s-product-token-ownership-split-decision.md) | CU-0B02R待ち | 既存state sourceを直接所有移管 |
 | PRODUCT-ASSET | CU-0B02I | M3 / VS-1 / SPEC / icon system decision | `WAIT` | [CU-0B02S分割決定](reviews/2026-07-29-cu-0b02s-product-token-ownership-split-decision.md) | CU-0B02T待ち。統一source不在 | inline SVG/Unicode混在を採択済みicon systemと読まない |
@@ -550,7 +550,7 @@ U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除
 | resource設定を出す | G0-2 + G0-8 + U0b + K1a → U0f。設定はUser settings、pressure実測値はTransient |
 | 重いpreviewを追従させる | U1b + U1c + U5 + K1d → U1g。project fps/audio clockを変えず表示frameだけ落とす |
 
-現在の短い運用判断は、**`CU-108`でBrowser Rectangle→D2/journal→Stage/Timeline/Inspector→Undo/Redoの通常製品spineとVS-1を`DONE`とした。次PRODUCT-ASSET `DO`は未選定で、VS-2を発注可能な精度へ上げるrolling再判定から再開する。Motolii Studio Previewは用語正本上未実装のままで、`preview-runnable`全6条件と文書化済み起動コマンドの現行証拠は未再締結。token後続は`WAIT`。**
+現在の短い運用判断は、**`CU-108`で通常製品spineとVS-1を`DONE`、commit `eb4e6658`で`U4a-1` / `CU-202`を`DONE`とした。次PRODUCT-ASSET `DO`は`CU-0B02R`だけで、`CU-0B02C → CU-203 → CU-204 → U4a-2`は`WAIT`。Motolii Studio Previewは用語正本上未実装のままで、`preview-runnable`全6条件と文書化済み起動コマンドの現行証拠は未再締結。**
 
 ## 更新規則
 
