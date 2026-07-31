@@ -1,6 +1,6 @@
 # 実装進行台帳
 
-最終確認: **2026-07-29**
+最終確認: **2026-07-31**
 
 このファイルは、実装者が「次に何をするか」を1枚で判断するための現場用台帳。M0〜M5の意味や完了条件を再定義せず、現在の依存関係と発注順だけを示す。
 
@@ -43,6 +43,12 @@
 | M3 | **VS-1 Rectangle配置とUndo** | Browser typed intent→offline native Host WebView→exact codec/bounded inbox→Host private platform capture→native Stage latest-epoch hit-test→1 Surface上のStage/Timeline→opaque Browser lifecycle再投影→nonterminal Place preview→候補terminal原因分類→stale/duplicate admission→単一下流配送まで`CU-107TD`で成立。token後続は`WAIT`。次は横展開せず親`CU-107`を閉鎖確認する。D2/Undoまで未貫通のためMotolii Studio Preview完成とは扱わない。G0-9DはDistribution Ready用hardware gate。eguiへ新規製品面を実装せず、plugin UI公開契約はG0-3 / GAP-13まで停止する |
 | M4 | **K0契約凍結済み(test-only) / K1a再判定** | [歴史20版再照合](reviews/2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md)と[memory model 6版再照合](reviews/2026-07-23-historical-memory-model-lineage-recovery.md)後、K0はRoD/RoIの契約意味をtest-only spikeで凍結済みで、K1〜K8は未実装。runtime実装はK1a以降の別粒とし、K1階層基盤→K7 group freeze→K8全曲Draft coverageへ進む。現行`PipelineCache`／dynamic target pool／wgpu budget thresholdをResourceLedger、copy-out、disk store完成と数えない。K4の恒久`source_id`／再リンク／package意味はGAP-3／7の再調査前に焼かないが、このgateをK0や独立K1へ広げない。K6のVello／usvg製品統合は未実装で、R8成立性だけを完成証拠にしない |
 | M5 | **identity meaning decision可 / fixture WAIT** | P0I自身が所有するcontinuity／transform／nested identity／寿命／cache入力境界／PRNG処分をdocsで先に閉じ、TextCluster内部写像とPrototype ownerは明示留保する。fixtureはdecision merge後に分割する。P6のfontique／harfrust／Vello text stackは未実装で、K6とpremul adapterを重複実装しない |
+
+Repository validationは[validation topology決定](reviews/2026-07-31-repository-validation-topology-decision.md)で
+`cargo test`単独ownerを撤回し、`docs / policy / tooling / rust / web-build / web-contract /
+web-visual`へ分離した。dispatcherと`docs`／`tooling`／`rust`／`web-build`のCI接続を本粒で行う。
+`web-contract`／`web-visual`は固定browserをclean CI runnerへ用意してgreenを固定するまでblocking
+CIへ昇格せず、未実行／未完走をgreenまたは製品完成と記録しない。
 
 [M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3はU0a入場済みで、[UI runtime責任境界](ui-runtime-architecture.md)と[G0-9段階化](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)も決定済み。G0-9Lは固定Macのplatform prerequisite evidenceだけを限定確定したが、W0b、H1b、Motolii Studio Preview、window結合を解禁しない。G0-6Hは人間`ACCEPT`で完了し、U0e-3だけを解禁した。W0bの他の製品前提は別途閉じる。G0-9DまでDistribution Readyを名乗らない。plugin UI公開契約はG0-9合格と分離し、G0-3 / GAP-13の決定まで発注しない。headlessなTimeline/Stage projectionもSelected U seriesの前枝番がmainへ到達した時だけ次の1枝番を発注する。
 

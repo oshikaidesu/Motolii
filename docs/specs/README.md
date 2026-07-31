@@ -22,7 +22,12 @@
 ## タスク粒度のルール
 
 1. **1タスク=1PR**: 差分が1クレート(+テスト)に収まり、レビュー可能なサイズ(目安: 実装数百行)であること。超えるなら分割する。
-2. **完了条件は自動判定**: 各タスクは`cargo test`(またはCIのゴールデンイメージテスト)で完了を機械判定できること。「動いた気がする」を完了条件にしない(落とし穴D-2)。
+2. **完了条件は変更面を観測できるoracleで判定**: 各タスクは
+   `PRIMARY_ORACLE / REPO_LANES / EXTERNAL_GATES`を持ち、変更した契約を直接失敗させられる
+   fixture、test、guardまたはcheck commandを固定する。`cargo test --locked --workspace`はRust laneの
+   必要条件であり、React、docs、製品E2E、実機、人間審判の代替ではない。詳細は
+   [repository validation topology決定](../reviews/2026-07-31-repository-validation-topology-decision.md)。
+   「動いた気がする」、変更面を観測できないgreen、未実行を完了条件にしない(落とし穴D-2)。
 3. **依存の明示**: 各タスクは依存タスクIDを持つ。依存先が未完了のタスクには着手しない。依存のないタスク同士のみ並列に走らせる。
 4. **インターフェース先行**: 並列タスク間の境界は、仕様書内の型シグネチャ(trait/struct)として先に文章で固定する。実装中に境界を変えたくなったら、実装を止めて仕様書改訂PRを先に出す。
 5. **モック許可**: 依存先が未完了でも、仕様書のシグネチャ通りのモックを自作してテストを書いてよい(結合はインテグレーションタスクで検証)。
@@ -41,6 +46,10 @@
 ## インターフェース契約(並列タスク間の境界となる型・trait)
 ## タスク分割
 | ID | 内容 | 依存 | 完了条件 |
+各task行の完了条件には次を併記する:
+PRIMARY_ORACLE: <変更した契約を直接失敗させられる既存command>
+REPO_LANES: <docs | policy | tooling | rust | web-build | web-contract | web-visual>
+EXTERNAL_GATES: <NONE | 名前付きplatform / product E2E / human / hardware gate>
 ## 並列レーン(同時に走らせられるタスク列)
 ## フェーズ完了条件
 ## 実装ガード(先行ツールの失敗・ユーザー不満クロスチェック)
