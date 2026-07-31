@@ -915,6 +915,10 @@ impl ProductApp {
     ) {
         match event {
             ProductEvent::Wake => {
+                if let Err(error) = self.process_pending_inspector_commit(event_loop) {
+                    self.fail(event_loop, error);
+                    return;
+                }
                 if let Err(error) = self.process_inspector_gestures() {
                     self.fail(event_loop, error);
                     return;
@@ -1203,6 +1207,40 @@ impl ProductApp {
             self.render_request_template.quality,
         ));
         Ok(generation)
+    }
+
+    fn process_pending_inspector_commit(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+    ) -> Result<(), ProductRuntimeError> {
+        let Some(terminal) = self.take_pending_inspector_commit() else {
+            return Ok(());
+        };
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=inspector-commit session={} sequence={} cause={:?}",
+            terminal.session, terminal.sequence, terminal.cause,
+        ));
+        match terminal.into_set_effect_param_request() {
+            Some(request) => {
+                self.document_queue.push_set_effect_param(request);
+                match self.document_runtime.process_next(
+                    &mut self.document_queue,
+                    self.primary,
+                    self.projection_generation,
+                )? {
+                    Some(published) => {
+                        self.adopt_full_publish(event_loop, published, "inspector-opacity");
+                    }
+                    None => {
+                        self.submit_inspector_baseline()?;
+                    }
+                }
+            }
+            None => {
+                self.submit_inspector_baseline()?;
+            }
+        }
+        Ok(())
     }
 
     fn handle_history_trigger(&mut self, event_loop: &ActiveEventLoop, trigger: EffectiveTrigger) {

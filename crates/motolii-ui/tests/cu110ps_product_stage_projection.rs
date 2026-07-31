@@ -33,6 +33,9 @@ fn product_inspector_preview_routes_through_bounded_wake_before_result_drain() {
     let handle_wake = runtime
         .find("ProductEvent::Wake => {")
         .expect("product wake handler");
+    let commit_call = runtime[handle_wake..]
+        .find("self.process_pending_inspector_commit(")
+        .expect("pending inspector commit on wake");
     let process_call = runtime[handle_wake..]
         .find("self.process_inspector_gestures()")
         .expect("inspector gestures on wake");
@@ -42,6 +45,10 @@ fn product_inspector_preview_routes_through_bounded_wake_before_result_drain() {
     assert!(
         inspector_wake < drain_stage,
         "inspector gesture processing must be declared before stage result drain"
+    );
+    assert!(
+        commit_call < process_call,
+        "pending inspector commit must drain before gesture inbox on Wake"
     );
     assert!(
         process_call < drain_call,
@@ -54,6 +61,11 @@ fn product_inspector_preview_routes_through_bounded_wake_before_result_drain() {
         "pending_inspector_commit",
         "pending_inspector_commit: Option<InspectorGestureTerminal>",
         "take_pending_inspector_commit",
+        "self.take_pending_inspector_commit()",
+        "process_pending_inspector_commit",
+        "into_set_effect_param_request",
+        "push_set_effect_param",
+        "inspector-opacity",
         "resolve_effect_param_preview_command",
         "InspectorGestureTerminalCause::Cancel",
     ] {
