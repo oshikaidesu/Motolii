@@ -289,7 +289,7 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-0B02N | `PRODUCT / WAIT` | native shellを同じgenerated Rust adapterへ接続 | CU-0B02T | 同じrole値、Document保存0、toolkit隔離 | native専用token正本が必要 |
 | CU-0B02C | `PRODUCT / SPLIT` | 既存component stateを直接所有移管 | CU-0B02R | [CU-0B02C-S](2026-07-31-cu-0b02c-component-state-source-supply-decision.md)でC-S/C-P/C-Vへ分割 | 縮約再実装が必要 |
 | CU-0B02C-S | `SPEC / DONE` | fixed primitive sourceとtoken supply処分を固定 | CU-0B02R | 2 path / 2 hash、7 export、5 state、dependency 3 class | docs-onlyをC完了と読み替えたくなる |
-| CU-0B02C-P | `PRODUCT / DO` | fixed primitive 2ファイルをproduct ownerへ直接移管 | CU-0B02C-S | 7 export、focus/hover/pressed/disabled/selected、copy 0、mock import 0 | 非color値を恒久tokenへ推測昇格したくなる |
+| CU-0B02C-P | `PRODUCT / DONE` | fixed primitive 2ファイルをproduct ownerへ直接移管 | CU-0B02C-S | 7 export、focus/hover/pressed/disabled/selected、copy 0、mock import 0、30 PNG byte同一 | 非color値を恒久tokenへ推測昇格したくなる |
 | CU-0B02C-V | `SPEC / WAIT` | component-private carryの最終処分 | CU-0B02C-P、CU-203 | 第二consumerで共通性を再審判 | CU-203前に汎用tokenを発明したくなる |
 | CU-0B02I | `SPEC / WAIT` | icon grid/stroke system採択 | CU-0B02T | inline SVG/Unicode混在をicon正本と誤認しない | source不在のまま実装したくなる |
 | CU-0B03H | `PRODUCT / DONE` | H1b offline bundle / closed Host callback / mountの最小契約を固定 | CU-0A09B、CU-0A08BTI | [実装決定](2026-07-29-cu-0b03h-browser-host-contract-offline-mount-decision.md)。built-in Browser 1面、network 0、fixture caller 0、公開plugin API 0 | — |
@@ -334,7 +334,7 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 |---|---|---|---|---|---|
 | CU-201 | `CORE / WAIT` | U3b move/trim/snapをD2へ接続 | CU-105/106 | random操作列、相対位置、Undo全巻戻し、Cancel 0 | marker/beat未決を同時実装したくなる |
 | CU-202 | `CORE / DONE` | U4a-1 ValueType→control→command対応model | U2b-1、既存U4a-1契約 | commit `eb4e6658`。全first-party保存param対応またはtyped拒否、新ValueType 0、workspace全緑 | plugin独自UIが必要 |
-| CU-203 | `PRODUCT / WAIT` | U2c-3共通feedback component | CU-0B02C-P、U2c-1 | state matrix、理由+回復、色/文字単独依存拒否 | 個別picker/popup state machineが必要 |
+| CU-203 | `PRODUCT / DO` | U2c-3共通feedback component | CU-0B02C-P、U2c-1 | state matrix、理由+回復、色/文字単独依存拒否 | 個別picker/popup state machineが必要 |
 | CU-204 | `PRODUCT / WAIT` | U2c-5 Brief/Context/Inspect/Assistive投影 | CU-203、U2c-4 | reason/subject/facts一致、recovery通常Intent経由 | diagnosticからDocument直接mutationが必要 |
 | CU-205 | `PRODUCT / WAIT` | U4a-2自動Inspectorとnonblocking preview | CU-202/204、U1b | 100 slider updates、latest preview、1 gesture=1 Undo、stale拒否 | custom plugin panelへ逸脱 |
 | CU-206 | `PRODUCT / WAIT` | U4b keyframe/区間Easingを製品接続 | CU-205、native Easing core | drag write 0/release 1/Esc 0、非対象curve不変 | key構造やthreshold変更が必要 |

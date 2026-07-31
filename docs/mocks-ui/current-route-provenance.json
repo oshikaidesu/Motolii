@@ -99,11 +99,7 @@
     },
     {
       "path": "docs/mocks-ui/src/primitives/index.jsx",
-      "sha256": "005b5db5a71f75ab139d26f44169538f74d3711ca2244748e9b4a016088c9f8b"
-    },
-    {
-      "path": "docs/mocks-ui/src/primitives/primitives.css",
-      "sha256": "f625758bbfb9db6577618584a79ef9e900510ffc96662c6b1f6191393590959c"
+      "sha256": "912dd2a15937e280a511921a3db893cb8ba9c0a6fb2c3c5ef1d2be40fe178943"
     },
     {
       "path": "docs/mocks-ui/src/reference/EmptyBrowserReference.jsx",
@@ -139,7 +135,7 @@
     },
     {
       "path": "docs/mocks-ui/src/reference/reference-font.css",
-      "sha256": "8bb4122baef8f57b7dff5181eda98fb059505f9a9a6db3111994d9b60788aea3"
+      "sha256": "a38f177c482f38b8c7566707efa18fef7a20d0c21dd818182afff4f8744aa8a1"
     },
     {
       "path": "docs/mocks-ui/src/screens/AllSurfacesScreen.jsx",
@@ -219,11 +215,19 @@
     },
     {
       "path": "ui/motolii-web/src/index.js",
-      "sha256": "b5a245a4f04e53186603ee6212fc1c868683a36f81c0f14b4c4329975255a585"
+      "sha256": "942787a0782f6341829b41545a32b2c899cfc2cbd0e9c5a7f84cb985ea13a275"
     },
     {
       "path": "ui/motolii-web/src/patterns/DiscoveryBrowser.jsx",
       "sha256": "1d996ad66dba3ff7fb36cf811ce8d22faec1fee271a2dd5349d953a7cf89a2ea"
+    },
+    {
+      "path": "ui/motolii-web/src/primitives/index.jsx",
+      "sha256": "d5c9dd7d9016dacbef6f1ef93fa80e4cfe00a22eccc5e4faf7a4e12eada6de29"
+    },
+    {
+      "path": "ui/motolii-web/src/primitives/primitives.css",
+      "sha256": "7ecfe0195f922506429caa0e141fe6104bd845e02265e2bd24f4a67232dafc2b"
     },
     {
       "path": "ui/motolii-web/src/read-model/starterMediaProjectionDecoder.js",

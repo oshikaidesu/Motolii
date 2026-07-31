@@ -3,7 +3,8 @@
 - 日付: 2026-07-31
 - 状態: **決定 / CU-0B02C-S DONE**
 - 親: `CU-0B02C` **SPLIT**
-- 次の一粒: `CU-0B02C-P` **PRODUCT-ASSET / DO**
+- 実装状態: `CU-0B02C-P` **PRODUCT-ASSET / DONE**
+- 次の一粒: `CU-203` **PRODUCT-ASSET / DO**
 
 ## 1. 決定
 
@@ -20,7 +21,7 @@
 | ID | 状態 | 一成果 |
 |---|---|---|
 | `CU-0B02C-S` | `SPEC / DONE` | source closure、state owner、mock supplierと非color値の処分を固定 |
-| `CU-0B02C-P` | `PRODUCT / DO` | 2ファイルを`ui/motolii-web/src/primitives/`へ直接所有移管し、mockをproduct export consumerへ反転 |
+| `CU-0B02C-P` | `PRODUCT / DONE` | 2ファイルを`ui/motolii-web/src/primitives/`へ直接所有移管し、mockをproduct export consumerへ反転 |
 | `CU-0B02C-V` | `SPEC / WAIT` | `CU-203`の第二consumer成立後、component-private carryを共通tokenへ昇格するかcomponent内へ留めるか再審判 |
 
 `CU-0B02C-P`完了でcomponent state ownershipは閉じ、`CU-203`を解禁する。
@@ -125,3 +126,14 @@ class 2/3 exact value、fixed/current provenance、current-route 30 PNG byte一�
 非目標はCU-203 feedback component、error意味、accepted routeのDOM置換、
 Light / custom / high contrast、icon、native token、公開component API、
 Document / selection / Undo / Host transportである。
+
+## 5. 実装証跡
+
+`CU-0B02C-P`はproduct 2 pathと7 package exportへ直接移管し、旧JSXを
+mock supplier import + product re-exportだけへ反転、旧CSSを削除した。product CSSは
+`--motolii-color-*`を直接参照し、非color値と`#ffffff30`だけをcomponent内へexact carryした。
+新publication `ee3c1a2d44fd-ead41d4d6562`は旧generation
+`f4f355510cb2-ead41d4d6562`の30 PNGと全byte一致した。product ownership、
+source inventory、token、publication guard、build、Browser 16件、panel layout 5件を通過した。
+reference harnessもprivate font overrideを保持し、generation
+`u0e2-02b795bf37b7-85c0fc529ab1`の30 PNGを旧generationとbyte一致させた。

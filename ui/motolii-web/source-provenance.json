@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "task": "CU-0A04 / CU-0A05B / CU-0A06B / CU-0A07C / CU-108-STAGE-REPRODUCTION",
+  "task": "CU-0A04 / CU-0A05B / CU-0A06B / CU-0A07C / CU-108-STAGE-REPRODUCTION / CU-0B02C-P",
   "authority": "docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md",
   "fixedSourceCommit": "56c318edcddab7cf95d263cc2f7dd2b4e6791134",
   "sourceOwnership": {
     "product": "@motolii/motolii-web",
-    "owner": "R1-browser / R2B-easing-trigger / R3B-key-tools / R4C-inspector / R5-stage-chrome",
-    "surface": "Browser / Easing trigger / KEYS-LAYERS key tools / Inspector / Stage header-transport",
+    "owner": "R1-browser / R2B-easing-trigger / R3B-key-tools / R4C-inspector / R5-stage-chrome / component-state-primitives",
+    "surface": "Browser / Easing trigger / KEYS-LAYERS key tools / Inspector / Stage header-transport / shared presentation primitives",
     "exports": [
       {
         "name": "DiscoveryBrowserCandidate",
@@ -34,6 +34,34 @@
       },
       {
         "name": "StageTransportCandidate",
+        "path": "src/index.js"
+      },
+      {
+        "name": "Button",
+        "path": "src/index.js"
+      },
+      {
+        "name": "Field",
+        "path": "src/index.js"
+      },
+      {
+        "name": "Icon",
+        "path": "src/index.js"
+      },
+      {
+        "name": "IconButton",
+        "path": "src/index.js"
+      },
+      {
+        "name": "PanelHeader",
+        "path": "src/index.js"
+      },
+      {
+        "name": "Tab",
+        "path": "src/index.js"
+      },
+      {
+        "name": "TabList",
         "path": "src/index.js"
       }
     ]
@@ -96,6 +124,21 @@
         "component": "ui/motolii-web/src/candidates/StageChromeCandidate.jsx",
         "css": "ui/motolii-web/src/host/stage-host-screen.css",
         "entries": "ui/motolii-web/stage-header.html / ui/motolii-web/stage-transport.html"
+      }
+    },
+    {
+      "type": "fixed-source-transfer-with-supplier-replacement",
+      "old": {
+        "component": "docs/mocks-ui/src/primitives/index.jsx",
+        "componentSha256": "005b5db5a71f75ab139d26f44169538f74d3711ca2244748e9b4a016088c9f8b",
+        "css": "docs/mocks-ui/src/primitives/primitives.css",
+        "cssSha256": "f625758bbfb9db6577618584a79ef9e900510ffc96662c6b1f6191393590959c"
+      },
+      "current": {
+        "component": "ui/motolii-web/src/primitives/index.jsx",
+        "componentSha256": "d5c9dd7d9016dacbef6f1ef93fa80e4cfe00a22eccc5e4faf7a4e12eada6de29",
+        "css": "ui/motolii-web/src/primitives/primitives.css",
+        "cssSha256": "7ecfe0195f922506429caa0e141fe6104bd845e02265e2bd24f4a67232dafc2b"
       }
     }
   ],

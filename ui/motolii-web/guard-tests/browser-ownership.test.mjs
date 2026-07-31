@@ -49,6 +49,8 @@ const CURRENT_KEY_TOOLS_CSS = "ui/motolii-web/src/candidates/key-tools-candidate
 const CURRENT_INSPECTOR_SOURCE = "ui/motolii-web/src/candidates/InspectorCandidate.jsx";
 const CURRENT_INSPECTOR_CSS = "ui/motolii-web/src/candidates/inspector-candidate.css";
 const CURRENT_STAGE_CHROME_SOURCE = "ui/motolii-web/src/candidates/StageChromeCandidate.jsx";
+const CURRENT_PRIMITIVES_SOURCE = "ui/motolii-web/src/primitives/index.jsx";
+const CURRENT_PRIMITIVES_CSS = "ui/motolii-web/src/primitives/primitives.css";
 const PRODUCT_RUNTIME_MODULES = [
   CURRENT_BROWSER_INDEX,
   CURRENT_BROWSER_SOURCE,
@@ -57,6 +59,7 @@ const PRODUCT_RUNTIME_MODULES = [
   CURRENT_KEY_TOOLS_SOURCE,
   CURRENT_INSPECTOR_SOURCE,
   CURRENT_STAGE_CHROME_SOURCE,
+  CURRENT_PRIMITIVES_SOURCE,
 ];
 
 const FIXED_BROWSER_SOURCE = "docs/mocks-ui/src/candidates/DiscoveryBrowserCandidate.jsx";
@@ -68,6 +71,25 @@ const FIXED_KEY_TOOLS_SOURCE = "docs/mocks-ui/src/candidates/KeyToolsCandidate.j
 const FIXED_KEY_TOOLS_CSS = "docs/mocks-ui/src/candidates/key-tools-candidate.css";
 const FIXED_INSPECTOR_SOURCE = "docs/mocks-ui/src/candidates/InspectorCandidate.jsx";
 const FIXED_INSPECTOR_CSS = "docs/mocks-ui/src/candidates/inspector-candidate.css";
+const FIXED_PRIMITIVES_SOURCE = "docs/mocks-ui/src/primitives/index.jsx";
+const FIXED_PRIMITIVES_CSS = "docs/mocks-ui/src/primitives/primitives.css";
+const FIXED_PRIMITIVES_SOURCE_SHA256 =
+  "005b5db5a71f75ab139d26f44169538f74d3711ca2244748e9b4a016088c9f8b";
+const FIXED_PRIMITIVES_CSS_SHA256 =
+  "f625758bbfb9db6577618584a79ef9e900510ffc96662c6b1f6191393590959c";
+const CURRENT_PRIMITIVES_SOURCE_SHA256 =
+  "d5c9dd7d9016dacbef6f1ef93fa80e4cfe00a22eccc5e4faf7a4e12eada6de29";
+const CURRENT_PRIMITIVES_CSS_SHA256 =
+  "7ecfe0195f922506429caa0e141fe6104bd845e02265e2bd24f4a67232dafc2b";
+const PRIMITIVE_EXPORTS = [
+  "Button",
+  "Field",
+  "Icon",
+  "IconButton",
+  "PanelHeader",
+  "Tab",
+  "TabList",
+];
 
 const EXPECTED_EASING_TRIGGER_SHA256 =
   "6ae4cf7e79586e33cedaed0bb928daa34aa4b8ac9cdc9f6c494637875f502932";
@@ -795,6 +817,9 @@ function assertProductExportFromIndex(ast) {
   assert.equal(exportNames.has("InspectorContext"), true);
   assert.equal(exportNames.has("StageHeaderCandidate"), true);
   assert.equal(exportNames.has("StageTransportCandidate"), true);
+  for (const primitiveExport of PRIMITIVE_EXPORTS) {
+    assert.equal(exportNames.has(primitiveExport), true);
+  }
   assert.equal(exportNames.has("default"), false);
 }
 
@@ -1337,9 +1362,9 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
   }
 
   assert.equal(productPackage.name, PRODUCT_NAME);
-  assert.equal(provenance.task, "CU-0A04 / CU-0A05B / CU-0A06B / CU-0A07C / CU-108-STAGE-REPRODUCTION");
-  assert.equal(provenance.sourceOwnership.owner, "R1-browser / R2B-easing-trigger / R3B-key-tools / R4C-inspector / R5-stage-chrome");
-  assert.equal(provenance.sourceOwnership.surface, "Browser / Easing trigger / KEYS-LAYERS key tools / Inspector / Stage header-transport");
+  assert.equal(provenance.task, "CU-0A04 / CU-0A05B / CU-0A06B / CU-0A07C / CU-108-STAGE-REPRODUCTION / CU-0B02C-P");
+  assert.equal(provenance.sourceOwnership.owner, "R1-browser / R2B-easing-trigger / R3B-key-tools / R4C-inspector / R5-stage-chrome / component-state-primitives");
+  assert.equal(provenance.sourceOwnership.surface, "Browser / Easing trigger / KEYS-LAYERS key tools / Inspector / Stage header-transport / shared presentation primitives");
   assert.deepEqual(provenance.sourceOwnership.exports, [
     { name: "DiscoveryBrowserCandidate", path: "src/index.js" },
     { name: "EasingTriggerCandidate", path: "src/index.js" },
@@ -1348,6 +1373,13 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
     { name: "InspectorContext", path: "src/index.js" },
     { name: "StageHeaderCandidate", path: "src/index.js" },
     { name: "StageTransportCandidate", path: "src/index.js" },
+    { name: "Button", path: "src/index.js" },
+    { name: "Field", path: "src/index.js" },
+    { name: "Icon", path: "src/index.js" },
+    { name: "IconButton", path: "src/index.js" },
+    { name: "PanelHeader", path: "src/index.js" },
+    { name: "Tab", path: "src/index.js" },
+    { name: "TabList", path: "src/index.js" },
   ]);
   assert.deepEqual(provenance.migrations, [
     {
@@ -1409,6 +1441,21 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
         entries: "ui/motolii-web/stage-header.html / ui/motolii-web/stage-transport.html",
       },
     },
+    {
+      type: "fixed-source-transfer-with-supplier-replacement",
+      old: {
+        component: FIXED_PRIMITIVES_SOURCE,
+        componentSha256: FIXED_PRIMITIVES_SOURCE_SHA256,
+        css: FIXED_PRIMITIVES_CSS,
+        cssSha256: FIXED_PRIMITIVES_CSS_SHA256,
+      },
+      current: {
+        component: CURRENT_PRIMITIVES_SOURCE,
+        componentSha256: CURRENT_PRIMITIVES_SOURCE_SHA256,
+        css: CURRENT_PRIMITIVES_CSS,
+        cssSha256: CURRENT_PRIMITIVES_CSS_SHA256,
+      },
+    },
   ]);
 
   const easingTriggerBytes = await readFile(abs(CURRENT_EASING_TRIGGER_SOURCE));
@@ -1460,7 +1507,140 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
     "./candidates/InspectorCandidate.jsx",
     "./candidates/KeyToolsCandidate.jsx",
     "./candidates/StageChromeCandidate.jsx",
+    "./primitives/index.jsx",
   ]);
+});
+
+test("directly promotes fixed primitive state ownership without a second implementation", async () => {
+  const fixedSource = readBlobFromCommit(
+    FIXED_PRIMITIVES_SOURCE,
+    FIXED_SOURCE_COMMIT,
+  ).toString("utf8");
+  const fixedCss = readBlobFromCommit(
+    FIXED_PRIMITIVES_CSS,
+    FIXED_SOURCE_COMMIT,
+  ).toString("utf8");
+  const currentSource = await readFile(abs(CURRENT_PRIMITIVES_SOURCE), "utf8");
+  const currentCss = await readFile(abs(CURRENT_PRIMITIVES_CSS), "utf8");
+  const mockShim = await readFile(
+    abs("docs/mocks-ui/src/primitives/index.jsx"),
+    "utf8",
+  );
+
+  assert.equal(hashBytes(Buffer.from(fixedSource)), FIXED_PRIMITIVES_SOURCE_SHA256);
+  assert.equal(hashBytes(Buffer.from(fixedCss)), FIXED_PRIMITIVES_CSS_SHA256);
+  assert.equal(hashBytes(Buffer.from(currentSource)), CURRENT_PRIMITIVES_SOURCE_SHA256);
+  assert.equal(hashBytes(Buffer.from(currentCss)), CURRENT_PRIMITIVES_CSS_SHA256);
+  assert.equal(existsSync(abs(FIXED_PRIMITIVES_CSS)), false);
+
+  let expectedSource = fixedSource;
+  for (const role of [
+    "project",
+    "files",
+    "plugins",
+    "stage",
+    "inspector",
+    "timeline",
+  ]) {
+    expectedSource = expectedSource.replaceAll(
+      `--mock-role-way-${role}`,
+      `--motolii-color-way-${role}`,
+    );
+  }
+  assert.equal(currentSource, expectedSource);
+
+  let expectedCss = fixedCss.replace(
+    '@import "../tokens/mock-candidates.css";\n\n',
+    "",
+  );
+  expectedCss = expectedCss
+    .replace(
+      "  font-family: var(--mock-role-font-technical);",
+      `  font-family: var(
+    --motolii-primitive-font-technical,
+    ui-monospace,
+    "SFMono-Regular",
+    Menlo,
+    Consolas,
+    monospace
+  );`,
+    )
+    .replace(
+      "  font: 400 8px var(--mock-role-font-technical);",
+      `  font: 400 8px var(
+    --motolii-primitive-font-technical,
+    ui-monospace,
+    "SFMono-Regular",
+    Menlo,
+    Consolas,
+    monospace
+  );`,
+    )
+    .replace(
+      "  font: 7px var(--mock-role-font-technical);",
+      `  font: 7px var(
+    --motolii-primitive-font-technical,
+    ui-monospace,
+    "SFMono-Regular",
+    Menlo,
+    Consolas,
+    monospace
+  );`,
+    );
+  const replacements = new Map([
+    ["var(--mock-role-surface-app)", "var(--motolii-color-surface-app)"],
+    ["var(--mock-role-surface-panel)", "var(--motolii-color-surface-panel)"],
+    ["var(--mock-role-surface-raised)", "var(--motolii-color-surface-raised)"],
+    ["var(--mock-role-surface-hover)", "var(--motolii-color-surface-hover)"],
+    ["var(--mock-role-border-default)", "var(--motolii-color-border-default)"],
+    ["var(--mock-role-border-strong)", "var(--motolii-color-border-strong)"],
+    ["var(--mock-role-text-primary)", "var(--motolii-color-text-primary)"],
+    ["var(--mock-role-text-secondary)", "var(--motolii-color-text-secondary)"],
+    ["var(--mock-role-text-muted)", "var(--motolii-color-text-muted)"],
+    ["var(--mock-role-focus)", "var(--motolii-color-focus)"],
+    ["var(--mock-role-action-active)", "var(--motolii-color-action-active)"],
+    ["var(--mock-role-way-plugins)", "var(--motolii-color-way-plugins)"],
+    ["var(--mock-role-focus-width)", "2px"],
+    ["var(--mock-role-control-height)", "25px"],
+    ["var(--mock-role-tab-height)", "28px"],
+    ["var(--mock-role-panel-header-height)", "29px"],
+    ["var(--mock-role-gap-tight)", "3px"],
+    ["var(--mock-role-gap-control)", "5px"],
+    ["var(--mock-role-gap-group)", "7px"],
+    ["var(--mock-role-inset-control)", "9px"],
+    ["var(--mock-role-corner-control)", "2px"],
+  ]);
+  for (const [from, to] of replacements) {
+    expectedCss = expectedCss.replaceAll(from, to);
+  }
+  assert.equal(currentCss, expectedCss);
+  assert.equal((currentCss.match(/#ffffff30/g) ?? []).length, 1);
+  assert.equal(currentCss.includes("--mock-role-"), false);
+  assert.equal(currentCss.includes("docs/mocks-ui"), false);
+  assert.equal(currentSource.includes("useState"), false);
+  assert.equal(currentSource.includes("useEffect"), false);
+  assert.equal(currentSource.includes("localStorage"), false);
+  assert.equal(currentSource.includes("Document"), false);
+
+  assert.equal(
+    mockShim,
+    `import "../tokens/mock-candidates.css";
+
+export {
+  Button,
+  Field,
+  Icon,
+  IconButton,
+  PanelHeader,
+  Tab,
+  TabList,
+} from "@motolii/motolii-web";
+`,
+  );
+  assert.deepEqual(
+    [...collectNamedExports(parseModule(mockShim))].sort(),
+    [...PRIMITIVE_EXPORTS].sort(),
+  );
 });
 
 test("keeps fixed Stage chrome DOM and private read-only Host projection", async () => {

@@ -19,9 +19,9 @@ const DECODER_PATH = join(
 
 const AUTHORITY_SHA256 = {
   "ui/motolii-web/src/index.js":
-    "b5a245a4f04e53186603ee6212fc1c868683a36f81c0f14b4c4329975255a585",
+    "942787a0782f6341829b41545a32b2c899cfc2cbd0e9c5a7f84cb985ea13a275",
   "ui/motolii-web/source-provenance.json":
-    "675df616f9cf774e5df9cb4b2b3a6d39b253732738a91c8ba6d2d845a61680f9",
+    "c6577848800e51bc4d8b3471cf792d0e9d731ba3002ef93b91cfe11d4797c7f8",
   "ui/motolii-web/src/candidates/InspectorCandidate.jsx":
     "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0",
   "docs/mocks-ui/fixtures/reference-document.json":
