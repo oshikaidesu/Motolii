@@ -408,3 +408,4 @@
 | [2026-07-30-cu-108rds-drop-release-routing-repair-selection.md](2026-07-30-cu-108rds-drop-release-routing-repair-selection.md) | CU-108RDS drop release排他routing修復選定と次ゴールhandoff |
 | [2026-07-30-cu-108-product-connection-human-acceptance-observation.md](2026-07-30-cu-108-product-connection-human-acceptance-observation.md) | CU-108 通常製品接続の人間受け入れ観察 |
 | [2026-07-30-sd-02g-product-host-layout-geometry-implementation-decision.md](2026-07-30-sd-02g-product-host-layout-geometry-implementation-decision.md) | SD-02G product Host layout geometry単一owner実装 |
+| [2026-07-31-repository-validation-topology-decision.md](2026-07-31-repository-validation-topology-decision.md) | Cargo単独完了ownerをRust laneへ限定し、repository検証と外部審判を分離する決定 |

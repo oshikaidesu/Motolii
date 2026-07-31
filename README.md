@@ -223,11 +223,21 @@ Requirements:
 - Vulkan, Metal, or DX12 graphics support. CI also exercises software Vulkan/lavapipe.
 
 ```sh
-cargo test --workspace
+# Local portable profile: docs, then Rust fmt/clippy/locked workspace tests.
+./scripts/validate.sh local
+
+# Run the repository lanes required by the task contract.
+./scripts/validate.sh --list
 
 # Render a project to mp4.
 cargo run -p motolii-cli -- export-project path/to/project.json
 ```
+
+`cargo test --locked --workspace` remains the Rust lane. React, policy, product E2E,
+platform, hardware, and human gates are separate and must be named by each task's
+`PRIMARY_ORACLE / REPO_LANES / EXTERNAL_GATES`.
+`./scripts/test-local.sh` is the equivalent local profile wrapper after
+`scripts/setup-local-deps.sh` has provided the ffmpeg environment.
 
 ## Contributing
 

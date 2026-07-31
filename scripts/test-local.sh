@@ -15,4 +15,4 @@ source "${ENV_FILE}"
 echo "Using ffmpeg from: $(command -v ffmpeg)"
 echo "Using ffprobe from: $(command -v ffprobe)"
 
-cargo +stable test --workspace
+exec "${ROOT_DIR}/scripts/validate.sh" local

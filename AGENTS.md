@@ -122,13 +122,14 @@ Rerunを一度でも根拠・再利用箇所・変更案に含める発注書は
 - ドリフト検知時に既存仕様を黙って上書きしない。矛盾する旧記述と新案を同じ「現行」として残さず、未統一なら入口文書へ両者と解消条件を明記する。恒久形式、公開API、plugin契約、Document意味へ波及する場合は通常のSTOP条件と仕様改訂を優先する
 - 作業完了前に、その会話で新しく決まったこと、保留したこと、撤回したことがdocsへ回収され、Codexタスク履歴だけに残っていないか確認する。雑談的な発想は無理に規範化せず、実装判断へ影響し始めた時だけ台帳化する
 - **1チケット=1コミット**。完了時に仕様書のチケット表・実装状況表を更新する
-- 完了条件は自動判定(`cargo test`/ゴールデンイメージ)。「動いた気がする」を完了条件にしない
+- 完了条件は[repository validation topology](docs/reviews/2026-07-31-repository-validation-topology-decision.md)に従い、各粒へ`PRIMARY_ORACLE / REPO_LANES / EXTERNAL_GATES`を固定する。`cargo test`はRust laneであり、React、docs、製品E2E、実機、人間審判を代替しない。「動いた気がする」、変更面を観測できないgreen、未実行を完了条件にしない
 - **テストを「直して」通さない**: ゴールデン参照画像・受け入れテストの削除・期待値書き換え・実装のspecial-caseで緑にすることを禁止。**テストが間違っていると思ったら実装を止めて報告する**。参照画像の正当な更新は理由を明記した独立PRに分離(specs/README.md 粒度ルール6、[pitfalls H-2](docs/pitfalls-and-roadmap.md))
 - **新規ヘルパーを書く前に既存を検索する**: 同等物が既にないかgrepしてから書く(LLM開発の最大の負債はコピペ増殖 — [pitfalls H-3](docs/pitfalls-and-roadmap.md))。テストヘルパーのtestkit集約ルールの一般化
 - **新しい汎用機構を自作する前に責任を処分する**: repo内経路、[決定逆引き台帳](docs/decision-index.md)、[参考ライブラリ一覧](docs/references.md)、一次資料の順に確認し、`REUSE / ADOPT / WRAP / EXTERNAL / BUILD / REJECT`と`RETIREMENT`を選ぶ。file dialog、clipboard、OS bridge、layout、cache、scheduler、codec、test runner等の一般問題を、初期差分が短いという理由だけで`BUILD`しない。製品外harness/toolは製品へimportしない`FROZEN / DELETE-LATER`証拠カプセルに閉じ、一般機能を持つ長寿命owner、公開面、状態正本、background service、platform abstractionを増やさない。後続ループは各粒を`PASS / REDUCE / STOP`で再判定し、前粒のadapterや採択を自動継承しない。依存候補の型・thread model・OS handleが公開API、Document、serde面へ漏れる、または絶対規律の正本を依存側へ移さないと使えない場合はSTOPする。詳細は[依存優先・責任最小化ゲート](docs/reviews/2026-07-24-dependency-first-responsibility-gate.md)
 - **仕様書の未決事項に依存するタスクに着手しない**: 未決を「もっともらしいデフォルト」で埋めない。仕様書改訂PRで先に潰す(specs/README.md 粒度ルール7、GR-PV)
 - **完了報告は証跡付き**: 実行したコマンドとテスト出力を添える。「動くはず」を報告にしない
-- 提出前に `cargo test --workspace` 全緑を確認
+- 提出前は`./scripts/validate.sh local`でportable local profileを確認し、local依存setup済みなら`./scripts/test-local.sh`でも同じprofileを確認する。さらに粒の`PRIMARY_ORACLE / REPO_LANES / EXTERNAL_GATES`を追加実行する。local profile greenはCI、platform、human／hardware greenの代替ではない
+- 既知の既存不具合でlocal profileの一laneがredでも、profile全体をgreenと報告しない。独立な残りlaneは直接実行して個別証跡を残し、red laneと未実行gateを分離して報告する
 - **プラグイン規約の機械判定(INF-7a〜f)**: 提出前に `cargo test -p motolii-plugin` と、Filter/ParamDriverを触ったら `cargo test -p motolii-testkit --test purity` を回す。新規プラグインは `./scripts/new-plugin.sh <kind> <name>` から始め、純関数は `motolii_testkit::purity` で固定する
 - インターフェース契約(specの型シグネチャ)を変えたくなったら、実装を止めて仕様書改訂を先に
 

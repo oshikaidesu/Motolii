@@ -51,11 +51,15 @@ jobs:
           dpkg -s libasound2-dev
           dpkg -s libfontconfig1-dev
           dpkg -s libwebkit2gtk-4.1-dev
-      - name: Delegation CLI boundary
-        run: ./scripts/test-delegate-cursor-supervised.sh
       - name: Rust toolchain
         run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Validation dispatcher boundary
+        run: ./scripts/test-validate.sh
+      - name: Documentation
+        run: ./scripts/validate.sh docs
+      - name: M3E-1 UI toolkit and delegation tooling
+        run: ./scripts/validate.sh tooling
       - name: M2E-2 protected test assets × src simultaneous change gate
         if: github.event_name == 'pull_request'
         run: |
@@ -75,15 +79,23 @@ jobs:
           BASE="origin/${{ github.base_ref }}"
           # merge-base 失敗はスクリプト側で fail-closed。浅掘り回避は checkout fetch-depth: 0。
           ./scripts/check-golden-update-policy.sh "$BASE"
-      - name: M3E-1 UI toolkit dependency direction gate
-        run: ./scripts/check-ui-toolkit-deps.sh
-      - name: Format
-        run: cargo fmt --all --check
-      - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Test
-        # M2E-3: Cargo.lock と乖離した解決を禁止し、依存ドリフトを検知する。
-        run: cargo test --locked --workspace
+      - name: Rust
+        # M2E-3のlocked workspace testをfmt/clippyと同じRust laneで維持する。
+        run: ./scripts/validate.sh rust
+
+  web-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            docs/mocks-ui/package-lock.json
+            ui/motolii-web/package-lock.json
+      - name: Web build
+        run: ./scripts/validate.sh web-build
 
   d1m-lock-windows:
     runs-on: windows-latest
