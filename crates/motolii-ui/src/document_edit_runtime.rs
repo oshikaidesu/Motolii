@@ -547,13 +547,25 @@ impl DocumentEditRuntime {
 
         let snapshot = self.writer.snapshot();
         let primary = current_primary.filter(|id| self.writer.find_envelope(*id).is_some());
+        let created_effect_use = if let HistoryDirection::Redo = action.direction {
+            match &action.durable_command {
+                Command::CreateEffect { target, use_, .. }
+                    if current_primary.as_ref() == Some(target) =>
+                {
+                    Some(use_.id)
+                }
+                _ => None,
+            }
+        } else {
+            None
+        };
         Ok(Some(PublishedDocument {
             kind,
             revision: self.writer.revision,
             snapshot,
             primary,
             projection_generation,
-            created_effect_use: None,
+            created_effect_use,
         }))
     }
 
@@ -1318,7 +1330,7 @@ mod tests {
             .unwrap()
             .expect("Redo must publish");
         assert_eq!(redone.kind, DocumentEditActionKind::Redo);
-        assert_eq!(redone.created_effect_use, None);
+        assert_eq!(redone.created_effect_use, Some(created));
         assert_eq!(redone.primary, Some(primary));
         let redone_envelope = runtime
             .writer
@@ -1332,6 +1344,62 @@ mod tests {
             attached_json
         );
         assert_eq!(runtime.history_lengths(), (1, 0));
+
+        queue.push_undo();
+        let undone_for_foreign_primary = runtime
+            .process_next(&mut queue, Some(primary), 7)
+            .unwrap()
+            .expect("Undo must publish before foreign-primary Redo");
+        assert_eq!(undone_for_foreign_primary.created_effect_use, None);
+
+        queue.push_redo();
+        let foreign_primary_redo = runtime
+            .process_next(&mut queue, None, 8)
+            .unwrap()
+            .expect("foreign-primary Redo must still publish the Document");
+        assert_eq!(foreign_primary_redo.created_effect_use, None);
+        assert_eq!(foreign_primary_redo.primary, None);
+
+        let request = SetEffectParamRequest::new(
+            primary,
+            created,
+            definition_id,
+            "core.filter.opacity".into(),
+            1,
+            "amount".into(),
+            0.4,
+        );
+        queue.push_set_effect_param(request);
+        let changed = runtime
+            .process_next(&mut queue, Some(primary), 9)
+            .unwrap()
+            .expect("SetEffectParam must publish");
+        assert_eq!(changed.kind, DocumentEditActionKind::SetEffectParam);
+        assert_eq!(changed.created_effect_use, None);
+
+        queue.push_undo();
+        let undone_param = runtime
+            .process_next(&mut queue, Some(primary), 10)
+            .unwrap()
+            .expect("undo param must publish");
+        assert_eq!(undone_param.kind, DocumentEditActionKind::Undo);
+        assert_eq!(undone_param.created_effect_use, None);
+
+        queue.push_redo();
+        let redo_param = runtime
+            .process_next(&mut queue, Some(primary), 11)
+            .unwrap()
+            .expect("redo param must publish");
+        assert_eq!(redo_param.kind, DocumentEditActionKind::Redo);
+        assert_eq!(redo_param.created_effect_use, None);
+
+        queue.push_undo();
+        let undo_param_restored = runtime
+            .process_next(&mut queue, Some(primary), 12)
+            .unwrap()
+            .expect("undo param must publish");
+        assert_eq!(undo_param_restored.kind, DocumentEditActionKind::Undo);
+        assert_eq!(undo_param_restored.created_effect_use, None);
 
         drop(runtime);
         let limits = ResourceLimits::production();
