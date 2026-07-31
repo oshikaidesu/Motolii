@@ -214,6 +214,13 @@ projected item 1件時に`1`、catalog absent時に既存`3`とする。
 - 通常製品windowでOpacity cardが見えることをshipped bundleから確認する
 - Web source意味、React DOM/CSS、intent、Document、selection、Undoを変更しない
 
+`CU-205B2`はcommit `185bc327`で`DONE`。Sparkはusage limitで差分作成前に停止したため、
+同じauthority・allowlist・oracleを固定して実装者をSolへ交代した。Rust focused
+13/13、Browser codec 6/6 skip 0、正規bundle二回生成の全tree hash一致、
+manifest/serve/旧hash 404、ignored path 0を閉じ、Grok `VERDICT: ACCEPT`、
+P0/P1/P2=0を得た。B1G/B1I/B2が揃ったため親`CU-205B`も`DONE`、次の実装粒は
+`CU-205T`。
+
 CU-205B1Gだけ、またはCU-205B1Iだけを通常製品接続の完成と数えない。
 B1G/B1I/B2が揃って親CU-205Bを`DONE`とする。
 CU-205B全体はcard表示とtyped sourceだけを所有し、attach、D2、Inspector、previewを実装しない。
