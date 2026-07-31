@@ -9,8 +9,9 @@
 `CU-205`を次の正常系4粒とE2Eへ分割する。
 
 1. `CU-205B PRODUCT-ASSET`: first-party `core.filter.opacity`を既存Browser
-   `PluginCard`へtyped catalog projectionで接続する。source consumer `CU-205B1`と
-   shipped Host/bundle `CU-205B2`へ分ける
+   `PluginCard`へtyped catalog projectionで接続する。source consumer親`CU-205B1`を
+   provenance guard `CU-205B1G`とsource実装`CU-205B1I`へ分け、その後
+   shipped Host/bundle `CU-205B2`へ進む
 2. `CU-205T PRODUCT`: Browserのtyped attach intentを、現在のprimary layerに対する
    既存`DocumentWriter::prepare_create_effect`とjournal-first D2 routeへ接続する
 3. `CU-205P PRODUCT`: 選択中Effect Useの`NodeDesc` / `ParamDef`を既存
@@ -24,7 +25,7 @@
 `CU-205`親と`U4a-2`は、正常系と既存のinvalid/read-only共通診断表示が両方閉じるまで
 `SPLIT / WAIT`とする。到達不能な診断をfixtureやunknown command注入で偽装しない。
 
-実装順は`CU-205B1 → CU-205B2 → CU-205T → CU-205P → CU-205W → CU-205E`で固定する。
+実装順は`CU-205B1G → CU-205B1I → CU-205B2 → CU-205T → CU-205P → CU-205W → CU-205E`で固定する。
 presentation、Document attach、Inspector projection、gesture write、E2Eを一粒へ束ねない。
 
 ## 2. 既存契約接続票
@@ -36,7 +37,7 @@ presentation、Document attach、Inspector projection、gesture write、E2Eを�
 | `OWNER` | Effect Definition / Use / parameter値はDocument。primary layerとactive Effect UseはHost Transient。Browser / Inspectorのhover・focus・開閉はlocal presentation。first-party catalog projectionはDocument外Host read model |
 | `WRITE ROUTE` | Browser typed intent→Host coordinator→current primary検証→`prepare_create_effect`→既存journal-first D2→publish。parameterは既存`SetProperty(EffectParam)` routeへ入り、ReactはDocument writerを持たない |
 | `GAP` | first-party catalogからEffects Browserへの通常projection、attach intent、active Effect Use投影、生成control、preview gesture接続が無い。現行Browser HostはRectangle 1件、Inspector Hostは`nodes: []` |
-| `RESOLUTION ROUTE` | 既存`PluginCard`、CU-G09 private catalog shape、first-party catalog、effect prepare、parameter control、Inspector Hostを`REUSE`し、B1/B2/T/P/W/Eへ`REDUCE`する |
+| `RESOLUTION ROUTE` | 既存`PluginCard`、CU-G09 private catalog shape、first-party catalog、effect prepare、parameter control、Inspector Hostを`REUSE`し、B1G/B1I/B2/T/P/W/Eへ`REDUCE`する |
 | `DISPOSITION` | 正常系は`PASS`。到達可能sourceの無い`CU-204P`だけを`WAIT`に残す |
 
 ## 3. 実在sourceと固定値
@@ -146,14 +147,54 @@ threshold/golden変更を拒否する。
 既存`PluginCard`を捨てた縮約leaf、公開catalog/plugin契約の新設、未決metadataの捏造、
 Document/Undo ownerのReact移動、通常route以外だけの成立が必要なら停止する。
 
-`CU-205B1`はproduct Web sourceだけを所有する。
+初回`CU-205B1`施工はGrok `REJECT`となり、差分を採用しなかった。固定source hashを
+直接列挙する`browser-catalog-decoder.test.mjs`が、既に存在するappend-only
+`source-provenance.json::postPromotionChanges` authorityと再結合されておらず、
+正当なpost-promotion source変更を無条件に拒否したためである。期待hashを実装ごとに
+同じ差分で書き換えず、先に`CU-205B1G ORACLE-GUARD`を行う。
+
+`CU-205B1G`はtest-only provenance guardだけを所有する。
+
+- `browser-ownership.test.mjs`に既存する`validatePostPromotionChanges`を、product codeへ
+  importされないguard-tests内の共有moduleへ移す
+- Browser固定SHA、index 0固定entry、exact key、同一file、task一意、非空reason、
+  hash chain、last current hashとlive source一致を一つも弱めない
+- `browser-catalog-decoder.test.mjs`はBrowser JSXと`source-provenance.json`の
+  その時点のhash literalを期待値更新せず、同じ共有validatorでlive chainを検証する
+- `inspector-read-model-decoder.test.mjs`はInspector JSXの固定hashを維持したまま、
+  Browser変更でも変化する`source-provenance.json`全体hashだけを固定authorityから外す
+- decoder、React、provenance JSON、fixture、製品runtimeを変更しない
+- helper重複、単なるcurrent hash受理、空chain受理、index 0緩和を拒否する
+
+`CU-205B1I`はproduct Web sourceとprovenance appendだけを所有する。
 
 - `browserHostCodec.js`でstrict catalog snapshotを既存`browserCatalogDecoder`へ渡す
 - `host/main.jsx`からdecode済みcatalogを`DiscoveryBrowserCandidate`へ渡す
 - `CandidatePluginBrowser`はcatalog入力がある通常Hostだけで既存`PluginCard`を
   projected item consumerにし、入力なしのmock/standalone 3 cardを変更しない
 - Host fixtureによるcodec/component/ownership試験を追加する
+- `source-provenance.json::postPromotionChanges`へ`CU-205B1I`の旧末尾hash→新live hashを
+  一件appendし、共有validatorを通す
 - generated-host、Rust、Document、intent、CSS、visual oracleを変更しない
+
+projected `PluginCard`の値は次だけとし、fallbackを置かない。
+
+- `itemId` / `name`: exact `item_id` / non-null `display_name`
+- `category` / `subtype`: exact taxonomy refs `effect` / `color`のid + label
+- `mode`: exact install-state ref `installed`から`installed`
+- `folder` / `labels`: taxonomy labelを順序どおり空白結合した導出値
+- `search`: display name、item id、taxonomy label、provider label、install-state labelの順序付き結合
+- `thumbnail`: role-fixed local presentation `poster`
+- `kind`: role-fixed local presentation `FX`
+- `state` / `identity` / `impact`: `undefined`
+- `pack`: `null`
+- `motion`: `false`
+- `tags`: 空配列、`tagVisible`: `true`
+
+present catalogでscope、item、vocabulary ref、exact labelが一致しなければcodecで拒否する。
+Candidate側で`catalogs[0]`、static 3 card、label、item idへfallbackしない。
+Hookは常に同じ順で呼び、catalog専用Contextを新設せず既存prop経路で渡す。Results countは
+projected item 1件時に`1`、catalog absent時に既存`3`とする。
 
 `CU-205B2`はshipped Host接続だけを所有する。
 
@@ -163,7 +204,8 @@ Document/Undo ownerのReact移動、通常route以外だけの成立が必要な
 - 通常製品windowでOpacity cardが見えることをshipped bundleから確認する
 - Web source意味、React DOM/CSS、intent、Document、selection、Undoを変更しない
 
-CU-205B1だけを通常製品接続の完成と数えない。B1/B2が揃って親CU-205Bを`DONE`とする。
+CU-205B1Gだけ、またはCU-205B1Iだけを通常製品接続の完成と数えない。
+B1G/B1I/B2が揃って親CU-205Bを`DONE`とする。
 CU-205B全体はcard表示とtyped sourceだけを所有し、attach、D2、Inspector、previewを実装しない。
 
 ## 5. CU-205T attach
