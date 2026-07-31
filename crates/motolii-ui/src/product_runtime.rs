@@ -498,7 +498,12 @@ impl ProductApp {
             initial_instance_epoch,
         ));
         let inspector_started = Instant::now();
-        let inspector = InspectorHostRuntime::new(&window, &self.current_document, self.primary)?;
+        let inspector = InspectorHostRuntime::new(
+            &window,
+            &self.current_document,
+            self.primary,
+            self.active_effect_use,
+        )?;
         crate::ui_numeric_trace::emit(format_args!(
             "kind=startup phase=inspector-created phase_ms={:.3}",
             elapsed_ms(inspector_started),
@@ -851,7 +856,11 @@ impl ProductApp {
                     self.primary = published.primary;
                     self.projection_generation = published.projection_generation;
                     if let Some(inspector) = &self.inspector {
-                        if let Err(error) = inspector.publish(&self.current_document, self.primary)
+                        if let Err(error) = inspector.publish(
+                            &self.current_document,
+                            self.primary,
+                            self.active_effect_use,
+                        )
                         {
                             return self.fail(event_loop, error);
                         }
@@ -1045,7 +1054,11 @@ impl ProductApp {
                 self.primary = published.primary;
                 self.projection_generation = published.projection_generation;
                 if let Some(inspector) = &self.inspector {
-                    if let Err(error) = inspector.publish(&self.current_document, self.primary) {
+                    if let Err(error) = inspector.publish(
+                        &self.current_document,
+                        self.primary,
+                        self.active_effect_use,
+                    ) {
                         return self.fail(event_loop, error);
                     }
                 }
@@ -1115,7 +1128,11 @@ impl ProductApp {
         self.primary = published.primary;
         self.projection_generation = published.projection_generation;
         if let Some(inspector) = &self.inspector {
-            if let Err(error) = inspector.publish(&self.current_document, self.primary) {
+            if let Err(error) = inspector.publish(
+                &self.current_document,
+                self.primary,
+                self.active_effect_use,
+            ) {
                 return self.fail(event_loop, error);
             }
         }

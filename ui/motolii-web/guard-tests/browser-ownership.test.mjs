@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { validatePostPromotionChanges } from "./browser-post-promotion-provenance.mjs";
+import { decodeInspectorReadModel } from "../src/read-model/inspectorReadModelDecoder.js";
 
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PRODUCT_DIR = path.resolve(TEST_DIR, "..");
@@ -18,6 +19,14 @@ const REPO_DIR = execFileSync("git", ["rev-parse", "--show-toplevel"], {
 const DOCS_MOCKS_DIR = path.resolve(REPO_DIR, "docs/mocks-ui");
 const DOCS_MOCKS_PACKAGE = path.join(DOCS_MOCKS_DIR, "package.json");
 const PRODUCT_PACKAGE = path.join(PRODUCT_DIR, "package.json");
+const INSPECTOR_PARTS = path.join(
+  DOCS_MOCKS_DIR,
+  "fixtures/inspector-read-model-parts.json",
+);
+const REFERENCE_DOCUMENT = path.join(
+  DOCS_MOCKS_DIR,
+  "fixtures/reference-document.json",
+);
 const OWNERSHIP_TEST_SOURCE = readFileSync(fileURLToPath(import.meta.url), "utf8");
 
 const requireFromMocks = createRequire(DOCS_MOCKS_PACKAGE);
@@ -104,7 +113,7 @@ const EXPECTED_KEY_TOOLS_SHA256 =
 const EXPECTED_KEY_TOOLS_CSS_SHA256 =
   "f84eb7f98f05844fa3bfc72b702cee2709f1fc0bb9be614f2b01039a65b5190d";
 const EXPECTED_INSPECTOR_SHA256 =
-  "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0";
+  "a1af604c78113f4df0538c3045b19d51c1d3fc8c6740305abc47b7e8a2d10f37";
 const EXPECTED_INSPECTOR_CSS_SHA256 =
   "730e2861a893b2b07fa66d5acef0038a49bdcf337e8c5a037785b0a58d829cbe";
 const INSPECTOR_POST_PROMOTION_TASK = "CU-0A08ITP";
@@ -114,6 +123,10 @@ const INSPECTOR_POST_PROMOTION_REASON =
   "VS-1 Inspector target read-only projection component input";
 const FIXED_INSPECTOR_COMPONENT_SHA256 =
   "1e0bdd3eebd665e517600af4db090f74d50951aef12fdd476e97a828de91a3e4";
+const CU205P_INSPECTOR_FIXED_SHA256 =
+  "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0";
+const CU205P_INSPECTOR_REASON =
+  "VS-2 active Effect Inspector read-only control projection";
 
 const ALLOWED_EXTERNAL_PACKAGES = ["react", "html-react-parser"];
 const SEAM_COMPONENT_NAME = "CandidateCreateBrowser";
@@ -214,6 +227,60 @@ function validateInspectorPostPromotionChanges(provenance, currentComponentSha25
 
 function hashBytes(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+function loadInspectorInput() {
+  const parts = JSON.parse(readFileSync(INSPECTOR_PARTS, "utf8"));
+  const document = JSON.parse(readFileSync(REFERENCE_DOCUMENT, "utf8"));
+  return structuredClone({ ...parts, document });
+}
+
+function findItemByLayerId(items, layerId) {
+  if (!Array.isArray(items)) return undefined;
+  for (const item of items) {
+    if (item.envelope?.layer_id === layerId) return item;
+    const child = findItemByLayerId(item.children, layerId);
+    if (child !== undefined) return child;
+  }
+  return undefined;
+}
+
+function loadActiveOpacityInput() {
+  const input = loadInspectorInput();
+  input.active_effect_use_id = 17;
+  input.nodes[0].effect_version = 1;
+  input.nodes[0].params[0].control = "F64";
+  input.document.effect_definitions[0].params = {
+    amount: { const: { F64: 0.72 } },
+  };
+  const targetItem = findItemByLayerId(input.document.tracks[0].items, 5);
+  targetItem.envelope.effects.push({ id: 17, definition_id: 0 });
+  return input;
+}
+
+function renderInspectorSource(sourceText, inspectorReadModel) {
+  const { transformSync } = requireFromMocks("esbuild");
+  const React = requireFromMocks("react");
+  const { renderToStaticMarkup } = requireFromMocks("react-dom/server");
+  const withoutCss = sourceText.replace(
+    /^import "\.\/inspector-candidate\.css";\n/m,
+    "",
+  );
+  const compiled = transformSync(withoutCss, {
+    loader: "jsx",
+    format: "cjs",
+    jsx: "automatic",
+  }).code;
+  const loaded = { exports: {} };
+  const loadDependency = (specifier) => requireFromMocks(specifier);
+  const evaluate = new Function("require", "module", "exports", compiled);
+  evaluate(loadDependency, loaded, loaded.exports);
+  return renderToStaticMarkup(
+    React.createElement(loaded.exports.InspectorCandidate, {
+      mode: undefined,
+      inspectorReadModel,
+    }),
+  );
 }
 
 function abs(relativePath) {
@@ -654,7 +721,11 @@ function validateInspectorSafeBranch(sourceText) {
     for (const child of Object.values(node)) walk(child);
   };
   walk(returned);
-  assert.deepEqual(expressionBindings, ["panelHead", "targetIdentity"]);
+  assert.deepEqual(expressionBindings, [
+    "panelHead",
+    "targetIdentity",
+    "activeEffectSection",
+  ]);
   assert.deepEqual(textValues, []);
 }
 
@@ -887,6 +958,129 @@ test("validates decoded Inspector target projection into the existing identity J
   }
 });
 
+test("projects one exact active Opacity amount control and preserves absent output", async () => {
+  const absentInput = loadInspectorInput();
+  const absentOutput = decodeInspectorReadModel(absentInput);
+  assert.equal(Object.hasOwn(absentOutput, "active_effect"), false);
+
+  const activeOutput = decodeInspectorReadModel(loadActiveOpacityInput());
+  assert.deepEqual(activeOutput.active_effect, {
+    layer_id: 5,
+    effect_use_id: 17,
+    definition_id: 0,
+    plugin_id: "core.filter.opacity",
+    effect_version: 1,
+    params: [
+      {
+        id: "amount",
+        current: { const: { F64: 0.72 } },
+        value_type: "F64",
+        f64_domain: {
+          min_inclusive: 0,
+          max_inclusive: 1,
+          integer: false,
+        },
+        control_kind: "F64",
+      },
+    ],
+  });
+
+  const source = await readFile(abs(CURRENT_INSPECTOR_SOURCE), "utf8");
+  const absentHtml = renderInspectorSource(source, absentOutput);
+  assert.equal(
+    absentHtml,
+    '<aside class="inspector" id="inspector"><div class="panel-head">Inspector</div><div class="section"><div class="identity"><div class="icon">G</div><div><b>Reference group</b><small>Group · 1 child</small></div></div></div></aside>',
+  );
+
+  const activeHtml = renderInspectorSource(source, activeOutput);
+  assert.equal((activeHtml.match(/class="scrub"/g) ?? []).length, 1);
+  assert.match(activeHtml, /data-effect-use-id="17"/);
+  assert.match(activeHtml, /id="effect-use-17-amount"/);
+  assert.match(activeHtml, /data-param="amount"/);
+  assert.match(activeHtml, /aria-label="amount read-only"/);
+  assert.match(activeHtml, /aria-readonly="true"/);
+  assert.match(activeHtml, /disabled=""/);
+  assert.match(activeHtml, />72%<\/output>/);
+  assert.doesNotMatch(activeHtml, /AUTO ON|AUTO OFF|onpointer|onkeydown/i);
+});
+
+test("rejects ambiguous or mismatched active Effect Use projections", () => {
+  const cases = [
+    (input) => { input.active_effect_use_id = Number.NaN; },
+    (input) => { input.active_effect_use_id = 999; },
+    (input) => { input.active_effect_use_id = 1; },
+    (input) => {
+      const target = findItemByLayerId(input.document.tracks[0].items, 5);
+      target.envelope.effects.push({ id: 17, definition_id: 0 });
+    },
+    (input) => { input.document.effect_definitions[0].id = 99; },
+    (input) => {
+      input.document.effect_definitions.push(
+        structuredClone(input.document.effect_definitions[0]),
+      );
+    },
+    (input) => { input.document.effect_definitions[0].plugin_id = "core.filter.other"; },
+    (input) => { input.document.effect_definitions[0].effect_version = 2; },
+    (input) => {
+      input.document.effect_definitions[0].plugin_id = "core.filter.other";
+      input.nodes[0].id = "core.filter.other";
+    },
+    (input) => {
+      input.document.effect_definitions[0].effect_version = 2;
+      input.nodes[0].effect_version = 2;
+    },
+    (input) => { delete input.nodes[0].effect_version; },
+    (input) => { delete input.nodes[0].params[0].control; },
+    (input) => { input.nodes[0].params[0].control = "Vec2"; },
+    (input) => { delete input.nodes[0].params[0].f64_domain; },
+    (input) => { input.nodes[0].params[0].f64_domain.max_inclusive = 2; },
+    (input) => { input.nodes[0].params[0].f64_domain.integer = true; },
+    (input) => { delete input.document.effect_definitions[0].params.amount; },
+    (input) => {
+      input.nodes[0].params = [];
+      input.document.effect_definitions[0].params = {};
+    },
+    (input) => {
+      const other = structuredClone(input.nodes[0].params[0]);
+      other.id = "other";
+      input.nodes[0].params.push(other);
+      input.document.effect_definitions[0].params = {
+        other: { const: { F64: 0.25 } },
+        amount: { const: { F64: 0.72 } },
+      };
+    },
+    (input) => {
+      input.nodes[0].params[0].id = "other";
+      input.document.effect_definitions[0].params = {
+        other: { const: { F64: 0.72 } },
+      };
+    },
+    (input) => {
+      input.document.effect_definitions[0].params.amount = { keyframes: {} };
+    },
+    (input) => {
+      input.document.effect_definitions[0].params.amount.const.F64 = 1.1;
+    },
+    (input) => {
+      input.document.effect_definitions[0].params.amount.const.F64 = Number.POSITIVE_INFINITY;
+    },
+    (input) => { input.extra = true; },
+    (input) => { delete input.target; },
+  ];
+  for (const mutate of cases) {
+    const input = loadActiveOpacityInput();
+    mutate(input);
+    assert.throws(
+      () => decodeInspectorReadModel(input),
+      (error) => {
+        assert.ok(error instanceof TypeError);
+        assert.match(error.message, /^R[^:]+: .+ at .+$/);
+        return true;
+      },
+    );
+  }
+});
+
 test("validates Inspector post-promotion provenance as an append-only chain", async () => {
   const provenance = JSON.parse(
     await readFile(path.join(PRODUCT_DIR, "source-provenance.json"), "utf8"),
@@ -896,6 +1090,14 @@ test("validates Inspector post-promotion provenance as an append-only chain", as
   );
   assert.doesNotThrow(() =>
     validateInspectorPostPromotionChanges(provenance, currentInspectorSha256));
+  assert.equal(provenance.inspectorPostPromotionChanges.length, 3);
+  assert.deepEqual(provenance.inspectorPostPromotionChanges.at(-1), {
+    task: "CU-205P",
+    file: INSPECTOR_POST_PROMOTION_FILE,
+    reason: CU205P_INSPECTOR_REASON,
+    fixedSourceSha256: CU205P_INSPECTOR_FIXED_SHA256,
+    currentSha256: currentInspectorSha256,
+  });
 
   const index0 = provenance.inspectorPostPromotionChanges[0];
   const syntheticSha = hashBytes(Buffer.from("cu-0a08itp-inspector-chain-next"));

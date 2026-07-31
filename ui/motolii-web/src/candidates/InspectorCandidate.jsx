@@ -45,6 +45,8 @@ function ObjectAutoHint({ param, keys, automation }) {
 function ScrubControl({
   param,
   value,
+  controlId = param,
+  readOnly = false,
   onScrubStart,
   onScrubMove,
   onScrubEnd,
@@ -66,28 +68,34 @@ function ScrubControl({
     <button
       ref={settlingRef}
       className="scrub"
-      id={param}
+      id={controlId}
       data-param={param}
       style={{ "--dial-shift": value * 2 }}
-      aria-label={`${param === "intensity" ? "Intensity" : "Spread"}。無限目盛を左右dragして変更`}
-      onPointerDown={(event) => {
+      aria-label={
+        readOnly
+          ? `${param} read-only`
+          : `${param === "intensity" ? "Intensity" : "Spread"}。無限目盛を左右dragして変更`
+      }
+      aria-readonly={readOnly || undefined}
+      disabled={readOnly || undefined}
+      onPointerDown={readOnly ? undefined : (event) => {
         event.preventDefault();
         event.currentTarget.setPointerCapture(event.pointerId);
         onScrubStart(param, event.clientX, event.currentTarget);
       }}
-      onPointerMove={(event) => {
+      onPointerMove={readOnly ? undefined : (event) => {
         onScrubMove(param, event.clientX, event.currentTarget);
       }}
-      onPointerUp={(event) => {
+      onPointerUp={readOnly ? undefined : (event) => {
         onScrubEnd(param, event.currentTarget, triggerSettling);
       }}
-      onPointerCancel={(event) => {
+      onPointerCancel={readOnly ? undefined : (event) => {
         onScrubCancel(param, event.currentTarget);
       }}
       onAnimationEnd={() => {
         settlingRef.current?.classList.remove("settling");
       }}
-      onKeyDown={(event) => {
+      onKeyDown={readOnly ? undefined : (event) => {
         if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
         event.preventDefault();
         const step = event.shiftKey ? 10 : 1;
@@ -371,12 +379,36 @@ export function InspectorCandidate({
       </div>
     </div>
   );
+  const activeEffect = inspectorReadModel?.active_effect;
+  const activeEffectSection = activeEffect === undefined ? null : (
+    <div className="section" data-effect-use-id={activeEffect.effect_use_id}>
+      <div className="section-title">
+        {activeEffect.plugin_id} <span>V{activeEffect.effect_version}</span>
+      </div>
+      {activeEffect.params.map((param) => {
+        const controlId = `effect-use-${activeEffect.effect_use_id}-${param.id}`;
+        return (
+          <div className="row" key={controlId}>
+            <label htmlFor={controlId}>{param.id}</label>
+            <ScrubControl
+              param={param.id}
+              controlId={controlId}
+              value={param.current.const.F64 * 100}
+              readOnly
+            />
+            <span className="tag">{param.control_kind}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   if (mode === undefined && inspectorReadModel !== undefined) {
     return (
       <aside className="inspector" id="inspector">
         {panelHead}
         <div className="section">{targetIdentity}</div>
+        {activeEffectSection}
       </aside>
     );
   }
