@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { Module, register } from "node:module";
 import { pathToFileURL } from "node:url";
@@ -12,7 +13,7 @@ process.env.NODE_PATH = TEST_NODE_MODULES;
 Module._initPaths();
 
 const jsxLoaderSource = `
-  import { readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
   import { createRequire, Module } from "node:module";
   import { pathToFileURL } from "node:url";
 
@@ -59,7 +60,10 @@ const jsxLoaderSource = `
 
   export async function load(url, context, nextLoad) {
     if (url.endsWith(".jsx")) {
-      const source = await readFile(new URL(url), "utf8");
+      let source = await readFile(new URL(url), "utf8");
+      if (url.endsWith("/DiscoveryBrowserCandidate.jsx")) {
+        source += "\\nexport { PluginCard as __TestPluginCard };\\n";
+      }
       const result = await transform(source, {
         format: "esm",
         jsx: "automatic",
@@ -88,7 +92,7 @@ const { renderToStaticMarkup } = await import(
 const { parseDocument } = await import(
   pathToFileURL(`${TEST_NODE_MODULES}/htmlparser2/dist/index.js`).href
 );
-const { DiscoveryBrowserCandidate } = await import(
+const { DiscoveryBrowserCandidate, __TestPluginCard } = await import(
   "../src/candidates/DiscoveryBrowserCandidate.jsx"
 );
 
@@ -160,6 +164,7 @@ function catalogSnapshot(catalogInput) {
 
 function opacityCatalogProjection() {
   return {
+    scopeRef: "first-party-effects",
     itemId: "core.filter.opacity",
     name: "Opacity",
     category: { value: "effect", label: "Effect" },
@@ -177,6 +182,42 @@ function opacityCatalogProjection() {
     motion: false,
     tags: [],
     tagVisible: true,
+  };
+}
+
+function pluginCardHandlers(onSelect, onCommit) {
+  const card = {};
+  const element = __TestPluginCard({
+    ...opacityCatalogProjection(),
+    selected: true,
+    onSelect,
+    onCommit,
+  });
+  const main = element.props.children[0];
+  return {
+    card,
+    main,
+    dragStart() {
+      element.props.onDragStart({
+        currentTarget: card,
+        dataTransfer: { setData() {} },
+      });
+    },
+    pointerDown() {
+      main.props.onPointerDown(this.event());
+    },
+    event(overrides = {}) {
+      return {
+        currentTarget: { closest: () => card },
+        key: "Enter",
+        repeat: false,
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+        ...overrides,
+      };
+    },
   };
 }
 
@@ -267,6 +308,123 @@ test("decodes the exact first-party Opacity PluginCard projection", () => {
   assert.deepEqual(decoded.catalogProjection, opacityCatalogProjection());
 });
 
+test("emits closed attach envelopes with consecutive sender sequences", () => {
+  const decoded = decodeBrowserHostSnapshot(catalogSnapshot(catalog()));
+  const sent = [];
+  const send = createBrowserHostSender(decoded, (message) => sent.push(message));
+  const intent = Object.freeze({
+    kind: "browser.attach-effect",
+    source: Object.freeze({
+      scope_ref: decoded.catalogProjection.scopeRef,
+      item_id: decoded.catalogProjection.itemId,
+    }),
+  });
+
+  send(intent);
+  send(intent);
+
+  assert.deepEqual(sent.map((message) => JSON.parse(message)), [
+    {
+      version: 1,
+      direction: "web-to-host",
+      role: "browser",
+      instance_epoch: "7",
+      sequence: "11",
+      kind: "browser.attach-effect",
+      source: {
+        scope_ref: "first-party-effects",
+        item_id: "core.filter.opacity",
+      },
+    },
+    {
+      version: 1,
+      direction: "web-to-host",
+      role: "browser",
+      instance_epoch: "7",
+      sequence: "12",
+      kind: "browser.attach-effect",
+      source: {
+        scope_ref: "first-party-effects",
+        item_id: "core.filter.opacity",
+      },
+    },
+  ]);
+});
+
+test("keeps click and drag selection-only while committing exact card gestures", () => {
+  let selections = 0;
+  let commits = 0;
+  const handlers = pluginCardHandlers(
+    () => { selections += 1; },
+    () => { commits += 1; },
+  );
+
+  handlers.main.props.onClick();
+  assert.deepEqual({ selections, commits }, { selections: 1, commits: 0 });
+
+  handlers.main.props.onClick();
+  handlers.main.props.onClick();
+  handlers.main.props.onDoubleClick(handlers.event());
+  assert.deepEqual({ selections, commits }, { selections: 3, commits: 1 });
+
+  handlers.dragStart();
+  handlers.main.props.onClick();
+  handlers.main.props.onClick();
+  handlers.main.props.onDoubleClick(handlers.event());
+  assert.deepEqual({ selections, commits }, { selections: 5, commits: 1 });
+
+  handlers.pointerDown();
+  handlers.main.props.onClick();
+  handlers.main.props.onClick();
+  handlers.main.props.onDoubleClick(handlers.event());
+  assert.deepEqual({ selections, commits }, { selections: 7, commits: 2 });
+
+  for (const modified of [
+    { repeat: true },
+    { altKey: true },
+    { ctrlKey: true },
+    { metaKey: true },
+    { shiftKey: true },
+  ]) {
+    handlers.main.props.onKeyDown(handlers.event(modified));
+  }
+  assert.equal(commits, 2);
+
+  handlers.main.props.onKeyDown(handlers.event());
+  handlers.main.props.onClick();
+  assert.deepEqual({ selections, commits }, { selections: 8, commits: 3 });
+});
+
+test("standalone fixture PluginCards have no product attach callback", () => {
+  const handlers = pluginCardHandlers(() => {}, undefined);
+  assert.doesNotThrow(() => {
+    handlers.main.props.onDoubleClick(handlers.event());
+    handlers.main.props.onKeyDown(handlers.event());
+  });
+});
+
+test("wires attach only through the projected product Host route", async () => {
+  const candidateSource = await readFile(
+    new URL("../src/candidates/DiscoveryBrowserCandidate.jsx", import.meta.url),
+    "utf8",
+  );
+  const hostSource = await readFile(
+    new URL("../src/host/main.jsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(hostSource, /onAttachEffectIntent=\{sendBrowserIntent\}/);
+  assert.equal(
+    candidateSource.match(/onCommit=\{\(\) => onAttachEffectIntent\?\.\(/g)?.length,
+    1,
+  );
+  assert.equal(
+    candidateSource.match(/<PluginCard/g)?.length,
+    4,
+    "one projected and three standalone fixture cards must remain",
+  );
+});
+
 test("rejects malformed or mismatched present catalog projections", () => {
   for (const mutate of [
     (value) => { value.catalog_revision = 2; },
@@ -344,6 +502,29 @@ test("rejects unknown, stale-shaped, oversized, and exhausted inputs", () => {
   assert.throws(() => send({
     kind: "browser.place",
     source: { scope_ref: "catalog-scope-2", item_id: "rectangle", extra: true },
+  }));
+  assert.throws(() => send({
+    kind: "browser.attach-effect",
+    item_id: "core.filter.opacity",
+  }));
+  assert.throws(() => send({
+    kind: "browser.attach-effect",
+    source: {
+      scope_ref: "first-party-effects",
+      item_id: "core.filter.opacity",
+    },
+  }));
+
+  const projectedSend = createBrowserHostSender(
+    decodeBrowserHostSnapshot(catalogSnapshot(catalog())),
+    () => {},
+  );
+  assert.throws(() => projectedSend({
+    kind: "browser.attach-effect",
+    source: {
+      scope_ref: "first-party-effects",
+      item_id: "other.effect",
+    },
   }));
 
   const exhausted = decodeBrowserHostSnapshot({

@@ -6,11 +6,11 @@ use std::sync::Arc;
 use motolii_core::{RationalTime, RationalTimeError};
 use motolii_doc::{
     Clip, ClipSource, Command, CommandError, Document, DocumentError, DocumentPluginError,
-    DocumentWriter, ItemEnvelope, JournalEdit, LayerId, LayerIdError, ParentLocator, ProjectError,
-    ProjectSession, SaveProjectOptions, StandardShape, TrackItem, UndoError, VectorContent,
-    VectorRecipe,
+    DocumentWriter, DraftDocParam, EffectDefinitionDraft, EffectId, ItemEnvelope, JournalEdit,
+    LayerId, LayerIdError, ParentLocator, PreparedPluginRecipe, ProjectError, ProjectSession,
+    SaveProjectOptions, StandardShape, TrackItem, UndoError, VectorContent, VectorRecipe,
 };
-use motolii_plugin::PluginCatalog;
+use motolii_plugin::{PluginCatalog, PluginKind};
 
 use crate::{DocumentCommandRequest, DomainIntent, InputPhase, RouterOutput};
 
@@ -18,6 +18,7 @@ use crate::{DocumentCommandRequest, DomainIntent, InputPhase, RouterOutput};
 pub(crate) enum DocumentEditAction {
     Apply(DocumentCommandRequest),
     PlaceRectangle(PlaceRectangleRequest),
+    AttachEffect(AttachEffectRequest),
     ReplacePrimary(LayerId),
     ClearPrimary,
     Undo,
@@ -29,6 +30,7 @@ impl DocumentEditAction {
         match self {
             Self::Apply(_) => DocumentEditActionKind::Apply,
             Self::PlaceRectangle(_) => DocumentEditActionKind::PlaceRectangle,
+            Self::AttachEffect(_) => DocumentEditActionKind::AttachEffect,
             Self::ReplacePrimary(_) => DocumentEditActionKind::ReplacePrimary,
             Self::ClearPrimary => DocumentEditActionKind::ClearPrimary,
             Self::Undo => DocumentEditActionKind::Undo,
@@ -41,6 +43,7 @@ impl DocumentEditAction {
 pub(crate) enum DocumentEditActionKind {
     Apply,
     PlaceRectangle,
+    AttachEffect,
     ReplacePrimary,
     ClearPrimary,
     Undo,
@@ -56,6 +59,11 @@ impl DocumentEditQueue {
     pub(crate) fn push_place_rectangle(&mut self, request: PlaceRectangleRequest) {
         self.pending
             .push_back(DocumentEditAction::PlaceRectangle(request));
+    }
+
+    pub(crate) fn push_attach_effect(&mut self, request: AttachEffectRequest) {
+        self.pending
+            .push_back(DocumentEditAction::AttachEffect(request));
     }
 
     pub(crate) fn push_replace_primary(&mut self, target: LayerId) {
@@ -124,6 +132,11 @@ impl DocumentEditQueue {
 pub(crate) struct PlaceRectangleRequest {
     pub(crate) position: [f64; 2],
     pub(crate) playhead: RationalTime,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AttachEffectRequest {
+    pub(crate) plugin_id: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -303,6 +316,7 @@ impl DocumentEditRuntime {
                     current_primary,
                     current_primary,
                     next_projection_generation,
+                    None,
                 )
             }
             DocumentEditAction::PlaceRectangle(request) => {
@@ -319,6 +333,36 @@ impl DocumentEditRuntime {
                     current_primary,
                     Some(layer_id),
                     next_projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::AttachEffect(request) => {
+                let Some(target) = current_primary else {
+                    return Ok(None);
+                };
+                let Some(index) = self
+                    .writer
+                    .find_envelope(target)
+                    .map(|envelope| envelope.effects.len())
+                else {
+                    return Ok(None);
+                };
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                let (command, created_effect_use) = prepare_attach_effect_command(
+                    &self.writer,
+                    &self.catalog,
+                    target,
+                    index,
+                    request,
+                )?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    Some(created_effect_use),
                 )
             }
             DocumentEditAction::ReplacePrimary(target) => {
@@ -336,6 +380,7 @@ impl DocumentEditRuntime {
                     snapshot: self.writer.snapshot(),
                     primary: Some(target),
                     projection_generation,
+                    created_effect_use: None,
                 }))
             }
             DocumentEditAction::ClearPrimary => {
@@ -350,6 +395,7 @@ impl DocumentEditRuntime {
                     snapshot: self.writer.snapshot(),
                     primary: None,
                     projection_generation,
+                    created_effect_use: None,
                 }))
             }
         }
@@ -362,6 +408,7 @@ impl DocumentEditRuntime {
         current_primary: Option<LayerId>,
         success_primary: Option<LayerId>,
         projection_generation: u64,
+        created_effect_use: Option<EffectId>,
     ) -> Result<Option<PublishedDocument>, DocumentEditRuntimeError> {
         self.commit_durable(&command)?;
 
@@ -397,6 +444,7 @@ impl DocumentEditRuntime {
             snapshot,
             primary,
             projection_generation,
+            created_effect_use,
         }))
     }
 
@@ -448,6 +496,7 @@ impl DocumentEditRuntime {
             snapshot,
             primary,
             projection_generation,
+            created_effect_use: None,
         }))
     }
 
@@ -490,6 +539,55 @@ fn next_projection_generation(current: u64) -> Result<u64, DocumentEditRuntimeEr
     current
         .checked_add(1)
         .ok_or(DocumentEditRuntimeError::ProjectionGenerationExhausted)
+}
+
+fn prepare_attach_effect_command(
+    writer: &DocumentWriter,
+    catalog: &PluginCatalog,
+    target: LayerId,
+    index: usize,
+    request: AttachEffectRequest,
+) -> Result<(Command, EffectId), DocumentEditRuntimeError> {
+    let current_version = catalog
+        .get(&request.plugin_id)
+        .ok_or_else(|| DocumentPluginError::ContractMissing {
+            plugin_id: request.plugin_id.clone(),
+        })?
+        .node
+        .version;
+    let recipe = motolii_doc::prepare_plugin_recipe(
+        &request.plugin_id,
+        PluginKind::Filter,
+        current_version,
+        &BTreeMap::new(),
+        catalog,
+    )?;
+    let draft = attach_effect_draft(recipe)?;
+    let command = writer.prepare_create_effect(target, index, draft)?;
+    let created_effect_use = match &command {
+        Command::CreateEffect { use_, .. } => use_.id,
+        _ => return Err(DocumentEditRuntimeError::AttachPrepareCommandMismatch),
+    };
+    Ok((command, created_effect_use))
+}
+
+fn attach_effect_draft(
+    recipe: PreparedPluginRecipe,
+) -> Result<EffectDefinitionDraft, DocumentEditRuntimeError> {
+    let mut params = BTreeMap::new();
+    for (name, param) in recipe.params {
+        let motolii_doc::DocParam::Const(value) = param else {
+            return Err(DocumentEditRuntimeError::AttachDefaultNotConst { param: name });
+        };
+        params.insert(name, DraftDocParam::Const(value));
+    }
+    Ok(EffectDefinitionDraft {
+        plugin_id: recipe.plugin_id,
+        effect_version: recipe.current_version,
+        enabled: true,
+        params,
+        extra: Default::default(),
+    })
 }
 
 fn prepare_rectangle_command(
@@ -593,6 +691,7 @@ pub(crate) struct PublishedDocument {
     pub(crate) snapshot: Arc<Document>,
     pub(crate) primary: Option<LayerId>,
     pub(crate) projection_generation: u64,
+    pub(crate) created_effect_use: Option<EffectId>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -649,6 +748,10 @@ pub(crate) enum DocumentEditRuntimeError {
     NoTrackForRectangle,
     #[error("Rectangle LayerId reservation changed before live apply")]
     LayerIdReservationChanged,
+    #[error("prepared attach parameter `{param}` is not Const")]
+    AttachDefaultNotConst { param: String },
+    #[error("prepare_create_effect returned a non-CreateEffect command")]
+    AttachPrepareCommandMismatch,
     #[error(transparent)]
     LayerId(#[from] LayerIdError),
     #[error(transparent)]
@@ -657,6 +760,8 @@ pub(crate) enum DocumentEditRuntimeError {
     Document(#[from] DocumentError),
     #[error(transparent)]
     DocumentPlugin(#[from] DocumentPluginError),
+    #[error(transparent)]
+    EffectPrepare(#[from] motolii_doc::PrepareError),
     #[error("journal durable commit failed")]
     JournalCommit(#[source] Box<ProjectError>),
     #[error("live apply failed after durable journal commit")]
@@ -1034,6 +1139,228 @@ mod tests {
         assert_eq!(
             serde_json::to_vec(&reopened.document).unwrap(),
             post_apply_json
+        );
+    }
+
+    #[test]
+    fn attach_effect_commits_one_catalog_recipe_and_roundtrips_history() {
+        let (document, _) = fixture();
+        let primary = fixture_layer(&document);
+        let initial_stable = document.next_stable_id.peek_next();
+        let (path, mut runtime) = open_runtime(document);
+        let journal = journal_path_for_document(&path);
+        let journal_before = fs::metadata(&journal).map(|meta| meta.len()).unwrap_or(0);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_attach_effect(AttachEffectRequest {
+            plugin_id: "core.filter.opacity".into(),
+        });
+
+        let attached = runtime
+            .process_next(&mut queue, Some(primary), 4)
+            .unwrap()
+            .expect("validated attach must publish once");
+        let created = attached
+            .created_effect_use
+            .expect("attach publish must identify the created Effect Use");
+        assert_eq!(attached.kind, DocumentEditActionKind::AttachEffect);
+        assert_eq!(attached.revision, 1);
+        assert_eq!(attached.primary, Some(primary));
+        assert_eq!(attached.projection_generation, 5);
+        assert_eq!(queue.len(), 0);
+        assert_eq!(runtime.history_lengths(), (1, 0));
+        assert!(fs::metadata(&journal).expect("journal").len() > journal_before);
+
+        let envelope = runtime
+            .writer
+            .find_envelope(primary)
+            .expect("primary envelope");
+        assert_eq!(envelope.effects.len(), 1);
+        assert_eq!(envelope.effects[0].id, created);
+        let definition_id = envelope.effects[0].definition_id;
+        let definition = attached
+            .snapshot
+            .effect_definition(definition_id)
+            .expect("created definition");
+        assert_eq!(definition.plugin_id, "core.filter.opacity");
+        assert_eq!(definition.effect_version, 1);
+        assert!(definition.enabled);
+        assert_eq!(
+            definition.params,
+            BTreeMap::from([("amount".into(), motolii_doc::DocParam::const_f64(1.0))])
+        );
+        assert!(definition.extra.is_empty());
+        assert_eq!(attached.snapshot.effect_definitions.len(), 1);
+        assert_eq!(
+            attached.snapshot.next_stable_id.peek_next(),
+            initial_stable + 2
+        );
+        let attached_json = serde_json::to_vec(&*attached.snapshot).unwrap();
+
+        queue.push_undo();
+        let undone = runtime
+            .process_next(&mut queue, Some(primary), 5)
+            .unwrap()
+            .expect("Undo must publish");
+        assert_eq!(undone.kind, DocumentEditActionKind::Undo);
+        assert_eq!(undone.created_effect_use, None);
+        assert_eq!(undone.primary, Some(primary));
+        assert!(runtime
+            .writer
+            .find_envelope(primary)
+            .expect("primary after Undo")
+            .effects
+            .is_empty());
+        assert!(undone.snapshot.effect_definition(definition_id).is_none());
+        assert_eq!(runtime.history_lengths(), (0, 1));
+
+        queue.push_redo();
+        let redone = runtime
+            .process_next(&mut queue, Some(primary), 6)
+            .unwrap()
+            .expect("Redo must publish");
+        assert_eq!(redone.kind, DocumentEditActionKind::Redo);
+        assert_eq!(redone.created_effect_use, None);
+        assert_eq!(redone.primary, Some(primary));
+        let redone_envelope = runtime
+            .writer
+            .find_envelope(primary)
+            .expect("primary after Redo");
+        assert_eq!(redone_envelope.effects.len(), 1);
+        assert_eq!(redone_envelope.effects[0].id, created);
+        assert_eq!(redone_envelope.effects[0].definition_id, definition_id);
+        assert_eq!(
+            serde_json::to_vec(&*redone.snapshot).unwrap(),
+            attached_json
+        );
+        assert_eq!(runtime.history_lengths(), (1, 0));
+
+        drop(runtime);
+        let limits = ResourceLimits::production();
+        let (_session, reopened) = ProjectSession::open(&path, &limits).unwrap();
+        assert_eq!(
+            serde_json::to_vec(&reopened.document).unwrap(),
+            attached_json
+        );
+    }
+
+    #[test]
+    fn attach_effect_preflight_rejections_write_nothing() {
+        fn assert_unchanged(
+            runtime: &DocumentEditRuntime,
+            queue: &DocumentEditQueue,
+            initial_json: &[u8],
+            initial_stable: u64,
+            journal: &std::path::Path,
+            journal_size: u64,
+        ) {
+            assert_preflight_rejection_invariants(runtime, queue, initial_json, 0, (0, 0));
+            assert_eq!(
+                runtime.snapshot().next_stable_id.peek_next(),
+                initial_stable
+            );
+            assert_eq!(
+                fs::metadata(journal).map(|meta| meta.len()).unwrap_or(0),
+                journal_size
+            );
+        }
+
+        for primary in [None, Some(LayerId::from_raw(u64::MAX))] {
+            let (document, _) = fixture();
+            let initial_json = serde_json::to_vec(&document).unwrap();
+            let initial_stable = document.next_stable_id.peek_next();
+            let (path, mut runtime) = open_runtime(document);
+            let journal = journal_path_for_document(&path);
+            let journal_size = fs::metadata(&journal).map(|meta| meta.len()).unwrap_or(0);
+            let mut queue = DocumentEditQueue::default();
+            queue.push_attach_effect(AttachEffectRequest {
+                plugin_id: "core.filter.opacity".into(),
+            });
+
+            assert!(runtime
+                .process_next(&mut queue, primary, u64::MAX)
+                .unwrap()
+                .is_none());
+            assert_unchanged(
+                &runtime,
+                &queue,
+                &initial_json,
+                initial_stable,
+                &journal,
+                journal_size,
+            );
+        }
+
+        for (plugin_id, expected) in [
+            ("missing.filter", "missing"),
+            ("core.layer_source.radial_repeater", "kind"),
+        ] {
+            let (document, _) = fixture();
+            let primary = fixture_layer(&document);
+            let initial_json = serde_json::to_vec(&document).unwrap();
+            let initial_stable = document.next_stable_id.peek_next();
+            let (path, mut runtime) = open_runtime(document);
+            let journal = journal_path_for_document(&path);
+            let journal_size = fs::metadata(&journal).map(|meta| meta.len()).unwrap_or(0);
+            let mut queue = DocumentEditQueue::default();
+            queue.push_attach_effect(AttachEffectRequest {
+                plugin_id: plugin_id.into(),
+            });
+
+            let error = runtime
+                .process_next(&mut queue, Some(primary), 0)
+                .expect_err("invalid contract must fail before commit");
+            match expected {
+                "missing" => assert!(matches!(
+                    error,
+                    DocumentEditRuntimeError::DocumentPlugin(
+                        DocumentPluginError::ContractMissing { .. }
+                    )
+                )),
+                "kind" => assert!(matches!(
+                    error,
+                    DocumentEditRuntimeError::DocumentPlugin(
+                        DocumentPluginError::KindMismatch { .. }
+                    )
+                )),
+                _ => unreachable!(),
+            }
+            assert_unchanged(
+                &runtime,
+                &queue,
+                &initial_json,
+                initial_stable,
+                &journal,
+                journal_size,
+            );
+        }
+
+        let (document, _) = fixture();
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let initial_stable = document.next_stable_id.peek_next();
+        let (path, runtime) = open_runtime(document);
+        let journal = journal_path_for_document(&path);
+        let journal_size = fs::metadata(&journal).map(|meta| meta.len()).unwrap_or(0);
+        let non_const = PreparedPluginRecipe {
+            plugin_id: "core.filter.opacity".into(),
+            saved_version: 1,
+            current_version: 1,
+            params: BTreeMap::from([(
+                "amount".into(),
+                motolii_doc::DocParam::Keyframes(motolii_doc::DocKeyframeTrack::new()),
+            )]),
+        };
+        assert!(matches!(
+            attach_effect_draft(non_const),
+            Err(DocumentEditRuntimeError::AttachDefaultNotConst { ref param })
+                if param == "amount"
+        ));
+        assert_unchanged(
+            &runtime,
+            &DocumentEditQueue::default(),
+            &initial_json,
+            initial_stable,
+            &journal,
+            journal_size,
         );
     }
 

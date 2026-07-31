@@ -40,6 +40,7 @@ function previewClassForMediaType(mediaType) {
 const BrowserHierarchyContext = createContext(null);
 const BrowserStandaloneContext = createContext(null);
 const BrowserPlaceIntentContext = createContext(null);
+const draggedPluginCards = new WeakSet();
 const EFFECT_TAGS = [
   { id: "go-to", label: "Go-to", icon: "◎" },
   { id: "atmosphere", label: "Atmosphere", icon: "◌" },
@@ -64,6 +65,21 @@ function createBrowserPlaceIntent(scope_ref, item_id) {
   }
   return Object.freeze({
     kind: "browser.place",
+    source: Object.freeze({ scope_ref, item_id }),
+  });
+}
+
+function createBrowserAttachEffectIntent(scope_ref, item_id) {
+  if (
+    typeof scope_ref !== "string"
+    || scope_ref.length === 0
+    || typeof item_id !== "string"
+    || item_id.length === 0
+  ) {
+    throw new TypeError("Effect attach source identity must be non-empty strings");
+  }
+  return Object.freeze({
+    kind: "browser.attach-effect",
     source: Object.freeze({ scope_ref, item_id }),
   });
 }
@@ -242,6 +258,7 @@ function PluginCard({
   tags = [],
   tagVisible = true,
   onSelect,
+  onCommit,
 }) {
   return (
     <div
@@ -259,18 +276,49 @@ function PluginCard({
       data-item-identity={identity}
       data-preview={motion ? "motion" : "poster"}
       draggable
-      onDragStart={(event) =>
+      onDragStart={(event) => {
+        draggedPluginCards.add(event.currentTarget);
         event.dataTransfer.setData(
           "application/x-motolii-browser-item",
           itemId,
-        )
-      }
+        );
+      }}
     >
       <button
         className="candidate-plugin-card-main"
         aria-label={`${name}${state ? ` · ${state}` : ""}`}
         aria-pressed={selected}
         onClick={onSelect}
+        onPointerDown={(event) => {
+          const card = event.currentTarget.closest(".candidate-plugin-card");
+          if (card) {
+            draggedPluginCards.delete(card);
+          }
+        }}
+        onDoubleClick={(event) => {
+          const card = event.currentTarget.closest(".candidate-plugin-card");
+          if (card && draggedPluginCards.delete(card)) {
+            return;
+          }
+          onCommit?.();
+        }}
+        onKeyDown={(event) => {
+          if (
+            event.key !== "Enter"
+            || event.repeat
+            || event.altKey
+            || event.ctrlKey
+            || event.metaKey
+            || event.shiftKey
+          ) {
+            return;
+          }
+          const card = event.currentTarget.closest(".candidate-plugin-card");
+          if (card) {
+            draggedPluginCards.delete(card);
+          }
+          onCommit?.();
+        }}
       >
         <span className={`plugin-thumb ${thumbnail}`}>
           <span className="candidate-kind" aria-hidden="true">{kind}</span>
@@ -301,7 +349,7 @@ function PluginCard({
   );
 }
 
-function CandidatePluginBrowser({ catalogProjection }) {
+function CandidatePluginBrowser({ catalogProjection, onAttachEffectIntent }) {
   const standalone = useContext(BrowserStandaloneContext);
   const hasProjection = catalogProjection !== undefined;
   const itemIds = hasProjection
@@ -426,6 +474,12 @@ function CandidatePluginBrowser({ catalogProjection }) {
                 {...catalogProjection}
                 selected={selectedItem === catalogProjection.itemId}
                 onSelect={() => setSelectedItem(catalogProjection.itemId)}
+                onCommit={() => onAttachEffectIntent?.(
+                  createBrowserAttachEffectIntent(
+                    catalogProjection.scopeRef,
+                    catalogProjection.itemId,
+                  ),
+                )}
               />
             ) : (
               <>
@@ -1265,6 +1319,7 @@ export function DiscoveryBrowserCandidate({
   developmentProjection,
   rectangleIdentity,
   onPlaceIntent,
+  onAttachEffectIntent,
   catalogProjection,
 }) {
   const mediaProjection = developmentProjection === undefined
@@ -1320,7 +1375,10 @@ export function DiscoveryBrowserCandidate({
         child.attribs?.id === "vism-browser"
       ) {
         return mediaProjection ? <></> : (
-          <CandidatePluginBrowser catalogProjection={catalogProjection} />
+          <CandidatePluginBrowser
+            catalogProjection={catalogProjection}
+            onAttachEffectIntent={onAttachEffectIntent}
+          />
         );
       }
       if (
@@ -1360,7 +1418,10 @@ export function DiscoveryBrowserCandidate({
                   <small>MEDIA / CREATE / EFFECTS</small>
                 </div>
                 {browserTabs}
-                <CandidatePluginBrowser catalogProjection={catalogProjection} />
+                <CandidatePluginBrowser
+                  catalogProjection={catalogProjection}
+                  onAttachEffectIntent={onAttachEffectIntent}
+                />
                 <CandidateProjectBrowser />
               </aside>
             ) : createElement(

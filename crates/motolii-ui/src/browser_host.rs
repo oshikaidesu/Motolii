@@ -8,6 +8,7 @@ const BROWSER_ROLE: &str = "browser";
 const HOST_TO_WEB: &str = "host-to-web";
 const WEB_TO_HOST: &str = "web-to-host";
 const PLACE_KIND: &str = "browser.place";
+const ATTACH_EFFECT_KIND: &str = "browser.attach-effect";
 const MAX_ID_BYTES: usize = 128;
 const MAX_MESSAGE_BYTES: usize = 1024;
 const INBOX_CAPACITY: usize = 16;
@@ -24,12 +25,20 @@ pub(crate) struct BrowserPlaceIntent {
     pub(crate) item_id: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct BrowserAttachEffectIntent {
+    pub(crate) scope_ref: String,
+    pub(crate) item_id: String,
+}
+
 #[derive(Debug)]
 pub(crate) struct BrowserHostSession {
     instance_epoch: u64,
     last_sequence: u64,
     rectangle_source: BrowserPlaceIntent,
-    inbox: VecDeque<BrowserPlaceIntent>,
+    opacity_source: BrowserAttachEffectIntent,
+    place_inbox: VecDeque<BrowserPlaceIntent>,
+    attach_effect_inbox: VecDeque<BrowserAttachEffectIntent>,
 }
 
 impl BrowserHostSession {
@@ -42,7 +51,12 @@ impl BrowserHostSession {
             instance_epoch,
             last_sequence: sequence,
             rectangle_source,
-            inbox: VecDeque::with_capacity(INBOX_CAPACITY),
+            opacity_source: BrowserAttachEffectIntent {
+                scope_ref: EFFECTS_SCOPE.to_owned(),
+                item_id: OPACITY_ID.to_owned(),
+            },
+            place_inbox: VecDeque::with_capacity(INBOX_CAPACITY),
+            attach_effect_inbox: VecDeque::with_capacity(INBOX_CAPACITY),
         }
     }
 
@@ -82,7 +96,7 @@ impl BrowserHostSession {
         if message.role != BROWSER_ROLE {
             return Err(BrowserHostError::Role);
         }
-        if message.kind != PLACE_KIND {
+        if message.kind != PLACE_KIND && message.kind != ATTACH_EFFECT_KIND {
             return Err(BrowserHostError::Kind);
         }
         let instance_epoch = parse_canonical_u64(&message.instance_epoch, "instance_epoch")?;
@@ -102,24 +116,48 @@ impl BrowserHostSession {
         }
         validate_id(&message.source.scope_ref, "scope_ref")?;
         validate_id(&message.source.item_id, "item_id")?;
-        if message.source.scope_ref != self.rectangle_source.scope_ref
-            || message.source.item_id != self.rectangle_source.item_id
-        {
-            return Err(BrowserHostError::Source);
+        match message.kind.as_str() {
+            PLACE_KIND => {
+                if message.source.scope_ref != self.rectangle_source.scope_ref
+                    || message.source.item_id != self.rectangle_source.item_id
+                {
+                    return Err(BrowserHostError::Source);
+                }
+                if self.place_inbox.len() == INBOX_CAPACITY {
+                    return Err(BrowserHostError::InboxFull);
+                }
+                self.place_inbox.push_back(BrowserPlaceIntent {
+                    scope_ref: message.source.scope_ref,
+                    item_id: message.source.item_id,
+                });
+            }
+            ATTACH_EFFECT_KIND => {
+                if message.source.scope_ref != self.opacity_source.scope_ref
+                    || message.source.item_id != self.opacity_source.item_id
+                {
+                    return Err(BrowserHostError::AttachSource);
+                }
+                if self.attach_effect_inbox.len() == INBOX_CAPACITY {
+                    return Err(BrowserHostError::AttachInboxFull);
+                }
+                self.attach_effect_inbox
+                    .push_back(BrowserAttachEffectIntent {
+                        scope_ref: message.source.scope_ref,
+                        item_id: message.source.item_id,
+                    });
+            }
+            _ => unreachable!("intent kind was validated before admission"),
         }
-        if self.inbox.len() == INBOX_CAPACITY {
-            return Err(BrowserHostError::InboxFull);
-        }
-        self.inbox.push_back(BrowserPlaceIntent {
-            scope_ref: message.source.scope_ref,
-            item_id: message.source.item_id,
-        });
         self.last_sequence = sequence;
         Ok(())
     }
 
     pub(crate) fn pop(&mut self) -> Option<BrowserPlaceIntent> {
-        self.inbox.pop_front()
+        self.place_inbox.pop_front()
+    }
+
+    pub(crate) fn pop_attach_effect(&mut self) -> Option<BrowserAttachEffectIntent> {
+        self.attach_effect_inbox.pop_front()
     }
 }
 
@@ -351,8 +389,12 @@ pub(crate) enum BrowserHostError {
     Identifier { field: &'static str },
     #[error("Browser Host source does not match the admitted Rectangle source")]
     Source,
+    #[error("Browser Host source does not match the current Opacity projection")]
+    AttachSource,
     #[error("Browser Host inbox is full")]
     InboxFull,
+    #[error("Browser Host attach-effect inbox is full")]
+    AttachInboxFull,
 }
 
 #[cfg(test)]
@@ -371,6 +413,12 @@ mod tests {
     fn message(epoch: &str, sequence: &str) -> String {
         format!(
             r#"{{"version":1,"direction":"web-to-host","role":"browser","instance_epoch":"{epoch}","sequence":"{sequence}","kind":"browser.place","source":{{"scope_ref":"catalog-scope-2","item_id":"rectangle"}}}}"#
+        )
+    }
+
+    fn attach_message(epoch: &str, sequence: &str) -> String {
+        format!(
+            r#"{{"version":1,"direction":"web-to-host","role":"browser","instance_epoch":"{epoch}","sequence":"{sequence}","kind":"browser.attach-effect","source":{{"scope_ref":"first-party-effects","item_id":"core.filter.opacity"}}}}"#
         )
     }
 
@@ -480,6 +528,25 @@ mod tests {
     }
 
     #[test]
+    fn exact_opacity_attach_is_separate_from_place_delivery() {
+        let mut session = BrowserHostSession::new(7, 10, intent());
+
+        session.accept(&message("7", "11")).unwrap();
+        session.accept(&attach_message("7", "12")).unwrap();
+
+        assert_eq!(
+            session.pop_attach_effect(),
+            Some(BrowserAttachEffectIntent {
+                scope_ref: EFFECTS_SCOPE.into(),
+                item_id: OPACITY_ID.into(),
+            })
+        );
+        assert_eq!(session.pop_attach_effect(), None);
+        assert_eq!(session.pop(), Some(intent()));
+        assert_eq!(session.pop(), None);
+    }
+
+    #[test]
     fn rejects_stale_duplicate_gap_unknown_and_oversized_messages() {
         let mut session = BrowserHostSession::new(7, 10, intent());
         assert!(matches!(
@@ -505,6 +572,21 @@ mod tests {
         assert!(matches!(
             session.accept(&message("07", "11")),
             Err(BrowserHostError::UnsignedInteger { .. })
+        ));
+        let unknown_kind = message("7", "11").replace(PLACE_KIND, "browser.unknown");
+        assert!(matches!(
+            session.accept(&unknown_kind),
+            Err(BrowserHostError::Kind)
+        ));
+        let wrong_attach_scope = attach_message("7", "11").replace(EFFECTS_SCOPE, "other-effects");
+        assert!(matches!(
+            session.accept(&wrong_attach_scope),
+            Err(BrowserHostError::AttachSource)
+        ));
+        let wrong_attach_item = attach_message("7", "11").replace(OPACITY_ID, "other.effect");
+        assert!(matches!(
+            session.accept(&wrong_attach_item),
+            Err(BrowserHostError::AttachSource)
         ));
         let unknown = message("7", "11").replace(r#""source":{"#, r#""extra":true,"source":{"#);
         assert!(matches!(
@@ -533,6 +615,32 @@ mod tests {
         session
             .accept(&message("7", &(INBOX_CAPACITY + 1).to_string()))
             .unwrap();
+    }
+
+    #[test]
+    fn full_attach_inbox_does_not_consume_sequence_or_block_place() {
+        let mut session = BrowserHostSession::new(7, 0, intent());
+        for sequence in 1..=INBOX_CAPACITY {
+            session
+                .accept(&attach_message("7", &sequence.to_string()))
+                .unwrap();
+        }
+        assert!(matches!(
+            session.accept(&attach_message("7", &(INBOX_CAPACITY + 1).to_string())),
+            Err(BrowserHostError::AttachInboxFull)
+        ));
+
+        session
+            .accept(&message("7", &(INBOX_CAPACITY + 1).to_string()))
+            .unwrap();
+        assert_eq!(session.pop(), Some(intent()));
+        assert_eq!(
+            session.pop_attach_effect(),
+            Some(BrowserAttachEffectIntent {
+                scope_ref: EFFECTS_SCOPE.into(),
+                item_id: OPACITY_ID.into(),
+            })
+        );
     }
 
     #[test]

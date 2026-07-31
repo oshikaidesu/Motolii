@@ -164,6 +164,7 @@ function decodeOpacityCatalogProjection(input) {
 
   const taxonomyLabels = `${category.label} ${subtype.label}`;
   return Object.freeze({
+    scopeRef: catalog.scope_ref,
     itemId: item.item_id,
     name: item.display_name,
     category: Object.freeze({ value: category.id, label: category.label }),
@@ -247,10 +248,25 @@ export function createBrowserHostSender(snapshot, postMessage) {
   let sequence = snapshot.sequence;
   return (intent) => {
     exactKeys(intent, ["kind", "source"], "intent");
-    if (intent.kind !== "browser.place") {
+    if (
+      intent.kind !== "browser.place"
+      && intent.kind !== "browser.attach-effect"
+    ) {
       throw new TypeError("unknown Browser intent");
     }
     const source = exactKeys(intent.source, ["scope_ref", "item_id"], "intent.source");
+    const scopeRef = boundedId(source.scope_ref, "intent.scope_ref");
+    const itemId = boundedId(source.item_id, "intent.item_id");
+    if (
+      intent.kind === "browser.attach-effect"
+      && (
+        snapshot.catalogProjection === undefined
+        || scopeRef !== snapshot.catalogProjection.scopeRef
+        || itemId !== snapshot.catalogProjection.itemId
+      )
+    ) {
+      throw new TypeError("Browser attach source does not match the current projection");
+    }
     if (sequence === U64_MAX) {
       throw new RangeError("Browser Host sequence exhausted");
     }
@@ -261,10 +277,10 @@ export function createBrowserHostSender(snapshot, postMessage) {
       role: ROLE,
       instance_epoch: snapshot.instanceEpoch.toString(),
       sequence: sequence.toString(),
-      kind: "browser.place",
+      kind: intent.kind,
       source: {
-        scope_ref: boundedId(source.scope_ref, "intent.scope_ref"),
-        item_id: boundedId(source.item_id, "intent.item_id"),
+        scope_ref: scopeRef,
+        item_id: itemId,
       },
     };
     const encoded = JSON.stringify(message);

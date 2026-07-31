@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use motolii_core::{CanonicalPoint, Quality, RationalTime};
-use motolii_doc::EvaluationTime;
+use motolii_doc::{EffectId, EvaluationTime};
 use motolii_eval::DataTracks;
 use motolii_gpu::GpuCtx;
 use winit::dpi::LogicalSize;
@@ -18,8 +18,8 @@ use crate::browser_host_runtime::{
     BrowserFocusTarget, BrowserHostRuntime, BrowserHostRuntimeError, BrowserLifecycleEvent,
 };
 use crate::document_edit_runtime::{
-    DocumentEditDispatchError, DocumentEditQueue, DocumentEditRuntime, DocumentEditRuntimeError,
-    PlaceRectangleRequest, PublishedDocument,
+    AttachEffectRequest, DocumentEditDispatchError, DocumentEditQueue, DocumentEditRuntime,
+    DocumentEditRuntimeError, PlaceRectangleRequest, PublishedDocument,
 };
 use crate::host_pointer_capture::{HostPointerCancel, HostPointerCandidate};
 use crate::inspector_host_runtime::{InspectorHostRuntime, InspectorHostRuntimeError};
@@ -157,6 +157,7 @@ pub(crate) struct ProductApp {
     input_router: InputRouter,
     command_keymap: KeymapResolution,
     primary: Option<motolii_doc::LayerId>,
+    active_effect_use: Option<EffectId>,
     projection_generation: u64,
     current_document: Arc<motolii_doc::Document>,
     proxy: EventLoopProxy<ProductEvent>,
@@ -443,6 +444,7 @@ impl ProductApp {
             input_router: InputRouter::new(command_registry),
             command_keymap,
             primary: None,
+            active_effect_use: None,
             projection_generation: 0,
             proxy,
             layout_authority: LayoutAuthority::built_in()?,
@@ -647,6 +649,21 @@ impl ProductApp {
             self.surface_retry_at = None;
             self.request_redraw();
         }
+        let attach_effect = {
+            let Some(browser) = &self.browser else {
+                return;
+            };
+            browser.take_attach_effect_intent()
+        };
+        match attach_effect {
+            Ok(Some(intent)) => {
+                if let Err(error) = self.process_attach_effect(event_loop, intent.item_id) {
+                    return self.fail(event_loop, error);
+                }
+            }
+            Ok(None) => {}
+            Err(error) => return self.fail(event_loop, error),
+        }
         let Some(browser) = &self.browser else {
             return;
         };
@@ -829,6 +846,7 @@ impl ProductApp {
             ) {
                 Ok(Some(published)) => {
                     trace_document_publish("place", &published);
+                    self.reconcile_active_effect_use(&published);
                     self.current_document = published.snapshot;
                     self.primary = published.primary;
                     self.projection_generation = published.projection_generation;
@@ -1022,6 +1040,7 @@ impl ProductApp {
         ) {
             Ok(Some(published)) => {
                 trace_document_publish("timeline-selection", &published);
+                self.reconcile_active_effect_use(&published);
                 self.current_document = published.snapshot;
                 self.primary = published.primary;
                 self.projection_generation = published.projection_generation;
@@ -1084,12 +1103,14 @@ impl ProductApp {
         }
     }
 
-    fn adopt_history_publish(
+    fn adopt_full_publish(
         &mut self,
         event_loop: &ActiveEventLoop,
         published: PublishedDocument,
+        route: &'static str,
     ) {
-        trace_document_publish("history", &published);
+        trace_document_publish(route, &published);
+        self.reconcile_active_effect_use(&published);
         self.current_document = published.snapshot;
         self.primary = published.primary;
         self.projection_generation = published.projection_generation;
@@ -1103,11 +1124,7 @@ impl ProductApp {
                 Ok(projection) => projection,
                 Err(error) => return self.fail(event_loop, error),
             };
-        trace_timeline_projection(
-            "history",
-            self.projection_generation,
-            &self.timeline_projection,
-        );
+        trace_timeline_projection(route, self.projection_generation, &self.timeline_projection);
         if let Err(error) = self.publish_timeline_tools() {
             return self.fail(event_loop, error);
         }
@@ -1115,6 +1132,29 @@ impl ProductApp {
             return self.fail(event_loop, error);
         }
         self.request_redraw();
+    }
+
+    fn adopt_history_publish(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        published: PublishedDocument,
+    ) {
+        self.adopt_full_publish(event_loop, published, "history");
+    }
+
+    fn reconcile_active_effect_use(&mut self, published: &PublishedDocument) {
+        self.active_effect_use = active_effect_candidate(
+            self.primary,
+            self.active_effect_use,
+            published.primary,
+            published.created_effect_use,
+            |primary, effect| {
+                published
+                    .snapshot
+                    .find_effect_use(primary, effect)
+                    .is_some()
+            },
+        );
     }
 
     fn publish_timeline_tools(&self) -> Result<(), ProductRuntimeError> {
@@ -1154,6 +1194,23 @@ impl ProductApp {
             self.preview.slot().desc().width,
             self.preview.slot().desc().height,
         ));
+        Ok(())
+    }
+
+    fn process_attach_effect(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        plugin_id: String,
+    ) -> Result<(), ProductRuntimeError> {
+        self.document_queue
+            .push_attach_effect(AttachEffectRequest { plugin_id });
+        if let Some(published) = self.document_runtime.process_next(
+            &mut self.document_queue,
+            self.primary,
+            self.projection_generation,
+        )? {
+            self.adopt_full_publish(event_loop, published, "attach-effect");
+        }
         Ok(())
     }
 
@@ -1259,6 +1316,21 @@ impl ProductApp {
 
 fn elapsed_ms(started_at: Instant) -> f64 {
     started_at.elapsed().as_secs_f64() * 1_000.0
+}
+
+fn active_effect_candidate(
+    previous_primary: Option<motolii_doc::LayerId>,
+    previous_active: Option<EffectId>,
+    published_primary: Option<motolii_doc::LayerId>,
+    created_effect_use: Option<EffectId>,
+    contains: impl FnOnce(motolii_doc::LayerId, EffectId) -> bool,
+) -> Option<EffectId> {
+    if previous_primary != published_primary {
+        return None;
+    }
+    let primary = published_primary?;
+    let candidate = created_effect_use.or(previous_active)?;
+    contains(primary, candidate).then_some(candidate)
 }
 
 fn trace_document_publish(route: &str, published: &PublishedDocument) {
@@ -2115,6 +2187,61 @@ mod tests {
             Some("motolii.edit.redo")
         );
         assert!(keymap.diagnostics().is_empty());
+    }
+
+    #[test]
+    fn active_effect_candidate_prefers_attach_and_clears_on_primary_change() {
+        let primary = motolii_doc::LayerId::from_raw(7);
+        let other_primary = motolii_doc::LayerId::from_raw(8);
+        let previous = EffectId::from_raw(10);
+        let attached = EffectId::from_raw(11);
+
+        assert_eq!(
+            active_effect_candidate(
+                Some(primary),
+                Some(previous),
+                Some(primary),
+                Some(attached),
+                |candidate_primary, candidate| {
+                    candidate_primary == primary && candidate == attached
+                },
+            ),
+            Some(attached)
+        );
+        assert_eq!(
+            active_effect_candidate(
+                Some(primary),
+                Some(previous),
+                Some(other_primary),
+                Some(attached),
+                |_, _| true,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn active_effect_candidate_does_not_resurrect_after_disappearance() {
+        let primary = motolii_doc::LayerId::from_raw(7);
+        let effect = EffectId::from_raw(10);
+
+        let after_removal =
+            active_effect_candidate(Some(primary), Some(effect), Some(primary), None, |_, _| {
+                false
+            });
+        assert_eq!(after_removal, None);
+        assert_eq!(
+            active_effect_candidate(
+                Some(primary),
+                after_removal,
+                Some(primary),
+                None,
+                |candidate_primary, candidate| {
+                    candidate_primary == primary && candidate == effect
+                },
+            ),
+            None
+        );
     }
 
     #[test]

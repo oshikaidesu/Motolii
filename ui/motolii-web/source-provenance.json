@@ -204,6 +204,13 @@
       "reason": "first-party Opacity catalog projection through existing PluginCard",
       "fixedSourceSha256": "88a595c4df18da9180bd5fd23486d3006b473a02bf0222650f9ab6d4ffc13e20",
       "currentSha256": "27c87488836b1b883fe282601214c91901246d69e6a1b19c5f76952a79413296"
+    },
+    {
+      "task": "CU-205T",
+      "file": "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx",
+      "reason": "Opacity typed attach source gesture",
+      "fixedSourceSha256": "27c87488836b1b883fe282601214c91901246d69e6a1b19c5f76952a79413296",
+      "currentSha256": "89a2e9d399c3943ab50c2e6f4a460a834d689f42904dce38a24346872b34227f"
     }
   ],
   "inspectorPostPromotionChanges": [
