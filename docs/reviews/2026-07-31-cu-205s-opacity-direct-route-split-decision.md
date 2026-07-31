@@ -182,6 +182,11 @@ hash欠落の負例、ownership側の重複定義0 / product import 0を閉じ�
   一件appendし、共有validatorを通す
 - generated-host、Rust、Document、intent、CSS、visual oracleを変更しない
 
+`CU-205B1I`はcommit `054baef7`で`DONE`。Spark再試行はrender oracleをskipして
+Grok `REJECT`となったため未採用とし、固定grainの実装者をSolへ交代した。Sol差分は
+SSR 6/6・skip 0、ownership 11/11、focused provenance guard 1/1を通し、Grok
+`VERDICT: ACCEPT`、P0/P1/P2=0。次の実装粒は`CU-205B2`。
+
 projected `PluginCard`の値は次だけとし、fallbackを置かない。
 
 - `itemId` / `name`: exact `item_id` / non-null `display_name`
