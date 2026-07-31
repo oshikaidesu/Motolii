@@ -342,7 +342,12 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-204S | `SPEC / DONE` | 5診断、copy、4密度、owner、surfaceを固定 | CU-203P、U2c-4 | candidate空時callback 0、Inspector再利用、A/P境界 | 新reason/Intentを作りたくなる |
 | CU-204A | `CORE / DONE` | Envelope→4密度の純粋typed projection | CU-204S | 5×4、identity/order一致、serde/toolkit/callback 0、3+5 test、clippy | product wire/componentを束ねたくなる |
 | CU-204P | `PRODUCT / WAIT` | 既存Inspector Host→Feedback通常接続 | CU-204A | exact private codec、Transient、candidate空時action 0 | diagnostic routeや別surfaceで代用したくなる |
-| CU-205 | `PRODUCT / WAIT` | U4a-2自動Inspectorとnonblocking preview | CU-202/204、U1b | 100 slider updates、latest preview、1 gesture=1 Undo、stale拒否 | custom plugin panelへ逸脱 |
+| CU-205 | `PRODUCT / SPLIT` | U4a-2自動Inspectorとnonblocking preview | CU-202/204、U1b | 正常系はCU-205B/T/P/W/Eへ分割。100 slider updates、latest preview、1 gesture=1 Undo、stale拒否。invalid/read-only診断はCU-204P待ち | custom plugin panelへ逸脱、正常系だけで親DONE |
+| CU-205B | `PRODUCT-ASSET / DO` | first-party Opacityを既存Effects Browserへtyped投影 | CU-202、CU-G09、CU-0B02C-P | 既存PluginCard、exact `core.filter.opacity`、single click write 0、二重copy 0 | static card/label/thumbnailからidentity推測 |
+| CU-205T | `PRODUCT / WAIT` | Opacity double click/Enter→primaryへ新Definition+Use | CU-205B、VS-1 D2 | `prepare_create_effect`、明示default、1 attach=1 Undo、primaryなしwrite 0 | LinkEffectUse共有、bare item ID、Stage全体をtarget化 |
+| CU-205P | `PRODUCT / WAIT` | active Effect Use→generated Inspector control | CU-205T、CU-202 | exact Effect/Definition/Param identity、`amount` domain `[0,1]`、React正本0 | mock effect branch、label検索、fixture Effect |
+| CU-205W | `PRODUCT / WAIT` | amount latest previewとgesture commit | CU-205P、U1b | 100 updates非blocking、stale拒否、release 1 Undo、Esc/focus loss 0 | update毎journal、第二renderer |
+| CU-205E | `E2E / WAIT` | Rectangle→Opacity→amount→Undo/Redo→reopen | CU-205W | 通常製品window、latest preview=確定値、Effect/param保存、UI focus非永続 | fixture/headlessだけで完了 |
 | CU-206 | `PRODUCT / WAIT` | U4b keyframe/区間Easingを製品接続 | CU-205、native Easing core | drag write 0/release 1/Esc 0、非対象curve不変 | key構造やthreshold変更が必要 |
 | CU-207 | `PRODUCT / WAIT` | U4c Advanced意味検査とroundtrip | CU-205/204、D1l | open/close serialize不変、非既定意味badge、未実装pipeline偽装0 | 新公開Param APIが必要 |
 | CU-208 | `E2E / WAIT` | U2c-2 Direct/Advanced同値conformance | CU-205/207 | 同じDocument意味/Undo。Tool未実装を明記 | hidden helper/空harnessでしか通らない |
