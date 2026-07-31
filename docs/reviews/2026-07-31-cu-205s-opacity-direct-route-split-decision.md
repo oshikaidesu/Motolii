@@ -250,6 +250,15 @@ Rectangle PlaceのStage hit-testやcanonical positionをEffect attachへ流用�
 Opacityの初回Direct操作はdouble click / Enterで現在のprimary layerへ適用し、対象が無い時に
 中央配置、自動Rectangle生成、最終primaryへの暗黙fallbackをしない。
 
+`CU-205T`はcommit `a29ed709`で`DONE`。exact Opacity sourceだけを受ける
+`browser.attach-effect`、Placeと分離したHost inbox、current primary / effect末尾indexを読む
+private D2 request、`prepare_create_effect`から既存journal-first commit、作成Use receiptによる
+Host Transient active Effect Useまでを通常製品routeへ接続した。single click / drag、
+primaryなし / stale sourceはwrite 0、1 attach = 1 macro = 1 Undo、UndoでUse + Definition削除、
+Redoで同一identity復元を固定した。`cargo test -p motolii-ui`、Browser codec 10/10、
+ownership 11/11、host bundle整合が合格し、最終限定差分の独立read-only検収は
+P0/P1/P2=0。次の実装粒は`CU-205P`。
+
 ## 6. CU-205P Inspector projection
 
 CU-205Pはcurrent primary layerとactive Effect Useから、Effect Definitionのplugin id /
