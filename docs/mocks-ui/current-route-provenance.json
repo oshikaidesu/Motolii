@@ -66,6 +66,22 @@
       "sha256": "9e08238e9325977bf2372366b7b6c7f33f30a5e0378b85f5890ece3ee973ae97"
     },
     {
+      "path": "docs/mocks-ui/src/diagnostics/FeedbackStateMatrix.jsx",
+      "sha256": "da7c7f8b71c1518675ee23d247883d4aac299f370177a21a3cd02c671f73c4ca"
+    },
+    {
+      "path": "docs/mocks-ui/src/diagnostics/feedback-state-matrix.css",
+      "sha256": "3545caf57d23b99647ffd8e6c15fec1f3c96f21e3801ce3c6a6ef23f0477ef1e"
+    },
+    {
+      "path": "docs/mocks-ui/src/feedback/Feedback.jsx",
+      "sha256": "459fdd6120fd369b78d4a9784d98ac2b29fbb553afb35522f8f680fdfe4e4cd1"
+    },
+    {
+      "path": "docs/mocks-ui/src/feedback/feedback.css",
+      "sha256": "7e22e2a183796732c4f77c4bb018eb2342ecb812181e46f348e1aa3aa827ef50"
+    },
+    {
       "path": "docs/mocks-ui/src/fixtures/allSurfaces.js",
       "sha256": "e9e982284f91784d23edd6e2bbb15ee8cc1bc96726263fe1c729a59c8d8ec174"
     },
@@ -95,7 +111,7 @@
     },
     {
       "path": "docs/mocks-ui/src/main.jsx",
-      "sha256": "c40f26668ff0daf7507aa936008c988fdb7e9d1853125859f1f53955af55954d"
+      "sha256": "dc5214ad7b3c24e0ccd48ed9839b98619269649dced75742838004cde1d85ac6"
     },
     {
       "path": "docs/mocks-ui/src/primitives/index.jsx",

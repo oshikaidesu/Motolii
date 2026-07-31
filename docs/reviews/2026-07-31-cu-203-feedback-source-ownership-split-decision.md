@@ -1,7 +1,7 @@
 # CU-203 共通feedback source / ownership分割決定
 
 作成日: 2026-07-31
-状態: **決定 / CU-203S DONE / CU-203M DO / CU-203P WAIT**
+状態: **決定 / CU-203S DONE / CU-203M DONE / CU-203P DO**
 
 ## 1. 利用者成果
 
@@ -30,8 +30,8 @@ CU-203は診断の意味を新設するticketではない。既存のU2c-1 inter
 | ID | 種類 / 状態 | 一成果 | 依存 | 完了条件 |
 |---|---|---|---|---|
 | CU-203S | `SPEC / DONE` | source、owner、state matrix、停止線の裁定 | CU-0B02C-P、U2c-1/U2c-4 | 本文書と台帳が同じ分割を指す |
-| CU-203M | `PRODUCT-ASSET / DO` | mock側で独立feedback JSX/CSSとdevelopment-only matrixを確立 | CU-203S | §4の9 fixture、DOM/ARIA/computed-style/keyboard oracle、通常route変更0 |
-| CU-203P | `PRODUCT / WAIT` | Mの固定bytesをproduct ownerへ直接移管 | CU-203M | mock consumer反転、copy 0、package export、ownership guard、matrix不変 |
+| CU-203M | `PRODUCT-ASSET / DONE` | mock側で独立feedback JSX/CSSとdevelopment-only matrixを確立 | CU-203S | fixed SHA。9 fixture、guard 3件、Playwright 4件、current-route 30 PNG byte同一 |
+| CU-203P | `PRODUCT / DO` | Mの固定bytesをproduct ownerへ直接移管 | CU-203M | mock consumer反転、copy 0、package export、ownership guard、matrix不変 |
 
 MとPを一commitへ束ねない。正しい独立sourceが無い状態でproductへ縮約componentを先に作ることは、
 React直接移管契約の停止線に該当する。
@@ -42,6 +42,16 @@ mock側の新規sourceは次の2 pathだけをownerとする。
 
 - `docs/mocks-ui/src/feedback/Feedback.jsx`
 - `docs/mocks-ui/src/feedback/feedback.css`
+
+CU-203Mで確立した固定SHA-256は次とする。
+
+- JSX: `459fdd6120fd369b78d4a9784d98ac2b29fbb553afb35522f8f680fdfe4e4cd1`
+- CSS: `7e22e2a183796732c4f77c4bb018eb2342ecb812181e46f348e1aa3aa827ef50`
+- matrix JSX: `da7c7f8b71c1518675ee23d247883d4aac299f370177a21a3cd02c671f73c4ca`
+- matrix CSS: `3545caf57d23b99647ffd8e6c15fec1f3c96f21e3801ce3c6a6ef23f0477ef1e`
+
+current-route publicationはgeneration `1632212201a0-ead41d4d6562`へ進み、
+先行`ee3c1a2d44fd-ead41d4d6562`との30 PNG byte同一を確認した。
 
 componentは既存product primitivesとgenerated product tokenだけを使う。新しいtoken、icon system、
 global store、callback、timer、portal、popover、picker state machineを作らない。入力はCU-204が後で

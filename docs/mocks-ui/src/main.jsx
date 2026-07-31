@@ -13,6 +13,7 @@ import { MixedTimelineReference } from "./reference/MixedTimelineReference.jsx";
 import { ParameterEasingReference } from "./reference/ParameterEasingReference.jsx";
 import { SharedEffectRelativeReference } from "./reference/SharedEffectRelativeReference.jsx";
 import { StageFrameToolsReference } from "./reference/StageFrameToolsReference.jsx";
+import { FeedbackStateMatrix } from "./diagnostics/FeedbackStateMatrix.jsx";
 
 const currentRouteCapture = import.meta.env.MODE === "current-route-capture";
 
@@ -47,6 +48,11 @@ function DiscoveryBrowserCandidateWithDevelopmentProjection(props) {
 
 // 各画面担当はこのregistryへfixtureを足し、Appの経路解決を共有する。
 export const screenRegistry = {
+  "diagnostics/feedback-states": {
+    title: "Diagnostics / common feedback states",
+    Component: FeedbackStateMatrix,
+    catalogKind: "diagnostic",
+  },
   "reference/empty-browser": {
     title: "Reference / empty browser",
     Component: EmptyBrowserReference,

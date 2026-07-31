@@ -336,8 +336,8 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-202 | `CORE / DONE` | U4a-1 ValueType→control→command対応model | U2b-1、既存U4a-1契約 | commit `eb4e6658`。全first-party保存param対応またはtyped拒否、新ValueType 0、workspace全緑 | plugin独自UIが必要 |
 | CU-203 | `PRODUCT / SPLIT` | U2c-3共通feedback component | CU-0B02C-P、U2c-1/U2c-4 | [CU-203S](2026-07-31-cu-203-feedback-source-ownership-split-decision.md)でS/M/Pへ分割。Mでsource確立、Pで直接移管 | 個別picker/popup state machineが必要 |
 | CU-203S | `SPEC / DONE` | feedback source / owner / state matrix裁定 | CU-0B02C-P、U2c-1/U2c-4 | 9-state matrix、M/P境界、停止線 | codeや表示文言を同時決定したくなる |
-| CU-203M | `PRODUCT-ASSET / DO` | mock側の独立feedback source確立 | CU-203S | JSX/CSS、development-only matrix、通常route変更0 | source不在のままproductへ作りたくなる |
-| CU-203P | `PRODUCT / WAIT` | feedback sourceをproduct ownerへ直接移管 | CU-203M | byte固定、consumer反転、copy 0、provenance | CU-204の診断投影を束ねたくなる |
+| CU-203M | `PRODUCT-ASSET / DONE` | mock側の独立feedback source確立 | CU-203S | fixed JSX/CSS、9-state matrix、guard 3、Playwright 4、30 PNG byte同一 | source不在のままproductへ作りたくなる |
+| CU-203P | `PRODUCT / DO` | feedback sourceをproduct ownerへ直接移管 | CU-203M | byte固定、consumer反転、copy 0、provenance | CU-204の診断投影を束ねたくなる |
 | CU-204 | `PRODUCT / WAIT` | U2c-5 Brief/Context/Inspect/Assistive投影 | CU-203P、U2c-4 | reason/subject/facts一致、recovery通常Intent経由 | diagnosticからDocument直接mutationが必要 |
 | CU-205 | `PRODUCT / WAIT` | U4a-2自動Inspectorとnonblocking preview | CU-202/204、U1b | 100 slider updates、latest preview、1 gesture=1 Undo、stale拒否 | custom plugin panelへ逸脱 |
 | CU-206 | `PRODUCT / WAIT` | U4b keyframe/区間Easingを製品接続 | CU-205、native Easing core | drag write 0/release 1/Esc 0、非対象curve不変 | key構造やthreshold変更が必要 |
