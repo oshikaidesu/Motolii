@@ -349,9 +349,9 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-205B1I | `PRODUCT-ASSET / DONE` | Web source strict catalog consumer + provenance append | CU-205B1G | commit `054baef7`。codec→existing decoder→main→PluginCard、SSR 6/6 skip 0、mock 3 card不変、Rust/bundle/intent 0 | fallback/default/Context、provenance欠落 |
 | CU-205B2 | `PRODUCT-ASSET / DONE` | Rust Host snapshotとshipped bundle接続 | CU-205B1I | commit `185bc327`。first_party_catalog由来、正規bundle/manifest/include、通常製品bundle内Opacity、Grok ACCEPT P0/P1/P2=0 | contract複製、source意味変更、generatedだけ手修正 |
 | CU-205T | `PRODUCT / DONE` | Opacity double click/Enter→primaryへ新Definition+Use | CU-205B2、VS-1 D2 | commit `a29ed709`。`prepare_create_effect`、明示default、1 attach=1 Undo、primaryなしwrite 0 | LinkEffectUse共有、bare item ID、Stage全体をtarget化 |
-| CU-205P | `PRODUCT / DO` | active Effect Use→generated Inspector control | CU-205T、CU-202 | exact Effect/Definition/Param identity、`amount` domain `[0,1]`、React正本0 | mock effect branch、label検索、fixture Effect |
-| CU-205W | `PRODUCT / WAIT` | amount latest previewとgesture commit | CU-205P、U1b | 100 updates非blocking、stale拒否、release 1 Undo、Esc/focus loss 0 | update毎journal、第二renderer |
-| CU-205E | `E2E / WAIT` | Rectangle→Opacity→amount→Undo/Redo→reopen | CU-205W | 通常製品window、latest preview=確定値、Effect/param保存、UI focus非永続 | fixture/headlessだけで完了 |
+| CU-205P | `PRODUCT / DONE` | active Effect Use→generated Inspector control | CU-205T、CU-202 | commit `c0c1c741`。exact Effect/Definition/Param identity、`amount` domain `[0,1]`、React正本0、shipped Inspector bundle | mock effect branch、label検索、fixture Effect |
+| CU-205W | `PRODUCT / DONE` | amount latest previewとgesture commit | CU-205P、U1b | rolling `ca7f105a`〜`18517062`。100 updates非blocking、stale拒否、release 1 Undo、Esc/focus loss/cancel/replay write 0 | update毎journal、第二renderer |
+| CU-205E | `E2E / DO` | Rectangle→Opacity→amount→Undo/Redo→reopen | CU-205W `DONE` | 通常製品window、latest preview=確定値、Effect/param保存、UI focus非永続 | fixture/headlessだけで完了 |
 | CU-206 | `PRODUCT / WAIT` | U4b keyframe/区間Easingを製品接続 | CU-205、native Easing core | drag write 0/release 1/Esc 0、非対象curve不変 | key構造やthreshold変更が必要 |
 | CU-207 | `PRODUCT / WAIT` | U4c Advanced意味検査とroundtrip | CU-205/204、D1l | open/close serialize不変、非既定意味badge、未実装pipeline偽装0 | 新公開Param APIが必要 |
 | CU-208 | `E2E / WAIT` | U2c-2 Direct/Advanced同値conformance | CU-205/207 | 同じDocument意味/Undo。Tool未実装を明記 | hidden helper/空harnessでしか通らない |

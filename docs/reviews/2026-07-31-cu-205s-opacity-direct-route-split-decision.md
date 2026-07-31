@@ -284,7 +284,8 @@ Opacity `amount`はEffect Use ID + param id、Const F64、domain `[0,1]`とし�
 `ScrubControl`へread-only表示し、active不在時のtarget-only branchを維持した。
 shipped bundleは二回生成の19-file tree一致、manifest推移closure内のaccepted source
 token、旧7 JS hashの404を閉じた。rolling実bytesで`motolii-ui`全緑、decoder 39/39、
-ownership 13/13、bundle check、各独立read-only検収P0/P1=0。次の実装粒は`CU-205W`。
+ownership 13/13、bundle check、各独立read-only検収P0/P1=0。このP完了時点の後続は
+`CU-205W`だった。
 
 ## 7. CU-205W preview / gesture
 
@@ -300,6 +301,15 @@ CU-205Wは`amount`の1 gestureを次へ接続する。
 
 適用後Cancel、公開gesture lifecycle、第二preview renderer、CPU pixel経路、色変換経路、
 plugin ABI、Document schemaは本粒で増やさない。
+
+`CU-205W`はrolling commit `ca7f105a` / `c6e2c2a8` / `e5d7780e` / `bb755107` /
+`34883a8d` / `18517062`で`DONE`。React gestureはlatest update 1枠とterminal FIFOへ閉じ、
+render workerはpristine snapshot cloneへpreview commandを適用してlatest-wins generationを維持した。
+releaseは完全terminalをlive `DocumentWriter`へ再照合し、changed値だけを既存journal-first
+`commit_command`へ1回渡す。replay / stale / mismatch / cancelはwrite 0、release 1回はUndo 1回、
+Product Wakeはcommit→gesture inbox→render resultの順でfull publishまたはbaselineへ戻す。
+`motolii-ui`全test、100 update、generation拒否、replay/Undo、source-order guardを通し、
+最終独立read-only検収はP0/P1/P2=0。次の正常系DOは`CU-205E`だけである。
 
 ## 8. CU-205E E2E
 
