@@ -309,7 +309,7 @@ releaseは完全terminalをlive `DocumentWriter`へ再照合し、changed値だ�
 `commit_command`へ1回渡す。replay / stale / mismatch / cancelはwrite 0、release 1回はUndo 1回、
 Product Wakeはcommit→gesture inbox→render resultの順でfull publishまたはbaselineへ戻す。
 `motolii-ui`全test、100 update、generation拒否、replay/Undo、source-order guardを通し、
-最終独立read-only検収はP0/P1/P2=0。次の正常系DOは`CU-205E`だけである。
+最終独立read-only検収はP0/P1/P2=0。後続`CU-205E`も完了した。
 
 ## 8. CU-205E E2E
 
@@ -327,6 +327,16 @@ Product Wakeはcommit→gesture inbox→render resultの順でfull publishまた
    active Effect UseというUI選択は安全な未選択へ戻る
 
 mock、fixture-only Host、headless helperだけの完走をE2E合格にしない。
+
+`CU-205E`は[通常製品route E2E receipt](2026-08-01-cu-205e-opacity-normal-product-route-e2e-receipt.md)どおり、
+rolling commit `581876e0` / `7901e51e`を含む通常Mac製品windowで`DONE`。
+empty projectへRectangleを配置し、Effects BrowserからOpacityを追加、Inspectorの`amount`を
+`1.0 → 0.89`へ確定した。Undo 2回でparameter確定とEffect attachを順に戻し、Redo 2回で
+同じEffect Use / `amount`意味を復元した。再起動後のrecovery DocumentにはEffect Definition / Useと
+`amount = 0.89`が保持され、active Effect UseというHost Transient選択は未選択へ戻った。
+empty preview graphとCreateEffect Redo時のactive Effect復元に必要だった局所修復は、render 37 unit +
+16 integration、UI 168 unitを含む全`motolii-ui` test、最終独立read-only検収P0/P1/P2=0を通過した。
+これでCU-205の正常系B1G/B1I/B2/T/P/W/Eは全て完了した。
 
 ## 9. CU-204Pとの関係
 

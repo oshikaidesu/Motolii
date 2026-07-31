@@ -415,3 +415,4 @@
 | [2026-07-31-cu-204-staged-diagnostic-projection-split-decision.md](2026-07-31-cu-204-staged-diagnostic-projection-split-decision.md) | CU-204 段階診断投影 S/A/P分割決定 |
 | [2026-07-31-cu-204a-diagnostic-projection-adapter-implementation-decision.md](2026-07-31-cu-204a-diagnostic-projection-adapter-implementation-decision.md) | CU-204A 純粋段階診断投影adapter実装決定 |
 | [2026-07-31-cu-205s-opacity-direct-route-split-decision.md](2026-07-31-cu-205s-opacity-direct-route-split-decision.md) | CU-205S first-party Opacity Direct通常製品route分割決定 |
+| [2026-08-01-cu-205e-opacity-normal-product-route-e2e-receipt.md](2026-08-01-cu-205e-opacity-normal-product-route-e2e-receipt.md) | CU-205E Opacity通常製品route E2E receipt |

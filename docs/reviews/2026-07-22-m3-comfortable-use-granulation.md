@@ -351,7 +351,7 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-205T | `PRODUCT / DONE` | Opacity double click/Enter→primaryへ新Definition+Use | CU-205B2、VS-1 D2 | commit `a29ed709`。`prepare_create_effect`、明示default、1 attach=1 Undo、primaryなしwrite 0 | LinkEffectUse共有、bare item ID、Stage全体をtarget化 |
 | CU-205P | `PRODUCT / DONE` | active Effect Use→generated Inspector control | CU-205T、CU-202 | commit `c0c1c741`。exact Effect/Definition/Param identity、`amount` domain `[0,1]`、React正本0、shipped Inspector bundle | mock effect branch、label検索、fixture Effect |
 | CU-205W | `PRODUCT / DONE` | amount latest previewとgesture commit | CU-205P、U1b | rolling `ca7f105a`〜`18517062`。100 updates非blocking、stale拒否、release 1 Undo、Esc/focus loss/cancel/replay write 0 | update毎journal、第二renderer |
-| CU-205E | `E2E / DO` | Rectangle→Opacity→amount→Undo/Redo→reopen | CU-205W `DONE` | 通常製品window、latest preview=確定値、Effect/param保存、UI focus非永続 | fixture/headlessだけで完了 |
+| CU-205E | `E2E / DONE` | Rectangle→Opacity→amount→Undo/Redo→reopen | CU-205W `DONE` | rolling `581876e0` / `7901e51e`を含む通常Mac製品windowでamount `1.0 → 0.89`、Undo/Redo各2段、reopen後Effect/param保持、active Effect未選択、独立review P0/P1/P2=0 | fixture/headlessだけで完了 |
 | CU-206 | `PRODUCT / WAIT` | U4b keyframe/区間Easingを製品接続 | CU-205、native Easing core | drag write 0/release 1/Esc 0、非対象curve不変 | key構造やthreshold変更が必要 |
 | CU-207 | `PRODUCT / WAIT` | U4c Advanced意味検査とroundtrip | CU-205/204、D1l | open/close serialize不変、非既定意味badge、未実装pipeline偽装0 | 新公開Param APIが必要 |
 | CU-208 | `E2E / WAIT` | U2c-2 Direct/Advanced同値conformance | CU-205/207 | 同じDocument意味/Undo。Tool未実装を明記 | hidden helper/空harnessでしか通らない |
