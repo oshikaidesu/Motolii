@@ -51,6 +51,7 @@ const CURRENT_INSPECTOR_CSS = "ui/motolii-web/src/candidates/inspector-candidate
 const CURRENT_STAGE_CHROME_SOURCE = "ui/motolii-web/src/candidates/StageChromeCandidate.jsx";
 const CURRENT_PRIMITIVES_SOURCE = "ui/motolii-web/src/primitives/index.jsx";
 const CURRENT_PRIMITIVES_CSS = "ui/motolii-web/src/primitives/primitives.css";
+const CURRENT_FEEDBACK_SOURCE = "ui/motolii-web/src/feedback/Feedback.jsx";
 const PRODUCT_RUNTIME_MODULES = [
   CURRENT_BROWSER_INDEX,
   CURRENT_BROWSER_SOURCE,
@@ -60,6 +61,7 @@ const PRODUCT_RUNTIME_MODULES = [
   CURRENT_INSPECTOR_SOURCE,
   CURRENT_STAGE_CHROME_SOURCE,
   CURRENT_PRIMITIVES_SOURCE,
+  CURRENT_FEEDBACK_SOURCE,
 ];
 
 const FIXED_BROWSER_SOURCE = "docs/mocks-ui/src/candidates/DiscoveryBrowserCandidate.jsx";
@@ -817,6 +819,8 @@ function assertProductExportFromIndex(ast) {
   assert.equal(exportNames.has("InspectorContext"), true);
   assert.equal(exportNames.has("StageHeaderCandidate"), true);
   assert.equal(exportNames.has("StageTransportCandidate"), true);
+  assert.equal(exportNames.has("Feedback"), true);
+  assert.equal(exportNames.has("validateFeedbackModel"), false);
   for (const primitiveExport of PRIMITIVE_EXPORTS) {
     assert.equal(exportNames.has(primitiveExport), true);
   }
@@ -1362,9 +1366,9 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
   }
 
   assert.equal(productPackage.name, PRODUCT_NAME);
-  assert.equal(provenance.task, "CU-0A04 / CU-0A05B / CU-0A06B / CU-0A07C / CU-108-STAGE-REPRODUCTION / CU-0B02C-P");
-  assert.equal(provenance.sourceOwnership.owner, "R1-browser / R2B-easing-trigger / R3B-key-tools / R4C-inspector / R5-stage-chrome / component-state-primitives");
-  assert.equal(provenance.sourceOwnership.surface, "Browser / Easing trigger / KEYS-LAYERS key tools / Inspector / Stage header-transport / shared presentation primitives");
+  assert.equal(provenance.task, "CU-0A04 / CU-0A05B / CU-0A06B / CU-0A07C / CU-108-STAGE-REPRODUCTION / CU-0B02C-P / CU-203P");
+  assert.equal(provenance.sourceOwnership.owner, "R1-browser / R2B-easing-trigger / R3B-key-tools / R4C-inspector / R5-stage-chrome / component-state-primitives / common-feedback");
+  assert.equal(provenance.sourceOwnership.surface, "Browser / Easing trigger / KEYS-LAYERS key tools / Inspector / Stage header-transport / shared presentation primitives / common feedback");
   assert.deepEqual(provenance.sourceOwnership.exports, [
     { name: "DiscoveryBrowserCandidate", path: "src/index.js" },
     { name: "EasingTriggerCandidate", path: "src/index.js" },
@@ -1380,6 +1384,7 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
     { name: "PanelHeader", path: "src/index.js" },
     { name: "Tab", path: "src/index.js" },
     { name: "TabList", path: "src/index.js" },
+    { name: "Feedback", path: "src/index.js" },
   ]);
   assert.deepEqual(provenance.migrations, [
     {
@@ -1456,6 +1461,22 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
         cssSha256: CURRENT_PRIMITIVES_CSS_SHA256,
       },
     },
+    {
+      type: "fixed-source-transfer",
+      task: "CU-203P",
+      old: {
+        component: "docs/mocks-ui/src/feedback/Feedback.jsx",
+        componentSha256: "459fdd6120fd369b78d4a9784d98ac2b29fbb553afb35522f8f680fdfe4e4cd1",
+        css: "docs/mocks-ui/src/feedback/feedback.css",
+        cssSha256: "7e22e2a183796732c4f77c4bb018eb2342ecb812181e46f348e1aa3aa827ef50",
+      },
+      current: {
+        component: CURRENT_FEEDBACK_SOURCE,
+        componentSha256: "459fdd6120fd369b78d4a9784d98ac2b29fbb553afb35522f8f680fdfe4e4cd1",
+        css: "ui/motolii-web/src/feedback/feedback.css",
+        cssSha256: "7e22e2a183796732c4f77c4bb018eb2342ecb812181e46f348e1aa3aa827ef50",
+      },
+    },
   ]);
 
   const easingTriggerBytes = await readFile(abs(CURRENT_EASING_TRIGGER_SOURCE));
@@ -1507,6 +1528,7 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
     "./candidates/InspectorCandidate.jsx",
     "./candidates/KeyToolsCandidate.jsx",
     "./candidates/StageChromeCandidate.jsx",
+    "./feedback/Feedback.jsx",
     "./primitives/index.jsx",
   ]);
 });

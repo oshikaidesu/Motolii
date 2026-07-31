@@ -91,7 +91,7 @@ test("fails closed when contextual feedback omits reason or recovery", async ({
   page,
 }) => {
   const outcomes = await page.evaluate(async () => {
-    const { validateFeedbackModel } = await import(
+    const { Feedback } = await import(
       "/src/feedback/Feedback.jsx"
     );
     const base = {
@@ -114,7 +114,7 @@ test("fails closed when contextual feedback omits reason or recovery", async ({
       },
     ].map((model) => {
       try {
-        validateFeedbackModel(model);
+        Feedback(model);
         return "accepted";
       } catch (error) {
         return error instanceof TypeError ? "typed-reject" : "wrong-error";

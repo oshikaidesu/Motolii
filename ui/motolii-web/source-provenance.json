@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "task": "CU-0A04 / CU-0A05B / CU-0A06B / CU-0A07C / CU-108-STAGE-REPRODUCTION / CU-0B02C-P",
+  "task": "CU-0A04 / CU-0A05B / CU-0A06B / CU-0A07C / CU-108-STAGE-REPRODUCTION / CU-0B02C-P / CU-203P",
   "authority": "docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md",
   "fixedSourceCommit": "56c318edcddab7cf95d263cc2f7dd2b4e6791134",
   "sourceOwnership": {
     "product": "@motolii/motolii-web",
-    "owner": "R1-browser / R2B-easing-trigger / R3B-key-tools / R4C-inspector / R5-stage-chrome / component-state-primitives",
-    "surface": "Browser / Easing trigger / KEYS-LAYERS key tools / Inspector / Stage header-transport / shared presentation primitives",
+    "owner": "R1-browser / R2B-easing-trigger / R3B-key-tools / R4C-inspector / R5-stage-chrome / component-state-primitives / common-feedback",
+    "surface": "Browser / Easing trigger / KEYS-LAYERS key tools / Inspector / Stage header-transport / shared presentation primitives / common feedback",
     "exports": [
       {
         "name": "DiscoveryBrowserCandidate",
@@ -62,6 +62,10 @@
       },
       {
         "name": "TabList",
+        "path": "src/index.js"
+      },
+      {
+        "name": "Feedback",
         "path": "src/index.js"
       }
     ]
@@ -139,6 +143,22 @@
         "componentSha256": "d5c9dd7d9016dacbef6f1ef93fa80e4cfe00a22eccc5e4faf7a4e12eada6de29",
         "css": "ui/motolii-web/src/primitives/primitives.css",
         "cssSha256": "7ecfe0195f922506429caa0e141fe6104bd845e02265e2bd24f4a67232dafc2b"
+      }
+    },
+    {
+      "type": "fixed-source-transfer",
+      "task": "CU-203P",
+      "old": {
+        "component": "docs/mocks-ui/src/feedback/Feedback.jsx",
+        "componentSha256": "459fdd6120fd369b78d4a9784d98ac2b29fbb553afb35522f8f680fdfe4e4cd1",
+        "css": "docs/mocks-ui/src/feedback/feedback.css",
+        "cssSha256": "7e22e2a183796732c4f77c4bb018eb2342ecb812181e46f348e1aa3aa827ef50"
+      },
+      "current": {
+        "component": "ui/motolii-web/src/feedback/Feedback.jsx",
+        "componentSha256": "459fdd6120fd369b78d4a9784d98ac2b29fbb553afb35522f8f680fdfe4e4cd1",
+        "css": "ui/motolii-web/src/feedback/feedback.css",
+        "cssSha256": "7e22e2a183796732c4f77c4bb018eb2342ecb812181e46f348e1aa3aa827ef50"
       }
     }
   ],

@@ -16,9 +16,9 @@ const INDEX_PATH = join(repoRoot, "ui/motolii-web/src/index.js");
 
 const AUTHORITY_SHA256 = {
   "ui/motolii-web/src/index.js":
-    "942787a0782f6341829b41545a32b2c899cfc2cbd0e9c5a7f84cb985ea13a275",
+    "0f8e68a80ce7ce07c0ae286e5e1fde9a9dde0962996fe2fed29a7a783442503c",
   "docs/mocks-ui/package.json":
-    "d058d3c84d7b7cf688b576d6a5da32820b65405bf78ea06363380091a88b0cf6",
+    "f0272ac3b744463a5af28e24c843205b43d98c5c4b4f5c6cf51c80c651013f38",
   "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx":
     "88a595c4df18da9180bd5fd23486d3006b473a02bf0222650f9ab6d4ffc13e20",
   "ui/motolii-web/src/candidates/discovery-browser-candidate.css":
@@ -26,7 +26,7 @@ const AUTHORITY_SHA256 = {
   "ui/motolii-web/src/patterns/DiscoveryBrowser.jsx":
     "1d996ad66dba3ff7fb36cf811ce8d22faec1fee271a2dd5349d953a7cf89a2ea",
   "ui/motolii-web/source-provenance.json":
-    "c6577848800e51bc4d8b3471cf792d0e9d731ba3002ef93b91cfe11d4797c7f8",
+    "b29e9dfaa5616945768a0eec8b7036e07d1e6082f64dda31b6bfb2b8b3f7d289",
 };
 
 const FORBIDDEN_KEYS = [

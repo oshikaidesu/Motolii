@@ -19,9 +19,9 @@ const DECODER_PATH = join(
 
 const AUTHORITY_SHA256 = {
   "ui/motolii-web/src/index.js":
-    "942787a0782f6341829b41545a32b2c899cfc2cbd0e9c5a7f84cb985ea13a275",
+    "0f8e68a80ce7ce07c0ae286e5e1fde9a9dde0962996fe2fed29a7a783442503c",
   "ui/motolii-web/source-provenance.json":
-    "c6577848800e51bc4d8b3471cf792d0e9d731ba3002ef93b91cfe11d4797c7f8",
+    "b29e9dfaa5616945768a0eec8b7036e07d1e6082f64dda31b6bfb2b8b3f7d289",
   "ui/motolii-web/src/candidates/InspectorCandidate.jsx":
     "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0",
   "docs/mocks-ui/fixtures/reference-document.json":
@@ -29,7 +29,7 @@ const AUTHORITY_SHA256 = {
   "docs/mocks-ui/src/reference/loadReferenceFixtures.js":
     "8476efb890c753a6267c2f7a285f8c9ef37a9abeac51c40d75774fa4d0e97d5d",
   "docs/mocks-ui/package.json":
-    "d058d3c84d7b7cf688b576d6a5da32820b65405bf78ea06363380091a88b0cf6",
+    "f0272ac3b744463a5af28e24c843205b43d98c5c4b4f5c6cf51c80c651013f38",
 };
 
 const FORBIDDEN_R14 = [

@@ -2707,7 +2707,11 @@ test("records the fixed CU-0B02C primitive pair without expanding the six-surfac
     "f625758bbfb9db6577618584a79ef9e900510ffc96662c6b1f6191393590959c",
   );
 
-  const migration = provenance.migrations.at(-1);
+  const migration = provenance.migrations.find(
+    ({ type, old }) =>
+      type === "fixed-source-transfer-with-supplier-replacement"
+      && old?.component === fixedPrimitiveSource,
+  );
   assert.deepEqual(migration, {
     type: "fixed-source-transfer-with-supplier-replacement",
     old: {

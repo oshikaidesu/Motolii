@@ -6,6 +6,7 @@ export {
   StageHeaderCandidate,
   StageTransportCandidate,
 } from "./candidates/StageChromeCandidate.jsx";
+export { Feedback } from "./feedback/Feedback.jsx";
 export {
   Button,
   Field,

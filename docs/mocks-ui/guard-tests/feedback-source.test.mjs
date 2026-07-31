@@ -6,9 +6,12 @@ import test from "node:test";
 const root = path.resolve(import.meta.dirname, "..");
 const read = (relativePath) =>
   readFile(path.join(root, relativePath), "utf8");
+const repoRoot = path.resolve(root, "../..");
+const readProduct = (relativePath) =>
+  readFile(path.join(repoRoot, "ui/motolii-web", relativePath), "utf8");
 
-test("CU-203M source keeps the closed presentation vocabulary", async () => {
-  const source = await read("src/feedback/Feedback.jsx");
+test("CU-203P product source keeps the closed presentation vocabulary", async () => {
+  const source = await readProduct("src/feedback/Feedback.jsx");
 
   for (const value of ["inline", "target", "badge", "cursor"]) {
     assert.match(source, new RegExp(`"${value}"`));
@@ -64,8 +67,8 @@ test("CU-203M source keeps the closed presentation vocabulary", async () => {
   }
 });
 
-test("CU-203M CSS uses product colors and component-local geometry only", async () => {
-  const css = await read("src/feedback/feedback.css");
+test("CU-203P product CSS uses product colors and component-local geometry only", async () => {
+  const css = await readProduct("src/feedback/feedback.css");
 
   assert.doesNotMatch(css, /#[0-9a-f]{3,8}\b/i);
   assert.doesNotMatch(css, /\b(?:rgb|hsl)a?\(/i);
@@ -78,7 +81,7 @@ test("CU-203M CSS uses product colors and component-local geometry only", async 
   assert.match(css, /prefers-reduced-motion:\s*no-preference/);
 });
 
-test("CU-203M matrix is exact and diagnostic-only", async () => {
+test("CU-203P matrix remains exact and diagnostic-only", async () => {
   const [matrix, main, playwright] = await Promise.all([
     read("src/diagnostics/FeedbackStateMatrix.jsx"),
     read("src/main.jsx"),

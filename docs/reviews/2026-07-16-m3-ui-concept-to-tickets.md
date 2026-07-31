@@ -31,7 +31,7 @@ main済み U0a
   → U0e-1 token生成基盤 → U0e-2R React baseline再結合 → U0e-2 reference fixture
   → G0-9 UI runtime再選定 → G0-6H 人間審判 → U0e-3 product token/component
   → U2c-3 feedback component → U2c-5 diagnostic projection（G0-6H lane。U3a-1の論理ブロックではない）
-  → U3a-1I headless timeline foundation `DONE`（論理依存はU0a+U0bのみ。docs-only `CU-104`も[selection publish envelope決定](../reviews/2026-07-27-cu-104-selection-publish-envelope-decision.md)を`DONE`） → U4a-1 parameter mapping `DONE` → CU-0B02R `DONE` → CU-0B02C-S / CU-0B02C-P `DONE` → CU-203S / CU-203M `DONE` → CU-203P `DO` → CU-204 / U4a-2 `WAIT`
+  → U3a-1I headless timeline foundation `DONE`（論理依存はU0a+U0bのみ。docs-only `CU-104`も[selection publish envelope決定](../reviews/2026-07-27-cu-104-selection-publish-envelope-decision.md)を`DONE`） → U4a-1 parameter mapping `DONE` → CU-0B02R `DONE` → CU-0B02C-S / CU-0B02C-P `DONE` → CU-203S / CU-203M / CU-203P `DONE` → CU-0B02C-V `DO` → CU-204 / U4a-2 `WAIT`
   → U4c Advanced round-trip → U2c-2 real-entry conformance
 ```
 

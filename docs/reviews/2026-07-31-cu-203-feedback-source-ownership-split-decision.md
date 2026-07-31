@@ -1,7 +1,7 @@
 # CU-203 共通feedback source / ownership分割決定
 
 作成日: 2026-07-31
-状態: **決定 / CU-203S DONE / CU-203M DONE / CU-203P DO**
+状態: **決定 / CU-203S DONE / CU-203M DONE / CU-203P DONE**
 
 ## 1. 利用者成果
 
@@ -31,7 +31,7 @@ CU-203は診断の意味を新設するticketではない。既存のU2c-1 inter
 |---|---|---|---|---|
 | CU-203S | `SPEC / DONE` | source、owner、state matrix、停止線の裁定 | CU-0B02C-P、U2c-1/U2c-4 | 本文書と台帳が同じ分割を指す |
 | CU-203M | `PRODUCT-ASSET / DONE` | mock側で独立feedback JSX/CSSとdevelopment-only matrixを確立 | CU-203S | fixed SHA。9 fixture、guard 3件、Playwright 4件、current-route 30 PNG byte同一 |
-| CU-203P | `PRODUCT / DO` | Mの固定bytesをproduct ownerへ直接移管 | CU-203M | mock consumer反転、copy 0、package export、ownership guard、matrix不変 |
+| CU-203P | `PRODUCT / DONE` | Mの固定bytesをproduct ownerへ直接移管 | CU-203M | mock consumer反転、copy 0、package export、ownership guard、matrix不変 |
 
 MとPを一commitへ束ねない。正しい独立sourceが無い状態でproductへ縮約componentを先に作ることは、
 React直接移管契約の停止線に該当する。
@@ -95,6 +95,18 @@ DOM、class、stable hook、ARIA、keyboard focus order、9 fixtureのstateを�
 product runtimeから`docs/mocks-ui`、legacy、archive、fixtureへのimportは0、
 mock側の独立component/CSS copyも0とする。product exportはpresentation componentだけであり、
 `DiagnosticEnvelope` wire codec、翻訳辞書、Document command、recovery callbackを公開しない。
+
+CU-203Pでは固定JSX/CSSを次へSHA-256同一で移管した。
+
+- `ui/motolii-web/src/feedback/Feedback.jsx`
+- `ui/motolii-web/src/feedback/feedback.css`
+
+mock側は`@motolii/motolii-web`の`Feedback`だけをre-exportするconsumerへ反転し、旧CSSを削除した。
+package rootはpresentation component `Feedback`だけを公開し、内部validation helperは公開しない。
+product ownership provenanceと専用guard 3件を追加し、9 fixtureのDOM、class、ARIA、focus order、
+state hook、matrix JSX/CSS bytesは変更していない。CU-204のHost projection、表示密度、翻訳、
+recovery Intent配線は未着手のまま残す。current-route publicationはgeneration
+`0d972253d868-ead41d4d6562`へ進み、先行`1632212201a0-ead41d4d6562`との30 PNG byte同一を確認した。
 
 ## 6. 自動審判
 
