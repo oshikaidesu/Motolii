@@ -298,6 +298,37 @@ mod tests {
     }
 
     #[test]
+    fn empty_product_track_prepares_transparent_preview_via_worker() {
+        let Ok(gpu) = GpuCtx::new_headless() else {
+            unavailable_dep("GPU adapter", "new_headless failed");
+            return;
+        };
+        let gpu = Arc::new(gpu);
+        let mut document = Document::new_current();
+        let track = document.track_ids.allocate("V1").expect("track id");
+        document.tracks.push(Track {
+            id: track,
+            items: vec![],
+        });
+        document.validate().expect("empty product document");
+
+        let desc = bootstrap_frame_desc().expect("frame desc");
+        let preview = prepare_in_setup_worker(Arc::clone(&gpu), Arc::new(document), desc)
+            .expect("empty initial preview");
+
+        let rendered_desc = Quality::DRAFT.render_desc(desc);
+        assert_eq!(preview.slot().desc(), rendered_desc);
+        assert_eq!(preview.render_count, 1);
+
+        let bytes = download_rgba(&gpu, preview.slot().texture()).expect("transparent download");
+        assert_eq!(bytes.len(), rendered_desc.data_size());
+        assert!(
+            bytes.iter().all(|&v| v == 0),
+            "empty product preview must be GPU-resident transparent black"
+        );
+    }
+
+    #[test]
     fn one_private_path_proves_document_render_copy_and_register_once() {
         let Ok(gpu) = GpuCtx::new_headless() else {
             unavailable_dep("GPU adapter", "new_headless failed");
