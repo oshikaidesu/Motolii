@@ -166,6 +166,11 @@ Document/Undo ownerのReact移動、通常route以外だけの成立が必要な
 - decoder、React、provenance JSON、fixture、製品runtimeを変更しない
 - helper重複、単なるcurrent hash受理、空chain受理、index 0緩和を拒否する
 
+`CU-205B1G`はcommit `413bc551`で`DONE`。共有validator、tampered terminal / live
+hash欠落の負例、ownership側の重複定義0 / product import 0を閉じ、Grok
+`VERDICT: ACCEPT`、P0/P1=0を得た。製品codeとprovenance dataの変更は0である。
+次の実装粒は`CU-205B1I`。
+
 `CU-205B1I`はproduct Web sourceとprovenance appendだけを所有する。
 
 - `browserHostCodec.js`でstrict catalog snapshotを既存`browserCatalogDecoder`へ渡す
