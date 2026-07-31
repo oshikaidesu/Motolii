@@ -31,6 +31,7 @@ createRoot(container).render(
     <DiscoveryBrowserCandidate
       rectangleIdentity={snapshot.rectangleIdentity}
       onPlaceIntent={onPlaceIntent}
+      catalogProjection={snapshot.catalogProjection}
     />
   </main>,
 );
