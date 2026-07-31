@@ -31,7 +31,7 @@ main済み U0a
   → U0e-1 token生成基盤 → U0e-2R React baseline再結合 → U0e-2 reference fixture
   → G0-9 UI runtime再選定 → G0-6H 人間審判 → U0e-3 product token/component
   → U2c-3 feedback component → U2c-5 diagnostic projection（G0-6H lane。U3a-1の論理ブロックではない）
-  → U3a-1I headless timeline foundation `DONE`（論理依存はU0a+U0bのみ。docs-only `CU-104`も[selection publish envelope決定](../reviews/2026-07-27-cu-104-selection-publish-envelope-decision.md)を`DONE`） → U4a-1 parameter mapping `DONE` → CU-0B02R `DONE` → CU-0B02C-S / CU-0B02C-P `DONE` → CU-203 `DO` → CU-204 / U4a-2 `WAIT`
+  → U3a-1I headless timeline foundation `DONE`（論理依存はU0a+U0bのみ。docs-only `CU-104`も[selection publish envelope決定](../reviews/2026-07-27-cu-104-selection-publish-envelope-decision.md)を`DONE`） → U4a-1 parameter mapping `DONE` → CU-0B02R `DONE` → CU-0B02C-S / CU-0B02C-P `DONE` → CU-203S `DONE` → CU-203M `DO` → CU-203P / CU-204 / U4a-2 `WAIT`
   → U4c Advanced round-trip → U2c-2 real-entry conformance
 ```
 
@@ -86,7 +86,7 @@ Uシリーズの初回製品実装は、ファイル競合の有無ではなく�
 | U2b-1 | **完了**: normalized UI event→intent→prepared command→private single writer→`Arc<Document>`購読E2E | U1a-1, U2a-1 | Apply/Undo/Redoの各成功snapshotをUIとrender requestへ配送し、実windowで最終generationを同じdisplay slotへ表示。失敗・UI状態だけの変更はDocument/history不変 | selection/target、物理key、Undo/Redo UI commandを発明せず、egui memoryを第2のDocumentにしない |
 | U2c-1 | **完了**: [決定済み6状態契約](2026-07-21-m3-u2c-1-interaction-state-contract.md)に従うDiscover/Target/Preview/Commit/Cancel/Inspectの共通状態機械 | U2b-1, G0-7 | 6×6総当たりでinvalid遷移拒否、Target/Preview Cancel時にDocument/revision/history/queue/snapshot発行/render generation不変、公開3型のTransient非保存・toolkit隔離 | button/whip/tool別の状態機械を作らない |
 | U2c-2 | Direct/Tool/Advanced入口の意味同値conformance harness | U2c-1, U4a-2, U4c | 存在する複数入口が同じDocument意味とUndo単位。初回はDirect/Advancedを検査し、Tool未実装を明示 | 未実装入口をhidden helper、空harness、adapter kind、smoke注入、複数key bindingで偽装しない |
-| U2c-3 | target、error、semantic badge、cursor説明の共通feedback部品 | U2c-1, U0e-3 | state matrix、色だけ/文字だけ依存を拒否。disabled/invalidはtyped reasonと回復方法を必須化 | gray/dimだけのsilent disabled、個別機能固有のhover/focus/Cancelを許さない |
+| U2c-3 | target、error、semantic badge、cursor説明の共通feedback部品。実装は[CU-203S](2026-07-31-cu-203-feedback-source-ownership-split-decision.md)でS/M/Pへ分割 | U2c-1, U2c-4, U0e-3 | state matrix、色だけ/文字だけ依存を拒否。disabled/invalidはtyped reasonと回復方法を必須化 | gray/dimだけのsilent disabled、個別機能固有のhover/focus/Cancelを許さない |
 | U2c-4 | **完了**: [決定済みTransient Diagnostic Envelope契約](2026-07-21-m3-u2c-4-diagnostic-envelope-contract.md)に従う3系統の領域別adapter境界 | U0b-2 | 全対象variantの完全写像、definition/use ID順序、非対象pairのtyped拒否、future rejection専用adapter。Document/revision/history/queue/render generation不変 | 未実装Connection/Drop型を先に発明しない。Document objectへのUI説明、巨大domain error enum、serialize、egui型、表示文言IDを作らない |
 | U2c-5 | 同じ診断をBrief/Context/Inspect/Assistiveへ段階投影する共通componentとrecovery Intent配線 | U2c-3, U2c-4 | 全段階でreason/subjects/facts一致。Preview中の事前拒否、回復不能明示、screen-reader説明。recovery選択は通常Intent経由でUndo規則を守る | 外部検索を通常操作の必須手順にしない。診断componentからDocumentを直接変更しない |
 
