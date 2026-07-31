@@ -38,13 +38,17 @@ fn product_host_projects_the_adopted_snapshot_without_a_second_owner_or_intent_p
     assert!(inspector.contains("snapshot_json(document, primary, active_effect_use)"));
     assert!(!inspector.contains("snapshot_json(document, primary, None)"));
     assert!(web.contains("decodeInspectorReadModel(raw)"));
-    assert!(web.contains("<InspectorCandidate inspectorReadModel={inspectorReadModel} />"));
+    assert!(web.contains("createInspectorHostSender(bridge.postMessage)"));
+    assert!(web.contains("onEffectParamGesture={inspectorHostSender.send}"));
+    assert!(inspector.contains("postMessage:(message)=>window.ipc.postMessage(message)"));
+    assert!(inspector.contains("with_ipc_handler(move |request|"));
+    assert!(inspector.contains("InspectorGestureInbox"));
+    assert!(inspector.contains("MAX_PENDING_TERMINALS"));
 
     for forbidden in [
         "docs/mocks-ui",
         "docs/mocks/",
         "onPlaceIntent",
-        "postMessage",
         "DocumentWriter",
         "apply_macro",
     ] {

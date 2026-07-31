@@ -1,5 +1,8 @@
 //! product-owned Inspectorをnative shellのopaque childへ載せるprivate Host。
 
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+
 use wry::{Rect, WebView, WebViewBuilder};
 
 use crate::browser_host_runtime::product_asset_response;
@@ -8,8 +11,229 @@ use crate::{map_parameter_control, HostParameterControl};
 
 const PROTOCOL: &str = "motolii-inspector";
 const ENTRY_URL: &str = "motolii-inspector://product/inspector.html";
+const MAX_PENDING_TERMINALS: usize = 64;
+
+type InspectorWake = Arc<dyn Fn() + Send + Sync>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct InspectorGestureUpdate {
+    pub(crate) session: u64,
+    pub(crate) sequence: u64,
+    pub(crate) identity: InspectorGestureIdentity,
+    pub(crate) value: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct InspectorGestureTerminal {
+    pub(crate) session: u64,
+    pub(crate) sequence: u64,
+    pub(crate) identity: InspectorGestureIdentity,
+    pub(crate) cause: InspectorGestureTerminalCause,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum InspectorGestureTerminalCause {
+    Commit(f64),
+    Cancel,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct InspectorGestureIdentity {
+    layer_id: motolii_doc::LayerId,
+    effect_use_id: motolii_doc::EffectId,
+    definition_id: motolii_doc::EffectDefinitionId,
+    plugin_id: String,
+    effect_version: u32,
+    param_id: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InspectorGestureMessage {
+    #[serde(rename = "kind")]
+    _kind: InspectorGestureKind,
+    phase: InspectorGesturePhase,
+    session: u64,
+    sequence: u64,
+    layer_id: motolii_doc::LayerId,
+    effect_use_id: motolii_doc::EffectId,
+    definition_id: motolii_doc::EffectDefinitionId,
+    plugin_id: String,
+    effect_version: u32,
+    param_id: String,
+    #[serde(default, deserialize_with = "deserialize_gesture_value")]
+    value: InspectorGestureValue,
+}
+
+#[derive(Debug, Default)]
+enum InspectorGestureValue {
+    #[default]
+    Missing,
+    Null,
+    Number(f64),
+}
+
+fn deserialize_gesture_value<'de, D>(deserializer: D) -> Result<InspectorGestureValue, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(
+        match <Option<f64> as serde::Deserialize>::deserialize(deserializer)? {
+            Some(value) => InspectorGestureValue::Number(value),
+            None => InspectorGestureValue::Null,
+        },
+    )
+}
+
+impl InspectorGestureMessage {
+    fn identity(&self) -> InspectorGestureIdentity {
+        InspectorGestureIdentity {
+            layer_id: self.layer_id,
+            effect_use_id: self.effect_use_id,
+            definition_id: self.definition_id,
+            plugin_id: self.plugin_id.clone(),
+            effect_version: self.effect_version,
+            param_id: self.param_id.clone(),
+        }
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+enum InspectorGestureKind {
+    #[serde(rename = "effect-param-gesture")]
+    EffectParamGesture,
+}
+
+#[derive(Debug, Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum InspectorGesturePhase {
+    Start,
+    Update,
+    Commit,
+    Cancel,
+}
+
+#[derive(Debug)]
+struct ActiveInspectorGesture {
+    session: u64,
+    last_sequence: u64,
+}
+
+#[derive(Debug)]
+struct InspectorGestureInbox {
+    expected: Option<InspectorGestureIdentity>,
+    last_session: u64,
+    active: Option<ActiveInspectorGesture>,
+    latest_update: Option<InspectorGestureUpdate>,
+    terminals: VecDeque<InspectorGestureTerminal>,
+}
+
+impl InspectorGestureInbox {
+    fn new(expected: Option<InspectorGestureIdentity>) -> Self {
+        Self {
+            expected,
+            last_session: 0,
+            active: None,
+            latest_update: None,
+            terminals: VecDeque::new(),
+        }
+    }
+
+    fn reconcile(&mut self, expected: Option<InspectorGestureIdentity>) {
+        if self.expected != expected {
+            self.expected = expected;
+            self.active = None;
+            self.latest_update = None;
+        }
+    }
+
+    fn accept(&mut self, raw: &str) -> Result<(), InspectorGestureError> {
+        let message: InspectorGestureMessage = serde_json::from_str(raw)?;
+        let Some(expected) = &self.expected else {
+            return Err(InspectorGestureError::NoActiveTarget);
+        };
+        let identity = message.identity();
+        if &identity != expected {
+            return Err(InspectorGestureError::IdentityMismatch);
+        }
+        if message.session == 0 || message.sequence == 0 {
+            return Err(InspectorGestureError::NonPositiveOrder);
+        }
+        let value = match (message.phase, message.value) {
+            (InspectorGesturePhase::Cancel, InspectorGestureValue::Missing) => None,
+            (InspectorGesturePhase::Cancel, _) => {
+                return Err(InspectorGestureError::UnexpectedValue)
+            }
+            (_, InspectorGestureValue::Number(value))
+                if value.is_finite() && (0.0..=1.0).contains(&value) =>
+            {
+                Some(value)
+            }
+            _ => return Err(InspectorGestureError::InvalidValue),
+        };
+
+        match message.phase {
+            InspectorGesturePhase::Start => {
+                if self.active.is_some() {
+                    return Err(InspectorGestureError::GestureAlreadyActive);
+                }
+                if message.session <= self.last_session || message.sequence != 1 {
+                    return Err(InspectorGestureError::StaleOrReordered);
+                }
+                self.last_session = message.session;
+                self.active = Some(ActiveInspectorGesture {
+                    session: message.session,
+                    last_sequence: message.sequence,
+                });
+            }
+            InspectorGesturePhase::Update => {
+                self.advance(message.session, message.sequence)?;
+                self.latest_update = Some(InspectorGestureUpdate {
+                    session: message.session,
+                    sequence: message.sequence,
+                    identity,
+                    value: value.expect("validated update value"),
+                });
+            }
+            InspectorGesturePhase::Commit | InspectorGesturePhase::Cancel => {
+                if self.terminals.len() >= MAX_PENDING_TERMINALS {
+                    return Err(InspectorGestureError::TerminalInboxFull);
+                }
+                self.advance(message.session, message.sequence)?;
+                self.latest_update = None;
+                self.active = None;
+                self.terminals.push_back(InspectorGestureTerminal {
+                    session: message.session,
+                    sequence: message.sequence,
+                    identity,
+                    cause: match message.phase {
+                        InspectorGesturePhase::Commit => InspectorGestureTerminalCause::Commit(
+                            value.expect("validated commit value"),
+                        ),
+                        InspectorGesturePhase::Cancel => InspectorGestureTerminalCause::Cancel,
+                        _ => unreachable!(),
+                    },
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn advance(&mut self, session: u64, sequence: u64) -> Result<(), InspectorGestureError> {
+        let Some(active) = &mut self.active else {
+            return Err(InspectorGestureError::GestureNotActive);
+        };
+        if active.session != session || sequence <= active.last_sequence {
+            return Err(InspectorGestureError::StaleOrReordered);
+        }
+        active.last_sequence = sequence;
+        Ok(())
+    }
+}
 
 pub(crate) struct InspectorHostRuntime {
+    gesture_inbox: Arc<Mutex<InspectorGestureInbox>>,
+    wake: Arc<Mutex<Option<InspectorWake>>>,
     webview: WebView,
     latest_layout_epoch: Option<u64>,
 }
@@ -23,6 +247,7 @@ impl InspectorHostRuntime {
     ) -> Result<Self, InspectorHostRuntimeError> {
         let created_at = std::time::Instant::now();
         let snapshot = snapshot_json(document, primary, active_effect_use)?;
+        let gesture_identity = gesture_identity(document, primary, active_effect_use)?;
         let encoded_snapshot = javascript_json_parse_argument(&snapshot)?;
         let initialization_script = format!(
             r#"window.__MOTOLII_INSPECTOR_HOST__=(()=>{{
@@ -31,10 +256,15 @@ let current=JSON.parse({encoded_snapshot});
 return Object.freeze({{
 get snapshot(){{return current;}},
 subscribe:(next)=>{{if(typeof next!=="function"||listener!==null)throw new TypeError("invalid Inspector subscriber");listener=next;listener(current);}},
-publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
+publish:(next)=>{{current=next;if(listener!==null)listener(current);}},
+postMessage:(message)=>window.ipc.postMessage(message)
 }});
 }})();"#
         );
+        let gesture_inbox = Arc::new(Mutex::new(InspectorGestureInbox::new(gesture_identity)));
+        let wake = Arc::new(Mutex::new(None::<InspectorWake>));
+        let callback_inbox = Arc::clone(&gesture_inbox);
+        let callback_wake = Arc::clone(&wake);
         let webview = WebViewBuilder::new()
             .with_bounds(Rect {
                 position: wry::dpi::LogicalPosition::new(0.0, 0.0).into(),
@@ -46,6 +276,27 @@ publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
             })
             .with_url(ENTRY_URL)
             .with_navigation_handler(|target| target.starts_with("motolii-inspector:"))
+            .with_ipc_handler(move |request| {
+                let raw = request.body();
+                let accepted = callback_inbox
+                    .lock()
+                    .map_err(|_| InspectorGestureError::InboxPoisoned)
+                    .and_then(|mut inbox| inbox.accept(raw));
+                match accepted {
+                    Ok(()) => {
+                        crate::ui_numeric_trace::emit(format_args!(
+                            "kind=webview surface=inspector event=ipc-accepted bytes={}",
+                            raw.len(),
+                        ));
+                        if let Ok(wake) = callback_wake.lock() {
+                            if let Some(wake) = wake.as_ref() {
+                                wake();
+                            }
+                        }
+                    }
+                    Err(error) => eprintln!("Inspector Host rejected message: {error}"),
+                }
+            })
             .build_as_child(window)?;
         crate::ui_numeric_trace::emit(format_args!(
             "kind=webview surface=inspector event=created elapsed_ms={:.3} primary_present={}",
@@ -53,9 +304,42 @@ publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
             primary.is_some(),
         ));
         Ok(Self {
+            gesture_inbox,
+            wake,
             webview,
             latest_layout_epoch: None,
         })
+    }
+
+    pub(crate) fn register_wake(&self, wake: InspectorWake) -> Result<(), InspectorGestureError> {
+        let mut slot = self
+            .wake
+            .lock()
+            .map_err(|_| InspectorGestureError::InboxPoisoned)?;
+        *slot = Some(wake);
+        Ok(())
+    }
+
+    pub(crate) fn take_latest_update(
+        &self,
+    ) -> Result<Option<InspectorGestureUpdate>, InspectorGestureError> {
+        Ok(self
+            .gesture_inbox
+            .lock()
+            .map_err(|_| InspectorGestureError::InboxPoisoned)?
+            .latest_update
+            .take())
+    }
+
+    pub(crate) fn take_terminal(
+        &self,
+    ) -> Result<Option<InspectorGestureTerminal>, InspectorGestureError> {
+        Ok(self
+            .gesture_inbox
+            .lock()
+            .map_err(|_| InspectorGestureError::InboxPoisoned)?
+            .terminals
+            .pop_front())
     }
 
     pub(crate) fn set_bounds(
@@ -98,6 +382,11 @@ publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
         active_effect_use: Option<motolii_doc::EffectId>,
     ) -> Result<(), InspectorHostRuntimeError> {
         let snapshot = snapshot_json(document, primary, active_effect_use)?;
+        let gesture_identity = gesture_identity(document, primary, active_effect_use)?;
+        self.gesture_inbox
+            .lock()
+            .map_err(|_| InspectorGestureError::InboxPoisoned)?
+            .reconcile(gesture_identity);
         let encoded_snapshot = javascript_json_parse_argument(&snapshot)?;
         crate::ui_numeric_trace::emit(format_args!(
             "kind=webview surface=inspector event=publish primary_present={} payload_bytes={}",
@@ -109,6 +398,52 @@ publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
         ))?;
         Ok(())
     }
+}
+
+fn gesture_identity(
+    document: &motolii_doc::Document,
+    primary: Option<motolii_doc::LayerId>,
+    active_effect_use: Option<motolii_doc::EffectId>,
+) -> Result<Option<InspectorGestureIdentity>, InspectorHostRuntimeError> {
+    let Some(active_effect_use) = active_effect_use else {
+        return Ok(None);
+    };
+    let Some(primary) = primary else {
+        return Err(InspectorHostRuntimeError::ActiveEffectWithoutPrimary { active_effect_use });
+    };
+    let effect_use = document.find_effect_use(primary, active_effect_use).ok_or(
+        InspectorHostRuntimeError::ActiveEffectNotFound {
+            primary,
+            active_effect_use,
+        },
+    )?;
+    let definition = document.effect_definition(effect_use.definition_id).ok_or(
+        InspectorHostRuntimeError::ActiveEffectDefinitionNotFound {
+            definition_id: effect_use.definition_id,
+        },
+    )?;
+    let amount = definition.params.get("amount");
+    if definition.plugin_id != "core.filter.opacity"
+        || definition.effect_version != 1
+        || definition.params.len() != 1
+        || !matches!(
+            amount,
+            Some(motolii_doc::DocParam::Const(motolii_doc::DocValue::F64(value)))
+                if value.is_finite() && (0.0..=1.0).contains(value)
+        )
+    {
+        return Err(InspectorHostRuntimeError::ActiveEffectContractMismatch {
+            definition_id: definition.id,
+        });
+    }
+    Ok(Some(InspectorGestureIdentity {
+        layer_id: primary,
+        effect_use_id: active_effect_use,
+        definition_id: definition.id,
+        plugin_id: definition.plugin_id.clone(),
+        effect_version: definition.effect_version,
+        param_id: "amount".to_owned(),
+    }))
 }
 
 fn javascript_json_parse_argument(
@@ -258,6 +593,16 @@ pub(crate) enum InspectorHostRuntimeError {
         primary: motolii_doc::LayerId,
         active_effect_use: motolii_doc::EffectId,
     },
+    #[error("Inspector active Effect Definition {definition_id:?} was not found")]
+    ActiveEffectDefinitionNotFound {
+        definition_id: motolii_doc::EffectDefinitionId,
+    },
+    #[error("Inspector active Effect Definition {definition_id:?} does not match Opacity amount")]
+    ActiveEffectContractMismatch {
+        definition_id: motolii_doc::EffectDefinitionId,
+    },
+    #[error(transparent)]
+    Gesture(#[from] InspectorGestureError),
     #[error(transparent)]
     Catalog(#[from] motolii_plugin::PluginContractError),
     #[error(transparent)]
@@ -266,6 +611,32 @@ pub(crate) enum InspectorHostRuntimeError {
     Json(#[from] serde_json::Error),
     #[error("Inspector Host WebView failed")]
     WebView(#[from] wry::Error),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum InspectorGestureError {
+    #[error("Inspector gesture JSON was rejected")]
+    Json(#[from] serde_json::Error),
+    #[error("Inspector gesture has no active target")]
+    NoActiveTarget,
+    #[error("Inspector gesture identity does not match the active target")]
+    IdentityMismatch,
+    #[error("Inspector gesture session and sequence must be positive")]
+    NonPositiveOrder,
+    #[error("Inspector gesture value must be finite and in [0,1]")]
+    InvalidValue,
+    #[error("Inspector cancel must not carry a value")]
+    UnexpectedValue,
+    #[error("Inspector gesture is already active")]
+    GestureAlreadyActive,
+    #[error("Inspector gesture is not active")]
+    GestureNotActive,
+    #[error("Inspector gesture is stale or reordered")]
+    StaleOrReordered,
+    #[error("Inspector terminal inbox is full")]
+    TerminalInboxFull,
+    #[error("Inspector gesture inbox lock is poisoned")]
+    InboxPoisoned,
 }
 
 #[cfg(test)]
@@ -435,5 +806,175 @@ mod tests {
     fn bridge_argument_is_a_quoted_json_string_not_an_object_literal() {
         let encoded = javascript_json_parse_argument(&serde_json::json!({"target": 7})).unwrap();
         assert_eq!(encoded, r#""{\"target\":7}""#);
+    }
+
+    fn gesture_fixture() -> (
+        motolii_doc::Document,
+        motolii_doc::LayerId,
+        motolii_doc::EffectId,
+        InspectorGestureIdentity,
+    ) {
+        let mut document = motolii_doc::Document::new_current();
+        let layer_id = motolii_doc::LayerId::from_raw(5);
+        let effect_use_id = motolii_doc::EffectId::from_raw(17);
+        let definition_id = motolii_doc::EffectDefinitionId::from_raw(23);
+        let mut envelope = motolii_doc::ItemEnvelope::new(layer_id);
+        envelope.effects.push(motolii_doc::EffectUse {
+            id: effect_use_id,
+            definition_id,
+        });
+        document.tracks.push(motolii_doc::Track {
+            id: motolii_doc::TrackId::from_raw(1),
+            items: vec![motolii_doc::TrackItem::Group(motolii_doc::Group {
+                envelope,
+                children: Vec::new(),
+            })],
+        });
+        document
+            .effect_definitions
+            .push(motolii_doc::EffectDefinition::new(
+                definition_id,
+                "core.filter.opacity",
+                1,
+                true,
+                std::collections::BTreeMap::from([(
+                    "amount".to_owned(),
+                    motolii_doc::DocParam::const_f64(0.72),
+                )]),
+                serde_json::Map::new(),
+            ));
+        let identity = gesture_identity(&document, Some(layer_id), Some(effect_use_id))
+            .unwrap()
+            .unwrap();
+        (document, layer_id, effect_use_id, identity)
+    }
+
+    fn gesture_message(
+        identity: &InspectorGestureIdentity,
+        phase: &str,
+        session: u64,
+        sequence: u64,
+        value: Option<f64>,
+    ) -> String {
+        let mut message = serde_json::json!({
+            "kind": "effect-param-gesture",
+            "phase": phase,
+            "session": session,
+            "sequence": sequence,
+            "layer_id": identity.layer_id,
+            "effect_use_id": identity.effect_use_id,
+            "definition_id": identity.definition_id,
+            "plugin_id": identity.plugin_id,
+            "effect_version": identity.effect_version,
+            "param_id": identity.param_id,
+        });
+        if let Some(value) = value {
+            message["value"] = serde_json::json!(value);
+        }
+        serde_json::to_string(&message).unwrap()
+    }
+
+    #[test]
+    fn hundred_updates_replace_one_latest_slot_and_terminal_is_preserved() {
+        let (_, _, _, identity) = gesture_fixture();
+        let mut inbox = InspectorGestureInbox::new(Some(identity.clone()));
+        inbox
+            .accept(&gesture_message(&identity, "start", 1, 1, Some(0.72)))
+            .unwrap();
+        for sequence in 2..=101 {
+            inbox
+                .accept(&gesture_message(
+                    &identity,
+                    "update",
+                    1,
+                    sequence,
+                    Some((sequence - 1) as f64 / 100.0),
+                ))
+                .unwrap();
+        }
+        let latest = inbox.latest_update.as_ref().unwrap();
+        assert_eq!(latest.sequence, 101);
+        assert_eq!(latest.value, 1.0);
+        inbox
+            .accept(&gesture_message(&identity, "commit", 1, 102, Some(1.0)))
+            .unwrap();
+        assert!(inbox.latest_update.is_none());
+        assert_eq!(inbox.terminals.len(), 1);
+        assert_eq!(
+            inbox.terminals.front().unwrap().cause,
+            InspectorGestureTerminalCause::Commit(1.0)
+        );
+    }
+
+    #[test]
+    fn stale_prior_session_and_reordered_sequence_are_rejected() {
+        let (_, _, _, identity) = gesture_fixture();
+        let mut inbox = InspectorGestureInbox::new(Some(identity.clone()));
+        inbox
+            .accept(&gesture_message(&identity, "start", 1, 1, Some(0.72)))
+            .unwrap();
+        inbox
+            .accept(&gesture_message(&identity, "cancel", 1, 2, None))
+            .unwrap();
+        inbox
+            .accept(&gesture_message(&identity, "start", 2, 1, Some(0.72)))
+            .unwrap();
+        for raw in [
+            gesture_message(&identity, "update", 1, 3, Some(0.8)),
+            gesture_message(&identity, "update", 2, 1, Some(0.8)),
+            gesture_message(&identity, "start", 2, 1, Some(0.8)),
+        ] {
+            assert!(matches!(
+                inbox.accept(&raw),
+                Err(InspectorGestureError::StaleOrReordered)
+                    | Err(InspectorGestureError::GestureAlreadyActive)
+            ));
+        }
+        assert!(inbox.latest_update.is_none());
+    }
+
+    #[test]
+    fn malformed_identity_value_and_phase_shape_fail_closed() {
+        let (_, _, _, identity) = gesture_fixture();
+        let mut inbox = InspectorGestureInbox::new(Some(identity.clone()));
+        for raw in [
+            gesture_message(&identity, "start", 0, 1, Some(0.5)),
+            gesture_message(&identity, "start", 1, 1, Some(1.1)),
+            gesture_message(&identity, "cancel", 1, 1, Some(0.5)),
+            gesture_message(&identity, "unknown", 1, 1, Some(0.5)),
+            gesture_message(
+                &InspectorGestureIdentity {
+                    effect_use_id: motolii_doc::EffectId::from_raw(999),
+                    ..identity.clone()
+                },
+                "start",
+                1,
+                1,
+                Some(0.5),
+            ),
+        ] {
+            assert!(inbox.accept(&raw).is_err());
+        }
+        assert!(inbox.active.is_none());
+        assert!(inbox.latest_update.is_none());
+        assert!(inbox.terminals.is_empty());
+    }
+
+    #[test]
+    fn cancel_rejects_explicit_null_without_advancing_the_active_session() {
+        let (_, _, _, identity) = gesture_fixture();
+        let mut inbox = InspectorGestureInbox::new(Some(identity.clone()));
+        inbox
+            .accept(&gesture_message(&identity, "start", 1, 1, Some(0.5)))
+            .unwrap();
+        let mut cancel: serde_json::Value =
+            serde_json::from_str(&gesture_message(&identity, "cancel", 1, 2, None)).unwrap();
+        cancel["value"] = serde_json::Value::Null;
+        assert!(matches!(
+            inbox.accept(&serde_json::to_string(&cancel).unwrap()),
+            Err(InspectorGestureError::UnexpectedValue)
+        ));
+        assert_eq!(inbox.active.as_ref().unwrap().last_sequence, 1);
+        assert!(inbox.terminals.is_empty());
     }
 }

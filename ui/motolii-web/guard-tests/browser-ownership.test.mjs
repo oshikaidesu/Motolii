@@ -59,6 +59,7 @@ const CURRENT_KEY_TOOLS_SOURCE = "ui/motolii-web/src/candidates/KeyToolsCandidat
 const CURRENT_KEY_TOOLS_CSS = "ui/motolii-web/src/candidates/key-tools-candidate.css";
 const CURRENT_INSPECTOR_SOURCE = "ui/motolii-web/src/candidates/InspectorCandidate.jsx";
 const CURRENT_INSPECTOR_CSS = "ui/motolii-web/src/candidates/inspector-candidate.css";
+const CURRENT_INSPECTOR_HOST_CODEC = "ui/motolii-web/src/host/inspectorHostCodec.js";
 const CURRENT_STAGE_CHROME_SOURCE = "ui/motolii-web/src/candidates/StageChromeCandidate.jsx";
 const CURRENT_PRIMITIVES_SOURCE = "ui/motolii-web/src/primitives/index.jsx";
 const CURRENT_PRIMITIVES_CSS = "ui/motolii-web/src/primitives/primitives.css";
@@ -70,6 +71,7 @@ const PRODUCT_RUNTIME_MODULES = [
   CURRENT_EASING_TRIGGER_SOURCE,
   CURRENT_KEY_TOOLS_SOURCE,
   CURRENT_INSPECTOR_SOURCE,
+  CURRENT_INSPECTOR_HOST_CODEC,
   CURRENT_STAGE_CHROME_SOURCE,
   CURRENT_PRIMITIVES_SOURCE,
   CURRENT_FEEDBACK_SOURCE,
@@ -113,7 +115,7 @@ const EXPECTED_KEY_TOOLS_SHA256 =
 const EXPECTED_KEY_TOOLS_CSS_SHA256 =
   "f84eb7f98f05844fa3bfc72b702cee2709f1fc0bb9be614f2b01039a65b5190d";
 const EXPECTED_INSPECTOR_SHA256 =
-  "a1af604c78113f4df0538c3045b19d51c1d3fc8c6740305abc47b7e8a2d10f37";
+  "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e";
 const EXPECTED_INSPECTOR_CSS_SHA256 =
   "730e2861a893b2b07fa66d5acef0038a49bdcf337e8c5a037785b0a58d829cbe";
 const INSPECTOR_POST_PROMOTION_TASK = "CU-0A08ITP";
@@ -127,6 +129,8 @@ const CU205P_INSPECTOR_FIXED_SHA256 =
   "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0";
 const CU205P_INSPECTOR_REASON =
   "VS-2 active Effect Inspector read-only control projection";
+const CU205P_INSPECTOR_CURRENT_SHA256 =
+  "a1af604c78113f4df0538c3045b19d51c1d3fc8c6740305abc47b7e8a2d10f37";
 
 const ALLOWED_EXTERNAL_PACKAGES = ["react", "html-react-parser"];
 const SEAM_COMPONENT_NAME = "CandidateCreateBrowser";
@@ -146,11 +150,13 @@ function countNonOverlapping(text, needle) {
 }
 
 function assertInspectorDomTokenCounts(source) {
-  assert.equal(countNonOverlapping(source, "document."), 3);
-  assert.equal(countNonOverlapping(source, 'document.addEventListener("keydown"'), 1);
-  assert.equal(countNonOverlapping(source, 'document.removeEventListener("keydown"'), 1);
+  assert.equal(countNonOverlapping(source, "document."), 5);
+  assert.equal(countNonOverlapping(source, 'document.addEventListener("keydown"'), 2);
+  assert.equal(countNonOverlapping(source, 'document.removeEventListener("keydown"'), 2);
   assert.equal(countNonOverlapping(source, 'document.querySelector("#recovery")'), 1);
-  assert.equal(countNonOverlapping(source, "window."), 0);
+  assert.equal(countNonOverlapping(source, "window."), 2);
+  assert.equal(countNonOverlapping(source, 'window.addEventListener("blur"'), 1);
+  assert.equal(countNonOverlapping(source, 'window.removeEventListener("blur"'), 1);
   assert.equal(countNonOverlapping(source, "useState"), 0);
   assert.equal(countNonOverlapping(source, "useMemo"), 0);
   assert.equal(countNonOverlapping(source, "localStorage"), 0);
@@ -258,7 +264,7 @@ function loadActiveOpacityInput() {
   return input;
 }
 
-function renderInspectorSource(sourceText, inspectorReadModel) {
+function renderInspectorSource(sourceText, inspectorReadModel, props = {}) {
   const { transformSync } = requireFromMocks("esbuild");
   const React = requireFromMocks("react");
   const { renderToStaticMarkup } = requireFromMocks("react-dom/server");
@@ -279,6 +285,7 @@ function renderInspectorSource(sourceText, inspectorReadModel) {
     React.createElement(loaded.exports.InspectorCandidate, {
       mode: undefined,
       inspectorReadModel,
+      ...props,
     }),
   );
 }
@@ -1002,6 +1009,39 @@ test("projects one exact active Opacity amount control and preserves absent outp
   assert.match(activeHtml, /disabled=""/);
   assert.match(activeHtml, />72%<\/output>/);
   assert.doesNotMatch(activeHtml, /AUTO ON|AUTO OFF|onpointer|onkeydown/i);
+
+  const interactiveHtml = renderInspectorSource(source, activeOutput, {
+    onEffectParamGesture: () => {},
+  });
+  assert.match(interactiveHtml, /aria-label="Amount。無限目盛を左右dragして変更"/);
+  assert.doesNotMatch(interactiveHtml, /aria-readonly|disabled=/);
+});
+
+test("changes product gesture presentation only after private send succeeds", async () => {
+  const source = await readFile(abs(CURRENT_INSPECTOR_SOURCE), "utf8");
+  const assertOrdered = (before, after) => {
+    const beforeIndex = source.indexOf(before);
+    const afterIndex = source.indexOf(after, beforeIndex + before.length);
+    assert.notEqual(beforeIndex, -1, `missing ${before}`);
+    assert.notEqual(afterIndex, -1, `missing ${after}`);
+    assert.ok(beforeIndex < afterIndex, `${before} must precede ${after}`);
+  };
+  assertOrdered(
+    'emitProductGesture("start", param, value);',
+    "productScrubSessionRef.current = session;",
+  );
+  assertOrdered(
+    'emitProductGesture("update", param, value);',
+    "session.value = value;",
+  );
+  assertOrdered(
+    'onEffectParamGesture({ phase: "cancel", paramId: param.id });',
+    "productScrubSessionRef.current = null;",
+  );
+  assertOrdered(
+    'emitProductGesture("commit", param, session.value);',
+    "productScrubSessionRef.current = null;",
+  );
 });
 
 test("rejects ambiguous or mismatched active Effect Use projections", () => {
@@ -1090,14 +1130,19 @@ test("validates Inspector post-promotion provenance as an append-only chain", as
   );
   assert.doesNotThrow(() =>
     validateInspectorPostPromotionChanges(provenance, currentInspectorSha256));
-  assert.equal(provenance.inspectorPostPromotionChanges.length, 3);
+  assert.equal(provenance.inspectorPostPromotionChanges.length, 4);
   assert.deepEqual(provenance.inspectorPostPromotionChanges.at(-1), {
-    task: "CU-205P",
+    task: "CU-205W-A1",
     file: INSPECTOR_POST_PROMOTION_FILE,
-    reason: CU205P_INSPECTOR_REASON,
-    fixedSourceSha256: CU205P_INSPECTOR_FIXED_SHA256,
+    reason: "VS-2 active amount gesture local presentation seam",
+    fixedSourceSha256: CU205P_INSPECTOR_CURRENT_SHA256,
     currentSha256: currentInspectorSha256,
   });
+  assert.deepEqual(provenance.privateRuntimeSources, [{
+    task: "CU-205W-A1",
+    file: CURRENT_INSPECTOR_HOST_CODEC,
+    owner: "private Inspector typed gesture transport",
+  }]);
 
   const index0 = provenance.inspectorPostPromotionChanges[0];
   const syntheticSha = hashBytes(Buffer.from("cu-0a08itp-inspector-chain-next"));

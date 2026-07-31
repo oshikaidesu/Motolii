@@ -70,6 +70,13 @@
       }
     ]
   },
+  "privateRuntimeSources": [
+    {
+      "task": "CU-205W-A1",
+      "file": "ui/motolii-web/src/host/inspectorHostCodec.js",
+      "owner": "private Inspector typed gesture transport"
+    }
+  ],
   "migrations": [
     {
       "type": "fixed-source-transfer",
@@ -234,6 +241,13 @@
       "reason": "VS-2 active Effect Inspector read-only control projection",
       "fixedSourceSha256": "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0",
       "currentSha256": "a1af604c78113f4df0538c3045b19d51c1d3fc8c6740305abc47b7e8a2d10f37"
+    },
+    {
+      "task": "CU-205W-A1",
+      "file": "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
+      "reason": "VS-2 active amount gesture local presentation seam",
+      "fixedSourceSha256": "a1af604c78113f4df0538c3045b19d51c1d3fc8c6740305abc47b7e8a2d10f37",
+      "currentSha256": "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e"
     }
   ]
 }
