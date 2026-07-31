@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { decodeBrowserCatalog } from "../../../ui/motolii-web/src/read-model/browserCatalogDecoder.js";
+import { validatePostPromotionChanges } from "../../../ui/motolii-web/guard-tests/browser-post-promotion-provenance.mjs";
 
 const guardDir = dirname(fileURLToPath(import.meta.url));
 const mocksUiRoot = join(guardDir, "..");
@@ -13,20 +14,17 @@ const repoRoot = join(mocksUiRoot, "..", "..");
 const PARTS_PATH = join(mocksUiRoot, "fixtures/browser-catalog-parts.json");
 const DECODER_PATH = join(repoRoot, "ui/motolii-web/src/read-model/browserCatalogDecoder.js");
 const INDEX_PATH = join(repoRoot, "ui/motolii-web/src/index.js");
+const CURRENT_BROWSER_SOURCE = "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx";
 
 const AUTHORITY_SHA256 = {
   "ui/motolii-web/src/index.js":
     "0f8e68a80ce7ce07c0ae286e5e1fde9a9dde0962996fe2fed29a7a783442503c",
   "docs/mocks-ui/package.json":
     "f0272ac3b744463a5af28e24c843205b43d98c5c4b4f5c6cf51c80c651013f38",
-  "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx":
-    "88a595c4df18da9180bd5fd23486d3006b473a02bf0222650f9ab6d4ffc13e20",
   "ui/motolii-web/src/candidates/discovery-browser-candidate.css":
     "1dcb6afc3c16907366f6d73ed7cfb1b04c8cea872d169e959ead49b6c6cedccd",
   "ui/motolii-web/src/patterns/DiscoveryBrowser.jsx":
     "1d996ad66dba3ff7fb36cf811ce8d22faec1fee271a2dd5349d953a7cf89a2ea",
-  "ui/motolii-web/source-provenance.json":
-    "b29e9dfaa5616945768a0eec8b7036e07d1e6082f64dda31b6bfb2b8b3f7d289",
 };
 
 const FORBIDDEN_KEYS = [
@@ -92,6 +90,10 @@ function selectStaleBrowserDecoderProseLines(text) {
 function sha256File(relPath) {
   const abs = join(repoRoot, relPath);
   return createHash("sha256").update(readFileSync(abs)).digest("hex");
+}
+
+function hashBytes(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 function loadFixture(overrides = {}) {
@@ -292,6 +294,26 @@ test("React source bytes unchanged", () => {
   }
   const prov = readFileSync(join(repoRoot, "ui/motolii-web/source-provenance.json"), "utf8");
   assert.match(prov, /56c318edcddab7cf95d263cc2f7dd2b4e6791134/);
+
+  const provenance = JSON.parse(prov);
+  const currentBrowserSha256 = hashBytes(readFileSync(join(repoRoot, CURRENT_BROWSER_SOURCE)));
+  assert.doesNotThrow(() =>
+    validatePostPromotionChanges(provenance, currentBrowserSha256),
+  );
+
+  const tamperedChain = structuredClone(provenance.postPromotionChanges);
+  const last = tamperedChain.at(-1);
+  tamperedChain[tamperedChain.length - 1] = {
+    ...last,
+    currentSha256: "0".repeat(64),
+  };
+  assert.throws(() =>
+    validatePostPromotionChanges(
+      { ...provenance, postPromotionChanges: tamperedChain },
+      currentBrowserSha256,
+    ),
+  );
+  assert.throws(() => validatePostPromotionChanges(provenance));
 });
 
 test("B1 catalog_revision variants", () => {

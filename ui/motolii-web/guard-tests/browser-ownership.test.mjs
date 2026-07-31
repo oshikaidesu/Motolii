@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import test from "node:test";
+import { validatePostPromotionChanges } from "./browser-post-promotion-provenance.mjs";
 
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PRODUCT_DIR = path.resolve(TEST_DIR, "..");
@@ -17,6 +18,7 @@ const REPO_DIR = execFileSync("git", ["rev-parse", "--show-toplevel"], {
 const DOCS_MOCKS_DIR = path.resolve(REPO_DIR, "docs/mocks-ui");
 const DOCS_MOCKS_PACKAGE = path.join(DOCS_MOCKS_DIR, "package.json");
 const PRODUCT_PACKAGE = path.join(PRODUCT_DIR, "package.json");
+const OWNERSHIP_TEST_SOURCE = readFileSync(fileURLToPath(import.meta.url), "utf8");
 
 const requireFromMocks = createRequire(DOCS_MOCKS_PACKAGE);
 const { parse } = requireFromMocks("@babel/parser");
@@ -142,87 +144,20 @@ function assertInspectorDomTokenCounts(source) {
   assert.equal(countNonOverlapping(source, "fetch("), 0);
 }
 
-function validatePostPromotionChanges(provenance, currentComponentSha256) {
-  const changes = provenance.postPromotionChanges;
-  if (changes === undefined) {
-    if (currentComponentSha256 !== FIXED_BROWSER_COMPONENT_SHA256) {
-      throw new Error("component bytes differ from fixed commit without postPromotionChanges");
-    }
-    return;
-  }
-  if (!Array.isArray(changes)) {
-    throw new Error("postPromotionChanges must be an array");
-  }
-  if (changes.length < 1) {
-    throw new Error("postPromotionChanges must contain at least one entry");
-  }
-  for (const entry of changes) {
-    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
-      throw new Error("postPromotionChanges entry must be an object");
-    }
-    const keys = Object.keys(entry);
-    if (keys.length !== POST_PROMOTION_ENTRY_KEYS.length) {
-      throw new Error("postPromotionChanges entry has wrong key count");
-    }
-    for (const key of POST_PROMOTION_ENTRY_KEYS) {
-      if (!Object.hasOwn(entry, key)) {
-        throw new Error(`postPromotionChanges entry missing key ${key}`);
-      }
-    }
-    for (const key of keys) {
-      if (!POST_PROMOTION_ENTRY_KEYS.includes(key)) {
-        throw new Error(`postPromotionChanges entry has extra key ${key}`);
-      }
-    }
-  }
-  const index0 = changes[0];
-  if (index0.task !== POST_PROMOTION_TASK) {
-    throw new Error("postPromotionChanges task literal mismatch");
-  }
-  if (index0.file !== POST_PROMOTION_FILE) {
-    throw new Error("postPromotionChanges file literal mismatch");
-  }
-  if (index0.reason !== POST_PROMOTION_REASON) {
-    throw new Error("postPromotionChanges reason literal mismatch");
-  }
-  if (index0.fixedSourceSha256 !== FIXED_BROWSER_COMPONENT_SHA256) {
-    throw new Error("postPromotionChanges fixedSourceSha256 mismatch");
-  }
-  if (index0.currentSha256 !== POST_PROMOTION_INDEX0_CURRENT_SHA256) {
-    throw new Error("postPromotionChanges index 0 currentSha256 mismatch");
-  }
-  const index0File = index0.file;
-  for (const entry of changes) {
-    if (entry.file !== index0File) {
-      throw new Error("postPromotionChanges file must match index 0");
-    }
-  }
-  for (let i = 1; i < changes.length; i += 1) {
-    const entry = changes[i];
-    if (typeof entry.task !== "string" || entry.task.length === 0) {
-      throw new Error("postPromotionChanges task must be non-empty string");
-    }
-    if (typeof entry.reason !== "string" || entry.reason.length === 0) {
-      throw new Error("postPromotionChanges reason must be non-empty string");
-    }
-  }
-  const seenTasks = new Set();
-  for (const entry of changes) {
-    if (seenTasks.has(entry.task)) {
-      throw new Error("postPromotionChanges task must be unique");
-    }
-    seenTasks.add(entry.task);
-  }
-  for (let i = 1; i < changes.length; i += 1) {
-    if (changes[i].fixedSourceSha256 !== changes[i - 1].currentSha256) {
-      throw new Error("postPromotionChanges hash chain break");
-    }
-  }
-  const lastEntry = changes[changes.length - 1];
-  if (lastEntry.currentSha256 !== currentComponentSha256) {
-    throw new Error("postPromotionChanges currentSha256 mismatch");
-  }
-}
+test("guard imports a shared Browser post-promotion validator and does not redefine it", () => {
+  const importCount = (
+    OWNERSHIP_TEST_SOURCE.match(
+      /from\s+["']\.\/browser-post-promotion-provenance\.mjs["']/g,
+    ) ?? []
+  ).length;
+  assert.equal(importCount, 1, "validatePostPromotionChanges should be imported exactly once");
+  const localDefinitions = (
+    OWNERSHIP_TEST_SOURCE.match(
+      /\bfunction\s+validatePostPromotionChanges\s*\(/g,
+    ) ?? []
+  ).length;
+  assert.equal(localDefinitions, 0, "validatePostPromotionChanges must not be locally redefined");
+});
 
 function validateInspectorPostPromotionChanges(provenance, currentComponentSha256) {
   const changes = provenance.inspectorPostPromotionChanges;
@@ -1746,10 +1681,13 @@ test("rejects old source-path ownership and legacy/archive/raw-import closure fr
   assert.equal(existsSync(abs("docs/mocks-ui/src/candidates/discovery-browser-candidate.css")), false);
 
   for (const runtimeModule of PRODUCT_RUNTIME_MODULES) {
-    validateProductRuntimeSource(
-      abs(runtimeModule),
-      await readFile(abs(runtimeModule), "utf8"),
+    const candidate = await readFile(abs(runtimeModule), "utf8");
+    assert.equal(
+      candidate.includes("browser-post-promotion-provenance"),
+      false,
+      `${runtimeModule} must not import browser-post-promotion-provenance`,
     );
+    validateProductRuntimeSource(abs(runtimeModule), candidate);
   }
 
   // 逆例は重複束縛のparse失敗ではなくvalidatorのimport境界拒否で落とす
