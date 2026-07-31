@@ -413,3 +413,4 @@
 | [2026-07-31-cu-0b02cv-private-carry-final-disposition.md](2026-07-31-cu-0b02cv-private-carry-final-disposition.md) | CU-0B02C-V component-private carry最終処分 |
 | [2026-07-31-cu-203-feedback-source-ownership-split-decision.md](2026-07-31-cu-203-feedback-source-ownership-split-decision.md) | CU-203 共通feedback source / ownership分割決定 |
 | [2026-07-31-cu-204-staged-diagnostic-projection-split-decision.md](2026-07-31-cu-204-staged-diagnostic-projection-split-decision.md) | CU-204 段階診断投影 S/A/P分割決定 |
+| [2026-07-31-cu-204a-diagnostic-projection-adapter-implementation-decision.md](2026-07-31-cu-204a-diagnostic-projection-adapter-implementation-decision.md) | CU-204A 純粋段階診断投影adapter実装決定 |

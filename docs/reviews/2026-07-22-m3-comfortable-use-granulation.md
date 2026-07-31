@@ -340,7 +340,7 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-203P | `PRODUCT / DONE` | feedback sourceをproduct ownerへ直接移管 | CU-203M | byte固定、consumer反転、copy 0、provenance | CU-204の診断投影を束ねたくなる |
 | CU-204 | `PRODUCT / SPLIT` | U2c-5 Brief/Context/Inspect/Assistive投影 | CU-203P、U2c-4 | [CU-204S](2026-07-31-cu-204-staged-diagnostic-projection-split-decision.md)でS/A/Pへ分割 | diagnosticからDocument直接mutationが必要 |
 | CU-204S | `SPEC / DONE` | 5診断、copy、4密度、owner、surfaceを固定 | CU-203P、U2c-4 | candidate空時callback 0、Inspector再利用、A/P境界 | 新reason/Intentを作りたくなる |
-| CU-204A | `CORE / DO` | Envelope→4密度の純粋typed projection | CU-204S | 5×4、identity/order一致、serde/toolkit 0 | product wire/componentを束ねたくなる |
+| CU-204A | `CORE / DONE` | Envelope→4密度の純粋typed projection | CU-204S | 5×4、identity/order一致、serde/toolkit/callback 0、3+5 test、clippy | product wire/componentを束ねたくなる |
 | CU-204P | `PRODUCT / WAIT` | 既存Inspector Host→Feedback通常接続 | CU-204A | exact private codec、Transient、candidate空時action 0 | diagnostic routeや別surfaceで代用したくなる |
 | CU-205 | `PRODUCT / WAIT` | U4a-2自動Inspectorとnonblocking preview | CU-202/204、U1b | 100 slider updates、latest preview、1 gesture=1 Undo、stale拒否 | custom plugin panelへ逸脱 |
 | CU-206 | `PRODUCT / WAIT` | U4b keyframe/区間Easingを製品接続 | CU-205、native Easing core | drag write 0/release 1/Esc 0、非対象curve不変 | key構造やthreshold変更が必要 |

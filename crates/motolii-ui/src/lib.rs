@@ -7,6 +7,7 @@ mod browser_host;
 mod browser_host_runtime;
 mod command_registry;
 mod diagnostic;
+mod diagnostic_projection;
 mod display_slot;
 mod document_command_request;
 mod document_edit_runtime;
