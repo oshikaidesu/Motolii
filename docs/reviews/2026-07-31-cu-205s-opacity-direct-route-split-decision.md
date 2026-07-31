@@ -9,7 +9,8 @@
 `CU-205`を次の正常系4粒とE2Eへ分割する。
 
 1. `CU-205B PRODUCT-ASSET`: first-party `core.filter.opacity`を既存Browser
-   `PluginCard`へtyped catalog projectionで接続する
+   `PluginCard`へtyped catalog projectionで接続する。source consumer `CU-205B1`と
+   shipped Host/bundle `CU-205B2`へ分ける
 2. `CU-205T PRODUCT`: Browserのtyped attach intentを、現在のprimary layerに対する
    既存`DocumentWriter::prepare_create_effect`とjournal-first D2 routeへ接続する
 3. `CU-205P PRODUCT`: 選択中Effect Useの`NodeDesc` / `ParamDef`を既存
@@ -23,7 +24,7 @@
 `CU-205`親と`U4a-2`は、正常系と既存のinvalid/read-only共通診断表示が両方閉じるまで
 `SPLIT / WAIT`とする。到達不能な診断をfixtureやunknown command注入で偽装しない。
 
-実装順は`CU-205B → CU-205T → CU-205P → CU-205W → CU-205E`で固定する。
+実装順は`CU-205B1 → CU-205B2 → CU-205T → CU-205P → CU-205W → CU-205E`で固定する。
 presentation、Document attach、Inspector projection、gesture write、E2Eを一粒へ束ねない。
 
 ## 2. 既存契約接続票
@@ -35,7 +36,7 @@ presentation、Document attach、Inspector projection、gesture write、E2Eを�
 | `OWNER` | Effect Definition / Use / parameter値はDocument。primary layerとactive Effect UseはHost Transient。Browser / Inspectorのhover・focus・開閉はlocal presentation。first-party catalog projectionはDocument外Host read model |
 | `WRITE ROUTE` | Browser typed intent→Host coordinator→current primary検証→`prepare_create_effect`→既存journal-first D2→publish。parameterは既存`SetProperty(EffectParam)` routeへ入り、ReactはDocument writerを持たない |
 | `GAP` | first-party catalogからEffects Browserへの通常projection、attach intent、active Effect Use投影、生成control、preview gesture接続が無い。現行Browser HostはRectangle 1件、Inspector Hostは`nodes: []` |
-| `RESOLUTION ROUTE` | 既存`PluginCard`、CU-G09 private catalog shape、first-party catalog、effect prepare、parameter control、Inspector Hostを`REUSE`し、B/T/P/W/Eへ`REDUCE`する |
+| `RESOLUTION ROUTE` | 既存`PluginCard`、CU-G09 private catalog shape、first-party catalog、effect prepare、parameter control、Inspector Hostを`REUSE`し、B1/B2/T/P/W/Eへ`REDUCE`する |
 | `DISPOSITION` | 正常系は`PASS`。到達可能sourceの無い`CU-204P`だけを`WAIT`に残す |
 
 ## 3. 実在sourceと固定値
@@ -145,7 +146,25 @@ threshold/golden変更を拒否する。
 既存`PluginCard`を捨てた縮約leaf、公開catalog/plugin契約の新設、未決metadataの捏造、
 Document/Undo ownerのReact移動、通常route以外だけの成立が必要なら停止する。
 
-CU-205Bはcard表示とtyped sourceだけを所有し、attach、D2、Inspector、previewを実装しない。
+`CU-205B1`はproduct Web sourceだけを所有する。
+
+- `browserHostCodec.js`でstrict catalog snapshotを既存`browserCatalogDecoder`へ渡す
+- `host/main.jsx`からdecode済みcatalogを`DiscoveryBrowserCandidate`へ渡す
+- `CandidatePluginBrowser`はcatalog入力がある通常Hostだけで既存`PluginCard`を
+  projected item consumerにし、入力なしのmock/standalone 3 cardを変更しない
+- Host fixtureによるcodec/component/ownership試験を追加する
+- generated-host、Rust、Document、intent、CSS、visual oracleを変更しない
+
+`CU-205B2`はshipped Host接続だけを所有する。
+
+- Rust `BrowserHostSession`へexact private first-party snapshotを追加する
+- `opacity_contract()`を直接複製せず`first_party_catalog()`の登録済みcontractを読む
+- Host bundleを正規buildで再生成し、manifestとRust `include_bytes!`を新hashへ接続する
+- 通常製品windowでOpacity cardが見えることをshipped bundleから確認する
+- Web source意味、React DOM/CSS、intent、Document、selection、Undoを変更しない
+
+CU-205B1だけを通常製品接続の完成と数えない。B1/B2が揃って親CU-205Bを`DONE`とする。
+CU-205B全体はcard表示とtyped sourceだけを所有し、attach、D2、Inspector、previewを実装しない。
 
 ## 5. CU-205T attach
 
