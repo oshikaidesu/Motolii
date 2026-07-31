@@ -1,6 +1,7 @@
 import { StrictMode, useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.jsx";
+import "./tokens/accepted-route-product-tokens.css";
 import { DiscoveryBrowserCandidate, EasingTriggerCandidate } from "@motolii/motolii-web";
 import { EasingGraphCandidate } from "./candidates/EasingGraphCandidate.jsx";
 import { GraphViewCandidate } from "./candidates/GraphViewCandidate.jsx";
@@ -125,6 +126,7 @@ export const screenRegistry = {
     Component: LegacyHostBoundaryScreen,
     props: {
       fixture: "plugin-browser-candidate",
+      productTokenConsumer: true,
       BrowserComponent: currentRouteCapture
         ? DiscoveryBrowserCandidateWithDevelopmentProjection
         : DiscoveryBrowserCandidate,
@@ -149,6 +151,7 @@ export const screenRegistry = {
   },
 };
 
+document.documentElement.setAttribute("data-motolii-theme", "motolii-dark");
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <App registry={screenRegistry} />
