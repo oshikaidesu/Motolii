@@ -113,7 +113,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 ## 現在の並列レーン
 
-現在sliceは**VS-2 parameter editing**で、正常系`CU-205E`まで`DONE`。`CU-204P`は実在通常source待ちを維持し、次はその到達可能sourceと表示寿命を再監査する。PRODUCT-ASSET laneは意味・所有境界を優先して
+現在sliceは**VS-2 parameter editing**で、正常系`CU-205E`まで`DONE`。`CU-204P`は通常source 0の再確認後、新source成立まで再監査・実装を反復しない。次の独立laneはdocs-only `CU-201S`のU3b責任分割である。PRODUCT-ASSET laneは意味・所有境界を優先して
 1チケットずつ進めるが、この直列性を他の独立contract／repair／authoring laneへ波及させない。
 現在の全lane、変更path、STOP、Human Response Frontierは
 [並列レーン着手地図](reviews/2026-07-25-parallel-lane-readiness-map.md)を正とする。
@@ -246,7 +246,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | PRODUCT | CU-204 | M3 / VS-2 / U2c-5 staged diagnostic projection | `SPLIT` | [CU-204S分割決定](reviews/2026-07-31-cu-204-staged-diagnostic-projection-split-decision.md) | S → A → P | 5診断の4密度純粋投影と既存Inspector Host接続を再結合しない |
 | PRODUCT | CU-204S | M3 / VS-2 / SPEC / diagnostic projection split | `DONE` | [CU-204S分割決定](reviews/2026-07-31-cu-204-staged-diagnostic-projection-split-decision.md) | 現行5 reason、copy、4密度、Host Transient owner、Inspector surface、candidate空時callback 0を固定 | 次はCU-204Aだけ |
 | CORE | CU-204A | M3 / VS-2 / diagnostic projection adapter | `DONE` | [CU-204A実装決定](reviews/2026-07-31-cu-204a-diagnostic-projection-adapter-implementation-decision.md) | 5 reason × 4 density、typed identity/order不変、toolkit/serde/callback 0、3+5 test、clippy | CU-204Pのwire/component接続を束ねない |
-| PRODUCT | CU-204P | M3 / VS-2 / diagnostic Inspector Host connection | `WAIT` | [CU-204S分割決定](reviews/2026-07-31-cu-204-staged-diagnostic-projection-split-decision.md) | CU-204A | 既存Inspector private bridge/decoder/Feedbackを再利用。別surface 0 |
+| PRODUCT | CU-204P | M3 / VS-2 / diagnostic Inspector Host connection | `WAIT` | [CU-204S分割決定](reviews/2026-07-31-cu-204-staged-diagnostic-projection-split-decision.md)、[normal source再確認](reviews/2026-08-01-cu-204p-normal-source-readiness-recheck.md) | CU-204A + 実在する通常製品source | 5 reasonのproduction call 0を再確認。同じadapter/test-only/diagnostic-only injectionを再提出せず、source成立後に既存Inspector private bridge/decoder/Feedbackを再利用 |
 | PRODUCT | CU-205 | M3 / VS-2 / U4a-2 generated parameter panel | `SPLIT` | [CU-205S分割決定](reviews/2026-07-31-cu-205s-opacity-direct-route-split-decision.md) | CU-205B1G → B1I → B2 → T → P → W → E、invalid/read-onlyはCU-204P | 正常系と共通診断を再結合せず、両方が閉じるまで親DONEにしない |
 | PRODUCT-ASSET | CU-205S | M3 / VS-2 / SPEC / first-party Opacity Direct route split | `DONE` | [CU-205S分割決定](reviews/2026-07-31-cu-205s-opacity-direct-route-split-decision.md) | 実在Opacity contract、既存PluginCard、prepare_create_effect、parameter control、single writerを再照合 | code変更0。B1G/B1I/B2/B/T/P/W/Eは全て完了 |
 | PRODUCT-ASSET | CU-205B | M3 / VS-2 / Browser first-party Opacity projection | `DONE` | [CU-205S分割決定](reviews/2026-07-31-cu-205s-opacity-direct-route-split-decision.md) | CU-205B1G → CU-205B1I → CU-205B2 all DONE | provenance guard、source consumer、Rust Host/shipped bundleを分離して完了 |
@@ -579,7 +579,7 @@ U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除
 | resource設定を出す | G0-2 + G0-8 + U0b + K1a → U0f。設定はUser settings、pressure実測値はTransient |
 | 重いpreviewを追従させる | U1b + U1c + U5 + K1d → U1g。project fps/audio clockを変えず表示frameだけ落とす |
 
-現在の短い運用判断は、**`CU-108`で通常製品spineとVS-1を`DONE`、commit `eb4e6658`で`U4a-1` / `CU-202`、commit `782ffa3b`で`CU-0B02R`、`CU-0B02C-P`でprimitive direct promotionを`DONE`とした。`CU-203M / P`でfeedback source確立とproduct直接移管、`CU-0B02C-V`でprivate carry最終処分を`DONE`とした。`CU-204S`でS/A/Pを固定し、`CU-204A`で5 reason × 4 densityのprivate純粋投影を`DONE`とした。`CU-205S`でfirst-party Opacity正常系をB1G/B1I/B2/T/P/W/Eへ固定し、commit `a29ed709`で`CU-205T`、commit `c0c1c741`で`CU-205P`、rolling `ca7f105a`〜`18517062`で`CU-205W`、`581876e0` / `7901e51e`を含む通常Mac製品windowで`CU-205E`を`DONE`とした。次は`CU-204P`の到達可能sourceと表示寿命を再監査する。親`CU-205` / `U4a-2`は`SPLIT / WAIT`。Motolii Studio Previewは用語正本上未実装のままで、`preview-runnable`全6条件と文書化済み起動コマンドの現行証拠は未再締結。**
+現在の短い運用判断は、**`CU-108`で通常製品spineとVS-1を`DONE`、commit `eb4e6658`で`U4a-1` / `CU-202`、commit `782ffa3b`で`CU-0B02R`、`CU-0B02C-P`でprimitive direct promotionを`DONE`とした。`CU-203M / P`でfeedback source確立とproduct直接移管、`CU-0B02C-V`でprivate carry最終処分を`DONE`とした。`CU-204S`でS/A/Pを固定し、`CU-204A`で5 reason × 4 densityのprivate純粋投影を`DONE`とした。`CU-205S`でfirst-party Opacity正常系をB1G/B1I/B2/T/P/W/Eへ固定し、commit `a29ed709`で`CU-205T`、commit `c0c1c741`で`CU-205P`、rolling `ca7f105a`〜`18517062`で`CU-205W`、`581876e0` / `7901e51e`を含む通常Mac製品windowで`CU-205E`を`DONE`とした。`CU-204P`は通常source 0の再確認後、新source成立まで再監査・実装を反復しない。次の独立laneはdocs-only `CU-201S`。親`CU-205` / `U4a-2`は`SPLIT / WAIT`。Motolii Studio Previewは用語正本上未実装のままで、`preview-runnable`全6条件と文書化済み起動コマンドの現行証拠は未再締結。**
 
 ## 更新規則
 

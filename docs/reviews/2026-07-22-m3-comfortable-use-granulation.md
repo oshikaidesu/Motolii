@@ -341,7 +341,7 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-204 | `PRODUCT / SPLIT` | U2c-5 Brief/Context/Inspect/Assistive投影 | CU-203P、U2c-4 | [CU-204S](2026-07-31-cu-204-staged-diagnostic-projection-split-decision.md)でS/A/Pへ分割 | diagnosticからDocument直接mutationが必要 |
 | CU-204S | `SPEC / DONE` | 5診断、copy、4密度、owner、surfaceを固定 | CU-203P、U2c-4 | candidate空時callback 0、Inspector再利用、A/P境界 | 新reason/Intentを作りたくなる |
 | CU-204A | `CORE / DONE` | Envelope→4密度の純粋typed projection | CU-204S | 5×4、identity/order一致、serde/toolkit/callback 0、3+5 test、clippy | product wire/componentを束ねたくなる |
-| CU-204P | `PRODUCT / WAIT` | 既存Inspector Host→Feedback通常接続 | CU-204A | exact private codec、Transient、candidate空時action 0 | diagnostic routeや別surfaceで代用したくなる |
+| CU-204P | `PRODUCT / WAIT` | 既存Inspector Host→Feedback通常接続 | CU-204A | [2026-08-01再確認](2026-08-01-cu-204p-normal-source-readiness-recheck.md)で5 reasonのproduction source call 0、Host slot/codec/consumer 0を確認。実在operation成立後だけ再開 | diagnostic routeや別surfaceで代用したくなる |
 | CU-205 | `PRODUCT / SPLIT` | U4a-2自動Inspectorとnonblocking preview | CU-202/204、U1b | 正常系はCU-205B1G/B1I/B2/T/P/W/Eへ分割。100 slider updates、latest preview、1 gesture=1 Undo、stale拒否。invalid/read-only診断はCU-204P待ち | custom plugin panelへ逸脱、正常系だけで親DONE |
 | CU-205B | `PRODUCT-ASSET / DONE` | first-party Opacityを既存Effects Browserへtyped投影 | CU-202、CU-G09、CU-0B02C-P | B1G provenance guard→B1I source consumer→B2 shipped Host/bundle。既存PluginCard、exact `core.filter.opacity`、single click write 0、二重copy 0 | static card/label/thumbnailからidentity推測 |
 | CU-205B1 | `PRODUCT-ASSET / DONE` | Web sourceのstrict catalog consumer | CU-205S | B1G provenance guard→B1I source/provenance。初回Spark/Grok REJECT差分は未採用 | source hash期待値を書換え、fixtureだけで親B DONE |
