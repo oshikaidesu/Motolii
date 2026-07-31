@@ -290,7 +290,7 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-0B02C | `PRODUCT / SPLIT` | 既存component stateを直接所有移管 | CU-0B02R | [CU-0B02C-S](2026-07-31-cu-0b02c-component-state-source-supply-decision.md)でC-S/C-P/C-Vへ分割 | 縮約再実装が必要 |
 | CU-0B02C-S | `SPEC / DONE` | fixed primitive sourceとtoken supply処分を固定 | CU-0B02R | 2 path / 2 hash、7 export、5 state、dependency 3 class | docs-onlyをC完了と読み替えたくなる |
 | CU-0B02C-P | `PRODUCT / DONE` | fixed primitive 2ファイルをproduct ownerへ直接移管 | CU-0B02C-S | 7 export、focus/hover/pressed/disabled/selected、copy 0、mock import 0、30 PNG byte同一 | 非color値を恒久tokenへ推測昇格したくなる |
-| CU-0B02C-V | `SPEC / DO` | component-private carryの最終処分 | CU-0B02C-P、CU-203P | 第二consumerで共通性を再審判 | CU-203P前に汎用tokenを発明したくなる |
+| CU-0B02C-V | `SPEC / DONE` | component-private carryの最終処分 | CU-0B02C-P、CU-203P | 第二consumerを値/意味ごとに再審判し、公開token追加0、全件component-private維持 | CU-203P前に汎用tokenを発明したくなる |
 | CU-0B02I | `SPEC / WAIT` | icon grid/stroke system採択 | CU-0B02T | inline SVG/Unicode混在をicon正本と誤認しない | source不在のまま実装したくなる |
 | CU-0B03H | `PRODUCT / DONE` | H1b offline bundle / closed Host callback / mountの最小契約を固定 | CU-0A09B、CU-0A08BTI | [実装決定](2026-07-29-cu-0b03h-browser-host-contract-offline-mount-decision.md)。built-in Browser 1面、network 0、fixture caller 0、公開plugin API 0 | — |
 | CU-0B03 | `PRODUCT / DONE` | H1b exact codecをnative Host inboxへ接続 | CU-0B03H | [実装決定](2026-07-29-cu-0b03-native-browser-host-codec-inbox-implementation-decision.md)。invalid/stale/duplicate/oversize拒否、callback内D2 0、bounded inbox、offline native WebView実caller | — |
@@ -338,7 +338,7 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-203S | `SPEC / DONE` | feedback source / owner / state matrix裁定 | CU-0B02C-P、U2c-1/U2c-4 | 9-state matrix、M/P境界、停止線 | codeや表示文言を同時決定したくなる |
 | CU-203M | `PRODUCT-ASSET / DONE` | mock側の独立feedback source確立 | CU-203S | fixed JSX/CSS、9-state matrix、guard 3、Playwright 4、30 PNG byte同一 | source不在のままproductへ作りたくなる |
 | CU-203P | `PRODUCT / DONE` | feedback sourceをproduct ownerへ直接移管 | CU-203M | byte固定、consumer反転、copy 0、provenance | CU-204の診断投影を束ねたくなる |
-| CU-204 | `PRODUCT / WAIT` | U2c-5 Brief/Context/Inspect/Assistive投影 | CU-203P、U2c-4 | reason/subject/facts一致、recovery通常Intent経由 | diagnosticからDocument直接mutationが必要 |
+| CU-204 | `PRODUCT / DO` | U2c-5 Brief/Context/Inspect/Assistive投影 | CU-203P、U2c-4 | reason/subject/facts一致、recovery通常Intent経由 | diagnosticからDocument直接mutationが必要 |
 | CU-205 | `PRODUCT / WAIT` | U4a-2自動Inspectorとnonblocking preview | CU-202/204、U1b | 100 slider updates、latest preview、1 gesture=1 Undo、stale拒否 | custom plugin panelへ逸脱 |
 | CU-206 | `PRODUCT / WAIT` | U4b keyframe/区間Easingを製品接続 | CU-205、native Easing core | drag write 0/release 1/Esc 0、非対象curve不変 | key構造やthreshold変更が必要 |
 | CU-207 | `PRODUCT / WAIT` | U4c Advanced意味検査とroundtrip | CU-205/204、D1l | open/close serialize不変、非既定意味badge、未実装pipeline偽装0 | 新公開Param APIが必要 |

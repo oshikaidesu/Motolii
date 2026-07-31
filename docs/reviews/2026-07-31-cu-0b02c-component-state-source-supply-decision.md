@@ -1,10 +1,10 @@
 # CU-0B02C component state source / supply裁定
 
 - 日付: 2026-07-31
-- 状態: **決定 / CU-0B02C-S DONE**
+- 状態: **決定 / CU-0B02C-S / P / V DONE**
 - 親: `CU-0B02C` **SPLIT**
 - 実装状態: `CU-0B02C-P` **PRODUCT-ASSET / DONE**
-- 次の一粒: `CU-203` **PRODUCT-ASSET / DO**
+- 次の一粒: `CU-204` **PRODUCT / DO**
 
 ## 1. 決定
 
@@ -22,7 +22,7 @@
 |---|---|---|
 | `CU-0B02C-S` | `SPEC / DONE` | source closure、state owner、mock supplierと非color値の処分を固定 |
 | `CU-0B02C-P` | `PRODUCT / DONE` | 2ファイルを`ui/motolii-web/src/primitives/`へ直接所有移管し、mockをproduct export consumerへ反転 |
-| `CU-0B02C-V` | `SPEC / WAIT` | `CU-203`の第二consumer成立後、component-private carryを共通tokenへ昇格するかcomponent内へ留めるか再審判 |
+| `CU-0B02C-V` | `SPEC / DONE` | `CU-203P`の第二consumer成立後、component-private carryを再審判し全件をcomponent内へ留める |
 
 `CU-0B02C-P`完了でcomponent state ownershipは閉じ、`CU-203`を解禁する。
 `CU-0B02C-V`は`U0e-3`親閉鎖前のraw color / spacing最終処分であり、`CU-203`の
@@ -137,3 +137,14 @@ mock supplier import + product re-exportだけへ反転、旧CSSを削除した�
 source inventory、token、publication guard、build、Browser 16件、panel layout 5件を通過した。
 reference harnessもprivate font overrideを保持し、generation
 `u0e2-02b795bf37b7-85c0fc529ab1`の30 PNGを旧generationとbyte一致させた。
+
+## 6. CU-0B02C-V最終処分
+
+[CU-0B02C-V最終処分](2026-07-31-cu-0b02cv-private-carry-final-disposition.md)で、
+primitiveと`CU-203P`のfeedback CSSを値ごとに再照合した。同じ`2 / 3 / 5 / 7 / 9px`が
+現れてもcontrol geometry、message geometry、marker size、paddingは同じ意味ownerではない。
+technical fontと`#ffffff30`には第二consumer自体が無い。
+
+したがってclass 2/3は全件をcomponent-privateのまま維持し、DTCG、generated token、
+package export、共通CSS custom propertyへ昇格する値を0件とした。code / CSS / token /
+visual変更は0で、次の一粒を`CU-204`へ進める。
