@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use wry::{Rect, WebView, WebViewBuilder};
 
 use crate::browser_host_runtime::product_asset_response;
+use crate::document_edit_runtime::SetEffectParamRequest;
 use crate::native_host_layout::LogicalRect;
 use crate::{map_parameter_control, HostParameterControl};
 
@@ -29,6 +30,23 @@ pub(crate) struct InspectorGestureTerminal {
     pub(crate) sequence: u64,
     pub(crate) identity: InspectorGestureIdentity,
     pub(crate) cause: InspectorGestureTerminalCause,
+}
+
+impl InspectorGestureTerminal {
+    pub(crate) fn into_set_effect_param_request(self) -> Option<SetEffectParamRequest> {
+        match self.cause {
+            InspectorGestureTerminalCause::Cancel => None,
+            InspectorGestureTerminalCause::Commit(value) => Some(SetEffectParamRequest::new(
+                self.identity.layer_id,
+                self.identity.effect_use_id,
+                self.identity.definition_id,
+                self.identity.plugin_id,
+                self.identity.effect_version,
+                self.identity.param_id,
+                value,
+            )),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -915,6 +933,35 @@ mod tests {
             message["value"] = serde_json::json!(value);
         }
         serde_json::to_string(&message).unwrap()
+    }
+
+    #[test]
+    fn terminal_conversion_preserves_exact_commit_and_drops_cancel() {
+        let (_, _, _, identity) = gesture_fixture();
+        let expected = SetEffectParamRequest::new(
+            identity.layer_id,
+            identity.effect_use_id,
+            identity.definition_id,
+            identity.plugin_id.clone(),
+            identity.effect_version,
+            identity.param_id.clone(),
+            0.41,
+        );
+        let commit = InspectorGestureTerminal {
+            session: 7,
+            sequence: 9,
+            identity: identity.clone(),
+            cause: InspectorGestureTerminalCause::Commit(0.41),
+        };
+        assert_eq!(commit.into_set_effect_param_request(), Some(expected));
+
+        let cancel = InspectorGestureTerminal {
+            session: 8,
+            sequence: 3,
+            identity,
+            cause: InspectorGestureTerminalCause::Cancel,
+        };
+        assert_eq!(cancel.into_set_effect_param_request(), None);
     }
 
     #[test]

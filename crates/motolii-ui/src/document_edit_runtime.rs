@@ -6,9 +6,10 @@ use std::sync::Arc;
 use motolii_core::{RationalTime, RationalTimeError};
 use motolii_doc::{
     Clip, ClipSource, Command, CommandError, Document, DocumentError, DocumentPluginError,
-    DocumentWriter, DraftDocParam, EffectDefinitionDraft, EffectId, ItemEnvelope, JournalEdit,
-    LayerId, LayerIdError, ParentLocator, PreparedPluginRecipe, ProjectError, ProjectSession,
-    SaveProjectOptions, StandardShape, TrackItem, UndoError, VectorContent, VectorRecipe,
+    DocumentWriter, DraftDocParam, EffectDefinitionDraft, EffectDefinitionId, EffectId,
+    ItemEnvelope, JournalEdit, LayerId, LayerIdError, ParentLocator, PreparedPluginRecipe,
+    ProjectError, ProjectSession, SaveProjectOptions, ScalarPropertyId, StandardShape, TrackItem,
+    UndoError, VectorContent, VectorRecipe,
 };
 use motolii_plugin::{PluginCatalog, PluginKind};
 
@@ -19,6 +20,7 @@ pub(crate) enum DocumentEditAction {
     Apply(DocumentCommandRequest),
     PlaceRectangle(PlaceRectangleRequest),
     AttachEffect(AttachEffectRequest),
+    SetEffectParam(SetEffectParamRequest),
     ReplacePrimary(LayerId),
     ClearPrimary,
     Undo,
@@ -31,6 +33,7 @@ impl DocumentEditAction {
             Self::Apply(_) => DocumentEditActionKind::Apply,
             Self::PlaceRectangle(_) => DocumentEditActionKind::PlaceRectangle,
             Self::AttachEffect(_) => DocumentEditActionKind::AttachEffect,
+            Self::SetEffectParam(_) => DocumentEditActionKind::SetEffectParam,
             Self::ReplacePrimary(_) => DocumentEditActionKind::ReplacePrimary,
             Self::ClearPrimary => DocumentEditActionKind::ClearPrimary,
             Self::Undo => DocumentEditActionKind::Undo,
@@ -44,6 +47,7 @@ pub(crate) enum DocumentEditActionKind {
     Apply,
     PlaceRectangle,
     AttachEffect,
+    SetEffectParam,
     ReplacePrimary,
     ClearPrimary,
     Undo,
@@ -64,6 +68,11 @@ impl DocumentEditQueue {
     pub(crate) fn push_attach_effect(&mut self, request: AttachEffectRequest) {
         self.pending
             .push_back(DocumentEditAction::AttachEffect(request));
+    }
+
+    pub(crate) fn push_set_effect_param(&mut self, request: SetEffectParamRequest) {
+        self.pending
+            .push_back(DocumentEditAction::SetEffectParam(request));
     }
 
     pub(crate) fn push_replace_primary(&mut self, target: LayerId) {
@@ -137,6 +146,39 @@ pub(crate) struct PlaceRectangleRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AttachEffectRequest {
     pub(crate) plugin_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct SetEffectParamRequest {
+    layer_id: LayerId,
+    effect_use_id: EffectId,
+    definition_id: EffectDefinitionId,
+    plugin_id: String,
+    effect_version: u32,
+    param_id: String,
+    value: f64,
+}
+
+impl SetEffectParamRequest {
+    pub(crate) fn new(
+        layer_id: LayerId,
+        effect_use_id: EffectId,
+        definition_id: EffectDefinitionId,
+        plugin_id: String,
+        effect_version: u32,
+        param_id: String,
+        value: f64,
+    ) -> Self {
+        Self {
+            layer_id,
+            effect_use_id,
+            definition_id,
+            plugin_id,
+            effect_version,
+            param_id,
+            value,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -365,6 +407,21 @@ impl DocumentEditRuntime {
                     Some(created_effect_use),
                 )
             }
+            DocumentEditAction::SetEffectParam(request) => {
+                let Some(command) = prepare_set_effect_param_command(&self.writer, &request) else {
+                    return Ok(None);
+                };
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
             DocumentEditAction::ReplacePrimary(target) => {
                 if self.writer.find_envelope(target).is_none() {
                     return Err(DocumentEditRuntimeError::SelectionTargetNotFound(target));
@@ -539,6 +596,48 @@ fn next_projection_generation(current: u64) -> Result<u64, DocumentEditRuntimeEr
     current
         .checked_add(1)
         .ok_or(DocumentEditRuntimeError::ProjectionGenerationExhausted)
+}
+
+fn prepare_set_effect_param_command(
+    writer: &DocumentWriter,
+    request: &SetEffectParamRequest,
+) -> Option<Command> {
+    if request.plugin_id != "core.filter.opacity"
+        || request.effect_version != 1
+        || request.param_id != "amount"
+        || !request.value.is_finite()
+        || !(0.0..=1.0).contains(&request.value)
+    {
+        return None;
+    }
+    let snapshot = writer.snapshot();
+    let effect_use = snapshot.find_effect_use(request.layer_id, request.effect_use_id)?;
+    if effect_use.definition_id != request.definition_id {
+        return None;
+    }
+    let definition = snapshot.effect_definition(effect_use.definition_id)?;
+    if definition.plugin_id != request.plugin_id
+        || definition.effect_version != request.effect_version
+        || definition.params.len() != 1
+    {
+        return None;
+    }
+    let old_value = definition.params.get("amount")?;
+    let motolii_doc::DocParam::Const(motolii_doc::DocValue::F64(old_f64)) = old_value else {
+        return None;
+    };
+    if !old_f64.is_finite() || !(0.0..=1.0).contains(old_f64) {
+        return None;
+    }
+    if *old_f64 == request.value {
+        return None;
+    }
+    Some(Command::SetProperty {
+        target: request.layer_id,
+        property: ScalarPropertyId::EffectParam(request.effect_use_id, request.param_id.clone()),
+        old_value: old_value.clone(),
+        new_value: motolii_doc::DocParam::const_f64(request.value),
+    })
 }
 
 fn prepare_attach_effect_command(
@@ -1241,6 +1340,157 @@ mod tests {
             serde_json::to_vec(&reopened.document).unwrap(),
             attached_json
         );
+    }
+
+    #[test]
+    fn set_effect_param_commits_once_replay_is_noop_and_undo_restores_live_value() {
+        let (document, _) = fixture();
+        let primary = fixture_layer(&document);
+        let (path, mut runtime) = open_runtime(document);
+        let journal = journal_path_for_document(&path);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_attach_effect(AttachEffectRequest {
+            plugin_id: "core.filter.opacity".into(),
+        });
+        let attached = runtime
+            .process_next(&mut queue, Some(primary), 0)
+            .unwrap()
+            .expect("opacity attach must publish");
+        let effect_use_id = attached.created_effect_use.expect("effect use");
+        let definition_id = attached
+            .snapshot
+            .find_effect_use(primary, effect_use_id)
+            .expect("attached effect")
+            .definition_id;
+        let request = SetEffectParamRequest::new(
+            primary,
+            effect_use_id,
+            definition_id,
+            "core.filter.opacity".into(),
+            1,
+            "amount".into(),
+            0.4,
+        );
+        queue.push_set_effect_param(request.clone());
+
+        let changed = runtime
+            .process_next(&mut queue, Some(primary), 1)
+            .unwrap()
+            .expect("changed release must publish once");
+        assert_eq!(changed.kind, DocumentEditActionKind::SetEffectParam);
+        assert_eq!(changed.revision, 2);
+        assert_eq!(changed.projection_generation, 2);
+        assert_eq!(runtime.history_lengths(), (2, 0));
+        assert_eq!(
+            changed
+                .snapshot
+                .effect_definition(definition_id)
+                .unwrap()
+                .params
+                .get("amount"),
+            Some(&motolii_doc::DocParam::const_f64(0.4))
+        );
+
+        let changed_json = serde_json::to_vec(&*changed.snapshot).unwrap();
+        let journal_size = fs::metadata(&journal).unwrap().len();
+        queue.push_set_effect_param(request);
+        assert!(runtime
+            .process_next(&mut queue, Some(primary), u64::MAX)
+            .unwrap()
+            .is_none());
+        assert_eq!(runtime.revision(), 2);
+        assert_eq!(runtime.history_lengths(), (2, 0));
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            changed_json
+        );
+        assert_eq!(fs::metadata(&journal).unwrap().len(), journal_size);
+
+        queue.push_undo();
+        let undone = runtime
+            .process_next(&mut queue, Some(primary), 2)
+            .unwrap()
+            .expect("one Undo must restore the live old value");
+        assert_eq!(undone.kind, DocumentEditActionKind::Undo);
+        assert_eq!(runtime.history_lengths(), (1, 1));
+        assert_eq!(
+            undone
+                .snapshot
+                .effect_definition(definition_id)
+                .unwrap()
+                .params
+                .get("amount"),
+            Some(&motolii_doc::DocParam::const_f64(1.0))
+        );
+    }
+
+    #[test]
+    fn set_effect_param_stale_or_invalid_requests_write_nothing() {
+        let (document, _) = fixture();
+        let primary = fixture_layer(&document);
+        let (path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_attach_effect(AttachEffectRequest {
+            plugin_id: "core.filter.opacity".into(),
+        });
+        let attached = runtime
+            .process_next(&mut queue, Some(primary), 0)
+            .unwrap()
+            .unwrap();
+        let effect_use_id = attached.created_effect_use.unwrap();
+        let definition_id = attached
+            .snapshot
+            .find_effect_use(primary, effect_use_id)
+            .unwrap()
+            .definition_id;
+        let initial_json = serde_json::to_vec(&*runtime.snapshot()).unwrap();
+        let initial_history = runtime.history_lengths();
+        let initial_revision = runtime.revision();
+        let journal = journal_path_for_document(&path);
+        let initial_journal_size = fs::metadata(&journal).unwrap().len();
+
+        for request in [
+            SetEffectParamRequest::new(
+                LayerId::from_raw(u64::MAX),
+                effect_use_id,
+                definition_id,
+                "core.filter.opacity".into(),
+                1,
+                "amount".into(),
+                0.3,
+            ),
+            SetEffectParamRequest::new(
+                primary,
+                effect_use_id,
+                definition_id,
+                "core.filter.opacity".into(),
+                2,
+                "amount".into(),
+                0.3,
+            ),
+            SetEffectParamRequest::new(
+                primary,
+                effect_use_id,
+                definition_id,
+                "core.filter.opacity".into(),
+                1,
+                "amount".into(),
+                f64::NAN,
+            ),
+        ] {
+            queue.push_set_effect_param(request);
+            assert!(runtime
+                .process_next(&mut queue, Some(primary), u64::MAX)
+                .unwrap()
+                .is_none());
+            assert_eq!(runtime.revision(), initial_revision);
+            assert_eq!(runtime.history_lengths(), initial_history);
+            assert_eq!(
+                serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+                initial_json
+            );
+            assert_eq!(fs::metadata(&journal).unwrap().len(), initial_journal_size);
+        }
     }
 
     #[test]
