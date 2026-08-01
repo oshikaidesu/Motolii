@@ -113,7 +113,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 ## 現在の並列レーン
 
-現在sliceは**VS-2 parameter editing**で、正常系`CU-205E`まで`DONE`。`CU-204P`は通常source 0の再確認後、新source成立まで再監査・実装を反復しない。次の独立laneはdocs-only `CU-201S`のU3b責任分割である。PRODUCT-ASSET laneは意味・所有境界を優先して
+現在sliceは**VS-2 parameter editing / timeline interval editing**で、正常系`CU-205E`まで`DONE`。`CU-204P`は通常source 0の再確認後、新source成立まで再監査・実装を反復しない。docs-only `CU-201S`でU3bを分割し、次DOは`CU-201M-S`だけである。PRODUCT-ASSET laneは意味・所有境界を優先して
 1チケットずつ進めるが、この直列性を他の独立contract／repair／authoring laneへ波及させない。
 現在の全lane、変更path、STOP、Human Response Frontierは
 [並列レーン着手地図](reviews/2026-07-25-parallel-lane-readiness-map.md)を正とする。
@@ -239,6 +239,16 @@ P0I #170 → P7a → P7b → P7c → P7U
 | PRODUCT-ASSET | CU-0B02C-S | M3 / VS-1 / SPEC / component state source and supply | `DONE` | [CU-0B02C-S裁定](reviews/2026-07-31-cu-0b02c-component-state-source-supply-decision.md) | fixed primitive 2 path / 2 hash、7 export、5 state、dependency 3 class | code変更0。C-PだけをDOへ送る |
 | PRODUCT-ASSET | CU-0B02C-P | M3 / VS-1 / component state direct promotion | `DONE` | [CU-0B02C-S裁定](reviews/2026-07-31-cu-0b02c-component-state-source-supply-decision.md) | product 2 path、7 export、mock re-export consumer、copy 0、5 state/visual不変、generation `ee3c1a2d44fd-ead41d4d6562` | CU-203S裁定を解禁し、CU-203P / CU-0B02C-Vまで完了 |
 | PRODUCT-ASSET | CU-0B02C-V | M3 / VS-1 / SPEC / private carry final disposition | `DONE` | [CU-0B02C-V最終処分](reviews/2026-07-31-cu-0b02cv-private-carry-final-disposition.md) | 2 CSS / 21 color inventoryを値と意味ごとに比較。公開token追加0、class 2/3全件component-private維持、code/visual変更0 | CU-204S分割後の次粒はCU-204A `DO`。数値一致を意味共通性と読まない |
+| CORE | CU-201 | M3 / VS-2 / U3b move trim snap | `SPLIT` | [CU-201S責任分割](reviews/2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | M-S → (M-C ∥ T-S) → T-C → N-S → P → R → E | Clip interval command 0のまま親名で実装orderを作らない。M-C/T-Cの共有owner編集は直列 |
+| PRODUCT-ASSET | CU-201S | M3 / VS-2 / SPEC / U3b responsibility split | `DONE` | [CU-201S責任分割](reviews/2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | CU-105R/U3a-1I projection/hit、CU-106P primary、single writerを再照合 | 次DOはCU-201M-Sだけ。command/TimeMap/snap意味を先取りしない |
+| PRODUCT-ASSET | CU-201M-S | M3 / VS-2 / SPEC / Clip move durable meaning | `DO` | [CU-201S責任分割](reviews/2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | start/lane/boundary/overlap/collision/ripple/inverse/rejectionをfixtureで決定 | UI drag都合から公開commandを決めない |
+| CORE | CU-201M-C | M3 / VS-2 / Clip move command and Writer prepare | `WAIT` | [CU-201S責任分割](reviews/2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | CU-201M-S | journal replay、1 Undo、失敗時Document不変。raw mutation 0 |
+| PRODUCT-ASSET | CU-201T-S | M3 / VS-2 / SPEC / Clip trim and TimeMap meaning | `WAIT` | [CU-201S責任分割](reviews/2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | CU-201M-S | in/out/source time/duration/boundary/inverse/rejectionを決定 |
+| CORE | CU-201T-C | M3 / VS-2 / Clip trim command and Writer prepare | `WAIT` | [CU-201S責任分割](reviews/2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | CU-201T-S + CU-201M-C | journal replay、1 Undo、失敗時Document不変 |
+| PRODUCT-ASSET | CU-201N-S | M3 / VS-2 / SPEC / snap target priority and unit | `WAIT` | [CU-201S責任分割](reviews/2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | CU-201M-C + CU-201T-C | deterministic tie-break、no-snap、zoom/DPI/fps非依存。U7 beat/marker 0 |
+| PRODUCT | CU-201P | M3 / VS-2 / native Timeline interval gesture | `WAIT` | [CU-201S責任分割](reviews/2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | CU-201N-S | drag write 0、release 1 Undo、Cancel 0 |
+| ORACLE-GUARD | CU-201R | M3 / VS-2 / random move trim sequence | `WAIT` | [CU-201S責任分割](reviews/2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | CU-201P | 重複0、相対位置、全Undo、Cancel 0 |
+| E2E | CU-201E | M3 / VS-2 / normal product move trim reopen | `WAIT` | [CU-201S責任分割](reviews/2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | CU-201R | same identity、保存interval、UI drag state非永続 |
 | PRODUCT-ASSET | CU-203 | M3 / VS-2 / U2c-3 common feedback component | `DONE` | [CU-203分割決定](reviews/2026-07-31-cu-203-feedback-source-ownership-split-decision.md) | S → M → P | source不在をproduct縮約実装で埋めず、診断投影/Intent配線をCU-204へ残した |
 | PRODUCT-ASSET | CU-203S | M3 / VS-2 / SPEC / feedback source and owner | `DONE` | [CU-203分割決定](reviews/2026-07-31-cu-203-feedback-source-ownership-split-decision.md) | authority、owner、9-state matrix、M/P境界 | code変更0。後続CU-203M / P完了 |
 | PRODUCT-ASSET | CU-203M | M3 / VS-2 / feedback mock-side source establishment | `DONE` | [CU-203分割決定](reviews/2026-07-31-cu-203-feedback-source-ownership-split-decision.md) | fixed JSX `459fdd61…` / CSS `7e22e2a1…`、9-state matrix、guard 3、Playwright 4、generation `1632212201a0-ead41d4d6562` | CU-203Pへ固定sourceを引き渡し済み |
@@ -579,7 +589,7 @@ U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除
 | resource設定を出す | G0-2 + G0-8 + U0b + K1a → U0f。設定はUser settings、pressure実測値はTransient |
 | 重いpreviewを追従させる | U1b + U1c + U5 + K1d → U1g。project fps/audio clockを変えず表示frameだけ落とす |
 
-現在の短い運用判断は、**`CU-108`で通常製品spineとVS-1を`DONE`、commit `eb4e6658`で`U4a-1` / `CU-202`、commit `782ffa3b`で`CU-0B02R`、`CU-0B02C-P`でprimitive direct promotionを`DONE`とした。`CU-203M / P`でfeedback source確立とproduct直接移管、`CU-0B02C-V`でprivate carry最終処分を`DONE`とした。`CU-204S`でS/A/Pを固定し、`CU-204A`で5 reason × 4 densityのprivate純粋投影を`DONE`とした。`CU-205S`でfirst-party Opacity正常系をB1G/B1I/B2/T/P/W/Eへ固定し、commit `a29ed709`で`CU-205T`、commit `c0c1c741`で`CU-205P`、rolling `ca7f105a`〜`18517062`で`CU-205W`、`581876e0` / `7901e51e`を含む通常Mac製品windowで`CU-205E`を`DONE`とした。`CU-204P`は通常source 0の再確認後、新source成立まで再監査・実装を反復しない。次の独立laneはdocs-only `CU-201S`。親`CU-205` / `U4a-2`は`SPLIT / WAIT`。Motolii Studio Previewは用語正本上未実装のままで、`preview-runnable`全6条件と文書化済み起動コマンドの現行証拠は未再締結。**
+現在の短い運用判断は、**`CU-108`で通常製品spineとVS-1を`DONE`、commit `eb4e6658`で`U4a-1` / `CU-202`、commit `782ffa3b`で`CU-0B02R`、`CU-0B02C-P`でprimitive direct promotionを`DONE`とした。`CU-203M / P`でfeedback source確立とproduct直接移管、`CU-0B02C-V`でprivate carry最終処分を`DONE`とした。`CU-204S`でS/A/Pを固定し、`CU-204A`で5 reason × 4 densityのprivate純粋投影を`DONE`とした。`CU-205S`でfirst-party Opacity正常系をB1G/B1I/B2/T/P/W/Eへ固定し、commit `a29ed709`で`CU-205T`、commit `c0c1c741`で`CU-205P`、rolling `ca7f105a`〜`18517062`で`CU-205W`、`581876e0` / `7901e51e`を含む通常Mac製品windowで`CU-205E`を`DONE`とした。`CU-204P`は通常source 0の再確認後、新source成立まで再監査・実装を反復しない。`CU-201S`でU3bを分割し、次DOはdocs-only `CU-201M-S`だけ。親`CU-205` / `U4a-2`は`SPLIT / WAIT`。Motolii Studio Previewは用語正本上未実装のままで、`preview-runnable`全6条件と文書化済み起動コマンドの現行証拠は未再締結。**
 
 ## 更新規則
 

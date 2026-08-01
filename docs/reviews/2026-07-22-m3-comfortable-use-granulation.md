@@ -332,7 +332,16 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 
 | ID | 種類 / 状態 | 一成果 | 依存 | 合格と必須負例 | STOP |
 |---|---|---|---|---|---|
-| CU-201 | `CORE / WAIT` | U3b move/trim/snapをD2へ接続 | CU-105/106 | random操作列、相対位置、Undo全巻戻し、Cancel 0 | marker/beat未決を同時実装したくなる |
+| CU-201 | `CORE / SPLIT` | U3b move/trim/snapをD2へ接続 | CU-105/106の成立済み実子 | [CU-201S](2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md)でM-S/M-C/T-S/T-C/N-S/P/R/Eへ分割。random操作列、相対位置、Undo全巻戻し、Cancel 0 | marker/beat未決を同時実装したくなる |
+| CU-201S | `SPEC / DONE` | move/trim/snapの責任と実装順を分割 | CU-105R/U3a-1I、CU-106P | Clip interval command 0、既存hit/selection/single writer再利用、次DOはM-Sだけ | 未決のcommand/TimeMap/snap意味を同時採択 |
+| CU-201M-S | `SPEC / DO` | Clip moveの永続command意味を決定 | CU-201S | start、lane、境界、overlap/collision/ripple、inverse、拒否順をfixtureで閉じる | UI drag都合から公開commandを決める |
+| CU-201M-C | `CORE / WAIT` | 決定済みmove command / Writer prepare | CU-201M-S | journal replay、1 Undo、失敗時Document不変 | raw mutation、schema shortcut |
+| CU-201T-S | `SPEC / WAIT` | in/out trimとTimeMap意味を決定 | CU-201M-S | source time、duration、境界、inverse、拒否順 | move意味と一粒化 |
+| CU-201T-C | `CORE / WAIT` | 決定済みtrim command / Writer prepare | CU-201T-S、CU-201M-C | journal replay、1 Undo、失敗時Document不変 | test期待値から意味を発明 |
+| CU-201N-S | `SPEC / WAIT` | snap target / priority / unitを決定 | CU-201M-C、CU-201T-C | deterministic tie-break、no-snap、zoom/DPI/fps非依存 | U7 beat/markerを先取り |
+| CU-201P | `PRODUCT / WAIT` | native Timeline gestureをD2へ接続 | CU-201N-S | drag write 0、release 1 Undo、Cancel 0 | hover/focus/range/transportを束ねる |
+| CU-201R | `ORACLE / WAIT` | random move/trim系列を固定 | CU-201P | 重複0、相対位置、全Undo、Cancel 0 | 未決意味をoracleから逆算 |
+| CU-201E | `E2E / WAIT` | 通常window move→trim→Undo/Redo→reopen | CU-201R | same identity、保存interval、UI drag state非永続 | headlessだけで完了 |
 | CU-202 | `CORE / DONE` | U4a-1 ValueType→control→command対応model | U2b-1、既存U4a-1契約 | commit `eb4e6658`。全first-party保存param対応またはtyped拒否、新ValueType 0、workspace全緑 | plugin独自UIが必要 |
 | CU-203 | `PRODUCT / SPLIT` | U2c-3共通feedback component | CU-0B02C-P、U2c-1/U2c-4 | [CU-203S](2026-07-31-cu-203-feedback-source-ownership-split-decision.md)でS/M/Pへ分割。Mでsource確立、Pで直接移管 | 個別picker/popup state machineが必要 |
 | CU-203S | `SPEC / DONE` | feedback source / owner / state matrix裁定 | CU-0B02C-P、U2c-1/U2c-4 | 9-state matrix、M/P境界、停止線 | codeや表示文言を同時決定したくなる |
