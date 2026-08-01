@@ -157,8 +157,17 @@ grok_text="${FAKE_GROK_OUTPUT:-VERDICT: ACCEPT}"
 grok_json="$(printf '%s' "$grok_text" | jq -Rs .)"
 printf '{"type":"system","subtype":"init"}\n'
 printf '{"type":"thinking","subtype":"delta","text":"fixture reasoning"}\n'
-printf '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":%s}]}}\n' "$grok_json"
-printf '{"type":"result","subtype":"success","duration_ms":10,"duration_api_ms":10,"is_error":false,"result":%s,"usage":{"inputTokens":16013,"outputTokens":113,"cacheReadTokens":256,"cacheWriteTokens":0}}\n' "$grok_json"
+if [[ -n "${FAKE_GROK_PLAN_MODE:-}" ]]; then
+  # 実測(2026-08-01): `--mode plan`の検収者は結論をchat messageでなくplan tool callへ
+  # 書き、chat側にはpreambleしか残らない。これがtextモードでの「空出力」の正体
+  preamble='{"type":"text","text":"読み込んで照合します。"}'
+  printf '{"type":"assistant","message":{"role":"assistant","content":[%s]}}\n' "$preamble"
+  printf '{"type":"tool_call","subtype":"completed","tool_call":{"createPlanToolCall":{"args":{"plan":%s}}}}\n' "$grok_json"
+  printf '{"type":"result","subtype":"success","duration_ms":10,"duration_api_ms":10,"is_error":false,"result":"読み込んで照合します。","usage":{"inputTokens":16013,"outputTokens":113,"cacheReadTokens":256,"cacheWriteTokens":0}}\n'
+else
+  printf '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":%s}]}}\n' "$grok_json"
+  printf '{"type":"result","subtype":"success","duration_ms":10,"duration_api_ms":10,"is_error":false,"result":%s,"usage":{"inputTokens":16013,"outputTokens":113,"cacheReadTokens":256,"cacheWriteTokens":0}}\n' "$grok_json"
+fi
 EOF
 chmod +x "$FAKE_BIN/claude" "$FAKE_BIN/codex" "$FAKE_BIN/cursor-agent"
 
@@ -522,6 +531,17 @@ run_script prepare "$WT" "$TMP_ROOT/docs-owner.md" "$DOCS_TASK"
 [[ "$(read_rejecting_gate "$TMP_ROOT/docs-owner.md.evidence/gates.txt")" != "contract_boundary" ]] \
   || fail "docs registration must not count as a second contract boundary"
 
+# 宣言は一つだけ。二重宣言は境界が一つであることの証明にならない
+DUP_BOUNDARY_TASK="$(printf '%s\n' "$TASK" |
+  sed 's|^CONTRACT_BOUNDARY: fixture-src-oracle$|CONTRACT_BOUNDARY: fixture-src-oracle\
+CONTRACT_BOUNDARY: second-boundary|')"
+: >"$CALL_LOG"
+run_script prepare "$WT" "$TMP_ROOT/dup-boundary.md" "$DUP_BOUNDARY_TASK"
+assert_status 3 "$RUN_STATUS" "duplicate CONTRACT_BOUNDARY rejected"
+[[ ! -s "$CALL_LOG" ]] || fail "duplicate CONTRACT_BOUNDARY must fail before model invocation"
+[[ "$(read_rejecting_gate "$TMP_ROOT/dup-boundary.md.evidence/gates.txt")" == "contract_boundary" ]] \
+  || fail "gate ledger must name contract_boundary for the duplicate declaration"
+
 # 狭いprofileへの手動overrideもOpus起動前に拒否する。
 MISMATCH_TASK="$(printf '%s\n' "$TASK" | sed 's/^OWNER_CLOSURE: CLOSED$/OWNER_CLOSURE: MULTIPLE_KNOWN/')"
 : >"$CALL_LOG"
@@ -560,6 +580,28 @@ env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
 RUN_STATUS=$?
 set -e
 assert_status 0 "$RUN_STATUS" "frozen permanent contract prepare"
+# 最上段は非LLM oracleを要求するだけでなくrunnerが供給する。この行を消すと
+# 恒久契約の粒がMECHANICAL_GUARD不在でdispatchできなくなり、ここが緑でなくなる
+assert_has "$TMP_ROOT/frozen-permanent-order.md" \
+  "MECHANICAL_GUARD: permanent format change must be proven by a rejection test or schema golden, not by reviewer opinion." \
+  "PERMANENT supplies a non-LLM oracle"
+
+# SECURITYも同じく供給する。従来HAZARD_GUARDとNEGATIVE_ORACLEだけで機械guardが無かった
+SECURITY_TASK="$(printf '%s\n' "$TASK" | sed 's|^HAZARD_TAG: NONE$|HAZARD_TAG: SECURITY|')"
+: >"$CALL_LOG"
+set +e
+env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+  FAKE_CALL_LOG="$CALL_LOG" \
+  FAKE_OPUS_OUTPUT="$OPUS_READY" \
+  "$SCRIPT" prepare "$WT" "$TMP_ROOT/security-order.md" "$SECURITY_TASK" \
+  >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 0 "$RUN_STATUS" "SECURITY prepare"
+assert_has "$TMP_ROOT/security-order.md" \
+  "MECHANICAL_GUARD: authority rejection and permission width must be proven by a test or static check, not by review opinion." \
+  "SECURITY supplies a non-LLM oracle"
 assert_has "$TMP_ROOT/frozen-permanent-order.md" "CONTRACT_CLOSURE: FROZEN" \
   "frozen permanent contract closure"
 assert_has "$TMP_ROOT/frozen-permanent-order.md" \
@@ -929,8 +971,9 @@ assert_fragment "$CALL_LOG" "--json" "Spark emits JSONL events"
 # 通過したgateも記録する。従来は通過が無記録で、どの層が働いているか測れなかった
 HAPPY_GATES="$ORDER.evidence/gates.txt"
 [[ -f "$HAPPY_GATES" ]] || fail "passing gates must be recorded too"
-for gate_name in base grain_and_dependencies authorities allowed_files context_budget \
-  compiled_grain_contract exact_targets view_profile clean_worktree react_labels; do
+for gate_name in base grain_and_dependencies authorities allowed_files contract_boundary \
+  reviewer_independence context_budget compiled_grain_contract exact_targets view_profile \
+  clean_worktree react_labels; do
   assert_has "$HAPPY_GATES" "GATE_ENTER: $gate_name" "gate $gate_name entered"
   assert_has "$HAPPY_GATES" "GATE_PASS: $gate_name" "gate $gate_name passed"
 done
@@ -1022,12 +1065,13 @@ canonical_ref_digest_value="$(canonical_ref_digest "$WT_D3")"
 # 改訂3(2026-08-01): 検収者はmodel名でなく独立性条件で決まる。守るべき不変条件は
 # 「Grokを使う」ではなく「実装担当から独立した別LLMの外部視点」。
 run_reviewer_case() {
-  local label="$1" review_model="$2" expect_fragment="$3"
+  local label="$1" review_model="$2" expect_fragment="$3" extra_sed="${4:-}"
   local wt order
   wt="$(gr_d3_init_worktree "$TMP_ROOT/reviewer-$label")"
   order="$TMP_ROOT/reviewer-$label.md"
   gr_d3_ready_order "$wt" "$order"
   sed -i '' "s|^REVIEW_MODEL: .*$|REVIEW_MODEL: $review_model|" "$order"
+  [[ -z "$extra_sed" ]] || sed -i '' "$extra_sed" "$order"
   : >"$CALL_LOG"
   set +e
   env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
@@ -1043,16 +1087,50 @@ run_reviewer_case() {
     || fail "gate ledger must name reviewer_independence for $label"
 }
 
-# 実装担当modelを検収席へ置けない。現在のallowlistには実装担当が含まれないため
-# allowlistが先に落とす。identity検査は、将来allowlistが広がった時の多層防御として残す
+# 実装担当modelは検収席へ置けない。allowlistより先にidentityを検査するため、
+# この負例はidentity行そのものを固定する(削除すればここが緑でなくなる)
 run_reviewer_case "same-as-implementer" "gpt-5.3-codex-spark" \
-  "not an approved independent reviewer"
+  "reviewer must differ from the implementer"
 # 事前設計へ深く関与したorder managerを最終検収者にしない
 run_reviewer_case "same-as-manager" "claude-opus-5" \
   "reviewer must not be the order manager"
 # 承認されていないmodelを検収席へ置かない
 run_reviewer_case "unapproved" "some-unlisted-model" \
   "not an approved independent reviewer"
+
+# 段階化: NONE:PRIVATE以外はmodel familyまで離す。family行を削除すると緑でなくなる
+run_reviewer_case "same-family" "gpt-5.3-codex-mini" \
+  "must be from a different model family" \
+  's|^HAZARD_TAG: NONE$|HAZARD_TAG: PERSISTENCE|'
+# 最上段は非LLM oracleの宣言を必須にする。MECHANICAL_GUARDの要求行を削除すると緑でなくなる
+run_reviewer_case "security-without-oracle" "cursor-grok-4.5-high" \
+  "requires a declared non-LLM oracle" \
+  's|^HAZARD_TAG: NONE$|HAZARD_TAG: SECURITY|'
+
+# plan modeの検収結果はplan tool callにしか現れない。ここを抽出しないと、検収者が
+# 完全な判定を返していても「markerが無い」として機械的にREJECTされる(2026-08-01実測)
+WT_PLAN="$(gr_d3_init_worktree "$TMP_ROOT/grok-plan-mode")"
+ORDER_PLAN="$TMP_ROOT/grok-plan-mode.md"
+gr_d3_ready_order "$WT_PLAN" "$ORDER_PLAN"
+SPARK_PLAN="$TMP_ROOT/grok-plan-spark.sh"
+cat >"$SPARK_PLAN" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'after\n' >>"$WT_PLAN/src.txt"
+EOF
+chmod +x "$SPARK_PLAN"
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_PLAN" \
+  FAKE_GROK_PLAN_MODE=1 FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  "$SCRIPT" execute "$WT_PLAN" "$ORDER_PLAN" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 0 "$RUN_STATUS" "plan-mode verdict is extracted from the plan tool call"
+PLAN_ATTEMPT="$ORDER_PLAN.evidence/$(awk -F': ' '$1=="ATTEMPT"{print $2}' "$ORDER_PLAN.evidence/checkpoint.txt")"
+assert_has "$PLAN_ATTEMPT/grok-stdout.txt" "VERDICT: ACCEPT" "plan text became the reviewer verdict"
+[[ -s "$PLAN_ATTEMPT/grok-stdout-stream.jsonl" ]] || fail "plan-mode raw stream must be retained"
 
 WT_EMPTY="$TMP_ROOT/gr-d3-empty-target"
 WT_EMPTY="$(gr_d3_init_worktree "$WT_EMPTY")"

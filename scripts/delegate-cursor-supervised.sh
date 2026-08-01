@@ -392,12 +392,32 @@ result_is_valid() {
 # 生streamを証跡に残す。既存の`VERDICT:` marker契約は最終resultテキストの抽出で保つ
 extract_supervisor_result() {
   local stream="$1" output="$2" result_json="$3"
+  local plan_text="$stream.plan.txt" chat_text="$stream.chat.txt"
   : >"$output"
   : >"$result_json"
   [[ -f "$stream" ]] || return 0
   jq -c 'select(.type == "result")' "$stream" 2>/dev/null | tail -1 >"$result_json" || true
-  [[ -s "$result_json" ]] || return 0
-  jq -r '.result // empty' "$result_json" >"$output" 2>/dev/null || true
+  # `--mode plan`の検収者は結論をchat messageでなくplan tool callへ書く。textモードが
+  # これを捨てていたことが「Grokが60秒動いて空出力」の正体だった(2026-08-01実測)。
+  # chat側にはpreambleしか残らないため、plan側を先に見る。
+  jq -s -r '
+    [.[] | select(.type == "tool_call") | .tool_call.createPlanToolCall.args.plan? // empty]
+    | last // empty
+  ' "$stream" 2>/dev/null >"$plan_text" || : >"$plan_text"
+  : >"$chat_text"
+  if [[ -s "$result_json" ]]; then
+    jq -r '.result // empty' "$result_json" >"$chat_text" 2>/dev/null || : >"$chat_text"
+  fi
+  # markerを持つ側を採る。どちらにも無ければ非空の側を残し、原因を診断可能にする
+  if [[ -s "$plan_text" ]] && grep -Eq '^(VERDICT|ORDER): ' "$plan_text"; then
+    cat "$plan_text" >"$output"
+  elif [[ -s "$chat_text" ]] && grep -Eq '^(VERDICT|ORDER): ' "$chat_text"; then
+    cat "$chat_text" >"$output"
+  elif [[ -s "$plan_text" ]]; then
+    cat "$plan_text" >"$output"
+  else
+    cat "$chat_text" >"$output"
+  fi
 }
 
 # 施工も`--json` JSONLで受け、生streamを証跡に残す。表示用のspark-stdout.txtへは
@@ -1453,6 +1473,8 @@ run_dispatch_gate_for_inspect() {
   gate_check_grain_and_dependencies "$order_file" "$worktree"
   gate_check_authorities_at_base "$order_file" "$worktree"
   gate_check_allowed_files "$order_file"
+  gate_check_contract_boundary "$order_file"
+  gate_check_reviewer_independence "$order_file"
   gate_check_context_budget "$order_file" "$worktree"
   gate_check_compiled_grain_contract "$order_file"
   gate_check_exact_targets "$order_file" "$worktree" BASE
@@ -2474,10 +2496,8 @@ gate_check_reviewer_independence() {
   reviewer="$(gate_require_single_field "$order_file" "REVIEW_MODEL")"
   implementer="$(gate_require_single_field "$order_file" "IMPLEMENTER_MODEL")"
   manager="$(gate_require_single_field "$order_file" "ORDER_MANAGER_MODEL")"
-  for allowed in ${ALLOWED_REVIEW_MODELS[@]+"${ALLOWED_REVIEW_MODELS[@]}"}; do
-    [[ "$allowed" == "$reviewer" ]] && found=1
-  done
-  (( found == 1 )) || gate_fail "REVIEW_MODEL is not an approved independent reviewer: $reviewer"
+  # 検査順は独立性の強い条件から。allowlistを先に置くと、identity条件とfamily条件が
+  # allowlistに吸収されて到達不能になり、負例が空虚になる(2026-08-01独立検収P1指摘)
   [[ "$reviewer" != "$implementer" ]] \
     || gate_fail "reviewer must differ from the implementer: $reviewer"
   # 事前設計へ深く関与したmodelを最終reviewerに選ばない
@@ -2486,12 +2506,18 @@ gate_check_reviewer_independence() {
 
   impact="$(gate_require_single_field "$order_file" "CONTRACT_IMPACT")"
   hazard="$(gate_require_single_field "$order_file" "HAZARD_TAG")"
-  case "$hazard:$impact" in
-    NONE:PRIVATE) return 0 ;;
-  esac
   # 段階化: 影響が広がる粒はmodel familyまで離す
-  [[ "$(model_family "$reviewer")" != "$(model_family "$implementer")" ]] \
-    || gate_fail "reviewer must be from a different model family for $hazard/$impact"
+  case "$hazard:$impact" in
+    NONE:PRIVATE) : ;;
+    *)
+      [[ "$(model_family "$reviewer")" != "$(model_family "$implementer")" ]] \
+        || gate_fail "reviewer must be from a different model family for $hazard/$impact"
+      ;;
+  esac
+  for allowed in ${ALLOWED_REVIEW_MODELS[@]+"${ALLOWED_REVIEW_MODELS[@]}"}; do
+    [[ "$allowed" == "$reviewer" ]] && found=1
+  done
+  (( found == 1 )) || gate_fail "REVIEW_MODEL is not an approved independent reviewer: $reviewer"
   case "$hazard:$impact" in
     SECURITY:*|DESTRUCTIVE_FS:*|*:PERMANENT)
       # 最上段は非LLM oracleの併用を必須にする(model間エラー60%相関)

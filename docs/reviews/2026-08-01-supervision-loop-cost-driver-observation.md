@@ -192,6 +192,32 @@ system / thinking×4(timestamp付きdelta) / assistant / result
 `codex`と`cursor-agent`はUSD costを返さないため`COST_USD: UNKNOWN`とし、合計を0で埋めず
 `UNMEASURED_COST_STAGES`へstage名を残す。
 
+### 「空出力」の真の原因 — `--mode plan`は結論をplan tool callへ書く
+
+stream-json化した後に実検収を1回流して根本原因が確定した。runnerは検収者を
+`--mode plan`(read-only)で起動しているが、**plan modeのモデルは結論をchat messageでなく
+`createPlanToolCall`のargsへ書く**。chat側にはpreambleしか残らない。
+
+実測(2026-08-01、runner差分451行の独立検収):
+
+| 指標 | 値 |
+|---|---:|
+| wall time | 158秒 |
+| thinking event | 991件 |
+| tool_call | 60件 |
+| input / output tokens | 85,805 / 13,638 |
+| cache read | 486,656 |
+| chat messageに現れた内容 | **前置き3文のみ** |
+| 判定本文(P1×4と`VERDICT: REJECT`) | **plan tool callの中** |
+
+つまり検収者は2分38秒かけて完全な判定を返していたのに、`--output-format text`では
+**全てが捨てられ、空出力に見えていた**。過去の「Grok 60秒空出力のため不採用」も同一原因と
+考えられる。**Grokは寡黙ではなく、runnerが答えの出口を塞いでいた。**
+
+対処として`extract_supervisor_result`はplan tool callを先に読み、markerを持つ側を採用する。
+どちらにもmarkerが無い場合は非空の側を残し、原因を診断可能にする。専用負例は、判定を
+plan tool callにしか書かないfake検収者で`VERDICT`が抽出されることを固定する。
+
 ## 8b. 残る計測の穴
 
 - Spark／GrokのUSD cost（両CLIが返さない。token数からの換算は単価が変わるため正本にしない）
