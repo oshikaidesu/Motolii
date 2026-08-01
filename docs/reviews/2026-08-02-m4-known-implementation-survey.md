@@ -85,27 +85,39 @@ snapshotをpublishし、新しいrecipe keyを生成することがgeneration切
 - **制限**: allocator reportは`None`になり得る。budget thresholdはD3D12と任意Vulkanだけで、Metalを
   portableに守らない。よって正本はdescriptorからのHost側見積りと設定hard capである。
 - **RAM**: `foyer-memory::Cache::usage`と外部`CacheEntry`参照をprobe後に接続する。
-- **disk watermark候補**: `fs2::available_space/statvfs/allocation_granularity`を`ADOPT-PROBE`する。
+- **disk watermark候補**: Fable反対側確認後、8年以上更新のない`fs2 0.4.3`を候補から外し、同系APIを
+  `rustix`／`windows-sys`で維持する`fs4 1.1.0`（MIT OR Apache-2.0、MSRV 1.75）の
+  `available_space/statvfs/allocation_granularity`を`ADOPT-PROBE`する。
 - **薄い残余**: owner、tier、resident/pinned、要求量を既存resource生成点から一つのadmission inputへ
   翻訳する。これは製品policy adapterであり、汎用allocator／resource frameworkを新設しない。
 
-### 3.5 disk CAS、atomic commit、corrupt→miss
+### 3.5 disk artifact、atomic commit、corrupt→miss
 
-- **第一候補**: `cacache` 13.1.0、release commit
+- **旧第一候補／再検索の反証**: `cacache` 13.1.0、release commit
   `66eae4b78f75eb2a38a2d25e838a56561294aebf`、Apache-2.0。
 - **具体API**: `Writer/SyncWriter::commit`、`Reader/SyncReader::check`、`write_hash/read_hash`、
   SRI `Integrity`、key index、atomic content write、full-data verification。
-- **供給route**: `ADOPT-PROBE`。Motolii artifact catalogを別DB／WALとして作らず、recipe key→integrity
-  indexとcontent storeを使う。
-- **probe必須**: sync-only feature closure、同一filesystem commit、process kill、欠落index、bit flip、
-  concurrent same-key write、Windows rename、100GBを生成しないfake store境界。
+- **供給route**: Fable助言を一次資料へ再照合した結果、第一候補から降ろして`RESURVEY`する。runtime
+  featureなしでは`State`未定義でcompile不能（issue #92）、Windows write-heavyでcontent/indexがNUL破損
+  する未解決報告（#83）があり、maintainerはprojectをdormantとし利用者へforkを推奨している（#94）。
+  fork保守は最小コアと矛盾する。
+- **再検索oracle**: 同一filesystem atomic commit、process kill、欠落index、bit flip、ENOSPC、concurrent
+  same-key write、Windows rename、外部FFmpegが開ける実file、100GBを生成しない境界。
 - **failure policy**: not-found、integrity error、incomplete writerはすべてcache missへ写し、Project errorや
   Media Offlineへ昇格しない。検証成功後だけstoreへ見えるcommitを行う。
 - **非証明範囲**: disk hard budget／watermark、LRU policy、GPU copy-out、artifact codec、Final pixel意味。
 
 全面`foyer::HybridCache`はRAM／disk自動階層を提供するが、heavy development、default Tokio runtime、
-block cache engine、serialization contractまで所有する。K1cの責任を減らすかより新しいplatform／runtime
-責任を増やす可能性が高いため現routeでは`REJECT`し、`foyer-memory + cacache`の二境界に分ける。
+block cache engine、serialization contractまで所有する。さらにFFmpeg proxyが実fileを開く境界を直接
+閉じない。K1cの責任を減らすかより新しいplatform／runtime責任を増やす可能性が高いため現routeでは
+`REJECT`を維持する。RAMとdiskのowner分離は維持し、disk側だけを再検索する。
+
+[disk artifact store再検索](2026-08-02-m4-disk-artifact-store-resurvey.md)で、global CAS/dedup自体が
+現行M4 authorityの要求ではないと確認した。採択routeはworkspace `sha2`／`std::fs`の`REUSE`、Bazelの
+recipe分離・sccacheのsharded local cache・現行D1 atomic persistの`PATTERN`、`tempfile 3.27.0`の
+`ADOPT-PROBE`へ`REDUCE`する。完全recipe keyで通常reuseを保ち、content digestはintegrityへ限定する。
+異なるrecipe間のglobal content dedupは、音MADfixtureでdisk重複率がbudgetを支配すると測定された場合だけ
+再入場する。
 
 ### 3.6 区間coverageと部分無効化
 
@@ -148,7 +160,8 @@ block cache engine、serialization contractまで所有する。K1cの責任を�
 
 ### 3.9 SVG→Vello
 
-- **候補**: `vello_svg` 0.9.0。workspaceのVello 0.9と同じcompatible `vello`／`usvg`をre-exportし、
+- **候補**: `vello_svg` 0.10.0（Apache-2.0 OR MIT、MSRV 1.88）。0.9.0は名前に反してVello 0.7依存であり、
+  workspaceのVello 0.9に対応するのは0.10.0である。同crateはcompatible `vello`／`usvg`をre-exportし、
   `append_tree/render_tree`で`usvg::Tree`をVello `Scene`へ接続する。
 - **供給route**: `ADOPT-PROBE`。独自SVG parserとusvg→Vello walkerを作らない。
 - **probe必須**: K6のpath／group／fill／stroke corpus、unsupported featureのtyped診断、外部resource遮断、
@@ -160,6 +173,8 @@ block cache engine、serialization contractまで所有する。K1cの責任を�
 
 | 候補 | 処分 | 理由 |
 |---|---|---|
+| `cacache 13.1.0` | `REJECT` | dormant/fork保守推奨、runtime featureなしcompile不能、Windows破損未解決 |
+| 若い専用CAS crate | `REJECT` | backup／DB／WASM等のformat、WAL、chunking、runtimeを増やし、出荷実績が小さい |
 | Natron／Olive source | `REJECT` | GPL sourceを製品実装の移植元にしない。公開仕様と利用者成果だけを参照 |
 | Salsa dependency | `REJECT` | D2／render graphの評価authorityをdatabase／tracked queryへ反転する |
 | 全面Foyer HybridCache | `REJECT` | block engine、Tokio、serializationまで責任が広がり、CAS artifact境界が不透明になる |
@@ -173,7 +188,8 @@ block cache engine、serialization contractまで所有する。K1cの責任を�
 
 1. dependencyはexact version、license、feature closureを固定し、公開型／Document／serdeへ漏らさない。
 2. `foyer-memory`はexternal handle込みusage、全pin、drop、Mac／Windows buildを確認する。
-3. `cacache`はprocess kill、bit flip、missing index、concurrent writeをすべてmissまたは非公開artifactへ閉じる。
+3. disk artifactは`tempfile`／`sha2`／single writerのprobeでprocess kill、bit flip、missing、
+   concurrent completionをすべてmissまたは非公開artifactへ閉じる。global CASは初期契約にしない。
 4. `rangemap`は`RationalTime`を直接keyにせず、既存composition timebase上のhalf-open integer intervalへ写す。
 5. `priority-queue`はbounded、reprioritize、cancel、editor nonblockingを決定的fixtureで確認する。
 6. `vello_svg`はK6 subsetだけを閉じ、unsupported featureをsilent dropしない。
@@ -185,16 +201,20 @@ block cache engine、serialization contractまで所有する。K1cの責任を�
 - [Bazel Remote Caching](https://bazel.build/remote/caching)
 - [foyer-memory API](https://docs.rs/foyer-memory/0.22.3/foyer_memory/)、
   [foyer architecture](https://foyer-rs.github.io/foyer/docs/design/architecture)
-- [cacache 13.1.0](https://docs.rs/cacache/13.1.0/cacache/)
+- [cacache 13.1.0](https://docs.rs/cacache/13.1.0/cacache/)（旧候補）、
+  [sync-only compile issue #92](https://github.com/zkat/cacache-rs/issues/92)、
+  [Windows corruption #83](https://github.com/zkat/cacache-rs/issues/83)、
+  [maintenance status #94](https://github.com/zkat/cacache-rs/issues/94)
 - [wgpu MemoryBudgetThresholds](https://docs.rs/wgpu/29.0.4/wgpu/struct.MemoryBudgetThresholds.html)、
   [Device allocator report](https://docs.rs/wgpu/29.0.4/wgpu/struct.Device.html#method.generate_allocator_report)
 - [rangemap RangeSet](https://docs.rs/rangemap/1.7.1/rangemap/set/struct.RangeSet.html)
 - [priority-queue PriorityQueue](https://docs.rs/priority-queue/2.7.0/priority_queue/struct.PriorityQueue.html)
 - [FFmpeg fps filter](https://ffmpeg.org/ffmpeg-filters.html#fps)、
   [ffmpeg fps_mode](https://ffmpeg.org/ffmpeg.html)、[ffprobe](https://ffmpeg.org/ffprobe.html)
-- [vello_svg 0.9.0](https://docs.rs/vello_svg/0.9.0/vello_svg/)、
+- [vello_svg 0.10.0](https://docs.rs/vello_svg/0.10.0/vello_svg/)、
   [usvg](https://docs.rs/usvg/)
 
-本調査では外部LLMを再度呼んでいない。発明禁止と採択地図の原則は既にreview済みであり、今回の新しい
-候補判断は一次資料と現行codeへ限定した。runtime／platformで未確認の部分は`ADOPT`へ過大昇格せず、
-下流地図の`ADOPTION_PROBE`に残す。
+初版調査時には既決の発明禁止原則を外部LLMへ二重相談しなかった。その後、候補技術の反対側比較という
+新しい問いに限ってFable 5をread-onlyで呼び、`fs4`／`vello_svg`の訂正と`cacache`のriskを得た。Codexが
+crates.io、docs.rs、GitHub issue、現行codeへ再照合し、disk routeは別途再検索した。runtime／platformで
+未確認の部分は`ADOPT`へ過大昇格せず、下流地図の`ADOPTION_PROBE`に残す。

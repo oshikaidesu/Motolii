@@ -13,7 +13,7 @@ model、owner、failure mode、platform条件と採択方式をM4採択地図へ
 
 2026-08-02に[M4既知実装調査](../reviews/2026-08-02-m4-known-implementation-survey.md)と
 [M4既知実装採択・並列実装地図](../m4-known-implementation-adoption-map.md)の初版を作成した。13親へ
-検索入口をまとめ、RAM、disk CAS、区間集合、priority collection、disk watermark、SVG接続、copy-outを
+検索入口をまとめ、RAM、verified disk artifact、区間集合、priority collection、disk watermark、SVG接続、copy-outを
 個別の`ADOPTION_PROBE`へ分けた。これは依存採択やruntime実装完了ではない。
 
 K0〜K8はMotoliiの意味、負例、候補依存を保持する入力であり、調査前の実装順ではない。K0のtest-only

@@ -32,8 +32,8 @@
 | `M4-P01-REGION` | RoD RoI tile extent unknown propagation | 必要領域だけを安全に評価し、未知は全域fallbackする | K0 fixtureを`REUSE`、OpenFXを`PATTERN` | K0、K2 |
 | `M4-P02-IDENTITY` | recipe key content digest generation snapshot source fingerprint | 再起動やrename後も正しい成果だけを再利用する | Bazel action/CASを`PATTERN`、`sha2`を`REUSE` | K1b、K2、K4、GAP-3 |
 | `M4-P03-RAM` | weighted cache handle refs pin eviction usage | 参照中成果を壊さずRAM hard cap内で再利用する | `foyer-memory 0.22.3`を`ADOPT-PROBE` | K1a〜K1c |
-| `M4-P04-RESOURCE` | VRAM RAM disk admission descriptor allocator report watermark | allocation前に三tierの上限を守る | wgpu descriptor/reportを`REUSE/PATTERN`、`fs2`を`ADOPT-PROBE` | K1a、K1c、K1d |
-| `M4-P05-DISK` | CAS integrity atomic commit corrupt miss GC | 再起動後も壊れていない成果だけをdiskから読む | `cacache 13.1.0`を`ADOPT-PROBE` | K1c、K7、K8 |
+| `M4-P04-RESOURCE` | VRAM RAM disk admission descriptor allocator report watermark | allocation前に三tierの上限を守る | wgpu descriptor/reportを`REUSE/PATTERN`、`fs4 1.1.0`を`ADOPT-PROBE` | K1a、K1c、K1d |
+| `M4-P05-DISK` | artifact store integrity atomic commit corrupt miss LRU | 再起動後も壊れていない成果だけをdiskから読む | `sha2/std::fs`を`REUSE`、Bazel/sccache/D1 persistを`PATTERN`、`tempfile 3.27.0`を`ADOPT-PROBE` | K1c、K7、K8 |
 | `M4-P06-INTERVAL` | half-open range coverage gaps invalidation coalesce | 変更の影響区間だけを再計算する | `rangemap 1.7.1`を`ADOPT-PROBE` | K2、K7b、K8a |
 | `M4-P07-SCHEDULE` | priority bounded queue reprioritize cancel heartbeat latest | 編集を止めず、必要なbackground成果から作る | `priority-queue 2.7.0`を`ADOPT-PROBE`、`LatestWorker`を`REUSE/PATTERN` | K1d、K4、K7、K8 |
 | `M4-P08-PROXY` | ffmpeg ffprobe VFR CFR proxy PTS source id | 重い素材を決定的proxyへ置換して編集する | 現行FFmpeg sidecarを`REUSE/WRAP` | K4、GAP-3、GAP-26 |
@@ -41,15 +41,15 @@
 | `M4-P10-BAKE` | group bake atomic artifact substitute freeze | Groupの編集可能性を保ったまま仮出力を再利用する | P02/P05/P06/P07/P09の合成、独立frameworkなし | K7a〜K7c |
 | `M4-P11-COVERAGE` | whole composition draft coverage planner 100GB | 全曲Draftを計画し、disk成果で通し再生する | P05/P06/P07の既知機構を合成 | K8a、K8b |
 | `M4-P12-PRESSURE` | capacity deadline preview degrade resource snapshot | 容量不足と締切遅延を混同せずpreviewを縮退する | wgpu/resource snapshotとlatest mailboxを`REUSE` | K1d |
-| `M4-P13-VECTOR` | SVG usvg Vello path fill stroke unsupported premul | SVGの必要subsetを独自parserなしで描く | `vello_svg 0.9.0`を`ADOPT-PROBE`、Velloを`REUSE` | K6 |
+| `M4-P13-VECTOR` | SVG usvg Vello path fill stroke unsupported premul | SVGの必要subsetを独自parserなしで描く | `vello_svg 0.10.0`を`ADOPT-PROBE`、Vello 0.9を`REUSE` | K6 |
 
 ## 4. 現在のdispatch状態
 
 | 子 | 状態 | 閉じるもの |
 |---|---|---|
 | `P03-C1` | `ADOPTION_PROBE` | feature closure、Mac/Windows、external handle込みusage、全pin、drop、並行性 |
-| `P04-C4` | `ADOPTION_PROBE` | `fs2`の3 OS build、free-space failure、allocation granularity |
-| `P05-C1` | `ADOPTION_PROBE` | sync feature、kill/bit-flip/missing-index/same-key競合、Windows rename |
+| `P04-C4` | `ADOPTION_PROBE` | `fs4 1.1.0`の3 OS build、free-space failure、allocation granularity |
+| `P05-C1` | `ADOPTION_PROBE` | `tempfile 3.27.0`、single writer、FFmpeg temp、atomic visibility、integrity、lazy scan、hard budget |
 | `P06-C1` | `ADOPTION_PROBE` | half-open integer timebase、coalesce、gap、境界overflow |
 | `P07-C1` | `ADOPTION_PROBE` | MPL-2.0選択、bounded/reprioritize/remove、deterministic ordering |
 | `P13-C1` | `ADOPTION_PROBE` | K6 subset、unsupported診断、外部resource遮断、premul一回 |
@@ -110,9 +110,11 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 
 #### `P03-C2` RAM artifact cache adapter
 
-- **結果**: Motolii key/weight/admissionを`foyer-memory::Cache`へprivateに写し、typed handleを返す。
+- **結果**: recipe key→content digest→bufferの二段参照をRAMにも通し、digest/weight/admissionを
+  `foyer-memory::Cache`へprivateに写してtyped handleを返す。
 - **依存／並列**: P03-C1/P04-C1/P02-C1後。disk adapterと並列。
-- **oracle**: single lock order、lookup時GPU wait 0、pin中evict後もread可、missは再計算。
+- **oracle**: single lock order、lookup時GPU wait 0、pin中evict後もread可、missは再計算。同一source区間・
+  同一parameterのN sliceでcontent bufferは一つ。
 - **cutover**: cache別HashMap/LRU、同義Arc registryをretire。
 
 #### `P03-C3` audio cache migration
@@ -141,21 +143,26 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 
 #### `P04-C4` disk watermark probe
 
-- **結果**: `fs2`でfree spaceとallocation granularityを読み、失敗時の保守fallbackを固定する。
+- **結果**: `fs4 1.1.0`のsync APIでfree spaceとallocation granularityを読み、失敗時の保守fallbackを固定する。
 - **oracle**: 3 OS build、permission/error、fake filesystem境界、Document/Project failure化0。
 
-### M4-P05-DISK — content-addressed artifact store
+### M4-P05-DISK — verified recipe artifact store
 
-#### `P05-C1` cacache compatibility and corruption probe
+#### `P05-C1` filesystem artifact compatibility probe
 
-- **結果**: atomic commit、integrity check、same-key write、kill/corruptを隔離fixtureで確認する。
-- **oracle**: incomplete/bit-flip/missing indexはmiss、final pathにpartial artifact 0、100GB生成0。
+- **結果**: `tempfile 3.27.0`のsame-directory temp/persist、workspace `sha2`、single cache writer、
+  sharded recipe pathを組み合わせ、Rust copy-outとFFmpegが作る通常fileをatomicにpublishできるか確認する。
+- **oracle**: Mac/Windows、incomplete/bit-flip/truncate/missingはmiss、ENOSPC/process kill、同一recipe競合、
+  1GB fake budget、10万entry lazy scan、final pathにpartial artifact 0、100GB生成0。
+- **STOP**: fork、独自DB/WAL、cache format migration、常駐runtime、global content dedupを採択前提にしない。
 
 #### `P05-C2` private disk store adapter
 
-- **結果**: recipe key→integrity index、digest→contentをprivate APIへ閉じる。
+- **結果**: 完全recipe key digest→通常artifact file、size/content digest、volatile LRU metadataをprivate
+  APIへ閉じる。content digestはintegrity用で、異なるrecipe間のglobal dedupを初期契約にしない。
 - **依存／並列**: P05-C1/P02-C1/P04-C2後。RAM adapterと並列。
-- **oracle**: restart hit、rename hit、wrong generation miss、external cacache型の公開面0。
+- **oracle**: restart hit、rename hit、wrong generation miss、外部storage型の公開面0。同一process内で
+  検証済みhandleを再利用し、frameごとの全file再hash 0。
 - **cutover**: 独自DB/WAL/catalog/repair protocolを作らない。
 
 #### `P05-C3` disk budget and retirement
@@ -167,8 +174,10 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 
 #### `P06-C1` RangeSet compatibility probe
 
-- **結果**: composition timebaseのinteger half-open rangeでinsert/remove/gaps/coalesceを固定する。
-- **oracle**: adjacent/empty/end-exclusive/overflow、random model同値、`RationalTime`丸め二重化0。
+- **結果**: 映像はframe index、音声はsample indexの別`RangeSet`としてinteger half-open
+  rangeのinsert/remove/gaps/coalesceを固定する。
+- **oracle**: adjacent/empty/end-exclusive/overflow、random model同値、track種別を跨ぐ丸めと
+  `RationalTime`丸め二重化0。
 
 #### `P06-C2` affected-window projection
 
@@ -186,7 +195,9 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 #### `P07-C1` priority collection probe
 
 - **結果**: fixed 4 priority、reprioritize、remove、bounded admissionを`priority-queue`で確認する。
-- **oracle**: deterministic tie-break、latest seek昇格、cancelled job非実行、queue上限。
+- **薄い残余**: seek時の全item即時reprioritizeを必須にせず、generationを進めてpop時にstale jobを捨てる
+  lazy invalidationを既存patternとして使う。
+- **oracle**: deterministic tie-break、latest seek昇格またはstale drop、cancelled job非実行、queue上限。
 
 #### `P07-C2` bounded worker lifecycle
 
@@ -315,7 +326,7 @@ Waveは一括発注ではない。各子を一契約境界として検収し、�
 | 旧route／誤読 | 新owner | 処分 |
 |---|---|---|
 | cache別HashMap、LRU、参照registry | P03 RAM cache | 同一oracle後に`FROZEN → RETIRE` |
-| 独自disk DB/WAL/catalog | P05 cacache adapter | 新設禁止。既存断片があればCAS移行後retire |
+| 独自disk DB/WAL/catalog／global dedup | P05 verified recipe artifact adapter | 新設禁止。既存断片があれば単一owner切替後retire |
 | purgeを通常回復にするUI | complete key + miss policy | debug診断以外へ昇格しない |
 | generationごとの全走査削除 | immutable key + P06 ranges | writer publish切替後retire |
 | component別worker/runtime | P07 bounded worker | job adapter化後retire |

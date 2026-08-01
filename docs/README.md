@@ -37,7 +37,8 @@
 | [concept.md](concept.md) | コンセプト定義・決定事項の台帳 | 現行(決定はここに追記される) |
 | [known-implementation-adoption-model.md](known-implementation-adoption-model.md) | M3〜M5共通の既知実装調査、採択地図、薄い接続、独自負債置換・退役の開発順序 | **横断開発原則**(2026-08-02。M3適用済み、M4初版地図作成済み、M5はこれから) |
 | [m4-known-implementation-adoption-map.md](m4-known-implementation-adoption-map.md) | M4の13親、既知実装route、詳細子、採択probe、並列wave、旧負債の退役境界 | **初版採択地図／runtime未発注**(2026-08-02) |
-| [M4既知実装調査](reviews/2026-08-02-m4-known-implementation-survey.md) | M4のcache／resource／CAS／区間／background job／proxy／SVG候補を具体APIまで比較 | **比較中**(採択probe前。既決原則の二重相談はしない) |
+| [M4既知実装調査](reviews/2026-08-02-m4-known-implementation-survey.md) | M4のcache／resource／disk artifact／区間／background job／proxy／SVG候補を具体APIまで比較 | **比較中**(採択probe前。候補比較だけFable助言を再照合済み) |
+| [M4 disk artifact store再検索](reviews/2026-08-02-m4-disk-artifact-store-resurvey.md) | dormantなcacache後の候補を再検索し、global CASを過剰仕様としてverified recipe file storeへ縮小 | **縮小採用**(2026-08-02。tempfile採択probe前) |
 | [M5既知実装調査](reviews/2026-08-02-m5-known-implementation-survey.md) | M5の3D math／import／depth／bounds／text／identity候補を既存ownerへ割り当てる比較 | **比較中**(反対側レビューと採択probe前) |
 | [decision-index.md](decision-index.md) | 決定逆引き台帳: 主題キーワード→既決の正本へのポインタ(状態語彙固定・機械検証対象) | **運用正本**(2026-07-19新設。作業前の逆引き入口) |
 | [performance-model.md](performance-model.md) | 性能の設計根拠と規律 | 現行 |

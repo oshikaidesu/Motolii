@@ -32,7 +32,8 @@
 
 | ファイル | 表題 |
 |---|---|
-| [2026-08-02-m4-known-implementation-survey.md](2026-08-02-m4-known-implementation-survey.md) | M4のcache、resource、CAS、区間、background job、proxy、SVGを具体APIと非証明範囲へ割り当てる既知実装比較 |
+| [2026-08-02-m4-known-implementation-survey.md](2026-08-02-m4-known-implementation-survey.md) | M4のcache、resource、disk artifact、区間、background job、proxy、SVGを具体APIと非証明範囲へ割り当てる既知実装比較 |
+| [2026-08-02-m4-disk-artifact-store-resurvey.md](2026-08-02-m4-disk-artifact-store-resurvey.md) | cacache棄却後のdisk候補を再検索し、global CASを現行authority外としてverified recipe artifact storeへ縮小採用 |
 | [2026-08-02-m5-known-implementation-survey.md](2026-08-02-m5-known-implementation-survey.md) | M5の3D math、glTF、wgpu depth、bounds、text、deterministic identityを既存ownerへ接続する既知実装比較 |
 | [2026-07-26-third-party-sustainable-economy-decision.md](2026-07-26-third-party-sustainable-economy-decision.md) | 無料／有料、OSS／proprietary等を作者が選べる持続可能な経済圏を、Motoliiがmarketplaceを所有せず支える理由、責任境界、停止線 |
 | [2026-07-26-vism-malware-containment-handoff.md](2026-07-26-vism-malware-containment-handoff.md) | Vism悪性コード封じ込めをcatalogから分離し、現行事実、攻撃面、必須負例、合格条件、STOPを他LLMへ渡すread-only締結依頼 |

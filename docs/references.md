@@ -11,7 +11,7 @@
 | [OpenCut](https://github.com/OpenCut-app/OpenCut) | MIT | タイムラインUIの**操作仕様の参考のみ。コード流用は不可**(Rust/egui UIのためReact componentは流用対象外)。Rustコア(GPU compositor/effects/masks)は設計思想の参考 |
 | [ffmpeg-sidecar](https://github.com/nathanbabcock/ffmpeg-sidecar) | MIT | M0-S2で比較後、**Motolii依存としては不採用**。現行B-2はffprobe／ffmpeg CLIを自前の子process pipeで管理する。Rerun 0.34.1での同crate利用はprocess方式の反例探索に限り、Motoliiのcrate採択やdecode契約の根拠にしない（[S2回収](reviews/2026-07-23-historical-s2-decode-pipeline-lineage-recovery.md)、[Rerun先例調査](reviews/2026-07-20-rerun-prior-art-survey.md)） |
 | [wgpu](https://github.com/gfx-rs/wgpu) | Apache-2.0/MIT | レンダリングコアの土台(採用決定済み) |
-| [Vello](https://github.com/linebender/vello) | Apache-2.0/MIT | **採用決定(2026-07-10、S3スパイク合格)**。vello 0.9=wgpu29依存で本体と同一device同居を実測確認。条件: Renderer長寿命保持(初期化~900ms)・出力straight alpha→境界でpremul化。S3時点の最小自前usvg adapterは恒久決定にせず、同世代`vello_svg 0.9.0`をM4-K6で`ADOPT-PROBE`し、対応subsetとunsupported診断が閉じれば独自walkerを作らない。詳細は[spikes/s3-vello.md](spikes/s3-vello.md)、[M4調査](reviews/2026-08-02-m4-known-implementation-survey.md) |
+| [Vello](https://github.com/linebender/vello) | Apache-2.0/MIT | **採用決定(2026-07-10、S3スパイク合格)**。vello 0.9=wgpu29依存で本体と同一device同居を実測確認。条件: Renderer長寿命保持(初期化~900ms)・出力straight alpha→境界でpremul化。S3時点の最小自前usvg adapterは恒久決定にせず、Vello 0.9対応の`vello_svg 0.10.0`をM4-K6で`ADOPT-PROBE`し、対応subsetとunsupported診断が閉じれば独自walkerを作らない。詳細は[spikes/s3-vello.md](spikes/s3-vello.md)、[M4調査](reviews/2026-08-02-m4-known-implementation-survey.md) |
 | [Symphonia](https://github.com/pdeljanov/Symphonia) | MPL-2.0 | Pure Rust音声デコード(MP3/AAC/FLAC/WAV等)。音声インポート(B-1)の第一候補。MPLはファイル単位コピーレフトなので依存利用は安全 |
 | [resvg / usvg](https://github.com/linebender/resvg) | MPL-2.0 | SVGパーサ(usvg: 参照解決済みの正規化ツリーを返す)。SVG読み込み(コンセプト決定でコア機能)の第一候補。linebender管理下で保守中。Vello描画と接続する(M4-K6) |
 | [rubato](https://github.com/HEnquist/rubato) | MIT | 音声リサンプリング。**明示**スクラブ/シャトルのバリスピード候補(自動フォールバック用途ではない — [D5先例調査](reviews/2026-07-14-d5-transport-prior-art.md))。デバイス≠素材レートの固定比変換にも候補 |
@@ -67,7 +67,7 @@ maintenance、3 OS、既存fixtureとの適合を再確認する。
 | clipboard IO | [arboard](https://github.com/1Password/arboard) | Copy / Paste意味の仕様決定後 | payload、ID再採番、Undo、Document |
 | native menu | [muda](https://github.com/tauri-apps/muda) | OS menuが製品要件になった時 | CommandId、keymap、実行権限 |
 | CPU cache | [foyer-memory](https://docs.rs/foyer-memory/0.22.3/foyer_memory/) (`moka`はREMAP候補) | M4-P03のexternal handle込みusage、weighted eviction採択probe | VRAM texture寿命、hard admission、invalidation意味、永続key |
-| disk CAS | [cacache](https://docs.rs/cacache/13.1.0/cacache/) | M4-P05のintegrity、atomic commit、corrupt→miss採択probe | disk hard budget、LRU policy、artifact codec |
+| disk artifact | workspace `sha2/std::fs` `REUSE` + [sccache local](https://github.com/mozilla/sccache/blob/main/src/lru_disk_cache/mod.rs)／D1 atomic persist `PATTERN` + [`tempfile 3.27.0`](https://docs.rs/tempfile/3.27.0/tempfile/) `ADOPT-PROBE` | M4-P05のrecipe path、atomic publication、integrity、corrupt→miss。[cacache](https://docs.rs/cacache/13.1.0/cacache/)はdormant/fork推奨とWindows破損により`REJECT` | disk hard budget、LRU policy、artifact codec。global content dedupは実測再入場 |
 | 区間集合 | [rangemap](https://docs.rs/rangemap/1.7.1/rangemap/) | M4-P06のhalf-open invalidation/coverage採択probe | Document変異の意味、generation、scheduler priority |
 | priority collection | [priority-queue](https://docs.rs/priority-queue/2.7.0/priority_queue/) | M4-P07のbounded/reprioritize採択probe | worker lifecycle、cancel、Document/cache writer |
 | private 3D math | [glam](https://docs.rs/glam/0.33.2/glam/) | M5 camera／transform adapterの採択probe | Document座標意味、公開型、scene owner |
