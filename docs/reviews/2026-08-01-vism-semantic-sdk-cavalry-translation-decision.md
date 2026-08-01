@@ -259,7 +259,7 @@ VSM-C2等の既存依存を越えるまで開始しない。
 | 意味SDKの責任とfamily分割 | 本文書で決定 |
 | TypeScript公式作者言語 | 決定、runtime／surface未実装 |
 | Path2D internal geometry／PathOp | 部分実装済み、作者SDKとして未公開 |
-| SDK-S0／LANG-TS-F0 | 未実装、VSM-A4S main到達待ち |
+| SDK-S0／LANG-TS-F0 | SDK-S0S仕様review中、実装未着手。外部Rust crate scaffoldのVSM-A4Sとはowner／artifactを共有しない別lane。LANG-TS-F0はSDK-S0I待ち |
 | Inspector typed projection | docs決定、製品経路への統合未実装 |
 | Instance stable identity／nesting | P0I／P7で未閉鎖・未実装を含む |
 | Spatial／3D | M5仕様、主要runtime未実装 |

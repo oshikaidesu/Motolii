@@ -69,6 +69,7 @@
 | [reviews/2026-07-31-authoring-continuity-capsule-goal-contract.md](reviews/2026-07-31-authoring-continuity-capsule-goal-contract.md) | Inspect→Fork→preflight→atomic adoptionを一変更カプセルへ閉じ、初心者には一つの作者面を示す契約 | **決定** |
 | [reviews/2026-08-01-vism-authoring-language-boundary-decision.md](reviews/2026-08-01-vism-authoring-language-boundary-decision.md) | 一般creator-authorの公式sourceをTypeScriptとし、WGSL／Rustの席、MTS-1、非目標を固定 | **言語方針決定／engine・package・payload未決** |
 | [reviews/2026-08-01-vism-semantic-sdk-cavalry-translation-decision.md](reviews/2026-08-01-vism-semantic-sdk-cavalry-translation-decision.md) | Cavalry先例をPath／Instance等の意味値、純粋operation、明示capability、Host責任へ翻訳 | **意味SDK決定／SDK-S0未実装** |
+| [reviews/2026-08-01-sdk-s0-path2d-semantic-fixture-spec.md](reviews/2026-08-01-sdk-s0-path2d-semantic-fixture-spec.md) | Cavalry型の意味連続性を既存PathOpへ接続する最初の`Path2D → Path2D` fixture責任仕様 | **SDK-S0S仕様・独立review完了／SDK-S0I未実装** |
 | [reviews/2026-08-01-vism-inspector-source-automation-boundary-decision.md](reviews/2026-08-01-vism-inspector-source-automation-boundary-decision.md) | Vismを通常単位、Inspectorを意味の第一面、sourceを外部IDEへ段階開示する境界 | **決定／製品統合未実装** |
 | [reviews/2026-08-01-vsm-a4s-external-crate-author-scaffold-spec.md](reviews/2026-08-01-vsm-a4s-external-crate-author-scaffold-spec.md) | Radial Repeater fork、公開façade、Host conformanceを閉じる外部crate作者scaffold仕様 | **仕様案／独立review待ち** |
 | [generative-user-boundary.md](generative-user-boundary.md) | ジェネラティブ表現とユーザー拡張の境界: Shape/SVG、p5.js型入力、Materialize/Live/Feedback/Simulation、Host責務 | **設計決定**(2026-07-15。未凍結runtimeの実装許可ではない) |
