@@ -44,6 +44,7 @@ pub(crate) struct TimelinePrepareInput<'a> {
     pub(crate) document: &'a Document,
     pub(crate) projection: &'a TimelineProjection,
     pub(crate) primary: Option<LayerId>,
+    pub(crate) playhead: RationalTime,
     pub(crate) interval_preview: Option<TimelineIntervalPreview>,
 }
 
@@ -203,6 +204,7 @@ impl NativeTimelineRenderer {
             input.document,
             input.projection,
             input.primary,
+            input.playhead,
             input.interval_preview,
         )?;
         self.renderer.render_to_texture(
@@ -288,6 +290,7 @@ fn build_scene(
     document: &Document,
     projection: &TimelineProjection,
     primary: Option<LayerId>,
+    playhead: RationalTime,
     interval_preview: Option<TimelineIntervalPreview>,
 ) -> Result<(Scene, TimelineSceneStats), NativeTimelineRendererError> {
     let (Some(timeline), Some(timeline_logical)) = (layout.timeline_physical, layout.timeline)
@@ -587,9 +590,10 @@ fn build_scene(
         ]);
         scene.fill(Fill::NonZero, Affine::IDENTITY, INK, None, &diamond);
     }
+    let playhead_x = playhead_logical_x(time_x, right, playhead, document.composition.duration);
     fill(
         &mut scene,
-        time_x,
+        playhead_x,
         y + header_height,
         (2.0 * scale).max(1.0),
         bottom - y - header_height,
@@ -605,6 +609,21 @@ fn build_scene(
             text_runs,
         },
     ))
+}
+
+fn playhead_logical_x(
+    time_x: f64,
+    right: f64,
+    playhead: RationalTime,
+    duration: RationalTime,
+) -> f64 {
+    let duration = duration.as_seconds_f64();
+    let normalized = if duration > 0.0 {
+        playhead.as_seconds_f64() / duration
+    } else {
+        0.0
+    };
+    time_x + normalized.clamp(0.0, 1.0) * (right - time_x)
 }
 
 fn timeline_bar_geometry(
@@ -799,6 +818,22 @@ pub(crate) fn timeline_time_surface_logical_rect(
     })
 }
 
+pub(crate) fn timeline_ruler_logical_rect(
+    layout: NativeHostLayout,
+) -> Option<crate::native_host_layout::LogicalRect> {
+    let timeline = layout.timeline?;
+    let x_offset = (KEY_TOOLS_WIDTH + BAND_RAIL_WIDTH).min(timeline.width);
+    let y_offset = HEADER_HEIGHT.min(timeline.height);
+    let width = timeline.width - x_offset;
+    let height = RULER_HEIGHT.min((timeline.height - y_offset).max(0.0));
+    (width > 0.0 && height > 0.0).then_some(crate::native_host_layout::LogicalRect {
+        x: timeline.x + x_offset,
+        y: timeline.y + y_offset,
+        width,
+        height,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -822,6 +857,29 @@ mod tests {
         assert_eq!(geometry.x + geometry.width, 1_000.0);
         assert!(geometry.y >= 55.0);
         assert!(geometry.y + geometry.height <= 200.0);
+    }
+
+    #[test]
+    fn playhead_x_uses_the_current_time_and_clamps_to_the_composition() {
+        let duration = RationalTime::try_new(10, 1).unwrap();
+
+        assert_eq!(
+            playhead_logical_x(100.0, 500.0, RationalTime::ZERO, duration),
+            100.0
+        );
+        assert_eq!(
+            playhead_logical_x(100.0, 500.0, RationalTime::try_new(5, 1).unwrap(), duration,),
+            300.0
+        );
+        assert_eq!(
+            playhead_logical_x(
+                100.0,
+                500.0,
+                RationalTime::try_new(12, 1).unwrap(),
+                duration,
+            ),
+            500.0
+        );
     }
 
     #[test]
@@ -866,7 +924,16 @@ mod tests {
             face_index: 0,
         };
 
-        let (_, stats) = build_scene(&font, layout, &document, &projection, None, None).unwrap();
+        let (_, stats) = build_scene(
+            &font,
+            layout,
+            &document,
+            &projection,
+            None,
+            RationalTime::ZERO,
+            None,
+        )
+        .unwrap();
         assert_eq!(stats, TimelineSceneStats::default());
     }
 }

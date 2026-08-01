@@ -33,8 +33,9 @@ use crate::inspector_host_runtime::{
 use crate::layout_authority::LayoutAuthority;
 use crate::native_host_layout::{LogicalRect, NativeHostLayout, PhysicalRect};
 use crate::native_timeline_renderer::{
-    key_tools_logical_rect, timeline_time_surface_logical_rect, NativeTimelineRenderer,
-    NativeTimelineRendererError, TimelineIntervalPreview, TimelinePrepareInput,
+    key_tools_logical_rect, timeline_ruler_logical_rect, timeline_time_surface_logical_rect,
+    NativeTimelineRenderer, NativeTimelineRendererError, TimelineIntervalPreview,
+    TimelinePrepareInput,
 };
 use crate::render_worker::{
     RenderGeneration, RenderRequest, RenderWorker, RenderWorkerClient, RenderWorkerError,
@@ -169,6 +170,7 @@ pub(crate) struct ProductApp {
     primary: Option<motolii_doc::LayerId>,
     active_effect_use: Option<EffectId>,
     selected_position_key: Option<(LayerId, motolii_doc::KeyframeId)>,
+    playhead: RationalTime,
     projection_generation: u64,
     current_document: Arc<motolii_doc::Document>,
     proxy: EventLoopProxy<ProductEvent>,
@@ -298,6 +300,19 @@ impl ProductTimelineProjection {
 
     fn time_at(&self, position: [f64; 2], layout: NativeHostLayout) -> Option<RationalTime> {
         let surface = timeline_time_surface_logical_rect(layout)?;
+        self.time_at_surface(position, surface)
+    }
+
+    fn ruler_time_at(&self, position: [f64; 2], layout: NativeHostLayout) -> Option<RationalTime> {
+        let surface = timeline_ruler_logical_rect(layout)?;
+        self.time_at_surface(position, surface)
+    }
+
+    fn time_at_surface(
+        &self,
+        position: [f64; 2],
+        surface: crate::native_host_layout::LogicalRect,
+    ) -> Option<RationalTime> {
         if !surface.contains(position) || !surface.width.is_finite() || surface.width <= 0.0 {
             return None;
         }
@@ -723,6 +738,7 @@ impl ProductApp {
             primary: None,
             active_effect_use: None,
             selected_position_key: None,
+            playhead: RationalTime::ZERO,
             projection_generation: 0,
             proxy,
             layout_authority: LayoutAuthority::built_in()?,
@@ -804,6 +820,7 @@ impl ProductApp {
             &self.current_document,
             self.selected_position_key,
             self.projection_generation,
+            self.playhead,
         )?;
         crate::ui_numeric_trace::emit(format_args!(
             "kind=startup phase=stage-chrome-created phase_ms={:.3}",
@@ -1584,6 +1601,21 @@ impl ProductApp {
         let Some(layout) = self.layout else {
             return;
         };
+        if let Some(playhead) = self.timeline_projection.ruler_time_at(position, layout) {
+            self.playhead = playhead;
+            crate::ui_numeric_trace::emit(format_args!(
+                "kind=playhead route=ruler-click layout_epoch={} time={:?}",
+                layout.epoch, self.playhead,
+            ));
+            if let Err(error) = self.publish_stage_chrome(false) {
+                return self.fail(event_loop, error);
+            }
+            if let Err(error) = self.submit_stage_projection() {
+                return self.fail(event_loop, error);
+            }
+            self.request_redraw();
+            return;
+        }
         let hit = self.timeline_projection.hit_test(position, layout);
         crate::ui_numeric_trace::emit(format_args!(
             "kind=timeline-hit layout_epoch={} logical_x={:.3} logical_y={:.3} hit={:?}",
@@ -1646,7 +1678,7 @@ impl ProductApp {
         RenderRequest {
             document,
             data_tracks: Arc::clone(&self.render_request_template.data_tracks),
-            evaluation_time: self.render_request_template.evaluation_time,
+            evaluation_time: EvaluationTime::new(self.playhead),
             desc: self.render_request_template.desc,
             quality: self.render_request_template.quality,
         }
@@ -1923,6 +1955,7 @@ impl ProductApp {
                 self.selected_position_key,
                 self.projection_generation,
                 easing_pressed,
+                self.playhead,
             )?;
         }
         Ok(())
@@ -2156,6 +2189,7 @@ impl ProductApp {
             document: &self.current_document,
             timeline_projection: &self.timeline_projection,
             primary: self.primary,
+            playhead: self.playhead,
             interval_preview: self.interval_preview,
             place_overlay: place_overlay.as_ref(),
         }) {
@@ -2389,6 +2423,7 @@ struct ProductSurfaceFrame<'a> {
     document: &'a motolii_doc::Document,
     timeline_projection: &'a ProductTimelineProjection,
     primary: Option<LayerId>,
+    playhead: RationalTime,
     interval_preview: Option<TimelineIntervalPreview>,
     place_overlay: Option<&'a RectanglePlaceOverlay>,
 }
@@ -2481,6 +2516,7 @@ impl ProductSurface {
             document,
             timeline_projection,
             primary,
+            playhead,
             interval_preview,
             place_overlay,
         } = input;
@@ -2495,6 +2531,7 @@ impl ProductSurface {
                 document,
                 projection: &timeline_projection.projection,
                 primary,
+                playhead,
                 interval_preview,
             },
         )?;
@@ -3041,6 +3078,29 @@ mod tests {
         );
         assert_eq!(
             projection.hit_test([layout.stage.x, layout.stage.y], layout),
+            None
+        );
+    }
+
+    #[test]
+    fn timeline_ruler_maps_to_the_same_viewport_without_becoming_content_hit_input() {
+        let document = crate::static_preview::bootstrap_document().unwrap();
+        let projection = ProductTimelineProjection::from_document(&document).unwrap();
+        let layout = test_layout(10);
+        let ruler = timeline_ruler_logical_rect(layout).unwrap();
+        let midpoint = [ruler.x + ruler.width / 2.0, ruler.y + ruler.height / 2.0];
+
+        assert_eq!(
+            projection.ruler_time_at(midpoint, layout),
+            document
+                .composition
+                .duration
+                .try_mul(RationalTime::try_new(1, 2).unwrap())
+                .ok()
+        );
+        assert_eq!(projection.hit_test(midpoint, layout), None);
+        assert_eq!(
+            projection.ruler_time_at([ruler.x - 1.0, midpoint[1]], layout),
             None
         );
     }

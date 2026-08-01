@@ -445,3 +445,4 @@
 | [2026-08-02-u4b0-add-position-key-closed-contract-decision.md](2026-08-02-u4b0-add-position-key-closed-contract-decision.md) | U4b-0 Add Position Key closed contract決定 |
 | [2026-08-02-u4b1-outgoing-interp-command-contract-decision.md](2026-08-02-u4b1-outgoing-interp-command-contract-decision.md) | U4b-1 outgoing Interp command契約決定 |
 | [2026-08-02-u4b1-product-easing-connection-implementation-decision.md](2026-08-02-u4b1-product-easing-connection-implementation-decision.md) | U4b-1 通常製品Easing接続 実装記録 |
+| [2026-08-02-cu-210p-paused-playhead-product-connection-decision.md](2026-08-02-cu-210p-paused-playhead-product-connection-decision.md) | CU-210P paused playhead通常製品接続決定 |

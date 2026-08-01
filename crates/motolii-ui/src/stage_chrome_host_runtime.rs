@@ -8,6 +8,7 @@ use wry::{Rect, WebView, WebViewBuilder};
 use crate::browser_host_runtime::product_asset_response;
 use crate::native_host_layout::LogicalRect;
 use crate::timeline_projection::project_position_interval;
+use motolii_core::RationalTime;
 
 const PROTOCOL: &str = "motolii-stage";
 const HEADER_URL: &str = "motolii-stage://product/stage-header.html";
@@ -153,6 +154,7 @@ impl StageChromeHostRuntime {
         document: &motolii_doc::Document,
         selected_position_key: Option<(motolii_doc::LayerId, motolii_doc::KeyframeId)>,
         projection_generation: u64,
+        playhead: RationalTime,
     ) -> Result<Self, StageChromeHostRuntimeError> {
         let created_at = std::time::Instant::now();
         let (snapshot, expected) = snapshot_json(
@@ -161,6 +163,7 @@ impl StageChromeHostRuntime {
             projection_generation,
             false,
             0,
+            playhead,
         )?;
         let encoded = javascript_json_parse_argument(&snapshot)?;
         let initialization_script = format!(
@@ -250,6 +253,7 @@ openEasing:(interval,anchor)=>window.ipc.postMessage(JSON.stringify({{kind:"open
         selected_position_key: Option<(motolii_doc::LayerId, motolii_doc::KeyframeId)>,
         projection_generation: u64,
         easing_pressed: bool,
+        playhead: RationalTime,
     ) -> Result<(), StageChromeHostRuntimeError> {
         let (snapshot, expected) = snapshot_json(
             document,
@@ -257,6 +261,7 @@ openEasing:(interval,anchor)=>window.ipc.postMessage(JSON.stringify({{kind:"open
             projection_generation,
             easing_pressed,
             self.latest_layout_epoch.unwrap_or(0),
+            playhead,
         )?;
         self.easing_inbox
             .lock()
@@ -357,6 +362,7 @@ fn snapshot_json(
     projection_generation: u64,
     easing_pressed: bool,
     layout_epoch: u64,
+    playhead: RationalTime,
 ) -> Result<(serde_json::Value, Option<OpenEasingIdentity>), serde_json::Error> {
     let projected = selected_position_key.and_then(|(layer, left_key)| {
         let interval = project_position_interval(document, layer, left_key)?;
@@ -383,7 +389,7 @@ fn snapshot_json(
     Ok((
         serde_json::json!({
             "mode": "RECTANGLE",
-            "timecode": "00:00.0",
+            "timecode": format_stage_timecode(playhead),
             "barPosition": "BAR 0.0.00",
             "tempoStatus": "120 BPM · SNAP BEAT",
             "qualityStatus": "DRAFT · FP16 · 1/2",
@@ -393,6 +399,21 @@ fn snapshot_json(
         }),
         expected,
     ))
+}
+
+fn format_stage_timecode(time: RationalTime) -> String {
+    let total_tenths = (time.as_seconds_f64().max(0.0) * 10.0).floor() as u64;
+    let tenths = total_tenths % 10;
+    let total_seconds = total_tenths / 10;
+    let seconds = total_seconds % 60;
+    let total_minutes = total_seconds / 60;
+    if total_minutes < 60 {
+        format!("{total_minutes:02}:{seconds:02}.{tenths}")
+    } else {
+        let minutes = total_minutes % 60;
+        let hours = total_minutes / 60;
+        format!("{hours:02}:{minutes:02}:{seconds:02}.{tenths}")
+    }
 }
 
 fn javascript_json_parse_argument(
@@ -504,5 +525,18 @@ mod tests {
 
         assert!(inbox.pending.is_empty());
         assert_eq!(inbox.expected, Some(identity(4)));
+    }
+
+    #[test]
+    fn stage_timecode_projects_the_host_playhead() {
+        assert_eq!(format_stage_timecode(RationalTime::ZERO), "00:00.0");
+        assert_eq!(
+            format_stage_timecode(RationalTime::try_new(125, 10).unwrap()),
+            "00:12.5"
+        );
+        assert_eq!(
+            format_stage_timecode(RationalTime::try_new(3_661, 1).unwrap()),
+            "01:01:01.0"
+        );
     }
 }
