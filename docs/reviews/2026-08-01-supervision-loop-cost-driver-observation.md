@@ -154,7 +154,47 @@ Claude CLIの`--output-format json`は`total_cost_usd`と`usage`を**既に返�
 2. 実diffが劣化領域にある場合、`VERDICT: ACCEPT`を有効な採用根拠にしない有効性条件
 3. 独立性の梯子の最上段を「別provider」だけでなく「別provider＋非LLM oracle」とする
 4. 性能regressionはLLM検収の守備範囲外と明記し、bench/golden oracleで持つ
-5. Spark(`codex`)とGrok(`cursor-agent`)のtoken/cost計測（現在`UNKNOWN`）
+
+## 7b. 「Grokが寡黙」の原因と解消（実装済み・2026-08-01）
+
+Grokは寡黙ではなかった。`--output-format text`が**構造化イベントを全て捨てていた**。
+実CLIを`stream-json`で叩くと、単純な1行の依頼でも次を出す。
+
+```text
+system / thinking×4(timestamp付きdelta) / assistant / result
+```
+
+`result`イベントには`usage`、`duration_api_ms`、`is_error`、`session_id`、`request_id`が入る。
+過去に「Grok相談が2回とも空出力」で原因を切り分けられなかったのは、これらが一切保存されて
+いなかったためである。
+
+三段すべてを構造化出力へ移した。既存の`VERDICT:` marker契約と`spark-stdout.txt`表示は、
+最終テキストの抽出で従来どおり保つ。
+
+| 段 | 変更 | usage経路 | key表記 |
+|---|---|---|---|
+| Opus | 変更なし（既にjson） | result本体 | snake_case ＋ `total_cost_usd` |
+| Spark | `codex exec --json` | `turn.completed` | snake_case ＋ `cached_input_tokens` |
+| Grok | `cursor-agent --output-format stream-json` | `result` | **camelCase** (`inputTokens`等) |
+
+生streamは`spark-stream.jsonl`と`grok-stdout-stream.jsonl`へ残す。空出力の原因はここにしか現れない。
+
+### 実CLIでの抽出検証
+
+| 段 | 抽出結果 | input | output | cache_read | cost |
+|---|---|---:|---:|---:|---:|
+| Grok | `VERDICT: ACCEPT`（marker 1件、末尾一致） | 16,013 | 113 | 256 | 返さない |
+| Spark | `ok` | 9,988 | 62 | 4,608 | 返さない |
+
+**Grokは1行の自明な依頼でも入力16,013 tokensを使っている。** 検収26.47秒の大半は固定
+オーバーヘッドであり、diffの検査そのものではない。これは計装前には観測できなかった。
+
+`codex`と`cursor-agent`はUSD costを返さないため`COST_USD: UNKNOWN`とし、合計を0で埋めず
+`UNMEASURED_COST_STAGES`へstage名を残す。
+
+## 8b. 残る計測の穴
+
+- Spark／GrokのUSD cost（両CLIが返さない。token数からの換算は単価が変わるため正本にしない）
 
 ## 9. 導線 — 過去のやり方へ戻さない
 

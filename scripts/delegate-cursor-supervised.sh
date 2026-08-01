@@ -220,9 +220,10 @@ record_stage_telemetry() {
   # Claude CLIの`--output-format json`は既にusageとtotal_cost_usdを返している。
   # 従来はstructured_outputだけを読み、この計測値を捨てていた。
   if [[ -n "$result_json" && -f "$result_json" ]] && jq -e 'type == "object"' "$result_json" >/dev/null 2>&1; then
-    input_tokens="$(jq -r '.usage.input_tokens // "UNKNOWN"' "$result_json")"
-    output_tokens="$(jq -r '.usage.output_tokens // "UNKNOWN"' "$result_json")"
-    cache_read_tokens="$(jq -r '.usage.cache_read_input_tokens // "UNKNOWN"' "$result_json")"
+    # 三CLIでkey表記が違う。Claudeはsnake_case、Cursorはcamel、Codexはcached_input_tokens
+    input_tokens="$(jq -r '.usage.input_tokens // .usage.inputTokens // "UNKNOWN"' "$result_json")"
+    output_tokens="$(jq -r '.usage.output_tokens // .usage.outputTokens // "UNKNOWN"' "$result_json")"
+    cache_read_tokens="$(jq -r '.usage.cache_read_input_tokens // .usage.cacheReadTokens // .usage.cached_input_tokens // "UNKNOWN"' "$result_json")"
     cost_usd="$(jq -r '.total_cost_usd // "UNKNOWN"' "$result_json")"
     api_ms="$(jq -r '.duration_api_ms // "UNKNOWN"' "$result_json")"
   fi
@@ -253,6 +254,7 @@ summarize_telemetry() {
       printf "TOTAL_OUTPUT_TOKENS: %d\n", tout
       printf "TOTAL_COST_USD: %.6f\n", cost
       printf "UNMEASURED_TOKEN_STAGES:%s\n", (unmeasured == "" ? " NONE" : unmeasured)
+      printf "UNMEASURED_COST_STAGES:%s\n", (unknown_cost == "" ? " NONE" : unknown_cost)
     }
   ' "$telemetry_file" >>"$telemetry_file"
   echo "delegate-cursor-supervised: 計測合計 $(awk -F': ' '/^TOTAL_|^UNMEASURED_/ {printf "%s=%s ", $1, $2}' "$telemetry_file")" >&2
@@ -340,6 +342,34 @@ result_is_valid() {
   ' "$output"
 }
 
+# 検収を`--output-format text`で受けていた間、thinking delta、usage、失敗理由が
+# 全て捨てられ、空出力の原因を後から切り分けられなかった。stream-jsonへ切り替え、
+# 生streamを証跡に残す。既存の`VERDICT:` marker契約は最終resultテキストの抽出で保つ
+extract_supervisor_result() {
+  local stream="$1" output="$2" result_json="$3"
+  : >"$output"
+  : >"$result_json"
+  [[ -f "$stream" ]] || return 0
+  jq -c 'select(.type == "result")' "$stream" 2>/dev/null | tail -1 >"$result_json" || true
+  [[ -s "$result_json" ]] || return 0
+  jq -r '.result // empty' "$result_json" >"$output" 2>/dev/null || true
+}
+
+# 施工も`--json` JSONLで受け、生streamを証跡に残す。表示用のspark-stdout.txtへは
+# agent messageだけを抽出し、usageはturn.completedを正本にする
+extract_spark_result() {
+  local attempt_dir="$1"
+  local stream="$attempt_dir/spark-stream.jsonl"
+  local output="$attempt_dir/spark-stdout.txt"
+  local result_json="$attempt_dir/spark-result.json"
+  : >"$output"
+  : >"$result_json"
+  [[ -f "$stream" ]] || return 0
+  jq -r 'select(.type == "item.completed") | select(.item.type == "agent_message") | .item.text // empty' \
+    "$stream" 2>/dev/null >"$output" || true
+  jq -c 'select(.type == "turn.completed")' "$stream" 2>/dev/null | tail -1 >"$result_json" || true
+}
+
 run_supervisor() {
   local output="$1"
   local prompt="$2"
@@ -348,12 +378,18 @@ run_supervisor() {
   # plan modeで編集を禁止しつつ、--forceでread-only shellの非対話実行だけを
   # 可能にする。fingerprint/scope検査は、CLI側のmode退行も検出する多層防御。
   local cursor_mode_args=(--trust --mode plan --force --sandbox enabled)
-  if ! run_agent "$output" "$timeout_seconds" \
+  local stream="${output%.txt}-stream.jsonl"
+  local result_json="${output%.txt}-result.json"
+  local agent_status=0
+  run_agent "$stream" "$timeout_seconds" \
     env CURSOR_AGENT=1 "$CURSOR_AGENT_BIN" -p "${cursor_mode_args[@]}" \
-      --output-format text \
+      --output-format stream-json \
       --model "$CURSOR_GROK_MODEL" \
       --workspace "$WORKTREE" \
-      "$prompt"; then
+      "$prompt" || agent_status=$?
+  # 失敗・timeoutでも抽出する。空出力の理由はstreamにしか残らない
+  extract_supervisor_result "$stream" "$output" "$result_json"
+  if (( agent_status != 0 )); then
     return 1
   fi
   if ! result_is_valid "$output" "$result_kind"; then
@@ -2263,7 +2299,8 @@ EOF
   grok_start_epoch="$(date +%s)"
   (cd "$worktree" && run_supervisor "$attempt_dir/grok-stdout.txt" "$inspection_prompt" verdict "$inspection_timeout") || grok_status=$?
   # 検収はsubshellで走るためrun_agentのglobalが親へ戻らない。親側で計測する
-  record_stage_telemetry "$attempt_dir/telemetry.txt" GROK "$(( $(date +%s) - grok_start_epoch ))"
+  record_stage_telemetry "$attempt_dir/telemetry.txt" GROK "$(( $(date +%s) - grok_start_epoch ))" \
+    "$attempt_dir/grok-stdout-result.json"
   enforce_derived_target_closure "$worktree" "post-grok"
   if [[ "$grok_status" -ne 0 ]]; then
     [[ ! -f "$attempt_dir/grok-stdout.txt" ]] || cat "$attempt_dir/grok-stdout.txt"
@@ -2564,8 +2601,9 @@ spark_prompt_sha256="$(shasum -a 256 "$spark_prompt_file" | awk '{print $1}')"
 
 echo
 echo "## 2. Codex Spark implementation"
-if ! run_agent "$attempt_dir/spark-stdout.txt" "$SPARK_TIMEOUT_SECONDS" \
+if ! run_agent "$attempt_dir/spark-stream.jsonl" "$SPARK_TIMEOUT_SECONDS" \
   env CODEX_DELEGATED=1 "$CODEX_AGENT_BIN" --ask-for-approval never exec \
+    --json \
     --ephemeral --ignore-user-config --ignore-rules --strict-config \
     --disable memories --disable plugins --disable apps \
     --disable browser_use --disable browser_use_external \
@@ -2574,14 +2612,18 @@ if ! run_agent "$attempt_dir/spark-stdout.txt" "$SPARK_TIMEOUT_SECONDS" \
     --color never --model "$SPARK_MODEL" \
     --sandbox workspace-write --cd "$WORKTREE" \
     "$implementation_prompt"; then
-  record_stage_telemetry "$attempt_dir/telemetry.txt" SPARK "$RUN_AGENT_WALL_SECONDS"
+  extract_spark_result "$attempt_dir"
+  record_stage_telemetry "$attempt_dir/telemetry.txt" SPARK "$RUN_AGENT_WALL_SECONDS" \
+    "$attempt_dir/spark-result.json"
   [[ ! -f "$attempt_dir/spark-stdout.txt" ]] || cat "$attempt_dir/spark-stdout.txt"
   snapshot_worktree "$WORKTREE" "$attempt_dir" "post-spark"
   echo "STAGE: spark FAILED_OR_TIMEOUT" >>"$attempt_dir/stage-result.txt"
   invalidate_checkpoint "$evidence_root"
   exit 1
 fi
-record_stage_telemetry "$attempt_dir/telemetry.txt" SPARK "$RUN_AGENT_WALL_SECONDS"
+extract_spark_result "$attempt_dir"
+record_stage_telemetry "$attempt_dir/telemetry.txt" SPARK "$RUN_AGENT_WALL_SECONDS" \
+  "$attempt_dir/spark-result.json"
 cat "$attempt_dir/spark-stdout.txt"
 verify_generated_file_integrity "$target_capsule_file" "$target_capsule_sha256" "Spark target capsule"
 verify_generated_file_integrity "$compiled_grain_file" "$compiled_grain_sha256" "compiled Spark grain"

@@ -136,7 +136,13 @@ echo "codex:$*" >>"$FAKE_CALL_LOG"
 if [[ -n "${FAKE_SPARK_HOOK:-}" ]]; then
   bash "$FAKE_SPARK_HOOK"
 fi
-printf '%s\n' "${FAKE_SPARK_OUTPUT:-implementation complete}"
+# 実CLIの`codex exec --json`と同形のJSONL。usageはturn.completedが正本
+spark_text="${FAKE_SPARK_OUTPUT:-implementation complete}"
+printf '{"type":"thread.started","thread_id":"fixture"}\n'
+printf '{"type":"turn.started"}\n'
+printf '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":%s}}\n' \
+  "$(printf '%s' "$spark_text" | jq -Rs .)"
+printf '{"type":"turn.completed","usage":{"input_tokens":9988,"cached_input_tokens":4608,"cache_write_input_tokens":0,"output_tokens":62,"reasoning_output_tokens":55}}\n'
 EOF
 
 cat >"$FAKE_BIN/cursor-agent" <<'EOF'
@@ -146,7 +152,13 @@ echo "cursor:$*" >>"$FAKE_CALL_LOG"
 if [[ -n "${FAKE_GROK_HOOK:-}" ]]; then
   bash "$FAKE_GROK_HOOK"
 fi
-printf '%s\n' "${FAKE_GROK_OUTPUT:-VERDICT: ACCEPT}"
+# 実CLIの`cursor-agent --output-format stream-json`と同形。usageはcamelCase
+grok_text="${FAKE_GROK_OUTPUT:-VERDICT: ACCEPT}"
+grok_json="$(printf '%s' "$grok_text" | jq -Rs .)"
+printf '{"type":"system","subtype":"init"}\n'
+printf '{"type":"thinking","subtype":"delta","text":"fixture reasoning"}\n'
+printf '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":%s}]}}\n' "$grok_json"
+printf '{"type":"result","subtype":"success","duration_ms":10,"duration_api_ms":10,"is_error":false,"result":%s,"usage":{"inputTokens":16013,"outputTokens":113,"cacheReadTokens":256,"cacheWriteTokens":0}}\n' "$grok_json"
 EOF
 chmod +x "$FAKE_BIN/claude" "$FAKE_BIN/codex" "$FAKE_BIN/cursor-agent"
 
@@ -835,13 +847,27 @@ HAPPY_TELEMETRY="$happy_attempt/telemetry.txt"
 [[ -f "$HAPPY_TELEMETRY" ]] || fail "execute must record telemetry"
 grep -Eq '^SPARK_WALL_SECONDS: [0-9]+$' "$HAPPY_TELEMETRY" || fail "Spark wall seconds must be numeric"
 grep -Eq '^GROK_WALL_SECONDS: [0-9]+$' "$HAPPY_TELEMETRY" || fail "Grok wall seconds must be numeric"
-assert_has "$HAPPY_TELEMETRY" "SPARK_INPUT_TOKENS: UNKNOWN" "Spark tokens are unmeasured, not guessed"
-assert_has "$HAPPY_TELEMETRY" "GROK_INPUT_TOKENS: UNKNOWN" "Grok tokens are unmeasured, not guessed"
-grep -Eq '^UNMEASURED_TOKEN_STAGES:.*SPARK_INPUT_TOKENS' "$HAPPY_TELEMETRY" \
-  || fail "unmeasured Spark tokens must be named in the summary"
-grep -Eq '^UNMEASURED_TOKEN_STAGES:.*GROK_INPUT_TOKENS' "$HAPPY_TELEMETRY" \
-  || fail "unmeasured Grok tokens must be named in the summary"
+assert_has "$HAPPY_TELEMETRY" "SPARK_INPUT_TOKENS: 9988" "Spark tokens come from turn.completed"
+assert_has "$HAPPY_TELEMETRY" "SPARK_CACHE_READ_TOKENS: 4608" "Spark cached input measured"
+assert_has "$HAPPY_TELEMETRY" "GROK_INPUT_TOKENS: 16013" "Grok tokens come from the result event"
+assert_has "$HAPPY_TELEMETRY" "GROK_CACHE_READ_TOKENS: 256" "Grok cache read measured"
+# codexとcursorはUSD costを返さない。合計を0で埋めず欠測stage名を残す
+assert_has "$HAPPY_TELEMETRY" "SPARK_COST_USD: UNKNOWN" "codex reports tokens but no USD cost"
+assert_has "$HAPPY_TELEMETRY" "GROK_COST_USD: UNKNOWN" "cursor reports tokens but no USD cost"
+assert_has "$HAPPY_TELEMETRY" "UNMEASURED_TOKEN_STAGES: NONE" "every stage reports tokens"
+grep -Eq '^UNMEASURED_COST_STAGES:.*SPARK_COST_USD' "$HAPPY_TELEMETRY" \
+  || fail "unmeasured Spark cost must be named in the summary"
+grep -Eq '^UNMEASURED_COST_STAGES:.*GROK_COST_USD' "$HAPPY_TELEMETRY" \
+  || fail "unmeasured Grok cost must be named in the summary"
 grep -Eq '^TOTAL_WALL_SECONDS: [0-9]+$' "$HAPPY_TELEMETRY" || fail "execute must total wall seconds"
+
+# 生streamを必ず残す。Grokの空出力の原因はここにしか現れない
+[[ -s "$happy_attempt/spark-stream.jsonl" ]] || fail "Spark raw JSONL stream must be retained"
+[[ -s "$happy_attempt/grok-stdout-stream.jsonl" ]] || fail "Grok raw stream must be retained"
+grep -Fq '"type":"thinking"' "$happy_attempt/grok-stdout-stream.jsonl" \
+  || fail "Grok thinking events must be retained instead of discarded by text mode"
+assert_fragment "$CALL_LOG" "--output-format stream-json" "Grok streams structured events"
+assert_fragment "$CALL_LOG" "--json" "Spark emits JSONL events"
 
 GROK_HOOK="$TMP_ROOT/grok-hook.sh"
 cat >"$GROK_HOOK" <<EOF
