@@ -70,6 +70,10 @@ maintenance、3 OS、既存fixtureとの適合を再確認する。
 | disk CAS | [cacache](https://docs.rs/cacache/13.1.0/cacache/) | M4-P05のintegrity、atomic commit、corrupt→miss採択probe | disk hard budget、LRU policy、artifact codec |
 | 区間集合 | [rangemap](https://docs.rs/rangemap/1.7.1/rangemap/) | M4-P06のhalf-open invalidation/coverage採択probe | Document変異の意味、generation、scheduler priority |
 | priority collection | [priority-queue](https://docs.rs/priority-queue/2.7.0/priority_queue/) | M4-P07のbounded/reprioritize採択probe | worker lifecycle、cancel、Document/cache writer |
+| private 3D math | [glam](https://docs.rs/glam/0.33.2/glam/) | M5 camera／transform adapterの採択probe | Document座標意味、公開型、scene owner |
+| glTF parser | [gltf](https://docs.rs/gltf/1.4.1/gltf/) | Host-resolved bytesからM5対応subsetへ変換する採択probe | ambient resource解決、Document schema、Motolii表示互換 |
+| CPU bounds／ray | [parry3d](https://docs.rs/parry3d/0.29.0/parry3d/) | M5 pickingのAABB／triangle比較probe | physics world、UI selection owner、GPU picking |
+| deterministic PRNG | [rand_pcg](https://docs.rs/rand_pcg/0.10.2/rand_pcg/) | M5 private duplicate identityのreference-vector probe | InstanceId形式、slot寿命、migration、公開契約 |
 | screen reader smoke | [Guidepup](https://github.com/guidepup/guidepup) | macOS VoiceOver / Windows NVDAの前哨CI | 実IME、実機、人間審判 |
 | 構造snapshot | [insta](https://github.com/mitsuhiko/insta) | 更新不可侵を保つreview動線を先に作れた時 | semantic oracle、golden採否 |
 | 依存・license監査 | [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) | 手書き依存guardとの重複を整理する粒 | Motolii固有の依存方向と公開型検査 |

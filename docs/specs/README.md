@@ -17,7 +17,7 @@
 | [M2-document-model.md](M2-document-model.md) | **基盤再締結済み / 段階発注可**(P1修復とA〜C証跡がmain発効済み。D5は統合/E2E審判pending。歴史から再採択したD1n external revisionは独立follow-up・未実装) |
 | [M3-ui-integration.md](M3-ui-integration.md) | **ドラフト / UI責任境界・surface topology決定、platform受入比較中**(React chrome + native Stage/Timeline + headless interaction + 1 surface/2 viewport/opaque WebView islandsは決定。製品surface統合はG0-9実機待ち、plugin UI公開契約は分離したG0-3 / GAP-13待ち) |
 | [M4-cache-and-analysis.md](M4-cache-and-analysis.md) | ドラフト(K0 RoD/RoI test-only契約凍結済み。既知実装調査とM4初版採択地図は作成済み。K1〜K8製品runtime前に採択probeと一意な`DO`を閉じる) |
-| [M5-3d-and-post.md](M5-3d-and-post.md) | ドラフト(P0I等の意味decision／test-only fixtureは可。製品runtime前に既知実装調査とM5採択地図を閉じる) |
+| [M5-3d-and-post.md](M5-3d-and-post.md) | ドラフト(P0I等の意味decision／test-only fixtureは可。既知実装調査は比較中として作成済み。製品runtime前に反対側レビューとM5採択地図を閉じる) |
 
 ## タスク粒度のルール
 
