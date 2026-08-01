@@ -193,6 +193,7 @@ struct RawInputVisitor {
     forbid_ui_input_methods: bool,
     layout_adapter: bool,
     product_window_adapter: bool,
+    easing_popup_adapter: bool,
     violations: Vec<String>,
 }
 
@@ -210,6 +211,7 @@ impl RawInputVisitor {
         if path_is_forbidden(&segments)
             && !(self.layout_adapter && layout_adapter_path_is_allowed(&segments))
             && !(self.product_window_adapter && product_window_adapter_path_is_allowed(&segments))
+            && !(self.easing_popup_adapter && easing_popup_adapter_path_is_allowed(&segments))
         {
             self.violations
                 .push(format!("{origin}: {}", segments.join("::")));
@@ -283,7 +285,9 @@ impl<'ast> Visit<'ast> for RawInputVisitor {
             if ((path.glob || path.alias.is_some()) && toolkit_glob_is_forbidden(&path.segments))
                 || (path_is_forbidden(&path.segments)
                     && !(self.product_window_adapter
-                        && product_window_adapter_path_is_allowed(&path.segments)))
+                        && product_window_adapter_path_is_allowed(&path.segments))
+                    && !(self.easing_popup_adapter
+                        && easing_popup_adapter_path_is_allowed(&path.segments)))
             {
                 self.violations
                     .push(format!("use: {}", path.segments.join("::")));
@@ -318,12 +322,14 @@ fn audit_source(
     forbid_ui_input_methods: bool,
     layout_adapter: bool,
     product_window_adapter: bool,
+    easing_popup_adapter: bool,
 ) -> Result<Vec<String>, syn::Error> {
     let file = syn::parse_file(source)?;
     let mut visitor = RawInputVisitor {
         forbid_ui_input_methods,
         layout_adapter,
         product_window_adapter,
+        easing_popup_adapter,
         violations: Vec::new(),
     };
     visitor.visit_file(&file);
@@ -349,6 +355,49 @@ fn product_window_adapter_path_is_allowed(segments: &[String]) -> bool {
                         | "Occluded"
                         | "RedrawRequested"
                 )
+    )
+}
+
+fn easing_popup_adapter_path_is_allowed(segments: &[String]) -> bool {
+    matches!(
+        segments,
+        [winit, event, window_event]
+            if winit == "winit" && event == "event" && window_event == "WindowEvent"
+    ) || matches!(
+        segments,
+        [winit, event, window_event, variant]
+            if winit == "winit"
+                && event == "event"
+                && window_event == "WindowEvent"
+                && matches!(
+                    variant.as_str(),
+                    "CloseRequested"
+                        | "Focused"
+                        | "Resized"
+                        | "RedrawRequested"
+                        | "CursorMoved"
+                        | "MouseInput"
+                        | "KeyboardInput"
+                )
+    ) || matches!(
+        segments,
+        [winit, event, input, variant]
+            if winit == "winit"
+                && event == "event"
+                && ((input == "MouseButton" && variant == "Left")
+                    || (input == "ElementState"
+                        && matches!(variant.as_str(), "Pressed" | "Released")))
+    ) || matches!(
+        segments,
+        [winit, keyboard, input, variant]
+            if winit == "winit"
+                && keyboard == "keyboard"
+                && ((input == "Key" && variant == "Named")
+                    || (input == "NamedKey"
+                        && matches!(
+                            variant.as_str(),
+                            "Escape" | "Tab" | "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown"
+                        )))
     )
 }
 
@@ -445,6 +494,7 @@ fn workspace_product_sources_have_no_raw_toolkit_input() {
     let ui_source = workspace_root().join("crates/motolii-ui/src");
     let layout_adapter = ui_source.join("layout_runtime_adapter.rs");
     let product_window_adapter = ui_source.join("product_runtime_adapter.rs");
+    let easing_popup_adapter = ui_source.join("easing_popup_input_adapter.rs");
     for path in files {
         let source = fs::read_to_string(&path).unwrap();
         match audit_source(
@@ -452,6 +502,7 @@ fn workspace_product_sources_have_no_raw_toolkit_input() {
             path.starts_with(&ui_source),
             path == layout_adapter,
             path == product_window_adapter,
+            path == easing_popup_adapter,
         ) {
             Ok(found) => {
                 violations.extend(
@@ -503,7 +554,7 @@ fn audit_rejects_paths_aliases_methods_and_macro_tokens() {
     ];
 
     for source in rejected {
-        let violations = audit_source(source, true, false, false).unwrap();
+        let violations = audit_source(source, true, false, false, false).unwrap();
         assert!(
             !violations.is_empty(),
             "raw input fixture unexpectedly passed: {source}"
@@ -525,11 +576,12 @@ fn audit_ignores_literals_comments_and_domain_modifiers() {
         fn normalized(_: Modifiers) {}
     "###;
 
-    assert!(audit_source(accepted, true, false, false)
+    assert!(audit_source(accepted, true, false, false, false)
         .unwrap()
         .is_empty());
     assert!(audit_source(
         "fn domain<T>(value: &T) { value.input(|_| {}); }",
+        false,
         false,
         false,
         false
@@ -541,11 +593,13 @@ fn audit_ignores_literals_comments_and_domain_modifiers() {
         false,
         false,
         false,
+        false,
     )
     .unwrap()
     .is_empty());
     assert!(audit_source(
         "use second as first; use first as second;",
+        false,
         false,
         false,
         false
@@ -576,7 +630,7 @@ fn layout_adapter_accepts_only_the_specified_raw_closed_set() {
             });
         }
     "#;
-    assert!(audit_source(accepted, true, true, false)
+    assert!(audit_source(accepted, true, true, false, false)
         .unwrap()
         .is_empty());
 
@@ -589,7 +643,9 @@ fn layout_adapter_accepts_only_the_specified_raw_closed_set() {
     ];
     for source in rejected {
         assert!(
-            !audit_source(source, true, true, false).unwrap().is_empty(),
+            !audit_source(source, true, true, false, false)
+                .unwrap()
+                .is_empty(),
             "layout adapter fixture unexpectedly passed: {source}"
         );
     }
@@ -609,7 +665,7 @@ fn product_window_adapter_accepts_only_lifecycle_events() {
             }
         }
     "#;
-    assert!(audit_source(accepted, true, false, true)
+    assert!(audit_source(accepted, true, false, true, false)
         .unwrap()
         .is_empty());
 
@@ -619,10 +675,57 @@ fn product_window_adapter_accepts_only_lifecycle_events() {
         "fn f(e: winit::event::WindowEvent) { if let winit::event::WindowEvent::KeyboardInput { .. } = e {} }",
     ] {
         assert!(
-            !audit_source(source, true, false, true)
+            !audit_source(source, true, false, true, false)
                 .unwrap()
                 .is_empty(),
             "product window adapter fixture unexpectedly passed: {source}"
+        );
+    }
+}
+
+#[test]
+fn easing_popup_adapter_accepts_only_its_typed_input_closed_set() {
+    let accepted = r#"
+        fn adapt(event: winit::event::WindowEvent) {
+            match event {
+                winit::event::WindowEvent::CloseRequested
+                | winit::event::WindowEvent::Focused(_)
+                | winit::event::WindowEvent::Resized(_)
+                | winit::event::WindowEvent::RedrawRequested
+                | winit::event::WindowEvent::CursorMoved { .. }
+                | winit::event::WindowEvent::MouseInput {
+                    button: winit::event::MouseButton::Left,
+                    state: winit::event::ElementState::Pressed
+                        | winit::event::ElementState::Released,
+                    ..
+                }
+                | winit::event::WindowEvent::KeyboardInput { .. } => {}
+                _ => {}
+            }
+            let _ = winit::keyboard::Key::Named(winit::keyboard::NamedKey::Escape);
+            let _ = winit::keyboard::Key::Named(winit::keyboard::NamedKey::Tab);
+            let _ = winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowLeft);
+            let _ = winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowRight);
+            let _ = winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowUp);
+            let _ = winit::keyboard::Key::Named(winit::keyboard::NamedKey::ArrowDown);
+        }
+    "#;
+    assert!(audit_source(accepted, true, false, false, true)
+        .unwrap()
+        .is_empty());
+
+    for source in [
+        "fn f(_: winit::event::DeviceEvent) {}",
+        "fn f(_: winit::event::KeyEvent) {}",
+        "fn f() { let _ = winit::event::MouseButton::Right; }",
+        "fn f() { let _ = winit::keyboard::NamedKey::Enter; }",
+        "fn f(e: winit::event::WindowEvent) { if let winit::event::WindowEvent::ModifiersChanged(_) = e {} }",
+    ] {
+        assert!(
+            !audit_source(source, true, false, false, true)
+                .unwrap()
+                .is_empty(),
+            "Easing popup adapter fixture unexpectedly passed: {source}"
         );
     }
 }

@@ -16,15 +16,14 @@ export function StageTransportCandidate({
   barPosition,
   tempoStatus,
   qualityStatus,
+  easingTrigger,
 }) {
   return (
     <div className="transport">
       <button className="toolbtn" id="step-prev" type="button" aria-label="前のkeyへ">|‹</button>
       <button className="toolbtn" id="play" type="button" aria-label="再生">▶</button>
       <button className="toolbtn" id="step-next" type="button" aria-label="次のkeyへ">›|</button>
-      <button className="interval-easing" type="button" disabled aria-label="区間easing">
-        <span className="interval-easing__placeholder">—</span>
-      </button>
+      {easingTrigger}
       <span className="time" id="time">{timecode}</span>
       <span>{barPosition}</span>
       <span>{tempoStatus}</span>

@@ -7,10 +7,11 @@ use motolii_core::{RationalTime, RationalTimeError};
 use motolii_doc::{
     Clip, ClipSource, Command, CommandError, Document, DocumentError, DocumentPluginError,
     DocumentWriter, DraftDocParam, EffectDefinitionDraft, EffectDefinitionId, EffectId,
-    ItemEnvelope, JournalEdit, LayerId, LayerIdError, ParentLocator, PreparedPluginRecipe,
-    ProjectError, ProjectSession, SaveProjectOptions, ScalarPropertyId, StandardShape, TrackItem,
-    UndoError, VectorContent, VectorRecipe,
+    ItemEnvelope, JournalEdit, KeyframeId, LayerId, LayerIdError, ParentLocator,
+    PreparedPluginRecipe, ProjectError, ProjectSession, SaveProjectOptions, ScalarPropertyId,
+    StandardShape, TrackItem, UndoError, VectorContent, VectorRecipe,
 };
+use motolii_eval::Interp;
 use motolii_plugin::{PluginCatalog, PluginKind};
 
 use crate::{DocumentCommandRequest, DomainIntent, InputPhase, RouterOutput};
@@ -23,6 +24,7 @@ pub(crate) enum DocumentEditAction {
     SetEffectParam(SetEffectParamRequest),
     MoveClip(MoveClipRequest),
     TrimClip(TrimClipRequest),
+    SetPositionKeyInterp(SetPositionKeyInterpRequest),
     ReplacePrimary(LayerId),
     ClearPrimary,
     Undo,
@@ -38,6 +40,7 @@ impl DocumentEditAction {
             Self::SetEffectParam(_) => DocumentEditActionKind::SetEffectParam,
             Self::MoveClip(_) => DocumentEditActionKind::MoveClip,
             Self::TrimClip(_) => DocumentEditActionKind::TrimClip,
+            Self::SetPositionKeyInterp(_) => DocumentEditActionKind::SetPositionKeyInterp,
             Self::ReplacePrimary(_) => DocumentEditActionKind::ReplacePrimary,
             Self::ClearPrimary => DocumentEditActionKind::ClearPrimary,
             Self::Undo => DocumentEditActionKind::Undo,
@@ -54,6 +57,7 @@ pub(crate) enum DocumentEditActionKind {
     SetEffectParam,
     MoveClip,
     TrimClip,
+    SetPositionKeyInterp,
     ReplacePrimary,
     ClearPrimary,
     Undo,
@@ -89,6 +93,11 @@ impl DocumentEditQueue {
     pub(crate) fn push_move_clip(&mut self, request: MoveClipRequest) {
         self.pending
             .push_back(DocumentEditAction::MoveClip(request));
+    }
+
+    pub(crate) fn push_set_position_key_interp(&mut self, request: SetPositionKeyInterpRequest) {
+        self.pending
+            .push_back(DocumentEditAction::SetPositionKeyInterp(request));
     }
 
     pub(crate) fn push_replace_primary(&mut self, target: LayerId) {
@@ -192,6 +201,13 @@ pub(crate) struct TrimClipRequest {
     pub(crate) layer_id: LayerId,
     pub(crate) edge: TrimClipEdge,
     pub(crate) time: RationalTime,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct SetPositionKeyInterpRequest {
+    pub(crate) layer_id: LayerId,
+    pub(crate) left_key_id: KeyframeId,
+    pub(crate) interp: Interp,
 }
 
 impl SetEffectParamRequest {
@@ -485,6 +501,26 @@ impl DocumentEditRuntime {
                         .prepare_trim_clip_out(request.layer_id, request.time)?,
                 };
                 let Some(command) = command else {
+                    return Ok(None);
+                };
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    Some(request.layer_id),
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::SetPositionKeyInterp(request) => {
+                let Some(command) = self.writer.prepare_set_position_key_interp(
+                    request.layer_id,
+                    request.left_key_id,
+                    request.interp,
+                )?
+                else {
                     return Ok(None);
                 };
                 let projection_generation =

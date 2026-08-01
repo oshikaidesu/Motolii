@@ -105,6 +105,10 @@ body,
   color: var(--muted);
 }
 
+.easing-trigger-seat {
+  display: inline-flex;
+}
+
 .interval-easing:disabled {
   opacity: 0.55;
 }

@@ -20,7 +20,10 @@ use crate::browser_host_runtime::{
 use crate::document_edit_runtime::{
     AttachEffectRequest, DocumentEditDispatchError, DocumentEditQueue, DocumentEditRuntime,
     DocumentEditRuntimeError, MoveClipRequest, PlaceRectangleRequest, PublishedDocument,
-    TrimClipEdge, TrimClipRequest,
+    SetPositionKeyInterpRequest, TrimClipEdge, TrimClipRequest,
+};
+use crate::easing_popup_runtime::{
+    EasingPopupError, EasingPopupInput, EasingPopupOpen, EasingPopupOutcome, EasingPopupRuntime,
 };
 use crate::host_pointer_capture::{HostPointerCancel, HostPointerCandidate, HostPointerPress};
 use crate::inspector_host_runtime::{
@@ -36,11 +39,13 @@ use crate::native_timeline_renderer::{
 use crate::render_worker::{
     RenderGeneration, RenderRequest, RenderWorker, RenderWorkerClient, RenderWorkerError,
 };
-use crate::stage_chrome_host_runtime::{StageChromeHostRuntime, StageChromeHostRuntimeError};
+use crate::stage_chrome_host_runtime::{
+    StageChromeHostRuntime, StageChromeHostRuntimeError, StageChromeIntentError,
+};
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
 use crate::timeline_projection::{
-    project_timeline, TimelineHit, TimelineMetrics, TimelineProjection, TimelineProjectionError,
-    TimelineViewport,
+    project_position_interval, project_timeline, TimelineHit, TimelineMetrics, TimelineProjection,
+    TimelineProjectionError, TimelineViewport,
 };
 use crate::timeline_tools_host_runtime::{TimelineToolsHostRuntime, TimelineToolsHostRuntimeError};
 use crate::{
@@ -141,6 +146,7 @@ fn compile_product_runtime() {
 const _: fn() = compile_product_runtime;
 
 pub(crate) struct ProductApp {
+    easing_popup: Option<EasingPopupRuntime>,
     // surface → WebView → Windowの順にdropし、AppKit backingを先に失わない。
     gfx: Option<ProductSurface>,
     browser: Option<BrowserHostRuntime>,
@@ -162,6 +168,7 @@ pub(crate) struct ProductApp {
     command_keymap: KeymapResolution,
     primary: Option<motolii_doc::LayerId>,
     active_effect_use: Option<EffectId>,
+    selected_position_key: Option<(LayerId, motolii_doc::KeyframeId)>,
     projection_generation: u64,
     current_document: Arc<motolii_doc::Document>,
     proxy: EventLoopProxy<ProductEvent>,
@@ -693,6 +700,7 @@ impl ProductApp {
         let command_registry = builtin_command_registry()?;
         let command_keymap = product_command_keymap(&command_registry)?;
         Ok(Self {
+            easing_popup: None,
             gfx: None,
             browser: None,
             inspector: None,
@@ -714,6 +722,7 @@ impl ProductApp {
             command_keymap,
             primary: None,
             active_effect_use: None,
+            selected_position_key: None,
             projection_generation: 0,
             proxy,
             layout_authority: LayoutAuthority::built_in()?,
@@ -790,7 +799,12 @@ impl ProductApp {
             elapsed_ms(inspector_started),
         ));
         let stage_chrome_started = Instant::now();
-        let stage_chrome = StageChromeHostRuntime::new(&window)?;
+        let stage_chrome = StageChromeHostRuntime::new(
+            &window,
+            &self.current_document,
+            self.selected_position_key,
+            self.projection_generation,
+        )?;
         crate::ui_numeric_trace::emit(format_args!(
             "kind=startup phase=stage-chrome-created phase_ms={:.3}",
             elapsed_ms(stage_chrome_started),
@@ -827,6 +841,13 @@ impl ProductApp {
                 let _ = wake_proxy.send_event(ProductEvent::Wake);
             }))
             .map_err(InspectorHostRuntimeError::from)
+            .map_err(ProductRuntimeError::from)?;
+        let wake_proxy = self.proxy.clone();
+        stage_chrome
+            .register_wake(Arc::new(move || {
+                let _ = wake_proxy.send_event(ProductEvent::Wake);
+            }))
+            .map_err(StageChromeHostRuntimeError::from)
             .map_err(ProductRuntimeError::from)?;
         self.inspector = Some(inspector);
         self.stage_chrome = Some(stage_chrome);
@@ -1173,6 +1194,9 @@ impl ProductApp {
                     if let Err(error) = self.publish_timeline_tools() {
                         return self.fail(event_loop, error);
                     }
+                    if let Err(error) = self.publish_stage_chrome(false) {
+                        return self.fail(event_loop, error);
+                    }
                     if let Err(error) = self.submit_stage_projection() {
                         return self.fail(event_loop, error);
                     }
@@ -1191,6 +1215,10 @@ impl ProductApp {
     ) {
         match event {
             ProductEvent::Wake => {
+                if let Err(error) = self.process_stage_chrome_intents(event_loop) {
+                    self.fail(event_loop, error);
+                    return;
+                }
                 if let Err(error) = self.process_pending_inspector_commit(event_loop) {
                     self.fail(event_loop, error);
                     return;
@@ -1564,6 +1592,10 @@ impl ProductApp {
         let Some(hit) = hit else {
             return;
         };
+        self.selected_position_key = match hit {
+            TimelineHit::Key { layer, key } => Some((layer, key)),
+            TimelineHit::Bar { .. } | TimelineHit::None => None,
+        };
         self.browser_focus_target = BrowserFocusTarget::Parent;
         if let Some(browser) = &self.browser {
             if let Err(error) = browser.ensure_focus(self.browser_focus_target) {
@@ -1596,9 +1628,16 @@ impl ProductApp {
                         return self.fail(event_loop, error);
                     }
                 }
+                if let Err(error) = self.publish_stage_chrome(false) {
+                    return self.fail(event_loop, error);
+                }
                 self.request_redraw();
             }
-            Ok(None) => {}
+            Ok(None) => {
+                if let Err(error) = self.publish_stage_chrome(false) {
+                    self.fail(event_loop, error);
+                }
+            }
             Err(error) => self.fail(event_loop, error),
         }
     }
@@ -1805,6 +1844,9 @@ impl ProductApp {
         if let Err(error) = self.publish_timeline_tools() {
             return self.fail(event_loop, error);
         }
+        if let Err(error) = self.publish_stage_chrome(false) {
+            return self.fail(event_loop, error);
+        }
         if let Err(error) = self.submit_stage_projection() {
             return self.fail(event_loop, error);
         }
@@ -1872,6 +1914,156 @@ impl ProductApp {
             self.preview.slot().desc().height,
         ));
         Ok(())
+    }
+
+    fn publish_stage_chrome(&self, easing_pressed: bool) -> Result<(), ProductRuntimeError> {
+        if let Some(stage_chrome) = &self.stage_chrome {
+            stage_chrome.publish(
+                &self.current_document,
+                self.selected_position_key,
+                self.projection_generation,
+                easing_pressed,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn process_stage_chrome_intents(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+    ) -> Result<(), ProductRuntimeError> {
+        loop {
+            let request = match &self.stage_chrome {
+                Some(stage_chrome) => stage_chrome.take_open_easing()?,
+                None => None,
+            };
+            let Some(request) = request else {
+                break;
+            };
+            crate::ui_numeric_trace::emit(format_args!(
+                "kind=easing-popup state=requested layer={} left_key={} right_key={} projection_generation={}",
+                request.layer_id.get(),
+                request.left_key_id.get(),
+                request.right_key_id.get(),
+                request.projection_generation,
+            ));
+            let Some(layout) = self.layout else {
+                continue;
+            };
+            if request.layout_epoch != layout.epoch
+                || request.projection_generation != self.projection_generation
+            {
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=easing-popup state=stale-open-rejected"
+                ));
+                continue;
+            }
+            let Some(interval) = project_position_interval(
+                &self.current_document,
+                request.layer_id,
+                request.left_key_id,
+            )
+            .filter(|interval| interval.right_key == request.right_key_id) else {
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=easing-popup state=interval-open-rejected"
+                ));
+                continue;
+            };
+            let host = self
+                .window
+                .as_ref()
+                .ok_or(ProductRuntimeError::AlreadyInitialized)?;
+            let gfx = self
+                .gfx
+                .as_ref()
+                .ok_or(ProductRuntimeError::AlreadyInitialized)?;
+            let anchor = crate::easing_popup_model::LogicalRect {
+                x: layout.stage_transport.x + request.anchor.x,
+                y: layout.stage_transport.y + request.anchor.y,
+                width: request.anchor.width,
+                height: request.anchor.height,
+            };
+            self.easing_popup = Some(EasingPopupRuntime::open(EasingPopupOpen {
+                event_loop,
+                host,
+                instance: &gfx.instance,
+                adapter: &gfx.adapter,
+                gpu: Arc::clone(&self.gpu),
+                target: request,
+                anchor,
+                interp: interval.interp,
+            })?);
+            self.publish_stage_chrome(true)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn handle_auxiliary_window_input(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_id: winit::window::WindowId,
+        input: EasingPopupInput,
+    ) -> bool {
+        if self
+            .easing_popup
+            .as_ref()
+            .is_none_or(|popup| popup.window_id() != window_id)
+        {
+            return false;
+        }
+        let outcome = self
+            .easing_popup
+            .as_mut()
+            .expect("matched popup exists")
+            .handle_input(input);
+        match outcome {
+            Ok(EasingPopupOutcome::Handled) => {}
+            Ok(EasingPopupOutcome::Closed) => {
+                self.easing_popup = None;
+                if let Err(error) = self.publish_stage_chrome(false) {
+                    self.fail(event_loop, error);
+                }
+            }
+            Ok(EasingPopupOutcome::Commit(interp)) => {
+                let target = self
+                    .easing_popup
+                    .take()
+                    .expect("matched popup exists")
+                    .target();
+                self.document_queue
+                    .push_set_position_key_interp(SetPositionKeyInterpRequest {
+                        layer_id: target.layer_id,
+                        left_key_id: target.left_key_id,
+                        interp,
+                    });
+                match self.document_runtime.process_next(
+                    &mut self.document_queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => {
+                        self.adopt_full_publish(event_loop, published, "easing-popup")
+                    }
+                    Ok(None) => {
+                        if let Err(error) = self.publish_stage_chrome(false) {
+                            self.fail(event_loop, error);
+                        }
+                    }
+                    Err(error) => self.fail(event_loop, error),
+                }
+            }
+            Err(error) => {
+                self.easing_popup = None;
+                self.fail(event_loop, error);
+            }
+        }
+        true
+    }
+
+    pub(crate) fn owns_auxiliary_window(&self, window_id: winit::window::WindowId) -> bool {
+        self.easing_popup
+            .as_ref()
+            .is_some_and(|popup| popup.window_id() == window_id)
     }
 
     fn process_attach_effect(
@@ -2171,6 +2363,8 @@ impl BrowserLifecycleCoordinator {
 }
 
 struct ProductSurface {
+    instance: wgpu::Instance,
+    adapter: wgpu::Adapter,
     surface: wgpu::Surface<'static>,
     gpu: Arc<GpuCtx>,
     config: wgpu::SurfaceConfiguration,
@@ -2250,6 +2444,8 @@ impl ProductSurface {
             mapped_at_creation: false,
         });
         Ok(Self {
+            instance: parts.instance,
+            adapter: parts.adapter,
             surface,
             gpu: Arc::clone(gpu),
             config,
@@ -2706,6 +2902,10 @@ pub(crate) enum ProductRuntimeError {
     Inspector(#[from] InspectorHostRuntimeError),
     #[error(transparent)]
     StageChrome(#[from] StageChromeHostRuntimeError),
+    #[error(transparent)]
+    StageChromeIntent(#[from] StageChromeIntentError),
+    #[error(transparent)]
+    EasingPopup(#[from] EasingPopupError),
     #[error(transparent)]
     TimelineTools(#[from] TimelineToolsHostRuntimeError),
     #[error(transparent)]

@@ -1847,7 +1847,7 @@ export {
   );
 });
 
-test("keeps fixed Stage chrome DOM and private read-only Host projection", async () => {
+test("keeps fixed Stage chrome DOM and connects the promoted Easing trigger", async () => {
   const source = await readFile(abs(CURRENT_STAGE_CHROME_SOURCE), "utf8");
   const bridge = await readFile(
     abs("ui/motolii-web/src/host/stageHostBridge.js"),
@@ -1855,6 +1855,10 @@ test("keeps fixed Stage chrome DOM and private read-only Host projection", async
   );
   const css = await readFile(
     abs("ui/motolii-web/src/host/stage-host-screen.css"),
+    "utf8",
+  );
+  const transportMain = await readFile(
+    abs("ui/motolii-web/src/host/stage-transport-main.jsx"),
     "utf8",
   );
 
@@ -1873,6 +1877,22 @@ test("keeps fixed Stage chrome DOM and private read-only Host projection", async
   ]) {
     assert.equal(source.includes(token), true, `missing fixed Stage token ${token}`);
   }
+  for (const token of [
+    "easingTrigger",
+    "EasingTriggerCandidate",
+    "activeInterval={snapshot.activeInterval}",
+    "pressed={snapshot.easingPressed}",
+    "bridge.openEasing(snapshot.activeInterval, anchor)",
+    "getBoundingClientRect()",
+  ]) {
+    assert.equal(
+      source.includes(token) || transportMain.includes(token),
+      true,
+      `missing Easing trigger connection ${token}`,
+    );
+  }
+  assert.equal(source.includes('className="interval-easing"'), false);
+  assert.equal(transportMain.includes("docs/mocks-ui"), false);
   for (const forbidden of ["useState", "useReducer", "localStorage", "fetch(", "document."]) {
     assert.equal(source.includes(forbidden), false);
     assert.equal(bridge.includes(forbidden), false);

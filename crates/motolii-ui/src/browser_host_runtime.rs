@@ -35,13 +35,13 @@ const STAGE_TRANSPORT_HTML: &[u8] =
 const TIMELINE_TOOLS_HTML: &[u8] =
     include_bytes!("../../../ui/motolii-web/generated-host/timeline-tools.html");
 const STAGE_HEADER_JS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageHeader-DG-vBaNG.js");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageHeader-CMpi-GAg.js");
 const STAGE_TRANSPORT_JS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageTransport-B8kB-Auq.js");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageTransport-DKGEjryY.js");
 const STAGE_HOST_JS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageHostBridge-DC0bxqKK.js");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageHostBridge-B0Yq54e4.js");
 const STAGE_HOST_CSS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageHostBridge-ETwwNc59.css");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageHostBridge-BEnsFRTJ.css");
 const TIMELINE_TOOLS_JS: &[u8] =
     include_bytes!("../../../ui/motolii-web/generated-host/assets/timelineTools-Cdb6B475.js");
 const TIMELINE_TOOLS_CSS: &[u8] =
@@ -478,12 +478,12 @@ pub(crate) fn product_asset_response(path: &str) -> Response<Cow<'static, [u8]>>
         "/assets/host-BTNUEeQC.css" => ("text/css; charset=utf-8", HOST_CSS),
         "/assets/inspector-DMRbAE_f.js" => ("text/javascript; charset=utf-8", INSPECTOR_JS),
         "/assets/inspector-fMh9jxYJ.css" => ("text/css; charset=utf-8", INSPECTOR_CSS),
-        "/assets/stageHeader-DG-vBaNG.js" => ("text/javascript; charset=utf-8", STAGE_HEADER_JS),
-        "/assets/stageTransport-B8kB-Auq.js" => {
+        "/assets/stageHeader-CMpi-GAg.js" => ("text/javascript; charset=utf-8", STAGE_HEADER_JS),
+        "/assets/stageTransport-DKGEjryY.js" => {
             ("text/javascript; charset=utf-8", STAGE_TRANSPORT_JS)
         }
-        "/assets/stageHostBridge-DC0bxqKK.js" => ("text/javascript; charset=utf-8", STAGE_HOST_JS),
-        "/assets/stageHostBridge-ETwwNc59.css" => ("text/css; charset=utf-8", STAGE_HOST_CSS),
+        "/assets/stageHostBridge-B0Yq54e4.js" => ("text/javascript; charset=utf-8", STAGE_HOST_JS),
+        "/assets/stageHostBridge-BEnsFRTJ.css" => ("text/css; charset=utf-8", STAGE_HOST_CSS),
         "/assets/timelineTools-Cdb6B475.js" => {
             ("text/javascript; charset=utf-8", TIMELINE_TOOLS_JS)
         }
@@ -568,9 +568,9 @@ mod tests {
             (
                 STAGE_HEADER_HTML,
                 [
-                    "/assets/stageHeader-DG-vBaNG.js",
-                    "/assets/stageHostBridge-DC0bxqKK.js",
-                    "/assets/stageHostBridge-ETwwNc59.css",
+                    "/assets/stageHeader-CMpi-GAg.js",
+                    "/assets/stageHostBridge-B0Yq54e4.js",
+                    "/assets/stageHostBridge-BEnsFRTJ.css",
                     "/assets/tokens-CfIyaXn9.js",
                     "/assets/tokens-_d9c2vBB.css",
                 ],
@@ -578,9 +578,9 @@ mod tests {
             (
                 STAGE_TRANSPORT_HTML,
                 [
-                    "/assets/stageTransport-B8kB-Auq.js",
-                    "/assets/stageHostBridge-DC0bxqKK.js",
-                    "/assets/stageHostBridge-ETwwNc59.css",
+                    "/assets/stageTransport-DKGEjryY.js",
+                    "/assets/stageHostBridge-B0Yq54e4.js",
+                    "/assets/stageHostBridge-BEnsFRTJ.css",
                     "/assets/tokens-CfIyaXn9.js",
                     "/assets/tokens-_d9c2vBB.css",
                 ],
