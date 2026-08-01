@@ -388,6 +388,7 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | CU-G02 | `DONE` | 本変更でM3仕様[運用順](specs/M3-ui-integration.md)、[implementation-ledger](implementation-ledger.md)、[decision-index](decision-index.md)を同時更新し、次PRODUCT-ASSET粒を`U3a-1`へ固定した |
 | CU-G09 | `DONE` | [CU-G09 Browser catalog projection契約決定](reviews/2026-07-26-cu-g09-browser-catalog-projection-contract-decision.md) |
 | CU-205S | `DONE` | [CU-205S Opacity Direct通常製品route分割決定](reviews/2026-07-31-cu-205s-opacity-direct-route-split-decision.md)でB1G/B1I/B2/T/P/W/E、private first-party snapshot語彙、正常系とCU-204P診断の分離を固定 |
+| CU-201M-S | `DONE` | [CU-201M-S Clip start command契約決定](reviews/2026-08-01-cu-201m-s-clip-start-command-contract-decision.md)でsame-lane `SetClipStart`、typed拒否順、non-CAS old/new、merge、JournalEdit v2、9 oracleを固定。独立レビュー`ACCEPT` P0/P1/P2=0 |
 | CU-205B1G | `DONE` | commit `413bc551`でBrowser post-promotion validatorをtest-only共有化。fixed/index0/exact/chain/last-live、tampered terminal / live hash欠落拒否、product import 0を維持し、Grok `ACCEPT` P0/P1=0 |
 | CU-205B1I | `DONE` | commit `054baef7`でstrict catalog→existing PluginCardを接続。SSR 6/6 skip 0、ownership 11/11、append-only provenance、Grok `ACCEPT` P0/P1/P2=0 |
 | CU-205B2 | `DONE` | commit `185bc327`でfirst_party_catalog由来exact Opacity snapshot、正規generated-host、全include/serve path、旧hash 404を接続。Rust 13/13、codec 6/6 skip 0、Grok `ACCEPT` P0/P1/P2=0 |
