@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use motolii_core::{Fps, RationalTime};
 
-use crate::bezier::cubic_bezier_ease;
+use crate::bezier::{cubic_bezier_ease, split_cubic_bezier_ease};
 use crate::value::Value;
 
 #[derive(Debug, Clone, thiserror::Error, PartialEq)]
@@ -11,6 +11,10 @@ pub enum TrackError {
     InvalidBezier { x1: f64, x2: f64 },
     #[error("keyframes must be sorted by strictly increasing time without duplicates")]
     UnsortedOrDuplicateKeys,
+    #[error("easing split progress must be finite and strictly inside (0,1), got {progress}")]
+    InvalidSplitProgress { progress: f64 },
+    #[error("Bezier easing cannot be normalized at split progress {progress}")]
+    DegenerateBezierSplit { progress: f64 },
 }
 
 /// キーフレーム区間(このキーから次のキーまで)の補間方法。
@@ -26,6 +30,43 @@ pub enum Interp {
         x2: f64,
         y2: f64,
     },
+}
+
+impl Interp {
+    /// timeline progressで区間を分け、左右をそれぞれ0..1へ正規化した補間を返す。
+    pub fn split_at_progress(self, progress: f64) -> Result<(Self, Self), TrackError> {
+        if !progress.is_finite() || !(0.0 < progress && progress < 1.0) {
+            return Err(TrackError::InvalidSplitProgress { progress });
+        }
+        match self {
+            Self::Hold => Ok((Self::Hold, Self::Hold)),
+            Self::Linear => Ok((Self::Linear, Self::Linear)),
+            Self::Bezier { x1, y1, x2, y2 } => {
+                if ![x1, y1, x2, y2].iter().all(|value| value.is_finite())
+                    || !(0.0..=1.0).contains(&x1)
+                    || !(0.0..=1.0).contains(&x2)
+                {
+                    return Err(TrackError::InvalidBezier { x1, x2 });
+                }
+                let (left, right) = split_cubic_bezier_ease(x1, y1, x2, y2, progress)
+                    .ok_or(TrackError::DegenerateBezierSplit { progress })?;
+                Ok((
+                    Self::Bezier {
+                        x1: left[0],
+                        y1: left[1],
+                        x2: left[2],
+                        y2: left[3],
+                    },
+                    Self::Bezier {
+                        x1: right[0],
+                        y1: right[1],
+                        x2: right[2],
+                        y2: right[3],
+                    },
+                ))
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -256,6 +297,67 @@ mod tests {
             .as_f64()
             .unwrap();
         assert!(early < 25.0);
+    }
+
+    #[test]
+    fn split_bezier_preserves_the_original_easing_on_both_sides() {
+        let original = Interp::Bezier {
+            x1: 0.25,
+            y1: -0.2,
+            x2: 0.65,
+            y2: 1.3,
+        };
+        let split = 0.37;
+        let split_value = match original {
+            Interp::Bezier { x1, y1, x2, y2 } => cubic_bezier_ease(x1, y1, x2, y2, split),
+            _ => unreachable!(),
+        };
+        let (left, right) = original.split_at_progress(split).unwrap();
+
+        for index in 0..=100 {
+            let progress = index as f64 / 100.0;
+            let expected = match original {
+                Interp::Bezier { x1, y1, x2, y2 } => cubic_bezier_ease(x1, y1, x2, y2, progress),
+                _ => unreachable!(),
+            };
+            let actual = if progress <= split {
+                let local = progress / split;
+                let eased = match left {
+                    Interp::Bezier { x1, y1, x2, y2 } => cubic_bezier_ease(x1, y1, x2, y2, local),
+                    _ => unreachable!(),
+                };
+                split_value * eased
+            } else {
+                let local = (progress - split) / (1.0 - split);
+                let eased = match right {
+                    Interp::Bezier { x1, y1, x2, y2 } => cubic_bezier_ease(x1, y1, x2, y2, local),
+                    _ => unreachable!(),
+                };
+                split_value + (1.0 - split_value) * eased
+            };
+            assert!(
+                (actual - expected).abs() < 2e-6,
+                "progress={progress} expected={expected} actual={actual}"
+            );
+        }
+    }
+
+    #[test]
+    fn split_rejects_endpoints_and_non_normalizable_bezier() {
+        assert!(matches!(
+            Interp::Linear.split_at_progress(0.0),
+            Err(TrackError::InvalidSplitProgress { .. })
+        ));
+        assert!(matches!(
+            Interp::Bezier {
+                x1: 1.0 / 3.0,
+                y1: -1.0 / 6.0,
+                x2: 2.0 / 3.0,
+                y2: -1.0 / 6.0,
+            }
+            .split_at_progress(0.5),
+            Err(TrackError::DegenerateBezierSplit { .. })
+        ));
     }
 
     #[test]

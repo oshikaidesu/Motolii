@@ -19,11 +19,11 @@ use motolii_core::RationalTime;
 use motolii_doc::{
     layer_names_for_item, BlendMode, Clip, ClipSource, ClippingMaskSettings, Command, CommandError,
     DocKeyframe, DocKeyframeTrack, DocParam, DocValue, Document, DocumentWriter, EffectDefinition,
-    EffectDefinitionId, EffectId, EffectInstance, EffectUse, Group, ItemEnvelope, KeyframeId,
-    LayerId, LookAtAxis, MaskMode, ParentLocator, ScalarPropertyId, StableIdReservation, Track,
-    TrackId, TrackItem,
+    EffectDefinitionId, EffectId, EffectInstance, EffectUse, Group, ItemEnvelope, JournalEdit,
+    KeyframeId, LayerId, LookAtAxis, MaskMode, ParentLocator, PreparedAddPositionKey,
+    ScalarPropertyId, StableIdReservation, Track, TrackId, TrackItem,
 };
-use motolii_eval::Interp;
+use motolii_eval::{Interp, Value as EvalValue};
 use motolii_plugin::reference::reference_catalog;
 
 fn reference_writer(doc: Document) -> DocumentWriter {
@@ -662,6 +662,182 @@ fn effect_and_keyframe_ids_never_repeat_and_are_addressable() {
     let removed = track.remove_by_id(b);
     assert_eq!(removed.map(|k| k.id), Some(b));
     assert!(track.get_by_id(b).is_none());
+}
+
+fn position(doc: &Document, layer: LayerId) -> &DocParam {
+    fn in_items(items: &[TrackItem], layer: LayerId) -> Option<&DocParam> {
+        for item in items {
+            let envelope = match item {
+                TrackItem::Clip(clip) => &clip.envelope,
+                TrackItem::Group(group) => &group.envelope,
+            };
+            if envelope.layer_id == layer {
+                return Some(&envelope.transform.position);
+            }
+            if let TrackItem::Group(group) = item {
+                if let Some(found) = in_items(&group.children, layer) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+    doc.tracks
+        .iter()
+        .find_map(|track| in_items(&track.items, layer))
+        .expect("position")
+}
+
+#[test]
+fn add_position_key_const_is_one_undoable_stable_identity_command() {
+    let f = fixture();
+    let mut writer = reference_writer(f.doc.clone());
+    let before_next = writer.snapshot().next_stable_id.peek_next();
+    let prepared = writer
+        .prepare_add_position_key(f.layer, RationalTime::try_new(3, 2).unwrap())
+        .expect("prepare");
+    let PreparedAddPositionKey::Edit { command, key_id } = prepared else {
+        panic!("const position must add a key")
+    };
+    assert_eq!(command.kind(), motolii_doc::CommandKind::AddPositionKey);
+    assert_eq!(command.target_stable_id(), f.layer.get());
+    assert_eq!(command.property(), motolii_doc::PropertyId::Position);
+    assert_eq!(key_id.get(), before_next);
+    let durable: JournalEdit = serde_json::from_slice(
+        &serde_json::to_vec(&JournalEdit::new(command.clone())).expect("encode journal edit"),
+    )
+    .expect("decode journal edit");
+    assert_eq!(durable.format_version, JournalEdit::FORMAT_VERSION);
+    assert_eq!(durable.command, command);
+
+    let gesture = writer.begin_gesture();
+    writer.apply_command(gesture, command).expect("apply");
+    let after = writer.snapshot();
+    let DocParam::Keyframes(track) = position(&after, f.layer) else {
+        panic!("position must become a keyframe track")
+    };
+    assert_eq!(track.keys().len(), 1);
+    assert_eq!(track.keys()[0].id, key_id);
+    assert_eq!(after.next_stable_id.peek_next(), before_next + 1);
+
+    writer.undo().expect("undo");
+    assert_eq!(
+        position(&writer.snapshot(), f.layer),
+        position(&f.doc, f.layer)
+    );
+    assert_eq!(
+        writer.snapshot().next_stable_id.peek_next(),
+        before_next + 1
+    );
+    writer.redo().expect("redo");
+    assert_eq!(writer.snapshot().as_ref(), after.as_ref());
+}
+
+#[test]
+fn add_position_key_same_time_returns_existing_id_without_consuming_identity() {
+    let f = fixture();
+    let mut writer = reference_writer(f.doc);
+    let first = writer
+        .prepare_add_position_key(f.layer, RationalTime::try_new(1, 1).unwrap())
+        .expect("prepare first");
+    let PreparedAddPositionKey::Edit { command, key_id } = first else {
+        panic!("first key must be an edit")
+    };
+    let gesture = writer.begin_gesture();
+    writer.apply_command(gesture, command).expect("apply first");
+    let before = writer.snapshot();
+
+    let second = writer
+        .prepare_add_position_key(f.layer, RationalTime::try_new(1, 1).unwrap())
+        .expect("prepare same time");
+    assert_eq!(second, PreparedAddPositionKey::AlreadyPresent { key_id });
+    assert_eq!(writer.snapshot().as_ref(), before.as_ref());
+}
+
+#[test]
+fn add_position_key_splits_bezier_without_changing_evaluated_motion() {
+    let mut f = fixture();
+    let first = KeyframeId::from_raw(f.doc.next_stable_id.allocate().unwrap());
+    let second = KeyframeId::from_raw(f.doc.next_stable_id.allocate().unwrap());
+    let mut track = DocKeyframeTrack::new();
+    track.insert(DocKeyframe {
+        id: first,
+        t: RationalTime::ZERO,
+        value: DocValue::Vec2([0.0, 0.0]),
+        interp: Interp::Bezier {
+            x1: 0.25,
+            y1: 0.1,
+            x2: 0.25,
+            y2: 1.0,
+        },
+    });
+    track.insert(DocKeyframe {
+        id: second,
+        t: RationalTime::try_new(4, 1).unwrap(),
+        value: DocValue::Vec2([8.0, -4.0]),
+        interp: Interp::Linear,
+    });
+    let original = track.clone();
+    let TrackItem::Clip(clip) = &mut f.doc.tracks[0].items[0] else {
+        unreachable!()
+    };
+    clip.envelope.transform.position = DocParam::Keyframes(track);
+    f.doc.validate().unwrap();
+    let writer = reference_writer(f.doc);
+    let PreparedAddPositionKey::Edit { command, .. } = writer
+        .prepare_add_position_key(f.layer, RationalTime::try_new(3, 2).unwrap())
+        .expect("prepare split")
+    else {
+        panic!("internal time must add")
+    };
+    let mut applied = writer.snapshot().as_ref().clone();
+    command.apply(&mut applied).expect("apply split");
+    let DocParam::Keyframes(split) = position(&applied, f.layer) else {
+        unreachable!()
+    };
+    for tenths in 0..=40 {
+        let time = RationalTime::try_new(tenths, 10).unwrap();
+        let before = original.eval(time);
+        let after = split.eval(time);
+        let (EvalValue::Vec2(before), EvalValue::Vec2(after)) = (before, after) else {
+            unreachable!()
+        };
+        assert!(
+            (before[0] - after[0]).abs() < 1e-5,
+            "x at {tenths}/10: before={} after={}",
+            before[0],
+            after[0]
+        );
+        assert!(
+            (before[1] - after[1]).abs() < 1e-5,
+            "y at {tenths}/10: before={} after={}",
+            before[1],
+            after[1]
+        );
+    }
+}
+
+#[test]
+fn add_position_key_rejects_stale_payload_without_mutation() {
+    let f = fixture();
+    let writer = reference_writer(f.doc.clone());
+    let PreparedAddPositionKey::Edit { command, .. } = writer
+        .prepare_add_position_key(f.layer, RationalTime::try_new(1, 1).unwrap())
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    let mut changed = f.doc;
+    let TrackItem::Clip(clip) = &mut changed.tracks[0].items[0] else {
+        unreachable!()
+    };
+    clip.envelope.transform.position = DocParam::const_vec2([0.5, 0.5]);
+    let before = changed.clone();
+    assert!(matches!(
+        command.apply(&mut changed),
+        Err(CommandError::PositionKeyPayloadMismatch { layer }) if layer == f.layer.get()
+    ));
+    assert_eq!(changed, before);
 }
 
 #[test]

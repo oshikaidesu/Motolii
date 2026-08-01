@@ -20,7 +20,7 @@ use crate::schema::{
     AudioComponent, BlendMode, ClipSource, ClippingMaskSettings, EffectDefinition, EffectInstance,
     EffectUse, ItemEnvelope, TrackItem,
 };
-use crate::stable_id::{EffectDefinitionId, EffectId, StableIdReservation};
+use crate::stable_id::{EffectDefinitionId, EffectId, KeyframeId, StableIdReservation};
 use crate::track_id::TrackId;
 use crate::validate::{self, stable_id_in_use};
 use crate::{Document, LayerId, WRITER_VERSION};
@@ -101,6 +101,8 @@ impl GestureId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CommandKind {
     SetProperty,
+    /// U4b-0: `AddPositionKey` / `UndoAddPositionKey`共用。
+    AddPositionKey,
     SetBlendMode,
     SetClippingMask,
     SetTransformParent,
@@ -209,6 +211,25 @@ pub enum CommandError {
     StableIdReservationCounterMismatch { next: u64, before: u64, after: u64 },
     #[error("stable id {id} is outside reservation interval [{before}, {after})")]
     StableIdOutsideReservation { id: u64, before: u64, after: u64 },
+    #[error(
+        "add position key requires a stable-id document (version={version}, min_reader_version={min_reader_version})"
+    )]
+    PositionKeyRequiresStableIds {
+        version: u32,
+        min_reader_version: u32,
+    },
+    #[error("position does not contain a supported constant or keyframe track")]
+    UnsupportedPositionKeySource,
+    #[error("position value is not Vec2")]
+    PositionValueNotVec2,
+    #[error("position keyframe track must not be empty")]
+    EmptyPositionKeyTrack,
+    #[error("position keyframe track is invalid")]
+    InvalidPositionKeyTrack,
+    #[error("position curve cannot be split at the requested time")]
+    PositionCurveSplit,
+    #[error("add position key payload does not match layer {layer}")]
+    PositionKeyPayloadMismatch { layer: u64 },
     #[error(transparent)]
     Validate(#[from] crate::validate::DocumentError),
     #[error(transparent)]
@@ -234,6 +255,20 @@ pub enum Command {
         property: ScalarPropertyId,
         old_value: DocParam,
         new_value: DocParam,
+    },
+    AddPositionKey {
+        target: LayerId,
+        old_value: DocParam,
+        new_value: DocParam,
+        added_key_id: KeyframeId,
+        stable_id_reservation: StableIdReservation,
+    },
+    UndoAddPositionKey {
+        target: LayerId,
+        old_value: DocParam,
+        new_value: DocParam,
+        added_key_id: KeyframeId,
+        stable_id_reservation: StableIdReservation,
     },
     SetBlendMode {
         target: LayerId,
@@ -390,6 +425,9 @@ impl Command {
     pub fn kind(&self) -> CommandKind {
         match self {
             Command::SetProperty { .. } => CommandKind::SetProperty,
+            Command::AddPositionKey { .. } | Command::UndoAddPositionKey { .. } => {
+                CommandKind::AddPositionKey
+            }
             Command::SetBlendMode { .. } => CommandKind::SetBlendMode,
             Command::SetClippingMask { .. } => CommandKind::SetClippingMask,
             Command::SetTransformParent { .. } => CommandKind::SetTransformParent,
@@ -425,6 +463,8 @@ impl Command {
     pub fn target_stable_id(&self) -> u64 {
         match self {
             Command::SetProperty { target, .. }
+            | Command::AddPositionKey { target, .. }
+            | Command::UndoAddPositionKey { target, .. }
             | Command::SetBlendMode { target, .. }
             | Command::SetClippingMask { target, .. }
             | Command::SetTransformParent { target, .. }
@@ -455,6 +495,9 @@ impl Command {
     pub fn property(&self) -> PropertyId {
         match self {
             Command::SetProperty { property, .. } => property.clone().into(),
+            Command::AddPositionKey { .. } | Command::UndoAddPositionKey { .. } => {
+                PropertyId::Position
+            }
             Command::SetBlendMode { .. } => PropertyId::Blend,
             Command::SetClippingMask { .. } => PropertyId::ClippingMask,
             Command::SetTransformParent { .. } => PropertyId::TransformParent,
@@ -520,6 +563,14 @@ impl Command {
             | Command::UndoCopyLocalEffect {
                 stable_id_reservation,
                 ..
+            }
+            | Command::AddPositionKey {
+                stable_id_reservation,
+                ..
+            }
+            | Command::UndoAddPositionKey {
+                stable_id_reservation,
+                ..
             } => Some(*stable_id_reservation),
             Command::SetProperty { .. }
             | Command::SetBlendMode { .. }
@@ -577,6 +628,34 @@ impl Command {
                     write_property(env, property, new_value.clone())
                 }
             },
+            Command::AddPositionKey {
+                target,
+                old_value,
+                new_value,
+                added_key_id,
+                stable_id_reservation,
+            } => apply_add_position_key(
+                doc,
+                *target,
+                old_value,
+                new_value,
+                *added_key_id,
+                *stable_id_reservation,
+            ),
+            Command::UndoAddPositionKey {
+                target,
+                old_value,
+                new_value,
+                added_key_id,
+                stable_id_reservation,
+            } => apply_undo_add_position_key(
+                doc,
+                *target,
+                old_value,
+                new_value,
+                *added_key_id,
+                *stable_id_reservation,
+            ),
             Command::SetBlendMode { target, new, .. } => {
                 find_envelope_mut(doc, *target)?.blend = *new;
                 Ok(())
@@ -1024,6 +1103,32 @@ impl Command {
                 property,
                 old_value: new_value,
                 new_value: old_value,
+            },
+            Command::AddPositionKey {
+                target,
+                old_value,
+                new_value,
+                added_key_id,
+                stable_id_reservation,
+            } => Command::UndoAddPositionKey {
+                target,
+                old_value,
+                new_value,
+                added_key_id,
+                stable_id_reservation,
+            },
+            Command::UndoAddPositionKey {
+                target,
+                old_value,
+                new_value,
+                added_key_id,
+                stable_id_reservation,
+            } => Command::AddPositionKey {
+                target,
+                old_value,
+                new_value,
+                added_key_id,
+                stable_id_reservation,
             },
             Command::SetBlendMode { target, old, new } => Command::SetBlendMode {
                 target,
@@ -1891,6 +1996,67 @@ fn apply_reservation_commit(doc: &mut Document, commit: ReservationCommit) {
     if let Some(after) = commit.advance_to {
         doc.next_stable_id.commit_validated_reservation(after);
     }
+}
+
+fn apply_add_position_key(
+    doc: &mut Document,
+    target: LayerId,
+    old_value: &DocParam,
+    new_value: &DocParam,
+    added_key_id: KeyframeId,
+    reservation: StableIdReservation,
+) -> Result<(), CommandError> {
+    crate::position_key::guard_stable_id_document(doc)?;
+    let current = &find_envelope(doc, target)
+        .ok_or(CommandError::LayerNotFound(target.get()))?
+        .transform
+        .position;
+    if current != old_value {
+        return Err(CommandError::PositionKeyPayloadMismatch {
+            layer: target.get(),
+        });
+    }
+    crate::position_key::validate_add_position_key_payload(
+        old_value,
+        new_value,
+        added_key_id,
+        target,
+    )?;
+    let commit = validate_reservation_for_apply(doc, reservation, &[added_key_id.get()])?;
+    let mut next = doc.clone();
+    find_envelope_mut(&mut next, target)?.transform.position = new_value.clone();
+    apply_reservation_commit(&mut next, commit);
+    swap_if_valid(doc, next)
+}
+
+fn apply_undo_add_position_key(
+    doc: &mut Document,
+    target: LayerId,
+    old_value: &DocParam,
+    new_value: &DocParam,
+    added_key_id: KeyframeId,
+    reservation: StableIdReservation,
+) -> Result<(), CommandError> {
+    crate::position_key::guard_stable_id_document(doc)?;
+    let current = &find_envelope(doc, target)
+        .ok_or(CommandError::LayerNotFound(target.get()))?
+        .transform
+        .position;
+    if current != new_value {
+        return Err(CommandError::PositionKeyPayloadMismatch {
+            layer: target.get(),
+        });
+    }
+    crate::position_key::validate_add_position_key_payload(
+        old_value,
+        new_value,
+        added_key_id,
+        target,
+    )?;
+    validate_reservation_for_undo(doc, reservation, &[added_key_id.get()])?;
+    let mut next = doc.clone();
+    find_envelope_mut(&mut next, target)?.transform.position = old_value.clone();
+    swap_if_valid(doc, next)
 }
 
 pub(crate) fn find_use_location(doc: &Document, use_id: EffectId) -> Option<(LayerId, usize)> {

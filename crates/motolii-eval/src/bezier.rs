@@ -17,6 +17,51 @@ pub fn cubic_bezier_ease(x1: f64, y1: f64, x2: f64, y2: f64, x: f64) -> f64 {
     sample(y1, y2, s)
 }
 
+/// 同じsolverでtimeline progress `x`に対応するparameterを求め、左右区間を再正規化する。
+pub(crate) fn split_cubic_bezier_ease(
+    x1: f64,
+    y1: f64,
+    x2: f64,
+    y2: f64,
+    x: f64,
+) -> Option<([f64; 4], [f64; 4])> {
+    let s = solve_curve_x(x1, x2, x);
+    let p0 = [0.0, 0.0];
+    let p1 = [x1, y1];
+    let p2 = [x2, y2];
+    let p3 = [1.0, 1.0];
+    let a = point_lerp(p0, p1, s);
+    let b = point_lerp(p1, p2, s);
+    let c = point_lerp(p2, p3, s);
+    let d = point_lerp(a, b, s);
+    let e = point_lerp(b, c, s);
+    let f = point_lerp(d, e, s);
+    let y = f[1];
+    if !y.is_finite() || y == 0.0 || y == 1.0 {
+        return None;
+    }
+    let left = [
+        (a[0] / x).clamp(0.0, 1.0),
+        a[1] / y,
+        (d[0] / x).clamp(0.0, 1.0),
+        d[1] / y,
+    ];
+    let right = [
+        ((e[0] - x) / (1.0 - x)).clamp(0.0, 1.0),
+        (e[1] - y) / (1.0 - y),
+        ((c[0] - x) / (1.0 - x)).clamp(0.0, 1.0),
+        (c[1] - y) / (1.0 - y),
+    ];
+    left.iter()
+        .chain(right.iter())
+        .all(|value| value.is_finite())
+        .then_some((left, right))
+}
+
+fn point_lerp(a: [f64; 2], b: [f64; 2], t: f64) -> [f64; 2] {
+    [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
+}
+
 /// ベジェの1成分 B(s) を計算(端点0,1固定形)。
 fn sample(p1: f64, p2: f64, s: f64) -> f64 {
     // B(s) = 3(1-s)^2 s p1 + 3(1-s) s^2 p2 + s^3

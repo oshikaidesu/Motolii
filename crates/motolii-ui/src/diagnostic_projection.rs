@@ -250,6 +250,7 @@ const fn owner_copy(owner: UiStateOwner) -> &'static str {
 const fn command_kind_copy(kind: CommandKind) -> &'static str {
     match kind {
         CommandKind::SetProperty => "Set property",
+        CommandKind::AddPositionKey => "Add position key",
         CommandKind::SetBlendMode => "Set blend mode",
         CommandKind::SetClippingMask => "Set clipping mask",
         CommandKind::SetTransformParent => "Set transform parent",

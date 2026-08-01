@@ -32,6 +32,7 @@ pub mod param_expect;
 pub mod pathgeom;
 mod persist;
 mod plugin_resolution;
+mod position_key;
 mod schema;
 mod spatial_resolve;
 mod stable_id;
@@ -98,6 +99,7 @@ pub use plugin_resolution::{
     PluginDiagnosticReason, PluginSlotId, PreparedDocumentPlugins, PreparedPluginRecipe,
     ResolvedOpenProjectOutcome,
 };
+pub use position_key::PreparedAddPositionKey;
 pub use schema::{
     asset_components_require_newer_reader, AudioComponent, AudioOutOfRange, BlendMode, Clip,
     ClipSource, ClippingMaskSettings, CompCameraDoc, CompositeOrder, Composition, CompositionError,
@@ -565,6 +567,15 @@ impl DocumentWriter {
     /// D1l B-3: 対象 Use の Definition をローカル複製する。
     pub fn prepare_copy_local_effect(&self, use_id: EffectId) -> Result<Command, PrepareError> {
         effect_prepare::prepare_copy_local_effect(&self.doc, use_id)
+    }
+
+    /// U4b-0: Positionへexplicit keyをpure prepareする。same-timeは既存IDを返す。
+    pub fn prepare_add_position_key(
+        &self,
+        target: LayerId,
+        playhead: RationalTime,
+    ) -> Result<PreparedAddPositionKey, CommandError> {
+        position_key::prepare_add_position_key(&self.doc, target, playhead)
     }
 
     /// CU-201M-S: 対象 Clip の `start` を準備する。same-value は `None`。
