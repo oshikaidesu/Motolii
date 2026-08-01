@@ -2,6 +2,17 @@
 
 ステータス: **ドラフト**(凍結ゲートで確定)
 
+## 実装前の既知実装調査
+
+M5は[既知実装採択・置換開発モデル](../known-implementation-adoption-model.md)に従う。scene／object
+representation、camera observation、spatial renderer、glTF import、depth、text、Vello局所pass、post
+effect、picking／gizmo／bounds、deterministic duplicationを機構classとして先に調査し、具体file／API／
+algorithm、license、thread model、owner、failure mode、platform条件と採択方式をM5採択地図へ閉じる。
+
+P0I〜P7はMotoliiのworld、identity、互換、操作、oracleを保持する入力であり、独自3D engine、scene
+framework、text stack、gizmo frameworkを作る実装列ではない。意味decisionとtest-only fixtureは進められるが、
+**M5の製品runtime実装は既知実装調査と採択地図が閉じるまで発注しない。**
+
 ## 目的(退治する落とし穴)
 
 C-4(2.5Dとブレンドモードの衝突)、F-1(glTFとの軸整合)、F-6(テキスト基盤の分界)。

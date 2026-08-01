@@ -16,8 +16,8 @@
 | [M1-vertical-slice.md](M1-vertical-slice.md) | 確定(M0の採否判断で該当箇所を更新) |
 | [M2-document-model.md](M2-document-model.md) | **基盤再締結済み / 段階発注可**(P1修復とA〜C証跡がmain発効済み。D5は統合/E2E審判pending。歴史から再採択したD1n external revisionは独立follow-up・未実装) |
 | [M3-ui-integration.md](M3-ui-integration.md) | **ドラフト / UI責任境界・surface topology決定、platform受入比較中**(React chrome + native Stage/Timeline + headless interaction + 1 surface/2 viewport/opaque WebView islandsは決定。製品surface統合はG0-9実機待ち、plugin UI公開契約は分離したG0-3 / GAP-13待ち) |
-| [M4-cache-and-analysis.md](M4-cache-and-analysis.md) | ドラフト(K0 RoD/RoIは透過Stageと分離。旧K1をK1a〜K1dの台帳/並行store/階層退避/pressure制御へ分割。K2へShared Effect invalidationを追加。凍結ゲートで確定) |
-| [M5-3d-and-post.md](M5-3d-and-post.md) | ドラフト(P0I/P7でCavalry型Duplicator+stable seedを段階実装。凍結ゲートで確定) |
+| [M4-cache-and-analysis.md](M4-cache-and-analysis.md) | ドラフト(K0 RoD/RoI test-only契約凍結済み。K1〜K8製品runtime前に既知実装調査とM4採択地図を閉じる) |
+| [M5-3d-and-post.md](M5-3d-and-post.md) | ドラフト(P0I等の意味decision／test-only fixtureは可。製品runtime前に既知実装調査とM5採択地図を閉じる) |
 
 ## タスク粒度のルール
 
@@ -34,7 +34,7 @@
 6. **テスト不可侵(報酬面の分離)**: ゴールデン参照画像・受け入れテストの改変を実装タスクに含めない。**テストが間違っていると思ったら実装を止めて報告する**(テストの削除・期待値書き換え・実装側のspecial-caseで「緑にする」ことを禁止)。参照画像の更新が正当な場合は、理由を明記した独立の「テスト更新PR」に分離する(根拠は[pitfalls H-2](../pitfalls-and-roadmap.md))。
 7. **着手前の導線**: 各仕様書末尾の**「実装ガード」節**と、タスクが触る領域の関連ドキュメント(方針節・落とし穴)を読んでから着手する。**仕様書の未決事項に依存するタスクには着手しない** — LLMエージェントは未決を「もっともらしいデフォルト」で静かに埋める(intent drift)。未決は仕様書改訂PRで先に潰す([pitfalls H-3](../pitfalls-and-roadmap.md))。
 8. **恒久焼き込みの予防**: Documentスキーマに触るタスクは、着手前に[permanence-prevention](../reviews/2026-07-12-m2-permanence-prevention.md)と[AGENTS.md](../../AGENTS.md)のGR-PVチェックを読む。**意味文書が先、コードは写し。テスト緑≠完了**([pitfalls H-4](../pitfalls-and-roadmap.md))。
-9. **依存優先・発明工程なし**: 汎用機構、OS統合、基盤、test harnessは、[責任最小化ゲート](../reviews/2026-07-24-dependency-first-responsibility-gate.md)に従い、正本と`decision-index.md`で一度裁定した`REUSE / ADOPT / WRAP / PORT / PATTERN / EXTERNAL`を後続粒が継承する。粒ごとにecosystemを再調査せず、必須oracle、license、platform、security、maintenanceの具体的反証またはadapterの共有基盤化がある時だけ再裁定する。新機構の`BUILD`を通常taskにせず、modelは仕様化せず利用者例外へ返す。既完了や投入工数を維持理由にせず、独自機構は同じoracleへ通す縦slice置換で単一ownerを切り替え、旧routeを`FROZEN → RETIRE`する。
+9. **依存優先・発明工程なし**: [既知実装採択・置換開発モデル](../known-implementation-adoption-model.md)と[責任最小化ゲート](../reviews/2026-07-24-dependency-first-responsibility-gate.md)に従い、利用者成果と機構classを先に固定し、既知実装調査と採択地図を製品runtime実装より前に閉じる。正本と`decision-index.md`で一度裁定した`REUSE / ADOPT / WRAP / PORT / PATTERN / EXTERNAL`を後続粒が継承する。粒ごとにecosystemを再調査せず、必須oracle、license、platform、security、maintenanceの具体的反証またはadapterの共有基盤化がある時だけ再裁定する。新機構の`BUILD`を通常taskにせず、modelは仕様化せず利用者例外へ返す。既完了や投入工数を維持理由にせず、独自機構は同じoracleへ通す縦slice置換で単一ownerを切り替え、旧routeを`FROZEN → RETIRE`する。
 
 ## 仕様書テンプレート
 

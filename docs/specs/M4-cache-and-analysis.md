@@ -4,6 +4,17 @@
 
 2026-07-23歴史監査: cutoff全20版を[Unit 5J回収](../reviews/2026-07-23-historical-m4-cache-analysis-spec-lineage-recovery.md)で処分した。Host専権cache、完全key、透明なmiss、並行契約、hard budget、render外StateTrackは維持する。現行codeにあるping-pong targetと`PipelineCache`はM4 store完成ではない。K0は2026-07-25に[契約凍結](../spikes/m4-k0-region-contract.md)(test-only、PR [#338](https://github.com/oshikaidesu/Motolii/pull/338))を通過したがruntime／公開APIへは未昇格で、K1〜K8は未実装のままである。
 
+## 実装前の既知実装調査
+
+M4は[既知実装採択・置換開発モデル](../known-implementation-adoption-model.md)に従う。cache、resource
+accounting、RoD／RoI、generation／invalidation、階層退避、proxy、background scheduling、group
+bake、全曲Draft、corrupt→missを機構classとして先に調査し、具体file／API／algorithm、license、thread
+model、owner、failure mode、platform条件と採択方式をM4採択地図へ閉じる。
+
+K0〜K8はMotoliiの意味、負例、候補依存を保持する入力であり、調査前の実装順ではない。K0のtest-only
+契約凍結は維持するが、K1a以後を独自ResourceLedger／cache store／schedulerへ自動接続しない。
+**M4の次の開発成果は既知実装調査と採択地図であり、地図が閉じる前に製品runtime実装を発注しない。**
+
 ## 目的(退治する落とし穴)
 
 B-5(時系列依存とキャッシュ)、B-6(OpenCV依存)、F-2(キャッシュの並行契約 — Natronがデッドロックした正確なポイント)。
@@ -24,7 +35,7 @@ B-5(時系列依存とキャッシュ)、B-6(OpenCV依存)、F-2(キャッシュ
 - ノードグラフの領域伝播(RoI)設計はNatronの考え方を参考(references.md、GPLのため設計参考のみ)
 - **領域契約はK0で先行固定する**: OpenFX型の論理的出力範囲(RoD)と要求領域(RoI)を分離し、`Finite / Infinite / Unknown`を持つ。`Unknown`は空でなく最適化不能を表し、全入力RoDまたはHost安全上限へ保守的fallbackする。実texture bounds、Document永続値、GPU alpha readbackと混同しない。正本は[既知技術による処分決定](../reviews/2026-07-14-motion-foundation-known-tech-disposition.md)
 
-## タスク分割(粗案)
+## タスク分割(採択地図へ渡す既存要求)
 
 ### 操作単純化モデルへの割当
 
