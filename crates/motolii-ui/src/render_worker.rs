@@ -441,7 +441,7 @@ struct RenderWorkPayload {
 #[derive(Debug)]
 enum PreparedPreviewDocument<'a> {
     Baseline(&'a Document),
-    Preview(Document),
+    Preview(Box<Document>),
 }
 
 impl PreparedPreviewDocument<'_> {
@@ -466,7 +466,7 @@ fn prepare_preview_document<'a>(
             let mut document = (*request.document).clone();
             command.apply(&mut document)?;
             document.validate()?;
-            Ok(PreparedPreviewDocument::Preview(document))
+            Ok(PreparedPreviewDocument::Preview(Box::new(document)))
         }
     }
 }
@@ -808,6 +808,14 @@ mod tests {
             }
             PreparedPreviewDocument::Preview(_) => panic!("expected baseline borrow"),
         }
+    }
+
+    #[test]
+    fn prepared_preview_document_keeps_the_owned_variant_indirect() {
+        assert!(
+            std::mem::size_of::<PreparedPreviewDocument<'static>>()
+                <= 2 * std::mem::size_of::<usize>()
+        );
     }
 
     #[test]
