@@ -176,7 +176,7 @@ read-onlyで相談した。出力は採択authorityや検収判定ではなく�
 |---|---|---|---|---|---|
 | M5-A0T | 10 classの技術routeを決定 | 本書の`ADOPT/REUSE/WRAP/PATTERN/EXTERNAL/REJECT` | M5 spec、decision-index、ledger | 全classにtarget／oracle／拒否／retirementあり | **DONE**。本書のcommit |
 | M5-A0S | 2系列の作品意味decisionをmain正本へ処分 | `REUSE` `416aa2c2`／`33e957df` | M5 spec、decision-index、ledger | 現行決定と矛盾0、失効IDをDOへ戻さない | runtime前。docs-only |
-| M5-A1 | GLB全体preflightとdiagnostic | `ADOPT` `gltf`／`mikktspace`、`EXTERNAL` Validator／Asset Generator | Host importer→private faithful asset | positive／malformed／required ext／oversize／escape URI／tangentなしnormal map | A0T後。Document／renderer変更なし |
+| M5-A1 | GLB全体preflightとdiagnostic | `ADOPT` `gltf`／`mikktspace`、`EXTERNAL` Validator／Asset Generator | Host importer→private faithful asset | positive／malformed／required ext／oversize／escape URI／tangentなしnormal map | **DONE / KEEP**。[receipt](reviews/evidence/m5-known-implementation/M5-A1/README.md)。製品依存は未追加 |
 | M5-A2 | OBJを同じprivate assetへlower | `ADOPT` `tobj` | A1 faithful asset | triangle／normal／UV／MTL欠落を明示。無言PBR化なし | A1後。OBJは変換入口のみ |
 | M5-R0 | core PBR／unlit headless検証 | wgpu `REUSE`、Khronos Sample Renderer／Blender `PATTERN` | private compiled asset→offscreen target | Khronos metal／dielectric／normal／emissive、cold／warm、low-spec refusal | A0T/A1。renderlingは任意・非gateの外部比較 |
 | M5-R1 | Layer Orderへ3D contribution接続 | R0採択route | existing LayerSource／RenderSession | 3D未使用pixel不変、premul、Preview／Export一致 | R0＋M4 resource owner |
@@ -190,7 +190,7 @@ read-onlyで相談した。出力は採択authorityや検収判定ではなく�
 ## 8. 推奨順序
 
 1. **技術採択**: `M5-A0T`として本地図を確定する。**DONE**。
-2. **独立検証**: `M5-A1`、`M5-R0`、`M5-T0`、`M5-P0`、`M5-I0`、`M5-D0`を
+2. **独立検証**: `M5-A1`は**DONE**。`M5-R0`、`M5-T0`、`M5-P0`、`M5-I0`、`M5-D0`を
    このbranch上で一粒一commitとして閉じる。依存しない粒は並行可能だがdiffを束ねない。
 3. **意味decision recovery**: `M5-A0S`で`416aa2c2`と`33e957df`を現行mainへ処分する。
 4. **意味decision**: 検証証拠からP1/P2境界、C0 Observation、scene-color format／resource gateを閉じる。
