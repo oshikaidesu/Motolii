@@ -470,6 +470,18 @@ grep -Fq -- "VIEW_PROFILE WIDE requires read-only exploration" "$TMP_ROOT/stderr
   || fail "WIDE rejection reason is missing"
 [[ ! -s "$CALL_LOG" ]] || fail "WIDE must fail before model invocation"
 
+# 拒否したgateを台帳から一意に読めること。gateはexitするため、PASSの無い最後の
+# ENTERが拒否者になる。どの層が実際に働いているかの実測はこの台帳だけが根拠になる
+GATE_LEDGER="$ORDER.evidence/gates.txt"
+[[ -f "$GATE_LEDGER" ]] || fail "dispatch gates must be recorded"
+rejecting_gate="$(awk '
+  /^GATE_ENTER: /{ sub(/^GATE_ENTER: /, ""); pending = $0 }
+  /^GATE_PASS: /{ sub(/^GATE_PASS: /, ""); if ($0 == pending) pending = "" }
+  END { print pending }
+' "$GATE_LEDGER")"
+[[ "$rejecting_gate" == "view_profile" ]] \
+  || fail "gate ledger must name view_profile as the rejecting gate, got [$rejecting_gate]"
+
 # 狭いprofileへの手動overrideもOpus起動前に拒否する。
 MISMATCH_TASK="$(printf '%s\n' "$TASK" | sed 's/^OWNER_CLOSURE: CLOSED$/OWNER_CLOSURE: MULTIPLE_KNOWN/')"
 : >"$CALL_LOG"
@@ -868,6 +880,20 @@ grep -Fq '"type":"thinking"' "$happy_attempt/grok-stdout-stream.jsonl" \
   || fail "Grok thinking events must be retained instead of discarded by text mode"
 assert_fragment "$CALL_LOG" "--output-format stream-json" "Grok streams structured events"
 assert_fragment "$CALL_LOG" "--json" "Spark emits JSONL events"
+
+# 通過したgateも記録する。従来は通過が無記録で、どの層が働いているか測れなかった
+HAPPY_GATES="$ORDER.evidence/gates.txt"
+[[ -f "$HAPPY_GATES" ]] || fail "passing gates must be recorded too"
+for gate_name in base grain_and_dependencies authorities allowed_files context_budget \
+  compiled_grain_contract exact_targets view_profile clean_worktree react_labels; do
+  assert_has "$HAPPY_GATES" "GATE_ENTER: $gate_name" "gate $gate_name entered"
+  assert_has "$HAPPY_GATES" "GATE_PASS: $gate_name" "gate $gate_name passed"
+done
+# C層が実際に切り詰めたかの実測。粒がそのまま収まるならこの層は削れる
+grep -Eq '^ECONOMY: TARGET_CAPSULE produced_bytes=[0-9]+ baseline_bytes=[0-9]+$' "$HAPPY_GATES" \
+  || fail "target capsule economy must be measured against whole READ_FILE bytes"
+grep -Eq '^ECONOMY: COMPILED_GRAIN produced_bytes=[0-9]+ baseline_bytes=[0-9]+$' "$HAPPY_GATES" \
+  || fail "compiled grain economy must be measured against full order bytes"
 
 GROK_HOOK="$TMP_ROOT/grok-hook.sh"
 cat >"$GROK_HOOK" <<EOF

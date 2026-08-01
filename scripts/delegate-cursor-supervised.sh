@@ -95,6 +95,8 @@ case "$ORDER_FILE" in
   /*) : ;;
   *) ORDER_FILE="$(cd "$(dirname "$ORDER_FILE")" && pwd)/$(basename "$ORDER_FILE")" ;;
 esac
+# gate発火台帳はevidence root直下に置き、prepare/execute/inspectを通して追記する
+GATE_LOG="${ORDER_FILE}.evidence/gates.txt"
 shift 3
 if [[ "$MODE" != "prepare" && "$MODE" != "execute" && "$MODE" != "inspect" ]]; then
   usage >&2
@@ -208,6 +210,46 @@ mark_checkpoint_at_risk() {
 # 公開契約へは焼かない。測れないstageはUNKNOWNと明記し、欠測を沈黙させない。
 TELEMETRY_VERSION=1
 RUN_AGENT_WALL_SECONDS=0
+
+# どのgateが実際に発火したかを残す。通過したgateは従来一切記録されず、
+# 4,083行の監督機構のうち何が働いているかを実測で判定できなかった(2026-08-01)。
+# gateは失敗時に直接exitするため、ENTERとPASSを対で書き、PASSが無い最後のENTERを
+# 拒否したgateとして読む。GATE_LOGはargument解析直後に設定済み(ここで初期化しない)。
+
+record_gate() {
+  local phase="$1" name="$2"
+  [[ -n "$GATE_LOG" ]] || return 0
+  mkdir -p "$(dirname "$GATE_LOG")"
+  printf 'GATE_%s: %s\n' "$phase" "$name" >>"$GATE_LOG"
+}
+
+gate_run() {
+  local name="$1"
+  shift
+  record_gate ENTER "$name"
+  "$@"
+  record_gate PASS "$name"
+}
+
+# 文脈パッキング層が実際に切り詰めているかを測る。粒がそのまま収まるなら
+# capsuleもcompiled grainも節約しておらず、この層は削れるという実測根拠になる。
+record_context_economy() {
+  local key="$1" produced="$2" baseline="$3"
+  [[ -n "$GATE_LOG" ]] || return 0
+  mkdir -p "$(dirname "$GATE_LOG")"
+  printf 'ECONOMY: %s produced_bytes=%s baseline_bytes=%s\n' "$key" "$produced" "$baseline" >>"$GATE_LOG"
+}
+
+# capsuleを作らず`READ_FILE`を丸ごと渡した場合の入力量。capsuleとの差が節約分
+read_file_total_bytes() {
+  local order_file="$1" worktree="$2" total=0 path bytes
+  while IFS= read -r path; do
+    [[ -n "$path" && -f "$worktree/$path" ]] || continue
+    bytes="$(LC_ALL=C wc -c <"$worktree/$path" | tr -d ' ')"
+    total=$((total + bytes))
+  done < <(awk '/^READ_FILE: /{sub(/^READ_FILE: /, ""); print}' "$order_file")
+  printf '%s' "$total"
+}
 
 record_stage_telemetry() {
   local telemetry_file="$1" stage="$2" wall_seconds="$3" result_json="${4:-}"
@@ -1083,6 +1125,7 @@ build_target_capsule() {
   done
   rm -f "$seen_file"
   capsule_bytes="$(LC_ALL=C wc -c <"$output" | tr -d ' ')"
+  record_context_economy TARGET_CAPSULE "$capsule_bytes" "$(read_file_total_bytes "$order_file" "$worktree")"
   (( capsule_bytes <= MAX_TARGET_CAPSULE_BYTES )) \
     || gate_fail "target capsule exceeds $MAX_TARGET_CAPSULE_BYTES bytes: $capsule_bytes"
 }
@@ -1128,6 +1171,8 @@ build_compiled_spark_grain() {
   done
 
   grain_bytes="$(LC_ALL=C wc -c <"$output" | tr -d ' ')"
+  record_context_economy COMPILED_GRAIN "$grain_bytes" \
+    "$(LC_ALL=C wc -c <"$order_file" | tr -d ' ')"
   (( grain_bytes <= MAX_SPARK_GRAIN_BYTES )) \
     || gate_fail "compiled Spark grain exceeds $MAX_SPARK_GRAIN_BYTES bytes: $grain_bytes"
 }
@@ -2370,16 +2415,17 @@ EOF
 
 run_dispatch_gate() {
   local order_file="$1" worktree="$2"
-  gate_check_base "$order_file" "$worktree"
-  gate_check_grain_and_dependencies "$order_file" "$worktree"
-  gate_check_authorities "$order_file" "$worktree"
-  gate_check_allowed_files "$order_file"
-  gate_check_context_budget "$order_file" "$worktree"
-  gate_check_compiled_grain_contract "$order_file"
-  gate_check_exact_targets "$order_file" "$worktree"
-  gate_check_view_profile "$order_file"
-  gate_check_clean_worktree "$worktree"
-  gate_check_react_labels "$order_file"
+  record_gate ROUND "$(basename "$order_file")"
+  gate_run base gate_check_base "$order_file" "$worktree"
+  gate_run grain_and_dependencies gate_check_grain_and_dependencies "$order_file" "$worktree"
+  gate_run authorities gate_check_authorities "$order_file" "$worktree"
+  gate_run allowed_files gate_check_allowed_files "$order_file"
+  gate_run context_budget gate_check_context_budget "$order_file" "$worktree"
+  gate_run compiled_grain_contract gate_check_compiled_grain_contract "$order_file"
+  gate_run exact_targets gate_check_exact_targets "$order_file" "$worktree"
+  gate_run view_profile gate_check_view_profile "$order_file"
+  gate_run clean_worktree gate_check_clean_worktree "$worktree"
+  gate_run react_labels gate_check_react_labels "$order_file"
 }
 
 # gate_check_baseがBASE_REF/BASE_SHAを検証した後だけ呼ぶ。発注書本文の間接的な

@@ -196,6 +196,64 @@ system / thinking×4(timestamp付きdelta) / assistant / result
 
 - Spark／GrokのUSD cost（両CLIが返さない。token数からの換算は単価が変わるため正本にしない）
 
+## 10. runner三層の要否を測る手順(事前登録)
+
+`scripts/delegate-cursor-supervised.sh`は2,680行、専用試験は1,403行で合計4,083行ある。
+「本当に要るのか」を印象でなく実測で判定するため、**判定基準を先に登録する**。
+結果を見てから基準を作らない。
+
+runnerを役割で三層に分ける。
+
+| 層 | 内容 | 規律で代替できるか |
+|---|---|---|
+| **A 完全性** | sandbox隔離、fingerprint、検収者mutation検出、順序強制、evidence、derived target closure | できない。実装担当がambient memoryを読んだ430秒の失敗を塞いだのはこの層 |
+| **B 粒の閉鎖判定** | `NEW_SURFACE`、exact target、`VIEW_PROFILE`、authority hash、allowlist | 改訂1「契約境界=1」を機械化しているのがこの層 |
+| **C 文脈パッキング** | target capsule(48 KiB)、compiled grain(16 KiB)、context budget | **要否が未確定**。A/B測定で12.0%はプロジェクト自身の20%閾値未満 |
+
+### 記録するもの
+
+runnerは`<order>.evidence/gates.txt`へ次を追記する(2026-08-01実装)。
+
+```text
+GATE_ROUND: <対象file>
+GATE_ENTER: <gate名>          … 通過したgateも記録する(従来は無記録)
+GATE_PASS:  <gate名>
+ECONOMY: TARGET_CAPSULE  produced_bytes=<capsule> baseline_bytes=<READ_FILE合計>
+ECONOMY: COMPILED_GRAIN  produced_bytes=<grain>   baseline_bytes=<order全文>
+```
+
+gateは失敗時に直接exitするため、**`GATE_PASS`が無い最後の`GATE_ENTER`が拒否したgate**になる。
+`ECONOMY`は`execute`でのみ生成される(`prepare`はcapsule/grainを作らない)。
+
+### 判定基準
+
+次の3粒(実製品粒、凍結解除条件と同じ計数)で判定する。
+
+**C層を削れると判定する条件** — 3粒すべてで次が成立した場合:
+
+1. `TARGET_CAPSULE`の`baseline_bytes`が`MAX_TARGET_CAPSULE_BYTES`(49,152)以下。
+   すなわち`READ_FILE`を丸ごと渡しても予算内で、capsule生成が何も節約していない
+2. `COMPILED_GRAIN`の`baseline_bytes`が`MAX_SPARK_GRAIN_BYTES`(16,384)以下。
+   すなわちorder全文を渡しても予算内
+3. `context_budget` gateが一度も拒否しない
+
+**C層を残すと判定する条件** — 3粒のうち**1件でも**次が起きた場合:
+
+- 上記1〜3のいずれかが崩れる(実際に切り詰めが起きている)
+- `ECONOMY`の`produced_bytes`が`baseline_bytes`を大きく下回り、その粒がACCEPTしている
+
+**A層・B層が働いていると判定する条件**: gate台帳のいずれかが拒否を記録する、
+fingerprint／検収者mutation／order mutationの検出が発火する、
+または`NEW_SURFACE`／exact targetが粒の分割を強制する。
+
+### 判定しないこと
+
+- 3粒はすべて実製品粒とする。fixtureの反復で代用しない
+- C層を削る判断が出ても、削除自体は独立検収を経る。**本観察は削除の許可ではない**
+- A層・B層のgateが一度も拒否しなかったことを「不要」の根拠にしない。
+  拒否が出ないのは粒が正しく作られている場合もあるため、
+  A層は**発火しないこと自体が正常**である
+
 ## 9. 導線 — 過去のやり方へ戻さない
 
 - **コスト・token・wall timeを人が画面から書き写さない。** runnerのtelemetry receiptを正本にする。
