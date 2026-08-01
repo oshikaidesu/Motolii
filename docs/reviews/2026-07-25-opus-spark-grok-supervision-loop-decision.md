@@ -141,9 +141,13 @@ PLATFORM / NONE`を付け、tagごとの既知負例、禁止構文、機械lint
 
 ### 移行状態
 
-本節の方式は2026-07-30に運用決定した。typed delta、六軸分類、hazard guardの機械gateが専用runner試験と
-ともにmainへ入った時点で新接続を発効する。移行前の実行を新方式による速度改善の証拠に数えず、移行のために
-authority hash、scope closure、Grok独立検収、Codex precheckを弱めない。
+本節の方式は2026-07-30に運用決定し、**2026-08-01に発効した**。発効条件は「typed delta、六軸分類、
+hazard guardの機械gateが専用runner試験とともにmainへ入る」ことであり、main `3ce9d169`
+(PR #436 compiled-spark-grain-integration)で満たされた。main上の
+`scripts/test-delegate-cursor-supervised.sh`は`PASS`し、`scripts/validate.sh`から起動される。
+以後この方式を「未発効」として扱わない。移行前の実行を新方式による速度改善の証拠に数えず、発効を理由に
+authority hash、scope closure、独立検収、Codex precheckを弱めない。**発効したのは接続方式であって、
+複雑粒の一発合格でも速度改善でもない**。
 
 2026-07-30の未commit worktree実装では、専用runner試験で`STOP`、`READY`、同一session一回再試行、
 二回schema不正、CLI失敗時の再試行禁止、P0/P1の骨格差戻し、P2 resolution必須化、
@@ -204,8 +208,8 @@ Spark promptはtarget capsuleとcompiled grainを各一回だけ持ち、元task
 
 生成grain、target capsule、最終Spark promptは試行evidenceへ保存してparent shell保持hashと照合する。
 必須field欠落、16 KiB超過、runner-only metadata漏洩、Spark実行中の生成物改変はfail closedし、Grokへ進めない。
-専用負例は欠落拒否、改変拒否、重複task／全文order不在、必須field一回、三生成物hashを固定する。この接続も
-runner本体と専用負例がmainへ入るまで決定済み・未発効であり、単発fixtureの12.0%を全体速度へ外挿しない。
+専用負例は欠落拒否、改変拒否、重複task／全文order不在、必須field一回、三生成物hashを固定する。この接続は
+2026-08-01にmainで発効した(前掲§移行状態)。ただし単発fixtureの12.0%を全体速度へ外挿しない。
 
 次の複雑粒比較に先立ち、採用済みGR-D3 commit `707800b1`をbase
 `2a3e7812808cd0bbe7dcc62ea3f1d48a88cb99e9`へ照合した。実差分はrunner 218行、試験722行の計930行で、
@@ -334,6 +338,50 @@ Fable 5は大地図、長期展望、複数仕様の衝突、共有公開境界�
 
 React製品資産とRerun参照を含む発注は、`AGENTS.md`の追加ラベル、順序、STOP条件をこのループより優先して
 満たす。ループの簡略化は製品契約の簡略化を意味しない。
+
+## 改訂凍結(2026-08-01)
+
+状態: **停止線**
+
+本決定と`AGENTS.md`の監督ループ節は、**実製品粒で連続3件の`VERDICT: ACCEPT`を得るまで改訂しない**。
+
+凍結する理由は、規約の内容が誤っているからではなく、**改訂に終了条件がなかった**ためである。2026-07-25から
+08-01の間、計測のたびに規約が改訂され、改訂は「決定済み・未発効」として積まれ、mainへ入った後も発効宣言が
+行われなかった。その結果、どの規約が現に効いているのかを実行前に判定できず、同じ論点が繰り返し再裁定された。
+これは規約の欠陥ではなく、改訂ループの欠陥である。
+
+凍結中の扱いを次で固定する。
+
+- 監督ループについての計測、論文・先例調査、他LLMからの助言は`docs/reviews/`のobservationに留める。
+  規約、runner接続方式、`AGENTS.md`へ昇格させない
+- 評価指標は新設せず、[発注パイプライン比較 §8](2026-07-23-parallel-order-pipeline-comparison.md#8-速度と品質の測定案)
+  の既存表（lead time / wait time / first-pass accept / rework count / stale-base count / escaped finding /
+  Codex integration load）を使う。同書はARCHIVEDだが、アーカイブ対象は旧model配置と複数実装lane案であり、
+  §1の診断と§8の指標表は棄却されていない。数値は手写しでなく
+  [runner計装](2026-08-01-supervision-loop-cost-driver-observation.md#7-計装実装済み2026-08-01)のreceiptから採る
+- 連続3件は同一fixtureの反復でなく、実製品粒で数える。REJECT、STOP、timeoutが一件でも入れば計数をやり直す
+- 凍結の唯一の例外は、検収者固定を独立性条件へ一般化する改訂とする(次節)。その他の例外を作らない
+- 凍結解除時は、3件のorder SHA-256、Grok verdict、token、wall timeを本文書へ追記してから改訂を再開する
+
+### 凍結対象外 — 検収者の独立性条件
+
+現行runnerは`REVIEW_MODEL`を`cursor-grok-4.5-high`との等値比較で固定している。しかし守るべき不変条件は
+**Grokを使うこと**ではなく、**実装担当から独立した別LLMの外部視点による検収を必ず得ること**である。
+model固定はその不変条件の一実装にすぎない。
+
+したがって、次の一般化だけを凍結対象外とする。ただし本項は**方向の裁定であって、まだ実装していない**。
+
+- reviewerの独立性を機械判定にする: 実装担当と異なるmodel identityかつmodel family、fresh session、
+  read-only、実装担当の思考過程や自己説明を渡さない、`ACCEPT / REJECT`とP0/P1の構造化出力、
+  receiptへ実使用modelとfallback有無を記録する
+- 既定reviewerは`cursor-grok-4.5-high`のまま変えない
+- 事前設計へ深く関与したmodelを最終reviewerに選ばない
+- reviewerのscoring、選択router、provider多様性の必須化は**この段階では作らない**。凍結解除後に、
+  実績3件の証跡を根拠として再判定する
+
+独立検収そのものを省略する最適化は、model routingでもcost削減でも採らない。低riskだからreviewerを省く、
+mechanical testを独立検収の代替にする、実装担当の自己検証や複数候補投票で置き換える、のいずれも
+本ループの中核保証を失うため不可とする。
 
 ## アーカイブした方式
 
