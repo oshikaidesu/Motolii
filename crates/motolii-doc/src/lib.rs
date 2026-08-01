@@ -578,6 +578,16 @@ impl DocumentWriter {
         position_key::prepare_add_position_key(&self.doc, target, playhead)
     }
 
+    /// U4b-1: 左keyのoutgoing Interp変更をpure prepareする。same-valueは`None`。
+    pub fn prepare_set_position_key_interp(
+        &self,
+        target: LayerId,
+        left_key_id: KeyframeId,
+        new: motolii_eval::Interp,
+    ) -> Result<Option<Command>, CommandError> {
+        position_key::prepare_set_position_key_interp(&self.doc, target, left_key_id, new)
+    }
+
     /// CU-201M-S: 対象 Clip の `start` を準備する。same-value は `None`。
     pub fn prepare_set_clip_start(
         &self,

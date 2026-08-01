@@ -12,7 +12,7 @@ use crate::{
 #[derive(Debug, Clone, PartialEq)]
 pub enum PreparedAddPositionKey {
     Edit {
-        command: Command,
+        command: Box<Command>,
         key_id: KeyframeId,
     },
     AlreadyPresent {
@@ -58,7 +58,10 @@ pub(crate) fn prepare_add_position_key(
     };
     let mut candidate = doc.clone();
     command.apply(&mut candidate)?;
-    Ok(PreparedAddPositionKey::Edit { command, key_id })
+    Ok(PreparedAddPositionKey::Edit {
+        command: Box::new(command),
+        key_id,
+    })
 }
 
 pub(crate) fn validate_add_position_key_payload(
@@ -95,6 +98,110 @@ pub(crate) fn guard_stable_id_document(doc: &Document) -> Result<(), CommandErro
         });
     }
     doc.validate().map_err(CommandError::Validate)
+}
+
+pub(crate) fn prepare_set_position_key_interp(
+    doc: &Document,
+    target: LayerId,
+    left_key_id: KeyframeId,
+    new: Interp,
+) -> Result<Option<Command>, CommandError> {
+    guard_stable_id_document(doc)?;
+    crate::doc_keyframe::validate_interp(&new)?;
+    let envelope = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(target.get()))?;
+    let DocParam::Keyframes(track) = &envelope.transform.position else {
+        return Err(CommandError::UnsupportedPositionKeySource);
+    };
+    let (_, right_key_id, old) = position_interval(track, target, left_key_id)?;
+    if old == new {
+        return Ok(None);
+    }
+    Ok(Some(Command::SetPositionKeyInterp {
+        target,
+        left_key_id,
+        right_key_id,
+        old,
+        new,
+    }))
+}
+
+pub(crate) fn apply_set_position_key_interp(
+    doc: &mut Document,
+    target: LayerId,
+    left_key_id: KeyframeId,
+    right_key_id: KeyframeId,
+    old: Interp,
+    new: Interp,
+) -> Result<(), CommandError> {
+    guard_stable_id_document(doc)?;
+    crate::doc_keyframe::validate_interp(&new)?;
+    let envelope = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(target.get()))?;
+    let DocParam::Keyframes(track) = &envelope.transform.position else {
+        return Err(CommandError::UnsupportedPositionKeySource);
+    };
+    let left_index = track
+        .keys()
+        .iter()
+        .position(|key| key.id == left_key_id)
+        .ok_or(CommandError::PositionKeyNotFound {
+            layer: target.get(),
+            key: left_key_id.get(),
+        })?;
+    let actual_right = track.keys().get(left_index + 1).map(|key| key.id);
+    if actual_right != Some(right_key_id) {
+        return Err(CommandError::PositionIntervalMismatch {
+            layer: target.get(),
+            left: left_key_id.get(),
+            expected_right: right_key_id.get(),
+            found_right: actual_right.map(KeyframeId::get),
+        });
+    }
+    let actual_old = track.keys()[left_index].interp;
+    if actual_old != old {
+        return Err(CommandError::PositionKeyInterpPayloadMismatch {
+            layer: target.get(),
+            key: left_key_id.get(),
+        });
+    }
+    let mut next = doc.clone();
+    let next_envelope = crate::command::find_envelope_mut(&mut next, target)?;
+    let DocParam::Keyframes(next_track) = &mut next_envelope.transform.position else {
+        return Err(CommandError::UnsupportedPositionKeySource);
+    };
+    next_track
+        .get_by_id_mut(left_key_id)
+        .ok_or(CommandError::PositionKeyNotFound {
+            layer: target.get(),
+            key: left_key_id.get(),
+        })?
+        .interp = new;
+    next.validate().map_err(CommandError::Validate)?;
+    *doc = next;
+    Ok(())
+}
+
+fn position_interval(
+    track: &DocKeyframeTrack,
+    target: LayerId,
+    left_key_id: KeyframeId,
+) -> Result<(usize, KeyframeId, Interp), CommandError> {
+    let left_index = track
+        .keys()
+        .iter()
+        .position(|key| key.id == left_key_id)
+        .ok_or(CommandError::PositionKeyNotFound {
+            layer: target.get(),
+            key: left_key_id.get(),
+        })?;
+    let right =
+        track
+            .keys()
+            .get(left_index + 1)
+            .ok_or(CommandError::PositionKeyHasNoRightInterval {
+                layer: target.get(),
+                key: left_key_id.get(),
+            })?;
+    Ok((left_index, right.id, track.keys()[left_index].interp))
 }
 
 fn existing_key_at(

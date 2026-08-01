@@ -251,6 +251,7 @@ const fn command_kind_copy(kind: CommandKind) -> &'static str {
     match kind {
         CommandKind::SetProperty => "Set property",
         CommandKind::AddPositionKey => "Add position key",
+        CommandKind::SetPositionKeyInterp => "Set position key interpolation",
         CommandKind::SetBlendMode => "Set blend mode",
         CommandKind::SetClippingMask => "Set clipping mask",
         CommandKind::SetTransformParent => "Set transform parent",

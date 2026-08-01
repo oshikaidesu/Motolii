@@ -35,7 +35,7 @@ pub enum Interp {
 impl Interp {
     /// timeline progressで区間を分け、左右をそれぞれ0..1へ正規化した補間を返す。
     pub fn split_at_progress(self, progress: f64) -> Result<(Self, Self), TrackError> {
-        if !progress.is_finite() || !(0.0 < progress && progress < 1.0) {
+        if !(progress.is_finite() && 0.0 < progress && progress < 1.0) {
             return Err(TrackError::InvalidSplitProgress { progress });
         }
         match self {

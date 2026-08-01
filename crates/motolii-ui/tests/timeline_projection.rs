@@ -8,8 +8,8 @@ use motolii_doc::{
 };
 use motolii_eval::{DataTrackId, Interp};
 use motolii_ui::{
-    project_timeline, TimelineBar, TimelineHit, TimelineMetrics, TimelineProjectionError,
-    TimelineUnsupported, TimelineViewport,
+    project_position_interval, project_timeline, TimelineBar, TimelineHit, TimelineMetrics,
+    TimelineProjectionError, TimelineUnsupported, TimelineViewport,
 };
 
 fn metrics() -> TimelineMetrics {
@@ -160,6 +160,45 @@ fn p5_keyframes_project_exact_rational_time() {
     assert_eq!(key.layer, layer);
     assert_eq!(key.key, expected_key_id);
     assert_eq!(key.t, t);
+}
+
+#[test]
+fn position_interval_projects_immediate_right_and_left_outgoing_interp() {
+    let mut f = DocFixture::new();
+    let mut track = DocKeyframeTrack::new();
+    let left = keyframe_vec2_at(&mut f, sec(1));
+    let left_id = left.id;
+    let mut middle = keyframe_vec2_at(&mut f, sec(2));
+    middle.interp = Interp::Bezier {
+        x1: 0.2,
+        y1: -0.3,
+        x2: 0.8,
+        y2: 1.3,
+    };
+    let middle_id = middle.id;
+    let last = keyframe_vec2_at(&mut f, sec(3));
+    let last_id = last.id;
+    track.insert(left);
+    track.insert(middle);
+    track.insert(last);
+    let layer = f.push_clip("interval", sec(0), sec(5), DocParam::Keyframes(track));
+    let doc = f.finish();
+
+    let first = project_position_interval(&doc, layer, left_id).expect("first interval");
+    assert_eq!(first.left_key, left_id);
+    assert_eq!(first.right_key, middle_id);
+    assert_eq!(first.start, sec(1));
+    assert_eq!(first.end, sec(2));
+    assert_eq!(first.interp, Interp::Hold);
+
+    let second = project_position_interval(&doc, layer, middle_id).expect("second interval");
+    assert_eq!(second.right_key, last_id);
+    assert!(matches!(second.interp, Interp::Bezier { .. }));
+    assert_eq!(project_position_interval(&doc, layer, last_id), None);
+    assert_eq!(
+        project_position_interval(&doc, LayerId::from_raw(999), left_id),
+        None
+    );
 }
 
 #[test]

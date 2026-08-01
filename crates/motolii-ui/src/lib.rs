@@ -72,8 +72,9 @@ pub use shell::{run_shell, run_shell_with_project, ShellError};
 pub use state_ownership::{UiStateLifetime, UiStateOwner};
 pub use static_preview::StaticPreviewError;
 pub use timeline_projection::{
-    project_timeline, TimelineBar, TimelineHit, TimelineKey, TimelineMetrics, TimelineProjection,
-    TimelineProjectionError, TimelineUnsupported, TimelineViewport,
+    project_position_interval, project_timeline, TimelineBar, TimelineHit, TimelineKey,
+    TimelineMetrics, TimelinePositionInterval, TimelineProjection, TimelineProjectionError,
+    TimelineUnsupported, TimelineViewport,
 };
 
 /// 製品 UI クレートの識別子。依存方向 CI の許可リストと一致させる。

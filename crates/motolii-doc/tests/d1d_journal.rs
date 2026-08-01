@@ -15,10 +15,12 @@ use motolii_doc::journal::{
     JournalRecordKind,
 };
 use motolii_doc::{
-    load_catalog, Bpm, Clip, ClipSource, Command, DocParam, Document, ItemEnvelope, LayerId,
-    PinGenerationOptions, ProjectError, ProjectSession, RecoverySource, ResourceLimits,
-    RotateOptions, SaveProjectOptions, ScalarPropertyId, SessionError, Track, TrackItem, WalError,
+    load_catalog, Bpm, Clip, ClipSource, Command, DocKeyframe, DocKeyframeTrack, DocParam,
+    DocValue, Document, ItemEnvelope, KeyframeId, LayerId, PinGenerationOptions, ProjectError,
+    ProjectSession, RecoverySource, ResourceLimits, RotateOptions, SaveProjectOptions,
+    ScalarPropertyId, SessionError, Track, TrackItem, WalError,
 };
+use motolii_eval::Interp;
 
 fn unique_dir(tag: &str) -> PathBuf {
     let nanos = SystemTime::now()
@@ -79,6 +81,13 @@ fn clip_opacity(doc: &Document) -> DocParam {
         panic!("expected clip");
     };
     c.envelope.opacity.clone()
+}
+
+fn clip_position(doc: &Document) -> &DocParam {
+    let TrackItem::Clip(c) = &doc.tracks[0].items[0] else {
+        panic!("expected clip");
+    };
+    &c.envelope.transform.position
 }
 
 #[test]
@@ -235,6 +244,73 @@ fn edit_between_two_checkpoints_still_recovers_from_main_file() {
     let (_session, opened) = common::session::open_recovered(&path);
     assert_eq!(opened.source, RecoverySource::MainFile);
     assert_eq!(clip_opacity(&opened.document), DocParam::const_f64(0.5));
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn position_interp_v2_edit_replays_left_outgoing_only() {
+    let dir = unique_dir("position-interp-replay");
+    let path = dir.join("proj.json");
+    let (mut doc, layer) = doc_with_clip();
+    let left = KeyframeId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let right = KeyframeId::from_raw(doc.next_stable_id.allocate().unwrap());
+    let mut keys = DocKeyframeTrack::new();
+    keys.insert(DocKeyframe {
+        id: left,
+        t: RationalTime::ZERO,
+        value: DocValue::Vec2([0.0, 0.0]),
+        interp: Interp::Hold,
+    });
+    keys.insert(DocKeyframe {
+        id: right,
+        t: RationalTime::try_new(2, 1).unwrap(),
+        value: DocValue::Vec2([1.0, 1.0]),
+        interp: Interp::Linear,
+    });
+    let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] else {
+        unreachable!()
+    };
+    clip.envelope.transform.position = DocParam::Keyframes(keys);
+    doc.validate().unwrap();
+    common::session::save_journal(&path, &doc, &SaveProjectOptions::default());
+
+    let new = Interp::Bezier {
+        x1: 0.25,
+        y1: -0.2,
+        x2: 0.75,
+        y2: 1.2,
+    };
+    let edit = JournalEdit::new(Command::SetPositionKeyInterp {
+        target: layer,
+        left_key_id: left,
+        right_key_id: right,
+        old: Interp::Hold,
+        new,
+    });
+    common::session::save_journal(
+        &path,
+        &doc,
+        &SaveProjectOptions {
+            journal_edit: Some(edit),
+            checkpoint: false,
+            ..Default::default()
+        },
+    );
+
+    let (_session, opened) = common::session::open_recovered(&path);
+    assert!(matches!(
+        opened.source,
+        RecoverySource::JournalReplay | RecoverySource::CommittedPrefixReplay
+    ));
+    let DocParam::Keyframes(replayed) = clip_position(&opened.document) else {
+        unreachable!()
+    };
+    assert_eq!(replayed.keys().len(), 2);
+    assert_eq!(replayed.keys()[0].id, left);
+    assert_eq!(replayed.keys()[0].interp, new);
+    assert_eq!(replayed.keys()[1].id, right);
+    assert_eq!(replayed.keys()[1].interp, Interp::Linear);
+    assert_eq!(opened.document.next_stable_id, doc.next_stable_id);
     let _ = fs::remove_dir_all(dir);
 }
 

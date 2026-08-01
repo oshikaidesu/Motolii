@@ -103,6 +103,7 @@ pub enum CommandKind {
     SetProperty,
     /// U4b-0: `AddPositionKey` / `UndoAddPositionKey`共用。
     AddPositionKey,
+    SetPositionKeyInterp,
     SetBlendMode,
     SetClippingMask,
     SetTransformParent,
@@ -230,6 +231,23 @@ pub enum CommandError {
     PositionCurveSplit,
     #[error("add position key payload does not match layer {layer}")]
     PositionKeyPayloadMismatch { layer: u64 },
+    #[error("position key {key} not found on layer {layer}")]
+    PositionKeyNotFound { layer: u64, key: u64 },
+    #[error("position key {key} on layer {layer} has no outgoing interval")]
+    PositionKeyHasNoRightInterval { layer: u64, key: u64 },
+    #[error(
+        "position interval identity mismatch on layer {layer} (left={left}, expected right={expected_right}, found right={found_right:?})"
+    )]
+    PositionIntervalMismatch {
+        layer: u64,
+        left: u64,
+        expected_right: u64,
+        found_right: Option<u64>,
+    },
+    #[error("position key interpolation payload mismatch on layer {layer}, key {key}")]
+    PositionKeyInterpPayloadMismatch { layer: u64, key: u64 },
+    #[error(transparent)]
+    PositionInterp(#[from] crate::DocKeyframeError),
     #[error(transparent)]
     Validate(#[from] crate::validate::DocumentError),
     #[error(transparent)]
@@ -269,6 +287,13 @@ pub enum Command {
         new_value: DocParam,
         added_key_id: KeyframeId,
         stable_id_reservation: StableIdReservation,
+    },
+    SetPositionKeyInterp {
+        target: LayerId,
+        left_key_id: KeyframeId,
+        right_key_id: KeyframeId,
+        old: motolii_eval::Interp,
+        new: motolii_eval::Interp,
     },
     SetBlendMode {
         target: LayerId,
@@ -428,6 +453,7 @@ impl Command {
             Command::AddPositionKey { .. } | Command::UndoAddPositionKey { .. } => {
                 CommandKind::AddPositionKey
             }
+            Command::SetPositionKeyInterp { .. } => CommandKind::SetPositionKeyInterp,
             Command::SetBlendMode { .. } => CommandKind::SetBlendMode,
             Command::SetClippingMask { .. } => CommandKind::SetClippingMask,
             Command::SetTransformParent { .. } => CommandKind::SetTransformParent,
@@ -465,6 +491,7 @@ impl Command {
             Command::SetProperty { target, .. }
             | Command::AddPositionKey { target, .. }
             | Command::UndoAddPositionKey { target, .. }
+            | Command::SetPositionKeyInterp { target, .. }
             | Command::SetBlendMode { target, .. }
             | Command::SetClippingMask { target, .. }
             | Command::SetTransformParent { target, .. }
@@ -498,6 +525,7 @@ impl Command {
             Command::AddPositionKey { .. } | Command::UndoAddPositionKey { .. } => {
                 PropertyId::Position
             }
+            Command::SetPositionKeyInterp { .. } => PropertyId::Position,
             Command::SetBlendMode { .. } => PropertyId::Blend,
             Command::SetClippingMask { .. } => PropertyId::ClippingMask,
             Command::SetTransformParent { .. } => PropertyId::TransformParent,
@@ -573,6 +601,7 @@ impl Command {
                 ..
             } => Some(*stable_id_reservation),
             Command::SetProperty { .. }
+            | Command::SetPositionKeyInterp { .. }
             | Command::SetBlendMode { .. }
             | Command::SetClippingMask { .. }
             | Command::SetTransformParent { .. }
@@ -655,6 +684,20 @@ impl Command {
                 new_value,
                 *added_key_id,
                 *stable_id_reservation,
+            ),
+            Command::SetPositionKeyInterp {
+                target,
+                left_key_id,
+                right_key_id,
+                old,
+                new,
+            } => crate::position_key::apply_set_position_key_interp(
+                doc,
+                *target,
+                *left_key_id,
+                *right_key_id,
+                *old,
+                *new,
             ),
             Command::SetBlendMode { target, new, .. } => {
                 find_envelope_mut(doc, *target)?.blend = *new;
@@ -1129,6 +1172,19 @@ impl Command {
                 new_value,
                 added_key_id,
                 stable_id_reservation,
+            },
+            Command::SetPositionKeyInterp {
+                target,
+                left_key_id,
+                right_key_id,
+                old,
+                new,
+            } => Command::SetPositionKeyInterp {
+                target,
+                left_key_id,
+                right_key_id,
+                old: new,
+                new: old,
             },
             Command::SetBlendMode { target, old, new } => Command::SetBlendMode {
                 target,

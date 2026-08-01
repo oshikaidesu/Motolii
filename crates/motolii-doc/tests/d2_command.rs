@@ -704,14 +704,14 @@ fn add_position_key_const_is_one_undoable_stable_identity_command() {
     assert_eq!(command.property(), motolii_doc::PropertyId::Position);
     assert_eq!(key_id.get(), before_next);
     let durable: JournalEdit = serde_json::from_slice(
-        &serde_json::to_vec(&JournalEdit::new(command.clone())).expect("encode journal edit"),
+        &serde_json::to_vec(&JournalEdit::new((*command).clone())).expect("encode journal edit"),
     )
     .expect("decode journal edit");
     assert_eq!(durable.format_version, JournalEdit::FORMAT_VERSION);
-    assert_eq!(durable.command, command);
+    assert_eq!(durable.command, *command);
 
     let gesture = writer.begin_gesture();
-    writer.apply_command(gesture, command).expect("apply");
+    writer.apply_command(gesture, *command).expect("apply");
     let after = writer.snapshot();
     let DocParam::Keyframes(track) = position(&after, f.layer) else {
         panic!("position must become a keyframe track")
@@ -744,7 +744,9 @@ fn add_position_key_same_time_returns_existing_id_without_consuming_identity() {
         panic!("first key must be an edit")
     };
     let gesture = writer.begin_gesture();
-    writer.apply_command(gesture, command).expect("apply first");
+    writer
+        .apply_command(gesture, *command)
+        .expect("apply first");
     let before = writer.snapshot();
 
     let second = writer
@@ -838,6 +840,134 @@ fn add_position_key_rejects_stale_payload_without_mutation() {
         Err(CommandError::PositionKeyPayloadMismatch { layer }) if layer == f.layer.get()
     ));
     assert_eq!(changed, before);
+}
+
+fn position_track_fixture() -> (Fixture, KeyframeId, KeyframeId) {
+    let mut f = fixture();
+    let left = KeyframeId::from_raw(f.doc.next_stable_id.allocate().unwrap());
+    let right = KeyframeId::from_raw(f.doc.next_stable_id.allocate().unwrap());
+    let mut track = DocKeyframeTrack::new();
+    track.insert(DocKeyframe {
+        id: left,
+        t: RationalTime::ZERO,
+        value: DocValue::Vec2([0.0, 0.0]),
+        interp: Interp::Hold,
+    });
+    track.insert(DocKeyframe {
+        id: right,
+        t: RationalTime::try_new(2, 1).unwrap(),
+        value: DocValue::Vec2([1.0, 1.0]),
+        interp: Interp::Linear,
+    });
+    let TrackItem::Clip(clip) = &mut f.doc.tracks[0].items[0] else {
+        unreachable!()
+    };
+    clip.envelope.transform.position = DocParam::Keyframes(track);
+    f.doc.validate().unwrap();
+    (f, left, right)
+}
+
+#[test]
+fn set_position_key_interp_changes_only_left_outgoing_and_is_one_undo() {
+    let (f, left, right) = position_track_fixture();
+    let original = f.doc.clone();
+    let mut writer = reference_writer(f.doc);
+    let new = Interp::Bezier {
+        x1: 0.2,
+        y1: -0.4,
+        x2: 0.8,
+        y2: 1.4,
+    };
+    let command = writer
+        .prepare_set_position_key_interp(f.layer, left, new)
+        .expect("prepare")
+        .expect("changed value");
+    assert_eq!(
+        command.kind(),
+        motolii_doc::CommandKind::SetPositionKeyInterp
+    );
+    let durable: JournalEdit =
+        serde_json::from_slice(&serde_json::to_vec(&JournalEdit::new(command.clone())).unwrap())
+            .unwrap();
+    assert_eq!(durable.command, command);
+
+    let gesture = writer.begin_gesture();
+    writer.apply_command(gesture, command).expect("apply");
+    let applied = writer.snapshot();
+    let DocParam::Keyframes(applied_track) = position(&applied, f.layer) else {
+        unreachable!()
+    };
+    assert_eq!(applied_track.keys().len(), 2);
+    assert_eq!(applied_track.keys()[0].id, left);
+    assert_eq!(applied_track.keys()[0].interp, new);
+    assert_eq!(applied_track.keys()[1].id, right);
+    assert_eq!(applied_track.keys()[1].interp, Interp::Linear);
+    assert_eq!(applied.next_stable_id, original.next_stable_id);
+    assert_eq!(writer.undo_len(), 1);
+
+    writer.undo().expect("undo");
+    assert_eq!(writer.snapshot().as_ref(), &original);
+    writer.redo().expect("redo");
+    assert_eq!(writer.snapshot().as_ref(), applied.as_ref());
+    assert!(writer
+        .prepare_set_position_key_interp(f.layer, left, new)
+        .expect("same-value prepare")
+        .is_none());
+}
+
+#[test]
+fn set_position_key_interp_rejects_stale_successor_without_mutation() {
+    let (f, left, _) = position_track_fixture();
+    let writer = reference_writer(f.doc.clone());
+    let command = writer
+        .prepare_set_position_key_interp(f.layer, left, Interp::Linear)
+        .unwrap()
+        .unwrap();
+    let mut changed = f.doc;
+    let inserted = KeyframeId::from_raw(changed.next_stable_id.allocate().unwrap());
+    let TrackItem::Clip(clip) = &mut changed.tracks[0].items[0] else {
+        unreachable!()
+    };
+    let DocParam::Keyframes(track) = &mut clip.envelope.transform.position else {
+        unreachable!()
+    };
+    track.insert(DocKeyframe {
+        id: inserted,
+        t: RationalTime::try_new(1, 1).unwrap(),
+        value: DocValue::Vec2([0.5, 0.5]),
+        interp: Interp::Hold,
+    });
+    changed.validate().unwrap();
+    let before = changed.clone();
+    assert!(matches!(
+        command.apply(&mut changed),
+        Err(CommandError::PositionIntervalMismatch { .. })
+    ));
+    assert_eq!(changed, before);
+}
+
+#[test]
+fn set_position_key_interp_rejects_last_key_and_invalid_curve() {
+    let (f, left, right) = position_track_fixture();
+    let writer = reference_writer(f.doc.clone());
+    assert!(matches!(
+        writer.prepare_set_position_key_interp(f.layer, right, Interp::Linear),
+        Err(CommandError::PositionKeyHasNoRightInterval { .. })
+    ));
+    assert!(matches!(
+        writer.prepare_set_position_key_interp(
+            f.layer,
+            left,
+            Interp::Bezier {
+                x1: -0.1,
+                y1: 0.0,
+                x2: 1.0,
+                y2: 1.0,
+            },
+        ),
+        Err(CommandError::PositionInterp(_))
+    ));
+    assert_eq!(writer.snapshot().as_ref(), &f.doc);
 }
 
 #[test]

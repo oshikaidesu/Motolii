@@ -4,6 +4,7 @@
 
 use motolii_core::RationalTime;
 use motolii_doc::{DocParam, Document, KeyframeId, LayerId, TrackItem};
+use motolii_eval::Interp;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TimelineMetrics {
@@ -38,6 +39,16 @@ pub struct TimelineKey {
     pub band: u32,
     pub center_x: f64,
     pub center_y: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelinePositionInterval {
+    pub layer: LayerId,
+    pub left_key: KeyframeId,
+    pub right_key: KeyframeId,
+    pub start: RationalTime,
+    pub end: RationalTime,
+    pub interp: Interp,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -156,6 +167,39 @@ pub fn project_timeline(
         unsupported,
         key_half_extent: metrics.key_half_extent,
     })
+}
+
+/// U4b-1: native Timelineで選ばれた左Position keyから直後区間を導出する。
+pub fn project_position_interval(
+    document: &Document,
+    layer: LayerId,
+    left_key: KeyframeId,
+) -> Option<TimelinePositionInterval> {
+    for track in &document.tracks {
+        for item in &track.items {
+            let TrackItem::Clip(clip) = item else {
+                continue;
+            };
+            if clip.envelope.layer_id != layer {
+                continue;
+            }
+            let DocParam::Keyframes(keys) = &clip.envelope.transform.position else {
+                return None;
+            };
+            let left_index = keys.keys().iter().position(|key| key.id == left_key)?;
+            let left = &keys.keys()[left_index];
+            let right = keys.keys().get(left_index + 1)?;
+            return Some(TimelinePositionInterval {
+                layer,
+                left_key,
+                right_key: right.id,
+                start: left.t,
+                end: right.t,
+                interp: left.interp,
+            });
+        }
+    }
+    None
 }
 
 impl TimelineProjection {

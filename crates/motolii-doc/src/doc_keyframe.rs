@@ -71,6 +71,10 @@ impl DocKeyframeTrack {
         self.keys.iter().find(|k| k.id == id)
     }
 
+    pub(crate) fn get_by_id_mut(&mut self, id: KeyframeId) -> Option<&mut DocKeyframe> {
+        self.keys.iter_mut().find(|k| k.id == id)
+    }
+
     /// idで1件削除する(コマンド層のキーフレーム削除で使用。時刻は不変条件維持に無関係)。
     pub fn remove_by_id(&mut self, id: KeyframeId) -> Option<DocKeyframe> {
         let idx = self.keys.iter().position(|k| k.id == id)?;
