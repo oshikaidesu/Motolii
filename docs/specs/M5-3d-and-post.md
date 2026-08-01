@@ -4,6 +4,10 @@
 
 ## 実装前の既知実装調査
 
+現行の調査入口は[M5 既知実装調査・暫定採択地図](../m5-known-implementation-adoption-map.md)とする。
+同地図は`main`の決定、現行code fact、未統合の3D import／Render Contribution決定候補、公式一次資料を
+分離している。暫定routeだけで製品runtimeを発注せず、最初にdecision recovery `M5-A0`を閉じる。
+
 M5は[既知実装採択・置換開発モデル](../known-implementation-adoption-model.md)に従う。scene／object
 representation、camera observation、spatial renderer、glTF import、depth、text、Vello局所pass、post
 effect、picking／gizmo／bounds、deterministic duplicationを機構classとして先に調査し、具体file／API／
