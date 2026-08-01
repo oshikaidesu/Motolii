@@ -440,3 +440,4 @@
 | [2026-08-01-cu-201t-s-clip-trim-timemap-contract-decision.md](2026-08-01-cu-201t-s-clip-trim-timemap-contract-decision.md) | CU-201T-S Clip trim / TimeMap契約決定 |
 | [2026-08-01-cu-201n-s-timeline-snap-contract-decision.md](2026-08-01-cu-201n-s-timeline-snap-contract-decision.md) | CU-201N-S Timeline snap契約決定 |
 | [2026-08-01-cu-201p-native-timeline-interval-gesture-implementation-decision.md](2026-08-01-cu-201p-native-timeline-interval-gesture-implementation-decision.md) | CU-201P native Timeline interval gesture実装決定 |
+| [2026-08-01-cu-201r-timeline-interval-sequence-oracle-decision.md](2026-08-01-cu-201r-timeline-interval-sequence-oracle-decision.md) | CU-201R Timeline interval系列oracle決定 |

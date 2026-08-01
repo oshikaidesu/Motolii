@@ -1507,8 +1507,7 @@ impl ProductApp {
     }
 
     fn cancel_interval_gesture(&mut self, _event_loop: &ActiveEventLoop) {
-        self.active_interval = None;
-        self.interval_preview = None;
+        clear_interval_gesture(&mut self.active_interval, &mut self.interval_preview);
         self.request_redraw();
     }
 
@@ -1991,6 +1990,14 @@ impl ProductApp {
             Err(ProductSurfaceError::Fatal(reason)) => self.fail(event_loop, reason),
         }
     }
+}
+
+fn clear_interval_gesture(
+    active: &mut Option<ActiveIntervalGesture>,
+    preview: &mut Option<TimelineIntervalPreview>,
+) {
+    *active = None;
+    *preview = None;
 }
 
 fn elapsed_ms(started_at: Instant) -> f64 {
@@ -2895,6 +2902,37 @@ mod tests {
         assert_eq!(preview.layer, bar.layer);
         assert_eq!(preview.start, bar.start);
         assert_eq!(preview.end, bar.end);
+    }
+
+    #[test]
+    fn interval_cancel_clears_only_transient_state_and_enqueues_no_document_work() {
+        let document = crate::static_preview::bootstrap_document().unwrap();
+        let projection = ProductTimelineProjection::from_document(&document).unwrap();
+        let bar = projection.projection.bars()[0];
+        let mut active = Some(ActiveIntervalGesture {
+            generation: 1,
+            target: IntervalPressTarget {
+                layer: bar.layer,
+                kind: IntervalGestureKind::Move,
+                start: bar.start,
+                end: bar.end,
+            },
+            grab_time: bar.start,
+            layout_epoch: 9,
+            projection_generation: 0,
+        });
+        let mut preview = Some(TimelineIntervalPreview {
+            layer: bar.layer,
+            start: bar.start,
+            end: bar.end,
+        });
+        let queue = DocumentEditQueue::default();
+
+        clear_interval_gesture(&mut active, &mut preview);
+
+        assert!(active.is_none());
+        assert!(preview.is_none());
+        assert_eq!(queue.len(), 0);
     }
 
     #[test]

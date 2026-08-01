@@ -962,7 +962,7 @@ pub(crate) enum DocumentEditRuntimeError {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
     use std::sync::Arc;
 
@@ -1053,6 +1053,46 @@ mod tests {
         )
         .unwrap();
         (document, request)
+    }
+
+    fn interval_sequence_fixture() -> (Document, Vec<LayerId>) {
+        let mut document = Document::new_current();
+        let track = document.track_ids.allocate("V1").unwrap();
+        let asset = document
+            .assets
+            .allocate("media", "video/mp4", "hash")
+            .unwrap();
+        let mut layers = Vec::new();
+        let mut items = Vec::new();
+        for (index, start) in [0_i64, 2, 4].into_iter().enumerate() {
+            let layer = document
+                .layers
+                .allocate(format!("fixture-{index}"))
+                .unwrap();
+            layers.push(layer);
+            items.push(TrackItem::Clip(Clip {
+                envelope: ItemEnvelope::new(layer),
+                start: RationalTime::try_new(start, 1).unwrap(),
+                duration: RationalTime::try_new(1, 1).unwrap(),
+                time_map: Default::default(),
+                source: ClipSource::asset_video_only(asset),
+            }));
+        }
+        document.tracks.push(Track { id: track, items });
+        document.validate().unwrap();
+        (document, layers)
+    }
+
+    fn clip_by_layer(document: &Document, layer: LayerId) -> &Clip {
+        document
+            .tracks
+            .iter()
+            .flat_map(|track| &track.items)
+            .find_map(|item| match item {
+                TrackItem::Clip(clip) if clip.envelope.layer_id == layer => Some(clip),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("fixture clip {layer:?} not found"))
     }
 
     struct TwoTrackFixture {
@@ -2614,6 +2654,119 @@ mod tests {
         assert_eq!(runtime.history_lengths(), (0, 0));
         assert_eq!(
             serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
+    }
+
+    #[test]
+    fn deterministic_move_trim_sequence_preserves_identity_and_full_undo_reopens_initial_bytes() {
+        const STEPS: usize = 192;
+        let (document, layers) = interval_sequence_fixture();
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let initial_ids = layers.iter().copied().collect::<BTreeSet<_>>();
+        let (path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        let mut generation = 0_u64;
+        let mut state = 0x4d59_5df4_d0f3_3173_u64;
+
+        for step in 0..STEPS {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            let layer = layers[(state as usize) % layers.len()];
+            let before_snapshot = runtime.snapshot();
+            let before = clip_by_layer(&before_snapshot, layer).clone();
+            let delta = RationalTime::try_new(((state >> 16) % 5 + 1) as i64, 600).unwrap();
+
+            match (state >> 8) % 3 {
+                0 => {
+                    let mut start =
+                        RationalTime::try_new(((state >> 24) % 480) as i64, 60).unwrap();
+                    if start == before.start {
+                        start = start
+                            .try_add(RationalTime::try_new(1, 60).unwrap())
+                            .unwrap();
+                    }
+                    queue.push_move_clip(MoveClipRequest {
+                        layer_id: layer,
+                        start,
+                    });
+                }
+                1 => queue.push_trim_clip(TrimClipRequest {
+                    layer_id: layer,
+                    edge: TrimClipEdge::In,
+                    time: before.start.try_add(delta).unwrap(),
+                }),
+                _ => queue.push_trim_clip(TrimClipRequest {
+                    layer_id: layer,
+                    edge: TrimClipEdge::Out,
+                    time: before
+                        .start
+                        .try_add(before.duration)
+                        .unwrap()
+                        .try_sub(delta)
+                        .unwrap(),
+                }),
+            }
+
+            let published = runtime
+                .process_next(&mut queue, Some(layer), generation)
+                .unwrap()
+                .unwrap_or_else(|| panic!("step {step} must publish"));
+            generation = published.projection_generation;
+            let after = clip_by_layer(&published.snapshot, layer);
+            let ids = published
+                .snapshot
+                .tracks
+                .iter()
+                .flat_map(|track| &track.items)
+                .map(|item| match item {
+                    TrackItem::Clip(clip) => clip.envelope.layer_id,
+                    TrackItem::Group(group) => group.envelope.layer_id,
+                })
+                .collect::<BTreeSet<_>>();
+
+            assert_eq!(ids, initial_ids, "step {step} changed Clip identity set");
+            assert_eq!(published.primary, Some(layer));
+            assert_eq!(queue.len(), 0);
+            assert_eq!(runtime.history_lengths(), (step + 1, 0));
+            if published.kind == DocumentEditActionKind::MoveClip {
+                assert_eq!(after.duration, before.duration);
+                assert_eq!(after.time_map, before.time_map);
+                assert_eq!(after.source, before.source);
+                assert_eq!(
+                    after.start.try_add(after.duration).unwrap(),
+                    before
+                        .start
+                        .try_add(before.duration)
+                        .unwrap()
+                        .try_add(after.start.try_sub(before.start).unwrap())
+                        .unwrap(),
+                    "step {step} did not translate both interval edges equally"
+                );
+            }
+        }
+
+        for remaining in (0..STEPS).rev() {
+            queue.push_undo();
+            let undone = runtime
+                .process_next(&mut queue, None, generation)
+                .unwrap()
+                .unwrap_or_else(|| panic!("Undo {remaining} must publish"));
+            generation = undone.projection_generation;
+            assert_eq!(runtime.history_lengths(), (remaining, STEPS - remaining));
+            assert_eq!(queue.len(), 0);
+        }
+
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
+        drop(runtime);
+        let limits = ResourceLimits::production();
+        let (_session, reopened) = ProjectSession::open(&path, &limits).unwrap();
+        assert_eq!(
+            serde_json::to_vec(&reopened.document).unwrap(),
             initial_json
         );
     }
