@@ -13,12 +13,12 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 
 - 「発注して」「実装を発注」等、**発注を依頼動詞として明示した時だけ**自動委任する。通常の「実装して」、説明、引用、ファイル内の語では発火しない
 - 現行routeは`Codex → cursor-grok-4.5-high → gpt-5.3-codex-spark → claude-opus-5 → Codex`、`ROUTE_CONTRACT_VERSION: 2`、`LOOP_PROFILE: grok-spark-opus`だけとする。Grokはread-only preflight、Sparkは隔離実装、Opusは実装思考を受け取らないfresh read-only final review、Codexは正本照合と採否を所有する。外部modelは再委任しない
-- 旧`opus-spark-grok`、`ORDER_MANAGER_MODEL`、`OPUS_DELTA_*`、旧task-class routingを現行へ使わず、自動翻訳・黙ったfallbackをしない。古いworktreeのrunnerは正規入口にせず、current mainからfresh worktreeとversion 2 orderを再生成する
+- 旧`opus-spark-grok`、`ORDER_MANAGER_MODEL`、`OPUS_DELTA_*`、旧task-class routingを現行へ使わず、自動翻訳・黙ったfallbackをしない。branch内の`delegate-cursor-supervised.sh`を直接起動せず、Git common dirへactivateされたcanonical runnerだけを正規入口にする。receiptの`RUNNER_SHA256`がactive manifestと一致しない実行は採用根拠にしない
 - 一回のloopは一つの`CONTRACT_BOUNDARY`だけを扱う。`GRAIN`は契約境界であり施工step数ではない。同じbase、owner、allowlist、read set、oracle、非目標内の複数stepは一つのSpark sessionで施工し、Grok／Opusをstepごとに再起動しない。境界または完了条件が増える場合は同一粒で施工せず、新しいユーザー許可へ戻す
 - 主担当Codexは正本・履歴・コード事実を一度だけ広く読み、外部modelへ`AGENTS.md`、spec、repo全体を三重送信しない。orderは`READ_MODE: CAPSULE`、`CONTEXT_FACT:`、exact `READ_FILE / INTERNAL_TARGET / TEST_TARGET / REUSE_TARGET`、`NEW_SURFACE: FORBIDDEN`を持つ。上限はtask 12 KiB、order 32 KiB、target capsule 48 KiB、compiled grain 16 KiB、authority 4件、allowlist 8件、read set 12件／128 KiB。欠落、hash変化、target不一致、runner-only metadata漏洩はmodel起動前にfail closedする
 - 視野幅は`AUTHORITY_SPAN / OWNER_CLOSURE / CAUSE_CLOSURE / CONTRACT_CLOSURE / ORACLE_CLOSURE / REUSE_CLOSURE`から機械算出し、UNKNOWN、COMPETING、UNRESOLVED、ABSENT、NEWを含む`WIDE`をSparkへ送らない。shared／permanent境界は検証済み`CONTRACT_AUTHORITY`と正本hashが一致する場合だけ施工する。詳細なfield、hazard、React、Rerunの強制動線は[監督ループ正本](docs/reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md)を読む
 - Grok findingの採否と各`DELTA_RESOLUTION`をCodexが照合し、`CODEX PRECHECK: APPROVED`前にSparkを起動しない。Opus finalが`ACCEPT`かつP0/P1=0でなければ採用、commit、pushしない。review findingは現粒のREJECTまたは新粒候補であり、同一粒のscope追加権限ではない。性能regressionはLLM verdictでなくbench、golden、profilingで判定する
-- route v2と既発効のcapsule／authority／hazard gateがmainへ入った後は、実製品粒3件連続ACCEPTまでroutingを再改訂しない。計測、論文、利用者報告、外部LLM助言はauthorityでなくobservationとし、ユーザーの明示決定なしにrouteへ昇格しない。Fableは大地図、共有公開境界、恒久契約、長期衝突に限るloop外read-only相談であり、通常gateにしない
+- 監督ループを件数条件で凍結しない。計測、論文、利用者報告、外部LLM助言はauthorityでなくobservationとし、ユーザーの明示決定、正本更新、専用負例、runner byte固定、明示activateが揃うまで現行routeを変更しない。取消は証跡を削除せず`cancel` receiptでorderの採用資格を終端化する。Fableは大地図、共有公開境界、恒久契約、長期衝突に限るloop外read-only相談であり、通常gateにしない
 - runner、order schema、六軸、telemetry、独立性、停止条件の詳細と現行／歴史の区別は[監督ループ正本](docs/reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md)を唯一の説明正本とする。AGENTS.mdへ再複製しない
 
 ## 発注外のscope自己反証とコーディングパートナー

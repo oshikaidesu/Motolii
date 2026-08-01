@@ -4,6 +4,19 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="$ROOT_DIR/scripts/delegate-cursor-supervised.sh"
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/motolii-grok-spark-opus-test.XXXXXX")"
+RUNNER_SHA256="$(shasum -a 256 "$SCRIPT" | awk '{print $1}')"
+ACTIVE_FILE="$TMP_ROOT/active-runner.txt"
+{
+  echo "FORMAT: 1"
+  echo "SOURCE_COMMIT: 0000000000000000000000000000000000000000"
+  echo "RUNNER_SHA256: $RUNNER_SHA256"
+  echo "ROUTE_CONTRACT_VERSION: 2"
+  echo "LOOP_PROFILE: grok-spark-opus"
+} >"$ACTIVE_FILE"
+export MOTOLII_CANONICAL_RUNNER_SHA256="$RUNNER_SHA256"
+export MOTOLII_CANONICAL_RUNNER_ACTIVE_FILE="$ACTIVE_FILE"
+export MOTOLII_CANONICAL_RUNNER_SOURCE_COMMIT="0000000000000000000000000000000000000000"
+export MOTOLII_RUNNER_ROOT_DIR="$ROOT_DIR"
 
 cleanup() {
   if [[ "${MOTOLII_KEEP_TEST_TMP:-0}" == "1" ]]; then
@@ -433,6 +446,32 @@ run_script() {
   RUN_STATUS=$?
   set -e
 }
+
+set +e
+env -u MOTOLII_CANONICAL_RUNNER_SHA256 -u MOTOLII_CANONICAL_RUNNER_ACTIVE_FILE \
+  "$SCRIPT" prepare "$WT" "$ORDER" "$TASK" >"$TMP_ROOT/direct.stdout" 2>"$TMP_ROOT/direct.stderr"
+RUN_STATUS=$?
+set -e
+assert_status 2 "$RUN_STATUS" "branch-local runner direct execution rejection"
+assert_fragment "$TMP_ROOT/direct.stderr" "canonical launcher" "branch-local runner rejection message"
+
+CANCEL_ORDER="$TMP_ROOT/cancel-order.md"
+printf 'ORDER: READY\n' >"$CANCEL_ORDER"
+mkdir -p "$CANCEL_ORDER.evidence"
+printf 'ATTEMPT: attempt-0001\n' >"$CANCEL_ORDER.evidence/checkpoint.txt"
+run_script cancel "$WT" "$CANCEL_ORDER" WRONG_STAGE
+assert_status 0 "$RUN_STATUS" "explicit cancellation"
+assert_has "$CANCEL_ORDER.evidence/cancellations/cancel-0001/receipt.txt" "STATUS: CANCELLED" \
+  "cancellation status"
+assert_has "$CANCEL_ORDER.evidence/cancellations/cancel-0001/receipt.txt" "REASON: WRONG_STAGE" \
+  "cancellation reason"
+assert_has "$CANCEL_ORDER.evidence/cancellations/cancel-0001/receipt.txt" "CANCEL_SCOPE: ACCEPTANCE_ONLY" \
+  "cancellation scope"
+[[ ! -e "$CANCEL_ORDER.evidence/checkpoint.txt" ]] || fail "cancel must invalidate checkpoint"
+run_script execute "$WT" "$CANCEL_ORDER" "$TASK"
+assert_status 3 "$RUN_STATUS" "cancelled order reuse rejection"
+assert_fragment "$TMP_ROOT/stderr.log" "明示cancel済み" "cancelled order rejection message"
+[[ ! -s "$CALL_LOG" ]] || fail "cancelled order must not start a model"
 
 set +e
 env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \

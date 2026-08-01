@@ -1,7 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+RUNNER_SELF_SHA256="$(shasum -a 256 "${BASH_SOURCE[0]}" | awk '{print $1}')"
+if [[ -z "${MOTOLII_CANONICAL_RUNNER_SHA256:-}" || \
+      "$MOTOLII_CANONICAL_RUNNER_SHA256" != "$RUNNER_SELF_SHA256" || \
+      -z "${MOTOLII_CANONICAL_RUNNER_ACTIVE_FILE:-}" || \
+      ! -f "$MOTOLII_CANONICAL_RUNNER_ACTIVE_FILE" || \
+      -L "$MOTOLII_CANONICAL_RUNNER_ACTIVE_FILE" || \
+      "$(awk -F': ' '$1=="RUNNER_SHA256" { count++; value=$2 } END { if (count==1) print value }' \
+        "$MOTOLII_CANONICAL_RUNNER_ACTIVE_FILE")" != "$RUNNER_SELF_SHA256" ]]; then
+  echo "delegate-cursor-supervised: branch内runnerの直接実行は禁止です。activate済みcanonical launcherを使用してください" >&2
+  exit 2
+fi
+
+ROOT_DIR="${MOTOLII_RUNNER_ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)}"
 PRIMARY_WORKTREE_RAW="$(git -C "$ROOT_DIR" worktree list --porcelain | awk '/^worktree / && !found { print substr($0, 10); found=1 }')"
 PRIMARY_WORKTREE="$(cd "$PRIMARY_WORKTREE_RAW" && pwd -P)"
 CURSOR_AGENT_BIN="${CURSOR_AGENT_BIN:-cursor-agent}"
@@ -61,6 +73,7 @@ usage() {
   echo "Usage: $0 prepare <isolated-worktree> <order-file> <task>"
   echo "       $0 execute <isolated-worktree> <approved-order-file> <task>"
   echo "       $0 inspect <isolated-worktree> <approved-order-file> <task>"
+  echo "       $0 cancel <isolated-worktree> <order-file> <REASON_CODE>"
   echo "       printf '%s\n' <task> | $0 prepare|execute <isolated-worktree> <order-file>"
 }
 
@@ -102,23 +115,32 @@ esac
 # gate発火台帳はevidence root直下に置き、prepare/execute/inspectを通して追記する
 GATE_LOG="${ORDER_FILE}.evidence/gates.txt"
 shift 3
-if [[ "$MODE" != "prepare" && "$MODE" != "execute" && "$MODE" != "inspect" ]]; then
+if [[ "$MODE" != "prepare" && "$MODE" != "execute" && "$MODE" != "inspect" && "$MODE" != "cancel" ]]; then
   usage >&2
   exit 2
 fi
-if [[ "$#" -gt 0 ]]; then
+if [[ "$MODE" == "cancel" ]]; then
+  if [[ "$#" != 1 || ! "$1" =~ ^[A-Z][A-Z0-9_]{2,63}$ ]]; then
+    echo "delegate-cursor-supervised: cancel reasonは3〜64文字の大文字reason codeで指定してください" >&2
+    exit 2
+  fi
+  cancel_reason="$1"
+  task=""
+elif [[ "$#" -gt 0 ]]; then
   task="$*"
 else
   task="$(cat)"
 fi
-if [[ -z "${task//[[:space:]]/}" ]]; then
+if [[ "$MODE" != "cancel" && -z "${task//[[:space:]]/}" ]]; then
   usage >&2
   exit 2
 fi
-task_bytes="$(LC_ALL=C printf '%s' "$task" | wc -c | tr -d ' ')"
-if (( task_bytes > MAX_TASK_BYTES )); then
-  echo "delegate-cursor-supervised: taskが文脈予算 ${MAX_TASK_BYTES} bytesを超えています: $task_bytes" >&2
-  exit 2
+if [[ "$MODE" != "cancel" ]]; then
+  task_bytes="$(LC_ALL=C printf '%s' "$task" | wc -c | tr -d ' ')"
+  if (( task_bytes > MAX_TASK_BYTES )); then
+    echo "delegate-cursor-supervised: taskが文脈予算 ${MAX_TASK_BYTES} bytesを超えています: $task_bytes" >&2
+    exit 2
+  fi
 fi
 
 for _ambient_git_var in GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
@@ -130,7 +152,10 @@ for _ambient_git_var in GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTOR
   fi
 done
 
-task_hash="$(printf '%s' "$task" | shasum -a 256 | awk '{print $1}')"
+task_hash=""
+if [[ "$MODE" != "cancel" ]]; then
+  task_hash="$(printf '%s' "$task" | shasum -a 256 | awk '{print $1}')"
+fi
 if [[ "$WORKTREE" == "$PRIMARY_WORKTREE" ]]; then
   echo "delegate-cursor-supervised: 主作業ツリーへの実装発注は禁止です" >&2
   exit 2
@@ -151,6 +176,62 @@ if [[ "$WORKTREE" != "$worktree_toplevel" ]]; then
   echo "delegate-cursor-supervised: WORKTREEはworktree toplevelではありません: $WORKTREE" >&2
   exit 2
 fi
+
+evidence_root="${ORDER_FILE}.evidence"
+if [[ "$MODE" == "cancel" ]]; then
+  if [[ ! -d "$evidence_root" ]]; then
+    echo "delegate-cursor-supervised: cancel対象のrunner evidenceがありません: $evidence_root" >&2
+    exit 2
+  fi
+  cancellation_root="$evidence_root/cancellations"
+  mkdir -p "$cancellation_root"
+  cancellation_dir=""
+  cancellation_number=1
+  while (( cancellation_number <= 10000 )); do
+    candidate="$(printf '%s/cancel-%04d' "$cancellation_root" "$cancellation_number")"
+    if mkdir "$candidate" 2>/dev/null; then
+      cancellation_dir="$candidate"
+      break
+    fi
+    cancellation_number=$((cancellation_number + 1))
+  done
+  if [[ -z "$cancellation_dir" ]]; then
+    echo "delegate-cursor-supervised: cancellation receiptを確保できません" >&2
+    exit 2
+  fi
+  checkpoint_sha256="NONE"
+  if [[ -f "$evidence_root/checkpoint.txt" ]]; then
+    checkpoint_sha256="$(shasum -a 256 "$evidence_root/checkpoint.txt" | awk '{print $1}')"
+    cp "$evidence_root/checkpoint.txt" "$cancellation_dir/checkpoint-before-cancel.txt"
+  fi
+  order_sha256="NONE"
+  if [[ -f "$ORDER_FILE" ]]; then
+    order_sha256="$(shasum -a 256 "$ORDER_FILE" | awk '{print $1}')"
+  fi
+  rm -f "$evidence_root/checkpoint.txt"
+  {
+    echo "STATUS: CANCELLED"
+    echo "CANCEL_SCOPE: ACCEPTANCE_ONLY"
+    echo "REASON: $cancel_reason"
+    echo "ORDER_SHA256: $order_sha256"
+    echo "CHECKPOINT_SHA256: $checkpoint_sha256"
+    echo "WORKTREE: $WORKTREE"
+    echo "HEAD: $(git -C "$WORKTREE" rev-parse HEAD)"
+    echo "RUNNER_SHA256: $RUNNER_SELF_SHA256"
+    echo "ROUTE_CONTRACT_VERSION: $ROUTE_CONTRACT_VERSION"
+    echo "LOOP_PROFILE: $LOOP_PROFILE"
+  } >"$cancellation_dir/receipt.txt"
+  echo "delegate-cursor-supervised: CANCELLED ($cancel_reason): $cancellation_dir/receipt.txt" >&2
+  exit 0
+fi
+
+for cancellation_receipt in "$evidence_root"/cancellations/cancel-*/receipt.txt; do
+  if [[ -f "$cancellation_receipt" ]]; then
+    echo "delegate-cursor-supervised: このorderは明示cancel済みです。新しいorderを作成してください" >&2
+    exit 3
+  fi
+done
+
 for value in "$SUPERVISOR_TIMEOUT_SECONDS" "$SPARK_TIMEOUT_SECONDS" "$INSPECTION_TIMEOUT_SECONDS" "$HEARTBEAT_SECONDS" "$TERMINATION_GRACE_SECONDS"; do
   if [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
     echo "delegate-cursor-supervised: timeout/heartbeatは正の整数で指定してください" >&2
@@ -2759,6 +2840,8 @@ RECEIPT_MODEL_FALLBACK="NONE"
   echo "MODE: $MODE"
   echo "TASK_SHA256: $task_hash"
   echo "WORKTREE: $WORKTREE"
+  echo "RUNNER_SHA256: $RUNNER_SELF_SHA256"
+  echo "RUNNER_SOURCE_COMMIT: ${MOTOLII_CANONICAL_RUNNER_SOURCE_COMMIT:-UNKNOWN}"
   echo "ROUTE_CONTRACT_VERSION: $ROUTE_CONTRACT_VERSION"
   echo "LOOP_PROFILE: $LOOP_PROFILE"
   echo "PREFLIGHT_MODEL: $GROK_PREFLIGHT_MODEL"

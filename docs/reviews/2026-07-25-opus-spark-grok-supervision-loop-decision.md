@@ -35,9 +35,10 @@ Codex → Cursor Grok 4.5 High → Codex Spark → Claude Opus 5 → Codex
 現行routeは`ROUTE_CONTRACT_VERSION: 2`、`LOOP_PROFILE: grok-spark-opus`、
 `PREFLIGHT_MODEL / IMPLEMENTER_MODEL / REVIEW_MODEL`で固定する。旧`opus-spark-grok`、
 `ORDER_MANAGER_MODEL`、`OPUS_DELTA_FINDING`、`OPUS_DELTA_REASON`はsupersededであり、runnerはモデル起動前に拒否する。
-旧orderを現行fieldへ自動翻訳しない。古いworktree内の古いrunnerは新gateを持たないため正規入口にせず、current mainから
-fresh worktreeとversion 2 orderを再生成する。これは過去の証拠を削除する規則ではなく、過去の実行物を現行発注へ
-再利用しない規則である。
+旧orderを現行fieldへ自動翻訳しない。branch内のrunner byteはbranchごとに異なり得るため直接起動せず、
+`scripts/activate-supervised-runner.sh activate <commit>`でGit common dirへ固定したcanonical bundleだけを正規入口にする。
+launcherはbundle byteとactive manifestのSHA-256を照合し、receiptへ`RUNNER_SHA256`とsource commitを残す。これは過去の
+証拠を削除する規則ではなく、activateされていない過去runnerの結果を現行発注の採用根拠へ再利用しない規則である。
 
 ### 契約粒と施工ステップ
 
@@ -354,8 +355,9 @@ Opus／Fable相談を生の`claude -p --output-format text`で起動し、完了
 Fable昇格条件にしない。監視包絡が使えない場合は生CLIへ戻らず、相談を省略してCodexが正本とコード事実で続行するか、
 当該相談だけを未実施として返す。
 
-この追補は2026-08-01のユーザー明示訂正に基づく。正規発注のmodel routing、独立性条件、凍結解除条件を変更せず、
-既に発効しているrunner観測契約の適用漏れだけを閉じるため、後段の改訂凍結を解除しない。
+この追補は2026-08-01のユーザー明示訂正に基づく。この時点では正規発注のmodel routing、独立性条件、当時の
+凍結条件を変更せず、既に発効しているrunner観測契約の適用漏れだけを閉じた。後段の改訂統制で、その件数凍結自体は
+別のユーザー明示決定により撤回されている。
 
 ### 相談トリガー
 
@@ -544,62 +546,46 @@ Opus finalの`ACCEPT`を性能非退行の根拠にしない。性能に触れ�
 
 **設計を閉じてから実装する。本改訂では採らない。**
 
-## 改訂凍結(2026-08-01)
+## 改訂統制(2026-08-01再改訂)
 
-状態: **停止線**
+状態: **決定**
 
-本決定と`AGENTS.md`の監督ループ節は、**実製品粒で連続3件の`VERDICT: ACCEPT`を得るまで改訂しない**。
+同日のユーザー明示決定により、実製品粒3件連続`ACCEPT`まで監督ループを凍結する停止線は撤回する。件数条件は
+欠陥修正まで止め、古いbranch runnerの誤使用を温存したため、改訂churnへの対策として過剰だった。
 
-凍結する理由は、規約の内容が誤っているからではなく、**改訂に終了条件がなかった**ためである。2026-07-25から
-08-01の間、計測のたびに規約が改訂され、改訂は「決定済み・未発効」として積まれ、mainへ入った後も発効宣言が
-行われなかった。その結果、どの規約が現に効いているのかを実行前に判定できず、同じ論点が繰り返し再裁定された。
-これは規約の欠陥ではなく、改訂ループの欠陥である。
+凍結の代わりに、変更の発効を次の閉じた手順で統制する。
 
-凍結中の扱いを次で固定する。
+1. 計測、論文、利用者報告、外部LLM助言はobservationであり、それだけで現行routeを変えない
+2. ユーザーの明示決定、変更前後の責任順序、互換性、非目標、専用負例を正本へ同時に記録する
+3. route、order schema、runner接続を変える差分は専用runner testと`check-docs`を通し、一つのcommitへ閉じる
+4. commitから抽出したrunner byteをGit common dirへ明示activateし、active manifestのSHA-256と一致したbundleだけを使う
+5. receiptの`RUNNER_SHA256`、`RUNNER_SOURCE_COMMIT`、route versionがactive manifestと一致しない結果を採用しない
 
-- 監督ループについての計測、論文・先例調査、他LLMからの助言は`docs/reviews/`のobservationに留める。
-  規約、runner接続方式、`AGENTS.md`へ昇格させない
-- 評価指標は新設せず、[発注パイプライン比較 §8](2026-07-23-parallel-order-pipeline-comparison.md#8-速度と品質の測定案)
-  の既存表（lead time / wait time / first-pass accept / rework count / stale-base count / escaped finding /
-  Codex integration load）を使う。同書はARCHIVEDだが、アーカイブ対象は旧model配置と複数実装lane案であり、
-  §1の診断と§8の指標表は棄却されていない。数値は手写しでなく
-  [runner計装](2026-08-01-supervision-loop-cost-driver-observation.md#7-計装実装済み2026-08-01)のreceiptから採る
-- 連続3件は同一fixtureの反復でなく、実製品粒で数える。REJECT、STOP、timeoutが一件でも入れば計数をやり直す
-- 凍結解除時は、3件のorder SHA-256、検収verdict、token、wall timeを本文書へ追記してから改訂を再開する
+評価には[発注パイプライン比較 §8](2026-07-23-parallel-order-pipeline-comparison.md#8-速度と品質の測定案)の
+lead time / wait time / first-pass accept / rework count / stale-base count / escaped finding / Codex integration loadを使い、
+数値はrunner receiptから採る。評価結果は次の改訂候補にはできるが、自動activate条件にはしない。
 
-**起点**: 本凍結は前節「2026-08-01改訂」をもって発効する。同改訂は凍結の違反ではなく、
-churnを止めるための締めくくりである。以後、新しい規約項を追加しない。
-
-**凍結対象外(実装のみ)**: 前節で**未発効**と明記した機械gateの実装は凍結の対象外とする。
-新しい規約を作る作業ではなく、既に裁定済みの条項をrunnerへ落とす作業だからである。具体的には
-次の三つに限る。これ以外を「実装だから対象外」と拡張しない。
-
-1. ~~改訂1の契約境界数をdispatch前に機械判定するgateと専用負例~~ **完了(2026-08-01)**
-2. ~~改訂3の`REVIEW_MODEL`等値比較を独立性述語へ置換するgateと専用負例~~ **完了(2026-08-01)**
-3. SparkのUSD cost計測(CLIが返さないため、可能なら別経路で) — **未着手**
-4. gate発火台帳と文脈パッキングの節約量計測。gate、routing、独立性を変えず記録だけ増やす。
-   凍結の解除条件(連続3 ACCEPT)は証跡なしに判定できず、runner三層の要否も実測なしには決められない
-   ため、計測手段の追加は凍結の趣旨に反しない。判定基準は
-   [観察§10](2026-08-01-supervision-loop-cost-driver-observation.md#10-runner三層の要否を測る手順事前登録)へ
-   事前登録する
+canonical runnerの`cancel`はorderの採用資格だけを終端化する。checkpointを削除し、元checkpoint hash、order hash、
+reason code、worktree HEAD、runner hashをappend-only receiptへ残し、同じorderの再実行を拒否する。実行中processのkillは
+PID／process group所有と競合制御を要する別契約であり、この`cancel`へ含めない。
 
 2026-08-01のユーザー明示決定により、`Grok preflight → Spark → Opus final`をroute contract version 2として採択する。
 これは固定fixtureの49秒を速度／品質改善の証明へ昇格した結果ではなく、Grokの具体化能力を粒化へ、重いOpusを実diffの
-最終検収へ配置する責任判断である。正本、runner、専用負例を同時に閉じ、main発効後は再び凍結する。
+最終検収へ配置する責任判断である。正本、runner、専用負例を同時に閉じ、canonical bundleの明示activate後に発効する。
 
 同日のユーザー明示訂正による「契約粒と施工ステップ」の区別も、model routing、一粒一契約境界、allowlist、独立検収を
 変更しない既存語義の明確化として区別する。施工ステップごとの外部LLM再起動は追加せず、途中投入runner機能は未実装の
 まま正規接続方式へ昇格させない。
 
-改訂5(検収入力のslice化)は**設計が閉じていない**ため、実装として着手しない。設計を閉じる作業自体が
-規約改訂に当たるため、凍結解除後に扱う。
+改訂5(検収入力のslice化)は**設計が閉じていない**ため、実装として着手しない。凍結撤回は未決設計の
+自動施工許可ではなく、同じ改訂統制を通して別に閉じる。
 
-### 凍結中も動かさない中核保証
+### 改訂でも動かさない中核保証
 
 検収者の独立性条件は前節[改訂3](#改訂3--検収者固定を独立性条件へ一般化する条件は発効実装は未発効)が正本であり、
 ここでは重複させない。
 
-凍結の有無にかかわらず、次の最適化は採らない。**独立検収そのものを省略・代替する変更は、
+次の最適化は採らない。**独立検収そのものを省略・代替する変更は、
 コスト削減でもmodel routingでも不可とする。**
 
 - 低riskだからreviewerを省く
@@ -617,6 +603,9 @@ churnを止めるための締めくくりである。以後、新しい規約項
 ## 完了条件
 
 - `AGENTS.md`が本ループと同じ責任順序を示す
+- commitからGit common dirへactivateしたcanonical runnerだけが起動でき、branch内runnerの直接実行を拒否する
+- receiptの`RUNNER_SHA256`と`RUNNER_SOURCE_COMMIT`がactive manifestへ一致する
+- `cancel`がcheckpointを失効し、append-only receiptを残し、同じorderの再利用をmodel起動前に拒否する
 - 正規runnerがGrok preflight、Spark実装、fresh Opus read-only final reviewの順だけを起動する
 - orderのmodel/loop metadataが固定値と一致しない場合はdispatch前にfail closedする
 - task／order／authority／allowlist／read setが速度予算を超える場合はmodel起動前にfail closedする
