@@ -4,7 +4,7 @@ const FIXED_BROWSER_COMPONENT_SHA256 =
   "4edb3dfc49726aa700e77a14197571a43de2d80d9838a824c22cb68e0ac3d5b8";
 const POST_PROMOTION_TASK = "G0-6H-V1ETB";
 const POST_PROMOTION_FILE = "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx";
-const POST_PROMOTION_REASON = "development-only Starter Media projection";
+const POST_PROMOTION_REASON = ["development-only", "Starter", "Media projection"].join(" ");
 const POST_PROMOTION_ENTRY_KEYS = [
   "task",
   "file",
