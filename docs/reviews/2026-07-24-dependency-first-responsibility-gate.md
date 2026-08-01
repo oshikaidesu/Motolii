@@ -9,13 +9,14 @@ OS差、権限、互換性、更新追従、障害解析、試験、配布、削
 したがって実装手段は、初期差分の小ささではなく、**目的達成までと、その後にMotoliiが持ち続ける
 総責任が最小になる経路**で選ぶ。
 
-Motoliiが直接所有するのは、作品の意味、純関数評価、Document、single writer、Undo、正準座標、
-Preview / Export共通経路、VRAMと色変換の境界など、製品固有の意味と性能保証である。file dialog、
-clipboard、AccessibilityのOS bridge、一般的なlayout数学、入力注入、外部E2E runner、依存監査等の
-一般問題は、既存実装へ委ねられない理由を確認してから自作する。
+Motoliiが直接所有するのは、作品の意味、製品policy、admission、acceptance oracle、絶対規律の
+enforcement pointである。identity、Undo、layout、scheduler、codec等の機構classは解決済みの
+OSS、標準、実装patternを供給源とし、Motolii固有の語彙や型名だけを理由に発明しない。必要な
+first-party codeは、採択済み機構を既存contractへ写す薄いtranslation／admission adapter、製品policy、
+fixtureに限定する。
 
 これは依存を増やす決定ではない。依存もversion、供給網、license、build、型漏出、撤去という責任を
-持ち込む。採用、薄いwrap、外部runner、自作、棄却を同じ表で比較する。
+持ち込む。採用、薄いwrap、`PORT / PATTERN`、外部runner、棄却を同じ表で比較する。
 
 ## 2. 着手前の短い動線
 
@@ -24,16 +25,18 @@ clipboard、AccessibilityのOS bridge、一般的なlayout数学、入力注入�
 
 1. **AUTHORITY**: 対象spec、絶対規律、既決の責任所有者を確認する
 2. **IN-REPO**: 現行code、helper、testkit、既存依存に同等経路がないか検索する
-3. **DECISION**: `decision-index.md`と`references.md`で採否済み候補を確認する
-4. **ECOSYSTEM**: 一般問題が残る場合だけ、公式docs、公式repository、registryから候補を探す
+3. **DECISION**: `decision-index.md`と`references.md`で機構classの採択済みrouteを確認し、あれば継承する
+4. **ECOSYSTEM**: 採択routeが無いか、後述の反証がある時だけ公式docs、公式repository、registryから候補を探し、結果を一度だけ正本と`decision-index.md`へ記録する
 5. **RESPONSIBILITY**: 減る責任と増える責任を対で書く。人気やdownload数を実利用者数とみなさない
-6. **DISPOSITION**: `REUSE / ADOPT / WRAP / EXTERNAL / BUILD / REJECT`の一つを選ぶ
+6. **DISPOSITION**: `REUSE / ADOPT / WRAP / PORT / PATTERN / EXTERNAL / REJECT`の一つを選ぶ
 7. **EXIT**: Motolii fixtureを依存非依存に保ち、交換・削除時に触る境界を限定する
 
-closed orderには次の短票だけを置く。調査報告を毎回作り直さない。
+採択済みrouteがあるclosed orderは`ADOPTION ROUTE: <decision-indexの一意な行keyword>`だけを置く。
+次の短票は機構classの初回裁定または具体的反証による再裁定時だけ一度作り、正本と台帳へ回収する。
+粒ごとに短票や調査報告を作り直さない。
 
 ```text
-RESPONSIBILITY DISPOSITION: REUSE | ADOPT | WRAP | EXTERNAL | BUILD
+RESPONSIBILITY DISPOSITION: REUSE | ADOPT | WRAP | PORT | PATTERN | EXTERNAL
 EXISTING ROUTE: repo内経路、既決候補、または該当なし
 OWNED RESIDUE: Motoliiに残す固有意味・性能境界
 IMPORTED RESPONSIBILITY: version、license、build、権限、OS差、供給網
@@ -41,8 +44,11 @@ EXIT: adapter、fixture、交換時の限定範囲
 RETIREMENT: 製品へ残す範囲、証拠確定後にfreeze/deleteする範囲
 ```
 
-`BUILD`は悪い判定ではない。ただし、既存候補が契約を満たさない事実、Motolii固有として残る部分、
-公開型やDocumentへOS／vendor型を漏らさない境界を示す。調査のための大きな抽象化を先に作らない。
+`PORT`／`PATTERN`は、解決済み機構をMotolii所有codeで実装・接続する処分であり、発明ではない。
+新しい機構classの`BUILD`は通常処分に置かない。既知routeを列挙しても必須oracle、license、supported
+platform、security、maintenanceのいずれかを満たせない具体的反証がある場合だけ、利用者例外へ返す
+直前にFable 5へread-onlyで一回だけ先例の取りこぼしと既存routeへの再写像を照会する。Fableを含む
+modelは新機構を認可・仕様化しない。採択済みcontractを正本へ記録することは発明禁止に含めない。
 
 ## 3. 製品外責任の予算
 
@@ -68,8 +74,10 @@ Motolii固有の合否を既存経路へ載せる最小adapterに閉じる場合
 background service、platform abstractionを増やさないことである。一般機能を薄いadapterへ
 移しただけで複数粒から再利用し始めた場合は、証拠カプセルではなく新基盤なのでSTOPする。
 
-後続粒の「ループ」は調査と判定手順だけを反復する。前粒のadapter、採択、閾値を次粒へ
-自動継承せず、各粒で次のいずれかを確定してから実装する。
+後続粒は、正本と`decision-index.md`で一度裁定した機構classの採択routeを参照して継承する。
+粒ごとのecosystem再調査・再裁定はしない。再裁定は、必須oracle、license、supported platform、security、
+maintenanceの不適合、または薄いadapterが複数粒の共有基盤へ昇格する具体的反証が出た時だけ行う。
+各粒では採択routeを成果へ接続できるかを次のいずれかで確定する。
 
 - `PASS`: 既存routeとMotolii固有oracleだけで責任予算内
 - `REDUCE`: 一般責任をlibrary / OS / external runnerへ戻してから再判定
@@ -91,7 +99,7 @@ background service、platform abstractionを増やさないことである。一
 - 証拠確定後にも保守するplatform abstraction、process supervisor、capture/input frameworkを
   acceptance専用codeへ追加する
 - `RETIREMENT`が空、または「後で判断」となっており、製品と証拠カプセルの寿命を分離できない
-- 前粒の`PASS`やadapterを理由に、別の粒の責任処分を省略してループ実装する
+- 採択routeの適用範囲外まで前粒の`PASS`を広げる、または薄いadapterを共有基盤へ昇格するのに再裁定しない
 
 ## 5. 2026-07-24 Fable広域調査の処分
 
@@ -114,9 +122,11 @@ desktop E2E、GPU/text、media、Document、cache、plugin sandbox、test toolin
 
 ## 6. 既完了粒と残粒への適用
 
-既完了粒を一括で書き直さない。変更量、OS固有code、独自framework、保守事故の順に
-`KEEP / WRAP / TEST-ONLY / DELETE-LATER / REDUNDANT`を付け、後続製品経路が同じ証明を持つ時だけ
-縮退する。fixtureが製品意味を持たず、削除可能に閉じているなら、存在自体を失敗扱いしない。
+既完了であること、投入工数、差分量を維持理由にしない。独自機構の総責任が採択済みrouteより重いなら、
+製品意味とoracleを保った置換を優先する。ただしbig-bang rewriteや旧新二重ownerにはせず、縦sliceごとに
+新routeを同じ正例・負例へ通し、writer／consumerを一回だけ切り替え、旧routeを`FROZEN → RETIRE`する。
+置換票には旧owner、採択route、parity oracle、切替点、削除条件を閉じ、移行途中を恒久互換層にしない。
+fixtureが製品意味を持たず削除可能に閉じているなら、存在自体を失敗扱いしない。
 
 未着手粒は、依存関係を保ったまま着手時に短票を追加する。短票の結果、既存libraryや外部runnerで
 完了条件を満たせるなら、粒IDを消さず実装量を減らす。粒は成果と審判の単位であり、自作code量の
