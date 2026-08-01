@@ -30,6 +30,40 @@ Codex → Cursor Grok 4.5 High → Codex Spark → Claude Opus 5 → Codex
 各粒の契約境界を確認した上でloopを個別に回す。実装前の意味が未閉鎖なら、通常loop外のOpus相談で閉じるが、
 最終検収は同じsessionを再利用せずfresh sessionにする。
 
+### 外側監督profileと親項目閉鎖
+
+2026-08-02のユーザー明示決定により、runner外側の主担当Codexへ次の交換可能な運用profileを置く。
+
+```text
+SUPERVISION_PROFILE: luna-daily-sol-parent-v1
+OUTER_MODEL: gpt-5.6-luna
+OUTER_EFFORT: max
+PARENT_CLOSURE_MODEL: gpt-5.6-sol
+PARENT_CLOSURE_EFFORT: xhigh
+CHILD_ROUTE: grok-spark-opus/v2
+```
+
+Lunaは各子粒の接続票、scope、Grok findingの採否、Codex precheck、Opus final後の正本再照合と統合を所有する。
+Lunaを独立検収者、大地図の単独決定者、恒久契約のauthorityにしない。子粒の施工と独立検収は既存の
+`Grok preflight → Spark → Opus final`だけを使い、このprofileをorder schema、runner定数、receipt必須fieldへ
+追加しない。
+
+Solは毎粒のbarrierにしない。次のいずれかで判断が変わり得る時だけ、会話全文を渡さないfresh read-only相談として呼ぶ。
+
+1. 親項目の全子粒receipt、必須test、製品route evidenceが揃い、`DONE`を判定する
+2. 地図の依存topologyを変更する
+3. 複数ownerまたは複数仕様の衝突により、親項目を`REOPEN / REMAP`する可能性がある
+
+Solへ渡すpacketは親項目のauthority、完成条件、子粒commit／receipt、試験・製品E2E、残件、非目標に限定する。
+出力は`PARENT_DISPOSITION: CLOSE / REOPEN / REMAP / ESCALATE`、`MISSING_EVIDENCE`、
+`DEPENDENCY_CONFLICT`、`NEXT_PARENT_ACTION`へ分ける。Solは実装、子粒の再施工、scope追加、再委任を行わず、
+出力はauthorityでなくLuna／主担当Codexが正本へ再照合する助言とする。共有公開境界、恒久契約、長期衝突、
+またはSolでも閉じない対立は従来どおりFableへ上げる。
+
+このprofileのmodel名やeffortを将来変更しても、`ROUTE_CONTRACT_VERSION: 2`、`LOOP_PROFILE: grok-spark-opus`、
+runner、order、独立検収条件は変更しない。profile変更はユーザー明示決定と本節・decision-indexの同時更新だけで行い、
+旧profileへ黙ってfallbackしない。profileを利用できない実行はその事実を報告し、別profileが発効したと称さない。
+
 ### route contract version 2と旧ルール拒否
 
 現行routeは`ROUTE_CONTRACT_VERSION: 2`、`LOOP_PROFILE: grok-spark-opus`、

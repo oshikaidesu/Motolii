@@ -13,6 +13,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 
 - 「発注して」「実装を発注」等、**発注を依頼動詞として明示した時だけ**自動委任する。通常の「実装して」、説明、引用、ファイル内の語では発火しない
 - 現行routeは`Codex → cursor-grok-4.5-high → gpt-5.3-codex-spark → claude-opus-5 → Codex`、`ROUTE_CONTRACT_VERSION: 2`、`LOOP_PROFILE: grok-spark-opus`だけとする。Grokはread-only preflight、Sparkは隔離実装、Opusは実装思考を受け取らないfresh read-only final review、Codexは正本照合と採否を所有する。外部modelは再委任しない
+- 外側のCodex席は`SUPERVISION_PROFILE: luna-daily-sol-parent-v1`として`gpt-5.6-luna` `max`を通常監督に使い、全子粒receiptが揃った親項目の閉鎖・地図topology変更・複数owner／仕様衝突だけをfresh read-onlyの`gpt-5.6-sol` `xhigh`へ上げる。これはrunner route v2を変更せず、model利用不能時に黙って代替しない。詳細は監督ループ正本を読む
 - 旧`opus-spark-grok`、`ORDER_MANAGER_MODEL`、`OPUS_DELTA_*`、旧task-class routingを現行へ使わず、自動翻訳・黙ったfallbackをしない。branch内の`delegate-cursor-supervised.sh`を直接起動せず、Git common dirへactivateされたcanonical runnerだけを正規入口にする。receiptの`RUNNER_SHA256`がactive manifestと一致しない実行は採用根拠にしない
 - 一回のloopは一つの`CONTRACT_BOUNDARY`だけを扱う。`GRAIN`は契約境界であり施工step数ではない。同じbase、owner、allowlist、read set、oracle、非目標内の複数stepは一つのSpark sessionで施工し、Grok／Opusをstepごとに再起動しない。境界または完了条件が増える場合は同一粒で施工せず、新しいユーザー許可へ戻す
 - 主担当Codexは正本・履歴・コード事実を一度だけ広く読み、外部modelへ`AGENTS.md`、spec、repo全体を三重送信しない。orderは`READ_MODE: CAPSULE`、`CONTEXT_FACT:`、exact `READ_FILE / INTERNAL_TARGET / TEST_TARGET / REUSE_TARGET`、`NEW_SURFACE: FORBIDDEN`を持つ。上限はtask 12 KiB、order 32 KiB、target capsule 48 KiB、compiled grain 16 KiB、authority 4件、allowlist 8件、read set 12件／128 KiB。欠落、hash変化、target不一致、runner-only metadata漏洩はmodel起動前にfail closedする
