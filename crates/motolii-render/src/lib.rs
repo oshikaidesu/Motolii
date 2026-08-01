@@ -846,6 +846,14 @@ fn validate_linear_graph(
         }
     }
 
+    if !has_general_graph && is_exact_empty_transparent_frame(graph) {
+        inputs
+            .source_time
+            .or(source_time)
+            .ok_or(RenderError::MissingSource)?;
+        has_general_graph = true;
+    }
+
     if !has_general_graph {
         match producer.get(graph.output.0).and_then(|p| *p) {
             // 単一レイヤー等、Compositeなしで中間テクスチャをそのまま出すD3グラフ。
@@ -898,6 +906,20 @@ fn validate_linear_graph(
             .or(source_time)
             .ok_or(RenderError::MissingSource)?,
     })
+}
+
+fn is_exact_empty_transparent_frame(graph: &LinearRenderGraph) -> bool {
+    graph.steps.len() == 1
+        && matches!(
+            graph.steps.first(),
+            Some(RenderStep::SolidSource {
+                output,
+                source,
+            }) if output.0 == graph.output.0
+                && source.color == [0.0, 0.0, 0.0, 0.0]
+                && source.time_map == TimeMap::identity()
+                && !source.reports_source_time
+        )
 }
 
 fn texture_slot_count(graph: &LinearRenderGraph) -> Result<usize, RenderError> {
@@ -2574,6 +2596,193 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, RenderError::DuplicateTextureWrite(0)));
+    }
+
+    #[test]
+    fn graph_accepts_exact_empty_transparent_frame_with_explicit_source_time() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let desc = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let timeline = RationalTime::try_from_frame(6, Fps::try_new(30, 1).unwrap()).unwrap();
+        let graph = LinearRenderGraph {
+            desc,
+            steps: vec![RenderStep::SolidSource {
+                output: TextureId(0),
+                source: SolidSource {
+                    color: [0.0, 0.0, 0.0, 0.0],
+                    time_map: TimeMap::identity(),
+                    reports_source_time: false,
+                },
+            }],
+            output: TextureId(0),
+        };
+
+        let rendered = render_graph_cached(
+            &gpu,
+            &mut RenderSession::new(&gpu),
+            timeline,
+            &graph,
+            &RenderGraphInputs {
+                camera: camera_for_desc(desc),
+                video_sources: &[],
+                source_time: Some(timeline),
+                plugins: None,
+            },
+            Quality::FINAL,
+        )
+        .unwrap();
+        assert_eq!(rendered.source_time, timeline);
+
+        let actual = download_rgba(&gpu, &rendered.texture).unwrap();
+        assert!(
+            actual.iter().all(|&v| v == 0),
+            "empty transparent frame must be all zero bytes"
+        );
+    }
+
+    #[test]
+    fn graph_rejects_opaque_single_solid_output() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let desc = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let graph = LinearRenderGraph {
+            desc,
+            steps: vec![RenderStep::SolidSource {
+                output: TextureId(0),
+                source: SolidSource {
+                    color: [1.0, 0.0, 0.0, 1.0],
+                    time_map: TimeMap::identity(),
+                    reports_source_time: false,
+                },
+            }],
+            output: TextureId(0),
+        };
+
+        let err = render_graph_cached(
+            &gpu,
+            &mut RenderSession::new(&gpu),
+            RationalTime::ZERO,
+            &graph,
+            &RenderGraphInputs {
+                camera: camera_for_desc(desc),
+                video_sources: &[],
+                source_time: Some(RationalTime::ZERO),
+                plugins: None,
+            },
+            Quality::FINAL,
+        )
+        .unwrap_err();
+        assert!(matches!(err, RenderError::MissingOverlay));
+    }
+
+    #[test]
+    fn graph_rejects_reporting_single_transparent_solid() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let desc = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let graph = LinearRenderGraph {
+            desc,
+            steps: vec![RenderStep::SolidSource {
+                output: TextureId(0),
+                source: SolidSource {
+                    color: [0.0, 0.0, 0.0, 0.0],
+                    time_map: TimeMap::identity(),
+                    reports_source_time: true,
+                },
+            }],
+            output: TextureId(0),
+        };
+
+        let err = render_graph_cached(
+            &gpu,
+            &mut RenderSession::new(&gpu),
+            RationalTime::ZERO,
+            &graph,
+            &RenderGraphInputs {
+                camera: camera_for_desc(desc),
+                video_sources: &[],
+                source_time: Some(RationalTime::ZERO),
+                plugins: None,
+            },
+            Quality::FINAL,
+        )
+        .unwrap_err();
+        assert!(matches!(err, RenderError::MissingOverlay));
+    }
+
+    #[test]
+    fn graph_rejects_time_mapped_single_transparent_solid() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let desc = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let graph = LinearRenderGraph {
+            desc,
+            steps: vec![RenderStep::SolidSource {
+                output: TextureId(0),
+                source: SolidSource {
+                    color: [0.0, 0.0, 0.0, 0.0],
+                    time_map: TimeMap::offset(RationalTime::try_new(1, 1).unwrap()),
+                    reports_source_time: false,
+                },
+            }],
+            output: TextureId(0),
+        };
+
+        let err = render_graph_cached(
+            &gpu,
+            &mut RenderSession::new(&gpu),
+            RationalTime::ZERO,
+            &graph,
+            &RenderGraphInputs {
+                camera: camera_for_desc(desc),
+                video_sources: &[],
+                source_time: Some(RationalTime::ZERO),
+                plugins: None,
+            },
+            Quality::FINAL,
+        )
+        .unwrap_err();
+        assert!(matches!(err, RenderError::MissingOverlay));
+    }
+
+    #[test]
+    fn graph_rejects_extra_step_empty_shape_variant() {
+        let Some(gpu) = gpu_or_skip() else { return };
+        let desc = FrameDesc::packed(8, 4, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let graph = LinearRenderGraph {
+            desc,
+            steps: vec![
+                RenderStep::SolidSource {
+                    output: TextureId(0),
+                    source: SolidSource {
+                        color: [0.0, 0.0, 0.0, 0.0],
+                        time_map: TimeMap::identity(),
+                        reports_source_time: false,
+                    },
+                },
+                RenderStep::SolidSource {
+                    output: TextureId(1),
+                    source: SolidSource {
+                        color: [0.0, 0.0, 0.0, 0.0],
+                        time_map: TimeMap::identity(),
+                        reports_source_time: false,
+                    },
+                },
+            ],
+            output: TextureId(1),
+        };
+
+        let err = render_graph_cached(
+            &gpu,
+            &mut RenderSession::new(&gpu),
+            RationalTime::ZERO,
+            &graph,
+            &RenderGraphInputs {
+                camera: camera_for_desc(desc),
+                video_sources: &[],
+                source_time: Some(RationalTime::ZERO),
+                plugins: None,
+            },
+            Quality::FINAL,
+        )
+        .unwrap_err();
+        assert!(matches!(err, RenderError::UnusedTextureWrite(0)));
     }
 
     #[test]

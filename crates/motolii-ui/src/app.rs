@@ -1304,6 +1304,7 @@ mod tests {
             snapshot: Arc::new(published_document),
             primary: Some(published_layer),
             projection_generation: 9,
+            created_effect_use: None,
         };
 
         adopt_published_document(

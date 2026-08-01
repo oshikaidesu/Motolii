@@ -45,6 +45,8 @@ function ObjectAutoHint({ param, keys, automation }) {
 function ScrubControl({
   param,
   value,
+  controlId = param,
+  readOnly = false,
   onScrubStart,
   onScrubMove,
   onScrubEnd,
@@ -66,33 +68,39 @@ function ScrubControl({
     <button
       ref={settlingRef}
       className="scrub"
-      id={param}
+      id={controlId}
       data-param={param}
       style={{ "--dial-shift": value * 2 }}
-      aria-label={`${param === "intensity" ? "Intensity" : "Spread"}。無限目盛を左右dragして変更`}
-      onPointerDown={(event) => {
+      aria-label={
+        readOnly
+          ? `${param} read-only`
+          : `${param === "intensity" ? "Intensity" : param === "amount" ? "Amount" : "Spread"}。無限目盛を左右dragして変更`
+      }
+      aria-readonly={readOnly || undefined}
+      disabled={readOnly || undefined}
+      onPointerDown={readOnly ? undefined : (event) => {
         event.preventDefault();
         event.currentTarget.setPointerCapture(event.pointerId);
         onScrubStart(param, event.clientX, event.currentTarget);
       }}
-      onPointerMove={(event) => {
+      onPointerMove={readOnly ? undefined : (event) => {
         onScrubMove(param, event.clientX, event.currentTarget);
       }}
-      onPointerUp={(event) => {
+      onPointerUp={readOnly ? undefined : (event) => {
         onScrubEnd(param, event.currentTarget, triggerSettling);
       }}
-      onPointerCancel={(event) => {
+      onPointerCancel={readOnly ? undefined : (event) => {
         onScrubCancel(param, event.currentTarget);
       }}
       onAnimationEnd={() => {
         settlingRef.current?.classList.remove("settling");
       }}
-      onKeyDown={(event) => {
+      onKeyDown={readOnly ? undefined : (event) => {
         if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
         event.preventDefault();
         const step = event.shiftKey ? 10 : 1;
         const delta = event.key === "ArrowRight" ? step : -step;
-        onScrubKey(param, delta, triggerSettling);
+        onScrubKey(param, delta, triggerSettling, event.currentTarget);
       }}
     >
       <span className="scrub-dial" aria-hidden="true" />
@@ -246,10 +254,14 @@ export function InspectorCandidate({
   setStageTool,
   renderPluginHistory,
   inspectorReadModel,
+  onEffectParamGesture,
 }) {
   const [, syncRender] = useReducer((n) => n + 1, 0);
   const scrubSessionRef = useRef(null);
+  const productScrubSessionRef = useRef(null);
+  const productDisplayValuesRef = useRef(new Map());
   const toggledAutomationRef = useRef({ object: new Set(), effect: new Set() });
+  const activeEffect = inspectorReadModel?.active_effect;
 
   useEffect(() => {
     toggledAutomationRef.current = { object: new Set(), effect: new Set() };
@@ -258,6 +270,11 @@ export function InspectorCandidate({
   const bump = useCallback(() => {
     syncRender();
   }, []);
+
+  useEffect(() => {
+    productScrubSessionRef.current = null;
+    productDisplayValuesRef.current.clear();
+  }, [activeEffect?.effect_use_id]);
 
   const toggleObjectAutomation = (param) => {
     toggledAutomationRef.current.object.add(param);
@@ -349,6 +366,105 @@ export function InspectorCandidate({
     onScrubKey,
   };
 
+  const productParam = (paramId) => activeEffect?.params.find(
+    (param) => param.id === paramId,
+  );
+  const productValue = (param) => (
+    productDisplayValuesRef.current.get(param.id) ?? param.current.const.F64
+  );
+  const clampProductValue = (param, value) => Math.min(
+    param.f64_domain.max_inclusive,
+    Math.max(param.f64_domain.min_inclusive, value),
+  );
+  const emitProductGesture = (phase, param, value) => {
+    const event = phase === "cancel"
+      ? { phase, paramId: param.id }
+      : { phase, paramId: param.id, value };
+    onEffectParamGesture(event);
+  };
+  const onProductScrubStart = (paramId, clientX, control) => {
+    const param = productParam(paramId);
+    if (!param || productScrubSessionRef.current !== null) return;
+    const value = productValue(param);
+    const session = {
+      paramId,
+      clientX,
+      initialValue: value,
+      value,
+      control,
+    };
+    emitProductGesture("start", param, value);
+    productScrubSessionRef.current = session;
+    control.classList.add("dragging");
+  };
+  const onProductScrubMove = (paramId, clientX) => {
+    const session = productScrubSessionRef.current;
+    const param = productParam(paramId);
+    if (!param || !session || session.paramId !== paramId) return;
+    const value = clampProductValue(
+      param,
+      session.initialValue + (clientX - session.clientX) / 100,
+    );
+    if (value === session.value) return;
+    emitProductGesture("update", param, value);
+    session.value = value;
+    productDisplayValuesRef.current.set(paramId, value);
+    bump();
+  };
+  const cancelProductScrub = useCallback(() => {
+    const session = productScrubSessionRef.current;
+    const param = activeEffect?.params.find(({ id }) => id === session?.paramId);
+    if (!session || !param || typeof onEffectParamGesture !== "function") return;
+    onEffectParamGesture({ phase: "cancel", paramId: param.id });
+    productScrubSessionRef.current = null;
+    productDisplayValuesRef.current.delete(param.id);
+    session.control.classList.remove("dragging");
+    bump();
+  }, [activeEffect, onEffectParamGesture, bump]);
+  const onProductScrubEnd = (paramId, control, triggerSettling) => {
+    const session = productScrubSessionRef.current;
+    const param = productParam(paramId);
+    if (!param || !session || session.paramId !== paramId) return;
+    emitProductGesture("commit", param, session.value);
+    productScrubSessionRef.current = null;
+    control.classList.remove("dragging");
+    const delta = session.value - session.initialValue;
+    if (delta !== 0) triggerSettling(delta > 0 ? 3 : -3);
+    bump();
+  };
+  const onProductScrubKey = (paramId, delta, triggerSettling, control) => {
+    const param = productParam(paramId);
+    if (!param || productScrubSessionRef.current !== null) return;
+    const initialValue = productValue(param);
+    const value = clampProductValue(param, initialValue + delta / 100);
+    emitProductGesture("start", param, initialValue);
+    productScrubSessionRef.current = {
+      paramId,
+      clientX: 0,
+      initialValue,
+      value,
+      control,
+    };
+    emitProductGesture("commit", param, value);
+    productScrubSessionRef.current = null;
+    productDisplayValuesRef.current.set(paramId, value);
+    if (value !== initialValue) triggerSettling(value > initialValue ? 3 : -3);
+    bump();
+  };
+
+  useEffect(() => {
+    if (typeof onEffectParamGesture !== "function") return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") cancelProductScrub();
+    };
+    window.addEventListener("blur", cancelProductScrub);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("blur", cancelProductScrub);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onEffectParamGesture, cancelProductScrub]);
+
   const panelHead = <div className="panel-head">Inspector</div>;
   const selectedObjectName =
     inspectorReadModel === undefined
@@ -371,12 +487,41 @@ export function InspectorCandidate({
       </div>
     </div>
   );
+  const activeEffectSection = activeEffect === undefined ? null : (
+    <div className="section" data-effect-use-id={activeEffect.effect_use_id}>
+      <div className="section-title">
+        {activeEffect.plugin_id} <span>V{activeEffect.effect_version}</span>
+      </div>
+      {activeEffect.params.map((param) => {
+        const controlId = `effect-use-${activeEffect.effect_use_id}-${param.id}`;
+        const interactive = typeof onEffectParamGesture === "function";
+        return (
+          <div className="row" key={controlId}>
+            <label htmlFor={controlId}>{param.id}</label>
+            <ScrubControl
+              param={param.id}
+              controlId={controlId}
+              value={productValue(param) * 100}
+              readOnly={!interactive}
+              onScrubStart={interactive ? onProductScrubStart : undefined}
+              onScrubMove={interactive ? onProductScrubMove : undefined}
+              onScrubEnd={interactive ? onProductScrubEnd : undefined}
+              onScrubCancel={interactive ? (_param, _control) => cancelProductScrub() : undefined}
+              onScrubKey={interactive ? onProductScrubKey : undefined}
+            />
+            <span className="tag">{param.control_kind}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   if (mode === undefined && inspectorReadModel !== undefined) {
     return (
       <aside className="inspector" id="inspector">
         {panelHead}
         <div className="section">{targetIdentity}</div>
+        {activeEffectSection}
       </aside>
     );
   }

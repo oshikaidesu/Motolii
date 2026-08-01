@@ -20,7 +20,7 @@ if (
 }
 
 const snapshot = decodeBrowserHostSnapshot(bridge.snapshot);
-const onPlaceIntent = createBrowserHostSender(snapshot, bridge.postMessage);
+const sendBrowserIntent = createBrowserHostSender(snapshot, bridge.postMessage);
 const container = document.querySelector("#motolii-browser-root");
 if (!container) {
   throw new TypeError("Motolii Browser mount is unavailable");
@@ -30,7 +30,9 @@ createRoot(container).render(
   <main className="browser-standalone-screen">
     <DiscoveryBrowserCandidate
       rectangleIdentity={snapshot.rectangleIdentity}
-      onPlaceIntent={onPlaceIntent}
+      onPlaceIntent={sendBrowserIntent}
+      onAttachEffectIntent={sendBrowserIntent}
+      catalogProjection={snapshot.catalogProjection}
     />
   </main>,
 );

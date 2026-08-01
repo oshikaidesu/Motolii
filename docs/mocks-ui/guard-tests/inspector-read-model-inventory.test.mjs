@@ -27,13 +27,13 @@ const REF_DOC_PATH = join(
 );
 
 const AUTHORITY_SHA256 = {
-  "AGENTS.md": "e875d28e496cdc6cea2fc9423d17e1a35f1d88d3b897f1f7da71bd6ecb52e57e",
+  "AGENTS.md": "13916917966a51d0437f091870e996903081ec35d856fa51cee5100371ec19ba",
   "docs/reviews/2026-07-26-cu-0a08i-inspector-read-model-split-decision.md":
     "4ec2a5296944d60b9e75275b69b841d3600d9f158d63ffccf345dca05ae12182",
   "docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md":
     "5f632d2e7bb2632c47e4b92505add405c4fcfe70d0b104deb08b964797be652c",
   "ui/motolii-web/src/candidates/InspectorCandidate.jsx":
-    "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0",
+    "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e",
   "docs/mocks-ui/fixtures/reference-document.json":
     "a3b9212f13b586ec4a800390a1b524907defd32a85ee0d5bd74f5db6ae63397c",
   "docs/mocks-ui/src/reference/loadReferenceFixtures.js":
@@ -51,7 +51,7 @@ const AUTHORITY_SHA256 = {
   "docs/mocks-ui/guard-tests/inspector-containment.test.mjs":
     "8f5a32efdac280d7ea9c07b3336995828199d44dc743e613b4b6111236444a0b",
   "docs/mocks-ui/package.json":
-    "d058d3c84d7b7cf688b576d6a5da32820b65405bf78ea06363380091a88b0cf6",
+    "f0272ac3b744463a5af28e24c843205b43d98c5c4b4f5c6cf51c80c651013f38",
   "scripts/check-docs.sh":
     "7af62c013e65416c61ffc79ede7f125254231a6b4b88c0fe53c52c85868e6cd8",
 };
@@ -123,7 +123,7 @@ const MODE_HEADINGS = [
   "§3.5 missing",
 ];
 
-const KEYS_LITERAL_LINES = new Set([491, 497, 516]);
+const KEYS_LITERAL_LINES = new Set([636, 642, 661]);
 
 const KNOWN_COMPONENTS = new Set([
   "EffectScrubRow",
@@ -172,7 +172,7 @@ export const OFF_BY_ONE_COLLISIONS = [];
 /** Shared AST source keys with multiple §3 consumer roles. */
 export const SHARED_LEAF_SOURCES = [
   {
-    key: "text|352|Inspector#1",
+    key: "text|468|Inspector#1",
     consumers: [
       "safe.chrome-panel-head",
       "installed-effect-focused.chrome-panel-head",
@@ -183,7 +183,7 @@ export const SHARED_LEAF_SOURCES = [
     ],
   },
   {
-    key: "component|130|ScrubControl#1",
+    key: "component|138|ScrubControl#1",
     consumers: [
       "installed-effect-focused.scrub-control-intensity",
       "installed-effect-focused.scrub-control-spread",
@@ -192,7 +192,7 @@ export const SHARED_LEAF_SOURCES = [
     ],
   },
   {
-    key: "class|119|automation-mark#1",
+    key: "class|127|automation-mark#1",
     consumers: [
       "installed-effect-focused.intensity-automation",
       "installed-effect-focused.spread-automation",
@@ -201,7 +201,7 @@ export const SHARED_LEAF_SOURCES = [
     ],
   },
   {
-    key: "class|450|automation-mark#1",
+    key: "class|595|automation-mark#1",
     consumers: [
       "installed.position-automation",
       "installed.depth-automation-mark",
@@ -211,7 +211,7 @@ export const SHARED_LEAF_SOURCES = [
     ],
   },
   {
-    key: "class|98|scrub-dial#1",
+    key: "class|106|scrub-dial#1",
     consumers: [
       "installed-effect-focused.intensity-dial",
       "installed-effect-focused.spread-dial",
@@ -220,7 +220,7 @@ export const SHARED_LEAF_SOURCES = [
     ],
   },
   {
-    key: "dynamic|99|${value}%#1",
+    key: "dynamic|107|${value}%#1",
     consumers: [
       "installed-effect-focused.intensity-output",
       "installed-effect-focused.spread-output",
@@ -229,7 +229,7 @@ export const SHARED_LEAF_SOURCES = [
     ],
   },
   {
-    key: "dynamic|132|AUTO ON / AUTO OFF#1",
+    key: "dynamic|140|AUTO ON / AUTO OFF#1",
     consumers: [
       "installed-effect-focused.intensity-hint",
       "installed-effect-focused.spread-hint",
@@ -242,7 +242,7 @@ export const SHARED_LEAF_SOURCES = [
     consumers: ["installed.object-hint-auto"],
   },
   {
-    key: "component|462|ObjectAutoHint#1",
+    key: "component|607|ObjectAutoHint#1",
     consumers: [
       "installed.position-object-hint",
       "installed.depth-object-hint",
@@ -252,15 +252,15 @@ export const SHARED_LEAF_SOURCES = [
     ],
   },
   {
-    key: "text|367|G#1",
+    key: "text|483|G#1",
     consumers: ["safe.identity-icon", "installed.identity-icon"],
   },
   {
-    key: "dynamic|369|{selectedObjectName}#1",
+    key: "dynamic|485|{selectedObjectName}#1",
     consumers: ["safe.identity-name", "installed.identity-name"],
   },
   {
-    key: "dynamic|370|{selectedObjectKind}#1",
+    key: "dynamic|486|{selectedObjectKind}#1",
     consumers: ["safe.identity-kind-child", "installed.identity-kind-child"],
   },
 ];
@@ -752,9 +752,9 @@ test("T2-extract nonempty and sentinels", () => {
   assert.ok(texts.has("Vism (.vism)"));
   assert.ok(extracted.some((r) => r.kind === "component" && r.text === "ScrubControl"));
   assert.ok(extracted.some((r) => r.kind === "prop-label" && r.text === "Intensity"));
-  const none193 = extracted.filter((r) => r.text === "NONE" && r.line === 193);
-  assert.equal(none193.length, 2);
-  assert.deepEqual(none193.map((r) => r.occ), [1, 2]);
+  const none201 = extracted.filter((r) => r.text === "NONE" && r.line === 201);
+  assert.equal(none201.length, 2);
+  assert.deepEqual(none201.map((r) => r.occ), [1, 2]);
 });
 
 test("T1-lifecycle and icon classification mechanical", () => {
@@ -780,8 +780,8 @@ test("T-parse-neg production parsers fail closed", () => {
   assert.throws(() => parseManifestLineColumn("12#0"), /malformed/);
   assert.throws(() => parseManifestLineColumn("12#x"), /malformed/);
   const badDoc = doc.replace(
-    "| discover.lifecycle-code | InspectorCandidate.jsx:193 | Code execution | U |",
-    "| discover.lifecycle-code | InspectorCandidate.jsx:193#9 | Code execution | U |",
+    "| discover.lifecycle-code | InspectorCandidate.jsx:201 | Code execution | U |",
+    "| discover.lifecycle-code | InspectorCandidate.jsx:201#9 | Code execution | U |",
   );
   assert.throws(() => parseSection3Tables(badDoc, extracted), /expected one AST record/);
 });
@@ -1076,11 +1076,11 @@ test("KEYS literal closure", () => {
   }
 });
 
-test("scrub dial L98 closure", () => {
+test("scrub dial L106 closure", () => {
   const dialRows = section3.filter((r) => r.visible === "scrub-dial");
   assert.ok(dialRows.length >= 4);
   for (const row of dialRows) {
-    assert.equal(row.line, 98);
+    assert.equal(row.line, 106);
   }
 });
 

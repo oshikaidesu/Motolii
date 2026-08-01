@@ -254,7 +254,7 @@
           "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
           "role": "oracle",
           "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416",
-          "currentSha256": "3243ffbc863f660ec527def954bf8358c381cd5a492cda13cb4ed95044c9f09e"
+          "currentSha256": "8e6231068970623aab94435fe6cd89602492a9b176dc92e70dcc98740e8b5ed9"
         },
         {
           "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
@@ -265,7 +265,8 @@
         {
           "path": "docs/mocks-ui/src/legacy/legacySource.js",
           "role": "oracle",
-          "sha256": "4fd547d2efa98d6d1fadf403b4ae2379abb0767d50cda172f8f6fa749a230e20"
+          "sha256": "4fd547d2efa98d6d1fadf403b4ae2379abb0767d50cda172f8f6fa749a230e20",
+          "currentSha256": "cdc35cbe821213f1d8c6ad7d5fc1470dddfa38db1a0b9ac5c9c8568dc328021f"
         },
         {
           "path": "docs/mocks/m3-vism-host-boundary.html",
@@ -288,7 +289,7 @@
           {
             "path": "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
             "role": "runtime",
-            "currentSha256": "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0"
+            "currentSha256": "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e"
           },
           {
             "path": "ui/motolii-web/src/candidates/inspector-candidate.css",
@@ -375,7 +376,7 @@
           "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
           "role": "legacy-oracle",
           "sha256": "10d780c99d38536bb53aba5c4b6ddbbcb6d706b099f581595d6b3539f76ec416",
-          "currentSha256": "3243ffbc863f660ec527def954bf8358c381cd5a492cda13cb4ed95044c9f09e"
+          "currentSha256": "8e6231068970623aab94435fe6cd89602492a9b176dc92e70dcc98740e8b5ed9"
         },
         {
           "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
@@ -386,7 +387,8 @@
         {
           "path": "docs/mocks-ui/src/legacy/legacySource.js",
           "role": "legacy-oracle",
-          "sha256": "4fd547d2efa98d6d1fadf403b4ae2379abb0767d50cda172f8f6fa749a230e20"
+          "sha256": "4fd547d2efa98d6d1fadf403b4ae2379abb0767d50cda172f8f6fa749a230e20",
+          "currentSha256": "cdc35cbe821213f1d8c6ad7d5fc1470dddfa38db1a0b9ac5c9c8568dc328021f"
         },
         {
           "path": "docs/mocks/m3-vism-host-boundary.html",

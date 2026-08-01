@@ -5,7 +5,10 @@ const WRAPPER_KEYS = new Set([
   "document",
   "nodes",
   "target",
+  "active_effect_use_id",
 ]);
+
+const REQUIRED_WRAPPER_KEYS = ["fixtureRevision", "document", "nodes", "target"];
 
 const DOC_PARAM_TAGS = new Set([
   "const",
@@ -19,6 +22,8 @@ const DOC_PARAM_TAGS = new Set([
 const VALUE_TYPE_TAGS = new Set(["F64", "Vec2", "Vec3", "Color", "AssetRef"]);
 
 const PARAM_VALUE_TYPES = new Set(["F64", "Vec2", "Vec3", "Color", "AssetRef"]);
+
+const PARAMETER_CONTROL_KINDS = new Set(["F64", "Vec2", "Vec3", "Color"]);
 
 const BLEND_MODES = new Set(["normal", "add", "multiply"]);
 
@@ -438,6 +443,14 @@ function validateNodes(nodes) {
       fail("8", `wrapper.nodes[${i}].id`, `duplicate node id ${obj.id}`);
     }
     seenNodeIds.add(obj.id);
+    let effectVersion;
+    if (Object.hasOwn(obj, "effect_version")) {
+      effectVersion = requireInteger(
+        obj.effect_version,
+        "5",
+        `wrapper.nodes[${i}].effect_version`,
+      );
+    }
     if (!Array.isArray(obj.params)) {
       fail("4", `wrapper.nodes[${i}].params`, "expected array");
     }
@@ -506,14 +519,33 @@ function validateNodes(nodes) {
           `wrapper.nodes[${i}].params[${p}].default`,
         );
       }
+      let control;
+      if (Object.hasOwn(param, "control")) {
+        control = param.control;
+        if (typeof control !== "string" || !PARAMETER_CONTROL_KINDS.has(control)) {
+          fail(
+            "6",
+            `wrapper.nodes[${i}].params[${p}].control`,
+            `unknown parameter control ${control}`,
+          );
+        }
+        if (control !== param.value_type) {
+          fail(
+            "10",
+            `wrapper.nodes[${i}].params[${p}].control`,
+            `control ${control} does not match value_type ${param.value_type}`,
+          );
+        }
+      }
       paramsOut[paramsOut.length] = {
         id: param.id,
         value_type: param.value_type,
         default: param.default,
         f64_domain: f64Domain,
+        control,
       };
     }
-    nodeById.set(obj.id, paramsOut);
+    nodeById.set(obj.id, { effect_version: effectVersion, params: paramsOut });
   }
   return nodeById;
 }
@@ -526,7 +558,7 @@ function validateWrapper(input) {
       fail("1", `wrapper.${key}`, `unexpected top-level key ${key}`);
     }
   }
-  for (const required of WRAPPER_KEYS) {
+  for (const required of REQUIRED_WRAPPER_KEYS) {
     if (!Object.hasOwn(root, required)) {
       fail("2", `wrapper.${required}`, `missing required key ${required}`);
     }
@@ -556,7 +588,15 @@ function validateWrapper(input) {
   }
   const layerId = target.layer_id;
   requireInteger(layerId, "5", "wrapper.target.layer_id");
-  return { doc, nodes, layerId };
+  let activeEffectUseId;
+  if (Object.hasOwn(root, "active_effect_use_id")) {
+    activeEffectUseId = requireInteger(
+      root.active_effect_use_id,
+      "5",
+      "wrapper.active_effect_use_id",
+    );
+  }
+  return { doc, nodes, layerId, activeEffectUseId };
 }
 
 function findItemsForLayer(doc, layerId) {
@@ -603,6 +643,187 @@ function projectParamDef(param) {
   return out;
 }
 
+function findEffectUses(doc, effectUseId) {
+  const matches = [];
+  const visit = (item) => {
+    const effects = item.envelope?.effects;
+    if (!Array.isArray(effects)) {
+      return;
+    }
+    for (let index = 0; index < effects.length; index += 1) {
+      const effect = effects[index];
+      const id = requireInteger(
+        effect.id,
+        "5",
+        `EffectUse[${index}].id`,
+      );
+      if (id === effectUseId) {
+        matches[matches.length] = {
+          effect,
+          layer_id: item.envelope.layer_id,
+        };
+      }
+    }
+  };
+  const walk = (items) => {
+    if (!Array.isArray(items)) {
+      return;
+    }
+    for (const item of items) {
+      visit(item);
+      if (Array.isArray(item.children)) {
+        walk(item.children);
+      }
+    }
+  };
+  for (const track of doc.tracks) {
+    walk(track.items);
+  }
+  return matches;
+}
+
+function projectActiveEffect(doc, nodes, layerId, effectUseId) {
+  const uses = findEffectUses(doc, effectUseId);
+  if (uses.length !== 1) {
+    fail(
+      "7",
+      "wrapper.active_effect_use_id",
+      `expected exactly one EffectUse ${effectUseId}`,
+    );
+  }
+  const resolvedUse = uses[0];
+  if (resolvedUse.layer_id !== layerId) {
+    fail(
+      "7",
+      "wrapper.active_effect_use_id",
+      `EffectUse ${effectUseId} is outside target layer ${layerId}`,
+    );
+  }
+
+  const definitionId = requireInteger(
+    resolvedUse.effect.definition_id,
+    "5",
+    `EffectUse ${effectUseId}.definition_id`,
+  );
+  const definitions = (doc.effect_definitions ?? []).filter(
+    (definition) => definition.id === definitionId,
+  );
+  if (definitions.length !== 1) {
+    fail(
+      "7",
+      `EffectUse ${effectUseId}.definition_id`,
+      `expected exactly one Definition ${definitionId}`,
+    );
+  }
+  const definition = definitions[0];
+  const effectVersion = requireInteger(
+    definition.effect_version,
+    "5",
+    `Definition ${definitionId}.effect_version`,
+  );
+  if (definition.plugin_id !== "core.filter.opacity" || effectVersion !== 1) {
+    fail(
+      "9",
+      `Definition ${definitionId}`,
+      "active control requires core.filter.opacity v1",
+    );
+  }
+  const node = nodes.get(definition.plugin_id);
+  if (!node) {
+    fail("9", `Definition ${definitionId}.plugin_id`, "unresolved plugin id");
+  }
+  if (node.effect_version !== effectVersion) {
+    fail(
+      "9",
+      `Definition ${definitionId}.effect_version`,
+      `node version does not match ${effectVersion}`,
+    );
+  }
+
+  const currentParams = requireObject(
+    definition.params,
+    "4",
+    `Definition ${definitionId}.params`,
+  );
+  const currentParamIds = Object.keys(currentParams);
+  const nodeParamIds = node.params.map((param) => param.id);
+  if (
+    currentParamIds.length !== nodeParamIds.length
+    || currentParamIds.some((paramId, index) => paramId !== nodeParamIds[index])
+  ) {
+    fail(
+      "11",
+      `Definition ${definitionId}.params`,
+      "parameter ids and order do not match node",
+    );
+  }
+  if (nodeParamIds.length !== 1 || nodeParamIds[0] !== "amount") {
+    fail("11", `Definition ${definitionId}.params`, "missing exact amount parameter");
+  }
+
+  const params = node.params.map((param) => {
+    if (param.id !== "amount") {
+      fail("11", `Definition ${definitionId}.params.${param.id}`, "unknown parameter");
+    }
+    if (param.value_type !== "F64" || param.control !== "F64") {
+      fail("10", `node.params.${param.id}`, "amount requires F64 value and control");
+    }
+    if (param.f64_domain === undefined) {
+      fail("11", `node.params.${param.id}.f64_domain`, "missing f64_domain");
+    }
+    if (
+      param.f64_domain.min_inclusive !== 0
+      || param.f64_domain.max_inclusive !== 1
+      || param.f64_domain.integer !== false
+    ) {
+      fail("10", `node.params.${param.id}.f64_domain`, "amount requires exact [0,1] domain");
+    }
+    const current = requireObject(
+      currentParams[param.id],
+      "4",
+      `Definition ${definitionId}.params.${param.id}`,
+    );
+    const keys = Object.keys(current);
+    if (keys.length !== 1 || keys[0] !== "const") {
+      fail("10", `Definition ${definitionId}.params.${param.id}`, "current value must be Const");
+    }
+    const tagged = validateDocValue(
+      current.const,
+      "4",
+      `Definition ${definitionId}.params.${param.id}.const`,
+    );
+    if (!Object.hasOwn(tagged, "F64")) {
+      fail("10", `Definition ${definitionId}.params.${param.id}`, "current value must be F64");
+    }
+    defaultWithinDomain(
+      tagged,
+      param.f64_domain,
+      "10",
+      `Definition ${definitionId}.params.${param.id}.const`,
+    );
+    return {
+      id: param.id,
+      current: { const: cloneDocValue(tagged, `active.params.${param.id}`) },
+      value_type: param.value_type,
+      f64_domain: {
+        min_inclusive: param.f64_domain.min_inclusive,
+        max_inclusive: param.f64_domain.max_inclusive,
+        integer: param.f64_domain.integer,
+      },
+      control_kind: param.control,
+    };
+  });
+
+  return {
+    layer_id: layerId,
+    effect_use_id: effectUseId,
+    definition_id: definitionId,
+    plugin_id: definition.plugin_id,
+    effect_version: effectVersion,
+    params,
+  };
+}
+
 function assertNoForbiddenOutputKeys(value, owner) {
   if (value === null || typeof value !== "object") {
     return;
@@ -622,7 +843,7 @@ function assertNoForbiddenOutputKeys(value, owner) {
 }
 
 function decodeInspectorReadModel(input) {
-  const { doc, nodes, layerId } = validateWrapper(input);
+  const { doc, nodes, layerId, activeEffectUseId } = validateWrapper(input);
   const { layerIds, layerNames } = collectLayerIds(doc);
   if (!layerIds.has(layerId)) {
     fail("7", "wrapper.target.layer_id", `dangling layer id ${layerId}`);
@@ -664,8 +885,8 @@ function decodeInspectorReadModel(input) {
   for (let d = 0; d < effectDefs.length; d += 1) {
     const def = effectDefs[d];
     const pluginId = def.plugin_id;
-    const nodeParams = nodes.get(pluginId);
-    if (!nodeParams) {
+    const node = nodes.get(pluginId);
+    if (!node) {
       fail(
         "9",
         `inputDoc.effect_definitions plugin_id ${pluginId}`,
@@ -675,7 +896,7 @@ function decodeInspectorReadModel(input) {
     effect_definitions[d] = {
       definition_id: def.id,
       plugin_id: pluginId,
-      params: nodeParams.map(projectParamDef),
+      params: node.params.map(projectParamDef),
     };
   }
 
@@ -684,6 +905,14 @@ function decodeInspectorReadModel(input) {
     target: targetOut,
     effect_definitions,
   };
+  if (activeEffectUseId !== undefined) {
+    output.active_effect = projectActiveEffect(
+      doc,
+      nodes,
+      layerId,
+      activeEffectUseId,
+    );
+  }
   assertNoForbiddenOutputKeys(output, "output");
   return output;
 }

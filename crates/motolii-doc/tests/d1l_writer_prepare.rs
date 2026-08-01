@@ -8,10 +8,14 @@ use std::sync::Arc;
 use common::identity_roundtrip::assert_identity_command_roundtrip;
 
 use motolii_core::RationalTime;
+use motolii_doc::journal::{
+    replay_from_base, JournalEdit, JournalFrame, JournalHeader, JournalRecordKind,
+    JournalScanOutcome, V2_EDIT_FORMAT_VERSION,
+};
 use motolii_doc::{
     Clip, ClipSource, Command, CommandError, DocParam, DocValue, Document, DocumentError,
     DocumentPluginError, DocumentWriter, DraftDocParam, DraftKeyframe, EffectDefinition,
-    EffectDefinitionDraft, EffectDefinitionId, EffectId, EffectUse, ItemEnvelope, LayerId,
+    EffectDefinitionDraft, EffectDefinitionId, EffectId, EffectUse, Group, ItemEnvelope, LayerId,
     PrepareError, StableIdError, StableIdReservation, Track, TrackId, TrackItem,
     MIN_READER_VERSION_FOR_COMP_CAMERA, WRITER_VERSION,
 };
@@ -737,4 +741,457 @@ fn new_current_contract_matches_prepare_gate() {
     assert_eq!(doc.min_reader_version, MIN_READER_VERSION_FOR_COMP_CAMERA);
     let writer = reference_writer(doc);
     assert!(writer.validate().is_ok());
+}
+
+fn clip_at(doc: &Document, layer: LayerId) -> &Clip {
+    let TrackItem::Clip(clip) = find_track_item(doc, layer) else {
+        panic!("expected clip");
+    };
+    clip
+}
+
+fn find_track_item(doc: &Document, layer: LayerId) -> &TrackItem {
+    doc.tracks
+        .iter()
+        .flat_map(|track| track.items.iter())
+        .find(|item| match item {
+            TrackItem::Clip(c) => c.envelope.layer_id == layer,
+            TrackItem::Group(g) => g.envelope.layer_id == layer,
+        })
+        .unwrap_or_else(|| panic!("layer {} not found", layer.get()))
+}
+
+fn group_fixture() -> (Document, LayerId) {
+    let mut doc = Document::new_current();
+    let group_layer = doc.layers.allocate("group").unwrap();
+    let track = doc.track_ids.allocate("V1").unwrap();
+    doc.tracks.push(Track {
+        id: track,
+        items: vec![TrackItem::Group(Group {
+            envelope: ItemEnvelope::new(group_layer),
+            children: vec![],
+        })],
+    });
+    doc.validate().unwrap();
+    (doc, group_layer)
+}
+
+fn overlap_fixture() -> (Document, LayerId, LayerId) {
+    let mut doc = Document::new_current();
+    let layer_a = doc.layers.allocate("a").unwrap();
+    let layer_b = doc.layers.allocate("b").unwrap();
+    let track = doc.track_ids.allocate("V1").unwrap();
+    let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
+    doc.tracks.push(Track {
+        id: track,
+        items: vec![
+            TrackItem::Clip(Clip {
+                envelope: ItemEnvelope::new(layer_a),
+                start: RationalTime::ZERO,
+                duration: RationalTime::try_new(5, 1).unwrap(),
+                time_map: Default::default(),
+                source: ClipSource::asset_video_only(asset),
+            }),
+            TrackItem::Clip(Clip {
+                envelope: ItemEnvelope::new(layer_b),
+                start: RationalTime::try_new(2, 1).unwrap(),
+                duration: RationalTime::try_new(5, 1).unwrap(),
+                time_map: Default::default(),
+                source: ClipSource::asset_video_only(asset),
+            }),
+        ],
+    });
+    doc.validate().unwrap();
+    (doc, layer_a, layer_b)
+}
+
+fn replay_single_edit(base: Document, edit: &JournalEdit) -> Document {
+    let payload = serde_json::to_vec(edit).expect("journal edit json");
+    let scan = JournalScanOutcome {
+        header: JournalHeader {
+            version: 1,
+            generation_salt: 1,
+            project_id: uuid::Uuid::new_v4(),
+        },
+        frames: vec![JournalFrame {
+            record_id: uuid::Uuid::new_v4(),
+            prev_id: None,
+            snapshot_ref: None,
+            record_salt: 1,
+            kind: JournalRecordKind::Edit,
+            payload,
+        }],
+        valid_bytes: 0,
+        file_len: 0,
+        stopped: None,
+    };
+    let outcome = replay_from_base(base, &scan, &mut |_| unreachable!(), false);
+    assert!(
+        outcome.replay_failures.is_empty(),
+        "failures={:?}",
+        outcome.replay_failures
+    );
+    outcome.document
+}
+
+#[test]
+fn prepare_set_clip_start_leaves_writer_unchanged() {
+    let (doc, layer) = layer_track_only_fixture();
+    let writer = reference_writer(doc);
+    let snap = writer.snapshot();
+    let revision = writer.revision;
+    let new = RationalTime::try_new(2, 1).unwrap();
+    let cmd = writer
+        .prepare_set_clip_start(layer, new)
+        .expect("prepare")
+        .expect("command");
+    assert_writer_unchanged(&writer, &snap, revision);
+    assert!(cmd.stable_id_reservation().is_none());
+    let Command::SetClipStart {
+        old,
+        new: prepared_new,
+        ..
+    } = cmd
+    else {
+        panic!("expected SetClipStart");
+    };
+    assert_eq!(old, RationalTime::ZERO);
+    assert_eq!(prepared_new, new);
+}
+
+#[test]
+fn set_clip_start_changes_only_start() {
+    let (doc, layer) = layer_track_only_fixture();
+    let before = doc.clone();
+    let new = RationalTime::try_new(2, 1).unwrap();
+    let writer = reference_writer(doc);
+    let cmd = writer.prepare_set_clip_start(layer, new).unwrap().unwrap();
+    let mut working = before.clone();
+    cmd.apply(&mut working).unwrap();
+    let before_clip = clip_at(&before, layer);
+    let after_clip = clip_at(&working, layer);
+    assert_eq!(after_clip.start, new);
+    assert_eq!(after_clip.duration, before_clip.duration);
+    assert_eq!(after_clip.time_map, before_clip.time_map);
+    assert_eq!(after_clip.source, before_clip.source);
+    assert_eq!(after_clip.envelope, before_clip.envelope);
+    let mut expected = before.clone();
+    if let TrackItem::Clip(c) = &mut expected.tracks[0].items[0] {
+        c.start = new;
+    }
+    assert_eq!(working, expected);
+}
+
+#[test]
+fn set_clip_start_negative_overlap_and_end_at_composition_succeed() {
+    let (doc, layer_a, layer_b) = overlap_fixture();
+    let comp_duration = doc.composition.duration;
+    let duration = RationalTime::try_new(5, 1).unwrap();
+    let end_at_comp_start = comp_duration.try_sub(duration).unwrap();
+
+    for (target, new) in [
+        (layer_a, RationalTime::try_new(-1, 1).unwrap()),
+        (layer_b, RationalTime::try_new(4, 1).unwrap()),
+        (layer_a, end_at_comp_start),
+    ] {
+        let mut working = doc.clone();
+        let cmd = Command::SetClipStart {
+            target,
+            old: clip_at(&doc, target).start,
+            new,
+        };
+        cmd.apply(&mut working).unwrap();
+        assert_eq!(clip_at(&working, target).start, new);
+        working.validate().unwrap();
+    }
+}
+
+#[test]
+fn set_clip_start_rejects_in_precedence_order_without_mutation() {
+    let (doc, layer) = layer_track_only_fixture();
+    let duration = RationalTime::try_new(5, 1).unwrap();
+    let comp = doc.composition.duration;
+    let past_start = comp
+        .try_sub(duration)
+        .unwrap()
+        .try_add(RationalTime::try_new(1, 100).unwrap())
+        .unwrap();
+    let overflow_start = RationalTime::try_new(i64::MAX, 1).unwrap();
+    let (group_doc, group_layer) = group_fixture();
+
+    struct Case<'a> {
+        label: &'a str,
+        doc: Document,
+        target: LayerId,
+        new: RationalTime,
+    }
+
+    let cases = [
+        Case {
+            label: "missing",
+            doc: doc.clone(),
+            target: LayerId::from_raw(999),
+            new: RationalTime::ZERO,
+        },
+        Case {
+            label: "group",
+            doc: group_doc,
+            target: group_layer,
+            new: RationalTime::ZERO,
+        },
+        Case {
+            label: "overflow",
+            doc: doc.clone(),
+            target: layer,
+            new: overflow_start,
+        },
+        Case {
+            label: "past composition",
+            doc,
+            target: layer,
+            new: past_start,
+        },
+    ];
+
+    for case in cases {
+        let before = case.doc.clone();
+        let writer = reference_writer(case.doc);
+        let err = writer
+            .prepare_set_clip_start(case.target, case.new)
+            .unwrap_err();
+        match case.label {
+            "missing" => assert!(matches!(err, CommandError::LayerNotFound(999)), "{err:?}"),
+            "group" => assert!(
+                matches!(err, CommandError::TrackItemNotClip { layer } if layer == group_layer.get()),
+                "{err:?}"
+            ),
+            "overflow" => assert!(
+                matches!(
+                    err,
+                    CommandError::Validate(DocumentError::ClipIntervalOverflow { layer_id })
+                    if layer_id == layer.get()
+                ),
+                "{err:?}"
+            ),
+            "past composition" => assert!(
+                matches!(
+                    err,
+                    CommandError::Validate(DocumentError::ClipPastComposition { layer_id, .. })
+                    if layer_id == layer.get()
+                ),
+                "{err:?}"
+            ),
+            _ => unreachable!(),
+        }
+        assert_eq!(writer.snapshot().as_ref(), &before, "{}", case.label);
+        assert_eq!(writer.revision, 0, "{}", case.label);
+
+        let mut direct = before.clone();
+        let err = Command::SetClipStart {
+            target: case.target,
+            old: RationalTime::ZERO,
+            new: case.new,
+        }
+        .apply(&mut direct)
+        .unwrap_err();
+        match case.label {
+            "missing" => assert!(matches!(err, CommandError::LayerNotFound(999)), "{err:?}"),
+            "group" => assert!(
+                matches!(err, CommandError::TrackItemNotClip { layer } if layer == group_layer.get()),
+                "{err:?}"
+            ),
+            "overflow" => assert!(
+                matches!(
+                    err,
+                    CommandError::Validate(DocumentError::ClipIntervalOverflow { layer_id })
+                    if layer_id == layer.get()
+                ),
+                "{err:?}"
+            ),
+            "past composition" => assert!(
+                matches!(
+                    err,
+                    CommandError::Validate(DocumentError::ClipPastComposition { layer_id, .. })
+                    if layer_id == layer.get()
+                ),
+                "{err:?}"
+            ),
+            _ => unreachable!(),
+        }
+        assert_eq!(direct, before, "{}", case.label);
+    }
+}
+
+#[test]
+fn prepare_set_clip_start_same_value_returns_none() {
+    let (doc, layer) = layer_track_only_fixture();
+    let writer = reference_writer(doc);
+    let current = clip_at(writer.snapshot().as_ref(), layer).start;
+    assert!(writer
+        .prepare_set_clip_start(layer, current)
+        .unwrap()
+        .is_none());
+}
+
+#[test]
+fn set_clip_start_same_value_raw_apply_is_identity() {
+    let (doc, layer) = layer_track_only_fixture();
+    let mut working = doc.clone();
+    let current = clip_at(&doc, layer).start;
+    Command::SetClipStart {
+        target: layer,
+        old: current,
+        new: current,
+    }
+    .apply(&mut working)
+    .unwrap();
+    assert_eq!(working, doc);
+}
+
+#[test]
+fn set_clip_start_non_cas_raw_old_writes_new_and_inverse_swaps_payload() {
+    let (doc, layer) = layer_track_only_fixture();
+    let new = RationalTime::try_new(2, 1).unwrap();
+    let stale_old = RationalTime::try_new(1, 1).unwrap();
+    let cmd = Command::SetClipStart {
+        target: layer,
+        old: stale_old,
+        new,
+    };
+    let mut working = doc.clone();
+    cmd.apply(&mut working).unwrap();
+    assert_eq!(clip_at(&working, layer).start, new);
+
+    cmd.inverse().apply(&mut working).unwrap();
+    assert_eq!(clip_at(&working, layer).start, stale_old);
+}
+
+#[test]
+fn writer_prepared_set_clip_start_undo_redo_restores_exact_values() {
+    let (doc, layer) = layer_track_only_fixture();
+    let new = RationalTime::try_new(3, 1).unwrap();
+    let mut writer = reference_writer(doc.clone());
+    let cmd = writer.prepare_set_clip_start(layer, new).unwrap().unwrap();
+    let gesture = writer.begin_gesture();
+    writer.apply_command(gesture, cmd).unwrap();
+    assert_eq!(clip_at(writer.snapshot().as_ref(), layer).start, new);
+
+    writer.undo().unwrap();
+    assert_eq!(writer.snapshot().as_ref(), &doc);
+
+    writer.redo().unwrap();
+    assert_eq!(clip_at(writer.snapshot().as_ref(), layer).start, new);
+}
+
+#[test]
+fn set_clip_start_same_gesture_merge_first_old_last_new() {
+    let (doc, layer_a, layer_b) = overlap_fixture();
+    let mut writer = reference_writer(doc.clone());
+    let gesture = writer.begin_gesture();
+    let a_old = clip_at(&doc, layer_a).start;
+    let b_old = clip_at(&doc, layer_b).start;
+    let a_mid = RationalTime::try_new(1, 1).unwrap();
+    let a_new = RationalTime::try_new(2, 1).unwrap();
+    let b_new = RationalTime::try_new(3, 1).unwrap();
+
+    writer
+        .apply_command(
+            gesture,
+            Command::SetClipStart {
+                target: layer_a,
+                old: a_old,
+                new: a_mid,
+            },
+        )
+        .unwrap();
+    writer
+        .apply_command(
+            gesture,
+            Command::SetClipStart {
+                target: layer_a,
+                old: a_mid,
+                new: a_new,
+            },
+        )
+        .unwrap();
+    writer
+        .apply_command(
+            gesture,
+            Command::SetClipStart {
+                target: layer_b,
+                old: b_old,
+                new: b_new,
+            },
+        )
+        .unwrap();
+
+    assert_eq!(writer.undo_len(), 1);
+    assert_eq!(clip_at(writer.snapshot().as_ref(), layer_a).start, a_new);
+    assert_eq!(clip_at(writer.snapshot().as_ref(), layer_b).start, b_new);
+
+    writer.undo().unwrap();
+    assert_eq!(writer.snapshot().as_ref(), &doc);
+}
+
+#[test]
+fn set_clip_start_journal_v2_roundtrip_and_replay() {
+    let (doc, layer) = layer_track_only_fixture();
+    let new = RationalTime::try_new(2, 1).unwrap();
+    let cmd = reference_writer(doc.clone())
+        .prepare_set_clip_start(layer, new)
+        .unwrap()
+        .unwrap();
+    let edit = JournalEdit::new(cmd);
+    assert_eq!(edit.format_version, V2_EDIT_FORMAT_VERSION);
+    let json = serde_json::to_string(&edit).unwrap();
+    assert!(json.contains("SetClipStart"));
+    let decoded: JournalEdit = serde_json::from_str(&json).unwrap();
+    assert_eq!(decoded, edit);
+    assert!(decoded.command.stable_id_reservation().is_none());
+
+    let replayed = replay_single_edit(doc, &edit);
+    assert_eq!(clip_at(&replayed, layer).start, new);
+}
+
+#[test]
+fn set_clip_start_preserves_document_version_and_stable_ids() {
+    let (doc, layer) = layer_track_only_fixture();
+    let version = doc.version;
+    let min_reader = doc.min_reader_version;
+    let counter = doc.next_stable_id.peek_next();
+    let new = RationalTime::try_new(1, 1).unwrap();
+    let mut working = doc;
+    reference_writer(working.clone())
+        .prepare_set_clip_start(layer, new)
+        .unwrap()
+        .unwrap()
+        .apply(&mut working)
+        .unwrap();
+    assert_eq!(working.version, version);
+    assert_eq!(working.min_reader_version, min_reader);
+    assert_eq!(working.next_stable_id.peek_next(), counter);
+}
+
+#[test]
+fn set_clip_start_random_valid_sequence_undo_restores_document() {
+    let (doc, layer) = layer_track_only_fixture();
+    let duration = RationalTime::try_new(5, 1).unwrap();
+    let comp = doc.composition.duration;
+    let max_start = comp.try_sub(duration).unwrap();
+    let candidates = [
+        RationalTime::try_new(-2, 1).unwrap(),
+        RationalTime::ZERO,
+        RationalTime::try_new(1, 1).unwrap(),
+        RationalTime::try_new(3, 2).unwrap(),
+        max_start,
+    ];
+    let mut writer = reference_writer(doc.clone());
+    let gesture = writer.begin_gesture();
+    for new in candidates {
+        assert!(new.try_add(duration).unwrap() <= comp);
+        let cmd = writer.prepare_set_clip_start(layer, new).unwrap().unwrap();
+        writer.apply_command(gesture, cmd).unwrap();
+    }
+    writer.undo().unwrap();
+    assert_eq!(writer.snapshot().as_ref(), &doc);
 }

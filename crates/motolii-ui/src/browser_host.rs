@@ -1,3 +1,5 @@
+use motolii_plugin::{F64Domain, PluginCatalog, PluginKind, Value, ValueType};
+use motolii_plugins_firstparty::first_party_catalog;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
@@ -6,12 +8,25 @@ const BROWSER_ROLE: &str = "browser";
 const HOST_TO_WEB: &str = "host-to-web";
 const WEB_TO_HOST: &str = "web-to-host";
 const PLACE_KIND: &str = "browser.place";
+const ATTACH_EFFECT_KIND: &str = "browser.attach-effect";
 const MAX_ID_BYTES: usize = 128;
 const MAX_MESSAGE_BYTES: usize = 1024;
 const INBOX_CAPACITY: usize = 16;
+const CATALOG_REVISION: u8 = 1;
+const OPACITY_ID: &str = "core.filter.opacity";
+const OPACITY_NAME: &str = "Opacity";
+const OPACITY_CATEGORY: &str = "Color";
+const OPACITY_PARAM: &str = "amount";
+const EFFECTS_SCOPE: &str = "first-party-effects";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BrowserPlaceIntent {
+    pub(crate) scope_ref: String,
+    pub(crate) item_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct BrowserAttachEffectIntent {
     pub(crate) scope_ref: String,
     pub(crate) item_id: String,
 }
@@ -21,7 +36,9 @@ pub(crate) struct BrowserHostSession {
     instance_epoch: u64,
     last_sequence: u64,
     rectangle_source: BrowserPlaceIntent,
-    inbox: VecDeque<BrowserPlaceIntent>,
+    opacity_source: BrowserAttachEffectIntent,
+    place_inbox: VecDeque<BrowserPlaceIntent>,
+    attach_effect_inbox: VecDeque<BrowserAttachEffectIntent>,
 }
 
 impl BrowserHostSession {
@@ -34,13 +51,20 @@ impl BrowserHostSession {
             instance_epoch,
             last_sequence: sequence,
             rectangle_source,
-            inbox: VecDeque::with_capacity(INBOX_CAPACITY),
+            opacity_source: BrowserAttachEffectIntent {
+                scope_ref: EFFECTS_SCOPE.to_owned(),
+                item_id: OPACITY_ID.to_owned(),
+            },
+            place_inbox: VecDeque::with_capacity(INBOX_CAPACITY),
+            attach_effect_inbox: VecDeque::with_capacity(INBOX_CAPACITY),
         }
     }
 
     pub(crate) fn snapshot_json(&self) -> Result<String, BrowserHostError> {
         validate_id(&self.rectangle_source.scope_ref, "scope_ref")?;
         validate_id(&self.rectangle_source.item_id, "item_id")?;
+        let first_party = first_party_catalog()?;
+        let catalog = opacity_catalog_snapshot(&first_party)?;
         serde_json::to_string(&HostSnapshot {
             version: CODEC_VERSION,
             direction: HOST_TO_WEB,
@@ -52,6 +76,7 @@ impl BrowserHostSession {
                     scope_ref: &self.rectangle_source.scope_ref,
                     item_id: &self.rectangle_source.item_id,
                 },
+                catalog,
             },
         })
         .map_err(BrowserHostError::Encode)
@@ -71,7 +96,7 @@ impl BrowserHostSession {
         if message.role != BROWSER_ROLE {
             return Err(BrowserHostError::Role);
         }
-        if message.kind != PLACE_KIND {
+        if message.kind != PLACE_KIND && message.kind != ATTACH_EFFECT_KIND {
             return Err(BrowserHostError::Kind);
         }
         let instance_epoch = parse_canonical_u64(&message.instance_epoch, "instance_epoch")?;
@@ -91,24 +116,48 @@ impl BrowserHostSession {
         }
         validate_id(&message.source.scope_ref, "scope_ref")?;
         validate_id(&message.source.item_id, "item_id")?;
-        if message.source.scope_ref != self.rectangle_source.scope_ref
-            || message.source.item_id != self.rectangle_source.item_id
-        {
-            return Err(BrowserHostError::Source);
+        match message.kind.as_str() {
+            PLACE_KIND => {
+                if message.source.scope_ref != self.rectangle_source.scope_ref
+                    || message.source.item_id != self.rectangle_source.item_id
+                {
+                    return Err(BrowserHostError::Source);
+                }
+                if self.place_inbox.len() == INBOX_CAPACITY {
+                    return Err(BrowserHostError::InboxFull);
+                }
+                self.place_inbox.push_back(BrowserPlaceIntent {
+                    scope_ref: message.source.scope_ref,
+                    item_id: message.source.item_id,
+                });
+            }
+            ATTACH_EFFECT_KIND => {
+                if message.source.scope_ref != self.opacity_source.scope_ref
+                    || message.source.item_id != self.opacity_source.item_id
+                {
+                    return Err(BrowserHostError::AttachSource);
+                }
+                if self.attach_effect_inbox.len() == INBOX_CAPACITY {
+                    return Err(BrowserHostError::AttachInboxFull);
+                }
+                self.attach_effect_inbox
+                    .push_back(BrowserAttachEffectIntent {
+                        scope_ref: message.source.scope_ref,
+                        item_id: message.source.item_id,
+                    });
+            }
+            _ => unreachable!("intent kind was validated before admission"),
         }
-        if self.inbox.len() == INBOX_CAPACITY {
-            return Err(BrowserHostError::InboxFull);
-        }
-        self.inbox.push_back(BrowserPlaceIntent {
-            scope_ref: message.source.scope_ref,
-            item_id: message.source.item_id,
-        });
         self.last_sequence = sequence;
         Ok(())
     }
 
     pub(crate) fn pop(&mut self) -> Option<BrowserPlaceIntent> {
-        self.inbox.pop_front()
+        self.place_inbox.pop_front()
+    }
+
+    pub(crate) fn pop_attach_effect(&mut self) -> Option<BrowserAttachEffectIntent> {
+        self.attach_effect_inbox.pop_front()
     }
 }
 
@@ -125,12 +174,147 @@ struct HostSnapshot<'a> {
 #[derive(Debug, Serialize)]
 struct HostBrowser<'a> {
     rectangle_source: WireSource<'a>,
+    catalog: HostCatalogSnapshot<'a>,
 }
 
 #[derive(Debug, Serialize)]
 struct WireSource<'a> {
     scope_ref: &'a str,
     item_id: &'a str,
+}
+
+#[derive(Debug, Serialize)]
+struct HostCatalogSnapshot<'a> {
+    catalog_revision: u8,
+    vocabularies: HostVocabularies,
+    catalogs: [HostScopedCatalog<'a>; 1],
+}
+
+#[derive(Debug, Serialize)]
+struct HostVocabularies {
+    scopes: [HostVocabularyEntry; 1],
+    taxonomies: [HostVocabularyEntry; 2],
+    providers: [HostVocabularyEntry; 1],
+    packs: [HostVocabularyEntry; 0],
+    install_states: [HostVocabularyEntry; 1],
+    impact_units: [HostVocabularyEntry; 0],
+    tags: [HostVocabularyEntry; 0],
+}
+
+#[derive(Debug, Serialize)]
+struct HostVocabularyEntry {
+    id: &'static str,
+    label: &'static str,
+    scope_ref: Option<&'static str>,
+}
+
+#[derive(Debug, Serialize)]
+struct HostScopedCatalog<'a> {
+    scope_ref: &'static str,
+    items: [HostCatalogItem<'a>; 1],
+}
+
+#[derive(Debug, Serialize)]
+struct HostCatalogItem<'a> {
+    item_id: &'a str,
+    display_name: &'a str,
+    taxonomy_refs: [&'static str; 2],
+    provider_ref: &'static str,
+    pack_ref: Option<&'static str>,
+    install_state_ref: &'static str,
+    preview_kind: &'static str,
+    impact: Option<()>,
+    tag_refs: [&'static str; 0],
+}
+
+fn opacity_catalog_snapshot(
+    catalog: &PluginCatalog,
+) -> Result<HostCatalogSnapshot<'_>, BrowserHostError> {
+    let matches = catalog
+        .iter()
+        .filter(|(id, _)| id.0 == OPACITY_ID)
+        .collect::<Vec<_>>();
+    let [(_, contract)] = matches.as_slice() else {
+        return Err(BrowserHostError::OpacityCatalogCardinality {
+            actual: matches.len(),
+        });
+    };
+    let node = &contract.node;
+    validate_opacity_contract(contract.kind == PluginKind::Filter, "kind")?;
+    validate_opacity_contract(node.id.0 == OPACITY_ID, "id")?;
+    validate_opacity_contract(node.version == 1, "version")?;
+    validate_opacity_contract(node.display_name == OPACITY_NAME, "display_name")?;
+    validate_opacity_contract(node.category == OPACITY_CATEGORY, "category")?;
+    validate_opacity_contract(node.min_inputs == 1 && node.max_inputs == 1, "inputs")?;
+    validate_opacity_contract(contract.migrations.is_empty(), "migrations")?;
+    let [param] = node.params.as_slice() else {
+        return Err(BrowserHostError::OpacityContractMismatch { field: "params" });
+    };
+    validate_opacity_contract(param.id == OPACITY_PARAM, "param.id")?;
+    validate_opacity_contract(param.value_type == ValueType::F64, "param.value_type")?;
+    validate_opacity_contract(param.default == Value::F64(1.0), "param.default")?;
+    validate_opacity_contract(
+        param.f64_domain == Some(F64Domain::unit()),
+        "param.f64_domain",
+    )?;
+
+    Ok(HostCatalogSnapshot {
+        catalog_revision: CATALOG_REVISION,
+        vocabularies: HostVocabularies {
+            scopes: [HostVocabularyEntry {
+                id: EFFECTS_SCOPE,
+                label: "First-party effects",
+                scope_ref: None,
+            }],
+            taxonomies: [
+                HostVocabularyEntry {
+                    id: "effect",
+                    label: "Effect",
+                    scope_ref: Some(EFFECTS_SCOPE),
+                },
+                HostVocabularyEntry {
+                    id: "color",
+                    label: OPACITY_CATEGORY,
+                    scope_ref: Some(EFFECTS_SCOPE),
+                },
+            ],
+            providers: [HostVocabularyEntry {
+                id: "built-in",
+                label: "Built-in",
+                scope_ref: Some(EFFECTS_SCOPE),
+            }],
+            packs: [],
+            install_states: [HostVocabularyEntry {
+                id: "installed",
+                label: "Installed",
+                scope_ref: Some(EFFECTS_SCOPE),
+            }],
+            impact_units: [],
+            tags: [],
+        },
+        catalogs: [HostScopedCatalog {
+            scope_ref: EFFECTS_SCOPE,
+            items: [HostCatalogItem {
+                item_id: node.id.0,
+                display_name: node.display_name,
+                taxonomy_refs: ["effect", "color"],
+                provider_ref: "built-in",
+                pack_ref: None,
+                install_state_ref: "installed",
+                preview_kind: "poster",
+                impact: None,
+                tag_refs: [],
+            }],
+        }],
+    })
+}
+
+fn validate_opacity_contract(condition: bool, field: &'static str) -> Result<(), BrowserHostError> {
+    if condition {
+        Ok(())
+    } else {
+        Err(BrowserHostError::OpacityContractMismatch { field })
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -179,6 +363,12 @@ pub(crate) enum BrowserHostError {
     Decode(#[source] serde_json::Error),
     #[error("Browser Host snapshot could not be encoded")]
     Encode(#[source] serde_json::Error),
+    #[error("Browser Host first-party catalog could not be assembled")]
+    Catalog(#[from] motolii_plugin::PluginContractError),
+    #[error("Browser Host expected exactly one Opacity contract, found {actual}")]
+    OpacityCatalogCardinality { actual: usize },
+    #[error("Browser Host Opacity contract field `{field}` mismatched")]
+    OpacityContractMismatch { field: &'static str },
     #[error("Browser Host codec version mismatch")]
     Version,
     #[error("Browser Host direction mismatch")]
@@ -199,12 +389,18 @@ pub(crate) enum BrowserHostError {
     Identifier { field: &'static str },
     #[error("Browser Host source does not match the admitted Rectangle source")]
     Source,
+    #[error("Browser Host source does not match the current Opacity projection")]
+    AttachSource,
     #[error("Browser Host inbox is full")]
     InboxFull,
+    #[error("Browser Host attach-effect inbox is full")]
+    AttachInboxFull,
 }
 
 #[cfg(test)]
 mod tests {
+    use motolii_plugin::{PluginCatalogBuilder, PluginContractError};
+
     use super::*;
 
     fn intent() -> BrowserPlaceIntent {
@@ -220,14 +416,132 @@ mod tests {
         )
     }
 
+    fn attach_message(epoch: &str, sequence: &str) -> String {
+        format!(
+            r#"{{"version":1,"direction":"web-to-host","role":"browser","instance_epoch":"{epoch}","sequence":"{sequence}","kind":"browser.attach-effect","source":{{"scope_ref":"first-party-effects","item_id":"core.filter.opacity"}}}}"#
+        )
+    }
+
     #[test]
     fn snapshot_and_place_delivery_match_the_web_codec() {
         let mut session = BrowserHostSession::new(7, 10, intent());
+        let expected_catalog = serde_json::json!({
+            "catalog_revision": 1,
+            "vocabularies": {
+                "scopes": [{
+                    "id": "first-party-effects",
+                    "label": "First-party effects",
+                    "scope_ref": null
+                }],
+                "taxonomies": [
+                    {"id": "effect", "label": "Effect", "scope_ref": "first-party-effects"},
+                    {"id": "color", "label": "Color", "scope_ref": "first-party-effects"}
+                ],
+                "providers": [{
+                    "id": "built-in",
+                    "label": "Built-in",
+                    "scope_ref": "first-party-effects"
+                }],
+                "packs": [],
+                "install_states": [{
+                    "id": "installed",
+                    "label": "Installed",
+                    "scope_ref": "first-party-effects"
+                }],
+                "impact_units": [],
+                "tags": []
+            },
+            "catalogs": [{
+                "scope_ref": "first-party-effects",
+                "items": [{
+                    "item_id": "core.filter.opacity",
+                    "display_name": "Opacity",
+                    "taxonomy_refs": ["effect", "color"],
+                    "provider_ref": "built-in",
+                    "pack_ref": null,
+                    "install_state_ref": "installed",
+                    "preview_kind": "poster",
+                    "impact": null,
+                    "tag_refs": []
+                }]
+            }]
+        });
+        let snapshot: serde_json::Value =
+            serde_json::from_str(&session.snapshot_json().unwrap()).unwrap();
         assert_eq!(
-            session.snapshot_json().unwrap(),
-            r#"{"version":1,"direction":"host-to-web","role":"browser","instance_epoch":"7","sequence":"10","browser":{"rectangle_source":{"scope_ref":"catalog-scope-2","item_id":"rectangle"}}}"#
+            snapshot,
+            serde_json::json!({
+                "version": 1,
+                "direction": "host-to-web",
+                "role": "browser",
+                "instance_epoch": "7",
+                "sequence": "10",
+                "browser": {
+                    "rectangle_source": {
+                        "scope_ref": "catalog-scope-2",
+                        "item_id": "rectangle"
+                    },
+                    "catalog": expected_catalog
+                }
+            })
         );
         session.accept(&message("7", "11")).unwrap();
+        assert_eq!(session.pop(), Some(intent()));
+        assert_eq!(session.pop(), None);
+    }
+
+    #[test]
+    fn opacity_snapshot_rejects_missing_mismatched_and_duplicate_contracts() {
+        let empty = PluginCatalogBuilder::new().build().unwrap();
+        assert!(matches!(
+            opacity_catalog_snapshot(&empty),
+            Err(BrowserHostError::OpacityCatalogCardinality { actual: 0 })
+        ));
+
+        let mut mismatched = first_party_catalog()
+            .unwrap()
+            .get(OPACITY_ID)
+            .unwrap()
+            .clone();
+        mismatched.node.display_name = "Not Opacity";
+        let mut mismatch_builder = PluginCatalogBuilder::new();
+        mismatch_builder.register(mismatched).unwrap();
+        assert!(matches!(
+            opacity_catalog_snapshot(&mismatch_builder.build().unwrap()),
+            Err(BrowserHostError::OpacityContractMismatch {
+                field: "display_name"
+            })
+        ));
+
+        let contract = first_party_catalog()
+            .unwrap()
+            .get(OPACITY_ID)
+            .unwrap()
+            .clone();
+        let mut duplicate_builder = PluginCatalogBuilder::new();
+        duplicate_builder.register(contract.clone()).unwrap();
+        let duplicate = duplicate_builder.register(contract).unwrap_err();
+        assert!(matches!(
+            BrowserHostError::Catalog(duplicate),
+            BrowserHostError::Catalog(PluginContractError::DuplicateContract { id: OPACITY_ID })
+        ));
+    }
+
+    #[test]
+    fn exact_opacity_attach_is_separate_from_place_delivery() {
+        let mut session = BrowserHostSession::new(7, 10, intent());
+
+        session.accept(&message("7", "11")).unwrap();
+        session.accept(&attach_message("7", "12")).unwrap();
+
+        assert_eq!(
+            session.pop_attach_effect(),
+            Some(BrowserAttachEffectIntent {
+                scope_ref: EFFECTS_SCOPE.into(),
+                item_id: OPACITY_ID.into(),
+            })
+        );
+        assert_eq!(session.pop_attach_effect(), None);
         assert_eq!(session.pop(), Some(intent()));
         assert_eq!(session.pop(), None);
     }
@@ -259,6 +573,21 @@ mod tests {
             session.accept(&message("07", "11")),
             Err(BrowserHostError::UnsignedInteger { .. })
         ));
+        let unknown_kind = message("7", "11").replace(PLACE_KIND, "browser.unknown");
+        assert!(matches!(
+            session.accept(&unknown_kind),
+            Err(BrowserHostError::Kind)
+        ));
+        let wrong_attach_scope = attach_message("7", "11").replace(EFFECTS_SCOPE, "other-effects");
+        assert!(matches!(
+            session.accept(&wrong_attach_scope),
+            Err(BrowserHostError::AttachSource)
+        ));
+        let wrong_attach_item = attach_message("7", "11").replace(OPACITY_ID, "other.effect");
+        assert!(matches!(
+            session.accept(&wrong_attach_item),
+            Err(BrowserHostError::AttachSource)
+        ));
         let unknown = message("7", "11").replace(r#""source":{"#, r#""extra":true,"source":{"#);
         assert!(matches!(
             session.accept(&unknown),
@@ -289,12 +618,38 @@ mod tests {
     }
 
     #[test]
+    fn full_attach_inbox_does_not_consume_sequence_or_block_place() {
+        let mut session = BrowserHostSession::new(7, 0, intent());
+        for sequence in 1..=INBOX_CAPACITY {
+            session
+                .accept(&attach_message("7", &sequence.to_string()))
+                .unwrap();
+        }
+        assert!(matches!(
+            session.accept(&attach_message("7", &(INBOX_CAPACITY + 1).to_string())),
+            Err(BrowserHostError::AttachInboxFull)
+        ));
+
+        session
+            .accept(&message("7", &(INBOX_CAPACITY + 1).to_string()))
+            .unwrap();
+        assert_eq!(session.pop(), Some(intent()));
+        assert_eq!(
+            session.pop_attach_effect(),
+            Some(BrowserAttachEffectIntent {
+                scope_ref: EFFECTS_SCOPE.into(),
+                item_id: OPACITY_ID.into(),
+            })
+        );
+    }
+
+    #[test]
     fn replacement_instance_keeps_source_but_rejects_old_epoch() {
         let source = intent();
         let mut replacement = BrowserHostSession::new(8, 0, source.clone());
 
         assert!(replacement.snapshot_json().unwrap().contains(
-            r#""instance_epoch":"8","sequence":"0","browser":{"rectangle_source":{"scope_ref":"catalog-scope-2","item_id":"rectangle"}}"#
+            r#""instance_epoch":"8","sequence":"0","browser":{"rectangle_source":{"scope_ref":"catalog-scope-2","item_id":"rectangle"},"catalog":{"catalog_revision":1"#
         ));
         assert!(matches!(
             replacement.accept(&message("7", "1")),
