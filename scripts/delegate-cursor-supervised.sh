@@ -8,6 +8,9 @@ CURSOR_AGENT_BIN="${CURSOR_AGENT_BIN:-cursor-agent}"
 CODEX_AGENT_BIN="${CODEX_AGENT_BIN:-codex}"
 CLAUDE_AGENT_BIN="${CLAUDE_AGENT_BIN:-claude}"
 CURSOR_GROK_MODEL="cursor-grok-4.5-high"
+# 改訂3(2026-08-01): 検収者はmodel名でなく独立性条件で決める。既定はGrokのまま。
+# 実装担当・order managerと同一identityのmodelはここに入っていても独立性gateで落ちる
+ALLOWED_REVIEW_MODELS=("cursor-grok-4.5-high" "claude-opus-5")
 OPUS_MANAGER_MODEL="claude-opus-5"
 SPARK_MODEL="gpt-5.3-codex-spark"
 LOOP_PROFILE="opus-spark-grok"
@@ -1319,6 +1322,9 @@ append_hazard_guard() {
     SECURITY)
       {
         echo "HAZARD_GUARD: SECURITY requires deny-by-default authority, bounded input, and typed rejection evidence."
+        # 改訂3(2026-08-01): 最上段は非LLM oracleの併用を必須にする。model間エラーは
+        # 60%相関するため、別providerを足しても相関しない軸にならない
+        echo "MECHANICAL_GUARD: authority rejection and permission width must be proven by a test or static check, not by review opinion."
         echo "NEGATIVE_ORACLE: missing or forged authority must fail before mutation without widening permissions."
       } >>"$order_file"
       ;;
@@ -1347,6 +1353,14 @@ append_hazard_guard() {
       gate_fail "cannot append unknown HAZARD_TAG: $hazard_tag"
       ;;
   esac
+}
+
+# 改訂3(2026-08-01): 恒久契約は独立性の最上段であり、非LLM oracleの併用を要求する。
+# hazard tagと同じく、runnerが要求するだけでなく機械guardを供給する
+append_permanence_guard() {
+  local order_file="$1" contract_impact="$2"
+  [[ "$contract_impact" == "PERMANENT" ]] || return 0
+  echo "MECHANICAL_GUARD: permanent format change must be proven by a rejection test or schema golden, not by reviewer opinion." >>"$order_file"
 }
 
 gate_check_clean_worktree() {
@@ -2413,6 +2427,80 @@ EOF
   echo "delegate-cursor-supervised: 必須検収ACCEPT。Codex最終レビュー待ちです"
 }
 
+# 改訂1(2026-08-01): 粒の上限は行数でなく契約境界数。境界そのものは意味であって
+# 機械で導出できないため、(a)`CONTRACT_BOUNDARY:`を一つだけ宣言させ、
+# (b)allowlistが単一のtop-level ownerへ収まることを照合する。930行のGR-D3は
+# 誰も境界数を宣言しなかったため、4境界であることが見えないまま2回dispatchされた。
+# docs/はledger・decision-index登録がworkflow上必須のため、別境界に数えない。
+gate_check_contract_boundary() {
+  local order_file="$1"
+  local af owner seen o
+  local owners=()
+  gate_require_single_field "$order_file" "CONTRACT_BOUNDARY" >/dev/null
+  for af in ${GATE_ALLOWED_FILES[@]+"${GATE_ALLOWED_FILES[@]}"}; do
+    case "$af" in
+      docs/*) continue ;;
+      crates/*) owner="crates/$(printf '%s' "${af#crates/}" | cut -d/ -f1)" ;;
+      */*) owner="${af%%/*}" ;;
+      *) owner="." ;;
+    esac
+    seen=0
+    for o in ${owners[@]+"${owners[@]}"}; do
+      [[ "$o" == "$owner" ]] && seen=1
+    done
+    (( seen == 1 )) || owners+=("$owner")
+  done
+  if (( ${#owners[@]} > 1 )); then
+    gate_fail "ALLOWED_FILE spans multiple contract owners: ${owners[*]}"
+  fi
+}
+
+# 改訂3(2026-08-01): 検収者を固定modelでなく独立性条件で定める。
+# 不変条件は「Grokを使う」ではなく「実装担当から独立した別LLMの外部視点」。
+model_family() {
+  case "$1" in
+    claude-*) printf 'anthropic' ;;
+    gpt-*|codex-*) printf 'openai' ;;
+    cursor-grok-*|grok-*) printf 'xai' ;;
+    *) printf 'unknown' ;;
+  esac
+}
+
+gate_check_reviewer_independence() {
+  local order_file="$1"
+  local reviewer implementer manager impact hazard allowed found=0 candidate
+  # skeleton段ではrunner所有fieldがまだ無い。orderへ書かれた後だけ検査する
+  grep -Eq '^REVIEW_MODEL:' "$order_file" || return 0
+  reviewer="$(gate_require_single_field "$order_file" "REVIEW_MODEL")"
+  implementer="$(gate_require_single_field "$order_file" "IMPLEMENTER_MODEL")"
+  manager="$(gate_require_single_field "$order_file" "ORDER_MANAGER_MODEL")"
+  for allowed in ${ALLOWED_REVIEW_MODELS[@]+"${ALLOWED_REVIEW_MODELS[@]}"}; do
+    [[ "$allowed" == "$reviewer" ]] && found=1
+  done
+  (( found == 1 )) || gate_fail "REVIEW_MODEL is not an approved independent reviewer: $reviewer"
+  [[ "$reviewer" != "$implementer" ]] \
+    || gate_fail "reviewer must differ from the implementer: $reviewer"
+  # 事前設計へ深く関与したmodelを最終reviewerに選ばない
+  [[ "$reviewer" != "$manager" ]] \
+    || gate_fail "reviewer must not be the order manager: $reviewer"
+
+  impact="$(gate_require_single_field "$order_file" "CONTRACT_IMPACT")"
+  hazard="$(gate_require_single_field "$order_file" "HAZARD_TAG")"
+  case "$hazard:$impact" in
+    NONE:PRIVATE) return 0 ;;
+  esac
+  # 段階化: 影響が広がる粒はmodel familyまで離す
+  [[ "$(model_family "$reviewer")" != "$(model_family "$implementer")" ]] \
+    || gate_fail "reviewer must be from a different model family for $hazard/$impact"
+  case "$hazard:$impact" in
+    SECURITY:*|DESTRUCTIVE_FS:*|*:PERMANENT)
+      # 最上段は非LLM oracleの併用を必須にする(model間エラー60%相関)
+      grep -Eq '^MECHANICAL_GUARD:' "$order_file" \
+        || gate_fail "$hazard/$impact requires a declared non-LLM oracle (MECHANICAL_GUARD)"
+      ;;
+  esac
+}
+
 run_dispatch_gate() {
   local order_file="$1" worktree="$2"
   record_gate ROUND "$(basename "$order_file")"
@@ -2420,6 +2508,8 @@ run_dispatch_gate() {
   gate_run grain_and_dependencies gate_check_grain_and_dependencies "$order_file" "$worktree"
   gate_run authorities gate_check_authorities "$order_file" "$worktree"
   gate_run allowed_files gate_check_allowed_files "$order_file"
+  gate_run contract_boundary gate_check_contract_boundary "$order_file"
+  gate_run reviewer_independence gate_check_reviewer_independence "$order_file"
   gate_run context_budget gate_check_context_budget "$order_file" "$worktree"
   gate_run compiled_grain_contract gate_check_compiled_grain_contract "$order_file"
   gate_run exact_targets gate_check_exact_targets "$order_file" "$worktree"
@@ -2501,6 +2591,7 @@ EOF
 
   cat "$skeleton_file" >"$ORDER_FILE"
   append_hazard_guard "$ORDER_FILE" "$hazard_tag"
+  append_permanence_guard "$ORDER_FILE" "$(gate_require_single_field "$skeleton_file" "CONTRACT_IMPACT")"
   jq -r '.findings | to_entries[] | "OPUS_DELTA_FINDING: F\(.key + 1) \(.value.kind) \(.value.severity) \(.value.delta)"' \
     "$tmp_dir/opus-delta.json" >>"$ORDER_FILE"
   {
@@ -2539,11 +2630,12 @@ if [[ -z "$ORDER_LOOP_PROFILE" || -z "$ORDER_MANAGER_MODEL" || -z "$ORDER_IMPLEM
   echo "delegate-cursor-supervised: 発注書のloop/model指定が欠落または重複しています" >&2
   exit 3
 fi
+# REVIEW_MODELはここで固定値と突き合わせない。改訂3(2026-08-01)により検収者は
+# model名でなく独立性条件で決まり、gate_check_reviewer_independenceが判定する
 if [[ "$ORDER_LOOP_PROFILE" != "$LOOP_PROFILE" ]] ||
    [[ "$ORDER_MANAGER_MODEL" != "$OPUS_MANAGER_MODEL" ]] ||
-   [[ "$ORDER_IMPLEMENTER_MODEL" != "$SPARK_MODEL" ]] ||
-   [[ "$ORDER_REVIEW_MODEL" != "$CURSOR_GROK_MODEL" ]]; then
-  echo "delegate-cursor-supervised: 発注書のmodel経路がOpus/Spark/Grok監督ループと一致しません" >&2
+   [[ "$ORDER_IMPLEMENTER_MODEL" != "$SPARK_MODEL" ]]; then
+  echo "delegate-cursor-supervised: 発注書のmodel経路がOpus/Spark監督ループと一致しません" >&2
   exit 3
 fi
 if ! grep -qx 'CODEX PRECHECK: APPROVED' "$ORDER_FILE"; then
@@ -2571,6 +2663,11 @@ printf '%s' "$task" >"$attempt_dir/task.txt"
   echo "ORDER_MANAGER_MODEL: $OPUS_MANAGER_MODEL"
   echo "IMPLEMENTER_MODEL: $SPARK_MODEL"
   echo "REVIEW_MODEL: $CURSOR_GROK_MODEL"
+  # 改訂3: receiptへ実使用modelとfallback有無を残す。runnerは黙ったfallbackを
+  # しないため常にNONE。ループ外で別modelへ差し替えた場合、receiptに現れない
+  echo "IMPLEMENTER_MODEL_FAMILY: $(model_family "$SPARK_MODEL")"
+  echo "REVIEW_MODEL_FAMILY: $(model_family "$CURSOR_GROK_MODEL")"
+  echo "MODEL_FALLBACK: NONE"
 } >"$attempt_dir/metadata.txt"
 
 if [[ "$MODE" == "inspect" ]]; then

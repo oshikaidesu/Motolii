@@ -240,6 +240,7 @@ BASE_SHA: $base_sha
 DEPENDENCY: DEP-1
 AUTHORITY: AGENTS.md SHA256:$auth_hash
 ALLOWED_FILE: src.txt
+CONTRACT_BOUNDARY: fixture-src-oracle
 READ_MODE: CAPSULE
 CONTEXT_FACT: src.txt is the only implementation fixture.
 READ_FILE: src.txt
@@ -374,6 +375,7 @@ DEPENDENCY: DEP-1
 AUTHORITY: AGENTS.md SHA256:$AUTH_HASH
 ALLOWED_FILE: src.txt
 ALLOWED_FILE: test.txt
+CONTRACT_BOUNDARY: fixture-src-oracle
 READ_MODE: CAPSULE
 CONTEXT_FACT: src.txt is the only implementation fixture.
 READ_FILE: src.txt
@@ -481,6 +483,44 @@ rejecting_gate="$(awk '
 ' "$GATE_LEDGER")"
 [[ "$rejecting_gate" == "view_profile" ]] \
   || fail "gate ledger must name view_profile as the rejecting gate, got [$rejecting_gate]"
+
+read_rejecting_gate() {
+  awk '
+    /^GATE_ENTER: /{ sub(/^GATE_ENTER: /, ""); pending = $0 }
+    /^GATE_PASS: /{ sub(/^GATE_PASS: /, ""); if ($0 == pending) pending = "" }
+    END { print pending }
+  ' "$1"
+}
+
+# 改訂1(2026-08-01): 契約境界は宣言させる。930行のGR-D3は誰も境界数を宣言せず、
+# 4境界であることが見えないまま2回dispatchされた。
+NO_BOUNDARY_TASK="$(printf '%s\n' "$TASK" | sed '/^CONTRACT_BOUNDARY: /d')"
+: >"$CALL_LOG"
+run_script prepare "$WT" "$TMP_ROOT/no-boundary.md" "$NO_BOUNDARY_TASK"
+assert_status 3 "$RUN_STATUS" "missing CONTRACT_BOUNDARY rejected"
+[[ ! -s "$CALL_LOG" ]] || fail "missing CONTRACT_BOUNDARY must fail before model invocation"
+[[ "$(read_rejecting_gate "$TMP_ROOT/no-boundary.md.evidence/gates.txt")" == "contract_boundary" ]] \
+  || fail "gate ledger must name contract_boundary for the missing declaration"
+
+# allowlistが複数のtop-level ownerへまたがる粒は、宣言が1つでも境界が1つではない
+MULTI_OWNER_TASK="$(printf '%s\n' "$TASK" |
+  sed 's|^ALLOWED_FILE: test.txt$|ALLOWED_FILE: crates/other-crate/lib.rs|')"
+: >"$CALL_LOG"
+run_script prepare "$WT" "$TMP_ROOT/multi-owner.md" "$MULTI_OWNER_TASK"
+assert_status 3 "$RUN_STATUS" "multi-owner allowlist rejected"
+[[ ! -s "$CALL_LOG" ]] || fail "multi-owner allowlist must fail before model invocation"
+[[ "$(read_rejecting_gate "$TMP_ROOT/multi-owner.md.evidence/gates.txt")" == "contract_boundary" ]] \
+  || fail "gate ledger must name contract_boundary for the multi-owner allowlist"
+grep -Fq -- "spans multiple contract owners" "$TMP_ROOT/stderr.log" \
+  || fail "multi-owner rejection must name the owners"
+
+# docs/はledger・decision-index登録がworkflow上必須のため、別境界に数えない
+DOCS_TASK="$(printf '%s\n' "$TASK" |
+  sed 's|^ALLOWED_FILE: test.txt$|ALLOWED_FILE: docs/implementation-ledger.md|')"
+: >"$CALL_LOG"
+run_script prepare "$WT" "$TMP_ROOT/docs-owner.md" "$DOCS_TASK"
+[[ "$(read_rejecting_gate "$TMP_ROOT/docs-owner.md.evidence/gates.txt")" != "contract_boundary" ]] \
+  || fail "docs registration must not count as a second contract boundary"
 
 # 狭いprofileへの手動overrideもOpus起動前に拒否する。
 MISMATCH_TASK="$(printf '%s\n' "$TASK" | sed 's/^OWNER_CLOSURE: CLOSED$/OWNER_CLOSURE: MULTIPLE_KNOWN/')"
@@ -843,6 +883,11 @@ fi
   || fail "Spark prompt must contain Objective exactly once"
 [[ "$(grep -c '^Test:' "$happy_attempt/spark-prompt.txt")" -eq 1 ]] \
   || fail "Spark prompt must contain Test exactly once"
+# 改訂3(2026-08-01): receiptへ実使用modelとfallback有無を残す。ループ外で別modelへ
+# 差し替えた場合、receiptに現れないことで検出できる
+assert_has "$happy_attempt/metadata.txt" "IMPLEMENTER_MODEL_FAMILY: openai" "implementer family recorded"
+assert_has "$happy_attempt/metadata.txt" "REVIEW_MODEL_FAMILY: xai" "reviewer family recorded"
+assert_has "$happy_attempt/metadata.txt" "MODEL_FALLBACK: NONE" "runner never falls back silently"
 assert_has "$happy_attempt/metadata.txt" \
   "TARGET_CAPSULE_SHA256: $(sha256_file "$happy_attempt/spark-target-capsule.txt")" \
   "target capsule hash evidence"
@@ -973,6 +1018,41 @@ runner_ref_digest="$(tr -d '[:space:]' <"$latest_attempt/pre-spark-ref-digest.sh
 canonical_ref_digest_value="$(canonical_ref_digest "$WT_D3")"
 [[ "$runner_ref_digest" == "$canonical_ref_digest_value" ]] \
   || fail "GR-D3 ref digest recipe: runner=$runner_ref_digest canonical=$canonical_ref_digest_value"
+
+# 改訂3(2026-08-01): 検収者はmodel名でなく独立性条件で決まる。守るべき不変条件は
+# 「Grokを使う」ではなく「実装担当から独立した別LLMの外部視点」。
+run_reviewer_case() {
+  local label="$1" review_model="$2" expect_fragment="$3"
+  local wt order
+  wt="$(gr_d3_init_worktree "$TMP_ROOT/reviewer-$label")"
+  order="$TMP_ROOT/reviewer-$label.md"
+  gr_d3_ready_order "$wt" "$order"
+  sed -i '' "s|^REVIEW_MODEL: .*$|REVIEW_MODEL: $review_model|" "$order"
+  : >"$CALL_LOG"
+  set +e
+  env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+    PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" \
+    "$SCRIPT" execute "$wt" "$order" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+  RUN_STATUS=$?
+  set -e
+  assert_status 3 "$RUN_STATUS" "reviewer $label rejected"
+  [[ ! -s "$CALL_LOG" ]] || fail "reviewer $label must fail before any model starts"
+  grep -Fq -- "$expect_fragment" "$TMP_ROOT/stderr.log" \
+    || fail "reviewer $label rejection reason missing: $expect_fragment"
+  [[ "$(read_rejecting_gate "$order.evidence/gates.txt")" == "reviewer_independence" ]] \
+    || fail "gate ledger must name reviewer_independence for $label"
+}
+
+# 実装担当modelを検収席へ置けない。現在のallowlistには実装担当が含まれないため
+# allowlistが先に落とす。identity検査は、将来allowlistが広がった時の多層防御として残す
+run_reviewer_case "same-as-implementer" "gpt-5.3-codex-spark" \
+  "not an approved independent reviewer"
+# 事前設計へ深く関与したorder managerを最終検収者にしない
+run_reviewer_case "same-as-manager" "claude-opus-5" \
+  "reviewer must not be the order manager"
+# 承認されていないmodelを検収席へ置かない
+run_reviewer_case "unapproved" "some-unlisted-model" \
+  "not an approved independent reviewer"
 
 WT_EMPTY="$TMP_ROOT/gr-d3-empty-target"
 WT_EMPTY="$(gr_d3_init_worktree "$WT_EMPTY")"

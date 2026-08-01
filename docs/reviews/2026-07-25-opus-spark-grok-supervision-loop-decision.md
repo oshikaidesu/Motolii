@@ -363,7 +363,14 @@ React製品資産とRerun参照を含む発注は、`AGENTS.md`の追加ラベ�
 も self-contained とファイル分散を基準にしている(同書は実証研究の引用が無い人間向け実務ガイドで、
 リポジトリは2025-11-21にアーカイブ済み)。
 
-**未発効**: dispatch前に境界数を機械判定するgate。現状はCodexが骨格作成時に適用する。
+**発効(2026-08-01実装)**: `CONTRACT_BOUNDARY:`を一つだけ宣言させ、`ALLOWED_FILE`が単一の
+top-level ownerへ収まることをdispatch前に照合する。`docs/`はledger・decision-index登録が
+workflow上必須のため別境界に数えない。
+
+**この機械化の限界を明記する**: 契約境界は意味であり、機械で導出できない。実装したのは
+**宣言gateとowner照合**であって境界の導出ではない。それでも930行のGR-D3は「誰も境界数を
+宣言しなかったため4境界であることが見えないまま2回dispatchされた」という失敗であり、
+宣言を強制するだけでこの失敗は起きなくなる。owner照合は宣言と実態の食い違いを機械で捕える。
 
 ### 改訂2 — `VERDICT: ACCEPT`に有効性条件を付ける(発効中)
 
@@ -422,9 +429,22 @@ F1・recall・コストの全てで上回っている。
 
 financial independenceはMotoliiへ**転移不可**として明記する。
 
-**未発効**: runnerは`REVIEW_MODEL`を`cursor-grok-4.5-high`との等値比較で固定している。
-独立性述語への置換と専用負例が入るまで、既定reviewerは`cursor-grok-4.5-high`のまま変えない。
-事前設計へ深く関与したmodelを最終reviewerに選ばない。
+**発効(2026-08-01実装)**: `REVIEW_MODEL`の固定値等値比較を廃し、次をdispatch前に照合する。
+
+- reviewerが承認済み独立検収者の集合に属する(既定は`cursor-grok-4.5-high`のまま)
+- reviewerのidentityが実装担当と異なる
+- reviewerのidentityがorder managerと異なる(事前設計へ深く関与したmodelを選ばない)
+- `HAZARD_TAG: NONE`かつ`CONTRACT_IMPACT: PRIVATE`以外は、reviewerのmodel familyが実装担当と異なる
+- `SECURITY` / `DESTRUCTIVE_FS` / `CONTRACT_IMPACT: PERMANENT`は`MECHANICAL_GUARD:`の宣言を必須とする
+
+最上段の非LLM oracleは要求するだけでなくrunnerが供給する。`SECURITY`と`PERMANENT`へ
+`MECHANICAL_GUARD:`を機械注入し、「reviewerの意見でなくtestまたは静的検査で証明する」ことを
+orderへ焼く。receiptには`IMPLEMENTER_MODEL_FAMILY` / `REVIEW_MODEL_FAMILY` / `MODEL_FALLBACK`を残す。
+runnerは黙ったfallbackをしないため`MODEL_FALLBACK`は常に`NONE`であり、**ループ外で別modelへ
+差し替えた場合はreceiptに現れない**ことで検出できる。
+
+現在のallowlistには実装担当が含まれないため、identity検査はallowlistに先行して落とされる。
+identity検査はallowlistが将来広がった時の多層防御として残す。
 
 ### 改訂4 — 性能regressionはLLM検収の守備範囲外(発効中)
 
@@ -478,9 +498,9 @@ churnを止めるための締めくくりである。以後、新しい規約項
 新しい規約を作る作業ではなく、既に裁定済みの条項をrunnerへ落とす作業だからである。具体的には
 次の三つに限る。これ以外を「実装だから対象外」と拡張しない。
 
-1. 改訂1の契約境界数をdispatch前に機械判定するgateと専用負例
-2. 改訂3の`REVIEW_MODEL`等値比較を独立性述語へ置換するgateと専用負例
-3. Spark／GrokのUSD cost計測(両CLIが返さないため、可能なら別経路で)
+1. ~~改訂1の契約境界数をdispatch前に機械判定するgateと専用負例~~ **完了(2026-08-01)**
+2. ~~改訂3の`REVIEW_MODEL`等値比較を独立性述語へ置換するgateと専用負例~~ **完了(2026-08-01)**
+3. Spark／GrokのUSD cost計測(両CLIが返さないため、可能なら別経路で) — **未着手**
 4. gate発火台帳と文脈パッキングの節約量計測。gate、routing、独立性を変えず記録だけ増やす。
    凍結の解除条件(連続3 ACCEPT)は証跡なしに判定できず、runner三層の要否も実測なしには決められない
    ため、計測手段の追加は凍結の趣旨に反しない。判定基準は
