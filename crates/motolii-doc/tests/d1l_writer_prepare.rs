@@ -8,16 +8,16 @@ use std::sync::Arc;
 use common::identity_roundtrip::assert_identity_command_roundtrip;
 
 use motolii_core::RationalTime;
+use motolii_doc::journal::{
+    replay_from_base, JournalEdit, JournalFrame, JournalHeader, JournalRecordKind,
+    JournalScanOutcome, V2_EDIT_FORMAT_VERSION,
+};
 use motolii_doc::{
     Clip, ClipSource, Command, CommandError, DocParam, DocValue, Document, DocumentError,
     DocumentPluginError, DocumentWriter, DraftDocParam, DraftKeyframe, EffectDefinition,
     EffectDefinitionDraft, EffectDefinitionId, EffectId, EffectUse, Group, ItemEnvelope, LayerId,
     PrepareError, StableIdError, StableIdReservation, Track, TrackId, TrackItem,
     MIN_READER_VERSION_FOR_COMP_CAMERA, WRITER_VERSION,
-};
-use motolii_doc::journal::{
-    replay_from_base, JournalEdit, JournalFrame, JournalHeader, JournalRecordKind,
-    JournalScanOutcome, V2_EDIT_FORMAT_VERSION,
 };
 use motolii_eval::Interp;
 use motolii_plugin::reference::reference_catalog;
@@ -847,7 +847,12 @@ fn prepare_set_clip_start_leaves_writer_unchanged() {
         .expect("command");
     assert_writer_unchanged(&writer, &snap, revision);
     assert!(cmd.stable_id_reservation().is_none());
-    let Command::SetClipStart { old, new: prepared_new, .. } = cmd else {
+    let Command::SetClipStart {
+        old,
+        new: prepared_new,
+        ..
+    } = cmd
+    else {
         panic!("expected SetClipStart");
     };
     assert_eq!(old, RationalTime::ZERO);
@@ -860,10 +865,7 @@ fn set_clip_start_changes_only_start() {
     let before = doc.clone();
     let new = RationalTime::try_new(2, 1).unwrap();
     let writer = reference_writer(doc);
-    let cmd = writer
-        .prepare_set_clip_start(layer, new)
-        .unwrap()
-        .unwrap();
+    let cmd = writer.prepare_set_clip_start(layer, new).unwrap().unwrap();
     let mut working = before.clone();
     cmd.apply(&mut working).unwrap();
     let before_clip = clip_at(&before, layer);
@@ -1025,7 +1027,10 @@ fn prepare_set_clip_start_same_value_returns_none() {
     let (doc, layer) = layer_track_only_fixture();
     let writer = reference_writer(doc);
     let current = clip_at(writer.snapshot().as_ref(), layer).start;
-    assert!(writer.prepare_set_clip_start(layer, current).unwrap().is_none());
+    assert!(writer
+        .prepare_set_clip_start(layer, current)
+        .unwrap()
+        .is_none());
 }
 
 #[test]

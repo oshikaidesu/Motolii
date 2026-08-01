@@ -115,10 +115,9 @@ fn merge_pair(first: &Command, second: Command) -> Command {
             old,
             new,
         },
-        (
-            Command::SetClipStart { target, old, .. },
-            Command::SetClipStart { new, .. },
-        ) => Command::SetClipStart { target, old, new },
+        (Command::SetClipStart { target, old, .. }, Command::SetClipStart { new, .. }) => {
+            Command::SetClipStart { target, old, new }
+        }
         (_, second) => second,
     }
 }

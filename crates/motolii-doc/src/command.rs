@@ -918,8 +918,8 @@ impl Command {
                     clip.duration
                 };
                 validate_clip_start(doc, layer, *new, duration)?;
-                let item = find_track_item_mut(doc, *target)
-                    .ok_or(CommandError::LayerNotFound(layer))?;
+                let item =
+                    find_track_item_mut(doc, *target).ok_or(CommandError::LayerNotFound(layer))?;
                 let TrackItem::Clip(clip) = item else {
                     return Err(CommandError::TrackItemNotClip { layer });
                 };
@@ -1455,8 +1455,7 @@ pub fn prepare_set_clip_start(
     new: RationalTime,
 ) -> Result<Option<Command>, CommandError> {
     let layer = target.get();
-    let (_, _, item) =
-        find_item_location(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    let (_, _, item) = find_item_location(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
     let TrackItem::Clip(clip) = item else {
         return Err(CommandError::TrackItemNotClip { layer });
     };
