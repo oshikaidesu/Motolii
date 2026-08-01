@@ -289,7 +289,7 @@
           {
             "path": "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
             "role": "runtime",
-            "currentSha256": "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0"
+            "currentSha256": "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e"
           },
           {
             "path": "ui/motolii-web/src/candidates/inspector-candidate.css",
