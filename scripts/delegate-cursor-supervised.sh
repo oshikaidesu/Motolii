@@ -440,6 +440,9 @@ run_supervisor() {
   local prompt="$2"
   local result_kind="$3"
   local timeout_seconds="${4:-$SUPERVISOR_TIMEOUT_SECONDS}"
+  # 起動するmodelはorderの`REVIEW_MODEL`を正本にする。固定定数で起動すると、
+  # 独立性gateが検査した宣言と実際に走るmodelが乖離しうる(2026-08-01独立検収P2指摘)
+  local review_model="${5:-$CURSOR_GROK_MODEL}"
   # plan modeで編集を禁止しつつ、--forceでread-only shellの非対話実行だけを
   # 可能にする。fingerprint/scope検査は、CLI側のmode退行も検出する多層防御。
   local cursor_mode_args=(--trust --mode plan --force --sandbox enabled)
@@ -449,7 +452,7 @@ run_supervisor() {
   run_agent "$stream" "$timeout_seconds" \
     env CURSOR_AGENT=1 "$CURSOR_AGENT_BIN" -p "${cursor_mode_args[@]}" \
       --output-format stream-json \
-      --model "$CURSOR_GROK_MODEL" \
+      --model "$review_model" \
       --workspace "$WORKTREE" \
       "$prompt" || agent_status=$?
   # 失敗・timeoutでも抽出する。空出力の理由はstreamにしか残らない
@@ -2378,7 +2381,8 @@ EOF
   echo "## 3. Cursor Grok 4.5 High read-only inspection"
   grok_status=0
   grok_start_epoch="$(date +%s)"
-  (cd "$worktree" && run_supervisor "$attempt_dir/grok-stdout.txt" "$inspection_prompt" verdict "$inspection_timeout") || grok_status=$?
+  (cd "$worktree" && run_supervisor "$attempt_dir/grok-stdout.txt" "$inspection_prompt" verdict \
+    "$inspection_timeout" "$(gate_require_single_field "$order_file" "REVIEW_MODEL")") || grok_status=$?
   # 検収はsubshellで走るためrun_agentのglobalが親へ戻らない。親側で計測する
   record_stage_telemetry "$attempt_dir/telemetry.txt" GROK "$(( $(date +%s) - grok_start_epoch ))" \
     "$attempt_dir/grok-stdout-result.json"
@@ -2490,9 +2494,13 @@ model_family() {
 
 gate_check_reviewer_independence() {
   local order_file="$1"
-  local reviewer implementer manager impact hazard allowed found=0 candidate
-  # skeleton段ではrunner所有fieldがまだ無い。orderへ書かれた後だけ検査する
-  grep -Eq '^REVIEW_MODEL:' "$order_file" || return 0
+  local reviewer implementer manager impact hazard allowed found=0
+  # skeleton段ではrunner所有fieldがまだ無い。orderへ書かれた後だけ検査する。
+  # 通過ではなくskipであることを台帳へ残す(PASSと区別できないと監査で誤読される)
+  if ! grep -Eq '^REVIEW_MODEL:' "$order_file"; then
+    record_gate SKIP "reviewer_independence(no REVIEW_MODEL yet)"
+    return 0
+  fi
   reviewer="$(gate_require_single_field "$order_file" "REVIEW_MODEL")"
   implementer="$(gate_require_single_field "$order_file" "IMPLEMENTER_MODEL")"
   manager="$(gate_require_single_field "$order_file" "ORDER_MANAGER_MODEL")"

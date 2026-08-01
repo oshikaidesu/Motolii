@@ -523,13 +523,25 @@ assert_status 3 "$RUN_STATUS" "multi-owner allowlist rejected"
 grep -Fq -- "spans multiple contract owners" "$TMP_ROOT/stderr.log" \
   || fail "multi-owner rejection must name the owners"
 
-# docs/はledger・decision-index登録がworkflow上必須のため、別境界に数えない
+# docs/はledger・decision-index登録がworkflow上必須のため、別境界に数えない。
+# 「拒否されない」を弱いassertで済ませると正例を証明できない(2026-08-01独立検収P1指摘)ため、
+# 他の理由でも落ちない完全な粒を組み、exit 0そのものを固定する
 DOCS_TASK="$(printf '%s\n' "$TASK" |
-  sed 's|^ALLOWED_FILE: test.txt$|ALLOWED_FILE: docs/implementation-ledger.md|')"
+  sed 's|^ALLOWED_FILE: test.txt$|ALLOWED_FILE: test.txt\
+ALLOWED_FILE: docs/implementation-ledger.md|')"
 : >"$CALL_LOG"
-run_script prepare "$WT" "$TMP_ROOT/docs-owner.md" "$DOCS_TASK"
-[[ "$(read_rejecting_gate "$TMP_ROOT/docs-owner.md.evidence/gates.txt")" != "contract_boundary" ]] \
-  || fail "docs registration must not count as a second contract boundary"
+set +e
+env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+  FAKE_CALL_LOG="$CALL_LOG" \
+  FAKE_OPUS_OUTPUT="$OPUS_READY" \
+  "$SCRIPT" prepare "$WT" "$TMP_ROOT/docs-owner.md" "$DOCS_TASK" \
+  >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 0 "$RUN_STATUS" "docs registration alongside one owner must dispatch"
+assert_has "$TMP_ROOT/docs-owner.md" "ALLOWED_FILE: docs/implementation-ledger.md" \
+  "docs allowlist entry survived"
 
 # 宣言は一つだけ。二重宣言は境界が一つであることの証明にならない
 DUP_BOUNDARY_TASK="$(printf '%s\n' "$TASK" |
@@ -966,6 +978,10 @@ grep -Eq '^TOTAL_WALL_SECONDS: [0-9]+$' "$HAPPY_TELEMETRY" || fail "execute must
 grep -Fq '"type":"thinking"' "$happy_attempt/grok-stdout-stream.jsonl" \
   || fail "Grok thinking events must be retained instead of discarded by text mode"
 assert_fragment "$CALL_LOG" "--output-format stream-json" "Grok streams structured events"
+# 起動modelはorderのREVIEW_MODELを正本にする。固定定数へ戻すと宣言と実行が乖離する
+ORDER_REVIEW_MODEL_VALUE="$(awk -F': ' '/^REVIEW_MODEL: /{print $2}' "$ORDER")"
+assert_fragment "$CALL_LOG" "--model $ORDER_REVIEW_MODEL_VALUE" \
+  "reviewer is launched with the model declared in the order"
 assert_fragment "$CALL_LOG" "--json" "Spark emits JSONL events"
 
 # 通過したgateも記録する。従来は通過が無記録で、どの層が働いているか測れなかった
@@ -1102,10 +1118,17 @@ run_reviewer_case "unapproved" "some-unlisted-model" \
 run_reviewer_case "same-family" "gpt-5.3-codex-mini" \
   "must be from a different model family" \
   's|^HAZARD_TAG: NONE$|HAZARD_TAG: PERSISTENCE|'
-# 最上段は非LLM oracleの宣言を必須にする。MECHANICAL_GUARDの要求行を削除すると緑でなくなる
+# 最上段は非LLM oracleの宣言を必須にする。case各腕を個別に固定する。
+# 腕をまとめて消すmutationしか試さないと、腕1本の削除を見逃す(2026-08-01独立検収P1指摘)
 run_reviewer_case "security-without-oracle" "cursor-grok-4.5-high" \
   "requires a declared non-LLM oracle" \
   's|^HAZARD_TAG: NONE$|HAZARD_TAG: SECURITY|'
+run_reviewer_case "destructive-without-oracle" "cursor-grok-4.5-high" \
+  "requires a declared non-LLM oracle" \
+  's|^HAZARD_TAG: NONE$|HAZARD_TAG: DESTRUCTIVE_FS|'
+run_reviewer_case "permanent-without-oracle" "cursor-grok-4.5-high" \
+  "requires a declared non-LLM oracle" \
+  's|^CONTRACT_IMPACT: PRIVATE$|CONTRACT_IMPACT: PERMANENT|; s|^CONTRACT_CLOSURE: PRIVATE$|CONTRACT_CLOSURE: FROZEN|; s|^CONTRACT_AUTHORITY: NONE$|CONTRACT_AUTHORITY: AGENTS.md@SHA256:PLACEHOLDER|'
 
 # plan modeの検収結果はplan tool callにしか現れない。ここを抽出しないと、検収者が
 # 完全な判定を返していても「markerが無い」として機械的にREJECTされる(2026-08-01実測)
