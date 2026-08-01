@@ -143,7 +143,7 @@ Draft Previewは知覚可能な品質差を許して即時性と試行回数を�
 | Cavalry的なジェネレータ/デュプリケータ/配列 | Cavalry | プロシージャルオーバーレイ生成の拡張として同様にプラグインで。**評価モデル上の口(インスタンスインデックス)は凍結ゲートで予約する(F-7)** |
 | エクスプレッション(パラメータ間スクリプト) | AE | **v1ではやらない**。シェイプ間相互作用は型付きリンク(下記)で表す。汎用スクリプトはWASMパラメータプラグイン(v2)の逃げ道のみ |
 
-ただし、これは毎frameの評価経路へscriptを置かないという決定であり、**編集時one-shot Generator**は別である。Paper.js型object/path/group思想をMotolii正準座標で再構成したShapeScriptと、LLM向けSVG materialize adapterが型付きD2 command batchを生成し、通常のGroup/vector layerとして1 Undoで実体化する口をv1.xに置く。生成後のDocument・preview・exportはscript/SVG engine非依存で、runtime固有型やsourceを必須schemaへ焼かない。p5.js型の非clear canvas蓄積はscriptの隠し状態にせず、有限shape履歴へ畳めるものはmaterializeし、真に前出力が必要なものはF-11 Feedbackのホスト所有チェックポイントBakeへ送る。正本は[M3-U9a〜U9c](specs/M3-ui-integration.md#編集時generator-hookone-shot)と[plugin-resources §6](plugin-resources.md#6-時間参照-lookbehind--フィードバックf-11口の予約のみ)。
+ただし、これは毎frameの評価経路へscriptを置かないという決定であり、**編集時one-shot Generator**は別である。Paper.js型object/path/group思想をMotolii正準座標で再構成したMTS-1 TypeScript Host SDKと、LLM向けSVG materialize adapterが型付きD2 command batchを生成し、通常のGroup/vector layerとして1 Undoで実体化する口をv1.xに置く。旧称ShapeScriptを独自言語・syntax・runtimeとしては作らない。生成後のDocument・preview・exportはscript/SVG engine非依存で、runtime固有型やsourceを必須schemaへ焼かない。p5.js型の非clear canvas蓄積はscriptの隠し状態にせず、有限shape履歴へ畳めるものはmaterializeし、真に前出力が必要なものはF-11 Feedbackのホスト所有チェックポイントBakeへ送る。正本は[作者言語境界](reviews/2026-08-01-vism-authoring-language-boundary-decision.md)、[M3-U9a〜U9c](specs/M3-ui-integration.md#編集時generator-hookone-shot)、[plugin-resources §6](plugin-resources.md#6-時間参照-lookbehind--フィードバックf-11口の予約のみ)。
 
 ### 構造に関わる3項目(2026-07-07 決定済み → 上の決定事項参照)
 

@@ -32,6 +32,22 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-07-26-third-party-sustainable-economy-decision.md](2026-07-26-third-party-sustainable-economy-decision.md) | 無料／有料、OSS／proprietary等を作者が選べる持続可能な経済圏を、Motoliiがmarketplaceを所有せず支える理由、責任境界、停止線 |
+| [2026-07-26-vism-malware-containment-handoff.md](2026-07-26-vism-malware-containment-handoff.md) | Vism悪性コード封じ込めをcatalogから分離し、現行事実、攻撃面、必須負例、合格条件、STOPを他LLMへ渡すread-only締結依頼 |
+| [2026-07-26-vism-malware-containment-contract-decision.md](2026-07-26-vism-malware-containment-contract-decision.md) | 悪性Vismのambient authority 0、hard budget、typed failure、bounded recovery、atomic install、13負例とclaim boundaryを締結し、runtime／schema実装はSTOPする意味論決定 |
+| [2026-07-27-vism-authoring-journey-decision.md](2026-07-27-vism-authoring-journey-decision.md) | 推奨pass shape／標準operation候補と独自WGSL、自己完結shader closure、source authority／backend派生物、v1 source fork／v2 local Vism、Kit selection closureを分ける作者journey比較 |
+| [2026-07-28-vj-multistream-video-prior-art-observation.md](2026-07-28-vj-multistream-video-prior-art-observation.md) | 40動画＋合成後Glowをdecode／surface／coverage／post effectへ分け、VJのGPU-native media、hardware decode、YUV直結、Glow pyramidをMotoliiへ移す比較と停止線 |
+| [2026-07-29-decode-to-composite-premise-audit.md](2026-07-29-decode-to-composite-premise-audit.md) | compressed packetからcompositionまでのcopy／materialize／共有／seek前提を分解し、library選定前の原因分離fixtureと停止線を固定する比較 |
+| [2026-07-29-aviutl-completed-plugin-stack-performance-observation.md](2026-07-29-aviutl-completed-plugin-stack-performance-observation.md) | AviUtlを入力、handle reuse、patch、LuaJIT、RAM preview、波形／編集補助で完成するsoftwareとして再定義し、責任分解、音MAD高編集密度fixture、MotoliiのHost／plugin境界を記録 |
+| [2026-07-29-aviutl2-low-spec-migration-performance-gate.md](2026-07-29-aviutl2-low-spec-migration-performance-gate.md) | 旧AviUtl完成拡張スタックとAviUtl2を別々の移行基準旗とし、L0-M音MAD映像を含む日常編集と負荷後の粘りを分ける最低スペック比較台帳 |
+| [2026-07-29-external-authoring-bridge-seat-decision.md](2026-07-29-external-authoring-bridge-seat-decision.md) | 外部制作toolの選択をtyped proposalからAuthoring Toolへ渡す第三者Bridge席、app非列挙、single-writer正本化、商流／権限分離、能力別再入場gateの決定 |
+| [2026-07-29-vism-cross-culture-expression-stress-test-observation.md](2026-07-29-vism-cross-culture-expression-stress-test-observation.md) | AviUtl／Blender／TouchDesigner／Cavalry／GitHubを横断し、Path→Path、補助typed出力、Feedback、Data→Data、Surface／Materialの空席と候補を分離する観察 |
+| [2026-07-31-authoring-continuity-capsule-goal-contract.md](2026-07-31-authoring-continuity-capsule-goal-contract.md) | 作者経路の行き止まり禁止、一回一変更カプセル、Host所有oracle、宣言typed capability、初心者には一つの作者面・内部artifactはHost導出と段階開示、製品所有Inspect／Fork／atomic adoptionと後戻り不能な負例を固定 |
+| [2026-08-01-motolii-semantic-sdk-aviutl-community-comparison.md](2026-08-01-motolii-semantic-sdk-aviutl-community-comparison.md) | AviUtl 1.x成熟拡張環境／AviUtl2とMotolii意味SDKを比較し、一作者面、自動parameter、通常Vism、fork、反復、Preset／Kit、分散配布、高度化をcontinuity floorへ縮小採用 |
+| [2026-08-01-vism-authoring-language-boundary-decision.md](2026-08-01-vism-authoring-language-boundary-decision.md) | 一般creator-authorがprogramを書く段のTypeScript source、MTS-1 compatibility profile、WGSL／Rust責任、engine／package非決定、F0/F1と停止線を固定 |
+| [2026-08-01-vism-inspector-source-automation-boundary-decision.md](2026-08-01-vism-inspector-source-automation-boundary-decision.md) | Vismを通常の製品単位、Inspectorを意味の第一面、TypeScriptを外部IDEへ段階開示する作者source、Automationを別の将来席として固定 |
+| [2026-08-01-vism-semantic-sdk-cavalry-translation-decision.md](2026-08-01-vism-semantic-sdk-cavalry-translation-decision.md) | CavalryのPath／Mesh／Context／Deformer／Particle先例を、言語より長寿命な意味型、純粋operation、明示capability、Host責任へ翻訳するVism意味SDK決定 |
+| [2026-08-01-vsm-a4s-external-crate-author-scaffold-spec.md](2026-08-01-vsm-a4s-external-crate-author-scaffold-spec.md) | VSM-A4S — 外部crate作者scaffold責任仕様 |
 | [2026-07-09-R1-export-review.md](2026-07-09-R1-export-review.md) | コードレビュー所見 2026-07-09 (R1/Quality・export・cli周辺) |
 | [2026-07-09-R3-datatrack-review.md](2026-07-09-R3-datatrack-review.md) | コードレビュー所見 2026-07-09 (R3/DataTrack統合) |
 | [2026-07-10-M1-plugin-boundary-review.md](2026-07-10-M1-plugin-boundary-review.md) | 設計レビュー所見 2026-07-10 (M1完了後・プラグイン境界の凍結前監査) |
