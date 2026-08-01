@@ -3,7 +3,7 @@
 - 日付: 2026-08-02
 - 状態: **決定**
 - U3a-2Q-V: **DONE**
-- 次実装粒: **CU-206 DO**
+- 次実装: **CU-206 SPLIT**（`CU-206I → CU-206R → CU-206C`）
 
 ## 1. 利用者成果
 
@@ -45,3 +45,10 @@
 - `product_runtime_adapter.rs`のlifecycle-only境界を拡張しない。既存AppKit local monitor以外の入力frameworkを作らない。
 - fixed値や期待値を試験通過のために変更しない。既存move / trim / snap / Easing / selectionの意味が変わる場合はSTOPする。
 
+## 6. 施工分割
+
+runnerのread capsule上限内で同じ契約を重複読込せず、直列に閉じる。
+
+1. `CU-206I`: 既存AppKit local monitorへbounded 2軸scroll sampleとBrowser Hostのprivate pollを追加する。
+2. `CU-206R`: native rendererを固定row / 固定time scale / viewport描画へし、既存入口はdefault viewportで互換維持する。
+3. `CU-206C`: Product session state、projection、hit-test、move / trim / snap、I/Rの既存private入口を一つへ接続し、通常製品windowで検証する。
