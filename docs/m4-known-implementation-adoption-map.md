@@ -15,8 +15,9 @@
 
 ## 2. 固定原則
 
-1. Motoliiは完全key、作品意味、hard admission、優先順位、製品oracleを所有する。cache collection、CAS、
-   区間集合、priority collection、SVG変換の一般機構は既知実装へ委ねる。
+1. Motoliiは完全key、作品意味、hard admission、優先順位、製品oracleを所有する。cache collection、
+   区間集合、priority collection、SVG変換の一般機構は既知実装へ委ねる。diskはCASを前提にせず、
+   映像編集製品で成立済みの再生成可能な通常artifact file方式へ合わせる。
 2. `REUSE / ADOPT / WRAP / PATTERN`を親で一度裁定し、子は再選定しない。
 3. 外部型をDocument、公開plugin API、serde、journalへ漏らさない。adapterはprivateな一方向写像にする。
 4. cache miss、破損、不完全writeは作品failureにせず再計算へ落とす。key漏れはpurge UIで隠さない。
@@ -33,7 +34,7 @@
 | `M4-P02-IDENTITY` | recipe key content digest generation snapshot source fingerprint | 再起動やrename後も正しい成果だけを再利用する | Bazel action/CASを`PATTERN`、`sha2`を`REUSE` | K1b、K2、K4、GAP-3 |
 | `M4-P03-RAM` | weighted cache handle refs pin eviction usage | 参照中成果を壊さずRAM hard cap内で再利用する | `foyer-memory 0.22.3`を`ADOPT-PROBE` | K1a〜K1c |
 | `M4-P04-RESOURCE` | VRAM RAM disk admission descriptor allocator report watermark | allocation前に三tierの上限を守る | wgpu descriptor/reportを`REUSE/PATTERN`、`fs4 1.1.0`を`ADOPT-PROBE` | K1a、K1c、K1d |
-| `M4-P05-DISK` | artifact store integrity atomic commit corrupt miss LRU | 再起動後も壊れていない成果だけをdiskから読む | `sha2/std::fs`を`REUSE`、Bazel/sccache/D1 persistを`PATTERN`、`tempfile 3.27.0`を`ADOPT-PROBE` | K1c、K7、K8 |
+| `M4-P05-DISK` | artifact store generated media render cache proxy integrity atomic corrupt miss LRU | 再起動後も壊れていない成果だけをdiskから読む | Blender/AE/Premiere/Resolve/FCPの再生成mediaを`PATTERN`、`sha2/std::fs`を`REUSE`、sccache/D1 persistを`PATTERN`、`tempfile 3.27.0`を`ADOPT-PROBE` | K1c、K7、K8 |
 | `M4-P06-INTERVAL` | half-open range coverage gaps invalidation coalesce | 変更の影響区間だけを再計算する | `rangemap 1.7.1`を`ADOPT-PROBE` | K2、K7b、K8a |
 | `M4-P07-SCHEDULE` | priority bounded queue reprioritize cancel heartbeat latest | 編集を止めず、必要なbackground成果から作る | `priority-queue 2.7.0`を`ADOPT-PROBE`、`LatestWorker`を`REUSE/PATTERN` | K1d、K4、K7、K8 |
 | `M4-P08-PROXY` | ffmpeg ffprobe VFR CFR proxy PTS source id | 重い素材を決定的proxyへ置換して編集する | 現行FFmpeg sidecarを`REUSE/WRAP` | K4、GAP-3、GAP-26 |
@@ -151,9 +152,12 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 #### `P05-C1` filesystem artifact compatibility probe
 
 - **結果**: `tempfile 3.27.0`のsame-directory temp/persist、workspace `sha2`、single cache writer、
-  sharded recipe pathを組み合わせ、Rust copy-outとFFmpegが作る通常fileをatomicにpublishできるか確認する。
+  sharded recipe pathを組み合わせ、映像編集製品で成立済みの再生成可能な通常file方式をMotoliiの強い境界へ
+  接続し、Rust copy-outとFFmpegが作る通常fileをatomicにpublishできるか確認する。
 - **oracle**: Mac/Windows、incomplete/bit-flip/truncate/missingはmiss、ENOSPC/process kill、同一recipe競合、
   1GB fake budget、10万entry lazy scan、final pathにpartial artifact 0、100GB生成0。
+- **証明分界**: 先行製品は通常file／再生成／明示削除の妥協範囲だけを証明する。content integrity、
+  allocation前hard budget、Windows atomic visibility、完全recipe keyはこのprobeで別途証明する。
 - **STOP**: fork、独自DB/WAL、cache format migration、常駐runtime、global content dedupを採択前提にしない。
 
 #### `P05-C2` private disk store adapter
@@ -320,6 +324,11 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 
 Waveは一括発注ではない。各子を一契約境界として検収し、共有fileへの合流だけownerが直列化する。
 `SPEC_ONLY`のGAP-3やGAP-29を別候補で迂回しない。
+
+### P05の検証梯子
+
+`P05-C1 compatibility` → `P05-C2 store model` → `P05-C3 resource integration` → `K7a/K8b product E2E`
+の順に閉じる。各段のexact oracleは[disk artifact再検索 §6.1](reviews/2026-08-02-m4-disk-artifact-store-resurvey.md#61-検証の層と完了線)を正とする。前段greenを後段完成へ読み替えず、現状態は検証計画済み・runtime未検証とする。
 
 ## 7. 旧負債の処分
 

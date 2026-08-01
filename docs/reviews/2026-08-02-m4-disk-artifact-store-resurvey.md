@@ -64,6 +64,25 @@ database向けのformat、compression、chunking、WAL、HMAC、remote backend�
 
 これは`REUSE / PATTERN / ADOPT-PROBE`であり、汎用cache protocolや永続DBを新設する`BUILD`ではない。
 
+### 3.3 映像編集製品で成立済みの妥協範囲
+
+専用CAS crateが勝たないことは、disk cacheそのものを独自frameworkとして発明する理由にならない。出荷済みの
+映像編集製品は、global content dedupより、再生成できるframe／proxy／render mediaを製品固有keyで通常fileへ
+保存し、無効化または利用者操作で捨てるrouteを広く採っている。
+
+| 先例 | 公開資料から確認できる成立範囲 | Motoliiへ転移しないもの |
+|---|---|---|
+| Blender VSE | RAM cacheのdisk拡張、保存先、容量上限、圧縮。導入実装は100 frame単位fileとsize超過削除 | GPL実装、100-frame format、過剰無効化、Blender identity |
+| After Effects | sessionを跨ぐrendered-frame cache、起動時scan、最大容量、空き容量reserve、明示purge | 非公開key／format、Adobe database、Final適格性の推測 |
+| Premiere Pro | `.cfa`／`.pek`等の派生fileと対応database、削除後の再生成、age／size cleanup | 形式、共有database、後追いcleanupをhard admissionの代用にしない |
+| DaVinci Resolve | persistentなRender Cache／Optimized Media、通常codec、変更後の再cache、明示削除 | proprietary format、Deliverへのcache利用policy |
+| Final Cut Pro | libraryまたは外部保存先のrender／proxy／optimized media、unused／all削除、originalから再生成 | library format、macOS専用storage contract |
+
+これらは「通常fileの再生成cacheで製品価値が成立する」ことだけを証明する。partial publication 0、content
+integrity、allocation前hard budget、Windows atomic visibility、Motoliiの完全recipe keyは証明しない。その差だけを
+`P05-C1`以降のfixtureで閉じる。Rerunのchunk store／query／viewer persistenceはこの成果のownerではなく、
+M4-P05の採択routeへ入れない。
+
 ## 4. REDUCE後のprivate store境界
 
 ### 4.1 identity
@@ -111,6 +130,20 @@ filesystem hard-linkまたはcontent blob層を独立`PATTERN`比較する。こ
 6. 10万entry相当のlazy scan／shardingを実file全生成なしで計測する。
 7. external crate型、path、mtimeをDocument／公開API／serde／journalへ漏らさない。
 
+### 6.1 検証の層と完了線
+
+先例の存在はprobe合格ではなく、`P05-C1`の合格も製品cache完成ではない。検証を次の四層に分ける。
+
+| 層 | 対象 | 必須oracle | 合格後に許すもの |
+|---|---|---|---|
+| `V1 compatibility` | P05-C1 isolated fixture | Mac／Windows build、Rust／FFmpeg通常file、same-dir publish、kill／ENOSPC／bit-flip／truncate／missing／stale temp、同一recipe競合、partial final 0 | `tempfile`採択とprivate adapter起票 |
+| `V2 store model` | P05-C2 unit／model test | restart hit、wrong generation miss、検証済みhandle再利用、shard衝突0、公開型漏出0 | recipe file storeをK1b/K1cへ接続 |
+| `V3 resource integration` | P05-C3 + P04-C2 stress | allocation前hard admission、1GB sparse/fake budget `+ epsilon`以内、pin／open／committing削除0、削除失敗を未回収計上、watermark refusal | disk tierの製品route接続 |
+| `V4 product E2E` | K7a／K8b | process kill後restart、破損cacheから透明再生成、FFmpeg実読込、cache有無のFinal bit一致、全曲Draft coverage、実file 100GB生成0 | 旧disk routeの`FROZEN → RETIRE` |
+
+`V1`〜`V4`は期待値更新、purge後だけ成功する試験、mock codec、実fileの巨大生成で代用しない。現時点は
+**検証計画済み・runtime未検証**であり、先行製品の存在やdocs greenをP05完成証拠に数えない。
+
 ## 7. STOPと再入場
 
 - `tempfile::persist`が対象Windows filesystemで可視性atomicを満たさない場合は、そのplatformのpublication
@@ -132,3 +165,9 @@ filesystem hard-linkまたはcontent blob層を独立`PATTERN`比較する。こ
 - [`cassadilia 0.4.7`](https://docs.rs/cassadilia/0.4.7/cassadilia/)
 - [`object_store 0.14.1`](https://docs.rs/object_store/0.14.1/object_store/)
 - [Motolii D1 atomic persist](../../crates/motolii-doc/src/persist.rs)
+- [Blender VSE performance／disk cache](https://docs.blender.org/manual/en/4.5/editors/video_sequencer/introduction.html)、
+  [VSE disk cache導入記録](https://www.mail-archive.com/bf-blender-cvs%40blender.org/msg123543.html)
+- [After Effects memory and storage](https://helpx.adobe.com/after-effects/desktop/memory-storage-performance/memory-and-storage/memory-storage1.html)
+- [Premiere media cache](https://helpx.adobe.com/premiere/desktop/troubleshooting/media-issues/manage-media-cache.html)
+- [DaVinci Resolve reference manual](https://documents.blackmagicdesign.com/UserManuals/DaVinci_Resolve_15_Reference_Manual.pdf)
+- [Final Cut Pro render files](https://support.apple.com/guide/final-cut-pro/manage-render-files-ver68a8c250/mac)
