@@ -27,6 +27,24 @@ Codex → Claude Opus 5 → Codex Spark → Cursor Grok 4.5 High → Codex
 Opus 5の委任権は一段だけであり、Spark以外を起動せず、Sparkも再委任しない。一回のrunner実行は一つの
 `GRAIN`だけを扱う。複数粒が必要なら、主担当Codexが各粒の契約境界を確認した上でループを個別に回す。
 
+### 契約粒と施工ステップ
+
+2026-08-01のユーザー明示訂正により、`GRAIN`を一つのOpus事前管理とGrok最終検収を共有する**契約境界単位**として固定し、
+Spark内部の作業分割を**施工ステップ**として区別する。命令、編集、確認commandが複数あること自体は粒を増やさない。
+
+- Sparkには短く曖昧な依頼でなく、target、変更順、完成bytes／状態、負例、各確認commandを具体的に渡す
+- 長い施工は、同じbase、worktree、owner、`CONTRACT_BOUNDARY`、allowlist、read set、oracle、非目標を保ったまま
+  順序付きステップへ分ける
+- ステップ開始ごとにOpus／Grokを呼ばない。Opusは粒の施工前、Grokは全ステップ後の累積実diffに原則一回とし、
+  ステップ間はCodexの照合と機械commandで閉じる
+- 承認済み境界、allowlist、oracleの変更が必要ならSparkは推測で広げずCodexへ戻す。新しい契約境界が増える場合だけ
+  別の`GRAIN`としてループを追加する
+- GrokのREJECTまたはP0/P1修復後に必要な再検収は、施工ステップ開始による再呼出しとは区別し、省略しない
+
+現行runnerはtarget capsuleとcompiled grainをSparkへ各一回だけ渡す実装である。そのためこの決定の発効範囲は、
+全施工ステップを一つのcompiled grainへ順序付きで明記し、一つのSpark sessionで処理させるところまでとする。
+実行途中に次ステップだけを追加投入するrunner機能は**未実装**であり、複数のOpus→Spark→Grok loopで代用しない。
+
 Fable 5は通常ループの段階または必須gateにしない。大地図、設計比較、共有公開境界など、主担当Codexが
 高難度の反対側助言を必要と判断した場合だけ、通常ループの外からread-onlyで直接呼ぶ。
 
@@ -527,6 +545,10 @@ churnを止めるための締めくくりである。以後、新しい規約項
 追補は、Codex裁量のrouting改訂でなく監視契約の適用漏れ修復として区別する。model routing、責任順序、runner接続方式、
 評価指標は変更しない。`Grok preflight → Spark → Opus final`候補の固定fixture実測はobservationに留め、正規routingへ
 昇格しない。
+
+同日のユーザー明示訂正による「契約粒と施工ステップ」の区別も、model routing、一粒一契約境界、allowlist、独立検収を
+変更しない既存語義の明確化として区別する。施工ステップごとの外部LLM再起動は追加せず、途中投入runner機能は未実装の
+まま正規接続方式へ昇格させない。
 
 改訂5(検収入力のslice化)は**設計が閉じていない**ため、実装として着手しない。設計を閉じる作業自体が
 規約改訂に当たるため、凍結解除後に扱う。
