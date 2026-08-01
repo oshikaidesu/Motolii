@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use motolii_core::RationalTime;
+use motolii_core::{RationalTime, TimeMap};
 
 use crate::duplicate::{definition_semantic_body_eq, remint_order_keyframe_ids};
 use crate::param::DocParam;
@@ -58,6 +58,8 @@ pub enum PropertyId {
     AudioGain(usize),
     ChildList,
     ClipStart,
+    ClipIn,
+    ClipOut,
 }
 
 impl From<ScalarPropertyId> for PropertyId {
@@ -120,6 +122,8 @@ pub enum CommandKind {
     AddTrackItem,
     RemoveTrackItem,
     SetClipStart,
+    TrimClipIn,
+    TrimClipOut,
 }
 
 /// S18: `gesture_id + command_kind + target_stable_id + property_id`。
@@ -139,6 +143,8 @@ pub enum CommandError {
     LayerNotFound(u64),
     #[error("track item {layer} is not a Clip")]
     TrackItemNotClip { layer: u64 },
+    #[error("invalid clip in-trim payload for layer {layer}")]
+    InvalidClipTrim { layer: u64 },
     #[error("track {0} not found")]
     TrackNotFound(u64),
     #[error("group {0} not found (or is not a Group)")]
@@ -364,6 +370,20 @@ pub enum Command {
         old: RationalTime,
         new: RationalTime,
     },
+    TrimClipIn {
+        target: LayerId,
+        old_start: RationalTime,
+        old_duration: RationalTime,
+        old_time_map: TimeMap,
+        new_start: RationalTime,
+        new_duration: RationalTime,
+        new_time_map: TimeMap,
+    },
+    TrimClipOut {
+        target: LayerId,
+        old_duration: RationalTime,
+        new_duration: RationalTime,
+    },
 }
 
 impl Command {
@@ -396,6 +416,8 @@ impl Command {
             Command::AddTrackItem { .. } => CommandKind::AddTrackItem,
             Command::RemoveTrackItem { .. } => CommandKind::RemoveTrackItem,
             Command::SetClipStart { .. } => CommandKind::SetClipStart,
+            Command::TrimClipIn { .. } => CommandKind::TrimClipIn,
+            Command::TrimClipOut { .. } => CommandKind::TrimClipOut,
         }
     }
 
@@ -411,7 +433,9 @@ impl Command {
             | Command::SetEffectEnabled { target, .. }
             | Command::SetAudioComponentEnabled { target, .. }
             | Command::SetAudioComponentGain { target, .. }
-            | Command::SetClipStart { target, .. } => target.get(),
+            | Command::SetClipStart { target, .. }
+            | Command::TrimClipIn { target, .. }
+            | Command::TrimClipOut { target, .. } => target.get(),
             Command::CreateEffect { target, .. }
             | Command::UndoCreateEffect { target, .. }
             | Command::LinkEffectUse { target, .. }
@@ -456,6 +480,8 @@ impl Command {
             Command::SetAudioComponentGain { index, .. } => PropertyId::AudioGain(*index),
             Command::AddTrackItem { .. } | Command::RemoveTrackItem { .. } => PropertyId::ChildList,
             Command::SetClipStart { .. } => PropertyId::ClipStart,
+            Command::TrimClipIn { .. } => PropertyId::ClipIn,
+            Command::TrimClipOut { .. } => PropertyId::ClipOut,
         }
     }
 
@@ -510,7 +536,9 @@ impl Command {
             | Command::SetAudioComponentGain { .. }
             | Command::AddTrackItem { .. }
             | Command::RemoveTrackItem { .. }
-            | Command::SetClipStart { .. } => None,
+            | Command::SetClipStart { .. }
+            | Command::TrimClipIn { .. }
+            | Command::TrimClipOut { .. } => None,
         }
     }
 
@@ -926,6 +954,60 @@ impl Command {
                 clip.start = *new;
                 Ok(())
             }
+            Command::TrimClipIn {
+                target,
+                old_start,
+                old_duration,
+                old_time_map,
+                new_start,
+                new_duration,
+                new_time_map,
+            } => {
+                let layer = target.get();
+                let item =
+                    find_track_item_mut(doc, *target).ok_or(CommandError::LayerNotFound(layer))?;
+                if !matches!(item, TrackItem::Clip(_)) {
+                    return Err(CommandError::TrackItemNotClip { layer });
+                }
+                validate_clip_in_payload(
+                    doc,
+                    layer,
+                    (*old_start, *old_duration, *old_time_map),
+                    (*new_start, *new_duration, *new_time_map),
+                )?;
+                let item =
+                    find_track_item_mut(doc, *target).ok_or(CommandError::LayerNotFound(layer))?;
+                let TrackItem::Clip(clip) = item else {
+                    return Err(CommandError::TrackItemNotClip { layer });
+                };
+                clip.start = *new_start;
+                clip.duration = *new_duration;
+                clip.time_map = *new_time_map;
+                Ok(())
+            }
+            Command::TrimClipOut {
+                target,
+                new_duration,
+                ..
+            } => {
+                let layer = target.get();
+                let start = {
+                    let item = find_track_item_mut(doc, *target)
+                        .ok_or(CommandError::LayerNotFound(layer))?;
+                    let TrackItem::Clip(clip) = item else {
+                        return Err(CommandError::TrackItemNotClip { layer });
+                    };
+                    clip.start
+                };
+                validate_clip_duration(doc, layer, start, *new_duration)?;
+                let item =
+                    find_track_item_mut(doc, *target).ok_or(CommandError::LayerNotFound(layer))?;
+                let TrackItem::Clip(clip) = item else {
+                    return Err(CommandError::TrackItemNotClip { layer });
+                };
+                clip.duration = *new_duration;
+                Ok(())
+            }
         }
     }
 
@@ -1133,6 +1215,32 @@ impl Command {
                 target,
                 old: new,
                 new: old,
+            },
+            Command::TrimClipIn {
+                target,
+                old_start,
+                old_duration,
+                old_time_map,
+                new_start,
+                new_duration,
+                new_time_map,
+            } => Command::TrimClipIn {
+                target,
+                old_start: new_start,
+                old_duration: new_duration,
+                old_time_map: new_time_map,
+                new_start: old_start,
+                new_duration: old_duration,
+                new_time_map: old_time_map,
+            },
+            Command::TrimClipOut {
+                target,
+                old_duration,
+                new_duration,
+            } => Command::TrimClipOut {
+                target,
+                old_duration: new_duration,
+                new_duration: old_duration,
             },
         }
     }
@@ -1448,6 +1556,83 @@ fn validate_clip_start(
     Ok(())
 }
 
+fn clip_interval_overflow(layer_id: u64) -> CommandError {
+    CommandError::Validate(validate::DocumentError::ClipIntervalOverflow { layer_id })
+}
+
+fn validate_clip_duration(
+    doc: &Document,
+    layer_id: u64,
+    start: RationalTime,
+    new_duration: RationalTime,
+) -> Result<(), CommandError> {
+    let end = start
+        .try_add(new_duration)
+        .map_err(|_| clip_interval_overflow(layer_id))?;
+    if new_duration <= RationalTime::ZERO {
+        return Err(CommandError::Validate(
+            validate::DocumentError::NonPositiveClipDuration { layer_id },
+        ));
+    }
+    if end > doc.composition.duration {
+        return Err(CommandError::Validate(
+            validate::DocumentError::ClipPastComposition {
+                layer_id,
+                end,
+                comp: doc.composition.duration,
+            },
+        ));
+    }
+    Ok(())
+}
+
+fn validate_clip_in_payload(
+    doc: &Document,
+    layer_id: u64,
+    old: (RationalTime, RationalTime, TimeMap),
+    new: (RationalTime, RationalTime, TimeMap),
+) -> Result<(), CommandError> {
+    let (old_start, old_duration, old_time_map) = old;
+    let (new_start, new_duration, new_time_map) = new;
+    let old_end = old_start
+        .try_add(old_duration)
+        .map_err(|_| clip_interval_overflow(layer_id))?;
+    let new_end = new_start
+        .try_add(new_duration)
+        .map_err(|_| clip_interval_overflow(layer_id))?;
+    let delta = new_start
+        .try_sub(old_start)
+        .map_err(|_| clip_interval_overflow(layer_id))?;
+    let expected_source_start = old_time_map
+        .try_map(delta)
+        .map_err(|_| clip_interval_overflow(layer_id))?;
+
+    if new_duration <= RationalTime::ZERO {
+        return Err(CommandError::Validate(
+            validate::DocumentError::NonPositiveClipDuration { layer_id },
+        ));
+    }
+    if old_duration <= RationalTime::ZERO
+        || old_end != new_end
+        || old_time_map.speed_num() != new_time_map.speed_num()
+        || old_time_map.speed_den() != new_time_map.speed_den()
+        || old_time_map.overrun_mode != new_time_map.overrun_mode
+        || expected_source_start != new_time_map.source_start
+    {
+        return Err(CommandError::InvalidClipTrim { layer: layer_id });
+    }
+    if new_end > doc.composition.duration {
+        return Err(CommandError::Validate(
+            validate::DocumentError::ClipPastComposition {
+                layer_id,
+                end: new_end,
+                comp: doc.composition.duration,
+            },
+        ));
+    }
+    Ok(())
+}
+
 /// CU-201M-S: Clip `start`変更commandを構築する。成功・失敗とも live Document 不変。
 pub fn prepare_set_clip_start(
     doc: &Document,
@@ -1465,6 +1650,90 @@ pub fn prepare_set_clip_start(
     }
     validate_clip_start(doc, layer, new, clip.duration)?;
     Ok(Some(Command::SetClipStart { target, old, new }))
+}
+
+/// CU-201T-S: 左edgeを変更し、旧右端と残存source写像を保つcommandを構築する。
+pub fn prepare_trim_clip_in(
+    doc: &Document,
+    target: LayerId,
+    new_start: RationalTime,
+) -> Result<Option<Command>, CommandError> {
+    let layer = target.get();
+    let (_, _, item) = find_item_location(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    let TrackItem::Clip(clip) = item else {
+        return Err(CommandError::TrackItemNotClip { layer });
+    };
+    if new_start == clip.start {
+        return Ok(None);
+    }
+
+    let old_start = clip.start;
+    let old_duration = clip.duration;
+    let old_time_map = clip.time_map;
+    let old_end = old_start
+        .try_add(old_duration)
+        .map_err(|_| clip_interval_overflow(layer))?;
+    let new_duration = old_end
+        .try_sub(new_start)
+        .map_err(|_| clip_interval_overflow(layer))?;
+    let delta = new_start
+        .try_sub(old_start)
+        .map_err(|_| clip_interval_overflow(layer))?;
+    let new_source_start = old_time_map
+        .try_map(delta)
+        .map_err(|_| clip_interval_overflow(layer))?;
+    let new_time_map = TimeMap::try_new(
+        new_source_start,
+        old_time_map.speed_num(),
+        old_time_map.speed_den(),
+        old_time_map.overrun_mode,
+    )
+    .map_err(|_| clip_interval_overflow(layer))?;
+
+    validate_clip_in_payload(
+        doc,
+        layer,
+        (old_start, old_duration, old_time_map),
+        (new_start, new_duration, new_time_map),
+    )?;
+    Ok(Some(Command::TrimClipIn {
+        target,
+        old_start,
+        old_duration,
+        old_time_map,
+        new_start,
+        new_duration,
+        new_time_map,
+    }))
+}
+
+/// CU-201T-S: 右edgeを変更し、`start`とTimeMapを保つcommandを構築する。
+pub fn prepare_trim_clip_out(
+    doc: &Document,
+    target: LayerId,
+    new_end: RationalTime,
+) -> Result<Option<Command>, CommandError> {
+    let layer = target.get();
+    let (_, _, item) = find_item_location(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    let TrackItem::Clip(clip) = item else {
+        return Err(CommandError::TrackItemNotClip { layer });
+    };
+    let old_end = clip
+        .start
+        .try_add(clip.duration)
+        .map_err(|_| clip_interval_overflow(layer))?;
+    if new_end == old_end {
+        return Ok(None);
+    }
+    let new_duration = new_end
+        .try_sub(clip.start)
+        .map_err(|_| clip_interval_overflow(layer))?;
+    validate_clip_duration(doc, layer, clip.start, new_duration)?;
+    Ok(Some(Command::TrimClipOut {
+        target,
+        old_duration: clip.duration,
+        new_duration,
+    }))
 }
 
 struct ReservationCommit {

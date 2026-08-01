@@ -118,6 +118,41 @@ fn merge_pair(first: &Command, second: Command) -> Command {
         (Command::SetClipStart { target, old, .. }, Command::SetClipStart { new, .. }) => {
             Command::SetClipStart { target, old, new }
         }
+        (
+            Command::TrimClipIn {
+                target,
+                old_start,
+                old_duration,
+                old_time_map,
+                ..
+            },
+            Command::TrimClipIn {
+                new_start,
+                new_duration,
+                new_time_map,
+                ..
+            },
+        ) => Command::TrimClipIn {
+            target,
+            old_start,
+            old_duration,
+            old_time_map,
+            new_start,
+            new_duration,
+            new_time_map,
+        },
+        (
+            Command::TrimClipOut {
+                target,
+                old_duration,
+                ..
+            },
+            Command::TrimClipOut { new_duration, .. },
+        ) => Command::TrimClipOut {
+            target,
+            old_duration,
+            new_duration,
+        },
         (_, second) => second,
     }
 }

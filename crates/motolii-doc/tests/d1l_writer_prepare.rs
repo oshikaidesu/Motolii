@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use common::identity_roundtrip::assert_identity_command_roundtrip;
 
-use motolii_core::RationalTime;
+use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::journal::{
     replay_from_base, JournalEdit, JournalFrame, JournalHeader, JournalRecordKind,
     JournalScanOutcome, V2_EDIT_FORMAT_VERSION,
@@ -1194,4 +1194,391 @@ fn set_clip_start_random_valid_sequence_undo_restores_document() {
     }
     writer.undo().unwrap();
     assert_eq!(writer.snapshot().as_ref(), &doc);
+}
+
+#[test]
+fn trim_clip_in_shrink_and_extend_preserve_right_edge_and_source_mapping() {
+    let (mut doc, layer) = layer_track_only_fixture();
+    let time_map = TimeMap::constant_speed(RationalTime::try_new(1, 1).unwrap(), 3, 2).unwrap();
+    let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] else {
+        unreachable!();
+    };
+    clip.time_map = time_map;
+    let original = clip.clone();
+    let old_end = original.start.try_add(original.duration).unwrap();
+
+    for new_start in [
+        RationalTime::try_new(1, 1).unwrap(),
+        RationalTime::try_new(-1, 1).unwrap(),
+    ] {
+        let writer = reference_writer(doc.clone());
+        let cmd = writer
+            .prepare_trim_clip_in(layer, new_start)
+            .unwrap()
+            .unwrap();
+        assert!(cmd.stable_id_reservation().is_none());
+        let mut working = doc.clone();
+        cmd.apply(&mut working).unwrap();
+        let changed = clip_at(&working, layer);
+        assert_eq!(changed.start, new_start);
+        assert_eq!(changed.start.try_add(changed.duration).unwrap(), old_end);
+        assert_eq!(changed.time_map.speed_num(), original.time_map.speed_num());
+        assert_eq!(changed.time_map.speed_den(), original.time_map.speed_den());
+        assert_eq!(
+            changed.time_map.overrun_mode,
+            original.time_map.overrun_mode
+        );
+        for timeline_time in [new_start, RationalTime::try_new(2, 1).unwrap(), old_end] {
+            let old_local = timeline_time.try_sub(original.start).unwrap();
+            let new_local = timeline_time.try_sub(changed.start).unwrap();
+            assert_eq!(
+                original.time_map.try_map(old_local).unwrap(),
+                changed.time_map.try_map(new_local).unwrap()
+            );
+        }
+        assert_eq!(changed.source, original.source);
+        assert_eq!(changed.envelope, original.envelope);
+        working.validate().unwrap();
+    }
+}
+
+#[test]
+fn trim_clip_out_shrink_and_extend_change_only_duration() {
+    let (mut doc, layer) = layer_track_only_fixture();
+    let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] else {
+        unreachable!();
+    };
+    clip.start = RationalTime::try_new(-1, 1).unwrap();
+    clip.time_map = TimeMap::constant_speed(RationalTime::try_new(2, 1).unwrap(), 2, 1).unwrap();
+    let before = clip.clone();
+
+    for new_end in [
+        RationalTime::try_new(2, 1).unwrap(),
+        RationalTime::try_new(6, 1).unwrap(),
+    ] {
+        let cmd = reference_writer(doc.clone())
+            .prepare_trim_clip_out(layer, new_end)
+            .unwrap()
+            .unwrap();
+        let mut working = doc.clone();
+        cmd.apply(&mut working).unwrap();
+        let changed = clip_at(&working, layer);
+        assert_eq!(changed.start, before.start);
+        assert_eq!(changed.time_map, before.time_map);
+        assert_eq!(changed.duration, new_end.try_sub(before.start).unwrap());
+        assert_eq!(changed.source, before.source);
+        assert_eq!(changed.envelope, before.envelope);
+        working.validate().unwrap();
+    }
+}
+
+#[test]
+fn trim_clip_prepare_same_edges_return_none() {
+    let (doc, layer) = layer_track_only_fixture();
+    let writer = reference_writer(doc);
+    let snapshot = writer.snapshot();
+    let clip = clip_at(snapshot.as_ref(), layer);
+    let end = clip.start.try_add(clip.duration).unwrap();
+    assert!(writer
+        .prepare_trim_clip_in(layer, clip.start)
+        .unwrap()
+        .is_none());
+    assert!(writer.prepare_trim_clip_out(layer, end).unwrap().is_none());
+}
+
+#[test]
+fn trim_clip_rejects_targets_boundaries_and_corrupt_payload_without_mutation() {
+    let (doc, layer) = layer_track_only_fixture();
+    let (group_doc, group_layer) = group_fixture();
+    for prepare_in in [true, false] {
+        let writer = reference_writer(doc.clone());
+        let missing = if prepare_in {
+            writer
+                .prepare_trim_clip_in(LayerId::from_raw(999), RationalTime::ZERO)
+                .unwrap_err()
+        } else {
+            writer
+                .prepare_trim_clip_out(LayerId::from_raw(999), RationalTime::ZERO)
+                .unwrap_err()
+        };
+        assert!(matches!(missing, CommandError::LayerNotFound(999)));
+
+        let group_writer = reference_writer(group_doc.clone());
+        let group = if prepare_in {
+            group_writer
+                .prepare_trim_clip_in(group_layer, RationalTime::ZERO)
+                .unwrap_err()
+        } else {
+            group_writer
+                .prepare_trim_clip_out(group_layer, RationalTime::ZERO)
+                .unwrap_err()
+        };
+        assert!(
+            matches!(group, CommandError::TrackItemNotClip { layer } if layer == group_layer.get())
+        );
+    }
+
+    let writer = reference_writer(doc.clone());
+    let start = clip_at(&doc, layer).start;
+    let end = start.try_add(clip_at(&doc, layer).duration).unwrap();
+    for err in [
+        writer.prepare_trim_clip_in(layer, end).unwrap_err(),
+        writer.prepare_trim_clip_out(layer, start).unwrap_err(),
+    ] {
+        assert!(matches!(
+            err,
+            CommandError::Validate(DocumentError::NonPositiveClipDuration { layer_id })
+            if layer_id == layer.get()
+        ));
+    }
+    let past = doc
+        .composition
+        .duration
+        .try_add(RationalTime::try_new(1, 1).unwrap())
+        .unwrap();
+    assert!(matches!(
+        writer.prepare_trim_clip_out(layer, past).unwrap_err(),
+        CommandError::Validate(DocumentError::ClipPastComposition { layer_id, .. })
+        if layer_id == layer.get()
+    ));
+
+    let valid = writer
+        .prepare_trim_clip_in(layer, RationalTime::try_new(1, 1).unwrap())
+        .unwrap()
+        .unwrap();
+    let Command::TrimClipIn {
+        target,
+        old_start,
+        old_duration,
+        old_time_map,
+        new_start,
+        new_duration,
+        ..
+    } = valid
+    else {
+        unreachable!();
+    };
+    let corrupt = Command::TrimClipIn {
+        target,
+        old_start,
+        old_duration,
+        old_time_map,
+        new_start,
+        new_duration,
+        new_time_map: old_time_map,
+    };
+    let mut working = doc.clone();
+    assert!(matches!(
+        corrupt.apply(&mut working).unwrap_err(),
+        CommandError::InvalidClipTrim { layer: invalid } if invalid == layer.get()
+    ));
+    assert_eq!(working, doc);
+}
+
+#[test]
+fn trim_clip_non_cas_inverse_merge_and_replay_use_absolute_payloads() {
+    let (doc, layer) = layer_track_only_fixture();
+    let prepared = reference_writer(doc.clone())
+        .prepare_trim_clip_in(layer, RationalTime::try_new(1, 1).unwrap())
+        .unwrap()
+        .unwrap();
+    let mut divergent = doc.clone();
+    let TrackItem::Clip(clip) = &mut divergent.tracks[0].items[0] else {
+        unreachable!();
+    };
+    clip.start = RationalTime::try_new(-1, 1).unwrap();
+    clip.duration = RationalTime::try_new(6, 1).unwrap();
+    prepared.apply(&mut divergent).unwrap();
+    let after = divergent.clone();
+    prepared.inverse().apply(&mut divergent).unwrap();
+    assert_eq!(divergent, doc);
+
+    let edit = JournalEdit::new(prepared.clone());
+    let json = serde_json::to_string(&edit).unwrap();
+    assert!(json.contains("TrimClipIn"));
+    let decoded: JournalEdit = serde_json::from_str(&json).unwrap();
+    assert_eq!(decoded, edit);
+    let replayed = replay_single_edit(doc.clone(), &edit);
+    assert_eq!(replayed, after);
+
+    let mut writer = reference_writer(doc.clone());
+    let gesture = writer.begin_gesture();
+    let first = writer
+        .prepare_trim_clip_out(layer, RationalTime::try_new(4, 1).unwrap())
+        .unwrap()
+        .unwrap();
+    writer.apply_command(gesture, first).unwrap();
+    let second = writer
+        .prepare_trim_clip_out(layer, RationalTime::try_new(3, 1).unwrap())
+        .unwrap()
+        .unwrap();
+    writer.apply_command(gesture, second).unwrap();
+    assert_eq!(writer.undo_len(), 1);
+    writer.undo().unwrap();
+    assert_eq!(writer.snapshot().as_ref(), &doc);
+    writer.redo().unwrap();
+    assert_eq!(
+        clip_at(writer.snapshot().as_ref(), layer).duration,
+        RationalTime::try_new(3, 1).unwrap()
+    );
+}
+
+#[test]
+fn trim_clip_arithmetic_overflow_precedes_duration_rejection() {
+    let (mut in_doc, in_layer) = layer_track_only_fixture();
+    let TrackItem::Clip(in_clip) = &mut in_doc.tracks[0].items[0] else {
+        unreachable!();
+    };
+    in_clip.time_map = TimeMap::constant_speed(RationalTime::ZERO, 2, 1).unwrap();
+    assert!(matches!(
+        reference_writer(in_doc)
+            .prepare_trim_clip_in(in_layer, RationalTime::try_new(i64::MAX, 1).unwrap())
+            .unwrap_err(),
+        CommandError::Validate(DocumentError::ClipIntervalOverflow { layer_id })
+        if layer_id == in_layer.get()
+    ));
+
+    let (mut out_doc, out_layer) = layer_track_only_fixture();
+    let TrackItem::Clip(out_clip) = &mut out_doc.tracks[0].items[0] else {
+        unreachable!();
+    };
+    out_clip.start = RationalTime::try_new(-1, 1).unwrap();
+    assert!(matches!(
+        reference_writer(out_doc)
+            .prepare_trim_clip_out(out_layer, RationalTime::try_new(i64::MAX, 1).unwrap())
+            .unwrap_err(),
+        CommandError::Validate(DocumentError::ClipIntervalOverflow { layer_id })
+        if layer_id == out_layer.get()
+    ));
+}
+
+#[test]
+fn trim_clip_raw_same_value_is_identity_and_merge_keys_keep_edges_separate() {
+    let (doc, layer) = layer_track_only_fixture();
+    let clip = clip_at(&doc, layer);
+    let same_in = Command::TrimClipIn {
+        target: layer,
+        old_start: clip.start,
+        old_duration: clip.duration,
+        old_time_map: clip.time_map,
+        new_start: clip.start,
+        new_duration: clip.duration,
+        new_time_map: clip.time_map,
+    };
+    let same_out = Command::TrimClipOut {
+        target: layer,
+        old_duration: clip.duration,
+        new_duration: clip.duration,
+    };
+    for command in [&same_in, &same_out] {
+        let mut working = doc.clone();
+        command.apply(&mut working).unwrap();
+        assert_eq!(working, doc);
+    }
+
+    let gesture = motolii_doc::GestureId::from_raw(9);
+    let move_command = Command::SetClipStart {
+        target: layer,
+        old: clip.start,
+        new: clip.start,
+    };
+    assert_ne!(same_in.merge_key(gesture), same_out.merge_key(gesture));
+    assert_ne!(same_in.merge_key(gesture), move_command.merge_key(gesture));
+
+    let other_in = Command::TrimClipIn {
+        target: LayerId::from_raw(layer.get() + 1),
+        old_start: clip.start,
+        old_duration: clip.duration,
+        old_time_map: clip.time_map,
+        new_start: clip.start,
+        new_duration: clip.duration,
+        new_time_map: clip.time_map,
+    };
+    assert_ne!(same_in.merge_key(gesture), other_in.merge_key(gesture));
+
+    let mut writer = reference_writer(doc.clone());
+    let first = writer
+        .prepare_trim_clip_in(layer, RationalTime::try_new(1, 1).unwrap())
+        .unwrap()
+        .unwrap();
+    writer.apply_command(gesture, first).unwrap();
+    let second = writer
+        .prepare_trim_clip_in(layer, RationalTime::try_new(2, 1).unwrap())
+        .unwrap()
+        .unwrap();
+    writer.apply_command(gesture, second).unwrap();
+    assert_eq!(writer.undo_len(), 1);
+    writer.undo().unwrap();
+    assert_eq!(writer.snapshot().as_ref(), &doc);
+}
+
+#[test]
+fn trim_clip_out_v2_replay_and_both_edges_preserve_versions_and_ids() {
+    let (doc, layer) = layer_track_only_fixture();
+    let version = doc.version;
+    let min_reader = doc.min_reader_version;
+    let counter = doc.next_stable_id.peek_next();
+    let in_command = reference_writer(doc.clone())
+        .prepare_trim_clip_in(layer, RationalTime::try_new(1, 1).unwrap())
+        .unwrap()
+        .unwrap();
+    let out_command = reference_writer(doc.clone())
+        .prepare_trim_clip_out(layer, RationalTime::try_new(4, 1).unwrap())
+        .unwrap()
+        .unwrap();
+
+    for (tag, command) in [("TrimClipIn", in_command), ("TrimClipOut", out_command)] {
+        let edit = JournalEdit::new(command);
+        assert_eq!(edit.format_version, V2_EDIT_FORMAT_VERSION);
+        let json = serde_json::to_string(&edit).unwrap();
+        assert!(json.contains(tag));
+        let decoded: JournalEdit = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded, edit);
+        assert!(decoded.command.stable_id_reservation().is_none());
+        let replayed = replay_single_edit(doc.clone(), &edit);
+        assert_eq!(replayed.version, version);
+        assert_eq!(replayed.min_reader_version, min_reader);
+        assert_eq!(replayed.next_stable_id.peek_next(), counter);
+    }
+}
+
+#[test]
+fn trim_clip_allows_overlap_and_composition_end_boundary() {
+    let (doc, layer_a, layer_b) = overlap_fixture();
+    let comp = doc.composition.duration;
+    let a_end = clip_at(&doc, layer_a)
+        .start
+        .try_add(clip_at(&doc, layer_a).duration)
+        .unwrap();
+    let mut in_working = doc.clone();
+    reference_writer(doc.clone())
+        .prepare_trim_clip_in(layer_a, RationalTime::try_new(4, 1).unwrap())
+        .unwrap()
+        .unwrap()
+        .apply(&mut in_working)
+        .unwrap();
+    assert_eq!(
+        clip_at(&in_working, layer_a)
+            .start
+            .try_add(clip_at(&in_working, layer_a).duration)
+            .unwrap(),
+        a_end
+    );
+    in_working.validate().unwrap();
+
+    let mut out_working = doc.clone();
+    reference_writer(doc)
+        .prepare_trim_clip_out(layer_b, comp)
+        .unwrap()
+        .unwrap()
+        .apply(&mut out_working)
+        .unwrap();
+    assert_eq!(
+        clip_at(&out_working, layer_b)
+            .start
+            .try_add(clip_at(&out_working, layer_b).duration)
+            .unwrap(),
+        comp
+    );
+    out_working.validate().unwrap();
 }

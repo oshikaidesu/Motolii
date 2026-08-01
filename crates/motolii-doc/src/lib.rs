@@ -575,6 +575,24 @@ impl DocumentWriter {
     ) -> Result<Option<Command>, CommandError> {
         command::prepare_set_clip_start(&self.doc, target, new)
     }
+
+    /// CU-201T-S: 対象 Clip の左edgeを準備する。same-value は `None`。
+    pub fn prepare_trim_clip_in(
+        &self,
+        target: LayerId,
+        new_start: RationalTime,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_trim_clip_in(&self.doc, target, new_start)
+    }
+
+    /// CU-201T-S: 対象 Clip の右edgeを準備する。same-value は `None`。
+    pub fn prepare_trim_clip_out(
+        &self,
+        target: LayerId,
+        new_end: RationalTime,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_trim_clip_out(&self.doc, target, new_end)
+    }
 }
 
 /// 読み手API: スナップショットだけを受け、書き込めない。
