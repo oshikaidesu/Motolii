@@ -292,3 +292,37 @@ fingerprint／検収者mutation／order mutationの検出が発火する、
 - **`session resume`・model routing・reviewer変更で速度を解決しようとしない。** 本書§2と§7で反証済み
 - **調査を規約改訂へ直結させない。** 1回目の失敗（§3）は制約条件を言語化する前に検索したことが原因であり、
   検索の巧拙ではない。[docs/reviews/README.md](README.md)規律1・6を先に通す
+
+## 11. `Grok preflight → Spark → Opus final`固定fixture試行
+
+状態: **観察。正規routingへ未採択**
+
+2026-08-01、ユーザー提案により、重いOpusを最後の実diff検収へ置き、Grokを施工前の粒化preflightへ置く候補を
+一回だけ固定fixtureで試した。製品差分、正規runner、`AGENTS.md`の責任順序は変更していない。
+
+### fixtureと測定境界
+
+- baselineは`value.txt`の一行`before`、完成bytesは一行`after`
+- 変更許可は`value.txt`だけ。`verify.sh`は完成bytesと一行性を検査
+- Grokはread-only preflight、Sparkは一行施工と`verify.sh`、Opusはfresh sessionで実diffと機械証跡を最終検収
+- 三段ともstructured stream、heartbeat、300秒timeout、exit status、process group回収を持つ一時harnessで実行
+- raw streamは一時領域に保持し、hashと集約receiptを
+  [evidence receipt](evidence/supervision-grok-opus-calibration/receipt.txt)へ固定
+
+### receipt
+
+| stage | wall | input | cache read | output | result |
+|---|---:|---:|---:|---:|---|
+| Grok preflight | 22秒 | 25,477 | 3,200 | 341 | `READY P0/P1/P2=0` |
+| Spark | 18秒 | 49,040 | 45,312 | 1,533 | `verify.sh` exit 0、exact one-line diff |
+| Opus final (`high`) | 9秒 | 2 | 0 | 305 | `ACCEPT P0/P1/P2=0`、$0.035592 |
+| **合計** | **49秒** | — | — | — | 全stage exit 0 |
+
+現行方式の歴史的な一行fixtureはOpus prepare 12秒＋execute 62秒で約74秒だったため、候補runは観測値として
+25秒短い。ただし同一fixture bytes、同日時、同一cache状態のA/Bではなく、Spark inputも歴史値10,070に対して
+49,040と増えている。したがって**速度改善・コスト改善・品質改善は未証明**であり、model routing変更の根拠にはしない。
+
+この試行が示すのは、候補順序が実CLIで疎通し、固定fixture上では49秒で最終ACCEPTまで到達したことだけである。
+次に比較するなら凍結解除後の実製品一粒で、既存のlead time／wait time／first-pass accept／rework count／
+stale-base count／escaped finding／Codex integration loadを同じreceiptから採る。Opus最終検収は、事前相談と同じ
+sessionを再利用せず、実装者の思考を渡さないfresh sessionを維持する。

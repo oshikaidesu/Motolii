@@ -282,6 +282,22 @@ Opus 5を発注時の施工管理だけに限定しない。主担当Codexは、
 commit、push、PR作成、agent起動、再委任を行わず、回答はCodexが正本、現行コード、試験へ再照合する助言に留める。
 相談の完了を通常作業の一律barrierにせず、別視点が判断品質を実質的に上げる場合に使う。
 
+### 発注外相談の観測契約
+
+2026-08-01、正規runnerがstructured streamとheartbeatを発効済みだったにもかかわらず、発注外の
+Opus／Fable相談を生の`claude -p --output-format text`で起動し、完了前のstdout空を「無出力」と誤認して
+局所中断した。これはmodelの空回答でもrunnerの失敗でもなく、**監視包絡を相談経路へ適用しなかった運用欠陥**である。
+
+発注外相談も、structured stream、生event保存、30秒heartbeat、宣言timeout、exit status、process group回収を
+持つ監視包絡から起動する。`Script running`、完了前のstdout空、thinking未表示は利用不能の証拠にせず、完了resultの
+有無、exit status、timeout marker、主担当による局所中断の有無を既存の生eventと実行証拠のまま別々に報告する。
+新しいrunner outcome labelやreceipt schemaは作らない。同じClaude CLI transport上でOpusを局所中断した事実だけを
+Fable昇格条件にしない。監視包絡が使えない場合は生CLIへ戻らず、相談を省略してCodexが正本とコード事実で続行するか、
+当該相談だけを未実施として返す。
+
+この追補は2026-08-01のユーザー明示訂正に基づく。正規発注のmodel routing、独立性条件、凍結解除条件を変更せず、
+既に発効しているrunner観測契約の適用漏れだけを閉じるため、後段の改訂凍結を解除しない。
+
 ### 相談トリガー
 
 次のどれか一つが成立し、Opus 5の回答によって実装判断が変わり得る場合に呼ぶ。
@@ -506,6 +522,11 @@ churnを止めるための締めくくりである。以後、新しい規約項
    ため、計測手段の追加は凍結の趣旨に反しない。判定基準は
    [観察§10](2026-08-01-supervision-loop-cost-driver-observation.md#10-runner三層の要否を測る手順事前登録)へ
    事前登録する
+
+2026-08-01のユーザー明示訂正により、発注外相談へ既存のstructured stream／heartbeat／timeout証拠を適用する
+追補は、Codex裁量のrouting改訂でなく監視契約の適用漏れ修復として区別する。model routing、責任順序、runner接続方式、
+評価指標は変更しない。`Grok preflight → Spark → Opus final`候補の固定fixture実測はobservationに留め、正規routingへ
+昇格しない。
 
 改訂5(検収入力のslice化)は**設計が閉じていない**ため、実装として着手しない。設計を閉じる作業自体が
 規約改訂に当たるため、凍結解除後に扱う。
