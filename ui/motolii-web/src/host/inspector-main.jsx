@@ -39,6 +39,7 @@ const renderSnapshot = (raw) => {
       <InspectorCandidate
         inspectorReadModel={inspectorReadModel}
         onEffectParamGesture={inspectorHostSender.send}
+        onAddPositionKey={inspectorHostSender.sendAddPositionKey}
       />
     </main>,
   );

@@ -18,9 +18,9 @@ use crate::browser_host_runtime::{
     BrowserFocusTarget, BrowserHostRuntime, BrowserHostRuntimeError, BrowserLifecycleEvent,
 };
 use crate::document_edit_runtime::{
-    AttachEffectRequest, DocumentEditDispatchError, DocumentEditQueue, DocumentEditRuntime,
-    DocumentEditRuntimeError, MoveClipRequest, PlaceRectangleRequest, PublishedDocument,
-    SetPositionKeyInterpRequest, TrimClipEdge, TrimClipRequest,
+    AddPositionKeyRequest, AttachEffectRequest, DocumentEditDispatchError, DocumentEditQueue,
+    DocumentEditRuntime, DocumentEditRuntimeError, MoveClipRequest, PlaceRectangleRequest,
+    PublishedDocument, SetPositionKeyInterpRequest, TrimClipEdge, TrimClipRequest,
 };
 use crate::easing_popup_runtime::{
     EasingPopupError, EasingPopupInput, EasingPopupOpen, EasingPopupOutcome, EasingPopupRuntime,
@@ -1194,6 +1194,7 @@ impl ProductApp {
                             &self.current_document,
                             self.primary,
                             self.active_effect_use,
+                            self.projection_generation,
                         ) {
                             return self.fail(event_loop, error);
                         }
@@ -1232,6 +1233,10 @@ impl ProductApp {
     ) {
         match event {
             ProductEvent::Wake => {
+                if let Err(error) = self.process_add_position_key_intents(event_loop) {
+                    self.fail(event_loop, error);
+                    return;
+                }
                 if let Err(error) = self.process_stage_chrome_intents(event_loop) {
                     self.fail(event_loop, error);
                     return;
@@ -1656,6 +1661,7 @@ impl ProductApp {
                         &self.current_document,
                         self.primary,
                         self.active_effect_use,
+                        self.projection_generation,
                     ) {
                         return self.fail(event_loop, error);
                     }
@@ -1861,9 +1867,12 @@ impl ProductApp {
         self.primary = published.primary;
         self.projection_generation = published.projection_generation;
         if let Some(inspector) = &self.inspector {
-            if let Err(error) =
-                inspector.publish(&self.current_document, self.primary, self.active_effect_use)
-            {
+            if let Err(error) = inspector.publish(
+                &self.current_document,
+                self.primary,
+                self.active_effect_use,
+                self.projection_generation,
+            ) {
                 return self.fail(event_loop, error);
             }
         }
@@ -2027,6 +2036,45 @@ impl ProductApp {
                 interp: interval.interp,
             })?);
             self.publish_stage_chrome(true)?;
+        }
+        Ok(())
+    }
+
+    fn process_add_position_key_intents(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+    ) -> Result<(), ProductRuntimeError> {
+        loop {
+            let intent = match &self.inspector {
+                Some(inspector) => inspector
+                    .take_add_position_key()
+                    .map_err(InspectorHostRuntimeError::from)?,
+                None => None,
+            };
+            let Some(intent) = intent else {
+                break;
+            };
+            if self.primary != Some(intent.layer_id)
+                || self.projection_generation != intent.projection_generation
+            {
+                continue;
+            }
+            self.document_queue
+                .push_add_position_key(AddPositionKeyRequest {
+                    layer_id: intent.layer_id,
+                    playhead: self.playhead,
+                });
+            match self.document_runtime.process_next(
+                &mut self.document_queue,
+                self.primary,
+                self.projection_generation,
+            ) {
+                Ok(Some(published)) => {
+                    self.adopt_full_publish(event_loop, published, "add-position-key")
+                }
+                Ok(None) => {}
+                Err(error) => return Err(error.into()),
+            }
         }
         Ok(())
     }

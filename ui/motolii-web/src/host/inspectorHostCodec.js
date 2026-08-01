@@ -60,6 +60,30 @@ function exactActiveAmount(readModel) {
   });
 }
 
+function exactPositionControl(readModel) {
+  const control = readModel?.position_control;
+  if (control === undefined) return null;
+  requireExactKeys(
+    control,
+    ["layer_id", "projection_generation", "key_count"],
+    "Inspector position control",
+  );
+  if (
+    !Number.isSafeInteger(control.layer_id)
+    || control.layer_id <= 0
+    || !Number.isSafeInteger(control.projection_generation)
+    || control.projection_generation < 0
+    || !Number.isSafeInteger(control.key_count)
+    || control.key_count < 0
+  ) {
+    throw new TypeError("Inspector position control is invalid");
+  }
+  return Object.freeze({
+    layer_id: control.layer_id,
+    projection_generation: control.projection_generation,
+  });
+}
+
 function sameIdentity(left, right) {
   if (left === right) return true;
   if (left === null || right === null) return false;
@@ -72,6 +96,7 @@ export function createInspectorHostSender(postMessage) {
   }
 
   let identity = null;
+  let positionIdentity = null;
   let activeSession = null;
   let nextSession = 1;
 
@@ -81,6 +106,17 @@ export function createInspectorHostSender(postMessage) {
       activeSession = null;
     }
     identity = projectedIdentity;
+    positionIdentity = exactPositionControl(readModel);
+  };
+
+  const sendAddPositionKey = () => {
+    if (positionIdentity === null) {
+      throw new TypeError("Inspector Position has no exact key target");
+    }
+    postMessage(JSON.stringify({
+      kind: "add-position-key",
+      ...positionIdentity,
+    }));
   };
 
   const send = (event) => {
@@ -144,5 +180,5 @@ export function createInspectorHostSender(postMessage) {
     }
   };
 
-  return Object.freeze({ project, send });
+  return Object.freeze({ project, send, sendAddPositionKey });
 }

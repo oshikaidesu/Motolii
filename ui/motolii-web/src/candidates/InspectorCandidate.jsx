@@ -255,6 +255,7 @@ export function InspectorCandidate({
   renderPluginHistory,
   inspectorReadModel,
   onEffectParamGesture,
+  onAddPositionKey,
 }) {
   const [, syncRender] = useReducer((n) => n + 1, 0);
   const scrubSessionRef = useRef(null);
@@ -515,12 +516,38 @@ export function InspectorCandidate({
       })}
     </div>
   );
+  const positionControl = inspectorReadModel?.position_control;
+  const positionSection = positionControl === undefined ? null : (
+    <div className="section">
+      <div className="section-title">
+        TRANSFORM <span>OBJECT</span>
+      </div>
+      <div className="row">
+        <span className="param-label">
+          Position{" "}
+          <button
+            className={`automation-mark ${positionControl.key_count > 0 ? "on" : ""}`}
+            data-position-key-action="add"
+            aria-label="Add Position key at current playhead"
+            onClick={typeof onAddPositionKey === "function" ? onAddPositionKey : undefined}
+          />
+        </span>
+        <span className="value">Current playhead</span>
+        <span className="scrub-hint">
+          {positionControl.key_count === 0
+            ? ""
+            : `${positionControl.key_count} ${positionControl.key_count === 1 ? "KEY" : "KEYS"}`}
+        </span>
+      </div>
+    </div>
+  );
 
   if (mode === undefined && inspectorReadModel !== undefined) {
     return (
       <aside className="inspector" id="inspector">
         {panelHead}
         <div className="section">{targetIdentity}</div>
+        {positionSection}
         {activeEffectSection}
       </aside>
     );

@@ -6,6 +6,7 @@ const WRAPPER_KEYS = new Set([
   "nodes",
   "target",
   "active_effect_use_id",
+  "position_control",
 ]);
 
 const REQUIRED_WRAPPER_KEYS = ["fixtureRevision", "document", "nodes", "target"];
@@ -596,7 +597,53 @@ function validateWrapper(input) {
       "wrapper.active_effect_use_id",
     );
   }
-  return { doc, nodes, layerId, activeEffectUseId };
+  let positionControl;
+  if (Object.hasOwn(root, "position_control")) {
+    const control = requireObject(root.position_control, "4", "wrapper.position_control");
+    requireExactObjectKeys(
+      control,
+      ["layer_id", "projection_generation", "key_count"],
+      "wrapper.position_control",
+    );
+    const controlLayerId = requireInteger(
+      control.layer_id,
+      "5",
+      "wrapper.position_control.layer_id",
+    );
+    if (controlLayerId !== layerId) {
+      fail("7", "wrapper.position_control.layer_id", "does not match target layer");
+    }
+    const projectionGeneration = requireInteger(
+      control.projection_generation,
+      "5",
+      "wrapper.position_control.projection_generation",
+    );
+    if (projectionGeneration < 0) {
+      fail("5", "wrapper.position_control.projection_generation", "expected non-negative integer");
+    }
+    const keyCount = requireInteger(
+      control.key_count,
+      "5",
+      "wrapper.position_control.key_count",
+    );
+    if (keyCount < 0) {
+      fail("10", "wrapper.position_control", "invalid key state");
+    }
+    positionControl = {
+      layer_id: controlLayerId,
+      projection_generation: projectionGeneration,
+      key_count: keyCount,
+    };
+  }
+  return { doc, nodes, layerId, activeEffectUseId, positionControl };
+}
+
+function requireExactObjectKeys(value, expected, owner) {
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
+    fail("4", owner, "unexpected object keys");
+  }
 }
 
 function findItemsForLayer(doc, layerId) {
@@ -843,7 +890,7 @@ function assertNoForbiddenOutputKeys(value, owner) {
 }
 
 function decodeInspectorReadModel(input) {
-  const { doc, nodes, layerId, activeEffectUseId } = validateWrapper(input);
+  const { doc, nodes, layerId, activeEffectUseId, positionControl } = validateWrapper(input);
   const { layerIds, layerNames } = collectLayerIds(doc);
   if (!layerIds.has(layerId)) {
     fail("7", "wrapper.target.layer_id", `dangling layer id ${layerId}`);
@@ -905,6 +952,9 @@ function decodeInspectorReadModel(input) {
     target: targetOut,
     effect_definitions,
   };
+  if (positionControl !== undefined) {
+    output.position_control = positionControl;
+  }
   if (activeEffectUseId !== undefined) {
     output.active_effect = projectActiveEffect(
       doc,

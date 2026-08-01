@@ -13,8 +13,74 @@ use crate::{map_parameter_control, HostParameterControl};
 const PROTOCOL: &str = "motolii-inspector";
 const ENTRY_URL: &str = "motolii-inspector://product/inspector.html";
 const MAX_PENDING_TERMINALS: usize = 64;
+const MAX_PENDING_POSITION_KEYS: usize = 8;
 
 type InspectorWake = Arc<dyn Fn() + Send + Sync>;
+
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
+pub(crate) struct InspectorPositionControl {
+    pub(crate) layer_id: motolii_doc::LayerId,
+    pub(crate) projection_generation: u64,
+    pub(crate) key_count: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct AddPositionKeyIntent {
+    pub(crate) layer_id: motolii_doc::LayerId,
+    pub(crate) projection_generation: u64,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AddPositionKeyMessage {
+    #[serde(rename = "kind")]
+    _kind: AddPositionKeyKind,
+    layer_id: motolii_doc::LayerId,
+    projection_generation: u64,
+}
+
+#[derive(Debug, serde::Deserialize)]
+enum AddPositionKeyKind {
+    #[serde(rename = "add-position-key")]
+    AddPositionKey,
+}
+
+#[derive(Debug)]
+struct AddPositionKeyInbox {
+    expected: Option<AddPositionKeyIntent>,
+    pending: VecDeque<AddPositionKeyIntent>,
+}
+
+impl AddPositionKeyInbox {
+    fn new(expected: Option<AddPositionKeyIntent>) -> Self {
+        Self {
+            expected,
+            pending: VecDeque::new(),
+        }
+    }
+
+    fn reconcile(&mut self, expected: Option<AddPositionKeyIntent>) {
+        if self.expected != expected {
+            self.expected = expected;
+            self.pending.clear();
+        }
+    }
+
+    fn accept(&mut self, message: AddPositionKeyMessage) -> Result<(), AddPositionKeyIntentError> {
+        let intent = AddPositionKeyIntent {
+            layer_id: message.layer_id,
+            projection_generation: message.projection_generation,
+        };
+        if self.expected != Some(intent) {
+            return Err(AddPositionKeyIntentError::IdentityMismatch);
+        }
+        if self.pending.len() >= MAX_PENDING_POSITION_KEYS {
+            return Err(AddPositionKeyIntentError::InboxFull);
+        }
+        self.pending.push_back(intent);
+        Ok(())
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct InspectorGestureUpdate {
@@ -251,6 +317,7 @@ impl InspectorGestureInbox {
 
 pub(crate) struct InspectorHostRuntime {
     gesture_inbox: Arc<Mutex<InspectorGestureInbox>>,
+    position_key_inbox: Arc<Mutex<AddPositionKeyInbox>>,
     wake: Arc<Mutex<Option<InspectorWake>>>,
     webview: WebView,
     latest_layout_epoch: Option<u64>,
@@ -266,6 +333,7 @@ impl InspectorHostRuntime {
         let created_at = std::time::Instant::now();
         let snapshot = snapshot_json(document, primary, active_effect_use)?;
         let gesture_identity = gesture_identity(document, primary, active_effect_use)?;
+        let position_control = position_control(document, primary, 0);
         let encoded_snapshot = javascript_json_parse_argument(&snapshot)?;
         let initialization_script = format!(
             r#"window.__MOTOLII_INSPECTOR_HOST__=(()=>{{
@@ -280,8 +348,12 @@ postMessage:(message)=>window.ipc.postMessage(message)
 }})();"#
         );
         let gesture_inbox = Arc::new(Mutex::new(InspectorGestureInbox::new(gesture_identity)));
+        let position_key_inbox = Arc::new(Mutex::new(AddPositionKeyInbox::new(
+            position_control.map(position_intent),
+        )));
         let wake = Arc::new(Mutex::new(None::<InspectorWake>));
         let callback_inbox = Arc::clone(&gesture_inbox);
+        let callback_position_key_inbox = Arc::clone(&position_key_inbox);
         let callback_wake = Arc::clone(&wake);
         let webview = WebViewBuilder::new()
             .with_bounds(Rect {
@@ -296,10 +368,18 @@ postMessage:(message)=>window.ipc.postMessage(message)
             .with_navigation_handler(|target| target.starts_with("motolii-inspector:"))
             .with_ipc_handler(move |request| {
                 let raw = request.body();
-                let accepted = callback_inbox
-                    .lock()
-                    .map_err(|_| InspectorGestureError::InboxPoisoned)
-                    .and_then(|mut inbox| inbox.accept(raw));
+                let accepted = match serde_json::from_str::<AddPositionKeyMessage>(raw) {
+                    Ok(message) => callback_position_key_inbox
+                        .lock()
+                        .map_err(|_| AddPositionKeyIntentError::InboxPoisoned)
+                        .and_then(|mut inbox| inbox.accept(message))
+                        .map_err(InspectorIpcError::from),
+                    Err(_) => callback_inbox
+                        .lock()
+                        .map_err(|_| InspectorGestureError::InboxPoisoned)
+                        .and_then(|mut inbox| inbox.accept(raw))
+                        .map_err(InspectorIpcError::from),
+                };
                 match accepted {
                     Ok(()) => {
                         crate::ui_numeric_trace::emit(format_args!(
@@ -323,6 +403,7 @@ postMessage:(message)=>window.ipc.postMessage(message)
         ));
         Ok(Self {
             gesture_inbox,
+            position_key_inbox,
             wake,
             webview,
             latest_layout_epoch: None,
@@ -357,6 +438,17 @@ postMessage:(message)=>window.ipc.postMessage(message)
             .lock()
             .map_err(|_| InspectorGestureError::InboxPoisoned)?
             .terminals
+            .pop_front())
+    }
+
+    pub(crate) fn take_add_position_key(
+        &self,
+    ) -> Result<Option<AddPositionKeyIntent>, AddPositionKeyIntentError> {
+        Ok(self
+            .position_key_inbox
+            .lock()
+            .map_err(|_| AddPositionKeyIntentError::InboxPoisoned)?
+            .pending
             .pop_front())
     }
 
@@ -398,13 +490,24 @@ postMessage:(message)=>window.ipc.postMessage(message)
         document: &motolii_doc::Document,
         primary: Option<motolii_doc::LayerId>,
         active_effect_use: Option<motolii_doc::EffectId>,
+        projection_generation: u64,
     ) -> Result<(), InspectorHostRuntimeError> {
-        let snapshot = snapshot_json(document, primary, active_effect_use)?;
+        let snapshot = snapshot_json_with_position_generation(
+            document,
+            primary,
+            active_effect_use,
+            projection_generation,
+        )?;
         let gesture_identity = gesture_identity(document, primary, active_effect_use)?;
+        let position_control = position_control(document, primary, projection_generation);
         self.gesture_inbox
             .lock()
             .map_err(|_| InspectorGestureError::InboxPoisoned)?
             .reconcile(gesture_identity);
+        self.position_key_inbox
+            .lock()
+            .map_err(|_| AddPositionKeyIntentError::InboxPoisoned)?
+            .reconcile(position_control.map(position_intent));
         let encoded_snapshot = javascript_json_parse_argument(&snapshot)?;
         crate::ui_numeric_trace::emit(format_args!(
             "kind=webview surface=inspector event=publish primary_present={} payload_bytes={}",
@@ -518,6 +621,15 @@ fn snapshot_json(
     primary: Option<motolii_doc::LayerId>,
     active_effect_use: Option<motolii_doc::EffectId>,
 ) -> Result<serde_json::Value, InspectorHostRuntimeError> {
+    snapshot_json_with_position_generation(document, primary, active_effect_use, 0)
+}
+
+fn snapshot_json_with_position_generation(
+    document: &motolii_doc::Document,
+    primary: Option<motolii_doc::LayerId>,
+    active_effect_use: Option<motolii_doc::EffectId>,
+    projection_generation: u64,
+) -> Result<serde_json::Value, InspectorHostRuntimeError> {
     if let Some(active_effect_use) = active_effect_use {
         let Some(primary) = primary else {
             return Err(InspectorHostRuntimeError::ActiveEffectWithoutPrimary {
@@ -575,7 +687,65 @@ fn snapshot_json(
         nodes,
         target: InspectorTarget { layer_id: primary },
         active_effect_use_id: active_effect_use,
+        position_control: position_control(document, Some(primary), projection_generation),
     })?)
+}
+
+fn position_intent(control: InspectorPositionControl) -> AddPositionKeyIntent {
+    AddPositionKeyIntent {
+        layer_id: control.layer_id,
+        projection_generation: control.projection_generation,
+    }
+}
+
+fn position_control(
+    document: &motolii_doc::Document,
+    primary: Option<motolii_doc::LayerId>,
+    projection_generation: u64,
+) -> Option<InspectorPositionControl> {
+    let layer_id = primary?;
+    let position = &find_envelope(document, layer_id)?.transform.position;
+    let key_count = match position {
+        motolii_doc::DocParam::Const(motolii_doc::DocValue::Vec2(_)) => 0,
+        motolii_doc::DocParam::Keyframes(track) => track.keys().len(),
+        _ => return None,
+    };
+    Some(InspectorPositionControl {
+        layer_id,
+        projection_generation,
+        key_count,
+    })
+}
+
+fn find_envelope(
+    document: &motolii_doc::Document,
+    target: motolii_doc::LayerId,
+) -> Option<&motolii_doc::ItemEnvelope> {
+    fn in_items(
+        items: &[motolii_doc::TrackItem],
+        target: motolii_doc::LayerId,
+    ) -> Option<&motolii_doc::ItemEnvelope> {
+        for item in items {
+            let envelope = match item {
+                motolii_doc::TrackItem::Clip(clip) => &clip.envelope,
+                motolii_doc::TrackItem::Group(group) => &group.envelope,
+            };
+            if envelope.layer_id == target {
+                return Some(envelope);
+            }
+            if let motolii_doc::TrackItem::Group(group) = item {
+                if let Some(found) = in_items(&group.children, target) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+
+    document
+        .tracks
+        .iter()
+        .find_map(|track| in_items(&track.items, target))
 }
 
 fn doc_value_from_plugin(value: &motolii_plugin::Value) -> motolii_doc::DocValue {
@@ -608,6 +778,8 @@ struct InspectorSnapshot<'a> {
     target: InspectorTarget,
     #[serde(skip_serializing_if = "Option::is_none")]
     active_effect_use_id: Option<motolii_doc::EffectId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    position_control: Option<InspectorPositionControl>,
 }
 
 #[derive(serde::Serialize)]
@@ -665,6 +837,8 @@ pub(crate) enum InspectorHostRuntimeError {
     #[error(transparent)]
     Gesture(#[from] InspectorGestureError),
     #[error(transparent)]
+    PositionKey(#[from] AddPositionKeyIntentError),
+    #[error(transparent)]
     Catalog(#[from] motolii_plugin::PluginContractError),
     #[error(transparent)]
     ParameterControl(#[from] crate::ParameterControlError),
@@ -672,6 +846,24 @@ pub(crate) enum InspectorHostRuntimeError {
     Json(#[from] serde_json::Error),
     #[error("Inspector Host WebView failed")]
     WebView(#[from] wry::Error),
+}
+
+#[derive(Debug, thiserror::Error)]
+enum InspectorIpcError {
+    #[error(transparent)]
+    Gesture(#[from] InspectorGestureError),
+    #[error(transparent)]
+    PositionKey(#[from] AddPositionKeyIntentError),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum AddPositionKeyIntentError {
+    #[error("Inspector Add Position Key identity does not match the current projection")]
+    IdentityMismatch,
+    #[error("Inspector Add Position Key inbox is full")]
+    InboxFull,
+    #[error("Inspector Add Position Key inbox lock is poisoned")]
+    InboxPoisoned,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -861,6 +1053,35 @@ mod tests {
             .as_object()
             .unwrap()
             .contains_key("active_effect_use_id"));
+        assert_eq!(snapshot["position_control"]["layer_id"], primary.get());
+        assert_eq!(snapshot["position_control"]["projection_generation"], 0);
+        assert_eq!(snapshot["position_control"]["key_count"], 0);
+    }
+
+    #[test]
+    fn add_position_key_inbox_rejects_stale_identity_and_clears_on_projection_change() {
+        let expected = AddPositionKeyIntent {
+            layer_id: motolii_doc::LayerId::from_raw(5),
+            projection_generation: 9,
+        };
+        let message = || AddPositionKeyMessage {
+            _kind: AddPositionKeyKind::AddPositionKey,
+            layer_id: expected.layer_id,
+            projection_generation: expected.projection_generation,
+        };
+        let mut inbox = AddPositionKeyInbox::new(Some(expected));
+        inbox.accept(message()).unwrap();
+        assert_eq!(inbox.pending.pop_front(), Some(expected));
+        inbox.accept(message()).unwrap();
+        inbox.reconcile(Some(AddPositionKeyIntent {
+            projection_generation: 10,
+            ..expected
+        }));
+        assert!(inbox.pending.is_empty());
+        assert!(matches!(
+            inbox.accept(message()),
+            Err(AddPositionKeyIntentError::IdentityMismatch)
+        ));
     }
 
     #[test]

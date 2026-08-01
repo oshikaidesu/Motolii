@@ -22,6 +22,17 @@ function activeAmount(value = 0.72) {
   };
 }
 
+function positionControl(overrides = {}) {
+  return {
+    position_control: {
+      layer_id: 5,
+      projection_generation: 9,
+      key_count: 1,
+      ...overrides,
+    },
+  };
+}
+
 test("emits exact identity with monotonic gesture session and sequence", () => {
   const messages = [];
   const sender = createInspectorHostSender((raw) => messages.push(JSON.parse(raw)));
@@ -111,4 +122,29 @@ test("validation and postMessage failure do not partially advance a gesture", ()
   sender.send({ phase: "cancel", paramId: "amount" });
   assert.equal(messages[0].session, 1);
   assert.equal(messages[0].sequence, 1);
+});
+
+test("emits one exact Add Position Key identity from the current projection", () => {
+  const messages = [];
+  const sender = createInspectorHostSender((raw) => messages.push(JSON.parse(raw)));
+  sender.project(positionControl());
+  sender.sendAddPositionKey();
+  assert.deepEqual(messages, [{
+    kind: "add-position-key",
+    layer_id: 5,
+    projection_generation: 9,
+  }]);
+});
+
+test("fails closed for absent or malformed Position key projections", () => {
+  const messages = [];
+  const sender = createInspectorHostSender((raw) => messages.push(raw));
+  assert.throws(() => sender.sendAddPositionKey());
+  for (const projection of [
+    positionControl({ projection_generation: -1 }),
+    positionControl({ key_count: -1 }),
+  ]) {
+    assert.throws(() => sender.project(projection));
+  }
+  assert.equal(messages.length, 0);
 });

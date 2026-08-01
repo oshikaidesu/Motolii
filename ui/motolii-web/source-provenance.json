@@ -248,6 +248,13 @@
       "reason": "VS-2 active amount gesture local presentation seam",
       "fixedSourceSha256": "a1af604c78113f4df0538c3045b19d51c1d3fc8c6740305abc47b7e8a2d10f37",
       "currentSha256": "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e"
+    },
+    {
+      "task": "U4b-0P",
+      "file": "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
+      "reason": "Position key action seat in the existing safe product branch",
+      "fixedSourceSha256": "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e",
+      "currentSha256": "013025c3b98c68549c7d7a546dd20b615164432a0ca1d4cb23783a135951dcab"
     }
   ]
 }

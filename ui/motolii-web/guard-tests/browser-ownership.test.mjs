@@ -115,7 +115,7 @@ const EXPECTED_KEY_TOOLS_SHA256 =
 const EXPECTED_KEY_TOOLS_CSS_SHA256 =
   "f84eb7f98f05844fa3bfc72b702cee2709f1fc0bb9be614f2b01039a65b5190d";
 const EXPECTED_INSPECTOR_SHA256 =
-  "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e";
+  "013025c3b98c68549c7d7a546dd20b615164432a0ca1d4cb23783a135951dcab";
 const EXPECTED_INSPECTOR_CSS_SHA256 =
   "730e2861a893b2b07fa66d5acef0038a49bdcf337e8c5a037785b0a58d829cbe";
 const INSPECTOR_POST_PROMOTION_TASK = "CU-0A08ITP";
@@ -131,6 +131,8 @@ const CU205P_INSPECTOR_REASON =
   "VS-2 active Effect Inspector read-only control projection";
 const CU205P_INSPECTOR_CURRENT_SHA256 =
   "a1af604c78113f4df0538c3045b19d51c1d3fc8c6740305abc47b7e8a2d10f37";
+const CU205WA1_INSPECTOR_CURRENT_SHA256 =
+  "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e";
 
 const ALLOWED_EXTERNAL_PACKAGES = ["react", "html-react-parser"];
 const SEAM_COMPONENT_NAME = "CandidateCreateBrowser";
@@ -731,6 +733,7 @@ function validateInspectorSafeBranch(sourceText) {
   assert.deepEqual(expressionBindings, [
     "panelHead",
     "targetIdentity",
+    "positionSection",
     "activeEffectSection",
   ]);
   assert.deepEqual(textValues, []);
@@ -960,6 +963,7 @@ test("validates decoded Inspector target projection into the existing identity J
       '<div className="section">{targetIdentity}</div>',
       '<div className="section">Pulse rings</div>',
     ),
+    source.replace("        {positionSection}\n", ""),
   ]) {
     assert.throws(() => validateInspectorSafeBranch(candidate));
   }
@@ -1130,12 +1134,12 @@ test("validates Inspector post-promotion provenance as an append-only chain", as
   );
   assert.doesNotThrow(() =>
     validateInspectorPostPromotionChanges(provenance, currentInspectorSha256));
-  assert.equal(provenance.inspectorPostPromotionChanges.length, 4);
+  assert.equal(provenance.inspectorPostPromotionChanges.length, 5);
   assert.deepEqual(provenance.inspectorPostPromotionChanges.at(-1), {
-    task: "CU-205W-A1",
+    task: "U4b-0P",
     file: INSPECTOR_POST_PROMOTION_FILE,
-    reason: "VS-2 active amount gesture local presentation seam",
-    fixedSourceSha256: CU205P_INSPECTOR_CURRENT_SHA256,
+    reason: "Position key action seat in the existing safe product branch",
+    fixedSourceSha256: CU205WA1_INSPECTOR_CURRENT_SHA256,
     currentSha256: currentInspectorSha256,
   });
   assert.deepEqual(provenance.privateRuntimeSources, [{
