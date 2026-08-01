@@ -341,8 +341,8 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-201S | `SPEC / DONE` | move/trim/snapの責任と実装順を分割 | CU-105R/U3a-1I、CU-106P | Clip interval command 0、既存hit/selection/single writer再利用。M-S完了後はM-C/T-Sを並列可能 | 未決のcommand/TimeMap/snap意味を同時採択 |
 | CU-201M-S | `SPEC / DONE` | Clip moveの永続command意味を決定 | CU-201S | [契約決定](2026-08-01-cu-201m-s-clip-start-command-contract-decision.md)で同一lane `SetClipStart`、負開始/overlap許可、end上限、old/new対称、v2 journalを固定 | UI drag都合から公開commandを決める |
 | CU-201M-C | `CORE / DO` | 決定済みmove command / Writer prepare | CU-201M-S | journal replay、1 Undo、失敗時Document不変 | raw mutation、schema shortcut |
-| CU-201T-S | `SPEC / DO` | in/out trimとTimeMap意味を決定 | CU-201M-S | source time、duration、境界、inverse、拒否順 | move意味と一粒化 |
-| CU-201T-C | `CORE / WAIT` | 決定済みtrim command / Writer prepare | CU-201T-S、CU-201M-C | journal replay、1 Undo、失敗時Document不変 | test期待値から意味を発明 |
+| CU-201T-S | `SPEC / DONE` | in/out trimとTimeMap意味を決定 | CU-201M-S | [CU-201T-S契約](2026-08-01-cu-201t-s-clip-trim-timemap-contract-decision.md)で明示2 command、厳密source写像、absolute old/new、duration > 0、拒否順を固定 | move意味と一粒化 |
+| CU-201T-C | `CORE / DO` | 決定済みtrim command / Writer prepare | CU-201T-S、CU-201M-C | journal replay、1 Undo、失敗時Document不変 | test期待値から意味を発明 |
 | CU-201N-S | `SPEC / WAIT` | snap target / priority / unitを決定 | CU-201M-C、CU-201T-C | deterministic tie-break、no-snap、zoom/DPI/fps非依存 | U7 beat/markerを先取り |
 | CU-201P | `PRODUCT / WAIT` | native Timeline gestureをD2へ接続 | CU-201N-S | drag write 0、release 1 Undo、Cancel 0 | hover/focus/range/transportを束ねる |
 | CU-201R | `ORACLE / WAIT` | random move/trim系列を固定 | CU-201P | 重複0、相対位置、全Undo、Cancel 0 | 未決意味をoracleから逆算 |

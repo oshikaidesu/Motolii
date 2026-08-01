@@ -130,7 +130,7 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 | `P01-C2` | `TARGET_MISSING` | 固定sourceの未移管componentをsurface別に一件特定し、実コードからdynamic transitionのowner/input/intent/stale ruleを埋める | product単一owner、mockはconsumer |
 | `P01-C3` | `TARGET_MISSING` | Browser以外で欠けるrole別epoch/reload callbackを一件特定 | crash/reload後に同じsnapshotを再投影 |
 | `P01-C4` | `SPEC_ONLY` | detach時のWorkspace codecとtop-level再生成境界を一問で固定 | layoutを復元してDocument不変 |
-| `P02-C1` | `SPEC_ONLY` | 現行`DO`の`CU-201T-S`でtrim意味を閉じる。次に`CU-201T-C` | trimがjournal replay可能で1 Undo |
+| `P02-C1` | `IMPLEMENT` | `CU-201T-S`で閉じた`TrimClipIn` / `TrimClipOut`を`CU-201T-C`で既存D2へ接続 | trimがjournal replay可能で1 Undo |
 | `P02-C2` | `VERIFY_ONLY` | 既存journal→apply→publish routeの失敗oracleを再実行。理由なく再構成しない | 全surfaceが同じpublished snapshotを読む |
 | `P02-C3` | `TARGET_MISSING` | selection成立済み部分を除き、essential focusまたはplayhead consumerを一件特定 | UI stateをDocumentへ保存せず一方向publish |
 | `P03-C1` | `VERIFY_ONLY` | 100k key狭域projectionと同名label/typed identity oracle。renderer本体を再実装しない | visible workがbounded |
@@ -162,34 +162,35 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 
 ## 5. 現在発行できるorder
 
-現時点で製品codeを変更する`IMPLEMENT`は選定しない。発行可能なのは次の二本であり、目的が異なるため並列可。
+`CU-201T-S`の意味閉鎖により、製品codeを変更する最初の`IMPLEMENT`として`CU-201T-C`を発行できる。
+`P03-C1-VERIFY`は独立だが、直列速度測定中は同時発行しない。
 
-### 5.1 `CU-201T-S` — trim意味の閉鎖
+### 5.1 `CU-201T-C` — trim command接続
 
 ```text
 INPUT:
-  existing SetClipStart move contract
-  Clip.start / duration / TimeMap / source interval authority
+  CU-201T-S TrimClipIn / TrimClipOut contract
+  existing SetClipStart command / Writer / undo / JournalEdit v2 route
 
-DECIDE ONLY:
-  trim-in and trim-out changed fields
-  source-time mapping
-  minimum duration and boundary rejection
-  inverse command and replay expectation
+IMPLEMENT:
+  two explicit command variants and distinct merge properties
+  Writer prepare from new left/right edge
+  atomic apply / inverse / merge / v2 replay
+  exact RationalTime and typed rejection matrix
 
 WRITE:
-  docs/specs/M3-ui-integration.md
-  one decision document
-  docs/decision-index.md
-  docs/implementation-ledger.md
+  crates/motolii-doc/src/command.rs
+  crates/motolii-doc/src/undo.rs
+  crates/motolii-doc/tests/ only where the existing command oracle family owns the test
 
 FORBIDDEN:
-  Rust implementation
-  journal version change
-  schema/public/plugin contract change
+  generic interval command
+  delta payload or live-speed replay recomputation
+  schema/journal version/plugin contract change
+  snap/ripple/slip/retime/UI gesture
 
 EXIT:
-  CU-201T-C can be emitted with one command owner and exact oracle
+  in/out shrink and extend, inverse, merge, JSON/WAL replay and every reject leave exact state
 ```
 
 ### 5.2 `P03-C1-VERIFY` — bounded Timeline oracle候補
