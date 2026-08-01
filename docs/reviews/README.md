@@ -410,3 +410,13 @@
 | [2026-07-30-sd-02g-product-host-layout-geometry-implementation-decision.md](2026-07-30-sd-02g-product-host-layout-geometry-implementation-decision.md) | SD-02G product Host layout geometry単一owner実装 |
 | [2026-07-31-repository-validation-topology-decision.md](2026-07-31-repository-validation-topology-decision.md) | Cargo単独完了ownerをRust laneへ限定し、repository検証と外部審判を分離する決定 |
 | [2026-08-01-supervision-loop-cost-driver-observation.md](2026-08-01-supervision-loop-cost-driver-observation.md) | 監督ループの速度支配項と計装(rework支配・文献監査・銀の弾丸不在) |
+| [2026-07-31-cu-0b02c-component-state-source-supply-decision.md](2026-07-31-cu-0b02c-component-state-source-supply-decision.md) | CU-0B02C component state source / supply裁定 |
+| [2026-07-31-cu-0b02cv-private-carry-final-disposition.md](2026-07-31-cu-0b02cv-private-carry-final-disposition.md) | CU-0B02C-V component-private carry最終処分 |
+| [2026-07-31-cu-203-feedback-source-ownership-split-decision.md](2026-07-31-cu-203-feedback-source-ownership-split-decision.md) | CU-203 共通feedback source / ownership分割決定 |
+| [2026-07-31-cu-204-staged-diagnostic-projection-split-decision.md](2026-07-31-cu-204-staged-diagnostic-projection-split-decision.md) | CU-204 段階診断投影 S/A/P分割決定 |
+| [2026-07-31-cu-204a-diagnostic-projection-adapter-implementation-decision.md](2026-07-31-cu-204a-diagnostic-projection-adapter-implementation-decision.md) | CU-204A 純粋段階診断投影adapter実装決定 |
+| [2026-07-31-cu-205s-opacity-direct-route-split-decision.md](2026-07-31-cu-205s-opacity-direct-route-split-decision.md) | CU-205S first-party Opacity Direct通常製品route分割決定 |
+| [2026-08-01-cu-205e-opacity-normal-product-route-e2e-receipt.md](2026-08-01-cu-205e-opacity-normal-product-route-e2e-receipt.md) | CU-205E Opacity通常製品route E2E receipt |
+| [2026-08-01-cu-204p-normal-source-readiness-recheck.md](2026-08-01-cu-204p-normal-source-readiness-recheck.md) | CU-204P 通常製品source到達性の再確認 |
+| [2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md](2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | CU-201 U3b move/trim/snap責任分割決定 |
+| [2026-08-01-cu-201m-s-clip-start-command-contract-decision.md](2026-08-01-cu-201m-s-clip-start-command-contract-decision.md) | CU-201M-S Clip start command契約決定 |

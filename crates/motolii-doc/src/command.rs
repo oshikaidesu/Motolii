@@ -12,6 +12,8 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use motolii_core::RationalTime;
+
 use crate::duplicate::{definition_semantic_body_eq, remint_order_keyframe_ids};
 use crate::param::DocParam;
 use crate::schema::{
@@ -55,6 +57,7 @@ pub enum PropertyId {
     AudioEnabled(usize),
     AudioGain(usize),
     ChildList,
+    ClipStart,
 }
 
 impl From<ScalarPropertyId> for PropertyId {
@@ -116,6 +119,7 @@ pub enum CommandKind {
     SetAudioComponentGain,
     AddTrackItem,
     RemoveTrackItem,
+    SetClipStart,
 }
 
 /// S18: `gesture_id + command_kind + target_stable_id + property_id`。
@@ -133,6 +137,8 @@ pub enum CommandError {
     EmptyMacro,
     #[error("layer {0} not found")]
     LayerNotFound(u64),
+    #[error("track item {layer} is not a Clip")]
+    TrackItemNotClip { layer: u64 },
     #[error("track {0} not found")]
     TrackNotFound(u64),
     #[error("group {0} not found (or is not a Group)")]
@@ -353,6 +359,11 @@ pub enum Command {
         /// subtreeの表示名。台帳から外したあと、inverseのAddで復元する。
         layer_names: BTreeMap<LayerId, String>,
     },
+    SetClipStart {
+        target: LayerId,
+        old: RationalTime,
+        new: RationalTime,
+    },
 }
 
 impl Command {
@@ -384,6 +395,7 @@ impl Command {
             Command::SetAudioComponentGain { .. } => CommandKind::SetAudioComponentGain,
             Command::AddTrackItem { .. } => CommandKind::AddTrackItem,
             Command::RemoveTrackItem { .. } => CommandKind::RemoveTrackItem,
+            Command::SetClipStart { .. } => CommandKind::SetClipStart,
         }
     }
 
@@ -398,7 +410,8 @@ impl Command {
             | Command::RemoveEffect { target, .. }
             | Command::SetEffectEnabled { target, .. }
             | Command::SetAudioComponentEnabled { target, .. }
-            | Command::SetAudioComponentGain { target, .. } => target.get(),
+            | Command::SetAudioComponentGain { target, .. }
+            | Command::SetClipStart { target, .. } => target.get(),
             Command::CreateEffect { target, .. }
             | Command::UndoCreateEffect { target, .. }
             | Command::LinkEffectUse { target, .. }
@@ -442,6 +455,7 @@ impl Command {
             Command::SetAudioComponentEnabled { index, .. } => PropertyId::AudioEnabled(*index),
             Command::SetAudioComponentGain { index, .. } => PropertyId::AudioGain(*index),
             Command::AddTrackItem { .. } | Command::RemoveTrackItem { .. } => PropertyId::ChildList,
+            Command::SetClipStart { .. } => PropertyId::ClipStart,
         }
     }
 
@@ -495,7 +509,8 @@ impl Command {
             | Command::SetAudioComponentEnabled { .. }
             | Command::SetAudioComponentGain { .. }
             | Command::AddTrackItem { .. }
-            | Command::RemoveTrackItem { .. } => None,
+            | Command::RemoveTrackItem { .. }
+            | Command::SetClipStart { .. } => None,
         }
     }
 
@@ -892,6 +907,25 @@ impl Command {
                 }
                 Ok(())
             }
+            Command::SetClipStart { target, new, .. } => {
+                let layer = target.get();
+                let duration = {
+                    let item = find_track_item_mut(doc, *target)
+                        .ok_or(CommandError::LayerNotFound(layer))?;
+                    let TrackItem::Clip(clip) = item else {
+                        return Err(CommandError::TrackItemNotClip { layer });
+                    };
+                    clip.duration
+                };
+                validate_clip_start(doc, layer, *new, duration)?;
+                let item = find_track_item_mut(doc, *target)
+                    .ok_or(CommandError::LayerNotFound(layer))?;
+                let TrackItem::Clip(clip) = item else {
+                    return Err(CommandError::TrackItemNotClip { layer });
+                };
+                clip.start = *new;
+                Ok(())
+            }
         }
     }
 
@@ -1094,6 +1128,11 @@ impl Command {
                 index,
                 item,
                 layer_names,
+            },
+            Command::SetClipStart { target, old, new } => Command::SetClipStart {
+                target,
+                old: new,
+                new: old,
             },
         }
     }
@@ -1386,6 +1425,47 @@ fn find_in_groups(
         }
     }
     None
+}
+
+fn validate_clip_start(
+    doc: &Document,
+    layer_id: u64,
+    new_start: RationalTime,
+    duration: RationalTime,
+) -> Result<(), CommandError> {
+    let end = new_start.try_add(duration).map_err(|_| {
+        CommandError::Validate(validate::DocumentError::ClipIntervalOverflow { layer_id })
+    })?;
+    if end > doc.composition.duration {
+        return Err(CommandError::Validate(
+            validate::DocumentError::ClipPastComposition {
+                layer_id,
+                end,
+                comp: doc.composition.duration,
+            },
+        ));
+    }
+    Ok(())
+}
+
+/// CU-201M-S: Clip `start`変更commandを構築する。成功・失敗とも live Document 不変。
+pub fn prepare_set_clip_start(
+    doc: &Document,
+    target: LayerId,
+    new: RationalTime,
+) -> Result<Option<Command>, CommandError> {
+    let layer = target.get();
+    let (_, _, item) =
+        find_item_location(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    let TrackItem::Clip(clip) = item else {
+        return Err(CommandError::TrackItemNotClip { layer });
+    };
+    let old = clip.start;
+    if new == old {
+        return Ok(None);
+    }
+    validate_clip_start(doc, layer, new, clip.duration)?;
+    Ok(Some(Command::SetClipStart { target, old, new }))
 }
 
 struct ReservationCommit {

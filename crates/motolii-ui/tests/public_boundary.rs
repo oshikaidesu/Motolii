@@ -1,7 +1,10 @@
 //! U0a: motolii-uiの公開APIがUI toolkit型を漏らさないことを走査する。
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+use syn::{visit::Visit, UseTree};
 
 fn crate_src_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("src")
@@ -153,4 +156,107 @@ fn crate_info_reports_linked_toolkit() {
     let info = motolii_ui::crate_info().expect("egui should be linked in motolii-ui");
     assert_eq!(info.crate_id, motolii_ui::CRATE_ID);
     assert!(info.toolkit_linked);
+}
+
+#[test]
+fn parameter_control_is_private_module_with_exact_reexports() {
+    let lib = {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("lib.rs");
+        fs::read_to_string(path).unwrap()
+    };
+    let ast = syn::parse_file(&lib).unwrap();
+
+    #[derive(Default)]
+    struct ParameterControlExtractor {
+        declared_private: bool,
+        exported: BTreeSet<String>,
+        invalid_reexport: bool,
+    }
+
+    impl<'ast> Visit<'ast> for ParameterControlExtractor {
+        fn visit_item_mod(&mut self, i: &'ast syn::ItemMod) {
+            if i.ident == "parameter_control" && matches!(i.vis, syn::Visibility::Inherited) {
+                self.declared_private = true;
+            }
+            syn::visit::visit_item_mod(self, i);
+        }
+
+        fn visit_item_use(&mut self, i: &'ast syn::ItemUse) {
+            if !matches!(&i.vis, syn::Visibility::Public(_)) {
+                return;
+            }
+
+            fn collect(
+                pc_depth: Option<usize>,
+                tree: &UseTree,
+                exported: &mut BTreeSet<String>,
+                invalid: &mut bool,
+            ) {
+                match tree {
+                    UseTree::Path(node) => {
+                        let next_depth = match pc_depth {
+                            Some(depth) => Some(depth + 1),
+                            None if node.ident == "parameter_control" => Some(0),
+                            None => None,
+                        };
+                        collect(next_depth, &node.tree, exported, invalid);
+                    }
+                    UseTree::Name(node) => match pc_depth {
+                        Some(0) => {
+                            exported.insert(node.ident.to_string());
+                        }
+                        Some(_) => {
+                            *invalid = true;
+                        }
+                        None => {}
+                    },
+                    UseTree::Rename(_) => {
+                        if pc_depth.is_some() {
+                            *invalid = true;
+                        }
+                    }
+                    UseTree::Glob(_) => {
+                        if pc_depth.is_some() {
+                            *invalid = true;
+                        }
+                    }
+                    UseTree::Group(node) => {
+                        for item in &node.items {
+                            collect(pc_depth, item, exported, invalid);
+                        }
+                    }
+                }
+            }
+
+            collect(
+                None,
+                &i.tree,
+                &mut self.exported,
+                &mut self.invalid_reexport,
+            );
+            syn::visit::visit_item_use(self, i);
+        }
+    }
+
+    let mut extractor = ParameterControlExtractor::default();
+    extractor.visit_file(&ast);
+
+    assert!(
+        extractor.declared_private,
+        "parameter_control must be declared as a private module in lib.rs"
+    );
+    assert!(
+        !extractor.invalid_reexport,
+        "parameter_control reexports must be direct identifiers: pub use parameter_control::{{...}}"
+    );
+
+    let expected = BTreeSet::from_iter([
+        "HostParameterControl".to_string(),
+        "map_parameter_control".to_string(),
+        "ParameterControlError".to_string(),
+        "ParameterControlSpec".to_string(),
+    ]);
+    assert_eq!(extractor.exported, expected);
 }

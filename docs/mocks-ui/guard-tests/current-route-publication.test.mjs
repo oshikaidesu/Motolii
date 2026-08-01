@@ -763,7 +763,7 @@ test("rejects v1-or-legacy schema and unsafe capture paths", async () => {
   });
 });
 
-test("old reference output hashes remain unchanged", async () => {
+test("reference publication advances provenance without changing capture bytes", async () => {
   const currentTextValue = (await readFile(path.join(REFERENCE_OUTPUT_ROOT, "CURRENT"), "utf8")).trim();
   const manifestBytes = await readFile(
     path.join(REFERENCE_OUTPUT_ROOT, "generations", currentTextValue, "manifest.json"),
@@ -783,9 +783,9 @@ test("old reference output hashes remain unchanged", async () => {
   const captureFiles = (await readdir(capturesDir)).sort();
     const digest = createHash("sha256");
 
-    assert.equal(sha256(currentBytes), "a2eb48d4b93fa5eeae88d7c9de877e2791e49971c3b678da40e97d18a3e3021e");
-    assert.equal(sha256(manifestBytes), "feabc97a8791d05a337d3f1365b09a2e1fb652b583163466dfec90320c5536f5");
-    assert.equal(sha256(provenanceBytes), "08f96cbd77545e1734cc285970137ba20e1b9f31f3fac8f4e3704c467daa64a4");
+    assert.equal(sha256(currentBytes), "f6f2ac55dcc966a1a5803de12d0a76db92969642f300ea4c9619cfb66219eca9");
+    assert.equal(sha256(manifestBytes), "ce37f8f791d9c21059687fcc2e4974a69e49f0d29d69c0f1fd40da7266fad489");
+    assert.equal(sha256(provenanceBytes), "02b795bf37b74b46e7eafa6b23e74b32a14680fccc0053ff107342fd4aa2e711");
 
     assert.equal(captureFiles.length, EXPECTED_CAPTURE_COUNT);
     for (const filename of captureFiles) {

@@ -40,6 +40,7 @@ function previewClassForMediaType(mediaType) {
 const BrowserHierarchyContext = createContext(null);
 const BrowserStandaloneContext = createContext(null);
 const BrowserPlaceIntentContext = createContext(null);
+const draggedPluginCards = new WeakSet();
 const EFFECT_TAGS = [
   { id: "go-to", label: "Go-to", icon: "◎" },
   { id: "atmosphere", label: "Atmosphere", icon: "◌" },
@@ -64,6 +65,21 @@ function createBrowserPlaceIntent(scope_ref, item_id) {
   }
   return Object.freeze({
     kind: "browser.place",
+    source: Object.freeze({ scope_ref, item_id }),
+  });
+}
+
+function createBrowserAttachEffectIntent(scope_ref, item_id) {
+  if (
+    typeof scope_ref !== "string"
+    || scope_ref.length === 0
+    || typeof item_id !== "string"
+    || item_id.length === 0
+  ) {
+    throw new TypeError("Effect attach source identity must be non-empty strings");
+  }
+  return Object.freeze({
+    kind: "browser.attach-effect",
     source: Object.freeze({ scope_ref, item_id }),
   });
 }
@@ -242,6 +258,7 @@ function PluginCard({
   tags = [],
   tagVisible = true,
   onSelect,
+  onCommit,
 }) {
   return (
     <div
@@ -259,18 +276,49 @@ function PluginCard({
       data-item-identity={identity}
       data-preview={motion ? "motion" : "poster"}
       draggable
-      onDragStart={(event) =>
+      onDragStart={(event) => {
+        draggedPluginCards.add(event.currentTarget);
         event.dataTransfer.setData(
           "application/x-motolii-browser-item",
           itemId,
-        )
-      }
+        );
+      }}
     >
       <button
         className="candidate-plugin-card-main"
         aria-label={`${name}${state ? ` · ${state}` : ""}`}
         aria-pressed={selected}
         onClick={onSelect}
+        onPointerDown={(event) => {
+          const card = event.currentTarget.closest(".candidate-plugin-card");
+          if (card) {
+            draggedPluginCards.delete(card);
+          }
+        }}
+        onDoubleClick={(event) => {
+          const card = event.currentTarget.closest(".candidate-plugin-card");
+          if (card && draggedPluginCards.delete(card)) {
+            return;
+          }
+          onCommit?.();
+        }}
+        onKeyDown={(event) => {
+          if (
+            event.key !== "Enter"
+            || event.repeat
+            || event.altKey
+            || event.ctrlKey
+            || event.metaKey
+            || event.shiftKey
+          ) {
+            return;
+          }
+          const card = event.currentTarget.closest(".candidate-plugin-card");
+          if (card) {
+            draggedPluginCards.delete(card);
+          }
+          onCommit?.();
+        }}
       >
         <span className={`plugin-thumb ${thumbnail}`}>
           <span className="candidate-kind" aria-hidden="true">{kind}</span>
@@ -301,15 +349,20 @@ function PluginCard({
   );
 }
 
-function CandidatePluginBrowser() {
+function CandidatePluginBrowser({ catalogProjection, onAttachEffectIntent }) {
   const standalone = useContext(BrowserStandaloneContext);
-  const itemIds = ["echo-bloom", "type-pulse", "fold-field"];
+  const hasProjection = catalogProjection !== undefined;
+  const itemIds = hasProjection
+    ? [catalogProjection.itemId]
+    : ["echo-bloom", "type-pulse", "fold-field"];
   const tagging = useCandidateTags(itemIds, {
     "echo-bloom": ["go-to", "atmosphere"],
     "type-pulse": ["kinetic"],
     "fold-field": ["review"],
   });
-  const [selectedItem, setSelectedItem] = useState("echo-bloom");
+  const [selectedItem, setSelectedItem] = useState(hasProjection
+    ? catalogProjection.itemId
+    : "echo-bloom");
 
   return (
     <div
@@ -404,7 +457,7 @@ function CandidatePluginBrowser() {
         <DiscoveryResults
           id="plugin-results"
           title="Results"
-          count="3"
+          count={hasProjection ? "1" : "3"}
           countId="plugin-result-count"
           headerChildren={(
             <button
@@ -416,61 +469,77 @@ function CandidatePluginBrowser() {
           )}
         >
           <div className="plugin-grid candidate-plugin-grid">
-            <PluginCard
-              itemId="echo-bloom"
-              mode="installed"
-              folder="motion project"
-              labels="goto effect glow"
-              search="echo bloom light pulse glow effect installed"
-              thumbnail="bloom"
-              kind="FX"
-              name="Echo Bloom"
-              category={{ value: "effect", label: "Effect" }}
-              subtype={{ value: "glow", label: "Light" }}
-              pack="motion-kit-alpha"
-              motion
-              selected={selectedItem === "echo-bloom"}
-              tags={tagging.tagsFor("echo-bloom")}
-              tagVisible={tagging.isVisible("echo-bloom")}
-              onSelect={() => setSelectedItem("echo-bloom")}
-            />
-            <PluginCard
-              itemId="type-pulse"
-              mode="installed"
-              folder="type"
-              labels="effect text motion"
-              search="type pulse kinetic text motion effect"
-              thumbnail="glyph"
-              kind="FX"
-              name="Type Pulse"
-              category={{ value: "effect", label: "Effect" }}
-              subtype={{ value: "text", label: "Typography" }}
-              pack="motion-kit-alpha"
-              identity="motion-kit.type-pulse"
-              impact="◆ 12 KEYS"
-              motion
-              selected={selectedItem === "type-pulse"}
-              tags={tagging.tagsFor("type-pulse")}
-              tagVisible={tagging.isVisible("type-pulse")}
-              onSelect={() => setSelectedItem("type-pulse")}
-            />
-            <PluginCard
-              itemId="fold-field"
-              mode="blocked"
-              folder="experimental"
-              labels="effect space"
-              search="fold field space geometry effect incompatible"
-              thumbnail="fold"
-              kind="FX"
-              name="Fold Field"
-              category={{ value: "effect", label: "Effect" }}
-              subtype={{ value: "space", label: "Spatial" }}
-              state="Unavailable"
-              selected={selectedItem === "fold-field"}
-              tags={tagging.tagsFor("fold-field")}
-              tagVisible={tagging.isVisible("fold-field")}
-              onSelect={() => setSelectedItem("fold-field")}
-            />
+            {hasProjection ? (
+              <PluginCard
+                {...catalogProjection}
+                selected={selectedItem === catalogProjection.itemId}
+                onSelect={() => setSelectedItem(catalogProjection.itemId)}
+                onCommit={() => onAttachEffectIntent?.(
+                  createBrowserAttachEffectIntent(
+                    catalogProjection.scopeRef,
+                    catalogProjection.itemId,
+                  ),
+                )}
+              />
+            ) : (
+              <>
+                <PluginCard
+                  itemId="echo-bloom"
+                  mode="installed"
+                  folder="motion project"
+                  labels="goto effect glow"
+                  search="echo bloom light pulse glow effect installed"
+                  thumbnail="bloom"
+                  kind="FX"
+                  name="Echo Bloom"
+                  category={{ value: "effect", label: "Effect" }}
+                  subtype={{ value: "glow", label: "Light" }}
+                  pack="motion-kit-alpha"
+                  motion
+                  selected={selectedItem === "echo-bloom"}
+                  tags={tagging.tagsFor("echo-bloom")}
+                  tagVisible={tagging.isVisible("echo-bloom")}
+                  onSelect={() => setSelectedItem("echo-bloom")}
+                />
+                <PluginCard
+                  itemId="type-pulse"
+                  mode="installed"
+                  folder="type"
+                  labels="effect text motion"
+                  search="type pulse kinetic text motion effect"
+                  thumbnail="glyph"
+                  kind="FX"
+                  name="Type Pulse"
+                  category={{ value: "effect", label: "Effect" }}
+                  subtype={{ value: "text", label: "Typography" }}
+                  pack="motion-kit-alpha"
+                  identity="motion-kit.type-pulse"
+                  impact="◆ 12 KEYS"
+                  motion
+                  selected={selectedItem === "type-pulse"}
+                  tags={tagging.tagsFor("type-pulse")}
+                  tagVisible={tagging.isVisible("type-pulse")}
+                  onSelect={() => setSelectedItem("type-pulse")}
+                />
+                <PluginCard
+                  itemId="fold-field"
+                  mode="blocked"
+                  folder="experimental"
+                  labels="effect space"
+                  search="fold field space geometry effect incompatible"
+                  thumbnail="fold"
+                  kind="FX"
+                  name="Fold Field"
+                  category={{ value: "effect", label: "Effect" }}
+                  subtype={{ value: "space", label: "Spatial" }}
+                  state="Unavailable"
+                  selected={selectedItem === "fold-field"}
+                  tags={tagging.tagsFor("fold-field")}
+                  tagVisible={tagging.isVisible("fold-field")}
+                  onSelect={() => setSelectedItem("fold-field")}
+                />
+              </>
+            )}
           </div>
         </DiscoveryResults>
 
@@ -1250,6 +1319,8 @@ export function DiscoveryBrowserCandidate({
   developmentProjection,
   rectangleIdentity,
   onPlaceIntent,
+  onAttachEffectIntent,
+  catalogProjection,
 }) {
   const mediaProjection = developmentProjection === undefined
     ? undefined
@@ -1303,7 +1374,12 @@ export function DiscoveryBrowserCandidate({
         child.type === "tag" &&
         child.attribs?.id === "vism-browser"
       ) {
-        return mediaProjection ? <></> : <CandidatePluginBrowser />;
+        return mediaProjection ? <></> : (
+          <CandidatePluginBrowser
+            catalogProjection={catalogProjection}
+            onAttachEffectIntent={onAttachEffectIntent}
+          />
+        );
       }
       if (
         child.type === "tag" &&
@@ -1342,7 +1418,10 @@ export function DiscoveryBrowserCandidate({
                   <small>MEDIA / CREATE / EFFECTS</small>
                 </div>
                 {browserTabs}
-                <CandidatePluginBrowser />
+                <CandidatePluginBrowser
+                  catalogProjection={catalogProjection}
+                  onAttachEffectIntent={onAttachEffectIntent}
+                />
                 <CandidateProjectBrowser />
               </aside>
             ) : createElement(

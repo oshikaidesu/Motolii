@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "task": "CU-0A04 / CU-0A05B / CU-0A06B / CU-0A07C / CU-108-STAGE-REPRODUCTION",
+  "task": "CU-0A04 / CU-0A05B / CU-0A06B / CU-0A07C / CU-108-STAGE-REPRODUCTION / CU-0B02C-P / CU-203P",
   "authority": "docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md",
   "fixedSourceCommit": "56c318edcddab7cf95d263cc2f7dd2b4e6791134",
   "sourceOwnership": {
     "product": "@motolii/motolii-web",
-    "owner": "R1-browser / R2B-easing-trigger / R3B-key-tools / R4C-inspector / R5-stage-chrome",
-    "surface": "Browser / Easing trigger / KEYS-LAYERS key tools / Inspector / Stage header-transport",
+    "owner": "R1-browser / R2B-easing-trigger / R3B-key-tools / R4C-inspector / R5-stage-chrome / component-state-primitives / common-feedback",
+    "surface": "Browser / Easing trigger / KEYS-LAYERS key tools / Inspector / Stage header-transport / shared presentation primitives / common feedback",
     "exports": [
       {
         "name": "DiscoveryBrowserCandidate",
@@ -35,9 +35,48 @@
       {
         "name": "StageTransportCandidate",
         "path": "src/index.js"
+      },
+      {
+        "name": "Button",
+        "path": "src/index.js"
+      },
+      {
+        "name": "Field",
+        "path": "src/index.js"
+      },
+      {
+        "name": "Icon",
+        "path": "src/index.js"
+      },
+      {
+        "name": "IconButton",
+        "path": "src/index.js"
+      },
+      {
+        "name": "PanelHeader",
+        "path": "src/index.js"
+      },
+      {
+        "name": "Tab",
+        "path": "src/index.js"
+      },
+      {
+        "name": "TabList",
+        "path": "src/index.js"
+      },
+      {
+        "name": "Feedback",
+        "path": "src/index.js"
       }
     ]
   },
+  "privateRuntimeSources": [
+    {
+      "task": "CU-205W-A1",
+      "file": "ui/motolii-web/src/host/inspectorHostCodec.js",
+      "owner": "private Inspector typed gesture transport"
+    }
+  ],
   "migrations": [
     {
       "type": "fixed-source-transfer",
@@ -97,6 +136,37 @@
         "css": "ui/motolii-web/src/host/stage-host-screen.css",
         "entries": "ui/motolii-web/stage-header.html / ui/motolii-web/stage-transport.html"
       }
+    },
+    {
+      "type": "fixed-source-transfer-with-supplier-replacement",
+      "old": {
+        "component": "docs/mocks-ui/src/primitives/index.jsx",
+        "componentSha256": "005b5db5a71f75ab139d26f44169538f74d3711ca2244748e9b4a016088c9f8b",
+        "css": "docs/mocks-ui/src/primitives/primitives.css",
+        "cssSha256": "f625758bbfb9db6577618584a79ef9e900510ffc96662c6b1f6191393590959c"
+      },
+      "current": {
+        "component": "ui/motolii-web/src/primitives/index.jsx",
+        "componentSha256": "d5c9dd7d9016dacbef6f1ef93fa80e4cfe00a22eccc5e4faf7a4e12eada6de29",
+        "css": "ui/motolii-web/src/primitives/primitives.css",
+        "cssSha256": "7ecfe0195f922506429caa0e141fe6104bd845e02265e2bd24f4a67232dafc2b"
+      }
+    },
+    {
+      "type": "fixed-source-transfer",
+      "task": "CU-203P",
+      "old": {
+        "component": "docs/mocks-ui/src/feedback/Feedback.jsx",
+        "componentSha256": "459fdd6120fd369b78d4a9784d98ac2b29fbb553afb35522f8f680fdfe4e4cd1",
+        "css": "docs/mocks-ui/src/feedback/feedback.css",
+        "cssSha256": "7e22e2a183796732c4f77c4bb018eb2342ecb812181e46f348e1aa3aa827ef50"
+      },
+      "current": {
+        "component": "ui/motolii-web/src/feedback/Feedback.jsx",
+        "componentSha256": "459fdd6120fd369b78d4a9784d98ac2b29fbb553afb35522f8f680fdfe4e4cd1",
+        "css": "ui/motolii-web/src/feedback/feedback.css",
+        "cssSha256": "7e22e2a183796732c4f77c4bb018eb2342ecb812181e46f348e1aa3aa827ef50"
+      }
     }
   ],
   "postPromotionChanges": [
@@ -134,6 +204,20 @@
       "reason": "suppress the WebKit DOM drag image while native Stage renders the typed Rectangle preview",
       "fixedSourceSha256": "e05b8636d9d07d9cd75612b1025474e34eeec37ef673b377a79fddb5773e42f9",
       "currentSha256": "88a595c4df18da9180bd5fd23486d3006b473a02bf0222650f9ab6d4ffc13e20"
+    },
+    {
+      "task": "CU-205B1I",
+      "file": "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx",
+      "reason": "first-party Opacity catalog projection through existing PluginCard",
+      "fixedSourceSha256": "88a595c4df18da9180bd5fd23486d3006b473a02bf0222650f9ab6d4ffc13e20",
+      "currentSha256": "27c87488836b1b883fe282601214c91901246d69e6a1b19c5f76952a79413296"
+    },
+    {
+      "task": "CU-205T",
+      "file": "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx",
+      "reason": "Opacity typed attach source gesture",
+      "fixedSourceSha256": "27c87488836b1b883fe282601214c91901246d69e6a1b19c5f76952a79413296",
+      "currentSha256": "89a2e9d399c3943ab50c2e6f4a460a834d689f42904dce38a24346872b34227f"
     }
   ],
   "inspectorPostPromotionChanges": [
@@ -150,6 +234,20 @@
       "reason": "VS-1 Inspector target-only safe product branch",
       "fixedSourceSha256": "a01e7431361fdbaf1bdc1f1836045835f501d72e9d62aba1bf833ba3d53cc140",
       "currentSha256": "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0"
+    },
+    {
+      "task": "CU-205P",
+      "file": "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
+      "reason": "VS-2 active Effect Inspector read-only control projection",
+      "fixedSourceSha256": "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0",
+      "currentSha256": "a1af604c78113f4df0538c3045b19d51c1d3fc8c6740305abc47b7e8a2d10f37"
+    },
+    {
+      "task": "CU-205W-A1",
+      "file": "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
+      "reason": "VS-2 active amount gesture local presentation seam",
+      "fixedSourceSha256": "a1af604c78113f4df0538c3045b19d51c1d3fc8c6740305abc47b7e8a2d10f37",
+      "currentSha256": "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e"
     }
   ]
 }

@@ -17,6 +17,7 @@
 .motolii-mock-app[data-reference-screen] {
   --mock-role-font-technical: "MotoliiReferenceInter", sans-serif;
   --mock-mono: var(--mock-role-font-technical);
+  --motolii-primitive-font-technical: var(--mock-role-font-technical);
   font-family: "MotoliiReferenceInter", sans-serif;
   font-variant-numeric: tabular-nums;
 }

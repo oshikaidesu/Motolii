@@ -20,6 +20,7 @@ import {
   legacyBody,
   legacyScript,
   legacyStyle,
+  acceptedRouteLegacyStyle,
 } from "./legacySource";
 import {
   InspectorContext,
@@ -344,6 +345,7 @@ function LegacyFixture({
   EasingTriggerComponent,
   resizableLayout,
   developmentEmptyProjection,
+  productTokenConsumer,
 }) {
   const [activeInterval, setActiveInterval] = useState(null);
   const [pressed, setPressed] = useState(false);
@@ -457,7 +459,9 @@ function LegacyFixture({
 
   return (
     <>
-      <style data-legacy-host-boundary>{legacyStyle}</style>
+      <style data-legacy-host-boundary>
+        {productTokenConsumer ? acceptedRouteLegacyStyle : legacyStyle}
+      </style>
       <InspectorContext.Provider
         value={{
           payload: inspectorPayload,
@@ -481,6 +485,7 @@ export function LegacyHostBoundaryScreen({
   EasingTriggerComponent,
   resizableLayout = false,
   developmentEmptyProjection = false,
+  productTokenConsumer = false,
 }) {
   return (
     <LegacyFixture
@@ -493,6 +498,7 @@ export function LegacyHostBoundaryScreen({
       EasingTriggerComponent={EasingTriggerComponent}
       resizableLayout={resizableLayout}
       developmentEmptyProjection={developmentEmptyProjection}
+      productTokenConsumer={productTokenConsumer}
     />
   );
 }

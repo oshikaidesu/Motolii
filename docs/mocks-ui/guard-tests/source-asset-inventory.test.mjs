@@ -2683,3 +2683,52 @@ test("rejects easing trigger source drift, ownership violations, and containment
     ),
   }));
 });
+
+test("records the fixed CU-0B02C primitive pair without expanding the six-surface inventory", async () => {
+  const fixedPrimitiveSource = "docs/mocks-ui/src/primitives/index.jsx";
+  const fixedPrimitiveCss = "docs/mocks-ui/src/primitives/primitives.css";
+  const currentPrimitiveSource = "ui/motolii-web/src/primitives/index.jsx";
+  const currentPrimitiveCss = "ui/motolii-web/src/primitives/primitives.css";
+  const provenance = JSON.parse(
+    await readFile(
+      absoluteFromRelative("ui/motolii-web/source-provenance.json"),
+      "utf8",
+    ),
+  );
+  const manifest = JSON.parse(await readFile(MANIFEST_PATH, "utf8"));
+
+  assert.equal(manifest.surfaces.length, 6);
+  assert.equal(
+    hashBytes(readBlobFromCommit(fixedPrimitiveSource, FIXED_SOURCE_COMMIT)),
+    "005b5db5a71f75ab139d26f44169538f74d3711ca2244748e9b4a016088c9f8b",
+  );
+  assert.equal(
+    hashBytes(readBlobFromCommit(fixedPrimitiveCss, FIXED_SOURCE_COMMIT)),
+    "f625758bbfb9db6577618584a79ef9e900510ffc96662c6b1f6191393590959c",
+  );
+
+  const migration = provenance.migrations.find(
+    ({ type, old }) =>
+      type === "fixed-source-transfer-with-supplier-replacement"
+      && old?.component === fixedPrimitiveSource,
+  );
+  assert.deepEqual(migration, {
+    type: "fixed-source-transfer-with-supplier-replacement",
+    old: {
+      component: fixedPrimitiveSource,
+      componentSha256:
+        "005b5db5a71f75ab139d26f44169538f74d3711ca2244748e9b4a016088c9f8b",
+      css: fixedPrimitiveCss,
+      cssSha256:
+        "f625758bbfb9db6577618584a79ef9e900510ffc96662c6b1f6191393590959c",
+    },
+    current: {
+      component: currentPrimitiveSource,
+      componentSha256:
+        hashBytes(await readFile(absoluteFromRelative(currentPrimitiveSource))),
+      css: currentPrimitiveCss,
+      cssSha256:
+        hashBytes(await readFile(absoluteFromRelative(currentPrimitiveCss))),
+    },
+  });
+});

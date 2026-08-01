@@ -1,3 +1,7 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { expect, test } from "@playwright/test";
 
 const CANDIDATE_URL =
@@ -9,6 +13,102 @@ const INTERVAL_EASING_PLAYHEAD_KEY_TRIGGER_MUTATION_NAMES = [
   "disabled",
 ];
 
+const ACCEPTED_ROUTE_TOKEN_SELECTOR =
+  ':root[data-motolii-theme="motolii-dark"]:has(#root > [data-fixture="plugin-browser-candidate"])';
+const LEGACY_TOKEN_ALIASES = [
+  ["bg", "surface-app"],
+  ["panel", "surface-panel"],
+  ["raised", "surface-raised"],
+  ["hover", "surface-hover"],
+  ["line", "border-default"],
+  ["line2", "border-strong"],
+  ["ink", "text-primary"],
+  ["sub", "text-secondary"],
+  ["muted", "text-muted"],
+  ["data", "data"],
+  ["shape", "shape"],
+  ["warning", "status-warning"],
+  ["ok", "status-ok"],
+  ["way-project", "way-project"],
+  ["way-files", "way-files"],
+  ["way-plugins", "way-plugins"],
+  ["way-stage", "way-stage"],
+  ["way-inspector", "way-inspector"],
+  ["way-timeline", "way-timeline"],
+];
+const PRODUCT_TOKEN_ROLES = [
+  "surface-app",
+  "surface-panel",
+  "surface-raised",
+  "surface-hover",
+  "border-default",
+  "border-strong",
+  "text-primary",
+  "text-secondary",
+  "text-muted",
+  "focus",
+  "action-active",
+  "data",
+  "shape",
+  "status-warning",
+  "status-ok",
+  "way-project",
+  "way-files",
+  "way-plugins",
+  "way-stage",
+  "way-inspector",
+  "way-timeline",
+];
+const GENERATED_TOKEN_CSS = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../ui/motolii-tokens/generated/tokens.css",
+);
+
+async function openTokenRoute(page, route) {
+  await page.goto(`http://127.0.0.1:5173/#${route}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await page.locator("#root > *").first().waitFor({ state: "visible" });
+  if (route === "plugin-browser-candidate") {
+    await page
+      .locator('.app[data-parity-ready="true"]')
+      .waitFor({ state: "visible" });
+  }
+}
+
+async function normalizedCustomProperties(page, propertyNames) {
+  return page.evaluate((names) => {
+    const probe = document.createElement("span");
+    probe.hidden = true;
+    (document.querySelector(".app") ?? document.documentElement).append(probe);
+    const toHex = (color) => {
+      const channels = color.match(/[\d.]+/g)?.map(Number);
+      if (!channels || channels.length < 3) return color;
+      const alpha = Math.round((channels[3] ?? 1) * 255);
+      return `#${[channels[0], channels[1], channels[2], alpha]
+        .map((channel) => channel.toString(16).padStart(2, "0"))
+        .join("")}`;
+    };
+    const values = Object.fromEntries(
+      names.map((name) => {
+        probe.style.color = `var(--${name})`;
+        return [name, toHex(getComputedStyle(probe).color)];
+      }),
+    );
+    probe.remove();
+    return values;
+  }, propertyNames);
+}
+
+async function generatedTokenValues() {
+  const source = await readFile(GENERATED_TOKEN_CSS, "utf8");
+  return Object.fromEntries(
+    [...source.matchAll(/--motolii-color-([a-z0-9-]+):\s*(#[0-9a-f]{8});/g)].map(
+      ([, role, value]) => [role, value],
+    ),
+  );
+}
+
 async function openCandidate(page) {
   await page.goto(CANDIDATE_URL, { waitUntil: "domcontentloaded" });
   await page
@@ -18,6 +118,60 @@ async function openCandidate(page) {
 }
 
 test.describe("shared discovery Browser candidate", () => {
+  test("accepted-route token wiring is route-local and does not leak", async ({
+    page,
+  }) => {
+    const generated = await generatedTokenValues();
+    expect(Object.keys(generated).sort()).toEqual([...PRODUCT_TOKEN_ROLES].sort());
+
+    await openTokenRoute(page, "plugin-browser-candidate");
+    expect(
+      await page.evaluate(
+        (selector) => document.documentElement.matches(selector),
+        ACCEPTED_ROUTE_TOKEN_SELECTOR,
+      ),
+    ).toBe(true);
+
+    const aliases = [
+      ...LEGACY_TOKEN_ALIASES.map(([alias]) => alias),
+      ...PRODUCT_TOKEN_ROLES.map((role) => `mock-role-${role}`),
+      "active",
+      "motolii-color-action-active",
+    ];
+    const resolved = await normalizedCustomProperties(page, aliases);
+    for (const [alias, role] of LEGACY_TOKEN_ALIASES) {
+      expect(resolved[alias], alias).toBe(generated[role]);
+    }
+    for (const role of PRODUCT_TOKEN_ROLES) {
+      expect(resolved[`mock-role-${role}`], role).toBe(generated[role]);
+    }
+    expect(resolved.active).toBe("#d4b36fff");
+    expect(resolved["motolii-color-action-active"]).toBe("#d8b574ff");
+
+    for (const route of [
+      "archive/all-surfaces",
+      "reference/empty-browser",
+      "catalog",
+    ]) {
+      await openTokenRoute(page, route);
+      expect(
+        await page.evaluate(
+          (selector) => document.documentElement.matches(selector),
+          ACCEPTED_ROUTE_TOKEN_SELECTOR,
+        ),
+        route,
+      ).toBe(false);
+    }
+
+    await openTokenRoute(page, "archive/all-surfaces");
+    const archiveColors = await normalizedCustomProperties(page, ["bg"]);
+    expect(archiveColors.bg).toBe("#141414ff");
+    await expect(page.locator(".app")).not.toHaveCSS(
+      "background-color",
+      "rgba(0, 0, 0, 0)",
+    );
+  });
+
   test("uses a React easing surface with AM interval actions and channel context", async ({
     page,
   }) => {
