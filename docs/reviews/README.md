@@ -443,3 +443,4 @@
 | [2026-08-01-cu-201r-timeline-interval-sequence-oracle-decision.md](2026-08-01-cu-201r-timeline-interval-sequence-oracle-decision.md) | CU-201R Timeline interval系列oracle決定 |
 | [2026-08-01-cu-201e-timeline-interval-normal-product-e2e-receipt.md](2026-08-01-cu-201e-timeline-interval-normal-product-e2e-receipt.md) | CU-201E Timeline interval通常製品route E2E receipt |
 | [2026-08-02-u4b0-add-position-key-closed-contract-decision.md](2026-08-02-u4b0-add-position-key-closed-contract-decision.md) | U4b-0 Add Position Key closed contract決定 |
+| [2026-08-02-u4b1-outgoing-interp-command-contract-decision.md](2026-08-02-u4b1-outgoing-interp-command-contract-decision.md) | U4b-1 outgoing Interp command契約決定 |
