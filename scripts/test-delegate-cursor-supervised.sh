@@ -942,6 +942,11 @@ fi
 assert_has "$happy_attempt/metadata.txt" "IMPLEMENTER_MODEL_FAMILY: openai" "implementer family recorded"
 assert_has "$happy_attempt/metadata.txt" "REVIEW_MODEL_FAMILY: xai" "reviewer family recorded"
 assert_has "$happy_attempt/metadata.txt" "MODEL_FALLBACK: NONE" "runner never falls back silently"
+# receiptは定数でなくorderの宣言を写す。宣言・argv・receiptが三者一致すること
+ORDER_REVIEW_MODEL_VALUE="$(awk -F': ' '/^REVIEW_MODEL: /{print $2}' "$ORDER")"
+[[ -n "$ORDER_REVIEW_MODEL_VALUE" ]] || fail "order must declare REVIEW_MODEL"
+assert_has "$happy_attempt/metadata.txt" "REVIEW_MODEL: $ORDER_REVIEW_MODEL_VALUE" \
+  "receipt records the reviewer declared in the order"
 assert_has "$happy_attempt/metadata.txt" \
   "TARGET_CAPSULE_SHA256: $(sha256_file "$happy_attempt/spark-target-capsule.txt")" \
   "target capsule hash evidence"
@@ -979,8 +984,7 @@ grep -Fq '"type":"thinking"' "$happy_attempt/grok-stdout-stream.jsonl" \
   || fail "Grok thinking events must be retained instead of discarded by text mode"
 assert_fragment "$CALL_LOG" "--output-format stream-json" "Grok streams structured events"
 # 起動modelはorderのREVIEW_MODELを正本にする。固定定数へ戻すと宣言と実行が乖離する
-ORDER_REVIEW_MODEL_VALUE="$(awk -F': ' '/^REVIEW_MODEL: /{print $2}' "$ORDER")"
-assert_fragment "$CALL_LOG" "--model $ORDER_REVIEW_MODEL_VALUE" \
+assert_fragment "$CALL_LOG" "--model $(awk -F': ' '/^REVIEW_MODEL: /{print $2}' "$ORDER")" \
   "reviewer is launched with the model declared in the order"
 assert_fragment "$CALL_LOG" "--json" "Spark emits JSONL events"
 
@@ -1129,6 +1133,11 @@ run_reviewer_case "destructive-without-oracle" "cursor-grok-4.5-high" \
 run_reviewer_case "permanent-without-oracle" "cursor-grok-4.5-high" \
   "requires a declared non-LLM oracle" \
   's|^CONTRACT_IMPACT: PRIVATE$|CONTRACT_IMPACT: PERMANENT|; s|^CONTRACT_CLOSURE: PRIVATE$|CONTRACT_CLOSURE: FROZEN|; s|^CONTRACT_AUTHORITY: NONE$|CONTRACT_AUTHORITY: AGENTS.md@SHA256:PLACEHOLDER|'
+# 宣言の存在だけを見ると空宣言で通る。中身のある一行を要求することを固定する
+run_reviewer_case "empty-mechanical-guard" "cursor-grok-4.5-high" \
+  "requires a declared non-LLM oracle" \
+  's|^HAZARD_TAG: NONE$|HAZARD_TAG: SECURITY\
+MECHANICAL_GUARD:   |'
 
 # plan modeの検収結果はplan tool callにしか現れない。ここを抽出しないと、検収者が
 # 完全な判定を返していても「markerが無い」として機械的にREJECTされる(2026-08-01実測)

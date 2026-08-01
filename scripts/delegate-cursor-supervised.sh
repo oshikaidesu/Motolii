@@ -10,7 +10,7 @@ CLAUDE_AGENT_BIN="${CLAUDE_AGENT_BIN:-claude}"
 CURSOR_GROK_MODEL="cursor-grok-4.5-high"
 # 改訂3(2026-08-01): 検収者はmodel名でなく独立性条件で決める。既定はGrokのまま。
 # 実装担当・order managerと同一identityのmodelはここに入っていても独立性gateで落ちる
-ALLOWED_REVIEW_MODELS=("cursor-grok-4.5-high" "claude-opus-5")
+ALLOWED_REVIEW_MODELS=("cursor-grok-4.5-high")
 OPUS_MANAGER_MODEL="claude-opus-5"
 SPARK_MODEL="gpt-5.3-codex-spark"
 LOOP_PROFILE="opus-spark-grok"
@@ -1472,17 +1472,18 @@ gate_check_authorities_at_base() {
 # 通常のclean gateへ通さず、base commit照合とscope/checkpoint検証だけを行う
 run_dispatch_gate_for_inspect() {
   local order_file="$1" worktree="$2"
-  gate_check_base "$order_file" "$worktree"
-  gate_check_grain_and_dependencies "$order_file" "$worktree"
-  gate_check_authorities_at_base "$order_file" "$worktree"
-  gate_check_allowed_files "$order_file"
-  gate_check_contract_boundary "$order_file"
-  gate_check_reviewer_independence "$order_file"
-  gate_check_context_budget "$order_file" "$worktree"
-  gate_check_compiled_grain_contract "$order_file"
-  gate_check_exact_targets "$order_file" "$worktree" BASE
-  gate_check_view_profile "$order_file"
-  gate_check_react_labels "$order_file"
+  record_gate ROUND "inspect:$(basename "$order_file")"
+  gate_run base gate_check_base "$order_file" "$worktree"
+  gate_run grain_and_dependencies gate_check_grain_and_dependencies "$order_file" "$worktree"
+  gate_run authorities gate_check_authorities_at_base "$order_file" "$worktree"
+  gate_run allowed_files gate_check_allowed_files "$order_file"
+  gate_run contract_boundary gate_check_contract_boundary "$order_file"
+  gate_run reviewer_independence gate_check_reviewer_independence "$order_file"
+  gate_run context_budget gate_check_context_budget "$order_file" "$worktree"
+  gate_run compiled_grain_contract gate_check_compiled_grain_contract "$order_file"
+  gate_run exact_targets gate_check_exact_targets "$order_file" "$worktree" BASE
+  gate_run view_profile gate_check_view_profile "$order_file"
+  gate_run react_labels gate_check_react_labels "$order_file"
 }
 
 # GR-D2: 変更許可閉集合とcontent fingerprintの永続証跡。
@@ -2528,8 +2529,9 @@ gate_check_reviewer_independence() {
   (( found == 1 )) || gate_fail "REVIEW_MODEL is not an approved independent reviewer: $reviewer"
   case "$hazard:$impact" in
     SECURITY:*|DESTRUCTIVE_FS:*|*:PERMANENT)
-      # 最上段は非LLM oracleの併用を必須にする(model間エラー60%相関)
-      grep -Eq '^MECHANICAL_GUARD:' "$order_file" \
+      # 最上段は非LLM oracleの併用を必須にする(model間エラー60%相関)。
+      # 存在だけを見ると空宣言で通るため、中身のある一行を要求する
+      grep -Eq '^MECHANICAL_GUARD:[[:space:]]*[^[:space:]]' "$order_file" \
         || gate_fail "$hazard/$impact requires a declared non-LLM oracle (MECHANICAL_GUARD)"
       ;;
   esac
@@ -2689,6 +2691,14 @@ cp "$ORDER_FILE" "$attempt_dir/order.txt"
 # pre-model hashだけを刻み、各stage後にこの値との一致を独立に再確認する
 approved_order_sha256="$(shasum -a 256 "$attempt_dir/order.txt" | awk '{print $1}')"
 printf '%s' "$task" >"$attempt_dir/task.txt"
+# receiptに書くmodelは定数でなくorderの宣言。既定から外れた場合は代替として明記し、
+# `MODEL_FALLBACK`を実際の値から導出する(literalだと差し替えを隠す)
+RECEIPT_REVIEW_MODEL="$(gate_require_single_field "$ORDER_FILE" "REVIEW_MODEL")"
+if [[ "$RECEIPT_REVIEW_MODEL" == "$CURSOR_GROK_MODEL" ]]; then
+  RECEIPT_MODEL_FALLBACK="NONE"
+else
+  RECEIPT_MODEL_FALLBACK="REVIEW_MODEL_SUBSTITUTED:$RECEIPT_REVIEW_MODEL"
+fi
 {
   echo "MODE: $MODE"
   echo "TASK_SHA256: $task_hash"
@@ -2696,12 +2706,12 @@ printf '%s' "$task" >"$attempt_dir/task.txt"
   echo "LOOP_PROFILE: $LOOP_PROFILE"
   echo "ORDER_MANAGER_MODEL: $OPUS_MANAGER_MODEL"
   echo "IMPLEMENTER_MODEL: $SPARK_MODEL"
-  echo "REVIEW_MODEL: $CURSOR_GROK_MODEL"
-  # 改訂3: receiptへ実使用modelとfallback有無を残す。runnerは黙ったfallbackを
-  # しないため常にNONE。ループ外で別modelへ差し替えた場合、receiptに現れない
+  # 改訂3: receiptへ**実際に起動するmodel**を残す。定数を書くと、独立性gateが
+  # 検査した宣言・実際のargv・receiptの三者が乖離し、受領証の意味が消える
+  echo "REVIEW_MODEL: $RECEIPT_REVIEW_MODEL"
   echo "IMPLEMENTER_MODEL_FAMILY: $(model_family "$SPARK_MODEL")"
-  echo "REVIEW_MODEL_FAMILY: $(model_family "$CURSOR_GROK_MODEL")"
-  echo "MODEL_FALLBACK: NONE"
+  echo "REVIEW_MODEL_FAMILY: $(model_family "$RECEIPT_REVIEW_MODEL")"
+  echo "MODEL_FALLBACK: $RECEIPT_MODEL_FALLBACK"
 } >"$attempt_dir/metadata.txt"
 
 if [[ "$MODE" == "inspect" ]]; then
