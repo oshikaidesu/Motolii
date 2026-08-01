@@ -1,7 +1,7 @@
 # M3 快適利用までのワークマップ（2026-07-22）
 
 状態: **利用者成果地図 / Local Alpha・Distribution Ready完成線の正本 / 2026-07-25 Wave 0同期済み /
-実行順の正本ではない**
+実行順・実装分解の正本ではない**
 
 ## 1. 目的
 
@@ -15,6 +15,10 @@ product-owned React面、native Stage/Timeline、Document編集、selection、�
 [M3縦slice実行方針](2026-07-24-m3-vertical-slice-execution-decision.md)と
 [並列レーン着手地図](2026-07-25-parallel-lane-readiness-map.md)、
 [implementation ledger](../implementation-ledger.md)を正とする。
+
+2026-08-01以降、検索可能な供給route、詳細な実装子、共有境界の衝突、並列waveは
+[M3既知技術採択・並列実装地図](../m3-parallel-implementation-map.md)を正とする。本書はLocal Alphaと
+Distribution Readyの利用者成果・完成線を維持し、旧W/CU行をdispatch queueとして使わない。
 
 ## 2. Authorityと位置づけ
 

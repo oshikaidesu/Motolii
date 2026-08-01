@@ -209,8 +209,9 @@ stage packetが保持していた安全情報は削らない。全M3 orderは名
 | M3仕様 | 作品意味、G/U ID、依存、完了条件、実装ガード、採択済みblocking decision | W/CU/stageごとの重複説明 |
 | 本決定 | 縦sliceの進捗原則、最初のslice、rolling horizon、未決blocking decisionの現在一覧、文書移行 | 個別実装file/API |
 | 快適利用Work Map | Local Alpha / Distribution Readyと遠方の利用者成果地図 | 個別order、現在状態、全粒のSTOP |
-| 粒度化文書 | 2026-07-22時点の候補分解・依存監査の履歴資料。tooling移行までは粒IDと状態cellだけを暫定dispatch台帳として保持 | tooling移行後の現在地、全将来orderの意味・順序拘束、継続的な粒修復 |
-| implementation ledger | 現在slice、そのslice内の現在order、直後のhandoff | 意味・完了条件・全将来粒の再記述 |
+| 粒度化文書 | 2026-07-22時点の候補分解・依存監査、過去oracleの履歴資料 | dispatch、現在地、全将来orderの意味・順序拘束、継続的な粒修復 |
+| M3既知技術採択・並列実装地図 | 検索親、詳細子、供給route、共有境界の衝突、並列wave、cutover | 製品意味、実merge状態、runnerの`DO`判定 |
+| implementation ledger | 現在slice、並列可能な現在order、直後のhandoff、runnerが読む`DO` | 意味・完了条件・全将来粒の再記述 |
 | closed order | 今回のallowlist、非目標、正負oracle、STOP、commands | M3全体地図の再掲 |
 
 同じ完了条件を複数文書へ手書きしない。表示用の対応表が必要な場合は、
@@ -219,6 +220,11 @@ stage packetが保持していた安全情報は削らない。全M3 orderは名
 ## 8. 既存文書の非破壊移行
 
 本方針の採択時は、既存G/U/CU/W ID、過去のFable証跡、完了済みtaskを削除・改名しない。
+
+> **2026-08-01移行完了**: 現runnerは`docs/implementation-ledger.md`の「現在の並列レーン」にある
+> `DO`行を直接検査し、旧快適利用粒度化表を読まない。下記6/11の暫定mirror条件は履歴として残すが、
+> 現行dispatchへ適用しない。検索親・詳細子・並列衝突は
+> [M3既知技術採択・並列実装地図](../m3-parallel-implementation-map.md)を入口とする。
 
 1. 本書§4のblocking decision一覧を現行入口にし、未決SPEC粒を履歴snapshotから切り離す
 2. CU-G01が指していたG0-9段階化改訂を先に、または次の順序改訂と同じ原子的変更で閉じる。

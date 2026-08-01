@@ -6,10 +6,11 @@
 
 ## 使い方
 
-1. まず本ページの「現在の並列レーン」を確認する。PRODUCT-ASSET内だけは現在選択中の1件を守る。
-2. Issueと該当する[マイルストーン仕様](specs/README.md)のタスク行・実装ガードを読む。
-3. 依存が1件でも未mergeなら着手しない。
-4. 完了時は、実装PR内で仕様のタスク表と本ページを同時に更新する。
+1. まず本ページの「現在の並列レーン」を確認する。M3の複数`DO`は地図の親・子・衝突表がfile-disjointと判定した時だけ並列にする。
+2. M3は先に[既知技術採択・並列実装地図](m3-parallel-implementation-map.md)で検索親、詳細子、共有file衝突を確認する。
+3. Issueと該当する[マイルストーン仕様](specs/README.md)のタスク行・実装ガードを読む。
+4. 依存が1件でも未mergeなら着手しない。
+5. 完了時は、実装PR内で仕様のタスク表と本ページを同時に更新する。
 
 情報が食い違う場合の優先順位は次の通り。
 
@@ -55,7 +56,10 @@ CIへ昇格せず、未実行／未完走をgreenまたは製品完成と記録�
 ### M3の1件を選ぶ動線
 
 M3は[縦slice実行方針](reviews/2026-07-24-m3-vertical-slice-execution-decision.md)を使い、
-一つの現在sliceと、その出口へ必要な一つの契約境界だけを現在orderにする。
+各orderを一つのslice出口に必要な一つの契約境界へ保つ。独立した複数orderは同時に`DO`へできるが、
+一つのorderへ複数境界を束ねない。
+実装候補の検索と並列衝突判定は[既知技術採択・並列実装地図](m3-parallel-implementation-map.md)を使う。
+旧快適利用粒度化表は履歴・oracle来歴であり、本表の`DO`行へ選ばれていない旧IDをdispatchしない。
 
 1. `decision-index.md`で主題を逆引きする
 2. 下の「現在の並列レーン」にあるPRODUCT-ASSETの現在粒と、現在sliceのblocking decision、
@@ -113,8 +117,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 ## 現在の並列レーン
 
-現在sliceは**VS-2 parameter editing / timeline interval editing**で、正常系`CU-205E`とmove command実装`CU-201M-C`まで`DONE`。`CU-204P`は通常source 0の再確認後、新source成立まで再監査・実装を反復しない。次の一粒はdocs-only `CU-201T-S`。PRODUCT-ASSET laneは意味・所有境界を優先して
-1チケットずつ進めるが、この直列性を他の独立contract／repair／authoring laneへ波及させない。
+現在sliceは**VS-2 parameter editing / timeline interval editing**で、正常系`CU-205E`とmove command実装`CU-201M-C`まで`DONE`。`CU-204P`は通常source 0の再確認後、新source成立まで再監査・実装を反復しない。現時点で選定済みの次粒はdocs-only `CU-201T-S`。後続は[M3既知技術採択・並列実装地図](m3-parallel-implementation-map.md)から、共有writer、event loop、GPU device、bundle publicationが衝突しない子を複数選定できる。
 現在の全lane、変更path、STOP、Human Response Frontierは
 [並列レーン着手地図](reviews/2026-07-25-parallel-lane-readiness-map.md)を正とする。
 旧night 3分岐は直接統合しない。

@@ -36,6 +36,11 @@ handoff contractを使い、実装とcommitは一つの契約境界に保つ。
 表の「既存地図との対応」は親IDを一括分類するものではない。現在sliceとorderは
 [implementation ledger](../implementation-ledger.md)、意味と完了条件は既存G/U IDを正とする。
 
+M3残作業の実装分解は[既知技術採択・並列実装地図](../m3-parallel-implementation-map.md)を入口とする。
+同地図の親は検索・供給route、子はtarget/oracle/cutover、衝突表は直列合流点を示す。旧快適利用粒度化の
+施工step、owner候補、再確認、mirror行を新しい実装粒として再発行しない。実際のdispatch可否は引き続き
+implementation ledgerの`DO`行、製品意味と完成条件は本仕様の既存G/U taskが正本である。
+
 ### 最初の製品完成線: VS-1 Rectangle配置とUndo
 
 M3の現在sliceは、通常製品routeからproduct-owned BrowserでRectangleを選び、native Stageへ配置し、
@@ -62,7 +67,7 @@ VS-1の正負oracle、blocking decision、後続のVS-2/VS-3は
 | G0-8 | resource予算presetとpreview縮退設定 | **意味完了・実測待ち** | [着手前決定§7](../reviews/2026-07-16-m3-preflight-decisions.md#7-g0-8-resource値はm4の事実から決める)。具体値だけG0-4+M4-K1a後に決定 |
 | G0-9 | React chrome + native Stage/Timelineのsurface統合 | **G0-9L固定Mac prerequisite evidence PASS / G0-9D WAIT-HARDWARE / 製品統合は別order** | [G0-9段階化](../reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)、[UI runtime責任境界](../ui-runtime-architecture.md)、[React直接移管契約](../reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)、[surface topology決定](../reviews/2026-07-21-ui-surface-topology-decision.md)を正本とする。固定Macのdirect wgpu(+Vello局所)比較、IME/VoiceOver、focus、resize/DPI/capture/lost、bounded GPU timestamp等のplatform prerequisite evidenceはG0-9Lで限定確定済み。これはW0b、H1b、Motolii Studio Preview、通常製品window、egui baseline削除、Windows/追加hardwareを解禁・完了しない。R0〜R6のproduct-owned React packageとmock consumer化を一境界ずつ進め、その後のbuilt-in WebView Hostもoffline bundle、closed typed transport、Host epoch、strict origin/lifecycleを別orderで再契約する。G0-9DはWindows・追加hardware・配布対象MacのDistribution Ready gateとして残す。plugin sandbox／公開契約はG0-3で別判定し、G0-9L/G0-9Dの合格へ含めない |
 
-以下は**M3入場(U0a完了)後**の論理依存表である。G0自体はM3全コードを一括停止する門ではないが、初回Uシリーズは下表の論理依存に加えて本書の直列運用を優先する。U1aはU0bの5層所有とdomain intentを待ち、custom UI追加タスクはG0-3の判定後に初めて起票する。U0〜U9を一括または並走発注しない。
+以下は**M3入場(U0a完了)後**の論理依存表である。G0自体はM3全コードを一括停止する門ではない。U1aはU0bの5層所有とdomain intentを待ち、custom UI追加タスクはG0-3の判定後に初めて起票する。U0〜U9を一括発注せず、[M3既知技術採択・並列実装地図](../m3-parallel-implementation-map.md)でowner、contract、file、oracleが独立した子だけを別orderとして並走させる。
 
 ## 方針(2026-07-24: UI責任境界・surface topology・egui製品不採用決定、G0-9 platform受入比較中)
 

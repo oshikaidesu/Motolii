@@ -1,6 +1,11 @@
 # M3 快適利用ワークマップ粒度化（2026-07-22）
 
-状態: **Fable全粒レビュー合格 / M3-A〜D動線再レビューACCEPT / Codex採否済み / 実装発注ではない**
+状態: **履歴snapshot / oracle来歴 / 現行dispatch・実装分解ではない**
+
+> **2026-08-01移行**: 現行の検索親、詳細子、供給route、並列衝突は
+> [M3既知技術採択・並列実装地図](../m3-parallel-implementation-map.md)へ移した。runnerは
+> [implementation ledger](../implementation-ledger.md)の「現在の並列レーン」にある`DO`行だけを検査する。
+> 本書の152行と`DO / WAIT / SPLIT` cellは過去判断とoracleの参照用であり、同期・修復・新規dispatchしない。
 
 ## 1. 目的
 
