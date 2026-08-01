@@ -975,9 +975,11 @@ gate_check_allowed_files() {
     if [[ "$af" == *".."* ]]; then
       gate_fail "ALLOWED_FILE path traversal: $af"
     fi
-    # 正規化されていないpathはowner分類を潰す。`./crates/a`と`./crates/b`は
-    # 両方ownerが`.`になり、複数境界の粒が単一ownerとして通過する(2026-08-01独立検収P0)
-    if [[ "$af" == ./* || "$af" == */ || "$af" == *//* ]]; then
+    # 正規化されていないpathはowner分類を潰す。先頭`./`だけでなく
+    # `crates/./a`/`crates/./b`も両方ownerが`crates/.`になり得るため、
+    # path componentとしての`.`を全位置で拒否する(2026-08-01独立検収P0)
+    if [[ "$af" == ./* || "$af" == */./* || "$af" == */. || \
+          "$af" == */ || "$af" == *//* ]]; then
       gate_fail "ALLOWED_FILE path must be normalized: $af"
     fi
     if [[ "${af%%/*}" == "target" ]]; then

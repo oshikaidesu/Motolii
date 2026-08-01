@@ -534,6 +534,27 @@ assert_status 3 "$RUN_STATUS" "unnormalized multi-owner allowlist rejected"
 grep -Fq -- "must be normalized" "$TMP_ROOT/stderr.log" \
   || fail "unnormalized ALLOWED_FILE rejection reason missing"
 
+# 先頭だけでなく埋め込み`.` componentでもowner分類を潰せる。`crates/./alpha`と
+# `crates/./beta`が同じ`crates/.`へ畳まれる形を、別の負例として固定する。
+EMBEDDED_NORMALIZE_TASK="$(printf '%s\n' "$TASK" |
+  sed 's|^ALLOWED_FILE: src.txt$|ALLOWED_FILE: crates/./alpha/lib.rs|; s|^ALLOWED_FILE: test.txt$|ALLOWED_FILE: crates/./beta/lib.rs|')"
+: >"$CALL_LOG"
+run_script prepare "$WT" "$TMP_ROOT/embedded-unnormalized.md" "$EMBEDDED_NORMALIZE_TASK"
+assert_status 3 "$RUN_STATUS" "embedded-dot multi-owner allowlist rejected"
+[[ ! -s "$CALL_LOG" ]] || fail "embedded-dot allowlist must fail before model invocation"
+grep -Fq -- "must be normalized" "$TMP_ROOT/stderr.log" \
+  || fail "embedded-dot ALLOWED_FILE rejection reason missing"
+
+# contract boundary gateを先行allowed-files gateのglobalへ戻すmutationを固定的に拒否する。
+# 通常dispatchだけではglobalが偶然current orderと一致するため、機能正例だけでは退行を
+# 検出できない。関数本体がorderを直接読むこととglobal名を参照しないことを両方固定する。
+CONTRACT_GATE_SOURCE="$(sed -n '/^gate_check_contract_boundary() {$/,/^}$/p' "$SCRIPT")"
+printf '%s\n' "$CONTRACT_GATE_SOURCE" | grep -Fq "grep -E '^ALLOWED_FILE: ' \"\$order_file\"" \
+  || fail "contract boundary gate must read ALLOWED_FILE from the current order"
+if printf '%s\n' "$CONTRACT_GATE_SOURCE" | grep -Fq 'GATE_ALLOWED_FILES'; then
+  fail "contract boundary gate must not depend on stale GATE_ALLOWED_FILES"
+fi
+
 
 # docs/はledger・decision-index登録がworkflow上必須のため、別境界に数えない。
 # 「拒否されない」を弱いassertで済ませると正例を証明できない(2026-08-01独立検収P1指摘)ため、
