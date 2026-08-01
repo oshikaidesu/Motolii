@@ -161,7 +161,7 @@ GAP-13の2026-07-16縮小判断は安全なfallbackとして残すが、最終�
 
 JS/p5.jsをDocument・評価器・レンダ契約へ直接入れず、まず**編集時Generatorが型付きD2コマンドbatchを返す汎用hook**を置く。ホストは開始時snapshotに対してbatch全体をpreflightし、単一writerへ1 macroとしてcommitする。成功時は通常のGroup/Clip/VectorRecipeだけが残り、失敗・cancel・制限超過時はDocumentとUndo履歴を一切変えない。Generatorへ`&mut Document`は渡さない。
 
-最初のadapterは**Motolii ShapeScript**とする。Paper.jsの`Project/Layer/Item/Path/Group`型object modelを設計参照にしつつ互換を名乗らず、座標はMotolii正準空間(原点中央・Y-up・高さ=1.0)、shape配置は中心基準、回転保存はradianに固定する。曖昧な位置引数を避け、`center`/`size`等のnamed fieldを使う。命令を通常のvector layer群へ変換し、1実行=1 Group=1 Undoとする。生成物は実行後に通常の編集UIで変更でき、保存・再読込・preview・exportにscript engineを必要としない。script source、runtime名、実行event stream、生成元provenanceはv1 Documentの必須意味にしない。
+最初のprogram adapterは**MTS-1 TypeScript one-shot Shape recipe adapter**とする。旧称`Motolii ShapeScript`を独自言語としては棄却し、Paper.jsの`Project/Layer/Item/Path/Group`型object modelを設計参照にしたHost SDKとして再配置する。Paper.js互換を名乗らず、座標はMotolii正準空間(原点中央・Y-up・高さ=1.0)、shape配置は中心基準、回転保存はradianに固定する。曖昧な位置引数を避け、`center`/`size`等のnamed fieldを使う。命令を通常のvector layer群へ変換し、1実行=1 Group=1 Undoとする。生成物は実行後に通常の編集UIで変更でき、保存・再読込・preview・exportにscript engineを必要としない。TypeScript source、runtime名、実行event stream、生成元provenanceはv1 Documentの必須意味にしない。[言語境界決定](../reviews/2026-08-01-vism-authoring-language-boundary-decision.md)の`LANG-TS-F0`と`VSM-C2`前に実装しない。
 
 LLM向けの第2入口として**SVG materialize adapter**を分離する。SVGの公開語彙を入力に利用するが、左上原点・Y-down・viewport単位は入口で正準座標へ変換し、SVG DOM/XMLをDocumentの実行意味にせず通常のGroup/VectorRecipeへ実体化する。
 
@@ -213,7 +213,7 @@ LLM向けの第2入口として**SVG materialize adapter**を分離する。SVG�
 | U8a | group/clip mask UI | U3b, M2-D7 | grouping/ungrouping/clip modeがD2 command経由でUndo可能 |
 | U8b | group仮出力toggle | U8a, M4-K7c | bake発動・区間無効化・再freezeがUIからE2Eで確認でき、toggle前後でDocument/Undo/serialize不変 |
 | U9a | **Editor Generator command hook**: 外部generator結果を型付きD2 command batchとして受けるtoolkit/runtime非依存境界 | U2b, M2-D2 | (1)generatorへ`&mut Document`を渡さない (2)開始snapshotに対するbatch全体preflight後だけ単一writerへ1 macro commitし、commit時に現行Documentと一致しない結果はstaleとして拒否 (3)成功=Undo 1回、失敗/cancel/制限超過/stale=Document・履歴変更ゼロ (4)journal/serializeには解決済み通常編集だけが残る (5)script engine無しでsave/reload/preview/export同一 (6)domain公開型にegui/JS/runtime固有型なし |
-| U9b | **Motolii ShapeScript one-shot adapter**: Paper.js型object/path/group思想を正準座標で再構成し、通常Group+vector layerへ変換 | U9a, M2-D1i-2 | (1)原点中央/Y-up/高さ1.0、center基準shape、radian、named fieldの固定表 (2)Path/Shape/Group/style/transform stack/unsupported APIの固定表 (3)同一script+明示`u64 seed`で同一command batch、時計/OS entropyなし (4)1実行=1 Group=1 Undo、生成物を通常編集可能 (5)network/filesystem/process/GPU textureへ非接続 (6)実行時間・command数・path点数・nest深度の上限超過を型付き拒否し部分生成なし (7)JS engineをDocument/renderer/plugin契約へ露出しない (8)editor buffer/script sourceの持ち場を分類し、恒久保存形式はこのタスクで発明しない (9)`draw()`/前frame画素/暗黙canvas蓄積が構文不能 |
+| U9b | **MTS-1 TypeScript one-shot Shape recipe adapter**（旧称ShapeScript）: Paper.js型object/path/group思想をHost SDKとして正準座標で再構成し、通常Group+vector layerへ変換 | U9a, M2-D1i-2, LANG-TS-F0, VSM-C2 | (1)原点中央/Y-up/高さ1.0、center基準shape、radian、named fieldの固定表 (2)Path/Shape/Group/style/transform stack/unsupported APIの固定表 (3)同一source+明示`u64 seed`で同一command batch、時計/OS entropyなし (4)1実行=1 Group=1 Undo、生成物を通常編集可能 (5)network/filesystem/process/GPU textureへ非接続 (6)実行時間・command数・path点数・nest深度の上限超過を型付き拒否し部分生成なし (7)JS engineをDocument/renderer/plugin契約へ露出しない (8)editor buffer/sourceの持ち場を分類し、恒久保存形式はこのタスクで発明しない (9)`draw()`/前frame画素/暗黙canvas蓄積が構文不能 (10)独自syntax、別runtime、別source extensionを追加しない |
 | U9c | **SVG materialize adapter**: LLM生成SVG→通常Group/VectorRecipe | U9b | (1)SVG viewport/左上原点/Y-downを正準座標へ決定的変換 (2)採用element/style/transformと拒否表を固定 (3)DOM/XML/script/event/外部URLをDocumentへ残さず、外部参照と実行要素を型付き拒否 (4)materialize後はSVG parser/runtime無しでsave/reload/preview/export同一 (5)同じSVGから同じD2 batch、1 import=1 Undo |
 | AG-3 | **domain完了／製品UI未実装のv1.x追加レーン**: React import dialog／gain form、native Timelineのaudio component展開／waveform／mute／音声分離intent | AG-1, AG-2, U6, U2c, U3a | 同じClipのmove/trim/retimeでA/V追従、分離前後PCM一致、1 gesture=1 Undo、別project mode/別timeline schemaを作らない。React/nativeは同じHost projectionを読み、Document／selection／Undoを二重所有しない。現行U6のMV最短導線を置換せず追加する |
 
@@ -230,7 +230,7 @@ PRODUCT-ASSET laneの本筋はU2b-2 Place接続である。BrowserのCSP offline
 
 U2h、Rectangle D2、製品surfaceを実装しない。G0-8+K1a後のU0f、M4依存の
 U1g/U1h/U3f/U8b、D5依存のU5、GAP-16依存のU7、未統一Browser P41、
-U9bのengine/sandbox/保存判断等へ到達したら、仕様や外部依存を迂回せずSTOPする。
+U9bのengine/sandbox/保存判断等へ到達したら、`LANG-TS-F0`と`VSM-C2`を迂回せずSTOPする。
 
 ## GR-UI審判割当表
 
@@ -290,4 +290,4 @@ U9bのengine/sandbox/保存判断等へ到達したら、仕様や外部依存�
 - OpenCutからコードは取り込まない。操作仕様・レイアウトのどの観察を採るかだけをU3a着手前に棚卸しする
 - Param Pipelineの具体型は未決。U4cは現行意味の可視化までで、Modifier UIの採否判断ではない
 - 枠外overscanの距離別品質・bounds cache・VRAM予算の固定値はU1f着手前spikeで決める。Stage全域を無制限Final描画するdefaultは採らない
-- U9bのJS engine、sandbox方式、script保存場所は未決。p5.js互換はv1要件にせず、有限one-shot命令のsyntax sugarが必要ならShapeScript完成後に別判断する
+- U9bのJS engine、sandbox方式、TypeScript source保存場所は未決。p5.js互換はv1要件にせず、独自ShapeScript syntax／別runtimeは作らない

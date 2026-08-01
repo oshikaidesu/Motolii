@@ -70,6 +70,61 @@ first-party無特権は「第三者配布が完成した」または「現行sta
 
 これは分類の決定であって、新しいtrait/APIの実装許可ではない。`FilterPlugin`や`ParamDriverPlugin`へ自由な`&mut Document`、layer名検索、UI callback、独自Undo、隠れcontrollerを足して代用しない。公開境界の解凍条件、capability分割、Hostへ昇格する審判は[小さなコアと探索可能な拡張](extensible-core-model.md)を正本とする。
 
+### 1.2 作者が最初に選ぶインターフェース群
+
+第三者作者は`PluginKind`や実装言語から始めず、表現が何を入力し、どのtyped意味を
+rasterize前まで保持するかを先に選ぶ。次の名称は作者向けの入口分類であり、新しいRust trait、
+公開enum、Vism package kindを意味しない。
+
+| 作者インターフェース群 | 主な入力 | 保持／出力する意味 | 現行または将来の正規化先 | 現在地 |
+|---|---|---|---|---|
+| **Filter / Pixel** | texture、mask、field | premultiplied texture | `FilterPlugin` / `CompositePlugin` | texture 1→1とN→1は実装済み。typed port／multi-passはgate待ち |
+| **Source / Generator** | parameter、時刻、seed、必要ならtyped source | textureまたはversion付きrecipe | `LayerSourcePlugin` / Structured Recipe | raster出力は実装済み。recipe作者口は未実装 |
+| **Path / Vector** | Shape、Path、SVG等の正準化source | `VectorRecipe`、vertex、open／closed、`PathOp`順序 | Authoring Tool / Generator / LayerSource | 既存`PathOp`を参照し、GAP-15と作者入口を待つ |
+| **Input / Data Provider** | MIDI、BPM、解析結果、手動tap、asset | `DataTrack`、event、field等のtyped data | `ParamDriverPlugin` / provider | 値列生成は実装済み。汎用input portとstructured eventはVSM-B2待ち |
+| **Mapping / Behavior** | typed data、scope、対象identity | parameter、transform、instance channelとの継続関係 | ParamDriver / Behavior | 現行DataTrack→parameter以外は比較中 |
+| **Instance / Particle** | Shape／mesh source、event、seed、distribution | stable InstanceId、birth、lifetime、per-instance channel | LayerSource / Duplicator / Simulation Bake | 閉形式particleはLayerSource候補。structured instanceはM5-P0I待ち |
+| **Text** | run、cluster、glyph、style span | 文字／単語／行identityとselector対象 | Text Sequence / Effector / Generator | M5-P6とText gate待ち |
+| **Simulation / Bake** | recipe、fixed step、seed、typed collider | Host所有StateTrack／再生成可能artifact | Simulation / Analysis Bake | 現行render traitへ隠さず、M4／Simulation gate待ち |
+| **Tool / Bridge** | read-only snapshot、外部選択、作者操作 | preflight可能なtyped command batch | Authoring Tool | atomic batchとExternal Authoring Bridgeのgate待ち |
+
+`Particle`は一つの万能interfaceではない。birth timeと`t`から直接求まる粒子は
+**Source / Instance**、相互衝突や逐次積分が本質なら**Simulation / Bake**へ置く。
+同様にMIDIはdevice APIそのものをVismへ渡さず、**Input / Data Provider**が記録済みeventを供給し、
+**Mapping / Instance**側がShape、Text、Path、parameterへ投影する。
+
+選択手順:
+
+1. 利用者が見る完成意図を一つ書く。`Glow`、`MIDI Note Bars`等で、内部kind名を製品名にしない。
+2. 入力と、rasterize前まで失ってはいけないidentityを列挙する。
+3. 時間意味をone-shot、`f(t)`、有限時間窓、Host所有Bakeのどれかへ置く。
+4. 上表のインターフェース群を選び、現在実装済みのtraitへ正規化できる場合だけ実装する。
+5. 未実装のtyped port、instance、text、state、atomic commandが必要なら、private APIや生JSONで迂回せずSTOPする。
+6. 複数の小Vismを完成用途へ束ねる場合は、consumerから具体provider IDを探さずKitへ接続を置く。
+
+この分類によりfirst-partyと第三者は同じ入口、停止線、conformanceを使える。作者入口の長期形と
+shader／asset closureは[Vism作者journey](reviews/2026-07-27-vism-authoring-journey-decision.md#55-作者インターフェース群--textpathinputinstanceを画素へ潰さない)、
+候補一覧と実装laneは[Vismプラグインカタログ](vism-plugin-catalog.md)を参照する。
+
+### 1.3 型付き出力を次の入口として再利用する
+
+作者インターフェース群は、Vismを相互排他的な終端kindへ分類するためのものではない。
+あるVismがrasterize前まで保持したtyped出力を、Kitの接続により別のVismの同じ、または異なる
+インターフェース群へ渡せることを拡張性の原則とする。本書ではこれを**再帰的なインターフェース再利用**
+と呼ぶ。ただし、実行時の自己呼び出し、無制限な入れ子、暗黙feedbackを許す意味ではない。
+
+代表例:
+
+- Path Providerの正準PathをText Vismへ渡し、glyph／cluster identityを保ったまま文字をPathへ沿わせる。
+- Text Vismが生成したglyph outlineをPathとして公開し、PathOp、Stroke、Instance配置等の後段へ渡す。
+- その結果のPathやInstanceを、さらにField、Material、Filterへ接続し、最終段まで可能な限り意味を画素へ潰さない。
+
+したがって`TextOnPathPlugin`のような組み合わせごとの万能kindを増やすことを第一選択にしない。
+拡張点は「閉じた少数のtyped入口」と「開かれた構成」の組で作る。Vismは具体provider IDを探索せず、
+Kitがprovider／consumerと型付きportを選ぶ。Hostは型互換、依存graphの非循環、資源上限、時間寿命を
+検証する。循環や過去状態が表現の本質なら、通常接続へ隠さず明示的なHost所有
+Simulation／Feedback／Bake境界の締結を待つ。
+
 ## 1.5. UIは書かない(v1)
 
 **現在のプラグイン公開契約にカスタムUIはまだ無い。** `NodeDesc.params`からHost標準parameter panelを生成することはM3 U4aの必須fallbackとして決定済みだが、製品接続は未実装である。plugin所有egui/native/Web code・wgpu描画panel・独自widgetを書いてもホストはロードしない。標準製品surfaceのnative／React選定はplugin分類と独立であり、custom UIのruntime・sandbox・互換・配布は[軸分離決定](reviews/2026-07-22-m3-surface-extension-axis-separation.md)に従ってG0-3 / GAP-13で比較する。本書からAPIを推測しない。
@@ -93,6 +148,22 @@ first-party無特権は「第三者配布が完成した」または「現行sta
 | `min_inputs` / `max_inputs` | 種別の契約に合わせる |
 
 未知の`id`を含むプロジェクトは**ロード失敗にしない**(警告+パススルー)。ホスト側の責務だが、作者はid/versionを安易に変えないことで可搬性を守る(F-9)。
+
+### 2.1 LLM実装時のタグ提案とローカル検索（2026-07-26運用追補）
+
+検索情報は、生成者と正本性の異なる三層へ分ける。
+
+| 層 | 例 | 責任 |
+|---|---|---|
+| **宣言・検証済みの実装事実** | plugin kind、型付きinput／output、時間依存、要求capability | Hostが検索facetへ投影する。自由記述tagへ重複転記しない |
+| **表現を説明する候補語** | glow、VHS、lyrics、organic、retro | LLMまたは人間が候補を作る。LLM候補はcode、WGSL、`NodeDesc`、parameter、fixture、preview、使用例のどれに基づくか短い根拠を添える |
+| **公開metadataの`tags`** | 作者が採択した検索語 | 作者／ownerが候補を承認、修正、却下して初めて確定する |
+
+LLMがVism／pluginを実装した場合、同じ実装文脈を使って**タグ候補と短い根拠**をauthoring handoffへ出す。公開済み実装の意味、parameter、previewが変わった場合も、既存tagとの差分を候補として示し、自動で追加・削除しない。LLMは最初の司書にはなれるが、公開語彙の最終curatorではない。
+
+ローカル検索は、宣言済みの実装事実、作者承認済みtag、利用者のlocal synonym／aliasを組み合わせてよい。ただしlocal synonym／aliasはHost／User libraryの検索投影であり、Vism package、`NodeDesc`、Projectを無断で書き換えない。価格、license、公式性、trust、安全性、compatibilityをLLMの推測tagから決めない。
+
+これは2026-07-26時点の任意のauthoring支援であり、特定modelの能力をplugin契約、manifest schema、conformance gateへ焼く決定ではない。tag vocabulary、alias形式、保存先、検索ranking、製品UIは未決である。根拠を説明できない誤分類やmodel間の大きな揺れが反復した時、または永続schema／公開契約／必須gateへ昇格する前に、この運用を再検討する。
 
 ## 3. 絶対禁止(破ると設計根拠が崩れる)
 
@@ -205,6 +276,7 @@ ParamDriverは`build_track`で`DataTrack`を返すだけ。ピクセルに触ら
 - [ ] 参照実装またはゴールデン/単体テストがある
 - [ ] **純関数**: 同じ`t`+入力で2回呼んでも同一出力(`motolii_testkit::purity::assert_filter_pure` / `assert_param_driver_pure`)
 - [ ] 表示名が「意図単位」になっている
+- [ ] LLMが`tags`を提案した場合、実装根拠つきの候補をhandoffへ出し、作者／ownerの承認前に公開metadataへ確定していない
 - [ ] カスタムUI(plugin所有egui/native code / wgpu panel / 独自widget)を製品コードに含めていない
 
 ## 8. まだ凍結していない口(触らない / 予約のみ)
