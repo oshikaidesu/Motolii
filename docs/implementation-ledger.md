@@ -7,7 +7,8 @@
 ## 使い方
 
 1. まず本ページの「現在の並列レーン」を確認する。M3の複数`DO`は地図の親・子・衝突表がfile-disjointと判定した時だけ並列にする。
-2. M3は先に[既知技術採択・並列実装地図](m3-parallel-implementation-map.md)で検索親、詳細子、共有file衝突を確認する。
+2. M3は[既知技術採択・並列実装地図](m3-parallel-implementation-map.md)で検索親を選び、
+   [実行可能発注地図](m3-executable-dispatch-map.md)でexact target、擬似コード、正負oracle、利用者出口が閉じた子だけを`DO`候補にする。
 3. Issueと該当する[マイルストーン仕様](specs/README.md)のタスク行・実装ガードを読む。
 4. 依存が1件でも未mergeなら着手しない。
 5. 完了時は、実装PR内で仕様のタスク表と本ページを同時に更新する。
@@ -59,6 +60,7 @@ M3は[縦slice実行方針](reviews/2026-07-24-m3-vertical-slice-execution-decis
 各orderを一つのslice出口に必要な一つの契約境界へ保つ。独立した複数orderは同時に`DO`へできるが、
 一つのorderへ複数境界を束ねない。
 実装候補の検索と並列衝突判定は[既知技術採択・並列実装地図](m3-parallel-implementation-map.md)を使う。
+発注前の現在状態とexact deltaは[実行可能発注地図](m3-executable-dispatch-map.md)を使う。
 旧快適利用粒度化表は履歴・oracle来歴であり、本表の`DO`行へ選ばれていない旧IDをdispatchしない。
 
 1. `decision-index.md`で主題を逆引きする

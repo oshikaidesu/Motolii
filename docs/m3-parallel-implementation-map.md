@@ -49,9 +49,9 @@ file-disjointな旧IDまたは子IDをledgerの別laneへ`DO`として昇格さ�
 
 ### 3.1 dispatch状態
 
-`READY`は依存先がmainにあり、記載targetを最新codeへ照合すれば実装orderへ上げられるという意味であり、
-main実装済みという意味ではない。次の子だけは先に記載条件を閉じる`GATED`である。その他の子は前段依存を
-満たした時点で`READY`とする。
+本書の子は設計上の施工packageであり、依存充足だけで`READY`へ上げない。exact delta、既存target、
+allowlist、正負oracle、利用者出口まで閉じた現在状態は
+[M3実行可能発注地図](m3-executable-dispatch-map.md)を正とする。
 
 | 子 | 状態 | 実装前に閉じるもの |
 |---|---|---|
@@ -69,7 +69,9 @@ main実装済みという意味ではない。次の子だけは先に記載条�
 | `P11-C3` | `HARDWARE` | 所有するWindows/Mac、DPI、NVDA/VoiceOver、配布artifact |
 | `P12-C1` | `GATED` | Unsaved / Save-As / cancel / failed-saveの製品policy |
 
-`GATED`は親全体の停止ではない。同じ親の`READY`な子、または成果を保つ`REDUCE` sliceは並列に進める。
+`GATED`は親全体の停止ではない。また、この表は現在の実装許可を表さない。同じ親でも
+[実行可能発注地図](m3-executable-dispatch-map.md)が`IMPLEMENT`へコンパイルし、implementation ledgerへ
+一意な`DO`が載った別子、または成果を保つ`REDUCE` sliceだけを並列に進める。
 
 ## 4. 子項目
 
@@ -89,9 +91,9 @@ main実装済みという意味ではない。次の子だけは先に記載条�
 
 - **結果**: Browser、Inspector、Feedback、Stage chrome、Timeline tools、Easing入口、KEYS/LAYERS、iconをproduct packageの一意ownerへ揃える。
 - **再利用target**: `ui/motolii-web/src/candidates/`、`patterns/`、`feedback/`、`host/`、DTCG生成CSS。
-- **薄い残余**: Host read modelとtyped callback。React側にselection、playhead、Undo、Documentを置かない。
+- **薄い残余**: 未移管assetは固定mock SHA、移管済みassetはprovenance manifestの現product closure hashからcomponent/hook/state/event/effect/story/test closureを列挙し、動的stateをlocal presentationまたは既存Host projection/typed intentへ一件ずつ分類する。React側にselection、playhead、Undo、Documentを置かない。
 - **依存／並列**: componentごとにfileが分かれる範囲は並列。Vite bundle/manifest publicationだけ直列。
-- **oracle**: mockはproduct export consumer、copy 0、固定DOM/class/stable ID/ARIA/interaction、visual threshold変更0。
+- **oracle**: mockはproduct export consumer、copy 0、固定DOM/class/stable ID/ARIA/interaction、visual threshold変更0。SOURCE ASSET manifestとDYNAMIC_TRANSITION票を独立reviewで照合し、source外から補完したinteraction/state 0、Host snapshot/playback/reload後のstale apply 0、semantic stateのcomponent-local owner 0。
 - **cutover**: `docs/mocks-ui` runtime importとlegacy adapterを禁止し、旧sourceをoracleとしてfreeze。
 - **吸収する旧ID**: CU-0A01〜09、CU-0B01/02、CU-203M/P、CU-205B*。
 
@@ -478,8 +480,9 @@ modelが新機構を仕様化せず利用者例外へ返す。
 2026-08-01にFable 5をread-onlyで呼び、現行spec、ledger、主要runtime、Cargo、referencesと本地図案を
 照合した。指摘から、projectとmediaの検索親分離、AccessKitの「既採択」誤認修正、rfd main-thread probe、
 export headless device、React surface hash chain、wgpu/Vello version closure、残る人間・hardware・仕様gateを
-本文へ採用した。FableはWeb検索結果を返さなかったため、外部互換性の根拠は下記一次資料をCodexが別途
-確認した。Fableの賛同自体はauthorityまたは実装許可に数えない。
+本文へ採用した。Fableの`WebSearch`は検索結果とsnippetを返したが、`WebFetch`による全文確認まで成立しない
+資料が含まれたため、それらは`検索確認`に留めた。外部互換性の根拠は下記一次資料をCodexが別途確認した。
+Fableの賛同自体はauthorityまたは実装許可に数えない。
 
 ## 10. 一次資料と現行採択
 

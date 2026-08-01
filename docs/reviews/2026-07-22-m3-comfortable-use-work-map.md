@@ -19,6 +19,8 @@ product-owned React面、native Stage/Timeline、Document編集、selection、�
 2026-08-01以降、検索可能な供給route、詳細な実装子、共有境界の衝突、並列waveは
 [M3既知技術採択・並列実装地図](../m3-parallel-implementation-map.md)を正とする。本書はLocal Alphaと
 Distribution Readyの利用者成果・完成線を維持し、旧W/CU行をdispatch queueとして使わない。
+各子の現在状態、exact target、order発行可否、Local Alphaまでの機械依存は
+[M3実行可能発注地図](../m3-executable-dispatch-map.md)を正とする。
 
 ## 2. Authorityと位置づけ
 

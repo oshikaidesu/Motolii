@@ -211,6 +211,7 @@ stage packetが保持していた安全情報は削らない。全M3 orderは名
 | 快適利用Work Map | Local Alpha / Distribution Readyと遠方の利用者成果地図 | 個別order、現在状態、全粒のSTOP |
 | 粒度化文書 | 2026-07-22時点の候補分解・依存監査、過去oracleの履歴資料 | dispatch、現在地、全将来orderの意味・順序拘束、継続的な粒修復 |
 | M3既知技術採択・並列実装地図 | 検索親、詳細子、供給route、共有境界の衝突、並列wave、cutover | 製品意味、実merge状態、runnerの`DO`判定 |
+| M3実行可能発注地図 | 33子のtyped state、exact target、order IR、現在の発行可否 | 製品意味、依存採択、ledger外の実装許可 |
 | implementation ledger | 現在slice、並列可能な現在order、直後のhandoff、runnerが読む`DO` | 意味・完了条件・全将来粒の再記述 |
 | closed order | 今回のallowlist、非目標、正負oracle、STOP、commands | M3全体地図の再掲 |
 

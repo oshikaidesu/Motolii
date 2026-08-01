@@ -16,6 +16,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 - 旧`opus-spark-grok`、`ORDER_MANAGER_MODEL`、`OPUS_DELTA_*`、旧task-class routingを現行へ使わず、自動翻訳・黙ったfallbackをしない。branch内の`delegate-cursor-supervised.sh`を直接起動せず、Git common dirへactivateされたcanonical runnerだけを正規入口にする。receiptの`RUNNER_SHA256`がactive manifestと一致しない実行は採用根拠にしない
 - 一回のloopは一つの`CONTRACT_BOUNDARY`だけを扱う。`GRAIN`は契約境界であり施工step数ではない。同じbase、owner、allowlist、read set、oracle、非目標内の複数stepは一つのSpark sessionで施工し、Grok／Opusをstepごとに再起動しない。境界または完了条件が増える場合は同一粒で施工せず、新しいユーザー許可へ戻す
 - 主担当Codexは正本・履歴・コード事実を一度だけ広く読み、外部modelへ`AGENTS.md`、spec、repo全体を三重送信しない。orderは`READ_MODE: CAPSULE`、`CONTEXT_FACT:`、exact `READ_FILE / INTERNAL_TARGET / TEST_TARGET / REUSE_TARGET`、`NEW_SURFACE: FORBIDDEN`を持つ。上限はtask 12 KiB、order 32 KiB、target capsule 48 KiB、compiled grain 16 KiB、authority 4件、allowlist 8件、read set 12件／128 KiB。欠落、hash変化、target不一致、runner-only metadata漏洩はmodel起動前にfail closedする
+- React source asset粒では`SOURCE ASSET`に列挙したsource closureを`READ_FILE`へ全件含め、各dynamic stateのcomponent/hook/state/event/effectへ一意な`REUSE_TARGET`を置く。source closureがread set 12件／128 KiBまたはtarget capsule 48 KiBを超える場合は省略・切断せず`ORDER: STOP`とし、相互作用するhandler／story／test closureを保ったcomponent単位へ粒を縮小する
 - 視野幅は`AUTHORITY_SPAN / OWNER_CLOSURE / CAUSE_CLOSURE / CONTRACT_CLOSURE / ORACLE_CLOSURE / REUSE_CLOSURE`から機械算出し、UNKNOWN、COMPETING、UNRESOLVED、ABSENT、NEWを含む`WIDE`をSparkへ送らない。shared／permanent境界は検証済み`CONTRACT_AUTHORITY`と正本hashが一致する場合だけ施工する。詳細なfield、hazard、React、Rerunの強制動線は[監督ループ正本](docs/reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md)を読む
 - Grok findingの採否と各`DELTA_RESOLUTION`をCodexが照合し、`CODEX PRECHECK: APPROVED`前にSparkを起動しない。Opus finalが`ACCEPT`かつP0/P1=0でなければ採用、commit、pushしない。review findingは現粒のREJECTまたは新粒候補であり、同一粒のscope追加権限ではない。性能regressionはLLM verdictでなくbench、golden、profilingで判定する
 - 監督ループを件数条件で凍結しない。計測、論文、利用者報告、外部LLM助言はauthorityでなくobservationとし、ユーザーの明示決定、正本更新、専用負例、runner byte固定、明示activateが揃うまで現行routeを変更しない。取消は証跡を削除せず`cancel` receiptでorderの採用資格を終端化する。Fableは大地図、共有公開境界、恒久契約、長期衝突に限るloop外read-only相談であり、通常gateにしない
@@ -43,11 +44,16 @@ Browser、Inspector、`KEYS / LAYERS`、Easing Panel等のReact所有面は、
 固定モックを見た目だけのoracleとして製品用componentを別途縮約再実装せず、固定sourceをproduct packageへ
 直接所有移管し、mockをproduct exportのconsumerへ反転する。mock固有state、legacy bridge、fixture adapterだけを
 Host projection / typed intentへ交換する。DOM/CSSを公開契約へ焼かない規律を、source assetを捨てる理由にしない。
+静止画、render結果、DOM snapshot、live DOM、React DevToolsから動的挙動を補完しない。未移管assetは固定mock SHA、
+移管済みassetはprovenance manifestが固定した現product closure hashのReact実コードを開き、対象exportから
+到達するcomponent、hook、local state、event handler、effect、model、Storybook、Playwright操作列をsource closureとして
+列挙する。各動的stateを`維持するlocal presentation`または`Host projection / typed intentへ交換するsemantic state`へ
+一件ずつ分類できない発注は`ORDER: STOP`とする。
 
 該当発注書は通常項目に加えて、次のラベルを順番どおり持たなければならない。
 
 1. `REACT AUTHORITY`: 対象面、移管契約、UI runtime境界、対応spec ID
-2. `SOURCE ASSET`: 固定SHA、旧path、export、CSS/model/test closure
+2. `SOURCE ASSET`: `FIXED_MOCK`または`PRODUCT_CLOSURE`のprovenance hash、path、export、component/hook/state/event/effect、CSS/model/story/test closure。全件を`READ_FILE`へ含め、各動的箇所を`REUSE_TARGET`で渡す
 3. `PRESERVE`: DOM、class、stable ID、ARIA、interaction、visual state
 4. `REPLACE`: mock/legacy stateからprojection / intentへ交換する範囲
 5. `STATE OWNER`: Document / User settings / Workspace / Project session / Transient / local presentation
@@ -60,6 +66,7 @@ source assetがあるのに別leafを新設した、CSS修理だけでparityへ�
 `TimelineCandidate`全体をnative Timelineの代わりに持ち込んだ、productが`docs/mocks-ui`/legacy scriptをruntime
 importした、mock/productへ同じcomponent copyを残した、catalog ID/label/thumbnail tokenから欠落意味を推測した、
 ReactへDocument/selection/Undo正本を追加した、visual threshold/goldenを変えた、diagnostic routeだけを成果にした、
+静止画、render結果、DOM snapshot、live DOM、React DevToolsからinteraction/stateを補った、動的stateのownerを推測した、
 のいずれかで`ORDER: STOP`とする。
 
 正しい独立React sourceが存在しない領域は製品packageへ縮約版を先に作らない。固定モック内で同形React化し、

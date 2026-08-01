@@ -9,6 +9,9 @@ Browser、Inspector、Timeline左側の`KEYS / LAYERS` tool panel、Easing trigg
 React所有面は、現行Reactモックを見た目だけの参考にして製品用へ作り直さない。
 固定したReact source assetを製品packageへ**直接所有移管**し、モック固有の状態と
 legacy bridgeだけをHostのprojection / intent境界へ交換する。
+ここでsource assetとは静止画やrender済みDOMではなく、固定SHAから到達するReact component、hook、state、
+event handler、effect、model、Storybook、Playwright操作列を含む実コードclosureである。動的挙動はこのclosureを
+読んで維持／交換を分類し、画面、screenshot、render結果、DOM snapshot、live DOM、React DevToolsから補完しない。
 
 ```text
 固定React asset
@@ -52,7 +55,7 @@ process cleanup、visual harness等の試験資産は、別途コードレビュ
 
 | 用語 | 意味 |
 |---|---|
-| source asset | 製品へ移すReact component、CSS、model、stable ID、ARIA、interaction test |
+| source asset | 製品へ移すReact component、hook、state、event handler、effect、CSS、model、stable ID、ARIA、story、interaction testの固定SHA closure |
 | product owner | runtimeでsource assetを一意に所有する製品package。現候補は`ui/motolii-web` |
 | mock consumer | product-owned componentをfixtureで組み立て、Storybook/Playwright/oracleとして使う開発入口 |
 | projection | Host snapshotから導出したrevision付きread-only表示入力 |
@@ -77,6 +80,11 @@ authorityの優先順は次とする。
 後発mainとReact baselineを再結合した版である。発注時はbranch名や作業中worktreeでなく、このSHAと
 対象pathを両方書く。
 
+これは未移管assetのsource authorityである。すでにproduct ownerへ移管済みのassetは、固定mock treeを再監査せず、
+provenance manifestが固定した現`ui/motolii-web` product closure hashとsource pathを使う。発注書は
+`SOURCE PROVENANCE: FIXED_MOCK | PRODUCT_CLOSURE`を明記し、Easing trigger等の固定mock commitに存在しない
+product-owned sourceを旧SHAから推測しない。
+
 現行inventoryは次のとおりである。
 
 | 製品面 | 固定source | 処分 |
@@ -98,7 +106,7 @@ DOMまたはglobal query/listenerに依存する面はlegacy bridgeである。�
 
 source assetはmockとproductへcopyして二重所有しない。次の順で単一ownerへ移す。
 
-1. 固定source path、export、CSS closure、Storybook story、Playwright操作をmanifest化する
+1. 固定source path、exportから到達するcomponent/hook/state/event/effect、CSS/model closure、Storybook story、Playwright操作をmanifest化する
 2. legacy bridge依存がある面は、固定モック内で同形Reactへ抽出してvisual/interaction parityを通す
 3. component、model、CSSをproduct packageへ履歴を追える形で移す
 4. `docs/mocks-ui`をproduct packageのconsumerへ反転し、fixture/story/oracleからproduct exportをimportする
@@ -107,6 +115,28 @@ source assetはmockとproductへcopyして二重所有しない。次の順で�
 
 移管の第一commitはpresentation ownershipだけを変え、Document操作やHost transportを同時実装しない。
 第二commit以降でmock stateをprojection / intentへ一境界ずつ交換する。
+
+### 5.1 動的source監査
+
+対象componentごとに次の表を実コードから作り、空欄または推測が一つでもあればHost接続を発注しない。
+
+```text
+SOURCE_PATH_AND_EXPORT:
+SOURCE_PROVENANCE: FIXED_MOCK | PRODUCT_CLOSURE
+TRIGGERING_EVENT:
+CURRENT_STATE_OR_EFFECT:
+CURRENT_RENDER_BRANCH:
+EXISTING_STORY_OR_TEST:
+DISPOSITION: PRESERVE_LOCAL | REPLACE_WITH_PROJECTION | REPLACE_WITH_INTENT | REMOVE_LEGACY
+SEMANTIC_OWNER: Document | UserSettings | Workspace | ProjectSession | Transient | NONE
+HOST_TARGET: <existing projection/intent/type> | MISSING
+STALE_RULE: <revision/generation/epoch> | NONE
+```
+
+hover、focus-visible、popover開閉、未確定composition等は`PRESERVE_LOCAL`候補である。selection、playhead、
+keyframe、easing、Undo、Document revision、stable object IDはReact sourceに`useState`やeffectとして存在しても
+意味を維持せず、既存Host targetへ交換する。`HOST_TARGET: MISSING`は新しいReact stateを作る許可ではなく、
+当該接続を`TARGET_MISSING`として前ownerへ返す信号である。
 
 ## 6. 維持するものと交換するもの
 
@@ -189,13 +219,16 @@ catalog projectionはDocument・plugin manifest・公開community contractと別
 10. 正しい画面を出さず、diagnostic routeだけを合格成果にした
 11. 公開API、Document、journal、plugin/community契約、永続layout形式の変更が必要になった
 12. WebView Host、sandbox、Windows/macOS受入をsource移管のvisual合格で証明済みにした
+13. 固定SHAのReact source closureを読まず、静止画、render結果、DOM snapshotからinteractionまたはstateを補った
+14. source内の動的stateを`PRESERVE_LOCAL / REPLACE_WITH_PROJECTION / REPLACE_WITH_INTENT / REMOVE_LEGACY`へ分類しないまま製品接続した
+15. `SOURCE ASSET` closureをorderの`READ_FILE`へ全件含めず、動的sourceを実装担当のtarget capsuleから省略した
 
 ## 10. 発注書の強制ラベル
 
 React source assetを扱う発注書は、通常項目に加え次を順番どおり持つ。
 
 1. `REACT AUTHORITY`: 対象面、本文書、UI runtime境界、対応spec ID
-2. `SOURCE ASSET`: 固定SHA、旧path、export、CSS/model/test closure
+2. `SOURCE ASSET`: `FIXED_MOCK`または`PRODUCT_CLOSURE`のprovenance hash、path、export、component/hook/state/event/effect、CSS/model/story/test closure。全件をorderの`READ_FILE`へ含め、各動的箇所を`REUSE_TARGET`で渡す
 3. `PRESERVE`: DOM、class、stable ID、ARIA、interaction、visual stateの維持範囲
 4. `REPLACE`: legacy/mock stateのうちprojection / intentへ交換する範囲
 5. `STATE OWNER`: Document / User settings / Workspace / Project session / Transient / local presentationの分類

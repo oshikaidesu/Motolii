@@ -40,6 +40,9 @@ M3残作業の実装分解は[既知技術採択・並列実装地図](../m3-par
 同地図の親は検索・供給route、子はtarget/oracle/cutover、衝突表は直列合流点を示す。旧快適利用粒度化の
 施工step、owner候補、再確認、mirror行を新しい実装粒として再発行しない。実際のdispatch可否は引き続き
 implementation ledgerの`DO`行、製品意味と完成条件は本仕様の既存G/U taskが正本である。
+各子を実装orderへ変換する前に[実行可能発注地図](../m3-executable-dispatch-map.md)で
+`exact target / allowlist / pseudocode / positive oracle / negative oracle / user-visible exit / next handoff`を閉じる。
+`TARGET_MISSING`を新しい汎用機構で埋めず、前ownerのSPEC/TARGET粒へ返す。
 
 ### 最初の製品完成線: VS-1 Rectangle配置とUndo
 

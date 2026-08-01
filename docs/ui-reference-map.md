@@ -46,22 +46,24 @@ React所有面の製品実装は[直接移管契約](reviews/2026-07-22-m3-react
 
 ## React移行の実状態
 
-「Reactへ移行済み」は実行基盤については正しいが、全surfaceがReact-nativeになったという意味ではない。
+「Reactへ移行済み」は全surfaceが製品接続済みという意味ではない。表示構成の比較参照と、実装担当が読む
+current source authorityを分ける。`#plugin-browser-candidate`は全体構成を人間が確認する現在のmock consumer routeであり、
+動的UIの実装sourceは`ui/motolii-web/source-provenance.json`が固定するproduct closureを使う。
 
 | fixture／領域 | 実装状態 | 現在の用途 |
 |---|---|---|
-| `#plugin-browser-candidate`のBrowser | React-native product asset（R1完了） | 固定sourceを`ui/motolii-web`が所有し、mockはproduct exportのconsumer。Host projection / typed intent接続はR5まで未実装 |
-| `#plugin-browser-candidate`のEasing Graph view | triggerはarchived HTML＋React legacy bridge、popupはReact製native oracle | triggerは固定mock内で同形React化してから製品移管する。既存の「現在値要約」はobject・channelとpressed/disabledを表すaccessible labelまで。visible summary chromeは固定source不在の未決事項で実装しない。popup frame/preset/form/curve/modelはnative oracleとして維持する |
-| `#plugin-browser-candidate`の`KEYS / LAYERS` | `TimelineCandidate.jsx`内のReact-native subtree | tool panelだけを同じDOM/CSSで抽出・移管する。time surfaceは移さない |
-| `#plugin-browser-candidate`のInspector | legacy HTMLをparseしたbridge | 正しい独立React sourceは未成立。モック側で同形React化してから移管する |
+| `#plugin-browser-candidate`のBrowser | React product-owned（R1完了、後続slice接続あり） | `ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx`のcurrent product closureがsource authority。mockはproduct exportのconsumer。Rectangle Place、Effect attach等の接続済みsliceと未接続interactionをprovenanceで分ける |
+| `#plugin-browser-candidate`のEasing入口 / popup | triggerはReact product-owned（R2B完了）、popupはnative oracle | trigger source authorityは`ui/motolii-web/src/candidates/EasingTriggerCandidate.jsx`。object・channelとpressed/disabledのaccessible stateまでを維持する。visible summary chromeは未決。popup frame/preset/form/curve/modelはnative oracleとして維持し、active interval／Interp接続は別粒 |
+| `#plugin-browser-candidate`の`KEYS / LAYERS` | React product-owned tool panel（R3B完了） | source authorityは`ui/motolii-web/src/candidates/KeyToolsCandidate.jsx`。mockの`TimelineCandidate.jsx`はconsumerであり、native time surfaceをReactへ移さない。各operationのHost接続は別粒 |
+| `#plugin-browser-candidate`のInspector | React product-owned（R4C完了、後続slice接続あり） | source authorityは`ui/motolii-web/src/candidates/InspectorCandidate.jsx`。target／Effect projectionと一部gestureの接続済みsliceをprovenanceで追い、未接続parameter/easingを画面から推測しない |
 | `#plugin-browser-candidate`のStage / Timeline time surface / Settings | legacy bridgeまたはReact比較candidate | native製品面のoracle／周辺文脈。React製品runtimeへ直接持ち込まない |
 | `#archive/all-surfaces`等 | legacy HTMLをparseしたarchive bridge | 旧画面との視覚parity回帰。通常catalogへ出さない |
 | `#skeleton` | React-native分解骨格 | component責務と組立境界の確認。視覚正本でも、Inspector等の代替製品実装でもない |
 
-したがって、React上で表示されるだけではReact-native所有へ移ったと判定しない。
-`src/legacy/LegacyHostBoundaryScreen.jsx`またはraw HTML由来のDOM／scriptへ依存する領域は、旧仕様を増やさず、
-固定モック内で同形Reactへ抽出してから製品ownerへ移す。正しいsourceが無いことを理由に、製品packageへ
-縮約版を先に作らない。
+したがって、React上で表示されるだけではproduct-connectedと判定しない。未移管領域が
+`src/legacy/LegacyHostBoundaryScreen.jsx`またはraw HTML由来のDOM／scriptへ依存する場合は、旧仕様を増やさず、
+固定モック内で同形Reactへ抽出してから製品ownerへ移す。移管済み領域は固定mock commitへ戻らず、provenance
+manifestのcurrent product closureを読む。正しいsourceが無いことを理由に、製品packageへ縮約版を先に作らない。
 
 ### G0-6H人間審判入力routeの裁定（2026-07-28）
 - 現行route `#plugin-browser-candidate`（固定commit `56c318ed`）がG0-6Hのforward-lookingなhuman-judgment入力routeとして単独採択される。
