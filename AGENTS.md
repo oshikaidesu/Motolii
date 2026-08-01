@@ -2,31 +2,24 @@
 
 Cursor / Claude Code / その他のLLMエージェント共通の入口。実装に着手する前にここを読む。
 
-## 「発注」時のOpus 5 / Spark / Grok監督ループ
+## 最上位の権限保存
 
-- ユーザーが「発注して」「実装を発注」等、**発注を依頼動詞として明示した時だけ**自動委任を発火する。通常の「実装して」、説明・引用・ファイル内に現れただけの「発注」では発火しない
-- **2026-07-25運用改訂**: 通常発注は`Codex → Claude Opus 5 → Codex Spark → Cursor Grok 4.5 High → Codex`の一つのループへ固定する。完全model IDは順に`claude-opus-5` / `gpt-5.3-codex-spark` / `cursor-grok-4.5-high`とし、aliasを使わない。旧`mechanical / standard / rapid / complex / cross-boundary`分類、Luna/Terra/Sol routing、Fable必須検収は[旧運用](docs/reviews/2026-07-22-terra-grok-delegation-policy.md)としてアーカイブし、現行発注へ使わない
-- 発火時の責任は固定する。**主担当Codex**は先例調査、コード事実、長期展望、親task、恒久形式／公開API／plugin契約／停止線、機械骨格と視野幅判定、Opus deltaの事前承認、Grok結果の再照合、最終統合を所有する。**Claude Opus 5**は会話履歴なしで機械骨格を検証し、見落としたrisk／負例／STOP／訂正だけを型付きdeltaで返す施工管理者とする。**Codex Spark**はrunnerが骨格と承認deltaから組み立てた一粒だけを隔離worktreeで実装する。**Cursor Grok 4.5 High**は実装担当から分離したread-only検収者として実diffと試験を監査する
-- Opus 5へ許す委任は一段だけであり、Spark以外を起動させない。一回のrunner実行は一つの`GRAIN`だけを扱い、Sparkは再委任しない。複数粒が必要なら、主担当Codexが各契約境界を確認してループを個別に回す
-- **契約粒と施工ステップを混同しない(2026-08-01ユーザー訂正)**: `GRAIN`はOpusの事前管理とGrokの最終検収を共有する**一つの契約境界**であり、Sparkへ渡す命令数、編集回数、確認command数ではない。Sparkには曖昧な短文でなく、target、変更順、完成bytes／状態、負例、各確認commandを十分具体的に与える。長くなる場合は同じbase、worktree、owner、`CONTRACT_BOUNDARY`、allowlist、read set、oracle、非目標の内側で順序付き施工ステップへ分けるが、ステップ開始ごとにOpus／Grokを再起動せず、同じSpark sessionの施工を継続し、最後の累積実diffだけをGrokが原則一回検収する。GrokのREJECTまたはP0/P1修復後に必要な再検収はこの削減対象にしない。ステップ間はCodexと機械commandで確認する。承認済み境界・allowlist・oracleの変更が必要なら施工を止めてCodexへ戻し、**新しい契約境界が増える場合だけ**新しい粒とする。現行runnerはcompiled grainとtarget capsuleを各一回だけ渡すため、当面は全施工ステップを一つのcompiled grainへ明記する。途中投入機能は未実装であり、複数runner loopによる代用をしない
-- **2026-07-30速度改訂**: 通常粒では、主担当Codexが正本・履歴・コード事実を一度だけ広く調べ、検証済みの小さな文脈カプセルをtaskへ渡す。Opus／Spark／Grokへ`AGENTS.md`全体、spec全体、repo全体を三重に読ませない。runnerは正本値を埋めたorder骨格を先に作り、Opus 5へ全文再執筆させず、`READY / STOP / ESCALATE`と最大5件、各220文字以内の`RISK / NEGATIVE_ORACLE / STOP / CORRECTION` deltaだけをJSON Schemaで返させる。schema違反は同じsessionへ一回だけ差戻し、散文fallbackや全文再生成をしない。P0/P1 deltaはSparkへの散文指示にせず、Codexが骨格とexact oracleへ織り込んで`prepare`を再実行する。P2 deltaを採用する場合も各`F1..F5`へ一つの`DELTA_RESOLUTION:`を対応させるまでdispatchしない。orderは`READ_MODE: CAPSULE`、判断に必要な`CONTEXT_FACT:`、実装・検収で開いてよい正確な`READ_FILE:`に加え、各1〜4件の`INTERNAL_TARGET / TEST_TARGET / REUSE_TARGET: <path> :: <一意なtrim済み1行>`と`NEW_SURFACE: FORBIDDEN`を持つ。runnerはtargetの存在、一意性、read set、allowlistを照合し、前40行＋後80行の重複除去済みtarget capsuleを48 KiB以下でSparkへ先渡しする。さらに承認orderから施工に不要なprovenance、閉鎖判定、model routingだけを決定的に除いた16 KiB以下の`SPARK_GRAIN_VERSION: 1`を生成し、Sparkへはtarget capsuleとcompiled grainを各一回だけ渡す。元taskと全文orderを重複送信せず、未知の製品固有ラベルや自由記述は削らない。必須field欠落、生成物hash変化、runner-only metadata漏洩はSpark起動前または検収前にfail closedする。task 12 KiB、order 32 KiB、authority 4件、allowlist 8件、read set 12件かつ合計128 KiBを上限とする。外部modelはwhole `READ_FILE`やカプセル外のrepo横断探索を初動にせず、不足時は推測や読込拡大でなく差戻す。Sparkはambient user config、memory、plugin、app、multi-agentを無効化したephemeral `workspace-write` sandboxで起動する。公開API、Document意味、plugin契約、永続形式、共有公開境界の変更は通常粒へ圧縮せず、Codexが仕様・決定粒として先に閉じる
-- **視野幅を気分で決めない**: CodexはOpus起動前に`AUTHORITY_SPAN: ONE / MULTIPLE / CONFLICTING`、`OWNER_CLOSURE: CLOSED / MULTIPLE_KNOWN / UNKNOWN`、`CAUSE_CLOSURE: LOCALIZED / COMPETING / UNKNOWN`、`CONTRACT_CLOSURE: PRIVATE / FROZEN / UNRESOLVED`、`ORACLE_CLOSURE: CLOSED / PARTIAL / ABSENT`、`REUSE_CLOSURE: REUSE / CHOICE / NEW`をコード事実つきで記録する。`CONTRACT_IMPACT: PRIVATE / SHARED / PERMANENT`は影響種別として別記し、`SHARED / PERMANENT`を`FROZEN`とするには`CONTRACT_AUTHORITY: <path>@SHA256:<hash>`が同じorderの検証済み`AUTHORITY: <path> SHA256:<hash>`と完全一致しなければならない。未決は`UNRESOLVED`、private粒は`CONTRACT_AUTHORITY: NONE`とする。六軸が閉鎖値なら`VIEW_PROFILE: CLOSED`、矛盾・UNKNOWN・COMPETING・UNRESOLVED・ABSENT・NEWが一つでもあれば`WIDE`、残りを`ADJACENT`と機械算出する。不明値を`CLOSED`へ倒さず、狭いprofileへの手動overrideを許さない。`WIDE`はSparkへ送らず、Opus／必要ならFableのread-only探索でauthority、owner、原因、oracleを閉じてから新しいカプセルとして再分類する。`HAZARD_TAG: DESTRUCTIVE_FS / SECURITY / PERSISTENCE / CONCURRENCY / PLATFORM / NONE`は視野幅と別軸とし、既知の危険構文・拒否試験・機械lintを骨格へ自動注入する。危険または恒久的でも正本で意味の閉じた粒を無条件に広域化せず、意味が未閉鎖の粒を短いdeltaへ押し込まない
-- `./scripts/delegate-cursor-supervised.sh prepare <worktree> <order-file> "<task>"`はCodex／runnerの骨格をOpus 5に検証させ、承認deltaからclosed orderを組み立てる。orderには対象仕様ID、目的、現状、変更許可file、非目標、再利用箇所、STOP条件、必須負例、実行command、六つの視野幅入力、`VIEW_PROFILE`、`HAZARD_TAG`、`READ_MODE: CAPSULE`、`CONTEXT_FACT:`、`READ_FILE:`、`INTERNAL_TARGET:`、`TEST_TARGET:`、`REUSE_TARGET:`、`NEW_SURFACE: FORBIDDEN`、`ORDER: READY`、task hash、`LOOP_PROFILE: opus-spark-grok`、三つの完全model IDを含める。主担当Codexがカプセル、exact target、視野幅、hazard guard、read set、採用deltaを再照合し、`CODEX PRECHECK: APPROVED`を追記するまで`execute`でSparkを起動しない
-- **2026-08-01発効**: typed delta、六軸分類、hazard guard、compiled Spark grainは、runner本体と専用負例がmainへ入った時点で**発効**とする。発効根拠はmain `3ce9d169`(PR #436 compiled-spark-grain-integration)に`scripts/delegate-cursor-supervised.sh`と専用負例`scripts/test-delegate-cursor-supervised.sh`が入り、`scripts/validate.sh`から起動され、main上で`PASS`したこと。以後、新方式を「未発効」として扱わず、旧全文order接続を現行実装事実として報告しない。ただし発効は**接続方式の発効であって、速度や一発合格の証明ではない**。compiled grainのfixtureで確認済みなのはcontext削減だけであり、20%未満の単発wall time差を速度改善として報告しない。複雑粒の一発ACCEPTは未証明のまま残る。authority hash、scope closure、独立検収、Codex precheckを発効を理由に弱めない
-- **監督ループ改訂の凍結(2026-08-01停止線)**: 本節と[監督ループ決定](docs/reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md)の規約は、**実製品粒で連続3件の`VERDICT: ACCEPT`を得るまで改訂しない**。この間、監督ループについての計測・論文調査・他LLM助言は`docs/reviews/`のobservationに留め、規約・runner接続方式へ昇格させない。理由は[速度支配項と計装の観察](docs/reviews/2026-08-01-supervision-loop-cost-driver-observation.md): コストの支配項はreviewer latencyでなくREJECTされた粒の作り直し(1,016秒・468,060 tokens・採用0)であり、計測のたびに規約を改訂する循環自体が遅延要因になっていた。Codex裁量で規約を改訂する唯一の例外は、検収者固定(`cursor-grok-4.5-high`)を独立性条件へ一般化する改訂であり、これも別途裁定を閉じてから行う。ユーザーが明示訂正した、既発効の監視契約を発注外相談にも適用する追記と、一粒一契約境界を変えず契約粒／施工ステップを区別する追記は、model routing、責任順序、runner接続方式、評価指標を変えない適用漏れ修復／既存語義の明確化として区別する
-- **速度とコストは手写しでなくrunner計測を正本にする**: 各stageのwall time、token、costは`prepare`が`<order>.evidence/prepare-telemetry.txt`、`execute`／`inspect`が`<attempt>/telemetry.txt`へ記録する。測れないstageは`UNKNOWN`と`UNMEASURED_TOKEN_STAGES`で明示し、欠測を沈黙させない。速度の評価指標にwall timeを単独で使わず、[発注パイプライン比較 §8](docs/reviews/2026-07-23-parallel-order-pipeline-comparison.md#8-速度と品質の測定案)の表(lead time／wait time／first-pass accept／rework count／stale-base count／escaped finding／Codex integration load)を使う。同書はARCHIVEDだが、アーカイブ対象は旧model配置と複数実装lane案であり、§1の診断と§8の指標表は棄却されていない。新しい指標語彙を発明しない。`session resume`、model routing、reviewer変更で速度を解決しようとしない(前掲観察§2・§7で反証済み)
-- Opus 5は仕様決定者ではない。親taskの公開API、Document意味、plugin契約、永続形式、変更許可範囲を変える必要が見えたら`ORDER: STOP`でCodexへ戻す。repo横断の歴史調査、複数仕様の意味判断、未指定の公開境界探索をSpark粒へ押し込まない
-- 実装発注は一度に1つの契約境界、隔離worktree、閉じたallowlistとする。外部実装には「例外追加・lint抑制・テスト期待値変更・生JSON/文字列走査・公開raw API・重複planner/helper」で契約を迂回させず、必要に見えた時点でSTOPさせる
-- Grok検収が`VERDICT: ACCEPT`かつ**P0/P1=0**でなければ実装差分を採用・commit・pushしない。Grokはorder再設計や実装修正をせず、REJECTをCodexへ返す。テスト緑は採用条件の一部であって、契約適合の代わりにしない
-- **粒の上限は行数でなく契約境界数(2026-08-01改訂1・発効中)**: 通常粒は一つの契約境界で閉じる。orderは`CONTRACT_BOUNDARY:`を一つだけ持ち、`ALLOWED_FILE`は単一のtop-level owner(`crates/<name>`等)へ収める。`docs/`はledger・decision-index登録がworkflow上必須のため別境界に数えない。runnerがdispatch前に照合する。複数境界を束ねた粒はOpus起動前にCodexが分割する。930行・4境界の粒は430秒＋586秒で2回ともREJECTし採用ゼロ、一行fixtureは62秒でACCEPTした。外部実測でもLLM検収のF1はdiff 10行未満で0.657、150行超で0.043に落ちる。行数閾値を正本にせず、`REUSE_CLOSURE`と`NEW_SURFACE`が境界ごとに閉じるかで判定する
-- **`VERDICT: ACCEPT`に有効性条件を付ける(2026-08-01改訂2)**: 検収が機能しない規模で得た`ACCEPT`を採用の根拠にしない。劣化領域のdiffは`ACCEPT`でも採用せず、粒を分割して再発注する。これは独立検収を弱めず、**検収が働かない領域の合格を根拠に使わない**制限である。大diffの検出率を回復させる実証済み手法は2026-08-01時点で存在しない
-- **検収者は「Grok」でなく「独立性条件」で定める(2026-08-01改訂3)**: 不変条件は実装担当から独立した別LLMの外部視点を必ず得ることであり、model固定はその一実装にすぎない。床は`実装担当と異なるmodel identity`／`fresh session`／`実装担当の思考過程・自己説明・修正理由を渡さない`／`read-only`／`検査範囲を実装担当が決めない`／`ACCEPT/REJECTとP0/P1の構造化出力`／`receiptへ実使用modelとfallback有無を記録`の7項目。technical independenceの中身は「別modelを使う」でなく「**問題理解を自分で再構成する**」(NASA SWE-141)。`SECURITY`／`DESTRUCTIVE_FS`／`PERMANENT`は別provider＋**非LLM oracleの併用を必須**とする(model間エラーは60%相関するため、真に相関しない軸は型・静的解析・実行)。より強いmodelを検収に置けば安全、とは考えない。runnerがdispatch前にallowlist・実装担当とのidentity差・order managerとのidentity差・段階に応じたfamily差・最上段の`MECHANICAL_GUARD:`宣言を照合する。既定reviewerは`cursor-grok-4.5-high`のまま。receiptへ`IMPLEMENTER_MODEL_FAMILY` / `REVIEW_MODEL_FAMILY` / `MODEL_FALLBACK`を残し、ループ外での差し替えはreceiptに現れないことで検出する
-- **性能regressionはLLM検収の守備範囲外(2026-08-01改訂4)**: 評価された全modelで性能関連バグのrecallがほぼ0であり、回復手法も見つかっていない。「VRAM常駐」「色変換の一元化」「プレビュー/書き出し同一関数」という絶対規律は、まさにこの欠陥クラスに一致する。性能の審判はbench／golden／profiling oracleで持ち、検収の`ACCEPT`を性能非退行の根拠にしない。性能に触れる粒は機械oracleを完了条件へ含める
-- Fable 5は通常ループの段階または必須gateにしない。大地図、設計比較、共有公開境界など、主担当Codexが高難度の反対側助言を必要と判断した場合だけ、ループ外からread-onlyで直接呼ぶ
-- 主担当Codexは監督者として、OpusのorderとSparkの差分を仕様・依存・実装ガード・既存API・テスト期待値に照らして再確認する。外部出力は根拠でなく未検証の助言であり、最終判断、統合、必須テスト、完了報告は主担当が行う
-- model利用不能時に別modelへ黙ってfallbackしない。外部modelへ秘密情報、認証情報、未公開の個人データを渡さない
-- order作成、実装、検収が失敗、STOP、REJECT、timeoutになった場合はCodexへ戻す。Codexが原因を分類し、必要なら新しいOpus粒として再投入する。ループ中の差分は隔離worktreeに留め、`VERDICT: ACCEPT`前に採用・commit・pushしない
-- 同じ阻害要因が反復し、order、差分、検収結果に有意な改善がなくなった場合だけループを止める。その際は反復した阻害要因、試した修正、未解決の選択肢を示してユーザーの判断を仰ぐ
+- **自己発注禁止**: 主担当Codexは、ユーザーが許可した`AUTHORIZED_OUTCOME / AUTHORIZED_ARTIFACTS / AUTHORIZED_MUTATIONS / AUTHORIZED_VALIDATION`を自分で増やさない。次の一手が成果物、owner、権限、完了条件、model呼出し、検収周回を増やす場合、その追加分は未許可として施工せず、既存scopeの最小次手を続けるかユーザーへ返す
+- **findingは権限ではない**: 調査、test、review、Grok、Opus、Fable、別Codexが新しい問題を発見しても、同一taskでの追加施工権限にはならない。既存完了条件を満たせない`IN_SCOPE_BLOCKER`だけを許可済みallowlist内の最小修正へ戻し、それ以外は`OUT_OF_SCOPE_FINDING`または`FOLLOW_UP`として報告する。reviewerはorder、scope、完了条件を増やさない
+- **既決を未決へ戻さない**: 提案、再設計、仕様化、発注の前に[決定逆引き台帳](docs/decision-index.md)を主題keywordで検索し、該当decision ID／正本path／現行状態を示す。該当決定を読まずに新しい仕組みを提案しない。正本と現行コードが衝突する場合だけ`AUTHORITY_CONFLICT`として当該操作を止める
+- 上記三則は主担当Codexを含む全modelに適用する。自己反証、隔離worktree、検収、技術的有用性、安全性は追加権限の代わりにならない。機械判定できる禁止は文章だけに置かずrunner、sandbox、hook、CIで拒否する
+
+## 「発注」時のGrok / Spark / Opus 5監督ループ
+
+- 「発注して」「実装を発注」等、**発注を依頼動詞として明示した時だけ**自動委任する。通常の「実装して」、説明、引用、ファイル内の語では発火しない
+- 現行routeは`Codex → cursor-grok-4.5-high → gpt-5.3-codex-spark → claude-opus-5 → Codex`、`ROUTE_CONTRACT_VERSION: 2`、`LOOP_PROFILE: grok-spark-opus`だけとする。Grokはread-only preflight、Sparkは隔離実装、Opusは実装思考を受け取らないfresh read-only final review、Codexは正本照合と採否を所有する。外部modelは再委任しない
+- 旧`opus-spark-grok`、`ORDER_MANAGER_MODEL`、`OPUS_DELTA_*`、旧task-class routingを現行へ使わず、自動翻訳・黙ったfallbackをしない。古いworktreeのrunnerは正規入口にせず、current mainからfresh worktreeとversion 2 orderを再生成する
+- 一回のloopは一つの`CONTRACT_BOUNDARY`だけを扱う。`GRAIN`は契約境界であり施工step数ではない。同じbase、owner、allowlist、read set、oracle、非目標内の複数stepは一つのSpark sessionで施工し、Grok／Opusをstepごとに再起動しない。境界または完了条件が増える場合は同一粒で施工せず、新しいユーザー許可へ戻す
+- 主担当Codexは正本・履歴・コード事実を一度だけ広く読み、外部modelへ`AGENTS.md`、spec、repo全体を三重送信しない。orderは`READ_MODE: CAPSULE`、`CONTEXT_FACT:`、exact `READ_FILE / INTERNAL_TARGET / TEST_TARGET / REUSE_TARGET`、`NEW_SURFACE: FORBIDDEN`を持つ。上限はtask 12 KiB、order 32 KiB、target capsule 48 KiB、compiled grain 16 KiB、authority 4件、allowlist 8件、read set 12件／128 KiB。欠落、hash変化、target不一致、runner-only metadata漏洩はmodel起動前にfail closedする
+- 視野幅は`AUTHORITY_SPAN / OWNER_CLOSURE / CAUSE_CLOSURE / CONTRACT_CLOSURE / ORACLE_CLOSURE / REUSE_CLOSURE`から機械算出し、UNKNOWN、COMPETING、UNRESOLVED、ABSENT、NEWを含む`WIDE`をSparkへ送らない。shared／permanent境界は検証済み`CONTRACT_AUTHORITY`と正本hashが一致する場合だけ施工する。詳細なfield、hazard、React、Rerunの強制動線は[監督ループ正本](docs/reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md)を読む
+- Grok findingの採否と各`DELTA_RESOLUTION`をCodexが照合し、`CODEX PRECHECK: APPROVED`前にSparkを起動しない。Opus finalが`ACCEPT`かつP0/P1=0でなければ採用、commit、pushしない。review findingは現粒のREJECTまたは新粒候補であり、同一粒のscope追加権限ではない。性能regressionはLLM verdictでなくbench、golden、profilingで判定する
+- route v2と既発効のcapsule／authority／hazard gateがmainへ入った後は、実製品粒3件連続ACCEPTまでroutingを再改訂しない。計測、論文、利用者報告、外部LLM助言はauthorityでなくobservationとし、ユーザーの明示決定なしにrouteへ昇格しない。Fableは大地図、共有公開境界、恒久契約、長期衝突に限るloop外read-only相談であり、通常gateにしない
+- runner、order schema、六軸、telemetry、独立性、停止条件の詳細と現行／歴史の区別は[監督ループ正本](docs/reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md)を唯一の説明正本とする。AGENTS.mdへ再複製しない
 
 ## 発注外のscope自己反証とコーディングパートナー
 
@@ -38,14 +31,10 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 
 ### Opus 5コーディングパートナー
 
-- `claude-opus-5`は発注時の施工管理者だけでなく、主担当Codexが日常的に意見を求める**広域コーディングパートナー**として使う。これは「発注」の自動委任トリガーとは独立し、ユーザーが個別にOpus利用を指定しなくても、別の視点が実装判断を実質的に良くする場面でCodexがread-only相談を起動できる
-- **相談トリガー**: 次のどれか一つが成立し、回答によって実装判断が変わり得る場合にOpus 5を呼ぶ。(1) 要求に複数の読みがあり実装・試験・状態所有が変わる、(2) 複数file/crateをまたぎ局所解が全体契約を壊し得る、(3) 原因仮説が複数あり一つへ早く収束しそう、(4) helper／依存／公開境界の再利用判断が割れる、(5) 計画の負例・STOP・非目標に漏れがありそう、(6) 小さな差分でもDocument／公開API／永続形式／Undo／plugin契約へ波及し得る、(7) Codexが未検証の「たぶん」「このはず」を根拠に進めようとしている、(8) 会話で生じた新しい意味と既存決定の整合を確認したい
-- **呼ばない条件**: 正本と変更箇所が一意な機械変更、単純な検索やコード事実だけで閉じる診断、回答を得ても判断が変わらない作業には形式的に呼ばない。相談待ちを通常作業の直列barrierにしない
-- **相談packet**: Opus 5へは、確定仕様とコード事実、Codexの仮説、迷っている選択肢、変えてはいけない境界、探してほしい反例・見落とし、助言してほしい改善機会を渡す。Opus 5は批判や欠陥検出だけで終わらず、既存境界内でより良くできる設計、実装順、再利用、検証、簡素化と具体的な次の一手を能動的に提案する。回答は`FACTS / INFERENCES / OPTIONS / OPPORTUNITIES / ADVICE / RECOMMENDATION / STOP CONDITIONS`へ分けさせ、事実、推論、助言を混ぜさせない
-- **パートナー姿勢**: Codexの案を否定すること自体を目的にせず、良い部分は明示して伸ばし、問題には理由と実行可能な改善案を対で返す。未依頼のscope拡大や新しい恒久契約を「助言」として押し込まず、現在の目的・非目標・停止線の内側で価値を増やす
-- 発注外相談ではOpus 5に編集、commit、push、PR作成、Spark起動、再委任を許さない。closed orderや`CODEX PRECHECK`は不要だが、回答は根拠ではなく助言として扱い、Codexが正本・現行コード・試験へ再照合して判断する
-- **発注外相談も無出力に戻さない**: Opus／Fableのread-only相談を生の`claude -p --output-format text`で起動しない。正規runnerと同じくstructured stream、生event保存、30秒heartbeat、宣言timeout、exit status、process group回収を持つ監視包絡から起動する。`Script running`や完了前のstdout空をmodelの空回答・利用不能と判定せず、完了resultの有無、exit status、timeout marker、主担当による局所中断の有無を証拠どおり別々に報告する。新しいrunner outcome labelやreceipt schemaは作らない。Opusを同じClaude CLI transport上で局所中断した事実だけを理由にFableへ自動昇格しない。監視包絡が使えない時は直接起動せず、正本とコード事実で継続するか当該相談だけを未実施として返す
-- **Fable昇格**: 大地図、長期展望、複数仕様の衝突、共有公開境界、恒久契約の新設・変更、またはCodexとOpus 5で結論が割れた場合はFable 5へread-only相談を昇格する。Opus 5の気軽な利用を、必要なFable相談の黙った代替にはしない
+- `claude-opus-5`は「発注」外でもread-only広域相談に使えるが、正本とコード事実だけで閉じる作業の形式的barrierにしない。要求解釈、複数owner／原因、再利用境界、負例、公開API／Document／永続形式への波及で判断が変わり得る場合だけ呼ぶ
+- 相談packetは確定仕様、コード事実、仮説、選択肢、非目標、反例、改善機会を含め、回答を`FACTS / INFERENCES / OPTIONS / OPPORTUNITIES / ADVICE / RECOMMENDATION / STOP CONDITIONS`へ分離する。編集、commit、push、PR、Spark、再委任を許さず、助言をauthorityや追加施工権限にしない
+- Opus／Fable相談は正規の監視包絡から起動し、生event、heartbeat、timeout、exit status、process回収を保存する。完了前stdout空を空回答と判定せず、別modelへ黙ってfallbackしない。監視包絡が使えなければ相談を未実施として正本とコード事実で継続する
+- 大地図、長期展望、複数仕様衝突、共有公開境界、恒久契約、CodexとOpusの結論衝突だけを`claude-fable-5`へread-only昇格する。FableはClaude Code CLIから直接呼び、Cursor同名modelで代替しない。Web資料は一次資料、利用者記録、検索snippetを区別する。詳細なtrigger、packet、監視、Fable commandは[監督ループ正本](docs/reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md)を読む
 
 ### Reactモック製品資産を含む発注の強制動線（無視禁止）
 
@@ -143,31 +132,8 @@ Rerunを一度でも根拠・再利用箇所・変更案に含める発注書は
 
 ## 恒久焼き込みの予防(M2 — GR-PV)
 
-正本: [docs/reviews/2026-07-12-m2-permanence-prevention.md](docs/reviews/2026-07-12-m2-permanence-prevention.md)。失敗後のmigration/Legacyは副次([rework-prior-art](docs/reviews/2026-07-12-rework-prior-art.md))。
-
-着手前チェック(1つでも No なら実装を止め、仕様改訂または依存チケット待ちへ):
-
-1. **意味が先か**: 焼く対象の意味論表/宣言が仕様にあるか。無ければ仕様改訂PRが先(コードで発明しない)
-2. **恒久面は狭いか**: 未決・未証明・UI都合だけのフィールドを足していないか
-3. **追加的か**: 新フィールド/新variant/defaultか。既存フィールドの解釈変更ではないか
-4. **依存直列か**: M2並列レーンを守っているか。特に **D1i-2完了前にD3しない**
-5. **完了条件に意味の審判があるか**: 拒否テストまたは意味論ゴールデン。`cargo test`緑だけで「完了」と書かない
-
-破れたときの出口だけ: 形状→D1e migration、画素→新variant(既存ゴールデン更新で通さない)、migration PRにnon-goals。
+正本は[恒久焼き込みの予防5手](docs/reviews/2026-07-12-m2-permanence-prevention.md)。M2 Document／schema／journalへ触る粒は、意味の仕様化、恒久面の最小化、追加的変更、依存順、意味の拒否試験を正本どおり確認する。一つでも閉じなければコードで補わず、当該施工を止めて仕様改訂または依存待ちへ戻す。migration／Legacyは予防の代替にしない。
 
 ## UI境界汚染の予防(M3 — GR-UI)
 
-正本: [docs/reviews/2026-07-14-m3-ui-boundary-prevention.md](docs/reviews/2026-07-14-m3-ui-boundary-prevention.md)。UI基盤の現行判断は[egui採用記録](docs/reviews/2026-07-18-m3-egui-selection.md)、旧Slint時点の採否記録は[反対側レビュー](docs/reviews/2026-07-14-m3-ui-boundary-counter-review.md)。UIはDocumentの投影であり、eguiの状態・px/DPI・入力イベント列を永続意味論へしない。
-
-M3仕様のGR-UI審判割当表で対象タスクに割り当てられた項目だけを確認する。非該当を形式的にYesにしない。該当項目が1つでもNoなら仕様改訂または依存待ちへ:
-
-1. **状態の持ち場が決まったか**: Document / User settings / Workspace profile / Project session / Transientの5層へ分類したか
-2. **書き込み口が一つか**: 永続編集はD2コマンドと単一writerだけを通るか
-3. **1ジェスチャー=1履歴か**: D2のmacro/merge/Undo単位を使い、未決transaction APIを発明していないか
-4. **UIスレッドを待たせないか**: worker分離、非blocking最新値mailbox、generation破棄があり、同期読み戻しが無いか
-5. **UI単位を焼いていないか**: px/DPI/度/ウィンドウ座標をDocument・評価・公開契約へ流していないか
-6. **UI toolkitを隔離したか**: `motolii-ui`外の製品クレートとdomain公開APIへegui/eframe/winit依存・型を出していないか
-7. **未決を埋めていないか**: GAP-13/GAP-6等の判断前に公開UI APIや恒久設定形式を足していないか
-8. **審判が再現可能か**: fixture・command・合否条件があり、基準機性能とIME等の人間確認を自動試験から分離したか
-9. **読む前に識別できるか**: 主要状態を文字だけ/色だけで表さず、新規componentを既存のtheme・icon・spacingへ馴染ませたか
-10. **数値で審判できるか**: UIの起動、window/DPI/layout、WebView lifecycle/IPC/focus、typed intent、座標、hit-test、drag、preview submit/result、Document revision、Stage/Timeline/Inspector投影、Undo/Redo、surface recovery/failure、性能、resource量を同じgeneration / revision / layout epochの構造化ログで追跡し、代表点・境界・異scaleの期待値を自動試験でassertしたか。毎frameの同値行を反復せず、目視だけで完了にしない
+正本は[M3 UI境界の規律8本](docs/reviews/2026-07-14-m3-ui-boundary-prevention.md)。M3仕様のGR-UI審判割当表で対象粒に割り当てられた項目だけを確認し、非該当を形式的に合格させない。UIはDocumentの投影であり、toolkit型、UI state、px／DPI、入力event列を永続意味論へしない。owner、D2単一writer／Undo、非blocking worker、toolkit隔離、再現可能なfixture／構造化logが一つでも閉じなければ、当該施工を止めて仕様改訂または依存待ちへ戻す。

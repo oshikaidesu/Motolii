@@ -295,7 +295,7 @@ fingerprint／検収者mutation／order mutationの検出が発火する、
 
 ## 11. `Grok preflight → Spark → Opus final`固定fixture試行
 
-状態: **観察。正規routingへ未採択**
+状態: **観察。後続のユーザー明示決定でroute version 2へ採択されたが、本fixture自体は採択根拠ではない**
 
 2026-08-01、ユーザー提案により、重いOpusを最後の実diff検収へ置き、Grokを施工前の粒化preflightへ置く候補を
 一回だけ固定fixtureで試した。製品差分、正規runner、`AGENTS.md`の責任順序は変更していない。
@@ -323,6 +323,8 @@ fingerprint／検収者mutation／order mutationの検出が発火する、
 49,040と増えている。したがって**速度改善・コスト改善・品質改善は未証明**であり、model routing変更の根拠にはしない。
 
 この試行が示すのは、候補順序が実CLIで疎通し、固定fixture上では49秒で最終ACCEPTまで到達したことだけである。
+後続の採択はGrokを粒化、Opusを実diff最終検収へ置くユーザーの責任判断によるもので、49秒を速度改善の証明へ
+昇格させない。
 次に比較するなら凍結解除後の実製品一粒で、既存のlead time／wait time／first-pass accept／rework count／
 stale-base count／escaped finding／Codex integration loadを同じreceiptから採る。Opus最終検収は、事前相談と同じ
 sessionを再利用せず、実装者の思考を渡さないfresh sessionを維持する。

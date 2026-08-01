@@ -11,14 +11,29 @@ FAIL=0
 
 err() { echo "NG: $1"; FAIL=1; }
 
-# 1. reviews/ の全ファイルが reviews/README.md の索引に登録されていること
+# 1. root AGENTS.md はCodexの既定読込上限より余白を持たせ、権限保存則を先頭へ固定する
+AGENTS_MAX_BYTES=30000
+AGENTS_PREFIX_BYTES=8192
+agents_bytes="$(LC_ALL=C wc -c < "$ROOT/AGENTS.md" | tr -d '[:space:]')"
+if [ "$agents_bytes" -gt "$AGENTS_MAX_BYTES" ]; then
+  err "AGENTS.md が ${agents_bytes} bytes (上限 ${AGENTS_MAX_BYTES})。詳細を正本docsへ移し、入口を校正すること"
+fi
+agents_prefix="$(LC_ALL=C head -c "$AGENTS_PREFIX_BYTES" "$ROOT/AGENTS.md")"
+for marker in '**自己発注禁止**' '**findingは権限ではない**' '**既決を未決へ戻さない**'; do
+  case "$agents_prefix" in
+    *"$marker"*) ;;
+    *) err "AGENTS.md の先頭 ${AGENTS_PREFIX_BYTES} bytes に必須規則がない: $marker" ;;
+  esac
+done
+
+# 2. reviews/ の全ファイルが reviews/README.md の索引に登録されていること
 for f in "$DOCS"/reviews/*.md; do
   b="$(basename "$f")"
   [ "$b" = "README.md" ] && continue
   grep -q "$b" "$DOCS/reviews/README.md" || err "reviews索引に未登録: docs/reviews/$b"
 done
 
-# 2. docs/README.md ファイルマップにリンク先の重複行がないこと
+# 3. docs/README.md ファイルマップにリンク先の重複行がないこと
 # (要旨セル内の相互参照は正当なので、表の先頭セルのリンクだけを見る)
 dups=$(grep -oE '^\| \[[^]]+\]\((reviews/[^)#]+\.md)\)' "$DOCS/README.md" \
   | grep -oE 'reviews/[^)#]+\.md' | sort | uniq -d)
@@ -28,7 +43,7 @@ if [ -n "$dups" ]; then
   done <<< "$dups"
 fi
 
-# 3. AGENTS.md と docs/**/*.md のローカルmdリンクが実在すること
+# 4. AGENTS.md と docs/**/*.md のローカルmdリンクが実在すること
 # (#fragmentは除去して判定)。必読入口のリンク切れもdocsと同じ失敗にする。
 python3 - "$ROOT" <<'PY'
 import os, re, sys
@@ -63,7 +78,7 @@ sys.exit(1 if fail else 0)
 PY
 [ $? -ne 0 ] && FAIL=1
 
-# 4. decision-index.md の状態語彙が固定集合に収まっていること
+# 5. decision-index.md の状態語彙が固定集合に収まっていること
 if [ -f "$DOCS/decision-index.md" ]; then
   bad=$(awk -F'|' '/^\|/ && NF>=6 && $2 !~ /主題|---/ {
     gsub(/^[ \t]+|[ \t]+$/, "", $4);
@@ -78,7 +93,7 @@ else
   err "docs/decision-index.md が存在しない"
 fi
 
-# 5. UI表示・起動の入口が、成果物用語正本を参照地図より先に通ること
+# 6. UI表示・起動の入口が、成果物用語正本を参照地図より先に通ること
 python3 - "$ROOT" <<'PY'
 import pathlib
 import sys
