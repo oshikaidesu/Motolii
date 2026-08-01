@@ -17,6 +17,10 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 - Opus 5は仕様決定者ではない。親taskの公開API、Document意味、plugin契約、永続形式、変更許可範囲を変える必要が見えたら`ORDER: STOP`でCodexへ戻す。repo横断の歴史調査、複数仕様の意味判断、未指定の公開境界探索をSpark粒へ押し込まない
 - 実装発注は一度に1つの契約境界、隔離worktree、閉じたallowlistとする。外部実装には「例外追加・lint抑制・テスト期待値変更・生JSON/文字列走査・公開raw API・重複planner/helper」で契約を迂回させず、必要に見えた時点でSTOPさせる
 - Grok検収が`VERDICT: ACCEPT`かつ**P0/P1=0**でなければ実装差分を採用・commit・pushしない。Grokはorder再設計や実装修正をせず、REJECTをCodexへ返す。テスト緑は採用条件の一部であって、契約適合の代わりにしない
+- **粒の上限は行数でなく契約境界数(2026-08-01改訂1)**: 通常粒は一つの契約境界で閉じる。複数境界を束ねた粒はOpus起動前にCodexが分割する。930行・4境界の粒は430秒＋586秒で2回ともREJECTし採用ゼロ、一行fixtureは62秒でACCEPTした。外部実測でもLLM検収のF1はdiff 10行未満で0.657、150行超で0.043に落ちる。行数閾値を正本にせず、`REUSE_CLOSURE`と`NEW_SURFACE`が境界ごとに閉じるかで判定する
+- **`VERDICT: ACCEPT`に有効性条件を付ける(2026-08-01改訂2)**: 検収が機能しない規模で得た`ACCEPT`を採用の根拠にしない。劣化領域のdiffは`ACCEPT`でも採用せず、粒を分割して再発注する。これは独立検収を弱めず、**検収が働かない領域の合格を根拠に使わない**制限である。大diffの検出率を回復させる実証済み手法は2026-08-01時点で存在しない
+- **検収者は「Grok」でなく「独立性条件」で定める(2026-08-01改訂3)**: 不変条件は実装担当から独立した別LLMの外部視点を必ず得ることであり、model固定はその一実装にすぎない。床は`実装担当と異なるmodel identity`／`fresh session`／`実装担当の思考過程・自己説明・修正理由を渡さない`／`read-only`／`検査範囲を実装担当が決めない`／`ACCEPT/REJECTとP0/P1の構造化出力`／`receiptへ実使用modelとfallback有無を記録`の7項目。technical independenceの中身は「別modelを使う」でなく「**問題理解を自分で再構成する**」(NASA SWE-141)。`SECURITY`／`DESTRUCTIVE_FS`／`PERMANENT`は別provider＋**非LLM oracleの併用を必須**とする(model間エラーは60%相関するため、真に相関しない軸は型・静的解析・実行)。より強いmodelを検収に置けば安全、とは考えない。runnerが`REVIEW_MODEL`を等値比較で固定している間、既定reviewerは`cursor-grok-4.5-high`のまま変えない
+- **性能regressionはLLM検収の守備範囲外(2026-08-01改訂4)**: 評価された全modelで性能関連バグのrecallがほぼ0であり、回復手法も見つかっていない。「VRAM常駐」「色変換の一元化」「プレビュー/書き出し同一関数」という絶対規律は、まさにこの欠陥クラスに一致する。性能の審判はbench／golden／profiling oracleで持ち、検収の`ACCEPT`を性能非退行の根拠にしない。性能に触れる粒は機械oracleを完了条件へ含める
 - Fable 5は通常ループの段階または必須gateにしない。大地図、設計比較、共有公開境界など、主担当Codexが高難度の反対側助言を必要と判断した場合だけ、ループ外からread-onlyで直接呼ぶ
 - 主担当Codexは監督者として、OpusのorderとSparkの差分を仕様・依存・実装ガード・既存API・テスト期待値に照らして再確認する。外部出力は根拠でなく未検証の助言であり、最終判断、統合、必須テスト、完了報告は主担当が行う
 - model利用不能時に別modelへ黙ってfallbackしない。外部modelへ秘密情報、認証情報、未公開の個人データを渡さない

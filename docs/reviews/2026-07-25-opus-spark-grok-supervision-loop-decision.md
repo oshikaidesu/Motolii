@@ -339,6 +339,115 @@ Fable 5は大地図、長期展望、複数仕様の衝突、共有公開境界�
 React製品資産とRerun参照を含む発注は、`AGENTS.md`の追加ラベル、順序、STOP条件をこのループより優先して
 満たす。ループの簡略化は製品契約の簡略化を意味しない。
 
+## 2026-08-01改訂 — 粒度上限・検収の有効性条件・独立性の定義・守備範囲
+
+根拠は[速度支配項と計装の観察](2026-08-01-supervision-loop-cost-driver-observation.md)。
+本改訂は**独立検収を制約条件として固定したまま**、その内側だけを変える。検収の省略・縮退は行わない。
+
+各項の**発効状態を明記する**。「決定済み・未発効」を積み増さないため、runner改修を待たずに
+主担当Codexが今日から適用できる項と、機械gateが要る項を分ける。
+
+### 改訂1 — 粒の上限は行数でなく契約境界数(発効中)
+
+通常粒は**一つの契約境界**で閉じる。複数境界を束ねた粒はOpus起動前にCodexが分割する。
+
+根拠は三方向で一致する。
+
+- Motolii実測: 930行・4境界の粒は430秒＋586秒で2回ともREJECT、採用0。一行fixtureは62秒でACCEPT
+- 本書§Spark compiled grainのA/B(2026-07-31)が既に「旧GR-D3は一つの`CLOSED`施工粒ではない」と自己診断していた
+- 外部実測([arXiv 2606.15689](https://arxiv.org/abs/2606.15689)): LLM検収のF1はdiff 10行未満で0.657、150行超で**0.043**
+
+`AGENTS.md`の「実装発注は一度に1つの契約境界」を、`REUSE_CLOSURE`と`NEW_SURFACE`が
+境界ごとに閉じているかで判定する運用へ具体化する。行数閾値は正本にしない。行数は事後にしか
+分からず、[Google eng-practices Small CLs](https://google.github.io/eng-practices/review/developer/small-cls.html)
+も self-contained とファイル分散を基準にしている(同書は実証研究の引用が無い人間向け実務ガイドで、
+リポジトリは2025-11-21にアーカイブ済み)。
+
+**未発効**: dispatch前に境界数を機械判定するgate。現状はCodexが骨格作成時に適用する。
+
+### 改訂2 — `VERDICT: ACCEPT`に有効性条件を付ける(発効中)
+
+検収が機能しない規模で得た`ACCEPT`を、採用の有効な根拠にしない。
+
+diff規模が劣化領域にある場合、Codexは`ACCEPT`を受け取っても**採用せず**、粒を分割して再発注する。
+これは独立検収を弱める変更ではない。**検収が働かない領域での合格を根拠に使わない**という制限であり、
+保証を強める方向である。
+
+Fable 5のread-only掃引(2026-08-01)で、大diffの検出率を回復させる実証済み手法は
+**見つからなかった**(実PR規模の最良値はどの手法でもF1 0.19–0.28帯)。したがって
+「検収技術で大きな粒を救う」経路は現時点で存在しない。
+
+**暫定**: 具体的な閾値は実データ3件が貯まるまで確定しない。外部研究の150行は8 OSSリポジトリの
+実PR由来で、Motoliiのgrain分布と異なる。
+
+### 改訂3 — 検収者固定を独立性条件へ一般化する(条件は発効、実装は未発効)
+
+守るべき不変条件は**Grokを使うこと**ではなく、**実装担当から独立した別LLMによる外部視点の検収を
+必ず得ること**である。model固定はその一実装にすぎない。
+
+独立の定義は先例に従う。[NASA SWE-141](https://swehb.nasa.gov/display/SWEHBVC/SWE-141+-+Software+Independent+Verification+and+Validation)
+とIEEE 1012はtechnical／managerial／financialの3軸を定める。DO-178Cは「検証者は当該成果物の
+作成者であってはならない」と定義し、独立を要求する目標数を保証レベルで変える(Level A=31中16、
+Level B=31中7、Level C/D=0)。IEC 61508はSILに応じて独立した個人→部門→組織の梯子を持つ。
+**先人は「独立を省くか」でなく「どこまで遠い独立を要求するか」を危険度で決めている。**
+
+Motoliiの床(全粒で必須・段階化しない):
+
+1. reviewerのmodel identityが実装担当と異なる
+2. reviewerはfresh sessionから開始する
+3. 実装担当の思考過程・自己説明・修正理由を渡さない。渡すのはfrozen contract、実diff、
+   test evidence、負例oracleだけ
+4. read-only。reviewerは修正しない
+5. 検査範囲を実装担当が決めない
+6. `ACCEPT / REJECT`とP0/P1を構造化出力する
+7. receiptへ実使用modelとfallback有無を記録する
+
+technical independenceの中身は「別modelを使う」ではなく「**問題理解を自分で再構成する**」である
+(SWE-141)。実装担当の推論を渡した時点で、model IDが違っても独立性は失われる。現行の
+compiled grainが実装担当の思考を含まないのは、この条件を満たしている。
+
+梯子(`HAZARD_TAG`×`CONTRACT_IMPACT`で段階化):
+
+| 影響 | 要求 |
+|---|---|
+| `NONE` / `PRIVATE` | 別model identity(床のみ) |
+| `PERSISTENCE` / `CONCURRENCY` / `PLATFORM` / `SHARED` | 別model family |
+| `SECURITY` / `DESTRUCTIVE_FS` / `PERMANENT` | 別provider **＋非LLM oracleの併用を必須** |
+
+最上段が「別provider」だけで足りないのは、[Correlated Errors in LLMs (ICML 2025)](https://arxiv.org/abs/2506.07962)
+が350+モデルで**両モデルが誤る場合の60%は同じ誤り**、しかも大型で高精度なモデルほどprovider差が
+あっても相関が高いと報告するため。**真に相関しない軸は非LLM oracle(型・静的解析・実行)である。**
+同じ理由で「より強いモデルを検収に置けば安心」を採らない。2606.15689でもHaiku 4.5がSonnet 4.6を
+F1・recall・コストの全てで上回っている。
+
+financial independenceはMotoliiへ**転移不可**として明記する。
+
+**未発効**: runnerは`REVIEW_MODEL`を`cursor-grok-4.5-high`との等値比較で固定している。
+独立性述語への置換と専用負例が入るまで、既定reviewerは`cursor-grok-4.5-high`のまま変えない。
+事前設計へ深く関与したmodelを最終reviewerに選ばない。
+
+### 改訂4 — 性能regressionはLLM検収の守備範囲外(発効中)
+
+[arXiv 2606.15689](https://arxiv.org/abs/2606.15689)は、評価した全モデルで**性能関連バグのrecallが
+ほぼ0**と報告する。Fableの掃引でもこの欠陥クラスを回復させる手法は見つからなかった。
+
+Motoliiの絶対規律は「VRAM常駐」「色変換の一元化」「プレビュー/書き出し同一関数」であり、
+**製品の中核リスクはLLM検収が最も弱い欠陥クラスに一致している**。
+
+したがって、性能regressionの審判をLLM検収へ期待しない。bench、golden、profiling oracleで持つ。
+Grokの`ACCEPT`を性能非退行の根拠にしない。性能に触れる粒は機械oracleを完了条件へ含める。
+
+### 改訂5 — 検収入力のslice化(未決・次段)
+
+計装で、Grokが1行の自明な依頼でも入力16,013 tokensを使うことが分かった。検収コストはdiffの
+大きさより**入力の作り方**に支配されている。
+
+唯一の本番デプロイ実証([arXiv 2505.17928](https://arxiv.org/html/2505.17928))は短いsliceが
+最大文脈に勝つと報告するが、Key Bug Inclusionは天井約31%である。また境界横断バグがsliceから
+落ちる危険があるため、全境界の契約シグネチャだけを見る俯瞰パスの併設が要る。
+
+**設計を閉じてから実装する。本改訂では採らない。**
+
 ## 改訂凍結(2026-08-01)
 
 状態: **停止線**
@@ -360,28 +469,34 @@ React製品資産とRerun参照を含む発注は、`AGENTS.md`の追加ラベ�
   §1の診断と§8の指標表は棄却されていない。数値は手写しでなく
   [runner計装](2026-08-01-supervision-loop-cost-driver-observation.md#7-計装実装済み2026-08-01)のreceiptから採る
 - 連続3件は同一fixtureの反復でなく、実製品粒で数える。REJECT、STOP、timeoutが一件でも入れば計数をやり直す
-- 凍結の唯一の例外は、検収者固定を独立性条件へ一般化する改訂とする(次節)。その他の例外を作らない
-- 凍結解除時は、3件のorder SHA-256、Grok verdict、token、wall timeを本文書へ追記してから改訂を再開する
+- 凍結解除時は、3件のorder SHA-256、検収verdict、token、wall timeを本文書へ追記してから改訂を再開する
 
-### 凍結対象外 — 検収者の独立性条件
+**起点**: 本凍結は前節「2026-08-01改訂」をもって発効する。同改訂は凍結の違反ではなく、
+churnを止めるための締めくくりである。以後、新しい規約項を追加しない。
 
-現行runnerは`REVIEW_MODEL`を`cursor-grok-4.5-high`との等値比較で固定している。しかし守るべき不変条件は
-**Grokを使うこと**ではなく、**実装担当から独立した別LLMの外部視点による検収を必ず得ること**である。
-model固定はその不変条件の一実装にすぎない。
+**凍結対象外(実装のみ)**: 前節で**未発効**と明記した機械gateの実装は凍結の対象外とする。
+新しい規約を作る作業ではなく、既に裁定済みの条項をrunnerへ落とす作業だからである。具体的には
+次の三つに限る。これ以外を「実装だから対象外」と拡張しない。
 
-したがって、次の一般化だけを凍結対象外とする。ただし本項は**方向の裁定であって、まだ実装していない**。
+1. 改訂1の契約境界数をdispatch前に機械判定するgateと専用負例
+2. 改訂3の`REVIEW_MODEL`等値比較を独立性述語へ置換するgateと専用負例
+3. Spark／GrokのUSD cost計測(両CLIが返さないため、可能なら別経路で)
 
-- reviewerの独立性を機械判定にする: 実装担当と異なるmodel identityかつmodel family、fresh session、
-  read-only、実装担当の思考過程や自己説明を渡さない、`ACCEPT / REJECT`とP0/P1の構造化出力、
-  receiptへ実使用modelとfallback有無を記録する
-- 既定reviewerは`cursor-grok-4.5-high`のまま変えない
-- 事前設計へ深く関与したmodelを最終reviewerに選ばない
-- reviewerのscoring、選択router、provider多様性の必須化は**この段階では作らない**。凍結解除後に、
-  実績3件の証跡を根拠として再判定する
+改訂5(検収入力のslice化)は**設計が閉じていない**ため、実装として着手しない。設計を閉じる作業自体が
+規約改訂に当たるため、凍結解除後に扱う。
 
-独立検収そのものを省略する最適化は、model routingでもcost削減でも採らない。低riskだからreviewerを省く、
-mechanical testを独立検収の代替にする、実装担当の自己検証や複数候補投票で置き換える、のいずれも
-本ループの中核保証を失うため不可とする。
+### 凍結中も動かさない中核保証
+
+検収者の独立性条件は前節[改訂3](#改訂3--検収者固定を独立性条件へ一般化する条件は発効実装は未発効)が正本であり、
+ここでは重複させない。
+
+凍結の有無にかかわらず、次の最適化は採らない。**独立検収そのものを省略・代替する変更は、
+コスト削減でもmodel routingでも不可とする。**
+
+- 低riskだからreviewerを省く
+- mechanical testを独立検収の代替にする
+- 実装担当の自己検証や複数候補投票で置き換える
+- reviewerのscoring、選択router、provider多様性の必須化を先に作る(実績3件の証跡が先)
 
 ## アーカイブした方式
 
@@ -405,3 +520,9 @@ mechanical testを独立検収の代替にする、実装担当の自己検証�
 - SparkとGrokが承認済みカプセル外の全規約・全spec・repo横断探索を通常動線で要求されない
 - 旧`TASK_CLASS` routingとFable必須検収を正規runnerから起動できない
 - runnerの負例試験と`./scripts/check-docs.sh`が通る
+- 通常粒が一つの契約境界で閉じ、複数境界を束ねた粒はOpus起動前に分割される(改訂1)
+- 検収が機能しない規模のdiffで得た`ACCEPT`を採用根拠にしない(改訂2)
+- reviewerが独立性の床7項目を満たし、receiptへ実使用modelとfallback有無が残る(改訂3)
+- 性能に触れる粒がbench／golden／profiling oracleを完了条件に含め、検収の`ACCEPT`を
+  性能非退行の根拠にしない(改訂4)
+- 各stageのwall time、token、costがrunner計装のreceiptに残り、欠測stageが明示される
