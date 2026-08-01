@@ -265,6 +265,7 @@ const fn command_kind_copy(kind: CommandKind) -> &'static str {
         CommandKind::SetAudioComponentGain => "Set audio component gain",
         CommandKind::AddTrackItem => "Add track item",
         CommandKind::RemoveTrackItem => "Remove track item",
+        CommandKind::SetClipStart => "Set clip start",
     }
 }
 
@@ -384,5 +385,13 @@ mod tests {
             ]
         );
         assert!(projection.recovery_candidates().is_empty());
+    }
+
+    #[test]
+    fn clip_start_command_uses_the_existing_diagnostic_copy_route() {
+        assert_eq!(
+            command_kind_copy(CommandKind::SetClipStart),
+            "Set clip start"
+        );
     }
 }
