@@ -975,6 +975,11 @@ gate_check_allowed_files() {
     if [[ "$af" == *".."* ]]; then
       gate_fail "ALLOWED_FILE path traversal: $af"
     fi
+    # 正規化されていないpathはowner分類を潰す。`./crates/a`と`./crates/b`は
+    # 両方ownerが`.`になり、複数境界の粒が単一ownerとして通過する(2026-08-01独立検収P0)
+    if [[ "$af" == ./* || "$af" == */ || "$af" == *//* ]]; then
+      gate_fail "ALLOWED_FILE path must be normalized: $af"
+    fi
     if [[ "${af%%/*}" == "target" ]]; then
       gate_fail "ALLOWED_FILE covers derived target output: $af"
     fi
@@ -1478,7 +1483,11 @@ run_dispatch_gate_for_inspect() {
   gate_run authorities gate_check_authorities_at_base "$order_file" "$worktree"
   gate_run allowed_files gate_check_allowed_files "$order_file"
   gate_run contract_boundary gate_check_contract_boundary "$order_file"
-  gate_run reviewer_independence gate_check_reviewer_independence "$order_file"
+  if grep -Eq '^REVIEW_MODEL:' "$order_file"; then
+    gate_run reviewer_independence gate_check_reviewer_independence "$order_file"
+  else
+    record_gate SKIP "reviewer_independence(no REVIEW_MODEL yet)"
+  fi
   gate_run context_budget gate_check_context_budget "$order_file" "$worktree"
   gate_run compiled_grain_contract gate_check_compiled_grain_contract "$order_file"
   gate_run exact_targets gate_check_exact_targets "$order_file" "$worktree" BASE
@@ -2461,10 +2470,16 @@ EOF
 # docs/はledger・decision-index登録がworkflow上必須のため、別境界に数えない。
 gate_check_contract_boundary() {
   local order_file="$1"
-  local af owner seen o
+  local line af owner seen o count=0
   local owners=()
   gate_require_single_field "$order_file" "CONTRACT_BOUNDARY" >/dev/null
-  for af in ${GATE_ALLOWED_FILES[@]+"${GATE_ALLOWED_FILES[@]}"}; do
+  # 先行gateのglobalへ依存すると、そのgateが走らない経路でowner検査が無言のno-opに
+  # なる(2026-08-01独立検収P1)。orderを直接読み、件数も独立に確認する
+  while IFS= read -r line; do
+    af="${line#ALLOWED_FILE: }"
+    [[ -n "$af" ]] || continue
+    count=$((count + 1))
+    af="${af#./}"
     case "$af" in
       docs/*) continue ;;
       crates/*) owner="crates/$(printf '%s' "${af#crates/}" | cut -d/ -f1)" ;;
@@ -2476,7 +2491,8 @@ gate_check_contract_boundary() {
       [[ "$o" == "$owner" ]] && seen=1
     done
     (( seen == 1 )) || owners+=("$owner")
-  done
+  done < <(grep -E '^ALLOWED_FILE: ' "$order_file")
+  (( count > 0 )) || gate_fail "CONTRACT_BOUNDARY declared without any ALLOWED_FILE"
   if (( ${#owners[@]} > 1 )); then
     gate_fail "ALLOWED_FILE spans multiple contract owners: ${owners[*]}"
   fi
@@ -2496,12 +2512,9 @@ model_family() {
 gate_check_reviewer_independence() {
   local order_file="$1"
   local reviewer implementer manager impact hazard allowed found=0
-  # skeleton段ではrunner所有fieldがまだ無い。orderへ書かれた後だけ検査する。
-  # 通過ではなくskipであることを台帳へ残す(PASSと区別できないと監査で誤読される)
-  if ! grep -Eq '^REVIEW_MODEL:' "$order_file"; then
-    record_gate SKIP "reviewer_independence(no REVIEW_MODEL yet)"
-    return 0
-  fi
+  # skeleton段でこの関数は呼ばれない。呼び出し側がREVIEW_MODELの有無で分岐し、
+  # 不在時はSKIPとして台帳へ残す。ここでearly returnするとgate_runがPASSを
+  # 追記してしまい、skipと本物の合格を区別できない(2026-08-01独立検収P2)
   reviewer="$(gate_require_single_field "$order_file" "REVIEW_MODEL")"
   implementer="$(gate_require_single_field "$order_file" "IMPLEMENTER_MODEL")"
   manager="$(gate_require_single_field "$order_file" "ORDER_MANAGER_MODEL")"
@@ -2545,7 +2558,11 @@ run_dispatch_gate() {
   gate_run authorities gate_check_authorities "$order_file" "$worktree"
   gate_run allowed_files gate_check_allowed_files "$order_file"
   gate_run contract_boundary gate_check_contract_boundary "$order_file"
-  gate_run reviewer_independence gate_check_reviewer_independence "$order_file"
+  if grep -Eq '^REVIEW_MODEL:' "$order_file"; then
+    gate_run reviewer_independence gate_check_reviewer_independence "$order_file"
+  else
+    record_gate SKIP "reviewer_independence(no REVIEW_MODEL yet)"
+  fi
   gate_run context_budget gate_check_context_budget "$order_file" "$worktree"
   gate_run compiled_grain_contract gate_check_compiled_grain_contract "$order_file"
   gate_run exact_targets gate_check_exact_targets "$order_file" "$worktree"

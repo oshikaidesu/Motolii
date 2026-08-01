@@ -523,6 +523,18 @@ assert_status 3 "$RUN_STATUS" "multi-owner allowlist rejected"
 grep -Fq -- "spans multiple contract owners" "$TMP_ROOT/stderr.log" \
   || fail "multi-owner rejection must name the owners"
 
+# 正規化されていないpathはowner分類を潰す。`./crates/a`と`./crates/b`が両方
+# owner `.` になると、複数境界の粒が単一ownerとして通過する(2026-08-01独立検収P0)
+NORMALIZE_TASK="$(printf '%s\n' "$TASK" |
+  sed 's|^ALLOWED_FILE: src.txt$|ALLOWED_FILE: ./crates/alpha/lib.rs|; s|^ALLOWED_FILE: test.txt$|ALLOWED_FILE: ./crates/beta/lib.rs|')"
+: >"$CALL_LOG"
+run_script prepare "$WT" "$TMP_ROOT/unnormalized.md" "$NORMALIZE_TASK"
+assert_status 3 "$RUN_STATUS" "unnormalized multi-owner allowlist rejected"
+[[ ! -s "$CALL_LOG" ]] || fail "unnormalized allowlist must fail before model invocation"
+grep -Fq -- "must be normalized" "$TMP_ROOT/stderr.log" \
+  || fail "unnormalized ALLOWED_FILE rejection reason missing"
+
+
 # docs/はledger・decision-index登録がworkflow上必須のため、別境界に数えない。
 # 「拒否されない」を弱いassertで済ませると正例を証明できない(2026-08-01独立検収P1指摘)ため、
 # 他の理由でも落ちない完全な粒を組み、exit 0そのものを固定する
@@ -542,6 +554,14 @@ set -e
 assert_status 0 "$RUN_STATUS" "docs registration alongside one owner must dispatch"
 assert_has "$TMP_ROOT/docs-owner.md" "ALLOWED_FILE: docs/implementation-ledger.md" \
   "docs allowlist entry survived"
+
+# skeleton段(REVIEW_MODEL不在)のskipをPASSとして記録すると、監査でskipと本物の
+# 合格を区別できない。skeleton roundはSKIP、order roundはPASSで両方現れること
+DOCS_GATES="$TMP_ROOT/docs-owner.md.evidence/gates.txt"
+grep -Eq '^GATE_SKIP: reviewer_independence' "$DOCS_GATES" \
+  || fail "skeleton stage must record reviewer_independence as SKIP"
+grep -Eq '^GATE_PASS: reviewer_independence' "$DOCS_GATES" \
+  || fail "order stage must record reviewer_independence as a real PASS"
 
 # 宣言は一つだけ。二重宣言は境界が一つであることの証明にならない
 DUP_BOUNDARY_TASK="$(printf '%s\n' "$TASK" |
