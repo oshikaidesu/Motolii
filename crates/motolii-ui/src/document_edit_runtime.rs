@@ -21,6 +21,8 @@ pub(crate) enum DocumentEditAction {
     PlaceRectangle(PlaceRectangleRequest),
     AttachEffect(AttachEffectRequest),
     SetEffectParam(SetEffectParamRequest),
+    MoveClip(MoveClipRequest),
+    TrimClip(TrimClipRequest),
     ReplacePrimary(LayerId),
     ClearPrimary,
     Undo,
@@ -34,6 +36,8 @@ impl DocumentEditAction {
             Self::PlaceRectangle(_) => DocumentEditActionKind::PlaceRectangle,
             Self::AttachEffect(_) => DocumentEditActionKind::AttachEffect,
             Self::SetEffectParam(_) => DocumentEditActionKind::SetEffectParam,
+            Self::MoveClip(_) => DocumentEditActionKind::MoveClip,
+            Self::TrimClip(_) => DocumentEditActionKind::TrimClip,
             Self::ReplacePrimary(_) => DocumentEditActionKind::ReplacePrimary,
             Self::ClearPrimary => DocumentEditActionKind::ClearPrimary,
             Self::Undo => DocumentEditActionKind::Undo,
@@ -48,6 +52,8 @@ pub(crate) enum DocumentEditActionKind {
     PlaceRectangle,
     AttachEffect,
     SetEffectParam,
+    MoveClip,
+    TrimClip,
     ReplacePrimary,
     ClearPrimary,
     Undo,
@@ -73,6 +79,16 @@ impl DocumentEditQueue {
     pub(crate) fn push_set_effect_param(&mut self, request: SetEffectParamRequest) {
         self.pending
             .push_back(DocumentEditAction::SetEffectParam(request));
+    }
+
+    pub(crate) fn push_trim_clip(&mut self, request: TrimClipRequest) {
+        self.pending
+            .push_back(DocumentEditAction::TrimClip(request));
+    }
+
+    pub(crate) fn push_move_clip(&mut self, request: MoveClipRequest) {
+        self.pending
+            .push_back(DocumentEditAction::MoveClip(request));
     }
 
     pub(crate) fn push_replace_primary(&mut self, target: LayerId) {
@@ -157,6 +173,25 @@ pub(crate) struct SetEffectParamRequest {
     effect_version: u32,
     param_id: String,
     value: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TrimClipEdge {
+    In,
+    Out,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct MoveClipRequest {
+    pub(crate) layer_id: LayerId,
+    pub(crate) start: RationalTime,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct TrimClipRequest {
+    pub(crate) layer_id: LayerId,
+    pub(crate) edge: TrimClipEdge,
+    pub(crate) time: RationalTime,
 }
 
 impl SetEffectParamRequest {
@@ -418,6 +453,47 @@ impl DocumentEditRuntime {
                     kind,
                     current_primary,
                     current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::MoveClip(request) => {
+                let Some(command) = self
+                    .writer
+                    .prepare_set_clip_start(request.layer_id, request.start)?
+                else {
+                    return Ok(None);
+                };
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    Some(request.layer_id),
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::TrimClip(request) => {
+                let command = match request.edge {
+                    TrimClipEdge::In => self
+                        .writer
+                        .prepare_trim_clip_in(request.layer_id, request.time)?,
+                    TrimClipEdge::Out => self
+                        .writer
+                        .prepare_trim_clip_out(request.layer_id, request.time)?,
+                };
+                let Some(command) = command else {
+                    return Ok(None);
+                };
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    Some(request.layer_id),
                     projection_generation,
                     None,
                 )
@@ -2457,6 +2533,88 @@ mod tests {
         assert_eq!(
             published.snapshot.layers.display_name(placed),
             Some("Rectangle")
+        );
+    }
+
+    #[test]
+    fn trim_clip_commits_through_the_shared_writer_and_roundtrips_history() {
+        let (document, _) = fixture();
+        let selected = fixture_layer(&document);
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_trim_clip(TrimClipRequest {
+            layer_id: selected,
+            edge: TrimClipEdge::In,
+            time: RationalTime::try_new(1, 4).unwrap(),
+        });
+
+        let trimmed = runtime
+            .process_next(&mut queue, Some(selected), 4)
+            .unwrap()
+            .expect("changed trim must publish once");
+        assert_eq!(trimmed.kind, DocumentEditActionKind::TrimClip);
+        assert_eq!(trimmed.revision, 1);
+        assert_eq!(trimmed.primary, Some(selected));
+        assert_eq!(trimmed.projection_generation, 5);
+        assert_eq!(runtime.history_lengths(), (1, 0));
+        let TrackItem::Clip(clip) = &trimmed.snapshot.tracks[0].items[0] else {
+            panic!("fixture must remain a Clip");
+        };
+        assert_eq!(clip.start, RationalTime::try_new(1, 4).unwrap());
+        assert_eq!(clip.duration, RationalTime::try_new(3, 4).unwrap());
+
+        queue.push_undo();
+        let undone = runtime
+            .process_next(&mut queue, Some(selected), 5)
+            .unwrap()
+            .expect("trim Undo must publish");
+        assert_eq!(undone.kind, DocumentEditActionKind::Undo);
+        assert_eq!(undone.revision, 2);
+        assert_eq!(undone.primary, Some(selected));
+        assert_eq!(undone.projection_generation, 6);
+        assert_eq!(runtime.history_lengths(), (0, 1));
+        assert_eq!(serde_json::to_vec(&*undone.snapshot).unwrap(), initial_json);
+
+        queue.push_redo();
+        let redone = runtime
+            .process_next(&mut queue, Some(selected), 6)
+            .unwrap()
+            .expect("trim Redo must publish");
+        assert_eq!(redone.kind, DocumentEditActionKind::Redo);
+        assert_eq!(redone.revision, 3);
+        assert_eq!(redone.primary, Some(selected));
+        assert_eq!(redone.projection_generation, 7);
+        assert_eq!(runtime.history_lengths(), (1, 0));
+        assert_eq!(
+            serde_json::to_vec(&*redone.snapshot).unwrap(),
+            serde_json::to_vec(&*trimmed.snapshot).unwrap()
+        );
+    }
+
+    #[test]
+    fn unchanged_trim_is_a_noop_before_projection_or_history_changes() {
+        let (document, _) = fixture();
+        let selected = fixture_layer(&document);
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_trim_clip(TrimClipRequest {
+            layer_id: selected,
+            edge: TrimClipEdge::In,
+            time: RationalTime::ZERO,
+        });
+
+        assert!(runtime
+            .process_next(&mut queue, Some(selected), u64::MAX)
+            .unwrap()
+            .is_none());
+        assert_eq!(queue.len(), 0);
+        assert_eq!(runtime.revision(), 0);
+        assert_eq!(runtime.history_lengths(), (0, 0));
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
         );
     }
 

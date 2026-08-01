@@ -40,6 +40,11 @@ pub(crate) struct HostPointerClick {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct HostPointerPress {
+    pub(crate) position: [f64; 2],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct PointerUpEntry {
     sequence: u64,
     position: [f64; 2],
@@ -151,6 +156,7 @@ pub(crate) struct PlatformPointerCapture {
     window: objc2::rc::Retained<objc2_app_kit::NSWindow>,
     state: HostPointerCaptureState,
     up_queue: std::sync::Arc<std::sync::Mutex<PointerUpQueue>>,
+    press_queue: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<HostPointerPress>>>,
     command_inbox: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<EffectiveTrigger>>>,
     host_commands_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
     click_monitor: objc2::rc::Retained<objc2::runtime::AnyObject>,
@@ -182,6 +188,9 @@ impl PlatformPointerCapture {
             .ok_or(PlatformPointerCaptureError::MissingWindow)?;
         let up_queue = std::sync::Arc::new(std::sync::Mutex::new(PointerUpQueue::default()));
         let monitor_inbox = std::sync::Arc::clone(&up_queue);
+        let press_queue =
+            std::sync::Arc::new(std::sync::Mutex::new(std::collections::VecDeque::new()));
+        let monitor_press_queue = std::sync::Arc::clone(&press_queue);
         let command_inbox =
             std::sync::Arc::new(std::sync::Mutex::new(std::collections::VecDeque::new()));
         let monitor_command_inbox = std::sync::Arc::clone(&command_inbox);
@@ -193,7 +202,11 @@ impl PlatformPointerCapture {
             block2::RcBlock::new(move |event: std::ptr::NonNull<objc2_app_kit::NSEvent>| {
                 // SAFETY: AppKitはlocal monitor呼び出し中のevent生存を保証する。
                 let event = unsafe { event.as_ref() };
-                if event.r#type() == objc2_app_kit::NSEventType::LeftMouseUp {
+                if matches!(
+                    event.r#type(),
+                    objc2_app_kit::NSEventType::LeftMouseDown
+                        | objc2_app_kit::NSEventType::LeftMouseUp
+                ) {
                     if let Some(content) = monitor_window.contentView() {
                         let content_point =
                             content.convertPoint_fromView(event.locationInWindow(), None);
@@ -204,9 +217,19 @@ impl PlatformPointerCapture {
                             content.isFlipped(),
                             content_height,
                         );
-                        let enqueued = match monitor_inbox.lock() {
-                            Ok(mut inbox) => inbox.enqueue(position).is_some(),
-                            Err(_) => false,
+                        let enqueued = match event.r#type() {
+                            objc2_app_kit::NSEventType::LeftMouseDown => monitor_press_queue
+                                .lock()
+                                .map(|mut inbox| {
+                                    inbox.push_back(HostPointerPress { position });
+                                    true
+                                })
+                                .unwrap_or(false),
+                            objc2_app_kit::NSEventType::LeftMouseUp => monitor_inbox
+                                .lock()
+                                .map(|mut inbox| inbox.enqueue(position).is_some())
+                                .unwrap_or(false),
+                            _ => false,
                         };
                         if enqueued {
                             monitor_wake();
@@ -226,7 +249,9 @@ impl PlatformPointerCapture {
         // SAFETY: blockは受け取ったlive eventをそのまま返し、monitor tokenはDropで除去する。
         let click_monitor = unsafe {
             objc2_app_kit::NSEvent::addLocalMonitorForEventsMatchingMask_handler(
-                objc2_app_kit::NSEventMask::LeftMouseUp | objc2_app_kit::NSEventMask::KeyDown,
+                objc2_app_kit::NSEventMask::LeftMouseDown
+                    | objc2_app_kit::NSEventMask::LeftMouseUp
+                    | objc2_app_kit::NSEventMask::KeyDown,
                 &monitor,
             )
         }
@@ -235,6 +260,7 @@ impl PlatformPointerCapture {
             window,
             state: HostPointerCaptureState::default(),
             up_queue,
+            press_queue,
             command_inbox,
             host_commands_enabled,
             click_monitor,
@@ -255,6 +281,9 @@ impl PlatformPointerCapture {
         let arm_sequence = queue.high_water();
         if !self.state.arm(generation, arm_sequence) {
             return false;
+        }
+        if let Ok(mut queue) = self.press_queue.lock() {
+            queue.clear();
         }
         self.last_logged_position = None;
         self.armed_after_event_timestamp = self
@@ -335,6 +364,15 @@ impl PlatformPointerCapture {
         Ok(queue.pop_unclaimed().map(|entry| HostPointerClick {
             position: entry.position,
         }))
+    }
+
+    pub(crate) fn poll_press(
+        &mut self,
+    ) -> Result<Option<HostPointerPress>, PlatformPointerCaptureError> {
+        self.press_queue
+            .lock()
+            .map_err(|_| PlatformPointerCaptureError::PressQueuePoisoned)
+            .map(|mut inbox| inbox.pop_front())
     }
 
     pub(crate) fn set_host_commands_enabled(&self, enabled: bool) {
@@ -442,6 +480,12 @@ impl PlatformPointerCapture {
         Ok(None)
     }
 
+    pub(crate) fn poll_press(
+        &mut self,
+    ) -> Result<Option<HostPointerPress>, PlatformPointerCaptureError> {
+        Ok(None)
+    }
+
     pub(crate) fn set_host_commands_enabled(&self, _enabled: bool) {}
 
     pub(crate) fn poll_command(
@@ -467,6 +511,8 @@ pub(crate) enum PlatformPointerCaptureError {
     UpQueuePoisoned,
     #[error("native command inbox lock is poisoned")]
     CommandInboxPoisoned,
+    #[error("native pointer press inbox lock is poisoned")]
+    PressQueuePoisoned,
 }
 
 fn position_changed(previous: Option<[f64; 2]>, current: [f64; 2]) -> bool {
@@ -505,6 +551,7 @@ fn compile_pointer_contract() {
         PlatformPointerCaptureError::EventMonitor,
         PlatformPointerCaptureError::UpQueuePoisoned,
         PlatformPointerCaptureError::CommandInboxPoisoned,
+        PlatformPointerCaptureError::PressQueuePoisoned,
     ];
     let _ = position_changed(None, [0.0, 0.0]);
 }

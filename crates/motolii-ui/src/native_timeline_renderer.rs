@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use fontique::{Collection, CollectionOptions, FontStyle, FontWeight, FontWidth};
 use harfrust::{FontRef, ShaperData, UnicodeBuffer};
+use motolii_core::RationalTime;
 use motolii_doc::{Document, LayerId};
 use vello::{
     kurbo::{Affine, Rect},
@@ -30,6 +31,21 @@ const BAR: Color = Color::from_rgba8(204, 149, 135, 255);
 const BAR_TEXT: Color = Color::from_rgba8(26, 27, 28, 255);
 const SELECTED: Color = Color::from_rgba8(250, 191, 92, 255);
 const PLAYHEAD: Color = Color::from_rgba8(242, 77, 87, 255);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct TimelineIntervalPreview {
+    pub(crate) layer: LayerId,
+    pub(crate) start: RationalTime,
+    pub(crate) end: RationalTime,
+}
+
+pub(crate) struct TimelinePrepareInput<'a> {
+    pub(crate) layout: NativeHostLayout,
+    pub(crate) document: &'a Document,
+    pub(crate) projection: &'a TimelineProjection,
+    pub(crate) primary: Option<LayerId>,
+    pub(crate) interval_preview: Option<TimelineIntervalPreview>,
+}
 
 pub(crate) struct NativeTimelineRenderer {
     renderer: Renderer,
@@ -179,12 +195,16 @@ impl NativeTimelineRenderer {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        layout: NativeHostLayout,
-        document: &Document,
-        projection: &TimelineProjection,
-        primary: Option<LayerId>,
+        input: TimelinePrepareInput<'_>,
     ) -> Result<TimelineSceneStats, NativeTimelineRendererError> {
-        let (scene, stats) = build_scene(&self.font, layout, document, projection, primary)?;
+        let (scene, stats) = build_scene(
+            &self.font,
+            input.layout,
+            input.document,
+            input.projection,
+            input.primary,
+            input.interval_preview,
+        )?;
         self.renderer.render_to_texture(
             device,
             queue,
@@ -268,6 +288,7 @@ fn build_scene(
     document: &Document,
     projection: &TimelineProjection,
     primary: Option<LayerId>,
+    interval_preview: Option<TimelineIntervalPreview>,
 ) -> Result<(Scene, TimelineSceneStats), NativeTimelineRendererError> {
     let (Some(timeline), Some(timeline_logical)) = (layout.timeline_physical, layout.timeline)
     else {
@@ -467,8 +488,17 @@ fn build_scene(
     }
 
     for bar in projection.bars() {
+        let preview = interval_preview.filter(|preview| preview.layer == bar.layer);
+        let draw_bar = preview.map_or(*bar, |preview| {
+            let duration = document.composition.duration.as_seconds_f64();
+            TimelineBar {
+                x_start: preview.start.as_seconds_f64() / duration,
+                x_end: preview.end.as_seconds_f64() / duration,
+                ..*bar
+            }
+        });
         let Some(geometry) =
-            timeline_bar_geometry(time_x, right, content_y, row_height, scale, bar)
+            timeline_bar_geometry(time_x, right, content_y, row_height, scale, &draw_bar)
         else {
             continue;
         };
@@ -497,6 +527,24 @@ fn build_scene(
                 scale.max(1.0)
             },
         );
+        if primary == Some(bar.layer) {
+            fill(
+                &mut scene,
+                geometry.x,
+                geometry.y,
+                (3.0 * scale).min(geometry.width),
+                geometry.height,
+                SELECTED,
+            );
+            fill(
+                &mut scene,
+                geometry.x + (geometry.width - 3.0 * scale).max(0.0),
+                geometry.y,
+                (3.0 * scale).min(geometry.width),
+                geometry.height,
+                SELECTED,
+            );
+        }
         fill(
             &mut scene,
             geometry.x + 7.0 * scale,
@@ -818,7 +866,7 @@ mod tests {
             face_index: 0,
         };
 
-        let (_, stats) = build_scene(&font, layout, &document, &projection, None).unwrap();
+        let (_, stats) = build_scene(&font, layout, &document, &projection, None, None).unwrap();
         assert_eq!(stats, TimelineSceneStats::default());
     }
 }

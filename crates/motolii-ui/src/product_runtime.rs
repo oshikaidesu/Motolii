@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use motolii_core::{CanonicalPoint, Quality, RationalTime};
-use motolii_doc::{Command, EffectId, EvaluationTime};
+use motolii_doc::{Command, EffectId, EvaluationTime, LayerId};
 use motolii_eval::DataTracks;
 use motolii_gpu::GpuCtx;
 use winit::dpi::LogicalSize;
@@ -19,9 +19,10 @@ use crate::browser_host_runtime::{
 };
 use crate::document_edit_runtime::{
     AttachEffectRequest, DocumentEditDispatchError, DocumentEditQueue, DocumentEditRuntime,
-    DocumentEditRuntimeError, PlaceRectangleRequest, PublishedDocument,
+    DocumentEditRuntimeError, MoveClipRequest, PlaceRectangleRequest, PublishedDocument,
+    TrimClipEdge, TrimClipRequest,
 };
-use crate::host_pointer_capture::{HostPointerCancel, HostPointerCandidate};
+use crate::host_pointer_capture::{HostPointerCancel, HostPointerCandidate, HostPointerPress};
 use crate::inspector_host_runtime::{
     resolve_effect_param_preview_command, InspectorGestureTerminal, InspectorGestureTerminalCause,
     InspectorHostRuntime, InspectorHostRuntimeError,
@@ -30,7 +31,7 @@ use crate::layout_authority::LayoutAuthority;
 use crate::native_host_layout::{LogicalRect, NativeHostLayout, PhysicalRect};
 use crate::native_timeline_renderer::{
     key_tools_logical_rect, timeline_time_surface_logical_rect, NativeTimelineRenderer,
-    NativeTimelineRendererError,
+    NativeTimelineRendererError, TimelineIntervalPreview, TimelinePrepareInput,
 };
 use crate::render_worker::{
     RenderGeneration, RenderRequest, RenderWorker, RenderWorkerClient, RenderWorkerError,
@@ -181,6 +182,9 @@ pub(crate) struct ProductApp {
     surface_retry_at: Option<Instant>,
     failure: Option<String>,
     pending_inspector_commit: Option<InspectorGestureTerminal>,
+    next_interval_generation: u64,
+    active_interval: Option<ActiveIntervalGesture>,
+    interval_preview: Option<TimelineIntervalPreview>,
 }
 
 #[derive(Debug, Clone)]
@@ -189,6 +193,33 @@ struct PendingStageDrop {
     generation: u64,
     layout_epoch: u64,
     ndc: [f64; 2],
+}
+
+const INTERVAL_HANDLE_LOGICAL_PX: f64 = 8.0;
+const SNAP_DISTANCE_LOGICAL_PX: f64 = 8.0;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IntervalGestureKind {
+    Move,
+    TrimIn,
+    TrimOut,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct IntervalPressTarget {
+    layer: LayerId,
+    kind: IntervalGestureKind,
+    start: RationalTime,
+    end: RationalTime,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ActiveIntervalGesture {
+    generation: u64,
+    target: IntervalPressTarget,
+    grab_time: RationalTime,
+    layout_epoch: u64,
+    projection_generation: u64,
 }
 
 #[derive(Debug, Default)]
@@ -217,11 +248,16 @@ impl ProductStageProjection {
 struct ProductTimelineProjection {
     projection: TimelineProjection,
     band_span: f64,
+    viewport: TimelineViewport,
 }
 
 impl ProductTimelineProjection {
     fn from_document(document: &motolii_doc::Document) -> Result<Self, TimelineProjectionError> {
         let duration_seconds = document.composition.duration.as_seconds_f64();
+        let viewport = TimelineViewport {
+            start: RationalTime::ZERO,
+            end: document.composition.duration,
+        };
         let projection = project_timeline(
             document,
             &TimelineMetrics {
@@ -229,10 +265,7 @@ impl ProductTimelineProjection {
                 units_per_second: duration_seconds.recip(),
                 key_half_extent: 1.0,
             },
-            &TimelineViewport {
-                start: RationalTime::ZERO,
-                end: document.composition.duration,
-            },
+            &viewport,
         )?;
         let band_span = projection
             .bars()
@@ -242,6 +275,7 @@ impl ProductTimelineProjection {
         Ok(Self {
             projection,
             band_span,
+            viewport,
         })
     }
 
@@ -253,6 +287,237 @@ impl ProductTimelineProjection {
         let x = (position[0] - time_surface.x) / time_surface.width;
         let y = ((position[1] - time_surface.y) / time_surface.height) * self.band_span;
         Some(self.projection.hit_test(x, y))
+    }
+
+    fn time_at(&self, position: [f64; 2], layout: NativeHostLayout) -> Option<RationalTime> {
+        let surface = timeline_time_surface_logical_rect(layout)?;
+        if !surface.contains(position) || !surface.width.is_finite() || surface.width <= 0.0 {
+            return None;
+        }
+        let normalized = (position[0] - surface.x) / surface.width;
+        let normalized = RationalTime::try_from_decimal_str(&format!("{normalized:.9}")).ok()?;
+        self.viewport
+            .end
+            .try_sub(self.viewport.start)
+            .and_then(|span| span.try_mul(normalized))
+            .and_then(|offset| self.viewport.start.try_add(offset))
+            .ok()
+    }
+
+    fn logical_x(&self, time: RationalTime, layout: NativeHostLayout) -> Option<f64> {
+        let surface = timeline_time_surface_logical_rect(layout)?;
+        let span = self.viewport.end.try_sub(self.viewport.start).ok()?;
+        let offset = time.try_sub(self.viewport.start).ok()?;
+        let normalized = offset.as_seconds_f64() / span.as_seconds_f64();
+        let x = surface.x + normalized * surface.width;
+        x.is_finite().then_some(x)
+    }
+
+    fn interval_press_target(
+        &self,
+        position: [f64; 2],
+        layout: NativeHostLayout,
+    ) -> Option<IntervalPressTarget> {
+        let TimelineHit::Bar { layer } = self.hit_test(position, layout)? else {
+            return None;
+        };
+        let bar = self
+            .projection
+            .bars()
+            .iter()
+            .find(|bar| bar.layer == layer)?;
+        let start_x = self.logical_x(bar.start, layout)?;
+        let end_x = self.logical_x(bar.end, layout)?;
+        let start_distance = (position[0] - start_x).abs();
+        let end_distance = (position[0] - end_x).abs();
+        let kind = if start_distance <= INTERVAL_HANDLE_LOGICAL_PX && start_distance <= end_distance
+        {
+            IntervalGestureKind::TrimIn
+        } else if end_distance <= INTERVAL_HANDLE_LOGICAL_PX {
+            IntervalGestureKind::TrimOut
+        } else {
+            IntervalGestureKind::Move
+        };
+        Some(IntervalPressTarget {
+            layer,
+            kind,
+            start: bar.start,
+            end: bar.end,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IntervalEdge {
+    In,
+    Out,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SnapTargetKind {
+    OtherClip,
+    Frame,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SnapCandidate {
+    delta: RationalTime,
+    target_kind: SnapTargetKind,
+    target_time: RationalTime,
+    other_layer: Option<LayerId>,
+    target_edge: IntervalEdge,
+    moving_edge: IntervalEdge,
+}
+
+fn rational_abs(value: RationalTime) -> Option<RationalTime> {
+    if value < RationalTime::ZERO {
+        value.try_neg().ok()
+    } else {
+        Some(value)
+    }
+}
+
+fn snap_candidate_is_better(candidate: SnapCandidate, current: SnapCandidate) -> bool {
+    let Some(candidate_distance) = rational_abs(candidate.delta) else {
+        return false;
+    };
+    let Some(current_distance) = rational_abs(current.delta) else {
+        return true;
+    };
+    let kind_rank = |kind| match kind {
+        SnapTargetKind::OtherClip => 0,
+        SnapTargetKind::Frame => 1,
+    };
+    let edge_rank = |edge| match edge {
+        IntervalEdge::In => 0,
+        IntervalEdge::Out => 1,
+    };
+    candidate_distance
+        .cmp(&current_distance)
+        .then_with(|| kind_rank(candidate.target_kind).cmp(&kind_rank(current.target_kind)))
+        .then_with(|| candidate.target_time.cmp(&current.target_time))
+        .then_with(|| candidate.other_layer.cmp(&current.other_layer))
+        .then_with(|| edge_rank(candidate.target_edge).cmp(&edge_rank(current.target_edge)))
+        .then_with(|| edge_rank(candidate.moving_edge).cmp(&edge_rank(current.moving_edge)))
+        .is_lt()
+}
+
+fn interval_preview_candidate(
+    active: ActiveIntervalGesture,
+    pointer_time: RationalTime,
+    layout: NativeHostLayout,
+    timeline: &ProductTimelineProjection,
+    document: &motolii_doc::Document,
+) -> Option<TimelineIntervalPreview> {
+    let pointer_delta = pointer_time.try_sub(active.grab_time).ok()?;
+    let (raw_start, raw_end, moving_edges) = match active.target.kind {
+        IntervalGestureKind::Move => {
+            let start = active.target.start.try_add(pointer_delta).ok()?;
+            let end = active.target.end.try_add(pointer_delta).ok()?;
+            (
+                start,
+                end,
+                [
+                    Some((IntervalEdge::In, start)),
+                    Some((IntervalEdge::Out, end)),
+                ],
+            )
+        }
+        IntervalGestureKind::TrimIn => {
+            let start = active.target.start.try_add(pointer_delta).ok()?;
+            (
+                start,
+                active.target.end,
+                [Some((IntervalEdge::In, start)), None],
+            )
+        }
+        IntervalGestureKind::TrimOut => {
+            let end = active.target.end.try_add(pointer_delta).ok()?;
+            (
+                active.target.start,
+                end,
+                [Some((IntervalEdge::Out, end)), None],
+            )
+        }
+    };
+
+    let mut best = None;
+    for (moving_edge, moving_time) in moving_edges.into_iter().flatten() {
+        if let Ok(frame) = moving_time.try_to_frame_round(document.composition.fps) {
+            if let Ok(target_time) = RationalTime::try_from_frame(frame, document.composition.fps) {
+                consider_snap_candidate(
+                    &mut best,
+                    SnapCandidate {
+                        delta: target_time.try_sub(moving_time).ok()?,
+                        target_kind: SnapTargetKind::Frame,
+                        target_time,
+                        other_layer: None,
+                        target_edge: IntervalEdge::In,
+                        moving_edge,
+                    },
+                    moving_time,
+                    layout,
+                    timeline,
+                );
+            }
+        }
+        for bar in timeline.projection.bars() {
+            if bar.layer == active.target.layer {
+                continue;
+            }
+            for (target_edge, target_time) in
+                [(IntervalEdge::In, bar.start), (IntervalEdge::Out, bar.end)]
+            {
+                consider_snap_candidate(
+                    &mut best,
+                    SnapCandidate {
+                        delta: target_time.try_sub(moving_time).ok()?,
+                        target_kind: SnapTargetKind::OtherClip,
+                        target_time,
+                        other_layer: Some(bar.layer),
+                        target_edge,
+                        moving_edge,
+                    },
+                    moving_time,
+                    layout,
+                    timeline,
+                );
+            }
+        }
+    }
+    let adjustment = best.map_or(RationalTime::ZERO, |candidate| candidate.delta);
+    let start = raw_start.try_add(adjustment).ok()?;
+    let end = raw_end.try_add(adjustment).ok()?;
+    (end > start).then_some(TimelineIntervalPreview {
+        layer: active.target.layer,
+        start,
+        end,
+    })
+}
+
+fn consider_snap_candidate(
+    best: &mut Option<SnapCandidate>,
+    candidate: SnapCandidate,
+    moving_time: RationalTime,
+    layout: NativeHostLayout,
+    timeline: &ProductTimelineProjection,
+) {
+    if candidate.target_time < timeline.viewport.start
+        || candidate.target_time > timeline.viewport.end
+    {
+        return;
+    }
+    let Some(moving_x) = timeline.logical_x(moving_time, layout) else {
+        return;
+    };
+    let Some(target_x) = timeline.logical_x(candidate.target_time, layout) else {
+        return;
+    };
+    if (target_x - moving_x).abs() > SNAP_DISTANCE_LOGICAL_PX {
+        return;
+    }
+    if best.is_none_or(|current| snap_candidate_is_better(candidate, current)) {
+        *best = Some(candidate);
     }
 }
 
@@ -468,6 +733,9 @@ impl ProductApp {
             surface_retry_at: None,
             failure: None,
             pending_inspector_commit: None,
+            next_interval_generation: 1,
+            active_interval: None,
+            interval_preview: None,
         })
     }
 
@@ -695,7 +963,7 @@ impl ProductApp {
         if let Err(error) = browser.ensure_focus(self.browser_focus_target) {
             return self.fail(event_loop, error);
         }
-        if self.active_place.is_none() {
+        if self.active_place.is_none() && self.active_interval.is_none() {
             let generation = self.next_place_generation;
             let Some(next_generation) = generation.checked_add(1) else {
                 return self.fail(event_loop, ProductRuntimeError::PlaceGenerationExhausted);
@@ -727,9 +995,17 @@ impl ProductApp {
                 Err(error) => return self.fail(event_loop, error),
             }
         }
-        if self.active_place.is_none() {
+        if self.active_place.is_none() && self.active_interval.is_none() {
             self.poll_host_input(event_loop);
-            self.set_idle_control_flow(event_loop);
+            if self.active_interval.is_some() {
+                event_loop.set_control_flow(ControlFlow::Poll);
+            } else {
+                self.set_idle_control_flow(event_loop);
+            }
+            return;
+        }
+        if self.active_interval.is_some() {
+            self.poll_interval_gesture(event_loop);
             return;
         }
         match browser.poll_pointer_candidate() {
@@ -971,6 +1247,8 @@ impl ProductApp {
             }
             BrowserRecoveryDecision::Degrade => {
                 self.active_place = None;
+                self.active_interval = None;
+                self.interval_preview = None;
                 self.place_preview.clear();
                 self.terminal_admission.retire_active();
                 self.candidate_terminal = None;
@@ -991,6 +1269,8 @@ impl ProductApp {
             .clone()
             .ok_or(ProductRuntimeError::BrowserLifecycleUnavailable)?;
         self.active_place = None;
+        self.active_interval = None;
+        self.interval_preview = None;
         self.place_preview.clear();
         self.terminal_admission.retire_active();
         self.candidate_terminal = None;
@@ -1013,7 +1293,7 @@ impl ProductApp {
     }
 
     pub(crate) fn poll_host_input(&mut self, event_loop: &ActiveEventLoop) {
-        if self.active_place.is_some() {
+        if self.active_place.is_some() || self.active_interval.is_some() {
             return;
         }
         let command = {
@@ -1026,6 +1306,26 @@ impl ProductApp {
             Ok(Some(trigger)) => self.handle_history_trigger(event_loop, trigger),
             Ok(None) => {}
             Err(error) => return self.fail(event_loop, error),
+        }
+        loop {
+            let press = {
+                let Some(browser) = &self.browser else {
+                    return;
+                };
+                browser.poll_host_press()
+            };
+            match press {
+                Ok(Some(press)) => {
+                    if self.begin_interval_gesture(event_loop, press) {
+                        return;
+                    }
+                }
+                Ok(None) => break,
+                Err(error) => {
+                    self.fail(event_loop, error);
+                    return;
+                }
+            }
         }
         loop {
             let click = {
@@ -1042,6 +1342,214 @@ impl ProductApp {
                     break;
                 }
             }
+        }
+    }
+
+    fn begin_interval_gesture(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        press: HostPointerPress,
+    ) -> bool {
+        let Some(layout) = self.layout else {
+            return false;
+        };
+        let Some(target) = self
+            .timeline_projection
+            .interval_press_target(press.position, layout)
+        else {
+            return false;
+        };
+        let Some(grab_time) = self.timeline_projection.time_at(press.position, layout) else {
+            return false;
+        };
+        self.handle_timeline_click(event_loop, press.position);
+        if self.failure.is_some() || self.primary != Some(target.layer) {
+            return false;
+        }
+        let generation = self.next_interval_generation;
+        let Some(next_generation) = generation.checked_add(1) else {
+            self.fail(event_loop, ProductRuntimeError::IntervalGenerationExhausted);
+            return false;
+        };
+        let armed = match &self.browser {
+            Some(browser) => browser.arm_pointer_capture(generation),
+            None => return false,
+        };
+        match armed {
+            Ok(true) => {
+                self.next_interval_generation = next_generation;
+                self.active_interval = Some(ActiveIntervalGesture {
+                    generation,
+                    target,
+                    grab_time,
+                    layout_epoch: layout.epoch,
+                    projection_generation: self.projection_generation,
+                });
+                self.interval_preview = Some(TimelineIntervalPreview {
+                    layer: target.layer,
+                    start: target.start,
+                    end: target.end,
+                });
+                self.request_redraw();
+                true
+            }
+            Ok(false) => false,
+            Err(error) => {
+                self.fail(event_loop, error);
+                false
+            }
+        }
+    }
+
+    fn poll_interval_gesture(&mut self, event_loop: &ActiveEventLoop) {
+        let candidate = match &self.browser {
+            Some(browser) => browser.poll_pointer_candidate(),
+            None => return,
+        };
+        match candidate {
+            Ok(Some(HostPointerCandidate::Moved {
+                generation,
+                position,
+            })) => {
+                let Some(active) = self.active_interval else {
+                    return;
+                };
+                let Some(layout) = self.layout else {
+                    self.cancel_interval_gesture(event_loop);
+                    return;
+                };
+                if generation != active.generation
+                    || layout.epoch != active.layout_epoch
+                    || self.projection_generation != active.projection_generation
+                {
+                    self.cancel_interval_gesture(event_loop);
+                    return;
+                }
+                self.interval_preview = self
+                    .timeline_projection
+                    .time_at(position, layout)
+                    .and_then(|pointer_time| {
+                        interval_preview_candidate(
+                            active,
+                            pointer_time,
+                            layout,
+                            &self.timeline_projection,
+                            &self.current_document,
+                        )
+                    });
+                self.request_redraw();
+                event_loop.set_control_flow(ControlFlow::Poll);
+            }
+            Ok(Some(HostPointerCandidate::Released {
+                generation,
+                position,
+            })) => {
+                let Some(active) = self.active_interval.take() else {
+                    self.interval_preview = None;
+                    self.set_idle_control_flow(event_loop);
+                    return;
+                };
+                self.interval_preview = None;
+                let Some(layout) = self.layout else {
+                    self.set_idle_control_flow(event_loop);
+                    return;
+                };
+                if generation != active.generation
+                    || layout.epoch != active.layout_epoch
+                    || self.projection_generation != active.projection_generation
+                {
+                    self.request_redraw();
+                    self.set_idle_control_flow(event_loop);
+                    return;
+                }
+                let Some(preview) =
+                    self.timeline_projection
+                        .time_at(position, layout)
+                        .and_then(|pointer_time| {
+                            interval_preview_candidate(
+                                active,
+                                pointer_time,
+                                layout,
+                                &self.timeline_projection,
+                                &self.current_document,
+                            )
+                        })
+                else {
+                    self.request_redraw();
+                    self.set_idle_control_flow(event_loop);
+                    return;
+                };
+                self.commit_interval_gesture(event_loop, active, preview);
+                self.set_idle_control_flow(event_loop);
+            }
+            Ok(Some(HostPointerCandidate::Cancelled { generation, .. })) => {
+                if self
+                    .active_interval
+                    .is_some_and(|active| active.generation == generation)
+                {
+                    self.cancel_interval_gesture(event_loop);
+                }
+                self.set_idle_control_flow(event_loop);
+            }
+            Ok(None) => match &self.browser {
+                Some(browser) => match browser.pointer_capture_is_active() {
+                    Ok(true) => event_loop.set_control_flow(ControlFlow::Poll),
+                    Ok(false) => {
+                        self.cancel_interval_gesture(event_loop);
+                        self.set_idle_control_flow(event_loop);
+                    }
+                    Err(error) => self.fail(event_loop, error),
+                },
+                None => self.cancel_interval_gesture(event_loop),
+            },
+            Err(error) => self.fail(event_loop, error),
+        }
+    }
+
+    fn cancel_interval_gesture(&mut self, _event_loop: &ActiveEventLoop) {
+        self.active_interval = None;
+        self.interval_preview = None;
+        self.request_redraw();
+    }
+
+    fn commit_interval_gesture(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        active: ActiveIntervalGesture,
+        preview: TimelineIntervalPreview,
+    ) {
+        match active.target.kind {
+            IntervalGestureKind::Move => self.document_queue.push_move_clip(MoveClipRequest {
+                layer_id: active.target.layer,
+                start: preview.start,
+            }),
+            IntervalGestureKind::TrimIn => self.document_queue.push_trim_clip(TrimClipRequest {
+                layer_id: active.target.layer,
+                edge: TrimClipEdge::In,
+                time: preview.start,
+            }),
+            IntervalGestureKind::TrimOut => self.document_queue.push_trim_clip(TrimClipRequest {
+                layer_id: active.target.layer,
+                edge: TrimClipEdge::Out,
+                time: preview.end,
+            }),
+        }
+        match self.document_runtime.process_next(
+            &mut self.document_queue,
+            self.primary,
+            self.projection_generation,
+        ) {
+            Ok(Some(published)) => {
+                self.adopt_full_publish(event_loop, published, "timeline-interval")
+            }
+            Ok(None) => self.request_redraw(),
+            Err(DocumentEditRuntimeError::Command(error)) => {
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=timeline-interval state=rejected error={error}"
+                ));
+                self.request_redraw();
+            }
+            Err(error) => self.fail(event_loop, error),
         }
     }
 
@@ -1451,14 +1959,15 @@ impl ProductApp {
         else {
             return;
         };
-        match gfx.render(
+        match gfx.render(ProductSurfaceFrame {
             layout,
             window,
-            &self.current_document,
-            &self.timeline_projection,
-            self.primary,
-            place_overlay.as_ref(),
-        ) {
+            document: &self.current_document,
+            timeline_projection: &self.timeline_projection,
+            primary: self.primary,
+            interval_preview: self.interval_preview,
+            place_overlay: place_overlay.as_ref(),
+        }) {
             Ok(()) => {}
             Err(ProductSurfaceError::Recover) => {
                 crate::ui_numeric_trace::emit(format_args!(
@@ -1673,6 +2182,16 @@ struct ProductGpuParts {
     device: wgpu::Device,
 }
 
+struct ProductSurfaceFrame<'a> {
+    layout: NativeHostLayout,
+    window: &'a Window,
+    document: &'a motolii_doc::Document,
+    timeline_projection: &'a ProductTimelineProjection,
+    primary: Option<LayerId>,
+    interval_preview: Option<TimelineIntervalPreview>,
+    place_overlay: Option<&'a RectanglePlaceOverlay>,
+}
+
 impl ProductSurface {
     fn new(
         window: &Arc<Window>,
@@ -1752,25 +2271,29 @@ impl ProductSurface {
         self.surface.configure(&self.gpu.device, &self.config);
     }
 
-    fn render(
-        &mut self,
-        layout: NativeHostLayout,
-        window: &Window,
-        document: &motolii_doc::Document,
-        timeline_projection: &ProductTimelineProjection,
-        primary: Option<motolii_doc::LayerId>,
-        place_overlay: Option<&RectanglePlaceOverlay>,
-    ) -> Result<(), ProductSurfaceError> {
+    fn render(&mut self, input: ProductSurfaceFrame<'_>) -> Result<(), ProductSurfaceError> {
+        let ProductSurfaceFrame {
+            layout,
+            window,
+            document,
+            timeline_projection,
+            primary,
+            interval_preview,
+            place_overlay,
+        } = input;
         if self.occluded || self.config.width == 0 || self.config.height == 0 {
             return Err(ProductSurfaceError::Skip);
         }
         let timeline_stats = self.native_timeline_renderer.prepare(
             &self.gpu.device,
             &self.gpu.queue,
-            layout,
-            document,
-            &timeline_projection.projection,
-            primary,
+            TimelinePrepareInput {
+                layout,
+                document,
+                projection: &timeline_projection.projection,
+                primary,
+                interval_preview,
+            },
         )?;
         let trace_key = (
             layout.epoch,
@@ -2200,6 +2723,8 @@ pub(crate) enum ProductRuntimeError {
     PlaceAdmissionGenerationRejected(u64),
     #[error("Place capture generation is exhausted")]
     PlaceGenerationExhausted,
+    #[error("Timeline interval capture generation is exhausted")]
+    IntervalGenerationExhausted,
     #[error("Place Stage NDC could not be converted through the displayed camera")]
     PlaceCanonicalConversion,
     #[error(transparent)]
@@ -2311,6 +2836,93 @@ mod tests {
             projection.hit_test([layout.stage.x, layout.stage.y], layout),
             None
         );
+    }
+
+    #[test]
+    fn timeline_interval_press_distinguishes_in_move_and_out_on_the_existing_bar() {
+        let document = crate::static_preview::bootstrap_document().unwrap();
+        let projection = ProductTimelineProjection::from_document(&document).unwrap();
+        let layout = test_layout(9);
+        let surface = timeline_time_surface_logical_rect(layout).unwrap();
+        let y = surface.y + surface.height / 2.0;
+
+        assert_eq!(
+            projection
+                .interval_press_target([surface.x + 1.0, y], layout)
+                .map(|target| target.kind),
+            Some(IntervalGestureKind::TrimIn)
+        );
+        assert_eq!(
+            projection
+                .interval_press_target([surface.x + surface.width / 2.0, y], layout)
+                .map(|target| target.kind),
+            Some(IntervalGestureKind::Move)
+        );
+        assert_eq!(
+            projection
+                .interval_press_target([surface.x + surface.width - 1.0, y], layout)
+                .map(|target| target.kind),
+            Some(IntervalGestureKind::TrimOut)
+        );
+    }
+
+    #[test]
+    fn interval_move_preview_snaps_both_edges_with_no_document_write() {
+        let document = crate::static_preview::bootstrap_document().unwrap();
+        let projection = ProductTimelineProjection::from_document(&document).unwrap();
+        let bar = projection.projection.bars()[0];
+        let active = ActiveIntervalGesture {
+            generation: 1,
+            target: IntervalPressTarget {
+                layer: bar.layer,
+                kind: IntervalGestureKind::Move,
+                start: bar.start,
+                end: bar.end,
+            },
+            grab_time: RationalTime::from_seconds(5),
+            layout_epoch: 9,
+            projection_generation: 0,
+        };
+        let preview = interval_preview_candidate(
+            active,
+            RationalTime::try_new(501, 100).unwrap(),
+            test_layout(9),
+            &projection,
+            &document,
+        )
+        .unwrap();
+
+        assert_eq!(preview.layer, bar.layer);
+        assert_eq!(preview.start, bar.start);
+        assert_eq!(preview.end, bar.end);
+    }
+
+    #[test]
+    fn equal_distance_item_edge_beats_frame_before_stable_identity_ties() {
+        let delta = RationalTime::try_new(1, 30).unwrap();
+        let frame = SnapCandidate {
+            delta,
+            target_kind: SnapTargetKind::Frame,
+            target_time: RationalTime::from_seconds(1),
+            other_layer: None,
+            target_edge: IntervalEdge::In,
+            moving_edge: IntervalEdge::In,
+        };
+        let item = SnapCandidate {
+            delta,
+            target_kind: SnapTargetKind::OtherClip,
+            target_time: RationalTime::from_seconds(1),
+            other_layer: Some(LayerId::from_raw(9)),
+            target_edge: IntervalEdge::Out,
+            moving_edge: IntervalEdge::Out,
+        };
+        let lower_identity = SnapCandidate {
+            other_layer: Some(LayerId::from_raw(4)),
+            ..item
+        };
+
+        assert!(snap_candidate_is_better(item, frame));
+        assert!(snap_candidate_is_better(lower_identity, item));
     }
 
     #[test]

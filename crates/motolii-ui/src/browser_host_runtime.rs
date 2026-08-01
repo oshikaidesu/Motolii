@@ -337,6 +337,27 @@ postMessage:(message)=>window.ipc.postMessage(message)
             .map(|capture| capture.is_active())
     }
 
+    pub(crate) fn arm_pointer_capture(
+        &self,
+        generation: u64,
+    ) -> Result<bool, BrowserHostRuntimeError> {
+        self.pointer_capture
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::PointerCapturePoisoned)
+            .map(|mut capture| capture.arm(generation))
+    }
+
+    pub(crate) fn poll_host_press(
+        &self,
+    ) -> Result<Option<crate::host_pointer_capture::HostPointerPress>, BrowserHostRuntimeError>
+    {
+        self.pointer_capture
+            .lock()
+            .map_err(|_| BrowserHostRuntimeError::PointerCapturePoisoned)?
+            .poll_press()
+            .map_err(Into::into)
+    }
+
     pub(crate) fn poll_host_click(
         &self,
     ) -> Result<Option<HostPointerClick>, BrowserHostRuntimeError> {
