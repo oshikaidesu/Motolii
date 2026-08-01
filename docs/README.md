@@ -25,7 +25,7 @@
 3. [pitfalls-and-roadmap.md](pitfalls-and-roadmap.md) — **最重要・最大**。落とし穴カタログ(A〜H、先行プロジェクト死因分析+LLM開発規律込み)とロードマップ(M0〜M5)、凍結ゲート
 4. M3〜M5の計画・実装に着手する時: [known-implementation-adoption-model.md](known-implementation-adoption-model.md)(利用者成果→既知実装調査→採択地図→接続→退役の横断順序)
 5. M3実装に着手する時: [m3-parallel-implementation-map.md](m3-parallel-implementation-map.md)(親検索)→ [m3-executable-dispatch-map.md](m3-executable-dispatch-map.md)(exact delta/擬似コード/oracle/出口)→ [implementation-ledger.md](implementation-ledger.md)(実際にdispatchする`DO`)→ [specs/M3-ui-integration.md](specs/M3-ui-integration.md)(意味と実装ガード)
-6. M4/M5に着手する時: 対象phaseの既知実装調査と採択地図を先に閉じる→ [implementation-ledger.md](implementation-ledger.md)(NOW/NEXT/WAIT)→ [specs/README.md](specs/README.md)(プロセスとステータス表)→ 対象`specs/M*.md`(タスク表と**末尾の「実装ガード」節**の両方を読む)
+6. M4に着手する時: [M4既知実装調査](reviews/2026-08-02-m4-known-implementation-survey.md)→ [M4既知実装採択・並列実装地図](m4-known-implementation-adoption-map.md)→ [implementation-ledger.md](implementation-ledger.md)(一意な`DO`)→ [specs/M4-cache-and-analysis.md](specs/M4-cache-and-analysis.md)(意味と実装ガード)。M5は対象phaseの調査と採択地図を先に閉じる
 7. UIを表示・起動・比較する時: [ui-artifact-terminology.md](ui-artifact-terminology.md)(要求名→成果物種別→実装状態。未実装のPreviewをMock/baseline/spikeで代替しない)→ [ui-reference-map.md](ui-reference-map.md)(対象surfaceの正本と実体)
 8. プラグインを書く/量産させる時: [plugin-authoring.md](plugin-authoring.md)(LLM/人間共通の契約・禁止事項・型紙)
 9. 依存・参考リポジトリを調べる時: [references.md](references.md)(ライセンス区分つき。GPL系はコードを読むことすら禁止)
@@ -35,7 +35,9 @@
 | ファイル | 役割 | 状態 |
 |---|---|---|
 | [concept.md](concept.md) | コンセプト定義・決定事項の台帳 | 現行(決定はここに追記される) |
-| [known-implementation-adoption-model.md](known-implementation-adoption-model.md) | M3〜M5共通の既知実装調査、採択地図、薄い接続、独自負債置換・退役の開発順序 | **横断開発原則**(2026-08-02。M3適用済み、M4/M5採択地図はこれから) |
+| [known-implementation-adoption-model.md](known-implementation-adoption-model.md) | M3〜M5共通の既知実装調査、採択地図、薄い接続、独自負債置換・退役の開発順序 | **横断開発原則**(2026-08-02。M3適用済み、M4初版地図作成済み、M5はこれから) |
+| [m4-known-implementation-adoption-map.md](m4-known-implementation-adoption-map.md) | M4の13親、既知実装route、詳細子、採択probe、並列wave、旧負債の退役境界 | **初版採択地図／runtime未発注**(2026-08-02) |
+| [M4既知実装調査](reviews/2026-08-02-m4-known-implementation-survey.md) | M4のcache／resource／CAS／区間／background job／proxy／SVG候補を具体APIまで比較 | **比較中**(採択probe前。既決原則の二重相談はしない) |
 | [decision-index.md](decision-index.md) | 決定逆引き台帳: 主題キーワード→既決の正本へのポインタ(状態語彙固定・機械検証対象) | **運用正本**(2026-07-19新設。作業前の逆引き入口) |
 | [performance-model.md](performance-model.md) | 性能の設計根拠と規律 | 現行 |
 | [memory-model.md](memory-model.md) | メモリ階層(VRAM/RAM/ディスク)の役割分担と容量疑念の台帳 | 現行 |

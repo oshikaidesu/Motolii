@@ -1,0 +1,330 @@
+# M4 既知実装採択・並列実装地図
+
+状態: **初版採択地図／runtime未発注**（2026-08-02）
+
+## 1. この地図が置き換えるもの
+
+本書はM4のK0〜K8を独自cache frameworkの施工順として読む計画を置き換える。親項目は検索と
+供給routeの単位、子項目は一つのowner、接続target、oracle、cutoverを持つ実装packageである。
+既知実装の調査証跡、version、license、非証明範囲は
+[M4既知実装調査](reviews/2026-08-02-m4-known-implementation-survey.md)を正とする。
+
+本書だけでは実装を許可しない。候補はまず`ADOPTION_PROBE`でdependency closureとfailure modeを閉じ、
+採択後に薄い接続粒を[implementation ledger](implementation-ledger.md)の一意な`DO`へ上げる。K0〜K8の
+旧IDは製品oracleと依存の来歴として残すが、旧列を粒ごとに再証明したり、自動的に順番実装したりしない。
+
+## 2. 固定原則
+
+1. Motoliiは完全key、作品意味、hard admission、優先順位、製品oracleを所有する。cache collection、CAS、
+   区間集合、priority collection、SVG変換の一般機構は既知実装へ委ねる。
+2. `REUSE / ADOPT / WRAP / PATTERN`を親で一度裁定し、子は再選定しない。
+3. 外部型をDocument、公開plugin API、serde、journalへ漏らさない。adapterはprivateな一方向写像にする。
+4. cache miss、破損、不完全writeは作品failureにせず再計算へ落とす。key漏れはpurge UIで隠さない。
+5. budget admissionはallocation前、GPU waitとUI thread blockingは禁止、previewとFinalは同じ評価関数を使う。
+6. 並列施工はDocument writer、GPU device、artifact commit、製品runtime合流だけを直列点にする。
+7. probe不合格は`BUILD`許可ではない。同じ成果を`REMAP / REDUCE`し、独自DB、WAL、scheduler runtime、
+   SVG parser、invalidation frameworkを作らない。
+
+## 3. 親項目の検索入口
+
+| 親ID | 検索key | 利用者成果 | 採択route | M4範囲 |
+|---|---|---|---|---|
+| `M4-P01-REGION` | RoD RoI tile extent unknown propagation | 必要領域だけを安全に評価し、未知は全域fallbackする | K0 fixtureを`REUSE`、OpenFXを`PATTERN` | K0、K2 |
+| `M4-P02-IDENTITY` | recipe key content digest generation snapshot source fingerprint | 再起動やrename後も正しい成果だけを再利用する | Bazel action/CASを`PATTERN`、`sha2`を`REUSE` | K1b、K2、K4、GAP-3 |
+| `M4-P03-RAM` | weighted cache handle refs pin eviction usage | 参照中成果を壊さずRAM hard cap内で再利用する | `foyer-memory 0.22.3`を`ADOPT-PROBE` | K1a〜K1c |
+| `M4-P04-RESOURCE` | VRAM RAM disk admission descriptor allocator report watermark | allocation前に三tierの上限を守る | wgpu descriptor/reportを`REUSE/PATTERN`、`fs2`を`ADOPT-PROBE` | K1a、K1c、K1d |
+| `M4-P05-DISK` | CAS integrity atomic commit corrupt miss GC | 再起動後も壊れていない成果だけをdiskから読む | `cacache 13.1.0`を`ADOPT-PROBE` | K1c、K7、K8 |
+| `M4-P06-INTERVAL` | half-open range coverage gaps invalidation coalesce | 変更の影響区間だけを再計算する | `rangemap 1.7.1`を`ADOPT-PROBE` | K2、K7b、K8a |
+| `M4-P07-SCHEDULE` | priority bounded queue reprioritize cancel heartbeat latest | 編集を止めず、必要なbackground成果から作る | `priority-queue 2.7.0`を`ADOPT-PROBE`、`LatestWorker`を`REUSE/PATTERN` | K1d、K4、K7、K8 |
+| `M4-P08-PROXY` | ffmpeg ffprobe VFR CFR proxy PTS source id | 重い素材を決定的proxyへ置換して編集する | 現行FFmpeg sidecarを`REUSE/WRAP` | K4、GAP-3、GAP-26 |
+| `M4-P09-COPYOUT` | wgpu copy map staging ring readback overlap | GPU評価を止めずに再利用成果をRAM/diskへ送る | `RgbaDownloader`を`REUSE`、wgpu copy/mapを`PATTERN` | K1c、K7a、GAP-29 |
+| `M4-P10-BAKE` | group bake atomic artifact substitute freeze | Groupの編集可能性を保ったまま仮出力を再利用する | P02/P05/P06/P07/P09の合成、独立frameworkなし | K7a〜K7c |
+| `M4-P11-COVERAGE` | whole composition draft coverage planner 100GB | 全曲Draftを計画し、disk成果で通し再生する | P05/P06/P07の既知機構を合成 | K8a、K8b |
+| `M4-P12-PRESSURE` | capacity deadline preview degrade resource snapshot | 容量不足と締切遅延を混同せずpreviewを縮退する | wgpu/resource snapshotとlatest mailboxを`REUSE` | K1d |
+| `M4-P13-VECTOR` | SVG usvg Vello path fill stroke unsupported premul | SVGの必要subsetを独自parserなしで描く | `vello_svg 0.9.0`を`ADOPT-PROBE`、Velloを`REUSE` | K6 |
+
+## 4. 現在のdispatch状態
+
+| 子 | 状態 | 閉じるもの |
+|---|---|---|
+| `P03-C1` | `ADOPTION_PROBE` | feature closure、Mac/Windows、external handle込みusage、全pin、drop、並行性 |
+| `P04-C4` | `ADOPTION_PROBE` | `fs2`の3 OS build、free-space failure、allocation granularity |
+| `P05-C1` | `ADOPTION_PROBE` | sync feature、kill/bit-flip/missing-index/same-key競合、Windows rename |
+| `P06-C1` | `ADOPTION_PROBE` | half-open integer timebase、coalesce、gap、境界overflow |
+| `P07-C1` | `ADOPTION_PROBE` | MPL-2.0選択、bounded/reprioritize/remove、deterministic ordering |
+| `P13-C1` | `ADOPTION_PROBE` | K6 subset、unsupported診断、外部resource遮断、premul一回 |
+| `P02-C2` | `SPEC_ONLY` | GAP-3のversion付きsource fingerprint。path/mtimeで代用しない |
+| `P09-C1` | `ADOPTION_PROBE` | GAP-29の原因分離bench。ring本数を先に決めない |
+| その他 | `GATED` | 依存するprobe、authority、product target、正負oracle |
+
+probeは互いにruntime ownerを書かない小fixtureとして並列化できる。ただし同じ`Cargo.toml`／lockfileの
+変更を競合させないため、各probeは独立差分で検収し、採択依存を一つの直列publicationへまとめる。
+
+## 5. 子項目
+
+### M4-P01-REGION — 評価領域
+
+#### `P01-C1` private runtime extent seam
+
+- **結果**: K0の`Finite / Infinite / Unknown`とunion/intersection/fallbackをprivate runtime型へ接続する。
+- **再利用target**: `crates/motolii-render/tests/k0_region_contract.rs`、render graphのinput/output extent。
+- **薄い残余**: canonical spaceとtexture boundsの一回限りの写像。
+- **oracle**: Unknown/Infiniteは過小評価0、empty/overflow安全、公開plugin型とDocument変更0。
+- **cutover**: component別rect helper、pixel座標の恒久意味を作らない。
+
+#### `P01-C2` dependency propagation
+
+- **結果**: output要求から各input RoIへ逆伝播し、非対応nodeはfull RoDへfallbackする。
+- **依存／並列**: P01-C1後。P02 key構築とfile分離できる。
+- **oracle**: full renderとtile renderの同一pixel、Unknownで欠落0、領域外work削減を測定。
+
+### M4-P02-IDENTITY — 完全keyと世代
+
+#### `P02-C1` recipe key and content digest
+
+- **結果**: node/version/parameter/input digest/time/Quality/platform saltを正本順でencodeし、recipe keyとartifact digestを分ける。
+- **再利用target**: `sha2`、既存typed IDs、render graph入力。
+- **oracle**: 各fieldの単独変異でmiss、並べ替え非同値、path/label/display名の混入0。
+- **cutover**: ad-hoc文字列key、`semantic_fingerprint()`転用、cache別key helperをretire。
+
+#### `P02-C2` source identity closure
+
+- **結果**: GAP-3のversion付きfingerprintを先に仕様化し、proxy/cacheへ同じ`source_id`を渡す。
+- **状態**: `SPEC_ONLY`。未決のままruntime実装しない。
+- **oracle**: rename同一、内容差異は不一致、旧形式migration/拒否が明示される。
+
+#### `P02-C3` immutable generation snapshot
+
+- **結果**: writer publishごとに新key空間へ移り、既存handleは旧snapshotを読み切る。
+- **薄い残余**: generation番号とpublished snapshotのprivate結合だけ。
+- **oracle**: purge/全走査なし、stale結果publish拒否、参照中artifactの早期解放0。
+
+### M4-P03-RAM — 参照handle付きRAM cache
+
+#### `P03-C1` foyer-memory compatibility probe
+
+- **結果**: exact version/featuresでK1bのweighted cache、external refs、resize、all-pin挙動を実測する。
+- **変更範囲**: dependencyと隔離fixtureのみ。製品runtime、公開型、Document変更0。
+- **oracle**: hard cap超過を検知、entry drop後usage回収、concurrent get/insert/remove、Mac/Windows build。
+- **不合格時**: `moka`を限定`REMAP`として比較し、独自concurrent cacheを作らない。
+
+#### `P03-C2` RAM artifact cache adapter
+
+- **結果**: Motolii key/weight/admissionを`foyer-memory::Cache`へprivateに写し、typed handleを返す。
+- **依存／並列**: P03-C1/P04-C1/P02-C1後。disk adapterと並列。
+- **oracle**: single lock order、lookup時GPU wait 0、pin中evict後もread可、missは再計算。
+- **cutover**: cache別HashMap/LRU、同義Arc registryをretire。
+
+#### `P03-C3` audio cache migration
+
+- **結果**: `AudioProgram`へ外から渡す無制限HashMapを共通RAM admissionへ接続する。
+- **oracle**: audio clock非blocking、同一PCM、budget accounting、旧二重owner 0。
+
+### M4-P04-RESOURCE — 三tier admission
+
+#### `P04-C1` descriptor-based estimator
+
+- **結果**: texture/buffer/PCM/artifactのdescriptorからallocation前bytesを算出する。
+- **再利用target**: wgpu descriptors、`TextureFormat::block_copy_size`、既存`MemoryBudgetThresholds`。
+- **oracle**: mip/array/alignment/format境界、overflow拒否、実allocation後の差分diagnostic。
+
+#### `P04-C2` unified hard admission
+
+- **結果**: owner/tier/resident/pinned/requested bytesを一つのHost policyへ渡す。
+- **薄い残余**: 製品policyとtyped refusalだけ。allocatorやresource frameworkを作らない。
+- **oracle**: allocation-before-admission 0、全pin時typed refusal、VRAM/RAM/disk二重計上0。
+
+#### `P04-C3` diagnostic snapshots
+
+- **結果**: wgpu allocator reportがある時だけ差分診断へ使い、hard cap正本にはしない。
+- **oracle**: report `None`でも成立、Metal/Windowsで同じHost policy、HUDはread-only。
+
+#### `P04-C4` disk watermark probe
+
+- **結果**: `fs2`でfree spaceとallocation granularityを読み、失敗時の保守fallbackを固定する。
+- **oracle**: 3 OS build、permission/error、fake filesystem境界、Document/Project failure化0。
+
+### M4-P05-DISK — content-addressed artifact store
+
+#### `P05-C1` cacache compatibility and corruption probe
+
+- **結果**: atomic commit、integrity check、same-key write、kill/corruptを隔離fixtureで確認する。
+- **oracle**: incomplete/bit-flip/missing indexはmiss、final pathにpartial artifact 0、100GB生成0。
+
+#### `P05-C2` private disk store adapter
+
+- **結果**: recipe key→integrity index、digest→contentをprivate APIへ閉じる。
+- **依存／並列**: P05-C1/P02-C1/P04-C2後。RAM adapterと並列。
+- **oracle**: restart hit、rename hit、wrong generation miss、external cacache型の公開面0。
+- **cutover**: 独自DB/WAL/catalog/repair protocolを作らない。
+
+#### `P05-C3` disk budget and retirement
+
+- **結果**: watermarkとvolatile access metadataでeviction候補を選び、content digestは不変に保つ。
+- **oracle**: pinned/committing artifact削除0、削除失敗はtyped diagnostic、再起動後missから回復。
+
+### M4-P06-INTERVAL — coverageと部分無効化
+
+#### `P06-C1` RangeSet compatibility probe
+
+- **結果**: composition timebaseのinteger half-open rangeでinsert/remove/gaps/coalesceを固定する。
+- **oracle**: adjacent/empty/end-exclusive/overflow、random model同値、`RationalTime`丸め二重化0。
+
+#### `P06-C2` affected-window projection
+
+- **結果**: typed Document変異とnode temporal footprintから影響node/区間を求める。
+- **oracle**: Unknownは全区間、無関係node保持、削除/並替/parameter変異corpus。
+- **cutover**: Salsa DB、汎用dependency framework、全cache purgeを採らない。
+
+#### `P06-C3` generation coverage switch
+
+- **結果**: 新generationのinvalid rangeだけを欠落としてpublishし、旧成果を安全に読む。
+- **oracle**: overlap edit競合、stale job拒否、旧generation handle保持、coverage偽陽性0。
+
+### M4-P07-SCHEDULE — bounded background job
+
+#### `P07-C1` priority collection probe
+
+- **結果**: fixed 4 priority、reprioritize、remove、bounded admissionを`priority-queue`で確認する。
+- **oracle**: deterministic tie-break、latest seek昇格、cancelled job非実行、queue上限。
+
+#### `P07-C2` bounded worker lifecycle
+
+- **結果**: 既存`LatestWorker`のthread/Condvar/generation/closeを複数jobへ拡張する。
+- **依存／並列**: P07-C1後。media/GPU job adapterは別moduleで並列。
+- **oracle**: editor thread block 0、shutdown join、panic typed failure、queueからDocument write 0。
+- **cutover**: Tokio runtime、独自async executor、OS thread priorityを導入しない。
+
+#### `P07-C3` cooperative cancel and heartbeat
+
+- **結果**: mediaは既存kill/cancel、CPU/GPUはtile/数frame境界のtokenとheartbeatを使う。
+- **oracle**: cancel latency、GPU command途中強制停止0、stale completion publish 0。
+
+### M4-P08-PROXY — media正規化
+
+#### `P08-C1` proxy recipe and sidecar job
+
+- **結果**: source identity、scale、fps、codec versionをrecipeにし、既存sidecarへjobを追加する。
+- **oracle**: 色/LUT/Document parameter混入0、cancel/finish/stderr、atomic artifact commit。
+
+#### `P08-C2` VFR to CFR verification
+
+- **結果**: ffprobe PTS/durationを基準にFFmpeg `fps`/`fps_mode`出力を検査する。
+- **oracle**: representative VFR、30000/1001、seek frame identity、duration drift上限。
+
+#### `P08-C3` product substitution
+
+- **結果**: proxy hit時だけdecoder inputを置換し、miss/failureはsourceへ戻る。
+- **oracle**: Finalはsource、Offline意味不変、purge不要、path/mtime key 0。
+
+### M4-P09-COPYOUT — GPUからartifactへの非同期境界
+
+#### `P09-C1` copy-out cause-isolation probe
+
+- **結果**: copy/map/encode/diskの各待ちを分離測定し、必要なin-flight数だけを採択する。
+- **再利用target**: `RgbaDownloader`、wgpu staging buffer/map_async。
+- **oracle**: UI/render評価chain blocking 0、bounded bytes、device loss、1/2/N buffer比較。
+
+#### `P09-C2` admitted copy-out pipeline
+
+- **結果**: P04 admission後だけcopyし、P05 commitへbounded resultを渡す。
+- **oracle**: loop内resource新設0、premul/color変換追加0、cancel後partial publish 0。
+
+### M4-P10-BAKE — Group仮出力
+
+#### `P10-C1` atomic bake artifact
+
+- **結果**: editable Groupの評価結果を一つのrecipe/CAS artifactとしてcommitする。
+- **oracle**: 子identity/編集可能性保持、失敗時旧成果保持、Final同値。
+
+#### `P10-C2` interval invalidation
+
+- **結果**: 子変更のaffected windowだけをP06 coverageから欠落させる。
+- **oracle**: 無関係区間hit、Unknown全区間、旧generation再利用。
+
+#### `P10-C3` graph substitution and refreeze
+
+- **結果**: hit時だけ内部graphをartifact sourceへ置換し、編集再開で自動的にlive graphへ戻る。
+- **oracle**: Documentへhidden canvas/state 0、preview/export同一関数、manual purge不要。
+
+### M4-P11-COVERAGE — 全曲Draft
+
+#### `P11-C1` coverage state and planner
+
+- **結果**: P06 gapsをP07のvisible/playhead-near/forward/background優先度へ変換する。
+- **oracle**: seekでreprioritize、bounded queue、完了済み区間の再投入0。
+
+#### `P11-C2` disk-backed playback
+
+- **結果**: coverage hitはP05 artifact、missはlive evaluationを同じclockへ供給する。
+- **oracle**: 音声主clock、欠落時停止0、stale generation混入0。
+
+#### `P11-C3` 100GB accounting E2E
+
+- **結果**: sparse/fake storeで100GB相当のaccounting、watermark、eviction、restartを通す。
+- **oracle**: 実100GB生成0、hard cap越え0、全曲通し、Final pixel意味不変。
+
+### M4-P12-PRESSURE — preview縮退
+
+#### `P12-C1` capacity controller
+
+- **結果**: VRAM/RAM/disk admission失敗をQuality候補へ型付きで通知する。
+- **oracle**: capacityだけでdeadline signalを出さない、Document/Final不変、silent allocation retry 0。
+
+#### `P12-C2` deadline controller
+
+- **結果**: frame deadlineとlatest generationからpreview Qualityを選ぶ。
+- **oracle**: memory余裕でも遅延時縮退、容量不足と別telemetry、hysteresis fixture。
+
+#### `P12-C3` resource snapshot provider
+
+- **結果**: M3 HUDへread-only snapshotを渡し、M3側にcache/schedulerを複製しない。
+- **oracle**: provider不在はtyped unavailable、UIからpurge/write 0、bounded更新頻度。
+
+### M4-P13-VECTOR — SVGからVello
+
+#### `P13-C1` vello_svg compatibility probe
+
+- **結果**: path/group/fill/stroke subsetを現wgpu device/Vello 0.9へ接続する。
+- **oracle**: fixed SVG corpus、unsupported typed、network/file external resource 0、premul一回。
+
+#### `P13-C2` product import adapter
+
+- **結果**: usvg treeをprivate import成果へ閉じ、rendererの長寿命Vello sceneへ渡す。
+- **oracle**: custom parser/walker 0、public usvg型0、preview/export同一、Renderer毎frame生成0。
+
+#### `P13-C3` subset acceptance
+
+- **結果**: K6対応表とgoldenを固定し、未対応text/clip/mask/filter等をsilent dropしない。
+- **oracle**: supported corpus同値、unsupported全件診断、golden threshold変更0。
+
+## 6. 並列waveと直列合流
+
+| wave | 並列可能な成果 | 直列点 |
+|---|---|---|
+| `A: adoption probes` | P03-C1、P04-C4、P05-C1、P06-C1、P07-C1、P13-C1、P09-C1 | Cargo dependency/lock publication、各候補の採否記録 |
+| `B: private foundations` | P01-C1、P02-C1/C3、P03-C2、P04-C1/C3、P05-C2、P07-C2 | P04-C2 unified admission、GAP-3 P02-C2 |
+| `C: product producers` | P06-C2/C3、P08-C1/C2、P09-C2、P12-C1/C2、P13-C2/C3 | artifact commitとproduct runtime合流 |
+| `D: composed outcomes` | P08-C3、P10、P11、P12-C3 | 通常製品route E2E、human/hardware acceptance |
+
+Waveは一括発注ではない。各子を一契約境界として検収し、共有fileへの合流だけownerが直列化する。
+`SPEC_ONLY`のGAP-3やGAP-29を別候補で迂回しない。
+
+## 7. 旧負債の処分
+
+| 旧route／誤読 | 新owner | 処分 |
+|---|---|---|
+| cache別HashMap、LRU、参照registry | P03 RAM cache | 同一oracle後に`FROZEN → RETIRE` |
+| 独自disk DB/WAL/catalog | P05 cacache adapter | 新設禁止。既存断片があればCAS移行後retire |
+| purgeを通常回復にするUI | complete key + miss policy | debug診断以外へ昇格しない |
+| generationごとの全走査削除 | immutable key + P06 ranges | writer publish切替後retire |
+| component別worker/runtime | P07 bounded worker | job adapter化後retire |
+| custom SVG parser/walker | P13 vello_svg | 新設禁止 |
+| 現行PipelineCache/target poolをM4完成と数える | 各現ownerの局所reuse | 名称だけを根拠に昇格しない |
+
+## 8. route再開条件
+
+採択routeを再び開けるのは、固定versionのlicense不適合、対象OS build不能、必須failure oracle不成立、
+hard capを構造上守れない、外部型が恒久契約へ漏れる、maintenance責任が独自薄adapterより増える、のいずれかを
+probeで再現した場合だけである。その場合も親の利用者成果とoracleは維持し、`REMAP / REDUCE`を先に行う。
+既完了コード、投入工数、外部LLMの好み、候補の知名度は再裁定理由にしない。
