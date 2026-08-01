@@ -201,10 +201,69 @@ mark_checkpoint_at_risk() {
   CHECKPOINT_SETTLED=0
 }
 
+# 監督ループのwall time・token・costをrunner自身が記録する。従来は外部modelの
+# 出力を人が画面から書き写すしかなく、採用差分1件あたりの実コストも、REJECTで
+# 捨てた分も機械で追えなかった(2026-08-01計装)。field名はevidence receipt限定で、
+# OpenTelemetry GenAI規約が未安定(2026-07時点でDevelopment)のため恒久形式・
+# 公開契約へは焼かない。測れないstageはUNKNOWNと明記し、欠測を沈黙させない。
+TELEMETRY_VERSION=1
+RUN_AGENT_WALL_SECONDS=0
+
+record_stage_telemetry() {
+  local telemetry_file="$1" stage="$2" wall_seconds="$3" result_json="${4:-}"
+  local input_tokens="UNKNOWN" output_tokens="UNKNOWN"
+  local cache_read_tokens="UNKNOWN" cost_usd="UNKNOWN" api_ms="UNKNOWN"
+  mkdir -p "$(dirname "$telemetry_file")"
+  if [[ ! -f "$telemetry_file" ]]; then
+    printf 'TELEMETRY_VERSION: %s\n' "$TELEMETRY_VERSION" >"$telemetry_file"
+  fi
+  # Claude CLIの`--output-format json`は既にusageとtotal_cost_usdを返している。
+  # 従来はstructured_outputだけを読み、この計測値を捨てていた。
+  if [[ -n "$result_json" && -f "$result_json" ]] && jq -e 'type == "object"' "$result_json" >/dev/null 2>&1; then
+    input_tokens="$(jq -r '.usage.input_tokens // "UNKNOWN"' "$result_json")"
+    output_tokens="$(jq -r '.usage.output_tokens // "UNKNOWN"' "$result_json")"
+    cache_read_tokens="$(jq -r '.usage.cache_read_input_tokens // "UNKNOWN"' "$result_json")"
+    cost_usd="$(jq -r '.total_cost_usd // "UNKNOWN"' "$result_json")"
+    api_ms="$(jq -r '.duration_api_ms // "UNKNOWN"' "$result_json")"
+  fi
+  {
+    printf '%s_WALL_SECONDS: %s\n' "$stage" "$wall_seconds"
+    printf '%s_INPUT_TOKENS: %s\n' "$stage" "$input_tokens"
+    printf '%s_OUTPUT_TOKENS: %s\n' "$stage" "$output_tokens"
+    printf '%s_CACHE_READ_TOKENS: %s\n' "$stage" "$cache_read_tokens"
+    printf '%s_COST_USD: %s\n' "$stage" "$cost_usd"
+    printf '%s_API_MS: %s\n' "$stage" "$api_ms"
+  } >>"$telemetry_file"
+  # 実行中に何も見えないという運用上の欠陥を、stage完了ごとの1行で塞ぐ
+  echo "delegate-cursor-supervised: 計測 ${stage} wall=${wall_seconds}s tokens_in=${input_tokens} tokens_out=${output_tokens} cost_usd=${cost_usd}" >&2
+}
+
+# 試行全体の合計。UNKNOWNは合計へ足さず、欠測stage名をそのまま残す
+summarize_telemetry() {
+  local telemetry_file="$1"
+  [[ -f "$telemetry_file" ]] || return 0
+  awk '
+    /_WALL_SECONDS: / { split($0, f, ": "); if (f[2] ~ /^[0-9]+$/) wall += f[2] }
+    /_COST_USD: / { split($0, f, ": "); if (f[2] ~ /^[0-9.]+$/) cost += f[2]; else unknown_cost = unknown_cost " " f[1] }
+    /_INPUT_TOKENS: / { split($0, f, ": "); if (f[2] ~ /^[0-9]+$/) tin += f[2]; else unmeasured = unmeasured " " f[1] }
+    /_OUTPUT_TOKENS: / { split($0, f, ": "); if (f[2] ~ /^[0-9]+$/) tout += f[2] }
+    END {
+      printf "TOTAL_WALL_SECONDS: %d\n", wall
+      printf "TOTAL_INPUT_TOKENS: %d\n", tin
+      printf "TOTAL_OUTPUT_TOKENS: %d\n", tout
+      printf "TOTAL_COST_USD: %.6f\n", cost
+      printf "UNMEASURED_TOKEN_STAGES:%s\n", (unmeasured == "" ? " NONE" : unmeasured)
+    }
+  ' "$telemetry_file" >>"$telemetry_file"
+  echo "delegate-cursor-supervised: 計測合計 $(awk -F': ' '/^TOTAL_|^UNMEASURED_/ {printf "%s=%s ", $1, $2}' "$telemetry_file")" >&2
+}
+
 run_agent() {
   local output="$1"
   local timeout_seconds="$2"
+  local start_epoch
   shift 2
+  start_epoch="$(date +%s)"
   echo "delegate-cursor-supervised: 起動: $1 (timeout=${timeout_seconds}s)" >&2
   # set -mでbackground jobを独立process group(pgid==pid)に置く。外部モデル側の
   # bash孫プロセスがtimeout/returnを生き延びてsnapshot後に書き換えることを防ぐため、
@@ -255,6 +314,8 @@ run_agent() {
   if [[ -s "$output.err" ]]; then
     cat "$output.err" >&2
   fi
+  # timeout・失敗した実行も計測対象にする。捨てた時間こそ支配項だったため
+  RUN_AGENT_WALL_SECONDS=$(( $(date +%s) - start_epoch ))
   return "$status"
 }
 
@@ -2160,7 +2221,7 @@ run_inspection_stage() {
   local worktree="$1" task="$2" order_txt="$3" attempt_dir="$4" inspection_timeout="$5"
   local order_file="$6" expected_order_sha256="$7"
   local evidence_root="$8" cp_attempt_name="$9" cp_task_hash="${10}" cp_base_ref="${11}" cp_base_sha="${12}" cp_head="${13}" cp_fingerprint="${14}"
-  local pre_fp post_fp inspection_prompt grok_status=0
+  local pre_fp post_fp inspection_prompt grok_status=0 grok_start_epoch
 
   snapshot_worktree "$worktree" "$attempt_dir" "pre-grok"
   pre_fp="$(cat "$attempt_dir/pre-grok-fingerprint.sha256")"
@@ -2199,7 +2260,10 @@ EOF
   echo
   echo "## 3. Cursor Grok 4.5 High read-only inspection"
   grok_status=0
+  grok_start_epoch="$(date +%s)"
   (cd "$worktree" && run_supervisor "$attempt_dir/grok-stdout.txt" "$inspection_prompt" verdict "$inspection_timeout") || grok_status=$?
+  # 検収はsubshellで走るためrun_agentのglobalが親へ戻らない。親側で計測する
+  record_stage_telemetry "$attempt_dir/telemetry.txt" GROK "$(( $(date +%s) - grok_start_epoch ))"
   enforce_derived_target_closure "$worktree" "post-grok"
   if [[ "$grok_status" -ne 0 ]]; then
     [[ ! -f "$attempt_dir/grok-stdout.txt" ]] || cat "$attempt_dir/grok-stdout.txt"
@@ -2255,11 +2319,14 @@ EOF
   publish_checkpoint "$evidence_root" "$cp_attempt_name" "$expected_order_sha256" "$cp_task_hash" "$cp_base_ref" "$cp_base_sha" "$cp_head" "$pre_fp"
 
   if ! grep -qx 'VERDICT: ACCEPT' "$attempt_dir/grok-stdout.txt"; then
+    # REJECTで捨てた時間とtokenこそ支配項だったため、ここでも必ず合計を出す
+    summarize_telemetry "$attempt_dir/telemetry.txt"
     echo "delegate-cursor-supervised: Grok検収REJECT。差分は隔離したまま採用しません" >&2
     echo "STAGE: grok REJECT" >>"$attempt_dir/stage-result.txt"
     exit 4
   fi
   echo "STAGE: grok ACCEPT" >>"$attempt_dir/stage-result.txt"
+  summarize_telemetry "$attempt_dir/telemetry.txt"
 
   echo "delegate-cursor-supervised: 必須検収ACCEPT。Codex最終レビュー待ちです"
 }
@@ -2322,20 +2389,29 @@ $task
 EOF
   )
   echo "## 1. Claude Opus 5 typed order delta"
+  prepare_telemetry_file="${ORDER_FILE}.evidence/prepare-telemetry.txt"
+  opus_start_epoch="$(date +%s)"
   if ! (cd "$WORKTREE" && run_order_manager_delta "$tmp_dir/opus-result.json" "$supervisor_prompt"); then
+    record_stage_telemetry "$prepare_telemetry_file" OPUS_DELTA \
+      "$(( $(date +%s) - opus_start_epoch ))" "$tmp_dir/opus-result.json"
     [[ ! -f "$tmp_dir/opus-result.json" ]] || cat "$tmp_dir/opus-result.json"
     exit 1
   fi
+  record_stage_telemetry "$prepare_telemetry_file" OPUS_DELTA \
+    "$(( $(date +%s) - opus_start_epoch ))" "$tmp_dir/opus-result.json"
   jq '.structured_output' "$tmp_dir/opus-result.json"
   jq -c '.structured_output' "$tmp_dir/opus-result.json" >"$tmp_dir/opus-delta.json"
   opus_disposition="$(jq -r '.disposition' "$tmp_dir/opus-delta.json")"
   if [[ "$opus_disposition" != "READY" ]]; then
+    summarize_telemetry "$prepare_telemetry_file"
     echo "delegate-cursor-supervised: Opus typed delta disposition=${opus_disposition}。Sparkは起動しません" >&2
     exit 3
   fi
   blocking_delta_count="$(jq '[.findings[] | select(.severity == "P0" or .severity == "P1")] | length' \
     "$tmp_dir/opus-delta.json")"
   if (( blocking_delta_count > 0 )); then
+    # 430〜586秒のSpark実行を約20秒の骨格差戻しへ置換した経路。その安さを実測で残す
+    summarize_telemetry "$prepare_telemetry_file"
     echo "delegate-cursor-supervised: Opus P0/P1 deltaが${blocking_delta_count}件あります。骨格とexact oracleへ織り込み、prepareを再実行してください" >&2
     exit 3
   fi
@@ -2354,6 +2430,7 @@ EOF
     echo "TASK_SHA256: $task_hash"
   } >>"$ORDER_FILE"
   run_dispatch_gate "$ORDER_FILE" "$WORKTREE"
+  summarize_telemetry "$prepare_telemetry_file"
   echo "delegate-cursor-supervised: 発注書案を保存しました: $ORDER_FILE" >&2
   echo "delegate-cursor-supervised: Codex審査後に CODEX PRECHECK: APPROVED を追記してください" >&2
   exit 0
@@ -2497,12 +2574,14 @@ if ! run_agent "$attempt_dir/spark-stdout.txt" "$SPARK_TIMEOUT_SECONDS" \
     --color never --model "$SPARK_MODEL" \
     --sandbox workspace-write --cd "$WORKTREE" \
     "$implementation_prompt"; then
+  record_stage_telemetry "$attempt_dir/telemetry.txt" SPARK "$RUN_AGENT_WALL_SECONDS"
   [[ ! -f "$attempt_dir/spark-stdout.txt" ]] || cat "$attempt_dir/spark-stdout.txt"
   snapshot_worktree "$WORKTREE" "$attempt_dir" "post-spark"
   echo "STAGE: spark FAILED_OR_TIMEOUT" >>"$attempt_dir/stage-result.txt"
   invalidate_checkpoint "$evidence_root"
   exit 1
 fi
+record_stage_telemetry "$attempt_dir/telemetry.txt" SPARK "$RUN_AGENT_WALL_SECONDS"
 cat "$attempt_dir/spark-stdout.txt"
 verify_generated_file_integrity "$target_capsule_file" "$target_capsule_sha256" "Spark target capsule"
 verify_generated_file_integrity "$compiled_grain_file" "$compiled_grain_sha256" "compiled Spark grain"

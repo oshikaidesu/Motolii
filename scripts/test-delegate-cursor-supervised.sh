@@ -387,8 +387,11 @@ EOF
 )
 TASK_HASH="$(printf '%s' "$TASK" | shasum -a 256 | awk '{print $1}')"
 ORDER="$TMP_ROOT/order.md"
-OPUS_READY='{"type":"result","subtype":"success","structured_output":{"disposition":"READY","findings":[{"kind":"NEGATIVE_ORACLE","severity":"P2","delta":"src.txt must remain unchanged when authority validation fails."}],"reason":"fixture skeleton is closed"}}'
-OPUS_BLOCKING='{"type":"result","subtype":"success","structured_output":{"disposition":"READY","findings":[{"kind":"NEGATIVE_ORACLE","severity":"P1","delta":"Add an exact unchanged-file rejection oracle before implementation."}],"reason":"one blocking oracle gap remains"}}'
+# 実CLIの`--output-format json`はstructured_outputと同じ階層でusageとtotal_cost_usdを
+# 返す。fixtureも同形にして、全prepare試験が計装の抽出経路を通るようにする
+OPUS_USAGE='"total_cost_usd":0.116,"duration_api_ms":21000,"usage":{"input_tokens":8084,"output_tokens":2206,"cache_read_input_tokens":2944}'
+OPUS_READY='{"type":"result","subtype":"success",'"$OPUS_USAGE"',"structured_output":{"disposition":"READY","findings":[{"kind":"NEGATIVE_ORACLE","severity":"P2","delta":"src.txt must remain unchanged when authority validation fails."}],"reason":"fixture skeleton is closed"}}'
+OPUS_BLOCKING='{"type":"result","subtype":"success",'"$OPUS_USAGE"',"structured_output":{"disposition":"READY","findings":[{"kind":"NEGATIVE_ORACLE","severity":"P1","delta":"Add an exact unchanged-file rejection oracle before implementation."}],"reason":"one blocking oracle gap remains"}}'
 
 run_script() {
   : >"$CALL_LOG"
@@ -428,6 +431,22 @@ assert_status 3 "$RUN_STATUS" "P0/P1 delta requires skeleton revision"
 grep -Fq -- "骨格とexact oracleへ織り込み" "$TMP_ROOT/stderr.log" \
   || fail "blocking delta did not request skeleton revision"
 [[ ! -f "$TMP_ROOT/blocking-order.md" ]] || fail "blocking delta must not produce a dispatchable order"
+
+# 骨格差戻しはSpark実行を置換する最も安い経路であり、その安さを実測で残す。
+# Opus JSONのusage/costを捨てず、欠測stageも沈黙させないことを固定する。
+BLOCKING_TELEMETRY="$TMP_ROOT/blocking-order.md.evidence/prepare-telemetry.txt"
+[[ -f "$BLOCKING_TELEMETRY" ]] || fail "prepare must record telemetry even when it fails closed"
+assert_has "$BLOCKING_TELEMETRY" "TELEMETRY_VERSION: 1" "telemetry version"
+assert_has "$BLOCKING_TELEMETRY" "OPUS_DELTA_INPUT_TOKENS: 8084" "Opus input tokens captured"
+assert_has "$BLOCKING_TELEMETRY" "OPUS_DELTA_OUTPUT_TOKENS: 2206" "Opus output tokens captured"
+assert_has "$BLOCKING_TELEMETRY" "OPUS_DELTA_CACHE_READ_TOKENS: 2944" "Opus cache read tokens captured"
+assert_has "$BLOCKING_TELEMETRY" "OPUS_DELTA_COST_USD: 0.116" "Opus cost captured"
+assert_has "$BLOCKING_TELEMETRY" "TOTAL_INPUT_TOKENS: 8084" "prepare telemetry totals"
+assert_has "$BLOCKING_TELEMETRY" "UNMEASURED_TOKEN_STAGES: NONE" "prepare has no unmeasured stage"
+grep -Eq '^OPUS_DELTA_WALL_SECONDS: [0-9]+$' "$BLOCKING_TELEMETRY" \
+  || fail "Opus wall seconds must be numeric"
+grep -Eq '^TOTAL_WALL_SECONDS: [0-9]+$' "$BLOCKING_TELEMETRY" \
+  || fail "prepare must total wall seconds"
 
 # WIDEはOpusを起動せずread-only探索へ戻す。
 WIDE_TASK="$(printf '%s\n' "$TASK" |
@@ -809,6 +828,20 @@ assert_has "$happy_attempt/metadata.txt" \
 assert_has "$happy_attempt/metadata.txt" \
   "SPARK_PROMPT_SHA256: $(sha256_file "$happy_attempt/spark-prompt.txt")" \
   "Spark prompt hash evidence"
+
+# execute側はSpark/Grokのwall timeを必ず残す。両CLIはusageを返さないため、
+# tokenは推測せずUNKNOWNとし、欠測stage名を合計行へ明示する
+HAPPY_TELEMETRY="$happy_attempt/telemetry.txt"
+[[ -f "$HAPPY_TELEMETRY" ]] || fail "execute must record telemetry"
+grep -Eq '^SPARK_WALL_SECONDS: [0-9]+$' "$HAPPY_TELEMETRY" || fail "Spark wall seconds must be numeric"
+grep -Eq '^GROK_WALL_SECONDS: [0-9]+$' "$HAPPY_TELEMETRY" || fail "Grok wall seconds must be numeric"
+assert_has "$HAPPY_TELEMETRY" "SPARK_INPUT_TOKENS: UNKNOWN" "Spark tokens are unmeasured, not guessed"
+assert_has "$HAPPY_TELEMETRY" "GROK_INPUT_TOKENS: UNKNOWN" "Grok tokens are unmeasured, not guessed"
+grep -Eq '^UNMEASURED_TOKEN_STAGES:.*SPARK_INPUT_TOKENS' "$HAPPY_TELEMETRY" \
+  || fail "unmeasured Spark tokens must be named in the summary"
+grep -Eq '^UNMEASURED_TOKEN_STAGES:.*GROK_INPUT_TOKENS' "$HAPPY_TELEMETRY" \
+  || fail "unmeasured Grok tokens must be named in the summary"
+grep -Eq '^TOTAL_WALL_SECONDS: [0-9]+$' "$HAPPY_TELEMETRY" || fail "execute must total wall seconds"
 
 GROK_HOOK="$TMP_ROOT/grok-hook.sh"
 cat >"$GROK_HOOK" <<EOF
