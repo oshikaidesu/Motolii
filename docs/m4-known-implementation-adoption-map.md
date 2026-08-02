@@ -50,7 +50,7 @@
 |---|---|---|
 | `P03-C1` | `REMAP / VERIFIED` | `foyer-memory 0.22.3`のweight／handle／resize／filter／並行操作、3 target cross-build。外部handle生存量はprivate ownerへREMAP |
 | `P04-C4` | `VERIFIED` | `fs4 1.1.0`のfree-space／allocation granularity観測、missing path typed error、3 target cross-build |
-| `P05-C1` | `ADOPTION_PROBE` | `tempfile 3.27.0`、single writer、FFmpeg temp、atomic visibility、integrity、lazy scan、hard budget |
+| `P05-C1` | `VERIFIED (V1)` | `tempfile 3.27.0` same-dir temp／persist、FFmpeg temp artifact、atomic visibility、path-independent SHA-256、stale temp隔離。V2/V3は別検証層 |
 | `P06-C1` | `REMAP / VERIFIED` | half-open integer timebase、coalesce、gap、境界overflow。raw empty rangeはpanicするためprivate guardを必須化 |
 | `P07-C1` | `REMAP / VERIFIED` | MPL-2.0選択、reprioritize/remove/pop、composite priorityによるdeterministic ordering。bounded admissionとgeneration filterはprivate owner |
 | `P13-C1` | `REMAP / VERIFIED` | `vello_svg 0.10.0`のpath/group/fill/stroke、typed parse error、pattern diagnostic、3 target cross-build。外部fileはusvg段で無言dropするためprivate preflightへREMAP |
@@ -152,13 +152,10 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 
 #### `P05-C1` filesystem artifact compatibility probe
 
-- **結果**: `tempfile 3.27.0`のsame-directory temp/persist、workspace `sha2`、single cache writer、
-  sharded recipe pathを組み合わせ、映像編集製品で成立済みの再生成可能な通常file方式をMotoliiの強い境界へ
-  接続し、Rust copy-outとFFmpegが作る通常fileをatomicにpublishできるか確認する。
-- **oracle**: Mac/Windows、incomplete/bit-flip/truncate/missingはmiss、ENOSPC/process kill、同一recipe競合、
-  1GB fake budget、10万entry lazy scan、final pathにpartial artifact 0、100GB生成0。
-- **証明分界**: 先行製品は通常file／再生成／明示削除の妥協範囲だけを証明する。content integrity、
-  allocation前hard budget、Windows atomic visibility、完全recipe keyはこのprobeで別途証明する。
+- **結果**: `tempfile 3.27.0`のsame-directory temp／persist、workspace `sha2`、現行FFmpeg `Encoder`の通常file出力を隔離fixtureで確認した。
+- **証拠**: `crates/motolii-media/tests/m4_p05_artifact_compatibility.rs`の4 fixtureがmacOS hostでgreen。tempとfinalの同一filesystem、publish前の旧final保持、FFmpeg tempのprobe、path-independent SHA-256とbit-flip検出、stale tempのfinal非可視を確認し、3 target cross-buildも通過した。
+- **判定**: `VERIFIED (V1 compatibility)`。V2 store model（restart／generation／handle）、V3 resource integration（ENOSPC／hard budget／lazy scan）、V4 K7/K8 product E2Eはこのfixtureの完了へ読み替えず、別層として残す。
+- **証明分界**: 先行製品は通常file／再生成／明示削除の妥協範囲だけを証明する。process kill、同一recipe競合、allocation前hard budget、Windows runtime atomic visibilityは後続層の未検証責任である。
 - **STOP**: fork、独自DB/WAL、cache format migration、常駐runtime、global content dedupを採択前提にしない。
 
 #### `P05-C2` private disk store adapter

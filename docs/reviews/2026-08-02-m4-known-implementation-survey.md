@@ -190,6 +190,14 @@ recipe分離・sccacheのsharded local cache・現行D1 atomic persistの`PATTER
   `usvg`段でSceneへ入らずcallbackも呼ばれなかったため、外部resource遮断をcrateの挙動へ委ねない。判定は
   `REMAP / VERIFIED`（K6 subset／callbackのみ採用、network/file typed preflightはMotolii private owner）。
 
+### 3.10 disk artifact V1 probe回収
+
+- **probe結果(2026-08-02)**: `crates/motolii-media/tests/m4_p05_artifact_compatibility.rs`の4 fixtureがmacOS hostでgreen。`tempfile 3.27.0`の
+  same-directory temp／persist、FFmpegが開く通常`.mp4` temp、atomic rename前の旧final保持、path-independent SHA-256とbit-flip検出、
+  stale tempのfinal非可視を確認し、`cargo check --locked`を`x86_64-pc-windows-gnu`、`aarch64-apple-darwin`、
+  `x86_64-unknown-linux-gnu`で通過した。判定は`VERIFIED (V1 compatibility)`。process kill／ENOSPC／同一recipe競合／Windows runtime atomic visibility、
+  V2 store model、V3 resource integration、V4 K7/K8 product E2Eは未検証として残す。
+
 ## 4. M4へ採らない一般機構
 
 | 候補 | 処分 | 理由 |

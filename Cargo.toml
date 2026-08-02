@@ -61,6 +61,7 @@ priority-queue = { package = "priority-queue", version = "=2.7.0", default-featu
 fs4 = { version = "=1.1.0", default-features = false, features = ["sync"] }
 foyer-memory = { version = "=0.22.3" }
 vello_svg = { version = "=0.10.0", default-features = false, features = ["wgpu"] }
+tempfile = "=3.27.0"
 bytemuck = { version = "1", features = ["derive"] }
 fontique = "0.10"
 harfrust = "0.7"

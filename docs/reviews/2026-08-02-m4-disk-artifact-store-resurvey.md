@@ -132,7 +132,7 @@ filesystem hard-linkまたはcontent blob層を独立`PATTERN`比較する。こ
 
 ### 6.1 検証の層と完了線
 
-先例の存在はprobe合格ではなく、`P05-C1`の合格も製品cache完成ではない。検証を次の四層に分ける。
+先例の存在はprobe合格ではなく、`P05-C1`の合格も製品cache完成ではない。2026-08-02のV1 fixtureはsame-dir publish／FFmpeg temp／digest／stale tempを閉じたが、process kill／ENOSPC／同一recipe競合／Windows runtime visibilityは未閉鎖のままである。検証を次の四層に分ける。
 
 | 層 | 対象 | 必須oracle | 合格後に許すもの |
 |---|---|---|---|
