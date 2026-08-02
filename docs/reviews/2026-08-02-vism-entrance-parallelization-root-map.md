@@ -5,6 +5,8 @@
 本書は[Vism実装計画 §8.1](2026-07-17-vism-implementation-plan.md#81-2026-07-23再基線の次の五手)が要求する
 全体レビューとして、Vismの各入口を既存authority、target、owner、write routeへ接続し、何が仕様化でき、
 何が依存待ちかを固定する。未決API／schemaを補完せず、実装順、依存、停止線、Phase C入場条件だけを扱う。
+各入口の既知解、採用方式、private境界、probe、cutover、retirementは
+[Vism既知実装採択マップ](../vism-known-implementation-adoption-map.md)を正とする。
 
 ## 1. 結論 — 固まった根と未閉鎖の根を分ける
 

@@ -4,7 +4,7 @@
 
 状態: **実装ロードマップ案／Vism package実装は未許可**。名称 **Vism** と拡張子 **`.vism`** は決定済みだが、manifest、container、payload、署名、loader、install storeは未決である。本書はそれらをコードから発明せず、どの証拠をどの順で揃えて仕様へ昇格するかを定める。現行境界のコード監査は[VSM-A0 inventory](2026-07-17-vism-a0-plugin-boundary-inventory.md)に固定した。
 
-関連正本: [Vismコンセプト](../vism-package-concept.md)、[Vism / Kitモデル](../vism-kit-model.md)、[Vismプラグインカタログ](../vism-plugin-catalog.md)、[Vism-ready反対側レビュー採否](2026-07-17-vism-ready-counter-review-disposition.md)、[first-party Vism表現需要調査](2026-07-23-first-party-vism-expression-demand-survey.md)、[プラグイン作者向け規約](../plugin-authoring.md)、[小さなコアと探索可能な拡張](../extensible-core-model.md)、[M2 Document仕様](../specs/M2-document-model.md)、[Simulationモデル](../simulation-model.md)
+関連正本: [Vismコンセプト](../vism-package-concept.md)、[Vism / Kitモデル](../vism-kit-model.md)、[Vismプラグインカタログ](../vism-plugin-catalog.md)、[Vism入口・並列解禁の根本マップ](2026-08-02-vism-entrance-parallelization-root-map.md)、[Vism既知実装採択マップ](../vism-known-implementation-adoption-map.md)、[Vism-ready反対側レビュー採否](2026-07-17-vism-ready-counter-review-disposition.md)、[first-party Vism表現需要調査](2026-07-23-first-party-vism-expression-demand-survey.md)、[プラグイン作者向け規約](../plugin-authoring.md)、[小さなコアと探索可能な拡張](../extensible-core-model.md)、[M2 Document仕様](../specs/M2-document-model.md)、[Simulationモデル](../simulation-model.md)
 
 ## 1. 結論
 

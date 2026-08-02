@@ -36,6 +36,7 @@
 |---|---|---|
 | [concept.md](concept.md) | コンセプト定義・決定事項の台帳 | 現行(決定はここに追記される) |
 | [known-implementation-adoption-model.md](known-implementation-adoption-model.md) | M3〜M5共通の既知実装調査、採択地図、薄い接続、独自負債置換・退役の開発順序 | **横断開発原則**(2026-08-02。M3適用済み、M4/M5採択地図はこれから) |
+| [vism-known-implementation-adoption-map.md](vism-known-implementation-adoption-map.md) | Vism全入口の既知解、採用方式、private境界、probe、cutover、retirement | **採択地図決定／依存・runtime実装は未許可**(2026-08-02) |
 | [decision-index.md](decision-index.md) | 決定逆引き台帳: 主題キーワード→既決の正本へのポインタ(状態語彙固定・機械検証対象) | **運用正本**(2026-07-19新設。作業前の逆引き入口) |
 | [performance-model.md](performance-model.md) | 性能の設計根拠と規律 | 現行 |
 | [memory-model.md](memory-model.md) | メモリ階層(VRAM/RAM/ディスク)の役割分担と容量疑念の台帳 | 現行 |
