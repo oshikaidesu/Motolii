@@ -130,7 +130,7 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 | `P01-C2` | `TARGET_MISSING` | 固定sourceの未移管componentをsurface別に一件特定し、実コードからdynamic transitionのowner/input/intent/stale ruleを埋める | product単一owner、mockはconsumer |
 | `P01-C3` | `TARGET_MISSING` | Browser以外で欠けるrole別epoch/reload callbackを一件特定 | crash/reload後に同じsnapshotを再投影 |
 | `P01-C4` | `SPEC_ONLY` | detach時のWorkspace codecとtop-level再生成境界を一問で固定 | layoutを復元してDocument不変 |
-| `P02-C1` | `IMPLEMENT` | `CU-201T-S`で閉じた`TrimClipIn` / `TrimClipOut`を`CU-201T-C`で既存D2へ接続 | trimがjournal replay可能で1 Undo |
+| `P02-C1` | `DONE` | `CU-201T-C`で`CU-201T-S`の`TrimClipIn` / `TrimClipOut`を既存D2へ接続済み。`d1l_writer_prepare` 41/41、`motolii-ui` 170/170、fmt/clippy green | trimがjournal replay可能で1 Undo |
 | `P02-C2` | `DONE` | `document_edit_runtime` 33/33、製品Place/Timeline/Inspector/Undo delivery 9/9、writer境界 4/4を再実行。既存routeのみ | 全surfaceが同じpublished snapshotを読む |
 | `P02-C3` | `TARGET_MISSING` | selection成立済み部分を除き、essential focusまたはplayhead consumerを一件特定 | UI stateをDocumentへ保存せず一方向publish |
 | `P03-C1` | `DONE` | `crates/motolii-ui/tests/timeline_projection.rs::p12_hundred_thousand_keys_cull_to_visible_identity`で100k keyの狭域projectionとtyped identityを確認。renderer本体は変更しない | visible outputがbounded |
@@ -164,7 +164,7 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 
 `CU-201T-S`の意味閉鎖により開始された`CU-201T-C`は、実装 `a860e10e`、oracle補強 `c2eda847`、targeted test/fmt/clippy greenをもって完了した。
 `CU-201N-S`で既存`TimelineKey`/`TimelineBar`だけを候補へ採用し、key優先、stable identity tie-break、transient `RationalTime` threshold、no-snapを固定した。
-`P03-C1-VERIFY`とP02-C2は既存routeの確認として閉じた。PRODUCT `CU-201P`は、[CU-201P target gap observation](reviews/2026-08-03-cu-201p-target-gap-observation.md)のとおり、Timeline drag→D2 requestの実在target不足で`WAIT_TARGET`に戻す。Stage placementのpointer captureを流用した実装は開始しない。
+`P02-C1`、`P03-C1-VERIFY`、P02-C2、P01-C1は既存routeの実装・確認として閉じた。PRODUCT `CU-201P`は、[CU-201P target gap observation](reviews/2026-08-03-cu-201p-target-gap-observation.md)のとおり、Timeline drag→D2 requestの実在target不足で`WAIT_TARGET`に戻す。Stage placementのpointer captureを流用した実装は開始しない。
 
 ### 5.1 `CU-201T-C` — trim command接続
 
