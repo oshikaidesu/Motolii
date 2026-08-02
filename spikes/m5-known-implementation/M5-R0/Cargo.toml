@@ -1,0 +1,13 @@
+[package]
+name = "m5-r0-headless-pbr"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+bytemuck = { version = "=1.23.1", features = ["derive"] }
+pollster = "=0.4.0"
+thiserror = "=2.0.16"
+wgpu = "29"
