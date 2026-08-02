@@ -2,6 +2,22 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+SCRIPT="$ROOT_DIR/scripts/activate-supervised-runner.sh"
+set +e
+RETIRED_OUTPUT="$("$SCRIPT" status 2>&1)"
+RETIRED_STATUS=$?
+set -e
+[[ "$RETIRED_STATUS" -eq 64 ]] || { echo "test-activate-supervised-runner: expected retired exit 64, got $RETIRED_STATUS" >&2; exit 1; }
+[[ "$RETIRED_OUTPUT" == *"RETIRED 2026-08-02"* ]] || { echo "test-activate-supervised-runner: retirement marker missing" >&2; exit 1; }
+COMMON_DIR="$(git -C "$ROOT_DIR" rev-parse --path-format=absolute --git-common-dir)"
+INSTALLED_LAUNCHER="$COMMON_DIR/motolii-supervised-runner/run"
+if [[ -e "$INSTALLED_LAUNCHER" ]]; then
+  [[ -f "$INSTALLED_LAUNCHER" && ! -L "$INSTALLED_LAUNCHER" ]] || { echo "test-activate-supervised-runner: installed launcher is not a regular file" >&2; exit 1; }
+  grep -Fq "RETIRED 2026-08-02" "$INSTALLED_LAUNCHER" || { echo "test-activate-supervised-runner: live canonical launcher bypass remains" >&2; exit 1; }
+fi
+echo "test-activate-supervised-runner: RETIRED PASS"
+exit 0
+
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/motolii-canonical-runner-test.XXXXXX")"
 
 cleanup() {

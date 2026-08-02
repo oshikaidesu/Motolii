@@ -2,6 +2,10 @@
 
 Cursor / Claude Code / その他のLLMエージェント共通の入口。実装に着手する前にここを読む。
 
+## 監督runnerの廃止（2026-08-02）
+
+- 旧delegate/activateはexit 64で廃止。`@agentex/agent`を直接使い代替runnerを作らない。未閉鎖保証は推測で補わない。詳細は[廃止決定](docs/reviews/2026-08-02-supervised-runner-retirement-decision.md)。
+
 ## 最上位の権限保存
 
 - **自己発注禁止**: 主担当Codexは、ユーザーが許可した`AUTHORIZED_OUTCOME / AUTHORIZED_ARTIFACTS / AUTHORIZED_MUTATIONS / AUTHORIZED_VALIDATION`を自分で増やさない。次の一手が成果物、owner、権限、完了条件、model呼出し、検収周回を増やす場合、その追加分は未許可として施工せず、既存scopeの最小次手を続けるかユーザーへ返す
@@ -9,7 +13,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 - **既決を未決へ戻さない**: 提案、再設計、仕様化、発注の前に[決定逆引き台帳](docs/decision-index.md)を主題keywordで検索し、該当decision ID／正本path／現行状態を示す。該当決定を読まずに新しい仕組みを提案しない。正本と現行コードが衝突する場合だけ`AUTHORITY_CONFLICT`として当該操作を止める
 - 上記三則は主担当Codexを含む全modelに適用する。自己反証、隔離worktree、検収、技術的有用性、安全性は追加権限の代わりにならない。機械判定できる禁止は文章だけに置かずrunner、sandbox、hook、CIで拒否する
 
-## 「発注」時のGrok / Spark / Opus 5監督ループ
+## [RETIRED TRANSPORT] 「発注」時のGrok / Spark / Opus 5監督ループ
 
 - 「発注して」「実装を発注」等、**発注を依頼動詞として明示した時だけ**自動委任する。通常の「実装して」、説明、引用、ファイル内の語では発火しない
 - 現行routeは`Codex → cursor-grok-4.5-high → gpt-5.3-codex-spark → claude-opus-5 → Codex`、`ROUTE_CONTRACT_VERSION: 2`、`LOOP_PROFILE: grok-spark-opus`だけとする。Grokはread-only preflight、Sparkは隔離実装、Opusは実装思考を受け取らないfresh read-only final review、Codexは正本照合と採否を所有する。外部modelは再委任しない

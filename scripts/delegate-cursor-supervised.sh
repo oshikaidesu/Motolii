@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "delegate-cursor-supervised: RETIRED 2026-08-02; active execution is disabled. See docs/reviews/2026-08-02-supervised-runner-retirement-decision.md" >&2
+exit 64
+
 RUNNER_SELF_SHA256="$(shasum -a 256 "${BASH_SOURCE[0]}" | awk '{print $1}')"
 if [[ -z "${MOTOLII_CANONICAL_RUNNER_SHA256:-}" || \
       "$MOTOLII_CANONICAL_RUNNER_SHA256" != "$RUNNER_SELF_SHA256" || \

@@ -1,6 +1,10 @@
 # Grok / Spark / Opus 5 監督ループ
 
-状態: **決定**
+状態: **独自runner transportは2026-08-02に撤回・役割分離原則のみ歴史参照**
+
+> `scripts/delegate-cursor-supervised.sh`とcanonical activateは
+> [非破壊的廃止決定](2026-08-02-supervised-runner-retirement-decision.md)で通常入口から外れた。
+> 本文のorder schema、route version、launcher手順を新規実行へ使わない。
 
 日付: 2026-07-25
 

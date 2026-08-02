@@ -3,6 +3,15 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="$ROOT_DIR/scripts/delegate-cursor-supervised.sh"
+set +e
+RETIRED_OUTPUT="$("$SCRIPT" 2>&1)"
+RETIRED_STATUS=$?
+set -e
+[[ "$RETIRED_STATUS" -eq 64 ]] || { echo "test-delegate-cursor-supervised: expected retired exit 64, got $RETIRED_STATUS" >&2; exit 1; }
+[[ "$RETIRED_OUTPUT" == *"RETIRED 2026-08-02"* ]] || { echo "test-delegate-cursor-supervised: retirement marker missing" >&2; exit 1; }
+echo "test-delegate-cursor-supervised: RETIRED PASS"
+exit 0
+
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/motolii-grok-spark-opus-test.XXXXXX")"
 RUNNER_SHA256="$(shasum -a 256 "$SCRIPT" | awk '{print $1}')"
 ACTIVE_FILE="$TMP_ROOT/active-runner.txt"

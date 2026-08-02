@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "activate-supervised-runner: RETIRED 2026-08-02; canonical activation is disabled. See docs/reviews/2026-08-02-supervised-runner-retirement-decision.md" >&2
+exit 64
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 COMMON_DIR="$(git -C "$ROOT_DIR" rev-parse --path-format=absolute --git-common-dir)"
 INSTALL_ROOT="$COMMON_DIR/motolii-supervised-runner"
