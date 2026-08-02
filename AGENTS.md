@@ -2,6 +2,10 @@
 
 Cursor / Claude Code / その他のLLMエージェント共通の入口。実装に着手する前にここを読む。
 
+## 実装前の既知実装fail-close
+
+- **一般機構を先に作らない**: 計画・仕様化・発注・実装前にrepo、[決定台帳](docs/decision-index.md)、[references](docs/references.md)、一次資料を調べ、主担当preflightへ`MECHANISM CLASS / KNOWN IMPLEMENTATION / ADOPTION ROUTE / THIN MOTOLII RESIDUAL / RETIREMENT / BUILD: FORBIDDEN`を記録する。欠落、未調査、裁定なし、一般frameworkの薄い残余への偽装では実装担当を起動しない。既決routeは正本を示して継承し、`BUILD`はmodelが許可せず利用者例外へ返す。これはtransport schemaではない。詳細は[既知実装採択・置換開発モデル](docs/known-implementation-adoption-model.md)
+
 ## 監督runnerの廃止と薄いCLI監視（2026-08-03）
 
 - 旧delegate/activateはexit 64のまま。外部CLIの起動と生ログ保存だけは[`run-observed-cli.py`](scripts/run-observed-cli.py)を使う。
@@ -135,7 +139,7 @@ Rerunを一度でも根拠・再利用箇所・変更案に含める場合、主
 - 完了条件は[repository validation topology](docs/reviews/2026-07-31-repository-validation-topology-decision.md)に従い、各粒へ`PRIMARY_ORACLE / REPO_LANES / EXTERNAL_GATES`を固定する。`cargo test`はRust laneであり、React、docs、製品E2E、実機、人間審判を代替しない。「動いた気がする」、変更面を観測できないgreen、未実行を完了条件にしない
 - **テストを「直して」通さない**: ゴールデン参照画像・受け入れテストの削除・期待値書き換え・実装のspecial-caseで緑にすることを禁止。**テストが間違っていると思ったら実装を止めて報告する**。参照画像の正当な更新は理由を明記した独立PRに分離(specs/README.md 粒度ルール6、[pitfalls H-2](docs/pitfalls-and-roadmap.md))
 - **新規ヘルパーを書く前に既存を検索する**: 同等物が既にないかgrepしてから書く(LLM開発の最大の負債はコピペ増殖 — [pitfalls H-3](docs/pitfalls-and-roadmap.md))。テストヘルパーのtestkit集約ルールの一般化
-- **発明工程を持たない**: 汎用機構はrepo、[決定逆引き台帳](docs/decision-index.md)、[参考ライブラリ一覧](docs/references.md)、一次資料から一度だけ`REUSE / ADOPT / WRAP / PORT / PATTERN / EXTERNAL / REJECT`を裁定し、後続粒は採択routeを継承する。粒ごとの再調査は必須oracle、license、platform、security、maintenanceの反証またはadapterの共有基盤化がある時だけ。`PORT / PATTERN`は解決済み機構のMotolii所有実装であり、薄いtranslation／admission adapter、製品policy、fixtureを許す。新機構の`BUILD`は通常処分にせず、Fable検査でも回避不能な時だけ利用者例外へ返す。既完了や投入工数を維持理由にせず、同じoracleへ通す縦slice置換で単一ownerを切り替え、旧routeを`FROZEN → RETIRE`する。旧decisionの`BUILD`／採択非継承表記は歴史語彙であり現行orderへ使わない。詳細は[依存優先・責任最小化ゲート](docs/reviews/2026-07-24-dependency-first-responsibility-gate.md)
+- **発明工程を持たない**: 冒頭の既知実装preflight 6欄を満たし、汎用機構をrepo、[決定逆引き台帳](docs/decision-index.md)、[参考ライブラリ一覧](docs/references.md)、一次資料から一度だけ`REUSE / ADOPT / WRAP / PORT / PATTERN / EXTERNAL / REJECT`へ裁定する。後続粒は採択routeを継承し、粒ごとの再調査は必須oracle、license、platform、security、maintenanceの反証またはadapterの共有基盤化がある時だけ。`PORT / PATTERN`は解決済み機構のMotolii所有実装であり、薄いtranslation／admission adapter、製品policy、fixtureを許す。新機構の`BUILD`は通常処分にせず、Fable検査でも回避不能な時だけ利用者例外へ返す。既完了や投入工数を維持理由にせず、同じoracleへ通す縦slice置換で単一ownerを切り替え、旧routeを`FROZEN → RETIRE`する。旧decisionの`BUILD`／採択非継承表記は歴史語彙であり現行orderへ使わない。詳細は[依存優先・責任最小化ゲート](docs/reviews/2026-07-24-dependency-first-responsibility-gate.md)
 - **仕様書の未決事項に依存するタスクに着手しない**: 未決を「もっともらしいデフォルト」で埋めない。仕様書改訂PRで先に潰す(specs/README.md 粒度ルール7、GR-PV)
 - **完了報告は証跡付き**: 実行したコマンドとテスト出力を添える。「動くはず」を報告にしない
 - 提出前は`./scripts/validate.sh local`でportable local profileを確認し、local依存setup済みなら`./scripts/test-local.sh`でも同じprofileを確認する。さらに粒の`PRIMARY_ORACLE / REPO_LANES / EXTERNAL_GATES`を追加実行する。local profile greenはCI、platform、human／hardware greenの代替ではない

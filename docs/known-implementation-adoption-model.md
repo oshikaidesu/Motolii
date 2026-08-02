@@ -47,6 +47,23 @@ M3〜M5の各phaseは、次を順番どおり閉じる。
 `ADOPTION MAP`が無いphaseで、遠いtask列を先に詳細化したり、既存IDを順番に実装したりしない。
 調査結果から必要な子項目が減ることは成功であり、古い粒数を残量として維持しない。
 
+### 3.1 計画・発注・実装のfail-close記録
+
+一般機構を新設・置換する可能性がある粒は、主担当Codexが計画または発注前に次の6欄を記録する。
+これはrunner、CLI harness、外部model transportのschemaではなく、主担当が実装開始可否を判定するpreflightである。
+
+1. `MECHANISM CLASS`: 製品task IDやcrate名から独立した必要能力
+2. `KNOWN IMPLEMENTATION`: repo内実装、採択済みdecision、または固定version／commit／APIを持つ既知解
+3. `ADOPTION ROUTE`: `REUSE / ADOPT / WRAP / PORT / PATTERN / EXTERNAL / REJECT`
+4. `THIN MOTOLII RESIDUAL`: Motolii固有のpolicy、admission、translation、fixture
+5. `RETIREMENT`: 旧ownerの`KEEP / REPLACE / FROZEN → RETIRE`、一回のcutover条件、または`NONE`
+6. `BUILD: FORBIDDEN`: 通常workflowの固定値。model、reviewer、採択失敗は変更権限を持たない
+
+既決routeを継承する粒は再調査の代わりに正本pathと裁定を記録する。6欄の欠落、
+`KNOWN IMPLEMENTATION: 未調査`、裁定なし、一般frameworkを`THIN MOTOLII RESIDUAL`へ入れた記録では、
+計画を実装可能とせず、実装担当を起動しない。既知routeが具体的反証で尽きた場合は§6の例外経路へ返し、
+`BUILD`へ書き換えて通常施工を続けない。
+
 ## 4. 採択地図の必須形式
 
 親項目は機構classと供給routeを検索する単位、子項目は一つの製品成果とoracleを閉じる単位とする。
