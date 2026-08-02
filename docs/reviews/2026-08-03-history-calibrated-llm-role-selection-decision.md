@@ -32,6 +32,7 @@ taskごとに選ぶ役割へ反映する。transport、監督責任、採用資�
 | 意味、owner、原因、共有契約が未閉鎖 | Claude Opus read-only | 反例、STOP、選択肢、閉鎖条件 | 閉鎖後に実装するならGrok等の別family |
 | authorityは閉じたがscope、allowlist、exact target、負例が複雑 | Grok read-only | boundedな粒化・preflight、漏れの列挙 | Grokを施工判断へ使ったならClaude等の別family |
 | 一契約境界に閉じた機械施工 | Spark | 指定pathの変更と指定試験 | 通常はClaude。Claude familyが施工・設計へ関与済みならGrok等 |
+| Sparkがcapacity／rate limitで利用不能 | Composer、Luna Max等の低コストmodel | 同じbase・scope・allowlist・oracleを再確認したfresh実装 | 選択したmodelと異なるfamily |
 | 実diffのscope、削除、guard、負例を詳しく監査 | Grok read-only | concrete diff audit | Grok自身は採否しない |
 | 実diffの意味、owner、既存契約との統合を監査 | Claude Opus read-only | semantic final audit | Claude自身は採否しない |
 | 性能、安全性、永続形式、platform correctness | 非LLM oracle | bench、negative test、schema/OS fixture | LLMは補助監査のみ |
@@ -43,13 +44,17 @@ taskごとに選ぶ役割へ反映する。transport、監督責任、採用資�
 3. 未閉鎖の意味をClaudeへ、具体的な境界列挙をGrokへ送る。両方必要なら独立に並べず、先の回答をCodexが正本へ
    再照合して残った問いだけを次へ送る
 4. 設計・契約閉鎖へ深く関与したmodel familyは同じtaskの最終reviewer候補から外す
-5. Grokのtimeout、CLI失敗、空の完了結果は観測失敗としてCodexへ戻す。未完了streamの一時的なstdout空とは区別し、
+5. Sparkのcapacity／rate limitは観測失敗として一度Codexへ戻す。同じtask境界がなお有効なら、ComposerまたはLuna Max等を
+   新しい実装担当として明示選択できる。CLIで確認した完全model ID、変更理由、fresh sessionをlogへ残し、自動retry列、
+   alias推測、途中sessionの引継ぎ、無記録のfallbackは行わない
+6. Grokのtimeout、CLI失敗、空の完了結果は観測失敗としてCodexへ戻す。未完了streamの一時的なstdout空とは区別し、
    別modelへ黙ってfallbackしない
-6. reviewerはfindingを列挙するだけでscope、order、実装、採用を増やさない。最終採否はCodexが非LLM oracleと合わせて行う
+7. reviewerはfindingを列挙するだけでscope、order、実装、採用を増やさない。最終採否はCodexが非LLM oracleと合わせて行う
 
 ## 非目標
 
 - `Grok → Spark → Opus`または`Claude → Spark → Grok`を固定routeにすること
 - modelごとのscore、学習DB、append-only receipt、retry状態機械を作ること
+- Spark失敗時に無条件で特定modelへ切り替える固定fallback chainを作ること
 - 過去のwall timeだけでmodelを格付けすること
 - Claude/Grokの賛同をauthority、ユーザー権限、採用資格にすること

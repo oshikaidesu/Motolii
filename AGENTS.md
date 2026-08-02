@@ -21,6 +21,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 - worktreeは主担当Codexが用意する。外部CLIは[`run-observed-cli.py`](scripts/run-observed-cli.py)へ完全なmodel/mode/sandbox引数を渡して起動し、利用不能時に別modelへ黙ってfallbackしない。外部modelは再委任しない
 - 実装担当と最終reviewerは別session・別役割にする。reviewerはread-onlyで実diffと試験を確認し、変更した場合は検収を無効とする。必要なmodelと段階はtaskに応じてCodexが選び、全発注へ固定直列routeを課さない
 - modelは履歴上の得意領域で選ぶ。意味・owner・原因・共有契約の閉鎖には`claude-opus-5`を実装前のread-only相談へ使い、scope・allowlist・exact target・負例・実diffの列挙監査には`cursor-grok-4.5-high`を使う。閉じた機械施工は`gpt-5.3-codex-spark`へ渡せるが、性能・安全性・永続性の合否は非LLM oracleで決める
+- Sparkがcapacity／rate limitで起動・完了できない場合、Codexは失敗をlogへ残し、同じbase・scope・allowlist・oracleを再確認した上でComposerまたはLuna Max等の低コストmodelを新しい実装担当として明示選択できる。これはsilent fallbackや自動retry列ではない。CLIで利用可能な完全model IDを確認して記録し、推測したaliasを使わず、変更後のmodel familyと異なる最終reviewerを選ぶ
 - 同じtaskで設計・契約閉鎖へ深く関与したmodel familyは最終reviewerにしない。Claudeを事前相談へ使ったらGrok等の別family、Cursor/Grokを施工またはpreflightへ使ったらClaude等の別familyをfresh read-only reviewerにする。小さく閉じたtaskはpreflightを省き、Grokの寡黙・timeout・空の完了結果は失敗として記録して黙って別modelへ切り替えない
 - 採用はCodexが実base、開始前後fingerprint、diff、試験、review結果を直接照合して決める。LLMの賛同やlogの存在だけで採用せず、P0/P1未解決、scope外変更、reviewer mutation、ユーザーSTOP後の実行を拒否する
 - promptは正本を再送せず、判断に必要なコード事実、対象path、変更境界、負例、確認commandだけに絞る。不足時は推測やrepo横断探索をさせずCodexへ戻す。詳細は[runner非依存監督決定](docs/reviews/2026-08-03-runner-independent-supervision-decision.md)

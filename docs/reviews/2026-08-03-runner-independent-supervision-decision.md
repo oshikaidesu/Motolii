@@ -47,6 +47,9 @@ model選択は[履歴較正によるLLM役割選択](2026-08-03-history-calibrat
 判定対象へ合わせる。Claudeは意味・owner・契約閉鎖、Grokはscope・exact target・負例・実diffの列挙監査、Sparkは
 閉じた機械施工を第一候補とする。同じtaskの設計へ深く関与したmodel familyを最終reviewerへ再利用せず、小taskでは
 preflightを省く。この選択は固定stage、fallback順、receipt資格を新設しない。
+Sparkのcapacity／rate limit時は、Codexが同じbase・scope・allowlist・oracleを再確認し、CLIで完全IDを確認できたComposer、
+Luna Max等の低コストmodelをfreshな実装担当として明示選択できる。失敗したsessionを引き継がず、選択変更と理由をlogへ
+残し、変更後のmodel familyと異なる最終reviewerを使うため、これは黙ったfallbackや固定fallback順には当たらない。
 
 ## 採用と停止
 
