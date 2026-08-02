@@ -130,7 +130,7 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 
 | 子 | 現在状態 | exact次order | 通常製品routeの出口 |
 |---|---|---|---|
-| `P01-C1` | `VERIFY_ONLY` | adapterを物理移動せず、重複coordinatorの実在だけを列挙。無ければPASS | event-loop/surface ownerが一意 |
+| `P01-C1` | `DONE` | `EventLoop<ProductEvent>`／`run_app`と`ApplicationHandler<ProductEvent>` adapterの一意性を確認。物理移動・coordinator再設計なし | event-loop/surface ownerが一意、重複coordinator 0 |
 | `P01-C2` | `REDUCE` | `P01-C2-A` mock-side source extraction／titlebar oracleはDONE。次は`P01-C2-B` product ownershipを再分類し、project-name projection／Settings intent／layout slotのexact target不足ならWAIT_TARGETのままにする | product単一owner、mockはconsumer。AllSurfaces全体移管・新global WebView・local stateは不可 |
 | `P01-C3` | `TARGET_MISSING` | Browser以外で欠けるrole別epoch/reload callbackを一件特定 | crash/reload後に同じsnapshotを再投影 |
 | `P01-C4` | `SPEC_ONLY` | detach時のWorkspace codecとtop-level再生成境界を一問で固定 | layoutを復元してDocument不変 |
