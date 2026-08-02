@@ -18,6 +18,7 @@ motolii-core.workspace = true
 motolii-audio.workspace = true
 motolii-doc.workspace = true
 motolii-eval.workspace = true
+motolii-export.workspace = true
 motolii-gpu.workspace = true
 motolii-plugin.workspace = true
 motolii-plugins-firstparty.workspace = true

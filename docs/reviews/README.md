@@ -46,6 +46,7 @@
 | [2026-08-01-motolii-semantic-sdk-aviutl-community-comparison.md](2026-08-01-motolii-semantic-sdk-aviutl-community-comparison.md) | AviUtl 1.x成熟拡張環境／AviUtl2とMotolii意味SDKを比較し、一作者面、自動parameter、通常Vism、fork、反復、Preset／Kit、分散配布、高度化をcontinuity floorへ縮小採用 |
 | [2026-08-01-vism-authoring-language-boundary-decision.md](2026-08-01-vism-authoring-language-boundary-decision.md) | 一般creator-authorがprogramを書く段のTypeScript source、MTS-1 compatibility profile、WGSL／Rust責任、engine／package非決定、F0/F1と停止線を固定 |
 | [2026-08-01-vism-inspector-source-automation-boundary-decision.md](2026-08-01-vism-inspector-source-automation-boundary-decision.md) | Vismを通常の製品単位、Inspectorを意味の第一面、TypeScriptを外部IDEへ段階開示する作者source、Automationを別の将来席として固定 |
+| [2026-08-02-cu-211-project-export-local-alpha-decision.md](2026-08-02-cu-211-project-export-local-alpha-decision.md) | Local AlphaのSave checkpoint／別プロセスreopen／headless atomic Exportを既存targetへ縮小接続し、Save-As／cancel等を残件化 |
 | [2026-08-01-vism-semantic-sdk-cavalry-translation-decision.md](2026-08-01-vism-semantic-sdk-cavalry-translation-decision.md) | CavalryのPath／Mesh／Context／Deformer／Particle先例を、言語より長寿命な意味型、純粋operation、明示capability、Host責任へ翻訳するVism意味SDK決定 |
 | [2026-08-01-sdk-s0-path2d-semantic-fixture-spec.md](2026-08-01-sdk-s0-path2d-semantic-fixture-spec.md) | SDK-S0S — 既存M2 PathOpをnative oracleにする`Path2D → Path2D`意味fixture責任仕様 |
 | [2026-08-01-vsm-a4s-external-crate-author-scaffold-spec.md](2026-08-01-vsm-a4s-external-crate-author-scaffold-spec.md) | VSM-A4S — 外部crate作者scaffold責任仕様 |

@@ -19,6 +19,10 @@ export function StageTransportCandidate({
   easingTrigger,
   playing,
   togglePlay,
+  projectStatus,
+  exportStatus,
+  saveProject,
+  exportProject,
 }) {
   return (
     <div className="transport">
@@ -35,10 +39,14 @@ export function StageTransportCandidate({
       </button>
       <button className="toolbtn" id="step-next" type="button" aria-label="次のkeyへ">›|</button>
       {easingTrigger}
+      <button className="toolbtn" id="save-project" type="button" onClick={saveProject}>保存</button>
+      <button className="toolbtn" id="export-project" type="button" onClick={exportProject}>書き出し</button>
       <span className="time" id="time">{timecode}</span>
       <span>{barPosition}</span>
       <span>{tempoStatus}</span>
       <span className="quality">{qualityStatus}</span>
+      <span id="project-status" aria-live="polite">{projectStatus}</span>
+      <span id="export-status" aria-live="polite">{exportStatus}</span>
     </div>
   );
 }

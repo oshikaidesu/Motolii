@@ -374,6 +374,27 @@ impl DocumentEditRuntime {
         self.writer.snapshot()
     }
 
+    pub(crate) fn project_path(&self) -> &std::path::Path {
+        self.session.document_path()
+    }
+
+    pub(crate) fn save_checkpoint(&mut self) -> Result<(), DocumentEditRuntimeError> {
+        if self.health == RuntimeHealth::Poisoned {
+            return Err(DocumentEditRuntimeError::SessionPoisoned);
+        }
+        let snapshot = self.writer.snapshot();
+        let options = SaveProjectOptions {
+            limits: *self.session.limits(),
+            checkpoint: true,
+            ..SaveProjectOptions::default()
+        };
+        if let Err(error) = self.session.save_with_journal(&snapshot, &options) {
+            self.poison();
+            return Err(DocumentEditRuntimeError::JournalCommit(error));
+        }
+        Ok(())
+    }
+
     fn poison(&mut self) {
         self.health = RuntimeHealth::Poisoned;
     }

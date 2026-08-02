@@ -2593,6 +2593,7 @@ dependencies = [
  "motolii-core",
  "motolii-doc",
  "motolii-eval",
+ "motolii-export",
  "motolii-gpu",
  "motolii-plugin",
  "motolii-plugins-firstparty",

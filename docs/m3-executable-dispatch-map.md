@@ -146,8 +146,8 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 | `P07-C1` | `TARGET_MISSING` | GAP-28の`PlaybackSession`→mixed `AudioProgram`接続。seek-onlyならREDUCE | audio主clockでseek/play/pause |
 | `P07-C2` | `WAIT_CONFLICT` | P07-C1、raw measurement、M4 provider後 | deadline時だけ古いpreviewをdrop |
 | `P07-C3` | `MEASURE` | 10分実素材のclock/drift/drop raw測定 | 長時間再生の同期証拠 |
-| `P08-C1` | `TARGET_MISSING` | Export provider snapshotとproduct source assetを一つずつ特定 | settings/start/progress/cancelが通常面に出る |
-| `P08-C2` | `WAIT_CONFLICT` | P08-C1とP12-C1後にatomic artifact E2E | 失敗時partial final 0 |
+| `P08-C1` | `REDUCE` | CU-211で既存ExportJobをStage strict intent／headless worker／statusへ縮小接続。provider snapshot、settings、cancelは別粒 | Local Alphaの書き出し開始と終了が通常面に出る |
+| `P08-C2` | `REDUCE` | CU-211でdirect ExportJobの成功後atomic final publishを先行接続。mixed audio／failure E2Eは残す | 失敗時partial final 0 |
 | `P09-C1` | `SPEC_ONLY` | Delete/Duplicate/RenameとClipboard/Pasteを分離。まず一CommandId family | 頻出操作が1 Undoで成立 |
 | `P09-C2` | `SPEC_ONLY` | keymap設定UI範囲とIME審判を分離 | composition中shortcut誤発火0 |
 | `P09-C3` | `WAIT_CONFLICT` | P09-C1/C2とP01-C4後。OS menu要件が無ければmuda不採用 | button/keymap/menuが同じintent |
@@ -158,7 +158,7 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 | `P11-C1` | `WAIT_CONFLICT` | P01〜P10/P12のLocal Alpha必要子が通常routeへ統合後 | 起動からExportまで一fixtureで完走 |
 | `P11-C2` | `HUMAN` | P11-C1 buildで制作、IME、聴感、keyboard/AX審判 | 教材なしの日常制作 |
 | `P11-C3` | `HARDWARE` | 所有Windows/Mac、DPI、NVDA/VoiceOver、配布artifact | Distribution Ready |
-| `P12-C1` | `SPEC_ONLY` | Unsaved/Save-As/cancel/failed-save policyとrfd probeを分離 | New/Open/Save/reopenで原本を失わない |
+| `P12-C1` | `REDUCE` | CU-211で既存ProjectSession checkpointと同一path別プロセスreopenを接続。Save-As、native dialog、in-process reopen、cancel policyは残す | Local AlphaのSave/reopenで原本を失わない |
 
 ## 5. 現在発行できるorder
 

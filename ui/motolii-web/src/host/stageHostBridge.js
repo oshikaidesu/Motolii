@@ -17,6 +17,8 @@ export function readStageHostSnapshot(bridge) {
     || typeof snapshot.barPosition !== "string"
     || typeof snapshot.tempoStatus !== "string"
     || typeof snapshot.qualityStatus !== "string"
+    || typeof snapshot.projectStatus !== "string"
+    || typeof snapshot.exportStatus !== "string"
     || typeof snapshot.easingPressed !== "boolean"
     || typeof snapshot.playing !== "boolean"
     || !Number.isSafeInteger(snapshot.layoutEpoch)
@@ -31,6 +33,8 @@ export function readStageHostSnapshot(bridge) {
     barPosition: snapshot.barPosition,
     tempoStatus: snapshot.tempoStatus,
     qualityStatus: snapshot.qualityStatus,
+    projectStatus: snapshot.projectStatus,
+    exportStatus: snapshot.exportStatus,
     activeInterval: snapshot.activeInterval,
     easingPressed: snapshot.easingPressed,
     playing: snapshot.playing,

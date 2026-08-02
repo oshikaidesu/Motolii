@@ -1,6 +1,7 @@
 //! macOS通常project sessionのdirect native Surface Host。
 
 use std::borrow::Cow;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -10,6 +11,7 @@ use motolii_audio::{
 use motolii_core::{CanonicalPoint, Quality, RationalTime};
 use motolii_doc::{Command, EffectId, EvaluationTime, LayerId};
 use motolii_eval::DataTracks;
+use motolii_export::{export_document_video, ExportJob, ExportReport};
 use motolii_gpu::GpuCtx;
 use motolii_transport::PlaybackSession;
 use winit::dpi::LogicalSize;
@@ -46,6 +48,7 @@ use crate::render_worker::{
 };
 use crate::stage_chrome_host_runtime::{
     StageChromeHostRuntime, StageChromeHostRuntimeError, StageChromeIntentError,
+    StageChromeProjection, StageChromeStatus,
 };
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
 use crate::timeline_projection::{
@@ -60,10 +63,11 @@ use crate::{
     ModifierError, Modifiers, NormalizedInput, PlatformBindingConstraints, PlatformCommandModifier,
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 pub(crate) enum ProductEvent {
     Wake,
     BrowserLifecycle(BrowserLifecycleEvent),
+    ExportFinished(Result<ExportReport, String>),
 }
 
 pub(crate) fn run(document_runtime: DocumentEditRuntime) -> Result<(), ProductRuntimeError> {
@@ -178,6 +182,9 @@ pub(crate) struct ProductApp {
     playback: Option<PlaybackSession>,
     projection_generation: u64,
     current_document: Arc<motolii_doc::Document>,
+    project_status: String,
+    export_status: String,
+    export_in_flight: bool,
     proxy: EventLoopProxy<ProductEvent>,
     layout_authority: LayoutAuthority,
     layout: Option<NativeHostLayout>,
@@ -230,6 +237,15 @@ fn canonical_audio_frames(time: RationalTime) -> Result<u64, ProductRuntimeError
         .ok_or(ProductRuntimeError::PlaybackDurationOverflow)?
         / denominator;
     u64::try_from(frames).map_err(|_| ProductRuntimeError::PlaybackDurationOverflow)
+}
+
+fn default_export_path(document_path: &Path) -> PathBuf {
+    let stem = document_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("motolii-project");
+    document_path.with_file_name(format!("{stem}-export.mp4"))
 }
 
 fn line_delta_to_logical(delta: [f64; 2]) -> [f64; 2] {
@@ -562,6 +578,9 @@ impl ProductApp {
             timeline_projection,
             displayed_camera,
             current_document,
+            project_status: String::from("READY"),
+            export_status: String::from("READY"),
+            export_in_flight: false,
             document_runtime,
             document_queue: DocumentEditQueue::default(),
             input_router: InputRouter::new(command_registry),
@@ -1133,44 +1152,7 @@ impl ProductApp {
                 self.primary,
                 self.projection_generation,
             ) {
-                Ok(Some(published)) => {
-                    trace_document_publish("place", &published);
-                    self.reconcile_active_effect_use(&published);
-                    self.current_document = published.snapshot;
-                    self.primary = published.primary;
-                    self.projection_generation = published.projection_generation;
-                    if let Some(inspector) = &self.inspector {
-                        if let Err(error) = inspector.publish(
-                            &self.current_document,
-                            self.primary,
-                            self.active_effect_use,
-                            self.projection_generation,
-                        ) {
-                            return self.fail(event_loop, error);
-                        }
-                    }
-                    self.timeline_projection =
-                        match ProductTimelineProjection::from_document(&self.current_document) {
-                            Ok(projection) => projection,
-                            Err(error) => return self.fail(event_loop, error),
-                        };
-                    self.synchronize_timeline_viewport(self.layout);
-                    trace_timeline_projection(
-                        "place",
-                        self.projection_generation,
-                        &self.timeline_projection,
-                    );
-                    if let Err(error) = self.publish_timeline_tools() {
-                        return self.fail(event_loop, error);
-                    }
-                    if let Err(error) = self.publish_stage_chrome(false) {
-                        return self.fail(event_loop, error);
-                    }
-                    if let Err(error) = self.submit_stage_projection() {
-                        return self.fail(event_loop, error);
-                    }
-                    self.request_redraw();
-                }
+                Ok(Some(published)) => self.adopt_full_publish(event_loop, published, "place"),
                 Ok(None) => {}
                 Err(error) => self.fail(event_loop, error),
             }
@@ -1213,6 +1195,29 @@ impl ProductApp {
                 if let Err(error) = self.handle_browser_lifecycle(event) {
                     self.fail(event_loop, error);
                 }
+            }
+            ProductEvent::ExportFinished(result) => {
+                self.export_in_flight = false;
+                match result {
+                    Ok(report) => {
+                        self.export_status = format!("EXPORTED {} frames", report.frames_written);
+                        crate::ui_numeric_trace::emit(format_args!(
+                            "kind=project action=export state=finished frames={} width={} height={}",
+                            report.frames_written, report.desc.width, report.desc.height,
+                        ));
+                    }
+                    Err(error) => {
+                        self.export_status = "EXPORT ERROR".to_owned();
+                        crate::ui_numeric_trace::emit(format_args!(
+                            "kind=project action=export state=error error={error}"
+                        ));
+                    }
+                }
+                if let Err(error) = self.publish_stage_chrome(false) {
+                    self.fail(event_loop, error);
+                    return;
+                }
+                self.request_redraw();
             }
         }
     }
@@ -1812,6 +1817,7 @@ impl ProductApp {
         published: PublishedDocument,
         route: &'static str,
     ) {
+        self.project_status = "EDITED".to_owned();
         trace_document_publish(route, &published);
         self.reconcile_active_effect_use(&published);
         self.current_document = published.snapshot;
@@ -1915,10 +1921,13 @@ impl ProductApp {
                 &self.current_document,
                 self.selected_position_key,
                 self.projection_generation,
-                easing_pressed,
-                self.playback
-                    .as_ref()
-                    .is_some_and(PlaybackSession::is_playing),
+                StageChromeProjection::new(
+                    easing_pressed,
+                    self.playback
+                        .as_ref()
+                        .is_some_and(PlaybackSession::is_playing),
+                    StageChromeStatus::new(&self.project_status, &self.export_status),
+                ),
                 self.playhead,
             )?;
         }
@@ -2002,6 +2011,91 @@ impl ProductApp {
             }
             self.toggle_playback()?;
         }
+        loop {
+            let save = match &self.stage_chrome {
+                Some(stage_chrome) => stage_chrome.take_save_project()?,
+                None => false,
+            };
+            if !save {
+                break;
+            }
+            self.save_project()?;
+        }
+        loop {
+            let export = match &self.stage_chrome {
+                Some(stage_chrome) => stage_chrome.take_export_project()?,
+                None => false,
+            };
+            if !export {
+                break;
+            }
+            self.start_export()?;
+        }
+        Ok(())
+    }
+
+    fn save_project(&mut self) -> Result<(), ProductRuntimeError> {
+        if let Err(error) = self.document_runtime.save_checkpoint() {
+            self.project_status = "SAVE ERROR".to_owned();
+            crate::ui_numeric_trace::emit(format_args!(
+                "kind=project action=save state=error error={error}"
+            ));
+            self.publish_stage_chrome(false)?;
+            self.request_redraw();
+            if matches!(&error, DocumentEditRuntimeError::SessionPoisoned) {
+                return Err(error.into());
+            }
+            return Ok(());
+        }
+        self.project_status = "SAVED".to_owned();
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=project action=save state=finished path={}",
+            self.document_runtime.project_path().display(),
+        ));
+        self.publish_stage_chrome(false)?;
+        self.request_redraw();
+        Ok(())
+    }
+
+    fn start_export(&mut self) -> Result<(), ProductRuntimeError> {
+        if self.export_in_flight {
+            return Ok(());
+        }
+        let document_path = self.document_runtime.project_path().to_owned();
+        let output_path = default_export_path(&document_path);
+        let project_root = document_path.parent().map(Path::to_path_buf);
+        let document = Arc::clone(&self.current_document);
+        let proxy = self.proxy.clone();
+        self.export_in_flight = true;
+        self.export_status = "EXPORTING".to_owned();
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=project action=export state=started input={} output={}",
+            document_path.display(),
+            output_path.display(),
+        ));
+        self.publish_stage_chrome(false)?;
+        self.request_redraw();
+        std::thread::Builder::new()
+            .name("motolii-product-export".to_owned())
+            .spawn(move || {
+                let result = (|| -> Result<ExportReport, String> {
+                    let gpu = GpuCtx::new_headless().map_err(|error| error.to_string())?;
+                    let runtime = motolii_plugins_firstparty::first_party_runtime()
+                        .map_err(|error| error.to_string())?;
+                    let job = ExportJob {
+                        doc: &document,
+                        runtime: &runtime,
+                        output_path: &output_path,
+                        project_root: project_root.as_deref(),
+                        frame_count: None,
+                        qp0: false,
+                        data_tracks: DataTracks::new(),
+                    };
+                    export_document_video(&gpu, &job).map_err(|error| error.to_string())
+                })();
+                let _ = proxy.send_event(ProductEvent::ExportFinished(result));
+            })
+            .map_err(|error| ProductRuntimeError::ExportSpawn(error.to_string()))?;
         Ok(())
     }
 
@@ -2575,6 +2669,8 @@ pub(crate) enum ProductRuntimeError {
     PlaybackDurationOverflow,
     #[error("playback buffer is too large for the host process")]
     PlaybackBufferOverflow,
+    #[error("product export worker could not be started: {0}")]
+    ExportSpawn(String),
     #[error("Browser instance epoch is exhausted")]
     BrowserInstanceEpochExhausted,
     #[error("Browser lifecycle coordinator is unavailable")]

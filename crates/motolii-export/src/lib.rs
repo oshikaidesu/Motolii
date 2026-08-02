@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use motolii_audio::{AudioProgram, CANONICAL_SAMPLE_RATE};
 use motolii_core::{
@@ -101,6 +101,12 @@ pub enum ExportError {
     DegradedPlugins(Vec<PluginDiagnostic>),
     #[error(transparent)]
     Audio(#[from] motolii_audio::AudioError),
+    #[error("atomic export publish failed for {path}")]
+    AtomicPublish {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
 }
 
 /// 書き出し設定。Document≠ExportJob(M2E-11⑤)。
@@ -219,6 +225,38 @@ pub fn export_overlay_video(
 
 /// Document → render graph 直結の書き出し(D3) + 楽曲mux(D6)。
 pub fn export_document_video(
+    gpu: &GpuCtx,
+    job: &ExportJob<'_>,
+) -> Result<ExportReport, ExportError> {
+    let staged_path = staged_export_path(job.output_path)?;
+    let staged_job = ExportJob {
+        doc: job.doc,
+        runtime: job.runtime,
+        output_path: &staged_path,
+        project_root: job.project_root,
+        frame_count: job.frame_count,
+        qp0: job.qp0,
+        data_tracks: job.data_tracks.clone(),
+    };
+    let result = export_document_video_inner(gpu, &staged_job);
+    match result {
+        Ok(report) => std::fs::rename(&staged_path, job.output_path)
+            .map_err(|source| {
+                let _ = std::fs::remove_file(&staged_path);
+                ExportError::AtomicPublish {
+                    path: job.output_path.to_owned(),
+                    source,
+                }
+            })
+            .map(|_| report),
+        Err(error) => {
+            cleanup_staged_outputs(&staged_path);
+            Err(error)
+        }
+    }
+}
+
+fn export_document_video_inner(
     gpu: &GpuCtx,
     job: &ExportJob<'_>,
 ) -> Result<ExportReport, ExportError> {
@@ -582,6 +620,31 @@ fn ensure_asset_reader<'a>(
     }
 }
 
+fn staged_export_path(output_path: &Path) -> Result<PathBuf, ExportError> {
+    let parent = output_path.parent().unwrap_or_else(|| Path::new("."));
+    let stem = output_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .ok_or(ExportError::InvalidRequest(
+            "output_path must have a file name",
+        ))?;
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| ExportError::InvalidRequest("system clock is before UNIX epoch"))?
+        .as_nanos();
+    Ok(parent.join(format!(
+        ".{stem}.motolii-export-{}-{nonce}.mp4",
+        std::process::id()
+    )))
+}
+
+fn cleanup_staged_outputs(staged_path: &Path) {
+    let _ = std::fs::remove_file(staged_path);
+    let _ = std::fs::remove_file(staged_path.with_extension("video-only.tmp.mp4"));
+    let _ = std::fs::remove_file(staged_path.with_extension("mixed.tmp.wav"));
+}
+
 fn resolve_export_frame_desc(
     doc: &Document,
     project_root: Option<&Path>,
@@ -591,7 +654,14 @@ fn resolve_export_frame_desc(
         collect_video_assets_from_items(&track.items, &mut found);
     }
     let Some(asset_id) = found else {
-        return Err(ExportError::NoVideoSource);
+        // Local AlphaのRectangle-only作品は、既定のHD面へ直接レンダする。
+        return Ok(FrameDesc::packed(
+            1920,
+            1080,
+            PixelFormat::Rgba8Unorm,
+            ColorSpace::Srgb,
+            true,
+        ));
     };
     let asset = doc
         .assets

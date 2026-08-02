@@ -15,8 +15,42 @@ const HEADER_URL: &str = "motolii-stage://product/stage-header.html";
 const TRANSPORT_URL: &str = "motolii-stage://product/stage-transport.html";
 const MAX_PENDING_EASING_OPENS: usize = 8;
 const MAX_PENDING_PLAYBACK_TOGGLES: usize = 8;
+const MAX_PENDING_PROJECT_ACTIONS: usize = 8;
 
 type StageChromeWake = Arc<dyn Fn() + Send + Sync>;
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct StageChromeStatus<'a> {
+    pub(crate) project: &'a str,
+    pub(crate) export: &'a str,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct StageChromeProjection<'a> {
+    pub(crate) easing_pressed: bool,
+    pub(crate) playing: bool,
+    pub(crate) status: StageChromeStatus<'a>,
+}
+
+impl<'a> StageChromeProjection<'a> {
+    pub(crate) const fn new(
+        easing_pressed: bool,
+        playing: bool,
+        status: StageChromeStatus<'a>,
+    ) -> Self {
+        Self {
+            easing_pressed,
+            playing,
+            status,
+        }
+    }
+}
+
+impl<'a> StageChromeStatus<'a> {
+    pub(crate) const fn new(project: &'a str, export: &'a str) -> Self {
+        Self { project, export }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct OpenEasingRequest {
@@ -77,6 +111,21 @@ struct TogglePlaybackMessage {
 }
 
 #[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProjectActionMessage {
+    #[serde(rename = "kind")]
+    _kind: ProjectActionKind,
+}
+
+#[derive(Debug, serde::Deserialize)]
+enum ProjectActionKind {
+    #[serde(rename = "save-project")]
+    SaveProject,
+    #[serde(rename = "export-project")]
+    ExportProject,
+}
+
+#[derive(Debug, serde::Deserialize)]
 enum TogglePlaybackKind {
     #[serde(rename = "toggle-play")]
     TogglePlay,
@@ -98,6 +147,26 @@ impl TogglePlaybackInbox {
         let _: TogglePlaybackMessage = serde_json::from_str(raw)?;
         if self.pending.len() >= MAX_PENDING_PLAYBACK_TOGGLES {
             return Err(StageChromeIntentError::PlaybackInboxFull);
+        }
+        self.pending.push_back(());
+        Ok(())
+    }
+
+    fn take(&mut self) -> bool {
+        self.pending.pop_front().is_some()
+    }
+}
+
+#[derive(Debug, Default)]
+struct ProjectActionInbox {
+    pending: VecDeque<()>,
+}
+
+impl ProjectActionInbox {
+    fn accept(&mut self, raw: &str) -> Result<(), StageChromeIntentError> {
+        let _: ProjectActionMessage = serde_json::from_str(raw)?;
+        if self.pending.len() >= MAX_PENDING_PROJECT_ACTIONS {
+            return Err(StageChromeIntentError::ProjectInboxFull);
         }
         self.pending.push_back(());
         Ok(())
@@ -183,6 +252,8 @@ impl OpenEasingInbox {
 pub(crate) struct StageChromeHostRuntime {
     easing_inbox: Arc<Mutex<OpenEasingInbox>>,
     playback_inbox: Arc<Mutex<TogglePlaybackInbox>>,
+    save_inbox: Arc<Mutex<ProjectActionInbox>>,
+    export_inbox: Arc<Mutex<ProjectActionInbox>>,
     wake: Arc<Mutex<Option<StageChromeWake>>>,
     header: WebView,
     transport: WebView,
@@ -202,8 +273,7 @@ impl StageChromeHostRuntime {
             document,
             selected_position_key,
             projection_generation,
-            false,
-            false,
+            StageChromeProjection::new(false, false, StageChromeStatus::new("READY", "READY")),
             0,
             playhead,
         )?;
@@ -218,12 +288,16 @@ subscribe:(next)=>{{if(typeof next!=="function"||listener!==null)throw new TypeE
 publish:(next)=>{{current=next;if(listener!==null)listener(current);}},
 setLayoutEpoch:(layoutEpoch)=>{{current=Object.freeze({{...current,layoutEpoch}});if(listener!==null)listener(current);}},
 openEasing:(interval,anchor)=>window.ipc.postMessage(JSON.stringify({{kind:"open-easing",layerId:interval.layerId,leftKeyId:interval.leftKeyId,rightKeyId:interval.rightKeyId,projectionGeneration:interval.projectionGeneration,layoutEpoch:current.layoutEpoch,anchor:{{x:anchor.x,y:anchor.y,width:anchor.width,height:anchor.height}}}})),
-togglePlayback:()=>window.ipc.postMessage(JSON.stringify({{kind:"toggle-play"}}))
+togglePlayback:()=>window.ipc.postMessage(JSON.stringify({{kind:"toggle-play"}})),
+saveProject:()=>window.ipc.postMessage(JSON.stringify({{kind:"save-project"}})),
+exportProject:()=>window.ipc.postMessage(JSON.stringify({{kind:"export-project"}}))
 }});
 }})();"#
         );
         let easing_inbox = Arc::new(Mutex::new(OpenEasingInbox::new(expected)));
         let playback_inbox = Arc::new(Mutex::new(TogglePlaybackInbox::new()));
+        let save_inbox = Arc::new(Mutex::new(ProjectActionInbox::default()));
+        let export_inbox = Arc::new(Mutex::new(ProjectActionInbox::default()));
         let wake = Arc::new(Mutex::new(None::<StageChromeWake>));
         let header = build_stage_webview(
             window,
@@ -234,6 +308,8 @@ togglePlayback:()=>window.ipc.postMessage(JSON.stringify({{kind:"toggle-play"}})
         )?;
         let callback_inbox = Arc::clone(&easing_inbox);
         let callback_playback = Arc::clone(&playback_inbox);
+        let callback_save = Arc::clone(&save_inbox);
+        let callback_export = Arc::clone(&export_inbox);
         let callback_wake = Arc::clone(&wake);
         let transport = build_stage_webview(
             window,
@@ -241,7 +317,13 @@ togglePlayback:()=>window.ipc.postMessage(JSON.stringify({{kind:"toggle-play"}})
             &initialization_script,
             "stage-transport",
             Some(Box::new(move |raw| {
-                let accepted = accept_stage_message(raw, &callback_inbox, &callback_playback);
+                let accepted = accept_stage_message(
+                    raw,
+                    &callback_inbox,
+                    &callback_playback,
+                    &callback_save,
+                    &callback_export,
+                );
                 match accepted {
                     Ok(()) => {
                         if let Ok(wake) = callback_wake.lock() {
@@ -261,6 +343,8 @@ togglePlayback:()=>window.ipc.postMessage(JSON.stringify({{kind:"toggle-play"}})
         Ok(Self {
             easing_inbox,
             playback_inbox,
+            save_inbox,
+            export_inbox,
             wake,
             header,
             transport,
@@ -298,21 +382,35 @@ togglePlayback:()=>window.ipc.postMessage(JSON.stringify({{kind:"toggle-play"}})
             .take())
     }
 
+    pub(crate) fn take_save_project(&self) -> Result<bool, StageChromeIntentError> {
+        Ok(self
+            .save_inbox
+            .lock()
+            .map_err(|_| StageChromeIntentError::InboxPoisoned)?
+            .take())
+    }
+
+    pub(crate) fn take_export_project(&self) -> Result<bool, StageChromeIntentError> {
+        Ok(self
+            .export_inbox
+            .lock()
+            .map_err(|_| StageChromeIntentError::InboxPoisoned)?
+            .take())
+    }
+
     pub(crate) fn publish(
         &self,
         document: &motolii_doc::Document,
         selected_position_key: Option<(motolii_doc::LayerId, motolii_doc::KeyframeId)>,
         projection_generation: u64,
-        easing_pressed: bool,
-        playing: bool,
+        projection: StageChromeProjection<'_>,
         playhead: RationalTime,
     ) -> Result<(), StageChromeHostRuntimeError> {
         let (snapshot, expected) = snapshot_json(
             document,
             selected_position_key,
             projection_generation,
-            easing_pressed,
-            playing,
+            projection,
             self.latest_layout_epoch.unwrap_or(0),
             playhead,
         )?;
@@ -413,8 +511,7 @@ fn snapshot_json(
     document: &motolii_doc::Document,
     selected_position_key: Option<(motolii_doc::LayerId, motolii_doc::KeyframeId)>,
     projection_generation: u64,
-    easing_pressed: bool,
-    playing: bool,
+    projection: StageChromeProjection<'_>,
     layout_epoch: u64,
     playhead: RationalTime,
 ) -> Result<(serde_json::Value, Option<OpenEasingIdentity>), serde_json::Error> {
@@ -448,8 +545,10 @@ fn snapshot_json(
             "tempoStatus": "120 BPM · SNAP BEAT",
             "qualityStatus": "DRAFT · FP16 · 1/2",
             "activeInterval": active_interval,
-            "easingPressed": easing_pressed,
-            "playing": playing,
+            "easingPressed": projection.easing_pressed,
+            "playing": projection.playing,
+            "projectStatus": projection.status.project,
+            "exportStatus": projection.status.export,
             "layoutEpoch": layout_epoch,
         }),
         expected,
@@ -481,11 +580,21 @@ fn accept_stage_message(
     raw: &str,
     easing_inbox: &Arc<Mutex<OpenEasingInbox>>,
     playback_inbox: &Arc<Mutex<TogglePlaybackInbox>>,
+    save_inbox: &Arc<Mutex<ProjectActionInbox>>,
+    export_inbox: &Arc<Mutex<ProjectActionInbox>>,
 ) -> Result<(), StageChromeIntentError> {
     let value = serde_json::from_str::<serde_json::Value>(raw)?;
     let kind = value.get("kind").and_then(serde_json::Value::as_str);
     match kind {
         Some("toggle-play") => playback_inbox
+            .lock()
+            .map_err(|_| StageChromeIntentError::InboxPoisoned)?
+            .accept(raw),
+        Some("save-project") => save_inbox
+            .lock()
+            .map_err(|_| StageChromeIntentError::InboxPoisoned)?
+            .accept(raw),
+        Some("export-project") => export_inbox
             .lock()
             .map_err(|_| StageChromeIntentError::InboxPoisoned)?
             .accept(raw),
@@ -508,6 +617,8 @@ pub(crate) enum StageChromeIntentError {
     InboxFull,
     #[error("Stage chrome playback intent inbox is full")]
     PlaybackInboxFull,
+    #[error("Stage chrome project action inbox is full")]
+    ProjectInboxFull,
     #[error("Stage chrome easing intent inbox is unavailable")]
     InboxPoisoned,
 }
@@ -612,6 +723,18 @@ mod tests {
         assert!(!inbox.take());
         assert!(matches!(
             inbox.accept(r#"{"kind":"toggle-play","extra":true}"#),
+            Err(StageChromeIntentError::Json(_))
+        ));
+    }
+
+    #[test]
+    fn project_actions_are_strict_and_bounded() {
+        let mut inbox = ProjectActionInbox::default();
+        inbox.accept(r#"{"kind":"save-project"}"#).unwrap();
+        assert!(inbox.take());
+        assert!(!inbox.take());
+        assert!(matches!(
+            inbox.accept(r#"{"kind":"export-project","extra":true}"#),
             Err(StageChromeIntentError::Json(_))
         ));
     }

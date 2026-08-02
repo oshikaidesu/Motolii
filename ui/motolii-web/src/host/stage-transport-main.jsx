@@ -26,6 +26,8 @@ function StageTransportScreen() {
   };
 
   const togglePlay = () => bridge.togglePlayback();
+  const saveProject = () => bridge.saveProject();
+  const exportProject = () => bridge.exportProject();
 
   return (
     <main className="stage-standalone-screen stage-transport-screen">
@@ -36,6 +38,10 @@ function StageTransportScreen() {
         qualityStatus={snapshot.qualityStatus}
         playing={snapshot.playing}
         togglePlay={togglePlay}
+        projectStatus={snapshot.projectStatus}
+        exportStatus={snapshot.exportStatus}
+        saveProject={saveProject}
+        exportProject={exportProject}
         easingTrigger={(
           <span
             className="easing-trigger-seat"
