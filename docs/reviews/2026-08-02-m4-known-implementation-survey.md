@@ -90,6 +90,10 @@ snapshotをpublishし、新しいrecipe keyを生成することがgeneration切
   `available_space/statvfs/allocation_granularity`を`ADOPT-PROBE`する。
 - **薄い残余**: owner、tier、resident/pinned、要求量を既存resource生成点から一つのadmission inputへ
   翻訳する。これは製品policy adapterであり、汎用allocator／resource frameworkを新設しない。
+- **probe結果(2026-08-02)**: `crates/motolii-testkit/tests/m4_p04_fs4.rs`で既存directory／fileのfree space・allocation
+  granularityとmissing pathのtyped errorを3 fixtureで確認し、macOS host実行がgreen。`cargo check --locked`は
+  `x86_64-pc-windows-gnu`、`aarch64-apple-darwin`、`x86_64-unknown-linux-gnu`で通過した。`VERIFIED`は観測APIの採択を意味し、
+  hard budget／admission／eviction／Document failureはprivate ownerの未実装責任として残す。
 
 ### 3.5 disk artifact、atomic commit、corrupt→miss
 

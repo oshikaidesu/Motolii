@@ -49,7 +49,7 @@
 | 子 | 状態 | 閉じるもの |
 |---|---|---|
 | `P03-C1` | `ADOPTION_PROBE` | feature closure、Mac/Windows、external handle込みusage、全pin、drop、並行性 |
-| `P04-C4` | `ADOPTION_PROBE` | `fs4 1.1.0`の3 OS build、free-space failure、allocation granularity |
+| `P04-C4` | `VERIFIED` | `fs4 1.1.0`のfree-space／allocation granularity観測、missing path typed error、3 target cross-build |
 | `P05-C1` | `ADOPTION_PROBE` | `tempfile 3.27.0`、single writer、FFmpeg temp、atomic visibility、integrity、lazy scan、hard budget |
 | `P06-C1` | `REMAP / VERIFIED` | half-open integer timebase、coalesce、gap、境界overflow。raw empty rangeはpanicするためprivate guardを必須化 |
 | `P07-C1` | `REMAP / VERIFIED` | MPL-2.0選択、reprioritize/remove/pop、composite priorityによるdeterministic ordering。bounded admissionとgeneration filterはprivate owner |
@@ -144,8 +144,9 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 
 #### `P04-C4` disk watermark probe
 
-- **結果**: `fs4 1.1.0`のsync APIでfree spaceとallocation granularityを読み、失敗時の保守fallbackを固定する。
-- **oracle**: 3 OS build、permission/error、fake filesystem境界、Document/Project failure化0。
+- **結果**: `fs4 1.1.0`のsync APIで既存directory／fileのfree spaceとallocation granularityを観測し、missing pathをtyped errorとして確認した。
+- **証拠**: `crates/motolii-testkit/tests/m4_p04_fs4.rs`の3 fixtureがmacOS hostでgreen。`cargo check --locked`を`x86_64-pc-windows-gnu`、`aarch64-apple-darwin`、`x86_64-unknown-linux-gnu`で通過させた。
+- **判定**: `VERIFIED`。fs4は観測だけを肩代わりし、hard budget、admission、eviction、Document/Project failureはMotolii private ownerに残す。cross-buildは各OSのruntime permission挙動を証明しないため、製品fallbackの実機保証とは分離する。
 
 ### M4-P05-DISK — verified recipe artifact store
 

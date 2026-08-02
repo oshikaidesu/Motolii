@@ -58,6 +58,7 @@ serde_json = "1"
 sha2 = "0.10"
 rangemap = "=1.7.1"
 priority-queue = { package = "priority-queue", version = "=2.7.0", default-features = false, features = ["std"] }
+fs4 = { version = "=1.1.0", default-features = false, features = ["sync"] }
 bytemuck = { version = "1", features = ["derive"] }
 fontique = "0.10"
 harfrust = "0.7"
