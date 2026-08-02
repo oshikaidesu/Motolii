@@ -453,3 +453,5 @@
 | [2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md](2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | CU-201 U3b move/trim/snap責任分割決定 |
 | [2026-08-01-cu-201m-s-clip-start-command-contract-decision.md](2026-08-01-cu-201m-s-clip-start-command-contract-decision.md) | CU-201M-S Clip start command契約決定 |
 | [2026-08-01-cu-201t-s-clip-trim-timemap-contract-decision.md](2026-08-01-cu-201t-s-clip-trim-timemap-contract-decision.md) | CU-201T-S Clip trim / TimeMap契約決定 |
+| [2026-08-03-cu-201n-s-snap-target-contract-decision.md](2026-08-03-cu-201n-s-snap-target-contract-decision.md) | CU-201N-S snap target / priority / unit契約決定 |
+| [2026-08-03-cu-201p-target-gap-observation.md](2026-08-03-cu-201p-target-gap-observation.md) | CU-201P native Timeline gesture target gap観察 |

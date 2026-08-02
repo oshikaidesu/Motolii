@@ -134,7 +134,7 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 | `P02-C2` | `DONE` | `document_edit_runtime` 33/33、製品Place/Timeline/Inspector/Undo delivery 9/9、writer境界 4/4を再実行。既存routeのみ | 全surfaceが同じpublished snapshotを読む |
 | `P02-C3` | `TARGET_MISSING` | selection成立済み部分を除き、essential focusまたはplayhead consumerを一件特定 | UI stateをDocumentへ保存せず一方向publish |
 | `P03-C1` | `DONE` | `crates/motolii-ui/tests/timeline_projection.rs::p12_hundred_thousand_keys_cull_to_visible_identity`で100k keyの狭域projectionとtyped identityを確認。renderer本体は変更しない | visible outputがbounded |
-| `P03-C2` | `WAIT_CONFLICT` | `P02-C1`の対象command完成後、move/trimのどちらか一gestureだけ | drag中write 0、release 1 Undo |
+| `P03-C2` | `TARGET_MISSING` | `CU-201P`調査でStage placement用pointer captureとTimeline click選択はあるが、Timeline drag→D2 requestのowner/codec/terminal targetが無い | drag中write 0、release 1 Undo |
 | `P03-C3` | `TARGET_MISSING` | visible-range consumerとnavigation CommandIdを一つ特定 | selection/focus/playheadが同一projection |
 | `P04-C1` | `DONE` | なし。`U4a-1`〜`CU-205E`を再実装しない | first-party parameterの通常編集route |
 | `P04-C2` | `TARGET_MISSING` | active interval read model、outgoing Interp D2 command、Host codec、React consumerを前ownerへ分離 | easing変更が1 command / 1 Undo |
@@ -163,7 +163,8 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 ## 5. 現在開始できるtask
 
 `CU-201T-S`の意味閉鎖により開始された`CU-201T-C`は、実装 `a860e10e`、oracle補強 `c2eda847`、targeted test/fmt/clippy greenをもって完了した。
-次に開始できる最小粒は、snapの恒久意味だけを閉じるdocs-only `CU-201N-S`である。`P03-C1-VERIFY`は独立だが、直列速度測定中は同時開始しない。
+`CU-201N-S`で既存`TimelineKey`/`TimelineBar`だけを候補へ採用し、key優先、stable identity tie-break、transient `RationalTime` threshold、no-snapを固定した。
+`P03-C1-VERIFY`とP02-C2は既存routeの確認として閉じた。PRODUCT `CU-201P`は、[CU-201P target gap observation](reviews/2026-08-03-cu-201p-target-gap-observation.md)のとおり、Timeline drag→D2 requestの実在target不足で`WAIT_TARGET`に戻す。Stage placementのpointer captureを流用した実装は開始しない。
 
 ### 5.1 `CU-201T-C` — trim command接続
 
