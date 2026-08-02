@@ -452,3 +452,4 @@
 | [2026-08-02-u4b0p-product-add-position-key-connection-decision.md](2026-08-02-u4b0p-product-add-position-key-connection-decision.md) | U4b-0P Add Position Key通常製品接続決定 |
 | [2026-08-02-u3a-2q-v-ordinary-timeline-viewport-decision.md](2026-08-02-u3a-2q-v-ordinary-timeline-viewport-decision.md) | U3a-2Q-V ordinary Timeline viewport決定 |
 | [2026-08-02-cu-206c-ordinary-timeline-viewport-implementation-decision.md](2026-08-02-cu-206c-ordinary-timeline-viewport-implementation-decision.md) | CU-206C ordinary Timeline viewport接続実装 |
+| [2026-08-02-m3-local-alpha-goal-line-owner-inventory.md](2026-08-02-m3-local-alpha-goal-line-owner-inventory.md) | 固定Mac Local Alphaゴール線の既知target owner棚卸し（CU-5A04前倒しなし） |
