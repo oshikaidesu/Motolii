@@ -1,6 +1,6 @@
 # M3 実行可能発注地図
 
-状態: **施工前コンパイル正本 / 2026-08-01停止simulation反映**
+状態: **施工前コンパイル正本 / 2026-08-02 current branch同期**
 
 ## 1. 目的
 
@@ -11,6 +11,10 @@
 2026-08-01の4子フローsimulationでは、供給routeが決まっていても次の不足がある子を`READY`と呼ぶと、
 実装担当が既存adapterを物理移動したり、存在しないtyped snapshotを新設したりすることが分かった。
 したがって「既知解がある」と「いま実装orderを発行できる」を別状態にする。
+
+2026-08-02に、current branch `codex/m3-local-alpha-20260801` の既存receiptを再照合した。
+`CU-201T-C`（trim command）、`CU-201E`（move/trim/snap通常製品gesture）、`U4b-1P`
+（Easing通常製品接続）は既に閉じているため、下表で同じ粒を再発行しない。
 
 ## 2. 発注コンパイラ
 
@@ -130,14 +134,14 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 | `P01-C2` | `TARGET_MISSING` | 固定sourceの未移管componentをsurface別に一件特定し、実コードからdynamic transitionのowner/input/intent/stale ruleを埋める | product単一owner、mockはconsumer |
 | `P01-C3` | `TARGET_MISSING` | Browser以外で欠けるrole別epoch/reload callbackを一件特定 | crash/reload後に同じsnapshotを再投影 |
 | `P01-C4` | `SPEC_ONLY` | detach時のWorkspace codecとtop-level再生成境界を一問で固定 | layoutを復元してDocument不変 |
-| `P02-C1` | `IMPLEMENT` | `CU-201T-S`で閉じた`TrimClipIn` / `TrimClipOut`を`CU-201T-C`で既存D2へ接続 | trimがjournal replay可能で1 Undo |
+| `P02-C1` | `REDUCE` | `CU-201T-C`は完了済み。残るDelete/Duplicate/Rename/Paste command family（`CU-401A/B`）は別の既存scopeが閉じた時だけ再コンパイルし、trimを再発行しない | trimはjournal replay可能で1 Undo。残余commandは未選定 |
 | `P02-C2` | `VERIFY_ONLY` | 既存journal→apply→publish routeの失敗oracleを再実行。理由なく再構成しない | 全surfaceが同じpublished snapshotを読む |
 | `P02-C3` | `TARGET_MISSING` | selection成立済み部分を除き、essential focusまたはplayhead consumerを一件特定 | UI stateをDocumentへ保存せず一方向publish |
 | `P03-C1` | `VERIFY_ONLY` | 100k key狭域projectionと同名label/typed identity oracle。renderer本体を再実装しない | visible workがbounded |
-| `P03-C2` | `WAIT_CONFLICT` | `P02-C1`の対象command完成後、move/trimのどちらか一gestureだけ | drag中write 0、release 1 Undo |
+| `P03-C2` | `DONE` | なし。`CU-201E`の通常製品move/trim/snap receiptを再施工しない | drag中write 0、release 1 Undo、同じLayerIdでreopen |
 | `P03-C3` | `TARGET_MISSING` | visible-range consumerとnavigation CommandIdを一つ特定 | selection/focus/playheadが同一projection |
 | `P04-C1` | `DONE` | なし。`U4a-1`〜`CU-205E`を再実装しない | first-party parameterの通常編集route |
-| `P04-C2` | `TARGET_MISSING` | active interval read model、outgoing Interp D2 command、Host codec、React consumerを前ownerへ分離 | easing変更が1 command / 1 Undo |
+| `P04-C2` | `DONE` | なし。`U4b-1C` / `U4b-1P`のactive interval・outgoing Interp・native popup接続を再施工しない | easing変更が1 command / 1 Undo、stale/cancelは変更0 |
 | `P04-C3` | `TARGET_MISSING` | `CU-204P`へ渡す実在normal operation source | 実providerの診断を既存Feedbackへ投影 |
 | `P05-C1` | `TARGET_MISSING` | 現行Stage表示を除き、off-frame/Stage Viewの未成立targetを一つ特定 | 同じcamera/worldでframe内外を表示 |
 | `P05-C2` | `SPEC_ONLY` | camera/object targetと既存D2 commandの写像を一問で固定 | 直接操作が1 gesture / 1 Undo |
@@ -162,17 +166,18 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 
 ## 5. 現在発行できるorder
 
-`CU-201T-S`の意味閉鎖により、製品codeを変更する最初の`IMPLEMENT`として`CU-201T-C`を発行できる。
-`P03-C1-VERIFY`は独立だが、直列速度測定中は同時発行しない。
+`CU-201T-C`は既に完了している。`P03-C1-VERIFY`は既存routeを変えない独立確認候補だが、
+Local Alpha全長の`P11-C1`を前進させる実装orderではない。G04/G05の未決policyを埋めるorderや、
+`CU-5A04`を名乗るためのfixture集約は発行しない。
 
-### 5.1 `CU-201T-C` — trim command接続
+### 5.1 `CU-201T-C` — trim command接続（完了済み記録）
 
 ```text
 INPUT:
   CU-201T-S TrimClipIn / TrimClipOut contract
   existing SetClipStart command / Writer / undo / JournalEdit v2 route
 
-IMPLEMENT:
+IMPLEMENT (already closed):
   two explicit command variants and distinct merge properties
   Writer prepare from new left/right edge
   atomic apply / inverse / merge / v2 replay

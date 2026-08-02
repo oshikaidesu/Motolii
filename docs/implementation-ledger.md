@@ -119,7 +119,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 ## 現在の並列レーン
 
-現在sliceは**VS-2 parameter editing / timeline interval editing**で、正常系`CU-205E`、move command実装`CU-201M-C`、trim意味`CU-201T-S`まで`DONE`。`CU-204P`は通常source 0の再確認後、新source成立まで再監査・実装を反復しない。現時点で選定済みの次粒はCORE `CU-201T-C`。後続は[M3既知技術採択・並列実装地図](m3-parallel-implementation-map.md)から、共有writer、event loop、GPU device、bundle publicationが衝突しない子を複数選定できる。
+現在sliceは**VS-2 parameter editing / timeline interval editing**で、正常系`CU-205E`、`CU-201M-C`、`CU-201T-S`、`CU-201T-C`、`CU-201E`まで`DONE`。`CU-204P`は通常source 0の再確認後、新source成立まで再監査・実装を反復しない。固定Mac Local Alpha全長は既存`CU-5A04/P11-C1`が`WAIT_CONFLICT`で、G04/G05の未決policyを埋める新orderやreceipt集約は選定しない。次粒は既存依存のauthority・code事実・oracleが閉じた時だけ、既存IDから再選定する。後続は[M3既知技術採択・並列実装地図](m3-parallel-implementation-map.md)から、共有writer、event loop、GPU device、bundle publicationが衝突しない子を選定する。
 現在の全lane、変更path、STOP、Human Response Frontierは
 [並列レーン着手地図](reviews/2026-07-25-parallel-lane-readiness-map.md)を正とする。
 旧night 3分岐は直接統合しない。
