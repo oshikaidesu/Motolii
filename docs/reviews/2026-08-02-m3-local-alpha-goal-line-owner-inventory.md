@@ -46,3 +46,11 @@ activity、recovery機構は本棚卸しから発明しない。`CU-5A04`を名�
 oracleまで閉じた時だけ、その既存IDを再選定する。依存が閉じない間に行えるのは、既存receiptの
 再検証または正本docsの同期に限り、Local Alpha全長の完了とは報告しない。
 
+## 2026-08-02 監査記録（Fable read-only照会後）
+
+- 現在のbranch `codex/m3-local-alpha-20260801` / `0cb55444`はcleanである。
+- 上表のreceiptは各区間の証拠であり、全長を閉じる受領書ではない。各receiptの縮小範囲を読み合わせずに
+  9段のcoverageやM3 Local Alpha完了へ集約しない。
+- 全長の既知正本targetは`CU-5A04/P11-C1`だけだが、上記依存が未解決のため`WAIT_CONFLICT`を維持する。
+- 本記録は監査入力であり、`CU-5A04`の完了・部分完了、実装発注、dispatch変更を意味しない。依存の
+  いずれかが正本・owner・原因・oracleまで閉じた時にだけ、その既存IDを再選定する。
