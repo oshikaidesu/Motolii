@@ -11,9 +11,15 @@ accounting、RoD／RoI、generation／invalidation、階層退避、proxy、back
 bake、全曲Draft、corrupt→missを機構classとして先に調査し、具体file／API／algorithm、license、thread
 model、owner、failure mode、platform条件と採択方式をM4採択地図へ閉じる。
 
+2026-08-02に[M4既知実装調査](../reviews/2026-08-02-m4-known-implementation-survey.md)と
+[M4既知実装採択・並列実装地図](../m4-known-implementation-adoption-map.md)の初版を作成した。13親へ
+検索入口をまとめ、RAM、verified disk artifact、区間集合、priority collection、disk watermark、SVG接続、copy-outを
+個別の`ADOPTION_PROBE`へ分けた。これは依存採択やruntime実装完了ではない。
+
 K0〜K8はMotoliiの意味、負例、候補依存を保持する入力であり、調査前の実装順ではない。K0のtest-only
 契約凍結は維持するが、K1a以後を独自ResourceLedger／cache store／schedulerへ自動接続しない。
-**M4の次の開発成果は既知実装調査と採択地図であり、地図が閉じる前に製品runtime実装を発注しない。**
+**M4の次の開発成果は地図のWave Aにある採択probeである。probe不合格を独自実装の許可にせず、
+採択後もimplementation ledgerへ一意な`DO`が載る前に製品runtimeを発注しない。**
 
 ## 目的(退治する落とし穴)
 

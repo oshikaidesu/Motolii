@@ -12,6 +12,7 @@ algorithm、license、thread model、owner、failure mode、platform条件と採
 P0I〜P7はMotoliiのworld、identity、互換、操作、oracleを保持する入力であり、独自3D engine、scene
 framework、text stack、gizmo frameworkを作る実装列ではない。意味decisionとtest-only fixtureは進められるが、
 **M5の製品runtime実装は既知実装調査と採択地図が閉じるまで発注しない。**
+候補、具体API、非証明範囲、M4との共通接合部は[M5既知実装調査](../reviews/2026-08-02-m5-known-implementation-survey.md)に集約する。
 
 ## 目的(退治する落とし穴)
 
