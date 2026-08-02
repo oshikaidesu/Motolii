@@ -19,6 +19,9 @@ impl winit::application::ApplicationHandler<crate::product_runtime::ProductEvent
 
     fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         self.poll_browser(event_loop);
+        if let Some(retry_at) = self.request_auxiliary_redraw() {
+            event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(retry_at));
+        }
     }
 
     fn window_event(

@@ -1,6 +1,9 @@
 //! G0-9受入済みmodelを通常製品windowから開くprivate native wgpu popup。
 
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use glyphon::{
     Attrs, Buffer, Cache, Color, Family, FontSystem, Metrics, Resolution, Shaping, SwashCache,
@@ -21,6 +24,8 @@ use crate::easing_popup_model::{
 };
 use crate::stage_chrome_host_runtime::OpenEasingRequest;
 
+const POPUP_RETRY_DELAY: Duration = Duration::from_millis(50);
+
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct ScreenUniform {
@@ -37,6 +42,7 @@ struct PreparedText {
 }
 
 struct PopupGfx {
+    window: Arc<Window>,
     surface: wgpu::Surface<'static>,
     gpu: Arc<motolii_gpu::GpuCtx>,
     config: wgpu::SurfaceConfiguration,
@@ -205,6 +211,7 @@ impl PopupGfx {
             None,
         );
         let mut gfx = Self {
+            window: Arc::clone(window),
             surface,
             gpu,
             config,
@@ -308,16 +315,16 @@ impl PopupGfx {
             .map_err(|_| EasingPopupError::TextPrepare)
     }
 
-    fn render(&mut self) -> Result<(), EasingPopupError> {
+    fn render(&mut self) -> Result<bool, EasingPopupError> {
         let frame = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            wgpu::CurrentSurfaceTexture::Success(frame) => frame,
+            wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
             wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
-                return Ok(())
+                return Ok(false)
             }
             wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
                 self.surface.configure(&self.gpu.device, &self.config);
-                return Ok(());
+                return Ok(false);
             }
             wgpu::CurrentSurfaceTexture::Validation => return Err(EasingPopupError::SurfaceFrame),
         };
@@ -361,8 +368,9 @@ impl PopupGfx {
                 .map_err(|_| EasingPopupError::TextRender)?;
         }
         self.gpu.queue.submit([encoder.finish()]);
+        self.window.pre_present_notify();
         frame.present();
-        Ok(())
+        Ok(true)
     }
 }
 
@@ -377,6 +385,8 @@ pub(crate) struct EasingPopupRuntime {
     next_drag_token: u64,
     visual: PopupVisualState,
     received_focus: bool,
+    needs_redraw: bool,
+    retry_at: Option<Instant>,
 }
 
 pub(crate) struct EasingPopupOpen<'a> {
@@ -469,7 +479,7 @@ impl EasingPopupRuntime {
             session.hot_resource_creation_count,
         ));
         let mut gfx = PopupGfx::new(instance, adapter, gpu, &window, &session, &store, visual)?;
-        gfx.render()?;
+        let needs_redraw = !gfx.render()?;
         window.focus_window();
         window.request_redraw();
         Ok(Self {
@@ -483,6 +493,8 @@ impl EasingPopupRuntime {
             next_drag_token: 1,
             visual,
             received_focus: false,
+            needs_redraw,
+            retry_at: None,
         })
     }
 
@@ -516,7 +528,12 @@ impl EasingPopupRuntime {
                     .configure(&self.gfx.gpu.device, &self.gfx.config);
                 self.refresh()?;
             }
-            EasingPopupInput::RedrawRequested => self.gfx.render()?,
+            EasingPopupInput::RedrawRequested => {
+                self.needs_redraw = !self.gfx.render()?;
+                self.retry_at = self
+                    .needs_redraw
+                    .then(|| Instant::now() + POPUP_RETRY_DELAY);
+            }
             EasingPopupInput::CursorMoved {
                 physical_x,
                 physical_y,
@@ -601,9 +618,26 @@ impl EasingPopupRuntime {
     fn refresh(&mut self) -> Result<(), EasingPopupError> {
         self.gfx
             .update_scene(&self.session, &self.store, self.visual)?;
-        self.gfx.render()?;
-        self.window.request_redraw();
+        self.needs_redraw = !self.gfx.render()?;
+        self.retry_at = self
+            .needs_redraw
+            .then(|| Instant::now() + POPUP_RETRY_DELAY);
         Ok(())
+    }
+
+    pub(crate) fn request_redraw_if_due(&mut self) -> Option<Instant> {
+        if !self.needs_redraw {
+            return None;
+        }
+        if self
+            .retry_at
+            .is_some_and(|retry_at| Instant::now() < retry_at)
+        {
+            return self.retry_at;
+        }
+        self.retry_at = None;
+        self.window.request_redraw();
+        None
     }
 }
 

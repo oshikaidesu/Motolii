@@ -1,7 +1,7 @@
 # U4b-1 製品Easing接続 実装記録
 
 作成日: 2026-08-02
-状態: **自動検証DONE / 通常Mac製品windowの人間E2E待ち**
+状態: **自動検証DONE / 通常Mac製品window人間E2E DONE**
 
 ## 1. 利用者成果
 
@@ -54,5 +54,6 @@ triggerからnative popupを開き、preset選択またはcurve dragをrelease�
 
 自動検証は、exact interval受理、stale / unknown / unprojected拒否、interval変更時queue破棄、
 popup modelのdrag / commit / cancel、React source ownershipと二重trigger不在を閉じる。
-通常Mac製品windowで2つのPosition keyを持つ実projectを開き、trigger表示、popup、preset / drag、
-Undo / Redo、Save / reopenまで目視・操作する人間E2Eは未実施であり、ここを製品受入の残線とする。
+通常Mac製品windowで2つのPosition keyを持つ実projectを開き、trigger表示、popup、Smooth preset、
+Undo / Redoを確認した。プロセスを閉じて同じprojectを再openし、`journal.wal` replay後もpopupのSmooth
+curveが復元されることを確認した。My Presets / FavoriteのUser settings永続化は本決定の非目標として残す。

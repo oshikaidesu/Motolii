@@ -2107,6 +2107,12 @@ impl ProductApp {
         }
     }
 
+    pub(crate) fn request_auxiliary_redraw(&mut self) -> Option<Instant> {
+        self.easing_popup
+            .as_mut()
+            .and_then(EasingPopupRuntime::request_redraw_if_due)
+    }
+
     pub(crate) fn resize(&mut self, event_loop: &ActiveEventLoop, width: u32, height: u32) {
         crate::ui_numeric_trace::emit(format_args!(
             "kind=window event=resize physical_width={} physical_height={}",
