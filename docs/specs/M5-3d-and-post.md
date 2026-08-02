@@ -4,6 +4,12 @@
 
 ## 実装前の既知実装調査
 
+現行の調査・検証入口は[M5 既知実装採択・検証地図](../m5-known-implementation-adoption-map.md)とする。
+ただし、M5の製品runtimeは[M5休止・M3意味開放契約](../reviews/2026-08-02-m5-pause-until-m3-semantic-release.md)に従い、
+M3の共有writer、通常製品route、snapshot／Stage／Preview／Export、独立受入・main統合が意味論として閉じるまで休止する。
+チケットIDや枝番の完了数ではなく、同契約の意味境界を開放判定に使う。M5の採択地図、decision recovery、private
+fixtureは保持するが、M3の共有契約をM5のprivate型から推測しない。
+
 M5は[既知実装採択・置換開発モデル](../known-implementation-adoption-model.md)に従う。scene／object
 representation、camera observation、spatial renderer、glTF import、depth、text、Vello局所pass、post
 effect、picking／gizmo／bounds、deterministic duplicationを機構classとして先に調査し、具体file／API／
@@ -11,7 +17,7 @@ algorithm、license、thread model、owner、failure mode、platform条件と採
 
 P0I〜P7はMotoliiのworld、identity、互換、操作、oracleを保持する入力であり、独自3D engine、scene
 framework、text stack、gizmo frameworkを作る実装列ではない。意味decisionとtest-only fixtureは進められるが、
-**M5の製品runtime実装は既知実装調査と採択地図が閉じるまで発注しない。**
+**M5の製品runtime実装は、既知実装調査・採択地図・M3意味開放がすべて閉じるまで発注しない。**
 候補、具体API、非証明範囲、M4との共通接合部は[M5既知実装調査](../reviews/2026-08-02-m5-known-implementation-survey.md)に集約する。
 
 ## 目的(退治する落とし穴)
@@ -151,7 +157,7 @@ M5は[操作単純化モデル](../interaction-simplicity-model.md)の最初の�
 | ID | 内容 | 依存 | 完了条件(概要) |
 |---|---|---|---|
 | P0I | [#170](https://github.com/oshikaidesu/Motolii/issues/170) **Cavalry型Instance/Behaviour境界spike+意味凍結**: Input Shapes、Distribution、per-instance channels、nested Contextを最小fixtureで再現し、`InstanceId != index`とdomain別Selectorを固定する。製品schema/APIはまだ追加しない | 凍結ゲート, [2026-07-15決定](../reviews/2026-07-15-relative-scope-duplicator-decision.md) | (1)Linear/Grid/Radial/Pathのslot key表 (2)count増減/並べ替え後も残存InstanceId由来seedとmotion sampleが同identityへ追従 (3)nested親子ID/context depth (4)TextCluster/Word/Line、ShapePath、CloneInstanceの寿命差 (5)Position/Rotation/Scale/Visibility/Opacity/Prototype/TimeOffset channel型 (6)cache依存完全列挙 (7)PCG32実装名/versionと`hash(user_seed,id,channel)`golden (8)OS entropy/時計/thread/GPU順を乱数入力にしない |
-| P1 | OSS leaf parserによるglTF／GLB読み込みとOBJ→同一private asset lowering。core metallic-roughness、unlit、vertex color、UV0/UV1、OPAQUE/MASK、source意図と構造化diagnosticを保持し、renderer capabilityへwhole-asset preflightする | 凍結ゲート, [M5-3D-R0決定](../reviews/2026-08-01-m5-3d-import-rendering-boundary-decision.md) | Khronos positive／malformed asset、required extension、missing／escape URI、oversize、axis／unit、node TRS animationのゴールデン。unsupportedを白material／texture欠落／別alphaへ無言変換しない。parser／image crateのversion・license・maintenance・3 OSを固定 |
+| P1 | OSS leaf parserによるglTF／GLB読み込みとOBJ→同一private asset lowering。core metallic-roughness、unlit、vertex color、UV0/UV1、OPAQUE/MASK、source意図と構造化diagnosticを保持し、renderer capabilityへwhole-asset preflightする | 凍結ゲート, [M5-3D-R0決定](../reviews/2026-08-01-m5-3d-import-rendering-boundary-decision.md)。[M5-A1 private probe](../reviews/evidence/m5-known-implementation/M5-A1/README.md)は`gltf`／`mikktspace`をKEEPしたが製品依存・Importerは未実装 | Khronos positive／malformed asset、required extension、missing／escape URI、oversize、axis／unit、node TRS animationのゴールデン。unsupportedを白material／texture欠落／別alphaへ無言変換しない。parser／image crateのversion・license・maintenance・3 OSを固定 |
 | P2 | 同じmesh／material／shader systemから3D系LayerSourcePlugin境界へ接続する。既存`PlanarOrthographic`を参照し、mesh／point cloud／video planeをlinear-light premultiplied RGBAへレンダする。lit glTFは固定neutral environment、unlitは別BRDFを通さない | P1, M2-D1j/D1k/D3f | 正投影ではZ差だけで視差なし、RGBAが通常Compositeで2D layerと合成、3D未使用compのpixel不変。metal／dielectric／normal／emissive／unlit、texture color semantic、MASK、Preview／Export、low-spec capability refusal、cold／warm resource計測をgolden／receipt固定。bare一灯、runtime自動縮退、二重rendererなし |
 | P3 | Camera Object／Provider／Observation Contractのdecision／schema／runtime統合。orientation補間、handedness／軸、projection／clip、target constraint特異点、Planar切替、初期capability閉集合、provider identity／version pin、active binding Document形、bounds／picking参加を先に固定 | P2 | Spatial／Perspective providerでZを持つ平面がcamera移動により視差するgolden、camera animation E2E、既存Planar project／pixel不変、Preview／Export同一、単一active binding。独立した二Camera Providerとmesh／point rendererが具体provider IDなしで同じObservationを使い、capability不足／provider欠落／version不一致は型付き拒否・Document不変・黙示Planar fallbackなし。provider換装は全体preflight後1 Undo、失敗時変更ゼロ。Camera／renderer間のprivate型、生JSON、opaque ID、scene-aware camera、camera-aware scene format、first-party専用口が構文不能 |
 | P2D | 拡張可能な遮蔽ポリシー境界+組み込み`Layer Order / Group Depth / AE-style Bins`。通常UIは`Z Occlusion` OFF/ON、Advancedは全ポリシーと明示`Depth Participant`を表示 | P1, P3, M2-D1j/D1k/D3f, M3-U2c, M3-U4c, M4-K0 | (1)同じ座標の2平面が`Layer Order`ではレイヤー順、`Group Depth`ではZ交差で前後反転 (2)3D-2D-3D fixtureで明示参加フラグだけがbinを分断 (3)effect/mask/typeは無言でbinを変えない (4)切替前後で座標/見かけ投影/Document子順/Undo/選択不変 (5)group外はピクセル不変 (6)opaque/cutout/soft alphaの対応・拒否が明示 (7)未知/非対応ポリシーを無言fallbackしない (8)Advanced非表示でも適用ポリシーとbin境界を識別可能 (9)Unknown boundsをsort/cull根拠にせずFinalを切らない |

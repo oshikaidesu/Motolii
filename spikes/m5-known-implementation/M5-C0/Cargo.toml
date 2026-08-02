@@ -1,0 +1,11 @@
+[package]
+name = "m5-c0-observation-semantics"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+glam = { version = "=0.33.2", default-features = false, features = ["std"] }
+thiserror = "=2.0.16"

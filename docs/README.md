@@ -35,8 +35,9 @@
 | ファイル | 役割 | 状態 |
 |---|---|---|
 | [concept.md](concept.md) | コンセプト定義・決定事項の台帳 | 現行(決定はここに追記される) |
-| [known-implementation-adoption-model.md](known-implementation-adoption-model.md) | M3〜M5共通の既知実装調査、採択地図、薄い接続、独自負債置換・退役の開発順序 | **横断開発原則**(2026-08-02。M3適用済み、M4初版地図作成済み、M5はこれから) |
+| [known-implementation-adoption-model.md](known-implementation-adoption-model.md) | M3〜M5共通の既知実装調査、採択地図、薄い接続、独自負債置換・退役の開発順序 | **横断開発原則**(2026-08-02。M3適用済み、M4/M5採択地図確定) |
 | [m4-known-implementation-adoption-map.md](m4-known-implementation-adoption-map.md) | M4の13親、既知実装route、詳細子、採択probe、並列wave、旧負債の退役境界 | **初版採択地図／runtime未発注**(2026-08-02) |
+| [m5-known-implementation-adoption-map.md](m5-known-implementation-adoption-map.md) | M5の10機構class、採択route、12実装子、private検証、decision recovery順序 | **技術採択決定／private検証DONE／製品runtimeはM3意味開放待ち**(2026-08-02) |
 | [M4既知実装調査](reviews/2026-08-02-m4-known-implementation-survey.md) | M4のcache／resource／disk artifact／区間／background job／proxy／SVG候補を具体APIまで比較 | **比較中**(採択probe前。候補比較だけFable助言を再照合済み) |
 | [M4 disk artifact store再検索](reviews/2026-08-02-m4-disk-artifact-store-resurvey.md) | dormantなcacache後の候補を再検索し、global CASを過剰仕様としてverified recipe file storeへ縮小 | **縮小採用**(2026-08-02。tempfile採択probe前) |
 | [M5既知実装調査](reviews/2026-08-02-m5-known-implementation-survey.md) | M5の3D math／import／depth／bounds／text／identity候補を既存ownerへ割り当てる比較 | **比較中**(反対側レビューと採択probe前) |

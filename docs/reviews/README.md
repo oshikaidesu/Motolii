@@ -52,6 +52,12 @@
 | [2026-08-01-vism-semantic-sdk-cavalry-translation-decision.md](2026-08-01-vism-semantic-sdk-cavalry-translation-decision.md) | CavalryのPath／Mesh／Context／Deformer／Particle先例を、言語より長寿命な意味型、純粋operation、明示capability、Host責任へ翻訳するVism意味SDK決定 |
 | [2026-08-01-sdk-s0-path2d-semantic-fixture-spec.md](2026-08-01-sdk-s0-path2d-semantic-fixture-spec.md) | SDK-S0S — 既存M2 PathOpをnative oracleにする`Path2D → Path2D`意味fixture責任仕様 |
 | [2026-08-01-vsm-a4s-external-crate-author-scaffold-spec.md](2026-08-01-vsm-a4s-external-crate-author-scaffold-spec.md) | VSM-A4S — 外部crate作者scaffold責任仕様 |
+| [2026-08-02-m5-a0s-decision-recovery.md](2026-08-02-m5-a0s-decision-recovery.md) | M5-A0S — 後発3D import／Render Contribution資料7 blobの縮小採用・観察・棄却と、runtime前の停止線 |
+| [2026-08-02-m5-c0-observation-preflight.md](2026-08-02-m5-c0-observation-preflight.md) | M5-C0 — Planar／Spatial Observationの実在target、未決公開境界、M4 K1a依存、仕様化前の停止線 |
+| [2026-08-02-m5-c0-observation-contract-decision.md](2026-08-02-m5-c0-observation-contract-decision.md) | M5-C0 — 初期projective Observationの意味、Host／Provider責任、拒否・換装oracle、schema/runtime分割 |
+| [2026-08-02-m5-c0-schema-preflight.md](2026-08-02-m5-c0-schema-preflight.md) | M5-C0 — 公開型・serde／wire・Document version・provider identityの実在target再照合と仕様化停止線 |
+| [2026-08-02-m5-pause-until-m3-semantic-release.md](2026-08-02-m5-pause-until-m3-semantic-release.md) | M5 — M3の意味論が開放されるまで製品runtimeを休止し、IDではなく共有writer・通常route・snapshot・出力・受入意味で再開判定する契約 |
+| [M5-C0 private Observation semantics receipt](evidence/m5-known-implementation/M5-C0/README.md) | M5-C0 — `glam` private semantic fixtureの射影、typed refusal、provider換装oracle（5/5） |
 | [2026-07-09-R1-export-review.md](2026-07-09-R1-export-review.md) | コードレビュー所見 2026-07-09 (R1/Quality・export・cli周辺) |
 | [2026-07-09-R3-datatrack-review.md](2026-07-09-R3-datatrack-review.md) | コードレビュー所見 2026-07-09 (R3/DataTrack統合) |
 | [2026-07-10-M1-plugin-boundary-review.md](2026-07-10-M1-plugin-boundary-review.md) | 設計レビュー所見 2026-07-10 (M1完了後・プラグイン境界の凍結前監査) |
