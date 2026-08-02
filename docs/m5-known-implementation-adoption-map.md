@@ -183,14 +183,14 @@ read-onlyで相談した。出力は採択authorityや検収判定ではなく�
 | M5-R2 | Group Depth opaque／cutout | Render Contribution決定を`REUSE` | Host depth policy→same material system | Z交差、cutout、soft alpha typed refusal、group外不変 | P3 Observation＋resource gates |
 | M5-C0 | PlanarとSpatialのObservation decision | Camera Provider決定を`REUSE`、`glam` private leaf | Host camera eval→typed Observation | provider 2種、3 OS golden、capability拒否、Planar pixel不変 | A0S後、public API前 |
 | M5-T0 | P6 run APIと条件付きParley採否を比較 | Fontique／HarfRust／Vello `REUSE`、Parley itemize比較 | new private `motolii-text` leaf→Vello | CJK＋Latin＋emoji＋RTL、fallback、cluster、variation、missing glyph diagnostic | **DONE / KEEP + REDUCE**。[receipt](reviews/evidence/m5-known-implementation/M5-T0/README.md)。手書きitemize禁止。variationは固定variable font待ち。公開契約は比較後 |
-| M5-P0 | Blur/LGG/grain algorithm survey＋fixture | wgpu `REUSE`、既知shader `PATTERN` | filter graph／pipeline cache | RoI radius、Unknown全域、linear、Draft/Final | M4 K0/K1。Vello非依存 |
+| M5-P0 | Blur/LGG/grain algorithm survey＋fixture | wgpu `REUSE`、既知shader `PATTERN` | filter graph／pipeline cache | RoI radius、Unknown全域、linear、Draft/Final | **DONE / KEEP（algorithm contract）**。[receipt](reviews/evidence/m5-known-implementation/M5-P0/README.md)。GPU pass／M4 ownerは未接続 |
 | M5-I0 | dense object picking比較 | `obvhs`／owned flat BVH／Rerun-style async GPU | Stage projection→Transient selection | 10k object moving camera、stale generation、readback stall 0、same semantic ID | C0＋bounds contract。`parry3d`非採択 |
 | M5-D0 | stable instance evaluator | P0I/P7 decision、`rand_pcg`、owned stable mixer | input shape→slot key→InstanceId→channels | count増減／reorder／nested／thread順／3 OSでidentityとgolden vector不変 | schema前にtest-only meaning fixture |
 
 ## 8. 推奨順序
 
 1. **技術採択**: `M5-A0T`として本地図を確定する。**DONE**。
-2. **独立検証**: `M5-A1`、`M5-R0`、`M5-T0`は**DONE**。`M5-P0`、`M5-I0`、`M5-D0`を
+2. **独立検証**: `M5-A1`、`M5-R0`、`M5-T0`、`M5-P0`は**DONE**。`M5-I0`、`M5-D0`を
   このbranch上で一粒一commitとして閉じる。依存しない粒は並行可能だがdiffを束ねない。
 3. **意味decision recovery**: `M5-A0S`で`416aa2c2`と`33e957df`を現行mainへ処分する。
 4. **意味decision**: 検証証拠からP1/P2境界、C0 Observation、scene-color format／resource gateを閉じる。
