@@ -119,7 +119,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 ## 現在の並列レーン
 
-現在sliceは**VS-2 parameter editing / timeline interval editing**で、正常系`CU-205E`、move command実装`CU-201M-C`、trim command実装`CU-201T-C`、Timeline bounded projection確認`P03-C1`まで`DONE`。`CU-204P`は通常source 0の再確認後、新source成立まで再監査・実装を反復しない。現時点で選定済みの次粒はPRODUCT `CU-201P`。後続は[M3既知技術採択・並列実装地図](m3-parallel-implementation-map.md)から、共有writer、event loop、GPU device、bundle publicationが衝突しない子を複数選定できる。
+現在sliceは**VS-2 parameter editing / timeline interval editing**で、正常系`CU-205E`、move command実装`CU-201M-C`、trim command実装`CU-201T-C`、Timeline bounded projection確認`P03-C1`まで`DONE`。`CU-204P`は通常source 0の再確認後、新source成立まで再監査・実装を反復しない。`CU-201P`は既決のmove/trim/snap意味を持つが、Timeline drag→既存D2 requestのowner/codec/terminal targetが現行codeに無く`WAIT_TARGET`を維持する。親M3を止めない次の一契約は、既知の`rfd`採択probeに限定した`P06-C1-MAC`である。共有writer、event loop、GPU device、bundle publicationを変更せず、実Mac外部gate到達前に製品接続へ進まない。
 現在の全lane、変更path、STOP、Human Response Frontierは
 [並列レーン着手地図](reviews/2026-07-25-parallel-lane-readiness-map.md)を正とする。
 旧night 3分岐は直接統合しない。
@@ -254,6 +254,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | PRODUCT-ASSET | P03-C1 | M3 / VS-2 / VERIFY / bounded Timeline projection | `DONE` | — | `p12_hundred_thousand_keys_cull_to_visible_identity`、`cargo test -p motolii-ui --test timeline_projection` 25/25 | renderer/product runtime変更0。CU-201Pへ戻る |
 | PRODUCT-ASSET | P02-C2 | M3 / VS-2 / VERIFY / journal apply publish failure oracle | `DONE` | — | `document_edit_runtime` 33/33、製品Place/Timeline/Inspector/Undo delivery 9/9、writer boundary 4/4 | 既存D2/journal/publish route変更0 |
 | PRODUCT-ASSET | P01-C1 | M3 / VS-2 / VERIFY / runtime integration seam | `DONE` | — | 単一`ApplicationHandler<ProductEvent>`、単一`run_app`、`raw_input_boundary` 5/5、`u1a1_static_viewport` 3/3 | adapter移動・coordinator追加0 |
+| PRODUCT-ASSET | P06-C1-MAC | M3 / P06 / ADOPTION_PROBE / fixed Mac native file-dialog seam | `ACTIVE / EXTERNAL_GATE_PENDING` | [P06-C1-MAC rfd採択probe観察](reviews/2026-08-03-p06-c1-mac-rfd-adoption-probe-observation.md) | `MECHANISM CLASS`: native file dialog + parent/thread/cancel boundary。`KNOWN IMPLEMENTATION`: `rfd` 0.17.2 `FileDialog`/`AsyncFileDialog` + existing `motolii-media::probe_container`。`ADOPTION ROUTE`: `ADOPT`（probe only）。`THIN MOTOLII RESIDUAL`: file-kind admission、typed missing/corrupt/unsupported mapping、read-only probe。`RETIREMENT`: custom dialog/filesystem watcher 0。`BUILD: FORBIDDEN`。isolated host/`aarch64-apple-darwin` compileはPASS、実Macのparent/selection/Cancelは外部gate待ち | product Cargo、Document/Undo、public API、persistence、shared writer変更0。外部gate完了後だけP06-C2をvideo-onlyへREDUCE |
 | PRODUCT | CU-201P | M3 / VS-2 / native Timeline interval gesture | `WAIT_TARGET` | [CU-201P target gap observation](reviews/2026-08-03-cu-201p-target-gap-observation.md) | `TimelineHit`/Stage placement pointer captureは存在するが、Timeline drag→D2 requestのowner/codec/terminal targetが不在 | target成立前のgesture/action/coordinator新設0 |
 | ORACLE-GUARD | CU-201R | M3 / VS-2 / random move trim sequence | `WAIT` | [CU-201S責任分割](reviews/2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | CU-201P | 重複0、相対位置、全Undo、Cancel 0 |
 | E2E | CU-201E | M3 / VS-2 / normal product move trim reopen | `WAIT` | [CU-201S責任分割](reviews/2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | CU-201R | same identity、保存interval、UI drag state非永続 |
