@@ -31,6 +31,8 @@ const BAR: Color = Color::from_rgba8(204, 149, 135, 255);
 const BAR_TEXT: Color = Color::from_rgba8(26, 27, 28, 255);
 const SELECTED: Color = Color::from_rgba8(250, 191, 92, 255);
 const PLAYHEAD: Color = Color::from_rgba8(242, 77, 87, 255);
+const TIMELINE_PIXELS_PER_SECOND: f64 = 80.0;
+const TIMELINE_ROW_HEIGHT: f64 = 34.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct TimelineIntervalPreview {
@@ -58,6 +60,8 @@ pub(crate) struct NativeTimelineRenderer {
     overlay_pipeline: wgpu::RenderPipeline,
     width: u32,
     height: u32,
+    timeline_horizontal_start: RationalTime,
+    timeline_vertical_offset: f64,
 }
 
 impl NativeTimelineRenderer {
@@ -162,7 +166,22 @@ impl NativeTimelineRenderer {
             overlay_pipeline,
             width: width.max(1),
             height: height.max(1),
+            timeline_horizontal_start: RationalTime::ZERO,
+            timeline_vertical_offset: 0.0,
         })
+    }
+
+    pub(crate) fn set_timeline_viewport(
+        &mut self,
+        timeline_horizontal_start: RationalTime,
+        timeline_vertical_offset: f64,
+    ) {
+        self.timeline_horizontal_start = timeline_horizontal_start;
+        self.timeline_vertical_offset = if timeline_vertical_offset.is_finite() {
+            timeline_vertical_offset
+        } else {
+            0.0
+        };
     }
 
     pub(crate) fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
@@ -198,15 +217,17 @@ impl NativeTimelineRenderer {
         queue: &wgpu::Queue,
         input: TimelinePrepareInput<'_>,
     ) -> Result<TimelineSceneStats, NativeTimelineRendererError> {
-        let (scene, stats) = build_scene(
-            &self.font,
-            input.layout,
-            input.document,
-            input.projection,
-            input.primary,
-            input.playhead,
-            input.interval_preview,
-        )?;
+        let scene_input = TimelineSceneInput {
+            layout: input.layout,
+            document: input.document,
+            projection: input.projection,
+            timeline_horizontal_start: self.timeline_horizontal_start,
+            timeline_vertical_offset: self.timeline_vertical_offset,
+            primary: input.primary,
+            playhead: input.playhead,
+            interval_preview: input.interval_preview,
+        };
+        let (scene, stats) = build_scene(&self.font, scene_input)?;
         self.renderer.render_to_texture(
             device,
             queue,
@@ -229,6 +250,29 @@ impl NativeTimelineRenderer {
         pass.set_scissor_rect(0, 0, self.width, self.height);
         pass.draw(0..6, 0..1);
     }
+}
+
+#[derive(Clone, Copy)]
+struct TimelineSceneInput<'a> {
+    layout: NativeHostLayout,
+    document: &'a Document,
+    projection: &'a TimelineProjection,
+    timeline_horizontal_start: RationalTime,
+    timeline_vertical_offset: f64,
+    primary: Option<LayerId>,
+    playhead: RationalTime,
+    interval_preview: Option<TimelineIntervalPreview>,
+}
+
+#[derive(Clone, Copy)]
+struct TimelineGeometryViewport {
+    time_x: f64,
+    visible_width: f64,
+    visible_top: f64,
+    horizontal_start: f64,
+    row_height: f64,
+    content_y: f64,
+    visible_height: f64,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -286,13 +330,18 @@ impl TimelineFont {
 
 fn build_scene(
     font: &TimelineFont,
-    layout: NativeHostLayout,
-    document: &Document,
-    projection: &TimelineProjection,
-    primary: Option<LayerId>,
-    playhead: RationalTime,
-    interval_preview: Option<TimelineIntervalPreview>,
+    input: TimelineSceneInput<'_>,
 ) -> Result<(Scene, TimelineSceneStats), NativeTimelineRendererError> {
+    let TimelineSceneInput {
+        layout,
+        document,
+        projection,
+        timeline_horizontal_start,
+        timeline_vertical_offset,
+        primary,
+        playhead,
+        interval_preview,
+    } = input;
     let (Some(timeline), Some(timeline_logical)) = (layout.timeline_physical, layout.timeline)
     else {
         return Ok((Scene::new(), TimelineSceneStats::default()));
@@ -309,13 +358,21 @@ fn build_scene(
     let native_x = (x + key_tools_width).min(right);
     let time_x = (native_x + rail_width).min(right);
     let content_y = (y + header_height + ruler_height).min(bottom);
+    let Some(time_surface) = timeline_time_surface_logical_rect(layout) else {
+        return Ok((Scene::new(), TimelineSceneStats::default()));
+    };
+    let visible_span = (time_surface.width / TIMELINE_PIXELS_PER_SECOND).max(0.0);
+    let visible_bottom = timeline_vertical_offset + time_surface.height;
     let row_count = projection
         .bars()
         .iter()
         .map(|bar| bar.band as usize + 1)
         .max()
         .unwrap_or(1);
-    let row_height = ((bottom - content_y) / row_count as f64).max(1.0);
+    let row_height = TIMELINE_ROW_HEIGHT * scale;
+    let visible_top = timeline_vertical_offset;
+    let horizontal_start = timeline_horizontal_start.as_seconds_f64();
+    let visible_width = time_surface.width * scale;
 
     let mut scene = Scene::new();
     let mut text_runs = 0;
@@ -365,7 +422,7 @@ fn build_scene(
         &mut scene,
         time_x,
         y + header_height,
-        right - time_x,
+        visible_width,
         ruler_height,
         BG,
     );
@@ -405,8 +462,13 @@ fn build_scene(
         ACTIVE,
     )?;
 
-    for tick in 0..=16 {
-        let tick_x = time_x + (right - time_x) * f64::from(tick) / 16.0;
+    let tick_count = visible_span.ceil().max(1.0) as usize;
+    for tick in 0..=tick_count {
+        let tick_seconds = tick as f64;
+        let tick_x = time_x + tick_seconds * TIMELINE_PIXELS_PER_SECOND * scale;
+        if tick_x > time_x + visible_width {
+            continue;
+        }
         let major = tick % 4 == 0;
         let tick_height = if major { 8.0 } else { 4.0 } * scale;
         fill(
@@ -433,7 +495,7 @@ fn build_scene(
             text_runs += draw_text(
                 &mut scene,
                 font,
-                &(tick / 4).to_string(),
+                &format!("{:.2}", horizontal_start + tick_seconds),
                 tick_x + 3.0 * scale,
                 y + 43.0 * scale,
                 8.0 * scale,
@@ -443,66 +505,94 @@ fn build_scene(
     }
 
     for row in 0..row_count {
-        let row_y = content_y + row as f64 * row_height;
+        let row_y_logical = f64::from(row as u32) * TIMELINE_ROW_HEIGHT;
+        let row_visible_top = row_y_logical;
+        let row_visible_bottom = row_visible_top + TIMELINE_ROW_HEIGHT;
+        if row_visible_bottom <= visible_top || row_visible_top >= visible_bottom {
+            continue;
+        }
+        let row_y = content_y + (row_y_logical - visible_top) * scale;
+        let content_bottom = content_y + time_surface.height * scale;
+        let row_bottom = row_y + row_height;
+        if row_bottom <= content_y || row_y >= content_bottom {
+            continue;
+        }
+        let separator_y =
+            (row_bottom - scale.max(1.0)).clamp(content_y, content_bottom - scale.max(1.0));
         fill(
             &mut scene,
             native_x,
-            row_y + row_height - scale.max(1.0),
+            separator_y,
             right - native_x,
             scale.max(1.0),
             LINE,
         );
-        outline(
-            &mut scene,
-            native_x + 7.0 * scale,
-            row_y + 7.0 * scale,
-            18.0 * scale,
-            18.0 * scale,
-            LINE,
-            scale.max(1.0),
-        );
-        outline(
-            &mut scene,
-            native_x + 29.0 * scale,
-            row_y + 7.0 * scale,
-            18.0 * scale,
-            18.0 * scale,
-            LINE,
-            scale.max(1.0),
-        );
-        text_runs += draw_text(
-            &mut scene,
-            font,
-            "S",
-            native_x + 13.0 * scale,
-            row_y + 19.0 * scale,
-            8.0 * scale,
-            INK,
-        )?;
-        text_runs += draw_text(
-            &mut scene,
-            font,
-            "M",
-            native_x + 35.0 * scale,
-            row_y + 19.0 * scale,
-            8.0 * scale,
-            INK,
-        )?;
+        let button_y = row_y + 7.0 * scale;
+        if button_y >= content_y && button_y + 18.0 * scale <= content_bottom {
+            outline(
+                &mut scene,
+                native_x + 7.0 * scale,
+                button_y,
+                18.0 * scale,
+                18.0 * scale,
+                LINE,
+                scale.max(1.0),
+            );
+            outline(
+                &mut scene,
+                native_x + 29.0 * scale,
+                button_y,
+                18.0 * scale,
+                18.0 * scale,
+                LINE,
+                scale.max(1.0),
+            );
+        }
+        let label_y = row_y + 19.0 * scale;
+        if label_y >= content_y && label_y <= content_bottom {
+            text_runs += draw_text(
+                &mut scene,
+                font,
+                "S",
+                native_x + 13.0 * scale,
+                label_y,
+                8.0 * scale,
+                INK,
+            )?;
+            text_runs += draw_text(
+                &mut scene,
+                font,
+                "M",
+                native_x + 35.0 * scale,
+                label_y,
+                8.0 * scale,
+                INK,
+            )?;
+        }
     }
 
     for bar in projection.bars() {
         let preview = interval_preview.filter(|preview| preview.layer == bar.layer);
-        let draw_bar = preview.map_or(*bar, |preview| {
-            let duration = document.composition.duration.as_seconds_f64();
-            TimelineBar {
-                x_start: preview.start.as_seconds_f64() / duration,
-                x_end: preview.end.as_seconds_f64() / duration,
-                ..*bar
-            }
-        });
-        let Some(geometry) =
-            timeline_bar_geometry(time_x, right, content_y, row_height, scale, &draw_bar)
-        else {
+        let mut draw_bar = *bar;
+        if let Some(preview) = preview {
+            draw_bar.start = preview.start;
+            draw_bar.end = preview.end;
+        }
+        if !band_visible(f64::from(draw_bar.band), visible_top, visible_bottom) {
+            continue;
+        }
+        let Some(geometry) = timeline_bar_geometry(
+            TimelineGeometryViewport {
+                time_x,
+                visible_width,
+                visible_top,
+                horizontal_start,
+                row_height,
+                content_y,
+                visible_height: time_surface.height * scale,
+            },
+            &draw_bar,
+        ) else {
             continue;
         };
         fill(
@@ -578,9 +668,22 @@ fn build_scene(
     }
 
     for key in projection.keys() {
-        let key_x = time_x + key.center_x.clamp(0.0, 1.0) * (right - time_x);
-        let key_y = content_y + f64::from(key.band) * row_height + row_height / 2.0;
+        if !band_visible(f64::from(key.band), visible_top, visible_bottom) {
+            continue;
+        }
+        let key_x = time_x
+            + (key.t.as_seconds_f64() - horizontal_start) * TIMELINE_PIXELS_PER_SECOND * scale;
+        if !key_x.is_finite() || key_x < time_x || key_x > time_x + visible_width {
+            continue;
+        }
+        let key_y = content_y
+            + (f64::from(key.band) * TIMELINE_ROW_HEIGHT - visible_top) * scale
+            + row_height / 2.0;
         let radius = 4.0 * scale;
+        let key_y = key_y.clamp(
+            content_y + radius,
+            content_y + time_surface.height * scale - radius,
+        );
         let diamond = vello::kurbo::BezPath::from_iter([
             vello::kurbo::PathEl::MoveTo((key_x, key_y - radius).into()),
             vello::kurbo::PathEl::LineTo((key_x + radius, key_y).into()),
@@ -590,7 +693,14 @@ fn build_scene(
         ]);
         scene.fill(Fill::NonZero, Affine::IDENTITY, INK, None, &diamond);
     }
-    let playhead_x = playhead_logical_x(time_x, right, playhead, document.composition.duration);
+    let playhead_x = playhead_logical_x(
+        visible_span,
+        time_x,
+        time_x + visible_width,
+        playhead,
+        timeline_horizontal_start,
+        scale,
+    );
     fill(
         &mut scene,
         playhead_x,
@@ -612,39 +722,73 @@ fn build_scene(
 }
 
 fn playhead_logical_x(
+    visible_span: f64,
     time_x: f64,
     right: f64,
     playhead: RationalTime,
-    duration: RationalTime,
+    horizontal_start: RationalTime,
+    scale: f64,
 ) -> f64 {
-    let duration = duration.as_seconds_f64();
-    let normalized = if duration > 0.0 {
-        playhead.as_seconds_f64() / duration
-    } else {
-        0.0
-    };
-    time_x + normalized.clamp(0.0, 1.0) * (right - time_x)
+    if !visible_span.is_finite() || visible_span <= 0.0 || scale <= 0.0 {
+        return time_x;
+    }
+    let clamped_seconds = (playhead.as_seconds_f64() - horizontal_start.as_seconds_f64())
+        .max(0.0)
+        .min(visible_span);
+    (time_x + clamped_seconds * TIMELINE_PIXELS_PER_SECOND * scale).clamp(time_x, right)
 }
 
 fn timeline_bar_geometry(
-    time_x: f64,
-    right: f64,
-    content_y: f64,
-    row_height: f64,
-    scale: f64,
+    viewport: TimelineGeometryViewport,
     bar: &TimelineBar,
 ) -> Option<TimelineBarGeometry> {
-    let x = time_x + bar.x_start.clamp(0.0, 1.0) * (right - time_x);
-    let bar_right = time_x + bar.x_end.clamp(0.0, 1.0) * (right - time_x);
-    let y = content_y + f64::from(bar.band) * row_height + 5.0 * scale;
+    let TimelineGeometryViewport {
+        time_x,
+        visible_width,
+        visible_top,
+        horizontal_start,
+        row_height,
+        content_y,
+        visible_height,
+    } = viewport;
+    let scale = row_height / TIMELINE_ROW_HEIGHT;
+    if !time_x.is_finite() || !visible_width.is_finite() {
+        return None;
+    }
+    let bar_left = bar.start.as_seconds_f64() - horizontal_start;
+    let bar_right = bar.end.as_seconds_f64() - horizontal_start;
+    if !bar_left.is_finite() || !bar_right.is_finite() {
+        return None;
+    }
+    let x = time_x + bar_left * (TIMELINE_PIXELS_PER_SECOND * scale);
+    let bar_right = time_x + bar_right * (TIMELINE_PIXELS_PER_SECOND * scale);
+    if !x.is_finite() || !bar_right.is_finite() {
+        return None;
+    }
+    let y =
+        content_y + (f64::from(bar.band) * TIMELINE_ROW_HEIGHT - visible_top) * scale + 5.0 * scale;
     let height = (row_height - 10.0 * scale).max(12.0 * scale);
-    let width = bar_right - x;
-    (width > 0.0 && height > 0.0).then_some(TimelineBarGeometry {
-        x,
-        y,
-        width,
-        height,
+    let right = time_x + visible_width;
+    let bottom = content_y + visible_height;
+    let clipped_x = x.max(time_x);
+    let clipped_right = bar_right.min(right);
+    let clipped_y = y.max(content_y);
+    let clipped_bottom = (y + height).min(bottom);
+    if clipped_right <= clipped_x || clipped_bottom <= clipped_y {
+        return None;
+    }
+    (height > 0.0).then_some(TimelineBarGeometry {
+        x: clipped_x,
+        y: clipped_y,
+        width: clipped_right - clipped_x,
+        height: clipped_bottom - clipped_y,
     })
+}
+
+fn band_visible(row: f64, visible_top: f64, visible_bottom: f64) -> bool {
+    let bar_top = row * TIMELINE_ROW_HEIGHT;
+    let bar_bottom = bar_top + TIMELINE_ROW_HEIGHT;
+    bar_bottom > visible_top && bar_top < visible_bottom
 }
 
 fn fill(scene: &mut Scene, x: f64, y: f64, width: f64, height: f64, color: Color) {
@@ -844,39 +988,65 @@ mod tests {
         let bar = TimelineBar {
             layer: motolii_doc::LayerId::from_raw(1),
             start: motolii_core::RationalTime::ZERO,
-            end: motolii_core::RationalTime::ZERO,
+            end: motolii_core::RationalTime::try_new(5, 1).unwrap(),
             band: 0,
             x_start: 0.0,
             x_end: 1.0,
             y_top: 0.0,
             y_bottom: 1.0,
         };
-        let geometry = timeline_bar_geometry(256.0, 1_000.0, 55.0, 145.0, 1.0, &bar).unwrap();
+        let geometry = timeline_bar_geometry(
+            TimelineGeometryViewport {
+                time_x: 100.0,
+                visible_width: 800.0,
+                visible_top: 0.0,
+                horizontal_start: 0.0,
+                row_height: 34.0,
+                content_y: 55.0,
+                visible_height: 145.0,
+            },
+            &bar,
+        )
+        .unwrap();
 
-        assert_eq!(geometry.x, 256.0);
-        assert_eq!(geometry.x + geometry.width, 1_000.0);
+        assert_eq!(geometry.x, 100.0);
+        assert_eq!(geometry.x + geometry.width, 500.0);
         assert!(geometry.y >= 55.0);
         assert!(geometry.y + geometry.height <= 200.0);
     }
 
     #[test]
     fn playhead_x_uses_the_current_time_and_clamps_to_the_composition() {
-        let duration = RationalTime::try_new(10, 1).unwrap();
-
         assert_eq!(
-            playhead_logical_x(100.0, 500.0, RationalTime::ZERO, duration),
+            playhead_logical_x(
+                5.0,
+                100.0,
+                500.0,
+                RationalTime::ZERO,
+                RationalTime::ZERO,
+                1.0,
+            ),
             100.0
         );
         assert_eq!(
-            playhead_logical_x(100.0, 500.0, RationalTime::try_new(5, 1).unwrap(), duration,),
-            300.0
+            playhead_logical_x(
+                5.0,
+                100.0,
+                500.0,
+                RationalTime::try_new(5, 1).unwrap(),
+                RationalTime::ZERO,
+                1.0,
+            ),
+            500.0
         );
         assert_eq!(
             playhead_logical_x(
+                5.0,
                 100.0,
                 500.0,
                 RationalTime::try_new(12, 1).unwrap(),
-                duration,
+                RationalTime::ZERO,
+                1.0,
             ),
             500.0
         );
@@ -926,14 +1096,108 @@ mod tests {
 
         let (_, stats) = build_scene(
             &font,
-            layout,
-            &document,
-            &projection,
-            None,
-            RationalTime::ZERO,
-            None,
+            TimelineSceneInput {
+                layout,
+                document: &document,
+                projection: &projection,
+                timeline_horizontal_start: RationalTime::ZERO,
+                timeline_vertical_offset: 0.0,
+                primary: None,
+                playhead: RationalTime::ZERO,
+                interval_preview: None,
+            },
         )
         .unwrap();
         assert_eq!(stats, TimelineSceneStats::default());
+    }
+
+    #[test]
+    fn bar_geometry_uses_viewport_start_and_fixed_scale() {
+        let bar = TimelineBar {
+            layer: motolii_doc::LayerId::from_raw(1),
+            start: motolii_core::RationalTime::try_new(2, 1).unwrap(),
+            end: motolii_core::RationalTime::try_new(3, 1).unwrap(),
+            band: 1,
+            x_start: 0.0,
+            x_end: 1.0,
+            y_top: 0.0,
+            y_bottom: 1.0,
+        };
+        let geometry = timeline_bar_geometry(
+            TimelineGeometryViewport {
+                time_x: 100.0,
+                visible_width: 800.0,
+                visible_top: 0.0,
+                horizontal_start: 1.0,
+                row_height: 34.0,
+                content_y: 55.0,
+                visible_height: 145.0,
+            },
+            &bar,
+        )
+        .unwrap();
+        assert_eq!(geometry.x, 180.0);
+        assert_eq!(geometry.y, 94.0);
+        assert_eq!(geometry.width, 80.0);
+    }
+
+    #[test]
+    fn bar_geometry_clips_to_the_timeline_surface() {
+        let bar = TimelineBar {
+            layer: motolii_doc::LayerId::from_raw(1),
+            start: motolii_core::RationalTime::try_new(-1, 1).unwrap(),
+            end: motolii_core::RationalTime::try_new(2, 1).unwrap(),
+            band: 0,
+            x_start: 0.0,
+            x_end: 1.0,
+            y_top: 0.0,
+            y_bottom: 1.0,
+        };
+        let geometry = timeline_bar_geometry(
+            TimelineGeometryViewport {
+                time_x: 100.0,
+                visible_width: 160.0,
+                visible_top: 0.0,
+                horizontal_start: 0.0,
+                row_height: 34.0,
+                content_y: 55.0,
+                visible_height: 34.0,
+            },
+            &bar,
+        )
+        .unwrap();
+        assert_eq!(geometry.x, 100.0);
+        assert_eq!(geometry.width, 160.0);
+        assert!(geometry.y >= 55.0);
+        assert!(geometry.y + geometry.height <= 89.0);
+    }
+
+    #[test]
+    fn fixed_rows_keep_34_logical_pixels_at_retina_scale() {
+        let bar = TimelineBar {
+            layer: motolii_doc::LayerId::from_raw(1),
+            start: motolii_core::RationalTime::ZERO,
+            end: motolii_core::RationalTime::try_new(1, 1).unwrap(),
+            band: 24,
+            x_start: 0.0,
+            x_end: 1.0,
+            y_top: 0.0,
+            y_bottom: 1.0,
+        };
+        let geometry = timeline_bar_geometry(
+            TimelineGeometryViewport {
+                time_x: 100.0,
+                visible_width: 160.0,
+                visible_top: 0.0,
+                horizontal_start: 0.0,
+                row_height: 68.0,
+                content_y: 55.0,
+                visible_height: 25.0 * 68.0,
+            },
+            &bar,
+        )
+        .unwrap();
+        assert_eq!(geometry.y, 55.0 + 24.0 * 68.0 + 10.0);
+        assert!(geometry.height <= 68.0);
     }
 }

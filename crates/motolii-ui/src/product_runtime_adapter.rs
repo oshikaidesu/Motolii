@@ -40,6 +40,30 @@ impl winit::application::ApplicationHandler<crate::product_runtime::ProductEvent
             winit::event::WindowEvent::ScaleFactorChanged { .. } => {
                 self.scale_factor_changed(event_loop);
             }
+            winit::event::WindowEvent::CursorMoved { position, .. } => {
+                let scale_factor = self.window_scale_factor().unwrap_or(1.0);
+                let scale_factor = if scale_factor.is_finite() && scale_factor > 0.0 {
+                    scale_factor
+                } else {
+                    1.0
+                };
+                self.set_cursor([position.x / scale_factor, position.y / scale_factor]);
+                self.poll_host_input(event_loop);
+            }
+            winit::event::WindowEvent::MouseWheel { delta, .. } => {
+                match delta {
+                    winit::event::MouseScrollDelta::LineDelta(horizontal, vertical) => {
+                        self.scroll_timeline_line_delta([horizontal.into(), vertical.into()]);
+                    }
+                    winit::event::MouseScrollDelta::PixelDelta(delta) => {
+                        self.scroll_timeline_pixel_delta(
+                            [delta.x, delta.y],
+                            self.window_scale_factor().unwrap_or(1.0),
+                        );
+                    }
+                }
+                self.poll_host_input(event_loop);
+            }
             winit::event::WindowEvent::Occluded(occluded) => self.set_occluded(occluded),
             winit::event::WindowEvent::RedrawRequested => self.render(event_loop),
             _ => self.poll_host_input(event_loop),
