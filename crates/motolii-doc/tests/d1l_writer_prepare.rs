@@ -21,7 +21,7 @@ use motolii_doc::{
 };
 use motolii_eval::Interp;
 use motolii_plugin::reference::reference_catalog;
-use serde_json::Map;
+use serde_json::{Map, Value};
 
 fn reference_writer(doc: Document) -> DocumentWriter {
     DocumentWriter::new(doc, Arc::new(reference_catalog().unwrap())).unwrap()
@@ -759,6 +759,44 @@ fn find_track_item(doc: &Document, layer: LayerId) -> &TrackItem {
             TrackItem::Group(g) => g.envelope.layer_id == layer,
         })
         .unwrap_or_else(|| panic!("layer {} not found", layer.get()))
+}
+
+fn find_track_item_mut(doc: &mut Document, layer: LayerId) -> Option<&mut TrackItem> {
+    for track in &mut doc.tracks {
+        for item in &mut track.items {
+            let current_layer = match item {
+                TrackItem::Clip(clip) => clip.envelope.layer_id,
+                TrackItem::Group(group) => group.envelope.layer_id,
+            };
+            if current_layer == layer {
+                return Some(item);
+            }
+            if let TrackItem::Group(group) = item {
+                if let Some(found) = find_track_item_mut_in_group(group, layer) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn find_track_item_mut_in_group(group: &mut Group, layer: LayerId) -> Option<&mut TrackItem> {
+    for item in &mut group.children {
+        let current_layer = match item {
+            TrackItem::Clip(clip) => clip.envelope.layer_id,
+            TrackItem::Group(child_group) => child_group.envelope.layer_id,
+        };
+        if current_layer == layer {
+            return Some(item);
+        }
+        if let TrackItem::Group(child) = item {
+            if let Some(found) = find_track_item_mut_in_group(child, layer) {
+                return Some(found);
+            }
+        }
+    }
+    None
 }
 
 fn group_fixture() -> (Document, LayerId) {
@@ -1581,4 +1619,328 @@ fn trim_clip_allows_overlap_and_composition_end_boundary() {
         comp
     );
     out_working.validate().unwrap();
+}
+
+#[test]
+fn trim_clip_raw_rejection_precedence_conflicts_do_not_mutate_document() {
+    let (group_doc, group_layer) = group_fixture();
+    let mut group_working = group_doc.clone();
+    let group_in = Command::TrimClipIn {
+        target: group_layer,
+        old_start: RationalTime::try_new(0, 1).unwrap(),
+        old_duration: RationalTime::try_new(1, 1).unwrap(),
+        old_time_map: TimeMap::try_new(RationalTime::ZERO, 2, 1, motolii_core::OverrunMode::Freeze)
+            .unwrap(),
+        new_start: RationalTime::try_new(i64::MAX, 1).unwrap(),
+        new_duration: RationalTime::try_new(1, 1).unwrap(),
+        new_time_map: TimeMap::try_new(RationalTime::ZERO, 2, 1, motolii_core::OverrunMode::Freeze)
+            .unwrap(),
+    };
+    assert!(matches!(
+        group_in.apply(&mut group_working),
+        Err(CommandError::TrackItemNotClip { layer }) if layer == group_layer.get()
+    ));
+    assert_eq!(group_working, group_doc);
+
+    let (doc, layer) = layer_track_only_fixture();
+    let clip = clip_at(&doc, layer);
+    let mut non_positive = doc.clone();
+    let in_non_positive = Command::TrimClipIn {
+        target: layer,
+        old_start: clip.start,
+        old_duration: clip.duration,
+        old_time_map: clip.time_map,
+        new_start: clip.start,
+        new_duration: RationalTime::try_new(0, 1).unwrap(),
+        new_time_map: TimeMap::try_new(
+            RationalTime::try_new(1, 1).unwrap(),
+            2,
+            1,
+            motolii_core::OverrunMode::Freeze,
+        )
+        .unwrap(),
+    };
+    assert!(matches!(
+        in_non_positive.apply(&mut non_positive),
+        Err(CommandError::Validate(
+            motolii_doc::DocumentError::NonPositiveClipDuration {
+                layer_id
+            }
+        )) if layer_id == layer.get()
+    ));
+    assert_eq!(non_positive, doc);
+
+    let mut invalid = doc.clone();
+    let mut invalid_duration = doc.composition.duration;
+    invalid_duration = invalid_duration
+        .try_add(RationalTime::try_new(1, 1).unwrap())
+        .unwrap();
+    let in_invalid_after_clip = Command::TrimClipIn {
+        target: layer,
+        old_start: clip.start,
+        old_duration: clip.duration,
+        old_time_map: clip.time_map,
+        new_start: clip.start,
+        new_duration: invalid_duration,
+        new_time_map: TimeMap::try_new(
+            clip.time_map.source_start,
+            2,
+            1,
+            motolii_core::OverrunMode::Loop,
+        )
+        .unwrap(),
+    };
+    assert!(matches!(
+        in_invalid_after_clip.apply(&mut invalid),
+        Err(CommandError::InvalidClipTrim { layer: got }) if got == layer.get()
+    ));
+    assert_eq!(invalid, doc);
+}
+
+#[test]
+fn trim_clip_keyframed_clip_and_sibling_remain_unchanged_except_target_fields() {
+    let fixture = v4_fixture();
+    let mut doc = fixture.doc;
+    let target = fixture.layer;
+
+    let mut with_keyframes = doc.clone();
+    let keyframe_cmd = reference_writer(doc.clone())
+        .prepare_create_effect(target, 1, nested_create_draft())
+        .unwrap();
+    keyframe_cmd.apply(&mut with_keyframes).unwrap();
+    let definition_id = match &keyframe_cmd {
+        Command::CreateEffect { definition, .. } => definition.id,
+        _ => unreachable!(),
+    };
+    let definition = with_keyframes.effect_definition(definition_id).unwrap();
+    let mut saw_nested_keyframes = false;
+    for param in definition.params.values() {
+        if let DocParam::Keyframes(track) = param {
+            saw_nested_keyframes = true;
+            let mut key_iters = track.keys().iter();
+            let first = key_iters.next().unwrap();
+            let second = key_iters.next().unwrap();
+            assert_eq!(first.t, RationalTime::ZERO);
+            assert_eq!(second.t, RationalTime::try_new(1, 1).unwrap());
+            assert_ne!(first.id, second.id);
+            assert!(key_iters.next().is_none());
+        }
+    }
+    assert!(saw_nested_keyframes);
+
+    doc = with_keyframes;
+    let sibling = doc.layers.allocate("sibling").unwrap();
+    let source = clip_at(&doc, target).source.clone();
+    let source_start = TimeMap::identity().source_start;
+    doc.tracks[0].items.push(TrackItem::Clip(Clip {
+        envelope: ItemEnvelope::new(sibling),
+        start: RationalTime::try_new(2, 1).unwrap(),
+        duration: RationalTime::try_new(3, 1).unwrap(),
+        time_map: TimeMap::try_new(source_start, 3, 2, motolii_core::OverrunMode::Freeze).unwrap(),
+        source,
+    }));
+    doc.validate().unwrap();
+
+    let sibling_before = clip_at(&doc, sibling);
+
+    let mut in_working = doc.clone();
+    let mut in_expected = doc.clone();
+    let in_target = reference_writer(doc.clone())
+        .prepare_trim_clip_in(target, RationalTime::try_new(1, 1).unwrap())
+        .unwrap()
+        .unwrap();
+    let (in_new_start, in_new_duration, in_new_time_map) = match &in_target {
+        Command::TrimClipIn {
+            new_start,
+            new_duration,
+            new_time_map,
+            ..
+        } => (*new_start, *new_duration, *new_time_map),
+        _ => unreachable!(),
+    };
+    in_target.apply(&mut in_working).unwrap();
+    if let Some(item) = find_track_item_mut(&mut in_expected, target) {
+        let TrackItem::Clip(clip) = item else {
+            panic!("target should remain clip");
+        };
+        clip.start = in_new_start;
+        clip.duration = in_new_duration;
+        clip.time_map = in_new_time_map;
+    } else {
+        panic!("target should exist");
+    }
+    assert_eq!(in_working, in_expected);
+    assert_eq!(clip_at(&in_working, sibling), sibling_before);
+
+    let mut out_working = doc.clone();
+    let mut out_expected = doc.clone();
+    let out_target = reference_writer(doc.clone())
+        .prepare_trim_clip_out(target, RationalTime::try_new(4, 1).unwrap())
+        .unwrap()
+        .unwrap();
+    out_target.apply(&mut out_working).unwrap();
+    if let Some(item) = find_track_item_mut(&mut out_expected, target) {
+        let TrackItem::Clip(clip) = item else {
+            panic!("target should remain clip");
+        };
+        clip.duration = RationalTime::try_new(4, 1).unwrap();
+    } else {
+        panic!("target should exist");
+    }
+    assert_eq!(out_working, out_expected);
+    assert_eq!(clip_at(&out_working, sibling), sibling_before);
+}
+
+#[test]
+fn trim_clip_journal_v2_wire_tags_and_snake_case_fields_are_exact_for_both_variants() {
+    let in_json = r#"{
+        "format_version": 2,
+        "command": {
+            "TrimClipIn": {
+                "target": 9,
+                "old_start": {"num": 0, "den": 1},
+                "old_duration": {"num": 5, "den": 1},
+                "old_time_map": {
+                    "source_start": {"num": 10, "den": 1},
+                    "speed_num": 3,
+                    "speed_den": 1,
+                    "overrun_mode": "black"
+                },
+                "new_start": {"num": 1, "den": 1},
+                "new_duration": {"num": 4, "den": 1},
+                "new_time_map": {
+                    "source_start": {"num": 13, "den": 1},
+                    "speed_num": 3,
+                    "speed_den": 1,
+                    "overrun_mode": "black"
+                }
+            }
+        }
+    }"#;
+    let in_value: Value = serde_json::from_str(in_json).unwrap();
+    assert_eq!(
+        in_value.get("format_version").and_then(Value::as_u64),
+        Some(2)
+    );
+    let in_cmds = in_value.get("command").unwrap().as_object().unwrap();
+    assert_eq!(in_cmds.len(), 1);
+    let (in_tag, in_payload) = in_cmds.iter().next().unwrap();
+    assert_eq!(in_tag, "TrimClipIn");
+    let in_payload = in_payload.as_object().unwrap();
+    assert_eq!(
+        in_payload.len(),
+        7,
+        "TrimClipIn payload must only use snake_case interval/time_map keys"
+    );
+    for key in [
+        "target",
+        "old_start",
+        "old_duration",
+        "old_time_map",
+        "new_start",
+        "new_duration",
+        "new_time_map",
+    ] {
+        assert!(in_payload.contains_key(key));
+    }
+    let decoded_in: JournalEdit = serde_json::from_str(in_json).unwrap();
+    assert_eq!(
+        decoded_in,
+        JournalEdit {
+            format_version: V2_EDIT_FORMAT_VERSION,
+            command: Command::TrimClipIn {
+                target: LayerId::from_raw(9),
+                old_start: RationalTime::try_new(0, 1).unwrap(),
+                old_duration: RationalTime::try_new(5, 1).unwrap(),
+                old_time_map: TimeMap::try_new(
+                    RationalTime::try_new(10, 1).unwrap(),
+                    3,
+                    1,
+                    motolii_core::OverrunMode::Black,
+                )
+                .unwrap(),
+                new_start: RationalTime::try_new(1, 1).unwrap(),
+                new_duration: RationalTime::try_new(4, 1).unwrap(),
+                new_time_map: TimeMap::try_new(
+                    RationalTime::try_new(13, 1).unwrap(),
+                    3,
+                    1,
+                    motolii_core::OverrunMode::Black,
+                )
+                .unwrap(),
+            },
+        }
+    );
+
+    let out_json = r#"{
+        "format_version": 2,
+        "command": {
+            "TrimClipOut": {
+                "target": 9,
+                "old_duration": {"num": 5, "den": 1},
+                "new_duration": {"num": 3, "den": 1}
+            }
+        }
+    }"#;
+    let out_value: Value = serde_json::from_str(out_json).unwrap();
+    let out_cmds = out_value.get("command").unwrap().as_object().unwrap();
+    assert_eq!(out_cmds.len(), 1);
+    let (out_tag, out_payload) = out_cmds.iter().next().unwrap();
+    assert_eq!(out_tag, "TrimClipOut");
+    let out_payload = out_payload.as_object().unwrap();
+    assert_eq!(out_payload.len(), 3);
+    for key in ["target", "old_duration", "new_duration"] {
+        assert!(out_payload.contains_key(key));
+    }
+    let decoded_out: JournalEdit = serde_json::from_str(out_json).unwrap();
+    assert_eq!(
+        decoded_out,
+        JournalEdit {
+            format_version: V2_EDIT_FORMAT_VERSION,
+            command: Command::TrimClipOut {
+                target: LayerId::from_raw(9),
+                old_duration: RationalTime::try_new(5, 1).unwrap(),
+                new_duration: RationalTime::try_new(3, 1).unwrap(),
+            },
+        }
+    );
+}
+
+#[test]
+fn trim_clip_overrun_mode_survives_for_black_and_loop_even_when_source_is_out_of_range() {
+    for overrun in [
+        motolii_core::OverrunMode::Black,
+        motolii_core::OverrunMode::Loop,
+    ] {
+        let (mut doc, layer) = layer_track_only_fixture();
+        let out_of_range_source_start = RationalTime::try_new(5000, 1).unwrap();
+        {
+            let TrackItem::Clip(clip) = &mut doc.tracks[0].items[0] else {
+                unreachable!();
+            };
+            clip.time_map = TimeMap::try_new(out_of_range_source_start, 2, 1, overrun).unwrap();
+        }
+        let baseline = clip_at(&doc, layer).time_map;
+
+        let in_cmd = reference_writer(doc.clone())
+            .prepare_trim_clip_in(layer, RationalTime::try_new(-1, 1).unwrap())
+            .unwrap()
+            .unwrap();
+        let mut in_working = doc.clone();
+        in_cmd.apply(&mut in_working).unwrap();
+        let in_after = clip_at(&in_working, layer);
+        assert_eq!(in_after.time_map.overrun_mode, overrun);
+        assert_eq!(in_after.time_map.speed_num(), baseline.speed_num());
+        assert_eq!(in_after.time_map.speed_den(), baseline.speed_den());
+
+        let out_cmd = reference_writer(doc.clone())
+            .prepare_trim_clip_out(layer, RationalTime::try_new(4, 1).unwrap())
+            .unwrap()
+            .unwrap();
+        let mut out_working = doc.clone();
+        out_cmd.apply(&mut out_working).unwrap();
+        let out_after = clip_at(&out_working, layer);
+        assert_eq!(out_after.time_map.overrun_mode, overrun);
+        assert_eq!(out_after.time_map, baseline);
+    }
 }
