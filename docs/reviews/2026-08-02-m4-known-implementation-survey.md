@@ -71,6 +71,12 @@ snapshotをpublishし、新しいrecipe keyを生成することがgeneration切
   全pin時の挙動、capacityを越える瞬間、drop後`usage/refs`、loomまたはupstream concurrency証跡。
 - **非証明範囲**: VRAM texture resident、disk CAS、hard admission前の全owner合算、Motolii key、
   generation、GPU wait禁止。
+- **probe結果(2026-08-02)**: `crates/motolii-testkit/tests/m4_p03_foyer_memory.rs`の4 fixtureがgreen。weight、clone/drop時の
+  refs、resize、filter、outdated handle、concurrent get/insert/removeを確認し、`cargo check --locked`を
+  `x86_64-pc-windows-gnu`、`aarch64-apple-darwin`、`x86_64-unknown-linux-gnu`で通過した。一方、entryをremoveした時点で
+  外部handleを保持していても`Cache::usage()`は0へ下がる。よって判定は`REMAP / VERIFIED`とし、foyerはweighted eviction／handle／
+  resize／filter／並行データ構造だけを肩代わりし、外部生存量を含むhard capはprivate ownerへ残す。default featureの`foyer-tokio`
+  runtime closureも採択条件として記録する。
 
 `moka`はconcurrent cache、weighted capacity、eviction listenerを持つが、weightをeviction選択に使わず、
 外部参照込み使用量を直接所有しないため第一候補にしない。`foyer-memory` probeが失敗した場合の

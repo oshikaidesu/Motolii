@@ -48,7 +48,7 @@
 
 | 子 | 状態 | 閉じるもの |
 |---|---|---|
-| `P03-C1` | `ADOPTION_PROBE` | feature closure、Mac/Windows、external handle込みusage、全pin、drop、並行性 |
+| `P03-C1` | `REMAP / VERIFIED` | `foyer-memory 0.22.3`のweight／handle／resize／filter／並行操作、3 target cross-build。外部handle生存量はprivate ownerへREMAP |
 | `P04-C4` | `VERIFIED` | `fs4 1.1.0`のfree-space／allocation granularity観測、missing path typed error、3 target cross-build |
 | `P05-C1` | `ADOPTION_PROBE` | `tempfile 3.27.0`、single writer、FFmpeg temp、atomic visibility、integrity、lazy scan、hard budget |
 | `P06-C1` | `REMAP / VERIFIED` | half-open integer timebase、coalesce、gap、境界overflow。raw empty rangeはpanicするためprivate guardを必須化 |
@@ -104,10 +104,10 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 
 #### `P03-C1` foyer-memory compatibility probe
 
-- **結果**: exact version/featuresでK1bのweighted cache、external refs、resize、all-pin挙動を実測する。
+- **結果**: `foyer-memory 0.22.3`のdefault feature（`foyer-tokio` runtime closure）でK1bのweighted cache、external refs、resize、filter、並行操作を実測した。
 - **変更範囲**: dependencyと隔離fixtureのみ。製品runtime、公開型、Document変更0。
-- **oracle**: hard cap超過を検知、entry drop後usage回収、concurrent get/insert/remove、Mac/Windows build。
-- **不合格時**: `moka`を限定`REMAP`として比較し、独自concurrent cacheを作らない。
+- **証拠**: `crates/motolii-testkit/tests/m4_p03_foyer_memory.rs`の4 fixtureがgreen。weight／clone refs／outdated handle／resize／filter／concurrent get-insert-removeを確認し、`cargo check --locked`を`x86_64-pc-windows-gnu`、`aarch64-apple-darwin`、`x86_64-unknown-linux-gnu`で通過させた。
+- **判定**: `REMAP / VERIFIED`。weighted eviction、entry handle、resize、filter、並行データ構造は採用する。ただしentryがcacheからremoveされると、外部handleを保持していても`Cache::usage()`が0へ下がるため、実メモリhard capの外部生存量はfoyerへ委ねずprivate ownerで加算する。独自concurrent cacheは作らない。
 
 #### `P03-C2` RAM artifact cache adapter
 

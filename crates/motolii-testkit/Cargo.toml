@@ -24,6 +24,7 @@ motolii-plugins-firstparty.workspace = true
 rangemap.workspace = true
 priority-queue.workspace = true
 fs4.workspace = true
+foyer-memory.workspace = true
 
 [[bench]]
 name = "perf_startup"
