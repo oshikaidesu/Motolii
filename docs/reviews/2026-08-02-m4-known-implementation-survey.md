@@ -148,6 +148,9 @@ recipe分離・sccacheのsharded local cache・現行D1 atomic persistの`PATTER
   境界で確認する。Tokio `CancellationToken`を得るためだけにasync runtimeを新設しない。
 - **薄い残余**: K8の固定4優先度、latest seekでのpriority更新、bounded queue、job result message、
   heartbeat。queueはDocument／cacheへ直接書かず、ownerへmessageを返す。
+- **probe結果(2026-08-02)**: `priority-queue 2.7.0`の4 fixtureは`cargo test -p motolii-testkit --test m4_p07_priority_queue --locked`
+  でgreen。composite priorityでtie-breakを決定化し、bounded admission／generation filterはprivate ownerへ
+  `REMAP / VERIFIED`した。queue自体のexecutor／cancel／Document writer責任は採らない。
 - **非証明範囲**: OS thread priority、強制preemption、GPU command途中停止、ffmpeg process supervisor共通化。
 
 ### 3.8 proxyとVFR→CFR

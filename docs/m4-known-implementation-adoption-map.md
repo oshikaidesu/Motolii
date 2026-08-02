@@ -52,7 +52,7 @@
 | `P04-C4` | `ADOPTION_PROBE` | `fs4 1.1.0`の3 OS build、free-space failure、allocation granularity |
 | `P05-C1` | `ADOPTION_PROBE` | `tempfile 3.27.0`、single writer、FFmpeg temp、atomic visibility、integrity、lazy scan、hard budget |
 | `P06-C1` | `REMAP / VERIFIED` | half-open integer timebase、coalesce、gap、境界overflow。raw empty rangeはpanicするためprivate guardを必須化 |
-| `P07-C1` | `ADOPTION_PROBE` | MPL-2.0選択、bounded/reprioritize/remove、deterministic ordering |
+| `P07-C1` | `REMAP / VERIFIED` | MPL-2.0選択、reprioritize/remove/pop、composite priorityによるdeterministic ordering。bounded admissionとgeneration filterはprivate owner |
 | `P13-C1` | `ADOPTION_PROBE` | K6 subset、unsupported診断、外部resource遮断、premul一回 |
 | `P02-C2` | `SPEC_ONLY` | GAP-3のversion付きsource fingerprint。path/mtimeで代用しない |
 | `P09-C1` | `ADOPTION_PROBE` | GAP-29の原因分離bench。ring本数を先に決めない |
@@ -206,6 +206,10 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 - **結果**: fixed 4 priority、reprioritize、remove、bounded admissionを`priority-queue`で確認する。
 - **薄い残余**: seek時の全item即時reprioritizeを必須にせず、generationを進めてpop時にstale jobを捨てる
   lazy invalidationを既存patternとして使う。
+- **実証**: `crates/motolii-testkit/tests/m4_p07_priority_queue.rs`で4 testsが`--locked` green。composite priorityの
+  同順位決定性、change/remove/pop、重複item更新、generation／bounded guardの責任分離を確認した。
+- **裁定**: `REMAP / VERIFIED`。queueはdata structureとして採択するが、bounded admission、stale generation、cancel、
+  worker lifecycle、Document/cache writerはMotolii ownerに残す。raw queueをexecutorへ昇格しない。
 - **oracle**: deterministic tie-break、latest seek昇格またはstale drop、cancelled job非実行、queue上限。
 
 #### `P07-C2` bounded worker lifecycle

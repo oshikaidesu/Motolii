@@ -22,6 +22,7 @@ motolii-plugin-radial-repeater.workspace = true
 motolii-plugin-sine.workspace = true
 motolii-plugins-firstparty.workspace = true
 rangemap.workspace = true
+priority-queue.workspace = true
 
 [[bench]]
 name = "perf_startup"
