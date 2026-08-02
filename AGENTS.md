@@ -2,9 +2,10 @@
 
 Cursor / Claude Code / その他のLLMエージェント共通の入口。実装に着手する前にここを読む。
 
-## 監督runnerの廃止（2026-08-02）
+## 監督runnerの廃止と薄いCLI監視（2026-08-03）
 
-- 旧delegate/activateはexit 64で廃止。`@agentex/agent`を直接使い代替runnerを作らない。未閉鎖保証は推測で補わない。詳細は[廃止決定](docs/reviews/2026-08-02-supervised-runner-retirement-decision.md)。
+- 旧delegate/activateはexit 64のまま。外部CLIの起動と生ログ保存だけは[`run-observed-cli.py`](scripts/run-observed-cli.py)を使う。
+  worktree、監督、採否、session資格は所有しない。詳細は[薄いCLI監視決定](docs/reviews/2026-08-03-thin-observed-cli-harness-decision.md)。
 
 ## 最上位の権限保存
 
