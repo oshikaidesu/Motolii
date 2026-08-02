@@ -127,6 +127,9 @@ recipe分離・sccacheのsharded local cache・現行D1 atomic persistの`PATTER
   自動coalesceする。
 - **供給route**: `ADOPT-PROBE`。Motoliiの`RationalTime`をcacheの離散tick／frame indexへ一度写し、
   K7 invalid intervalとK8 coverageに同じcollectionを使う。
+- **probe結果(2026-08-02)**: `rangemap 1.7.1`の6 fixtureは`cargo test -p motolii-testkit --test m4_p06_rangemap --locked`でgreen。
+  ただしraw `RangeSet::insert`はempty rangeでassert panicするため、製品へは`start < end`のprivate guardを挟む
+  `REMAP / VERIFIED`とした。外部型・panicを公開境界へ漏らさない。
 - **非証明範囲**: どのDocument変異がどのnode／時間窓へ影響するか、Unknownの全区間fallback、
   Quality、generation、scheduler priority。
 

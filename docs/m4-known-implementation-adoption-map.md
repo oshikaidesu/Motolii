@@ -51,7 +51,7 @@
 | `P03-C1` | `ADOPTION_PROBE` | feature closure、Mac/Windows、external handle込みusage、全pin、drop、並行性 |
 | `P04-C4` | `ADOPTION_PROBE` | `fs4 1.1.0`の3 OS build、free-space failure、allocation granularity |
 | `P05-C1` | `ADOPTION_PROBE` | `tempfile 3.27.0`、single writer、FFmpeg temp、atomic visibility、integrity、lazy scan、hard budget |
-| `P06-C1` | `ADOPTION_PROBE` | half-open integer timebase、coalesce、gap、境界overflow |
+| `P06-C1` | `REMAP / VERIFIED` | half-open integer timebase、coalesce、gap、境界overflow。raw empty rangeはpanicするためprivate guardを必須化 |
 | `P07-C1` | `ADOPTION_PROBE` | MPL-2.0選択、bounded/reprioritize/remove、deterministic ordering |
 | `P13-C1` | `ADOPTION_PROBE` | K6 subset、unsupported診断、外部resource遮断、premul一回 |
 | `P02-C2` | `SPEC_ONLY` | GAP-3のversion付きsource fingerprint。path/mtimeで代用しない |
@@ -180,6 +180,11 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 
 - **結果**: 映像はframe index、音声はsample indexの別`RangeSet`としてinteger half-open
   rangeのinsert/remove/gaps/coalesceを固定する。
+- **実証**: `crates/motolii-testkit/tests/m4_p06_rangemap.rs`で6 testsが`--locked` green。adjacent／overlapのcoalesce、
+  remove分割、bounded gaps、end-exclusive、i64境界、frame/sample owner分離を確認した。
+- **負例**: `RangeSet::insert(5..5)`はraw APIのassert panic。製品routeへ直接漏らさず、`start < end`を先に検査する
+  private typed guardへ`REMAP`する。これはempty/overflowを「試験期待値変更」で隠したものではなく、採択条件として固定した。
+- **裁定**: `REMAP / VERIFIED`。`rangemap 1.7.1`の集合機構は採択し、入力検査・RationalTime変換・generation・Document意味はMotolii側に残す。
 - **oracle**: adjacent/empty/end-exclusive/overflow、random model同値、track種別を跨ぐ丸めと
   `RationalTime`丸め二重化0。
 
