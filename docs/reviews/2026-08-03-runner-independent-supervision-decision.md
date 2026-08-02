@@ -43,6 +43,11 @@ Motoliiの監督は主担当Codexの責任であり、transport、order schema�
 追加できる。reviewerを複数にするか、Grok／Opus／Codexのどれを使うかはtaskのriskとユーザー指定で決め、全作業へ
 固定routeとして課さない。明示されたmodelは完全IDで起動し、利用不能時に別modelへ黙ってfallbackしない。
 
+model選択は[履歴較正によるLLM役割選択](2026-08-03-history-calibrated-llm-role-selection-decision.md)に従い、taskの
+判定対象へ合わせる。Claudeは意味・owner・契約閉鎖、Grokはscope・exact target・負例・実diffの列挙監査、Sparkは
+閉じた機械施工を第一候補とする。同じtaskの設計へ深く関与したmodel familyを最終reviewerへ再利用せず、小taskでは
+preflightを省く。この選択は固定stage、fallback順、receipt資格を新設しない。
+
 ## 採用と停止
 
 採用に必要なのはrunner receiptでなく、Codexが直接確認した次の事実である。
