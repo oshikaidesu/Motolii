@@ -162,8 +162,8 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 
 ## 5. 現在開始できるtask
 
-`CU-201T-S`の意味閉鎖により、製品codeを変更する最初の`IMPLEMENT`として`CU-201T-C`を開始できる。
-`P03-C1-VERIFY`は独立だが、直列速度測定中は同時開始しない。
+`CU-201T-S`の意味閉鎖により開始された`CU-201T-C`は、実装 `a860e10e`、oracle補強 `c2eda847`、targeted test/fmt/clippy greenをもって完了した。
+次に開始できる最小粒は、snapの恒久意味だけを閉じるdocs-only `CU-201N-S`である。`P03-C1-VERIFY`は独立だが、直列速度測定中は同時開始しない。
 
 ### 5.1 `CU-201T-C` — trim command接続
 
