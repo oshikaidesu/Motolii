@@ -32,6 +32,7 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-02-vism-entrance-parallelization-root-map.md](2026-08-02-vism-entrance-parallelization-root-map.md) | Vismの意味の根と並列施工の根を分け、Filter／Source／Data／Path／Text／Instance／Simulation／Automation等の入口を既存owner、route、STOPへ接続する§8.1全体レビュー |
 | [2026-07-26-third-party-sustainable-economy-decision.md](2026-07-26-third-party-sustainable-economy-decision.md) | 無料／有料、OSS／proprietary等を作者が選べる持続可能な経済圏を、Motoliiがmarketplaceを所有せず支える理由、責任境界、停止線 |
 | [2026-07-26-vism-malware-containment-handoff.md](2026-07-26-vism-malware-containment-handoff.md) | Vism悪性コード封じ込めをcatalogから分離し、現行事実、攻撃面、必須負例、合格条件、STOPを他LLMへ渡すread-only締結依頼 |
 | [2026-07-26-vism-malware-containment-contract-decision.md](2026-07-26-vism-malware-containment-contract-decision.md) | 悪性Vismのambient authority 0、hard budget、typed failure、bounded recovery、atomic install、13負例とclaim boundaryを締結し、runtime／schema実装はSTOPする意味論決定 |

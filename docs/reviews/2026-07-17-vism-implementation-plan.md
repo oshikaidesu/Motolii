@@ -314,7 +314,7 @@ git diff --check
 
 これと並行できるのは**VSM-A8G0の仕様作成だけ**である。Glow実装、公開API追加、resource allocator変更、M5中間形式の確定を一発注へ束ねない。`VSM-A8G1`以降はM4／M5依存が満たされてから別境界で発注し、`VSM-A8G3`を通るまでPhase Bのpayload分類とPhase Cのcontainer比較を締結しない。外部出力はv1完成映像だけなので、この五手へDelivery Adapter実装を入れない。
 
-この再基線は個別実装発注の前に全体レビューへ渡す。レビューは順序、依存、停止線、Phase Cへ入るgateを対象とし、未決のAPI／schemaを補完する場にはしない。
+この再基線は個別実装発注の前に[全体レビュー](2026-08-02-vism-entrance-parallelization-root-map.md)へ渡す。レビューは順序、依存、停止線、Phase Cへ入るgateを対象とし、未決のAPI／schemaを補完する場にはしない。全体レビューは意味の根を決定済み、並列施工の根を`VSM-A9`まで未閉鎖と判定し、入口ごとの既存owner／write route／STOPを固定した。本変更のmain統合前に`VSM-A4I`を解禁せず、`VSM-A9`前に二つ以上のVism実装を同時起動しない。
 
 ## 9. この計画が完了したと呼べる条件
 
