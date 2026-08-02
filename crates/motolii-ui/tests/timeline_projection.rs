@@ -1,10 +1,10 @@
 //! U3a-1I: headless Timeline projection の決定的fixture審判。
 //! packing/cull/座標overflowの順序と半開区間を、Document validate済みfixtureだけで固定する。
 
-use motolii_core::RationalTime;
+use motolii_core::{Fps, RationalTime};
 use motolii_doc::{
     AssetId, Clip, ClipSource, DocKeyframe, DocKeyframeTrack, DocParam, DocValue, Document, Group,
-    ItemEnvelope, KeyframeId, LayerId, LookAtAxis, Track, TrackItem,
+    Composition, ItemEnvelope, KeyframeId, LayerId, LookAtAxis, Track, TrackItem,
 };
 use motolii_eval::{DataTrackId, Interp};
 use motolii_ui::{
@@ -326,6 +326,63 @@ fn p11_duplicate_projection_is_identical() {
     assert_eq!(a.bars(), b.bars());
     assert_eq!(a.keys(), b.keys());
     assert_eq!(a.unsupported(), b.unsupported());
+}
+
+#[test]
+fn p12_bounded_key_projection_preserves_layer_identity() {
+    let mut f = DocFixture::new();
+    f.doc.composition = Composition::try_new(
+        16,
+        9,
+        sec(100_000),
+        Fps::try_new(30, 1).unwrap(),
+    )
+    .unwrap();
+    let mut keys = DocKeyframeTrack::new();
+    for second in 0..100_000_i64 {
+        keys.insert(keyframe_vec2_at(&mut f, sec(second)));
+    }
+    let dense_layer = f.push_clip(
+        "same",
+        sec(0),
+        sec(100_000),
+        DocParam::Keyframes(keys),
+    );
+    let sibling_layer = f.push_clip(
+        "same",
+        sec(50_000),
+        sec(1),
+        DocParam::const_vec2([0.0, 0.0]),
+    );
+    let doc = f.finish();
+    assert_eq!(doc.layers.display_name(dense_layer), Some("same"));
+    assert_eq!(doc.layers.display_name(sibling_layer), Some("same"));
+    assert_ne!(dense_layer, sibling_layer);
+
+    let viewport = TimelineViewport {
+        start: sec(50_000),
+        end: sec(50_001),
+    };
+    let projection = project_timeline(&doc, &metrics(), &viewport).unwrap();
+
+    assert_eq!(projection.keys().len(), 1);
+    assert_eq!(projection.keys()[0].layer, dense_layer);
+    assert_eq!(
+        projection
+            .bars()
+            .iter()
+            .filter(|bar| bar.layer == dense_layer)
+            .count(),
+        1
+    );
+    assert_eq!(
+        projection
+            .bars()
+            .iter()
+            .filter(|bar| bar.layer == sibling_layer)
+            .count(),
+        1
+    );
 }
 
 #[test]
