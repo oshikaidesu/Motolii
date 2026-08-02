@@ -36,7 +36,7 @@
 |---|---|---|
 | [concept.md](concept.md) | コンセプト定義・決定事項の台帳 | 現行(決定はここに追記される) |
 | [known-implementation-adoption-model.md](known-implementation-adoption-model.md) | M3〜M5共通の既知実装調査、採択地図、薄い接続、独自負債置換・退役の開発順序 | **横断開発原則**(2026-08-02。M3適用済み、M5技術採択地図確定、M4はこれから) |
-| [m5-known-implementation-adoption-map.md](m5-known-implementation-adoption-map.md) | M5の10機構class、採択route、12実装子、この隔離branchでの検証契約、decision recovery順序 | **技術採択決定／A1・R0・T0・P0・I0検証DONE／D0検証NEXT**(2026-08-02。製品runtimeは意味decision・evidence gate待ち) |
+| [m5-known-implementation-adoption-map.md](m5-known-implementation-adoption-map.md) | M5の10機構class、採択route、12実装子、この隔離branchでの検証契約、decision recovery順序 | **技術採択決定／A1・R0・T0・P0・I0・D0検証DONE**(2026-08-02。製品runtimeは意味decision・evidence gate待ち) |
 | [decision-index.md](decision-index.md) | 決定逆引き台帳: 主題キーワード→既決の正本へのポインタ(状態語彙固定・機械検証対象) | **運用正本**(2026-07-19新設。作業前の逆引き入口) |
 | [performance-model.md](performance-model.md) | 性能の設計根拠と規律 | 現行 |
 | [memory-model.md](memory-model.md) | メモリ階層(VRAM/RAM/ディスク)の役割分担と容量疑念の台帳 | 現行 |

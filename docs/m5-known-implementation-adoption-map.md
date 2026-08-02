@@ -185,13 +185,13 @@ read-onlyで相談した。出力は採択authorityや検収判定ではなく�
 | M5-T0 | P6 run APIと条件付きParley採否を比較 | Fontique／HarfRust／Vello `REUSE`、Parley itemize比較 | new private `motolii-text` leaf→Vello | CJK＋Latin＋emoji＋RTL、fallback、cluster、variation、missing glyph diagnostic | **DONE / KEEP + REDUCE**。[receipt](reviews/evidence/m5-known-implementation/M5-T0/README.md)。手書きitemize禁止。variationは固定variable font待ち。公開契約は比較後 |
 | M5-P0 | Blur/LGG/grain algorithm survey＋fixture | wgpu `REUSE`、既知shader `PATTERN` | filter graph／pipeline cache | RoI radius、Unknown全域、linear、Draft/Final | **DONE / KEEP（algorithm contract）**。[receipt](reviews/evidence/m5-known-implementation/M5-P0/README.md)。GPU pass／M4 ownerは未接続 |
 | M5-I0 | dense object picking比較 | `obvhs`／owned flat BVH／Rerun-style async GPU | Stage projection→Transient selection | 10k object moving camera、stale generation、readback stall 0、same semantic ID | **DONE / KEEP + REDUCE**。[receipt](reviews/evidence/m5-known-implementation/M5-I0/README.md)。CPU semantic一致とstale拒否まで。GPU readback／Stage接続は未完了 |
-| M5-D0 | stable instance evaluator | P0I/P7 decision、`rand_pcg`、owned stable mixer | input shape→slot key→InstanceId→channels | count増減／reorder／nested／thread順／3 OSでidentityとgolden vector不変 | schema前にtest-only meaning fixture |
+| M5-D0 | stable instance evaluator | P0I/P7 decision、`rand_pcg`、owned stable mixer | input shape→slot key→InstanceId→channels | **DONE / KEEP（test-only meaning fixture）**。[receipt](reviews/evidence/m5-known-implementation/M5-D0/README.md)。count増減／reorder／nested／thread順／golden vectorを確認。schema／3 OSは未接続 |
 
 ## 8. 推奨順序
 
 1. **技術採択**: `M5-A0T`として本地図を確定する。**DONE**。
-2. **独立検証**: `M5-A1`、`M5-R0`、`M5-T0`、`M5-P0`、`M5-I0`は**DONE**。`M5-D0`を
-  このbranch上で一粒一commitとして閉じる。依存しない粒は並行可能だがdiffを束ねない。
+2. **独立検証**: `M5-A1`、`M5-R0`、`M5-T0`、`M5-P0`、`M5-I0`、`M5-D0`は**DONE**。
+  このbranch上で一粒一commitとして閉じた。依存しない粒は並行可能だがdiffを束ねない。
 3. **意味decision recovery**: `M5-A0S`で`416aa2c2`と`33e957df`を現行mainへ処分する。
 4. **意味decision**: 検証証拠からP1/P2境界、C0 Observation、scene-color format／resource gateを閉じる。
 5. **薄い接続**: Layer Orderを先に通常製品routeへ接続し、Group Depth、picking、Duplicatorを後続にする。
