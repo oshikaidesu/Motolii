@@ -53,13 +53,15 @@ fn timeline_time_surface_reuses_the_typed_projection_hit_and_excludes_chrome() {
     let layout = test_layout(9);
     let timeline = layout.timeline.unwrap();
     let time_surface = timeline_time_surface_logical_rect(layout).unwrap();
-    let center = [
+    // なぜ: U3a-2Q-Vではrowをsurface全高へ伸ばさず34 logical pxで固定する。
+    // bar自身の中央だけをtyped hit oracleにし、下方の空白をbarとみなさない。
+    let first_row_center = [
         time_surface.x + time_surface.width / 2.0,
-        time_surface.y + time_surface.height / 2.0,
+        time_surface.y + 17.0,
     ];
 
     assert_eq!(
-        projection.hit_test(center, layout),
+        projection.hit_test(first_row_center, layout),
         Some(TimelineHit::Bar {
             layer: expected_layer
         })
