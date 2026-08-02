@@ -104,7 +104,30 @@ field単位には分けず、既存ownerと供給routeが一つになる三つ�
 - `NEGATIVE ORACLE`: parallel Export model、queue、架空progress/cancel、Document変更、失敗artifact公開を拒否
 - `STOP`: Export sheetを実装する、UI項目に対応する現行Job/provider capabilityが無い場合は隠すか上流へ戻し、M3で型やproviderを新設しない
 
-## 6. 非目標
+## 6.1 titlebar source closure audit（P01-C2）
+
+`P01-C2`は現行実行地図で`TARGET_MISSING`のため、ここでは実装を発注せず、固定sourceの動的遷移と審判の不足だけを閉じる。
+固定SHA `56c318edcddab7cf95d263cc2f7dd2b4e6791134`の`AllSurfacesScreen.jsx`から読み取れるtitlebar closureは次のとおりである。
+
+| source箇所 | 現在の意味 | 移管時の処分 | HOST_TARGET | STALE_RULE |
+|---|---|---|---|---|
+| `header.mock-titlebar` / `.wordmark` | `MOTOLII`の静的wordmarkとproject slotの表示順 | DOM/class/ARIAを保持。wordmarkはlocal presentation、project slotはprojectionへ交換 | wordmark=`NONE`、project name=`MISSING`（現行`StageChromeProjection`はstatus文字列だけ） | `NONE` / project projection成立後の既存generation |
+| `allSurfacesFixture.project` | `night_drive.mv`というmock fixture値 | ProductAppからのtyped read-only projectionへ交換。fixture値の持込み禁止 | `MISSING`（project pathはnative側にあるが、titlebarへ渡すprojection fieldが無い） | `MISSING` |
+| `Button variant="quiet">Settings` | mockの表示専用button。Settings sheetのsourceは無い | focus/hover/ARIAは保持。既存UserSettings commandへintentを交換できるまでdisabled/非表示。新sheet・local stateは禁止 | `MISSING`（既存commandはあるがStage/global chromeのintent routeが無い） | `MISSING` |
+| `Button>Export` | mockの表示専用button | 既存`export-project` intentへ交換。Export sheet・新設定は含めない | `StageChromeHostRuntime::take_export_project`（既存target） | 既存layout epoch / product snapshot |
+| `.mock-titlebar`, `.wordmark`, `.mock-grow` rules | 固定React sourceのlayout/token参照 | mock内抽出時はbyte同一。product移管時は既存token closureへ接続し、leaf CSS修理でparityを追わない | CSSはsource closure。product token mappingは未監査 | `NONE` |
+
+### titlebarの2段粒への分割
+
+Fable read-only反対側確認（2026-08-02）は、titlebar構想を維持しつつ、source内抽出とproduct所有移管を一枚へ束ねないよう`REDUCE`とした。
+従って次の順序だけを許可する。
+
+1. **`P01-C2-A` mock-side source extraction / oracle** — 固定mock内でtitlebar subtreeを独立exportへ抽出し、`.mock-titlebar`単位のcomputed-style・ARIA・keyboard/focus・button order oracleを追加する。`AllSurfacesScreen`全体移管、product変更、Settings/Export意味追加は行わない。
+2. **`P01-C2-B` product ownership** — Aの固定source/exportとtitlebar oracleだけを`ui/motolii-web`へ直接移管し、mockをproduct exportのconsumerへ反転する。Bのdispatchはproject-name projection、Settings intent、product layout slotのexact targetが揃うまで行わない。既存Export intentだけを先行接続して二重dispatchを作らない。
+
+`P01-C2-A`はdocs audit完了・実装未発効、`P01-C2-B`は`WAIT_TARGET`である。新しいReact local state、global titlebar WebView、project-name field、Settings sheet、Export providerをこの分割から発明しない。各実装粒は、implementation ledgerの一意な`DO`行とsource closure確認後にだけ発効する。
+
+## 7. 非目標
 
 - Save-Asのdialog、identity切替、sidecar transaction
 - 新しいUserSettings field・codec・store

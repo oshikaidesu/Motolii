@@ -131,7 +131,7 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 | 子 | 現在状態 | exact次order | 通常製品routeの出口 |
 |---|---|---|---|
 | `P01-C1` | `VERIFY_ONLY` | adapterを物理移動せず、重複coordinatorの実在だけを列挙。無ければPASS | event-loop/surface ownerが一意 |
-| `P01-C2` | `TARGET_MISSING` | 固定sourceの未移管componentをsurface別に一件特定し、実コードからdynamic transitionのowner/input/intent/stale ruleを埋める | product単一owner、mockはconsumer |
+| `P01-C2` | `TARGET_MISSING` | `P01-C2-A`として固定titlebar subtreeのsource closure・dynamic transition・titlebar単位oracleをdocsで閉じる。A完了後にのみ`P01-C2-B` product ownershipを再分類し、project-name projection／Settings intent／layout slotのexact target不足ならWAIT_TARGETのままにする | product単一owner、mockはconsumer。AllSurfaces全体移管・新global WebView・local stateは不可 |
 | `P01-C3` | `TARGET_MISSING` | Browser以外で欠けるrole別epoch/reload callbackを一件特定 | crash/reload後に同じsnapshotを再投影 |
 | `P01-C4` | `SPEC_ONLY` | detach時のWorkspace codecとtop-level再生成境界を一問で固定 | layoutを復元してDocument不変 |
 | `P02-C1` | `REDUCE` | `CU-201T-C`は完了済み。残るDelete/Duplicate/Rename/Paste command family（`CU-401A/B`）は別の既存scopeが閉じた時だけ再コンパイルし、trimを再発行しない | trimはjournal replay可能で1 Undo。残余commandは未選定 |
