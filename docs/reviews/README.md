@@ -430,6 +430,7 @@
 | [2026-07-30-sd-02g-product-host-layout-geometry-implementation-decision.md](2026-07-30-sd-02g-product-host-layout-geometry-implementation-decision.md) | SD-02G product Host layout geometry単一owner実装 |
 | [2026-07-31-repository-validation-topology-decision.md](2026-07-31-repository-validation-topology-decision.md) | Cargo単独完了ownerをRust laneへ限定し、repository検証と外部審判を分離する決定 |
 | [2026-08-01-supervision-loop-cost-driver-observation.md](2026-08-01-supervision-loop-cost-driver-observation.md) | 監督ループの速度支配項と計装(rework支配・文献監査・銀の弾丸不在) |
+| [2026-08-01-m5-3d-import-rendering-boundary-decision.md](2026-08-01-m5-3d-import-rendering-boundary-decision.md) | M5 3Dインポート／レンダリング境界決定 |
 | [2026-08-02-supervised-runner-retirement-decision.md](2026-08-02-supervised-runner-retirement-decision.md) | Motolii独自監督runnerを非破壊的に廃止し、Agentex共通入口の実地検証範囲と未閉鎖を固定する決定 |
 | [2026-08-03-thin-observed-cli-harness-decision.md](2026-08-03-thin-observed-cli-harness-decision.md) | Claude Code、Codex CLI、Cursor Agentをexact argvと生logだけで接続するtransport-only harness決定 |
 | [2026-08-03-runner-independent-supervision-decision.md](2026-08-03-runner-independent-supervision-decision.md) | 旧route/order/receipt状態機械を撤回し、scope・worktree・検収・採否をCodexへ戻す監督責任決定 |
