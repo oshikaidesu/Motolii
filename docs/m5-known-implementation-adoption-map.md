@@ -178,7 +178,7 @@ read-onlyで相談した。出力は採択authorityや検収判定ではなく�
 | M5-A0T | 10 classの技術routeを決定 | 本書の`ADOPT/REUSE/WRAP/PATTERN/EXTERNAL/REJECT` | M5 spec、decision-index、ledger | 全classにtarget／oracle／拒否／retirementあり | **DONE**。本書のcommit |
 | M5-A0S | 2系列の作品意味decisionをmain正本へ処分 | `REUSE` `416aa2c2`／`33e957df` | M5 spec、decision-index、ledger | 7 blobを縮小採用／観察／棄却へ処分、失効IDをDOへ戻さない | **DONE（docs-only）**。runtime前 |
 | M5-A1 | GLB全体preflightとdiagnostic | `ADOPT` `gltf`／`mikktspace`、`EXTERNAL` Validator／Asset Generator | Host importer→private faithful asset | positive／malformed／required ext／oversize／escape URI／tangentなしnormal map | **DONE / KEEP**。[receipt](reviews/evidence/m5-known-implementation/M5-A1/README.md)。製品依存は未追加 |
-| M5-A2 | OBJを同じprivate assetへlower | `ADOPT` `tobj` | A1 faithful asset | triangle／normal／UV／MTL欠落を明示。無言PBR化なし | A1後。OBJは変換入口のみ |
+| M5-A2 | OBJを同じprivate assetへlower | `ADOPT` `tobj` | A1 faithful asset | triangle／normal／UV／MTL欠落を明示。無言PBR化なし | **DONE / KEEP（private leaf）**。[receipt](reviews/evidence/m5-known-implementation/M5-A2/README.md)。製品入力・依存は未追加 |
 | M5-R0 | core PBR／unlit headless検証 | wgpu `REUSE`、Khronos Sample Renderer／Blender `PATTERN` | private compiled asset→offscreen target | Khronos metal／dielectric／normal／emissive、cold／warm、low-spec refusal | **DONE / KEEP**。[receipt](reviews/evidence/m5-known-implementation/M5-R0/README.md)。製品material／renderer未接続 |
 | M5-R1 | Layer Orderへ3D contribution接続 | R0採択route | existing LayerSource／RenderSession | 3D未使用pixel不変、premul、Preview／Export一致 | R0＋M4 resource owner |
 | M5-R2 | Group Depth opaque／cutout | Render Contribution決定を`REUSE` | Host depth policy→same material system | Z交差、cutout、soft alpha typed refusal、group外不変 | P3 Observation＋resource gates |
