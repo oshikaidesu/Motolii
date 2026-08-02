@@ -448,5 +448,6 @@
 | [2026-08-02-u4b1-product-easing-connection-implementation-decision.md](2026-08-02-u4b1-product-easing-connection-implementation-decision.md) | U4b-1 通常製品Easing接続 実装記録 |
 | [2026-08-02-cu-210p-paused-playhead-product-connection-decision.md](2026-08-02-cu-210p-paused-playhead-product-connection-decision.md) | CU-210P paused playhead通常製品接続決定 |
 | [2026-08-02-cu-210r-video-playback-product-connection-implementation-decision.md](2026-08-02-cu-210r-video-playback-product-connection-implementation-decision.md) | CU-210R — 既存PlaybackSession／cpal clockとstrict Stage transport intentをRectangle video-only Local Alphaへ縮小接続し、seek origin、pause/play、source drain、通常製品windowを確認 |
+| [2026-08-02-cu-212-mixed-audio-playback-product-connection-decision.md](2026-08-02-cu-212-mixed-audio-playback-product-connection-decision.md) | CU-212 — 既存AudioProgram／MixProducerをPlaybackSessionと通常製品windowへ縮小接続し、mixed sourceの再生終端を確認 |
 | [2026-08-02-u4b0p-product-add-position-key-connection-decision.md](2026-08-02-u4b0p-product-add-position-key-connection-decision.md) | U4b-0P Add Position Key通常製品接続決定 |
 | [2026-08-02-u3a-2q-v-ordinary-timeline-viewport-decision.md](2026-08-02-u3a-2q-v-ordinary-timeline-viewport-decision.md) | U3a-2Q-V ordinary Timeline viewport決定 |

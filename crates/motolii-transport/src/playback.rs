@@ -5,8 +5,9 @@ use std::sync::Arc;
 
 use cpal::traits::HostTrait;
 use motolii_audio::{
-    channel, negotiate_output, source_frame_to_device, AudioProducer, DeviceWaitLatency,
-    NegotiatedOutput, OutputStream, PcmCache, PlaybackCounters,
+    channel, negotiate_output, source_frame_to_device, AudioProducer, AudioProgram,
+    DeviceWaitLatency, MixProducer, NegotiatedOutput, OutputStream, PcmCache, PcmFormat,
+    PlaybackCounters, RingProducer,
 };
 use motolii_core::{Fps, Quality};
 
@@ -21,7 +22,7 @@ pub struct PlaybackSession {
     source_start_frame: u64,
     source_sample_rate: u32,
     _output: OutputStream,
-    _producer: AudioProducer,
+    _producer: PlaybackProducer,
     playing: Arc<AtomicBool>,
 }
 
@@ -51,6 +52,80 @@ impl PlaybackSession {
         device: &cpal::Device,
     ) -> Result<Self, PlaybackSessionError> {
         let format = cache.format();
+        Self::open_on_device_with(
+            format,
+            start_frame,
+            fps,
+            base_quality,
+            gpu,
+            device,
+            |ring, rate| {
+                AudioProducer::spawn_with_device_rate(Arc::clone(&cache), ring, start_frame, rate)
+                    .map(PlaybackProducer::Pcm)
+            },
+        )
+    }
+
+    /// Document由来の決定論的mixed PCMをデフォルト出力へ接続する。
+    pub fn open_default_program(
+        program: Arc<AudioProgram>,
+        start_frame: u64,
+        fps: Fps,
+        base_quality: Quality,
+        gpu: Option<&motolii_gpu::GpuCtx>,
+    ) -> Result<Self, PlaybackSessionError> {
+        let host = cpal::default_host();
+        let device = host
+            .default_output_device()
+            .ok_or(PlaybackSessionError::NoOutputDevice)?;
+        Self::open_on_device_program(program, start_frame, fps, base_quality, gpu, &device)
+    }
+
+    /// 指定デバイスへDocument由来のmixed PCMを接続する。
+    pub fn open_on_device_program(
+        program: Arc<AudioProgram>,
+        start_frame: u64,
+        fps: Fps,
+        base_quality: Quality,
+        gpu: Option<&motolii_gpu::GpuCtx>,
+        device: &cpal::Device,
+    ) -> Result<Self, PlaybackSessionError> {
+        let format = PcmFormat {
+            channels: motolii_audio::CANONICAL_CHANNELS,
+            sample_rate: motolii_audio::CANONICAL_SAMPLE_RATE,
+        };
+        Self::open_on_device_with(
+            format,
+            start_frame,
+            fps,
+            base_quality,
+            gpu,
+            device,
+            |ring, rate| {
+                MixProducer::spawn_with_device_rate(
+                    Arc::clone(&program),
+                    ring,
+                    start_frame,
+                    rate,
+                    None,
+                )
+                .map(PlaybackProducer::Mixed)
+            },
+        )
+    }
+
+    fn open_on_device_with(
+        format: PcmFormat,
+        start_frame: u64,
+        fps: Fps,
+        base_quality: Quality,
+        gpu: Option<&motolii_gpu::GpuCtx>,
+        device: &cpal::Device,
+        producer_factory: impl FnOnce(
+            RingProducer,
+            u32,
+        ) -> Result<PlaybackProducer, motolii_audio::AudioError>,
+    ) -> Result<Self, PlaybackSessionError> {
         let counters = Arc::new(PlaybackCounters::default());
         let device_wait = Arc::new(DeviceWaitLatency::default());
         let (ring_prod, ring_cons) =
@@ -66,13 +141,8 @@ impl PlaybackSession {
         )
         .map_err(PlaybackSessionError::Audio)?;
 
-        let producer = AudioProducer::spawn_with_device_rate(
-            Arc::clone(&cache),
-            ring_prod,
-            start_frame,
-            negotiated.device_sample_rate,
-        )
-        .map_err(PlaybackSessionError::Audio)?;
+        let producer = producer_factory(ring_prod, negotiated.device_sample_rate)
+            .map_err(PlaybackSessionError::Audio)?;
 
         // Transportのoriginは供給済みデバイスフレームと同じレートへ変換する。
         let transport_origin_frame = source_frame_to_device(
@@ -161,6 +231,13 @@ impl PlaybackSession {
     pub fn is_playing(&self) -> bool {
         self.playing.load(Ordering::Acquire)
     }
+}
+
+// ProducerはPlaybackSessionの生存期間を音声workerへ伝えるためだけに保持する。
+#[allow(dead_code)]
+enum PlaybackProducer {
+    Pcm(AudioProducer),
+    Mixed(MixProducer),
 }
 
 #[derive(Debug, thiserror::Error)]

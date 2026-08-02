@@ -10,7 +10,7 @@ use motolii_doc::{
 };
 
 use crate::cache::PcmCache;
-use crate::convert::to_canonical;
+use crate::convert::{canonical_format, to_canonical, CANONICAL_CHANNELS};
 use crate::decode::decode_file_audio_ordinal;
 use crate::error::{AudioError, Result};
 use crate::meter::AudioMeter;
@@ -85,6 +85,44 @@ impl AudioProgram {
 
     pub fn master_gain(&self) -> f64 {
         self.master_gain
+    }
+
+    /// 製品のcomposition終端まで、正規silenceをproducerへ供給できるようにする。
+    ///
+    /// 音声sourceが映像尺より短くても、cpal clockがunderrunで止まらないよう、
+    /// 既存sourceを変更せずgain 0の共有mix sourceを末尾へ足す。
+    pub fn pad_to_duration(mut self, duration: RationalTime) -> Result<Self> {
+        let target_frames = time_to_canonical_frames(duration)?;
+        let mut current_end = 0;
+        for source in &self.sources {
+            let start = time_to_canonical_frames(source.timeline_start)?;
+            let length = time_to_canonical_frames(source.timeline_duration)?;
+            current_end = current_end.max(start.saturating_add(length));
+        }
+        if target_frames <= current_end {
+            return Ok(self);
+        }
+        // PCM本体は一フレームだけでよい。timeline_durationが終端を決め、
+        // それ以降は`AudioOutOfRange::Silence`へ落とすため、尺分のゼロ配列を確保しない。
+        let sample_count = usize::from(CANONICAL_CHANNELS);
+        let timeline_start = frames_to_time(current_end)?;
+        let timeline_duration = duration
+            .try_sub(timeline_start)
+            .map_err(|_| AudioError::InvalidMixRange)?;
+        let pcm = Arc::new(PcmCache::from_interleaved(
+            vec![0.0; sample_count],
+            canonical_format(),
+        )?);
+        self.sources.push(MixSource {
+            pcm,
+            timeline_start,
+            timeline_duration,
+            time_map: TimeMap::IDENTITY,
+            gain: motolii_doc::DocParam::const_f64(0.0),
+            out_of_range: AudioOutOfRange::Silence,
+            enabled: true,
+        });
+        Ok(self)
     }
 
     /// preview/export同一の `mix_audio` 入口。
@@ -176,6 +214,19 @@ fn load_canonical_stream(
 fn frames_to_time(frames: u64) -> Result<RationalTime> {
     RationalTime::try_new(frames as i64, crate::convert::CANONICAL_SAMPLE_RATE as i64)
         .map_err(|_| AudioError::InvalidMixRange)
+}
+
+fn time_to_canonical_frames(time: RationalTime) -> Result<u64> {
+    if time <= RationalTime::ZERO {
+        return Ok(0);
+    }
+    let numerator = u128::try_from(time.num()).map_err(|_| AudioError::InvalidMixRange)?;
+    let denominator = u128::try_from(time.den()).map_err(|_| AudioError::InvalidMixRange)?;
+    let frames = numerator
+        .checked_mul(u128::from(crate::convert::CANONICAL_SAMPLE_RATE))
+        .ok_or(AudioError::InvalidMixRange)?
+        / denominator.max(1);
+    u64::try_from(frames).map_err(|_| AudioError::InvalidMixRange)
 }
 
 /// テスト用: パス解決を省略して直接sourcesを渡す。

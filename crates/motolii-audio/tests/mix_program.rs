@@ -140,6 +140,21 @@ fn same_track_overlap_remains_document_validate_concern() {
 }
 
 #[test]
+fn program_padding_keeps_transport_supplied_through_composition_end() {
+    let program = program_from_sources(
+        vec![identity_source(stereo_const(4, 0.25, 0.25), 4, 1.0)],
+        1.0,
+    )
+    .pad_to_duration(RationalTime::try_new(1, 1).unwrap())
+    .unwrap();
+
+    assert_eq!(program.sources().len(), 2);
+    let (out, report) = program.mix_audio(4, 48_000 - 4, None).unwrap();
+    assert!(out.iter().all(|sample| *sample == 0.0));
+    assert_eq!(report.frames, 48_000 - 4);
+}
+
+#[test]
 fn mix_producer_feeds_ring_while_callback_only_reads() {
     let program = Arc::new(program_from_sources(
         vec![identity_source(stereo_const(4_096, 0.5, -0.5), 4_096, 1.0)],

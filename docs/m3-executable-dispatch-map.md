@@ -143,7 +143,7 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 | `P05-C2` | `SPEC_ONLY` | camera/object targetと既存D2 commandの写像を一問で固定 | 直接操作が1 gesture / 1 Undo |
 | `P06-C1` | `ADOPTION_PROBE` | rfdのmain-thread、cancel、Linux portal、parent windowを確認 | dialogからread-only media probeへ到達 |
 | `P06-C2` | `SPEC_ONLY` | 動画配置とSoundtrackを分離し、まず動画placement defaultを固定 | valid confirmだけ1 Undo |
-| `P07-C1` | `TARGET_MISSING` | GAP-28の`PlaybackSession`→mixed `AudioProgram`接続。seek-onlyならREDUCE | audio主clockでseek/play/pause |
+| `P07-C1` | `REDUCE` | CU-212で既存`AudioProgram`／`MixProducer`を`PlaybackSession`へ縮小接続。音声authoring、waveform、continuous scrub、長尺driftは別粒 | audio主clockでmixed sourceのseek/play/pause/end |
 | `P07-C2` | `WAIT_CONFLICT` | P07-C1、raw measurement、M4 provider後 | deadline時だけ古いpreviewをdrop |
 | `P07-C3` | `MEASURE` | 10分実素材のclock/drift/drop raw測定 | 長時間再生の同期証拠 |
 | `P08-C1` | `REDUCE` | CU-211で既存ExportJobをStage strict intent／headless worker／statusへ縮小接続。provider snapshot、settings、cancelは別粒 | Local Alphaの書き出し開始と終了が通常面に出る |

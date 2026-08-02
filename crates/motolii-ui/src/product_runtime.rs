@@ -1,12 +1,14 @@
 //! macOS通常project sessionのdirect native Surface Host。
 
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use motolii_audio::{
-    source_frame_to_device, PcmCache, PcmFormat, CANONICAL_CHANNELS, CANONICAL_SAMPLE_RATE,
+    source_frame_to_device, AudioProgram, PcmCache, PcmFormat, CANONICAL_CHANNELS,
+    CANONICAL_SAMPLE_RATE,
 };
 use motolii_core::{CanonicalPoint, Quality, RationalTime};
 use motolii_doc::{Command, EffectId, EvaluationTime, LayerId};
@@ -180,6 +182,7 @@ pub(crate) struct ProductApp {
     selected_position_key: Option<(LayerId, motolii_doc::KeyframeId)>,
     playhead: RationalTime,
     playback: Option<PlaybackSession>,
+    audio_program: Option<Arc<AudioProgram>>,
     projection_generation: u64,
     current_document: Arc<motolii_doc::Document>,
     project_status: String,
@@ -246,6 +249,19 @@ fn default_export_path(document_path: &Path) -> PathBuf {
         .filter(|value| !value.is_empty())
         .unwrap_or("motolii-project");
     document_path.with_file_name(format!("{stem}-export.mp4"))
+}
+
+fn build_product_audio_program(
+    document: &motolii_doc::Document,
+    project_path: &Path,
+) -> Result<Option<Arc<AudioProgram>>, ProductRuntimeError> {
+    let mut caches = HashMap::new();
+    let program = AudioProgram::from_document(document, project_path.parent(), &mut caches)?;
+    if program.sources().is_empty() {
+        return Ok(None);
+    }
+    let program = program.pad_to_duration(document.composition.duration)?;
+    Ok(Some(Arc::new(program)))
 }
 
 fn line_delta_to_logical(delta: [f64; 2]) -> [f64; 2] {
@@ -558,6 +574,8 @@ impl ProductApp {
     ) -> Result<Self, ProductRuntimeError> {
         let displayed_camera = preview.camera();
         let current_document = document_runtime.snapshot();
+        let audio_program =
+            build_product_audio_program(&current_document, document_runtime.project_path())?;
         let timeline_projection = ProductTimelineProjection::from_document(&current_document)?;
         let command_registry = builtin_command_registry()?;
         let command_keymap = product_command_keymap(&command_registry)?;
@@ -590,6 +608,7 @@ impl ProductApp {
             selected_position_key: None,
             playhead: RationalTime::ZERO,
             playback: None,
+            audio_program,
             projection_generation: 0,
             proxy,
             layout_authority: LayoutAuthority::built_in()?,
@@ -2125,25 +2144,39 @@ impl ProductApp {
                 self.playhead = RationalTime::ZERO;
                 start_frame = 0;
             }
-            let sample_count = duration_frames
-                .checked_mul(u64::from(CANONICAL_CHANNELS))
-                .and_then(|count| usize::try_from(count).ok())
-                .ok_or(ProductRuntimeError::PlaybackBufferOverflow)?;
-            // Rectangle video-only接続の無音PCM。実音声はGAP-28のAudioProgram接続で扱う。
-            let cache = Arc::new(PcmCache::from_interleaved(
-                vec![0.0; sample_count],
-                PcmFormat {
-                    channels: CANONICAL_CHANNELS,
-                    sample_rate: CANONICAL_SAMPLE_RATE,
-                },
-            )?);
-            let session = PlaybackSession::open_default(
-                cache,
-                start_frame,
-                self.current_document.composition.fps,
-                Quality::DRAFT,
-                Some(self.gpu.as_ref()),
-            )?;
+            let session = if let Some(program) = &self.audio_program {
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=transport source=mixed sources={}",
+                    program.sources().len()
+                ));
+                PlaybackSession::open_default_program(
+                    Arc::clone(program),
+                    start_frame,
+                    self.current_document.composition.fps,
+                    Quality::DRAFT,
+                    Some(self.gpu.as_ref()),
+                )?
+            } else {
+                let sample_count = duration_frames
+                    .checked_mul(u64::from(CANONICAL_CHANNELS))
+                    .and_then(|count| usize::try_from(count).ok())
+                    .ok_or(ProductRuntimeError::PlaybackBufferOverflow)?;
+                // Rectangle video-only接続は既存の無音fallbackを維持する。
+                let cache = Arc::new(PcmCache::from_interleaved(
+                    vec![0.0; sample_count],
+                    PcmFormat {
+                        channels: CANONICAL_CHANNELS,
+                        sample_rate: CANONICAL_SAMPLE_RATE,
+                    },
+                )?);
+                PlaybackSession::open_default(
+                    cache,
+                    start_frame,
+                    self.current_document.composition.fps,
+                    Quality::DRAFT,
+                    Some(self.gpu.as_ref()),
+                )?
+            };
             self.playback = Some(session);
             crate::ui_numeric_trace::emit(format_args!(
                 "kind=transport action=play start_frame={} duration_frames={}",
