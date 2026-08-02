@@ -119,7 +119,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 ## 現在の並列レーン
 
-現在sliceは**VS-2 parameter editing / timeline interval editing**で、正常系`CU-205E`、`CU-201M-C`、`CU-201T-S`、`CU-201T-C`、`CU-201E`まで`DONE`。`CU-204P`は通常source 0の再確認後、新source成立まで再監査・実装を反復しない。固定Mac Local Alpha全長は既存`CU-5A04/P11-C1`が`WAIT_CONFLICT`で、G04/G05の未決policyを埋める新orderやreceipt集約は選定しない。次粒は既存依存のauthority・code事実・oracleが閉じた時だけ、既存IDから再選定する。後続は[M3既知技術採択・並列実装地図](m3-parallel-implementation-map.md)から、共有writer、event loop、GPU device、bundle publicationが衝突しない子を選定する。
+現在sliceは**VS-2 parameter editing / timeline interval editing**で、正常系`CU-205E`、`CU-201M-C`、`CU-201T-S`、`CU-201T-C`、`CU-201E`まで`DONE`。`CU-204P`は通常source 0の再確認後、新source成立まで再監査・実装を反復しない。固定Mac Local Alpha全長は既存`CU-5A04/P11-C1`が`WAIT_CONFLICT`のままだが、ユーザー再開指示によりその前段の既知rfd採択probeだけを`P06-C1-MAC`として選定する。G04/G05の未決policyを埋める新orderやreceipt集約は選定しない。次粒は既存依存のauthority・code事実・oracleが閉じた時だけ、既存IDから再選定する。後続は[M3既知技術採択・並列実装地図](m3-parallel-implementation-map.md)から、共有writer、event loop、GPU device、bundle publicationが衝突しない子を選定する。
 現在の全lane、変更path、STOP、Human Response Frontierは
 [並列レーン着手地図](reviews/2026-07-25-parallel-lane-readiness-map.md)を正とする。
 旧night 3分岐は直接統合しない。
@@ -249,6 +249,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | PRODUCT-ASSET | CU-0B02C-V | M3 / VS-1 / SPEC / private carry final disposition | `DONE` | [CU-0B02C-V最終処分](reviews/2026-07-31-cu-0b02cv-private-carry-final-disposition.md) | 2 CSS / 21 color inventoryを値と意味ごとに比較。公開token追加0、class 2/3全件component-private維持、code/visual変更0 | CU-204S分割後の次粒はCU-204A `DO`。数値一致を意味共通性と読まない |
 | CORE | CU-201 | M3 / VS-2 / U3b move trim snap | `DONE` | [CU-201E E2E](reviews/2026-08-01-cu-201e-timeline-interval-normal-product-e2e-receipt.md) | M-S → (M-C ∥ T-S) → T-C → N-S → P → R → Eを全完了 | same identity、通常製品move/trim/snap、Undo/Redo、reopen。M4/M5、transport、Easingは非目標 |
 | ORACLE-GUARD | P01-C1 | M3 / VS-1 / single event-loop coordinator audit | `DONE` | — | `EventLoop<ProductEvent>`／`run_app` 1箇所、`ApplicationHandler<ProductEvent>` adapter 1箇所 | 物理移動0、重複coordinator 0、event-loop/surface owner一意 |
+| PRODUCT-ASSET | P06-C1-MAC | M3 / P06 / ADOPTION_PROBE / fixed Mac rfd dialog seam | `DO` | — | `P01-C1`、`G0-9L` | 既存ProductApp event loop上のrfd main-thread／parent window／cancel／typed failureを固定Macで確認し、read-only media probeへ到達。Document、Undo、公開surface変更0 |
 | ORACLE-GUARD | P02-C2 | M3 / VS-1 / durable journal publish failure oracle | `DONE` | — | 既存`DocumentEditRuntime`の成功／journal commit失敗／durable後live apply失敗を再実行 | journal-first、failure poison、publish順序を確認。新経路0 |
 | PRODUCT-ASSET | CU-201S | M3 / VS-2 / SPEC / U3b responsibility split | `DONE` | [CU-201S責任分割](reviews/2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | CU-105R/U3a-1I projection/hit、CU-106P primary、single writerを再照合 | M-S/M-C/T-S完了。次はCORE T-C |
 | PRODUCT-ASSET | CU-201M-S | M3 / VS-2 / SPEC / Clip move durable meaning | `DONE` | [CU-201M-S契約決定](reviews/2026-08-01-cu-201m-s-clip-start-command-contract-decision.md) | same-lane `SetClipStart`、LayerId、negative/overlap許可、checked end、old/new対称、merge、JournalEdit v2 | UI drag都合から公開commandを決めない |
@@ -407,6 +408,7 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | CU-0A08B | `SPLIT` | CU-G09完了後のreadiness再確認で、CU-G09 §4/§6/§7だけで閉じるCU-0A08BP pure decoderと、U4a-2を要するCU-0A08BT Host projection/typed intent/JSX接続へ分割 |
 | CU-G09O | `DONE` | [CU-G09O Browser decoder output契約決定](reviews/2026-07-26-cu-g09o-browser-decoder-output-contract-decision.md) |
 | CU-G09R | `DONE` | [CU-G09R Browser decoder拒否優先順決定](reviews/2026-07-26-cu-g09r-browser-decoder-rejection-precedence-decision.md) |
+| P01-C1 | `DONE` | 現行`product_runtime.rs`の`EventLoop<ProductEvent>`／`run_app`と`product_runtime_adapter.rs`の`ApplicationHandler<ProductEvent>`が各1箇所。P06-C1-MACはこのevent-loop ownerを再利用し、新coordinatorを作らない |
 | CU-0A08BP | `DONE` | `ui/motolii-web/src/read-model/browserCatalogDecoder.js`、`docs/mocks-ui/fixtures/browser-catalog-parts.json`、`docs/mocks-ui/guard-tests/browser-catalog-decoder.test.mjs`、`node --test docs/mocks-ui/guard-tests/browser-catalog-decoder.test.mjs` |
 | CU-0A08BR | `DONE` | current laneのexact lane-kind / task-ID / state selectorとsynthetic negative/positiveで、完了済みdecoder stale状態と別IDの後続状態語を分離 |
 | CU-0A08BS | `DONE` | `selectStaleBrowserDecoderProseLines`とsynthetic negative/positiveで、完全一致stale prose拒否と別粒`DO`同居受理を分離。`node --test docs/mocks-ui/guard-tests/browser-catalog-decoder.test.mjs`（118 pass）、`npm run test:reference-guard`、`./scripts/check-docs.sh` |
