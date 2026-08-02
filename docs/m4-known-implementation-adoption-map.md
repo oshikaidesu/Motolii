@@ -32,17 +32,17 @@
 |---|---|---|---|---|
 | `M4-P01-REGION` | RoD RoI tile extent unknown propagation | 必要領域だけを安全に評価し、未知は全域fallbackする | K0 fixtureを`REUSE`、OpenFXを`PATTERN` | K0、K2 |
 | `M4-P02-IDENTITY` | recipe key content digest generation snapshot source fingerprint | 再起動やrename後も正しい成果だけを再利用する | Bazel action/CASを`PATTERN`、`sha2`を`REUSE` | K1b、K2、K4、GAP-3 |
-| `M4-P03-RAM` | weighted cache handle refs pin eviction usage | 参照中成果を壊さずRAM hard cap内で再利用する | `foyer-memory 0.22.3`を`ADOPT-PROBE` | K1a〜K1c |
-| `M4-P04-RESOURCE` | VRAM RAM disk admission descriptor allocator report watermark | allocation前に三tierの上限を守る | wgpu descriptor/reportを`REUSE/PATTERN`、`fs4 1.1.0`を`ADOPT-PROBE` | K1a、K1c、K1d |
-| `M4-P05-DISK` | artifact store generated media render cache proxy integrity atomic corrupt miss LRU | 再起動後も壊れていない成果だけをdiskから読む | Blender/AE/Premiere/Resolve/FCPの再生成mediaを`PATTERN`、`sha2/std::fs`を`REUSE`、sccache/D1 persistを`PATTERN`、`tempfile 3.27.0`を`ADOPT-PROBE` | K1c、K7、K8 |
-| `M4-P06-INTERVAL` | half-open range coverage gaps invalidation coalesce | 変更の影響区間だけを再計算する | `rangemap 1.7.1`を`ADOPT-PROBE` | K2、K7b、K8a |
-| `M4-P07-SCHEDULE` | priority bounded queue reprioritize cancel heartbeat latest | 編集を止めず、必要なbackground成果から作る | `priority-queue 2.7.0`を`ADOPT-PROBE`、`LatestWorker`を`REUSE/PATTERN` | K1d、K4、K7、K8 |
+| `M4-P03-RAM` | weighted cache handle refs pin eviction usage | 参照中成果を壊さずRAM hard cap内で再利用する | `foyer-memory 0.22.3`を`REMAP / VERIFIED`。外部生存量はprivate owner | K1a〜K1c |
+| `M4-P04-RESOURCE` | VRAM RAM disk admission descriptor allocator report watermark | allocation前に三tierの上限を守る | wgpu descriptor/reportを`REUSE/PATTERN`、`fs4 1.1.0`を`VERIFIED (observation)` | K1a、K1c、K1d |
+| `M4-P05-DISK` | artifact store generated media render cache proxy integrity atomic corrupt miss LRU | 再起動後も壊れていない成果だけをdiskから読む | Blender/AE/Premiere/Resolve/FCPの再生成mediaを`PATTERN`、`sha2/std::fs`を`REUSE`、sccache/D1 persistを`PATTERN`、`tempfile 3.27.0`を`VERIFIED (V1)`。V2以降はruntime absent STOP | K1c、K7、K8 |
+| `M4-P06-INTERVAL` | half-open range coverage gaps invalidation coalesce | 変更の影響区間だけを再計算する | `rangemap 1.7.1`を`REMAP / VERIFIED` | K2、K7b、K8a |
+| `M4-P07-SCHEDULE` | priority bounded queue reprioritize cancel heartbeat latest | 編集を止めず、必要なbackground成果から作る | `priority-queue 2.7.0`を`REMAP / VERIFIED`、`LatestWorker`を`REUSE/PATTERN` | K1d、K4、K7、K8 |
 | `M4-P08-PROXY` | ffmpeg ffprobe VFR CFR proxy PTS source id | 重い素材を決定的proxyへ置換して編集する | 現行FFmpeg sidecarを`REUSE/WRAP` | K4、GAP-3、GAP-26 |
-| `M4-P09-COPYOUT` | wgpu copy map staging ring readback overlap | GPU評価を止めずに再利用成果をRAM/diskへ送る | `RgbaDownloader`を`REUSE`、wgpu copy/mapを`PATTERN` | K1c、K7a、GAP-29 |
+| `M4-P09-COPYOUT` | wgpu copy map staging ring readback overlap | GPU評価を止めずに再利用成果をRAM/diskへ送る | `RgbaDownloader`を`REUSE`、wgpu copy/mapを`PATTERN`。方式採択は`STOP / GAP-29` | K1c、K7a、GAP-29 |
 | `M4-P10-BAKE` | group bake atomic artifact substitute freeze | Groupの編集可能性を保ったまま仮出力を再利用する | P02/P05/P06/P07/P09の合成、独立frameworkなし | K7a〜K7c |
 | `M4-P11-COVERAGE` | whole composition draft coverage planner 100GB | 全曲Draftを計画し、disk成果で通し再生する | P05/P06/P07の既知機構を合成 | K8a、K8b |
 | `M4-P12-PRESSURE` | capacity deadline preview degrade resource snapshot | 容量不足と締切遅延を混同せずpreviewを縮退する | wgpu/resource snapshotとlatest mailboxを`REUSE` | K1d |
-| `M4-P13-VECTOR` | SVG usvg Vello path fill stroke unsupported premul | SVGの必要subsetを独自parserなしで描く | `vello_svg 0.10.0`を`ADOPT-PROBE`、Vello 0.9を`REUSE` | K6 |
+| `M4-P13-VECTOR` | SVG usvg Vello path fill stroke unsupported premul | SVGの必要subsetを独自parserなしで描く | `vello_svg 0.10.0`を`REMAP / VERIFIED`、Vello 0.9を`REUSE` | K6 |
 
 ## 4. 現在のdispatch状態
 
@@ -57,7 +57,10 @@
 | `P02-C1` | `STOP / GAP-3` | 完全recipe keyのfield順は既知だが、source／parameter encodingとversioned fingerprint authorityが未閉鎖。runtime keyを発明しない |
 | `P02-C2` | `STOP / GAP-3` | version付きsource fingerprint未決。path/mtimeで代用しない |
 | `P09-C1` | `STOP / GAP-29` | 現行baselineの同期1-buffer readback guardは確認済み。copy/map/encode/disk原因分離とring数採択は未計測のため固定しない |
-| その他 | `GATED` | 依存するprobe、authority、product target、正負oracle |
+| `P05-C2` | `STOP / RUNTIME ABSENT` | V1後のrestart/generation/store handleを接続するprivate disk storeが現行codeにない。新しいstore ownerをこの検証branchで発明しない |
+| `P05-C3` | `STOP / RUNTIME ABSENT` | ResourceLedger、disk hard budget、pin/committing eviction routeが未実装。P04観測だけでresource integrationを証明しない |
+| `K7a/K8b` | `STOP / RUNTIME ABSENT` | group bake／full-composition Draft／cache playbackのproduct producerとE2E routeが未実装。現行PipelineCache/exportを完成証拠にしない |
+| その他 | `STOP / DEPENDENCY` | 停止したauthority／runtime absentに依存する後続粒。新しいownerや意味を発明せず、実装branchで再入場 |
 
 probeは互いにruntime ownerを書かない小fixtureとして並列化できる。ただし同じ`Cargo.toml`／lockfileの
 変更を競合させないため、各probeは独立差分で検収し、採択依存を一つの直列publicationへまとめる。
@@ -163,16 +166,18 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 #### `P05-C2` private disk store adapter
 
 - **結果**: 完全recipe key digest→通常artifact file、size/content digest、volatile LRU metadataをprivate
-  APIへ閉じる。content digestはintegrity用で、異なるrecipe間のglobal dedupを初期契約にしない。
+  APIへ閉じる方針を確認した。
 - **依存／並列**: P05-C1/P02-C1/P04-C2後。RAM adapterと並列。
 - **oracle**: restart hit、rename hit、wrong generation miss、外部storage型の公開面0。同一process内で
   検証済みhandleを再利用し、frameごとの全file再hash 0。
+- **判定**: `STOP / RUNTIME ABSENT`。現行repoにこのstore owner／routeがなく、P02-C1の完全keyもGAP-3で停止中。test-only storeを製品adapterの代替として発明しない。
 - **cutover**: 独自DB/WAL/catalog/repair protocolを作らない。
 
 #### `P05-C3` disk budget and retirement
 
-- **結果**: watermarkとvolatile access metadataでeviction候補を選び、content digestは不変に保つ。
+- **結果**: watermarkとvolatile access metadataでeviction候補を選び、content digestは不変に保つ方針を確認した。
 - **oracle**: pinned/committing artifact削除0、削除失敗はtyped diagnostic、再起動後missから回復。
+- **判定**: `STOP / RUNTIME ABSENT`。ResourceLedger／disk admission／eviction ownerが未実装で、`fs4`観測やV1 fixtureから統合済みと推論しない。
 
 ### M4-P06-INTERVAL — coverageと部分無効化
 
@@ -340,6 +345,8 @@ Waveは一括発注ではない。各子を一契約境界として検収し、�
 
 `P05-C1 compatibility` → `P05-C2 store model` → `P05-C3 resource integration` → `K7a/K8b product E2E`
 の順に閉じる。各段のexact oracleは[disk artifact再検索 §6.1](reviews/2026-08-02-m4-disk-artifact-store-resurvey.md#61-検証の層と完了線)を正とする。前段greenを後段完成へ読み替えず、現状態は検証計画済み・runtime未検証とする。
+
+2026-08-02の検証branchではV1 compatibilityまでを実行し、P05-C2/C3とK7a/K8bは`STOP / RUNTIME ABSENT`へ閉じた。現行M4仕様自身がK1〜K8を未実装と明記し、repo検索でもResourceLedger／disk store／group bake／full Draft producerは存在しない。これらを埋める新ownerや恒久契約は「検証」の範囲を越えるため、製品runtime実装の別branchへ返す。
 
 ## 7. 旧負債の処分
 
