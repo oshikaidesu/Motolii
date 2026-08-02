@@ -117,7 +117,8 @@ fn timeline_interval_press_distinguishes_in_move_and_out_on_the_existing_bar() {
     let projection = ProductTimelineProjection::from_document(&document).unwrap();
     let layout = test_layout(9);
     let surface = timeline_time_surface_logical_rect(layout).unwrap();
-    let y = surface.y + surface.height / 2.0;
+    // なぜ: fixed-row viewportではbarの縦位置はsurface中央でなく先頭34px rowにあるため。
+    let y = surface.y + 17.0;
 
     assert_eq!(
         projection
