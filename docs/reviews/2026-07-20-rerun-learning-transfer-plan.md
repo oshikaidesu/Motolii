@@ -414,7 +414,7 @@ Rerun sourceとの比較結果は補助証拠であり、Motolii fixture/testを
 - `re_*`依存、Blueprint field、Entity path、Rerun cache keyを実装担当の判断で追加できる
 - Rerunに存在しないためMotoliiの編集Undo、Vism/plugin拡張、IME、audio clock等を非目標へ落としている
 - Rerun snapshotへ合わせるためReact reference、意味論golden、既存test期待値の変更を許している
-- Terraへ分類、公開API、Document状態、代替設計の選択を委任している
+- 実装担当へ分類、公開API、Document状態、代替設計の選択を委任している
 
 ## 10. 完了の定義
 

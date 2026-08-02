@@ -58,3 +58,11 @@ taskごとに選ぶ役割へ反映する。transport、監督責任、採用資�
 - Spark失敗時に無条件で特定modelへ切り替える固定fallback chainを作ること
 - 過去のwall timeだけでmodelを格付けすること
 - Claude/Grokの賛同をauthority、ユーザー権限、採用資格にすること
+
+## Fable read-only経路
+
+Fableは大地図、長期展望、複数仕様衝突、共有公開境界、恒久契約、CodexとOpusの結論衝突、または
+一般機構の既知routeが具体的反証で尽きた時の一回の取りこぼし検査だけに使う。正規model IDは
+`claude-fable-5`で、Claude Code CLIから薄いCLI harnessを介してread-onlyで直接起動する。
+Cursorの同名modelや別modelへ黙ってfallbackせず、編集、Bash、commit、push、外部model起動、再委任を許可しない。
+出力は助言であり、Codexが正本、現行コード、取得済み一次資料へ再照合して採否する。

@@ -33,7 +33,7 @@
 5. **モック許可**: 依存先が未完了でも、仕様書のシグネチャ通りのモックを自作してテストを書いてよい(結合はインテグレーションタスクで検証)。
 6. **テスト不可侵(報酬面の分離)**: ゴールデン参照画像・受け入れテストの改変を実装タスクに含めない。**テストが間違っていると思ったら実装を止めて報告する**(テストの削除・期待値書き換え・実装側のspecial-caseで「緑にする」ことを禁止)。参照画像の更新が正当な場合は、理由を明記した独立の「テスト更新PR」に分離する(根拠は[pitfalls H-2](../pitfalls-and-roadmap.md))。
 7. **着手前の導線**: 各仕様書末尾の**「実装ガード」節**と、タスクが触る領域の関連ドキュメント(方針節・落とし穴)を読んでから着手する。**仕様書の未決事項に依存するタスクには着手しない** — LLMエージェントは未決を「もっともらしいデフォルト」で静かに埋める(intent drift)。未決は仕様書改訂PRで先に潰す([pitfalls H-3](../pitfalls-and-roadmap.md))。
-8. **恒久焼き込みの予防**: Documentスキーマに触るタスクは、着手前に[permanence-prevention](../reviews/2026-07-12-m2-permanence-prevention.md)と[AGENTS.md](../../AGENTS.md)のGR-PVチェックを読む。**意味文書が先、コードは写し。テスト緑≠完了**([pitfalls H-4](../pitfalls-and-roadmap.md))。
+8. **恒久焼き込みの予防**: Documentスキーマに触るタスクは、着手前に[permanence-prevention](../reviews/2026-07-12-m2-permanence-prevention.md)と[AGENTS.md](../../AGENTS.md)の条件別routingを読む。**意味文書が先、コードは写し。テスト緑≠完了**([pitfalls H-4](../pitfalls-and-roadmap.md))。
 9. **依存優先・発明工程なし**: [既知実装採択・置換開発モデル](../known-implementation-adoption-model.md)と[責任最小化ゲート](../reviews/2026-07-24-dependency-first-responsibility-gate.md)に従い、利用者成果と機構classを先に固定し、既知実装調査と採択地図を製品runtime実装より前に閉じる。正本と`decision-index.md`で一度裁定した`REUSE / ADOPT / WRAP / PORT / PATTERN / EXTERNAL`を後続粒が継承する。粒ごとにecosystemを再調査せず、必須oracle、license、platform、security、maintenanceの具体的反証またはadapterの共有基盤化がある時だけ再裁定する。新機構の`BUILD`を通常taskにせず、modelは仕様化せず利用者例外へ返す。既完了や投入工数を維持理由にせず、独自機構は同じoracleへ通す縦slice置換で単一ownerを切り替え、旧routeを`FROZEN → RETIRE`する。
 
 ## 仕様書テンプレート

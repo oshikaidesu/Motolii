@@ -221,14 +221,14 @@ catalog projectionはDocument・plugin manifest・公開community contractと別
 12. WebView Host、sandbox、Windows/macOS受入をsource移管のvisual合格で証明済みにした
 13. 固定SHAのReact source closureを読まず、静止画、render結果、DOM snapshotからinteractionまたはstateを補った
 14. source内の動的stateを`PRESERVE_LOCAL / REPLACE_WITH_PROJECTION / REPLACE_WITH_INTENT / REMOVE_LEGACY`へ分類しないまま製品接続した
-15. `SOURCE ASSET` closureをorderの`READ_FILE`へ全件含めず、動的sourceを実装担当のtarget capsuleから省略した
+15. `SOURCE ASSET` closureを主担当Codexが確認せず、動的sourceを実装担当へ渡す限定文脈から省略した
 
-## 10. 発注書の強制ラベル
+## 10. 施工前確認の強制ラベル
 
-React source assetを扱う発注書は、通常項目に加え次を順番どおり持つ。
+React source assetを扱う場合、主担当Codexは外部transportのschemaではないpreflightとして次を順番どおり確認する。
 
 1. `REACT AUTHORITY`: 対象面、本文書、UI runtime境界、対応spec ID
-2. `SOURCE ASSET`: `FIXED_MOCK`または`PRODUCT_CLOSURE`のprovenance hash、path、export、component/hook/state/event/effect、CSS/model/story/test closure。全件をorderの`READ_FILE`へ含め、各動的箇所を`REUSE_TARGET`で渡す
+2. `SOURCE ASSET`: `FIXED_MOCK`または`PRODUCT_CLOSURE`のprovenance hash、path、export、component/hook/state/event/effect、CSS/model/story/test closure。実装担当には対象closureと各動的箇所を限定文脈として渡す
 3. `PRESERVE`: DOM、class、stable ID、ARIA、interaction、visual stateの維持範囲
 4. `REPLACE`: legacy/mock stateのうちprojection / intentへ交換する範囲
 5. `STATE OWNER`: Document / User settings / Workspace / Project session / Transient / local presentationの分類
@@ -236,9 +236,8 @@ React source assetを扱う発注書は、通常項目に加え次を順番ど�
 7. `NEGATIVE ORACLE`: 二重copy、legacy import、opaque-ID分岐、二重state、threshold変更の拒否試験
 8. `STOP`: 本文書§9と、公開契約・意味の未決に遭遇した場合の停止
 
-一つでも欠落、順序逆転、対象path不一致があればCodex事前審査は承認せず、受注者を起動しない。
-発注書実体では各ラベルを`REACT AUTHORITY:`のようなラベルだけの独立行に置き、内容は次行以降へ書く。
-`REACT AUTHORITY: Browser`のようなinline表記は機械guardが受理しない。
+一つでも欠落、順序逆転、対象path不一致があればCodex事前審査は承認せず、実装担当を起動しない。
+旧runnerのorder、`READ_FILE`、`REUSE_TARGET`、機械guardは本確認の発効条件ではない。
 発注は一面・一所有境界ずつ行い、Browser、Inspector、KEYS/LAYERS、Easing、Host codec、WebView統合、
 D2 commitを一枚の変更許可へ束ねない。
 
