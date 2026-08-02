@@ -180,8 +180,13 @@ IMPLEMENT:
 
 WRITE:
   crates/motolii-doc/src/command.rs
+  crates/motolii-doc/src/lib.rs の DocumentWriter 二入口だけ
   crates/motolii-doc/src/undo.rs
   crates/motolii-doc/tests/ only where the existing command oracle family owns the test
+  crates/motolii-ui/src/diagnostic_projection.rs の exhaustive CommandKind label 二armだけ
+
+  lib.rs は INPUT の Writer 接続を所有し、diagnostic_projection.rs は CommandKind 追加で
+  compile-required になる既存consumerである。いずれも新しい意味・UI gesture・第二writerを追加しない。
 
 FORBIDDEN:
   generic interval command
