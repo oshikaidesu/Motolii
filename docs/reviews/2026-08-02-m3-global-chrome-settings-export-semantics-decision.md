@@ -125,7 +125,7 @@ Fable read-only反対側確認（2026-08-02）は、titlebar構想を維持し�
 1. **`P01-C2-A` mock-side source extraction / oracle** — 固定mock内でtitlebar subtreeを独立exportへ抽出し、`.mock-titlebar`単位のcomputed-style・ARIA・keyboard/focus・button order oracleを追加する。`AllSurfacesScreen`全体移管、product変更、Settings/Export意味追加は行わない。
 2. **`P01-C2-B` product ownership** — Aの固定source/exportとtitlebar oracleだけを`ui/motolii-web`へ直接移管し、mockをproduct exportのconsumerへ反転する。Bのdispatchはproject-name projection、Settings intent、product layout slotのexact targetが揃うまで行わない。既存Export intentだけを先行接続して二重dispatchを作らない。
 
-`P01-C2-A`はdocs audit完了・実装未発効、`P01-C2-B`は`WAIT_TARGET`である。新しいReact local state、global titlebar WebView、project-name field、Settings sheet、Export providerをこの分割から発明しない。各実装粒は、implementation ledgerの一意な`DO`行とsource closure確認後にだけ発効する。
+`P01-C2-A`は固定mock内のsource抽出とtitlebar単位oracleまで`DONE`（product変更0）、`P01-C2-B`は`WAIT_TARGET`である。Aの実装は`docs/mocks-ui/src/screens/GlobalTitlebar.jsx`、専用story、`tests/titlebar-source.spec.js`、current-route provenanceへ限定した。全reference guardの既存Inspector hash driftはAの合否へ混ぜない。新しいReact local state、global titlebar WebView、project-name field、Settings sheet、Export providerをこの分割から発明しない。各実装粒は、implementation ledgerの一意な`DO`行とsource closure確認後にだけ発効する。
 
 ## 7. 非目標
 

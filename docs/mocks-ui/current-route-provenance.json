@@ -151,7 +151,11 @@
     },
     {
       "path": "docs/mocks-ui/src/screens/AllSurfacesScreen.jsx",
-      "sha256": "d00bc40b5883ba1da972bfdea1d067c2f80b8e91ba1452a32fa83750f9d5a91d"
+      "sha256": "e779cd267d2167d177bd6a24c2647bc39288978853028b4ea5e08572b8516ae1"
+    },
+    {
+      "path": "docs/mocks-ui/src/screens/GlobalTitlebar.jsx",
+      "sha256": "c2885cdb3a1d3b1990fffe80ca59413e518461d9856695213b72c7b524155a08"
     },
     {
       "path": "docs/mocks-ui/src/screens/all-surfaces.css",

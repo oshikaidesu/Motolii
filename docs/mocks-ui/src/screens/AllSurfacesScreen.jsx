@@ -5,18 +5,13 @@ import { InspectorSurface } from "../surfaces/InspectorSurface";
 import { StageSurface } from "../surfaces/StageSurface";
 import { TimelineSurface } from "../surfaces/TimelineSurface";
 import "./all-surfaces.css";
+import { GlobalTitlebar } from "./GlobalTitlebar";
 
 export function AllSurfacesScreen() {
   const fixture = allSurfacesFixture;
   return (
     <div className="motolii-mock-app">
-      <header className="mock-titlebar">
-        <strong className="wordmark">MOTOLII</strong>
-        <span>{fixture.project}</span>
-        <span className="mock-grow" />
-        <Button variant="quiet">Settings</Button>
-        <Button>Export</Button>
-      </header>
+      <GlobalTitlebar project={fixture.project} />
       <nav className="mock-commandbar" aria-label="Command bar">
         <Button pressed>SELECT</Button>
         <Button variant="quiet">CAMERA</Button>
