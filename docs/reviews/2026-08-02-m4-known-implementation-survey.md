@@ -222,6 +222,17 @@ recipe分離・sccacheのsharded local cache・現行D1 atomic persistの`PATTER
 4. `rangemap`は`RationalTime`を直接keyにせず、既存composition timebase上のhalf-open integer intervalへ写す。
 5. `priority-queue`はbounded、reprioritize、cancel、editor nonblockingを決定的fixtureで確認する。
 6. `vello_svg`はK6 subsetだけを閉じ、unsupported featureをsilent dropしない。
+
+2026-08-02の再照合では、P02-C1/C2は`Asset.content_hash`が任意文字列でGAP-3のversioned fingerprint authorityがないため
+`STOP / GAP-3`とした。P09-C1は既存`origin_guard` 6 fixtureでheadless readback／UI共有拒否を再確認したが、GAP-29の原因分離・
+overlap・ring数採択を計測していないため`STOP / GAP-29`とした。どちらも未決の意味や方式を発明して閉じない。
+
+### 3.11 copy-out baselineとSTOP
+
+- **証拠**: `cargo test -p motolii-gpu --test origin_guard --locked`で6 fixtureがgreen。`RgbaDownloader`は同一寸法のstaging bufferを
+  再利用するが、submit直後にmap完了をpollする1-buffer同期経路であり、exportもrender→download→encodeを直列実行する。
+- **判定**: `STOP / GAP-29`。copy／map／encode／diskの原因分離、1/2/N buffer比較、overlap、backpressure、cancel／error cleanupは未計測で、
+  既知先例からring本数を推測しない。
 7. probe不合格時は候補を独自実装へ置換せず、同じ親の`REMAP / REDUCE`へ戻す。
 
 ## 6. 一次資料

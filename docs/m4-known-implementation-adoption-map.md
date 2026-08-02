@@ -54,8 +54,9 @@
 | `P06-C1` | `REMAP / VERIFIED` | half-open integer timebase、coalesce、gap、境界overflow。raw empty rangeはpanicするためprivate guardを必須化 |
 | `P07-C1` | `REMAP / VERIFIED` | MPL-2.0選択、reprioritize/remove/pop、composite priorityによるdeterministic ordering。bounded admissionとgeneration filterはprivate owner |
 | `P13-C1` | `REMAP / VERIFIED` | `vello_svg 0.10.0`のpath/group/fill/stroke、typed parse error、pattern diagnostic、3 target cross-build。外部fileはusvg段で無言dropするためprivate preflightへREMAP |
-| `P02-C2` | `SPEC_ONLY` | GAP-3のversion付きsource fingerprint。path/mtimeで代用しない |
-| `P09-C1` | `ADOPTION_PROBE` | GAP-29の原因分離bench。ring本数を先に決めない |
+| `P02-C1` | `STOP / GAP-3` | 完全recipe keyのfield順は既知だが、source／parameter encodingとversioned fingerprint authorityが未閉鎖。runtime keyを発明しない |
+| `P02-C2` | `STOP / GAP-3` | version付きsource fingerprint未決。path/mtimeで代用しない |
+| `P09-C1` | `STOP / GAP-29` | 現行baselineの同期1-buffer readback guardは確認済み。copy/map/encode/disk原因分離とring数採択は未計測のため固定しない |
 | その他 | `GATED` | 依存するprobe、authority、product target、正負oracle |
 
 probeは互いにruntime ownerを書かない小fixtureとして並列化できる。ただし同じ`Cargo.toml`／lockfileの
@@ -83,15 +84,16 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 
 #### `P02-C1` recipe key and content digest
 
-- **結果**: node/version/parameter/input digest/time/Quality/platform saltを正本順でencodeし、recipe keyとartifact digestを分ける。
+- **結果**: node/version/parameter/input digest/time/Quality/platform saltを正本順でencodeし、recipe keyとartifact digestを分ける方針を確認した。
 - **再利用target**: `sha2`、既存typed IDs、render graph入力。
 - **oracle**: 各fieldの単独変異でmiss、並べ替え非同値、path/label/display名の混入0。
-- **cutover**: ad-hoc文字列key、`semantic_fingerprint()`転用、cache別key helperをretire。
+- **判定**: `STOP / GAP-3`。現行`Asset.content_hash`は任意文字列で、version・algorithm・chunk／encoding・collision照合が正本化されていない。exact encoderやprivate key helperをこのprobeで発明しない。
+- **cutover**: ad-hoc文字列key、`semantic_fingerprint()`転用、cache別key helperをretireするのはGAP-3決定後。
 
 #### `P02-C2` source identity closure
 
-- **結果**: GAP-3のversion付きfingerprintを先に仕様化し、proxy/cacheへ同じ`source_id`を渡す。
-- **状態**: `SPEC_ONLY`。未決のままruntime実装しない。
+- **結果**: GAP-3のversion付きfingerprintを先に仕様化し、proxy/cacheへ同じ`source_id`を渡す方針を確認した。
+- **状態**: `STOP / GAP-3`。未決のままruntime実装しない。
 - **oracle**: rename同一、内容差異は不一致、旧形式migration/拒否が明示される。
 
 #### `P02-C3` immutable generation snapshot
@@ -243,9 +245,10 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 
 #### `P09-C1` copy-out cause-isolation probe
 
-- **結果**: copy/map/encode/diskの各待ちを分離測定し、必要なin-flight数だけを採択する。
+- **結果**: 現行`RgbaDownloader`のheadless同期readback許可／UI共有readback拒否を既存6 fixtureで再確認した。copy/map/encode/diskの各待ちを分離測定し、必要なin-flight数だけを採択する本probeはGAP-29で停止する。
 - **再利用target**: `RgbaDownloader`、wgpu staging buffer/map_async。
-- **oracle**: UI/render評価chain blocking 0、bounded bytes、device loss、1/2/N buffer比較。
+- **oracle**: UI/render評価chain blocking 0、bounded bytes、device loss、1/2/N buffer比較。固定ring数・重畳方式・性能SLOは計測前に決めない。
+- **判定**: `STOP / GAP-29`。既存baselineは同期1-bufferとorigin guardまでで、代表MVのcopy/map/encode/disk原因分離・overlap・backpressure・cancel cleanupを証明しない。
 
 #### `P09-C2` admitted copy-out pipeline
 
