@@ -7,7 +7,8 @@
 現行の調査・検証入口は[M5 既知実装採択・検証地図](../m5-known-implementation-adoption-map.md)とする。
 同地図で10機構classの技術route `M5-A0T`は決定済みであり、
 `codex/m5-known-implementation-plan-20260802`上の子検証へ進む。検証成功だけで製品runtimeを発注せず、
-接続前に未統合の3D import／Render Contribution作品意味をdecision recovery `M5-A0S`で閉じる。
+接続前に未統合の3D import／Render Contribution作品意味を[decision recovery `M5-A0S`](../reviews/2026-08-02-m5-a0s-decision-recovery.md)で閉じる。
+`M5-A0S`は後発資料を縮小採用／観察／棄却へ処分するdocs-only gateであり、公開APIやruntime実装を追加しない。
 
 M5は[既知実装採択・置換開発モデル](../known-implementation-adoption-model.md)に従う。scene／object
 representation、camera observation、spatial renderer、glTF import、depth、text、Vello局所pass、post

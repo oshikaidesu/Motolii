@@ -1,6 +1,6 @@
 # M5 既知実装採択・検証地図
 
-状態: **技術採択決定／検証NEXT／製品runtimeは意味decision・evidence gate待ち**（2026-08-02）
+状態: **技術採択・意味decision recovery済み／検証済み／製品runtimeはObservation・resource gate待ち**（2026-08-02）
 
 ## 1. 目的と入力
 
@@ -58,8 +58,9 @@ M5の最初の通常製品成果を、次の4本へ分ける。
 - `33e957df`: requirementとcontributionの分離、whole-request admission、Host resource owner、
   linear-premultiplied scene color、soft alpha typed unsupported、format／copy／budget evidence gate。
 
-この2系列は内容を再発明せず、現行M5仕様との矛盾、失効ID、main未収載の理由を確認し、
-採用／縮小採用／棄却を一度だけ処分する。
+この2系列は内容を再発明せず、現行M5仕様との矛盾、失効ID、main未収載の理由を確認した。
+`M5-A0S`で`縮小採用／観察／棄却（archive-only negative）`へ一度だけ処分済みであり、
+詳細は[M5-A0S決定回収](reviews/2026-08-02-m5-a0s-decision-recovery.md)とdelta receiptに固定する。
 
 ### 3.3 未決
 
@@ -175,7 +176,7 @@ read-onlyで相談した。出力は採択authorityや検収判定ではなく�
 | 子 | 結果 | 既知route | exact接続target | 正例／負例oracle | 依存／cutover |
 |---|---|---|---|---|---|
 | M5-A0T | 10 classの技術routeを決定 | 本書の`ADOPT/REUSE/WRAP/PATTERN/EXTERNAL/REJECT` | M5 spec、decision-index、ledger | 全classにtarget／oracle／拒否／retirementあり | **DONE**。本書のcommit |
-| M5-A0S | 2系列の作品意味decisionをmain正本へ処分 | `REUSE` `416aa2c2`／`33e957df` | M5 spec、decision-index、ledger | 現行決定と矛盾0、失効IDをDOへ戻さない | runtime前。docs-only |
+| M5-A0S | 2系列の作品意味decisionをmain正本へ処分 | `REUSE` `416aa2c2`／`33e957df` | M5 spec、decision-index、ledger | 7 blobを縮小採用／観察／棄却へ処分、失効IDをDOへ戻さない | **DONE（docs-only）**。runtime前 |
 | M5-A1 | GLB全体preflightとdiagnostic | `ADOPT` `gltf`／`mikktspace`、`EXTERNAL` Validator／Asset Generator | Host importer→private faithful asset | positive／malformed／required ext／oversize／escape URI／tangentなしnormal map | **DONE / KEEP**。[receipt](reviews/evidence/m5-known-implementation/M5-A1/README.md)。製品依存は未追加 |
 | M5-A2 | OBJを同じprivate assetへlower | `ADOPT` `tobj` | A1 faithful asset | triangle／normal／UV／MTL欠落を明示。無言PBR化なし | A1後。OBJは変換入口のみ |
 | M5-R0 | core PBR／unlit headless検証 | wgpu `REUSE`、Khronos Sample Renderer／Blender `PATTERN` | private compiled asset→offscreen target | Khronos metal／dielectric／normal／emissive、cold／warm、low-spec refusal | **DONE / KEEP**。[receipt](reviews/evidence/m5-known-implementation/M5-R0/README.md)。製品material／renderer未接続 |
@@ -192,8 +193,8 @@ read-onlyで相談した。出力は採択authorityや検収判定ではなく�
 1. **技術採択**: `M5-A0T`として本地図を確定する。**DONE**。
 2. **独立検証**: `M5-A1`、`M5-R0`、`M5-T0`、`M5-P0`、`M5-I0`、`M5-D0`は**DONE**。
   このbranch上で一粒一commitとして閉じた。依存しない粒は並行可能だがdiffを束ねない。
-3. **意味decision recovery**: `M5-A0S`で`416aa2c2`と`33e957df`を現行mainへ処分する。
-4. **意味decision**: 検証証拠からP1/P2境界、C0 Observation、scene-color format／resource gateを閉じる。
+3. **意味decision recovery**: `M5-A0S`で`416aa2c2`と`33e957df`を処分した。**DONE（docs-only）**。
+4. **意味decision**: 検証証拠からP1/P2境界、`M5-C0` Observation、scene-color format／resource gateを閉じる。ここが次のgate。
 5. **薄い接続**: Layer Orderを先に通常製品routeへ接続し、Group Depth、picking、Duplicatorを後続にする。
 6. **cutover**: test-only adapterや旧局所copyを、同一oracleが成立した子ごとに`FROZEN → RETIRE`する。
 
@@ -209,7 +210,8 @@ read-onlyで相談した。出力は採択authorityや検収判定ではなく�
 - 比較だけの依存は通常workspaceと`Cargo.lock`へ入れない。private leafの製品依存追加は、検証合格後の
   独立採択commitで行う。renderlingはworkspace外の任意比較であり、未実行でも`M5-R0`を止めない。
 - 検証中はDocument／serde／公開API／plugin契約、golden／thresholdを変更しない。
-- `M5-A0S`、P3の意味decision、M4 resource gateを通るまで、検証成功を製品runtime完成と報告しない。
+- `M5-A0S`はdocs-onlyの歴史意味処分であり、P3の意味decision、M4 resource gateを通るまで、
+  検証成功を製品runtime完成と報告しない。
 
 ## 10. STOPと再調査条件
 

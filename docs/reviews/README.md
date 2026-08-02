@@ -49,6 +49,7 @@
 | [2026-08-01-vism-semantic-sdk-cavalry-translation-decision.md](2026-08-01-vism-semantic-sdk-cavalry-translation-decision.md) | CavalryのPath／Mesh／Context／Deformer／Particle先例を、言語より長寿命な意味型、純粋operation、明示capability、Host責任へ翻訳するVism意味SDK決定 |
 | [2026-08-01-sdk-s0-path2d-semantic-fixture-spec.md](2026-08-01-sdk-s0-path2d-semantic-fixture-spec.md) | SDK-S0S — 既存M2 PathOpをnative oracleにする`Path2D → Path2D`意味fixture責任仕様 |
 | [2026-08-01-vsm-a4s-external-crate-author-scaffold-spec.md](2026-08-01-vsm-a4s-external-crate-author-scaffold-spec.md) | VSM-A4S — 外部crate作者scaffold責任仕様 |
+| [2026-08-02-m5-a0s-decision-recovery.md](2026-08-02-m5-a0s-decision-recovery.md) | M5-A0S — 後発3D import／Render Contribution資料7 blobの縮小採用・観察・棄却と、runtime前の停止線 |
 | [2026-07-09-R1-export-review.md](2026-07-09-R1-export-review.md) | コードレビュー所見 2026-07-09 (R1/Quality・export・cli周辺) |
 | [2026-07-09-R3-datatrack-review.md](2026-07-09-R3-datatrack-review.md) | コードレビュー所見 2026-07-09 (R3/DataTrack統合) |
 | [2026-07-10-M1-plugin-boundary-review.md](2026-07-10-M1-plugin-boundary-review.md) | 設計レビュー所見 2026-07-10 (M1完了後・プラグイン境界の凍結前監査) |
