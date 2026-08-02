@@ -131,7 +131,7 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 | `P01-C3` | `TARGET_MISSING` | Browser以外で欠けるrole別epoch/reload callbackを一件特定 | crash/reload後に同じsnapshotを再投影 |
 | `P01-C4` | `SPEC_ONLY` | detach時のWorkspace codecとtop-level再生成境界を一問で固定 | layoutを復元してDocument不変 |
 | `P02-C1` | `IMPLEMENT` | `CU-201T-S`で閉じた`TrimClipIn` / `TrimClipOut`を`CU-201T-C`で既存D2へ接続 | trimがjournal replay可能で1 Undo |
-| `P02-C2` | `VERIFY_ONLY` | 既存journal→apply→publish routeの失敗oracleを再実行。理由なく再構成しない | 全surfaceが同じpublished snapshotを読む |
+| `P02-C2` | `DONE` | `document_edit_runtime` 33/33、製品Place/Timeline/Inspector/Undo delivery 9/9、writer境界 4/4を再実行。既存routeのみ | 全surfaceが同じpublished snapshotを読む |
 | `P02-C3` | `TARGET_MISSING` | selection成立済み部分を除き、essential focusまたはplayhead consumerを一件特定 | UI stateをDocumentへ保存せず一方向publish |
 | `P03-C1` | `DONE` | `crates/motolii-ui/tests/timeline_projection.rs::p12_hundred_thousand_keys_cull_to_visible_identity`で100k keyの狭域projectionとtyped identityを確認。renderer本体は変更しない | visible outputがbounded |
 | `P03-C2` | `WAIT_CONFLICT` | `P02-C1`の対象command完成後、move/trimのどちらか一gestureだけ | drag中write 0、release 1 Undo |
