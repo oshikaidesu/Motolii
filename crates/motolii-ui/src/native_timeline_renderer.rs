@@ -680,10 +680,10 @@ fn build_scene(
             + (f64::from(key.band) * TIMELINE_ROW_HEIGHT - visible_top) * scale
             + row_height / 2.0;
         let radius = 4.0 * scale;
-        let key_y = key_y.clamp(
-            content_y + radius,
-            content_y + time_surface.height * scale - radius,
-        );
+        let content_bottom = content_y + time_surface.height * scale;
+        if key_y < content_y || key_y > content_bottom {
+            continue;
+        }
         let diamond = vello::kurbo::BezPath::from_iter([
             vello::kurbo::PathEl::MoveTo((key_x, key_y - radius).into()),
             vello::kurbo::PathEl::LineTo((key_x + radius, key_y).into()),

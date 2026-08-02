@@ -322,6 +322,80 @@ fn clamp_vertical_offset_value(
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct TimelineScrollContext {
+    surface: crate::native_host_layout::LogicalRect,
+    viewport_start: f64,
+    duration: f64,
+    visible_span: f64,
+    total_height: f64,
+}
+
+fn timeline_scroll_context(
+    projection: &ProductTimelineProjection,
+    layout: NativeHostLayout,
+) -> Option<TimelineScrollContext> {
+    let surface = timeline_time_surface_logical_rect(layout)?;
+    let visible_span = projection.visible_span_seconds(layout)?;
+    let duration = projection
+        .viewport
+        .end
+        .try_sub(projection.viewport.start)
+        .ok()?
+        .as_seconds_f64();
+    Some(TimelineScrollContext {
+        surface,
+        viewport_start: projection.viewport.start.as_seconds_f64(),
+        duration,
+        visible_span,
+        total_height: (projection.band_span * TIMELINE_ROW_HEIGHT).max(1.0),
+    })
+}
+
+fn timeline_scroll_offsets(
+    horizontal_start: RationalTime,
+    vertical_offset: f64,
+    delta: [f64; 2],
+    cursor: [f64; 2],
+    context: TimelineScrollContext,
+) -> Option<(RationalTime, f64)> {
+    let TimelineScrollContext {
+        surface,
+        viewport_start,
+        duration,
+        visible_span,
+        total_height,
+    } = context;
+    if !surface.contains(cursor) {
+        return None;
+    }
+    let dx = if delta[0].is_finite() { delta[0] } else { 0.0 };
+    let dy = if delta[1].is_finite() { delta[1] } else { 0.0 };
+    let dx_time = RationalTime::try_from_decimal_str(&format!(
+        "{:.9}",
+        (dx / TIMELINE_PIXELS_PER_SECOND).abs()
+    ))
+    .ok()?;
+    let horizontal = if dx >= 0.0 {
+        horizontal_start
+            .try_sub(dx_time)
+            .unwrap_or(horizontal_start)
+    } else {
+        horizontal_start
+            .try_add(dx_time)
+            .unwrap_or(horizontal_start)
+    };
+    let horizontal = clamp_horizontal_start_value(
+        horizontal.as_seconds_f64(),
+        viewport_start,
+        duration,
+        visible_span,
+    );
+    let horizontal = RationalTime::try_from_decimal_str(&format!("{horizontal:.9}")).ok()?;
+    let vertical = clamp_vertical_offset_value(vertical_offset - dy, total_height, surface.height);
+    Some((horizontal, vertical))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum IntervalGestureKind {
     Move,
@@ -446,7 +520,8 @@ impl ProductTimelineProjection {
             return None;
         }
         let local_seconds = (x_local / TIMELINE_PIXELS_PER_SECOND).clamp(0.0, visible_seconds);
-        let x = (self.horizontal_start.as_seconds_f64() + local_seconds) / viewport_seconds;
+        let absolute_seconds = self.horizontal_start.as_seconds_f64() + local_seconds;
+        let x = (absolute_seconds - self.viewport.start.as_seconds_f64()) / viewport_seconds;
         if !x.is_finite() {
             return None;
         }
@@ -499,14 +574,7 @@ impl ProductTimelineProjection {
 
     fn unclamped_logical_x(&self, time: RationalTime, layout: NativeHostLayout) -> Option<f64> {
         let surface = timeline_time_surface_logical_rect(layout)?;
-        let span = self.visible_span_seconds(layout)?;
-        let viewport_seconds = self
-            .viewport
-            .end
-            .try_sub(self.viewport.start)
-            .ok()?
-            .as_seconds_f64();
-        if viewport_seconds <= 0.0 || !span.is_finite() || span <= 0.0 {
+        if !surface.width.is_finite() || surface.width <= 0.0 {
             return None;
         }
         let local_seconds = time.as_seconds_f64() - self.horizontal_start.as_seconds_f64();
@@ -933,29 +1001,20 @@ impl ProductApp {
         let Some(layout) = self.layout else {
             return;
         };
-        let dx = if delta[0].is_finite() { delta[0] } else { 0.0 };
-        let dy = if delta[1].is_finite() { delta[1] } else { 0.0 };
-        let mut horizontal = self.horizontal_start;
-        let Some(dx_time) = ProductTimelineProjection::rational_from_seconds(
-            (dx / TIMELINE_PIXELS_PER_SECOND).abs(),
+        let Some(context) = timeline_scroll_context(&self.timeline_projection, layout) else {
+            return;
+        };
+        let Some((horizontal_start, vertical_offset)) = timeline_scroll_offsets(
+            self.horizontal_start,
+            self.vertical_offset,
+            delta,
+            self.cursor,
+            context,
         ) else {
-            self.request_redraw();
             return;
         };
-        if dx >= 0.0 {
-            horizontal = horizontal.try_sub(dx_time).unwrap_or(horizontal);
-        } else {
-            horizontal = horizontal.try_add(dx_time).unwrap_or(horizontal);
-        }
-        let Some(surface) = timeline_time_surface_logical_rect(layout) else {
-            return;
-        };
-        if !surface.contains(self.cursor) {
-            return;
-        }
-        self.horizontal_start = self.clamp_horizontal_start(layout, horizontal);
-        self.vertical_offset -= dy;
-        self.vertical_offset = self.clamp_vertical_offset(layout, self.vertical_offset);
+        self.horizontal_start = horizontal_start;
+        self.vertical_offset = vertical_offset;
         self.synchronize_timeline_viewport(Some(layout));
         self.request_redraw();
     }
@@ -2798,6 +2857,99 @@ mod projection_unit_tests {
         assert_eq!(
             pixel_delta_to_logical([f64::NAN, f64::INFINITY], 2.0),
             [0.0, 0.0]
+        );
+    }
+
+    #[test]
+    fn timeline_scroll_offsets_require_timeline_cursor_and_move_both_axes_once() {
+        let surface = crate::native_host_layout::LogicalRect {
+            x: 100.0,
+            y: 200.0,
+            width: 800.0,
+            height: 400.0,
+        };
+        let start = RationalTime::try_new(2, 1).unwrap();
+        assert_eq!(
+            timeline_scroll_offsets(
+                start,
+                68.0,
+                [80.0, -34.0],
+                [99.0, 200.0],
+                TimelineScrollContext {
+                    surface,
+                    viewport_start: 0.0,
+                    duration: 10.0,
+                    visible_span: 10.0,
+                    total_height: 850.0,
+                },
+            ),
+            None
+        );
+        assert_eq!(
+            timeline_scroll_offsets(
+                start,
+                68.0,
+                [80.0, -34.0],
+                [100.0, 200.0],
+                TimelineScrollContext {
+                    surface,
+                    viewport_start: 0.0,
+                    duration: 10.0,
+                    visible_span: 4.0,
+                    total_height: 850.0,
+                },
+            ),
+            Some((RationalTime::try_new(1, 1).unwrap(), 102.0))
+        );
+    }
+
+    #[test]
+    fn timeline_scroll_context_and_projection_keep_hit_identity_after_pan() {
+        let document = crate::static_preview::bootstrap_document().unwrap();
+        let mut projection = ProductTimelineProjection::from_document(&document).unwrap();
+        let layout = test_layout();
+        let context = timeline_scroll_context(&projection, layout).unwrap();
+        let surface = context.surface;
+        let (horizontal_start, vertical_offset) = timeline_scroll_offsets(
+            projection.horizontal_start,
+            projection.vertical_offset,
+            [-80.0, 0.0],
+            [surface.x + 1.0, surface.y + 17.0],
+            context,
+        )
+        .unwrap();
+        projection.set_horizontal_start(horizontal_start);
+        projection.set_vertical_offset(vertical_offset);
+        assert_eq!(
+            horizontal_start,
+            ProductTimelineProjection::rational_from_seconds(
+                (10.0 - context.visible_span).max(0.0)
+            )
+            .unwrap()
+        );
+        assert_eq!(
+            projection.hit_test([surface.x + 1.0, surface.y + 17.0], layout),
+            Some(TimelineHit::Bar {
+                layer: projection.projection.bars()[0].layer,
+            })
+        );
+    }
+
+    #[test]
+    fn hit_test_accounts_for_non_zero_viewport_start() {
+        let document = crate::static_preview::bootstrap_document().unwrap();
+        let mut projection = ProductTimelineProjection::from_document(&document).unwrap();
+        projection.viewport.start = RationalTime::try_new(2, 1).unwrap();
+        projection.viewport.end = RationalTime::try_new(12, 1).unwrap();
+        projection.set_horizontal_start(RationalTime::try_new(2, 1).unwrap());
+        let layout = test_layout();
+        let surface =
+            crate::native_timeline_renderer::timeline_time_surface_logical_rect(layout).unwrap();
+        assert_eq!(
+            projection.hit_test([surface.x + 80.0, surface.y + 17.0], layout),
+            Some(TimelineHit::Bar {
+                layer: projection.projection.bars()[0].layer,
+            })
         );
     }
 

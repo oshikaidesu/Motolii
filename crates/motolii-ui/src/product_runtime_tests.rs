@@ -98,7 +98,11 @@ fn timeline_ruler_maps_to_the_same_viewport_without_becoming_content_hit_input()
 
     assert_eq!(
         projection.ruler_time_at(midpoint, layout),
-        RationalTime::try_from_decimal_str(&format!("{:.9}", ruler.width / 160.0)).ok()
+        RationalTime::try_from_decimal_str(&format!(
+            "{:.9}",
+            (ruler.width / TIMELINE_PIXELS_PER_SECOND) / 2.0
+        ))
+        .ok()
     );
     assert_eq!(projection.hit_test(midpoint, layout), None);
     assert_eq!(
@@ -128,11 +132,28 @@ fn timeline_interval_press_distinguishes_in_move_and_out_on_the_existing_bar() {
             .map(|target| target.kind),
         Some(IntervalGestureKind::Move)
     );
+    let offscreen_end_x = projection
+        .unclamped_logical_x(projection.projection.bars()[0].end, layout)
+        .unwrap();
+    assert!(offscreen_end_x > surface.x + surface.width);
     assert_eq!(
         projection
             .interval_press_target([surface.x + surface.width - 1.0, y], layout)
             .map(|target| target.kind),
         Some(IntervalGestureKind::Move)
+    );
+
+    let mut panned = ProductTimelineProjection::from_document(&document).unwrap();
+    panned.set_horizontal_start(RationalTime::try_new(1, 1).unwrap());
+    let bar_end_x = panned
+        .unclamped_logical_x(panned.projection.bars()[0].end, layout)
+        .unwrap();
+    assert!(bar_end_x < surface.x + surface.width);
+    assert_eq!(
+        panned
+            .interval_press_target([bar_end_x - 1.0, y], layout)
+            .map(|target| target.kind),
+        Some(IntervalGestureKind::TrimOut)
     );
 }
 
