@@ -3,7 +3,7 @@
 - 日付: 2026-08-02
 - 状態: **決定**
 - U3a-2Q-V: **DONE**
-- 次実装: **CU-206 SPLIT**（`CU-206I → CU-206R → CU-206C`）
+- 次実装: **CU-206C DO**
 
 ## 1. 利用者成果
 
@@ -12,7 +12,7 @@
 - track rowは固定モックの既存値を再利用し、**34 logical px**で固定する。
 - 時間軸は固定モックの既存grid値を再利用し、**80 logical px / second**を初期scaleとする。
 - clip barのstart / duration / bandはDocument投影値のままにし、clip数やwindow高でbarの高さ・時間scaleを変えない。
-- 縦scrollはtrack方向、横scrollはtime方向のviewportだけを動かす。Mac trackpadの2軸deltaを分離し、Shift+縦wheelは横scrollへ写す。
+- 縦scrollはtrack方向、横scrollはtime方向のviewportだけを動かす。`MouseWheel`の2軸deltaを分離し、trackpad / horizontal wheelの横deltaを使う。
 - ruler、bar、key、playhead、hit-test、move / trim / snapは同じviewport変換を使う。
 
 ## 2. ownerと寿命
@@ -42,13 +42,11 @@
 
 - zoom gesture、semantic zoom段階、minimap、scrollbar widget、track reorder、track header機能、永続viewport形式を追加しない。
 - React `TimelineCandidate`、`docs/mocks-ui` runtime import、第二Timeline、公開API、Document/serde/journal/plugin契約を追加しない。
-- `product_runtime_adapter.rs`のlifecycle-only境界を拡張しない。既存AppKit local monitor以外の入力frameworkを作らない。
+- 既存`product_runtime_adapter.rs`へ`CursorMoved / MouseWheel`だけを仕様承認済みclosed setとして追加し、raw型をProduct runtimeへ漏らさない。別input adapter / frameworkを作らない。
 - fixed値や期待値を試験通過のために変更しない。既存move / trim / snap / Easing / selectionの意味が変わる場合はSTOPする。
 
-## 6. 施工分割
+## 6. 失敗probeとREMAP
 
-runnerのread capsule上限内で同じ契約を重複読込せず、直列に閉じる。
+`CU-206I`の先行input carrierは、consumer不在期間のdead codeをSparkがlint抑制し、runnerのderived target closureも失敗したため`CANCELLED`とした。差分は採用せずworktreeを元へ戻した。
 
-1. `CU-206I`: 既存AppKit local monitorへbounded 2軸scroll sampleとBrowser Hostのprivate pollを追加する。
-2. `CU-206R`: native rendererを固定row / 固定time scale / viewport描画へし、既存入口はdefault viewportで互換維持する。
-3. `CU-206C`: Product session state、projection、hit-test、move / trim / snap、I/Rの既存private入口を一つへ接続し、通常製品windowで検証する。
+中間carrierを作らず、既存`product_runtime_adapter`の仕様承認closed setへ`CursorMoved / MouseWheel / MouseScrollDelta`だけを追加する。adapterでlogical cursorと有限な2軸deltaへ落とし、同じ`CU-206C`でProject session viewport、native renderer、hit-testへ接続する。`ModifiersChanged`、keyboard、mouse button、DeviceEventは引き続き拒否する。

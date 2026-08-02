@@ -354,7 +354,16 @@ fn product_window_adapter_path_is_allowed(segments: &[String]) -> bool {
                         | "ScaleFactorChanged"
                         | "Occluded"
                         | "RedrawRequested"
+                        | "CursorMoved"
+                        | "MouseWheel"
                 )
+    ) || matches!(
+        segments,
+        [winit, event, input, variant]
+            if winit == "winit"
+                && event == "event"
+                && input == "MouseScrollDelta"
+                && matches!(variant.as_str(), "LineDelta" | "PixelDelta")
     )
 }
 
@@ -660,7 +669,13 @@ fn product_window_adapter_accepts_only_lifecycle_events() {
                 | winit::event::WindowEvent::Resized(_)
                 | winit::event::WindowEvent::ScaleFactorChanged { .. }
                 | winit::event::WindowEvent::Occluded(_)
-                | winit::event::WindowEvent::RedrawRequested => {}
+                | winit::event::WindowEvent::RedrawRequested
+                | winit::event::WindowEvent::CursorMoved { .. }
+                | winit::event::WindowEvent::MouseWheel {
+                    delta: winit::event::MouseScrollDelta::LineDelta(_, _)
+                        | winit::event::MouseScrollDelta::PixelDelta(_),
+                    ..
+                } => {}
                 _ => {}
             }
         }
