@@ -133,7 +133,7 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 | `P02-C1` | `IMPLEMENT` | `CU-201T-S`で閉じた`TrimClipIn` / `TrimClipOut`を`CU-201T-C`で既存D2へ接続 | trimがjournal replay可能で1 Undo |
 | `P02-C2` | `VERIFY_ONLY` | 既存journal→apply→publish routeの失敗oracleを再実行。理由なく再構成しない | 全surfaceが同じpublished snapshotを読む |
 | `P02-C3` | `TARGET_MISSING` | selection成立済み部分を除き、essential focusまたはplayhead consumerを一件特定 | UI stateをDocumentへ保存せず一方向publish |
-| `P03-C1` | `VERIFY_ONLY` | 100k key狭域projectionと同名label/typed identity oracle。renderer本体を再実装しない | visible workがbounded |
+| `P03-C1` | `DONE` | `crates/motolii-ui/tests/timeline_projection.rs::p12_hundred_thousand_keys_cull_to_visible_identity`で100k keyの狭域projectionとtyped identityを確認。renderer本体は変更しない | visible outputがbounded |
 | `P03-C2` | `WAIT_CONFLICT` | `P02-C1`の対象command完成後、move/trimのどちらか一gestureだけ | drag中write 0、release 1 Undo |
 | `P03-C3` | `TARGET_MISSING` | visible-range consumerとnavigation CommandIdを一つ特定 | selection/focus/playheadが同一projection |
 | `P04-C1` | `DONE` | なし。`U4a-1`〜`CU-205E`を再実装しない | first-party parameterの通常編集route |
@@ -198,7 +198,7 @@ EXIT:
   in/out shrink and extend, inverse, merge, JSON/WAL replay and every reject leave exact state
 ```
 
-### 5.2 `P03-C1-VERIFY` — bounded Timeline oracle候補
+### 5.2 `P03-C1-VERIFY` — bounded Timeline oracle
 
 ```text
 INPUT:
@@ -219,12 +219,11 @@ FORBIDDEN:
   threshold adoption
 
 EXIT:
-  if existing coverage is absent, one regression-test commit
-  otherwise DONE with no diff
+  `p12_hundred_thousand_keys_cull_to_visible_identity` passes; no renderer/product diff
 ```
 
-`P03-C1-VERIFY`は製品機能の進捗ではなく、既存routeを再施工しないための確認である。実装速度の本線は
-`CU-201T-S → CU-201T-C → P03-C2 trim gesture`である。
+`P03-C1-VERIFY`は製品機能の進捗ではなく、既存routeを再施工しないための確認である。確認済みのため、
+製品実装の本線は`CU-201N-S → CU-201P`へ戻る。
 
 ## 6. ゴールへ至る依存IR
 

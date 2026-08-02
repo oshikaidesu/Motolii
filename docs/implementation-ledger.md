@@ -119,7 +119,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 ## 現在の並列レーン
 
-現在sliceは**VS-2 parameter editing / timeline interval editing**で、正常系`CU-205E`、move command実装`CU-201M-C`、trim command実装`CU-201T-C`まで`DONE`。`CU-204P`は通常source 0の再確認後、新source成立まで再監査・実装を反復しない。現時点で選定済みの次粒はSPEC `CU-201N-S`。後続は[M3既知技術採択・並列実装地図](m3-parallel-implementation-map.md)から、共有writer、event loop、GPU device、bundle publicationが衝突しない子を複数選定できる。
+現在sliceは**VS-2 parameter editing / timeline interval editing**で、正常系`CU-205E`、move command実装`CU-201M-C`、trim command実装`CU-201T-C`、Timeline bounded projection確認`P03-C1`まで`DONE`。`CU-204P`は通常source 0の再確認後、新source成立まで再監査・実装を反復しない。現時点で選定済みの次粒はPRODUCT `CU-201P`。後続は[M3既知技術採択・並列実装地図](m3-parallel-implementation-map.md)から、共有writer、event loop、GPU device、bundle publicationが衝突しない子を複数選定できる。
 現在の全lane、変更path、STOP、Human Response Frontierは
 [並列レーン着手地図](reviews/2026-07-25-parallel-lane-readiness-map.md)を正とする。
 旧night 3分岐は直接統合しない。
@@ -250,8 +250,9 @@ P0I #170 → P7a → P7b → P7c → P7U
 | CORE | CU-201M-C | M3 / VS-2 / Clip move command and Writer prepare | `DONE` | [CU-201M-S契約決定](reviews/2026-08-01-cu-201m-s-clip-start-command-contract-decision.md) | commit `729953d3`（format `293186c8`）、9 oracle、journal replay、workspace test/clippy、Grok `ACCEPT` P0/P1/P2=0 | start以外不変、raw mutation 0、schema/journal version不変 |
 | PRODUCT-ASSET | CU-201T-S | M3 / VS-2 / SPEC / Clip trim and TimeMap meaning | `DONE` | [CU-201T-S契約](reviews/2026-08-01-cu-201t-s-clip-trim-timemap-contract-decision.md) | `TrimClipIn` / `TrimClipOut`、厳密RationalTime、absolute old/new payload、duration > 0、拒否順を固定 | schema/code変更0。T-CをDOへ上げる |
 | CORE | CU-201T-C | M3 / VS-2 / Clip trim command and Writer prepare | `DONE` | [CU-201T-S契約](reviews/2026-08-01-cu-201t-s-clip-trim-timemap-contract-decision.md) | 実装 `a860e10e`、oracle補強 `c2eda847`。`cargo test -p motolii-doc --test d1l_writer_prepare` 41/41、`motolii-ui` 170/170、fmt/clippy green | journal replay、1 Undo、失敗時Document不変 |
-| PRODUCT-ASSET | CU-201N-S | M3 / VS-2 / SPEC / snap target priority and unit | `DO` | [CU-201S責任分割](reviews/2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | CU-201M-C + CU-201T-C `DONE` | deterministic tie-break、no-snap、zoom/DPI/fps非依存。U7 beat/marker 0 |
-| PRODUCT | CU-201P | M3 / VS-2 / native Timeline interval gesture | `WAIT` | [CU-201S責任分割](reviews/2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | CU-201N-S | drag write 0、release 1 Undo、Cancel 0 |
+| PRODUCT-ASSET | CU-201N-S | M3 / VS-2 / SPEC / snap target priority and unit | `DONE` | [CU-201N-S契約](reviews/2026-08-03-cu-201n-s-snap-target-contract-decision.md) | `TimelineBar`/`TimelineKey`/`RationalTime`既存target、key優先・stable identity tie-break・transient threshold・no-snapを固定 | 次はPRODUCT `CU-201P` |
+| PRODUCT-ASSET | P03-C1 | M3 / VS-2 / VERIFY / bounded Timeline projection | `DONE` | — | `p12_hundred_thousand_keys_cull_to_visible_identity`、`cargo test -p motolii-ui --test timeline_projection` 25/25 | renderer/product runtime変更0。CU-201Pへ戻る |
+| PRODUCT | CU-201P | M3 / VS-2 / native Timeline interval gesture | `DO` | [CU-201N-S契約](reviews/2026-08-03-cu-201n-s-snap-target-contract-decision.md) | CU-201N-S `DONE` + existing `TimelineHit`/pointer capture | drag write 0、release 1 Undo、Cancel 0 |
 | ORACLE-GUARD | CU-201R | M3 / VS-2 / random move trim sequence | `WAIT` | [CU-201S責任分割](reviews/2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | CU-201P | 重複0、相対位置、全Undo、Cancel 0 |
 | E2E | CU-201E | M3 / VS-2 / normal product move trim reopen | `WAIT` | [CU-201S責任分割](reviews/2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | CU-201R | same identity、保存interval、UI drag state非永続 |
 | PRODUCT-ASSET | CU-203 | M3 / VS-2 / U2c-3 common feedback component | `DONE` | [CU-203分割決定](reviews/2026-07-31-cu-203-feedback-source-ownership-split-decision.md) | S → M → P | source不在をproduct縮約実装で埋めず、診断投影/Intent配線をCU-204へ残した |
