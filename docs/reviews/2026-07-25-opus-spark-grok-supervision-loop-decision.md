@@ -4,7 +4,8 @@
 
 > `scripts/delegate-cursor-supervised.sh`とcanonical activateは
 > [非破壊的廃止決定](2026-08-02-supervised-runner-retirement-decision.md)で通常入口から外れた。
-> 本文のorder schema、route version、launcher手順を新規実行へ使わない。
+> 本文のorder schema、route version、launcher手順を新規実行へ使わない。現行の監督責任は
+> [runner非依存監督決定](2026-08-03-runner-independent-supervision-decision.md)だけを参照する。
 
 日付: 2026-07-25
 

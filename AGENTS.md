@@ -12,21 +12,17 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 - **自己発注禁止**: 主担当Codexは、ユーザーが許可した`AUTHORIZED_OUTCOME / AUTHORIZED_ARTIFACTS / AUTHORIZED_MUTATIONS / AUTHORIZED_VALIDATION`を自分で増やさない。次の一手が成果物、owner、権限、完了条件、model呼出し、検収周回を増やす場合、その追加分は未許可として施工せず、既存scopeの最小次手を続けるかユーザーへ返す
 - **findingは権限ではない**: 調査、test、review、Grok、Opus、Fable、別Codexが新しい問題を発見しても、同一taskでの追加施工権限にはならない。既存完了条件を満たせない`IN_SCOPE_BLOCKER`だけを許可済みallowlist内の最小修正へ戻し、それ以外は`OUT_OF_SCOPE_FINDING`または`FOLLOW_UP`として報告する。reviewerはorder、scope、完了条件を増やさない
 - **既決を未決へ戻さない**: 提案、再設計、仕様化、発注の前に[決定逆引き台帳](docs/decision-index.md)を主題keywordで検索し、該当decision ID／正本path／現行状態を示す。該当決定を読まずに新しい仕組みを提案しない。正本と現行コードが衝突する場合だけ`AUTHORITY_CONFLICT`として当該操作を止める
-- 上記三則は主担当Codexを含む全modelに適用する。自己反証、隔離worktree、検収、技術的有用性、安全性は追加権限の代わりにならない。機械判定できる禁止は文章だけに置かずrunner、sandbox、hook、CIで拒否する
+- 上記三則は主担当Codexを含む全modelに適用する。自己反証、隔離worktree、検収、技術的有用性、安全性は追加権限の代わりにならない。機械判定できる禁止は既存のsandbox、hook、CI、testで拒否する
 
-## [RETIRED TRANSPORT] 「発注」時のGrok / Spark / Opus 5監督ループ
+## 「発注」時のrunner非依存監督
 
 - 「発注して」「実装を発注」等、**発注を依頼動詞として明示した時だけ**自動委任する。通常の「実装して」、説明、引用、ファイル内の語では発火しない
-- 現行routeは`Codex → cursor-grok-4.5-high → gpt-5.3-codex-spark → claude-opus-5 → Codex`、`ROUTE_CONTRACT_VERSION: 2`、`LOOP_PROFILE: grok-spark-opus`だけとする。Grokはread-only preflight、Sparkは隔離実装、Opusは実装思考を受け取らないfresh read-only final review、Codexは正本照合と採否を所有する。外部modelは再委任しない
-- 外側のCodex席は`SUPERVISION_PROFILE: luna-daily-sol-parent-v1`として`gpt-5.6-luna` `max`を通常監督に使い、全子粒receiptが揃った親項目の閉鎖・地図topology変更・複数owner／仕様衝突だけをfresh read-onlyの`gpt-5.6-sol` `xhigh`へ上げる。これはrunner route v2を変更せず、model利用不能時に黙って代替しない。詳細は監督ループ正本を読む
-- 旧`opus-spark-grok`、`ORDER_MANAGER_MODEL`、`OPUS_DELTA_*`、旧task-class routingを現行へ使わず、自動翻訳・黙ったfallbackをしない。branch内の`delegate-cursor-supervised.sh`を直接起動せず、Git common dirへactivateされたcanonical runnerだけを正規入口にする。receiptの`RUNNER_SHA256`がactive manifestと一致しない実行は採用根拠にしない
-- 一回のloopは一つの`CONTRACT_BOUNDARY`だけを扱う。`GRAIN`は契約境界であり施工step数ではない。同じbase、owner、allowlist、read set、oracle、非目標内の複数stepは一つのSpark sessionで施工し、Grok／Opusをstepごとに再起動しない。境界または完了条件が増える場合は同一粒で施工せず、新しいユーザー許可へ戻す
-- 主担当Codexは正本・履歴・コード事実を一度だけ広く読み、外部modelへ`AGENTS.md`、spec、repo全体を三重送信しない。orderは`READ_MODE: CAPSULE`、`CONTEXT_FACT:`、exact `READ_FILE / INTERNAL_TARGET / TEST_TARGET / REUSE_TARGET`、`NEW_SURFACE: FORBIDDEN`を持つ。上限はtask 12 KiB、order 32 KiB、target capsule 48 KiB、compiled grain 16 KiB、authority 4件、allowlist 8件、read set 12件／128 KiB。欠落、hash変化、target不一致、runner-only metadata漏洩はmodel起動前にfail closedする
-- React source asset粒では`SOURCE ASSET`に列挙したsource closureを`READ_FILE`へ全件含め、各dynamic stateのcomponent/hook/state/event/effectへ一意な`REUSE_TARGET`を置く。source closureがread set 12件／128 KiBまたはtarget capsule 48 KiBを超える場合は省略・切断せず`ORDER: STOP`とし、相互作用するhandler／story／test closureを保ったcomponent単位へ粒を縮小する
-- 視野幅は`AUTHORITY_SPAN / OWNER_CLOSURE / CAUSE_CLOSURE / CONTRACT_CLOSURE / ORACLE_CLOSURE / REUSE_CLOSURE`から機械算出し、UNKNOWN、COMPETING、UNRESOLVED、ABSENT、NEWを含む`WIDE`をSparkへ送らない。shared／permanent境界は検証済み`CONTRACT_AUTHORITY`と正本hashが一致する場合だけ施工する。詳細なfield、hazard、React、Rerunの強制動線は[監督ループ正本](docs/reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md)を読む
-- Grok findingの採否と各`DELTA_RESOLUTION`をCodexが照合し、`CODEX PRECHECK: APPROVED`前にSparkを起動しない。Opus finalが`ACCEPT`かつP0/P1=0でなければ採用、commit、pushしない。review findingは現粒のREJECTまたは新粒候補であり、同一粒のscope追加権限ではない。性能regressionはLLM verdictでなくbench、golden、profilingで判定する
-- 監督ループを件数条件で凍結しない。計測、論文、利用者報告、外部LLM助言はauthorityでなくobservationとし、ユーザーの明示決定、正本更新、専用負例、runner byte固定、明示activateが揃うまで現行routeを変更しない。取消は証跡を削除せず`cancel` receiptでorderの採用資格を終端化する。Fableは大地図、共有公開境界、恒久契約、長期衝突に限るloop外read-only相談であり、通常gateにしない
-- runner、order schema、六軸、telemetry、独立性、停止条件の詳細と現行／歴史の区別は[監督ループ正本](docs/reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md)を唯一の説明正本とする。AGENTS.mdへ再複製しない
+- 主担当Codexがユーザーscope、正本、base/cwd、変更対象、非目標、oracleを所有し、一つの契約境界だけを実装担当へ渡す。意味、owner、原因、再利用、oracleのいずれかが閉じない`WIDE`は実装担当へ送らず、調査またはユーザー判断へ戻す
+- worktreeは主担当Codexが用意する。外部CLIは[`run-observed-cli.py`](scripts/run-observed-cli.py)へ完全なmodel/mode/sandbox引数を渡して起動し、利用不能時に別modelへ黙ってfallbackしない。外部modelは再委任しない
+- 実装担当と最終reviewerは別session・別役割にする。reviewerはread-onlyで実diffと試験を確認し、変更した場合は検収を無効とする。必要なmodelと段階はtaskに応じてCodexが選び、全発注へ固定直列routeを課さない
+- 採用はCodexが実base、開始前後fingerprint、diff、試験、review結果を直接照合して決める。LLMの賛同やlogの存在だけで採用せず、P0/P1未解決、scope外変更、reviewer mutation、ユーザーSTOP後の実行を拒否する
+- promptは正本を再送せず、判断に必要なコード事実、対象path、変更境界、負例、確認commandだけに絞る。不足時は推測やrepo横断探索をさせずCodexへ戻す。詳細は[runner非依存監督決定](docs/reviews/2026-08-03-runner-independent-supervision-decision.md)
+- 旧runner固有の起動・状態・証跡語彙は歴史資料であり、現行の起動条件・採用資格・必須fieldに使わない
 
 ## 発注外のscope自己反証とコーディングパートナー
 
@@ -40,8 +36,8 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。実装
 
 - `claude-opus-5`は「発注」外でもread-only広域相談に使えるが、正本とコード事実だけで閉じる作業の形式的barrierにしない。要求解釈、複数owner／原因、再利用境界、負例、公開API／Document／永続形式への波及で判断が変わり得る場合だけ呼ぶ
 - 相談packetは確定仕様、コード事実、仮説、選択肢、非目標、反例、改善機会を含め、回答を`FACTS / INFERENCES / OPTIONS / OPPORTUNITIES / ADVICE / RECOMMENDATION / STOP CONDITIONS`へ分離する。編集、commit、push、PR、Spark、再委任を許さず、助言をauthorityや追加施工権限にしない
-- Opus／Fable相談は正規の監視包絡から起動し、生event、heartbeat、timeout、exit status、process回収を保存する。完了前stdout空を空回答と判定せず、別modelへ黙ってfallbackしない。監視包絡が使えなければ相談を未実施として正本とコード事実で継続する
-- 大地図、長期展望、複数仕様衝突、共有公開境界、恒久契約、CodexとOpusの結論衝突だけを`claude-fable-5`へread-only昇格する。加えて、新機構が必要に見え、列挙した既知routeが必須oracle、license、platform、security、maintenanceで落ちる証拠が揃った時は、利用者例外へ返す直前に一回だけFableへ先例の取りこぼし／再写像を照会する。Fableは発明を認可・仕様化しない。Claude Code CLIから直接呼び、Cursor同名modelで代替しない。詳細は[監督ループ正本](docs/reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md)を読む
+- Opus／Fable相談は薄いCLI harnessから起動し、生stream、timeout、exit status、process回収を保存する。完了前stdout空を空回答と判定せず、別modelへ黙ってfallbackしない
+- 大地図、長期展望、複数仕様衝突、共有公開境界、恒久契約、CodexとOpusの結論衝突だけを`claude-fable-5`へread-only昇格する。加えて、新機構が必要に見え、列挙した既知routeが必須oracle、license、platform、security、maintenanceで落ちる証拠が揃った時は、利用者例外へ返す直前に一回だけFableへ先例の取りこぼし／再写像を照会する。Fableは発明を認可・仕様化しない。Claude Code CLIから直接呼び、Cursor同名modelで代替しない
 
 ### Reactモック製品資産を含む発注の強制動線（無視禁止）
 
@@ -54,12 +50,12 @@ Host projection / typed intentへ交換する。DOM/CSSを公開契約へ焼か�
 移管済みassetはprovenance manifestが固定した現product closure hashのReact実コードを開き、対象exportから
 到達するcomponent、hook、local state、event handler、effect、model、Storybook、Playwright操作列をsource closureとして
 列挙する。各動的stateを`維持するlocal presentation`または`Host projection / typed intentへ交換するsemantic state`へ
-一件ずつ分類できない発注は`ORDER: STOP`とする。
+一件ずつ分類できない施工は`STOP`とする。
 
-該当発注書は通常項目に加えて、次のラベルを順番どおり持たなければならない。
+主担当Codexは施工前に次を確認する。これはtransportへ渡すschemaではない。
 
 1. `REACT AUTHORITY`: 対象面、移管契約、UI runtime境界、対応spec ID
-2. `SOURCE ASSET`: `FIXED_MOCK`または`PRODUCT_CLOSURE`のprovenance hash、path、export、component/hook/state/event/effect、CSS/model/story/test closure。全件を`READ_FILE`へ含め、各動的箇所を`REUSE_TARGET`で渡す
+2. `SOURCE ASSET`: `FIXED_MOCK`または`PRODUCT_CLOSURE`のprovenance hash、path、export、component/hook/state/event/effect、CSS/model/story/test closure。対象source closureを実装担当へ渡す
 3. `PRESERVE`: DOM、class、stable ID、ARIA、interaction、visual state
 4. `REPLACE`: mock/legacy stateからprojection / intentへ交換する範囲
 5. `STATE OWNER`: Document / User settings / Workspace / Project session / Transient / local presentation
@@ -73,7 +69,7 @@ source assetがあるのに別leafを新設した、CSS修理だけでparityへ�
 importした、mock/productへ同じcomponent copyを残した、catalog ID/label/thumbnail tokenから欠落意味を推測した、
 ReactへDocument/selection/Undo正本を追加した、visual threshold/goldenを変えた、diagnostic routeだけを成果にした、
 静止画、render結果、DOM snapshot、live DOM、React DevToolsからinteraction/stateを補った、動的stateのownerを推測した、
-のいずれかで`ORDER: STOP`とする。
+のいずれかで施工を`STOP`する。
 
 正しい独立React sourceが存在しない領域は製品packageへ縮約版を先に作らない。固定モック内で同形React化し、
 既存visual/interaction oracleへ合格してから所有移管する。presentation移管とHost state接続、WebView統合、D2 commitを
@@ -83,7 +79,7 @@ ReactへDocument/selection/Undo正本を追加した、visual threshold/golden�
 
 Rerunは主要な製品先例だがMotoliiの仕様正本ではない。Rerunを参照する調査・設計・実装発注は、必ず **Motolii仕様 → 現行コード事実 → Rerun先例 → Motolii fixture** の順に通す。Rerunのcrate、型、画面、内部責任からMotoliiの目的・公開API・Document・plugin契約を逆算しない。正本と詳細動線は[Rerun学習・転移計画 §9](docs/reviews/2026-07-20-rerun-learning-transfer-plan.md#9-rerun参照を発注へ入れる強制動線)。候補assetの母集団と監査済み範囲は[Rerun source asset inventory](docs/reviews/2026-07-20-rerun-source-asset-inventory.md)を読み、同文書の「候補分類」を採用裁定として扱わない。
 
-Rerunを一度でも根拠・再利用箇所・変更案に含める発注書は、通常の必須項目に加えて次のラベルを順番どおり持たなければならない。欠落、順序逆転、内容不一致が一つでもあればCodex事前審査は承認せず、選択済み実装担当を起動しない。
+Rerunを一度でも根拠・再利用箇所・変更案に含める場合、主担当Codexは施工前に次を確認する。これはtransportへ渡すschemaではない。欠落または内容不一致があれば実装担当を起動しない。
 
 1. `MOTOLII AUTHORITY`: 対象spec ID、決定、既存公開契約、完成条件
 2. `CODE FACT GAP`: 現行コードで未成立の事実と再現証跡
@@ -92,7 +88,7 @@ Rerunを一度でも根拠・再利用箇所・変更案に含める発注書は
 5. `TRANSFER LIMIT`: 変更許可ファイル、持込禁止型・状態・意味、既存境界で自作する比較案
 6. `MOTOLII ORACLE`: Rerunとの類似ではなくMotolii fixture/testで判定する合否
 
-次のどれかが起きた時点で`ORDER: STOP`とし、仕様を発明せずCodexへ戻す: Rerunの内部構造を採らないと実装不能に見える／package名またはinventoryの候補分類だけでasset範囲を決めた／未裁定assetの依存・vendoring・移植が必要／公開API・Document・plugin契約・永続形式の変更が必要／Rerunに無いMotolii固有要件を削る必要がある／Rerunの見た目やsnapshotへ合わせるため既存期待値を変更したくなった。検収はRerunへの外観・構造類似を合格根拠にせず、上記6ラベル、Motoliiの負例、依存差分、公開型、serde面、license由来を再確認する。
+次のどれかが起きた時点で施工を`STOP`し、仕様を発明せずCodexへ戻す: Rerunの内部構造を採らないと実装不能に見える／package名またはinventoryの候補分類だけでasset範囲を決めた／未裁定assetの依存・vendoring・移植が必要／公開API・Document・plugin契約・永続形式の変更が必要／Rerunに無いMotolii固有要件を削る必要がある／Rerunの見た目やsnapshotへ合わせるため既存期待値を変更したくなった。検収はRerunへの外観・構造類似を合格根拠にせず、上記6項目、Motoliiの負例、依存差分、公開型、serde面、license由来を再確認する。
 
 ## 最初に読む
 
@@ -128,7 +124,7 @@ Rerunを一度でも根拠・再利用箇所・変更案に含める発注書は
 
 - **会話中の仕様ドリフトを先に回収する**: 会話が当初の論点からずれ始めた、新しい用途・用語・状態所有・操作・配布形式へ広がった、既存決定と違う案が出た、と認識した時点で、広がった候補案の実行だけを保留し、親taskは既存scope内の次手で継続する。会話を正本にせず、(1) 単なる観察は`docs/reviews/`のobservation、(2) 比較中の案はprototype／decision ledger、(3) 採択済みの意味は対象spec、(4) 後続課題はbacklogへ、**状態（観察／比較中／決定／棄却／停止）と非目標つき**でコードより先に記録する
 - **着手前に[決定逆引き台帳](docs/decision-index.md)を主題キーワードで引く**。既決を「未決」と誤認して埋め直さない。決定・撤回・未統一が新しく生まれたら、正本へ書いた上で同じ変更で台帳へ1行登録する(登録規則は[docs/reviews/README.md](docs/reviews/README.md))。docs/reviewsを触ったら`scripts/check-docs.sh`を通す
-- **要求を直接「新しい意味決定」へ送らない**: 各粒を `AUTHORITY → INTERNAL TARGET → OWNER → WRITE ROUTE → GAP → RESOLUTION ROUTE → DISPOSITION(PASS / REDUCE / RESOLVE)`へ写す。既存targetとrouteは再決定せず接続する。`GAP`は未調査やUI名称差でなく型・試験の不在または契約矛盾で証明する。解決段は `REUSE → REMAP → REDUCE → 正本／decision-indexの採択route参照 → 必要時Opus`とし、共有／恒久境界はFableへ上げる。仕様化してよいのは採択済みrouteの接続契約と製品policy／oracleだけで、modelは新機構targetを仕様化しない。既知routeが具体的反証で尽きた時はFableの一回の取りこぼし検査後、利用者例外へ返す。`ORDER: STOP`は発明施工だけを止める局所信号であり、親taskと接続可能laneは続ける。解決粒は[implementation ledger](docs/implementation-ledger.md)へ登録し、新決定は正本と[decision-index](docs/decision-index.md)を同時更新する
+- **要求を直接「新しい意味決定」へ送らない**: 各粒を `AUTHORITY → INTERNAL TARGET → OWNER → WRITE ROUTE → GAP → RESOLUTION ROUTE → DISPOSITION(PASS / REDUCE / RESOLVE)`へ写す。既存targetとrouteは再決定せず接続する。`GAP`は未調査やUI名称差でなく型・試験の不在または契約矛盾で証明する。解決段は `REUSE → REMAP → REDUCE → 正本／decision-indexの採択route参照 → 必要時Opus`とし、共有／恒久境界はFableへ上げる。仕様化してよいのは採択済みrouteの接続契約と製品policy／oracleだけで、modelは新機構targetを仕様化しない。既知routeが具体的反証で尽きた時はFableの一回の取りこぼし検査後、利用者例外へ返す。`STOP`は発明施工だけを止める局所信号であり、親taskと接続可能laneは続ける。解決粒は[implementation ledger](docs/implementation-ledger.md)へ登録し、新決定は正本と[decision-index](docs/decision-index.md)を同時更新する
 - ドリフト検知時に既存仕様を黙って上書きしない。矛盾する旧記述と新案を同じ「現行」として残さず、未統一なら入口文書へ両者と解消条件を明記する。恒久形式、公開API、plugin契約、Document意味へ波及する場合は通常のSTOP条件と仕様改訂を優先する
 - 作業完了前に、その会話で新しく決まったこと、保留したこと、撤回したことがdocsへ回収され、Codexタスク履歴だけに残っていないか確認する。雑談的な発想は無理に規範化せず、実装判断へ影響し始めた時だけ台帳化する
 - **1チケット=1コミット**。完了時に仕様書のチケット表・実装状況表を更新する

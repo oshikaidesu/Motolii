@@ -1,5 +1,8 @@
 # 監督runnerの派生`target/`閉包
 
+> 2026-08-03追補: 本文は旧runner事故と修復の歴史証跡である。新規発注のtransport・採用資格には使わず、
+> workspace派生物の安全な確認原則だけを[runner非依存監督決定](2026-08-03-runner-independent-supervision-decision.md)から適用する。
+
 状態: **完了**。Issue [#329](https://github.com/oshikaidesu/Motolii/issues/329)は
 [#336](https://github.com/oshikaidesu/Motolii/pull/336)でmainへ統合した。`M4-K0 / #167`は旧隔離差分を
 採用せず、fresh main/worktree/orderから再発注できる。

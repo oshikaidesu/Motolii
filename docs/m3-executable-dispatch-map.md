@@ -1,21 +1,21 @@
-# M3 実行可能発注地図
+# M3 実行可能task地図
 
 状態: **施工前コンパイル正本 / 2026-08-01停止simulation反映**
 
 ## 1. 目的
 
-[既知技術採択・並列実装地図](m3-parallel-implementation-map.md)の親・子を、そのまま発注できる
-`exact delta`へ変換する。本書は製品意味や新しいrunner gateを作らない。各子について、現在mainで
+[既知技術採択・並列実装地図](m3-parallel-implementation-map.md)の親・子を、施工可否を判断できる
+`exact delta`へ変換する。本書は製品意味や新しいtransport gateを作らない。各子について、現在mainで
 すでに成立したもの、実装前に閉じる前提、実装担当が変更できるexact target、利用者に見える出口を分ける。
 
 2026-08-01の4子フローsimulationでは、供給routeが決まっていても次の不足がある子を`READY`と呼ぶと、
 実装担当が既存adapterを物理移動したり、存在しないtyped snapshotを新設したりすることが分かった。
-したがって「既知解がある」と「いま実装orderを発行できる」を別状態にする。
+したがって「既知解がある」と「いま実装taskを開始できる」を別状態にする。
 
-## 2. 発注コンパイラ
+## 2. Codex readiness判定
 
 ```text
-compile(child, current_main, active_orders):
+compile(child, current_main, active_tasks):
     authority = exact_authority(child)
     outcome   = observable_user_exit(child)
     target    = existing_internal_target(child, current_main)
@@ -32,7 +32,7 @@ compile(child, current_main, active_orders):
         return TARGET_MISSING(exact_required_type_or_callback)
     if dynamic_surface(child) and transition_contract(child) is incomplete:
         return TARGET_MISSING(exact_event_owner_intent_or_stale_rule)
-    if target intersects an active order or a shared writer:
+    if target intersects an active task or a shared writer:
         return WAIT_CONFLICT(unique_integration_owner)
     if allowlist crosses more than one contract owner:
         return REDUCE
@@ -66,7 +66,7 @@ TRANSITION_ORDER:
   selected_route_probe_required=true        -> ADOPTION_PROBE
   exact_existing_target=false               -> TARGET_MISSING
   dynamic_transition_incomplete=true         -> TARGET_MISSING
-  active_order_or_shared_writer_conflict=true -> WAIT_CONFLICT
+  active_task_or_shared_writer_conflict=true  -> WAIT_CONFLICT
   one_contract_boundary=false               -> REDUCE
   raw_runtime_evidence_required=true         -> MEASURE
   synthetic_substitution_forbidden=true      -> HUMAN | HARDWARE
@@ -80,14 +80,14 @@ POST_IMPLEMENT:
 
 ## 3. 状態語
 
-| 状態 | 発行してよいorder |
+| 状態 | 開始してよいtask |
 |---|---|
 | `DONE` | なし。既存実装を再施工しない |
 | `VERIFY_ONLY` | 既存routeを変えない拒否試験またはshipped-path確認だけ |
 | `SPEC_ONLY` | docs、fixture、拒否表だけ。製品codeを変更しない |
 | `ADOPTION_PROBE` | upstream互換・thread・platform・licenseを隔離確認。製品接続しない |
 | `TARGET_MISSING` | 実装禁止。必要な既存型・callback・snapshotを一意にして前ownerへ返す |
-| `WAIT_CONFLICT` | 共有writerまたはactive orderの完了待ち |
+| `WAIT_CONFLICT` | 共有writerまたはactive taskの完了待ち |
 | `IMPLEMENT` | 一契約境界、exact allowlist、正負oracle、利用者出口が閉じた実装 |
 | `MEASURE` | 既存routeを変えずraw値を採取する。閾値や新機構を仕様化しない |
 | `HUMAN` / `HARDWARE` | synthetic代用禁止の外部審判 |
@@ -124,7 +124,7 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 この表の状態は基線`555a9ab5`と2026-08-01 simulation時点である。`IMPLEMENT`への昇格は
 implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 
-| 子 | 現在状態 | exact次order | 通常製品routeの出口 |
+| 子 | 現在状態 | exact次task | 通常製品routeの出口 |
 |---|---|---|---|
 | `P01-C1` | `VERIFY_ONLY` | adapterを物理移動せず、重複coordinatorの実在だけを列挙。無ければPASS | event-loop/surface ownerが一意 |
 | `P01-C2` | `TARGET_MISSING` | 固定sourceの未移管componentをsurface別に一件特定し、実コードからdynamic transitionのowner/input/intent/stale ruleを埋める | product単一owner、mockはconsumer |
@@ -160,10 +160,10 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 | `P11-C3` | `HARDWARE` | 所有Windows/Mac、DPI、NVDA/VoiceOver、配布artifact | Distribution Ready |
 | `P12-C1` | `SPEC_ONLY` | Unsaved/Save-As/cancel/failed-save policyとrfd probeを分離 | New/Open/Save/reopenで原本を失わない |
 
-## 5. 現在発行できるorder
+## 5. 現在開始できるtask
 
-`CU-201T-S`の意味閉鎖により、製品codeを変更する最初の`IMPLEMENT`として`CU-201T-C`を発行できる。
-`P03-C1-VERIFY`は独立だが、直列速度測定中は同時発行しない。
+`CU-201T-S`の意味閉鎖により、製品codeを変更する最初の`IMPLEMENT`として`CU-201T-C`を開始できる。
+`P03-C1-VERIFY`は独立だが、直列速度測定中は同時開始しない。
 
 ### 5.1 `CU-201T-C` — trim command接続
 
@@ -228,7 +228,7 @@ EXIT:
 
 ## 6. ゴールへ至る依存IR
 
-runnerとLLMは視覚的な順序を推測せず、次のedgeだけを依存として扱う。同じ`requires`を持たず、
+主担当Codexは視覚的な順序を推測せず、次のedgeだけを依存として扱う。同じ`requires`を持たず、
 allowlistとwriterが衝突しないnodeは並列にdispatchできる。
 ただし、このIRはreadinessを与えない。各nodeは§4のcompile状態とimplementation ledgerの一意な`DO`を通過するまで
 dispatch禁止であり、`requires=[]`は`IMPLEMENT`を意味しない。
@@ -259,14 +259,14 @@ NODE HUMAN-ACCEPT requires=[local_alpha_fixture] emits=[human_acceptance]
 NODE DISTRIBUTION requires=[local_alpha_fixture] emits=[hardware_distribution_evidence]
 ```
 
-## 7. 一つの実装orderの完成形
+## 7. 一つの実装taskの確認項目
 
-次の欄を値まで埋められない子は実装担当へ送らない。
+次の項目をコード事実で確認できない子は実装担当へ送らない。これはtransportが解釈するschemaではない。
 
 ```text
 PARENT_ID:
 CHILD_ID:
-LEGACY_GRAIN:
+LEGACY_TASK:
 USER_VISIBLE_EXIT:
 
 AUTHORITY: <path> SHA256:<hash>

@@ -521,8 +521,9 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | CU-G01 | `DONE` | [G0-9段階化](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)で固定Mac prerequisite evidenceをG0-9Lへ限定し、G0-9DをDistribution Readyまで分離 |
 | GR-D2 | `DONE` | [監督ループ決定](reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md)へ変更許可閉集合、append-only証跡、timeout分離、検収者mutation拒否、resumeを継承済み |
 | GR-D3 | `DONE` | [#336](https://github.com/oshikaidesu/Motolii/pull/336)で既知三entryのfail-closed清掃、HEAD／全ref不変、実K0停止形とGrok到達を閉包 |
-| GR-D4 | `DONE` | [独自監督runnerの非破壊的廃止](reviews/2026-08-02-supervised-runner-retirement-decision.md)。旧delegate/activateはsource・receiptを残してexit 64、Agentex実粒検証はACCEPT。ambient完全無効化、Cursor途中stream、永続receiptは未閉鎖 |
+| GR-D4 | `DONE` | [独自監督runnerの非破壊的廃止](reviews/2026-08-02-supervised-runner-retirement-decision.md)。旧delegate/activateはsource・過去receiptを残してexit 64。Agentex標準入口案と旧runnerの未閉鎖項目はGR-D5/D6で撤回・再配置済み |
 | GR-D5 | `DONE` | [薄いobserved CLI harness](reviews/2026-08-03-thin-observed-cli-harness-decision.md)をprovider非依存のtransportとして実装。exact argv、生stdout/stderr、lifecycle、exit/signal、wall timeout、process-group回収、log SHA-256だけを所有し、監督・採否・worktree・session資格を持たない。専用負例と三CLI read-only smokeで検証 |
+| GR-D6 | `DONE` | [runner非依存監督決定](reviews/2026-08-03-runner-independent-supervision-decision.md)でroute version、profile、prepare/execute/inspect/cancel、order/compiled grain、activation、runner hash、独自receiptを歴史化。scope、worktree、WIDE、fingerprint/diff、独立検収、最終採否をCodex責任へ戻した |
 | K0 | `DONE` | [#338](https://github.com/oshikaidesu/Motolii/pull/338)と[K0契約凍結報告](spikes/m4-k0-region-contract.md)で9条件を15 testに固定。**test-only契約凍結であり、runtime region関数・公開API・testkit昇格・ROI最適化は含まない**。K1系はこの行だけを根拠に起票しない |
 | M1-FREEZE-GATE | `DONE` | [凍結ゲート宣言](reviews/2026-07-10-freeze-gate-declaration.md)がM2〜M5並列laneを解禁 |
 | M2-D3 | `DONE` | [M2仕様 D3](specs/M2-document-model.md)のDocument→render graph接続が完了 |

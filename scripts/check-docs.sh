@@ -26,6 +26,23 @@ for marker in '**自己発注禁止**' '**findingは権限ではない**' '**既
   esac
 done
 
+# 入口規約から撤回済みrunner protocolを再生成しない。歴史文書内の記録は対象外。
+for retired_runner_term in \
+  'ROUTE_CONTRACT_VERSION' \
+  'LOOP_PROFILE' \
+  'RUNNER_SHA256' \
+  'SPARK_GRAIN_VERSION' \
+  'CODEX PRECHECK' \
+  'READ_MODE: CAPSULE' \
+  'ORDER: STOP' \
+  'canonical runner' \
+  'prepare/execute/inspect/cancel' \
+  'compiled grain'; do
+  if grep -Fq "$retired_runner_term" "$ROOT/AGENTS.md"; then
+    err "AGENTS.md に撤回済みrunner protocolが再登場: $retired_runner_term"
+  fi
+done
+
 # 2. reviews/ の全ファイルが reviews/README.md の索引に登録されていること
 for f in "$DOCS"/reviews/*.md; do
   b="$(basename "$f")"

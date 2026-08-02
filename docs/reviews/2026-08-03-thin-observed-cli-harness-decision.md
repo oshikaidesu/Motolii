@@ -27,6 +27,8 @@ Claude Code、Codex CLI、Cursor Agentを接続するMotolii側の共通入口�
 - session resume/cancelの採用資格、append-only receipt DB、order schema
 - JSON eventの解釈、重複除去、final answer抽出、無回答判定
 
+これらの監督責任は[runner非依存監督決定](2026-08-03-runner-independent-supervision-decision.md)に置く。
+
 これにより、[旧runner廃止決定](2026-08-02-supervised-runner-retirement-decision.md)の旧transport廃止は維持しつつ、
 同文書の「Agentexを唯一の直接入口とする」部分だけを撤回する。Agentexは比較対象として残せるが、標準入口ではない。
 

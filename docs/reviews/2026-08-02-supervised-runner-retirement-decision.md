@@ -1,8 +1,12 @@
 # Motolii独自監督runnerの非破壊的廃止
 
-状態: **決定・発効は本変更のmain統合後**
+状態: **決定・発効済み。Agentex標準入口部分は2026-08-03撤回**
 
 日付: 2026-08-02
+
+> 2026-08-03追補: 旧runner廃止は維持するが、Agentexを標準入口とする案は
+> [薄いCLI harness](2026-08-03-thin-observed-cli-harness-decision.md)へ置換した。監督責任は
+> [runner非依存監督決定](2026-08-03-runner-independent-supervision-decision.md)を現行正本とする。
 
 ## 決定
 

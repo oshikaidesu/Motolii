@@ -14,9 +14,9 @@ oracleの単位である。施工step数では分割しない。
 現行dispatch queueとして使わない。実状態は[implementation ledger](implementation-ledger.md)、製品意味は
 [M3仕様](specs/M3-ui-integration.md)、供給routeと並列境界は本書を正とする。
 
-本書は新しいledger、schema、runner gateではない。現runnerは
-`implementation-ledger.md`の「現在の並列レーン」にある`DO`行をdispatch gateとして読む。各実装orderは
-その`GRAIN`に加えて親IDと子IDを一つずつ引用する。実装可能な子を同時に走らせる時だけ、互いに
+本書は新しいledger、transport schema、機械gateではない。主担当Codexは
+`implementation-ledger.md`の「現在の並列レーン」にある`DO`行を施工前に確認する。各実装taskは
+親IDと子IDを一つずつ引用する。実装可能な子を同時に走らせる時だけ、互いに
 file-disjointな旧IDまたは子IDをledgerの別laneへ`DO`として昇格させる。旧粒度化表の152行を同期し直さない。
 
 ## 2. 固定原則

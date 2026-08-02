@@ -356,9 +356,10 @@ Motolii fixture / testによる実装・検収
 6. §6の分類を一つ裁定する。未裁定ならread-only調査までで停止し、依存追加、vendoring、portを発注しない。
 7. M1〜M5のどのフェーズへ関与するかを§4から選び、既存停止線と入場条件を確認する。
 
-### 9.3 発注: 仕様と先例を同じ欄へ混ぜない
+### 9.3 施工前確認: 仕様と先例を混ぜない
 
-Rerunを一度でも根拠・再利用箇所・変更案に含める発注書は、次の6ラベルをこの順序で持つ。
+Rerunを一度でも根拠・再利用箇所・変更案に含める場合、主担当Codexは次の6項目を施工前に確認する。
+これはtransportのorder schemaではない。
 
 | 必須ラベル | 書く内容 | 書いてはいけないこと |
 |---|---|---|
@@ -369,9 +370,9 @@ Rerunを一度でも根拠・再利用箇所・変更案に含める発注書は
 | `TRANSFER LIMIT` | 変更許可file、持込禁止型・状態・意味、既存境界案 | 「必要なら共通化」「適宜API追加」 |
 | `MOTOLII ORACLE` | Motolii fixture、負例、test、性能・人間比較 | Rerunとの外観・構造類似を合格条件にする |
 
-通常の発注必須項目である目的、非目標、再利用箇所、STOP条件、必須負例、実行コマンドも省略しない。上表はそれらを置換せず、Rerun参照の権限を限定する追加欄である。
+目的、非目標、再利用箇所、STOP条件、必須負例、実行コマンドも省略しない。上表はRerun参照の権限を限定する確認項目である。
 
-Codex事前審査は次を順に確認し、一つでもNoなら`CODEX PRECHECK: APPROVED`を書かない。
+Codexは次を確認し、一つでもNoなら実装担当を起動しない。
 
 1. Rerunを削除して読んでも、Motoliiの目的と完成条件が完全か。
 2. `CODE FACT GAP`は現行コード証跡で再現できるか。
@@ -381,7 +382,7 @@ Codex事前審査は次を順に確認し、一つでもNoなら`CODEX PRECHECK:
 
 ### 9.4 実装中のSTOP
 
-次のどれかが起きたら、Terraは代替設計や仕様変更を行わず`ORDER: STOP`で戻す。
+次のどれかが起きたら、実装担当は代替設計や仕様変更を行わず`STOP`してCodexへ戻す。
 
 - Rerun内部構造を採らないと既存Motolii契約では実装不能に見える
 - 未裁定asset、別crate、font、icon、shader、licenseを追加で持ち込む必要がある
@@ -390,11 +391,11 @@ Codex事前審査は次を順に確認し、一つでもNoなら`CODEX PRECHECK:
 - Rerunのsnapshotや見た目へ合わせるため既存test、golden、期待値を変更したくなった
 - 指定分類を越えて`PATTERN→PORT`、`PORT→VENDOR/DEPEND`へ広げたくなった
 
-STOP後に別backendで仕様を補完して実装を続けない。CodexがMotolii正本へ戻り、発注書差し戻し、個別裁定、仕様改訂、作業中止のいずれかを選ぶ。
+STOP後に別backendで仕様を補完して実装を続けない。CodexがMotolii正本へ戻り、施工範囲の差し戻し、個別裁定、仕様改訂、作業中止のいずれかを選ぶ。
 
 ### 9.5 検収と統合
 
-Grok検収とCodex統合判断では、テスト緑に加えて次を確認する。
+独立reviewerとCodexの統合判断では、テスト緑に加えて次を確認する。
 
 1. 6ラベルと実差分が一致し、変更file・依存・分類が拡大していない。
 2. RerunのEntity、Blueprint、store、cache key、View class、serde、UI tokenが公開型・Document・plugin契約へ漏れていない。
@@ -406,7 +407,7 @@ Rerun sourceとの比較結果は補助証拠であり、Motolii fixture/testを
 
 ### 9.6 必須負例
 
-次の発注書はprepare段階で差し戻す。
+次の依頼は実装担当の起動前に差し戻す。
 
 - 「RerunのTime PanelをMotoliiへ実装する」のようにRerun assetが目的になっている
 - spec IDやコードgapがなく「Rerun風」「Rerunベース」を完成条件にしている
