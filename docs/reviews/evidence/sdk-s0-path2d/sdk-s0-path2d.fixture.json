@@ -1,0 +1,191 @@
+{
+  "contract": {
+    "label": "Offset Path",
+    "input": {
+      "name": "source",
+      "value_type": "Path2D",
+      "space": "canonical-local"
+    },
+    "output": {
+      "name": "result",
+      "value_type": "Path2D",
+      "space": "canonical-local"
+    },
+    "parameter": {
+      "name": "distance",
+      "value_type": "scalar",
+      "unit": "canonical-length",
+      "finite": true,
+      "default": 0.0
+    },
+    "operation_profile": {
+      "line_join": "miter",
+      "miter_limit": 4.0
+    },
+    "pure": true,
+    "capability": "path2d-offset"
+  },
+  "equivalence_tolerance": 0.000001,
+  "vertex_budget": 16,
+  "paths": {
+    "square": {
+      "contours": [
+        {
+          "closed": true,
+          "vertices": [
+            { "point": [0.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [1.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [1.0, 1.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [0.0, 1.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] }
+          ]
+        }
+      ]
+    },
+    "curved-triangle": {
+      "contours": [
+        {
+          "closed": true,
+          "vertices": [
+            { "point": [0.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [1.0, 0.6] },
+            { "point": [2.0, 0.0], "in_tangent": [-1.0, 0.6], "out_tangent": [0.0, 0.0] },
+            { "point": [1.0, -1.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] }
+          ]
+        }
+      ]
+    },
+    "chord-triangle": {
+      "contours": [
+        {
+          "closed": true,
+          "vertices": [
+            { "point": [0.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [2.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [1.0, -1.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] }
+          ]
+        }
+      ]
+    },
+    "open-line": {
+      "contours": [
+        {
+          "closed": false,
+          "vertices": [
+            { "point": [0.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [1.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] }
+          ]
+        }
+      ]
+    },
+    "over-budget": {
+      "contours": [
+        {
+          "closed": true,
+          "vertices": [
+            { "point": [0.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [1.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [2.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [3.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [4.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [5.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [6.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [7.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [8.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [9.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [10.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [11.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [12.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [13.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [14.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [15.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] },
+            { "point": [16.0, 0.0], "in_tangent": [0.0, 0.0], "out_tangent": [0.0, 0.0] }
+          ]
+        }
+      ]
+    }
+  },
+  "cases": [
+    {
+      "id": "S0-P1",
+      "assertion": "native-identity",
+      "runs": [
+        { "source": { "kind": "path", "path": "square", "space": "canonical-local" }, "distance": { "kind": "finite", "value": 0.0 }, "time": 0.0, "expected": { "kind": "success" } }
+      ]
+    },
+    {
+      "id": "S0-P2",
+      "assertion": "native-equivalent",
+      "runs": [
+        { "source": { "kind": "path", "path": "square", "space": "canonical-local" }, "distance": { "kind": "finite", "value": 0.1 }, "time": 0.0, "expected": { "kind": "success" } }
+      ]
+    },
+    {
+      "id": "S0-P3",
+      "assertion": "native-equivalent",
+      "runs": [
+        { "source": { "kind": "path", "path": "square", "space": "canonical-local" }, "distance": { "kind": "finite", "value": -0.1 }, "time": 0.0, "expected": { "kind": "success" } }
+      ]
+    },
+    {
+      "id": "S0-P4",
+      "assertion": "bezier-native-distinct",
+      "comparison_path": "chord-triangle",
+      "runs": [
+        { "source": { "kind": "path", "path": "curved-triangle", "space": "canonical-local" }, "distance": { "kind": "finite", "value": 0.1 }, "time": 0.0, "expected": { "kind": "success" } }
+      ]
+    },
+    {
+      "id": "S0-N1",
+      "assertion": "failures",
+      "runs": [
+        { "source": { "kind": "path", "path": "open-line", "space": "canonical-local" }, "distance": { "kind": "finite", "value": 0.1 }, "time": 0.0, "expected": { "kind": "failure", "reason": "open-contour-unsupported", "target": "source" } }
+      ]
+    },
+    {
+      "id": "S0-N2",
+      "assertion": "failures",
+      "runs": [
+        { "source": { "kind": "path", "path": "square", "space": "canonical-local" }, "distance": { "kind": "non-finite", "value": "nan" }, "time": 0.0, "expected": { "kind": "failure", "reason": "non-finite-distance", "target": "distance" } },
+        { "source": { "kind": "path", "path": "square", "space": "canonical-local" }, "distance": { "kind": "non-finite", "value": "positive-infinity" }, "time": 0.0, "expected": { "kind": "failure", "reason": "non-finite-distance", "target": "distance" } },
+        { "source": { "kind": "path", "path": "square", "space": "canonical-local" }, "distance": { "kind": "non-finite", "value": "negative-infinity" }, "time": 0.0, "expected": { "kind": "failure", "reason": "non-finite-distance", "target": "distance" } }
+      ]
+    },
+    {
+      "id": "S0-N3",
+      "assertion": "failures",
+      "runs": [
+        { "source": { "kind": "missing" }, "distance": { "kind": "finite", "value": 0.1 }, "time": 0.0, "expected": { "kind": "failure", "reason": "missing-input", "target": "source" } },
+        { "source": { "kind": "other-type" }, "distance": { "kind": "finite", "value": 0.1 }, "time": 0.0, "expected": { "kind": "failure", "reason": "type-mismatch", "target": "source" } }
+      ]
+    },
+    {
+      "id": "S0-N4",
+      "assertion": "failures",
+      "runs": [
+        { "source": { "kind": "path", "path": "square", "space": "world" }, "distance": { "kind": "finite", "value": 0.1 }, "time": 0.0, "expected": { "kind": "failure", "reason": "space-mismatch", "target": "source" } }
+      ]
+    },
+    {
+      "id": "S0-N5",
+      "assertion": "consumer-independent",
+      "runs": [
+        { "source": { "kind": "path", "path": "square", "space": "canonical-local" }, "distance": { "kind": "finite", "value": 0.1 }, "time": 0.0, "expected": { "kind": "success" } },
+        { "source": { "kind": "path", "path": "square", "space": "canonical-local" }, "distance": { "kind": "finite", "value": -0.1 }, "time": 0.0, "expected": { "kind": "success" } }
+      ]
+    },
+    {
+      "id": "S0-N6",
+      "assertion": "failures",
+      "runs": [
+        { "source": { "kind": "path", "path": "over-budget", "space": "canonical-local" }, "distance": { "kind": "finite", "value": 0.1 }, "time": 0.0, "expected": { "kind": "failure", "reason": "budget-exceeded", "target": "source-budget" } }
+      ]
+    },
+    {
+      "id": "S0-N7",
+      "assertion": "time-independent",
+      "runs": [
+        { "source": { "kind": "path", "path": "square", "space": "canonical-local" }, "distance": { "kind": "finite", "value": 0.1 }, "time": 0.0, "expected": { "kind": "success" } },
+        { "source": { "kind": "path", "path": "square", "space": "canonical-local" }, "distance": { "kind": "finite", "value": 0.1 }, "time": 1234.5, "expected": { "kind": "success" } }
+      ]
+    }
+  ]
+}
