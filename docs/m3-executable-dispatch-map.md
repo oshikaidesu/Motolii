@@ -135,7 +135,7 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 | `P01-C3` | `TARGET_MISSING` | Browser以外で欠けるrole別epoch/reload callbackを一件特定 | crash/reload後に同じsnapshotを再投影 |
 | `P01-C4` | `SPEC_ONLY` | detach時のWorkspace codecとtop-level再生成境界を一問で固定 | layoutを復元してDocument不変 |
 | `P02-C1` | `REDUCE` | `CU-201T-C`は完了済み。残るDelete/Duplicate/Rename/Paste command family（`CU-401A/B`）は別の既存scopeが閉じた時だけ再コンパイルし、trimを再発行しない | trimはjournal replay可能で1 Undo。残余commandは未選定 |
-| `P02-C2` | `VERIFY_ONLY` | 既存journal→apply→publish routeの失敗oracleを再実行。理由なく再構成しない | 全surfaceが同じpublished snapshotを読む |
+| `P02-C2` | `DONE` | 既存journal→apply→publish routeの成功／失敗oracleを再実行。理由なく再構成しない | journal先行、failure poison、live apply後publishの順序を既存routeで確認 |
 | `P02-C3` | `TARGET_MISSING` | selection成立済み部分を除き、essential focusまたはplayhead consumerを一件特定 | UI stateをDocumentへ保存せず一方向publish |
 | `P03-C1` | `DONE` | 100k key狭域projectionと同名label/typed identity oracleを既存Timeline projectionへ追加。renderer本体は再実装しない | visible workがbounded。専用回帰試験で1秒viewportのkey出力とLayerId identityを確認 |
 | `P03-C2` | `DONE` | なし。`CU-201E`の通常製品move/trim/snap receiptを再施工しない | drag中write 0、release 1 Undo、同じLayerIdでreopen |
