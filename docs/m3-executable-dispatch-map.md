@@ -126,7 +126,7 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 
 | 子 | 現在状態 | exact次task | 通常製品routeの出口 |
 |---|---|---|---|
-| `P01-C1` | `VERIFY_ONLY` | adapterを物理移動せず、重複coordinatorの実在だけを列挙。無ければPASS | event-loop/surface ownerが一意 |
+| `P01-C1` | `DONE` | `product_runtime_adapter.rs`の単一`ApplicationHandler<ProductEvent>`と`product_runtime.rs`の単一`run_app`を確認。`raw_input_boundary` 5/5、`u1a1_static_viewport` 3/3 | event-loop/surface ownerが一意 |
 | `P01-C2` | `TARGET_MISSING` | 固定sourceの未移管componentをsurface別に一件特定し、実コードからdynamic transitionのowner/input/intent/stale ruleを埋める | product単一owner、mockはconsumer |
 | `P01-C3` | `TARGET_MISSING` | Browser以外で欠けるrole別epoch/reload callbackを一件特定 | crash/reload後に同じsnapshotを再投影 |
 | `P01-C4` | `SPEC_ONLY` | detach時のWorkspace codecとtop-level再生成境界を一問で固定 | layoutを復元してDocument不変 |
