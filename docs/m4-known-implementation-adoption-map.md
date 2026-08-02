@@ -53,7 +53,7 @@
 | `P05-C1` | `ADOPTION_PROBE` | `tempfile 3.27.0`、single writer、FFmpeg temp、atomic visibility、integrity、lazy scan、hard budget |
 | `P06-C1` | `REMAP / VERIFIED` | half-open integer timebase、coalesce、gap、境界overflow。raw empty rangeはpanicするためprivate guardを必須化 |
 | `P07-C1` | `REMAP / VERIFIED` | MPL-2.0選択、reprioritize/remove/pop、composite priorityによるdeterministic ordering。bounded admissionとgeneration filterはprivate owner |
-| `P13-C1` | `ADOPTION_PROBE` | K6 subset、unsupported診断、外部resource遮断、premul一回 |
+| `P13-C1` | `REMAP / VERIFIED` | `vello_svg 0.10.0`のpath/group/fill/stroke、typed parse error、pattern diagnostic、3 target cross-build。外部fileはusvg段で無言dropするためprivate preflightへREMAP |
 | `P02-C2` | `SPEC_ONLY` | GAP-3のversion付きsource fingerprint。path/mtimeで代用しない |
 | `P09-C1` | `ADOPTION_PROBE` | GAP-29の原因分離bench。ring本数を先に決めない |
 | その他 | `GATED` | 依存するprobe、authority、product target、正負oracle |
@@ -310,8 +310,9 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 
 #### `P13-C1` vello_svg compatibility probe
 
-- **結果**: path/group/fill/stroke subsetを現wgpu device/Vello 0.9へ接続する。
-- **oracle**: fixed SVG corpus、unsupported typed、network/file external resource 0、premul一回。
+- **結果**: `vello_svg 0.10.0`（`vello 0.9`／`wgpu` feature）のpath/group/fill/stroke subsetをSceneへ接続する。
+- **証拠**: `crates/motolii-testkit/tests/m4_p13_vello_svg.rs`の4 fixtureがgreen。supported Scene、pattern unsupported callback、malformed SVG typed errorを確認し、external file resourceは`usvg`がSceneへ入れずcallbackも呼ばないことを観測した。`cargo check --locked`を`x86_64-pc-windows-gnu`、`aarch64-apple-darwin`、`x86_64-unknown-linux-gnu`で通過させた。
+- **判定**: `REMAP / VERIFIED`。K6のpath/group/fill/strokeとunsupported callbackは採用する。外部resource 0はcrate単体の拒否証明にならないため、Motolii import preflightでnetwork/fileをtyped拒否してからcrateへ渡す。premul一回とRenderer長寿命はP13-C1のScene probe外で、K6接続時に別oracleとして保持する。
 
 #### `P13-C2` product import adapter
 

@@ -184,6 +184,11 @@ recipe分離・sccacheのsharded local cache・現行D1 atomic persistの`PATTER
   Renderer長寿命、CQ-7 straight→premul一回、現native device/format。
 - **非証明範囲**: `vello_svg`が明記するtext、group opacity、clip、mask、filter等の未対応機能。
   K6の必要subsetを越えて支持を公約しない。
+- **probe結果(2026-08-02)**: `crates/motolii-testkit/tests/m4_p13_vello_svg.rs`の4 fixtureがgreen。path/group/fill/strokeのScene生成、
+  patternのunsupported callback、malformed SVGのtyped errorを確認し、`cargo check --locked`を
+  `x86_64-pc-windows-gnu`、`aarch64-apple-darwin`、`x86_64-unknown-linux-gnu`で通過した。一方、missing `file://` imageは
+  `usvg`段でSceneへ入らずcallbackも呼ばれなかったため、外部resource遮断をcrateの挙動へ委ねない。判定は
+  `REMAP / VERIFIED`（K6 subset／callbackのみ採用、network/file typed preflightはMotolii private owner）。
 
 ## 4. M4へ採らない一般機構
 
