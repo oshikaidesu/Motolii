@@ -43,6 +43,17 @@ for retired_runner_term in \
   fi
 done
 
+# 旧監督ループ正本は短い撤回tombstoneに固定し、規則集として復活させない。
+RETIRED_SUPERVISION="$DOCS/reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md"
+retired_supervision_bytes="$(LC_ALL=C wc -c < "$RETIRED_SUPERVISION" | tr -d '[:space:]')"
+if [ "$retired_supervision_bytes" -gt 6000 ]; then
+  err "撤回済み監督ループ文書が ${retired_supervision_bytes} bytes。歴史本文を現行treeへ復元しないこと"
+fi
+grep -Fq '状態: **撤回**' "$RETIRED_SUPERVISION" \
+  || err "旧監督ループ文書が撤回状態でない"
+grep -Fq '2026-08-03-runner-independent-supervision-decision.md' "$RETIRED_SUPERVISION" \
+  || err "旧監督ループ文書に現行runner非依存正本への移動先がない"
+
 # 2. reviews/ の全ファイルが reviews/README.md の索引に登録されていること
 for f in "$DOCS"/reviews/*.md; do
   b="$(basename "$f")"

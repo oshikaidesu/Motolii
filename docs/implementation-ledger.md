@@ -345,7 +345,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 | 0 | HVR-G01 | History tooling | `DONE` | — | 意味グラフ補助境界を正本化 | HVR-D01の依存 |
 | 1 | U0e-2R | M3 | `DONE` | — | 固定React baseline `eb16d06`を最新mainへ再結合し、43 visual testとworkspace gateを通過 | GR-D1を単独実行 |
 | 2 | GR-D1 | M3 guard | `DONE` | — | Terra実装 + Grok検収の通常発注入口へBASE_REF/SHA・authority・粒状態・React labelのdispatch gateを固定し、専用負例とworkspace試験を通過 | GR-D2を単独実行 |
-| 3 | GR-D2 | M3 guard | `DONE` | — | 変更許可閉集合、append-only検収証跡、timeout分離、検収者mutation拒否、検収resumeをrunnerへ固定し、専用負例とworkspace試験を通過。旧Terra + Grok backendはアーカイブし、防護をOpus 5 + Spark + Grokへ継承 | GR-R1/R2をDOへ移す |
+| 3 | GR-D2 | M3 guard | `DONE` | — | 旧runnerでscope閉包、timeout、reviewer mutationを検証した歴史粒。append-only receipt、resume資格、固定model routeはGR-D6で撤回済み | GR-R1/R2をDOへ移す |
 | 4 | GR-R1/R2 | M3 guard | `DONE` | — | manifestのpath/export/SHAとAST/PostCSS closure、実render nodeへのfixture投影、route隔離、三層因果、raw token拒否を43負例・44 visual・Grok P0/P1=0で固定 | GR-R3をDOへ移す |
 | 5 | GR-R3 | M3 guard | `DONE` | — | immutable generation + atomic CURRENT、PNG byte/RGBA、閉schema、17 I/O失敗点、全negative matrixを70 testsとGrok P0/P1=0で固定 | U0e-2をDOへ戻す |
 | 6 | U0e-2 | M3 | `DONE` | — | 同一三層fixtureを既存React Surfaceへ直接投影する5 reference screen、固定Chromium/font、normal+5派生の30 PNG、provenance/atomic generation/read-only checkを固定 | G0-6H assisted human stop |
@@ -519,7 +519,7 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | U0b-1 | `DONE` | [主クリティカルパス](#主クリティカルパス) Selected U series行の`U0b-1 DONE`、[M3仕様 運用順](specs/M3-ui-integration.md)、[M3入場判定](#m3への入場判定) |
 | U0b-2 | `DONE` | [主クリティカルパス](#主クリティカルパス) Selected U series行の`U0b-2 DONE`、[M3仕様 運用順](specs/M3-ui-integration.md)、[M3入場判定](#m3への入場判定) |
 | CU-G01 | `DONE` | [G0-9段階化](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)で固定Mac prerequisite evidenceをG0-9Lへ限定し、G0-9DをDistribution Readyまで分離 |
-| GR-D2 | `DONE` | [監督ループ決定](reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md)へ変更許可閉集合、append-only証跡、timeout分離、検収者mutation拒否、resumeを継承済み |
+| GR-D2 | `DONE` | 旧runnerでscope閉包、timeout分離、reviewer mutation拒否を検証した歴史粒。runner protocol、append-only receipt、resume資格はGR-D6で撤回し、継承原則だけを[runner非依存監督](reviews/2026-08-03-runner-independent-supervision-decision.md)へ移した |
 | GR-D3 | `DONE` | [#336](https://github.com/oshikaidesu/Motolii/pull/336)で既知三entryのfail-closed清掃、HEAD／全ref不変、実K0停止形とGrok到達を閉包 |
 | GR-D4 | `DONE` | [独自監督runnerの非破壊的廃止](reviews/2026-08-02-supervised-runner-retirement-decision.md)。旧delegate/activateはsource・過去receiptを残してexit 64。Agentex標準入口案と旧runnerの未閉鎖項目はGR-D5/D6で撤回・再配置済み |
 | GR-D5 | `DONE` | [薄いobserved CLI harness](reviews/2026-08-03-thin-observed-cli-harness-decision.md)をprovider非依存のtransportとして実装。exact argv、生stdout/stderr、lifecycle、exit/signal、wall timeout、process-group回収、log SHA-256だけを所有し、監督・採否・worktree・session資格を持たない。専用負例と三CLI read-only smokeで検証 |
