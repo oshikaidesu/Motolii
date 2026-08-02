@@ -5,6 +5,10 @@
 ## 実装前の既知実装調査
 
 現行の調査・検証入口は[M5 既知実装採択・検証地図](../m5-known-implementation-adoption-map.md)とする。
+ただし、M5の製品runtimeは[M5休止・M3意味開放契約](../reviews/2026-08-02-m5-pause-until-m3-semantic-release.md)に従い、
+M3の共有writer、通常製品route、snapshot／Stage／Preview／Export、独立受入・main統合が意味論として閉じるまで休止する。
+チケットIDや枝番の完了数ではなく、同契約の意味境界を開放判定に使う。M5の採択地図、decision recovery、private
+fixtureは保持するが、M3の共有契約をM5のprivate型から推測しない。
 同地図で10機構classの技術route `M5-A0T`は決定済みであり、
 `codex/m5-known-implementation-plan-20260802`上の子検証へ進む。検証成功だけで製品runtimeを発注せず、
 接続前に未統合の3D import／Render Contribution作品意味を[decision recovery `M5-A0S`](../reviews/2026-08-02-m5-a0s-decision-recovery.md)で閉じる。
@@ -17,7 +21,7 @@ algorithm、license、thread model、owner、failure mode、platform条件と採
 
 P0I〜P7はMotoliiのworld、identity、互換、操作、oracleを保持する入力であり、独自3D engine、scene
 framework、text stack、gizmo frameworkを作る実装列ではない。意味decisionとtest-only fixtureは進められるが、
-**M5の製品runtime実装は既知実装調査と採択地図が閉じるまで発注しない。**
+**M5の製品runtime実装は、既知実装調査・採択地図・M3意味開放がすべて閉じるまで発注しない。**
 
 ## 目的(退治する落とし穴)
 
