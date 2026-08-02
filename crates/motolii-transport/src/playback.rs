@@ -1,11 +1,12 @@
 //! 再生開始経路: Transport + 共有`PlaybackCounters`/`DeviceWaitLatency` + cpal出力。
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use cpal::traits::HostTrait;
 use motolii_audio::{
-    channel, negotiate_output, AudioProducer, DeviceWaitLatency, NegotiatedOutput, OutputStream,
-    PcmCache, PlaybackCounters,
+    channel, negotiate_output, source_frame_to_device, AudioProducer, DeviceWaitLatency,
+    NegotiatedOutput, OutputStream, PcmCache, PlaybackCounters,
 };
 use motolii_core::{Fps, Quality};
 
@@ -17,8 +18,11 @@ pub struct PlaybackSession {
     counters: Arc<PlaybackCounters>,
     device_wait: Arc<DeviceWaitLatency>,
     negotiated: NegotiatedOutput,
+    source_start_frame: u64,
+    source_sample_rate: u32,
     _output: OutputStream,
     _producer: AudioProducer,
+    playing: Arc<AtomicBool>,
 }
 
 impl PlaybackSession {
@@ -70,35 +74,47 @@ impl PlaybackSession {
         )
         .map_err(PlaybackSessionError::Audio)?;
 
+        // Transportのoriginは供給済みデバイスフレームと同じレートへ変換する。
+        let transport_origin_frame = source_frame_to_device(
+            start_frame,
+            format.sample_rate,
+            negotiated.device_sample_rate,
+        );
         let transport = if let Some(gpu) = gpu {
-            Transport::new_with_gpu(
+            Transport::new_with_gpu_origin(
                 Arc::clone(&counters),
                 Arc::clone(&device_wait),
                 fps,
                 negotiated.device_sample_rate,
                 base_quality,
                 gpu,
+                transport_origin_frame,
             )
             .map_err(PlaybackSessionError::Transport)?
         } else {
-            Transport::new(
+            Transport::new_with_origin(
                 Arc::clone(&counters),
                 Arc::clone(&device_wait),
                 fps,
                 negotiated.device_sample_rate,
                 base_quality,
                 false,
+                transport_origin_frame,
             )
             .map_err(PlaybackSessionError::Transport)?
         };
+        let playing = Arc::new(AtomicBool::new(true));
 
         Ok(Self {
             transport,
             counters,
             device_wait,
             negotiated,
+            source_start_frame: start_frame,
+            source_sample_rate: format.sample_rate,
             _output: output,
             _producer: producer,
+            playing,
         })
     }
 
@@ -120,6 +136,30 @@ impl PlaybackSession {
 
     pub fn negotiated(&self) -> &NegotiatedOutput {
         &self.negotiated
+    }
+
+    pub fn source_start_frame(&self) -> u64 {
+        self.source_start_frame
+    }
+
+    pub fn source_sample_rate(&self) -> u32 {
+        self.source_sample_rate
+    }
+
+    pub fn pause(&self) -> Result<(), PlaybackSessionError> {
+        self._output.pause().map_err(PlaybackSessionError::Audio)?;
+        self.playing.store(false, Ordering::Release);
+        Ok(())
+    }
+
+    pub fn play(&self) -> Result<(), PlaybackSessionError> {
+        self._output.play().map_err(PlaybackSessionError::Audio)?;
+        self.playing.store(true, Ordering::Release);
+        Ok(())
+    }
+
+    pub fn is_playing(&self) -> bool {
+        self.playing.load(Ordering::Acquire)
     }
 }
 

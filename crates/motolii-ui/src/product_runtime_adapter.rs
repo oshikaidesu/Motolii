@@ -19,6 +19,13 @@ impl winit::application::ApplicationHandler<crate::product_runtime::ProductEvent
 
     fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         self.poll_browser(event_loop);
+        match self.tick_playback() {
+            Ok(true) => event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(
+                std::time::Instant::now() + std::time::Duration::from_millis(16),
+            )),
+            Ok(false) => {}
+            Err(error) => self.fail(event_loop, error),
+        }
         if let Some(retry_at) = self.request_auxiliary_redraw() {
             event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(retry_at));
         }

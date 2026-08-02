@@ -17,11 +17,22 @@ export function StageTransportCandidate({
   tempoStatus,
   qualityStatus,
   easingTrigger,
+  playing,
+  togglePlay,
 }) {
   return (
     <div className="transport">
       <button className="toolbtn" id="step-prev" type="button" aria-label="前のkeyへ">|‹</button>
-      <button className="toolbtn" id="play" type="button" aria-label="再生">▶</button>
+      <button
+        className="toolbtn"
+        id="play"
+        type="button"
+        aria-label={playing ? "一時停止" : "再生"}
+        aria-pressed={playing ? "true" : "false"}
+        onClick={togglePlay}
+      >
+        {playing ? "Ⅱ" : "▶"}
+      </button>
       <button className="toolbtn" id="step-next" type="button" aria-label="次のkeyへ">›|</button>
       {easingTrigger}
       <span className="time" id="time">{timecode}</span>

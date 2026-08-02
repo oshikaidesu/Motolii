@@ -4,10 +4,14 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use motolii_audio::{
+    source_frame_to_device, PcmCache, PcmFormat, CANONICAL_CHANNELS, CANONICAL_SAMPLE_RATE,
+};
 use motolii_core::{CanonicalPoint, Quality, RationalTime};
 use motolii_doc::{Command, EffectId, EvaluationTime, LayerId};
 use motolii_eval::DataTracks;
 use motolii_gpu::GpuCtx;
+use motolii_transport::PlaybackSession;
 use winit::dpi::LogicalSize;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::window::Window;
@@ -171,6 +175,7 @@ pub(crate) struct ProductApp {
     active_effect_use: Option<EffectId>,
     selected_position_key: Option<(LayerId, motolii_doc::KeyframeId)>,
     playhead: RationalTime,
+    playback: Option<PlaybackSession>,
     projection_generation: u64,
     current_document: Arc<motolii_doc::Document>,
     proxy: EventLoopProxy<ProductEvent>,
@@ -211,6 +216,21 @@ const INTERVAL_HANDLE_LOGICAL_PX: f64 = 8.0;
 const SNAP_DISTANCE_LOGICAL_PX: f64 = 8.0;
 const TIMELINE_PIXELS_PER_SECOND: f64 = 80.0;
 const TIMELINE_ROW_HEIGHT: f64 = 34.0;
+
+fn canonical_audio_frames(time: RationalTime) -> Result<u64, ProductRuntimeError> {
+    if time <= RationalTime::ZERO {
+        return Ok(0);
+    }
+    let numerator = u128::try_from(time.num().max(0))
+        .map_err(|_| ProductRuntimeError::PlaybackDurationOverflow)?;
+    let denominator = u128::try_from(time.den().max(1))
+        .map_err(|_| ProductRuntimeError::PlaybackDurationOverflow)?;
+    let frames = numerator
+        .checked_mul(u128::from(CANONICAL_SAMPLE_RATE))
+        .ok_or(ProductRuntimeError::PlaybackDurationOverflow)?
+        / denominator;
+    u64::try_from(frames).map_err(|_| ProductRuntimeError::PlaybackDurationOverflow)
+}
 
 fn line_delta_to_logical(delta: [f64; 2]) -> [f64; 2] {
     [
@@ -550,6 +570,7 @@ impl ProductApp {
             active_effect_use: None,
             selected_position_key: None,
             playhead: RationalTime::ZERO,
+            playback: None,
             projection_generation: 0,
             proxy,
             layout_authority: LayoutAuthority::built_in()?,
@@ -1895,6 +1916,9 @@ impl ProductApp {
                 self.selected_position_key,
                 self.projection_generation,
                 easing_pressed,
+                self.playback
+                    .as_ref()
+                    .is_some_and(PlaybackSession::is_playing),
                 self.playhead,
             )?;
         }
@@ -1968,7 +1992,112 @@ impl ProductApp {
             })?);
             self.publish_stage_chrome(true)?;
         }
+        loop {
+            let toggle = match &self.stage_chrome {
+                Some(stage_chrome) => stage_chrome.take_toggle_playback()?,
+                None => false,
+            };
+            if !toggle {
+                break;
+            }
+            self.toggle_playback()?;
+        }
         Ok(())
+    }
+
+    fn toggle_playback(&mut self) -> Result<(), ProductRuntimeError> {
+        if let Some(session) = self.playback.as_ref() {
+            if session.is_playing() {
+                session.pause()?;
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=transport action=pause time={:?}",
+                    self.playhead
+                ));
+            } else {
+                session.play()?;
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=transport action=play time={:?}",
+                    self.playhead
+                ));
+            }
+        } else {
+            let duration_frames =
+                canonical_audio_frames(self.current_document.composition.duration)?;
+            if duration_frames == 0 {
+                return Ok(());
+            }
+            let mut start_frame = canonical_audio_frames(self.playhead)?;
+            if start_frame >= duration_frames {
+                self.playhead = RationalTime::ZERO;
+                start_frame = 0;
+            }
+            let sample_count = duration_frames
+                .checked_mul(u64::from(CANONICAL_CHANNELS))
+                .and_then(|count| usize::try_from(count).ok())
+                .ok_or(ProductRuntimeError::PlaybackBufferOverflow)?;
+            // Rectangle video-only接続の無音PCM。実音声はGAP-28のAudioProgram接続で扱う。
+            let cache = Arc::new(PcmCache::from_interleaved(
+                vec![0.0; sample_count],
+                PcmFormat {
+                    channels: CANONICAL_CHANNELS,
+                    sample_rate: CANONICAL_SAMPLE_RATE,
+                },
+            )?);
+            let session = PlaybackSession::open_default(
+                cache,
+                start_frame,
+                self.current_document.composition.fps,
+                Quality::DRAFT,
+                Some(self.gpu.as_ref()),
+            )?;
+            self.playback = Some(session);
+            crate::ui_numeric_trace::emit(format_args!(
+                "kind=transport action=play start_frame={} duration_frames={}",
+                start_frame, duration_frames
+            ));
+        }
+        self.publish_stage_chrome(false)?;
+        self.request_redraw();
+        Ok(())
+    }
+
+    pub(crate) fn tick_playback(&mut self) -> Result<bool, ProductRuntimeError> {
+        let Some(session) = self.playback.as_ref() else {
+            return Ok(false);
+        };
+        if !session.is_playing() {
+            return Ok(false);
+        }
+        let time = session.transport().perceptual_time()?;
+        let duration = self.current_document.composition.duration;
+        let duration_frames = canonical_audio_frames(duration)?;
+        let remaining_source_frames = duration_frames.saturating_sub(session.source_start_frame());
+        let remaining_frames = source_frame_to_device(
+            remaining_source_frames,
+            session.source_sample_rate(),
+            session.transport().sample_rate(),
+        );
+        let source_drained = session.transport().supplied_frames() >= remaining_frames;
+        if source_drained || time >= duration {
+            self.playhead = duration;
+            self.playback.take();
+            crate::ui_numeric_trace::emit(format_args!(
+                "kind=transport action=ended time={:?}",
+                self.playhead
+            ));
+            self.publish_stage_chrome(false)?;
+            self.submit_stage_projection()?;
+            self.request_redraw();
+            return Ok(false);
+        }
+        if time <= self.playhead {
+            return Ok(true);
+        }
+        self.playhead = time;
+        self.publish_stage_chrome(false)?;
+        self.submit_stage_projection()?;
+        self.request_redraw();
+        Ok(true)
     }
 
     fn process_add_position_key_intents(
@@ -2401,6 +2530,12 @@ pub(crate) enum ProductRuntimeError {
     #[error(transparent)]
     RenderWorker(#[from] RenderWorkerError),
     #[error(transparent)]
+    Audio(#[from] motolii_audio::AudioError),
+    #[error(transparent)]
+    Playback(#[from] motolii_transport::PlaybackSessionError),
+    #[error(transparent)]
+    Transport(#[from] motolii_transport::TransportError),
+    #[error(transparent)]
     RepaintSignal(#[from] crate::render_worker::RepaintSignalRegistrationError),
     #[error(transparent)]
     Display(#[from] crate::display_slot::DisplaySlotError),
@@ -2436,6 +2571,10 @@ pub(crate) enum ProductRuntimeError {
     AlreadyInitialized,
     #[error("native product layout epoch is exhausted")]
     LayoutEpochExhausted,
+    #[error("playback duration is too large for the canonical audio buffer")]
+    PlaybackDurationOverflow,
+    #[error("playback buffer is too large for the host process")]
+    PlaybackBufferOverflow,
     #[error("Browser instance epoch is exhausted")]
     BrowserInstanceEpochExhausted,
     #[error("Browser lifecycle coordinator is unavailable")]

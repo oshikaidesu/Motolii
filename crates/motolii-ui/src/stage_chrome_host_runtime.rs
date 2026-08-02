@@ -14,6 +14,7 @@ const PROTOCOL: &str = "motolii-stage";
 const HEADER_URL: &str = "motolii-stage://product/stage-header.html";
 const TRANSPORT_URL: &str = "motolii-stage://product/stage-transport.html";
 const MAX_PENDING_EASING_OPENS: usize = 8;
+const MAX_PENDING_PLAYBACK_TOGGLES: usize = 8;
 
 type StageChromeWake = Arc<dyn Fn() + Send + Sync>;
 
@@ -66,6 +67,45 @@ struct OpenEasingAnchor {
 enum OpenEasingKind {
     #[serde(rename = "open-easing")]
     OpenEasing,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TogglePlaybackMessage {
+    #[serde(rename = "kind")]
+    _kind: TogglePlaybackKind,
+}
+
+#[derive(Debug, serde::Deserialize)]
+enum TogglePlaybackKind {
+    #[serde(rename = "toggle-play")]
+    TogglePlay,
+}
+
+#[derive(Debug)]
+struct TogglePlaybackInbox {
+    pending: VecDeque<()>,
+}
+
+impl TogglePlaybackInbox {
+    fn new() -> Self {
+        Self {
+            pending: VecDeque::new(),
+        }
+    }
+
+    fn accept(&mut self, raw: &str) -> Result<(), StageChromeIntentError> {
+        let _: TogglePlaybackMessage = serde_json::from_str(raw)?;
+        if self.pending.len() >= MAX_PENDING_PLAYBACK_TOGGLES {
+            return Err(StageChromeIntentError::PlaybackInboxFull);
+        }
+        self.pending.push_back(());
+        Ok(())
+    }
+
+    fn take(&mut self) -> bool {
+        self.pending.pop_front().is_some()
+    }
 }
 
 #[derive(Debug)]
@@ -142,6 +182,7 @@ impl OpenEasingInbox {
 
 pub(crate) struct StageChromeHostRuntime {
     easing_inbox: Arc<Mutex<OpenEasingInbox>>,
+    playback_inbox: Arc<Mutex<TogglePlaybackInbox>>,
     wake: Arc<Mutex<Option<StageChromeWake>>>,
     header: WebView,
     transport: WebView,
@@ -162,6 +203,7 @@ impl StageChromeHostRuntime {
             selected_position_key,
             projection_generation,
             false,
+            false,
             0,
             playhead,
         )?;
@@ -175,11 +217,13 @@ get snapshot(){{return current;}},
 subscribe:(next)=>{{if(typeof next!=="function"||listener!==null)throw new TypeError("invalid Stage subscriber");listener=next;listener(current);return()=>{{listener=null;}};}},
 publish:(next)=>{{current=next;if(listener!==null)listener(current);}},
 setLayoutEpoch:(layoutEpoch)=>{{current=Object.freeze({{...current,layoutEpoch}});if(listener!==null)listener(current);}},
-openEasing:(interval,anchor)=>window.ipc.postMessage(JSON.stringify({{kind:"open-easing",layerId:interval.layerId,leftKeyId:interval.leftKeyId,rightKeyId:interval.rightKeyId,projectionGeneration:interval.projectionGeneration,layoutEpoch:current.layoutEpoch,anchor:{{x:anchor.x,y:anchor.y,width:anchor.width,height:anchor.height}}}}))
+openEasing:(interval,anchor)=>window.ipc.postMessage(JSON.stringify({{kind:"open-easing",layerId:interval.layerId,leftKeyId:interval.leftKeyId,rightKeyId:interval.rightKeyId,projectionGeneration:interval.projectionGeneration,layoutEpoch:current.layoutEpoch,anchor:{{x:anchor.x,y:anchor.y,width:anchor.width,height:anchor.height}}}})),
+togglePlayback:()=>window.ipc.postMessage(JSON.stringify({{kind:"toggle-play"}}))
 }});
 }})();"#
         );
         let easing_inbox = Arc::new(Mutex::new(OpenEasingInbox::new(expected)));
+        let playback_inbox = Arc::new(Mutex::new(TogglePlaybackInbox::new()));
         let wake = Arc::new(Mutex::new(None::<StageChromeWake>));
         let header = build_stage_webview(
             window,
@@ -189,6 +233,7 @@ openEasing:(interval,anchor)=>window.ipc.postMessage(JSON.stringify({{kind:"open
             None,
         )?;
         let callback_inbox = Arc::clone(&easing_inbox);
+        let callback_playback = Arc::clone(&playback_inbox);
         let callback_wake = Arc::clone(&wake);
         let transport = build_stage_webview(
             window,
@@ -196,10 +241,7 @@ openEasing:(interval,anchor)=>window.ipc.postMessage(JSON.stringify({{kind:"open
             &initialization_script,
             "stage-transport",
             Some(Box::new(move |raw| {
-                let accepted = callback_inbox
-                    .lock()
-                    .map_err(|_| StageChromeIntentError::InboxPoisoned)
-                    .and_then(|mut inbox| inbox.accept(raw));
+                let accepted = accept_stage_message(raw, &callback_inbox, &callback_playback);
                 match accepted {
                     Ok(()) => {
                         if let Ok(wake) = callback_wake.lock() {
@@ -218,6 +260,7 @@ openEasing:(interval,anchor)=>window.ipc.postMessage(JSON.stringify({{kind:"open
         ));
         Ok(Self {
             easing_inbox,
+            playback_inbox,
             wake,
             header,
             transport,
@@ -247,12 +290,21 @@ openEasing:(interval,anchor)=>window.ipc.postMessage(JSON.stringify({{kind:"open
             .pop_front())
     }
 
+    pub(crate) fn take_toggle_playback(&self) -> Result<bool, StageChromeIntentError> {
+        Ok(self
+            .playback_inbox
+            .lock()
+            .map_err(|_| StageChromeIntentError::InboxPoisoned)?
+            .take())
+    }
+
     pub(crate) fn publish(
         &self,
         document: &motolii_doc::Document,
         selected_position_key: Option<(motolii_doc::LayerId, motolii_doc::KeyframeId)>,
         projection_generation: u64,
         easing_pressed: bool,
+        playing: bool,
         playhead: RationalTime,
     ) -> Result<(), StageChromeHostRuntimeError> {
         let (snapshot, expected) = snapshot_json(
@@ -260,6 +312,7 @@ openEasing:(interval,anchor)=>window.ipc.postMessage(JSON.stringify({{kind:"open
             selected_position_key,
             projection_generation,
             easing_pressed,
+            playing,
             self.latest_layout_epoch.unwrap_or(0),
             playhead,
         )?;
@@ -361,6 +414,7 @@ fn snapshot_json(
     selected_position_key: Option<(motolii_doc::LayerId, motolii_doc::KeyframeId)>,
     projection_generation: u64,
     easing_pressed: bool,
+    playing: bool,
     layout_epoch: u64,
     playhead: RationalTime,
 ) -> Result<(serde_json::Value, Option<OpenEasingIdentity>), serde_json::Error> {
@@ -395,6 +449,7 @@ fn snapshot_json(
             "qualityStatus": "DRAFT · FP16 · 1/2",
             "activeInterval": active_interval,
             "easingPressed": easing_pressed,
+            "playing": playing,
             "layoutEpoch": layout_epoch,
         }),
         expected,
@@ -422,6 +477,25 @@ fn javascript_json_parse_argument(
     serde_json::to_string(&serde_json::to_string(snapshot)?)
 }
 
+fn accept_stage_message(
+    raw: &str,
+    easing_inbox: &Arc<Mutex<OpenEasingInbox>>,
+    playback_inbox: &Arc<Mutex<TogglePlaybackInbox>>,
+) -> Result<(), StageChromeIntentError> {
+    let value = serde_json::from_str::<serde_json::Value>(raw)?;
+    let kind = value.get("kind").and_then(serde_json::Value::as_str);
+    match kind {
+        Some("toggle-play") => playback_inbox
+            .lock()
+            .map_err(|_| StageChromeIntentError::InboxPoisoned)?
+            .accept(raw),
+        _ => easing_inbox
+            .lock()
+            .map_err(|_| StageChromeIntentError::InboxPoisoned)?
+            .accept(raw),
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum StageChromeIntentError {
     #[error("Stage chrome message is invalid")]
@@ -432,6 +506,8 @@ pub(crate) enum StageChromeIntentError {
     InvalidAnchor,
     #[error("Stage chrome easing intent inbox is full")]
     InboxFull,
+    #[error("Stage chrome playback intent inbox is full")]
+    PlaybackInboxFull,
     #[error("Stage chrome easing intent inbox is unavailable")]
     InboxPoisoned,
 }
@@ -525,6 +601,19 @@ mod tests {
 
         assert!(inbox.pending.is_empty());
         assert_eq!(inbox.expected, Some(identity(4)));
+    }
+
+    #[test]
+    fn playback_toggle_accepts_only_the_closed_message() {
+        let mut inbox = TogglePlaybackInbox::new();
+
+        inbox.accept(r#"{"kind":"toggle-play"}"#).unwrap();
+        assert!(inbox.take());
+        assert!(!inbox.take());
+        assert!(matches!(
+            inbox.accept(r#"{"kind":"toggle-play","extra":true}"#),
+            Err(StageChromeIntentError::Json(_))
+        ));
     }
 
     #[test]

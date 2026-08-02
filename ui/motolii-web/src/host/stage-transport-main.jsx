@@ -25,6 +25,8 @@ function StageTransportScreen() {
     }
   };
 
+  const togglePlay = () => bridge.togglePlayback();
+
   return (
     <main className="stage-standalone-screen stage-transport-screen">
       <StageTransportCandidate
@@ -32,6 +34,8 @@ function StageTransportScreen() {
         barPosition={snapshot.barPosition}
         tempoStatus={snapshot.tempoStatus}
         qualityStatus={snapshot.qualityStatus}
+        playing={snapshot.playing}
+        togglePlay={togglePlay}
         easingTrigger={(
           <span
             className="easing-trigger-seat"

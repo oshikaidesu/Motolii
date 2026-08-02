@@ -18,6 +18,7 @@ export function readStageHostSnapshot(bridge) {
     || typeof snapshot.tempoStatus !== "string"
     || typeof snapshot.qualityStatus !== "string"
     || typeof snapshot.easingPressed !== "boolean"
+    || typeof snapshot.playing !== "boolean"
     || !Number.isSafeInteger(snapshot.layoutEpoch)
     || snapshot.layoutEpoch < 0
     || !validActiveInterval(snapshot.activeInterval)
@@ -32,6 +33,7 @@ export function readStageHostSnapshot(bridge) {
     qualityStatus: snapshot.qualityStatus,
     activeInterval: snapshot.activeInterval,
     easingPressed: snapshot.easingPressed,
+    playing: snapshot.playing,
     layoutEpoch: snapshot.layoutEpoch,
   });
 }

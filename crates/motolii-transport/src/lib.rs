@@ -48,6 +48,7 @@ pub struct FramePlan {
 pub struct Transport {
     counters: Arc<PlaybackCounters>,
     device_wait: Arc<DeviceWaitLatency>,
+    timeline_origin_frame: u64,
     drs: DrsController,
     fps: Fps,
     sample_rate: u32,
@@ -66,6 +67,28 @@ impl Transport {
         base_quality: Quality,
         drs_enabled: bool,
     ) -> Result<Self, TransportError> {
+        Self::new_with_origin(
+            counters,
+            device_wait,
+            fps,
+            sample_rate,
+            base_quality,
+            drs_enabled,
+            0,
+        )
+    }
+
+    /// `supplied_frames`の0がタイムライン上のどの音声フレームかを指定して作る。
+    /// seek後の再生でも、Transportの時刻をプロジェクト時刻へ戻すために使う。
+    pub fn new_with_origin(
+        counters: Arc<PlaybackCounters>,
+        device_wait: Arc<DeviceWaitLatency>,
+        fps: Fps,
+        sample_rate: u32,
+        base_quality: Quality,
+        drs_enabled: bool,
+        timeline_origin_frame: u64,
+    ) -> Result<Self, TransportError> {
         if sample_rate == 0 {
             return Err(TransportError::InvalidSampleRate);
         }
@@ -73,6 +96,7 @@ impl Transport {
         Ok(Self {
             counters,
             device_wait,
+            timeline_origin_frame,
             drs: DrsController::new(drs_enabled, config),
             fps,
             sample_rate,
@@ -92,14 +116,36 @@ impl Transport {
         base_quality: Quality,
         gpu: &motolii_gpu::GpuCtx,
     ) -> Result<Self, TransportError> {
+        Self::new_with_gpu_origin(
+            counters,
+            device_wait,
+            fps,
+            sample_rate,
+            base_quality,
+            gpu,
+            0,
+        )
+    }
+
+    /// GPU timestamp付きでseek起点を保持したTransportを作る。
+    pub fn new_with_gpu_origin(
+        counters: Arc<PlaybackCounters>,
+        device_wait: Arc<DeviceWaitLatency>,
+        fps: Fps,
+        sample_rate: u32,
+        base_quality: Quality,
+        gpu: &motolii_gpu::GpuCtx,
+        timeline_origin_frame: u64,
+    ) -> Result<Self, TransportError> {
         let drs_enabled = motolii_gpu::drs_available(&gpu.device);
-        Self::new(
+        Self::new_with_origin(
             counters,
             device_wait,
             fps,
             sample_rate,
             base_quality,
             drs_enabled,
+            timeline_origin_frame,
         )
     }
 
@@ -127,6 +173,10 @@ impl Transport {
         self.sample_rate
     }
 
+    pub fn timeline_origin_frame(&self) -> u64 {
+        self.timeline_origin_frame
+    }
+
     /// クロック正本: デバイスへ供給済みサンプルフレーム数。
     pub fn supplied_frames(&self) -> u64 {
         self.counters.frames_supplied()
@@ -134,7 +184,11 @@ impl Transport {
 
     /// 聴感サンプルフレーム数(供給済み−デバイス待ちのみ)。
     pub fn perceptual_frames(&self) -> u64 {
-        perceptual_sample_frames(self.supplied_frames(), self.device_wait.wait_frames())
+        self.timeline_origin_frame
+            .saturating_add(perceptual_sample_frames(
+                self.supplied_frames(),
+                self.device_wait.wait_frames(),
+            ))
     }
 
     /// 聴感タイムライン時刻。
@@ -236,5 +290,29 @@ mod tests {
         assert_eq!(second.display_frame, 90);
         assert_eq!(second.dropped_frames, 59); // skipped 31..=89
         assert_eq!(transport.total_dropped_frames(), 59);
+    }
+
+    #[test]
+    fn perceptual_time_keeps_seek_origin() {
+        let counters = Arc::new(PlaybackCounters::default());
+        let wait = Arc::new(DeviceWaitLatency::default());
+        let transport = Transport::new_with_origin(
+            Arc::clone(&counters),
+            wait,
+            Fps::try_new(30, 1).unwrap(),
+            48_000,
+            Quality::DRAFT,
+            false,
+            48_000 * 5,
+        )
+        .unwrap();
+
+        counters.advance_supplied_for_simulation(48_000);
+
+        assert_eq!(transport.perceptual_frames(), 48_000 * 6);
+        assert_eq!(
+            transport.perceptual_time().unwrap(),
+            RationalTime::from_seconds(6)
+        );
     }
 }
