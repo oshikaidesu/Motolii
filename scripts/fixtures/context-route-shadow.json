@@ -1,0 +1,116 @@
+{
+  "queries": [
+    {
+      "id": "project-save-reopen",
+      "hypotheses": [
+        ["project lifecycle", "Save-As", "reopen"],
+        ["P12-C1", "Unsaved", "failed-save"],
+        ["CU-G04", "project", "save"]
+      ],
+      "gold": [
+        "docs/m3-parallel-implementation-map.md",
+        "docs/m3-executable-dispatch-map.md"
+      ]
+    },
+    {
+      "id": "react-source-promotion",
+      "hypotheses": [
+        ["React", "製品", "直接所有移管"],
+        ["source asset", "Host", "projection"],
+        ["モック", "作り直さない", "製品package"]
+      ],
+      "gold": [
+        "docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md"
+      ]
+    },
+    {
+      "id": "rerun-transfer-order",
+      "hypotheses": [
+        ["Rerun", "学習", "転移計画"],
+        ["source asset inventory", "固定commit", "package"],
+        ["TRANSFER CLASS", "MOTOLII AUTHORITY", "RERUN EVIDENCE"]
+      ],
+      "gold": [
+        "docs/reviews/2026-07-20-rerun-learning-transfer-plan.md",
+        "docs/reviews/2026-07-20-rerun-source-asset-inventory.md"
+      ]
+    },
+    {
+      "id": "external-llm-live-stream",
+      "hypotheses": [
+        ["外部LLM", "途中stream", "heartbeat"],
+        ["run-observed-cli.py", "stdout", "stderr"],
+        ["wall timeout", "provider-native", "構造化途中stream"]
+      ],
+      "gold": [
+        "docs/reviews/2026-08-03-thin-observed-cli-harness-decision.md"
+      ]
+    },
+    {
+      "id": "runner-independent-supervision",
+      "hypotheses": [
+        ["runner非依存", "監督責任", "transport"],
+        ["主担当Codex", "最終採否", "allowlist"],
+        ["旧runner", "廃止", "receipt"]
+      ],
+      "gold": [
+        "docs/reviews/2026-08-03-runner-independent-supervision-decision.md"
+      ]
+    },
+    {
+      "id": "timeline-body-drag",
+      "hypotheses": [
+        ["CU-201P-MOVE", "body-drag", "SetClipStart"],
+        ["Timeline", "Transient preview", "release"],
+        ["trim edge", "MOVE-ONLY", "known-semantics"]
+      ],
+      "gold": [
+        "docs/reviews/2026-08-03-cu-201p-move-known-semantics-adoption-decision.md"
+      ]
+    },
+    {
+      "id": "mac-native-file-dialog",
+      "hypotheses": [
+        ["P06-C1-MAC", "rfd", "FIXED_MAC_GATE_PASS"],
+        ["native file dialog", "parent", "Cancel"],
+        ["probe_container", "MediaError", "ADOPT"]
+      ],
+      "gold": [
+        "docs/reviews/2026-08-03-p06-c1-mac-rfd-adoption-probe-observation.md"
+      ]
+    },
+    {
+      "id": "shared-feedback-owner",
+      "hypotheses": [
+        ["CU-203", "feedback", "ownership"],
+        ["共通feedback", "直接所有移管", "9-state"],
+        ["DiagnosticEnvelope", "Host Transient", "CU-204"]
+      ],
+      "gold": [
+        "docs/reviews/2026-07-31-cu-203-feedback-source-ownership-split-decision.md"
+      ]
+    },
+    {
+      "id": "opacity-direct-route",
+      "hypotheses": [
+        ["CU-205S", "Opacity Direct", "通常製品route"],
+        ["core.filter.opacity", "prepare_create_effect", "map_parameter_control"],
+        ["Browser", "Inspector", "single writer"]
+      ],
+      "gold": [
+        "docs/reviews/2026-07-31-cu-205s-opacity-direct-route-split-decision.md"
+      ]
+    },
+    {
+      "id": "large-repo-context-routing",
+      "hypotheses": [
+        ["context routing", "authority", "capsule"],
+        ["query rewrite", "3〜5", "検索仮説"],
+        ["Basic Memory", "typed graph", "意味汚染"]
+      ],
+      "gold": [
+        "docs/reviews/2026-08-03-llm-large-repository-context-routing-prior-art-observation.md"
+      ]
+    }
+  ]
+}

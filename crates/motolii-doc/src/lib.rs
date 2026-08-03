@@ -41,6 +41,7 @@ mod validate;
 
 use std::sync::Arc;
 
+use motolii_core::RationalTime;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -564,6 +565,33 @@ impl DocumentWriter {
     /// D1l B-3: 対象 Use の Definition をローカル複製する。
     pub fn prepare_copy_local_effect(&self, use_id: EffectId) -> Result<Command, PrepareError> {
         effect_prepare::prepare_copy_local_effect(&self.doc, use_id)
+    }
+
+    /// CU-201M-S: 対象 Clip の `start` を準備する。same-value は `None`。
+    pub fn prepare_set_clip_start(
+        &self,
+        target: LayerId,
+        new: RationalTime,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_set_clip_start(&self.doc, target, new)
+    }
+
+    /// CU-201T-S: 対象 Clip の左edgeを準備する。same-value は `None`。
+    pub fn prepare_trim_clip_in(
+        &self,
+        target: LayerId,
+        new_start: RationalTime,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_trim_clip_in(&self.doc, target, new_start)
+    }
+
+    /// CU-201T-S: 対象 Clip の右edgeを準備する。same-value は `None`。
+    pub fn prepare_trim_clip_out(
+        &self,
+        target: LayerId,
+        new_end: RationalTime,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_trim_clip_out(&self.doc, target, new_end)
     }
 }
 

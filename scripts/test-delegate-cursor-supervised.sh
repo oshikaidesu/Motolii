@@ -3,7 +3,29 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="$ROOT_DIR/scripts/delegate-cursor-supervised.sh"
-TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/motolii-opus-spark-grok-test.XXXXXX")"
+set +e
+RETIRED_OUTPUT="$("$SCRIPT" 2>&1)"
+RETIRED_STATUS=$?
+set -e
+[[ "$RETIRED_STATUS" -eq 64 ]] || { echo "test-delegate-cursor-supervised: expected retired exit 64, got $RETIRED_STATUS" >&2; exit 1; }
+[[ "$RETIRED_OUTPUT" == *"RETIRED 2026-08-02"* ]] || { echo "test-delegate-cursor-supervised: retirement marker missing" >&2; exit 1; }
+echo "test-delegate-cursor-supervised: RETIRED PASS"
+exit 0
+
+TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/motolii-grok-spark-opus-test.XXXXXX")"
+RUNNER_SHA256="$(shasum -a 256 "$SCRIPT" | awk '{print $1}')"
+ACTIVE_FILE="$TMP_ROOT/active-runner.txt"
+{
+  echo "FORMAT: 1"
+  echo "SOURCE_COMMIT: 0000000000000000000000000000000000000000"
+  echo "RUNNER_SHA256: $RUNNER_SHA256"
+  echo "ROUTE_CONTRACT_VERSION: 2"
+  echo "LOOP_PROFILE: grok-spark-opus"
+} >"$ACTIVE_FILE"
+export MOTOLII_CANONICAL_RUNNER_SHA256="$RUNNER_SHA256"
+export MOTOLII_CANONICAL_RUNNER_ACTIVE_FILE="$ACTIVE_FILE"
+export MOTOLII_CANONICAL_RUNNER_SOURCE_COMMIT="0000000000000000000000000000000000000000"
+export MOTOLII_RUNNER_ROOT_DIR="$ROOT_DIR"
 
 cleanup() {
   if [[ "${MOTOLII_KEEP_TEST_TMP:-0}" == "1" ]]; then
@@ -118,15 +140,14 @@ cat >"$FAKE_BIN/claude" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 echo "claude:$*" >>"$FAKE_CALL_LOG"
-if [[ "${FAKE_OPUS_STATUS:-0}" != "0" ]]; then
-  exit "$FAKE_OPUS_STATUS"
+if [[ "${FAKE_REVIEW_STATUS:-0}" != "0" ]]; then
+  exit "$FAKE_REVIEW_STATUS"
 fi
-default_output='{"type":"result","subtype":"success","structured_output":{"disposition":"STOP","findings":[],"reason":"fixture stop"}}'
-if [[ "$*" == *"--resume "* ]]; then
-  printf '%s\n' "${FAKE_OPUS_RETRY_OUTPUT:-${FAKE_OPUS_OUTPUT:-$default_output}}"
-else
-  printf '%s\n' "${FAKE_OPUS_OUTPUT:-$default_output}"
+if [[ -n "${FAKE_REVIEW_HOOK:-}" ]]; then
+  bash "$FAKE_REVIEW_HOOK"
 fi
+default_output='{"type":"result","subtype":"success","total_cost_usd":0.035,"usage":{"input_tokens":1200,"output_tokens":180,"cache_read_input_tokens":0},"structured_output":{"verdict":"ACCEPT","findings":[],"reason":"fixture accepted"}}'
+printf '%s\n' "${FAKE_REVIEW_OUTPUT:-$default_output}"
 EOF
 
 cat >"$FAKE_BIN/codex" <<'EOF'
@@ -136,17 +157,42 @@ echo "codex:$*" >>"$FAKE_CALL_LOG"
 if [[ -n "${FAKE_SPARK_HOOK:-}" ]]; then
   bash "$FAKE_SPARK_HOOK"
 fi
-printf '%s\n' "${FAKE_SPARK_OUTPUT:-implementation complete}"
+# 実CLIの`codex exec --json`と同形のJSONL。usageはturn.completedが正本
+spark_text="${FAKE_SPARK_OUTPUT:-implementation complete}"
+printf '{"type":"thread.started","thread_id":"fixture"}\n'
+printf '{"type":"turn.started"}\n'
+printf '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":%s}}\n' \
+  "$(printf '%s' "$spark_text" | jq -Rs .)"
+printf '{"type":"turn.completed","usage":{"input_tokens":9988,"cached_input_tokens":4608,"cache_write_input_tokens":0,"output_tokens":62,"reasoning_output_tokens":55}}\n'
 EOF
 
 cat >"$FAKE_BIN/cursor-agent" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 echo "cursor:$*" >>"$FAKE_CALL_LOG"
-if [[ -n "${FAKE_GROK_HOOK:-}" ]]; then
-  bash "$FAKE_GROK_HOOK"
+if [[ "${FAKE_PREFLIGHT_STATUS:-0}" != "0" ]]; then
+  exit "$FAKE_PREFLIGHT_STATUS"
 fi
-printf '%s\n' "${FAKE_GROK_OUTPUT:-VERDICT: ACCEPT}"
+if [[ -n "${FAKE_PREFLIGHT_HOOK:-}" ]]; then
+  bash "$FAKE_PREFLIGHT_HOOK"
+fi
+# 実CLIの`cursor-agent --output-format stream-json`と同形。usageはcamelCase
+grok_text="${FAKE_PREFLIGHT_OUTPUT:-PREFLIGHT_REASON: fixture closed
+ORDER: READY}"
+grok_json="$(printf '%s' "$grok_text" | jq -Rs .)"
+printf '{"type":"system","subtype":"init"}\n'
+printf '{"type":"thinking","subtype":"delta","text":"fixture reasoning"}\n'
+if [[ -n "${FAKE_GROK_PLAN_MODE:-}" ]]; then
+  # 実測(2026-08-01): `--mode plan`の検収者は結論をchat messageでなくplan tool callへ
+  # 書き、chat側にはpreambleしか残らない。これがtextモードでの「空出力」の正体
+  preamble='{"type":"text","text":"読み込んで照合します。"}'
+  printf '{"type":"assistant","message":{"role":"assistant","content":[%s]}}\n' "$preamble"
+  printf '{"type":"tool_call","subtype":"completed","tool_call":{"createPlanToolCall":{"args":{"plan":%s}}}}\n' "$grok_json"
+  printf '{"type":"result","subtype":"success","duration_ms":10,"duration_api_ms":10,"is_error":false,"result":"読み込んで照合します。","usage":{"inputTokens":16013,"outputTokens":113,"cacheReadTokens":256,"cacheWriteTokens":0}}\n'
+else
+  printf '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":%s}]}}\n' "$grok_json"
+  printf '{"type":"result","subtype":"success","duration_ms":10,"duration_api_ms":10,"is_error":false,"result":%s,"usage":{"inputTokens":16013,"outputTokens":113,"cacheReadTokens":256,"cacheWriteTokens":0}}\n' "$grok_json"
+fi
 EOF
 chmod +x "$FAKE_BIN/claude" "$FAKE_BIN/codex" "$FAKE_BIN/cursor-agent"
 
@@ -228,6 +274,7 @@ BASE_SHA: $base_sha
 DEPENDENCY: DEP-1
 AUTHORITY: AGENTS.md SHA256:$auth_hash
 ALLOWED_FILE: src.txt
+CONTRACT_BOUNDARY: fixture-src-oracle
 READ_MODE: CAPSULE
 CONTEXT_FACT: src.txt is the only implementation fixture.
 READ_FILE: src.txt
@@ -249,10 +296,11 @@ Non-goal: no adjacent edits.
 STOP: authority conflict.
 Test: git diff --check.
 ORDER: READY
-LOOP_PROFILE: opus-spark-grok
-ORDER_MANAGER_MODEL: claude-opus-5
+ROUTE_CONTRACT_VERSION: 2
+LOOP_PROFILE: grok-spark-opus
+PREFLIGHT_MODEL: cursor-grok-4.5-high
 IMPLEMENTER_MODEL: gpt-5.3-codex-spark
-REVIEW_MODEL: cursor-grok-4.5-high
+REVIEW_MODEL: claude-opus-5
 TASK_SHA256: $task_hash
 CODEX PRECHECK: APPROVED
 EOF
@@ -362,6 +410,7 @@ DEPENDENCY: DEP-1
 AUTHORITY: AGENTS.md SHA256:$AUTH_HASH
 ALLOWED_FILE: src.txt
 ALLOWED_FILE: test.txt
+CONTRACT_BOUNDARY: fixture-src-oracle
 READ_MODE: CAPSULE
 CONTEXT_FACT: src.txt is the only implementation fixture.
 READ_FILE: src.txt
@@ -387,8 +436,12 @@ EOF
 )
 TASK_HASH="$(printf '%s' "$TASK" | shasum -a 256 | awk '{print $1}')"
 ORDER="$TMP_ROOT/order.md"
-OPUS_READY='{"type":"result","subtype":"success","structured_output":{"disposition":"READY","findings":[{"kind":"NEGATIVE_ORACLE","severity":"P2","delta":"src.txt must remain unchanged when authority validation fails."}],"reason":"fixture skeleton is closed"}}'
-OPUS_BLOCKING='{"type":"result","subtype":"success","structured_output":{"disposition":"READY","findings":[{"kind":"NEGATIVE_ORACLE","severity":"P1","delta":"Add an exact unchanged-file rejection oracle before implementation."}],"reason":"one blocking oracle gap remains"}}'
+PREFLIGHT_READY=$'PREFLIGHT_FINDING: F1 NEGATIVE_ORACLE P2 src.txt must remain unchanged when authority validation fails.\nPREFLIGHT_REASON: fixture skeleton is closed\nORDER: READY'
+PREFLIGHT_BLOCKING=$'PREFLIGHT_FINDING: F1 NEGATIVE_ORACLE P1 Add an exact unchanged-file rejection oracle before implementation.\nPREFLIGHT_REASON: one blocking oracle gap remains\nORDER: READY'
+PREFLIGHT_STOP=$'PREFLIGHT_REASON: fixture stop\nORDER: STOP'
+OPUS_ACCEPT='{"type":"result","subtype":"success","total_cost_usd":0.035,"usage":{"input_tokens":1200,"output_tokens":180,"cache_read_input_tokens":0},"structured_output":{"verdict":"ACCEPT","findings":[],"reason":"fixture accepted"}}'
+OPUS_REJECT='{"type":"result","subtype":"success","total_cost_usd":0.035,"usage":{"input_tokens":1200,"output_tokens":180,"cache_read_input_tokens":0},"structured_output":{"verdict":"REJECT","findings":[{"severity":"P2","finding":"fixture rejection"}],"reason":"fixture rejected"}}'
+OPUS_ACCEPT_P1='{"type":"result","subtype":"success","total_cost_usd":0.035,"usage":{"input_tokens":1200,"output_tokens":180,"cache_read_input_tokens":0},"structured_output":{"verdict":"ACCEPT","findings":[{"severity":"P1","finding":"blocking fixture finding"}],"reason":"invalid accept with P1"}}'
 
 run_script() {
   : >"$CALL_LOG"
@@ -403,15 +456,44 @@ run_script() {
   set -e
 }
 
-run_script prepare "$WT" "$ORDER" "$TASK"
-assert_status 3 "$RUN_STATUS" "Opus STOP fails closed"
-assert_fragment "$CALL_LOG" "claude:-p --model claude-opus-5" "Opus is the order manager"
-assert_fragment "$CALL_LOG" "--effort low" "Opus fast delta option"
-assert_fragment "$CALL_LOG" "--json-schema" "Opus typed delta schema"
-assert_fragment "$CALL_LOG" "--output-format json" "Opus JSON output"
-if grep -Fq -- "--no-session-persistence" "$CALL_LOG"; then
-  fail "typed delta must retain its session only for one schema retry"
-fi
+set +e
+env -u MOTOLII_CANONICAL_RUNNER_SHA256 -u MOTOLII_CANONICAL_RUNNER_ACTIVE_FILE \
+  "$SCRIPT" prepare "$WT" "$ORDER" "$TASK" >"$TMP_ROOT/direct.stdout" 2>"$TMP_ROOT/direct.stderr"
+RUN_STATUS=$?
+set -e
+assert_status 2 "$RUN_STATUS" "branch-local runner direct execution rejection"
+assert_fragment "$TMP_ROOT/direct.stderr" "canonical launcher" "branch-local runner rejection message"
+
+CANCEL_ORDER="$TMP_ROOT/cancel-order.md"
+printf 'ORDER: READY\n' >"$CANCEL_ORDER"
+mkdir -p "$CANCEL_ORDER.evidence"
+printf 'ATTEMPT: attempt-0001\n' >"$CANCEL_ORDER.evidence/checkpoint.txt"
+run_script cancel "$WT" "$CANCEL_ORDER" WRONG_STAGE
+assert_status 0 "$RUN_STATUS" "explicit cancellation"
+assert_has "$CANCEL_ORDER.evidence/cancellations/cancel-0001/receipt.txt" "STATUS: CANCELLED" \
+  "cancellation status"
+assert_has "$CANCEL_ORDER.evidence/cancellations/cancel-0001/receipt.txt" "REASON: WRONG_STAGE" \
+  "cancellation reason"
+assert_has "$CANCEL_ORDER.evidence/cancellations/cancel-0001/receipt.txt" "CANCEL_SCOPE: ACCEPTANCE_ONLY" \
+  "cancellation scope"
+[[ ! -e "$CANCEL_ORDER.evidence/checkpoint.txt" ]] || fail "cancel must invalidate checkpoint"
+run_script execute "$WT" "$CANCEL_ORDER" "$TASK"
+assert_status 3 "$RUN_STATUS" "cancelled order reuse rejection"
+assert_fragment "$TMP_ROOT/stderr.log" "明示cancel済み" "cancelled order rejection message"
+[[ ! -s "$CALL_LOG" ]] || fail "cancelled order must not start a model"
+
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" \
+  FAKE_PREFLIGHT_OUTPUT="$PREFLIGHT_STOP" \
+  "$SCRIPT" prepare "$WT" "$ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 3 "$RUN_STATUS" "Grok STOP fails closed"
+assert_fragment "$CALL_LOG" "cursor:-p" "Grok is the preflight reviewer"
+assert_fragment "$CALL_LOG" "--model cursor-grok-4.5-high" "Grok preflight model"
+assert_fragment "$CALL_LOG" "--output-format stream-json" "Grok structured stream"
+assert_fragment "$CALL_LOG" "A finding may only stop" "preflight finding is non-authorizing"
 
 # P0/P1 deltaはSparkへの散文handoffにせず、Codex骨格のrevisionへ戻す。
 : >"$CALL_LOG"
@@ -419,15 +501,30 @@ set +e
 env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" \
   FAKE_CALL_LOG="$CALL_LOG" \
-  FAKE_OPUS_OUTPUT="$OPUS_BLOCKING" \
+  FAKE_PREFLIGHT_OUTPUT="$PREFLIGHT_BLOCKING" \
   "$SCRIPT" prepare "$WT" "$TMP_ROOT/blocking-order.md" "$TASK" \
   >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
-assert_status 3 "$RUN_STATUS" "P0/P1 delta requires skeleton revision"
+assert_status 3 "$RUN_STATUS" "P0/P1 preflight finding requires skeleton revision"
 grep -Fq -- "骨格とexact oracleへ織り込み" "$TMP_ROOT/stderr.log" \
   || fail "blocking delta did not request skeleton revision"
 [[ ! -f "$TMP_ROOT/blocking-order.md" ]] || fail "blocking delta must not produce a dispatchable order"
+
+# 骨格差戻しはSpark実行を置換する最も安い経路であり、その安さを実測で残す。
+# Opus JSONのusage/costを捨てず、欠測stageも沈黙させないことを固定する。
+BLOCKING_TELEMETRY="$TMP_ROOT/blocking-order.md.evidence/prepare-telemetry.txt"
+[[ -f "$BLOCKING_TELEMETRY" ]] || fail "prepare must record telemetry even when it fails closed"
+assert_has "$BLOCKING_TELEMETRY" "TELEMETRY_VERSION: 1" "telemetry version"
+assert_has "$BLOCKING_TELEMETRY" "PREFLIGHT_INPUT_TOKENS: 16013" "preflight input tokens captured"
+assert_has "$BLOCKING_TELEMETRY" "PREFLIGHT_OUTPUT_TOKENS: 113" "preflight output tokens captured"
+assert_has "$BLOCKING_TELEMETRY" "PREFLIGHT_CACHE_READ_TOKENS: 256" "preflight cache read captured"
+assert_has "$BLOCKING_TELEMETRY" "TOTAL_INPUT_TOKENS: 16013" "prepare telemetry totals"
+assert_has "$BLOCKING_TELEMETRY" "UNMEASURED_TOKEN_STAGES: NONE" "prepare has no unmeasured stage"
+grep -Eq '^PREFLIGHT_WALL_SECONDS: [0-9]+$' "$BLOCKING_TELEMETRY" \
+  || fail "preflight wall seconds must be numeric"
+grep -Eq '^TOTAL_WALL_SECONDS: [0-9]+$' "$BLOCKING_TELEMETRY" \
+  || fail "prepare must total wall seconds"
 
 # WIDEはOpusを起動せずread-only探索へ戻す。
 WIDE_TASK="$(printf '%s\n' "$TASK" |
@@ -438,6 +535,120 @@ assert_status 3 "$RUN_STATUS" "WIDE prepare rejected before Opus"
 grep -Fq -- "VIEW_PROFILE WIDE requires read-only exploration" "$TMP_ROOT/stderr.log" \
   || fail "WIDE rejection reason is missing"
 [[ ! -s "$CALL_LOG" ]] || fail "WIDE must fail before model invocation"
+
+# 拒否したgateを台帳から一意に読めること。gateはexitするため、PASSの無い最後の
+# ENTERが拒否者になる。どの層が実際に働いているかの実測はこの台帳だけが根拠になる
+GATE_LEDGER="$ORDER.evidence/gates.txt"
+[[ -f "$GATE_LEDGER" ]] || fail "dispatch gates must be recorded"
+rejecting_gate="$(awk '
+  /^GATE_ENTER: /{ sub(/^GATE_ENTER: /, ""); pending = $0 }
+  /^GATE_PASS: /{ sub(/^GATE_PASS: /, ""); if ($0 == pending) pending = "" }
+  END { print pending }
+' "$GATE_LEDGER")"
+[[ "$rejecting_gate" == "view_profile" ]] \
+  || fail "gate ledger must name view_profile as the rejecting gate, got [$rejecting_gate]"
+
+read_rejecting_gate() {
+  awk '
+    /^GATE_ENTER: /{ sub(/^GATE_ENTER: /, ""); pending = $0 }
+    /^GATE_PASS: /{ sub(/^GATE_PASS: /, ""); if ($0 == pending) pending = "" }
+    END { print pending }
+  ' "$1"
+}
+
+# 改訂1(2026-08-01): 契約境界は宣言させる。930行のGR-D3は誰も境界数を宣言せず、
+# 4境界であることが見えないまま2回dispatchされた。
+NO_BOUNDARY_TASK="$(printf '%s\n' "$TASK" | sed '/^CONTRACT_BOUNDARY: /d')"
+: >"$CALL_LOG"
+run_script prepare "$WT" "$TMP_ROOT/no-boundary.md" "$NO_BOUNDARY_TASK"
+assert_status 3 "$RUN_STATUS" "missing CONTRACT_BOUNDARY rejected"
+[[ ! -s "$CALL_LOG" ]] || fail "missing CONTRACT_BOUNDARY must fail before model invocation"
+[[ "$(read_rejecting_gate "$TMP_ROOT/no-boundary.md.evidence/gates.txt")" == "contract_boundary" ]] \
+  || fail "gate ledger must name contract_boundary for the missing declaration"
+
+# allowlistが複数のtop-level ownerへまたがる粒は、宣言が1つでも境界が1つではない
+MULTI_OWNER_TASK="$(printf '%s\n' "$TASK" |
+  sed 's|^ALLOWED_FILE: test.txt$|ALLOWED_FILE: crates/other-crate/lib.rs|')"
+: >"$CALL_LOG"
+run_script prepare "$WT" "$TMP_ROOT/multi-owner.md" "$MULTI_OWNER_TASK"
+assert_status 3 "$RUN_STATUS" "multi-owner allowlist rejected"
+[[ ! -s "$CALL_LOG" ]] || fail "multi-owner allowlist must fail before model invocation"
+[[ "$(read_rejecting_gate "$TMP_ROOT/multi-owner.md.evidence/gates.txt")" == "contract_boundary" ]] \
+  || fail "gate ledger must name contract_boundary for the multi-owner allowlist"
+grep -Fq -- "spans multiple contract owners" "$TMP_ROOT/stderr.log" \
+  || fail "multi-owner rejection must name the owners"
+
+# 正規化されていないpathはowner分類を潰す。`./crates/a`と`./crates/b`が両方
+# owner `.` になると、複数境界の粒が単一ownerとして通過する(2026-08-01独立検収P0)
+NORMALIZE_TASK="$(printf '%s\n' "$TASK" |
+  sed 's|^ALLOWED_FILE: src.txt$|ALLOWED_FILE: ./crates/alpha/lib.rs|; s|^ALLOWED_FILE: test.txt$|ALLOWED_FILE: ./crates/beta/lib.rs|')"
+: >"$CALL_LOG"
+run_script prepare "$WT" "$TMP_ROOT/unnormalized.md" "$NORMALIZE_TASK"
+assert_status 3 "$RUN_STATUS" "unnormalized multi-owner allowlist rejected"
+[[ ! -s "$CALL_LOG" ]] || fail "unnormalized allowlist must fail before model invocation"
+grep -Fq -- "must be normalized" "$TMP_ROOT/stderr.log" \
+  || fail "unnormalized ALLOWED_FILE rejection reason missing"
+
+# 先頭だけでなく埋め込み`.` componentでもowner分類を潰せる。`crates/./alpha`と
+# `crates/./beta`が同じ`crates/.`へ畳まれる形を、別の負例として固定する。
+EMBEDDED_NORMALIZE_TASK="$(printf '%s\n' "$TASK" |
+  sed 's|^ALLOWED_FILE: src.txt$|ALLOWED_FILE: crates/./alpha/lib.rs|; s|^ALLOWED_FILE: test.txt$|ALLOWED_FILE: crates/./beta/lib.rs|')"
+: >"$CALL_LOG"
+run_script prepare "$WT" "$TMP_ROOT/embedded-unnormalized.md" "$EMBEDDED_NORMALIZE_TASK"
+assert_status 3 "$RUN_STATUS" "embedded-dot multi-owner allowlist rejected"
+[[ ! -s "$CALL_LOG" ]] || fail "embedded-dot allowlist must fail before model invocation"
+grep -Fq -- "must be normalized" "$TMP_ROOT/stderr.log" \
+  || fail "embedded-dot ALLOWED_FILE rejection reason missing"
+
+# contract boundary gateを先行allowed-files gateのglobalへ戻すmutationを固定的に拒否する。
+# 通常dispatchだけではglobalが偶然current orderと一致するため、機能正例だけでは退行を
+# 検出できない。関数本体がorderを直接読むこととglobal名を参照しないことを両方固定する。
+CONTRACT_GATE_SOURCE="$(sed -n '/^gate_check_contract_boundary() {$/,/^}$/p' "$SCRIPT")"
+printf '%s\n' "$CONTRACT_GATE_SOURCE" | grep -Fq "grep -E '^ALLOWED_FILE: ' \"\$order_file\"" \
+  || fail "contract boundary gate must read ALLOWED_FILE from the current order"
+if printf '%s\n' "$CONTRACT_GATE_SOURCE" | grep -Fq 'GATE_ALLOWED_FILES'; then
+  fail "contract boundary gate must not depend on stale GATE_ALLOWED_FILES"
+fi
+
+
+# docs/はledger・decision-index登録がworkflow上必須のため、別境界に数えない。
+# 「拒否されない」を弱いassertで済ませると正例を証明できない(2026-08-01独立検収P1指摘)ため、
+# 他の理由でも落ちない完全な粒を組み、exit 0そのものを固定する
+DOCS_TASK="$(printf '%s\n' "$TASK" |
+  sed 's|^ALLOWED_FILE: test.txt$|ALLOWED_FILE: test.txt\
+ALLOWED_FILE: docs/implementation-ledger.md|')"
+: >"$CALL_LOG"
+set +e
+env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+  FAKE_CALL_LOG="$CALL_LOG" \
+  FAKE_PREFLIGHT_OUTPUT="$PREFLIGHT_READY" \
+  "$SCRIPT" prepare "$WT" "$TMP_ROOT/docs-owner.md" "$DOCS_TASK" \
+  >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 0 "$RUN_STATUS" "docs registration alongside one owner must dispatch"
+assert_has "$TMP_ROOT/docs-owner.md" "ALLOWED_FILE: docs/implementation-ledger.md" \
+  "docs allowlist entry survived"
+
+# skeleton段(REVIEW_MODEL不在)のskipをPASSとして記録すると、監査でskipと本物の
+# 合格を区別できない。skeleton roundはSKIP、order roundはPASSで両方現れること
+DOCS_GATES="$TMP_ROOT/docs-owner.md.evidence/gates.txt"
+grep -Eq '^GATE_SKIP: reviewer_independence' "$DOCS_GATES" \
+  || fail "skeleton stage must record reviewer_independence as SKIP"
+grep -Eq '^GATE_PASS: reviewer_independence' "$DOCS_GATES" \
+  || fail "order stage must record reviewer_independence as a real PASS"
+
+# 宣言は一つだけ。二重宣言は境界が一つであることの証明にならない
+DUP_BOUNDARY_TASK="$(printf '%s\n' "$TASK" |
+  sed 's|^CONTRACT_BOUNDARY: fixture-src-oracle$|CONTRACT_BOUNDARY: fixture-src-oracle\
+CONTRACT_BOUNDARY: second-boundary|')"
+: >"$CALL_LOG"
+run_script prepare "$WT" "$TMP_ROOT/dup-boundary.md" "$DUP_BOUNDARY_TASK"
+assert_status 3 "$RUN_STATUS" "duplicate CONTRACT_BOUNDARY rejected"
+[[ ! -s "$CALL_LOG" ]] || fail "duplicate CONTRACT_BOUNDARY must fail before model invocation"
+[[ "$(read_rejecting_gate "$TMP_ROOT/dup-boundary.md.evidence/gates.txt")" == "contract_boundary" ]] \
+  || fail "gate ledger must name contract_boundary for the duplicate declaration"
 
 # 狭いprofileへの手動overrideもOpus起動前に拒否する。
 MISMATCH_TASK="$(printf '%s\n' "$TASK" | sed 's/^OWNER_CLOSURE: CLOSED$/OWNER_CLOSURE: MULTIPLE_KNOWN/')"
@@ -471,12 +682,34 @@ set +e
 env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" \
   FAKE_CALL_LOG="$CALL_LOG" \
-  FAKE_OPUS_OUTPUT="$OPUS_READY" \
+  FAKE_PREFLIGHT_OUTPUT="$PREFLIGHT_READY" \
   "$SCRIPT" prepare "$WT" "$TMP_ROOT/frozen-permanent-order.md" "$FROZEN_PERMANENT_TASK" \
   >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
 assert_status 0 "$RUN_STATUS" "frozen permanent contract prepare"
+# 最上段は非LLM oracleを要求するだけでなくrunnerが供給する。この行を消すと
+# 恒久契約の粒がMECHANICAL_GUARD不在でdispatchできなくなり、ここが緑でなくなる
+assert_has "$TMP_ROOT/frozen-permanent-order.md" \
+  "MECHANICAL_GUARD: permanent format change must be proven by a rejection test or schema golden, not by reviewer opinion." \
+  "PERMANENT supplies a non-LLM oracle"
+
+# SECURITYも同じく供給する。従来HAZARD_GUARDとNEGATIVE_ORACLEだけで機械guardが無かった
+SECURITY_TASK="$(printf '%s\n' "$TASK" | sed 's|^HAZARD_TAG: NONE$|HAZARD_TAG: SECURITY|')"
+: >"$CALL_LOG"
+set +e
+env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+  FAKE_CALL_LOG="$CALL_LOG" \
+  FAKE_PREFLIGHT_OUTPUT="$PREFLIGHT_READY" \
+  "$SCRIPT" prepare "$WT" "$TMP_ROOT/security-order.md" "$SECURITY_TASK" \
+  >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 0 "$RUN_STATUS" "SECURITY prepare"
+assert_has "$TMP_ROOT/security-order.md" \
+  "MECHANICAL_GUARD: authority rejection and permission width must be proven by a test or static check, not by review opinion." \
+  "SECURITY supplies a non-LLM oracle"
 assert_has "$TMP_ROOT/frozen-permanent-order.md" "CONTRACT_CLOSURE: FROZEN" \
   "frozen permanent contract closure"
 assert_has "$TMP_ROOT/frozen-permanent-order.md" \
@@ -520,14 +753,14 @@ set +e
 env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" \
   FAKE_CALL_LOG="$CALL_LOG" \
-  FAKE_OPUS_OUTPUT="$OPUS_READY" \
+  FAKE_PREFLIGHT_OUTPUT="$PREFLIGHT_READY" \
   "$SCRIPT" prepare "$WT" "$TMP_ROOT/adjacent-order.md" "$ADJACENT_TASK" \
   >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
 assert_status 0 "$RUN_STATUS" "ADJACENT prepare"
 assert_has "$TMP_ROOT/adjacent-order.md" "VIEW_PROFILE: ADJACENT" "adjacent profile"
-[[ "$(grep -c '^claude:' "$CALL_LOG")" -eq 1 ]] || fail "ADJACENT must invoke one typed delta validation"
+[[ "$(grep -c '^cursor:' "$CALL_LOG")" -eq 1 ]] || fail "ADJACENT must invoke one preflight"
 
 # Complete READY orderで正規metadataが追加されることを確認する。
 : >"$CALL_LOG"
@@ -535,23 +768,27 @@ set +e
 env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" \
   FAKE_CALL_LOG="$CALL_LOG" \
-  FAKE_OPUS_OUTPUT="$OPUS_READY" \
+  FAKE_PREFLIGHT_OUTPUT="$PREFLIGHT_READY" \
   "$SCRIPT" prepare "$WT" "$ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
-assert_status 0 "$RUN_STATUS" "Opus READY prepare"
-assert_has "$ORDER" "LOOP_PROFILE: opus-spark-grok" "loop profile"
-assert_has "$ORDER" "ORDER_MANAGER_MODEL: claude-opus-5" "manager model"
+assert_status 0 "$RUN_STATUS" "Grok READY prepare"
+assert_has "$ORDER" "ROUTE_CONTRACT_VERSION: 2" "route contract version"
+assert_has "$ORDER" "LOOP_PROFILE: grok-spark-opus" "loop profile"
+assert_has "$ORDER" "PREFLIGHT_MODEL: cursor-grok-4.5-high" "preflight model"
 assert_has "$ORDER" "IMPLEMENTER_MODEL: gpt-5.3-codex-spark" "Spark model"
-assert_has "$ORDER" "REVIEW_MODEL: cursor-grok-4.5-high" "Grok model"
+assert_has "$ORDER" "REVIEW_MODEL: claude-opus-5" "Opus review model"
 assert_has "$ORDER" "TASK_SHA256: $TASK_HASH" "task binding"
 assert_has "$ORDER" "READ_MODE: CAPSULE" "bounded context mode"
 assert_has "$ORDER" "VIEW_PROFILE: CLOSED" "computed view profile"
 assert_has "$ORDER" "HAZARD_GUARD: NONE" "runner-owned hazard guard"
 assert_has "$ORDER" \
-  "OPUS_DELTA_FINDING: F1 NEGATIVE_ORACLE P2 src.txt must remain unchanged when authority validation fails." \
+  "PREFLIGHT_FINDING: F1 NEGATIVE_ORACLE P2 src.txt must remain unchanged when authority validation fails." \
   "typed delta finding"
-assert_has "$ORDER" "OPUS_DELTA_REASON: fixture skeleton is closed" "typed delta reason"
+assert_has "$ORDER" "PREFLIGHT_REASON: fixture skeleton is closed" "typed delta reason"
+[[ -s "$ORDER.evidence/preflight-output-stream.jsonl" ]] || fail "preflight raw stream must be retained"
+[[ -s "$ORDER.evidence/preflight-output-result.json" ]] || fail "preflight result event must be retained"
+assert_has "$ORDER.evidence/preflight-output.txt" "ORDER: READY" "preflight decision evidence"
 
 # destructive filesystem grainは、Opusの気分に依存せず既知の機械guardを注入する。
 HAZARD_ORDER="$TMP_ROOT/hazard-order.md"
@@ -561,7 +798,7 @@ set +e
 env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" \
   FAKE_CALL_LOG="$CALL_LOG" \
-  FAKE_OPUS_OUTPUT="$OPUS_READY" \
+  FAKE_PREFLIGHT_OUTPUT="$PREFLIGHT_READY" \
   "$SCRIPT" prepare "$WT" "$HAZARD_ORDER" "$HAZARD_TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
@@ -576,52 +813,33 @@ assert_fragment "$HAZARD_ORDER" \
   "NEGATIVE_ORACLE: zero deletion targets must perform zero recursive removals" \
   "zero-target negative oracle"
 
-# CLI自体の失敗はschema不正ではないためsame-session retryを行わない。
+# CLI自体の失敗はfallbackせず一回で停止する。
 : >"$CALL_LOG"
 set +e
 env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" \
   FAKE_CALL_LOG="$CALL_LOG" \
-  FAKE_OPUS_STATUS=42 \
+  FAKE_PREFLIGHT_STATUS=42 \
   "$SCRIPT" prepare "$WT" "$TMP_ROOT/cli-failure-order.md" "$TASK" \
   >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
-assert_status 1 "$RUN_STATUS" "Opus CLI failure"
-[[ "$(grep -c '^claude:' "$CALL_LOG")" -eq 1 ]] || fail "CLI failure must not trigger schema retry"
+assert_status 1 "$RUN_STATUS" "Grok preflight CLI failure"
+[[ "$(grep -c '^cursor:' "$CALL_LOG")" -eq 1 ]] || fail "CLI failure must not trigger fallback"
 
-# schema不正は同じsessionへ一度だけ差戻し、二回目が正しければ採用する。
-RETRY_ORDER="$TMP_ROOT/retry-order.md"
-: >"$CALL_LOG"
-set +e
-env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
-  PATH="$FAKE_BIN:/usr/bin:/bin" \
-  FAKE_CALL_LOG="$CALL_LOG" \
-  FAKE_OPUS_OUTPUT='not-json' \
-  FAKE_OPUS_RETRY_OUTPUT="$OPUS_READY" \
-  "$SCRIPT" prepare "$WT" "$RETRY_ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
-RUN_STATUS=$?
-set -e
-assert_status 0 "$RUN_STATUS" "same-session schema retry succeeds"
-[[ "$(grep -c '^claude:' "$CALL_LOG")" -eq 2 ]] || fail "schema retry must invoke Claude exactly twice"
-assert_fragment "$CALL_LOG" "--resume " "schema retry resumes the same session"
-
-# 二回とも不正なら散文fallbackせず終了する。
+# marker/schema不正は散文fallbackや別model再試行をせず終了する。
 DOUBLE_BAD_ORDER="$TMP_ROOT/double-bad-order.md"
 : >"$CALL_LOG"
 set +e
 env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" \
   FAKE_CALL_LOG="$CALL_LOG" \
-  FAKE_OPUS_OUTPUT='not-json' \
-  FAKE_OPUS_RETRY_OUTPUT='still-not-json' \
+  FAKE_PREFLIGHT_OUTPUT='not-valid-preflight' \
   "$SCRIPT" prepare "$WT" "$DOUBLE_BAD_ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
-assert_status 1 "$RUN_STATUS" "double schema failure"
-[[ "$(grep -c '^claude:' "$CALL_LOG")" -eq 2 ]] || fail "double schema failure must stop after two calls"
-grep -Fq -- "散文fallbackしません" "$TMP_ROOT/stderr.log" \
-  || fail "double schema failure did not report fail-closed fallback policy"
+assert_status 1 "$RUN_STATUS" "invalid preflight output"
+[[ "$(grep -c '^cursor:' "$CALL_LOG")" -eq 1 ]] || fail "invalid preflight must stop after one call"
 
 # Codexが各deltaを実装／試験へどう閉じるか明記しない限り、Sparkを起動しない。
 UNRESOLVED_ORDER="$TMP_ROOT/unresolved-order.md"
@@ -635,8 +853,8 @@ env -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   "$SCRIPT" execute "$WT" "$UNRESOLVED_ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
-assert_status 3 "$RUN_STATUS" "unresolved Opus delta"
-grep -Fq -- "every Opus delta finding requires one matching DELTA_RESOLUTION" "$TMP_ROOT/stderr.log" \
+assert_status 3 "$RUN_STATUS" "unresolved preflight finding"
+grep -Fq -- "every preflight finding requires one matching DELTA_RESOLUTION" "$TMP_ROOT/stderr.log" \
   || fail "missing delta resolution reason is absent"
 [[ ! -s "$CALL_LOG" ]] || fail "unresolved delta must fail before Spark"
 
@@ -750,13 +968,14 @@ env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" \
   FAKE_CALL_LOG="$CALL_LOG" \
   FAKE_SPARK_HOOK="$SPARK_HOOK" \
-  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  FAKE_REVIEW_OUTPUT="$OPUS_ACCEPT" \
   "$SCRIPT" execute "$WT" "$ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
-assert_status 0 "$RUN_STATUS" "Spark then Grok happy path"
+assert_status 0 "$RUN_STATUS" "Spark then Opus happy path"
 grep -Fq -- "--model gpt-5.3-codex-spark" "$CALL_LOG" || fail "Spark model was not invoked"
-grep -Fq -- "--model cursor-grok-4.5-high" "$CALL_LOG" || fail "Grok model was not invoked"
+grep -Fq -- "--model claude-opus-5" "$CALL_LOG" || fail "Opus review model was not invoked"
+assert_fragment "$CALL_LOG" "A finding may reject" "final finding is non-authorizing"
 assert_fragment "$CALL_LOG" "--ignore-user-config" "Spark ignores ambient user config"
 assert_fragment "$CALL_LOG" "--disable memories" "Spark memory is disabled"
 assert_fragment "$CALL_LOG" "--disable plugins" "Spark plugins are disabled"
@@ -768,12 +987,12 @@ assert_fragment "$CALL_LOG" "=== src.txt line 1 anchor: before ===" "internal ta
 assert_fragment "$CALL_LOG" "=== test.txt line 1 anchor: fixture oracle ===" "test target neighborhood"
 assert_fragment "$CALL_LOG" "new command, mode, public API" "new surface prohibition"
 assert_fragment "$CALL_LOG" "Run every Test and DELTA_RESOLUTION check" "Spark must run required tests"
-if grep -Fq -- "claude:" "$CALL_LOG"; then
-  fail "execute must not rerun Opus or Fable"
+if grep -Fq -- "cursor:" "$CALL_LOG"; then
+  fail "execute must not rerun Grok preflight"
 fi
 codex_line="$(grep -n '^codex:' "$CALL_LOG" | cut -d: -f1)"
-grok_line="$(grep -n '^cursor:' "$CALL_LOG" | cut -d: -f1)"
-[[ "$codex_line" -lt "$grok_line" ]] || fail "Spark must run before Grok"
+review_line="$(grep -n '^claude:' "$CALL_LOG" | cut -d: -f1)"
+[[ "$codex_line" -lt "$review_line" ]] || fail "Spark must run before Opus review"
 
 happy_attempt_name="$(awk -F': ' '$1=="ATTEMPT"{print $2}' "${ORDER}.evidence/checkpoint.txt")"
 happy_attempt="${ORDER}.evidence/$happy_attempt_name"
@@ -788,7 +1007,7 @@ assert_has "$happy_attempt/spark-compiled-grain.txt" \
   "compiled delta resolution"
 assert_has "$happy_attempt/spark-compiled-grain.txt" \
   "Test: git diff --check." "compiled test"
-if grep -Eq '^(AUTHORITY|BASE_SHA|VIEW_PROFILE|TASK_SHA256|CODEX PRECHECK|OPUS_DELTA_REASON):' \
+if grep -Eq '^(AUTHORITY|BASE_SHA|VIEW_PROFILE|TASK_SHA256|CODEX PRECHECK|PREFLIGHT_REASON):' \
   "$happy_attempt/spark-compiled-grain.txt"; then
   fail "compiled grain retained runner-only metadata"
 fi
@@ -800,6 +1019,16 @@ fi
   || fail "Spark prompt must contain Objective exactly once"
 [[ "$(grep -c '^Test:' "$happy_attempt/spark-prompt.txt")" -eq 1 ]] \
   || fail "Spark prompt must contain Test exactly once"
+# 改訂3(2026-08-01): receiptへ実使用modelとfallback有無を残す。ループ外で別modelへ
+# 差し替えた場合、receiptに現れないことで検出できる
+assert_has "$happy_attempt/metadata.txt" "IMPLEMENTER_MODEL_FAMILY: openai" "implementer family recorded"
+assert_has "$happy_attempt/metadata.txt" "REVIEW_MODEL_FAMILY: anthropic" "reviewer family recorded"
+assert_has "$happy_attempt/metadata.txt" "MODEL_FALLBACK: NONE" "runner never falls back silently"
+# receiptは定数でなくorderの宣言を写す。宣言・argv・receiptが三者一致すること
+ORDER_REVIEW_MODEL_VALUE="$(awk -F': ' '/^REVIEW_MODEL: /{print $2}' "$ORDER")"
+[[ -n "$ORDER_REVIEW_MODEL_VALUE" ]] || fail "order must declare REVIEW_MODEL"
+assert_has "$happy_attempt/metadata.txt" "REVIEW_MODEL: $ORDER_REVIEW_MODEL_VALUE" \
+  "receipt records the reviewer declared in the order"
 assert_has "$happy_attempt/metadata.txt" \
   "TARGET_CAPSULE_SHA256: $(sha256_file "$happy_attempt/spark-target-capsule.txt")" \
   "target capsule hash evidence"
@@ -810,25 +1039,114 @@ assert_has "$happy_attempt/metadata.txt" \
   "SPARK_PROMPT_SHA256: $(sha256_file "$happy_attempt/spark-prompt.txt")" \
   "Spark prompt hash evidence"
 
-GROK_HOOK="$TMP_ROOT/grok-hook.sh"
-cat >"$GROK_HOOK" <<EOF
+# execute側はSpark/reviewのwall timeを必ず残す。
+HAPPY_TELEMETRY="$happy_attempt/telemetry.txt"
+[[ -f "$HAPPY_TELEMETRY" ]] || fail "execute must record telemetry"
+grep -Eq '^SPARK_WALL_SECONDS: [0-9]+$' "$HAPPY_TELEMETRY" || fail "Spark wall seconds must be numeric"
+grep -Eq '^REVIEW_WALL_SECONDS: [0-9]+$' "$HAPPY_TELEMETRY" || fail "review wall seconds must be numeric"
+assert_has "$HAPPY_TELEMETRY" "SPARK_INPUT_TOKENS: 9988" "Spark tokens come from turn.completed"
+assert_has "$HAPPY_TELEMETRY" "SPARK_CACHE_READ_TOKENS: 4608" "Spark cached input measured"
+assert_has "$HAPPY_TELEMETRY" "REVIEW_INPUT_TOKENS: 1200" "review tokens come from Claude result"
+assert_has "$HAPPY_TELEMETRY" "REVIEW_CACHE_READ_TOKENS: 0" "review cache read measured"
+# codexはUSD costを返さないがClaude reviewは返す。
+assert_has "$HAPPY_TELEMETRY" "SPARK_COST_USD: UNKNOWN" "codex reports tokens but no USD cost"
+assert_has "$HAPPY_TELEMETRY" "REVIEW_COST_USD: 0.035" "Claude review cost measured"
+assert_has "$HAPPY_TELEMETRY" "UNMEASURED_TOKEN_STAGES: NONE" "every stage reports tokens"
+grep -Eq '^UNMEASURED_COST_STAGES:.*SPARK_COST_USD' "$HAPPY_TELEMETRY" \
+  || fail "unmeasured Spark cost must be named in the summary"
+grep -Eq '^TOTAL_WALL_SECONDS: [0-9]+$' "$HAPPY_TELEMETRY" || fail "execute must total wall seconds"
+
+# Spark JSONLとOpus structured final resultを必ず残す。
+[[ -s "$happy_attempt/spark-stream.jsonl" ]] || fail "Spark raw JSONL stream must be retained"
+[[ -s "$happy_attempt/review-result.json" ]] || fail "Opus structured review must be retained"
+assert_fragment "$CALL_LOG" "--output-format json" "Opus review uses structured output"
+assert_fragment "$CALL_LOG" "--json-schema" "Opus review is schema-bound"
+assert_fragment "$CALL_LOG" "--permission-mode bypassPermissions" "OS sandbox contains the noninteractive reviewer"
+assert_fragment "$CALL_LOG" "--tools Read,Bash" "reviewer tool surface is read and command only"
+assert_fragment "$CALL_LOG" "--session-id " "reviewer receives a fresh session id"
+assert_fragment "$CALL_LOG" "--no-session-persistence" "reviewer session cannot be resumed later"
+if grep -Fq -- "--resume" "$CALL_LOG"; then
+  fail "final review must never resume a prior session"
+fi
+# 起動modelはorderのREVIEW_MODELを正本にする。固定定数へ戻すと宣言と実行が乖離する
+assert_fragment "$CALL_LOG" "--model $(awk -F': ' '/^REVIEW_MODEL: /{print $2}' "$ORDER")" \
+  "reviewer is launched with the model declared in the order"
+assert_fragment "$CALL_LOG" "--json" "Spark emits JSONL events"
+
+# 通過したgateも記録する。従来は通過が無記録で、どの層が働いているか測れなかった
+HAPPY_GATES="$ORDER.evidence/gates.txt"
+[[ -f "$HAPPY_GATES" ]] || fail "passing gates must be recorded too"
+for gate_name in base grain_and_dependencies authorities allowed_files contract_boundary route_contract \
+  reviewer_independence context_budget compiled_grain_contract exact_targets view_profile \
+  clean_worktree react_labels; do
+  assert_has "$HAPPY_GATES" "GATE_ENTER: $gate_name" "gate $gate_name entered"
+  assert_has "$HAPPY_GATES" "GATE_PASS: $gate_name" "gate $gate_name passed"
+done
+# C層が実際に切り詰めたかの実測。粒がそのまま収まるならこの層は削れる
+grep -Eq '^ECONOMY: TARGET_CAPSULE produced_bytes=[0-9]+ baseline_bytes=[0-9]+$' "$HAPPY_GATES" \
+  || fail "target capsule economy must be measured against whole READ_FILE bytes"
+grep -Eq '^ECONOMY: COMPILED_GRAIN produced_bytes=[0-9]+ baseline_bytes=[0-9]+$' "$HAPPY_GATES" \
+  || fail "compiled grain economy must be measured against full order bytes"
+
+# 旧runnerが残したcheckpointを再開する場合も、inspect側route gateがreviewer起動前に拒否する。
+cp "$ORDER" "$TMP_ROOT/order-before-stale-inspect.md"
+cp "$happy_attempt/order.txt" "$TMP_ROOT/attempt-order-before-stale-inspect.md"
+cp "$ORDER.evidence/checkpoint.txt" "$TMP_ROOT/checkpoint-before-stale-inspect.txt"
+sed -i '' 's|^ROUTE_CONTRACT_VERSION: 2$|ROUTE_CONTRACT_VERSION: 1|' "$ORDER" "$happy_attempt/order.txt"
+stale_inspect_sha="$(sha256_file "$ORDER")"
+sed -i '' "s|^ORDER_SHA256: .*$|ORDER_SHA256: $stale_inspect_sha|" "$ORDER.evidence/checkpoint.txt"
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" \
+  "$SCRIPT" inspect "$WT" "$ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 3 "$RUN_STATUS" "stale checkpoint inspect rejected"
+[[ ! -s "$CALL_LOG" ]] || fail "stale checkpoint inspect must fail before reviewer launch"
+grep -Fq -- "stale supervision route contract" "$TMP_ROOT/stderr.log" \
+  || fail "inspect stale route rejection reason missing"
+cp "$TMP_ROOT/order-before-stale-inspect.md" "$ORDER"
+cp "$TMP_ROOT/attempt-order-before-stale-inspect.md" "$happy_attempt/order.txt"
+cp "$TMP_ROOT/checkpoint-before-stale-inspect.txt" "$ORDER.evidence/checkpoint.txt"
+
+# 最終verdictとP0/P1は別々にfail closedする。ACCEPT文字列だけでは採用しない。
+for review_case in reject accept-p1; do
+  review_output="$OPUS_REJECT"
+  [[ "$review_case" != "accept-p1" ]] || review_output="$OPUS_ACCEPT_P1"
+  : >"$CALL_LOG"
+  set +e
+  env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+    PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" \
+    FAKE_REVIEW_OUTPUT="$review_output" \
+    "$SCRIPT" inspect "$WT" "$ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+  RUN_STATUS=$?
+  set -e
+  assert_status 4 "$RUN_STATUS" "final review $review_case rejected"
+  [[ "$(grep -c '^claude:' "$CALL_LOG")" -eq 1 ]] || fail "$review_case must invoke one fresh Opus review"
+  [[ "$(grep -c '^codex:' "$CALL_LOG" || true)" -eq 0 ]] || fail "$review_case inspect must not rerun Spark"
+done
+
+REVIEW_HOOK="$TMP_ROOT/grok-hook.sh"
+cat >"$REVIEW_HOOK" <<EOF
 #!/usr/bin/env bash
 printf 'reviewer mutation\n' >>"$WT/src.txt"
 EOF
-chmod +x "$GROK_HOOK"
+chmod +x "$REVIEW_HOOK"
 : >"$CALL_LOG"
 set +e
 env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" \
   FAKE_CALL_LOG="$CALL_LOG" \
-  FAKE_GROK_HOOK="$GROK_HOOK" \
-  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  FAKE_REVIEW_HOOK="$REVIEW_HOOK" \
+  FAKE_REVIEW_OUTPUT="$OPUS_ACCEPT" \
   "$SCRIPT" inspect "$WT" "$ORDER" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
-assert_status 8 "$RUN_STATUS" "read-only Grok mutation rejected"
-grep -Fq -- "fingerprint changed during read-only inspection" "$TMP_ROOT/stderr.log" \
-  || fail "Grok mutation did not report fingerprint failure"
+assert_status 1 "$RUN_STATUS" "OS sandbox blocks final reviewer mutation"
+assert_has "$WT/src.txt" "after" "reviewer mutation never reached the worktree"
+grep -Eq 'Operation not permitted|Sandbox' "$TMP_ROOT/stderr.log" \
+  || fail "reviewer mutation did not report sandbox denial"
 
 STALE_ORDER="$TMP_ROOT/stale-order.md"
 sed 's/^IMPLEMENTER_MODEL:.*/IMPLEMENTER_MODEL: gpt-5.6-terra/' "$ORDER" >"$STALE_ORDER"
@@ -875,7 +1193,7 @@ chmod +x "$SPARK_POSITIVE"
 set +e
 env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_POSITIVE" \
-  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  FAKE_REVIEW_OUTPUT="$OPUS_ACCEPT" \
   "$SCRIPT" execute "$WT_D3" "$ORDER_D3" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
@@ -888,6 +1206,114 @@ runner_ref_digest="$(tr -d '[:space:]' <"$latest_attempt/pre-spark-ref-digest.sh
 canonical_ref_digest_value="$(canonical_ref_digest "$WT_D3")"
 [[ "$runner_ref_digest" == "$canonical_ref_digest_value" ]] \
   || fail "GR-D3 ref digest recipe: runner=$runner_ref_digest canonical=$canonical_ref_digest_value"
+
+# 改訂3(2026-08-01): 検収者はmodel名でなく独立性条件で決まる。守るべき不変条件は
+# 「Grokを使う」ではなく「実装担当から独立した別LLMの外部視点」。
+run_reviewer_case() {
+  local label="$1" review_model="$2" expect_fragment="$3" extra_sed="${4:-}"
+  local wt order
+  wt="$(gr_d3_init_worktree "$TMP_ROOT/reviewer-$label")"
+  order="$TMP_ROOT/reviewer-$label.md"
+  gr_d3_ready_order "$wt" "$order"
+  sed -i '' "s|^REVIEW_MODEL: .*$|REVIEW_MODEL: $review_model|" "$order"
+  [[ -z "$extra_sed" ]] || sed -i '' "$extra_sed" "$order"
+  : >"$CALL_LOG"
+  set +e
+  env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+    PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" \
+    "$SCRIPT" execute "$wt" "$order" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+  RUN_STATUS=$?
+  set -e
+  assert_status 3 "$RUN_STATUS" "reviewer $label rejected"
+  [[ ! -s "$CALL_LOG" ]] || fail "reviewer $label must fail before any model starts"
+  grep -Fq -- "$expect_fragment" "$TMP_ROOT/stderr.log" \
+    || fail "reviewer $label rejection reason missing: $expect_fragment"
+  [[ "$(read_rejecting_gate "$order.evidence/gates.txt")" == "reviewer_independence" ]] \
+    || fail "gate ledger must name reviewer_independence for $label"
+}
+
+# 実装担当modelは検収席へ置けない。allowlistより先にidentityを検査するため、
+# この負例はidentity行そのものを固定する(削除すればここが緑でなくなる)
+run_reviewer_case "same-as-implementer" "gpt-5.3-codex-spark" \
+  "reviewer must differ from the implementer"
+# 事前粒化へ関与したmodelを最終検収者にしない
+run_reviewer_case "same-as-preflight" "cursor-grok-4.5-high" \
+  "reviewer must not be the preflight model"
+# 承認されていないmodelを検収席へ置かない
+run_reviewer_case "unapproved" "some-unlisted-model" \
+  "not an approved independent reviewer"
+
+# 段階化: NONE:PRIVATE以外はmodel familyまで離す。family行を削除すると緑でなくなる
+run_reviewer_case "same-family" "gpt-5.3-codex-mini" \
+  "must be from a different model family" \
+  's|^HAZARD_TAG: NONE$|HAZARD_TAG: PERSISTENCE|'
+# 最上段は非LLM oracleの宣言を必須にする。case各腕を個別に固定する。
+# 腕をまとめて消すmutationしか試さないと、腕1本の削除を見逃す(2026-08-01独立検収P1指摘)
+run_reviewer_case "security-without-oracle" "claude-opus-5" \
+  "requires a declared non-LLM oracle" \
+  's|^HAZARD_TAG: NONE$|HAZARD_TAG: SECURITY|'
+run_reviewer_case "destructive-without-oracle" "claude-opus-5" \
+  "requires a declared non-LLM oracle" \
+  's|^HAZARD_TAG: NONE$|HAZARD_TAG: DESTRUCTIVE_FS|'
+run_reviewer_case "permanent-without-oracle" "claude-opus-5" \
+  "requires a declared non-LLM oracle" \
+  's|^CONTRACT_IMPACT: PRIVATE$|CONTRACT_IMPACT: PERMANENT|; s|^CONTRACT_CLOSURE: PRIVATE$|CONTRACT_CLOSURE: FROZEN|; s|^CONTRACT_AUTHORITY: NONE$|CONTRACT_AUTHORITY: AGENTS.md@SHA256:PLACEHOLDER|'
+# 宣言の存在だけを見ると空宣言で通る。中身のある一行を要求することを固定する
+run_reviewer_case "empty-mechanical-guard" "claude-opus-5" \
+  "requires a declared non-LLM oracle" \
+  's|^HAZARD_TAG: NONE$|HAZARD_TAG: SECURITY\
+MECHANICAL_GUARD:   |'
+
+run_stale_route_case() {
+  local label="$1" sed_expr="$2" expect_fragment="$3"
+  local wt order
+  wt="$(gr_d3_init_worktree "$TMP_ROOT/stale-$label")"
+  order="$TMP_ROOT/stale-$label.md"
+  gr_d3_ready_order "$wt" "$order"
+  sed -i '' "$sed_expr" "$order"
+  case "$label" in
+    legacy-manager) printf 'ORDER_MANAGER_MODEL: claude-opus-5\n' >>"$order" ;;
+    legacy-finding) printf 'OPUS_DELTA_FINDING: F1 RISK P2 stale\n' >>"$order" ;;
+    legacy-reason) printf 'OPUS_DELTA_REASON: stale\n' >>"$order" ;;
+  esac
+  : >"$CALL_LOG"
+  set +e
+  env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+    PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" \
+    "$SCRIPT" execute "$wt" "$order" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+  RUN_STATUS=$?
+  set -e
+  assert_status 3 "$RUN_STATUS" "stale route $label rejected"
+  [[ ! -s "$CALL_LOG" ]] || fail "stale route $label must fail before any model starts"
+  grep -Fq -- "$expect_fragment" "$TMP_ROOT/stderr.log" \
+    || fail "stale route $label rejection reason missing: $expect_fragment"
+}
+
+# 過去orderを黙って現行routeへ読み替えない。version/profile/legacy fieldを個別に拒否する。
+run_stale_route_case "version" 's|^ROUTE_CONTRACT_VERSION: 2$|ROUTE_CONTRACT_VERSION: 1|' \
+  "stale supervision route contract"
+run_stale_route_case "profile" 's|^LOOP_PROFILE: grok-spark-opus$|LOOP_PROFILE: opus-spark-grok|' \
+  "stale supervision LOOP_PROFILE"
+for legacy_label in legacy-manager legacy-finding legacy-reason; do
+  run_stale_route_case "$legacy_label" 's|^PREFLIGHT_MODEL: cursor-grok-4.5-high$|PREFLIGHT_MODEL: cursor-grok-4.5-high|' \
+    "legacy supervision fields are forbidden"
+done
+
+# plan modeのpreflight結果はplan tool callにしか現れない場合がある。
+ORDER_PLAN="$TMP_ROOT/grok-plan-mode.md"
+printf 'before\n' >"$WT/src.txt"
+WT_PLAN="$TMP_ROOT/grok-plan-mode-worktree"
+git clone -q "$WT" "$WT_PLAN"
+: >"$CALL_LOG"
+set +e
+env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
+  PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" \
+  FAKE_GROK_PLAN_MODE=1 FAKE_PREFLIGHT_OUTPUT="$PREFLIGHT_READY" \
+  "$SCRIPT" prepare "$WT_PLAN" "$ORDER_PLAN" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
+RUN_STATUS=$?
+set -e
+assert_status 0 "$RUN_STATUS" "plan-mode preflight is extracted from the plan tool call"
+assert_has "$ORDER_PLAN" "PREFLIGHT_REASON: fixture skeleton is closed" "plan text became the preflight result"
 
 WT_EMPTY="$TMP_ROOT/gr-d3-empty-target"
 WT_EMPTY="$(gr_d3_init_worktree "$WT_EMPTY")"
@@ -907,7 +1333,7 @@ chmod +x "$SPARK_EMPTY"
 set +e
 env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_EMPTY" \
-  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  FAKE_REVIEW_OUTPUT="$OPUS_ACCEPT" \
   "$SCRIPT" execute "$WT_EMPTY" "$ORDER_EMPTY" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
@@ -937,7 +1363,7 @@ chmod +x "$SPARK_UNKNOWN"
 set +e
 env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_UNKNOWN" \
-  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  FAKE_REVIEW_OUTPUT="$OPUS_ACCEPT" \
   "$SCRIPT" execute "$WT_UNKNOWN" "$ORDER_UNKNOWN" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
@@ -966,7 +1392,7 @@ chmod +x "$SPARK_SYMLINK_ROOT"
 set +e
 env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_SYMLINK_ROOT" \
-  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  FAKE_REVIEW_OUTPUT="$OPUS_ACCEPT" \
   "$SCRIPT" execute "$WT_SYMLINK_ROOT" "$ORDER_SYMLINK_ROOT" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
@@ -993,7 +1419,7 @@ chmod +x "$SPARK_DANGLING"
 set +e
 env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_DANGLING" \
-  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  FAKE_REVIEW_OUTPUT="$OPUS_ACCEPT" \
   "$SCRIPT" execute "$WT_DANGLING" "$ORDER_DANGLING" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
@@ -1023,7 +1449,7 @@ chmod +x "$SPARK_NESTED_LIVE"
 set +e
 env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_NESTED_LIVE" \
-  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  FAKE_REVIEW_OUTPUT="$OPUS_ACCEPT" \
   "$SCRIPT" execute "$WT_NESTED_LIVE" "$ORDER_NESTED_LIVE" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
@@ -1054,7 +1480,7 @@ chmod +x "$SPARK_NESTED_DANGLING"
 set +e
 env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_NESTED_DANGLING" \
-  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  FAKE_REVIEW_OUTPUT="$OPUS_ACCEPT" \
   "$SCRIPT" execute "$WT_NESTED_DANGLING" "$ORDER_NESTED_DANGLING" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
@@ -1079,7 +1505,7 @@ chmod +x "$SPARK_TRACKED_SETUP"
 set +e
 env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_TRACKED_SETUP" \
-  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  FAKE_REVIEW_OUTPUT="$OPUS_ACCEPT" \
   "$SCRIPT" execute "$WT_TRACKED" "$ORDER_TRACKED" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
@@ -1091,7 +1517,7 @@ git_fixture "$WT_TRACKED" add -f target/d1i4-empty-classification.tsv
 set +e
 env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" \
-  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  FAKE_REVIEW_OUTPUT="$OPUS_ACCEPT" \
   "$SCRIPT" inspect "$WT_TRACKED" "$ORDER_TRACKED" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
@@ -1129,7 +1555,7 @@ chmod +x "$SPARK_REMOVAL"
 set +e
 env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_REMOVAL" \
-  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  FAKE_REVIEW_OUTPUT="$OPUS_ACCEPT" \
   "$SCRIPT" execute "$WT_REMOVAL" "$ORDER_REMOVAL" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
@@ -1154,7 +1580,7 @@ chmod +x "$SPARK_INSPECT_RESUME"
 set +e
 env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_INSPECT_RESUME" \
-  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  FAKE_REVIEW_OUTPUT="$OPUS_ACCEPT" \
   "$SCRIPT" execute "$WT_INSPECT_RESUME" "$ORDER_INSPECT_RESUME" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
@@ -1164,7 +1590,7 @@ create_three_known_target_entries "$WT_INSPECT_RESUME"
 set +e
 env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" \
-  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  FAKE_REVIEW_OUTPUT="$OPUS_ACCEPT" \
   "$SCRIPT" inspect "$WT_INSPECT_RESUME" "$ORDER_INSPECT_RESUME" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
@@ -1197,13 +1623,13 @@ chmod +x "$GROK_POST_GROK"
 set +e
 env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" \
-  FAKE_SPARK_HOOK="$SPARK_POST_GROK" FAKE_GROK_HOOK="$GROK_POST_GROK" \
-  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  FAKE_SPARK_HOOK="$SPARK_POST_GROK" FAKE_REVIEW_HOOK="$GROK_POST_GROK" \
+  FAKE_REVIEW_OUTPUT="$OPUS_ACCEPT" \
   "$SCRIPT" execute "$WT_POST_GROK" "$ORDER_POST_GROK" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
-assert_status 0 "$RUN_STATUS" "GR-D3 post-reaped-Grok closure"
-[[ ! -e "$WT_POST_GROK/target" ]] || fail "GR-D3 post-grok: target still present"
+assert_status 1 "$RUN_STATUS" "OS sandbox blocks reviewer derived-target creation"
+[[ ! -e "$WT_POST_GROK/target" ]] || fail "reviewer sandbox allowed a derived target"
 
 WT_GROK_UNKNOWN="$TMP_ROOT/gr-d3-grok-unknown"
 WT_GROK_UNKNOWN="$(gr_d3_init_worktree "$WT_GROK_UNKNOWN")"
@@ -1228,16 +1654,16 @@ chmod +x "$GROK_UNKNOWN"
 set +e
 env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" \
-  FAKE_SPARK_HOOK="$SPARK_GROK_UNKNOWN" FAKE_GROK_HOOK="$GROK_UNKNOWN" \
-  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  FAKE_SPARK_HOOK="$SPARK_GROK_UNKNOWN" FAKE_REVIEW_HOOK="$GROK_UNKNOWN" \
+  FAKE_REVIEW_OUTPUT="$OPUS_ACCEPT" \
   "$SCRIPT" execute "$WT_GROK_UNKNOWN" "$ORDER_GROK_UNKNOWN" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
-assert_status 7 "$RUN_STATUS" "GR-D3 post-grok unknown mutation"
-grep -Fqx 'grok-unknown-marker' "$WT_GROK_UNKNOWN/target/grok-unknown" \
-  || fail "GR-D3 grok unknown: mutation removed"
+assert_status 1 "$RUN_STATUS" "OS sandbox blocks reviewer unknown-target creation"
+[[ ! -e "$WT_GROK_UNKNOWN/target/grok-unknown" ]] \
+  || fail "reviewer sandbox allowed an unknown derived target"
 [[ -f "${ORDER_GROK_UNKNOWN}.evidence/checkpoint.txt" ]] \
-  && fail "GR-D3 grok unknown: checkpoint must not remain after scope failure"
+  || fail "review failure without worktree mutation should preserve the Spark checkpoint"
 
 WT_REF="$TMP_ROOT/gr-d3-ref-drift"
 WT_REF="$(gr_d3_init_worktree "$WT_REF")"
@@ -1262,7 +1688,7 @@ chmod +x "$SPARK_REF"
 set +e
 env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_REF" \
-  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  FAKE_REVIEW_OUTPUT="$OPUS_ACCEPT" \
   "$SCRIPT" execute "$WT_REF" "$ORDER_REF" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e
@@ -1294,7 +1720,7 @@ chmod +x "$SPARK_COMMIT"
 set +e
 env "${GIT_UNSET[@]}" -u CURSOR_AGENT -u CODEX_DELEGATED -u CLAUDE_DELEGATED \
   PATH="$FAKE_BIN:/usr/bin:/bin" FAKE_CALL_LOG="$CALL_LOG" FAKE_SPARK_HOOK="$SPARK_COMMIT" \
-  FAKE_GROK_OUTPUT="VERDICT: ACCEPT" \
+  FAKE_REVIEW_OUTPUT="$OPUS_ACCEPT" \
   "$SCRIPT" execute "$WT_COMMIT" "$ORDER_COMMIT" "$TASK" >"$TMP_ROOT/stdout.log" 2>"$TMP_ROOT/stderr.log"
 RUN_STATUS=$?
 set -e

@@ -1,6 +1,11 @@
 # M3 快適利用ワークマップ粒度化（2026-07-22）
 
-状態: **Fable全粒レビュー合格 / M3-A〜D動線再レビューACCEPT / Codex採否済み / 実装発注ではない**
+状態: **履歴snapshot / oracle来歴 / 現行dispatch・実装分解ではない**
+
+> **2026-08-01移行**: 現行の検索親、詳細子、供給route、並列衝突は
+> [M3既知技術採択・並列実装地図](../m3-parallel-implementation-map.md)へ移した。runnerは
+> [implementation ledger](../implementation-ledger.md)の「現在の並列レーン」にある`DO`行だけを検査する。
+> 本書の152行と`DO / WAIT / SPLIT` cellは過去判断とoracleの参照用であり、同期・修復・新規dispatchしない。
 
 ## 1. 目的
 
@@ -285,9 +290,12 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 | CU-0B02 | `PRODUCT / SPLIT` | U0e-3 token/component state/iconを製品導入 | CU-0B01 | [CU-0B02S](2026-07-29-cu-0b02s-product-token-ownership-split-decision.md)でT/R/N/C/Iへ分割 | 一粒でsupplier、React、native、component、iconを変更したくなる |
 | CU-0B02S | `SPEC / DONE` | token ownerと接続粒を固定 | CU-0B01 | supplier二重性、単一DTCG、v2生成境界、後続順を決定 | archived sourceを直接変更したくなる |
 | CU-0B02T | `PRODUCT / DONE` | product Dark DTCGとgenerator v2 Rust/CSS/manifest | CU-0B02S、U0e-1 | [実装決定](2026-07-29-cu-0b02t-product-token-authority-implementation-decision.md)。v1 byte不変、21 role、raw supplier拒否、Light/custom/object色発明0 | — |
-| CU-0B02R | `PRODUCT / WAIT` | accepted React routeをgenerated CSS consumerへ反転 | CU-0B02T | legacy token supplier退役、visual/DOM不変、二重supplier 0。Place縦切り完了まで優先度WAIT | archived HTML変更またはthreshold変更が必要 |
+| CU-0B02R | `PRODUCT / DONE` | accepted React routeをgenerated CSS consumerへ反転 | CU-0B02T | commit `782ffa3b`。legacy token supplier退役、route非漏洩、current-route 30 PNG byte一致、独立review ACCEPT | archived HTML変更またはthreshold変更が必要 |
 | CU-0B02N | `PRODUCT / WAIT` | native shellを同じgenerated Rust adapterへ接続 | CU-0B02T | 同じrole値、Document保存0、toolkit隔離 | native専用token正本が必要 |
-| CU-0B02C | `PRODUCT / WAIT` | 既存component stateを直接所有移管 | CU-0B02R | focus/hover/pressed/disabled/selected、copy 0 | 縮約再実装が必要 |
+| CU-0B02C | `PRODUCT / SPLIT` | 既存component stateを直接所有移管 | CU-0B02R | [CU-0B02C-S](2026-07-31-cu-0b02c-component-state-source-supply-decision.md)でC-S/C-P/C-Vへ分割 | 縮約再実装が必要 |
+| CU-0B02C-S | `SPEC / DONE` | fixed primitive sourceとtoken supply処分を固定 | CU-0B02R | 2 path / 2 hash、7 export、5 state、dependency 3 class | docs-onlyをC完了と読み替えたくなる |
+| CU-0B02C-P | `PRODUCT / DONE` | fixed primitive 2ファイルをproduct ownerへ直接移管 | CU-0B02C-S | 7 export、focus/hover/pressed/disabled/selected、copy 0、mock import 0、30 PNG byte同一 | 非color値を恒久tokenへ推測昇格したくなる |
+| CU-0B02C-V | `SPEC / DONE` | component-private carryの最終処分 | CU-0B02C-P、CU-203P | 第二consumerを値/意味ごとに再審判し、公開token追加0、全件component-private維持 | CU-203P前に汎用tokenを発明したくなる |
 | CU-0B02I | `SPEC / WAIT` | icon grid/stroke system採択 | CU-0B02T | inline SVG/Unicode混在をicon正本と誤認しない | source不在のまま実装したくなる |
 | CU-0B03H | `PRODUCT / DONE` | H1b offline bundle / closed Host callback / mountの最小契約を固定 | CU-0A09B、CU-0A08BTI | [実装決定](2026-07-29-cu-0b03h-browser-host-contract-offline-mount-decision.md)。built-in Browser 1面、network 0、fixture caller 0、公開plugin API 0 | — |
 | CU-0B03 | `PRODUCT / DONE` | H1b exact codecをnative Host inboxへ接続 | CU-0B03H | [実装決定](2026-07-29-cu-0b03-native-browser-host-codec-inbox-implementation-decision.md)。invalid/stale/duplicate/oversize拒否、callback内D2 0、bounded inbox、offline native WebView実caller | — |
@@ -329,11 +337,35 @@ React粒のclosed orderは直接移管契約の`REACT AUTHORITY`から`STOP`ま�
 
 | ID | 種類 / 状態 | 一成果 | 依存 | 合格と必須負例 | STOP |
 |---|---|---|---|---|---|
-| CU-201 | `CORE / WAIT` | U3b move/trim/snapをD2へ接続 | CU-105/106 | random操作列、相対位置、Undo全巻戻し、Cancel 0 | marker/beat未決を同時実装したくなる |
-| CU-202 | `CORE / WAIT` | U4a-1 ValueType→control→command対応model | U2b-1、既存U4a-1契約 | 全保存param対応またはtyped拒否、新ValueType 0 | plugin独自UIが必要 |
-| CU-203 | `PRODUCT / WAIT` | U2c-3共通feedback component | CU-0B02C、U2c-1 | state matrix、理由+回復、色/文字単独依存拒否 | 個別picker/popup state machineが必要 |
-| CU-204 | `PRODUCT / WAIT` | U2c-5 Brief/Context/Inspect/Assistive投影 | CU-203、U2c-4 | reason/subject/facts一致、recovery通常Intent経由 | diagnosticからDocument直接mutationが必要 |
-| CU-205 | `PRODUCT / WAIT` | U4a-2自動Inspectorとnonblocking preview | CU-202/204、U1b | 100 slider updates、latest preview、1 gesture=1 Undo、stale拒否 | custom plugin panelへ逸脱 |
+| CU-201 | `CORE / SPLIT` | U3b move/trim/snapをD2へ接続 | CU-105/106の成立済み実子 | [CU-201S](2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md)でM-S/M-C/T-S/T-C/N-S/P/R/Eへ分割。random操作列、相対位置、Undo全巻戻し、Cancel 0 | marker/beat未決を同時実装したくなる |
+| CU-201S | `SPEC / DONE` | move/trim/snapの責任と実装順を分割 | CU-105R/U3a-1I、CU-106P | Clip interval command 0、既存hit/selection/single writer再利用。M-S完了後はM-C/T-Sを並列可能 | 未決のcommand/TimeMap/snap意味を同時採択 |
+| CU-201M-S | `SPEC / DONE` | Clip moveの永続command意味を決定 | CU-201S | [契約決定](2026-08-01-cu-201m-s-clip-start-command-contract-decision.md)で同一lane `SetClipStart`、負開始/overlap許可、end上限、old/new対称、v2 journalを固定 | UI drag都合から公開commandを決める |
+| CU-201M-C | `CORE / DO` | 決定済みmove command / Writer prepare | CU-201M-S | journal replay、1 Undo、失敗時Document不変 | raw mutation、schema shortcut |
+| CU-201T-S | `SPEC / DONE` | in/out trimとTimeMap意味を決定 | CU-201M-S | [CU-201T-S契約](2026-08-01-cu-201t-s-clip-trim-timemap-contract-decision.md)で明示2 command、厳密source写像、absolute old/new、duration > 0、拒否順を固定 | move意味と一粒化 |
+| CU-201T-C | `CORE / DO` | 決定済みtrim command / Writer prepare | CU-201T-S、CU-201M-C | journal replay、1 Undo、失敗時Document不変 | test期待値から意味を発明 |
+| CU-201N-S | `SPEC / WAIT` | snap target / priority / unitを決定 | CU-201M-C、CU-201T-C | deterministic tie-break、no-snap、zoom/DPI/fps非依存 | U7 beat/markerを先取り |
+| CU-201P | `PRODUCT / WAIT` | native Timeline gestureをD2へ接続 | CU-201N-S | drag write 0、release 1 Undo、Cancel 0 | hover/focus/range/transportを束ねる |
+| CU-201R | `ORACLE / WAIT` | random move/trim系列を固定 | CU-201P | 重複0、相対位置、全Undo、Cancel 0 | 未決意味をoracleから逆算 |
+| CU-201E | `E2E / WAIT` | 通常window move→trim→Undo/Redo→reopen | CU-201R | same identity、保存interval、UI drag state非永続 | headlessだけで完了 |
+| CU-202 | `CORE / DONE` | U4a-1 ValueType→control→command対応model | U2b-1、既存U4a-1契約 | commit `eb4e6658`。全first-party保存param対応またはtyped拒否、新ValueType 0、workspace全緑 | plugin独自UIが必要 |
+| CU-203 | `PRODUCT / SPLIT` | U2c-3共通feedback component | CU-0B02C-P、U2c-1/U2c-4 | [CU-203S](2026-07-31-cu-203-feedback-source-ownership-split-decision.md)でS/M/Pへ分割。Mでsource確立、Pで直接移管 | 個別picker/popup state machineが必要 |
+| CU-203S | `SPEC / DONE` | feedback source / owner / state matrix裁定 | CU-0B02C-P、U2c-1/U2c-4 | 9-state matrix、M/P境界、停止線 | codeや表示文言を同時決定したくなる |
+| CU-203M | `PRODUCT-ASSET / DONE` | mock側の独立feedback source確立 | CU-203S | fixed JSX/CSS、9-state matrix、guard 3、Playwright 4、30 PNG byte同一 | source不在のままproductへ作りたくなる |
+| CU-203P | `PRODUCT / DONE` | feedback sourceをproduct ownerへ直接移管 | CU-203M | byte固定、consumer反転、copy 0、provenance | CU-204の診断投影を束ねたくなる |
+| CU-204 | `PRODUCT / SPLIT` | U2c-5 Brief/Context/Inspect/Assistive投影 | CU-203P、U2c-4 | [CU-204S](2026-07-31-cu-204-staged-diagnostic-projection-split-decision.md)でS/A/Pへ分割 | diagnosticからDocument直接mutationが必要 |
+| CU-204S | `SPEC / DONE` | 5診断、copy、4密度、owner、surfaceを固定 | CU-203P、U2c-4 | candidate空時callback 0、Inspector再利用、A/P境界 | 新reason/Intentを作りたくなる |
+| CU-204A | `CORE / DONE` | Envelope→4密度の純粋typed projection | CU-204S | 5×4、identity/order一致、serde/toolkit/callback 0、3+5 test、clippy | product wire/componentを束ねたくなる |
+| CU-204P | `PRODUCT / WAIT` | 既存Inspector Host→Feedback通常接続 | CU-204A | [2026-08-01再確認](2026-08-01-cu-204p-normal-source-readiness-recheck.md)で5 reasonのproduction source call 0、Host slot/codec/consumer 0を確認。実在operation成立後だけ再開 | diagnostic routeや別surfaceで代用したくなる |
+| CU-205 | `PRODUCT / SPLIT` | U4a-2自動Inspectorとnonblocking preview | CU-202/204、U1b | 正常系はCU-205B1G/B1I/B2/T/P/W/Eへ分割。100 slider updates、latest preview、1 gesture=1 Undo、stale拒否。invalid/read-only診断はCU-204P待ち | custom plugin panelへ逸脱、正常系だけで親DONE |
+| CU-205B | `PRODUCT-ASSET / DONE` | first-party Opacityを既存Effects Browserへtyped投影 | CU-202、CU-G09、CU-0B02C-P | B1G provenance guard→B1I source consumer→B2 shipped Host/bundle。既存PluginCard、exact `core.filter.opacity`、single click write 0、二重copy 0 | static card/label/thumbnailからidentity推測 |
+| CU-205B1 | `PRODUCT-ASSET / DONE` | Web sourceのstrict catalog consumer | CU-205S | B1G provenance guard→B1I source/provenance。初回Spark/Grok REJECT差分は未採用 | source hash期待値を書換え、fixtureだけで親B DONE |
+| CU-205B1G | `ORACLE-GUARD / DONE` | Browser post-promotion共有hash-chain guard | CU-205S | commit `413bc551`。fixed index 0、exact key、chain、last=liveを維持。Browser decoder guardへ共有し、Inspector guardのmanifest全体hash固定だけを外した。product code/provenance 0 | current hashだけ受理、空chain、guard重複 |
+| CU-205B1I | `PRODUCT-ASSET / DONE` | Web source strict catalog consumer + provenance append | CU-205B1G | commit `054baef7`。codec→existing decoder→main→PluginCard、SSR 6/6 skip 0、mock 3 card不変、Rust/bundle/intent 0 | fallback/default/Context、provenance欠落 |
+| CU-205B2 | `PRODUCT-ASSET / DONE` | Rust Host snapshotとshipped bundle接続 | CU-205B1I | commit `185bc327`。first_party_catalog由来、正規bundle/manifest/include、通常製品bundle内Opacity、Grok ACCEPT P0/P1/P2=0 | contract複製、source意味変更、generatedだけ手修正 |
+| CU-205T | `PRODUCT / DONE` | Opacity double click/Enter→primaryへ新Definition+Use | CU-205B2、VS-1 D2 | commit `a29ed709`。`prepare_create_effect`、明示default、1 attach=1 Undo、primaryなしwrite 0 | LinkEffectUse共有、bare item ID、Stage全体をtarget化 |
+| CU-205P | `PRODUCT / DONE` | active Effect Use→generated Inspector control | CU-205T、CU-202 | commit `c0c1c741`。exact Effect/Definition/Param identity、`amount` domain `[0,1]`、React正本0、shipped Inspector bundle | mock effect branch、label検索、fixture Effect |
+| CU-205W | `PRODUCT / DONE` | amount latest previewとgesture commit | CU-205P、U1b | rolling `ca7f105a`〜`18517062`。100 updates非blocking、stale拒否、release 1 Undo、Esc/focus loss/cancel/replay write 0 | update毎journal、第二renderer |
+| CU-205E | `E2E / DONE` | Rectangle→Opacity→amount→Undo/Redo→reopen | CU-205W `DONE` | rolling `581876e0` / `7901e51e`を含む通常Mac製品windowでamount `1.0 → 0.89`、Undo/Redo各2段、reopen後Effect/param保持、active Effect未選択、独立review P0/P1/P2=0 | fixture/headlessだけで完了 |
 | CU-206 | `PRODUCT / WAIT` | U4b keyframe/区間Easingを製品接続 | CU-205、native Easing core | drag write 0/release 1/Esc 0、非対象curve不変 | key構造やthreshold変更が必要 |
 | CU-207 | `PRODUCT / WAIT` | U4c Advanced意味検査とroundtrip | CU-205/204、D1l | open/close serialize不変、非既定意味badge、未実装pipeline偽装0 | 新公開Param APIが必要 |
 | CU-208 | `E2E / WAIT` | U2c-2 Direct/Advanced同値conformance | CU-205/207 | 同じDocument意味/Undo。Tool未実装を明記 | hidden helper/空harnessでしか通らない |

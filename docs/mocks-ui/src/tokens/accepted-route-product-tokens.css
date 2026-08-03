@@ -1,0 +1,45 @@
+@import "../../../../ui/motolii-tokens/generated/tokens.css";
+
+:root[data-motolii-theme="motolii-dark"]:has(#root > [data-fixture="plugin-browser-candidate"]) {
+  --bg: var(--motolii-color-surface-app);
+  --panel: var(--motolii-color-surface-panel);
+  --raised: var(--motolii-color-surface-raised);
+  --hover: var(--motolii-color-surface-hover);
+  --line: var(--motolii-color-border-default);
+  --line2: var(--motolii-color-border-strong);
+  --ink: var(--motolii-color-text-primary);
+  --sub: var(--motolii-color-text-secondary);
+  --muted: var(--motolii-color-text-muted);
+  --active: var(--motolii-color-action-active);
+  --data: var(--motolii-color-data);
+  --shape: var(--motolii-color-shape);
+  --warning: var(--motolii-color-status-warning);
+  --ok: var(--motolii-color-status-ok);
+  --way-project: var(--motolii-color-way-project);
+  --way-files: var(--motolii-color-way-files);
+  --way-plugins: var(--motolii-color-way-plugins);
+  --way-stage: var(--motolii-color-way-stage);
+  --way-inspector: var(--motolii-color-way-inspector);
+  --way-timeline: var(--motolii-color-way-timeline);
+  --mock-role-surface-app: var(--motolii-color-surface-app);
+  --mock-role-surface-panel: var(--motolii-color-surface-panel);
+  --mock-role-surface-raised: var(--motolii-color-surface-raised);
+  --mock-role-surface-hover: var(--motolii-color-surface-hover);
+  --mock-role-border-default: var(--motolii-color-border-default);
+  --mock-role-border-strong: var(--motolii-color-border-strong);
+  --mock-role-text-primary: var(--motolii-color-text-primary);
+  --mock-role-text-secondary: var(--motolii-color-text-secondary);
+  --mock-role-text-muted: var(--motolii-color-text-muted);
+  --mock-role-focus: var(--motolii-color-focus);
+  --mock-role-action-active: var(--motolii-color-action-active);
+  --mock-role-data: var(--motolii-color-data);
+  --mock-role-shape: var(--motolii-color-shape);
+  --mock-role-status-warning: var(--motolii-color-status-warning);
+  --mock-role-status-ok: var(--motolii-color-status-ok);
+  --mock-role-way-project: var(--motolii-color-way-project);
+  --mock-role-way-files: var(--motolii-color-way-files);
+  --mock-role-way-plugins: var(--motolii-color-way-plugins);
+  --mock-role-way-stage: var(--motolii-color-way-stage);
+  --mock-role-way-inspector: var(--motolii-color-way-inspector);
+  --mock-role-way-timeline: var(--motolii-color-way-timeline);
+}

@@ -1,0 +1,214 @@
+.mock-button,
+.mock-tab,
+.mock-icon-button,
+.mock-field {
+  font: inherit;
+  color: inherit;
+}
+
+.mock-button,
+.mock-tab,
+.mock-icon-button {
+  cursor: pointer;
+}
+
+.mock-button:focus-visible,
+.mock-tab:focus-visible,
+.mock-icon-button:focus-visible,
+.mock-field:focus-visible {
+  outline: 2px solid var(--motolii-color-focus);
+  outline-offset: 2px;
+}
+
+.mock-button {
+  min-height: 25px;
+  padding: 0 9px;
+  border: 1px solid var(--motolii-color-border-strong);
+  border-radius: 2px;
+  background: var(--motolii-color-surface-panel);
+  color: var(--motolii-color-text-primary);
+}
+
+.mock-button:hover:not(:disabled) {
+  background: var(--motolii-color-surface-hover);
+}
+
+.mock-button--quiet {
+  border-color: var(--motolii-color-border-default);
+  color: var(--motolii-color-text-secondary);
+}
+
+.mock-button--primary {
+  border-color: var(--motolii-color-action-active);
+  background: color-mix(
+    in srgb,
+    var(--motolii-color-action-active) 16%,
+    var(--motolii-color-surface-panel)
+  );
+  font-weight: 700;
+}
+
+.mock-button[aria-pressed="true"],
+.mock-button[data-active="true"] {
+  border-color: var(--motolii-color-action-active);
+  color: var(--motolii-color-text-primary);
+}
+
+.mock-button:disabled,
+.mock-icon-button:disabled {
+  border-style: dashed;
+  color: var(--motolii-color-text-muted);
+  cursor: not-allowed;
+}
+
+.mock-icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  font-family: var(
+    --motolii-primitive-font-technical,
+    ui-monospace,
+    "SFMono-Regular",
+    Menlo,
+    Consolas,
+    monospace
+  );
+  font-style: normal;
+  line-height: 1;
+}
+
+.mock-icon-button {
+  min-width: 25px;
+  min-height: 25px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 5px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--motolii-color-text-secondary);
+}
+
+.mock-icon-button:hover:not(:disabled) {
+  border-color: var(--motolii-color-border-default);
+  background: var(--motolii-color-surface-hover);
+}
+
+.mock-icon-button[aria-pressed="true"],
+.mock-icon-button[data-active="true"] {
+  border-color: var(--motolii-color-focus);
+  background: var(--motolii-color-surface-raised);
+  color: var(--motolii-color-text-primary);
+}
+
+.mock-tabs {
+  min-height: 28px;
+  display: flex;
+  border-bottom: 1px solid var(--motolii-color-border-default);
+}
+
+.mock-tab {
+  flex: 1;
+  min-height: 28px;
+  border: 0;
+  border-right: 1px solid var(--motolii-color-border-default);
+  background: var(--motolii-color-surface-app);
+  color: var(--motolii-color-text-muted);
+}
+
+.mock-tab:hover {
+  background: var(--motolii-color-surface-hover);
+  color: var(--motolii-color-text-secondary);
+}
+
+.mock-tab[aria-selected="true"] {
+  background: var(--motolii-color-surface-panel);
+  color: var(--motolii-color-text-primary);
+  box-shadow: inset 0 -2px var(--mock-tab-accent, var(--motolii-color-action-active));
+}
+
+.mock-panel-header {
+  min-height: 29px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+  border-bottom: 1px solid var(--motolii-color-border-default);
+  background: var(--motolii-color-surface-raised);
+  color: var(--motolii-color-text-primary);
+  font-weight: 700;
+}
+
+.mock-panel-header__marker {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  background: var(--mock-panel-wayfinding, var(--motolii-color-way-plugins));
+  box-shadow: inset 0 0 0 1px #ffffff30;
+}
+
+.mock-panel-header__detail {
+  margin-left: auto;
+  color: var(--motolii-color-text-muted);
+  font: 400 8px var(
+    --motolii-primitive-font-technical,
+    ui-monospace,
+    "SFMono-Regular",
+    Menlo,
+    Consolas,
+    monospace
+  );
+}
+
+.mock-panel-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.mock-field-label {
+  display: grid;
+  gap: 3px;
+  color: var(--motolii-color-text-secondary);
+  font-size: 10px;
+}
+
+.mock-field-label--inline {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+}
+
+.mock-field {
+  min-width: 0;
+  min-height: 25px;
+  padding: 3px 7px;
+  border: 1px solid var(--motolii-color-border-default);
+  background: var(--motolii-color-surface-app);
+  color: var(--motolii-color-text-primary);
+}
+
+.mock-field::placeholder {
+  color: var(--motolii-color-text-muted);
+}
+
+.mock-field:disabled {
+  border-style: dashed;
+  color: var(--motolii-color-text-muted);
+  cursor: not-allowed;
+}
+
+.mock-field__hint {
+  color: var(--motolii-color-text-muted);
+  font: 7px var(
+    --motolii-primitive-font-technical,
+    ui-monospace,
+    "SFMono-Regular",
+    Menlo,
+    Consolas,
+    monospace
+  );
+}
+
+.mock-field-label--inline .mock-field__hint {
+  grid-column: 2;
+}

@@ -5,6 +5,10 @@
 対象: CU-0A02 / U0e-2 の却下差分、React source asset を含む以後の発注、
 `scripts/delegate-cursor-supervised.sh`
 
+> 2026-08-03追補: runner、marker、order fieldによる機械gateは撤回済み。本文は事故原因の歴史記録として残し、
+> 現行施工ではbase/worktree/source closure/fixture因果/atomicityを主担当Codexとtask固有testが直接確認する。
+> 現行責任は[runner非依存監督決定](2026-08-03-runner-independent-supervision-decision.md)を参照する。
+
 ## 1. 結論
 
 U0e-2 の発注書には、既存 `candidates/surfaces` の表示合成、三層 fixture の投影、

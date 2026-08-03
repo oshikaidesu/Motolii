@@ -290,6 +290,36 @@ fn p11_duplicate_projection_is_identical() {
 }
 
 #[test]
+fn p12_hundred_thousand_keys_cull_to_visible_identity() {
+    let mut f = DocFixture::new();
+    let mut track = DocKeyframeTrack::new();
+    let mut visible_id = None;
+    for i in 0..100_000_i64 {
+        let key = keyframe_vec2_at(&mut f, sec(i));
+        if i == 50_000 {
+            visible_id = Some(key.id);
+        }
+        track.insert(key);
+    }
+    let layer = f.push_clip(
+        "repeated-label",
+        sec(0),
+        sec(100_001),
+        DocParam::Keyframes(track),
+    );
+    f.doc.composition.duration = sec(100_001);
+    let doc = f.finish();
+    let viewport = TimelineViewport {
+        start: sec(50_000),
+        end: sec(50_001),
+    };
+    let projection = project_timeline(&doc, &metrics(), &viewport).unwrap();
+    assert_eq!(projection.keys().len(), 1);
+    assert_eq!(projection.keys()[0].layer, layer);
+    assert_eq!(projection.keys()[0].key, visible_id.unwrap());
+}
+
+#[test]
 fn n1_zero_duration_is_invalid_duration_without_partial_output() {
     let mut f = DocFixture::new();
     f.push_clip(

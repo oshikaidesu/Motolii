@@ -6,7 +6,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 
 use motolii_core::{CompCamera, FrameDesc, Quality};
-use motolii_doc::{build_document_frame_graph, Document, EvaluationTime};
+use motolii_doc::{build_document_frame_graph, Command, CommandError, Document, EvaluationTime};
 use motolii_eval::DataTracks;
 use motolii_gpu::GpuCtx;
 use motolii_plugins_firstparty::first_party_runtime;
@@ -432,10 +432,51 @@ pub(crate) struct RenderRequest {
     pub(crate) quality: Quality,
 }
 
+#[derive(Debug, Clone)]
+struct RenderWorkPayload {
+    request: RenderRequest,
+    preview_command: Option<Command>,
+}
+
+#[derive(Debug)]
+enum PreparedPreviewDocument<'a> {
+    Baseline(&'a Document),
+    Preview(Box<Document>),
+}
+
+impl PreparedPreviewDocument<'_> {
+    fn as_ref(&self) -> &Document {
+        match self {
+            Self::Baseline(document) => document,
+            Self::Preview(document) => document,
+        }
+    }
+}
+
+fn prepare_preview_document<'a>(
+    request: &'a RenderRequest,
+    preview_command: Option<&Command>,
+) -> Result<PreparedPreviewDocument<'a>, RenderWorkerError> {
+    match preview_command {
+        None => {
+            request.document.validate()?;
+            Ok(PreparedPreviewDocument::Baseline(request.document.as_ref()))
+        }
+        Some(command) => {
+            let mut document = (*request.document).clone();
+            command.apply(&mut document)?;
+            document.validate()?;
+            Ok(PreparedPreviewDocument::Preview(Box::new(document)))
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum RenderWorkerError {
     #[error(transparent)]
     Runtime(#[from] motolii_plugins_firstparty::FirstPartyError),
+    #[error(transparent)]
+    Command(#[from] CommandError),
     #[error(transparent)]
     Document(#[from] motolii_doc::DocumentError),
     #[error(transparent)]
@@ -457,12 +498,12 @@ pub(crate) enum RenderWorkerStartError {
 }
 
 pub(crate) struct RenderWorker {
-    inner: LatestWorker<RenderRequest, RenderedPreview, RenderWorkerError>,
+    inner: LatestWorker<RenderWorkPayload, RenderedPreview, RenderWorkerError>,
 }
 
 #[derive(Clone)]
 pub(crate) struct RenderWorkerClient {
-    inner: LatestWorkerClient<RenderRequest, RenderedPreview, RenderWorkerError>,
+    inner: LatestWorkerClient<RenderWorkPayload, RenderedPreview, RenderWorkerError>,
 }
 
 #[derive(Debug)]
@@ -476,21 +517,22 @@ impl RenderWorker {
         let runtime = first_party_runtime()?;
         let mut session = RenderSession::new(&gpu);
         let execute_gpu = Arc::clone(&gpu);
-        let execute = move |request: RenderRequest| {
-            request.document.validate()?;
+        let execute = move |work: RenderWorkPayload| {
+            let prepared = prepare_preview_document(&work.request, work.preview_command.as_ref())?;
+            let document = prepared.as_ref();
             execute_gpu.check_health()?;
             let built = build_document_frame_graph(
-                &request.document,
-                request.evaluation_time,
-                request.desc,
-                &request.data_tracks,
+                document,
+                work.request.evaluation_time,
+                work.request.desc,
+                &work.request.data_tracks,
                 &runtime,
                 None,
             )?;
             let rendered = render_graph_cached(
                 &execute_gpu,
                 &mut session,
-                request.evaluation_time.timeline_time,
+                work.request.evaluation_time.timeline_time,
                 &built.graph,
                 &RenderGraphInputs {
                     camera: built.camera,
@@ -498,7 +540,7 @@ impl RenderWorker {
                     source_time: Some(built.source_time),
                     plugins: Some(runtime.executors()),
                 },
-                request.quality,
+                work.request.quality,
             )?;
             execute_gpu.check_health()?;
             Ok(RenderedPreview {
@@ -517,7 +559,10 @@ impl RenderWorker {
         &self,
         request: RenderRequest,
     ) -> Result<RenderGeneration, RenderSubmitError> {
-        self.inner.submit(request)
+        self.inner.submit(RenderWorkPayload {
+            request,
+            preview_command: None,
+        })
     }
 
     pub(crate) fn client(&self) -> RenderWorkerClient {
@@ -554,7 +599,21 @@ impl RenderWorkerClient {
         &self,
         request: RenderRequest,
     ) -> Result<RenderGeneration, RenderSubmitError> {
-        self.inner.submit(request)
+        self.inner.submit(RenderWorkPayload {
+            request,
+            preview_command: None,
+        })
+    }
+
+    pub(crate) fn submit_preview(
+        &self,
+        request: RenderRequest,
+        preview_command: Command,
+    ) -> Result<RenderGeneration, RenderSubmitError> {
+        self.inner.submit(RenderWorkPayload {
+            request,
+            preview_command: Some(preview_command),
+        })
     }
 
     pub(crate) fn latest_accepted_generation(&self) -> Option<RenderGeneration> {
@@ -592,6 +651,10 @@ mod tests {
         adapt_input_router_error, CommandId, DiagnosticReasonCode, InputRouterError,
         InteractionState, InteractionStateMachine,
     };
+    use motolii_doc::{
+        Command, CommandError, DocParam, EffectDefinition, EffectDefinitionId, EffectId, EffectUse,
+        LayerId, ScalarPropertyId, TrackItem,
+    };
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum TestError {
@@ -601,9 +664,61 @@ mod tests {
 
     fn assert_send_sync<T: Send + Sync>() {}
 
+    fn document_with_opacity_effect() -> (Document, LayerId, EffectId, DocParam) {
+        let mut document = bootstrap_document().expect("document");
+        let effect = EffectId::from_raw(document.next_stable_id.allocate().expect("effect id"));
+        let definition = EffectDefinitionId::from_raw(
+            document.next_stable_id.allocate().expect("definition id"),
+        );
+        let TrackItem::Clip(clip) = &mut document.tracks[0].items[0] else {
+            panic!("bootstrap fixture must contain a clip");
+        };
+        let layer = clip.envelope.layer_id;
+        clip.envelope.effects.push(EffectUse {
+            id: effect,
+            definition_id: definition,
+        });
+        let amount = DocParam::const_f64(0.72);
+        document.effect_definitions.push(EffectDefinition::new(
+            definition,
+            "core.filter.opacity",
+            1,
+            true,
+            std::collections::BTreeMap::from([("amount".to_owned(), amount.clone())]),
+            serde_json::Map::new(),
+        ));
+        document.validate().expect("effect document");
+        (document, layer, effect, amount)
+    }
+
+    fn test_render_request(document: Arc<Document>) -> RenderRequest {
+        RenderRequest {
+            document,
+            data_tracks: Arc::new(DataTracks::new()),
+            evaluation_time: EvaluationTime::new(motolii_core::RationalTime::ZERO),
+            desc: bootstrap_frame_desc().expect("frame desc"),
+            quality: Quality::DRAFT,
+        }
+    }
+
+    fn opacity_preview_command(
+        target: LayerId,
+        effect: EffectId,
+        old_value: DocParam,
+        new_value: DocParam,
+    ) -> Command {
+        Command::SetProperty {
+            target,
+            property: ScalarPropertyId::EffectParam(effect, "amount".to_owned()),
+            old_value,
+            new_value,
+        }
+    }
+
     #[test]
     fn worker_handles_are_send_sync() {
         assert_send_sync::<RenderRequest>();
+        assert_send_sync::<RenderWorkPayload>();
         assert_send_sync::<StampedResult<RenderedPreview, RenderWorkerError>>();
         assert_send_sync::<Arc<WorkerShared<u64, u64, TestError>>>();
         assert_send_sync::<LatestWorkerClient<u64, u64, TestError>>();
@@ -633,6 +748,210 @@ mod tests {
         let result = worker.try_take_latest().expect("latest result");
         assert_eq!(result.generation.get(), 100);
         assert_eq!(result.result, Ok(100));
+    }
+
+    #[test]
+    fn hundred_optional_preview_payloads_replace_pending_without_waiting() {
+        let (release_tx, release_rx) = mpsc::channel();
+        let last_had_preview = Arc::new(AtomicU32::new(0));
+        let preview_flag = Arc::clone(&last_had_preview);
+        let mut worker = LatestWorker::spawn_from_generation(
+            "u205wb1-hundred-preview",
+            1,
+            move |payload: RenderWorkPayload| {
+                preview_flag.store(
+                    u32::from(payload.preview_command.is_some()),
+                    Ordering::Relaxed,
+                );
+                Ok::<_, TestError>(())
+            },
+            || TestError::Panicked,
+            Some(release_rx),
+        )
+        .expect("spawn");
+        let (document, layer, effect, old_amount) = document_with_opacity_effect();
+        let document = Arc::new(document);
+        let preview = opacity_preview_command(layer, effect, old_amount, DocParam::const_f64(0.25));
+        for value in 1..=100 {
+            let preview_command = (value == 100).then(|| preview.clone());
+            let generation = worker
+                .submit(RenderWorkPayload {
+                    request: test_render_request(Arc::clone(&document)),
+                    preview_command,
+                })
+                .expect("submit");
+            assert_eq!(generation.get(), value);
+        }
+        assert_eq!(
+            worker.pending_generation().map(RenderGeneration::get),
+            Some(100)
+        );
+        release_tx.send(()).expect("release");
+        worker.close();
+        worker.join().expect("join");
+        assert_eq!(last_had_preview.load(Ordering::Relaxed), 1);
+        let result = worker.try_take_latest().expect("latest result");
+        assert_eq!(result.generation.get(), 100);
+        assert_eq!(result.result, Ok(()));
+    }
+
+    #[test]
+    fn preview_prepare_none_selects_baseline_document() {
+        let document = Arc::new(bootstrap_document().expect("document"));
+        let before = serde_json::to_string(&*document).expect("serialize");
+        let request = test_render_request(document);
+        let prepared = prepare_preview_document(&request, None).expect("baseline");
+        match prepared {
+            PreparedPreviewDocument::Baseline(baseline) => {
+                assert!(std::ptr::eq(baseline, request.document.as_ref()));
+                assert_eq!(serde_json::to_string(baseline).expect("serialize"), before);
+            }
+            PreparedPreviewDocument::Preview(_) => panic!("expected baseline borrow"),
+        }
+    }
+
+    #[test]
+    fn prepared_preview_document_keeps_the_owned_variant_indirect() {
+        assert!(
+            std::mem::size_of::<PreparedPreviewDocument<'static>>()
+                <= 2 * std::mem::size_of::<usize>()
+        );
+    }
+
+    #[test]
+    fn preview_prepare_applies_command_to_clone_not_baseline() {
+        let (document, layer, effect, old_amount) = document_with_opacity_effect();
+        let document = Arc::new(document);
+        let before = serde_json::to_string(&*document).expect("serialize");
+        let command = opacity_preview_command(layer, effect, old_amount, DocParam::const_f64(0.25));
+        let request = test_render_request(document);
+        let prepared = prepare_preview_document(&request, Some(&command)).expect("preview apply");
+        match prepared {
+            PreparedPreviewDocument::Preview(preview) => {
+                assert_ne!(
+                    serde_json::to_string(&preview).expect("serialize preview"),
+                    before
+                );
+            }
+            PreparedPreviewDocument::Baseline(_) => panic!("expected owned preview"),
+        }
+        assert_eq!(
+            serde_json::to_string(&request.document).expect("serialize baseline"),
+            before
+        );
+    }
+
+    #[test]
+    fn preview_prepare_command_error_leaves_baseline_bytes_unchanged() {
+        let (document, _, effect, _) = document_with_opacity_effect();
+        let document = Arc::new(document);
+        let before = serde_json::to_string(&*document).expect("serialize");
+        let request = test_render_request(document);
+        let command = opacity_preview_command(
+            LayerId::from_raw(u64::MAX),
+            effect,
+            DocParam::const_f64(1.0),
+            DocParam::const_f64(0.25),
+        );
+        let error = prepare_preview_document(&request, Some(&command)).expect_err("command");
+        assert!(matches!(
+            error,
+            RenderWorkerError::Command(CommandError::LayerNotFound(_))
+        ));
+        assert_eq!(
+            serde_json::to_string(&request.document).expect("serialize"),
+            before
+        );
+    }
+
+    #[test]
+    fn preview_prepare_validation_error_leaves_baseline_bytes_unchanged() {
+        let (document, layer, _, _) = document_with_opacity_effect();
+        let document = Arc::new(document);
+        let before = serde_json::to_string(&*document).expect("serialize");
+        let request = test_render_request(document);
+        let command = Command::SetProperty {
+            target: layer,
+            property: ScalarPropertyId::Opacity,
+            old_value: DocParam::const_f64(1.0),
+            new_value: DocParam::const_color([0.0, 0.0, 0.0, 1.0]),
+        };
+        let error = prepare_preview_document(&request, Some(&command)).expect_err("validate");
+        assert!(matches!(error, RenderWorkerError::Document(_)));
+        assert_eq!(
+            serde_json::to_string(&request.document).expect("serialize"),
+            before
+        );
+    }
+
+    #[test]
+    fn later_none_preview_payload_selects_pristine_baseline_after_apply() {
+        let (document, layer, effect, old_amount) = document_with_opacity_effect();
+        let document = Arc::new(document);
+        let before = serde_json::to_string(&*document).expect("serialize");
+        let request = test_render_request(Arc::clone(&document));
+        let command = opacity_preview_command(layer, effect, old_amount, DocParam::const_f64(0.25));
+        prepare_preview_document(&request, Some(&command)).expect("preview apply");
+        let baseline = prepare_preview_document(&request, None).expect("baseline");
+        match baseline {
+            PreparedPreviewDocument::Baseline(baseline) => {
+                assert!(std::ptr::eq(baseline, request.document.as_ref()));
+                assert_eq!(serde_json::to_string(baseline).expect("serialize"), before);
+            }
+            PreparedPreviewDocument::Preview(_) => panic!("expected baseline borrow"),
+        }
+    }
+
+    #[test]
+    fn typed_preview_prepare_errors_publish_in_generation_order() {
+        let (document, layer, effect, old_amount) = document_with_opacity_effect();
+        let document = Arc::new(document);
+        let before = serde_json::to_string(&*document).expect("serialize");
+        let bad = opacity_preview_command(
+            LayerId::from_raw(u64::MAX),
+            effect,
+            DocParam::const_f64(1.0),
+            DocParam::const_f64(0.25),
+        );
+        let good = opacity_preview_command(layer, effect, old_amount, DocParam::const_f64(0.5));
+        let mut worker = LatestWorker::spawn(
+            "u205wb1-preview-error-order",
+            |payload: RenderWorkPayload| {
+                prepare_preview_document(&payload.request, payload.preview_command.as_ref())?;
+                Ok::<_, RenderWorkerError>(())
+            },
+            || RenderWorkerError::WorkerPanicked,
+        )
+        .expect("spawn");
+        worker
+            .submit(RenderWorkPayload {
+                request: test_render_request(Arc::clone(&document)),
+                preview_command: Some(bad),
+            })
+            .expect("submit error");
+        let first = loop {
+            if let Some(result) = worker.try_take_latest() {
+                break result;
+            }
+            thread::yield_now();
+        };
+        assert_eq!(first.generation.get(), 1);
+        assert!(matches!(
+            first.result,
+            Err(RenderWorkerError::Command(CommandError::LayerNotFound(_)))
+        ));
+        worker
+            .submit(RenderWorkPayload {
+                request: test_render_request(Arc::clone(&document)),
+                preview_command: Some(good),
+            })
+            .expect("submit recovery");
+        worker.close();
+        worker.join().expect("join");
+        let result = worker.try_take_latest().expect("recovery result");
+        assert_eq!(result.generation.get(), 2);
+        assert!(result.result.is_ok());
+        assert_eq!(serde_json::to_string(&document).expect("serialize"), before);
     }
 
     #[test]

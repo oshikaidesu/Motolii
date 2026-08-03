@@ -1,0 +1,12 @@
+[package]
+name = "m5-i0-dense-picking"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+glam = { version = "=0.33.2", features = ["bytemuck"] }
+obvhs = "0.3.2"
+thiserror = "2"

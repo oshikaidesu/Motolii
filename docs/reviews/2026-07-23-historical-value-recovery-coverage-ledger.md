@@ -118,7 +118,7 @@ cutoff後に追加・更新されたdocsは最後のdelta単位へ分離する�
 | 9E | 専用plugin path残余: INF-7g LLM Opacity実演とcreator-author境界 | DISPOSITIONED（1 blob）。catalog／distribution専用pathは9A/9Bで完了、横断記述は各root/spec単位で処分 |
 | 10 | specs/index/backlog/implementation ledger、spikes、mocks、運用文書の残余lineage | 未着手 |
 | 11 | 分岐版・rename・topic横断の取りこぼし監査 | 未着手 |
-| 12 | cutoff後delta、全receipt照合、完了宣言 | 未着手 |
+| 12 | cutoff後delta、全receipt照合、完了宣言 | 未着手（M5-A0S deltaは別manifestで部分処分） |
 
 Unit 2以降で一つのlineageが大きすぎる場合は`4A/4B`等へ割る。Unit番号は順序の目安であり、現行の実装milestone IDではない。
 

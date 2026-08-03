@@ -4,7 +4,7 @@
 
 状態: **実装ロードマップ案／Vism package実装は未許可**。名称 **Vism** と拡張子 **`.vism`** は決定済みだが、manifest、container、payload、署名、loader、install storeは未決である。本書はそれらをコードから発明せず、どの証拠をどの順で揃えて仕様へ昇格するかを定める。現行境界のコード監査は[VSM-A0 inventory](2026-07-17-vism-a0-plugin-boundary-inventory.md)に固定した。
 
-関連正本: [Vismコンセプト](../vism-package-concept.md)、[Vism / Kitモデル](../vism-kit-model.md)、[Vismプラグインカタログ](../vism-plugin-catalog.md)、[Vism-ready反対側レビュー採否](2026-07-17-vism-ready-counter-review-disposition.md)、[first-party Vism表現需要調査](2026-07-23-first-party-vism-expression-demand-survey.md)、[プラグイン作者向け規約](../plugin-authoring.md)、[小さなコアと探索可能な拡張](../extensible-core-model.md)、[M2 Document仕様](../specs/M2-document-model.md)、[Simulationモデル](../simulation-model.md)
+関連正本: [Vismコンセプト](../vism-package-concept.md)、[Vism / Kitモデル](../vism-kit-model.md)、[Vismプラグインカタログ](../vism-plugin-catalog.md)、[Vism入口・並列解禁の根本マップ](2026-08-02-vism-entrance-parallelization-root-map.md)、[Vism既知実装採択マップ](../vism-known-implementation-adoption-map.md)、[Vism-ready反対側レビュー採否](2026-07-17-vism-ready-counter-review-disposition.md)、[first-party Vism表現需要調査](2026-07-23-first-party-vism-expression-demand-survey.md)、[プラグイン作者向け規約](../plugin-authoring.md)、[小さなコアと探索可能な拡張](../extensible-core-model.md)、[M2 Document仕様](../specs/M2-document-model.md)、[Simulationモデル](../simulation-model.md)
 
 ## 1. 結論
 
@@ -110,8 +110,12 @@ Vism実装の最初の意味課題はschemaではなく、次の三層を混ぜ�
 | VSM-A3-3 | Radial Repeater GPU画素意味の独立CPU oracle固定（union・premul・正準座標・純関数・P6/N8/N10） | VSM-A3-2 | testkit oracle／plugin最小bugfixのみ。schema・Panel・golden期待値書換え禁止。[A3S §10](2026-07-18-vism-a3s-layersource-lowering-spec.md#10-後続-vsm-a3-の契約境界分割発注表) | **実装完了**（本票） |
 | VSM-A3-4 | `first_party_catalog()`から`core.layer_source.radial_repeater` v1をA3D literal期待値へ直接assertする非UI Contract列挙fixture（P5） | VSM-A3-2 | Slint・U4a Panel・新公開API・`radial_repeater_contract()`追認を追加しない。[A3S §10](2026-07-18-vism-a3s-layersource-lowering-spec.md#10-後続-vsm-a3-の契約境界分割発注表) | **実装完了**（本票） |
 | VSM-A3 | A3D採択済みのRadial Repeater LayerSourceを、**A3-0完了後の公開Host cache**とA3S一般経路で別workspace crateに実装する | VSM-A3S, VSM-A3-0, VSM-A3-2 | VRAM常駐golden、Draft/Final同一関数、正準座標、private依存拒否。U4a前は現行Contract列挙fixtureだけを審判し、製品Parameter Panel適合はU4aへ分離する。[A3S §10](2026-07-18-vism-a3s-layersource-lowering-spec.md#10-後続-vsm-a3-の契約境界分割発注表) | **完了**（A3-1a／1b／1c／0／2／3／4） |
-| VSM-A4S | first-party無特権gateと**外部crate作者scaffold**の責任を仕様化する。既存`new-plugin.sh`のin-tree生成、package/install/manifest、loaderとは分離し、コードは触らない | VSM-A1, VSM-A2, VSM-A3 | 公開façadeだけを使う生成物、Host側conformance/purity/golden入口、private依存拒否、既存in-tree scaffold非破壊、A4Iの変更許可面とSTOPが未決なし | **仕様着手可**（A1の延期条件はA2/A3完了で解消） |
+| VSM-A4S | first-party無特権gateと**外部crate作者scaffold**の責任を仕様化する。既存`new-plugin.sh`のin-tree生成、package/install/manifest、loaderとは分離し、コードは触らない | VSM-A1, VSM-A2, VSM-A3 | [作者journey決定](2026-07-27-vism-authoring-journey-decision.md)のv1 source forkをRadial Repeater等からrebuild／restartまで通す。公開façadeだけを使う生成物、out-of-treeでも実行できるHost側conformance/purity/golden入口、private依存拒否、既存in-tree scaffold非破壊、A4Iの変更許可面とSTOPが未決なし。local Vism／package完成を称さない | **仕様・独立review完了**: spot `ACCEPT` P0=0/P1=0/P2=3、P2反映。本変更のmain統合で発効。[A4S責任仕様](2026-08-01-vsm-a4s-external-crate-author-scaffold-spec.md) |
 | VSM-A4I | A4Sに従い、同じ境界の外部crate作者scaffoldを実装する | VSM-A4S、§8.1の全体レビュー | (1)生成crateの通常依存は`motolii-plugin`だけ、dev/build依存・build.rs・private APIなし (2)Host側conformance/purity/golden入口を同時生成または型付き案内し、plugin crateからtestkitへ逆依存しない (3)first-party参照crateがHost内部crate／UI toolkit／OS・vendor APIへ依存するとCI赤 (4)package/install/manifestを生成せずVism完成を称さない (5)既存in-tree scaffoldの出力を壊さない | **WAIT**（A4Sと§8.1全体レビュー後。仕様と実装は別PR） |
+| SDK-S0S | Cavalry型の意味連続性を最初の`Path2D → Path2D`へ縮小し、既存M2 PathOp offset、typed contract projection、負例、owner、変更許可面を仕様化する | M2-D1i-2、意味SDK決定 | 新しい幾何algorithm、公開Rust／TS API、Document／serde、runtime／packageを作らず、既存native oracleとD1i-2 goldenへ接続。LANG-TS-F0とlanguage-neutral fixtureを分離する | **仕様・独立review完了**: spot `ACCEPT` P0=0/P1=0/P2=3、P2反映。本変更のmain統合で発効。[SDK-S0S責任仕様](2026-08-01-sdk-s0-path2d-semantic-fixture-spec.md) |
+| SDK-S0I | SDK-S0Sのlanguage-neutral Path2D fixtureとnative oracle同値をtest-onlyに実装する | SDK-S0S独立review P0/P1=0 | positive 4、negative 7、contract projection、consumer非干渉。公開API、製品runtime／Inspector、TypeScript、Document／serde、保護golden期待値を変更しない | **実装・独立review・main統合完了**。consumer-neutral JSONをRust testが型付き読込し、native oracle同値とreason＋target診断を検査。Grok `ACCEPT` P0=0/P1=0/P2=0 |
+| LANG-TS-F0 | [言語境界決定](2026-08-01-vism-authoring-language-boundary-decision.md)のMTS-1意味・診断fixtureをheadless dev harnessで閉じる。live engine／製品UI／Documentは触らない | 言語境界決定、SDK-S0I | ECMAScript 2024＋TypeScript 7.0.2基線、closed allowlist、Host SDK型、SDK-S0 fixture同値oracle、MTS-N1〜N5/N7/N9、典型error 8/10、10分forkを固定。compilerは隔離authoring toolchain入力に限定し、製品runtime／Cargo依存、serde、package、loaderを追加せず、製品対応を称さない | **WAIT／SDK-S0I後に仕様粒化** |
+| LANG-TS-F1 | MTS-1 live候補のfeedback速度、last-good、hard budget、隔離、回復を測る | LANG-TS-F0、VSM-C2のJS engine比較 | p50 edit-to-Preview 2秒以内、再起動0、deadline／budget超過のtyped failure、他Vism継続。特定engineを先に採択せず、F0合格をruntime証拠にしない | **WAIT／C2後** |
 | VSM-A5 | kind横断の欠落／未来版／未知payload round-trip matrixを追加する | VSM-A1, VSM-A2, M2-D1f/D6 | open成功、byte意味保持、無関係編集成功、export型付き拒否、互換実装再導入後に評価復元 | M2再締結との調整待ち |
 | VSM-A6 | L3状態系を公開境界だけで実証する | SIM-1 | StateTrackをHostが所有し、plugin欠落時もDocument recipe保持。render pluginに隠れ可変状態なし | SIM-1待ち |
 | VSM-A7 | 現行`Document.bpm`から値列を導出し、既存`DataTrackId`→`DocParam::Data`結線でparameterを駆動する意味fixture。公開型・schemaは追加しない | VSM-A0 | 固定BPM→拍位置／値列がRationalTimeで決定的。既存param結線だけを使用し、「consumer Vism」や入力portを称さない。旧Project byte意味不変 | **完了**: [結果](2026-07-17-vism-a7-bpm-datatrack-spike.md)／test 3件 |
@@ -310,7 +314,7 @@ git diff --check
 
 これと並行できるのは**VSM-A8G0の仕様作成だけ**である。Glow実装、公開API追加、resource allocator変更、M5中間形式の確定を一発注へ束ねない。`VSM-A8G1`以降はM4／M5依存が満たされてから別境界で発注し、`VSM-A8G3`を通るまでPhase Bのpayload分類とPhase Cのcontainer比較を締結しない。外部出力はv1完成映像だけなので、この五手へDelivery Adapter実装を入れない。
 
-この再基線は個別実装発注の前に全体レビューへ渡す。レビューは順序、依存、停止線、Phase Cへ入るgateを対象とし、未決のAPI／schemaを補完する場にはしない。
+この再基線は個別実装発注の前に[全体レビュー](2026-08-02-vism-entrance-parallelization-root-map.md)へ渡す。レビューは順序、依存、停止線、Phase Cへ入るgateを対象とし、未決のAPI／schemaを補完する場にはしない。全体レビューは意味の根を決定済み、並列施工の根を`VSM-A9`まで未閉鎖と判定し、入口ごとの既存owner／write route／STOPを固定した。本変更のmain統合前に`VSM-A4I`を解禁せず、`VSM-A9`前に二つ以上のVism実装を同時起動しない。
 
 ## 9. この計画が完了したと呼べる条件
 

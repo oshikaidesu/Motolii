@@ -32,6 +32,34 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-03-p12-c1-document-lifecycle-adoption-decision.md](2026-08-03-p12-c1-document-lifecycle-adoption-decision.md) | Desktop文書ライフサイクル採択決定: P12-C1で既知セーブ意味論を仕様化し、ReadOnlyNewer/Close/Save As/rfdの未接続境界を固定 |
+| [2026-08-02-m4-known-implementation-survey.md](2026-08-02-m4-known-implementation-survey.md) | M4のcache、resource、disk artifact、区間、background job、proxy、SVGを具体APIと非証明範囲へ割り当てる既知実装比較 |
+| [2026-08-02-m4-disk-artifact-store-resurvey.md](2026-08-02-m4-disk-artifact-store-resurvey.md) | cacache棄却後のdisk候補を再検索し、global CASを現行authority外としてverified recipe artifact storeへ縮小採用 |
+| [2026-08-02-m5-known-implementation-survey.md](2026-08-02-m5-known-implementation-survey.md) | M5の3D math、glTF、wgpu depth、bounds、text、deterministic identityを既存ownerへ接続する既知実装比較 |
+| [2026-08-02-vism-entrance-parallelization-root-map.md](2026-08-02-vism-entrance-parallelization-root-map.md) | Vismの意味の根と並列施工の根を分け、Filter／Source／Data／Path／Text／Instance／Simulation／Automation等の入口を既存owner、route、STOPへ接続する§8.1全体レビュー |
+| [2026-07-26-third-party-sustainable-economy-decision.md](2026-07-26-third-party-sustainable-economy-decision.md) | 無料／有料、OSS／proprietary等を作者が選べる持続可能な経済圏を、Motoliiがmarketplaceを所有せず支える理由、責任境界、停止線 |
+| [2026-07-26-vism-malware-containment-handoff.md](2026-07-26-vism-malware-containment-handoff.md) | Vism悪性コード封じ込めをcatalogから分離し、現行事実、攻撃面、必須負例、合格条件、STOPを他LLMへ渡すread-only締結依頼 |
+| [2026-07-26-vism-malware-containment-contract-decision.md](2026-07-26-vism-malware-containment-contract-decision.md) | 悪性Vismのambient authority 0、hard budget、typed failure、bounded recovery、atomic install、13負例とclaim boundaryを締結し、runtime／schema実装はSTOPする意味論決定 |
+| [2026-07-27-vism-authoring-journey-decision.md](2026-07-27-vism-authoring-journey-decision.md) | 推奨pass shape／標準operation候補と独自WGSL、自己完結shader closure、source authority／backend派生物、v1 source fork／v2 local Vism、Kit selection closureを分ける作者journey比較 |
+| [2026-07-28-vj-multistream-video-prior-art-observation.md](2026-07-28-vj-multistream-video-prior-art-observation.md) | 40動画＋合成後Glowをdecode／surface／coverage／post effectへ分け、VJのGPU-native media、hardware decode、YUV直結、Glow pyramidをMotoliiへ移す比較と停止線 |
+| [2026-07-29-decode-to-composite-premise-audit.md](2026-07-29-decode-to-composite-premise-audit.md) | compressed packetからcompositionまでのcopy／materialize／共有／seek前提を分解し、library選定前の原因分離fixtureと停止線を固定する比較 |
+| [2026-07-29-aviutl-completed-plugin-stack-performance-observation.md](2026-07-29-aviutl-completed-plugin-stack-performance-observation.md) | AviUtlを入力、handle reuse、patch、LuaJIT、RAM preview、波形／編集補助で完成するsoftwareとして再定義し、責任分解、音MAD高編集密度fixture、MotoliiのHost／plugin境界を記録 |
+| [2026-07-29-aviutl2-low-spec-migration-performance-gate.md](2026-07-29-aviutl2-low-spec-migration-performance-gate.md) | 旧AviUtl完成拡張スタックとAviUtl2を別々の移行基準旗とし、L0-M音MAD映像を含む日常編集と負荷後の粘りを分ける最低スペック比較台帳 |
+| [2026-07-29-external-authoring-bridge-seat-decision.md](2026-07-29-external-authoring-bridge-seat-decision.md) | 外部制作toolの選択をtyped proposalからAuthoring Toolへ渡す第三者Bridge席、app非列挙、single-writer正本化、商流／権限分離、能力別再入場gateの決定 |
+| [2026-07-29-vism-cross-culture-expression-stress-test-observation.md](2026-07-29-vism-cross-culture-expression-stress-test-observation.md) | AviUtl／Blender／TouchDesigner／Cavalry／GitHubを横断し、Path→Path、補助typed出力、Feedback、Data→Data、Surface／Materialの空席と候補を分離する観察 |
+| [2026-07-31-authoring-continuity-capsule-goal-contract.md](2026-07-31-authoring-continuity-capsule-goal-contract.md) | 作者経路の行き止まり禁止、一回一変更カプセル、Host所有oracle、宣言typed capability、初心者には一つの作者面・内部artifactはHost導出と段階開示、製品所有Inspect／Fork／atomic adoptionと後戻り不能な負例を固定 |
+| [2026-08-01-motolii-semantic-sdk-aviutl-community-comparison.md](2026-08-01-motolii-semantic-sdk-aviutl-community-comparison.md) | AviUtl 1.x成熟拡張環境／AviUtl2とMotolii意味SDKを比較し、一作者面、自動parameter、通常Vism、fork、反復、Preset／Kit、分散配布、高度化をcontinuity floorへ縮小採用 |
+| [2026-08-01-vism-authoring-language-boundary-decision.md](2026-08-01-vism-authoring-language-boundary-decision.md) | 一般creator-authorがprogramを書く段のTypeScript source、MTS-1 compatibility profile、WGSL／Rust責任、engine／package非決定、F0/F1と停止線を固定 |
+| [2026-08-01-vism-inspector-source-automation-boundary-decision.md](2026-08-01-vism-inspector-source-automation-boundary-decision.md) | Vismを通常の製品単位、Inspectorを意味の第一面、TypeScriptを外部IDEへ段階開示する作者source、Automationを別の将来席として固定 |
+| [2026-08-01-vism-semantic-sdk-cavalry-translation-decision.md](2026-08-01-vism-semantic-sdk-cavalry-translation-decision.md) | CavalryのPath／Mesh／Context／Deformer／Particle先例を、言語より長寿命な意味型、純粋operation、明示capability、Host責任へ翻訳するVism意味SDK決定 |
+| [2026-08-01-sdk-s0-path2d-semantic-fixture-spec.md](2026-08-01-sdk-s0-path2d-semantic-fixture-spec.md) | SDK-S0S — 既存M2 PathOpをnative oracleにする`Path2D → Path2D`意味fixture責任仕様 |
+| [2026-08-01-vsm-a4s-external-crate-author-scaffold-spec.md](2026-08-01-vsm-a4s-external-crate-author-scaffold-spec.md) | VSM-A4S — 外部crate作者scaffold責任仕様 |
+| [2026-08-02-m5-a0s-decision-recovery.md](2026-08-02-m5-a0s-decision-recovery.md) | M5-A0S — 後発3D import／Render Contribution資料7 blobの縮小採用・観察・棄却と、runtime前の停止線 |
+| [2026-08-02-m5-c0-observation-preflight.md](2026-08-02-m5-c0-observation-preflight.md) | M5-C0 — Planar／Spatial Observationの実在target、未決公開境界、M4 K1a依存、仕様化前の停止線 |
+| [2026-08-02-m5-c0-observation-contract-decision.md](2026-08-02-m5-c0-observation-contract-decision.md) | M5-C0 — 初期projective Observationの意味、Host／Provider責任、拒否・換装oracle、schema/runtime分割 |
+| [2026-08-02-m5-c0-schema-preflight.md](2026-08-02-m5-c0-schema-preflight.md) | M5-C0 — 公開型・serde／wire・Document version・provider identityの実在target再照合と仕様化停止線 |
+| [2026-08-02-m5-pause-until-m3-semantic-release.md](2026-08-02-m5-pause-until-m3-semantic-release.md) | M5 — M3の意味論が開放されるまで製品runtimeを休止し、IDではなく共有writer・通常route・snapshot・出力・受入意味で再開判定する契約 |
+| [M5-C0 private Observation semantics receipt](evidence/m5-known-implementation/M5-C0/README.md) | M5-C0 — `glam` private semantic fixtureの射影、typed refusal、provider換装oracle（5/5） |
 | [2026-07-09-R1-export-review.md](2026-07-09-R1-export-review.md) | コードレビュー所見 2026-07-09 (R1/Quality・export・cli周辺) |
 | [2026-07-09-R3-datatrack-review.md](2026-07-09-R3-datatrack-review.md) | コードレビュー所見 2026-07-09 (R3/DataTrack統合) |
 | [2026-07-10-M1-plugin-boundary-review.md](2026-07-10-M1-plugin-boundary-review.md) | 設計レビュー所見 2026-07-10 (M1完了後・プラグイン境界の凍結前監査) |
@@ -204,7 +232,7 @@
 | [2026-07-23-historical-plugin-ecosystem-lineage-recovery.md](2026-07-23-historical-plugin-ecosystem-lineage-recovery.md) | 旧plugin ecosystemの未処分11版を処分し、中央人気／dedupeを持たないcommunity原則と旧tap/lock/build schemaを分離 |
 | [2026-07-23-vism-kit-rack-unification-decision.md](2026-07-23-vism-kit-rack-unification-decision.md) | 独立Plugin Setを廃止し、接続済み一式をRack型Vism Kitへ、推薦だけの集合をcurator list／feedへ分離 |
 | [2026-07-22-terra-grok-delegation-policy.md](2026-07-22-terra-grok-delegation-policy.md) | **ARCHIVED** — task class別のLuna／Terra／Sol実装、Grok検収、Fable追加検収を定めた旧運用 |
-| [2026-07-25-opus-spark-grok-supervision-loop-decision.md](2026-07-25-opus-spark-grok-supervision-loop-decision.md) | 通常発注をCodex → Opus 5粒化 → Spark施工 → Grok独立検収 → Codex採否へ固定し、発注外のOpus 5 read-onlyコーディング相談も定める現行運用 |
+| [2026-07-25-opus-spark-grok-supervision-loop-decision.md](2026-07-25-opus-spark-grok-supervision-loop-decision.md) | 撤回済み固定model監督ループのtombstoneと現行runner非依存正本への移動先 |
 | [2026-07-23-parallel-order-pipeline-comparison.md](2026-07-23-parallel-order-pipeline-comparison.md) | **ARCHIVED** — 旧task-class運用上でpreflight・実装・検収を重ねた発注パイプライン比較 |
 | [2026-07-23-first-party-vism-expression-demand-survey.md](2026-07-23-first-party-vism-expression-demand-survey.md) | AE・AviUtl 1.x／2・Cavalryの表現需要と、人気plugin／公開script系統からVism候補、Host／Infrastructure／Adapter責任、Kitを分ける調査 |
 | [2026-07-23-group-source-pool-cloner-concept.md](2026-07-23-group-source-pool-cloner-concept.md) | Groupの直接の子を割合つきprototype poolとしてClonerへ渡すMotolii固有概念の比較 |
@@ -409,3 +437,29 @@
 | [2026-07-30-cu-108-product-connection-human-acceptance-observation.md](2026-07-30-cu-108-product-connection-human-acceptance-observation.md) | CU-108 通常製品接続の人間受け入れ観察 |
 | [2026-07-30-sd-02g-product-host-layout-geometry-implementation-decision.md](2026-07-30-sd-02g-product-host-layout-geometry-implementation-decision.md) | SD-02G product Host layout geometry単一owner実装 |
 | [2026-07-31-repository-validation-topology-decision.md](2026-07-31-repository-validation-topology-decision.md) | Cargo単独完了ownerをRust laneへ限定し、repository検証と外部審判を分離する決定 |
+| [2026-08-01-supervision-loop-cost-driver-observation.md](2026-08-01-supervision-loop-cost-driver-observation.md) | 監督ループの速度支配項と計装(rework支配・文献監査・銀の弾丸不在) |
+| [2026-08-01-m5-3d-import-rendering-boundary-decision.md](2026-08-01-m5-3d-import-rendering-boundary-decision.md) | M5 3Dインポート／レンダリング境界決定 |
+| [2026-08-02-supervised-runner-retirement-decision.md](2026-08-02-supervised-runner-retirement-decision.md) | Motolii独自監督runnerを非破壊的に廃止し、Agentex共通入口の実地検証範囲と未閉鎖を固定する決定 |
+| [2026-08-03-thin-observed-cli-harness-decision.md](2026-08-03-thin-observed-cli-harness-decision.md) | Claude Code、Codex CLI、Cursor Agentをexact argvと生logだけで接続するtransport-only harness決定 |
+| [2026-08-03-runner-independent-supervision-decision.md](2026-08-03-runner-independent-supervision-decision.md) | 旧route/order/receipt状態機械を撤回し、scope・worktree・検収・採否をCodexへ戻す監督責任決定 |
+| [2026-08-03-history-calibrated-llm-role-selection-decision.md](2026-08-03-history-calibrated-llm-role-selection-decision.md) | Sol総監督、Spark初回機械施工、Luna同一境界修正、一粒／短wave session、別family検収を固定routeなしで選ぶ決定 |
+| [2026-08-03-claude-low-closed-review-calibration-observation.md](2026-08-03-claude-low-closed-review-calibration-observation.md) | Claude lowをCLOSED reviewへ使うbounded合成packet／保存済み過去diff再現とCLI turn制御の実測観察 |
+| [2026-08-03-blind-evidence-envelope-counterexample-observation.md](2026-08-03-blind-evidence-envelope-counterexample-observation.md) | 単一blind envelopeの速度比較と全hit inventory／EVIDENCE_GAP／fresh waveによる選択バイアス反例捕捉の観察 |
+| [2026-08-03-renewal-branch-reconciliation-handoff.md](2026-08-03-renewal-branch-reconciliation-handoff.md) | main統合後のbranch／worktreeを非破壊で分類し、renewal後のDO候補とfresh開始手順を固定する引継ぎsnapshot |
+| [2026-08-03-llm-large-repository-context-routing-prior-art-observation.md](2026-08-03-llm-large-repository-context-routing-prior-art-observation.md) | LLM大規模repository開発の短い入口地図、hybrid retrieval、dependency graph、long-context昇格を比較し、Motolii向けauthority-aware mapの検証仮説を置く観察 |
+| [2026-07-31-cu-0b02c-component-state-source-supply-decision.md](2026-07-31-cu-0b02c-component-state-source-supply-decision.md) | CU-0B02C component state source / supply裁定 |
+| [2026-07-31-cu-0b02cv-private-carry-final-disposition.md](2026-07-31-cu-0b02cv-private-carry-final-disposition.md) | CU-0B02C-V component-private carry最終処分 |
+| [2026-07-31-cu-203-feedback-source-ownership-split-decision.md](2026-07-31-cu-203-feedback-source-ownership-split-decision.md) | CU-203 共通feedback source / ownership分割決定 |
+| [2026-07-31-cu-204-staged-diagnostic-projection-split-decision.md](2026-07-31-cu-204-staged-diagnostic-projection-split-decision.md) | CU-204 段階診断投影 S/A/P分割決定 |
+| [2026-07-31-cu-204a-diagnostic-projection-adapter-implementation-decision.md](2026-07-31-cu-204a-diagnostic-projection-adapter-implementation-decision.md) | CU-204A 純粋段階診断投影adapter実装決定 |
+| [2026-07-31-cu-205s-opacity-direct-route-split-decision.md](2026-07-31-cu-205s-opacity-direct-route-split-decision.md) | CU-205S first-party Opacity Direct通常製品route分割決定 |
+| [2026-08-01-cu-205e-opacity-normal-product-route-e2e-receipt.md](2026-08-01-cu-205e-opacity-normal-product-route-e2e-receipt.md) | CU-205E Opacity通常製品route E2E receipt |
+| [2026-08-01-cu-204p-normal-source-readiness-recheck.md](2026-08-01-cu-204p-normal-source-readiness-recheck.md) | CU-204P 通常製品source到達性の再確認 |
+| [2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md](2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md) | CU-201 U3b move/trim/snap責任分割決定 |
+| [2026-08-01-cu-201m-s-clip-start-command-contract-decision.md](2026-08-01-cu-201m-s-clip-start-command-contract-decision.md) | CU-201M-S Clip start command契約決定 |
+| [2026-08-01-cu-201t-s-clip-trim-timemap-contract-decision.md](2026-08-01-cu-201t-s-clip-trim-timemap-contract-decision.md) | CU-201T-S Clip trim / TimeMap契約決定 |
+| [2026-08-03-cu-201n-s-snap-target-contract-decision.md](2026-08-03-cu-201n-s-snap-target-contract-decision.md) | CU-201N-S snap target / priority / unit契約決定 |
+| [2026-08-03-cu-201p-target-gap-observation.md](2026-08-03-cu-201p-target-gap-observation.md) | CU-201P native Timeline gesture target gap観察 |
+| [2026-08-03-p06-c1-mac-rfd-adoption-probe-observation.md](2026-08-03-p06-c1-mac-rfd-adoption-probe-observation.md) | P06-C1-MAC rfd採択probeと固定Mac parent/selection/Cancel/typed failure外部gate PASSの観察 |
+| [2026-08-03-cu-201p-move-known-semantics-adoption-decision.md](2026-08-03-cu-201p-move-known-semantics-adoption-decision.md) | CU-201P-MOVE native Timeline body-drag既知意味採択・move-only縮小決定 |
+| [2026-08-03-cu-201p-trim-edge-known-semantics-adoption-decision.md](2026-08-03-cu-201p-trim-edge-known-semantics-adoption-decision.md) | CU-201P-TRIM Blender VSE handle hit規則のPATTERN採択・in/out trim target決定 |

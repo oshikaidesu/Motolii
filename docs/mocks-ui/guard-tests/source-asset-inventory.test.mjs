@@ -159,7 +159,7 @@ const EXPECTED_INSPECTOR_PRODUCT_SOURCE =
 const EXPECTED_INSPECTOR_PRODUCT_CSS =
   "ui/motolii-web/src/candidates/inspector-candidate.css";
 const EXPECTED_INSPECTOR_SHA256 =
-  "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0";
+  "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e";
 const EXPECTED_INSPECTOR_CSS_SHA256 =
   "730e2861a893b2b07fa66d5acef0038a49bdcf337e8c5a037785b0a58d829cbe";
 const EXPECTED_INSPECTOR_LEGACY_CLOSURE = [
@@ -2682,4 +2682,53 @@ test("rejects easing trigger source drift, ownership violations, and containment
       "  const [openState, setOpenState] = useState(false);\n  return (",
     ),
   }));
+});
+
+test("records the fixed CU-0B02C primitive pair without expanding the six-surface inventory", async () => {
+  const fixedPrimitiveSource = "docs/mocks-ui/src/primitives/index.jsx";
+  const fixedPrimitiveCss = "docs/mocks-ui/src/primitives/primitives.css";
+  const currentPrimitiveSource = "ui/motolii-web/src/primitives/index.jsx";
+  const currentPrimitiveCss = "ui/motolii-web/src/primitives/primitives.css";
+  const provenance = JSON.parse(
+    await readFile(
+      absoluteFromRelative("ui/motolii-web/source-provenance.json"),
+      "utf8",
+    ),
+  );
+  const manifest = JSON.parse(await readFile(MANIFEST_PATH, "utf8"));
+
+  assert.equal(manifest.surfaces.length, 6);
+  assert.equal(
+    hashBytes(readBlobFromCommit(fixedPrimitiveSource, FIXED_SOURCE_COMMIT)),
+    "005b5db5a71f75ab139d26f44169538f74d3711ca2244748e9b4a016088c9f8b",
+  );
+  assert.equal(
+    hashBytes(readBlobFromCommit(fixedPrimitiveCss, FIXED_SOURCE_COMMIT)),
+    "f625758bbfb9db6577618584a79ef9e900510ffc96662c6b1f6191393590959c",
+  );
+
+  const migration = provenance.migrations.find(
+    ({ type, old }) =>
+      type === "fixed-source-transfer-with-supplier-replacement"
+      && old?.component === fixedPrimitiveSource,
+  );
+  assert.deepEqual(migration, {
+    type: "fixed-source-transfer-with-supplier-replacement",
+    old: {
+      component: fixedPrimitiveSource,
+      componentSha256:
+        "005b5db5a71f75ab139d26f44169538f74d3711ca2244748e9b4a016088c9f8b",
+      css: fixedPrimitiveCss,
+      cssSha256:
+        "f625758bbfb9db6577618584a79ef9e900510ffc96662c6b1f6191393590959c",
+    },
+    current: {
+      component: currentPrimitiveSource,
+      componentSha256:
+        hashBytes(await readFile(absoluteFromRelative(currentPrimitiveSource))),
+      css: currentPrimitiveCss,
+      cssSha256:
+        hashBytes(await readFile(absoluteFromRelative(currentPrimitiveCss))),
+    },
+  });
 });

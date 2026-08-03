@@ -1,12 +1,14 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import test from "node:test";
+import { validatePostPromotionChanges } from "./browser-post-promotion-provenance.mjs";
+import { decodeInspectorReadModel } from "../src/read-model/inspectorReadModelDecoder.js";
 
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PRODUCT_DIR = path.resolve(TEST_DIR, "..");
@@ -17,6 +19,15 @@ const REPO_DIR = execFileSync("git", ["rev-parse", "--show-toplevel"], {
 const DOCS_MOCKS_DIR = path.resolve(REPO_DIR, "docs/mocks-ui");
 const DOCS_MOCKS_PACKAGE = path.join(DOCS_MOCKS_DIR, "package.json");
 const PRODUCT_PACKAGE = path.join(PRODUCT_DIR, "package.json");
+const INSPECTOR_PARTS = path.join(
+  DOCS_MOCKS_DIR,
+  "fixtures/inspector-read-model-parts.json",
+);
+const REFERENCE_DOCUMENT = path.join(
+  DOCS_MOCKS_DIR,
+  "fixtures/reference-document.json",
+);
+const OWNERSHIP_TEST_SOURCE = readFileSync(fileURLToPath(import.meta.url), "utf8");
 
 const requireFromMocks = createRequire(DOCS_MOCKS_PACKAGE);
 const { parse } = requireFromMocks("@babel/parser");
@@ -48,7 +59,11 @@ const CURRENT_KEY_TOOLS_SOURCE = "ui/motolii-web/src/candidates/KeyToolsCandidat
 const CURRENT_KEY_TOOLS_CSS = "ui/motolii-web/src/candidates/key-tools-candidate.css";
 const CURRENT_INSPECTOR_SOURCE = "ui/motolii-web/src/candidates/InspectorCandidate.jsx";
 const CURRENT_INSPECTOR_CSS = "ui/motolii-web/src/candidates/inspector-candidate.css";
+const CURRENT_INSPECTOR_HOST_CODEC = "ui/motolii-web/src/host/inspectorHostCodec.js";
 const CURRENT_STAGE_CHROME_SOURCE = "ui/motolii-web/src/candidates/StageChromeCandidate.jsx";
+const CURRENT_PRIMITIVES_SOURCE = "ui/motolii-web/src/primitives/index.jsx";
+const CURRENT_PRIMITIVES_CSS = "ui/motolii-web/src/primitives/primitives.css";
+const CURRENT_FEEDBACK_SOURCE = "ui/motolii-web/src/feedback/Feedback.jsx";
 const PRODUCT_RUNTIME_MODULES = [
   CURRENT_BROWSER_INDEX,
   CURRENT_BROWSER_SOURCE,
@@ -56,7 +71,10 @@ const PRODUCT_RUNTIME_MODULES = [
   CURRENT_EASING_TRIGGER_SOURCE,
   CURRENT_KEY_TOOLS_SOURCE,
   CURRENT_INSPECTOR_SOURCE,
+  CURRENT_INSPECTOR_HOST_CODEC,
   CURRENT_STAGE_CHROME_SOURCE,
+  CURRENT_PRIMITIVES_SOURCE,
+  CURRENT_FEEDBACK_SOURCE,
 ];
 
 const FIXED_BROWSER_SOURCE = "docs/mocks-ui/src/candidates/DiscoveryBrowserCandidate.jsx";
@@ -68,6 +86,25 @@ const FIXED_KEY_TOOLS_SOURCE = "docs/mocks-ui/src/candidates/KeyToolsCandidate.j
 const FIXED_KEY_TOOLS_CSS = "docs/mocks-ui/src/candidates/key-tools-candidate.css";
 const FIXED_INSPECTOR_SOURCE = "docs/mocks-ui/src/candidates/InspectorCandidate.jsx";
 const FIXED_INSPECTOR_CSS = "docs/mocks-ui/src/candidates/inspector-candidate.css";
+const FIXED_PRIMITIVES_SOURCE = "docs/mocks-ui/src/primitives/index.jsx";
+const FIXED_PRIMITIVES_CSS = "docs/mocks-ui/src/primitives/primitives.css";
+const FIXED_PRIMITIVES_SOURCE_SHA256 =
+  "005b5db5a71f75ab139d26f44169538f74d3711ca2244748e9b4a016088c9f8b";
+const FIXED_PRIMITIVES_CSS_SHA256 =
+  "f625758bbfb9db6577618584a79ef9e900510ffc96662c6b1f6191393590959c";
+const CURRENT_PRIMITIVES_SOURCE_SHA256 =
+  "d5c9dd7d9016dacbef6f1ef93fa80e4cfe00a22eccc5e4faf7a4e12eada6de29";
+const CURRENT_PRIMITIVES_CSS_SHA256 =
+  "7ecfe0195f922506429caa0e141fe6104bd845e02265e2bd24f4a67232dafc2b";
+const PRIMITIVE_EXPORTS = [
+  "Button",
+  "Field",
+  "Icon",
+  "IconButton",
+  "PanelHeader",
+  "Tab",
+  "TabList",
+];
 
 const EXPECTED_EASING_TRIGGER_SHA256 =
   "6ae4cf7e79586e33cedaed0bb928daa34aa4b8ac9cdc9f6c494637875f502932";
@@ -78,7 +115,7 @@ const EXPECTED_KEY_TOOLS_SHA256 =
 const EXPECTED_KEY_TOOLS_CSS_SHA256 =
   "f84eb7f98f05844fa3bfc72b702cee2709f1fc0bb9be614f2b01039a65b5190d";
 const EXPECTED_INSPECTOR_SHA256 =
-  "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0";
+  "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e";
 const EXPECTED_INSPECTOR_CSS_SHA256 =
   "730e2861a893b2b07fa66d5acef0038a49bdcf337e8c5a037785b0a58d829cbe";
 const INSPECTOR_POST_PROMOTION_TASK = "CU-0A08ITP";
@@ -88,6 +125,12 @@ const INSPECTOR_POST_PROMOTION_REASON =
   "VS-1 Inspector target read-only projection component input";
 const FIXED_INSPECTOR_COMPONENT_SHA256 =
   "1e0bdd3eebd665e517600af4db090f74d50951aef12fdd476e97a828de91a3e4";
+const CU205P_INSPECTOR_FIXED_SHA256 =
+  "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0";
+const CU205P_INSPECTOR_REASON =
+  "VS-2 active Effect Inspector read-only control projection";
+const CU205P_INSPECTOR_CURRENT_SHA256 =
+  "a1af604c78113f4df0538c3045b19d51c1d3fc8c6740305abc47b7e8a2d10f37";
 
 const ALLOWED_EXTERNAL_PACKAGES = ["react", "html-react-parser"];
 const SEAM_COMPONENT_NAME = "CandidateCreateBrowser";
@@ -107,98 +150,33 @@ function countNonOverlapping(text, needle) {
 }
 
 function assertInspectorDomTokenCounts(source) {
-  assert.equal(countNonOverlapping(source, "document."), 3);
-  assert.equal(countNonOverlapping(source, 'document.addEventListener("keydown"'), 1);
-  assert.equal(countNonOverlapping(source, 'document.removeEventListener("keydown"'), 1);
+  assert.equal(countNonOverlapping(source, "document."), 5);
+  assert.equal(countNonOverlapping(source, 'document.addEventListener("keydown"'), 2);
+  assert.equal(countNonOverlapping(source, 'document.removeEventListener("keydown"'), 2);
   assert.equal(countNonOverlapping(source, 'document.querySelector("#recovery")'), 1);
-  assert.equal(countNonOverlapping(source, "window."), 0);
+  assert.equal(countNonOverlapping(source, "window."), 2);
+  assert.equal(countNonOverlapping(source, 'window.addEventListener("blur"'), 1);
+  assert.equal(countNonOverlapping(source, 'window.removeEventListener("blur"'), 1);
   assert.equal(countNonOverlapping(source, "useState"), 0);
   assert.equal(countNonOverlapping(source, "useMemo"), 0);
   assert.equal(countNonOverlapping(source, "localStorage"), 0);
   assert.equal(countNonOverlapping(source, "fetch("), 0);
 }
 
-function validatePostPromotionChanges(provenance, currentComponentSha256) {
-  const changes = provenance.postPromotionChanges;
-  if (changes === undefined) {
-    if (currentComponentSha256 !== FIXED_BROWSER_COMPONENT_SHA256) {
-      throw new Error("component bytes differ from fixed commit without postPromotionChanges");
-    }
-    return;
-  }
-  if (!Array.isArray(changes)) {
-    throw new Error("postPromotionChanges must be an array");
-  }
-  if (changes.length < 1) {
-    throw new Error("postPromotionChanges must contain at least one entry");
-  }
-  for (const entry of changes) {
-    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
-      throw new Error("postPromotionChanges entry must be an object");
-    }
-    const keys = Object.keys(entry);
-    if (keys.length !== POST_PROMOTION_ENTRY_KEYS.length) {
-      throw new Error("postPromotionChanges entry has wrong key count");
-    }
-    for (const key of POST_PROMOTION_ENTRY_KEYS) {
-      if (!Object.hasOwn(entry, key)) {
-        throw new Error(`postPromotionChanges entry missing key ${key}`);
-      }
-    }
-    for (const key of keys) {
-      if (!POST_PROMOTION_ENTRY_KEYS.includes(key)) {
-        throw new Error(`postPromotionChanges entry has extra key ${key}`);
-      }
-    }
-  }
-  const index0 = changes[0];
-  if (index0.task !== POST_PROMOTION_TASK) {
-    throw new Error("postPromotionChanges task literal mismatch");
-  }
-  if (index0.file !== POST_PROMOTION_FILE) {
-    throw new Error("postPromotionChanges file literal mismatch");
-  }
-  if (index0.reason !== POST_PROMOTION_REASON) {
-    throw new Error("postPromotionChanges reason literal mismatch");
-  }
-  if (index0.fixedSourceSha256 !== FIXED_BROWSER_COMPONENT_SHA256) {
-    throw new Error("postPromotionChanges fixedSourceSha256 mismatch");
-  }
-  if (index0.currentSha256 !== POST_PROMOTION_INDEX0_CURRENT_SHA256) {
-    throw new Error("postPromotionChanges index 0 currentSha256 mismatch");
-  }
-  const index0File = index0.file;
-  for (const entry of changes) {
-    if (entry.file !== index0File) {
-      throw new Error("postPromotionChanges file must match index 0");
-    }
-  }
-  for (let i = 1; i < changes.length; i += 1) {
-    const entry = changes[i];
-    if (typeof entry.task !== "string" || entry.task.length === 0) {
-      throw new Error("postPromotionChanges task must be non-empty string");
-    }
-    if (typeof entry.reason !== "string" || entry.reason.length === 0) {
-      throw new Error("postPromotionChanges reason must be non-empty string");
-    }
-  }
-  const seenTasks = new Set();
-  for (const entry of changes) {
-    if (seenTasks.has(entry.task)) {
-      throw new Error("postPromotionChanges task must be unique");
-    }
-    seenTasks.add(entry.task);
-  }
-  for (let i = 1; i < changes.length; i += 1) {
-    if (changes[i].fixedSourceSha256 !== changes[i - 1].currentSha256) {
-      throw new Error("postPromotionChanges hash chain break");
-    }
-  }
-  const lastEntry = changes[changes.length - 1];
-  if (lastEntry.currentSha256 !== currentComponentSha256) {
-    throw new Error("postPromotionChanges currentSha256 mismatch");
-  }
-}
+test("guard imports a shared Browser post-promotion validator and does not redefine it", () => {
+  const importCount = (
+    OWNERSHIP_TEST_SOURCE.match(
+      /from\s+["']\.\/browser-post-promotion-provenance\.mjs["']/g,
+    ) ?? []
+  ).length;
+  assert.equal(importCount, 1, "validatePostPromotionChanges should be imported exactly once");
+  const localDefinitions = (
+    OWNERSHIP_TEST_SOURCE.match(
+      /\bfunction\s+validatePostPromotionChanges\s*\(/g,
+    ) ?? []
+  ).length;
+  assert.equal(localDefinitions, 0, "validatePostPromotionChanges must not be locally redefined");
+});
 
 function validateInspectorPostPromotionChanges(provenance, currentComponentSha256) {
   const changes = provenance.inspectorPostPromotionChanges;
@@ -255,6 +233,61 @@ function validateInspectorPostPromotionChanges(provenance, currentComponentSha25
 
 function hashBytes(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+function loadInspectorInput() {
+  const parts = JSON.parse(readFileSync(INSPECTOR_PARTS, "utf8"));
+  const document = JSON.parse(readFileSync(REFERENCE_DOCUMENT, "utf8"));
+  return structuredClone({ ...parts, document });
+}
+
+function findItemByLayerId(items, layerId) {
+  if (!Array.isArray(items)) return undefined;
+  for (const item of items) {
+    if (item.envelope?.layer_id === layerId) return item;
+    const child = findItemByLayerId(item.children, layerId);
+    if (child !== undefined) return child;
+  }
+  return undefined;
+}
+
+function loadActiveOpacityInput() {
+  const input = loadInspectorInput();
+  input.active_effect_use_id = 17;
+  input.nodes[0].effect_version = 1;
+  input.nodes[0].params[0].control = "F64";
+  input.document.effect_definitions[0].params = {
+    amount: { const: { F64: 0.72 } },
+  };
+  const targetItem = findItemByLayerId(input.document.tracks[0].items, 5);
+  targetItem.envelope.effects.push({ id: 17, definition_id: 0 });
+  return input;
+}
+
+function renderInspectorSource(sourceText, inspectorReadModel, props = {}) {
+  const { transformSync } = requireFromMocks("esbuild");
+  const React = requireFromMocks("react");
+  const { renderToStaticMarkup } = requireFromMocks("react-dom/server");
+  const withoutCss = sourceText.replace(
+    /^import "\.\/inspector-candidate\.css";\n/m,
+    "",
+  );
+  const compiled = transformSync(withoutCss, {
+    loader: "jsx",
+    format: "cjs",
+    jsx: "automatic",
+  }).code;
+  const loaded = { exports: {} };
+  const loadDependency = (specifier) => requireFromMocks(specifier);
+  const evaluate = new Function("require", "module", "exports", compiled);
+  evaluate(loadDependency, loaded, loaded.exports);
+  return renderToStaticMarkup(
+    React.createElement(loaded.exports.InspectorCandidate, {
+      mode: undefined,
+      inspectorReadModel,
+      ...props,
+    }),
+  );
 }
 
 function abs(relativePath) {
@@ -695,7 +728,11 @@ function validateInspectorSafeBranch(sourceText) {
     for (const child of Object.values(node)) walk(child);
   };
   walk(returned);
-  assert.deepEqual(expressionBindings, ["panelHead", "targetIdentity"]);
+  assert.deepEqual(expressionBindings, [
+    "panelHead",
+    "targetIdentity",
+    "activeEffectSection",
+  ]);
   assert.deepEqual(textValues, []);
 }
 
@@ -795,6 +832,11 @@ function assertProductExportFromIndex(ast) {
   assert.equal(exportNames.has("InspectorContext"), true);
   assert.equal(exportNames.has("StageHeaderCandidate"), true);
   assert.equal(exportNames.has("StageTransportCandidate"), true);
+  assert.equal(exportNames.has("Feedback"), true);
+  assert.equal(exportNames.has("validateFeedbackModel"), false);
+  for (const primitiveExport of PRIMITIVE_EXPORTS) {
+    assert.equal(exportNames.has(primitiveExport), true);
+  }
   assert.equal(exportNames.has("default"), false);
 }
 
@@ -923,6 +965,162 @@ test("validates decoded Inspector target projection into the existing identity J
   }
 });
 
+test("projects one exact active Opacity amount control and preserves absent output", async () => {
+  const absentInput = loadInspectorInput();
+  const absentOutput = decodeInspectorReadModel(absentInput);
+  assert.equal(Object.hasOwn(absentOutput, "active_effect"), false);
+
+  const activeOutput = decodeInspectorReadModel(loadActiveOpacityInput());
+  assert.deepEqual(activeOutput.active_effect, {
+    layer_id: 5,
+    effect_use_id: 17,
+    definition_id: 0,
+    plugin_id: "core.filter.opacity",
+    effect_version: 1,
+    params: [
+      {
+        id: "amount",
+        current: { const: { F64: 0.72 } },
+        value_type: "F64",
+        f64_domain: {
+          min_inclusive: 0,
+          max_inclusive: 1,
+          integer: false,
+        },
+        control_kind: "F64",
+      },
+    ],
+  });
+
+  const source = await readFile(abs(CURRENT_INSPECTOR_SOURCE), "utf8");
+  const absentHtml = renderInspectorSource(source, absentOutput);
+  assert.equal(
+    absentHtml,
+    '<aside class="inspector" id="inspector"><div class="panel-head">Inspector</div><div class="section"><div class="identity"><div class="icon">G</div><div><b>Reference group</b><small>Group · 1 child</small></div></div></div></aside>',
+  );
+
+  const activeHtml = renderInspectorSource(source, activeOutput);
+  assert.equal((activeHtml.match(/class="scrub"/g) ?? []).length, 1);
+  assert.match(activeHtml, /data-effect-use-id="17"/);
+  assert.match(activeHtml, /id="effect-use-17-amount"/);
+  assert.match(activeHtml, /data-param="amount"/);
+  assert.match(activeHtml, /aria-label="amount read-only"/);
+  assert.match(activeHtml, /aria-readonly="true"/);
+  assert.match(activeHtml, /disabled=""/);
+  assert.match(activeHtml, />72%<\/output>/);
+  assert.doesNotMatch(activeHtml, /AUTO ON|AUTO OFF|onpointer|onkeydown/i);
+
+  const interactiveHtml = renderInspectorSource(source, activeOutput, {
+    onEffectParamGesture: () => {},
+  });
+  assert.match(interactiveHtml, /aria-label="Amount。無限目盛を左右dragして変更"/);
+  assert.doesNotMatch(interactiveHtml, /aria-readonly|disabled=/);
+});
+
+test("changes product gesture presentation only after private send succeeds", async () => {
+  const source = await readFile(abs(CURRENT_INSPECTOR_SOURCE), "utf8");
+  const assertOrdered = (before, after) => {
+    const beforeIndex = source.indexOf(before);
+    const afterIndex = source.indexOf(after, beforeIndex + before.length);
+    assert.notEqual(beforeIndex, -1, `missing ${before}`);
+    assert.notEqual(afterIndex, -1, `missing ${after}`);
+    assert.ok(beforeIndex < afterIndex, `${before} must precede ${after}`);
+  };
+  assertOrdered(
+    'emitProductGesture("start", param, value);',
+    "productScrubSessionRef.current = session;",
+  );
+  assertOrdered(
+    'emitProductGesture("update", param, value);',
+    "session.value = value;",
+  );
+  assertOrdered(
+    'onEffectParamGesture({ phase: "cancel", paramId: param.id });',
+    "productScrubSessionRef.current = null;",
+  );
+  assertOrdered(
+    'emitProductGesture("commit", param, session.value);',
+    "productScrubSessionRef.current = null;",
+  );
+});
+
+test("rejects ambiguous or mismatched active Effect Use projections", () => {
+  const cases = [
+    (input) => { input.active_effect_use_id = Number.NaN; },
+    (input) => { input.active_effect_use_id = 999; },
+    (input) => { input.active_effect_use_id = 1; },
+    (input) => {
+      const target = findItemByLayerId(input.document.tracks[0].items, 5);
+      target.envelope.effects.push({ id: 17, definition_id: 0 });
+    },
+    (input) => { input.document.effect_definitions[0].id = 99; },
+    (input) => {
+      input.document.effect_definitions.push(
+        structuredClone(input.document.effect_definitions[0]),
+      );
+    },
+    (input) => { input.document.effect_definitions[0].plugin_id = "core.filter.other"; },
+    (input) => { input.document.effect_definitions[0].effect_version = 2; },
+    (input) => {
+      input.document.effect_definitions[0].plugin_id = "core.filter.other";
+      input.nodes[0].id = "core.filter.other";
+    },
+    (input) => {
+      input.document.effect_definitions[0].effect_version = 2;
+      input.nodes[0].effect_version = 2;
+    },
+    (input) => { delete input.nodes[0].effect_version; },
+    (input) => { delete input.nodes[0].params[0].control; },
+    (input) => { input.nodes[0].params[0].control = "Vec2"; },
+    (input) => { delete input.nodes[0].params[0].f64_domain; },
+    (input) => { input.nodes[0].params[0].f64_domain.max_inclusive = 2; },
+    (input) => { input.nodes[0].params[0].f64_domain.integer = true; },
+    (input) => { delete input.document.effect_definitions[0].params.amount; },
+    (input) => {
+      input.nodes[0].params = [];
+      input.document.effect_definitions[0].params = {};
+    },
+    (input) => {
+      const other = structuredClone(input.nodes[0].params[0]);
+      other.id = "other";
+      input.nodes[0].params.push(other);
+      input.document.effect_definitions[0].params = {
+        other: { const: { F64: 0.25 } },
+        amount: { const: { F64: 0.72 } },
+      };
+    },
+    (input) => {
+      input.nodes[0].params[0].id = "other";
+      input.document.effect_definitions[0].params = {
+        other: { const: { F64: 0.72 } },
+      };
+    },
+    (input) => {
+      input.document.effect_definitions[0].params.amount = { keyframes: {} };
+    },
+    (input) => {
+      input.document.effect_definitions[0].params.amount.const.F64 = 1.1;
+    },
+    (input) => {
+      input.document.effect_definitions[0].params.amount.const.F64 = Number.POSITIVE_INFINITY;
+    },
+    (input) => { input.extra = true; },
+    (input) => { delete input.target; },
+  ];
+  for (const mutate of cases) {
+    const input = loadActiveOpacityInput();
+    mutate(input);
+    assert.throws(
+      () => decodeInspectorReadModel(input),
+      (error) => {
+        assert.ok(error instanceof TypeError);
+        assert.match(error.message, /^R[^:]+: .+ at .+$/);
+        return true;
+      },
+    );
+  }
+});
+
 test("validates Inspector post-promotion provenance as an append-only chain", async () => {
   const provenance = JSON.parse(
     await readFile(path.join(PRODUCT_DIR, "source-provenance.json"), "utf8"),
@@ -932,6 +1130,19 @@ test("validates Inspector post-promotion provenance as an append-only chain", as
   );
   assert.doesNotThrow(() =>
     validateInspectorPostPromotionChanges(provenance, currentInspectorSha256));
+  assert.equal(provenance.inspectorPostPromotionChanges.length, 4);
+  assert.deepEqual(provenance.inspectorPostPromotionChanges.at(-1), {
+    task: "CU-205W-A1",
+    file: INSPECTOR_POST_PROMOTION_FILE,
+    reason: "VS-2 active amount gesture local presentation seam",
+    fixedSourceSha256: CU205P_INSPECTOR_CURRENT_SHA256,
+    currentSha256: currentInspectorSha256,
+  });
+  assert.deepEqual(provenance.privateRuntimeSources, [{
+    task: "CU-205W-A1",
+    file: CURRENT_INSPECTOR_HOST_CODEC,
+    owner: "private Inspector typed gesture transport",
+  }]);
 
   const index0 = provenance.inspectorPostPromotionChanges[0];
   const syntheticSha = hashBytes(Buffer.from("cu-0a08itp-inspector-chain-next"));
@@ -1337,9 +1548,9 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
   }
 
   assert.equal(productPackage.name, PRODUCT_NAME);
-  assert.equal(provenance.task, "CU-0A04 / CU-0A05B / CU-0A06B / CU-0A07C / CU-108-STAGE-REPRODUCTION");
-  assert.equal(provenance.sourceOwnership.owner, "R1-browser / R2B-easing-trigger / R3B-key-tools / R4C-inspector / R5-stage-chrome");
-  assert.equal(provenance.sourceOwnership.surface, "Browser / Easing trigger / KEYS-LAYERS key tools / Inspector / Stage header-transport");
+  assert.equal(provenance.task, "CU-0A04 / CU-0A05B / CU-0A06B / CU-0A07C / CU-108-STAGE-REPRODUCTION / CU-0B02C-P / CU-203P");
+  assert.equal(provenance.sourceOwnership.owner, "R1-browser / R2B-easing-trigger / R3B-key-tools / R4C-inspector / R5-stage-chrome / component-state-primitives / common-feedback");
+  assert.equal(provenance.sourceOwnership.surface, "Browser / Easing trigger / KEYS-LAYERS key tools / Inspector / Stage header-transport / shared presentation primitives / common feedback");
   assert.deepEqual(provenance.sourceOwnership.exports, [
     { name: "DiscoveryBrowserCandidate", path: "src/index.js" },
     { name: "EasingTriggerCandidate", path: "src/index.js" },
@@ -1348,6 +1559,14 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
     { name: "InspectorContext", path: "src/index.js" },
     { name: "StageHeaderCandidate", path: "src/index.js" },
     { name: "StageTransportCandidate", path: "src/index.js" },
+    { name: "Button", path: "src/index.js" },
+    { name: "Field", path: "src/index.js" },
+    { name: "Icon", path: "src/index.js" },
+    { name: "IconButton", path: "src/index.js" },
+    { name: "PanelHeader", path: "src/index.js" },
+    { name: "Tab", path: "src/index.js" },
+    { name: "TabList", path: "src/index.js" },
+    { name: "Feedback", path: "src/index.js" },
   ]);
   assert.deepEqual(provenance.migrations, [
     {
@@ -1409,6 +1628,37 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
         entries: "ui/motolii-web/stage-header.html / ui/motolii-web/stage-transport.html",
       },
     },
+    {
+      type: "fixed-source-transfer-with-supplier-replacement",
+      old: {
+        component: FIXED_PRIMITIVES_SOURCE,
+        componentSha256: FIXED_PRIMITIVES_SOURCE_SHA256,
+        css: FIXED_PRIMITIVES_CSS,
+        cssSha256: FIXED_PRIMITIVES_CSS_SHA256,
+      },
+      current: {
+        component: CURRENT_PRIMITIVES_SOURCE,
+        componentSha256: CURRENT_PRIMITIVES_SOURCE_SHA256,
+        css: CURRENT_PRIMITIVES_CSS,
+        cssSha256: CURRENT_PRIMITIVES_CSS_SHA256,
+      },
+    },
+    {
+      type: "fixed-source-transfer",
+      task: "CU-203P",
+      old: {
+        component: "docs/mocks-ui/src/feedback/Feedback.jsx",
+        componentSha256: "459fdd6120fd369b78d4a9784d98ac2b29fbb553afb35522f8f680fdfe4e4cd1",
+        css: "docs/mocks-ui/src/feedback/feedback.css",
+        cssSha256: "7e22e2a183796732c4f77c4bb018eb2342ecb812181e46f348e1aa3aa827ef50",
+      },
+      current: {
+        component: CURRENT_FEEDBACK_SOURCE,
+        componentSha256: "459fdd6120fd369b78d4a9784d98ac2b29fbb553afb35522f8f680fdfe4e4cd1",
+        css: "ui/motolii-web/src/feedback/feedback.css",
+        cssSha256: "7e22e2a183796732c4f77c4bb018eb2342ecb812181e46f348e1aa3aa827ef50",
+      },
+    },
   ]);
 
   const easingTriggerBytes = await readFile(abs(CURRENT_EASING_TRIGGER_SOURCE));
@@ -1460,7 +1710,141 @@ test("validates fixed Browser bytes and browser export mapping", async () => {
     "./candidates/InspectorCandidate.jsx",
     "./candidates/KeyToolsCandidate.jsx",
     "./candidates/StageChromeCandidate.jsx",
+    "./feedback/Feedback.jsx",
+    "./primitives/index.jsx",
   ]);
+});
+
+test("directly promotes fixed primitive state ownership without a second implementation", async () => {
+  const fixedSource = readBlobFromCommit(
+    FIXED_PRIMITIVES_SOURCE,
+    FIXED_SOURCE_COMMIT,
+  ).toString("utf8");
+  const fixedCss = readBlobFromCommit(
+    FIXED_PRIMITIVES_CSS,
+    FIXED_SOURCE_COMMIT,
+  ).toString("utf8");
+  const currentSource = await readFile(abs(CURRENT_PRIMITIVES_SOURCE), "utf8");
+  const currentCss = await readFile(abs(CURRENT_PRIMITIVES_CSS), "utf8");
+  const mockShim = await readFile(
+    abs("docs/mocks-ui/src/primitives/index.jsx"),
+    "utf8",
+  );
+
+  assert.equal(hashBytes(Buffer.from(fixedSource)), FIXED_PRIMITIVES_SOURCE_SHA256);
+  assert.equal(hashBytes(Buffer.from(fixedCss)), FIXED_PRIMITIVES_CSS_SHA256);
+  assert.equal(hashBytes(Buffer.from(currentSource)), CURRENT_PRIMITIVES_SOURCE_SHA256);
+  assert.equal(hashBytes(Buffer.from(currentCss)), CURRENT_PRIMITIVES_CSS_SHA256);
+  assert.equal(existsSync(abs(FIXED_PRIMITIVES_CSS)), false);
+
+  let expectedSource = fixedSource;
+  for (const role of [
+    "project",
+    "files",
+    "plugins",
+    "stage",
+    "inspector",
+    "timeline",
+  ]) {
+    expectedSource = expectedSource.replaceAll(
+      `--mock-role-way-${role}`,
+      `--motolii-color-way-${role}`,
+    );
+  }
+  assert.equal(currentSource, expectedSource);
+
+  let expectedCss = fixedCss.replace(
+    '@import "../tokens/mock-candidates.css";\n\n',
+    "",
+  );
+  expectedCss = expectedCss
+    .replace(
+      "  font-family: var(--mock-role-font-technical);",
+      `  font-family: var(
+    --motolii-primitive-font-technical,
+    ui-monospace,
+    "SFMono-Regular",
+    Menlo,
+    Consolas,
+    monospace
+  );`,
+    )
+    .replace(
+      "  font: 400 8px var(--mock-role-font-technical);",
+      `  font: 400 8px var(
+    --motolii-primitive-font-technical,
+    ui-monospace,
+    "SFMono-Regular",
+    Menlo,
+    Consolas,
+    monospace
+  );`,
+    )
+    .replace(
+      "  font: 7px var(--mock-role-font-technical);",
+      `  font: 7px var(
+    --motolii-primitive-font-technical,
+    ui-monospace,
+    "SFMono-Regular",
+    Menlo,
+    Consolas,
+    monospace
+  );`,
+    );
+  const replacements = new Map([
+    ["var(--mock-role-surface-app)", "var(--motolii-color-surface-app)"],
+    ["var(--mock-role-surface-panel)", "var(--motolii-color-surface-panel)"],
+    ["var(--mock-role-surface-raised)", "var(--motolii-color-surface-raised)"],
+    ["var(--mock-role-surface-hover)", "var(--motolii-color-surface-hover)"],
+    ["var(--mock-role-border-default)", "var(--motolii-color-border-default)"],
+    ["var(--mock-role-border-strong)", "var(--motolii-color-border-strong)"],
+    ["var(--mock-role-text-primary)", "var(--motolii-color-text-primary)"],
+    ["var(--mock-role-text-secondary)", "var(--motolii-color-text-secondary)"],
+    ["var(--mock-role-text-muted)", "var(--motolii-color-text-muted)"],
+    ["var(--mock-role-focus)", "var(--motolii-color-focus)"],
+    ["var(--mock-role-action-active)", "var(--motolii-color-action-active)"],
+    ["var(--mock-role-way-plugins)", "var(--motolii-color-way-plugins)"],
+    ["var(--mock-role-focus-width)", "2px"],
+    ["var(--mock-role-control-height)", "25px"],
+    ["var(--mock-role-tab-height)", "28px"],
+    ["var(--mock-role-panel-header-height)", "29px"],
+    ["var(--mock-role-gap-tight)", "3px"],
+    ["var(--mock-role-gap-control)", "5px"],
+    ["var(--mock-role-gap-group)", "7px"],
+    ["var(--mock-role-inset-control)", "9px"],
+    ["var(--mock-role-corner-control)", "2px"],
+  ]);
+  for (const [from, to] of replacements) {
+    expectedCss = expectedCss.replaceAll(from, to);
+  }
+  assert.equal(currentCss, expectedCss);
+  assert.equal((currentCss.match(/#ffffff30/g) ?? []).length, 1);
+  assert.equal(currentCss.includes("--mock-role-"), false);
+  assert.equal(currentCss.includes("docs/mocks-ui"), false);
+  assert.equal(currentSource.includes("useState"), false);
+  assert.equal(currentSource.includes("useEffect"), false);
+  assert.equal(currentSource.includes("localStorage"), false);
+  assert.equal(currentSource.includes("Document"), false);
+
+  assert.equal(
+    mockShim,
+    `import "../tokens/mock-candidates.css";
+
+export {
+  Button,
+  Field,
+  Icon,
+  IconButton,
+  PanelHeader,
+  Tab,
+  TabList,
+} from "@motolii/motolii-web";
+`,
+  );
+  assert.deepEqual(
+    [...collectNamedExports(parseModule(mockShim))].sort(),
+    [...PRIMITIVE_EXPORTS].sort(),
+  );
 });
 
 test("keeps fixed Stage chrome DOM and private read-only Host projection", async () => {
@@ -1544,10 +1928,13 @@ test("rejects old source-path ownership and legacy/archive/raw-import closure fr
   assert.equal(existsSync(abs("docs/mocks-ui/src/candidates/discovery-browser-candidate.css")), false);
 
   for (const runtimeModule of PRODUCT_RUNTIME_MODULES) {
-    validateProductRuntimeSource(
-      abs(runtimeModule),
-      await readFile(abs(runtimeModule), "utf8"),
+    const candidate = await readFile(abs(runtimeModule), "utf8");
+    assert.equal(
+      candidate.includes("browser-post-promotion-provenance"),
+      false,
+      `${runtimeModule} must not import browser-post-promotion-provenance`,
     );
+    validateProductRuntimeSource(abs(runtimeModule), candidate);
   }
 
   // 逆例は重複束縛のparse失敗ではなくvalidatorのimport境界拒否で落とす

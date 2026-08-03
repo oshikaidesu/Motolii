@@ -342,11 +342,11 @@ CU-0A08IS `docs/reviews/2026-07-26-cu-0a08is-inspector-read-model-inventory.md` 
 - STOP条件は `STOP` と同内容。特に `S` の意味決定、`S`値の追加、value-setの同一snapshot外再定義、ID推定、default補完を要する場合はここで停止する。
 
 ## §10 未決（S）一覧
-- `provider` / `pack` / `install_states` 語彙の内容・発行者・cross-snapshot 寿命は `S`（authority: community `protocol/schema/UI`、decision-index L24）。
+- `provider` / `pack` / `install_states` 語彙の内容・発行者・cross-snapshot 寿命は `S`（authority: community `protocol/schema/UI`、decision-index L24）。ただし[CU-205S](2026-07-31-cu-205s-opacity-direct-route-split-decision.md#4-cu-205b-browser-source)は、通常製品のprivate first-party snapshot一件に限り、`first-party-effects` scope内の`built-in` / `installed`を同一snapshot宣言語彙として固定した。これはcommunity語彙、外部発行者、cross-snapshot既定を解決しない。
 - `taxonomy_refs` / `provider_ref` / `pack_ref` / `install_state_ref` / `impact.measures[].unit_ref` / `tag_refs` は §6 の `A` carrier のみ。語彙 ID の意味集合は snapshot 内宣言に委ね、cross-snapshot 既定は書かない。
-- `mode` / `state` / `category` / `subtype` / `kind` / `type` / `provider` 可視文字列 / `identity` / `thumbnail` class token の意味は `S`（`install_state_ref` は carrier のみで振る舞いは未決）。
+- `mode` / `state` / `category` / `subtype` / `kind` / `type` / `provider` 可視文字列 / `identity` / `thumbnail` class token の意味は `S`（`install_state_ref` は carrier のみで振る舞いは未決）。CU-205Sの`Effect` / `Color` / `Built-in` / `Installed`はOpacity一件のprivate snapshot vocabulary labelであり、これらの一般可視意味、icon、thumbnail、availability振る舞いを解決しない。
 - tag assignment の永続 owner は `S`（`useCandidateTags` mock-local）。
 - Browser tab / scope 名固定 / provider 由来の primary navigation（P41 未統一）は `S`。
-- drag payload open defect は `S`（`application/x-motolii-browser-item` は現状 bare `itemId` のみ）。
+- drag payload open defect は `S`（`application/x-motolii-browser-item` は現状 bare `itemId` のみ）。CU-205SはOpacity正常routeで`(scope_ref, item_id)` carrierへの交換だけを決定し、drag/drop Commit targetとDocument writeは未決のまま0とする。
 - `impact` の可視書式（`◆ 12 KEYS`、`▱ + ◆ 12` 等）と glyph/unit 順は `S`。
 - `folder` / `labels` / `data-search` は §4 で `D` と分類済み。decoder 重複 field としての意味決定は不要（未決一覧には載せない）。

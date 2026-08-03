@@ -1,0 +1,13 @@
+[package]
+name = "m5-t0-text-stack"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+fontique = { version = "0.11", features = ["system"] }
+harfrust = "0.10"
+parley = { version = "0.11", default-features = true }
+thiserror = "2"
