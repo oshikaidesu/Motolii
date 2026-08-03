@@ -45,9 +45,10 @@ use crate::timeline_projection::{
 use crate::timeline_tools_host_runtime::{TimelineToolsHostRuntime, TimelineToolsHostRuntimeError};
 use crate::{
     builtin_command_registry, resolve_keymap, AsciiKey, Binding, BuiltinKeymap, CommandId,
-    CommandIdError, CommandRegistry, CommandRegistryError, EffectiveTrigger, Gesture, InputPhase,
-    InputRouter, InputRouterError, KeyToken, KeymapDelta, KeymapResolution, Modifier,
-    ModifierError, Modifiers, NormalizedInput, PlatformBindingConstraints, PlatformCommandModifier,
+    CommandIdError, CommandRegistry, CommandRegistryError, DomainIntent, EffectiveTrigger, Gesture,
+    ImeGateState, InputPhase, InputRouter, InputRouterError, KeyToken, KeymapDelta,
+    KeymapResolution, Modifier, ModifierError, Modifiers, NormalizedInput,
+    PlatformBindingConstraints, PlatformCommandModifier, RouterOutput, SafetyInterrupt,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -160,6 +161,7 @@ pub(crate) struct ProductApp {
     document_queue: DocumentEditQueue,
     input_router: InputRouter,
     command_keymap: KeymapResolution,
+    current_modifiers: Modifiers,
     primary: Option<motolii_doc::LayerId>,
     active_effect_use: Option<EffectId>,
     projection_generation: u64,
@@ -485,6 +487,7 @@ impl ProductApp {
             document_queue: DocumentEditQueue::default(),
             input_router: InputRouter::new(command_registry),
             command_keymap,
+            current_modifiers: Modifiers::default(),
             primary: None,
             active_effect_use: None,
             projection_generation: 0,
@@ -1045,10 +1048,7 @@ impl ProductApp {
         Ok(())
     }
 
-    pub(crate) fn handle_window_cursor_moved(
-        &mut self,
-        position: winit::dpi::PhysicalPosition<f64>,
-    ) {
+    pub(crate) fn handle_window_cursor_moved(&mut self, position: [f64; 2]) {
         let Some(window) = &self.window else {
             return;
         };
@@ -1056,7 +1056,7 @@ impl ProductApp {
         if !scale.is_finite() || scale <= 0.0 {
             return;
         }
-        let logical = [position.x / scale, position.y / scale];
+        let logical = [position[0] / scale, position[1] / scale];
         self.last_pointer_position = Some(logical);
         let (Some(gesture), Some(layout)) = (self.timeline_move.as_ref(), self.layout) else {
             return;
@@ -1081,20 +1081,16 @@ impl ProductApp {
         }
     }
 
-    pub(crate) fn handle_window_mouse_input(
+    pub(crate) fn handle_window_pointer_phase(
         &mut self,
         event_loop: &ActiveEventLoop,
-        state: winit::event::ElementState,
-        button: winit::event::MouseButton,
+        phase: InputPhase,
     ) {
-        if button != winit::event::MouseButton::Left {
-            return;
-        }
         let Some(position) = self.last_pointer_position else {
             return;
         };
-        match state {
-            winit::event::ElementState::Pressed => {
+        match phase {
+            InputPhase::Press => {
                 if self.timeline_move.is_some() {
                     return;
                 }
@@ -1123,19 +1119,78 @@ impl ProductApp {
                     layer.get(),
                     self.projection_generation,
                 ));
+                if let Err(error) = self
+                    .input_router
+                    .route(NormalizedInput::Phase(InputPhase::DragStart))
+                {
+                    self.cancel_timeline_move("input-router-error");
+                    self.fail(event_loop, error);
+                }
             }
-            winit::event::ElementState::Released => {
+            InputPhase::Release => {
                 self.finish_timeline_move(event_loop, position);
             }
+            _ => {}
         }
     }
 
-    pub(crate) fn cancel_window_pointer_gesture(&mut self) {
-        self.cancel_timeline_move("window-focus-or-capture-loss");
+    pub(crate) fn handle_window_modifiers(&mut self, modifiers: Modifiers) {
+        self.current_modifiers = modifiers;
+    }
+
+    pub(crate) fn handle_window_ime(&mut self, state: ImeGateState) {
+        self.input_router.set_ime_gate(state);
+    }
+
+    pub(crate) fn handle_window_key(&mut self, event_loop: &ActiveEventLoop, key: KeyToken) {
+        let trigger = EffectiveTrigger::Keyboard {
+            key,
+            modifiers: self.current_modifiers.clone(),
+            phase: InputPhase::Press,
+        };
+        let Some(command) = self.command_keymap.get(&trigger).cloned() else {
+            return;
+        };
+        let output = match self.input_router.route(NormalizedInput::Command {
+            phase: InputPhase::Press,
+            id: command,
+        }) {
+            Ok(output) => output,
+            Err(error) => return self.fail(event_loop, error),
+        };
+        match output {
+            RouterOutput::Intent {
+                intent: DomainIntent::CancelInFlightGesture,
+                ..
+            } => self.cancel_timeline_move("escape"),
+            RouterOutput::CancelCommandIgnored { .. } | RouterOutput::ShortcutSuppressed { .. } => {
+            }
+            _ => {}
+        }
+    }
+
+    pub(crate) fn handle_window_safety_interrupt(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        source: SafetyInterrupt,
+    ) {
+        let output = match self
+            .input_router
+            .route(NormalizedInput::SafetyInterrupt(source))
+        {
+            Ok(output) => output,
+            Err(error) => return self.fail(event_loop, error),
+        };
+        if matches!(output, RouterOutput::SafetyCancel { .. }) {
+            self.cancel_timeline_move("window-focus-or-capture-loss");
+        }
     }
 
     fn cancel_timeline_move(&mut self, reason: &'static str) {
         if let Some(gesture) = self.timeline_move.take() {
+            let _ = self
+                .input_router
+                .route(NormalizedInput::Phase(InputPhase::Cancel));
             crate::ui_numeric_trace::emit(format_args!(
                 "kind=timeline-move state=cancel layer={} generation={} reason={}",
                 gesture.layer().get(),
@@ -1151,6 +1206,12 @@ impl ProductApp {
         let Some(gesture) = self.timeline_move.take() else {
             return;
         };
+        if let Err(error) = self
+            .input_router
+            .route(NormalizedInput::Phase(InputPhase::DragEnd))
+        {
+            return self.fail(event_loop, error);
+        }
         self.timeline_projection.clear_move_preview();
         let Some(layout) = self.layout else {
             return;
@@ -1776,11 +1837,26 @@ fn build_browser_runtime(
 fn product_command_keymap(
     registry: &CommandRegistry,
 ) -> Result<KeymapResolution, ProductRuntimeError> {
+    let base = product_builtin_keymap()?;
+    let resolution = resolve_keymap(
+        &base,
+        &KeymapDelta::default(),
+        &PlatformBindingConstraints::new(PlatformCommandModifier::Meta, Vec::new()),
+        registry,
+    );
+    if resolution.diagnostics().is_empty() {
+        Ok(resolution)
+    } else {
+        Err(ProductRuntimeError::CommandKeymap)
+    }
+}
+
+fn product_builtin_keymap() -> Result<BuiltinKeymap, ProductRuntimeError> {
     let primary = Modifiers::try_new([Modifier::Primary])?;
     let primary_shift = Modifiers::try_new([Modifier::Primary, Modifier::Shift])?;
     let z = KeyToken::Ascii(AsciiKey::try_new('z')?);
-    let base = BuiltinKeymap::new(
-        1,
+    Ok(BuiltinKeymap::new(
+        2,
         vec![
             Binding {
                 gesture: Gesture::Keyboard {
@@ -1798,19 +1874,16 @@ fn product_command_keymap(
                 },
                 command: CommandId::try_new("motolii.edit.redo")?,
             },
+            Binding {
+                gesture: Gesture::Keyboard {
+                    key: KeyToken::Escape,
+                    modifiers: Modifiers::default(),
+                    phase: InputPhase::Press,
+                },
+                command: CommandId::try_new("motolii.gesture.cancel")?,
+            },
         ],
-    );
-    let resolution = resolve_keymap(
-        &base,
-        &KeymapDelta::default(),
-        &PlatformBindingConstraints::new(PlatformCommandModifier::Meta, Vec::new()),
-        registry,
-    );
-    if resolution.diagnostics().is_empty() {
-        Ok(resolution)
-    } else {
-        Err(ProductRuntimeError::CommandKeymap)
-    }
+    ))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2543,8 +2616,9 @@ mod tests {
     }
 
     #[test]
-    fn product_history_shortcuts_resolve_to_stable_command_ids() {
+    fn product_shortcuts_resolve_to_stable_command_ids() {
         let registry = builtin_command_registry().unwrap();
+        let base = product_builtin_keymap().unwrap();
         let keymap = product_command_keymap(&registry).unwrap();
         let z = KeyToken::Ascii(AsciiKey::try_new('z').unwrap());
         let undo = EffectiveTrigger::Keyboard {
@@ -2557,7 +2631,18 @@ mod tests {
             modifiers: Modifiers::try_new([Modifier::Meta, Modifier::Shift]).unwrap(),
             phase: InputPhase::Press,
         };
+        let cancel = EffectiveTrigger::Keyboard {
+            key: KeyToken::Escape,
+            modifiers: Modifiers::default(),
+            phase: InputPhase::Press,
+        };
+        let modified_cancel = EffectiveTrigger::Keyboard {
+            key: KeyToken::Escape,
+            modifiers: Modifiers::try_new([Modifier::Shift]).unwrap(),
+            phase: InputPhase::Press,
+        };
 
+        assert_eq!(base.version, 2);
         assert_eq!(
             keymap.get(&undo).map(CommandId::as_str),
             Some("motolii.edit.undo")
@@ -2566,6 +2651,11 @@ mod tests {
             keymap.get(&redo).map(CommandId::as_str),
             Some("motolii.edit.redo")
         );
+        assert_eq!(
+            keymap.get(&cancel).map(CommandId::as_str),
+            Some("motolii.gesture.cancel")
+        );
+        assert_eq!(keymap.get(&modified_cancel), None);
         assert!(keymap.diagnostics().is_empty());
     }
 
