@@ -54,7 +54,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。本書
 - ユーザーが「発注して」「実装を発注」等を依頼動詞として明示した時だけ外部実装を起動する。通常の「実装して」、説明、引用内の語では自動委任しない
 - 主担当Codexがbase/cwd、worktree、authority、scope、allowlist、非目標、oracle、fingerprint、diff、最終採否を所有する。意味、owner、原因、再利用、oracleが閉じない`WIDE`は実装担当へ送らない
 - 外部CLIは[`run-observed-cli.py`](scripts/run-observed-cli.py)でexact argvを起動し、provider-nativeの構造化途中stream、生stderr、exit／signal、process回収を保存する。呼出側は実行中のeventを観測し、provider固有の最終結果位置まで読む。harnessはJSON意味解釈、worktree、意味判断、採否、session資格を所有しない
-- 通常監督の第一候補は`gpt-5.6-luna`のmax effortとし、検証済みの小さなcontext capsuleで一契約境界または短いwaveだけを扱う。session resumeはoutcome、owner、scope、oracleが不変な間だけに限り、粒の終了後は会話履歴を長期記憶として継承しない。難所、意味衝突、共有／恒久契約、Lunaの探索膨張、main統合直前だけ`gpt-5.6-sol`へ疎に昇格する。これは固定直列routeではなく、詳細は[LLM役割選択](docs/reviews/2026-08-03-history-calibrated-llm-role-selection-decision.md)に従う
+- 総監督は`gpt-5.6-sol`のmedium effortを基準とし、authority、次粒、owner、scope、oracle、finding処分、最終統合を所有する。閉じた初回の機械施工はfreshな`gpt-5.3-codex-spark`、同じ契約境界のreview finding修正はfreshな`gpt-5.6-luna` maxを第一候補とする。複雑な初回施工はLunaへ直接送り、単純修正はfreshなSparkも選べる。これは固定直列routeではなく、検証済みの小さなcontext capsuleで一契約境界またはoutcome／owner／scope／oracleが同一の短いwaveだけを扱う。詳細は[LLM役割選択](docs/reviews/2026-08-03-history-calibrated-llm-role-selection-decision.md)に従う
 - modelはtaskの判定対象で選び、利用不能時に別modelへ黙ってfallbackしない。外部modelへ再委任、秘密情報、認証情報、未公開個人情報を渡さない
 - 実装担当と最終reviewerは別session・別役割にし、同taskの設計・施工へ深く関与したmodel familyを最終reviewerに使わない。reviewerはread-onlyで実diffと試験を監査し、mutationした検収を無効とする。性能、安全性、永続性、platform correctnessは非LLM oracleで判定する
 - 採用前にCodexが開始前後fingerprint、実diff、scope、試験、review、P0/P1、reviewer mutationを再照合する。ユーザーSTOP後は対象processを止め、新しい編集・試験・reviewを開始しない

@@ -50,15 +50,16 @@ Motoliiの監督は主担当Codexの責任であり、transport、order schema�
 追加できる。reviewerを複数にするか、Grok／Opus／Codexのどれを使うかはtaskのriskとユーザー指定で決め、全作業へ
 固定routeとして課さない。明示されたmodelは完全IDで起動し、利用不能時に別modelへ黙ってfallbackしない。
 
-modelとsessionはharnessでなく主担当Codexが[履歴較正によるLLM役割選択](2026-08-03-history-calibrated-llm-role-selection-decision.md)に
-従って選ぶ。通常は`gpt-5.6-luna` maxへ、現行authorityとコード事実から作った小さなcapsuleを渡し、一契約境界または同じ
-outcome、owner、scope、oracleの短いwaveだけを監督させる。session resumeはその境界内だけに限り、終了後の会話履歴を
+modelとsessionはharnessでなく総監督`gpt-5.6-sol`が[履歴較正によるLLM役割選択](2026-08-03-history-calibrated-llm-role-selection-decision.md)に
+従って選ぶ。Solはauthority、次粒、owner、scope、oracle、finding処分、最終統合を所有し、現行authorityとコード事実から小さな
+capsuleを作る。一sessionは一契約境界または同じoutcome、owner、scope、oracleの短いwaveだけを扱い、終了後の会話履歴を
 project memoryへしない。長期状態はGit、正本、decision/ledger、raw logが所有する。
 
-`gpt-5.6-sol`はauthority衝突、意味／owner／原因競合、共有・恒久契約、Lunaの探索膨張、main統合直前へ疎に昇格する。
-Claudeはsemanticな反対側、Grokはscope・exact target・負例・実diffの列挙監査、Spark／Composer等は閉じた機械施工へtaskと
-capacityに応じて選べる。同じtaskへ深く関与したmodel familyを独立最終reviewerへ再利用しない。LunaとSolは同じfamilyなので、
-SolをLuna施工の独立検収へ数えない。この選択は固定stage、fallback順、receipt資格を新設しない。
+閉じた初回の機械施工は`gpt-5.3-codex-spark`のfresh session、複雑な初回施工は`gpt-5.6-luna` maxを第一候補とする。review findingを
+Solが正本とoracleへ再照合し、同じ契約境界内の修正と判断した場合はfreshなLuna Maxを第一候補とし、単純修正はfreshなSparkも
+選べる。Claudeはsemanticな反対側、Grokはscope・exact target・負例・実diffの列挙監査へ使う。同じtaskの設計・施工へ深く関与した
+model familyを独立最終reviewerへ再利用しない。Spark、Luna、Solは同じOpenAI familyなので相互の独立検収を兼ねない。この選択は
+固定stage、fallback順、receipt資格を新設しない。
 
 modelの利用不能時はCodexが同じbase、scope、allowlist、oracleを再確認し、CLIで完全IDを確認できたmodelをfresh sessionで
 明示選択する。失敗したsessionを別modelへ引き継がず、選択変更と理由をlogへ残す。これは黙ったfallbackや固定fallback順ではない。
@@ -70,7 +71,7 @@ modelの利用不能時はCodexが同じbase、scope、allowlist、oracleを再�
 - 正しいbase/cwdと開始前後fingerprint
 - 許可scope内の実diff
 - task固有test／fixture／非LLM oracle
-- reviewerが実装担当と分離され、review中mutationが0であること
+- reviewerがfreshな別familyで、設計・実装へ深く関与せず、review中mutationが0であること
 - P0/P1、scope違反、未決共有境界が残っていないこと
 
 LLMの`ACCEPT`、test green、log hashはそれぞれ一部の証拠であり、単独では採用資格にならない。性能、安全性、永続形式等は
