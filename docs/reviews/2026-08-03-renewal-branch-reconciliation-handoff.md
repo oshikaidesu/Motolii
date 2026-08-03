@@ -4,6 +4,13 @@
 
 日付: 2026-08-03
 
+## 2026-08-04 PR #441 CI再検証による訂正
+
+本snapshotが第一製品grain候補とした`CU-201P-TRIM`の`DO`は撤回する。先行`CU-201P-MOVE`のnative pointer接続が
+`CU-0B04NA`のlifecycle-only raw-input guardに拒否され、記録済みの`workspace check green`は成立しなかった。
+違反実装grain `43727b77`はPR #441のCI修復で局所revertし、MOVEを`EXTERNAL_GATE_PENDING`、TRIMを`WAIT_TARGET`へ戻す。
+exact private pointer adapter authority成立前に、以下のCU-201P-TRIM開始packetを実行しない。独立候補`GAP-25`の状態は本訂正で変更しない。
+
 ## 目的
 
 監督規約のrenewal後に、旧sessionやbranch名をauthorityとして自動再開せず、現行local `refs/heads/main`、正本、decision index、
@@ -60,10 +67,10 @@ blind evidence envelopeへ現行mainとbranchのexact diff、source hash、query
 
 現行ledgerの実作業候補は二つで、同じtaskへ束ねない。
 
-### 1. 製品前進: CU-201P-TRIM
+### 1. 製品前進: CU-201P-TRIM（2026-08-04訂正により実行禁止）
 
 - `AUTHORITY`: `docs/implementation-ledger.md` CU-201P-TRIM、M3 U3b、CU-201P-TRIM known-semantics adoption
-- `CURRENT STATE`: `DO`。MOVE、TRIM-S、trim command／Writer／journal／UndoはDONE。親CU-201Pの残余は`SPLIT / WAIT_TARGET`
+- `CURRENT STATE`: `WAIT_TARGET`。MOVE-S、TRIM-S、trim command／Writer／journal／Undoの意味はDONEだが、製品MOVEは`EXTERNAL_GATE_PENDING`
 - `INTERNAL TARGET`: 既存`ProductApp`のTimeline projection／pointer経路、public `TimelineProjection::hit_test`、既存`prepare_trim_clip_in/out`
 - `GAP`: `ProductTimelineHit`は現行型ではなく、DOが既存`ProductApp`内だけに許したprivate refinementの新設名。public hitを変更しない
 - `OWNER / WRITE ROUTE`: Product sessionのtransient gesture → release時に既存D2 trim commandを一回commit

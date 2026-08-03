@@ -13,7 +13,6 @@ use motolii_doc::{
 };
 use motolii_plugin::{PluginCatalog, PluginKind};
 
-use crate::timeline_move_gesture::TimelineMoveRequest;
 use crate::{DocumentCommandRequest, DomainIntent, InputPhase, RouterOutput};
 
 #[derive(Debug)]
@@ -22,7 +21,6 @@ pub(crate) enum DocumentEditAction {
     PlaceRectangle(PlaceRectangleRequest),
     AttachEffect(AttachEffectRequest),
     SetEffectParam(SetEffectParamRequest),
-    MoveClip(TimelineMoveRequest),
     ReplacePrimary(LayerId),
     ClearPrimary,
     Undo,
@@ -36,7 +34,6 @@ impl DocumentEditAction {
             Self::PlaceRectangle(_) => DocumentEditActionKind::PlaceRectangle,
             Self::AttachEffect(_) => DocumentEditActionKind::AttachEffect,
             Self::SetEffectParam(_) => DocumentEditActionKind::SetEffectParam,
-            Self::MoveClip(_) => DocumentEditActionKind::MoveClip,
             Self::ReplacePrimary(_) => DocumentEditActionKind::ReplacePrimary,
             Self::ClearPrimary => DocumentEditActionKind::ClearPrimary,
             Self::Undo => DocumentEditActionKind::Undo,
@@ -51,7 +48,6 @@ pub(crate) enum DocumentEditActionKind {
     PlaceRectangle,
     AttachEffect,
     SetEffectParam,
-    MoveClip,
     ReplacePrimary,
     ClearPrimary,
     Undo,
@@ -77,11 +73,6 @@ impl DocumentEditQueue {
     pub(crate) fn push_set_effect_param(&mut self, request: SetEffectParamRequest) {
         self.pending
             .push_back(DocumentEditAction::SetEffectParam(request));
-    }
-
-    pub(crate) fn push_move_clip(&mut self, request: TimelineMoveRequest) {
-        self.pending
-            .push_back(DocumentEditAction::MoveClip(request));
     }
 
     pub(crate) fn push_replace_primary(&mut self, target: LayerId) {
@@ -418,24 +409,6 @@ impl DocumentEditRuntime {
             }
             DocumentEditAction::SetEffectParam(request) => {
                 let Some(command) = prepare_set_effect_param_command(&self.writer, &request) else {
-                    return Ok(None);
-                };
-                let projection_generation =
-                    next_projection_generation(current_projection_generation)?;
-                self.commit_command(
-                    command,
-                    kind,
-                    current_primary,
-                    current_primary,
-                    projection_generation,
-                    None,
-                )
-            }
-            DocumentEditAction::MoveClip(request) => {
-                let Some(command) = self
-                    .writer
-                    .prepare_set_clip_start(request.layer, request.new_start)?
-                else {
                     return Ok(None);
                 };
                 let projection_generation =
@@ -2485,67 +2458,6 @@ mod tests {
             published.snapshot.layers.display_name(placed),
             Some("Rectangle")
         );
-    }
-
-    #[test]
-    fn move_clip_commits_once_and_undo_restores_the_original_start() {
-        let (document, _) = fixture();
-        let layer = fixture_layer(&document);
-        let (_path, mut runtime) = open_runtime(document);
-        let mut queue = DocumentEditQueue::default();
-        queue.push_move_clip(TimelineMoveRequest {
-            layer,
-            new_start: RationalTime::try_new(1, 4).unwrap(),
-        });
-
-        let moved = runtime.process_next(&mut queue, None, 0).unwrap().unwrap();
-        assert_eq!(moved.kind, DocumentEditActionKind::MoveClip);
-        assert_eq!(runtime.history_lengths(), (1, 0));
-        assert_eq!(
-            clip_start(&moved.snapshot, layer),
-            RationalTime::try_new(1, 4).unwrap()
-        );
-
-        queue.push_undo();
-        let undone = runtime.process_next(&mut queue, None, 1).unwrap().unwrap();
-        assert_eq!(undone.kind, DocumentEditActionKind::Undo);
-        assert_eq!(clip_start(&undone.snapshot, layer), RationalTime::ZERO);
-    }
-
-    #[test]
-    fn invalid_move_is_consumed_without_document_or_history_change() {
-        let (document, _) = fixture();
-        let layer = fixture_layer(&document);
-        let initial_json = serde_json::to_vec(&document).unwrap();
-        let (_path, mut runtime) = open_runtime(document);
-        let mut queue = DocumentEditQueue::default();
-        queue.push_move_clip(TimelineMoveRequest {
-            layer,
-            new_start: RationalTime::try_new(99, 1).unwrap(),
-        });
-
-        assert!(matches!(
-            runtime.process_next(&mut queue, None, 0),
-            Err(DocumentEditRuntimeError::Command(_))
-        ));
-        assert_eq!(runtime.history_lengths(), (0, 0));
-        assert_eq!(runtime.revision(), 0);
-        assert_eq!(
-            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
-            initial_json
-        );
-    }
-
-    fn clip_start(document: &Document, layer: LayerId) -> RationalTime {
-        document
-            .tracks
-            .iter()
-            .flat_map(|track| track.items.iter())
-            .find_map(|item| match item {
-                TrackItem::Clip(clip) if clip.envelope.layer_id == layer => Some(clip.start),
-                _ => None,
-            })
-            .expect("fixture clip")
     }
 
     #[test]

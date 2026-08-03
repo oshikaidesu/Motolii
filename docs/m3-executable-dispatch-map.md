@@ -122,8 +122,10 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 ## 4. 33子の現在コンパイル結果
 
 `555a9ab5`は2026-08-01 simulation時点の初期simulation baselineとしてのみ保持し、本表全体を現時点で再検証したことは示さない。
-現在の`P03-C2`の`REDUCE / IMPLEMENT` overrideは、§5.3の現行authorityとimplementation ledgerの一意な
-`CU-201P-TRIM` `DO`行に裏付けられる。`IMPLEMENT`への昇格はimplementation ledgerへ一意な`DO`行を追加した時だけ発効する。
+現在の`P03-C2`は`WAIT_TARGET`である。PR #441のRust CI再検証でnative pointer接続が既決の
+`CU-0B04NA` lifecycle-only raw-input guardに拒否され、`CU-201P-MOVE`を`EXTERNAL_GATE_PENDING`、
+`CU-201P-TRIM`を`WAIT_TARGET`へ戻した。exact private pointer adapter authorityと一意なledger `DO`行が
+成立するまで`IMPLEMENT`へ昇格しない。
 
 | 子 | 現在状態 | exact次task | 通常製品routeの出口 |
 |---|---|---|---|
@@ -135,7 +137,7 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 | `P02-C2` | `DONE` | `document_edit_runtime` 33/33、製品Place/Timeline/Inspector/Undo delivery 9/9、writer境界 4/4を再実行。既存routeのみ | 全surfaceが同じpublished snapshotを読む |
 | `P02-C3` | `TARGET_MISSING` | selection成立済み部分を除き、essential focusまたはplayhead consumerを一件特定 | UI stateをDocumentへ保存せず一方向publish |
 | `P03-C1` | `DONE` | `crates/motolii-ui/tests/timeline_projection.rs::p12_hundred_thousand_keys_cull_to_visible_identity`で100k keyの狭域projectionとtyped identityを確認。renderer本体は変更しない | visible outputがbounded |
-| `P03-C2` | `REDUCE / IMPLEMENT` | `CU-201P-MOVE`のcompletionは下記proseとimplementation ledgerに残す。`CU-201P-TRIM-S`でBlender固定sourceの内部handle hitをPATTERN採択し、public `TimelineHit`／`TimelineProjection::hit_test`は不変のまま、private `ProductTimelineHit`でKey優先後のBarをLeft/Right/Bodyへ精密化する。bar width 25 / derived height 16 logical px未満はbody-only、次は`CU-201P-TRIM`だけ | drag中write 0、release 1 Undo、cancel/stale/invalid 0 |
+| `P03-C2` | `WAIT_TARGET` | MOVE-S / TRIM-Sの意味は閉鎖済み。`CursorMoved / MouseInput / Focused / CursorLeft`を受理してtoolkit-free eventへ変換するexact private adapter authorityが未成立で、既存lifecycle-only adapterは広げない | drag中write 0、release 1 Undo、cancel/stale/invalid 0 |
 | `P03-C3` | `TARGET_MISSING` | visible-range consumerとnavigation CommandIdを一つ特定 | selection/focus/playheadが同一projection |
 | `P04-C1` | `DONE` | なし。`U4a-1`〜`CU-205E`を再実装しない | first-party parameterの通常編集route |
 | `P04-C2` | `TARGET_MISSING` | active interval read model、outgoing Interp D2 command、Host codec、React consumerを前ownerへ分離 | easing変更が1 command / 1 Undo |
@@ -165,7 +167,7 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 
 `CU-201T-S`の意味閉鎖により開始された`CU-201T-C`は、実装 `a860e10e`、oracle補強 `c2eda847`、targeted test/fmt/clippy greenをもって完了した。
 `CU-201N-S`で既存`TimelineKey`/`TimelineBar`だけを候補へ採用し、key優先、stable identity tie-break、transient `RationalTime` threshold、no-snapを固定した。
-`P02-C1`、`P03-C1-VERIFY`、P02-C2、P01-C1は既存routeの実装・確認として閉じた。`CU-201P-MOVE`は、既知NLEのbody-drag収束意味を既存native event／Transient projection／single writerへREDUCE接続して閉じた。[CU-201P-TRIM-S](reviews/2026-08-03-cu-201p-trim-edge-known-semantics-adoption-decision.md)でtrim edge targetも閉じ、次の実装粒は`CU-201P-TRIM`だけとする。snap threshold、slip/slide/roll/ripple、multi-selectを含む広い親`CU-201P`の残余は`WAIT_TARGET`を維持する。Stage placementのpointer captureを流用しない。
+`P02-C1`、`P03-C1-VERIFY`、P02-C2、P01-C1は既存routeの実装・確認として閉じた。`CU-201P-MOVE-S`と[CU-201P-TRIM-S](reviews/2026-08-03-cu-201p-trim-edge-known-semantics-adoption-decision.md)の意味は閉鎖済みだが、製品pointer接続は`CU-0B04NA`のlifecycle-only raw-input境界と衝突した。`CU-201P-MOVE`は`EXTERNAL_GATE_PENDING`、`CU-201P-TRIM`と広い親`CU-201P`は`WAIT_TARGET`とし、exact private adapter authority成立前に実装しない。Stage placementのpointer captureも流用しない。
 
 ### 5.1 `CU-201T-C` — trim command接続
 
@@ -225,21 +227,25 @@ EXIT:
 ```
 
 `P03-C1-VERIFY`は製品機能の進捗ではなく、既存routeを再施工しないための確認である。確認済みのため、
-製品実装の本線は`CU-201N-S DONE → CU-201P-MOVE DONE → CU-201P-TRIM`のみであり、残余親`CU-201P`は
-`SPLIT / WAIT_TARGET`に留まる。
+製品実装の本線は`CU-201N-S DONE → CU-201P-MOVE-S DONE → pointer adapter authority未成立`で停止している。
+`CU-201P-MOVE`は`EXTERNAL_GATE_PENDING`、`CU-201P-TRIM`と残余親`CU-201P`は`WAIT_TARGET`に留まる。
 
-### 5.3 `CU-201P-TRIM` — native Timeline trim-edge dispatch capsule
+### 5.3 `CU-201P-TRIM` — native Timeline trim-edge保留capsule
+
+以下はdispatch orderではない。MOVEと共有するexact private pointer adapter authorityと一意なledger `DO`行が
+成立するまで、既存`ProductApp` transient routeや実装可能なinput ownerを仮定しない。
 
 ```text
 INPUT:
   CU-201P-TRIM known-semantics adoption decision
   CU-201T-S TrimClipIn / TrimClipOut meaning
-  existing ProductTimelineProjection / ProductApp transient and DocumentEditRuntime route
+  exact private pointer adapter authority MISSING
+  existing TimelineProjection / DocumentEditRuntime route
 
 MECHANISM_CLASS:
   Timeline bar hit refinement and edge-drag transient lifecycle
 KNOWN_IMPLEMENTATION_SEARCH:
-  existing TimelineProjection::hit_test, ProductTimelineProjection, CU-201P-MOVE;
+  existing TimelineProjection::hit_test and DocumentEditRuntime;
   pinned Blender sequencer_select.cc commit 6e15da150d397d3c6e95e4d3ca147f0150bb7311
   with cutoff source L883-L945 and left-before-right ordering source L1017-L1035
 ADOPTION_ROUTE: PATTERN / REDUCE / REUSE

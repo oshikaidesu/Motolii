@@ -37,14 +37,6 @@ impl winit::application::ApplicationHandler<crate::product_runtime::ProductEvent
             }
             winit::event::WindowEvent::Occluded(occluded) => self.set_occluded(occluded),
             winit::event::WindowEvent::RedrawRequested => self.render(event_loop),
-            winit::event::WindowEvent::CursorMoved { position, .. } => {
-                self.handle_window_cursor_moved(position)
-            }
-            winit::event::WindowEvent::MouseInput { state, button, .. } => {
-                self.handle_window_mouse_input(event_loop, state, button)
-            }
-            winit::event::WindowEvent::Focused(false)
-            | winit::event::WindowEvent::CursorLeft { .. } => self.cancel_window_pointer_gesture(),
             _ => self.poll_host_input(event_loop),
         }
     }
