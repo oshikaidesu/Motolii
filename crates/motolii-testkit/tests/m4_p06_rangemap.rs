@@ -32,7 +32,8 @@ fn adjacent_and_overlapping_ranges_coalesce() {
 
 #[test]
 fn removal_preserves_two_half_open_fragments() {
-    let mut set = RangeSet::from([0..20]);
+    let mut set = RangeSet::new();
+    set.insert(0..20);
     set.remove(4..16);
 
     assert_eq!(ranges(&set), vec![0..4, 16..20]);

@@ -195,9 +195,7 @@ impl TimelineProjection {
         if !start_x.is_finite() || !end_x.is_finite() {
             return None;
         }
-        let Some(bar) = preview.bars.iter_mut().find(|bar| bar.layer == layer) else {
-            return None;
-        };
+        let bar = preview.bars.iter_mut().find(|bar| bar.layer == layer)?;
         bar.start = new_start;
         bar.end = new_end;
         bar.x_start = start_x;
