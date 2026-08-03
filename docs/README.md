@@ -35,7 +35,7 @@
 | ファイル | 役割 | 状態 |
 |---|---|---|
 | [concept.md](concept.md) | コンセプト定義・決定事項の台帳 | 現行(決定はここに追記される) |
-| [known-implementation-adoption-model.md](known-implementation-adoption-model.md) | M3〜M5共通の既知実装調査、採択地図、薄い接続、独自負債置換・退役の開発順序 | **横断開発原則**(2026-08-02。M3適用済み、M4/M5採択地図確定) |
+| [known-implementation-adoption-model.md](known-implementation-adoption-model.md) | M3〜M5共通の既知実装調査、採択地図、薄い接続、独自負債置換・退役の開発順序 | **確定運用／非凍結の横断開発原則**(2026-08-02。M3適用済み、M4/M5採択地図確定。反証と実測で改訂可) |
 | [m4-known-implementation-adoption-map.md](m4-known-implementation-adoption-map.md) | M4の13親、既知実装route、詳細子、採択probe、並列wave、旧負債の退役境界 | **初版採択地図／runtime未発注**(2026-08-02) |
 | [m5-known-implementation-adoption-map.md](m5-known-implementation-adoption-map.md) | M5の10機構class、採択route、12実装子、private検証、decision recovery順序 | **技術採択決定／private検証DONE／製品runtimeはM3意味開放待ち**(2026-08-02) |
 | [vism-known-implementation-adoption-map.md](vism-known-implementation-adoption-map.md) | Vism全入口の既知解、採用方式、private境界、probe、cutover、retirement | **採択地図決定／依存・runtime実装は未許可**(2026-08-02) |
