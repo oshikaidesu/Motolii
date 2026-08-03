@@ -467,3 +467,4 @@
 | [2026-08-04-cu-201p-host-input-implementation-acceptance.md](2026-08-04-cu-201p-host-input-implementation-acceptance.md) | CU-201P-HOST-INPUT実装受入・MOVE再締結・TRIM再開・M3最終HUMAN集約 |
 | [2026-08-04-cu-201p-trim-implementation-acceptance.md](2026-08-04-cu-201p-trim-implementation-acceptance.md) | CU-201P-TRIM実装受入・独立検収・CU-201R開始・M3最終HUMAN集約 |
 | [2026-08-04-cu-201r-random-move-trim-oracle-decision.md](2026-08-04-cu-201r-random-move-trim-oracle-decision.md) | CU-201R既存proptest系列採択・no-ripple/identity/全Undo oracle固定 |
+| [2026-08-04-cu-201r-random-move-trim-oracle-acceptance.md](2026-08-04-cu-201r-random-move-trim-oracle-acceptance.md) | CU-201R 2,048-step実装・独立review受入・CU-201E開始 |

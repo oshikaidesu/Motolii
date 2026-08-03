@@ -123,7 +123,7 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 
 `555a9ab5`は2026-08-01 simulation時点の初期simulation baselineとしてのみ保持し、本表全体を現時点で再検証したことは示さない。
 現在の`P03-C2`の`DONE / REDUCE` overrideは、§5.4の現行authority、commit `da4dcf75`、
-[TRIM実装受入](reviews/2026-08-04-cu-201p-trim-implementation-acceptance.md)に裏付けられる。現行の一意な`DO`は、受理済みMOVE/TRIMだけを対象とする`CU-201R`である。
+[TRIM実装受入](reviews/2026-08-04-cu-201p-trim-implementation-acceptance.md)に裏付けられる。`CU-201R`はcommit `d0f7dfec`と[oracle受入](reviews/2026-08-04-cu-201r-random-move-trim-oracle-acceptance.md)で閉じ、現行の一意な`DO`は`CU-201E`である。
 
 | 子 | 現在状態 | exact次task | 通常製品routeの出口 |
 |---|---|---|---|
@@ -165,7 +165,7 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 
 `CU-201T-S`の意味閉鎖により開始された`CU-201T-C`は、実装 `a860e10e`、oracle補強 `c2eda847`、targeted test/fmt/clippy greenをもって完了した。
 `CU-201N-S`で既存`TimelineKey`/`TimelineBar`だけを候補へ採用し、key優先、stable identity tie-break、transient `RationalTime` threshold、no-snapを固定した。
-`P02-C1`、`P03-C1-VERIFY`、P02-C2は既存routeの実装・確認として閉じた。[HOST-INPUT実装受入](reviews/2026-08-04-cu-201p-host-input-implementation-acceptance.md)でraw ownerとlogical Escape/focus cancelを再締結しMOVEをtechnical reclose、[TRIM実装受入](reviews/2026-08-04-cu-201p-trim-implementation-acceptance.md)で既知handle hitから既存trim writerまでを閉じた。次の実装粒は受理済みMOVE/TRIMだけの`CU-201R`とする。pointer-lossと通常Undo/RedoはCU-201E、ユーザー目視はM3最終HUMAN checklistへ集約する。snap threshold、slip/slide/roll/ripple、multi-selectを含む広い親`CU-201P`の残余は`WAIT_TARGET`を維持する。Stage placementのpointer captureを流用しない。
+`P02-C1`、`P03-C1-VERIFY`、P02-C2は既存routeの実装・確認として閉じた。[HOST-INPUT実装受入](reviews/2026-08-04-cu-201p-host-input-implementation-acceptance.md)でraw ownerとlogical Escape/focus cancelを再締結しMOVEをtechnical reclose、[TRIM実装受入](reviews/2026-08-04-cu-201p-trim-implementation-acceptance.md)で既知handle hitから既存trim writer、[CU-201R受入](reviews/2026-08-04-cu-201r-random-move-trim-oracle-acceptance.md)で2,048-step系列を閉じた。次の実装粒は`CU-201E`とする。pointer-loss、通常製品Undo/Redo、reopenをEで確認し、ユーザー目視はM3最終HUMAN checklistへ集約する。snap threshold、slip/slide/roll/ripple、multi-selectを含む広い親`CU-201P`の残余は`WAIT_TARGET`を維持する。Stage placementのpointer captureを流用しない。
 
 ### 5.1 `CU-201T-C` — trim command接続
 
@@ -402,8 +402,8 @@ VALIDATION:
   cargo clippy --locked -p motolii-doc --test d2_command -- -D warnings
   git diff --check
 NEXT_HANDOFF:
-  after implementation and independent review acceptance, CU-201E becomes DO;
-  parent CU-201P remains SPLIT / WAIT_TARGET
+  DONE at commit d0f7dfec with 2048 accepted steps and fresh Opus closure P0/P1/P2 0;
+  CU-201E is DO; parent CU-201P remains SPLIT / WAIT_TARGET
 ```
 
 ## 6. ゴールへ至る依存IR
