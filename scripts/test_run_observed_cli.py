@@ -29,7 +29,15 @@ class RunObservedCliTest(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp.cleanup()
 
-    def invoke(self, name: str, code: str, *child_args: str, timeout: str = "5", grace: str = "0.2") -> subprocess.CompletedProcess[bytes]:
+    def invoke(
+        self,
+        name: str,
+        code: str,
+        *child_args: str,
+        timeout: str = "5",
+        grace: str = "0.2",
+        heartbeat: str = "10",
+    ) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(
             [
                 sys.executable,
@@ -42,6 +50,8 @@ class RunObservedCliTest(unittest.TestCase):
                 timeout,
                 "--grace-seconds",
                 grace,
+                "--heartbeat-seconds",
+                heartbeat,
                 "--",
                 os.fspath(PYTHON),
                 "-c",
@@ -83,6 +93,27 @@ class RunObservedCliTest(unittest.TestCase):
         result = self.invoke("failure", "import sys; print('failed'); raise SystemExit(23)")
         self.assertEqual(result.returncode, 23)
         self.assertEqual(self.metadata("failure")["exit_code"], 23)
+
+    def test_heartbeat_reports_live_process_and_stream_progress_without_ending_it(self) -> None:
+        result = self.invoke(
+            "heartbeat",
+            "import sys,time; sys.stdout.write('thinking\\n'); sys.stdout.flush(); time.sleep(0.18)",
+            timeout="1",
+            heartbeat="0.05",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lifecycle = [json.loads(line) for line in (self.root / "heartbeat" / "lifecycle.jsonl").read_text().splitlines()]
+        heartbeats = [event for event in lifecycle if event["event"] == "heartbeat"]
+        self.assertGreaterEqual(len(heartbeats), 1)
+        first = heartbeats[0]
+        self.assertTrue(first["pid_alive"])
+        self.assertGreaterEqual(first["elapsed_ms"], 0)
+        self.assertGreaterEqual(first["idle_ms"], 0)
+        self.assertGreaterEqual(first["stdout_bytes"], len(b"thinking\n"))
+        self.assertEqual(first["stderr_bytes"], 0)
+        self.assertEqual(lifecycle[0]["event"], "started")
+        self.assertEqual(lifecycle[-1]["event"], "completed")
+        self.assertEqual(self.metadata("heartbeat")["heartbeat_seconds"], 0.05)
 
     def test_timeout_terminates_the_child_process_group(self) -> None:
         pid_file = self.root / "grandchild.pid"
@@ -135,6 +166,12 @@ class RunObservedCliTest(unittest.TestCase):
         self.assertFalse((self.root / "invalid").exists())
         zero = subprocess.run([*base, "--timeout-seconds", "0", "--", os.fspath(PYTHON), "-V"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.assertEqual(zero.returncode, 64)
+        heartbeat_zero = subprocess.run(
+            [*base, "--timeout-seconds", "1", "--heartbeat-seconds", "0", "--", os.fspath(PYTHON), "-V"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.assertEqual(heartbeat_zero.returncode, 64)
 
     def test_rejects_log_tree_overlapping_child_cwd(self) -> None:
         result = subprocess.run(

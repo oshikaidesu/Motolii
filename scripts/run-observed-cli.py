@@ -46,12 +46,23 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def tee(source: BinaryIO, log: BinaryIO, destination: BinaryIO) -> None:
+def tee(
+    source: BinaryIO,
+    log: BinaryIO,
+    destination: BinaryIO,
+    progress: dict[str, float | int],
+    progress_lock: threading.Lock,
+    byte_key: str,
+) -> None:
     try:
         try:
-            while chunk := source.read(65536):
+            read_chunk = getattr(source, "read1", source.read)
+            while chunk := read_chunk(65536):
                 log.write(chunk)
                 log.flush()
+                with progress_lock:
+                    progress[byte_key] += len(chunk)
+                    progress["last_output_monotonic"] = time.monotonic()
                 try:
                     destination.write(chunk)
                     destination.flush()
@@ -71,14 +82,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--log-dir", required=True, type=Path, help="New one-run evidence directory")
     parser.add_argument("--timeout-seconds", required=True, type=float, help="Positive wall timeout")
     parser.add_argument("--grace-seconds", type=float, default=5.0, help="Positive TERM-to-KILL grace")
+    parser.add_argument("--heartbeat-seconds", type=float, default=10.0, help="Positive lifecycle heartbeat interval")
     parser.add_argument("command", nargs=argparse.REMAINDER, help="Exact child argv after --")
     args = parser.parse_args(argv)
     if args.command and args.command[0] == "--":
         args.command = args.command[1:]
     if not args.command:
         parser.error("an exact child argv is required after --")
-    if args.timeout_seconds <= 0 or args.grace_seconds <= 0:
-        parser.error("timeout and grace must be positive")
+    if args.timeout_seconds <= 0 or args.grace_seconds <= 0 or args.heartbeat_seconds <= 0:
+        parser.error("timeout, grace, and heartbeat must be positive")
     if not args.command[0].startswith(os.sep):
         parser.error("the child executable must be an absolute path")
     return args
@@ -125,6 +137,12 @@ def main(argv: list[str]) -> int:
     received_signal: int | None = None
     sent_kill = False
     spawn_error: str | None = None
+    progress: dict[str, float | int] = {
+        "last_output_monotonic": started_monotonic,
+        "stderr_bytes": 0,
+        "stdout_bytes": 0,
+    }
+    progress_lock = threading.Lock()
 
     def remember_signal(signum: int, _frame: object) -> None:
         nonlocal received_signal
@@ -144,21 +162,53 @@ def main(argv: list[str]) -> int:
             )
             assert process.stdout is not None and process.stderr is not None
             write_json_line(lifecycle, {"at": started_at, "event": "started", "pid": process.pid})
-            stdout_thread = threading.Thread(target=tee, args=(process.stdout, stdout_log, sys.stdout.buffer), daemon=True)
-            stderr_thread = threading.Thread(target=tee, args=(process.stderr, stderr_log, sys.stderr.buffer), daemon=True)
+            stdout_thread = threading.Thread(
+                target=tee,
+                args=(process.stdout, stdout_log, sys.stdout.buffer, progress, progress_lock, "stdout_bytes"),
+                daemon=True,
+            )
+            stderr_thread = threading.Thread(
+                target=tee,
+                args=(process.stderr, stderr_log, sys.stderr.buffer, progress, progress_lock, "stderr_bytes"),
+                daemon=True,
+            )
             stdout_thread.start()
             stderr_thread.start()
 
             deadline = started_monotonic + args.timeout_seconds
+            next_heartbeat = started_monotonic + args.heartbeat_seconds
             while process.poll() is None:
                 if received_signal is not None:
                     write_json_line(lifecycle, {"at": utc_now(), "event": "parent_signal", "signal": signal.Signals(received_signal).name})
                     break
-                if time.monotonic() >= deadline:
+                now = time.monotonic()
+                if now >= deadline:
                     timed_out = True
                     write_json_line(lifecycle, {"at": utc_now(), "event": "timeout"})
                     break
-                time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
+                if now >= next_heartbeat:
+                    if process.poll() is not None:
+                        continue
+                    with progress_lock:
+                        stdout_bytes = int(progress["stdout_bytes"])
+                        stderr_bytes = int(progress["stderr_bytes"])
+                        last_output_monotonic = float(progress["last_output_monotonic"])
+                    write_json_line(
+                        lifecycle,
+                        {
+                            "at": utc_now(),
+                            "elapsed_ms": round((now - started_monotonic) * 1000),
+                            "event": "heartbeat",
+                            "idle_ms": max(0, round((now - last_output_monotonic) * 1000)),
+                            "pid": process.pid,
+                            "pid_alive": True,
+                            "stderr_bytes": stderr_bytes,
+                            "stdout_bytes": stdout_bytes,
+                        },
+                    )
+                    while next_heartbeat <= now:
+                        next_heartbeat += args.heartbeat_seconds
+                time.sleep(min(0.05, max(0.0, deadline - now), max(0.0, next_heartbeat - now)))
 
             if process.poll() is None and (timed_out or received_signal is not None):
                 forwarded = received_signal if received_signal is not None else signal.SIGTERM
@@ -212,6 +262,7 @@ def main(argv: list[str]) -> int:
         "duration_ms": round((time.monotonic() - started_monotonic) * 1000),
         "exit_code": returncode if returncode is not None and returncode >= 0 else None,
         "grace_seconds": args.grace_seconds,
+        "heartbeat_seconds": args.heartbeat_seconds,
         "harness_error": spawn_error,
         "pid": process.pid if process is not None else None,
         "received_signal": signal.Signals(received_signal).name if received_signal is not None else None,
