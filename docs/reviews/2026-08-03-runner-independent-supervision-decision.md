@@ -52,14 +52,13 @@ Motoliiの監督は主担当Codexの責任であり、transport、order schema�
 固定routeとして課さない。明示されたmodelは完全IDで起動し、利用不能時に別modelへ黙ってfallbackしない。
 
 modelとsessionはharnessでなく総監督`gpt-5.6-sol`が[履歴較正によるLLM役割選択](2026-08-03-history-calibrated-llm-role-selection-decision.md)に
-従って選ぶ。Solはauthority衝突、粒分割／STOP、複数契約統合、最終採否／main統合を保持する。閉じた粒のpreflight、次手選定、
-bounded施工、同一境界finding修正、diff／test照合はfreshなLuna Maxへ委譲できる。一sessionは一契約境界または同じoutcome、
-owner、scope、oracleの短いwaveだけを扱い、終了後の会話履歴を
+従って選ぶ。Solはauthority、次粒、owner、scope、oracle、finding処分、最終統合を所有し、現行authorityとコード事実から小さな
+capsuleを作る。一sessionは一契約境界または同じoutcome、owner、scope、oracleの短いwaveだけを扱い、終了後の会話履歴を
 project memoryへしない。長期状態はGit、正本、decision/ledger、raw logが所有する。
 
-Lunaは`model_reasoning_effort=max`を標準とし、単純施工・修正はfreshなSparkも選べる。maxでもcapsule、read set、一契約境界を
-広げず、この担当範囲拡張に再benchmarkを要求しない。Claudeはsemanticな反対側、Grokはscope・exact target・負例・実diffの
-列挙監査へ使う。同じtaskの設計・施工へ深く関与した
+閉じた初回の機械施工は`gpt-5.3-codex-spark`のfresh session、複雑な初回施工は`gpt-5.6-luna` maxを第一候補とする。review findingを
+Solが正本とoracleへ再照合し、同じ契約境界内の修正と判断した場合はfreshなLuna Maxを第一候補とし、単純修正はfreshなSparkも
+選べる。Claudeはsemanticな反対側、Grokはscope・exact target・負例・実diffの列挙監査へ使う。同じtaskの設計・施工へ深く関与した
 model familyを独立最終reviewerへ再利用しない。Spark、Luna、Solは同じOpenAI familyなので相互の独立検収を兼ねない。この選択は
 固定stage、fallback順、receipt資格を新設しない。
 
