@@ -30,6 +30,11 @@ Slice 2: 選択 -> 値変更 -> key/easing -> seek/playback -> Undo/Redo
 ロードマップと完成判定は縦sliceで持つ。実装発注とcommitは、既存規律どおり一つの
 契約境界へ分ける。縦sliceを一枚の巨大な発注へ束ねない。
 
+2026-08-04追補: 縦sliceは[利用者成果の背骨と調査不足粒の自律再接続決定](2026-08-04-outcome-spine-autonomous-gap-research-decision.md)の
+`OUTCOME SPINE`として扱う。調査不足のedgeは`REUSE / REMAP / REDUCE / 再調査 / WAIT_TARGET`へ局所処分し、
+実在targetを発明せず、依存しないedgeを継続する。ユーザー目視は粒ごとでなくM3全体の最後へ集約するが、
+named external gateと自動oracleは別審判のまま維持する。
+
 ## 2. 変更が必要になった事実
 
 現行文書では、同じ作業を次の複数座標で手書きしている。

@@ -35,6 +35,7 @@
 7. **着手前の導線**: 各仕様書末尾の**「実装ガード」節**と、タスクが触る領域の関連ドキュメント(方針節・落とし穴)を読んでから着手する。**仕様書の未決事項に依存するタスクには着手しない** — LLMエージェントは未決を「もっともらしいデフォルト」で静かに埋める(intent drift)。未決は仕様書改訂PRで先に潰す([pitfalls H-3](../pitfalls-and-roadmap.md))。
 8. **恒久焼き込みの予防**: Documentスキーマに触るタスクは、着手前に[permanence-prevention](../reviews/2026-07-12-m2-permanence-prevention.md)と[AGENTS.md](../../AGENTS.md)の条件別routingを読む。**意味文書が先、コードは写し。テスト緑≠完了**([pitfalls H-4](../pitfalls-and-roadmap.md))。
 9. **依存優先・発明工程なし**: [既知実装採択・置換開発モデル](../known-implementation-adoption-model.md)と[責任最小化ゲート](../reviews/2026-07-24-dependency-first-responsibility-gate.md)に従い、利用者成果と機構classを先に固定し、既知実装調査と採択地図を製品runtime実装より前に閉じる。正本と`decision-index.md`で一度裁定した`REUSE / ADOPT / WRAP / PORT / PATTERN / EXTERNAL`を後続粒が継承する。粒ごとにecosystemを再調査せず、必須oracle、license、platform、security、maintenanceの具体的反証またはadapterの共有基盤化がある時だけ再裁定する。新機構の`BUILD`を通常taskにせず、modelは仕様化せず利用者例外へ返す。既完了や投入工数を維持理由にせず、独自機構は同じoracleへ通す縦slice置換で単一ownerを切り替え、旧routeを`FROZEN → RETIRE`する。
+10. **利用者成果の背骨を先に固定する**: 複数粒にまたがる挙動は[自律再接続決定](../reviews/2026-08-04-outcome-spine-autonomous-gap-research-decision.md)に従い、通常製品routeの操作列、stable identity、成功出口、失敗回復、自動oracle、external gateを先に置く。各実装は一契約境界のまま、調査不足を`REUSE / REMAP / REDUCE / 再調査 / WAIT_TARGET`へ局所処分する。古い`next`や粒数を進捗軸にせず、実装後の現行codeから次edgeを再計測する。
 
 ## 仕様書テンプレート
 
