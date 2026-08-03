@@ -15,7 +15,7 @@ use common::identity_roundtrip::assert_identity_command_roundtrip;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use motolii_core::RationalTime;
+use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
     layer_names_for_item, BlendMode, Clip, ClipSource, ClippingMaskSettings, Command, CommandError,
     DocKeyframe, DocKeyframeTrack, DocParam, DocValue, Document, DocumentWriter, EffectDefinition,
@@ -540,6 +540,312 @@ proptest! {
             writer.undo().expect("undo");
         }
         assert_eq!(writer.snapshot().as_ref(), &initial);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CU-201R: 固定seedによる乱択MOVE/TRIM(同一Clip)列の全Undo審判
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone)]
+enum Cu201rEditSpec {
+    Move { delta_ticks: i64 },
+    TrimIn { delta_ticks: i64 },
+    TrimOut { delta_ticks: i64 },
+}
+
+#[derive(Debug, Clone)]
+struct Cu201rFixture {
+    doc: Document,
+    target: LayerId,
+}
+
+fn cu201r_fixture() -> Cu201rFixture {
+    let mut doc = Document::new_current();
+    let track = doc.track_ids.allocate("V1").unwrap();
+    let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
+    let target = doc.layers.allocate("target").unwrap();
+    let left = doc.layers.allocate("left").unwrap();
+    let right = doc.layers.allocate("right").unwrap();
+
+    let source = ClipSource::asset_video_only(asset);
+
+    doc.tracks.push(Track {
+        id: track,
+        items: vec![
+            TrackItem::Clip(Clip {
+                envelope: ItemEnvelope::new(left),
+                start: RationalTime::try_new(0, 1).unwrap(),
+                duration: RationalTime::try_new(2, 1).unwrap(),
+                time_map: Default::default(),
+                source: source.clone(),
+            }),
+            TrackItem::Clip(Clip {
+                envelope: ItemEnvelope::new(target),
+                start: RationalTime::try_new(3, 1).unwrap(),
+                duration: RationalTime::try_new(3, 1).unwrap(),
+                time_map: TimeMap::identity(),
+                source: source.clone(),
+            }),
+            TrackItem::Clip(Clip {
+                envelope: ItemEnvelope::new(right),
+                start: RationalTime::try_new(7, 1).unwrap(),
+                duration: RationalTime::try_new(2, 1).unwrap(),
+                time_map: Default::default(),
+                source,
+            }),
+        ],
+    });
+    doc.validate().expect("fixture must be valid");
+
+    Cu201rFixture { doc, target }
+}
+
+fn cu201r_edit_spec_strategy() -> impl Strategy<Value = Cu201rEditSpec> {
+    prop_oneof![
+        (-4i64..=4).prop_map(|delta_ticks| Cu201rEditSpec::Move { delta_ticks }),
+        (-3i64..=3).prop_map(|delta_ticks| Cu201rEditSpec::TrimIn { delta_ticks }),
+        (-3i64..=3).prop_map(|delta_ticks| Cu201rEditSpec::TrimOut { delta_ticks }),
+    ]
+}
+
+fn cu201r_edit_sequence_strategy() -> impl Strategy<Value = Vec<Cu201rEditSpec>> {
+    prop::collection::vec(cu201r_edit_spec_strategy(), 64)
+}
+
+fn cu201r_track_layer_signature(doc: &Document) -> Vec<Vec<LayerId>> {
+    doc.tracks
+        .iter()
+        .map(|track| {
+            track
+                .items
+                .iter()
+                .map(|item| match item {
+                    TrackItem::Clip(clip) => clip.envelope.layer_id,
+                    TrackItem::Group(group) => group.envelope.layer_id,
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn cu201r_collect_track_layer_multiset(doc: &Document) -> BTreeMap<LayerId, usize> {
+    let mut counts = BTreeMap::new();
+    for track in &doc.tracks {
+        for item in &track.items {
+            let layer_id = match item {
+                TrackItem::Clip(clip) => clip.envelope.layer_id,
+                TrackItem::Group(group) => group.envelope.layer_id,
+            };
+            *counts.entry(layer_id).or_insert(0) += 1;
+        }
+    }
+    counts
+}
+
+fn cu201r_assert_layer_multiset_has_no_duplicates(doc: &Document) {
+    let multiset = cu201r_collect_track_layer_multiset(doc);
+    for (layer_id, count) in &multiset {
+        assert_eq!(*count, 1, "LayerId {layer_id:?} appears {count} times");
+    }
+}
+
+fn cu201r_sentinel_clips(doc: &Document, target: LayerId) -> BTreeMap<LayerId, Clip> {
+    let mut sentinels = BTreeMap::new();
+    for track in &doc.tracks {
+        for item in &track.items {
+            if let TrackItem::Clip(clip) = item {
+                if clip.envelope.layer_id != target {
+                    sentinels.insert(clip.envelope.layer_id, clip.clone());
+                }
+            }
+        }
+    }
+    sentinels
+}
+
+fn cu201r_target_clip(doc: &Document, target: LayerId) -> Option<&Clip> {
+    for track in &doc.tracks {
+        for item in &track.items {
+            if let TrackItem::Clip(clip) = item {
+                if clip.envelope.layer_id == target {
+                    return Some(clip);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn build_cu201r_command(
+    writer: &DocumentWriter,
+    target: LayerId,
+    spec: &Cu201rEditSpec,
+) -> Command {
+    let doc = writer.snapshot();
+    let snapshot = doc.as_ref();
+    let clip = cu201r_target_clip(snapshot, target).expect("target clip must exist");
+    let one = RationalTime::try_new(1, 1).unwrap();
+
+    match spec {
+        Cu201rEditSpec::Move { delta_ticks } => {
+            let max_start = snapshot
+                .composition
+                .duration
+                .try_sub(clip.duration)
+                .unwrap();
+            let range_start = max_start.try_sub(one.try_mul_i64(8).unwrap()).unwrap();
+            let selected_index = *delta_ticks + 4;
+            let selected = range_start
+                .try_add(one.try_mul_i64(selected_index).unwrap())
+                .unwrap();
+            let new_start = if selected == clip.start {
+                let adjacent_index = if selected_index < 8 {
+                    selected_index + 1
+                } else {
+                    selected_index - 1
+                };
+                range_start
+                    .try_add(one.try_mul_i64(adjacent_index).unwrap())
+                    .unwrap()
+            } else {
+                selected
+            };
+            writer
+                .prepare_set_clip_start(target, new_start)
+                .expect("mapped MOVE must be valid")
+                .expect("mapped MOVE must change the clip")
+        }
+        Cu201rEditSpec::TrimIn { delta_ticks } => {
+            let old_end = clip
+                .start
+                .try_add(clip.duration)
+                .expect("clip interval should be valid");
+            let range_start = old_end.try_sub(one.try_mul_i64(7).unwrap()).unwrap();
+            let selected_index = *delta_ticks + 3;
+            let selected = range_start
+                .try_add(one.try_mul_i64(selected_index).unwrap())
+                .unwrap();
+            let new_start = if selected == clip.start {
+                let adjacent_index = if selected_index < 6 {
+                    selected_index + 1
+                } else {
+                    selected_index - 1
+                };
+                range_start
+                    .try_add(one.try_mul_i64(adjacent_index).unwrap())
+                    .unwrap()
+            } else {
+                selected
+            };
+            let cmd = writer
+                .prepare_trim_clip_in(target, new_start)
+                .expect("mapped left TRIM must be valid")
+                .expect("mapped left TRIM must change the clip");
+            assert!(
+                cmd.stable_id_reservation().is_none(),
+                "SetTrimClipIn command should not reserve stable IDs in CU-201R"
+            );
+            cmd
+        }
+        Cu201rEditSpec::TrimOut { delta_ticks } => {
+            let old_end = clip
+                .start
+                .try_add(clip.duration)
+                .expect("clip interval should be valid");
+            let available = snapshot
+                .composition
+                .duration
+                .try_sub(clip.start)
+                .expect("target start must precede composition end");
+            let selected_index = *delta_ticks + 3;
+            let selected = clip
+                .start
+                .try_add(
+                    available
+                        .try_mul(RationalTime::try_new(selected_index + 1, 8).unwrap())
+                        .unwrap(),
+                )
+                .unwrap();
+            let new_end = if selected == old_end {
+                let adjacent_index = if selected_index < 6 {
+                    selected_index + 1
+                } else {
+                    selected_index - 1
+                };
+                clip.start
+                    .try_add(
+                        available
+                            .try_mul(RationalTime::try_new(adjacent_index + 1, 8).unwrap())
+                            .unwrap(),
+                    )
+                    .unwrap()
+            } else {
+                selected
+            };
+            writer
+                .prepare_trim_clip_out(target, new_end)
+                .expect("mapped right TRIM must be valid")
+                .expect("mapped right TRIM must change the clip")
+        }
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        // CU-201R: 64 steps/ケース×32 = 2048 で、固定seed下の十分数操作を検査。
+        cases: 32,
+        rng_seed: RngSeed::Fixed(0x4D32_B303_5EED_0001),
+        .. ProptestConfig::default()
+    })]
+
+    #[test]
+    fn cu_201r_random_move_trim_sequence_undo_restores_state(
+        steps in cu201r_edit_sequence_strategy()
+    ) {
+        let fixture = cu201r_fixture();
+        let initial = fixture.doc.clone();
+        let initial_sentinels = cu201r_sentinel_clips(&initial, fixture.target);
+        let initial_signature = cu201r_track_layer_signature(&initial);
+        let target = cu201r_target_clip(&initial, fixture.target).expect("target clip must exist");
+        let target_envelope = target.envelope.clone();
+        let target_source = target.source.clone();
+        let initial_next_stable_id = initial.next_stable_id.peek_next();
+        let mut writer = reference_writer(initial.clone());
+        let mut accepted = 0usize;
+
+        for spec in steps {
+            let cmd = build_cu201r_command(&writer, fixture.target, &spec);
+
+            let gesture = writer.begin_gesture();
+            writer
+                .apply_command(gesture, cmd)
+                .expect("apply_command must succeed");
+            writer.validate().expect("document must validate after apply");
+            accepted += 1;
+
+            let snapshot = writer.snapshot();
+            let after = snapshot.as_ref();
+            cu201r_assert_layer_multiset_has_no_duplicates(after);
+            assert_eq!(cu201r_track_layer_signature(after), initial_signature);
+
+            let sentinels = cu201r_sentinel_clips(after, fixture.target);
+            assert_eq!(sentinels, initial_sentinels);
+
+            let after_target = cu201r_target_clip(after, fixture.target)
+                .expect("target clip must still exist");
+            assert_eq!(after_target.envelope, target_envelope);
+            assert_eq!(after_target.source, target_source);
+        }
+
+        assert_eq!(accepted, 64);
+        assert_eq!(writer.undo_len(), accepted);
+        for _ in 0..accepted {
+            writer.undo().expect("undo");
+        }
+        assert_eq!(writer.undo_len(), 0);
+        assert_eq!(writer.snapshot().as_ref(), &initial);
+        assert_eq!(writer.snapshot().as_ref().next_stable_id.peek_next(), initial_next_stable_id);
     }
 }
 
