@@ -138,12 +138,14 @@ REPO_LANES:
   cargo fmt --all --check
   git diff --check
 EXTERNAL_GATES:
-  normal Mac product window: body drag and trim-edge drag each cancel by Escape with write 0;
+  normal Mac product window: existing body drag cancels by Escape with write 0;
   focus loss and pointer loss each cancel with write 0;
   existing Undo/Redo still reach the existing commands without duplicate dispatch
 ```
 
 `EXTERNAL_GATES`未実施は`EXTERNAL_GATE_PENDING`であり、repository greenで置換しない。
+trim-edge dragの同じcancel gateはHOST-INPUT完了条件へ循環させず、`CU-201P-TRIM`再開後の
+named external gateとして実施する。
 
 ## 6. 非目標
 
