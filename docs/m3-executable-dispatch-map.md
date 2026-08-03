@@ -123,11 +123,11 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 
 `555a9ab5`は2026-08-01 simulation時点の初期simulation baselineとしてのみ保持し、本表全体を現時点で再検証したことは示さない。
 現在の`P03-C2`の`REDUCE / IMPLEMENT` overrideは、§5.3の現行authorityとimplementation ledgerの一意な
-`CU-201P-TRIM` `DO`行に裏付けられる。`IMPLEMENT`への昇格はimplementation ledgerへ一意な`DO`行を追加した時だけ発効する。
+`CU-201P-HOST-INPUT` `DO`行に裏付けられる。`IMPLEMENT`への昇格はimplementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 
 | 子 | 現在状態 | exact次task | 通常製品routeの出口 |
 |---|---|---|---|
-| `P01-C1` | `DONE` | `product_runtime_adapter.rs`の単一`ApplicationHandler<ProductEvent>`と`product_runtime.rs`の単一`run_app`を確認。`raw_input_boundary` 5/5、`u1a1_static_viewport` 3/3 | event-loop/surface ownerが一意 |
+| `P01-C1` | `REOPEN / WAIT_HOST_INPUT` | 単一`ApplicationHandler<ProductEvent>`と単一`run_app`は保持。現行mainでraw pointer入力が旧5-event閉集合を越えたため、`CU-201P-HOST-INPUT`でraw ownerとtyped seamを再締結する | event-loop/surface ownerが一意、adapter外raw型0 |
 | `P01-C2` | `TARGET_MISSING` | 固定sourceの未移管componentをsurface別に一件特定し、実コードからdynamic transitionのowner/input/intent/stale ruleを埋める | product単一owner、mockはconsumer |
 | `P01-C3` | `TARGET_MISSING` | Browser以外で欠けるrole別epoch/reload callbackを一件特定 | crash/reload後に同じsnapshotを再投影 |
 | `P01-C4` | `SPEC_ONLY` | detach時のWorkspace codecとtop-level再生成境界を一問で固定 | layoutを復元してDocument不変 |
@@ -135,7 +135,7 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 | `P02-C2` | `DONE` | `document_edit_runtime` 33/33、製品Place/Timeline/Inspector/Undo delivery 9/9、writer境界 4/4を再実行。既存routeのみ | 全surfaceが同じpublished snapshotを読む |
 | `P02-C3` | `TARGET_MISSING` | selection成立済み部分を除き、essential focusまたはplayhead consumerを一件特定 | UI stateをDocumentへ保存せず一方向publish |
 | `P03-C1` | `DONE` | `crates/motolii-ui/tests/timeline_projection.rs::p12_hundred_thousand_keys_cull_to_visible_identity`で100k keyの狭域projectionとtyped identityを確認。renderer本体は変更しない | visible outputがbounded |
-| `P03-C2` | `REDUCE / IMPLEMENT` | `CU-201P-MOVE`のcompletionは下記proseとimplementation ledgerに残す。`CU-201P-TRIM-S`でBlender固定sourceの内部handle hitをPATTERN採択し、public `TimelineHit`／`TimelineProjection::hit_test`は不変のまま、private `ProductTimelineHit`でKey優先後のBarをLeft/Right/Bodyへ精密化する。bar width 25 / derived height 16 logical px未満はbody-only、次は`CU-201P-TRIM`だけ | drag中write 0、release 1 Undo、cancel/stale/invalid 0 |
+| `P03-C2` | `REDUCE / IMPLEMENT` | MOVE実装diffとTRIM WIPは保持する。winit/egui-winit/Qt/Blender既知解を縮小採択した`CU-201P-HOST-INPUT`だけを先に実装し、raw owner、logical Escape、focus/pointer lossを既存InputRouterへ接続する | drag中write 0、release 1 Undo、cancel/stale/invalid 0 |
 | `P03-C3` | `TARGET_MISSING` | visible-range consumerとnavigation CommandIdを一つ特定 | selection/focus/playheadが同一projection |
 | `P04-C1` | `DONE` | なし。`U4a-1`〜`CU-205E`を再実装しない | first-party parameterの通常編集route |
 | `P04-C2` | `TARGET_MISSING` | active interval read model、outgoing Interp D2 command、Host codec、React consumerを前ownerへ分離 | easing変更が1 command / 1 Undo |
@@ -165,7 +165,7 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 
 `CU-201T-S`の意味閉鎖により開始された`CU-201T-C`は、実装 `a860e10e`、oracle補強 `c2eda847`、targeted test/fmt/clippy greenをもって完了した。
 `CU-201N-S`で既存`TimelineKey`/`TimelineBar`だけを候補へ採用し、key優先、stable identity tie-break、transient `RationalTime` threshold、no-snapを固定した。
-`P02-C1`、`P03-C1-VERIFY`、P02-C2、P01-C1は既存routeの実装・確認として閉じた。`CU-201P-MOVE`は、既知NLEのbody-drag収束意味を既存native event／Transient projection／single writerへREDUCE接続して閉じた。[CU-201P-TRIM-S](reviews/2026-08-03-cu-201p-trim-edge-known-semantics-adoption-decision.md)でtrim edge targetも閉じ、次の実装粒は`CU-201P-TRIM`だけとする。snap threshold、slip/slide/roll/ripple、multi-selectを含む広い親`CU-201P`の残余は`WAIT_TARGET`を維持する。Stage placementのpointer captureを流用しない。
+`P02-C1`、`P03-C1-VERIFY`、P02-C2は既存routeの実装・確認として閉じた。`CU-201P-MOVE`の実装diffと`CU-201P-TRIM` WIPは保持するが、native pointer追加後のraw guard redとlogical Escape producer不在により受入を繰り上げない。[CU-201P-HOST-INPUT-S](reviews/2026-08-04-cu-201p-host-input-spine-decision.md)でwinit logical key、egui-winit一箇所正規化、Qt standard Cancel、Blender modal Escapeを縮小採択し、次の実装粒は`CU-201P-HOST-INPUT`だけとする。完了後にMOVEを再締結してTRIMを再開する。snap threshold、slip/slide/roll/ripple、multi-selectを含む広い親`CU-201P`の残余は`WAIT_TARGET`を維持する。Stage placementのpointer captureを流用しない。
 
 ### 5.1 `CU-201T-C` — trim command接続
 
@@ -225,10 +225,58 @@ EXIT:
 ```
 
 `P03-C1-VERIFY`は製品機能の進捗ではなく、既存routeを再施工しないための確認である。確認済みのため、
-製品実装の本線は`CU-201N-S DONE → CU-201P-MOVE DONE → CU-201P-TRIM`のみであり、残余親`CU-201P`は
-`SPLIT / WAIT_TARGET`に留まる。
+製品実装の本線は`CU-201N-S DONE → CU-201P-HOST-INPUT → MOVE再締結 → CU-201P-TRIM再開`であり、
+残余親`CU-201P`は`SPLIT / WAIT_TARGET`に留まる。
 
-### 5.3 `CU-201P-TRIM` — native Timeline trim-edge dispatch capsule
+### 5.3 `CU-201P-HOST-INPUT` — Product Host input spine capsule
+
+```text
+INPUT:
+  CU-201P-HOST-INPUT-S decision
+  existing ProductApp / product_runtime_adapter.rs / InputRouter / KeyToken::Escape
+
+MECHANISM_CLASS:
+  desktop window input normalization and modal cancel delivery
+KNOWN_IMPLEMENTATION_SEARCH:
+  repo InputRouter/KeyToken/EffectiveTrigger/layout adapter;
+  winit 0.30.13; egui-winit 0.35.0; Qt StandardKey::Cancel; Blender modal cancel
+ADOPTION_ROUTE: ADOPT / WRAP / PORT
+BUILD_JUSTIFICATION: NONE
+BUILD: FORBIDDEN
+
+ALLOWLIST:
+  crates/motolii-ui/src/product_runtime_adapter.rs
+  crates/motolii-ui/src/product_runtime.rs
+  crates/motolii-ui/tests/raw_input_boundary.rs
+  inline tests in changed src files only
+
+POSITIVE_ORACLE:
+  one approved raw adapter emits existing typed input only;
+  product BuiltinKeymap version 2 maps modifier-free Escape to the existing cancel command;
+  source builtin version 1 delta remains a typed mismatch without implicit migration;
+  active gesture + logical Escape/focus loss/pointer loss cancels Transient once with semantic write 0;
+  release still commits the existing move/trim command once
+NEGATIVE_ORACLE:
+  synthetic/repeat/release/Process/preedit/unknown key emits no command;
+  no gesture and duplicate cancel events write 0;
+  raw winit input outside product_runtime_adapter.rs fails the guard;
+  AppKit history route remains outside the diff
+STOP:
+  if logical Escape cannot reach the existing cancel command through InputRouter without a new framework,
+  stop this grain and return to Sol; do not widen into trim, history commands, or residual CU-201P targets
+VALIDATION:
+  cargo test --locked -p motolii-ui --test raw_input_boundary
+  cargo test --locked -p motolii-ui input_router
+  cargo test --locked -p motolii-ui product_runtime
+  cargo test --locked -p motolii-ui
+  cargo clippy --locked -p motolii-ui --all-targets -- -D warnings
+  cargo fmt --all --check
+  git diff --check
+NEXT_HANDOFF:
+  reclose CU-201P-MOVE, then rebase and resume preserved CU-201P-TRIM WIP
+```
+
+### 5.4 `CU-201P-TRIM` — native Timeline trim-edge dispatch capsule
 
 ```text
 INPUT:
@@ -307,7 +355,8 @@ VALIDATION:
   this specification-edit grain remains validated outside this implementation capsule by
   ./scripts/check-docs.sh and git diff --check.
 NEXT_HANDOFF:
-  PRODUCT CU-201P-TRIM implementation owner; parent CU-201P remains SPLIT / WAIT_TARGET
+  WAIT_HOST_INPUT; after §5.3 completion, PRODUCT CU-201P-TRIM implementation owner;
+  parent CU-201P remains SPLIT / WAIT_TARGET
 ```
 
 ## 6. ゴールへ至る依存IR

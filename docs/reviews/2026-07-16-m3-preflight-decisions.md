@@ -138,6 +138,17 @@ U0d-3のraw input監査は次の機械境界に限定する。
   adapterの入力、出力、IME優先、SafetyInterrupt、許可fileを仕様改訂で先に固定し、
   許可file外ゼロの負例、`CommandId`/keymap resolverを迂回した`DomainIntent`直接発行の
   禁止、toolkit型の公開API非流出も同じ改訂で審判化する。機能側やresolverへ例外を広げない。
+- 2026-08-04に上記将来条件を[CU-201P-HOST-INPUT-S](2026-08-04-cu-201p-host-input-spine-decision.md)で
+  満たした。通常Product Hostでは`product_runtime_adapter.rs`だけを追加raw ownerとし、
+  CursorMoved、primary MouseInput、Focused(false)、CursorLeft、ModifiersChanged、logical Escapeの
+  KeyboardInput、Imeだけを既存primitive / `InputPhase` / `SafetyInterrupt` / `Modifiers` /
+  `KeyToken::Escape` / `EffectiveTrigger` / `ImeGateState`へ変換できる。
+  synthetic/repeat/release/Process/文字・不明key、
+  physical key fallback、adapter外raw型、`DomainIntent`直接発行は拒否する。
+  product builtin baseは不変version 2へ上げ、modifierなしEscapeを既存
+  `motolii.gesture.cancel`へ割り当てる。wire codec v1は不変で、source builtin version 1 deltaは
+  既存typed mismatchへ送り、暗黙migrationしない。
+  これはU1a-2 layout adapterの閉集合を広げず、AppKit history routeも変更しない局所改訂である。
 - 上記AST監査を主審判とし、字句・path・use-treeの規則を満たさないscannerでは
   U0d-3を完了にしない。既存
   `check-ui-toolkit-deps.sh`の「`motolii-ui`外にtoolkit直接依存なし」、

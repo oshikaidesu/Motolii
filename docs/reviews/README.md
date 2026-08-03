@@ -463,3 +463,4 @@
 | [2026-08-03-p06-c1-mac-rfd-adoption-probe-observation.md](2026-08-03-p06-c1-mac-rfd-adoption-probe-observation.md) | P06-C1-MAC rfd採択probeと固定Mac parent/selection/Cancel/typed failure外部gate PASSの観察 |
 | [2026-08-03-cu-201p-move-known-semantics-adoption-decision.md](2026-08-03-cu-201p-move-known-semantics-adoption-decision.md) | CU-201P-MOVE native Timeline body-drag既知意味採択・move-only縮小決定 |
 | [2026-08-03-cu-201p-trim-edge-known-semantics-adoption-decision.md](2026-08-03-cu-201p-trim-edge-known-semantics-adoption-decision.md) | CU-201P-TRIM Blender VSE handle hit規則のPATTERN採択・in/out trim target決定 |
+| [2026-08-04-cu-201p-host-input-spine-decision.md](2026-08-04-cu-201p-host-input-spine-decision.md) | CU-201P通常Product Host入力背骨・logical Escape cancel既知実装採択決定 |
