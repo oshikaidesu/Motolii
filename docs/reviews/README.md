@@ -470,3 +470,4 @@
 | [2026-08-04-cu-201r-random-move-trim-oracle-acceptance.md](2026-08-04-cu-201r-random-move-trim-oracle-acceptance.md) | CU-201R 2,048-step実装・独立review受入・CU-201E開始 |
 | [2026-08-04-cu-201e-normal-product-route-e2e-receipt.md](2026-08-04-cu-201e-normal-product-route-e2e-receipt.md) | CU-201E 通常製品move/trim/reopen E2E PASS（pointer-loss分離） |
 | [2026-08-04-outcome-spine-autonomous-gap-research-decision.md](2026-08-04-outcome-spine-autonomous-gap-research-decision.md) | 利用者成果の背骨・調査不足粒の自律再検索・REMAP/REDUCE・M3 HUMAN最終集約 |
+| [2026-08-04-u4b0-durable-position-key-closed-contract.md](2026-08-04-u4b0-durable-position-key-closed-contract.md) | U4b-0 Position専用durable command・Bezier分割・journal v2据え置きの実装前closed contract |
