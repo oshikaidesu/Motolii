@@ -27,6 +27,13 @@ Motoliiの監督は主担当Codexの責任であり、transport、order schema�
 | 実装担当 | Codexが渡した一契約境界の施工と指定試験。scopeや公開契約を増やさない |
 | reviewer | fresh read-only sessionで実diffと試験を監査。修正、order再設計、採用を行わない |
 
+## 外部LLM起動の共通前提
+
+発注、相談、調査、検収、診断、session再開を問わず、外部LLMは[薄いCLI harness決定](2026-08-03-thin-observed-cli-harness-decision.md)の
+途中stream条件を満たす時だけ起動する。provider-nativeの構造化途中eventを有効化し、生streamを保存しながら主担当Codexが
+実行中に読めることを起動前に確認する。heartbeatとwall timeoutはprocess管理の補助であり、途中event、進捗、最終回答位置の
+観測を代替しない。条件を閉じられないprovider／versionは、別modelへfallbackせず局所的に利用不能とする。
+
 ## 発注フロー
 
 ユーザーが「発注」を依頼動詞として明示した場合だけ外部実装を起動する。主担当Codexは次を行う。
