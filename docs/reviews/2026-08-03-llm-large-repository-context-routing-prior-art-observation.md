@@ -368,6 +368,26 @@ recallも低い。次のbaselineは、LLMが一つの答えを要約するので
 正本が衝突する、必要owner／testが閉じない時だけ関連全文へ昇格する。これは意味を新DBへ移す案でなく、
 既存の原子的台帳をsemantic compilation boundaryとして使う案である。
 
+### 6.5 10 queryのread-only shadow
+
+上記query rewriteの最小反証として、[`context-route-shadow.py`](../../scripts/context-route-shadow.py)と
+固定10 queryの[fixture](../../scripts/fixtures/context-route-shadow.json)を追加した。tool自身は自然言語を
+解釈せず、主担当が固定した3〜5個のterm集合を受け取る。`docs/**/*.md`をread-onlyで走査し、
+`decision-index`の直接link、文書冒頭での一致、term近接度、明示状態をrank材料にする。出力はtop-kごとの
+path、最初の根拠lineと最大240文字のexcerpt、source SHA-256、状態だけであり、authority採否、要約、
+dependency traversal、embedding、DB、index cacheを持たない。
+
+現HEADのtop 10比較では、最初の一仮説だけのbaselineがgold `11/12`、3〜5仮説の和集合が`12/12`だった。
+複数仮説で回復したのはproject Save/reopenの二つ目の現行mapである。10問合計の候補母集団は57件から
+137件、LLMへ渡し得るtop 10 JSONは21,537 byteから33,049 byte、明示状態汚染は3件から5件、同一process内の
+累積wall timeは約336 msから約411 msへ増えた。top 5ではgoldを落とすため採らない。
+
+従って複数仮説は今回の一つのlexical missを回復したが、候補削減やtoken削減を単独では解かない。
+本toolは**比較用shadow**に留め、AGENTS必須gate、authority DB、常設index、M3実装の自動dispatchへ使わない。
+次に進める条件は、実際のM3 taskで同じfixture形式を再利用し、top 10のsource spanだけでowner、code target、
+test targetが閉じるかをLLM A/Bで確認できた場合に限る。失敗時はrank機構を増築せず、短い入口mapまたは
+既存decision rowの不足へ戻す。
+
 ## 7. 現時点の処分
 
 - **観察**: 巨大な単一入口より、短いmapとprogressive disclosureを組み合わせる公開先例がある。
@@ -387,6 +407,8 @@ recallも低い。次のbaselineは、LLMが一つの答えを要約するので
   backendよりtyped edgeと状態filterが精度を支配した。
 - **見送り**: Graphiti／GraphRAG系を現行authority retrievalへ使う案。時間状態のmodelは参考になるが、
   LLM fact抽出／summaryを正本経路へ置くと、今回重視する意味汚染と再現性の条件を先に悪化させる。
+- **比較結果**: 10 query shadowでは複数仮説がtop 10 recallを`11/12`から`12/12`へ回復した一方、
+  候補母集団とcapsule byteは増えた。shadowをauthority gateへ昇格せず、次は実taskのLLM A/Bだけを行う。
 - **停止**: 五queryだけを根拠にしたAGENTS全面再編、常設vector DB、外部service必須化、semantic scoreによる採否。
 
 次の一手は、既存三層routeをbaselineにし、同じ利用者文から3〜5個の検索仮説を作るだけのquery rewriteを
