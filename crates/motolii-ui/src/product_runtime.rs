@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use motolii_core::{CanonicalPoint, Quality, RationalTime};
-use motolii_doc::{Command, EffectId, EvaluationTime};
+use motolii_doc::{Command, EffectId, EvaluationTime, LayerId, TrackItem};
 use motolii_eval::DataTracks;
 use motolii_gpu::GpuCtx;
 use winit::dpi::LogicalSize;
@@ -37,6 +37,7 @@ use crate::render_worker::{
 };
 use crate::stage_chrome_host_runtime::{StageChromeHostRuntime, StageChromeHostRuntimeError};
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
+use crate::timeline_move_gesture::{TimelineMoveGesture, TimelineMoveRequest};
 use crate::timeline_projection::{
     project_timeline, TimelineHit, TimelineMetrics, TimelineProjection, TimelineProjectionError,
     TimelineViewport,
@@ -181,6 +182,8 @@ pub(crate) struct ProductApp {
     surface_retry_at: Option<Instant>,
     failure: Option<String>,
     pending_inspector_commit: Option<InspectorGestureTerminal>,
+    timeline_move: Option<TimelineMoveGesture>,
+    last_pointer_position: Option<[f64; 2]>,
 }
 
 #[derive(Debug, Clone)]
@@ -217,6 +220,8 @@ impl ProductStageProjection {
 struct ProductTimelineProjection {
     projection: TimelineProjection,
     band_span: f64,
+    composition_duration: RationalTime,
+    preview: Option<TimelineProjection>,
 }
 
 impl ProductTimelineProjection {
@@ -242,7 +247,27 @@ impl ProductTimelineProjection {
         Ok(Self {
             projection,
             band_span,
+            composition_duration: document.composition.duration,
+            preview: None,
         })
+    }
+
+    fn render_projection(&self) -> &TimelineProjection {
+        self.preview.as_ref().unwrap_or(&self.projection)
+    }
+
+    fn set_move_preview(&mut self, request: Option<TimelineMoveRequest>) {
+        self.preview = request.and_then(|request| {
+            self.projection.preview_move(
+                request.layer,
+                request.new_start,
+                self.composition_duration,
+            )
+        });
+    }
+
+    fn clear_move_preview(&mut self) {
+        self.preview = None;
     }
 
     fn hit_test(&self, position: [f64; 2], layout: NativeHostLayout) -> Option<TimelineHit> {
@@ -252,7 +277,20 @@ impl ProductTimelineProjection {
         }
         let x = (position[0] - time_surface.x) / time_surface.width;
         let y = ((position[1] - time_surface.y) / time_surface.height) * self.band_span;
-        Some(self.projection.hit_test(x, y))
+        Some(self.render_projection().hit_test(x, y))
+    }
+
+    fn time_at(&self, position: [f64; 2], layout: NativeHostLayout) -> Option<RationalTime> {
+        let time_surface = timeline_time_surface_logical_rect(layout)?;
+        if !position.iter().all(|value| value.is_finite()) || !time_surface.contains(position) {
+            return None;
+        }
+        let normalized = (position[0] - time_surface.x) / time_surface.width;
+        if !normalized.is_finite() {
+            return None;
+        }
+        let fraction = RationalTime::try_from_decimal_str(&format!("{normalized:.9}")).ok()?;
+        self.composition_duration.try_mul(fraction).ok()
     }
 }
 
@@ -468,6 +506,8 @@ impl ProductApp {
             surface_retry_at: None,
             failure: None,
             pending_inspector_commit: None,
+            timeline_move: None,
+            last_pointer_position: None,
         })
     }
 
@@ -1005,6 +1045,151 @@ impl ProductApp {
         Ok(())
     }
 
+    pub(crate) fn handle_window_cursor_moved(
+        &mut self,
+        position: winit::dpi::PhysicalPosition<f64>,
+    ) {
+        let Some(window) = &self.window else {
+            return;
+        };
+        let scale = window.scale_factor();
+        if !scale.is_finite() || scale <= 0.0 {
+            return;
+        }
+        let logical = [position.x / scale, position.y / scale];
+        self.last_pointer_position = Some(logical);
+        let (Some(gesture), Some(layout)) = (self.timeline_move.as_ref(), self.layout) else {
+            return;
+        };
+        let Some(pointer_time) = self.timeline_projection.time_at(logical, layout) else {
+            self.timeline_projection.clear_move_preview();
+            self.request_redraw();
+            return;
+        };
+        match gesture.preview(pointer_time) {
+            Ok(new_start) => {
+                self.timeline_projection
+                    .set_move_preview(Some(TimelineMoveRequest {
+                        layer: gesture.layer(),
+                        new_start,
+                    }));
+                self.request_redraw();
+            }
+            Err(_) => {
+                self.cancel_timeline_move("time-overflow");
+            }
+        }
+    }
+
+    pub(crate) fn handle_window_mouse_input(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        state: winit::event::ElementState,
+        button: winit::event::MouseButton,
+    ) {
+        if button != winit::event::MouseButton::Left {
+            return;
+        }
+        let Some(position) = self.last_pointer_position else {
+            return;
+        };
+        match state {
+            winit::event::ElementState::Pressed => {
+                if self.timeline_move.is_some() {
+                    return;
+                }
+                let Some(layout) = self.layout else {
+                    return;
+                };
+                let Some(TimelineHit::Bar { layer }) =
+                    self.timeline_projection.hit_test(position, layout)
+                else {
+                    return;
+                };
+                let Some(pointer_time) = self.timeline_projection.time_at(position, layout) else {
+                    return;
+                };
+                let Some(initial_start) = find_clip_start(&self.current_document, layer) else {
+                    return;
+                };
+                self.timeline_move = Some(TimelineMoveGesture::begin(
+                    layer,
+                    pointer_time,
+                    initial_start,
+                    self.projection_generation,
+                ));
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=timeline-move state=begin layer={} generation={}",
+                    layer.get(),
+                    self.projection_generation,
+                ));
+            }
+            winit::event::ElementState::Released => {
+                self.finish_timeline_move(event_loop, position);
+            }
+        }
+    }
+
+    pub(crate) fn cancel_window_pointer_gesture(&mut self) {
+        self.cancel_timeline_move("window-focus-or-capture-loss");
+    }
+
+    fn cancel_timeline_move(&mut self, reason: &'static str) {
+        if let Some(gesture) = self.timeline_move.take() {
+            crate::ui_numeric_trace::emit(format_args!(
+                "kind=timeline-move state=cancel layer={} generation={} reason={}",
+                gesture.layer().get(),
+                gesture.generation(),
+                reason,
+            ));
+            self.timeline_projection.clear_move_preview();
+            self.request_redraw();
+        }
+    }
+
+    fn finish_timeline_move(&mut self, event_loop: &ActiveEventLoop, position: [f64; 2]) {
+        let Some(gesture) = self.timeline_move.take() else {
+            return;
+        };
+        self.timeline_projection.clear_move_preview();
+        let Some(layout) = self.layout else {
+            return;
+        };
+        let Some(pointer_time) = self.timeline_projection.time_at(position, layout) else {
+            self.request_redraw();
+            return;
+        };
+        if gesture.generation() != self.projection_generation
+            || find_clip_start(&self.current_document, gesture.layer())
+                != Some(gesture.initial_start())
+        {
+            self.request_redraw();
+            return;
+        }
+        let request = match gesture.release(pointer_time) {
+            Ok(Some(request)) => request,
+            Ok(None) => {
+                self.request_redraw();
+                return;
+            }
+            Err(_) => {
+                self.request_redraw();
+                return;
+            }
+        };
+        self.document_queue.push_move_clip(request);
+        match self.document_runtime.process_next(
+            &mut self.document_queue,
+            self.primary,
+            self.projection_generation,
+        ) {
+            Ok(Some(published)) => self.adopt_full_publish(event_loop, published, "timeline-move"),
+            Ok(None) => self.request_redraw(),
+            Err(DocumentEditRuntimeError::Command(_)) => self.request_redraw(),
+            Err(error) => self.fail(event_loop, error),
+        }
+    }
+
     fn set_idle_control_flow(&self, event_loop: &ActiveEventLoop) {
         match self.surface_retry_at {
             Some(retry_at) => event_loop.set_control_flow(ControlFlow::WaitUntil(retry_at)),
@@ -1277,6 +1462,7 @@ impl ProductApp {
         published: PublishedDocument,
         route: &'static str,
     ) {
+        self.cancel_timeline_move("published-generation-changed");
         trace_document_publish(route, &published);
         self.reconcile_active_effect_use(&published);
         self.current_document = published.snapshot;
@@ -1501,6 +1687,30 @@ fn active_effect_candidate(
     let primary = published_primary?;
     let candidate = created_effect_use.or(previous_active)?;
     contains(primary, candidate).then_some(candidate)
+}
+
+fn find_clip_start(document: &motolii_doc::Document, target: LayerId) -> Option<RationalTime> {
+    fn find(items: &[TrackItem], target: LayerId) -> Option<RationalTime> {
+        for item in items {
+            match item {
+                TrackItem::Clip(clip) if clip.envelope.layer_id == target => {
+                    return Some(clip.start);
+                }
+                TrackItem::Group(group) => {
+                    if let Some(start) = find(&group.children, target) {
+                        return Some(start);
+                    }
+                }
+                TrackItem::Clip(_) => {}
+            }
+        }
+        None
+    }
+
+    document
+        .tracks
+        .iter()
+        .find_map(|track| find(&track.items, target))
 }
 
 fn trace_document_publish(route: &str, published: &PublishedDocument) {
@@ -1769,7 +1979,7 @@ impl ProductSurface {
             &self.gpu.queue,
             layout,
             document,
-            &timeline_projection.projection,
+            timeline_projection.render_projection(),
             primary,
         )?;
         let trace_key = (

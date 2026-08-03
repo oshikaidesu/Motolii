@@ -33,6 +33,7 @@ mod shell;
 mod stage_chrome_host_runtime;
 mod state_ownership;
 mod static_preview;
+mod timeline_move_gesture;
 mod timeline_projection;
 mod timeline_tools_host_runtime;
 mod ui_numeric_trace;

@@ -134,7 +134,7 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 | `P02-C2` | `DONE` | `document_edit_runtime` 33/33、製品Place/Timeline/Inspector/Undo delivery 9/9、writer境界 4/4を再実行。既存routeのみ | 全surfaceが同じpublished snapshotを読む |
 | `P02-C3` | `TARGET_MISSING` | selection成立済み部分を除き、essential focusまたはplayhead consumerを一件特定 | UI stateをDocumentへ保存せず一方向publish |
 | `P03-C1` | `DONE` | `crates/motolii-ui/tests/timeline_projection.rs::p12_hundred_thousand_keys_cull_to_visible_identity`で100k keyの狭域projectionとtyped identityを確認。renderer本体は変更しない | visible outputがbounded |
-| `P03-C2` | `TARGET_MISSING` | `CU-201P`調査でStage placement用pointer captureとTimeline click選択はあるが、Timeline drag→D2 requestのowner/codec/terminal targetが無い | drag中write 0、release 1 Undo |
+| `P03-C2` | `DONE / REDUCE` | `CU-201P-MOVE`として、既知NLE body-drag意味を既存`ProductApp`／`TimelineProjection`／`DocumentWriter::prepare_set_clip_start`へ限定接続。広い`CU-201P` interval gestureは引き続き別target | drag中write 0、release 1 Undo、cancel/stale/invalid 0 |
 | `P03-C3` | `TARGET_MISSING` | visible-range consumerとnavigation CommandIdを一つ特定 | selection/focus/playheadが同一projection |
 | `P04-C1` | `DONE` | なし。`U4a-1`〜`CU-205E`を再実装しない | first-party parameterの通常編集route |
 | `P04-C2` | `TARGET_MISSING` | active interval read model、outgoing Interp D2 command、Host codec、React consumerを前ownerへ分離 | easing変更が1 command / 1 Undo |
@@ -164,7 +164,7 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 
 `CU-201T-S`の意味閉鎖により開始された`CU-201T-C`は、実装 `a860e10e`、oracle補強 `c2eda847`、targeted test/fmt/clippy greenをもって完了した。
 `CU-201N-S`で既存`TimelineKey`/`TimelineBar`だけを候補へ採用し、key優先、stable identity tie-break、transient `RationalTime` threshold、no-snapを固定した。
-`P02-C1`、`P03-C1-VERIFY`、P02-C2、P01-C1は既存routeの実装・確認として閉じた。PRODUCT `CU-201P`は、[CU-201P target gap observation](reviews/2026-08-03-cu-201p-target-gap-observation.md)のとおり、Timeline drag→D2 requestの実在target不足で`WAIT_TARGET`に戻す。Stage placementのpointer captureを流用した実装は開始しない。
+`P02-C1`、`P03-C1-VERIFY`、P02-C2、P01-C1は既存routeの実装・確認として閉じた。`CU-201P-MOVE`は、既知NLEのbody-drag収束意味を既存native event／Transient projection／single writerへREDUCE接続して閉じた。trim edge、snap threshold、slip/slide/roll/ripple、multi-selectを含む広いPRODUCT `CU-201P`は、[CU-201P target gap observation](reviews/2026-08-03-cu-201p-target-gap-observation.md)どおり`WAIT_TARGET`を維持する。Stage placementのpointer captureを流用しない。
 
 ### 5.1 `CU-201T-C` — trim command接続
 
