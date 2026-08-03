@@ -107,6 +107,20 @@ Vismが宣言できる依存を少なくとも次へ分ける。
 
 Vism package内部のlibrary依存と、作品意味を構成するVism間依存を混ぜない。前者はbuild／供給網、後者はKit／Project graphの責任である。
 
+### 3.2 型付きinterfaceは構成の途中で再利用できる
+
+Path、Text、Input、Instance等のinterfaceは、graphの入口に一度だけ現れる分類ではない。Vismのtyped出力を
+次のVismのtyped入力へ接続し、同じ意味のinterfaceを構成の後段で再び使える。これはVismの組み合わせごとに
+専用kindやHost APIを増やさず、少数の型付き境界から第三者が新しい表現を組み立てるための原則である。
+
+```text
+Path Provider ── Path ──> Text-on-Path ── Text / VectorRecipe ──> Material / Filter
+Text Outline  ── Path ──> PathOp ── Path ──> Instance-along-Path
+```
+
+ここでいう再利用は有向非循環graph上の構成であり、runtime再帰や暗黙feedbackではない。循環、前frame、
+逐次状態が必要なら通常のtyped接続へ偽装せず、Host所有Simulation／Feedback／Bakeとして別に締結する。
+
 ## 4. Kitの責任
 
 概念上のKitは次を持てる。

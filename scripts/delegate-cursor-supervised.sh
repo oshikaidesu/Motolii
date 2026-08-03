@@ -1,16 +1,35 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+echo "delegate-cursor-supervised: RETIRED 2026-08-02; active execution is disabled. See docs/reviews/2026-08-02-supervised-runner-retirement-decision.md" >&2
+exit 64
+
+RUNNER_SELF_SHA256="$(shasum -a 256 "${BASH_SOURCE[0]}" | awk '{print $1}')"
+if [[ -z "${MOTOLII_CANONICAL_RUNNER_SHA256:-}" || \
+      "$MOTOLII_CANONICAL_RUNNER_SHA256" != "$RUNNER_SELF_SHA256" || \
+      -z "${MOTOLII_CANONICAL_RUNNER_ACTIVE_FILE:-}" || \
+      ! -f "$MOTOLII_CANONICAL_RUNNER_ACTIVE_FILE" || \
+      -L "$MOTOLII_CANONICAL_RUNNER_ACTIVE_FILE" || \
+      "$(awk -F': ' '$1=="RUNNER_SHA256" { count++; value=$2 } END { if (count==1) print value }' \
+        "$MOTOLII_CANONICAL_RUNNER_ACTIVE_FILE")" != "$RUNNER_SELF_SHA256" ]]; then
+  echo "delegate-cursor-supervised: branch内runnerの直接実行は禁止です。activate済みcanonical launcherを使用してください" >&2
+  exit 2
+fi
+
+ROOT_DIR="${MOTOLII_RUNNER_ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)}"
 PRIMARY_WORKTREE_RAW="$(git -C "$ROOT_DIR" worktree list --porcelain | awk '/^worktree / && !found { print substr($0, 10); found=1 }')"
 PRIMARY_WORKTREE="$(cd "$PRIMARY_WORKTREE_RAW" && pwd -P)"
 CURSOR_AGENT_BIN="${CURSOR_AGENT_BIN:-cursor-agent}"
 CODEX_AGENT_BIN="${CODEX_AGENT_BIN:-codex}"
 CLAUDE_AGENT_BIN="${CLAUDE_AGENT_BIN:-claude}"
-CURSOR_GROK_MODEL="cursor-grok-4.5-high"
-OPUS_MANAGER_MODEL="claude-opus-5"
+GROK_PREFLIGHT_MODEL="cursor-grok-4.5-high"
+# 改訂3(2026-08-01): 検収者はmodel名でなく独立性条件で決める。新profileの既定はOpus。
+# 実装担当・order managerと同一identityのmodelはここに入っていても独立性gateで落ちる
+ALLOWED_REVIEW_MODELS=("claude-opus-5")
+OPUS_REVIEW_MODEL="claude-opus-5"
 SPARK_MODEL="gpt-5.3-codex-spark"
-LOOP_PROFILE="opus-spark-grok"
+ROUTE_CONTRACT_VERSION="2"
+LOOP_PROFILE="grok-spark-opus"
 SUPERVISOR_TIMEOUT_SECONDS="${CURSOR_SUPERVISED_TIMEOUT_SECONDS:-300}"
 SPARK_TIMEOUT_SECONDS="${CODEX_SPARK_TIMEOUT_SECONDS:-1800}"
 INSPECTION_TIMEOUT_SECONDS="${CURSOR_INSPECTION_TIMEOUT_SECONDS:-240}"
@@ -34,9 +53,9 @@ MAX_TARGET_CAPSULE_BYTES=49152
 MAX_SPARK_GRAIN_BYTES=16384
 TARGET_CONTEXT_BEFORE=40
 TARGET_CONTEXT_AFTER=80
-MAX_OPUS_DELTA_FINDINGS=5
-MAX_OPUS_DELTA_TEXT_BYTES=220
-MAX_OPUS_DELTA_REASON_BYTES=300
+MAX_PREFLIGHT_FINDINGS=5
+MAX_PREFLIGHT_TEXT_BYTES=220
+MAX_PREFLIGHT_REASON_BYTES=300
 SPARK_GRAIN_REQUIRED_LABELS=(
   Objective
   GRAIN
@@ -51,12 +70,13 @@ SPARK_GRAIN_REQUIRED_LABELS=(
   STOP
   Test
 )
-OPUS_DELTA_SCHEMA='{"type":"object","additionalProperties":false,"properties":{"disposition":{"type":"string","enum":["READY","STOP","ESCALATE"]},"findings":{"type":"array","maxItems":5,"items":{"type":"object","additionalProperties":false,"properties":{"kind":{"type":"string","enum":["RISK","NEGATIVE_ORACLE","STOP","CORRECTION"]},"severity":{"type":"string","enum":["P0","P1","P2"]},"delta":{"type":"string","maxLength":220}},"required":["kind","severity","delta"]}},"reason":{"type":"string","maxLength":300}},"required":["disposition","findings","reason"]}'
+OPUS_REVIEW_SCHEMA='{"type":"object","additionalProperties":false,"properties":{"verdict":{"type":"string","enum":["ACCEPT","REJECT"]},"findings":{"type":"array","maxItems":5,"items":{"type":"object","additionalProperties":false,"properties":{"severity":{"type":"string","enum":["P0","P1","P2"]},"finding":{"type":"string","maxLength":220}},"required":["severity","finding"]}},"reason":{"type":"string","maxLength":300}},"required":["verdict","findings","reason"]}'
 
 usage() {
   echo "Usage: $0 prepare <isolated-worktree> <order-file> <task>"
   echo "       $0 execute <isolated-worktree> <approved-order-file> <task>"
   echo "       $0 inspect <isolated-worktree> <approved-order-file> <task>"
+  echo "       $0 cancel <isolated-worktree> <order-file> <REASON_CODE>"
   echo "       printf '%s\n' <task> | $0 prepare|execute <isolated-worktree> <order-file>"
 }
 
@@ -95,24 +115,35 @@ case "$ORDER_FILE" in
   /*) : ;;
   *) ORDER_FILE="$(cd "$(dirname "$ORDER_FILE")" && pwd)/$(basename "$ORDER_FILE")" ;;
 esac
+# gate発火台帳はevidence root直下に置き、prepare/execute/inspectを通して追記する
+GATE_LOG="${ORDER_FILE}.evidence/gates.txt"
 shift 3
-if [[ "$MODE" != "prepare" && "$MODE" != "execute" && "$MODE" != "inspect" ]]; then
+if [[ "$MODE" != "prepare" && "$MODE" != "execute" && "$MODE" != "inspect" && "$MODE" != "cancel" ]]; then
   usage >&2
   exit 2
 fi
-if [[ "$#" -gt 0 ]]; then
+if [[ "$MODE" == "cancel" ]]; then
+  if [[ "$#" != 1 || ! "$1" =~ ^[A-Z][A-Z0-9_]{2,63}$ ]]; then
+    echo "delegate-cursor-supervised: cancel reasonは3〜64文字の大文字reason codeで指定してください" >&2
+    exit 2
+  fi
+  cancel_reason="$1"
+  task=""
+elif [[ "$#" -gt 0 ]]; then
   task="$*"
 else
   task="$(cat)"
 fi
-if [[ -z "${task//[[:space:]]/}" ]]; then
+if [[ "$MODE" != "cancel" && -z "${task//[[:space:]]/}" ]]; then
   usage >&2
   exit 2
 fi
-task_bytes="$(LC_ALL=C printf '%s' "$task" | wc -c | tr -d ' ')"
-if (( task_bytes > MAX_TASK_BYTES )); then
-  echo "delegate-cursor-supervised: taskが文脈予算 ${MAX_TASK_BYTES} bytesを超えています: $task_bytes" >&2
-  exit 2
+if [[ "$MODE" != "cancel" ]]; then
+  task_bytes="$(LC_ALL=C printf '%s' "$task" | wc -c | tr -d ' ')"
+  if (( task_bytes > MAX_TASK_BYTES )); then
+    echo "delegate-cursor-supervised: taskが文脈予算 ${MAX_TASK_BYTES} bytesを超えています: $task_bytes" >&2
+    exit 2
+  fi
 fi
 
 for _ambient_git_var in GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
@@ -124,7 +155,10 @@ for _ambient_git_var in GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTOR
   fi
 done
 
-task_hash="$(printf '%s' "$task" | shasum -a 256 | awk '{print $1}')"
+task_hash=""
+if [[ "$MODE" != "cancel" ]]; then
+  task_hash="$(printf '%s' "$task" | shasum -a 256 | awk '{print $1}')"
+fi
 if [[ "$WORKTREE" == "$PRIMARY_WORKTREE" ]]; then
   echo "delegate-cursor-supervised: 主作業ツリーへの実装発注は禁止です" >&2
   exit 2
@@ -145,6 +179,62 @@ if [[ "$WORKTREE" != "$worktree_toplevel" ]]; then
   echo "delegate-cursor-supervised: WORKTREEはworktree toplevelではありません: $WORKTREE" >&2
   exit 2
 fi
+
+evidence_root="${ORDER_FILE}.evidence"
+if [[ "$MODE" == "cancel" ]]; then
+  if [[ ! -d "$evidence_root" ]]; then
+    echo "delegate-cursor-supervised: cancel対象のrunner evidenceがありません: $evidence_root" >&2
+    exit 2
+  fi
+  cancellation_root="$evidence_root/cancellations"
+  mkdir -p "$cancellation_root"
+  cancellation_dir=""
+  cancellation_number=1
+  while (( cancellation_number <= 10000 )); do
+    candidate="$(printf '%s/cancel-%04d' "$cancellation_root" "$cancellation_number")"
+    if mkdir "$candidate" 2>/dev/null; then
+      cancellation_dir="$candidate"
+      break
+    fi
+    cancellation_number=$((cancellation_number + 1))
+  done
+  if [[ -z "$cancellation_dir" ]]; then
+    echo "delegate-cursor-supervised: cancellation receiptを確保できません" >&2
+    exit 2
+  fi
+  checkpoint_sha256="NONE"
+  if [[ -f "$evidence_root/checkpoint.txt" ]]; then
+    checkpoint_sha256="$(shasum -a 256 "$evidence_root/checkpoint.txt" | awk '{print $1}')"
+    cp "$evidence_root/checkpoint.txt" "$cancellation_dir/checkpoint-before-cancel.txt"
+  fi
+  order_sha256="NONE"
+  if [[ -f "$ORDER_FILE" ]]; then
+    order_sha256="$(shasum -a 256 "$ORDER_FILE" | awk '{print $1}')"
+  fi
+  rm -f "$evidence_root/checkpoint.txt"
+  {
+    echo "STATUS: CANCELLED"
+    echo "CANCEL_SCOPE: ACCEPTANCE_ONLY"
+    echo "REASON: $cancel_reason"
+    echo "ORDER_SHA256: $order_sha256"
+    echo "CHECKPOINT_SHA256: $checkpoint_sha256"
+    echo "WORKTREE: $WORKTREE"
+    echo "HEAD: $(git -C "$WORKTREE" rev-parse HEAD)"
+    echo "RUNNER_SHA256: $RUNNER_SELF_SHA256"
+    echo "ROUTE_CONTRACT_VERSION: $ROUTE_CONTRACT_VERSION"
+    echo "LOOP_PROFILE: $LOOP_PROFILE"
+  } >"$cancellation_dir/receipt.txt"
+  echo "delegate-cursor-supervised: CANCELLED ($cancel_reason): $cancellation_dir/receipt.txt" >&2
+  exit 0
+fi
+
+for cancellation_receipt in "$evidence_root"/cancellations/cancel-*/receipt.txt; do
+  if [[ -f "$cancellation_receipt" ]]; then
+    echo "delegate-cursor-supervised: このorderは明示cancel済みです。新しいorderを作成してください" >&2
+    exit 3
+  fi
+done
+
 for value in "$SUPERVISOR_TIMEOUT_SECONDS" "$SPARK_TIMEOUT_SECONDS" "$INSPECTION_TIMEOUT_SECONDS" "$HEARTBEAT_SECONDS" "$TERMINATION_GRACE_SECONDS"; do
   if [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
     echo "delegate-cursor-supervised: timeout/heartbeatは正の整数で指定してください" >&2
@@ -201,10 +291,111 @@ mark_checkpoint_at_risk() {
   CHECKPOINT_SETTLED=0
 }
 
+# 監督ループのwall time・token・costをrunner自身が記録する。従来は外部modelの
+# 出力を人が画面から書き写すしかなく、採用差分1件あたりの実コストも、REJECTで
+# 捨てた分も機械で追えなかった(2026-08-01計装)。field名はevidence receipt限定で、
+# OpenTelemetry GenAI規約が未安定(2026-07時点でDevelopment)のため恒久形式・
+# 公開契約へは焼かない。測れないstageはUNKNOWNと明記し、欠測を沈黙させない。
+TELEMETRY_VERSION=1
+RUN_AGENT_WALL_SECONDS=0
+
+# どのgateが実際に発火したかを残す。通過したgateは従来一切記録されず、
+# 4,083行の監督機構のうち何が働いているかを実測で判定できなかった(2026-08-01)。
+# gateは失敗時に直接exitするため、ENTERとPASSを対で書き、PASSが無い最後のENTERを
+# 拒否したgateとして読む。GATE_LOGはargument解析直後に設定済み(ここで初期化しない)。
+
+record_gate() {
+  local phase="$1" name="$2"
+  [[ -n "$GATE_LOG" ]] || return 0
+  mkdir -p "$(dirname "$GATE_LOG")"
+  printf 'GATE_%s: %s\n' "$phase" "$name" >>"$GATE_LOG"
+}
+
+gate_run() {
+  local name="$1"
+  shift
+  record_gate ENTER "$name"
+  "$@"
+  record_gate PASS "$name"
+}
+
+# 文脈パッキング層が実際に切り詰めているかを測る。粒がそのまま収まるなら
+# capsuleもcompiled grainも節約しておらず、この層は削れるという実測根拠になる。
+record_context_economy() {
+  local key="$1" produced="$2" baseline="$3"
+  [[ -n "$GATE_LOG" ]] || return 0
+  mkdir -p "$(dirname "$GATE_LOG")"
+  printf 'ECONOMY: %s produced_bytes=%s baseline_bytes=%s\n' "$key" "$produced" "$baseline" >>"$GATE_LOG"
+}
+
+# capsuleを作らず`READ_FILE`を丸ごと渡した場合の入力量。capsuleとの差が節約分
+read_file_total_bytes() {
+  local order_file="$1" worktree="$2" total=0 path bytes
+  while IFS= read -r path; do
+    [[ -n "$path" && -f "$worktree/$path" ]] || continue
+    bytes="$(LC_ALL=C wc -c <"$worktree/$path" | tr -d ' ')"
+    total=$((total + bytes))
+  done < <(awk '/^READ_FILE: /{sub(/^READ_FILE: /, ""); print}' "$order_file")
+  printf '%s' "$total"
+}
+
+record_stage_telemetry() {
+  local telemetry_file="$1" stage="$2" wall_seconds="$3" result_json="${4:-}"
+  local input_tokens="UNKNOWN" output_tokens="UNKNOWN"
+  local cache_read_tokens="UNKNOWN" cost_usd="UNKNOWN" api_ms="UNKNOWN"
+  mkdir -p "$(dirname "$telemetry_file")"
+  if [[ ! -f "$telemetry_file" ]]; then
+    printf 'TELEMETRY_VERSION: %s\n' "$TELEMETRY_VERSION" >"$telemetry_file"
+  fi
+  # Claude CLIの`--output-format json`は既にusageとtotal_cost_usdを返している。
+  # 従来はstructured_outputだけを読み、この計測値を捨てていた。
+  if [[ -n "$result_json" && -f "$result_json" ]] && jq -e 'type == "object"' "$result_json" >/dev/null 2>&1; then
+    # 三CLIでkey表記が違う。Claudeはsnake_case、Cursorはcamel、Codexはcached_input_tokens
+    input_tokens="$(jq -r '.usage.input_tokens // .usage.inputTokens // "UNKNOWN"' "$result_json")"
+    output_tokens="$(jq -r '.usage.output_tokens // .usage.outputTokens // "UNKNOWN"' "$result_json")"
+    cache_read_tokens="$(jq -r '.usage.cache_read_input_tokens // .usage.cacheReadTokens // .usage.cached_input_tokens // "UNKNOWN"' "$result_json")"
+    cost_usd="$(jq -r '.total_cost_usd // "UNKNOWN"' "$result_json")"
+    api_ms="$(jq -r '.duration_api_ms // "UNKNOWN"' "$result_json")"
+  fi
+  {
+    printf '%s_WALL_SECONDS: %s\n' "$stage" "$wall_seconds"
+    printf '%s_INPUT_TOKENS: %s\n' "$stage" "$input_tokens"
+    printf '%s_OUTPUT_TOKENS: %s\n' "$stage" "$output_tokens"
+    printf '%s_CACHE_READ_TOKENS: %s\n' "$stage" "$cache_read_tokens"
+    printf '%s_COST_USD: %s\n' "$stage" "$cost_usd"
+    printf '%s_API_MS: %s\n' "$stage" "$api_ms"
+  } >>"$telemetry_file"
+  # 実行中に何も見えないという運用上の欠陥を、stage完了ごとの1行で塞ぐ
+  echo "delegate-cursor-supervised: 計測 ${stage} wall=${wall_seconds}s tokens_in=${input_tokens} tokens_out=${output_tokens} cost_usd=${cost_usd}" >&2
+}
+
+# 試行全体の合計。UNKNOWNは合計へ足さず、欠測stage名をそのまま残す
+summarize_telemetry() {
+  local telemetry_file="$1"
+  [[ -f "$telemetry_file" ]] || return 0
+  awk '
+    /_WALL_SECONDS: / { split($0, f, ": "); if (f[2] ~ /^[0-9]+$/) wall += f[2] }
+    /_COST_USD: / { split($0, f, ": "); if (f[2] ~ /^[0-9.]+$/) cost += f[2]; else unknown_cost = unknown_cost " " f[1] }
+    /_INPUT_TOKENS: / { split($0, f, ": "); if (f[2] ~ /^[0-9]+$/) tin += f[2]; else unmeasured = unmeasured " " f[1] }
+    /_OUTPUT_TOKENS: / { split($0, f, ": "); if (f[2] ~ /^[0-9]+$/) tout += f[2] }
+    END {
+      printf "TOTAL_WALL_SECONDS: %d\n", wall
+      printf "TOTAL_INPUT_TOKENS: %d\n", tin
+      printf "TOTAL_OUTPUT_TOKENS: %d\n", tout
+      printf "TOTAL_COST_USD: %.6f\n", cost
+      printf "UNMEASURED_TOKEN_STAGES:%s\n", (unmeasured == "" ? " NONE" : unmeasured)
+      printf "UNMEASURED_COST_STAGES:%s\n", (unknown_cost == "" ? " NONE" : unknown_cost)
+    }
+  ' "$telemetry_file" >>"$telemetry_file"
+  echo "delegate-cursor-supervised: 計測合計 $(awk -F': ' '/^TOTAL_|^UNMEASURED_/ {printf "%s=%s ", $1, $2}' "$telemetry_file")" >&2
+}
+
 run_agent() {
   local output="$1"
   local timeout_seconds="$2"
+  local start_epoch
   shift 2
+  start_epoch="$(date +%s)"
   echo "delegate-cursor-supervised: 起動: $1 (timeout=${timeout_seconds}s)" >&2
   # set -mでbackground jobを独立process group(pgid==pid)に置く。外部モデル側の
   # bash孫プロセスがtimeout/returnを生き延びてsnapshot後に書き換えることを防ぐため、
@@ -255,6 +446,8 @@ run_agent() {
   if [[ -s "$output.err" ]]; then
     cat "$output.err" >&2
   fi
+  # timeout・失敗した実行も計測対象にする。捨てた時間こそ支配項だったため
+  RUN_AGENT_WALL_SECONDS=$(( $(date +%s) - start_epoch ))
   return "$status"
 }
 
@@ -279,99 +472,170 @@ result_is_valid() {
   ' "$output"
 }
 
+# 検収を`--output-format text`で受けていた間、thinking delta、usage、失敗理由が
+# 全て捨てられ、空出力の原因を後から切り分けられなかった。stream-jsonへ切り替え、
+# 生streamを証跡に残す。既存の`VERDICT:` marker契約は最終resultテキストの抽出で保つ
+extract_supervisor_result() {
+  local stream="$1" output="$2" result_json="$3"
+  local plan_text="$stream.plan.txt" chat_text="$stream.chat.txt"
+  : >"$output"
+  : >"$result_json"
+  [[ -f "$stream" ]] || return 0
+  jq -c 'select(.type == "result")' "$stream" 2>/dev/null | tail -1 >"$result_json" || true
+  # `--mode plan`の検収者は結論をchat messageでなくplan tool callへ書く。textモードが
+  # これを捨てていたことが「Grokが60秒動いて空出力」の正体だった(2026-08-01実測)。
+  # chat側にはpreambleしか残らないため、plan側を先に見る。
+  jq -s -r '
+    [.[] | select(.type == "tool_call") | .tool_call.createPlanToolCall.args.plan? // empty]
+    | last // empty
+  ' "$stream" 2>/dev/null >"$plan_text" || : >"$plan_text"
+  : >"$chat_text"
+  if [[ -s "$result_json" ]]; then
+    jq -r '.result // empty' "$result_json" >"$chat_text" 2>/dev/null || : >"$chat_text"
+  fi
+  # markerを持つ側を採る。どちらにも無ければ非空の側を残し、原因を診断可能にする
+  if [[ -s "$plan_text" ]] && grep -Eq '^(VERDICT|ORDER): ' "$plan_text"; then
+    cat "$plan_text" >"$output"
+  elif [[ -s "$chat_text" ]] && grep -Eq '^(VERDICT|ORDER): ' "$chat_text"; then
+    cat "$chat_text" >"$output"
+  elif [[ -s "$plan_text" ]]; then
+    cat "$plan_text" >"$output"
+  else
+    cat "$chat_text" >"$output"
+  fi
+}
+
+# 施工も`--json` JSONLで受け、生streamを証跡に残す。表示用のspark-stdout.txtへは
+# agent messageだけを抽出し、usageはturn.completedを正本にする
+extract_spark_result() {
+  local attempt_dir="$1"
+  local stream="$attempt_dir/spark-stream.jsonl"
+  local output="$attempt_dir/spark-stdout.txt"
+  local result_json="$attempt_dir/spark-result.json"
+  : >"$output"
+  : >"$result_json"
+  [[ -f "$stream" ]] || return 0
+  jq -r 'select(.type == "item.completed") | select(.item.type == "agent_message") | .item.text // empty' \
+    "$stream" 2>/dev/null >"$output" || true
+  jq -c 'select(.type == "turn.completed")' "$stream" 2>/dev/null | tail -1 >"$result_json" || true
+}
+
 run_supervisor() {
   local output="$1"
   local prompt="$2"
   local result_kind="$3"
   local timeout_seconds="${4:-$SUPERVISOR_TIMEOUT_SECONDS}"
+  # 起動するmodelはorderの`REVIEW_MODEL`を正本にする。固定定数で起動すると、
+  # 独立性gateが検査した宣言と実際に走るmodelが乖離しうる(2026-08-01独立検収P2指摘)
+  local review_model="${5:-$GROK_PREFLIGHT_MODEL}"
   # plan modeで編集を禁止しつつ、--forceでread-only shellの非対話実行だけを
   # 可能にする。fingerprint/scope検査は、CLI側のmode退行も検出する多層防御。
   local cursor_mode_args=(--trust --mode plan --force --sandbox enabled)
-  if ! run_agent "$output" "$timeout_seconds" \
+  local stream="${output%.txt}-stream.jsonl"
+  local result_json="${output%.txt}-result.json"
+  local agent_status=0
+  run_agent "$stream" "$timeout_seconds" \
     env CURSOR_AGENT=1 "$CURSOR_AGENT_BIN" -p "${cursor_mode_args[@]}" \
-      --output-format text \
-      --model "$CURSOR_GROK_MODEL" \
+      --output-format stream-json \
+      --model "$review_model" \
       --workspace "$WORKTREE" \
-      "$prompt"; then
+      "$prompt" || agent_status=$?
+  # 失敗・timeoutでも抽出する。空出力の理由はstreamにしか残らない
+  extract_supervisor_result "$stream" "$output" "$result_json"
+  if (( agent_status != 0 )); then
     return 1
   fi
   if ! result_is_valid "$output" "$result_kind"; then
-    echo "delegate-cursor-supervised: Grokの結果markerが欠落・曖昧・末尾外です" >&2
+    echo "delegate-cursor-supervised: Cursor stageの結果markerが欠落・曖昧・末尾外です" >&2
     return 1
   fi
 }
 
-opus_delta_is_valid() {
+preflight_output_is_valid() {
   local output="$1"
-  jq -e \
-    --argjson max_findings "$MAX_OPUS_DELTA_FINDINGS" \
-    --argjson max_delta "$MAX_OPUS_DELTA_TEXT_BYTES" \
-    --argjson max_reason "$MAX_OPUS_DELTA_REASON_BYTES" '
-      .type == "result" and
-      .subtype == "success" and
-      (.structured_output | type) == "object" and
-      (.structured_output as $d |
-        (($d | keys | sort) == ["disposition", "findings", "reason"]) and
-        ($d.disposition == "READY" or $d.disposition == "STOP" or $d.disposition == "ESCALATE") and
-        (($d.findings | type) == "array") and
-        (($d.findings | length) <= $max_findings) and
-        all($d.findings[];
-          ((keys | sort) == ["delta", "kind", "severity"]) and
-          (.kind == "RISK" or .kind == "NEGATIVE_ORACLE" or .kind == "STOP" or .kind == "CORRECTION") and
-          (.severity == "P0" or .severity == "P1" or .severity == "P2") and
-          ((.delta | type) == "string") and
-          ((.delta | utf8bytelength) >= 1) and
-          ((.delta | utf8bytelength) <= $max_delta) and
-          ((.delta | test("[\\r\\n]")) | not)
-        ) and
-        (($d.reason | type) == "string") and
-        (($d.reason | utf8bytelength) >= 1) and
-        (($d.reason | utf8bytelength) <= $max_reason) and
-        (($d.reason | test("[\\r\\n]")) | not)
-      )
-    ' "$output" >/dev/null 2>&1
+  local findings reason_count reason reason_bytes count line id kind severity delta delta_bytes expected_id="F0"
+  result_is_valid "$output" order || return 1
+  reason_count="$(grep -c '^PREFLIGHT_REASON: ' "$output" || true)"
+  [[ "$reason_count" == "1" ]] || return 1
+  reason="$(awk '/^PREFLIGHT_REASON: /{sub(/^PREFLIGHT_REASON: /, ""); print}' "$output")"
+  [[ -n "$reason" && "$reason" != *$'\n'* && "$reason" != *$'\r'* ]] || return 1
+  reason_bytes="$(printf '%s' "$reason" | LC_ALL=C wc -c | tr -d ' ')"
+  (( reason_bytes <= MAX_PREFLIGHT_REASON_BYTES )) || return 1
+  findings="$(grep '^PREFLIGHT_FINDING: ' "$output" || true)"
+  count="$(grep -c '^PREFLIGHT_FINDING: ' "$output" || true)"
+  (( count <= MAX_PREFLIGHT_FINDINGS )) || return 1
+  [[ -z "$findings" ]] && return 0
+  while IFS= read -r line; do
+    if [[ ! "$line" =~ ^PREFLIGHT_FINDING:\ (F[1-5])\ (RISK|NEGATIVE_ORACLE|STOP|CORRECTION)\ (P0|P1|P2)\ (.+)$ ]]; then
+      return 1
+    fi
+    id="${BASH_REMATCH[1]}"; kind="${BASH_REMATCH[2]}"; severity="${BASH_REMATCH[3]}"; delta="${BASH_REMATCH[4]}"
+    [[ -n "$id" && -n "$kind" && -n "$severity" && -n "$delta" ]] || return 1
+    expected_id="F$(( ${expected_id#F} + 1 ))"
+    [[ "$id" == "$expected_id" ]] || return 1
+    delta_bytes="$(printf '%s' "$delta" | LC_ALL=C wc -c | tr -d ' ')"
+    (( delta_bytes <= MAX_PREFLIGHT_TEXT_BYTES )) || return 1
+  done <<<"$findings"
+  [[ "$(printf '%s\n' "$findings" | awk '{print $2}' | sort | uniq -d | wc -l | tr -d ' ')" == "0" ]]
 }
 
-run_order_manager_delta() {
+run_grok_preflight() {
   local output="$1"
   local prompt="$2"
   local timeout_seconds="${3:-$SUPERVISOR_TIMEOUT_SECONDS}"
-  local session_id retry_prompt
+  if ! run_supervisor "$output" "$prompt" order "$timeout_seconds" "$GROK_PREFLIGHT_MODEL"; then
+    return 1
+  fi
+  preflight_output_is_valid "$output"
+}
+
+opus_review_is_valid() {
+  local output="$1"
+  jq -e '
+    .type == "result" and .subtype == "success" and
+    (.structured_output | type) == "object" and
+    ((.structured_output | keys | sort) == ["findings", "reason", "verdict"]) and
+    (.structured_output.verdict == "ACCEPT" or .structured_output.verdict == "REJECT") and
+    (.structured_output.findings | type) == "array" and
+    (.structured_output.findings | length) <= 5 and
+    all(.structured_output.findings[];
+      ((keys | sort) == ["finding", "severity"]) and
+      (.severity == "P0" or .severity == "P1" or .severity == "P2") and
+      (.finding | type) == "string" and (.finding | utf8bytelength) >= 1 and
+      (.finding | utf8bytelength) <= 220 and ((.finding | test("[\\r\\n]")) | not)) and
+    (.structured_output.reason | type) == "string" and
+    (.structured_output.reason | utf8bytelength) >= 1 and
+    (.structured_output.reason | utf8bytelength) <= 300 and
+    ((.structured_output.reason | test("[\\r\\n]")) | not)
+  ' "$output" >/dev/null 2>&1
+}
+
+run_opus_review() {
+  local output="$1" prompt="$2" timeout_seconds="${3:-$INSPECTION_TIMEOUT_SECONDS}"
+  local session_id sandbox_profile
   session_id="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+  sandbox_profile="$tmp_dir/opus-review.sb"
+  cat >"$sandbox_profile" <<EOF
+(version 1)
+(allow default)
+(deny file-write* (subpath "$WORKTREE"))
+(deny file-write* (subpath "$ROOT_DIR"))
+EOF
   if ! run_agent "$output" "$timeout_seconds" \
+    /usr/bin/sandbox-exec -f "$sandbox_profile" \
     env CLAUDE_DELEGATED=1 "$CLAUDE_AGENT_BIN" -p \
-      --model "$OPUS_MANAGER_MODEL" \
-      --effort low \
-      --permission-mode default \
-      --tools "" \
+      --model "$OPUS_REVIEW_MODEL" \
+      --effort high \
+      --permission-mode bypassPermissions \
+      --tools "Read,Bash" \
       --session-id "$session_id" \
-      --json-schema "$OPUS_DELTA_SCHEMA" \
+      --no-session-persistence \
+      --json-schema "$OPUS_REVIEW_SCHEMA" \
       --output-format json \
       "$prompt"; then
     return 1
   fi
-  if opus_delta_is_valid "$output"; then
-    return 0
-  fi
-
-  echo "delegate-cursor-supervised: Opus typed deltaがschema不正。same-sessionで一回だけ差戻します" >&2
-  retry_prompt="Your previous response was not a valid typed delta. Return only one JSON object matching the same supplied schema. Do not add prose, markdown, tools, or a full order."
-  if run_agent "$output.retry" "$timeout_seconds" \
-    env CLAUDE_DELEGATED=1 "$CLAUDE_AGENT_BIN" -p \
-      --model "$OPUS_MANAGER_MODEL" \
-      --effort low \
-      --permission-mode default \
-      --tools "" \
-      --resume "$session_id" \
-      --json-schema "$OPUS_DELTA_SCHEMA" \
-      --output-format json \
-      "$retry_prompt" &&
-      opus_delta_is_valid "$output.retry"; then
-    mv "$output.retry" "$output"
-    return 0
-  fi
-  echo "delegate-cursor-supervised: Opus typed deltaが二回ともschema不正。散文fallbackしません" >&2
-  return 1
+  opus_review_is_valid "$output"
 }
 
 # U0e-2の却下原因(発注書と正本の未照合)を再発させないためのgate。詳細:
@@ -810,6 +1074,13 @@ gate_check_allowed_files() {
     if [[ "$af" == *".."* ]]; then
       gate_fail "ALLOWED_FILE path traversal: $af"
     fi
+    # 正規化されていないpathはowner分類を潰す。先頭`./`だけでなく
+    # `crates/./a`/`crates/./b`も両方ownerが`crates/.`になり得るため、
+    # path componentとしての`.`を全位置で拒否する(2026-08-01独立検収P0)
+    if [[ "$af" == ./* || "$af" == */./* || "$af" == */. || \
+          "$af" == */ || "$af" == *//* ]]; then
+      gate_fail "ALLOWED_FILE path must be normalized: $af"
+    fi
     if [[ "${af%%/*}" == "target" ]]; then
       gate_fail "ALLOWED_FILE covers derived target output: $af"
     fi
@@ -986,6 +1257,7 @@ build_target_capsule() {
   done
   rm -f "$seen_file"
   capsule_bytes="$(LC_ALL=C wc -c <"$output" | tr -d ' ')"
+  record_context_economy TARGET_CAPSULE "$capsule_bytes" "$(read_file_total_bytes "$order_file" "$worktree")"
   (( capsule_bytes <= MAX_TARGET_CAPSULE_BYTES )) \
     || gate_fail "target capsule exceeds $MAX_TARGET_CAPSULE_BYTES bytes: $capsule_bytes"
 }
@@ -998,7 +1270,7 @@ gate_check_compiled_grain_contract() {
   done
 }
 
-# 承認済みorderはCodex/Grokの検証正本として保持する一方、Sparkには施工判断へ
+# 承認済みorderはCodex／final reviewerの検証正本として保持する一方、Sparkには施工判断へ
 # 不要なprovenance、閉鎖判定、model routingを再送しない。未知の製品固有ラベルや
 # 自由記述は勝手に捨てず、runner所有の既知metadataだけを除く決定的な射影にする。
 build_compiled_spark_grain() {
@@ -1007,14 +1279,14 @@ build_compiled_spark_grain() {
 
   awk '
     BEGIN { print "SPARK_GRAIN_VERSION: 1" }
-    /^(BASE_REF|BASE_SHA|DEPENDENCY|AUTHORITY|AUTHORITY_SPAN|OWNER_CLOSURE|CAUSE_CLOSURE|CONTRACT_IMPACT|CONTRACT_CLOSURE|CONTRACT_AUTHORITY|ORACLE_CLOSURE|REUSE_CLOSURE|VIEW_PROFILE|HAZARD_TAG|READ_MODE|ORDER|LOOP_PROFILE|ORDER_MANAGER_MODEL|IMPLEMENTER_MODEL|REVIEW_MODEL|TASK_SHA256|CODEX PRECHECK|OPUS_DELTA_REASON):/ {
+    /^(BASE_REF|BASE_SHA|DEPENDENCY|AUTHORITY|AUTHORITY_SPAN|OWNER_CLOSURE|CAUSE_CLOSURE|CONTRACT_IMPACT|CONTRACT_CLOSURE|CONTRACT_AUTHORITY|ORACLE_CLOSURE|REUSE_CLOSURE|VIEW_PROFILE|HAZARD_TAG|READ_MODE|ORDER|ROUTE_CONTRACT_VERSION|LOOP_PROFILE|PREFLIGHT_MODEL|IMPLEMENTER_MODEL|REVIEW_MODEL|TASK_SHA256|CODEX PRECHECK|PREFLIGHT_REASON):/ {
       next
     }
     { print }
   ' "$order_file" >"$output"
 
   [[ -s "$output" ]] || gate_fail "compiled Spark grain is empty"
-  if grep -Eq '^(BASE_REF|BASE_SHA|DEPENDENCY|AUTHORITY|AUTHORITY_SPAN|OWNER_CLOSURE|CAUSE_CLOSURE|CONTRACT_IMPACT|CONTRACT_CLOSURE|CONTRACT_AUTHORITY|ORACLE_CLOSURE|REUSE_CLOSURE|VIEW_PROFILE|HAZARD_TAG|READ_MODE|ORDER|LOOP_PROFILE|ORDER_MANAGER_MODEL|IMPLEMENTER_MODEL|REVIEW_MODEL|TASK_SHA256|CODEX PRECHECK|OPUS_DELTA_REASON):' "$output"; then
+  if grep -Eq '^(BASE_REF|BASE_SHA|DEPENDENCY|AUTHORITY|AUTHORITY_SPAN|OWNER_CLOSURE|CAUSE_CLOSURE|CONTRACT_IMPACT|CONTRACT_CLOSURE|CONTRACT_AUTHORITY|ORACLE_CLOSURE|REUSE_CLOSURE|VIEW_PROFILE|HAZARD_TAG|READ_MODE|ORDER|ROUTE_CONTRACT_VERSION|LOOP_PROFILE|PREFLIGHT_MODEL|IMPLEMENTER_MODEL|REVIEW_MODEL|TASK_SHA256|CODEX PRECHECK|PREFLIGHT_REASON):' "$output"; then
     gate_fail "compiled Spark grain leaked runner-only metadata"
   fi
   [[ "$(grep -c '^SPARK_GRAIN_VERSION: 1$' "$output" || true)" -eq 1 ]] \
@@ -1031,6 +1303,8 @@ build_compiled_spark_grain() {
   done
 
   grain_bytes="$(LC_ALL=C wc -c <"$output" | tr -d ' ')"
+  record_context_economy COMPILED_GRAIN "$grain_bytes" \
+    "$(LC_ALL=C wc -c <"$order_file" | tr -d ' ')"
   (( grain_bytes <= MAX_SPARK_GRAIN_BYTES )) \
     || gate_fail "compiled Spark grain exceeds $MAX_SPARK_GRAIN_BYTES bytes: $grain_bytes"
 }
@@ -1119,7 +1393,7 @@ gate_check_view_profile() {
 
 prepare_skeleton_reject_reserved_fields() {
   local skeleton_file="$1"
-  if grep -Eq '^(ORDER:|CODEX PRECHECK:|LOOP_PROFILE:|ORDER_MANAGER_MODEL:|IMPLEMENTER_MODEL:|REVIEW_MODEL:|TASK_SHA256:|SPARK_GRAIN_VERSION:|OPUS_DELTA_|DELTA_RESOLUTION:|HAZARD_GUARD:|MECHANICAL_GUARD:)' "$skeleton_file"; then
+  if grep -Eq '^(ORDER:|CODEX PRECHECK:|ROUTE_CONTRACT_VERSION:|LOOP_PROFILE:|PREFLIGHT_MODEL:|IMPLEMENTER_MODEL:|REVIEW_MODEL:|TASK_SHA256:|SPARK_GRAIN_VERSION:|PREFLIGHT_|DELTA_RESOLUTION:|HAZARD_GUARD:|MECHANICAL_GUARD:|ORDER_MANAGER_MODEL:|OPUS_DELTA_)' "$skeleton_file"; then
     gate_fail "prepare skeleton contains runner-owned field"
   fi
 }
@@ -1129,12 +1403,12 @@ gate_check_delta_resolutions() {
   local finding_lines resolution_lines line finding_id resolution_id
   local finding_ids="" resolution_ids="" count
 
-  finding_lines="$(grep -E '^OPUS_DELTA_FINDING:' "$order_file" || true)"
+  finding_lines="$(grep -E '^PREFLIGHT_FINDING:' "$order_file" || true)"
   resolution_lines="$(grep -E '^DELTA_RESOLUTION:' "$order_file" || true)"
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
-    if [[ ! "$line" =~ ^OPUS_DELTA_FINDING:\ (F[1-5])\ (RISK|NEGATIVE_ORACLE|STOP|CORRECTION)\ (P0|P1|P2)\ (.+)$ ]]; then
-      gate_fail "OPUS_DELTA_FINDING malformed"
+    if [[ ! "$line" =~ ^PREFLIGHT_FINDING:\ (F[1-5])\ (RISK|NEGATIVE_ORACLE|STOP|CORRECTION)\ (P0|P1|P2)\ (.+)$ ]]; then
+      gate_fail "PREFLIGHT_FINDING malformed"
     fi
     finding_id="${BASH_REMATCH[1]}"
     finding_ids+="${finding_id}"$'\n'
@@ -1150,15 +1424,15 @@ gate_check_delta_resolutions() {
   done <<<"$resolution_lines"
 
   count="$(printf '%s' "$finding_ids" | grep -c '^F' || true)"
-  if (( count > MAX_OPUS_DELTA_FINDINGS )); then
-    gate_fail "too many OPUS_DELTA_FINDING entries: $count"
+  if (( count > MAX_PREFLIGHT_FINDINGS )); then
+    gate_fail "too many PREFLIGHT_FINDING entries: $count"
   fi
   [[ -z "$finding_ids" || -z "$(printf '%s' "$finding_ids" | sort | uniq -d)" ]] \
-    || gate_fail "duplicate OPUS_DELTA_FINDING ID"
+    || gate_fail "duplicate PREFLIGHT_FINDING ID"
   [[ -z "$resolution_ids" || -z "$(printf '%s' "$resolution_ids" | sort | uniq -d)" ]] \
     || gate_fail "duplicate DELTA_RESOLUTION ID"
   if [[ "$(printf '%s' "$finding_ids" | sort)" != "$(printf '%s' "$resolution_ids" | sort)" ]]; then
-    gate_fail "every Opus delta finding requires one matching DELTA_RESOLUTION before precheck"
+    gate_fail "every preflight finding requires one matching DELTA_RESOLUTION before precheck"
   fi
 }
 
@@ -1177,6 +1451,9 @@ append_hazard_guard() {
     SECURITY)
       {
         echo "HAZARD_GUARD: SECURITY requires deny-by-default authority, bounded input, and typed rejection evidence."
+        # 改訂3(2026-08-01): 最上段は非LLM oracleの併用を必須にする。model間エラーは
+        # 60%相関するため、別providerを足しても相関しない軸にならない
+        echo "MECHANICAL_GUARD: authority rejection and permission width must be proven by a test or static check, not by review opinion."
         echo "NEGATIVE_ORACLE: missing or forged authority must fail before mutation without widening permissions."
       } >>"$order_file"
       ;;
@@ -1205,6 +1482,14 @@ append_hazard_guard() {
       gate_fail "cannot append unknown HAZARD_TAG: $hazard_tag"
       ;;
   esac
+}
+
+# 改訂3(2026-08-01): 恒久契約は独立性の最上段であり、非LLM oracleの併用を要求する。
+# hazard tagと同じく、runnerが要求するだけでなく機械guardを供給する
+append_permanence_guard() {
+  local order_file="$1" contract_impact="$2"
+  [[ "$contract_impact" == "PERMANENT" ]] || return 0
+  echo "MECHANICAL_GUARD: permanent format change must be proven by a rejection test or schema golden, not by reviewer opinion." >>"$order_file"
 }
 
 gate_check_clean_worktree() {
@@ -1293,15 +1578,23 @@ gate_check_authorities_at_base() {
 # 通常のclean gateへ通さず、base commit照合とscope/checkpoint検証だけを行う
 run_dispatch_gate_for_inspect() {
   local order_file="$1" worktree="$2"
-  gate_check_base "$order_file" "$worktree"
-  gate_check_grain_and_dependencies "$order_file" "$worktree"
-  gate_check_authorities_at_base "$order_file" "$worktree"
-  gate_check_allowed_files "$order_file"
-  gate_check_context_budget "$order_file" "$worktree"
-  gate_check_compiled_grain_contract "$order_file"
-  gate_check_exact_targets "$order_file" "$worktree" BASE
-  gate_check_view_profile "$order_file"
-  gate_check_react_labels "$order_file"
+  record_gate ROUND "inspect:$(basename "$order_file")"
+  gate_run base gate_check_base "$order_file" "$worktree"
+  gate_run grain_and_dependencies gate_check_grain_and_dependencies "$order_file" "$worktree"
+  gate_run authorities gate_check_authorities_at_base "$order_file" "$worktree"
+  gate_run allowed_files gate_check_allowed_files "$order_file"
+  gate_run contract_boundary gate_check_contract_boundary "$order_file"
+  if grep -Eq '^REVIEW_MODEL:' "$order_file"; then
+    gate_run reviewer_independence gate_check_reviewer_independence "$order_file"
+  else
+    record_gate SKIP "reviewer_independence(no REVIEW_MODEL yet)"
+  fi
+  gate_run route_contract gate_check_route_contract "$order_file"
+  gate_run context_budget gate_check_context_budget "$order_file" "$worktree"
+  gate_run compiled_grain_contract gate_check_compiled_grain_contract "$order_file"
+  gate_run exact_targets gate_check_exact_targets "$order_file" "$worktree" BASE
+  gate_run view_profile gate_check_view_profile "$order_file"
+  gate_run react_labels gate_check_react_labels "$order_file"
 }
 
 # GR-D2: 変更許可閉集合とcontent fingerprintの永続証跡。
@@ -1780,7 +2073,7 @@ build_out_of_scope_manifest() {
 
 # expected-parent-digestはparent shell変数(Spark起動前にbuild_out_of_scope_manifestの
 # 結果をhashした値)のみを権威として使う。永続化したevidence file自体を後から読み直して
-# 比較の権威にはしない(Spark/Grokのbash toolがevidence_rootへ書き込み得るため)
+# 比較の権威にはしない(Spark／final reviewerのbash toolがevidence_rootへ書き込み得るため)
 enforce_out_of_scope_manifest_unchanged() {
   local expected_digest="$1" post_manifest_file="$2" violations_file="$3" worktree="$4" pre_ignore_policy="$5"
   local post_digest named_violations_file post_ignore_policy
@@ -1838,7 +2131,7 @@ record_scope_violations() {
   [[ "$found" -eq 0 ]]
 }
 
-# violationsがあればSCOPE NG:を出してGrok起動前にfail closedする
+# violationsがあればSCOPE NG:を出してfinal review起動前にfail closedする
 enforce_scope_closure() {
   local worktree="$1" outfile="$2"
   if ! record_scope_violations "$worktree" "$outfile"; then
@@ -1945,7 +2238,7 @@ compute_ignore_policy_hash() {
 # tracked/staged/untracked(非ignore)の全pathをcontent単位でhashし、
 # git status文言が同じでも中身が変わった場合を検知できる単一fingerprintにする。
 # symlinkはtarget文字列を、通常fileはbytesをhashする。ignore policy hashも
-# 混ぜ込み、Grok検収や再開待ち中の書き換えをfingerprintの一致判定だけで
+# 混ぜ込み、final reviewや再開待ち中の書き換えをfingerprintの一致判定だけで
 # 検知できるようにする
 compute_fingerprint() {
   local worktree="$1"
@@ -2098,7 +2391,7 @@ invalidate_checkpoint() {
 
 # inspectは、実装成功直後に残したcheckpointが現在のorder/task/base/head/
 # worktree fingerprintと完全一致する時だけ進む。driftや証跡欠落はEVIDENCE NG
-# とし、Sparkは元よりGrokも起動しない。
+# とし、Sparkもfinal reviewerも起動しない。
 # 比較は必ずこの関数がindependentに再計算した値(order_sha256/base_ref/base_sha/
 # head_now/fp_now)を基準に行い、checkpoint file自体を比較の権威にはしない。
 # 一致した値はVALIDATED_*globalへ残し、以降の再publishがcheckpoint fileの
@@ -2149,7 +2442,7 @@ validate_checkpoint() {
   VALIDATED_FINGERPRINT="$fp_now"
 }
 
-# Grok検収の起動から終了までを一つのstageとして、直前/直後のfingerprintを
+# 最終検収の起動から終了までを一つのstageとして、直前/直後のfingerprintを
 # 比較する。read-only検収者がworktreeを変えていればACCEPTでも無効化する。
 # checkpointの発行判断はここで完結させる: 呼び出し側がmark_checkpoint_at_riskで
 # 既にEXIT trapを「無効化がデフォルト」に倒した後、fingerprint/scope/order
@@ -2160,17 +2453,17 @@ run_inspection_stage() {
   local worktree="$1" task="$2" order_txt="$3" attempt_dir="$4" inspection_timeout="$5"
   local order_file="$6" expected_order_sha256="$7"
   local evidence_root="$8" cp_attempt_name="$9" cp_task_hash="${10}" cp_base_ref="${11}" cp_base_sha="${12}" cp_head="${13}" cp_fingerprint="${14}"
-  local pre_fp post_fp inspection_prompt grok_status=0
+  local pre_fp post_fp inspection_prompt review_status=0 review_start_epoch review_verdict
 
-  snapshot_worktree "$worktree" "$attempt_dir" "pre-grok"
-  pre_fp="$(cat "$attempt_dir/pre-grok-fingerprint.sha256")"
+  snapshot_worktree "$worktree" "$attempt_dir" "pre-review"
+  pre_fp="$(cat "$attempt_dir/pre-review-fingerprint.sha256")"
   if [[ "$pre_fp" != "$cp_fingerprint" ]]; then
     invalidate_checkpoint "$evidence_root"
     inspect_fail "worktree fingerprint drifted before grok inspection started"
   fi
 
   inspection_prompt=$(cat <<EOF
-You are the read-only acceptance supervisor for Motolii. Do not edit files,
+You are the fresh read-only final acceptance reviewer for Motolii. Do not edit files,
 commit, push, create a PR, spawn subagents, or delegate. Inspect the actual diff
 and rerun the exact required evidence now. The binding order is the complete
 Codex-approved policy capsule for this grain. Open only READ_FILE paths, changed
@@ -2183,10 +2476,10 @@ Do not search outside the selected worktree, run broad filesystem find commands,
 or launch background commands. Complete and reap every command before deciding.
 
 Classify P0/P1/P2 with file and line evidence. Any P0/P1, missing required test,
-out-of-allowlist edit, or unverifiable command requires rejection. End with one
-exact plain-text final line: VERDICT: ACCEPT or VERDICT: REJECT. Do not bold it,
-quote it, append text, run another tool, or report background command status
-after that line.
+out-of-allowlist edit, or unverifiable command requires rejection. Return only
+the supplied JSON schema. ACCEPT requires P0=0 and P1=0. A finding may reject
+this grain or identify a follow-up, but it does not authorize new files, owners,
+completion conditions, validation rounds, or implementation.
 
 Original user task:
 $task
@@ -2197,23 +2490,27 @@ EOF
   )
 
   echo
-  echo "## 3. Cursor Grok 4.5 High read-only inspection"
-  grok_status=0
-  (cd "$worktree" && run_supervisor "$attempt_dir/grok-stdout.txt" "$inspection_prompt" verdict "$inspection_timeout") || grok_status=$?
-  enforce_derived_target_closure "$worktree" "post-grok"
-  if [[ "$grok_status" -ne 0 ]]; then
-    [[ ! -f "$attempt_dir/grok-stdout.txt" ]] || cat "$attempt_dir/grok-stdout.txt"
-    snapshot_worktree "$worktree" "$attempt_dir" "post-grok"
-    echo "STAGE: grok FAILED_OR_TIMEOUT" >>"$attempt_dir/stage-result.txt"
+  echo "## 3. Claude Opus 5 fresh read-only final review"
+  review_status=0
+  review_start_epoch="$(date +%s)"
+  (cd "$worktree" && run_opus_review "$attempt_dir/review-result.json" "$inspection_prompt" \
+    "$inspection_timeout") || review_status=$?
+  record_stage_telemetry "$attempt_dir/telemetry.txt" REVIEW "$(( $(date +%s) - review_start_epoch ))" \
+    "$attempt_dir/review-result.json"
+  enforce_derived_target_closure "$worktree" "post-review"
+  if [[ "$review_status" -ne 0 ]]; then
+    [[ ! -f "$attempt_dir/review-result.json" ]] || cat "$attempt_dir/review-result.json"
+    snapshot_worktree "$worktree" "$attempt_dir" "post-review"
+    echo "STAGE: review FAILED_OR_TIMEOUT" >>"$attempt_dir/stage-result.txt"
     # timeout/失敗自体はworktreeを汚していない限りcheckpointを潰さない。
     # これにより後続のinspectがSparkを再実行せずに再開できる。ただしfingerprintが
     # 保たれていても、Grokのbash toolはworktree外の承認済みorder(外部fileとこの
     # 試行のcopyの両方)を書き換え得るため、republishする前に独立して確認する
-    post_fp="$(cat "$attempt_dir/post-grok-fingerprint.sha256")"
+    post_fp="$(cat "$attempt_dir/post-review-fingerprint.sha256")"
     if [[ "$(shasum -a 256 "$order_file" | awk '{print $1}')" != "$expected_order_sha256" || \
           "$(shasum -a 256 "$attempt_dir/order.txt" | awk '{print $1}')" != "$expected_order_sha256" ]]; then
       invalidate_checkpoint "$evidence_root"
-      evidence_fail "approved order mutated during grok inspection"
+      evidence_fail "approved order mutated during final review"
     fi
     if [[ "$post_fp" == "$pre_fp" ]]; then
       publish_checkpoint "$evidence_root" "$cp_attempt_name" "$expected_order_sha256" "$cp_task_hash" "$cp_base_ref" "$cp_base_sha" "$cp_head" "$pre_fp"
@@ -2222,60 +2519,180 @@ EOF
     fi
     exit 1
   fi
-  cat "$attempt_dir/grok-stdout.txt"
+  jq '.structured_output' "$attempt_dir/review-result.json"
 
-  snapshot_worktree "$worktree" "$attempt_dir" "post-grok"
-  post_fp="$(cat "$attempt_dir/post-grok-fingerprint.sha256")"
+  snapshot_worktree "$worktree" "$attempt_dir" "post-review"
+  post_fp="$(cat "$attempt_dir/post-review-fingerprint.sha256")"
 
   if [[ "$post_fp" != "$pre_fp" ]]; then
     invalidate_checkpoint "$evidence_root"
-    record_scope_violations "$worktree" "$attempt_dir/post-grok-scope-violations.txt" || true
-    [[ ! -s "$attempt_dir/post-grok-scope-violations.txt" ]] || cat "$attempt_dir/post-grok-scope-violations.txt" >&2
+    record_scope_violations "$worktree" "$attempt_dir/post-review-scope-violations.txt" || true
+    [[ ! -s "$attempt_dir/post-review-scope-violations.txt" ]] || cat "$attempt_dir/post-review-scope-violations.txt" >&2
     inspect_fail "worktree fingerprint changed during read-only inspection"
   fi
 
   # fingerprintが変わっていなくても、再検証として scope closure を独立に再確認する
-  if ! record_scope_violations "$worktree" "$attempt_dir/post-grok-scope-violations.txt"; then
+  if ! record_scope_violations "$worktree" "$attempt_dir/post-review-scope-violations.txt"; then
     invalidate_checkpoint "$evidence_root"
-    cat "$attempt_dir/post-grok-scope-violations.txt" >&2
-    [[ -z "${CURRENT_ATTEMPT_DIR:-}" ]] || cat "$attempt_dir/post-grok-scope-violations.txt" >>"$CURRENT_ATTEMPT_DIR/stage-result.txt" 2>/dev/null || true
+    cat "$attempt_dir/post-review-scope-violations.txt" >&2
+    [[ -z "${CURRENT_ATTEMPT_DIR:-}" ]] || cat "$attempt_dir/post-review-scope-violations.txt" >>"$CURRENT_ATTEMPT_DIR/stage-result.txt" 2>/dev/null || true
     exit 7
   fi
 
-  # worktree fingerprintはworktree外のorder fileを見ないため、Grok起動前後で
+  # worktree fingerprintはworktree外のorder fileを見ないため、Opus起動前後で
   # 承認済みorder本文(外部fileとこの試行のcopyの両方)が変わっていないか独立に確認する
   if [[ "$(shasum -a 256 "$order_file" | awk '{print $1}')" != "$expected_order_sha256" || \
         "$(shasum -a 256 "$attempt_dir/order.txt" | awk '{print $1}')" != "$expected_order_sha256" ]]; then
     invalidate_checkpoint "$evidence_root"
-    evidence_fail "approved order mutated during grok inspection"
+    evidence_fail "approved order mutated during final review"
   fi
 
   # ここまでintegrityが保たれているため、ACCEPT/REJECTいずれの結果でも
   # checkpointを(parent保持値で)再発行し、後続inspectの再開余地を残す
   publish_checkpoint "$evidence_root" "$cp_attempt_name" "$expected_order_sha256" "$cp_task_hash" "$cp_base_ref" "$cp_base_sha" "$cp_head" "$pre_fp"
 
-  if ! grep -qx 'VERDICT: ACCEPT' "$attempt_dir/grok-stdout.txt"; then
-    echo "delegate-cursor-supervised: Grok検収REJECT。差分は隔離したまま採用しません" >&2
-    echo "STAGE: grok REJECT" >>"$attempt_dir/stage-result.txt"
+  review_verdict="$(jq -r '.structured_output.verdict' "$attempt_dir/review-result.json")"
+  if [[ "$review_verdict" != "ACCEPT" ]] ||
+     jq -e '.structured_output.findings[] | select(.severity == "P0" or .severity == "P1")' \
+       "$attempt_dir/review-result.json" >/dev/null; then
+    # REJECTで捨てた時間とtokenこそ支配項だったため、ここでも必ず合計を出す
+    summarize_telemetry "$attempt_dir/telemetry.txt"
+    echo "delegate-cursor-supervised: Opus最終検収REJECT。差分は隔離したまま採用しません" >&2
+    echo "STAGE: review REJECT" >>"$attempt_dir/stage-result.txt"
     exit 4
   fi
-  echo "STAGE: grok ACCEPT" >>"$attempt_dir/stage-result.txt"
+  echo "STAGE: review ACCEPT" >>"$attempt_dir/stage-result.txt"
+  summarize_telemetry "$attempt_dir/telemetry.txt"
 
   echo "delegate-cursor-supervised: 必須検収ACCEPT。Codex最終レビュー待ちです"
 }
 
+# 改訂1(2026-08-01): 粒の上限は行数でなく契約境界数。境界そのものは意味であって
+# 機械で導出できないため、(a)`CONTRACT_BOUNDARY:`を一つだけ宣言させ、
+# (b)allowlistが単一のtop-level ownerへ収まることを照合する。930行のGR-D3は
+# 誰も境界数を宣言しなかったため、4境界であることが見えないまま2回dispatchされた。
+# docs/はledger・decision-index登録がworkflow上必須のため、別境界に数えない。
+gate_check_contract_boundary() {
+  local order_file="$1"
+  local line af owner seen o count=0
+  local owners=()
+  gate_require_single_field "$order_file" "CONTRACT_BOUNDARY" >/dev/null
+  # 先行gateのglobalへ依存すると、そのgateが走らない経路でowner検査が無言のno-opに
+  # なる(2026-08-01独立検収P1)。orderを直接読み、件数も独立に確認する
+  while IFS= read -r line; do
+    af="${line#ALLOWED_FILE: }"
+    [[ -n "$af" ]] || continue
+    count=$((count + 1))
+    af="${af#./}"
+    case "$af" in
+      docs/*) continue ;;
+      crates/*) owner="crates/$(printf '%s' "${af#crates/}" | cut -d/ -f1)" ;;
+      */*) owner="${af%%/*}" ;;
+      *) owner="." ;;
+    esac
+    seen=0
+    for o in ${owners[@]+"${owners[@]}"}; do
+      [[ "$o" == "$owner" ]] && seen=1
+    done
+    (( seen == 1 )) || owners+=("$owner")
+  done < <(grep -E '^ALLOWED_FILE: ' "$order_file")
+  (( count > 0 )) || gate_fail "CONTRACT_BOUNDARY declared without any ALLOWED_FILE"
+  if (( ${#owners[@]} > 1 )); then
+    gate_fail "ALLOWED_FILE spans multiple contract owners: ${owners[*]}"
+  fi
+}
+
+# 改訂3(2026-08-01): 検収者を固定modelでなく独立性条件で定める。
+# 不変条件は「Grokを使う」ではなく「実装担当から独立した別LLMの外部視点」。
+model_family() {
+  case "$1" in
+    claude-*) printf 'anthropic' ;;
+    gpt-*|codex-*) printf 'openai' ;;
+    cursor-grok-*|grok-*) printf 'xai' ;;
+    *) printf 'unknown' ;;
+  esac
+}
+
+gate_check_reviewer_independence() {
+  local order_file="$1"
+  local reviewer implementer preflight impact hazard allowed found=0
+  # skeleton段でこの関数は呼ばれない。呼び出し側がREVIEW_MODELの有無で分岐し、
+  # 不在時はSKIPとして台帳へ残す。ここでearly returnするとgate_runがPASSを
+  # 追記してしまい、skipと本物の合格を区別できない(2026-08-01独立検収P2)
+  reviewer="$(gate_require_single_field "$order_file" "REVIEW_MODEL")"
+  implementer="$(gate_require_single_field "$order_file" "IMPLEMENTER_MODEL")"
+  preflight="$(gate_require_single_field "$order_file" "PREFLIGHT_MODEL")"
+  # 検査順は独立性の強い条件から。allowlistを先に置くと、identity条件とfamily条件が
+  # allowlistに吸収されて到達不能になり、負例が空虚になる(2026-08-01独立検収P1指摘)
+  [[ "$reviewer" != "$implementer" ]] \
+    || gate_fail "reviewer must differ from the implementer: $reviewer"
+  # 事前設計へ深く関与したmodelを最終reviewerに選ばない
+  [[ "$reviewer" != "$preflight" ]] \
+    || gate_fail "reviewer must not be the preflight model: $reviewer"
+
+  impact="$(gate_require_single_field "$order_file" "CONTRACT_IMPACT")"
+  hazard="$(gate_require_single_field "$order_file" "HAZARD_TAG")"
+  # 段階化: 影響が広がる粒はmodel familyまで離す
+  case "$hazard:$impact" in
+    NONE:PRIVATE) : ;;
+    *)
+      [[ "$(model_family "$reviewer")" != "$(model_family "$implementer")" ]] \
+        || gate_fail "reviewer must be from a different model family for $hazard/$impact"
+      ;;
+  esac
+  for allowed in ${ALLOWED_REVIEW_MODELS[@]+"${ALLOWED_REVIEW_MODELS[@]}"}; do
+    [[ "$allowed" == "$reviewer" ]] && found=1
+  done
+  (( found == 1 )) || gate_fail "REVIEW_MODEL is not an approved independent reviewer: $reviewer"
+  case "$hazard:$impact" in
+    SECURITY:*|DESTRUCTIVE_FS:*|*:PERMANENT)
+      # 最上段は非LLM oracleの併用を必須にする(model間エラー60%相関)。
+      # 存在だけを見ると空宣言で通るため、中身のある一行を要求する
+      grep -Eq '^MECHANICAL_GUARD:[[:space:]]*[^[:space:]]' "$order_file" \
+        || gate_fail "$hazard/$impact requires a declared non-LLM oracle (MECHANICAL_GUARD)"
+      ;;
+  esac
+}
+
+gate_check_route_contract() {
+  local order_file="$1"
+  [[ "$(gate_require_single_field "$order_file" "ROUTE_CONTRACT_VERSION")" == "$ROUTE_CONTRACT_VERSION" ]] \
+    || gate_fail "stale supervision route contract; regenerate the order with version $ROUTE_CONTRACT_VERSION"
+  [[ "$(gate_require_single_field "$order_file" "LOOP_PROFILE")" == "$LOOP_PROFILE" ]] \
+    || gate_fail "stale supervision LOOP_PROFILE; regenerate the order with $LOOP_PROFILE"
+  [[ "$(gate_require_single_field "$order_file" "PREFLIGHT_MODEL")" == "$GROK_PREFLIGHT_MODEL" ]] \
+    || gate_fail "PREFLIGHT_MODEL does not match the active route profile"
+  [[ "$(gate_require_single_field "$order_file" "IMPLEMENTER_MODEL")" == "$SPARK_MODEL" ]] \
+    || gate_fail "IMPLEMENTER_MODEL does not match the active route profile"
+  [[ "$(gate_require_single_field "$order_file" "REVIEW_MODEL")" == "$OPUS_REVIEW_MODEL" ]] \
+    || gate_fail "REVIEW_MODEL does not match the active route profile"
+  if grep -Eq '^(ORDER_MANAGER_MODEL|OPUS_DELTA_FINDING|OPUS_DELTA_REASON):' "$order_file"; then
+    gate_fail "legacy supervision fields are forbidden; regenerate the order instead of translating it"
+  fi
+}
+
 run_dispatch_gate() {
   local order_file="$1" worktree="$2"
-  gate_check_base "$order_file" "$worktree"
-  gate_check_grain_and_dependencies "$order_file" "$worktree"
-  gate_check_authorities "$order_file" "$worktree"
-  gate_check_allowed_files "$order_file"
-  gate_check_context_budget "$order_file" "$worktree"
-  gate_check_compiled_grain_contract "$order_file"
-  gate_check_exact_targets "$order_file" "$worktree"
-  gate_check_view_profile "$order_file"
-  gate_check_clean_worktree "$worktree"
-  gate_check_react_labels "$order_file"
+  record_gate ROUND "$(basename "$order_file")"
+  gate_run base gate_check_base "$order_file" "$worktree"
+  gate_run grain_and_dependencies gate_check_grain_and_dependencies "$order_file" "$worktree"
+  gate_run authorities gate_check_authorities "$order_file" "$worktree"
+  gate_run allowed_files gate_check_allowed_files "$order_file"
+  gate_run contract_boundary gate_check_contract_boundary "$order_file"
+  if grep -Eq '^REVIEW_MODEL:' "$order_file"; then
+    gate_run reviewer_independence gate_check_reviewer_independence "$order_file"
+  else
+    record_gate SKIP "reviewer_independence(no REVIEW_MODEL yet)"
+  fi
+  if grep -Eq '^ORDER: READY$' "$order_file"; then
+    gate_run route_contract gate_check_route_contract "$order_file"
+  fi
+  gate_run context_budget gate_check_context_budget "$order_file" "$worktree"
+  gate_run compiled_grain_contract gate_check_compiled_grain_contract "$order_file"
+  gate_run exact_targets gate_check_exact_targets "$order_file" "$worktree"
+  gate_run view_profile gate_check_view_profile "$order_file"
+  gate_run clean_worktree gate_check_clean_worktree "$worktree"
+  gate_run react_labels gate_check_react_labels "$order_file"
 }
 
 # gate_check_baseがBASE_REF/BASE_SHAを検証した後だけ呼ぶ。発注書本文の間接的な
@@ -2295,65 +2712,84 @@ if [[ "$MODE" == "prepare" ]]; then
   skeleton_file="$tmp_dir/order-skeleton.txt"
   printf '%s\n' "$task" >"$skeleton_file"
   prepare_skeleton_reject_reserved_fields "$skeleton_file"
-  # Opusへ渡す前に、Codex骨格だけでbase、ledger、authority、scope、視野幅を
+  # Grokへ渡す前に、Codex骨格だけでbase、ledger、authority、scope、視野幅を
   # 全て閉じる。WIDEや不一致はmodelに解釈させずここで差戻す。
   run_dispatch_gate "$skeleton_file" "$WORKTREE"
   hazard_tag="$(gate_require_single_field "$skeleton_file" "HAZARD_TAG")"
   supervisor_prompt=$(cat <<EOF
-You are the read-only validator for one Motolii implementation grain. Do not use
-tools, edit, commit, push, create a PR, spawn subagents, delegate, inspect the
-repository, restate the order, or invent authority. Codex and the runner already
+You are the read-only preflight reviewer for one Motolii implementation grain.
+Do not edit, commit, push, create a PR, spawn subagents, delegate, inspect outside
+the selected worktree, restate the order, or invent authority. Codex and the runner already
 validated BASE_SHA, ledger state, dependencies, authority hashes, allowlist,
 read set, exact internal/test/reuse targets, context budgets, VIEW_PROFILE,
 NEW_SURFACE, and HAZARD_TAG in the skeleton below.
 Those runner-owned fields are immutable.
 
-Return only the supplied JSON Schema. disposition is READY when the skeleton is
-sufficient, STOP when it contradicts its own closed contract, and ESCALATE when
-the stated facts expose a wider unresolved problem. findings contain only the
-highest-severity missing RISK, NEGATIVE_ORACLE, STOP, or CORRECTION. Return at
-most $MAX_OPUS_DELTA_FINDINGS findings, each at most
-$MAX_OPUS_DELTA_TEXT_BYTES bytes. Prefer fewer findings. Do not repeat facts
-already present, propose optional hardening, expand product scope, or write a
-full order. Known hazard guards are injected mechanically after validation.
+Return zero to $MAX_PREFLIGHT_FINDINGS exact single-line findings in this form:
+PREFLIGHT_FINDING: F1 RISK P2 text
+Use sequential F1..F5 IDs and only RISK, NEGATIVE_ORACLE, STOP, or CORRECTION.
+Each text is at most $MAX_PREFLIGHT_TEXT_BYTES bytes. Then return exactly one
+PREFLIGHT_REASON line of at most $MAX_PREFLIGHT_REASON_BYTES bytes. End with
+exactly ORDER: READY when the skeleton is sufficient, or ORDER: STOP when it is
+not. Do not add prose after the marker. Do not repeat facts already present,
+propose optional hardening, expand product scope, or write a full order. Known
+hazard guards are injected mechanically after validation. A finding may only stop
+this grain or identify a follow-up. It does not authorize new files, owners,
+completion conditions, validation rounds, or model calls in this grain.
 
 Validated order skeleton:
 $task
 EOF
   )
-  echo "## 1. Claude Opus 5 typed order delta"
-  if ! (cd "$WORKTREE" && run_order_manager_delta "$tmp_dir/opus-result.json" "$supervisor_prompt"); then
-    [[ ! -f "$tmp_dir/opus-result.json" ]] || cat "$tmp_dir/opus-result.json"
+  echo "## 1. Cursor Grok 4.5 High grain preflight"
+  prepare_telemetry_file="${ORDER_FILE}.evidence/prepare-telemetry.txt"
+  prepare_evidence_root="${ORDER_FILE}.evidence"
+  mkdir -p "$prepare_evidence_root"
+  preflight_start_epoch="$(date +%s)"
+  if ! (cd "$WORKTREE" && run_grok_preflight "$tmp_dir/preflight-output.txt" "$supervisor_prompt"); then
+    for evidence_file in preflight-output.txt preflight-output-stream.jsonl preflight-output-result.json; do
+      [[ ! -f "$tmp_dir/$evidence_file" ]] || cp "$tmp_dir/$evidence_file" "$prepare_evidence_root/$evidence_file"
+    done
+    record_stage_telemetry "$prepare_telemetry_file" PREFLIGHT \
+      "$(( $(date +%s) - preflight_start_epoch ))" "$tmp_dir/preflight-output-result.json"
+    [[ ! -f "$tmp_dir/preflight-output.txt" ]] || cat "$tmp_dir/preflight-output.txt"
     exit 1
   fi
-  jq '.structured_output' "$tmp_dir/opus-result.json"
-  jq -c '.structured_output' "$tmp_dir/opus-result.json" >"$tmp_dir/opus-delta.json"
-  opus_disposition="$(jq -r '.disposition' "$tmp_dir/opus-delta.json")"
-  if [[ "$opus_disposition" != "READY" ]]; then
-    echo "delegate-cursor-supervised: Opus typed delta disposition=${opus_disposition}。Sparkは起動しません" >&2
+  for evidence_file in preflight-output.txt preflight-output-stream.jsonl preflight-output-result.json; do
+    [[ ! -f "$tmp_dir/$evidence_file" ]] || cp "$tmp_dir/$evidence_file" "$prepare_evidence_root/$evidence_file"
+  done
+  record_stage_telemetry "$prepare_telemetry_file" PREFLIGHT \
+    "$(( $(date +%s) - preflight_start_epoch ))" "$tmp_dir/preflight-output-result.json"
+  cat "$tmp_dir/preflight-output.txt"
+  if ! grep -qx 'ORDER: READY' "$tmp_dir/preflight-output.txt"; then
+    summarize_telemetry "$prepare_telemetry_file"
+    echo "delegate-cursor-supervised: Grok preflight STOP。Sparkは起動しません" >&2
     exit 3
   fi
-  blocking_delta_count="$(jq '[.findings[] | select(.severity == "P0" or .severity == "P1")] | length' \
-    "$tmp_dir/opus-delta.json")"
+  blocking_delta_count="$(grep -Ec '^PREFLIGHT_FINDING: F[1-5] (RISK|NEGATIVE_ORACLE|STOP|CORRECTION) P[01] ' \
+    "$tmp_dir/preflight-output.txt" || true)"
   if (( blocking_delta_count > 0 )); then
-    echo "delegate-cursor-supervised: Opus P0/P1 deltaが${blocking_delta_count}件あります。骨格とexact oracleへ織り込み、prepareを再実行してください" >&2
+    summarize_telemetry "$prepare_telemetry_file"
+    echo "delegate-cursor-supervised: Grok P0/P1 findingが${blocking_delta_count}件あります。骨格とexact oracleへ織り込み、prepareを再実行してください" >&2
     exit 3
   fi
 
   cat "$skeleton_file" >"$ORDER_FILE"
   append_hazard_guard "$ORDER_FILE" "$hazard_tag"
-  jq -r '.findings | to_entries[] | "OPUS_DELTA_FINDING: F\(.key + 1) \(.value.kind) \(.value.severity) \(.value.delta)"' \
-    "$tmp_dir/opus-delta.json" >>"$ORDER_FILE"
+  append_permanence_guard "$ORDER_FILE" "$(gate_require_single_field "$skeleton_file" "CONTRACT_IMPACT")"
+  grep '^PREFLIGHT_FINDING: ' "$tmp_dir/preflight-output.txt" >>"$ORDER_FILE" || true
   {
-    printf 'OPUS_DELTA_REASON: %s\n' "$(jq -r '.reason' "$tmp_dir/opus-delta.json")"
+    grep '^PREFLIGHT_REASON: ' "$tmp_dir/preflight-output.txt"
     echo "ORDER: READY"
+    echo "ROUTE_CONTRACT_VERSION: $ROUTE_CONTRACT_VERSION"
     echo "LOOP_PROFILE: $LOOP_PROFILE"
-    echo "ORDER_MANAGER_MODEL: $OPUS_MANAGER_MODEL"
+    echo "PREFLIGHT_MODEL: $GROK_PREFLIGHT_MODEL"
     echo "IMPLEMENTER_MODEL: $SPARK_MODEL"
-    echo "REVIEW_MODEL: $CURSOR_GROK_MODEL"
+    echo "REVIEW_MODEL: $OPUS_REVIEW_MODEL"
     echo "TASK_SHA256: $task_hash"
   } >>"$ORDER_FILE"
   run_dispatch_gate "$ORDER_FILE" "$WORKTREE"
+  summarize_telemetry "$prepare_telemetry_file"
   echo "delegate-cursor-supervised: 発注書案を保存しました: $ORDER_FILE" >&2
   echo "delegate-cursor-supervised: Codex審査後に CODEX PRECHECK: APPROVED を追記してください" >&2
   exit 0
@@ -2372,20 +2808,16 @@ if ! grep -qx "TASK_SHA256: $task_hash" "$ORDER_FILE"; then
   exit 3
 fi
 ORDER_LOOP_PROFILE="$(order_value "$ORDER_FILE" LOOP_PROFILE)"
-ORDER_MANAGER_MODEL="$(order_value "$ORDER_FILE" ORDER_MANAGER_MODEL)"
+ORDER_ROUTE_CONTRACT_VERSION="$(order_value "$ORDER_FILE" ROUTE_CONTRACT_VERSION)"
+ORDER_PREFLIGHT_MODEL="$(order_value "$ORDER_FILE" PREFLIGHT_MODEL)"
 ORDER_IMPLEMENTER_MODEL="$(order_value "$ORDER_FILE" IMPLEMENTER_MODEL)"
 ORDER_REVIEW_MODEL="$(order_value "$ORDER_FILE" REVIEW_MODEL)"
-if [[ -z "$ORDER_LOOP_PROFILE" || -z "$ORDER_MANAGER_MODEL" || -z "$ORDER_IMPLEMENTER_MODEL" || -z "$ORDER_REVIEW_MODEL" ]]; then
+if [[ -z "$ORDER_ROUTE_CONTRACT_VERSION" || -z "$ORDER_LOOP_PROFILE" || -z "$ORDER_PREFLIGHT_MODEL" || -z "$ORDER_IMPLEMENTER_MODEL" || -z "$ORDER_REVIEW_MODEL" ]]; then
   echo "delegate-cursor-supervised: 発注書のloop/model指定が欠落または重複しています" >&2
   exit 3
 fi
-if [[ "$ORDER_LOOP_PROFILE" != "$LOOP_PROFILE" ]] ||
-   [[ "$ORDER_MANAGER_MODEL" != "$OPUS_MANAGER_MODEL" ]] ||
-   [[ "$ORDER_IMPLEMENTER_MODEL" != "$SPARK_MODEL" ]] ||
-   [[ "$ORDER_REVIEW_MODEL" != "$CURSOR_GROK_MODEL" ]]; then
-  echo "delegate-cursor-supervised: 発注書のmodel経路がOpus/Spark/Grok監督ループと一致しません" >&2
-  exit 3
-fi
+# model配置とroute versionはrun_dispatch_gateの独立性・route contract gateで
+# 順序付きに検査する。ここで先に固定値比較すると、より強いidentity負例が隠れる。
 if ! grep -qx 'CODEX PRECHECK: APPROVED' "$ORDER_FILE"; then
   echo "delegate-cursor-supervised: Codex事前承認がありません" >&2
   exit 3
@@ -2399,31 +2831,43 @@ attempt_dir="$(new_attempt_dir "$evidence_root")"
 CURRENT_ATTEMPT_DIR="$attempt_dir"
 attempt_name="$(basename "$attempt_dir")"
 cp "$ORDER_FILE" "$attempt_dir/order.txt"
-# Spark/Grokが起動する前の承認済みorder本文のhash。checkpointへはこの
+# Spark／Opusが起動する前の承認済みorder本文のhash。checkpointへはこの
 # pre-model hashだけを刻み、各stage後にこの値との一致を独立に再確認する
 approved_order_sha256="$(shasum -a 256 "$attempt_dir/order.txt" | awk '{print $1}')"
 printf '%s' "$task" >"$attempt_dir/task.txt"
+# receiptに書くmodelは定数でなくorderの宣言。既定から外れた場合は代替として明記し、
+# `MODEL_FALLBACK`を実際の値から導出する(literalだと差し替えを隠す)
+RECEIPT_REVIEW_MODEL="$(gate_require_single_field "$ORDER_FILE" "REVIEW_MODEL")"
+RECEIPT_MODEL_FALLBACK="NONE"
 {
   echo "MODE: $MODE"
   echo "TASK_SHA256: $task_hash"
   echo "WORKTREE: $WORKTREE"
+  echo "RUNNER_SHA256: $RUNNER_SELF_SHA256"
+  echo "RUNNER_SOURCE_COMMIT: ${MOTOLII_CANONICAL_RUNNER_SOURCE_COMMIT:-UNKNOWN}"
+  echo "ROUTE_CONTRACT_VERSION: $ROUTE_CONTRACT_VERSION"
   echo "LOOP_PROFILE: $LOOP_PROFILE"
-  echo "ORDER_MANAGER_MODEL: $OPUS_MANAGER_MODEL"
+  echo "PREFLIGHT_MODEL: $GROK_PREFLIGHT_MODEL"
   echo "IMPLEMENTER_MODEL: $SPARK_MODEL"
-  echo "REVIEW_MODEL: $CURSOR_GROK_MODEL"
+  # 改訂3: receiptへ**実際に起動するmodel**を残す。定数を書くと、独立性gateが
+  # 検査した宣言・実際のargv・receiptの三者が乖離し、受領証の意味が消える
+  echo "REVIEW_MODEL: $RECEIPT_REVIEW_MODEL"
+  echo "IMPLEMENTER_MODEL_FAMILY: $(model_family "$SPARK_MODEL")"
+  echo "REVIEW_MODEL_FAMILY: $(model_family "$RECEIPT_REVIEW_MODEL")"
+  echo "MODEL_FALLBACK: $RECEIPT_MODEL_FALLBACK"
 } >"$attempt_dir/metadata.txt"
 
 if [[ "$MODE" == "inspect" ]]; then
   enforce_derived_target_closure "$WORKTREE" "inspect-resume"
   # inspectはSparkを再起動しない。実装成功直後のcheckpointに現在の
   # order/task/base/head/worktree fingerprintが一致する時だけ、scope closureを
-  # 再確認してGrokだけを起動する
+  # 再確認して最終reviewだけを起動する
   validate_checkpoint "$evidence_root" "$ORDER_FILE" "$task_hash" "$WORKTREE"
   run_dispatch_gate_for_inspect "$ORDER_FILE" "$WORKTREE"
   record_base_metadata "$ORDER_FILE" "$attempt_dir"
-  enforce_scope_closure "$WORKTREE" "$attempt_dir/pre-grok-scope-violations.txt"
+  enforce_scope_closure "$WORKTREE" "$attempt_dir/pre-review-scope-violations.txt"
   # ここまでの検証はcheckpointを変更しない(先行するinspect失敗の証跡を破壊しない)。
-  # Grokを起動する直前にだけEXIT trapを「無効化がデフォルト」へ倒す
+  # 最終reviewを起動する直前にだけEXIT trapを「無効化がデフォルト」へ倒す
   mark_checkpoint_at_risk "$evidence_root"
   run_inspection_stage "$WORKTREE" "$task" "$(cat "$attempt_dir/order.txt")" "$attempt_dir" "$INSPECTION_TIMEOUT_SECONDS" \
     "$ORDER_FILE" "$approved_order_sha256" \
@@ -2487,8 +2931,9 @@ spark_prompt_sha256="$(shasum -a 256 "$spark_prompt_file" | awk '{print $1}')"
 
 echo
 echo "## 2. Codex Spark implementation"
-if ! run_agent "$attempt_dir/spark-stdout.txt" "$SPARK_TIMEOUT_SECONDS" \
+if ! run_agent "$attempt_dir/spark-stream.jsonl" "$SPARK_TIMEOUT_SECONDS" \
   env CODEX_DELEGATED=1 "$CODEX_AGENT_BIN" --ask-for-approval never exec \
+    --json \
     --ephemeral --ignore-user-config --ignore-rules --strict-config \
     --disable memories --disable plugins --disable apps \
     --disable browser_use --disable browser_use_external \
@@ -2497,12 +2942,18 @@ if ! run_agent "$attempt_dir/spark-stdout.txt" "$SPARK_TIMEOUT_SECONDS" \
     --color never --model "$SPARK_MODEL" \
     --sandbox workspace-write --cd "$WORKTREE" \
     "$implementation_prompt"; then
+  extract_spark_result "$attempt_dir"
+  record_stage_telemetry "$attempt_dir/telemetry.txt" SPARK "$RUN_AGENT_WALL_SECONDS" \
+    "$attempt_dir/spark-result.json"
   [[ ! -f "$attempt_dir/spark-stdout.txt" ]] || cat "$attempt_dir/spark-stdout.txt"
   snapshot_worktree "$WORKTREE" "$attempt_dir" "post-spark"
   echo "STAGE: spark FAILED_OR_TIMEOUT" >>"$attempt_dir/stage-result.txt"
   invalidate_checkpoint "$evidence_root"
   exit 1
 fi
+extract_spark_result "$attempt_dir"
+record_stage_telemetry "$attempt_dir/telemetry.txt" SPARK "$RUN_AGENT_WALL_SECONDS" \
+  "$attempt_dir/spark-result.json"
 cat "$attempt_dir/spark-stdout.txt"
 verify_generated_file_integrity "$target_capsule_file" "$target_capsule_sha256" "Spark target capsule"
 verify_generated_file_integrity "$compiled_grain_file" "$compiled_grain_sha256" "compiled Spark grain"
@@ -2551,8 +3002,8 @@ base_ref_val="$(gate_require_single_field "$ORDER_FILE" "BASE_REF")"
 base_sha_val="$(gate_require_single_field "$ORDER_FILE" "BASE_SHA")"
 publish_checkpoint "$evidence_root" "$attempt_name" "$approved_order_sha256" "$task_hash" "$base_ref_val" "$base_sha_val" "$head_before" "$post_impl_fp"
 
-# Grokを起動する直前にもう一度EXIT trapを「無効化がデフォルト」へ倒す。
-# run_inspection_stage自身がGrokの結果に応じてpublish/invalidateを確定させる
+# Opusを起動する直前にもう一度EXIT trapを「無効化がデフォルト」へ倒す。
+# run_inspection_stage自身がOpusの結果に応じてpublish/invalidateを確定させる
 mark_checkpoint_at_risk "$evidence_root"
 run_inspection_stage "$WORKTREE" "$task" "$(cat "$attempt_dir/order.txt")" "$attempt_dir" "$INSPECTION_TIMEOUT_SECONDS" \
   "$ORDER_FILE" "$approved_order_sha256" \

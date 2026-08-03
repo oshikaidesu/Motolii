@@ -21,6 +21,11 @@ motolii-plugin-opacity.workspace = true
 motolii-plugin-radial-repeater.workspace = true
 motolii-plugin-sine.workspace = true
 motolii-plugins-firstparty.workspace = true
+rangemap.workspace = true
+priority-queue.workspace = true
+fs4.workspace = true
+foyer-memory.workspace = true
+vello_svg.workspace = true
 
 [[bench]]
 name = "perf_startup"

@@ -2,6 +2,24 @@
 
 ステータス: **ドラフト**(凍結ゲートで確定)
 
+## 実装前の既知実装調査
+
+現行の調査・検証入口は[M5 既知実装採択・検証地図](../m5-known-implementation-adoption-map.md)とする。
+ただし、M5の製品runtimeは[M5休止・M3意味開放契約](../reviews/2026-08-02-m5-pause-until-m3-semantic-release.md)に従い、
+M3の共有writer、通常製品route、snapshot／Stage／Preview／Export、独立受入・main統合が意味論として閉じるまで休止する。
+チケットIDや枝番の完了数ではなく、同契約の意味境界を開放判定に使う。M5の採択地図、decision recovery、private
+fixtureは保持するが、M3の共有契約をM5のprivate型から推測しない。
+
+M5は[既知実装採択・置換開発モデル](../known-implementation-adoption-model.md)に従う。scene／object
+representation、camera observation、spatial renderer、glTF import、depth、text、Vello局所pass、post
+effect、picking／gizmo／bounds、deterministic duplicationを機構classとして先に調査し、具体file／API／
+algorithm、license、thread model、owner、failure mode、platform条件と採択方式をM5採択地図へ閉じる。
+
+P0I〜P7はMotoliiのworld、identity、互換、操作、oracleを保持する入力であり、独自3D engine、scene
+framework、text stack、gizmo frameworkを作る実装列ではない。意味decisionとtest-only fixtureは進められるが、
+**M5の製品runtime実装は、既知実装調査・採択地図・M3意味開放がすべて閉じるまで発注しない。**
+候補、具体API、非証明範囲、M4との共通接合部は[M5既知実装調査](../reviews/2026-08-02-m5-known-implementation-survey.md)に集約する。
+
 ## 目的(退治する落とし穴)
 
 C-4(2.5Dとブレンドモードの衝突)、F-1(glTFとの軸整合)、F-6(テキスト基盤の分界)。
@@ -23,8 +41,8 @@ C-4(2.5Dとブレンドモードの衝突)、F-1(glTFとの軸整合)、F-6(テ�
 - **軸整合(F-1)**: 世界座標は正準座標系と同じ**Y-up・原点中央**(glTFのY-upと一致し、変換なしで同居)。2Dレイヤーは「Z=0のXY平面に置かれた高さ1.0のクワッド」として世界に置く。正準空間がY-upなので2D↔3Dで軸反転が発生しない(テクスチャのV原点等、ラスター側の上下はmotolii-gpu内部で吸収し、パラメータ空間には漏らさない)
 - カメラ文脈はコンポ全体で共有する。M2の`PlanarOrthographic`を既存variant／pixel compatibility baselineとして保持し、M5の空間camera拡張は[Camera Object / Provider決定](../reviews/2026-07-24-camera-object-provider-decision.md)に従う。Host enumへのSpatial variant追加でなく、タイムラインCamera Object、versioned Camera Provider、representation非依存Observation Contractのdecision／schema／runtime統合をP3で行う。位置+注視点+暗黙world-upをpose保存へ使わず、orientation補間・clip・target constraint特異点を先に固定する。レイヤー／グループ固有camera、camera cut、複数active viewは作らない
 - ユーザーが直接触る3Dレイヤー側の値は「素材の配置」に限定する。位置/スケール/回転/奥行き/点サイズ等のモーショングラフィック的なパラメータに留め、オブジェクト階層・ライト・コレクション・制約・レンダーレイヤー等のBlender/Nuke的な概念はv1に入れない
-- ライティングはunlit(必要になったら固定1灯)
-- OBJはglTF変換パスで受ける(内部はglTFのみ)
+- 3D material／lightingのv1境界は[インポート／レンダリング境界決定](../reviews/2026-08-01-m5-3d-import-rendering-boundary-decision.md)を正本とする。core metallic-roughnessと`KHR_materials_unlit`を同じmaterial systemで扱い、lit materialはDocument外・Host所有の固定neutral environmentで描く。bareな固定1灯PBR、runtimeのambient／unlit自動縮退、environment authoring、shadow、user lightは採らない
+- OBJはOSS parserからglTFと同じprivate faithful assetへlowerし、別renderer／別永続formatを作らない。「内部はglTFのみ」は同じmaterial／primitive／diagnostic経路を使う意味であり、変換済みglTF bytesをDocumentやdiskへ保存する意味ではない
 - 被写界深度はZ距離ベースのポストブラーで代用
 - ポストプロセスは通常のRenderNodeとして実装(専用機構を作らない)
 
@@ -97,6 +115,19 @@ object/material/generatorとCamera Providerの追加はplugin境界へ開くが�
 - プラグインは決定論的であること。`render_frame(t, Quality)`の入力から同じ出力を返し、**レンダ系traitは**前フレーム状態に依存するシミュレーションを持たない(逐次シミュレーションはレンダ経路の外のベイク境界=SimulationPlugin+StateTrackで扱う。[simulation-model.md](../simulation-model.md)、2026-07-10改訂)
 - 全遮蔽ポリシーは同じ`render_frame(t, Quality)`から評価し、preview/exportで別経路を作らない。選択値も隠れたruntime stateではなくDocument上の明示値として扱う
 
+## 3D import／material rendererのprivate分界
+
+[M5 3Dインポート／レンダリング境界決定](../reviews/2026-08-01-m5-3d-import-rendering-boundary-decision.md)に従い、
+P1／P2はfull engineを導入せず、privateな二段の派生物へ責任を分ける。
+
+1. importerはOSS parserの出力からsource material意図、node／primitive／animation、解決済みresource、
+   unsupported extensionと欠落resourceの構造化diagnosticを保持する。白materialや欠落textureへの無言fallbackをしない。
+2. renderer capabilityとresource budgetをwhole-assetでpreflightし、同じmesh／material／shader systemへcompileする。
+   `Layer Order`と`Group Depth`はHost所有pass configurationであり、別scene／別rendererを作らない。
+
+両段階はTransientな評価派生物であり、Document／journal／公開plugin API／永続formatへserdeしない。
+P3前に公開Observation／Render Contribution型を発明せず、M4のGpuAssetCache／budget ownerも先取りしない。
+
 ## 動的シミュレーション(物理演算)について — M5固有の補足(2026-07-07 決定 → **2026-07-10 改訂: 「レンダ経路ではやらない」に縮小**)
 
 > **改訂(2026-07-10)**: 本節の決定は「決定論」と「フレーム独立性」を一括りにしていた。固定シード+固定タイムステップの逐次シミュレーションは完全に決定論的であり、失われるのはランダムアクセス性のみ — それは区間キャッシュ+チェックポイント(ベイク)で回収できる。よって決定を次の通り縮小改訂する: **「コアのレンダ経路(`render_frame(t)`と全render系trait)は物理シミュレーションを持たない」は不変**。一方、**逐次シミュレーション自体は、レンダ経路の外のホスト管理ベイク境界(`SimulationPlugin`+StateTrack)を通じて一級のプラグイン種別として設計に含める**。全体設計・成立性試算・段階導入は[simulation-model.md](../simulation-model.md)。以下の本文は改訂前の記録として残す(下記「決定」の1と3の読み替えは改訂注を参照)。
@@ -111,8 +142,8 @@ object/material/generatorとCamera Providerの追加はplugin境界へ開くが�
 
 1. **コアは物理シミュレーションを持たない**。3Dは「時刻t → シーン状態」が純関数で決まるもの(静的メッシュ、キーフレーム/手続き変形、剛体的トランスフォーム)に限定する。これはレンダラ全体の「`render_frame(t)`は決定論的な純関数」という大原則(B-4)と完全に一致する
    - **改訂注(2026-07-10)**: 「コア=レンダ経路」と読み替える。シミュレーションはレンダ経路の外(ベイク相)で走り、`render_frame(t)`はベイク結果(StateTrack)を読む純関数のまま — 原則B-4は不変([simulation-model.md](../simulation-model.md)§3)
-2. **動的シミュレーションが欲しい場合は"ベイク済み"で持ち込む**。他ツール(Blender等)でシミュレーションし、頂点アニメーション付きglTF/Alembic的な**焼き込み済みシーケンス**として読み込む。うちはそれを再生するだけ(逐次計算しない)。「シミュレーションはインポート前に終わっている」を原則にする
-   - **改訂注(2026-07-10)**: このルートは映画級の重いシミュレーション(高解像度流体・破壊等)の推奨経路として存続する。v1の唯一の経路でもある(SimulationPluginの実装はv1.x)
+2. **動的シミュレーションが欲しい場合は"ベイク済み"で持ち込む**。v1は他ツール(Blender等)でrigid／node TRS animationへベイクしたglTF／GLBを時刻`t`の純関数として再生する。「シミュレーションはインポート前に終わっている」を原則にする
+   - **改訂注(2026-08-01)**: 従来の「頂点アニメーション付きglTF/Alembic的sequenceがv1唯一の経路」は、v1でmorph／skinningを持たないガード7と矛盾したため縮小した。morph target clip、skinning、baked deformation、Alembic相当cacheはv1.x再入場とし、retargetingは非目標を維持する(SimulationPluginの実装もv1.x)
 3. ~~仮に将来プロシージャルな動きを足すとしても、前フレーム非依存(時刻の純関数)なものだけを許可する。前フレーム状態を積む本物のシミュレーションはプラグインにも入れない~~ → **改訂(2026-07-10)**: 前フレーム状態を積むシミュレーションを**ホスト管理のベイク境界(`SimulationPlugin`+StateTrack、キャッシュキーはM4-K1と同一の枠)として設計に含める**。キャッシュ設計を壊すのは「隠れ状態」であって「状態」そのものではない — 状態をホストが所有・チェックポイント保存すれば、キャッシュ/スクラブ/並列書き出し/タイムリマップと全部両立する。tの純関数で書けるもの(レベル0/1)を優先する原則は残る([simulation-model.md](../simulation-model.md)§2)
 
 この判断により、3DはM4のキャッシュ機構(ノードID×時間区間×パラメータハッシュ)とグループ仮出力(ベイク)に**そのまま乗る**。「プレビューでは多少カクついてよい、キャッシュで滑らかにする」という要望は、3DレイヤーをDraft品質(低ポリ/低解像度)で回し、確定したら区間ベイクする、という既存の仕組みで実現できる(3D専用の特別扱いが不要)。
@@ -126,8 +157,8 @@ M5は[操作単純化モデル](../interaction-simplicity-model.md)の最初の�
 | ID | 内容 | 依存 | 完了条件(概要) |
 |---|---|---|---|
 | P0I | [#170](https://github.com/oshikaidesu/Motolii/issues/170) **Cavalry型Instance/Behaviour境界spike+意味凍結**: Input Shapes、Distribution、per-instance channels、nested Contextを最小fixtureで再現し、`InstanceId != index`とdomain別Selectorを固定する。製品schema/APIはまだ追加しない | 凍結ゲート, [2026-07-15決定](../reviews/2026-07-15-relative-scope-duplicator-decision.md) | (1)Linear/Grid/Radial/Pathのslot key表 (2)count増減/並べ替え後も残存InstanceId由来seedとmotion sampleが同identityへ追従 (3)nested親子ID/context depth (4)TextCluster/Word/Line、ShapePath、CloneInstanceの寿命差 (5)Position/Rotation/Scale/Visibility/Opacity/Prototype/TimeOffset channel型 (6)cache依存完全列挙 (7)PCG32実装名/versionと`hash(user_seed,id,channel)`golden (8)OS entropy/時計/thread/GPU順を乱数入力にしない |
-| P1 | glTF読み込み(メッシュ・マテリアル最小限)+ OBJ→glTF変換パス | 凍結ゲート | サンプルアセットの読み込みゴールデンテスト |
-| P2 | 3D系LayerSourcePlugin境界: 既存`PlanarOrthographic`を参照し、メッシュ/点群/動画テクスチャ平面をpremultiplied RGBAへレンダ(レイヤー単位に1パス) | P1, M2-D1j/D1k/D3f | 正投影ではZ差だけで視差が生じないこと、plugin内部Z解決後のRGBAが通常Compositeで2D layerと合成されること、3D未使用compのpixel不変をgolden固定 |
+| P1 | OSS leaf parserによるglTF／GLB読み込みとOBJ→同一private asset lowering。core metallic-roughness、unlit、vertex color、UV0/UV1、OPAQUE/MASK、source意図と構造化diagnosticを保持し、renderer capabilityへwhole-asset preflightする | 凍結ゲート, [M5-3D-R0決定](../reviews/2026-08-01-m5-3d-import-rendering-boundary-decision.md)。[M5-A1 private probe](../reviews/evidence/m5-known-implementation/M5-A1/README.md)は`gltf`／`mikktspace`をKEEPしたが製品依存・Importerは未実装 | Khronos positive／malformed asset、required extension、missing／escape URI、oversize、axis／unit、node TRS animationのゴールデン。unsupportedを白material／texture欠落／別alphaへ無言変換しない。parser／image crateのversion・license・maintenance・3 OSを固定 |
+| P2 | 同じmesh／material／shader systemから3D系LayerSourcePlugin境界へ接続する。既存`PlanarOrthographic`を参照し、mesh／point cloud／video planeをlinear-light premultiplied RGBAへレンダする。lit glTFは固定neutral environment、unlitは別BRDFを通さない | P1, M2-D1j/D1k/D3f | 正投影ではZ差だけで視差なし、RGBAが通常Compositeで2D layerと合成、3D未使用compのpixel不変。metal／dielectric／normal／emissive／unlit、texture color semantic、MASK、Preview／Export、low-spec capability refusal、cold／warm resource計測をgolden／receipt固定。bare一灯、runtime自動縮退、二重rendererなし |
 | P3 | Camera Object／Provider／Observation Contractのdecision／schema／runtime統合。orientation補間、handedness／軸、projection／clip、target constraint特異点、Planar切替、初期capability閉集合、provider identity／version pin、active binding Document形、bounds／picking参加を先に固定 | P2 | Spatial／Perspective providerでZを持つ平面がcamera移動により視差するgolden、camera animation E2E、既存Planar project／pixel不変、Preview／Export同一、単一active binding。独立した二Camera Providerとmesh／point rendererが具体provider IDなしで同じObservationを使い、capability不足／provider欠落／version不一致は型付き拒否・Document不変・黙示Planar fallbackなし。provider換装は全体preflight後1 Undo、失敗時変更ゼロ。Camera／renderer間のprivate型、生JSON、opaque ID、scene-aware camera、camera-aware scene format、first-party専用口が構文不能 |
 | P2D | 拡張可能な遮蔽ポリシー境界+組み込み`Layer Order / Group Depth / AE-style Bins`。通常UIは`Z Occlusion` OFF/ON、Advancedは全ポリシーと明示`Depth Participant`を表示 | P1, P3, M2-D1j/D1k/D3f, M3-U2c, M3-U4c, M4-K0 | (1)同じ座標の2平面が`Layer Order`ではレイヤー順、`Group Depth`ではZ交差で前後反転 (2)3D-2D-3D fixtureで明示参加フラグだけがbinを分断 (3)effect/mask/typeは無言でbinを変えない (4)切替前後で座標/見かけ投影/Document子順/Undo/選択不変 (5)group外はピクセル不変 (6)opaque/cutout/soft alphaの対応・拒否が明示 (7)未知/非対応ポリシーを無言fallbackしない (8)Advanced非表示でも適用ポリシーとbin境界を識別可能 (9)Unknown boundsをsort/cull根拠にせずFinalを切らない |
 | P2U | Stage transform toolの`Scale / Depth Move`分離。Scale handleとDepth rail/axisをM3-U2dのCamera/Object操作、既存toolbar/Inspector/timeline語彙へ統合 | P3, M2-D2, M3-U2d | (1)Scale dragはscaleだけ、Depth dragはposition.zだけをD2 command化 (2)各gestureがUndo 1回 (3)perspective/orthographic fixture (4)active toolを文字なし・grayscaleでも形/iconから識別 (5)DPI差で同じ正規化gestureが同じdomain値 (6)script不要で両channelへkeyframe可能 (7)`Position X/Y`・`Depth Z`・`Rotation Z`が別group/channelで、Depth操作から3D modeや第二のDepth fieldを生成しない (8)native wgpu presentation overlayがcanonical preview/export画素を変えず、frame内resource生成/GPU readback 0 (9)CPU解析hit-test、move中semantic write 0、Escape/focus lossの確定変更0 |
@@ -185,12 +216,14 @@ AEの3世代の3D(Ray-traced CS6 / Cineware / Advanced 3D)の死因、glTF実装
 14. **見かけサイズ変化と同名Zの原因を識別可能にする**: perspective上で同じ拡大に見えても、Scale toolはscaleだけ、Depth Move toolはposition.zだけを変更する。`Position X/Y`、`Depth Z`、`Rotation Z`を別group/channelにし、bounding handleとDepth rail/axisを形/icon/labelで分ける。色だけ・数値欄だけ・scriptだけへ意味を隠さず、Depth操作から暗黙の3D modeを作らない。tool選択はDocument外、確定transformだけをD2 commandへ流し、1 gesture=1履歴を守る → P2U
 15. **選択肢を増やせるが、意味を上書きしない**: 初期3方式は組み込みプリセットであり最終的な閉集合ではない。新方式は同じworld/object/camera入力を使う追加ポリシーとして登録し、安定ID・version・能力・alpha保証・fallback可否を宣言する。公開trait/永続schemaの形はP2D実機spike前に発明しない。Advanced controlsの開閉はDocument外、出力を変える選択だけをDocumentへ置く → P2D
 16. **Depth Railをsetup scriptにしない**: AE圏では同じ需要がexpression、controller null、Refresh、Bake、precomp修復として何度も再実装された。Motoliiは評価済みEdit-Space Zをlive表示し、通常transformをD2 macroで編集する。自動group化、mixed-parentの裏XYZ補正、隠れlink、専用animation channel、再生中のauto-fit、GPU readbackを禁止し、Preserve Appearanceの補正channelも可視化する → P2R
+17. **importとrendererを一体のcapability契約にする**: parser成功を製品成功と呼ばず、faithful imported assetとrenderer-compiled派生物をprivateに分ける。core PBR／unlit／texture semantic／alpha／animationをwhole-asset preflightし、unsupportedをimporterで破壊的downgradeしない。両派生物は非serde、`Layer Order / Group Depth`は同じscene／material／shader systemを使う → P1/P2
+18. **bare一灯PBRを既定にしない**: core glTFはHost lightingを完成させず、metallic材質はpunctual一灯だけでは黒化しやすい。v1は固定neutral environmentを使い、具体asset／prefilter／露出／tone-mapはP2 evidenceで固定する。成立しないbackendは3D layerだけtyped refusalとし、ambient／unlit／bare一灯へ無言縮退しない → P2
 
 出典: community.adobe.com(Ray-traced廃止/Cineware激遅/Advanced 3Dハードウェアエラー/Pixel Motion Blur) / creativecow.net(3Dテキストぼけ/16bitバンディング) / discourse.threejs.org(GLBが暗い) / projects.blender.org #118319(+Y Up軸反転) / godotengine.org(ufbx頂点焼き込み)・godotengine/godot#89244(リターゲット) / linebender/xilem#1358 / pop-os/cosmic-term#325 / crft.jetsets.jp(AE縦組みの約物) / aketama.work・note.com(AviUtlカラオケ字幕の実態)
 
 ## 未決事項
 
-- 3Dパスの中間フォーマット(HDRリニアで持つか、レイヤーごとに8bit確定か)。**実装ガード4の調査によりリニアFP16が推奨案**
+- 3Dパスの具体中間GPU format。linear-light／premultiplied意味は維持するが、FP16採否、usage、precision、byte量はGPU evidence前に固定しない
 - ~~縦書き対応の時期とスコープ(v1は横書きのみか)~~ → **判定(2026-07-12): v1は横書きのみ(縦書き延期)+ガード9据え置き**(回転ベースの反面事例2件=resvg・Flutter公式回答を調査で追加確認)。P6契約へは費用≈0の文言3点のみ先行反映(C-1/C-2/C-3、上記追記)。**C-4**(縦行送りメトリクス口)/**C-5**(縦メトリクス欠落診断)は延期=縦書き着手時の完了条件へ、**C-6**(sideways描画材料)は棄却=`glyph_transform`貫通で現契約に既にある、**C-7**(fallback縦適性)は論点記録のみ=実質の緩和策はガード8(a)同梱フォント下限保証。併読: [調査メモ](../reviews/2026-07-12-vertical-text-prior-art.md)・[反対側レビュー](../reviews/2026-07-12-vertical-text-prior-art-counter-review.md)
 - ~~モーションブラーはスコープ外のままでよいか~~ → 決定(2026-07-07): プラグイン領域。Quality型にサンプル数の口だけ確保
 - ~~テキストP6の一発API vs ラン単位~~ → **決定(2026-07-10)**: ラン単位3点セット(上記)

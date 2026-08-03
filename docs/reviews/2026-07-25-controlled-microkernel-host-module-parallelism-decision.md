@@ -90,6 +90,10 @@ Coreへ残すのは機能一覧ではなく、複数moduleが同じ作品意味�
 
 Coreがこれらを制御することは、全機能のアルゴリズム、保存backend、UI、policyをCore crateへ置く
 ことを意味しない。`motolii-core` crateの現行item一覧を、この最小Coreの完成形とみなさない。
+また、制御面を列挙したことは機構を第一原理から発明する許可ではない。identity、snapshot、atomic
+commit、lifecycle、scheduling等の各機構classは、正本と`decision-index.md`で一度裁定した
+`REUSE / ADOPT / WRAP / PORT / PATTERN / EXTERNAL`の供給routeを持ち、後続seatが継承する。
+Coreが持つのはauthority、製品policy、admission、acceptance oracleと薄い接続である。
 
 ## 4. Host capability moduleへ分離できるもの
 
@@ -176,6 +180,7 @@ process間GPU共有、ABI、署名、permission、quota、version negotiationは
 5. module追加が他moduleのsource、fixture期待値、Document schemaを変更しない。
 6. duplicate identity、authority重複、private dependency、未宣言capabilityを機械拒否できる。
 7. 通常製品routeへ合流する前の単体成果と、slice完成を区別できる。
+8. 機構classの採択済み供給routeがあり、必須oracle、license、platform、security、maintenanceの反証がない。
 
 共有contract、Document意味、永続形式、公開API、authority多重度の変更が必要になった実装は
 `STOP`し、当該contractだけの独立decision／orderへ戻す。他moduleの実装へ便乗して広げない。
@@ -248,8 +253,9 @@ runtimeではaccepted revisionから発行した同一snapshotを複数evaluator
 - 現行仕様taskを「module化できる」という理由だけで完了扱いすること
 
 次の実装前作業は、現行crateとtaskを本書のseat候補へ分類し、
-`KEEP IN KERNEL / EXTRACT CONTRACT / PROVIDER CANDIDATE / CONSUMER / REJECT`
-およびauthority多重度を記録するread-only inventoryである。inventoryからtraitやcrateを自動生成せず、
+`KEEP IN KERNEL / EXTRACT CONTRACT / PROVIDER CANDIDATE / CONSUMER / REJECT`、authority多重度、
+採択済み`SUPPLIER DISPOSITION`を記録するread-only inventoryである。供給routeが無い機構はmodelが
+新設せず、既知routeの反証を添えて利用者例外へ返す。inventoryからtraitやcrateを自動生成せず、
 二実装、conformance、製品sliceへの速度効果があるseatだけを個別decisionへ上げる。
 
 ## 11. 開発速度の審判

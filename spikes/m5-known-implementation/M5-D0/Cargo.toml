@@ -1,0 +1,11 @@
+[package]
+name = "m5-d0-stable-instance-evaluator"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+rand_pcg = "=0.10.2"
+thiserror = "2"

@@ -66,6 +66,18 @@
       "sha256": "9e08238e9325977bf2372366b7b6c7f33f30a5e0378b85f5890ece3ee973ae97"
     },
     {
+      "path": "docs/mocks-ui/src/diagnostics/FeedbackStateMatrix.jsx",
+      "sha256": "da7c7f8b71c1518675ee23d247883d4aac299f370177a21a3cd02c671f73c4ca"
+    },
+    {
+      "path": "docs/mocks-ui/src/diagnostics/feedback-state-matrix.css",
+      "sha256": "3545caf57d23b99647ffd8e6c15fec1f3c96f21e3801ce3c6a6ef23f0477ef1e"
+    },
+    {
+      "path": "docs/mocks-ui/src/feedback/Feedback.jsx",
+      "sha256": "0a223bc03e59ca47dce30488df1f2114622cdcf318e9c7d0a4ae23ecc7ef7fc1"
+    },
+    {
       "path": "docs/mocks-ui/src/fixtures/allSurfaces.js",
       "sha256": "e9e982284f91784d23edd6e2bbb15ee8cc1bc96726263fe1c729a59c8d8ec174"
     },
@@ -79,7 +91,7 @@
     },
     {
       "path": "docs/mocks-ui/src/legacy/LegacyHostBoundaryScreen.jsx",
-      "sha256": "3243ffbc863f660ec527def954bf8358c381cd5a492cda13cb4ed95044c9f09e"
+      "sha256": "8e6231068970623aab94435fe6cd89602492a9b176dc92e70dcc98740e8b5ed9"
     },
     {
       "path": "docs/mocks-ui/src/legacy/LegacyRegions.jsx",
@@ -91,19 +103,15 @@
     },
     {
       "path": "docs/mocks-ui/src/legacy/legacySource.js",
-      "sha256": "4fd547d2efa98d6d1fadf403b4ae2379abb0767d50cda172f8f6fa749a230e20"
+      "sha256": "cdc35cbe821213f1d8c6ad7d5fc1470dddfa38db1a0b9ac5c9c8568dc328021f"
     },
     {
       "path": "docs/mocks-ui/src/main.jsx",
-      "sha256": "2164f5505b51adac31c07c09728573958af6276ae8a025a3700ebe0e2b02cf9f"
+      "sha256": "dc5214ad7b3c24e0ccd48ed9839b98619269649dced75742838004cde1d85ac6"
     },
     {
       "path": "docs/mocks-ui/src/primitives/index.jsx",
-      "sha256": "005b5db5a71f75ab139d26f44169538f74d3711ca2244748e9b4a016088c9f8b"
-    },
-    {
-      "path": "docs/mocks-ui/src/primitives/primitives.css",
-      "sha256": "f625758bbfb9db6577618584a79ef9e900510ffc96662c6b1f6191393590959c"
+      "sha256": "912dd2a15937e280a511921a3db893cb8ba9c0a6fb2c3c5ef1d2be40fe178943"
     },
     {
       "path": "docs/mocks-ui/src/reference/EmptyBrowserReference.jsx",
@@ -139,7 +147,7 @@
     },
     {
       "path": "docs/mocks-ui/src/reference/reference-font.css",
-      "sha256": "8bb4122baef8f57b7dff5181eda98fb059505f9a9a6db3111994d9b60788aea3"
+      "sha256": "a38f177c482f38b8c7566707efa18fef7a20d0c21dd818182afff4f8744aa8a1"
     },
     {
       "path": "docs/mocks-ui/src/screens/AllSurfacesScreen.jsx",
@@ -166,6 +174,10 @@
       "sha256": "335eba6886f9804f4ce0c80555ef6d1a1e243fd7deb7458da031734a051dbe5f"
     },
     {
+      "path": "docs/mocks-ui/src/tokens/accepted-route-product-tokens.css",
+      "sha256": "acd772000224d7ebfae3ea206aa498faafe4ff80c2c5330482de76754c5a9a8f"
+    },
+    {
       "path": "docs/mocks-ui/src/tokens/mock-candidates.css",
       "sha256": "7b7ee84a021f3caa0fc327509e41bb7efe30424d032468260159f971ee35b4af"
     },
@@ -174,8 +186,12 @@
       "sha256": "a20bd36d6b8b241ef4ec21adda6b045e470bf89fbc78e2788207aa6d0875ec68"
     },
     {
+      "path": "ui/motolii-tokens/generated/tokens.css",
+      "sha256": "60c7783d073cac324a8f6e303fb72f7643d3ba6a3b1f972069c4d76591effe0c"
+    },
+    {
       "path": "ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx",
-      "sha256": "88a595c4df18da9180bd5fd23486d3006b473a02bf0222650f9ab6d4ffc13e20"
+      "sha256": "89a2e9d399c3943ab50c2e6f4a460a834d689f42904dce38a24346872b34227f"
     },
     {
       "path": "ui/motolii-web/src/candidates/EasingTriggerCandidate.jsx",
@@ -183,7 +199,7 @@
     },
     {
       "path": "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
-      "sha256": "71d21793ab1ed19be4c976bb5bb1bf5a97c51f8392a46f034248526c6a215ba0"
+      "sha256": "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e"
     },
     {
       "path": "ui/motolii-web/src/candidates/KeyToolsCandidate.jsx",
@@ -210,12 +226,28 @@
       "sha256": "f84eb7f98f05844fa3bfc72b702cee2709f1fc0bb9be614f2b01039a65b5190d"
     },
     {
+      "path": "ui/motolii-web/src/feedback/Feedback.jsx",
+      "sha256": "459fdd6120fd369b78d4a9784d98ac2b29fbb553afb35522f8f680fdfe4e4cd1"
+    },
+    {
+      "path": "ui/motolii-web/src/feedback/feedback.css",
+      "sha256": "7e22e2a183796732c4f77c4bb018eb2342ecb812181e46f348e1aa3aa827ef50"
+    },
+    {
       "path": "ui/motolii-web/src/index.js",
-      "sha256": "b5a245a4f04e53186603ee6212fc1c868683a36f81c0f14b4c4329975255a585"
+      "sha256": "0f8e68a80ce7ce07c0ae286e5e1fde9a9dde0962996fe2fed29a7a783442503c"
     },
     {
       "path": "ui/motolii-web/src/patterns/DiscoveryBrowser.jsx",
       "sha256": "1d996ad66dba3ff7fb36cf811ce8d22faec1fee271a2dd5349d953a7cf89a2ea"
+    },
+    {
+      "path": "ui/motolii-web/src/primitives/index.jsx",
+      "sha256": "d5c9dd7d9016dacbef6f1ef93fa80e4cfe00a22eccc5e4faf7a4e12eada6de29"
+    },
+    {
+      "path": "ui/motolii-web/src/primitives/primitives.css",
+      "sha256": "7ecfe0195f922506429caa0e141fe6104bd845e02265e2bd24f4a67232dafc2b"
     },
     {
       "path": "ui/motolii-web/src/read-model/starterMediaProjectionDecoder.js",

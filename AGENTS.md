@@ -1,165 +1,74 @@
 # AGENTS.md — コーディングエージェント向け作業規約
 
-Cursor / Claude Code / その他のLLMエージェント共通の入口。実装に着手する前にここを読む。
+Cursor / Claude Code / その他のLLMエージェント共通の入口。本書は常時規律と条件別の正本routingだけを持つ。
+詳細手順、時点依存のmodel情報、phase進捗、固定SHAはリンク先が所有する。
 
-## 「発注」時のOpus 5 / Spark / Grok監督ループ
+## 常時規律
 
-- ユーザーが「発注して」「実装を発注」等、**発注を依頼動詞として明示した時だけ**自動委任を発火する。通常の「実装して」、説明・引用・ファイル内に現れただけの「発注」では発火しない
-- **2026-07-25運用改訂**: 通常発注は`Codex → Claude Opus 5 → Codex Spark → Cursor Grok 4.5 High → Codex`の一つのループへ固定する。完全model IDは順に`claude-opus-5` / `gpt-5.3-codex-spark` / `cursor-grok-4.5-high`とし、aliasを使わない。旧`mechanical / standard / rapid / complex / cross-boundary`分類、Luna/Terra/Sol routing、Fable必須検収は[旧運用](docs/reviews/2026-07-22-terra-grok-delegation-policy.md)としてアーカイブし、現行発注へ使わない
-- 発火時の責任は固定する。**主担当Codex**は先例調査、コード事実、長期展望、親task、恒久形式／公開API／plugin契約／停止線、機械骨格と視野幅判定、Opus deltaの事前承認、Grok結果の再照合、最終統合を所有する。**Claude Opus 5**は会話履歴なしで機械骨格を検証し、見落としたrisk／負例／STOP／訂正だけを型付きdeltaで返す施工管理者とする。**Codex Spark**はrunnerが骨格と承認deltaから組み立てた一粒だけを隔離worktreeで実装する。**Cursor Grok 4.5 High**は実装担当から分離したread-only検収者として実diffと試験を監査する
-- Opus 5へ許す委任は一段だけであり、Spark以外を起動させない。一回のrunner実行は一つの`GRAIN`だけを扱い、Sparkは再委任しない。複数粒が必要なら、主担当Codexが各契約境界を確認してループを個別に回す
-- **2026-07-30速度改訂**: 通常粒では、主担当Codexが正本・履歴・コード事実を一度だけ広く調べ、検証済みの小さな文脈カプセルをtaskへ渡す。Opus／Spark／Grokへ`AGENTS.md`全体、spec全体、repo全体を三重に読ませない。runnerは正本値を埋めたorder骨格を先に作り、Opus 5へ全文再執筆させず、`READY / STOP / ESCALATE`と最大5件、各220文字以内の`RISK / NEGATIVE_ORACLE / STOP / CORRECTION` deltaだけをJSON Schemaで返させる。schema違反は同じsessionへ一回だけ差戻し、散文fallbackや全文再生成をしない。P0/P1 deltaはSparkへの散文指示にせず、Codexが骨格とexact oracleへ織り込んで`prepare`を再実行する。P2 deltaを採用する場合も各`F1..F5`へ一つの`DELTA_RESOLUTION:`を対応させるまでdispatchしない。orderは`READ_MODE: CAPSULE`、判断に必要な`CONTEXT_FACT:`、実装・検収で開いてよい正確な`READ_FILE:`に加え、各1〜4件の`INTERNAL_TARGET / TEST_TARGET / REUSE_TARGET: <path> :: <一意なtrim済み1行>`と`NEW_SURFACE: FORBIDDEN`を持つ。runnerはtargetの存在、一意性、read set、allowlistを照合し、前40行＋後80行の重複除去済みtarget capsuleを48 KiB以下でSparkへ先渡しする。さらに承認orderから施工に不要なprovenance、閉鎖判定、model routingだけを決定的に除いた16 KiB以下の`SPARK_GRAIN_VERSION: 1`を生成し、Sparkへはtarget capsuleとcompiled grainを各一回だけ渡す。元taskと全文orderを重複送信せず、未知の製品固有ラベルや自由記述は削らない。必須field欠落、生成物hash変化、runner-only metadata漏洩はSpark起動前または検収前にfail closedする。task 12 KiB、order 32 KiB、authority 4件、allowlist 8件、read set 12件かつ合計128 KiBを上限とする。外部modelはwhole `READ_FILE`やカプセル外のrepo横断探索を初動にせず、不足時は推測や読込拡大でなく差戻す。Sparkはambient user config、memory、plugin、app、multi-agentを無効化したephemeral `workspace-write` sandboxで起動する。公開API、Document意味、plugin契約、永続形式、共有公開境界の変更は通常粒へ圧縮せず、Codexが仕様・決定粒として先に閉じる
-- **視野幅を気分で決めない**: CodexはOpus起動前に`AUTHORITY_SPAN: ONE / MULTIPLE / CONFLICTING`、`OWNER_CLOSURE: CLOSED / MULTIPLE_KNOWN / UNKNOWN`、`CAUSE_CLOSURE: LOCALIZED / COMPETING / UNKNOWN`、`CONTRACT_CLOSURE: PRIVATE / FROZEN / UNRESOLVED`、`ORACLE_CLOSURE: CLOSED / PARTIAL / ABSENT`、`REUSE_CLOSURE: REUSE / CHOICE / NEW`をコード事実つきで記録する。`CONTRACT_IMPACT: PRIVATE / SHARED / PERMANENT`は影響種別として別記し、`SHARED / PERMANENT`を`FROZEN`とするには`CONTRACT_AUTHORITY: <path>@SHA256:<hash>`が同じorderの検証済み`AUTHORITY: <path> SHA256:<hash>`と完全一致しなければならない。未決は`UNRESOLVED`、private粒は`CONTRACT_AUTHORITY: NONE`とする。六軸が閉鎖値なら`VIEW_PROFILE: CLOSED`、矛盾・UNKNOWN・COMPETING・UNRESOLVED・ABSENT・NEWが一つでもあれば`WIDE`、残りを`ADJACENT`と機械算出する。不明値を`CLOSED`へ倒さず、狭いprofileへの手動overrideを許さない。`WIDE`はSparkへ送らず、Opus／必要ならFableのread-only探索でauthority、owner、原因、oracleを閉じてから新しいカプセルとして再分類する。`HAZARD_TAG: DESTRUCTIVE_FS / SECURITY / PERSISTENCE / CONCURRENCY / PLATFORM / NONE`は視野幅と別軸とし、既知の危険構文・拒否試験・機械lintを骨格へ自動注入する。危険または恒久的でも正本で意味の閉じた粒を無条件に広域化せず、意味が未閉鎖の粒を短いdeltaへ押し込まない
-- `./scripts/delegate-cursor-supervised.sh prepare <worktree> <order-file> "<task>"`はCodex／runnerの骨格をOpus 5に検証させ、承認deltaからclosed orderを組み立てる。orderには対象仕様ID、目的、現状、変更許可file、非目標、再利用箇所、STOP条件、必須負例、実行command、六つの視野幅入力、`VIEW_PROFILE`、`HAZARD_TAG`、`READ_MODE: CAPSULE`、`CONTEXT_FACT:`、`READ_FILE:`、`INTERNAL_TARGET:`、`TEST_TARGET:`、`REUSE_TARGET:`、`NEW_SURFACE: FORBIDDEN`、`ORDER: READY`、task hash、`LOOP_PROFILE: opus-spark-grok`、三つの完全model IDを含める。主担当Codexがカプセル、exact target、視野幅、hazard guard、read set、採用deltaを再照合し、`CODEX PRECHECK: APPROVED`を追記するまで`execute`でSparkを起動しない
-- typed delta、六軸分類、hazard guard、compiled Spark grainは、runner本体と専用負例がmainへ入るまで**決定済み・未発効**とする。それまでは現行runnerの全文order接続を実装事実として扱い、新方式の速度や機械gateが有効だと報告しない。compiled grainのfixtureではcontext削減だけを確認済みで、20%未満の単発wall time差を速度改善として報告しない。移行実装でauthority hash、scope closure、Grok独立検収、Codex precheckを弱めない
-- Opus 5は仕様決定者ではない。親taskの公開API、Document意味、plugin契約、永続形式、変更許可範囲を変える必要が見えたら`ORDER: STOP`でCodexへ戻す。repo横断の歴史調査、複数仕様の意味判断、未指定の公開境界探索をSpark粒へ押し込まない
-- 実装発注は一度に1つの契約境界、隔離worktree、閉じたallowlistとする。外部実装には「例外追加・lint抑制・テスト期待値変更・生JSON/文字列走査・公開raw API・重複planner/helper」で契約を迂回させず、必要に見えた時点でSTOPさせる
-- Grok検収が`VERDICT: ACCEPT`かつ**P0/P1=0**でなければ実装差分を採用・commit・pushしない。Grokはorder再設計や実装修正をせず、REJECTをCodexへ返す。テスト緑は採用条件の一部であって、契約適合の代わりにしない
-- Fable 5は通常ループの段階または必須gateにしない。大地図、設計比較、共有公開境界など、主担当Codexが高難度の反対側助言を必要と判断した場合だけ、ループ外からread-onlyで直接呼ぶ
-- 主担当Codexは監督者として、OpusのorderとSparkの差分を仕様・依存・実装ガード・既存API・テスト期待値に照らして再確認する。外部出力は根拠でなく未検証の助言であり、最終判断、統合、必須テスト、完了報告は主担当が行う
-- model利用不能時に別modelへ黙ってfallbackしない。外部modelへ秘密情報、認証情報、未公開の個人データを渡さない
-- order作成、実装、検収が失敗、STOP、REJECT、timeoutになった場合はCodexへ戻す。Codexが原因を分類し、必要なら新しいOpus粒として再投入する。ループ中の差分は隔離worktreeに留め、`VERDICT: ACCEPT`前に採用・commit・pushしない
-- 同じ阻害要因が反復し、order、差分、検収結果に有意な改善がなくなった場合だけループを止める。その際は反復した阻害要因、試した修正、未解決の選択肢を示してユーザーの判断を仰ぐ
+- **自己発注禁止**: 許可されたoutcome、成果物、mutation、validation、外部model呼出し、完了条件を主担当Codexが増やさない
+- **findingは権限ではない**: 調査、test、review、隔離、安全性、技術的有用性から追加施工を始めない。既存完了条件を阻むscope内原因だけを許可範囲の最小修正へ戻し、他はfindingとして報告する
+- **既決を未決へ戻さない**: 提案・設計・実装前に[決定逆引き台帳](docs/decision-index.md)を主題keywordで検索し、正本、現行状態、コード事実を確認する。衝突時だけ該当操作を`AUTHORITY_CONFLICT`として止める
+- **一般機構を先に作らない**: 計画・仕様化・発注・実装前にrepo、decision index、[references](docs/references.md)、一次資料を調べ、主担当preflightへ`MECHANISM CLASS / KNOWN IMPLEMENTATION / ADOPTION ROUTE / THIN MOTOLII RESIDUAL / RETIREMENT / BUILD: FORBIDDEN`を記録する。欠落、未調査、裁定なし、一般frameworkの薄い残余への偽装では実装しない。詳細は[既知実装採択・置換開発モデル](docs/known-implementation-adoption-model.md)
+- **STOPは局所信号**: 危険操作、未決契約の発明、該当粒の施工だけを止め、親taskと接続可能なlaneは`REUSE / REMAP / REDUCE / 再調査`で続ける。利用者判断なしに安全な次手がない場合だけ返す
+- **状態を繰り上げない**: WIP、fixture、probe、test green、外部review、main統合、通常製品route、製品完成を分ける。LLMの賛同をauthorityや採用資格にしない
 
-## 発注外のscope自己反証とコーディングパートナー
+## 条件別に読む正本
 
-- **違和感で親taskを止めない**: 調査から比較実験、検収から再実装、修復から新機構、報告から強制介入のように、次の一手が元の依頼から動詞、成果物、owner、権限、完了条件のいずれかを増やす時は、親taskでなく**その考え**を疑う。実行前に`ORIGINAL_OUTCOME / PROPOSED_NEXT_ACTION / WHY_NEEDED / ADDED_SCOPE / DISCONFIRMING_EVIDENCE / SMALLEST_IN_SCOPE_ACTION / DISPOSITION`を短く書く。`DISPOSITION`は`KEEP / REVISE / DROP / ESCALATE`だけとし、説明できない案は`DROP`、過大な案は`REVISE`して、親taskを最小のscope内経路で継続する
-- **相談packet自体を第一のブレーキにする**: packet作成中に、ユーザーが求めていない成果物、自己追加した完了条件、「隔離されているから実行してよい」という安全性と権限の混同、既に完了した施工の再実行が見えた場合は、相談相手の返答を待たず候補案を`DROP / REVISE`する。疑念を無期限WAIT、親task全体の停止、無関係laneの停止へ一般化しない
-- **別Codexを高速なscope反対側に使う**: 自己反証後も`KEEP`か`REVISE`かが割れ、回答で次の実行が変わり得る場合だけ、会話全文を渡さないfresh-contextの別Codexをread-onlyで一つ呼ぶ。渡すのは上記packetと検証済みコード事実だけとし、編集、外部model起動、再委任を許さない。回答は`FACTS / SCOPE_DELTA / COUNTEREXAMPLE / SMALLEST_NEXT_ACTION / DISPOSITION`に限定し、同じmodelの賛同をauthorityや実行許可にしない
-- **段階的に昇格する**: 正本とコード事実だけで閉じる通常作業は主担当Codexが続行する。別Codexでも要求解釈、owner、原因、再利用境界が閉じない時だけOpus 5へ進み、共有公開境界、恒久契約、長期展望、またはCodexとOpusの結論衝突だけをFable 5へ上げる。外部LLMを全作業の直列barrierにしない
-- **`STOP`は局所信号**: 既存規約の`STOP`は危険な候補操作、契約を発明する施工、または該当粒を実行しないという意味であり、親taskを放棄する命令ではない。主担当Codexへ戻して`REUSE / REMAP / REDUCE / 再調査 / 別lane継続`の次手を選ぶ。不可逆操作に必要な権限が無い等、利用者判断なしに安全な次手が存在しない場合だけ当該粒をユーザーへ返す
+最初に[docs/README.md](docs/README.md)、対象phaseの[仕様](docs/specs/README.md)末尾の実装ガード、[implementation ledger](docs/implementation-ledger.md)を読む。次の条件に該当する時だけ追加正本を読み、未確認なら当該施工を開始しない。
 
-### Opus 5コーディングパートナー
+| 条件 | 必須正本 |
+|---|---|
+| 外部LLMへの発注、相談、検収 | [runner非依存監督](docs/reviews/2026-08-03-runner-independent-supervision-decision.md)、[LLM役割選択](docs/reviews/2026-08-03-history-calibrated-llm-role-selection-decision.md)、[薄いCLI監視](docs/reviews/2026-08-03-thin-observed-cli-harness-decision.md) |
+| 一般機構の新設・置換 | [既知実装採択・置換開発モデル](docs/known-implementation-adoption-model.md)、[依存優先・責任最小化ゲート](docs/reviews/2026-07-24-dependency-first-responsibility-gate.md) |
+| M2 Document、schema、journal | [恒久焼き込みの予防](docs/reviews/2026-07-12-m2-permanence-prevention.md) |
+| M3製品実装 | [M2基盤再締結gate](docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md)、対象M3正本 |
+| M3 UI、入力、Timeline、panel | [UI境界の規律](docs/reviews/2026-07-14-m3-ui-boundary-prevention.md)、[UI成果物用語](docs/ui-artifact-terminology.md)、[UI参照地図](docs/ui-reference-map.md) |
+| React mock／product source asset | [React製品資産の直接移管契約](docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md) |
+| Rerunのsource、crate、画面、pattern | [Rerun inventory](docs/reviews/2026-07-20-rerun-source-asset-inventory.md)、[Rerun学習・転移計画 §9](docs/reviews/2026-07-20-rerun-learning-transfer-plan.md#9-rerun参照を発注へ入れる強制動線) |
+| pluginの作成・量産 | [plugin authoring](docs/plugin-authoring.md) |
 
-- `claude-opus-5`は発注時の施工管理者だけでなく、主担当Codexが日常的に意見を求める**広域コーディングパートナー**として使う。これは「発注」の自動委任トリガーとは独立し、ユーザーが個別にOpus利用を指定しなくても、別の視点が実装判断を実質的に良くする場面でCodexがread-only相談を起動できる
-- **相談トリガー**: 次のどれか一つが成立し、回答によって実装判断が変わり得る場合にOpus 5を呼ぶ。(1) 要求に複数の読みがあり実装・試験・状態所有が変わる、(2) 複数file/crateをまたぎ局所解が全体契約を壊し得る、(3) 原因仮説が複数あり一つへ早く収束しそう、(4) helper／依存／公開境界の再利用判断が割れる、(5) 計画の負例・STOP・非目標に漏れがありそう、(6) 小さな差分でもDocument／公開API／永続形式／Undo／plugin契約へ波及し得る、(7) Codexが未検証の「たぶん」「このはず」を根拠に進めようとしている、(8) 会話で生じた新しい意味と既存決定の整合を確認したい
-- **呼ばない条件**: 正本と変更箇所が一意な機械変更、単純な検索やコード事実だけで閉じる診断、回答を得ても判断が変わらない作業には形式的に呼ばない。相談待ちを通常作業の直列barrierにしない
-- **相談packet**: Opus 5へは、確定仕様とコード事実、Codexの仮説、迷っている選択肢、変えてはいけない境界、探してほしい反例・見落とし、助言してほしい改善機会を渡す。Opus 5は批判や欠陥検出だけで終わらず、既存境界内でより良くできる設計、実装順、再利用、検証、簡素化と具体的な次の一手を能動的に提案する。回答は`FACTS / INFERENCES / OPTIONS / OPPORTUNITIES / ADVICE / RECOMMENDATION / STOP CONDITIONS`へ分けさせ、事実、推論、助言を混ぜさせない
-- **パートナー姿勢**: Codexの案を否定すること自体を目的にせず、良い部分は明示して伸ばし、問題には理由と実行可能な改善案を対で返す。未依頼のscope拡大や新しい恒久契約を「助言」として押し込まず、現在の目的・非目標・停止線の内側で価値を増やす
-- 発注外相談ではOpus 5に編集、commit、push、PR作成、Spark起動、再委任を許さない。closed orderや`CODEX PRECHECK`は不要だが、回答は根拠ではなく助言として扱い、Codexが正本・現行コード・試験へ再照合して判断する
-- **Fable昇格**: 大地図、長期展望、複数仕様の衝突、共有公開境界、恒久契約の新設・変更、またはCodexとOpus 5で結論が割れた場合はFable 5へread-only相談を昇格する。Opus 5の気軽な利用を、必要なFable相談の黙った代替にはしない
+## Motoliiの絶対規律
 
-### Reactモック製品資産を含む発注の強制動線（無視禁止）
+1. **VRAM常駐**: ピクセルはwgpu textureとしてGPUに置き、安易なCPU処理を混ぜない
+2. **色変換一元化**: 色変換はrender直前の一箇所だけ
+3. **plugin純関数**: 出力は時刻`t`と型付き入力で決まり、隠れた可変状態を持たない。時間依存が必要な表現は[simulation model](docs/simulation-model.md)の正規routeへ送る
+4. **single writer**: Documentを書き換えるのは編集threadだけ。他はimmutable snapshotのreader
+5. **正準座標**: 空間parameterは単位なし、原点中央、Y-up、高さ1.0。絶対pxを永続意味にしない
+6. **Preview / Export同一評価**: 差は`Quality`だけ。別render経路を作らない
+7. **vendor／OS非依存契約**: pluginへCUDA、Metal、DX等を露出せず、wgpu／WGSL抽象を使う
 
-Browser、Inspector、`KEYS / LAYERS`、Easing Panel等のReact所有面は、
-[React製品資産の直接移管契約](docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)を先に読む。
-固定モックを見た目だけのoracleとして製品用componentを別途縮約再実装せず、固定sourceをproduct packageへ
-直接所有移管し、mockをproduct exportのconsumerへ反転する。mock固有state、legacy bridge、fixture adapterだけを
-Host projection / typed intentへ交換する。DOM/CSSを公開契約へ焼かない規律を、source assetを捨てる理由にしない。
+## 計画と実装
 
-該当発注書は通常項目に加えて、次のラベルを順番どおり持たなければならない。
+- 着手前にbranch、HEAD、`git status --short --branch`、local mainとの関係、`git worktree list`を確認する。dirty worktreeの既存差分は利用者のものとして保持し、編集はlocal `main`から専用clean worktreeを作る
+- 利用者成果を一つのownerと契約境界へ閉じ、`AUTHORITY → INTERNAL TARGET → OWNER → WRITE ROUTE → GAP → RESOLUTION ROUTE → DISPOSITION`へ写す。実在identity、command、consumer、layout slot、公開契約がなければ推測しない
+- `GAP`は未調査やUI名称差でなく、現行型・source・試験の不在または契約矛盾で示す。既存targetがあれば再決定せず接続し、公開API、Document意味、plugin契約、永続形式の新設・変更は仕様粒で先に閉じる
+- 一回の実装は一契約境界と閉じた変更fileへ限定する。施工step数を粒数とみなさず、owner、意味、完了条件が増えるなら別の利用者許可へ戻す
+- 新規helper、依存、一般機構、UI componentを書く前に同等物を検索する。React source assetが存在する時は縮約copyを作らず、Rerunを参照する時はMotolii仕様から逆算しない
+- test、golden、threshold、期待値を実装都合で変更してgreenにしない。testが誤りに見える場合は施工を止め、独立した仕様・oracle変更として扱う
+- 会話で新しい意味、状態owner、操作、配布形式が生じたら、観察／比較中／決定／棄却／停止と非目標をコードより先に正本へ回収する。会話だけをauthorityにしない
+- **1 ticket = 1 commit**。仕様・decisionを変更したら同じcommitでdecision indexと必要なledgerを更新する
 
-1. `REACT AUTHORITY`: 対象面、移管契約、UI runtime境界、対応spec ID
-2. `SOURCE ASSET`: 固定SHA、旧path、export、CSS/model/test closure
-3. `PRESERVE`: DOM、class、stable ID、ARIA、interaction、visual state
-4. `REPLACE`: mock/legacy stateからprojection / intentへ交換する範囲
-5. `STATE OWNER`: Document / User settings / Workspace / Project session / Transient / local presentation
-6. `DIAGNOSTIC ROUTE`: 正しい製品画面とdevelopment専用契約確認画面の分離
-7. `NEGATIVE ORACLE`: 二重copy、legacy import、opaque-ID分岐、二重state、threshold変更の拒否
-8. `STOP`: 未決意味、公開契約、source不在、owner境界違反に遭遇した場合の停止
+## 外部LLMと検収
 
-欠落、順序逆転、固定SHA/pathとの不一致が一つでもあればCodex事前審査は承認せず、実装担当を起動しない。
-source assetがあるのに別leafを新設した、CSS修理だけでparityへ寄せ始めた、skeletonを製品面にした、
-`TimelineCandidate`全体をnative Timelineの代わりに持ち込んだ、productが`docs/mocks-ui`/legacy scriptをruntime
-importした、mock/productへ同じcomponent copyを残した、catalog ID/label/thumbnail tokenから欠落意味を推測した、
-ReactへDocument/selection/Undo正本を追加した、visual threshold/goldenを変えた、diagnostic routeだけを成果にした、
-のいずれかで`ORDER: STOP`とする。
+- ユーザーが「発注して」「実装を発注」等を依頼動詞として明示した時だけ外部実装を起動する。通常の「実装して」、説明、引用内の語では自動委任しない
+- 主担当Codexがbase/cwd、worktree、authority、scope、allowlist、非目標、oracle、fingerprint、diff、最終採否を所有する。意味、owner、原因、再利用、oracleが閉じない`WIDE`は実装担当へ送らない
+- 外部CLIは[`run-observed-cli.py`](scripts/run-observed-cli.py)でexact argvを起動し、生stream、timeout、exit／signal、process回収を保存する。harnessはworktree、意味判断、採否、session資格を所有しない
+- modelはtaskの判定対象で選び、利用不能時に別modelへ黙ってfallbackしない。外部modelへ再委任、秘密情報、認証情報、未公開個人情報を渡さない
+- 実装担当と最終reviewerは別session・別役割にし、同taskの設計・施工へ深く関与したmodel familyを最終reviewerに使わない。reviewerはread-onlyで実diffと試験を監査し、mutationした検収を無効とする。性能、安全性、永続性、platform correctnessは非LLM oracleで判定する
+- 採用前にCodexが開始前後fingerprint、実diff、scope、試験、review、P0/P1、reviewer mutationを再照合する。ユーザーSTOP後は対象processを止め、新しい編集・試験・reviewを開始しない
 
-正しい独立React sourceが存在しない領域は製品packageへ縮約版を先に作らない。固定モック内で同形React化し、
-既存visual/interaction oracleへ合格してから所有移管する。presentation移管とHost state接続、WebView統合、D2 commitを
-一つの発注へ束ねない。
+## 実装規約
 
-### Rerun参照を含む発注の強制動線（無視禁止）
+- 公開APIで入力起因の失敗をpanic／`assert!`にせず、構造化した`Result`で返す
+- GPU resourceをloop内で生成しない。texture、buffer、pipeline、shaderは再利用する
+- `?`の早期returnが後始末を飛ばさないか確認する。特に`Encoder::finish()`前のreturnを避ける
+- errorを文字列へ潰さず、`#[from]`／transparent errorで原因構造を保つ
+- test helperは`motolii-testkit`へ集約し、`gpu_or_skip`等を複製しない
+- コメントは日本語で「なぜ」だけを書く
 
-Rerunは主要な製品先例だがMotoliiの仕様正本ではない。Rerunを参照する調査・設計・実装発注は、必ず **Motolii仕様 → 現行コード事実 → Rerun先例 → Motolii fixture** の順に通す。Rerunのcrate、型、画面、内部責任からMotoliiの目的・公開API・Document・plugin契約を逆算しない。正本と詳細動線は[Rerun学習・転移計画 §9](docs/reviews/2026-07-20-rerun-learning-transfer-plan.md#9-rerun参照を発注へ入れる強制動線)。候補assetの母集団と監査済み範囲は[Rerun source asset inventory](docs/reviews/2026-07-20-rerun-source-asset-inventory.md)を読み、同文書の「候補分類」を採用裁定として扱わない。
+## 検証と完了報告
 
-Rerunを一度でも根拠・再利用箇所・変更案に含める発注書は、通常の必須項目に加えて次のラベルを順番どおり持たなければならない。欠落、順序逆転、内容不一致が一つでもあればCodex事前審査は承認せず、選択済み実装担当を起動しない。
-
-1. `MOTOLII AUTHORITY`: 対象spec ID、決定、既存公開契約、完成条件
-2. `CODE FACT GAP`: 現行コードで未成立の事実と再現証跡
-3. `RERUN EVIDENCE`: 固定commit、packageだけでなく対象file/API、監査済み範囲と非証明範囲。Motolii要件そのものを書かない
-4. `TRANSFER CLASS`: 裁定済みの`DEPEND / VENDOR / PORT / PATTERN / REJECT`
-5. `TRANSFER LIMIT`: 変更許可ファイル、持込禁止型・状態・意味、既存境界で自作する比較案
-6. `MOTOLII ORACLE`: Rerunとの類似ではなくMotolii fixture/testで判定する合否
-
-次のどれかが起きた時点で`ORDER: STOP`とし、仕様を発明せずCodexへ戻す: Rerunの内部構造を採らないと実装不能に見える／package名またはinventoryの候補分類だけでasset範囲を決めた／未裁定assetの依存・vendoring・移植が必要／公開API・Document・plugin契約・永続形式の変更が必要／Rerunに無いMotolii固有要件を削る必要がある／Rerunの見た目やsnapshotへ合わせるため既存期待値を変更したくなった。検収はRerunへの外観・構造類似を合格根拠にせず、上記6ラベル、Motoliiの負例、依存差分、公開型、serde面、license由来を再確認する。
-
-## 最初に読む
-
-1. [docs/README.md](docs/README.md) — プロジェクト全体像・ドキュメントの読む順序・用語
-2. 着手するフェーズの仕様書([docs/specs/](docs/specs/README.md)): タスク表(完了条件・依存つき)と、**末尾の「実装ガード」節**(先行ツールの失敗・ユーザー不満をタスクIDに紐付けた注意リスト。完了条件を追加している場合がある)
-3. プラグインを書く/量産する時: [docs/plugin-authoring.md](docs/plugin-authoring.md)(種別・NodeDesc必須欄・禁止事項・型紙)
-4. M2 Document/スキーマ/ジャーナルに触る時: **先に**[docs/reviews/2026-07-12-m2-permanence-prevention.md](docs/reviews/2026-07-12-m2-permanence-prevention.md)(予防5手)。背景の先人調査は[rework-prior-art](docs/reviews/2026-07-12-rework-prior-art.md)
-5. M3製品実装に触る時: **先に**[docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md](docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md)を読み、ステータスが発効中なら実装を止める。調査・fixtureも公開APIや永続形式へ焼かない
-6. M3 UI/入力/タイムライン/プラグインパネルに触る時: **先に**[docs/reviews/2026-07-14-m3-ui-boundary-prevention.md](docs/reviews/2026-07-14-m3-ui-boundary-prevention.md)(UI境界の規律8本)
-7. M3の外観・timeline・panelに触る時、またはUI実行物を表示・起動・比較する時: **最初に**[UI成果物・実装状態の用語](docs/ui-artifact-terminology.md)で要求名を成果物へ分類し、次に[M3 UI参照地図](docs/ui-reference-map.md)、[docs/ui-visual-language.md](docs/ui-visual-language.md)、[React製品資産の直接移管契約](docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)を読む。`Motolii Studio Preview`が未実装なら、Mock、Native Shell Baseline、個別spike、egui比較baselineを代替起動せず、未実装と報告する。別成果物を見せる時はユーザーがその固有名を指定した場合だけにする。Reactモックの実体と`README.md`は固定commit `56c318edcddab7cf95d263cc2f7dd2b4e6791134`で読み、main側にまだ無い時は`docs/mocks/`を代替の現行実装として変更せず、React側の再結合または対象worktreeへの移動を先に行う。`docs/mocks/`は**ARCHIVED・新規変更禁止**。通常入場と`#catalog`はReact候補だけ、legacyは`#archive/*`とparity testだけから参照する。新しいUI判断、操作、goldenをHTMLへ入れようとした時点、またはReact source assetを縮約再実装しようとした時点でSTOPする。モックの具体色値や未決機能をDocument/公開契約へ焼かない
-8. Rerunのsource、crate、画面、実装patternを調査・発注・実装へ使う時: **先に**[Rerun source asset inventory](docs/reviews/2026-07-20-rerun-source-asset-inventory.md)と[Rerun学習・転移計画](docs/reviews/2026-07-20-rerun-learning-transfer-plan.md)、特に後者§4/§8/§9を読む。Rerun起点で発注書を書かない
-
-## 絶対規律(破ると設計の根拠が崩れる。レビュー最重視項目)
-
-1. **VRAM常駐**: ピクセルはwgpuテクスチャとしてGPUに置いたまま処理。安易なCPU処理の混入禁止
-2. **色変換の一元化**: 色変換はレンダ直前の1箇所のみ
-3. **プラグイン純関数契約**: 出力は時刻tと入力だけで決まる。隠れた可変状態の禁止(正本は`docs/concept.md`「馬鹿正直にシミュレートしない」— 第一選択は常にf(t)の安い力)。物理・前後フレーム等の時間軸依存が本当に要る表現だけ正規ルート(レンダ外のベイク境界)へ — [docs/simulation-model.md](docs/simulation-model.md)の5段はしごを参照。Filterに状態を隠すハックのPRは受けない
-4. **単一writer**: ドキュメントを書き換えるのは編集スレッドだけ。他は`Arc<Document>`の読み手
-5. **正準座標系**: 空間パラメータは正準空間(単位なし・原点中央・Y-up・高さ=1.0)で持つ。絶対px値のパラメータ禁止
-6. **プレビュー/書き出し同一関数**: 差は`Quality`引数のみ。並行レンダ経路を作らない
-7. **プラグイン契約にベンダー/OS固有APIを出さない**: 見せるGPUはwgpu/WGSL抽象のみ(CUDA/Metal/DX等を契約に露出しない)。OS分断の再生産防止(落とし穴F-9)
-
-## 実装規約(2026-07-09 コードレビューの教訓より)
-
-- **公開APIで`assert!`/panicしない**。入力起因の失敗は型付き`Result`(thiserror)で返す(例: JSON経由の値が直接届く関数)
-- **ループ内でGPUリソースを作らない**。テクスチャ/バッファ/パイプライン/シェーダモジュールの生成はコンストラクタかループ外へ。再利用パターンは`motolii-gpu::RgbaDownloader`と`motolii-gpu::yuv::SizePool`を参照
-- **`?`での早期returnが後始末を飛ばさないか確認**。特に`Encoder::finish()`(飛ばすとDropがffmpegをkillしmp4が壊れる)
-- **エラー型を文字列に潰さない**。`#[from]`/`#[error(transparent)]`で構造を保ち、呼び出し側がmatchできる形を維持
-- **テストヘルパーはmotolii-testkitへ**。`gpu_or_skip`等をテストファイル間でコピペしない
-- **コメントは日本語で「なぜ」だけ**書く(何をしているかはコードが語る)
-
-## ワークフロー
-
-- **会話中の仕様ドリフトを先に回収する**: 会話が当初の論点からずれ始めた、新しい用途・用語・状態所有・操作・配布形式へ広がった、既存決定と違う案が出た、と認識した時点で、広がった候補案の実行だけを保留し、親taskは既存scope内の次手で継続する。会話を正本にせず、(1) 単なる観察は`docs/reviews/`のobservation、(2) 比較中の案はprototype／decision ledger、(3) 採択済みの意味は対象spec、(4) 後続課題はbacklogへ、**状態（観察／比較中／決定／棄却／停止）と非目標つき**でコードより先に記録する
-- **着手前に[決定逆引き台帳](docs/decision-index.md)を主題キーワードで引く**。既決を「未決」と誤認して埋め直さない。決定・撤回・未統一が新しく生まれたら、正本へ書いた上で同じ変更で台帳へ1行登録する(登録規則は[docs/reviews/README.md](docs/reviews/README.md))。docs/reviewsを触ったら`scripts/check-docs.sh`を通す
-- **要求を直接「新しい意味決定」へ送らない**: 計画・発注・実装の前に、利用者成果を粒へ分け、各粒について次の**既存契約接続票**をコード事実まで埋める。順序は `AUTHORITY`（decision-indexから辿ったspec／決定）→ `INTERNAL TARGET`（既存の型・field・parameter・command・projection）→ `OWNER`（既存5層／local presentationと唯一のwriter）→ `WRITE ROUTE`（typed intentからD2／既存更新口、またはread-only投影）→ `GAP`（要求と既存契約の差）→ `RESOLUTION ROUTE`（後述の解決段）→ `DISPOSITION`（`PASS / REDUCE / RESOLVE`）で固定する。既存targetとrouteがある粒は**再決定せず接続実装**へ送る。`GAP`は「未調査」やUI上の名称差では成立せず、repo検索と型・試験の不在または契約矛盾を証跡にする。対応先不在、既決との矛盾、公開API・Document意味・plugin契約・永続形式の新設／変更が必要な粒は`RESOLVE`し、親taskを止めない。解決段は `REUSE`（既存target再探索）→ `REMAP`（既存の別target／routeへ型付きで写す）→ `REDUCE`（成果を保つ最小sliceへ縮小）→ Opus 5 read-only相談 → 共有境界・恒久契約ならFable 5 read-only相談 → `SPECIFY`（主担当Codexが現行authorityと検証可能なfixtureへ再照合し、必要な新targetを仕様化）の順で前進させ、同じ問い・同じ証拠・同じ相談を反復しない。助言はauthorityにせず、各段は新しいコード事実、反例、比較結果のいずれかを次段へ渡す。明示された製品scope内ならCodexが推奨targetを仕様化し、仕様改訂と拒否試験を閉じた後に実装粒を再投入する。新しい利用者権限・製品scope・不可逆な外部契約が必要な場合だけ当該粒の選択肢をユーザーへ返すが、親taskと無関係laneは継続する。`RESOLVE`粒は仕様確定前に実装せず、発効中のhard gateをこの動線で迂回しない。実装orderの`ORDER: STOP`は契約を発明する施工だけを止める局所信号であり、計画の終端、無期限WAIT、利用者成果の放棄にしない。解決粒は[implementation ledger](docs/implementation-ledger.md)へ登録し、新決定が生じたら正本と[decision-index](docs/decision-index.md)を同じ変更で更新する。発注時はこの接続票または同内容をtask／orderへ含め、欠落時は`CODEX PRECHECK`を承認しない。複数機能をまとめた一つの局所停止で、接続可能な粒や無関係laneまで止めない
-- ドリフト検知時に既存仕様を黙って上書きしない。矛盾する旧記述と新案を同じ「現行」として残さず、未統一なら入口文書へ両者と解消条件を明記する。恒久形式、公開API、plugin契約、Document意味へ波及する場合は通常のSTOP条件と仕様改訂を優先する
-- 作業完了前に、その会話で新しく決まったこと、保留したこと、撤回したことがdocsへ回収され、Codexタスク履歴だけに残っていないか確認する。雑談的な発想は無理に規範化せず、実装判断へ影響し始めた時だけ台帳化する
-- **1チケット=1コミット**。完了時に仕様書のチケット表・実装状況表を更新する
-- 完了条件は[repository validation topology](docs/reviews/2026-07-31-repository-validation-topology-decision.md)に従い、各粒へ`PRIMARY_ORACLE / REPO_LANES / EXTERNAL_GATES`を固定する。`cargo test`はRust laneであり、React、docs、製品E2E、実機、人間審判を代替しない。「動いた気がする」、変更面を観測できないgreen、未実行を完了条件にしない
-- **テストを「直して」通さない**: ゴールデン参照画像・受け入れテストの削除・期待値書き換え・実装のspecial-caseで緑にすることを禁止。**テストが間違っていると思ったら実装を止めて報告する**。参照画像の正当な更新は理由を明記した独立PRに分離(specs/README.md 粒度ルール6、[pitfalls H-2](docs/pitfalls-and-roadmap.md))
-- **新規ヘルパーを書く前に既存を検索する**: 同等物が既にないかgrepしてから書く(LLM開発の最大の負債はコピペ増殖 — [pitfalls H-3](docs/pitfalls-and-roadmap.md))。テストヘルパーのtestkit集約ルールの一般化
-- **新しい汎用機構を自作する前に責任を処分する**: repo内経路、[決定逆引き台帳](docs/decision-index.md)、[参考ライブラリ一覧](docs/references.md)、一次資料の順に確認し、`REUSE / ADOPT / WRAP / EXTERNAL / BUILD / REJECT`と`RETIREMENT`を選ぶ。file dialog、clipboard、OS bridge、layout、cache、scheduler、codec、test runner等の一般問題を、初期差分が短いという理由だけで`BUILD`しない。製品外harness/toolは製品へimportしない`FROZEN / DELETE-LATER`証拠カプセルに閉じ、一般機能を持つ長寿命owner、公開面、状態正本、background service、platform abstractionを増やさない。後続ループは各粒を`PASS / REDUCE / STOP`で再判定し、前粒のadapterや採択を自動継承しない。依存候補の型・thread model・OS handleが公開API、Document、serde面へ漏れる、または絶対規律の正本を依存側へ移さないと使えない場合はSTOPする。詳細は[依存優先・責任最小化ゲート](docs/reviews/2026-07-24-dependency-first-responsibility-gate.md)
-- **仕様書の未決事項に依存するタスクに着手しない**: 未決を「もっともらしいデフォルト」で埋めない。仕様書改訂PRで先に潰す(specs/README.md 粒度ルール7、GR-PV)
-- **完了報告は証跡付き**: 実行したコマンドとテスト出力を添える。「動くはず」を報告にしない
-- 提出前は`./scripts/validate.sh local`でportable local profileを確認し、local依存setup済みなら`./scripts/test-local.sh`でも同じprofileを確認する。さらに粒の`PRIMARY_ORACLE / REPO_LANES / EXTERNAL_GATES`を追加実行する。local profile greenはCI、platform、human／hardware greenの代替ではない
-- 既知の既存不具合でlocal profileの一laneがredでも、profile全体をgreenと報告しない。独立な残りlaneは直接実行して個別証跡を残し、red laneと未実行gateを分離して報告する
-- **プラグイン規約の機械判定(INF-7a〜f)**: 提出前に `cargo test -p motolii-plugin` と、Filter/ParamDriverを触ったら `cargo test -p motolii-testkit --test purity` を回す。新規プラグインは `./scripts/new-plugin.sh <kind> <name>` から始め、純関数は `motolii_testkit::purity` で固定する
-- インターフェース契約(specの型シグネチャ)を変えたくなったら、実装を止めて仕様書改訂を先に
-
-## 恒久焼き込みの予防(M2 — GR-PV)
-
-正本: [docs/reviews/2026-07-12-m2-permanence-prevention.md](docs/reviews/2026-07-12-m2-permanence-prevention.md)。失敗後のmigration/Legacyは副次([rework-prior-art](docs/reviews/2026-07-12-rework-prior-art.md))。
-
-着手前チェック(1つでも No なら実装を止め、仕様改訂または依存チケット待ちへ):
-
-1. **意味が先か**: 焼く対象の意味論表/宣言が仕様にあるか。無ければ仕様改訂PRが先(コードで発明しない)
-2. **恒久面は狭いか**: 未決・未証明・UI都合だけのフィールドを足していないか
-3. **追加的か**: 新フィールド/新variant/defaultか。既存フィールドの解釈変更ではないか
-4. **依存直列か**: M2並列レーンを守っているか。特に **D1i-2完了前にD3しない**
-5. **完了条件に意味の審判があるか**: 拒否テストまたは意味論ゴールデン。`cargo test`緑だけで「完了」と書かない
-
-破れたときの出口だけ: 形状→D1e migration、画素→新variant(既存ゴールデン更新で通さない)、migration PRにnon-goals。
-
-## UI境界汚染の予防(M3 — GR-UI)
-
-正本: [docs/reviews/2026-07-14-m3-ui-boundary-prevention.md](docs/reviews/2026-07-14-m3-ui-boundary-prevention.md)。UI基盤の現行判断は[egui採用記録](docs/reviews/2026-07-18-m3-egui-selection.md)、旧Slint時点の採否記録は[反対側レビュー](docs/reviews/2026-07-14-m3-ui-boundary-counter-review.md)。UIはDocumentの投影であり、eguiの状態・px/DPI・入力イベント列を永続意味論へしない。
-
-M3仕様のGR-UI審判割当表で対象タスクに割り当てられた項目だけを確認する。非該当を形式的にYesにしない。該当項目が1つでもNoなら仕様改訂または依存待ちへ:
-
-1. **状態の持ち場が決まったか**: Document / User settings / Workspace profile / Project session / Transientの5層へ分類したか
-2. **書き込み口が一つか**: 永続編集はD2コマンドと単一writerだけを通るか
-3. **1ジェスチャー=1履歴か**: D2のmacro/merge/Undo単位を使い、未決transaction APIを発明していないか
-4. **UIスレッドを待たせないか**: worker分離、非blocking最新値mailbox、generation破棄があり、同期読み戻しが無いか
-5. **UI単位を焼いていないか**: px/DPI/度/ウィンドウ座標をDocument・評価・公開契約へ流していないか
-6. **UI toolkitを隔離したか**: `motolii-ui`外の製品クレートとdomain公開APIへegui/eframe/winit依存・型を出していないか
-7. **未決を埋めていないか**: GAP-13/GAP-6等の判断前に公開UI APIや恒久設定形式を足していないか
-8. **審判が再現可能か**: fixture・command・合否条件があり、基準機性能とIME等の人間確認を自動試験から分離したか
-9. **読む前に識別できるか**: 主要状態を文字だけ/色だけで表さず、新規componentを既存のtheme・icon・spacingへ馴染ませたか
-10. **数値で審判できるか**: UIの起動、window/DPI/layout、WebView lifecycle/IPC/focus、typed intent、座標、hit-test、drag、preview submit/result、Document revision、Stage/Timeline/Inspector投影、Undo/Redo、surface recovery/failure、性能、resource量を同じgeneration / revision / layout epochの構造化ログで追跡し、代表点・境界・異scaleの期待値を自動試験でassertしたか。毎frameの同値行を反復せず、目視だけで完了にしない
+- 各粒へ`PRIMARY_ORACLE / REPO_LANES / EXTERNAL_GATES`を固定する。`cargo test`はRust laneであり、React、docs、製品E2E、実機、人間審判を代替しない
+- docs／review変更は`./scripts/check-docs.sh`と`git diff --check`を通す。通常提出は`./scripts/validate.sh local`、必要なtask固有test、利用可能なら`./scripts/test-local.sh`を実行する
+- 一つのlaneが既知不具合でredでも全体をgreenと報告しない。実diff、製品route、validation／review、integration、blocker、未実行gateを分離して報告する
+- 完了時は実行commandと結果、commit、main統合有無、残存dirty差分、次の一粒と非目標を示す。「動くはず」「たぶん完了」を使わない

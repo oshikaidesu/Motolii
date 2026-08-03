@@ -171,6 +171,47 @@ impl TimelineProjection {
         &self.unsupported
     }
 
+    /// Documentを書き換えず、body drag中のbar/key位置だけを一時投影する。
+    pub(crate) fn preview_move(
+        &self,
+        layer: LayerId,
+        new_start: RationalTime,
+        composition_duration: RationalTime,
+    ) -> Option<Self> {
+        if composition_duration <= RationalTime::ZERO {
+            return None;
+        }
+        let original = self.bars.iter().find(|bar| bar.layer == layer)?;
+        let duration = original.end.try_sub(original.start).ok()?;
+        let new_end = new_start.try_add(duration).ok()?;
+        let delta = new_start.try_sub(original.start).ok()?;
+        let mut preview = self.clone();
+        let width = composition_duration.as_seconds_f64();
+        if !width.is_finite() || width <= 0.0 {
+            return None;
+        }
+        let start_x = new_start.as_seconds_f64() / width;
+        let end_x = new_end.as_seconds_f64() / width;
+        if !start_x.is_finite() || !end_x.is_finite() {
+            return None;
+        }
+        let bar = preview.bars.iter_mut().find(|bar| bar.layer == layer)?;
+        bar.start = new_start;
+        bar.end = new_end;
+        bar.x_start = start_x;
+        bar.x_end = end_x;
+        for key in &mut preview.keys {
+            if key.layer == layer {
+                key.t = key.t.try_add(delta).ok()?;
+                key.center_x = key.t.as_seconds_f64() / width;
+                if !key.center_x.is_finite() {
+                    return None;
+                }
+            }
+        }
+        Some(preview)
+    }
+
     pub fn hit_test(&self, x: f64, y: f64) -> TimelineHit {
         let mut best_key: Option<(LayerId, KeyframeId)> = None;
         for key in &self.keys {

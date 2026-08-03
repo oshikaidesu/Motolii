@@ -11,14 +11,57 @@ FAIL=0
 
 err() { echo "NG: $1"; FAIL=1; }
 
-# 1. reviews/ の全ファイルが reviews/README.md の索引に登録されていること
+# 1. root AGENTS.md はCodexの既定読込上限より余白を持たせ、権限保存則を先頭へ固定する
+AGENTS_MAX_BYTES=30000
+AGENTS_PREFIX_BYTES=8192
+agents_bytes="$(LC_ALL=C wc -c < "$ROOT/AGENTS.md" | tr -d '[:space:]')"
+if [ "$agents_bytes" -gt "$AGENTS_MAX_BYTES" ]; then
+  err "AGENTS.md が ${agents_bytes} bytes (上限 ${AGENTS_MAX_BYTES})。詳細を正本docsへ移し、入口を校正すること"
+fi
+agents_prefix="$(LC_ALL=C head -c "$AGENTS_PREFIX_BYTES" "$ROOT/AGENTS.md")"
+for marker in '**自己発注禁止**' '**findingは権限ではない**' '**既決を未決へ戻さない**'; do
+  case "$agents_prefix" in
+    *"$marker"*) ;;
+    *) err "AGENTS.md の先頭 ${AGENTS_PREFIX_BYTES} bytes に必須規則がない: $marker" ;;
+  esac
+done
+
+# 入口規約から撤回済みrunner protocolを再生成しない。歴史文書内の記録は対象外。
+for retired_runner_term in \
+  'ROUTE_CONTRACT_VERSION' \
+  'LOOP_PROFILE' \
+  'RUNNER_SHA256' \
+  'SPARK_GRAIN_VERSION' \
+  'CODEX PRECHECK' \
+  'READ_MODE: CAPSULE' \
+  'ORDER: STOP' \
+  'canonical runner' \
+  'prepare/execute/inspect/cancel' \
+  'compiled grain'; do
+  if grep -Fq "$retired_runner_term" "$ROOT/AGENTS.md"; then
+    err "AGENTS.md に撤回済みrunner protocolが再登場: $retired_runner_term"
+  fi
+done
+
+# 旧監督ループ正本は短い撤回tombstoneに固定し、規則集として復活させない。
+RETIRED_SUPERVISION="$DOCS/reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md"
+retired_supervision_bytes="$(LC_ALL=C wc -c < "$RETIRED_SUPERVISION" | tr -d '[:space:]')"
+if [ "$retired_supervision_bytes" -gt 6000 ]; then
+  err "撤回済み監督ループ文書が ${retired_supervision_bytes} bytes。歴史本文を現行treeへ復元しないこと"
+fi
+grep -Fq '状態: **撤回**' "$RETIRED_SUPERVISION" \
+  || err "旧監督ループ文書が撤回状態でない"
+grep -Fq '2026-08-03-runner-independent-supervision-decision.md' "$RETIRED_SUPERVISION" \
+  || err "旧監督ループ文書に現行runner非依存正本への移動先がない"
+
+# 2. reviews/ の全ファイルが reviews/README.md の索引に登録されていること
 for f in "$DOCS"/reviews/*.md; do
   b="$(basename "$f")"
   [ "$b" = "README.md" ] && continue
   grep -q "$b" "$DOCS/reviews/README.md" || err "reviews索引に未登録: docs/reviews/$b"
 done
 
-# 2. docs/README.md ファイルマップにリンク先の重複行がないこと
+# 3. docs/README.md ファイルマップにリンク先の重複行がないこと
 # (要旨セル内の相互参照は正当なので、表の先頭セルのリンクだけを見る)
 dups=$(grep -oE '^\| \[[^]]+\]\((reviews/[^)#]+\.md)\)' "$DOCS/README.md" \
   | grep -oE 'reviews/[^)#]+\.md' | sort | uniq -d)
@@ -28,7 +71,7 @@ if [ -n "$dups" ]; then
   done <<< "$dups"
 fi
 
-# 3. AGENTS.md と docs/**/*.md のローカルmdリンクが実在すること
+# 4. AGENTS.md と docs/**/*.md のローカルmdリンクが実在すること
 # (#fragmentは除去して判定)。必読入口のリンク切れもdocsと同じ失敗にする。
 python3 - "$ROOT" <<'PY'
 import os, re, sys
@@ -63,7 +106,7 @@ sys.exit(1 if fail else 0)
 PY
 [ $? -ne 0 ] && FAIL=1
 
-# 4. decision-index.md の状態語彙が固定集合に収まっていること
+# 5. decision-index.md の状態語彙が固定集合に収まっていること
 if [ -f "$DOCS/decision-index.md" ]; then
   bad=$(awk -F'|' '/^\|/ && NF>=6 && $2 !~ /主題|---/ {
     gsub(/^[ \t]+|[ \t]+$/, "", $4);
@@ -78,7 +121,7 @@ else
   err "docs/decision-index.md が存在しない"
 fi
 
-# 5. UI表示・起動の入口が、成果物用語正本を参照地図より先に通ること
+# 6. UI表示・起動の入口が、成果物用語正本を参照地図より先に通ること
 python3 - "$ROOT" <<'PY'
 import pathlib
 import sys

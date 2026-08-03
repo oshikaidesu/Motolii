@@ -11,6 +11,8 @@
 - `paths.tsv`: cutoff refsの履歴へ現れたMarkdown pathの集合。
 - `read-receipts/`: 全文または限定topicで読了した既存監査の証跡。これは最終処分完了を意味しない。
 - `disposition-receipts/`: 現行規範・成立理由・再入場候補・負例・archiveのみのいずれかへ処分したblob。一つのblobは一つのprimary receiptだけに属する。
+- `deltas/`: cutoff後に追加・更新されたrefを、固定`cutoff-refs.tsv`へ混ぜずに記録する別manifest。
+- `delta-disposition-receipts/`: delta manifestのblobを処分したreceipt。固定corpusの進捗計算とは別に、各deltaの回収文書へ対応づける。
 
 `observed_path`は`git rev-list --objects`がblobへ最初に対応づけたpathであり、rename全履歴の正本ではない。renameや同一blobの複数pathは`paths.tsv`と個別回収文書で確認する。
 
@@ -30,7 +32,7 @@ corpusの再生成方法:
   docs/reviews/evidence/historical-value-recovery/cutoff-refs.tsv
 ```
 
-再生成結果がcommitted `corpus.tsv`と一致しない場合、cutoff refが欠落したかGit objectが失われている。新しいrefの後発変更は既存corpusへ混ぜず、最終delta単位で別manifestに固定する。
+再生成結果がcommitted `corpus.tsv`と一致しない場合、cutoff refが欠落したかGit objectが失われている。新しいrefの後発変更は既存corpusへ混ぜず、最終delta単位で`deltas/`へ固定する。deltaのreceiptは固定corpusのcheckerへ混ぜず、回収文書・SHA・個数を同じcommitで再照合する。
 
 ## 意味索引との境界
 

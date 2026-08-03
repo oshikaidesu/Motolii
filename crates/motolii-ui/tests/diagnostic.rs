@@ -187,4 +187,26 @@ fn public_adapter_signatures_and_envelope_types_stay_read_only_and_transient() {
         );
     }
     assert!(!source.contains("pub fn new("));
+
+    let projection_source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/diagnostic_projection.rs"),
+    )
+    .unwrap();
+    for forbidden in [
+        "Serialize",
+        "Deserialize",
+        "serde::",
+        "egui::",
+        "eframe::",
+        "winit::",
+        "DocumentWriter",
+        "RenderWorker",
+        "Box<dyn Fn",
+        "impl Fn",
+    ] {
+        assert!(
+            !projection_source.contains(forbidden),
+            "projection source contains forbidden boundary {forbidden}"
+        );
+    }
 }

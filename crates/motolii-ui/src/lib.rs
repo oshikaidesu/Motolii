@@ -7,6 +7,7 @@ mod browser_host;
 mod browser_host_runtime;
 mod command_registry;
 mod diagnostic;
+mod diagnostic_projection;
 mod display_slot;
 mod document_command_request;
 mod document_edit_runtime;
@@ -24,6 +25,7 @@ mod layout_runtime;
 mod layout_runtime_adapter;
 mod native_host_layout;
 mod native_timeline_renderer;
+mod parameter_control;
 mod product_runtime;
 mod product_runtime_adapter;
 mod render_worker;
@@ -31,6 +33,7 @@ mod shell;
 mod stage_chrome_host_runtime;
 mod state_ownership;
 mod static_preview;
+mod timeline_move_gesture;
 mod timeline_projection;
 mod timeline_tools_host_runtime;
 mod ui_numeric_trace;
@@ -62,6 +65,9 @@ pub use keymap_codec::{
     decode_keymap_json, encode_keymap_json, KeymapApplyError, KeymapCodecDiagnostic,
     KeymapCodecError, KeymapCodecLimits, LimitKind, LoadedKeymap, OpaqueOperationReason,
     KEYMAP_CODEC_VERSION,
+};
+pub use parameter_control::{
+    map_parameter_control, HostParameterControl, ParameterControlError, ParameterControlSpec,
 };
 pub use shell::{run_shell, run_shell_with_project, ShellError};
 pub use state_ownership::{UiStateLifetime, UiStateOwner};

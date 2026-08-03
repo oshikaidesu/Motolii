@@ -416,7 +416,7 @@ D-1/G-1は「凍結前の並列」を止めた。残るのは入場ゲート通�
 更新追従、障害解析、配布、試験、削除時の移行まで所有し、製品固有でない保守が本体より大きくなる。
 反対に、libraryを入れるだけでもversion、license、供給網、build、型漏出、撤去責任を増やす。
 
-**対策**: 初期行数でなく総責任を比較する。[依存優先・責任最小化ゲート](reviews/2026-07-24-dependency-first-responsibility-gate.md)に従い、repo内再利用→既決裁定→外部候補の順に確認して`REUSE / ADOPT / WRAP / EXTERNAL / BUILD / REJECT`を選ぶ。MotoliiはDocument、single writer、作品意味、純関数、VRAM・色変換等を保持し、一般問題だけを薄い境界の外へ委ねる。既完了codeは一括置換せず、後続製品経路が同じ証明を持った時だけ`DELETE-LATER`を実行する。
+**対策**: 初期行数や投入済み工数でなく総責任を比較する。[依存優先・責任最小化ゲート](reviews/2026-07-24-dependency-first-responsibility-gate.md)に従い、機構classを一度`REUSE / ADOPT / WRAP / PORT / PATTERN / EXTERNAL / REJECT`へ裁定して後続粒が継承する。新機構の`BUILD`を通常処分にせず、既完了の独自機構も同じoracleへ通す縦slice置換で単一ownerを切り替え、旧routeを`FROZEN → RETIRE`する。
 
 ---
 

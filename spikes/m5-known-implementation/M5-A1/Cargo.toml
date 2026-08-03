@@ -1,0 +1,13 @@
+[package]
+name = "m5-a1-gltf-preflight"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# 製品workspaceの依存解決を検証だけで変えないため、独立workspaceにする。
+[workspace]
+
+[dependencies]
+gltf = { version = "=1.4.1", default-features = false, features = ["extensions", "names", "utils"] }
+mikktspace = { version = "=0.3.0", default-features = false, features = ["glam"] }
+thiserror = "=2.0.16"
