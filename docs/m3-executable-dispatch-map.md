@@ -158,7 +158,7 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 | `P11-C1` | `WAIT_CONFLICT` | P01〜P10/P12のLocal Alpha必要子が通常routeへ統合後 | 起動からExportまで一fixtureで完走 |
 | `P11-C2` | `HUMAN` | P11-C1 buildで制作、IME、聴感、keyboard/AX審判 | 教材なしの日常制作 |
 | `P11-C3` | `HARDWARE` | 所有Windows/Mac、DPI、NVDA/VoiceOver、配布artifact | Distribution Ready |
-| `P12-C1` | `SPEC_ONLY` | Unsaved/Save-As/cancel/failed-save policyとrfd probeを分離 | New/Open/Save/reopenで原本を失わない |
+| `P12-C1` | `SPEC_ONLY` | lifecycle採択は `NSDocument` / FCP意味論前提で journal durability を採用済み。残りgap: `OpenMode`入場、close ordering + in-flight失敗投影、Save-As identity/path移譲、rfd接続 | 新規保存成功/失敗導線を実装しない |
 
 ## 5. 現在開始できるtask
 

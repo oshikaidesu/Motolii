@@ -45,7 +45,7 @@ file-disjointな旧IDまたは子IDをledgerの別laneへ`DO`として昇格さ�
 | `M3-P09-OPERATIONS` | delete duplicate rename clipboard keymap IME accessibility workspace | 頻出操作、入力、copy/paste、panel操作で行き止まらない | `REUSE` InputRouter/keymap/commands、arboard/AccessKitを`EVALUATE → ADOPT`、OS menuは要件成立時だけmuda | U0c/d、U1d/e、CU-G08/10、CU-401〜407 |
 | `M3-P10-RECOVERY` | activity telemetry crash reload surface loss HUD readiness | 処理状態が見え、surface/crash後も正本から復帰する | `REUSE` Host snapshots/generation/typed failure/Playwright/testkit | U1b/c/i、CU-204、CU-5A01〜03、CU-5B03/04 |
 | `M3-P11-ACCEPTANCE` | Local Alpha E2E human hardware Windows DPI NVDA VoiceOver | 通常routeを人間・実機・全platformで完走する | `EXTERNAL` human/hardware/OS、`REUSE`同一Local Alpha fixture | CU-G06、CU-5A04〜06、CU-601〜605 |
-| `M3-P12-PROJECT` | Project New Open Save Save-As Unsaved reopen lock catalog | projectを安全に開閉・保存し、失敗や未保存を失わない | `REUSE` motolii-doc catalog/lock/session/lifecycle、rfdを`EVALUATE → ADOPT` | CU-G04、CU-301/302/310 |
+| `M3-P12-PROJECT` | Project New Open Save Save-As Unsaved reopen lock catalog | projectを安全に開閉・保存し、失敗や未保存を失わない。既知のdesktop保存意味論（journal durability-first、reopen耐久同値）を採択して既存ownerに接続 | `REUSE` motolii-doc catalog/lock/session/lifecycle、rfdを`EVALUATE → ADOPT` | CU-G04、CU-301/302/310 |
 
 ### 3.1 dispatch状態
 
@@ -67,7 +67,7 @@ allowlist、正負oracle、利用者出口まで閉じた現在状態は
 | `P10-C3` | `GATED` | M4 K1/K7/K8の実在provider snapshot。M3独自cache/schedulerで代用しない |
 | `P11-C2` | `HUMAN` | IME、聴感、日常制作の人間審判 |
 | `P11-C3` | `HARDWARE` | 所有するWindows/Mac、DPI、NVDA/VoiceOver、配布artifact |
-| `P12-C1` | `GATED` | Unsaved / Save-As / cancel / failed-saveの製品policy |
+| `P12-C1` | `SPEC_ONLY` | OpenMode admission / close ordering・失敗投影 / Save-As identity移譲 / rfd接続の4点を残す。健全なwritable projectのUnsaved promptやdirty stateは対象外 |
 
 `GATED`は親全体の停止ではない。また、この表は現在の実装許可を表さない。同じ親でも
 [実行可能発注地図](m3-executable-dispatch-map.md)が`IMPLEMENT`へコンパイルし、implementation ledgerへ
@@ -394,9 +394,9 @@ allowlist、正負oracle、利用者出口まで閉じた現在状態は
 
 #### `P12-C1` New, Open, Save, Save-As and Unsaved
 
-- **結果**: 製品policyを閉じた後、native dialogを既存catalog/lock/session/load/saveへ接続する。
+- **結果**: `P12-C1`は`SPEC_ONLY`として、desktop文書ライフサイクルの既知意味論（`NSDocument` + Auto-save系意味）を受ける。保存耐久はjournal published snapshot routeを採択し、Saveはcheckpointとして扱うがdurabilityの開始点にはしない。
 - **再利用target**: motolii-doc lifecycle/catalog/lock、P02-C2 session source、rfd候補。
-- **薄い残余**: Unsaved choice、Save-As destination、cancel/failed-save時のsurface projection。
+- **薄い残余**: OpenMode admission、close orderingとin-flight失敗投影、Save-As destinationと新identity/path/lock/session移譲、rfdのcancel/failed-save投影。健全なwritable projectのUnsaved choiceは残件にしない。
 - **依存／並列**: policy決定とrfd probe、P01-C1/P02-C2後。P08 exportとは別artifactで並列。
 - **oracle**: unknown保持、future/corrupt/lock typed拒否、cancel/失敗時原本不変、durable reopen同値。
 - **cutover**: raw path open、lock steal、UI-owned document session、SaveをExportへ兼用するrouteをretire。

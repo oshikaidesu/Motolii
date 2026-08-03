@@ -32,6 +32,7 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-03-p12-c1-document-lifecycle-adoption-decision.md](2026-08-03-p12-c1-document-lifecycle-adoption-decision.md) | Desktop文書ライフサイクル採択決定: P12-C1で既知セーブ意味論を仕様化し、ReadOnlyNewer/Close/Save As/rfdの未接続境界を固定 |
 | [2026-08-02-m4-known-implementation-survey.md](2026-08-02-m4-known-implementation-survey.md) | M4のcache、resource、disk artifact、区間、background job、proxy、SVGを具体APIと非証明範囲へ割り当てる既知実装比較 |
 | [2026-08-02-m4-disk-artifact-store-resurvey.md](2026-08-02-m4-disk-artifact-store-resurvey.md) | cacache棄却後のdisk候補を再検索し、global CASを現行authority外としてverified recipe artifact storeへ縮小採用 |
 | [2026-08-02-m5-known-implementation-survey.md](2026-08-02-m5-known-implementation-survey.md) | M5の3D math、glTF、wgpu depth、bounds、text、deterministic identityを既存ownerへ接続する既知実装比較 |
