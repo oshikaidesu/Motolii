@@ -34,30 +34,27 @@ class RunObservedCliTest(unittest.TestCase):
         name: str,
         code: str,
         *child_args: str,
-        timeout: str = "5",
+        timeout: str | None = None,
         grace: str = "0.2",
         heartbeat: str = "10",
     ) -> subprocess.CompletedProcess[bytes]:
+        command = [
+            sys.executable,
+            os.fspath(SCRIPT),
+            "--cwd",
+            os.fspath(self.cwd),
+            "--log-dir",
+            os.fspath(self.root / name),
+            "--grace-seconds",
+            grace,
+            "--heartbeat-seconds",
+            heartbeat,
+        ]
+        if timeout is not None:
+            command.extend(["--timeout-seconds", timeout])
+        command.extend(["--", os.fspath(PYTHON), "-c", code, *child_args])
         return subprocess.run(
-            [
-                sys.executable,
-                os.fspath(SCRIPT),
-                "--cwd",
-                os.fspath(self.cwd),
-                "--log-dir",
-                os.fspath(self.root / name),
-                "--timeout-seconds",
-                timeout,
-                "--grace-seconds",
-                grace,
-                "--heartbeat-seconds",
-                heartbeat,
-                "--",
-                os.fspath(PYTHON),
-                "-c",
-                code,
-                *child_args,
-            ],
+            command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
@@ -98,7 +95,6 @@ class RunObservedCliTest(unittest.TestCase):
         result = self.invoke(
             "heartbeat",
             "import sys,time; sys.stdout.write('thinking\\n'); sys.stdout.flush(); time.sleep(0.18)",
-            timeout="1",
             heartbeat="0.05",
         )
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -114,6 +110,7 @@ class RunObservedCliTest(unittest.TestCase):
         self.assertEqual(lifecycle[0]["event"], "started")
         self.assertEqual(lifecycle[-1]["event"], "completed")
         self.assertEqual(self.metadata("heartbeat")["heartbeat_seconds"], 0.05)
+        self.assertIsNone(self.metadata("heartbeat")["timeout_seconds"])
 
     def test_timeout_terminates_the_child_process_group(self) -> None:
         pid_file = self.root / "grandchild.pid"

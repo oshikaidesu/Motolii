@@ -80,7 +80,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cwd", required=True, type=Path, help="Existing child working directory")
     parser.add_argument("--log-dir", required=True, type=Path, help="New one-run evidence directory")
-    parser.add_argument("--timeout-seconds", required=True, type=float, help="Positive wall timeout")
+    parser.add_argument("--timeout-seconds", type=float, help="Optional positive wall timeout; omitted means no runtime deadline")
     parser.add_argument("--grace-seconds", type=float, default=5.0, help="Positive TERM-to-KILL grace")
     parser.add_argument("--heartbeat-seconds", type=float, default=10.0, help="Positive lifecycle heartbeat interval")
     parser.add_argument("command", nargs=argparse.REMAINDER, help="Exact child argv after --")
@@ -89,8 +89,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         args.command = args.command[1:]
     if not args.command:
         parser.error("an exact child argv is required after --")
-    if args.timeout_seconds <= 0 or args.grace_seconds <= 0 or args.heartbeat_seconds <= 0:
-        parser.error("timeout, grace, and heartbeat must be positive")
+    if (args.timeout_seconds is not None and args.timeout_seconds <= 0) or args.grace_seconds <= 0 or args.heartbeat_seconds <= 0:
+        parser.error("explicit timeout, grace, and heartbeat must be positive")
     if not args.command[0].startswith(os.sep):
         parser.error("the child executable must be an absolute path")
     return args
@@ -175,14 +175,14 @@ def main(argv: list[str]) -> int:
             stdout_thread.start()
             stderr_thread.start()
 
-            deadline = started_monotonic + args.timeout_seconds
+            deadline = started_monotonic + args.timeout_seconds if args.timeout_seconds is not None else None
             next_heartbeat = started_monotonic + args.heartbeat_seconds
             while process.poll() is None:
                 if received_signal is not None:
                     write_json_line(lifecycle, {"at": utc_now(), "event": "parent_signal", "signal": signal.Signals(received_signal).name})
                     break
                 now = time.monotonic()
-                if now >= deadline:
+                if deadline is not None and now >= deadline:
                     timed_out = True
                     write_json_line(lifecycle, {"at": utc_now(), "event": "timeout"})
                     break
@@ -208,7 +208,8 @@ def main(argv: list[str]) -> int:
                     )
                     while next_heartbeat <= now:
                         next_heartbeat += args.heartbeat_seconds
-                time.sleep(min(0.05, max(0.0, deadline - now), max(0.0, next_heartbeat - now)))
+                until_deadline = 0.05 if deadline is None else max(0.0, deadline - now)
+                time.sleep(min(0.05, until_deadline, max(0.0, next_heartbeat - now)))
 
             if process.poll() is None and (timed_out or received_signal is not None):
                 forwarded = received_signal if received_signal is not None else signal.SIGTERM
@@ -222,7 +223,7 @@ def main(argv: list[str]) -> int:
                     write_json_line(lifecycle, {"at": utc_now(), "event": "signal_sent", "signal": "SIGKILL"})
             process.wait()
             for thread in (stdout_thread, stderr_thread):
-                thread.join(max(0.0, deadline - time.monotonic()))
+                thread.join(args.grace_seconds)
             if stdout_thread.is_alive() or stderr_thread.is_alive():
                 timed_out = True
                 write_json_line(lifecycle, {"at": utc_now(), "event": "timeout", "reason": "open_pipe_after_child_exit"})
