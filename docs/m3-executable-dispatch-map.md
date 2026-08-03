@@ -122,12 +122,12 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 ## 4. 33子の現在コンパイル結果
 
 `555a9ab5`は2026-08-01 simulation時点の初期simulation baselineとしてのみ保持し、本表全体を現時点で再検証したことは示さない。
-現在の`P03-C2`の`REDUCE / IMPLEMENT` overrideは、§5.3の現行authorityとimplementation ledgerの一意な
-`CU-201P-HOST-INPUT` `DO`行に裏付けられる。`IMPLEMENT`への昇格はimplementation ledgerへ一意な`DO`行を追加した時だけ発効する。
+現在の`P03-C2`の`REDUCE / IMPLEMENT` overrideは、§5.4の現行authorityとimplementation ledgerの一意な
+`CU-201P-TRIM` `DO`行に裏付けられる。`IMPLEMENT`への昇格はimplementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 
 | 子 | 現在状態 | exact次task | 通常製品routeの出口 |
 |---|---|---|---|
-| `P01-C1` | `REOPEN / WAIT_HOST_INPUT` | 単一`ApplicationHandler<ProductEvent>`と単一`run_app`は保持。現行mainでraw pointer入力が旧5-event閉集合を越えたため、`CU-201P-HOST-INPUT`でraw ownerとtyped seamを再締結する | event-loop/surface ownerが一意、adapter外raw型0 |
+| `P01-C1` | `DONE` | commit `f79625b8`で単一`ApplicationHandler<ProductEvent>`と単一`run_app`を保持し、raw ownerを`product_runtime_adapter.rs`一箇所へ再締結 | event-loop/surface ownerが一意、adapter外raw型0 |
 | `P01-C2` | `TARGET_MISSING` | 固定sourceの未移管componentをsurface別に一件特定し、実コードからdynamic transitionのowner/input/intent/stale ruleを埋める | product単一owner、mockはconsumer |
 | `P01-C3` | `TARGET_MISSING` | Browser以外で欠けるrole別epoch/reload callbackを一件特定 | crash/reload後に同じsnapshotを再投影 |
 | `P01-C4` | `SPEC_ONLY` | detach時のWorkspace codecとtop-level再生成境界を一問で固定 | layoutを復元してDocument不変 |
@@ -135,7 +135,7 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 | `P02-C2` | `DONE` | `document_edit_runtime` 33/33、製品Place/Timeline/Inspector/Undo delivery 9/9、writer境界 4/4を再実行。既存routeのみ | 全surfaceが同じpublished snapshotを読む |
 | `P02-C3` | `TARGET_MISSING` | selection成立済み部分を除き、essential focusまたはplayhead consumerを一件特定 | UI stateをDocumentへ保存せず一方向publish |
 | `P03-C1` | `DONE` | `crates/motolii-ui/tests/timeline_projection.rs::p12_hundred_thousand_keys_cull_to_visible_identity`で100k keyの狭域projectionとtyped identityを確認。renderer本体は変更しない | visible outputがbounded |
-| `P03-C2` | `REDUCE / IMPLEMENT` | MOVE実装diffとTRIM WIPは保持する。winit/egui-winit/Qt/Blender既知解を縮小採択した`CU-201P-HOST-INPUT`だけを先に実装し、raw owner、logical Escape、focus/pointer lossを既存InputRouterへ接続する | drag中write 0、release 1 Undo、cancel/stale/invalid 0 |
+| `P03-C2` | `REDUCE / IMPLEMENT` | HOST-INPUTでraw ownerとEscape/focus cancelを再締結しMOVEをtechnical reclose。Blender既知handle hitを縮小採択した`CU-201P-TRIM`だけを保持WIPから再開する | drag中write 0、release 1 Undo、cancel/stale/invalid 0 |
 | `P03-C3` | `TARGET_MISSING` | visible-range consumerとnavigation CommandIdを一つ特定 | selection/focus/playheadが同一projection |
 | `P04-C1` | `DONE` | なし。`U4a-1`〜`CU-205E`を再実装しない | first-party parameterの通常編集route |
 | `P04-C2` | `TARGET_MISSING` | active interval read model、outgoing Interp D2 command、Host codec、React consumerを前ownerへ分離 | easing変更が1 command / 1 Undo |
@@ -165,7 +165,7 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 
 `CU-201T-S`の意味閉鎖により開始された`CU-201T-C`は、実装 `a860e10e`、oracle補強 `c2eda847`、targeted test/fmt/clippy greenをもって完了した。
 `CU-201N-S`で既存`TimelineKey`/`TimelineBar`だけを候補へ採用し、key優先、stable identity tie-break、transient `RationalTime` threshold、no-snapを固定した。
-`P02-C1`、`P03-C1-VERIFY`、P02-C2は既存routeの実装・確認として閉じた。`CU-201P-MOVE`の実装diffと`CU-201P-TRIM` WIPは保持するが、native pointer追加後のraw guard redとlogical Escape producer不在により受入を繰り上げない。[CU-201P-HOST-INPUT-S](reviews/2026-08-04-cu-201p-host-input-spine-decision.md)でwinit logical key、egui-winit一箇所正規化、Qt standard Cancel、Blender modal Escapeを縮小採択し、次の実装粒は`CU-201P-HOST-INPUT`だけとする。完了後にMOVEを再締結してTRIMを再開する。snap threshold、slip/slide/roll/ripple、multi-selectを含む広い親`CU-201P`の残余は`WAIT_TARGET`を維持する。Stage placementのpointer captureを流用しない。
+`P02-C1`、`P03-C1-VERIFY`、P02-C2は既存routeの実装・確認として閉じた。[HOST-INPUT実装受入](reviews/2026-08-04-cu-201p-host-input-implementation-acceptance.md)でraw ownerとlogical Escape/focus cancelを再締結し、MOVEはtechnical reclose、次の実装粒は保持WIPから再開する`CU-201P-TRIM`だけとする。pointer-lossと通常Undo/Redoの残りはCU-201E、ユーザー目視はM3最終HUMAN checklistへ集約する。snap threshold、slip/slide/roll/ripple、multi-selectを含む広い親`CU-201P`の残余は`WAIT_TARGET`を維持する。Stage placementのpointer captureを流用しない。
 
 ### 5.1 `CU-201T-C` — trim command接続
 
@@ -225,7 +225,7 @@ EXIT:
 ```
 
 `P03-C1-VERIFY`は製品機能の進捗ではなく、既存routeを再施工しないための確認である。確認済みのため、
-製品実装の本線は`CU-201N-S DONE → CU-201P-HOST-INPUT → MOVE再締結 → CU-201P-TRIM再開`であり、
+製品実装の本線は`HOST-INPUT実装受入 → MOVE technical reclose → CU-201P-TRIM → CU-201R → CU-201E`であり、
 残余親`CU-201P`は`SPLIT / WAIT_TARGET`に留まる。
 
 ### 5.3 `CU-201P-HOST-INPUT` — Product Host input spine capsule
@@ -355,7 +355,7 @@ VALIDATION:
   this specification-edit grain remains validated outside this implementation capsule by
   ./scripts/check-docs.sh and git diff --check.
 NEXT_HANDOFF:
-  WAIT_HOST_INPUT; after §5.3 completion, PRODUCT CU-201P-TRIM implementation owner;
+  DO; rebase the preserved WIP onto the accepted HOST-INPUT lineage and complete only PRODUCT CU-201P-TRIM;
   parent CU-201P remains SPLIT / WAIT_TARGET
 ```
 

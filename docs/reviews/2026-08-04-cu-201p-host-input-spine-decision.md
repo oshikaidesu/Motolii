@@ -160,9 +160,10 @@ named external gateとして実施する。
 ## 7. 状態遷移
 
 - `CU-201P-HOST-INPUT-S`: `DONE / ADOPT・WRAP`
-- `CU-201P-HOST-INPUT`: `DO`
-- `CU-201P-MOVE`: 実装diffは保持するがEscapeとraw guardが再締結するまで`REOPEN / WAIT_HOST_INPUT`
-- `CU-201P-TRIM`: WIPを保持し、host input実装が閉じるまで`WAIT_HOST_INPUT`
+- `CU-201P-HOST-INPUT`: [実装受入](2026-08-04-cu-201p-host-input-implementation-acceptance.md)により`IMPLEMENTED / REVIEW ACCEPT / EXTERNAL_POINTER_GATE_PENDING / HUMAN_DEFERRED`
+- `CU-201P-MOVE`: `IMPLEMENTED / RECLOSED / EXTERNAL_POINTER_GATE_PENDING / HUMAN_DEFERRED`
+- `CU-201P-TRIM`: 保持WIPを再baseして再開する`DO`
 - 親`CU-201P`: `SPLIT / WAIT_TARGET`を維持
 
-Host input実装後は独立reviewとnamed external gateを別に判定し、成功した時だけMOVE再締結とTRIM再開を行う。
+Host inputの独立review、repository oracle、Escape/focus-loss Mac gateはPASSした。pointer-lossと通常Undo/Redoの残りは
+`CU-201E`で判定し、未実施をPASSへ繰り上げない。各粒のユーザー目視はM3最終HUMAN checklistへ集約する。
