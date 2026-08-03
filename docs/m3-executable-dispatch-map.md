@@ -359,6 +359,53 @@ NEXT_HANDOFF:
   CU-201R is DO for the accepted MOVE/TRIM route only; parent CU-201P remains SPLIT / WAIT_TARGET
 ```
 
+### 5.5 `CU-201R` — bounded random MOVE / TRIM oracle capsule
+
+```text
+INPUT:
+  CU-201R random MOVE / TRIM oracle decision
+  accepted CU-201P-MOVE / CU-201P-TRIM
+  existing d2_command fixed-seed proptest pattern
+
+MECHANISM_CLASS:
+  stateful property-based command sequence testing
+KNOWN_IMPLEMENTATION_SEARCH:
+  repo random_multi_gesture_sequence_undo_redo_restores_semantic_state;
+  workspace proptest / RngSeed::Fixed / shrinking;
+  existing DocumentWriter prepare_set_clip_start / prepare_trim_clip_in / prepare_trim_clip_out
+ADOPTION_ROUTE: REUSE / REDUCE
+BUILD_JUSTIFICATION: NONE
+BUILD: FORBIDDEN
+
+ALLOWLIST:
+  crates/motolii-doc/tests/d2_command.rs
+
+POSITIVE_ORACLE:
+  at least 2,000 fixed-seed valid MOVE/left-TRIM/right-TRIM steps;
+  stable LayerId multiset has duplicates 0; Track item count/order unchanged;
+  non-target sentinel Clips and their relative intervals unchanged;
+  target envelope/source unchanged; Document validates after every accepted step;
+  all accepted gestures Undo to byte-equivalent initial Document and undo length 0
+NEGATIVE_ORACLE:
+  no new dependency, PRNG, simulator, production helper, public API, schema, journal change;
+  no snap/group/ripple/slip/slide/roll/multi-select expectation;
+  existing MOVE/TRIM/HOST cancel tests remain green; no fake random no-op cancel proof
+STOP:
+  if valid sequence requires new product meaning or production code, return to Sol and REDUCE;
+  do not infer that meaning from the property expectation
+VALIDATION:
+  cargo test --locked -p motolii-doc --test d2_command cu_201r
+  cargo test --locked -p motolii-ui timeline_move
+  cargo test --locked -p motolii-ui timeline_trim
+  cargo test --locked -p motolii-ui product_runtime
+  cargo fmt --all -- --check
+  cargo clippy --locked -p motolii-doc --test d2_command -- -D warnings
+  git diff --check
+NEXT_HANDOFF:
+  after implementation and independent review acceptance, CU-201E becomes DO;
+  parent CU-201P remains SPLIT / WAIT_TARGET
+```
+
 ## 6. ゴールへ至る依存IR
 
 主担当Codexは視覚的な順序を推測せず、次のedgeだけを依存として扱う。同じ`requires`を持たず、
