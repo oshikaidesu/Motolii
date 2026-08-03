@@ -269,6 +269,16 @@ CHILD_ID:
 LEGACY_TASK:
 USER_VISIBLE_EXIT:
 
+MECHANISM_CLASS:
+KNOWN_IMPLEMENTATION_SEARCH: <repo path、decision keyword、一次資料または継承する正本>
+CANDIDATES: <repo内実装、固定version/commit/API、製品先例>
+ADOPTION_ROUTE: REUSE | ADOPT | WRAP | PORT | PATTERN | EXTERNAL | REJECT
+REJECTED_CANDIDATES: NONE | <候補 :: 具体的不適合>
+THIN_MOTOLII_SEAM: <existing owner/type/command/projection>
+THIN_MOTOLII_RESIDUAL:
+BUILD_JUSTIFICATION: NONE
+BUILD: FORBIDDEN
+
 AUTHORITY: <path> SHA256:<hash>
 CURRENT_CODE_FACT: <path>:<symbol> :: <one unique fact>
 CONTRACT_BOUNDARY: <one owner and one meaning>

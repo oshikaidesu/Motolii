@@ -8,7 +8,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。本書
 - **自己発注禁止**: 許可されたoutcome、成果物、mutation、validation、外部model呼出し、完了条件を主担当Codexが増やさない
 - **findingは権限ではない**: 調査、test、review、隔離、安全性、技術的有用性から追加施工を始めない。既存完了条件を阻むscope内原因だけを許可範囲の最小修正へ戻し、他はfindingとして報告する
 - **既決を未決へ戻さない**: 提案・設計・実装前に[決定逆引き台帳](docs/decision-index.md)を主題keywordで検索し、正本、現行状態、コード事実を確認する。衝突時だけ該当操作を`AUTHORITY_CONFLICT`として止める
-- **一般機構を先に作らない**: 計画・仕様化・発注・実装前にrepo、decision index、[references](docs/references.md)、一次資料を調べ、主担当preflightへ`MECHANISM CLASS / KNOWN IMPLEMENTATION / ADOPTION ROUTE / THIN MOTOLII RESIDUAL / RETIREMENT / BUILD: FORBIDDEN`を記録する。欠落、未調査、裁定なし、一般frameworkの薄い残余への偽装では実装しない。詳細は[既知実装採択・置換開発モデル](docs/known-implementation-adoption-model.md)
+- **既知実装優先 — 新設前に探索・採択する**: 一般機構と製品意味を計画・仕様化・発注・実装する前に、repo、decision index、[references](docs/references.md)、製品先例、一次資料を調べる。主担当preflightには`MECHANISM CLASS / KNOWN IMPLEMENTATION SEARCH / CANDIDATES / ADOPTION ROUTE / REJECTED CANDIDATES / THIN MOTOLII SEAM / THIN MOTOLII RESIDUAL / RETIREMENT / BUILD JUSTIFICATION / BUILD: FORBIDDEN`を短く記録する。欠落、検索先なし、候補なし、裁定なし、一般frameworkの薄い残余への偽装では実装しない。`BUILD JUSTIFICATION`が`NONE`以外なら通常発注を止め、利用者例外へ戻す。詳細は[既知実装採択・置換開発モデル](docs/known-implementation-adoption-model.md)
 - **STOPは局所信号**: 危険操作、未決契約の発明、該当粒の施工だけを止め、親taskと接続可能なlaneは`REUSE / REMAP / REDUCE / 再調査`で続ける。利用者判断なしに安全な次手がない場合だけ返す
 - **状態を繰り上げない**: WIP、fixture、probe、test green、外部review、main統合、通常製品route、製品完成を分ける。LLMの賛同をauthorityや採用資格にしない
 - **外部LLMは途中stream必須**: 発注、相談、調査、検収、診断、再開を問わず、provider-nativeの構造化途中streamを有効化し、主担当が実行中に観測できる状態で生streamを保存してから起動する。対応optionを現行CLIのhelp／一次資料で確認できない、途中eventを保存・観測できない、最終textしか得られない場合はfail closedする。heartbeatやwall timeoutをprovider eventの代用、寡黙判定、早期終了根拠にしない。詳細は[薄いCLI監視](docs/reviews/2026-08-03-thin-observed-cli-harness-decision.md)

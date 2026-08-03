@@ -31,17 +31,23 @@ fixtureに限定する。
 6. **DISPOSITION**: `REUSE / ADOPT / WRAP / PORT / PATTERN / EXTERNAL / REJECT`の一つを選ぶ
 7. **EXIT**: Motolii fixtureを依存非依存に保ち、交換・削除時に触る境界を限定する
 
-採択済みrouteがあるclosed orderは`ADOPTION ROUTE: <decision-indexの一意な行keyword>`だけを置く。
-次の短票は機構classの初回裁定または具体的反証による再裁定時だけ一度作り、正本と台帳へ回収する。
-粒ごとに短票や調査報告を作り直さない。
+採択済みrouteがあるclosed orderは再調査せず、`KNOWN IMPLEMENTATION SEARCH`へ正本pathと
+decision-indexの一意な行keywordを置く。次の短票は機構classの初回裁定または具体的反証による
+再裁定時だけ一度作り、正本と台帳へ回収する。粒ごとに長い調査報告を作り直さない。
 
 ```text
-RESPONSIBILITY DISPOSITION: REUSE | ADOPT | WRAP | PORT | PATTERN | EXTERNAL
-EXISTING ROUTE: repo内経路、既決候補、または該当なし
-OWNED RESIDUE: Motoliiに残す固有意味・性能境界
+MECHANISM CLASS: 製品task IDから独立した必要能力
+KNOWN IMPLEMENTATION SEARCH: 検索したrepo path、decision keyword、一次資料または継承する正本
+CANDIDATES: repo内実装、固定version/commit/API、製品先例
+ADOPTION ROUTE: REUSE | ADOPT | WRAP | PORT | PATTERN | EXTERNAL | REJECT
+REJECTED CANDIDATES: NONE、または候補と具体的不適合
+THIN MOTOLII SEAM: 接続する既存owner、type、command、projection
+THIN MOTOLII RESIDUAL: Motoliiに残す固有意味・policy・admission・fixture
 IMPORTED RESPONSIBILITY: version、license、build、権限、OS差、供給網
 EXIT: adapter、fixture、交換時の限定範囲
 RETIREMENT: 製品へ残す範囲、証拠確定後にfreeze/deleteする範囲
+BUILD JUSTIFICATION: NONE
+BUILD: FORBIDDEN
 ```
 
 `PORT`／`PATTERN`は、解決済み機構をMotolii所有codeで実装・接続する処分であり、発明ではない。
