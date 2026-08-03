@@ -443,6 +443,8 @@
 | [2026-08-03-thin-observed-cli-harness-decision.md](2026-08-03-thin-observed-cli-harness-decision.md) | Claude Code、Codex CLI、Cursor Agentをexact argvと生logだけで接続するtransport-only harness決定 |
 | [2026-08-03-runner-independent-supervision-decision.md](2026-08-03-runner-independent-supervision-decision.md) | 旧route/order/receipt状態機械を撤回し、scope・worktree・検収・採否をCodexへ戻す監督責任決定 |
 | [2026-08-03-history-calibrated-llm-role-selection-decision.md](2026-08-03-history-calibrated-llm-role-selection-decision.md) | Sol総監督、Spark初回機械施工、Luna同一境界修正、一粒／短wave session、別family検収を固定routeなしで選ぶ決定 |
+| [2026-08-03-claude-low-closed-review-calibration-observation.md](2026-08-03-claude-low-closed-review-calibration-observation.md) | Claude lowをCLOSED reviewへ使うbounded合成packet／保存済み過去diff再現とCLI turn制御の実測観察 |
+| [2026-08-03-blind-evidence-envelope-counterexample-observation.md](2026-08-03-blind-evidence-envelope-counterexample-observation.md) | 単一blind envelopeの速度比較と全hit inventory／EVIDENCE_GAP／fresh waveによる選択バイアス反例捕捉の観察 |
 | [2026-08-03-llm-large-repository-context-routing-prior-art-observation.md](2026-08-03-llm-large-repository-context-routing-prior-art-observation.md) | LLM大規模repository開発の短い入口地図、hybrid retrieval、dependency graph、long-context昇格を比較し、Motolii向けauthority-aware mapの検証仮説を置く観察 |
 | [2026-07-31-cu-0b02c-component-state-source-supply-decision.md](2026-07-31-cu-0b02c-component-state-source-supply-decision.md) | CU-0B02C component state source / supply裁定 |
 | [2026-07-31-cu-0b02cv-private-carry-final-disposition.md](2026-07-31-cu-0b02cv-private-carry-final-disposition.md) | CU-0B02C-V component-private carry最終処分 |

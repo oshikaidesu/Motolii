@@ -42,9 +42,10 @@ Motoliiの監督は主担当Codexの責任であり、transport、order schema�
 2. 意味、owner、原因、再利用、oracleのいずれかが未閉鎖なら`WIDE`として実装を起動せず、調査・縮小・ユーザー判断へ戻す
 3. cleanな隔離worktreeを作り、開始baseとfingerprintを保存する
 4. 必要最小のコード事実、対象path、変更境界、負例、確認commandを実装担当へ渡す
-5. 実装後のdiff、fingerprint、試験をCodexが確認する
-6. 実装担当と異なるfresh read-only reviewerへ、実diffと検証対象を渡す
-7. Codexが正本、diff、試験、review結果を再照合して採用・差戻し・局所STOPを決める
+5. capsule、diff、oracle、許可snippet、想定tool turnから動的context／token予算を記録し、超過する粒を契約境界またはfinding群で分割する
+6. 実装後のdiff、fingerprint、試験をCodexが確認する
+7. 実装担当と異なるfresh read-only reviewerへ、視野幅から算出したeffortと実diff／検証対象を渡す
+8. Codexが正本、diff、試験、review結果を再照合して採用・差戻し・粒分割・局所STOPを決める
 
 これは固定stage数を要求しない。機械変更では外部preflightを省ける。共有境界や原因競合では実装前のread-only相談を
 追加できる。reviewerを複数にするか、Grok／Opus／Codexのどれを使うかはtaskのriskとユーザー指定で決め、全作業へ
@@ -63,6 +64,20 @@ model familyを独立最終reviewerへ再利用しない。Spark、Luna、Solは
 
 modelの利用不能時はCodexが同じbase、scope、allowlist、oracleを再確認し、CLIで完全IDを確認できたmodelをfresh sessionで
 明示選択する。失敗したsessionを別modelへ引き継がず、選択変更と理由をlogへ残す。これは黙ったfallbackや固定fallback順ではない。
+
+Claude系のeffortは[履歴較正によるLLM役割選択](2026-08-03-history-calibrated-llm-role-selection-decision.md)の
+`CLOSED / ADJACENT / WIDE / CONFLICTING`から算出する。高effortをread scope拡大の許可にせず、Luna Maxも同じcapsule／read set／
+一契約境界へ閉じる。複数file／資料が同じ契約結論を補強するだけなら`WIDE`へ上げず、未収束のauthority主張、意味owner、
+writer、原因、reuseの競合を広域化の根拠にする。hazardはeffortでなく負例、非LLM oracle、reviewer構成を強める。
+予算超過はmodel失敗へ押し込まず、施工またはreview grainの分割信号として扱う。`TOOL_TURN_BUDGET`は予定するtool-result cycleと
+最終回答として置き、file数やtool call数から機械算出しない。hard turn capは起動するexact Claude Code binaryのhelpに存在する時だけ
+使い、2026-08-03に確認した2.1.216／2.1.220には無かった。完了eventのnatural turnをprovider-native streamで観測する。
+
+外部reviewerのread入口は[履歴較正によるLLM役割選択](2026-08-03-history-calibrated-llm-role-selection-decision.md)のblind evidence
+envelopeを標準とする。exact原文、source/range/hash、記録したquery／anchor scope内の全hit inventoryを一artifactへ機械連結し、
+Codexの推奨結論を混ぜない。未収録の関連hitがあれば`ACCEPT`を許さず、reviewerが返したexact rangeの`EVIDENCE_GAP`をSolが
+現行sourceへ再照合してfresh waveへ追加する。Fableで実証済みの共通方式をOpus／Grokへも適用し、provider固有の効果量だけを
+初回数粒で注記する。未較正を固定fallback、自由探索、適用保留の理由にしない。
 
 ## 採用と停止
 
