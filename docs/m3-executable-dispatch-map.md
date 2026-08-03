@@ -121,8 +121,9 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 
 ## 4. 33子の現在コンパイル結果
 
-この表の状態は基線`555a9ab5`と2026-08-01 simulation時点である。`IMPLEMENT`への昇格は
-implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
+`555a9ab5`は2026-08-01 simulation時点の初期simulation baselineとしてのみ保持し、本表全体を現時点で再検証したことは示さない。
+現在の`P03-C2`の`REDUCE / IMPLEMENT` overrideは、§5.3の現行authorityとimplementation ledgerの一意な
+`CU-201P-TRIM` `DO`行に裏付けられる。`IMPLEMENT`への昇格はimplementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 
 | 子 | 現在状態 | exact次task | 通常製品routeの出口 |
 |---|---|---|---|
@@ -134,7 +135,7 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 | `P02-C2` | `DONE` | `document_edit_runtime` 33/33、製品Place/Timeline/Inspector/Undo delivery 9/9、writer境界 4/4を再実行。既存routeのみ | 全surfaceが同じpublished snapshotを読む |
 | `P02-C3` | `TARGET_MISSING` | selection成立済み部分を除き、essential focusまたはplayhead consumerを一件特定 | UI stateをDocumentへ保存せず一方向publish |
 | `P03-C1` | `DONE` | `crates/motolii-ui/tests/timeline_projection.rs::p12_hundred_thousand_keys_cull_to_visible_identity`で100k keyの狭域projectionとtyped identityを確認。renderer本体は変更しない | visible outputがbounded |
-| `P03-C2` | `DONE / REDUCE` | `CU-201P-MOVE`として、既知NLE body-drag意味を既存`ProductApp`／`TimelineProjection`／`DocumentWriter::prepare_set_clip_start`へ限定接続。広い`CU-201P` interval gestureは引き続き別target | drag中write 0、release 1 Undo、cancel/stale/invalid 0 |
+| `P03-C2` | `REDUCE / IMPLEMENT` | `CU-201P-MOVE`のcompletionは下記proseとimplementation ledgerに残す。`CU-201P-TRIM-S`でBlender固定sourceの内部handle hitをPATTERN採択し、public `TimelineHit`／`TimelineProjection::hit_test`は不変のまま、private `ProductTimelineHit`でKey優先後のBarをLeft/Right/Bodyへ精密化する。bar width 25 / derived height 16 logical px未満はbody-only、次は`CU-201P-TRIM`だけ | drag中write 0、release 1 Undo、cancel/stale/invalid 0 |
 | `P03-C3` | `TARGET_MISSING` | visible-range consumerとnavigation CommandIdを一つ特定 | selection/focus/playheadが同一projection |
 | `P04-C1` | `DONE` | なし。`U4a-1`〜`CU-205E`を再実装しない | first-party parameterの通常編集route |
 | `P04-C2` | `TARGET_MISSING` | active interval read model、outgoing Interp D2 command、Host codec、React consumerを前ownerへ分離 | easing変更が1 command / 1 Undo |
@@ -164,7 +165,7 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 
 `CU-201T-S`の意味閉鎖により開始された`CU-201T-C`は、実装 `a860e10e`、oracle補強 `c2eda847`、targeted test/fmt/clippy greenをもって完了した。
 `CU-201N-S`で既存`TimelineKey`/`TimelineBar`だけを候補へ採用し、key優先、stable identity tie-break、transient `RationalTime` threshold、no-snapを固定した。
-`P02-C1`、`P03-C1-VERIFY`、P02-C2、P01-C1は既存routeの実装・確認として閉じた。`CU-201P-MOVE`は、既知NLEのbody-drag収束意味を既存native event／Transient projection／single writerへREDUCE接続して閉じた。trim edge、snap threshold、slip/slide/roll/ripple、multi-selectを含む広いPRODUCT `CU-201P`は、[CU-201P target gap observation](reviews/2026-08-03-cu-201p-target-gap-observation.md)どおり`WAIT_TARGET`を維持する。Stage placementのpointer captureを流用しない。
+`P02-C1`、`P03-C1-VERIFY`、P02-C2、P01-C1は既存routeの実装・確認として閉じた。`CU-201P-MOVE`は、既知NLEのbody-drag収束意味を既存native event／Transient projection／single writerへREDUCE接続して閉じた。[CU-201P-TRIM-S](reviews/2026-08-03-cu-201p-trim-edge-known-semantics-adoption-decision.md)でtrim edge targetも閉じ、次の実装粒は`CU-201P-TRIM`だけとする。snap threshold、slip/slide/roll/ripple、multi-selectを含む広い親`CU-201P`の残余は`WAIT_TARGET`を維持する。Stage placementのpointer captureを流用しない。
 
 ### 5.1 `CU-201T-C` — trim command接続
 
@@ -224,7 +225,90 @@ EXIT:
 ```
 
 `P03-C1-VERIFY`は製品機能の進捗ではなく、既存routeを再施工しないための確認である。確認済みのため、
-製品実装の本線は`CU-201N-S → CU-201P`へ戻る。
+製品実装の本線は`CU-201N-S DONE → CU-201P-MOVE DONE → CU-201P-TRIM`のみであり、残余親`CU-201P`は
+`SPLIT / WAIT_TARGET`に留まる。
+
+### 5.3 `CU-201P-TRIM` — native Timeline trim-edge dispatch capsule
+
+```text
+INPUT:
+  CU-201P-TRIM known-semantics adoption decision
+  CU-201T-S TrimClipIn / TrimClipOut meaning
+  existing ProductTimelineProjection / ProductApp transient and DocumentEditRuntime route
+
+MECHANISM_CLASS:
+  Timeline bar hit refinement and edge-drag transient lifecycle
+KNOWN_IMPLEMENTATION_SEARCH:
+  existing TimelineProjection::hit_test, ProductTimelineProjection, CU-201P-MOVE;
+  pinned Blender sequencer_select.cc commit 6e15da150d397d3c6e95e4d3ca147f0150bb7311
+  with cutoff source L883-L945 and left-before-right ordering source L1017-L1035
+ADOPTION_ROUTE: PATTERN / REDUCE / REUSE
+BUILD_JUSTIFICATION: NONE
+BUILD: FORBIDDEN
+
+EXACT_TARGET:
+  keep public TimelineHit and TimelineProjection::hit_test byte-for-byte unchanged;
+  add crate-private ProductTimelineHit owned only by private ProductTimelineProjection/ProductApp;
+  refine only public Bar into Left | Right | Body, with Key and None mapped unchanged
+
+GEOMETRY:
+  logical bar width = (bar.x_end - bar.x_start) * time_surface.width
+  logical bar height = time_surface.height / band_span
+  admit edge refinement only when time_surface.height, band_span, and derived height are finite positive
+  enable edges only at width >= 25 and derived height >= 16 logical px
+  edge width = min(15, bar_width / 4) logical px
+  whole-composition viewport stays body-only below either cutoff until an authorized zoom route exists
+
+POINTER:
+  on Left/Right press freeze layer, initial_pointer_time, initial_start, initial_end,
+  initial edge (Left=initial_start, Right=initial_end), and projection generation
+  for preview and release: delta = current_pointer_time - initial_pointer_time
+  Left: new_start = initial_start + delta
+  Right: new_end = initial_end + delta
+  never jump directly to current_pointer_time on press, preview, or release
+
+SELECTION:
+  private Key and all private bar variants Left/Right/Body -> existing ReplacePrimary(layer)
+  private None -> existing ClearPrimary; outside time surface keeps existing no-hit route
+
+WRITE:
+  preview is read-only; release calls existing prepare_trim_clip_in/out once;
+  same-value, stale, cancel, arithmetic failure, target loss, and prepare rejection commit 0
+
+ALLOWLIST:
+  crates/motolii-ui/src/lib.rs
+  crates/motolii-ui/src/product_runtime.rs
+  crates/motolii-ui/src/document_edit_runtime.rs
+  crates/motolii-ui/src/timeline_trim_gesture.rs (new private trim-specific file allowed)
+  no separate test files; keep tests inline in these files
+  do not edit crates/motolii-ui/src/timeline_projection.rs; public TimelineHit / TimelineProjection::hit_test contract stays unchanged
+
+POSITIVE_ORACLE:
+  Key priority; cutoff boundary; non-overlapping Left/Right/Body; delta mapping;
+  one Trim command and one Undo on release; edge click retains the same selected layer
+NEGATIVE_ORACLE:
+  public hit API/variants unchanged; same-pointer release no-op; no pointer jump;
+  drag-time Document/journal/history/revision/publish 0; no physical-px/DPI/fps/frame-grid threshold;
+  no zoom invention, generic gesture framework, Stage capture reuse, snap, or selection meaning change
+STOP:
+  if finite-positive height admission, existing public hit mapping, or a single existing Trim writer route cannot close,
+  stop CU-201P-TRIM and return to Sol; do not widen to the residual CU-201P targets
+VALIDATION:
+  implementation route (must observe implementation, not docs only):
+    cargo fmt --check
+    cargo test --locked -p motolii-ui timeline_trim
+    cargo test --locked -p motolii-ui document_edit_runtime
+    cargo test --locked -p motolii-ui product_runtime
+    cargo test --locked -p motolii-ui
+    cargo clippy --locked -p motolii-ui --all-targets -- -D warnings
+    git diff --check
+  target tests must directly cover private hit boundaries/selection, pointer delta/no-jump,
+  writer trim/Undo, and cancel/stale/invalid zero-write.
+  this specification-edit grain remains validated outside this implementation capsule by
+  ./scripts/check-docs.sh and git diff --check.
+NEXT_HANDOFF:
+  PRODUCT CU-201P-TRIM implementation owner; parent CU-201P remains SPLIT / WAIT_TARGET
+```
 
 ## 6. ゴールへ至る依存IR
 
