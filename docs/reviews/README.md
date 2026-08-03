@@ -465,3 +465,4 @@
 | [2026-08-03-cu-201p-trim-edge-known-semantics-adoption-decision.md](2026-08-03-cu-201p-trim-edge-known-semantics-adoption-decision.md) | CU-201P-TRIM Blender VSE handle hit規則のPATTERN採択・in/out trim target決定 |
 | [2026-08-04-cu-201p-host-input-spine-decision.md](2026-08-04-cu-201p-host-input-spine-decision.md) | CU-201P通常Product Host入力背骨・logical Escape cancel既知実装採択決定 |
 | [2026-08-04-cu-201p-host-input-implementation-acceptance.md](2026-08-04-cu-201p-host-input-implementation-acceptance.md) | CU-201P-HOST-INPUT実装受入・MOVE再締結・TRIM再開・M3最終HUMAN集約 |
+| [2026-08-04-cu-201p-trim-implementation-acceptance.md](2026-08-04-cu-201p-trim-implementation-acceptance.md) | CU-201P-TRIM実装受入・独立検収・CU-201R開始・M3最終HUMAN集約 |
