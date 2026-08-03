@@ -442,7 +442,7 @@
 | [2026-08-02-supervised-runner-retirement-decision.md](2026-08-02-supervised-runner-retirement-decision.md) | Motolii独自監督runnerを非破壊的に廃止し、Agentex共通入口の実地検証範囲と未閉鎖を固定する決定 |
 | [2026-08-03-thin-observed-cli-harness-decision.md](2026-08-03-thin-observed-cli-harness-decision.md) | Claude Code、Codex CLI、Cursor Agentをexact argvと生logだけで接続するtransport-only harness決定 |
 | [2026-08-03-runner-independent-supervision-decision.md](2026-08-03-runner-independent-supervision-decision.md) | 旧route/order/receipt状態機械を撤回し、scope・worktree・検収・採否をCodexへ戻す監督責任決定 |
-| [2026-08-03-history-calibrated-llm-role-selection-decision.md](2026-08-03-history-calibrated-llm-role-selection-decision.md) | Grok／Claude／Sparkの履歴上の特性を固定routeでなくtask別の役割選択へ反映する決定 |
+| [2026-08-03-history-calibrated-llm-role-selection-decision.md](2026-08-03-history-calibrated-llm-role-selection-decision.md) | Luna Max通常監督、Sol疎昇格、一粒／短wave session、別family検収を固定routeなしで選ぶ決定 |
 | [2026-08-03-llm-large-repository-context-routing-prior-art-observation.md](2026-08-03-llm-large-repository-context-routing-prior-art-observation.md) | LLM大規模repository開発の短い入口地図、hybrid retrieval、dependency graph、long-context昇格を比較し、Motolii向けauthority-aware mapの検証仮説を置く観察 |
 | [2026-07-31-cu-0b02c-component-state-source-supply-decision.md](2026-07-31-cu-0b02c-component-state-source-supply-decision.md) | CU-0B02C component state source / supply裁定 |
 | [2026-07-31-cu-0b02cv-private-carry-final-disposition.md](2026-07-31-cu-0b02cv-private-carry-final-disposition.md) | CU-0B02C-V component-private carry最終処分 |
