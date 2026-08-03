@@ -36,6 +36,7 @@ mod static_preview;
 mod timeline_move_gesture;
 mod timeline_projection;
 mod timeline_tools_host_runtime;
+mod timeline_trim_gesture;
 mod ui_numeric_trace;
 
 pub use command_registry::{

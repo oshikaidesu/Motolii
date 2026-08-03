@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use motolii_core::{CanonicalPoint, Quality, RationalTime};
-use motolii_doc::{Command, EffectId, EvaluationTime, LayerId, TrackItem};
+use motolii_doc::{Command, EffectId, EvaluationTime, KeyframeId, LayerId, TrackItem};
 use motolii_eval::DataTracks;
 use motolii_gpu::GpuCtx;
 use winit::dpi::LogicalSize;
@@ -43,6 +43,7 @@ use crate::timeline_projection::{
     TimelineViewport,
 };
 use crate::timeline_tools_host_runtime::{TimelineToolsHostRuntime, TimelineToolsHostRuntimeError};
+use crate::timeline_trim_gesture::{TimelineTrimEdge, TimelineTrimGesture};
 use crate::{
     builtin_command_registry, resolve_keymap, AsciiKey, Binding, BuiltinKeymap, CommandId,
     CommandIdError, CommandRegistry, CommandRegistryError, DomainIntent, EffectiveTrigger, Gesture,
@@ -185,6 +186,7 @@ pub(crate) struct ProductApp {
     failure: Option<String>,
     pending_inspector_commit: Option<InspectorGestureTerminal>,
     timeline_move: Option<TimelineMoveGesture>,
+    timeline_trim: Option<TimelineTrimGesture>,
     last_pointer_position: Option<[f64; 2]>,
 }
 
@@ -224,6 +226,15 @@ struct ProductTimelineProjection {
     band_span: f64,
     composition_duration: RationalTime,
     preview: Option<TimelineProjection>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProductTimelineHit {
+    Key { layer: LayerId, key: KeyframeId },
+    Left { layer: LayerId },
+    Right { layer: LayerId },
+    Body { layer: LayerId },
+    None,
 }
 
 impl ProductTimelineProjection {
@@ -272,14 +283,83 @@ impl ProductTimelineProjection {
         self.preview = None;
     }
 
-    fn hit_test(&self, position: [f64; 2], layout: NativeHostLayout) -> Option<TimelineHit> {
+    fn set_trim_preview(
+        &mut self,
+        document: Option<&motolii_doc::Document>,
+    ) -> Result<(), TimelineProjectionError> {
+        self.preview = document
+            .map(Self::from_document)
+            .transpose()?
+            .map(|projection| projection.projection);
+        Ok(())
+    }
+
+    fn hit_test(&self, position: [f64; 2], layout: NativeHostLayout) -> Option<ProductTimelineHit> {
+        self.hit_test_pair(position, layout)
+            .map(|(_, private_hit)| private_hit)
+    }
+
+    fn hit_test_pair(
+        &self,
+        position: [f64; 2],
+        layout: NativeHostLayout,
+    ) -> Option<(TimelineHit, ProductTimelineHit)> {
         let time_surface = timeline_time_surface_logical_rect(layout)?;
-        if !time_surface.contains(position) {
+        if !position.iter().all(|value| value.is_finite())
+            || !time_surface.x.is_finite()
+            || !time_surface.y.is_finite()
+            || !time_surface.width.is_finite()
+            || time_surface.width <= 0.0
+            || !time_surface.height.is_finite()
+            || time_surface.height <= 0.0
+            || !self.band_span.is_finite()
+            || self.band_span <= 0.0
+            || !time_surface.contains(position)
+        {
             return None;
         }
         let x = (position[0] - time_surface.x) / time_surface.width;
         let y = ((position[1] - time_surface.y) / time_surface.height) * self.band_span;
-        Some(self.render_projection().hit_test(x, y))
+        let public_hit = self.render_projection().hit_test(x, y);
+        let private_hit = match public_hit {
+            TimelineHit::Key { layer, key } => ProductTimelineHit::Key { layer, key },
+            TimelineHit::None => ProductTimelineHit::None,
+            TimelineHit::Bar { layer } => {
+                let Some(bar) = self
+                    .render_projection()
+                    .bars()
+                    .iter()
+                    .find(|bar| bar.layer == layer)
+                else {
+                    return Some((public_hit, ProductTimelineHit::Body { layer }));
+                };
+                let bar_width = (bar.x_end - bar.x_start) * time_surface.width;
+                let bar_height = time_surface.height / self.band_span;
+                if !bar.x_start.is_finite()
+                    || !bar.x_end.is_finite()
+                    || !bar_width.is_finite()
+                    || bar_width < 25.0
+                    || !bar_height.is_finite()
+                    || bar_height < 16.0
+                {
+                    ProductTimelineHit::Body { layer }
+                } else {
+                    let bar_left = time_surface.x + bar.x_start * time_surface.width;
+                    let local_x = position[0] - bar_left;
+                    let edge_width = 15.0_f64.min(bar_width / 4.0);
+                    if !bar_left.is_finite() || !local_x.is_finite() {
+                        ProductTimelineHit::Body { layer }
+                    } else if local_x <= edge_width {
+                        ProductTimelineHit::Left { layer }
+                    } else if local_x >= bar_width - edge_width {
+                        ProductTimelineHit::Right { layer }
+                    } else {
+                        ProductTimelineHit::Body { layer }
+                    }
+                }
+            }
+        };
+        Some((public_hit, private_hit))
     }
 
     fn time_at(&self, position: [f64; 2], layout: NativeHostLayout) -> Option<RationalTime> {
@@ -510,6 +590,7 @@ impl ProductApp {
             failure: None,
             pending_inspector_commit: None,
             timeline_move: None,
+            timeline_trim: None,
             last_pointer_position: None,
         })
     }
@@ -1058,6 +1139,35 @@ impl ProductApp {
         }
         let logical = [position[0] / scale, position[1] / scale];
         self.last_pointer_position = Some(logical);
+        if let (Some(gesture), Some(layout)) = (self.timeline_trim.as_ref(), self.layout) {
+            let Some(pointer_time) = self.timeline_projection.time_at(logical, layout) else {
+                let _ = self.timeline_projection.set_trim_preview(None);
+                self.request_redraw();
+                return;
+            };
+            match gesture.preview(pointer_time) {
+                Ok(request) => match self.document_runtime.preview_trim(request) {
+                    Ok(Some(document)) => {
+                        if self
+                            .timeline_projection
+                            .set_trim_preview(Some(&document))
+                            .is_err()
+                        {
+                            self.cancel_timeline_trim("projection-failed");
+                            return;
+                        }
+                        self.request_redraw();
+                    }
+                    Ok(None) | Err(DocumentEditRuntimeError::Command(_)) => {
+                        let _ = self.timeline_projection.set_trim_preview(None);
+                        self.request_redraw();
+                    }
+                    Err(_) => self.cancel_timeline_trim("preview-failed"),
+                },
+                Err(_) => self.cancel_timeline_trim("time-overflow"),
+            }
+            return;
+        }
         let (Some(gesture), Some(layout)) = (self.timeline_move.as_ref(), self.layout) else {
             return;
         };
@@ -1091,44 +1201,81 @@ impl ProductApp {
         };
         match phase {
             InputPhase::Press => {
-                if self.timeline_move.is_some() {
+                if self.timeline_move.is_some() || self.timeline_trim.is_some() {
                     return;
                 }
                 let Some(layout) = self.layout else {
                     return;
                 };
-                let Some(TimelineHit::Bar { layer }) =
-                    self.timeline_projection.hit_test(position, layout)
-                else {
+                let Some(hit) = self.timeline_projection.hit_test(position, layout) else {
                     return;
                 };
                 let Some(pointer_time) = self.timeline_projection.time_at(position, layout) else {
                     return;
                 };
-                let Some(initial_start) = find_clip_start(&self.current_document, layer) else {
-                    return;
-                };
-                self.timeline_move = Some(TimelineMoveGesture::begin(
-                    layer,
-                    pointer_time,
-                    initial_start,
-                    self.projection_generation,
-                ));
-                crate::ui_numeric_trace::emit(format_args!(
-                    "kind=timeline-move state=begin layer={} generation={}",
-                    layer.get(),
-                    self.projection_generation,
-                ));
-                if let Err(error) = self
-                    .input_router
-                    .route(NormalizedInput::Phase(InputPhase::DragStart))
-                {
-                    self.cancel_timeline_move("input-router-error");
-                    self.fail(event_loop, error);
+                match hit {
+                    ProductTimelineHit::Body { layer } => {
+                        let Some(initial_start) = find_clip_start(&self.current_document, layer)
+                        else {
+                            return;
+                        };
+                        self.timeline_move = Some(TimelineMoveGesture::begin(
+                            layer,
+                            pointer_time,
+                            initial_start,
+                            self.projection_generation,
+                        ));
+                        crate::ui_numeric_trace::emit(format_args!(
+                            "kind=timeline-move state=begin layer={} generation={}",
+                            layer.get(),
+                            self.projection_generation,
+                        ));
+                    }
+                    ProductTimelineHit::Left { layer } | ProductTimelineHit::Right { layer } => {
+                        let Some((initial_start, initial_end)) =
+                            find_clip_interval(&self.current_document, layer)
+                        else {
+                            return;
+                        };
+                        let edge = match hit {
+                            ProductTimelineHit::Left { .. } => TimelineTrimEdge::Left,
+                            ProductTimelineHit::Right { .. } => TimelineTrimEdge::Right,
+                            _ => unreachable!(),
+                        };
+                        self.timeline_trim = Some(TimelineTrimGesture::begin(
+                            layer,
+                            edge,
+                            pointer_time,
+                            initial_start,
+                            initial_end,
+                            self.projection_generation,
+                        ));
+                        crate::ui_numeric_trace::emit(format_args!(
+                            "kind=timeline-trim state=begin layer={} edge={:?} generation={}",
+                            layer.get(),
+                            edge,
+                            self.projection_generation,
+                        ));
+                    }
+                    ProductTimelineHit::Key { .. } | ProductTimelineHit::None => {}
+                }
+                if self.timeline_move.is_some() || self.timeline_trim.is_some() {
+                    if let Err(error) = self
+                        .input_router
+                        .route(NormalizedInput::Phase(InputPhase::DragStart))
+                    {
+                        self.cancel_timeline_move("input-router-error");
+                        self.cancel_timeline_trim("input-router-error");
+                        self.fail(event_loop, error);
+                    }
                 }
             }
             InputPhase::Release => {
-                self.finish_timeline_move(event_loop, position);
+                if self.timeline_trim.is_some() {
+                    self.finish_timeline_trim(event_loop, position);
+                } else {
+                    self.finish_timeline_move(event_loop, position);
+                }
             }
             _ => {}
         }
@@ -1162,7 +1309,10 @@ impl ProductApp {
             RouterOutput::Intent {
                 intent: DomainIntent::CancelInFlightGesture,
                 ..
-            } => self.cancel_timeline_move("escape"),
+            } => {
+                self.cancel_timeline_move("escape");
+                self.cancel_timeline_trim("escape");
+            }
             RouterOutput::CancelCommandIgnored { .. } | RouterOutput::ShortcutSuppressed { .. } => {
             }
             _ => {}
@@ -1183,6 +1333,7 @@ impl ProductApp {
         };
         if matches!(output, RouterOutput::SafetyCancel { .. }) {
             self.cancel_timeline_move("window-focus-or-capture-loss");
+            self.cancel_timeline_trim("window-focus-or-capture-loss");
         }
     }
 
@@ -1198,6 +1349,23 @@ impl ProductApp {
                 reason,
             ));
             self.timeline_projection.clear_move_preview();
+            self.request_redraw();
+        }
+    }
+
+    fn cancel_timeline_trim(&mut self, reason: &'static str) {
+        if let Some(gesture) = self.timeline_trim.take() {
+            let _ = self
+                .input_router
+                .route(NormalizedInput::Phase(InputPhase::Cancel));
+            crate::ui_numeric_trace::emit(format_args!(
+                "kind=timeline-trim state=cancel layer={} edge={:?} generation={} reason={}",
+                gesture.layer().get(),
+                gesture.edge(),
+                gesture.generation(),
+                reason,
+            ));
+            let _ = self.timeline_projection.set_trim_preview(None);
             self.request_redraw();
         }
     }
@@ -1251,6 +1419,51 @@ impl ProductApp {
         }
     }
 
+    fn finish_timeline_trim(&mut self, event_loop: &ActiveEventLoop, position: [f64; 2]) {
+        let Some(gesture) = self.timeline_trim.take() else {
+            return;
+        };
+        if let Err(error) = self
+            .input_router
+            .route(NormalizedInput::Phase(InputPhase::DragEnd))
+        {
+            return self.fail(event_loop, error);
+        }
+        let _ = self.timeline_projection.set_trim_preview(None);
+        let Some(layout) = self.layout else {
+            return;
+        };
+        let Some(pointer_time) = self.timeline_projection.time_at(position, layout) else {
+            self.request_redraw();
+            return;
+        };
+        if !timeline_trim_gesture_is_current(
+            &gesture,
+            self.projection_generation,
+            find_clip_interval(&self.current_document, gesture.layer()),
+        ) {
+            self.request_redraw();
+            return;
+        }
+        let request = match gesture.release(pointer_time) {
+            Ok(Some(request)) => request,
+            Ok(None) | Err(_) => {
+                self.request_redraw();
+                return;
+            }
+        };
+        self.document_queue.push_trim_clip(request);
+        match self.document_runtime.process_next(
+            &mut self.document_queue,
+            self.primary,
+            self.projection_generation,
+        ) {
+            Ok(Some(published)) => self.adopt_full_publish(event_loop, published, "timeline-trim"),
+            Ok(None) | Err(DocumentEditRuntimeError::Command(_)) => self.request_redraw(),
+            Err(error) => self.fail(event_loop, error),
+        }
+    }
+
     fn set_idle_control_flow(&self, event_loop: &ActiveEventLoop) {
         match self.surface_retry_at {
             Some(retry_at) => event_loop.set_control_flow(ControlFlow::WaitUntil(retry_at)),
@@ -1295,12 +1508,15 @@ impl ProductApp {
         let Some(layout) = self.layout else {
             return;
         };
-        let hit = self.timeline_projection.hit_test(position, layout);
+        let hit_pair = self.timeline_projection.hit_test_pair(position, layout);
         crate::ui_numeric_trace::emit(format_args!(
             "kind=timeline-hit layout_epoch={} logical_x={:.3} logical_y={:.3} hit={:?}",
-            layout.epoch, position[0], position[1], hit,
+            layout.epoch,
+            position[0],
+            position[1],
+            hit_pair.as_ref().map(|(public_hit, _)| public_hit),
         ));
-        let Some(hit) = hit else {
+        let Some((public_hit, _)) = hit_pair else {
             return;
         };
         self.browser_focus_target = BrowserFocusTarget::Parent;
@@ -1309,7 +1525,7 @@ impl ProductApp {
                 return self.fail(event_loop, error);
             }
         }
-        match hit {
+        match public_hit {
             TimelineHit::Key { layer, .. } | TimelineHit::Bar { layer } => {
                 self.document_queue.push_replace_primary(layer);
             }
@@ -1524,6 +1740,7 @@ impl ProductApp {
         route: &'static str,
     ) {
         self.cancel_timeline_move("published-generation-changed");
+        self.cancel_timeline_trim("published-generation-changed");
         trace_document_publish(route, &published);
         self.reconcile_active_effect_use(&published);
         self.current_document = published.snapshot;
@@ -1772,6 +1989,42 @@ fn find_clip_start(document: &motolii_doc::Document, target: LayerId) -> Option<
         .tracks
         .iter()
         .find_map(|track| find(&track.items, target))
+}
+
+fn find_clip_interval(
+    document: &motolii_doc::Document,
+    target: LayerId,
+) -> Option<(RationalTime, RationalTime)> {
+    fn find(items: &[TrackItem], target: LayerId) -> Option<(RationalTime, RationalTime)> {
+        for item in items {
+            match item {
+                TrackItem::Clip(clip) if clip.envelope.layer_id == target => {
+                    return Some((clip.start, clip.start.try_add(clip.duration).ok()?));
+                }
+                TrackItem::Group(group) => {
+                    if let Some(interval) = find(&group.children, target) {
+                        return Some(interval);
+                    }
+                }
+                TrackItem::Clip(_) => {}
+            }
+        }
+        None
+    }
+
+    document
+        .tracks
+        .iter()
+        .find_map(|track| find(&track.items, target))
+}
+
+fn timeline_trim_gesture_is_current(
+    gesture: &TimelineTrimGesture,
+    projection_generation: u64,
+    interval: Option<(RationalTime, RationalTime)>,
+) -> bool {
+    gesture.generation() == projection_generation
+        && interval == Some((gesture.initial_start(), gesture.initial_end()))
 }
 
 fn trace_document_publish(route: &str, published: &PublishedDocument) {
@@ -2570,7 +2823,7 @@ mod tests {
 
         assert_eq!(
             projection.hit_test(center, layout),
-            Some(TimelineHit::Bar {
+            Some(ProductTimelineHit::Body {
                 layer: expected_layer
             })
         );
@@ -2594,6 +2847,117 @@ mod tests {
             projection.hit_test([layout.stage.x, layout.stage.y], layout),
             None
         );
+    }
+
+    #[test]
+    fn timeline_private_hit_refines_only_admitted_bar_edges() {
+        let document = crate::static_preview::bootstrap_document().unwrap();
+        let projection = ProductTimelineProjection::from_document(&document).unwrap();
+        let layer = projection.projection.bars()[0].layer;
+        let layout = test_layout(9);
+        let surface = timeline_time_surface_logical_rect(layout).unwrap();
+        let y = surface.y + surface.height / 2.0;
+
+        assert_eq!(
+            projection.hit_test([surface.x + 15.0, y], layout),
+            Some(ProductTimelineHit::Left { layer })
+        );
+        assert_eq!(
+            projection.hit_test([surface.x + 15.001, y], layout),
+            Some(ProductTimelineHit::Body { layer })
+        );
+        assert_eq!(
+            projection.hit_test([surface.x + surface.width - 15.0, y], layout),
+            Some(ProductTimelineHit::Right { layer })
+        );
+
+        let timeline = layout.timeline.unwrap();
+        let horizontal_chrome = timeline.width - surface.width;
+        let mut narrow = layout;
+        narrow.timeline.as_mut().unwrap().width = horizontal_chrome + 24.999;
+        let narrow_surface = timeline_time_surface_logical_rect(narrow).unwrap();
+        assert_eq!(
+            projection.hit_test(
+                [
+                    narrow_surface.x + 1.0,
+                    narrow_surface.y + narrow_surface.height / 2.0
+                ],
+                narrow,
+            ),
+            Some(ProductTimelineHit::Body { layer })
+        );
+        narrow.timeline.as_mut().unwrap().width = horizontal_chrome + 25.0;
+        let cutoff_surface = timeline_time_surface_logical_rect(narrow).unwrap();
+        assert_eq!(
+            projection.hit_test(
+                [
+                    cutoff_surface.x + 1.0,
+                    cutoff_surface.y + cutoff_surface.height / 2.0
+                ],
+                narrow,
+            ),
+            Some(ProductTimelineHit::Left { layer })
+        );
+
+        let vertical_chrome = timeline.height - surface.height;
+        let mut short = layout;
+        short.timeline.as_mut().unwrap().height = vertical_chrome + 15.999;
+        let short_surface = timeline_time_surface_logical_rect(short).unwrap();
+        assert_eq!(
+            projection.hit_test(
+                [
+                    short_surface.x + 1.0,
+                    short_surface.y + short_surface.height / 2.0
+                ],
+                short,
+            ),
+            Some(ProductTimelineHit::Body { layer })
+        );
+        short.timeline.as_mut().unwrap().height = vertical_chrome + 16.0;
+        let height_cutoff_surface = timeline_time_surface_logical_rect(short).unwrap();
+        assert_eq!(
+            projection.hit_test(
+                [
+                    height_cutoff_surface.x + 1.0,
+                    height_cutoff_surface.y + height_cutoff_surface.height / 2.0,
+                ],
+                short,
+            ),
+            Some(ProductTimelineHit::Left { layer })
+        );
+    }
+
+    #[test]
+    fn timeline_trim_rejects_stale_generation_changed_interval_and_target_loss() {
+        let interval = (
+            RationalTime::try_new(2, 10).unwrap(),
+            RationalTime::try_new(8, 10).unwrap(),
+        );
+        let gesture = TimelineTrimGesture::begin(
+            LayerId::from_raw(7),
+            TimelineTrimEdge::Left,
+            RationalTime::try_new(3, 10).unwrap(),
+            interval.0,
+            interval.1,
+            4,
+        );
+
+        assert!(timeline_trim_gesture_is_current(
+            &gesture,
+            4,
+            Some(interval)
+        ));
+        assert!(!timeline_trim_gesture_is_current(
+            &gesture,
+            5,
+            Some(interval)
+        ));
+        assert!(!timeline_trim_gesture_is_current(
+            &gesture,
+            4,
+            Some((interval.0, RationalTime::try_new(9, 10).unwrap())),
+        ));
+        assert!(!timeline_trim_gesture_is_current(&gesture, 4, None));
     }
 
     #[test]

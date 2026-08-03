@@ -14,6 +14,7 @@ use motolii_doc::{
 use motolii_plugin::{PluginCatalog, PluginKind};
 
 use crate::timeline_move_gesture::TimelineMoveRequest;
+use crate::timeline_trim_gesture::TimelineTrimRequest;
 use crate::{DocumentCommandRequest, DomainIntent, InputPhase, RouterOutput};
 
 #[derive(Debug)]
@@ -23,6 +24,7 @@ pub(crate) enum DocumentEditAction {
     AttachEffect(AttachEffectRequest),
     SetEffectParam(SetEffectParamRequest),
     MoveClip(TimelineMoveRequest),
+    TrimClip(TimelineTrimRequest),
     ReplacePrimary(LayerId),
     ClearPrimary,
     Undo,
@@ -37,6 +39,7 @@ impl DocumentEditAction {
             Self::AttachEffect(_) => DocumentEditActionKind::AttachEffect,
             Self::SetEffectParam(_) => DocumentEditActionKind::SetEffectParam,
             Self::MoveClip(_) => DocumentEditActionKind::MoveClip,
+            Self::TrimClip(_) => DocumentEditActionKind::TrimClip,
             Self::ReplacePrimary(_) => DocumentEditActionKind::ReplacePrimary,
             Self::ClearPrimary => DocumentEditActionKind::ClearPrimary,
             Self::Undo => DocumentEditActionKind::Undo,
@@ -52,6 +55,7 @@ pub(crate) enum DocumentEditActionKind {
     AttachEffect,
     SetEffectParam,
     MoveClip,
+    TrimClip,
     ReplacePrimary,
     ClearPrimary,
     Undo,
@@ -82,6 +86,11 @@ impl DocumentEditQueue {
     pub(crate) fn push_move_clip(&mut self, request: TimelineMoveRequest) {
         self.pending
             .push_back(DocumentEditAction::MoveClip(request));
+    }
+
+    pub(crate) fn push_trim_clip(&mut self, request: TimelineTrimRequest) {
+        self.pending
+            .push_back(DocumentEditAction::TrimClip(request));
     }
 
     pub(crate) fn push_replace_primary(&mut self, target: LayerId) {
@@ -318,6 +327,30 @@ impl DocumentEditRuntime {
         self.writer.snapshot()
     }
 
+    pub(crate) fn preview_trim(
+        &self,
+        request: TimelineTrimRequest,
+    ) -> Result<Option<Arc<Document>>, DocumentEditRuntimeError> {
+        if self.health == RuntimeHealth::Poisoned {
+            return Err(DocumentEditRuntimeError::SessionPoisoned);
+        }
+        let command = match request {
+            TimelineTrimRequest::In { layer, new_start } => {
+                self.writer.prepare_trim_clip_in(layer, new_start)?
+            }
+            TimelineTrimRequest::Out { layer, new_end } => {
+                self.writer.prepare_trim_clip_out(layer, new_end)?
+            }
+        };
+        let Some(command) = command else {
+            return Ok(None);
+        };
+        let mut preview = (*self.writer.snapshot()).clone();
+        command.apply(&mut preview)?;
+        preview.validate()?;
+        Ok(Some(Arc::new(preview)))
+    }
+
     fn poison(&mut self) {
         self.health = RuntimeHealth::Poisoned;
     }
@@ -436,6 +469,29 @@ impl DocumentEditRuntime {
                     .writer
                     .prepare_set_clip_start(request.layer, request.new_start)?
                 else {
+                    return Ok(None);
+                };
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::TrimClip(request) => {
+                let command = match request {
+                    TimelineTrimRequest::In { layer, new_start } => {
+                        self.writer.prepare_trim_clip_in(layer, new_start)?
+                    }
+                    TimelineTrimRequest::Out { layer, new_end } => {
+                        self.writer.prepare_trim_clip_out(layer, new_end)?
+                    }
+                };
+                let Some(command) = command else {
                     return Ok(None);
                 };
                 let projection_generation =
@@ -2543,6 +2599,106 @@ mod tests {
             .flat_map(|track| track.items.iter())
             .find_map(|item| match item {
                 TrackItem::Clip(clip) if clip.envelope.layer_id == layer => Some(clip.start),
+                _ => None,
+            })
+            .expect("fixture clip")
+    }
+
+    #[test]
+    fn trim_preview_is_read_only_and_left_release_commits_once_with_undo() {
+        let (document, _) = fixture();
+        let layer = fixture_layer(&document);
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let (_path, mut runtime) = open_runtime(document);
+        let request = TimelineTrimRequest::In {
+            layer,
+            new_start: RationalTime::try_new(1, 4).unwrap(),
+        };
+
+        let preview = runtime
+            .preview_trim(request)
+            .unwrap()
+            .expect("changed trim must produce a transient snapshot");
+        assert_eq!(
+            clip_interval(&preview, layer),
+            (
+                RationalTime::try_new(1, 4).unwrap(),
+                RationalTime::try_new(1, 1).unwrap(),
+            )
+        );
+        assert_eq!(runtime.history_lengths(), (0, 0));
+        assert_eq!(runtime.revision(), 0);
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
+
+        let mut queue = DocumentEditQueue::default();
+        queue.push_trim_clip(request);
+        let trimmed = runtime.process_next(&mut queue, None, 0).unwrap().unwrap();
+        assert_eq!(trimmed.kind, DocumentEditActionKind::TrimClip);
+        assert_eq!(runtime.history_lengths(), (1, 0));
+        assert_eq!(
+            clip_interval(&trimmed.snapshot, layer),
+            clip_interval(&preview, layer)
+        );
+
+        queue.push_undo();
+        let undone = runtime.process_next(&mut queue, None, 1).unwrap().unwrap();
+        assert_eq!(undone.kind, DocumentEditActionKind::Undo);
+        assert_eq!(
+            clip_interval(&undone.snapshot, layer),
+            (RationalTime::ZERO, RationalTime::try_new(1, 1).unwrap())
+        );
+    }
+
+    #[test]
+    fn right_trim_commits_duration_only_and_invalid_edge_writes_nothing() {
+        let (document, _) = fixture();
+        let layer = fixture_layer(&document);
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_trim_clip(TimelineTrimRequest::Out {
+            layer,
+            new_end: RationalTime::try_new(1, 2).unwrap(),
+        });
+
+        let trimmed = runtime.process_next(&mut queue, None, 0).unwrap().unwrap();
+        assert_eq!(trimmed.kind, DocumentEditActionKind::TrimClip);
+        assert_eq!(
+            clip_interval(&trimmed.snapshot, layer),
+            (RationalTime::ZERO, RationalTime::try_new(1, 2).unwrap())
+        );
+        assert_eq!(runtime.history_lengths(), (1, 0));
+
+        let before_invalid = serde_json::to_vec(&*runtime.snapshot()).unwrap();
+        let revision = runtime.revision();
+        queue.push_trim_clip(TimelineTrimRequest::Out {
+            layer,
+            new_end: RationalTime::ZERO,
+        });
+        assert!(matches!(
+            runtime.process_next(&mut queue, None, 1),
+            Err(DocumentEditRuntimeError::Command(_))
+        ));
+        assert_eq!(runtime.history_lengths(), (1, 0));
+        assert_eq!(runtime.revision(), revision);
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            before_invalid
+        );
+    }
+
+    fn clip_interval(document: &Document, layer: LayerId) -> (RationalTime, RationalTime) {
+        document
+            .tracks
+            .iter()
+            .flat_map(|track| track.items.iter())
+            .find_map(|item| match item {
+                TrackItem::Clip(clip) if clip.envelope.layer_id == layer => Some((
+                    clip.start,
+                    clip.start.try_add(clip.duration).expect("fixture interval"),
+                )),
                 _ => None,
             })
             .expect("fixture clip")
