@@ -457,5 +457,5 @@
 | [2026-08-01-cu-201t-s-clip-trim-timemap-contract-decision.md](2026-08-01-cu-201t-s-clip-trim-timemap-contract-decision.md) | CU-201T-S Clip trim / TimeMap契約決定 |
 | [2026-08-03-cu-201n-s-snap-target-contract-decision.md](2026-08-03-cu-201n-s-snap-target-contract-decision.md) | CU-201N-S snap target / priority / unit契約決定 |
 | [2026-08-03-cu-201p-target-gap-observation.md](2026-08-03-cu-201p-target-gap-observation.md) | CU-201P native Timeline gesture target gap観察 |
-| [2026-08-03-p06-c1-mac-rfd-adoption-probe-observation.md](2026-08-03-p06-c1-mac-rfd-adoption-probe-observation.md) | P06-C1-MAC rfd採択probeと実Mac外部gate待ちの観察 |
+| [2026-08-03-p06-c1-mac-rfd-adoption-probe-observation.md](2026-08-03-p06-c1-mac-rfd-adoption-probe-observation.md) | P06-C1-MAC rfd採択probeと固定Mac parent/selection/Cancel/typed failure外部gate PASSの観察 |
 | [2026-08-03-cu-201p-move-known-semantics-adoption-decision.md](2026-08-03-cu-201p-move-known-semantics-adoption-decision.md) | CU-201P-MOVE native Timeline body-drag既知意味採択・move-only縮小決定 |

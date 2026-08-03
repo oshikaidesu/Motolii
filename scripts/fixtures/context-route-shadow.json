@@ -71,7 +71,7 @@
     {
       "id": "mac-native-file-dialog",
       "hypotheses": [
-        ["P06-C1-MAC", "rfd", "EXTERNAL_GATE_PENDING"],
+        ["P06-C1-MAC", "rfd", "FIXED_MAC_GATE_PASS"],
         ["native file dialog", "parent", "Cancel"],
         ["probe_container", "MediaError", "ADOPT"]
       ],

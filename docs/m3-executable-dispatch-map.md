@@ -141,7 +141,7 @@ implementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 | `P04-C3` | `TARGET_MISSING` | `CU-204P`へ渡す実在normal operation source | 実providerの診断を既存Feedbackへ投影 |
 | `P05-C1` | `TARGET_MISSING` | 現行Stage表示を除き、off-frame/Stage Viewの未成立targetを一つ特定 | 同じcamera/worldでframe内外を表示 |
 | `P05-C2` | `SPEC_ONLY` | camera/object targetと既存D2 commandの写像を一問で固定 | 直接操作が1 gesture / 1 Undo |
-| `P06-C1` | `ADOPTION_PROBE` | rfdのmain-thread、cancel、Linux portal、parent windowを確認 | dialogからread-only media probeへ到達 |
+| `P06-C1` | `ADOPTION_PROBE / FIXED_MAC_GATE_PASS` | 固定Macのrfd main-thread、parent sheet、selection、Cancel、typed failureは確認済み。Linux portalは未完了 | 製品接続を数えず、dialogからread-only media probeへ到達 |
 | `P06-C2` | `SPEC_ONLY` | 動画配置とSoundtrackを分離し、まず動画placement defaultを固定 | valid confirmだけ1 Undo |
 | `P07-C1` | `TARGET_MISSING` | GAP-28の`PlaybackSession`→mixed `AudioProgram`接続。seek-onlyならREDUCE | audio主clockでseek/play/pause |
 | `P07-C2` | `WAIT_CONFLICT` | P07-C1、raw measurement、M4 provider後 | deadline時だけ古いpreviewをdrop |

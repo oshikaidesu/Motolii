@@ -58,7 +58,7 @@ allowlist、正負oracle、利用者出口まで閉じた現在状態は
 | `P02-C1` | `GATED` | `CU-201T-S`等、各command familyの既存意味。未確定familyを同じ実装へ混ぜない |
 | `P04-C3` | `GATED` | `CU-204P`へ接続する実在の通常operation source。fixture専用sourceを作らない |
 | `P01-C2` | `GATED` | 固定sourceに無いiconを推測・新造しない。既存product assetの範囲は先行可 |
-| `P06-C1` | `GATED` | rfdのmain-thread/event-loop、Linux portal、cancel/failure fixtureを小さな採択probeで確認 |
+| `P06-C1` | `GATED / FIXED_MAC_GATE_PASS` | 固定Macはrfd parent sheet、event-loop、selection、Cancel、typed media failureを採択probeで確認済み。Linux portalと製品接続は未完了 |
 | `P06-C2` | `GATED` | Soundtrackの選択policy。動画配置までを先に`REDUCE`してもよい |
 | `P07-C1` | `GATED` | GAP-28の製品`PlaybackSession`とmixed `AudioProgram`接続。seek/scrub単独は`REDUCE`可 |
 | `P09-C1` | `GATED` | clipboard payload、ID再採番、Pasteの1 Undo意味。未決ならDelete/Duplicate/Renameだけを先行 |
