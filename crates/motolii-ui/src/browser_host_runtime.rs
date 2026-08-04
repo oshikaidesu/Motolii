@@ -37,7 +37,7 @@ const TIMELINE_TOOLS_HTML: &[u8] =
 const STAGE_HEADER_JS: &[u8] =
     include_bytes!("../../../ui/motolii-web/generated-host/assets/stageHeader-Dm10QD7x.js");
 const STAGE_TRANSPORT_JS: &[u8] =
-    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageTransport-_WQKpYvj.js");
+    include_bytes!("../../../ui/motolii-web/generated-host/assets/stageTransport-Dtx-2dKf.js");
 const STAGE_HOST_JS: &[u8] =
     include_bytes!("../../../ui/motolii-web/generated-host/assets/stageHostBridge-CbK80xri.js");
 const STAGE_HOST_CSS: &[u8] =
@@ -458,7 +458,7 @@ pub(crate) fn product_asset_response(path: &str) -> Response<Cow<'static, [u8]>>
         "/assets/inspector-DHxJYfhL.js" => ("text/javascript; charset=utf-8", INSPECTOR_JS),
         "/assets/inspector-fMh9jxYJ.css" => ("text/css; charset=utf-8", INSPECTOR_CSS),
         "/assets/stageHeader-Dm10QD7x.js" => ("text/javascript; charset=utf-8", STAGE_HEADER_JS),
-        "/assets/stageTransport-_WQKpYvj.js" => {
+        "/assets/stageTransport-Dtx-2dKf.js" => {
             ("text/javascript; charset=utf-8", STAGE_TRANSPORT_JS)
         }
         "/assets/stageHostBridge-CbK80xri.js" => ("text/javascript; charset=utf-8", STAGE_HOST_JS),
@@ -557,7 +557,7 @@ mod tests {
             (
                 STAGE_TRANSPORT_HTML,
                 [
-                    "/assets/stageTransport-_WQKpYvj.js",
+                    "/assets/stageTransport-Dtx-2dKf.js",
                     "/assets/stageHostBridge-CbK80xri.js",
                     "/assets/stageHostBridge-ETwwNc59.css",
                     "/assets/tokens-CcZ3RUC1.js",

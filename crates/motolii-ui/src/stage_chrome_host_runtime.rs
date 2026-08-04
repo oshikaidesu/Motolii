@@ -17,14 +17,10 @@ pub(crate) struct StageChromeHostRuntime {
     transport: WebView,
     latest_layout_epoch: Option<u64>,
     easing_inbox: Arc<Mutex<StageEasingInbox>>,
-    wake: Arc<Mutex<Option<StageEasingWake>>>,
 }
 
 type StageEasingWake = Arc<dyn Fn() + Send + Sync>;
-type StageEasingCallback = (
-    Arc<Mutex<StageEasingInbox>>,
-    Arc<Mutex<Option<StageEasingWake>>>,
-);
+type StageEasingCallback = (Arc<Mutex<StageEasingInbox>>, StageEasingWake);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct StageEasingIntent {
@@ -33,18 +29,16 @@ pub(crate) struct StageEasingIntent {
 }
 
 #[derive(Debug, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-struct StageEasingMessage {
-    kind: StageEasingKind,
-    anchor: StageEasingAnchor,
-    #[serde(rename = "layoutEpoch")]
-    layout_epoch: u64,
-}
-
-#[derive(Debug, serde::Deserialize)]
-enum StageEasingKind {
+#[serde(tag = "kind", deny_unknown_fields)]
+enum StageEasingMessage {
     #[serde(rename = "open-position-easing")]
-    OpenPositionEasing,
+    OpenPositionEasing {
+        anchor: StageEasingAnchor,
+        #[serde(rename = "layoutEpoch")]
+        layout_epoch: u64,
+    },
+    #[serde(rename = "stage-easing-ready")]
+    Ready {},
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -59,41 +53,66 @@ struct StageEasingAnchor {
 #[derive(Debug, Default)]
 struct StageEasingInbox {
     pending: VecDeque<StageEasingIntent>,
+    document_ready: bool,
 }
 
 impl StageEasingInbox {
-    fn accept(&mut self, raw: &str) -> Result<(), StageEasingIntentError> {
+    fn accept(&mut self, raw: &str) -> Result<StageEasingInbound, StageEasingIntentError> {
         let message: StageEasingMessage = serde_json::from_str(raw)?;
-        let _ = message.kind;
-        let anchor = LogicalRect {
-            x: message.anchor.x,
-            y: message.anchor.y,
-            width: message.anchor.width,
-            height: message.anchor.height,
-        };
-        if message.layout_epoch == 0
-            || !anchor.x.is_finite()
-            || !anchor.y.is_finite()
-            || !anchor.width.is_finite()
-            || !anchor.height.is_finite()
-            || anchor.width < 0.0
-            || anchor.height < 0.0
-        {
-            return Err(StageEasingIntentError::Invalid);
+        match message {
+            StageEasingMessage::Ready {} => {
+                self.document_ready = true;
+                Ok(StageEasingInbound::Ready)
+            }
+            StageEasingMessage::OpenPositionEasing {
+                anchor,
+                layout_epoch,
+            } => {
+                let anchor = LogicalRect {
+                    x: anchor.x,
+                    y: anchor.y,
+                    width: anchor.width,
+                    height: anchor.height,
+                };
+                if layout_epoch == 0
+                    || !anchor.x.is_finite()
+                    || !anchor.y.is_finite()
+                    || !anchor.width.is_finite()
+                    || !anchor.height.is_finite()
+                    || anchor.width < 0.0
+                    || anchor.height < 0.0
+                {
+                    return Err(StageEasingIntentError::Invalid);
+                }
+                if !self.pending.is_empty() {
+                    return Err(StageEasingIntentError::InboxFull);
+                }
+                self.pending.push_back(StageEasingIntent {
+                    anchor,
+                    layout_epoch,
+                });
+                Ok(StageEasingInbound::Intent)
+            }
         }
-        if !self.pending.is_empty() {
-            return Err(StageEasingIntentError::InboxFull);
-        }
-        self.pending.push_back(StageEasingIntent {
-            anchor,
-            layout_epoch: message.layout_epoch,
-        });
-        Ok(())
     }
 
     fn take(&mut self) -> Option<StageEasingIntent> {
         self.pending.pop_front()
     }
+
+    fn document_ready(&self) -> bool {
+        self.document_ready
+    }
+
+    fn acknowledge_document_ready(&mut self) {
+        self.document_ready = false;
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StageEasingInbound {
+    Ready,
+    Intent,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -151,6 +170,7 @@ impl StageChromeHostRuntime {
     pub(crate) fn new(
         window: &winit::window::Window,
         snapshot: &StageTransportSnapshot,
+        easing_wake: StageEasingWake,
     ) -> Result<Self, StageChromeHostRuntimeError> {
         let created_at = std::time::Instant::now();
         let header_initialization_script = r#"window.__MOTOLII_STAGE_HOST__=Object.freeze({
@@ -172,12 +192,30 @@ get snapshot(){{return current;}},
 subscribe:(next)=>{{if(typeof next!=="function"||listener!==null)throw new TypeError("invalid Stage transport subscriber");listener=next;}},
 publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
 }});
-}})();"#
+}})();
+window.__MOTOLII_STAGE_EASING__=(()=>{{
+let layoutEpoch=0;
+const setLayoutEpoch=(next)=>{{
+  if(!Number.isSafeInteger(next)||next<=0)throw new TypeError("invalid Stage Easing layout epoch");
+  layoutEpoch=next;
+}};
+const postMessage=(message)=>{{
+  if(!Number.isSafeInteger(layoutEpoch)||layoutEpoch<=0)return false;
+  window.ipc.postMessage(message);
+  return true;
+}};
+return Object.freeze({{
+  get layoutEpoch(){{return layoutEpoch;}},
+  setLayoutEpoch,
+  postMessage,
+}});
+}})();
+if(window.ipc&&typeof window.ipc.postMessage==="function"){{
+  window.ipc.postMessage('{{"kind":"stage-easing-ready"}}');
+}}"#
         );
         let easing_inbox = Arc::new(Mutex::new(StageEasingInbox::default()));
-        let wake = Arc::new(Mutex::new(None::<StageEasingWake>));
         let callback_inbox = Arc::clone(&easing_inbox);
-        let callback_wake = Arc::clone(&wake);
         let header = build_stage_webview(
             window,
             HEADER_URL,
@@ -190,7 +228,7 @@ publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
             TRANSPORT_URL,
             &transport_initialization_script,
             "stage-transport",
-            Some((callback_inbox, callback_wake)),
+            Some((callback_inbox, easing_wake)),
         )?;
         crate::ui_numeric_trace::emit(format_args!(
             "kind=webview surface=stage-chrome event=created elapsed_ms={:.3}",
@@ -201,7 +239,6 @@ publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
             transport,
             latest_layout_epoch: None,
             easing_inbox,
-            wake,
         })
     }
 
@@ -234,9 +271,6 @@ publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
         }
         set_webview_bounds(&self.header, header)?;
         set_webview_bounds(&self.transport, transport)?;
-        self.transport.evaluate_script(&format!(
-            "window.__MOTOLII_STAGE_EASING__=Object.freeze({{layoutEpoch:{layout_epoch},postMessage:(message)=>window.ipc.postMessage(message)}});"
-        ))?;
         crate::ui_numeric_trace::emit(format_args!(
             "kind=webview surface=stage-chrome event=bounds layout_epoch={} \
              header_x={:.3} header_y={:.3} header_width={:.3} header_height={:.3} \
@@ -252,18 +286,7 @@ publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
             transport.height,
         ));
         self.latest_layout_epoch = Some(layout_epoch);
-        Ok(())
-    }
-
-    pub(crate) fn register_easing_wake(
-        &self,
-        wake: StageEasingWake,
-    ) -> Result<(), StageEasingIntentError> {
-        *self
-            .wake
-            .lock()
-            .map_err(|_| StageEasingIntentError::InboxPoisoned)? = Some(wake);
-        Ok(())
+        self.sync_easing_layout()
     }
 
     pub(crate) fn take_easing_intent(
@@ -274,6 +297,31 @@ publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
             .lock()
             .map_err(|_| StageEasingIntentError::InboxPoisoned)?
             .take())
+    }
+
+    pub(crate) fn sync_easing_layout(&mut self) -> Result<(), StageChromeHostRuntimeError> {
+        let Some(layout_epoch) = self.latest_layout_epoch else {
+            return Ok(());
+        };
+        let document_ready = self
+            .easing_inbox
+            .lock()
+            .map_err(|_| StageEasingIntentError::InboxPoisoned)?
+            .document_ready();
+        if !document_ready {
+            return Ok(());
+        }
+        self.transport.evaluate_script(&format!(
+            "window.__MOTOLII_STAGE_EASING__?.setLayoutEpoch({layout_epoch});"
+        ))?;
+        self.easing_inbox
+            .lock()
+            .map_err(|_| StageEasingIntentError::InboxPoisoned)?
+            .acknowledge_document_ready();
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=webview surface=stage-transport event=easing-layout-ready layout_epoch={layout_epoch}",
+        ));
+        Ok(())
     }
 }
 
@@ -316,11 +364,22 @@ fn build_stage_webview(
                 .lock()
                 .map_err(|_| StageEasingIntentError::InboxPoisoned)
                 .and_then(|mut inbox| inbox.accept(request.body()));
-            if accepted.is_ok() {
-                if let Ok(wake) = wake.lock() {
-                    if let Some(wake) = wake.as_ref() {
-                        wake();
-                    }
+            match accepted {
+                Ok(inbound) => {
+                    let event = match inbound {
+                        StageEasingInbound::Ready => "easing-document-ready",
+                        StageEasingInbound::Intent => "easing-intent-accepted",
+                    };
+                    crate::ui_numeric_trace::emit(format_args!(
+                        "kind=webview surface=stage-transport event={event} bytes={}",
+                        request.body().len(),
+                    ));
+                    wake();
+                }
+                Err(error) => {
+                    crate::ui_numeric_trace::emit(format_args!(
+                        "kind=webview surface=stage-transport event=easing-intent-rejected reason={error}",
+                    ));
                 }
             }
         })
@@ -343,6 +402,8 @@ pub(crate) enum StageChromeHostRuntimeError {
     WebView(#[from] wry::Error),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    EasingIntent(#[from] StageEasingIntentError),
 }
 
 #[cfg(test)]
@@ -373,5 +434,76 @@ mod tests {
                 serde_json::Value::Null,
             );
         }
+    }
+
+    fn valid_easing_intent(layout_epoch: u64) -> String {
+        format!(
+            r#"{{"kind":"open-position-easing","anchor":{{"x":1.5,"y":2.5,"width":3.5,"height":4.5}},"layoutEpoch":{layout_epoch}}}"#
+        )
+    }
+
+    #[test]
+    fn stage_easing_inbox_accepts_one_strict_anchor_layout_intent() {
+        let mut inbox = StageEasingInbox::default();
+
+        assert_eq!(
+            inbox.accept(&valid_easing_intent(7)).unwrap(),
+            StageEasingInbound::Intent,
+        );
+        assert_eq!(
+            inbox.take(),
+            Some(StageEasingIntent {
+                anchor: LogicalRect {
+                    x: 1.5,
+                    y: 2.5,
+                    width: 3.5,
+                    height: 4.5,
+                },
+                layout_epoch: 7,
+            }),
+        );
+    }
+
+    #[test]
+    fn stage_easing_inbox_rejects_unknown_invalid_and_nonpositive_messages() {
+        let invalid = [
+            r#"{"kind":"open-position-easing","anchor":{"x":1.0,"y":2.0,"width":3.0,"height":4.0},"layoutEpoch":0}"#,
+            r#"{"kind":"open-position-easing","anchor":{"x":1.0,"y":2.0,"width":-3.0,"height":4.0},"layoutEpoch":1}"#,
+            r#"{"kind":"open-position-easing","anchor":{"x":1.0,"y":2.0,"width":3.0,"height":4.0,"identity":1},"layoutEpoch":1}"#,
+            r#"{"kind":"open-position-easing","anchor":{"x":1.0,"y":2.0,"width":3.0,"height":4.0},"layoutEpoch":1,"identity":1}"#,
+            r#"{"kind":"unknown","anchor":{"x":1.0,"y":2.0,"width":3.0,"height":4.0},"layoutEpoch":1}"#,
+            r#"{"kind":"stage-easing-ready","extra":true}"#,
+        ];
+
+        for raw in invalid {
+            let mut inbox = StageEasingInbox::default();
+            assert!(inbox.accept(raw).is_err(), "must reject {raw}");
+            assert_eq!(inbox.take(), None);
+        }
+    }
+
+    #[test]
+    fn stage_easing_inbox_is_single_slot_and_replays_document_ready_per_navigation() {
+        let mut inbox = StageEasingInbox::default();
+        assert_eq!(
+            inbox.accept(r#"{"kind":"stage-easing-ready"}"#).unwrap(),
+            StageEasingInbound::Ready,
+        );
+        assert!(inbox.document_ready());
+        inbox.acknowledge_document_ready();
+        assert!(!inbox.document_ready());
+        assert_eq!(
+            inbox.accept(r#"{"kind":"stage-easing-ready"}"#).unwrap(),
+            StageEasingInbound::Ready,
+        );
+        assert!(inbox.document_ready());
+        assert_eq!(
+            inbox.accept(&valid_easing_intent(3)).unwrap(),
+            StageEasingInbound::Intent,
+        );
+        assert!(matches!(
+            inbox.accept(&valid_easing_intent(3)),
+            Err(StageEasingIntentError::InboxFull)
+        ));
     }
 }

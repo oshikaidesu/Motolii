@@ -27,12 +27,17 @@ impl winit::application::ApplicationHandler<crate::product_runtime::ProductEvent
         window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
-        let popup_event = self
-            .easing_popup_window_id()
-            .is_some_and(|popup_id| popup_id == window_id);
-        if popup_event {
-            self.handle_easing_popup_event(event_loop, window_id, event);
-            return;
+        match route_window_event(
+            self.easing_popup_window_id(),
+            self.primary_window_id(),
+            window_id,
+        ) {
+            ProductWindowEventRoute::Popup => {
+                self.handle_easing_popup_event(event_loop, window_id, event);
+                return;
+            }
+            ProductWindowEventRoute::Ignore => return,
+            ProductWindowEventRoute::Primary => {}
         }
         match event {
             winit::event::WindowEvent::CloseRequested => event_loop.exit(),
@@ -91,6 +96,27 @@ impl winit::application::ApplicationHandler<crate::product_runtime::ProductEvent
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProductWindowEventRoute {
+    Popup,
+    Primary,
+    Ignore,
+}
+
+fn route_window_event<Id: Copy + Eq>(
+    popup_window_id: Option<Id>,
+    primary_window_id: Option<Id>,
+    window_id: Id,
+) -> ProductWindowEventRoute {
+    if popup_window_id == Some(window_id) {
+        ProductWindowEventRoute::Popup
+    } else if primary_window_id == Some(window_id) {
+        ProductWindowEventRoute::Primary
+    } else {
+        ProductWindowEventRoute::Ignore
+    }
+}
+
 fn normalized_modifiers(state: winit::keyboard::ModifiersState) -> Option<crate::Modifiers> {
     crate::Modifiers::try_new(
         [
@@ -134,7 +160,10 @@ fn normalized_ime(ime: &winit::event::Ime) -> Option<crate::ImeGateState> {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalized_ime, normalized_key, normalized_modifiers};
+    use super::{
+        normalized_ime, normalized_key, normalized_modifiers, route_window_event,
+        ProductWindowEventRoute,
+    };
 
     #[test]
     fn logical_escape_accepts_only_real_first_press() {
@@ -199,5 +228,26 @@ mod tests {
             Some(crate::ImeGateState::Inactive)
         );
         assert_eq!(normalized_ime(&winit::event::Ime::Enabled), None);
+    }
+
+    #[test]
+    fn child_window_route_isolated_and_late_dead_child_never_reaches_primary() {
+        let primary = 10_u8;
+        let child = 20_u8;
+        assert_eq!(
+            route_window_event(Some(child), Some(primary), child),
+            ProductWindowEventRoute::Popup,
+        );
+        assert_eq!(
+            route_window_event(Some(child), Some(primary), primary),
+            ProductWindowEventRoute::Primary,
+        );
+        assert_eq!(
+            route_window_event(None, Some(primary), child),
+            ProductWindowEventRoute::Ignore,
+        );
+        let source = include_str!("product_runtime_adapter.rs");
+        assert!(source.contains("self.easing_popup_window_id(),\n            self.primary_window_id(),\n            window_id,"));
+        assert!(source.contains("ProductWindowEventRoute::Ignore => return"));
     }
 }

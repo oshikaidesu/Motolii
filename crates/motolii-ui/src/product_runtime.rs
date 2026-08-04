@@ -35,7 +35,9 @@ use crate::native_timeline_renderer::{
     key_tools_logical_rect, timeline_ruler_logical_rect, timeline_time_surface_logical_rect,
     NativeTimelineRenderState, NativeTimelineRenderer, NativeTimelineRendererError,
 };
-use crate::product_easing_popup::{PopupTerminal, ProductEasingPopup, ProductEasingPopupError};
+use crate::product_easing_popup::{
+    PopupTerminal, ProductEasingPopup, ProductEasingPopupError, ProductEasingPopupOpen,
+};
 use crate::render_worker::{
     RenderGeneration, RenderRequest, RenderWorker, RenderWorkerClient, RenderWorkerError,
 };
@@ -756,6 +758,7 @@ impl ProductApp {
             elapsed_ms(inspector_started),
         ));
         let stage_chrome_started = Instant::now();
+        let stage_wake_proxy = self.proxy.clone();
         let stage_chrome = StageChromeHostRuntime::new(
             &window,
             &stage_transport_snapshot(
@@ -763,6 +766,9 @@ impl ProductApp {
                 self.primary,
                 self.editor_playhead.current,
             ),
+            Arc::new(move || {
+                let _ = stage_wake_proxy.send_event(ProductEvent::Wake);
+            }),
         )?;
         crate::ui_numeric_trace::emit(format_args!(
             "kind=startup phase=stage-chrome-created phase_ms={:.3}",
@@ -800,12 +806,6 @@ impl ProductApp {
                 let _ = wake_proxy.send_event(ProductEvent::Wake);
             }))
             .map_err(InspectorHostRuntimeError::from)
-            .map_err(ProductRuntimeError::from)?;
-        let wake_proxy = self.proxy.clone();
-        stage_chrome
-            .register_easing_wake(Arc::new(move || {
-                let _ = wake_proxy.send_event(ProductEvent::Wake);
-            }))
             .map_err(ProductRuntimeError::from)?;
         self.inspector = Some(inspector);
         self.stage_chrome = Some(stage_chrome);
@@ -937,9 +937,7 @@ impl ProductApp {
             Ok(None) => {}
             Err(error) => return self.fail(event_loop, error),
         }
-        if let Err(error) = self.process_stage_easing_intents(event_loop) {
-            return self.fail(event_loop, error);
-        }
+        self.process_stage_easing_intents(event_loop);
         let Some(browser) = &self.browser else {
             return;
         };
@@ -1948,50 +1946,88 @@ impl ProductApp {
         }
     }
 
-    fn process_stage_easing_intents(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-    ) -> Result<(), ProductRuntimeError> {
+    fn process_stage_easing_intents(&mut self, event_loop: &ActiveEventLoop) {
         let intent = {
-            let Some(stage_chrome) = &self.stage_chrome else {
-                return Ok(());
+            let Some(stage_chrome) = &mut self.stage_chrome else {
+                return;
             };
-            stage_chrome.take_easing_intent()?
+            if let Err(error) = stage_chrome.sync_easing_layout() {
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=easing-popup event=layout-sync-rejected reason={error}",
+                ));
+                return;
+            }
+            match stage_chrome.take_easing_intent() {
+                Ok(intent) => intent,
+                Err(error) => {
+                    crate::ui_numeric_trace::emit(format_args!(
+                        "kind=easing-popup event=inbound-rejected reason={error}",
+                    ));
+                    return;
+                }
+            }
         };
         let Some(StageEasingIntent {
             anchor,
             layout_epoch,
         }) = intent
         else {
-            return Ok(());
+            return;
         };
-        if self.easing_popup.is_some()
-            || self.layout.map(|layout| layout.epoch) != Some(layout_epoch)
-        {
-            return Ok(());
-        }
-        let Some(interval) = position_active_interval(
+        let current_interval = position_active_interval(
             &self.current_document,
             self.primary,
             self.editor_playhead.current,
-        ) else {
-            return Ok(());
+        );
+        let interval = match admit_easing_open(
+            self.easing_popup.is_some(),
+            self.layout.map(|layout| layout.epoch),
+            layout_epoch,
+            current_interval,
+        ) {
+            Ok(interval) => interval,
+            Err(reason) => {
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=easing-popup event=open-rejected reason={reason:?} layout_epoch={layout_epoch}",
+                ));
+                return;
+            }
         };
-        let (window, gfx) = match (&self.window, &self.gfx) {
-            (Some(window), Some(gfx)) => (window, gfx),
-            _ => return Ok(()),
+        let (window, gfx, transport) = match (&self.window, &self.gfx, self.layout) {
+            (Some(window), Some(gfx), Some(layout)) => (window, gfx, layout.stage_transport),
+            _ => {
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=easing-popup event=open-rejected reason=host-unavailable layout_epoch={layout_epoch}",
+                ));
+                return;
+            }
         };
-        let popup = ProductEasingPopup::open(
+        match ProductEasingPopup::open(
             event_loop,
-            window,
-            &gfx.instance,
-            &gfx.adapter,
-            Arc::clone(&self.gpu),
-            anchor,
-            interval.left_interp,
-        )?;
-        self.easing_popup = Some((popup, interval, self.projection_generation, layout_epoch));
-        Ok(())
+            ProductEasingPopupOpen {
+                host: window,
+                instance: &gfx.instance,
+                adapter: &gfx.adapter,
+                gpu: Arc::clone(&self.gpu),
+                transport,
+                anchor,
+                interp: interval.left_interp,
+            },
+        ) {
+            Ok(popup) => {
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=easing-popup event=open layout_epoch={layout_epoch} generation={}",
+                    self.projection_generation,
+                ));
+                self.easing_popup =
+                    Some((popup, interval, self.projection_generation, layout_epoch));
+            }
+            Err(error) => {
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=easing-popup event=open-rejected reason={error}",
+                ));
+            }
+        }
     }
 
     pub(crate) fn handle_easing_popup_event(
@@ -2007,45 +2043,74 @@ impl ProductApp {
             if popup.window_id() != window_id {
                 return;
             }
-            match popup.handle_event(&event) {
-                Ok(terminal) => terminal,
-                Err(error) => return self.fail(event_loop, error),
+            popup.handle_event(&event)
+        };
+        let terminal = match terminal {
+            Ok(terminal) => terminal,
+            Err(error) => {
+                self.easing_popup = None;
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=easing-popup event=closed reason=render-error error={error}",
+                ));
+                return;
             }
         };
         let Some(terminal) = terminal else {
             return;
         };
-        let (_, expected_interval, expected_generation, expected_layout_epoch) =
-            self.easing_popup.take().expect("popup was present");
-        let PopupTerminal::Commit(interp) = terminal else {
+        let Some((_, expected_interval, expected_generation, expected_layout_epoch)) =
+            self.easing_popup.take()
+        else {
+            crate::ui_numeric_trace::emit(format_args!(
+                "kind=easing-popup event=terminal-rejected reason=closed",
+            ));
             return;
         };
-        if self.projection_generation != expected_generation
-            || self.layout.map(|layout| layout.epoch) != Some(expected_layout_epoch)
-            || position_active_interval(
-                &self.current_document,
-                self.primary,
-                self.editor_playhead.current,
-            )
-            .as_ref()
-                != Some(&expected_interval)
-            || expected_interval.left_interp == interp
-        {
+        let PopupTerminal::Commit(interp) = terminal else {
+            crate::ui_numeric_trace::emit(format_args!(
+                "kind=easing-popup event=cancel layout_epoch={expected_layout_epoch}",
+            ));
             return;
-        }
-        self.document_queue
-            .push_set_position_key_interp(SetPositionKeyInterpRequest {
-                target: expected_interval.layer,
-                key: expected_interval.left_id,
-                interp,
-            });
+        };
+        let current_interval = position_active_interval(
+            &self.current_document,
+            self.primary,
+            self.editor_playhead.current,
+        );
+        let request = match admit_easing_terminal(
+            self.projection_generation,
+            self.layout.map(|layout| layout.epoch),
+            current_interval.as_ref(),
+            expected_generation,
+            expected_layout_epoch,
+            &expected_interval,
+            interp,
+        ) {
+            Ok(request) => request,
+            Err(reason) => {
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=easing-popup event=terminal-rejected reason={reason:?} layout_epoch={expected_layout_epoch}",
+                ));
+                return;
+            }
+        };
+        self.document_queue.push_set_position_key_interp(request);
         match self.document_runtime.process_next(
             &mut self.document_queue,
             self.primary,
             self.projection_generation,
         ) {
-            Ok(Some(published)) => self.adopt_full_publish(event_loop, published, "stage-easing"),
-            Ok(None) => {}
+            Ok(Some(published)) => {
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=easing-popup event=commit layout_epoch={expected_layout_epoch}",
+                ));
+                self.adopt_full_publish(event_loop, published, "stage-easing");
+            }
+            Ok(None) => {
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=easing-popup event=terminal-rejected reason=d2-noop layout_epoch={expected_layout_epoch}",
+                ));
+            }
             Err(error) => self.fail(event_loop, error),
         }
     }
@@ -2054,6 +2119,10 @@ impl ProductApp {
         self.easing_popup
             .as_ref()
             .map(|(popup, _, _, _)| popup.window_id())
+    }
+
+    pub(crate) fn primary_window_id(&self) -> Option<winit::window::WindowId> {
+        self.window.as_ref().map(|window| window.id())
     }
 
     fn submit_stage_projection(&self) -> Result<RenderGeneration, ProductRuntimeError> {
@@ -2617,6 +2686,64 @@ struct PositionActiveInterval {
     right_id: KeyframeId,
     right_t: RationalTime,
     left_interp: motolii_eval::Interp,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EasingOpenReject {
+    PopupActive,
+    LayoutEpochMismatch,
+    NoActiveInterval,
+}
+
+fn admit_easing_open(
+    popup_active: bool,
+    current_layout_epoch: Option<u64>,
+    intent_layout_epoch: u64,
+    interval: Option<PositionActiveInterval>,
+) -> Result<PositionActiveInterval, EasingOpenReject> {
+    if popup_active {
+        return Err(EasingOpenReject::PopupActive);
+    }
+    if current_layout_epoch != Some(intent_layout_epoch) {
+        return Err(EasingOpenReject::LayoutEpochMismatch);
+    }
+    interval.ok_or(EasingOpenReject::NoActiveInterval)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EasingTerminalReject {
+    GenerationMismatch,
+    LayoutEpochMismatch,
+    IntervalMismatch,
+    SameValue,
+}
+
+fn admit_easing_terminal(
+    current_generation: u64,
+    current_layout_epoch: Option<u64>,
+    current_interval: Option<&PositionActiveInterval>,
+    expected_generation: u64,
+    expected_layout_epoch: u64,
+    expected_interval: &PositionActiveInterval,
+    interp: motolii_eval::Interp,
+) -> Result<SetPositionKeyInterpRequest, EasingTerminalReject> {
+    if current_generation != expected_generation {
+        return Err(EasingTerminalReject::GenerationMismatch);
+    }
+    if current_layout_epoch != Some(expected_layout_epoch) {
+        return Err(EasingTerminalReject::LayoutEpochMismatch);
+    }
+    if current_interval != Some(expected_interval) {
+        return Err(EasingTerminalReject::IntervalMismatch);
+    }
+    if expected_interval.left_interp == interp {
+        return Err(EasingTerminalReject::SameValue);
+    }
+    Ok(SetPositionKeyInterpRequest {
+        target: expected_interval.layer,
+        key: expected_interval.left_id,
+        interp,
+    })
 }
 
 fn stage_transport_snapshot(
@@ -3330,6 +3457,95 @@ mod tests {
             })
         );
         assert_eq!(serde_json::to_vec(&document).unwrap(), before);
+    }
+
+    #[test]
+    fn easing_admission_rejects_no_interval_stale_duplicate_identity_and_same_value_before_queue() {
+        let (document, layer, ids) = position_keyframe_document();
+        let interval =
+            position_active_interval(&document, Some(layer), RationalTime::try_new(1, 1).unwrap())
+                .unwrap();
+        assert_eq!(
+            admit_easing_open(false, Some(7), 7, None),
+            Err(EasingOpenReject::NoActiveInterval),
+        );
+        assert_eq!(
+            admit_easing_open(true, Some(7), 7, Some(interval.clone())),
+            Err(EasingOpenReject::PopupActive),
+        );
+        assert_eq!(
+            admit_easing_open(false, Some(8), 7, Some(interval.clone())),
+            Err(EasingOpenReject::LayoutEpochMismatch),
+        );
+
+        let replacement = motolii_eval::Interp::Bezier {
+            x1: 0.4,
+            y1: 0.0,
+            x2: 0.2,
+            y2: 1.0,
+        };
+        let accepted =
+            admit_easing_terminal(11, Some(7), Some(&interval), 11, 7, &interval, replacement)
+                .unwrap();
+        assert_eq!(
+            accepted,
+            SetPositionKeyInterpRequest {
+                target: layer,
+                key: ids[0],
+                interp: replacement,
+            },
+        );
+
+        let mut mismatched_interval = interval.clone();
+        mismatched_interval.left_id = KeyframeId::from_raw(999);
+        let rejected = [
+            admit_easing_terminal(12, Some(7), Some(&interval), 11, 7, &interval, replacement),
+            admit_easing_terminal(11, Some(8), Some(&interval), 11, 7, &interval, replacement),
+            admit_easing_terminal(
+                11,
+                Some(7),
+                Some(&mismatched_interval),
+                11,
+                7,
+                &interval,
+                replacement,
+            ),
+            admit_easing_terminal(
+                11,
+                Some(7),
+                Some(&interval),
+                11,
+                7,
+                &interval,
+                interval.left_interp,
+            ),
+        ];
+        assert_eq!(rejected[0], Err(EasingTerminalReject::GenerationMismatch),);
+        assert_eq!(rejected[1], Err(EasingTerminalReject::LayoutEpochMismatch),);
+        assert_eq!(rejected[2], Err(EasingTerminalReject::IntervalMismatch));
+        assert_eq!(rejected[3], Err(EasingTerminalReject::SameValue));
+        let mut queued = Vec::new();
+        for request in rejected.into_iter().flatten() {
+            queued.push(request);
+        }
+        assert!(queued.is_empty());
+    }
+
+    #[test]
+    fn easing_popup_static_gpu_proof_retains_only_product_owned_gpu_parts() {
+        let product = include_str!("product_runtime.rs");
+        let popup = include_str!("product_easing_popup.rs");
+
+        assert!(product.contains("instance: wgpu::Instance,"));
+        assert!(product.contains("adapter: wgpu::Adapter,"));
+        assert!(product.contains("&gfx.instance,"));
+        assert!(product.contains("&gfx.adapter,"));
+        assert!(product.contains("Arc::clone(&self.gpu),"));
+        assert!(popup.contains("instance.create_surface(Arc::clone(&window))"));
+        assert!(popup.contains("Renderer::new(&gpu.device"));
+        assert!(popup.contains("&self.gpu.queue"));
+        assert!(!popup.contains("request_device"));
+        assert!(!popup.contains("EventLoop::new"));
     }
 
     #[test]

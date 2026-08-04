@@ -1585,6 +1585,85 @@ mod tests {
     }
 
     #[test]
+    fn position_interp_d2_changes_only_the_requested_left_key_outgoing_interp() {
+        let (mut document, _) = fixture();
+        let primary = fixture_layer(&document);
+        let left = motolii_doc::KeyframeId::from_raw(document.next_stable_id.allocate().unwrap());
+        let right = motolii_doc::KeyframeId::from_raw(document.next_stable_id.allocate().unwrap());
+        let mut keys = motolii_doc::DocKeyframeTrack::new();
+        keys.insert(motolii_doc::DocKeyframe {
+            id: left,
+            t: RationalTime::ZERO,
+            value: motolii_doc::DocValue::Vec2([0.0, 0.0]),
+            interp: Interp::Linear,
+        });
+        keys.insert(motolii_doc::DocKeyframe {
+            id: right,
+            t: RationalTime::from_seconds(1),
+            value: motolii_doc::DocValue::Vec2([1.0, 1.0]),
+            interp: Interp::Hold,
+        });
+        match &mut document.tracks[0].items[0] {
+            TrackItem::Clip(clip) => {
+                clip.envelope.transform.position = motolii_doc::DocParam::Keyframes(keys);
+            }
+            TrackItem::Group(_) => unreachable!("fixture begins with a clip"),
+        }
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        let replacement = Interp::Bezier {
+            x1: 0.4,
+            y1: 0.0,
+            x2: 0.2,
+            y2: 1.0,
+        };
+        queue.push_set_position_key_interp(SetPositionKeyInterpRequest {
+            target: primary,
+            key: left,
+            interp: replacement,
+        });
+
+        assert_eq!(
+            runtime
+                .process_next(&mut queue, Some(primary), 0)
+                .unwrap()
+                .unwrap()
+                .kind,
+            DocumentEditActionKind::SetPositionKeyInterp,
+        );
+        let track = match &runtime
+            .writer
+            .find_envelope(primary)
+            .unwrap()
+            .transform
+            .position
+        {
+            motolii_doc::DocParam::Keyframes(track) => track,
+            other => {
+                panic!("expected Position keyframes after interpolation change, got {other:?}")
+            }
+        };
+        assert_eq!(
+            track
+                .keys()
+                .iter()
+                .find(|key| key.id == left)
+                .unwrap()
+                .interp,
+            replacement,
+        );
+        assert_eq!(
+            track
+                .keys()
+                .iter()
+                .find(|key| key.id == right)
+                .unwrap()
+                .interp,
+            Interp::Hold,
+        );
+    }
+
+    #[test]
     fn add_position_key_product_negatives_are_noops_before_any_durable_write() {
         let time = RationalTime::try_new(1, 2).unwrap();
 

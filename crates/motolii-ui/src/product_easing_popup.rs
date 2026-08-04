@@ -13,7 +13,7 @@ use winit::{
 use crate::native_host_layout::LogicalRect;
 
 pub(crate) struct ProductEasingPopup {
-    window: Arc<Window>,
+    // surfaceを先にdropし、child Windowのbackingを最後まで保持する。
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
     gpu: Arc<motolii_gpu::GpuCtx>,
@@ -21,6 +21,7 @@ pub(crate) struct ProductEasingPopup {
     state: egui_winit::State,
     renderer: Renderer,
     curve: [f32; 4],
+    window: Arc<Window>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -29,24 +30,33 @@ pub(crate) enum PopupTerminal {
     Commit(Interp),
 }
 
+pub(crate) struct ProductEasingPopupOpen<'a> {
+    pub(crate) host: &'a Window,
+    pub(crate) instance: &'a wgpu::Instance,
+    pub(crate) adapter: &'a wgpu::Adapter,
+    pub(crate) gpu: Arc<motolii_gpu::GpuCtx>,
+    pub(crate) transport: LogicalRect,
+    pub(crate) anchor: LogicalRect,
+    pub(crate) interp: Interp,
+}
+
 impl ProductEasingPopup {
     pub(crate) fn open(
         event_loop: &ActiveEventLoop,
-        host: &Window,
-        instance: &wgpu::Instance,
-        adapter: &wgpu::Adapter,
-        gpu: Arc<motolii_gpu::GpuCtx>,
-        anchor: LogicalRect,
-        interp: Interp,
+        open: ProductEasingPopupOpen<'_>,
     ) -> Result<Self, ProductEasingPopupError> {
+        let ProductEasingPopupOpen {
+            host,
+            instance,
+            adapter,
+            gpu,
+            transport,
+            anchor,
+            interp,
+        } = open;
         let scale = host.scale_factor();
-        let origin = host.outer_position().unwrap_or(PhysicalPosition::new(0, 0));
-        let position = PhysicalPosition::new(
-            origin.x.saturating_add((anchor.x * scale).round() as i32),
-            origin
-                .y
-                .saturating_add(((anchor.y + anchor.height) * scale).round() as i32),
-        );
+        let origin = host.inner_position().unwrap_or(PhysicalPosition::new(0, 0));
+        let position = popup_screen_position(origin, scale, transport, anchor);
         let window = Arc::new(
             event_loop.create_window(
                 Window::default_attributes()
@@ -100,7 +110,6 @@ impl ProductEasingPopup {
             Interp::Hold => [0.0, 0.0, 1.0, 1.0],
         };
         Ok(Self {
-            window,
             surface,
             config,
             gpu: Arc::clone(&gpu),
@@ -108,6 +117,7 @@ impl ProductEasingPopup {
             state,
             renderer: Renderer::new(&gpu.device, format, RendererOptions::default()),
             curve,
+            window,
         })
     }
 
@@ -119,11 +129,8 @@ impl ProductEasingPopup {
         &mut self,
         event: &winit::event::WindowEvent,
     ) -> Result<Option<PopupTerminal>, ProductEasingPopupError> {
-        if matches!(
-            event,
-            winit::event::WindowEvent::CloseRequested | winit::event::WindowEvent::Focused(false)
-        ) {
-            return Ok(Some(PopupTerminal::Cancel));
+        if let Some(terminal) = popup_terminal_for_window_event(event) {
+            return Ok(Some(terminal));
         }
         if let winit::event::WindowEvent::Resized(size) = event {
             if size.width > 0 && size.height > 0 {
@@ -148,31 +155,16 @@ impl ProductEasingPopup {
                 ui.heading("Interval Easing");
                 ui.horizontal(|ui| {
                     if ui.button("Linear").clicked() {
-                        terminal = Some(PopupTerminal::Commit(Interp::Linear));
+                        terminal = popup_preset_terminal(PopupPreset::Linear);
                     }
                     if ui.button("Smooth").clicked() {
-                        terminal = Some(PopupTerminal::Commit(Interp::Bezier {
-                            x1: 0.4,
-                            y1: 0.0,
-                            x2: 0.2,
-                            y2: 1.0,
-                        }));
+                        terminal = popup_preset_terminal(PopupPreset::Smooth);
                     }
                     if ui.button("Ease In").clicked() {
-                        terminal = Some(PopupTerminal::Commit(Interp::Bezier {
-                            x1: 0.42,
-                            y1: 0.0,
-                            x2: 1.0,
-                            y2: 1.0,
-                        }));
+                        terminal = popup_preset_terminal(PopupPreset::EaseIn);
                     }
                     if ui.button("Ease Out").clicked() {
-                        terminal = Some(PopupTerminal::Commit(Interp::Bezier {
-                            x1: 0.0,
-                            y1: 0.0,
-                            x2: 0.58,
-                            y2: 1.0,
-                        }));
+                        terminal = popup_preset_terminal(PopupPreset::EaseOut);
                     }
                 });
                 ui.separator();
@@ -181,12 +173,7 @@ impl ProductEasingPopup {
                     ui.add(egui::Slider::new(value, 0.0..=1.0));
                 }
                 if ui.button("Apply custom").clicked() {
-                    terminal = Some(PopupTerminal::Commit(Interp::Bezier {
-                        x1: self.curve[0] as f64,
-                        y1: self.curve[1] as f64,
-                        x2: self.curve[2] as f64,
-                        y2: self.curve[3] as f64,
-                    }));
+                    terminal = Some(popup_custom_terminal(self.curve));
                 }
                 ui.add_enabled(false, egui::Button::new("Hold"));
                 ui.add_enabled(false, egui::Button::new("Bounce / Elastic"));
@@ -268,6 +255,77 @@ impl ProductEasingPopup {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PopupPreset {
+    Linear,
+    Smooth,
+    EaseIn,
+    EaseOut,
+    #[cfg(test)]
+    Hold,
+    #[cfg(test)]
+    BounceElastic,
+}
+
+fn popup_preset_terminal(preset: PopupPreset) -> Option<PopupTerminal> {
+    match preset {
+        PopupPreset::Linear => Some(PopupTerminal::Commit(Interp::Linear)),
+        PopupPreset::Smooth => Some(PopupTerminal::Commit(Interp::Bezier {
+            x1: 0.4,
+            y1: 0.0,
+            x2: 0.2,
+            y2: 1.0,
+        })),
+        PopupPreset::EaseIn => Some(PopupTerminal::Commit(Interp::Bezier {
+            x1: 0.42,
+            y1: 0.0,
+            x2: 1.0,
+            y2: 1.0,
+        })),
+        PopupPreset::EaseOut => Some(PopupTerminal::Commit(Interp::Bezier {
+            x1: 0.0,
+            y1: 0.0,
+            x2: 0.58,
+            y2: 1.0,
+        })),
+        #[cfg(test)]
+        PopupPreset::Hold | PopupPreset::BounceElastic => None,
+    }
+}
+
+fn popup_custom_terminal(curve: [f32; 4]) -> PopupTerminal {
+    PopupTerminal::Commit(Interp::Bezier {
+        x1: curve[0] as f64,
+        y1: curve[1] as f64,
+        x2: curve[2] as f64,
+        y2: curve[3] as f64,
+    })
+}
+
+fn popup_terminal_for_window_event(event: &winit::event::WindowEvent) -> Option<PopupTerminal> {
+    matches!(
+        event,
+        winit::event::WindowEvent::CloseRequested | winit::event::WindowEvent::Focused(false)
+    )
+    .then_some(PopupTerminal::Cancel)
+}
+
+fn popup_screen_position(
+    host_inner_origin: PhysicalPosition<i32>,
+    scale: f64,
+    transport: LogicalRect,
+    anchor: LogicalRect,
+) -> PhysicalPosition<i32> {
+    PhysicalPosition::new(
+        host_inner_origin
+            .x
+            .saturating_add(((transport.x + anchor.x) * scale).round() as i32),
+        host_inner_origin
+            .y
+            .saturating_add(((transport.y + anchor.y + anchor.height) * scale).round() as i32),
+    )
+}
+
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ProductEasingPopupError {
     #[error(transparent)]
@@ -278,4 +336,97 @@ pub(crate) enum ProductEasingPopupError {
     SurfaceUnsupported,
     #[error("Easing popup could not acquire its surface")]
     SurfaceFrame,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn popup_presets_custom_and_disabled_cards_have_only_the_allowed_terminals() {
+        assert_eq!(
+            popup_preset_terminal(PopupPreset::Linear),
+            Some(PopupTerminal::Commit(Interp::Linear)),
+        );
+        assert_eq!(
+            popup_preset_terminal(PopupPreset::Smooth),
+            Some(PopupTerminal::Commit(Interp::Bezier {
+                x1: 0.4,
+                y1: 0.0,
+                x2: 0.2,
+                y2: 1.0,
+            })),
+        );
+        assert_eq!(
+            popup_preset_terminal(PopupPreset::EaseIn),
+            Some(PopupTerminal::Commit(Interp::Bezier {
+                x1: 0.42,
+                y1: 0.0,
+                x2: 1.0,
+                y2: 1.0,
+            })),
+        );
+        assert_eq!(
+            popup_preset_terminal(PopupPreset::EaseOut),
+            Some(PopupTerminal::Commit(Interp::Bezier {
+                x1: 0.0,
+                y1: 0.0,
+                x2: 0.58,
+                y2: 1.0,
+            })),
+        );
+        assert_eq!(popup_preset_terminal(PopupPreset::Hold), None);
+        assert_eq!(popup_preset_terminal(PopupPreset::BounceElastic), None);
+        let source = include_str!("product_easing_popup.rs");
+        assert!(source.contains("ui.add_enabled(false, egui::Button::new(\"Hold\"))"));
+        assert!(source.contains("ui.add_enabled(false, egui::Button::new(\"Bounce / Elastic\"))"));
+        assert_eq!(
+            popup_custom_terminal([0.25, 0.5, 0.75, 1.0]),
+            PopupTerminal::Commit(Interp::Bezier {
+                x1: 0.25,
+                y1: 0.5,
+                x2: 0.75,
+                y2: 1.0,
+            }),
+        );
+    }
+
+    #[test]
+    fn popup_close_and_focus_loss_are_cancel_only() {
+        assert_eq!(
+            popup_terminal_for_window_event(&winit::event::WindowEvent::CloseRequested),
+            Some(PopupTerminal::Cancel),
+        );
+        assert_eq!(
+            popup_terminal_for_window_event(&winit::event::WindowEvent::Focused(false)),
+            Some(PopupTerminal::Cancel),
+        );
+        assert_eq!(
+            popup_terminal_for_window_event(&winit::event::WindowEvent::Focused(true)),
+            None,
+        );
+    }
+
+    #[test]
+    fn popup_anchor_uses_inner_origin_and_transport_local_offset() {
+        assert_eq!(
+            popup_screen_position(
+                PhysicalPosition::new(100, 200),
+                2.0,
+                LogicalRect {
+                    x: 10.0,
+                    y: 20.0,
+                    width: 400.0,
+                    height: 40.0,
+                },
+                LogicalRect {
+                    x: 3.0,
+                    y: 4.0,
+                    width: 12.0,
+                    height: 5.0,
+                },
+            ),
+            PhysicalPosition::new(126, 258),
+        );
+    }
 }

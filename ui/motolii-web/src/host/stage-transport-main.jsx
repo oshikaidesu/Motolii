@@ -25,9 +25,15 @@ function render(nextSnapshot) {
         qualityStatus={nextSnapshot.qualityStatus}
         activeInterval={nextSnapshot.activeInterval}
         onOpenEasing={(anchor) => {
-          window.__MOTOLII_STAGE_EASING__.postMessage(
-            encodeStageEasingIntent(anchor, window.__MOTOLII_STAGE_EASING__.layoutEpoch),
-          );
+          const easing = window.__MOTOLII_STAGE_EASING__;
+          if (!easing || !Number.isSafeInteger(easing.layoutEpoch) || easing.layoutEpoch <= 0) {
+            return;
+          }
+          try {
+            easing.postMessage(encodeStageEasingIntent(anchor, easing.layoutEpoch));
+          } catch {
+            // 初期化直後のraceでReact event handlerを例外終了させない。
+          }
         }}
       />
     </main>,
