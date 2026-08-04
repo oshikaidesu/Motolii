@@ -39,7 +39,7 @@
 
 | Phase | 状態 | 現在の出口 |
 |---|---|---|
-| M3/P07-C1D | **`DO / CONTRACT CLOSED`** | React Stage `#play`→typed Host intent→ProductApp-owned one PlaybackSession→audio-device Transport time→existing editor_playhead/Stage/native Timelineの一本を接続する。human visualとP07-C3は保留 |
+| M3/P07-C1D | **`DO / CONTRACT CLOSED`** | React Stage `#play`→typed Host intent→ProductApp-owned one PlaybackSession→audio-device Transport time→existing editor_playhead/Stage/native Timelineの一本を接続する。通常Host buildのhash付きassetは既存Rust embed/path表を同時更新し、旧hashへの手動rename／生成物手編集を拒否する。human visualとP07-C3は保留 |
 | M3/P07-C1C | **`DONE / ACCEPTED / MAIN`** | commit `b1b2c4df`でcanonical `start_frame`をexact `RationalTime` originへ変換し、negotiated-device elapsed timeへ加える。48 kHz / 44.1 kHzを閉じ、ProductApp/React/controlは含めない |
 | M3/P07-C1B | **`DONE / ACCEPTED / MAIN`** | commit `25365aa8`でexisting PlaybackSessionをsingle-cache routeから`AudioProgram` / `MixProducer`へ一file置換した。ProductApp lifetime/control/time handoffは親P07-C1の`TARGET_MISSING`へ残す |
 | M0 | `DONE` | spike完了。S2は`ffmpeg-sidecar`クレート不採用、自前子process pipe／CFR seek成立まで。VFR、長尺／4K、pool、停止中readのkillは製品完成証拠にせずK4／GAP-26へ分離 |

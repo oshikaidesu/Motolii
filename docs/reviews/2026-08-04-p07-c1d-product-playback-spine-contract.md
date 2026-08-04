@@ -78,9 +78,12 @@ React StageTransportCandidate #play
 ## 5. capsule and oracle
 
 `ALLOWLIST`: product playback dependencies; `crates/motolii-ui/src/document_edit_runtime.rs`;
-`product_runtime.rs`; `product_runtime_adapter.rs`; `stage_chrome_host_runtime.rs`; React Stage transport candidate,
-entry/bridge and their focused tests/generated product asset only. `motolii-audio`, `motolii-transport`, Document,
-journal, render worker, native Timeline renderer/projection, Inspector, Easing, and public API semantics are read-only.
+`product_runtime.rs`; `product_runtime_adapter.rs`; `stage_chrome_host_runtime.rs`;
+`crates/motolii-ui/src/browser_host_runtime.rs`の既存Stage generated-asset embed/path表だけ; React Stage transport
+candidate、entry/bridgeとfocused tests、通常のHost buildが出力するgenerated product assetだけ。
+generated assetのhash名を旧名へ手動renameしたりminified output／manifestを手編集してembed表を回避しない。
+`motolii-audio`, `motolii-transport`, Document, journal, render worker, native Timeline renderer/projection,
+Inspector, Easing, and public API semantics are read-only.
 
 `PRIMARY_ORACLE`: focused fixtures prove exact toggle codec and bounded inbox; stale preparation opens zero sessions;
 only one session is active; ZERO and nonZERO starts use canonical exact frames; simulated 48 kHz and 44.1 kHz
@@ -90,7 +93,8 @@ parallel output. Fresh separate-family read-only review must find P0/P1=0.
 
 `REPO_LANES`: focused UI Rust tests; Stage Host web guard/tests/build; `cargo fmt --check`;
 `cargo test --locked -p motolii-ui`; `cargo test --locked -p motolii-transport`;
-`cargo test --locked -p motolii-audio`; `./scripts/check-docs.sh`; `git diff --check`; exact allowlist.
+`cargo test --locked -p motolii-audio`; normal Host buildを二回実行した再生成安定性;
+`./scripts/check-docs.sh`; `git diff --check`; exact allowlist.
 
 `EXTERNAL_GATES`: real default-device playback, audible pause/end, focus/affordance, and visual motion remain
 `EXTERNAL_GATE_PENDING` until the M3-final human pass; P07-C3 retains its separate real-material clock measurement.
