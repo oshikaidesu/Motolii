@@ -1,6 +1,6 @@
 # P04-C2 Easing product producer / popup adoption contract
 
-状態: **AMENDED / P04-C2-DIAGNOSTIC-CORRECTION DONE / ACCEPTED / P04-C2-EASING-C7A CONTRACT_CLOSED / DO / EXTERNAL_GATE_PENDING**
+状態: **AMENDED / P04-C2-DIAGNOSTIC-CORRECTION DONE / ACCEPTED / P04-C2-EASING-C7A DONE / ACCEPTED / EXTERNAL_GATE_PENDING**
 
 日付: 2026-08-04
 
@@ -161,9 +161,11 @@ Historical acceptance recorded the focused exact-label test, relevant `motolii-u
 `git diff --check`; `EXTERNAL_GATES`: none. This diagnostic ticket authorizes no popup work; the separate
 C7A implementation authority is §6.2.
 
-### 6.2 `P04-C2-EASING-C7A` — contract closed / `DO`
+### 6.2 `P04-C2-EASING-C7A` — `DONE / ACCEPTED / EXTERNAL_GATE_PENDING`
 
-`P04-C2-EASING-C7A` is one full, non-dead product implementation order. It is the explicit, popup-local
+`P04-C2-EASING-C7A` is one full, non-dead product implementation order, implemented by commits
+`bb0624d8`, `87bf026e`, and `56f61e7b` and accepted in
+[its implementation receipt](2026-08-04-p04-c2-easing-c7a-implementation-acceptance.md). It is the explicit, popup-local
 exception to the standard-egui-runtime exclusion in [UI runtime責任境界](../ui-runtime-architecture.md):
 `ProductApp` owns the private
 popup/session module and a native child `WindowId`/surface. The one `EventLoop<ProductEvent>` constructed
