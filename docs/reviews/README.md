@@ -475,3 +475,4 @@
 | [2026-08-04-native-timeline-editor-playhead-contract.md](2026-08-04-native-timeline-editor-playhead-contract.md) | P02-C3 native Timeline editor playhead producer/carrier契約 |
 | [2026-08-04-native-timeline-editor-playhead-implementation-acceptance.md](2026-08-04-native-timeline-editor-playhead-implementation-acceptance.md) | P02-C3 native Timeline editor playhead ruler producer/carrier実装受入 |
 | [2026-08-04-position-active-interval-read-model-contract.md](2026-08-04-position-active-interval-read-model-contract.md) | P04-C2 ACTIVE-INTERVAL Position read-model契約 |
+| [2026-08-04-position-active-interval-implementation-admissibility-rejection.md](2026-08-04-position-active-interval-implementation-admissibility-rejection.md) | P04-C2 ACTIVE-INTERVAL compiler oracleによるconsumer不在・WAIT_CONSUMER観察 |

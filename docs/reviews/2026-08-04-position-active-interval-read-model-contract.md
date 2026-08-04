@@ -1,15 +1,17 @@
 # P04-C2 ACTIVE-INTERVAL Position read-model contract
 
-状態: **決定 / IMPLEMENT（ACTIVE-INTERVAL sub-boundary のみ） / HUMAN DEFERRED**
+状態: **決定 / WAIT_CONSUMER（ACTIVE-INTERVAL sub-boundary のみ） / HUMAN DEFERRED**
 
 日付: 2026-08-04
 
 ## 1. 閉じる境界
 
 既存 [P04-C2 decomposition/graph](../m3-executable-dispatch-map.md#6-ゴールへ至る依存ir) の
-`ACTIVE-INTERVAL` node だけを実装可能にする。これは新 ticket ID ではなく、
+`ACTIVE-INTERVAL` node の read rule だけを閉じる。これは新 ticket ID ではなく、
 `INTERP-COMMAND` より前の read-only node である。dispatch の `IMPLEMENT` / `DO` は
-implementation ledger が所有し、本契約自身や相談結果が状態を認可しない。親 `P04-C2` は、outgoing
+implementation ledger が所有し、本契約自身や相談結果が状態を認可しない。現行local stateは
+[implementation-admissibility rejection](2026-08-04-position-active-interval-implementation-admissibility-rejection.md)
+により`WAIT_CONSUMER`である。親 `P04-C2` は、outgoing
 `Interp` command と製品 Easing route が未成立なので `TARGET_MISSING` のまま完了にしない。
 
 private `ProductApp` は、現在の `current_document`、primary `LayerId`、
@@ -82,9 +84,9 @@ React projection, intent, popup, or product component.
 
 ## 4. implementation boundary and oracle
 
-Implementation allowlist is exactly `crates/motolii-ui/src/product_runtime.rs` and focused unit
-tests for it. The derivation remains private to `ProductApp`; no public/general Timeline API is
-introduced.
+Future implementation allowlist is exactly `crates/motolii-ui/src/product_runtime.rs` and focused
+unit tests for it, but no implementation is currently admitted. The derivation must remain private
+to `ProductApp`; no public/general Timeline API is introduced.
 
 `PRIMARY_ORACLE` is exact identity/time and the left outgoing `Interp` for a strict interior
 Position interval. Focused negative cases prove no result for every rejected case in §2. Before
@@ -93,8 +95,9 @@ takes read-only inputs and has no queue or projection-mutation access; it must n
 Document, journal, history, Undo, queue, or projection generation. Queue/generation counters
 are therefore not a helper oracle.
 
-`REPO_LANES`: focused `product_runtime` unit tests, `git diff --check`, and
-`./scripts/check-docs.sh`. `EXTERNAL_GATES`: human visual verification is deferred; no test
+`REPO_LANES` for a future admitted consumer are focused `product_runtime` unit tests,
+`git diff --check`, and `./scripts/check-docs.sh`. The prior focused test passed but clippy
+rejected its unused production helper; it is not implementation evidence. `EXTERNAL_GATES`: human visual verification is deferred; no test
 closes native popup/window, preset, settings, or accessibility acceptance.
 
 ## 5. explicit non-goals and next handoff
@@ -104,6 +107,6 @@ popup/native window, presets/settings, Inspector Add Position Key, generalized c
 or complete `P04-C2` / `U4b-1`. It does not alter the separately `WAIT_TARGET` normal Inspector
 Position row route.
 
-On success it emits only existing graph value `active_interval_identity` for
-`INTERP-COMMAND`. That later node remains blocked until a separately closed command owner,
-write route, consumer, and one-command/one-Undo oracle exist.
+After a real consumer is separately identified, this rule may emit only existing graph value
+`active_interval_identity` for `INTERP-COMMAND`. That later node remains blocked until a
+separately closed command owner, write route, consumer, and one-command/one-Undo oracle exist.
