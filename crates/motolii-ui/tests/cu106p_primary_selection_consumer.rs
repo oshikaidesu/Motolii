@@ -7,7 +7,7 @@ fn production_timeline_click_reaches_typed_hit_and_one_selection_action() {
         .split("fn handle_timeline_click(")
         .nth(1)
         .expect("non-test product Timeline click consumer exists")
-        .split("fn submit_stage_projection")
+        .split("\n    fn ")
         .next()
         .expect("selection consumer is bounded");
 

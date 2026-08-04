@@ -17,10 +17,15 @@ pub(crate) struct StageChromeHostRuntime {
     transport: WebView,
     latest_layout_epoch: Option<u64>,
     easing_inbox: Arc<Mutex<StageEasingInbox>>,
+    playback_inbox: Arc<Mutex<StagePlaybackInbox>>,
 }
 
 type StageEasingWake = Arc<dyn Fn() + Send + Sync>;
-type StageEasingCallback = (Arc<Mutex<StageEasingInbox>>, StageEasingWake);
+type StageChromeCallback = (
+    Arc<Mutex<StageEasingInbox>>,
+    Arc<Mutex<StagePlaybackInbox>>,
+    StageEasingWake,
+);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct StageEasingIntent {
@@ -132,6 +137,50 @@ enum StageEasingInbound {
     Intent,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct StagePlaybackToggle;
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+enum StagePlaybackMessage {
+    #[serde(rename = "toggle-playback")]
+    TogglePlayback {},
+}
+
+#[derive(Debug, Default)]
+struct StagePlaybackInbox {
+    pending: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StagePlaybackInbound {
+    NotPlayback,
+    Toggle,
+}
+
+impl StagePlaybackInbox {
+    fn accept(&mut self, raw: &str) -> Result<StagePlaybackInbound, StagePlaybackIntentError> {
+        let value: serde_json::Value = serde_json::from_str(raw)?;
+        if value.get("kind").and_then(serde_json::Value::as_str) != Some("toggle-playback") {
+            return Ok(StagePlaybackInbound::NotPlayback);
+        }
+        serde_json::from_value::<StagePlaybackMessage>(value)?;
+        if self.pending {
+            return Err(StagePlaybackIntentError::InboxFull);
+        }
+        self.pending = true;
+        Ok(StagePlaybackInbound::Toggle)
+    }
+
+    fn take(&mut self) -> Option<StagePlaybackToggle> {
+        if !self.pending {
+            return None;
+        }
+        self.pending = false;
+        Some(StagePlaybackToggle)
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum StageEasingIntentError {
     #[error("Stage Easing intent JSON failed")]
@@ -144,6 +193,26 @@ pub(crate) enum StageEasingIntentError {
     InboxPoisoned,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum StagePlaybackIntentError {
+    #[error("Stage playback intent JSON failed")]
+    Json(#[from] serde_json::Error),
+    #[error("Stage playback intent inbox is full")]
+    InboxFull,
+    #[error("Stage playback intent inbox is poisoned")]
+    InboxPoisoned,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub(crate) enum StagePlaybackState {
+    #[serde(rename = "idle")]
+    Idle,
+    #[serde(rename = "preparing")]
+    Preparing,
+    #[serde(rename = "playing")]
+    Playing,
+}
+
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub(crate) struct StageTransportSnapshot {
     mode: &'static str,
@@ -154,6 +223,8 @@ pub(crate) struct StageTransportSnapshot {
     tempo_status: &'static str,
     #[serde(rename = "qualityStatus")]
     quality_status: &'static str,
+    #[serde(rename = "playbackState")]
+    playback_state: StagePlaybackState,
     #[serde(rename = "activeInterval")]
     active_interval: Option<StageActiveInterval>,
 }
@@ -167,12 +238,20 @@ struct StageActiveInterval {
 
 impl StageTransportSnapshot {
     pub(crate) fn with_position_active_interval(object_name: Option<String>) -> Self {
+        Self::with_position_active_interval_and_state(object_name, StagePlaybackState::Idle)
+    }
+
+    pub(crate) fn with_position_active_interval_and_state(
+        object_name: Option<String>,
+        playback_state: StagePlaybackState,
+    ) -> Self {
         Self {
             mode: "RECTANGLE",
             timecode: "00:00.0",
             bar_position: "BAR 0.0.00",
             tempo_status: "120 BPM · SNAP BEAT",
             quality_status: "DRAFT · FP16 · 1/2",
+            playback_state,
             active_interval: object_name
                 .filter(|name| !name.is_empty())
                 .map(|object_name| StageActiveInterval {
@@ -235,7 +314,9 @@ const postEasingReady=()=>{{
 if(!postEasingReady())window.addEventListener("DOMContentLoaded",postEasingReady,{{once:true}});"#
         );
         let easing_inbox = Arc::new(Mutex::new(StageEasingInbox::default()));
-        let callback_inbox = Arc::clone(&easing_inbox);
+        let playback_inbox = Arc::new(Mutex::new(StagePlaybackInbox::default()));
+        let callback_easing_inbox = Arc::clone(&easing_inbox);
+        let callback_playback_inbox = Arc::clone(&playback_inbox);
         let header = build_stage_webview(
             window,
             HEADER_URL,
@@ -248,7 +329,7 @@ if(!postEasingReady())window.addEventListener("DOMContentLoaded",postEasingReady
             TRANSPORT_URL,
             &transport_initialization_script,
             "stage-transport",
-            Some((callback_inbox, easing_wake)),
+            Some((callback_easing_inbox, callback_playback_inbox, easing_wake)),
         )?;
         crate::ui_numeric_trace::emit(format_args!(
             "kind=webview surface=stage-chrome event=created elapsed_ms={:.3}",
@@ -259,6 +340,7 @@ if(!postEasingReady())window.addEventListener("DOMContentLoaded",postEasingReady
             transport,
             latest_layout_epoch: None,
             easing_inbox,
+            playback_inbox,
         })
     }
 
@@ -319,6 +401,16 @@ if(!postEasingReady())window.addEventListener("DOMContentLoaded",postEasingReady
             .take())
     }
 
+    pub(crate) fn take_playback_intent(
+        &self,
+    ) -> Result<Option<StagePlaybackToggle>, StagePlaybackIntentError> {
+        Ok(self
+            .playback_inbox
+            .lock()
+            .map_err(|_| StagePlaybackIntentError::InboxPoisoned)?
+            .take())
+    }
+
     pub(crate) fn sync_easing_layout(&mut self) -> Result<(), StageChromeHostRuntimeError> {
         let Some(layout_epoch) = self.latest_layout_epoch else {
             return Ok(());
@@ -356,7 +448,7 @@ fn build_stage_webview(
     entry_url: &'static str,
     initialization_script: &str,
     surface: &'static str,
-    easing: Option<StageEasingCallback>,
+    callback: Option<StageChromeCallback>,
 ) -> Result<WebView, wry::Error> {
     let builder = WebViewBuilder::new()
         .with_bounds(Rect {
@@ -378,13 +470,35 @@ fn build_stage_webview(
             }
             accepted
         });
-    let builder = if let Some((inbox, wake)) = easing {
+    let builder = if let Some((easing_inbox, playback_inbox, wake)) = callback {
         builder.with_ipc_handler(move |request| {
-            let accepted = inbox
+            let playback = playback_inbox
+                .lock()
+                .map_err(|_| StagePlaybackIntentError::InboxPoisoned)
+                .and_then(|mut inbox| inbox.accept(request.body()));
+            match playback {
+                Ok(StagePlaybackInbound::Toggle) => {
+                    crate::ui_numeric_trace::emit(format_args!(
+                        "kind=webview surface=stage-transport event=playback-intent-accepted bytes={}",
+                        request.body().len(),
+                    ));
+                    wake();
+                    return;
+                }
+                Ok(StagePlaybackInbound::NotPlayback) => {}
+                Err(error) => {
+                    crate::ui_numeric_trace::emit(format_args!(
+                        "kind=webview surface=stage-transport event=playback-intent-rejected reason={error}",
+                    ));
+                    return;
+                }
+            }
+
+            let easing = easing_inbox
                 .lock()
                 .map_err(|_| StageEasingIntentError::InboxPoisoned)
                 .and_then(|mut inbox| inbox.accept(request.body()));
-            match accepted {
+            match easing {
                 Ok(inbound) => {
                     let event = match inbound {
                         StageEasingInbound::Ready => "easing-document-ready",
@@ -424,6 +538,8 @@ pub(crate) enum StageChromeHostRuntimeError {
     Json(#[from] serde_json::Error),
     #[error(transparent)]
     EasingIntent(#[from] StageEasingIntentError),
+    #[error(transparent)]
+    PlaybackIntent(#[from] StagePlaybackIntentError),
 }
 
 #[cfg(test)]
@@ -444,6 +560,7 @@ mod tests {
                 "barPosition": "BAR 0.0.00",
                 "tempoStatus": "120 BPM · SNAP BEAT",
                 "qualityStatus": "DRAFT · FP16 · 1/2",
+                "playbackState": "idle",
                 "activeInterval": { "objectName": "Rectangle", "channel": "Position" }
             })
         );
@@ -482,6 +599,36 @@ mod tests {
                 layout_epoch: 7,
             }),
         );
+    }
+
+    #[test]
+    fn stage_playback_inbox_accepts_one_exact_toggle_and_bounds_pending_intent() {
+        let mut inbox = StagePlaybackInbox::default();
+
+        assert_eq!(
+            inbox.accept(r#"{"kind":"toggle-playback"}"#).unwrap(),
+            StagePlaybackInbound::Toggle,
+        );
+        assert!(matches!(
+            inbox.accept(r#"{"kind":"toggle-playback"}"#),
+            Err(StagePlaybackIntentError::InboxFull)
+        ));
+        assert_eq!(inbox.take(), Some(StagePlaybackToggle));
+        assert_eq!(inbox.take(), None);
+    }
+
+    #[test]
+    fn stage_playback_inbox_rejects_extra_fields_but_leaves_easing_to_its_inbox() {
+        let mut playback = StagePlaybackInbox::default();
+        assert_eq!(
+            playback
+                .accept(r#"{"kind":"open-position-easing","extra":true}"#)
+                .unwrap(),
+            StagePlaybackInbound::NotPlayback,
+        );
+        assert!(playback
+            .accept(r#"{"kind":"toggle-playback","extra":true}"#)
+            .is_err());
     }
 
     #[test]

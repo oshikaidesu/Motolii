@@ -24,7 +24,7 @@ function validateStageHostBridge(bridge) {
 function decodeStageHostSnapshot(snapshot, requireActiveInterval) {
   const snapshotKeys = Object.keys(snapshot ?? {}).sort();
   const expectedSnapshotKeys = requireActiveInterval
-    ? ["activeInterval", "barPosition", "mode", "qualityStatus", "tempoStatus", "timecode"]
+    ? ["activeInterval", "barPosition", "mode", "playbackState", "qualityStatus", "tempoStatus", "timecode"]
     : ["barPosition", "mode", "qualityStatus", "tempoStatus", "timecode"];
   if (
     snapshot === null
@@ -35,6 +35,7 @@ function decodeStageHostSnapshot(snapshot, requireActiveInterval) {
     || typeof snapshot.barPosition !== "string"
     || typeof snapshot.tempoStatus !== "string"
     || typeof snapshot.qualityStatus !== "string"
+    || (requireActiveInterval && !["idle", "preparing", "playing"].includes(snapshot.playbackState))
     || snapshotKeys.length !== expectedSnapshotKeys.length
     || snapshotKeys.some((key, index) => key !== expectedSnapshotKeys[index])
     || (requireActiveInterval && (!Object.hasOwn(snapshot, "activeInterval")
@@ -48,7 +49,7 @@ function decodeStageHostSnapshot(snapshot, requireActiveInterval) {
   ) {
     throw new TypeError("Motolii Stage Host snapshot is invalid");
   }
-  return Object.freeze({
+  const decoded = {
     mode: snapshot.mode,
     timecode: snapshot.timecode,
     barPosition: snapshot.barPosition,
@@ -60,7 +61,9 @@ function decodeStageHostSnapshot(snapshot, requireActiveInterval) {
         objectName: snapshot.activeInterval.objectName,
         channel: "Position",
       }),
-  });
+  };
+  if (requireActiveInterval) decoded.playbackState = snapshot.playbackState;
+  return Object.freeze(decoded);
 }
 
 export function readStageHostSnapshot(bridge) {

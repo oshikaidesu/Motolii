@@ -1,15 +1,18 @@
 //! macOS通常project sessionのdirect native Surface Host。
 
 use std::borrow::Cow;
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
-use motolii_core::{CanonicalPoint, Quality, RationalTime};
+use motolii_audio::{AudioProgram, PcmCache, CANONICAL_SAMPLE_RATE};
+use motolii_core::{CanonicalPoint, Fps, FpsError, Quality, RationalTime, RationalTimeError};
 use motolii_doc::{
     Command, DocParam, DocValue, EffectId, EvaluationTime, KeyframeId, LayerId, TrackItem,
 };
 use motolii_eval::DataTracks;
 use motolii_gpu::GpuCtx;
+use motolii_transport::{FramePlan, PlaybackSession, PlaybackSessionError, TransportError};
 use winit::dpi::LogicalSize;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::window::Window;
@@ -43,7 +46,7 @@ use crate::render_worker::{
 };
 use crate::stage_chrome_host_runtime::{
     StageChromeHostRuntime, StageChromeHostRuntimeError, StageEasingIntent, StageEasingIntentError,
-    StageTransportSnapshot,
+    StagePlaybackIntentError, StagePlaybackState, StagePlaybackToggle, StageTransportSnapshot,
 };
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
 use crate::timeline_move_gesture::{TimelineMoveGesture, TimelineMoveRequest};
@@ -198,6 +201,10 @@ pub(crate) struct ProductApp {
     timeline_move: Option<TimelineMoveGesture>,
     timeline_trim: Option<TimelineTrimGesture>,
     editor_playhead: EditorPlayhead,
+    playback_lifecycle: PlaybackLifecycle,
+    playback_preparation: Option<PlaybackPreparation>,
+    playback_session: Option<PlaybackSession>,
+    playback_caches: HashMap<(String, u32), Arc<PcmCache>>,
     last_pointer_position: Option<[f64; 2]>,
 }
 
@@ -264,6 +271,83 @@ impl EditorPlayhead {
         self.current = time;
         true
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PlaybackLifecycle {
+    state: StagePlaybackState,
+    generation: u64,
+    session_active: bool,
+}
+
+impl Default for PlaybackLifecycle {
+    fn default() -> Self {
+        Self {
+            state: StagePlaybackState::Idle,
+            generation: 0,
+            session_active: false,
+        }
+    }
+}
+
+impl PlaybackLifecycle {
+    fn state(self) -> StagePlaybackState {
+        self.state
+    }
+
+    fn begin_preparing(&mut self) -> Result<u64, ProductPlaybackError> {
+        if self.state != StagePlaybackState::Idle || self.session_active {
+            return Err(ProductPlaybackError::LifecycleConflict { state: self.state });
+        }
+        self.generation = self
+            .generation
+            .checked_add(1)
+            .ok_or(ProductPlaybackError::GenerationExhausted)?;
+        self.state = StagePlaybackState::Preparing;
+        Ok(self.generation)
+    }
+
+    fn accepts_preparation(self, generation: u64) -> bool {
+        self.state == StagePlaybackState::Preparing && self.generation == generation
+    }
+
+    fn activate(&mut self, generation: u64) -> Result<(), ProductPlaybackError> {
+        if !self.accepts_preparation(generation) || self.session_active {
+            return Err(ProductPlaybackError::LifecycleConflict { state: self.state });
+        }
+        self.state = StagePlaybackState::Playing;
+        self.session_active = true;
+        Ok(())
+    }
+
+    fn cancel_preparing(&mut self) -> Result<(), ProductPlaybackError> {
+        if self.state != StagePlaybackState::Preparing || self.session_active {
+            return Err(ProductPlaybackError::LifecycleConflict { state: self.state });
+        }
+        self.invalidate()
+    }
+
+    fn invalidate(&mut self) -> Result<(), ProductPlaybackError> {
+        self.generation = self
+            .generation
+            .checked_add(1)
+            .ok_or(ProductPlaybackError::GenerationExhausted)?;
+        self.state = StagePlaybackState::Idle;
+        self.session_active = false;
+        Ok(())
+    }
+}
+
+struct PlaybackPreparation {
+    generation: u64,
+    start_frame: u64,
+    receiver: mpsc::Receiver<PlaybackPreparationResult>,
+}
+
+struct PlaybackPreparationResult {
+    generation: u64,
+    caches: HashMap<(String, u32), Arc<PcmCache>>,
+    program: Result<Arc<AudioProgram>, motolii_audio::AudioError>,
 }
 
 #[derive(Debug, Clone)]
@@ -703,6 +787,10 @@ impl ProductApp {
             timeline_move: None,
             timeline_trim: None,
             editor_playhead: EditorPlayhead::default(),
+            playback_lifecycle: PlaybackLifecycle::default(),
+            playback_preparation: None,
+            playback_session: None,
+            playback_caches: HashMap::new(),
             last_pointer_position: None,
         })
     }
@@ -914,6 +1002,249 @@ impl ProductApp {
         Ok(())
     }
 
+    fn process_stage_playback_intents(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+    ) -> Result<(), ProductRuntimeError> {
+        let intent = {
+            let Some(stage_chrome) = &self.stage_chrome else {
+                return Ok(());
+            };
+            stage_chrome.take_playback_intent()?
+        };
+        if matches!(intent, Some(StagePlaybackToggle)) {
+            self.toggle_playback(event_loop)?;
+        }
+        Ok(())
+    }
+
+    fn toggle_playback(&mut self, event_loop: &ActiveEventLoop) -> Result<(), ProductRuntimeError> {
+        match self.playback_lifecycle.state() {
+            StagePlaybackState::Idle => self.begin_playback_preparation(event_loop),
+            StagePlaybackState::Preparing => self.cancel_playback_preparation(event_loop),
+            StagePlaybackState::Playing => self.pause_playback(event_loop),
+        }
+    }
+
+    fn begin_playback_preparation(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+    ) -> Result<(), ProductRuntimeError> {
+        let start_frame = canonical_playback_start_frame(self.editor_playhead.current)?;
+        let generation = self.playback_lifecycle.begin_preparing()?;
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let document = Arc::clone(&self.current_document);
+        let project_root = self.document_runtime.project_root();
+        let mut caches = std::mem::take(&mut self.playback_caches);
+        let proxy = self.proxy.clone();
+        let worker = std::thread::Builder::new()
+            .name("motolii-audio-program".to_owned())
+            .spawn(move || {
+                let program =
+                    AudioProgram::from_document(&document, project_root.as_deref(), &mut caches)
+                        .map(Arc::new);
+                let _ = sender.send(PlaybackPreparationResult {
+                    generation,
+                    caches,
+                    program,
+                });
+                let _ = proxy.send_event(ProductEvent::Wake);
+            });
+        if let Err(error) = worker {
+            let _ = self.playback_lifecycle.invalidate();
+            return Err(ProductPlaybackError::PreparationSpawn(error).into());
+        }
+        self.playback_preparation = Some(PlaybackPreparation {
+            generation,
+            start_frame,
+            receiver,
+        });
+        self.publish_stage_transport()?;
+        self.request_redraw();
+        self.set_idle_control_flow(event_loop);
+        Ok(())
+    }
+
+    fn cancel_playback_preparation(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+    ) -> Result<(), ProductRuntimeError> {
+        self.playback_preparation.take();
+        self.playback_lifecycle.cancel_preparing()?;
+        self.publish_stage_transport()?;
+        self.request_redraw();
+        self.set_idle_control_flow(event_loop);
+        Ok(())
+    }
+
+    fn process_playback_preparation(&mut self) -> Result<(), ProductRuntimeError> {
+        let Some(preparation) = self.playback_preparation.as_ref() else {
+            return Ok(());
+        };
+        let received = match preparation.receiver.try_recv() {
+            Ok(result) => result,
+            Err(mpsc::TryRecvError::Empty) => return Ok(()),
+            Err(mpsc::TryRecvError::Disconnected) => {
+                return Err(
+                    ProductPlaybackError::PreparationDisconnected(preparation.generation).into(),
+                )
+            }
+        };
+        let preparation = self.playback_preparation.take().ok_or(
+            ProductPlaybackError::PreparationDisconnected(received.generation),
+        )?;
+        if !self
+            .playback_lifecycle
+            .accepts_preparation(received.generation)
+            || preparation.generation != received.generation
+        {
+            return Ok(());
+        }
+        self.playback_caches = received.caches;
+        let program =
+            received
+                .program
+                .map_err(|source| ProductPlaybackError::PreparationFailed {
+                    generation: received.generation,
+                    source,
+                })?;
+        if self.playback_session.is_some() {
+            return Err(ProductPlaybackError::LifecycleConflict {
+                state: self.playback_lifecycle.state(),
+            }
+            .into());
+        }
+        let session = PlaybackSession::open_default(
+            program,
+            preparation.start_frame,
+            self.current_document.composition.fps,
+            Quality::DRAFT,
+            Some(&self.gpu),
+        )
+        .map_err(ProductPlaybackError::from)?;
+        self.playback_lifecycle.activate(received.generation)?;
+        self.playback_session = Some(session);
+        self.publish_stage_transport()?;
+        self.submit_stage_projection()?;
+        self.request_redraw();
+        Ok(())
+    }
+
+    fn pause_playback(&mut self, event_loop: &ActiveEventLoop) -> Result<(), ProductRuntimeError> {
+        let time = self
+            .playback_session
+            .as_ref()
+            .ok_or(ProductPlaybackError::LifecycleConflict {
+                state: self.playback_lifecycle.state(),
+            })?
+            .transport()
+            .perceptual_time()
+            .map_err(ProductPlaybackError::from)?;
+        let time = clamp_playback_time(time, self.current_document.composition.duration)?;
+        self.playback_session.take();
+        self.playback_lifecycle.invalidate()?;
+        self.editor_playhead.set(time);
+        self.publish_stage_transport()?;
+        self.submit_stage_projection()?;
+        self.request_redraw();
+        self.set_idle_control_flow(event_loop);
+        Ok(())
+    }
+
+    fn process_playback_clock(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+    ) -> Result<(), ProductRuntimeError> {
+        if self.playback_lifecycle.state() != StagePlaybackState::Playing {
+            return Ok(());
+        }
+        event_loop.set_control_flow(ControlFlow::Poll);
+        let plan = self
+            .playback_session
+            .as_mut()
+            .ok_or(ProductPlaybackError::LifecycleConflict {
+                state: self.playback_lifecycle.state(),
+            })?
+            .transport_mut()
+            .next_frame_plan()
+            .map_err(ProductPlaybackError::from)?;
+        self.adopt_playback_frame_plan(event_loop, plan)
+    }
+
+    fn adopt_playback_frame_plan(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        plan: FramePlan,
+    ) -> Result<(), ProductRuntimeError> {
+        let duration = self.current_document.composition.duration;
+        if duration < RationalTime::ZERO {
+            return Err(ProductPlaybackError::NegativeCompositionDuration.into());
+        }
+        if plan.timeline_time >= duration {
+            self.editor_playhead.set(duration);
+            self.playback_session.take();
+            self.playback_lifecycle.invalidate()?;
+            self.publish_stage_transport()?;
+            self.submit_stage_projection()?;
+            self.request_redraw();
+            self.set_idle_control_flow(event_loop);
+            return Ok(());
+        }
+        if plan.timeline_time < RationalTime::ZERO {
+            return Err(ProductPlaybackError::NegativePlayhead.into());
+        }
+        if self.editor_playhead.set(plan.timeline_time) {
+            self.publish_stage_transport()?;
+            self.submit_stage_projection()?;
+            self.request_redraw();
+        }
+        Ok(())
+    }
+
+    fn retire_playback_for_document_change(&mut self) -> Result<(), ProductRuntimeError> {
+        match self.playback_lifecycle.state() {
+            StagePlaybackState::Idle => {
+                if self.playback_preparation.is_some() || self.playback_session.is_some() {
+                    return Err(ProductPlaybackError::LifecycleConflict {
+                        state: StagePlaybackState::Idle,
+                    }
+                    .into());
+                }
+            }
+            StagePlaybackState::Preparing => {
+                self.playback_preparation.take();
+                self.playback_lifecycle.cancel_preparing()?;
+            }
+            StagePlaybackState::Playing => {
+                let time = self
+                    .playback_session
+                    .as_ref()
+                    .ok_or(ProductPlaybackError::LifecycleConflict {
+                        state: StagePlaybackState::Playing,
+                    })?
+                    .transport()
+                    .perceptual_time()
+                    .map_err(ProductPlaybackError::from)?;
+                let time = clamp_playback_time(time, self.current_document.composition.duration)?;
+                self.playback_session.take();
+                self.playback_lifecycle.invalidate()?;
+                self.editor_playhead.set(time);
+            }
+        }
+        Ok(())
+    }
+
+    fn stop_playback_for_scrub(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+    ) -> Result<(), ProductRuntimeError> {
+        match self.playback_lifecycle.state() {
+            StagePlaybackState::Idle => Ok(()),
+            StagePlaybackState::Preparing => self.cancel_playback_preparation(event_loop),
+            StagePlaybackState::Playing => self.pause_playback(event_loop),
+        }
+    }
+
     pub(crate) fn poll_browser(&mut self, event_loop: &ActiveEventLoop) {
         if self
             .surface_retry_at
@@ -921,6 +1252,12 @@ impl ProductApp {
         {
             self.surface_retry_at = None;
             self.request_redraw();
+        }
+        if let Err(error) = self.process_stage_playback_intents(event_loop) {
+            return self.fail(event_loop, error);
+        }
+        if let Err(error) = self.process_playback_clock(event_loop) {
+            return self.fail(event_loop, error);
         }
         let attach_effect = {
             let Some(browser) = &self.browser else {
@@ -1119,40 +1456,7 @@ impl ProductApp {
                 self.projection_generation,
             ) {
                 Ok(Some(published)) => {
-                    trace_document_publish("place", &published);
-                    self.reconcile_active_effect_use(&published);
-                    self.current_document = published.snapshot;
-                    self.primary = published.primary;
-                    self.projection_generation = published.projection_generation;
-                    if let Err(error) = self.publish_stage_transport() {
-                        return self.fail(event_loop, error);
-                    }
-                    if let Some(inspector) = &self.inspector {
-                        if let Err(error) = inspector.publish(
-                            &self.current_document,
-                            self.primary,
-                            self.active_effect_use,
-                        ) {
-                            return self.fail(event_loop, error);
-                        }
-                    }
-                    self.timeline_projection =
-                        match ProductTimelineProjection::from_document(&self.current_document) {
-                            Ok(projection) => projection,
-                            Err(error) => return self.fail(event_loop, error),
-                        };
-                    trace_timeline_projection(
-                        "place",
-                        self.projection_generation,
-                        &self.timeline_projection,
-                    );
-                    if let Err(error) = self.publish_timeline_tools() {
-                        return self.fail(event_loop, error);
-                    }
-                    if let Err(error) = self.submit_stage_projection() {
-                        return self.fail(event_loop, error);
-                    }
-                    self.request_redraw();
+                    self.adopt_full_publish(event_loop, published, "place");
                 }
                 Ok(None) => {}
                 Err(error) => self.fail(event_loop, error),
@@ -1167,6 +1471,14 @@ impl ProductApp {
     ) {
         match event {
             ProductEvent::Wake => {
+                if let Err(error) = self.process_stage_playback_intents(event_loop) {
+                    self.fail(event_loop, error);
+                    return;
+                }
+                if let Err(error) = self.process_playback_preparation() {
+                    self.fail(event_loop, error);
+                    return;
+                }
                 if let Err(error) = self.process_pending_inspector_commit(event_loop) {
                     self.fail(event_loop, error);
                     return;
@@ -1370,6 +1682,10 @@ impl ProductApp {
                     .timeline_projection
                     .ruler_time_at(position, layout, true)
                 {
+                    if let Err(error) = self.stop_playback_for_scrub(event_loop) {
+                        self.fail(event_loop, error);
+                        return;
+                    }
                     if let Err(error) = self
                         .input_router
                         .route(NormalizedInput::Phase(InputPhase::DragStart))
@@ -1713,6 +2029,10 @@ impl ProductApp {
     }
 
     fn set_idle_control_flow(&self, event_loop: &ActiveEventLoop) {
+        if self.playback_lifecycle.state() == StagePlaybackState::Playing {
+            event_loop.set_control_flow(ControlFlow::Poll);
+            return;
+        }
         match self.surface_retry_at {
             Some(retry_at) => event_loop.set_control_flow(ControlFlow::WaitUntil(retry_at)),
             None => event_loop.set_control_flow(ControlFlow::Wait),
@@ -2208,6 +2528,15 @@ impl ProductApp {
         published: PublishedDocument,
         route: &'static str,
     ) {
+        if !matches!(
+            published.kind,
+            crate::document_edit_runtime::DocumentEditActionKind::ReplacePrimary
+                | crate::document_edit_runtime::DocumentEditActionKind::ClearPrimary
+        ) {
+            if let Err(error) = self.retire_playback_for_document_change() {
+                return self.fail(event_loop, error);
+            }
+        }
         self.cancel_timeline_move("published-generation-changed");
         self.cancel_timeline_trim("published-generation-changed");
         self.retire_editor_playhead("published-generation-changed");
@@ -2243,10 +2572,11 @@ impl ProductApp {
 
     fn publish_stage_transport(&self) -> Result<(), ProductRuntimeError> {
         if let Some(stage_chrome) = &self.stage_chrome {
-            publish_stage_transport_snapshot(
+            publish_stage_transport_snapshot_with_state(
                 &self.current_document,
                 self.primary,
                 self.editor_playhead.current,
+                self.playback_lifecycle.state(),
                 |snapshot| stage_chrome.publish(snapshot),
             )?;
         }
@@ -2751,6 +3081,15 @@ fn stage_transport_snapshot(
     primary: Option<LayerId>,
     playhead: RationalTime,
 ) -> StageTransportSnapshot {
+    stage_transport_snapshot_with_state(document, primary, playhead, StagePlaybackState::Idle)
+}
+
+fn stage_transport_snapshot_with_state(
+    document: &motolii_doc::Document,
+    primary: Option<LayerId>,
+    playhead: RationalTime,
+    playback_state: StagePlaybackState,
+) -> StageTransportSnapshot {
     let object_name = position_active_interval(document, primary, playhead).and_then(|interval| {
         document
             .layers
@@ -2758,16 +3097,59 @@ fn stage_transport_snapshot(
             .filter(|name| !name.is_empty())
             .map(str::to_owned)
     });
-    StageTransportSnapshot::with_position_active_interval(object_name)
+    if playback_state == StagePlaybackState::Idle {
+        StageTransportSnapshot::with_position_active_interval(object_name)
+    } else {
+        StageTransportSnapshot::with_position_active_interval_and_state(object_name, playback_state)
+    }
 }
 
+fn canonical_playback_start_frame(current: RationalTime) -> Result<u64, ProductPlaybackError> {
+    if current < RationalTime::ZERO {
+        return Err(ProductPlaybackError::NegativePlayhead);
+    }
+    let canonical_fps = Fps::try_new(CANONICAL_SAMPLE_RATE as i64, 1)?;
+    let frame = current.try_to_frame_floor(canonical_fps)?;
+    u64::try_from(frame).map_err(|_| ProductPlaybackError::StartFrameOverflow)
+}
+
+fn clamp_playback_time(
+    time: RationalTime,
+    duration: RationalTime,
+) -> Result<RationalTime, ProductPlaybackError> {
+    if duration < RationalTime::ZERO {
+        return Err(ProductPlaybackError::NegativeCompositionDuration);
+    }
+    if time < RationalTime::ZERO {
+        return Err(ProductPlaybackError::NegativePlayhead);
+    }
+    Ok(time.min(duration))
+}
+
+#[allow(dead_code)]
 fn publish_stage_transport_snapshot<E>(
     document: &motolii_doc::Document,
     primary: Option<LayerId>,
     playhead: RationalTime,
     publish: impl FnOnce(&StageTransportSnapshot) -> Result<(), E>,
 ) -> Result<(), E> {
-    let snapshot = stage_transport_snapshot(document, primary, playhead);
+    publish_stage_transport_snapshot_with_state(
+        document,
+        primary,
+        playhead,
+        StagePlaybackState::Idle,
+        publish,
+    )
+}
+
+fn publish_stage_transport_snapshot_with_state<E>(
+    document: &motolii_doc::Document,
+    primary: Option<LayerId>,
+    playhead: RationalTime,
+    playback_state: StagePlaybackState,
+    publish: impl FnOnce(&StageTransportSnapshot) -> Result<(), E>,
+) -> Result<(), E> {
+    let snapshot = stage_transport_snapshot_with_state(document, primary, playhead, playback_state);
     publish(&snapshot)
 }
 
@@ -3323,6 +3705,40 @@ enum ProductSurfaceError {
 }
 
 #[derive(Debug, thiserror::Error)]
+pub(crate) enum ProductPlaybackError {
+    #[error("playback lifecycle conflict in {state:?} state")]
+    LifecycleConflict { state: StagePlaybackState },
+    #[error("playback preparation generation is exhausted")]
+    GenerationExhausted,
+    #[error("playhead time is negative")]
+    NegativePlayhead,
+    #[error("playback start frame overflows the canonical sample index")]
+    StartFrameOverflow,
+    #[error("composition duration is negative")]
+    NegativeCompositionDuration,
+    #[error("playback preparation worker failed to start")]
+    PreparationSpawn(#[source] std::io::Error),
+    #[error("playback preparation result for generation {0} disconnected")]
+    PreparationDisconnected(u64),
+    #[error("playback preparation failed for generation {generation}: {source}")]
+    PreparationFailed {
+        generation: u64,
+        #[source]
+        source: motolii_audio::AudioError,
+    },
+    #[error(transparent)]
+    Audio(#[from] motolii_audio::AudioError),
+    #[error(transparent)]
+    Session(#[from] PlaybackSessionError),
+    #[error(transparent)]
+    Transport(#[from] TransportError),
+    #[error(transparent)]
+    Fps(#[from] FpsError),
+    #[error(transparent)]
+    Time(#[from] RationalTimeError),
+}
+
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum ProductRuntimeError {
     #[error(transparent)]
     Gpu(#[from] motolii_gpu::GpuError),
@@ -3356,6 +3772,10 @@ pub(crate) enum ProductRuntimeError {
     StageChrome(#[from] StageChromeHostRuntimeError),
     #[error(transparent)]
     StageEasingIntent(#[from] StageEasingIntentError),
+    #[error(transparent)]
+    StagePlaybackIntent(#[from] StagePlaybackIntentError),
+    #[error(transparent)]
+    Playback(#[from] ProductPlaybackError),
     #[error(transparent)]
     EasingPopup(#[from] ProductEasingPopupError),
     #[error(transparent)]
@@ -3407,8 +3827,70 @@ pub(crate) enum ProductRuntimeError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use motolii_core::{ColorSpace, FrameDesc, PixelFormat};
+    use motolii_audio::{DeviceWaitLatency, PlaybackCounters};
+    use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat};
     use motolii_doc::{DocKeyframe, DocKeyframeTrack};
+    use motolii_transport::Transport;
+
+    #[test]
+    fn playback_lifecycle_cancels_stale_preparation_and_allows_one_session() {
+        let mut lifecycle = PlaybackLifecycle::default();
+        let stale_generation = lifecycle.begin_preparing().unwrap();
+        assert!(lifecycle.accepts_preparation(stale_generation));
+        lifecycle.cancel_preparing().unwrap();
+        assert!(!lifecycle.accepts_preparation(stale_generation));
+
+        let active_generation = lifecycle.begin_preparing().unwrap();
+        lifecycle.activate(active_generation).unwrap();
+        assert_eq!(lifecycle.state(), StagePlaybackState::Playing);
+        assert!(lifecycle.activate(active_generation).is_err());
+        lifecycle.invalidate().unwrap();
+        assert_eq!(lifecycle.state(), StagePlaybackState::Idle);
+        assert!(!lifecycle.session_active);
+    }
+
+    #[test]
+    fn canonical_playback_start_frame_uses_exact_zero_and_sample_rate_conversion() {
+        assert_eq!(
+            canonical_playback_start_frame(RationalTime::ZERO).unwrap(),
+            0
+        );
+        assert_eq!(
+            canonical_playback_start_frame(RationalTime::try_new(1, 24).unwrap()).unwrap(),
+            2_000
+        );
+        assert_eq!(
+            canonical_playback_start_frame(RationalTime::try_new(1, 48_000).unwrap()).unwrap(),
+            1
+        );
+        assert!(matches!(
+            canonical_playback_start_frame(RationalTime::try_new(-1, 48_000).unwrap()),
+            Err(ProductPlaybackError::NegativePlayhead)
+        ));
+    }
+
+    #[test]
+    fn transport_reports_absolute_time_and_repeats_without_counter_advance() {
+        for sample_rate in [48_000_u32, 44_100_u32] {
+            let counters = Arc::new(PlaybackCounters::default());
+            counters.advance_supplied_for_simulation(u64::from(sample_rate) * 2);
+            let mut transport = Transport::new(
+                counters,
+                Arc::new(DeviceWaitLatency::default()),
+                Fps::try_new(30, 1).unwrap(),
+                sample_rate,
+                RationalTime::try_new(1, 1).unwrap(),
+                Quality::DRAFT,
+                false,
+            )
+            .unwrap();
+            let first = transport.next_frame_plan().unwrap();
+            let repeated = transport.next_frame_plan().unwrap();
+
+            assert_eq!(first.timeline_time, RationalTime::try_new(3, 1).unwrap());
+            assert_eq!(repeated.timeline_time, first.timeline_time);
+        }
+    }
 
     fn position_keyframe_document() -> (motolii_doc::Document, LayerId, [KeyframeId; 2]) {
         let mut document = crate::static_preview::bootstrap_document().unwrap();
@@ -3786,10 +4268,11 @@ mod tests {
         assert!(production.contains("StageChromeHostRuntime::new(\n            &window,\n            &stage_transport_snapshot("));
         assert_eq!(
             production.matches("self.publish_stage_transport()").count(),
-            4
+            9
         );
         assert!(method("fn refresh_editor_playhead").contains("self.publish_stage_transport()?"));
-        assert!(method("fn publish_stage_transport").contains("publish_stage_transport_snapshot("));
+        assert!(method("fn publish_stage_transport")
+            .contains("publish_stage_transport_snapshot_with_state("));
         assert!(!method("fn update_layout").contains("publish_stage_transport"));
         assert!(!method("fn update_layout").contains("refresh_editor_playhead"));
         let cancel = method("fn cancel_editor_playhead");

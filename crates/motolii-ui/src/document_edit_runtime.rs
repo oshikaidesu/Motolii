@@ -1,6 +1,7 @@
 //! 確定済みDocument編集をsingle writerへ直列配送するprivate runtime。
 
 use std::collections::{BTreeMap, VecDeque};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use motolii_core::{RationalTime, RationalTimeError};
@@ -356,6 +357,10 @@ impl DocumentEditRuntime {
 
     pub(crate) fn snapshot(&self) -> Arc<Document> {
         self.writer.snapshot()
+    }
+
+    pub(crate) fn project_root(&self) -> Option<PathBuf> {
+        self.session.document_path().parent().map(PathBuf::from)
     }
 
     pub(crate) fn preview_trim(

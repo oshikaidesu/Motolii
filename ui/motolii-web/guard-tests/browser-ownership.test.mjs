@@ -1953,12 +1953,13 @@ test("keeps fixed Stage chrome DOM and private read-only Host projection", async
     'id="step-prev"',
     'aria-label="前のkeyへ"',
     'id="play"',
+    'aria-label={isPlaying ? "一時停止" : isPreparing ? "再生準備をキャンセル" : "再生"}',
     'id="step-next"',
     'aria-label="次のkeyへ"',
     'id="time"',
     'className="quality"',
     'import { EasingTriggerCandidate } from "./EasingTriggerCandidate.jsx";',
-    '<EasingTriggerCandidate activeInterval={activeInterval} pressed={false} />',
+    '<EasingTriggerCandidate activeInterval={activeInterval} pressed={false} onOpen={onOpenEasing} />',
   ]) {
     assert.equal(source.includes(token), true, `missing fixed Stage token ${token}`);
   }
@@ -1966,6 +1967,8 @@ test("keeps fixed Stage chrome DOM and private read-only Host projection", async
     "readStageHostSnapshot",
     "subscribeStageTransportSnapshot",
     "activeInterval={nextSnapshot.activeInterval}",
+    "playbackState={nextSnapshot.playbackState}",
+    "encodeStagePlaybackToggle",
   ]) {
     assert.equal(transportMain.includes(token), true, `missing Stage transport token ${token}`);
   }
@@ -1979,11 +1982,12 @@ test("keeps fixed Stage chrome DOM and private read-only Host projection", async
   for (const forbidden of [
     "interval-easing__placeholder",
     '<button className="interval-easing"',
-    "onClick",
   ]) {
     assert.equal(source.includes(forbidden), false);
     assert.equal(transportMain.includes(forbidden), false);
   }
+  assert.equal(source.includes("onClick"), true);
+  assert.equal(transportMain.includes("onClick"), false);
   for (const token of [
     "height: 23px",
     "min-width: 29px",
@@ -2015,6 +2019,7 @@ test("keeps the static Stage header bridge separate from the active transport pr
       barPosition: "BAR 0.0.00",
       tempoStatus: "120 BPM · SNAP BEAT",
       qualityStatus: "DRAFT · FP16 · 1/2",
+      playbackState: "idle",
       activeInterval: { objectName: "Rectangle", channel: "Position" },
     },
     subscribe(next) {

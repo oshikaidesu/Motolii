@@ -15,8 +15,9 @@ fn pending_stage_drop_reaches_one_rectangle_action_and_one_runtime_process() {
     assert_eq!(delivery.matches(".process_next(").count(), 1);
     assert!(delivery.contains("canonical_drop_from_ndc(self.displayed_camera, drop.ndc)"));
     assert!(delivery.contains("playhead: RationalTime::ZERO"));
-    assert!(delivery.contains("self.primary = published.primary"));
-    assert!(delivery.contains("self.projection_generation = published.projection_generation"));
+    assert!(delivery.contains("self.adopt_full_publish(event_loop, published, \"place\")"));
+    assert!(source.contains("self.primary = published.primary"));
+    assert!(source.contains("self.projection_generation = published.projection_generation"));
 }
 
 #[test]
