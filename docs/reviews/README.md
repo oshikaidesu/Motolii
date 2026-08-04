@@ -477,6 +477,7 @@
 | [2026-08-04-position-active-interval-read-model-contract.md](2026-08-04-position-active-interval-read-model-contract.md) | P04-C2 ACTIVE-INTERVAL Position read-model契約 |
 | [2026-08-04-interp-command-d2-contract.md](2026-08-04-interp-command-d2-contract.md) | P04-C2 INTERP-COMMAND Position outgoing Interp D2 command契約 |
 | [2026-08-04-interp-command-d2-implementation-acceptance.md](2026-08-04-interp-command-d2-implementation-acceptance.md) | P04-C2 INTERP-COMMAND D2実装受入。dedicated command/Writer/Undo/journal replayをDONE / ACCEPTED |
+| [2026-08-04-p04-c2-easing-product-route-contract.md](2026-08-04-p04-c2-easing-product-route-contract.md) | P04-C2 React Easing trigger→surface-local Host popup session→existing queue/D2の通常製品route契約 |
 | [2026-08-04-stage-transport-easing-trigger-consumer-contract.md](2026-08-04-stage-transport-easing-trigger-consumer-contract.md) | P04-C2 ACTIVE-INTERVAL のStage transport既存slot→Easing trigger read-only consumer契約 |
 | [2026-08-04-stage-transport-easing-trigger-implementation-acceptance.md](2026-08-04-stage-transport-easing-trigger-implementation-acceptance.md) | P04-C2 ACTIVE-INTERVAL Stage transport Easing trigger実装受入・EXTERNAL_GATE_PENDING |
 | [2026-08-04-position-active-interval-implementation-admissibility-rejection.md](2026-08-04-position-active-interval-implementation-admissibility-rejection.md) | P04-C2 ACTIVE-INTERVAL compiler oracleによるconsumer不在の歴史観察・REMAPPED |

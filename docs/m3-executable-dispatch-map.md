@@ -138,7 +138,7 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 | `P03-C2` | `DONE / REDUCE` | HOST-INPUTでraw ownerとEscape/focus cancelを再締結しMOVEをtechnical reclose。Blender既知handle hitを縮小採択した`CU-201P-TRIM`をcommit `da4dcf75`で実装・独立review受入 | drag中write 0、release 1 Undo、cancel/stale/invalid 0 |
 | `P03-C3` | `TARGET_MISSING` | visible-range consumerとnavigation CommandIdを一つ特定 | selection/focus/playheadが同一projection |
 | `P04-C1` | `DONE` | なし。`U4a-1`〜`CU-205E`を再実装しない | first-party parameterの通常編集route |
-| `P04-C2` | `SPLIT / TARGET_MISSING` | `ACTIVE-INTERVAL`と`INTERP-COMMAND`はDONE / ACCEPTED。後者はcommit `03667b7d`と[implementation acceptance](reviews/2026-08-04-interp-command-d2-implementation-acceptance.md)でdedicated D2/Undo/journal replayを閉鎖。producer/Host/React/popup/inputは別 `WAIT_TARGET`。Inspector Position Add Key routeは別の`CU-0A08ITI TARGET_MISSING`であり混同しない | easing変更が1 command / 1 Undo |
+| `P04-C2` | `SPLIT / P04-C2-EASING DO` | `ACTIVE-INTERVAL`と`INTERP-COMMAND`はDONE / ACCEPTED。後者はcommit `03667b7d`と[implementation acceptance](reviews/2026-08-04-interp-command-d2-implementation-acceptance.md)でdedicated D2/Undo/journal replayを閉鎖。[product route contract](reviews/2026-08-04-p04-c2-easing-product-route-contract.md)がReact anchor/layout intent→surface-local Host session/admission→existing queue/D2を閉じ、次の実装は`P04-C2-EASING`だけである。Inspector Position Add Key routeは別の`CU-0A08ITI TARGET_MISSING`であり混同しない | easing変更が1 command / 1 Undo |
 | `P04-C3` | `TARGET_MISSING` | `CU-204P`へ渡す実在normal operation source | 実providerの診断を既存Feedbackへ投影 |
 | `P05-C1` | `TARGET_MISSING` | 現行Stage表示を除き、off-frame/Stage Viewの未成立targetを一つ特定 | 同じcamera/worldでframe内外を表示 |
 | `P05-C2` | `SPEC_ONLY` | camera/object targetと既存D2 commandの写像を一問で固定 | 直接操作が1 gesture / 1 Undo |
@@ -429,6 +429,8 @@ NODE INTERP-COMMAND  requires=[active_interval_identity] emits=[outgoing_interp_
   state=DONE/ACCEPTED; commit=03667b7d; contract=reviews/2026-08-04-interp-command-d2-contract.md; acceptance=reviews/2026-08-04-interp-command-d2-implementation-acceptance.md
   scope=Position existing key outgoing Interp dedicated D2/Undo/JournalEdit v2/WAL replay only; producer/Host/React/popup/input remain WAIT_TARGET and parent P04-C2/U4b-1 remain incomplete
 NODE P04-C2-EASING   requires=[outgoing_interp_command]  emits=[easing_edit_route]
+  state=DO/CONTRACT_CLOSED/EXTERNAL_GATE_PENDING; contract=reviews/2026-08-04-p04-c2-easing-product-route-contract.md
+  scope=product-owned React anchor/layout intent -> surface-local strict inbound -> private Host re-derivation/session -> native popup terminal admission -> existing DocumentEditQueue/SetPositionKeyInterp; Stage read-only snapshot unchanged; Inspector/Add Position Key and User settings remain WAIT_TARGET
 
 NODE P01-RESIDUAL    requires=[]                         emits=[role_host_routes]
 NODE SURFACE-JOIN    requires=[role_host_routes]         emits=[shared_surface_snapshot]
