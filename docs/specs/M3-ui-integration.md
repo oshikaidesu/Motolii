@@ -250,6 +250,8 @@ U9bのengine/sandbox/保存判断等へ到達したら、`LANG-TS-F0`と`VSM-C2`
 
 局所前提 `P07-C1C` は [playback-origin audio clock contract and acceptance](../reviews/2026-08-04-p07-c1c-playback-origin-clock-contract.md) とcommit `b1b2c4df`でcode/main `DONE / ACCEPTED`となった。existing `PlaybackSession::start_frame`をcanonical rateからexact `RationalTime` originへ変換してexisting `Transport`へ渡し、raw supplied/device-waitはnegotiated-device elapsedのままnonZERO再生の`perceptual_time`とframe planを正しいabsolute timeへ置く。48 kHz / 44.1 kHzとZERO回帰を固定し、canonical/device frame整数の直足し、counter pre-advance、second clock、UI offset、ProductApp/React接続は含めない。
 
+次のbackbone `P07-C1D` は [product playback spine contract](../reviews/2026-08-04-p07-c1d-product-playback-spine-contract.md) により`DO`とする。実在React Stage `#play`をtyped one-shotでexisting `ProductApp`へ渡し、one `PlaybackSession` lifetimeとaudio-device `Transport` absolute timeをexisting `editor_playhead`、Stage render/transport、native Timelineへ接続する。pause/end/document mutationはsessionをretireする。React timer/store、second clock、汎用controller、Space/seek/JKL、parallel output、dynamic Timeline marker width、human gate実施は含めない。
+
 ## GR-UI審判割当表
 
 | 規律 | 対象タスク | 自動審判 | 人間実機審判 |

@@ -145,12 +145,12 @@ and failure/recovery routing.
 
 ## 4. admissible next disposition
 
-`P07-C1` remains `TARGET_MISSING / PREFLIGHT ONLY`. P07-C1A, P07-C1B, and P07-C1C are accepted;
-none invents a product owner. The next parent work is a fresh read-only source audit that attempts to
-close the four listed facts one by one on current main. If an existing
-real control source is found but full playback remains unclosed, a future authority owner may choose
-another explicitly bounded `REDUCE` slice. If any fact remains absent, that subfact stays
-`WAIT_TARGET` and the other M3 lanes continue.
+`P07-C1` remains a split parent and is not complete. P07-C1A, P07-C1B, and P07-C1C are accepted.
+The current-main remeasurement found the existing React Stage `#play`, `StageChromeHostRuntime`,
+`ProductApp`, `DocumentEditRuntime`/`ProjectSession::document_path`, `editor_playhead`, render-worker,
+and native Timeline consumers. [P07-C1D](2026-08-04-p07-c1d-product-playback-spine-contract.md)
+therefore closes one implementation boundary from that real source through one ProductApp-owned session to
+the existing consumers. It does not close later seek/step/keyboard policy or the named external gates.
 
 This is not an authority to implement a seek-only route, to add another `PlaybackSession` route, or
 to add a dependency. It also does not unblock P07-C2 deadline policy or P07-C3 real-material measurement.
