@@ -32,6 +32,7 @@ pub mod param_expect;
 pub mod pathgeom;
 mod persist;
 mod plugin_resolution;
+mod position_key_prepare;
 mod schema;
 mod spatial_resolve;
 mod stable_id;
@@ -98,6 +99,7 @@ pub use plugin_resolution::{
     PluginDiagnosticReason, PluginSlotId, PreparedDocumentPlugins, PreparedPluginRecipe,
     ResolvedOpenProjectOutcome,
 };
+pub use position_key_prepare::{AddPositionKeyPreparation, AddPositionKeyPrepareError};
 pub use schema::{
     asset_components_require_newer_reader, AudioComponent, AudioOutOfRange, BlendMode, Clip,
     ClipSource, ClippingMaskSettings, CompCameraDoc, CompositeOrder, Composition, CompositionError,
@@ -592,6 +594,15 @@ impl DocumentWriter {
         new_end: RationalTime,
     ) -> Result<Option<Command>, CommandError> {
         command::prepare_trim_clip_out(&self.doc, target, new_end)
+    }
+
+    /// Positionへplayhead時刻のkeyを追加するcommandを準備する。
+    pub fn prepare_add_position_key(
+        &self,
+        target: LayerId,
+        t: RationalTime,
+    ) -> Result<AddPositionKeyPreparation, AddPositionKeyPrepareError> {
+        position_key_prepare::prepare_add_position_key(&self.doc, target, t)
     }
 }
 

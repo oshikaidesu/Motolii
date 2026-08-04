@@ -16,11 +16,12 @@ use motolii_core::{RationalTime, TimeMap};
 
 use crate::duplicate::{definition_semantic_body_eq, remint_order_keyframe_ids};
 use crate::param::DocParam;
+use crate::position_key_prepare::deterministic_new_position;
 use crate::schema::{
     AudioComponent, BlendMode, ClipSource, ClippingMaskSettings, EffectDefinition, EffectInstance,
     EffectUse, ItemEnvelope, TrackItem,
 };
-use crate::stable_id::{EffectDefinitionId, EffectId, StableIdReservation};
+use crate::stable_id::{EffectDefinitionId, EffectId, KeyframeId, StableIdReservation};
 use crate::track_id::TrackId;
 use crate::validate::{self, stable_id_in_use};
 use crate::{Document, LayerId, WRITER_VERSION};
@@ -121,6 +122,7 @@ pub enum CommandKind {
     SetAudioComponentGain,
     AddTrackItem,
     RemoveTrackItem,
+    AddPositionKey,
     SetClipStart,
     TrimClipIn,
     TrimClipOut,
@@ -184,6 +186,8 @@ pub enum CommandError {
     CopyLocalDefinitionMismatch { expected: u64, found: u64 },
     #[error("copy-local payload does not match source definition semantics")]
     CopyLocalPayloadMismatch,
+    #[error("add position key payload mismatch (layer {layer}, key_id {key_id})")]
+    AddPositionKeyPayloadMismatch { layer: u64, key_id: u64 },
     #[error("effect use {use_id} not found in document")]
     EffectUseNotFound { use_id: u64 },
     #[error(
@@ -365,6 +369,20 @@ pub enum Command {
         /// subtreeの表示名。台帳から外したあと、inverseのAddで復元する。
         layer_names: BTreeMap<LayerId, String>,
     },
+    AddPositionKey {
+        target: LayerId,
+        old_value: DocParam,
+        new_value: DocParam,
+        added_key_id: KeyframeId,
+        stable_id_reservation: StableIdReservation,
+    },
+    UndoAddPositionKey {
+        target: LayerId,
+        old_value: DocParam,
+        new_value: DocParam,
+        added_key_id: KeyframeId,
+        stable_id_reservation: StableIdReservation,
+    },
     SetClipStart {
         target: LayerId,
         old: RationalTime,
@@ -415,6 +433,9 @@ impl Command {
             Command::SetAudioComponentGain { .. } => CommandKind::SetAudioComponentGain,
             Command::AddTrackItem { .. } => CommandKind::AddTrackItem,
             Command::RemoveTrackItem { .. } => CommandKind::RemoveTrackItem,
+            Command::AddPositionKey { .. } | Command::UndoAddPositionKey { .. } => {
+                CommandKind::AddPositionKey
+            }
             Command::SetClipStart { .. } => CommandKind::SetClipStart,
             Command::TrimClipIn { .. } => CommandKind::TrimClipIn,
             Command::TrimClipOut { .. } => CommandKind::TrimClipOut,
@@ -436,6 +457,8 @@ impl Command {
             | Command::SetClipStart { target, .. }
             | Command::TrimClipIn { target, .. }
             | Command::TrimClipOut { target, .. } => target.get(),
+            Command::AddPositionKey { added_key_id, .. }
+            | Command::UndoAddPositionKey { added_key_id, .. } => added_key_id.get(),
             Command::CreateEffect { target, .. }
             | Command::UndoCreateEffect { target, .. }
             | Command::LinkEffectUse { target, .. }
@@ -475,6 +498,9 @@ impl Command {
             Command::CopyLocalEffect { use_id, .. }
             | Command::UndoCopyLocalEffect { use_id, .. } => {
                 PropertyId::EffectDefinitionLink(*use_id)
+            }
+            Command::AddPositionKey { .. } | Command::UndoAddPositionKey { .. } => {
+                PropertyId::Position
             }
             Command::SetAudioComponentEnabled { index, .. } => PropertyId::AudioEnabled(*index),
             Command::SetAudioComponentGain { index, .. } => PropertyId::AudioGain(*index),
@@ -518,6 +544,14 @@ impl Command {
                 ..
             }
             | Command::UndoCopyLocalEffect {
+                stable_id_reservation,
+                ..
+            } => Some(*stable_id_reservation),
+            Command::AddPositionKey {
+                stable_id_reservation,
+                ..
+            }
+            | Command::UndoAddPositionKey {
                 stable_id_reservation,
                 ..
             } => Some(*stable_id_reservation),
@@ -935,6 +969,34 @@ impl Command {
                 }
                 Ok(())
             }
+            Command::AddPositionKey {
+                target,
+                old_value,
+                new_value,
+                added_key_id,
+                stable_id_reservation,
+            } => apply_add_position_key(
+                doc,
+                *target,
+                old_value.clone(),
+                new_value.clone(),
+                *added_key_id,
+                *stable_id_reservation,
+            ),
+            Command::UndoAddPositionKey {
+                target,
+                old_value,
+                new_value,
+                added_key_id,
+                stable_id_reservation,
+            } => undo_add_position_key(
+                doc,
+                *target,
+                old_value.clone(),
+                new_value.clone(),
+                *added_key_id,
+                *stable_id_reservation,
+            ),
             Command::SetClipStart { target, new, .. } => {
                 let layer = target.get();
                 let duration = {
@@ -1210,6 +1272,32 @@ impl Command {
                 index,
                 item,
                 layer_names,
+            },
+            Command::AddPositionKey {
+                target,
+                old_value,
+                new_value,
+                added_key_id,
+                stable_id_reservation,
+            } => Command::UndoAddPositionKey {
+                target,
+                old_value,
+                new_value,
+                added_key_id,
+                stable_id_reservation,
+            },
+            Command::UndoAddPositionKey {
+                target,
+                old_value,
+                new_value,
+                added_key_id,
+                stable_id_reservation,
+            } => Command::AddPositionKey {
+                target,
+                old_value,
+                new_value,
+                added_key_id,
+                stable_id_reservation,
             },
             Command::SetClipStart { target, old, new } => Command::SetClipStart {
                 target,
@@ -2250,4 +2338,93 @@ fn apply_undo_copy_local_effect(
     next.effect_definitions
         .retain(|d| d.id != new_definition.id);
     swap_if_valid(doc, next)
+}
+
+fn apply_add_position_key(
+    doc: &mut Document,
+    target: LayerId,
+    old_value: DocParam,
+    new_value: DocParam,
+    added_key_id: KeyframeId,
+    stable_id_reservation: StableIdReservation,
+) -> Result<(), CommandError> {
+    let introduced = [added_key_id.get()];
+    let commit = validate_reservation_for_apply(doc, stable_id_reservation, &introduced)?;
+    validate_add_position_key_payload(
+        doc,
+        target,
+        &old_value,
+        &old_value,
+        &new_value,
+        added_key_id,
+    )?;
+
+    let mut next = doc.clone();
+    find_envelope_mut(&mut next, target)?.transform.position = new_value;
+    apply_reservation_commit(&mut next, commit);
+    swap_if_valid(doc, next)
+}
+
+fn undo_add_position_key(
+    doc: &mut Document,
+    target: LayerId,
+    old_value: DocParam,
+    new_value: DocParam,
+    added_key_id: KeyframeId,
+    stable_id_reservation: StableIdReservation,
+) -> Result<(), CommandError> {
+    let introduced = [added_key_id.get()];
+    validate_reservation_for_undo(doc, stable_id_reservation, &introduced)?;
+    validate_add_position_key_payload(
+        doc,
+        target,
+        &new_value,
+        &old_value,
+        &new_value,
+        added_key_id,
+    )?;
+
+    let mut next = doc.clone();
+    find_envelope_mut(&mut next, target)?.transform.position = old_value;
+    swap_if_valid(doc, next)
+}
+
+fn validate_add_position_key_payload(
+    doc: &Document,
+    target: LayerId,
+    expected_current_position: &DocParam,
+    old_value: &DocParam,
+    new_value: &DocParam,
+    added_key_id: KeyframeId,
+) -> Result<RationalTime, CommandError> {
+    let layer = target.get();
+    let mismatch = || CommandError::AddPositionKeyPayloadMismatch {
+        layer,
+        key_id: added_key_id.get(),
+    };
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    if env.transform.position != *expected_current_position {
+        return Err(mismatch());
+    }
+    if let DocParam::Keyframes(track) = old_value {
+        if track.get_by_id(added_key_id).is_some() {
+            return Err(mismatch());
+        }
+    }
+
+    let DocParam::Keyframes(track) = new_value else {
+        return Err(mismatch());
+    };
+    let mut matches = track.keys().iter().filter(|key| key.id == added_key_id);
+    let t = matches.next().map(|key| key.t).ok_or_else(mismatch)?;
+    if matches.next().is_some() {
+        return Err(mismatch());
+    }
+
+    let expected =
+        deterministic_new_position(old_value, target, t, added_key_id).map_err(|_| mismatch())?;
+    if expected != *new_value {
+        return Err(mismatch());
+    }
+    Ok(t)
 }

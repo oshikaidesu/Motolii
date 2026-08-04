@@ -1,6 +1,6 @@
 # U4b-0 durable Add Position Key closed contract
 
-状態: **決定 / code未実装 / 実装発注可**
+状態: **決定 / code実装受入済み / main統合済み**
 
 日付: 2026-08-04
 
@@ -15,7 +15,7 @@ OWNER: DocumentWriter / Command / existing motolii-eval Interp
 WRITE ROUTE: one prepared durable Command -> existing single writer / Undo / JournalEdit v2
 GAP: exact Rust DTO、Bezier split、numeric tolerance、journal version要否
 RESOLUTION ROUTE: existing lifecycle reservation pattern + existing RationalTime/Interp/Bezier solver
-DISPOSITION: docs contract closed; code is the next one-boundary grain
+DISPOSITION: docs contract, bounded code acceptance, and main integration closed
 ```
 
 ## 2. 既知実装採択
@@ -109,6 +109,7 @@ ALLOWLIST production:
   crates/motolii-doc/src/position_key_prepare.rs (new)
   crates/motolii-eval/src/track.rs
   crates/motolii-eval/src/bezier.rs
+  crates/motolii-ui/src/diagnostic_projection.rs (CommandKind exhaustive label one arm only)
 ALLOWLIST tests:
   inline tests in the files above
   crates/motolii-doc/src/undo.rs (test only)
@@ -122,8 +123,10 @@ REPO_LANES: motolii-eval focused tests / motolii-doc focused tests / affected-cr
 EXTERNAL_GATES: fresh different-family read-only diff review; UI、product E2E、human目視はU4b-0外
 ```
 
+workspace compileで`CommandKind::AddPositionKey`追加が既存のexhaustive診断labelを必ず要求するため、既存patternと同形の`"Add position key"`一armだけを薄い接続として許可する。UI操作、layout、component、診断policyの変更へ広げない。
+
 ## 7. STOPと次手
 
 別Position source、generic keyframe API、`SetProperty` wire変更、別solver/tolerance、近似／clamp、journal version、Document schema／min-reader変更が必要なら当該施工だけを止める。
 
-次の一粒はこのallowlistだけを使う`U4b-0 durable Add Position Key implementation`である。実装受入後に現行codeからMotion Authoring Loopの次edgeを再計測し、active interval／Easingを同じ粒へ束ねない。
+このallowlistの`U4b-0 durable Add Position Key implementation`は受入・main統合済みである。現行codeからMotion Authoring Loopの次edgeを再計測し、active interval／Easingを同じ粒へ束ねない。

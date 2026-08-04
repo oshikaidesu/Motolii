@@ -281,6 +281,7 @@ pub fn frames_through_last_commit(frames: &[JournalFrame]) -> &[JournalFrame] {
 
 #[cfg(test)]
 mod replay_tests {
+    use super::{apply_decoded_edit, decode_edit, edit_payload};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -399,6 +400,51 @@ mod replay_tests {
         });
         doc.validate().unwrap();
         (doc, layer)
+    }
+
+    #[test]
+    fn v2_add_position_key_replay_matches_live_apply_and_v1_rejects_variant() {
+        let (base, layer) = empty_clip_base();
+        let prepared = crate::position_key_prepare::prepare_add_position_key(
+            &base,
+            layer,
+            RationalTime::from_seconds(2),
+        )
+        .unwrap();
+        let crate::AddPositionKeyPreparation::Prepared { key_id, command } = prepared else {
+            panic!("const position must prepare a key");
+        };
+        let command_value = serde_json::to_value(&command).unwrap();
+
+        let mut live = base.clone();
+        command.apply(&mut live).unwrap();
+        let live_counter = live.next_stable_id.peek_next();
+
+        let payload = edit_payload(&JournalEdit::new(command)).unwrap();
+        let decoded = decode_edit(&payload).unwrap();
+        let mut replayed = base;
+        apply_decoded_edit(&mut replayed, &decoded).unwrap();
+
+        assert_eq!(replayed, live);
+        assert_eq!(replayed.next_stable_id.peek_next(), live_counter);
+        let position = &crate::command::find_envelope(&replayed, layer)
+            .unwrap()
+            .transform
+            .position;
+        let DocParam::Keyframes(track) = position else {
+            panic!("replayed position must be keyframed");
+        };
+        assert_eq!(
+            track.get_by_id(key_id).map(|key| key.t),
+            Some(RationalTime::from_seconds(2))
+        );
+
+        let legacy = serde_json::to_vec(&json!({
+            "format_version": V1_EDIT_FORMAT_VERSION,
+            "command": command_value
+        }))
+        .unwrap();
+        assert!(decode_edit(&legacy).is_err());
     }
 
     fn inline_effect_json() -> serde_json::Value {

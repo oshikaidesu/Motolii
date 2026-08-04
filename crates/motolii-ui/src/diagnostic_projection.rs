@@ -265,6 +265,7 @@ const fn command_kind_copy(kind: CommandKind) -> &'static str {
         CommandKind::SetAudioComponentGain => "Set audio component gain",
         CommandKind::AddTrackItem => "Add track item",
         CommandKind::RemoveTrackItem => "Remove track item",
+        CommandKind::AddPositionKey => "Add position key",
         CommandKind::SetClipStart => "Set clip start",
         CommandKind::TrimClipIn => "Trim clip in",
         CommandKind::TrimClipOut => "Trim clip out",
