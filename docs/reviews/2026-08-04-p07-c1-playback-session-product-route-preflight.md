@@ -126,9 +126,9 @@ The source must show that repaint frequency cannot advance the time.
 
 The source audit found a narrower prerequisite: `PlaybackSession` starts `MixProducer` at
 `start_frame`, but its `Transport` interprets elapsed `frames_supplied` from timeline ZERO.
-[P07-C1C](2026-08-04-p07-c1c-playback-origin-clock-contract.md) closes the immutable nonZERO timeline
-origin inside the existing sole clock before ProductApp handoff. It does not select the missing
-ProductApp consumer or pause/seek/end policy.
+[P07-C1C](2026-08-04-p07-c1c-playback-origin-clock-contract.md) closed the immutable nonZERO timeline
+origin inside the existing sole clock at commit `b1b2c4df`. It does not select the missing ProductApp
+consumer or pause/seek/end policy.
 
 ### D. actual UI / Host control source and typed intent — **MISSING**
 
@@ -145,9 +145,9 @@ and failure/recovery routing.
 
 ## 4. admissible next disposition
 
-`P07-C1` remains `TARGET_MISSING / PREFLIGHT ONLY`. P07-C1A and P07-C1B are accepted; P07-C1C is the
-next bounded prerequisite `DO`. None invents a product owner. The next parent work after C is a
-fresh read-only source audit that attempts to close the four listed facts one by one. If an existing
+`P07-C1` remains `TARGET_MISSING / PREFLIGHT ONLY`. P07-C1A, P07-C1B, and P07-C1C are accepted;
+none invents a product owner. The next parent work is a fresh read-only source audit that attempts to
+close the four listed facts one by one on current main. If an existing
 real control source is found but full playback remains unclosed, a future authority owner may choose
 another explicitly bounded `REDUCE` slice. If any fact remains absent, that subfact stays
 `WAIT_TARGET` and the other M3 lanes continue.

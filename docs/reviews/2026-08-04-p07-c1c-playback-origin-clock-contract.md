@@ -1,6 +1,6 @@
 # P07-C1C playback-origin audio clock contract
 
-状態: **DO / CLOSED CONTRACT / IMPLEMENTATION PENDING**
+状態: **DONE / ACCEPTED / MAIN**
 
 日付: 2026-08-04
 
@@ -70,3 +70,21 @@ control and M3-final human visual checks remain separate.
 
 `NON-GOALS`: ProductApp lifetime/program construction/error projection; React play/pause/step;
 editor_playhead publication; end-of-program policy; repeated seek/reopen; UI timecode formatting.
+
+## 5. implementation acceptance
+
+commit `b1b2c4df` で、既存 `Transport` にimmutable `RationalTime` originを追加し、
+`PlaybackSession` はcanonical `start_frame`を `CANONICAL_SAMPLE_RATE` でexact timeへ変換した。
+`MixProducer`には元の`start_frame`を渡したまま、`perceptual_time()`はnegotiated device rateの
+elapsed frameだけを時刻化してoriginへchecked-addする。48 kHz / 44.1 kHzのnonZERO origin、
+device wait、absolute frame plan、ZERO回帰をfocused testで固定した。
+
+- `cargo fmt --check`: PASS
+- `cargo test --locked -p motolii-transport`: PASS
+- `cargo test --locked -p motolii-audio`: PASS（既存real-device smoke 1件はdefault evidence外としてignored）
+- `git diff --check` / exact six-file allowlist: PASS
+- fresh Grok direct read-only review: `ACCEPT`, P0/P1/P2=0
+- integration / `main`: `b1b2c4df211373b9032d2ce2048db19037605f0a`
+
+P07-C3 real-device gate、ProductApp lifetime/program construction/control/current-time handoff、
+M3-final human visual checkは未実行であり、本受入では繰り上げない。
