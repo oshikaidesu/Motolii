@@ -1,6 +1,6 @@
 # P04-C2 Easing product producer / popup adoption contract
 
-状態: **決定 / IMPLEMENT（P04-C2 Easing product route） / EXTERNAL_GATE_PENDING**
+状態: **CONTRACT_CLOSED / IMPLEMENTATION_PENDING / EXTERNAL_GATE_PENDING**
 
 日付: 2026-08-04
 
@@ -72,8 +72,7 @@ ADOPTION ROUTE: REUSE identities, D2 and trigger; add one Position-only action a
 REJECTED CANDIDATES: Stage activeInterval input bridge; SpikePresetStore; second wgpu device;
   test counters; hardcoded interval identity; generic popup/channel framework; new dependency;
   advanced interpolation semantics; User settings preset persistence
-THIN MOTOLII SEAM: React anchor/layout intent -> private Host re-derivation/session -> existing queue
-  enum/action handling location
+THIN MOTOLII SEAM: React anchor/layout intent is re-derived and admitted by the private Host session, then reaches the existing queue enum/action handling location.
 THIN MOTOLII RESIDUAL: Position-only interval admission, stale rejection and product-specific oracle
 RETIREMENT: static disabled trigger behavior once the product route is accepted; spike-only state,
   counters and persistence doubles remain non-product evidence
@@ -89,24 +88,24 @@ pattern/oracle, not a store, second device, or product window implementation to 
 
 ## 4. next implementation boundary and oracle
 
-`P04-C2-EASING` is the next single product implementation boundary. Its exact implementation allowlist
-is: `ui/motolii-web/src/candidates/EasingTriggerCandidate.jsx`,
-`ui/motolii-web/src/candidates/StageChromeCandidate.jsx`,
+`P04-C2-EASING` is the next single product implementation boundary. Its exact source allowlist is
+`ui/motolii-web/src/candidates/EasingTriggerCandidate.jsx`,
+`ui/motolii-web/src/candidates/StageChromeCandidate.jsx`, the **new planned**
 `ui/motolii-web/src/host/stage-easing-intent-codec.js`,
-`ui/motolii-web/src/host/stage-transport-main.jsx`, `ui/motolii-web/vite.host.config.js`, the generated
-closure `ui/motolii-web/generated-host/stage-transport.html`,
-`ui/motolii-web/generated-host/asset-manifest.json`,
-`ui/motolii-web/generated-host/assets/stageTransport-D2Rp8zl5.js`, and
-`ui/motolii-web/generated-host/assets/stageHostBridge-C2ejaXPt.js`; and the corresponding
-`crates/motolii-ui/src/browser_host_runtime.rs` `include_bytes!` / route-filename
-replacements; `crates/motolii-ui/src/stage_chrome_host_runtime.rs`,
+`ui/motolii-web/src/host/stage-transport-main.jsx`, and `ui/motolii-web/vite.host.config.js`;
+`crates/motolii-ui/src/stage_chrome_host_runtime.rs`,
 `crates/motolii-ui/src/product_runtime.rs`, and `crates/motolii-ui/src/document_edit_runtime.rs`; plus
 focused tests in `ui/motolii-web/guard-tests/stage-easing-intent-codec.test.mjs`,
 `crates/motolii-ui/src/stage_chrome_host_runtime.rs`, `crates/motolii-ui/src/product_runtime.rs`, and
-`crates/motolii-ui/src/document_edit_runtime.rs`. It may not alter `motolii-doc`, public APIs,
+`crates/motolii-ui/src/document_edit_runtime.rs`. Generated output is limited to the affected
+`ui/motolii-web/generated-host/**` closure, its `asset-manifest.json`, and the corresponding
+`crates/motolii-ui/src/browser_host_runtime.rs` `include_bytes!` / route-filename replacements;
+content-hashed asset filenames are generated rather than fixed. No unrelated generated asset may
+change. It may not alter `motolii-doc`, public APIs,
 serde/journal schema, plugin contracts, User settings, dependencies, or Inspector/Add Position Key.
 
-`PRIMARY_ORACLE`: the separate strict codec accepts only anchor/layout data; a current strict-interior
+`PRIMARY_ORACLE`: the separate strict codec accepts only anchor/layout data; `Hold` input and every
+advanced preset reject with intent/action/command 0; a current strict-interior
 Position interval can open one session; every stale/cancel/duplicate/no-interval path performs zero
 enqueue and zero Document write; a same-value accepted terminal also performs zero queue action,
 command, journal, Undo, and publish; each value-changing accepted basic/custom terminal action reaches
