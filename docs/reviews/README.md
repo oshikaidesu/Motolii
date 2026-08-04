@@ -474,6 +474,7 @@
 | [2026-08-04-inspector-position-key-product-entry-reclosure.md](2026-08-04-inspector-position-key-product-entry-reclosure.md) | Inspector Position行をAdd Position Key通常入口へ選定し、normal row/current-playhead carrier不在をlocal WAIT_TARGETへ再締結 |
 | [2026-08-04-inspector-position-row-direct-promotion-contract.md](2026-08-04-inspector-position-row-direct-promotion-contract.md) | Inspector Position行のConst(Vec2) read-only projectionを既存product source内で直接昇格し、intent/queueを別WAIT_TARGETへ分離 |
 | [2026-08-04-inspector-position-row-implementation-acceptance.md](2026-08-04-inspector-position-row-implementation-acceptance.md) | CU-0A08ITIA finite Const X/Y・tag-only animated・inert同一source row・provenanceのcode/main受入 |
+| [2026-08-04-inspector-position-key-one-shot-intent-contract.md](2026-08-04-inspector-position-key-one-shot-intent-contract.md) | CU-0A08ITIBをsequence-only private one-shot、separate Host inbox、current primary/playhead、既存prepareへ閉じてDO化 |
 | [2026-08-04-native-timeline-editor-playhead-contract.md](2026-08-04-native-timeline-editor-playhead-contract.md) | P02-C3 native Timeline editor playhead producer/carrier契約 |
 | [2026-08-04-native-timeline-editor-playhead-implementation-acceptance.md](2026-08-04-native-timeline-editor-playhead-implementation-acceptance.md) | P02-C3 native Timeline editor playhead ruler producer/carrier実装受入 |
 | [2026-08-04-position-active-interval-read-model-contract.md](2026-08-04-position-active-interval-read-model-contract.md) | P04-C2 ACTIVE-INTERVAL Position read-model契約 |
