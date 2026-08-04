@@ -1,6 +1,6 @@
 # P07-C1D product playback spine contract
 
-状態: **DO / CLOSED CONTRACT**
+状態: **DONE / ACCEPTED / EXTERNAL_GATE_PENDING**
 
 日付: 2026-08-04
 
@@ -102,3 +102,5 @@ parallel output. Fresh separate-family read-only review must find P0/P1=0.
 `NON-GOALS`: seek command/UI, previous/next key, Space binding, looping, playback rate, JKL, waveform, audio scrub,
 background cache framework, hot document audio rebuild, Export change, Document/journal/schema, public command/codec,
 new dependency beyond existing workspace `motolii-audio`/`motolii-transport`, or M3 completion.
+
+Implementation acceptance is recorded in [P07-C1D product playback spine implementation acceptance](2026-08-04-p07-c1d-product-playback-spine-implementation-acceptance.md).
