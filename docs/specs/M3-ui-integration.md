@@ -240,7 +240,7 @@ U2h、Rectangle D2、製品surfaceを実装しない。G0-8+K1a後のU0f、M4依
 U1g/U1h/U3f/U8b、D5依存のU5、GAP-16依存のU7、未統一Browser P41、
 U9bのengine/sandbox/保存判断等へ到達したら、`LANG-TS-F0`と`VSM-C2`を迂回せずSTOPする。
 
-[P02-C3 native Timeline editor playhead contract](../reviews/2026-08-04-native-timeline-editor-playhead-contract.md)のnative ruler→private `ProductApp` editor playhead→native Timeline/Stage producer/carrierはcommit `75ccd5e7`でcode/main `DONE`となった（[implementation acceptance](../reviews/2026-08-04-native-timeline-editor-playhead-implementation-acceptance.md)）。親P02-C3は未完であり、normal Position rowとInspector wiringは`CU-0A08ITI WAIT_TARGET`のまま、P04-C2 Easing、focus/visible range、playback/audio Transport、snap、Document意味は本境界に入れない。current implementation `DO`はなし。
+[P02-C3 native Timeline editor playhead contract](../reviews/2026-08-04-native-timeline-editor-playhead-contract.md)のnative ruler→private `ProductApp` editor playhead→native Timeline/Stage producer/carrierはcommit `75ccd5e7`でcode/main `DONE`となった（[implementation acceptance](../reviews/2026-08-04-native-timeline-editor-playhead-implementation-acceptance.md)）。親P02-C3は未完であり、normal Position rowとInspector wiringは`CU-0A08ITI WAIT_TARGET`のまま、focus/visible range、playback/audio Transport、snap、Document意味は本境界に入れない。P04-C2では[ACTIVE-INTERVAL Position read-model contract](../reviews/2026-08-04-position-active-interval-read-model-contract.md)だけが`DO`で、private strict-interior read-only derivationを閉じる。outgoing `Interp` commandと製品 Easing routeは未成立のため、親P04-C2は`TARGET_MISSING`のままである。
 
 ## GR-UI審判割当表
 
