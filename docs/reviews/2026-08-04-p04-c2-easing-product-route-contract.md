@@ -16,8 +16,8 @@ React Easing trigger click { anchor, layout_epoch }
   -> ProductApp / Host: current Document + primary + editor_playhead.current から再導出
   -> native popup session / admission
   -> one basic preset or validated custom Bezier release
-  -> DocumentEditQueue { LayerId, KeyframeId, Interp }
-  -> existing SetPositionKeyInterp D2 prepare/CAS -> 1 journal command / 1 Undo / publish
+  -> DocumentEditQueue Position-only action { LayerId, KeyframeId, Interp }
+  -> SetPositionKeyInterp D2 prepare/CAS -> 1 journal command / 1 Undo / publish
 ```
 
 `Document` が key、`Interp`、revision と Undo の唯一の正本である。React は anchor と
@@ -36,37 +36,44 @@ User settings へ保存しない。
    Position interval を再導出する。interval 不在なら popup/session/queue write は 0。
 3. opening session は private に layer、left/right key IDs/times、left `Interp`、projection generation、
    layout epoch と transient token を capture する。既存 G0-9 の placement、session、cancel patternを
-   使用し、shared GPU context で native popup を開く。
+   使用する。second device は禁止するが、product shared context の採択は実装で現行 owner を証明してから行う。
 4. preset selection 又は custom Bezier release の直前に Host は current generation/layout epoch と
    strict-interior interval を再検証する。token closed、duplicate、cancel、generation/layout mismatch、
    key/time/left identity mismatch は queue enqueue 0 / Document write 0 で閉じる。
-5. accepted terminal action は `DocumentEditQueue` に `(LayerId, KeyframeId, Interp)`だけを一回 enqueue
-   する。既存 D2 `SetPositionKeyInterp` prepare が old value を read し、command CAS が durable guard に
-   なる。一 basic preset 又は custom release は 1 queue action = 1 journal command = 1 Undo/publish、drag
-   中は 0 write である。
+5. accepted terminal action は `DocumentEditQueue` のこの boundary で追加する Position-only action に
+   `(LayerId, KeyframeId, Interp)`だけを一回 enqueue する。既存 D2 `SetPositionKeyInterp` prepare が old
+   value を read し、command CAS が durable guard になる。一 basic preset 又は custom release は、**値が
+   変わる時だけ** 1 queue action = 1 journal command = 1 Undo/publish、drag 中は 0 write である。same-value
+   accepted terminal は no-op とし、queue action / command / journal / Undo / publish はすべて 0 で閉じる。
 
-basic presets are exact: `Linear -> Interp::Linear`; `Smooth -> Bezier { .4, .0, .2, 1.0 }`;
-`Ease In -> Bezier { .42, .0, 1.0, 1.0 }`; `Ease Out -> Bezier { .0, .0, .58, 1.0 }`;
-custom is `Interp::Bezier` after the existing finite and `x1/x2 in [0, 1]` validation. `Hold` is
-available only where the product-owned source actually exposes it. Bounce, Elastic and other
-advanced visual cards emit no intent and are disabled until their semantic authority is separately
-closed; their presence in an oracle does not authorize a durable mapping.
+basic preset provenance is the React source authority
+[`docs/mocks-ui/src/candidates/EasingGraphCandidate.jsx:16-41`](../mocks-ui/src/candidates/EasingGraphCandidate.jsx):
+`Linear -> Interp::Linear`; `Smooth -> Bezier { .4, .0, .2, 1.0 }`; `Ease In -> Bezier { .42, .0,
+1.0, 1.0 }`; `Ease Out -> Bezier { .0, .0, .58, 1.0 }`. Custom is `Interp::Bezier`, admitted by the
+existing [`validate_interp`](../../crates/motolii-doc/src/doc_keyframe.rs) boundary. `Hold` is not in
+that product source and is not part of this boundary. Bounce, Elastic and other advanced visual cards
+emit no intent and are disabled until their semantic authority is separately closed; their presence in
+an oracle does not authorize a durable mapping.
 
 ## 3. known-implementation adoption preflight
 
 ```text
 MECHANISM CLASS: interval easing popup terminal admission over an existing D2 interpolation command
 KNOWN IMPLEMENTATION SEARCH: P04-C2 ACTIVE-INTERVAL and INTERP-COMMAND contracts/acceptance;
-  native Easing popup G0-9 acceptance; product-owned EasingTriggerCandidate; Inspector surface-local
-  strict codec/publish pattern; existing ProductApp primary/playhead and DocumentEditQueue
+  native Easing popup G0-9 acceptance; product-owned EasingTriggerCandidate and React source-authority
+  EasingGraphCandidate preset values; Inspector surface-local strict codec/inbox pattern; existing ProductApp primary/playhead
+  and DocumentEditQueue enum/action handling location
 CANDIDATES: direct React trigger reuse; strict-interior PositionActiveInterval recomputation;
-  G0-9 popup placement/session/cancel pattern; shared wgpu context; existing queue and D2 command
-ADOPTION ROUTE: REUSE identities, D2, queue and trigger; PATTERN for surface-local inbound,
+  G0-9 popup placement/session/cancel pattern; existing ProductApp GPU owner; existing queue enum/action
+  handling location and D2 command
+ADOPTION ROUTE: REUSE identities, D2 and trigger; add one Position-only action at the existing queue
+  enum/action handling location; PATTERN for surface-local inbound,
   popup session/admission and exactly-once cancel/stale handling
 REJECTED CANDIDATES: Stage activeInterval input bridge; SpikePresetStore; second wgpu device;
   test counters; hardcoded interval identity; generic popup/channel framework; new dependency;
   advanced interpolation semantics; User settings preset persistence
 THIN MOTOLII SEAM: React anchor/layout intent -> private Host re-derivation/session -> existing queue
+  enum/action handling location
 THIN MOTOLII RESIDUAL: Position-only interval admission, stale rejection and product-specific oracle
 RETIREMENT: static disabled trigger behavior once the product route is accepted; spike-only state,
   counters and persistence doubles remain non-product evidence
@@ -74,35 +81,57 @@ BUILD JUSTIFICATION: NONE
 BUILD: FORBIDDEN
 ```
 
-The React source asset is not copied or reduced. The existing Stage transport contract remains
-output-only; this new inbound is surface-local and does not generalize its snapshot, channel model,
-or Host runtime. The G0-9 spike is a pattern/oracle, not a store, second device, or product window
-implementation to import wholesale.
+The React source asset is not copied or reduced. The existing Stage transport `{snapshot, subscribe,
+publish}` output bridge remains byte-for-byte the output-only bridge: no snapshot-object field addition
+and no `postMessage` addition to that bridge are allowed. The inbound is a separate, surface-local Stage
+transport sender/inbox contract, not a generalized snapshot/channel/Host framework. The G0-9 spike is a
+pattern/oracle, not a store, second device, or product window implementation to import wholesale.
 
 ## 4. next implementation boundary and oracle
 
-`P04-C2-EASING` is the next single product implementation boundary. Its allowlist is limited to the
-existing product Easing trigger closure, its Stage/surface-local Host runtime and ProductApp
-coordinator, the product-local adoption of the G0-9 native popup/session pattern, the existing
-`DocumentEditQueue` action handling location, and focused tests for the route. It may not alter
-`motolii-doc`, public APIs, serde/journal schema, plugin contracts, User settings, dependencies, or
-Inspector/Add Position Key.
+`P04-C2-EASING` is the next single product implementation boundary. Its exact implementation allowlist
+is: `ui/motolii-web/src/candidates/EasingTriggerCandidate.jsx`,
+`ui/motolii-web/src/candidates/StageChromeCandidate.jsx`,
+`ui/motolii-web/src/host/stage-easing-intent-codec.js`,
+`ui/motolii-web/src/host/stage-transport-main.jsx`, `ui/motolii-web/vite.host.config.js`, the generated
+closure `ui/motolii-web/generated-host/stage-transport.html`,
+`ui/motolii-web/generated-host/asset-manifest.json`,
+`ui/motolii-web/generated-host/assets/stageTransport-D2Rp8zl5.js`, and
+`ui/motolii-web/generated-host/assets/stageHostBridge-C2ejaXPt.js`; and the corresponding
+`crates/motolii-ui/src/browser_host_runtime.rs` `include_bytes!` / route-filename
+replacements; `crates/motolii-ui/src/stage_chrome_host_runtime.rs`,
+`crates/motolii-ui/src/product_runtime.rs`, and `crates/motolii-ui/src/document_edit_runtime.rs`; plus
+focused tests in `ui/motolii-web/guard-tests/stage-easing-intent-codec.test.mjs`,
+`crates/motolii-ui/src/stage_chrome_host_runtime.rs`, `crates/motolii-ui/src/product_runtime.rs`, and
+`crates/motolii-ui/src/document_edit_runtime.rs`. It may not alter `motolii-doc`, public APIs,
+serde/journal schema, plugin contracts, User settings, dependencies, or Inspector/Add Position Key.
 
-`PRIMARY_ORACLE`: the strict codec accepts only anchor/layout data; a current strict-interior
+`PRIMARY_ORACLE`: the separate strict codec accepts only anchor/layout data; a current strict-interior
 Position interval can open one session; every stale/cancel/duplicate/no-interval path performs zero
-enqueue and zero Document write; each accepted basic/custom terminal action reaches exactly one
-existing `SetPositionKeyInterp` command, one Undo/publish, and changes only the left key's outgoing
-`Interp`. `REPO_LANES`: focused React/source-asset, Host/session/queue and D2 integration tests,
+enqueue and zero Document write; a same-value accepted terminal also performs zero queue action,
+command, journal, Undo, and publish; each value-changing accepted basic/custom terminal action reaches
+exactly one `SetPositionKeyInterp` command, one journal command, one Undo/publish, and changes only the
+left key's outgoing `Interp`. `REPO_LANES`: focused React/source-asset, Host/session/queue and D2 integration tests,
 then relevant Rust/Node lanes, `git diff --check`, and `./scripts/check-docs.sh`. `EXTERNAL_GATES`:
 native visual parity, real z-order/focus/dismiss, DPI/second monitor and accessibility remain for
 the M3-final manual/real-device checklist; repository tests do not close them.
+
+## 4.1 2026-07-22 native popup acceptance §5 reconciliation
+
+This contract does not silently overturn [the 2026-07-22 native popup acceptance §5](2026-07-22-m3-native-easing-popup-acceptance.md#5-製品接続の停止線). Its stopping items are reconciled one by one:
+
+- `U4a` interval/outgoing owner is discharged by `ACTIVE-INTERVAL` and `INTERP-COMMAND`; the latter is the accepted D2 owner.
+- `U2h` primary projection is reused as the existing `ProductApp::primary`. No focus identity is invented; popup focus remains an external gate.
+- The curve gesture's one-gesture / one-D2-command / one-Undo rule is this contract's value-changing terminal admission; same-value, cancel, stale, and duplicate terminals are zero-command paths.
+- React trigger promotion/oracle is discharged through R2B, the Stage trigger acceptance, and the G0-9 pattern; no second React popup state is introduced.
+- Platform z-order, focus, DPI/second-monitor, and accessibility acceptance is deliberately resequenced to the user-directed M3-final manual/real-device checklist and remains `EXTERNAL_GATE_PENDING`.
 
 ## 5. explicit non-goals / remaining waits
 
 - Inspector Add Position Key stays separate as `CU-0A08ITI WAIT_TARGET`; no Inspector Position row,
   projection, or typed intent is inferred here.
-- User preset save/delete/reorder/favorite persistence stays `WAIT_TARGET` pending a real User
-  settings codec; basic editing does not wait on it.
+- User preset save/delete/reorder/favorite persistence remains owned by the Host User settings codec;
+  that work is `WAIT_TARGET` until its real codec is selected. Basic editing does not wait on it.
 - Copy/paste, advanced Bounce/Elastic/Cyclic/Random/Steps/Elastic Steps semantics, a generic popup
   or input framework, new dependencies, public API/Document/schema changes, and a second GPU device
   are out of scope.
