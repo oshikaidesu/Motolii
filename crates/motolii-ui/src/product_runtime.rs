@@ -22,6 +22,7 @@ use crate::browser_host_runtime::{
 use crate::document_edit_runtime::{
     AddPositionKeyRequest, AttachEffectRequest, DocumentEditDispatchError, DocumentEditQueue,
     DocumentEditRuntime, DocumentEditRuntimeError, PlaceRectangleRequest, PublishedDocument,
+    SetPositionKeyInterpRequest,
 };
 use crate::host_pointer_capture::{HostPointerCancel, HostPointerCandidate};
 use crate::inspector_host_runtime::{
@@ -34,11 +35,13 @@ use crate::native_timeline_renderer::{
     key_tools_logical_rect, timeline_ruler_logical_rect, timeline_time_surface_logical_rect,
     NativeTimelineRenderState, NativeTimelineRenderer, NativeTimelineRendererError,
 };
+use crate::product_easing_popup::{PopupTerminal, ProductEasingPopup, ProductEasingPopupError};
 use crate::render_worker::{
     RenderGeneration, RenderRequest, RenderWorker, RenderWorkerClient, RenderWorkerError,
 };
 use crate::stage_chrome_host_runtime::{
-    StageChromeHostRuntime, StageChromeHostRuntimeError, StageTransportSnapshot,
+    StageChromeHostRuntime, StageChromeHostRuntimeError, StageEasingIntent, StageEasingIntentError,
+    StageTransportSnapshot,
 };
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
 use crate::timeline_move_gesture::{TimelineMoveGesture, TimelineMoveRequest};
@@ -152,6 +155,7 @@ pub(crate) struct ProductApp {
     browser: Option<BrowserHostRuntime>,
     inspector: Option<InspectorHostRuntime>,
     stage_chrome: Option<StageChromeHostRuntime>,
+    easing_popup: Option<(ProductEasingPopup, PositionActiveInterval, u64, u64)>,
     timeline_tools: Option<TimelineToolsHostRuntime>,
     window: Option<Arc<Window>>,
     gpu: Arc<GpuCtx>,
@@ -656,6 +660,7 @@ impl ProductApp {
             browser: None,
             inspector: None,
             stage_chrome: None,
+            easing_popup: None,
             timeline_tools: None,
             window: None,
             gpu,
@@ -796,6 +801,12 @@ impl ProductApp {
             }))
             .map_err(InspectorHostRuntimeError::from)
             .map_err(ProductRuntimeError::from)?;
+        let wake_proxy = self.proxy.clone();
+        stage_chrome
+            .register_easing_wake(Arc::new(move || {
+                let _ = wake_proxy.send_event(ProductEvent::Wake);
+            }))
+            .map_err(ProductRuntimeError::from)?;
         self.inspector = Some(inspector);
         self.stage_chrome = Some(stage_chrome);
         self.timeline_tools = Some(timeline_tools);
@@ -925,6 +936,9 @@ impl ProductApp {
             }
             Ok(None) => {}
             Err(error) => return self.fail(event_loop, error),
+        }
+        if let Err(error) = self.process_stage_easing_intents(event_loop) {
+            return self.fail(event_loop, error);
         }
         let Some(browser) = &self.browser else {
             return;
@@ -1934,6 +1948,114 @@ impl ProductApp {
         }
     }
 
+    fn process_stage_easing_intents(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+    ) -> Result<(), ProductRuntimeError> {
+        let intent = {
+            let Some(stage_chrome) = &self.stage_chrome else {
+                return Ok(());
+            };
+            stage_chrome.take_easing_intent()?
+        };
+        let Some(StageEasingIntent {
+            anchor,
+            layout_epoch,
+        }) = intent
+        else {
+            return Ok(());
+        };
+        if self.easing_popup.is_some()
+            || self.layout.map(|layout| layout.epoch) != Some(layout_epoch)
+        {
+            return Ok(());
+        }
+        let Some(interval) = position_active_interval(
+            &self.current_document,
+            self.primary,
+            self.editor_playhead.current,
+        ) else {
+            return Ok(());
+        };
+        let (window, gfx) = match (&self.window, &self.gfx) {
+            (Some(window), Some(gfx)) => (window, gfx),
+            _ => return Ok(()),
+        };
+        let popup = ProductEasingPopup::open(
+            event_loop,
+            window,
+            &gfx.instance,
+            &gfx.adapter,
+            Arc::clone(&self.gpu),
+            anchor,
+            interval.left_interp,
+        )?;
+        self.easing_popup = Some((popup, interval, self.projection_generation, layout_epoch));
+        Ok(())
+    }
+
+    pub(crate) fn handle_easing_popup_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_id: winit::window::WindowId,
+        event: winit::event::WindowEvent,
+    ) {
+        let terminal = {
+            let Some((popup, _, _, _)) = &mut self.easing_popup else {
+                return;
+            };
+            if popup.window_id() != window_id {
+                return;
+            }
+            match popup.handle_event(&event) {
+                Ok(terminal) => terminal,
+                Err(error) => return self.fail(event_loop, error),
+            }
+        };
+        let Some(terminal) = terminal else {
+            return;
+        };
+        let (_, expected_interval, expected_generation, expected_layout_epoch) =
+            self.easing_popup.take().expect("popup was present");
+        let PopupTerminal::Commit(interp) = terminal else {
+            return;
+        };
+        if self.projection_generation != expected_generation
+            || self.layout.map(|layout| layout.epoch) != Some(expected_layout_epoch)
+            || position_active_interval(
+                &self.current_document,
+                self.primary,
+                self.editor_playhead.current,
+            )
+            .as_ref()
+                != Some(&expected_interval)
+            || expected_interval.left_interp == interp
+        {
+            return;
+        }
+        self.document_queue
+            .push_set_position_key_interp(SetPositionKeyInterpRequest {
+                target: expected_interval.layer,
+                key: expected_interval.left_id,
+                interp,
+            });
+        match self.document_runtime.process_next(
+            &mut self.document_queue,
+            self.primary,
+            self.projection_generation,
+        ) {
+            Ok(Some(published)) => self.adopt_full_publish(event_loop, published, "stage-easing"),
+            Ok(None) => {}
+            Err(error) => self.fail(event_loop, error),
+        }
+    }
+
+    pub(crate) fn easing_popup_window_id(&self) -> Option<winit::window::WindowId> {
+        self.easing_popup
+            .as_ref()
+            .map(|(popup, _, _, _)| popup.window_id())
+    }
+
     fn submit_stage_projection(&self) -> Result<RenderGeneration, ProductRuntimeError> {
         let generation = self
             .render_client
@@ -2580,6 +2702,8 @@ fn position_active_interval(
 }
 
 struct ProductSurface {
+    instance: wgpu::Instance,
+    adapter: wgpu::Adapter,
     surface: wgpu::Surface<'static>,
     gpu: Arc<GpuCtx>,
     config: wgpu::SurfaceConfiguration,
@@ -2649,6 +2773,8 @@ impl ProductSurface {
             mapped_at_creation: false,
         });
         Ok(Self {
+            instance: parts.instance,
+            adapter: parts.adapter,
             surface,
             gpu: Arc::clone(gpu),
             config,
@@ -3101,6 +3227,10 @@ pub(crate) enum ProductRuntimeError {
     Inspector(#[from] InspectorHostRuntimeError),
     #[error(transparent)]
     StageChrome(#[from] StageChromeHostRuntimeError),
+    #[error(transparent)]
+    StageEasingIntent(#[from] StageEasingIntentError),
+    #[error(transparent)]
+    EasingPopup(#[from] ProductEasingPopupError),
     #[error(transparent)]
     TimelineTools(#[from] TimelineToolsHostRuntimeError),
     #[error(transparent)]

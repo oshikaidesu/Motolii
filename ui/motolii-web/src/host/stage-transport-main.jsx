@@ -6,6 +6,7 @@ import {
   readStageHostSnapshot,
   subscribeStageTransportSnapshot,
 } from "./stageHostBridge.js";
+import { encodeStageEasingIntent } from "./stage-easing-intent-codec.js";
 
 const snapshot = readStageHostSnapshot(window.__MOTOLII_STAGE_HOST__);
 const container = document.querySelector("#motolii-stage-transport-root");
@@ -23,6 +24,11 @@ function render(nextSnapshot) {
         tempoStatus={nextSnapshot.tempoStatus}
         qualityStatus={nextSnapshot.qualityStatus}
         activeInterval={nextSnapshot.activeInterval}
+        onOpenEasing={(anchor) => {
+          window.__MOTOLII_STAGE_EASING__.postMessage(
+            encodeStageEasingIntent(anchor, window.__MOTOLII_STAGE_EASING__.layoutEpoch),
+          );
+        }}
       />
     </main>,
   );

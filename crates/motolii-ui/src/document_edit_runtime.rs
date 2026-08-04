@@ -7,11 +7,12 @@ use motolii_core::{RationalTime, RationalTimeError};
 use motolii_doc::{
     AddPositionKeyPreparation, AddPositionKeyPrepareError, Clip, ClipSource, Command, CommandError,
     Document, DocumentError, DocumentPluginError, DocumentWriter, DraftDocParam,
-    EffectDefinitionDraft, EffectDefinitionId, EffectId, ItemEnvelope, JournalEdit, LayerId,
-    LayerIdError, ParentLocator, PreparedPluginRecipe, ProjectError, ProjectSession,
+    EffectDefinitionDraft, EffectDefinitionId, EffectId, ItemEnvelope, JournalEdit, KeyframeId,
+    LayerId, LayerIdError, ParentLocator, PreparedPluginRecipe, ProjectError, ProjectSession,
     SaveProjectOptions, ScalarPropertyId, StandardShape, TrackItem, UndoError, VectorContent,
     VectorRecipe,
 };
+use motolii_eval::Interp;
 use motolii_plugin::{PluginCatalog, PluginKind};
 
 use crate::timeline_move_gesture::TimelineMoveRequest;
@@ -25,6 +26,7 @@ pub(crate) enum DocumentEditAction {
     AttachEffect(AttachEffectRequest),
     SetEffectParam(SetEffectParamRequest),
     AddPositionKey(AddPositionKeyRequest),
+    SetPositionKeyInterp(SetPositionKeyInterpRequest),
     MoveClip(TimelineMoveRequest),
     TrimClip(TimelineTrimRequest),
     ReplacePrimary(LayerId),
@@ -41,6 +43,7 @@ impl DocumentEditAction {
             Self::AttachEffect(_) => DocumentEditActionKind::AttachEffect,
             Self::SetEffectParam(_) => DocumentEditActionKind::SetEffectParam,
             Self::AddPositionKey(_) => DocumentEditActionKind::AddPositionKey,
+            Self::SetPositionKeyInterp(_) => DocumentEditActionKind::SetPositionKeyInterp,
             Self::MoveClip(_) => DocumentEditActionKind::MoveClip,
             Self::TrimClip(_) => DocumentEditActionKind::TrimClip,
             Self::ReplacePrimary(_) => DocumentEditActionKind::ReplacePrimary,
@@ -58,6 +61,7 @@ pub(crate) enum DocumentEditActionKind {
     AttachEffect,
     SetEffectParam,
     AddPositionKey,
+    SetPositionKeyInterp,
     MoveClip,
     TrimClip,
     ReplacePrimary,
@@ -90,6 +94,11 @@ impl DocumentEditQueue {
     pub(crate) fn push_add_position_key(&mut self, request: AddPositionKeyRequest) {
         self.pending
             .push_back(DocumentEditAction::AddPositionKey(request));
+    }
+
+    pub(crate) fn push_set_position_key_interp(&mut self, request: SetPositionKeyInterpRequest) {
+        self.pending
+            .push_back(DocumentEditAction::SetPositionKeyInterp(request));
     }
 
     pub(crate) fn push_move_clip(&mut self, request: TimelineMoveRequest) {
@@ -190,6 +199,13 @@ pub(crate) struct SetEffectParamRequest {
 pub(crate) struct AddPositionKeyRequest {
     pub(crate) target: LayerId,
     pub(crate) time: RationalTime,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct SetPositionKeyInterpRequest {
+    pub(crate) target: LayerId,
+    pub(crate) key: KeyframeId,
+    pub(crate) interp: Interp,
 }
 
 impl SetEffectParamRequest {
@@ -498,6 +514,39 @@ impl DocumentEditRuntime {
                     Err(error) => return Err(error.into()),
                 };
                 let AddPositionKeyPreparation::Prepared { command, .. } = preparation else {
+                    return Ok(None);
+                };
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::SetPositionKeyInterp(request) => {
+                if current_primary != Some(request.target) {
+                    return Ok(None);
+                }
+                let command = match self.writer.prepare_set_position_key_interp(
+                    request.target,
+                    request.key,
+                    request.interp,
+                ) {
+                    Ok(command) => command,
+                    Err(
+                        CommandError::LayerNotFound(_)
+                        | CommandError::PositionKeyInterpSourceUnsupported { .. }
+                        | CommandError::PositionKeyInterpValueTypeMismatch { .. }
+                        | CommandError::PositionKeyNotFound { .. }
+                        | CommandError::PositionKeyInterpInvalid { .. },
+                    ) => return Ok(None),
+                    Err(error) => return Err(error.into()),
+                };
+                let Some(command) = command else {
                     return Ok(None);
                 };
                 let projection_generation =
@@ -1468,6 +1517,71 @@ mod tests {
             other => panic!("expected Position keyframes after redo, got {other:?}"),
         };
         assert_eq!(redone_key_id, key_id);
+    }
+
+    #[test]
+    fn position_interp_queue_commits_once_and_same_value_is_a_durable_noop() {
+        let (document, _) = fixture();
+        let primary = fixture_layer(&document);
+        let time = RationalTime::try_new(1, 2).unwrap();
+        let (path, mut runtime) = open_runtime(document);
+        let journal = journal_path_for_document(&path);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_add_position_key(AddPositionKeyRequest {
+            target: primary,
+            time,
+        });
+        let keyed = runtime
+            .process_next(&mut queue, Some(primary), 0)
+            .unwrap()
+            .expect("Position key must publish");
+        let key = match &runtime
+            .writer
+            .find_envelope(primary)
+            .unwrap()
+            .transform
+            .position
+        {
+            motolii_doc::DocParam::Keyframes(track) => {
+                track.keys().iter().find(|key| key.t == time).unwrap().id
+            }
+            _ => unreachable!(),
+        };
+        let journal_before = fs::metadata(&journal).map(|meta| meta.len()).unwrap_or(0);
+        queue.push_set_position_key_interp(SetPositionKeyInterpRequest {
+            target: primary,
+            key,
+            interp: Interp::Bezier {
+                x1: 0.4,
+                y1: 0.0,
+                x2: 0.2,
+                y2: 1.0,
+            },
+        });
+        let changed = runtime
+            .process_next(&mut queue, Some(primary), keyed.projection_generation)
+            .unwrap()
+            .expect("changed interpolation must publish once");
+        assert_eq!(changed.kind, DocumentEditActionKind::SetPositionKeyInterp);
+        assert_eq!(runtime.history_lengths(), (2, 0));
+        let journal_after_change = fs::metadata(&journal).unwrap().len();
+        assert!(journal_after_change > journal_before);
+        queue.push_set_position_key_interp(SetPositionKeyInterpRequest {
+            target: primary,
+            key,
+            interp: Interp::Bezier {
+                x1: 0.4,
+                y1: 0.0,
+                x2: 0.2,
+                y2: 1.0,
+            },
+        });
+        assert!(runtime
+            .process_next(&mut queue, Some(primary), changed.projection_generation)
+            .unwrap()
+            .is_none());
+        assert_eq!(runtime.history_lengths(), (2, 0));
+        assert_eq!(fs::metadata(&journal).unwrap().len(), journal_after_change);
     }
 
     #[test]

@@ -1,5 +1,8 @@
 //! 確定済みStage React chromeをnative viewportの上下へ載せるprivate Host。
 
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+
 use wry::{Rect, WebView, WebViewBuilder};
 
 use crate::browser_host_runtime::product_asset_response;
@@ -13,6 +16,96 @@ pub(crate) struct StageChromeHostRuntime {
     header: WebView,
     transport: WebView,
     latest_layout_epoch: Option<u64>,
+    easing_inbox: Arc<Mutex<StageEasingInbox>>,
+    wake: Arc<Mutex<Option<StageEasingWake>>>,
+}
+
+type StageEasingWake = Arc<dyn Fn() + Send + Sync>;
+type StageEasingCallback = (
+    Arc<Mutex<StageEasingInbox>>,
+    Arc<Mutex<Option<StageEasingWake>>>,
+);
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct StageEasingIntent {
+    pub(crate) anchor: LogicalRect,
+    pub(crate) layout_epoch: u64,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StageEasingMessage {
+    kind: StageEasingKind,
+    anchor: StageEasingAnchor,
+    #[serde(rename = "layoutEpoch")]
+    layout_epoch: u64,
+}
+
+#[derive(Debug, serde::Deserialize)]
+enum StageEasingKind {
+    #[serde(rename = "open-position-easing")]
+    OpenPositionEasing,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StageEasingAnchor {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+#[derive(Debug, Default)]
+struct StageEasingInbox {
+    pending: VecDeque<StageEasingIntent>,
+}
+
+impl StageEasingInbox {
+    fn accept(&mut self, raw: &str) -> Result<(), StageEasingIntentError> {
+        let message: StageEasingMessage = serde_json::from_str(raw)?;
+        let _ = message.kind;
+        let anchor = LogicalRect {
+            x: message.anchor.x,
+            y: message.anchor.y,
+            width: message.anchor.width,
+            height: message.anchor.height,
+        };
+        if message.layout_epoch == 0
+            || !anchor.x.is_finite()
+            || !anchor.y.is_finite()
+            || !anchor.width.is_finite()
+            || !anchor.height.is_finite()
+            || anchor.width < 0.0
+            || anchor.height < 0.0
+        {
+            return Err(StageEasingIntentError::Invalid);
+        }
+        if !self.pending.is_empty() {
+            return Err(StageEasingIntentError::InboxFull);
+        }
+        self.pending.push_back(StageEasingIntent {
+            anchor,
+            layout_epoch: message.layout_epoch,
+        });
+        Ok(())
+    }
+
+    fn take(&mut self) -> Option<StageEasingIntent> {
+        self.pending.pop_front()
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum StageEasingIntentError {
+    #[error("Stage Easing intent JSON failed")]
+    Json(#[from] serde_json::Error),
+    #[error("Stage Easing intent is invalid")]
+    Invalid,
+    #[error("Stage Easing inbox is full")]
+    InboxFull,
+    #[error("Stage Easing inbox is poisoned")]
+    InboxPoisoned,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -81,17 +174,23 @@ publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
 }});
 }})();"#
         );
+        let easing_inbox = Arc::new(Mutex::new(StageEasingInbox::default()));
+        let wake = Arc::new(Mutex::new(None::<StageEasingWake>));
+        let callback_inbox = Arc::clone(&easing_inbox);
+        let callback_wake = Arc::clone(&wake);
         let header = build_stage_webview(
             window,
             HEADER_URL,
             header_initialization_script,
             "stage-header",
+            None,
         )?;
         let transport = build_stage_webview(
             window,
             TRANSPORT_URL,
             &transport_initialization_script,
             "stage-transport",
+            Some((callback_inbox, callback_wake)),
         )?;
         crate::ui_numeric_trace::emit(format_args!(
             "kind=webview surface=stage-chrome event=created elapsed_ms={:.3}",
@@ -101,6 +200,8 @@ publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
             header,
             transport,
             latest_layout_epoch: None,
+            easing_inbox,
+            wake,
         })
     }
 
@@ -133,6 +234,9 @@ publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
         }
         set_webview_bounds(&self.header, header)?;
         set_webview_bounds(&self.transport, transport)?;
+        self.transport.evaluate_script(&format!(
+            "window.__MOTOLII_STAGE_EASING__=Object.freeze({{layoutEpoch:{layout_epoch},postMessage:(message)=>window.ipc.postMessage(message)}});"
+        ))?;
         crate::ui_numeric_trace::emit(format_args!(
             "kind=webview surface=stage-chrome event=bounds layout_epoch={} \
              header_x={:.3} header_y={:.3} header_width={:.3} header_height={:.3} \
@@ -150,6 +254,27 @@ publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
         self.latest_layout_epoch = Some(layout_epoch);
         Ok(())
     }
+
+    pub(crate) fn register_easing_wake(
+        &self,
+        wake: StageEasingWake,
+    ) -> Result<(), StageEasingIntentError> {
+        *self
+            .wake
+            .lock()
+            .map_err(|_| StageEasingIntentError::InboxPoisoned)? = Some(wake);
+        Ok(())
+    }
+
+    pub(crate) fn take_easing_intent(
+        &self,
+    ) -> Result<Option<StageEasingIntent>, StageEasingIntentError> {
+        Ok(self
+            .easing_inbox
+            .lock()
+            .map_err(|_| StageEasingIntentError::InboxPoisoned)?
+            .take())
+    }
 }
 
 fn javascript_json_parse_argument<T: serde::Serialize>(
@@ -163,8 +288,9 @@ fn build_stage_webview(
     entry_url: &'static str,
     initialization_script: &str,
     surface: &'static str,
+    easing: Option<StageEasingCallback>,
 ) -> Result<WebView, wry::Error> {
-    WebViewBuilder::new()
+    let builder = WebViewBuilder::new()
         .with_bounds(Rect {
             position: wry::dpi::LogicalPosition::new(0.0, 0.0).into(),
             size: wry::dpi::LogicalSize::new(1.0, 1.0).into(),
@@ -183,8 +309,25 @@ fn build_stage_webview(
                 ));
             }
             accepted
+        });
+    let builder = if let Some((inbox, wake)) = easing {
+        builder.with_ipc_handler(move |request| {
+            let accepted = inbox
+                .lock()
+                .map_err(|_| StageEasingIntentError::InboxPoisoned)
+                .and_then(|mut inbox| inbox.accept(request.body()));
+            if accepted.is_ok() {
+                if let Ok(wake) = wake.lock() {
+                    if let Some(wake) = wake.as_ref() {
+                        wake();
+                    }
+                }
+            }
         })
-        .build_as_child(window)
+    } else {
+        builder
+    };
+    builder.build_as_child(window)
 }
 
 fn set_webview_bounds(webview: &WebView, rect: LogicalRect) -> Result<(), wry::Error> {

@@ -24,9 +24,16 @@ impl winit::application::ApplicationHandler<crate::product_runtime::ProductEvent
     fn window_event(
         &mut self,
         event_loop: &winit::event_loop::ActiveEventLoop,
-        _window_id: winit::window::WindowId,
+        window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
+        let popup_event = self
+            .easing_popup_window_id()
+            .is_some_and(|popup_id| popup_id == window_id);
+        if popup_event {
+            self.handle_easing_popup_event(event_loop, window_id, event);
+            return;
+        }
         match event {
             winit::event::WindowEvent::CloseRequested => event_loop.exit(),
             winit::event::WindowEvent::Resized(size) => {

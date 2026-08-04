@@ -26,6 +26,7 @@ mod layout_runtime_adapter;
 mod native_host_layout;
 mod native_timeline_renderer;
 mod parameter_control;
+mod product_easing_popup;
 mod product_runtime;
 mod product_runtime_adapter;
 mod render_worker;

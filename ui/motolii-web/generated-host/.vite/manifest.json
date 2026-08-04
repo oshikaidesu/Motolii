@@ -1,6 +1,6 @@
 {
-  "_stageHostBridge-DnzDWEX0.js": {
-    "file": "assets/stageHostBridge-DnzDWEX0.js",
+  "_stageHostBridge-CbK80xri.js": {
+    "file": "assets/stageHostBridge-CbK80xri.js",
     "name": "stageHostBridge",
     "imports": [
       "_tokens-CcZ3RUC1.js"
@@ -49,23 +49,23 @@
     ]
   },
   "stage-header.html": {
-    "file": "assets/stageHeader-C5eiGbKp.js",
+    "file": "assets/stageHeader-Dm10QD7x.js",
     "name": "stageHeader",
     "src": "stage-header.html",
     "isEntry": true,
     "imports": [
       "_tokens-CcZ3RUC1.js",
-      "_stageHostBridge-DnzDWEX0.js"
+      "_stageHostBridge-CbK80xri.js"
     ]
   },
   "stage-transport.html": {
-    "file": "assets/stageTransport-BX-hxsrf.js",
+    "file": "assets/stageTransport-_WQKpYvj.js",
     "name": "stageTransport",
     "src": "stage-transport.html",
     "isEntry": true,
     "imports": [
       "_tokens-CcZ3RUC1.js",
-      "_stageHostBridge-DnzDWEX0.js"
+      "_stageHostBridge-CbK80xri.js"
     ]
   },
   "timeline-tools.html": {
