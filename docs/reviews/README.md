@@ -481,6 +481,7 @@
 | [2026-08-04-p07-c1-playback-session-product-route-preflight.md](2026-08-04-p07-c1-playback-session-product-route-preflight.md) | P07-C1 mixed AudioProgram / PlaybackSession 製品routeの4経路 preflight・TARGET_MISSING |
 | [2026-08-04-p07-c1a-video-only-program-supply-contract.md](2026-08-04-p07-c1a-video-only-program-supply-contract.md) | P07-C1A zero-source AudioProgramへ既存composition durationを供給floorとして再利用するclosed contract |
 | [2026-08-04-p07-c1b-mixed-playback-session-contract.md](2026-08-04-p07-c1b-mixed-playback-session-contract.md) | P07-C1B existing PlaybackSessionをAudioProgram/MixProducerへ置換するadapter contract |
+| [2026-08-04-p07-c1c-playback-origin-clock-contract.md](2026-08-04-p07-c1c-playback-origin-clock-contract.md) | P07-C1C nonZERO start_frameをexisting Transport sole clock originへ運ぶclosed contract |
 | [2026-08-04-position-active-interval-read-model-contract.md](2026-08-04-position-active-interval-read-model-contract.md) | P04-C2 ACTIVE-INTERVAL Position read-model契約 |
 | [2026-08-04-interp-command-d2-contract.md](2026-08-04-interp-command-d2-contract.md) | P04-C2 INTERP-COMMAND Position outgoing Interp D2 command契約 |
 | [2026-08-04-interp-command-d2-implementation-acceptance.md](2026-08-04-interp-command-d2-implementation-acceptance.md) | P04-C2 INTERP-COMMAND D2実装受入。dedicated command/Writer/Undo/journal replayをDONE / ACCEPTED |

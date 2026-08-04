@@ -39,6 +39,7 @@
 
 | Phase | 状態 | 現在の出口 |
 |---|---|---|
+| M3/P07-C1C | **`DO / CONTRACT CLOSED`** | existing PlaybackSessionの`start_frame`とTransport clock originを同一にし、nonZERO playhead再生のZERO巻戻りを先に閉じる。ProductApp/React/controlは含めない |
 | M3/P07-C1B | **`DONE / ACCEPTED / MAIN`** | commit `25365aa8`でexisting PlaybackSessionをsingle-cache routeから`AudioProgram` / `MixProducer`へ一file置換した。ProductApp lifetime/control/time handoffは親P07-C1の`TARGET_MISSING`へ残す |
 | M0 | `DONE` | spike完了。S2は`ffmpeg-sidecar`クレート不採用、自前子process pipe／CFR seek成立まで。VFR、長尺／4K、pool、停止中readのkillは製品完成証拠にせずK4／GAP-26へ分離 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み。RenderTargetPoolは直列2枚を下限にbranch livenessで伸長するが、O(n²)未来scan最適化、fp16／path fusion、40-layer性能は未成立。R9/T11は当時の歴史sign-offで、現行製品Stage／実素材release受入はGAP-32。出荷hardening候補G1〜G8は完了条件外で、2026-07-23再照合の未到達process/artifact reliabilityはGAP-26、GPU health分類はGAP-27、同期export readbackの原因分離／staging採択はGAP-29、GPU RGB→YUV export接続はGAP-31。G7の同期1-frame boundedをcopy重畳完成、decode側GPU色変換や出力tagをinverse変換完成とみなさない |

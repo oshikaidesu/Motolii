@@ -124,6 +124,12 @@ time to Timeline/Stage. Playback and scrub precedence, seek generation invalidat
 and late producer/session shutdown must be fixed by existing-owner evidence before code dispatch.
 The source must show that repaint frequency cannot advance the time.
 
+The source audit found a narrower prerequisite: `PlaybackSession` starts `MixProducer` at
+`start_frame`, but its `Transport` interprets elapsed `frames_supplied` from timeline ZERO.
+[P07-C1C](2026-08-04-p07-c1c-playback-origin-clock-contract.md) closes the immutable nonZERO timeline
+origin inside the existing sole clock before ProductApp handoff. It does not select the missing
+ProductApp consumer or pause/seek/end policy.
+
 ### D. actual UI / Host control source and typed intent — **MISSING**
 
 The current native timeline control surface has ruler scrub input, but the source audit found no
@@ -139,8 +145,8 @@ and failure/recovery routing.
 
 ## 4. admissible next disposition
 
-`P07-C1` remains `TARGET_MISSING / PREFLIGHT ONLY`. P07-C1A and P07-C1B are accepted; neither invents
-a product owner. The next parent work is a
+`P07-C1` remains `TARGET_MISSING / PREFLIGHT ONLY`. P07-C1A and P07-C1B are accepted; P07-C1C is the
+next bounded prerequisite `DO`. None invents a product owner. The next parent work after C is a
 fresh read-only source audit that attempts to close the four listed facts one by one. If an existing
 real control source is found but full playback remains unclosed, a future authority owner may choose
 another explicitly bounded `REDUCE` slice. If any fact remains absent, that subfact stays
