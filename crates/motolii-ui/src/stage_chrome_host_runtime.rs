@@ -15,10 +15,52 @@ pub(crate) struct StageChromeHostRuntime {
     latest_layout_epoch: Option<u64>,
 }
 
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub(crate) struct StageTransportSnapshot {
+    mode: &'static str,
+    timecode: &'static str,
+    #[serde(rename = "barPosition")]
+    bar_position: &'static str,
+    #[serde(rename = "tempoStatus")]
+    tempo_status: &'static str,
+    #[serde(rename = "qualityStatus")]
+    quality_status: &'static str,
+    #[serde(rename = "activeInterval")]
+    active_interval: Option<StageActiveInterval>,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+struct StageActiveInterval {
+    #[serde(rename = "objectName")]
+    object_name: String,
+    channel: &'static str,
+}
+
+impl StageTransportSnapshot {
+    pub(crate) fn with_position_active_interval(object_name: Option<String>) -> Self {
+        Self {
+            mode: "RECTANGLE",
+            timecode: "00:00.0",
+            bar_position: "BAR 0.0.00",
+            tempo_status: "120 BPM · SNAP BEAT",
+            quality_status: "DRAFT · FP16 · 1/2",
+            active_interval: object_name
+                .filter(|name| !name.is_empty())
+                .map(|object_name| StageActiveInterval {
+                    object_name,
+                    channel: "Position",
+                }),
+        }
+    }
+}
+
 impl StageChromeHostRuntime {
-    pub(crate) fn new(window: &winit::window::Window) -> Result<Self, StageChromeHostRuntimeError> {
+    pub(crate) fn new(
+        window: &winit::window::Window,
+        snapshot: &StageTransportSnapshot,
+    ) -> Result<Self, StageChromeHostRuntimeError> {
         let created_at = std::time::Instant::now();
-        let initialization_script = r#"window.__MOTOLII_STAGE_HOST__=Object.freeze({
+        let header_initialization_script = r#"window.__MOTOLII_STAGE_HOST__=Object.freeze({
 snapshot:Object.freeze({
 mode:"RECTANGLE",
 timecode:"00:00.0",
@@ -27,12 +69,28 @@ tempoStatus:"120 BPM · SNAP BEAT",
 qualityStatus:"DRAFT · FP16 · 1/2"
 })
 });"#;
-        let header =
-            build_stage_webview(window, HEADER_URL, initialization_script, "stage-header")?;
+        let encoded_snapshot = javascript_json_parse_argument(snapshot)?;
+        let transport_initialization_script = format!(
+            r#"window.__MOTOLII_STAGE_HOST__=(()=>{{
+let listener=null;
+let current=JSON.parse({encoded_snapshot});
+return Object.freeze({{
+get snapshot(){{return current;}},
+subscribe:(next)=>{{if(typeof next!=="function"||listener!==null)throw new TypeError("invalid Stage transport subscriber");listener=next;}},
+publish:(next)=>{{current=next;if(listener!==null)listener(current);}}
+}});
+}})();"#
+        );
+        let header = build_stage_webview(
+            window,
+            HEADER_URL,
+            header_initialization_script,
+            "stage-header",
+        )?;
         let transport = build_stage_webview(
             window,
             TRANSPORT_URL,
-            initialization_script,
+            &transport_initialization_script,
             "stage-transport",
         )?;
         crate::ui_numeric_trace::emit(format_args!(
@@ -44,6 +102,21 @@ qualityStatus:"DRAFT · FP16 · 1/2"
             transport,
             latest_layout_epoch: None,
         })
+    }
+
+    pub(crate) fn publish(
+        &self,
+        snapshot: &StageTransportSnapshot,
+    ) -> Result<(), StageChromeHostRuntimeError> {
+        let encoded_snapshot = javascript_json_parse_argument(snapshot)?;
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=webview surface=stage-transport event=publish payload_bytes={}",
+            encoded_snapshot.len(),
+        ));
+        self.transport.evaluate_script(&format!(
+            "window.__MOTOLII_STAGE_HOST__.publish(JSON.parse({encoded_snapshot}));"
+        ))?;
+        Ok(())
     }
 
     pub(crate) fn set_bounds(
@@ -77,6 +150,12 @@ qualityStatus:"DRAFT · FP16 · 1/2"
         self.latest_layout_epoch = Some(layout_epoch);
         Ok(())
     }
+}
+
+fn javascript_json_parse_argument<T: serde::Serialize>(
+    snapshot: &T,
+) -> Result<String, serde_json::Error> {
+    serde_json::to_string(&serde_json::to_string(snapshot)?)
 }
 
 fn build_stage_webview(
@@ -119,4 +198,37 @@ fn set_webview_bounds(webview: &WebView, rect: LogicalRect) -> Result<(), wry::E
 pub(crate) enum StageChromeHostRuntimeError {
     #[error("Stage chrome WebView failed")]
     WebView(#[from] wry::Error),
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stage_transport_snapshot_projects_only_non_empty_position_interval_names() {
+        let active = serde_json::to_value(StageTransportSnapshot::with_position_active_interval(
+            Some("Rectangle".to_owned()),
+        ))
+        .unwrap();
+        assert_eq!(
+            active,
+            serde_json::json!({
+                "mode": "RECTANGLE",
+                "timecode": "00:00.0",
+                "barPosition": "BAR 0.0.00",
+                "tempoStatus": "120 BPM · SNAP BEAT",
+                "qualityStatus": "DRAFT · FP16 · 1/2",
+                "activeInterval": { "objectName": "Rectangle", "channel": "Position" }
+            })
+        );
+        for name in [None, Some(String::new())] {
+            assert_eq!(
+                serde_json::to_value(StageTransportSnapshot::with_position_active_interval(name))
+                    .unwrap()["activeInterval"],
+                serde_json::Value::Null,
+            );
+        }
+    }
 }

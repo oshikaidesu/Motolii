@@ -9,6 +9,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { validatePostPromotionChanges } from "./browser-post-promotion-provenance.mjs";
 import { decodeInspectorReadModel } from "../src/read-model/inspectorReadModelDecoder.js";
+import {
+  readStageHostSnapshot,
+  subscribeStageTransportSnapshot,
+} from "../src/host/stageHostBridge.js";
 
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PRODUCT_DIR = path.resolve(TEST_DIR, "..");
@@ -1849,6 +1853,10 @@ export {
 
 test("keeps fixed Stage chrome DOM and private read-only Host projection", async () => {
   const source = await readFile(abs(CURRENT_STAGE_CHROME_SOURCE), "utf8");
+  const transportMain = await readFile(
+    abs("ui/motolii-web/src/host/stage-transport-main.jsx"),
+    "utf8",
+  );
   const bridge = await readFile(
     abs("ui/motolii-web/src/host/stageHostBridge.js"),
     "utf8",
@@ -1870,12 +1878,32 @@ test("keeps fixed Stage chrome DOM and private read-only Host projection", async
     'aria-label="次のkeyへ"',
     'id="time"',
     'className="quality"',
+    'import { EasingTriggerCandidate } from "./EasingTriggerCandidate.jsx";',
+    '<EasingTriggerCandidate activeInterval={activeInterval} pressed={false} />',
   ]) {
     assert.equal(source.includes(token), true, `missing fixed Stage token ${token}`);
+  }
+  for (const token of [
+    "readStageHostSnapshot",
+    "subscribeStageTransportSnapshot",
+    "activeInterval={nextSnapshot.activeInterval}",
+  ]) {
+    assert.equal(transportMain.includes(token), true, `missing Stage transport token ${token}`);
+  }
+  for (const token of ["activeInterval", "subscribe", "publish"]) {
+    assert.equal(bridge.includes(token), true, `missing Stage Host bridge token ${token}`);
   }
   for (const forbidden of ["useState", "useReducer", "localStorage", "fetch(", "document."]) {
     assert.equal(source.includes(forbidden), false);
     assert.equal(bridge.includes(forbidden), false);
+  }
+  for (const forbidden of [
+    "interval-easing__placeholder",
+    '<button className="interval-easing"',
+    "onClick",
+  ]) {
+    assert.equal(source.includes(forbidden), false);
+    assert.equal(transportMain.includes(forbidden), false);
   }
   for (const token of [
     "height: 23px",
@@ -1886,6 +1914,80 @@ test("keeps fixed Stage chrome DOM and private read-only Host projection", async
   ]) {
     assert.equal(css.includes(token), true, `missing fixed Stage CSS ${token}`);
   }
+});
+
+test("keeps the static Stage header bridge separate from the active transport projection", () => {
+  const header = readStageHostSnapshot({
+    snapshot: {
+      mode: "RECTANGLE",
+      timecode: "00:00.0",
+      barPosition: "BAR 0.0.00",
+      tempoStatus: "120 BPM · SNAP BEAT",
+      qualityStatus: "DRAFT · FP16 · 1/2",
+    },
+  });
+  assert.equal(header.activeInterval, null);
+
+  let subscriber = null;
+  const transportBridge = {
+    snapshot: {
+      mode: "RECTANGLE",
+      timecode: "00:00.0",
+      barPosition: "BAR 0.0.00",
+      tempoStatus: "120 BPM · SNAP BEAT",
+      qualityStatus: "DRAFT · FP16 · 1/2",
+      activeInterval: { objectName: "Rectangle", channel: "Position" },
+    },
+    subscribe(next) {
+      subscriber = next;
+    },
+    publish() {},
+  };
+  const transport = readStageHostSnapshot(transportBridge);
+  assert.deepEqual(transport.activeInterval, {
+    objectName: "Rectangle",
+    channel: "Position",
+  });
+  assert.equal(
+    readStageHostSnapshot({
+      ...transportBridge,
+      snapshot: { ...transportBridge.snapshot, activeInterval: null },
+    }).activeInterval,
+    null,
+  );
+  subscribeStageTransportSnapshot(transportBridge, () => {});
+  assert.equal(typeof subscriber, "function");
+  assert.throws(
+    () => readStageHostSnapshot({ ...transportBridge, snapshot: { ...transportBridge.snapshot, activeInterval: undefined } }),
+    TypeError,
+  );
+  assert.throws(
+    () => readStageHostSnapshot({
+      ...transportBridge,
+      snapshot: { ...transportBridge.snapshot, unexpected: true },
+    }),
+    TypeError,
+  );
+  assert.throws(
+    () => readStageHostSnapshot({
+      ...transportBridge,
+      snapshot: {
+        ...transportBridge.snapshot,
+        activeInterval: { objectName: "", channel: "Position" },
+      },
+    }),
+    TypeError,
+  );
+  assert.throws(
+    () => readStageHostSnapshot({
+      ...transportBridge,
+      snapshot: {
+        ...transportBridge.snapshot,
+        activeInterval: { objectName: "Rectangle", channel: "Position", extra: true },
+      },
+    }),
+    TypeError,
+  );
 });
 
 test("validates product export/consumer import topology via parsed AST", async () => {

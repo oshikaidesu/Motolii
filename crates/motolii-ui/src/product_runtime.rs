@@ -5,7 +5,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use motolii_core::{CanonicalPoint, Quality, RationalTime};
-use motolii_doc::{Command, EffectId, EvaluationTime, KeyframeId, LayerId, TrackItem};
+use motolii_doc::{
+    Command, DocParam, DocValue, EffectId, EvaluationTime, KeyframeId, LayerId, TrackItem,
+};
 use motolii_eval::DataTracks;
 use motolii_gpu::GpuCtx;
 use winit::dpi::LogicalSize;
@@ -35,7 +37,9 @@ use crate::native_timeline_renderer::{
 use crate::render_worker::{
     RenderGeneration, RenderRequest, RenderWorker, RenderWorkerClient, RenderWorkerError,
 };
-use crate::stage_chrome_host_runtime::{StageChromeHostRuntime, StageChromeHostRuntimeError};
+use crate::stage_chrome_host_runtime::{
+    StageChromeHostRuntime, StageChromeHostRuntimeError, StageTransportSnapshot,
+};
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
 use crate::timeline_move_gesture::{TimelineMoveGesture, TimelineMoveRequest};
 use crate::timeline_projection::{
@@ -747,7 +751,14 @@ impl ProductApp {
             elapsed_ms(inspector_started),
         ));
         let stage_chrome_started = Instant::now();
-        let stage_chrome = StageChromeHostRuntime::new(&window)?;
+        let stage_chrome = StageChromeHostRuntime::new(
+            &window,
+            &stage_transport_snapshot(
+                &self.current_document,
+                self.primary,
+                self.editor_playhead.current,
+            ),
+        )?;
         crate::ui_numeric_trace::emit(format_args!(
             "kind=startup phase=stage-chrome-created phase_ms={:.3}",
             elapsed_ms(stage_chrome_started),
@@ -1101,6 +1112,9 @@ impl ProductApp {
                     self.current_document = published.snapshot;
                     self.primary = published.primary;
                     self.projection_generation = published.projection_generation;
+                    if let Err(error) = self.publish_stage_transport() {
+                        return self.fail(event_loop, error);
+                    }
                     if let Some(inspector) = &self.inspector {
                         if let Err(error) = inspector.publish(
                             &self.current_document,
@@ -1518,6 +1532,7 @@ impl ProductApp {
     }
 
     fn refresh_editor_playhead(&self) -> Result<(), ProductRuntimeError> {
+        self.publish_stage_transport()?;
         self.submit_stage_projection()?;
         self.request_redraw();
         Ok(())
@@ -1759,6 +1774,9 @@ impl ProductApp {
                 self.current_document = published.snapshot;
                 self.primary = published.primary;
                 self.projection_generation = published.projection_generation;
+                if let Err(error) = self.publish_stage_transport() {
+                    return self.fail(event_loop, error);
+                }
                 if let Some(inspector) = &self.inspector {
                     if let Err(error) = inspector.publish(
                         &self.current_document,
@@ -1964,6 +1982,9 @@ impl ProductApp {
         self.current_document = published.snapshot;
         self.primary = published.primary;
         self.projection_generation = published.projection_generation;
+        if let Err(error) = self.publish_stage_transport() {
+            return self.fail(event_loop, error);
+        }
         if let Some(inspector) = &self.inspector {
             if let Err(error) =
                 inspector.publish(&self.current_document, self.primary, self.active_effect_use)
@@ -1984,6 +2005,18 @@ impl ProductApp {
             return self.fail(event_loop, error);
         }
         self.request_redraw();
+    }
+
+    fn publish_stage_transport(&self) -> Result<(), ProductRuntimeError> {
+        if let Some(stage_chrome) = &self.stage_chrome {
+            publish_stage_transport_snapshot(
+                &self.current_document,
+                self.primary,
+                self.editor_playhead.current,
+                |snapshot| stage_chrome.publish(snapshot),
+            )?;
+        }
+        Ok(())
     }
 
     fn adopt_history_publish(
@@ -2409,6 +2442,98 @@ impl BrowserLifecycleCoordinator {
             .ok_or(ProductRuntimeError::BrowserInstanceEpochExhausted)?;
         Ok(BrowserRecoveryDecision::Replace { instance_epoch })
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct PositionActiveInterval {
+    layer: LayerId,
+    left_id: KeyframeId,
+    left_t: RationalTime,
+    right_id: KeyframeId,
+    right_t: RationalTime,
+    left_interp: motolii_eval::Interp,
+}
+
+fn stage_transport_snapshot(
+    document: &motolii_doc::Document,
+    primary: Option<LayerId>,
+    playhead: RationalTime,
+) -> StageTransportSnapshot {
+    let object_name = position_active_interval(document, primary, playhead).and_then(|interval| {
+        document
+            .layers
+            .display_name(interval.layer)
+            .filter(|name| !name.is_empty())
+            .map(str::to_owned)
+    });
+    StageTransportSnapshot::with_position_active_interval(object_name)
+}
+
+fn publish_stage_transport_snapshot<E>(
+    document: &motolii_doc::Document,
+    primary: Option<LayerId>,
+    playhead: RationalTime,
+    publish: impl FnOnce(&StageTransportSnapshot) -> Result<(), E>,
+) -> Result<(), E> {
+    let snapshot = stage_transport_snapshot(document, primary, playhead);
+    publish(&snapshot)
+}
+
+fn position_active_interval(
+    document: &motolii_doc::Document,
+    primary: Option<LayerId>,
+    playhead: RationalTime,
+) -> Option<PositionActiveInterval> {
+    fn find_envelope(items: &[TrackItem], target: LayerId) -> Option<&motolii_doc::ItemEnvelope> {
+        for item in items {
+            match item {
+                TrackItem::Clip(clip) if clip.envelope.layer_id == target => {
+                    return Some(&clip.envelope);
+                }
+                TrackItem::Group(group) if group.envelope.layer_id == target => {
+                    return Some(&group.envelope);
+                }
+                TrackItem::Group(group) => {
+                    if let Some(envelope) = find_envelope(&group.children, target) {
+                        return Some(envelope);
+                    }
+                }
+                TrackItem::Clip(_) => {}
+            }
+        }
+        None
+    }
+
+    let layer = primary?;
+    let envelope = document
+        .tracks
+        .iter()
+        .find_map(|track| find_envelope(&track.items, layer))?;
+    let DocParam::Keyframes(track) = &envelope.transform.position else {
+        return None;
+    };
+    let keys = track.keys();
+    if keys.len() < 2
+        || track.validate().is_err()
+        || keys
+            .iter()
+            .any(|key| !matches!(key.value, DocValue::Vec2(_)))
+    {
+        return None;
+    }
+    keys.windows(2).find_map(|pair| {
+        let [left, right] = pair else {
+            return None;
+        };
+        (left.t < playhead && playhead < right.t).then_some(PositionActiveInterval {
+            layer,
+            left_id: left.id,
+            left_t: left.t,
+            right_id: right.id,
+            right_t: right.t,
+            left_interp: left.interp,
+        })
+    })
 }
 
 struct ProductSurface {
@@ -2983,6 +3108,322 @@ pub(crate) enum ProductRuntimeError {
 mod tests {
     use super::*;
     use motolii_core::{ColorSpace, FrameDesc, PixelFormat};
+    use motolii_doc::{DocKeyframe, DocKeyframeTrack};
+
+    fn position_keyframe_document() -> (motolii_doc::Document, LayerId, [KeyframeId; 2]) {
+        let mut document = crate::static_preview::bootstrap_document().unwrap();
+        let layer = match &document.tracks[0].items[0] {
+            TrackItem::Clip(clip) => clip.envelope.layer_id,
+            TrackItem::Group(_) => unreachable!("bootstrap fixture is a clip"),
+        };
+        let ids = [KeyframeId::from_raw(101), KeyframeId::from_raw(102)];
+        let mut track = DocKeyframeTrack::new();
+        track.insert(DocKeyframe {
+            id: ids[0],
+            t: RationalTime::ZERO,
+            value: DocValue::Vec2([0.0, 0.0]),
+            interp: motolii_eval::Interp::Linear,
+        });
+        track.insert(DocKeyframe {
+            id: ids[1],
+            t: RationalTime::try_new(2, 1).unwrap(),
+            value: DocValue::Vec2([1.0, 1.0]),
+            interp: motolii_eval::Interp::Hold,
+        });
+        match &mut document.tracks[0].items[0] {
+            TrackItem::Clip(clip) => {
+                clip.envelope.transform.position = DocParam::Keyframes(track);
+            }
+            TrackItem::Group(_) => unreachable!("bootstrap fixture is a clip"),
+        }
+        (document, layer, ids)
+    }
+
+    #[test]
+    fn position_active_interval_returns_exact_strict_interior_identity_without_document_write() {
+        let (document, layer, ids) = position_keyframe_document();
+        let before = serde_json::to_vec(&document).unwrap();
+        let playhead = RationalTime::try_new(1, 1).unwrap();
+
+        assert_eq!(
+            position_active_interval(&document, Some(layer), playhead),
+            Some(PositionActiveInterval {
+                layer,
+                left_id: ids[0],
+                left_t: RationalTime::ZERO,
+                right_id: ids[1],
+                right_t: RationalTime::try_new(2, 1).unwrap(),
+                left_interp: motolii_eval::Interp::Linear,
+            })
+        );
+        assert_eq!(serde_json::to_vec(&document).unwrap(), before);
+    }
+
+    #[test]
+    fn position_active_interval_rejects_missing_primary_endpoints_and_non_vec2_position() {
+        let (mut document, layer, _) = position_keyframe_document();
+
+        assert_eq!(
+            position_active_interval(&document, None, RationalTime::ZERO),
+            None
+        );
+        assert_eq!(
+            position_active_interval(&document, Some(layer), RationalTime::ZERO),
+            None
+        );
+        assert_eq!(
+            position_active_interval(&document, Some(layer), RationalTime::try_new(2, 1).unwrap(),),
+            None
+        );
+
+        match &mut document.tracks[0].items[0] {
+            TrackItem::Clip(clip) => {
+                clip.envelope.transform.position = DocParam::const_f64(1.0);
+            }
+            TrackItem::Group(_) => unreachable!("bootstrap fixture is a clip"),
+        }
+        let before_unsupported = serde_json::to_vec(&document).unwrap();
+        assert_eq!(
+            position_active_interval(&document, Some(layer), RationalTime::try_new(1, 1).unwrap()),
+            None
+        );
+        assert_eq!(serde_json::to_vec(&document).unwrap(), before_unsupported);
+    }
+
+    #[test]
+    fn position_active_interval_fails_closed_for_every_non_position_or_incomplete_track_shape() {
+        let (document, layer, ids) = position_keyframe_document();
+        let interior = RationalTime::try_new(1, 1).unwrap();
+        for playhead in [
+            RationalTime::try_new(-1, 1).unwrap(),
+            RationalTime::try_new(3, 1).unwrap(),
+        ] {
+            let before = serde_json::to_vec(&document).unwrap();
+            assert_eq!(
+                position_active_interval(&document, Some(layer), playhead),
+                None
+            );
+            assert_eq!(serde_json::to_vec(&document).unwrap(), before);
+        }
+
+        let zero_keys = DocKeyframeTrack::new();
+        let mut one_key = DocKeyframeTrack::new();
+        one_key.insert(DocKeyframe {
+            id: ids[0],
+            t: RationalTime::ZERO,
+            value: DocValue::Vec2([0.0, 0.0]),
+            interp: motolii_eval::Interp::Linear,
+        });
+        let mut non_vec2 = DocKeyframeTrack::new();
+        non_vec2.insert(DocKeyframe {
+            id: ids[0],
+            t: RationalTime::ZERO,
+            value: DocValue::F64(0.0),
+            interp: motolii_eval::Interp::Linear,
+        });
+        non_vec2.insert(DocKeyframe {
+            id: ids[1],
+            t: RationalTime::try_new(2, 1).unwrap(),
+            value: DocValue::F64(1.0),
+            interp: motolii_eval::Interp::Linear,
+        });
+        let variants = [
+            DocParam::Keyframes(zero_keys),
+            DocParam::Keyframes(one_key),
+            DocParam::Keyframes(non_vec2),
+            DocParam::Vec2Axes {
+                x: Box::new(DocParam::const_f64(0.0)),
+                y: Box::new(DocParam::const_f64(0.0)),
+            },
+            DocParam::Data {
+                track: motolii_eval::DataTrackId("position".to_owned()),
+                fallback: DocValue::Vec2([0.0, 0.0]),
+            },
+            DocParam::LookAt {
+                target: layer,
+                axis: motolii_doc::LookAtAxis::PlusY,
+            },
+            DocParam::Follow {
+                target: layer,
+                offset: [0.0, 0.0],
+            },
+        ];
+        for param in variants {
+            let mut case = document.clone();
+            match &mut case.tracks[0].items[0] {
+                TrackItem::Clip(clip) => clip.envelope.transform.position = param,
+                TrackItem::Group(_) => unreachable!("bootstrap fixture is a clip"),
+            }
+            let before = serde_json::to_vec(&case).unwrap();
+            assert_eq!(position_active_interval(&case, Some(layer), interior), None);
+            assert_eq!(serde_json::to_vec(&case).unwrap(), before);
+        }
+
+        let before = serde_json::to_vec(&document).unwrap();
+        assert_eq!(
+            position_active_interval(&document, Some(LayerId::from_raw(999)), interior),
+            None
+        );
+        assert_eq!(serde_json::to_vec(&document).unwrap(), before);
+    }
+
+    #[test]
+    fn stage_transport_snapshot_depends_only_on_document_primary_and_playhead() {
+        let (document, layer, _) = position_keyframe_document();
+        let interior = RationalTime::try_new(1, 1).unwrap();
+        let outside = RationalTime::try_new(3, 1).unwrap();
+        let active =
+            serde_json::to_value(stage_transport_snapshot(&document, Some(layer), interior))
+                .unwrap();
+        assert_eq!(
+            active["activeInterval"],
+            serde_json::json!({ "objectName": "static-preview", "channel": "Position" })
+        );
+        assert_eq!(
+            serde_json::to_value(stage_transport_snapshot(&document, None, interior)).unwrap()
+                ["activeInterval"],
+            serde_json::Value::Null,
+        );
+        assert_eq!(
+            serde_json::to_value(stage_transport_snapshot(&document, Some(layer), outside))
+                .unwrap()["activeInterval"],
+            serde_json::Value::Null,
+        );
+        let mut replaced = document.clone();
+        match &mut replaced.tracks[0].items[0] {
+            TrackItem::Clip(clip) => {
+                clip.envelope.transform.position = DocParam::const_vec2([0.0, 0.0])
+            }
+            TrackItem::Group(_) => unreachable!("bootstrap fixture is a clip"),
+        }
+        assert_eq!(
+            serde_json::to_value(stage_transport_snapshot(&replaced, Some(layer), interior))
+                .unwrap()["activeInterval"],
+            serde_json::Value::Null,
+        );
+
+        let missing_name_layer = LayerId::from_raw(999);
+        let mut missing_name = document.clone();
+        match &mut missing_name.tracks[0].items[0] {
+            TrackItem::Clip(clip) => clip.envelope.layer_id = missing_name_layer,
+            TrackItem::Group(_) => unreachable!("bootstrap fixture is a clip"),
+        }
+        assert_eq!(
+            serde_json::to_value(stage_transport_snapshot(
+                &missing_name,
+                Some(missing_name_layer),
+                interior,
+            ))
+            .unwrap()["activeInterval"],
+            serde_json::Value::Null,
+        );
+
+        let mut empty_name = document.clone();
+        let empty_name_layer = empty_name.layers.allocate("").unwrap();
+        match &mut empty_name.tracks[0].items[0] {
+            TrackItem::Clip(clip) => clip.envelope.layer_id = empty_name_layer,
+            TrackItem::Group(_) => unreachable!("bootstrap fixture is a clip"),
+        }
+        assert_eq!(
+            serde_json::to_value(stage_transport_snapshot(
+                &empty_name,
+                Some(empty_name_layer),
+                interior,
+            ))
+            .unwrap()["activeInterval"],
+            serde_json::Value::Null,
+        );
+    }
+
+    #[test]
+    fn stage_transport_publish_delivers_one_exact_snapshot_without_document_write() {
+        let (document, layer, _) = position_keyframe_document();
+        let before = serde_json::to_vec(&document).unwrap();
+        let mut published = Vec::new();
+        publish_stage_transport_snapshot(
+            &document,
+            Some(layer),
+            RationalTime::try_new(1, 1).unwrap(),
+            |snapshot| {
+                published.push(snapshot.clone());
+                Ok::<_, ()>(())
+            },
+        )
+        .unwrap();
+        assert_eq!(published.len(), 1);
+        assert_eq!(
+            serde_json::to_value(&published[0]).unwrap()["activeInterval"],
+            serde_json::json!({ "objectName": "static-preview", "channel": "Position" })
+        );
+        assert_eq!(serde_json::to_vec(&document).unwrap(), before);
+
+        published.clear();
+        publish_stage_transport_snapshot(&document, None, RationalTime::ZERO, |snapshot| {
+            published.push(snapshot.clone());
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+        assert_eq!(published.len(), 1);
+        assert_eq!(
+            serde_json::to_value(&published[0]).unwrap()["activeInterval"],
+            serde_json::Value::Null,
+        );
+        assert_eq!(serde_json::to_vec(&document).unwrap(), before);
+    }
+
+    #[test]
+    fn stage_transport_production_lifecycle_has_only_the_admitted_publish_paths() {
+        let source = include_str!("product_runtime.rs");
+        let production = source.split("#[cfg(test)]").next().unwrap();
+        let method = |name: &str| {
+            let start = production.find(name).unwrap();
+            let tail = &production[start..];
+            let end = ["\n    fn ", "\n    pub(crate) fn "]
+                .into_iter()
+                .filter_map(|marker| tail[1..].find(marker).map(|end| end + 1))
+                .min()
+                .unwrap_or(tail.len());
+            &tail[..end]
+        };
+        let free_fn = |name: &str| {
+            let start = production.find(name).unwrap();
+            let tail = &production[start..];
+            &tail[..tail[1..]
+                .find("\nfn ")
+                .map(|end| end + 1)
+                .unwrap_or(tail.len())]
+        };
+
+        assert!(production.contains("StageChromeHostRuntime::new(\n            &window,\n            &stage_transport_snapshot("));
+        assert_eq!(
+            production.matches("self.publish_stage_transport()").count(),
+            4
+        );
+        assert!(method("fn refresh_editor_playhead").contains("self.publish_stage_transport()?"));
+        assert!(method("fn publish_stage_transport").contains("publish_stage_transport_snapshot("));
+        assert!(!method("fn update_layout").contains("publish_stage_transport"));
+        assert!(!method("fn update_layout").contains("refresh_editor_playhead"));
+        let cancel = method("fn cancel_editor_playhead");
+        assert!(cancel.contains(
+            "if self.editor_playhead.scrub.is_none() {\n            return Ok(());\n        }"
+        ));
+        assert!(cancel.contains("if changed {\n            self.refresh_editor_playhead()?;"));
+        let snapshot = free_fn("fn stage_transport_snapshot(");
+        let publish = free_fn("fn publish_stage_transport_snapshot<");
+        for body in [snapshot, publish] {
+            for forbidden in [
+                "journal",
+                "history",
+                "undo",
+                "document_queue",
+                "projection_generation",
+            ] {
+                assert!(!body.contains(forbidden));
+            }
+        }
+        assert!(snapshot.contains("document: &motolii_doc::Document"));
+        assert!(publish.contains("document: &motolii_doc::Document"));
+    }
 
     fn test_layout(epoch: u64) -> NativeHostLayout {
         test_layout_with(epoch, crate::layout::PanelLayout::built_in())
