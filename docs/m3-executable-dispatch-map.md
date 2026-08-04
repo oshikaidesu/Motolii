@@ -431,7 +431,7 @@ NODE INTERP-COMMAND  requires=[active_interval_identity] emits=[outgoing_interp_
 NODE P04-C2-DIAGNOSTIC-CORRECTION requires=[outgoing_interp_command] emits=[interp_diagnostic_label]
   state=DONE/ACCEPTED; commit=58b84e22; contract=reviews/2026-08-04-p04-c2-easing-product-route-contract.md#61-p04-c2-diagnostic-correction--do
   acceptance=reviews/2026-08-04-p04-c2-diagnostic-correction-implementation-acceptance.md
-  scope=diagnostic_projection::command_kind_copy exhaustive SetPositionKeyInterp label and one focused test only; no next implementation DO
+  scope=diagnostic_projection::command_kind_copy exhaustive SetPositionKeyInterp label and one focused test only; this diagnostic node authorizes no popup work; the separate C7A implementation DO is NODE P04-C2-EASING-C7A below
 NODE P04-C2-EASING-C7A requires=[active_interval_identity,outgoing_interp_command] emits=[easing_edit_route]
   state=CONTRACT_CLOSED/DO/EXTERNAL_GATE_PENDING; contract=reviews/2026-08-04-p04-c2-easing-product-route-contract.md#6-2026-08-04-terminal-adoption-amendment
   scope=direct egui::Context + egui_winit::State + egui_wgpu::Renderer 0.35/wgpu 29 over ProductApp sole EventLoop, existing ProductGpuParts/GpuCtx, real WindowId dispatch, one private module, and one Position-only request -> SetPositionKeyInterp. C7b in-surface visibility FAIL is caused by the opaque Stage child WebView; no second device/loop/WebView, framework, Timeline renderer copy, G0-9 state, or partial React/IPC route

@@ -132,8 +132,9 @@ This contract does not silently overturn [the 2026-07-22 native popup acceptance
 
 ## 5. explicit non-goals / remaining waits
 
-- Inspector Add Position Key stays separate as `CU-0A08ITI WAIT_TARGET`; no Inspector Position row,
-  projection, or typed intent is inferred here.
+- Inspector Add Position Key stays separate as `CU-0A08ITI DONE / ACCEPTED / EXTERNAL_GATE_PENDING`
+  at commit `98e38925`; this contract does not reopen or extend Inspector Position row, projection,
+  or typed intent work.
 - User preset save/delete/reorder/favorite persistence remains owned by the Host User settings codec;
   that work is `WAIT_TARGET` until its real codec is selected. Basic editing does not wait on it.
 - Copy/paste, advanced Bounce/Elastic/Cyclic/Random/Steps/Elastic Steps semantics, a generic popup
@@ -157,7 +158,8 @@ product meaning, producer, popup, queue action, or public surface.
 
 `PRIMARY_ORACLE`: the focused test proves the exact label for `CommandKind::SetPositionKeyInterp`; the
 match remains exhaustive. `REPO_LANES`: the focused Rust test, relevant `motolii-ui` Rust lane, and
-`git diff --check`. `EXTERNAL_GATES`: none. This is the only implementation `DO` emitted here.
+`git diff --check`. `EXTERNAL_GATES`: none. This diagnostic sub-boundary authorizes no popup work;
+the separate C7A implementation authority is §6.2.
 
 ### 6.2 `P04-C2-POPUP-TERMINAL-C7A` — contract closed / `DO`
 
