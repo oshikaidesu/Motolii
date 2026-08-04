@@ -1,6 +1,6 @@
 # P07-C1A video-only AudioProgram supply contract
 
-状態: **DO / CLOSED CONTRACT / IMPLEMENTATION PENDING**
+状態: **DONE / ACCEPTED / MAIN**
 
 日付: 2026-08-04
 
@@ -93,3 +93,17 @@ Export changes; new dependency; second clock; automatic varispeed; Timeline/Insp
 
 `COMPLETION`: focused tests prove the zero-source and short-source supply floor, diff stays inside the
 allowlist, and a fresh read-only reviewer finds no P0/P1 or clock/export/schema expansion.
+
+## 6. implementation acceptance
+
+commit `d14010ad` で3-file allowlistのままmain統合した。`AudioProgram` は
+`Document::composition.duration` をprivate scalarとして保持し、identity/resample共通の
+`program_end_frame` が既存source終端とのmaxを取る。zero-sourceとshort-sourceの両fixtureで
+ring由来zeroがcomposition frame数だけ `frames_supplied` を進め、callback underrun countersは0を
+保った。
+
+`cargo fmt --check`、`cargo test --locked -p motolii-audio --test mix_program`（10件）、
+`cargo test --locked -p motolii-audio`、`git diff --check` はPASSした。実audio-deviceを要する既存
+smoke 1件は従来どおりdefault laneでignoreであり、本粒のexternal gateではない。施工へ関与して
+いないfresh Grok direct read-only reviewはP0/P1/P2=0で`ACCEPT`した。親P07-C1のproduct routeと
+P07-C3実素材測定は未完のままである。

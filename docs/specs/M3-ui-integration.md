@@ -244,7 +244,7 @@ U9bのengine/sandbox/保存判断等へ到達したら、`LANG-TS-F0`と`VSM-C2`
 
 `P07-C1` は [mixed AudioProgram product PlaybackSession route preflight](../reviews/2026-08-04-p07-c1-playback-session-product-route-preflight.md) により `TARGET_MISSING / PREFLIGHT ONLY` である。native ruler の `editor_playhead` は transient scrub carrier であり、continuous playback clock ではない。既存 D5 の audio-device sole clock、`AudioProgram`／`MixProducer`、`Transport` は再利用候補だが、製品 `PlaybackSession` は single-`PcmCache` のまま production caller 0、`ProductApp` は transport/audio 非依存である。AudioProgram/MixProducer construction、session lifetime、Transport current-time handoff、actual UI/Host typed control source の4経路が同じbaseで実在 source とoracleにより閉じるまで、seek-only、fixed ZERO、UI/repaint/vsync、または新しい Space command/controllerを代替routeにせず、implementation `DO` を発行しない。P07-C3 の10分実素材測定とM3-final manual control/affordance gateも未実行のまま分離する。
 
-局所前提 `P07-C1A` だけは [video-only AudioProgram supply contract](../reviews/2026-08-04-p07-c1a-video-only-program-supply-contract.md) により `DO` とする。既存 `Document::composition.duration` を `AudioProgram` へ写し、identity/resample共通のproducer終端に対する供給floorとする。zero／short-source区間の正規mix無音はringを通るため既存 `frames_supplied` を進める。second clock、callback padding、Document/schema/Export変更、製品route接続は含めず、親4経路の `TARGET_MISSING` を変更しない。
+局所前提 `P07-C1A` は [video-only AudioProgram supply contract](../reviews/2026-08-04-p07-c1a-video-only-program-supply-contract.md) とcommit `d14010ad`でcode/main `DONE / ACCEPTED`となった。既存 `Document::composition.duration` を `AudioProgram` へ写し、identity/resample共通のproducer終端に対する供給floorとした。zero／short-source区間の正規mix無音はringを通るため既存 `frames_supplied` を進める。second clock、callback padding、Document/schema/Export変更、製品route接続は含めず、親4経路の `TARGET_MISSING` を変更しない。
 
 ## GR-UI審判割当表
 

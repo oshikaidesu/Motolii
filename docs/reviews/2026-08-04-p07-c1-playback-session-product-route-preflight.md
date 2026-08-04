@@ -87,9 +87,9 @@ need an already-owned typed product failure path, not silent single-source fallb
 
 The source audit also found a narrower prerequisite: a zero-source `AudioProgram` currently gives
 `MixProducer` an end frame of zero, so callback underrun does not advance the correct D5 clock.
-[P07-C1A](2026-08-04-p07-c1a-video-only-program-supply-contract.md) is authorized independently to
-reuse the existing composition duration as the shared producer supply floor. It does not close the
-missing product construction/root/cache owner described above.
+[P07-C1A](2026-08-04-p07-c1a-video-only-program-supply-contract.md) reused the existing composition
+duration as the shared producer supply floor and reached code/main `DONE / ACCEPTED` at commit
+`d14010ad`. It does not close the missing product construction/root/cache owner described above.
 
 ### B. PlaybackSession constructor and lifetime — **MISSING**
 
@@ -134,8 +134,8 @@ and failure/recovery routing.
 
 ## 4. admissible next disposition
 
-`P07-C1` remains `TARGET_MISSING / PREFLIGHT ONLY`. P07-C1A is the one bounded prerequisite `DO`:
-it may fix the zero-source supply floor without inventing a product owner. The next parent work is a
+`P07-C1` remains `TARGET_MISSING / PREFLIGHT ONLY`. P07-C1A is the accepted bounded prerequisite:
+it fixed the zero-source supply floor without inventing a product owner. The next parent work is a
 fresh read-only source audit that attempts to close the four listed facts one by one. If an existing
 real control source is found but full playback remains unclosed, a future authority owner may choose
 another explicitly bounded `REDUCE` slice. If any fact remains absent, that subfact stays
