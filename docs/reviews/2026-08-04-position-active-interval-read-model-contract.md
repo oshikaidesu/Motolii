@@ -1,6 +1,6 @@
 # P04-C2 ACTIVE-INTERVAL Position read-model contract
 
-状態: **決定 / WAIT_CONSUMER（ACTIVE-INTERVAL sub-boundary のみ） / HUMAN DEFERRED**
+状態: **決定 / IMPLEMENT（ACTIVE-INTERVAL read-only consumer sub-boundary のみ） / EXTERNAL_VISUAL_DEFERRED**
 
 日付: 2026-08-04
 
@@ -9,9 +9,9 @@
 既存 [P04-C2 decomposition/graph](../m3-executable-dispatch-map.md#6-ゴールへ至る依存ir) の
 `ACTIVE-INTERVAL` node の read rule だけを閉じる。これは新 ticket ID ではなく、
 `INTERP-COMMAND` より前の read-only node である。dispatch の `IMPLEMENT` / `DO` は
-implementation ledger が所有し、本契約自身や相談結果が状態を認可しない。現行local stateは
-[implementation-admissibility rejection](2026-08-04-position-active-interval-implementation-admissibility-rejection.md)
-により`WAIT_CONSUMER`である。親 `P04-C2` は、outgoing
+implementation ledger が所有し、本契約自身や相談結果が状態を認可しない。旧 compiler rejection は
+[Stage transport Easing trigger consumer contract](2026-08-04-stage-transport-easing-trigger-consumer-contract.md)
+が実在 mount/slot を選定したことで、この read-only consumer に限り解消した。親 `P04-C2` は、outgoing
 `Interp` command と製品 Easing route が未成立なので `TARGET_MISSING` のまま完了にしない。
 
 private `ProductApp` は、現在の `current_document`、primary `LayerId`、
@@ -78,15 +78,16 @@ BUILD: FORBIDDEN
 Fable blind review returned `ACCEPT_ISOLATED` as a read-only consultation. It is not authority
 for the graph, state, owner, or implementation.
 
-The React `EasingTriggerCandidate` is evidence for the existing `activeInterval` / disabled
-presentation shape only. It neither supplies interval identity nor authorizes a Host codec,
-React projection, intent, popup, or product component.
+The React `EasingTriggerCandidate` is the selected existing presentation consumer, but neither
+supplies interval identity nor authorizes input intent, popup, or product semantic ownership. Its
+private output projection and direct import are closed only by the
+[Stage transport consumer contract](2026-08-04-stage-transport-easing-trigger-consumer-contract.md).
 
 ## 4. implementation boundary and oracle
 
-Future implementation allowlist is exactly `crates/motolii-ui/src/product_runtime.rs` and focused
-unit tests for it, but no implementation is currently admitted. The derivation must remain private
-to `ProductApp`; no public/general Timeline API is introduced.
+The admitted implementation allowlist and Stage transport publication lifecycle are exactly those
+in the [Stage transport consumer contract](2026-08-04-stage-transport-easing-trigger-consumer-contract.md).
+The derivation remains private to `ProductApp`; no public/general Timeline API is introduced.
 
 `PRIMARY_ORACLE` is exact identity/time and the left outgoing `Interp` for a strict interior
 Position interval. Focused negative cases prove no result for every rejected case in §2. Before
@@ -95,18 +96,19 @@ takes read-only inputs and has no queue or projection-mutation access; it must n
 Document, journal, history, Undo, queue, or projection generation. Queue/generation counters
 are therefore not a helper oracle.
 
-`REPO_LANES` for a future admitted consumer are focused `product_runtime` unit tests,
-`git diff --check`, and `./scripts/check-docs.sh`. The prior focused test passed but clippy
-rejected its unused production helper; it is not implementation evidence. `EXTERNAL_GATES`: human visual verification is deferred; no test
+`REPO_LANES` for the admitted consumer are the focused Rust/Stage Host and React guard lanes
+fixed by that contract, plus `git diff --check` and `./scripts/check-docs.sh`. The prior focused
+test passed but clippy rejected its unused production helper; it remains historical evidence, not
+implementation evidence. `EXTERNAL_GATES`: human visual verification is deferred; no test
 closes native popup/window, preset, settings, or accessibility acceptance.
 
 ## 5. explicit non-goals and next handoff
 
-This node does not create an outgoing `Interp` command, Host codec, React projection/intent,
+This node does not create an outgoing `Interp` command, Host input codec, React intent,
 popup/native window, presets/settings, Inspector Add Position Key, generalized channel model,
-or complete `P04-C2` / `U4b-1`. It does not alter the separately `WAIT_TARGET` normal Inspector
-Position row route.
+or complete `P04-C2` / `U4b-1`. The private Stage transport output projection is its sole exception.
+It does not alter the separately `WAIT_TARGET` normal Inspector Position row route.
 
-After a real consumer is separately identified, this rule may emit only existing graph value
-`active_interval_identity` for `INTERP-COMMAND`. That later node remains blocked until a
+This selected consumer may emit only existing graph value `active_interval_identity` for
+`INTERP-COMMAND`. That later node remains blocked until a
 separately closed command owner, write route, consumer, and one-command/one-Undo oracle exist.

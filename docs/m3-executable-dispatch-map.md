@@ -419,10 +419,11 @@ NODE CU-201T-C       requires=[trim_semantics]           emits=[trim_d2_command]
 NODE P03-C2-TRIM     requires=[trim_d2_command]          emits=[native_trim_gesture]
 
 NODE ACTIVE-INTERVAL requires=[]                         emits=[active_interval_identity]
-  state=WAIT_CONSUMER; existing P04-C2 decomposition/graph names this node
+  state=IMPLEMENT; existing P04-C2 decomposition/graph names this node
   contract=reviews/2026-08-04-position-active-interval-read-model-contract.md
-  rejection=reviews/2026-08-04-position-active-interval-implementation-admissibility-rejection.md
-  scope=private ProductApp DocParam::Keyframes(DocKeyframeTrack) with DocValue::Vec2 strict-interior read only; no real product consumer, P04-C2 remains TARGET_MISSING
+  consumer=reviews/2026-08-04-stage-transport-easing-trigger-consumer-contract.md
+  history=reviews/2026-08-04-position-active-interval-implementation-admissibility-rejection.md
+  scope=private ProductApp strict-interior Position read -> private Stage transport activeInterval output only; no input/write/popup, P04-C2 remains TARGET_MISSING
 NODE INTERP-COMMAND  requires=[active_interval_identity] emits=[outgoing_interp_command]
 NODE P04-C2-EASING   requires=[outgoing_interp_command]  emits=[easing_edit_route]
 

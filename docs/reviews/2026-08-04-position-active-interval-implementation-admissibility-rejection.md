@@ -1,6 +1,6 @@
 # P04-C2 ACTIVE-INTERVAL implementation-admissibility rejection
 
-状態: **観察 / WAIT_CONSUMER**
+状態: **歴史観察 / REMAPPED**
 
 日付: 2026-08-04
 
@@ -29,9 +29,12 @@ read model.
 
 ## Disposition
 
-`ACTIVE-INTERVAL` remains the existing node in the P04-C2 graph, but its local state is
-`WAIT_CONSUMER`, not `IMPLEMENT` / `DO`. The parent `P04-C2` remains `TARGET_MISSING` because
-the separate `INTERP-COMMAND` and product Easing route are absent.
+This compiler result was a valid `WAIT_CONSUMER` observation at the preserved base; it is not a
+current prohibition. The [Stage transport Easing trigger consumer contract](2026-08-04-stage-transport-easing-trigger-consumer-contract.md)
+later selected an existing ordinary product mount, exact disabled slot, and product-owned trigger.
+Consequently `ACTIVE-INTERVAL` is now `IMPLEMENT` only for that contract's private output
+projection. The parent `P04-C2` remains `TARGET_MISSING` because the separate `INTERP-COMMAND`
+and product Easing route are absent.
 
 Rejected workarounds: dummy/discarded read, `allow`/`expect(dead_code)`, `cfg(test)` or test-only
 implementation, and an invented renderer, Host, React, popup, or Inspector consumer. None is a
@@ -39,14 +42,15 @@ product connection and each would falsify the compiler finding instead of resolv
 
 ## Resolution route and non-goals
 
-`REMAP`: fresh preflight must first identify one real existing product consumer or Host intent
-boundary that owns an observable use of the interval. This observation neither selects nor
-authorizes that consumer. The separately `WAIT_TARGET` Inspector Position route is only a
-candidate for that fresh preflight, not an implementation target here.
+`REMAP` completed only for the private Stage transport output projection. The selected consumer
+does not create Host intent: it uses `activeInterval: null | { objectName, channel: "Position" }`
+and retains IDs/times/`Interp` in Rust. The separately `WAIT_TARGET` Inspector Position route is
+not selected by this remap.
 
-No code, Document/journal/history/Undo/queue/projection-generation mutation, public API, Host
-codec, React projection/intent, popup, preset/settings, outgoing `Interp` command, or generalized
-channel model is authorized by this observation.
+This historical observation does not authorize Document/journal/history/Undo/queue/projection-generation
+mutation, public API, Host input codec, React intent, popup, preset/settings, outgoing `Interp`
+command, or generalized channel model. The separate private Stage output projection is authorized
+only by the consumer contract.
 
 Fable `ACCEPT_ISOLATED` was read-only consultation, never authority; the compiler oracle falsifies
 its sufficiency for product implementation eligibility.
