@@ -33,7 +33,7 @@ Blender は Timeline の scrub 領域で click/drag して current frame を移�
 - ruler 内の primary press は scrub を開始し、その座標を即時採用する。active scrub 中の cursor move は同じ state を更新し、release は最後の採用値を保持する。既存 track body/key/edge の Move/Trim hit と重ならない。
 - ruler x を composition duration の closed interval `[ZERO, duration]` へ clamp して `RationalTime` として保持する。start/end は両端値である。
 - Esc、focus loss、pointer capture loss、ruler/layout epoch 変更、ruler/layout 不在、非有限座標、不正 geometry/mapping、overflow は press 時値へ戻して scrub を消す。Document/journal/history/queue/Undo/selection/D2 write は常に 0 である。
-- 値変更だけが private playhead revision を進める。Document `projection_generation` は進めない。renderer は既存の固定 ZERO 線をこの `RationalTime` の線へ置換し、Stage は既存 RenderRequest の evaluation time として同じ値を使う。既存 RenderWorker の latest generation admission が stale result を拒否する。
+- Document `projection_generation` は進めない。playhead専用revisionも新設せず、renderer は既存の固定 ZERO 線をこの `RationalTime` の線へ置換し、Stage は既存 RenderRequest の evaluation time として同じ値を使う。既存 RenderWorker の latest generation admission が stale result を拒否する。
 - snap は導入しない。frame grid、key、marker、clip edge、modifier snap と外部 playback/Transport は owner/target 未成立の非目標である。
 
 ## 4. 実装 allowlist と oracle
