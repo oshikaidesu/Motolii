@@ -478,6 +478,7 @@
 | [2026-08-04-inspector-position-key-one-shot-intent-implementation-acceptance.md](2026-08-04-inspector-position-key-one-shot-intent-implementation-acceptance.md) | CU-0A08ITIB adjacent affordance・separate FIFO・Wake時current primary/playhead・existing durable routeのcode/main受入 |
 | [2026-08-04-native-timeline-editor-playhead-contract.md](2026-08-04-native-timeline-editor-playhead-contract.md) | P02-C3 native Timeline editor playhead producer/carrier契約 |
 | [2026-08-04-native-timeline-editor-playhead-implementation-acceptance.md](2026-08-04-native-timeline-editor-playhead-implementation-acceptance.md) | P02-C3 native Timeline editor playhead ruler producer/carrier実装受入 |
+| [2026-08-04-p07-c1-playback-session-product-route-preflight.md](2026-08-04-p07-c1-playback-session-product-route-preflight.md) | P07-C1 mixed AudioProgram / PlaybackSession 製品routeの4経路 preflight・TARGET_MISSING |
 | [2026-08-04-position-active-interval-read-model-contract.md](2026-08-04-position-active-interval-read-model-contract.md) | P04-C2 ACTIVE-INTERVAL Position read-model契約 |
 | [2026-08-04-interp-command-d2-contract.md](2026-08-04-interp-command-d2-contract.md) | P04-C2 INTERP-COMMAND Position outgoing Interp D2 command契約 |
 | [2026-08-04-interp-command-d2-implementation-acceptance.md](2026-08-04-interp-command-d2-implementation-acceptance.md) | P04-C2 INTERP-COMMAND D2実装受入。dedicated command/Writer/Undo/journal replayをDONE / ACCEPTED |

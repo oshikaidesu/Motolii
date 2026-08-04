@@ -144,7 +144,7 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 | `P05-C2` | `SPEC_ONLY` | camera/object targetと既存D2 commandの写像を一問で固定 | 直接操作が1 gesture / 1 Undo |
 | `P06-C1` | `ADOPTION_PROBE / FIXED_MAC_GATE_PASS` | 固定Macのrfd main-thread、parent sheet、selection、Cancel、typed failureは確認済み。Linux portalは未完了 | 製品接続を数えず、dialogからread-only media probeへ到達 |
 | `P06-C2` | `SPEC_ONLY` | 動画配置とSoundtrackを分離し、まず動画placement defaultを固定 | valid confirmだけ1 Undo |
-| `P07-C1` | `TARGET_MISSING` | GAP-28の`PlaybackSession`→mixed `AudioProgram`接続。seek-onlyならREDUCE | audio主clockでseek/play/pause |
+| `P07-C1` | `TARGET_MISSING / PREFLIGHT ONLY` | [P07-C1 preflight](reviews/2026-08-04-p07-c1-playback-session-product-route-preflight.md)の4経路（AudioProgram/MixProducer construction、PlaybackSession lifetime、Transport current-time handoff、actual UI/Host typed control source）を同一baseで閉じる。seek-only は将来の明示 `REDUCE` 候補だが現行DOではない | audio主clockでmixed seek/play/pause、UI/repaint clock 0 |
 | `P07-C2` | `WAIT_CONFLICT` | P07-C1、raw measurement、M4 provider後 | deadline時だけ古いpreviewをdrop |
 | `P07-C3` | `MEASURE` | 10分実素材のclock/drift/drop raw測定 | 長時間再生の同期証拠 |
 | `P08-C1` | `TARGET_MISSING` | Export provider snapshotとproduct source assetを一つずつ特定 | settings/start/progress/cancelが通常面に出る |

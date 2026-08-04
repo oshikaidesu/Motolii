@@ -60,7 +60,7 @@ allowlist、正負oracle、利用者出口まで閉じた現在状態は
 | `P01-C2` | `GATED` | 固定sourceに無いiconを推測・新造しない。既存product assetの範囲は先行可 |
 | `P06-C1` | `GATED / FIXED_MAC_GATE_PASS` | 固定Macはrfd parent sheet、event-loop、selection、Cancel、typed media failureを採択probeで確認済み。Linux portalと製品接続は未完了 |
 | `P06-C2` | `GATED` | Soundtrackの選択policy。動画配置までを先に`REDUCE`してもよい |
-| `P07-C1` | `GATED` | GAP-28の製品`PlaybackSession`とmixed `AudioProgram`接続。seek/scrub単独は`REDUCE`可 |
+| `P07-C1` | `TARGET_MISSING / PREFLIGHT ONLY` | GAP-28の製品`PlaybackSession`とmixed `AudioProgram`接続。4経路（program construction、session lifetime、current-time handoff、actual typed control source）が閉じるまで実装しない。seek/scrub単独は将来の明示`REDUCE`候補 |
 | `P09-C1` | `GATED` | clipboard payload、ID再採番、Pasteの1 Undo意味。未決ならDelete/Duplicate/Renameだけを先行 |
 | `P09-C2` | `GATED` | keymap設定UIのv1範囲と実IME審判 |
 | `P09-C4` | `GATED` | AccessKit product dependency、bounded tree graft、各OS adapterの採択probe |
