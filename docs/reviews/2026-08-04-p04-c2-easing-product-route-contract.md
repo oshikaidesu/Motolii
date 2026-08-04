@@ -1,6 +1,6 @@
 # P04-C2 Easing product producer / popup adoption contract
 
-状態: **AMENDED / DIAGNOSTIC-CORRECTION DONE / ACCEPTED / POPUP-TERMINAL C7A CONTRACT_CLOSED / DO / EXTERNAL_GATE_PENDING**
+状態: **AMENDED / P04-C2-DIAGNOSTIC-CORRECTION DONE / ACCEPTED / P04-C2-EASING-C7A CONTRACT_CLOSED / DO / EXTERNAL_GATE_PENDING**
 
 日付: 2026-08-04
 
@@ -95,6 +95,7 @@ pattern/oracle, not a store, second device, or product window implementation to 
 `ui/motolii-web/src/host/stage-transport-main.jsx`, and `ui/motolii-web/vite.host.config.js`;
 `crates/motolii-ui/src/stage_chrome_host_runtime.rs`,
 `crates/motolii-ui/src/product_runtime.rs`, `crates/motolii-ui/src/product_runtime_adapter.rs`,
+`crates/motolii-ui/src/lib.rs`,
 `crates/motolii-ui/src/document_edit_runtime.rs`, and the **one new private**
 `crates/motolii-ui/src/product_easing_popup.rs`; plus
 focused tests in `ui/motolii-web/guard-tests/stage-easing-intent-codec.test.mjs`,
@@ -132,7 +133,7 @@ This contract does not silently overturn [the 2026-07-22 native popup acceptance
 
 ## 5. explicit non-goals / remaining waits
 
-- Inspector Add Position Key stays separate as `CU-0A08ITI DONE / ACCEPTED / EXTERNAL_GATE_PENDING`
+- Inspector Add Position Key stays separate as `CU-0A08ITIB DONE / ACCEPTED / EXTERNAL_GATE_PENDING`
   at commit `98e38925`; this contract does not reopen or extend Inspector Position row, projection,
   or typed intent work.
 - User preset save/delete/reorder/favorite persistence remains owned by the Host User settings codec;
@@ -144,26 +145,27 @@ This contract does not silently overturn [the 2026-07-22 native popup acceptance
 
 ## 6. 2026-08-04 terminal-adoption amendment
 
-This amendment replaces the former single implementation order `P04-C2-EASING`. It closes exactly
-two bounded tickets and does not authorize the partial React/IPC route currently outside the product
-runtime.
+This amendment replaces the former single implementation order `P04-C2-EASING`. It records the completed
+historical diagnostic ticket and closes the separate C7A implementation order; it does not authorize the
+partial React/IPC route currently outside the product runtime.
 
-### 6.1 `P04-C2-DIAGNOSTIC-CORRECTION` — `DO`
+### 6.1 `P04-C2-DIAGNOSTIC-CORRECTION` — historical `DONE / ACCEPTED`
 
-`crates/motolii-ui/src/diagnostic_projection.rs::command_kind_copy` is the already-existing exhaustive
-consumer of `CommandKind`. `CommandKind::SetPositionKeyInterp` is accepted in D2, but that consumer
-has no arm. The complete ticket is one arm returning exactly `"Set position key interpolation"` and
-one focused assertion beside `clip_start_command_uses_the_existing_diagnostic_copy_route`. It adds no
-product meaning, producer, popup, queue action, or public surface.
+`crates/motolii-ui/src/diagnostic_projection.rs::command_kind_copy` was the already-existing exhaustive
+consumer of `CommandKind`. The formerly missing `CommandKind::SetPositionKeyInterp` arm was completed in
+commit `58b84e22`, returning exactly `"Set position key interpolation"` with one focused assertion beside
+`clip_start_command_uses_the_existing_diagnostic_copy_route`. It adds no product meaning, producer, popup,
+queue action, or public surface, and creates no current implementation `DO`.
 
-`PRIMARY_ORACLE`: the focused test proves the exact label for `CommandKind::SetPositionKeyInterp`; the
-match remains exhaustive. `REPO_LANES`: the focused Rust test, relevant `motolii-ui` Rust lane, and
-`git diff --check`. `EXTERNAL_GATES`: none. This diagnostic sub-boundary authorizes no popup work;
-the separate C7A implementation authority is §6.2.
+Historical acceptance recorded the focused exact-label test, relevant `motolii-ui` Rust lane, and
+`git diff --check`; `EXTERNAL_GATES`: none. This diagnostic ticket authorizes no popup work; the separate
+C7A implementation authority is §6.2.
 
-### 6.2 `P04-C2-POPUP-TERMINAL-C7A` — contract closed / `DO`
+### 6.2 `P04-C2-EASING-C7A` — contract closed / `DO`
 
-`P04-C2-EASING-C7A` is one full, non-dead product implementation order. `ProductApp` owns the private
+`P04-C2-EASING-C7A` is one full, non-dead product implementation order. It is the explicit, popup-local
+exception to the standard-egui-runtime exclusion in [UI runtime責任境界](../ui-runtime-architecture.md):
+`ProductApp` owns the private
 popup/session module and a native child `WindowId`/surface. The one `EventLoop<ProductEvent>` constructed
 by `product_runtime::run` remains the only event loop; the existing `ProductGpuParts` instance/adapter and
 the same `ProductApp`-owned `GpuCtx` device/queue remain the only product GPU. The child surface renders
@@ -172,8 +174,10 @@ at 0.35 over wgpu 29. `product_runtime_adapter.rs::window_event` dispatches each
 `WindowId` to this private owner, and the primary-window path must not silently consume it. No second
 App/EventLoop/WebView/device, public popup abstraction, trait/registry, or generalized channel is allowed.
 
-An in-main-surface overlay is rejected: the opaque Stage transport child WebView is above the native
-surface, so it cannot provide this popup's visible native terminal. React remains the product anchor/layout
+An in-main-surface overlay is rejected by the documented topology, not by a visual measurement claim:
+[UI runtime責任境界 §4](../ui-runtime-architecture.md#4-surface-topologyとcoordinator境界) fixes opaque Stage
+child WebView rectangles as OS-composited above the normal native surface. Therefore C7b cannot be the
+visible native terminal on that route. React remains the product anchor/layout
 producer on its separate surface-local inbound; Rust re-derives the current strict-interior Position interval.
 The one private module owns the native session/renderer, while one narrow Position-only
 `DocumentEditAction`/request reaches the existing `SetPositionKeyInterp` prepare/D2 writer. It is not a
@@ -203,8 +207,9 @@ BUILD JUSTIFICATION: NONE
 BUILD: FORBIDDEN
 ```
 
-Source proof is fixed as follows: dependency/version availability is `PASS`; C7b visibility was `FAIL` for
-the abandoned in-surface route; and current ProductApp retention, `WindowId` dispatch, and queue sink are
-the thin C7A implementation gaps authorized here, not reasons to build a bespoke mechanism. Consultation
+Source proof is fixed as follows: dependency/version availability is `PASS`; C7b is rejected from
+`docs/ui-runtime-architecture.md` §4 (opaque child WebView is OS-composited above the normal native surface),
+not recorded as a visual-test `FAIL`; and current ProductApp retention, `WindowId` dispatch, and queue sink
+are the thin C7A implementation gaps authorized here, not reasons to build a bespoke mechanism. Consultation
 is not authority. Manual z-order/focus/DPI/accessibility/visual acceptance remains the M3-final
 `EXTERNAL_GATE_PENDING` checklist.

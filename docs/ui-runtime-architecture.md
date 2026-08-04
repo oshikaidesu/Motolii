@@ -1,6 +1,6 @@
 # UI runtime責任境界
 
-状態: **責任境界・surface topology・egui製品不採用を決定**（2026-07-21、2026-07-24追補）。platform受入とdirect wgpu／Vello局所利用のrenderer採否はG0-9実機spike待ち。
+状態: **責任境界・surface topology・標準egui製品runtime不採用を決定**（2026-07-21、2026-07-24追補、2026-08-04 C7A局所例外）。platform受入とdirect wgpu／Vello局所利用のrenderer採否はG0-9実機spike待ち。
 
 2026-07-22追補: 本書のnative／Reactは**presentation runtime**の分担であり、Core、bundled first-party Host module、first-party plugin、third-party pluginの分類ではない。OS window、surface実装、architectural role、provenance / trustは[軸分離決定](reviews/2026-07-22-m3-surface-extension-axis-separation.md)に従って独立に判定する。
 
@@ -13,6 +13,9 @@ layout投影、render worker、IME/lifecycle証拠は比較・回帰・診断bas
 Timeline、Stage、theme、componentをeguiへ実装しない。React所有面をeguiへ再実装せず、native所有面を
 egui widget/callbackで包まない。既存baselineの物理撤去はG0-9のplatform受入と代替診断経路が成立した後の
 独立作業とし、direct wgpu枝の不合格だけでeguiを自動的に製品候補へ戻さない。再採用には本決定の明示改訂を要する。
+2026-08-04の明示改訂は`P04-C2-EASING-C7A`だけである。これは`ProductApp`所有の一つのprivate native child
+popup/session rendererに既存direct egui依存を局所再利用する例外であり、main shell、Stage、Timeline、React
+chrome、汎用panel/theme/component、公開popup frameworkへeguiを採用しない。C7A以外のegui製品採用には別の明示改訂を要する。
 
 ## 1. 所有境界
 
@@ -61,7 +64,9 @@ nativeへ残す。React controlはtyped command intentだけをHostへ送り、p
 将来のKBar型command stripや追加transport controlもこのReact chrome seamへ置ける。ただし特定library、JS component、
 command配置、第三者拡張APIを現時点の製品契約へ焼かず、既存`CommandId` / typed intent境界を再利用する。
 
-ただし高頻度curve操作を伴うEasing popupは一般popoverの例外である。
+ただし高頻度curve操作を伴うEasing popupは一般popoverの例外である。`P04-C2-EASING-C7A`に限り、
+このprivate native child popup/session rendererは既存direct egui依存を局所利用できる。これは標準native
+rendererの置換でもegui shellの復活でもない。
 [native Easing popup受入契約](reviews/2026-07-22-m3-native-easing-popup-acceptance.md)に従い、Reactは入口と
 object・channel・pressed/disabledのaccessible stateだけを所有し、visible summary chromeは別のUI判断まで
 実装しない。native wgpuはpopup frame、preset/user library、数値form、curve、grid、handle、
@@ -133,7 +138,7 @@ UI framework再発明として停止する。
 - 複雑path、curve、roto、採択済みglyph描画: Velloを局所rendererとして再利用
 - font discovery/shaping: 採択済みfontique + harfrust。単純layoutで不足する実例が出た時だけParleyを比較
 - accessibility: AccessKitを基盤にし、全keyをnode化しないbounded semantic projectionを作る
-- egui: 製品runtimeには不採用。成立済みbaseline/debug・回帰比較として、G0-9のplatform受入と代替診断経路が閉じるまで削除しない
+- egui: 標準製品runtimeには不採用。成立済みbaseline/debug・回帰比較として、G0-9のplatform受入と代替診断経路が閉じるまで削除しない。唯一の明示例外は`P04-C2-EASING-C7A`のprivate child popup/session rendererであり、同ticketのallowlist外へ一般化しない
 
 direct wgpuは採択候補であって、headless benchmarkだけで製品renderer確定とはしない。Velloの「局所」は
 呼出頻度でなく、所有語彙、描画面積、primitive数、allocation、GPU時間で判定する。毎frame呼ばれても
