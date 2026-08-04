@@ -138,7 +138,7 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 | `P03-C2` | `DONE / REDUCE` | HOST-INPUTでraw ownerとEscape/focus cancelを再締結しMOVEをtechnical reclose。Blender既知handle hitを縮小採択した`CU-201P-TRIM`をcommit `da4dcf75`で実装・独立review受入 | drag中write 0、release 1 Undo、cancel/stale/invalid 0 |
 | `P03-C3` | `TARGET_MISSING` | visible-range consumerとnavigation CommandIdを一つ特定 | selection/focus/playheadが同一projection |
 | `P04-C1` | `DONE` | なし。`U4a-1`〜`CU-205E`を再実装しない | first-party parameterの通常編集route |
-| `P04-C2` | `TARGET_MISSING` | active interval read model、outgoing Interp D2 command、Host codec、React consumerを前ownerへ分離。Inspector Position Add Key routeは別の`CU-0A08ITI TARGET_MISSING`であり混同しない | easing変更が1 command / 1 Undo |
+| `P04-C2` | `SPLIT / TARGET_MISSING` | `ACTIVE-INTERVAL` はDONE。`INTERP-COMMAND` は[dedicated D2 contract](reviews/2026-08-04-interp-command-d2-contract.md)で`IMPLEMENT_READY`、次はそのCORE実装。Host codec/React consumer/popupは別 `WAIT_TARGET`。Inspector Position Add Key routeは別の`CU-0A08ITI TARGET_MISSING`であり混同しない | easing変更が1 command / 1 Undo |
 | `P04-C3` | `TARGET_MISSING` | `CU-204P`へ渡す実在normal operation source | 実providerの診断を既存Feedbackへ投影 |
 | `P05-C1` | `TARGET_MISSING` | 現行Stage表示を除き、off-frame/Stage Viewの未成立targetを一つ特定 | 同じcamera/worldでframe内外を表示 |
 | `P05-C2` | `SPEC_ONLY` | camera/object targetと既存D2 commandの写像を一問で固定 | 直接操作が1 gesture / 1 Undo |
