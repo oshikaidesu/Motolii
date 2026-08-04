@@ -39,7 +39,7 @@ Esc、focus loss、pointer capture loss、layout 変更、不正 ruler/layout/ma
 
 - `P02-C3` ruler producer/carrier sub-boundary: code / main `DONE` at `75ccd5e7`。
 - 親 `P02-C3`: `INCOMPLETE`。focus、visible range、playback/audio、normal Inspector row/wiring、P04-C2 Easing を完了扱いにしない。
-- `CU-0A08ITI`: `WAIT_TARGET` のまま。current-playhead carrierは本粒で成立したが、normal Position row/projectionとtyped Host intentは未成立である。
+- `CU-0A08ITI`: `SPLIT`。current-playhead carrierは本粒で成立し、`CU-0A08ITIA`は有限`Const(Vec2)`値とtag-only `Keyframes` presenceを読むnormal Position row/projectionとして`DO`、typed Host intentの`CU-0A08ITIB`は`WAIT_TARGET`である。Aはkeyframe評価・contents・countを持たない。
 - `P04-C2`: `TARGET_MISSING` のまま。active interval / outgoing `Interp` / owner / command / consumer を発明しない。
 
 current implementation `DO` はなし。次の実装は、別の docs contract が実在 owner、target、command、consumer と oracle を閉じた時だけ選定する。

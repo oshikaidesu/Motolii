@@ -1,6 +1,6 @@
 # Inspector Position Add Key product entry reclosure
 
-状態: **決定 / local `WAIT_TARGET`**
+状態: **決定 / A `DO`、B local `WAIT_TARGET`**
 
 日付: 2026-08-04
 
@@ -13,9 +13,12 @@
 
 ただし、この選択は durable command を再施工する許可ではない。現行通常 Inspector
 branch に Position 行、projection、typed Host intent/queue consumer がないため、
-`CU-0A08ITI` の Add Position product connection は local `WAIT_TARGET` のままとする。
+`CU-0A08ITI` を A read-only Position row/projection (`CU-0A08ITIA`) と B typed
+Host intent/queue (`CU-0A08ITIB`) に分ける。Aだけは
+[direct-promotion contract](2026-08-04-inspector-position-row-direct-promotion-contract.md)で
+`DO`、B は local `WAIT_TARGET` のままとする。
 current playhead の private producer は成立済みだが、Inspector の consumer には未接続である。
-この文書は既存 ID の状態を再分類するだけで、新しい grain ID や code ticket を作らない。
+この文書は durable command を再施工せず、既存 `CU-0A08ITI` を A/B の接続境界へ再分類する。
 
 ```text
 AUTHORITY: user-selected normal entry + U4b-0 closed contract + CU-0A08IT split
@@ -24,8 +27,8 @@ OWNER: DocumentWriter / Command / existing D2 single writer
 WRITE ROUTE: Prepared AddPositionKey -> existing queue/runtime -> Undo / JournalEdit v2
 GAP: normal Position-row projection/trigger and typed Inspector intent/queue consumer are absent;
   the existing ProductApp current-playhead carrier is not an Inspector consumer
-RESOLUTION ROUTE: retain CU-0A08ITI WAIT_TARGET; close each missing target before code
-DISPOSITION: Position row is the selected entry; implementation is not dispatchable
+RESOLUTION ROUTE: close A's `Const(Vec2)` value / tag-only `Keyframes` presence Position projection/row first; retain B as WAIT_TARGET
+DISPOSITION: Position row is the selected entry; only A is dispatchable
 ```
 
 ## 2. Exact source, current carrier, and missing targets
@@ -87,8 +90,8 @@ BUILD: FORBIDDEN (new component, generic keyframe framework, second writer, new 
 
 ## 4. Future boundary and negative oracles
 
-Only after the normal Position row/projection and typed Inspector intent/queue consumer are
-separately closed may one bounded implementation connect:
+After A's normal Position row/projection is accepted (without evaluating or counting Keyframes), and only after B's typed Inspector intent/queue
+consumer is separately closed, one bounded implementation may connect:
 normal Position control -> typed private Inspector intent -> one queue action ->
 `prepare_add_position_key(primary, current_playhead)` -> existing publish cycle.
 
