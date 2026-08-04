@@ -1,6 +1,6 @@
 # P04-C2 ACTIVE-INTERVAL Stage transport Easing trigger consumer contract
 
-状態: **決定 / IMPLEMENT（ACTIVE-INTERVAL read-only consumer sub-boundary のみ） / EXTERNAL_VISUAL_DEFERRED**
+状態: **決定 / DONE・ACCEPTED（ACTIVE-INTERVAL read-only consumer sub-boundary のみ） / EXTERNAL_GATE_PENDING**
 
 日付: 2026-08-04
 
@@ -144,3 +144,5 @@ do not close it.
 This contract makes the active interval live in normal production only as a read-only consumer; it
 does not authorize any edit. The next separate boundary, if independently selected, is the graph's
 `INTERP-COMMAND` owner/write-route/admission contract. It must not be inferred from this trigger.
+
+Implementation acceptance is recorded in [Stage transport Easing trigger implementation acceptance](2026-08-04-stage-transport-easing-trigger-implementation-acceptance.md).

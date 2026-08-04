@@ -419,11 +419,12 @@ NODE CU-201T-C       requires=[trim_semantics]           emits=[trim_d2_command]
 NODE P03-C2-TRIM     requires=[trim_d2_command]          emits=[native_trim_gesture]
 
 NODE ACTIVE-INTERVAL requires=[]                         emits=[active_interval_identity]
-  state=IMPLEMENT; existing P04-C2 decomposition/graph names this node
+  state=DONE/ACCEPTED/EXTERNAL_GATE_PENDING; commit=68ab4b9d; existing P04-C2 decomposition/graph names this node
   contract=reviews/2026-08-04-position-active-interval-read-model-contract.md
   consumer=reviews/2026-08-04-stage-transport-easing-trigger-consumer-contract.md
+  acceptance=reviews/2026-08-04-stage-transport-easing-trigger-implementation-acceptance.md
   history=reviews/2026-08-04-position-active-interval-implementation-admissibility-rejection.md
-  scope=private ProductApp strict-interior Position read -> private Stage transport activeInterval output only; no input/write/popup, P04-C2 remains TARGET_MISSING
+  scope=private ProductApp strict-interior Position read -> private Stage transport activeInterval output only; no input/write/popup; parent P04-C2 remains TARGET_MISSING and external visual/focus/accessibility is pending
 NODE INTERP-COMMAND  requires=[active_interval_identity] emits=[outgoing_interp_command]
 NODE P04-C2-EASING   requires=[outgoing_interp_command]  emits=[easing_edit_route]
 
