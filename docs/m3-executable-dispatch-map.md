@@ -123,7 +123,7 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 
 `555a9ab5`は2026-08-01 simulation時点の初期simulation baselineとしてのみ保持し、本表全体を現時点で再検証したことは示さない。
 現在の`P03-C2`の`DONE / REDUCE` overrideは、§5.4の現行authority、commit `da4dcf75`、
-[TRIM実装受入](reviews/2026-08-04-cu-201p-trim-implementation-acceptance.md)に裏付けられる。`CU-201R`はcommit `d0f7dfec`と[oracle受入](reviews/2026-08-04-cu-201r-random-move-trim-oracle-acceptance.md)で閉じ、`CU-201E`は通常製品E2Eまで`DONE`、`U4b-0`もcontract/code/mainまで`DONE`である。現行の`DO`はない。
+[TRIM実装受入](reviews/2026-08-04-cu-201p-trim-implementation-acceptance.md)に裏付けられる。`CU-201R`はcommit `d0f7dfec`と[oracle受入](reviews/2026-08-04-cu-201r-random-move-trim-oracle-acceptance.md)で閉じ、`CU-201E`は通常製品E2Eまで`DONE`、`U4b-0`もcontract/code/mainまで`DONE`である。通常Add Position Keyの入口は[Inspector Position entry reclosure](reviews/2026-08-04-inspector-position-key-product-entry-reclosure.md)でPosition行へ選定したが、normal rowとcurrent-playhead carrierが不在なので`CU-0A08ITI`は`TARGET_MISSING`にコンパイルする。これは`P04-C2` Easingのactive interval/outgoing Interp欠落と別である。現行の`DO`はない。
 
 | 子 | 現在状態 | exact次task | 通常製品routeの出口 |
 |---|---|---|---|
@@ -138,7 +138,7 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 | `P03-C2` | `DONE / REDUCE` | HOST-INPUTでraw ownerとEscape/focus cancelを再締結しMOVEをtechnical reclose。Blender既知handle hitを縮小採択した`CU-201P-TRIM`をcommit `da4dcf75`で実装・独立review受入 | drag中write 0、release 1 Undo、cancel/stale/invalid 0 |
 | `P03-C3` | `TARGET_MISSING` | visible-range consumerとnavigation CommandIdを一つ特定 | selection/focus/playheadが同一projection |
 | `P04-C1` | `DONE` | なし。`U4a-1`〜`CU-205E`を再実装しない | first-party parameterの通常編集route |
-| `P04-C2` | `TARGET_MISSING` | active interval read model、outgoing Interp D2 command、Host codec、React consumerを前ownerへ分離 | easing変更が1 command / 1 Undo |
+| `P04-C2` | `TARGET_MISSING` | active interval read model、outgoing Interp D2 command、Host codec、React consumerを前ownerへ分離。Inspector Position Add Key routeは別の`CU-0A08ITI TARGET_MISSING`であり混同しない | easing変更が1 command / 1 Undo |
 | `P04-C3` | `TARGET_MISSING` | `CU-204P`へ渡す実在normal operation source | 実providerの診断を既存Feedbackへ投影 |
 | `P05-C1` | `TARGET_MISSING` | 現行Stage表示を除き、off-frame/Stage Viewの未成立targetを一つ特定 | 同じcamera/worldでframe内外を表示 |
 | `P05-C2` | `SPEC_ONLY` | camera/object targetと既存D2 commandの写像を一問で固定 | 直接操作が1 gesture / 1 Undo |
