@@ -1,6 +1,6 @@
 # P07-C1B mixed PlaybackSession adapter contract
 
-状態: **DO / CLOSED CONTRACT / IMPLEMENTATION PENDING**
+状態: **DONE / ACCEPTED / MAIN**
 
 日付: 2026-08-04
 
@@ -59,3 +59,16 @@ closed by compilation. P07-C1 product-route and M3-final human control gates rem
 
 `NON-GOALS`: product dependency/lifetime/error projection; project root/cache ownership; typed play/pause
 intent; pause/seek/reopen precedence; current-time projection; UI, Timeline or Inspector visuals.
+
+## 5. implementation acceptance
+
+commit `25365aa8` で `PlaybackSession` の入力を `Arc<AudioProgram>`、producerを
+`MixProducer` へ置換し、`canonical_format()` によるring／device negotiationと既存の単一
+output、counters、device-wait、`Transport` ownerを維持した。変更fileはallowlistの
+`crates/motolii-transport/src/playback.rs` 一つだけである。
+
+`cargo fmt --check`、`cargo test --locked -p motolii-transport`、
+`cargo test --locked -p motolii-audio`、`git diff --check` はすべてPASSした。audioの
+real-device smoke 1件は既存どおりignoredで、P07-C3外部gateを代替しない。fresh Grokの
+read-only direct reviewは`ACCEPT`、P0/P1/P2=0、reviewer mutation 0だった。親P07-C1の
+ProductApp lifetime、program構築caller、typed control、current-time handoffは未閉鎖のままである。

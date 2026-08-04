@@ -91,10 +91,10 @@ The source audit also found a narrower prerequisite: a zero-source `AudioProgram
 duration as the shared producer supply floor and reached code/main `DONE / ACCEPTED` at commit
 `d14010ad`. It does not close the missing product construction/root/cache owner described above.
 
-### B. PlaybackSession constructor and lifetime — **MISSING / ADAPTER DO**
+### B. PlaybackSession constructor and lifetime — **PRODUCT LIFETIME MISSING / ADAPTER ACCEPTED**
 
-`crates/motolii-transport/src/playback.rs::PlaybackSession::{open_default,open_on_device}` is a
-single-`Arc<PcmCache>` constructor and stores `_producer: AudioProducer`. It creates the output,
+`crates/motolii-transport/src/playback.rs::PlaybackSession::{open_default,open_on_device}` now accepts
+`Arc<AudioProgram>` and stores `_producer: MixProducer` at commit `25365aa8`. It creates the output,
 producer, counters, device-wait and `Transport` internally. Repository search finds no production
 caller of `PlaybackSession`; its existing use is confined to its own crate/tests.
 
@@ -104,9 +104,10 @@ constructor must admit `AudioProgram`/`MixProducer` without keeping a parallel s
 No duplicate device output, callback-owned construction, hidden global, or new general controller is
 allowed.
 
-[P07-C1B](2026-08-04-p07-c1b-mixed-playback-session-contract.md) is the bounded adapter `DO`: it may
-replace the existing session's single-cache producer with `AudioProgram` / `MixProducer`. It does not
-select the missing ProductApp lifetime, construction caller or error projection.
+[P07-C1B](2026-08-04-p07-c1b-mixed-playback-session-contract.md) is code/main `DONE / ACCEPTED` at
+commit `25365aa8`: it replaced the existing session's single-cache producer with
+`AudioProgram` / `MixProducer`. It does not select the missing ProductApp lifetime, construction
+caller or error projection.
 
 ### C. current-time producer / consumer handoff — **MISSING**
 
@@ -138,15 +139,15 @@ and failure/recovery routing.
 
 ## 4. admissible next disposition
 
-`P07-C1` remains `TARGET_MISSING / PREFLIGHT ONLY`. P07-C1A is accepted and P07-C1B is the next bounded
-adapter `DO`; neither invents a product owner. The next parent work after B is a
+`P07-C1` remains `TARGET_MISSING / PREFLIGHT ONLY`. P07-C1A and P07-C1B are accepted; neither invents
+a product owner. The next parent work is a
 fresh read-only source audit that attempts to close the four listed facts one by one. If an existing
 real control source is found but full playback remains unclosed, a future authority owner may choose
 another explicitly bounded `REDUCE` slice. If any fact remains absent, that subfact stays
 `WAIT_TARGET` and the other M3 lanes continue.
 
-This is not an authority to implement a seek-only route, to change `PlaybackSession`, or to add a
-dependency. It also does not unblock P07-C2 deadline policy or P07-C3 real-material measurement.
+This is not an authority to implement a seek-only route, to add another `PlaybackSession` route, or
+to add a dependency. It also does not unblock P07-C2 deadline policy or P07-C3 real-material measurement.
 
 ## 5. oracle and gates for a future closed boundary
 
