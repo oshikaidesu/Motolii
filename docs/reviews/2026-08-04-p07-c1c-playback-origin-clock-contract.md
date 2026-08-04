@@ -12,7 +12,7 @@
 timeline originを閉じる。
 
 本粒はaudio-device sole clockへsecond clockを追加しない。既存の供給済みframeとdevice waitの差へ、
-session開始時のcanonical source frameを一度だけ加える。
+session開始時のcanonical source frameをexact `RationalTime`へ変換して一度だけ加える。
 
 ## 2. 既知実装採択
 
@@ -25,7 +25,7 @@ CANDIDATES: A) Transport carries immutable timeline origin; B) pre-advance share
 ADOPTION ROUTE: REUSE A; one clock, origin + elapsed device-supplied frames
 REJECTED CANDIDATES: B mutates device counters; C second clock; UI offset; wall/vsync clock;
   compatibility constructor retaining implicit ZERO
-THIN MOTOLII SEAM: immutable start_frame on existing Transport constructors and clock reads
+THIN MOTOLII SEAM: immutable RationalTime origin on existing Transport constructors and clock reads
 THIN MOTOLII RESIDUAL: constructor call-site remap and focused nonZERO origin fixtures
 RETIREMENT: implicit-ZERO Transport construction is replaced, not retained
 BUILD JUSTIFICATION: NONE
@@ -34,17 +34,19 @@ BUILD: FORBIDDEN beyond section 4
 
 ## 3. exact contract
 
-1. `Transport` stores one immutable canonical `timeline_origin_frame: u64`.
+1. `Transport` stores one immutable `timeline_origin: RationalTime`.
 2. `Transport::new` and `Transport::new_with_gpu` accept that origin explicitly; no overload/default
-   constructor is retained. Existing ZERO-based tests/simulators pass `0` explicitly.
-3. `PlaybackSession::open_on_device` passes its existing `start_frame` to `Transport`; producer and
-   Transport therefore share the same origin identity.
+   constructor is retained. Existing ZERO-based tests/simulators pass `RationalTime::ZERO` explicitly.
+3. `PlaybackSession::open_on_device` converts its existing canonical `start_frame` exactly with
+   `sample_frames_to_time(start_frame, CANONICAL_SAMPLE_RATE)` and passes the result to `Transport`;
+   producer and Transport therefore share the same origin identity without mixing canonical and
+   negotiated-device frame units.
 4. `supplied_frames()` remains the raw device-supplied elapsed count and `perceptual_frames()` remains
-   elapsed supplied minus device wait. `timeline_perceptual_frames()` adds the immutable origin with
-   saturating addition; `perceptual_time()` and `next_frame_plan()` use that absolute timeline frame.
-5. At origin `0`, all existing D5 behavior is unchanged. At origin `48_000`, zero elapsed supply reads
-   exactly one second; subsequent supply advances from that origin while device wait subtracts elapsed
-   frames only.
+   elapsed supplied minus device wait. `perceptual_time()` converts elapsed frames using the negotiated
+   device sample rate and exact-adds the immutable origin; `next_frame_plan()` uses that absolute time.
+5. At origin ZERO, all existing D5 behavior is unchanged. At canonical start frame `48_000`, zero
+   elapsed supply reads exactly one second on both 48 kHz and 44.1 kHz negotiated devices; subsequent
+   supply advances from that origin while device wait subtracts elapsed device frames only.
 6. No ProductApp, React/Host, pause/seek policy, Document, journal, output callback, producer, DRS policy,
    dependency or UI change is included.
 
@@ -54,10 +56,11 @@ BUILD: FORBIDDEN beyond section 4
 `crates/motolii-transport/src/playback.rs`, `crates/motolii-transport/src/simulate.rs`, and focused
 `crates/motolii-transport/tests/*.rs` constructor/origin checks only.
 
-`PRIMARY_ORACLE`: a focused test proves nonZERO `timeline_origin_frame` is present in
-`perceptual_time()` and `next_frame_plan()`, device wait subtracts only elapsed supply, ZERO-origin
-behavior stays identical, and `PlaybackSession` passes the same `start_frame` to producer and
-Transport. Fresh read-only review must find P0/P1=0.
+`PRIMARY_ORACLE`: focused tests prove a one-second nonZERO canonical origin is present in
+`perceptual_time()` and `next_frame_plan()` at both 48 kHz and 44.1 kHz device rates, device wait
+subtracts only elapsed device supply, ZERO-origin behavior stays identical, and `PlaybackSession`
+derives origin from the same `start_frame` passed to the producer. Fresh read-only review must find
+P0/P1=0.
 
 `REPO_LANES`: `cargo fmt --check`; `cargo test --locked -p motolii-transport`;
 `cargo test --locked -p motolii-audio`; `git diff --check`; exact allowlist check.

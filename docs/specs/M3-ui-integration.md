@@ -248,7 +248,7 @@ U9bのengine/sandbox/保存判断等へ到達したら、`LANG-TS-F0`と`VSM-C2`
 
 局所adapter `P07-C1B` は [mixed PlaybackSession contract and acceptance](../reviews/2026-08-04-p07-c1b-mixed-playback-session-contract.md) とcommit `25365aa8`でcode/main `DONE / ACCEPTED`となった。既存sessionのsingle `PcmCache` / `AudioProducer`を`AudioProgram` / `MixProducer`へ置換し、output/counters/device-wait/Transportを単一のまま保つ。ProductApp lifetime、program構築caller、React control、current-time handoffは含めず、親P07-C1を完了にしない。
 
-次の局所前提 `P07-C1C` は [playback-origin audio clock contract](../reviews/2026-08-04-p07-c1c-playback-origin-clock-contract.md) により`DO`とする。existing `PlaybackSession::start_frame`をexisting `Transport`のimmutable timeline originへ渡し、raw supplied/device-waitはelapsedのままnonZERO再生の`perceptual_time`とframe planだけを正しいabsolute timeへ置く。counter pre-advance、second clock、UI offset、ProductApp/React接続は含めない。
+次の局所前提 `P07-C1C` は [playback-origin audio clock contract](../reviews/2026-08-04-p07-c1c-playback-origin-clock-contract.md) により`DO`とする。existing `PlaybackSession::start_frame`をcanonical rateからexact `RationalTime` originへ変換してexisting `Transport`へ渡し、raw supplied/device-waitはnegotiated-device elapsedのままnonZERO再生の`perceptual_time`とframe planだけを正しいabsolute timeへ置く。canonical/device frame整数の直足し、counter pre-advance、second clock、UI offset、ProductApp/React接続は含めない。
 
 ## GR-UI審判割当表
 
