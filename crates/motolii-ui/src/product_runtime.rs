@@ -29,8 +29,8 @@ use crate::inspector_host_runtime::{
 use crate::layout_authority::LayoutAuthority;
 use crate::native_host_layout::{LogicalRect, NativeHostLayout, PhysicalRect};
 use crate::native_timeline_renderer::{
-    key_tools_logical_rect, timeline_time_surface_logical_rect, NativeTimelineRenderer,
-    NativeTimelineRendererError,
+    key_tools_logical_rect, timeline_ruler_logical_rect, timeline_time_surface_logical_rect,
+    NativeTimelineRenderState, NativeTimelineRenderer, NativeTimelineRendererError,
 };
 use crate::render_worker::{
     RenderGeneration, RenderRequest, RenderWorker, RenderWorkerClient, RenderWorkerError,
@@ -187,7 +187,73 @@ pub(crate) struct ProductApp {
     pending_inspector_commit: Option<InspectorGestureTerminal>,
     timeline_move: Option<TimelineMoveGesture>,
     timeline_trim: Option<TimelineTrimGesture>,
+    editor_playhead: EditorPlayhead,
     last_pointer_position: Option<[f64; 2]>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PlayheadScrub {
+    initial: RationalTime,
+    layout_epoch: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct EditorPlayhead {
+    current: RationalTime,
+    scrub: Option<PlayheadScrub>,
+}
+
+impl Default for EditorPlayhead {
+    fn default() -> Self {
+        Self {
+            current: RationalTime::ZERO,
+            scrub: None,
+        }
+    }
+}
+
+impl EditorPlayhead {
+    fn begin(&mut self, layout_epoch: u64, time: RationalTime) -> bool {
+        self.scrub = Some(PlayheadScrub {
+            initial: self.current,
+            layout_epoch,
+        });
+        self.set(time)
+    }
+
+    fn update(&mut self, layout_epoch: u64, time: RationalTime) -> Option<bool> {
+        (self.scrub?.layout_epoch == layout_epoch).then(|| self.set(time))
+    }
+
+    fn finish(&mut self, layout_epoch: u64) -> bool {
+        let Some(scrub) = self.scrub else {
+            return false;
+        };
+        if scrub.layout_epoch != layout_epoch {
+            return self.cancel();
+        }
+        self.scrub = None;
+        false
+    }
+
+    fn cancel(&mut self) -> bool {
+        let Some(scrub) = self.scrub.take() else {
+            return false;
+        };
+        self.set(scrub.initial)
+    }
+
+    fn retire(&mut self) -> bool {
+        self.scrub.take().is_some()
+    }
+
+    fn set(&mut self, time: RationalTime) -> bool {
+        if self.current == time {
+            return false;
+        }
+        self.current = time;
+        true
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -371,6 +437,40 @@ impl ProductTimelineProjection {
         if !normalized.is_finite() {
             return None;
         }
+        let fraction = RationalTime::try_from_decimal_str(&format!("{normalized:.9}")).ok()?;
+        self.composition_duration.try_mul(fraction).ok()
+    }
+
+    fn ruler_time_at(
+        &self,
+        position: [f64; 2],
+        layout: NativeHostLayout,
+        require_ruler_hit: bool,
+    ) -> Option<RationalTime> {
+        let ruler = timeline_ruler_logical_rect(layout)?;
+        if !position.iter().all(|value| value.is_finite())
+            || !ruler.x.is_finite()
+            || !ruler.y.is_finite()
+            || !ruler.width.is_finite()
+            || ruler.width <= 0.0
+            || !ruler.height.is_finite()
+            || ruler.height <= 0.0
+        {
+            return None;
+        }
+        let right = ruler.x + ruler.width;
+        let bottom = ruler.y + ruler.height;
+        if !right.is_finite()
+            || !bottom.is_finite()
+            || (require_ruler_hit
+                && (position[0] < ruler.x
+                    || position[0] > right
+                    || position[1] < ruler.y
+                    || position[1] >= bottom))
+        {
+            return None;
+        }
+        let normalized = ((position[0] - ruler.x) / ruler.width).clamp(0.0, 1.0);
         let fraction = RationalTime::try_from_decimal_str(&format!("{normalized:.9}")).ok()?;
         self.composition_duration.try_mul(fraction).ok()
     }
@@ -591,6 +691,7 @@ impl ProductApp {
             pending_inspector_commit: None,
             timeline_move: None,
             timeline_trim: None,
+            editor_playhead: EditorPlayhead::default(),
             last_pointer_position: None,
         })
     }
@@ -700,6 +801,7 @@ impl ProductApp {
     }
 
     pub(crate) fn update_layout(&mut self) -> Result<(), ProductRuntimeError> {
+        self.cancel_editor_playhead("layout-changed")?;
         let Some(window) = &self.window else {
             return Ok(());
         };
@@ -1139,6 +1241,30 @@ impl ProductApp {
         }
         let logical = [position[0] / scale, position[1] / scale];
         self.last_pointer_position = Some(logical);
+        if self.editor_playhead.scrub.is_some() {
+            let Some(layout) = self.layout else {
+                let _ = self.cancel_editor_playhead("layout-unavailable");
+                return;
+            };
+            let Some(time) = self
+                .timeline_projection
+                .ruler_time_at(logical, layout, false)
+            else {
+                let _ = self.cancel_editor_playhead("invalid-ruler-mapping");
+                return;
+            };
+            match self.editor_playhead.update(layout.epoch, time) {
+                Some(changed) => {
+                    if changed {
+                        let _ = self.refresh_editor_playhead();
+                    }
+                }
+                None => {
+                    let _ = self.cancel_editor_playhead("layout-epoch-changed");
+                }
+            }
+            return;
+        }
         if let (Some(gesture), Some(layout)) = (self.timeline_trim.as_ref(), self.layout) {
             let Some(pointer_time) = self.timeline_projection.time_at(logical, layout) else {
                 let _ = self.timeline_projection.set_trim_preview(None);
@@ -1201,12 +1327,40 @@ impl ProductApp {
         };
         match phase {
             InputPhase::Press => {
-                if self.timeline_move.is_some() || self.timeline_trim.is_some() {
+                if self.timeline_move.is_some()
+                    || self.timeline_trim.is_some()
+                    || self.editor_playhead.scrub.is_some()
+                {
                     return;
                 }
                 let Some(layout) = self.layout else {
                     return;
                 };
+                if let Some(time) = self
+                    .timeline_projection
+                    .ruler_time_at(position, layout, true)
+                {
+                    if let Err(error) = self
+                        .input_router
+                        .route(NormalizedInput::Phase(InputPhase::DragStart))
+                    {
+                        self.fail(event_loop, error);
+                        return;
+                    }
+                    let changed = self.editor_playhead.begin(layout.epoch, time);
+                    crate::ui_numeric_trace::emit(format_args!(
+                        "kind=timeline-playhead state=begin layout_epoch={}",
+                        layout.epoch,
+                    ));
+                    if changed {
+                        if let Err(error) = self.refresh_editor_playhead() {
+                            self.fail(event_loop, error);
+                        }
+                    } else {
+                        self.request_redraw();
+                    }
+                    return;
+                }
                 let Some(hit) = self.timeline_projection.hit_test(position, layout) else {
                     return;
                 };
@@ -1271,7 +1425,27 @@ impl ProductApp {
                 }
             }
             InputPhase::Release => {
-                if self.timeline_trim.is_some() {
+                if self.editor_playhead.scrub.is_some() {
+                    let Some(layout) = self.layout else {
+                        if let Err(error) = self.cancel_editor_playhead("layout-unavailable") {
+                            self.fail(event_loop, error);
+                        }
+                        return;
+                    };
+                    if let Err(error) = self
+                        .input_router
+                        .route(NormalizedInput::Phase(InputPhase::DragEnd))
+                    {
+                        self.fail(event_loop, error);
+                        return;
+                    }
+                    if self.editor_playhead.finish(layout.epoch) {
+                        if let Err(error) = self.refresh_editor_playhead() {
+                            self.fail(event_loop, error);
+                        }
+                    }
+                    self.request_redraw();
+                } else if self.timeline_trim.is_some() {
                     self.finish_timeline_trim(event_loop, position);
                 } else {
                     self.finish_timeline_move(event_loop, position);
@@ -1312,6 +1486,9 @@ impl ProductApp {
             } => {
                 self.cancel_timeline_move("escape");
                 self.cancel_timeline_trim("escape");
+                if let Err(error) = self.cancel_editor_playhead("escape") {
+                    self.fail(event_loop, error);
+                }
             }
             RouterOutput::CancelCommandIgnored { .. } | RouterOutput::ShortcutSuppressed { .. } => {
             }
@@ -1334,6 +1511,46 @@ impl ProductApp {
         if matches!(output, RouterOutput::SafetyCancel { .. }) {
             self.cancel_timeline_move("window-focus-or-capture-loss");
             self.cancel_timeline_trim("window-focus-or-capture-loss");
+            if let Err(error) = self.cancel_editor_playhead("window-focus-or-capture-loss") {
+                self.fail(event_loop, error);
+            }
+        }
+    }
+
+    fn refresh_editor_playhead(&self) -> Result<(), ProductRuntimeError> {
+        self.submit_stage_projection()?;
+        self.request_redraw();
+        Ok(())
+    }
+
+    fn cancel_editor_playhead(&mut self, reason: &'static str) -> Result<(), ProductRuntimeError> {
+        if self.editor_playhead.scrub.is_none() {
+            return Ok(());
+        }
+        self.input_router
+            .route(NormalizedInput::Phase(InputPhase::Cancel))?;
+        let changed = self.editor_playhead.cancel();
+        if changed {
+            self.refresh_editor_playhead()?;
+        } else {
+            self.request_redraw();
+        }
+        crate::ui_numeric_trace::emit(format_args!(
+            "kind=timeline-playhead state=cancel reason={}",
+            reason,
+        ));
+        Ok(())
+    }
+
+    fn retire_editor_playhead(&mut self, reason: &'static str) {
+        if self.editor_playhead.retire() {
+            let _ = self
+                .input_router
+                .route(NormalizedInput::Phase(InputPhase::Cancel));
+            crate::ui_numeric_trace::emit(format_args!(
+                "kind=timeline-playhead state=retire reason={}",
+                reason,
+            ));
         }
     }
 
@@ -1562,7 +1779,7 @@ impl ProductApp {
         RenderRequest {
             document,
             data_tracks: Arc::clone(&self.render_request_template.data_tracks),
-            evaluation_time: self.render_request_template.evaluation_time,
+            evaluation_time: EvaluationTime::new(self.editor_playhead.current),
             desc: self.render_request_template.desc,
             quality: self.render_request_template.quality,
         }
@@ -1741,6 +1958,7 @@ impl ProductApp {
     ) {
         self.cancel_timeline_move("published-generation-changed");
         self.cancel_timeline_trim("published-generation-changed");
+        self.retire_editor_playhead("published-generation-changed");
         trace_document_publish(route, &published);
         self.reconcile_active_effect_use(&published);
         self.current_document = published.snapshot;
@@ -1920,7 +2138,10 @@ impl ProductApp {
             window,
             &self.current_document,
             &self.timeline_projection,
-            self.primary,
+            NativeTimelineRenderState {
+                primary: self.primary,
+                playhead: self.editor_playhead.current,
+            },
             place_overlay.as_ref(),
         ) {
             Ok(()) => {}
@@ -2294,7 +2515,7 @@ impl ProductSurface {
         window: &Window,
         document: &motolii_doc::Document,
         timeline_projection: &ProductTimelineProjection,
-        primary: Option<motolii_doc::LayerId>,
+        timeline_state: NativeTimelineRenderState,
         place_overlay: Option<&RectanglePlaceOverlay>,
     ) -> Result<(), ProductSurfaceError> {
         if self.occluded || self.config.width == 0 || self.config.height == 0 {
@@ -2306,7 +2527,7 @@ impl ProductSurface {
             layout,
             document,
             timeline_projection.render_projection(),
-            primary,
+            timeline_state,
         )?;
         let trace_key = (
             layout.epoch,
@@ -2806,6 +3027,138 @@ mod tests {
         assert_eq!(bar.x_start, 0.0);
         assert_eq!(bar.x_end, 1.0);
         assert_eq!(projection.band_span, 1.0);
+    }
+
+    #[test]
+    fn editor_playhead_starts_at_zero_and_retains_release_value() {
+        let mut playhead = EditorPlayhead::default();
+        let interior = RationalTime::try_new(3, 2).unwrap();
+
+        assert_eq!(playhead.current, RationalTime::ZERO);
+        assert!(playhead.begin(9, interior));
+        assert!(!playhead.finish(9));
+        assert_eq!(playhead.current, interior);
+        assert!(playhead.scrub.is_none());
+    }
+
+    #[test]
+    fn editor_playhead_cancel_and_layout_change_restore_press_value() {
+        let mut playhead = EditorPlayhead::default();
+        let press = RationalTime::try_new(1, 2).unwrap();
+        let moved = RationalTime::try_new(3, 2).unwrap();
+
+        assert!(playhead.begin(7, press));
+        assert_eq!(playhead.update(7, moved), Some(true));
+        assert!(playhead.cancel());
+        assert_eq!(playhead.current, RationalTime::ZERO);
+        assert!(playhead.begin(8, press));
+        assert_eq!(playhead.update(9, moved), None);
+        assert!(playhead.cancel());
+        assert_eq!(playhead.current, RationalTime::ZERO);
+    }
+
+    #[test]
+    fn editor_playhead_publish_retirement_preserves_current_value() {
+        let mut playhead = EditorPlayhead::default();
+        let press = RationalTime::try_new(1, 2).unwrap();
+        let current = RationalTime::try_new(3, 2).unwrap();
+
+        assert!(playhead.begin(7, press));
+        assert_eq!(playhead.update(7, current), Some(true));
+        assert!(playhead.retire());
+        assert_eq!(playhead.current, current);
+        assert!(playhead.scrub.is_none());
+    }
+
+    #[test]
+    fn playhead_scrub_arms_existing_escape_and_safety_cancel_lifecycle() {
+        let registry = builtin_command_registry().unwrap();
+        let cancel = CommandId::try_new("motolii.gesture.cancel").unwrap();
+        let mut router = InputRouter::new(registry);
+
+        router
+            .route(NormalizedInput::Phase(InputPhase::DragStart))
+            .unwrap();
+        assert!(matches!(
+            router
+                .route(NormalizedInput::Command {
+                    phase: InputPhase::Press,
+                    id: cancel.clone(),
+                })
+                .unwrap(),
+            RouterOutput::Intent {
+                intent: DomainIntent::CancelInFlightGesture,
+                ..
+            }
+        ));
+        router
+            .route(NormalizedInput::Phase(InputPhase::DragStart))
+            .unwrap();
+        assert!(matches!(
+            router
+                .route(NormalizedInput::SafetyInterrupt(
+                    SafetyInterrupt::WindowFocusLost
+                ))
+                .unwrap(),
+            RouterOutput::SafetyCancel {
+                intent: DomainIntent::CancelInFlightGesture,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn ruler_mapping_is_closed_clamped_and_excludes_non_ruler_inputs() {
+        let document = crate::static_preview::bootstrap_document().unwrap();
+        let projection = ProductTimelineProjection::from_document(&document).unwrap();
+        let layout = test_layout(9);
+        let ruler = timeline_ruler_logical_rect(layout).unwrap();
+        let duration = document.composition.duration;
+        let y = ruler.y + ruler.height / 2.0;
+
+        assert_eq!(
+            projection.ruler_time_at([ruler.x, y], layout, true),
+            Some(RationalTime::ZERO)
+        );
+        assert_eq!(
+            projection.ruler_time_at([ruler.x + ruler.width / 2.0, y], layout, true),
+            Some(
+                duration
+                    .try_mul(RationalTime::try_new(1, 2).unwrap())
+                    .unwrap()
+            )
+        );
+        assert_eq!(
+            projection.ruler_time_at([ruler.x + ruler.width, y], layout, true),
+            Some(duration)
+        );
+        assert_eq!(
+            projection.ruler_time_at([ruler.x - 1.0, y], layout, true),
+            None
+        );
+        assert_eq!(
+            projection.ruler_time_at([ruler.x + 1.0, ruler.y - 1.0], layout, true),
+            None
+        );
+        assert_eq!(
+            projection.ruler_time_at([ruler.x + 1.0, ruler.y + ruler.height + 1.0], layout, true),
+            None
+        );
+        assert_eq!(projection.ruler_time_at([f64::NAN, y], layout, true), None);
+        let mut missing_timeline = layout;
+        missing_timeline.timeline = None;
+        assert_eq!(
+            projection.ruler_time_at([ruler.x, y], missing_timeline, true),
+            None
+        );
+        assert_eq!(
+            projection.ruler_time_at([ruler.x - 1.0, y], layout, false),
+            Some(RationalTime::ZERO)
+        );
+        assert_eq!(
+            projection.ruler_time_at([ruler.x + ruler.width + 1.0, y], layout, false),
+            Some(duration)
+        );
     }
 
     #[test]
