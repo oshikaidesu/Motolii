@@ -150,11 +150,30 @@ crates/motolii-ui/src/product_runtime.rs
 crates/motolii-ui/src/browser_host_runtime.rs
 ```
 
-The last Rust file may change only the existing generated Inspector asset include name after the
-normal host build. Generated output allowlist is exactly the tracked changes produced by
+The last Rust file may change only the exact generated asset `include_bytes!` paths, served route
+match literals, and route-test expected paths for every content-hashed asset rotated by the same
+normal host build. It may not change response behavior, protocol/source/API meaning, or any other
+Rust logic. Generated output allowlist is exactly the tracked changes produced by
 `npm --prefix ui/motolii-web run build:host` under `ui/motolii-web/generated-host/**`, including
 its manifests; it is not source authority. Untracked, manually edited, or build-unrelated output
 is out of scope.
+
+### 6.1 measured build conflict and disposition
+
+The first bounded implementation run measured that the normal host build changed the shared JS
+chunk from `tokens-CfIyaXn9.js` to `tokens-CcZ3RUC1.js`. Vite therefore rotated all seven JS asset
+filenames that import or contain that shared graph (Host, Inspector, Stage Header, Stage Host
+Bridge, Stage Transport, Timeline Tools, and tokens), rewrote all five entry HTML files, and
+updated both generated manifests. The generated-output clause above already admits that exact
+tracked build result, but the former Inspector-only restriction on `browser_host_runtime.rs` left
+the other six new asset paths unavailable to `include_bytes!`; the affected Rust compile then
+failed on seven missing old paths.
+
+Disposition: keep the single normal build output and update the existing runtime path literals and
+their exact route-test expectations for all seven rotated assets. Do not preserve dual old/new
+assets, manually copy or rename generated files, edit generated output by hand, or change unrelated
+Rust source. This is an allowlist correction for deterministic bundle closure only; it adds no
+product behavior, owner, protocol, public API, dependency, or implementation boundary.
 
 Tests/guards:
 
