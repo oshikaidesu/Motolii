@@ -183,6 +183,7 @@ LLM向けの第2入口として**SVG materialize adapter**を分離する。SVG�
 
 | ID | 内容 | 依存 | 完了条件(概要) |
 |---|---|---|---|
+| U4b-0V | **`DO / CONTRACT CLOSED`**: exact current-playhead Position Vec2 key value editing | U4b-0, CU-0A08ITIB, P02-C3 | [closed contract](../reviews/2026-08-04-u4b0v-position-key-value-edit-contract.md)どおりexisting explicit Add後のon-keyだけを既存React Inspector X/Yから編集し、dedicated D2がID/time/interp/他key/counterを保持する。Const/off-keyはread-onlyでAdd Keyをrecoveryとし、Auto Key、whole-curve SetProperty、Timeline redesign/dynamic marker widthを拒否する。human visual/focus/a11yはM3-final `EXTERNAL_GATE_PENDING` |
 | U0a | `motolii-ui`クレート骨格+UI toolkit依存方向CI | G0-1 | **完了**: `motolii-ui`以外の製品クレートのegui/eframe/egui-winit/egui-wgpu/egui_tiles直接依存を、Cargo metadataの直接依存検査（`package = "…"` renameを含む解決済みpackage名、`motolii_testkit::ui_toolkit_dep_policy`）が拒否。domain公開型へtoolkit型が無い。egui骨格へ置換済み |
 | U0b | UI状態所有表+toolkit非依存domain intent | G0-2, M2-D2 | 代表状態をDocument/User settings/Workspace profile/Project session/Transientの5層へ分類。toolkit型なしintentの単体テスト。新しい所有寿命や恒久workspace/session形式はこのタスクで発明しない |
 | U0c | input router+安定`CommandId`+event種別 | U0b, G0-2 | press/release/click/dragを区別し、IME preedit中のshortcut抑止を自動試験。shortcutを持つ全登録commandに安定IDがあり、機能crateの[raw key/modifier分岐](../reviews/2026-07-16-m3-preflight-decisions.md#23-keymap保存)を拒否。物理入力からdomain intentまでtoolkit型なし |

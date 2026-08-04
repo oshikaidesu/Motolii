@@ -40,6 +40,7 @@
 | Phase | 状態 | 現在の出口 |
 |---|---|---|
 | M3/P07-C1D | **`DONE / ACCEPTED / EXTERNAL_GATE_PENDING`** | commit `ea69f5ca`でReact Stage `#play`→typed Host intent→ProductApp-owned one PlaybackSession→audio-device Transport time→existing editor_playhead/Stage/native Timelineの一本を接続した。Inspector React assetとfixed Timeline marker geometryは維持。real device/audio/visualとP07-C3はM3-final保留 |
+| M3/U4b-0V | **`DO / CONTRACT CLOSED`** | existing explicit Add Position Key後、Rust current playheadにexact一致するVec2 keyのvalueだけをReact Inspector X/Yから変更する。dedicated `SetPositionKeyValue`はID/time/interp/other keys/counterを保持。Const/off-keyはread-only、Auto Keyとwhole-curve SetPropertyは拒否 |
 | M3/P07-C1C | **`DONE / ACCEPTED / MAIN`** | commit `b1b2c4df`でcanonical `start_frame`をexact `RationalTime` originへ変換し、negotiated-device elapsed timeへ加える。48 kHz / 44.1 kHzを閉じ、ProductApp/React/controlは含めない |
 | M3/P07-C1B | **`DONE / ACCEPTED / MAIN`** | commit `25365aa8`でexisting PlaybackSessionをsingle-cache routeから`AudioProgram` / `MixProducer`へ一file置換した。ProductApp lifetime/control/time handoffは親P07-C1の`TARGET_MISSING`へ残す |
 | M0 | `DONE` | spike完了。S2は`ffmpeg-sidecar`クレート不採用、自前子process pipe／CFR seek成立まで。VFR、長尺／4K、pool、停止中readのkillは製品完成証拠にせずK4／GAP-26へ分離 |
