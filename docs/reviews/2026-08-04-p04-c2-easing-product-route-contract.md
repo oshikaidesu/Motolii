@@ -203,7 +203,8 @@ ADOPTION ROUTE: REUSE the direct dependencies, sole loop, GPU ownership, React a
 REJECTED CANDIDATES: in-main-surface overlay below opaque Stage WebView; SpikePresetStore/UserPreset/counters/current_curve/
   revision/PopupGfx; NativeTimelineRenderer change/copy; glyphon; second App/EventLoop/WebView/device; generic popup trait/registry/channel; partial React/IPC route
 THIN MOTOLII SEAM: React anchor/layout inbound -> ProductApp current interval re-derivation -> private child WindowId/session -> Position-only request -> existing SetPositionKeyInterp
-THIN MOTOLII RESIDUAL: current ProductApp retention, child WindowId registration/dispatch, and queue sink are the exact C7A implementation gaps
+THIN MOTOLII RESIDUAL: the accepted private residual is ProductApp retention, child WindowId registration/dispatch,
+  and the Position-only queue sink; remaining evidence is limited to M3-final manual native z-order/focus/DPI/a11y/visual/second-monitor gates
 RETIREMENT: do not retain or promote the partial React/IPC route
 BUILD JUSTIFICATION: NONE
 BUILD: FORBIDDEN
