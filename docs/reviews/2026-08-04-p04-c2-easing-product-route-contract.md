@@ -86,9 +86,10 @@ and no `postMessage` addition to that bridge are allowed. The inbound is a separ
 transport sender/inbox contract, not a generalized snapshot/channel/Host framework. The G0-9 spike is a
 pattern/oracle, not a store, second device, or product window implementation to import wholesale.
 
-## 4. next implementation boundary and oracle
+## 4. accepted implementation boundary and oracle
 
-`P04-C2-EASING-C7A` is the next single product implementation boundary. Its exact source allowlist is
+`P04-C2-EASING-C7A` was the single product implementation boundary accepted at the commits and
+implementation receipt named below. Its exact source allowlist was
 `ui/motolii-web/src/candidates/EasingTriggerCandidate.jsx`,
 `ui/motolii-web/src/candidates/StageChromeCandidate.jsx`, the **new planned**
 `ui/motolii-web/src/host/stage-easing-intent-codec.js`,
@@ -212,7 +213,7 @@ BUILD: FORBIDDEN
 
 Source proof is fixed as follows: dependency/version availability is `PASS`; C7b is rejected from
 `docs/ui-runtime-architecture.md` §4 (opaque child WebView is OS-composited above the normal native surface),
-not recorded as a visual-test `FAIL`; and current ProductApp retention, `WindowId` dispatch, and queue sink
-are the thin C7A implementation gaps authorized here, not reasons to build a bespoke mechanism. Consultation
-is not authority. Manual z-order/focus/DPI/accessibility/visual acceptance remains the M3-final
-`EXTERNAL_GATE_PENDING` checklist.
+not recorded as a visual-test `FAIL`; and the then-missing ProductApp retention, `WindowId` dispatch, and
+queue sink were thin C7A implementation gaps, not reasons to build a bespoke mechanism. The accepted commits
+and implementation receipt close those historical gaps. Consultation is not authority. The only remaining C7A
+acceptance items are the M3-final z-order/focus/DPI/accessibility/visual `EXTERNAL_GATE_PENDING` checklist.
