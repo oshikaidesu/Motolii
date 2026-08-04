@@ -1,6 +1,6 @@
 # U4b-0V Position key value edit contract
 
-状態: **DO / CLOSED CONTRACT**
+状態: **DONE / ACCEPTED / EXTERNAL_GATE_PENDING**
 
 日付: 2026-08-04
 
