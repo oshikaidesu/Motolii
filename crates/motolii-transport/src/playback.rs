@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use cpal::traits::HostTrait;
 use motolii_audio::{
-    channel, negotiate_output, AudioProducer, DeviceWaitLatency, NegotiatedOutput, OutputStream,
-    PcmCache, PlaybackCounters,
+    canonical_format, channel, negotiate_output, AudioProgram, DeviceWaitLatency, MixProducer,
+    NegotiatedOutput, OutputStream, PlaybackCounters,
 };
 use motolii_core::{Fps, Quality};
 
@@ -18,13 +18,13 @@ pub struct PlaybackSession {
     device_wait: Arc<DeviceWaitLatency>,
     negotiated: NegotiatedOutput,
     _output: OutputStream,
-    _producer: AudioProducer,
+    _producer: MixProducer,
 }
 
 impl PlaybackSession {
     /// デフォルト出力デバイスで再生を開始する。
     pub fn open_default(
-        cache: Arc<PcmCache>,
+        program: Arc<AudioProgram>,
         start_frame: u64,
         fps: Fps,
         base_quality: Quality,
@@ -34,19 +34,19 @@ impl PlaybackSession {
         let device = host
             .default_output_device()
             .ok_or(PlaybackSessionError::NoOutputDevice)?;
-        Self::open_on_device(cache, start_frame, fps, base_quality, gpu, &device)
+        Self::open_on_device(program, start_frame, fps, base_quality, gpu, &device)
     }
 
     /// 指定デバイスで再生を開始する。
     pub fn open_on_device(
-        cache: Arc<PcmCache>,
+        program: Arc<AudioProgram>,
         start_frame: u64,
         fps: Fps,
         base_quality: Quality,
         gpu: Option<&motolii_gpu::GpuCtx>,
         device: &cpal::Device,
     ) -> Result<Self, PlaybackSessionError> {
-        let format = cache.format();
+        let format = canonical_format();
         let counters = Arc::new(PlaybackCounters::default());
         let device_wait = Arc::new(DeviceWaitLatency::default());
         let (ring_prod, ring_cons) =
@@ -62,11 +62,12 @@ impl PlaybackSession {
         )
         .map_err(PlaybackSessionError::Audio)?;
 
-        let producer = AudioProducer::spawn_with_device_rate(
-            Arc::clone(&cache),
+        let producer = MixProducer::spawn_with_device_rate(
+            Arc::clone(&program),
             ring_prod,
             start_frame,
             negotiated.device_sample_rate,
+            None,
         )
         .map_err(PlaybackSessionError::Audio)?;
 
