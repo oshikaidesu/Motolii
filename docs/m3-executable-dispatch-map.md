@@ -123,7 +123,7 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 
 `555a9ab5`は2026-08-01 simulation時点の初期simulation baselineとしてのみ保持し、本表全体を現時点で再検証したことは示さない。
 現在の`P03-C2`の`DONE / REDUCE` overrideは、§5.4の現行authority、commit `da4dcf75`、
-[TRIM実装受入](reviews/2026-08-04-cu-201p-trim-implementation-acceptance.md)に裏付けられる。`CU-201R`はcommit `d0f7dfec`と[oracle受入](reviews/2026-08-04-cu-201r-random-move-trim-oracle-acceptance.md)で閉じ、`CU-201E`は通常製品E2Eまで`DONE`、`U4b-0`もcontract/code/mainまで`DONE`である。通常Add Position Keyの入口は[Inspector Position entry reclosure](reviews/2026-08-04-inspector-position-key-product-entry-reclosure.md)でPosition行へ選定し、current-playhead carrierはcommit `75ccd5e7`で成立した。normal Position row/projectionとtyped Host intentが未実装なので`CU-0A08ITI`は`TARGET_MISSING`にコンパイルする。これは`P04-C2` Easingのactive interval/outgoing Interp欠落と別である。[P02-C3 playhead implementation acceptance](reviews/2026-08-04-native-timeline-editor-playhead-implementation-acceptance.md)によりruler producer/carrierはcommit `75ccd5e7`でcode/main `DONE`。current implementation `DO`は`P04-C2-EASING`だけである。
+[TRIM実装受入](reviews/2026-08-04-cu-201p-trim-implementation-acceptance.md)に裏付けられる。`CU-201R`はcommit `d0f7dfec`と[oracle受入](reviews/2026-08-04-cu-201r-random-move-trim-oracle-acceptance.md)で閉じ、`CU-201E`は通常製品E2Eまで`DONE`、`U4b-0`もcontract/code/mainまで`DONE`である。通常Add Position Keyの入口は[Inspector Position entry reclosure](reviews/2026-08-04-inspector-position-key-product-entry-reclosure.md)でPosition行へ選定し、current-playhead carrierはcommit `75ccd5e7`で成立した。normal Position row/projectionとtyped Host intentが未実装なので`CU-0A08ITI`は`TARGET_MISSING`にコンパイルする。これは`P04-C2` Easingのactive interval/outgoing Interp欠落と別である。[P02-C3 playhead implementation acceptance](reviews/2026-08-04-native-timeline-editor-playhead-implementation-acceptance.md)によりruler producer/carrierはcommit `75ccd5e7`でcode/main `DONE`。current implementation `DO`は`P04-C2-DIAGNOSTIC-CORRECTION`だけであり、popup terminal visual routeは`WAIT_TARGET`である。
 
 | 子 | 現在状態 | exact次task | 通常製品routeの出口 |
 |---|---|---|---|
@@ -138,7 +138,7 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 | `P03-C2` | `DONE / REDUCE` | HOST-INPUTでraw ownerとEscape/focus cancelを再締結しMOVEをtechnical reclose。Blender既知handle hitを縮小採択した`CU-201P-TRIM`をcommit `da4dcf75`で実装・独立review受入 | drag中write 0、release 1 Undo、cancel/stale/invalid 0 |
 | `P03-C3` | `TARGET_MISSING` | visible-range consumerとnavigation CommandIdを一つ特定 | selection/focus/playheadが同一projection |
 | `P04-C1` | `DONE` | なし。`U4a-1`〜`CU-205E`を再実装しない | first-party parameterの通常編集route |
-| `P04-C2` | `SPLIT / P04-C2-EASING CONTRACT_CLOSED / IMPLEMENTATION_PENDING` | `ACTIVE-INTERVAL`と`INTERP-COMMAND`はDONE / ACCEPTED。後者はcommit `03667b7d`と[implementation acceptance](reviews/2026-08-04-interp-command-d2-implementation-acceptance.md)でdedicated D2/Undo/journal replayを閉鎖。[product route contract](reviews/2026-08-04-p04-c2-easing-product-route-contract.md)がReact anchor/layout intent→separate surface-local Stage sender/inbox→Host session/admission→existing queue enum/action handling location→D2を閉じ、次の実装は`P04-C2-EASING`だけである。旧INTERP-COMMANDのproducer/Host/React/popup/input `WAIT_TARGET`はcontractで解消済みで実装はpending。Inspector Position Add Key routeは別の`CU-0A08ITI TARGET_MISSING`であり混同しない | value-changing easing変更が1 command / 1 Undo、same-valueは0 |
+| `P04-C2` | `SPLIT / DIAGNOSTIC-CORRECTION DO / POPUP-TERMINAL CONTRACT_CLOSED / TERMINAL_VISUAL WAIT_TARGET` | `ACTIVE-INTERVAL`と`INTERP-COMMAND`はDONE / ACCEPTED。次の唯一の実装は既存diagnostic consumerへの`SetPositionKeyInterp` label correctionである。[terminal-adoption amendment](reviews/2026-08-04-p04-c2-easing-product-route-contract.md#6-2026-08-04-terminal-adoption-amendment)はProductApp sole EventLoop/shared GpuCtxとG0-9 PATTERNを固定したが、exact product popup renderer targetは無い。partial React/IPC routeとrenderer portは採用しない。Inspector Position Add Key routeは別の`CU-0A08ITI TARGET_MISSING`であり混同しない | popup visual codeは`WAIT_TARGET`; value-changing easing変更はまだ通常製品routeに到達しない |
 | `P04-C3` | `TARGET_MISSING` | `CU-204P`へ渡す実在normal operation source | 実providerの診断を既存Feedbackへ投影 |
 | `P05-C1` | `TARGET_MISSING` | 現行Stage表示を除き、off-frame/Stage Viewの未成立targetを一つ特定 | 同じcamera/worldでframe内外を表示 |
 | `P05-C2` | `SPEC_ONLY` | camera/object targetと既存D2 commandの写像を一問で固定 | 直接操作が1 gesture / 1 Undo |
@@ -424,13 +424,16 @@ NODE ACTIVE-INTERVAL requires=[]                         emits=[active_interval_
   consumer=reviews/2026-08-04-stage-transport-easing-trigger-consumer-contract.md
   acceptance=reviews/2026-08-04-stage-transport-easing-trigger-implementation-acceptance.md
   history=reviews/2026-08-04-position-active-interval-implementation-admissibility-rejection.md
-  scope=private ProductApp strict-interior Position read -> private Stage transport activeInterval output only; no input/write/popup; P04-C2-EASING contract is closed and its implementation is pending; external visual/focus/accessibility is pending
+  scope=private ProductApp strict-interior Position read -> private Stage transport activeInterval output only; no input/write/popup; terminal visual route is WAIT_TARGET; external visual/focus/accessibility is pending
 NODE INTERP-COMMAND  requires=[active_interval_identity] emits=[outgoing_interp_command]
   state=DONE/ACCEPTED; commit=03667b7d; contract=reviews/2026-08-04-interp-command-d2-contract.md; acceptance=reviews/2026-08-04-interp-command-d2-implementation-acceptance.md
-  scope=Position existing key outgoing Interp dedicated D2/Undo/JournalEdit v2/WAL replay only; former producer/Host/React/popup/input WAIT_TARGET is discharged by P04-C2-EASING contract, whose implementation remains pending; parent P04-C2/U4b-1 remains incomplete
-NODE P04-C2-EASING   requires=[outgoing_interp_command]  emits=[easing_edit_route]
-  state=DO/CONTRACT_CLOSED/IMPLEMENTATION_PENDING/EXTERNAL_GATE_PENDING; contract=reviews/2026-08-04-p04-c2-easing-product-route-contract.md
-  scope=product-owned React anchor/layout intent -> separate surface-local Stage sender/inbox -> private Host re-derivation/session -> native popup terminal admission -> Position-only action added at existing DocumentEditQueue enum/action handling location -> SetPositionKeyInterp; Stage `{snapshot,subscribe,publish}` output bridge unchanged; Inspector/Add Position Key and User settings work remain WAIT_TARGET
+  scope=Position existing key outgoing Interp dedicated D2/Undo/JournalEdit v2/WAL replay only; popup terminal visual route remains WAIT_TARGET; parent P04-C2/U4b-1 remains incomplete
+NODE P04-C2-DIAGNOSTIC-CORRECTION requires=[outgoing_interp_command] emits=[interp_diagnostic_label]
+  state=DO; contract=reviews/2026-08-04-p04-c2-easing-product-route-contract.md#61-p04-c2-diagnostic-correction--do
+  scope=diagnostic_projection::command_kind_copy exhaustive SetPositionKeyInterp label and one focused test only
+NODE P04-C2-POPUP-TERMINAL requires=[outgoing_interp_command] emits=[popup_terminal_contract]
+  state=CONTRACT_CLOSED/TERMINAL_VISUAL_WAIT_TARGET/EXTERNAL_GATE_PENDING; contract=reviews/2026-08-04-p04-c2-easing-product-route-contract.md#62-p04-c2-popup-terminal--contract-closed-terminal-visual-route-wait_target
+  scope=ProductApp sole EventLoop/shared GpuCtx/WindowId dispatch disposition plus G0-9 PATTERN only; no existing popup renderer target, so no popup code or React/IPC route is dispatchable
 
 NODE P01-RESIDUAL    requires=[]                         emits=[role_host_routes]
 NODE SURFACE-JOIN    requires=[role_host_routes]         emits=[shared_surface_snapshot]

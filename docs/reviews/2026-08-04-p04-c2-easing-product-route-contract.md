@@ -1,6 +1,6 @@
 # P04-C2 Easing product producer / popup adoption contract
 
-状態: **CONTRACT_CLOSED / IMPLEMENTATION_PENDING / EXTERNAL_GATE_PENDING**
+状態: **AMENDED / DIAGNOSTIC-CORRECTION DO / POPUP-TERMINAL CONTRACT_CLOSED / TERMINAL_VISUAL WAIT_TARGET / EXTERNAL_GATE_PENDING**
 
 日付: 2026-08-04
 
@@ -135,3 +135,65 @@ This contract does not silently overturn [the 2026-07-22 native popup acceptance
   or input framework, new dependencies, public API/Document/schema changes, and a second GPU device
   are out of scope.
 - Acceptance of this contract is not implementation, product E2E, or human/native visual acceptance.
+
+## 6. 2026-08-04 terminal-adoption amendment
+
+This amendment replaces the former single implementation order `P04-C2-EASING`. It closes exactly
+two bounded tickets and does not authorize the partial React/IPC route currently outside the product
+runtime.
+
+### 6.1 `P04-C2-DIAGNOSTIC-CORRECTION` — `DO`
+
+`crates/motolii-ui/src/diagnostic_projection.rs::command_kind_copy` is the already-existing exhaustive
+consumer of `CommandKind`. `CommandKind::SetPositionKeyInterp` is accepted in D2, but that consumer
+has no arm. The complete ticket is one arm returning exactly `"Set position key interpolation"` and
+one focused assertion beside `clip_start_command_uses_the_existing_diagnostic_copy_route`. It adds no
+product meaning, producer, popup, queue action, or public surface.
+
+`PRIMARY_ORACLE`: the focused test proves the exact label for `CommandKind::SetPositionKeyInterp`; the
+match remains exhaustive. `REPO_LANES`: the focused Rust test, relevant `motolii-ui` Rust lane, and
+`git diff --check`. `EXTERNAL_GATES`: none. This is the only implementation `DO` emitted here.
+
+### 6.2 `P04-C2-POPUP-TERMINAL` — contract closed; terminal visual route `WAIT_TARGET`
+
+The future popup is product-local and private: `ProductApp` owns its transient popup state/module,
+the one `EventLoop<ProductEvent>` constructed by `product_runtime::run` remains the only event loop,
+and that same `ProductApp`-owned `Arc<GpuCtx>` remains the only product device/context. If a child
+window is later admitted, `product_runtime_adapter.rs::window_event` must dispatch by its real
+`WindowId` to that private owner; the primary-window path must not silently consume the child event.
+No App/EventLoop/WebView, wgpu device, public popup abstraction, or generalized channel is authorized.
+
+G0-9 is `PATTERN` only for placement, transient session/cancel rules, Bezier gesture/hit testing, and
+their oracle. Do not adopt its `SpikePresetStore`, `UserPreset`, commit counters, `current_curve`,
+revision state, or `PopupGfx`; none is a product owner. The partial React/IPC dead route is neither an
+adoption candidate nor a fallback and must not be committed.
+
+The known product rendering evidence is deliberately insufficient for a popup implementation:
+`native_timeline_renderer::NativeTimelineRenderer::{new,prepare,composite}` and its private
+`draw_text`/`TimelineFont` prove that the repository already uses Vello + fontique + harfrust for the
+Timeline overlay, but their exact API consumes `NativeHostLayout`, `Document`, and
+`TimelineProjection`; it exposes no popup-renderer or text-renderer route. `glyphon` is absent.
+Copying or porting that private renderer, or introducing another renderer, would be bespoke framework
+work and is forbidden. Therefore the terminal visual route remains `WAIT_TARGET`; this amendment does
+not authorize popup code after the diagnostic correction.
+
+```text
+MECHANISM CLASS: native transient popup terminal over ProductApp's sole event loop and shared GPU
+KNOWN IMPLEMENTATION SEARCH: ProductApp::run/ProductApp/GpuCtx; product_runtime_adapter::window_event;
+  NativeTimelineRenderer and private draw_text; G0-9 popup spike; existing P04-C2 D2/queue contract
+CANDIDATES: ProductApp private ownership; sole EventLoop<ProductEvent>; shared Arc<GpuCtx>;
+  NativeTimelineRenderer's existing Vello/fontique/harfrust route; G0-9 placement/session/Bezier pattern
+ADOPTION ROUTE: PATTERN only for G0-9 placement/session/Bezier/hit testing; no render adoption yet
+REJECTED CANDIDATES: SpikePresetStore/UserPreset/counters/current_curve/revision/PopupGfx; glyphon;
+  renderer port/copy; second App/EventLoop/WebView/device; generic popup/channel framework; partial React/IPC route
+THIN MOTOLII SEAM: diagnostic CommandKind label only; popup visual seam has no selected existing target
+THIN MOTOLII RESIDUAL: select a real product-local popup rendering target before terminal visual code
+RETIREMENT: do not retain or promote the partial React/IPC route
+BUILD JUSTIFICATION: NONE
+BUILD: FORBIDDEN
+```
+
+`P04-C2-POPUP-TERMINAL` is a docs contract ticket, not a code ticket. Its closure fixes the owner,
+event/device exclusions, and adoption disposition above. It does not create a follow-on `DO`: after
+`P04-C2-DIAGNOSTIC-CORRECTION`, the popup terminal visual implementation remains `WAIT_TARGET` until
+an exact existing product rendering target and consumer are proven in a separate authority change.
