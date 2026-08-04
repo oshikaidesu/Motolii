@@ -1,6 +1,6 @@
 # P04-C2 INTERP-COMMAND Position outgoing interpolation D2 contract
 
-状態: **決定 / SPEC DONE / IMPLEMENT_READY（D2 command sub-boundary のみ）**
+状態: **決定 / DONE / ACCEPTED（D2 command sub-boundary のみ）**
 
 日付: 2026-08-04
 
@@ -19,7 +19,7 @@ settings、Easing UI は閉じない。
 | WRITE ROUTE | future typed producer → `DocumentWriter` prepare → `Command` → journal-first D2 → history → published snapshot |
 | GAP | `AddPositionKey` はkeyを導入するだけで既存keyの `interp` を更新しない。current enum にinterpolation-only variant/prepare/oracleはない |
 | RESOLUTION | existing dedicated `Command` variant + `CommandKind`/`PropertyId`/inverse + `JournalEdit` v2 + `UndoHistory` をREUSEし、Position/key admissionだけをthin residualとして追加 |
-| DISPOSITION | `INTERP-COMMAND` D2 contractはIMPLEMENT_READY。producer/Host/popupは別 `WAIT_TARGET` のまま |
+| DISPOSITION | `INTERP-COMMAND` D2はcommit `03667b7d`でDONE / ACCEPTED。producer/Host/popupは別 `WAIT_TARGET` のまま |
 
 この文書は command identity と admission を決めるだけで、通常製品から command を発行する権限を作らない。
 
@@ -164,6 +164,7 @@ native popup/window, curve editor, drag preview, presets, settings, playback, Au
 channel model, or a public API beyond the explicit `Command` variant and `DocumentWriter` wrapper above. It does not complete
 parent `P04-C2` / `U4b-1`.
 
-After this D2 command is implemented and independently accepted, the next edge is a separate producer/admission contract
+Implementation acceptance is recorded in [INTERP-COMMAND D2 implementation acceptance](2026-08-04-interp-command-d2-implementation-acceptance.md).
+The next edge is a separate producer/admission contract
 from the existing Easing trigger to exactly one typed command. Its target, click/focus/cancel semantics, and external visual
 gate remain `WAIT_TARGET` until separately closed.
