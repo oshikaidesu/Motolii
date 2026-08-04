@@ -123,7 +123,7 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 
 `555a9ab5`は2026-08-01 simulation時点の初期simulation baselineとしてのみ保持し、本表全体を現時点で再検証したことは示さない。
 現在の`P03-C2`の`DONE / REDUCE` overrideは、§5.4の現行authority、commit `da4dcf75`、
-[TRIM実装受入](reviews/2026-08-04-cu-201p-trim-implementation-acceptance.md)に裏付けられる。`CU-201R`はcommit `d0f7dfec`と[oracle受入](reviews/2026-08-04-cu-201r-random-move-trim-oracle-acceptance.md)で閉じ、`CU-201E`は通常製品E2Eまで`DONE`、`U4b-0`もcontract/code/mainまで`DONE`である。通常Add Position Keyの入口は[Inspector Position entry reclosure](reviews/2026-08-04-inspector-position-key-product-entry-reclosure.md)でPosition行へ選定したが、normal rowとcurrent-playhead carrierが不在なので`CU-0A08ITI`は`TARGET_MISSING`にコンパイルする。これは`P04-C2` Easingのactive interval/outgoing Interp欠落と別である。現行の`DO`はない。
+[TRIM実装受入](reviews/2026-08-04-cu-201p-trim-implementation-acceptance.md)に裏付けられる。`CU-201R`はcommit `d0f7dfec`と[oracle受入](reviews/2026-08-04-cu-201r-random-move-trim-oracle-acceptance.md)で閉じ、`CU-201E`は通常製品E2Eまで`DONE`、`U4b-0`もcontract/code/mainまで`DONE`である。通常Add Position Keyの入口は[Inspector Position entry reclosure](reviews/2026-08-04-inspector-position-key-product-entry-reclosure.md)でPosition行へ選定したが、normal rowとcurrent-playhead carrierは未実装なので`CU-0A08ITI`は`TARGET_MISSING`にコンパイルする。これは`P04-C2` Easingのactive interval/outgoing Interp欠落と別である。現行の`DO`は[P02-C3 native Timeline editor playhead contract](reviews/2026-08-04-native-timeline-editor-playhead-contract.md)に限定する。
 
 | 子 | 現在状態 | exact次task | 通常製品routeの出口 |
 |---|---|---|---|
@@ -133,7 +133,7 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 | `P01-C4` | `SPEC_ONLY` | detach時のWorkspace codecとtop-level再生成境界を一問で固定 | layoutを復元してDocument不変 |
 | `P02-C1` | `DONE` | `CU-201T-C`で`CU-201T-S`の`TrimClipIn` / `TrimClipOut`を既存D2へ接続済み。`d1l_writer_prepare` 41/41、`motolii-ui` 170/170、fmt/clippy green | trimがjournal replay可能で1 Undo |
 | `P02-C2` | `DONE` | `document_edit_runtime` 33/33、製品Place/Timeline/Inspector/Undo delivery 9/9、writer境界 4/4を再実行。既存routeのみ | 全surfaceが同じpublished snapshotを読む |
-| `P02-C3` | `TARGET_MISSING` | selection成立済み部分を除き、essential focusまたはplayhead consumerを一件特定 | UI stateをDocumentへ保存せず一方向publish |
+| `P02-C3` | `IMPLEMENT`（ruler producer/carrier sub-boundaryのみ） | existing native ruler→private `ProductApp` Project-session playhead→native Timeline/Stage current-time consumerを接続。press/move/release/cancelとprivate revisionだけを扱う | UI stateをDocumentへ保存せず、ruler/Stageが同一current timeを読む。親P02-C3、focus/visible range、Inspector normal row/wiring、P04-C2、playback/audio/snapは未完了 |
 | `P03-C1` | `DONE` | `crates/motolii-ui/tests/timeline_projection.rs::p12_hundred_thousand_keys_cull_to_visible_identity`で100k keyの狭域projectionとtyped identityを確認。renderer本体は変更しない | visible outputがbounded |
 | `P03-C2` | `DONE / REDUCE` | HOST-INPUTでraw ownerとEscape/focus cancelを再締結しMOVEをtechnical reclose。Blender既知handle hitを縮小採択した`CU-201P-TRIM`をcommit `da4dcf75`で実装・独立review受入 | drag中write 0、release 1 Undo、cancel/stale/invalid 0 |
 | `P03-C3` | `TARGET_MISSING` | visible-range consumerとnavigation CommandIdを一つ特定 | selection/focus/playheadが同一projection |
@@ -165,7 +165,7 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 
 `CU-201T-S`の意味閉鎖により開始された`CU-201T-C`は、実装 `a860e10e`、oracle補強 `c2eda847`、targeted test/fmt/clippy greenをもって完了した。
 `CU-201N-S`で既存`TimelineKey`/`TimelineBar`だけを候補へ採用し、key優先、stable identity tie-break、transient `RationalTime` threshold、no-snapを固定した。
-`P02-C1`、`P03-C1-VERIFY`、P02-C2は既存routeの実装・確認として閉じた。[HOST-INPUT実装受入](reviews/2026-08-04-cu-201p-host-input-implementation-acceptance.md)でraw ownerとlogical Escape/focus cancelを再締結しMOVEをtechnical reclose、[TRIM実装受入](reviews/2026-08-04-cu-201p-trim-implementation-acceptance.md)で既知handle hitから既存trim writer、[CU-201R受入](reviews/2026-08-04-cu-201r-random-move-trim-oracle-acceptance.md)で2,048-step系列を閉じた。`CU-201E`は通常製品MOVE/TRIM/Undo/Redo/reopenを`PRODUCT_E2E_PASS`で閉じ、pointer-lossは`EXTERNAL_POINTER_GATE_PENDING`、ユーザー目視はM3最終HUMAN checklistへ集約する。現行の実装taskはない。snap threshold、slip/slide/roll/ripple、multi-selectを含む広い親`CU-201P`の残余は`WAIT_TARGET`を維持する。Stage placementのpointer captureを流用しない。
+`P02-C1`、`P03-C1-VERIFY`、P02-C2は既存routeの実装・確認として閉じた。[HOST-INPUT実装受入](reviews/2026-08-04-cu-201p-host-input-implementation-acceptance.md)でraw ownerとlogical Escape/focus cancelを再締結しMOVEをtechnical reclose、[TRIM実装受入](reviews/2026-08-04-cu-201p-trim-implementation-acceptance.md)で既知handle hitから既存trim writer、[CU-201R受入](reviews/2026-08-04-cu-201r-random-move-trim-oracle-acceptance.md)で2,048-step系列を閉じた。`CU-201E`は通常製品MOVE/TRIM/Undo/Redo/reopenを`PRODUCT_E2E_PASS`で閉じ、pointer-lossは`EXTERNAL_POINTER_GATE_PENDING`、ユーザー目視はM3最終HUMAN checklistへ集約する。現行の実装taskは[P02-C3 native Timeline editor playhead contract](reviews/2026-08-04-native-timeline-editor-playhead-contract.md)だけであり、ruler producer/carrier以外へ広げない。snap threshold、slip/slide/roll/ripple、multi-selectを含む広い親`CU-201P`の残余は`WAIT_TARGET`を維持する。Stage placementのpointer captureを流用しない。
 
 ### 5.1 `CU-201T-C` — trim command接続
 

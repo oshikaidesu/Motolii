@@ -240,6 +240,8 @@ U2h、Rectangle D2、製品surfaceを実装しない。G0-8+K1a後のU0f、M4依
 U1g/U1h/U3f/U8b、D5依存のU5、GAP-16依存のU7、未統一Browser P41、
 U9bのengine/sandbox/保存判断等へ到達したら、`LANG-TS-F0`と`VSM-C2`を迂回せずSTOPする。
 
+[P02-C3 native Timeline editor playhead contract](../reviews/2026-08-04-native-timeline-editor-playhead-contract.md)は、native ruler→private `ProductApp` editor playhead→native Timeline/Stageのproducer/carrierだけを`IMPLEMENT`へ選定する。normal Position rowとInspector wiringは`CU-0A08ITI WAIT_TARGET`のまま、P04-C2 Easing、focus/visible range、playback/audio Transport、snap、Document意味は本境界に入れない。
+
 ## GR-UI審判割当表
 
 | 規律 | 対象タスク | 自動審判 | 人間実機審判 |
