@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use motolii_core::{
     CanonicalPoint as CoreCanonicalPoint, ColorSpace, CompCamera, Fps, FrameDesc, PixelFormat,
-    Quality, TimeMap,
+    Quality, RationalTime, TimeMap,
 };
 use motolii_nodes::{CanonicalPoint, CanonicalSize, RectOverlay};
 use motolii_render::{render_frame, RenderFrameRequest, SolidSource};
@@ -27,6 +27,7 @@ fn transport_frame_plan_drives_render_with_quality_and_time() {
         wait,
         Fps::try_new(30, 1).unwrap(),
         48_000,
+        RationalTime::ZERO,
         Quality::DRAFT,
         motolii_gpu::drs_available(&gpu.device),
     )

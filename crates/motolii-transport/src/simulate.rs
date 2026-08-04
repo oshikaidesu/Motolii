@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use motolii_audio::{channel, fill_or_silence, PcmCache, PlaybackCounters, RingConsumer};
-use motolii_core::{Fps, Quality};
+use motolii_core::{Fps, Quality, RationalTime};
 
 use crate::drs::{DrsConfig, FrameTiming};
 use crate::{FramePlan, Transport, TransportError};
@@ -250,6 +250,7 @@ pub fn test_preview(
         wait,
         Fps::try_new(30, 1).unwrap(),
         sample_rate,
+        RationalTime::ZERO,
         Quality::DRAFT,
         drs_enabled,
     )
@@ -265,6 +266,7 @@ pub fn test_transport_headless(sample_rate: u32, drs_enabled: bool) -> Transport
         Arc::new(motolii_audio::DeviceWaitLatency::default()),
         Fps::try_new(30, 1).unwrap(),
         sample_rate,
+        RationalTime::ZERO,
         Quality::DRAFT,
         drs_enabled,
     )

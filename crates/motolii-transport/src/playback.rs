@@ -5,11 +5,11 @@ use std::sync::Arc;
 use cpal::traits::HostTrait;
 use motolii_audio::{
     canonical_format, channel, negotiate_output, AudioProgram, DeviceWaitLatency, MixProducer,
-    NegotiatedOutput, OutputStream, PlaybackCounters,
+    NegotiatedOutput, OutputStream, PlaybackCounters, CANONICAL_SAMPLE_RATE,
 };
 use motolii_core::{Fps, Quality};
 
-use crate::{Transport, TransportError};
+use crate::{sample_frames_to_time, Transport, TransportError};
 
 /// Transportと音声出力を共有状態で束ねる再生セッション。
 pub struct PlaybackSession {
@@ -47,6 +47,9 @@ impl PlaybackSession {
         device: &cpal::Device,
     ) -> Result<Self, PlaybackSessionError> {
         let format = canonical_format();
+        let timeline_origin = sample_frames_to_time(start_frame, CANONICAL_SAMPLE_RATE)
+            .map_err(TransportError::from)
+            .map_err(PlaybackSessionError::Transport)?;
         let counters = Arc::new(PlaybackCounters::default());
         let device_wait = Arc::new(DeviceWaitLatency::default());
         let (ring_prod, ring_cons) =
@@ -77,6 +80,7 @@ impl PlaybackSession {
                 Arc::clone(&device_wait),
                 fps,
                 negotiated.device_sample_rate,
+                timeline_origin,
                 base_quality,
                 gpu,
             )
@@ -87,6 +91,7 @@ impl PlaybackSession {
                 Arc::clone(&device_wait),
                 fps,
                 negotiated.device_sample_rate,
+                timeline_origin,
                 base_quality,
                 false,
             )
