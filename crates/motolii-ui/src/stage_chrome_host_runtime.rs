@@ -53,7 +53,14 @@ struct StageEasingAnchor {
 #[derive(Debug, Default)]
 struct StageEasingInbox {
     pending: VecDeque<StageEasingIntent>,
-    document_ready: bool,
+    document_generation: u64,
+    synced_layout: Option<StageEasingLayoutDelivery>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct StageEasingLayoutDelivery {
+    document_generation: u64,
+    layout_epoch: u64,
 }
 
 impl StageEasingInbox {
@@ -61,7 +68,8 @@ impl StageEasingInbox {
         let message: StageEasingMessage = serde_json::from_str(raw)?;
         match message {
             StageEasingMessage::Ready {} => {
-                self.document_ready = true;
+                self.document_generation = self.document_generation.saturating_add(1);
+                self.synced_layout = None;
                 Ok(StageEasingInbound::Ready)
             }
             StageEasingMessage::OpenPositionEasing {
@@ -100,12 +108,21 @@ impl StageEasingInbox {
         self.pending.pop_front()
     }
 
-    fn document_ready(&self) -> bool {
-        self.document_ready
+    fn next_layout_delivery(&self, layout_epoch: u64) -> Option<StageEasingLayoutDelivery> {
+        if self.document_generation == 0 {
+            return None;
+        }
+        let delivery = StageEasingLayoutDelivery {
+            document_generation: self.document_generation,
+            layout_epoch,
+        };
+        (self.synced_layout != Some(delivery)).then_some(delivery)
     }
 
-    fn acknowledge_document_ready(&mut self) {
-        self.document_ready = false;
+    fn acknowledge_layout_delivery(&mut self, delivery: StageEasingLayoutDelivery) {
+        if self.document_generation == delivery.document_generation {
+            self.synced_layout = Some(delivery);
+        }
     }
 }
 
@@ -210,9 +227,12 @@ return Object.freeze({{
   postMessage,
 }});
 }})();
-if(window.ipc&&typeof window.ipc.postMessage==="function"){{
+const postEasingReady=()=>{{
+  if(!window.ipc||typeof window.ipc.postMessage!=="function")return false;
   window.ipc.postMessage('{{"kind":"stage-easing-ready"}}');
-}}"#
+  return true;
+}};
+if(!postEasingReady())window.addEventListener("DOMContentLoaded",postEasingReady,{{once:true}});"#
         );
         let easing_inbox = Arc::new(Mutex::new(StageEasingInbox::default()));
         let callback_inbox = Arc::clone(&easing_inbox);
@@ -303,21 +323,21 @@ if(window.ipc&&typeof window.ipc.postMessage==="function"){{
         let Some(layout_epoch) = self.latest_layout_epoch else {
             return Ok(());
         };
-        let document_ready = self
+        let delivery = self
             .easing_inbox
             .lock()
             .map_err(|_| StageEasingIntentError::InboxPoisoned)?
-            .document_ready();
-        if !document_ready {
+            .next_layout_delivery(layout_epoch);
+        let Some(delivery) = delivery else {
             return Ok(());
-        }
+        };
         self.transport.evaluate_script(&format!(
             "window.__MOTOLII_STAGE_EASING__?.setLayoutEpoch({layout_epoch});"
         ))?;
         self.easing_inbox
             .lock()
             .map_err(|_| StageEasingIntentError::InboxPoisoned)?
-            .acknowledge_document_ready();
+            .acknowledge_layout_delivery(delivery);
         crate::ui_numeric_trace::emit(format_args!(
             "kind=webview surface=stage-transport event=easing-layout-ready layout_epoch={layout_epoch}",
         ));
@@ -483,20 +503,33 @@ mod tests {
     }
 
     #[test]
-    fn stage_easing_inbox_is_single_slot_and_replays_document_ready_per_navigation() {
+    fn stage_easing_layout_sync_replays_epoch_per_document_and_bounds_change() {
         let mut inbox = StageEasingInbox::default();
         assert_eq!(
             inbox.accept(r#"{"kind":"stage-easing-ready"}"#).unwrap(),
             StageEasingInbound::Ready,
         );
-        assert!(inbox.document_ready());
-        inbox.acknowledge_document_ready();
-        assert!(!inbox.document_ready());
+        let initial = inbox.next_layout_delivery(1).unwrap();
+        assert_eq!(initial.layout_epoch, 1);
+        inbox.acknowledge_layout_delivery(initial);
+        assert_eq!(inbox.next_layout_delivery(1), None);
+
+        let resized = inbox.next_layout_delivery(2).unwrap();
+        assert_eq!(resized.layout_epoch, 2);
+        inbox.acknowledge_layout_delivery(resized);
+        assert_eq!(inbox.next_layout_delivery(2), None);
+
         assert_eq!(
             inbox.accept(r#"{"kind":"stage-easing-ready"}"#).unwrap(),
             StageEasingInbound::Ready,
         );
-        assert!(inbox.document_ready());
+        let reloaded = inbox.next_layout_delivery(2).unwrap();
+        assert_ne!(reloaded.document_generation, resized.document_generation);
+        inbox.acknowledge_layout_delivery(resized);
+        assert_eq!(inbox.next_layout_delivery(2), Some(reloaded));
+        inbox.acknowledge_layout_delivery(reloaded);
+        assert_eq!(inbox.next_layout_delivery(2), None);
+
         assert_eq!(
             inbox.accept(&valid_easing_intent(3)).unwrap(),
             StageEasingInbound::Intent,
