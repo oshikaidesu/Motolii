@@ -72,7 +72,7 @@ VS-1の正負oracle、blocking decision、後続のVS-2/VS-3は
 
 以下は**M3入場(U0a完了)後**の論理依存表である。G0自体はM3全コードを一括停止する門ではない。U1aはU0bの5層所有とdomain intentを待ち、custom UI追加タスクはG0-3の判定後に初めて起票する。U0〜U9を一括発注せず、[M3既知技術採択・並列実装地図](../m3-parallel-implementation-map.md)でowner、contract、file、oracleが独立した子だけを別orderとして並走させる。
 
-## 方針(2026-07-24: UI責任境界・surface topology・egui製品不採用決定、G0-9 platform受入比較中)
+## 方針(2026-07-24: UI責任境界・surface topology・egui標準製品runtime不採用・C7A private child popup限定例外、G0-9 platform受入比較中)
 
 以下のegui節は2026-07-18採用時の歴史的baseline仕様と成立証拠として保持する。eguiは標準製品runtimeへ採用せず、新しい製品面を実装しない。責任境界は[正本](../ui-runtime-architecture.md)へ移り、G0-9完了前のWebView/native統合や既存baseline撤去の許可ではない。toolkit横断のDocument/command/thread/座標/preview規律は引き続き現行である。
 
