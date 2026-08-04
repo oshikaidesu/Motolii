@@ -21,7 +21,7 @@ const AUTHORITY_SHA256 = {
   "ui/motolii-web/src/index.js":
     "0f8e68a80ce7ce07c0ae286e5e1fde9a9dde0962996fe2fed29a7a783442503c",
   "ui/motolii-web/src/candidates/InspectorCandidate.jsx":
-    "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e",
+    "aa2b4f713d804509fcf4c0a2222b525db431f88fdd002bdaeee6b23af1a4240c",
   "docs/mocks-ui/fixtures/reference-document.json":
     "a3b9212f13b586ec4a800390a1b524907defd32a85ee0d5bd74f5db6ae63397c",
   "docs/mocks-ui/src/reference/loadReferenceFixtures.js":
@@ -91,6 +91,22 @@ function assertRuleThrows(fn, rulePattern) {
   });
 }
 
+function selectedItem(input) {
+  const find = (items) => {
+    for (const item of items) {
+      if (item.envelope?.layer_id === input.target.layer_id) return item;
+      const child = find(item.children ?? []);
+      if (child !== undefined) return child;
+    }
+    return undefined;
+  };
+  return find(input.document.tracks.flatMap((track) => track.items));
+}
+
+function selectedPosition(input) {
+  return selectedItem(input).envelope.transform.position;
+}
+
 const P1_EXPECTED = {
   fixture_revision: 1,
   target: {
@@ -133,6 +149,7 @@ const P1_EXPECTED = {
       ],
     },
   ],
+  position: { kind: "const", x: 0, y: 0 },
 };
 
 test("authority hashes unchanged", () => {
@@ -668,9 +685,45 @@ test("N5 R4 rejects non-array Vec2 payload in position.const", () => {
   assertRuleThrows(() => decodeInspectorReadModel(input), /R4:/);
 });
 
-test("N6 output shape lock D1 through D6", () => {
+test("N6 projects only closed Position summaries", () => {
+  const constant = decodeInspectorReadModel(loadAcceptedInput());
+  assert.deepEqual(constant.position, { kind: "const", x: 0, y: 0 });
+  assert.equal(Object.isFrozen(constant.position), true);
+
+  const animatedInput = loadAcceptedInput();
+  const animatedPosition = selectedPosition(animatedInput);
+  Object.keys(animatedPosition).forEach((key) => delete animatedPosition[key]);
+  Object.assign(animatedPosition, {
+    keyframes: { contents_are_not_inspected: [Number.NaN] },
+  });
+  const animated = decodeInspectorReadModel(animatedInput);
+  assert.deepEqual(animated.position, { kind: "animated" });
+  assert.equal(Object.isFrozen(animated.position), true);
+
+  const missingInput = loadAcceptedInput();
+  delete selectedItem(missingInput).envelope.transform.position;
+  assert.equal(Object.hasOwn(decodeInspectorReadModel(missingInput), "position"), false);
+
+  const unsupported = [
+    { const: { F64: 0 } },
+    { const: { Vec3: [0, 0, 0] } },
+    { data: { track: {}, fallback: { Vec2: [0, 0] } } },
+    { vec2_axes: { x: { const: { F64: 0 } }, y: { const: { F64: 0 } } } },
+    { look_at: { axis: "plus_y", target: 0 } },
+    { follow: { target: 0, offset: [0, 0] } },
+  ];
+  for (const position of unsupported) {
+    const input = loadAcceptedInput();
+    const selected = selectedPosition(input);
+    Object.keys(selected).forEach((key) => delete selected[key]);
+    Object.assign(selected, position);
+    assert.throws(() => decodeInspectorReadModel(input));
+  }
+});
+
+test("N7 output shape lock D1 through D6", () => {
   const out = decodeInspectorReadModel(loadAcceptedInput());
-  assert.deepEqual(Object.keys(out), ["fixture_revision", "target", "effect_definitions"]);
+  assert.deepEqual(Object.keys(out), ["fixture_revision", "target", "effect_definitions", "position"]);
   assert.deepEqual(Object.keys(out.target), [
     "layer_id",
     "layer_name",
@@ -683,4 +736,5 @@ test("N6 output shape lock D1 through D6", () => {
     "default",
     "f64_domain",
   ]);
+  assert.deepEqual(Object.keys(out.position), ["kind", "x", "y"]);
 });

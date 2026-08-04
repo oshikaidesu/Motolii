@@ -119,7 +119,7 @@ const EXPECTED_KEY_TOOLS_SHA256 =
 const EXPECTED_KEY_TOOLS_CSS_SHA256 =
   "f84eb7f98f05844fa3bfc72b702cee2709f1fc0bb9be614f2b01039a65b5190d";
 const EXPECTED_INSPECTOR_SHA256 =
-  "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e";
+  "aa2b4f713d804509fcf4c0a2222b525db431f88fdd002bdaeee6b23af1a4240c";
 const EXPECTED_INSPECTOR_CSS_SHA256 =
   "730e2861a893b2b07fa66d5acef0038a49bdcf337e8c5a037785b0a58d829cbe";
 const INSPECTOR_POST_PROMOTION_TASK = "CU-0A08ITP";
@@ -135,6 +135,8 @@ const CU205P_INSPECTOR_REASON =
   "VS-2 active Effect Inspector read-only control projection";
 const CU205P_INSPECTOR_CURRENT_SHA256 =
   "a1af604c78113f4df0538c3045b19d51c1d3fc8c6740305abc47b7e8a2d10f37";
+const CU0A08ITIA_INSPECTOR_REASON =
+  "Inspector Position closed read-only row direct promotion";
 
 const ALLOWED_EXTERNAL_PACKAGES = ["react", "html-react-parser"];
 const SEAM_COMPONENT_NAME = "CandidateCreateBrowser";
@@ -735,9 +737,50 @@ function validateInspectorSafeBranch(sourceText) {
   assert.deepEqual(expressionBindings, [
     "panelHead",
     "targetIdentity",
+    "positionRow",
     "activeEffectSection",
   ]);
   assert.deepEqual(textValues, []);
+}
+
+function validateInspectorPositionRow(sourceText) {
+  const ast = parseModule(sourceText);
+  const component = findTopLevelFunction(ast, "InspectorCandidate");
+  const objectRow = component.body.body.filter(
+    (statement) => statement.type === "VariableDeclaration"
+      && statement.declarations.some(
+        (declaration) => declaration.id?.name === "objectRow",
+      ),
+  );
+  assert.equal(objectRow.length, 1, "one shared objectRow grammar is required");
+  const branch = component.body.body.find(
+    (statement) => statement.type === "IfStatement"
+      && statement.test?.type === "LogicalExpression"
+      && statement.test.left?.left?.name === "mode"
+      && statement.test.right?.left?.name === "inspectorReadModel",
+  );
+  assert.ok(branch?.start !== undefined && branch.end !== undefined);
+  const defaultBranch = sourceText.slice(branch.start, branch.end);
+  assert.match(defaultBranch, /const position = inspectorReadModel\.position/);
+  assert.match(defaultBranch, /objectRow\(/);
+  assert.match(defaultBranch, /<label>Position<\/label>/);
+  assert.match(defaultBranch, /position\.kind === "const"/);
+  assert.match(defaultBranch, /<b>X<\/b> \{position\.x\}/);
+  assert.match(defaultBranch, /<b>Y<\/b> \{position\.y\}/);
+  assert.match(defaultBranch, />animated</);
+  for (const forbidden of [
+    "onClick",
+    "onPointer",
+    "onKey",
+    "postMessage",
+    "state.",
+    "automation",
+    "KEYS",
+    "AUTO ON",
+    "AUTO OFF",
+  ]) {
+    assert.equal(defaultBranch.includes(forbidden), false, forbidden);
+  }
 }
 
 function validateBrowserIdentityProjection(sourceText) {
@@ -942,6 +985,7 @@ test("validates decoded Inspector target projection into the existing identity J
   const source = await readFile(abs(CURRENT_INSPECTOR_SOURCE), "utf8");
   assert.doesNotThrow(() => validateInspectorReadProjection(source));
   assert.doesNotThrow(() => validateInspectorSafeBranch(source));
+  assert.doesNotThrow(() => validateInspectorPositionRow(source));
   for (const candidate of [
     source.replace(
       "inspectorReadModel.target.layer_name",
@@ -967,6 +1011,10 @@ test("validates decoded Inspector target projection into the existing identity J
   ]) {
     assert.throws(() => validateInspectorSafeBranch(candidate));
   }
+  assert.throws(() =>
+    validateInspectorPositionRow(source.replace('>animated</span>', '>2 KEYS</span>')));
+  assert.throws(() =>
+    validateInspectorPositionRow(source.replace('<label>Position</label>', '<button onClick={() => {}}>Position</button>')));
 });
 
 test("projects one exact active Opacity amount control and preserves absent output", async () => {
@@ -1000,8 +1048,9 @@ test("projects one exact active Opacity amount control and preserves absent outp
   const absentHtml = renderInspectorSource(source, absentOutput);
   assert.equal(
     absentHtml,
-    '<aside class="inspector" id="inspector"><div class="panel-head">Inspector</div><div class="section"><div class="identity"><div class="icon">G</div><div><b>Reference group</b><small>Group · 1 child</small></div></div></div></aside>',
+    '<aside class="inspector" id="inspector"><div class="panel-head">Inspector</div><div class="section"><div class="identity"><div class="icon">G</div><div><b>Reference group</b><small>Group · 1 child</small></div></div></div><div class="row"><label>Position</label><span class="value axis-pack"><i><b>X</b> 0</i><i><b>Y</b> 0</i></span><span></span></div></aside>',
   );
+  assert.doesNotMatch(absentHtml, /class="scrub"|data-effect-use-id=|data-param=/);
 
   const activeHtml = renderInspectorSource(source, activeOutput);
   assert.equal((activeHtml.match(/class="scrub"/g) ?? []).length, 1);
@@ -1134,12 +1183,12 @@ test("validates Inspector post-promotion provenance as an append-only chain", as
   );
   assert.doesNotThrow(() =>
     validateInspectorPostPromotionChanges(provenance, currentInspectorSha256));
-  assert.equal(provenance.inspectorPostPromotionChanges.length, 4);
+  assert.equal(provenance.inspectorPostPromotionChanges.length, 5);
   assert.deepEqual(provenance.inspectorPostPromotionChanges.at(-1), {
-    task: "CU-205W-A1",
+    task: "CU-0A08ITIA",
     file: INSPECTOR_POST_PROMOTION_FILE,
-    reason: "VS-2 active amount gesture local presentation seam",
-    fixedSourceSha256: CU205P_INSPECTOR_CURRENT_SHA256,
+    reason: CU0A08ITIA_INSPECTOR_REASON,
+    fixedSourceSha256: "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e",
     currentSha256: currentInspectorSha256,
   });
   assert.deepEqual(provenance.privateRuntimeSources, [{

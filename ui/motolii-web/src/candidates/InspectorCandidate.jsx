@@ -515,12 +515,32 @@ export function InspectorCandidate({
       })}
     </div>
   );
+  const objectRow = (key, labelContent, valueContent, hintContent) => (
+    <div className="row" key={key}>
+      {labelContent}
+      {valueContent}
+      {hintContent}
+    </div>
+  );
 
   if (mode === undefined && inspectorReadModel !== undefined) {
+    const position = inspectorReadModel.position;
+    const positionRow = position === undefined ? null : objectRow(
+      "position",
+      <label>Position</label>,
+      position.kind === "const" ? (
+        <span className="value axis-pack">
+          <i><b>X</b> {position.x}</i>
+          <i><b>Y</b> {position.y}</i>
+        </span>
+      ) : <span className="value">animated</span>,
+      <span />,
+    );
     return (
       <aside className="inspector" id="inspector">
         {panelHead}
         <div className="section">{targetIdentity}</div>
+        {positionRow}
         {activeEffectSection}
       </aside>
     );
@@ -585,27 +605,26 @@ export function InspectorCandidate({
   }
 
   if (mode === "installed") {
-    const objectRow = (param, label, valueContent, keys, extraClass = "") => {
+    const installedObjectRow = (param, label, valueContent, keys, extraClass = "") => {
       const on = state.automation[param];
-      return (
-        <div className="row" key={param}>
-          <span className="param-label">
-            {label}{" "}
-            <button
-              className={`automation-mark ${on ? "on" : ""}${extraClass}`}
-              data-object-automation={param}
-              aria-pressed={on}
-              aria-label={objectAutomationAriaLabel(
-                param,
-                on,
-                toggledAutomationRef.current.object.has(param),
-              )}
-              onClick={() => toggleObjectAutomation(param)}
-            />
-          </span>
-          {valueContent}
-          <ObjectAutoHint param={param} keys={keys} automation={state.automation} />
-        </div>
+      return objectRow(
+        param,
+        <span className="param-label">
+          {label}{" "}
+          <button
+            className={`automation-mark ${on ? "on" : ""}${extraClass}`}
+            data-object-automation={param}
+            aria-pressed={on}
+            aria-label={objectAutomationAriaLabel(
+              param,
+              on,
+              toggledAutomationRef.current.object.has(param),
+            )}
+            onClick={() => toggleObjectAutomation(param)}
+          />
+        </span>,
+        valueContent,
+        <ObjectAutoHint param={param} keys={keys} automation={state.automation} />,
       );
     };
 
@@ -622,7 +641,7 @@ export function InspectorCandidate({
           <div className="section-title">
             TRANSFORM <span>OBJECT</span>
           </div>
-          {objectRow(
+          {installedObjectRow(
             "position",
             "Position",
             <span className="value axis-pack">
@@ -635,26 +654,26 @@ export function InspectorCandidate({
             </span>,
             "2 KEYS",
           )}
-          {objectRow(
+          {installedObjectRow(
             "depth",
             "Depth Z",
             <span className="value" id="depth-value">0.180</span>,
             "1 KEY",
             " at-key",
           )}
-          {objectRow(
+          {installedObjectRow(
             "scale",
             "Scale",
             <span className="value">1.000</span>,
             "",
           )}
-          {objectRow(
+          {installedObjectRow(
             "rotation",
             "Rotation Z",
             <span className="value">0.000 rad</span>,
             "",
           )}
-          {objectRow(
+          {installedObjectRow(
             "opacity",
             "Opacity",
             <span className="value">100%</span>,
