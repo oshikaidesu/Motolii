@@ -3,6 +3,7 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
+use motolii_core::RationalTime;
 use wry::{Rect, WebView, WebViewBuilder};
 
 use crate::browser_host_runtime::product_asset_response;
@@ -250,6 +251,204 @@ impl InspectorGestureInbox {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum InspectorPositionAxis {
+    X,
+    Y,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct InspectorPositionGestureStart {
+    pub(crate) session: u64,
+    pub(crate) sequence: u64,
+    pub(crate) axis: InspectorPositionAxis,
+    pub(crate) value: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct InspectorPositionGestureUpdate {
+    pub(crate) session: u64,
+    pub(crate) sequence: u64,
+    pub(crate) axis: InspectorPositionAxis,
+    pub(crate) value: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct InspectorPositionGestureTerminal {
+    pub(crate) session: u64,
+    pub(crate) sequence: u64,
+    pub(crate) axis: InspectorPositionAxis,
+    pub(crate) cause: InspectorPositionGestureTerminalCause,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum InspectorPositionGestureTerminalCause {
+    Commit(f64),
+    Cancel,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InspectorPositionGestureMessage {
+    #[serde(rename = "kind")]
+    _kind: InspectorPositionGestureKind,
+    phase: InspectorPositionGesturePhase,
+    session: u64,
+    sequence: u64,
+    axis: InspectorPositionAxis,
+    #[serde(default, deserialize_with = "deserialize_gesture_value")]
+    value: InspectorGestureValue,
+}
+
+#[derive(Debug, serde::Deserialize)]
+enum InspectorPositionGestureKind {
+    #[serde(rename = "position-key-value-gesture")]
+    PositionKeyValueGesture,
+}
+
+#[derive(Debug, Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum InspectorPositionGesturePhase {
+    Start,
+    Update,
+    Commit,
+    Cancel,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ActiveInspectorPositionGesture {
+    session: u64,
+    last_sequence: u64,
+}
+
+const MAX_PENDING_POSITION_GESTURE_TERMINALS: usize = 64;
+const MAX_PENDING_POSITION_GESTURE_STARTS: usize = 64;
+
+#[derive(Debug)]
+struct InspectorPositionGestureInbox {
+    editable: bool,
+    last_session: u64,
+    active: Option<ActiveInspectorPositionGesture>,
+    starts: VecDeque<InspectorPositionGestureStart>,
+    latest_update: Option<InspectorPositionGestureUpdate>,
+    terminals: VecDeque<InspectorPositionGestureTerminal>,
+}
+
+impl InspectorPositionGestureInbox {
+    fn new(editable: bool) -> Self {
+        Self {
+            editable,
+            last_session: 0,
+            active: None,
+            starts: VecDeque::new(),
+            latest_update: None,
+            terminals: VecDeque::new(),
+        }
+    }
+
+    fn reconcile(&mut self, editable: bool) {
+        if self.editable != editable {
+            self.editable = editable;
+            self.active = None;
+            self.starts.clear();
+            self.latest_update = None;
+        }
+    }
+
+    fn accept(&mut self, raw: &str) -> Result<(), InspectorPositionGestureError> {
+        let message: InspectorPositionGestureMessage = serde_json::from_str(raw)?;
+        if !self.editable {
+            return Err(InspectorPositionGestureError::NotEditable);
+        }
+        if message.session == 0 || message.sequence == 0 {
+            return Err(InspectorPositionGestureError::NonPositiveOrder);
+        }
+        let value = match (message.phase, message.value) {
+            (InspectorPositionGesturePhase::Cancel, InspectorGestureValue::Missing) => None,
+            (InspectorPositionGesturePhase::Cancel, _) => {
+                return Err(InspectorPositionGestureError::UnexpectedValue)
+            }
+            (_, InspectorGestureValue::Number(value)) if value.is_finite() => Some(value),
+            _ => return Err(InspectorPositionGestureError::InvalidValue),
+        };
+
+        match message.phase {
+            InspectorPositionGesturePhase::Start => {
+                if self.active.is_some() {
+                    return Err(InspectorPositionGestureError::GestureAlreadyActive);
+                }
+                if self.starts.len() >= MAX_PENDING_POSITION_GESTURE_STARTS {
+                    return Err(InspectorPositionGestureError::StartInboxFull);
+                }
+                if message.session <= self.last_session || message.sequence != 1 {
+                    return Err(InspectorPositionGestureError::StaleOrReordered);
+                }
+                self.last_session = message.session;
+                self.active = Some(ActiveInspectorPositionGesture {
+                    session: message.session,
+                    last_sequence: message.sequence,
+                });
+                self.starts.push_back(InspectorPositionGestureStart {
+                    session: message.session,
+                    sequence: message.sequence,
+                    axis: message.axis,
+                    value: value.expect("validated start value"),
+                });
+            }
+            InspectorPositionGesturePhase::Update => {
+                self.advance(message.session, message.sequence)?;
+                self.latest_update = Some(InspectorPositionGestureUpdate {
+                    session: message.session,
+                    sequence: message.sequence,
+                    axis: message.axis,
+                    value: value.expect("validated update value"),
+                });
+            }
+            InspectorPositionGesturePhase::Commit | InspectorPositionGesturePhase::Cancel => {
+                if self.terminals.len() >= MAX_PENDING_POSITION_GESTURE_TERMINALS {
+                    return Err(InspectorPositionGestureError::TerminalInboxFull);
+                }
+                self.advance(message.session, message.sequence)?;
+                self.latest_update = None;
+                self.active = None;
+                self.terminals.push_back(InspectorPositionGestureTerminal {
+                    session: message.session,
+                    sequence: message.sequence,
+                    axis: message.axis,
+                    cause: match message.phase {
+                        InspectorPositionGesturePhase::Commit => {
+                            InspectorPositionGestureTerminalCause::Commit(
+                                value.expect("validated commit value"),
+                            )
+                        }
+                        InspectorPositionGesturePhase::Cancel => {
+                            InspectorPositionGestureTerminalCause::Cancel
+                        }
+                        _ => unreachable!(),
+                    },
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn advance(
+        &mut self,
+        session: u64,
+        sequence: u64,
+    ) -> Result<(), InspectorPositionGestureError> {
+        let Some(active) = &mut self.active else {
+            return Err(InspectorPositionGestureError::GestureNotActive);
+        };
+        if active.session != session || sequence <= active.last_sequence {
+            return Err(InspectorPositionGestureError::StaleOrReordered);
+        }
+        active.last_sequence = sequence;
+        Ok(())
+    }
+}
+
 #[derive(Debug, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct InspectorPositionKeyMessage {
@@ -295,6 +494,7 @@ impl InspectorPositionKeyInbox {
 #[derive(Debug, Clone, Copy)]
 enum InspectorInboundKind {
     Gesture,
+    PositionGesture,
     PositionKey,
 }
 
@@ -302,6 +502,7 @@ fn inspector_inbound_kind(raw: &str) -> Result<InspectorInboundKind, InspectorIn
     let message: serde_json::Value = serde_json::from_str(raw)?;
     match message.get("kind").and_then(serde_json::Value::as_str) {
         Some("effect-param-gesture") => Ok(InspectorInboundKind::Gesture),
+        Some("position-key-value-gesture") => Ok(InspectorInboundKind::PositionGesture),
         Some("add-position-key") => Ok(InspectorInboundKind::PositionKey),
         _ => Err(InspectorInboundError::UnknownKind),
     }
@@ -309,6 +510,7 @@ fn inspector_inbound_kind(raw: &str) -> Result<InspectorInboundKind, InspectorIn
 
 pub(crate) struct InspectorHostRuntime {
     gesture_inbox: Arc<Mutex<InspectorGestureInbox>>,
+    position_gesture_inbox: Arc<Mutex<InspectorPositionGestureInbox>>,
     position_key_inbox: Arc<Mutex<InspectorPositionKeyInbox>>,
     wake: Arc<Mutex<Option<InspectorWake>>>,
     webview: WebView,
@@ -321,10 +523,12 @@ impl InspectorHostRuntime {
         document: &motolii_doc::Document,
         primary: Option<motolii_doc::LayerId>,
         active_effect_use: Option<motolii_doc::EffectId>,
+        playhead: RationalTime,
     ) -> Result<Self, InspectorHostRuntimeError> {
         let created_at = std::time::Instant::now();
-        let snapshot = snapshot_json(document, primary, active_effect_use)?;
+        let snapshot = snapshot_json_at_playhead(document, primary, active_effect_use, playhead)?;
         let gesture_identity = gesture_identity(document, primary, active_effect_use)?;
+        let position_gesture_editable = position_projection(document, primary, playhead).is_key();
         let encoded_snapshot = javascript_json_parse_argument(&snapshot)?;
         let initialization_script = format!(
             r#"window.__MOTOLII_INSPECTOR_HOST__=(()=>{{
@@ -339,9 +543,13 @@ postMessage:(message)=>window.ipc.postMessage(message)
 }})();"#
         );
         let gesture_inbox = Arc::new(Mutex::new(InspectorGestureInbox::new(gesture_identity)));
+        let position_gesture_inbox = Arc::new(Mutex::new(InspectorPositionGestureInbox::new(
+            position_gesture_editable,
+        )));
         let position_key_inbox = Arc::new(Mutex::new(InspectorPositionKeyInbox::default()));
         let wake = Arc::new(Mutex::new(None::<InspectorWake>));
         let callback_gesture_inbox = Arc::clone(&gesture_inbox);
+        let callback_position_gesture_inbox = Arc::clone(&position_gesture_inbox);
         let callback_position_key_inbox = Arc::clone(&position_key_inbox);
         let callback_wake = Arc::clone(&wake);
         let webview = WebViewBuilder::new()
@@ -363,6 +571,11 @@ postMessage:(message)=>window.ipc.postMessage(message)
                         .map_err(|_| InspectorGestureError::InboxPoisoned)
                         .and_then(|mut inbox| inbox.accept(raw))
                         .map_err(InspectorInboundError::Gesture),
+                    Ok(InspectorInboundKind::PositionGesture) => callback_position_gesture_inbox
+                        .lock()
+                        .map_err(|_| InspectorPositionGestureError::InboxPoisoned)
+                        .and_then(|mut inbox| inbox.accept(raw))
+                        .map_err(InspectorInboundError::PositionGesture),
                     Ok(InspectorInboundKind::PositionKey) => callback_position_key_inbox
                         .lock()
                         .map_err(|_| InspectorPositionKeyError::InboxPoisoned)
@@ -393,6 +606,7 @@ postMessage:(message)=>window.ipc.postMessage(message)
         ));
         Ok(Self {
             gesture_inbox,
+            position_gesture_inbox,
             position_key_inbox,
             wake,
             webview,
@@ -427,6 +641,39 @@ postMessage:(message)=>window.ipc.postMessage(message)
             .gesture_inbox
             .lock()
             .map_err(|_| InspectorGestureError::InboxPoisoned)?
+            .terminals
+            .pop_front())
+    }
+
+    pub(crate) fn take_position_start(
+        &self,
+    ) -> Result<Option<InspectorPositionGestureStart>, InspectorPositionGestureError> {
+        Ok(self
+            .position_gesture_inbox
+            .lock()
+            .map_err(|_| InspectorPositionGestureError::InboxPoisoned)?
+            .starts
+            .pop_front())
+    }
+
+    pub(crate) fn take_latest_position_update(
+        &self,
+    ) -> Result<Option<InspectorPositionGestureUpdate>, InspectorPositionGestureError> {
+        Ok(self
+            .position_gesture_inbox
+            .lock()
+            .map_err(|_| InspectorPositionGestureError::InboxPoisoned)?
+            .latest_update
+            .take())
+    }
+
+    pub(crate) fn take_position_terminal(
+        &self,
+    ) -> Result<Option<InspectorPositionGestureTerminal>, InspectorPositionGestureError> {
+        Ok(self
+            .position_gesture_inbox
+            .lock()
+            .map_err(|_| InspectorPositionGestureError::InboxPoisoned)?
             .terminals
             .pop_front())
     }
@@ -479,13 +726,19 @@ postMessage:(message)=>window.ipc.postMessage(message)
         document: &motolii_doc::Document,
         primary: Option<motolii_doc::LayerId>,
         active_effect_use: Option<motolii_doc::EffectId>,
+        playhead: RationalTime,
     ) -> Result<(), InspectorHostRuntimeError> {
-        let snapshot = snapshot_json(document, primary, active_effect_use)?;
+        let snapshot = snapshot_json_at_playhead(document, primary, active_effect_use, playhead)?;
         let gesture_identity = gesture_identity(document, primary, active_effect_use)?;
+        let position_gesture_editable = position_projection(document, primary, playhead).is_key();
         self.gesture_inbox
             .lock()
             .map_err(|_| InspectorGestureError::InboxPoisoned)?
             .reconcile(gesture_identity);
+        self.position_gesture_inbox
+            .lock()
+            .map_err(|_| InspectorPositionGestureError::InboxPoisoned)?
+            .reconcile(position_gesture_editable);
         let encoded_snapshot = javascript_json_parse_argument(&snapshot)?;
         crate::ui_numeric_trace::emit(format_args!(
             "kind=webview surface=inspector event=publish primary_present={} payload_bytes={}",
@@ -594,10 +847,20 @@ fn javascript_json_parse_argument(
     serde_json::to_string(&serde_json::to_string(snapshot)?)
 }
 
+#[cfg(test)]
 fn snapshot_json(
     document: &motolii_doc::Document,
     primary: Option<motolii_doc::LayerId>,
     active_effect_use: Option<motolii_doc::EffectId>,
+) -> Result<serde_json::Value, InspectorHostRuntimeError> {
+    snapshot_json_at_playhead(document, primary, active_effect_use, RationalTime::ZERO)
+}
+
+fn snapshot_json_at_playhead(
+    document: &motolii_doc::Document,
+    primary: Option<motolii_doc::LayerId>,
+    active_effect_use: Option<motolii_doc::EffectId>,
+    playhead: RationalTime,
 ) -> Result<serde_json::Value, InspectorHostRuntimeError> {
     if let Some(active_effect_use) = active_effect_use {
         let Some(primary) = primary else {
@@ -655,8 +918,125 @@ fn snapshot_json(
         document,
         nodes,
         target: InspectorTarget { layer_id: primary },
+        position: position_projection(document, Some(primary), playhead),
         active_effect_use_id: active_effect_use,
     })?)
+}
+
+#[derive(Debug, Clone, Copy)]
+enum InspectorPositionProjection {
+    Const { x: f64, y: f64 },
+    Key { x: f64, y: f64 },
+    Animated,
+}
+
+impl InspectorPositionProjection {
+    fn is_key(self) -> bool {
+        matches!(self, Self::Key { .. })
+    }
+}
+
+impl serde::Serialize for InspectorPositionProjection {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        let mut state = serializer.serialize_struct("InspectorPositionProjection", 3)?;
+        match self {
+            Self::Const { x, y } => {
+                state.serialize_field("kind", "const")?;
+                state.serialize_field("x", x)?;
+                state.serialize_field("y", y)?;
+            }
+            Self::Key { x, y } => {
+                state.serialize_field("kind", "key")?;
+                state.serialize_field("x", x)?;
+                state.serialize_field("y", y)?;
+            }
+            Self::Animated => state.serialize_field("kind", "animated")?,
+        }
+        state.end()
+    }
+}
+
+fn position_projection(
+    document: &motolii_doc::Document,
+    primary: Option<motolii_doc::LayerId>,
+    playhead: RationalTime,
+) -> InspectorPositionProjection {
+    fn find_envelope(
+        items: &[motolii_doc::TrackItem],
+        target: motolii_doc::LayerId,
+    ) -> Option<&motolii_doc::ItemEnvelope> {
+        for item in items {
+            match item {
+                motolii_doc::TrackItem::Clip(clip) if clip.envelope.layer_id == target => {
+                    return Some(&clip.envelope);
+                }
+                motolii_doc::TrackItem::Group(group) if group.envelope.layer_id == target => {
+                    return Some(&group.envelope);
+                }
+                motolii_doc::TrackItem::Group(group) => {
+                    if let Some(envelope) = find_envelope(&group.children, target) {
+                        return Some(envelope);
+                    }
+                }
+                motolii_doc::TrackItem::Clip(_) => {}
+            }
+        }
+        None
+    }
+
+    let Some(primary) = primary else {
+        return InspectorPositionProjection::Animated;
+    };
+    let Some(envelope) = document
+        .tracks
+        .iter()
+        .find_map(|track| find_envelope(&track.items, primary))
+    else {
+        return InspectorPositionProjection::Animated;
+    };
+
+    match &envelope.transform.position {
+        motolii_doc::DocParam::Const(motolii_doc::DocValue::Vec2([x, y]))
+            if x.is_finite() && y.is_finite() =>
+        {
+            InspectorPositionProjection::Const { x: *x, y: *y }
+        }
+        motolii_doc::DocParam::Vec2Axes { x, y } => match (&**x, &**y) {
+            (
+                motolii_doc::DocParam::Const(motolii_doc::DocValue::F64(x)),
+                motolii_doc::DocParam::Const(motolii_doc::DocValue::F64(y)),
+            ) if x.is_finite() && y.is_finite() => {
+                InspectorPositionProjection::Const { x: *x, y: *y }
+            }
+            _ => InspectorPositionProjection::Animated,
+        },
+        motolii_doc::DocParam::Keyframes(track) => {
+            let keys = track.keys();
+            if keys.is_empty()
+                || keys.iter().any(|key| {
+                    !matches!(key.value, motolii_doc::DocValue::Vec2(value)
+                        if value.iter().all(|value| value.is_finite()))
+                })
+            {
+                return InspectorPositionProjection::Animated;
+            }
+            keys.iter()
+                .find(|key| key.t == playhead)
+                .and_then(|key| match key.value {
+                    motolii_doc::DocValue::Vec2([x, y]) => {
+                        Some(InspectorPositionProjection::Key { x, y })
+                    }
+                    _ => None,
+                })
+                .unwrap_or(InspectorPositionProjection::Animated)
+        }
+        _ => InspectorPositionProjection::Animated,
+    }
 }
 
 fn doc_value_from_plugin(value: &motolii_plugin::Value) -> motolii_doc::DocValue {
@@ -687,6 +1067,7 @@ struct InspectorSnapshot<'a> {
     document: &'a motolii_doc::Document,
     nodes: Vec<InspectorNode>,
     target: InspectorTarget,
+    position: InspectorPositionProjection,
     #[serde(skip_serializing_if = "Option::is_none")]
     active_effect_use_id: Option<motolii_doc::EffectId>,
 }
@@ -746,6 +1127,8 @@ pub(crate) enum InspectorHostRuntimeError {
     #[error(transparent)]
     Gesture(#[from] InspectorGestureError),
     #[error(transparent)]
+    PositionGesture(#[from] InspectorPositionGestureError),
+    #[error(transparent)]
     PositionKey(#[from] InspectorPositionKeyError),
     #[error(transparent)]
     Catalog(#[from] motolii_plugin::PluginContractError),
@@ -784,6 +1167,32 @@ pub(crate) enum InspectorGestureError {
 }
 
 #[derive(Debug, thiserror::Error)]
+pub(crate) enum InspectorPositionGestureError {
+    #[error("Inspector Position gesture JSON was rejected")]
+    Json(#[from] serde_json::Error),
+    #[error("Inspector Position value is not editable at the current key")]
+    NotEditable,
+    #[error("Inspector Position gesture session and sequence must be positive")]
+    NonPositiveOrder,
+    #[error("Inspector Position gesture value must be finite")]
+    InvalidValue,
+    #[error("Inspector Position cancel must not carry a value")]
+    UnexpectedValue,
+    #[error("Inspector Position gesture is already active")]
+    GestureAlreadyActive,
+    #[error("Inspector Position gesture is not active")]
+    GestureNotActive,
+    #[error("Inspector Position gesture is stale or reordered")]
+    StaleOrReordered,
+    #[error("Inspector Position gesture start inbox is full")]
+    StartInboxFull,
+    #[error("Inspector Position gesture terminal inbox is full")]
+    TerminalInboxFull,
+    #[error("Inspector Position gesture inbox lock is poisoned")]
+    InboxPoisoned,
+}
+
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum InspectorPositionKeyError {
     #[error("Inspector Position key JSON was rejected")]
     Json(#[from] serde_json::Error),
@@ -805,6 +1214,8 @@ enum InspectorInboundError {
     UnknownKind,
     #[error(transparent)]
     Gesture(InspectorGestureError),
+    #[error(transparent)]
+    PositionGesture(InspectorPositionGestureError),
     #[error(transparent)]
     PositionKey(InspectorPositionKeyError),
 }
@@ -973,6 +1384,49 @@ mod tests {
     }
 
     #[test]
+    fn position_projection_admits_only_an_exact_current_vec2_key() {
+        let (mut document, primary, _, _, _) = document_with_effects();
+        let key_time = RationalTime::from_seconds(1);
+        let key_id = motolii_doc::KeyframeId::from_raw(41);
+        let mut track = motolii_doc::DocKeyframeTrack::new();
+        track.insert(motolii_doc::DocKeyframe {
+            id: key_id,
+            t: key_time,
+            value: motolii_doc::DocValue::Vec2([0.25, -0.5]),
+            interp: motolii_eval::Interp::Linear,
+        });
+        match &mut document.tracks[0].items[0] {
+            motolii_doc::TrackItem::Group(group) => {
+                group.envelope.transform.position = motolii_doc::DocParam::Keyframes(track);
+            }
+            motolii_doc::TrackItem::Clip(_) => unreachable!("fixture uses a group"),
+        }
+        assert_eq!(
+            serde_json::to_value(position_projection(&document, Some(primary), key_time)).unwrap(),
+            serde_json::json!({"kind": "key", "x": 0.25, "y": -0.5})
+        );
+        assert_eq!(
+            serde_json::to_value(position_projection(
+                &document,
+                Some(primary),
+                RationalTime::ZERO,
+            ))
+            .unwrap(),
+            serde_json::json!({"kind": "animated"})
+        );
+        match &mut document.tracks[0].items[0] {
+            motolii_doc::TrackItem::Group(group) => {
+                group.envelope.transform.position = motolii_doc::DocParam::const_vec2([1.0, 2.0]);
+            }
+            motolii_doc::TrackItem::Clip(_) => unreachable!("fixture uses a group"),
+        }
+        assert_eq!(
+            serde_json::to_value(position_projection(&document, Some(primary), key_time)).unwrap(),
+            serde_json::json!({"kind": "const", "x": 1.0, "y": 2.0})
+        );
+    }
+
+    #[test]
     fn bridge_argument_is_a_quoted_json_string_not_an_object_literal() {
         let encoded = javascript_json_parse_argument(&serde_json::json!({"target": 7})).unwrap();
         assert_eq!(encoded, r#""{\"target\":7}""#);
@@ -1050,6 +1504,26 @@ mod tests {
             "sequence": sequence,
         })
         .to_string()
+    }
+
+    fn position_gesture_message(
+        phase: &str,
+        session: u64,
+        sequence: u64,
+        axis: &str,
+        value: Option<f64>,
+    ) -> String {
+        let mut message = serde_json::json!({
+            "kind": "position-key-value-gesture",
+            "phase": phase,
+            "session": session,
+            "sequence": sequence,
+            "axis": axis,
+        });
+        if let Some(value) = value {
+            message["value"] = serde_json::json!(value);
+        }
+        serde_json::to_string(&message).unwrap()
     }
 
     #[test]
@@ -1271,6 +1745,98 @@ mod tests {
         );
         assert_eq!(gestures.latest_update, expected_update);
         assert_eq!(gestures.terminals, expected_terminals);
+    }
+
+    #[test]
+    fn position_gesture_inbox_is_separate_finite_axis_ordered_and_bounded() {
+        let mut inbox = InspectorPositionGestureInbox::new(true);
+        inbox
+            .accept(&position_gesture_message("start", 1, 1, "x", Some(0.25)))
+            .unwrap();
+        inbox
+            .accept(&position_gesture_message("update", 1, 2, "x", Some(0.5)))
+            .unwrap();
+        assert_eq!(
+            inbox.starts.pop_front(),
+            Some(InspectorPositionGestureStart {
+                session: 1,
+                sequence: 1,
+                axis: InspectorPositionAxis::X,
+                value: 0.25,
+            })
+        );
+        assert_eq!(
+            inbox.latest_update,
+            Some(InspectorPositionGestureUpdate {
+                session: 1,
+                sequence: 2,
+                axis: InspectorPositionAxis::X,
+                value: 0.5,
+            })
+        );
+        inbox
+            .accept(&position_gesture_message("commit", 1, 3, "x", Some(0.75)))
+            .unwrap();
+        assert_eq!(
+            inbox.terminals.pop_front(),
+            Some(InspectorPositionGestureTerminal {
+                session: 1,
+                sequence: 3,
+                axis: InspectorPositionAxis::X,
+                cause: InspectorPositionGestureTerminalCause::Commit(0.75),
+            })
+        );
+
+        for raw in [
+            r#"{}"#,
+            r#"{"kind":"position-key-value-gesture","phase":"start","session":2,"sequence":1,"axis":"x"}"#,
+            r#"{"kind":"position-key-value-gesture","phase":"start","session":2,"sequence":1,"axis":"x","value":null}"#,
+            r#"{"kind":"position-key-value-gesture","phase":"start","session":2,"sequence":1,"axis":"z","value":0.1}"#,
+            r#"{"kind":"position-key-value-gesture","phase":"start","session":2,"sequence":1,"axis":"x","value":0.1,"target":1}"#,
+        ] {
+            assert!(inbox.accept(raw).is_err(), "{raw}");
+        }
+        assert!(matches!(
+            inbox.accept(&position_gesture_message(
+                "start",
+                2,
+                1,
+                "x",
+                Some(f64::NAN)
+            )),
+            Err(InspectorPositionGestureError::InvalidValue)
+        ));
+
+        let mut not_editable = InspectorPositionGestureInbox::new(false);
+        assert!(matches!(
+            not_editable.accept(&position_gesture_message("start", 1, 1, "x", Some(0.1))),
+            Err(InspectorPositionGestureError::NotEditable)
+        ));
+
+        let mut full = InspectorPositionGestureInbox::new(true);
+        for session in 1..=MAX_PENDING_POSITION_GESTURE_TERMINALS as u64 {
+            full.accept(&position_gesture_message(
+                "start",
+                session,
+                1,
+                "x",
+                Some(0.1),
+            ))
+            .unwrap();
+            full.accept(&position_gesture_message("cancel", session, 2, "x", None))
+                .unwrap();
+        }
+        assert!(matches!(
+            full.accept(&position_gesture_message(
+                "start",
+                MAX_PENDING_POSITION_GESTURE_TERMINALS as u64 + 1,
+                1,
+                "x",
+                Some(0.1),
+            )),
+            Err(InspectorPositionGestureError::TerminalInboxFull)
+                | Err(InspectorPositionGestureError::StartInboxFull)
+        ));
     }
 
     #[test]

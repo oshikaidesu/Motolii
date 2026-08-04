@@ -61,6 +61,7 @@ pub enum PropertyId {
     AudioGain(usize),
     ChildList,
     PositionKeyInterp(KeyframeId),
+    PositionKeyValue(KeyframeId),
     ClipStart,
     ClipIn,
     ClipOut,
@@ -127,6 +128,7 @@ pub enum CommandKind {
     RemoveTrackItem,
     AddPositionKey,
     SetPositionKeyInterp,
+    SetPositionKeyValue,
     SetClipStart,
     TrimClipIn,
     TrimClipOut,
@@ -206,6 +208,16 @@ pub enum CommandError {
     },
     #[error("position key interpolation payload mismatch for key {key_id} on layer {layer}")]
     PositionKeyInterpPayloadMismatch { layer: u64, key_id: u64 },
+    #[error("position key value source unsupported for layer {layer}")]
+    PositionKeyValueSourceUnsupported { layer: u64 },
+    #[error("position key value type mismatch for layer {layer}")]
+    PositionKeyValueTypeMismatch { layer: u64 },
+    #[error("position key value not found for key {key_id} on layer {layer}")]
+    PositionKeyValueNotFound { layer: u64, key_id: u64 },
+    #[error("position key value for key {key_id} on layer {layer} must be finite")]
+    PositionKeyValueNonFinite { layer: u64, key_id: u64 },
+    #[error("position key value payload mismatch for key {key_id} on layer {layer}")]
+    PositionKeyValuePayloadMismatch { layer: u64, key_id: u64 },
     #[error("effect use {use_id} not found in document")]
     EffectUseNotFound { use_id: u64 },
     #[error(
@@ -407,6 +419,12 @@ pub enum Command {
         old: motolii_eval::Interp,
         new: motolii_eval::Interp,
     },
+    SetPositionKeyValue {
+        target: LayerId,
+        key: KeyframeId,
+        old: [f64; 2],
+        new: [f64; 2],
+    },
     SetClipStart {
         target: LayerId,
         old: RationalTime,
@@ -461,6 +479,7 @@ impl Command {
                 CommandKind::AddPositionKey
             }
             Command::SetPositionKeyInterp { .. } => CommandKind::SetPositionKeyInterp,
+            Command::SetPositionKeyValue { .. } => CommandKind::SetPositionKeyValue,
             Command::SetClipStart { .. } => CommandKind::SetClipStart,
             Command::TrimClipIn { .. } => CommandKind::TrimClipIn,
             Command::TrimClipOut { .. } => CommandKind::TrimClipOut,
@@ -480,6 +499,7 @@ impl Command {
             | Command::SetAudioComponentEnabled { target, .. }
             | Command::SetAudioComponentGain { target, .. }
             | Command::SetPositionKeyInterp { target, .. }
+            | Command::SetPositionKeyValue { target, .. }
             | Command::SetClipStart { target, .. }
             | Command::TrimClipIn { target, .. }
             | Command::TrimClipOut { target, .. } => target.get(),
@@ -529,6 +549,7 @@ impl Command {
                 PropertyId::Position
             }
             Command::SetPositionKeyInterp { key, .. } => PropertyId::PositionKeyInterp(*key),
+            Command::SetPositionKeyValue { key, .. } => PropertyId::PositionKeyValue(*key),
             Command::SetAudioComponentEnabled { index, .. } => PropertyId::AudioEnabled(*index),
             Command::SetAudioComponentGain { index, .. } => PropertyId::AudioGain(*index),
             Command::AddTrackItem { .. } | Command::RemoveTrackItem { .. } => PropertyId::ChildList,
@@ -598,6 +619,7 @@ impl Command {
             | Command::AddTrackItem { .. }
             | Command::RemoveTrackItem { .. }
             | Command::SetPositionKeyInterp { .. }
+            | Command::SetPositionKeyValue { .. }
             | Command::SetClipStart { .. }
             | Command::TrimClipIn { .. }
             | Command::TrimClipOut { .. } => None,
@@ -1031,6 +1053,12 @@ impl Command {
                 old,
                 new,
             } => apply_set_position_key_interp(doc, *target, *key, old, new),
+            Command::SetPositionKeyValue {
+                target,
+                key,
+                old,
+                new,
+            } => apply_set_position_key_value(doc, *target, *key, *old, *new),
             Command::SetClipStart { target, new, .. } => {
                 let layer = target.get();
                 let duration = {
@@ -1339,6 +1367,17 @@ impl Command {
                 old,
                 new,
             } => Command::SetPositionKeyInterp {
+                target,
+                key,
+                old: new,
+                new: old,
+            },
+            Command::SetPositionKeyValue {
+                target,
+                key,
+                old,
+                new,
+            } => Command::SetPositionKeyValue {
                 target,
                 key,
                 old: new,
@@ -1778,6 +1817,25 @@ pub(crate) fn prepare_set_position_key_interp(
         return Ok(None);
     }
     Ok(Some(Command::SetPositionKeyInterp {
+        target,
+        key,
+        old,
+        new,
+    }))
+}
+
+/// Position key の Vec2 value だけを置換する command を構築する。
+pub(crate) fn prepare_set_position_key_value(
+    doc: &Document,
+    target: LayerId,
+    key: KeyframeId,
+    new: [f64; 2],
+) -> Result<Option<Command>, CommandError> {
+    let old = position_key_value_for_command(doc, target, key, None, new)?;
+    if new == old {
+        return Ok(None);
+    }
+    Ok(Some(Command::SetPositionKeyValue {
         target,
         key,
         old,
@@ -2478,6 +2536,97 @@ fn apply_set_position_key_interp(
     replacement.interp = *new;
     track.insert(replacement);
     swap_if_valid(doc, next)
+}
+
+fn apply_set_position_key_value(
+    doc: &mut Document,
+    target: LayerId,
+    key: KeyframeId,
+    old: [f64; 2],
+    new: [f64; 2],
+) -> Result<(), CommandError> {
+    position_key_value_for_command(doc, target, key, Some(old), new)?;
+    if old == new {
+        return Ok(());
+    }
+
+    let mut next = doc.clone();
+    let env = find_envelope_mut(&mut next, target)?;
+    let layer = target.get();
+    let DocParam::Keyframes(track) = &mut env.transform.position else {
+        return Err(CommandError::PositionKeyValueSourceUnsupported { layer });
+    };
+    let mut replacement = track
+        .get_by_id(key)
+        .ok_or(CommandError::PositionKeyValueNotFound {
+            layer,
+            key_id: key.get(),
+        })?
+        .clone();
+    replacement.value = DocValue::Vec2(new);
+    track.insert(replacement);
+    swap_if_valid(doc, next)
+}
+
+fn position_key_value_for_command(
+    doc: &Document,
+    target: LayerId,
+    key: KeyframeId,
+    expected_old: Option<[f64; 2]>,
+    new: [f64; 2],
+) -> Result<[f64; 2], CommandError> {
+    let layer = target.get();
+    if !new.iter().all(|value| value.is_finite()) {
+        return Err(CommandError::PositionKeyValueNonFinite {
+            layer,
+            key_id: key.get(),
+        });
+    }
+    if let Some(old) = expected_old {
+        if !old.iter().all(|value| value.is_finite()) {
+            return Err(CommandError::PositionKeyValueNonFinite {
+                layer,
+                key_id: key.get(),
+            });
+        }
+    }
+
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    let DocParam::Keyframes(track) = &env.transform.position else {
+        return Err(CommandError::PositionKeyValueSourceUnsupported { layer });
+    };
+    if track.keys().is_empty() {
+        return Err(CommandError::PositionKeyValueSourceUnsupported { layer });
+    }
+    if track
+        .keys()
+        .iter()
+        .any(|candidate| !matches!(candidate.value, DocValue::Vec2(_)))
+    {
+        return Err(CommandError::PositionKeyValueTypeMismatch { layer });
+    }
+    let current = track
+        .get_by_id(key)
+        .ok_or(CommandError::PositionKeyValueNotFound {
+            layer,
+            key_id: key.get(),
+        })?;
+    let DocValue::Vec2(current_value) = current.value else {
+        return Err(CommandError::PositionKeyValueTypeMismatch { layer });
+    };
+    if !current_value.iter().all(|value| value.is_finite()) {
+        return Err(CommandError::PositionKeyValueNonFinite {
+            layer,
+            key_id: key.get(),
+        });
+    }
+    if expected_old.is_some_and(|old| old != current_value) {
+        return Err(CommandError::PositionKeyValuePayloadMismatch {
+            layer,
+            key_id: key.get(),
+        });
+    }
+    Ok(current_value)
 }
 
 fn position_key_interp_for_command(

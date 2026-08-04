@@ -28,6 +28,7 @@ pub(crate) enum DocumentEditAction {
     SetEffectParam(SetEffectParamRequest),
     AddPositionKey(AddPositionKeyRequest),
     SetPositionKeyInterp(SetPositionKeyInterpRequest),
+    SetPositionKeyValue(SetPositionKeyValueRequest),
     MoveClip(TimelineMoveRequest),
     TrimClip(TimelineTrimRequest),
     ReplacePrimary(LayerId),
@@ -45,6 +46,7 @@ impl DocumentEditAction {
             Self::SetEffectParam(_) => DocumentEditActionKind::SetEffectParam,
             Self::AddPositionKey(_) => DocumentEditActionKind::AddPositionKey,
             Self::SetPositionKeyInterp(_) => DocumentEditActionKind::SetPositionKeyInterp,
+            Self::SetPositionKeyValue(_) => DocumentEditActionKind::SetPositionKeyValue,
             Self::MoveClip(_) => DocumentEditActionKind::MoveClip,
             Self::TrimClip(_) => DocumentEditActionKind::TrimClip,
             Self::ReplacePrimary(_) => DocumentEditActionKind::ReplacePrimary,
@@ -63,6 +65,7 @@ pub(crate) enum DocumentEditActionKind {
     SetEffectParam,
     AddPositionKey,
     SetPositionKeyInterp,
+    SetPositionKeyValue,
     MoveClip,
     TrimClip,
     ReplacePrimary,
@@ -100,6 +103,11 @@ impl DocumentEditQueue {
     pub(crate) fn push_set_position_key_interp(&mut self, request: SetPositionKeyInterpRequest) {
         self.pending
             .push_back(DocumentEditAction::SetPositionKeyInterp(request));
+    }
+
+    pub(crate) fn push_set_position_key_value(&mut self, request: SetPositionKeyValueRequest) {
+        self.pending
+            .push_back(DocumentEditAction::SetPositionKeyValue(request));
     }
 
     pub(crate) fn push_move_clip(&mut self, request: TimelineMoveRequest) {
@@ -207,6 +215,14 @@ pub(crate) struct SetPositionKeyInterpRequest {
     pub(crate) target: LayerId,
     pub(crate) key: KeyframeId,
     pub(crate) interp: Interp,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct SetPositionKeyValueRequest {
+    pub(crate) target: LayerId,
+    pub(crate) key: KeyframeId,
+    pub(crate) old: [f64; 2],
+    pub(crate) new: [f64; 2],
 }
 
 impl SetEffectParamRequest {
@@ -554,6 +570,46 @@ impl DocumentEditRuntime {
                 let Some(command) = command else {
                     return Ok(None);
                 };
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::SetPositionKeyValue(request) => {
+                if current_primary != Some(request.target) {
+                    return Ok(None);
+                }
+                let command = match self.writer.prepare_set_position_key_value(
+                    request.target,
+                    request.key,
+                    request.new,
+                ) {
+                    Ok(command) => command,
+                    Err(
+                        CommandError::LayerNotFound(_)
+                        | CommandError::PositionKeyValueSourceUnsupported { .. }
+                        | CommandError::PositionKeyValueTypeMismatch { .. }
+                        | CommandError::PositionKeyValueNotFound { .. }
+                        | CommandError::PositionKeyValueNonFinite { .. }
+                        | CommandError::PositionKeyValuePayloadMismatch { .. },
+                    ) => return Ok(None),
+                    Err(error) => return Err(error.into()),
+                };
+                let Some(command) = command else {
+                    return Ok(None);
+                };
+                let Command::SetPositionKeyValue { old, .. } = &command else {
+                    return Err(DocumentEditRuntimeError::PositionKeyPrepareMismatch);
+                };
+                if *old != request.old {
+                    return Ok(None);
+                }
                 let projection_generation =
                     next_projection_generation(current_projection_generation)?;
                 self.commit_command(
@@ -1047,6 +1103,8 @@ pub(crate) enum DocumentEditRuntimeError {
     AttachDefaultNotConst { param: String },
     #[error("prepare_create_effect returned a non-CreateEffect command")]
     AttachPrepareCommandMismatch,
+    #[error("prepare_set_position_key_value returned a non-value command")]
+    PositionKeyPrepareMismatch,
     #[error(transparent)]
     LayerId(#[from] LayerIdError),
     #[error(transparent)]
@@ -1587,6 +1645,147 @@ mod tests {
             .is_none());
         assert_eq!(runtime.history_lengths(), (2, 0));
         assert_eq!(fs::metadata(&journal).unwrap().len(), journal_after_change);
+    }
+
+    #[test]
+    fn position_value_queue_commits_one_key_locally_and_roundtrips_history() {
+        let (document, _) = fixture();
+        let primary = fixture_layer(&document);
+        let time = RationalTime::try_new(1, 2).unwrap();
+        let (path, mut runtime) = open_runtime(document);
+        let journal = journal_path_for_document(&path);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_add_position_key(AddPositionKeyRequest {
+            target: primary,
+            time,
+        });
+        let keyed = runtime
+            .process_next(&mut queue, Some(primary), 0)
+            .unwrap()
+            .expect("Position key must publish");
+        let (key, interp, counter) = match &runtime
+            .writer
+            .find_envelope(primary)
+            .unwrap()
+            .transform
+            .position
+        {
+            motolii_doc::DocParam::Keyframes(track) => {
+                let key = track.keys().iter().find(|key| key.t == time).unwrap();
+                (
+                    key.id,
+                    key.interp,
+                    runtime.snapshot().next_stable_id.peek_next(),
+                )
+            }
+            other => panic!("expected Position keyframes, got {other:?}"),
+        };
+        let before_value = serde_json::to_vec(&*runtime.snapshot()).unwrap();
+        let journal_before = fs::metadata(&journal).unwrap().len();
+        queue.push_set_position_key_value(SetPositionKeyValueRequest {
+            target: primary,
+            key,
+            old: [0.0, 0.0],
+            new: [0.4, -0.2],
+        });
+        let changed = runtime
+            .process_next(&mut queue, Some(primary), keyed.projection_generation)
+            .unwrap()
+            .expect("Position value must publish once");
+        assert_eq!(changed.kind, DocumentEditActionKind::SetPositionKeyValue);
+        assert_eq!(changed.revision, 2);
+        assert_eq!(runtime.history_lengths(), (2, 0));
+        assert!(fs::metadata(&journal).unwrap().len() > journal_before);
+        match &changed
+            .snapshot
+            .tracks
+            .iter()
+            .flat_map(|track| track.items.iter())
+            .find_map(|item| match item {
+                TrackItem::Clip(clip) if clip.envelope.layer_id == primary => {
+                    Some(&clip.envelope.transform.position)
+                }
+                TrackItem::Group(_) | TrackItem::Clip(_) => None,
+            })
+            .unwrap()
+        {
+            motolii_doc::DocParam::Keyframes(track) => {
+                let edited = track.get_by_id(key).unwrap();
+                assert_eq!(edited.value, motolii_doc::DocValue::Vec2([0.4, -0.2]));
+                assert_eq!(edited.t, time);
+                assert_eq!(edited.interp, interp);
+            }
+            other => panic!("expected Position keyframes after value edit, got {other:?}"),
+        }
+        assert_eq!(changed.snapshot.next_stable_id.peek_next(), counter);
+        assert_ne!(
+            serde_json::to_vec(&*changed.snapshot).unwrap(),
+            before_value
+        );
+
+        let changed_json = serde_json::to_vec(&*changed.snapshot).unwrap();
+        let journal_after_change = fs::metadata(&journal).unwrap().len();
+        queue.push_set_position_key_value(SetPositionKeyValueRequest {
+            target: primary,
+            key,
+            old: [0.0, 0.0],
+            new: [0.4, -0.2],
+        });
+        assert!(runtime
+            .process_next(&mut queue, Some(primary), changed.projection_generation)
+            .unwrap()
+            .is_none());
+        assert_eq!(runtime.history_lengths(), (2, 0));
+        assert_eq!(runtime.revision(), 2);
+        assert_eq!(fs::metadata(&journal).unwrap().len(), journal_after_change);
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            changed_json
+        );
+
+        queue.push_undo();
+        let undone = runtime
+            .process_next(&mut queue, Some(primary), changed.projection_generation)
+            .unwrap()
+            .expect("Position value undo must publish");
+        assert_eq!(undone.kind, DocumentEditActionKind::Undo);
+        queue.push_redo();
+        let redone = runtime
+            .process_next(&mut queue, Some(primary), undone.projection_generation)
+            .unwrap()
+            .expect("Position value redo must publish");
+        assert_eq!(redone.kind, DocumentEditActionKind::Redo);
+        assert_eq!(serde_json::to_vec(&*redone.snapshot).unwrap(), changed_json);
+
+        let stale_json = serde_json::to_vec(&*runtime.snapshot()).unwrap();
+        let stale_revision = runtime.revision();
+        let stale_history = runtime.history_lengths();
+        let stale_journal = fs::metadata(&journal).unwrap().len();
+        queue.push_set_position_key_value(SetPositionKeyValueRequest {
+            target: primary,
+            key,
+            old: [9.0, 9.0],
+            new: [0.8, 0.9],
+        });
+        assert!(runtime
+            .process_next(&mut queue, Some(primary), redone.projection_generation)
+            .unwrap()
+            .is_none());
+        assert_eq!(runtime.revision(), stale_revision);
+        assert_eq!(runtime.history_lengths(), stale_history);
+        assert_eq!(fs::metadata(&journal).unwrap().len(), stale_journal);
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            stale_json
+        );
+
+        drop(runtime);
+        let limits = ResourceLimits::production();
+        let (_session, reopened) = ProjectSession::open(&path, &limits).unwrap();
+        assert_eq!(
+            serde_json::to_vec(&reopened.document).unwrap(),
+            changed_json
+        );
     }
 
     #[test]

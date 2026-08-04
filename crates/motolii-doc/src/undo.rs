@@ -130,6 +130,17 @@ fn merge_pair(first: &Command, second: Command) -> Command {
             new,
         },
         (
+            Command::SetPositionKeyValue {
+                target, key, old, ..
+            },
+            Command::SetPositionKeyValue { new, .. },
+        ) => Command::SetPositionKeyValue {
+            target,
+            key,
+            old,
+            new,
+        },
+        (
             Command::TrimClipIn {
                 target,
                 old_start,

@@ -45,6 +45,8 @@ function ObjectAutoHint({ param, keys, automation }) {
 function ScrubControl({
   param,
   value,
+  displayValue = `${value}%`,
+  displayName,
   controlId = param,
   readOnly = false,
   onScrubStart,
@@ -73,8 +75,8 @@ function ScrubControl({
       style={{ "--dial-shift": value * 2 }}
       aria-label={
         readOnly
-          ? `${param} read-only`
-          : `${param === "intensity" ? "Intensity" : param === "amount" ? "Amount" : "Spread"}。無限目盛を左右dragして変更`
+          ? `${displayName ?? param} read-only`
+          : `${displayName ?? (param === "intensity" ? "Intensity" : param === "amount" ? "Amount" : "Spread")}。無限目盛を左右dragして変更`
       }
       aria-readonly={readOnly || undefined}
       disabled={readOnly || undefined}
@@ -104,7 +106,7 @@ function ScrubControl({
       }}
     >
       <span className="scrub-dial" aria-hidden="true" />
-      <output id={`${param}-read`}>{`${value}%`}</output>
+      <output id={`${param}-read`}>{displayValue}</output>
     </button>
   );
 }
@@ -255,12 +257,15 @@ export function InspectorCandidate({
   renderPluginHistory,
   inspectorReadModel,
   onEffectParamGesture,
+  onPositionKeyGesture,
   onAddPositionKey,
 }) {
   const [, syncRender] = useReducer((n) => n + 1, 0);
   const scrubSessionRef = useRef(null);
   const productScrubSessionRef = useRef(null);
   const productDisplayValuesRef = useRef(new Map());
+  const positionScrubSessionRef = useRef(null);
+  const positionDisplayValuesRef = useRef(new Map());
   const toggledAutomationRef = useRef({ object: new Set(), effect: new Set() });
   const activeEffect = inspectorReadModel?.active_effect;
 
@@ -276,6 +281,17 @@ export function InspectorCandidate({
     productScrubSessionRef.current = null;
     productDisplayValuesRef.current.clear();
   }, [activeEffect?.effect_use_id]);
+
+  const projectedPosition = inspectorReadModel?.position;
+  useEffect(() => {
+    positionScrubSessionRef.current = null;
+    positionDisplayValuesRef.current.clear();
+  }, [
+    inspectorReadModel?.target?.layer_id,
+    projectedPosition?.kind,
+    projectedPosition?.x,
+    projectedPosition?.y,
+  ]);
 
   const toggleObjectAutomation = (param) => {
     toggledAutomationRef.current.object.add(param);
@@ -466,6 +482,99 @@ export function InspectorCandidate({
     };
   }, [onEffectParamGesture, cancelProductScrub]);
 
+  const positionValue = (axis) => (
+    positionDisplayValuesRef.current.get(axis) ?? projectedPosition?.[axis]
+  );
+  const emitPositionGesture = (phase, axis, value) => {
+    if (typeof onPositionKeyGesture !== "function") return;
+    const event = phase === "cancel"
+      ? { phase, axis }
+      : { phase, axis, value };
+    onPositionKeyGesture(event);
+  };
+  const onPositionScrubStart = (axis, clientX, control) => {
+    if (
+      projectedPosition?.kind !== "key"
+      || positionScrubSessionRef.current !== null
+      || !Number.isFinite(positionValue(axis))
+    ) return;
+    const value = positionValue(axis);
+    emitPositionGesture("start", axis, value);
+    positionScrubSessionRef.current = {
+      axis,
+      clientX,
+      initialValue: value,
+      value,
+      control,
+    };
+    control.classList.add("dragging");
+  };
+  const onPositionScrubMove = (axis, clientX) => {
+    const session = positionScrubSessionRef.current;
+    if (!session || session.axis !== axis) return;
+    const value = session.initialValue + (clientX - session.clientX) / 100;
+    if (!Number.isFinite(value) || value === session.value) return;
+    emitPositionGesture("update", axis, value);
+    session.value = value;
+    positionDisplayValuesRef.current.set(axis, value);
+    bump();
+  };
+  const cancelPositionScrub = useCallback(() => {
+    const session = positionScrubSessionRef.current;
+    if (!session || typeof onPositionKeyGesture !== "function") return;
+    emitPositionGesture("cancel", session.axis);
+    positionScrubSessionRef.current = null;
+    positionDisplayValuesRef.current.clear();
+    session.control.classList.remove("dragging");
+    bump();
+  }, [onPositionKeyGesture, bump]);
+  const onPositionScrubEnd = (axis, control, triggerSettling) => {
+    const session = positionScrubSessionRef.current;
+    if (!session || session.axis !== axis) return;
+    emitPositionGesture("commit", axis, session.value);
+    positionScrubSessionRef.current = null;
+    control.classList.remove("dragging");
+    const delta = session.value - session.initialValue;
+    if (delta !== 0) triggerSettling(delta > 0 ? 3 : -3);
+    bump();
+  };
+  const onPositionScrubKey = (axis, delta, triggerSettling, control) => {
+    if (
+      projectedPosition?.kind !== "key"
+      || positionScrubSessionRef.current !== null
+      || !Number.isFinite(positionValue(axis))
+    ) return;
+    const initialValue = positionValue(axis);
+    const value = initialValue + delta / 100;
+    if (!Number.isFinite(value)) return;
+    emitPositionGesture("start", axis, initialValue);
+    positionScrubSessionRef.current = {
+      axis,
+      clientX: 0,
+      initialValue,
+      value,
+      control,
+    };
+    emitPositionGesture("commit", axis, value);
+    positionScrubSessionRef.current = null;
+    positionDisplayValuesRef.current.set(axis, value);
+    if (value !== initialValue) triggerSettling(value > initialValue ? 3 : -3);
+    bump();
+  };
+
+  useEffect(() => {
+    if (typeof onPositionKeyGesture !== "function") return undefined;
+    window.addEventListener("blur", cancelPositionScrub);
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") cancelPositionScrub();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("blur", cancelPositionScrub);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onPositionKeyGesture, cancelPositionScrub]);
+
   const panelHead = <div className="panel-head">Inspector</div>;
   const selectedObjectName =
     inspectorReadModel === undefined
@@ -526,10 +635,32 @@ export function InspectorCandidate({
 
   if (mode === undefined && inspectorReadModel !== undefined) {
     const position = inspectorReadModel.position;
+    const positionEditable = position?.kind === "key"
+      && typeof onPositionKeyGesture === "function";
+    const positionAxisControl = (axis, label) => (
+      <ScrubControl
+        param={`position-${axis}`}
+        displayName={`Position ${label}`}
+        controlId={`position-${axis}`}
+        value={positionValue(axis)}
+        displayValue={Number(positionValue(axis)).toFixed(3)}
+        readOnly={!positionEditable}
+        onScrubStart={positionEditable ? onPositionScrubStart : undefined}
+        onScrubMove={positionEditable ? onPositionScrubMove : undefined}
+        onScrubEnd={positionEditable ? onPositionScrubEnd : undefined}
+        onScrubCancel={positionEditable ? (_axis, control) => cancelPositionScrub(control) : undefined}
+        onScrubKey={positionEditable ? onPositionScrubKey : undefined}
+      />
+    );
     const positionRow = position === undefined ? null : objectRow(
       "position",
       <label>Position</label>,
-      position.kind === "const" ? (
+      position.kind === "key" ? (
+        <span className="value axis-pack editable-position">
+          {positionAxisControl("x", "X")}
+          {positionAxisControl("y", "Y")}
+        </span>
+      ) : position.kind === "const" ? (
         <span className="value axis-pack">
           <i><b>X</b> {position.x}</i>
           <i><b>Y</b> {position.y}</i>

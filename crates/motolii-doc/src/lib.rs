@@ -614,6 +614,16 @@ impl DocumentWriter {
     ) -> Result<Option<Command>, CommandError> {
         command::prepare_set_position_key_interp(&self.doc, target, key, new)
     }
+
+    /// Position key の Vec2 value 変更commandを準備する。same-value は `None`。
+    pub fn prepare_set_position_key_value(
+        &self,
+        target: LayerId,
+        key: KeyframeId,
+        new: [f64; 2],
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_set_position_key_value(&self.doc, target, key, new)
+    }
 }
 
 /// 読み手API: スナップショットだけを受け、書き込めない。

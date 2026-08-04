@@ -267,6 +267,7 @@ const fn command_kind_copy(kind: CommandKind) -> &'static str {
         CommandKind::RemoveTrackItem => "Remove track item",
         CommandKind::AddPositionKey => "Add position key",
         CommandKind::SetPositionKeyInterp => "Set position key interpolation",
+        CommandKind::SetPositionKeyValue => "Set position key value",
         CommandKind::SetClipStart => "Set clip start",
         CommandKind::TrimClipIn => "Trim clip in",
         CommandKind::TrimClipOut => "Trim clip out",

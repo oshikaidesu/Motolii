@@ -25,12 +25,14 @@ use crate::browser_host_runtime::{
 use crate::document_edit_runtime::{
     AddPositionKeyRequest, AttachEffectRequest, DocumentEditDispatchError, DocumentEditQueue,
     DocumentEditRuntime, DocumentEditRuntimeError, PlaceRectangleRequest, PublishedDocument,
-    SetPositionKeyInterpRequest,
+    SetPositionKeyInterpRequest, SetPositionKeyValueRequest,
 };
 use crate::host_pointer_capture::{HostPointerCancel, HostPointerCandidate};
 use crate::inspector_host_runtime::{
     resolve_effect_param_preview_command, InspectorGestureTerminal, InspectorGestureTerminalCause,
-    InspectorHostRuntime, InspectorHostRuntimeError,
+    InspectorHostRuntime, InspectorHostRuntimeError, InspectorPositionAxis,
+    InspectorPositionGestureStart, InspectorPositionGestureTerminal,
+    InspectorPositionGestureTerminalCause,
 };
 use crate::layout_authority::LayoutAuthority;
 use crate::native_host_layout::{LogicalRect, NativeHostLayout, PhysicalRect};
@@ -198,6 +200,8 @@ pub(crate) struct ProductApp {
     surface_retry_at: Option<Instant>,
     failure: Option<String>,
     pending_inspector_commit: Option<InspectorGestureTerminal>,
+    pending_position_commit: Option<InspectorPositionGestureTerminal>,
+    position_gesture: Option<PositionGestureBaseline>,
     timeline_move: Option<TimelineMoveGesture>,
     timeline_trim: Option<TimelineTrimGesture>,
     editor_playhead: EditorPlayhead,
@@ -218,6 +222,16 @@ struct PlayheadScrub {
 struct EditorPlayhead {
     current: RationalTime,
     scrub: Option<PlayheadScrub>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct PositionGestureBaseline {
+    session: u64,
+    target: LayerId,
+    playhead: RationalTime,
+    key: KeyframeId,
+    value: [f64; 2],
+    position: DocParam,
 }
 
 impl Default for EditorPlayhead {
@@ -784,6 +798,8 @@ impl ProductApp {
             surface_retry_at: None,
             failure: None,
             pending_inspector_commit: None,
+            pending_position_commit: None,
+            position_gesture: None,
             timeline_move: None,
             timeline_trim: None,
             editor_playhead: EditorPlayhead::default(),
@@ -840,6 +856,7 @@ impl ProductApp {
             &self.current_document,
             self.primary,
             self.active_effect_use,
+            self.editor_playhead.current,
         )?;
         crate::ui_numeric_trace::emit(format_args!(
             "kind=startup phase=inspector-created phase_ms={:.3}",
@@ -1487,6 +1504,14 @@ impl ProductApp {
                     self.fail(event_loop, error);
                     return;
                 }
+                if let Err(error) = self.process_pending_position_commit(event_loop) {
+                    self.fail(event_loop, error);
+                    return;
+                }
+                if let Err(error) = self.process_inspector_position_gestures() {
+                    self.fail(event_loop, error);
+                    return;
+                }
                 if let Err(error) = self.process_inspector_position_key_intents(event_loop) {
                     self.fail(event_loop, error);
                     return;
@@ -1863,8 +1888,21 @@ impl ProductApp {
         }
     }
 
-    fn refresh_editor_playhead(&self) -> Result<(), ProductRuntimeError> {
+    fn refresh_editor_playhead(&mut self) -> Result<(), ProductRuntimeError> {
+        let had_position_gesture =
+            self.position_gesture.take().is_some() || self.pending_position_commit.take().is_some();
         self.publish_stage_transport()?;
+        if let Some(inspector) = &self.inspector {
+            inspector.publish(
+                &self.current_document,
+                self.primary,
+                self.active_effect_use,
+                self.editor_playhead.current,
+            )?;
+        }
+        if had_position_gesture {
+            self.submit_inspector_baseline()?;
+        }
         self.submit_stage_projection()?;
         self.request_redraw();
         Ok(())
@@ -2118,6 +2156,7 @@ impl ProductApp {
                         &self.current_document,
                         self.primary,
                         self.active_effect_use,
+                        self.editor_playhead.current,
                     ) {
                         return self.fail(event_loop, error);
                     }
@@ -2224,6 +2263,181 @@ impl ProductApp {
             return Ok(());
         };
         self.submit_inspector_preview(document, command)?;
+        Ok(())
+    }
+
+    fn process_inspector_position_gestures(&mut self) -> Result<(), ProductRuntimeError> {
+        if self.pending_position_commit.is_some() {
+            return Ok(());
+        }
+        let Some(inspector) = &self.inspector else {
+            return Ok(());
+        };
+        let document = Arc::clone(&self.current_document);
+        if let Some(start) = inspector
+            .take_position_start()
+            .map_err(InspectorHostRuntimeError::from)
+            .map_err(ProductRuntimeError::from)?
+        {
+            self.position_gesture = position_gesture_baseline(
+                &document,
+                self.primary,
+                self.editor_playhead.current,
+                start,
+            );
+        }
+
+        let mut needs_baseline = false;
+        let mut pending_commit = None;
+        loop {
+            let Some(terminal) = inspector
+                .take_position_terminal()
+                .map_err(InspectorHostRuntimeError::from)
+                .map_err(ProductRuntimeError::from)?
+            else {
+                break;
+            };
+            match terminal.cause {
+                InspectorPositionGestureTerminalCause::Cancel => {
+                    self.position_gesture = None;
+                    needs_baseline = true;
+                }
+                InspectorPositionGestureTerminalCause::Commit(value) => {
+                    let Some(baseline) = self.position_gesture.as_ref() else {
+                        needs_baseline = true;
+                        continue;
+                    };
+                    if baseline.session != terminal.session {
+                        self.position_gesture = None;
+                        needs_baseline = true;
+                        continue;
+                    }
+                    match resolve_position_gesture_command(
+                        &document,
+                        self.primary,
+                        self.editor_playhead.current,
+                        baseline,
+                        terminal.axis,
+                        value,
+                    ) {
+                        Some(command) => {
+                            pending_commit = Some((terminal, command));
+                            break;
+                        }
+                        None => {
+                            self.position_gesture = None;
+                            needs_baseline = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some((terminal, command)) = pending_commit {
+            self.pending_position_commit = Some(terminal);
+            if needs_baseline {
+                self.submit_inspector_baseline()?;
+            }
+            self.submit_inspector_preview(Arc::clone(&document), command)?;
+            return Ok(());
+        }
+
+        let update = inspector
+            .take_latest_position_update()
+            .map_err(InspectorHostRuntimeError::from)
+            .map_err(ProductRuntimeError::from)?;
+        let Some(update) = update else {
+            if needs_baseline {
+                self.submit_inspector_baseline()?;
+            }
+            return Ok(());
+        };
+        let preview = self
+            .position_gesture
+            .as_ref()
+            .and_then(|baseline| {
+                (baseline.session == update.session).then(|| {
+                    resolve_position_gesture_command(
+                        &document,
+                        self.primary,
+                        self.editor_playhead.current,
+                        baseline,
+                        update.axis,
+                        update.value,
+                    )
+                })
+            })
+            .flatten();
+        if preview.is_none() {
+            self.position_gesture = None;
+            self.submit_inspector_baseline()?;
+            return Ok(());
+        }
+        self.submit_inspector_preview(document, preview.expect("checked preview"))?;
+        Ok(())
+    }
+
+    fn process_pending_position_commit(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+    ) -> Result<(), ProductRuntimeError> {
+        let Some(terminal) = self.pending_position_commit.take() else {
+            return Ok(());
+        };
+        let InspectorPositionGestureTerminalCause::Commit(value) = terminal.cause else {
+            self.position_gesture = None;
+            self.submit_inspector_baseline()?;
+            return Ok(());
+        };
+        let document = Arc::clone(&self.current_document);
+        let Some(baseline) = self.position_gesture.as_ref() else {
+            self.submit_inspector_baseline()?;
+            return Ok(());
+        };
+        let Some(command) = resolve_position_gesture_command(
+            &document,
+            self.primary,
+            self.editor_playhead.current,
+            baseline,
+            terminal.axis,
+            value,
+        ) else {
+            self.position_gesture = None;
+            self.submit_inspector_baseline()?;
+            return Ok(());
+        };
+        let Command::SetPositionKeyValue {
+            target,
+            key,
+            old,
+            new,
+        } = command
+        else {
+            self.position_gesture = None;
+            self.submit_inspector_baseline()?;
+            return Ok(());
+        };
+        self.document_queue
+            .push_set_position_key_value(SetPositionKeyValueRequest {
+                target,
+                key,
+                old,
+                new,
+            });
+        match self.document_runtime.process_next(
+            &mut self.document_queue,
+            self.primary,
+            self.projection_generation,
+        )? {
+            Some(published) => {
+                self.position_gesture = None;
+                self.adopt_full_publish(event_loop, published, "inspector-position-key-value");
+            }
+            None => {
+                self.position_gesture = None;
+                self.submit_inspector_baseline()?;
+            }
+        }
         Ok(())
     }
 
@@ -2539,6 +2753,8 @@ impl ProductApp {
         }
         self.cancel_timeline_move("published-generation-changed");
         self.cancel_timeline_trim("published-generation-changed");
+        self.position_gesture = None;
+        self.pending_position_commit = None;
         self.retire_editor_playhead("published-generation-changed");
         trace_document_publish(route, &published);
         self.reconcile_active_effect_use(&published);
@@ -2549,9 +2765,12 @@ impl ProductApp {
             return self.fail(event_loop, error);
         }
         if let Some(inspector) = &self.inspector {
-            if let Err(error) =
-                inspector.publish(&self.current_document, self.primary, self.active_effect_use)
-            {
+            if let Err(error) = inspector.publish(
+                &self.current_document,
+                self.primary,
+                self.active_effect_use,
+                self.editor_playhead.current,
+            ) {
                 return self.fail(event_loop, error);
             }
         }
@@ -3151,6 +3370,111 @@ fn publish_stage_transport_snapshot_with_state<E>(
 ) -> Result<(), E> {
     let snapshot = stage_transport_snapshot_with_state(document, primary, playhead, playback_state);
     publish(&snapshot)
+}
+
+fn position_gesture_baseline(
+    document: &motolii_doc::Document,
+    primary: Option<LayerId>,
+    playhead: RationalTime,
+    start: InspectorPositionGestureStart,
+) -> Option<PositionGestureBaseline> {
+    let target = primary?;
+    let (key, value, position) = position_key_value_at(document, Some(target), playhead)?;
+    if axis_value(value, start.axis) != start.value {
+        return None;
+    }
+    Some(PositionGestureBaseline {
+        session: start.session,
+        target,
+        playhead,
+        key,
+        value,
+        position,
+    })
+}
+
+fn resolve_position_gesture_command(
+    document: &motolii_doc::Document,
+    primary: Option<LayerId>,
+    playhead: RationalTime,
+    baseline: &PositionGestureBaseline,
+    axis: InspectorPositionAxis,
+    value: f64,
+) -> Option<Command> {
+    if !value.is_finite() || primary != Some(baseline.target) || playhead != baseline.playhead {
+        return None;
+    }
+    let (key, current, position) =
+        position_key_value_at(document, Some(baseline.target), baseline.playhead)?;
+    if key != baseline.key || current != baseline.value || position != baseline.position {
+        return None;
+    }
+    let new = match axis {
+        InspectorPositionAxis::X => [value, baseline.value[1]],
+        InspectorPositionAxis::Y => [baseline.value[0], value],
+    };
+    (new != baseline.value).then_some(Command::SetPositionKeyValue {
+        target: baseline.target,
+        key: baseline.key,
+        old: baseline.value,
+        new,
+    })
+}
+
+fn axis_value(value: [f64; 2], axis: InspectorPositionAxis) -> f64 {
+    match axis {
+        InspectorPositionAxis::X => value[0],
+        InspectorPositionAxis::Y => value[1],
+    }
+}
+
+fn position_key_value_at(
+    document: &motolii_doc::Document,
+    primary: Option<LayerId>,
+    playhead: RationalTime,
+) -> Option<(KeyframeId, [f64; 2], DocParam)> {
+    fn find_envelope(items: &[TrackItem], target: LayerId) -> Option<&motolii_doc::ItemEnvelope> {
+        for item in items {
+            match item {
+                TrackItem::Clip(clip) if clip.envelope.layer_id == target => {
+                    return Some(&clip.envelope);
+                }
+                TrackItem::Group(group) if group.envelope.layer_id == target => {
+                    return Some(&group.envelope);
+                }
+                TrackItem::Group(group) => {
+                    if let Some(envelope) = find_envelope(&group.children, target) {
+                        return Some(envelope);
+                    }
+                }
+                TrackItem::Clip(_) => {}
+            }
+        }
+        None
+    }
+
+    let target = primary?;
+    let envelope = document
+        .tracks
+        .iter()
+        .find_map(|track| find_envelope(&track.items, target))?;
+    let DocParam::Keyframes(track) = &envelope.transform.position else {
+        return None;
+    };
+    let keys = track.keys();
+    if keys.is_empty()
+        || track.validate().is_err()
+        || keys.iter().any(|key| {
+            !matches!(key.value, DocValue::Vec2(value) if value.iter().all(|value| value.is_finite()))
+        })
+    {
+        return None;
+    }
+    let key = keys.iter().find(|key| key.t == playhead)?;
+    let DocValue::Vec2(value) = key.value else {
+        return None;
+    };
+    Some((key.id, value, envelope.transform.position.clone()))
 }
 
 fn position_active_interval(
@@ -3938,6 +4262,81 @@ mod tests {
                 left_interp: motolii_eval::Interp::Linear,
             })
         );
+        assert_eq!(serde_json::to_vec(&document).unwrap(), before);
+    }
+
+    #[test]
+    fn position_key_value_gesture_requires_exact_key_and_unchanged_live_curve() {
+        let (document, layer, ids) = position_keyframe_document();
+        let before = serde_json::to_vec(&document).unwrap();
+        let playhead = RationalTime::ZERO;
+        let baseline = position_gesture_baseline(
+            &document,
+            Some(layer),
+            playhead,
+            InspectorPositionGestureStart {
+                session: 1,
+                sequence: 1,
+                axis: InspectorPositionAxis::X,
+                value: 0.0,
+            },
+        )
+        .expect("exact current Vec2 key must admit Position editing");
+        assert_eq!(baseline.key, ids[0]);
+        assert_eq!(baseline.value, [0.0, 0.0]);
+        assert_eq!(
+            resolve_position_gesture_command(
+                &document,
+                Some(layer),
+                playhead,
+                &baseline,
+                InspectorPositionAxis::X,
+                0.25,
+            ),
+            Some(Command::SetPositionKeyValue {
+                target: layer,
+                key: ids[0],
+                old: [0.0, 0.0],
+                new: [0.25, 0.0],
+            })
+        );
+        for (primary, time, axis, value) in [
+            (
+                Some(layer),
+                RationalTime::try_new(1, 1).unwrap(),
+                InspectorPositionAxis::X,
+                0.25,
+            ),
+            (None, playhead, InspectorPositionAxis::X, 0.25),
+            (Some(layer), playhead, InspectorPositionAxis::X, 0.0),
+            (Some(layer), playhead, InspectorPositionAxis::X, f64::NAN),
+        ] {
+            assert!(resolve_position_gesture_command(
+                &document, primary, time, &baseline, axis, value,
+            )
+            .is_none());
+        }
+        let mut changed_curve = document.clone();
+        match &mut changed_curve.tracks[0].items[0] {
+            TrackItem::Clip(clip) => {
+                let DocParam::Keyframes(track) = &mut clip.envelope.transform.position else {
+                    unreachable!();
+                };
+                let mut replacement = track.get_by_id(ids[1]).unwrap().clone();
+                replacement.value = DocValue::Vec2([2.0, 2.0]);
+                track.insert(replacement);
+            }
+            TrackItem::Group(_) => unreachable!("bootstrap fixture is a clip"),
+        }
+        assert!(resolve_position_gesture_command(
+            &changed_curve,
+            Some(layer),
+            playhead,
+            &baseline,
+            InspectorPositionAxis::X,
+            0.25,
+        )
+        .is_none());
         assert_eq!(serde_json::to_vec(&document).unwrap(), before);
     }
 
