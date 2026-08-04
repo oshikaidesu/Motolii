@@ -604,6 +604,16 @@ impl DocumentWriter {
     ) -> Result<AddPositionKeyPreparation, AddPositionKeyPrepareError> {
         position_key_prepare::prepare_add_position_key(&self.doc, target, t)
     }
+
+    /// Position key の outgoing interpolation 変更commandを準備する。same-value は `None`。
+    pub fn prepare_set_position_key_interp(
+        &self,
+        target: LayerId,
+        key: KeyframeId,
+        new: motolii_eval::Interp,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_set_position_key_interp(&self.doc, target, key, new)
+    }
 }
 
 /// 読み手API: スナップショットだけを受け、書き込めない。

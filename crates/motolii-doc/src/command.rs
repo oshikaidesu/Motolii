@@ -14,6 +14,8 @@ use thiserror::Error;
 
 use motolii_core::{RationalTime, TimeMap};
 
+use crate::doc_keyframe::{validate_interp, DocKeyframeError};
+use crate::doc_value::DocValue;
 use crate::duplicate::{definition_semantic_body_eq, remint_order_keyframe_ids};
 use crate::param::DocParam;
 use crate::position_key_prepare::deterministic_new_position;
@@ -58,6 +60,7 @@ pub enum PropertyId {
     AudioEnabled(usize),
     AudioGain(usize),
     ChildList,
+    PositionKeyInterp(KeyframeId),
     ClipStart,
     ClipIn,
     ClipOut,
@@ -123,6 +126,7 @@ pub enum CommandKind {
     AddTrackItem,
     RemoveTrackItem,
     AddPositionKey,
+    SetPositionKeyInterp,
     SetClipStart,
     TrimClipIn,
     TrimClipOut,
@@ -188,6 +192,20 @@ pub enum CommandError {
     CopyLocalPayloadMismatch,
     #[error("add position key payload mismatch (layer {layer}, key_id {key_id})")]
     AddPositionKeyPayloadMismatch { layer: u64, key_id: u64 },
+    #[error("position interpolation source unsupported for layer {layer}")]
+    PositionKeyInterpSourceUnsupported { layer: u64 },
+    #[error("position interpolation value type mismatch for layer {layer}")]
+    PositionKeyInterpValueTypeMismatch { layer: u64 },
+    #[error("position key {key_id} not found on layer {layer}")]
+    PositionKeyNotFound { layer: u64, key_id: u64 },
+    #[error("position key interpolation invalid for key {key_id} on layer {layer}")]
+    PositionKeyInterpInvalid {
+        layer: u64,
+        key_id: u64,
+        source: DocKeyframeError,
+    },
+    #[error("position key interpolation payload mismatch for key {key_id} on layer {layer}")]
+    PositionKeyInterpPayloadMismatch { layer: u64, key_id: u64 },
     #[error("effect use {use_id} not found in document")]
     EffectUseNotFound { use_id: u64 },
     #[error(
@@ -383,6 +401,12 @@ pub enum Command {
         added_key_id: KeyframeId,
         stable_id_reservation: StableIdReservation,
     },
+    SetPositionKeyInterp {
+        target: LayerId,
+        key: KeyframeId,
+        old: motolii_eval::Interp,
+        new: motolii_eval::Interp,
+    },
     SetClipStart {
         target: LayerId,
         old: RationalTime,
@@ -436,6 +460,7 @@ impl Command {
             Command::AddPositionKey { .. } | Command::UndoAddPositionKey { .. } => {
                 CommandKind::AddPositionKey
             }
+            Command::SetPositionKeyInterp { .. } => CommandKind::SetPositionKeyInterp,
             Command::SetClipStart { .. } => CommandKind::SetClipStart,
             Command::TrimClipIn { .. } => CommandKind::TrimClipIn,
             Command::TrimClipOut { .. } => CommandKind::TrimClipOut,
@@ -454,6 +479,7 @@ impl Command {
             | Command::SetEffectEnabled { target, .. }
             | Command::SetAudioComponentEnabled { target, .. }
             | Command::SetAudioComponentGain { target, .. }
+            | Command::SetPositionKeyInterp { target, .. }
             | Command::SetClipStart { target, .. }
             | Command::TrimClipIn { target, .. }
             | Command::TrimClipOut { target, .. } => target.get(),
@@ -502,6 +528,7 @@ impl Command {
             Command::AddPositionKey { .. } | Command::UndoAddPositionKey { .. } => {
                 PropertyId::Position
             }
+            Command::SetPositionKeyInterp { key, .. } => PropertyId::PositionKeyInterp(*key),
             Command::SetAudioComponentEnabled { index, .. } => PropertyId::AudioEnabled(*index),
             Command::SetAudioComponentGain { index, .. } => PropertyId::AudioGain(*index),
             Command::AddTrackItem { .. } | Command::RemoveTrackItem { .. } => PropertyId::ChildList,
@@ -570,6 +597,7 @@ impl Command {
             | Command::SetAudioComponentGain { .. }
             | Command::AddTrackItem { .. }
             | Command::RemoveTrackItem { .. }
+            | Command::SetPositionKeyInterp { .. }
             | Command::SetClipStart { .. }
             | Command::TrimClipIn { .. }
             | Command::TrimClipOut { .. } => None,
@@ -997,6 +1025,12 @@ impl Command {
                 *added_key_id,
                 *stable_id_reservation,
             ),
+            Command::SetPositionKeyInterp {
+                target,
+                key,
+                old,
+                new,
+            } => apply_set_position_key_interp(doc, *target, *key, old, new),
             Command::SetClipStart { target, new, .. } => {
                 let layer = target.get();
                 let duration = {
@@ -1298,6 +1332,17 @@ impl Command {
                 new_value,
                 added_key_id,
                 stable_id_reservation,
+            },
+            Command::SetPositionKeyInterp {
+                target,
+                key,
+                old,
+                new,
+            } => Command::SetPositionKeyInterp {
+                target,
+                key,
+                old: new,
+                new: old,
             },
             Command::SetClipStart { target, old, new } => Command::SetClipStart {
                 target,
@@ -1719,6 +1764,25 @@ fn validate_clip_in_payload(
         ));
     }
     Ok(())
+}
+
+/// Position key の outgoing interpolation だけを置換する command を構築する。
+pub(crate) fn prepare_set_position_key_interp(
+    doc: &Document,
+    target: LayerId,
+    key: KeyframeId,
+    new: motolii_eval::Interp,
+) -> Result<Option<Command>, CommandError> {
+    let old = position_key_interp_for_command(doc, target, key, None, &new)?;
+    if new == old {
+        return Ok(None);
+    }
+    Ok(Some(Command::SetPositionKeyInterp {
+        target,
+        key,
+        old,
+        new,
+    }))
 }
 
 /// CU-201M-S: Clip `start`変更commandを構築する。成功・失敗とも live Document 不変。
@@ -2387,6 +2451,78 @@ fn undo_add_position_key(
     let mut next = doc.clone();
     find_envelope_mut(&mut next, target)?.transform.position = old_value;
     swap_if_valid(doc, next)
+}
+
+fn apply_set_position_key_interp(
+    doc: &mut Document,
+    target: LayerId,
+    key: KeyframeId,
+    old: &motolii_eval::Interp,
+    new: &motolii_eval::Interp,
+) -> Result<(), CommandError> {
+    position_key_interp_for_command(doc, target, key, Some(old), new)?;
+
+    let mut next = doc.clone();
+    let env = find_envelope_mut(&mut next, target)?;
+    let layer = target.get();
+    let DocParam::Keyframes(track) = &mut env.transform.position else {
+        return Err(CommandError::PositionKeyInterpSourceUnsupported { layer });
+    };
+    let mut replacement = track
+        .get_by_id(key)
+        .ok_or(CommandError::PositionKeyNotFound {
+            layer,
+            key_id: key.get(),
+        })?
+        .clone();
+    replacement.interp = *new;
+    track.insert(replacement);
+    swap_if_valid(doc, next)
+}
+
+fn position_key_interp_for_command(
+    doc: &Document,
+    target: LayerId,
+    key: KeyframeId,
+    expected_old: Option<&motolii_eval::Interp>,
+    new: &motolii_eval::Interp,
+) -> Result<motolii_eval::Interp, CommandError> {
+    let layer = target.get();
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    let DocParam::Keyframes(track) = &env.transform.position else {
+        return Err(CommandError::PositionKeyInterpSourceUnsupported { layer });
+    };
+    if track
+        .keys()
+        .iter()
+        .any(|candidate| !matches!(candidate.value, DocValue::Vec2(_)))
+    {
+        return Err(CommandError::PositionKeyInterpValueTypeMismatch { layer });
+    }
+    let current = track
+        .get_by_id(key)
+        .ok_or(CommandError::PositionKeyNotFound {
+            layer,
+            key_id: key.get(),
+        })?;
+    let old = expected_old.unwrap_or(&current.interp);
+    validate_interp(old).map_err(|source| CommandError::PositionKeyInterpInvalid {
+        layer,
+        key_id: key.get(),
+        source,
+    })?;
+    validate_interp(new).map_err(|source| CommandError::PositionKeyInterpInvalid {
+        layer,
+        key_id: key.get(),
+        source,
+    })?;
+    if current.interp != *old {
+        return Err(CommandError::PositionKeyInterpPayloadMismatch {
+            layer,
+            key_id: key.get(),
+        });
+    }
+    Ok(current.interp)
 }
 
 fn validate_add_position_key_payload(

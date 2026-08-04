@@ -18,10 +18,10 @@ use std::sync::Arc;
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::{
     layer_names_for_item, BlendMode, Clip, ClipSource, ClippingMaskSettings, Command, CommandError,
-    DocKeyframe, DocKeyframeTrack, DocParam, DocValue, Document, DocumentWriter, EffectDefinition,
-    EffectDefinitionId, EffectId, EffectInstance, EffectUse, Group, ItemEnvelope, KeyframeId,
-    LayerId, LookAtAxis, MaskMode, ParentLocator, ScalarPropertyId, StableIdReservation, Track,
-    TrackId, TrackItem,
+    DocKeyframe, DocKeyframeError, DocKeyframeTrack, DocParam, DocValue, Document, DocumentWriter,
+    EffectDefinition, EffectDefinitionId, EffectId, EffectInstance, EffectUse, Group, ItemEnvelope,
+    KeyframeId, LayerId, LookAtAxis, MaskMode, ParentLocator, ScalarPropertyId,
+    StableIdReservation, Track, TrackId, TrackItem,
 };
 use motolii_eval::Interp;
 use motolii_plugin::reference::reference_catalog;
@@ -968,6 +968,372 @@ fn effect_and_keyframe_ids_never_repeat_and_are_addressable() {
     let removed = track.remove_by_id(b);
     assert_eq!(removed.map(|k| k.id), Some(b));
     assert!(track.get_by_id(b).is_none());
+}
+
+fn replace_fixture_position(doc: &mut Document, layer: LayerId, position: DocParam) {
+    for track in &mut doc.tracks {
+        for item in &mut track.items {
+            let TrackItem::Clip(clip) = item else {
+                continue;
+            };
+            if clip.envelope.layer_id == layer {
+                clip.envelope.transform.position = position;
+                return;
+            }
+        }
+    }
+    panic!("fixture layer must resolve to a clip");
+}
+
+fn keyed_position(first: KeyframeId, second: Option<KeyframeId>) -> DocParam {
+    let mut track = DocKeyframeTrack::new();
+    track.insert(DocKeyframe {
+        id: first,
+        t: RationalTime::ZERO,
+        value: DocValue::Vec2([0.0, 0.0]),
+        interp: Interp::Linear,
+    });
+    if let Some(second) = second {
+        track.insert(DocKeyframe {
+            id: second,
+            t: RationalTime::from_seconds(1),
+            value: DocValue::Vec2([1.0, 1.0]),
+            interp: Interp::Hold,
+        });
+    }
+    DocParam::Keyframes(track)
+}
+
+fn interp_command(target: LayerId, key: KeyframeId, old: Interp, new: Interp) -> Command {
+    Command::SetPositionKeyInterp {
+        target,
+        key,
+        old,
+        new,
+    }
+}
+
+fn document_json(doc: &Document) -> Vec<u8> {
+    serde_json::to_vec(doc).unwrap()
+}
+
+#[test]
+fn position_key_interp_noop_and_terminal_key_preserve_document_counters_and_bytes() {
+    let mut f = fixture();
+    let key = KeyframeId::from_raw(f.doc.next_stable_id.allocate().unwrap());
+    replace_fixture_position(&mut f.doc, f.layer, keyed_position(key, None));
+    f.doc.validate().unwrap();
+    let counter = f.doc.next_stable_id.peek_next();
+    let before = f.doc.clone();
+    let writer = reference_writer(f.doc);
+
+    assert_eq!(
+        writer
+            .prepare_set_position_key_interp(f.layer, key, Interp::Linear)
+            .unwrap(),
+        None
+    );
+    assert_eq!(writer.snapshot().as_ref(), &before);
+    assert_eq!(writer.revision, 0);
+    assert_eq!(writer.undo_len(), 0);
+    assert_eq!(writer.snapshot().next_stable_id.peek_next(), counter);
+
+    let identity = interp_command(f.layer, key, Interp::Linear, Interp::Linear);
+    let raw_before = document_json(writer.snapshot().as_ref());
+    let mut raw_document = (*writer.snapshot()).clone();
+    identity.apply(&mut raw_document).unwrap();
+    assert_eq!(document_json(&raw_document), raw_before);
+    assert_eq!(raw_document.next_stable_id.peek_next(), counter);
+
+    let command = writer
+        .prepare_set_position_key_interp(f.layer, key, Interp::Hold)
+        .unwrap()
+        .unwrap();
+    command.apply(&mut raw_document).unwrap();
+    let TrackItem::Clip(clip) = &raw_document.tracks[0].items[0] else {
+        panic!("fixture target must be a clip");
+    };
+    let DocParam::Keyframes(track) = &clip.envelope.transform.position else {
+        panic!("terminal position must remain keyframed");
+    };
+    assert_eq!(track.get_by_id(key).unwrap().interp, Interp::Hold);
+    assert_eq!(raw_document.next_stable_id.peek_next(), counter);
+}
+
+#[test]
+fn position_key_interp_rejections_are_ordered_typed_and_byte_preserving() {
+    let mut f = fixture();
+    let key = KeyframeId::from_raw(f.doc.next_stable_id.allocate().unwrap());
+    replace_fixture_position(&mut f.doc, f.layer, keyed_position(key, None));
+    f.doc.validate().unwrap();
+
+    let reject = |doc: &Document, command: Command| {
+        let before = document_json(doc);
+        let mut working = doc.clone();
+        let error = command.apply(&mut working).unwrap_err();
+        assert_eq!(document_json(&working), before);
+        error
+    };
+    assert!(matches!(
+        reject(
+            &f.doc,
+            interp_command(LayerId::from_raw(999), key, Interp::Linear, Interp::Hold)
+        ),
+        CommandError::LayerNotFound(999)
+    ));
+
+    let unsupported = [
+        DocParam::const_vec2([0.0, 0.0]),
+        DocParam::Vec2Axes {
+            x: Box::new(DocParam::const_f64(0.0)),
+            y: Box::new(DocParam::const_f64(0.0)),
+        },
+        DocParam::Data {
+            track: motolii_eval::DataTrackId("position.source".into()),
+            fallback: DocValue::Vec2([0.0, 0.0]),
+        },
+        DocParam::LookAt {
+            target: f.other_layer,
+            axis: LookAtAxis::PlusX,
+        },
+        DocParam::Follow {
+            target: f.other_layer,
+            offset: [0.0, 0.0],
+        },
+    ];
+    for position in unsupported {
+        let mut doc = f.doc.clone();
+        replace_fixture_position(&mut doc, f.layer, position);
+        assert!(matches!(
+            reject(&doc, interp_command(f.layer, key, Interp::Linear, Interp::Hold)),
+            CommandError::PositionKeyInterpSourceUnsupported { layer } if layer == f.layer.get()
+        ));
+    }
+
+    let mut wrong_value = DocKeyframeTrack::new();
+    wrong_value.insert(DocKeyframe {
+        id: key,
+        t: RationalTime::ZERO,
+        value: DocValue::F64(0.0),
+        interp: Interp::Linear,
+    });
+    let mut wrong_value_doc = f.doc.clone();
+    replace_fixture_position(
+        &mut wrong_value_doc,
+        f.layer,
+        DocParam::Keyframes(wrong_value),
+    );
+    assert!(matches!(
+        reject(
+            &wrong_value_doc,
+            interp_command(f.layer, key, Interp::Linear, Interp::Hold)
+        ),
+        CommandError::PositionKeyInterpValueTypeMismatch { layer } if layer == f.layer.get()
+    ));
+
+    let mut empty_doc = f.doc.clone();
+    replace_fixture_position(
+        &mut empty_doc,
+        f.layer,
+        DocParam::Keyframes(DocKeyframeTrack::new()),
+    );
+    assert!(matches!(
+        reject(&empty_doc, interp_command(f.layer, key, Interp::Linear, Interp::Hold)),
+        CommandError::PositionKeyNotFound { layer, key_id }
+            if layer == f.layer.get() && key_id == key.get()
+    ));
+    let missing = KeyframeId::from_raw(key.get() + 1);
+    assert!(matches!(
+        reject(&f.doc, interp_command(f.layer, missing, Interp::Linear, Interp::Hold)),
+        CommandError::PositionKeyNotFound { layer, key_id }
+            if layer == f.layer.get() && key_id == missing.get()
+    ));
+
+    let non_finite = Interp::Bezier {
+        x1: f64::NAN,
+        y1: 0.0,
+        x2: 1.0,
+        y2: 1.0,
+    };
+    assert!(matches!(
+        reject(
+            &f.doc,
+            interp_command(f.layer, key, non_finite, Interp::Hold)
+        ),
+        CommandError::PositionKeyInterpInvalid {
+            source: DocKeyframeError::NonFiniteBezier,
+            ..
+        }
+    ));
+    let invalid_x = Interp::Bezier {
+        x1: -0.1,
+        y1: 0.0,
+        x2: 1.0,
+        y2: 1.0,
+    };
+    assert!(matches!(
+        reject(
+            &f.doc,
+            interp_command(f.layer, key, Interp::Linear, invalid_x)
+        ),
+        CommandError::PositionKeyInterpInvalid {
+            source: DocKeyframeError::InvalidBezier { .. },
+            ..
+        }
+    ));
+    assert!(matches!(
+        reject(&f.doc, interp_command(f.layer, key, Interp::Hold, Interp::Linear)),
+        CommandError::PositionKeyInterpPayloadMismatch { layer, key_id }
+            if layer == f.layer.get() && key_id == key.get()
+    ));
+}
+
+#[test]
+fn position_key_interp_merge_identity_keeps_keys_and_layers_distinct() {
+    let mut f = fixture();
+    let first = KeyframeId::from_raw(f.doc.next_stable_id.allocate().unwrap());
+    let second = KeyframeId::from_raw(f.doc.next_stable_id.allocate().unwrap());
+    let other = KeyframeId::from_raw(f.doc.next_stable_id.allocate().unwrap());
+    replace_fixture_position(&mut f.doc, f.layer, keyed_position(first, Some(second)));
+    replace_fixture_position(&mut f.doc, f.other_layer, keyed_position(other, None));
+    f.doc.validate().unwrap();
+    let counter = f.doc.next_stable_id.peek_next();
+    let before = f.doc.clone();
+    let mut writer = reference_writer(f.doc);
+    let gesture = writer.begin_gesture();
+
+    let first_bezier = Interp::Bezier {
+        x1: 0.2,
+        y1: 0.0,
+        x2: 0.8,
+        y2: 1.0,
+    };
+    let first_change = interp_command(f.layer, first, Interp::Linear, first_bezier);
+    let first_final = interp_command(f.layer, first, first_bezier, Interp::Hold);
+    let second_change = interp_command(f.layer, second, Interp::Hold, Interp::Linear);
+    let other_change = interp_command(f.other_layer, other, Interp::Linear, Interp::Hold);
+    assert_ne!(first_change.property(), second_change.property());
+    assert_ne!(
+        first_change.target_stable_id(),
+        other_change.target_stable_id()
+    );
+    assert_ne!(
+        first_change.merge_key(gesture),
+        second_change.merge_key(gesture)
+    );
+    assert_ne!(
+        first_change.merge_key(gesture),
+        other_change.merge_key(gesture)
+    );
+    assert_eq!(
+        first_change.inverse(),
+        interp_command(f.layer, first, first_bezier, Interp::Linear,)
+    );
+
+    writer.apply_command(gesture, first_change).unwrap();
+    writer.apply_command(gesture, first_final).unwrap();
+    writer.apply_command(gesture, second_change).unwrap();
+    writer.apply_command(gesture, other_change).unwrap();
+    assert_eq!(writer.undo_len(), 1);
+    assert_eq!(writer.snapshot().next_stable_id.peek_next(), counter);
+    let after = (*writer.snapshot()).clone();
+    writer.undo().unwrap();
+    assert_eq!(writer.snapshot().as_ref(), &before);
+    writer.redo().unwrap();
+    assert_eq!(writer.snapshot().as_ref(), &after);
+    assert_eq!(writer.snapshot().next_stable_id.peek_next(), counter);
+}
+
+#[test]
+fn position_key_interp_is_key_only_cas_mergeable_and_undoable() {
+    let mut f = fixture();
+    let first = KeyframeId::from_raw(f.doc.next_stable_id.allocate().unwrap());
+    let second = KeyframeId::from_raw(f.doc.next_stable_id.allocate().unwrap());
+    let mut position = DocKeyframeTrack::new();
+    position.insert(DocKeyframe {
+        id: first,
+        t: RationalTime::ZERO,
+        value: DocValue::Vec2([0.0, 0.0]),
+        interp: Interp::Linear,
+    });
+    position.insert(DocKeyframe {
+        id: second,
+        t: RationalTime::from_seconds(1),
+        value: DocValue::Vec2([1.0, 1.0]),
+        interp: Interp::Hold,
+    });
+    let TrackItem::Clip(clip) = &mut f.doc.tracks[0].items[0] else {
+        panic!("fixture target must be a clip");
+    };
+    clip.envelope.transform.position = DocParam::Keyframes(position);
+    f.doc.validate().unwrap();
+
+    let counter = f.doc.next_stable_id.peek_next();
+    let before = f.doc.clone();
+    let mut writer = reference_writer(f.doc);
+    let first_new = Interp::Bezier {
+        x1: 0.2,
+        y1: -0.3,
+        x2: 0.8,
+        y2: 1.4,
+    };
+    let gesture = writer.begin_gesture();
+    let first_command = writer
+        .prepare_set_position_key_interp(f.layer, first, first_new)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        first_command.kind(),
+        motolii_doc::CommandKind::SetPositionKeyInterp
+    );
+    assert_eq!(first_command.target_stable_id(), f.layer.get());
+    assert!(first_command.stable_id_reservation().is_none());
+    writer.apply_command(gesture, first_command).unwrap();
+
+    let last_new = Interp::Hold;
+    let last_command = writer
+        .prepare_set_position_key_interp(f.layer, first, last_new)
+        .unwrap()
+        .unwrap();
+    writer.apply_command(gesture, last_command).unwrap();
+    assert_eq!(writer.undo_len(), 1);
+    assert_eq!(writer.snapshot().next_stable_id.peek_next(), counter);
+
+    let snapshot = writer.snapshot();
+    let TrackItem::Clip(after) = &snapshot.tracks[0].items[0] else {
+        panic!("fixture target must be a clip");
+    };
+    let DocParam::Keyframes(after_position) = &after.envelope.transform.position else {
+        panic!("position must remain keyframed");
+    };
+    assert_eq!(after_position.get_by_id(first).unwrap().interp, last_new);
+    assert_eq!(
+        after_position.get_by_id(second).unwrap().interp,
+        Interp::Hold
+    );
+    assert_eq!(
+        after_position.get_by_id(first).unwrap().t,
+        RationalTime::ZERO
+    );
+    assert_eq!(
+        after_position.get_by_id(first).unwrap().value,
+        DocValue::Vec2([0.0, 0.0])
+    );
+
+    writer.undo().unwrap();
+    assert_eq!(writer.snapshot().as_ref(), &before);
+    writer.redo().unwrap();
+    let stale = Command::SetPositionKeyInterp {
+        target: f.layer,
+        key: first,
+        old: Interp::Linear,
+        new: Interp::Hold,
+    };
+    let mut stale_doc = (*writer.snapshot()).clone();
+    assert!(matches!(
+        stale.apply(&mut stale_doc),
+        Err(CommandError::PositionKeyInterpPayloadMismatch { .. })
+    ));
 }
 
 #[test]

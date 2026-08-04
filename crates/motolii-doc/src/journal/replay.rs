@@ -292,7 +292,7 @@ mod replay_tests {
     use crate::journal::{
         generation_path_for_document, load_catalog, open_project, replay_from_base,
         save_project_with_journal, JournalEdit, JournalRecordKind, JournalScanOutcome,
-        ReplayFailure, V1_EDIT_FORMAT_VERSION,
+        ReplayFailure, V1_EDIT_FORMAT_VERSION, V2_EDIT_FORMAT_VERSION,
     };
     use crate::{
         migrate_bytes, Clip, ClipSource, Command, DocParam, Document, EffectUse, ItemEnvelope,
@@ -445,6 +445,114 @@ mod replay_tests {
         }))
         .unwrap();
         assert!(decode_edit(&legacy).is_err());
+    }
+
+    #[test]
+    fn v2_position_key_interp_replay_matches_live_apply_and_v1_rejects_variant() {
+        let (base, layer) = empty_clip_base();
+        let crate::AddPositionKeyPreparation::Prepared { key_id, command } =
+            crate::position_key_prepare::prepare_add_position_key(
+                &base,
+                layer,
+                RationalTime::from_seconds(2),
+            )
+            .unwrap()
+        else {
+            panic!("const position must prepare a key");
+        };
+        let mut keyed = base;
+        command.apply(&mut keyed).unwrap();
+        let command = crate::command::prepare_set_position_key_interp(
+            &keyed,
+            layer,
+            key_id,
+            motolii_eval::Interp::Bezier {
+                x1: 0.2,
+                y1: -0.5,
+                x2: 0.8,
+                y2: 1.5,
+            },
+        )
+        .unwrap()
+        .unwrap();
+        let command_value = serde_json::to_value(&command).unwrap();
+        let serde_json::Value::Object(command_object) = &command_value else {
+            panic!("command must use the externally tagged serde shape");
+        };
+        assert_eq!(command_object.len(), 1);
+        let serde_json::Value::Object(fields) = command_object
+            .get("SetPositionKeyInterp")
+            .expect("dedicated command tag")
+        else {
+            panic!("SetPositionKeyInterp payload must be an object");
+        };
+        for field in ["target", "key", "old", "new"] {
+            assert!(fields.contains_key(field), "missing {field}");
+        }
+        let edit = JournalEdit::new(command.clone());
+        assert_eq!(edit.format_version, V2_EDIT_FORMAT_VERSION);
+
+        let mut live = keyed.clone();
+        command.apply(&mut live).unwrap();
+        let payload = edit_payload(&edit).unwrap();
+        let decoded = decode_edit(&payload).unwrap();
+        let mut replayed = keyed;
+        apply_decoded_edit(&mut replayed, &decoded).unwrap();
+
+        assert_eq!(replayed, live);
+        let legacy = serde_json::to_vec(&json!({
+            "format_version": V1_EDIT_FORMAT_VERSION,
+            "command": command_value
+        }))
+        .unwrap();
+        assert!(decode_edit(&legacy).is_err());
+    }
+
+    #[test]
+    fn v2_position_key_interp_committed_wal_replays_like_live_apply() {
+        let dir = unique_dir("position-key-interp-wal");
+        let path = dir.join("proj.json");
+        let (base, layer) = empty_clip_base();
+        let crate::AddPositionKeyPreparation::Prepared { key_id, command } =
+            crate::position_key_prepare::prepare_add_position_key(
+                &base,
+                layer,
+                RationalTime::from_seconds(2),
+            )
+            .unwrap()
+        else {
+            panic!("const position must prepare a key");
+        };
+        let mut keyed = base;
+        command.apply(&mut keyed).unwrap();
+        let command = crate::command::prepare_set_position_key_interp(
+            &keyed,
+            layer,
+            key_id,
+            motolii_eval::Interp::Hold,
+        )
+        .unwrap()
+        .unwrap();
+        let edit = JournalEdit::new(command.clone());
+        let mut live = keyed.clone();
+        command.apply(&mut live).unwrap();
+
+        save_project_with_journal(&path, &keyed, &SaveProjectOptions::default()).unwrap();
+        save_project_with_journal(
+            &path,
+            &keyed,
+            &SaveProjectOptions {
+                journal_edit: Some(edit),
+                checkpoint: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let opened = open_project(&path).unwrap();
+        let replay = opened.replay.expect("committed WAL edit must replay");
+        assert!(replay.replay_failures.is_empty());
+        assert_eq!(replay.document, live);
+        let _ = fs::remove_dir_all(dir);
     }
 
     fn inline_effect_json() -> serde_json::Value {

@@ -119,6 +119,17 @@ fn merge_pair(first: &Command, second: Command) -> Command {
             Command::SetClipStart { target, old, new }
         }
         (
+            Command::SetPositionKeyInterp {
+                target, key, old, ..
+            },
+            Command::SetPositionKeyInterp { new, .. },
+        ) => Command::SetPositionKeyInterp {
+            target,
+            key,
+            old,
+            new,
+        },
+        (
             Command::TrimClipIn {
                 target,
                 old_start,
