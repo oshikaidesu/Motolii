@@ -1,6 +1,6 @@
 # Inspector Position key one-shot intent contract
 
-状態: **決定 / `CU-0A08ITIB` `CONTRACT_CLOSED / DO`**
+状態: **決定 / `CU-0A08ITIB` code/main `DONE / ACCEPTED / EXTERNAL_GATE_PENDING`**
 
 日付: 2026-08-04
 
@@ -27,7 +27,8 @@ WRITE ROUTE: Prepared AddPositionKey -> existing durable commit -> existing full
 GAP: exact one-shot message, separate inbox, queue action, and product affordance were absent
 RESOLUTION ROUTE: reuse current Inspector private IPC, current Wake drain, current queue/runtime,
   current editor playhead, and U4b-0 prepare without a general keyframe API
-DISPOSITION: WAIT_TARGET is discharged; one bounded implementation is DO
+DISPOSITION: commit 98e38925 closes the bounded implementation as DONE / ACCEPTED;
+  native/WebView visual, focus, accessibility, and affordance recognizability remain M3-final pending
 ```
 
 ## 2. exact private message and React owner
@@ -218,6 +219,9 @@ Rust tests and strict clippy; `./scripts/check-docs.sh`; `git diff --check`.
 `EXTERNAL_GATES`: fresh different-family read-only diff review before adoption. Native/WebView
 human visual, focus, accessibility, and affordance recognizability remain M3 final
 `EXTERNAL_GATE_PENDING`; automated green does not close them.
+
+Implementation acceptance is recorded in
+[Inspector Position key one-shot intent implementation acceptance](2026-08-04-inspector-position-key-one-shot-intent-implementation-acceptance.md).
 
 ## 8. STOP / non-goals
 
