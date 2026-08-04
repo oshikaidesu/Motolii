@@ -255,6 +255,13 @@
       "reason": "Inspector Position closed read-only row direct promotion",
       "fixedSourceSha256": "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e",
       "currentSha256": "aa2b4f713d804509fcf4c0a2222b525db431f88fdd002bdaeee6b23af1a4240c"
+    },
+    {
+      "task": "CU-0A08ITIB",
+      "file": "ui/motolii-web/src/candidates/InspectorCandidate.jsx",
+      "reason": "Inspector Position one-shot Add Position Key affordance",
+      "fixedSourceSha256": "aa2b4f713d804509fcf4c0a2222b525db431f88fdd002bdaeee6b23af1a4240c",
+      "currentSha256": "619c3adc118c3fd66f20cf400d8000755bdecb19bc02f3afaa8f522792dafc24"
     }
   ]
 }

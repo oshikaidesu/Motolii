@@ -255,6 +255,7 @@ export function InspectorCandidate({
   renderPluginHistory,
   inspectorReadModel,
   onEffectParamGesture,
+  onAddPositionKey,
 }) {
   const [, syncRender] = useReducer((n) => n + 1, 0);
   const scrubSessionRef = useRef(null);
@@ -534,7 +535,16 @@ export function InspectorCandidate({
           <i><b>Y</b> {position.y}</i>
         </span>
       ) : <span className="value">animated</span>,
-      <span />,
+      typeof onAddPositionKey === "function" ? (
+        <button
+          type="button"
+          className="automation-mark"
+          aria-label="Add Position Key"
+          onClick={onAddPositionKey}
+        >
+          <span aria-hidden="true">◇</span>
+        </button>
+      ) : <span />,
     );
     return (
       <aside className="inspector" id="inspector">

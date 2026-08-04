@@ -5,11 +5,12 @@ use std::sync::Arc;
 
 use motolii_core::{RationalTime, RationalTimeError};
 use motolii_doc::{
-    Clip, ClipSource, Command, CommandError, Document, DocumentError, DocumentPluginError,
-    DocumentWriter, DraftDocParam, EffectDefinitionDraft, EffectDefinitionId, EffectId,
-    ItemEnvelope, JournalEdit, LayerId, LayerIdError, ParentLocator, PreparedPluginRecipe,
-    ProjectError, ProjectSession, SaveProjectOptions, ScalarPropertyId, StandardShape, TrackItem,
-    UndoError, VectorContent, VectorRecipe,
+    AddPositionKeyPreparation, AddPositionKeyPrepareError, Clip, ClipSource, Command, CommandError,
+    Document, DocumentError, DocumentPluginError, DocumentWriter, DraftDocParam,
+    EffectDefinitionDraft, EffectDefinitionId, EffectId, ItemEnvelope, JournalEdit, LayerId,
+    LayerIdError, ParentLocator, PreparedPluginRecipe, ProjectError, ProjectSession,
+    SaveProjectOptions, ScalarPropertyId, StandardShape, TrackItem, UndoError, VectorContent,
+    VectorRecipe,
 };
 use motolii_plugin::{PluginCatalog, PluginKind};
 
@@ -23,6 +24,7 @@ pub(crate) enum DocumentEditAction {
     PlaceRectangle(PlaceRectangleRequest),
     AttachEffect(AttachEffectRequest),
     SetEffectParam(SetEffectParamRequest),
+    AddPositionKey(AddPositionKeyRequest),
     MoveClip(TimelineMoveRequest),
     TrimClip(TimelineTrimRequest),
     ReplacePrimary(LayerId),
@@ -38,6 +40,7 @@ impl DocumentEditAction {
             Self::PlaceRectangle(_) => DocumentEditActionKind::PlaceRectangle,
             Self::AttachEffect(_) => DocumentEditActionKind::AttachEffect,
             Self::SetEffectParam(_) => DocumentEditActionKind::SetEffectParam,
+            Self::AddPositionKey(_) => DocumentEditActionKind::AddPositionKey,
             Self::MoveClip(_) => DocumentEditActionKind::MoveClip,
             Self::TrimClip(_) => DocumentEditActionKind::TrimClip,
             Self::ReplacePrimary(_) => DocumentEditActionKind::ReplacePrimary,
@@ -54,6 +57,7 @@ pub(crate) enum DocumentEditActionKind {
     PlaceRectangle,
     AttachEffect,
     SetEffectParam,
+    AddPositionKey,
     MoveClip,
     TrimClip,
     ReplacePrimary,
@@ -81,6 +85,11 @@ impl DocumentEditQueue {
     pub(crate) fn push_set_effect_param(&mut self, request: SetEffectParamRequest) {
         self.pending
             .push_back(DocumentEditAction::SetEffectParam(request));
+    }
+
+    pub(crate) fn push_add_position_key(&mut self, request: AddPositionKeyRequest) {
+        self.pending
+            .push_back(DocumentEditAction::AddPositionKey(request));
     }
 
     pub(crate) fn push_move_clip(&mut self, request: TimelineMoveRequest) {
@@ -175,6 +184,12 @@ pub(crate) struct SetEffectParamRequest {
     effect_version: u32,
     param_id: String,
     value: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct AddPositionKeyRequest {
+    pub(crate) target: LayerId,
+    pub(crate) time: RationalTime,
 }
 
 impl SetEffectParamRequest {
@@ -451,6 +466,38 @@ impl DocumentEditRuntime {
             }
             DocumentEditAction::SetEffectParam(request) => {
                 let Some(command) = prepare_set_effect_param_command(&self.writer, &request) else {
+                    return Ok(None);
+                };
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::AddPositionKey(request) => {
+                if current_primary != Some(request.target) {
+                    return Ok(None);
+                }
+                let preparation = match self
+                    .writer
+                    .prepare_add_position_key(request.target, request.time)
+                {
+                    Ok(preparation) => preparation,
+                    Err(
+                        AddPositionKeyPrepareError::Command(CommandError::LayerNotFound(_))
+                        | AddPositionKeyPrepareError::PositionSourceUnsupported { .. }
+                        | AddPositionKeyPrepareError::PositionValueTypeMismatch { .. },
+                    ) => {
+                        return Ok(None);
+                    }
+                    Err(error) => return Err(error.into()),
+                };
+                let AddPositionKeyPreparation::Prepared { command, .. } = preparation else {
                     return Ok(None);
                 };
                 let projection_generation =
@@ -956,6 +1003,8 @@ pub(crate) enum DocumentEditRuntimeError {
     DocumentPlugin(#[from] DocumentPluginError),
     #[error(transparent)]
     EffectPrepare(#[from] motolii_doc::PrepareError),
+    #[error(transparent)]
+    PositionKeyPrepare(#[from] AddPositionKeyPrepareError),
     #[error("journal durable commit failed")]
     JournalCommit(#[source] Box<ProjectError>),
     #[error("live apply failed after durable journal commit")]
@@ -1209,6 +1258,34 @@ mod tests {
         assert!(!runtime.is_poisoned());
     }
 
+    fn assert_add_position_key_noop(
+        document: Document,
+        current_primary: Option<LayerId>,
+        request: AddPositionKeyRequest,
+    ) {
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let initial_stable = document.next_stable_id.peek_next();
+        let (path, mut runtime) = open_runtime(document);
+        let journal = journal_path_for_document(&path);
+        let journal_size = fs::metadata(&journal).map(|meta| meta.len()).unwrap_or(0);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_add_position_key(request);
+
+        assert!(runtime
+            .process_next(&mut queue, current_primary, u64::MAX)
+            .unwrap()
+            .is_none());
+        assert_preflight_rejection_invariants(&runtime, &queue, &initial_json, 0, (0, 0));
+        assert_eq!(
+            runtime.snapshot().next_stable_id.peek_next(),
+            initial_stable
+        );
+        assert_eq!(
+            fs::metadata(&journal).map(|meta| meta.len()).unwrap_or(0),
+            journal_size
+        );
+    }
+
     fn dangling_parent_after_remove_fixture() -> (Document, DocumentCommandRequest) {
         let mut document = Document::new_current();
         let deleted_layer = document.layers.allocate("deleted-parent").unwrap();
@@ -1294,6 +1371,206 @@ mod tests {
         );
         assert_eq!(queue.len(), 0);
         assert_eq!(applied.projection_generation, 1);
+    }
+
+    #[test]
+    fn add_position_key_commits_at_request_time_and_preserves_the_key_id_through_history() {
+        let (document, _) = fixture();
+        let primary = fixture_layer(&document);
+        let expected_key_id =
+            motolii_doc::KeyframeId::from_raw(document.next_stable_id.peek_next());
+        let time = RationalTime::try_new(1, 2).unwrap();
+        let (path, mut runtime) = open_runtime(document);
+        let journal = journal_path_for_document(&path);
+        let journal_before = fs::metadata(&journal).map(|meta| meta.len()).unwrap_or(0);
+        let mut queue = DocumentEditQueue::default();
+        let request = AddPositionKeyRequest {
+            target: primary,
+            time,
+        };
+        queue.push_add_position_key(request);
+
+        let published = runtime
+            .process_next(&mut queue, Some(primary), 4)
+            .unwrap()
+            .expect("new Position key must publish once");
+        assert_eq!(published.kind, DocumentEditActionKind::AddPositionKey);
+        assert_eq!(published.revision, 1);
+        assert_eq!(published.primary, Some(primary));
+        assert_eq!(published.projection_generation, 5);
+        assert_eq!(runtime.history_lengths(), (1, 0));
+        assert!(fs::metadata(&journal).unwrap().len() > journal_before);
+
+        let key_id = match &runtime
+            .writer
+            .find_envelope(primary)
+            .expect("primary envelope")
+            .transform
+            .position
+        {
+            motolii_doc::DocParam::Keyframes(track) => {
+                let key = track
+                    .keys()
+                    .iter()
+                    .find(|key| key.t == time)
+                    .expect("request time key");
+                assert_eq!(key.value, motolii_doc::DocValue::Vec2([0.0, 0.0]));
+                key.id
+            }
+            other => panic!("expected Position keyframes, got {other:?}"),
+        };
+        assert_eq!(key_id, expected_key_id);
+
+        let after_first_json = serde_json::to_vec(&*runtime.snapshot()).unwrap();
+        let after_first_revision = runtime.revision();
+        let after_first_history = runtime.history_lengths();
+        let after_first_journal = fs::metadata(&journal).unwrap().len();
+        queue.push_add_position_key(request);
+        assert!(runtime
+            .process_next(&mut queue, Some(primary), u64::MAX)
+            .unwrap()
+            .is_none());
+        assert_eq!(runtime.revision(), after_first_revision);
+        assert_eq!(runtime.history_lengths(), after_first_history);
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            after_first_json
+        );
+        assert_eq!(fs::metadata(&journal).unwrap().len(), after_first_journal);
+
+        queue.push_undo();
+        let undone = runtime
+            .process_next(&mut queue, Some(primary), 5)
+            .unwrap()
+            .expect("Position key undo must publish");
+        assert_eq!(undone.kind, DocumentEditActionKind::Undo);
+        queue.push_redo();
+        let redone = runtime
+            .process_next(&mut queue, Some(primary), 6)
+            .unwrap()
+            .expect("Position key redo must publish");
+        assert_eq!(redone.kind, DocumentEditActionKind::Redo);
+        let redone_key_id = match &runtime
+            .writer
+            .find_envelope(primary)
+            .expect("primary envelope")
+            .transform
+            .position
+        {
+            motolii_doc::DocParam::Keyframes(track) => {
+                track
+                    .keys()
+                    .iter()
+                    .find(|key| key.t == time)
+                    .expect("redone request time key")
+                    .id
+            }
+            other => panic!("expected Position keyframes after redo, got {other:?}"),
+        };
+        assert_eq!(redone_key_id, key_id);
+    }
+
+    #[test]
+    fn add_position_key_product_negatives_are_noops_before_any_durable_write() {
+        let time = RationalTime::try_new(1, 2).unwrap();
+
+        let (document, _) = fixture();
+        let primary = fixture_layer(&document);
+        assert_add_position_key_noop(
+            document,
+            None,
+            AddPositionKeyRequest {
+                target: primary,
+                time,
+            },
+        );
+
+        let (document, _) = fixture();
+        let primary = fixture_layer(&document);
+        assert_add_position_key_noop(
+            document,
+            Some(LayerId::from_raw(u64::MAX)),
+            AddPositionKeyRequest {
+                target: primary,
+                time,
+            },
+        );
+
+        let (document, _) = fixture();
+        let missing = LayerId::from_raw(u64::MAX);
+        assert_add_position_key_noop(
+            document,
+            Some(missing),
+            AddPositionKeyRequest {
+                target: missing,
+                time,
+            },
+        );
+
+        let (mut document, _) = fixture();
+        let primary = fixture_layer(&document);
+        match &mut document.tracks[0].items[0] {
+            TrackItem::Clip(clip) => {
+                clip.envelope.transform.position = motolii_doc::DocParam::Vec2Axes {
+                    x: Box::new(motolii_doc::DocParam::const_f64(0.0)),
+                    y: Box::new(motolii_doc::DocParam::const_f64(0.0)),
+                };
+            }
+            TrackItem::Group(_) => unreachable!("fixture is a clip"),
+        }
+        assert_add_position_key_noop(
+            document,
+            Some(primary),
+            AddPositionKeyRequest {
+                target: primary,
+                time,
+            },
+        );
+    }
+
+    #[test]
+    fn add_position_key_type_mismatch_is_a_noop_without_a_second_runtime_mutation() {
+        let (document, _) = fixture();
+        let primary = fixture_layer(&document);
+        let (path, mut runtime) = open_runtime(document);
+        runtime
+            .writer
+            .edit(|document| match &mut document.tracks[0].items[0] {
+                TrackItem::Clip(clip) => {
+                    clip.envelope.transform.position = motolii_doc::DocParam::const_f64(1.0);
+                }
+                TrackItem::Group(_) => unreachable!("fixture is a clip"),
+            });
+        let initial_json = serde_json::to_vec(&*runtime.snapshot()).unwrap();
+        let initial_revision = runtime.revision();
+        let initial_stable = runtime.snapshot().next_stable_id.peek_next();
+        let journal = journal_path_for_document(&path);
+        let journal_size = fs::metadata(&journal).map(|meta| meta.len()).unwrap_or(0);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_add_position_key(AddPositionKeyRequest {
+            target: primary,
+            time: RationalTime::try_new(1, 2).unwrap(),
+        });
+
+        assert!(runtime
+            .process_next(&mut queue, Some(primary), u64::MAX)
+            .unwrap()
+            .is_none());
+        assert_preflight_rejection_invariants(
+            &runtime,
+            &queue,
+            &initial_json,
+            initial_revision,
+            (0, 0),
+        );
+        assert_eq!(
+            runtime.snapshot().next_stable_id.peek_next(),
+            initial_stable
+        );
+        assert_eq!(
+            fs::metadata(&journal).map(|meta| meta.len()).unwrap_or(0),
+            journal_size
+        );
     }
 
     #[test]

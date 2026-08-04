@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { createInspectorHostSender } from "../src/host/inspectorHostCodec.js";
@@ -111,4 +112,43 @@ test("validation and postMessage failure do not partially advance a gesture", ()
   sender.send({ phase: "cancel", paramId: "amount" });
   assert.equal(messages[0].session, 1);
   assert.equal(messages[0].sequence, 1);
+});
+
+test("emits an exact independent Position key one-shot only after postMessage succeeds", () => {
+  const messages = [];
+  let failPost = true;
+  const sender = createInspectorHostSender((raw) => {
+    if (failPost) throw new Error("synthetic post failure");
+    messages.push(JSON.parse(raw));
+  });
+
+  assert.throws(() => sender.sendAddPositionKey());
+  assert.deepEqual(messages, []);
+  failPost = false;
+  sender.sendAddPositionKey();
+  sender.sendAddPositionKey();
+
+  assert.deepEqual(messages, [
+    { kind: "add-position-key", sequence: 1 },
+    { kind: "add-position-key", sequence: 2 },
+  ]);
+});
+
+test("Position key sender stops after its positive-safe sequence is exhausted", async () => {
+  const source = await readFile(
+    new URL("../src/host/inspectorHostCodec.js", import.meta.url),
+    "utf8",
+  );
+  const exhaustedSource = source.replace("Number.MAX_SAFE_INTEGER", "1");
+  const exhaustedModule = await import(
+    `data:text/javascript;base64,${Buffer.from(exhaustedSource).toString("base64")}`,
+  );
+  const messages = [];
+  const sender = exhaustedModule.createInspectorHostSender((raw) => {
+    messages.push(JSON.parse(raw));
+  });
+
+  sender.sendAddPositionKey();
+  assert.throws(() => sender.sendAddPositionKey());
+  assert.deepEqual(messages, [{ kind: "add-position-key", sequence: 1 }]);
 });

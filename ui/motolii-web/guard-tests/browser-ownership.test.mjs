@@ -119,7 +119,7 @@ const EXPECTED_KEY_TOOLS_SHA256 =
 const EXPECTED_KEY_TOOLS_CSS_SHA256 =
   "f84eb7f98f05844fa3bfc72b702cee2709f1fc0bb9be614f2b01039a65b5190d";
 const EXPECTED_INSPECTOR_SHA256 =
-  "aa2b4f713d804509fcf4c0a2222b525db431f88fdd002bdaeee6b23af1a4240c";
+  "619c3adc118c3fd66f20cf400d8000755bdecb19bc02f3afaa8f522792dafc24";
 const EXPECTED_INSPECTOR_CSS_SHA256 =
   "730e2861a893b2b07fa66d5acef0038a49bdcf337e8c5a037785b0a58d829cbe";
 const INSPECTOR_POST_PROMOTION_TASK = "CU-0A08ITP";
@@ -137,6 +137,8 @@ const CU205P_INSPECTOR_CURRENT_SHA256 =
   "a1af604c78113f4df0538c3045b19d51c1d3fc8c6740305abc47b7e8a2d10f37";
 const CU0A08ITIA_INSPECTOR_REASON =
   "Inspector Position closed read-only row direct promotion";
+const CU0A08ITIB_INSPECTOR_REASON =
+  "Inspector Position one-shot Add Position Key affordance";
 
 const ALLOWED_EXTERNAL_PACKAGES = ["react", "html-react-parser"];
 const SEAM_COMPONENT_NAME = "CandidateCreateBrowser";
@@ -768,16 +770,26 @@ function validateInspectorPositionRow(sourceText) {
   assert.match(defaultBranch, /<b>X<\/b> \{position\.x\}/);
   assert.match(defaultBranch, /<b>Y<\/b> \{position\.y\}/);
   assert.match(defaultBranch, />animated</);
+  assert.match(defaultBranch, /typeof onAddPositionKey === "function"/);
+  assert.match(
+    defaultBranch,
+    /<button\s+type="button"\s+className="automation-mark"\s+aria-label="Add Position Key"\s+onClick=\{onAddPositionKey\}\s*>\s*<span aria-hidden="true">◇<\/span>\s*<\/button>/,
+  );
+  assert.equal((defaultBranch.match(/onClick/g) ?? []).length, 1);
   for (const forbidden of [
-    "onClick",
     "onPointer",
-    "onKey",
+    "onKeyDown",
+    "onKeyUp",
+    "onKeyPress",
     "postMessage",
     "state.",
-    "automation",
+    "state.automation",
     "KEYS",
     "AUTO ON",
     "AUTO OFF",
+    "playhead",
+    "selection",
+    "Undo",
   ]) {
     assert.equal(defaultBranch.includes(forbidden), false, forbidden);
   }
@@ -1015,6 +1027,8 @@ test("validates decoded Inspector target projection into the existing identity J
     validateInspectorPositionRow(source.replace('>animated</span>', '>2 KEYS</span>')));
   assert.throws(() =>
     validateInspectorPositionRow(source.replace('<label>Position</label>', '<button onClick={() => {}}>Position</button>')));
+  assert.throws(() =>
+    validateInspectorPositionRow(source.replace('aria-label="Add Position Key"', 'aria-label="Add Key"')));
 });
 
 test("projects one exact active Opacity amount control and preserves absent output", async () => {
@@ -1068,6 +1082,15 @@ test("projects one exact active Opacity amount control and preserves absent outp
   });
   assert.match(interactiveHtml, /aria-label="Amount。無限目盛を左右dragして変更"/);
   assert.doesNotMatch(interactiveHtml, /aria-readonly|disabled=/);
+
+  const positionKeyHtml = renderInspectorSource(source, absentOutput, {
+    onAddPositionKey: () => {},
+  });
+  assert.match(
+    positionKeyHtml,
+    /<button type="button" class="automation-mark" aria-label="Add Position Key"><span aria-hidden="true">◇<\/span><\/button>/,
+  );
+  assert.equal((positionKeyHtml.match(/aria-label="Add Position Key"/g) ?? []).length, 1);
 });
 
 test("changes product gesture presentation only after private send succeeds", async () => {
@@ -1183,12 +1206,19 @@ test("validates Inspector post-promotion provenance as an append-only chain", as
   );
   assert.doesNotThrow(() =>
     validateInspectorPostPromotionChanges(provenance, currentInspectorSha256));
-  assert.equal(provenance.inspectorPostPromotionChanges.length, 5);
-  assert.deepEqual(provenance.inspectorPostPromotionChanges.at(-1), {
+  assert.equal(provenance.inspectorPostPromotionChanges.length, 6);
+  assert.deepEqual(provenance.inspectorPostPromotionChanges.at(-2), {
     task: "CU-0A08ITIA",
     file: INSPECTOR_POST_PROMOTION_FILE,
     reason: CU0A08ITIA_INSPECTOR_REASON,
     fixedSourceSha256: "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e",
+    currentSha256: "aa2b4f713d804509fcf4c0a2222b525db431f88fdd002bdaeee6b23af1a4240c",
+  });
+  assert.deepEqual(provenance.inspectorPostPromotionChanges.at(-1), {
+    task: "CU-0A08ITIB",
+    file: INSPECTOR_POST_PROMOTION_FILE,
+    reason: CU0A08ITIB_INSPECTOR_REASON,
+    fixedSourceSha256: "aa2b4f713d804509fcf4c0a2222b525db431f88fdd002bdaeee6b23af1a4240c",
     currentSha256: currentInspectorSha256,
   });
   assert.deepEqual(provenance.privateRuntimeSources, [{

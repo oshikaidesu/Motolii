@@ -74,6 +74,7 @@ export function createInspectorHostSender(postMessage) {
   let identity = null;
   let activeSession = null;
   let nextSession = 1;
+  let nextPositionKeySequence = 1;
 
   const project = (readModel) => {
     const projectedIdentity = exactActiveAmount(readModel);
@@ -144,5 +145,14 @@ export function createInspectorHostSender(postMessage) {
     }
   };
 
-  return Object.freeze({ project, send });
+  const sendAddPositionKey = () => {
+    const sequence = requireSafePositiveInteger(
+      nextPositionKeySequence,
+      "Inspector Position key sequence",
+    );
+    postMessage(JSON.stringify({ kind: "add-position-key", sequence }));
+    nextPositionKeySequence = sequence === Number.MAX_SAFE_INTEGER ? null : sequence + 1;
+  };
+
+  return Object.freeze({ project, send, sendAddPositionKey });
 }

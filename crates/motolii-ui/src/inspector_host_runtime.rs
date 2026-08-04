@@ -13,6 +13,7 @@ use crate::{map_parameter_control, HostParameterControl};
 const PROTOCOL: &str = "motolii-inspector";
 const ENTRY_URL: &str = "motolii-inspector://product/inspector.html";
 const MAX_PENDING_TERMINALS: usize = 64;
+const MAX_PENDING_POSITION_KEYS: usize = 64;
 
 type InspectorWake = Arc<dyn Fn() + Send + Sync>;
 
@@ -249,8 +250,66 @@ impl InspectorGestureInbox {
     }
 }
 
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InspectorPositionKeyMessage {
+    #[serde(rename = "kind")]
+    _kind: InspectorPositionKeyKind,
+    sequence: u64,
+}
+
+#[derive(Debug, serde::Deserialize)]
+enum InspectorPositionKeyKind {
+    #[serde(rename = "add-position-key")]
+    AddPositionKey,
+}
+
+#[derive(Debug, Default)]
+struct InspectorPositionKeyInbox {
+    last_sequence: u64,
+    pending: VecDeque<u64>,
+}
+
+impl InspectorPositionKeyInbox {
+    fn accept(&mut self, raw: &str) -> Result<(), InspectorPositionKeyError> {
+        let message: InspectorPositionKeyMessage = serde_json::from_str(raw)?;
+        if message.sequence == 0 {
+            return Err(InspectorPositionKeyError::NonPositiveSequence);
+        }
+        if message.sequence <= self.last_sequence {
+            return Err(InspectorPositionKeyError::StaleOrReordered);
+        }
+        if self.pending.len() >= MAX_PENDING_POSITION_KEYS {
+            return Err(InspectorPositionKeyError::InboxFull);
+        }
+        self.last_sequence = message.sequence;
+        self.pending.push_back(message.sequence);
+        Ok(())
+    }
+
+    fn take(&mut self) -> Option<u64> {
+        self.pending.pop_front()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum InspectorInboundKind {
+    Gesture,
+    PositionKey,
+}
+
+fn inspector_inbound_kind(raw: &str) -> Result<InspectorInboundKind, InspectorInboundError> {
+    let message: serde_json::Value = serde_json::from_str(raw)?;
+    match message.get("kind").and_then(serde_json::Value::as_str) {
+        Some("effect-param-gesture") => Ok(InspectorInboundKind::Gesture),
+        Some("add-position-key") => Ok(InspectorInboundKind::PositionKey),
+        _ => Err(InspectorInboundError::UnknownKind),
+    }
+}
+
 pub(crate) struct InspectorHostRuntime {
     gesture_inbox: Arc<Mutex<InspectorGestureInbox>>,
+    position_key_inbox: Arc<Mutex<InspectorPositionKeyInbox>>,
     wake: Arc<Mutex<Option<InspectorWake>>>,
     webview: WebView,
     latest_layout_epoch: Option<u64>,
@@ -280,8 +339,10 @@ postMessage:(message)=>window.ipc.postMessage(message)
 }})();"#
         );
         let gesture_inbox = Arc::new(Mutex::new(InspectorGestureInbox::new(gesture_identity)));
+        let position_key_inbox = Arc::new(Mutex::new(InspectorPositionKeyInbox::default()));
         let wake = Arc::new(Mutex::new(None::<InspectorWake>));
-        let callback_inbox = Arc::clone(&gesture_inbox);
+        let callback_gesture_inbox = Arc::clone(&gesture_inbox);
+        let callback_position_key_inbox = Arc::clone(&position_key_inbox);
         let callback_wake = Arc::clone(&wake);
         let webview = WebViewBuilder::new()
             .with_bounds(Rect {
@@ -296,10 +357,19 @@ postMessage:(message)=>window.ipc.postMessage(message)
             .with_navigation_handler(|target| target.starts_with("motolii-inspector:"))
             .with_ipc_handler(move |request| {
                 let raw = request.body();
-                let accepted = callback_inbox
-                    .lock()
-                    .map_err(|_| InspectorGestureError::InboxPoisoned)
-                    .and_then(|mut inbox| inbox.accept(raw));
+                let accepted = match inspector_inbound_kind(raw) {
+                    Ok(InspectorInboundKind::Gesture) => callback_gesture_inbox
+                        .lock()
+                        .map_err(|_| InspectorGestureError::InboxPoisoned)
+                        .and_then(|mut inbox| inbox.accept(raw))
+                        .map_err(InspectorInboundError::Gesture),
+                    Ok(InspectorInboundKind::PositionKey) => callback_position_key_inbox
+                        .lock()
+                        .map_err(|_| InspectorPositionKeyError::InboxPoisoned)
+                        .and_then(|mut inbox| inbox.accept(raw))
+                        .map_err(InspectorInboundError::PositionKey),
+                    Err(error) => Err(error),
+                };
                 match accepted {
                     Ok(()) => {
                         crate::ui_numeric_trace::emit(format_args!(
@@ -323,6 +393,7 @@ postMessage:(message)=>window.ipc.postMessage(message)
         ));
         Ok(Self {
             gesture_inbox,
+            position_key_inbox,
             wake,
             webview,
             latest_layout_epoch: None,
@@ -358,6 +429,16 @@ postMessage:(message)=>window.ipc.postMessage(message)
             .map_err(|_| InspectorGestureError::InboxPoisoned)?
             .terminals
             .pop_front())
+    }
+
+    pub(crate) fn take_add_position_key_intent(
+        &self,
+    ) -> Result<Option<u64>, InspectorPositionKeyError> {
+        Ok(self
+            .position_key_inbox
+            .lock()
+            .map_err(|_| InspectorPositionKeyError::InboxPoisoned)?
+            .take())
     }
 
     pub(crate) fn set_bounds(
@@ -665,6 +746,8 @@ pub(crate) enum InspectorHostRuntimeError {
     #[error(transparent)]
     Gesture(#[from] InspectorGestureError),
     #[error(transparent)]
+    PositionKey(#[from] InspectorPositionKeyError),
+    #[error(transparent)]
     Catalog(#[from] motolii_plugin::PluginContractError),
     #[error(transparent)]
     ParameterControl(#[from] crate::ParameterControlError),
@@ -698,6 +781,32 @@ pub(crate) enum InspectorGestureError {
     TerminalInboxFull,
     #[error("Inspector gesture inbox lock is poisoned")]
     InboxPoisoned,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum InspectorPositionKeyError {
+    #[error("Inspector Position key JSON was rejected")]
+    Json(#[from] serde_json::Error),
+    #[error("Inspector Position key sequence must be positive")]
+    NonPositiveSequence,
+    #[error("Inspector Position key sequence is stale or reordered")]
+    StaleOrReordered,
+    #[error("Inspector Position key inbox is full")]
+    InboxFull,
+    #[error("Inspector Position key inbox lock is poisoned")]
+    InboxPoisoned,
+}
+
+#[derive(Debug, thiserror::Error)]
+enum InspectorInboundError {
+    #[error("Inspector Host IPC JSON was rejected")]
+    Json(#[from] serde_json::Error),
+    #[error("Inspector Host IPC kind was rejected")]
+    UnknownKind,
+    #[error(transparent)]
+    Gesture(InspectorGestureError),
+    #[error(transparent)]
+    PositionKey(InspectorPositionKeyError),
 }
 
 #[cfg(test)]
@@ -935,6 +1044,14 @@ mod tests {
         serde_json::to_string(&message).unwrap()
     }
 
+    fn position_key_message(sequence: u64) -> String {
+        serde_json::json!({
+            "kind": "add-position-key",
+            "sequence": sequence,
+        })
+        .to_string()
+    }
+
     #[test]
     fn terminal_conversion_preserves_exact_commit_and_drops_cancel() {
         let (_, _, _, identity) = gesture_fixture();
@@ -1066,6 +1183,94 @@ mod tests {
         ));
         assert_eq!(inbox.active.as_ref().unwrap().last_sequence, 1);
         assert!(inbox.terminals.is_empty());
+    }
+
+    #[test]
+    fn position_key_inbox_admits_exact_monotonic_messages_in_fifo_order() {
+        let mut inbox = InspectorPositionKeyInbox::default();
+        inbox.accept(&position_key_message(1)).unwrap();
+        inbox.accept(&position_key_message(2)).unwrap();
+
+        assert_eq!(inbox.take(), Some(1));
+        assert_eq!(inbox.take(), Some(2));
+        assert_eq!(inbox.take(), None);
+        assert_eq!(inbox.last_sequence, 2);
+    }
+
+    #[test]
+    fn position_key_inbox_rejects_invalid_replayed_and_full_messages_without_advancing() {
+        let mut inbox = InspectorPositionKeyInbox::default();
+        for raw in [
+            r#"{}"#,
+            r#"{"kind":"add-position-key"}"#,
+            r#"{"kind":"add-position-key","sequence":0}"#,
+            r#"{"kind":"add-position-key","sequence":"1"}"#,
+            r#"{"kind":"other","sequence":1}"#,
+            r#"{"kind":"add-position-key","sequence":1,"target":1}"#,
+        ] {
+            assert!(inbox.accept(raw).is_err(), "{raw}");
+        }
+        assert_eq!(inbox.last_sequence, 0);
+        assert!(inbox.pending.is_empty());
+
+        inbox.accept(&position_key_message(2)).unwrap();
+        for sequence in [2, 1] {
+            assert!(matches!(
+                inbox.accept(&position_key_message(sequence)),
+                Err(InspectorPositionKeyError::StaleOrReordered)
+            ));
+        }
+        assert_eq!(inbox.last_sequence, 2);
+        assert_eq!(inbox.pending, VecDeque::from([2]));
+
+        let mut full = InspectorPositionKeyInbox::default();
+        for sequence in 1..=MAX_PENDING_POSITION_KEYS as u64 {
+            full.accept(&position_key_message(sequence)).unwrap();
+        }
+        assert!(matches!(
+            full.accept(&position_key_message(MAX_PENDING_POSITION_KEYS as u64 + 1)),
+            Err(InspectorPositionKeyError::InboxFull)
+        ));
+        assert_eq!(full.last_sequence, MAX_PENDING_POSITION_KEYS as u64);
+        assert_eq!(full.pending.len(), MAX_PENDING_POSITION_KEYS);
+    }
+
+    #[test]
+    fn position_key_admission_does_not_mutate_opacity_gesture_state() {
+        let (_, _, _, identity) = gesture_fixture();
+        let mut gestures = InspectorGestureInbox::new(Some(identity.clone()));
+        gestures
+            .accept(&gesture_message(&identity, "start", 1, 1, Some(0.5)))
+            .unwrap();
+        gestures
+            .accept(&gesture_message(&identity, "update", 1, 2, Some(0.6)))
+            .unwrap();
+        let expected_active = gestures
+            .active
+            .as_ref()
+            .map(|active| (active.session, active.last_sequence));
+        let expected_update = gestures.latest_update.clone();
+        let expected_terminals = gestures.terminals.clone();
+
+        let mut keys = InspectorPositionKeyInbox::default();
+        for raw in [
+            r#"{"kind":"add-position-key","sequence":0}"#,
+            r#"{"kind":"add-position-key","sequence":1,"target":1}"#,
+            r#"{"kind":"wrong","sequence":1}"#,
+        ] {
+            assert!(keys.accept(raw).is_err());
+        }
+        keys.accept(&position_key_message(1)).unwrap();
+
+        assert_eq!(
+            gestures
+                .active
+                .as_ref()
+                .map(|active| (active.session, active.last_sequence)),
+            expected_active
+        );
+        assert_eq!(gestures.latest_update, expected_update);
+        assert_eq!(gestures.terminals, expected_terminals);
     }
 
     #[test]

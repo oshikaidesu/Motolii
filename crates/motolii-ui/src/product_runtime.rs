@@ -20,8 +20,8 @@ use crate::browser_host_runtime::{
     BrowserFocusTarget, BrowserHostRuntime, BrowserHostRuntimeError, BrowserLifecycleEvent,
 };
 use crate::document_edit_runtime::{
-    AttachEffectRequest, DocumentEditDispatchError, DocumentEditQueue, DocumentEditRuntime,
-    DocumentEditRuntimeError, PlaceRectangleRequest, PublishedDocument,
+    AddPositionKeyRequest, AttachEffectRequest, DocumentEditDispatchError, DocumentEditQueue,
+    DocumentEditRuntime, DocumentEditRuntimeError, PlaceRectangleRequest, PublishedDocument,
 };
 use crate::host_pointer_capture::{HostPointerCancel, HostPointerCandidate};
 use crate::inspector_host_runtime::{
@@ -1163,6 +1163,10 @@ impl ProductApp {
                     self.fail(event_loop, error);
                     return;
                 }
+                if let Err(error) = self.process_inspector_position_key_intents(event_loop) {
+                    self.fail(event_loop, error);
+                    return;
+                }
                 if let Err(error) = self.drain_stage_projection() {
                     self.fail(event_loop, error);
                     return;
@@ -1889,6 +1893,45 @@ impl ProductApp {
         };
         self.submit_inspector_preview(document, command)?;
         Ok(())
+    }
+
+    fn process_inspector_position_key_intents(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+    ) -> Result<(), ProductRuntimeError> {
+        loop {
+            let sequence = {
+                let Some(inspector) = &self.inspector else {
+                    return Ok(());
+                };
+                inspector
+                    .take_add_position_key_intent()
+                    .map_err(InspectorHostRuntimeError::from)
+                    .map_err(ProductRuntimeError::from)?
+            };
+            let Some(sequence) = sequence else {
+                return Ok(());
+            };
+            let Some(target) = self.primary else {
+                continue;
+            };
+            let request = AddPositionKeyRequest {
+                target,
+                time: self.editor_playhead.current,
+            };
+            crate::ui_numeric_trace::emit(format_args!(
+                "kind=inspector-position-key sequence={} target={:?} time={:?}",
+                sequence, request.target, request.time,
+            ));
+            self.document_queue.push_add_position_key(request);
+            if let Some(published) = self.document_runtime.process_next(
+                &mut self.document_queue,
+                self.primary,
+                self.projection_generation,
+            )? {
+                self.adopt_full_publish(event_loop, published, "inspector-add-position-key");
+            }
+        }
     }
 
     fn submit_stage_projection(&self) -> Result<RenderGeneration, ProductRuntimeError> {
@@ -3423,6 +3466,42 @@ mod tests {
         }
         assert!(snapshot.contains("document: &motolii_doc::Document"));
         assert!(publish.contains("document: &motolii_doc::Document"));
+    }
+
+    #[test]
+    fn inspector_position_key_wake_route_resolves_current_primary_and_playhead_before_browser_poll()
+    {
+        let source = include_str!("product_runtime.rs");
+        let production = source.split("#[cfg(test)]").next().unwrap();
+        let method = |name: &str| {
+            let start = production.find(name).unwrap();
+            let tail = &production[start..];
+            let end = ["\n    fn ", "\n    pub(crate) fn "]
+                .into_iter()
+                .filter_map(|marker| tail[1..].find(marker).map(|end| end + 1))
+                .min()
+                .unwrap_or(tail.len());
+            &tail[..end]
+        };
+
+        let wake = method("pub(crate) fn handle_product_event");
+        let position_route = method("fn process_inspector_position_key_intents");
+        assert!(
+            wake.find("self.process_inspector_position_key_intents(event_loop)")
+                < wake.find("self.poll_browser(event_loop)")
+        );
+        for required in [
+            "let Some(target) = self.primary else",
+            "time: self.editor_playhead.current",
+            "self.document_queue.push_add_position_key(request)",
+            "self.document_runtime.process_next(",
+            "self.adopt_full_publish(event_loop, published, \"inspector-add-position-key\")",
+        ] {
+            assert!(position_route.contains(required), "{required}");
+        }
+        for forbidden in ["RationalTime::ZERO", "mock", "postMessage", "Interp"] {
+            assert!(!position_route.contains(forbidden), "{forbidden}");
+        }
     }
 
     fn test_layout(epoch: u64) -> NativeHostLayout {
