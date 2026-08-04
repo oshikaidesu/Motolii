@@ -91,7 +91,7 @@ The source audit also found a narrower prerequisite: a zero-source `AudioProgram
 duration as the shared producer supply floor and reached code/main `DONE / ACCEPTED` at commit
 `d14010ad`. It does not close the missing product construction/root/cache owner described above.
 
-### B. PlaybackSession constructor and lifetime — **MISSING**
+### B. PlaybackSession constructor and lifetime — **MISSING / ADAPTER DO**
 
 `crates/motolii-transport/src/playback.rs::PlaybackSession::{open_default,open_on_device}` is a
 single-`Arc<PcmCache>` constructor and stores `_producer: AudioProducer`. It creates the output,
@@ -103,6 +103,10 @@ is active, stop/join it at product shutdown/reopen/failure, and name its error p
 constructor must admit `AudioProgram`/`MixProducer` without keeping a parallel single-cache route.
 No duplicate device output, callback-owned construction, hidden global, or new general controller is
 allowed.
+
+[P07-C1B](2026-08-04-p07-c1b-mixed-playback-session-contract.md) is the bounded adapter `DO`: it may
+replace the existing session's single-cache producer with `AudioProgram` / `MixProducer`. It does not
+select the missing ProductApp lifetime, construction caller or error projection.
 
 ### C. current-time producer / consumer handoff — **MISSING**
 
@@ -134,8 +138,8 @@ and failure/recovery routing.
 
 ## 4. admissible next disposition
 
-`P07-C1` remains `TARGET_MISSING / PREFLIGHT ONLY`. P07-C1A is the accepted bounded prerequisite:
-it fixed the zero-source supply floor without inventing a product owner. The next parent work is a
+`P07-C1` remains `TARGET_MISSING / PREFLIGHT ONLY`. P07-C1A is accepted and P07-C1B is the next bounded
+adapter `DO`; neither invents a product owner. The next parent work after B is a
 fresh read-only source audit that attempts to close the four listed facts one by one. If an existing
 real control source is found but full playback remains unclosed, a future authority owner may choose
 another explicitly bounded `REDUCE` slice. If any fact remains absent, that subfact stays

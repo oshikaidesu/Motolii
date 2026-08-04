@@ -246,6 +246,8 @@ U9bのengine/sandbox/保存判断等へ到達したら、`LANG-TS-F0`と`VSM-C2`
 
 局所前提 `P07-C1A` は [video-only AudioProgram supply contract](../reviews/2026-08-04-p07-c1a-video-only-program-supply-contract.md) とcommit `d14010ad`でcode/main `DONE / ACCEPTED`となった。既存 `Document::composition.duration` を `AudioProgram` へ写し、identity/resample共通のproducer終端に対する供給floorとした。zero／short-source区間の正規mix無音はringを通るため既存 `frames_supplied` を進める。second clock、callback padding、Document/schema/Export変更、製品route接続は含めず、親4経路の `TARGET_MISSING` を変更しない。
 
+次の局所adapter `P07-C1B` は [mixed PlaybackSession contract](../reviews/2026-08-04-p07-c1b-mixed-playback-session-contract.md) により`DO`とする。既存sessionのsingle `PcmCache` / `AudioProducer`を`AudioProgram` / `MixProducer`へ置換し、output/counters/device-wait/Transportを単一のまま保つ。ProductApp lifetime、program構築caller、React control、current-time handoffは含めず、親P07-C1を完了にしない。
+
 ## GR-UI審判割当表
 
 | 規律 | 対象タスク | 自動審判 | 人間実機審判 |
