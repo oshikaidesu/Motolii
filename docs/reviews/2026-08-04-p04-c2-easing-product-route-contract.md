@@ -1,6 +1,6 @@
 # P04-C2 Easing product producer / popup adoption contract
 
-状態: **AMENDED / DIAGNOSTIC-CORRECTION DO / POPUP-TERMINAL CONTRACT_CLOSED / TERMINAL_VISUAL WAIT_TARGET / EXTERNAL_GATE_PENDING**
+状態: **AMENDED / DIAGNOSTIC-CORRECTION DONE / ACCEPTED / POPUP-TERMINAL C7A CONTRACT_CLOSED / DO / EXTERNAL_GATE_PENDING**
 
 日付: 2026-08-04
 
@@ -88,16 +88,19 @@ pattern/oracle, not a store, second device, or product window implementation to 
 
 ## 4. next implementation boundary and oracle
 
-`P04-C2-EASING` is the next single product implementation boundary. Its exact source allowlist is
+`P04-C2-EASING-C7A` is the next single product implementation boundary. Its exact source allowlist is
 `ui/motolii-web/src/candidates/EasingTriggerCandidate.jsx`,
 `ui/motolii-web/src/candidates/StageChromeCandidate.jsx`, the **new planned**
 `ui/motolii-web/src/host/stage-easing-intent-codec.js`,
 `ui/motolii-web/src/host/stage-transport-main.jsx`, and `ui/motolii-web/vite.host.config.js`;
 `crates/motolii-ui/src/stage_chrome_host_runtime.rs`,
-`crates/motolii-ui/src/product_runtime.rs`, and `crates/motolii-ui/src/document_edit_runtime.rs`; plus
+`crates/motolii-ui/src/product_runtime.rs`, `crates/motolii-ui/src/product_runtime_adapter.rs`,
+`crates/motolii-ui/src/document_edit_runtime.rs`, and the **one new private**
+`crates/motolii-ui/src/product_easing_popup.rs`; plus
 focused tests in `ui/motolii-web/guard-tests/stage-easing-intent-codec.test.mjs`,
-`crates/motolii-ui/src/stage_chrome_host_runtime.rs`, `crates/motolii-ui/src/product_runtime.rs`, and
-`crates/motolii-ui/src/document_edit_runtime.rs`. Generated output is limited to the affected
+`crates/motolii-ui/src/stage_chrome_host_runtime.rs`, `crates/motolii-ui/src/product_runtime.rs`,
+`crates/motolii-ui/src/product_runtime_adapter.rs`, `crates/motolii-ui/src/document_edit_runtime.rs`,
+and `crates/motolii-ui/src/product_easing_popup.rs`. Generated output is limited to the affected
 `ui/motolii-web/generated-host/**` closure, its `asset-manifest.json`, and the corresponding
 `crates/motolii-ui/src/browser_host_runtime.rs` `include_bytes!` / route-filename replacements;
 content-hashed asset filenames are generated rather than fixed. No unrelated generated asset may
@@ -110,7 +113,9 @@ Position interval can open one session; every stale/cancel/duplicate/no-interval
 enqueue and zero Document write; a same-value accepted terminal also performs zero queue action,
 command, journal, Undo, and publish; each value-changing accepted basic/custom terminal action reaches
 exactly one `SetPositionKeyInterp` command, one journal command, one Undo/publish, and changes only the
-left key's outgoing `Interp`. `REPO_LANES`: focused React/source-asset, Host/session/queue and D2 integration tests,
+left key's outgoing `Interp`; the real child `WindowId` dispatch reaches only the private popup owner;
+the same `ProductGpuParts` instance/adapter and `GpuCtx` device/queue are retained, with no second GPU.
+`REPO_LANES`: focused React/source-asset, Host/session/queue, private popup and D2 integration tests,
 then relevant Rust/Node lanes, `git diff --check`, and `./scripts/check-docs.sh`. `EXTERNAL_GATES`:
 native visual parity, real z-order/focus/dismiss, DPI/second monitor and accessibility remain for
 the M3-final manual/real-device checklist; repository tests do not close them.
@@ -154,46 +159,50 @@ product meaning, producer, popup, queue action, or public surface.
 match remains exhaustive. `REPO_LANES`: the focused Rust test, relevant `motolii-ui` Rust lane, and
 `git diff --check`. `EXTERNAL_GATES`: none. This is the only implementation `DO` emitted here.
 
-### 6.2 `P04-C2-POPUP-TERMINAL` — contract closed; terminal visual route `WAIT_TARGET`
+### 6.2 `P04-C2-POPUP-TERMINAL-C7A` — contract closed / `DO`
 
-The future popup is product-local and private: `ProductApp` owns its transient popup state/module,
-the one `EventLoop<ProductEvent>` constructed by `product_runtime::run` remains the only event loop,
-and that same `ProductApp`-owned `Arc<GpuCtx>` remains the only product device/context. If a child
-window is later admitted, `product_runtime_adapter.rs::window_event` must dispatch by its real
-`WindowId` to that private owner; the primary-window path must not silently consume the child event.
-No App/EventLoop/WebView, wgpu device, public popup abstraction, or generalized channel is authorized.
+`P04-C2-EASING-C7A` is one full, non-dead product implementation order. `ProductApp` owns the private
+popup/session module and a native child `WindowId`/surface. The one `EventLoop<ProductEvent>` constructed
+by `product_runtime::run` remains the only event loop; the existing `ProductGpuParts` instance/adapter and
+the same `ProductApp`-owned `GpuCtx` device/queue remain the only product GPU. The child surface renders
+through the existing direct dependencies `egui::Context`, `egui_winit::State`, and `egui_wgpu::Renderer`
+at 0.35 over wgpu 29. `product_runtime_adapter.rs::window_event` dispatches each child event by its real
+`WindowId` to this private owner, and the primary-window path must not silently consume it. No second
+App/EventLoop/WebView/device, public popup abstraction, trait/registry, or generalized channel is allowed.
+
+An in-main-surface overlay is rejected: the opaque Stage transport child WebView is above the native
+surface, so it cannot provide this popup's visible native terminal. React remains the product anchor/layout
+producer on its separate surface-local inbound; Rust re-derives the current strict-interior Position interval.
+The one private module owns the native session/renderer, while one narrow Position-only
+`DocumentEditAction`/request reaches the existing `SetPositionKeyInterp` prepare/D2 writer. It is not a
+general popup framework.
 
 G0-9 is `PATTERN` only for placement, transient session/cancel rules, Bezier gesture/hit testing, and
 their oracle. Do not adopt its `SpikePresetStore`, `UserPreset`, commit counters, `current_curve`,
 revision state, or `PopupGfx`; none is a product owner. The partial React/IPC dead route is neither an
-adoption candidate nor a fallback and must not be committed.
-
-The known product rendering evidence is deliberately insufficient for a popup implementation:
-`native_timeline_renderer::NativeTimelineRenderer::{new,prepare,composite}` and its private
-`draw_text`/`TimelineFont` prove that the repository already uses Vello + fontique + harfrust for the
-Timeline overlay, but their exact API consumes `NativeHostLayout`, `Document`, and
-`TimelineProjection`; it exposes no popup-renderer or text-renderer route. `glyphon` is absent.
-Copying or porting that private renderer, or introducing another renderer, would be bespoke framework
-work and is forbidden. Therefore the terminal visual route remains `WAIT_TARGET`; this amendment does
-not authorize popup code after the diagnostic correction.
+adoption candidate nor a fallback and must not be committed. `NativeTimelineRenderer` is neither copied
+nor changed: C7A uses the selected direct egui dependencies, not a Timeline renderer port.
 
 ```text
-MECHANISM CLASS: native transient popup terminal over ProductApp's sole event loop and shared GPU
-KNOWN IMPLEMENTATION SEARCH: ProductApp::run/ProductApp/GpuCtx; product_runtime_adapter::window_event;
-  NativeTimelineRenderer and private draw_text; G0-9 popup spike; existing P04-C2 D2/queue contract
-CANDIDATES: ProductApp private ownership; sole EventLoop<ProductEvent>; shared Arc<GpuCtx>;
-  NativeTimelineRenderer's existing Vello/fontique/harfrust route; G0-9 placement/session/Bezier pattern
-ADOPTION ROUTE: PATTERN only for G0-9 placement/session/Bezier/hit testing; no render adoption yet
-REJECTED CANDIDATES: SpikePresetStore/UserPreset/counters/current_curve/revision/PopupGfx; glyphon;
-  renderer port/copy; second App/EventLoop/WebView/device; generic popup/channel framework; partial React/IPC route
-THIN MOTOLII SEAM: diagnostic CommandKind label only; popup visual seam has no selected existing target
-THIN MOTOLII RESIDUAL: select a real product-local popup rendering target before terminal visual code
+MECHANISM CLASS: native transient child-window popup terminal over ProductApp's sole event loop and shared GPU
+KNOWN IMPLEMENTATION SEARCH: existing direct egui::Context + egui_winit::State + egui_wgpu::Renderer 0.35,
+  wgpu 29, ProductApp::run/ProductApp/GpuCtx/ProductGpuParts, product_runtime_adapter::window_event,
+  G0-9 placement/session/Bezier pattern, G0-10 shared-device multi-surface evidence, and P04-C2 D2/queue contract
+CANDIDATES: ProductApp private owner; one EventLoop<ProductEvent>; existing ProductGpuParts instance/adapter;
+  existing GpuCtx device/queue; direct egui renderer dependencies; G0-9 placement/session/Bezier pattern
+ADOPTION ROUTE: REUSE the direct dependencies, sole loop, GPU ownership, React anchor/layout source, and D2 command;
+  PATTERN only for G0-9 session/gesture; add one private non-generic popup/session renderer module and one Position-only queue request
+REJECTED CANDIDATES: in-main-surface overlay below opaque Stage WebView; SpikePresetStore/UserPreset/counters/current_curve/
+  revision/PopupGfx; NativeTimelineRenderer change/copy; glyphon; second App/EventLoop/WebView/device; generic popup trait/registry/channel; partial React/IPC route
+THIN MOTOLII SEAM: React anchor/layout inbound -> ProductApp current interval re-derivation -> private child WindowId/session -> Position-only request -> existing SetPositionKeyInterp
+THIN MOTOLII RESIDUAL: current ProductApp retention, child WindowId registration/dispatch, and queue sink are the exact C7A implementation gaps
 RETIREMENT: do not retain or promote the partial React/IPC route
 BUILD JUSTIFICATION: NONE
 BUILD: FORBIDDEN
 ```
 
-`P04-C2-POPUP-TERMINAL` is a docs contract ticket, not a code ticket. Its closure fixes the owner,
-event/device exclusions, and adoption disposition above. It does not create a follow-on `DO`: after
-`P04-C2-DIAGNOSTIC-CORRECTION`, the popup terminal visual implementation remains `WAIT_TARGET` until
-an exact existing product rendering target and consumer are proven in a separate authority change.
+Source proof is fixed as follows: dependency/version availability is `PASS`; C7b visibility was `FAIL` for
+the abandoned in-surface route; and current ProductApp retention, `WindowId` dispatch, and queue sink are
+the thin C7A implementation gaps authorized here, not reasons to build a bespoke mechanism. Consultation
+is not authority. Manual z-order/focus/DPI/accessibility/visual acceptance remains the M3-final
+`EXTERNAL_GATE_PENDING` checklist.
