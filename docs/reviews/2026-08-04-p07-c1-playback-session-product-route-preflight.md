@@ -72,7 +72,7 @@ BUILD: FORBIDDEN
 
 ## 3. current source facts and the four required closures
 
-### A. AudioProgram / MixProducer construction — **MISSING**
+### A. AudioProgram / MixProducer construction — **MISSING / PREREQUISITE DO**
 
 `AudioProgram::from_document` and `MixProducer::spawn_with_device_rate` exist, and
 `crates/motolii-audio/tests/mix_program.rs` proves source ordering, mixed producer callback
@@ -84,6 +84,12 @@ Required closure fact: one existing product project/session owner must be named 
 current immutable Document, project asset resolution root, and cache lifetime to `AudioProgram`; the
 construction must not occur in the device callback or UI repaint. Missing/corrupt/unresolved assets
 need an already-owned typed product failure path, not silent single-source fallback.
+
+The source audit also found a narrower prerequisite: a zero-source `AudioProgram` currently gives
+`MixProducer` an end frame of zero, so callback underrun does not advance the correct D5 clock.
+[P07-C1A](2026-08-04-p07-c1a-video-only-program-supply-contract.md) is authorized independently to
+reuse the existing composition duration as the shared producer supply floor. It does not close the
+missing product construction/root/cache owner described above.
 
 ### B. PlaybackSession constructor and lifetime — **MISSING**
 
@@ -128,11 +134,12 @@ and failure/recovery routing.
 
 ## 4. admissible next disposition
 
-`P07-C1` remains `TARGET_MISSING / PREFLIGHT ONLY`. The next safe work is a fresh read-only source
-audit that attempts to close the four listed facts one by one. If an existing real control source is
-found but full playback remains unclosed, a future authority owner may choose an explicitly bounded
-`REDUCE` slice; it must not be named or authorized by this preflight. If any fact remains absent,
-that subfact stays `WAIT_TARGET` and the other M3 lanes continue.
+`P07-C1` remains `TARGET_MISSING / PREFLIGHT ONLY`. P07-C1A is the one bounded prerequisite `DO`:
+it may fix the zero-source supply floor without inventing a product owner. The next parent work is a
+fresh read-only source audit that attempts to close the four listed facts one by one. If an existing
+real control source is found but full playback remains unclosed, a future authority owner may choose
+another explicitly bounded `REDUCE` slice. If any fact remains absent, that subfact stays
+`WAIT_TARGET` and the other M3 lanes continue.
 
 This is not an authority to implement a seek-only route, to change `PlaybackSession`, or to add a
 dependency. It also does not unblock P07-C2 deadline policy or P07-C3 real-material measurement.
