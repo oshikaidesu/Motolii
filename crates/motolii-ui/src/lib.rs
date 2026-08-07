@@ -41,6 +41,7 @@ mod render_worker;
 mod shell;
 mod stage_chrome_host_runtime;
 mod stage_geometry_projection;
+mod stage_hit_test;
 mod state_ownership;
 mod static_preview;
 mod timeline_move_gesture;
