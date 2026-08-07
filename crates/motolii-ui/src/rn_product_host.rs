@@ -8,6 +8,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use motolii_core::RationalTime;
 use motolii_doc::LayerId;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -115,6 +116,8 @@ pub(crate) struct WireProductSnapshot {
     host_handle: String,
     revision: String,
     projection_generation: String,
+    /// Host transient の現在評価時刻。Document / revision には載せない。
+    current_time: RationalTime,
     #[serde(skip_serializing_if = "Option::is_none")]
     primary_layer_id: Option<String>,
     stage: WireStageProjection,
@@ -132,6 +135,7 @@ struct WireStageProjection {
 pub struct RnProductSnapshotForTest {
     pub revision: String,
     pub projection_generation: String,
+    pub current_time: RationalTime,
     pub primary_layer_id: Option<String>,
     pub layer_ids: Vec<String>,
 }
@@ -186,6 +190,9 @@ pub(crate) struct WireIntentEnvelope {
     /// stage_pointer: 単調増加 sequence（二重配送検出用。本seamでは調停しない）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sequence: Option<u64>,
+    /// set_time: 評価 frame index。欠落・非整数は typed 拒否。暗黙 clamp しない。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    frame: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -318,6 +325,8 @@ struct RnStageSurface {
 struct RnProductHost {
     runtime: DocumentEditRuntime,
     projection_generation: u64,
+    /// Document 外の transient 評価時刻。初期値は ZERO。
+    current_time: RationalTime,
     primary: Option<LayerId>,
     stages: HashMap<u64, RnStageSurface>,
     destroyed: bool,
@@ -353,6 +362,7 @@ impl RnProductHost {
             host_handle: host_handle.to_string(),
             revision: self.runtime.document_revision().to_string(),
             projection_generation: self.projection_generation.to_string(),
+            current_time: self.current_time,
             primary_layer_id: self.primary.map(|layer| layer.get().to_string()),
             stage: WireStageProjection { selection, bounds },
             diagnostics: Vec::new(),
@@ -413,6 +423,70 @@ impl RnProductHost {
 
         match intent.kind.as_str() {
             "read_snapshot" => accept(self.snapshot_wire(host_handle)),
+            "set_time" => {
+                // frame index だけを受け、Composition.fps で RationalTime へ解決する。
+                // 負・duration 超過・try_from_frame 失敗は暗黙 clamp せず typed 拒否。
+                let Some(frame) = intent.frame else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let (fps, duration) = {
+                    let snapshot = self.runtime.snapshot();
+                    (snapshot.composition.fps, snapshot.composition.duration)
+                };
+                let Ok(time) = RationalTime::try_from_frame(frame, fps) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                if time < RationalTime::ZERO || time > duration {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                }
+                if time == self.current_time {
+                    // 同一時刻の再設定は no-op。generation は進めない。
+                    return accept(self.snapshot_wire(host_handle));
+                }
+                // Host 内に CU-104E 枯渇 preflight は無い。飽和・wrap せず typed 拒否する。
+                let Some(next_generation) = self.projection_generation.checked_add(1) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                self.current_time = time;
+                self.projection_generation = next_generation;
+                accept(self.snapshot_wire(host_handle))
+            }
             "stage_mount" | "stage_resize" | "stage_focus" | "stage_unmount" | "stage_pointer" => {
                 let Some(stage_handle) = intent
                     .stage_handle
@@ -1073,6 +1147,7 @@ impl RnHostRegistry {
             RnProductHost {
                 runtime,
                 projection_generation: 0,
+                current_time: RationalTime::ZERO,
                 primary: None,
                 stages: HashMap::new(),
                 destroyed: false,
@@ -1164,7 +1239,42 @@ impl RnHostRegistry {
         if host.destroyed {
             return Err(RnHostError::DestroyedHost(host_handle));
         }
-        let intent: WireIntentEnvelope = serde_json::from_str(intent_json)?;
+        // set_time は frame index のみ。旧 time 秒 wire・非整数・欠落はここで typed 拒否する。
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(intent_json) {
+            if value.get("kind").and_then(|kind| kind.as_str()) == Some("set_time") {
+                let frame_is_i64 = value
+                    .get("frame")
+                    .map(|frame| frame.is_i64())
+                    .unwrap_or(false);
+                if value.get("time").is_some() || !frame_is_i64 {
+                    return encode_json(&reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ));
+                }
+            }
+        }
+        let intent: WireIntentEnvelope = match serde_json::from_str(intent_json) {
+            Ok(intent) => intent,
+            Err(_) => {
+                return encode_json(&reject(
+                    diagnostic(
+                        RnHostReasonCode::InvalidIntent,
+                        Some(host_handle),
+                        None,
+                        None,
+                        None,
+                    ),
+                    None,
+                ));
+            }
+        };
         if intent.version != WIRE_VERSION || intent.direction != RN_TO_HOST {
             let response = reject(
                 diagnostic(
@@ -1355,6 +1465,7 @@ fn snapshot_for_test(snapshot: WireProductSnapshot) -> RnProductSnapshotForTest 
     RnProductSnapshotForTest {
         revision: snapshot.revision,
         projection_generation: snapshot.projection_generation,
+        current_time: snapshot.current_time,
         primary_layer_id: snapshot.primary_layer_id,
         layer_ids: snapshot
             .stage
@@ -1405,6 +1516,7 @@ pub fn host_dispatch_intent_for_test(
         view_local_x: None,
         view_local_y: None,
         sequence: None,
+        frame: None,
     };
     let json = with_registry(|registry| {
         registry.dispatch_intent_json(host_handle, &encode_json(&wire_intent)?)
@@ -1985,7 +2097,99 @@ mod tests {
             view_local_x: Some(view_local_x),
             view_local_y: Some(view_local_y),
             sequence: Some(sequence),
+            frame: None,
         }
+    }
+
+    fn set_time_json(host: u64, frame_json: &str) -> String {
+        format!(
+            concat!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"set_time","#,
+                r#""host_handle":"{host}","frame":{frame}}}"#
+            ),
+            host = host,
+            frame = frame_json
+        )
+    }
+
+    fn dispatch_raw_json(host: u64, intent_json: &str) -> RnHostTestResponse {
+        #[cfg(target_os = "macos")]
+        {
+            let mut out = vec![0u8; MAX_JSON_BYTES];
+            let written = unsafe {
+                motolii_rn_host_dispatch_intent_json(
+                    host,
+                    intent_json.as_ptr(),
+                    intent_json.len(),
+                    out.as_mut_ptr(),
+                    out.len(),
+                )
+            };
+            assert!(
+                written > 0,
+                "motolii_rn_host_dispatch_intent_json failed: {written}"
+            );
+            let response: WireIntentResponse =
+                serde_json::from_slice(&out[..written as usize]).expect("response json");
+            response_for_test(response)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            with_registry(|registry| {
+                let out = registry.dispatch_intent_json(host, intent_json)?;
+                let response: WireIntentResponse =
+                    serde_json::from_str(&out).map_err(RnHostError::from)?;
+                Ok(response_for_test(response))
+            })
+            .expect("dispatch raw json")
+        }
+    }
+
+    fn fixture_path_with_fps(tag: &str, fps: motolii_core::Fps) -> std::path::PathBuf {
+        let id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = tmp_dir(&format!("rn-product-host-{tag}-{id}")).join("project.json");
+        let mut document = Document::new_current();
+        document.composition.fps = fps;
+        let layer = document.layers.allocate("r0-layer").expect("layer");
+        let track = document.track_ids.allocate("r0-track").expect("track");
+        document.tracks.push(Track {
+            id: track,
+            items: vec![TrackItem::Clip(Clip {
+                envelope: ItemEnvelope::new(layer),
+                start: RationalTime::ZERO,
+                duration: document.composition.duration,
+                time_map: TimeMap::identity(),
+                source: ClipSource::Plugin {
+                    plugin_id: RECT_LAYER_SOURCE.into(),
+                    effect_version: 1,
+                    params: BTreeMap::from([
+                        ("center".into(), DocParam::const_vec2([0.0, 0.0])),
+                        ("size".into(), DocParam::const_vec2([1.0, 1.0])),
+                        ("color".into(), DocParam::const_color([0.0, 1.0, 0.0, 1.0])),
+                    ]),
+                    extra: Default::default(),
+                },
+            })],
+        });
+        document.validate().expect("valid fixture document");
+        let limits = ResourceLimits::production();
+        let mut session = ProjectSession::acquire(&path, &limits).expect("acquire fixture");
+        session
+            .save_with_journal(
+                &document,
+                &SaveProjectOptions {
+                    limits,
+                    checkpoint: true,
+                    ..SaveProjectOptions::default()
+                },
+            )
+            .expect("save fixture");
+        path
+    }
+
+    fn create_host_with_fps(tag: &str, fps: motolii_core::Fps) -> u64 {
+        let path = fixture_path_with_fps(tag, fps);
+        host_create_for_test(&path).expect("host")
     }
 
     fn dispatch_wire(host: u64, mut intent: WireIntentEnvelope) -> RnHostTestResponse {
@@ -2021,8 +2225,220 @@ mod tests {
         let snapshot = read_snapshot(host);
         assert_eq!(snapshot.revision, "0");
         assert_eq!(snapshot.projection_generation, "0");
+        assert_eq!(snapshot.current_time, RationalTime::ZERO);
         assert!(snapshot.primary_layer_id.is_none());
         assert!(!snapshot.layer_ids.is_empty());
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_time_accepts_valid_frame_and_advances_projection_generation() {
+        let _lock = test_lock();
+        let host = create_host("set-time-accept");
+        let baseline = read_snapshot(host);
+        assert_eq!(baseline.current_time, RationalTime::ZERO);
+        assert_eq!(baseline.projection_generation, "0");
+
+        // 既定 Composition は 30fps・duration 10s。frame 45 → 45/30 = 3/2。
+        let response = dispatch_raw_json(host, &set_time_json(host, "45"));
+        assert!(response.accepted);
+        let snap = response.snapshot.expect("snapshot");
+        assert_eq!(
+            snap.current_time,
+            RationalTime::try_new(3, 2).expect("3/2")
+        );
+        assert_eq!(snap.projection_generation, "1");
+        assert_eq!(snap.revision, baseline.revision);
+        assert_eq!(snap.primary_layer_id, baseline.primary_layer_id);
+
+        let after = read_snapshot(host);
+        assert_eq!(after.current_time, snap.current_time);
+        assert_eq!(after.projection_generation, "1");
+        assert_eq!(after.revision, baseline.revision);
+        assert_eq!(after.primary_layer_id, baseline.primary_layer_id);
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_time_frame_zero_resolves_to_rational_time_zero_via_ffi_json() {
+        let _lock = test_lock();
+        let host = create_host("set-time-zero");
+        // いったん非 ZERO にしてから frame 0 へ戻し、解決結果を観測する。
+        assert!(dispatch_raw_json(host, &set_time_json(host, "30")).accepted);
+        let response = dispatch_raw_json(host, &set_time_json(host, "0"));
+        assert!(response.accepted);
+        let snap = response.snapshot.expect("snapshot");
+        assert_eq!(snap.current_time, RationalTime::ZERO);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_time_ntsc_frame_is_exact_fraction_via_ffi_json() {
+        let _lock = test_lock();
+        let fps = motolii_core::Fps::try_new(30_000, 1_001).expect("29.97");
+        let host = create_host_with_fps("set-time-ntsc", fps);
+        // duration 10s 内に収まる N。N*1001/30000 を十進近似なしで観測する。
+        let frame = 100i64;
+        let response = dispatch_raw_json(host, &set_time_json(host, &frame.to_string()));
+        assert!(response.accepted);
+        let snap = response.snapshot.expect("snapshot");
+        assert_eq!(
+            snap.current_time,
+            RationalTime::try_new(frame * 1_001, 30_000).expect("exact ntsc")
+        );
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_time_film_24_frame_is_exact_fraction_via_ffi_json() {
+        let _lock = test_lock();
+        let fps = motolii_core::Fps::try_new(24, 1).expect("24");
+        let host = create_host_with_fps("set-time-24", fps);
+        let frame = 48i64;
+        let response = dispatch_raw_json(host, &set_time_json(host, &frame.to_string()));
+        assert!(response.accepted);
+        let snap = response.snapshot.expect("snapshot");
+        assert_eq!(
+            snap.current_time,
+            RationalTime::try_new(frame, 24).expect("exact 24")
+        );
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_time_same_frame_is_noop_without_generation_advance() {
+        let _lock = test_lock();
+        let host = create_host("set-time-noop");
+        assert!(dispatch_raw_json(host, &set_time_json(host, "60")).accepted);
+        let after_first = read_snapshot(host);
+        assert_eq!(after_first.projection_generation, "1");
+
+        let noop = dispatch_raw_json(host, &set_time_json(host, "60"));
+        assert!(noop.accepted);
+        let snap = noop.snapshot.expect("snapshot");
+        assert_eq!(snap.current_time, after_first.current_time);
+        assert_eq!(snap.projection_generation, after_first.projection_generation);
+        assert_eq!(snap.revision, after_first.revision);
+        assert_eq!(snap.primary_layer_id, after_first.primary_layer_id);
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_time_rejects_out_of_bounds_and_bad_wire_without_clamp_or_document_write() {
+        let _lock = test_lock();
+        let host = create_host("set-time-reject");
+        let baseline = read_snapshot(host);
+
+        let negative = dispatch_raw_json(host, &set_time_json(host, "-1"));
+        assert!(!negative.accepted);
+        assert_eq!(negative.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        // duration 10s / 30fps → frame 300 が境界。301 は超過。
+        let over = dispatch_raw_json(host, &set_time_json(host, "301"));
+        assert!(!over.accepted);
+        assert_eq!(over.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let missing = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"set_time","host_handle":"{host}"}}"#
+            ),
+        );
+        assert!(!missing.accepted);
+        assert_eq!(missing.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let non_integer = dispatch_raw_json(host, &set_time_json(host, "1.5"));
+        assert!(!non_integer.accepted);
+        assert_eq!(non_integer.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let legacy_time = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_time","#,
+                    r#""host_handle":"{host}","time":1.5}}"#
+                ),
+                host = host
+            ),
+        );
+        assert!(!legacy_time.accepted);
+        assert_eq!(legacy_time.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let legacy_time_with_frame = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_time","#,
+                    r#""host_handle":"{host}","frame":1,"time":1.5}}"#
+                ),
+                host = host
+            ),
+        );
+        assert!(!legacy_time_with_frame.accepted);
+        assert_eq!(
+            legacy_time_with_frame.reason,
+            Some(RnHostReasonCode::InvalidIntent)
+        );
+
+        let after = read_snapshot(host);
+        assert_eq!(after.current_time, RationalTime::ZERO);
+        assert_eq!(after.revision, baseline.revision);
+        assert_eq!(after.projection_generation, baseline.projection_generation);
+        assert_eq!(after.primary_layer_id, baseline.primary_layer_id);
+        assert_eq!(after.layer_ids, baseline.layer_ids);
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_time_rejects_try_from_frame_overflow_without_panic() {
+        let _lock = test_lock();
+        // fps=1/2 かつ frame=i64::MAX だと try_from_frame が Overflow になる。
+        let fps = motolii_core::Fps::try_new(1, 2).expect("1/2");
+        let host = create_host_with_fps("set-time-overflow", fps);
+        let baseline = read_snapshot(host);
+        let rejected = dispatch_raw_json(host, &set_time_json(host, &i64::MAX.to_string()));
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+        let after = read_snapshot(host);
+        assert_eq!(after.current_time, baseline.current_time);
+        assert_eq!(after.projection_generation, baseline.projection_generation);
+        assert_eq!(after.revision, baseline.revision);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_time_rejects_projection_generation_exhaustion_without_saturation() {
+        let _lock = test_lock();
+        let host = create_host("set-time-gen-exhaust");
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            product.projection_generation = u64::MAX;
+            Ok(())
+        })
+        .expect("force exhaustion");
+
+        // 同一 ZERO は no-op で受理し、枯渇でも generation を触らない。
+        let noop = dispatch_raw_json(host, &set_time_json(host, "0"));
+        assert!(noop.accepted);
+        assert_eq!(
+            noop.snapshot.expect("snapshot").projection_generation,
+            u64::MAX.to_string()
+        );
+
+        // 異なる frame は前進不能なので typed 拒否。飽和させない。
+        let rejected = dispatch_raw_json(host, &set_time_json(host, "1"));
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+        let after = read_snapshot(host);
+        assert_eq!(after.current_time, RationalTime::ZERO);
+        assert_eq!(after.projection_generation, u64::MAX.to_string());
+
         let _ = host_destroy_for_test(host);
     }
 
