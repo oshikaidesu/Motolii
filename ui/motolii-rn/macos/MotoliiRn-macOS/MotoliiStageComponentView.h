@@ -12,6 +12,7 @@
   uint64_t _hostHandle;
   uint64_t _stageHandle;
   uint64_t _revision;
+  uint64_t _pointerSequence;
   BOOL _mounted;
   BOOL _focused;
   BOOL _surfaceAttached;

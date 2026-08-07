@@ -228,7 +228,20 @@ BOOL BridgeAccepted(NSData *data)
 - (void)mouseDown:(NSEvent *)event
 {
   [self.window makeFirstResponder:self];
+  [self sendPointerIntent:@"down" event:event];
   [super mouseDown:event];
+}
+
+- (void)mouseDragged:(NSEvent *)event
+{
+  [self sendPointerIntent:@"drag" event:event];
+  [super mouseDragged:event];
+}
+
+- (void)mouseUp:(NSEvent *)event
+{
+  [self sendPointerIntent:@"up" event:event];
+  [super mouseUp:event];
 }
 
 - (void)updateLayer
@@ -423,6 +436,53 @@ BOOL BridgeAccepted(NSData *data)
             height:self.bounds.size.height
        scaleFactor:self.window.backingScaleFactor
            focused:_focused];
+}
+
+- (void)sendPointerIntent:(NSString *)phase event:(NSEvent *)event
+{
+  // stage 未register / unmount 後の late AppKit event は送らない。
+  if (_hostHandle == 0 || _stageHandle == 0 || !_mounted || event == nil) {
+    return;
+  }
+
+  // MotoliiStageComponentView は isFlipped を override せず NSView 既定 (NO) のまま。
+  // convertPoint:fromView:nil の view-local は原点左下・Y上向きの AppKit 論理座標であり、
+  // その値をそのまま view_local_x / view_local_y として送る（flip 変換しない）。
+  NSPoint local = [self convertPoint:event.locationInWindow fromView:nil];
+  uint64_t sequence = ++_pointerSequence;
+
+  NSDictionary *payload = @{
+    @"version" : @1,
+    @"direction" : @"rn-to-host",
+    @"kind" : @"stage_pointer",
+    @"host_handle" : HandleString(_hostHandle),
+    @"stage_handle" : HandleString(_stageHandle),
+    @"phase" : phase,
+    @"view_local_x" : @(local.x),
+    @"view_local_y" : @(local.y),
+    @"sequence" : @((unsigned long long)sequence),
+  };
+  NSData *request = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
+  if (request == nil) {
+    _snapshotText = @"intent encoding failed";
+    [self setNeedsDisplay:YES];
+    return;
+  }
+
+  uint8_t output[kBridgeBufferCapacity];
+  int64_t result = motolii_rn_host_dispatch_intent_json(
+      _hostHandle,
+      (const uint8_t *)request.bytes,
+      request.length,
+      output,
+      sizeof(output));
+  if (result <= 0 || (uint64_t)result > sizeof(output)) {
+    _snapshotText = @"intent rejected by host bridge";
+  } else {
+    NSData *response = [NSData dataWithBytes:output length:(NSUInteger)result];
+    _snapshotText = SnapshotTextFromJSON(response);
+  }
+  [self setNeedsDisplay:YES];
 }
 
 - (void)sendIntent:(NSString *)kind
