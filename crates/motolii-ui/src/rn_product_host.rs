@@ -12,6 +12,15 @@ use motolii_doc::LayerId;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+#[cfg(target_os = "macos")]
+use motolii_gpu::GpuCtx;
+#[cfg(target_os = "macos")]
+use wgpu::{
+    Color, CompositeAlphaMode, CurrentSurfaceTexture, LoadOp, Operations, PresentMode,
+    RenderPassColorAttachment, RenderPassDescriptor, StoreOp, Surface, SurfaceConfiguration,
+    SurfaceTargetUnsafe, TextureFormat, TextureUsages,
+};
+
 use crate::document_edit_runtime::DocumentEditRuntime;
 use crate::shell::{open_project_runtime, ShellError};
 
@@ -175,7 +184,98 @@ pub(crate) struct WireIntentResponse {
     diagnostics: Vec<RnHostDiagnostic>,
 }
 
-#[derive(Debug)]
+#[cfg(target_os = "macos")]
+struct HostGpuBundle {
+    ctx: GpuCtx,
+    instance: wgpu::Instance,
+    adapter: wgpu::Adapter,
+}
+
+#[cfg(target_os = "macos")]
+struct StageGpuBinding {
+    surface_epoch: u64,
+    last_presented_epoch: Option<u64>,
+    physical_width: u32,
+    physical_height: u32,
+    layer_ptr: usize,
+    surface: Option<Surface<'static>>,
+    needs_reconfigure: bool,
+    poisoned: bool,
+}
+
+#[cfg(target_os = "macos")]
+impl StageGpuBinding {
+    fn detached() -> Self {
+        Self {
+            surface_epoch: 0,
+            last_presented_epoch: None,
+            physical_width: 0,
+            physical_height: 0,
+            layer_ptr: 0,
+            surface: None,
+            needs_reconfigure: false,
+            poisoned: false,
+        }
+    }
+
+    fn is_attached(&self) -> bool {
+        self.layer_ptr != 0
+    }
+
+    fn has_surface(&self) -> bool {
+        self.surface.is_some()
+    }
+
+    fn reject_if_poisoned(&self) -> Result<(), RnHostReasonCode> {
+        if self.poisoned {
+            Err(RnHostReasonCode::InvalidIntent)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn validate_attach(&self, layer_ptr: usize) -> Result<(), RnHostReasonCode> {
+        self.reject_if_poisoned()?;
+        if layer_ptr == 0 || self.is_attached() {
+            return Err(RnHostReasonCode::InvalidIntent);
+        }
+        Ok(())
+    }
+
+    fn configured(&mut self, width: u32, height: u32) {
+        self.physical_width = width;
+        self.physical_height = height;
+        self.needs_reconfigure = false;
+        self.surface_epoch = self.surface_epoch.saturating_add(1);
+    }
+
+    fn presented(&mut self, suboptimal: bool) {
+        self.last_presented_epoch = Some(self.surface_epoch);
+        self.needs_reconfigure = suboptimal;
+    }
+
+    fn outdated(&mut self) {
+        self.needs_reconfigure = true;
+    }
+
+    fn acquisition_deferred(&mut self) {}
+
+    fn lost(&mut self) {
+        self.surface = None;
+        self.layer_ptr = 0;
+        self.physical_width = 0;
+        self.physical_height = 0;
+        self.needs_reconfigure = false;
+        self.surface_epoch = self.surface_epoch.saturating_add(1);
+    }
+
+    fn validation_failed(&mut self) {
+        self.poisoned = true;
+        self.needs_reconfigure = false;
+        self.surface_epoch = self.surface_epoch.saturating_add(1);
+    }
+}
+
 struct RnStageSurface {
     host_handle: u64,
     mounted: bool,
@@ -184,6 +284,8 @@ struct RnStageSurface {
     height: u32,
     scale_factor: f64,
     focused: bool,
+    #[cfg(target_os = "macos")]
+    gpu: StageGpuBinding,
 }
 
 struct RnProductHost {
@@ -192,6 +294,8 @@ struct RnProductHost {
     primary: Option<LayerId>,
     stages: HashMap<u64, RnStageSurface>,
     destroyed: bool,
+    #[cfg(target_os = "macos")]
+    gpu: Option<HostGpuBundle>,
 }
 
 impl RnProductHost {
@@ -362,6 +466,8 @@ impl RnProductHost {
                         stage.focused = intent.focused.expect("validated focus state");
                     }
                     "stage_unmount" => {
+                        #[cfg(target_os = "macos")]
+                        stage.gpu_detach_surface();
                         stage.mounted = false;
                     }
                     _ => {}
@@ -398,6 +504,8 @@ impl RnProductHost {
                 height: 0,
                 scale_factor: 1.0,
                 focused: false,
+                #[cfg(target_os = "macos")]
+                gpu: StageGpuBinding::detached(),
             },
         );
         Ok(())
@@ -410,19 +518,476 @@ impl RnProductHost {
         if stage.destroyed {
             return Err(RnHostError::DestroyedStage(stage_handle));
         }
+        #[cfg(target_os = "macos")]
+        stage.gpu_detach_surface();
         stage.destroyed = true;
         stage.mounted = false;
         Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    fn ensure_gpu(&mut self) -> Result<&mut HostGpuBundle, RnHostReasonCode> {
+        if self.gpu.is_none() {
+            let (ctx, parts) = GpuCtx::new_for_ui().map_err(|_| RnHostReasonCode::InvalidIntent)?;
+            self.gpu = Some(HostGpuBundle {
+                ctx,
+                instance: parts.instance,
+                adapter: parts.adapter,
+            });
+        }
+        Ok(self.gpu.as_mut().expect("gpu bundle initialized"))
+    }
+
+    #[cfg(target_os = "macos")]
+    fn stage_attach_surface(
+        &mut self,
+        stage_handle: u64,
+        layer_ptr: usize,
+    ) -> Result<u64, RnHostReasonCode> {
+        require_main_thread()?;
+        {
+            let stage = self
+                .stages
+                .get(&stage_handle)
+                .ok_or(RnHostReasonCode::UnknownStageHandle)?;
+            if stage.destroyed {
+                return Err(RnHostReasonCode::LateLifecycleEvent);
+            }
+            if !stage.mounted {
+                return Err(RnHostReasonCode::InvalidIntent);
+            }
+            stage.gpu.validate_attach(layer_ptr)?;
+        }
+        let surface = {
+            let gpu = self.ensure_gpu()?;
+            unsafe {
+                gpu.instance
+                    .create_surface_unsafe(SurfaceTargetUnsafe::CoreAnimationLayer(
+                        layer_ptr as *mut core::ffi::c_void,
+                    ))
+            }
+            .map_err(|_| RnHostReasonCode::InvalidIntent)?
+        };
+        let stage = self
+            .stages
+            .get_mut(&stage_handle)
+            .ok_or(RnHostReasonCode::UnknownStageHandle)?;
+        stage.gpu.surface_epoch = stage.gpu.surface_epoch.saturating_add(1);
+        stage.gpu.layer_ptr = layer_ptr;
+        stage.gpu.surface = Some(surface);
+        stage.gpu.physical_width = 0;
+        stage.gpu.physical_height = 0;
+        stage.gpu.last_presented_epoch = None;
+        stage.gpu.needs_reconfigure = true;
+        Ok(stage.gpu.surface_epoch)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn configure_stage_surface(
+        &mut self,
+        stage_handle: u64,
+        width: u32,
+        height: u32,
+    ) -> Result<(), RnHostReasonCode> {
+        let config = {
+            let gpu = self.gpu.as_ref().ok_or(RnHostReasonCode::InvalidIntent)?;
+            let stage = self
+                .stages
+                .get(&stage_handle)
+                .ok_or(RnHostReasonCode::UnknownStageHandle)?;
+            stage.gpu.reject_if_poisoned()?;
+            let surface = stage
+                .gpu
+                .surface
+                .as_ref()
+                .ok_or(RnHostReasonCode::InvalidIntent)?;
+            supported_surface_config(surface, &gpu.adapter, width, height)?
+        };
+        let gpu = self.gpu.as_ref().ok_or(RnHostReasonCode::InvalidIntent)?;
+        let stage = self
+            .stages
+            .get_mut(&stage_handle)
+            .ok_or(RnHostReasonCode::UnknownStageHandle)?;
+        let surface = stage
+            .gpu
+            .surface
+            .as_ref()
+            .ok_or(RnHostReasonCode::InvalidIntent)?;
+        surface.configure(&gpu.ctx.device, &config);
+        stage.gpu.configured(width, height);
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    fn stage_resize_physical(
+        &mut self,
+        stage_handle: u64,
+        width: u32,
+        height: u32,
+    ) -> Result<(), RnHostReasonCode> {
+        require_main_thread()?;
+        {
+            let stage = self
+                .stages
+                .get(&stage_handle)
+                .ok_or(RnHostReasonCode::UnknownStageHandle)?;
+            if stage.destroyed {
+                return Err(RnHostReasonCode::LateLifecycleEvent);
+            }
+            if !stage.gpu.is_attached() || !stage.gpu.has_surface() {
+                return Err(RnHostReasonCode::InvalidIntent);
+            }
+            stage.gpu.reject_if_poisoned()?;
+        }
+        if width == 0 || height == 0 {
+            let stage = self
+                .stages
+                .get_mut(&stage_handle)
+                .ok_or(RnHostReasonCode::UnknownStageHandle)?;
+            stage.gpu.physical_width = width;
+            stage.gpu.physical_height = height;
+            stage.gpu.needs_reconfigure = true;
+            return Ok(());
+        }
+        self.configure_stage_surface(stage_handle, width, height)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn stage_draw(&mut self, stage_handle: u64) -> Result<(), RnHostReasonCode> {
+        require_main_thread()?;
+        let (width, height, attached, needs_reconfigure) = {
+            let stage = self
+                .stages
+                .get(&stage_handle)
+                .ok_or(RnHostReasonCode::UnknownStageHandle)?;
+            if stage.destroyed {
+                return Err(RnHostReasonCode::LateLifecycleEvent);
+            }
+            stage.gpu.reject_if_poisoned()?;
+            (
+                stage.gpu.physical_width,
+                stage.gpu.physical_height,
+                stage.gpu.is_attached(),
+                stage.gpu.needs_reconfigure,
+            )
+        };
+        if !attached {
+            return Err(RnHostReasonCode::InvalidIntent);
+        }
+        if width == 0 || height == 0 {
+            return Ok(());
+        }
+        if needs_reconfigure {
+            self.configure_stage_surface(stage_handle, width, height)?;
+        }
+        let gpu = self.gpu.as_ref().ok_or(RnHostReasonCode::InvalidIntent)?;
+        let surface = self
+            .stages
+            .get(&stage_handle)
+            .ok_or(RnHostReasonCode::UnknownStageHandle)?
+            .gpu
+            .surface
+            .as_ref()
+            .ok_or(RnHostReasonCode::InvalidIntent)?;
+        match surface.get_current_texture() {
+            CurrentSurfaceTexture::Success(frame) => {
+                let view = frame
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+                let mut encoder =
+                    gpu.ctx
+                        .device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("motolii-rn-stage-clear"),
+                        });
+                {
+                    let _pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                        label: Some("motolii-rn-stage-clear-pass"),
+                        color_attachments: &[Some(RenderPassColorAttachment {
+                            view: &view,
+                            depth_slice: None,
+                            resolve_target: None,
+                            ops: Operations {
+                                load: LoadOp::Clear(Color {
+                                    r: 0.08,
+                                    g: 0.08,
+                                    b: 0.08,
+                                    a: 1.0,
+                                }),
+                                store: StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                        multiview_mask: None,
+                    });
+                }
+                gpu.ctx.queue.submit(Some(encoder.finish()));
+                frame.present();
+                self.stages
+                    .get_mut(&stage_handle)
+                    .ok_or(RnHostReasonCode::UnknownStageHandle)?
+                    .gpu
+                    .presented(false);
+                Ok(())
+            }
+            CurrentSurfaceTexture::Suboptimal(frame) => {
+                let view = frame
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+                let mut encoder =
+                    gpu.ctx
+                        .device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("motolii-rn-stage-clear"),
+                        });
+                {
+                    let _pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                        label: Some("motolii-rn-stage-clear-pass"),
+                        color_attachments: &[Some(RenderPassColorAttachment {
+                            view: &view,
+                            depth_slice: None,
+                            resolve_target: None,
+                            ops: Operations {
+                                load: LoadOp::Clear(Color {
+                                    r: 0.08,
+                                    g: 0.08,
+                                    b: 0.08,
+                                    a: 1.0,
+                                }),
+                                store: StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                        multiview_mask: None,
+                    });
+                }
+                gpu.ctx.queue.submit(Some(encoder.finish()));
+                frame.present();
+                self.stages
+                    .get_mut(&stage_handle)
+                    .ok_or(RnHostReasonCode::UnknownStageHandle)?
+                    .gpu
+                    .presented(true);
+                Ok(())
+            }
+            CurrentSurfaceTexture::Timeout | CurrentSurfaceTexture::Occluded => {
+                self.stages
+                    .get_mut(&stage_handle)
+                    .ok_or(RnHostReasonCode::UnknownStageHandle)?
+                    .gpu
+                    .acquisition_deferred();
+                Ok(())
+            }
+            CurrentSurfaceTexture::Outdated => {
+                self.stages
+                    .get_mut(&stage_handle)
+                    .ok_or(RnHostReasonCode::UnknownStageHandle)?
+                    .gpu
+                    .outdated();
+                Ok(())
+            }
+            CurrentSurfaceTexture::Lost => {
+                self.stages
+                    .get_mut(&stage_handle)
+                    .ok_or(RnHostReasonCode::UnknownStageHandle)?
+                    .gpu
+                    .lost();
+                Err(RnHostReasonCode::InvalidIntent)
+            }
+            CurrentSurfaceTexture::Validation => {
+                self.stages
+                    .get_mut(&stage_handle)
+                    .ok_or(RnHostReasonCode::UnknownStageHandle)?
+                    .gpu
+                    .validation_failed();
+                Err(RnHostReasonCode::InvalidIntent)
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn stage_detach_surface(&mut self, stage_handle: u64) -> Result<u64, RnHostReasonCode> {
+        require_main_thread()?;
+        let stage = self
+            .stages
+            .get_mut(&stage_handle)
+            .ok_or(RnHostReasonCode::UnknownStageHandle)?;
+        if stage.destroyed {
+            return Err(RnHostReasonCode::LateLifecycleEvent);
+        }
+        stage.gpu_detach_surface();
+        Ok(stage.gpu.surface_epoch)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn detach_all_stage_surfaces(&mut self) {
+        let stage_handles = self.stages.keys().copied().collect::<Vec<_>>();
+        for stage_handle in stage_handles {
+            if let Some(stage) = self.stages.get_mut(&stage_handle) {
+                stage.gpu_detach_surface();
+            }
+        }
     }
 
     fn destroy(&mut self, host_handle: u64) -> Result<(), RnHostError> {
         if self.destroyed {
             return Err(RnHostError::DestroyedHost(host_handle));
         }
+        #[cfg(target_os = "macos")]
+        self.detach_all_stage_surfaces();
         self.destroyed = true;
         self.stages.clear();
+        #[cfg(target_os = "macos")]
+        {
+            self.gpu = None;
+        }
         Ok(())
     }
+}
+
+#[cfg(target_os = "macos")]
+fn supported_surface_config(
+    surface: &Surface<'static>,
+    adapter: &wgpu::Adapter,
+    width: u32,
+    height: u32,
+) -> Result<SurfaceConfiguration, RnHostReasonCode> {
+    let capabilities = surface.get_capabilities(adapter);
+    if !capabilities.formats.contains(&TextureFormat::Bgra8Unorm)
+        || !capabilities.present_modes.contains(&PresentMode::Fifo)
+        || !capabilities.alpha_modes.contains(&CompositeAlphaMode::Auto)
+    {
+        return Err(RnHostReasonCode::InvalidIntent);
+    }
+    Ok(SurfaceConfiguration {
+        usage: TextureUsages::RENDER_ATTACHMENT,
+        format: TextureFormat::Bgra8Unorm,
+        width,
+        height,
+        present_mode: PresentMode::Fifo,
+        desired_maximum_frame_latency: 2,
+        alpha_mode: CompositeAlphaMode::Auto,
+        view_formats: Vec::new(),
+    })
+}
+
+#[cfg(target_os = "macos")]
+impl RnStageSurface {
+    fn gpu_detach_surface(&mut self) {
+        if self.gpu.is_attached() {
+            self.gpu.surface = None;
+            self.gpu.layer_ptr = 0;
+            self.gpu.physical_width = 0;
+            self.gpu.physical_height = 0;
+            self.gpu.last_presented_epoch = None;
+            self.gpu.needs_reconfigure = false;
+            self.gpu.poisoned = false;
+            self.gpu.surface_epoch = self.gpu.surface_epoch.saturating_add(1);
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn require_main_thread() -> Result<(), RnHostReasonCode> {
+    if objc2::MainThreadMarker::new().is_none() {
+        return Err(RnHostReasonCode::InvalidIntent);
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn run_stage_gpu_op(
+    host_handle: u64,
+    stage_handle: u64,
+    f: impl FnOnce(&mut RnProductHost, u64) -> Result<(), RnHostReasonCode>,
+) -> Result<String, RnHostReasonCode> {
+    let outcome = with_registry(|registry| {
+        let host = registry.hosts.get_mut(&host_handle);
+        let Some(host) = host else {
+            return Ok(Err(if registry.destroyed_hosts.contains(&host_handle) {
+                RnHostReasonCode::DestroyedHostHandle
+            } else {
+                RnHostReasonCode::UnknownHostHandle
+            }));
+        };
+        if host.destroyed {
+            return Ok(Err(RnHostReasonCode::DestroyedHostHandle));
+        }
+        let Some(stage) = host.stages.get(&stage_handle) else {
+            return Ok(Err(if registry.destroyed_stages.contains(&stage_handle) {
+                RnHostReasonCode::DestroyedStageHandle
+            } else {
+                RnHostReasonCode::UnknownStageHandle
+            }));
+        };
+        if stage.host_handle != host_handle {
+            return Ok(Err(RnHostReasonCode::UnknownStageHandle));
+        }
+        if let Err(reason) = f(host, stage_handle) {
+            return Ok(Err(reason));
+        }
+        match encode_response(&accept_no_snapshot()) {
+            Ok(json) => Ok(Ok(json)),
+            Err(_) => Ok(Err(RnHostReasonCode::InvalidIntent)),
+        }
+    });
+    match outcome {
+        Ok(inner) => inner,
+        Err(_) => Err(RnHostReasonCode::InvalidIntent),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn write_stage_gpu_op(
+    out: *mut u8,
+    out_cap: usize,
+    host_handle: u64,
+    stage_handle: u64,
+    f: impl FnOnce(&mut RnProductHost, u64) -> Result<(), RnHostReasonCode>,
+) -> i64 {
+    if !output_usable(out, out_cap) {
+        return -1;
+    }
+    catch_unwind(AssertUnwindSafe(|| {
+        if require_main_thread().is_err() {
+            return write_reject(
+                out,
+                out_cap,
+                RnHostReasonCode::InvalidIntent,
+                Some(host_handle),
+                Some(stage_handle),
+            );
+        }
+        if host_handle == 0 {
+            return write_reject(
+                out,
+                out_cap,
+                RnHostReasonCode::UnknownHostHandle,
+                Some(0),
+                Some(stage_handle),
+            );
+        }
+        if stage_handle == 0 {
+            return write_reject(
+                out,
+                out_cap,
+                RnHostReasonCode::UnknownStageHandle,
+                Some(host_handle),
+                Some(0),
+            );
+        }
+        match run_stage_gpu_op(host_handle, stage_handle, f) {
+            Ok(json) => write_bytes(out, out_cap, &json),
+            Err(reason) => {
+                write_reject(out, out_cap, reason, Some(host_handle), Some(stage_handle))
+            }
+        }
+    }))
+    .unwrap_or(-1)
 }
 
 struct RnHostRegistry {
@@ -464,6 +1029,8 @@ impl RnHostRegistry {
                 primary: None,
                 stages: HashMap::new(),
                 destroyed: false,
+                #[cfg(target_os = "macos")]
+                gpu: None,
             },
         );
         Ok(handle)
@@ -808,6 +1375,44 @@ pub fn host_destroy_for_test(host_handle: u64) -> Result<(), RnHostError> {
     with_registry(|registry| registry.destroy_host(host_handle))
 }
 
+#[cfg(all(test, target_os = "macos"))]
+pub(crate) fn stage_gpu_state_for_test(
+    stage_handle: u64,
+) -> Result<(u64, bool, u32, u32), RnHostError> {
+    with_registry(|registry| {
+        for host in registry.hosts.values() {
+            if let Some(stage) = host.stages.get(&stage_handle) {
+                return Ok((
+                    stage.gpu.surface_epoch,
+                    stage.gpu.is_attached(),
+                    stage.gpu.physical_width,
+                    stage.gpu.physical_height,
+                ));
+            }
+        }
+        Err(RnHostError::UnknownStage(stage_handle))
+    })
+}
+
+#[cfg(all(test, target_os = "macos"))]
+pub(crate) fn stage_gpu_mark_attached_for_test(
+    stage_handle: u64,
+    layer_ptr: usize,
+) -> Result<u64, RnHostError> {
+    with_registry(|registry| {
+        for host in registry.hosts.values_mut() {
+            if let Some(stage) = host.stages.get_mut(&stage_handle) {
+                stage.gpu.surface_epoch = stage.gpu.surface_epoch.saturating_add(1);
+                stage.gpu.layer_ptr = layer_ptr;
+                stage.gpu.physical_width = 0;
+                stage.gpu.physical_height = 0;
+                return Ok(stage.gpu.surface_epoch);
+            }
+        }
+        Err(RnHostError::UnknownStage(stage_handle))
+    })
+}
+
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn motolii_rn_host_create(
@@ -1137,6 +1742,70 @@ pub extern "C" fn motolii_rn_host_dispatch_intent_json(
 }
 
 #[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn motolii_rn_stage_attach(
+    host_handle: u64,
+    stage_handle: u64,
+    metal_layer: *mut core::ffi::c_void,
+    out: *mut u8,
+    out_cap: usize,
+) -> i64 {
+    let layer_ptr = metal_layer as usize;
+    write_stage_gpu_op(
+        out,
+        out_cap,
+        host_handle,
+        stage_handle,
+        move |host, stage| host.stage_attach_surface(stage, layer_ptr).map(|_| ()),
+    )
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn motolii_rn_stage_resize_physical(
+    host_handle: u64,
+    stage_handle: u64,
+    width: u32,
+    height: u32,
+    out: *mut u8,
+    out_cap: usize,
+) -> i64 {
+    write_stage_gpu_op(
+        out,
+        out_cap,
+        host_handle,
+        stage_handle,
+        move |host, stage| host.stage_resize_physical(stage, width, height),
+    )
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn motolii_rn_stage_draw(
+    host_handle: u64,
+    stage_handle: u64,
+    out: *mut u8,
+    out_cap: usize,
+) -> i64 {
+    write_stage_gpu_op(out, out_cap, host_handle, stage_handle, |host, stage| {
+        host.stage_draw(stage)
+    })
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn motolii_rn_stage_detach(
+    host_handle: u64,
+    stage_handle: u64,
+    out: *mut u8,
+    out_cap: usize,
+) -> i64 {
+    write_stage_gpu_op(out, out_cap, host_handle, stage_handle, |host, stage| {
+        host.stage_detach_surface(stage).map(|_| ())
+    })
+}
+
+#[cfg(target_os = "macos")]
 #[allow(dead_code)]
 const _: fn() = || {
     let _ =
@@ -1147,6 +1816,12 @@ const _: fn() = || {
     let _ = motolii_rn_host_read_snapshot_json as extern "C" fn(u64, *mut u8, usize) -> i64;
     let _ = motolii_rn_host_dispatch_intent_json
         as extern "C" fn(u64, *const u8, usize, *mut u8, usize) -> i64;
+    let _ = motolii_rn_stage_attach
+        as extern "C" fn(u64, u64, *mut core::ffi::c_void, *mut u8, usize) -> i64;
+    let _ = motolii_rn_stage_resize_physical
+        as extern "C" fn(u64, u64, u32, u32, *mut u8, usize) -> i64;
+    let _ = motolii_rn_stage_draw as extern "C" fn(u64, u64, *mut u8, usize) -> i64;
+    let _ = motolii_rn_stage_detach as extern "C" fn(u64, u64, *mut u8, usize) -> i64;
 };
 
 #[cfg(test)]
@@ -1568,6 +2243,243 @@ mod tests {
         assert_eq!(
             double_host_response.diagnostics[0].reason,
             RnHostReasonCode::DoubleDestroy
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn stage_gpu_binding_starts_detached_with_zero_epoch() {
+        let binding = StageGpuBinding::detached();
+        assert_eq!(binding.surface_epoch, 0);
+        assert!(!binding.is_attached());
+        assert_eq!(binding.physical_width, 0);
+        assert_eq!(binding.physical_height, 0);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn stage_gpu_detach_increments_epoch_and_clears_binding_markers() {
+        let mut stage = RnStageSurface {
+            host_handle: 1,
+            mounted: true,
+            destroyed: false,
+            width: 100,
+            height: 50,
+            scale_factor: 2.0,
+            focused: false,
+            gpu: StageGpuBinding {
+                surface_epoch: 2,
+                last_presented_epoch: Some(2),
+                physical_width: 200,
+                physical_height: 100,
+                layer_ptr: 0xdead_beef,
+                surface: None,
+                needs_reconfigure: false,
+                poisoned: false,
+            },
+        };
+        assert!(stage.gpu.is_attached());
+        stage.gpu_detach_surface();
+        assert!(!stage.gpu.is_attached());
+        assert_eq!(stage.gpu.surface_epoch, 3);
+        assert_eq!(stage.gpu.physical_width, 0);
+        assert_eq!(stage.gpu.physical_height, 0);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn stage_gpu_resize_unknown_stage_is_rejected_without_registry_mutation() {
+        let _lock = test_lock();
+        let host = create_host("gpu-unknown-stage");
+        let before = read_snapshot(host);
+        let outcome = run_stage_gpu_op(host, 99_999, |_, _| Ok(()));
+        assert_eq!(outcome, Err(RnHostReasonCode::UnknownStageHandle));
+        let after = read_snapshot(host);
+        assert_eq!(after.revision, before.revision);
+        assert_eq!(after.projection_generation, before.projection_generation);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn stage_gpu_attach_validation_rejects_null_layer_without_state_change() {
+        let binding = StageGpuBinding::detached();
+        assert_eq!(
+            binding.validate_attach(0),
+            Err(RnHostReasonCode::InvalidIntent)
+        );
+        assert_eq!(binding.surface_epoch, 0);
+        assert!(!binding.is_attached());
+        assert!(!binding.has_surface());
+        assert!(!binding.needs_reconfigure);
+        assert!(!binding.poisoned);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn stage_unmount_detaches_gpu_binding_markers_without_real_layer() {
+        let _lock = test_lock();
+        let host = create_host("gpu-unmount-detach");
+        let stage = host_register_stage_for_test(host).expect("stage");
+        stage_gpu_mark_attached_for_test(stage, 0xfeed_face).expect("mark attached");
+        let (epoch, attached, _, _) = stage_gpu_state_for_test(stage).expect("state");
+        assert!(attached);
+        assert_eq!(epoch, 1);
+
+        let mut mount = base_intent("stage_mount");
+        mount.stage_handle = Some(stage);
+        assert!(dispatch(host, mount).accepted);
+
+        let mut unmount = base_intent("stage_unmount");
+        unmount.stage_handle = Some(stage);
+        assert!(dispatch(host, unmount).accepted);
+
+        let (epoch_after, attached_after, width, height) =
+            stage_gpu_state_for_test(stage).expect("state");
+        assert!(!attached_after);
+        assert_eq!(epoch_after, epoch + 1);
+        assert_eq!(width, 0);
+        assert_eq!(height, 0);
+
+        let _ = host_destroy_stage_for_test(stage);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn stage_gpu_duplicate_attach_is_rejected_without_replacing_binding() {
+        let mut binding = StageGpuBinding::detached();
+        binding.layer_ptr = 0xfeed_face;
+        binding.surface_epoch = 4;
+        assert_eq!(
+            binding.validate_attach(0xdead_beef),
+            Err(RnHostReasonCode::InvalidIntent)
+        );
+        assert_eq!(binding.layer_ptr, 0xfeed_face);
+        assert_eq!(binding.surface_epoch, 4);
+        assert!(!binding.has_surface());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn stage_gpu_surface_state_transitions_are_epoch_bounded() {
+        let mut binding = StageGpuBinding::detached();
+        binding.layer_ptr = 1;
+        binding.needs_reconfigure = true;
+
+        binding.configured(640, 360);
+        assert_eq!(binding.surface_epoch, 1);
+        assert!(!binding.needs_reconfigure);
+        assert_eq!(binding.last_presented_epoch, None);
+
+        binding.presented(false);
+        assert_eq!(binding.last_presented_epoch, Some(1));
+        assert!(!binding.needs_reconfigure);
+
+        binding.acquisition_deferred();
+        assert_eq!(binding.surface_epoch, 1);
+        assert_eq!(binding.last_presented_epoch, Some(1));
+        assert!(!binding.needs_reconfigure);
+
+        binding.presented(true);
+        assert_eq!(binding.last_presented_epoch, Some(1));
+        assert!(binding.needs_reconfigure);
+        binding.configured(640, 360);
+        assert_eq!(binding.surface_epoch, 2);
+        assert!(!binding.needs_reconfigure);
+
+        binding.outdated();
+        assert!(binding.needs_reconfigure);
+        binding.configured(640, 360);
+        assert_eq!(binding.surface_epoch, 3);
+        assert!(!binding.needs_reconfigure);
+
+        binding.lost();
+        assert_eq!(binding.surface_epoch, 4);
+        assert!(!binding.is_attached());
+        assert!(!binding.has_surface());
+        assert!(!binding.needs_reconfigure);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn stage_gpu_validation_poison_recovers_only_through_detach() {
+        let mut stage = RnStageSurface {
+            host_handle: 1,
+            mounted: true,
+            destroyed: false,
+            width: 100,
+            height: 50,
+            scale_factor: 2.0,
+            focused: false,
+            gpu: StageGpuBinding {
+                surface_epoch: 7,
+                last_presented_epoch: Some(7),
+                physical_width: 200,
+                physical_height: 100,
+                layer_ptr: 1,
+                surface: None,
+                needs_reconfigure: false,
+                poisoned: false,
+            },
+        };
+
+        stage.gpu.validation_failed();
+        assert_eq!(stage.gpu.surface_epoch, 8);
+        assert!(stage.gpu.poisoned);
+        // draw／resizeは同じpoison gateを通り、attachは重複bindingも併せて拒否する。
+        assert_eq!(
+            stage.gpu.reject_if_poisoned(),
+            Err(RnHostReasonCode::InvalidIntent)
+        );
+        assert_eq!(
+            stage.gpu.validate_attach(2),
+            Err(RnHostReasonCode::InvalidIntent)
+        );
+
+        stage.gpu_detach_surface();
+        assert_eq!(stage.gpu.surface_epoch, 9);
+        assert!(!stage.gpu.is_attached());
+        assert!(!stage.gpu.has_surface());
+        assert!(!stage.gpu.poisoned);
+        assert_eq!(stage.gpu.last_presented_epoch, None);
+        assert_eq!(stage.gpu.physical_width, 0);
+        assert_eq!(stage.gpu.physical_height, 0);
+        assert_eq!(stage.gpu.validate_attach(2), Ok(()));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn stage_gpu_host_stage_pair_mismatch_is_rejected_without_snapshot_write() {
+        let _lock = test_lock();
+        let host = create_host("gpu-pair-mismatch");
+        let stage = host_register_stage_for_test(host).expect("stage");
+        let before = read_snapshot(host);
+        let outcome = run_stage_gpu_op(host + 100, stage, |_, _| Ok(()));
+        assert_eq!(outcome, Err(RnHostReasonCode::UnknownHostHandle));
+        let after = read_snapshot(host);
+        assert_eq!(after.revision, before.revision);
+        assert_eq!(after.projection_generation, before.projection_generation);
+        let _ = host_destroy_stage_for_test(stage);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn stage_gpu_abi_rejects_off_main_before_zero_handle_validation() {
+        let (written, output) = std::thread::spawn(|| {
+            let mut output = vec![0_u8; MAX_JSON_BYTES];
+            let written = motolii_rn_stage_draw(0, 0, output.as_mut_ptr(), output.len());
+            (written, output)
+        })
+        .join()
+        .expect("off-main gpu call");
+        assert!(written > 0);
+        let response = parse_wire_response(&output, written);
+        assert!(!response.accepted);
+        assert_eq!(
+            response.diagnostics[0].reason,
+            RnHostReasonCode::InvalidIntent
         );
     }
 }

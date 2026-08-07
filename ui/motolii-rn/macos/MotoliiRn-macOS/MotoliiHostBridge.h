@@ -29,6 +29,29 @@ int64_t motolii_rn_host_dispatch_intent_json(
     size_t intent_len,
     uint8_t *out,
     size_t out_cap);
+int64_t motolii_rn_stage_attach(
+    uint64_t host_handle,
+    uint64_t stage_handle,
+    void *metal_layer,
+    uint8_t *out,
+    size_t out_cap);
+int64_t motolii_rn_stage_resize_physical(
+    uint64_t host_handle,
+    uint64_t stage_handle,
+    uint32_t width,
+    uint32_t height,
+    uint8_t *out,
+    size_t out_cap);
+int64_t motolii_rn_stage_draw(
+    uint64_t host_handle,
+    uint64_t stage_handle,
+    uint8_t *out,
+    size_t out_cap);
+int64_t motolii_rn_stage_detach(
+    uint64_t host_handle,
+    uint64_t stage_handle,
+    uint8_t *out,
+    size_t out_cap);
 
 #ifdef __cplusplus
 }

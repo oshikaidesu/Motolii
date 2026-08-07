@@ -3,6 +3,7 @@
 #import "MotoliiHostBridge.h"
 
 #import <AppKit/AppKit.h>
+#import <QuartzCore/CAMetalLayer.h>
 #import <React/renderer/components/MotoliiRnSpec/ComponentDescriptors.h>
 
 #include <cerrno>
@@ -97,6 +98,19 @@ NSString *SnapshotTextFromJSON(NSData *data)
                                     layer];
 }
 
+BOOL BridgeAccepted(NSData *data)
+{
+  if (data == nil) {
+    return NO;
+  }
+  NSDictionary *response =
+      [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+  if (![response isKindOfClass:[NSDictionary class]]) {
+    return NO;
+  }
+  return [response[@"accepted"] boolValue];
+}
+
 } // namespace
 
 @implementation MotoliiStageComponentView
@@ -111,10 +125,25 @@ NSString *SnapshotTextFromJSON(NSData *data)
   self = [super initWithFrame:frame];
   if (self) {
     _snapshotText = @"stage not mounted";
+    _surfaceAttached = NO;
+    _surfaceRecoveryPending = NO;
     self.wantsLayer = YES;
-    self.layer.backgroundColor = NSColor.windowBackgroundColor.CGColor;
+    _metalLayer = (CAMetalLayer *)self.layer;
   }
   return self;
+}
+
+- (CALayer *)makeBackingLayer
+{
+  CAMetalLayer *layer = [CAMetalLayer layer];
+  layer.contentsScale = 1.0;
+  layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+  return layer;
+}
+
+- (BOOL)wantsUpdateLayer
+{
+  return YES;
 }
 
 - (void)dealloc
@@ -154,13 +183,21 @@ NSString *SnapshotTextFromJSON(NSData *data)
 - (void)layout
 {
   [super layout];
+  if (self.window != nil) {
+    _metalLayer.contentsScale = self.window.backingScaleFactor;
+  }
   [self sendResizeIntent];
+  [self sendPhysicalResize];
 }
 
 - (void)viewDidChangeBackingProperties
 {
   [super viewDidChangeBackingProperties];
+  if (self.window != nil) {
+    _metalLayer.contentsScale = self.window.backingScaleFactor;
+  }
   [self sendResizeIntent];
+  [self sendPhysicalResize];
 }
 
 - (BOOL)acceptsFirstResponder
@@ -194,30 +231,45 @@ NSString *SnapshotTextFromJSON(NSData *data)
   [super mouseDown:event];
 }
 
-- (void)drawRect:(NSRect)dirtyRect
+- (void)updateLayer
 {
-  [super drawRect:dirtyRect];
+  if (![NSThread isMainThread]) {
+    _snapshotText = @"gpu draw rejected off main thread";
+    return;
+  }
 
-  [[NSColor colorWithWhite:0.08 alpha:1.0] setFill];
-  NSRectFill(self.bounds);
+  if (_surfaceRecoveryPending) {
+    // 一回のdisplay passにつきfresh attachは一度だけ試し、失敗時は再予約しない。
+    _surfaceRecoveryPending = NO;
+    [self attachSurfaceIfNeeded];
+    if (!_surfaceAttached) {
+      return;
+    }
+    [self sendPhysicalResize];
+  }
 
-  NSDictionary *attributes = @{
-    NSFontAttributeName : [NSFont systemFontOfSize:12 weight:NSFontWeightSemibold],
-    NSForegroundColorAttributeName : [NSColor colorWithWhite:0.88 alpha:1.0],
-  };
-  NSString *title = @"Fabric Stage · placeholder";
-  [title drawAtPoint:NSMakePoint(18, NSMaxY(self.bounds) - 30) withAttributes:attributes];
+  if (_stageHandle == 0 || !_surfaceAttached) {
+    return;
+  }
 
-  NSDictionary *detailAttributes = @{
-    NSFontAttributeName : [NSFont monospacedSystemFontOfSize:10 weight:NSFontWeightRegular],
-    NSForegroundColorAttributeName : [NSColor colorWithWhite:0.65 alpha:1.0],
-  };
-  NSString *detail = [NSString stringWithFormat:@"host %@ · stage %@\n%@",
-                                                HandleString(_hostHandle),
-                                                HandleString(_stageHandle),
-                                                _snapshotText ?: @"snapshot unavailable"];
-  [detail drawAtPoint:NSMakePoint(18, NSMaxY(self.bounds) - 54)
-       withAttributes:detailAttributes];
+  uint8_t output[kBridgeBufferCapacity];
+  int64_t drawResult = motolii_rn_stage_draw(
+      _hostHandle, _stageHandle, output, sizeof(output));
+  if (drawResult <= 0 || (uint64_t)drawResult > sizeof(output) ||
+      !BridgeAccepted([NSData dataWithBytes:output length:(NSUInteger)drawResult])) {
+    _snapshotText = @"gpu draw rejected";
+    [self scheduleSurfaceRecovery];
+  }
+}
+
+- (void)scheduleSurfaceRecovery
+{
+  if (_surfaceRecoveryPending) {
+    return;
+  }
+  [self detachSurfaceIfNeeded];
+  _surfaceRecoveryPending = YES;
+  [self setNeedsDisplay:YES];
 }
 
 - (void)activateStageIfNeeded
@@ -253,9 +305,78 @@ NSString *SnapshotTextFromJSON(NSData *data)
   _stageHandle = stageHandle;
   _mounted = YES;
   [self sendIntent:@"stage_mount"];
+  [self attachSurfaceIfNeeded];
   [self sendResizeIntent];
+  [self sendPhysicalResize];
   [self sendFocusIntent];
   [self readSnapshot];
+  [self setNeedsDisplay:YES];
+}
+
+- (void)attachSurfaceIfNeeded
+{
+  if (_stageHandle == 0 || _surfaceAttached || _metalLayer == nil) {
+    return;
+  }
+  if (![NSThread isMainThread]) {
+    _snapshotText = @"gpu attach rejected off main thread";
+    return;
+  }
+  uint8_t output[kBridgeBufferCapacity];
+  int64_t attachResult = motolii_rn_stage_attach(
+      _hostHandle, _stageHandle, (__bridge void *)_metalLayer, output, sizeof(output));
+  if (attachResult <= 0 || (uint64_t)attachResult > sizeof(output)) {
+    _snapshotText = @"gpu attach rejected";
+    return;
+  }
+  NSData *response = [NSData dataWithBytes:output length:(NSUInteger)attachResult];
+  if (!BridgeAccepted(response)) {
+    _snapshotText = SnapshotTextFromJSON(response);
+    return;
+  }
+  _surfaceAttached = YES;
+}
+
+- (void)detachSurfaceIfNeeded
+{
+  if (_stageHandle == 0 || !_surfaceAttached) {
+    return;
+  }
+  if (![NSThread isMainThread]) {
+    _snapshotText = @"gpu detach rejected off main thread";
+    return;
+  }
+  uint8_t output[kBridgeBufferCapacity];
+  int64_t detachResult = motolii_rn_stage_detach(
+      _hostHandle, _stageHandle, output, sizeof(output));
+  if (detachResult > 0 && (uint64_t)detachResult <= sizeof(output)) {
+    NSData *response = [NSData dataWithBytes:output length:(NSUInteger)detachResult];
+    if (!BridgeAccepted(response)) {
+      _snapshotText = SnapshotTextFromJSON(response);
+    }
+  }
+  _surfaceAttached = NO;
+}
+
+- (void)sendPhysicalResize
+{
+  if (_stageHandle == 0 || !_surfaceAttached || self.window == nil) {
+    return;
+  }
+  if (![NSThread isMainThread]) {
+    _snapshotText = @"gpu resize rejected off main thread";
+    return;
+  }
+  CGFloat scaleFactor = self.window.backingScaleFactor > 0 ? self.window.backingScaleFactor : 1.0;
+  NSUInteger width = (NSUInteger)MAX(0, ceil(self.bounds.size.width * scaleFactor));
+  NSUInteger height = (NSUInteger)MAX(0, ceil(self.bounds.size.height * scaleFactor));
+  uint8_t output[kBridgeBufferCapacity];
+  int64_t resizeResult = motolii_rn_stage_resize_physical(
+      _hostHandle, _stageHandle, (uint32_t)width, (uint32_t)height, output, sizeof(output));
+  if (resizeResult <= 0 || (uint64_t)resizeResult > sizeof(output) ||
+      !BridgeAccepted([NSData dataWithBytes:output length:(NSUInteger)resizeResult])) {
+    _snapshotText = @"gpu resize rejected";
+  }
 }
 
 - (void)deactivateStage
@@ -264,6 +385,7 @@ NSString *SnapshotTextFromJSON(NSData *data)
     return;
   }
 
+  [self detachSurfaceIfNeeded];
   if (_mounted) {
     [self sendIntent:@"stage_unmount"];
   }
@@ -271,6 +393,8 @@ NSString *SnapshotTextFromJSON(NSData *data)
   motolii_rn_stage_destroy(_stageHandle, output, sizeof(output));
   _mounted = NO;
   _focused = NO;
+  _surfaceAttached = NO;
+  _surfaceRecoveryPending = NO;
   _stageHandle = 0;
   _snapshotText = @"stage not mounted";
   [self setNeedsDisplay:YES];
