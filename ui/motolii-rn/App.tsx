@@ -35,8 +35,11 @@ export default function App({
         <Text style={styles.title}>MOTOLII · R0</Text>
         <Text style={styles.path}>{projectPath ?? 'project path missing'}</Text>
       </View>
-      <View style={styles.content}>
-        <View style={styles.stageColumn}>
+      <View style={styles.workspace}>
+        <View style={styles.browserSlot} testID="browser-slot">
+          <Text style={styles.slotLabel}>Browser</Text>
+        </View>
+        <View style={styles.stageSlot} testID="stage-slot">
           {hasHost ? (
             <MotoliiStageView
               accessibilityLabel="Motolii Fabric Stage placeholder"
@@ -53,7 +56,12 @@ export default function App({
             </View>
           )}
         </View>
-        <SnapshotReadout snapshotJSON={snapshotJSON} />
+        <View style={styles.inspectorSlot} testID="inspector-slot">
+          <SnapshotReadout snapshotJSON={snapshotJSON} />
+        </View>
+      </View>
+      <View style={styles.timelineSlot} testID="timeline-slot">
+        <Text style={styles.slotLabel}>Timeline</Text>
       </View>
     </View>
   );
@@ -87,20 +95,43 @@ const styles = StyleSheet.create({
     color: '#9ca1a4',
     fontSize: 10,
   },
-  content: {
+  workspace: {
     flex: 1,
     flexDirection: 'row',
   },
-  stageColumn: {
+  browserSlot: {
+    width: 200,
+    padding: 12,
+    borderRightWidth: 1,
+    borderRightColor: '#34383c',
+    backgroundColor: '#1b1d20',
+  },
+  stageSlot: {
     flex: 1,
     padding: 12,
+  },
+  inspectorSlot: {
+    width: 240,
+  },
+  timelineSlot: {
+    height: 120,
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#34383c',
+    backgroundColor: '#1b1d20',
+  },
+  slotLabel: {
+    color: '#9ca1a4',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
   stage: {
     flex: 1,
     minHeight: 320,
   },
   snapshot: {
-    width: 240,
+    flex: 1,
     padding: 12,
     borderLeftWidth: 1,
     borderLeftColor: '#34383c',
