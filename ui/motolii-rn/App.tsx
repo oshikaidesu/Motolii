@@ -1,6 +1,7 @@
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 
+import InspectorInitialReadPanel from './src/inspector/InspectorInitialReadPanel';
 import MotoliiStageView from './src/specs/MotoliiStageNativeComponent';
 
 export type MotoliiProductProps = {
@@ -9,17 +10,6 @@ export type MotoliiProductProps = {
   snapshotJSON?: string;
   diagnostic?: string;
 };
-
-function SnapshotReadout({snapshotJSON}: {snapshotJSON?: string}) {
-  return (
-    <View style={styles.snapshot} testID="host-snapshot">
-      <Text style={styles.label}>HOST SNAPSHOT</Text>
-      <Text selectable style={styles.snapshotText}>
-        {snapshotJSON ?? 'snapshot unavailable'}
-      </Text>
-    </View>
-  );
-}
 
 export default function App({
   hostHandle = '0',
@@ -57,7 +47,7 @@ export default function App({
           )}
         </View>
         <View style={styles.inspectorSlot} testID="inspector-slot">
-          <SnapshotReadout snapshotJSON={snapshotJSON} />
+          <InspectorInitialReadPanel snapshotJSON={snapshotJSON} />
         </View>
       </View>
       <View style={styles.timelineSlot} testID="timeline-slot">
@@ -129,25 +119,6 @@ const styles = StyleSheet.create({
   stage: {
     flex: 1,
     minHeight: 320,
-  },
-  snapshot: {
-    flex: 1,
-    padding: 12,
-    borderLeftWidth: 1,
-    borderLeftColor: '#34383c',
-    backgroundColor: '#1b1d20',
-  },
-  label: {
-    color: '#b9ae73',
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  snapshotText: {
-    marginTop: 8,
-    color: '#d6d8d6',
-    fontFamily: 'Menlo',
-    fontSize: 9,
   },
   failure: {
     flex: 1,

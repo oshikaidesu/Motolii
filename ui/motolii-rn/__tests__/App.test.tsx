@@ -20,7 +20,20 @@ describe('Motolii R0 product root', () => {
         <App
           hostHandle="7"
           projectPath="/tmp/project"
-          snapshotJSON='{"revision":"3","primary_layer_id":"11"}'
+          snapshotJSON={JSON.stringify({
+            version: 1,
+            direction: 'host-to-rn',
+            role: 'product-runtime-seat',
+            host_handle: '7',
+            revision: '3',
+            projection_generation: '4',
+            primary_layer_id: '11',
+            stage: {
+              selection: [{layer_id: '11'}],
+              bounds: [{layer_id: '11', display_name: 'Title card'}],
+            },
+            diagnostics: [],
+          })}
         />,
       );
     });
@@ -32,8 +45,13 @@ describe('Motolii R0 product root', () => {
     expect(countOccurrences(serialized, '"inspector-slot"')).toBe(1);
     expect(countOccurrences(serialized, '"timeline-slot"')).toBe(1);
     expect(countOccurrences(serialized, 'MotoliiStageView')).toBe(1);
-    expect(serialized).toContain('revision');
+    expect(countOccurrences(serialized, 'inspector-initial-read-panel')).toBe(1);
+    expect(serialized).toContain('Inspector');
+    expect(serialized).toContain('Initial snapshot');
+    expect(serialized).toContain('Title card');
+    expect(serialized).toContain('Revision');
     expect(serialized).toContain('3');
+    expect(serialized).not.toContain('primary_layer_id');
   });
 
   it('shows a diagnostic instead of fabricating a host', async () => {
