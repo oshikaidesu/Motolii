@@ -6,7 +6,7 @@
 use std::collections::{HashMap, HashSet};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use motolii_doc::LayerId;
 use serde::{Deserialize, Serialize};
@@ -23,6 +23,8 @@ use wgpu::{
 
 use crate::document_edit_runtime::DocumentEditRuntime;
 use crate::shell::{open_project_runtime, ShellError};
+#[cfg(target_os = "macos")]
+use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
 
 const WIRE_VERSION: u8 = 1;
 const HOST_TO_RN: &str = "host-to-rn";
@@ -186,9 +188,12 @@ pub(crate) struct WireIntentResponse {
 
 #[cfg(target_os = "macos")]
 struct HostGpuBundle {
-    ctx: GpuCtx,
+    ctx: Arc<GpuCtx>,
     instance: wgpu::Instance,
     adapter: wgpu::Adapter,
+    _preview: StaticPreview,
+    preview_pipeline: wgpu::RenderPipeline,
+    preview_bind_group: wgpu::BindGroup,
 }
 
 #[cfg(target_os = "macos")]
@@ -529,10 +534,26 @@ impl RnProductHost {
     fn ensure_gpu(&mut self) -> Result<&mut HostGpuBundle, RnHostReasonCode> {
         if self.gpu.is_none() {
             let (ctx, parts) = GpuCtx::new_for_ui().map_err(|_| RnHostReasonCode::InvalidIntent)?;
+            let ctx = Arc::new(ctx);
+            let preview = prepare_in_setup_worker(
+                Arc::clone(&ctx),
+                self.runtime.snapshot(),
+                bootstrap_frame_desc().map_err(|_| RnHostReasonCode::InvalidIntent)?,
+            )
+            .map_err(|_| RnHostReasonCode::InvalidIntent)?;
+            let (preview_pipeline, preview_bind_group) =
+                crate::product_runtime::create_preview_pipeline(
+                    &ctx.device,
+                    TextureFormat::Bgra8Unorm,
+                    preview.slot().view(),
+                );
             self.gpu = Some(HostGpuBundle {
                 ctx,
                 instance: parts.instance,
                 adapter: parts.adapter,
+                _preview: preview,
+                preview_pipeline,
+                preview_bind_group,
             });
         }
         Ok(self.gpu.as_mut().expect("gpu bundle initialized"))
@@ -691,40 +712,7 @@ impl RnProductHost {
             .ok_or(RnHostReasonCode::InvalidIntent)?;
         match surface.get_current_texture() {
             CurrentSurfaceTexture::Success(frame) => {
-                let view = frame
-                    .texture
-                    .create_view(&wgpu::TextureViewDescriptor::default());
-                let mut encoder =
-                    gpu.ctx
-                        .device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("motolii-rn-stage-clear"),
-                        });
-                {
-                    let _pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                        label: Some("motolii-rn-stage-clear-pass"),
-                        color_attachments: &[Some(RenderPassColorAttachment {
-                            view: &view,
-                            depth_slice: None,
-                            resolve_target: None,
-                            ops: Operations {
-                                load: LoadOp::Clear(Color {
-                                    r: 0.08,
-                                    g: 0.08,
-                                    b: 0.08,
-                                    a: 1.0,
-                                }),
-                                store: StoreOp::Store,
-                            },
-                        })],
-                        depth_stencil_attachment: None,
-                        timestamp_writes: None,
-                        occlusion_query_set: None,
-                        multiview_mask: None,
-                    });
-                }
-                gpu.ctx.queue.submit(Some(encoder.finish()));
-                frame.present();
+                draw_stage_preview(gpu, frame);
                 self.stages
                     .get_mut(&stage_handle)
                     .ok_or(RnHostReasonCode::UnknownStageHandle)?
@@ -733,40 +721,7 @@ impl RnProductHost {
                 Ok(())
             }
             CurrentSurfaceTexture::Suboptimal(frame) => {
-                let view = frame
-                    .texture
-                    .create_view(&wgpu::TextureViewDescriptor::default());
-                let mut encoder =
-                    gpu.ctx
-                        .device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("motolii-rn-stage-clear"),
-                        });
-                {
-                    let _pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                        label: Some("motolii-rn-stage-clear-pass"),
-                        color_attachments: &[Some(RenderPassColorAttachment {
-                            view: &view,
-                            depth_slice: None,
-                            resolve_target: None,
-                            ops: Operations {
-                                load: LoadOp::Clear(Color {
-                                    r: 0.08,
-                                    g: 0.08,
-                                    b: 0.08,
-                                    a: 1.0,
-                                }),
-                                store: StoreOp::Store,
-                            },
-                        })],
-                        depth_stencil_attachment: None,
-                        timestamp_writes: None,
-                        occlusion_query_set: None,
-                        multiview_mask: None,
-                    });
-                }
-                gpu.ctx.queue.submit(Some(encoder.finish()));
-                frame.present();
+                draw_stage_preview(gpu, frame);
                 self.stages
                     .get_mut(&stage_handle)
                     .ok_or(RnHostReasonCode::UnknownStageHandle)?
@@ -847,6 +802,42 @@ impl RnProductHost {
         }
         Ok(())
     }
+}
+
+#[cfg(target_os = "macos")]
+fn draw_stage_preview(gpu: &HostGpuBundle, frame: wgpu::SurfaceTexture) {
+    let view = frame
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
+    let mut encoder = gpu
+        .ctx
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("motolii-rn-stage-preview"),
+        });
+    {
+        let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            label: Some("motolii-rn-stage-preview-pass"),
+            color_attachments: &[Some(RenderPassColorAttachment {
+                view: &view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: Operations {
+                    load: LoadOp::Clear(Color::BLACK),
+                    store: StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&gpu.preview_pipeline);
+        pass.set_bind_group(0, &gpu.preview_bind_group, &[]);
+        pass.draw(0..3, 0..1);
+    }
+    gpu.ctx.queue.submit(Some(encoder.finish()));
+    frame.present();
 }
 
 #[cfg(target_os = "macos")]

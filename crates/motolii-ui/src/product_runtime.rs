@@ -3852,7 +3852,7 @@ fn draw_rect<'a>(
     pass.draw(0..3, 0..1);
 }
 
-fn create_preview_pipeline(
+pub(crate) fn create_preview_pipeline(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
     view: &wgpu::TextureView,
