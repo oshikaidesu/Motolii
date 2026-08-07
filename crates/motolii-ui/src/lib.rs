@@ -40,6 +40,7 @@ pub use rn_product_host::{
 mod render_worker;
 mod shell;
 mod stage_chrome_host_runtime;
+mod stage_geometry_projection;
 mod state_ownership;
 mod static_preview;
 mod timeline_move_gesture;
@@ -80,6 +81,10 @@ pub use parameter_control::{
     map_parameter_control, HostParameterControl, ParameterControlError, ParameterControlSpec,
 };
 pub use shell::{run_shell, run_shell_with_project, ShellError};
+pub use stage_geometry_projection::{
+    project_stage_geometry, StageGeometryError, StageGeometryProjection, StageGeometryUnavailable,
+    StageLayerGeometry, StageLayerProjection, StageLocalRect,
+};
 pub use state_ownership::{UiStateLifetime, UiStateOwner};
 pub use static_preview::StaticPreviewError;
 pub use timeline_projection::{
