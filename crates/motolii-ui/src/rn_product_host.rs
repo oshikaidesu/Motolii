@@ -174,6 +174,18 @@ pub(crate) struct WireIntentEnvelope {
     scale_factor: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     focused: Option<bool>,
+    /// stage_pointer: `down` | `drag` | `up` | `cancel`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    phase: Option<String>,
+    /// stage_pointer: view-local logical X（physical / scale_factor と混同しない）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    view_local_x: Option<f64>,
+    /// stage_pointer: view-local logical Y
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    view_local_y: Option<f64>,
+    /// stage_pointer: 単調増加 sequence（二重配送検出用。本seamでは調停しない）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sequence: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -281,6 +293,15 @@ impl StageGpuBinding {
     }
 }
 
+/// Host 内 transient の最新 pointer。Document / revision / primary には載せない。
+#[derive(Debug, Clone, PartialEq)]
+struct StagePointerTransient {
+    phase: String,
+    view_local_x: f64,
+    view_local_y: f64,
+    sequence: u64,
+}
+
 struct RnStageSurface {
     host_handle: u64,
     mounted: bool,
@@ -289,6 +310,7 @@ struct RnStageSurface {
     height: u32,
     scale_factor: f64,
     focused: bool,
+    pointer: Option<StagePointerTransient>,
     #[cfg(target_os = "macos")]
     gpu: StageGpuBinding,
 }
@@ -391,7 +413,7 @@ impl RnProductHost {
 
         match intent.kind.as_str() {
             "read_snapshot" => accept(self.snapshot_wire(host_handle)),
-            "stage_mount" | "stage_resize" | "stage_focus" | "stage_unmount" => {
+            "stage_mount" | "stage_resize" | "stage_focus" | "stage_unmount" | "stage_pointer" => {
                 let Some(stage_handle) = intent
                     .stage_handle
                     .as_deref()
@@ -432,6 +454,19 @@ impl RnProductHost {
                         None,
                     );
                 }
+                // unmount 後の late pointer は lifecycle と同じ late route で拒否する。
+                if intent.kind == "stage_pointer" && !stage.mounted {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::LateLifecycleEvent,
+                            Some(host_handle),
+                            Some(stage_handle),
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                }
                 let payload_is_valid = match intent.kind.as_str() {
                     "stage_resize" => matches!(
                         (intent.width, intent.height, intent.scale_factor),
@@ -443,6 +478,17 @@ impl RnProductHost {
                     ),
                     "stage_focus" => intent.focused.is_some(),
                     "stage_mount" | "stage_unmount" => true,
+                    "stage_pointer" => {
+                        let phase_ok = matches!(
+                            intent.phase.as_deref(),
+                            Some("down" | "drag" | "up" | "cancel")
+                        );
+                        let coords_ok = matches!(
+                            (intent.view_local_x, intent.view_local_y),
+                            (Some(x), Some(y)) if x.is_finite() && y.is_finite()
+                        );
+                        phase_ok && coords_ok && intent.sequence.is_some()
+                    }
                     _ => false,
                 };
                 if !payload_is_valid {
@@ -474,6 +520,15 @@ impl RnProductHost {
                         #[cfg(target_os = "macos")]
                         stage.gpu_detach_surface();
                         stage.mounted = false;
+                    }
+                    "stage_pointer" => {
+                        // Document / revision / journal / primary は触らず transient だけ更新する。
+                        stage.pointer = Some(StagePointerTransient {
+                            phase: intent.phase.expect("validated pointer phase"),
+                            view_local_x: intent.view_local_x.expect("validated view_local_x"),
+                            view_local_y: intent.view_local_y.expect("validated view_local_y"),
+                            sequence: intent.sequence.expect("validated pointer sequence"),
+                        });
                     }
                     _ => {}
                 }
@@ -509,6 +564,7 @@ impl RnProductHost {
                 height: 0,
                 scale_factor: 1.0,
                 focused: false,
+                pointer: None,
                 #[cfg(target_os = "macos")]
                 gpu: StageGpuBinding::detached(),
             },
@@ -1345,6 +1401,10 @@ pub fn host_dispatch_intent_for_test(
         height: intent.height,
         scale_factor: intent.scale_factor,
         focused: intent.focused,
+        phase: None,
+        view_local_x: None,
+        view_local_y: None,
+        sequence: None,
     };
     let json = with_registry(|registry| {
         registry.dispatch_intent_json(host_handle, &encode_json(&wire_intent)?)
@@ -1903,6 +1963,57 @@ mod tests {
         }
     }
 
+    fn pointer_intent(
+        stage: u64,
+        phase: &str,
+        view_local_x: f64,
+        view_local_y: f64,
+        sequence: u64,
+    ) -> WireIntentEnvelope {
+        WireIntentEnvelope {
+            version: WIRE_VERSION,
+            direction: RN_TO_HOST.to_owned(),
+            kind: "stage_pointer".to_owned(),
+            host_handle: String::new(),
+            stage_handle: Some(stage.to_string()),
+            projection_generation: None,
+            width: None,
+            height: None,
+            scale_factor: None,
+            focused: None,
+            phase: Some(phase.to_owned()),
+            view_local_x: Some(view_local_x),
+            view_local_y: Some(view_local_y),
+            sequence: Some(sequence),
+        }
+    }
+
+    fn dispatch_wire(host: u64, mut intent: WireIntentEnvelope) -> RnHostTestResponse {
+        intent.host_handle = host.to_string();
+        // JSON 経由だと非有限 f64 を運べないため、受理検証は envelope 直送で行う。
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            Ok(response_for_test(product.dispatch_intent(host, intent)))
+        })
+        .expect("dispatch wire")
+    }
+
+    fn read_stage_pointer(stage: u64) -> Option<StagePointerTransient> {
+        with_registry(|registry| {
+            for host in registry.hosts.values() {
+                if let Some(surface) = host.stages.get(&stage) {
+                    return Ok(surface.pointer.clone());
+                }
+            }
+            Err(RnHostError::UnknownStage(stage))
+        })
+        .ok()
+        .flatten()
+    }
+
     #[test]
     fn snapshot_carries_revision_projection_generation_and_primary_layer_id() {
         let _lock = test_lock();
@@ -1956,6 +2067,103 @@ mod tests {
         assert_eq!(after.projection_generation, baseline.projection_generation);
         assert_eq!(after.primary_layer_id, baseline.primary_layer_id);
         assert_eq!(after.layer_ids, baseline.layer_ids);
+
+        let _ = host_destroy_stage_for_test(stage);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn stage_pointer_phases_record_transient_without_document_write() {
+        let _lock = test_lock();
+        let host = create_host("pointer-accept");
+        let baseline = read_snapshot(host);
+        let stage = host_register_stage_for_test(host).expect("stage");
+
+        let mut mount = base_intent("stage_mount");
+        mount.stage_handle = Some(stage);
+        assert!(dispatch(host, mount).accepted);
+
+        let phases = [
+            ("down", 12.5, 34.0, 1_u64),
+            ("drag", 18.0, 40.25, 2),
+            ("up", 20.0, 41.0, 3),
+            ("cancel", 0.0, 0.0, 4),
+        ];
+        for (phase, x, y, sequence) in phases {
+            let response = dispatch_wire(host, pointer_intent(stage, phase, x, y, sequence));
+            assert!(response.accepted, "phase {phase} should accept");
+            let recorded = read_stage_pointer(stage).expect("transient pointer");
+            assert_eq!(recorded.phase, phase);
+            assert_eq!(recorded.view_local_x, x);
+            assert_eq!(recorded.view_local_y, y);
+            assert_eq!(recorded.sequence, sequence);
+            let snap = response.snapshot.expect("snapshot");
+            assert_eq!(snap.revision, baseline.revision);
+            assert_eq!(snap.projection_generation, baseline.projection_generation);
+            assert_eq!(snap.primary_layer_id, baseline.primary_layer_id);
+        }
+
+        let after = read_snapshot(host);
+        assert_eq!(after.revision, baseline.revision);
+        assert_eq!(after.projection_generation, baseline.projection_generation);
+        assert_eq!(after.primary_layer_id, baseline.primary_layer_id);
+        assert_eq!(after.layer_ids, baseline.layer_ids);
+
+        let _ = host_destroy_stage_for_test(stage);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn stage_pointer_rejects_invalid_payload_and_late_events() {
+        let _lock = test_lock();
+        let host = create_host("pointer-reject");
+        let baseline = read_snapshot(host);
+        let stage = host_register_stage_for_test(host).expect("stage");
+
+        let mut mount = base_intent("stage_mount");
+        mount.stage_handle = Some(stage);
+        assert!(dispatch(host, mount).accepted);
+
+        let mut unknown_phase = pointer_intent(stage, "move", 1.0, 2.0, 1);
+        unknown_phase.phase = Some("move".to_owned());
+        let rejected = dispatch_wire(host, unknown_phase);
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let mut non_finite = pointer_intent(stage, "down", f64::NAN, 2.0, 2);
+        let rejected = dispatch_wire(host, non_finite);
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        non_finite = pointer_intent(stage, "down", 1.0, f64::INFINITY, 3);
+        let rejected = dispatch_wire(host, non_finite);
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let mut missing_sequence = pointer_intent(stage, "down", 1.0, 2.0, 4);
+        missing_sequence.sequence = None;
+        let rejected = dispatch_wire(host, missing_sequence);
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let unknown_stage = dispatch_wire(host, pointer_intent(99_999, "down", 1.0, 2.0, 5));
+        assert!(!unknown_stage.accepted);
+        assert_eq!(
+            unknown_stage.reason,
+            Some(RnHostReasonCode::UnknownStageHandle)
+        );
+
+        let mut unmount = base_intent("stage_unmount");
+        unmount.stage_handle = Some(stage);
+        assert!(dispatch(host, unmount).accepted);
+        let late = dispatch_wire(host, pointer_intent(stage, "up", 1.0, 2.0, 6));
+        assert!(!late.accepted);
+        assert_eq!(late.reason, Some(RnHostReasonCode::LateLifecycleEvent));
+
+        let after = read_snapshot(host);
+        assert_eq!(after.revision, baseline.revision);
+        assert_eq!(after.projection_generation, baseline.projection_generation);
+        assert_eq!(after.primary_layer_id, baseline.primary_layer_id);
 
         let _ = host_destroy_stage_for_test(stage);
         let _ = host_destroy_for_test(host);
@@ -2258,6 +2466,7 @@ mod tests {
             height: 50,
             scale_factor: 2.0,
             focused: false,
+            pointer: None,
             gpu: StageGpuBinding {
                 surface_epoch: 2,
                 last_presented_epoch: Some(2),
@@ -2403,6 +2612,7 @@ mod tests {
             height: 50,
             scale_factor: 2.0,
             focused: false,
+            pointer: None,
             gpu: StageGpuBinding {
                 surface_epoch: 7,
                 last_presented_epoch: Some(7),
