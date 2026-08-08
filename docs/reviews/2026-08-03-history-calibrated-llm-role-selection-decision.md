@@ -1,14 +1,16 @@
 # 履歴較正によるLLM役割選択
 
+> 2026-08-07追補: 通常施工の第一候補は[Terra / Grok 4.5 / Composer 2.5役割再配置](2026-08-07-terra-grok-composer-role-reallocation-decision.md)が上書きする。Terraはboundedな候補order compile、Grok 4.5 non-fastは通常〜重めのclosed implementation、Composer 2.5 standardは明示理由のある代替施工とする。固定pipelineにはしない。本書の視野幅、effort、blind evidence envelope、別family reviewは継続する。
+
 状態: **決定**（main統合後発効）
 
 日付: 2026-08-03
 
 ## 目的
 
-Solを総監督としてauthority、次粒、owner、scope、oracle、最終統合へ常置する。閉じた初回の機械施工はSpark、同じ契約境界の
-review finding修正はfreshなLuna Maxを第一候補とし、複雑な初回施工はLunaへ直接送れる。一方で、Sol、Luna、Spark、Grok、
-Claudeを全task共通の固定順へせず、taskの判定対象と過去に観測した失敗形から役割を選ぶ。transport、監督責任、採用資格は増やさない。
+主担当がauthority、次粒、owner、scope、oracle、最終統合を所有する。Terraはboundedな候補order compile、Sparkは極小closed施工、
+Grok 4.5 non-fastは通常〜重めのclosed implementation、Composer 2.5 standardは明示理由のある代替施工へ置く。一方で、これらを
+全task共通の固定順へせず、taskの判定対象と過去に観測した失敗形から役割を選ぶ。transport、監督責任、採用資格は増やさない。
 
 ## 履歴から確認したこと
 
@@ -55,12 +57,11 @@ Claude effortの一次資料は[Anthropic Effort](https://platform.claude.com/do
    統合、STOP、境界変更のいずれかで閉じる。新しい粒はfresh sessionとfresh capsuleから始める
 4. 長期状態はGit、現行正本、decision index、implementation ledger、raw実行logへ置く。会話履歴、session token、modelの記憶を
    authority、採用DB、project memoryにしない
-5. authorityと契約が閉じた初回の機械施工は完全model ID `gpt-5.3-codex-spark`のfresh sessionを第一候補とする。複雑な初回施工は
-   `gpt-5.6-luna`、`model_reasoning_effort=max`へ直接送ってよい。review findingをSolが正本とoracleへ再照合し、同じ契約境界内の
-   修正と判断した場合はfreshなLuna Maxを第一候補とし、単純修正はfreshなSparkも選べる
-6. Spark、Luna、Solは同じOpenAI familyなので相互に独立検収者とはみなさない。独立reviewが必要な施工では、設計・施工へ深く
-   関与していないClaudeまたはGrok等の別familyをfresh read-only sessionで選ぶ。Spark施工でClaudeが設計へ関与していなければ、
-   fresh Claude read-only reviewを第一候補にできる
+5. order未閉鎖かつ探索範囲boundedならCodex directのTerraで候補orderをcompileする。既にclosedならTerraを省略し、極小施工は
+   完全model ID `gpt-5.3-codex-spark`、通常〜重めの施工はCursor Grok 4.5 non-fastを第一候補にする。Composer 2.5 standardは
+   価格、capacity、task実測の明示理由がある時だけ選び、自動fallbackにしない
+6. Spark、Luna、Sol、Terraは同じOpenAI familyなので相互に独立検収者とはみなさず、Grok施工後にGrokをreviewerへ再利用しない。
+   独立reviewが必要な施工では、設計・施工へ深く関与していないClaude等の別familyをfresh read-only sessionで選ぶ
 
 ## 視野幅とClaude effort
 
@@ -87,8 +88,8 @@ file数、資料数、crate数だけで`WIDE`へ上げない。複数資料が�
 必須負例、task固有の非LLM oracle、platform／実機lane、独立reviewerの要否と構成を強める。hazard調査によって競合原因、
 部分oracle、未決共有境界が実際に見つかった場合だけ、そのコード事実から視野幅を再分類する。
 
-Lunaの複雑な初回施工と同一契約内finding修正は従来どおり`model_reasoning_effort=max`を第一候補にできる。ただしこれは
-思考深度の選択だけであり、capsule外read、repo横断探索、複数契約施工、無制限tool turnを許さない。
+Grok 4.5を使えない契約または同一契約内finding修正でLunaを明示選択する場合、`model_reasoning_effort=max`を候補にできる。
+ただしこれは思考深度の選択だけであり、capsule外read、repo横断探索、複数契約施工、無制限tool turnを許さない。
 
 ## 動的context／token予算と分割
 
@@ -158,19 +159,19 @@ Solが要求と現行sourceを再照合し、必要なexact原文だけを追加
 |---|---|---|---|
 | authority、次粒、owner、scope、oracle、最終統合 | Sol medium以上 | 総監督、capsule作成、外部model選択、finding処分、最終採否 | SolはOpenAI family施工の独立reviewを兼ねない |
 | authority衝突、意味、owner、原因、共有契約が未閉鎖 | Sol medium以上、必要ならClaude Opus read-only | 反例、STOP、選択肢、閉鎖条件 | 閉鎖後に実装するなら関与していない別family |
-| authorityは閉じたがscope、allowlist、exact target、負例が複雑 | Grok read-only | boundedな粒化・preflight、漏れの列挙 | Grokを施工判断へ使ったならClaude等の別family |
+| authorityは閉じたがscope、allowlist、exact target、負例が複雑 | Terra read-only | boundedな候補order compile、漏れの列挙 | Terraは採否しない。施工後は未関与の別family |
 | 一契約境界に閉じた初回の機械施工 | Spark | 指定pathの変更と指定試験 | 設計へ未関与のfresh Claude等、別family |
-| 複雑な初回施工、同一境界のreview finding修正 | Luna Max。単純修正はfresh Spark可 | 指定pathの変更と指定試験 | 施工・設計へ未関与の別family |
+| 通常〜重めのclosed implementation、同一境界のfinding修正 | Grok 4.5 non-fastを第一候補。別family制約やtask適合でLuna／Composerも選べる | 指定pathの変更と指定試験 | 施工・設計へ未関与の別family |
 | main統合直前、複数粒の整合 | Sol medium以上 | authority、非目標、diff、oracleの全体照合 | SolはOpenAI family施工の独立reviewを兼ねない |
-| 実diffのscope、削除、guard、負例を詳しく監査 | Grok read-only | concrete diff audit | Grok自身は採否しない |
+| 実diffのscope、削除、guard、負例を詳しく監査 | 施工に未関与のTerraまたは別family reviewer | concrete diff audit | reviewer自身は採否しない |
 | 実diffの意味、owner、既存契約との統合を監査 | Claude Opus read-only。`CLOSED=low`、`ADJACENT=medium`を通常候補にする | semantic final audit | Claude自身は採否しない |
 | 性能、安全性、永続形式、platform correctness | 非LLM oracle | bench、negative test、schema/OS fixture | LLMは補助監査のみ |
 
 ## 分岐規則
 
 1. Codexが先にauthority、base/cwd、worktree、scope、oracle、実装担当候補を確認する
-2. Solが閉じた小さな機械taskはSparkへ直接送れ、複雑な初回施工はLunaへ送れる。全modelを通すことを完了条件にしない
-3. Solだけで閉じない意味をClaudeへ、具体的な境界列挙をGrokへ送る。複数が必要なら独立に並べず、先の回答をSolが正本へ
+2. 主担当が閉じた極小の機械taskはSpark、通常〜重めのclosed taskはGrok 4.5へ直接送れる。order未閉鎖時だけTerraを候補compileへ使い、全modelを通すことを完了条件にしない
+3. 主担当だけで閉じない意味をClaudeへ、boundedな境界列挙をTerraへ送る。複数が必要なら独立に並べず、先の回答を主担当が正本へ
    再照合して残った問いだけを次へ送る
 4. 設計・契約閉鎖へ深く関与したmodel familyは同じtaskの最終reviewer候補から外す
 5. modelのcapacity／rate limitは観測失敗として一度Codexへ戻す。同じtask境界がなお有効なら、利用可能なmodelを新しい
@@ -179,7 +180,7 @@ Solが要求と現行sourceを再照合し、必要なexact原文だけを追加
 6. Grokのtimeout、CLI失敗、空の完了結果は観測失敗としてCodexへ戻す。未完了streamの一時的なstdout空とは区別し、
    別modelへ黙ってfallbackしない
 7. reviewerはfindingを列挙するだけでscope、order、実装、採用を増やさない。最終採否はCodexが非LLM oracleと合わせて行う
-8. LunaまたはSparkのtool call、読込量、転記誤り、wall timeがcapsuleの意図を超えて膨らんだ場合は、同じsessionへ全文を追加せず閉じる。
+8. Grok、Composer、LunaまたはSparkのtool call、読込量、転記誤り、wall timeがcapsuleの意図を超えて膨らんだ場合は、同じsessionへ全文を追加せず閉じる。
    Solがauthority検索とcapsuleを修正し、同じ問いと証拠を反復しない
 
 ## 非目標

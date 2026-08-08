@@ -1,7 +1,7 @@
 # プラグインUIモデル: 宣言語彙 vs 自由描画
 
 作成日: 2026-07-13(同日、批判レビュー7点を反映して改訂)
-ステータス: **比較中**。2026-07-16の縮小採用は`NodeDesc`自動panel fallbackとして保持する。2026-07-22の[軸分離決定](reviews/2026-07-22-m3-surface-extension-axis-separation.md)により、標準製品面のnative／React選定はG0-9、plugin UIのsandbox・互換・配布・公開契約はG0-3 / GAP-13へ分離した。G0-9の証拠は入力にできるが、合格だけでplugin所有UI codeを公開しない。先例表の事実評価は引き続き仮説([reviews/README.md](reviews/README.md)規律3)
+ステータス: **比較中**。2026-07-16の縮小採用は`NodeDesc`自動panel fallbackとして保持する。2026-08-07に標準製品面は[React Native + rust-skia + wgpu](ui-runtime-architecture.md)へ再基線化したが、bundled product-owned RN panelとthird-party plugin UIは別軸である。RN採択だけでplugin所有JS/native code、同process権限、network、eval、raw GPU面を公開しない。sandbox・互換・配布・公開契約はG0-3 / GAP-13へ残す。先例表の事実評価は引き続き仮説([reviews/README.md](reviews/README.md)規律3)
 関連: [plugin-authoring.md](plugin-authoring.md)§2、[specs/M3-ui-integration.md](specs/M3-ui-integration.md)§拡張方式、[dev-experience.md](dev-experience.md)、[backlog.md](backlog.md) GAP-2/GAP-13
 
 ## 1. 問題(なぜこの文書が要るか)
@@ -94,4 +94,4 @@ AE圏の観察(仮説): **独自UIは有料プラグインのメイン機能ク�
 | M3-2 カスタムパネル(.slint実行時ロード) | プラグインが`.slint`を同梱、slint-interpreterでロード | **競合**。本仮説のレベル2(ホスト解釈の宣言的レイアウト)とレベル4の中間に位置する。`.slint`は宣言的だが、レイアウト語彙の統制・テーマ追従・検証可能性の扱いが未整理 |
 | M3-3 フルカスタム描画(wgpuテクスチャ) | プラグインが描き、ホストが埋め込む | **正面競合**。本仮説のレベル4=v1で開けない、と矛盾 |
 
-**2026-07-21再評価、2026-07-22境界訂正**: 2026-07-16の縮小採用は、安全なfallbackと比較前の停止線として有効である。ただしHost/communityでcomponent／test語彙を再利用する可能性とReact/WebView候補により、自由UIを永久にactive roadmapへ戻さない結論は撤回候補となった。GAP-13はG0-3で再評価し、G0-9のplatform証拠を入力にできるが、製品surfaceの合否へ畳まない。
+**2026-08-07再基線**: 2026-07-16の縮小採用は、安全なfallbackと比較前の停止線として有効である。React Nativeによりproduct-owned custom panelの実装余地は広がったが、third-party自由UIを同processへ開く結論にはしない。GAP-13はG0-3で再評価し、標準製品surfaceの証拠を入力にできるが、製品surfaceの合否へ畳まない。

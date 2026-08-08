@@ -58,7 +58,7 @@ perspective cameraでは、XY scaleの増減とZ移動のどちらでも画面�
 - `Scale / Depth Move`のtool選択はTransient interaction(または保存寿命決定前のWorkspace/session候補)であり、Document・ジャーナルへ保存しない。確定した`scale`または`position.z`だけをD2 commandで書く
 - 1 dragは1 macro/Undoとし、Scale gestureからZ command、Depth Move gestureからScale commandを発生させない。pointer軌跡やlogical pxをDocumentへ流さない
 - mode切替やdragのために式・script・expressionを要求しない。キーフレームは既存のScale / `position.z`（UI上の`Depth Z`）へ直接打つ
-- handle、selection outline、gizmo、Depth rail/axisの可視描画は、canonical画素へ混ぜずnative wgpu Stage presentation overlayが所有する。少数固定形状のhit-testはCPU解析幾何で行い、GPU readbackをdrag hot pathへ入れない。Web UIはtool選択、数値、説明、bounded a11y proxyを所有できる。詳細と停止線は[Native Stage gizmo所有境界](../reviews/2026-07-21-native-stage-gizmo-ownership.md)を正とする
+- handle、selection outline、gizmo、Depth rail/axisの可視描画は、canonical画素へ混ぜずrust-skia Stage overlayが所有し、wgpu previewとfinal compositeする。少数固定形状のhit-testはCPU解析幾何で行い、GPU readbackをdrag hot pathへ入れない。React Native UIはtool選択、数値、説明、bounded a11y proxyを所有できる。M3の実装正本は[UI runtime責任境界](../ui-runtime-architecture.md)、M5のsemantic ownershipとcanonical非混入は[旧Native Stage gizmo所有境界](../reviews/2026-07-21-native-stage-gizmo-ownership.md)をoracleとして維持する
 
 ## Depth Rail / 奥行き展開
 
@@ -114,6 +114,15 @@ object/material/generatorとCamera Providerの追加はplugin境界へ開くが�
 - spatial rendererは宣言bounds／picking情報をHost参加境界へ供給し、選択、Fit、枠外表示、snapを同期GPU readbackなしで成立させる。Camera Providerはscene objectやpoint／mesh／splat dataを走査しない
 - プラグインは決定論的であること。`render_frame(t, Quality)`の入力から同じ出力を返し、**レンダ系traitは**前フレーム状態に依存するシミュレーションを持たない(逐次シミュレーションはレンダ経路の外のベイク境界=SimulationPlugin+StateTrackで扱う。[simulation-model.md](../simulation-model.md)、2026-07-10改訂)
 - 全遮蔽ポリシーは同じ`render_frame(t, Quality)`から評価し、preview/exportで別経路を作らない。選択値も隠れたruntime stateではなくDocument上の明示値として扱う
+
+### 3D viewport操作とgizmoの境界
+
+3D gizmoは一般のSkia/RN UIではなく、active camera、正準XYZ world、object transform、depth／pickingが交わるStage viewportの操作要素である。表示上はM3のcanonical output外rust-skia overlayを標準とするが、操作の意味と所有者はRust headless interaction／Hostに置く。したがって「gizmoだけnative」は許容される逃げ道ではなく、同じ意味契約を保った描画実装の差し替えとして扱う。
+
+- 同一camera／display-transform epochから、軸・平面のhit-test、screen-size補正、depth occlusion、drag previewを導出する。RNへper-pointer-moveを送り、Skia側に別camera／selection stateを持たせない
+- drag中はDocument／D2へのsemantic writeを行わず、release時のterminal typed intentだけを既存D2 commandへ渡す。1 gesture = 高々1 Undo、Escape／focus loss／stale epoch／invalid targetは確定変更0とする
+- native GPU presentation overlayへ描画を移す場合も、wgpu device／surface／event loopを二重化せず、canonical preview／export画素を変更せず、hit-test／gesture／D2 ownerを分岐させない。rust-skiaが描画を担える間は標準経路を維持する
+- Camera編集、workspace pan／fit、object transform、gizmo dragは別操作として扱う。カメラを暗黙に動かすgizmoや、Document外の隠れたtransform controllerを生成しない
 
 ## 3D import／material rendererのprivate分界
 

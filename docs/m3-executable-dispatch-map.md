@@ -1,6 +1,8 @@
 # M3 実行可能task地図
 
-状態: **施工前コンパイル正本 / 2026-08-01停止simulation反映**
+状態: **旧runtime施工前snapshot / 新規dispatch authorityではない**（2026-08-07）
+
+2026-08-07のReact Native + rust-skia + wgpu再基線化により、本書の33子は旧routeのexact target、semantic oracle、gapを検索する履歴snapshotへ移った。新runtimeの意味とwaveは[M3仕様](specs/M3-ui-integration.md)、施工nodeと依存は[M3 RN runtime実行地図](m3-rn-runtime-execution-map.md)、現在状態は[implementation ledger](implementation-ledger.md)を正とする。本書の`IMPLEMENT`、`TARGET_MISSING`、旧「次task」を新runtimeへ自動継承しない。
 
 ## 1. 目的
 

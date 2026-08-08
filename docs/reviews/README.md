@@ -32,6 +32,29 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-07-m3-integration-zone-value-update.md](2026-08-07-m3-integration-zone-value-update.md) | M3を「UIを作る工程」から「先に作った資産を接続する統合ゾーン」へ読み直し、既定推定を`BUILT_UNWIRED`、sort keyをconcept.mdの完成条件、記録↔コードdriftを一級riskとする価値観更新 |
+| [2026-08-08-source-shortfall-ask-before-remap-decision.md](2026-08-08-source-shortfall-ask-before-remap-decision.md) | 素材不足時の`OverrunMode`既定をFreezeのまま維持し、引き伸ばし／Loopは利用者へ問うて明示選択時のみ有効とする決定 |
+| [2026-08-08-group-bake-chain-and-gap3-root.md](2026-08-08-group-bake-chain-and-gap3-root.md) | Group Bake(プリコンポ代替)の仮コードでM4着地先が一つも実在しないことを確認し、阻害の根がGAP-3(同一性format未締結)であると特定した観察 |
+| [2026-08-08-call-site-sketch-artifacts.md](2026-08-08-call-site-sketch-artifacts.md) | 仮コード成果物の保全(非authority/非compile)。背骨はgate通過・修正済み、他6区間はgate未通過のまま |
+| [2026-08-08-gate-effectiveness-measurement.md](2026-08-08-gate-effectiveness-measurement.md) | 鎖のgateは1回で12件(うち施工不能なseam 4件)を検出し回収する一方、capsuleのgateはv1 12件→v2 9件/再指摘7件で1周では収束しないという実測 |
+| [2026-08-08-skia-reject-to-adopt-authority-reconciliation.md](2026-08-08-skia-reject-to-adopt-authority-reconciliation.md) | 2026-07-21/27のSkia`REJECT`と2026-08-07再基線の衝突を裁定し、Vello退役により前提が消滅したとして旧`REJECT`を撤回、alpha・色の懸念は維持する |
+| [2026-08-08-n-overlay-dependency-gate.md](2026-08-08-n-overlay-dependency-gate.md) | rust-skia overlay renderer導入の依存ゲート7段通過記録と、`references.md`にskia項目が存在しない記録層欠落の指摘 |
+| [2026-08-08-gizmo-known-implementation-preflight.md](2026-08-08-gizmo-known-implementation-preflight.md) | gizmo機構の既知実装調査と製品先例、`transform-gizmo`系候補の一次資料事実、未確認4件により`BUILD JUSTIFICATION`未確定で実装発注不可とするpreflight |
+| [2026-08-08-supervisor-handoff-integration-map-and-instrument.md](2026-08-08-supervisor-handoff-integration-map-and-instrument.md) | 統合地図の実測再構築、M3価値観更新、仮コード器具の3段運用、Stage×M5判定、リポジトリ外資産による判定訂正を次のsupervisorへ渡す引継ぎ |
+| [2026-08-08-out-of-repository-asset-inventory.md](2026-08-08-out-of-repository-asset-inventory.md) | node surveyがリポジトリ内しか見ない限界と、リポジトリ外の隔離probe実在による`N-OVERLAY`判定訂正(`ABSENT`→`PROBE_ONLY`)、`ABSENT`判定前の外部確認手順 |
+| [2026-08-08-call-site-sketch-seams-and-stage-m5-verdict.md](2026-08-08-call-site-sketch-seams-and-stage-m5-verdict.md) | 仮コード7区間を1本へ統合して検出した継ぎ目の合成失敗9件と、Stage×M5迎え入れ判定(絶対規律2/6は成立、Provider席は実在、不足はC0-Schema1つ) |
+| [2026-08-07-call-site-sketch-composition-failures.md](2026-08-07-call-site-sketch-composition-failures.md) | 仮コード合成テストで検出した決定間の合成失敗14件と、作者・配布枝7件が同一の欠落(runtime identity/installation path不在)へ収束する観察 |
+| [2026-08-07-supervisor-handoff-map-rebuild-and-spine.md](2026-08-07-supervisor-handoff-map-rebuild-and-spine.md) | 62項目の実測による地図再構築、背骨4粒のlocal branch到達、新規node 3件、仮コード器具の初回運用実績を次のsupervisorへ渡す引継ぎ |
+| [2026-08-07-call-site-sketch-findings-return.md](2026-08-07-call-site-sketch-findings-return.md) | 仮コード照合で出たReadOnlyNewer admission不成立とUndoがasset登録を巻き戻さない疑いを、修理許可でないfindingとして前ownerへ返却する |
+| [2026-08-07-provisional-call-site-sketch-instrument-decision.md](2026-08-07-provisional-call-site-sketch-instrument-decision.md) | 背骨を呼び出し側から先に書き、実名で埋まらない箇所を欠落として露出させる非compile器具の規約と、survey `ABSENT`との相互検証条件、並列化の上限 |
+| [2026-08-07-r2-rn-transient-time-seat-decision.md](2026-08-07-r2-rn-transient-time-seat-decision.md) | RN Hostへ背骨に必要な最小のtransient評価時刻席だけを置き、`R2-FOCUS-PLAYHEAD-AUTHORITY`と旧`EditorPlayhead`流用は未決のまま維持する縮小採用 |
+| [2026-08-07-r2-stage-geometry-read-projection-decision.md](2026-08-07-r2-stage-geometry-read-projection-decision.md) | Stage幾何を`TARGET_MISSING`から`REMAP`へ訂正し、AABBでなく(正準局所rect + world/camera Affine2D)をRect source限定・可視時刻限定で投影する縮小採用 |
+| [2026-08-07-m3-supervisor-handoff-stage-to-gizmo.md](2026-08-07-m3-supervisor-handoff-stage-to-gizmo.md) | Stage初回pixelsのlocal main到達、gizmo直行を止めたidentity gap、Browser回り道候補の未採用処分を次のfresh supervisorへ渡す引継ぎ |
+| [2026-08-07-terra-grok-composer-role-reallocation-decision.md](2026-08-07-terra-grok-composer-role-reallocation-decision.md) | Terraをbounded order compile、Grok 4.5を通常〜重施工、Composer 2.5を明示理由のある代替施工へ再配置する決定 |
+| [2026-08-07-codex-spark-cli-smoke-observation.md](2026-08-07-codex-spark-cli-smoke-observation.md) | `gpt-5.3-codex-spark`の現行Codex CLI起動、JSONL、usage、4.864秒完了と小context向け運用境界を記録する観察 |
+| [2026-08-07-outcome-order-compilation-and-research-return-loop.md](2026-08-07-outcome-order-compilation-and-research-return-loop.md) | 利用者成果からclosed orderをcompileし、実装／調査返却後にcurrent codeから次edgeを再選定する横断発注ループ |
+| [2026-08-07-m3-baseline-required-autonomy-checkpoint.md](2026-08-07-m3-baseline-required-autonomy-checkpoint.md) | M3 baseline必要性の自動承認、非OpenAI抽出、別family challenge、Codexの整理・写像・採否責任、Web調査再入場条件を分離するcheckpoint決定 |
+| [2026-08-07-m3-react-native-rust-skia-runtime-rebaseline.md](2026-08-07-m3-react-native-rust-skia-runtime-rebaseline.md) | M3標準UIをReact Native shell、rust-skia Timeline／Curve、wgpu + rust-skia Stageへ再基線化する決定 |
 | [2026-08-03-p12-c1-document-lifecycle-adoption-decision.md](2026-08-03-p12-c1-document-lifecycle-adoption-decision.md) | Desktop文書ライフサイクル採択決定: P12-C1で既知セーブ意味論を仕様化し、ReadOnlyNewer/Close/Save As/rfdの未接続境界を固定 |
 | [2026-08-02-m4-known-implementation-survey.md](2026-08-02-m4-known-implementation-survey.md) | M4のcache、resource、disk artifact、区間、background job、proxy、SVGを具体APIと非証明範囲へ割り当てる既知実装比較 |
 | [2026-08-02-m4-disk-artifact-store-resurvey.md](2026-08-02-m4-disk-artifact-store-resurvey.md) | cacache棄却後のdisk候補を再検索し、global CASを現行authority外としてverified recipe artifact storeへ縮小採用 |

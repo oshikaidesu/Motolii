@@ -1,6 +1,6 @@
 # M3 UI参照地図
 
-更新日: 2026-07-23
+更新日: 2026-08-07
 
 M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決める。会話履歴、スクリーンショット、旧HTML、React prototypeのいずれも、単独では製品仕様にならない。
 
@@ -8,21 +8,19 @@ M3 UIを調べる時は、資料の新旧ではなく次の層で参照先を決
 
 固有名、成果物種別、結合段階は[UI成果物・実装状態の用語](ui-artifact-terminology.md)を正本とする。
 
-- **Motolii Studio**: 利用者へ届けるnative desktop製品。
+- **Motolii Studio**: 利用者へ届けるReact Native + native canvas desktop製品。
 - **Motolii Studio Mock**: `docs/mocks-ui/`で外部browserに表示する開発モック。
 - **Motolii Studio Preview**: 定義済みの製品surfaceを通常経路で一つのnative desktop実行ファイルへ結合した
   preview build。現時点では未実装である。
 
-既存`motolii_ui_shell`は**Native Shell Baseline**、個別`g0-9-*` / `g0-10-*`は
-**Native Surface Spike**と呼ぶ。内部task IDの`G0-9 Native Product Mock`は発注・証跡の識別子に限定する。
-source assetまたはisolated spikeの成立を、product-integratedやpreview-runnableへ繰り上げない。
+既存`motolii_ui_shell`とwinit/WebView/direct-wgpu/Vello製品routeは**Legacy Product Route / Migration Oracle**、個別`g0-9-*` / `g0-10-*`と2026-08-06〜07のRN/Skia検証は**Native Surface Spike**と呼ぶ。source asset、旧product route、isolated spikeの成立を、新しいRN product-integratedまたはpreview-runnableへ繰り上げない。
 
 ## 参照順位
 
 | 層 | 役割 | 正本／入口 | 変更時の規則 |
 |---|---|---|---|
 | 規範 | 状態所有、Undo、入力、意味、受け入れ条件 | [M3仕様](specs/M3-ui-integration.md)、[UI操作言語](ui-interaction-language.md)、[UI視覚言語](ui-visual-language.md)、[UI境界規律](reviews/2026-07-14-m3-ui-boundary-prevention.md) | prototypeや会話から直接上書きせず、仕様・決定台帳を先に改訂する |
-| 現行prototype / React source asset | 現在ブラウザで比較する操作・構成と、React所有面を製品packageへ直接移すsource | `docs/mocks-ui/README.md`と固定commit `56c318ed`、[React製品資産の直接移管契約](reviews/2026-07-22-m3-react-product-asset-promotion-contract.md) | hash fixture、操作試験、比較台帳を一緒に更新する。React/CSS値を製品契約へ焼かず、縮約再実装で置換しない |
+| 現行prototype / React source asset | 現在browserで比較する操作・構成と、RNへ移すconcept、component boundary、state、test oracle | `docs/mocks-ui/README.md`と固定commit `56c318ed`、[runtime再基線決定](reviews/2026-08-07-m3-react-native-rust-skia-runtime-rebaseline.md) | DOM/CSSのbyte同一移管を要求せず、意味・情報階層・状態・操作をRN primitivesとnative component contractへ変換する |
 | 製品実装先例 | 高密度shell、時間面、GPU viewport、selection、component、試験を成立させた実装資産 | [UI runtime責任境界](ui-runtime-architecture.md)、[Rerun先例調査](reviews/2026-07-20-rerun-prior-art-survey.md)、[Rerun学習・転移計画](reviews/2026-07-20-rerun-learning-transfer-plan.md) | Rerunの画面・語彙・schemaを模倣しない。React/native所有は正本に従い、toolkit横断patternだけを比較入力とする。egui固有assetは製品へ依存・vendoring・移植しない |
 | 採否台帳 | 先例、観察、未決、棄却、停止線 | `reviews/`の対象別decision／observation ledger | 出典、Motoliiへの翻訳、反映先を分ける |
 | 移行互換 | React移行中の視覚parityと未置換領域 | [旧HTMLモック台帳](mocks/README.md)、`mocks-ui/src/legacy/` | 新しい判断を追加しない。React-native置換後に参照専用へ縮退する |
@@ -39,16 +37,11 @@ source assetまたはisolated spikeの成立を、product-integratedやpreview-r
 | Rerun | 高密度な製品shell、時間面、GPU viewport、selection、component、試験をどう成立させたか | Motoliiの作品意味、編集command、clip/keyframe操作。egui固有assetを製品へ`DEPEND/VENDOR/PORT`すること |
 | Motolii規範・仕様 | 状態の持ち場、Undo、公開契約、受け入れ条件 | 具体token値や未採択component実装 |
 
-React所有面の製品実装は[直接移管契約](reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)に従い、
-固定source assetをproduct ownerへ移してから、mock/legacy stateだけをMotoliiのprojection / intentへ交換する。
-別の縮約componentへ翻訳し直さない。Rerunに存在することだけを理由に機能を足さず、Reactモックに
-存在する表示だけを理由に未決のDocument意味を実装しない。
+React資産のRN移行は、固定source assetのcomponent boundary、情報階層、labels、状態、interaction testをproduct ownerへ移し、DOM element、CSS、browser event、WebView bridgeをRN primitives、StyleSheet、typed native component contractへ変換する。見た目のbyte同一やDOM互換を目的にせず、縮約版でconceptを落とさない。Rerunに存在することだけを理由に機能を足さず、Reactモックに存在する表示だけを理由に未決のDocument意味を実装しない。
 
-## React移行の実状態
+## React web資産からReact Nativeへの移行状態
 
-「Reactへ移行済み」は全surfaceが製品接続済みという意味ではない。表示構成の比較参照と、実装担当が読む
-current source authorityを分ける。`#plugin-browser-candidate`は全体構成を人間が確認する現在のmock consumer routeであり、
-動的UIの実装sourceは`ui/motolii-web/source-provenance.json`が固定するproduct closureを使う。
+既存の「React product-owned」はReact web資産のowner確立を意味し、RN product routeへの移植完了ではない。`#plugin-browser-candidate`は全体構成を人間が確認するmock consumer route、`ui/motolii-web/source-provenance.json`はweb source closureのauthorityである。RN側の新しいsource authorityはM3-R0/R1で作り、旧closureを直接release runtimeと呼ばない。
 
 | fixture／領域 | 実装状態 | 現在の用途 |
 |---|---|---|
