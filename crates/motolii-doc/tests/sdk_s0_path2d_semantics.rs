@@ -368,7 +368,7 @@ fn evaluate_run(run: &FixtureRun) -> Result<FixtureResult, FixtureFailure> {
     evaluate(input(&run.source), distance(run.distance), run.time)
 }
 
-fn expected_failure(expected: &FixtureExpected) -> FixtureFailure {
+fn fixture_failure(expected: &FixtureExpected) -> FixtureFailure {
     match expected {
         FixtureExpected::Failure { reason, target } => FixtureFailure {
             reason: *reason,
@@ -490,7 +490,7 @@ fn s0_n1_open_contour_is_typed_failure() {
     let case = case("S0-N1");
     assert_eq!(case.assertion, FixtureAssertion::Failures);
     let run = &case.runs[0];
-    assert_eq!(evaluate_run(run), Err(expected_failure(&run.expected)));
+    assert_eq!(evaluate_run(run), Err(fixture_failure(&run.expected)));
 }
 
 #[test]
@@ -498,7 +498,7 @@ fn s0_n2_non_finite_distance_is_rejected_before_native_oracle() {
     let case = case("S0-N2");
     assert_eq!(case.assertion, FixtureAssertion::Failures);
     for run in &case.runs {
-        assert_eq!(evaluate_run(run), Err(expected_failure(&run.expected)));
+        assert_eq!(evaluate_run(run), Err(fixture_failure(&run.expected)));
     }
 }
 
@@ -507,7 +507,7 @@ fn s0_n3_missing_and_wrong_type_do_not_become_empty_paths() {
     let case = case("S0-N3");
     assert_eq!(case.assertion, FixtureAssertion::Failures);
     for run in &case.runs {
-        assert_eq!(evaluate_run(run), Err(expected_failure(&run.expected)));
+        assert_eq!(evaluate_run(run), Err(fixture_failure(&run.expected)));
     }
 }
 
@@ -516,7 +516,7 @@ fn s0_n4_wrong_space_is_not_implicitly_converted() {
     let case = case("S0-N4");
     assert_eq!(case.assertion, FixtureAssertion::Failures);
     let run = &case.runs[0];
-    assert_eq!(evaluate_run(run), Err(expected_failure(&run.expected)));
+    assert_eq!(evaluate_run(run), Err(fixture_failure(&run.expected)));
 }
 
 #[test]
@@ -553,7 +553,7 @@ fn s0_n6_fixture_budget_rejects_partial_success() {
     let case = case("S0-N6");
     assert_eq!(case.assertion, FixtureAssertion::Failures);
     let run = &case.runs[0];
-    assert_eq!(evaluate_run(run), Err(expected_failure(&run.expected)));
+    assert_eq!(evaluate_run(run), Err(fixture_failure(&run.expected)));
 }
 
 #[test]

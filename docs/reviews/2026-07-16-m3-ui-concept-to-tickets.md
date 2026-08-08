@@ -53,7 +53,7 @@ Uシリーズの初回製品実装は、ファイル競合の有無ではなく�
 | U0c-2 | **完了**: press/release/click/dragを正規化するinput routerとIME preedit gate | U0c-1 | 7 phaseの意味差、preedit中の登録済みshortcut抑止、未知ID拒否、Safety Cancel分離、全builtin IDのregistry経由intent対応、同じ正規入力から同じ出力、raw key/toolkit/永続契約監査 | TextInput自体の実機IME合否はU1dへ送る |
 | U0d-1 | **完了**: G0-2の閉じたGesture語彙でbuiltin baseへuser deltaを重ねる純粋keymap resolver | U0c-2 | Add、base exact GestureのReplace/Disable、複数割当、順序非依存delta。Primaryのplatform展開とKeyToggleのPress/Release展開後のEffectiveTrigger競合、Primary混在、未登録ID、OS予約、不正target/phaseを型付き診断し該当triggerを実行mapへ載せない | JSON/serde、原本保全、ファイルI/O、Context、設定画面を含めない |
 | U0d-2 | **完了**: version付きJSON codec、migration、原本保全 | U0d-1 | roundtrip、migration冪等、未知`CommandId`と移行前原本保持 | 保存場所、GUI import/exportを決めない |
-| U0d-3 | **完了**: 全登録commandの再割当conformanceとraw key監査 | U0d-2 | `builtin_command_registry()`全量へ一意な合成base/別Gestureを割り当て、base無効化→別bindingをresolveしたIDを`InputRouter`へ通して同じintent。全workspace memberのproduct sourceを[AST raw input監査](2026-07-16-m3-preflight-decisions.md#23-keymap保存)。U1a-2以後は同節で改訂した単一layout adapterの閉集合を除き、登録command・source fileの例外ゼロ | 製品既定Gesture/presetを推測しない。仕様改訂なしに一部commandやfileだけ固定する例外を認めない |
+| U0d-3 | **完了**: 全登録commandの再割当conformance | U0d-2 | `builtin_command_registry()`全量へ一意な合成base/別Gestureを割り当て、base無効化→別bindingをresolveしたIDを`InputRouter`へ通して同じintent。旧source-wide AST raw input scannerは[2026-08-09改訂](2026-07-16-m3-preflight-decisions.md#23-keymap保存)で退役 | 製品既定Gesture/presetを推測しない。raw toolkit型をDocument／plugin／wire／公開domain契約へ流さない。file名やevent enumのglobal allowlistを再設置しない |
 
 ### 3.2 視覚言語
 

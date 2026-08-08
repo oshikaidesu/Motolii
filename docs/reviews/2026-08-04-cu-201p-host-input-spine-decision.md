@@ -5,6 +5,12 @@
 - 親: `CU-201P` / M3 U3b / VS-2
 - 後続: PRODUCT `CU-201P-HOST-INPUT`
 
+> **2026-08-09改訂**: 本書のlogical Escape、IME優先、`InputRouter`配送、cancel write 0は維持する。
+> `product_runtime_adapter.rs`だけをraw ownerとするfile topology、exact event allowlist、
+> `raw_input_boundary` AST scannerは退役した。Motolii UI／Hostのprivate window／surface／session ownerは
+> 担当するnative eventを直接読めるが、toolkit型をDocument／plugin／wire／公開domain契約へ流さない。
+> 以下のraw owner／scanner記述は2026-08-04時点の実装来歴であり、現行配置の審判ではない。
+
 ## 1. 粒の目標
 
 通常Product Hostで開始したnative Timeline gestureを、同じwindowの論理Escape、focus loss、

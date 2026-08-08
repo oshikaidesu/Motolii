@@ -40,7 +40,5 @@ objc2.workspace = true
 objc2-app-kit = { workspace = true, features = ["block2", "std", "NSEvent", "NSView", "NSWindow"] }
 
 [dev-dependencies]
-cargo_metadata.workspace = true
 motolii-testkit.workspace = true
-proc-macro2 = "1"
 syn = { version = "2", features = ["full", "visit"] }
