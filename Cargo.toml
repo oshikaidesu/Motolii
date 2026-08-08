@@ -66,6 +66,11 @@ bytemuck = { version = "1", features = ["derive"] }
 fontique = "0.10"
 harfrust = "0.7"
 vello = "0.9.0"
+# N-OVERLAY: 2D overlay renderer(handle/gizmo/outline/grid/safe area/path)。
+# base previewとfinal compositeはwgpuが所有し、overlayはdirty時だけraster/upload。
+# skia型をdomain/公開plugin契約/Document schemaへ漏らさない。
+skia-safe = { version = "0.99.0", default-features = false, features = ["binary-cache"] }
+
 thiserror = "2"
 image = { version = "0.25", default-features = false, features = ["png"] }
 # egui-wgpuとコアで同じwgpuメジャーを共有する。

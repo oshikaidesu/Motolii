@@ -30,6 +30,7 @@ serde_json.workspace = true
 taffy.workspace = true
 thiserror.workspace = true
 vello.workspace = true
+skia-safe.workspace = true
 wgpu.workspace = true
 winit.workspace = true
 wry.workspace = true
