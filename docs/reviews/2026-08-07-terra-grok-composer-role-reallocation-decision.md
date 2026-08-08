@@ -1,7 +1,7 @@
 # Terra / Grok 4.5 / Composer 2.5 役割再配置決定
 
-日付: 2026-08-07  
-状態: **決定／固定pipelineではない**  
+日付: 2026-08-07
+状態: **決定／固定pipelineではない**
 対象: 外部LLMの発注compile、施工、correction、review、Cursor first-party pool活用
 
 ## 決定

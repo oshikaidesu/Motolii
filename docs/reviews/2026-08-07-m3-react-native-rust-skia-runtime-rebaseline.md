@@ -1,6 +1,6 @@
 # M3 React Native + Rust/Skia UI runtime再基線決定
 
-日付: 2026-08-07  
+日付: 2026-08-07
 状態: **決定 / 製品実装は未着手**
 
 ## 1. 決定
@@ -110,4 +110,3 @@ rust-skiaはMIT、SkiaはBSD 3-clause系である。配布物へ両者のcopyrig
 - 1000 rich clipまたは500 full gizmoを常時フル情報表示すること
 - probe成功をWindows、IME、a11y、distributionの完了へ一般化すること
 - 旧direct-wgpu/Vello資産を検証なしに削除すること
-

@@ -1,6 +1,6 @@
 # M3 baseline-required自走checkpoint決定
 
-日付: 2026-08-07  
+日付: 2026-08-07
 状態: **決定**
 
 ## 1. checkpoint

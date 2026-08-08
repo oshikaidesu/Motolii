@@ -1,6 +1,6 @@
 # M3 supervisor handoff — Stage pixelsからgizmoへ
 
-日付: 2026-08-07  
+日付: 2026-08-07
 状態: **引き継ぎ / 施工停止 / 次発注未選定**
 
 ## 1. この文書の扱い
@@ -120,4 +120,3 @@ current fact:
 - live update、selection、bounds、gizmo、Timeline、Position key、Easingの一括発注
 - root dirty差分の整理、stage、commit、push
 - local mainのremote push
-

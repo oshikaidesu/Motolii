@@ -1,7 +1,7 @@
 # 外部LLM発注の観測・実行・可変配分runbook
 
-日付: 2026-08-07  
-状態: **運用正本／CLI snapshotは起動前更新**  
+日付: 2026-08-07
+状態: **運用正本／CLI snapshotは起動前更新**
 対象: Motoliiの外部LLM相談、調査、発注、施工、correction、review
 
 ## 1. 目的

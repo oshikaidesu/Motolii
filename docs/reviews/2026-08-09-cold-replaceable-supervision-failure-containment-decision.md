@@ -1,6 +1,6 @@
 # cold-replaceable監督と停止封じ込め決定
 
-日付: 2026-08-09  
+日付: 2026-08-09
 状態: **決定 / failure injectionとfresh closure review通過前は全体並列発注不可**
 
 ## 1. 決定

@@ -1,7 +1,7 @@
 # Codex Spark CLI起動smoke観察
 
-日付: 2026-08-07  
-状態: **観察／起動経路確認済み、実装能力とcontext上限は未検証**  
+日付: 2026-08-07
+状態: **観察／起動経路確認済み、実装能力とcontext上限は未検証**
 対象: `gpt-5.3-codex-spark`、Codex CLI、薄いobserved CLI harness
 
 ## 結果
