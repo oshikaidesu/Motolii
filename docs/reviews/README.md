@@ -32,6 +32,12 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-08-m4-m5-call-site-connection-sketch.md](2026-08-08-m4-m5-call-site-connection-sketch.md) | M4／M5全機構をM3の共有render背骨へ仮接続し、最小Core＋private sandbox境界、authority段8 lane／foundation段12 lane、共有ownerによる4列publication、既存STOPごとのsafe parallel edgeを抽出した観察 |
+| [2026-08-08-depth-rail-selection-focus-decision.md](2026-08-08-depth-rail-selection-focus-decision.md) | z=0既定群の灰色統合と「個別化=逸脱」新規則、選択フォーカスでdragして初めて視差が生まれるDepth Rail設計の利用者裁定、7案却下の経緯と10方向実声調査の返却 |
+| [2026-08-08-supervisor-handoff-timeline-design-and-return-to-codex.md](2026-08-08-supervisor-handoff-timeline-design-and-return-to-codex.md) | Timeline設計12件と完成条件の鎖、skia fixture 7本、起動準備だけ済ませた外部発注2件、Codex復帰による代理supervisor席の返上を次のsupervisorへ渡す引継ぎ |
+| [2026-08-08-timeline-design-decisions-and-skia-fixtures.md](2026-08-08-timeline-design-decisions-and-skia-fixtures.md) | キーframe方式維持(値域が確定しないため)、行高固定・最小(縦が情報を持たないため)、object bar読み取り専用(誤爆コストの非対称)、畳み＝射影、逸脱時のみ表示、glyphは形で示す、をskia fixtureで確認した設計決定とAbleton実測 |
+| [2026-08-08-completion-condition-call-site-sketch.md](2026-08-08-completion-condition-call-site-sketch.md) | 完成条件(3〜5分・音楽同期・音声mux)を1本の鎖として書き、音声mux実装済みに対して楽曲bedのSoundtrack編集とAsset登録を同一製品操作へ閉じるatomic境界が無いこと(`N-SOUNDTRACK-WRITE`)を検出した観察 |
+| [2026-08-08-mascot-and-pet-decision.md](2026-08-08-mascot-and-pet-decision.md) | マスコットを8×8・2色のカササギへ確定し、ライト背景では体色を反転、動きは立つ／沈む／浮くの3フレームで賄う決定と、マスコット的装飾規律との衝突によるペット機能の延期 |
 | [2026-08-07-m3-integration-zone-value-update.md](2026-08-07-m3-integration-zone-value-update.md) | M3を「UIを作る工程」から「先に作った資産を接続する統合ゾーン」へ読み直し、既定推定を`BUILT_UNWIRED`、sort keyをconcept.mdの完成条件、記録↔コードdriftを一級riskとする価値観更新 |
 | [2026-08-08-source-shortfall-ask-before-remap-decision.md](2026-08-08-source-shortfall-ask-before-remap-decision.md) | 素材不足時の`OverrunMode`既定をFreezeのまま維持し、引き伸ばし／Loopは利用者へ問うて明示選択時のみ有効とする決定 |
 | [2026-08-08-group-bake-chain-and-gap3-root.md](2026-08-08-group-bake-chain-and-gap3-root.md) | Group Bake(プリコンポ代替)の仮コードでM4着地先が一つも実在しないことを確認し、阻害の根がGAP-3(同一性format未締結)であると特定した観察 |
