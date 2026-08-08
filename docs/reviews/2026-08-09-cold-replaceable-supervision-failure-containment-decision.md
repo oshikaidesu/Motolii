@@ -146,6 +146,25 @@ evidence selectionは次の閉schemaだけを受ける。`ranges`と`scope`は1-
 
 まず圧縮dry runを通し、その後に24時間scaleでqueue、disk、idle、recovery timeを測る。総監督自身の要約はoracle入力にしない。
 
+### 2026-08-09圧縮dry run
+
+`scripts/test_supervision_failure_containment.py`はproduction runner、activation bundle、採用DBではなく、temp directory／temp Git repo／fake CLIだけを使うtest-only fixtureである。既存`run-observed-cli.py`と合わせ、§8の13項目を次へ写像して通過した。
+
+| §8 | 非LLM oracle |
+|---|---|
+| 1 evidence preflight | `scripts/test_check_evidence_envelope.py` 7 test。source drift、range外hit、path escape、repo内symlink、range重複、上書き、byte再検査 |
+| 2 double top seat / 3 stalled but alive | real `fcntl.flock`を二processで競合し、holderを`SIGSTOP`中もsecond acquisitionと新規launchを拒否。`SIGCONT`後の正常回収だけを許可 |
+| 4 real death | lock holderを`SIGKILL`し、process exit後のlock取得と全ACTIVE treeのcurrent fingerprint再取得を確認。古いfingerprintを継承しない |
+| 5 base drift | temp Git repoのpreauthorized HEAD後に新commitを作り、不一致を採用拒否へ返す |
+| 6 write-set collision / 7 allowlist and reviewer purity | path交差またはsemantic owner共有を拒否し、実Git diffのallowlist外pathとreviewer前後fingerprint差を検出 |
+| 8 RETURN bound | 3 return後の新規activation 0と、未採用candidate fileのbyte保全 |
+| 9 false progress / 10 channel unavailable | heartbeatをterminal resultにせず、direct fake CLI exit 69後のfallback log 0、success／nonzero／partial／hang／silenceをraw metaとlifecycleから`RETURN(done/fail)`へだけ再構成 |
+| 11 user STOP | harness親へ`SIGTERM`し、child＋grandchild process group回収、`received_signal=SIGTERM`、後続launch 0 |
+| 12 integration crash | Git pre-commit hook中にprocess groupを`SIGKILL`し、HEAD pre-state、exact `.git/index.lock`残留を確認してtemp repo内で回収後、decision＋ledgerの二fileを一commitへatomic反映 |
+| 13 campaign dry run | 上記fake CLI 5形をdisjoint logへ通し、全runが`started → ... → completed`、採用遷移0、raw partial byte保全 |
+
+`python3 -m unittest scripts/test_check_evidence_envelope.py scripts/test_run_observed_cli.py scripts/test_supervision_failure_containment.py`は23 test、`./scripts/validate.sh tooling`も23 testを含めてPASSした。これは圧縮dry runの合格であり、実外部modelの24時間campaign、queue／disk scale、製品実装、main統合の証拠ではない。
+
 ## 9. 既知実装preflight
 
 ```text
@@ -163,11 +182,13 @@ BUILD: FORBIDDEN for a new supervision framework, receipt DB, broker, or authori
 
 ## 10. 外部counter-reviewの処分
 
-2026-08-09のfresh Cursor Grok 4.5 Highは`REVISE`、fresh Claude Opus 5 xhighはpacket inventory不整合を検出して`EVIDENCE_GAP`を返した。Fable指定runはproviderが別modelへ自動fallbackしたため停止し無効とした。
+2026-08-09の初回fresh Cursor Grok 4.5 Highは`REVISE`、初回fresh Claude Opus 5 xhighはpacket inventory不整合を検出して`EVIDENCE_GAP`を返した。Fable指定runはproviderが別modelへ自動fallbackしたため停止し無効とした。
 
 共通findingは本文へ採用した。特に、総監督不在中の下位activation禁止、cold replacement、process-group reclamation、write-set交差拒否、bounded RETURN、candidate staleness、family provenance、user発注scopeをP0として回収した。
 
-Opusの`EVIDENCE_GAP`はacceptanceではない。修正済みpacketを非LLM preflightへ通し、freshな短waveでP0/P1とgapを再検査するまで本決定のclosure reviewは未完了である。
+修正後の初回closure packetはcheckerを通ったが153,157 bytes／3,441行となり、Claudeの一回Readは1,259行でtruncateされた。ComposerとGrokは同一fileを追加paginationして最終文を返したため、one-read blind envelope reviewとしては無効である。Opusは追加Readせず`EVIDENCE_GAP`を返した。三runから、failure injection未実施、symlink負例不足、one-read予算超過をscope内blockerとして採用した。
+
+symlink負例と圧縮failure injectionは§8の追補で回収済み。raw rangeまで一回Readへ収まる縮小packetを非LLM preflightへ通し、freshなComposer 2.5短waveでP0/P1とgapを再検査するまで本決定のclosure reviewは未完了である。旧Grok／Opusは本修正へ関与したため最終独立reviewerに数えない。
 
 ## 11. 棄却する複雑性
 

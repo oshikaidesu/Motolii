@@ -110,7 +110,7 @@ plan modeでは結論がchat textでなく`createPlanToolCall.args`に入る実�
 ## 検証と負例
 
 専用testは、引数中の空白を含むexact argv、生NUL byteを含むstderr、非zero exitの保存、親終了後もpipeを保持する場合を含む
-process group内grandchildのtimeout回収、既存log directoryの上書き拒否、cwd/log tree重複、relative executable、
+process group内grandchildのtimeout回収（OS process-group reclamation）、既存log directoryの上書き拒否、cwd/log tree重複、relative executable、
 非positive timeout／grace／heartbeatの拒否を固定する。さらに、子が少量stdoutをflushしてから寡黙になるfixtureで、
 終了前heartbeatにprocess生存、経過時間、byte進捗、idle時間が記録され、そのheartbeatがprocessを終了しないことを確認する。
 

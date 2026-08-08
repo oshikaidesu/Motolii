@@ -109,6 +109,16 @@ class CheckEvidenceEnvelopeTest(unittest.TestCase):
         self.assertEqual(result.returncode, 65)
         self.assertIn(b"normalized repository-relative", result.stderr)
 
+    def test_rejects_symlink_source_even_when_target_stays_inside_repository(self) -> None:
+        actual = self.repo / "actual.md"
+        actual.write_text("top seat\n", encoding="utf-8")
+        self.source.symlink_to(actual.name)
+        self.write_selection(ranges=[[1, 1]], queries=[{"literal": "top seat", "scope": [1, 1]}])
+
+        result = self.invoke("--write-envelope")
+        self.assertEqual(result.returncode, 65)
+        self.assertIn(b"regular non-symlink", result.stderr)
+
     def test_rejects_overlapping_or_unsorted_ranges(self) -> None:
         self.source.write_text("top seat\ncontext\ntop seat\n", encoding="utf-8")
         self.write_selection(ranges=[[1, 2], [2, 3]], queries=[{"literal": "top seat", "scope": [1, 3]}])
