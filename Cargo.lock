@@ -2649,7 +2649,6 @@ version = "0.1.0"
 dependencies = [
  "block2 0.6.2",
  "bytemuck",
- "cargo_metadata",
  "eframe",
  "egui",
  "egui-wgpu",
@@ -2669,7 +2668,6 @@ dependencies = [
  "motolii-transport",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
- "proc-macro2",
  "serde",
  "serde_json",
  "syn 2.0.119",
