@@ -55,6 +55,7 @@
 | [2026-08-07-outcome-order-compilation-and-research-return-loop.md](2026-08-07-outcome-order-compilation-and-research-return-loop.md) | 利用者成果からclosed orderをcompileし、実装／調査返却後にcurrent codeから次edgeを再選定する横断発注ループ |
 | [2026-08-07-m3-baseline-required-autonomy-checkpoint.md](2026-08-07-m3-baseline-required-autonomy-checkpoint.md) | M3 baseline必要性の自動承認、非OpenAI抽出、別family challenge、Codexの整理・写像・採否責任、Web調査再入場条件を分離するcheckpoint決定 |
 | [2026-08-07-m3-react-native-rust-skia-runtime-rebaseline.md](2026-08-07-m3-react-native-rust-skia-runtime-rebaseline.md) | M3標準UIをReact Native shell、rust-skia Timeline／Curve、wgpu + rust-skia Stageへ再基線化する決定 |
+| [2026-08-09-ui-placement-deferral-staging-surface-decision.md](2026-08-09-ui-placement-deferral-staging-surface-decision.md) | UI配置だけが未決のclosed controlを既存routeのまま一時配置し、並列接続を止めないHost-owned staging surface決定 |
 | [2026-08-08-serial-core-known-contracts-decision.md](2026-08-08-serial-core-known-contracts-decision.md) | M3/M4/M5直列核 — Asset lifecycle、source/recipe identity、resource/artifact/job、mutation/invalidationの既知実装採択決定 |
 | [2026-08-03-p12-c1-document-lifecycle-adoption-decision.md](2026-08-03-p12-c1-document-lifecycle-adoption-decision.md) | Desktop文書ライフサイクル採択決定: P12-C1で既知セーブ意味論を仕様化し、ReadOnlyNewer/Close/Save As/rfdの未接続境界を固定 |
 | [2026-08-02-m4-known-implementation-survey.md](2026-08-02-m4-known-implementation-survey.md) | M4のcache、resource、disk artifact、区間、background job、proxy、SVGを具体APIと非証明範囲へ割り当てる既知実装比較 |

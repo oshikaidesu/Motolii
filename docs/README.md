@@ -207,3 +207,4 @@
 - **SimulationPlugin / StateTrack**: 逐次状態シミュレーション(布・液体・パーティクル)のプラグイン境界と、そのベイク結果(チェックポイント列の区間キャッシュ)。状態はホストが所有し、`render_frame(t)`はベイク結果を読む純関数のまま(落とし穴F-12、[simulation-model.md](simulation-model.md)。口の予約段階)
 - **TemporalFootprint(時間窓)**: エコー/モーションブラー等が前後フレーム/サブフレームサンプルを読むための、`NodeDesc`への静的宣言(予約。任意時刻アクセスAPIは不採用)
 - **プラグインパネル**: `NodeDesc.params`自動生成panelは全保存paramを操作できる必須fallbackとして決定済みだが、製品U4aは未実装。plugin所有egui/native/Web/wgpu UIはG0-3 / GAP-13の公開・sandbox・互換・配布審判まで公開しない。標準製品surfaceのG0-9合格だけでは解除しない
+- **UI配置保留**: 操作意味とtyped routeが閉じ、最終surfaceだけが未決のcontrolは[Host-owned staging surface](reviews/2026-08-09-ui-placement-deferral-staging-surface-decision.md)へ一時配置して並列接続を進められる。値／保存ownerを移さず、final assignmentで退役する。空間interaction、未決意味、公開UI frameworkの逃げ道にはしない

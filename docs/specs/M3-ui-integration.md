@@ -162,6 +162,14 @@ bundled first-party panelはRN componentとして実装できる。これは既�
 
 third-party plugin UIは別gateとする。v1既定はHost-generated parameter panelと宣言的hint／gizmoであり、任意JS bundle、同process native code、network、eval、raw GPU textureをRN採択から自動的に許可しない。sandbox、permission、version、crash isolation、distributionはG0-3 / GAP-13で閉じる。
 
+### UI配置保留と未配置control staging surface
+
+M3／M4／M5の接続で、user-facingな操作意味、read projection、typed intentまたはD2 Command、owner、Undo／failureが閉じている一方、最終surfaceの配置だけが未決の場合は、[UI配置保留決定](../reviews/2026-08-09-ui-placement-deferral-staging-surface-decision.md)に従いHost-owned staging surfaceへ一時配置してよい。これはSettings、debug panel、万能Inspector、plugin UI frameworkではなく、既存`PanelLayout`／`LayoutAuthority`と既存control routeを再利用する任意表示panelである。panelの開閉、dock／detach、寸法はWorkspace profileまたはProject sessionに置き、Document、journal、render recipeへ入れない。
+
+stagingは値やCommandのownerにならず、一つのbindingにactive placementを一つだけ持つ。final surfaceがacceptedになったcutでstaging配置を除去し、同じread projectionとtyped routeのままpresentationだけを移す。操作意味、owner、command、consumer、Undo、failureのいずれかが未決ならstagingへ仮置きせず、そのedgeを`RESEARCH_RETURN`する。
+
+Timeline trim／key drag、Stage gizmo、Depth Rail direct manipulation、drag and drop、pointer captureなど、位置やgesture自体が操作意味であるinteractionは対象外とする。staging routeのgreenはruntimeの`product-connected`候補に限り、final placement、visual、density、focus、keyboard、a11y、human judgmentを完了扱いにしない。
+
 ## 10. 実装wave
 
 以下は利用者成果のwaveであって、一wave一発注を意味しない。施工境界、並列可否、現在状態は[M3 RN runtime実行地図](../m3-rn-runtime-execution-map.md)で判定する。
