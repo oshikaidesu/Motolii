@@ -4,12 +4,7 @@
     {
       "path": ".vite/manifest.json",
       "bytes": 1897,
-      "sha256": "07a5e77b493d3bf2d6bb30649195fd51b9954edc5f39e6a38ff130e1e427f73f"
-    },
-    {
-      "path": "assets/host-B-XE4xF7.js",
-      "bytes": 15909,
-      "sha256": "564660220542a49c932133cf0dba6c6a8fced36ba3fb7ab2cf5a8b395d7b291d"
+      "sha256": "255f266c89ec434592e34c14399627aed1a43130e72beccde898f9cae9bdbd18"
     },
     {
       "path": "assets/host-BTNUEeQC.css",
@@ -17,9 +12,9 @@
       "sha256": "1231bec4878ec7e00b46f1b9f76eaa81876cbd3fe37ed1b6f30bd47116480633"
     },
     {
-      "path": "assets/inspector-DMRbAE_f.js",
-      "bytes": 18220,
-      "sha256": "1c724e4da4faa5c0a16ec6a17b53ac4484db0b74e0d240d1b7c05d2c820287ac"
+      "path": "assets/host-DIGnnbvI.js",
+      "bytes": 15909,
+      "sha256": "8bea7988aeccca631308c455222fcd31f837caf27cb2f4c3e448f99f35dc7430"
     },
     {
       "path": "assets/inspector-fMh9jxYJ.css",
@@ -27,14 +22,19 @@
       "sha256": "6e36177dd521ac1764b472b32cc610968ab17ae164568e7bc720554637ae855e"
     },
     {
-      "path": "assets/stageHeader-DG-vBaNG.js",
-      "bytes": 401,
-      "sha256": "cfc364c34a083c0d7bc34ae23ae237431dd5bbfa6b994c2bb79990567705a2d5"
+      "path": "assets/inspector-s34699b_.js",
+      "bytes": 21105,
+      "sha256": "d1981085e16f6288e44f04e8dd42bc2de768d33c4437418a84f5a0dde42774e3"
     },
     {
-      "path": "assets/stageHostBridge-DC0bxqKK.js",
-      "bytes": 1866,
-      "sha256": "d09891e8668ed4b4a4083c8ff9cf8c9f91c69357a8fc64efaa22496820b64332"
+      "path": "assets/stageHeader-DGLvYwuw.js",
+      "bytes": 401,
+      "sha256": "bcaca41ca5d6d60ecb54a2590b3d16d8e58f4ae9ac62b0d108fa967d0e9e68ae"
+    },
+    {
+      "path": "assets/stageHostBridge-CTr12xK1.js",
+      "bytes": 4124,
+      "sha256": "968c37b26c2f644101c2af7aeed6e3a99c28a540699139eaf197b444e171639d"
     },
     {
       "path": "assets/stageHostBridge-ETwwNc59.css",
@@ -42,14 +42,9 @@
       "sha256": "6a0dd87815ee9d3b3317503245f4cd9e019cafa8d140d70ff0aea568c91e4f9e"
     },
     {
-      "path": "assets/stageTransport-B8kB-Auq.js",
-      "bytes": 500,
-      "sha256": "12abc003789d3868fdfbd0f121f9896d4abd0b23a3d48f6f0317b13d934c1d25"
-    },
-    {
-      "path": "assets/timelineTools-Cdb6B475.js",
-      "bytes": 5343,
-      "sha256": "75df802ef5d755cd14eed5f35acfcf9b58531ce7737f11317ec5a506535890ef"
+      "path": "assets/stageTransport-CtydKcPX.js",
+      "bytes": 1441,
+      "sha256": "25e6804579dac88a14c8b25f3e3bda3f56f3a0920615319f94770d5de99f794d"
     },
     {
       "path": "assets/timelineTools-CEMKvxwx.css",
@@ -57,39 +52,44 @@
       "sha256": "42682cd86ac9d77fd4df2164dbccc9c565b774852e9fbacb366d3ccac060464e"
     },
     {
+      "path": "assets/timelineTools-DJuSyohE.js",
+      "bytes": 5343,
+      "sha256": "da01ff091b4f4415d3500d9ec20a6645c749039c4df2917ff5e86b0ade80f498"
+    },
+    {
       "path": "assets/tokens-_d9c2vBB.css",
       "bytes": 45429,
       "sha256": "5bd1342c9c375f804782a7978d23e0c25503710a37a8862a0a6a409e193395ed"
     },
     {
-      "path": "assets/tokens-CfIyaXn9.js",
-      "bytes": 288218,
-      "sha256": "5c20bb209666aaf2a3e21c7c0d1a8005ddd06cd9e0e5a02f9f832e33ffaaf2a0"
+      "path": "assets/tokens-Rirh76Dh.js",
+      "bytes": 291171,
+      "sha256": "c6c026306d696b1a08bfd7a385decf6433c55fe5559bf6a360b8aa7496c116ae"
     },
     {
       "path": "host.html",
       "bytes": 869,
-      "sha256": "0c84780bcfd46a6fba8b4883892789791c1f7c0c16869787167491054a54ecba"
+      "sha256": "bd0bb4488dcc29e547ee911d8189dc7f9e1302f2b37e59ba08618c0979b82586"
     },
     {
       "path": "inspector.html",
       "bytes": 883,
-      "sha256": "14a185aa191c70d493e27c9e4cceaa92e2b92f74da7e4e5979780c738002cf38"
+      "sha256": "3d65407205732fc8da0418674f7f746daea0c6085a4dd94bf40bebdb3fb0916e"
     },
     {
       "path": "stage-header.html",
       "bytes": 984,
-      "sha256": "ec76a3a7cd3a172a9272b2c4a4a695a1024ce5a0acb4b736d2bb25dbef3a0f3d"
+      "sha256": "7425fbada1c22a95501ce62b7ea2e3d8c0be96dba7c3214280bf0ec84974a858"
     },
     {
       "path": "stage-transport.html",
       "bytes": 993,
-      "sha256": "11417bdfdd821efb1d9fcb397715f19ea751e35efff755817242b59ee8c6384b"
+      "sha256": "37aea24dc37c6196702980e9ef2bb7bcf2176e479a2740e1118e5774a3a57cc1"
     },
     {
       "path": "timeline-tools.html",
       "bytes": 901,
-      "sha256": "05fa4220477b90285ad176612def722b19f3bec15779fdfdbeb6d1ff014f41c3"
+      "sha256": "95dd63387418963f1a29b6e8eb660f501e6a14f45d357792162f753a7d3b0c0c"
     }
   ]
 }

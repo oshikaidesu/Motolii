@@ -8,8 +8,8 @@ use cargo_metadata::MetadataCommand;
 use proc_macro2::{Delimiter, TokenStream, TokenTree};
 use syn::visit::Visit;
 use syn::{
-    Attribute, ExprField, ExprMethodCall, ItemExternCrate, ItemMod, ItemUse, Macro, Member, Meta,
-    UseTree,
+    Attribute, ExprField, ExprMethodCall, FieldPat, ItemExternCrate, ItemMod, ItemUse, Macro,
+    Member, Meta, UseTree,
 };
 
 const FORBIDDEN_BARE_IDENTIFIERS: &[&str] = &[
@@ -273,7 +273,30 @@ impl<'ast> Visit<'ast> for RawInputVisitor {
         {
             self.violations.push("layout adapter field".into());
         }
+        if self.product_window_adapter
+            && matches!(
+                &field.member,
+                Member::Named(member)
+                    if matches!(member.to_string().as_str(), "physical_key" | "text" | "location")
+            )
+        {
+            self.violations.push("product adapter key field".into());
+        }
         syn::visit::visit_expr_field(self, field);
+    }
+
+    fn visit_field_pat(&mut self, field: &'ast FieldPat) {
+        if self.product_window_adapter
+            && matches!(
+                &field.member,
+                Member::Named(member)
+                    if matches!(member.to_string().as_str(), "device_id" | "physical_key" | "text" | "location")
+            )
+        {
+            self.violations
+                .push("product adapter raw pattern field".into());
+        }
+        syn::visit::visit_field_pat(self, field);
     }
 
     fn visit_item_use(&mut self, item_use: &'ast ItemUse) {
@@ -348,7 +371,60 @@ fn product_window_adapter_path_is_allowed(segments: &[String]) -> bool {
                         | "ScaleFactorChanged"
                         | "Occluded"
                         | "RedrawRequested"
+                        | "CursorMoved"
+                        | "MouseInput"
+                        | "Focused"
+                        | "CursorLeft"
+                        | "ModifiersChanged"
+                        | "KeyboardInput"
+                        | "Ime"
                 )
+    ) || matches!(
+        segments,
+        [winit, event, mouse_button, variant]
+            if winit == "winit"
+                && event == "event"
+                && mouse_button == "MouseButton"
+                && variant == "Left"
+    ) || matches!(
+        segments,
+        [winit, event, element_state]
+            if winit == "winit" && event == "event" && element_state == "ElementState"
+    ) || matches!(
+        segments,
+        [winit, event, ime]
+            if winit == "winit" && event == "event" && ime == "Ime"
+    ) || matches!(
+        segments,
+        [winit, event, ime, variant]
+            if winit == "winit"
+                && event == "event"
+                && ime == "Ime"
+                && matches!(variant.as_str(), "Enabled" | "Disabled" | "Preedit" | "Commit")
+    ) || matches!(
+        segments,
+        [winit, keyboard, modifiers]
+            if winit == "winit"
+                && keyboard == "keyboard"
+                && modifiers == "ModifiersState"
+    ) || matches!(
+        segments,
+        [winit, keyboard, key]
+            if winit == "winit" && keyboard == "keyboard" && key == "Key"
+    ) || matches!(
+        segments,
+        [winit, keyboard, key, variant]
+            if winit == "winit"
+                && keyboard == "keyboard"
+                && key == "Key"
+                && variant == "Named"
+    ) || matches!(
+        segments,
+        [winit, keyboard, named_key, variant]
+            if winit == "winit"
+                && keyboard == "keyboard"
+                && named_key == "NamedKey"
+                && variant == "Escape"
     )
 }
 
@@ -596,7 +672,7 @@ fn layout_adapter_accepts_only_the_specified_raw_closed_set() {
 }
 
 #[test]
-fn product_window_adapter_accepts_only_lifecycle_events() {
+fn product_window_adapter_accepts_only_the_specified_raw_closed_set() {
     let accepted = r#"
         fn adapt(event: winit::event::WindowEvent) {
             match event {
@@ -604,9 +680,33 @@ fn product_window_adapter_accepts_only_lifecycle_events() {
                 | winit::event::WindowEvent::Resized(_)
                 | winit::event::WindowEvent::ScaleFactorChanged { .. }
                 | winit::event::WindowEvent::Occluded(_)
-                | winit::event::WindowEvent::RedrawRequested => {}
+                | winit::event::WindowEvent::RedrawRequested
+                | winit::event::WindowEvent::CursorMoved { .. }
+                | winit::event::WindowEvent::MouseInput { .. }
+                | winit::event::WindowEvent::Focused(false)
+                | winit::event::WindowEvent::CursorLeft { .. }
+                | winit::event::WindowEvent::ModifiersChanged(_)
+                | winit::event::WindowEvent::KeyboardInput { .. }
+                | winit::event::WindowEvent::Ime(_) => {}
                 _ => {}
             }
+        }
+        fn normalize(
+            state: winit::event::ElementState,
+            modifiers: winit::keyboard::ModifiersState,
+            key: &winit::keyboard::Key,
+            ime: &winit::event::Ime,
+        ) {
+            let _ = state.is_pressed();
+            let _ = modifiers.control_key();
+            let _ = key == &winit::keyboard::Key::Named(winit::keyboard::NamedKey::Escape);
+            match ime {
+                winit::event::Ime::Enabled
+                | winit::event::Ime::Disabled
+                | winit::event::Ime::Preedit(..)
+                | winit::event::Ime::Commit(_) => {}
+            }
+            let _ = winit::event::MouseButton::Left;
         }
     "#;
     assert!(audit_source(accepted, true, false, true)
@@ -616,7 +716,13 @@ fn product_window_adapter_accepts_only_lifecycle_events() {
     for source in [
         "fn f(_: winit::event::KeyEvent) {}",
         "fn f(_: winit::event::DeviceEvent) {}",
-        "fn f(e: winit::event::WindowEvent) { if let winit::event::WindowEvent::KeyboardInput { .. } = e {} }",
+        "fn f(e: winit::event::WindowEvent) { if let winit::event::WindowEvent::KeyboardInput { event, .. } = e { let _ = event.physical_key; } }",
+        "fn f(_: winit::keyboard::PhysicalKey) {}",
+        "fn f(_: winit::keyboard::KeyCode) {}",
+        "fn f() { let _ = winit::keyboard::NamedKey::Enter; }",
+        "fn f() { let _ = winit::event::MouseButton::Right; }",
+        "fn f(e: winit::event::WindowEvent) { if let winit::event::WindowEvent::MouseWheel { .. } = e {} }",
+        "fn f(e: winit::event::WindowEvent) { if let winit::event::WindowEvent::CursorMoved { device_id, .. } = e { let _ = device_id; } }",
     ] {
         assert!(
             !audit_source(source, true, false, true)

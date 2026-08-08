@@ -34,7 +34,7 @@ pub enum TransportError {
 /// 映像レンダ1フレーム分の計画(常に最新の聴感時刻)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FramePlan {
-    /// 聴感タイムライン時刻(供給済み−デバイス待ち)。
+    /// 聴感タイムライン時刻(原点 + 供給済み−デバイス待ち)。
     pub timeline_time: RationalTime,
     /// 表示フレーム添字(床)。
     pub display_frame: i64,
@@ -48,6 +48,7 @@ pub struct FramePlan {
 pub struct Transport {
     counters: Arc<PlaybackCounters>,
     device_wait: Arc<DeviceWaitLatency>,
+    timeline_origin: RationalTime,
     drs: DrsController,
     fps: Fps,
     sample_rate: u32,
@@ -63,6 +64,7 @@ impl Transport {
         device_wait: Arc<DeviceWaitLatency>,
         fps: Fps,
         sample_rate: u32,
+        timeline_origin: RationalTime,
         base_quality: Quality,
         drs_enabled: bool,
     ) -> Result<Self, TransportError> {
@@ -73,6 +75,7 @@ impl Transport {
         Ok(Self {
             counters,
             device_wait,
+            timeline_origin,
             drs: DrsController::new(drs_enabled, config),
             fps,
             sample_rate,
@@ -89,6 +92,7 @@ impl Transport {
         device_wait: Arc<DeviceWaitLatency>,
         fps: Fps,
         sample_rate: u32,
+        timeline_origin: RationalTime,
         base_quality: Quality,
         gpu: &motolii_gpu::GpuCtx,
     ) -> Result<Self, TransportError> {
@@ -98,6 +102,7 @@ impl Transport {
             device_wait,
             fps,
             sample_rate,
+            timeline_origin,
             base_quality,
             drs_enabled,
         )
@@ -139,10 +144,8 @@ impl Transport {
 
     /// 聴感タイムライン時刻。
     pub fn perceptual_time(&self) -> Result<RationalTime, TransportError> {
-        Ok(sample_frames_to_time(
-            self.perceptual_frames(),
-            self.sample_rate,
-        )?)
+        let elapsed = sample_frames_to_time(self.perceptual_frames(), self.sample_rate)?;
+        Ok(self.timeline_origin.try_add(elapsed)?)
     }
 
     /// 映像レンダ用: 常に最新の聴感時刻だけを返す(古い時刻は手掛けない=ドロップ)。
@@ -206,6 +209,7 @@ mod tests {
             wait,
             Fps::try_new(30, 1).unwrap(),
             48_000,
+            RationalTime::ZERO,
             Quality::DRAFT,
             false,
         )
@@ -222,6 +226,7 @@ mod tests {
             wait,
             Fps::try_new(30, 1).unwrap(),
             48_000,
+            RationalTime::ZERO,
             Quality::DRAFT,
             false,
         )
@@ -236,5 +241,104 @@ mod tests {
         assert_eq!(second.display_frame, 90);
         assert_eq!(second.dropped_frames, 59); // skipped 31..=89
         assert_eq!(transport.total_dropped_frames(), 59);
+    }
+
+    #[test]
+    fn one_second_origin_is_exact_at_device_rates() {
+        let origin = sample_frames_to_time(48_000, 48_000).unwrap();
+        for sample_rate in [48_000, 44_100] {
+            let transport = Transport::new(
+                Arc::new(PlaybackCounters::default()),
+                Arc::new(DeviceWaitLatency::default()),
+                Fps::try_new(30, 1).unwrap(),
+                sample_rate,
+                origin,
+                Quality::DRAFT,
+                false,
+            )
+            .unwrap();
+
+            assert_eq!(transport.supplied_frames(), 0);
+            assert_eq!(transport.perceptual_frames(), 0);
+            assert_eq!(
+                transport.perceptual_time().unwrap(),
+                RationalTime::from_seconds(1)
+            );
+        }
+    }
+
+    #[test]
+    fn device_wait_subtracts_from_elapsed_device_frames_only() {
+        let origin = RationalTime::from_seconds(1);
+        for (sample_rate, wait_frames) in [(48_000u32, 480u64), (44_100, 441)] {
+            let counters = Arc::new(PlaybackCounters::default());
+            let wait = Arc::new(DeviceWaitLatency::default());
+            counters.advance_supplied_for_simulation(sample_rate as u64);
+            wait.set_wait_frames(wait_frames);
+            let transport = Transport::new(
+                Arc::clone(&counters),
+                Arc::clone(&wait),
+                Fps::try_new(30, 1).unwrap(),
+                sample_rate,
+                origin,
+                Quality::DRAFT,
+                false,
+            )
+            .unwrap();
+
+            let elapsed_frames = sample_rate as u64 - wait_frames;
+            assert_eq!(transport.supplied_frames(), sample_rate as u64);
+            assert_eq!(transport.perceptual_frames(), elapsed_frames);
+            assert_eq!(
+                transport.perceptual_time().unwrap(),
+                origin
+                    .try_add(sample_frames_to_time(elapsed_frames, sample_rate).unwrap())
+                    .unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn next_frame_plan_reports_absolute_timeline_time() {
+        let counters = Arc::new(PlaybackCounters::default());
+        counters.advance_supplied_for_simulation(44_100);
+        let mut transport = Transport::new(
+            Arc::clone(&counters),
+            Arc::new(DeviceWaitLatency::default()),
+            Fps::try_new(30, 1).unwrap(),
+            44_100,
+            RationalTime::from_seconds(1),
+            Quality::DRAFT,
+            false,
+        )
+        .unwrap();
+
+        let plan = transport.next_frame_plan().unwrap();
+        assert_eq!(plan.display_frame, 60);
+        assert_eq!(plan.timeline_time, RationalTime::from_seconds(2));
+    }
+
+    #[test]
+    fn zero_origin_keeps_legacy_timeline() {
+        let wait = Arc::new(DeviceWaitLatency::default());
+        wait.set_wait_frames(480);
+        let mut transport_zero = Transport::new(
+            Arc::new(PlaybackCounters::default()),
+            wait,
+            Fps::try_new(30, 1).unwrap(),
+            48_000,
+            RationalTime::ZERO,
+            Quality::DRAFT,
+            false,
+        )
+        .unwrap();
+        assert_eq!(transport_zero.perceptual_frames(), 0);
+        assert_eq!(
+            transport_zero.perceptual_time().unwrap(),
+            RationalTime::ZERO
+        );
+        let plan = transport_zero.next_frame_plan().unwrap();
+        assert_eq!(plan.timeline_time, RationalTime::ZERO);
+        assert_eq!(plan.display_frame, 0);
     }
 }

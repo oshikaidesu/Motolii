@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use fontique::{Collection, CollectionOptions, FontStyle, FontWeight, FontWidth};
 use harfrust::{FontRef, ShaperData, UnicodeBuffer};
+use motolii_core::RationalTime;
 use motolii_doc::{Document, LayerId};
 use vello::{
     kurbo::{Affine, Rect},
@@ -41,6 +42,12 @@ pub(crate) struct NativeTimelineRenderer {
     overlay_pipeline: wgpu::RenderPipeline,
     width: u32,
     height: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct NativeTimelineRenderState {
+    pub(crate) primary: Option<LayerId>,
+    pub(crate) playhead: RationalTime,
 }
 
 impl NativeTimelineRenderer {
@@ -182,9 +189,16 @@ impl NativeTimelineRenderer {
         layout: NativeHostLayout,
         document: &Document,
         projection: &TimelineProjection,
-        primary: Option<LayerId>,
+        state: NativeTimelineRenderState,
     ) -> Result<TimelineSceneStats, NativeTimelineRendererError> {
-        let (scene, stats) = build_scene(&self.font, layout, document, projection, primary)?;
+        let (scene, stats) = build_scene(
+            &self.font,
+            layout,
+            document,
+            projection,
+            state.primary,
+            state.playhead,
+        )?;
         self.renderer.render_to_texture(
             device,
             queue,
@@ -268,6 +282,7 @@ fn build_scene(
     document: &Document,
     projection: &TimelineProjection,
     primary: Option<LayerId>,
+    playhead: RationalTime,
 ) -> Result<(Scene, TimelineSceneStats), NativeTimelineRendererError> {
     let (Some(timeline), Some(timeline_logical)) = (layout.timeline_physical, layout.timeline)
     else {
@@ -539,9 +554,10 @@ fn build_scene(
         ]);
         scene.fill(Fill::NonZero, Affine::IDENTITY, INK, None, &diamond);
     }
+    let playhead_x = playhead_x(time_x, right, document.composition.duration, playhead);
     fill(
         &mut scene,
-        time_x,
+        playhead_x,
         y + header_height,
         (2.0 * scale).max(1.0),
         bottom - y - header_height,
@@ -578,6 +594,16 @@ fn timeline_bar_geometry(
         width,
         height,
     })
+}
+
+fn playhead_x(time_x: f64, right: f64, duration: RationalTime, playhead: RationalTime) -> f64 {
+    let duration_seconds = duration.as_seconds_f64();
+    let fraction = if duration_seconds.is_finite() && duration_seconds > 0.0 {
+        (playhead.as_seconds_f64() / duration_seconds).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    time_x + (right - time_x) * fraction
 }
 
 fn fill(scene: &mut Scene, x: f64, y: f64, width: f64, height: f64, color: Color) {
@@ -751,6 +777,22 @@ pub(crate) fn timeline_time_surface_logical_rect(
     })
 }
 
+pub(crate) fn timeline_ruler_logical_rect(
+    layout: NativeHostLayout,
+) -> Option<crate::native_host_layout::LogicalRect> {
+    let timeline = layout.timeline?;
+    let x_offset = (KEY_TOOLS_WIDTH + BAND_RAIL_WIDTH).min(timeline.width);
+    let y_offset = HEADER_HEIGHT.min(timeline.height);
+    let width = timeline.width - x_offset;
+    let height = RULER_HEIGHT.min(timeline.height - y_offset);
+    (width > 0.0 && height > 0.0).then_some(crate::native_host_layout::LogicalRect {
+        x: timeline.x + x_offset,
+        y: timeline.y + y_offset,
+        width,
+        height,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -774,6 +816,18 @@ mod tests {
         assert_eq!(geometry.x + geometry.width, 1_000.0);
         assert!(geometry.y >= 55.0);
         assert!(geometry.y + geometry.height <= 200.0);
+    }
+
+    #[test]
+    fn playhead_line_maps_zero_interior_and_duration_to_ruler_bounds() {
+        let duration = RationalTime::try_new(5, 1).unwrap();
+
+        assert_eq!(playhead_x(10.0, 110.0, duration, RationalTime::ZERO), 10.0);
+        assert_eq!(
+            playhead_x(10.0, 110.0, duration, RationalTime::try_new(5, 2).unwrap(),),
+            60.0
+        );
+        assert_eq!(playhead_x(10.0, 110.0, duration, duration), 110.0);
     }
 
     #[test]
@@ -818,7 +872,15 @@ mod tests {
             face_index: 0,
         };
 
-        let (_, stats) = build_scene(&font, layout, &document, &projection, None).unwrap();
+        let (_, stats) = build_scene(
+            &font,
+            layout,
+            &document,
+            &projection,
+            None,
+            RationalTime::ZERO,
+        )
+        .unwrap();
         assert_eq!(stats, TimelineSceneStats::default());
     }
 }

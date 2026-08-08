@@ -62,7 +62,7 @@ allowlist、正負oracle、利用者出口まで閉じた現在状態は
 | `P01-C2` | `GATED` | 固定sourceに無いiconを推測・新造しない。既存product assetの範囲は先行可 |
 | `P06-C1` | `GATED / FIXED_MAC_GATE_PASS` | 固定Macはrfd parent sheet、event-loop、selection、Cancel、typed media failureを採択probeで確認済み。Linux portalと製品接続は未完了 |
 | `P06-C2` | `GATED` | Soundtrackの選択policy。動画配置までを先に`REDUCE`してもよい |
-| `P07-C1` | `GATED` | GAP-28の製品`PlaybackSession`とmixed `AudioProgram`接続。seek/scrub単独は`REDUCE`可 |
+| `P07-C1` | `TARGET_MISSING / PREFLIGHT ONLY` | GAP-28の製品`PlaybackSession`とmixed `AudioProgram`接続。4経路（program construction、session lifetime、current-time handoff、actual typed control source）が閉じるまで実装しない。seek/scrub単独は将来の明示`REDUCE`候補 |
 | `P09-C1` | `GATED` | clipboard payload、ID再採番、Pasteの1 Undo意味。未決ならDelete/Duplicate/Renameだけを先行 |
 | `P09-C2` | `GATED` | keymap設定UIのv1範囲と実IME審判 |
 | `P09-C4` | `GATED` | AccessKit product dependency、bounded tree graft、各OS adapterの採択probe |
@@ -251,14 +251,16 @@ allowlist、正負oracle、利用者出口まで閉じた現在状態は
 
 ### M3-P07-TRANSPORT — seek、再生、縮退
 
+P02-C3 の ruler scrub と現在の `ZERO` 固定 playhead は編集用の投影であり、連続 playback の clock／control identity ではない。M2 Transport／audio が sole clock である。
+
 #### `P07-C1` transport UI connection
 
-- **結果**: React transport/native scrubから既存Transportへseek/play/pause/stepを送る。
-- **再利用target**: `crates/motolii-transport`、cpal audio clock、P02-C3 playhead projection、render_worker。
-- **薄い残余**: typed transport intent、latest seek、idle policy。
-- **依存／並列**: P03-C2/P06-C2後。P08/P09と並列。
-- **oracle**: repaint/vsync暴走でclock不変、latest seek、停止後idle、UIを主clockにしない。
-- **cutover**: UI timer/playback state、preview専用clockをretire。
+- **現行状態**: `TARGET_MISSING / PREFLIGHT ONLY / BUILD FORBIDDEN`。旧「React transport/native scrub から既存 Transport へ seek/play/pause/step を送る」は歴史的／aspirational な結果文であり、現行の product control source や実装 `DO` を表さない。
+- **欠落 route**: (1) `AudioProgram`／`MixProducer` の製品 construction、(2) `PlaybackSession` の製品 lifetime、(3) M2 Transport current-time の製品 handoff、(4) 実在する UI/Host typed control source。四つ全てが閉じるまで薄い残余を縮めず、実装しない。
+- **再利用候補**: `crates/motolii-transport`、cpal audio clock、P02-C3 playhead projection、render_worker。ただしこれらは欠落 route の consumer／owner を代替しない。
+- **次の安全な手**: read-only source audit、または将来の明示 `REDUCE` として seek/scrub 単独を再判定することだけ。P07-C2/C3 は引き続き block される。
+- **拒否線／oracle**: M2 Transport／audio sole clock を保持する。ruler scrub、固定 `ZERO`、UI repaint/vsync、Space、controller、新規 dependency、Document／journal state を playback route の代替にしない。将来の route は repaint/vsync で clock 不変、second clock／varispeed なし、session teardown、unresolved typed failure、preview/export sample 一致、stale generation publish 0 を示す。
+- **cutover**: 実在 route が閉じた後にのみ UI timer/playback state と preview 専用 clock を retire する。
 
 #### `P07-C2` preview deadline and pressure
 

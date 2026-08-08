@@ -232,6 +232,26 @@ function validateTransform(transform, ruleId, owner, layerIds) {
   }
 }
 
+function projectInspectorPosition(item) {
+  const transform = item.envelope.transform;
+  if (transform === undefined || !Object.hasOwn(transform, "position")) {
+    return undefined;
+  }
+  const param = transform.position;
+  const tag = Object.keys(param)[0];
+  if (tag === "keyframes") {
+    return Object.freeze({ kind: "animated" });
+  }
+  if (tag !== "const") {
+    fail("6", "track item.envelope.transform.position", "unsupported Position DocParam");
+  }
+  const value = param.const;
+  if (!Object.hasOwn(value, "Vec2")) {
+    fail("6", "track item.envelope.transform.position.const", "Position Const must be Vec2");
+  }
+  return Object.freeze({ kind: "const", x: value.Vec2[0], y: value.Vec2[1] });
+}
+
 function validateEnvelope(envelope, ruleId, owner, layerIds, effectDefIds) {
   const env = requireObject(envelope, ruleId, owner);
   const blend = env.blend;
@@ -879,6 +899,7 @@ function decodeInspectorReadModel(input) {
     }
     targetOut.child_count = children.length;
   }
+  const position = projectInspectorPosition(item);
 
   const effectDefs = doc.effect_definitions ?? [];
   const effect_definitions = [];
@@ -912,6 +933,9 @@ function decodeInspectorReadModel(input) {
       layerId,
       activeEffectUseId,
     );
+  }
+  if (position !== undefined) {
+    output.position = position;
   }
   assertNoForbiddenOutputKeys(output, "output");
   return output;

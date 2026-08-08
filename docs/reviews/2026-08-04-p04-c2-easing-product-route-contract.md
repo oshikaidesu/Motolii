@@ -1,0 +1,219 @@
+# P04-C2 Easing product producer / popup adoption contract
+
+状態: **AMENDED / P04-C2-DIAGNOSTIC-CORRECTION DONE / ACCEPTED / P04-C2-EASING-C7A DONE / ACCEPTED / EXTERNAL_GATE_PENDING**
+
+日付: 2026-08-04
+
+## 1. 閉じる outcome
+
+利用者が許可した通常製品routeは、product-owned React Easing trigger の click から native popup を
+開き、選んだ区間の outgoing Position interpolation を既存 D2 command へ一回だけ送ることである。
+これは既存 Stage transport の read-only `activeInterval` snapshot を input bridge へ変更しない別契約である。
+
+```text
+React Easing trigger click { anchor, layout_epoch }
+  -> surface-local strict inbound route
+  -> ProductApp / Host: current Document + primary + editor_playhead.current から再導出
+  -> native popup session / admission
+  -> one basic preset or validated custom Bezier release
+  -> DocumentEditQueue Position-only action { LayerId, KeyframeId, Interp }
+  -> SetPositionKeyInterp D2 prepare/CAS -> 1 journal command / 1 Undo / publish
+```
+
+`Document` が key、`Interp`、revision と Undo の唯一の正本である。React は anchor と
+`layout_epoch`だけを送る presentation producer、ProductApp / Host は private identity 再導出・
+session・stale admission、native popup は transient curve UI、DocumentEditQueue は single-writer
+request、D2 は durable admission を所有する。popup token、projection generation、layout epoch、
+screen coordinate、focus、drag preview は transient であり、queue payload、Document、journal、Undo、
+User settings へ保存しない。
+
+## 2. exact semantic / stale rule
+
+1. React は direct product-owned `EasingTriggerCandidate` を reuse し、click 時に logical anchor と
+   current `layout_epoch`だけを surface-local strict codec へ送る。Layer/key IDs、times、`Interp`、
+   Document/revision は React と read-only Stage snapshot を越えない。
+2. Host は受信時に current `Document`、primary、`editor_playhead.current`で既存 strict-interior
+   Position interval を再導出する。interval 不在なら popup/session/queue write は 0。
+3. opening session は private に layer、left/right key IDs/times、left `Interp`、projection generation、
+   layout epoch と transient token を capture する。既存 G0-9 の placement、session、cancel patternを
+   使用する。second device は禁止するが、product shared context の採択は実装で現行 owner を証明してから行う。
+4. preset selection 又は custom Bezier release の直前に Host は current generation/layout epoch と
+   strict-interior interval を再検証する。token closed、duplicate、cancel、generation/layout mismatch、
+   key/time/left identity mismatch は queue enqueue 0 / Document write 0 で閉じる。
+5. accepted terminal action は `DocumentEditQueue` のこの boundary で追加する Position-only action に
+   `(LayerId, KeyframeId, Interp)`だけを一回 enqueue する。既存 D2 `SetPositionKeyInterp` prepare が old
+   value を read し、command CAS が durable guard になる。一 basic preset 又は custom release は、**値が
+   変わる時だけ** 1 queue action = 1 journal command = 1 Undo/publish、drag 中は 0 write である。same-value
+   accepted terminal は no-op とし、queue action / command / journal / Undo / publish はすべて 0 で閉じる。
+
+basic preset provenance is the React source authority
+[`docs/mocks-ui/src/candidates/EasingGraphCandidate.jsx:16-41`](../mocks-ui/src/candidates/EasingGraphCandidate.jsx):
+`Linear -> Interp::Linear`; `Smooth -> Bezier { .4, .0, .2, 1.0 }`; `Ease In -> Bezier { .42, .0,
+1.0, 1.0 }`; `Ease Out -> Bezier { .0, .0, .58, 1.0 }`. Custom is `Interp::Bezier`, admitted by the
+existing [`validate_interp`](../../crates/motolii-doc/src/doc_keyframe.rs) boundary. `Hold` is not in
+that product source and is not part of this boundary. Bounce, Elastic and other advanced visual cards
+emit no intent and are disabled until their semantic authority is separately closed; their presence in
+an oracle does not authorize a durable mapping.
+
+## 3. known-implementation adoption preflight
+
+```text
+MECHANISM CLASS: interval easing popup terminal admission over an existing D2 interpolation command
+KNOWN IMPLEMENTATION SEARCH: P04-C2 ACTIVE-INTERVAL and INTERP-COMMAND contracts/acceptance;
+  native Easing popup G0-9 acceptance; product-owned EasingTriggerCandidate and React source-authority
+  EasingGraphCandidate preset values; Inspector surface-local strict codec/inbox pattern; existing ProductApp primary/playhead
+  and DocumentEditQueue enum/action handling location
+CANDIDATES: direct React trigger reuse; strict-interior PositionActiveInterval recomputation;
+  G0-9 popup placement/session/cancel pattern; existing ProductApp GPU owner; existing queue enum/action
+  handling location and D2 command
+ADOPTION ROUTE: REUSE identities, D2 and trigger; add one Position-only action at the existing queue
+  enum/action handling location; PATTERN for surface-local inbound,
+  popup session/admission and exactly-once cancel/stale handling
+REJECTED CANDIDATES: Stage activeInterval input bridge; SpikePresetStore; second wgpu device;
+  test counters; hardcoded interval identity; generic popup/channel framework; new dependency;
+  advanced interpolation semantics; User settings preset persistence
+THIN MOTOLII SEAM: React anchor/layout intent is re-derived and admitted by the private Host session, then reaches the existing queue enum/action handling location.
+THIN MOTOLII RESIDUAL: Position-only interval admission, stale rejection and product-specific oracle
+RETIREMENT: static disabled trigger behavior once the product route is accepted; spike-only state,
+  counters and persistence doubles remain non-product evidence
+BUILD JUSTIFICATION: NONE
+BUILD: FORBIDDEN
+```
+
+The React source asset is not copied or reduced. The existing Stage transport `{snapshot, subscribe,
+publish}` output bridge remains byte-for-byte the output-only bridge: no snapshot-object field addition
+and no `postMessage` addition to that bridge are allowed. The inbound is a separate, surface-local Stage
+transport sender/inbox contract, not a generalized snapshot/channel/Host framework. The G0-9 spike is a
+pattern/oracle, not a store, second device, or product window implementation to import wholesale.
+
+## 4. accepted implementation boundary and oracle
+
+`P04-C2-EASING-C7A` was the single product implementation boundary accepted at the commits and
+implementation receipt named below. Its exact source allowlist was
+`ui/motolii-web/src/candidates/EasingTriggerCandidate.jsx`,
+`ui/motolii-web/src/candidates/StageChromeCandidate.jsx`, the **new planned**
+`ui/motolii-web/src/host/stage-easing-intent-codec.js`,
+`ui/motolii-web/src/host/stage-transport-main.jsx`, and `ui/motolii-web/vite.host.config.js`;
+`crates/motolii-ui/src/stage_chrome_host_runtime.rs`,
+`crates/motolii-ui/src/product_runtime.rs`, `crates/motolii-ui/src/product_runtime_adapter.rs`,
+`crates/motolii-ui/src/lib.rs`,
+`crates/motolii-ui/src/document_edit_runtime.rs`, and the **one new private**
+`crates/motolii-ui/src/product_easing_popup.rs`; plus
+focused tests in `ui/motolii-web/guard-tests/stage-easing-intent-codec.test.mjs`,
+`crates/motolii-ui/src/stage_chrome_host_runtime.rs`, `crates/motolii-ui/src/product_runtime.rs`,
+`crates/motolii-ui/src/product_runtime_adapter.rs`, `crates/motolii-ui/src/document_edit_runtime.rs`,
+and `crates/motolii-ui/src/product_easing_popup.rs`. Generated output is limited to the affected
+`ui/motolii-web/generated-host/**` closure, its `asset-manifest.json`, and the corresponding
+`crates/motolii-ui/src/browser_host_runtime.rs` `include_bytes!` / route-filename replacements;
+content-hashed asset filenames are generated rather than fixed. No unrelated generated asset may
+change. It may not alter `motolii-doc`, public APIs,
+serde/journal schema, plugin contracts, User settings, dependencies, or Inspector/Add Position Key.
+
+`PRIMARY_ORACLE`: the separate strict codec accepts only anchor/layout data; `Hold` input and every
+advanced preset reject with intent/action/command 0; a current strict-interior
+Position interval can open one session; every stale/cancel/duplicate/no-interval path performs zero
+enqueue and zero Document write; a same-value accepted terminal also performs zero queue action,
+command, journal, Undo, and publish; each value-changing accepted basic/custom terminal action reaches
+exactly one `SetPositionKeyInterp` command, one journal command, one Undo/publish, and changes only the
+left key's outgoing `Interp`; the real child `WindowId` dispatch reaches only the private popup owner;
+the same `ProductGpuParts` instance/adapter and `GpuCtx` device/queue are retained, with no second GPU.
+`REPO_LANES`: focused React/source-asset, Host/session/queue, private popup and D2 integration tests,
+then relevant Rust/Node lanes, `git diff --check`, and `./scripts/check-docs.sh`. `EXTERNAL_GATES`:
+native visual parity, real z-order/focus/dismiss, DPI/second monitor and accessibility remain for
+the M3-final manual/real-device checklist; repository tests do not close them.
+
+## 4.1 2026-07-22 native popup acceptance §5 reconciliation
+
+This contract does not silently overturn [the 2026-07-22 native popup acceptance §5](2026-07-22-m3-native-easing-popup-acceptance.md#5-製品接続の停止線). Its stopping items are reconciled one by one:
+
+- `U4a` interval/outgoing owner is discharged by `ACTIVE-INTERVAL` and `INTERP-COMMAND`; the latter is the accepted D2 owner.
+- `U2h` primary projection is reused as the existing `ProductApp::primary`. No focus identity is invented; popup focus remains an external gate.
+- The curve gesture's one-gesture / one-D2-command / one-Undo rule is this contract's value-changing terminal admission; same-value, cancel, stale, and duplicate terminals are zero-command paths.
+- React trigger promotion/oracle is discharged through R2B, the Stage trigger acceptance, and the G0-9 pattern; no second React popup state is introduced.
+- Platform z-order, focus, DPI/second-monitor, and accessibility acceptance is deliberately resequenced to the user-directed M3-final manual/real-device checklist and remains `EXTERNAL_GATE_PENDING`.
+
+## 5. explicit non-goals / remaining waits
+
+- Inspector Add Position Key stays separate as `CU-0A08ITIB DONE / ACCEPTED / EXTERNAL_GATE_PENDING`
+  at commit `98e38925`; this contract does not reopen or extend Inspector Position row, projection,
+  or typed intent work.
+- User preset save/delete/reorder/favorite persistence remains owned by the Host User settings codec;
+  that work is `WAIT_TARGET` until its real codec is selected. Basic editing does not wait on it.
+- Copy/paste, advanced Bounce/Elastic/Cyclic/Random/Steps/Elastic Steps semantics, a generic popup
+  or input framework, new dependencies, public API/Document/schema changes, and a second GPU device
+  are out of scope.
+- Acceptance of this contract is not implementation, product E2E, or human/native visual acceptance.
+
+## 6. 2026-08-04 terminal-adoption amendment
+
+This amendment replaces the former single implementation order `P04-C2-EASING`. It records the completed
+historical diagnostic ticket and closes the separate C7A implementation order; it does not authorize the
+partial React/IPC route currently outside the product runtime.
+
+### 6.1 `P04-C2-DIAGNOSTIC-CORRECTION` — historical `DONE / ACCEPTED`
+
+`crates/motolii-ui/src/diagnostic_projection.rs::command_kind_copy` was the already-existing exhaustive
+consumer of `CommandKind`. The formerly missing `CommandKind::SetPositionKeyInterp` arm was completed in
+commit `58b84e22`, returning exactly `"Set position key interpolation"` with one focused assertion beside
+`clip_start_command_uses_the_existing_diagnostic_copy_route`. It adds no product meaning, producer, popup,
+queue action, or public surface, and creates no current implementation `DO`.
+
+Historical acceptance recorded the focused exact-label test, relevant `motolii-ui` Rust lane, and
+`git diff --check`; `EXTERNAL_GATES`: none. This diagnostic ticket authorizes no popup work; the separate
+C7A implementation authority is §6.2.
+
+### 6.2 `P04-C2-EASING-C7A` — `DONE / ACCEPTED / EXTERNAL_GATE_PENDING`
+
+`P04-C2-EASING-C7A` is one full, non-dead product implementation order, implemented by commits
+`bb0624d8`, `87bf026e`, and `56f61e7b` and accepted in
+[its implementation receipt](2026-08-04-p04-c2-easing-c7a-implementation-acceptance.md). It is the explicit, popup-local
+exception to the standard-egui-runtime exclusion in [UI runtime責任境界](../ui-runtime-architecture.md):
+`ProductApp` owns the private
+popup/session module and a native child `WindowId`/surface. The one `EventLoop<ProductEvent>` constructed
+by `product_runtime::run` remains the only event loop; the existing `ProductGpuParts` instance/adapter and
+the same `ProductApp`-owned `GpuCtx` device/queue remain the only product GPU. The child surface renders
+through the existing direct dependencies `egui::Context`, `egui_winit::State`, and `egui_wgpu::Renderer`
+at 0.35 over wgpu 29. `product_runtime_adapter.rs::window_event` dispatches each child event by its real
+`WindowId` to this private owner, and the primary-window path must not silently consume it. No second
+App/EventLoop/WebView/device, public popup abstraction, trait/registry, or generalized channel is allowed.
+
+An in-main-surface overlay is rejected by the documented topology, not by a visual measurement claim:
+[UI runtime責任境界 §4](../ui-runtime-architecture.md#4-surface-topologyとcoordinator境界) fixes opaque Stage
+child WebView rectangles as OS-composited above the normal native surface. Therefore C7b cannot be the
+visible native terminal on that route. React remains the product anchor/layout
+producer on its separate surface-local inbound; Rust re-derives the current strict-interior Position interval.
+The one private module owns the native session/renderer, while one narrow Position-only
+`DocumentEditAction`/request reaches the existing `SetPositionKeyInterp` prepare/D2 writer. It is not a
+general popup framework.
+
+G0-9 is `PATTERN` only for placement, transient session/cancel rules, Bezier gesture/hit testing, and
+their oracle. Do not adopt its `SpikePresetStore`, `UserPreset`, commit counters, `current_curve`,
+revision state, or `PopupGfx`; none is a product owner. The partial React/IPC dead route is neither an
+adoption candidate nor a fallback and must not be committed. `NativeTimelineRenderer` is neither copied
+nor changed: C7A uses the selected direct egui dependencies, not a Timeline renderer port.
+
+```text
+MECHANISM CLASS: native transient child-window popup terminal over ProductApp's sole event loop and shared GPU
+KNOWN IMPLEMENTATION SEARCH: existing direct egui::Context + egui_winit::State + egui_wgpu::Renderer 0.35,
+  wgpu 29, ProductApp::run/ProductApp/GpuCtx/ProductGpuParts, product_runtime_adapter::window_event,
+  G0-9 placement/session/Bezier pattern, G0-10 shared-device multi-surface evidence, and P04-C2 D2/queue contract
+CANDIDATES: ProductApp private owner; one EventLoop<ProductEvent>; existing ProductGpuParts instance/adapter;
+  existing GpuCtx device/queue; direct egui renderer dependencies; G0-9 placement/session/Bezier pattern
+ADOPTION ROUTE: REUSE the direct dependencies, sole loop, GPU ownership, React anchor/layout source, and D2 command;
+  PATTERN only for G0-9 session/gesture; add one private non-generic popup/session renderer module and one Position-only queue request
+REJECTED CANDIDATES: in-main-surface overlay below opaque Stage WebView; SpikePresetStore/UserPreset/counters/current_curve/
+  revision/PopupGfx; NativeTimelineRenderer change/copy; glyphon; second App/EventLoop/WebView/device; generic popup trait/registry/channel; partial React/IPC route
+THIN MOTOLII SEAM: React anchor/layout inbound -> ProductApp current interval re-derivation -> private child WindowId/session -> Position-only request -> existing SetPositionKeyInterp
+THIN MOTOLII RESIDUAL: the accepted private residual is ProductApp retention, child WindowId registration/dispatch,
+  and the Position-only queue sink; remaining evidence is limited to M3-final manual native z-order/focus/DPI/a11y/visual/second-monitor gates
+RETIREMENT: do not retain or promote the partial React/IPC route
+BUILD JUSTIFICATION: NONE
+BUILD: FORBIDDEN
+```
+
+Source proof is fixed as follows: dependency/version availability is `PASS`; C7b is rejected from
+`docs/ui-runtime-architecture.md` §4 (opaque child WebView is OS-composited above the normal native surface),
+not recorded as a visual-test `FAIL`; and the then-missing ProductApp retention, `WindowId` dispatch, and
+queue sink were thin C7A implementation gaps, not reasons to build a bespoke mechanism. The accepted commits
+and implementation receipt close those historical gaps. Consultation is not authority. The only remaining C7A
+acceptance items are the M3-final z-order/focus/DPI/accessibility/visual `EXTERNAL_GATE_PENDING` checklist.

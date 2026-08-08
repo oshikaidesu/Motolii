@@ -14,13 +14,16 @@ use thiserror::Error;
 
 use motolii_core::{RationalTime, TimeMap};
 
+use crate::doc_keyframe::{validate_interp, DocKeyframeError};
+use crate::doc_value::DocValue;
 use crate::duplicate::{definition_semantic_body_eq, remint_order_keyframe_ids};
 use crate::param::DocParam;
+use crate::position_key_prepare::deterministic_new_position;
 use crate::schema::{
     AudioComponent, BlendMode, ClipSource, ClippingMaskSettings, EffectDefinition, EffectInstance,
     EffectUse, ItemEnvelope, TrackItem,
 };
-use crate::stable_id::{EffectDefinitionId, EffectId, StableIdReservation};
+use crate::stable_id::{EffectDefinitionId, EffectId, KeyframeId, StableIdReservation};
 use crate::track_id::TrackId;
 use crate::validate::{self, stable_id_in_use};
 use crate::{Document, LayerId, WRITER_VERSION};
@@ -57,6 +60,8 @@ pub enum PropertyId {
     AudioEnabled(usize),
     AudioGain(usize),
     ChildList,
+    PositionKeyInterp(KeyframeId),
+    PositionKeyValue(KeyframeId),
     ClipStart,
     ClipIn,
     ClipOut,
@@ -121,6 +126,9 @@ pub enum CommandKind {
     SetAudioComponentGain,
     AddTrackItem,
     RemoveTrackItem,
+    AddPositionKey,
+    SetPositionKeyInterp,
+    SetPositionKeyValue,
     SetClipStart,
     TrimClipIn,
     TrimClipOut,
@@ -184,6 +192,32 @@ pub enum CommandError {
     CopyLocalDefinitionMismatch { expected: u64, found: u64 },
     #[error("copy-local payload does not match source definition semantics")]
     CopyLocalPayloadMismatch,
+    #[error("add position key payload mismatch (layer {layer}, key_id {key_id})")]
+    AddPositionKeyPayloadMismatch { layer: u64, key_id: u64 },
+    #[error("position interpolation source unsupported for layer {layer}")]
+    PositionKeyInterpSourceUnsupported { layer: u64 },
+    #[error("position interpolation value type mismatch for layer {layer}")]
+    PositionKeyInterpValueTypeMismatch { layer: u64 },
+    #[error("position key {key_id} not found on layer {layer}")]
+    PositionKeyNotFound { layer: u64, key_id: u64 },
+    #[error("position key interpolation invalid for key {key_id} on layer {layer}")]
+    PositionKeyInterpInvalid {
+        layer: u64,
+        key_id: u64,
+        source: DocKeyframeError,
+    },
+    #[error("position key interpolation payload mismatch for key {key_id} on layer {layer}")]
+    PositionKeyInterpPayloadMismatch { layer: u64, key_id: u64 },
+    #[error("position key value source unsupported for layer {layer}")]
+    PositionKeyValueSourceUnsupported { layer: u64 },
+    #[error("position key value type mismatch for layer {layer}")]
+    PositionKeyValueTypeMismatch { layer: u64 },
+    #[error("position key value not found for key {key_id} on layer {layer}")]
+    PositionKeyValueNotFound { layer: u64, key_id: u64 },
+    #[error("position key value for key {key_id} on layer {layer} must be finite")]
+    PositionKeyValueNonFinite { layer: u64, key_id: u64 },
+    #[error("position key value payload mismatch for key {key_id} on layer {layer}")]
+    PositionKeyValuePayloadMismatch { layer: u64, key_id: u64 },
     #[error("effect use {use_id} not found in document")]
     EffectUseNotFound { use_id: u64 },
     #[error(
@@ -365,6 +399,32 @@ pub enum Command {
         /// subtreeの表示名。台帳から外したあと、inverseのAddで復元する。
         layer_names: BTreeMap<LayerId, String>,
     },
+    AddPositionKey {
+        target: LayerId,
+        old_value: DocParam,
+        new_value: DocParam,
+        added_key_id: KeyframeId,
+        stable_id_reservation: StableIdReservation,
+    },
+    UndoAddPositionKey {
+        target: LayerId,
+        old_value: DocParam,
+        new_value: DocParam,
+        added_key_id: KeyframeId,
+        stable_id_reservation: StableIdReservation,
+    },
+    SetPositionKeyInterp {
+        target: LayerId,
+        key: KeyframeId,
+        old: motolii_eval::Interp,
+        new: motolii_eval::Interp,
+    },
+    SetPositionKeyValue {
+        target: LayerId,
+        key: KeyframeId,
+        old: [f64; 2],
+        new: [f64; 2],
+    },
     SetClipStart {
         target: LayerId,
         old: RationalTime,
@@ -415,6 +475,11 @@ impl Command {
             Command::SetAudioComponentGain { .. } => CommandKind::SetAudioComponentGain,
             Command::AddTrackItem { .. } => CommandKind::AddTrackItem,
             Command::RemoveTrackItem { .. } => CommandKind::RemoveTrackItem,
+            Command::AddPositionKey { .. } | Command::UndoAddPositionKey { .. } => {
+                CommandKind::AddPositionKey
+            }
+            Command::SetPositionKeyInterp { .. } => CommandKind::SetPositionKeyInterp,
+            Command::SetPositionKeyValue { .. } => CommandKind::SetPositionKeyValue,
             Command::SetClipStart { .. } => CommandKind::SetClipStart,
             Command::TrimClipIn { .. } => CommandKind::TrimClipIn,
             Command::TrimClipOut { .. } => CommandKind::TrimClipOut,
@@ -433,9 +498,13 @@ impl Command {
             | Command::SetEffectEnabled { target, .. }
             | Command::SetAudioComponentEnabled { target, .. }
             | Command::SetAudioComponentGain { target, .. }
+            | Command::SetPositionKeyInterp { target, .. }
+            | Command::SetPositionKeyValue { target, .. }
             | Command::SetClipStart { target, .. }
             | Command::TrimClipIn { target, .. }
             | Command::TrimClipOut { target, .. } => target.get(),
+            Command::AddPositionKey { added_key_id, .. }
+            | Command::UndoAddPositionKey { added_key_id, .. } => added_key_id.get(),
             Command::CreateEffect { target, .. }
             | Command::UndoCreateEffect { target, .. }
             | Command::LinkEffectUse { target, .. }
@@ -476,6 +545,11 @@ impl Command {
             | Command::UndoCopyLocalEffect { use_id, .. } => {
                 PropertyId::EffectDefinitionLink(*use_id)
             }
+            Command::AddPositionKey { .. } | Command::UndoAddPositionKey { .. } => {
+                PropertyId::Position
+            }
+            Command::SetPositionKeyInterp { key, .. } => PropertyId::PositionKeyInterp(*key),
+            Command::SetPositionKeyValue { key, .. } => PropertyId::PositionKeyValue(*key),
             Command::SetAudioComponentEnabled { index, .. } => PropertyId::AudioEnabled(*index),
             Command::SetAudioComponentGain { index, .. } => PropertyId::AudioGain(*index),
             Command::AddTrackItem { .. } | Command::RemoveTrackItem { .. } => PropertyId::ChildList,
@@ -521,6 +595,14 @@ impl Command {
                 stable_id_reservation,
                 ..
             } => Some(*stable_id_reservation),
+            Command::AddPositionKey {
+                stable_id_reservation,
+                ..
+            }
+            | Command::UndoAddPositionKey {
+                stable_id_reservation,
+                ..
+            } => Some(*stable_id_reservation),
             Command::SetProperty { .. }
             | Command::SetBlendMode { .. }
             | Command::SetClippingMask { .. }
@@ -536,6 +618,8 @@ impl Command {
             | Command::SetAudioComponentGain { .. }
             | Command::AddTrackItem { .. }
             | Command::RemoveTrackItem { .. }
+            | Command::SetPositionKeyInterp { .. }
+            | Command::SetPositionKeyValue { .. }
             | Command::SetClipStart { .. }
             | Command::TrimClipIn { .. }
             | Command::TrimClipOut { .. } => None,
@@ -935,6 +1019,46 @@ impl Command {
                 }
                 Ok(())
             }
+            Command::AddPositionKey {
+                target,
+                old_value,
+                new_value,
+                added_key_id,
+                stable_id_reservation,
+            } => apply_add_position_key(
+                doc,
+                *target,
+                old_value.clone(),
+                new_value.clone(),
+                *added_key_id,
+                *stable_id_reservation,
+            ),
+            Command::UndoAddPositionKey {
+                target,
+                old_value,
+                new_value,
+                added_key_id,
+                stable_id_reservation,
+            } => undo_add_position_key(
+                doc,
+                *target,
+                old_value.clone(),
+                new_value.clone(),
+                *added_key_id,
+                *stable_id_reservation,
+            ),
+            Command::SetPositionKeyInterp {
+                target,
+                key,
+                old,
+                new,
+            } => apply_set_position_key_interp(doc, *target, *key, old, new),
+            Command::SetPositionKeyValue {
+                target,
+                key,
+                old,
+                new,
+            } => apply_set_position_key_value(doc, *target, *key, *old, *new),
             Command::SetClipStart { target, new, .. } => {
                 let layer = target.get();
                 let duration = {
@@ -1210,6 +1334,54 @@ impl Command {
                 index,
                 item,
                 layer_names,
+            },
+            Command::AddPositionKey {
+                target,
+                old_value,
+                new_value,
+                added_key_id,
+                stable_id_reservation,
+            } => Command::UndoAddPositionKey {
+                target,
+                old_value,
+                new_value,
+                added_key_id,
+                stable_id_reservation,
+            },
+            Command::UndoAddPositionKey {
+                target,
+                old_value,
+                new_value,
+                added_key_id,
+                stable_id_reservation,
+            } => Command::AddPositionKey {
+                target,
+                old_value,
+                new_value,
+                added_key_id,
+                stable_id_reservation,
+            },
+            Command::SetPositionKeyInterp {
+                target,
+                key,
+                old,
+                new,
+            } => Command::SetPositionKeyInterp {
+                target,
+                key,
+                old: new,
+                new: old,
+            },
+            Command::SetPositionKeyValue {
+                target,
+                key,
+                old,
+                new,
+            } => Command::SetPositionKeyValue {
+                target,
+                key,
+                old: new,
+                new: old,
             },
             Command::SetClipStart { target, old, new } => Command::SetClipStart {
                 target,
@@ -1631,6 +1803,44 @@ fn validate_clip_in_payload(
         ));
     }
     Ok(())
+}
+
+/// Position key の outgoing interpolation だけを置換する command を構築する。
+pub(crate) fn prepare_set_position_key_interp(
+    doc: &Document,
+    target: LayerId,
+    key: KeyframeId,
+    new: motolii_eval::Interp,
+) -> Result<Option<Command>, CommandError> {
+    let old = position_key_interp_for_command(doc, target, key, None, &new)?;
+    if new == old {
+        return Ok(None);
+    }
+    Ok(Some(Command::SetPositionKeyInterp {
+        target,
+        key,
+        old,
+        new,
+    }))
+}
+
+/// Position key の Vec2 value だけを置換する command を構築する。
+pub(crate) fn prepare_set_position_key_value(
+    doc: &Document,
+    target: LayerId,
+    key: KeyframeId,
+    new: [f64; 2],
+) -> Result<Option<Command>, CommandError> {
+    let old = position_key_value_for_command(doc, target, key, None, new)?;
+    if new == old {
+        return Ok(None);
+    }
+    Ok(Some(Command::SetPositionKeyValue {
+        target,
+        key,
+        old,
+        new,
+    }))
 }
 
 /// CU-201M-S: Clip `start`変更commandを構築する。成功・失敗とも live Document 不変。
@@ -2250,4 +2460,256 @@ fn apply_undo_copy_local_effect(
     next.effect_definitions
         .retain(|d| d.id != new_definition.id);
     swap_if_valid(doc, next)
+}
+
+fn apply_add_position_key(
+    doc: &mut Document,
+    target: LayerId,
+    old_value: DocParam,
+    new_value: DocParam,
+    added_key_id: KeyframeId,
+    stable_id_reservation: StableIdReservation,
+) -> Result<(), CommandError> {
+    let introduced = [added_key_id.get()];
+    let commit = validate_reservation_for_apply(doc, stable_id_reservation, &introduced)?;
+    validate_add_position_key_payload(
+        doc,
+        target,
+        &old_value,
+        &old_value,
+        &new_value,
+        added_key_id,
+    )?;
+
+    let mut next = doc.clone();
+    find_envelope_mut(&mut next, target)?.transform.position = new_value;
+    apply_reservation_commit(&mut next, commit);
+    swap_if_valid(doc, next)
+}
+
+fn undo_add_position_key(
+    doc: &mut Document,
+    target: LayerId,
+    old_value: DocParam,
+    new_value: DocParam,
+    added_key_id: KeyframeId,
+    stable_id_reservation: StableIdReservation,
+) -> Result<(), CommandError> {
+    let introduced = [added_key_id.get()];
+    validate_reservation_for_undo(doc, stable_id_reservation, &introduced)?;
+    validate_add_position_key_payload(
+        doc,
+        target,
+        &new_value,
+        &old_value,
+        &new_value,
+        added_key_id,
+    )?;
+
+    let mut next = doc.clone();
+    find_envelope_mut(&mut next, target)?.transform.position = old_value;
+    swap_if_valid(doc, next)
+}
+
+fn apply_set_position_key_interp(
+    doc: &mut Document,
+    target: LayerId,
+    key: KeyframeId,
+    old: &motolii_eval::Interp,
+    new: &motolii_eval::Interp,
+) -> Result<(), CommandError> {
+    position_key_interp_for_command(doc, target, key, Some(old), new)?;
+
+    let mut next = doc.clone();
+    let env = find_envelope_mut(&mut next, target)?;
+    let layer = target.get();
+    let DocParam::Keyframes(track) = &mut env.transform.position else {
+        return Err(CommandError::PositionKeyInterpSourceUnsupported { layer });
+    };
+    let mut replacement = track
+        .get_by_id(key)
+        .ok_or(CommandError::PositionKeyNotFound {
+            layer,
+            key_id: key.get(),
+        })?
+        .clone();
+    replacement.interp = *new;
+    track.insert(replacement);
+    swap_if_valid(doc, next)
+}
+
+fn apply_set_position_key_value(
+    doc: &mut Document,
+    target: LayerId,
+    key: KeyframeId,
+    old: [f64; 2],
+    new: [f64; 2],
+) -> Result<(), CommandError> {
+    position_key_value_for_command(doc, target, key, Some(old), new)?;
+    if old == new {
+        return Ok(());
+    }
+
+    let mut next = doc.clone();
+    let env = find_envelope_mut(&mut next, target)?;
+    let layer = target.get();
+    let DocParam::Keyframes(track) = &mut env.transform.position else {
+        return Err(CommandError::PositionKeyValueSourceUnsupported { layer });
+    };
+    let mut replacement = track
+        .get_by_id(key)
+        .ok_or(CommandError::PositionKeyValueNotFound {
+            layer,
+            key_id: key.get(),
+        })?
+        .clone();
+    replacement.value = DocValue::Vec2(new);
+    track.insert(replacement);
+    swap_if_valid(doc, next)
+}
+
+fn position_key_value_for_command(
+    doc: &Document,
+    target: LayerId,
+    key: KeyframeId,
+    expected_old: Option<[f64; 2]>,
+    new: [f64; 2],
+) -> Result<[f64; 2], CommandError> {
+    let layer = target.get();
+    if !new.iter().all(|value| value.is_finite()) {
+        return Err(CommandError::PositionKeyValueNonFinite {
+            layer,
+            key_id: key.get(),
+        });
+    }
+    if let Some(old) = expected_old {
+        if !old.iter().all(|value| value.is_finite()) {
+            return Err(CommandError::PositionKeyValueNonFinite {
+                layer,
+                key_id: key.get(),
+            });
+        }
+    }
+
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    let DocParam::Keyframes(track) = &env.transform.position else {
+        return Err(CommandError::PositionKeyValueSourceUnsupported { layer });
+    };
+    if track.keys().is_empty() {
+        return Err(CommandError::PositionKeyValueSourceUnsupported { layer });
+    }
+    if track
+        .keys()
+        .iter()
+        .any(|candidate| !matches!(candidate.value, DocValue::Vec2(_)))
+    {
+        return Err(CommandError::PositionKeyValueTypeMismatch { layer });
+    }
+    let current = track
+        .get_by_id(key)
+        .ok_or(CommandError::PositionKeyValueNotFound {
+            layer,
+            key_id: key.get(),
+        })?;
+    let DocValue::Vec2(current_value) = current.value else {
+        return Err(CommandError::PositionKeyValueTypeMismatch { layer });
+    };
+    if !current_value.iter().all(|value| value.is_finite()) {
+        return Err(CommandError::PositionKeyValueNonFinite {
+            layer,
+            key_id: key.get(),
+        });
+    }
+    if expected_old.is_some_and(|old| old != current_value) {
+        return Err(CommandError::PositionKeyValuePayloadMismatch {
+            layer,
+            key_id: key.get(),
+        });
+    }
+    Ok(current_value)
+}
+
+fn position_key_interp_for_command(
+    doc: &Document,
+    target: LayerId,
+    key: KeyframeId,
+    expected_old: Option<&motolii_eval::Interp>,
+    new: &motolii_eval::Interp,
+) -> Result<motolii_eval::Interp, CommandError> {
+    let layer = target.get();
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    let DocParam::Keyframes(track) = &env.transform.position else {
+        return Err(CommandError::PositionKeyInterpSourceUnsupported { layer });
+    };
+    if track
+        .keys()
+        .iter()
+        .any(|candidate| !matches!(candidate.value, DocValue::Vec2(_)))
+    {
+        return Err(CommandError::PositionKeyInterpValueTypeMismatch { layer });
+    }
+    let current = track
+        .get_by_id(key)
+        .ok_or(CommandError::PositionKeyNotFound {
+            layer,
+            key_id: key.get(),
+        })?;
+    let old = expected_old.unwrap_or(&current.interp);
+    validate_interp(old).map_err(|source| CommandError::PositionKeyInterpInvalid {
+        layer,
+        key_id: key.get(),
+        source,
+    })?;
+    validate_interp(new).map_err(|source| CommandError::PositionKeyInterpInvalid {
+        layer,
+        key_id: key.get(),
+        source,
+    })?;
+    if current.interp != *old {
+        return Err(CommandError::PositionKeyInterpPayloadMismatch {
+            layer,
+            key_id: key.get(),
+        });
+    }
+    Ok(current.interp)
+}
+
+fn validate_add_position_key_payload(
+    doc: &Document,
+    target: LayerId,
+    expected_current_position: &DocParam,
+    old_value: &DocParam,
+    new_value: &DocParam,
+    added_key_id: KeyframeId,
+) -> Result<RationalTime, CommandError> {
+    let layer = target.get();
+    let mismatch = || CommandError::AddPositionKeyPayloadMismatch {
+        layer,
+        key_id: added_key_id.get(),
+    };
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    if env.transform.position != *expected_current_position {
+        return Err(mismatch());
+    }
+    if let DocParam::Keyframes(track) = old_value {
+        if track.get_by_id(added_key_id).is_some() {
+            return Err(mismatch());
+        }
+    }
+
+    let DocParam::Keyframes(track) = new_value else {
+        return Err(mismatch());
+    };
+    let mut matches = track.keys().iter().filter(|key| key.id == added_key_id);
+    let t = matches.next().map(|key| key.t).ok_or_else(mismatch)?;
+    if matches.next().is_some() {
+        return Err(mismatch());
+    }
+
+    let expected =
+        deterministic_new_position(old_value, target, t, added_key_id).map_err(|_| mismatch())?;
+    if expected != *new_value {
+        return Err(mismatch());
+    }
+    Ok(t)
 }

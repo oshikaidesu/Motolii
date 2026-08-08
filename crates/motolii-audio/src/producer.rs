@@ -221,9 +221,9 @@ impl Drop for MixProducer {
 /// mixチャンクサイズ(プロデューサ側alloc。callbackでは行わない)。
 const MIX_CHUNK_FRAMES: usize = 1_024;
 
-/// 全sourceのtimeline終端(正準frame)。これ以降は供給を止め、終端後のunderrunはTransport側。
+/// source終端とDocument composition尺の大きい方(正準frame)。
 fn program_end_frame(program: &AudioProgram) -> u64 {
-    let mut end = 0u64;
+    let mut end = rational_to_canonical_frames(program.composition_duration());
     for source in program.sources() {
         let start = rational_to_canonical_frames(source.timeline_start);
         let dur = rational_to_canonical_frames(source.timeline_duration);

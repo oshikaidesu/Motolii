@@ -26,19 +26,50 @@ if (!container) {
 
 const root = createRoot(container);
 const inspectorHostSender = createInspectorHostSender(bridge.postMessage);
+function projectRustPosition(readModel, rawPosition) {
+  if (rawPosition === undefined) return readModel;
+  if (
+    rawPosition === null
+    || typeof rawPosition !== "object"
+    || Array.isArray(rawPosition)
+    || !["const", "key", "animated"].includes(rawPosition.kind)
+  ) {
+    throw new TypeError("Inspector Position projection is invalid");
+  }
+  if (rawPosition.kind === "animated") {
+    return { ...readModel, position: { kind: "animated" } };
+  }
+  if (!Number.isFinite(rawPosition.x) || !Number.isFinite(rawPosition.y)) {
+    throw new TypeError("Inspector Position coordinates are invalid");
+  }
+  return {
+    ...readModel,
+    position: {
+      kind: rawPosition.kind,
+      x: rawPosition.x,
+      y: rawPosition.y,
+    },
+  };
+}
 const renderSnapshot = (raw) => {
   if (raw === null) {
     inspectorHostSender.project(null);
     root.render(null);
     return;
   }
-  const inspectorReadModel = decodeInspectorReadModel(raw);
+  const { position: rawPosition, ...decoderSnapshot } = raw;
+  const inspectorReadModel = projectRustPosition(
+    decodeInspectorReadModel(decoderSnapshot),
+    rawPosition,
+  );
   inspectorHostSender.project(inspectorReadModel);
   root.render(
     <main className="inspector-standalone-screen">
       <InspectorCandidate
         inspectorReadModel={inspectorReadModel}
         onEffectParamGesture={inspectorHostSender.send}
+        onPositionKeyGesture={inspectorHostSender.sendPositionKeyGesture}
+        onAddPositionKey={inspectorHostSender.sendAddPositionKey}
       />
     </main>,
   );

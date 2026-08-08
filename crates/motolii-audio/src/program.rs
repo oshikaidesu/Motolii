@@ -21,6 +21,7 @@ use crate::mix::{mix_audio, MixReport, MixSource};
 pub struct AudioProgram {
     sources: Vec<MixSource>,
     master_gain: f64,
+    composition_duration: RationalTime,
 }
 
 impl AudioProgram {
@@ -76,6 +77,7 @@ impl AudioProgram {
         Ok(Self {
             sources,
             master_gain,
+            composition_duration: doc.composition.duration,
         })
     }
 
@@ -85,6 +87,11 @@ impl AudioProgram {
 
     pub fn master_gain(&self) -> f64 {
         self.master_gain
+    }
+
+    /// Documentが所有するcomposition尺。
+    pub fn composition_duration(&self) -> RationalTime {
+        self.composition_duration
     }
 
     /// preview/export同一の `mix_audio` 入口。
@@ -179,9 +186,14 @@ fn frames_to_time(frames: u64) -> Result<RationalTime> {
 }
 
 /// テスト用: パス解決を省略して直接sourcesを渡す。
-pub fn program_from_sources(sources: Vec<MixSource>, master_gain: f64) -> AudioProgram {
+pub fn program_from_sources(
+    sources: Vec<MixSource>,
+    master_gain: f64,
+    composition_duration: RationalTime,
+) -> AudioProgram {
     AudioProgram {
         sources,
         master_gain,
+        composition_duration,
     }
 }

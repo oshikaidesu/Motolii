@@ -199,6 +199,7 @@ fn d5_timestamp_query_unavailable_disables_auto_drs() {
         Arc::new(motolii_audio::DeviceWaitLatency::default()),
         Fps::try_new(30, 1).unwrap(),
         48_000,
+        RationalTime::ZERO,
         Quality::DRAFT,
         false,
     )
@@ -224,6 +225,7 @@ fn d5_latency_compensation_uses_device_wait_only() {
         wait,
         Fps::try_new(30, 1).unwrap(),
         48_000,
+        RationalTime::ZERO,
         Quality::DRAFT,
         false,
     )

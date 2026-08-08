@@ -2,13 +2,29 @@ use serde::{Deserialize, Serialize};
 
 use motolii_core::{Fps, RationalTime};
 
-use crate::bezier::cubic_bezier_ease;
+use crate::bezier::{cubic_bezier_ease, sample, solve_curve_x};
 use crate::value::Value;
 
 #[derive(Debug, Clone, thiserror::Error, PartialEq)]
 pub enum TrackError {
     #[error("Bezier control point x1/x2 must be in [0,1], got x1={x1} x2={x2}")]
     InvalidBezier { x1: f64, x2: f64 },
+    #[error(
+        "Bezier split is unrepresentable: progress={progress}, x1={x1}, y1={y1}, x2={x2}, y2={y2}"
+    )]
+    UnrepresentableBezierSplit {
+        progress: f64,
+        x1: f64,
+        y1: f64,
+        x2: f64,
+        y2: f64,
+        curve_parameter: Option<f64>,
+        split_value: Option<f64>,
+        left_x_denominator: f64,
+        right_x_denominator: f64,
+        left_y_denominator: Option<f64>,
+        right_y_denominator: Option<f64>,
+    },
     #[error("keyframes must be sorted by strictly increasing time without duplicates")]
     UnsortedOrDuplicateKeys,
 }
@@ -26,6 +42,158 @@ pub enum Interp {
         x2: f64,
         y2: f64,
     },
+}
+
+impl Interp {
+    pub fn split_at(&self, progress: f64) -> Result<(Interp, Interp), TrackError> {
+        if !progress.is_finite() || !(0.0..=1.0).contains(&progress) {
+            if let Interp::Bezier { x1, y1, x2, y2 } = *self {
+                return Err(TrackError::UnrepresentableBezierSplit {
+                    progress,
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    curve_parameter: None,
+                    split_value: None,
+                    left_x_denominator: progress,
+                    right_x_denominator: 1.0 - progress,
+                    left_y_denominator: None,
+                    right_y_denominator: None,
+                });
+            }
+            return Err(TrackError::UnrepresentableBezierSplit {
+                progress,
+                x1: 0.0,
+                y1: 0.0,
+                x2: 0.0,
+                y2: 0.0,
+                curve_parameter: None,
+                split_value: None,
+                left_x_denominator: progress,
+                right_x_denominator: 1.0 - progress,
+                left_y_denominator: None,
+                right_y_denominator: None,
+            });
+        }
+
+        match *self {
+            Interp::Hold => Ok((Interp::Hold, Interp::Hold)),
+            Interp::Linear => Ok((Interp::Linear, Interp::Linear)),
+            Interp::Bezier { x1, y1, x2, y2 } => {
+                let s = solve_curve_x(x1, x2, progress);
+                if !s.is_finite() || !(0.0..=1.0).contains(&s) {
+                    return Err(TrackError::UnrepresentableBezierSplit {
+                        progress,
+                        x1,
+                        y1,
+                        x2,
+                        y2,
+                        curve_parameter: Some(s),
+                        split_value: None,
+                        left_x_denominator: progress,
+                        right_x_denominator: 1.0 - progress,
+                        left_y_denominator: None,
+                        right_y_denominator: None,
+                    });
+                }
+
+                let v = sample(y1, y2, s);
+                if !v.is_finite() {
+                    return Err(TrackError::UnrepresentableBezierSplit {
+                        progress,
+                        x1,
+                        y1,
+                        x2,
+                        y2,
+                        curve_parameter: Some(s),
+                        split_value: Some(v),
+                        left_x_denominator: progress,
+                        right_x_denominator: 1.0 - progress,
+                        left_y_denominator: None,
+                        right_y_denominator: None,
+                    });
+                }
+
+                let inv = 1.0 - s;
+                let left_x_denom = progress;
+                let right_x_denom = 1.0 - progress;
+                let left_y_denom = v;
+                let right_y_denom = 1.0 - v;
+
+                if !left_x_denom.is_finite()
+                    || !right_x_denom.is_finite()
+                    || !left_y_denom.is_finite()
+                    || !right_y_denom.is_finite()
+                    || left_x_denom == 0.0
+                    || right_x_denom == 0.0
+                    || left_y_denom == 0.0
+                    || right_y_denom == 0.0
+                {
+                    return Err(TrackError::UnrepresentableBezierSplit {
+                        progress,
+                        x1,
+                        y1,
+                        x2,
+                        y2,
+                        curve_parameter: Some(s),
+                        split_value: Some(v),
+                        left_x_denominator: left_x_denom,
+                        right_x_denominator: right_x_denom,
+                        left_y_denominator: Some(left_y_denom),
+                        right_y_denominator: Some(right_y_denom),
+                    });
+                }
+
+                let l1 = (x1 * s, y1 * s);
+                let l2 = (x1 * inv + x2 * s, y1 * inv + y2 * s);
+                let l3 = (x2 * inv + s, y2 * inv + s);
+                let l12 = (l1.0 * inv + l2.0 * s, l1.1 * inv + l2.1 * s);
+                let l23 = (l2.0 * inv + l3.0 * s, l2.1 * inv + l3.1 * s);
+
+                let left = Interp::Bezier {
+                    x1: l1.0 / left_x_denom,
+                    y1: l1.1 / left_y_denom,
+                    x2: l12.0 / left_x_denom,
+                    y2: l12.1 / left_y_denom,
+                };
+                let right = Interp::Bezier {
+                    x1: (l23.0 - progress) / right_x_denom,
+                    y1: (l23.1 - v) / right_y_denom,
+                    x2: (l3.0 - progress) / right_x_denom,
+                    y2: (l3.1 - v) / right_y_denom,
+                };
+
+                if !is_valid_bezier_control(left) || !is_valid_bezier_control(right) {
+                    return Err(TrackError::UnrepresentableBezierSplit {
+                        progress,
+                        x1,
+                        y1,
+                        x2,
+                        y2,
+                        curve_parameter: Some(s),
+                        split_value: Some(v),
+                        left_x_denominator: left_x_denom,
+                        right_x_denominator: right_x_denom,
+                        left_y_denominator: Some(left_y_denom),
+                        right_y_denominator: Some(right_y_denom),
+                    });
+                }
+
+                Ok((left, right))
+            }
+        }
+    }
+}
+
+fn is_valid_bezier_control(interp: Interp) -> bool {
+    if let Interp::Bezier { x1, y1, x2, y2 } = interp {
+        [x1, y1, x2, y2].iter().all(|v| v.is_finite())
+            && (0.0..=1.0).contains(&x1)
+            && (0.0..=1.0).contains(&x2)
+    } else {
+        false
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -485,5 +653,180 @@ mod tests {
             source.eval(RationalTime::ZERO, &tracks),
             Value::Vec2([0.42, 0.0])
         );
+    }
+}
+
+#[cfg(test)]
+mod split_tests {
+    use super::*;
+
+    fn bezier_controls(interp: &Interp) -> (f64, f64, f64, f64) {
+        match interp {
+            Interp::Bezier { x1, y1, x2, y2 } => (*x1, *y1, *x2, *y2),
+            _ => unreachable!(),
+        }
+    }
+
+    fn eval_split_curve(
+        left: (f64, f64, f64, f64),
+        right: (f64, f64, f64, f64),
+        split: f64,
+        x: f64,
+    ) -> f64 {
+        if x <= 0.0 {
+            0.0
+        } else if x < split {
+            let u = x / split;
+            cubic_bezier_ease(left.0, left.1, left.2, left.3, u)
+        } else if x < 1.0 {
+            let u = if split == 1.0 {
+                1.0
+            } else {
+                (x - split) / (1.0 - split)
+            };
+            cubic_bezier_ease(right.0, right.1, right.2, right.3, u)
+        } else {
+            1.0
+        }
+    }
+
+    #[test]
+    fn split_hold_and_linear_keeps_variant() {
+        assert_eq!(
+            Interp::Hold.split_at(0.42).expect("hold split"),
+            (Interp::Hold, Interp::Hold)
+        );
+        assert_eq!(
+            Interp::Linear.split_at(0.42).expect("linear split"),
+            (Interp::Linear, Interp::Linear)
+        );
+    }
+
+    #[test]
+    fn split_bezier_returns_bezier_pair() {
+        let interp = Interp::Bezier {
+            x1: 0.42,
+            y1: 0.1,
+            x2: 0.58,
+            y2: 0.9,
+        };
+        let (left, right) = interp.split_at(0.35).expect("bezier split");
+        let (lx1, _, lx2, _) = bezier_controls(&left);
+        let (rx1, _, rx2, _) = bezier_controls(&right);
+
+        assert!((0.0..=1.0).contains(&lx1));
+        assert!((0.0..=1.0).contains(&lx2));
+        assert!((0.0..=1.0).contains(&rx1));
+        assert!((0.0..=1.0).contains(&rx2));
+    }
+
+    #[test]
+    fn split_bezier_preserves_curve_at_multiple_samples() {
+        let interp = Interp::Bezier {
+            x1: 0.28,
+            y1: -0.2,
+            x2: 0.84,
+            y2: 0.8,
+        };
+        let split = 0.43;
+        let (left, right) = interp.split_at(split).expect("bezier split");
+        let left = bezier_controls(&left);
+        let right = bezier_controls(&right);
+        let split_value = cubic_bezier_ease(0.28, -0.2, 0.84, 0.8, split);
+
+        for i in 0..=100 {
+            let x = i as f64 / 100.0;
+            if (x - split).abs() < f64::EPSILON {
+                continue;
+            }
+            let original = cubic_bezier_ease(0.28, -0.2, 0.84, 0.8, x);
+            let expected_normalized = if x < split {
+                original / split_value
+            } else {
+                (original - split_value) / (1.0 - split_value)
+            };
+            let split_value = eval_split_curve(left, right, split, x);
+
+            assert!(
+                (expected_normalized - split_value).abs() <= 1e-6,
+                "x={x} expected={expected_normalized} split={split_value}"
+            );
+        }
+    }
+
+    #[test]
+    fn split_bezier_rejects_invalid_progress() {
+        let interp = Interp::Bezier {
+            x1: 0.3,
+            y1: 0.1,
+            x2: 0.7,
+            y2: 0.9,
+        };
+        assert!(matches!(
+            interp.split_at(f64::NAN),
+            Err(TrackError::UnrepresentableBezierSplit { .. })
+        ));
+        assert!(matches!(
+            interp.split_at(-0.01),
+            Err(TrackError::UnrepresentableBezierSplit { .. })
+        ));
+        assert!(matches!(
+            interp.split_at(1.01),
+            Err(TrackError::UnrepresentableBezierSplit { .. })
+        ));
+    }
+
+    #[test]
+    fn split_bezier_rejects_unrepresentable() {
+        let interp = Interp::Bezier {
+            x1: 0.5,
+            y1: 0.0,
+            x2: 0.5,
+            y2: -1.0,
+        };
+        let err = interp
+            .split_at(0.0)
+            .expect_err("must reject unrepresentable split");
+        match err {
+            TrackError::UnrepresentableBezierSplit {
+                left_x_denominator,
+                right_x_denominator,
+                left_y_denominator,
+                right_y_denominator,
+                ..
+            } => {
+                assert_eq!(left_x_denominator, 0.0);
+                assert_eq!(right_x_denominator, 1.0);
+                assert!(left_y_denominator.is_some());
+                assert!(right_y_denominator.is_some());
+                assert!(left_y_denominator
+                    .as_ref()
+                    .expect("left y denom should be present")
+                    .is_finite());
+                assert!(right_y_denominator
+                    .as_ref()
+                    .expect("right y denom should be present")
+                    .is_finite());
+            }
+            _ => panic!("wrong error kind"),
+        }
+    }
+
+    #[test]
+    fn split_bezier_rejects_infinite_control_value_with_finite_progress() {
+        let interp = Interp::Bezier {
+            x1: 0.5,
+            y1: f64::INFINITY,
+            x2: 0.5,
+            y2: 0.8,
+        };
+        let err = interp
+            .split_at(0.35)
+            .expect_err("must reject inf y control");
+        let TrackError::UnrepresentableBezierSplit { split_value, .. } = err else {
+            panic!("wrong error kind");
+        };
+
+        assert!(split_value.expect("split value is computed").is_infinite());
     }
 }

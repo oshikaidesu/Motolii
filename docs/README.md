@@ -42,6 +42,7 @@
 | [llm-dispatch-observation-and-allocation-runbook.md](llm-dispatch-observation-and-allocation-runbook.md) | closed orderをprovider CLI、途中stream、生log、主要model候補、利用枠別allocation profileへ接続する | **運用正本／CLI snapshotは起動前更新** |
 | [reviews/2026-08-07-terra-grok-composer-role-reallocation-decision.md](reviews/2026-08-07-terra-grok-composer-role-reallocation-decision.md) | Terraをbounded order compile、Sparkを極小施工、Grok 4.5を通常〜重施工、Composer 2.5を明示理由のある代替施工へ置く | **現行model役割決定／固定pipelineではない** |
 | [m3-rn-runtime-execution-map.md](m3-rn-runtime-execution-map.md) | 現行RN + rust-skia + wgpu M3のR0〜R4を実在target、単一owner、非LLM oracle、依存、cutoverへ分解し、ordinary editor viabilityを既存nodeへ重ねる施工地図 | **現行dispatch地図／R0候補READY-RECHECK、R1〜R4事前compile済み、baseline採用0**(2026-08-07。旧M3地図は検索・oracle履歴) |
+| [利用者成果の背骨と調査不足粒の自律再接続決定](reviews/2026-08-04-outcome-spine-autonomous-gap-research-decision.md) | 大きな利用者成果を進捗軸に保ち、一契約境界の粒を既知実装へ自律再接続する規律 | **決定**(2026-08-04。M3 HUMAN最終集約を含む) |
 | [m4-known-implementation-adoption-map.md](m4-known-implementation-adoption-map.md) | M4の13親、既知実装route、詳細子、採択probe、並列wave、旧負債の退役境界 | **初版採択地図／runtime未発注**(2026-08-02) |
 | [m5-known-implementation-adoption-map.md](m5-known-implementation-adoption-map.md) | M5の10機構class、採択route、12実装子、private検証、decision recovery順序 | **技術採択決定／private検証DONE／製品runtimeはM3意味開放待ち**(2026-08-02) |
 | [vism-known-implementation-adoption-map.md](vism-known-implementation-adoption-map.md) | Vism全入口の既知解、採用方式、private境界、probe、cutover、retirement | **採択地図決定／依存・runtime実装は未許可**(2026-08-02) |

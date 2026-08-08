@@ -1,6 +1,6 @@
 # 既知実装採択・置換開発モデル
 
-状態: **確定運用／非凍結の横断開発原則／M3〜M5と将来phaseへ適用**（2026-08-02、2026-08-03運用強度明記）
+状態: **確定運用／非凍結の横断開発原則／M3〜M5と将来phaseへ適用**（2026-08-02、2026-08-04 outcome spine追補）
 
 ## 1. 決めること
 
@@ -91,6 +91,20 @@ BUILD: FORBIDDEN
 欄の欠落、検索先なし、候補なし、裁定なし、一般frameworkを`THIN MOTOLII RESIDUAL`へ入れた記録では、
 計画を実装可能とせず、実装担当を起動しない。`BUILD JUSTIFICATION`は通常workflowでは`NONE`に固定する。
 非`NONE`の理由が生じた場合は§6の例外経路へ返し、`BUILD`へ書き換えて通常施工を続けない。
+
+### 3.2 利用者成果の背骨と調査不足粒
+
+複数粒にまたがる新規挙動は、着手可能なtask IDを順に消化せず、先に通常製品routeの操作列、
+stable identity、成功出口、失敗回復、自動oracle、external gateを**利用者成果の背骨**として固定する。
+背骨は進捗軸であり実装単位ではない。実装、review、commitは一契約境界のまま維持する。
+
+粒の調査不足を検出した場合は、現行repo、採択済みdecision、references、一次資料の順で再検索し、
+`REUSE -> REMAP -> REDUCE -> 再調査 -> WAIT_TARGET`へ処分する。局所`WAIT_TARGET`は依存しない
+背骨上のedgeを止めず、一般helper、第二state owner、仮UI、独自codecで不足を埋めない。各粒の完了後は
+古い`next`や粒数でなく、現行codeから背骨の未完edgeを再計測する。
+
+固定形式、検索完了条件、M3 HUMAN集約は
+[利用者成果の背骨と調査不足粒の自律再接続決定](reviews/2026-08-04-outcome-spine-autonomous-gap-research-decision.md)を正とする。
 
 ## 4. 採択地図の必須形式
 

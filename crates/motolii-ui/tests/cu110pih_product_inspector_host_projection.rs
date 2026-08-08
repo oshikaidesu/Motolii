@@ -6,10 +6,10 @@ fn product_host_projects_the_adopted_snapshot_without_a_second_owner_or_intent_p
     let inspector = include_str!("../src/inspector_host_runtime.rs");
     let web = include_str!("../../../ui/motolii-web/src/host/inspector-main.jsx");
     let publish = product
-        .split("Ok(Some(published)) => {")
+        .split("fn adopt_full_publish(")
         .nth(1)
         .expect("product Host adopts one published snapshot")
-        .split("Ok(None) =>")
+        .split("fn publish_stage_transport(")
         .next()
         .expect("publish arm is bounded");
 
@@ -18,7 +18,7 @@ fn product_host_projects_the_adopted_snapshot_without_a_second_owner_or_intent_p
         "InspectorHostRuntime::new(\n            &window,\n            &self.current_document,\n            self.primary,\n            self.active_effect_use,\n        )"
     ));
     assert!(product.contains("inspector.set_bounds(layout.epoch, layout.inspector)"));
-    assert_eq!(product.matches("inspector.publish(").count(), 3);
+    assert_eq!(product.matches("inspector.publish(").count(), 2);
     assert!(!product.contains("inspector.publish(&self.current_document, self.primary)"));
     assert!(publish.contains("self.reconcile_active_effect_use(&published);"));
     let reconcile_pos = publish

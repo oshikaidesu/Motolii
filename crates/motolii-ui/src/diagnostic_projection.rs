@@ -265,6 +265,9 @@ const fn command_kind_copy(kind: CommandKind) -> &'static str {
         CommandKind::SetAudioComponentGain => "Set audio component gain",
         CommandKind::AddTrackItem => "Add track item",
         CommandKind::RemoveTrackItem => "Remove track item",
+        CommandKind::AddPositionKey => "Add position key",
+        CommandKind::SetPositionKeyInterp => "Set position key interpolation",
+        CommandKind::SetPositionKeyValue => "Set position key value",
         CommandKind::SetClipStart => "Set clip start",
         CommandKind::TrimClipIn => "Trim clip in",
         CommandKind::TrimClipOut => "Trim clip out",
@@ -394,6 +397,14 @@ mod tests {
         assert_eq!(
             command_kind_copy(CommandKind::SetClipStart),
             "Set clip start"
+        );
+    }
+
+    #[test]
+    fn position_key_interp_command_uses_the_existing_diagnostic_copy_route() {
+        assert_eq!(
+            command_kind_copy(CommandKind::SetPositionKeyInterp),
+            "Set position key interpolation"
         );
     }
 }

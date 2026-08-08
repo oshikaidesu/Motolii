@@ -94,6 +94,8 @@ spike内のcommit counterはD2の代替ではなく、release/cancel境界を測
 
 製品U4bへ接続するには、isolated spike合格に加えて次を必要とする。
 
+2026-08-04の個別接続契約は[P04-C2 Easing product route contract §4.1](2026-08-04-p04-c2-easing-product-route-contract.md#41-2026-07-22-native-popup-acceptance-5-reconciliation)へ進み、platform z-order/focus/DPI/second-monitor/a11y gateはM3-final manual/real-device checklistへ再配置して`EXTERNAL_GATE_PENDING`とする。
+
 - U4aの区間導出と左key outgoing `Interp`の正本
 - U2hのselection/focus projection
 - curve dragを1 gesture / 1 D2 command / 1 Undoへする個別契約

@@ -1,3 +1,5 @@
+import { EasingTriggerCandidate } from "./EasingTriggerCandidate.jsx";
+
 export function StageHeaderCandidate({ mode }) {
   return (
     <div className="stage-tools">
@@ -16,15 +18,30 @@ export function StageTransportCandidate({
   barPosition,
   tempoStatus,
   qualityStatus,
+  playbackState,
+  activeInterval,
+  onOpenEasing,
+  onTogglePlayback,
 }) {
+  const isPreparing = playbackState === "preparing";
+  const isPlaying = playbackState === "playing";
   return (
     <div className="transport">
       <button className="toolbtn" id="step-prev" type="button" aria-label="前のkeyへ">|‹</button>
-      <button className="toolbtn" id="play" type="button" aria-label="再生">▶</button>
-      <button className="toolbtn" id="step-next" type="button" aria-label="次のkeyへ">›|</button>
-      <button className="interval-easing" type="button" disabled aria-label="区間easing">
-        <span className="interval-easing__placeholder">—</span>
+      <button
+        className="toolbtn"
+        id="play"
+        type="button"
+        aria-label={isPlaying ? "一時停止" : isPreparing ? "再生準備をキャンセル" : "再生"}
+        aria-pressed={isPlaying}
+        onClick={() => {
+          if (typeof onTogglePlayback === "function") onTogglePlayback();
+        }}
+      >
+        {isPlaying ? "Ⅱ" : isPreparing ? "■" : "▶"}
       </button>
+      <button className="toolbtn" id="step-next" type="button" aria-label="次のkeyへ">›|</button>
+      <EasingTriggerCandidate activeInterval={activeInterval} pressed={false} onOpen={onOpenEasing} />
       <span className="time" id="time">{timecode}</span>
       <span>{barPosition}</span>
       <span>{tempoStatus}</span>

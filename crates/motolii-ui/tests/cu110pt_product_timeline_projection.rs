@@ -4,10 +4,10 @@
 fn product_timeline_projects_the_adopted_snapshot_without_a_second_state_owner() {
     let source = include_str!("../src/product_runtime.rs");
     let publish = source
-        .split("Ok(Some(published)) => {")
+        .split("fn adopt_full_publish(")
         .nth(1)
         .expect("product Host adopts one published snapshot")
-        .split("Ok(None) =>")
+        .split("fn publish_stage_transport(")
         .next()
         .expect("publish arm is bounded");
 
@@ -17,7 +17,7 @@ fn product_timeline_projects_the_adopted_snapshot_without_a_second_state_owner()
     assert!(source.contains("end: document.composition.duration"));
     assert!(publish.contains("ProductTimelineProjection::from_document(&self.current_document)"));
     assert!(source.contains("native_timeline_renderer"));
-    assert!(source.contains("&timeline_projection.projection"));
+    assert!(source.contains("timeline_projection.render_projection()"));
     assert!(source.contains("native_timeline_renderer.composite"));
 
     let renderer = include_str!("../src/native_timeline_renderer.rs");

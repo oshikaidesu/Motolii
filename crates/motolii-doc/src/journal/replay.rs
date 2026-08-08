@@ -281,6 +281,7 @@ pub fn frames_through_last_commit(frames: &[JournalFrame]) -> &[JournalFrame] {
 
 #[cfg(test)]
 mod replay_tests {
+    use super::{apply_decoded_edit, decode_edit, edit_payload};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -291,11 +292,12 @@ mod replay_tests {
     use crate::journal::{
         generation_path_for_document, load_catalog, open_project, replay_from_base,
         save_project_with_journal, JournalEdit, JournalRecordKind, JournalScanOutcome,
-        ReplayFailure, V1_EDIT_FORMAT_VERSION,
+        ReplayFailure, V1_EDIT_FORMAT_VERSION, V2_EDIT_FORMAT_VERSION,
     };
     use crate::{
-        migrate_bytes, Clip, ClipSource, Command, DocParam, Document, EffectUse, ItemEnvelope,
-        LayerId, ResourceLimits, SaveProjectOptions, ScalarPropertyId, Track, TrackItem,
+        migrate_bytes, Clip, ClipSource, Command, DocParam, DocValue, Document, EffectUse,
+        ItemEnvelope, LayerId, ResourceLimits, SaveProjectOptions, ScalarPropertyId, Track,
+        TrackItem,
     };
 
     fn unique_dir(tag: &str) -> PathBuf {
@@ -399,6 +401,241 @@ mod replay_tests {
         });
         doc.validate().unwrap();
         (doc, layer)
+    }
+
+    #[test]
+    fn v2_add_position_key_replay_matches_live_apply_and_v1_rejects_variant() {
+        let (base, layer) = empty_clip_base();
+        let prepared = crate::position_key_prepare::prepare_add_position_key(
+            &base,
+            layer,
+            RationalTime::from_seconds(2),
+        )
+        .unwrap();
+        let crate::AddPositionKeyPreparation::Prepared { key_id, command } = prepared else {
+            panic!("const position must prepare a key");
+        };
+        let command_value = serde_json::to_value(&command).unwrap();
+
+        let mut live = base.clone();
+        command.apply(&mut live).unwrap();
+        let live_counter = live.next_stable_id.peek_next();
+
+        let payload = edit_payload(&JournalEdit::new(command)).unwrap();
+        let decoded = decode_edit(&payload).unwrap();
+        let mut replayed = base;
+        apply_decoded_edit(&mut replayed, &decoded).unwrap();
+
+        assert_eq!(replayed, live);
+        assert_eq!(replayed.next_stable_id.peek_next(), live_counter);
+        let position = &crate::command::find_envelope(&replayed, layer)
+            .unwrap()
+            .transform
+            .position;
+        let DocParam::Keyframes(track) = position else {
+            panic!("replayed position must be keyframed");
+        };
+        assert_eq!(
+            track.get_by_id(key_id).map(|key| key.t),
+            Some(RationalTime::from_seconds(2))
+        );
+
+        let legacy = serde_json::to_vec(&json!({
+            "format_version": V1_EDIT_FORMAT_VERSION,
+            "command": command_value
+        }))
+        .unwrap();
+        assert!(decode_edit(&legacy).is_err());
+    }
+
+    #[test]
+    fn v2_position_key_interp_replay_matches_live_apply_and_v1_rejects_variant() {
+        let (base, layer) = empty_clip_base();
+        let crate::AddPositionKeyPreparation::Prepared { key_id, command } =
+            crate::position_key_prepare::prepare_add_position_key(
+                &base,
+                layer,
+                RationalTime::from_seconds(2),
+            )
+            .unwrap()
+        else {
+            panic!("const position must prepare a key");
+        };
+        let mut keyed = base;
+        command.apply(&mut keyed).unwrap();
+        let command = crate::command::prepare_set_position_key_interp(
+            &keyed,
+            layer,
+            key_id,
+            motolii_eval::Interp::Bezier {
+                x1: 0.2,
+                y1: -0.5,
+                x2: 0.8,
+                y2: 1.5,
+            },
+        )
+        .unwrap()
+        .unwrap();
+        let command_value = serde_json::to_value(&command).unwrap();
+        let serde_json::Value::Object(command_object) = &command_value else {
+            panic!("command must use the externally tagged serde shape");
+        };
+        assert_eq!(command_object.len(), 1);
+        let serde_json::Value::Object(fields) = command_object
+            .get("SetPositionKeyInterp")
+            .expect("dedicated command tag")
+        else {
+            panic!("SetPositionKeyInterp payload must be an object");
+        };
+        for field in ["target", "key", "old", "new"] {
+            assert!(fields.contains_key(field), "missing {field}");
+        }
+        let edit = JournalEdit::new(command.clone());
+        assert_eq!(edit.format_version, V2_EDIT_FORMAT_VERSION);
+
+        let mut live = keyed.clone();
+        command.apply(&mut live).unwrap();
+        let payload = edit_payload(&edit).unwrap();
+        let decoded = decode_edit(&payload).unwrap();
+        let mut replayed = keyed;
+        apply_decoded_edit(&mut replayed, &decoded).unwrap();
+
+        assert_eq!(replayed, live);
+        let legacy = serde_json::to_vec(&json!({
+            "format_version": V1_EDIT_FORMAT_VERSION,
+            "command": command_value
+        }))
+        .unwrap();
+        assert!(decode_edit(&legacy).is_err());
+    }
+
+    #[test]
+    fn v2_position_key_value_replay_cas_inverse_and_v1_reject_variant() {
+        let (base, layer) = empty_clip_base();
+        let crate::AddPositionKeyPreparation::Prepared { key_id, command } =
+            crate::position_key_prepare::prepare_add_position_key(
+                &base,
+                layer,
+                RationalTime::from_seconds(2),
+            )
+            .unwrap()
+        else {
+            panic!("const position must prepare a key");
+        };
+        let mut keyed = base;
+        command.apply(&mut keyed).unwrap();
+        let command =
+            crate::command::prepare_set_position_key_value(&keyed, layer, key_id, [0.25, -0.5])
+                .unwrap()
+                .unwrap();
+        let command_value = serde_json::to_value(&command).unwrap();
+        let serde_json::Value::Object(command_object) = &command_value else {
+            panic!("command must use the externally tagged serde shape");
+        };
+        let serde_json::Value::Object(fields) = command_object
+            .get("SetPositionKeyValue")
+            .expect("dedicated command tag")
+        else {
+            panic!("SetPositionKeyValue payload must be an object");
+        };
+        for field in ["target", "key", "old", "new"] {
+            assert!(fields.contains_key(field), "missing {field}");
+        }
+        assert_eq!(
+            JournalEdit::new(command.clone()).format_version,
+            V2_EDIT_FORMAT_VERSION
+        );
+
+        let mut live = keyed.clone();
+        let counter = live.next_stable_id.peek_next();
+        command.apply(&mut live).unwrap();
+        let position = &crate::command::find_envelope(&live, layer)
+            .unwrap()
+            .transform
+            .position;
+        let DocParam::Keyframes(track) = position else {
+            panic!("replayed position must remain keyframed");
+        };
+        let edited = track.get_by_id(key_id).unwrap();
+        assert_eq!(edited.value, DocValue::Vec2([0.25, -0.5]));
+        assert_eq!(edited.t, RationalTime::from_seconds(2));
+        assert_eq!(edited.interp, motolii_eval::Interp::Linear);
+        assert_eq!(live.next_stable_id.peek_next(), counter);
+
+        let payload = edit_payload(&JournalEdit::new(command.clone())).unwrap();
+        let decoded = decode_edit(&payload).unwrap();
+        let mut replayed = keyed.clone();
+        apply_decoded_edit(&mut replayed, &decoded).unwrap();
+        assert_eq!(replayed, live);
+
+        let mut undone = live.clone();
+        command.inverse().apply(&mut undone).unwrap();
+        assert_eq!(undone, keyed);
+
+        let before_stale = serde_json::to_vec(&live).unwrap();
+        assert!(command.apply(&mut live).is_err());
+        assert_eq!(serde_json::to_vec(&live).unwrap(), before_stale);
+        assert!(crate::command::prepare_set_position_key_value(
+            &keyed,
+            layer,
+            key_id,
+            [f64::NAN, 0.0],
+        )
+        .is_err());
+
+        let legacy = serde_json::to_vec(&json!({
+            "format_version": V1_EDIT_FORMAT_VERSION,
+            "command": command_value
+        }))
+        .unwrap();
+        assert!(decode_edit(&legacy).is_err());
+    }
+
+    #[test]
+    fn v2_position_key_interp_committed_wal_replays_like_live_apply() {
+        let dir = unique_dir("position-key-interp-wal");
+        let path = dir.join("proj.json");
+        let (base, layer) = empty_clip_base();
+        let crate::AddPositionKeyPreparation::Prepared { key_id, command } =
+            crate::position_key_prepare::prepare_add_position_key(
+                &base,
+                layer,
+                RationalTime::from_seconds(2),
+            )
+            .unwrap()
+        else {
+            panic!("const position must prepare a key");
+        };
+        let mut keyed = base;
+        command.apply(&mut keyed).unwrap();
+        let command = crate::command::prepare_set_position_key_interp(
+            &keyed,
+            layer,
+            key_id,
+            motolii_eval::Interp::Hold,
+        )
+        .unwrap()
+        .unwrap();
+        let edit = JournalEdit::new(command.clone());
+        let mut live = keyed.clone();
+        command.apply(&mut live).unwrap();
+
+        save_project_with_journal(&path, &keyed, &SaveProjectOptions::default()).unwrap();
+        save_project_with_journal(
+            &path,
+            &keyed,
+            &SaveProjectOptions {
+                journal_edit: Some(edit),
+                checkpoint: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let opened = open_project(&path).unwrap();
+        let replay = opened.replay.expect("committed WAL edit must replay");
+        assert!(replay.replay_failures.is_empty());
+        assert_eq!(replay.document, live);
+        let _ = fs::remove_dir_all(dir);
     }
 
     fn inline_effect_json() -> serde_json::Value {

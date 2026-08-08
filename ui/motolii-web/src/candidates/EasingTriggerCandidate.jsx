@@ -1,6 +1,6 @@
 import "./easing-trigger-candidate.css";
 
-export function EasingTriggerCandidate({ activeInterval, pressed }) {
+export function EasingTriggerCandidate({ activeInterval, pressed, onOpen }) {
   return (
     <button
       id="interval-easing"
@@ -14,6 +14,11 @@ export function EasingTriggerCandidate({ activeInterval, pressed }) {
       aria-controls="easing-panel"
       data-info="Easing Graph|key間にいる時だけ開けます|"
       disabled={!activeInterval}
+      onClick={(event) => {
+        if (!activeInterval || typeof onOpen !== "function") return;
+        const rect = event.currentTarget.getBoundingClientRect();
+        onOpen({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+      }}
     >
       <svg viewBox="0 0 20 14" aria-hidden="true">
         <path d="M2 12 C7 12 8 2 18 2" />

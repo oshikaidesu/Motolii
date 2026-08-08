@@ -7,7 +7,7 @@ use motolii_audio::{
     channel, negotiate_output, DeviceWaitLatency, OutputStream, PcmCache, PcmFormat,
     PlaybackCounters,
 };
-use motolii_core::{Fps, Quality};
+use motolii_core::{Fps, Quality, RationalTime};
 use motolii_transport::Transport;
 
 fn tiny_cache() -> PcmCache {
@@ -54,6 +54,7 @@ fn output_stream_shares_counters_and_device_wait_with_transport() {
         Arc::clone(&device_wait),
         Fps::try_new(30, 1).unwrap(),
         negotiated.device_sample_rate,
+        RationalTime::ZERO,
         Quality::DRAFT,
         false,
     )

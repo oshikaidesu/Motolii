@@ -18,7 +18,7 @@ pub fn cubic_bezier_ease(x1: f64, y1: f64, x2: f64, y2: f64, x: f64) -> f64 {
 }
 
 /// ベジェの1成分 B(s) を計算(端点0,1固定形)。
-fn sample(p1: f64, p2: f64, s: f64) -> f64 {
+pub(super) fn sample(p1: f64, p2: f64, s: f64) -> f64 {
     // B(s) = 3(1-s)^2 s p1 + 3(1-s) s^2 p2 + s^3
     let inv = 1.0 - s;
     3.0 * inv * inv * s * p1 + 3.0 * inv * s * s * p2 + s * s * s
@@ -30,7 +30,7 @@ fn sample_derivative(p1: f64, p2: f64, s: f64) -> f64 {
 }
 
 /// x(s) = x を満たすsをNewton法+二分法フォールバックで解く。
-fn solve_curve_x(x1: f64, x2: f64, x: f64) -> f64 {
+pub(super) fn solve_curve_x(x1: f64, x2: f64, x: f64) -> f64 {
     const EPS: f64 = 1e-7;
 
     // Newton法(高速パス)

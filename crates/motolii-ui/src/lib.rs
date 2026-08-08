@@ -26,8 +26,17 @@ mod layout_runtime_adapter;
 mod native_host_layout;
 mod native_timeline_renderer;
 mod parameter_control;
+mod product_easing_popup;
 mod product_runtime;
 mod product_runtime_adapter;
+mod rn_product_host;
+
+#[doc(hidden)]
+pub use rn_product_host::{
+    host_create_for_test, host_destroy_for_test, host_destroy_stage_for_test,
+    host_dispatch_intent_for_test, host_read_snapshot_for_test, host_register_stage_for_test,
+    RnHostError, RnHostReasonCode, RnHostTestIntent, RnHostTestResponse, RnProductSnapshotForTest,
+};
 mod render_worker;
 mod shell;
 mod stage_chrome_host_runtime;
@@ -36,6 +45,7 @@ mod static_preview;
 mod timeline_move_gesture;
 mod timeline_projection;
 mod timeline_tools_host_runtime;
+mod timeline_trim_gesture;
 mod ui_numeric_trace;
 
 pub use command_registry::{

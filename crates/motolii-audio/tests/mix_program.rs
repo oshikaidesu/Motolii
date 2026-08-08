@@ -144,6 +144,7 @@ fn mix_producer_feeds_ring_while_callback_only_reads() {
     let program = Arc::new(program_from_sources(
         vec![identity_source(stereo_const(4_096, 0.5, -0.5), 4_096, 1.0)],
         1.0,
+        RationalTime::try_new(4_096, CANONICAL_SAMPLE_RATE as i64).unwrap(),
     ));
     let (ring_prod, ring_cons) = channel(CANONICAL_CHANNELS, 2_048).unwrap();
     let meter = Arc::new(AudioMeter::new());
@@ -178,6 +179,7 @@ fn hundred_seeks_do_not_block_callback_path() {
             1.0,
         )],
         1.0,
+        RationalTime::try_new(48_000, CANONICAL_SAMPLE_RATE as i64).unwrap(),
     ));
 
     let callback_max_ns = AtomicU64::new(0);
@@ -208,6 +210,7 @@ fn metering_snapshots_are_lock_free_under_updates() {
     let program = Arc::new(program_from_sources(
         vec![identity_source(stereo_const(8_000, 1.5, -1.25), 8_000, 1.0)],
         1.0,
+        RationalTime::try_new(8_000, CANONICAL_SAMPLE_RATE as i64).unwrap(),
     ));
     let (ring_prod, ring_cons) = channel(CANONICAL_CHANNELS, 2_048).unwrap();
     let producer =
@@ -243,6 +246,80 @@ fn gap_silence_is_not_ring_underrun() {
     assert_eq!(report.silence_frames, 10);
     // underflowカウンタはring経路のPlaybackCounters。mixの正規silenceとは別。
     let counters = PlaybackCounters::default();
+    assert_eq!(counters.underrun_events(), 0);
+}
+
+#[test]
+fn from_document_copies_composition_duration() {
+    let mut doc = Document::new_current();
+    let duration = RationalTime::try_new(1, 10).unwrap();
+    doc.composition.duration = duration;
+
+    let program = AudioProgram::from_document(&doc, None, &mut HashMap::new()).unwrap();
+
+    assert_eq!(program.composition_duration(), duration);
+}
+
+#[test]
+fn zero_source_program_supplies_composition_silence_without_callback_underrun() {
+    let duration_frames = 480u64;
+    let program = Arc::new(program_from_sources(
+        vec![],
+        1.0,
+        RationalTime::try_new(duration_frames as i64, CANONICAL_SAMPLE_RATE as i64).unwrap(),
+    ));
+    let (mixed, report) = program
+        .mix_audio(0, duration_frames as usize, None)
+        .unwrap();
+    assert!(mixed.iter().all(|sample| *sample == 0.0));
+    assert_eq!(report.silence_frames, duration_frames as usize);
+
+    let (ring_prod, ring_cons) = channel(CANONICAL_CHANNELS, 1_024).unwrap();
+    let producer = MixProducer::spawn(Arc::clone(&program), ring_prod, 0, None).unwrap();
+    wait_for_buffered_frames(&ring_cons, duration_frames as usize);
+
+    let counters = PlaybackCounters::default();
+    let mut output = vec![1.0; duration_frames as usize * CANONICAL_CHANNELS as usize];
+    fill_or_silence(&ring_cons, &mut output, &counters);
+    producer.stop();
+
+    assert!(output.iter().all(|sample| *sample == 0.0));
+    assert_eq!(counters.frames_supplied(), duration_frames);
+    assert_eq!(counters.silence_frames(), 0);
+    assert_eq!(counters.underrun_events(), 0);
+}
+
+#[test]
+fn shorter_source_supplies_zero_tail_without_callback_underrun() {
+    let source_frames = 4u64;
+    let duration_frames = 8u64;
+    let program = Arc::new(program_from_sources(
+        vec![identity_source(
+            stereo_const(source_frames as usize, 0.5, -0.5),
+            source_frames,
+            1.0,
+        )],
+        1.0,
+        RationalTime::try_new(duration_frames as i64, CANONICAL_SAMPLE_RATE as i64).unwrap(),
+    ));
+    let (ring_prod, ring_cons) = channel(CANONICAL_CHANNELS, 32).unwrap();
+    let producer = MixProducer::spawn(Arc::clone(&program), ring_prod, 0, None).unwrap();
+    wait_for_buffered_frames(&ring_cons, duration_frames as usize);
+
+    let counters = PlaybackCounters::default();
+    let mut output = vec![0.0; duration_frames as usize * CANONICAL_CHANNELS as usize];
+    fill_or_silence(&ring_cons, &mut output, &counters);
+    producer.stop();
+
+    assert_eq!(
+        &output[..source_frames as usize * 2],
+        &[0.5, -0.5].repeat(source_frames as usize)
+    );
+    assert!(output[source_frames as usize * 2..]
+        .iter()
+        .all(|sample| *sample == 0.0));
+    assert_eq!(counters.frames_supplied(), duration_frames);
+    assert_eq!(counters.silence_frames(), 0);
     assert_eq!(counters.underrun_events(), 0);
 }
 
@@ -305,4 +382,15 @@ fn tempfile_dir(name: &str) -> PathBuf {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
+}
+
+fn wait_for_buffered_frames(ring: &motolii_audio::RingConsumer, expected: usize) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while ring.buffered_frames() < expected {
+        assert!(
+            Instant::now() < deadline,
+            "mix producer did not fill {expected} frames in time"
+        );
+        thread::sleep(Duration::from_millis(1));
+    }
 }

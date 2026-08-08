@@ -9,6 +9,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { validatePostPromotionChanges } from "./browser-post-promotion-provenance.mjs";
 import { decodeInspectorReadModel } from "../src/read-model/inspectorReadModelDecoder.js";
+import {
+  readStageHostSnapshot,
+  subscribeStageTransportSnapshot,
+} from "../src/host/stageHostBridge.js";
 
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PRODUCT_DIR = path.resolve(TEST_DIR, "..");
@@ -115,7 +119,7 @@ const EXPECTED_KEY_TOOLS_SHA256 =
 const EXPECTED_KEY_TOOLS_CSS_SHA256 =
   "f84eb7f98f05844fa3bfc72b702cee2709f1fc0bb9be614f2b01039a65b5190d";
 const EXPECTED_INSPECTOR_SHA256 =
-  "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e";
+  "619c3adc118c3fd66f20cf400d8000755bdecb19bc02f3afaa8f522792dafc24";
 const EXPECTED_INSPECTOR_CSS_SHA256 =
   "730e2861a893b2b07fa66d5acef0038a49bdcf337e8c5a037785b0a58d829cbe";
 const INSPECTOR_POST_PROMOTION_TASK = "CU-0A08ITP";
@@ -131,6 +135,10 @@ const CU205P_INSPECTOR_REASON =
   "VS-2 active Effect Inspector read-only control projection";
 const CU205P_INSPECTOR_CURRENT_SHA256 =
   "a1af604c78113f4df0538c3045b19d51c1d3fc8c6740305abc47b7e8a2d10f37";
+const CU0A08ITIA_INSPECTOR_REASON =
+  "Inspector Position closed read-only row direct promotion";
+const CU0A08ITIB_INSPECTOR_REASON =
+  "Inspector Position one-shot Add Position Key affordance";
 
 const ALLOWED_EXTERNAL_PACKAGES = ["react", "html-react-parser"];
 const SEAM_COMPONENT_NAME = "CandidateCreateBrowser";
@@ -731,9 +739,60 @@ function validateInspectorSafeBranch(sourceText) {
   assert.deepEqual(expressionBindings, [
     "panelHead",
     "targetIdentity",
+    "positionRow",
     "activeEffectSection",
   ]);
   assert.deepEqual(textValues, []);
+}
+
+function validateInspectorPositionRow(sourceText) {
+  const ast = parseModule(sourceText);
+  const component = findTopLevelFunction(ast, "InspectorCandidate");
+  const objectRow = component.body.body.filter(
+    (statement) => statement.type === "VariableDeclaration"
+      && statement.declarations.some(
+        (declaration) => declaration.id?.name === "objectRow",
+      ),
+  );
+  assert.equal(objectRow.length, 1, "one shared objectRow grammar is required");
+  const branch = component.body.body.find(
+    (statement) => statement.type === "IfStatement"
+      && statement.test?.type === "LogicalExpression"
+      && statement.test.left?.left?.name === "mode"
+      && statement.test.right?.left?.name === "inspectorReadModel",
+  );
+  assert.ok(branch?.start !== undefined && branch.end !== undefined);
+  const defaultBranch = sourceText.slice(branch.start, branch.end);
+  assert.match(defaultBranch, /const position = inspectorReadModel\.position/);
+  assert.match(defaultBranch, /objectRow\(/);
+  assert.match(defaultBranch, /<label>Position<\/label>/);
+  assert.match(defaultBranch, /position\.kind === "const"/);
+  assert.match(defaultBranch, /<b>X<\/b> \{position\.x\}/);
+  assert.match(defaultBranch, /<b>Y<\/b> \{position\.y\}/);
+  assert.match(defaultBranch, />animated</);
+  assert.match(defaultBranch, /typeof onAddPositionKey === "function"/);
+  assert.match(
+    defaultBranch,
+    /<button\s+type="button"\s+className="automation-mark"\s+aria-label="Add Position Key"\s+onClick=\{onAddPositionKey\}\s*>\s*<span aria-hidden="true">◇<\/span>\s*<\/button>/,
+  );
+  assert.equal((defaultBranch.match(/onClick/g) ?? []).length, 1);
+  for (const forbidden of [
+    "onPointer",
+    "onKeyDown",
+    "onKeyUp",
+    "onKeyPress",
+    "postMessage",
+    "state.",
+    "state.automation",
+    "KEYS",
+    "AUTO ON",
+    "AUTO OFF",
+    "playhead",
+    "selection",
+    "Undo",
+  ]) {
+    assert.equal(defaultBranch.includes(forbidden), false, forbidden);
+  }
 }
 
 function validateBrowserIdentityProjection(sourceText) {
@@ -938,6 +997,7 @@ test("validates decoded Inspector target projection into the existing identity J
   const source = await readFile(abs(CURRENT_INSPECTOR_SOURCE), "utf8");
   assert.doesNotThrow(() => validateInspectorReadProjection(source));
   assert.doesNotThrow(() => validateInspectorSafeBranch(source));
+  assert.doesNotThrow(() => validateInspectorPositionRow(source));
   for (const candidate of [
     source.replace(
       "inspectorReadModel.target.layer_name",
@@ -963,6 +1023,12 @@ test("validates decoded Inspector target projection into the existing identity J
   ]) {
     assert.throws(() => validateInspectorSafeBranch(candidate));
   }
+  assert.throws(() =>
+    validateInspectorPositionRow(source.replace('>animated</span>', '>2 KEYS</span>')));
+  assert.throws(() =>
+    validateInspectorPositionRow(source.replace('<label>Position</label>', '<button onClick={() => {}}>Position</button>')));
+  assert.throws(() =>
+    validateInspectorPositionRow(source.replace('aria-label="Add Position Key"', 'aria-label="Add Key"')));
 });
 
 test("projects one exact active Opacity amount control and preserves absent output", async () => {
@@ -996,8 +1062,9 @@ test("projects one exact active Opacity amount control and preserves absent outp
   const absentHtml = renderInspectorSource(source, absentOutput);
   assert.equal(
     absentHtml,
-    '<aside class="inspector" id="inspector"><div class="panel-head">Inspector</div><div class="section"><div class="identity"><div class="icon">G</div><div><b>Reference group</b><small>Group · 1 child</small></div></div></div></aside>',
+    '<aside class="inspector" id="inspector"><div class="panel-head">Inspector</div><div class="section"><div class="identity"><div class="icon">G</div><div><b>Reference group</b><small>Group · 1 child</small></div></div></div><div class="row"><label>Position</label><span class="value axis-pack"><i><b>X</b> 0</i><i><b>Y</b> 0</i></span><span></span></div></aside>',
   );
+  assert.doesNotMatch(absentHtml, /class="scrub"|data-effect-use-id=|data-param=/);
 
   const activeHtml = renderInspectorSource(source, activeOutput);
   assert.equal((activeHtml.match(/class="scrub"/g) ?? []).length, 1);
@@ -1015,6 +1082,15 @@ test("projects one exact active Opacity amount control and preserves absent outp
   });
   assert.match(interactiveHtml, /aria-label="Amount。無限目盛を左右dragして変更"/);
   assert.doesNotMatch(interactiveHtml, /aria-readonly|disabled=/);
+
+  const positionKeyHtml = renderInspectorSource(source, absentOutput, {
+    onAddPositionKey: () => {},
+  });
+  assert.match(
+    positionKeyHtml,
+    /<button type="button" class="automation-mark" aria-label="Add Position Key"><span aria-hidden="true">◇<\/span><\/button>/,
+  );
+  assert.equal((positionKeyHtml.match(/aria-label="Add Position Key"/g) ?? []).length, 1);
 });
 
 test("changes product gesture presentation only after private send succeeds", async () => {
@@ -1130,12 +1206,19 @@ test("validates Inspector post-promotion provenance as an append-only chain", as
   );
   assert.doesNotThrow(() =>
     validateInspectorPostPromotionChanges(provenance, currentInspectorSha256));
-  assert.equal(provenance.inspectorPostPromotionChanges.length, 4);
-  assert.deepEqual(provenance.inspectorPostPromotionChanges.at(-1), {
-    task: "CU-205W-A1",
+  assert.equal(provenance.inspectorPostPromotionChanges.length, 6);
+  assert.deepEqual(provenance.inspectorPostPromotionChanges.at(-2), {
+    task: "CU-0A08ITIA",
     file: INSPECTOR_POST_PROMOTION_FILE,
-    reason: "VS-2 active amount gesture local presentation seam",
-    fixedSourceSha256: CU205P_INSPECTOR_CURRENT_SHA256,
+    reason: CU0A08ITIA_INSPECTOR_REASON,
+    fixedSourceSha256: "3c9e0096c95ea3692105eed016a7a2ff2c0f944d84984df258175982e5aa896e",
+    currentSha256: "aa2b4f713d804509fcf4c0a2222b525db431f88fdd002bdaeee6b23af1a4240c",
+  });
+  assert.deepEqual(provenance.inspectorPostPromotionChanges.at(-1), {
+    task: "CU-0A08ITIB",
+    file: INSPECTOR_POST_PROMOTION_FILE,
+    reason: CU0A08ITIB_INSPECTOR_REASON,
+    fixedSourceSha256: "aa2b4f713d804509fcf4c0a2222b525db431f88fdd002bdaeee6b23af1a4240c",
     currentSha256: currentInspectorSha256,
   });
   assert.deepEqual(provenance.privateRuntimeSources, [{
@@ -1849,6 +1932,10 @@ export {
 
 test("keeps fixed Stage chrome DOM and private read-only Host projection", async () => {
   const source = await readFile(abs(CURRENT_STAGE_CHROME_SOURCE), "utf8");
+  const transportMain = await readFile(
+    abs("ui/motolii-web/src/host/stage-transport-main.jsx"),
+    "utf8",
+  );
   const bridge = await readFile(
     abs("ui/motolii-web/src/host/stageHostBridge.js"),
     "utf8",
@@ -1866,17 +1953,41 @@ test("keeps fixed Stage chrome DOM and private read-only Host projection", async
     'id="step-prev"',
     'aria-label="前のkeyへ"',
     'id="play"',
+    'aria-label={isPlaying ? "一時停止" : isPreparing ? "再生準備をキャンセル" : "再生"}',
     'id="step-next"',
     'aria-label="次のkeyへ"',
     'id="time"',
     'className="quality"',
+    'import { EasingTriggerCandidate } from "./EasingTriggerCandidate.jsx";',
+    '<EasingTriggerCandidate activeInterval={activeInterval} pressed={false} onOpen={onOpenEasing} />',
   ]) {
     assert.equal(source.includes(token), true, `missing fixed Stage token ${token}`);
+  }
+  for (const token of [
+    "readStageHostSnapshot",
+    "subscribeStageTransportSnapshot",
+    "activeInterval={nextSnapshot.activeInterval}",
+    "playbackState={nextSnapshot.playbackState}",
+    "encodeStagePlaybackToggle",
+  ]) {
+    assert.equal(transportMain.includes(token), true, `missing Stage transport token ${token}`);
+  }
+  for (const token of ["activeInterval", "subscribe", "publish"]) {
+    assert.equal(bridge.includes(token), true, `missing Stage Host bridge token ${token}`);
   }
   for (const forbidden of ["useState", "useReducer", "localStorage", "fetch(", "document."]) {
     assert.equal(source.includes(forbidden), false);
     assert.equal(bridge.includes(forbidden), false);
   }
+  for (const forbidden of [
+    "interval-easing__placeholder",
+    '<button className="interval-easing"',
+  ]) {
+    assert.equal(source.includes(forbidden), false);
+    assert.equal(transportMain.includes(forbidden), false);
+  }
+  assert.equal(source.includes("onClick"), true);
+  assert.equal(transportMain.includes("onClick"), false);
   for (const token of [
     "height: 23px",
     "min-width: 29px",
@@ -1886,6 +1997,81 @@ test("keeps fixed Stage chrome DOM and private read-only Host projection", async
   ]) {
     assert.equal(css.includes(token), true, `missing fixed Stage CSS ${token}`);
   }
+});
+
+test("keeps the static Stage header bridge separate from the active transport projection", () => {
+  const header = readStageHostSnapshot({
+    snapshot: {
+      mode: "RECTANGLE",
+      timecode: "00:00.0",
+      barPosition: "BAR 0.0.00",
+      tempoStatus: "120 BPM · SNAP BEAT",
+      qualityStatus: "DRAFT · FP16 · 1/2",
+    },
+  });
+  assert.equal(header.activeInterval, null);
+
+  let subscriber = null;
+  const transportBridge = {
+    snapshot: {
+      mode: "RECTANGLE",
+      timecode: "00:00.0",
+      barPosition: "BAR 0.0.00",
+      tempoStatus: "120 BPM · SNAP BEAT",
+      qualityStatus: "DRAFT · FP16 · 1/2",
+      playbackState: "idle",
+      activeInterval: { objectName: "Rectangle", channel: "Position" },
+    },
+    subscribe(next) {
+      subscriber = next;
+    },
+    publish() {},
+  };
+  const transport = readStageHostSnapshot(transportBridge);
+  assert.deepEqual(transport.activeInterval, {
+    objectName: "Rectangle",
+    channel: "Position",
+  });
+  assert.equal(
+    readStageHostSnapshot({
+      ...transportBridge,
+      snapshot: { ...transportBridge.snapshot, activeInterval: null },
+    }).activeInterval,
+    null,
+  );
+  subscribeStageTransportSnapshot(transportBridge, () => {});
+  assert.equal(typeof subscriber, "function");
+  assert.throws(
+    () => readStageHostSnapshot({ ...transportBridge, snapshot: { ...transportBridge.snapshot, activeInterval: undefined } }),
+    TypeError,
+  );
+  assert.throws(
+    () => readStageHostSnapshot({
+      ...transportBridge,
+      snapshot: { ...transportBridge.snapshot, unexpected: true },
+    }),
+    TypeError,
+  );
+  assert.throws(
+    () => readStageHostSnapshot({
+      ...transportBridge,
+      snapshot: {
+        ...transportBridge.snapshot,
+        activeInterval: { objectName: "", channel: "Position" },
+      },
+    }),
+    TypeError,
+  );
+  assert.throws(
+    () => readStageHostSnapshot({
+      ...transportBridge,
+      snapshot: {
+        ...transportBridge.snapshot,
+        activeInterval: { objectName: "Rectangle", channel: "Position", extra: true },
+      },
+    }),
+    TypeError,
+  );
 });
 
 test("validates product export/consumer import topology via parsed AST", async () => {

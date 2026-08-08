@@ -25,6 +25,29 @@ function requireNormalizedValue(value, owner) {
   return value;
 }
 
+function requireFiniteScalar(value, owner) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new TypeError(`${owner} must be a finite number`);
+  }
+  return value;
+}
+
+function exactPositionKeyProjection(readModel) {
+  const position = readModel?.position;
+  if (position === undefined || position?.kind !== "key") return null;
+  if (
+    !Number.isFinite(position.x)
+    || !Number.isFinite(position.y)
+  ) {
+    throw new TypeError("Inspector Position key projection is invalid");
+  }
+  return Object.freeze({
+    layer_id: readModel?.target?.layer_id,
+    x: position.x,
+    y: position.y,
+  });
+}
+
 function exactActiveAmount(readModel) {
   const active = readModel?.active_effect;
   if (active === undefined) return null;
@@ -66,6 +89,14 @@ function sameIdentity(left, right) {
   return Object.keys(left).every((key) => left[key] === right[key]);
 }
 
+function samePositionProjection(left, right) {
+  if (left === right) return true;
+  if (left === null || right === null) return false;
+  return left.layer_id === right.layer_id
+    && left.x === right.x
+    && left.y === right.y;
+}
+
 export function createInspectorHostSender(postMessage) {
   if (typeof postMessage !== "function") {
     throw new TypeError("Inspector Host postMessage must be a function");
@@ -74,13 +105,22 @@ export function createInspectorHostSender(postMessage) {
   let identity = null;
   let activeSession = null;
   let nextSession = 1;
+  let nextPositionKeySequence = 1;
+  let positionProjection = null;
+  let activePositionSession = null;
+  let nextPositionSession = 1;
 
   const project = (readModel) => {
     const projectedIdentity = exactActiveAmount(readModel);
     if (!sameIdentity(identity, projectedIdentity)) {
       activeSession = null;
     }
+    const projectedPosition = exactPositionKeyProjection(readModel);
+    if (!samePositionProjection(positionProjection, projectedPosition)) {
+      activePositionSession = null;
+    }
     identity = projectedIdentity;
+    positionProjection = projectedPosition;
   };
 
   const send = (event) => {
@@ -144,5 +184,75 @@ export function createInspectorHostSender(postMessage) {
     }
   };
 
-  return Object.freeze({ project, send });
+  const sendAddPositionKey = () => {
+    const sequence = requireSafePositiveInteger(
+      nextPositionKeySequence,
+      "Inspector Position key sequence",
+    );
+    postMessage(JSON.stringify({ kind: "add-position-key", sequence }));
+    nextPositionKeySequence = sequence === Number.MAX_SAFE_INTEGER ? null : sequence + 1;
+  };
+
+  const sendPositionKeyGesture = (event) => {
+    if (positionProjection === null) {
+      throw new TypeError("Inspector Position gesture has no active key");
+    }
+    requireExactKeys(
+      event,
+      event?.phase === "cancel" ? ["phase", "axis"] : ["phase", "axis", "value"],
+      "Inspector Position gesture",
+    );
+    if (!PHASES.has(event.phase)) {
+      throw new TypeError("Inspector Position gesture phase is invalid");
+    }
+    if (event.axis !== "x" && event.axis !== "y") {
+      throw new TypeError("Inspector Position gesture axis is invalid");
+    }
+    const value = event.phase === "cancel"
+      ? null
+      : requireFiniteScalar(event.value, "Inspector Position gesture value");
+    let session;
+    let sequence;
+    let nextActiveSession;
+    if (event.phase === "start") {
+      if (activePositionSession !== null) {
+        throw new TypeError("Inspector Position gesture is already active");
+      }
+      requireSafePositiveInteger(nextPositionSession, "Inspector Position gesture session");
+      session = nextPositionSession;
+      sequence = 1;
+      nextActiveSession = { session, sequence };
+    } else {
+      if (activePositionSession === null) {
+        throw new TypeError("Inspector Position gesture is not active");
+      }
+      session = activePositionSession.session;
+      sequence = activePositionSession.sequence + 1;
+      requireSafePositiveInteger(sequence, "Inspector Position gesture sequence");
+      nextActiveSession = { session, sequence };
+    }
+
+    const message = {
+      kind: "position-key-value-gesture",
+      phase: event.phase,
+      session,
+      sequence,
+      axis: event.axis,
+    };
+    if (event.phase !== "cancel") message.value = value;
+    postMessage(JSON.stringify(message));
+    if (event.phase === "commit" || event.phase === "cancel") {
+      activePositionSession = null;
+    } else {
+      activePositionSession = nextActiveSession;
+    }
+    if (event.phase === "start") nextPositionSession += 1;
+  };
+
+  return Object.freeze({
+    project,
+    send,
+    sendAddPositionKey,
+    sendPositionKeyGesture,
+  });
 }
