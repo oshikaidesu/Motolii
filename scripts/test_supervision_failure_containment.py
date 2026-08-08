@@ -62,6 +62,61 @@ def frontiers_are_disjoint(
     return not left_paths.intersection(right_paths) and left_owner != right_owner
 
 
+def attempt_activation(
+    marker: Path,
+    *,
+    authorized_base: bytes,
+    current_base: bytes,
+    return_count: int,
+    return_limit: int,
+    paths: set[str],
+    owner: str,
+    active_frontiers: tuple[tuple[set[str], str], ...] = (),
+) -> str:
+    """Test-only transition oracle: write ACTIVE only when every gate remains true."""
+    if authorized_base != current_base:
+        return "REJECT_BASE_DRIFT"
+    if return_count >= return_limit:
+        return "REJECT_RETURN_BOUND"
+    if any(
+        not frontiers_are_disjoint(paths, owner, active_paths, active_owner)
+        for active_paths, active_owner in active_frontiers
+    ):
+        return "REJECT_COLLISION"
+    marker.write_text("ACTIVE\n", encoding="utf-8")
+    return "ACTIVE"
+
+
+def attempt_acceptance(
+    marker: Path,
+    *,
+    authorized_base: bytes,
+    current_base: bytes,
+    changed_paths: set[str],
+    allowlist: set[str],
+    reviewer_before: str,
+    reviewer_after: str,
+) -> str:
+    """Test-only transition oracle: write ADOPTED only for a current, pure candidate."""
+    if authorized_base != current_base:
+        return "REJECT_BASE_DRIFT"
+    if not changed_paths.issubset(allowlist):
+        return "REJECT_ALLOWLIST"
+    if reviewer_before != reviewer_after:
+        return "REJECT_REVIEWER_MUTATION"
+    marker.write_text("ADOPTED\n", encoding="utf-8")
+    return "ADOPTED"
+
+
+def reconstruct_return(meta: dict[str, object], lifecycle: list[str]) -> str | None:
+    """Heartbeat is never terminal; only a completed lifecycle can produce RETURN."""
+    if not lifecycle or lifecycle[0] != "started" or lifecycle[-1] != "completed":
+        return None
+    if meta.get("exit_code") == 0 and meta.get("timed_out") is False:
+        return "RETURN(done)"
+    return "RETURN(fail)"
+
+
 class SupervisionFailureContainmentTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -189,12 +244,72 @@ class SupervisionFailureContainmentTest(unittest.TestCase):
         subprocess.run([GIT, "-C", os.fspath(repo), "commit", "-qam", "advance"], check=True)
         current = subprocess.check_output([GIT, "-C", os.fspath(repo), "rev-parse", "HEAD"]).strip()
         self.assertNotEqual(authorized, current)
-        self.assertFalse(authorized == current)
+
+        launch_marker = self.root / "base-drift.launch"
+        adoption_marker = self.root / "base-drift.adopt"
+        self.assertEqual(
+            attempt_activation(
+                launch_marker,
+                authorized_base=authorized,
+                current_base=current,
+                return_count=0,
+                return_limit=3,
+                paths={"candidate.rs"},
+                owner="candidate",
+            ),
+            "REJECT_BASE_DRIFT",
+        )
+        self.assertEqual(
+            attempt_acceptance(
+                adoption_marker,
+                authorized_base=authorized,
+                current_base=current,
+                changed_paths={"candidate.rs"},
+                allowlist={"candidate.rs"},
+                reviewer_before="pure",
+                reviewer_after="pure",
+            ),
+            "REJECT_BASE_DRIFT",
+        )
+        self.assertFalse(launch_marker.exists())
+        self.assertFalse(adoption_marker.exists())
 
     def test_write_set_semantic_owner_allowlist_and_reviewer_mutation_are_rejected(self) -> None:
         self.assertFalse(frontiers_are_disjoint({"a.rs"}, "document", {"a.rs"}, "render"))
         self.assertFalse(frontiers_are_disjoint({"a.rs"}, "document", {"b.rs"}, "document"))
         self.assertTrue(frontiers_are_disjoint({"a.rs"}, "document", {"b.rs"}, "render"))
+
+        base = b"current"
+        path_collision_marker = self.root / "path-collision.launch"
+        owner_collision_marker = self.root / "owner-collision.launch"
+        self.assertEqual(
+            attempt_activation(
+                path_collision_marker,
+                authorized_base=base,
+                current_base=base,
+                return_count=0,
+                return_limit=3,
+                paths={"a.rs"},
+                owner="render",
+                active_frontiers=(({"a.rs"}, "document"),),
+            ),
+            "REJECT_COLLISION",
+        )
+        self.assertEqual(
+            attempt_activation(
+                owner_collision_marker,
+                authorized_base=base,
+                current_base=base,
+                return_count=0,
+                return_limit=3,
+                paths={"b.rs"},
+                owner="document",
+                active_frontiers=(({"a.rs"}, "document"),),
+            ),
+            "REJECT_COLLISION",
+        )
+        self.assertFalse(path_collision_marker.exists())
+        self.assertFalse(owner_collision_marker.exists())
 
         repo = self.init_git_repo("reviewer-mutation")
         (repo / "allowed.txt").write_text("base\n", encoding="utf-8")
@@ -207,15 +322,75 @@ class SupervisionFailureContainmentTest(unittest.TestCase):
             subprocess.check_output([GIT, "-C", os.fspath(repo), "diff", "--name-only"], text=True).splitlines()
         )
         self.assertFalse(changed.issubset({"allowed.txt"}))
-        self.assertNotEqual(before, fingerprint_tree(repo))
+        after = fingerprint_tree(repo)
+        self.assertNotEqual(before, after)
+
+        allowlist_marker = self.root / "allowlist.adopt"
+        mutation_marker = self.root / "reviewer-mutation.adopt"
+        accepted_marker = self.root / "clean-candidate.adopt"
+        self.assertEqual(
+            attempt_acceptance(
+                allowlist_marker,
+                authorized_base=base,
+                current_base=base,
+                changed_paths=changed,
+                allowlist={"allowed.txt"},
+                reviewer_before=before,
+                reviewer_after=before,
+            ),
+            "REJECT_ALLOWLIST",
+        )
+        self.assertEqual(
+            attempt_acceptance(
+                mutation_marker,
+                authorized_base=base,
+                current_base=base,
+                changed_paths={"allowed.txt"},
+                allowlist={"allowed.txt"},
+                reviewer_before=before,
+                reviewer_after=after,
+            ),
+            "REJECT_REVIEWER_MUTATION",
+        )
+        self.assertEqual(
+            attempt_acceptance(
+                accepted_marker,
+                authorized_base=base,
+                current_base=base,
+                changed_paths={"allowed.txt"},
+                allowlist={"allowed.txt"},
+                reviewer_before=before,
+                reviewer_after=before,
+            ),
+            "ADOPTED",
+        )
+        self.assertFalse(allowlist_marker.exists())
+        self.assertFalse(mutation_marker.exists())
+        self.assertTrue(accepted_marker.is_file())
 
     def test_bounded_return_stops_activation_and_preserves_candidates(self) -> None:
         candidate = self.root / "candidate.patch"
         candidate.write_text("unadopted\n", encoding="utf-8")
+        candidate_before = candidate.read_bytes()
         return_limit = 3
-        activations = [count < return_limit for count in range(5)]
-        self.assertEqual(activations, [True, True, True, False, False])
-        self.assertEqual(candidate.read_text(encoding="utf-8"), "unadopted\n")
+        base = b"current"
+        dispositions = []
+        for return_count in range(5):
+            marker = self.root / f"return-{return_count}.launch"
+            dispositions.append(
+                attempt_activation(
+                    marker,
+                    authorized_base=base,
+                    current_base=base,
+                    return_count=return_count,
+                    return_limit=return_limit,
+                    paths={f"candidate-{return_count}.rs"},
+                    owner=f"owner-{return_count}",
+                )
+            )
+            self.assertEqual(marker.exists(), return_count < return_limit)
+        self.assertEqual(dispositions, ["ACTIVE", "ACTIVE", "ACTIVE", "REJECT_RETURN_BOUND", "REJECT_RETURN_BOUND"])
+        self.assertEqual(candidate.read_bytes(), candidate_before)
 
     def test_channel_failure_has_no_silent_fallback_and_campaign_matrix_reconstructs_returns(self) -> None:
         success = self.invoke_observed("success", "print('success')")
@@ -237,13 +412,21 @@ class SupervisionFailureContainmentTest(unittest.TestCase):
             ]
             self.assertEqual(lifecycle[0], "started")
             self.assertEqual(lifecycle[-1], "completed")
-            dispositions.append("RETURN(done)" if meta["exit_code"] == 0 and not meta["timed_out"] else "RETURN(fail)")
+            disposition = reconstruct_return(meta, lifecycle)
+            self.assertIsNotNone(disposition)
+            dispositions.append(disposition)
         self.assertEqual(dispositions, ["RETURN(done)", "RETURN(fail)", "RETURN(fail)", "RETURN(fail)", "RETURN(done)"])
         silence_events = [
             json.loads(line)["event"]
             for line in (self.root / "logs" / "silence" / "lifecycle.jsonl").read_text(encoding="utf-8").splitlines()
         ]
         self.assertIn("heartbeat", silence_events[:-1])
+        self.assertIsNone(
+            reconstruct_return(
+                {"exit_code": 0, "timed_out": False},
+                ["started", "heartbeat", "heartbeat"],
+            )
+        )
 
     def test_user_stop_reclaims_the_entire_process_group_without_new_launch(self) -> None:
         child_pid = self.root / "child.pid"
