@@ -70,7 +70,9 @@ run_lane() {
       ;;
     tooling)
       require_no_args "$lane" "$@"
+      require_command python3
       "$ROOT_DIR/scripts/check-ui-toolkit-deps.sh"
+      python3 -m unittest scripts/test_check_evidence_envelope.py scripts/test_run_observed_cli.py
       "$ROOT_DIR/scripts/test-delegate-cursor-supervised.sh"
       ;;
     rust)

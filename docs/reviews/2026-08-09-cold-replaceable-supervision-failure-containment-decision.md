@@ -115,7 +115,7 @@ RETURN集合はboundedにし、上限へ達したら新規activationを止める
 
 全体並列発注前に、LLM判定ではなくprocess、Git、hash、exit、diffで次を検証する。
 
-1. **evidence preflight**: source SHA-256、range、literal query scopeのcomputed hit集合とmanifestが一致し、全hit raw bytesが収録range内にある
+1. **evidence preflight**: `scripts/check-evidence-envelope.py`がsource SHA-256、range、literal query scopeのcomputed hit集合をpacket内manifestへ生成し、全hit raw bytesが収録range内にあるpacketだけをbyte単位で再検証する
 2. **double top seat**: 二processが同時取得を試み、exactly oneだけがdispatch可能
 3. **stalled but alive**: top seatを`SIGSTOP`し、新規launch 0、child raw stream保全、死亡誤判定0
 4. **real death**: `SIGKILL`後、exit/signalとprocess-group回収後だけfresh successorが復元する
@@ -129,6 +129,21 @@ RETURN集合はboundedにし、上限へ達したら新規activationを止める
 12. **integration crash**: commit途中killでpreまたはpostの一方へ復元し、decision／ledgerを同じcommitに保つ
 13. **campaign dry run**: fake CLIでsuccess、nonzero、truncated output、hang、long silenceを再生し、許可された遷移だけをdurable stateとraw logから再構成できる
 
+evidence selectionは次の閉schemaだけを受ける。`ranges`と`scope`は1-origin inclusive lineであり、packet内のsource SHA-256、range hash、literal hit line／columnはtoolがcurrent bytesから生成する。選択者がhit一覧やhashを手入力しない。
+
+```json
+{
+  "schema_version": 1,
+  "sources": [{
+    "path": "docs/example.md",
+    "ranges": [[1, 20]],
+    "queries": [{"literal": "exact phrase", "scope": [1, 100]}]
+  }]
+}
+```
+
+新規packetは`--write-envelope`で既存pathへの上書きを拒否し、review起動直前に同じselectionを`--check-envelope`へ渡してcurrent sourceとbyte一致を再検査する。packet自身へ自己参照hashを入れず、commandが出すenvelope SHA-256をobserved run logへ記録する。
+
 まず圧縮dry runを通し、その後に24時間scaleでqueue、disk、idle、recovery timeを測る。総監督自身の要約はoracle入力にしない。
 
 ## 9. 既知実装preflight
@@ -136,10 +151,10 @@ RETURN集合はboundedにし、上限へ達したら新規activationを止める
 ```text
 MECHANISM CLASS: external run observation, process-group reclamation, Git/worktree isolation, deterministic evidence checking
 KNOWN IMPLEMENTATION SEARCH: scripts/run-observed-cli.py, scripts/test_run_observed_cli.py, runner-independent supervision, blind evidence envelope observation, Git worktree and process-group OS primitives
-CANDIDATES: existing observed CLI harness; Git/worktree/fingerprint; Python stdlib hashlib/json/pathlib for evidence preflight
+CANDIDATES: existing observed CLI harness; Git/worktree/fingerprint; scripts/check-evidence-envelope.py using Python stdlib hashlib/json/pathlib
 ADOPTION ROUTE: REUSE observed harness and Git; WRAP stdlib only for deterministic evidence preflight
 REJECTED CANDIDATES: new runner/state DB/queue service; warm session pool; harness JSON semantic interpreter; heartbeat daemon
-THIN MOTOLII SEAM: top-seat policy, exact preauthorization invalidation, evidence packet preflight, failure fixtures
+THIN MOTOLII SEAM: top-seat policy, exact preauthorization invalidation, standalone deterministic evidence packet preflight, failure fixtures
 THIN MOTOLII RESIDUAL: user dispatch scope, authority ownership, adoption oracle, reviewer independence
 RETIREMENT: no old runner revival; replace only the standalone evidence checker if an equivalent accepted repository lint exists
 BUILD JUSTIFICATION: NONE

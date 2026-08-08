@@ -38,7 +38,7 @@
 
 | Phase | 状態 | 現在の出口 |
 |---|---|---|
-| M3/M4/M5全体並列開始 | **`WAIT / BASELINE CONVERGED ON CANDIDATE`** | [統一並列開始baseline](reviews/2026-08-09-unified-parallel-start-baseline-decision.md)で製品main、現行authority、直列核4契約、UI配置逃げ道、仮コード調査、2026-08-08設計資料を一つのcandidate履歴へ収束した。R2 spine／N-OVERLAYは未採用candidateのまま。evidence envelope非LLM preflight、停止耐性failure injection、fresh別family closure review、top seatの再照合、main統合を通すまでcampaign発注0 |
+| M3/M4/M5全体並列開始 | **`WAIT / BASELINE CONVERGED ON CANDIDATE`** | [統一並列開始baseline](reviews/2026-08-09-unified-parallel-start-baseline-decision.md)で製品main、現行authority、直列核4契約、UI配置逃げ道、仮コード調査、2026-08-08設計資料を一つのcandidate履歴へ収束した。R2 spine／N-OVERLAYは未採用candidateのまま。`scripts/check-evidence-envelope.py`と専用負例は実装済み。実packetのpreflight、残る停止耐性failure injection、fresh別family closure review、top seatの再照合、main統合を通すまでcampaign発注0 |
 | M3/P07-C1D | **`DONE / ACCEPTED / EXTERNAL_GATE_PENDING`** | commit `ea69f5ca`でReact Stage `#play`→typed Host intent→ProductApp-owned one PlaybackSession→audio-device Transport time→existing editor_playhead/Stage/native Timelineの一本を接続した。Inspector React assetとfixed Timeline marker geometryは維持。real device/audio/visualとP07-C3はM3-final保留 |
 | M3/U4b-0V | **`DONE / ACCEPTED / EXTERNAL_GATE_PENDING`** | commit `c404a050`でexisting explicit Add Position Key後のexact current Vec2 keyをReact Inspector X/Yから編集する一本を接続した。dedicated key-local CAS、clone preview、one durable terminal、Undo/Redo/reopenを受入。Const/off-key read-only、Auto Key拒否、fixed Timeline geometryを維持 |
 | M3/P07-C1C | **`DONE / ACCEPTED / MAIN`** | commit `b1b2c4df`でcanonical `start_frame`をexact `RationalTime` originへ変換し、negotiated-device elapsed timeへ加える。48 kHz / 44.1 kHzを閉じ、ProductApp/React/controlは含めない |
