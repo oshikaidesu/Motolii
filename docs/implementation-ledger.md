@@ -1,6 +1,6 @@
 # 実装進行台帳
 
-最終確認: **2026-08-07**
+最終確認: **2026-08-09**
 
 このファイルは、実装者が「次に何をするか」を1枚で判断するための現場用台帳。M0〜M5の意味や完了条件を再定義せず、現在の依存関係と発注順だけを示す。
 
@@ -38,6 +38,7 @@
 
 | Phase | 状態 | 現在の出口 |
 |---|---|---|
+| M3/M4/M5全体並列開始 | **`WAIT / BASELINE CONVERGED ON CANDIDATE`** | [統一並列開始baseline](reviews/2026-08-09-unified-parallel-start-baseline-decision.md)で製品main、現行authority、直列核4契約、UI配置逃げ道、仮コード調査、2026-08-08設計資料を一つのcandidate履歴へ収束した。R2 spine／N-OVERLAYは未採用candidateのまま。evidence envelope非LLM preflight、停止耐性failure injection、fresh別family closure review、top seatの再照合、main統合を通すまでcampaign発注0 |
 | M3/P07-C1D | **`DONE / ACCEPTED / EXTERNAL_GATE_PENDING`** | commit `ea69f5ca`でReact Stage `#play`→typed Host intent→ProductApp-owned one PlaybackSession→audio-device Transport time→existing editor_playhead/Stage/native Timelineの一本を接続した。Inspector React assetとfixed Timeline marker geometryは維持。real device/audio/visualとP07-C3はM3-final保留 |
 | M3/U4b-0V | **`DONE / ACCEPTED / EXTERNAL_GATE_PENDING`** | commit `c404a050`でexisting explicit Add Position Key後のexact current Vec2 keyをReact Inspector X/Yから編集する一本を接続した。dedicated key-local CAS、clone preview、one durable terminal、Undo/Redo/reopenを受入。Const/off-key read-only、Auto Key拒否、fixed Timeline geometryを維持 |
 | M3/P07-C1C | **`DONE / ACCEPTED / MAIN`** | commit `b1b2c4df`でcanonical `start_frame`をexact `RationalTime` originへ変換し、negotiated-device elapsed timeへ加える。48 kHz / 44.1 kHzを閉じ、ProductApp/React/controlは含めない |
@@ -139,7 +140,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 ## 現在の並列レーン
 
-現在の開始gateは、製品main、現行authority、直列核契約、未commit設計資料を一つのbaselineへ収束し、code存在とacceptanceを分離することである。統一baselineから[M3 RN runtime実行地図](m3-rn-runtime-execution-map.md)の`R0-HOST`、`R0-MAC-SEAT`、`R0-STAGE-LIFECYCLE`を別々に再照合し、通常RN artifactの`R0-ACCEPT`で束ねる。再実装を先に発注せず、R0合格後にだけR1の未閉鎖nodeを`DO`へ上げる。旧direct-wgpu/Vello surfaceへの新機能追加や旧task列の継続を同時に`DO`へしない。
+現在の開始gateは、[統一並列開始baseline](reviews/2026-08-09-unified-parallel-start-baseline-decision.md)と[cold-replaceable監督と停止封じ込め](reviews/2026-08-09-cold-replaceable-supervision-failure-containment-decision.md)である。製品main、現行authority、直列核契約、未commit設計資料を一つのcandidate履歴へ収束し、code存在とacceptanceを分離した。evidence preflight、failure injection、fresh closure review、main統合を通すまでcampaignを発注しない。統一baselineから[M3 RN runtime実行地図](m3-rn-runtime-execution-map.md)の`R0-HOST`、`R0-MAC-SEAT`、`R0-STAGE-LIFECYCLE`を別々に再照合し、通常RN artifactの`R0-ACCEPT`で束ねる。再実装を先に発注せず、R0合格後にだけR1の未閉鎖nodeを`DO`へ上げる。旧direct-wgpu/Vello surfaceへの新機能追加や旧task列の継続を同時に`DO`へしない。
 
 [M3 baseline-required自走checkpoint](reviews/2026-08-07-m3-baseline-required-autonomy-checkpoint.md)は、一般的なdesktop NLEの必須outcomeを利用者再確認なしで一契約へcompileする方針を決定したが、現時点の採用itemは0である。baseline抽出は非OpenAI研究者、別family challenge、Codexのevidence整理／authority写像／最終採否へ分離し、直前のWeb調査失敗runに現れたsample、feature row、thresholdを採用しない。Claude directのempty-workspace 1-query capability probeはWebSearchと公式body取得まで通過したためfresh本調査へ進めるが、probeはbaseline evidence、runner機能、一般permissionではない。baseline本調査とR0三候補のread-only再検収は別laneとして並行可能だが、どちらもR1以降の製品施工許可ではない。
 

@@ -16,6 +16,7 @@
 - **M3 baseline-required自走**: 一般的なdesktop動画編集ソフトで欠落すると購入候補から外れるuser-visible outcomeは、独立した非OpenAI調査と別family反例監査を通過後に`BASELINE_REQUIRED`として必要性を自動承認する。総監督Codexはfeature listを独力抽出せず、evidence packet、current authorityへの写像、scope／oracle、最終採否だけを所有する。現時点の採用itemは0。Claude directのempty-workspace 1-query Web capability probeは通過したが、baseline本調査、challenge、mappingは未実施である。正本は[M3 baseline-required自走checkpoint](reviews/2026-08-07-m3-baseline-required-autonomy-checkpoint.md)
 - **開発方式とM3現在地**: 仕様書駆動で、通常製品routeの利用者outcomeを縦sliceとして閉じる。旧routeのVS-1、parameter、Timeline move/trim等は意味・command・oracle資産として保持するが、新しい標準runtime上の製品完成ではない。UI選定probeは完了し、現在は[M3仕様 Wave R0](specs/M3-ui-integration.md#wave-r0--product-runtime-seat)の未統合候補をHost、macOS seat、Stage lifecycle別に`READY-RECHECK`する。R0後にVS-1をRN shell + rust-skia Timeline + wgpu/rust-skia Stage + RN Inspectorで再閉鎖する。macOSで操作体系を先行し、Windows common Rust compileは通過済み、Windows RNW実機は`EXTERNAL_GATE_PENDING`。詳細な実装事実は[実装台帳](implementation-ledger.md)を正とする
 - **現在のUI接続粒（2026-08-07）**: runtime選定と隔離probeは`DONE`、R0未統合候補は`READY-RECHECK / MAIN NOT REACHED`。旧routeで成立したVS-1、parameter mapping、move／trim／snap、render worker、Stage projection、Undo／Redo、React conceptは再利用入力であり、R0候補の再実装を発注せず責任別検収から始める。旧`CU-201P-TRIM`等を新renderer選定より先に再発注しない
+- **全体並列の開始線（2026-08-09）**: 製品main、現行authority、直列核4契約、UI配置逃げ道、M3/M4/M5仮コード調査、昨晩の未commit設計資料を[統一並列開始baseline](reviews/2026-08-09-unified-parallel-start-baseline-decision.md)へ収束した。R2 spine／N-OVERLAYは未採用candidate、R0 acceptanceとcampaign開始は未閉鎖。並列campaignは[cold-replaceable監督と停止封じ込め](reviews/2026-08-09-cold-replaceable-supervision-failure-containment-decision.md)のfailure injectionとfresh closure reviewを通過するまで発注しない
 - **M3の実装分解**: [M3仕様](specs/M3-ui-integration.md#10-実装wave)のR0〜R4を成果wave、[M3 RN runtime実行地図](m3-rn-runtime-execution-map.md)を施工node・依存・oracleのdispatch正本とする。[旧既知技術採択地図](m3-parallel-implementation-map.md)と[旧実行可能地図](m3-executable-dispatch-map.md)はsemantic oracle、既存owner、未閉鎖gapの検索資料であり、旧ID／rendererを新runtimeへ自動継承しない
 - **設計目標の代表値**: 1080p動画レイヤー40本同時で破綻しない / プロセス強制終了しても編集を失わない(コマンドジャーナル) / フレーム並列(マルチコア)を構造で保証
 
@@ -24,18 +25,21 @@
 1. [concept.md](concept.md) — 何であって何でないか。**全決定事項の台帳**(スコープ、プラグイン境界、座標系、並行性、音声方針)
 2. [performance-model.md](performance-model.md) — 「なぜAEより軽くできるか」の物理(メモリ帯域モデル)、品質モード(Draft/Final)、並列性、40レイヤー目標の試算。**容量・VRAM上限への疑念は[memory-model.md](memory-model.md)(疑念台帳)へ**
 3. [pitfalls-and-roadmap.md](pitfalls-and-roadmap.md) — **最重要・最大**。落とし穴カタログ(A〜H、先行プロジェクト死因分析+LLM開発規律込み)とロードマップ(M0〜M5)、凍結ゲート
-4. M3〜M5の計画・発注・実装に着手する時: [known-implementation-adoption-model.md](known-implementation-adoption-model.md)(利用者成果→既知実装調査→採択地図→接続→退役)→ [発注コンパイルと調査返却loop](reviews/2026-08-07-outcome-order-compilation-and-research-return-loop.md)(closed order→実装／調査return→次edge再選定)→ 外部LLMを使う時だけ[発注観測・実行・可変配分runbook](llm-dispatch-observation-and-allocation-runbook.md)(CLI引数、途中log、主要model、利用枠profile)
-5. M3実装に着手する時: [M3仕様](specs/M3-ui-integration.md)（R0〜R4、意味、gate）→ [UI runtime責任境界](ui-runtime-architecture.md) → [M3 RN runtime実行地図](m3-rn-runtime-execution-map.md)（施工node、依存、oracle）→ [実装台帳](implementation-ledger.md)の一意な`DO`。旧[m3-parallel-implementation-map.md](m3-parallel-implementation-map.md)／[m3-executable-dispatch-map.md](m3-executable-dispatch-map.md)は既存ownerとoracleの検索にだけ使う
-6. M4に着手する時: [M4既知実装調査](reviews/2026-08-02-m4-known-implementation-survey.md)→ [M4既知実装採択・並列実装地図](m4-known-implementation-adoption-map.md)→ [implementation-ledger.md](implementation-ledger.md)(一意な`DO`)→ [specs/M4-cache-and-analysis.md](specs/M4-cache-and-analysis.md)(意味と実装ガード)。M5に着手する時: [M5既知実装調査](reviews/2026-08-02-m5-known-implementation-survey.md)→反対側レビュー→採択地図→ledgerの順で閉じる
-7. UIを表示・起動・比較する時: [ui-artifact-terminology.md](ui-artifact-terminology.md)(要求名→成果物種別→実装状態。未実装のPreviewをMock/baseline/spikeで代替しない)→ [ui-reference-map.md](ui-reference-map.md)(対象surfaceの正本と実体)
-8. プラグインを書く/量産させる時: [plugin-authoring.md](plugin-authoring.md)(LLM/人間共通の契約・禁止事項・型紙)
-9. 依存・参考リポジトリを調べる時: [references.md](references.md)(ライセンス区分つき。GPL系はコードを読むことすら禁止)
+4. M3〜M5の全体並列campaignを始める時: [統一並列開始baseline](reviews/2026-08-09-unified-parallel-start-baseline-decision.md)（開始履歴と候補状態）→ [cold-replaceable監督と停止封じ込め](reviews/2026-08-09-cold-replaceable-supervision-failure-containment-decision.md)（一つのtop seat、停止・復旧、failure injection）を先に読む
+5. M3〜M5の計画・発注・実装に着手する時: [known-implementation-adoption-model.md](known-implementation-adoption-model.md)(利用者成果→既知実装調査→採択地図→接続→退役)→ [発注コンパイルと調査返却loop](reviews/2026-08-07-outcome-order-compilation-and-research-return-loop.md)(closed order→実装／調査return→次edge再選定)→ 外部LLMを使う時だけ[発注観測・実行・可変配分runbook](llm-dispatch-observation-and-allocation-runbook.md)(CLI引数、途中log、主要model、利用枠profile)
+6. M3実装に着手する時: [M3仕様](specs/M3-ui-integration.md)（R0〜R4、意味、gate）→ [UI runtime責任境界](ui-runtime-architecture.md) → [M3 RN runtime実行地図](m3-rn-runtime-execution-map.md)（施工node、依存、oracle）→ [実装台帳](implementation-ledger.md)の一意な`DO`。旧[m3-parallel-implementation-map.md](m3-parallel-implementation-map.md)／[m3-executable-dispatch-map.md](m3-executable-dispatch-map.md)は既存ownerとoracleの検索にだけ使う
+7. M4に着手する時: [M4既知実装調査](reviews/2026-08-02-m4-known-implementation-survey.md)→ [M4既知実装採択・並列実装地図](m4-known-implementation-adoption-map.md)→ [implementation-ledger.md](implementation-ledger.md)(一意な`DO`)→ [specs/M4-cache-and-analysis.md](specs/M4-cache-and-analysis.md)(意味と実装ガード)。M5に着手する時: [M5既知実装調査](reviews/2026-08-02-m5-known-implementation-survey.md)→反対側レビュー→採択地図→ledgerの順で閉じる
+8. UIを表示・起動・比較する時: [ui-artifact-terminology.md](ui-artifact-terminology.md)(要求名→成果物種別→実装状態。未実装のPreviewをMock/baseline/spikeで代替しない)→ [ui-reference-map.md](ui-reference-map.md)(対象surfaceの正本と実体)
+9. プラグインを書く/量産させる時: [plugin-authoring.md](plugin-authoring.md)(LLM/人間共通の契約・禁止事項・型紙)
+10. 依存・参考リポジトリを調べる時: [references.md](references.md)(ライセンス区分つき。GPL系はコードを読むことすら禁止)
 
 ## ファイルマップ
 
 | ファイル | 役割 | 状態 |
 |---|---|---|
 | [concept.md](concept.md) | コンセプト定義・決定事項の台帳 | 現行(決定はここに追記される) |
+| [reviews/2026-08-09-unified-parallel-start-baseline-decision.md](reviews/2026-08-09-unified-parallel-start-baseline-decision.md) | 製品main、現行authority、直列核、UI配置逃げ道、仮コード調査、未commit設計資料を一つの開始履歴へ収束し、候補状態を固定する | **決定／candidate branch収束済み・main統合とcampaign未実施** |
+| [reviews/2026-08-09-cold-replaceable-supervision-failure-containment-decision.md](reviews/2026-08-09-cold-replaceable-supervision-failure-containment-decision.md) | 一つのtop seat、cold replacement、下位seatの権限上限、停止・復旧・採用gateとfailure injectionを固定する | **決定／failure injectionとfresh closure review待ち** |
 | [known-implementation-adoption-model.md](known-implementation-adoption-model.md) | M3〜M5共通の既知実装調査、採択地図、薄い接続、独自負債置換・退役の開発順序 | **確定運用／非凍結の横断開発原則**(2026-08-02。M3適用済み、M4/M5採択地図確定。反証と実測で改訂可) |
 | [reviews/2026-08-07-outcome-order-compilation-and-research-return-loop.md](reviews/2026-08-07-outcome-order-compilation-and-research-return-loop.md) | 利用者成果の背骨からclosed orderを作り、実装または調査返却を検収してcurrent codeから次edgeを再選定する横断発注loop | **決定／全計画・発注・STOP/RETURN・次粒再選定の正本** |
 | [reviews/2026-08-07-m3-baseline-required-autonomy-checkpoint.md](reviews/2026-08-07-m3-baseline-required-autonomy-checkpoint.md) | M3のbaseline必要性自動承認、非OpenAI抽出、別family challenge、Codexの整理・写像・採否責任、Web research再入場条件を分離する | **決定／baseline採用0、Web capability probe通過、R0再検収とfresh本調査が次lane** |

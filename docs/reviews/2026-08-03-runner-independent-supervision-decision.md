@@ -4,6 +4,10 @@
 
 日付: 2026-08-03
 
+## 2026-08-09追補
+
+本書のrunner非依存責任配置を維持したまま、M3〜M5全体並列campaignの開始線、top seatのcold replacement、下位seatのpreauthorization、停止・復旧failure injectionは[cold-replaceable監督と停止封じ込め](2026-08-09-cold-replaceable-supervision-failure-containment-decision.md)へ具体化した。これは旧runner、receipt DB、lease schema、固定pipelineの復活ではない。campaign開始前の候補状態とgateは[統一並列開始baseline](2026-08-09-unified-parallel-start-baseline-decision.md)を正とする。
+
 ## 決定
 
 Motoliiの監督は主担当Codexの責任であり、transport、order schema、receipt DB、固定model routeの責任ではない。

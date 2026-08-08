@@ -23,6 +23,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。本書
 | 条件 | 必須正本 |
 |---|---|
 | 計画、発注、`STOP / RETURN`、次粒再選定 | [発注コンパイルと調査返却loop](docs/reviews/2026-08-07-outcome-order-compilation-and-research-return-loop.md)、[既知実装採択モデル](docs/known-implementation-adoption-model.md) |
+| M3〜M5全体並列campaign、deputy／field、総監督takeover、停止耐性 | [統一並列開始baseline](docs/reviews/2026-08-09-unified-parallel-start-baseline-decision.md)、[cold-replaceable監督と停止封じ込め](docs/reviews/2026-08-09-cold-replaceable-supervision-failure-containment-decision.md) |
 | 外部LLMへの発注、相談、検収、利用枠に応じたmodel配分 | まず[Launch card](docs/llm-dispatch-observation-and-allocation-runbook.md#launch-card)。意味未閉鎖、例外選択、検収ではcardからリンクされた詳細正本だけを追加する |
 | 一般機構の新設・置換 | [既知実装採択・置換開発モデル](docs/known-implementation-adoption-model.md)、[依存優先・責任最小化ゲート](docs/reviews/2026-07-24-dependency-first-responsibility-gate.md) |
 | M2 Document、schema、journal | [恒久焼き込みの予防](docs/reviews/2026-07-12-m2-permanence-prevention.md) |

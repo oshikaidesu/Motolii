@@ -32,6 +32,8 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-09-unified-parallel-start-baseline-decision.md](2026-08-09-unified-parallel-start-baseline-decision.md) | 製品main、現行authority、直列核、UI配置逃げ道、仮コード調査、未commit設計資料を一つの開始履歴へ収束し、INTEGRATED／CANDIDATE／WAIT／REJECTEDを混同しない全体並列開始baseline決定 |
+| [2026-08-09-cold-replaceable-supervision-failure-containment-decision.md](2026-08-09-cold-replaceable-supervision-failure-containment-decision.md) | authorityを一つのtop seatへ保ったままfresh sessionへcold replacementし、総監督停止、二重権威、base drift、衝突、reviewer mutation、user STOPを非LLM failure injectionで封じ込める決定 |
 | [2026-08-08-m4-m5-call-site-connection-sketch.md](2026-08-08-m4-m5-call-site-connection-sketch.md) | M4／M5全機構をM3の共有render背骨へ仮接続し、最小Core＋private sandbox境界、authority段8 lane／foundation段12 lane、共有ownerによる4列publication、既存STOPごとのsafe parallel edgeを抽出した観察 |
 | [2026-08-08-depth-rail-selection-focus-decision.md](2026-08-08-depth-rail-selection-focus-decision.md) | z=0既定群の灰色統合と「個別化=逸脱」新規則、選択フォーカスでdragして初めて視差が生まれるDepth Rail設計の利用者裁定、7案却下の経緯と10方向実声調査の返却 |
 | [2026-08-08-supervisor-handoff-timeline-design-and-return-to-codex.md](2026-08-08-supervisor-handoff-timeline-design-and-return-to-codex.md) | Timeline設計12件と完成条件の鎖、skia fixture 7本、起動準備だけ済ませた外部発注2件、Codex復帰による代理supervisor席の返上を次のsupervisorへ渡す引継ぎ |
