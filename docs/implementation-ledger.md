@@ -46,7 +46,7 @@
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み。RenderTargetPoolは直列2枚を下限にbranch livenessで伸長するが、O(n²)未来scan最適化、fp16／path fusion、40-layer性能は未成立。R9/T11は当時の歴史sign-offで、現行製品Stage／実素材release受入はGAP-32。出荷hardening候補G1〜G8は完了条件外で、2026-07-23再照合の未到達process/artifact reliabilityはGAP-26、GPU health分類はGAP-27、同期export readbackの原因分離／staging採択はGAP-29、GPU RGB→YUV export接続はGAP-31。G7の同期1-frame boundedをcopy重畳完成、decode側GPU色変換や出力tagをinverse変換完成とみなさない |
 | M2 | **基盤再締結済み / narrow follow-up pending** | D1lのDocument／lifecycle意味、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。2026-07-23監査で`new_v1` enforcement driftをGAP-23、known Edit apply failureのsnapshot fallback driftをGAP-24、semantic oracle gate自己保護をGAP-25として狭く再開。Param Pipeline／Element Domain／Constraint GraphはM2-GAP-15の解凍gate前は未実装のままが正しい。D5は骨格到達・統合審判pendingで、AG-2 mixer coreと`PlaybackSession` mixed adapterは成立したが、製品lifetime／construction／control／time handoffはGAP-28。D1n external revisionも未実装で、cloud-safe公約不可 |
 | M3 | **UI runtime再基線 `DONE` / RN codeはlocal mainに存在 / R0 acceptance未閉鎖 / 旧route outcomeはaccepted oracleとして保持** | [2026-08-07再基線決定](reviews/2026-08-07-m3-react-native-rust-skia-runtime-rebaseline.md)でReact Native shell、rust-skia Timeline／Curve、wgpu + rust-skia Stageを標準にした。local main `9b2deac4`はRN product runtime seat、shell slots、Inspector initial snapshot、Stage GPU surface、initial Stage preview pixelsを含むが、`R0-HOST / R0-MAC-SEAT / R0-STAGE-LIFECYCLE / R0-ACCEPT`の責任別再照合を一つのacceptanceとして閉じた記録はないため、存在するcodeを製品完成へ繰り上げない。旧routeのVS-1、U4a-1、U4b-0/V、CU-0A08ITIB、P07-C1A/B/C/D、Opacity、Timeline move／trim、D2／Undo／projectionは各acceptanceどおり意味・command・oracle資産として維持する。macOS操作体系を先行し、Windows common Rust target compileは`DONE`、RNW実機は`EXTERNAL_GATE_PENDING`。plugin UI公開契約はG0-3 / GAP-13まで停止する |
-| M4 | **K0契約凍結済み(test-only) / P02-C1/C2 `CONTRACT CLOSED / IMPLEMENTATION NOT STARTED` / P03-C1・P04-C4・P05-C1(V1)・P06-C1・P07-C1・P13-C1 `REMAP / VERIFIED` / P09・P05-C2/C3・K7a/K8bは`STOP`** | K0はRoD/RoIの契約意味をtest-only spikeで凍結済み、K1〜K8は未実装。[直列核4契約](reviews/2026-08-08-serial-core-known-contracts-decision.md)でP02を止めていたsource identityをexact source bytesのSHA-256+size、canonical recipe、別ArtifactDigestへ締結し、Asset lifecycle、hard-budget policy、artifact/job、invalidation publicationの順序も閉じたが、codec／Command／ResourceLedger／classifierは未実装。[調査](reviews/2026-08-02-m4-known-implementation-survey.md)と[13親の採択地図](m4-known-implementation-adoption-map.md)は作成済み。[disk再検索](reviews/2026-08-02-m4-disk-artifact-store-resurvey.md)でglobal CASを過剰仕様として外し、映像編集製品で成立済みの再生成可能な通常artifact fileへREDUCEした。P03-C1は`foyer-memory 0.22.3`のweight／handle／resize／filter／並行操作を4 fixture、3 target cross-buildで確認したが、remove後も外部handleが生存する場合の実メモリ量は`Cache::usage()`に含まれないためprivate ownerへREMAPした。P04-C4は`fs4 1.1.0`のfree-space／allocation-granularity観測とtyped errorを3 fixture、3 target cross-buildで確認し、hard budget／admission／evictionはprivate ownerへ残した。P05-C1は`tempfile 3.27.0` same-dir temp／persist、FFmpeg temp artifact、atomic visibility、SHA-256、stale temp隔離を4 fixture、3 target cross-buildで確認しV1を閉じたが、process kill／ENOSPC／同一recipe競合／Windows runtime visibilityは未検証である。P06-C1は`rangemap 1.7.1`のhalf-open/coalesce/gapsを6 fixtureで確認し、empty raw insert panicをprivate guardへREMAPした。P07-C1は`priority-queue 2.7.0`のreprioritize/remove/popとcomposite tie-breakを4 fixtureで確認し、bounded admission／generation filterをprivate ownerへREMAPした。P13-C1は`vello_svg 0.10.0`のpath/group/fill/stroke、unsupported callback、typed parse errorを4 fixture、3 target cross-buildで確認したが、external fileはusvg段で無言dropするためnetwork/file preflightをprivate ownerへREMAPした。P09-C1はorigin guard baselineのみでGAP-29原因分離を計測せず`STOP`とした。P05-C2/C3はprivate disk store／ResourceLedgerが現行repoにないため、K7a/K8bはgroup bake／full Draft producerがないため、いずれも`STOP / RUNTIME ABSENT`とした。現行`PipelineCache`／dynamic target pool／wgpu budget thresholdをResourceLedger、copy-out、disk store完成と数えない |
+| M4 | **K0契約凍結済み(test-only) / P02-C1/C2 `CONTRACT CLOSED / IMPLEMENTATION NOT STARTED` / P03-C1・P04-C4・P05-C1(V1 baseline only)・P06-C1・P07-C1・P13-C1 `REMAP / VERIFIED` / P09・P05-C2/C3・K7a/K8bは`STOP`** | K0はRoD/RoIの契約意味をtest-only spikeで凍結済み、K1〜K8は未実装。[直列核4契約](reviews/2026-08-08-serial-core-known-contracts-decision.md)でP02を止めていたsource identityをexact source bytesのSHA-256+size、canonical recipe、別ArtifactDigestへ締結し、Asset lifecycle、hard-budget policy、artifact/job、invalidation publicationの順序も閉じたが、codec／Command／ResourceLedger／classifierは未実装。[調査](reviews/2026-08-02-m4-known-implementation-survey.md)と[13親の採択地図](m4-known-implementation-adoption-map.md)は作成済み。[disk再検索](reviews/2026-08-02-m4-disk-artifact-store-resurvey.md)でglobal CASを過剰仕様として外し、映像編集製品で成立済みの再生成可能な通常artifact fileへREDUCEした。P03-C1は`foyer-memory 0.22.3`のweight／handle／resize／filter／並行操作を4 fixture、3 target cross-buildで確認したが、remove後も外部handleが生存する場合の実メモリ量は`Cache::usage()`に含まれないためprivate ownerへREMAPした。P04-C4は`fs4 1.1.0`のfree-space／allocation-granularity観測とtyped errorを3 fixture、3 target cross-buildで確認し、hard budget／admission／evictionはprivate ownerへ残した。P05-C1は`tempfile 3.27.0` same-dir temp／persist、FFmpeg temp artifact、atomic visibility fixture、SHA-256、stale temp隔離を4 fixture、3 target cross-buildで確認したV1 baselineに限る。process kill／ENOSPC／同一recipe競合／Windows runtime visibilityは未検証でV2/V3へ残る。P06-C1は`rangemap 1.7.1`のhalf-open/coalesce/gapsを6 fixtureで確認し、empty raw insert panicをprivate guardへREMAPした。P07-C1は`priority-queue 2.7.0`のreprioritize/remove/popとcomposite tie-breakを4 fixtureで確認し、bounded admission／generation filterをprivate ownerへREMAPした。P13-C1は`vello_svg 0.10.0`のpath/group/fill/stroke、unsupported callback、typed parse errorを4 fixture、3 target cross-buildで確認したが、external fileはusvg段で無言dropするためnetwork/file preflightをprivate ownerへREMAPした。P09-C1はorigin guard baselineのみでGAP-29原因分離を計測せず`STOP`とした。P05-C2/C3はprivate disk store／ResourceLedgerが現行repoにないため、K7a/K8bはgroup bake／full Draft producerがないため、いずれも`STOP / RUNTIME ABSENT`とした。現行`PipelineCache`／dynamic target pool／wgpu budget thresholdをResourceLedger、copy-out、disk store完成と数えない |
 | M5 | **3D import-render境界・技術採択・private検証 DONE / 製品runtime `WAIT`（M3意味開放待ち）** | [M5 3D import／render境界](reviews/2026-08-01-m5-3d-import-rendering-boundary-decision.md)でOSS leaf parser、faithful imported assetとrenderer-compiled派生物のprivate二段境界、core PBR＋fixed neutral environment、同一renderer責任を決定した。[M5採択地図](m5-known-implementation-adoption-map.md)とA1/A2/R0/T0/P0/I0/D0/C0のprivate receiptでimport、renderer、text、post、picking、identity、Observationを検証したが、製品schema／runtime／resource接続は未実装。[M5休止契約](reviews/2026-08-02-m5-pause-until-m3-semantic-release.md)により、M3の共有writer・通常製品route・snapshot／Stage／Preview／Export・独立受入／main統合が意味論として閉じるまで休止し、再開後は共有resource/hard budget→C0 schema/provider identity/migration→M5 runtimeの順に進む |
 
 Repository validationは[validation topology決定](reviews/2026-07-31-repository-validation-topology-decision.md)で
@@ -99,22 +99,39 @@ RR-0 inventory → RR-1〜RR-8 asset判定 → RR-9統合縦切り
 
 Editor scripting:
 U2a → U2b → U9a → U9b → U9c
-F-11 + K0 → K1b + K1c → K7 → SCR-4 (Accumulation/Feedback Canvas)
+K0 + K1a + M4-P02-CODEC + M2-D8 → K1b
+K1a + K1b + P03-C2 + P04-C2 + P05-C2 + P05-C3 → K1c
+M2-ASSET-1C + P03-C2 → M4-P03-C3
+P07-C2 → M4-P07-C3 → P09-C2
+K1b + K1c + M2-D3 + P07-C2 + P09-C2 → K7a
+K7a + K2 → K7b → K7c
+U9b + F-11 + K0 + K7c → SCR-4 (Accumulation/Feedback Canvas)
 
 Bounds / cache:
-D3 → K0 #167 → K1b → K2
+D3 → K0 #167
+M2-ASSET-1A + K1a → M2-ASSET-1C
+M2-ASSET-1A → M4-P02-CODEC
+K0 #167 + K1a + M4-P02-CODEC + M2-D8 → K1b
+M2-D3 + M2-D3e + accepted target/source Command semantics → M4-P02-C3
+M4-P02-C3 → P06-C2
+K1b + M4-P02-C3 + P06-C2 → P06-C3
+K1b + M4-P02-C3 + P06-C2 + P06-C3 → K2
 
 Resource pressure / preview:
-K0 → K1a → K1b → K1c
+K0 → K1a
+K1a + M4-P02-CODEC + M2-D8 → K1b
+K1a + K1b + P03-C2 + P04-C2 + P05-C2 + P05-C3 → K1c
+M2-ASSET-1C + P03-C2 → M4-P03-C3
 K1c + K4 → K1d
 G0-8 + K1a → U0f
 U1b + U1c + U5 + K1d → U1g → U1h
 
 MV whole-song cache / freeze:
-K1b + K1c + D3 → K7a
+P07-C2 → M4-P07-C3 → P09-C2
+K1b + K1c + D3 + P07-C2 + P09-C2 → K7a
 K7a + K2 → K7b → K7c → U8b
-K1d + D3 → K8a
-K7c + K8a + D5 → K8b
+K1b + K1c + K1d + K2 + D3 + P06-C2 + P06-C3 + P07-C2 + M4-P07-C3 → K8a
+K7c + K8a + M2-D5 + M4-P03-C3 → K8b
 
 Duplicator:
 P0I #170 → P7a → P7b → P7c → P7U
@@ -572,16 +589,26 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | 3 | U3a-1I | M3 | `DONE` | `U3a-1S` `DONE`。論理依存の`U0a`/`U0b`は`DONE`。G0-6H/U0e-3/U2c-3/U2c-5/G0-9は入場条件にしない | toolkit/renderer非依存のDocument→Timeline projection/layout/cull/hit-testを小さなfixtureで閉じる。G0-9や100k再実測を入場条件にしない |
 | 4 | U3a-2 | M3 | `WAIT` | U3a-1I + G0-9 platform受入 | direct wgpu+Vello候補をwindowed fixture、input、WebView同居、presentまで閉じる。Canvas/browser WebGPUは先例baselineで製品枝にしない |
 | 5 | U2g | M3 | `WAIT` | D1l + D3e + U0e + U2b + U3a-2 merge | Effect常時接続線 |
-| 6A | M2-ASSET-1A | M2 | `READY-RECHECK / CONTRACT CLOSED` | [直列核4契約](reviews/2026-08-08-serial-core-known-contracts-decision.md)をcurrent mainで再照合し、strict fingerprint codec、`AssetTable::peek_next`／inverse-only `restore`、`AdmitAsset`／`RemoveAsset`、全typed use countを一つのexact allowlist／oracleへcompileする | K1aと別ownerで並列可。product import／relink adapter、P02 runtime codec、Replace Source、Purge UIを同じticketへ入れない |
+| 6A | M2-ASSET-1A | M2 | `READY-RECHECK / CONTRACT CLOSED` | [直列核4契約](reviews/2026-08-08-serial-core-known-contracts-decision.md)をcurrent mainで再照合し、strict fingerprint codec、`AssetTable::peek_next`／inverse-only `restore`、`AdmitAsset`／`RemoveAsset`、現行には無いprivateな一つのexhaustive `AssetRef` traversalを新設して`Document::validate`とtyped use countへ共有すること、stale `RemoveAsset`完全payload mismatch時の無変更拒否、journal container v1→v2 migrationと最初のv3 frameを一つにしたatomic replace、global Edit v3 writer、new readerのcontainer v1/v2・Edit v1/v2/v3互換、旧readerのreplay前hard refusalを一つのexact allowlist／oracleへcompileする | K1aと別ownerで並列可。product import／source binding／relink adapter、P02 runtime codec、Replace Source、Purge UIを同じticketへ入れない |
 | 6B | K1a | M4 | `READY-RECHECK / CONTRACT CLOSED` | K0凍結(test-only)と[直列核4契約](reviews/2026-08-08-serial-core-known-contracts-decision.md)をcurrent mainで再照合し、thin ResourceLedger policy ownerのexact allowlist／oracleを一契約へcompileする | M2-ASSET-1Aと別ownerで並列可。tier adapter、cache store、M5接続を同じticketへ入れない |
-| 7 | K1b | M4 | `WAIT` | K1a merge | cache同一性/LRU/並行store |
-| 8 | K1c | M4 | `WAIT` | K1a + K1b merge | VRAM/RAM/disk階層admissionと退避 |
+| 6C | P04-C2 | M4 | `WAIT / CONTRACT CLOSED` | K1a + P04-C1 merge | owner／tier／resident／pinned／requested bytesをK1aの唯一のResourceLedger policyへ渡すprivate tier adapter。第二policy／allocator frameworkを所有しない |
+| 7A | M2-ASSET-1C | M2/M3 product adapter | `WAIT / CONTRACT CLOSED` | M2-ASSET-1A + K1a merge | probe receiptをfresh full hashで再照合してからCommandをprepareし、loaded V1 tagを最初のbinding一致前にcache authorityにせず、SourceBinding full-copyを事前予約してjob中pinする。`resolve_asset_path`を直接使う現行audio／export source収集と後続media decode／probe／muxを含むcallsite inventoryを固定して、source-consuming workerへは保存済みfingerprintとexact bytesを結合したbudgeted Host-private SourceBindingだけを渡す。relink／Replace Source／proxy生成を同じticketへ入れない |
+| 7B | M4-P02-CODEC | M4 | `WAIT` | M2-ASSET-1A merge | canonical `RecipeKeyV1`／`ArtifactDigest` codecとmutation corpus。K1b/storeを同じticketへ入れない |
+| 7C | M4-P02-C3 | M4 | `WAIT / CONTRACT CLOSED` | M2-D3 + M2-D3e + accepted target/source Command semantics | exhaustive classifierと`(snapshot, CacheEpoch, InvalidationFootprint)` atomic state envelopeの唯一のowner。K1b store／K2統合を同じticketへ入れない |
+| 7D | K1b | M4 | `WAIT` | K1a + M4-P02-CODEC + M2-D8 merge | cache同一性/LRU/並行store。classifier／state envelopeを所有しない |
+| 7E | P06-C2 | M4 | `WAIT / CONTRACT CLOSED` | M4-P02-C3 merge | classifier済みaffected identity／temporal footprintをhalf-open区間へ写すprivate pure projection。Command分類／epoch／publishを所有しない |
+| 7F | P06-C3 | M4 | `WAIT / CONTRACT CLOSED` | K1b + M4-P02-C3 + P06-C2 merge | accepted footprintをK1b coverageへ反映するconsumer。coverage generationをCacheEpoch／第二state publishにしない |
+| 7G | M4-P03-C3 | M4 product audio adapter | `WAIT / CONTRACT CLOSED` | M2-ASSET-1C + P03-C2 merge | `AudioProgram`のcaller-owned無制限HashMapを共通RAM admissionへ移し、旧二重ownerを0にする。K1cと並列可、K8bが待つ |
+| 7H | M4-P07-C3 | M4 CPU/GPU task adapter | `WAIT / CONTRACT CLOSED` | P07-C2 merge | CPU/GPU cooperative token／heartbeatだけを閉じ、P09-C2とK8aを解放する。media branchはP08-C1の既存kill/cancel oracleへ吸収し、第二scheduler/cancel frameworkを作らない |
+| 8A | K2 | M4 | `WAIT` | K1b + M4-P02-C3 + P06-C2 + P06-C3 merge | accepted target/source Command意味をcache store、唯一のclassifier、pure interval projection／coverage consumerへ接続し、第二classifier／epoch publisherなしで部分無効化を閉じる |
+| 8B | K1c | M4 | `WAIT` | K1a + K1b + P03-C2 + P04-C2 + P05-C2 + P05-C3 merge | VRAM/RAM/disk階層admissionと退避。GPU copy-outはP09-C2へ残す |
+| 8C | K4 = P08-C3 | M4 | `WAIT` | M2-D1 + M2-ASSET-1C + M4-P02-CODEC + P05-C2 + P05-C3 + P07-C2 + P08-C1 + P08-C2 merge | SourceBindingからのproxy生成／CFR正規化／product substitution。通常product decode routeの唯一の合流点で、第二ownerとraw locator sidecar handoffを許さない |
 | 9 | K1d | M4 | `WAIT` | K1c + K4 merge | 容量pressureとdeadlineを分離したpreview縮退signal |
-| 10 | K7a | M4 | `WAIT` | K1b + K1c + D3 merge | group子合成のatomic bake成果物境界 |
+| 10 | K7a | M4 | `WAIT` | K1b + K1c + M2-D3 + P07-C2 + P09-C2 merge | group子合成のatomic bake成果物境界。GAP-29のP09-C1未採択中はP09-C2とともにWAIT |
 | 11 | K7b | M4 | `WAIT` | K7a + K2 merge | 依存時間区間だけの無効化と旧世代再利用 |
 | 12 | K7c | M4 | `WAIT` | K7a + K7b merge | bake hit時の内部graph置換と再freeze |
-| 13 | K8a | M4 | `WAIT` | K1b + K1c + K1d + D3 merge | 全曲Draft coverage planner |
-| 14 | K8b | M4 | `WAIT` | K7c + K8a + D5 merge | 100GB accounting fixtureと通し再生E2E |
+| 13 | K8a | M4 | `WAIT` | K1b + K1c + K1d + K2 + M2-D3 + P06-C2 + P06-C3 + P07-C2 + M4-P07-C3 merge | 全曲Draft coverage planner |
+| 14 | K8b | M4 | `WAIT` | K7c + K8a + M2-D5 + M4-P03-C3 merge | 100GB accounting fixtureと通し再生E2E |
 | 14 | U0f | M3 | `WAIT` | G0-2 + G0-8 + U0b + K1a merge | resource policyをUser settingsへ。Documentへ入れない |
 | 15 | U1g | M3 | `WAIT` | U1b + U1c + U5 + K1d merge | Transport時刻不変の最新frame表示/コマ落ち |
 | 16 | U1h | M3 | `WAIT` | U0e + U0f + U1g merge | Performance/Memory settingsとpressure HUD |
@@ -589,7 +616,7 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | 18 | U9a | M3 | `WAIT` | U2b merge | 汎用one-shot Generator hook。script runtime型を公開契約へ焼かない |
 | 19 | U9b | M3/v1.x | `WAIT` | U9a merge | Motolii ShapeScript。Paper.js互換やp5.js互換を名乗らない |
 | 20 | U9c | M3/v1.x | `WAIT` | U9b merge | SVG materialize adapter。DOM/XMLをDocument意味へしない |
-| 21 | SCR-4 | M4/v1.x | `WAIT` | U9b + F-11 + K0/K1b/K1c/K7 | 非clear drawをホスト所有Feedbackへ翻訳。隠しcanvasを作らない |
+| 21 | SCR-4 | M4/v1.x | `WAIT` | U9b + F-11 + K0 + K7c | 非clear drawをホスト所有Feedbackへ翻訳。K7a／K7b／K7cのartifact境界・区間無効化・再freeze後に入り、隠しcanvasを作らない |
 
 ## 凍結済みだが依存待ちのIssue
 
@@ -626,7 +653,7 @@ U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除
 | 編集時Generator hookを作る | U2b。まずruntime非依存のD2 command batch境界だけを固定 |
 | ShapeScriptを作る | U9a + D1i-2。正準座標・object/path/group・拒否表を先に固定 |
 | SVG adapterを作る | U9b。viewport/Y-down変換と安全な採用subsetを先に固定 |
-| 蓄積描画を作る | U9b + F-11 + K0/K1b/K1c/K7。畳めるshape履歴を先にmaterializeし、残りだけFeedbackへ昇格 |
+| 蓄積描画を作る | U9b + F-11 + K0 + K7c。K7a／K7b／K7cのartifact境界・区間無効化・再freeze後に入り、畳めるshape履歴を先にmaterializeして残りだけFeedbackへ昇格 |
 | resource設定を出す | G0-2 + G0-8 + U0b + K1a → U0f。設定はUser settings、pressure実測値はTransient |
 | 重いpreviewを追従させる | U1b + U1c + U5 + K1d → U1g。project fps/audio clockを変えず表示frameだけ落とす |
 

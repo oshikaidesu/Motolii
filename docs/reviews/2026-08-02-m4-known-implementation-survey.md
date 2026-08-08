@@ -25,7 +25,7 @@ Motolii固有の作品意味、完全keyの構成、hard budget値、優先順�
 | GPU transfer | `motolii-gpu::RgbaDownloader`はdownload bufferを再利用する | 複数in-flight copy、評価chain非blocking、RAM／disk admission |
 | preview worker | `motolii-ui::render_worker`は単一pending slot、世代、latest resultを持つ | background priority queue、実行中jobの細粒度cancel、coverage planner |
 | media | `motolii-media`はffmpeg／ffprobe sidecar、`FrameReaderCancel`／kill、bounded stderr、typed errorを持つ | proxy artifact、VFR→CFR生成job、pool、再起動後reuse |
-| identity | `Asset.content_hash`と`sha2`依存はあるが、GAP-3のversion付きfingerprint形式は未決 | path／mtime非依存の恒久source identity、完全cache key |
+| identity | `Asset.content_hash`と`sha2`依存はある。2026-08-08に`SourceFingerprintV1`／`RecipeKeyV1`契約は決定したが、strict codecとSourceBinding runtimeは未実装 | path／mtime非依存identityの製品runtime、完全cache key store |
 | audio | `AudioProgram`は`HashMap<(content_hash, ordinal), Arc<PcmCache>>`を呼出側から受け取る | budget、eviction、共通M4 store、disk persistence |
 | vector | workspaceはVello 0.9を使うがusvg／vello_svgは未導入 | SVG product import、対応subset、premul境界 |
 
@@ -170,7 +170,7 @@ recipe分離・sccacheのsharded local cache・現行D1 atomic persistの`PATTER
   PTS、duration、stream metadataを機械可読で出す。
 - **route**: 新しいmedia runtimeや`ffmpeg-sidecar` crateを採らず、既存spawn／stderr／cancel／finishへ
   proxy jobを追加する。scaleとfpsだけをproxy artifactへ焼き、色解釈、LUT、Document parameterを焼かない。
-- **identity**: proxyはGAP-3で確定する`source_id`とcodec recipeの派生CAS artifact。path／mtimeをkeyにしない。
+- **identity**: proxyは保存済み`SourceFingerprintV1`とSourceBindingが固定したexact consumed bytes、およびcodec recipeから導くreconstructible artifact。path／mtimeをkeyにせず、RecipeKeyとArtifactDigestを分離する。
 - **非証明範囲**: hardware decode、decoder pool、GAP-26 process lifecycle、具体proxy codec／bitrate、
   `30000/1001`誤ラベルpolicy。
 
@@ -229,7 +229,7 @@ overlap・ring数採択を計測していないため`STOP / GAP-29`とした。
 P05-C2/C3とK7a/K8bは、repoにprivate disk store／ResourceLedger／group bake／full Draft producerが存在せず、
 M4仕様もK1〜K8未実装を正本としているため`STOP / RUNTIME ABSENT`とした。V1 compatibilityのgreenを製品cache／E2Eの完了へ読み替えない。
 
-2026-08-08追補: P02-C1/C2のidentity意味だけは[直列核4契約決定](2026-08-08-serial-core-known-contracts-decision.md)で`SourceFingerprintV1`／`RecipeKeyV1`／`ArtifactDigest`へ締結した。現行は`CONTRACT CLOSED / IMPLEMENTATION NOT STARTED`とする。codec、Asset action、ResourceLedger、store、invalidation runtimeが存在しないこと、およびP05-C2/C3／K7a/K8bの`STOP / RUNTIME ABSENT`は変わらない。
+2026-08-08追補: P02-C1/C2のidentity意味は[直列核4契約決定](2026-08-08-serial-core-known-contracts-decision.md)でprovenance tag付き`SourceFingerprintV1`／Host-private `SourceBinding`／`RecipeKeyV1`／`ArtifactDigest`へ締結した。admitはadvisory probe後のfresh full hash、source-consuming workerは保存済みfingerprintとexact consumed bytesを結合したbindingだけを使う。現行は`CONTRACT CLOSED / IMPLEMENTATION NOT STARTED`とする。codec、Asset action、ResourceLedger、store、invalidation runtimeが存在しないこと、およびP05-C2/C3／K7a/K8bの`STOP / RUNTIME ABSENT`は変わらない。
 
 ### 3.11 copy-out baselineとSTOP
 
