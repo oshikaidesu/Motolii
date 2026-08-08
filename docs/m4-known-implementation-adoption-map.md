@@ -31,7 +31,7 @@
 | 親ID | 検索key | 利用者成果 | 採択route | M4範囲 |
 |---|---|---|---|---|
 | `M4-P01-REGION` | RoD RoI tile extent unknown propagation | 必要領域だけを安全に評価し、未知は全域fallbackする | K0 fixtureを`REUSE`、OpenFXを`PATTERN` | K0、K2 |
-| `M4-P02-IDENTITY` | recipe key content digest generation snapshot source fingerprint | 再起動やrename後も正しい成果だけを再利用する | Bazel action/CASを`PATTERN`、`sha2`を`REUSE` | K1b、K2、K4、GAP-3 |
+| `M4-P02-IDENTITY` | recipe key content digest generation snapshot source fingerprint | 再起動やrename後も正しい成果だけを再利用する | Bazel action/CASを`PATTERN`、`sha2`を`REUSE` | K1b、K2、K4、GAP-3のrelink／offline route |
 | `M4-P03-RAM` | weighted cache handle refs pin eviction usage | 参照中成果を壊さずRAM hard cap内で再利用する | `foyer-memory 0.22.3`を`REMAP / VERIFIED`。外部生存量はprivate owner | K1a〜K1c |
 | `M4-P04-RESOURCE` | VRAM RAM disk admission descriptor allocator report watermark | allocation前に三tierの上限を守る | wgpu descriptor/reportを`REUSE/PATTERN`、`fs4 1.1.0`を`VERIFIED (observation)` | K1a、K1c、K1d |
 | `M4-P05-DISK` | artifact store generated media render cache proxy integrity atomic corrupt miss LRU | 再起動後も壊れていない成果だけをdiskから読む | Blender/AE/Premiere/Resolve/FCPの再生成mediaを`PATTERN`、`sha2/std::fs`を`REUSE`、sccache/D1 persistを`PATTERN`、`tempfile 3.27.0`を`VERIFIED (V1)`。V2以降はruntime absent STOP | K1c、K7、K8 |
@@ -54,8 +54,8 @@
 | `P06-C1` | `REMAP / VERIFIED` | half-open integer timebase、coalesce、gap、境界overflow。raw empty rangeはpanicするためprivate guardを必須化 |
 | `P07-C1` | `REMAP / VERIFIED` | MPL-2.0選択、reprioritize/remove/pop、composite priorityによるdeterministic ordering。bounded admissionとgeneration filterはprivate owner |
 | `P13-C1` | `REMAP / VERIFIED` | `vello_svg 0.10.0`のpath/group/fill/stroke、typed parse error、pattern diagnostic、3 target cross-build。外部fileはusvg段で無言dropするためprivate preflightへREMAP |
-| `P02-C1` | `STOP / GAP-3` | 完全recipe keyのfield順は既知だが、source／parameter encodingとversioned fingerprint authorityが未閉鎖。runtime keyを発明しない |
-| `P02-C2` | `STOP / GAP-3` | version付きsource fingerprint未決。path/mtimeで代用しない |
+| `P02-C1` | `CONTRACT CLOSED / IMPLEMENTATION NOT STARTED` | [直列核4契約](reviews/2026-08-08-serial-core-known-contracts-decision.md)でHost-private canonical `RecipeKeyV1`と別`ArtifactDigest`を決定。codec／mutation oracle／runtime keyは別ticket |
+| `P02-C2` | `CONTRACT CLOSED / IMPLEMENTATION NOT STARTED` | `SourceFingerprintV1`をsource exact bytesのSHA-256+sizeへ決定。legacy opaque hashを自動昇格せず、strict codec／Asset admission／relinkは別ticket |
 | `P09-C1` | `STOP / GAP-29` | 現行baselineの同期1-buffer readback guardは確認済み。copy/map/encode/disk原因分離とring数採択は未計測のため固定しない |
 | `P05-C2` | `STOP / RUNTIME ABSENT` | V1後のrestart/generation/store handleを接続するprivate disk storeが現行codeにない。新しいstore ownerをこの検証branchで発明しない |
 | `P05-C3` | `STOP / RUNTIME ABSENT` | ResourceLedger、disk hard budget、pin/committing eviction routeが未実装。P04観測だけでresource integrationを証明しない |
@@ -90,19 +90,19 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 - **結果**: node/version/parameter/input digest/time/Quality/platform saltを正本順でencodeし、recipe keyとartifact digestを分ける方針を確認した。
 - **再利用target**: `sha2`、既存typed IDs、render graph入力。
 - **oracle**: 各fieldの単独変異でmiss、並べ替え非同値、path/label/display名の混入0。
-- **判定**: `STOP / GAP-3`。現行`Asset.content_hash`は任意文字列で、version・algorithm・chunk／encoding・collision照合が正本化されていない。exact encoderやprivate key helperをこのprobeで発明しない。
-- **cutover**: ad-hoc文字列key、`semantic_fingerprint()`転用、cache別key helperをretireするのはGAP-3決定後。
+- **判定**: `CONTRACT CLOSED / IMPLEMENTATION NOT STARTED`。[直列核4契約](reviews/2026-08-08-serial-core-known-contracts-decision.md)でdomain-separated、tag+length-prefixのHost-private canonical `RecipeKeyV1`と別`ArtifactDigest`を決定した。exact codec、mutation oracle、runtime key helperは別ticketで実装する。
+- **cutover**: ad-hoc文字列key、`semantic_fingerprint()`転用、cache別key helperはcanonical codec acceptance後にretireする。
 
 #### `P02-C2` source identity closure
 
-- **結果**: GAP-3のversion付きfingerprintを先に仕様化し、proxy/cacheへ同じ`source_id`を渡す方針を確認した。
-- **状態**: `STOP / GAP-3`。未決のままruntime実装しない。
+- **結果**: `SourceFingerprintV1`をsource exact bytesの`sha256:<64 lowercase hex>`+sizeへ決定し、proxy/cache/relinkへ同じcontent identityを渡す。
+- **状態**: `CONTRACT CLOSED / IMPLEMENTATION NOT STARTED`。legacy opaque hashは明示的な再hash前にauthorityへ昇格しない。strict codec、Asset admission、relink adapterは別ticket。
 - **oracle**: rename同一、内容差異は不一致、旧形式migration/拒否が明示される。
 
 #### `P02-C3` immutable generation snapshot
 
-- **結果**: writer publishごとに新key空間へ移り、既存handleは旧snapshotを読み切る。
-- **薄い残余**: generation番号とpublished snapshotのprivate結合だけ。
+- **結果**: M4 cache/session ownerのprivate `CacheEpoch`をaccepted durable Commandのsnapshot publishごとに進め、既存handleは旧snapshotを読み切る。M3 `projection_generation`、private `RenderGeneration`、journal generation、Document revisionを流用しない。
+- **薄い残余**: 非永続`CacheEpoch`とpublished immutable snapshot、job candidate receiptのprivate結合だけ。
 - **oracle**: purge/全走査なし、stale結果publish拒否、参照中artifactの早期解放0。
 
 ### M4-P03-RAM — 参照handle付きRAM cache
@@ -170,7 +170,7 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 - **依存／並列**: P05-C1/P02-C1/P04-C2後。RAM adapterと並列。
 - **oracle**: restart hit、rename hit、wrong generation miss、外部storage型の公開面0。同一process内で
   検証済みhandleを再利用し、frameごとの全file再hash 0。
-- **判定**: `STOP / RUNTIME ABSENT`。現行repoにこのstore owner／routeがなく、P02-C1の完全keyもGAP-3で停止中。test-only storeを製品adapterの代替として発明しない。
+- **判定**: `STOP / RUNTIME ABSENT`。P02-C1の意味は閉じたが、現行repoにcanonical codec、store owner／routeがない。test-only storeを製品adapterの代替として発明しない。
 - **cutover**: 独自DB/WAL/catalog/repair protocolを作らない。
 
 #### `P05-C3` disk budget and retirement
@@ -334,12 +334,12 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 | wave | 並列可能な成果 | 直列点 |
 |---|---|---|
 | `A: adoption probes` | P03-C1、P04-C4、P05-C1、P06-C1、P07-C1、P13-C1、P09-C1 | Cargo dependency/lock publication、各候補の採否記録 |
-| `B: private foundations` | P01-C1、P02-C1/C3、P03-C2、P04-C1/C3、P05-C2、P07-C2 | P04-C2 unified admission、GAP-3 P02-C2 |
+| `B: private foundations` | M2 Asset/P02 codec準備、K1a、P01-C1、P02-C3、P03-C2、P04-C1/C3、P07-C2 | P02 runtimeはstrict SourceFingerprint入力後、tier adapterはK1a acceptance後、P05-C2は両方の合流後 |
 | `C: product producers` | P06-C2/C3、P08-C1/C2、P09-C2、P12-C1/C2、P13-C2/C3 | artifact commitとproduct runtime合流 |
 | `D: composed outcomes` | P08-C3、P10、P11、P12-C3 | 通常製品route E2E、human/hardware acceptance |
 
 Waveは一括発注ではない。各子を一契約境界として検収し、共有fileへの合流だけownerが直列化する。
-`SPEC_ONLY`のGAP-3やGAP-29を別候補で迂回しない。
+GAP-3の残るrelink／offline product routeや`SPEC_ONLY`のGAP-29を別候補で迂回しない。
 
 ### P05の検証梯子
 

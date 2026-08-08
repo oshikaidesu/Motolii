@@ -223,11 +223,13 @@ recipe分離・sccacheのsharded local cache・現行D1 atomic persistの`PATTER
 5. `priority-queue`はbounded、reprioritize、cancel、editor nonblockingを決定的fixtureで確認する。
 6. `vello_svg`はK6 subsetだけを閉じ、unsupported featureをsilent dropしない。
 
-2026-08-02の再照合では、P02-C1/C2は`Asset.content_hash`が任意文字列でGAP-3のversioned fingerprint authorityがないため
-`STOP / GAP-3`とした。P09-C1は既存`origin_guard` 6 fixtureでheadless readback／UI共有拒否を再確認したが、GAP-29の原因分離・
+2026-08-02の再照合時点では、P02-C1/C2は`Asset.content_hash`が任意文字列でGAP-3のversioned fingerprint authorityがなかったため、
+runtimeを起票せずidentity決定へ返した。P09-C1は既存`origin_guard` 6 fixtureでheadless readback／UI共有拒否を再確認したが、GAP-29の原因分離・
 overlap・ring数採択を計測していないため`STOP / GAP-29`とした。どちらも未決の意味や方式を発明して閉じない。
 P05-C2/C3とK7a/K8bは、repoにprivate disk store／ResourceLedger／group bake／full Draft producerが存在せず、
 M4仕様もK1〜K8未実装を正本としているため`STOP / RUNTIME ABSENT`とした。V1 compatibilityのgreenを製品cache／E2Eの完了へ読み替えない。
+
+2026-08-08追補: P02-C1/C2のidentity意味だけは[直列核4契約決定](2026-08-08-serial-core-known-contracts-decision.md)で`SourceFingerprintV1`／`RecipeKeyV1`／`ArtifactDigest`へ締結した。現行は`CONTRACT CLOSED / IMPLEMENTATION NOT STARTED`とする。codec、Asset action、ResourceLedger、store、invalidation runtimeが存在しないこと、およびP05-C2/C3／K7a/K8bの`STOP / RUNTIME ABSENT`は変わらない。
 
 ### 3.11 copy-out baselineとSTOP
 

@@ -18,8 +18,9 @@ model、owner、failure mode、platform条件と採択方式をM4採択地図へ
 
 K0〜K8はMotoliiの意味、負例、候補依存を保持する入力であり、調査前の実装順ではない。K0のtest-only
 契約凍結は維持するが、K1a以後を独自ResourceLedger／cache store／schedulerへ自動接続しない。
-**M4の次の開発成果は地図のWave Aにある採択probeである。probe不合格を独自実装の許可にせず、
-採択後もimplementation ledgerへ一意な`DO`が載る前に製品runtimeを発注しない。**
+
+2026-08-08に[直列核4契約](../reviews/2026-08-08-serial-core-known-contracts-decision.md)で、Asset lifecycle、`SourceFingerprintV1`／`RecipeKeyV1`／`ArtifactDigest`、Hostの単一hard-budget admission policy、tier別adapter、検証後atomic publication、job終端、accepted Commandのexhaustive invalidation publicationを決定した。これはK1a／K1b／K2／K4のruntime acceptanceではない。1A M2 Assetと1B K1a ResourceLedgerは別ownerで並列に閉じられる。P02 runtime codecは1Aのstrict fingerprint入力を待つが、canonical encoder／mutation corpusの準備は並行できる。tier adapterはK1a、task adapterは該当recipe／publication contractのacceptance後に接続する。
+**地図のWave A adoption probeは`VERIFIED / REMAP`または局所`STOP`として記録済みである。次はimplementation ledgerの1A／1Bからexact owner、allowlist、oracleをcurrent mainで再compileする。probe不合格を独自実装の許可にせず、一意なclosed orderなしに製品runtimeを発注しない。**
 
 ## 目的(退治する落とし穴)
 
@@ -27,7 +28,7 @@ B-5(時系列依存とキャッシュ)、B-6(OpenCV依存)、F-2(キャッシュ
 
 ## 方針
 
-- キャッシュキー = ノードID × 時間区間 × 入力パラメータハッシュ **× Quality/出力記述子(2026-07-10追記)**。時系列解析ノードは**区間単位**のキャッシュエントリ(フレーム単位ダーティフラグでは表現しない)
+- キャッシュkeyは[直列核4契約](../reviews/2026-08-08-serial-core-known-contracts-decision.md#42-recipekeyv1)のHost-private canonical `RecipeKeyV1`とする。node／plugin identity、typed parameter、入力`SourceFingerprintV1`、意味を持つ順序、時間点または区間、Quality、出力記述子、必要なenvironment saltをdomain-separatedなtag+length-prefixでencodeする。時系列解析ノードは**区間単位**のcache entryとし、frame単位dirty flagでは表現しない
   - Draft/Finalは同一関数の引数違い(B-4)だが出力ピクセルは異なるため、**Qualityと出力FrameDesc(解像度スケール・精度)はキーの一部**。Draftキャッシュ(fp16・半解像度)とFinalキャッシュは別エントリであり、混ざるとB-4検証が嘘をつく。ただしQuality非依存な成果物(解析DataTrack、シミュレーションのStateTrack — [simulation-model.md](../simulation-model.md)§3.3)はキーにQualityを含めず、両品質から共有する
 - **キャッシュの前提(2026-07-10)**: 全レイヤー/ノードは最終的に2D合成パイプライン上の出力。`render(t)`が**前フレームの内部状態に依存しない**純関数であること([concept.md](../concept.md)の横断決定)。逐次依存シミュレーションは**レンダ経路には存在しない** — 逐次状態はレンダ外のベイク境界のStateTrackとして確定し、レンダはそれを読むだけ([simulation-model.md](../simulation-model.md))。外部ベイク済みアニメは**入力アセット+パラメータ**としてキーに含め、再生は`t`の純関数として扱う
 - **キャッシュキーの完全性原則(2026-07-10追記、キャッシュ制御とAPIの関係)**: キーは「ノード出力に影響し得る全入力」の完全な列挙でなければならない。したがって**プラグインAPIに入力の口を1つ開けるたび、その口のキーへの寄与を同時に定義する**(時間窓→キーの時間区間が点から窓へ / コライダー参照→参照レシピハッシュを算入 / 未定義ならその口は開けない)。凍結ゲートでのAPI審査項目に含める
@@ -35,7 +36,7 @@ B-5(時系列依存とキャッシュ)、B-6(OpenCV依存)、F-2(キャッシュ
 - **キャッシュは意味論に影響しない**: 全成果物がレシピ(Document)から決定論的に再生成可能なので、任意のエントリをいつ落としても正しさは不変(遅くなるだけ)。この保証が成り立つのは決定論契約(B-4/F-12)のおかげであり、逆にこの保証があるからLRU追い出し・予算管理・並行契約(F-2)を「性能の問題」として単純に扱える
 - **区間キャッシュのクライアントは3種を想定してキーを設計する(2026-07-10追記、F-12)**: (1)解析DataTrack(最終フェーズ)、(2)グループ仮出力=ベイク(K7)、(3)**シミュレーションのStateTrack**(チェックポイント列。[simulation-model.md](../simulation-model.md)§3.3。実装はv1.x=K1a〜K1c/K7後だが、K1bのキー/無効化設計が「チェックポイントからの部分再計算」を表現できることを確認する)
 - RAM/VRAM別のメモリ予算とLRU追い出しをキャッシュ層の初期設計に含める(4K RGBA=33MB/枚を常に意識)。階層の役割分担・読み戻し例外(確定出力の非同期コピーアウト)・VRAM予算の自前管理と逼迫時の退避はしご・ディスク階層は[memory-model.md](../memory-model.md)のP1〜P4に従う(2026-07-09)
-- **並行契約(F-2、K1の設計に含める)**: (1) 読み手はエントリのハンドル(参照カウント)を取得して使う。追い出しは「LRU選定→参照ゼロになってから解放」の遅延方式で、**使用中エントリを無効化しない**。(2) キャッシュの内部ロックは1段のみ(ロック保持中に別のロックやGPU同期を取らない)。(3) 無効化(パラメータ変更)はwriterのコマンド適用起点でエポック/世代番号を進め、古い世代のスナップショットで走行中のレンダは自分の世代のエントリを読み切ってよい。(4) バックグラウンドのプロキシ/解析ジョブ(K4/K5)はスナップショット読み+結果メッセージ返しのみで、キャッシュ/ドキュメントへ直接書かない(M2-D8の所有権モデルに従う)
+- **並行契約(F-2、K1の設計に含める)**: (1) 読み手はエントリのハンドル(参照カウント)を取得して使う。追い出しは「LRU選定→参照ゼロになってから解放」の遅延方式で、**使用中エントリを無効化しない**。(2) キャッシュの内部ロックは1段のみ(ロック保持中に別のロックやGPU同期を取らない)。(3) M4 cache/session ownerはaccepted durable Commandのsnapshot publishごとにprivate `CacheEpoch`を進める。古いsnapshotのrenderは自分のhandleを読み切ってよいが、late candidateは現catalogへpublishしない。これはM3 `projection_generation`、private `RenderGeneration`、journal generation、Document revisionとは別で、永続化もrecipe算入もしない。(4) backgroundのproxy／analysis job(K4/K5)はsnapshot読み、admission済みtempへの候補生成、validator、candidate receiptのmessage返却までとし、cache catalog／Documentへ直接書かない。Host artifact／catalog ownerだけがcancel／epoch／admission／競合を再照合し、atomic persist後にcatalogへ登録する(M2-D8の所有権モデルに従う)
 - インポート時パイプライン: プロキシ生成(低解像度)+ VFR→CFR正規化
 - **解析(色解析・オプティカルフロー・トラッキング)は最終フェーズへ移動した(2026-07-09決定、[roadmap「解析駆動」](../pitfalls-and-roadmap.md)参照)。** M4のスコープはキャッシュ/プロキシ/デコーダプール/ベイクまで。区間キャッシュの並行契約とキー設計(K1b)は解析の“口”として残すが、解析プロデューサ実装(旧K3/K5)は最終フェーズ
 - ノードグラフの領域伝播(RoI)設計はNatronの考え方を参考(references.md、GPLのため設計参考のみ)
@@ -74,13 +75,13 @@ M4は[操作単純化モデル](../interaction-simplicity-model.md)の**再計�
 「キャッシュを消せ」が万能対処になっている出荷ツール群(AE/Premiere/Resolve)の苦情と、ビルドシステムのキャッシュ汚染事例(Bazel/ccache)を調査し、既存方針(完全性原則・並行契約・予算)に無いガードを抽出した。
 
 1. **プロダクト目標「Purgeボタン不要」+キー網羅性の変異テスト**: 業界最大手3製品すべてで「キャッシュ削除」がサポートの第一手であり続けているのは、キー網羅性の失敗が事後修正不能な負債になる証拠。完全性原則(方針)を機械検証に落とす: 「出力ピクセルを変え得る変異(パラメータ/入力ファイル/フォント/プラグイン版/色設定)を列挙し、それぞれでキャッシュキーが必ず変わる」プロパティテストをK1b完了条件に追加。手動全消去UIはデバッグメニューにのみ置き、使われたらそれ自体をキー漏れバグのシグナルとして扱う
-2. **同一性判定にmtime・パス・時計の単調性を使わない**: Premiereは (a) 同名上書きファイルで古い映像を表示し続け(キーが実質パス+タイムスタンプ)、(b) NASとの時計ズレで「開くたび全再conform」の無限ループを起こした(公式KBが時刻同期を案内する事態)。`source_id`はversion付き内容指紋とし、パスは指紋への別名にすぎない。algorithm、chunk長、encoding、size、任意full hash、collision照合は[GAP-3](../backlog.md)で未決であり、歴史案の「先頭/末尾チャンクhash+サイズ」を恒久formatへ焼かない。冪等性テスト「同一入力への解析/プロキシジョブの2回目はno-op」を、mtimeを±数分ずらしたモックFSで回す(K4)
+2. **同一性判定にmtime・パス・時計の単調性を使わない**: Premiereは (a) 同名上書きファイルで古い映像を表示し続け(キーが実質パス+タイムスタンプ)、(b) NASとの時計ズレで「開くたび全再conform」の無限ループを起こした(公式KBが時刻同期を案内する事態)。content identityは[直列核4契約](../reviews/2026-08-08-serial-core-known-contracts-decision.md#41-sourcefingerprintv1)の`SourceFingerprintV1`、すなわちsource exact bytesのSHA-256+sizeとし、pathはlocatorにすぎない。先頭/末尾chunk、mtime、file name、legacy raw hashをidentity authorityにしない。冪等性テスト「同一入力への解析/プロキシジョブの2回目はno-op」を、mtimeを±数分ずらしたmock FSで回す(K4)
 3. **キーに環境saltを含める**: Bazelは環境(glibc版)がキーに入らずABI非互換オブジェクトを混入させた。フレームキャッシュのキーにはレンダラ版・キャッシュフォーマット版・プラグインの内容ハッシュ(mtimeでなく内容 — ccacheの`compilercheck=content`の教訓)・ffmpegビルド識別(同一ファイルでもビルド差でデコード結果が変わり得る)を算入する。フォーマット変更時はグローバルsaltのバンプ1行で全無効化できる構造に(K1b)
 4. **ジョブ成果物は検証を通ってからアトミックにコミット**: KdenliveはVAAPI初期化失敗で生まれた数百バイトの壊れたプロキシを「成功」として登録し再生を壊した。Bazelにも「exit 0だがmalformedな出力がキャッシュを汚染し全消費者に波及」の実例(#4276)。プロキシ/ベイク/解析の成果物はtempに書き→デコード可能・フレーム数/duration一致を検証→renameでコミット。壊れファイルは絶対にカタログへ登録せず、フルレゾへ透明フォールバック。「2回目の起動で再生成ジョブが0件」を冪等性の回帰テストに(K4/K7)
 5. **キャッシュは正しさに対して常に透明(異常系も含めて)**: Resolveには「レンダーバーが青(キャッシュ済み)なのにMedia Offlineで再生停止」という、エントリの存在と有効性の混同によるユーザー可視エラーがある。エントリの喪失・破損・読み取り失敗は**missと同一の挙動(再計算)に必ず縮退**し、ユーザー可視のエラー状態を作らない。テスト: レンダ中にキャッシュファイルをランダム破壊/削除しても出力がbit一致(K1b/K1c)。方針「キャッシュは意味論に影響しない」の異常系版
 6. **ディスクキャッシュも同じハード予算下に置く**: Premiereのmedia cacheは外付けSSDに設定してもCドライブを数十GB食い潰し、「running low on space」ポップアップが常態化(予算が後付けオプトイン+時間ベースGCで、書き込み時のadmission controlが無い)。ディスク階層([memory-model.md](../memory-model.md) P4)にもRAM/VRAMと同格の必須予算+LRU+書き込みadmission制を適用し、既定の置き場所はシステムドライブを避け、空き容量の絶対下限(watermark)で書き込み停止。テスト: 予算1GBで長時間スクラブしてもディレクトリサイズが予算+εを超えない(K1c/K7)
 7. **プロキシ=デコード置換のみ。解釈はプロキシに焼き込まず、生成キーにも入れない**: Premiereの「プロキシと本編で色が違う」は、色管理・LUT・interpretがプロキシ生成時点で焼き込まれる(または落ちる)ことが根因。解釈パラメータは「キーに入れると解釈変更のたび再生成地獄/焼き込むと不一致」の両落ちで、唯一の正解は**プロキシ/フルレゾ共通のグラフ側で再生時に評価する**こと(色変換一元化=絶対規律2のプロキシ版)。ゴールデン: 同一フレームのプロキシ経路/フルレゾ経路の出力をΔE閾値で比較(K4)
-8. **プロキシは`source_id`に紐づく内部生成物(ユーザー非可視)**: Premiereの外部プロキシ手動アタッチは「音声チャンネル数不一致で拒否」等、対応関係の検証責任をユーザーに転嫁して苦情源になった。インポート時自動生成(既定方針)を貫き、対応検証(フレーム数/タイムコード一致)は取り込みジョブ内で行う(K4)
+8. **プロキシは`SourceFingerprintV1`を入力に持つ内部生成物(ユーザー非可視)**: Premiereの外部プロキシ手動アタッチは「音声チャンネル数不一致で拒否」等、対応関係の検証責任をユーザーに転嫁して苦情源になった。インポート時自動生成(既定方針)を貫き、対応検証(フレーム数/タイムコード一致)は取り込みジョブ内で行う(K4)
 9. **予算はソフト目標でなくハード上限**: AE 2022のメモリリークでは、ユーザーが「Nフレームごとに自動purge」「他アプリ用予約RAMを増やしてAEの上限を絞る」という予算強制の手動代行で自衛していた。割当が予算超過なら同期evict、evict不能(全pin済み)なら該当ジョブを失敗させ、OSのOOM killerに到達させない。CIに平衡テスト: 数千フレーム連続レンダでRSS/VRAMが平衡水位に収束すること(単調増加=リーク検出)。デバッグビルドでは参照カウントハンドルに生成backtraceを記録し、終了時に生存ハンドルをダンプ(K1a/K1c)
 10. **時間窓を持つノードはメモリ見積りを事前宣言→admission control**: Resolveの「GPU Memory is Full」はtemporal系(NR等)がウィンドウ分のフレームを暗黙に常駐させることが主因の一つで、エラーに要求元・要求量が出ないためユーザーが対処不能だった。TemporalFootprint(凍結ゲート項目18)の宣言値から「ウィンドウ長×フレームサイズ」をスケジューリング前に予算照会し、入らなければ実行前に縮退(プロキシ/タイル化)。割当失敗の診断は必ず「ノード+要求量+現予算」を含める(K1a/K1c/K2)
 11. **バックグラウンドジョブはエディタを人質に取らない**: Premiereの「Media Pending」「Preparing Audio」ハングは、index/conform/波形生成の完了が表示の前提になっているため、ジョブ失速=編集不能になる構造。不変条件「エディタ操作は解析/プロキシジョブの完了を決して待たない」(成果物が欠けていれば空表示+進捗インジケータ)+ジョブに進捗ハートビート+watchdog(N秒進捗なしで再起動/縮退)。テスト: ジョブを人工的に無限スリープさせてもタイムライン操作のp99レイテンシが閾値内(K4。M2-D8の所有権モデルが前提)

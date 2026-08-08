@@ -10,6 +10,8 @@ M3の共有writer、通常製品route、snapshot／Stage／Preview／Export、�
 チケットIDや枝番の完了数ではなく、同契約の意味境界を開放判定に使う。M5の採択地図、decision recovery、private
 fixtureは保持するが、M3の共有契約をM5のprivate型から推測しない。
 
+M5が将来利用するAsset identity、resource／artifact／job、cache invalidationの共有接合部は[直列核4契約](../reviews/2026-08-08-serial-core-known-contracts-decision.md)を正とする。同decisionは共有契約と実装順序だけを閉じ、M5の製品runtime、公開schema、provider、GPU resource接続を解放しない。休止中はprivate fixtureを共有契約の実装済み代替にしない。
+
 M5は[既知実装採択・置換開発モデル](../known-implementation-adoption-model.md)に従う。scene／object
 representation、camera observation、spatial renderer、glTF import、depth、text、Vello局所pass、post
 effect、picking／gizmo／bounds、deterministic duplicationを機構classとして先に調査し、具体file／API／

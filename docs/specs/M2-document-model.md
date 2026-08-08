@@ -11,6 +11,14 @@ C-1(Undo後付け)、C-2(スキーマ進化)、B-1(音声・時間表現)、F-1(
 
 - プロジェクト状態は単一のserde可能な純データ構造(ドキュメントモデル)。エンジン(motolii-render)はこれを読むだけ
 - ドキュメントモデルはAsset実体とプロジェクトBPM(手動入力。ビート検出はやらない)を持つ。**Assetは一般アセット(opaqueペイロード+type文字列+内容ハッシュ)として定義し、動画・SVGはその特殊ケース**(F-10、[plugin-resources.md](../plugin-resources.md)§3 D2/D3。将来のImporterプラグイン=点群等の口。`ValueType::AssetRef`の予約と対)。**F-10は凍結ゲートで確定済み**(PipelineCache実証+AssetRef予約)。以後のD1系並列はタスク表の依存レーンに従う(「F-10未確定だからD1禁止」は失効)
+
+### Asset action／identity追補（2026-08-08決定）
+
+[直列核4契約](../reviews/2026-08-08-serial-core-known-contracts-decision.md)により、Assetのprobe、D2 `AdmitAsset { asset }`、既存Assetのuse作成、unused時だけの`RemoveAsset { asset }`を別actionとする。`AssetId`はDocument内のstable object identityであってcontent dedup keyではなく、workerやpath／hashから導出しない。IDは`AssetTable::peek_next`と同型のtable-local採番値からedit threadがCommandへ記録し、global `Document.next_stable_id`／`StableIdReservation`へ混ぜない。
+
+Undo／Redoは既存`LayerIdTable::peek_next`／inverse-only `restore`とD2 `AddTrackItem`↔`RemoveTrackItem`先例へ寄せる。`AssetTable::restore`はduplicateを拒否し、退役済みIDの同一entity復元だけを許し、counterを巻き戻さない。通常の`insert`は退役IDを拒否し続ける。initial admit、Undo、Redoは同じ完全なAsset値を相互inverseで扱い、Command applyはclone／validate／swapのatomic routeを使う。参照中Assetのremoveは全typed use検査で拒否する。
+
+新規file-backed Assetはsource exact bytesの`sha256:<64 lowercase hex>`と`size_bytes`が揃った時だけ`SourceFingerprintV1`としてrelink／persistent cache authorityになれる。path／mtime／file name、`head_hash`／`tail_hash`、legacy short hashはauthorityにしない。既存raw fieldはread互換のため保持し、明示的な再hash前に自動昇格しない。異なるbytesへの差し替えはlocator更新ではなく将来の明示Replace Source actionとする。Asset Command、`AssetTable`追補、strict codec、全typed use count、product import／relink adapterは未実装であり、D1a／D2完了を繰り上げない。relinkのD2 Command形はGAP-3の別cutで閉じる。
 - **音声のMV既定導線はプロジェクト直下の`Soundtrack`(楽曲1本+開始オフセット+マスターゲイン)**。これは既定ワークフローであり恒久制約ではない。Clip内蔵audio componentとmixer一般化は[音声一般化設計](../reviews/2026-07-14-audio-generalization-design.md)の独立レーン(AG-1〜)で追加する。M2コアの実装範囲ではSoundtrackのみを扱い、動画クリップ内蔵音声はミュートのまま
 - 全編集操作はコマンド(適用/逆適用可能な差分)として実装 → Undo/Redoはコマンド履歴で自動的に得られる
 - ファイル形式はバージョンフィールド付きJSON + マイグレーション関数の枠組み
@@ -18,7 +26,7 @@ C-1(Undo後付け)、C-2(スキーマ進化)、B-1(音声・時間表現)、F-1(
 - **シェイプ間リンク(レイヤー参照付きParamSource)をスキーマに含める(concept 2026-07-10)**: LookAt/Follow/ParentRef 等は**別レイヤーの変形を読む型付き参照**。AEエクスプレッションの代替。`LayerId`参照と依存グラフ(無効化伝播の入力)を D1/D3 で予約。評価は F-3 の順序で参照先を先に評価
 - **シェイプ系レイヤーは順序付きパス演算子スタックを持つ(concept 2026-07-10、F-13)**: パンク・膨張/ジグザグ/パスのオフセット/角丸/トリムパス/ツイスト/パスのウィグル(+リピーター=F-7)を、標準シェイプ・SVG・テキスト由来パスに共通適用する`Vec<PathOp>`相当の席をD1で予約。全演算子は`(パス, パラメータ, t)→パス`の純関数で、パラメータは通常のParamSource(キーフレーム/リンク)駆動。シリアライズはLottie形式(`pb`/`zz`/`op`/`rd`/`tm`/`tw`/`rp`)を前例にする([references.md](../references.md))。v1はファーストパーティの閉集合(プラグイン契約には出さない=`PathOp`種別化はv2判断、解凍手続き対象)
 - **クリップは時間写像(TimeMap)を持つ(F-4)**: `clip_local_time → source_time`の単調写像(D1g)。v1実装は恒等+定数速度(オフセット+speed)のみだが、**motolii-renderのソース時刻解決は必ずTimeMapを通す**。速度ランプ・逆再生はスキーマ互換のまま将来拡張。キーフレームはTimeMapを通さない
-- **所有権は単一writer+不変スナップショット(F-2)**: ドキュメントを書き換えるのはコマンド適用の編集スレッドただ1箇所。レンダ・書き出し・解析・プロキシ生成は`Arc<Document>`スナップショットを受け取る読み手。バックグラウンド成果はメッセージでwriterへ返し、writerがコマンドとして適用する
+- **所有権は単一writer+不変スナップショット(F-2)**: Documentを書き換えるのはコマンド適用の編集スレッドただ1箇所。レンダ・書き出し・解析・プロキシ生成は`Arc<Document>`スナップショットを受け取る読み手。Document mutationを必要とするbackground結果だけをmessageでedit writerへ返し、writerがCommandとして適用する。M4のreconstructible artifact候補はDocument mutationではなく、[M4並行契約](M4-cache-and-analysis.md)どおりworkerがcandidate receiptをmessageでHost artifact／catalog ownerへ返し、同ownerだけがatomic publishする
 - **スキーマの素性はOTIO互換寄りに保つ(F-5)**: トラック/クリップ/ソース区間を有理数時刻で表現し、「OTIOに写像できない構造を発明しない」。OTIO書き出し自体はv2候補
 
 ## スキーマ境界の宣言(M2E-11 / 監査SC-1)
