@@ -255,14 +255,7 @@ impl<'a> GraphBuilder<'a> {
     }
 
     fn should_draw(&self, env: &ItemEnvelope) -> bool {
-        // lock は描画無影響(B④)。
-        if !env.visible {
-            return false;
-        }
-        if self.any_solo && !env.solo {
-            return false;
-        }
-        true
+        envelope_should_draw(env, self.any_solo)
     }
 
     fn build_document(&mut self, _: Option<&Path>) -> Result<TextureId, GraphError> {
@@ -817,6 +810,17 @@ fn item_tree_has_solo(item: &TrackItem) -> bool {
     }
 }
 
+/// lock は描画無影響(B④)。GraphBuilder::should_draw と同一述語。
+fn envelope_should_draw(env: &ItemEnvelope, any_solo: bool) -> bool {
+    if !env.visible {
+        return false;
+    }
+    if any_solo && !env.solo {
+        return false;
+    }
+    true
+}
+
 fn clip_active(clip: &Clip, t: RationalTime) -> bool {
     clip.start <= t
         && clip
@@ -824,6 +828,43 @@ fn clip_active(clip: &Clip, t: RationalTime) -> bool {
             .try_add(clip.duration)
             .map(|e| t < e)
             .unwrap_or(false)
+}
+
+/// 現在時刻で実際に描画対象になる layer を列挙する。
+/// `clip_active` / `envelope_should_draw` / `item_tree_has_solo` を再利用し、マスク専用評価経路は含めない。
+pub fn visible_layers_at(doc: &Document, t: RationalTime) -> Vec<LayerId> {
+    let any_solo = document_has_solo(doc);
+    let mut out = Vec::new();
+    for track in &doc.tracks {
+        collect_visible_layers(&track.items, t, any_solo, &mut out);
+    }
+    out
+}
+
+fn collect_visible_layers(
+    items: &[TrackItem],
+    t: RationalTime,
+    any_solo: bool,
+    out: &mut Vec<LayerId>,
+) {
+    for item in items {
+        let env = item_envelope(item);
+        // マスク専用にだけ評価される経路は「描画されない」ため投影対象にしない。
+        if !envelope_should_draw(env, any_solo) {
+            continue;
+        }
+        match item {
+            TrackItem::Clip(clip) => {
+                if clip_active(clip, t) {
+                    out.push(clip.envelope.layer_id);
+                }
+            }
+            TrackItem::Group(group) => {
+                out.push(group.envelope.layer_id);
+                collect_visible_layers(&group.children, t, any_solo, out);
+            }
+        }
+    }
 }
 
 fn item_layer_id(item: &TrackItem) -> LayerId {
@@ -1074,5 +1115,74 @@ mod d3e_resolve_effect_tests {
                 && got_use == use_id.get()
                 && got_def == dangling.get()
         ));
+    }
+
+    #[test]
+    fn visible_layers_at_respects_clip_active_visible_and_solo() {
+        let mut doc = Document::new_current();
+        let track = doc.track_ids.allocate("V1").unwrap();
+        let asset = doc.assets.allocate("a", "video/mp4", "hash").unwrap();
+        doc.tracks.push(Track {
+            id: track,
+            items: vec![],
+        });
+        let active = doc.layers.allocate("active").unwrap();
+        let inactive = doc.layers.allocate("inactive").unwrap();
+        let hidden = doc.layers.allocate("hidden").unwrap();
+        let solo = doc.layers.allocate("solo").unwrap();
+        let other = doc.layers.allocate("other").unwrap();
+        let mk = |layer, start, duration, visible, solo_flag| {
+            let mut env = ItemEnvelope::new(layer);
+            env.visible = visible;
+            env.solo = solo_flag;
+            TrackItem::Clip(Clip {
+                envelope: env,
+                start,
+                duration,
+                time_map: Default::default(),
+                source: ClipSource::asset_video_only(asset),
+            })
+        };
+        doc.tracks[0].items.push(mk(
+            active,
+            RationalTime::ZERO,
+            RationalTime::try_new(10, 1).unwrap(),
+            true,
+            false,
+        ));
+        doc.tracks[0].items.push(mk(
+            inactive,
+            RationalTime::try_new(5, 1).unwrap(),
+            RationalTime::try_new(2, 1).unwrap(),
+            true,
+            false,
+        ));
+        // solo 無しのときは hidden だけ除外。
+        doc.tracks[0].items.push(mk(
+            hidden,
+            RationalTime::ZERO,
+            RationalTime::try_new(10, 1).unwrap(),
+            false,
+            false,
+        ));
+        let visible = visible_layers_at(&doc, RationalTime::ZERO);
+        assert_eq!(visible, vec![active]);
+
+        doc.tracks[0].items.push(mk(
+            solo,
+            RationalTime::ZERO,
+            RationalTime::try_new(10, 1).unwrap(),
+            true,
+            true,
+        ));
+        doc.tracks[0].items.push(mk(
+            other,
+            RationalTime::ZERO,
+            RationalTime::try_new(10, 1).unwrap(),
+            true,
+            false,
+        ));
+        let visible = visible_layers_at(&doc, RationalTime::ZERO);
+        assert_eq!(visible, vec![solo]);
     }
 }

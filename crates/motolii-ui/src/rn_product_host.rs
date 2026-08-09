@@ -11,7 +11,9 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::{Mutex, OnceLock};
 
-use motolii_doc::LayerId;
+use motolii_core::RationalTime;
+use motolii_doc::{EvaluationTime, LayerId};
+use motolii_eval::DataTracks;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -24,8 +26,15 @@ use wgpu::{
     SurfaceTargetUnsafe, TextureFormat, TextureUsages,
 };
 
-use crate::document_edit_runtime::DocumentEditRuntime;
+use crate::document_edit_runtime::{
+    DocumentEditQueue, DocumentEditRuntime, DocumentEditRuntimeError,
+};
 use crate::shell::{open_project_runtime, ShellError};
+use crate::stage_geometry_projection::project_stage_geometry;
+use crate::stage_hit_test::{
+    hit_test_projected_layers, view_local_in_stage, view_local_to_canonical, StageHit,
+    StageHitTestReject,
+};
 #[cfg(target_os = "macos")]
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
 
@@ -119,6 +128,8 @@ pub(crate) struct WireProductSnapshot {
     host_handle: String,
     revision: String,
     projection_generation: String,
+    /// Host transient の現在評価時刻。Document / revision には載せない。
+    current_time: RationalTime,
     #[serde(skip_serializing_if = "Option::is_none")]
     primary_layer_id: Option<String>,
     stage: WireStageProjection,
@@ -136,6 +147,7 @@ struct WireStageProjection {
 pub struct RnProductSnapshotForTest {
     pub revision: String,
     pub projection_generation: String,
+    pub current_time: RationalTime,
     pub primary_layer_id: Option<String>,
     pub layer_ids: Vec<String>,
 }
@@ -178,6 +190,21 @@ pub(crate) struct WireIntentEnvelope {
     scale_factor: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     focused: Option<bool>,
+    /// stage_pointer: `down` | `drag` | `up` | `cancel`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    phase: Option<String>,
+    /// stage_pointer: view-local logical X（physical / scale_factor と混同しない）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    view_local_x: Option<f64>,
+    /// stage_pointer: view-local logical Y
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    view_local_y: Option<f64>,
+    /// stage_pointer: 単調増加 sequence（二重配送検出用。本seamでは調停しない）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sequence: Option<u64>,
+    /// set_time: 評価 frame index。欠落・非整数は typed 拒否。暗黙 clamp しない。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    frame: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -285,6 +312,15 @@ impl StageGpuBinding {
     }
 }
 
+/// Host 内 transient の最新 pointer。Document / revision / primary には載せない。
+#[derive(Debug, Clone, PartialEq)]
+struct StagePointerTransient {
+    phase: String,
+    view_local_x: f64,
+    view_local_y: f64,
+    sequence: u64,
+}
+
 struct RnStageSurface {
     host_handle: u64,
     mounted: bool,
@@ -293,6 +329,7 @@ struct RnStageSurface {
     height: u32,
     scale_factor: f64,
     focused: bool,
+    pointer: Option<StagePointerTransient>,
     #[cfg(target_os = "macos")]
     gpu: StageGpuBinding,
 }
@@ -300,6 +337,8 @@ struct RnStageSurface {
 struct RnProductHost {
     runtime: DocumentEditRuntime,
     projection_generation: u64,
+    /// Document 外の transient 評価時刻。初期値は ZERO。
+    current_time: RationalTime,
     primary: Option<LayerId>,
     stages: HashMap<u64, RnStageSurface>,
     destroyed: bool,
@@ -335,6 +374,7 @@ impl RnProductHost {
             host_handle: host_handle.to_string(),
             revision: self.runtime.document_revision().to_string(),
             projection_generation: self.projection_generation.to_string(),
+            current_time: self.current_time,
             primary_layer_id: self.primary.map(|layer| layer.get().to_string()),
             stage: WireStageProjection { selection, bounds },
             diagnostics: Vec::new(),
@@ -395,7 +435,71 @@ impl RnProductHost {
 
         match intent.kind.as_str() {
             "read_snapshot" => accept(self.snapshot_wire(host_handle)),
-            "stage_mount" | "stage_resize" | "stage_focus" | "stage_unmount" => {
+            "set_time" => {
+                // frame index だけを受け、Composition.fps で RationalTime へ解決する。
+                // 負・duration 超過・try_from_frame 失敗は暗黙 clamp せず typed 拒否。
+                let Some(frame) = intent.frame else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let (fps, duration) = {
+                    let snapshot = self.runtime.snapshot();
+                    (snapshot.composition.fps, snapshot.composition.duration)
+                };
+                let Ok(time) = RationalTime::try_from_frame(frame, fps) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                if time < RationalTime::ZERO || time > duration {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                }
+                if time == self.current_time {
+                    // 同一時刻の再設定は no-op。generation は進めない。
+                    return accept(self.snapshot_wire(host_handle));
+                }
+                // Host 内に CU-104E 枯渇 preflight は無い。飽和・wrap せず typed 拒否する。
+                let Some(next_generation) = self.projection_generation.checked_add(1) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                self.current_time = time;
+                self.projection_generation = next_generation;
+                accept(self.snapshot_wire(host_handle))
+            }
+            "stage_mount" | "stage_resize" | "stage_focus" | "stage_unmount" | "stage_pointer" => {
                 let Some(stage_handle) = intent
                     .stage_handle
                     .as_deref()
@@ -436,6 +540,19 @@ impl RnProductHost {
                         None,
                     );
                 }
+                // unmount 後の late pointer は lifecycle と同じ late route で拒否する。
+                if intent.kind == "stage_pointer" && !stage.mounted {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::LateLifecycleEvent,
+                            Some(host_handle),
+                            Some(stage_handle),
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                }
                 let payload_is_valid = match intent.kind.as_str() {
                     "stage_resize" => matches!(
                         (intent.width, intent.height, intent.scale_factor),
@@ -447,6 +564,17 @@ impl RnProductHost {
                     ),
                     "stage_focus" => intent.focused.is_some(),
                     "stage_mount" | "stage_unmount" => true,
+                    "stage_pointer" => {
+                        let phase_ok = matches!(
+                            intent.phase.as_deref(),
+                            Some("down" | "drag" | "up" | "cancel")
+                        );
+                        let coords_ok = matches!(
+                            (intent.view_local_x, intent.view_local_y),
+                            (Some(x), Some(y)) if x.is_finite() && y.is_finite()
+                        );
+                        phase_ok && coords_ok && intent.sequence.is_some()
+                    }
                     _ => false,
                 };
                 if !payload_is_valid {
@@ -461,25 +589,63 @@ impl RnProductHost {
                         None,
                     );
                 }
-                match intent.kind.as_str() {
+                // pointer の selection は stage borrow 解放後に行う。
+                let pointer_down = match intent.kind.as_str() {
                     "stage_mount" => {
                         stage.mounted = true;
+                        None
                     }
                     "stage_resize" => {
                         stage.width = intent.width.expect("validated resize width");
                         stage.height = intent.height.expect("validated resize height");
                         stage.scale_factor =
                             intent.scale_factor.expect("validated resize scale factor");
+                        None
                     }
                     "stage_focus" => {
                         stage.focused = intent.focused.expect("validated focus state");
+                        None
                     }
                     "stage_unmount" => {
                         #[cfg(target_os = "macos")]
                         stage.gpu_detach_surface();
                         stage.mounted = false;
+                        None
                     }
-                    _ => {}
+                    "stage_pointer" => {
+                        // selection 成否と独立に transient を先に記録する（grain 2）。
+                        let phase = intent.phase.expect("validated pointer phase");
+                        let view_local_x = intent.view_local_x.expect("validated view_local_x");
+                        let view_local_y = intent.view_local_y.expect("validated view_local_y");
+                        let sequence = intent.sequence.expect("validated pointer sequence");
+                        let width = stage.width;
+                        let height = stage.height;
+                        stage.pointer = Some(StagePointerTransient {
+                            phase: phase.clone(),
+                            view_local_x,
+                            view_local_y,
+                            sequence,
+                        });
+                        if phase == "down" {
+                            Some((view_local_x, view_local_y, width, height))
+                        } else {
+                            // drag / up / cancel は selection を変更しない。
+                            None
+                        }
+                    }
+                    _ => None,
+                };
+                if let Some((view_local_x, view_local_y, width, height)) = pointer_down {
+                    if let Some(response) = self.apply_stage_pointer_selection(
+                        host_handle,
+                        stage_handle,
+                        view_local_x,
+                        view_local_y,
+                        width,
+                        height,
+                    ) {
+                        return response;
+                    }
                 }
                 accept(self.snapshot_wire(host_handle))
             }
@@ -499,6 +665,107 @@ impl RnProductHost {
         }
     }
 
+    /// `stage_pointer` down の hit-test → 既存 selection writer。
+    /// typed 拒否時だけ `Some(reject)`。受理・no-op は `None`（呼び出し側が snapshot を返す）。
+    fn apply_stage_pointer_selection(
+        &mut self,
+        host_handle: u64,
+        stage_handle: u64,
+        view_local_x: f64,
+        view_local_y: f64,
+        width: u32,
+        height: u32,
+    ) -> Option<WireIntentResponse> {
+        let canonical = match view_local_to_canonical(view_local_x, view_local_y, width, height) {
+            Ok(point) => point,
+            Err(StageHitTestReject::ZeroStageExtent) => {
+                return Some(reject(
+                    diagnostic(
+                        RnHostReasonCode::InvalidIntent,
+                        Some(host_handle),
+                        Some(stage_handle),
+                        None,
+                        None,
+                    ),
+                    None,
+                ));
+            }
+        };
+
+        // product path と同じ空 DataTracks。runtime に格納口は無い。
+        let tracks = DataTracks::new();
+        let document = self.runtime.snapshot();
+        let projection = match project_stage_geometry(
+            document.as_ref(),
+            EvaluationTime::new(self.current_time),
+            &tracks,
+        ) {
+            Ok(projection) => projection,
+            Err(_) => {
+                // 幾何失敗を選択解除の意思に読み替えない。
+                return Some(reject(
+                    diagnostic(
+                        RnHostReasonCode::InvalidIntent,
+                        Some(host_handle),
+                        Some(stage_handle),
+                        None,
+                        None,
+                    ),
+                    None,
+                ));
+            }
+        };
+
+        let hit = if view_local_in_stage(view_local_x, view_local_y, width, height) {
+            hit_test_projected_layers(canonical, &projection)
+        } else {
+            StageHit::Miss
+        };
+
+        let mut queue = DocumentEditQueue::default();
+        match hit {
+            StageHit::Layer(layer) => queue.push_replace_primary(layer),
+            StageHit::Miss => queue.push_clear_primary(),
+        }
+
+        match self
+            .runtime
+            .process_next(&mut queue, self.primary, self.projection_generation)
+        {
+            Ok(None) => {
+                // 存在拒否以外の same-id / already-clear no-op。generation は進めない。
+                None
+            }
+            Ok(Some(published)) => {
+                // accepted 変更だけを Host transient へ反映する（直接代入で意図を捏造しない）。
+                self.primary = published.primary;
+                self.projection_generation = published.projection_generation;
+                None
+            }
+            Err(DocumentEditRuntimeError::SelectionTargetNotFound(_))
+            | Err(DocumentEditRuntimeError::ProjectionGenerationExhausted) => Some(reject(
+                diagnostic(
+                    RnHostReasonCode::InvalidIntent,
+                    Some(host_handle),
+                    Some(stage_handle),
+                    None,
+                    None,
+                ),
+                None,
+            )),
+            Err(_) => Some(reject(
+                diagnostic(
+                    RnHostReasonCode::InvalidIntent,
+                    Some(host_handle),
+                    Some(stage_handle),
+                    None,
+                    None,
+                ),
+                None,
+            )),
+        }
+    }
+
     fn register_stage(&mut self, host_handle: u64, stage_handle: u64) -> Result<(), RnHostError> {
         if self.destroyed {
             return Err(RnHostError::DestroyedHost(host_handle));
@@ -513,6 +780,7 @@ impl RnProductHost {
                 height: 0,
                 scale_factor: 1.0,
                 focused: false,
+                pointer: None,
                 #[cfg(target_os = "macos")]
                 gpu: StageGpuBinding::detached(),
             },
@@ -1021,6 +1289,7 @@ impl RnHostRegistry {
             RnProductHost {
                 runtime,
                 projection_generation: 0,
+                current_time: RationalTime::ZERO,
                 primary: None,
                 stages: HashMap::new(),
                 destroyed: false,
@@ -1112,7 +1381,42 @@ impl RnHostRegistry {
         if host.destroyed {
             return Err(RnHostError::DestroyedHost(host_handle));
         }
-        let intent: WireIntentEnvelope = serde_json::from_str(intent_json)?;
+        // set_time は frame index のみ。旧 time 秒 wire・非整数・欠落はここで typed 拒否する。
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(intent_json) {
+            if value.get("kind").and_then(|kind| kind.as_str()) == Some("set_time") {
+                let frame_is_i64 = value
+                    .get("frame")
+                    .map(|frame| frame.is_i64())
+                    .unwrap_or(false);
+                if value.get("time").is_some() || !frame_is_i64 {
+                    return encode_json(&reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ));
+                }
+            }
+        }
+        let intent: WireIntentEnvelope = match serde_json::from_str(intent_json) {
+            Ok(intent) => intent,
+            Err(_) => {
+                return encode_json(&reject(
+                    diagnostic(
+                        RnHostReasonCode::InvalidIntent,
+                        Some(host_handle),
+                        None,
+                        None,
+                        None,
+                    ),
+                    None,
+                ));
+            }
+        };
         if intent.version != WIRE_VERSION || intent.direction != RN_TO_HOST {
             let response = reject(
                 diagnostic(
@@ -1314,6 +1618,7 @@ fn snapshot_for_test(snapshot: WireProductSnapshot) -> RnProductSnapshotForTest 
     RnProductSnapshotForTest {
         revision: snapshot.revision,
         projection_generation: snapshot.projection_generation,
+        current_time: snapshot.current_time,
         primary_layer_id: snapshot.primary_layer_id,
         layer_ids: snapshot
             .stage
@@ -1360,6 +1665,11 @@ pub fn host_dispatch_intent_for_test(
         height: intent.height,
         scale_factor: intent.scale_factor,
         focused: intent.focused,
+        phase: None,
+        view_local_x: None,
+        view_local_y: None,
+        sequence: None,
+        frame: None,
     };
     let json = with_registry(|registry| {
         registry.dispatch_intent_json(host_handle, &encode_json(&wire_intent)?)
@@ -1838,8 +2148,8 @@ mod tests {
 
     use motolii_core::{RationalTime, TimeMap};
     use motolii_doc::{
-        Clip, ClipSource, DocParam, Document, ItemEnvelope, ProjectSession, ResourceLimits,
-        SaveProjectOptions, Track, TrackItem, RECT_LAYER_SOURCE,
+        Clip, ClipSource, CompCameraDoc, DocParam, Document, ItemEnvelope, LayerId, ProjectSession,
+        ResourceLimits, SaveProjectOptions, Track, TrackItem, Transform2D, RECT_LAYER_SOURCE,
     };
     use motolii_testkit::tmp_dir;
 
@@ -1918,6 +2228,279 @@ mod tests {
         }
     }
 
+    fn pointer_intent(
+        stage: u64,
+        phase: &str,
+        view_local_x: f64,
+        view_local_y: f64,
+        sequence: u64,
+    ) -> WireIntentEnvelope {
+        WireIntentEnvelope {
+            version: WIRE_VERSION,
+            direction: RN_TO_HOST.to_owned(),
+            kind: "stage_pointer".to_owned(),
+            host_handle: String::new(),
+            stage_handle: Some(stage.to_string()),
+            projection_generation: None,
+            width: None,
+            height: None,
+            scale_factor: None,
+            focused: None,
+            phase: Some(phase.to_owned()),
+            view_local_x: Some(view_local_x),
+            view_local_y: Some(view_local_y),
+            sequence: Some(sequence),
+            frame: None,
+        }
+    }
+
+    fn set_time_json(host: u64, frame_json: &str) -> String {
+        format!(
+            concat!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"set_time","#,
+                r#""host_handle":"{host}","frame":{frame}}}"#
+            ),
+            host = host,
+            frame = frame_json
+        )
+    }
+
+    fn dispatch_raw_json(host: u64, intent_json: &str) -> RnHostTestResponse {
+        #[cfg(target_os = "macos")]
+        {
+            let mut out = vec![0u8; MAX_JSON_BYTES];
+            let written = motolii_rn_host_dispatch_intent_json(
+                host,
+                intent_json.as_ptr(),
+                intent_json.len(),
+                out.as_mut_ptr(),
+                out.len(),
+            );
+            assert!(
+                written > 0,
+                "motolii_rn_host_dispatch_intent_json failed: {written}"
+            );
+            let response: WireIntentResponse =
+                serde_json::from_slice(&out[..written as usize]).expect("response json");
+            response_for_test(response)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            with_registry(|registry| {
+                let out = registry.dispatch_intent_json(host, intent_json)?;
+                let response: WireIntentResponse =
+                    serde_json::from_str(&out).map_err(RnHostError::from)?;
+                Ok(response_for_test(response))
+            })
+            .expect("dispatch raw json")
+        }
+    }
+
+    fn fixture_path_with_fps(tag: &str, fps: motolii_core::Fps) -> std::path::PathBuf {
+        let id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = tmp_dir(&format!("rn-product-host-{tag}-{id}")).join("project.json");
+        let mut document = Document::new_current();
+        document.composition.fps = fps;
+        let layer = document.layers.allocate("r0-layer").expect("layer");
+        let track = document.track_ids.allocate("r0-track").expect("track");
+        document.tracks.push(Track {
+            id: track,
+            items: vec![TrackItem::Clip(Clip {
+                envelope: ItemEnvelope::new(layer),
+                start: RationalTime::ZERO,
+                duration: document.composition.duration,
+                time_map: TimeMap::identity(),
+                source: ClipSource::Plugin {
+                    plugin_id: RECT_LAYER_SOURCE.into(),
+                    effect_version: 1,
+                    params: BTreeMap::from([
+                        ("center".into(), DocParam::const_vec2([0.0, 0.0])),
+                        ("size".into(), DocParam::const_vec2([1.0, 1.0])),
+                        ("color".into(), DocParam::const_color([0.0, 1.0, 0.0, 1.0])),
+                    ]),
+                    extra: Default::default(),
+                },
+            })],
+        });
+        document.validate().expect("valid fixture document");
+        let limits = ResourceLimits::production();
+        let mut session = ProjectSession::acquire(&path, &limits).expect("acquire fixture");
+        session
+            .save_with_journal(
+                &document,
+                &SaveProjectOptions {
+                    limits,
+                    checkpoint: true,
+                    ..SaveProjectOptions::default()
+                },
+            )
+            .expect("save fixture");
+        path
+    }
+
+    fn create_host_with_fps(tag: &str, fps: motolii_core::Fps) -> u64 {
+        let path = fixture_path_with_fps(tag, fps);
+        host_create_for_test(&path).expect("host")
+    }
+
+    fn save_document_fixture(tag: &str, document: &Document) -> std::path::PathBuf {
+        let id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = tmp_dir(&format!("rn-product-host-{tag}-{id}")).join("project.json");
+        let limits = ResourceLimits::production();
+        let mut session = ProjectSession::acquire(&path, &limits).expect("acquire fixture");
+        session
+            .save_with_journal(
+                document,
+                &SaveProjectOptions {
+                    limits,
+                    checkpoint: true,
+                    ..SaveProjectOptions::default()
+                },
+            )
+            .expect("save fixture");
+        path
+    }
+
+    fn create_host_from_document(tag: &str, document: &Document) -> u64 {
+        let path = save_document_fixture(tag, document);
+        host_create_for_test(&path).expect("host")
+    }
+
+    struct Fixture {
+        document: Document,
+    }
+
+    impl Fixture {
+        fn new() -> Self {
+            Self {
+                document: Document::new_current(),
+            }
+        }
+
+        fn push_rect_layer(
+            &mut self,
+            name: &str,
+            center: [f64; 2],
+            size: [f64; 2],
+            transform: Transform2D,
+        ) -> LayerId {
+            if self.document.tracks.is_empty() {
+                let track = self.document.track_ids.allocate("V1").expect("track");
+                self.document.tracks.push(Track {
+                    id: track,
+                    items: vec![],
+                });
+            }
+            let layer = self.document.layers.allocate(name).expect("layer");
+            let mut envelope = ItemEnvelope::new(layer);
+            envelope.transform = transform;
+            self.document.tracks[0].items.push(TrackItem::Clip(Clip {
+                envelope,
+                start: RationalTime::ZERO,
+                duration: self.document.composition.duration,
+                time_map: TimeMap::identity(),
+                source: ClipSource::Plugin {
+                    plugin_id: RECT_LAYER_SOURCE.into(),
+                    effect_version: 1,
+                    params: rect_params(center, size),
+                    extra: Default::default(),
+                },
+            }));
+            layer
+        }
+    }
+
+    fn rect_params(center: [f64; 2], size: [f64; 2]) -> BTreeMap<String, DocParam> {
+        BTreeMap::from([
+            ("center".into(), DocParam::const_vec2(center)),
+            ("size".into(), DocParam::const_vec2(size)),
+            ("color".into(), DocParam::const_color([0.0, 1.0, 0.0, 1.0])),
+        ])
+    }
+
+    fn mount_and_resize(host: u64, stage: u64, width: u32, height: u32) {
+        let mut mount = base_intent("stage_mount");
+        mount.stage_handle = Some(stage);
+        assert!(dispatch(host, mount).accepted);
+        let mut resize = base_intent("stage_resize");
+        resize.stage_handle = Some(stage);
+        resize.width = Some(width);
+        resize.height = Some(height);
+        resize.scale_factor = Some(1.0);
+        assert!(dispatch(host, resize).accepted);
+    }
+
+    fn pointer_json(
+        host: u64,
+        stage: u64,
+        phase: &str,
+        view_local_x: f64,
+        view_local_y: f64,
+        sequence: u64,
+    ) -> String {
+        format!(
+            concat!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"stage_pointer","#,
+                r#""host_handle":"{host}","stage_handle":"{stage}","phase":"{phase}","#,
+                r#""view_local_x":{x},"view_local_y":{y},"sequence":{sequence}}}"#
+            ),
+            host = host,
+            stage = stage,
+            phase = phase,
+            x = view_local_x,
+            y = view_local_y,
+            sequence = sequence
+        )
+    }
+
+    fn canonical_to_view_local(
+        canonical_x: f64,
+        canonical_y: f64,
+        width: u32,
+        height: u32,
+    ) -> (f64, f64) {
+        let w = f64::from(width);
+        let h = f64::from(height);
+        (w * 0.5 + canonical_x * h, h * 0.5 + canonical_y * h)
+    }
+
+    fn document_json_bytes(host: u64) -> Vec<u8> {
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            Ok(serde_json::to_vec(product.runtime.snapshot().as_ref()).expect("document json"))
+        })
+        .expect("document bytes")
+    }
+
+    fn dispatch_wire(host: u64, mut intent: WireIntentEnvelope) -> RnHostTestResponse {
+        intent.host_handle = host.to_string();
+        // JSON 経由だと非有限 f64 を運べないため、受理検証は envelope 直送で行う。
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            Ok(response_for_test(product.dispatch_intent(host, intent)))
+        })
+        .expect("dispatch wire")
+    }
+
+    fn read_stage_pointer(stage: u64) -> Option<StagePointerTransient> {
+        with_registry(|registry| {
+            for host in registry.hosts.values() {
+                if let Some(surface) = host.stages.get(&stage) {
+                    return Ok(surface.pointer.clone());
+                }
+            }
+            Err(RnHostError::UnknownStage(stage))
+        })
+        .ok()
+        .flatten()
+    }
+
     #[test]
     fn snapshot_carries_revision_projection_generation_and_primary_layer_id() {
         let _lock = test_lock();
@@ -1925,8 +2508,220 @@ mod tests {
         let snapshot = read_snapshot(host);
         assert_eq!(snapshot.revision, "0");
         assert_eq!(snapshot.projection_generation, "0");
+        assert_eq!(snapshot.current_time, RationalTime::ZERO);
         assert!(snapshot.primary_layer_id.is_none());
         assert!(!snapshot.layer_ids.is_empty());
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_time_accepts_valid_frame_and_advances_projection_generation() {
+        let _lock = test_lock();
+        let host = create_host("set-time-accept");
+        let baseline = read_snapshot(host);
+        assert_eq!(baseline.current_time, RationalTime::ZERO);
+        assert_eq!(baseline.projection_generation, "0");
+
+        // 既定 Composition は 30fps・duration 10s。frame 45 → 45/30 = 3/2。
+        let response = dispatch_raw_json(host, &set_time_json(host, "45"));
+        assert!(response.accepted);
+        let snap = response.snapshot.expect("snapshot");
+        assert_eq!(snap.current_time, RationalTime::try_new(3, 2).expect("3/2"));
+        assert_eq!(snap.projection_generation, "1");
+        assert_eq!(snap.revision, baseline.revision);
+        assert_eq!(snap.primary_layer_id, baseline.primary_layer_id);
+
+        let after = read_snapshot(host);
+        assert_eq!(after.current_time, snap.current_time);
+        assert_eq!(after.projection_generation, "1");
+        assert_eq!(after.revision, baseline.revision);
+        assert_eq!(after.primary_layer_id, baseline.primary_layer_id);
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_time_frame_zero_resolves_to_rational_time_zero_via_ffi_json() {
+        let _lock = test_lock();
+        let host = create_host("set-time-zero");
+        // いったん非 ZERO にしてから frame 0 へ戻し、解決結果を観測する。
+        assert!(dispatch_raw_json(host, &set_time_json(host, "30")).accepted);
+        let response = dispatch_raw_json(host, &set_time_json(host, "0"));
+        assert!(response.accepted);
+        let snap = response.snapshot.expect("snapshot");
+        assert_eq!(snap.current_time, RationalTime::ZERO);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_time_ntsc_frame_is_exact_fraction_via_ffi_json() {
+        let _lock = test_lock();
+        let fps = motolii_core::Fps::try_new(30_000, 1_001).expect("29.97");
+        let host = create_host_with_fps("set-time-ntsc", fps);
+        // duration 10s 内に収まる N。N*1001/30000 を十進近似なしで観測する。
+        let frame = 100i64;
+        let response = dispatch_raw_json(host, &set_time_json(host, &frame.to_string()));
+        assert!(response.accepted);
+        let snap = response.snapshot.expect("snapshot");
+        assert_eq!(
+            snap.current_time,
+            RationalTime::try_new(frame * 1_001, 30_000).expect("exact ntsc")
+        );
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_time_film_24_frame_is_exact_fraction_via_ffi_json() {
+        let _lock = test_lock();
+        let fps = motolii_core::Fps::try_new(24, 1).expect("24");
+        let host = create_host_with_fps("set-time-24", fps);
+        let frame = 48i64;
+        let response = dispatch_raw_json(host, &set_time_json(host, &frame.to_string()));
+        assert!(response.accepted);
+        let snap = response.snapshot.expect("snapshot");
+        assert_eq!(
+            snap.current_time,
+            RationalTime::try_new(frame, 24).expect("exact 24")
+        );
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_time_same_frame_is_noop_without_generation_advance() {
+        let _lock = test_lock();
+        let host = create_host("set-time-noop");
+        assert!(dispatch_raw_json(host, &set_time_json(host, "60")).accepted);
+        let after_first = read_snapshot(host);
+        assert_eq!(after_first.projection_generation, "1");
+
+        let noop = dispatch_raw_json(host, &set_time_json(host, "60"));
+        assert!(noop.accepted);
+        let snap = noop.snapshot.expect("snapshot");
+        assert_eq!(snap.current_time, after_first.current_time);
+        assert_eq!(
+            snap.projection_generation,
+            after_first.projection_generation
+        );
+        assert_eq!(snap.revision, after_first.revision);
+        assert_eq!(snap.primary_layer_id, after_first.primary_layer_id);
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_time_rejects_out_of_bounds_and_bad_wire_without_clamp_or_document_write() {
+        let _lock = test_lock();
+        let host = create_host("set-time-reject");
+        let baseline = read_snapshot(host);
+
+        let negative = dispatch_raw_json(host, &set_time_json(host, "-1"));
+        assert!(!negative.accepted);
+        assert_eq!(negative.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        // duration 10s / 30fps → frame 300 が境界。301 は超過。
+        let over = dispatch_raw_json(host, &set_time_json(host, "301"));
+        assert!(!over.accepted);
+        assert_eq!(over.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let missing = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"set_time","host_handle":"{host}"}}"#
+            ),
+        );
+        assert!(!missing.accepted);
+        assert_eq!(missing.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let non_integer = dispatch_raw_json(host, &set_time_json(host, "1.5"));
+        assert!(!non_integer.accepted);
+        assert_eq!(non_integer.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let legacy_time = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_time","#,
+                    r#""host_handle":"{host}","time":1.5}}"#
+                ),
+                host = host
+            ),
+        );
+        assert!(!legacy_time.accepted);
+        assert_eq!(legacy_time.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let legacy_time_with_frame = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_time","#,
+                    r#""host_handle":"{host}","frame":1,"time":1.5}}"#
+                ),
+                host = host
+            ),
+        );
+        assert!(!legacy_time_with_frame.accepted);
+        assert_eq!(
+            legacy_time_with_frame.reason,
+            Some(RnHostReasonCode::InvalidIntent)
+        );
+
+        let after = read_snapshot(host);
+        assert_eq!(after.current_time, RationalTime::ZERO);
+        assert_eq!(after.revision, baseline.revision);
+        assert_eq!(after.projection_generation, baseline.projection_generation);
+        assert_eq!(after.primary_layer_id, baseline.primary_layer_id);
+        assert_eq!(after.layer_ids, baseline.layer_ids);
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_time_rejects_try_from_frame_overflow_without_panic() {
+        let _lock = test_lock();
+        // fps=1/2 かつ frame=i64::MAX だと try_from_frame が Overflow になる。
+        let fps = motolii_core::Fps::try_new(1, 2).expect("1/2");
+        let host = create_host_with_fps("set-time-overflow", fps);
+        let baseline = read_snapshot(host);
+        let rejected = dispatch_raw_json(host, &set_time_json(host, &i64::MAX.to_string()));
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+        let after = read_snapshot(host);
+        assert_eq!(after.current_time, baseline.current_time);
+        assert_eq!(after.projection_generation, baseline.projection_generation);
+        assert_eq!(after.revision, baseline.revision);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_time_rejects_projection_generation_exhaustion_without_saturation() {
+        let _lock = test_lock();
+        let host = create_host("set-time-gen-exhaust");
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            product.projection_generation = u64::MAX;
+            Ok(())
+        })
+        .expect("force exhaustion");
+
+        // 同一 ZERO は no-op で受理し、枯渇でも generation を触らない。
+        let noop = dispatch_raw_json(host, &set_time_json(host, "0"));
+        assert!(noop.accepted);
+        assert_eq!(
+            noop.snapshot.expect("snapshot").projection_generation,
+            u64::MAX.to_string()
+        );
+
+        // 異なる frame は前進不能なので typed 拒否。飽和させない。
+        let rejected = dispatch_raw_json(host, &set_time_json(host, "1"));
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+        let after = read_snapshot(host);
+        assert_eq!(after.current_time, RationalTime::ZERO);
+        assert_eq!(after.projection_generation, u64::MAX.to_string());
+
         let _ = host_destroy_for_test(host);
     }
 
@@ -1977,6 +2772,104 @@ mod tests {
     }
 
     #[test]
+    fn stage_pointer_phases_record_transient_without_document_write() {
+        let _lock = test_lock();
+        let host = create_host("pointer-accept");
+        let baseline = read_snapshot(host);
+        let stage = host_register_stage_for_test(host).expect("stage");
+        // resize 前は width/height 0 で selection が typed 拒否されるため、先に非正方形へ拡げる。
+        mount_and_resize(host, stage, 1600, 900);
+        let before_bytes = document_json_bytes(host);
+
+        // 既定 Rect(半幅0.5)の外。down は Miss→clear no-op で generation / Document 不変。
+        let phases = [
+            ("down", 12.5, 34.0, 1_u64),
+            ("drag", 18.0, 40.25, 2),
+            ("up", 20.0, 41.0, 3),
+            ("cancel", 1.0, 1.0, 4),
+        ];
+        for (phase, x, y, sequence) in phases {
+            let response = dispatch_wire(host, pointer_intent(stage, phase, x, y, sequence));
+            assert!(response.accepted, "phase {phase} should accept");
+            let recorded = read_stage_pointer(stage).expect("transient pointer");
+            assert_eq!(recorded.phase, phase);
+            assert_eq!(recorded.view_local_x, x);
+            assert_eq!(recorded.view_local_y, y);
+            assert_eq!(recorded.sequence, sequence);
+            let snap = response.snapshot.expect("snapshot");
+            assert_eq!(snap.revision, baseline.revision);
+            assert_eq!(snap.projection_generation, baseline.projection_generation);
+            assert_eq!(snap.primary_layer_id, baseline.primary_layer_id);
+        }
+
+        let after = read_snapshot(host);
+        assert_eq!(after.revision, baseline.revision);
+        assert_eq!(after.projection_generation, baseline.projection_generation);
+        assert_eq!(after.primary_layer_id, baseline.primary_layer_id);
+        assert_eq!(after.layer_ids, baseline.layer_ids);
+        assert_eq!(document_json_bytes(host), before_bytes);
+
+        let _ = host_destroy_stage_for_test(stage);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn stage_pointer_rejects_invalid_payload_and_late_events() {
+        let _lock = test_lock();
+        let host = create_host("pointer-reject");
+        let baseline = read_snapshot(host);
+        let stage = host_register_stage_for_test(host).expect("stage");
+
+        let mut mount = base_intent("stage_mount");
+        mount.stage_handle = Some(stage);
+        assert!(dispatch(host, mount).accepted);
+
+        let mut unknown_phase = pointer_intent(stage, "move", 1.0, 2.0, 1);
+        unknown_phase.phase = Some("move".to_owned());
+        let rejected = dispatch_wire(host, unknown_phase);
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let mut non_finite = pointer_intent(stage, "down", f64::NAN, 2.0, 2);
+        let rejected = dispatch_wire(host, non_finite);
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        non_finite = pointer_intent(stage, "down", 1.0, f64::INFINITY, 3);
+        let rejected = dispatch_wire(host, non_finite);
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let mut missing_sequence = pointer_intent(stage, "down", 1.0, 2.0, 4);
+        missing_sequence.sequence = None;
+        let rejected = dispatch_wire(host, missing_sequence);
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let unknown_stage = dispatch_wire(host, pointer_intent(99_999, "down", 1.0, 2.0, 5));
+        assert!(!unknown_stage.accepted);
+        assert_eq!(
+            unknown_stage.reason,
+            Some(RnHostReasonCode::UnknownStageHandle)
+        );
+
+        let mut unmount = base_intent("stage_unmount");
+        unmount.stage_handle = Some(stage);
+        assert!(dispatch(host, unmount).accepted);
+        let late = dispatch_wire(host, pointer_intent(stage, "up", 1.0, 2.0, 6));
+        assert!(!late.accepted);
+        assert_eq!(late.reason, Some(RnHostReasonCode::LateLifecycleEvent));
+
+        let after = read_snapshot(host);
+        assert_eq!(after.revision, baseline.revision);
+        assert_eq!(after.projection_generation, baseline.projection_generation);
+        assert_eq!(after.primary_layer_id, baseline.primary_layer_id);
+
+        let _ = host_destroy_stage_for_test(stage);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
     fn stale_projection_generation_is_zero_write() {
         let _lock = test_lock();
         let host = create_host("stale");
@@ -1992,6 +2885,531 @@ mod tests {
         let after = read_snapshot(host);
         assert_eq!(after.revision, before.revision);
         assert_eq!(after.projection_generation, before.projection_generation);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn stage_pointer_down_selects_rotated_rect_via_json_snapshot() {
+        let _lock = test_lock();
+        let mut fixture = Fixture::new();
+        let layer = fixture.push_rect_layer(
+            "rotated",
+            [0.05, -0.08],
+            [0.35, 0.22],
+            Transform2D {
+                position: DocParam::const_vec2([0.18, 0.12]),
+                rotation: DocParam::const_f64(0.55),
+                scale: DocParam::const_vec2([1.15, 0.9]),
+                ..Transform2D::identity()
+            },
+        );
+        fixture.document.composition.camera = CompCameraDoc::PlanarOrthographic {
+            center: DocParam::const_vec2([0.03, -0.02]),
+            roll_radians: DocParam::const_f64(0.2),
+            height: DocParam::const_f64(1.0),
+        };
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-rotated", &fixture.document);
+        let stage = host_register_stage_for_test(host).expect("stage");
+        mount_and_resize(host, stage, 1600, 900);
+        let before_bytes = document_json_bytes(host);
+        let before = read_snapshot(host);
+
+        // 局所原点付近を camera∘world で正準へ写し、非対称な view-local へ戻す。
+        let tracks = DataTracks::new();
+        let proj = project_stage_geometry(
+            &fixture.document,
+            EvaluationTime::new(RationalTime::ZERO),
+            &tracks,
+        )
+        .expect("geometry");
+        let crate::stage_geometry_projection::StageLayerProjection::Available(geo) =
+            proj.get(layer).expect("layer")
+        else {
+            panic!("available");
+        };
+        let composed = geo.camera_view * geo.world;
+        let [cx, cy] = composed.transform_point(geo.local_rect.center.x, geo.local_rect.center.y);
+        let (vx, vy) = canonical_to_view_local(cx, cy, 1600, 900);
+
+        let response = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 1));
+        assert!(response.accepted);
+        let snap = response.snapshot.expect("snapshot");
+        assert_eq!(snap.primary_layer_id, Some(layer.get().to_string()));
+        assert_eq!(snap.projection_generation, "1");
+        assert_eq!(snap.revision, before.revision);
+        assert_eq!(document_json_bytes(host), before_bytes);
+
+        let _ = host_destroy_stage_for_test(stage);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn stage_pointer_down_x_uses_height_denominator_on_portrait_stage() {
+        let _lock = test_lock();
+        // h>w でないと /height hit かつ /width miss が作れない。
+        let mut fixture = Fixture::new();
+        let layer = fixture.push_rect_layer(
+            "x-height",
+            [0.0, 0.0],
+            [0.7, 0.7],
+            Transform2D {
+                // 非 identity（平行移動）。逆写像を無視すると中心がずれる。
+                position: DocParam::const_vec2([0.0, 0.05]),
+                ..Transform2D::identity()
+            },
+        );
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-x-height", &fixture.document);
+        let stage = host_register_stage_for_test(host).expect("stage");
+        let (width, height) = (900_u32, 1600_u32);
+        mount_and_resize(host, stage, width, height);
+
+        // local x=0.25 → 正準 x=0.25。/height は半幅0.35内、/width なら ≈0.444 で外れ。
+        let (vx, vy) = canonical_to_view_local(0.25, 0.05, width, height);
+        assert!(vx >= 0.0 && vx <= f64::from(width));
+        let wrong_x = (vx - f64::from(width) * 0.5) / f64::from(width);
+        assert!(
+            wrong_x.abs() > 0.35,
+            "oracle requires /width miss: wrong_x={wrong_x}"
+        );
+
+        let response = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 1));
+        assert!(response.accepted);
+        assert_eq!(
+            response.snapshot.expect("snapshot").primary_layer_id,
+            Some(layer.get().to_string())
+        );
+
+        let _ = host_destroy_stage_for_test(stage);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn stage_pointer_down_scale_factor_oracle_preserves_logical_hit_target() {
+        let _lock = test_lock();
+        let mut fixture = Fixture::new();
+        let layer =
+            fixture.push_rect_layer("base", [0.0, 0.0], [0.5, 0.5], Transform2D::identity());
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-scale-factor", &fixture.document);
+        let stage = host_register_stage_for_test(host).expect("stage");
+
+        let mut mount = base_intent("stage_mount");
+        mount.stage_handle = Some(stage);
+        assert!(dispatch(host, mount).accepted);
+
+        let mut resize = base_intent("stage_resize");
+        resize.stage_handle = Some(stage);
+        resize.width = Some(1600);
+        resize.height = Some(900);
+        resize.scale_factor = Some(1.0);
+        assert!(dispatch(host, resize).accepted);
+
+        let tracks = DataTracks::new();
+        let proj = project_stage_geometry(
+            &fixture.document,
+            EvaluationTime::new(RationalTime::ZERO),
+            &tracks,
+        )
+        .expect("geometry");
+        let crate::stage_geometry_projection::StageLayerProjection::Available(geo) =
+            proj.get(layer).expect("layer")
+        else {
+            panic!("available");
+        };
+        let [cx, cy] = (geo.camera_view * geo.world)
+            .transform_point(geo.local_rect.center.x, geo.local_rect.center.y);
+        let (vx, vy) = canonical_to_view_local(cx, cy, 1600, 900);
+
+        let selected_once = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 1));
+        assert!(selected_once.accepted);
+        let primary_once = selected_once
+            .snapshot
+            .expect("snapshot")
+            .primary_layer_id
+            .expect("primary");
+        assert_eq!(primary_once, layer.get().to_string());
+
+        let mut resize_scaled = base_intent("stage_resize");
+        resize_scaled.stage_handle = Some(stage);
+        resize_scaled.width = Some(1600);
+        resize_scaled.height = Some(900);
+        resize_scaled.scale_factor = Some(2.0);
+        assert!(dispatch(host, resize_scaled).accepted);
+
+        let selected_twice = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 2));
+        assert_eq!(
+            selected_twice
+                .snapshot
+                .expect("snapshot")
+                .primary_layer_id
+                .expect("primary"),
+            layer.get().to_string()
+        );
+
+        let _ = host_destroy_stage_for_test(stage);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn stage_pointer_down_y_up_hits_upper_half_rect() {
+        let _lock = test_lock();
+        let mut fixture = Fixture::new();
+        let layer =
+            fixture.push_rect_layer("upper", [0.0, 0.25], [0.4, 0.3], Transform2D::identity());
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-y-up", &fixture.document);
+        let stage = host_register_stage_for_test(host).expect("stage");
+        mount_and_resize(host, stage, 1600, 900);
+        // view-local の大きい y（上方向）。Y 反転なら負の正準 y になり外れる。
+        let (vx, vy) = canonical_to_view_local(0.0, 0.25, 1600, 900);
+        assert!(vy > 450.0);
+
+        let response = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 1));
+        assert!(response.accepted);
+        assert_eq!(
+            response.snapshot.expect("snapshot").primary_layer_id,
+            Some(layer.get().to_string())
+        );
+
+        let _ = host_destroy_stage_for_test(stage);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn stage_pointer_down_clear_requires_prior_primary() {
+        let _lock = test_lock();
+        let mut fixture = Fixture::new();
+        let layer = fixture.push_rect_layer(
+            "target",
+            [0.0, 0.0],
+            [0.4, 0.4],
+            Transform2D {
+                position: DocParam::const_vec2([-0.2, 0.15]),
+                rotation: DocParam::const_f64(-0.3),
+                ..Transform2D::identity()
+            },
+        );
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-clear", &fixture.document);
+        let stage = host_register_stage_for_test(host).expect("stage");
+        mount_and_resize(host, stage, 1600, 900);
+        let before_bytes = document_json_bytes(host);
+
+        let tracks = DataTracks::new();
+        let proj = project_stage_geometry(
+            &fixture.document,
+            EvaluationTime::new(RationalTime::ZERO),
+            &tracks,
+        )
+        .expect("geometry");
+        let crate::stage_geometry_projection::StageLayerProjection::Available(geo) =
+            proj.get(layer).expect("layer")
+        else {
+            panic!("available");
+        };
+        let [cx, cy] = (geo.camera_view * geo.world)
+            .transform_point(geo.local_rect.center.x, geo.local_rect.center.y);
+        let (vx, vy) = canonical_to_view_local(cx, cy, 1600, 900);
+        let selected = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 1));
+        assert_eq!(
+            selected.snapshot.expect("snapshot").primary_layer_id,
+            Some(layer.get().to_string())
+        );
+
+        let cleared = dispatch_raw_json(host, &pointer_json(host, stage, "down", 10.0, 10.0, 2));
+        assert!(cleared.accepted);
+        let snap = cleared.snapshot.expect("snapshot");
+        assert!(snap.primary_layer_id.is_none());
+        assert_eq!(snap.projection_generation, "2");
+        assert_eq!(document_json_bytes(host), before_bytes);
+
+        let _ = host_destroy_stage_for_test(stage);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn stage_pointer_down_overlap_prefers_later_projection_layer() {
+        let _lock = test_lock();
+        let mut fixture = Fixture::new();
+        let back = fixture.push_rect_layer("back", [0.0, 0.0], [0.8, 0.8], Transform2D::identity());
+        let front = fixture.push_rect_layer(
+            "front",
+            [0.0, 0.0],
+            [0.5, 0.5],
+            Transform2D {
+                position: DocParam::const_vec2([0.05, -0.04]),
+                ..Transform2D::identity()
+            },
+        );
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-overlap", &fixture.document);
+        let stage = host_register_stage_for_test(host).expect("stage");
+        mount_and_resize(host, stage, 1600, 900);
+        let (vx, vy) = canonical_to_view_local(0.05, -0.04, 1600, 900);
+        let response = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 1));
+        assert_eq!(
+            response.snapshot.expect("snapshot").primary_layer_id,
+            Some(front.get().to_string())
+        );
+        assert_ne!(front, back);
+
+        let _ = host_destroy_stage_for_test(stage);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn stage_pointer_same_id_down_is_noop_for_generation() {
+        let _lock = test_lock();
+        let mut fixture = Fixture::new();
+        let layer = fixture.push_rect_layer(
+            "same",
+            [0.0, 0.0],
+            [0.5, 0.5],
+            Transform2D {
+                position: DocParam::const_vec2([0.2, -0.1]),
+                rotation: DocParam::const_f64(0.4),
+                ..Transform2D::identity()
+            },
+        );
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-same-id", &fixture.document);
+        let stage = host_register_stage_for_test(host).expect("stage");
+        mount_and_resize(host, stage, 1600, 900);
+        let tracks = DataTracks::new();
+        let proj = project_stage_geometry(
+            &fixture.document,
+            EvaluationTime::new(RationalTime::ZERO),
+            &tracks,
+        )
+        .expect("geometry");
+        let crate::stage_geometry_projection::StageLayerProjection::Available(geo) =
+            proj.get(layer).expect("layer")
+        else {
+            panic!("available");
+        };
+        let [cx, cy] = (geo.camera_view * geo.world)
+            .transform_point(geo.local_rect.center.x, geo.local_rect.center.y);
+        let (vx, vy) = canonical_to_view_local(cx, cy, 1600, 900);
+
+        let first = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 1));
+        assert_eq!(first.snapshot.expect("snapshot").projection_generation, "1");
+        let second = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 2));
+        let snap = second.snapshot.expect("snapshot");
+        assert_eq!(snap.projection_generation, "1");
+        assert_eq!(snap.primary_layer_id, Some(layer.get().to_string()));
+
+        let _ = host_destroy_stage_for_test(stage);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn stage_pointer_drag_up_cancel_keep_prior_primary() {
+        let _lock = test_lock();
+        let mut fixture = Fixture::new();
+        let layer = fixture.push_rect_layer(
+            "keep",
+            [0.0, 0.0],
+            [0.4, 0.4],
+            Transform2D {
+                position: DocParam::const_vec2([0.1, 0.1]),
+                ..Transform2D::identity()
+            },
+        );
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-phase-keep", &fixture.document);
+        let stage = host_register_stage_for_test(host).expect("stage");
+        mount_and_resize(host, stage, 1600, 900);
+        let (vx, vy) = canonical_to_view_local(0.1, 0.1, 1600, 900);
+        let selected = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 1));
+        assert_eq!(
+            selected.snapshot.expect("snapshot").primary_layer_id,
+            Some(layer.get().to_string())
+        );
+        let gen = read_snapshot(host).projection_generation;
+
+        for (phase, seq) in [("drag", 2_u64), ("up", 3), ("cancel", 4)] {
+            // 空領域へ送っても selection は変えない。
+            let response =
+                dispatch_raw_json(host, &pointer_json(host, stage, phase, 10.0, 10.0, seq));
+            assert!(response.accepted, "{phase}");
+            let snap = response.snapshot.expect("snapshot");
+            assert_eq!(snap.primary_layer_id, Some(layer.get().to_string()));
+            assert_eq!(snap.projection_generation, gen);
+        }
+
+        let _ = host_destroy_stage_for_test(stage);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn stage_pointer_down_zero_extent_rejects_without_changing_primary() {
+        let _lock = test_lock();
+        let mut fixture = Fixture::new();
+        let layer = fixture.push_rect_layer("z", [0.0, 0.0], [0.4, 0.4], Transform2D::identity());
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-zero", &fixture.document);
+        let stage = host_register_stage_for_test(host).expect("stage");
+        // いったん選択してから width=0 相当（resize 無し）で down する。
+        mount_and_resize(host, stage, 1600, 900);
+        let (vx, vy) = canonical_to_view_local(0.0, 0.0, 1600, 900);
+        assert!(dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 1)).accepted);
+        assert_eq!(
+            read_snapshot(host).primary_layer_id,
+            Some(layer.get().to_string())
+        );
+
+        // resize で正のサイズは必須なので、内部 state を 0 にして zero-extent を再現する。
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            let surface = product
+                .stages
+                .get_mut(&stage)
+                .ok_or(RnHostError::UnknownStage(stage))?;
+            surface.width = 0;
+            surface.height = 900;
+            Ok(())
+        })
+        .expect("zero width");
+
+        let before = read_snapshot(host);
+        let rejected = dispatch_wire(host, pointer_intent(stage, "down", 100.0, 100.0, 2));
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+        let recorded = read_stage_pointer(stage).expect("pointer recorded");
+        assert_eq!(recorded.phase, "down");
+        assert_eq!(recorded.sequence, 2);
+        let after = read_snapshot(host);
+        assert_eq!(after.primary_layer_id, before.primary_layer_id);
+        assert_eq!(after.projection_generation, before.projection_generation);
+
+        let _ = host_destroy_stage_for_test(stage);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn stage_pointer_down_on_singular_layer_clears_primary() {
+        let _lock = test_lock();
+        let mut fixture = Fixture::new();
+        let layer = fixture.push_rect_layer(
+            "singular",
+            [0.0, 0.0],
+            [0.5, 0.5],
+            Transform2D {
+                scale: DocParam::const_vec2([0.0, 1.0]),
+                ..Transform2D::identity()
+            },
+        );
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-geom-err", &fixture.document);
+        // 幾何は壊れていても ReplacePrimary は envelope 存在だけで受理できる。
+        // layer 単位の特異は projection 全体を落とさず Unavailable になるため、
+        // hit は Miss へ落ちて primary が clear される。
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            let mut queue = DocumentEditQueue::default();
+            queue.push_replace_primary(layer);
+            let published = product
+                .runtime
+                .process_next(&mut queue, product.primary, product.projection_generation)
+                .expect("process")
+                .expect("published");
+            product.primary = published.primary;
+            product.projection_generation = published.projection_generation;
+            Ok(())
+        })
+        .expect("seed primary");
+        let stage = host_register_stage_for_test(host).expect("stage");
+        mount_and_resize(host, stage, 1600, 900);
+        let before = read_snapshot(host);
+        assert_eq!(before.primary_layer_id, Some(layer.get().to_string()));
+
+        let selected = dispatch_raw_json(host, &pointer_json(host, stage, "down", 800.0, 450.0, 1));
+        assert!(selected.accepted);
+        assert_eq!(selected.snapshot.expect("snapshot").primary_layer_id, None);
+        let after = read_snapshot(host);
+        assert_eq!(after.primary_layer_id, None);
+        assert_eq!(read_stage_pointer(stage).expect("pointer").sequence, 1);
+
+        let _ = host_destroy_stage_for_test(stage);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn stage_pointer_down_miss_clears_primary() {
+        let _lock = test_lock();
+        let mut fixture = Fixture::new();
+        let layer =
+            fixture.push_rect_layer("healthy", [0.0, 0.0], [0.2, 0.2], Transform2D::identity());
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-miss-clear", &fixture.document);
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            let mut queue = DocumentEditQueue::default();
+            queue.push_replace_primary(layer);
+            let published = product
+                .runtime
+                .process_next(&mut queue, product.primary, product.projection_generation)
+                .expect("process")
+                .expect("published");
+            product.primary = published.primary;
+            product.projection_generation = published.projection_generation;
+            Ok(())
+        })
+        .expect("seed primary");
+        let stage = host_register_stage_for_test(host).expect("stage");
+        mount_and_resize(host, stage, 1600, 900);
+        let before = read_snapshot(host);
+        assert_eq!(before.primary_layer_id, Some(layer.get().to_string()));
+
+        // 健全な rect の外側を押す。空き領域の click は選択解除である。
+        let missed = dispatch_raw_json(host, &pointer_json(host, stage, "down", 20.0, 20.0, 1));
+        assert!(missed.accepted);
+        assert_eq!(missed.snapshot.expect("snapshot").primary_layer_id, None);
+        assert_eq!(read_snapshot(host).primary_layer_id, None);
+
+        let _ = host_destroy_stage_for_test(stage);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn stage_pointer_down_skips_degenerate_and_unavailable_layers() {
+        let _lock = test_lock();
+        let mut fixture = Fixture::new();
+        let _degenerate =
+            fixture.push_rect_layer("degen", [0.0, 0.0], [0.0, 0.5], Transform2D::identity());
+        let group_id = fixture.document.layers.allocate("g").expect("group");
+        fixture.document.tracks[0]
+            .items
+            .push(TrackItem::Group(motolii_doc::Group {
+                envelope: ItemEnvelope::new(group_id),
+                children: vec![],
+            }));
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-skip", &fixture.document);
+        let stage = host_register_stage_for_test(host).expect("stage");
+        mount_and_resize(host, stage, 1600, 900);
+        // 事前 primary を group 以外の存在 layer で持てないので、先に Replace で degenerate を primary にしない。
+        // Miss（退化・Unavailable 除外）→ clear no-op（primary None のまま）。
+        let response = dispatch_raw_json(host, &pointer_json(host, stage, "down", 800.0, 450.0, 1));
+        assert!(response.accepted);
+        assert!(response
+            .snapshot
+            .expect("snapshot")
+            .primary_layer_id
+            .is_none());
+
+        let _ = host_destroy_stage_for_test(stage);
         let _ = host_destroy_for_test(host);
     }
 
@@ -2273,6 +3691,7 @@ mod tests {
             height: 50,
             scale_factor: 2.0,
             focused: false,
+            pointer: None,
             gpu: StageGpuBinding {
                 surface_epoch: 2,
                 last_presented_epoch: Some(2),
@@ -2418,6 +3837,7 @@ mod tests {
             height: 50,
             scale_factor: 2.0,
             focused: false,
+            pointer: None,
             gpu: StageGpuBinding {
                 surface_epoch: 7,
                 last_presented_epoch: Some(7),

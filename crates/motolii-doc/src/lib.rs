@@ -66,8 +66,8 @@ pub use eval_time::{
     EvaluationTime, D3_CLIP_LOCAL_TO_SOURCE_VIA_TIMEMAP, M1_SOURCE_PTS_EQUALS_TIMELINE,
 };
 pub use graph::{
-    build_document_frame_graph, resolve_asset_path, DocumentFrameGraph, GraphError, VideoSlot,
-    CLEAR_LAYER_SOURCE, RECT_LAYER_SOURCE,
+    build_document_frame_graph, resolve_asset_path, visible_layers_at, DocumentFrameGraph,
+    GraphError, VideoSlot, CLEAR_LAYER_SOURCE, RECT_LAYER_SOURCE,
 };
 pub use ids::{LayerId, LayerIdError, LayerIdTable};
 pub use journal::{
