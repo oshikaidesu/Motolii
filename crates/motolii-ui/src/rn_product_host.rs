@@ -27,7 +27,7 @@ use wgpu::{
 };
 
 use crate::document_edit_runtime::{
-    DocumentEditQueue, DocumentEditRuntime, DocumentEditRuntimeError,
+    DocumentEditQueue, DocumentEditRuntime, DocumentEditRuntimeError, PlaceRectangleRequest,
 };
 use crate::shell::{open_project_runtime, ShellError};
 use crate::stage_geometry_projection::project_stage_geometry;
@@ -37,6 +37,7 @@ use crate::stage_hit_test::{
 };
 #[cfg(target_os = "macos")]
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
+use crate::{CommandId, DomainIntent, InputPhase, RouterOutput};
 
 const WIRE_VERSION: u8 = 1;
 const HOST_TO_RN: &str = "host-to-rn";
@@ -205,6 +206,12 @@ pub(crate) struct WireIntentEnvelope {
     /// set_time: 評価 frame index。欠落・非整数は typed 拒否。暗黙 clamp しない。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     frame: Option<i64>,
+    /// place_rectangle: canonical document position
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    position: Option<[f64; 2]>,
+    /// place_rectangle: document playhead time
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    playhead: Option<RationalTime>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -498,6 +505,126 @@ impl RnProductHost {
                 self.current_time = time;
                 self.projection_generation = next_generation;
                 accept(self.snapshot_wire(host_handle))
+            }
+            "place_rectangle" => {
+                let Some(position) = intent.position else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(playhead) = intent.playhead else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                if !position.iter().all(|value| value.is_finite()) {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                }
+                let mut queue = DocumentEditQueue::default();
+                queue.push_place_rectangle(PlaceRectangleRequest { position, playhead });
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => {
+                        self.primary = published.primary;
+                        self.projection_generation = published.projection_generation;
+                        accept(self.snapshot_wire(host_handle))
+                    }
+                    Ok(None) => accept(self.snapshot_wire(host_handle)),
+                    Err(_) => reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ),
+                }
+            }
+            "undo" | "redo" => {
+                let (intent, id) = if intent.kind == "undo" {
+                    (DomainIntent::Undo, "motolii.rn.undo")
+                } else {
+                    (DomainIntent::Redo, "motolii.rn.redo")
+                };
+                let output = RouterOutput::Intent {
+                    phase: InputPhase::Press,
+                    id: CommandId::try_new(id).expect("static command id"),
+                    intent,
+                };
+                let mut queue = DocumentEditQueue::default();
+                if queue.push_prepared(output, None).is_err() {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                }
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => {
+                        self.primary = published.primary;
+                        self.projection_generation = published.projection_generation;
+                        accept(self.snapshot_wire(host_handle))
+                    }
+                    Ok(None) => accept(self.snapshot_wire(host_handle)),
+                    Err(DocumentEditRuntimeError::NothingToUndo)
+                    | Err(DocumentEditRuntimeError::NothingToRedo) => reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ),
+                    Err(_) => reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ),
+                }
             }
             "stage_mount" | "stage_resize" | "stage_focus" | "stage_unmount" | "stage_pointer" => {
                 let Some(stage_handle) = intent
@@ -1650,27 +1777,28 @@ pub fn host_read_snapshot_for_test(
     with_registry(|registry| registry.read_snapshot(host_handle)).map(snapshot_for_test)
 }
 
-pub fn host_dispatch_intent_for_test(
+impl From<RnHostTestIntent> for serde_json::Value {
+    fn from(intent: RnHostTestIntent) -> Self {
+        serde_json::json!({
+            "version": WIRE_VERSION,
+            "direction": RN_TO_HOST,
+            "kind": intent.kind,
+            "stage_handle": intent.stage_handle.map(|value| value.to_string()),
+            "projection_generation": intent.projection_generation,
+            "width": intent.width,
+            "height": intent.height,
+            "scale_factor": intent.scale_factor,
+            "focused": intent.focused,
+        })
+    }
+}
+
+pub fn host_dispatch_intent_for_test<T: Into<serde_json::Value>>(
     host_handle: u64,
-    intent: RnHostTestIntent,
+    intent: T,
 ) -> Result<RnHostTestResponse, RnHostError> {
-    let wire_intent = WireIntentEnvelope {
-        version: WIRE_VERSION,
-        direction: RN_TO_HOST.to_owned(),
-        kind: intent.kind,
-        host_handle: host_handle.to_string(),
-        stage_handle: intent.stage_handle.map(|value| value.to_string()),
-        projection_generation: intent.projection_generation,
-        width: intent.width,
-        height: intent.height,
-        scale_factor: intent.scale_factor,
-        focused: intent.focused,
-        phase: None,
-        view_local_x: None,
-        view_local_y: None,
-        sequence: None,
-        frame: None,
-    };
+    let mut wire_intent = intent.into();
+    wire_intent["host_handle"] = serde_json::Value::String(host_handle.to_string());
     let json = with_registry(|registry| {
         registry.dispatch_intent_json(host_handle, &encode_json(&wire_intent)?)
     })?;
@@ -2251,6 +2379,8 @@ mod tests {
             view_local_y: Some(view_local_y),
             sequence: Some(sequence),
             frame: None,
+            position: None,
+            playhead: None,
         }
     }
 
