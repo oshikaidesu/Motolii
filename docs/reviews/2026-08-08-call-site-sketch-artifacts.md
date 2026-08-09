@@ -19,12 +19,12 @@ prompt、evidence log、統合版(Fable 16,464字)は保全対象外である（
 | 鎖 | 鎖のgate | 備考 |
 |---|---|---|
 | 背骨（outcome A） | **通過・修正済み** | `ERRORS: 12 / SEAM_BLOCKED: 4` を反映 |
-| outcome B（media / 保存 / 再生） | **未通過** | |
-| outcome C（書き出し / 日常操作 / panel） | **未通過** | |
-| Tune / Compose | **未通過** | |
-| Inspect / Fork | **未通過** | |
-| Author | **未通過** | 起草時に `PARTIAL`（最終形式未出力） |
-| Publish / Reuse | **未通過** | |
+| outcome B（media / 保存 / 再生） | **通過せず `NEEDS_REVISION`**(2026-08-09) | `ERRORS` 14 / `SEAM_BLOCKED` 3 / 完成条件を塞ぐ3件 |
+| outcome C（書き出し / 日常操作 / panel） | **通過せず `NEEDS_REVISION`**(2026-08-09) | `ERRORS` 9 / `SEAM_BLOCKED` 4。CLI exportが音声muxへ到達しない誤りを含む |
+| Tune / Compose | **通過せず `NEEDS_REVISION`**(2026-08-09) | `ERRORS` 11 / 完成条件を塞ぐ2件 |
+| Inspect / Fork | **通過せず `NEEDS_REVISION`**(2026-08-09) | `gesture_identity` の戻り型と適用範囲が誤り |
+| Author | **通過せず `NEEDS_REVISION`**(2026-08-09) | 起草時 `PARTIAL`。存在しない script を実名として記載 |
+| Publish / Reuse | **通過せず `NEEDS_REVISION`**(2026-08-09) | `ERRORS` 15 / `SEAM_BLOCKED` 6（最多） |
 
 **未通過の鎖は、施工を駆動する前に鎖のgateへ通すこと**（器具境界決定 §6.45）。
 背骨で12件出たため、他も同程度の誤りを含むと想定する。
@@ -189,6 +189,12 @@ survey `ABSENT` 側で背骨に現れなかったもの（`R3-OPS-RENAME`、`R3-
 
 ### seg-sketch-b1
 
+> ⚠️ **2026-08-09 鎖のgate結果: `NEEDS_REVISION`。この区間の実名を信用しないこと。**
+> 実名・型・引数・行番号のずれ、挿入できないseam、過剰な `???` が検出されている。
+> 指摘の全量は[鎖のgate 6区間の結果](2026-08-09-chain-gate-results-and-audio-path.md)を見ること。
+> **本文の実名をorderへ写す前に、必ずcurrent codeで再確認する。**
+
+
 Planファイルへの書き込みツールが使えないため、sketchを直接ここに出力します。
 
 ## OUTCOME: mediaを入れる
@@ -350,6 +356,12 @@ SKETCHED: 3 / RESOLVED: 20 / UNKNOWN: 9
 (このセッションでは plan ファイルへの書き込みツールが利用できなかったため、出力はこの応答テキストのみです。)
 ### seg-sketch-b2
 
+> ⚠️ **2026-08-09 鎖のgate結果: `NEEDS_REVISION`。この区間の実名を信用しないこと。**
+> 実名・型・引数・行番号のずれ、挿入できないseam、過剰な `???` が検出されている。
+> 指摘の全量は[鎖のgate 6区間の結果](2026-08-09-chain-gate-results-and-audio-path.md)を見ること。
+> **本文の実名をorderへ写す前に、必ずcurrent codeで再確認する。**
+
+
 Write/ExitPlanModeツールがこの環境では利用できないため、調査結果を直接ここに出力します(read-onlyでGlob/Grep/Readのみ使用)。
 
 ## OUTCOME: 書き出す
@@ -506,6 +518,12 @@ SKETCHED: 3 / RESOLVED: 19 / UNKNOWN: 9
 補足: このセッションのツールセットにWrite/ExitPlanModeが含まれていなかったため、plan fileへの書き込みと承認フローは実施していません。Glob/Grep/Readのみで完結する調査だったため、この場での直接出力としました。
 ### seg-seg-tune
 
+> ⚠️ **2026-08-09 鎖のgate結果: `NEEDS_REVISION`。この区間の実名を信用しないこと。**
+> 実名・型・引数・行番号のずれ、挿入できないseam、過剰な `???` が検出されている。
+> 指摘の全量は[鎖のgate 6区間の結果](2026-08-09-chain-gate-results-and-audio-path.md)を見ること。
+> **本文の実名をorderへ写す前に、必ずcurrent codeで再確認する。**
+
+
 ## 区間: Tune / Compose
 
 ### 呼び出し側
@@ -596,6 +614,12 @@ SetEffectEnabled { target, effect, old, new }
 
 SEGMENT: Tune/Compose / RESOLVED: 6 / UNKNOWN: 4 / COMPOSITION_FAILURES: 3
 ### seg-seg-fork
+
+> ⚠️ **2026-08-09 鎖のgate結果: `NEEDS_REVISION`。この区間の実名を信用しないこと。**
+> 実名・型・引数・行番号のずれ、挿入できないseam、過剰な `???` が検出されている。
+> 指摘の全量は[鎖のgate 6区間の結果](2026-08-09-chain-gate-results-and-audio-path.md)を見ること。
+> **本文の実名をorderへ写す前に、必ずcurrent codeで再確認する。**
+
 
 まず `docs/decision-index.md` を読み、Inspect/Fork区間に関係する主題行を特定します。Row 144はまだ未読なので確認する。row45/49(作者連続性・Inspector)、144(VSM-A4S)は確認済み。313行目のCU-110PIR(Inspector実装現況: read-only, editing callbackなし)が区間の核心的手がかりなので、実コードを特定する。核心となる決定文書3本(作者連続性契約、Inspector/Automation境界、VSM-A4S)を正本で確認する。row49の正本(Inspector・作者source・Automation境界決定)を確認し、space/temporal mode/Bakeの記述を正確に引用する。十分な材料が揃った。プランファイルへ最終出力を書く。Writeツールがこの環境で無効化されているため、プランファイルへの保存はできません。代わりに、区間分析の結果をそのままここに提示します(read-onlyでの調査結果であり、ファイル変更は一切行っていません)。
 
@@ -692,6 +716,12 @@ SEGMENT: Inspect / Fork / RESOLVED: 9 / UNKNOWN: 8 / COMPOSITION_FAILURES: 4Exit
 分析結果自体は完成しています。追加で見てほしい区間や、この分析への疑問点があれば教えてください。
 ### seg-seg-author
 
+> ⚠️ **2026-08-09 鎖のgate結果: `NEEDS_REVISION`。この区間の実名を信用しないこと。**
+> 実名・型・引数・行番号のずれ、挿入できないseam、過剰な `???` が検出されている。
+> 指摘の全量は[鎖のgate 6区間の結果](2026-08-09-chain-gate-results-and-audio-path.md)を見ること。
+> **本文の実名をorderへ写す前に、必ずcurrent codeで再確認する。**
+
+
 Author区間の担当作業に入る前に、`docs/decision-index.md`から関連決定を洗い出します。まず索引ファイルの構造とAuthor関連キーワードを確認します。Author区間の呼び出し側草稿に必要な実名は揃った。プランモードのため、まず草稿方針をプランファイルに書きます。プランファイルを書き込む`Write`ツールがこのセッションでは無効化されており、`ExitPlanMode`も呼び出せません。そのため、プラン内容をここに直接示します(ファイルへの書き込み・実行は行っていません)。
 
 ## 調査結果のまとめ
@@ -717,6 +747,12 @@ Author区間の担当作業に入る前に、`docs/decision-index.md`から関�
 
 この方針(合成失敗3件、水増しなし)で進めてよいか確認させてください。問題なければ、そのまま指定フォーマットの最終出力を書きます。
 ### seg-seg-publish
+
+> ⚠️ **2026-08-09 鎖のgate結果: `NEEDS_REVISION`。この区間の実名を信用しないこと。**
+> 実名・型・引数・行番号のずれ、挿入できないseam、過剰な `???` が検出されている。
+> 指摘の全量は[鎖のgate 6区間の結果](2026-08-09-chain-gate-results-and-audio-path.md)を見ること。
+> **本文の実名をorderへ写す前に、必ずcurrent codeで再確認する。**
+
 
 プラン用のWriteツールは使用できないため、成果物をそのままテキストで出力します(この作業はもともとread-only・ファイル不編集が前提のため問題ありません)。
 
