@@ -52,9 +52,10 @@
 
 Repository validationは[validation topology決定](reviews/2026-07-31-repository-validation-topology-decision.md)で
 `cargo test`単独ownerを撤回し、`docs / policy / tooling / rust / web-build / web-contract /
-web-visual`へ分離した。dispatcherと`docs`／`tooling`／`rust`／`web-build`のCI接続を本粒で行う。
-`web-contract`／`web-visual`は固定browserをclean CI runnerへ用意してgreenを固定するまでblocking
-CIへ昇格せず、未実行／未完走をgreenまたは製品完成と記録しない。
+web-visual`へ分離した。2026-08-09に`.github/workflows/ci.yml`を退役し、remote checkを採否条件や
+完了証拠から外した。dispatcherと各test／guardはlocalな明示commandとして維持する。
+`web-contract`／`web-visual`、Windows、platform gateはticketごとに個別検収し、未実行／未完走を
+greenまたは製品完成と記録しない。
 
 [M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3はU0a入場済みで、[UI runtime責任境界](ui-runtime-architecture.md)と[G0-9段階化](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)も決定済み。G0-9Lは固定Macのplatform prerequisite evidenceだけを限定確定したが、W0b、H1b、Motolii Studio Preview、window結合を解禁しない。G0-6Hは人間`ACCEPT`で完了し、U0e-3だけを解禁した。W0bの他の製品前提は別途閉じる。G0-9DまでDistribution Readyを名乗らない。plugin UI公開契約はG0-9合格と分離し、G0-3 / GAP-13の決定まで発注しない。headlessなTimeline/Stage projectionもSelected U seriesの前枝番がmainへ到達した時だけ次の1枝番を発注する。
 
