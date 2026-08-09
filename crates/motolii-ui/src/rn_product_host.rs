@@ -2269,15 +2269,13 @@ mod tests {
         #[cfg(target_os = "macos")]
         {
             let mut out = vec![0u8; MAX_JSON_BYTES];
-            let written = unsafe {
-                motolii_rn_host_dispatch_intent_json(
-                    host,
-                    intent_json.as_ptr(),
-                    intent_json.len(),
-                    out.as_mut_ptr(),
-                    out.len(),
-                )
-            };
+            let written = motolii_rn_host_dispatch_intent_json(
+                host,
+                intent_json.as_ptr(),
+                intent_json.len(),
+                out.as_mut_ptr(),
+                out.len(),
+            );
             assert!(
                 written > 0,
                 "motolii_rn_host_dispatch_intent_json failed: {written}"

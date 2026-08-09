@@ -104,9 +104,10 @@ pub fn project_stage_geometry(
                 ));
             }
             TrackItem::Clip(clip) => {
-                match project_clip(document, clip, layer, t, tracks, &resolved, camera_view)? {
-                    Some(projection) => layers.push((layer, projection)),
-                    None => {}
+                if let Some(projection) =
+                    project_clip(document, clip, layer, t, tracks, &resolved, camera_view)?
+                {
+                    layers.push((layer, projection));
                 }
             }
         }
