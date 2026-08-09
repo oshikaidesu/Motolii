@@ -1,13 +1,18 @@
 //! 可視 Layer の Stage 幾何を Document から読み取り専用投影する（R2-STAGE-GEOMETRY-READ）。
 //! AABB へ潰さず、局所 rect + world / camera view Affine2D を並べる。第二 writer を作らない。
 
+use std::collections::HashMap;
+
 use motolii_core::{CanonicalPoint, CanonicalSize, CompCamera, CompCameraError, RationalTime};
 use motolii_doc::{
-    param_eval, resolve_document_spaces, resolve_transform, visible_layers_at, Affine2D, Clip,
-    ClipSource, CompCameraDoc, Document, EvaluationTime, LayerId, ParamEvalError,
-    ResolvedLayerParams, TrackItem, Transform2D, RECT_LAYER_SOURCE,
+    param_eval, resolve_document_spaces, visible_layers_at, Affine2D, Clip, ClipSource,
+    CompCameraDoc, Document, EvaluationTime, LayerId, ParamEvalError, ResolvedLayerParams,
+    TrackItem, RECT_LAYER_SOURCE,
 };
 use motolii_eval::DataTracks;
+
+#[cfg(test)]
+use motolii_doc::{resolve_transform, Transform2D};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StageLocalRect {
@@ -90,7 +95,7 @@ pub fn project_stage_geometry(
         });
     }
 
-    let (resolved, _) = resolve_document_spaces(document, t, tracks)?;
+    let (resolved, world_affine) = resolve_document_spaces(document, t, tracks)?;
     let visible = visible_layers_at(document, t);
     let mut layers = Vec::with_capacity(visible.len());
 
@@ -105,9 +110,15 @@ pub fn project_stage_geometry(
                 ));
             }
             TrackItem::Clip(clip) => {
-                if let Some(projection) =
-                    project_clip(document, clip, layer, t, tracks, &resolved, camera_view)?
-                {
+                if let Some(projection) = project_clip(
+                    clip,
+                    layer,
+                    t,
+                    tracks,
+                    &resolved,
+                    &world_affine,
+                    camera_view,
+                )? {
                     layers.push((layer, projection));
                 }
             }
@@ -121,12 +132,12 @@ pub fn project_stage_geometry(
 }
 
 fn project_clip(
-    document: &Document,
     clip: &Clip,
     layer: LayerId,
     t: RationalTime,
     tracks: &DataTracks,
     resolved: &ResolvedLayerParams,
+    world_affine: &HashMap<u64, Affine2D>,
     camera_view: Affine2D,
 ) -> Result<Option<StageLayerProjection>, StageGeometryError> {
     match &clip.source {
@@ -155,14 +166,10 @@ fn project_clip(
                 })?;
             let center = param_eval::eval_vec2(center_p, t, tracks, resolved)?;
             let size = param_eval::eval_vec2(size_p, t, tracks, resolved)?;
-            let world = resolve_layer_world(
-                document,
-                &clip.envelope.transform,
-                layer,
-                t,
-                tracks,
-                resolved,
-            )?;
+            let world = world_affine
+                .get(&layer.get())
+                .copied()
+                .ok_or(StageGeometryError::LayerMissing { layer })?;
             if world.try_invert().is_none() || (camera_view * world).try_invert().is_none() {
                 return Ok(Some(StageLayerProjection::Unavailable(
                     StageGeometryUnavailable::SingularTransform { layer },
@@ -187,25 +194,6 @@ fn project_clip(
             StageGeometryUnavailable::PluginSource { layer },
         ))),
     }
-}
-
-fn resolve_layer_world(
-    document: &Document,
-    xform: &Transform2D,
-    layer: LayerId,
-    t: RationalTime,
-    tracks: &DataTracks,
-    resolved: &ResolvedLayerParams,
-) -> Result<Affine2D, StageGeometryError> {
-    let lookup = |id: LayerId| -> Option<&Transform2D> { find_transform(document, id) };
-    Ok(resolve_transform(
-        xform,
-        t,
-        tracks,
-        resolved,
-        &lookup,
-        Some(layer),
-    )?)
 }
 
 /// `camera_view_affine` と同一構成: S(1/h)·R(-roll)·T(-center)。
@@ -268,6 +256,7 @@ fn find_track_item(doc: &Document, target: LayerId) -> Option<&TrackItem> {
     doc.tracks.iter().find_map(|t| walk(&t.items, target))
 }
 
+#[cfg(test)]
 fn find_transform(doc: &Document, target: LayerId) -> Option<&Transform2D> {
     find_track_item(doc, target).map(|item| match item {
         TrackItem::Clip(c) => &c.envelope.transform,
