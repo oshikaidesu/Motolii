@@ -32,6 +32,7 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-10-group-drag-call-site-sketch.md](2026-08-10-group-drag-call-site-sketch.md) | グループrootを掴んで動かす鎖の仮コード。???8件のうち本当に未決は group bounds契約と group root選択の2件で、前者が pivot・handle・snap・dirty領域を含む6依存の要石であることを示した |
 | [2026-08-09-m3-r0-product-runtime-seat-acceptance.md](2026-08-09-m3-r0-product-runtime-seat-acceptance.md) | R0-HOST／MAC-SEAT／STAGE-LIFECYCLEを責任別に再照合し、通常RN Release artifactのread-only起動でR0-ACCEPTをDONEとした受入 |
 | [2026-08-09-unified-parallel-start-baseline-decision.md](2026-08-09-unified-parallel-start-baseline-decision.md) | 製品main、現行authority、直列核、UI配置逃げ道、仮コード調査、未commit設計資料を一つの開始履歴へ収束し、INTEGRATED／CANDIDATE／WAIT／REJECTEDを混同しない全体並列開始baseline決定 |
 | [2026-08-09-cold-replaceable-supervision-failure-containment-decision.md](2026-08-09-cold-replaceable-supervision-failure-containment-decision.md) | authorityを一つのtop seatへ保ったままfresh sessionへcold replacementし、総監督停止、二重権威、base drift、衝突、reviewer mutation、user STOPを非LLM failure injectionで封じ込める決定 |
