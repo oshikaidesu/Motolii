@@ -1,0 +1,41 @@
+name: Closed contract
+description: Open one implementation contract with a fixed owner, scope, and oracle.
+title: "[Contract] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One issue is one contract boundary. This form mirrors the closed-order capsule in `AGENTS.md`; it does not create new authority.
+
+  - type: textarea
+    id: capsule
+    attributes:
+      label: Closed-order capsule
+      description: Paste the exact current values; do not infer missing targets or owners.
+      placeholder: |
+        OUTCOME:
+        BASE:
+        AUTHORITY:
+        CURRENT STATE:
+        OWNER:
+        EXACT TARGET:
+        ALLOWLIST:
+        READ SET:
+        POSITIVE ORACLE:
+        NEGATIVE ORACLE:
+        REPO_LANES:
+        EXTERNAL_GATES:
+        NON-GOALS:
+        RETURN:
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: closure
+    attributes:
+      label: Closure
+      options:
+        - label: This issue contains one contract boundary and will produce one commit.
+          required: true
+        - label: Findings outside this contract will be reported, not implemented.
+          required: true
