@@ -16,6 +16,15 @@ pub struct SourceFingerprintV1 {
     size_bytes: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SourceFingerprintDecode {
+    V1(SourceFingerprintV1),
+    MalformedV1Sha256,
+    MissingSize,
+    UnknownAlgorithm,
+    LegacyOpaque,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum SourceFingerprintError {
     #[error("failed reading source for fingerprint: {source}")]
@@ -52,6 +61,32 @@ impl SourceFingerprintV1 {
         })
     }
 
+    pub fn decode_persisted(
+        content_hash: &str,
+        size_bytes: Option<u64>,
+    ) -> SourceFingerprintDecode {
+        const PREFIX: &str = "motolii-source-v1:";
+        const SHA256_PREFIX: &str = "motolii-source-v1:sha256:";
+
+        if !content_hash.starts_with(PREFIX) {
+            return SourceFingerprintDecode::LegacyOpaque;
+        }
+
+        if !content_hash.starts_with(SHA256_PREFIX) {
+            return SourceFingerprintDecode::UnknownAlgorithm;
+        }
+
+        let payload = &content_hash[SHA256_PREFIX.len()..];
+        let Some(digest) = decode_lower_hex_64(payload) else {
+            return SourceFingerprintDecode::MalformedV1Sha256;
+        };
+
+        match size_bytes {
+            Some(size_bytes) => SourceFingerprintDecode::V1(Self { digest, size_bytes }),
+            None => SourceFingerprintDecode::MissingSize,
+        }
+    }
+
     pub fn size_bytes(&self) -> u64 {
         self.size_bytes
     }
@@ -65,6 +100,31 @@ impl SourceFingerprintV1 {
         }
         hash
     }
+}
+
+fn decode_lower_hex_64(hex: &str) -> Option<[u8; 32]> {
+    if hex.len() != 64 {
+        return None;
+    }
+
+    let mut bytes = [0u8; 32];
+    let bytes_in = hex.as_bytes();
+
+    fn nibble(byte: u8) -> Option<u8> {
+        match byte {
+            b'0'..=b'9' => Some(byte - b'0'),
+            b'a'..=b'f' => Some(byte - b'a' + 10),
+            _ => None,
+        }
+    }
+
+    for i in 0..32 {
+        let hi = nibble(bytes_in[2 * i])?;
+        let lo = nibble(bytes_in[2 * i + 1])?;
+        bytes[i] = (hi << 4) | lo;
+    }
+
+    Some(bytes)
 }
 
 /// アセットの恒久ID。表示名は別フィールド。
@@ -424,6 +484,92 @@ mod tests {
         let fp = SourceFingerprintV1::from_reader(OneByteAtATimeReader::new(b"abc")).unwrap();
         assert_eq!(fp.content_hash(), "motolii-source-v1:sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
         assert_eq!(fp.size_bytes(), 3);
+    }
+
+    #[test]
+    fn source_fingerprint_decode_roundtrip_empty_bytes() {
+        let fp = SourceFingerprintV1::from_reader(io::Cursor::new(Vec::<u8>::new())).unwrap();
+        let decoded =
+            SourceFingerprintV1::decode_persisted(&fp.content_hash(), Some(fp.size_bytes()));
+        match decoded {
+            SourceFingerprintDecode::V1(decoded_fp) => {
+                assert_eq!(decoded_fp.size_bytes(), fp.size_bytes());
+                assert_eq!(decoded_fp.content_hash(), fp.content_hash());
+            }
+            other => panic!("unexpected decode result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn source_fingerprint_decode_roundtrip_abc_bytes() {
+        let fp = SourceFingerprintV1::from_reader(io::Cursor::new(b"abc")).unwrap();
+        let decoded =
+            SourceFingerprintV1::decode_persisted(&fp.content_hash(), Some(fp.size_bytes()));
+        match decoded {
+            SourceFingerprintDecode::V1(decoded_fp) => {
+                assert_eq!(decoded_fp.size_bytes(), fp.size_bytes());
+                assert_eq!(decoded_fp.content_hash(), fp.content_hash());
+            }
+            other => panic!("unexpected decode result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn source_fingerprint_decode_malformed_sha256_uppercase() {
+        let decoded = SourceFingerprintV1::decode_persisted(
+            "motolii-source-v1:sha256:Ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            Some(3),
+        );
+        assert_eq!(decoded, SourceFingerprintDecode::MalformedV1Sha256);
+    }
+
+    #[test]
+    fn source_fingerprint_decode_missing_size() {
+        let decoded = SourceFingerprintV1::decode_persisted(
+            "motolii-source-v1:sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            None,
+        );
+        assert_eq!(decoded, SourceFingerprintDecode::MissingSize);
+    }
+
+    #[test]
+    fn source_fingerprint_decode_unknown_algorithm() {
+        let decoded = SourceFingerprintV1::decode_persisted(
+            "motolii-source-v1:blake3:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            Some(1),
+        );
+        assert_eq!(decoded, SourceFingerprintDecode::UnknownAlgorithm);
+    }
+
+    #[test]
+    fn source_fingerprint_decode_sha256_prefix_legacy() {
+        let decoded = SourceFingerprintV1::decode_persisted(
+            "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            Some(3),
+        );
+        assert_eq!(decoded, SourceFingerprintDecode::LegacyOpaque);
+    }
+
+    #[test]
+    fn source_fingerprint_decode_arbitrary_opaque_legacy() {
+        let decoded = SourceFingerprintV1::decode_persisted("legacy-import-id-42", None);
+        assert_eq!(decoded, SourceFingerprintDecode::LegacyOpaque);
+    }
+
+    #[test]
+    fn source_fingerprint_decode_non_hex_malformed() {
+        let decoded = SourceFingerprintV1::decode_persisted(
+            "motolii-source-v1:sha256:ga7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            Some(3),
+        );
+        assert_eq!(decoded, SourceFingerprintDecode::MalformedV1Sha256);
+    }
+
+    #[test]
+    fn source_fingerprint_decode_wrong_length_malformed() {
+        let decoded =
+            SourceFingerprintV1::decode_persisted("motolii-source-v1:sha256:001122", Some(1));
+        assert_eq!(decoded, SourceFingerprintDecode::MalformedV1Sha256);
     }
 
     #[test]
