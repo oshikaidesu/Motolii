@@ -10,6 +10,7 @@ mod verify_b4;
 pub enum Command {
     ExportOverlay(Box<ExportOverlayArgs>),
     ExportProject(ExportProjectArgs),
+    ExportDocument(ExportDocumentArgs),
     VerifyB4(VerifyB4Args),
     Help,
 }
@@ -27,6 +28,14 @@ pub struct ExportOverlayArgs {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExportProjectArgs {
     pub project: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExportDocumentArgs {
+    pub document: PathBuf,
+    pub output: PathBuf,
+    pub frame_count: Option<usize>,
+    pub qp0: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -51,6 +60,7 @@ motolii-cli
 Commands:
   export-overlay --input <mp4> --output <mp4> [options]
   export-project --project <json> [options]
+  export-document --document <json> --output <mp4> [options]
   verify-b4 --project <json> [options]
 
 Options:
@@ -79,6 +89,7 @@ where
             parse_export_overlay(&args[1..]).map(|args| Command::ExportOverlay(Box::new(args)))
         }
         Some("export-project") => parse_export_project(&args[1..]).map(Command::ExportProject),
+        Some("export-document") => parse_export_document(&args[1..]).map(Command::ExportDocument),
         Some("verify-b4") => parse_verify_b4(&args[1..]).map(Command::VerifyB4),
         Some(other) => Err(CliError::Usage(format!(
             "unknown command: {other}\n\n{HELP}"
@@ -106,6 +117,45 @@ fn parse_export_project(args: &[String]) -> Result<ExportProjectArgs, CliError> 
 
     Ok(ExportProjectArgs {
         project: project.ok_or_else(|| CliError::Usage("--project is required".into()))?,
+    })
+}
+
+fn parse_export_document(args: &[String]) -> Result<ExportDocumentArgs, CliError> {
+    let mut document: Option<PathBuf> = None;
+    let mut output: Option<PathBuf> = None;
+    let mut frame_count = None;
+    let mut qp0 = false;
+
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--help" | "-h" => return Err(CliError::Usage(HELP.to_string())),
+            "--document" => {
+                document = Some(PathBuf::from(take_one(args, &mut i, "--document")?));
+            }
+            "--output" => {
+                output = Some(PathBuf::from(take_one(args, &mut i, "--output")?));
+            }
+            "--frame-count" => {
+                frame_count = Some(parse_one(args, &mut i, "--frame-count")?);
+            }
+            "--qp0" => {
+                qp0 = true;
+                i += 1;
+            }
+            other => {
+                return Err(CliError::Usage(format!(
+                    "unknown export-document option: {other}\n\n{HELP}"
+                )))
+            }
+        }
+    }
+
+    Ok(ExportDocumentArgs {
+        document: document.ok_or_else(|| CliError::Usage("--document is required".into()))?,
+        output: output.ok_or_else(|| CliError::Usage("--output is required".into()))?,
+        frame_count,
+        qp0,
     })
 }
 
