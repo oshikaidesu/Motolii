@@ -286,6 +286,11 @@ impl AssetTable {
         self.entries.values()
     }
 
+    /// 次に採番される生値(エントリは作らない)。Command構築前の予約確認用。
+    pub fn peek_next(&self) -> u64 {
+        self.next
+    }
+
     pub fn allocate(
         &mut self,
         name: impl Into<String>,
@@ -325,6 +330,21 @@ impl AssetTable {
                 id: asset.id.0,
                 next: self.next,
             });
+        }
+        let floor = asset.id.0.checked_add(1).ok_or(AssetError::Exhausted)?;
+        asset.normalize_self();
+        self.entries.insert(asset.id, asset);
+        if floor > self.next {
+            self.next = floor;
+        }
+        Ok(())
+    }
+
+    /// Undo/Redo用: 退役済み(`id < next`)でも同じAssetを台帳へ戻す。
+    /// 通常の新規挿入には使わず、採番カウンタは巻き戻さない。
+    pub fn restore(&mut self, mut asset: Asset) -> Result<(), AssetError> {
+        if self.entries.contains_key(&asset.id) {
+            return Err(AssetError::Duplicate { id: asset.id.0 });
         }
         let floor = asset.id.0.checked_add(1).ok_or(AssetError::Exhausted)?;
         asset.normalize_self();
@@ -434,6 +454,44 @@ mod tests {
             })
         );
         assert_eq!(table.next, next_before);
+    }
+
+    #[test]
+    fn restore_reinstates_identity_without_rewinding_next() {
+        let mut table = AssetTable::new();
+        assert_eq!(table.peek_next(), 0);
+
+        let id = table.allocate("a", "video/mp4", "h").unwrap();
+        let asset = table.remove(id).unwrap();
+        assert_eq!(table.peek_next(), 1);
+
+        table.restore(asset.clone()).unwrap();
+        assert_eq!(table.get(id), Some(&asset));
+        assert_eq!(table.peek_next(), 1);
+        assert_eq!(
+            table.restore(asset),
+            Err(AssetError::Duplicate { id: id.get() })
+        );
+        assert_eq!(table.peek_next(), 1);
+
+        let future = Asset {
+            id: AssetId::from_raw(3),
+            name: "future".into(),
+            asset_type: "image/png".into(),
+            content_hash: "future-hash".into(),
+            path_absolute: None,
+            path_project_relative: None,
+            file_name: None,
+            size_bytes: None,
+            head_hash: None,
+            tail_hash: None,
+        };
+        table.restore(future).unwrap();
+        assert_eq!(table.peek_next(), 4);
+        assert_eq!(
+            table.allocate("next", "image/png", "next-hash").unwrap(),
+            AssetId::from_raw(4)
+        );
     }
 
     #[test]
