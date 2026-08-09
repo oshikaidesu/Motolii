@@ -115,47 +115,53 @@ mod tests {
         RationalTime::try_new(n, 1).unwrap()
     }
 
+    struct Fixture {
+        doc: Document,
+    }
+
+    impl Fixture {
+        fn new() -> Self {
+            let mut doc = Document::new_current();
+            let track = doc.track_ids.allocate("V1").unwrap();
+            doc.tracks.push(Track {
+                id: track,
+                items: vec![],
+            });
+            Self { doc }
+        }
+
+        fn push_rect(
+            &mut self,
+            name: &str,
+            center: [f64; 2],
+            size: [f64; 2],
+            transform: Transform2D,
+        ) -> LayerId {
+            let layer = self.doc.layers.allocate(name).unwrap();
+            let mut envelope = ItemEnvelope::new(layer);
+            envelope.transform = transform;
+            self.doc.tracks[0].items.push(TrackItem::Clip(Clip {
+                envelope,
+                start: RationalTime::ZERO,
+                duration: sec(10),
+                time_map: Default::default(),
+                source: ClipSource::Plugin {
+                    plugin_id: RECT_LAYER_SOURCE.into(),
+                    effect_version: 1,
+                    params: rect_params(center, size),
+                    extra: Default::default(),
+                },
+            }));
+            layer
+        }
+    }
+
     fn rect_params(center: [f64; 2], size: [f64; 2]) -> BTreeMap<String, DocParam> {
         BTreeMap::from([
             ("center".into(), DocParam::const_vec2(center)),
             ("size".into(), DocParam::const_vec2(size)),
             ("color".into(), DocParam::const_color([1.0, 1.0, 1.0, 1.0])),
         ])
-    }
-
-    fn push_rect(
-        doc: &mut Document,
-        name: &str,
-        center: [f64; 2],
-        size: [f64; 2],
-        transform: Transform2D,
-    ) -> LayerId {
-        let layer = doc.layers.allocate(name).unwrap();
-        let mut envelope = ItemEnvelope::new(layer);
-        envelope.transform = transform;
-        doc.tracks[0].items.push(TrackItem::Clip(Clip {
-            envelope,
-            start: RationalTime::ZERO,
-            duration: sec(10),
-            time_map: Default::default(),
-            source: ClipSource::Plugin {
-                plugin_id: RECT_LAYER_SOURCE.into(),
-                effect_version: 1,
-                params: rect_params(center, size),
-                extra: Default::default(),
-            },
-        }));
-        layer
-    }
-
-    fn base_doc() -> Document {
-        let mut doc = Document::new_current();
-        let track = doc.track_ids.allocate("V1").unwrap();
-        doc.tracks.push(Track {
-            id: track,
-            items: vec![],
-        });
-        doc
     }
 
     #[test]
@@ -182,25 +188,17 @@ mod tests {
 
     #[test]
     fn later_projection_layer_wins_overlap() {
-        let mut doc = base_doc();
-        let back = push_rect(
-            &mut doc,
-            "back",
-            [0.0, 0.0],
-            [1.0, 1.0],
-            Transform2D::identity(),
-        );
-        let front = push_rect(
-            &mut doc,
-            "front",
-            [0.0, 0.0],
-            [1.0, 1.0],
-            Transform2D::identity(),
-        );
-        doc.validate().unwrap();
+        let mut fixture = Fixture::new();
+        let back = fixture.push_rect("back", [0.0, 0.0], [1.0, 1.0], Transform2D::identity());
+        let front = fixture.push_rect("front", [0.0, 0.0], [1.0, 1.0], Transform2D::identity());
+        fixture.doc.validate().unwrap();
         let tracks = DataTracks::new();
-        let proj =
-            project_stage_geometry(&doc, EvaluationTime::new(RationalTime::ZERO), &tracks).unwrap();
+        let proj = project_stage_geometry(
+            &fixture.doc,
+            EvaluationTime::new(RationalTime::ZERO),
+            &tracks,
+        )
+        .unwrap();
         assert_eq!(
             proj.layers().iter().map(|(id, _)| *id).collect::<Vec<_>>(),
             vec![back, front]

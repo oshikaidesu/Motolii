@@ -28,6 +28,7 @@ pub enum StageGeometryUnavailable {
     VideoSource { layer: LayerId },
     VectorSource { layer: LayerId },
     PluginSource { layer: LayerId },
+    SingularTransform { layer: LayerId },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -163,7 +164,9 @@ fn project_clip(
                 resolved,
             )?;
             if world.try_invert().is_none() || (camera_view * world).try_invert().is_none() {
-                return Err(StageGeometryError::SingularTransform { layer });
+                return Ok(Some(StageLayerProjection::Unavailable(
+                    StageGeometryUnavailable::SingularTransform { layer },
+                )));
             }
             Ok(Some(StageLayerProjection::Available(StageLayerGeometry {
                 local_rect: StageLocalRect {
@@ -292,50 +295,55 @@ mod tests {
         ])
     }
 
-    fn push_rect(
-        doc: &mut Document,
-        name: &str,
-        start: RationalTime,
-        duration: RationalTime,
-        center: [f64; 2],
-        size: [f64; 2],
-        transform: Transform2D,
-    ) -> LayerId {
-        let layer = doc.layers.allocate(name).unwrap();
-        let mut envelope = ItemEnvelope::new(layer);
-        envelope.transform = transform;
-        doc.tracks[0].items.push(TrackItem::Clip(Clip {
-            envelope,
-            start,
-            duration,
-            time_map: Default::default(),
-            source: ClipSource::Plugin {
-                plugin_id: RECT_LAYER_SOURCE.into(),
-                effect_version: 1,
-                params: rect_params(center, size),
-                extra: Default::default(),
-            },
-        }));
-        layer
+    struct Fixture {
+        doc: Document,
     }
 
-    fn base_doc() -> Document {
-        let mut doc = Document::new_current();
-        let track = doc.track_ids.allocate("V1").unwrap();
-        doc.tracks.push(Track {
-            id: track,
-            items: vec![],
-        });
-        doc
+    impl Fixture {
+        fn new() -> Self {
+            let mut doc = Document::new_current();
+            let track = doc.track_ids.allocate("V1").unwrap();
+            doc.tracks.push(Track {
+                id: track,
+                items: vec![],
+            });
+            Self { doc }
+        }
+
+        fn push_rect(
+            &mut self,
+            name: &str,
+            start: RationalTime,
+            duration: RationalTime,
+            center: [f64; 2],
+            size: [f64; 2],
+            transform: Transform2D,
+        ) -> LayerId {
+            let layer = self.doc.layers.allocate(name).unwrap();
+            let mut envelope = ItemEnvelope::new(layer);
+            envelope.transform = transform;
+            self.doc.tracks[0].items.push(TrackItem::Clip(Clip {
+                envelope,
+                start,
+                duration,
+                time_map: Default::default(),
+                source: ClipSource::Plugin {
+                    plugin_id: RECT_LAYER_SOURCE.into(),
+                    effect_version: 1,
+                    params: rect_params(center, size),
+                    extra: Default::default(),
+                },
+            }));
+            layer
+        }
     }
 
     #[test]
     fn default_camera_non_rotated_rect_matches_overlay_center_size() {
-        let mut doc = base_doc();
+        let mut fx = Fixture::new();
         let center = [0.1, -0.2];
         let size = [0.3, 0.4];
-        let layer = push_rect(
-            &mut doc,
+        let layer = fx.push_rect(
             "r",
             RationalTime::ZERO,
             sec(10),
@@ -343,10 +351,11 @@ mod tests {
             size,
             Transform2D::identity(),
         );
-        doc.validate().unwrap();
+        fx.doc.validate().unwrap();
         let tracks = DataTracks::new();
         let proj =
-            project_stage_geometry(&doc, EvaluationTime::new(RationalTime::ZERO), &tracks).unwrap();
+            project_stage_geometry(&fx.doc, EvaluationTime::new(RationalTime::ZERO), &tracks)
+                .unwrap();
         let StageLayerProjection::Available(geo) = proj.get(layer).unwrap() else {
             panic!("expected available");
         };
@@ -360,11 +369,11 @@ mod tests {
 
     #[test]
     fn parented_layer_world_matches_resolve_transform() {
-        let mut doc = base_doc();
-        let parent = doc.layers.allocate("parent").unwrap();
+        let mut fx = Fixture::new();
+        let parent = fx.doc.layers.allocate("parent").unwrap();
         let mut parent_env = ItemEnvelope::new(parent);
         parent_env.transform.position = DocParam::const_vec2([10.0, 0.0]);
-        doc.tracks[0].items.push(TrackItem::Clip(Clip {
+        fx.doc.tracks[0].items.push(TrackItem::Clip(Clip {
             envelope: parent_env,
             start: RationalTime::ZERO,
             duration: sec(10),
@@ -381,8 +390,7 @@ mod tests {
             parent: Some(parent),
             ..Transform2D::identity()
         };
-        let child = push_rect(
-            &mut doc,
+        let child = fx.push_rect(
             "child",
             RationalTime::ZERO,
             sec(10),
@@ -390,14 +398,14 @@ mod tests {
             [0.2, 0.2],
             child_xform.clone(),
         );
-        doc.validate().unwrap();
+        fx.doc.validate().unwrap();
         let tracks = DataTracks::new();
         let t = RationalTime::ZERO;
-        let (resolved, _) = resolve_document_spaces(&doc, t, &tracks).unwrap();
-        let lookup = |id: LayerId| find_transform(&doc, id);
+        let (resolved, _) = resolve_document_spaces(&fx.doc, t, &tracks).unwrap();
+        let lookup = |id: LayerId| find_transform(&fx.doc, id);
         let expected =
             resolve_transform(&child_xform, t, &tracks, &resolved, &lookup, Some(child)).unwrap();
-        let proj = project_stage_geometry(&doc, EvaluationTime::new(t), &tracks).unwrap();
+        let proj = project_stage_geometry(&fx.doc, EvaluationTime::new(t), &tracks).unwrap();
         let StageLayerProjection::Available(geo) = proj.get(child).unwrap() else {
             panic!("expected available");
         };
@@ -406,9 +414,8 @@ mod tests {
 
     #[test]
     fn rotation_and_look_at_corners_match_camera_view_times_world() {
-        let mut doc = base_doc();
-        let target = push_rect(
-            &mut doc,
+        let mut fx = Fixture::new();
+        let target = fx.push_rect(
             "target",
             RationalTime::ZERO,
             sec(10),
@@ -427,8 +434,7 @@ mod tests {
             },
             ..Transform2D::identity()
         };
-        let layer = push_rect(
-            &mut doc,
+        let layer = fx.push_rect(
             "look",
             RationalTime::ZERO,
             sec(10),
@@ -436,15 +442,16 @@ mod tests {
             [0.5, 0.25],
             look,
         );
-        doc.composition.camera = CompCameraDoc::PlanarOrthographic {
+        fx.doc.composition.camera = CompCameraDoc::PlanarOrthographic {
             center: DocParam::const_vec2([0.1, 0.2]),
             roll_radians: DocParam::const_f64(0.3),
             height: DocParam::const_f64(2.0),
         };
-        doc.validate().unwrap();
+        fx.doc.validate().unwrap();
         let tracks = DataTracks::new();
         let proj =
-            project_stage_geometry(&doc, EvaluationTime::new(RationalTime::ZERO), &tracks).unwrap();
+            project_stage_geometry(&fx.doc, EvaluationTime::new(RationalTime::ZERO), &tracks)
+                .unwrap();
         let StageLayerProjection::Available(geo) = proj.get(layer).unwrap() else {
             panic!("expected available");
         };
@@ -470,9 +477,8 @@ mod tests {
 
     #[test]
     fn camera_center_roll_height_affect_projection() {
-        let mut doc = base_doc();
-        let layer = push_rect(
-            &mut doc,
+        let mut fx = Fixture::new();
+        let layer = fx.push_rect(
             "r",
             RationalTime::ZERO,
             sec(10),
@@ -480,22 +486,23 @@ mod tests {
             [1.0, 1.0],
             Transform2D::identity(),
         );
-        doc.composition.camera = CompCameraDoc::PlanarOrthographic {
+        fx.doc.composition.camera = CompCameraDoc::PlanarOrthographic {
             center: DocParam::const_vec2([0.5, -0.25]),
             roll_radians: DocParam::const_f64(std::f64::consts::FRAC_PI_4),
             height: DocParam::const_f64(2.0),
         };
-        doc.validate().unwrap();
+        fx.doc.validate().unwrap();
         let tracks = DataTracks::new();
         let proj =
-            project_stage_geometry(&doc, EvaluationTime::new(RationalTime::ZERO), &tracks).unwrap();
+            project_stage_geometry(&fx.doc, EvaluationTime::new(RationalTime::ZERO), &tracks)
+                .unwrap();
         let expected = camera_view_affine(
             CompCamera::try_new(
                 CanonicalPoint { x: 0.5, y: -0.25 },
                 std::f64::consts::FRAC_PI_4,
                 2.0,
-                doc.composition.aspect_num(),
-                doc.composition.aspect_den(),
+                fx.doc.composition.aspect_num(),
+                fx.doc.composition.aspect_den(),
             )
             .unwrap(),
         );
@@ -508,10 +515,10 @@ mod tests {
 
     #[test]
     fn audio_only_clip_absent_from_projection() {
-        let mut doc = base_doc();
-        let asset = doc.assets.allocate("a", "audio/wav", "hash").unwrap();
-        let layer = doc.layers.allocate("audio").unwrap();
-        doc.tracks[0].items.push(TrackItem::Clip(Clip {
+        let mut fx = Fixture::new();
+        let asset = fx.doc.assets.allocate("a", "audio/wav", "hash").unwrap();
+        let layer = fx.doc.layers.allocate("audio").unwrap();
+        fx.doc.tracks[0].items.push(TrackItem::Clip(Clip {
             envelope: ItemEnvelope::new(layer),
             start: RationalTime::ZERO,
             duration: sec(10),
@@ -522,19 +529,19 @@ mod tests {
                 audio: vec![motolii_doc::AudioComponent::ordinal(0)],
             },
         }));
-        doc.validate().unwrap();
+        fx.doc.validate().unwrap();
         let tracks = DataTracks::new();
         let proj =
-            project_stage_geometry(&doc, EvaluationTime::new(RationalTime::ZERO), &tracks).unwrap();
+            project_stage_geometry(&fx.doc, EvaluationTime::new(RationalTime::ZERO), &tracks)
+                .unwrap();
         assert!(proj.get(layer).is_none());
         assert!(proj.layers().is_empty());
     }
 
     #[test]
     fn inactive_clip_time_yields_no_geometry() {
-        let mut doc = base_doc();
-        let layer = push_rect(
-            &mut doc,
+        let mut fx = Fixture::new();
+        let layer = fx.push_rect(
             "r",
             sec(5),
             sec(2),
@@ -542,17 +549,16 @@ mod tests {
             [1.0, 1.0],
             Transform2D::identity(),
         );
-        doc.validate().unwrap();
+        fx.doc.validate().unwrap();
         let tracks = DataTracks::new();
-        let proj = project_stage_geometry(&doc, EvaluationTime::new(sec(1)), &tracks).unwrap();
+        let proj = project_stage_geometry(&fx.doc, EvaluationTime::new(sec(1)), &tracks).unwrap();
         assert!(proj.get(layer).is_none());
     }
 
     #[test]
     fn invisible_or_unsoloed_item_yields_no_geometry() {
-        let mut doc = base_doc();
-        let hidden = push_rect(
-            &mut doc,
+        let mut fx = Fixture::new();
+        let hidden = fx.push_rect(
             "hidden",
             RationalTime::ZERO,
             sec(10),
@@ -560,12 +566,11 @@ mod tests {
             [1.0, 1.0],
             Transform2D::identity(),
         );
-        match &mut doc.tracks[0].items[0] {
+        match &mut fx.doc.tracks[0].items[0] {
             TrackItem::Clip(c) => c.envelope.visible = false,
             _ => panic!("clip"),
         }
-        let solo = push_rect(
-            &mut doc,
+        let solo = fx.push_rect(
             "solo",
             RationalTime::ZERO,
             sec(10),
@@ -573,12 +578,11 @@ mod tests {
             [1.0, 1.0],
             Transform2D::identity(),
         );
-        match &mut doc.tracks[0].items[1] {
+        match &mut fx.doc.tracks[0].items[1] {
             TrackItem::Clip(c) => c.envelope.solo = true,
             _ => panic!("clip"),
         }
-        let other = push_rect(
-            &mut doc,
+        let other = fx.push_rect(
             "other",
             RationalTime::ZERO,
             sec(10),
@@ -586,10 +590,11 @@ mod tests {
             [1.0, 1.0],
             Transform2D::identity(),
         );
-        doc.validate().unwrap();
+        fx.doc.validate().unwrap();
         let tracks = DataTracks::new();
         let proj =
-            project_stage_geometry(&doc, EvaluationTime::new(RationalTime::ZERO), &tracks).unwrap();
+            project_stage_geometry(&fx.doc, EvaluationTime::new(RationalTime::ZERO), &tracks)
+                .unwrap();
         assert!(proj.get(hidden).is_none());
         assert!(proj.get(other).is_none());
         assert!(matches!(
@@ -600,24 +605,24 @@ mod tests {
 
     #[test]
     fn group_video_vector_plugin_are_typed_unavailable() {
-        let mut doc = base_doc();
-        let asset = doc.assets.allocate("v", "video/mp4", "hash").unwrap();
-        let group_id = doc.layers.allocate("g").unwrap();
-        let video_id = doc.layers.allocate("video").unwrap();
-        let vector_id = doc.layers.allocate("vector").unwrap();
-        let plugin_id = doc.layers.allocate("plugin").unwrap();
-        doc.tracks[0].items.push(TrackItem::Group(Group {
+        let mut fx = Fixture::new();
+        let asset = fx.doc.assets.allocate("v", "video/mp4", "hash").unwrap();
+        let group_id = fx.doc.layers.allocate("g").unwrap();
+        let video_id = fx.doc.layers.allocate("video").unwrap();
+        let vector_id = fx.doc.layers.allocate("vector").unwrap();
+        let plugin_id = fx.doc.layers.allocate("plugin").unwrap();
+        fx.doc.tracks[0].items.push(TrackItem::Group(Group {
             envelope: ItemEnvelope::new(group_id),
             children: vec![],
         }));
-        doc.tracks[0].items.push(TrackItem::Clip(Clip {
+        fx.doc.tracks[0].items.push(TrackItem::Clip(Clip {
             envelope: ItemEnvelope::new(video_id),
             start: RationalTime::ZERO,
             duration: sec(10),
             time_map: Default::default(),
             source: ClipSource::asset_video_only(asset),
         }));
-        doc.tracks[0].items.push(TrackItem::Clip(Clip {
+        fx.doc.tracks[0].items.push(TrackItem::Clip(Clip {
             envelope: ItemEnvelope::new(vector_id),
             start: RationalTime::ZERO,
             duration: sec(10),
@@ -634,7 +639,7 @@ mod tests {
                 },
             },
         }));
-        doc.tracks[0].items.push(TrackItem::Clip(Clip {
+        fx.doc.tracks[0].items.push(TrackItem::Clip(Clip {
             envelope: ItemEnvelope::new(plugin_id),
             start: RationalTime::ZERO,
             duration: sec(10),
@@ -649,7 +654,8 @@ mod tests {
         // other.plugin は validate/prepare で落ちうるので validate 無しで投影だけ見る。
         let tracks = DataTracks::new();
         let proj =
-            project_stage_geometry(&doc, EvaluationTime::new(RationalTime::ZERO), &tracks).unwrap();
+            project_stage_geometry(&fx.doc, EvaluationTime::new(RationalTime::ZERO), &tracks)
+                .unwrap();
         assert!(matches!(
             proj.get(group_id),
             Some(StageLayerProjection::Unavailable(
@@ -678,9 +684,8 @@ mod tests {
 
     #[test]
     fn singular_scale_returns_typed_error_without_panic() {
-        let mut doc = base_doc();
-        let layer = push_rect(
-            &mut doc,
+        let mut fx = Fixture::new();
+        let layer = fx.push_rect(
             "r",
             RationalTime::ZERO,
             sec(10),
@@ -691,10 +696,60 @@ mod tests {
                 ..Transform2D::identity()
             },
         );
-        doc.validate().unwrap();
+        fx.doc.validate().unwrap();
         let tracks = DataTracks::new();
-        let err = project_stage_geometry(&doc, EvaluationTime::new(RationalTime::ZERO), &tracks)
-            .unwrap_err();
-        assert_eq!(err, StageGeometryError::SingularTransform { layer });
+        let proj =
+            project_stage_geometry(&fx.doc, EvaluationTime::new(RationalTime::ZERO), &tracks)
+                .unwrap();
+        assert!(matches!(
+            proj.get(layer),
+            Some(StageLayerProjection::Unavailable(
+                StageGeometryUnavailable::SingularTransform { .. }
+            ))
+        ));
+    }
+
+    #[test]
+    fn singular_transform_layer_does_not_cancel_healthy_geometry_hit() {
+        let mut fx = Fixture::new();
+        let singular = fx.push_rect(
+            "singular",
+            RationalTime::ZERO,
+            sec(10),
+            [0.0, 0.0],
+            [1.0, 1.0],
+            Transform2D {
+                scale: DocParam::const_vec2([0.0, 1.0]),
+                ..Transform2D::identity()
+            },
+        );
+        let healthy = fx.push_rect(
+            "healthy",
+            RationalTime::ZERO,
+            sec(10),
+            [1.0, 0.0],
+            [1.0, 1.0],
+            Transform2D::identity(),
+        );
+        fx.doc.validate().unwrap();
+        let tracks = DataTracks::new();
+        let proj =
+            project_stage_geometry(&fx.doc, EvaluationTime::new(RationalTime::ZERO), &tracks)
+                .unwrap();
+        assert!(matches!(
+            proj.get(singular),
+            Some(StageLayerProjection::Unavailable(
+                StageGeometryUnavailable::SingularTransform { layer: id }
+            )) if id == singular
+        ));
+        assert!(matches!(
+            proj.get(healthy),
+            Some(StageLayerProjection::Available(_))
+        ));
+        let hit = crate::stage_hit_test::hit_test_projected_layers(
+            CanonicalPoint { x: 1.0, y: 0.0 },
+            &proj,
+        );
+        assert_eq!(hit, StageHit::Layer(healthy));
     }
 }

@@ -2366,44 +2366,56 @@ mod tests {
         host_create_for_test(&path).expect("host")
     }
 
+    struct Fixture {
+        document: Document,
+    }
+
+    impl Fixture {
+        fn new() -> Self {
+            Self {
+                document: Document::new_current(),
+            }
+        }
+
+        fn push_rect_layer(
+            &mut self,
+            name: &str,
+            center: [f64; 2],
+            size: [f64; 2],
+            transform: Transform2D,
+        ) -> LayerId {
+            if self.document.tracks.is_empty() {
+                let track = self.document.track_ids.allocate("V1").expect("track");
+                self.document.tracks.push(Track {
+                    id: track,
+                    items: vec![],
+                });
+            }
+            let layer = self.document.layers.allocate(name).expect("layer");
+            let mut envelope = ItemEnvelope::new(layer);
+            envelope.transform = transform;
+            self.document.tracks[0].items.push(TrackItem::Clip(Clip {
+                envelope,
+                start: RationalTime::ZERO,
+                duration: self.document.composition.duration,
+                time_map: TimeMap::identity(),
+                source: ClipSource::Plugin {
+                    plugin_id: RECT_LAYER_SOURCE.into(),
+                    effect_version: 1,
+                    params: rect_params(center, size),
+                    extra: Default::default(),
+                },
+            }));
+            layer
+        }
+    }
+
     fn rect_params(center: [f64; 2], size: [f64; 2]) -> BTreeMap<String, DocParam> {
         BTreeMap::from([
             ("center".into(), DocParam::const_vec2(center)),
             ("size".into(), DocParam::const_vec2(size)),
             ("color".into(), DocParam::const_color([0.0, 1.0, 0.0, 1.0])),
         ])
-    }
-
-    fn push_rect_layer(
-        document: &mut Document,
-        name: &str,
-        center: [f64; 2],
-        size: [f64; 2],
-        transform: Transform2D,
-    ) -> LayerId {
-        if document.tracks.is_empty() {
-            let track = document.track_ids.allocate("V1").expect("track");
-            document.tracks.push(Track {
-                id: track,
-                items: vec![],
-            });
-        }
-        let layer = document.layers.allocate(name).expect("layer");
-        let mut envelope = ItemEnvelope::new(layer);
-        envelope.transform = transform;
-        document.tracks[0].items.push(TrackItem::Clip(Clip {
-            envelope,
-            start: RationalTime::ZERO,
-            duration: document.composition.duration,
-            time_map: TimeMap::identity(),
-            source: ClipSource::Plugin {
-                plugin_id: RECT_LAYER_SOURCE.into(),
-                effect_version: 1,
-                params: rect_params(center, size),
-                extra: Default::default(),
-            },
-        }));
-        layer
     }
 
     fn mount_and_resize(host: u64, stage: u64, width: u32, height: u32) {
@@ -2879,9 +2891,8 @@ mod tests {
     #[test]
     fn stage_pointer_down_selects_rotated_rect_via_json_snapshot() {
         let _lock = test_lock();
-        let mut document = Document::new_current();
-        let layer = push_rect_layer(
-            &mut document,
+        let mut fixture = Fixture::new();
+        let layer = fixture.push_rect_layer(
             "rotated",
             [0.05, -0.08],
             [0.35, 0.22],
@@ -2892,13 +2903,13 @@ mod tests {
                 ..Transform2D::identity()
             },
         );
-        document.composition.camera = CompCameraDoc::PlanarOrthographic {
+        fixture.document.composition.camera = CompCameraDoc::PlanarOrthographic {
             center: DocParam::const_vec2([0.03, -0.02]),
             roll_radians: DocParam::const_f64(0.2),
             height: DocParam::const_f64(1.0),
         };
-        document.validate().expect("valid");
-        let host = create_host_from_document("sel-rotated", &document);
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-rotated", &fixture.document);
         let stage = host_register_stage_for_test(host).expect("stage");
         mount_and_resize(host, stage, 1600, 900);
         let before_bytes = document_json_bytes(host);
@@ -2906,9 +2917,12 @@ mod tests {
 
         // 局所原点付近を camera∘world で正準へ写し、非対称な view-local へ戻す。
         let tracks = DataTracks::new();
-        let proj =
-            project_stage_geometry(&document, EvaluationTime::new(RationalTime::ZERO), &tracks)
-                .expect("geometry");
+        let proj = project_stage_geometry(
+            &fixture.document,
+            EvaluationTime::new(RationalTime::ZERO),
+            &tracks,
+        )
+        .expect("geometry");
         let crate::stage_geometry_projection::StageLayerProjection::Available(geo) =
             proj.get(layer).expect("layer")
         else {
@@ -2934,9 +2948,8 @@ mod tests {
     fn stage_pointer_down_x_uses_height_denominator_on_portrait_stage() {
         let _lock = test_lock();
         // h>w でないと /height hit かつ /width miss が作れない。
-        let mut document = Document::new_current();
-        let layer = push_rect_layer(
-            &mut document,
+        let mut fixture = Fixture::new();
+        let layer = fixture.push_rect_layer(
             "x-height",
             [0.0, 0.0],
             [0.7, 0.7],
@@ -2946,8 +2959,8 @@ mod tests {
                 ..Transform2D::identity()
             },
         );
-        document.validate().expect("valid");
-        let host = create_host_from_document("sel-x-height", &document);
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-x-height", &fixture.document);
         let stage = host_register_stage_for_test(host).expect("stage");
         let (width, height) = (900_u32, 1600_u32);
         mount_and_resize(host, stage, width, height);
@@ -2973,18 +2986,80 @@ mod tests {
     }
 
     #[test]
+    fn stage_pointer_down_scale_factor_oracle_preserves_logical_hit_target() {
+        let _lock = test_lock();
+        let mut fixture = Fixture::new();
+        let layer =
+            fixture.push_rect_layer("base", [0.0, 0.0], [0.5, 0.5], Transform2D::identity());
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-scale-factor", &fixture.document);
+        let stage = host_register_stage_for_test(host).expect("stage");
+
+        let mut mount = base_intent("stage_mount");
+        mount.stage_handle = Some(stage);
+        assert!(dispatch(host, mount).accepted);
+
+        let mut resize = base_intent("stage_resize");
+        resize.stage_handle = Some(stage);
+        resize.width = Some(1600);
+        resize.height = Some(900);
+        resize.scale_factor = Some(1.0);
+        assert!(dispatch(host, resize).accepted);
+
+        let tracks = DataTracks::new();
+        let proj = project_stage_geometry(
+            &fixture.document,
+            EvaluationTime::new(RationalTime::ZERO),
+            &tracks,
+        )
+        .expect("geometry");
+        let crate::stage_geometry_projection::StageLayerProjection::Available(geo) =
+            proj.get(layer).expect("layer")
+        else {
+            panic!("available");
+        };
+        let [cx, cy] = (geo.camera_view * geo.world)
+            .transform_point(geo.local_rect.center.x, geo.local_rect.center.y);
+        let (vx, vy) = canonical_to_view_local(cx, cy, 1600, 900);
+
+        let selected_once = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 1));
+        assert!(selected_once.accepted);
+        let primary_once = selected_once
+            .snapshot
+            .expect("snapshot")
+            .primary_layer_id
+            .expect("primary");
+        assert_eq!(primary_once, layer.get().to_string());
+
+        let mut resize_scaled = base_intent("stage_resize");
+        resize_scaled.stage_handle = Some(stage);
+        resize_scaled.width = Some(1600);
+        resize_scaled.height = Some(900);
+        resize_scaled.scale_factor = Some(2.0);
+        assert!(dispatch(host, resize_scaled).accepted);
+
+        let selected_twice = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 2));
+        assert_eq!(
+            selected_twice
+                .snapshot
+                .expect("snapshot")
+                .primary_layer_id
+                .expect("primary"),
+            layer.get().to_string()
+        );
+
+        let _ = host_destroy_stage_for_test(stage);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
     fn stage_pointer_down_y_up_hits_upper_half_rect() {
         let _lock = test_lock();
-        let mut document = Document::new_current();
-        let layer = push_rect_layer(
-            &mut document,
-            "upper",
-            [0.0, 0.25],
-            [0.4, 0.3],
-            Transform2D::identity(),
-        );
-        document.validate().expect("valid");
-        let host = create_host_from_document("sel-y-up", &document);
+        let mut fixture = Fixture::new();
+        let layer =
+            fixture.push_rect_layer("upper", [0.0, 0.25], [0.4, 0.3], Transform2D::identity());
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-y-up", &fixture.document);
         let stage = host_register_stage_for_test(host).expect("stage");
         mount_and_resize(host, stage, 1600, 900);
         // view-local の大きい y（上方向）。Y 反転なら負の正準 y になり外れる。
@@ -3005,9 +3080,8 @@ mod tests {
     #[test]
     fn stage_pointer_down_clear_requires_prior_primary() {
         let _lock = test_lock();
-        let mut document = Document::new_current();
-        let layer = push_rect_layer(
-            &mut document,
+        let mut fixture = Fixture::new();
+        let layer = fixture.push_rect_layer(
             "target",
             [0.0, 0.0],
             [0.4, 0.4],
@@ -3017,16 +3091,19 @@ mod tests {
                 ..Transform2D::identity()
             },
         );
-        document.validate().expect("valid");
-        let host = create_host_from_document("sel-clear", &document);
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-clear", &fixture.document);
         let stage = host_register_stage_for_test(host).expect("stage");
         mount_and_resize(host, stage, 1600, 900);
         let before_bytes = document_json_bytes(host);
 
         let tracks = DataTracks::new();
-        let proj =
-            project_stage_geometry(&document, EvaluationTime::new(RationalTime::ZERO), &tracks)
-                .expect("geometry");
+        let proj = project_stage_geometry(
+            &fixture.document,
+            EvaluationTime::new(RationalTime::ZERO),
+            &tracks,
+        )
+        .expect("geometry");
         let crate::stage_geometry_projection::StageLayerProjection::Available(geo) =
             proj.get(layer).expect("layer")
         else {
@@ -3055,16 +3132,9 @@ mod tests {
     #[test]
     fn stage_pointer_down_overlap_prefers_later_projection_layer() {
         let _lock = test_lock();
-        let mut document = Document::new_current();
-        let back = push_rect_layer(
-            &mut document,
-            "back",
-            [0.0, 0.0],
-            [0.8, 0.8],
-            Transform2D::identity(),
-        );
-        let front = push_rect_layer(
-            &mut document,
+        let mut fixture = Fixture::new();
+        let back = fixture.push_rect_layer("back", [0.0, 0.0], [0.8, 0.8], Transform2D::identity());
+        let front = fixture.push_rect_layer(
             "front",
             [0.0, 0.0],
             [0.5, 0.5],
@@ -3073,8 +3143,8 @@ mod tests {
                 ..Transform2D::identity()
             },
         );
-        document.validate().expect("valid");
-        let host = create_host_from_document("sel-overlap", &document);
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-overlap", &fixture.document);
         let stage = host_register_stage_for_test(host).expect("stage");
         mount_and_resize(host, stage, 1600, 900);
         let (vx, vy) = canonical_to_view_local(0.05, -0.04, 1600, 900);
@@ -3092,9 +3162,8 @@ mod tests {
     #[test]
     fn stage_pointer_same_id_down_is_noop_for_generation() {
         let _lock = test_lock();
-        let mut document = Document::new_current();
-        let layer = push_rect_layer(
-            &mut document,
+        let mut fixture = Fixture::new();
+        let layer = fixture.push_rect_layer(
             "same",
             [0.0, 0.0],
             [0.5, 0.5],
@@ -3104,14 +3173,17 @@ mod tests {
                 ..Transform2D::identity()
             },
         );
-        document.validate().expect("valid");
-        let host = create_host_from_document("sel-same-id", &document);
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-same-id", &fixture.document);
         let stage = host_register_stage_for_test(host).expect("stage");
         mount_and_resize(host, stage, 1600, 900);
         let tracks = DataTracks::new();
-        let proj =
-            project_stage_geometry(&document, EvaluationTime::new(RationalTime::ZERO), &tracks)
-                .expect("geometry");
+        let proj = project_stage_geometry(
+            &fixture.document,
+            EvaluationTime::new(RationalTime::ZERO),
+            &tracks,
+        )
+        .expect("geometry");
         let crate::stage_geometry_projection::StageLayerProjection::Available(geo) =
             proj.get(layer).expect("layer")
         else {
@@ -3135,9 +3207,8 @@ mod tests {
     #[test]
     fn stage_pointer_drag_up_cancel_keep_prior_primary() {
         let _lock = test_lock();
-        let mut document = Document::new_current();
-        let layer = push_rect_layer(
-            &mut document,
+        let mut fixture = Fixture::new();
+        let layer = fixture.push_rect_layer(
             "keep",
             [0.0, 0.0],
             [0.4, 0.4],
@@ -3146,8 +3217,8 @@ mod tests {
                 ..Transform2D::identity()
             },
         );
-        document.validate().expect("valid");
-        let host = create_host_from_document("sel-phase-keep", &document);
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-phase-keep", &fixture.document);
         let stage = host_register_stage_for_test(host).expect("stage");
         mount_and_resize(host, stage, 1600, 900);
         let (vx, vy) = canonical_to_view_local(0.1, 0.1, 1600, 900);
@@ -3175,16 +3246,10 @@ mod tests {
     #[test]
     fn stage_pointer_down_zero_extent_rejects_without_changing_primary() {
         let _lock = test_lock();
-        let mut document = Document::new_current();
-        let layer = push_rect_layer(
-            &mut document,
-            "z",
-            [0.0, 0.0],
-            [0.4, 0.4],
-            Transform2D::identity(),
-        );
-        document.validate().expect("valid");
-        let host = create_host_from_document("sel-zero", &document);
+        let mut fixture = Fixture::new();
+        let layer = fixture.push_rect_layer("z", [0.0, 0.0], [0.4, 0.4], Transform2D::identity());
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-zero", &fixture.document);
         let stage = host_register_stage_for_test(host).expect("stage");
         // いったん選択してから width=0 相当（resize 無し）で down する。
         mount_and_resize(host, stage, 1600, 900);
@@ -3229,9 +3294,8 @@ mod tests {
     #[test]
     fn stage_pointer_down_geometry_error_keeps_primary() {
         let _lock = test_lock();
-        let mut document = Document::new_current();
-        let layer = push_rect_layer(
-            &mut document,
+        let mut fixture = Fixture::new();
+        let layer = fixture.push_rect_layer(
             "singular",
             [0.0, 0.0],
             [0.5, 0.5],
@@ -3240,8 +3304,8 @@ mod tests {
                 ..Transform2D::identity()
             },
         );
-        document.validate().expect("valid");
-        let host = create_host_from_document("sel-geom-err", &document);
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-geom-err", &fixture.document);
         // 幾何は壊れていても ReplacePrimary は envelope 存在だけで受理できる。
         with_registry(|registry| {
             let product = registry
@@ -3265,9 +3329,12 @@ mod tests {
         let before = read_snapshot(host);
         assert_eq!(before.primary_layer_id, Some(layer.get().to_string()));
 
-        let rejected = dispatch_raw_json(host, &pointer_json(host, stage, "down", 800.0, 450.0, 1));
-        assert!(!rejected.accepted);
-        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+        let selected = dispatch_raw_json(host, &pointer_json(host, stage, "down", 800.0, 450.0, 1));
+        assert!(selected.accepted);
+        assert_eq!(
+            selected.snapshot.expect("snapshot").primary_layer_id,
+            before.primary_layer_id
+        );
         let after = read_snapshot(host);
         assert_eq!(after.primary_layer_id, before.primary_layer_id);
         assert_eq!(after.projection_generation, before.projection_generation);
@@ -3280,23 +3347,18 @@ mod tests {
     #[test]
     fn stage_pointer_down_skips_degenerate_and_unavailable_layers() {
         let _lock = test_lock();
-        let mut document = Document::new_current();
-        let _degenerate = push_rect_layer(
-            &mut document,
-            "degen",
-            [0.0, 0.0],
-            [0.0, 0.5],
-            Transform2D::identity(),
-        );
-        let group_id = document.layers.allocate("g").expect("group");
-        document.tracks[0]
+        let mut fixture = Fixture::new();
+        let _degenerate =
+            fixture.push_rect_layer("degen", [0.0, 0.0], [0.0, 0.5], Transform2D::identity());
+        let group_id = fixture.document.layers.allocate("g").expect("group");
+        fixture.document.tracks[0]
             .items
             .push(TrackItem::Group(motolii_doc::Group {
                 envelope: ItemEnvelope::new(group_id),
                 children: vec![],
             }));
-        document.validate().expect("valid");
-        let host = create_host_from_document("sel-skip", &document);
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-skip", &fixture.document);
         let stage = host_register_stage_for_test(host).expect("stage");
         mount_and_resize(host, stage, 1600, 900);
         // 事前 primary を group 以外の存在 layer で持てないので、先に Replace で degenerate を primary にしない。
