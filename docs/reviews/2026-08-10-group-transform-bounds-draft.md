@@ -1,9 +1,13 @@
 # グループのtransform boundsをどこから採るか（起草・未採択）
 
 日付: 2026-08-10
-状態: **起草 / 未採択。反対側レビュー未実施**
+状態: **却下（`REJECT`）。2026-08-10 反対側レビューにより不採択。記録として保全する**
 
 ## 0. この文書の扱い
+
+> ⚠️ **本案は反対側レビュー（Codex direct `gpt-5.6-sol` medium、read-only、実行command 12件）で
+> `REJECT` された。§4 の案を採用しないこと。** 却下理由と、そこから判明した構造的事実は §8 にある。
+> **§4 を根拠に実装・発注しない。** 本書は誤りの記録として保全する。
 
 **決定ではない。** supervisorが起草した案であり、反対側レビューを通すまで採択しない。
 `decision-index` へも未登録である。**本書を根拠に実装を発注しない。**
@@ -110,3 +114,66 @@ handleについては、`Unknown` のときcomposition全域へ倒す。
 3. §4.1「canvas由来は対応物を持たない」は正しいか。
    グループの仮出力（ベイク）は寸法を持つのではないか
 4. `Unknown` fallbackを全域にすると、利用者が嫌う1920p挙動が別経路で復活しないか
+
+
+## 8. 却下（2026-08-10）
+
+反対側レビューの `VERDICT` は **`REJECT`**。中核3論証がいずれも既決または現行コードの
+支える範囲を超えていた。supervisorが実コードで再確認し、**反証が正しいことを認める**。
+
+### 8.1 §4.2 は現行の評価構造と一致しない
+
+`graph.rs:377` のコメントが決定的である。
+
+> `// F-3: 子合成 → グループ effect stack → clipping mask。変形は継承済み。`
+
+`build_group` は `let child_xform = self.world_affine(layer)?` で
+**グループの変形を各子の world affine へ継承**し、変形済みの子を合成する
+（`graph.rs:349` / `:366` / `:377`、`spatial_resolve.rs:78`）。
+**「フラット1枚をtransformする」という前提が構造として存在しない。**
+
+### 8.2 §4.3 は明示的な禁止に抵触する
+
+`specs/M4-cache-and-analysis.md:43`:
+
+> `Unknown`は空でなく最適化不能を表し、全入力RoDまたはHost安全上限へ保守的fallbackする。
+> **実texture bounds、Document永続値、GPU alpha readbackと混同しない**
+
+RoD/RoIはrender graphの領域最適化契約であり、**Stage操作boundsへ流用してはならない**と
+書かれている。起草はこれを踏んだ。飛躍ではなく規則違反である。
+
+### 8.3 §4.1 の絶対表現は成立しない
+
+`concept.md:200` はeffect/mask用の中間textureをrender解像度で生成すると明記し、
+group bakeは`FrameDesc`で確定出力する（`specs/M4-cache-and-analysis.md:65`）。
+**「canvas相当の寸法付き評価物が一切ない」は誤り**である
+（「group所有の永続canvasがない」は成立する）。canvas由来を採る根拠にはならないが、
+§4.1の排除理由は無効である。
+
+### 8.4 §4.3のfallbackは、避けたかった挙動をそのまま再導入する
+
+`Unknown` → composition全域は、原因がcanvas既定かfallbackかに関わらず、
+**操作上の結果が composition 全域**である。しかも現行 Stage 幾何は
+Group / Video / Vector / 一般Plugin を常に `Unavailable` とするため、
+fallbackが例外的経路に留まる証拠がない。
+
+### 8.5 判明した構造的事実（次の起草の前提）
+
+**グループには「自分の画像」が評価モデル上存在しない。**
+変形は子へ継承され、`StageLayerProjection` の `{ local_rect, world, camera_view }` に
+当てはまる local_rect を持たない。`Group` が `Unavailable` なのは実装漏れではなく、
+**幾何モデルに置き場所が無いため**である。
+
+したがって問いは「content由来かcanvas由来か」ではない。正しくは
+
+> **子の変形済み幾何から、グループの矩形をどう導出するか**
+
+であり、既存2択の選択ではなく**新しい導出規則の設計**である。
+
+### 8.6 supervisor側の再発防止
+
+本日、起草が反対側レビューで落ちたのは2件目である（1件目はgizmoのRoD／描画先）。
+**いずれも「docsを読んで妥当なモデルを立て、実装コードを読まずに起草した」**ことが原因である。
+
+> **決定を起草する前に、その周辺を実装しているコードを読む。**
+> docsは意図を書くが、構造は書かない。
