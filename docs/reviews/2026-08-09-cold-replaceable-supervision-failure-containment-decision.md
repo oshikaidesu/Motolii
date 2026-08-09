@@ -97,6 +97,21 @@ RETURN、authority conflict、base change、predicate入力の変更が一つで
 - lease、checkpoint、handoff、summary、receiptを採用資格にする
 - reviewer mutation、same-family self-review、設計／施工関与familyの最終review
 
+### 6.1 top-seat meta drift circuit breaker
+
+これは外部LLMの有無と無関係に、local reasoning、docs、test、review、tool呼出しを含む全seatへ適用する局所停止規則である。`meta action`とは、現在ユーザーが許可した契約の成果、実diff、事前指定oracle、exact blockerの閉鎖、採用または統合を直接進めず、監督手順だけを追加・反復する行為をいう。docsや監督規則自体が現在の許可成果なら、そのdiffは`meta action`ではない。
+
+次のいずれかを`META_DRIFT_TRIGGER`とする。
+
+- current contractのdiff／fingerprint／evidenceが不変のまま、`meta action`が直前2手続く
+- 同じ不変contractへ、exact P0／P1／`EVIDENCE_GAP`の閉鎖なしにfull reviewを2回目として提案する
+- 現在の完了条件にない監督seat、階層、runbook、evidence format、test lane、review lane、toolまたはmodel callを追加する
+- 判断を変えるexact blockerを示さず、「念のため」でread scope、調査またはreviewを増やす
+
+任意seatは一致した条件を一つだけ示して`META_DRIFT_STOP: <matched trigger>`を返せる。この警告はauthorityを移譲しない。top seatは提案中の`meta action`を中止し、代替のmeta作業を増やさず、現在の契約にある直接の一手へ戻る。安全な直接手がなければexact blockerだけをユーザーへ返す。互いに非交差な既存laneは止めない。
+
+top seat自身はこのSTOPを解除できず、該当meta作業を追加できるのはユーザーの明示許可だけとする。外部modelは検知にも解除にも必須でなく、drift判定だけを目的に起動しない。counter、daemon、DB、receipt、常設watchdog seatを新設しない。
+
 ## 7. 採用gate
 
 top seatはcandidateごとに次を直接確認する。
