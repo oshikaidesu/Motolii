@@ -18,6 +18,41 @@ UI設計decision、[M5採択地図](m5-known-implementation-adoption-map.md)か�
 発注時は本書をorderのREAD SETへ入れてよい。ただし
 **本書をacceptance条件やoracleにしてはならない。**
 
+### この像は既に仮コードで実証されている
+
+本書は構想ではない。**完成像は2026-08-07/08に仮コードで一度実行され、
+繋がる形と繋がらない箇所が具体名で出ている。**
+
+| 実証物 | 何を出したか |
+|---|---|
+| [完成条件の鎖](reviews/2026-08-08-completion-condition-call-site-sketch.md) | 完成条件（3〜5分・音楽同期・音声mux）そのものの鎖を初めて1本書いた。**音声muxは実装済みなのに楽曲bedを作品へ据える編集操作が無い**ことを検出（`N-SOUNDTRACK-WRITE`） |
+| [M4/M5仮接続](reviews/2026-08-08-m4-m5-call-site-connection-sketch.md) | **M4とM5はM3の後へ直列に積む別phaseではなく、PreviewとExportが共有する同じ背骨へ合流する**ことを呼び出し側から示した |
+| [合成失敗14件](reviews/2026-08-07-call-site-sketch-composition-failures.md) | 決定どうしが同時に成立しない箇所 |
+| [継ぎ目9件とStage×M5判定](reviews/2026-08-08-call-site-sketch-seams-and-stage-m5-verdict.md) | 区間をまたぐ合成失敗 |
+| [仮コード成果物の保全](reviews/2026-08-08-call-site-sketch-artifacts.md) | 成果物そのもの |
+
+背骨は1枚に収まる。
+
+```text
+Document snapshot
+  -> build_document_frame_graph
+  -> [M4: Host cache / resource admission]
+  -> render_graph_cached
+       -> [M5: LayerSourcePlugin / RenderStep::Plugin]
+       -> Composite
+  -> Preview / Export
+```
+
+- **M4**は背骨の**外側**で、同一recipeの成果物を再利用し、miss時は既存評価へ透明に戻る
+- **M5**は背骨の**内側**で、既存 `LayerSourcePlugin` 席からpremultiplied RGBAを返し既存Compositeへ入る
+- **M4 K1a resource ownerはM5にも共有される。**
+  M4完了後にM5を始めるのではなく、同じHost所有境界を一度だけ閉じる関係である
+
+**注意**: 仮コードは[器具境界決定](reviews/2026-08-07-provisional-call-site-sketch-instrument-decision.md)により
+**非compile・非authority**であり、closed orderのAUTHORITY欄へ引いてはならない。
+本書が引用するのは**接続形状の観察**であって、API名・schema・実装許可ではない。
+`???` は希望API名ではなく、現行repoで実名を置けなかった契約境界である。
+
 ## 1. 完成条件（動かせない線）
 
 `concept.md`:
@@ -28,6 +63,36 @@ UI設計decision、[M5採択地図](m5-known-implementation-adoption-map.md)か�
 「音楽同期」は含意列挙では**音声mux**であり、拍同期編集ではない
 （[完成条件の鎖](reviews/2026-08-08-completion-condition-call-site-sketch.md)で
 起草者自身の読み替えを訂正済み）。
+
+### 残工程に「開発」は無い
+
+**M3もM4もM5も、新規開発ではない。** 残っているのは接続と採択だけである。
+これは希望的観測ではなく、3つの正本を実測した結果である。
+
+| | 中身 | 実測 |
+|---|---|---|
+| **M3** | 旧route（direct-wgpu/Vello + `ProductApp`）で**受入済みの意味資産** — Place、Undo／Redo、Timeline move／trim、Position key追加・値編集、easing、playback spine | 2026-08-07の再基線で**製品runtimeを失った**だけ。R1〜R4は繋ぎ直す工程 |
+| **M4** | [採択地図](m4-known-implementation-adoption-map.md)は全classが `REUSE` / `PATTERN` / `REMAP` — `sha2`、`fs4`、`tempfile`、`priority-queue`、`vello_svg`、現行FFmpeg sidecar、既存 `RgbaDownloader`／`LatestWorker` | 第一原理から作る機構は1つも無い |
+| **M5** | [採択地図](m5-known-implementation-adoption-map.md)が閉じ、private fixtureとreceiptが `DONE / KEEP` | 製品依存・接続が未了なだけ |
+
+M3は2026-08-07に「UIを作る工程」から
+**「先に作った資産を接続し製品として成立させる統合ゾーン」**へ読み直されている
+（[M3統合ゾーン価値観更新](reviews/2026-08-07-m3-integration-zone-value-update.md)）。
+**同じ読み方がM4とM5にも当てはまる。**
+
+#### 発注への含意（これが本節の実利）
+
+- **orderの形が「Xを実装せよ」なら疑う。** 正しい形は
+  **「既にあるXを、既にあるYへ、既にあるoracleの下で繋げ」**である
+- 繋ぎ先が実在しない場合、それは実装課題ではなく
+  **探索の失敗か、記録と実態のdrift**である。先に測る
+- したがって既定推定は `BUILT_UNWIRED`（作ってあるが繋がっていない）であり、
+  `ABSENT`（本当に無い）は外部確認を経てから宣言する
+- **「無い」と判断する前に、リポジトリ外も見る。**
+  skiaのTimeline／Depth Rail fixtureはrepo外に実在し、repo検索では出なかった
+
+`docs/README.md` の開発原則が同じことを定めている —
+**既知実装優先、新設前に探索・採択。** 一般機構を第一原理から発明しない。
 
 ## 2. 触れる順序 = wave
 
