@@ -6,11 +6,13 @@ license.workspace = true
 
 [dependencies]
 motolii-core.workspace = true
+motolii-doc.workspace = true
+motolii-gpu.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tempfile.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
 motolii-testkit.workspace = true
 sha2.workspace = true
-tempfile.workspace = true

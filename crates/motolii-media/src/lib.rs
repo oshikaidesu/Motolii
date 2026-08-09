@@ -13,6 +13,7 @@ mod decode;
 mod encode;
 mod mux;
 mod probe;
+mod source_binding;
 
 use std::io::Read;
 use std::process::Command;
@@ -28,6 +29,7 @@ pub use probe::{
     probe, probe_container, require_supported_audio, select_audio_stream, select_video_stream,
     ContainerInfo, MediaInfo, MediaStreamKind, ProbedAudioStream, ProbedVideoStream,
 };
+pub use source_binding::{SourceBinding, SourceBindingError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MediaError {
