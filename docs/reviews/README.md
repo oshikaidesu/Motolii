@@ -33,6 +33,8 @@
 | ファイル | 表題 |
 |---|---|
 | [2026-08-10-m3-map-node-state-measurement.md](2026-08-10-m3-map-node-state-measurement.md) | M3実行地図の全54 nodeをcurrent codeへ照合し、状態語の乖離8件を特定して更新した実測。WIRED 5／BUILT_UNWIRED 19／PARTIAL 16／ABSENT 10／EXTERNAL 4 |
+| [2026-08-09-supervisor-handoff-pr-operation-first-wave.md](2026-08-09-supervisor-handoff-pr-operation-first-wave.md) | PR運用の初merge 2件とclose 1件、4 lane並列waveの実測コスト、「前提を疑えるか」を軸とした総監督席のClaude移管理由とCodexとの役割分離、未記録だった読み口分離線とGPU群抽出、intent 2種の欠落だけがR1を止めている実測を次のsupervisorとCodexへ渡す引継ぎ |
+| [2026-08-09-chain-gate-results-and-audio-path.md](2026-08-09-chain-gate-results-and-audio-path.md) | 仮コード未通過6区間へ鎖のgateを掛けて全区間NEEDS_REVISIONを確定し、完成条件の音声経路が書き出し側・取り込み側とも実装済みで未配線(BUILT_UNWIRED)であることと、完成条件を塞ぐ8件を特定した観察 |
 | [2026-08-10-stage-hit-test-missing-group-transform.md](2026-08-10-stage-hit-test-missing-group-transform.md) | Stageのhit-test経路の world にグループ変形継承が入っておらず、変形を持つグループ内の子で描画位置とhit領域がずれるfinding。該当testなし。未処分 |
 | [2026-08-09-m3-r0-product-runtime-seat-acceptance.md](2026-08-09-m3-r0-product-runtime-seat-acceptance.md) | R0-HOST／MAC-SEAT／STAGE-LIFECYCLEを責任別に再照合し、通常RN Release artifactのread-only起動でR0-ACCEPTをDONEとした受入 |
 | [2026-08-09-unified-parallel-start-baseline-decision.md](2026-08-09-unified-parallel-start-baseline-decision.md) | 製品main、現行authority、直列核、UI配置逃げ道、仮コード調査、未commit設計資料を一つの開始履歴へ収束し、INTEGRATED／CANDIDATE／WAIT／REJECTEDを混同しない全体並列開始baseline決定 |
