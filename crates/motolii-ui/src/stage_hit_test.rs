@@ -48,10 +48,7 @@ pub(crate) fn view_local_in_stage(
 ) -> bool {
     let w = f64::from(width);
     let h = f64::from(height);
-    view_local_x >= 0.0
-        && view_local_x <= w
-        && view_local_y >= 0.0
-        && view_local_y <= h
+    view_local_x >= 0.0 && view_local_x <= w && view_local_y >= 0.0 && view_local_y <= h
 }
 
 fn point_in_closed_local_rect(local: CanonicalPoint, rect: StageLocalRect) -> bool {

@@ -2516,10 +2516,7 @@ mod tests {
         let response = dispatch_raw_json(host, &set_time_json(host, "45"));
         assert!(response.accepted);
         let snap = response.snapshot.expect("snapshot");
-        assert_eq!(
-            snap.current_time,
-            RationalTime::try_new(3, 2).expect("3/2")
-        );
+        assert_eq!(snap.current_time, RationalTime::try_new(3, 2).expect("3/2"));
         assert_eq!(snap.projection_generation, "1");
         assert_eq!(snap.revision, baseline.revision);
         assert_eq!(snap.primary_layer_id, baseline.primary_layer_id);
@@ -2591,7 +2588,10 @@ mod tests {
         assert!(noop.accepted);
         let snap = noop.snapshot.expect("snapshot");
         assert_eq!(snap.current_time, after_first.current_time);
-        assert_eq!(snap.projection_generation, after_first.projection_generation);
+        assert_eq!(
+            snap.projection_generation,
+            after_first.projection_generation
+        );
         assert_eq!(snap.revision, after_first.revision);
         assert_eq!(snap.primary_layer_id, after_first.primary_layer_id);
 
@@ -2908,12 +2908,9 @@ mod tests {
 
         // 局所原点付近を camera∘world で正準へ写し、非対称な view-local へ戻す。
         let tracks = DataTracks::new();
-        let proj = project_stage_geometry(
-            &document,
-            EvaluationTime::new(RationalTime::ZERO),
-            &tracks,
-        )
-        .expect("geometry");
+        let proj =
+            project_stage_geometry(&document, EvaluationTime::new(RationalTime::ZERO), &tracks)
+                .expect("geometry");
         let crate::stage_geometry_projection::StageLayerProjection::Available(geo) =
             proj.get(layer).expect("layer")
         else {
@@ -2926,10 +2923,7 @@ mod tests {
         let response = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 1));
         assert!(response.accepted);
         let snap = response.snapshot.expect("snapshot");
-        assert_eq!(
-            snap.primary_layer_id,
-            Some(layer.get().to_string())
-        );
+        assert_eq!(snap.primary_layer_id, Some(layer.get().to_string()));
         assert_eq!(snap.projection_generation, "1");
         assert_eq!(snap.revision, before.revision);
         assert_eq!(document_json_bytes(host), before_bytes);
@@ -2972,10 +2966,7 @@ mod tests {
         let response = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 1));
         assert!(response.accepted);
         assert_eq!(
-            response
-                .snapshot
-                .expect("snapshot")
-                .primary_layer_id,
+            response.snapshot.expect("snapshot").primary_layer_id,
             Some(layer.get().to_string())
         );
 
@@ -3005,10 +2996,7 @@ mod tests {
         let response = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 1));
         assert!(response.accepted);
         assert_eq!(
-            response
-                .snapshot
-                .expect("snapshot")
-                .primary_layer_id,
+            response.snapshot.expect("snapshot").primary_layer_id,
             Some(layer.get().to_string())
         );
 
@@ -3038,12 +3026,9 @@ mod tests {
         let before_bytes = document_json_bytes(host);
 
         let tracks = DataTracks::new();
-        let proj = project_stage_geometry(
-            &document,
-            EvaluationTime::new(RationalTime::ZERO),
-            &tracks,
-        )
-        .expect("geometry");
+        let proj =
+            project_stage_geometry(&document, EvaluationTime::new(RationalTime::ZERO), &tracks)
+                .expect("geometry");
         let crate::stage_geometry_projection::StageLayerProjection::Available(geo) =
             proj.get(layer).expect("layer")
         else {
@@ -3054,10 +3039,7 @@ mod tests {
         let (vx, vy) = canonical_to_view_local(cx, cy, 1600, 900);
         let selected = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 1));
         assert_eq!(
-            selected
-                .snapshot
-                .expect("snapshot")
-                .primary_layer_id,
+            selected.snapshot.expect("snapshot").primary_layer_id,
             Some(layer.get().to_string())
         );
 
@@ -3100,10 +3082,7 @@ mod tests {
         let (vx, vy) = canonical_to_view_local(0.05, -0.04, 1600, 900);
         let response = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 1));
         assert_eq!(
-            response
-                .snapshot
-                .expect("snapshot")
-                .primary_layer_id,
+            response.snapshot.expect("snapshot").primary_layer_id,
             Some(front.get().to_string())
         );
         assert_ne!(front, back);
@@ -3132,12 +3111,9 @@ mod tests {
         let stage = host_register_stage_for_test(host).expect("stage");
         mount_and_resize(host, stage, 1600, 900);
         let tracks = DataTracks::new();
-        let proj = project_stage_geometry(
-            &document,
-            EvaluationTime::new(RationalTime::ZERO),
-            &tracks,
-        )
-        .expect("geometry");
+        let proj =
+            project_stage_geometry(&document, EvaluationTime::new(RationalTime::ZERO), &tracks)
+                .expect("geometry");
         let crate::stage_geometry_projection::StageLayerProjection::Available(geo) =
             proj.get(layer).expect("layer")
         else {
@@ -3148,17 +3124,11 @@ mod tests {
         let (vx, vy) = canonical_to_view_local(cx, cy, 1600, 900);
 
         let first = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 1));
-        assert_eq!(
-            first.snapshot.expect("snapshot").projection_generation,
-            "1"
-        );
+        assert_eq!(first.snapshot.expect("snapshot").projection_generation, "1");
         let second = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 2));
         let snap = second.snapshot.expect("snapshot");
         assert_eq!(snap.projection_generation, "1");
-        assert_eq!(
-            snap.primary_layer_id,
-            Some(layer.get().to_string())
-        );
+        assert_eq!(snap.primary_layer_id, Some(layer.get().to_string()));
 
         let _ = host_destroy_stage_for_test(stage);
         let _ = host_destroy_for_test(host);
@@ -3185,10 +3155,7 @@ mod tests {
         let (vx, vy) = canonical_to_view_local(0.1, 0.1, 1600, 900);
         let selected = dispatch_raw_json(host, &pointer_json(host, stage, "down", vx, vy, 1));
         assert_eq!(
-            selected
-                .snapshot
-                .expect("snapshot")
-                .primary_layer_id,
+            selected.snapshot.expect("snapshot").primary_layer_id,
             Some(layer.get().to_string())
         );
         let gen = read_snapshot(host).projection_generation;
@@ -3199,10 +3166,7 @@ mod tests {
                 dispatch_raw_json(host, &pointer_json(host, stage, phase, 10.0, 10.0, seq));
             assert!(response.accepted, "{phase}");
             let snap = response.snapshot.expect("snapshot");
-            assert_eq!(
-                snap.primary_layer_id,
-                Some(layer.get().to_string())
-            );
+            assert_eq!(snap.primary_layer_id, Some(layer.get().to_string()));
             assert_eq!(snap.projection_generation, gen);
         }
 
@@ -3301,10 +3265,7 @@ mod tests {
         let stage = host_register_stage_for_test(host).expect("stage");
         mount_and_resize(host, stage, 1600, 900);
         let before = read_snapshot(host);
-        assert_eq!(
-            before.primary_layer_id,
-            Some(layer.get().to_string())
-        );
+        assert_eq!(before.primary_layer_id, Some(layer.get().to_string()));
 
         let rejected = dispatch_raw_json(host, &pointer_json(host, stage, "down", 800.0, 450.0, 1));
         assert!(!rejected.accepted);
@@ -3312,10 +3273,7 @@ mod tests {
         let after = read_snapshot(host);
         assert_eq!(after.primary_layer_id, before.primary_layer_id);
         assert_eq!(after.projection_generation, before.projection_generation);
-        assert_eq!(
-            read_stage_pointer(stage).expect("pointer").sequence,
-            1
-        );
+        assert_eq!(read_stage_pointer(stage).expect("pointer").sequence, 1);
 
         let _ = host_destroy_stage_for_test(stage);
         let _ = host_destroy_for_test(host);
@@ -3333,10 +3291,12 @@ mod tests {
             Transform2D::identity(),
         );
         let group_id = document.layers.allocate("g").expect("group");
-        document.tracks[0].items.push(TrackItem::Group(motolii_doc::Group {
-            envelope: ItemEnvelope::new(group_id),
-            children: vec![],
-        }));
+        document.tracks[0]
+            .items
+            .push(TrackItem::Group(motolii_doc::Group {
+                envelope: ItemEnvelope::new(group_id),
+                children: vec![],
+            }));
         document.validate().expect("valid");
         let host = create_host_from_document("sel-skip", &document);
         let stage = host_register_stage_for_test(host).expect("stage");
@@ -3345,7 +3305,11 @@ mod tests {
         // Miss（退化・Unavailable 除外）→ clear no-op（primary None のまま）。
         let response = dispatch_raw_json(host, &pointer_json(host, stage, "down", 800.0, 450.0, 1));
         assert!(response.accepted);
-        assert!(response.snapshot.expect("snapshot").primary_layer_id.is_none());
+        assert!(response
+            .snapshot
+            .expect("snapshot")
+            .primary_layer_id
+            .is_none());
 
         let _ = host_destroy_stage_for_test(stage);
         let _ = host_destroy_for_test(host);
