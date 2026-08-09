@@ -15,8 +15,10 @@ use super::v1_edit::{apply_v1_journal_command, LegacyJournalCommand};
 
 /// v1 journal Edit の format_version(読取専用互換)。
 pub const V1_EDIT_FORMAT_VERSION: u32 = 1;
-/// 新規書込みの journal Edit format_version(D1l §3.1)。
+/// v2 journal Edit の読取互換。
 pub const V2_EDIT_FORMAT_VERSION: u32 = 2;
+/// M2 Asset lifecycle cutover後の全新規 journal Edit format_version。
+pub const V3_EDIT_FORMAT_VERSION: u32 = 3;
 
 /// Editレコードのオンディスクpayload(恒久面)。`Command`を版付きで包む。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -26,7 +28,7 @@ pub struct JournalEdit {
 }
 
 impl JournalEdit {
-    pub const FORMAT_VERSION: u32 = V2_EDIT_FORMAT_VERSION;
+    pub const FORMAT_VERSION: u32 = V3_EDIT_FORMAT_VERSION;
 
     pub fn new(command: Command) -> Self {
         Self {
@@ -44,7 +46,7 @@ impl From<Command> for JournalEdit {
 
 #[derive(Debug, Clone)]
 enum DecodedJournalEdit {
-    V2(Box<Command>),
+    V2OrV3(Box<Command>),
     V1(LegacyJournalCommand),
 }
 
@@ -128,7 +130,7 @@ fn apply_decoded_edit(
     edit: &DecodedJournalEdit,
 ) -> Result<(), ReplayApplyError> {
     match edit {
-        DecodedJournalEdit::V2(command) => {
+        DecodedJournalEdit::V2OrV3(command) => {
             command.apply(doc)?;
             doc.validate()?;
         }
@@ -156,14 +158,14 @@ fn decode_edit(payload: &[u8]) -> Result<DecodedJournalEdit, String> {
                 .map_err(|e| format!("invalid v1 journal command: {e}"))?;
             Ok(DecodedJournalEdit::V1(legacy))
         }
-        v if v == u64::from(V2_EDIT_FORMAT_VERSION) => {
+        v if v == u64::from(V2_EDIT_FORMAT_VERSION) || v == u64::from(V3_EDIT_FORMAT_VERSION) => {
             let edit: JournalEdit = serde_json::from_value(value)
-                .map_err(|e| format!("invalid v2 journal edit: {e}"))?;
-            Ok(DecodedJournalEdit::V2(Box::new(edit.command)))
+                .map_err(|e| format!("invalid v2/v3 journal edit: {e}"))?;
+            Ok(DecodedJournalEdit::V2OrV3(Box::new(edit.command)))
         }
         other => Err(format!(
-            "unsupported journal edit format_version {other} (expected {} or {})",
-            V1_EDIT_FORMAT_VERSION, V2_EDIT_FORMAT_VERSION
+            "unsupported journal edit format_version {other} (expected {}, {}, or {})",
+            V1_EDIT_FORMAT_VERSION, V2_EDIT_FORMAT_VERSION, V3_EDIT_FORMAT_VERSION
         )),
     }
 }
@@ -292,7 +294,7 @@ mod replay_tests {
     use crate::journal::{
         generation_path_for_document, load_catalog, open_project, replay_from_base,
         save_project_with_journal, JournalEdit, JournalRecordKind, JournalScanOutcome,
-        ReplayFailure, V1_EDIT_FORMAT_VERSION, V2_EDIT_FORMAT_VERSION,
+        ReplayFailure, V1_EDIT_FORMAT_VERSION, V2_EDIT_FORMAT_VERSION, V3_EDIT_FORMAT_VERSION,
     };
     use crate::{
         migrate_bytes, Clip, ClipSource, Command, DocParam, DocValue, Document, EffectUse,
@@ -404,6 +406,36 @@ mod replay_tests {
     }
 
     #[test]
+    fn stored_v2_edit_payload_replays_after_v3_writer_cutover() {
+        let dir = unique_dir("stored-v2-edit");
+        let path = dir.join("proj.json");
+        let limits = ResourceLimits::production();
+        let (base, layer) = empty_clip_base();
+        save_project_with_journal(&path, &base, &SaveProjectOptions::default()).unwrap();
+
+        let command = Command::SetProperty {
+            target: layer,
+            property: ScalarPropertyId::Opacity,
+            old_value: DocParam::const_f64(1.0),
+            new_value: DocParam::const_f64(0.5),
+        };
+        let mut expected = base;
+        command.apply(&mut expected).unwrap();
+        let payload = edit_payload(&JournalEdit {
+            format_version: V2_EDIT_FORMAT_VERSION,
+            command,
+        })
+        .unwrap();
+        commit_edit_payload(&path, payload, &limits).unwrap();
+
+        let opened = open_project(&path).unwrap();
+        let replay = opened.replay.expect("stored v2 edit must replay");
+        assert!(replay.replay_failures.is_empty());
+        assert_eq!(replay.document, expected);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn v2_add_position_key_replay_matches_live_apply_and_v1_rejects_variant() {
         let (base, layer) = empty_clip_base();
         let prepared = crate::position_key_prepare::prepare_add_position_key(
@@ -491,7 +523,7 @@ mod replay_tests {
             assert!(fields.contains_key(field), "missing {field}");
         }
         let edit = JournalEdit::new(command.clone());
-        assert_eq!(edit.format_version, V2_EDIT_FORMAT_VERSION);
+        assert_eq!(edit.format_version, V3_EDIT_FORMAT_VERSION);
 
         let mut live = keyed.clone();
         command.apply(&mut live).unwrap();
@@ -543,7 +575,7 @@ mod replay_tests {
         }
         assert_eq!(
             JournalEdit::new(command.clone()).format_version,
-            V2_EDIT_FORMAT_VERSION
+            V3_EDIT_FORMAT_VERSION
         );
 
         let mut live = keyed.clone();
@@ -623,7 +655,7 @@ mod replay_tests {
         save_project_with_journal(&path, &keyed, &SaveProjectOptions::default()).unwrap();
         save_project_with_journal(
             &path,
-            &keyed,
+            &live,
             &SaveProjectOptions {
                 journal_edit: Some(edit),
                 checkpoint: false,
@@ -664,7 +696,7 @@ mod replay_tests {
     }
 
     #[test]
-    fn mixed_v1_v2_wal_replays_without_failures() {
+    fn mixed_v1_v3_wal_replays_without_failures() {
         let dir = unique_dir("mixed");
         let path = dir.join("proj.json");
         let (doc, layer) = empty_clip_base();
@@ -679,17 +711,20 @@ mod replay_tests {
         }));
         commit_edit_payload(&path, v1_add, &ResourceLimits::production()).unwrap();
 
-        let v2_opacity = JournalEdit::new(Command::SetProperty {
+        let command = Command::SetProperty {
             target: layer,
             property: ScalarPropertyId::Opacity,
             old_value: DocParam::const_f64(1.0),
             new_value: DocParam::const_f64(0.25),
-        });
+        };
+        let edit = JournalEdit::new(command.clone());
+        let mut candidate = open_project(&path).unwrap().document;
+        command.apply(&mut candidate).unwrap();
         save_project_with_journal(
             &path,
-            &doc,
+            &candidate,
             &SaveProjectOptions {
-                journal_edit: Some(v2_opacity),
+                journal_edit: Some(edit),
                 checkpoint: false,
                 ..Default::default()
             },

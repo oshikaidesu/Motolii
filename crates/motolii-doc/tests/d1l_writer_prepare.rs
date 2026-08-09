@@ -10,7 +10,7 @@ use common::identity_roundtrip::assert_identity_command_roundtrip;
 use motolii_core::{RationalTime, TimeMap};
 use motolii_doc::journal::{
     replay_from_base, JournalEdit, JournalFrame, JournalHeader, JournalRecordKind,
-    JournalScanOutcome, V2_EDIT_FORMAT_VERSION,
+    JournalScanOutcome, V2_EDIT_FORMAT_VERSION, V3_EDIT_FORMAT_VERSION,
 };
 use motolii_doc::{
     Clip, ClipSource, Command, CommandError, DocParam, DocValue, Document, DocumentError,
@@ -1180,7 +1180,7 @@ fn set_clip_start_journal_v2_roundtrip_and_replay() {
         .unwrap()
         .unwrap();
     let edit = JournalEdit::new(cmd);
-    assert_eq!(edit.format_version, V2_EDIT_FORMAT_VERSION);
+    assert_eq!(edit.format_version, V3_EDIT_FORMAT_VERSION);
     let json = serde_json::to_string(&edit).unwrap();
     assert!(json.contains("SetClipStart"));
     let decoded: JournalEdit = serde_json::from_str(&json).unwrap();
@@ -1567,7 +1567,7 @@ fn trim_clip_out_v2_replay_and_both_edges_preserve_versions_and_ids() {
 
     for (tag, command) in [("TrimClipIn", in_command), ("TrimClipOut", out_command)] {
         let edit = JournalEdit::new(command);
-        assert_eq!(edit.format_version, V2_EDIT_FORMAT_VERSION);
+        assert_eq!(edit.format_version, V3_EDIT_FORMAT_VERSION);
         let json = serde_json::to_string(&edit).unwrap();
         assert!(json.contains(tag));
         let decoded: JournalEdit = serde_json::from_str(&json).unwrap();

@@ -408,7 +408,7 @@ fn create_unique_temp(parent: &Path, final_path: &Path) -> io::Result<(PathBuf, 
 /// - Unix: `rename(2)` — 既存を原子的に置き換え
 /// - Windows: `MoveFileExW(MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)` —
 ///   `std::fs::rename` に頼らず置換フラグを明示(既存ファイルへの2回目以降保存のため)
-fn replace_file(from: &Path, to: &Path) -> io::Result<()> {
+pub(crate) fn replace_file(from: &Path, to: &Path) -> io::Result<()> {
     #[cfg(unix)]
     {
         fs::rename(from, to)

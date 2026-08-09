@@ -11,7 +11,9 @@ use uuid::Uuid;
 use super::fs::{FsError, JournalFs};
 
 pub const JOURNAL_MAGIC: &[u8; 8] = b"MOTOLIIJ";
-pub const JOURNAL_FORMAT_VERSION: u32 = 1;
+pub const V1_JOURNAL_FORMAT_VERSION: u32 = 1;
+pub const V2_JOURNAL_FORMAT_VERSION: u32 = 2;
+pub const JOURNAL_FORMAT_VERSION: u32 = V2_JOURNAL_FORMAT_VERSION;
 pub const HEADER_LEN: usize = 48;
 /// checksum(4)+ids(16*3)+salt(8)+kind(1)+pad(3)+payload_len(4)
 pub const FRAME_PREFIX_LEN: usize = 4 + 16 + 16 + 16 + 8 + 1 + 3 + 4;
@@ -183,7 +185,10 @@ pub fn read_header(data: &[u8]) -> Result<JournalHeader, JournalFormatError> {
         return Err(JournalFormatError::BadMagic);
     }
     let version = u32::from_le_bytes(data[8..12].try_into().expect("version"));
-    if version != JOURNAL_FORMAT_VERSION {
+    if !matches!(
+        version,
+        V1_JOURNAL_FORMAT_VERSION | V2_JOURNAL_FORMAT_VERSION
+    ) {
         return Err(JournalFormatError::UnsupportedVersion(version));
     }
     let generation_salt = u64::from_le_bytes(data[12..20].try_into().expect("salt"));
