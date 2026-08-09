@@ -447,39 +447,93 @@ GPU群を別moduleへ抜いて初めて、後段のStage / Timeline / Inspector�
 `motolii_rn_host_dispatch_intent_json` が受け付ける intent kind は
 **`set_time` と `stage_pointer` の2種類のみ**。
 
-一方、RN hostが既に単一writerとして保持する `DocumentEditRuntime` の queue には
-必要なものが実在する。
+RN hostが単一writerとして保持する `DocumentEditRuntime` の queue と、
+`process_next`（`rn_product_host.rs:733`）、D2 / journal / apply_macro / publish /
+三面投影は実装済み・test済みである。
 
-- `document_edit_runtime.rs:83` `push_place_rectangle`
-- `document_edit_runtime.rs:166` `push_undo`
-- `document_edit_runtime.rs:171` `push_redo`
+### 訂正 — 「intent 2〜3種と発火口だけ」は誤りだった
 
-いずれも `pub(crate)`。そして RN host は既に同じ queue を
-`process_next` で回している（`rn_product_host.rs:733`）。
-D2 / journal / apply_macro / publish / 三面投影は実装済み・test済み。
+**本節は一度誤った測定を載せた。2026-08-09に発注して実装担当が
+`EVIDENCE_GAP` で差し戻し、supervisorが再測定して確定した訂正を残す。**
 
-**つまりR1の出口に足りないのは、新規の製品意味ではなく intent 2〜3種と発火口だけである。**
-Browserに設計は要らない。ボタンで足りる。
+当初「`push_place_rectangle` / `push_undo` / `push_redo` が `pub(crate)` で実在するので
+intent 2〜3種を足すだけ」と書いた。**誤りである。**
 
-### 8.3 Codexへ渡す次の1粒（前提が閉じている）
+| 当初の記述 | 実測 |
+|---|---|
+| `push_undo` / `push_redo` が使える | **`#[cfg(test)]` 付きでtest専用。** `pub(crate)` だけ見て直上の属性を見ていなかった |
+| 発火口はApp.tsxのボタンで足りる | **RN routeにはStage pointer event以外にhostへ入力する経路が1つも存在しない** |
 
-- **契約**: `dispatch_intent_json` へ intent kind `place_rectangle` / `undo` / `redo` を追加し、
-  既存 queue の `push_place_rectangle` / `push_undo` / `push_redo` へ各1回接続する。
-  `App.tsx` のBrowser slotに発火口を1つ置く
-- **allowlist**: `crates/motolii-ui/src/rn_product_host.rs`、`ui/motolii-rn/App.tsx`、新規test
-- **正例oracle**: RN routeでRectangle生成 → Stage・Inspectorが同一revision →
-  Undoで消える → Redoで戻る
-- **負例oracle**: Document / journal へ UI state 0、unknown intentはtyped拒否、
-  stale generation拒否、同一intentの二重適用0
-- **非目標**: Timelineの描画、Browserの設計、wireへのgeometry追加、
-  `.take(16)` の上限変更
-- **owner**: 製品意味なので総監督は書かない。実装familyへ出す。
-  最終reviewerは実装と別family
+`push_undo` / `push_redo` の製品経路は別にある。
+`push_prepared(RouterOutput::Intent { phase: InputPhase::Press, intent: DomainIntent::Undo }, None)`
+（`document_edit_runtime.rs:132` 付近）である。
+
+そして入力経路の実測:
+
+- JS側の `NativeModules` / TurboModule / dispatch bridge — **0件**
+- native側の `keyDown` / `performKeyEquivalent` / `NSMenu` / `IBAction` — **0件**
+- `motolii_rn_host_dispatch_intent_json` の呼び出し元は
+  `MotoliiStageComponentView.mm` の pointer 経路**のみ**
+
+**つまりR1で本当に欠けているのは「発火口」ではなく、入力経路そのものである。**
+
+### R1の実際の規模
+
+| | accepted meaning | 必要量 |
+|---|---|---|
+| **Undo / Redo** | CU-111が旧routeで `Command+Z` / `Command+Shift+Z` を受入済み | nativeにkey経路を新設し、`push_prepared` の製品routeへ接続。**再接続であって発明ではない** |
+| **Place** | CU-107／CU-110がBrowserのtyped intent → drop → Placeを受入済み | **Browser UIとRN→host bridgeが要る。ここが本体** |
+
+`PlaceRectangleRequest` は `position: [f64; 2]` と `playhead: RationalTime` を要求する。
+これはRN→hostの**入力**であり、host→RNのsnapshot wireへgeometryを足す話とは別である。
+**この2つを混同したorderは自己矛盾する**（実際に一度そう書いて差し戻された）。
+
+Undo/Redoだけ通しても**取り消す対象が無い**。
+最小の可視成果は入力経路 + Place の両方を要する。
+
+### 8.3 発注で学んだこと — orderが閉じていない兆候
+
+2026-08-09の初回発注（Codex direct `gpt-5.6-luna` medium、
+`run-observed-cli.py` 経由）は**実装0で `EVIDENCE_GAP` 返却**となった。
+**これは失敗ではなく、fail-closedが正しく働いた結果である。**
+実装担当は契約どおりに動き、閉じていないorderを force しなかった。
+
+supervisor側のorderにあった欠陥3件を記録する。**同じ形を再生産しないため。**
+
+1. **接続先を属性まで確認していなかった** — `pub(crate)` を見て `#[cfg(test)]` を見落とした。
+   **`grep 'pub fn'` で見つけた関数を接続先にする前に、直上の属性と呼び出し元の実在を見る**
+2. **order自身が自己矛盾していた** — 「必須fieldを既存定義から読め」と書きながら
+   非目標に「wireへgeometryを追加するな」と書いた。実装担当はこれを両立できない。
+   **同日Sparkに対して起こした矛盾（「特異を `Err` にするな」と「既存testの期待値を変えるな」）と同型である**
+3. **allowlistが、契約を閉じられる唯一の場所を除外していた** — 発火口を置ける場所は
+   allowlist外のnative fileにしか無かった
+
+**orderを出す前の自己検査:**
+
+- この契約を閉じるために触る必要がある**すべて**のfileがallowlistに入っているか
+- 正例oracleを満たす経路が、allowlist内だけで**端から端まで**繋がるか
+- 非目標が、TARGETの達成を禁止していないか
+- 接続先の関数は**製品ビルドに存在する**か（`#[cfg(test)]` でないか）
+
+### 8.4 次の粒（規模が変わったので再選定が要る）
+
+§8.2の訂正により、R1の入口は「intentを足す」ではなく
+**「RN routeに入力経路を作る」**になった。直列核であり、
+これが閉じるまで他のR1 nodeは撃てない。
+
+選択肢と依存は次のとおり。**選定はsupervisor席が持つ。**
+
+| 候補 | 依存 | 備考 |
+|---|---|---|
+| RN→host入力経路（native key経路 or TurboModule） | なし。**直列核** | 方式選定は製品意味。旧routeのCU-111はAppKit keymap resolverを使っている |
+| `R1-BROWSER`（JS側のみ、Rust write 0） | 入力経路と**非交差**。並列可 | 地図どおりRN側component + Jestで閉じる |
+| GPU群抽出（§8.1(b)） | **入力経路と同一file**。並列不可 | 入力経路の後 |
 
 ### 8.4 順序
 
 1. §8.1 の裁定2件をdecisionとして記録する（総監督の道具なので総監督が書く）
-2. §8.3 を発注し、R1の書き込み経路を通す
+2. §8.4 からRN入力経路（直列核）を選定して発注し、R1の書き込み経路を通す。
+   `R1-BROWSER` はwrite setが非交差なので同時に走らせてよい
 3. GPU群抽出を入れて並列幅を2→4へ上げる
 4. Timeline を `project_timeline()` 直読みで描画する
 5. §5 の申し送り（runbookのSpark記録、台帳同期、`scripts/` 遺物）を合間に
