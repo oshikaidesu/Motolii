@@ -32,6 +32,7 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-10-group-transform-bounds-draft.md](2026-08-10-group-transform-bounds-draft.md) | グループのtransform handleが囲む矩形をcomposition寸法ではなく子の合成範囲とし、Unknownは全域fallback、空グループは全域へ倒さないとする起草。未採択・反対側レビュー未実施 |
 | [2026-08-10-group-drag-call-site-sketch.md](2026-08-10-group-drag-call-site-sketch.md) | グループrootを掴んで動かす鎖の仮コード。???8件のうち本当に未決は group bounds契約と group root選択の2件で、前者が pivot・handle・snap・dirty領域を含む6依存の要石であることを示した |
 | [2026-08-09-m3-r0-product-runtime-seat-acceptance.md](2026-08-09-m3-r0-product-runtime-seat-acceptance.md) | R0-HOST／MAC-SEAT／STAGE-LIFECYCLEを責任別に再照合し、通常RN Release artifactのread-only起動でR0-ACCEPTをDONEとした受入 |
 | [2026-08-09-unified-parallel-start-baseline-decision.md](2026-08-09-unified-parallel-start-baseline-decision.md) | 製品main、現行authority、直列核、UI配置逃げ道、仮コード調査、未commit設計資料を一つの開始履歴へ収束し、INTEGRATED／CANDIDATE／WAIT／REJECTEDを混同しない全体並列開始baseline決定 |
