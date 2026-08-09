@@ -188,6 +188,13 @@ pub const MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS: u32 = 4;
 /// D1j: `composition.camera`を含む文書が宣言すべき最小`min_reader_version`。
 pub const MIN_READER_VERSION_FOR_COMP_CAMERA: u32 = 5;
 
+#[derive(Debug, Clone)]
+pub(crate) struct AssetUse {
+    pub(crate) id: AssetId,
+    path: String,
+    allowed_types: &'static [&'static str],
+}
+
 impl Document {
     /// 保存前不変条件。失敗しても`self`は変更しない(検証のみ)。
     pub fn validate(&self) -> Result<(), DocumentError> {
@@ -203,10 +210,6 @@ impl Document {
             });
         }
         self.validate_comp_camera()?;
-
-        if let Some(st) = &self.soundtrack {
-            self.require_asset(st.asset)?;
-        }
 
         let mut seen_tracks = HashSet::new();
         // LayerIdはドキュメント全体で一意(LookAt/Followがトラック横断参照するため)
@@ -225,7 +228,82 @@ impl Document {
         detect_parent_cycles(&parents)?;
         self.validate_stable_ids()?;
         self.validate_asset_component_reader_gate()?;
-        self.validate_effect_definitions()
+        self.validate_effect_definitions()?;
+        self.validate_asset_uses()
+    }
+
+    pub(crate) fn asset_uses(&self) -> Vec<AssetUse> {
+        let Document {
+            version: _,
+            min_reader_version: _,
+            composition,
+            bpm: _,
+            soundtrack,
+            assets: _,
+            layers: _,
+            track_ids: _,
+            tracks,
+            next_stable_id: _,
+            effect_definitions,
+            extra: _,
+        } = self;
+        let mut uses = Vec::new();
+        collect_asset_uses_comp_camera(&composition.camera, &mut uses);
+        if let Some(soundtrack) = soundtrack {
+            uses.push(asset_use(soundtrack.asset, "soundtrack.asset", &[]));
+        }
+        for track in tracks {
+            let crate::schema::Track { id: _, items } = track;
+            for item in items {
+                collect_asset_uses_item(item, &mut uses);
+            }
+        }
+        for definition in effect_definitions {
+            let crate::schema::EffectDefinition {
+                id,
+                plugin_id: _,
+                effect_version: _,
+                enabled: _,
+                params,
+                extra: _,
+            } = definition;
+            let base = format!("effect_definitions[{}]", id.get());
+            for (name, param) in params {
+                collect_asset_uses_param(param, &format!("{base}.{name}"), &mut uses);
+            }
+        }
+        uses
+    }
+
+    pub(crate) fn asset_use_count(&self, id: AssetId) -> usize {
+        self.asset_uses()
+            .iter()
+            .filter(|asset_use| asset_use.id == id)
+            .count()
+    }
+
+    fn validate_asset_uses(&self) -> Result<(), DocumentError> {
+        for asset_use in self.asset_uses() {
+            let Some(asset) = self.assets.get(asset_use.id) else {
+                return Err(DocumentError::UnknownAssetId {
+                    id: asset_use.id.get(),
+                });
+            };
+            if !asset_use.allowed_types.is_empty()
+                && !asset_use
+                    .allowed_types
+                    .iter()
+                    .any(|allowed| *allowed == asset.asset_type)
+            {
+                return Err(DocumentError::WrongAssetType {
+                    path: asset_use.path,
+                    id: asset_use.id.get(),
+                    got: asset.asset_type.clone(),
+                    expected: asset_use.allowed_types.join(", "),
+                });
+            }
+        }
+        Ok(())
     }
 
     /// D1l: `effect_definitions`台帳自体(plugin_id/params)とreader gateを検査する。
@@ -348,35 +426,6 @@ impl Document {
             Err(DocumentError::UnknownLayerId { id: id.get() })
         }
     }
-
-    fn require_asset(&self, id: AssetId) -> Result<(), DocumentError> {
-        if self.assets.get(id).is_some() {
-            Ok(())
-        } else {
-            Err(DocumentError::UnknownAssetId { id: id.get() })
-        }
-    }
-
-    fn require_asset_type(
-        &self,
-        id: AssetId,
-        allowed: &[&str],
-        path: &str,
-    ) -> Result<(), DocumentError> {
-        let Some(asset) = self.assets.get(id) else {
-            return Err(DocumentError::UnknownAssetId { id: id.get() });
-        };
-        if allowed.iter().any(|t| *t == asset.asset_type) {
-            Ok(())
-        } else {
-            Err(DocumentError::WrongAssetType {
-                path: path.to_string(),
-                id: id.get(),
-                got: asset.asset_type.clone(),
-                expected: allowed.join(", "),
-            })
-        }
-    }
 }
 
 fn validate_item(
@@ -437,11 +486,10 @@ fn validate_clip(
 
     match &clip.source {
         ClipSource::Asset {
-            asset,
+            asset: _,
             video,
             audio,
         } => {
-            doc.require_asset(*asset)?;
             if video.is_none() && audio.is_empty() {
                 return Err(DocumentError::EmptyAssetComponents { layer_id });
             }
@@ -610,7 +658,7 @@ pub(crate) fn validate_param(
     path: &str,
 ) -> Result<(), DocumentError> {
     match param {
-        DocParam::Const(v) => validate_value(doc, v, constraints, path),
+        DocParam::Const(v) => validate_value(v, constraints, path),
         DocParam::Keyframes(track) => {
             if track.keys().is_empty() {
                 return Err(DocumentError::EmptyKeyframeTrack {
@@ -632,11 +680,11 @@ pub(crate) fn validate_param(
                     Some(_) => {}
                 }
                 validate_interp_at(path, &key.interp)?;
-                validate_value(doc, &key.value, constraints, path)?;
+                validate_value(&key.value, constraints, path)?;
             }
             Ok(())
         }
-        DocParam::Data { fallback, .. } => validate_value(doc, fallback, constraints, path),
+        DocParam::Data { fallback, .. } => validate_value(fallback, constraints, path),
         DocParam::Vec2Axes { x, y } => {
             if constraints.expected != ExpectedValueType::Vec2 {
                 return Err(DocumentError::ParamTypeMismatch {
@@ -679,7 +727,7 @@ pub(crate) fn validate_param_structure(
     path: &str,
 ) -> Result<(), DocumentError> {
     match param {
-        DocParam::Const(v) => validate_value_structure(doc, v, path),
+        DocParam::Const(v) => validate_value_structure(v, path),
         DocParam::Keyframes(track) => {
             if track.keys().is_empty() {
                 return Err(DocumentError::EmptyKeyframeTrack {
@@ -701,11 +749,11 @@ pub(crate) fn validate_param_structure(
                     Some(_) => {}
                 }
                 validate_interp_at(path, &key.interp)?;
-                validate_value_structure(doc, &key.value, path)?;
+                validate_value_structure(&key.value, path)?;
             }
             Ok(())
         }
-        DocParam::Data { fallback, .. } => validate_value_structure(doc, fallback, path),
+        DocParam::Data { fallback, .. } => validate_value_structure(fallback, path),
         DocParam::Vec2Axes { x, y } => {
             validate_param_structure(doc, x, &format!("{path}.x"))?;
             validate_param_structure(doc, y, &format!("{path}.y"))
@@ -739,7 +787,7 @@ pub(crate) fn validate_interp_at(
 
 /// ID採番前のDraft keyframe列: 空拒否・variant一致・値の構造検査。
 pub(crate) fn validate_keyframe_draft_values(
-    doc: &Document,
+    _doc: &Document,
     values: &[crate::doc_value::DocValue],
     path: &str,
 ) -> Result<(), DocumentError> {
@@ -762,13 +810,12 @@ pub(crate) fn validate_keyframe_draft_values(
             }
             Some(_) => {}
         }
-        validate_value_structure(doc, value, path)?;
+        validate_value_structure(value, path)?;
     }
     Ok(())
 }
 
 fn validate_value(
-    doc: &Document,
     value: &DocValue,
     constraints: ParamConstraints,
     path: &str,
@@ -780,7 +827,7 @@ fn validate_value(
             got: value.kind_name().to_string(),
         });
     }
-    validate_value_structure(doc, value, path)?;
+    validate_value_structure(value, path)?;
     if constraints.unit_interval {
         match value {
             DocValue::F64(v) if !(0.0..=1.0).contains(v) => {
@@ -818,11 +865,7 @@ fn validate_value(
     Ok(())
 }
 
-fn validate_value_structure(
-    doc: &Document,
-    value: &DocValue,
-    path: &str,
-) -> Result<(), DocumentError> {
+fn validate_value_structure(value: &DocValue, path: &str) -> Result<(), DocumentError> {
     match value {
         DocValue::F64(v) => {
             if !v.is_finite() {
@@ -852,9 +895,7 @@ fn validate_value_structure(
                 });
             }
         }
-        DocValue::AssetRef(id) => {
-            doc.require_asset(*id)?;
-        }
+        DocValue::AssetRef(_) => {}
     }
     Ok(())
 }
@@ -871,18 +912,244 @@ fn validate_vector_content(
                 validate_param(doc, height, path_op_scalar(), &format!("{path}.height"))
             }
         },
-        VectorContent::SvgAsset { asset } => {
-            // S6: ラスタ動画等を SvgAsset に混ぜて modifiers を付けられないよう型を固定
-            doc.require_asset_type(*asset, &[SVG_ASSET_TYPE], &format!("{path}.asset"))
-        }
-        VectorContent::TextPath { font_asset, .. } => {
-            doc.require_asset_type(*font_asset, FONT_ASSET_TYPES, &format!("{path}.font_asset"))
-        }
+        VectorContent::SvgAsset { .. } | VectorContent::TextPath { .. } => Ok(()),
         VectorContent::Group { children } => {
             for (i, child) in children.iter().enumerate() {
                 validate_vector_content(doc, child, &format!("{path}.children[{i}]"))?;
             }
             Ok(())
+        }
+    }
+}
+
+fn asset_use(
+    id: AssetId,
+    path: impl Into<String>,
+    allowed_types: &'static [&'static str],
+) -> AssetUse {
+    AssetUse {
+        id,
+        path: path.into(),
+        allowed_types,
+    }
+}
+
+fn collect_asset_uses_item(item: &TrackItem, out: &mut Vec<AssetUse>) {
+    let (envelope, source, children) = match item {
+        TrackItem::Clip(clip) => {
+            let Clip {
+                envelope,
+                start: _,
+                duration: _,
+                time_map: _,
+                source,
+            } = clip;
+            (envelope, Some(source), &[][..])
+        }
+        TrackItem::Group(group) => {
+            let Group { envelope, children } = group;
+            (envelope, None, children.as_slice())
+        }
+    };
+    let base = format!("layer{}", envelope.layer_id.get());
+    let ItemEnvelope {
+        layer_id: _,
+        effects: _,
+        transform,
+        clipping_mask: _,
+        blend: _,
+        opacity,
+        visible: _,
+        solo: _,
+        lock: _,
+    } = envelope;
+    collect_asset_uses_transform(transform, &format!("{base}.transform"), out);
+    collect_asset_uses_param(opacity, &format!("{base}.opacity"), out);
+
+    if let Some(source) = source {
+        match source {
+            ClipSource::Asset {
+                asset,
+                video: _,
+                audio,
+            } => {
+                out.push(asset_use(*asset, format!("{base}.source.asset"), &[]));
+                for (index, component) in audio.iter().enumerate() {
+                    let crate::schema::AudioComponent {
+                        stream: _,
+                        enabled: _,
+                        gain,
+                        out_of_range: _,
+                    } = component;
+                    collect_asset_uses_param(
+                        gain,
+                        &format!("{base}.source.audio[{index}].gain"),
+                        out,
+                    );
+                }
+            }
+            ClipSource::Plugin {
+                plugin_id: _,
+                effect_version: _,
+                params,
+                extra: _,
+            } => {
+                for (name, param) in params {
+                    collect_asset_uses_param(param, &format!("{base}.source.{name}"), out);
+                }
+            }
+            ClipSource::Vector { recipe } => {
+                let crate::schema::VectorRecipe { content, modifiers } = recipe;
+                collect_asset_uses_vector_content(content, &format!("{base}.recipe"), out);
+                for (index, op) in modifiers.iter().enumerate() {
+                    collect_asset_uses_path_op(
+                        op,
+                        &format!("{base}.recipe.modifiers[{index}]"),
+                        out,
+                    );
+                }
+            }
+        }
+    }
+    for child in children {
+        collect_asset_uses_item(child, out);
+    }
+}
+
+fn collect_asset_uses_comp_camera(camera: &CompCameraDoc, out: &mut Vec<AssetUse>) {
+    match camera {
+        CompCameraDoc::PlanarOrthographic {
+            center,
+            roll_radians,
+            height,
+        } => {
+            collect_asset_uses_param(center, "composition.camera.center", out);
+            collect_asset_uses_param(roll_radians, "composition.camera.roll_radians", out);
+            collect_asset_uses_param(height, "composition.camera.height", out);
+        }
+    }
+}
+
+fn collect_asset_uses_transform(transform: &Transform2D, base: &str, out: &mut Vec<AssetUse>) {
+    let Transform2D {
+        position,
+        anchor,
+        scale,
+        rotation,
+        parent: _,
+    } = transform;
+    collect_asset_uses_param(position, &format!("{base}.position"), out);
+    collect_asset_uses_param(anchor, &format!("{base}.anchor"), out);
+    collect_asset_uses_param(scale, &format!("{base}.scale"), out);
+    collect_asset_uses_param(rotation, &format!("{base}.rotation"), out);
+}
+
+fn collect_asset_uses_param(param: &DocParam, path: &str, out: &mut Vec<AssetUse>) {
+    match param {
+        DocParam::Const(value) => collect_asset_uses_value(value, path, out),
+        DocParam::Keyframes(track) => {
+            for key in track.keys() {
+                collect_asset_uses_value(&key.value, path, out);
+            }
+        }
+        DocParam::Data { track: _, fallback } => collect_asset_uses_value(fallback, path, out),
+        DocParam::Vec2Axes { x, y } => {
+            collect_asset_uses_param(x, &format!("{path}.x"), out);
+            collect_asset_uses_param(y, &format!("{path}.y"), out);
+        }
+        DocParam::LookAt { target: _, axis: _ }
+        | DocParam::Follow {
+            target: _,
+            offset: _,
+        } => {}
+    }
+}
+
+fn collect_asset_uses_value(value: &DocValue, path: &str, out: &mut Vec<AssetUse>) {
+    if let DocValue::AssetRef(id) = value {
+        out.push(asset_use(*id, path, &[]));
+    }
+}
+
+fn collect_asset_uses_vector_content(content: &VectorContent, path: &str, out: &mut Vec<AssetUse>) {
+    match content {
+        VectorContent::StandardShape { shape } => match shape {
+            StandardShape::Rect { width, height } | StandardShape::Ellipse { width, height } => {
+                collect_asset_uses_param(width, &format!("{path}.width"), out);
+                collect_asset_uses_param(height, &format!("{path}.height"), out);
+            }
+        },
+        VectorContent::SvgAsset { asset } => {
+            out.push(asset_use(*asset, format!("{path}.asset"), SVG_ASSET_TYPES))
+        }
+        VectorContent::TextPath {
+            text: _,
+            font_asset,
+        } => out.push(asset_use(
+            *font_asset,
+            format!("{path}.font_asset"),
+            FONT_ASSET_TYPES,
+        )),
+        VectorContent::Group { children } => {
+            for (index, child) in children.iter().enumerate() {
+                collect_asset_uses_vector_content(child, &format!("{path}.children[{index}]"), out);
+            }
+        }
+    }
+}
+
+fn collect_asset_uses_path_op(op: &PathOp, path: &str, out: &mut Vec<AssetUse>) {
+    match op {
+        PathOp::PuckerBloat { amount } => {
+            collect_asset_uses_param(amount, &format!("{path}.amount"), out)
+        }
+        PathOp::ZigZag {
+            amount,
+            ridges,
+            point_type: _,
+        } => {
+            collect_asset_uses_param(amount, &format!("{path}.amount"), out);
+            collect_asset_uses_param(ridges, &format!("{path}.ridges"), out);
+        }
+        PathOp::Offset {
+            distance,
+            line_join: _,
+            miter_limit: _,
+        } => collect_asset_uses_param(distance, &format!("{path}.distance"), out),
+        PathOp::RoundCorners { radius } => {
+            collect_asset_uses_param(radius, &format!("{path}.radius"), out)
+        }
+        PathOp::Trim {
+            start,
+            end,
+            offset,
+            mode: _,
+        } => {
+            collect_asset_uses_param(start, &format!("{path}.start"), out);
+            collect_asset_uses_param(end, &format!("{path}.end"), out);
+            collect_asset_uses_param(offset, &format!("{path}.offset"), out);
+        }
+        PathOp::Twist { angle, center } => {
+            collect_asset_uses_param(angle, &format!("{path}.angle"), out);
+            collect_asset_uses_param(center, &format!("{path}.center"), out);
+        }
+        PathOp::Wiggle { amp, freq, seed: _ } => {
+            collect_asset_uses_param(amp, &format!("{path}.amp"), out);
+            collect_asset_uses_param(freq, &format!("{path}.freq"), out);
+        }
+        PathOp::Repeater {
+            copies,
+            offset,
+            transform,
+            composite: _,
+            start_opacity,
+            end_opacity,
+        } => {
+            collect_asset_uses_param(copies, &format!("{path}.copies"), out);
+            collect_asset_uses_param(offset, &format!("{path}.offset"), out);
+            collect_asset_uses_transform(transform, &format!("{path}.transform"), out);
+            collect_asset_uses_param(start_opacity, &format!("{path}.start_opacity"), out);
+            collect_asset_uses_param(end_opacity, &format!("{path}.end_opacity"), out);
         }
     }
 }
@@ -1158,6 +1425,7 @@ fn validate_comp_camera_doc(
 
 /// `VectorContent::SvgAsset` が要求する MIME。
 const SVG_ASSET_TYPE: &str = "image/svg+xml";
+const SVG_ASSET_TYPES: &[&str] = &[SVG_ASSET_TYPE];
 
 /// `TextPath.font_asset` の許可型(D1i-1で確定。未決を埋めずここで正本化)。
 const FONT_ASSET_TYPES: &[&str] = &["font/ttf", "font/otf", "font/woff", "font/woff2"];
@@ -1284,5 +1552,101 @@ fn validate_path_op_params(
                 &format!("{path}.end_opacity"),
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod asset_use_tests {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use motolii_core::RationalTime;
+
+    use super::*;
+    use crate::schema::{EffectDefinition, Track};
+    use crate::EffectDefinitionId;
+
+    fn asset_ref(id: AssetId) -> DocParam {
+        DocParam::Const(DocValue::AssetRef(id))
+    }
+
+    fn clip(layer: u64, source: ClipSource) -> TrackItem {
+        TrackItem::Clip(Clip {
+            envelope: ItemEnvelope::new(LayerId::from_raw(layer)),
+            start: RationalTime::ZERO,
+            duration: RationalTime::try_new(1, 1).unwrap(),
+            time_map: Default::default(),
+            source,
+        })
+    }
+
+    #[test]
+    fn asset_use_inventory_covers_camera_orphan_and_recursive_group() {
+        let asset = AssetId::from_raw(10);
+        let mut doc = Document::new_current();
+        doc.composition.camera = CompCameraDoc::PlanarOrthographic {
+            center: asset_ref(asset),
+            roll_radians: DocParam::const_f64(0.0),
+            height: DocParam::const_f64(1.0),
+        };
+
+        let mut group_envelope = ItemEnvelope::new(LayerId::from_raw(1));
+        group_envelope.opacity = asset_ref(asset);
+        doc.tracks.push(Track {
+            id: TrackId::from_raw(0),
+            items: vec![TrackItem::Group(Group {
+                envelope: group_envelope,
+                children: vec![clip(
+                    2,
+                    ClipSource::Plugin {
+                        plugin_id: "test.source".into(),
+                        effect_version: 1,
+                        params: BTreeMap::from([("texture".into(), asset_ref(asset))]),
+                        extra: Default::default(),
+                    },
+                )],
+            })],
+        });
+        doc.effect_definitions.push(EffectDefinition::new(
+            EffectDefinitionId::from_raw(0),
+            "test.effect",
+            1,
+            true,
+            BTreeMap::from([("texture".into(), asset_ref(asset))]),
+            Default::default(),
+        ));
+
+        let uses = doc.asset_uses();
+        let paths = uses
+            .iter()
+            .map(|asset_use| asset_use.path.as_str())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            paths,
+            BTreeSet::from([
+                "composition.camera.center",
+                "effect_definitions[0].texture",
+                "layer1.opacity",
+                "layer2.source.texture",
+            ])
+        );
+    }
+
+    #[test]
+    fn asset_use_inventory_rejects_dangling_orphan_effect_reference() {
+        let mut doc = Document::new_current();
+        let definition_id = EffectDefinitionId::from_raw(doc.next_stable_id.allocate().unwrap());
+        doc.effect_definitions.push(EffectDefinition::new(
+            definition_id,
+            "test.effect",
+            1,
+            true,
+            BTreeMap::from([("texture".into(), asset_ref(AssetId::from_raw(99)))]),
+            Default::default(),
+        ));
+
+        assert_eq!(
+            doc.validate(),
+            Err(DocumentError::UnknownAssetId { id: 99 })
+        );
     }
 }

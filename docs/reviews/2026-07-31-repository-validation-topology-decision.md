@@ -1,6 +1,6 @@
 # Repository validation topology 決定（2026-07-31）
 
-状態: **決定**
+状態: **決定（2026-08-09 GitHub Actions接続を退役）**
 
 ## 1. 問題
 
@@ -70,16 +70,19 @@ product E2E、real audio device、real GPU、IME／Accessibility、人間審判�
 `policy`のbase欠落／option形／未解決ref、必須command不在を負例で固定する。
 dispatcher自身のtestが製品testのownerにはならない。
 
-## 5. CIへの接続
+## 5. GitHub Actions接続の退役（2026-08-09追補）
 
-CI jobとlaneを対応させる。既存のpolicyとWindows gateは独立のまま維持し、portable test jobは
-dispatcherの`docs`、`tooling`、`rust`を順に呼ぶ。`web-build`はclean checkoutの独立jobとし、
-commit済みHost bundleを検査してから再生成し、生成後のtracked差分とuntracked pathを拒否する。
+`.github/workflows/ci.yml`を削除し、GitHub Actionsをrepository validationの実行ownerから外す。
+PR上のcheck表示は採否条件でも製品証拠でもなく、remote greenを完了報告へ使わない。
 
-2026-07-31の統合基線では、`docs`、`tooling`、`rust`、`web-build`、`web-contract`を個別に
-green確認した。`web-contract`は固定Chromiumを使うため、CI runnerへのbrowser provisioningと
-clean-runner greenを別に閉じるまでblocking CIへ昇格しない。`web-visual`も同じく未昇格であり、
-未実行または未完走をgreenや製品完成と数えない。
+lane閉集合、`scripts/validate.sh`、各test／guard、platform／human／hardware gateは廃止しない。
+各ticketが`PRIMARY_ORACLE / REPO_LANES / EXTERNAL_GATES`を明示し、主担当が該当commandの
+実結果を検収する。GitHub Actionsへ再接続する場合は、必要な証明面とblocking条件を別ticketで
+利用者へ戻す。
+
+2026-07-31の統合基線で記録した各laneのgreenは歴史証拠として残すが、現在のremote CIや
+将来taskのgreenへ外挿しない。`web-contract`／`web-visual`の未実行または未完走も、引き続き
+greenや製品完成と数えない。
 
 本決定による`AGENTS.md`の正本変更は、Inspector read-model inventoryが固定する
 `AUTHORITY_SHA256["AGENTS.md"]`を変更後byteから再計算し、同じcommitで1 literalだけ更新する。
@@ -93,11 +96,11 @@ green証跡と、未昇格のbrowser／visual gateを分離して報告する。
 
 ```text
 RESPONSIBILITY DISPOSITION: WRAP
-EXISTING ROUTE: Cargo, rustfmt, clippy, npm, Node test, Playwright,既存shell guards, GitHub Actions
+EXISTING ROUTE: Cargo, rustfmt, clippy, npm, Node test, Playwright,既存shell guards
 OWNED RESIDUE: lane名、taskからoracleへの対応、証拠class分離、fail-closed dispatch
 IMPORTED RESPONSIBILITY: 追加dependencyなし。既存toolchain/version/license/build責任を維持
-EXIT: scripts/validate.shとCI stepだけを交換境界にし、各fixtureは既存ownerのまま
-RETIREMENT: scripts/test-local.shのCargo単独ownerを廃止。既存runner/test frameworkは廃止しない
+EXIT: scripts/validate.shを交換境界にし、各fixtureは既存ownerのまま
+RETIREMENT: scripts/test-local.shのCargo単独ownerと.github/workflows/ci.ymlを廃止。既存test frameworkは廃止しない
 ```
 
 `cargo-nextest`、Make／just、新しいgeneric test frameworkは本決定では採択しない。Rust laneの速度が
@@ -115,7 +118,7 @@ RETIREMENT: scripts/test-local.shのCargo単独ownerを廃止。既存runner/tes
 6. task実装者が必要な`EXTERNAL_GATES`を`NONE`へ落とす
 7. dispatcherへchange detector、scheduler、retry、background serviceを足す
 8. 既存redを通すためにoracle hash、期待値、threshold、除外、lint抑制を変える
-9. `web-contract`／`web-visual`をclean runnerでgreenにする前にblocking CIへ昇格する
+9. 利用者の別ticketなしにGitHub Actionsを再接続し、remote checkを完了ownerへ戻す
 10. `cargo test`を削除する、またはRust契約の代わりに別laneを使う
 
 ## 8. 完了条件
@@ -123,7 +126,7 @@ RETIREMENT: scripts/test-local.shのCargo単独ownerを廃止。既存runner/tes
 - `AGENTS.md`と`docs/specs/README.md`が`cargo test`単独ownerを撤回する
 - decision index／review index／docs入口から本決定を逆引きできる
 - dispatcher負例、`docs`、`tooling`、`rust`、`web-build`がgreen
-- CIがdispatcherの`tooling`／`rust`と新しい`docs`／`web-build`を呼ぶ
 - `AGENTS.md`変更後byteとInspector read-model inventoryの固定SHAが一致する
-- policyとWindows gateが独立のまま残る
+- `.github/workflows/ci.yml`が退役し、remote checkをgreen証拠として要求しない
+- policy、Windows、Web、platform gateはticketが指定した実commandで個別に検収する
 - `git diff --check`と`scripts/check-docs.sh`がgreen

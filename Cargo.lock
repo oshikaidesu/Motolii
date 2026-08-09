@@ -2473,6 +2473,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
+ "sha2",
  "syn 2.0.119",
  "thiserror 2.0.19",
  "uuid",
@@ -2522,6 +2523,8 @@ name = "motolii-media"
 version = "0.1.0"
 dependencies = [
  "motolii-core",
+ "motolii-doc",
+ "motolii-gpu",
  "motolii-testkit",
  "serde",
  "serde_json",

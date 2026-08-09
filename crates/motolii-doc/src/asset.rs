@@ -4,9 +4,128 @@
 //! GpuAssetCacheが持つ。Documentは多重キーでファイル実体を指す。
 
 use std::collections::BTreeMap;
+use std::io::{self, Read};
 
 use serde::de::{self, Deserialize, Deserializer};
 use serde::{Deserialize as DeserializeDerive, Serialize};
+use sha2::{Digest, Sha256};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceFingerprintV1 {
+    digest: [u8; 32],
+    size_bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SourceFingerprintDecode {
+    V1(SourceFingerprintV1),
+    MalformedV1Sha256,
+    MissingSize,
+    UnknownAlgorithm,
+    LegacyOpaque,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum SourceFingerprintError {
+    #[error("failed reading source for fingerprint: {source}")]
+    Io {
+        #[from]
+        source: io::Error,
+    },
+    #[error("byte count overflowed u64 during fingerprinting")]
+    ByteCountOverflow,
+}
+
+impl SourceFingerprintV1 {
+    pub fn from_reader<R: Read>(mut reader: R) -> Result<Self, SourceFingerprintError> {
+        let mut hasher = Sha256::new();
+        let mut total = 0u64;
+        let mut buffer = [0u8; 8192];
+
+        loop {
+            let count = reader.read(&mut buffer)?;
+            if count == 0 {
+                break;
+            }
+            hasher.update(&buffer[..count]);
+            total = total
+                .checked_add(count as u64)
+                .ok_or(SourceFingerprintError::ByteCountOverflow)?;
+        }
+
+        let digest = hasher.finalize().into();
+
+        Ok(Self {
+            digest,
+            size_bytes: total,
+        })
+    }
+
+    pub fn decode_persisted(
+        content_hash: &str,
+        size_bytes: Option<u64>,
+    ) -> SourceFingerprintDecode {
+        const PREFIX: &str = "motolii-source-v1:";
+        const SHA256_PREFIX: &str = "motolii-source-v1:sha256:";
+
+        if !content_hash.starts_with(PREFIX) {
+            return SourceFingerprintDecode::LegacyOpaque;
+        }
+
+        if !content_hash.starts_with(SHA256_PREFIX) {
+            return SourceFingerprintDecode::UnknownAlgorithm;
+        }
+
+        let payload = &content_hash[SHA256_PREFIX.len()..];
+        let Some(digest) = decode_lower_hex_64(payload) else {
+            return SourceFingerprintDecode::MalformedV1Sha256;
+        };
+
+        match size_bytes {
+            Some(size_bytes) => SourceFingerprintDecode::V1(Self { digest, size_bytes }),
+            None => SourceFingerprintDecode::MissingSize,
+        }
+    }
+
+    pub fn size_bytes(&self) -> u64 {
+        self.size_bytes
+    }
+
+    pub fn content_hash(&self) -> String {
+        use std::fmt::Write as _;
+        let mut hash = String::with_capacity(89);
+        hash.push_str("motolii-source-v1:sha256:");
+        for byte in &self.digest {
+            write!(&mut hash, "{byte:02x}").expect("writing to String cannot fail");
+        }
+        hash
+    }
+}
+
+fn decode_lower_hex_64(hex: &str) -> Option<[u8; 32]> {
+    if hex.len() != 64 {
+        return None;
+    }
+
+    let mut bytes = [0u8; 32];
+    let bytes_in = hex.as_bytes();
+
+    fn nibble(byte: u8) -> Option<u8> {
+        match byte {
+            b'0'..=b'9' => Some(byte - b'0'),
+            b'a'..=b'f' => Some(byte - b'a' + 10),
+            _ => None,
+        }
+    }
+
+    for i in 0..32 {
+        let hi = nibble(bytes_in[2 * i])?;
+        let lo = nibble(bytes_in[2 * i + 1])?;
+        bytes[i] = (hi << 4) | lo;
+    }
+
+    Some(bytes)
+}
 
 /// アセットの恒久ID。表示名は別フィールド。
 #[derive(
@@ -62,12 +181,45 @@ pub struct Asset {
     pub tail_hash: Option<String>,
 }
 
+/// 新規Assetを準備するための非永続payload。`AssetId`はedit threadが付与する。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssetDraft {
+    pub name: String,
+    pub asset_type: String,
+    pub content_hash: String,
+    pub path_absolute: Option<String>,
+    pub path_project_relative: Option<String>,
+    pub file_name: Option<String>,
+    pub size_bytes: Option<u64>,
+    pub head_hash: Option<String>,
+    pub tail_hash: Option<String>,
+}
+
+impl AssetDraft {
+    pub(crate) fn into_asset(self, id: AssetId) -> Asset {
+        let mut asset = Asset {
+            id,
+            name: self.name,
+            asset_type: self.asset_type,
+            content_hash: self.content_hash,
+            path_absolute: self.path_absolute,
+            path_project_relative: self.path_project_relative,
+            file_name: self.file_name,
+            size_bytes: self.size_bytes,
+            head_hash: self.head_hash,
+            tail_hash: self.tail_hash,
+        };
+        asset.normalize_self();
+        asset
+    }
+}
+
 impl Asset {
     pub fn normalize_path(path: &str) -> String {
         path.replace('\\', "/")
     }
 
-    fn normalize_self(&mut self) {
+    pub(crate) fn normalize_self(&mut self) {
         if let Some(abs) = self.path_absolute.as_mut() {
             *abs = Self::normalize_path(abs);
         }
@@ -167,6 +319,11 @@ impl AssetTable {
         self.entries.values()
     }
 
+    /// 次に採番される生値(エントリは作らない)。Command構築前の予約確認用。
+    pub fn peek_next(&self) -> u64 {
+        self.next
+    }
+
     pub fn allocate(
         &mut self,
         name: impl Into<String>,
@@ -216,6 +373,21 @@ impl AssetTable {
         Ok(())
     }
 
+    /// Undo/Redo用: 退役済み(`id < next`)でも同じAssetを台帳へ戻す。
+    /// 通常の新規挿入には使わず、採番カウンタは巻き戻さない。
+    pub fn restore(&mut self, mut asset: Asset) -> Result<(), AssetError> {
+        if self.entries.contains_key(&asset.id) {
+            return Err(AssetError::Duplicate { id: asset.id.0 });
+        }
+        let floor = asset.id.0.checked_add(1).ok_or(AssetError::Exhausted)?;
+        asset.normalize_self();
+        self.entries.insert(asset.id, asset);
+        if floor > self.next {
+            self.next = floor;
+        }
+        Ok(())
+    }
+
     /// 削除。採番カウンタは戻さない(再利用禁止)。
     pub fn remove(&mut self, id: AssetId) -> Result<Asset, AssetError> {
         self.entries
@@ -227,6 +399,63 @@ impl AssetTable {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{self, Error, ErrorKind, Read};
+
+    struct OneByteAtATimeReader {
+        source: Vec<u8>,
+        cursor: usize,
+    }
+
+    impl OneByteAtATimeReader {
+        fn new(data: impl Into<Vec<u8>>) -> Self {
+            Self {
+                source: data.into(),
+                cursor: 0,
+            }
+        }
+    }
+
+    impl Read for OneByteAtATimeReader {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            if self.cursor >= self.source.len() {
+                return Ok(0);
+            }
+            if buf.is_empty() {
+                return Ok(0);
+            }
+            buf[0] = self.source[self.cursor];
+            self.cursor += 1;
+            Ok(1)
+        }
+    }
+
+    struct FailingReader {
+        fail_with: Error,
+        first_call: bool,
+    }
+
+    impl FailingReader {
+        fn new(kind: ErrorKind, message: &str) -> Self {
+            Self {
+                fail_with: Error::new(kind, message.to_string()),
+                first_call: false,
+            }
+        }
+    }
+
+    impl Read for FailingReader {
+        fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+            if self.first_call {
+                Ok(0)
+            } else {
+                self.first_call = true;
+                Err(Error::new(
+                    self.fail_with.kind(),
+                    self.fail_with.to_string(),
+                ))
+            }
+        }
+    }
 
     #[test]
     fn path_normalization_uses_forward_slash() {
@@ -261,6 +490,44 @@ mod tests {
     }
 
     #[test]
+    fn restore_reinstates_identity_without_rewinding_next() {
+        let mut table = AssetTable::new();
+        assert_eq!(table.peek_next(), 0);
+
+        let id = table.allocate("a", "video/mp4", "h").unwrap();
+        let asset = table.remove(id).unwrap();
+        assert_eq!(table.peek_next(), 1);
+
+        table.restore(asset.clone()).unwrap();
+        assert_eq!(table.get(id), Some(&asset));
+        assert_eq!(table.peek_next(), 1);
+        assert_eq!(
+            table.restore(asset),
+            Err(AssetError::Duplicate { id: id.get() })
+        );
+        assert_eq!(table.peek_next(), 1);
+
+        let future = Asset {
+            id: AssetId::from_raw(3),
+            name: "future".into(),
+            asset_type: "image/png".into(),
+            content_hash: "future-hash".into(),
+            path_absolute: None,
+            path_project_relative: None,
+            file_name: None,
+            size_bytes: None,
+            head_hash: None,
+            tail_hash: None,
+        };
+        table.restore(future).unwrap();
+        assert_eq!(table.peek_next(), 4);
+        assert_eq!(
+            table.allocate("next", "image/png", "next-hash").unwrap(),
+            AssetId::from_raw(4)
+        );
+    }
+
+    #[test]
     fn asset_table_roundtrip_keeps_multi_keys() {
         let mut table = AssetTable::new();
         let id = table.allocate("intro", "video/mp4", "sha256:abc").unwrap();
@@ -287,5 +554,126 @@ mod tests {
         let a = back.get(id2).unwrap();
         assert_eq!(a.path_absolute.as_deref(), Some("D:/media/intro.mp4"));
         assert_eq!(a.path_project_relative.as_deref(), Some("media/intro.mp4"));
+    }
+
+    #[test]
+    fn source_fingerprint_empty_bytes() {
+        let fp = SourceFingerprintV1::from_reader(io::Cursor::new(Vec::<u8>::new())).unwrap();
+        assert_eq!(fp.content_hash(), "motolii-source-v1:sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+        assert_eq!(fp.size_bytes(), 0);
+    }
+
+    #[test]
+    fn source_fingerprint_abc_bytes() {
+        let fp = SourceFingerprintV1::from_reader(io::Cursor::new(b"abc")).unwrap();
+        assert_eq!(fp.content_hash(), "motolii-source-v1:sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+        assert_eq!(fp.size_bytes(), 3);
+    }
+
+    #[test]
+    fn source_fingerprint_one_byte_chunked_reader() {
+        let fp = SourceFingerprintV1::from_reader(OneByteAtATimeReader::new(b"abc")).unwrap();
+        assert_eq!(fp.content_hash(), "motolii-source-v1:sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+        assert_eq!(fp.size_bytes(), 3);
+    }
+
+    #[test]
+    fn source_fingerprint_decode_roundtrip_empty_bytes() {
+        let fp = SourceFingerprintV1::from_reader(io::Cursor::new(Vec::<u8>::new())).unwrap();
+        let decoded =
+            SourceFingerprintV1::decode_persisted(&fp.content_hash(), Some(fp.size_bytes()));
+        match decoded {
+            SourceFingerprintDecode::V1(decoded_fp) => {
+                assert_eq!(decoded_fp.size_bytes(), fp.size_bytes());
+                assert_eq!(decoded_fp.content_hash(), fp.content_hash());
+            }
+            other => panic!("unexpected decode result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn source_fingerprint_decode_roundtrip_abc_bytes() {
+        let fp = SourceFingerprintV1::from_reader(io::Cursor::new(b"abc")).unwrap();
+        let decoded =
+            SourceFingerprintV1::decode_persisted(&fp.content_hash(), Some(fp.size_bytes()));
+        match decoded {
+            SourceFingerprintDecode::V1(decoded_fp) => {
+                assert_eq!(decoded_fp.size_bytes(), fp.size_bytes());
+                assert_eq!(decoded_fp.content_hash(), fp.content_hash());
+            }
+            other => panic!("unexpected decode result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn source_fingerprint_decode_malformed_sha256_uppercase() {
+        let decoded = SourceFingerprintV1::decode_persisted(
+            "motolii-source-v1:sha256:Ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            Some(3),
+        );
+        assert_eq!(decoded, SourceFingerprintDecode::MalformedV1Sha256);
+    }
+
+    #[test]
+    fn source_fingerprint_decode_missing_size() {
+        let decoded = SourceFingerprintV1::decode_persisted(
+            "motolii-source-v1:sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            None,
+        );
+        assert_eq!(decoded, SourceFingerprintDecode::MissingSize);
+    }
+
+    #[test]
+    fn source_fingerprint_decode_unknown_algorithm() {
+        let decoded = SourceFingerprintV1::decode_persisted(
+            "motolii-source-v1:blake3:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            Some(1),
+        );
+        assert_eq!(decoded, SourceFingerprintDecode::UnknownAlgorithm);
+    }
+
+    #[test]
+    fn source_fingerprint_decode_sha256_prefix_legacy() {
+        let decoded = SourceFingerprintV1::decode_persisted(
+            "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            Some(3),
+        );
+        assert_eq!(decoded, SourceFingerprintDecode::LegacyOpaque);
+    }
+
+    #[test]
+    fn source_fingerprint_decode_arbitrary_opaque_legacy() {
+        let decoded = SourceFingerprintV1::decode_persisted("legacy-import-id-42", None);
+        assert_eq!(decoded, SourceFingerprintDecode::LegacyOpaque);
+    }
+
+    #[test]
+    fn source_fingerprint_decode_non_hex_malformed() {
+        let decoded = SourceFingerprintV1::decode_persisted(
+            "motolii-source-v1:sha256:ga7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            Some(3),
+        );
+        assert_eq!(decoded, SourceFingerprintDecode::MalformedV1Sha256);
+    }
+
+    #[test]
+    fn source_fingerprint_decode_wrong_length_malformed() {
+        let decoded =
+            SourceFingerprintV1::decode_persisted("motolii-source-v1:sha256:001122", Some(1));
+        assert_eq!(decoded, SourceFingerprintDecode::MalformedV1Sha256);
+    }
+
+    #[test]
+    fn source_fingerprint_reader_error_preserves_kind_and_message() {
+        let kind = ErrorKind::Other;
+        let message = "reader failed";
+        let err = SourceFingerprintV1::from_reader(FailingReader::new(kind, message)).unwrap_err();
+        assert!(matches!(err, SourceFingerprintError::Io { .. }));
+        let io_err = match err {
+            SourceFingerprintError::Io { source } => source,
+            SourceFingerprintError::ByteCountOverflow => unreachable!(),
+        };
+        assert_eq!(io_err.kind(), kind);
+        assert_eq!(io_err.to_string(), message.to_string());
     }
 }

@@ -36,6 +36,10 @@ pub struct FsOp {
 pub enum DurabilityStage {
     JournalAppend,
     JournalFsync,
+    JournalTempWrite,
+    JournalTempFsync,
+    JournalReplace,
+    JournalDirFsync,
     MainTempWrite,
     MainTempFsync,
     MainRename,
@@ -150,7 +154,7 @@ impl JournalFs for StdFs {
     }
 
     fn rename(&mut self, from: &Path, to: &Path) -> Result<(), FsError> {
-        fs::rename(from, to)?;
+        crate::persist::replace_file(from, to)?;
         Ok(())
     }
 
