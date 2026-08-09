@@ -39,7 +39,7 @@ python3 scripts/run-observed-cli.py \
   --heartbeat-seconds 10 \
   -- /Users/member_ottoto/.local/bin/cursor-agent -p \
   --workspace /absolute/prepared-worktree --trust --sandbox enabled \
-  --model cursor-grok-4.5-medium \
+  --model cursor-grok-4.5-high \
   --output-format stream-json --stream-partial-output \
   "$(< /absolute/closed-order-prompt.txt)"
 ```
@@ -185,17 +185,27 @@ python3 scripts/run-observed-cli.py \
 
 promptや認証情報をargvに置くと`meta.json`へ残る。secretをargvへ入れない。証跡の保存先、保持期間、機密区分は利用者の環境規則に従う。
 
-## 7. 2026-08-07実機CLI snapshot
+## 7. 2026-08-09実機CLI snapshot
 
 起動前に毎回再確認する。ここに無いflagやmodel IDを推測しない。
 
 | channel | 実binary／version | 構造化途中stream | catalog |
 |---|---|---|---|
 | Cursor Agent | `/Users/member_ottoto/.local/bin/cursor-agent` / `2026.08.04-aaa8809` | `-p --output-format stream-json --stream-partial-output` | `--list-models`あり |
-| Claude Code | `/Users/member_ottoto/.npm-global/bin/claude` / `2.1.223` | `-p --output-format stream-json --include-partial-messages --verbose` | account catalog一覧flagなし。exact IDを起動前記録 |
-| Codex CLI | `/Applications/ChatGPT.app/Contents/Resources/codex` / `0.146.0-alpha.3.1` | `exec --json` | `exec --help`に一覧flagなし。exact IDを起動前記録 |
+| Claude Code | `/Users/member_ottoto/.npm-global/bin/claude` / `2.1.226` | `-p --output-format stream-json --include-partial-messages --verbose` | account catalog一覧flagなし。exact IDを起動前記録 |
+| Codex CLI | `/Users/member_ottoto/.npm-global/bin/codex` / `0.147.0` | `exec --json` | `exec --help`に一覧flagなし。exact IDを起動前記録 |
 
-Claude Code 2.1.223のhelpにhard turn capは無い。`--fallback-model`は存在するが、無記録fallbackになるためMotoliiでは使わない。
+2026-08-09に`--list-models`で再確認したCursor catalogに**`cursor-grok-4.5-medium`は存在しない**。
+Grok 4.5は`cursor-grok-4.5-high` / `cursor-grok-4.5-high-fast`の2つだけで、effortはmodel IDへ焼かれている。
+Grokへmediumを指定できないため、視野幅がmedium相当のreviewでもhighを使うか、別modelへ落とす。
+どちらを選んだかを起動logへ記録する。同catalogのその他first-partyは`composer-2.5`、`gpt-5.3-codex`系、
+`gpt-5.2`、`claude-opus-5-thinking-high/xhigh`(±fast)である。
+
+Codex directは`~/.codex/models_cache.json`で`gpt-5.6-sol` / `gpt-5.6-sol-wm` / `gpt-5.6-terra` /
+`gpt-5.6-luna` / `gpt-5.5` / `gpt-5.4` / `gpt-5.4-mini` / `gpt-5.3-codex-spark`を確認した。
+`codex exec`は`-m/--model`と`-s/--sandbox`を持ち、reasoning effortは`-c 'model_reasoning_effort="<level>"'`で渡す。
+
+Claude Code 2.1.226のhelpにhard turn capは無い。`--fallback-model`は存在するが、無記録fallbackになるためMotoliiでは使わない。
 `--max-budget-usd`はAPI課金境界が確認できる場合の補助であり、subscription limitや完了を代替しない。
 
 ### Cursor Agent read-only
@@ -321,5 +331,5 @@ command、判定をpromptへ列挙しない。read上限を設ける場合も、
 合否判定には使わない。Sparkの失敗を導線FAIL、成功を導線PASSの証拠にしない。
 
 2026-08-07のfresh Luna read-only試験では、`AGENTS.md`から本書のLaunch cardへ到達し、二文書だけで通常サイズ施工を
-`cursor-grok-4.5-medium`、observed harness、provider stream、終了後証跡、return分類へ復元した。実closed-order capsuleを渡して
+`cursor-grok-4.5-medium`(当時の本書記載。2026-08-09のcatalog再確認で不在と判明し§7で訂正済み)、observed harness、provider stream、終了後証跡、return分類へ復元した。実closed-order capsuleを渡して
 いないためplaceholderを確定せず停止したことも正しい。この観測は導線到達だけを支持し、実装品質やmodel固定を証明しない。
