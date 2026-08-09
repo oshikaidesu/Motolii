@@ -1,7 +1,7 @@
 # cold-replaceable監督と停止封じ込め決定
 
 日付: 2026-08-09
-状態: **決定 / failure injectionとfresh closure review通過前は全体並列発注不可**
+状態: **決定 / failure injection通過 / PR型組織運用で全体並列発注可**
 
 ## 1. 決定
 
@@ -65,6 +65,22 @@ deputyまたはfieldがREADYをACTIVEにできるのは、top seatが現在存�
 
 RETURN、authority conflict、base change、predicate入力の変更が一つでも生じた時点で関連preauthorizationは失効する。top seat不在中は新規launch 0とする。
 
+### 4.1 組織機構の既知実装採択
+
+並列施工の通常routeには、既存のソフトウェア組織が使うGitHub／Gitの機構をそのまま採択する。
+
+| 既知機構 | Motoliiでの役割 |
+|---|---|
+| Issue | top seatが閉じた一契約境界 |
+| branch／worktree | 一ownerのsandboxとwrite-set分離 |
+| draft PR／diff | 未採用candidateとRETURN |
+| review | freshな独立検収の記録 |
+| main | top seatが採択・統合した正本 |
+
+新規施工は`1 Issue = 1契約境界 = 1 owner = 1 commit = 1 PR`へ閉じる。Issue／PRはauthorityを生成せず、finding、comment、label、merge可能性から自己発注しない。deputy／fieldは実測した配送または観測の詰まりがある時だけ使う任意seatであり、各PRの必須階層にしない。
+
+この規則は本追補後に開始する契約へ前向き適用する。既存branch、worktree、commit、PR、campaign成果へIssue新設、capsule書き直し、history rewrite、PR分割、再reviewを要求しない。
+
 ## 5. campaignと短wave
 
 24時間運転は一つの長寿命sessionやwaveではない。多数の短waveからなるcampaignである。
@@ -72,6 +88,8 @@ RETURN、authority conflict、base change、predicate入力の変更が一つで
 一つのユーザー`発注`は、campaignが起動できるoutcome、grain集合、mutation、validation、外部model利用を明示的に囲う。deputyがqueueを自動補充したり、findingからcorrection grainを生成したり、許可外grainへ進んだりしない。
 
 各短waveは一つのoutcome、owner、scope、oracleを持つfresh sessionである。return後はtop seatがcurrent codeから次edgeを再選定する。24時間というwall-clock目標はoracle、reviewer独立性、effort、negative caseを弱める理由にならない。
+
+最大化するのは同時agent数ではなく、単位時間あたりに独立検収を通ってmainへ統合できる契約数である。並列幅はwrite-set、review、統合の実測容量から広げ、固定agent数の達成や専用telemetry serviceを目的にしない。
 
 ## 6. state transition
 
@@ -183,16 +201,16 @@ evidence selectionは次の閉schemaだけを受ける。`ranges`と`scope`は1-
 ## 9. 既知実装preflight
 
 ```text
-MECHANISM CLASS: external run observation, process-group reclamation, Git/worktree isolation, deterministic evidence checking
-KNOWN IMPLEMENTATION SEARCH: scripts/run-observed-cli.py, scripts/test_run_observed_cli.py, runner-independent supervision, blind evidence envelope observation, Git worktree and process-group OS primitives
-CANDIDATES: existing observed CLI harness; Git/worktree/fingerprint; scripts/check-evidence-envelope.py using Python stdlib hashlib/json/pathlib
-ADOPTION ROUTE: REUSE observed harness and Git; WRAP stdlib only for deterministic evidence preflight
+MECHANISM CLASS: work intake, isolated implementation, candidate review, integration, external run observation, process-group reclamation, deterministic evidence checking
+KNOWN IMPLEMENTATION SEARCH: GitHub Issue/draft PR/review/main, Git branch/worktree/diff/fingerprint, scripts/run-observed-cli.py, scripts/test_run_observed_cli.py, runner-independent supervision, blind evidence envelope observation, process-group OS primitives
+CANDIDATES: GitHub and Git native organization flow; existing observed CLI harness; scripts/check-evidence-envelope.py using Python stdlib hashlib/json/pathlib
+ADOPTION ROUTE: REUSE GitHub/Git for organization and integration; REUSE observed harness; WRAP stdlib only for deterministic evidence preflight
 REJECTED CANDIDATES: new runner/state DB/queue service; warm session pool; harness JSON semantic interpreter; heartbeat daemon
-THIN MOTOLII SEAM: top-seat policy, exact preauthorization invalidation, standalone deterministic evidence packet preflight, failure fixtures
-THIN MOTOLII RESIDUAL: user dispatch scope, authority ownership, adoption oracle, reviewer independence
-RETIREMENT: no old runner revival; replace only the standalone evidence checker if an equivalent accepted repository lint exists
+THIN MOTOLII SEAM: closed capsule, no self-order, RETURN, top-seat policy, exact preauthorization invalidation, standalone deterministic evidence packet preflight, failure fixtures
+THIN MOTOLII RESIDUAL: user dispatch scope, authority ownership, semantic contract compilation, adoption oracle, reviewer independence
+RETIREMENT: no retroactive migration of accepted work; no old runner revival; replace only the standalone evidence checker if an equivalent accepted repository lint exists
 BUILD JUSTIFICATION: NONE
-BUILD: FORBIDDEN for a new supervision framework, receipt DB, broker, or authority service
+BUILD: FORBIDDEN for a custom organization/orchestration framework, receipt DB, broker, or authority service
 ```
 
 ## 10. 外部counter-reviewの処分
@@ -203,7 +221,7 @@ BUILD: FORBIDDEN for a new supervision framework, receipt DB, broker, or authori
 
 修正後の初回closure packetはcheckerを通ったが153,157 bytes／3,441行となり、Claudeの一回Readは1,259行でtruncateされた。ComposerとGrokは同一fileを追加paginationして最終文を返したため、one-read blind envelope reviewとしては無効である。Opusは追加Readせず`EVIDENCE_GAP`を返した。三runから、failure injection未実施、symlink負例不足、one-read予算超過をscope内blockerとして採用した。
 
-symlink負例と圧縮failure injectionは§8の追補で回収済み。raw rangeまで一回Readへ収まる縮小packetを非LLM preflightへ通し、freshなComposer 2.5短waveでP0/P1とgapを再検査するまで本決定のclosure reviewは未完了である。旧Grok／Opusは本修正へ関与したため最終独立reviewerに数えない。
+symlink負例と圧縮failure injectionは§8の追補で回収済み。`fresh Composer 2.5`を名指しした追加closure短waveは、§4.1のGitHub Issue／PR型採択へ置き換えて退役する。本決定を含むPRの利用者承認とtop-seatによるdiff／oracle再照合をpolicy closureとし、旧runは歴史証拠として保持して再実行しない。各製品契約の§7独立reviewは維持し、この処分から外部modelを自己発注しない。
 
 ## 11. 棄却する複雑性
 
