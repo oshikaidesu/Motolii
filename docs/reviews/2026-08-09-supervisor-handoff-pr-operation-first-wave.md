@@ -58,6 +58,105 @@ envelopeのみ、supervisorの推奨結論は本文へ混ぜない、実装famil
 **事前に必ず言う線は2つだけ**: mainへのforce-push / history rewrite、
 **mainに入っていない内容の削除**。
 
+### なぜ総監督をClaudeにしたか（証拠として残す）
+
+**印象ではなく、移行元sessionで実際に観測された材料だけを置く。**
+CodexとClaudeの優劣ではない。
+
+#### 軸は1本 —「前提を疑えるか」
+
+利用者の裁定:
+
+> codexはプレイヤーの思想が中心と思います。あくまで前提を疑うことができない。
+> そのためそこが得意なclaudeが監督になりましょう。
+
+**Codexはプレイヤーである。** 与えられた前提の内側では高精度で詰め切る。
+しかし前提そのものを疑う動作が無い。既に決まっているもの（CIテスト、地図の状態語、
+ledgerの記述）を疑わず、障害が出れば**回避**する。
+
+**監督席の仕事の本体は、前提が間違っているときに気づくことである。**
+次の一契約を選ぶ、ownerを決める、並列可否を判定する — どれも
+「今そう書かれていること」が正しいという前提の上に乗っている。
+前提が腐っていれば、その上の裁定は全部腐る。だから監督席は前提を疑える側が持つ。
+
+以下のCodexの症状は、すべてこの1本から派生している。
+そして局面の変化（ソロ → PR組織運用）が、その差を初めて致命的にした。
+
+#### 局面の変化が先にある
+
+利用者の言葉:
+
+> motoliiは今まで背骨が通るまでソロプロジェクト的な進め方をしていましたが、
+> ここから先は仮コードを元にPRを出すGitHubベースの組織的な動き方に変貌しようとしています。
+> そしてcodexはそこを取りまとめるのが、少し、下手だった。
+
+背骨を通していた間は一歩ごとに意味・owner・公開契約が新しく決まっていた。
+意味を決める作業は直列で、頭は1つでないと壊れる。**ソロ的だったのは構造的に妥当**である。
+いまは意味がspecとdecisionに凍結済みで、残っているのが
+「既存ownerを既存consumerへ、既存oracleの下で繋ぐ」作業になった。
+write setが交差しない限り手が増やせる。**PR組織運用へ変わる条件が満たされたのが今**である。
+
+#### 観測された症状（Claudeによる測定）
+
+いずれも「前提を疑わない」の帰結である。
+
+- **地図の前提を疑わなかった。** 実行地図はR1を「凍結後4本並列」と書くが、実コードでは
+  `rn_product_host.rs` がGPU device所有・snapshot生成・intent dispatchを1 fileで兼ねる。
+  **doc上のnodeで並列を数えていて、write setで数えていなかった。** これが一番効くずれ
+- **台帳の状態語を疑わなかった。** `R1-GPU-BINDING` が `COMPILE`（未着手）と書かれた横で
+  実装はmainに存在していた（§4.1に6件）。状態語を信じて発注すれば、
+  既に動いているものを再実装させる
+- **既決を疑えないので、詰まると回避へ向かう。** single-writer guardに引っかかったとき、
+  guardの妥当性を問う代わりに迂回形（macro化）が選ばれる構造と同じである
+- **ミッシングが出るとメタ考慮が再帰した。** 前提を疑えないため、
+  食い違いの原因を「監督方式が足りない」側へ求める。結果として次項になる
+- **監督装置が成果物になった。** `docs: stop top-seat meta drift`、
+  `docs: unify parallel start authority`、`tooling: verify blind evidence envelopes` など
+  監督方式そのものを整えるcommitが並ぶ。AGENTS.mdは88行だが参照する正本は約20本、
+  ledgerは682行。**規則の増加速度が製品の増加速度を上回っていた**
+- **wave収量が1本だった。** WAVE 1Aでmainへ入った製品commitはK1a 1本、
+  他は受入1件とbounded return 1件。waveの運用方法を書いたdocsの方が増えていた
+- **`1c80f0a5` は +1,806行のdocsで製品コード0行**（そして§6のとおり実体は退行branch）
+
+そしてこれを増幅していたのが**席**である。CodexはPRを介さず実装と統合を両方持っていたため、
+**疑う必要が発生する瞬間が構造上存在しなかった**。
+未統合branchはopen PRもreview queueも残さないので、誰も催促されない。
+PR運用はその瞬間を強制的に作る。**つまりPR組織化はCodexの当たり判定をそのまま上げる。**
+疑いを個人の資質に頼らず、仕組みの側で発生させるということである。
+
+#### Codexが強い側（同じ重みで残す）
+
+- **答えが定まっている閉じた照合で高精度。** 本日 Sol medium は #446 を
+  **P0=3 で REJECT** し、supervisor(Claude)の設計の穴を実際に検出した。
+  「guardが強すぎる」というsupervisorの結論の方が誤りだった
+- 利用者の観測: 「ゴールさえ定めてしまえばかなりの精度で詰めてくれる」
+  「solは見逃しをかなり検出してくれる」
+- Codexは自セッション内でRerunの扱い（`PATTERN`限定、`re_renderer`の製品依存は`REJECT`）を
+  正確に言い当てていた。**正本理解は正確である**
+
+#### Claudeが弱い側（同じ重みで残す）
+
+- 利用者の観測:「claude codeは専門性の高い部分への詰めが甘い部分が少々ある」
+- 本日の実証: guardを通すためfixture helper 3本をmacroへ潰し23箇所を書き換え、
+  trailing commaとunused importで2往復し、最後に全部巻き戻した。
+  **出来上がりは元より読めなくなり、安全性の増分はゼロ**。
+  深く手を入れた瞬間に品質が落ちた具体例である
+
+#### 結論
+
+**席は「前提を疑う仕事」と「前提の内側を詰める仕事」で分ける。
+能力の序列ではない。**
+
+| | 席 | 持つもの | 根拠 |
+|---|---|---|---|
+| **Claude** | 総監督 | 前提を疑う仕事。状態と境界の検証、横の接続、次の一契約の選定、owner / allowlist / read set / 正負oracle、PRの独立検収と採否 | 本日効いた成果が全て「書かれている状態と実際の状態の食い違いの検出」だった |
+| **Codex** | 指揮下の実装担当 / closed review | 前提の内側を詰める仕事。閉じた契約の施工、exact findingの照合 | Sol が #446 を P0=3 で REJECT、Codexの正本理解の正確さ |
+
+**Codexへ渡すorderは、前提が閉じ切っている必要がある。**
+前提を疑う工程はorderの外（＝総監督側）で終わらせてから渡す。
+open-endedな探索、地図の再解釈、owner未定の接続をCodexへ渡してはならない。
+それは能力の問題ではなく、**契約の作り方の問題**である。
+
 ### effort方針
 
 利用者裁定「ある程度決まりきっているので高effortは要らない、並列化なので節約重視」。
@@ -264,7 +363,101 @@ oracleへ昇格済みだが、利用者はAM体験の判定者である。利用
 非表示だが依存先として評価される参照元のミュート表現、`lock`、
 `ABSENT` 11件中9件の外部未確認、継ぎ目9件、休止契約、C0-Schema。
 
-## 8. 非目標（本sessionで守った線）
+## 8. Codexへ繋ぐための整理
+
+利用者の意図（2026-08-09）: **成果物が機能する方向へ進め、UXの穴で止まるな。**
+これは 2026-08-08 の「実装粒はUI設計が終わるまで混乱の元」を**上書きする**。
+UI設計の未決（Timeline 12件、Depth Rail未描画、Inspectorの受け皿、
+clear-on-missがAM体験と合うか）は、**いずれも発注を止める理由にしない**。
+機能が通る配線を先に入れ、見た目と操作性は後から直す。
+
+### 8.1 渡す前に埋める穴 — 未記録の裁定2件
+
+移行元sessionで総監督が裁定したが、**docsのどこにも記録されていない**。
+`decision-index`、実行地図の両方で grep 0件を確認済み。
+**記録せずにCodexへ渡すと後段が確実に衝突する。**
+
+**(a) 読み口の分離線**
+
+- **JSON wire** = RN JS側 consumer（Browser / Inspector）。identityと値のみ、16KB境界
+- **Rust in-process** = native側 consumer（Stage / Timeline）。geometryとprojectionはwireを通さない
+
+根拠は実測である。`MAX_STAGE_BOUNDS = 16` / `MAX_STAGE_SELECTION = 16` /
+`MAX_JSON_BYTES = 16_384`、`snapshot_wire()` は `.take(16)` で17層目以降を無言で落とす。
+R2 Timeline oracleは「1000 rich clip / 100k key」なので、これがJSON wireを通る未来は無い。
+**この線を引かずに4本発注すると、4本全部が自分のread要求でwireへfieldを足しにきて
+`rn_product_host.rs` で衝突する。**
+
+なお `timeline_projection.rs`(411行) は toolkit非依存で
+`project_timeline() → TimelineProjection` と `TimelineHit` を public公開済み（U3a-1I成果）。
+native Timelineはこれを直読みできる。**新規projectionを書かせる必要は無い。**
+
+**(b) GPU群の抽出**
+
+`rn_product_host.rs` の中身は独立した3 clusterである。
+
+- GPU/surface群: `HostGpuBundle` / `StageGpuBinding` / `RnStageSurface` /
+  `draw_stage_preview` / `supported_surface_config` / `run_stage_gpu_op` / `write_stage_gpu_op`
+- wire群: `WireStage*` / `WireProductSnapshot` / `snapshot_wire()`
+- host群: `RnProductHost` / `dispatch_intent` / registry / FFI
+
+GPU群を別moduleへ抜いて初めて、後段のStage / Timeline / Inspectorが
+同一fileを踏まずに並列化できる。**抜かない場合のピークは2本。**
+地図の「4本」はこの抽出を含めて初めて成立する。
+
+### 8.2 R1が止まっている理由（`be9168b1` 実測）
+
+| 面 | 実体 |
+|---|---|
+| Stage | native component、draw・pointer・selectionまで実在（#448でhit test着地） |
+| Inspector | `InspectorInitialReadPanel.tsx` の read-only表示、実在 |
+| **Browser** | `App.tsx` の `<Text>Browser</Text>` — **ラベルだけ** |
+| **Timeline** | `App.tsx` の `<Text>Timeline</Text>` — **ラベルだけ** |
+
+`motolii_rn_host_dispatch_intent_json` が受け付ける intent kind は
+**`set_time` と `stage_pointer` の2種類のみ**。
+
+一方、RN hostが既に単一writerとして保持する `DocumentEditRuntime` の queue には
+必要なものが実在する。
+
+- `document_edit_runtime.rs:83` `push_place_rectangle`
+- `document_edit_runtime.rs:166` `push_undo`
+- `document_edit_runtime.rs:171` `push_redo`
+
+いずれも `pub(crate)`。そして RN host は既に同じ queue を
+`process_next` で回している（`rn_product_host.rs:733`）。
+D2 / journal / apply_macro / publish / 三面投影は実装済み・test済み。
+
+**つまりR1の出口に足りないのは、新規の製品意味ではなく intent 2〜3種と発火口だけである。**
+Browserに設計は要らない。ボタンで足りる。
+
+### 8.3 Codexへ渡す次の1粒（前提が閉じている）
+
+- **契約**: `dispatch_intent_json` へ intent kind `place_rectangle` / `undo` / `redo` を追加し、
+  既存 queue の `push_place_rectangle` / `push_undo` / `push_redo` へ各1回接続する。
+  `App.tsx` のBrowser slotに発火口を1つ置く
+- **allowlist**: `crates/motolii-ui/src/rn_product_host.rs`、`ui/motolii-rn/App.tsx`、新規test
+- **正例oracle**: RN routeでRectangle生成 → Stage・Inspectorが同一revision →
+  Undoで消える → Redoで戻る
+- **負例oracle**: Document / journal へ UI state 0、unknown intentはtyped拒否、
+  stale generation拒否、同一intentの二重適用0
+- **非目標**: Timelineの描画、Browserの設計、wireへのgeometry追加、
+  `.take(16)` の上限変更
+- **owner**: 製品意味なので総監督は書かない。実装familyへ出す。
+  最終reviewerは実装と別family
+
+### 8.4 順序
+
+1. §8.1 の裁定2件をdecisionとして記録する（総監督の道具なので総監督が書く）
+2. §8.3 を発注し、R1の書き込み経路を通す
+3. GPU群抽出を入れて並列幅を2→4へ上げる
+4. Timeline を `project_timeline()` 直読みで描画する
+5. §5 の申し送り（runbookのSpark記録、台帳同期、`scripts/` 遺物）を合間に
+
+**§5「台帳同期が最優先」は、本sessionの実測で §8.1 へ置き換わる。**
+台帳の状態語より、記録されていない裁定2件の方が先に効く。
+
+## 9. 非目標（本sessionで守った線）
 
 - mainへのforce-push / history rewrite
 - mainに入っていない内容の削除
