@@ -1,6 +1,6 @@
 # M3 RN runtime 実行地図
 
-状態: **現行dispatch地図 / R0候補READY-RECHECK / R1〜R4事前compile済み**（2026-08-07）
+状態: **現行dispatch地図 / R0-ACCEPT DONE / R1 READY-RECHECK**（2026-08-09）
 
 本書は[現行M3仕様](specs/M3-ui-integration.md)のR0〜R4を、実在target、単一owner、非LLM oracle、依存関係へ落とす。成果waveは利用者出口、nodeは施工境界であり、node数を発注回数や担当LLM数として扱わない。同じowner、同じallowlist、同じoracleで閉じる隣接nodeは一つの短い実装waveにまとめてよい。
 
@@ -67,8 +67,8 @@ baseline調査前の一般機能を推測で埋めず、未抽出部分は`OPEN 
 
 | 利用者outcome | current authority | 対応node | 現在状態 | 閉じる前に必要なこと |
 |---|---|---|---|---|
-| offline製品appでprojectを開き、同じrevisionを安全に表示する | runtime再基線、R0契約 | `R0-HOST`、`R0-MAC-SEAT`、`R0-STAGE-LIFECYCLE`、`R0-ACCEPT` | `READY-RECHECK / MAIN NOT REACHED` | 三候補を責任別にcurrent-main再現し、通常RN artifactでwrite 0を確認する |
-| BrowserからRectangleを作り、Stage／Timeline／Inspectorへ同一identityを投影しUndo／Redoする | VS-1、D2、Place、projection oracle | `R1-BROWSER`、`R1-HOST-EDIT`、`R1-STAGE`、`R1-TIMELINE`、`R1-INSPECTOR`、`R1-E2E` | `WAIT(R0-ACCEPT)` | 単一GPU bindingとRN product rootを閉じ、旧route成功を新route合格の代用にしない |
+| offline製品appでprojectを開き、同じrevisionを安全に表示する | runtime再基線、R0契約 | `R0-HOST`、`R0-MAC-SEAT`、`R0-STAGE-LIFECYCLE`、`R0-ACCEPT` | `DONE` | [R0 product runtime seat受入](reviews/2026-08-09-m3-r0-product-runtime-seat-acceptance.md)で通常RN artifact、同revision、write 0を確認済み |
+| BrowserからRectangleを作り、Stage／Timeline／Inspectorへ同一identityを投影しUndo／Redoする | VS-1、D2、Place、projection oracle | `R1-BROWSER`、`R1-HOST-EDIT`、`R1-STAGE`、`R1-TIMELINE`、`R1-INSPECTOR`、`R1-E2E` | `READY-RECHECK / R0 DONE` | current mainから単一GPU binding、snapshot schema、RN product rootを一契約ずつcompileし、旧route成功を新route合格の代用にしない |
 | Position keyを現在時刻へ追加し、Stage gizmoで同じPositionを編集し、Curve／Easingを適用する | Add Position Key決定、`KeyframeId`／`Interp`、Stage／Curve契約 | `R2-FOCUS-PLAYHEAD-AUTHORITY`、`R2-STAGE-GIZMO`、`R2-KEY-COMMAND`、`R2-KEY-UI`、`R2-CURVE-READ`、`R2-CURVE-EDIT` | `OPEN / KNOWN GAPS` | key commandとplayhead consumerは`TARGET_MISSING`。gizmo terminal intentが既存key valueを更新する条件、Auto Key時だけ新keyを作る条件、RN Easing triggerからactive intervalへ至るowner／edgeをUIから発明せず前ownerで閉じる |
 | Timelineでseek、selection、move、trim、lane、snapを行う | Timeline projection、move／trim／snap oracle | `R2-SELECTION-AUTHORITY`、`R2-FOCUS-PLAYHEAD-AUTHORITY`、`R2-TL-NAV`、`R2-TL-EDIT` | `COMPILE / TARGET_MISSING` | visible-range consumerとplayhead authorityを特定する。既存move／trimを新rendererへ再実装しない |
 | mediaを入れ、保存・再open・再生・書き出しまで完走する | project lifecycle、media、D5、Export、recovery decisions | `R3-PROJECT-*`、`R3-MEDIA-*`、`R3-TRANSPORT-*`、`R3-EXPORT-*`、`R3-RECOVERY`、`R3-E2E` | `OPEN / MIXED` | mixed playback、async export、rename、diagnostic／activity／telemetryの実在target不足をprovider別に返す。seek-only等の独立edgeを過剰直列化しない |
@@ -131,12 +131,12 @@ R0の利用者出口は、実projectを開くoffline macOS Release appが起動�
 
 | node | owner / target | 閉じる契約 | 非LLM oracle | 状態 / 次 |
 |---|---|---|---|---|
-| `R0-HOST` | `motolii-ui`の`rn_product_host`、`document_edit_runtime`、Host FFI | project pathから一つのHostを作り、bounded snapshot、lifecycle intent、typed diagnosticを返す。semantic write 0 | host unit/integration test、unknown/stale/late/double-destroy拒否、既存Place/Undo/Redo test不変 | `VERIFY_CANDIDATE` → `R0-ACCEPT` |
-| `R0-MAC-SEAT` | `ui/motolii-rn/`、macOS app delegate／Xcode／Pods／Hermes bundle | RN window、offline Release bundle、Rust static library、明示project path、fail-closed bootstrap | TypeScript、Jest、ESLint、arm64 Release build、network 0の実起動 | `VERIFY_CANDIDATE` → `R0-ACCEPT` |
-| `R0-STAGE-LIFECYCLE` | Fabric `MotoliiStage` component viewとHost lifecycle ABI | 一つのnative child viewをregister/mount/resize/focus/unmount/remountし、late eventを拒否する。描画・編集はしない | lifecycle sequence、handle uniqueness、resize/scale、focus、remount同revision、Document JSON不変 | `VERIFY_CANDIDATE` → `R0-ACCEPT` |
-| `R0-ACCEPT` | 上記三nodeの統合artifact | fixture shellではなく通常RN appでR0出口を確認する | 実`project.json`、Release artifact、process launch、同snapshot、write 0 | `WAIT`。三候補のcurrent-main再現後だけ`DONE` |
+| `R0-HOST` | `motolii-ui`の`rn_product_host`、`document_edit_runtime`、Host FFI | project pathから一つのHostを作り、bounded snapshot、lifecycle intent、typed diagnosticを返す。semantic write 0 | host unit/integration test、unknown/stale/late/double-destroy拒否、既存Place/Undo/Redo test不変 | `DONE` |
+| `R0-MAC-SEAT` | `ui/motolii-rn/`、macOS app delegate／Xcode／Pods／Hermes bundle | RN window、offline Release bundle、Rust static library、明示project path、fail-closed bootstrap | TypeScript、Jest、ESLint、arm64 Release build、network 0の実起動 | `DONE` |
+| `R0-STAGE-LIFECYCLE` | Fabric `MotoliiStage` component viewとHost lifecycle ABI | 一つのnative child viewをregister/mount/resize/focus/unmount/remountし、late eventを拒否する。描画・編集はしない | lifecycle sequence、handle uniqueness、resize/scale、focus、remount同revision、Document JSON不変 | `DONE` |
+| `R0-ACCEPT` | 上記三nodeの統合artifact | fixture shellではなく通常RN appでR0出口を確認する | 実`project.json`、Release artifact、process launch、同snapshot、write 0 | `DONE`。根拠は[R0 product runtime seat受入](reviews/2026-08-09-m3-r0-product-runtime-seat-acceptance.md) |
 
-現在の未統合R0候補は三実装nodeを同時に含む。再実装を発注せず、まずdiff review、current-main再現、R0-ACCEPTを行う。候補の一部が不合格でもR0全体を書き直さず、該当nodeだけを修復する。
+R0はcurrent main上で受入済みである。同じfileに隣接するR1 GPU／draw候補はR0へ含めず、R1のclosed orderと非LLM oracleで別途判定する。
 
 ## 4. Wave R1 — VS-1再閉鎖
 
@@ -144,13 +144,13 @@ R1の利用者出口は、RN BrowserのRectangleから既存D2へ一度だけPla
 
 | node | owner / exact source | 閉じる契約 | positive / negative oracle | 状態 / 依存 |
 |---|---|---|---|---|
-| `R1-SHELL` | `ui/motolii-rn/App.tsx`とproduct layout components | Browser、Stage、Timeline、Inspectorを一つの製品rootへ配置し、app root配線、native component registration、bundle publicationをwave内の単一ownerとして合流する。fixture data ownerを持たない | RN component test、window resize、missing Host fail-closed、registration/publication重複0 | `WAIT(R0-ACCEPT)` |
-| `R1-BROWSER` | `DiscoveryBrowserCandidate.jsx`、`source-provenance.json`をconcept oracleとするRN Browser component | Rectangleの情報階層、source identity、`browser.place` terminal intentを移す。DOM DnDは移さない | Rectangle選択／intent一回、空identity拒否、Document write 0 | `WAIT(R0-ACCEPT)` |
-| `R1-HOST-EDIT` | 一つの`rn_product_host`と既存`PlaceRectangleRequest`／`process_next` | RN terminal intentを既存Place、Undo、Redoへ接続し、published snapshotを一度だけ配る | `cu110_product_place_commit`、`cu111_product_undo_redo`、stale/invalid/cancel write 0 | `WAIT(R0-ACCEPT, R1-BROWSER)` |
-| `R1-GPU-BINDING` | R0 native Stage lifecycle、`GpuCtx`、platform Component View | Stage previewとrust-skia surface/contextを一つのwgpu Device/Queueへ束ね、configure/resize/unmount/device-lostを一つのlifecycle ownerで閉じる | device/queue identity、第二device 0、late surface event 0、remount後同revision | `COMPILE / WAIT(R0-ACCEPT)`。backend初期化のexact targetとMac/Windows別surface contractを固定する |
+| `R1-SHELL` | `ui/motolii-rn/App.tsx`とproduct layout components | Browser、Stage、Timeline、Inspectorを一つの製品rootへ配置し、app root配線、native component registration、bundle publicationをwave内の単一ownerとして合流する。fixture data ownerを持たない | RN component test、window resize、missing Host fail-closed、registration/publication重複0 | `COMPILE`。current root、registration、publicationのexact write setを固定する |
+| `R1-BROWSER` | `DiscoveryBrowserCandidate.jsx`、`source-provenance.json`をconcept oracleとするRN Browser component | Rectangleの情報階層、source identity、`browser.place` terminal intentを移す。DOM DnDは移さない | Rectangle選択／intent一回、空identity拒否、Document write 0 | `COMPILE`。現行RN targetとterminal intent edgeを固定する |
+| `R1-HOST-EDIT` | 一つの`rn_product_host`と既存`PlaceRectangleRequest`／`process_next` | RN terminal intentを既存Place、Undo、Redoへ接続し、published snapshotを一度だけ配る | `cu110_product_place_commit`、`cu111_product_undo_redo`、stale/invalid/cancel write 0 | `WAIT(R1-BROWSER)` |
+| `R1-GPU-BINDING` | R0 native Stage lifecycle、`GpuCtx`、platform Component View | Stage previewとrust-skia surface/contextを一つのwgpu Device/Queueへ束ね、configure/resize/unmount/device-lostを一つのlifecycle ownerで閉じる | device/queue identity、第二device 0、late surface event 0、remount後同revision | `COMPILE`。backend初期化のexact targetとMac/Windows別surface contractを固定する |
 | `R1-STAGE` | R0 native Stage、`render_worker.rs`、`display_slot.rs`、`ProductStageProjection` oracle | wgpu previewとdirty rust-skia overlayで、published selection／boundsを同revision表示する。編集しない | `cu110ps`系、surface resize、stale frame reject、第二device 0 | `WAIT(R1-GPU-BINDING)` |
 | `R1-TIMELINE` | `timeline_projection.rs`と既存`ProductTimelineProjection` oracle、新rust-skia component | bounded visible read projectionを描画し、offscreen objectを生成しない。編集しない | `cu110pt`系、revision一致、visible bound、resize／zoom read-only | `WAIT(R1-GPU-BINDING)` |
-| `R1-INSPECTOR` | `InspectorCandidate.jsx`をconcept oracleとするRN Inspector、既存Inspector projection oracle | primary Rectangleのread-only identity／値を表示する。mock reducerをownerにしない | `cu110pih`／primary-selection consumer、none/stale表示、write 0 | `WAIT(R0-ACCEPT)` |
+| `R1-INSPECTOR` | `InspectorCandidate.jsx`をconcept oracleとするRN Inspector、既存Inspector projection oracle | primary Rectangleのread-only identity／値を表示する。mock reducerをownerにしない | `cu110pih`／primary-selection consumer、none/stale表示、write 0 | `COMPILE`。現行RN targetとread projection edgeを固定する |
 | `R1-E2E` | 一つのRN product artifact | Browser→D2→三面→Undo→Redoを同一identityで完走する | deterministic sequence、revision列、journal、reopen前提を壊さない、second owner 0 | `WAIT(R1-SHELL..INSPECTOR)` |
 
 並列化できるのは、snapshot schemaと`R1-GPU-BINDING`を凍結した後の`R1-BROWSER`、`R1-STAGE`、`R1-TIMELINE`、`R1-INSPECTOR`のうち、allowlistが交差しない組だけである。Stage/Timeline側でrust-skia backendを個別初期化してはならない。`R1-HOST-EDIT`は一つのHost ABI、`R1-SHELL`はapp root／registration／publicationを所有するため直列、`R1-E2E`は実装nodeではなく統合受入である。
@@ -184,7 +184,7 @@ R3は旧P06〜P10／P12の成果を、RN product routeへ接続する。Save、p
 
 | node | owner / exact source | 閉じる契約 | positive / negative oracle | 現在状態 / 依存 |
 |---|---|---|---|---|
-| `R3-PROJECT-POLICY` | `OpenMode`、`ProjectSession`、journal／lock、既存P12決定 | New/Open/Save/Save-As/closeのOpenMode admission、in-flight ordering、identity/path/lock移譲を固定する | future/corrupt/lock typed拒否、cancel/失敗で原本不変、journal durabilityをSave開始点にしない | `SPEC_ONLY`。残る四問を一問ずつ閉じる。`WAIT(R0-ACCEPT)` |
+| `R3-PROJECT-POLICY` | `OpenMode`、`ProjectSession`、journal／lock、既存P12決定 | New/Open/Save/Save-As/closeのOpenMode admission、in-flight ordering、identity/path/lock移譲を固定する | future/corrupt/lock typed拒否、cancel/失敗で原本不変、journal durabilityをSave開始点にしない | `SPEC_ONLY`。残る四問を一問ずつ閉じる |
 | `R3-PROJECT-UI` | RN dialogs/forms、`rn_product_host.rs`、ProjectSession、採択済みrfd macOS probe | policyをnative dialogと一つのHost sessionへ接続する。旧egui `shell.rs`をRN route ownerにしない | cancel write 0、ReadOnlyNewer save拒否、durable reopen同値、second session 0 | `WAIT(R3-PROJECT-POLICY)` |
 | `R3-MEDIA-EXPLORE` | RN Browser、`motolii-media::probe`／FrameReader、rfd | file selectionからread-only metadata/thumbnail/previewを表示する | UI thread decode 0、missing/corrupt/unsupported typed、browseでDocument/Undo不変 | `COMPILE`。file-kind admissionとRN callbackを固定。`WAIT(R1-E2E)` |
 | `R3-MEDIA-PLACE` | admitted media identity、D2 AddTrackItem、audio boundary | video placementとSoundtrackを別terminal intentとして一回commitする | valid confirmだけ1 Undo、duplicate/stale拒否、Soundtrack無しでも制作可能 | `SPEC_ONLY`。動画placement defaultとSoundtrack policyを分離。`WAIT(R3-MEDIA-EXPLORE)` |
@@ -335,10 +335,8 @@ NODE R4-DISTRIBUTION requires=[R4-MAC-HUMAN,R4-WIN-PRODUCT] state=EXTERNAL_GATE
 
 ## 11. 現在の一意な次手
 
-1. 未統合R0候補を`R0-HOST`、`R0-MAC-SEAT`、`R0-STAGE-LIFECYCLE`として別々にdiff reviewする。
-2. current main相当で各oracleと`R0-ACCEPT`を再現する。
-3. 合格後だけ四nodeを同じ統合単位としてmainへ到達させ、ledgerを`R0 DONE`へ更新する。
-4. R1のsnapshot schemaを先に固定し、file-disjointなread consumerだけを並列化する。
-5. R2以降は本書の`TARGET_MISSING`／`SPEC_ONLY`を前ownerで閉じるまで実装発注へ変換しない。ただしfile-disjointな別nodeのcompileとprobeは止めない。
+1. `R0-ACCEPT DONE`を基準に、R1のsnapshot schema、GPU binding、product rootをcurrent codeから別契約へcompileする。
+2. shared ownerのwrite setを先に固定し、file-disjointなBrowser／Stage／Timeline／Inspectorのread consumerだけを短waveで並列化する。
+3. R2以降は本書の`TARGET_MISSING`／`SPEC_ONLY`を前ownerで閉じるまで実装発注へ変換しない。ただしfile-disjointな別nodeのcompileとprobeは止めない。
 
 この地図自体の設計・変更は、M3のauthorityとdispatch境界を決める作業なので外部LLMへ発注しない。実装nodeの発注可否、担当model、並列数は、各nodeをclosed orderへ変換する時点で別途判断する。
