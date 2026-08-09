@@ -32,6 +32,7 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-09-chain-gate-results-and-audio-path.md](2026-08-09-chain-gate-results-and-audio-path.md) | 仮コード未通過6区間へ鎖のgateを掛けて全区間NEEDS_REVISIONを確定し、完成条件の音声経路が書き出し側・取り込み側とも実装済みで未配線(BUILT_UNWIRED)であることと、完成条件を塞ぐ8件を特定した観察 |
 | [2026-08-09-m3-r0-product-runtime-seat-acceptance.md](2026-08-09-m3-r0-product-runtime-seat-acceptance.md) | R0-HOST／MAC-SEAT／STAGE-LIFECYCLEを責任別に再照合し、通常RN Release artifactのread-only起動でR0-ACCEPTをDONEとした受入 |
 | [2026-08-09-unified-parallel-start-baseline-decision.md](2026-08-09-unified-parallel-start-baseline-decision.md) | 製品main、現行authority、直列核、UI配置逃げ道、仮コード調査、未commit設計資料を一つの開始履歴へ収束し、INTEGRATED／CANDIDATE／WAIT／REJECTEDを混同しない全体並列開始baseline決定 |
 | [2026-08-09-cold-replaceable-supervision-failure-containment-decision.md](2026-08-09-cold-replaceable-supervision-failure-containment-decision.md) | authorityを一つのtop seatへ保ったままfresh sessionへcold replacementし、総監督停止、二重権威、base drift、衝突、reviewer mutation、user STOPを非LLM failure injectionで封じ込める決定 |
