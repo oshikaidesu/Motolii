@@ -3292,7 +3292,7 @@ mod tests {
     }
 
     #[test]
-    fn stage_pointer_down_geometry_error_keeps_primary() {
+    fn stage_pointer_down_on_singular_layer_clears_primary() {
         let _lock = test_lock();
         let mut fixture = Fixture::new();
         let layer = fixture.push_rect_layer(
@@ -3307,6 +3307,8 @@ mod tests {
         fixture.document.validate().expect("valid");
         let host = create_host_from_document("sel-geom-err", &fixture.document);
         // 幾何は壊れていても ReplacePrimary は envelope 存在だけで受理できる。
+        // layer 単位の特異は projection 全体を落とさず Unavailable になるため、
+        // hit は Miss へ落ちて primary が clear される。
         with_registry(|registry| {
             let product = registry
                 .hosts
@@ -3331,14 +3333,50 @@ mod tests {
 
         let selected = dispatch_raw_json(host, &pointer_json(host, stage, "down", 800.0, 450.0, 1));
         assert!(selected.accepted);
-        assert_eq!(
-            selected.snapshot.expect("snapshot").primary_layer_id,
-            before.primary_layer_id
-        );
+        assert_eq!(selected.snapshot.expect("snapshot").primary_layer_id, None);
         let after = read_snapshot(host);
-        assert_eq!(after.primary_layer_id, before.primary_layer_id);
-        assert_eq!(after.projection_generation, before.projection_generation);
+        assert_eq!(after.primary_layer_id, None);
         assert_eq!(read_stage_pointer(stage).expect("pointer").sequence, 1);
+
+        let _ = host_destroy_stage_for_test(stage);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn stage_pointer_down_miss_clears_primary() {
+        let _lock = test_lock();
+        let mut fixture = Fixture::new();
+        let layer =
+            fixture.push_rect_layer("healthy", [0.0, 0.0], [0.2, 0.2], Transform2D::identity());
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("sel-miss-clear", &fixture.document);
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            let mut queue = DocumentEditQueue::default();
+            queue.push_replace_primary(layer);
+            let published = product
+                .runtime
+                .process_next(&mut queue, product.primary, product.projection_generation)
+                .expect("process")
+                .expect("published");
+            product.primary = published.primary;
+            product.projection_generation = published.projection_generation;
+            Ok(())
+        })
+        .expect("seed primary");
+        let stage = host_register_stage_for_test(host).expect("stage");
+        mount_and_resize(host, stage, 1600, 900);
+        let before = read_snapshot(host);
+        assert_eq!(before.primary_layer_id, Some(layer.get().to_string()));
+
+        // 健全な rect の外側を押す。空き領域の click は選択解除である。
+        let missed = dispatch_raw_json(host, &pointer_json(host, stage, "down", 20.0, 20.0, 1));
+        assert!(missed.accepted);
+        assert_eq!(missed.snapshot.expect("snapshot").primary_layer_id, None);
+        assert_eq!(read_snapshot(host).primary_layer_id, None);
 
         let _ = host_destroy_stage_for_test(stage);
         let _ = host_destroy_for_test(host);

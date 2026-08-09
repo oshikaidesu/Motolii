@@ -278,6 +278,7 @@ fn find_transform(doc: &Document, target: LayerId) -> Option<&Transform2D> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::stage_hit_test::StageHit;
     use motolii_doc::{
         Clip, DocParam, Group, ItemEnvelope, LookAtAxis, Track, TrackItem, Transform2D,
     };
@@ -740,7 +741,7 @@ mod tests {
             proj.get(singular),
             Some(StageLayerProjection::Unavailable(
                 StageGeometryUnavailable::SingularTransform { layer: id }
-            )) if id == singular
+            )) if *id == singular
         ));
         assert!(matches!(
             proj.get(healthy),
