@@ -4,9 +4,68 @@
 //! GpuAssetCacheが持つ。Documentは多重キーでファイル実体を指す。
 
 use std::collections::BTreeMap;
+use std::io::{self, Read};
 
 use serde::de::{self, Deserialize, Deserializer};
 use serde::{Deserialize as DeserializeDerive, Serialize};
+use sha2::{Digest, Sha256};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceFingerprintV1 {
+    digest: [u8; 32],
+    size_bytes: u64,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum SourceFingerprintError {
+    #[error("failed reading source for fingerprint: {source}")]
+    Io {
+        #[from]
+        source: io::Error,
+    },
+    #[error("byte count overflowed u64 during fingerprinting")]
+    ByteCountOverflow,
+}
+
+impl SourceFingerprintV1 {
+    pub fn from_reader<R: Read>(mut reader: R) -> Result<Self, SourceFingerprintError> {
+        let mut hasher = Sha256::new();
+        let mut total = 0u64;
+        let mut buffer = [0u8; 8192];
+
+        loop {
+            let count = reader.read(&mut buffer)?;
+            if count == 0 {
+                break;
+            }
+            hasher.update(&buffer[..count]);
+            total = total
+                .checked_add(count as u64)
+                .ok_or(SourceFingerprintError::ByteCountOverflow)?;
+        }
+
+        let digest = hasher.finalize().into();
+
+        Ok(Self {
+            digest,
+            size_bytes: total,
+        })
+    }
+
+    pub fn size_bytes(&self) -> u64 {
+        self.size_bytes
+    }
+
+    pub fn content_hash(&self) -> String {
+        use std::fmt::Write as _;
+        let mut hash = String::with_capacity(89);
+        hash.push_str("motolii-source-v1:sha256:");
+        for byte in &self.digest {
+            write!(&mut hash, "{byte:02x}").expect("writing to String cannot fail");
+        }
+        hash
+    }
+}
 
 /// アセットの恒久ID。表示名は別フィールド。
 #[derive(
@@ -227,6 +286,63 @@ impl AssetTable {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{self, Error, ErrorKind, Read};
+
+    struct OneByteAtATimeReader {
+        source: Vec<u8>,
+        cursor: usize,
+    }
+
+    impl OneByteAtATimeReader {
+        fn new(data: impl Into<Vec<u8>>) -> Self {
+            Self {
+                source: data.into(),
+                cursor: 0,
+            }
+        }
+    }
+
+    impl Read for OneByteAtATimeReader {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            if self.cursor >= self.source.len() {
+                return Ok(0);
+            }
+            if buf.is_empty() {
+                return Ok(0);
+            }
+            buf[0] = self.source[self.cursor];
+            self.cursor += 1;
+            Ok(1)
+        }
+    }
+
+    struct FailingReader {
+        fail_with: Error,
+        first_call: bool,
+    }
+
+    impl FailingReader {
+        fn new(kind: ErrorKind, message: &str) -> Self {
+            Self {
+                fail_with: Error::new(kind, message.to_string()),
+                first_call: false,
+            }
+        }
+    }
+
+    impl Read for FailingReader {
+        fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+            if self.first_call {
+                Ok(0)
+            } else {
+                self.first_call = true;
+                Err(Error::new(
+                    self.fail_with.kind(),
+                    self.fail_with.to_string(),
+                ))
+            }
+        }
+    }
 
     #[test]
     fn path_normalization_uses_forward_slash() {
@@ -287,5 +403,40 @@ mod tests {
         let a = back.get(id2).unwrap();
         assert_eq!(a.path_absolute.as_deref(), Some("D:/media/intro.mp4"));
         assert_eq!(a.path_project_relative.as_deref(), Some("media/intro.mp4"));
+    }
+
+    #[test]
+    fn source_fingerprint_empty_bytes() {
+        let fp = SourceFingerprintV1::from_reader(io::Cursor::new(Vec::<u8>::new())).unwrap();
+        assert_eq!(fp.content_hash(), "motolii-source-v1:sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+        assert_eq!(fp.size_bytes(), 0);
+    }
+
+    #[test]
+    fn source_fingerprint_abc_bytes() {
+        let fp = SourceFingerprintV1::from_reader(io::Cursor::new(b"abc")).unwrap();
+        assert_eq!(fp.content_hash(), "motolii-source-v1:sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+        assert_eq!(fp.size_bytes(), 3);
+    }
+
+    #[test]
+    fn source_fingerprint_one_byte_chunked_reader() {
+        let fp = SourceFingerprintV1::from_reader(OneByteAtATimeReader::new(b"abc")).unwrap();
+        assert_eq!(fp.content_hash(), "motolii-source-v1:sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+        assert_eq!(fp.size_bytes(), 3);
+    }
+
+    #[test]
+    fn source_fingerprint_reader_error_preserves_kind_and_message() {
+        let kind = ErrorKind::Other;
+        let message = "reader failed";
+        let err = SourceFingerprintV1::from_reader(FailingReader::new(kind, message)).unwrap_err();
+        assert!(matches!(err, SourceFingerprintError::Io { .. }));
+        let io_err = match err {
+            SourceFingerprintError::Io { source } => source,
+            SourceFingerprintError::ByteCountOverflow => unreachable!(),
+        };
+        assert_eq!(io_err.kind(), kind);
+        assert_eq!(io_err.to_string(), message.to_string());
     }
 }

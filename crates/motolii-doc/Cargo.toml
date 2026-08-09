@@ -11,6 +11,7 @@ motolii-eval.workspace = true
 motolii-nodes.workspace = true
 motolii-plugin.workspace = true
 motolii-render.workspace = true
+sha2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

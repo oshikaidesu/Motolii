@@ -47,7 +47,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 pub use affine::{compose_local, compose_transform, resolve_transform, Affine2D};
-pub use asset::{Asset, AssetError, AssetId, AssetTable};
+pub use asset::{
+    Asset, AssetError, AssetId, AssetTable, SourceFingerprintError, SourceFingerprintV1,
+};
 pub use audio_edit::{build_import_clip_source, plan_detach_audio, ImportAvMode};
 pub use bpm::{Bpm, BpmError};
 pub use camera_eval::CameraEvalError;
