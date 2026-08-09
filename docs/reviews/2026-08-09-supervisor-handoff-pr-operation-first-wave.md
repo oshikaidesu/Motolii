@@ -115,6 +115,27 @@ mergeされるかどうかに関わらず、作業はPRとして可視物にす�
 これはsessionのcontextが有限であることの帰結でもある。
 **人もLLMも忘れる。リポジトリだけが忘れない。**
 
+### 訂正 — 2点diffでmergeの影響を判定しない（2026-08-10）
+
+本書は当初「`1c80f0a5` をmergeすると `ui/motolii-rn/` が全削除され `ci.yml` が復活し、
+mainが退行する」と書いた。**これは誤りである。**
+
+`git diff main..1c80f0a5` は**mainの新しいcommitを削除として表示する**。
+mergeは3-wayであり、merge-baseからの差分だけを取り込む。**2点diffはmergeの挙動を表さない。**
+
+実測（2026-08-10）:
+
+- merge-base は `f800cb4f`（mainの履歴内）
+- **3-way mergeが実際に入れるのは docs 1,806行のみ。削除は0**
+- ただし対象8ファイルは**すべて既にorigin/mainに存在する**
+- うち review docs 6本は**内容が完全に同一**。`decision-index.md` と
+  `reviews/README.md` だけがmain側で成長しており**conflictする**
+
+**したがって処分は「merge しても何も増えず、index 2本がconflictするだけ」なのでcloseである。**
+結論は変わらないが、**理由が違う。** 誤った理由を残すと、同じ判定方法が再生産される。
+
+> **mergeの影響を見るときは merge-base からの3-way で見る。`A..B` の2点diffで判断しない。**
+
 ### LLM開発に固有の落とし穴 — 履歴が生まれない
 
 利用者の指摘（2026-08-09）:
@@ -403,11 +424,8 @@ U3a-1Sで `REJECT` 済み)、上位版で置換済み(easing popup)、build arti
 ## 6. 撤回・訂正した発言（記録を汚さないため明示）
 
 - 「rust-skia未導入」 → mainに限った話。鎖では採択済みだった
-- 「`1c80f0a5` は未merge docsで処分が必要」 → **誤り。docs 6本は全てmainにある。**
-  2点diffを取ると、このbranchはmainに対して `rn_product_host.rs` -2,491行、
-  `ui/motolii-rn/` 全削除、`resource_ledger.rs` -1,206行、
-  **`.github/workflows/ci.yml` +108行（退役CIの復活）**。mergeするとmainが退行する。
-  **処分は「何もせず放棄」**
+- 「`1c80f0a5` は未merge docsで処分が必要」 → 処分は**close**である。ただし
+  **当初書いた理由は誤っていた**（2026-08-10訂正、下記）
 - 裁定D1「skia導入はR2で」 → 撤回。導入済みなので「既存commitを採るか決める」が正しい
 - 「guardが強すぎる」 → 撤回。guardは正しく、迂回方法が悪かった
 - 「#446は独立検収なしで採る」 → 撤回（自分が書いたものを自分が採る構造）
