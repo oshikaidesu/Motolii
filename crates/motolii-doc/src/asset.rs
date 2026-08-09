@@ -181,12 +181,45 @@ pub struct Asset {
     pub tail_hash: Option<String>,
 }
 
+/// 新規Assetを準備するための非永続payload。`AssetId`はedit threadが付与する。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssetDraft {
+    pub name: String,
+    pub asset_type: String,
+    pub content_hash: String,
+    pub path_absolute: Option<String>,
+    pub path_project_relative: Option<String>,
+    pub file_name: Option<String>,
+    pub size_bytes: Option<u64>,
+    pub head_hash: Option<String>,
+    pub tail_hash: Option<String>,
+}
+
+impl AssetDraft {
+    pub(crate) fn into_asset(self, id: AssetId) -> Asset {
+        let mut asset = Asset {
+            id,
+            name: self.name,
+            asset_type: self.asset_type,
+            content_hash: self.content_hash,
+            path_absolute: self.path_absolute,
+            path_project_relative: self.path_project_relative,
+            file_name: self.file_name,
+            size_bytes: self.size_bytes,
+            head_hash: self.head_hash,
+            tail_hash: self.tail_hash,
+        };
+        asset.normalize_self();
+        asset
+    }
+}
+
 impl Asset {
     pub fn normalize_path(path: &str) -> String {
         path.replace('\\', "/")
     }
 
-    fn normalize_self(&mut self) {
+    pub(crate) fn normalize_self(&mut self) {
         if let Some(abs) = self.path_absolute.as_mut() {
             *abs = Self::normalize_path(abs);
         }

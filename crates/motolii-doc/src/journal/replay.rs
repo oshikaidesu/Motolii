@@ -158,9 +158,22 @@ fn decode_edit(payload: &[u8]) -> Result<DecodedJournalEdit, String> {
                 .map_err(|e| format!("invalid v1 journal command: {e}"))?;
             Ok(DecodedJournalEdit::V1(legacy))
         }
-        v if v == u64::from(V2_EDIT_FORMAT_VERSION) || v == u64::from(V3_EDIT_FORMAT_VERSION) => {
+        v if v == u64::from(V2_EDIT_FORMAT_VERSION) => {
             let edit: JournalEdit = serde_json::from_value(value)
-                .map_err(|e| format!("invalid v2/v3 journal edit: {e}"))?;
+                .map_err(|e| format!("invalid v2 journal edit: {e}"))?;
+            if matches!(
+                &edit.command,
+                Command::AdmitAsset { .. } | Command::RemoveAsset { .. }
+            ) {
+                return Err(
+                    "asset lifecycle commands require journal edit format_version 3".into(),
+                );
+            }
+            Ok(DecodedJournalEdit::V2OrV3(Box::new(edit.command)))
+        }
+        v if v == u64::from(V3_EDIT_FORMAT_VERSION) => {
+            let edit: JournalEdit = serde_json::from_value(value)
+                .map_err(|e| format!("invalid v3 journal edit: {e}"))?;
             Ok(DecodedJournalEdit::V2OrV3(Box::new(edit.command)))
         }
         other => Err(format!(
@@ -297,9 +310,9 @@ mod replay_tests {
         ReplayFailure, V1_EDIT_FORMAT_VERSION, V2_EDIT_FORMAT_VERSION, V3_EDIT_FORMAT_VERSION,
     };
     use crate::{
-        migrate_bytes, Clip, ClipSource, Command, DocParam, DocValue, Document, EffectUse,
-        ItemEnvelope, LayerId, ResourceLimits, SaveProjectOptions, ScalarPropertyId, Track,
-        TrackItem,
+        migrate_bytes, Asset, AssetId, Clip, ClipSource, Command, DocParam, DocValue, Document,
+        EffectUse, ItemEnvelope, LayerId, ResourceLimits, SaveProjectOptions, ScalarPropertyId,
+        Track, TrackItem,
     };
 
     fn unique_dir(tag: &str) -> PathBuf {
@@ -403,6 +416,36 @@ mod replay_tests {
         });
         doc.validate().unwrap();
         (doc, layer)
+    }
+
+    #[test]
+    fn v2_edit_rejects_v3_only_asset_lifecycle_command() {
+        let asset = Asset {
+            id: AssetId::from_raw(0),
+            name: "asset".into(),
+            asset_type: "video/mp4".into(),
+            content_hash: "legacy".into(),
+            path_absolute: None,
+            path_project_relative: None,
+            file_name: None,
+            size_bytes: None,
+            head_hash: None,
+            tail_hash: None,
+        };
+        for command in [
+            Command::AdmitAsset {
+                asset: asset.clone(),
+            },
+            Command::RemoveAsset { asset },
+        ] {
+            let payload = edit_payload(&JournalEdit {
+                format_version: V2_EDIT_FORMAT_VERSION,
+                command,
+            })
+            .unwrap();
+            let error = decode_edit(&payload).unwrap_err();
+            assert!(error.contains("require journal edit format_version 3"));
+        }
     }
 
     #[test]

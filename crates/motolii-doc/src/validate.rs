@@ -275,6 +275,13 @@ impl Document {
         uses
     }
 
+    pub(crate) fn asset_use_count(&self, id: AssetId) -> usize {
+        self.asset_uses()
+            .iter()
+            .filter(|asset_use| asset_use.id == id)
+            .count()
+    }
+
     fn validate_asset_uses(&self) -> Result<(), DocumentError> {
         for asset_use in self.asset_uses() {
             let Some(asset) = self.assets.get(asset_use.id) else {

@@ -261,6 +261,7 @@ const fn command_kind_copy(kind: CommandKind) -> &'static str {
         CommandKind::SetEffectEnabled => "Set effect enabled",
         CommandKind::DeleteEffectDefinition => "Delete effect definition",
         CommandKind::CopyLocalEffect => "Copy local effect",
+        CommandKind::AssetLifecycle => "Asset lifecycle",
         CommandKind::SetAudioComponentEnabled => "Set audio component enabled",
         CommandKind::SetAudioComponentGain => "Set audio component gain",
         CommandKind::AddTrackItem => "Add track item",
